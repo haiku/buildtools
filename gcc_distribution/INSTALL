@@ -1,0 +1,118 @@
+How to install gcc-2.95.3 under different versions of BeOS.
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+BeOS R5 (with or without BONE):
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The compiler, linker and tools:
+1. extract gcc-2.95.3_binutils-2.15.zip to /boot/develop/tools
+2. if the folder /boot/develop/tools/gnupro exists, rename it
+3. create the link: 
+   /boot/develop/tools/gnupro 
+   -> /boot/develop/tools/gcc-2.95.3_binutils-2.15
+--------------------------------------------------------------------------
+In order to switch between different compilers later, you just need to 
+adjust the link:
+   /boot/develop/tools/gnupro -> /boot/develop/tools/...
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The new libstdc++ (optional but recommended):
+1. rename /boot/develop/headers/cpp 
+2. execute this in Terminal (creates a link without dereferencing):
+	ln -snf /boot/develop/tools/gnupro/include/g++ /boot/develop/headers/cpp
+3. rename /boot/beos/system/lib/libstdc++.r4.so (e.g. libstdc++.r4.so.R5)
+4. copy /boot/develop/tools/gcc-2.95.3_binutils-2.15/lib/libstdc++.r4.so
+   to /boot/beos/system/lib/libstdc++.r4.so
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Dano:
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The compiler, linker and tools:
+1. extract gcc-2.95.3_binutils-2.15.zip to /boot/develop/tools
+2. if the folder /boot/develop/tools/gnupro exists, rename it
+3. create the link: 
+   /boot/develop/tools/gnupro 
+   -> /boot/develop/tools/gcc-2.95.3_binutils-2.15
+4. extract sdk_gcc-2.95.3_binutils-2.15.zip to /boot/develop/tools
+5. if the folder /boot/develop/tools/sdk exists, rename it
+6. create the link: 
+   /boot/develop/tools/sdk 
+   -> /boot/develop/tools/sdk_gcc-2.95.3_binutils-2.15
+--------------------------------------------------------------------------
+In order to switch between different compilers later, you just need to 
+adjust the two links:
+   /boot/develop/tools/gnupro -> /boot/develop/tools/...
+   /boot/develop/tools/sdk -> /boot/develop/tools/...
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The new libstdc++ (optional but recommended):
+1. rename /boot/develop/headers/cpp 
+2. execute this in Terminal (creates a link without dereferencing):
+	ln -snf /boot/develop/tools/gnupro/include/g++ /boot/develop/headers/cpp
+3. rename /boot/beos/system/lib/libstdc++.r4.so (e.g. libstdc++.r4.so.Dano)
+4. copy /boot/develop/tools/gcc-2.95.3_binutils-2.15/lib/libstdc++.r4.so
+   to /boot/beos/system/lib/libstdc++.r4.so
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Zeta (untested, please tell me if it doesn't work):
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The compiler, linker and tools (installed into the Zeta-devkit):
+1. extract gcc-2.95.3_binutils-2.15.zip 
+   to /etc/develop/zeta-r1-gcc2-x86/tools
+2. if the folder /etc/develop/zeta-r1-gcc2-x86/tools/gnupro exists, rename it
+3. create the link: 
+   /etc/develop/zeta-r1-gcc2-x86/tools/gnupro 
+   -> /etc/develop/zeta-r1-gcc2-x86/tools/gcc-2.95.3_binutils-2.15
+4. extract sdk_gcc-2.95.3_binutils-2.15.zip 
+   to /etc/develop/zeta-r1-gcc2-x86/tools
+5. if the folder /etc/develop/zeta-r1-gcc2-x86/tools/sdk exists, rename it
+6. create the link: 
+   /etc/develop/zeta-r1-gcc2-x86/tools/sdk 
+   -> /etc/develop/zeta-r1-gcc2-x86/tools/sdk_gcc-2.95.3_binutils-2.15
+--------------------------------------------------------------------------
+In order to switch between different compilers (for the Zeta target) later, 
+you just need to adjust the two links:
+   /etc/develop/zeta-r1-gcc2-x86/tools/gnupro 
+   -> /etc/develop/zeta-r1-gcc2-x86/tools/...
+   /etc/develop/zeta-r1-gcc2-x86/tools/sdk 
+   -> /etc/develop/zeta-r1-gcc2-x86/tools/...
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The compiler, linker and tools (linked into the R5-devkit):
+1. create the link: 
+   /etc/develop/beos-r5-gcc2-x86/tools/gcc-2.95.3_binutils-2.15 
+   -> /etc/develop/zeta-r1-gcc2-x86/tools/gcc-2.95.3_binutils-2.15
+2. if the folder /etc/develop/beos-r5-gcc2-x86/tools/gnupro exists, rename it
+3. create the link: 
+   /etc/develop/beos-r5-gcc2-x86/tools/gnupro 
+   -> /etc/develop/beos-r5-gcc2-x86/tools/gcc-2.95.3_binutils-2.15
+--------------------------------------------------------------------------
+In order to switch between different compilers (for the R5 target) later, 
+you just need to adjust the link:
+   /etc/develop/beos-r5-gcc2-x86/tools/gnupro 
+   -> /etc/develop/beos-r5-gcc2-x86/tools/...
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The new libstdc++ for target Zeta (optional but recommended):
+1. rename /etc/develop/zeta-r1-gcc2-x86/headers/cpp 
+2. execute this in Terminal (creates a link without dereferencing):
+	ln -snf /etc/develop/zeta-r1-gcc2-x86/tools/gnupro/include/g++ /etc/develop/zeta-r1-gcc2-x86/headers/cpp
+3. rename /boot/beos/system/lib/libstdc++.r4.so (e.g. libstdc++.r4.so.Zeta)
+4. copy /etc/develop/zeta-r1-gcc2-x86/tools/gcc-2.95.3_binutils-2.15/lib/libstdc++.r4.so
+   to /boot/beos/system/lib/libstdc++.r4.so
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+The new libstdc++ for target R5 (optional but recommended):
+1. rename /etc/develop/beos-r5-gcc2-x86/headers/cpp 
+2. execute this in Terminal (creates a link without dereferencing):
+	ln -snf /etc/develop/beos-r5-gcc2-x86/tools/gnupro/include/g++ /etc/develop/beos-r5-gcc2-x86/headers/cpp
+3. rename /etc/develop/beos-r5-gcc2-x86/lib/x86/libstdc++.r4.so (e.g. libstdc++.r4.so.R5)
+4. copy /etc/develop/beos-r5-gcc2-x86/tools/gcc-2.95.3_binutils-2.15/lib/libstdc++.r4.so
+   to /etc/develop/beos-r5-gcc2-x86/lib/x86/libstdc++.r4.so
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+Have fun!
+
+
+Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>

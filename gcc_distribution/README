@@ -1,0 +1,122 @@
+This is a package of gcc-2.95.3 and binutils-2.15 for BeOS.
+Please consult the file "INSTALL" for info about how to install this package.
+
+This port is based on the work done by Takashi Toyoshima, which in turn is 
+based on the official gnupro-releases done by Fred Fish and others at Be. 
+Thanks to these guys and thanks to everyone who helped testing this new release!
+
+Lots of patches have been applied to get gcc-2.95.3 working properly on BeOS, 
+you can find the gory details in the cvs-log-archives. 
+
+
+
+These are the main changes:
+
+ - this gcc-2.95.3 won't crash just because one is using iostreams and/or STL.
+
+ - an improved and less buggy libstdc++.r4.so is included (with new headers).
+
+ - the tool-chain now defaults to B_LOW_PRIORITY, such that you can do other
+   things while a large build is running. Thanks to Andrew Bachmann for 
+   suggesting this. You can override the default with -priority=<prio>.
+
+ - optimization is much more reliable now (it really is a bad idea to 
+   use -O2 or -O3 with older compilers, as the likelihood of things going
+   very wrong is high!).
+   This port should be more reliable when using -O2 or even -O3, but: YMMV!
+
+ - new html-documentation is included for all tools.
+ 
+ - the gcc-option '-shared' is now working again, '-nostart' is a (BeOS-
+   specific) synonym for it.
+
+
+Bugs/Peculiarities:
+
+ - the default specs no longer include -lnet on R5, so some projects that are
+   relying on this implicit linking against libnet.so fail during linking
+   stage with messages like 'undefined reference to select' (or similar).
+   This can be fixed by explicitly adding -lnet to the build.
+   The reason for leaving out -lnet from the specs is that this is the way
+   things are done under Dano & Zeta and I'd like to avoid having to provide
+   different releases for each platform.
+   Anyway, if you really want to get back the original R5 behaviour, just change
+   the link 
+      /boot/develop/tools/gnupro/lib/gcc-lib/i586-pc-beos/2.95.3-beos-xxx/specs
+   such that it points to specs.R5 and the R5-compatible specs should be active.
+
+ - gcc-2.95.3 (rightly) complains about code that calls delete on void*. This
+   code did not trigger any complaints with older compilers, but it probably
+   did not do what the programmer intended. If the pointer is in fact pointing
+   to an object, no destructors will be called, only the memory will be freed.
+   If that is the original intention, then the global operator delete should 
+   be used instead:
+       void cleanup (void* cookie) 
+       {
+           delete cookie;
+       }
+   becomes
+       void cleanup (void* cookie) 
+       {
+           ::operator delete cookie;
+       }
+	If the destructor should be called, you have to cast the void* to the
+	appropriate type (or preferably get rid of that void* cruft).
+
+ - the linker goes out of its way to avoid generating relocation entries of
+   type R_386_NONE with an offset of 0, as this crashes the dynamic loader
+   of BONE/Dan0/Zeta.
+	Part of the dynamic loading process is the relocation of several entries 
+	inside the binary to its real position in memory. The linker generates the
+	neccessary relocation entries, telling the loader for each relocation, what 
+	kind of relocation is to be done (type) and where the relocation takes place
+	(offset into the binary-section). These relocation entries live in several 
+	sections named ".rel."...
+	The linker from binutils-2.15 seems to do some more optimization than older 
+	linkers, converting unneeded relocation-entries (pointing to sections that 
+	were discarded during the link) to the R_386_NONE type, which in fact 
+	means: "do nothing". The offset of these relocation entries is set to 0.
+		[Sidenote: it would be better to remove this entries altogether, but 
+		that could change the size of an already layed-out section, which - 
+		according to the binutils maintainers - is difficult, so the free space 
+		is not yet reclaimed by ld].
+	Now it seems that the newer dynamic loader is a bit peculiar about how to 
+	handle these "do nothing" requests: it is perfectly happy to nothing at most 
+	offsets, only offset 0 it doesn't like at all, as it then tries to execute 
+	code like the following:
+		xor eax, eax
+		movl (eax), eax
+	which, naturally, crashes the machine.
+	The solution to this was to leave the original offset of these relocation 
+	entries in place, just change the type to R_386_NONE. This hack seems to 
+	work for all BeOS dynamic loaders.
+
+ - Every app is now automatically linked against a (new) object file named
+   fix_bdirectwin_typeinfo.o
+   Older compilers had the habit of generating typeinfo-functions in each 
+   object file that uses them (dynamic_cast). My version of gcc only does that 
+   if optimization is switched off. In optimizing mode, these functions are not 
+   kept in each object file, but they are taken from the library which "defines"
+   the class that is the target of the dynamic_cast. This works fine for most 
+   cases, but the Be-libraries seem to contain a broken version of the 
+   BDirectWindow-typeinfo-function.
+	The difference here is that older compilers never used this function, as the
+	linker always linked to the (object-file-)internal version of this funtion. 
+	Gcc-2.95.3 doesn't always generate these, so that the one living inside the 
+	Be-libraries is being used, which in turn leads to a crash (an example is
+	GLTeapot).
+	As a solution to this problem, I have created a new object file, named 
+	fix_bdirectwin_typeinfo.o, that contains an implementation of the 
+	BDirectWindow-typeinfo-funtion. Every app is now linked against this file 
+	automatically (by means of the specs-file), such that the broken 
+	implementation from the libs isn't used.
+	What remains a mystery to me is how that broken function found its way into 
+	the libs in the first place...
+
+ - I believe 2.95.3 improves upon the other available compilers for BeOS, but
+   this does not mean that it is better for all purposes, it is just different!
+   So don't be surprised if you encounter internal compiler errors with code 
+   that worked for gnupro-000224 or gnupro-991026. Please send me info about 
+   any such cases so that I can *try* to work out a solution.
+
+Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
