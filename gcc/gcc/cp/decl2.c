@@ -2885,16 +2885,28 @@ import_export_decl (decl)
       if (CLASSTYPE_INTERFACE_KNOWN (ctype)
 	  && (! DECL_ARTIFICIAL (decl) || DECL_VINDEX (decl)))
 	{
-	  DECL_NOT_REALLY_EXTERN (decl)
-	    = ! (CLASSTYPE_INTERFACE_ONLY (ctype)
-		 || (DECL_THIS_INLINE (decl) && ! flag_implement_inlines
-		     && !DECL_VINDEX (decl)));
-
-	  /* Always make artificials weak.  */
-	  if (DECL_ARTIFICIAL (decl) && flag_weak)
+	  if (! flag_new_abi && DECL_THIS_INLINE (decl)
+	      && ! DECL_ARTIFICIAL (decl)
+	      && ! DECL_VINDEX (decl) && CLASSTYPE_INTERFACE_ONLY (ctype))
+	    /* The heuristic does not work well, since even if we are
+	       interface only unit of a certain class, some methods can
+	       be declared inline only in this unit (provided they are
+	       used only there). In this case, emit linkonce code of the
+	       inline function as well.  */
 	    comdat_linkage (decl);
 	  else
-	    maybe_make_one_only (decl);
+	    {
+	      DECL_NOT_REALLY_EXTERN (decl)
+		= ! (CLASSTYPE_INTERFACE_ONLY (ctype)
+		     || (DECL_THIS_INLINE (decl) && ! flag_implement_inlines
+			 && !DECL_VINDEX (decl)));
+
+	      /* Always make artificials weak.  */
+	      if (DECL_ARTIFICIAL (decl) && flag_weak)
+		comdat_linkage (decl);
+	      else
+		maybe_make_one_only (decl);
+	    }
 	}
       else
 	comdat_linkage (decl);
