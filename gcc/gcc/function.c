@@ -2303,7 +2303,23 @@ fixup_var_refs_1 (var, promoted_mode, loc, insn, replacements)
 	  replacement = find_fixup_replacement (replacements, x);
 	  if (replacement->new)
 	    {
+	      enum machine_mode mode = GET_MODE (x);
 	      *loc = replacement->new;
+
+	      /* Careful!  We may have just replaced a SUBREG by a MEM, which
+		 means that the insn may have become invalid again.  We can't
+		 in this case make a new replacement since we already have one
+		 and we must deal with MATCH_DUPs.  */
+	      if (GET_CODE (replacement->new) == MEM)
+		{
+		  INSN_CODE (insn) = -1;
+		  if (recog_memoized (insn) >= 0)
+		    return;
+
+		  fixup_var_refs_1 (replacement->new, mode, &PATTERN (insn),
+				    insn, replacements);
+		}
+
 	      return;
 	    }
 	  
@@ -3715,6 +3731,23 @@ instantiate_decl (x, size, valid_only)
   XEXP (x, 0) = addr;
 }
 
+
+/* Called when instantiate_virtual_regs has failed to update the instruction.
+   Usually this means that non-matching instruction has been emit, however for
+   asm statements it may be the problem in the constraints.  */
+/* [zooey]: backported this (and calls to it) from gcc-3.4 in order to
+   give proper error messages for invalid asm instead of ICEing. */
+static void
+instantiate_virtual_regs_lossage (rtx insn)
+{
+  if (asm_noperands (PATTERN (insn)) >= 0)
+    {
+      error_for_asm (insn, "impossible constraint in `asm'");
+      delete_insn (insn);
+    }
+  else
+    abort ();
+}
 /* Given a pointer to a piece of rtx and an optional pointer to the
    containing object, instantiate any virtual registers present in it.
 
@@ -3791,7 +3824,10 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
 	     the simplest possible thing to handle them.  */
 	  if (GET_CODE (SET_SRC (x)) != REG
 	      && GET_CODE (SET_SRC (x)) != PLUS)
-	    abort ();
+	    {
+	      instantiate_virtual_regs_lossage (object);
+	      return 1;
+	    }
 
 	  start_sequence ();
 	  if (GET_CODE (SET_SRC (x)) != REG)
@@ -3807,7 +3843,7 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
 
 	  if (! validate_change (object, &SET_SRC (x), temp, 0)
 	      || ! extra_insns)
-	    abort ();
+	    instantiate_virtual_regs_lossage (object);
 
 	  return 1;
 	}
@@ -3920,7 +3956,10 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
 		  emit_insns_before (seq, object);
 		  if (! validate_change (object, loc, temp, 0)
 		      && ! validate_replace_rtx (x, temp, object))
-		    abort ();
+		    {
+		      instantiate_virtual_regs_lossage (object);
+		      return 1;
+		    }
 		}
 	    }
 
@@ -4084,7 +4123,7 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
 	      emit_insns_before (seq, object);
 	      if (! validate_change (object, loc, temp, 0)
 		  && ! validate_replace_rtx (x, temp, object))
-		abort ();
+	        instantiate_virtual_regs_lossage (object);
 	    }
 	}
 
