@@ -1585,9 +1585,25 @@ final_start_function (first, file, optimize)
      FILE *file;
      int optimize;
 {
+  rtx insn; 
   block_depth = 0;
 
   this_is_asm_operands = 0;
+
+  /* [zooey]: gcc-2.95.3 generates incorrect source-line labels when generating
+     debug-info because this function is called with first pointing to an note-insn
+     that has been deleted (whose NOTE_LINE_NUMBER == NOTE_INSN_DELETED).
+     In order to generate correct source-line labels, we skip to the first insn 
+     which has a line-number (if any).
+     The result of this is a much improved debugging experience...
+   */
+  if (NOTE_LINE_NUMBER (first) == NOTE_INSN_DELETED)
+    for (insn = first; insn; insn = NEXT_INSN (insn))
+      if (GET_CODE (insn) == NOTE && NOTE_LINE_NUMBER (insn) > 0)
+        {
+	  first = insn;
+	  break;
+        }
 
 #ifdef NON_SAVING_SETJMP
   /* A function that calls setjmp should save and restore all the
