@@ -577,6 +577,10 @@ various stages of compilation.  This fails to work on some systems where
 the assembler is unable to read from a pipe; but the GNU assembler has
 no trouble.
 
+@item -priority=<prio>
+Specify the BeOS thread-priority to use for all the tools. You can specify
+values between 1-10, the default is 5 (B_LOW_PRIORITY).
+
 @item --help
 Print (on the standard output) a description of the command line options
 understood by @code{gcc}.  If the @code{-v} option is also specified

@@ -102,6 +102,12 @@ static char *known_suffixes[] =
 #endif
 
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 /* This is the default list of directories to search for include files.
    It may be overridden by the various -I and -ixxx options.
 
@@ -1344,6 +1350,10 @@ cpp_handle_option (pfile, argc, argv)
 	  no_precomp = 1;
 	}
 #endif
+#ifdef __BEOS__
+        else if (!strncmp (argv[i], "-priority=", 10))
+	  priority = atol (argv[i] + 10);
+#endif
 	break;
       
       case 't':
@@ -1675,6 +1685,16 @@ cpp_handle_option (pfile, argc, argv)
 	return i;
       }
 
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+  {
+    char priobuf[20];
+    sprintf (priobuf, "-priority=%d", priority);
+    if (opts->verbose)    
+      cpp_notice ("using priority %d\n", priority);
+  }  
+#endif
+
   return i + 1;
 
  missing_filename:
@@ -1775,6 +1795,7 @@ Switches:\n\
   -P                        Do not generate #line directives\n\
   -$                        Do not allow '$' in identifiers\n\
   -remap                    Remap file names when including files.\n\
+  -priority=<prio>          Specify thread-priority to use (1-10, default is 5)\n\
   -h or --help              Display this information\n\
 "), stdout);
 }

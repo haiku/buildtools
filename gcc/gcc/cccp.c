@@ -83,6 +83,12 @@ static int hack_vms_include_specification ();
 #define INCLUDE_LEN_FUDGE 12	/* leave room for VMS syntax conversion */
 #endif /* VMS */
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 /* Windows does not natively support inodes, and neither does MSDOS.  */
 #if (defined (_WIN32) && ! defined (__CYGWIN__) && ! defined (_UWIN)) \
   || defined (__MSDOS__)
@@ -1189,6 +1195,7 @@ print_help ()
   printf ("  -P                        Do not generate #line directives\n");
   printf ("  -$                        Do not include '$' in identifiers\n");
   printf ("  -remap                    Remap file names when including files.\n");
+  printf ("  -priority=<prio>          Specify thread-priority to use (1-10, default is 5)\n");
   printf ("  -h or --help              Display this information\n");
 }
 
@@ -1452,6 +1459,10 @@ main (argc, argv)
 	    pfatal_with_name (pcp_fname);
 	  no_precomp = 1;
 	}
+#ifdef __BEOS__
+        else if (!strncmp (argv[i], "-priority=", 10))
+	  priority = atol (argv[i] + 10);
+#endif
 	break;
 
       case 't':
@@ -1748,6 +1759,17 @@ main (argc, argv)
       }
     }
   }
+
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+  {
+    char priobuf[20];
+    sprintf (priobuf, "-priority=%d", priority);
+    if (verbose)    
+      notice ("using priority %d\n", priority);
+  }  
+#endif
+
 
   /* Add dirs from CPATH after dirs from -I.  */
   /* There seems to be confusion about what CPATH should do,

@@ -53,6 +53,7 @@ Boston, MA 02111-1307, USA.  */
                             %{trigraphs}\
 			    %{!Q:-quiet} -dumpbase %b.cc %{d*} %{m*} %{a}\
 			    %{g*} %{O*} %{W*} %{w} %{pedantic*} %{ansi}\
+			    %{priority*}\
                             %{H} %{d*} %C %{D*} %{U*} %{i*} %Z\
 			    %{v:-version} %{pg:-p} %{p}\
 			    %{f*} %{+e*} %{aux-info*} %{Qn:-fno-ident}\
@@ -76,6 +77,7 @@ Boston, MA 02111-1307, USA.  */
     "%{!M:%{!MM:%{!E:cc1plus %{!pipe:%g.ii} %1 %2\
 			    %{!Q:-quiet} -dumpbase %b.cc %{d*} %{m*} %{a}\
 			    %{g*} %{O*} %{W*} %{w} %{pedantic*} %{ansi}\
+			    %{priority*}\
 			    %{v:-version} %{pg:-p} %{p}\
 			    %{f*} %{+e*} %{aux-info*} %{Qn:-fno-ident}\
 			    %{pg:%{fomit-frame-pointer:%e-pg and -fomit-frame-pointer are incompatible}}\
@@ -88,6 +90,7 @@ Boston, MA 02111-1307, USA.  */
   {"@c++-cpp-output",
    {"%{!M:%{!MM:%{!E:cc1plus %i %1 %2 %{!Q:-quiet} %{d*} %{m*} %{a}\
 			    %{g*} %{O*} %{W*} %{w} %{pedantic*} %{ansi}\
+			    %{priority*}\
 			    %{v:-version} %{pg:-p} %{p}\
 			    %{f*} %{+e*} %{aux-info*} %{Qn:-fno-ident}\
 			    %{pg:%{fomit-frame-pointer:%e-pg and -fomit-frame-pointer are incompatible}}\

@@ -75,6 +75,13 @@ Boston, MA 02111-1307, USA.  */
 #include "xcoffout.h"
 #endif
 
+
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 #ifdef VMS
 /* The extra parameters substantially improve the I/O performance.  */
 static FILE *
@@ -1113,6 +1120,7 @@ documented_lang_options[] =
   /* These are for languages with USE_CPPLIB.  */
   /* These options are already documented in cpplib.c */
   { "--help", "" },
+  { "-priority=<prio>", "" },
   { "-A", "" },
   { "-D", "" },
   { "-I", "" },
@@ -4585,6 +4593,7 @@ display_help ()
 #if defined HAIFA || defined INSN_SCHEDULING
   printf ("  -sched-verbose-<number> Set the verbosity level of the scheduler\n");
 #endif
+  printf ("  -priority=<prio>        Specify thread-priority to use (1-10, default is 5)\n");
   printf ("  --help                  Display this information\n");
 
   undoc = 0;
@@ -5138,6 +5147,10 @@ main (argc, argv)
 	    pedantic = 1;
 	  else if (!strcmp (str, "pedantic-errors"))
 	    flag_pedantic_errors = pedantic = 1;
+#ifdef __BEOS__
+	  else if (!strncmp (str, "priority=", 9))
+	    priority = atol (str + 9);
+#endif
 	  else if (!strcmp (str, "quiet"))
 	    quiet_flag = 1;
 	  else if (!strcmp (str, "version"))
@@ -5380,6 +5393,16 @@ main (argc, argv)
       else
 	filename = argv[i];
     }
+
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+  {
+    char priobuf[20];
+    sprintf (priobuf, "-priority=%d", priority);
+    if (version_flag && !quiet_flag)
+      notice ("using priority %d\n", priority);
+  }
+#endif
 
   /* Checker uses the frame pointer.  */
   if (flag_check_memory_usage)

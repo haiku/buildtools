@@ -43,6 +43,12 @@ Boston, MA 02111-1307, USA.  */
                lib$get_current_invo_context(decc$$get_vfork_jmpbuf()) : -1)
 #endif /* VMS */
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 #define COLLECT
 
 #include "collect2.h"
@@ -1048,6 +1054,13 @@ main (argc, argv)
       if (! strcmp (argv[i], "-debug"))
 	debug = 1;
     vflag = debug;
+
+#ifdef __BEOS__
+    for (i = 1; argv[i] != NULL; i ++)
+      if (! strncmp (argv[i], "-priority=",10))
+	  priority = atol (argv[i] + 10);
+    set_thread_priority (find_thread(NULL), priority);
+#endif
   }
 
 #ifndef DEFAULT_A_OUT_NAME

@@ -93,6 +93,12 @@ static char dir_separator_str[] = {DIR_SEPARATOR, 0};
 #define kill(p,s) raise(s)
 #endif
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 /* If a stage of compilation returns an exit status >= 1,
    compilation of that file ceases.  */
 
@@ -630,6 +636,7 @@ static struct compiler default_compilers[] =
 		  %{aux-info*} %{Qn:-fno-ident}\
 		  %{--help:--help}\
 		  %{g*} %{O*} %{W*} %{w} %{pedantic*}\
+		  %{priority*}\
 		  %{pg:%{fomit-frame-pointer:%e-pg and -fomit-frame-pointer are incompatible}}\
 		  %{S:%W{o*}%{!o*:-o %b.s}}%{!S:-o %{|!pipe:%g.s}} |\n\
                   %{!S:as %a %Y\
@@ -653,6 +660,7 @@ static struct compiler default_compilers[] =
    "%{!M:%{!MM:%{!E:cc1 %{!pipe:%g.i} %1 \
 		   %{!Q:-quiet} -dumpbase %b.c %{d*} %{m*} %{a*}\
 		   %{g*} %{O*} %{W*} %{w} %{pedantic*} %{std*}\
+		   %{priority*}\
 		   %{traditional} %{v:-version} %{pg:-p} %{p} %{f*}\
 		   %{aux-info*} %{Qn:-fno-ident}\
 		   %{--help:--help} \
@@ -699,6 +707,7 @@ static struct compiler default_compilers[] =
   {"@cpp-output",
    {"%{!M:%{!MM:%{!E:cc1 %i %1 %{!Q:-quiet} %{d*} %{m*} %{a*}\
 			%{g*} %{O*} %{W*} %{w} %{pedantic*} %{std*}\
+			%{priority*}\
 			%{traditional} %{v:-version} %{pg:-p} %{p} %{f*}\
 			%{aux-info*} %{Qn:-fno-ident}\
 			%{pg:%{fomit-frame-pointer:%e-pg and -fomit-frame-pointer are incompatible}}\
@@ -862,6 +871,7 @@ struct option_map option_map[] =
    {"--pipe", "-pipe", 0},
    {"--prefix", "-B", "a"},
    {"--preprocess", "-E", 0},
+   {"--priority", "-priority", 0},
    {"--print-search-dirs", "-print-search-dirs", 0},
    {"--print-file-name", "-print-file-name=", "aj"},
    {"--print-libgcc-file-name", "-print-libgcc-file-name", 0},
@@ -2507,6 +2517,7 @@ display_help ()
   printf ("                            Permissable languages include: c c++ assembler none\n");
   printf ("                            'none' means revert to the default behaviour of\n");
   printf ("                            guessing the language based on the file's extension\n");
+  printf ("  -priority=<prio>         Specify thread-priority to use (1-10, default is 5)\n");
 
   printf ("\nOptions starting with -g, -f, -m, -O or -W are automatically passed on to\n");
   printf ("the various sub-processes invoked by %s.  In order to pass other options\n",
@@ -2776,6 +2787,16 @@ process_command (argc, argv)
 	  add_assembler_option ("--help", 6);
 	  add_linker_option ("--help", 6);
 	}
+#ifdef __BEOS__
+      else if (!strncmp (argv[i], "-priority=", 10))
+	{
+	  priority = atol (argv[i] + 10);
+	  add_preprocessor_option (argv[i], strlen(argv[i]));
+	  add_assembler_option (argv[i], strlen(argv[i]));
+	  add_linker_option (argv[i], strlen(argv[i]));
+	  n_switches++;
+	}
+#endif
       else if (! strcmp (argv[i], "-print-search-dirs"))
 	print_search_dirs = 1;
       else if (! strcmp (argv[i], "-print-libgcc-file-name"))
@@ -3060,6 +3081,16 @@ process_command (argc, argv)
   if (have_c && have_o && lang_n_infiles > 1)
     fatal ("cannot specify -o with -c or -S and multiple compilations");
 
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+  {
+    char priobuf[20];
+    sprintf (priobuf, "-priority=%d", priority);
+    if (verbose_flag)
+      notice ("using priority %d\n", priority);
+  }  
+#endif
+
   /* Set up the search paths before we go looking for config files.  */
 
   /* These come before the md prefixes so that we will find gcc's subcommands
@@ -3158,6 +3189,16 @@ process_command (argc, argv)
 	;
       else if (! strcmp (argv[i], "-print-multi-directory"))
 	;
+      else if (! strncmp (argv[i], "-priority=", 10))
+	{
+	  /* Preserve the switch so that it can be caught by the
+	     cc1 spec string.  */
+	  switches[n_switches].part1     = argv[i]+1;
+	  switches[n_switches].args      = 0;
+	  switches[n_switches].live_cond = 0;
+	  switches[n_switches].validated = 0;
+	  n_switches++;
+	}
       else if (strcmp (argv[i], "-fhelp") == 0)
 	{
 	  if (verbose_flag)
