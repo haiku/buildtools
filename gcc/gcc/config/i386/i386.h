@@ -669,6 +669,11 @@ extern int ix86_arch;
          if (TEST_HARD_REG_BIT (x, i)) 			\
 	  fixed_regs[i] = call_used_regs[i] = 1; 	\
       }							\
+    if (!flag_omit_frame_pointer)			\
+      {							\
+	fixed_regs[FRAME_POINTER_REGNUM] = 1;		\
+	call_used_regs[FRAME_POINTER_REGNUM] = 1;	\
+      }							\
   }
 
 /* Return number of consecutive hard regs needed starting at reg REGNO
