@@ -38,6 +38,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 #define S_IXOTH 0001    /* Execute by others.  */
 #endif
 
+#ifdef __BEOS__
+static unsigned char _bfdio_files[OPEN_MAX+1];
+#endif
+
 file_ptr
 real_ftell (FILE *file)
 {
@@ -53,6 +57,9 @@ real_ftell (FILE *file)
 int
 real_fseek (FILE *file, file_ptr offset, int whence)
 {
+#ifdef __BEOS__
+  _bfdio_files[fileno(file)] = 1;
+#endif
 #if defined (HAVE_FSEEKO64)
   return fseeko64 (file, offset, whence);
 #elif defined (HAVE_FSEEKO)
@@ -175,7 +182,44 @@ bfd_bwrite (const void *ptr, bfd_size_type size, bfd *abfd)
       return size;
     }
 
+#if defined __BEOS__
+  {
+    FILE *f;
+    f = bfd_cache_lookup (abfd);
+    if (_bfdio_files[fileno(f)] == 1)
+      {
+        file_ptr eof;
+        file_ptr pos;
+
+        pos = ftell (f);
+        fseek (f, 0L, SEEK_END);
+        eof = ftell(f);
+          
+        if (eof < pos)
+          {
+            file_ptr diff;
+            static char zeros[512];
+
+            diff = pos - eof;
+
+            while (diff >= sizeof (zeros))
+              {
+                fwrite(zeros, sizeof (zeros), 1, f);
+                diff -= sizeof (zeros);
+              }
+            if (diff > 0)
+              fwrite(zeros, diff, 1, f);
+          }
+        else
+          fseek (f, pos, SEEK_SET);
+
+        _bfdio_files[fileno(f)] = 0;
+      }
+    nwrote = fwrite (ptr, 1, (size_t) size, f);
+  }
+#else
   nwrote = fwrite (ptr, 1, (size_t) size, bfd_cache_lookup (abfd));
+#endif
   if (nwrote != (size_t) -1)
     abfd->where += nwrote;
   if (nwrote != size)

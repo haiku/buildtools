@@ -301,7 +301,8 @@ main (int argc, char **argv)
   link_info.notice_all = FALSE;
   link_info.nocopyreloc = FALSE;
   link_info.new_dtags = FALSE;
-  link_info.combreloc = TRUE;
+  /* disable combreloc by default for BeOS: */
+  link_info.combreloc = FALSE;
   link_info.eh_frame_hdr = FALSE;
   link_info.strip_discarded = TRUE;
   link_info.strip = strip_none;

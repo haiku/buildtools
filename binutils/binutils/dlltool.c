@@ -386,6 +386,10 @@ static int verbose;
 static FILE *output_def;
 static FILE *base_file;
 
+#ifdef DLLTOOL_BEOS
+static const char *mname = "beos";
+#endif
+
 #ifdef DLLTOOL_ARM
 #ifdef DLLTOOL_ARM_EPOC
 static const char *mname = "arm-epoc";

@@ -985,7 +985,12 @@ parse_args (unsigned argc, char **argv)
 	      /* When creating a shared library, the default
 		 behaviour is to ignore any unresolved references.  */
 	      if (link_info.unresolved_syms_in_objects == RM_NOT_YET_SET)
+#ifdef __BEOS__
+		/* BeOS uses -shared for apps, but wants to report undefined symbols for them */
+		link_info.unresolved_syms_in_objects = how_to_report_unresolved_symbols;
+#else
 		link_info.unresolved_syms_in_objects = RM_IGNORE;
+#endif
 	      if (link_info.unresolved_syms_in_shared_libs == RM_NOT_YET_SET)
 		link_info.unresolved_syms_in_shared_libs = RM_IGNORE;
 	    }

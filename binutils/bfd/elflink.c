@@ -7813,6 +7813,8 @@ bfd_elf_final_link (bfd *abfd, struct bfd_link_info *info)
 	    {
 	    default:
 	      continue;
+/* BeOS (R5) doesn't know about DT_RELCOUNT, so we avoid using it */
+#ifndef __BEOS__
 	    case DT_NULL:
 	      if (relativecount > 0 && dyncon + bed->s->sizeof_dyn < dynconend)
 		{
@@ -7827,7 +7829,7 @@ bfd_elf_final_link (bfd *abfd, struct bfd_link_info *info)
 		  break;
 		}
 	      continue;
-
+#endif
 	    case DT_INIT:
 	      name = info->init_function;
 	      goto get_sym;
