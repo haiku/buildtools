@@ -73,6 +73,8 @@ DEFINE_LANG_NAME ("C++")
   { "-fno-labels-ok", "" },
   { "-fmemoize-lookups", "" },
   { "-fno-memoize-lookups", "" },
+  { "-fmultiple-symbol-spaces", "Use multiple symbol spaces (symbol export/import)" },
+  { "-fno-multiple-symbol-spaces", "" },
   { "-fname-mangling-version-", "" },
   { "-fnew-abi", "Enable experimental ABI changes" },
   { "-fno-new-abi", "" },

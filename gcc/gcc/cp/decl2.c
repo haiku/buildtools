@@ -493,6 +493,9 @@ int flag_permissive;
     if `-fSTRING' is seen as an option.
    (If `-fno-STRING' is seen as an option, the opposite value is stored.)  */
 
+/* Nonzero to force the use of multiple symbol spaces  */
+int flag_multiple_symbol_spaces;
+
 static struct { const char *string; int *variable; int on_value;}
 lang_f_options[] =
 {
@@ -526,6 +529,7 @@ lang_f_options[] =
   {"implicit-inline-templates", &flag_implicit_inline_templates, 1},
   {"implicit-templates", &flag_implicit_templates, 1},
   {"labels-ok", &flag_labels_ok, 1},
+  {"multiple-symbol-spaces", &flag_multiple_symbol_spaces, 1},
   {"nonansi-builtins", &flag_no_nonansi_builtin, 0},
   {"operator-names", &flag_operator_names, 1},
   {"optional-diags", &flag_optional_diags, 1},
@@ -2698,7 +2702,7 @@ import_export_class (ctype)
 	}
     }
 
-  if (!optimize)
+  if (!optimize || flag_multiple_symbol_spaces)
   if (import_export == -1)
     import_export = 0;
 

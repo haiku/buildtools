@@ -567,6 +567,9 @@ extern int flag_permissive;
 
 extern int flag_access_control;
 
+/* Nonzero to force the use of multiple symbol spaces  */
+int flag_multiple_symbol_spaces;
+
 
 /* C++ language-specific tree codes.  */
 #define DEFTREECODE(SYM, NAME, TYPE, LENGTH) SYM,

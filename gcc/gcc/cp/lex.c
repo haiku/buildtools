@@ -4890,18 +4890,18 @@ handle_cp_pragma (pname)
 
       interface_only = interface_strcmp (main_filename);
 
-      if (!optimize) 
+      if (!optimize || flag_multiple_symbol_spaces) 
 	{  /* activate multiple symbol spaces */
 #ifdef WORK_AROUND_PRAGMA_INTERFACE_BUG
 	  interface_only = 0;
 	  interface_unknown = 1;
 #else /* WORK_AROUND_PRAGMA_INTERFACE_BUG */
-      if (! interface_only)
-	interface_unknown = 0;
+	  if (! interface_only)
+	    interface_unknown = 0;
 #endif /* WORK_AROUND_PRAGMA_INTERFACE_BUG */
 	}
       else /* single symbol space: */
-      interface_unknown = 0;
+	interface_unknown = 0;
       TREE_INT_CST_LOW (fileinfo) = interface_only;
       TREE_INT_CST_HIGH (fileinfo) = interface_unknown;
 
