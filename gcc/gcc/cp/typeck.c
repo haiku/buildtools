@@ -5710,6 +5710,13 @@ build_c_cast (type, expr)
   if (type == error_mark_node || expr == error_mark_node)
     return error_mark_node;
 
+  if (processing_template_decl)
+    {
+      tree t = build_min (CAST_EXPR, type,
+			  min_tree_cons (NULL_TREE, value, NULL_TREE));
+      return t;
+    }
+
   /* build_c_cast puts on a NOP_EXPR to make the result not an lvalue.
      Strip such NOP_EXPRs if VALUE is being used in non-lvalue context.  */
   if (TREE_CODE (type) != REFERENCE_TYPE
@@ -5749,13 +5756,6 @@ build_c_cast (type, expr)
     {
       error ("cast specifies signature type");
       return error_mark_node;
-    }
-
-  if (processing_template_decl)
-    {
-      tree t = build_min (CAST_EXPR, type,
-			  min_tree_cons (NULL_TREE, value, NULL_TREE));
-      return t;
     }
 
   /* Convert functions and arrays to pointers and
