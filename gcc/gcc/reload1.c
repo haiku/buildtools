@@ -4155,6 +4155,7 @@ order_regs_for_reload (chain)
       int regno = reg_alloc_order[i];
 
       if (hard_reg_n_uses[regno].uses == 0
+	  && !fixed_regs[regno]
 	  && ! TEST_HARD_REG_BIT (bad_spill_regs, regno))
 	potential_reload_regs[o++] = regno;
     }
@@ -4162,12 +4163,14 @@ order_regs_for_reload (chain)
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     {
       if (hard_reg_n_uses[i].uses == 0 && call_used_regs[i]
+	  && !fixed_regs[i]
 	  && ! TEST_HARD_REG_BIT (bad_spill_regs, i))
 	potential_reload_regs[o++] = i;
     }
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     {
       if (hard_reg_n_uses[i].uses == 0 && ! call_used_regs[i]
+	  && !fixed_regs[i]
 	  && ! TEST_HARD_REG_BIT (bad_spill_regs, i))
 	potential_reload_regs[o++] = i;
     }
@@ -4182,10 +4185,13 @@ order_regs_for_reload (chain)
 
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     if (hard_reg_n_uses[i].uses != 0
+	  && !fixed_regs[hard_reg_n_uses[i].regno]
 	&& ! TEST_HARD_REG_BIT (bad_spill_regs, hard_reg_n_uses[i].regno))
       potential_reload_regs[o++] = hard_reg_n_uses[i].regno;
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
-    if (TEST_HARD_REG_BIT (bad_spill_regs, hard_reg_n_uses[i].regno))
+    if (TEST_HARD_REG_BIT (bad_spill_regs, hard_reg_n_uses[i].regno)
+    	  && !fixed_regs[hard_reg_n_uses[i].regno]
+)
       potential_reload_regs[o++] = hard_reg_n_uses[i].regno;
 }
 
