@@ -2351,11 +2351,15 @@ allows the control of this limit for functions that are explicitly marked as
 inline (ie marked with the inline keyword or defined within the class 
 definition in c++).  @var{n} is the size of functions that can be inlined in 
 number of pseudo instructions (not counting parameter handling).  The default
-value of n is 10000.  Increasing this value can result in more inlined code at
-the cost of compilation time and memory consumption.  Decreasing usually makes
-the compilation faster and less code will be inlined (which presumably 
-means slower programs).  This option is particularly useful for programs that 
-use inlining heavily such as those based on recursive templates with c++.
+value of n is 2000 .  Increasing this value (to e.g. 5000) can result in more
+inlined code at the cost of compilation time and memory consumption and will
+result in larger excutables. Too much inlining can decrease performance
+again because of the limited size of your CPU's instruction cache.
+Decreasing (e.g. to 250) usually makes the compilation faster and less code
+will be inlined (which presumably means smaller executables but slower
+programs).  This option is particularly useful for programs that use
+inlining heavily such as those based on recursive templates with c++.
+Note that functions at the leaf of the call tree get a bonus.
 
 @emph{Note:} pseudo instruction represents, in this particular context, an
 abstract measurement of function's size.  In no way, it represents a count
