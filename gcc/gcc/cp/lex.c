@@ -86,6 +86,8 @@ static void parse_float PROTO((PTR));
 static int is_global PROTO((tree));
 static void init_filename_times PROTO((void));
 
+extern int optimize;		/* lives in toplev.c */
+
 /* Given a file name X, return the nondirectory portion.
    Keep in mind that X can be computed more than once.  */
 char *
@@ -4879,12 +4881,19 @@ handle_cp_pragma (pname)
 	}
 
       interface_only = interface_strcmp (main_filename);
-#ifdef MULTIPLE_SYMBOL_SPACES
+
+      if (!optimize) 
+	{  /* activate multiple symbol spaces */
+#ifdef WORK_AROUND_PRAGMA_INTERFACE_BUG
+	  interface_only = 0;
+	  interface_unknown = 1;
+#else /* WORK_AROUND_PRAGMA_INTERFACE_BUG */
       if (! interface_only)
 	interface_unknown = 0;
-#else /* MULTIPLE_SYMBOL_SPACES */
+#endif /* WORK_AROUND_PRAGMA_INTERFACE_BUG */
+	}
+      else /* single symbol space: */
       interface_unknown = 0;
-#endif /* MULTIPLE_SYMBOL_SPACES */
       TREE_INT_CST_LOW (fileinfo) = interface_only;
       TREE_INT_CST_HIGH (fileinfo) = interface_unknown;
 

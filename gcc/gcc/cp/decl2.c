@@ -67,6 +67,8 @@ typedef struct priority_info_s {
   int destructions_p;
 } *priority_info;
 
+extern int optimize;		/* lives in toplev.c */
+
 static tree get_sentry PROTO((tree));
 static void mark_vtable_entries PROTO((tree));
 static void grok_function_init PROTO((tree, tree));
@@ -2696,10 +2698,9 @@ import_export_class (ctype)
 	}
     }
 
-#ifdef MULTIPLE_SYMBOL_SPACES
+  if (!optimize)
   if (import_export == -1)
     import_export = 0;
-#endif
 
   if (import_export)
     {
