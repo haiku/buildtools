@@ -259,7 +259,7 @@ DISTFILES = $(DIST_COMMON) $(SOURCES) $(HEADERS) $(TEXINFOS) $(EXTRA_DIST)
 
 TAR = tar
 GZIP_ENV = --best
-all: all-redirect
+all: all-redirect $(MKDOC)
 .SUFFIXES:
 .SUFFIXES: .dvi .info .ps .texi .texinfo .txi
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ Makefile.am $(top_srcdir)/configure.in $(ACLOCAL_M4) 
