@@ -361,6 +361,19 @@ READ_INT(unsigned long long)
 READ_INT(bool)
 #endif
 
+static void do_scan(istream *istr, const char *format, ...)
+{
+  streambuf *_strbuf = istr->_strbuf;
+  va_list ap;
+  va_start(ap, format);
+  int errcode = 0;
+  int count = _IO_vfscanf(_strbuf, format, ap, &errcode);
+  if ((errcode & (_IOS_EOF|_IOS_FAIL)) == _IOS_EOF && count != 1)
+    errcode |= _IOS_FAIL;
+  istr->setstate((ios::iostate)errcode);
+  va_end(ap);
+}
+
 istream& istream::operator>>(long double& x)
 {
     if (ipfx0())
@@ -368,10 +381,10 @@ istream& istream::operator>>(long double& x)
 	_IO_cleanup_region_start ((void (*) __P ((void *))) _IO_funlockfile,
 				  _strbuf);
 #if _G_HAVE_LONG_DOUBLE_IO
-	scan("%Lg", &x);
+	do_scan(this, "%Lg", &x);
 #else
 	double y;
-	scan("%lg", &y);
+	do_scan(this, "%lg", &y);
 	x = y;
 #endif
 	isfx();
@@ -386,7 +399,7 @@ istream& istream::operator>>(double& x)
       {
 	_IO_cleanup_region_start ((void (*) __P ((void *))) _IO_funlockfile,
 				  _strbuf);
-	scan("%lg", &x);
+	do_scan(this, "%lg", &x);
 	isfx();
 	_IO_cleanup_region_end (0);
       }
@@ -399,7 +412,7 @@ istream& istream::operator>>(float& x)
       {
 	_IO_cleanup_region_start ((void (*) __P ((void *))) _IO_funlockfile,
 				  _strbuf);
-	scan("%g", &x);
+	do_scan(this, "%g", &x);
 	isfx();
 	_IO_cleanup_region_end (0);
       }
