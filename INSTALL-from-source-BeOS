@@ -32,6 +32,15 @@ Ok, now everything is compiled and ready, waiting to be installed:
 	
 That's it, gcc-2.95.3 and binutils-2.15 are now installed and active.
 
+For the installation, you'll need the following tools/libraries to be installed:
+	autoconf
+	automake
+	gettext
+	libdl
+	libiconv
+
+You'll find most of these in the GNU and LibPak packages on BeBits (http://www.bebits.com/app/2971, and http://www.bebits.com/app/3322 respectively).
+
 So have fun!
 
 Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
