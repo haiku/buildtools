@@ -35,7 +35,7 @@ extern "C++" {
 class SFile: public fstream
 {
   protected:
-    int       sz;                   // unit size for structured binary IO
+    long      sz;                   // unit size for structured binary IO
 
 public:
     SFile() : fstream() { }
