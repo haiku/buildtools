@@ -8359,7 +8359,16 @@ gen_subprogram_die (decl, context_die)
   if (origin != NULL)
     {
       subr_die = new_die (DW_TAG_subprogram, context_die);
-      add_abstract_origin_attribute (subr_die, origin);
+      /* lookup_decl_die (origin) may be NULL if decl is a copy of an
+	 implicit declaration of a function that was created while
+	 inlining a function that referenced the function without a
+	 prior declaration.  Since we don't emit such implicit
+	 declarations in the first place, there's no point in linking
+	 this copy to it.  Besides, add_abstract_origin_attribute()
+	 would crash.  */
+      if (TREE_CODE (origin) != FUNCTION_DECL
+	  || lookup_decl_die (origin))
+	add_abstract_origin_attribute (subr_die, origin);
     }
   else if (old_die && DECL_ABSTRACT (decl)
 	   && get_AT_unsigned (old_die, DW_AT_inline))
