@@ -1,7 +1,7 @@
 #! /bin/sh
 
-BINUTILS=binutils-2.15-beos
-GCC=gcc-2.95.3-beos
+BINUTILS=binutils
+GCC=gcc
 
 echo generation html-docs for as...
 ln -sf ../../$BINUTILS/gas/doc/all.texi asconfig.texi
@@ -49,7 +49,7 @@ texi2html -split=section -nonumber -top_file=index.html -toc_file=toc.html -subd
 ln -sf iostream/index.html iostream.html
 
 echo generation html-docs for ld...
-texi2html -split=section -top_file=index.html -toc_file=toc.html -subdir=ld -I ../../binutils-2.15-beos/bfd/doc ../../$BINUTILS/ld/ld.texinfo
+texi2html -split=section -top_file=index.html -toc_file=toc.html -subdir=ld -I ../../$BINUTILS/bfd/doc ../../$BINUTILS/ld/ld.texinfo
 ln -sf ld/index.html ld.html
 
 echo generation html-docs for ldint...
