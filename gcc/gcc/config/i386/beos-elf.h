@@ -202,7 +202,7 @@ Boston, MA 02111-1307, USA.  */
 #define LIBGCC_SPEC ""
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart: %{!shared: start_dyn.o%s}} init_term_dyn.o%s %{p:i386-mcount.o%s}"
+#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart: %{!shared: start_dyn.o%s fix_bdirectwin_typeinfo.o%s}} init_term_dyn.o%s %{p:i386-mcount.o%s}"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
