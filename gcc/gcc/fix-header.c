@@ -796,6 +796,9 @@ write_rbrac ()
 	      || !strcmp (fn->fname, "vfprintf")
 	      || !strcmp (fn->fname, "vsprintf")
 	      || !strcmp (fn->fname, "rewinddir")
+	      || !strcmp (fn->fname, "getc")
+	      || !strcmp (fn->fname, "putc")
+	      || !strcmp (fn->fname, "setjmp")
 	      || !strcmp (fn->fname, "abort"))
 	    macro_protect = 1;
 

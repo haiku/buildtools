@@ -46,13 +46,8 @@
  * If you do not wish that, delete this exception notice.
  */
 
-#ifndef FIXINC_SERVER_H
-#define FIXINC_SERVER_H
-
-#include <stdio.h>
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
+#ifndef GCC_SERVER_H
+#define GCC_SERVER_H
 
 /*
  *  Dual pipe opening of a child process
@@ -70,25 +65,10 @@ typedef struct
   FILE *pf_write;		/* parent write fp */
 } t_pf_pair;
 
-typedef char *t_pchar;
+char* run_shell( const char* pzCmd );
+pid_t proc2_fopen( t_pf_pair* p_pair, tCC** pp_args );
+pid_t proc2_open( t_fd_pair* p_pair, tCC** pp_args );
+int   chain_open( int in_fd, tCC** pp_args, pid_t* p_child );
+void close_server( void );
 
-#define NOPROCESS	((pid_t) -1)
-#define NULLPROCESS	((pid_t)0)
-
-#define EXIT_PANIC	99
-
-typedef enum
-{
-  BOOL_FALSE, BOOL_TRUE
-} bool;
-
-#define _P_(p)	()
-
-char *run_shell   _P_ (( const char *pzCmd));
-pid_t proc2_fopen _P_ (( t_pf_pair * p_pair, t_pchar * pp_args));
-pid_t proc2_open  _P_ (( t_fd_pair * p_pair, t_pchar * pp_args));
-int chain_open    _P_ (( int in_fd,
-                         t_pchar * pp_args,
-                         pid_t * p_child));
-void close_server _P_ (( void ));
-#endif /* FIXINC_SERVER_H */
+#endif /* ! GCC_SERVER_H */

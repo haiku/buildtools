@@ -2136,7 +2136,7 @@ fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
 	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def 
 	MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc; pwd` ; \
 	export MAKE srcdir ; \
-	cd ./fixinc; $(SHELL) $${srcdir}/mkfixinc.sh $(target)
+	cd ./fixinc; $(SHELL) $${srcdir}/mkfixinc.sh $(host_canonical) $(target)
 
 ##stmp-fixinc: $(FIXINCLUDES) gsyslimits.h
 ##	rm -rf include
