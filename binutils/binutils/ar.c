@@ -51,6 +51,12 @@
 
 #define BUFSIZE 8192
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 /* Kludge declaration from BFD!  This is ugly!  FIXME!  XXX */
 
 struct ar_hdr *
@@ -404,7 +410,17 @@ main (int argc, char **argv)
 	  else
 	    print_version ("ar");
 	}
+#ifdef __BEOS__
+      else if (!strncmp (argv[1], "-priority=", 10))
+	{
+	  priority = atol (argv[1] + 10);
     }
+#endif
+    }
+
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+#endif
 
   START_PROGRESS (program_name, 0);
 

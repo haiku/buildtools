@@ -40,6 +40,12 @@
 #include "ldemul.h"
 #include "demangle.h"
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 #ifndef PATH_SEPARATOR
 #if defined (__MSDOS__) || (defined (_WIN32) && ! defined (__CYGWIN32__))
 #define PATH_SEPARATOR ';'
@@ -142,7 +148,8 @@ enum option_values
   OPTION_PIE,
   OPTION_UNRESOLVED_SYMBOLS,
   OPTION_WARN_UNRESOLVED_SYMBOLS,
-  OPTION_ERROR_UNRESOLVED_SYMBOLS
+  OPTION_ERROR_UNRESOLVED_SYMBOLS,
+  OPTION_PRIORITY
 };
 
 /* The long options.  This structure is used for both the option
@@ -235,6 +242,8 @@ static const struct ld_option ld_options[] =
       'o', N_("FILE"), N_("Set output file name"), EXACTLY_TWO_DASHES },
   { {NULL, required_argument, NULL, '\0'},
       'O', NULL, N_("Optimize output file"), ONE_DASH },
+  { {"priority", required_argument, NULL, OPTION_PRIORITY},
+     '\0', N_("PRIO"), N_("Set thread priority to PRIO"), ONE_DASH },
   { {"Qy", no_argument, NULL, OPTION_IGNORE},
       '\0', NULL, N_("Ignored for SVR4 compatibility"), ONE_DASH },
   { {"emit-relocs", no_argument, NULL, 'q'},
@@ -627,6 +636,11 @@ parse_args (unsigned argc, char **argv)
 	  else
 	    einfo (_("%P%F: unrecognized -assert option `%s'\n"), optarg);
 	  break;
+#ifdef __BEOS__
+	case OPTION_PRIORITY:
+	  priority = atol (optarg);
+	  break;
+#endif
 	case 'A':
 	  ldfile_add_arch (optarg);
 	  break;
@@ -1228,6 +1242,10 @@ parse_args (unsigned argc, char **argv)
 	  break;
 	}
     }
+
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+#endif
 
   if (ingroup)
     lang_leave_group ();

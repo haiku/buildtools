@@ -60,6 +60,12 @@ extern PTR sbrk ();
 #endif
 #endif
 
+#ifdef __BEOS__
+#include <OS.h>
+/* the thread priority used for all gcc-tools */
+static int priority = B_LOW_PRIORITY;
+#endif
+
 #ifdef USING_CGEN
 /* Perform any cgen specific initialisation for gas.  */
 extern void gas_cgen_begin (void);
@@ -301,6 +307,8 @@ Options:\n\
   fprintf (stream, _("\
   -o OBJFILE              name the object-file output OBJFILE (default a.out)\n"));
   fprintf (stream, _("\
+  -priority=<prio>        specify thread-priority to use (1-10, default is 5)\n"));
+  fprintf (stream, _("\
   -R                      fold data section into text section\n"));
   fprintf (stream, _("\
   --statistics            print various measured statistics from execution\n"));
@@ -415,6 +423,10 @@ parse_args (int * pargc, char *** pargv)
       OPTION_EXECSTACK,
       OPTION_NOEXECSTACK,
       OPTION_WARN_FATAL
+#ifdef __BEOS__      
+      ,
+      OPTION_PRIORITY
+#endif
     };
   
   static const struct option std_longopts[] =
@@ -458,6 +470,10 @@ parse_args (int * pargc, char *** pargv)
     {"noexecstack", no_argument, NULL, OPTION_NOEXECSTACK},
 #endif
     {"fatal-warnings", no_argument, NULL, OPTION_WARN_FATAL}
+#ifdef __BEOS__
+	 ,
+    {"priority", required_argument, NULL, OPTION_PRIORITY}
+#endif
     /* When you add options here, check that they do not collide with
        OPTION_MD_BASE.  See as.h.  */
   };
@@ -539,6 +555,12 @@ parse_args (int * pargc, char *** pargv)
 	case OPTION_HELP:
 	  show_usage (stdout);
 	  exit (EXIT_SUCCESS);
+
+#ifdef __BEOS__
+	case OPTION_PRIORITY:
+	  priority = atol (optarg);
+	  break;
+#endif
 
 	case OPTION_NOCPP:
 	  break;
@@ -812,6 +834,10 @@ the GNU General Public License.  This program has absolutely no warranty.\n"));
 
   *pargc = new_argc;
   *pargv = new_argv;
+
+#ifdef __BEOS__
+  set_thread_priority (find_thread(NULL), priority);
+#endif
 
 #ifdef md_after_parse_args
   md_after_parse_args ();
