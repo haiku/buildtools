@@ -7797,11 +7797,13 @@ scope_die_for (t, context_die)
 
       if (i < 0)
 	{
-	  if (TREE_CODE_CLASS (TREE_CODE (containing_scope)) != 't')
-	    abort ();
-	  if (debug_info_level > DINFO_LEVEL_TERSE
-	      && !TREE_ASM_WRITTEN (containing_scope))
-	    abort ();
+	  if (TREE_CODE_CLASS (TREE_CODE (containing_scope)) != 't'
+	  || (debug_info_level > DINFO_LEVEL_TERSE
+	      && !TREE_ASM_WRITTEN (containing_scope)))
+	    /* [zooey] avoid ICEing, return default instead: */
+	    if (pedantic)
+	      warning ("Trapped ICE during generation of debug-info, expect problems in debugger!\n");
+	    // abort ();
 
 	  /* If none of the current dies are suitable, we get file scope.  */
 	  scope_die = comp_unit_die;
@@ -8396,7 +8398,10 @@ gen_subprogram_die (decl, context_die)
 	  extern int errorcount;
 	  if (errorcount)
 	    return;
-	  abort ();
+	  // [zooey]: avoid ICEing, since we *should* have trapped all
+	  //          executions paths leading here...
+	  // abort ();
+	  return;
 	}
 
       /* If the definition comes from the same place as the declaration,
