@@ -281,7 +281,7 @@ else
 fi
 tr '	' ' ' <TMP >dummy.out
 
-for TYPE in dev_t clock_t fpos_t gid_t ino_t mode_t nlink_t off_t pid_t ptrdiff_t sigset_t size_t ssize_t time_t uid_t va_list wchar_t wint_t int16_t uint16_t int32_t uint_32_t u_int16_t u_int32_t; do
+for TYPE in dev_t clock_t fpos_t fpos64_t gid_t ino_t mode_t nlink_t off_t off64_t pid_t ptrdiff_t sigset_t size_t ssize_t time_t uid_t va_list wchar_t wint_t int16_t uint16_t int32_t uint_32_t u_int16_t u_int32_t; do
     eval IMPORTED=\$$TYPE
     if [ -n "${IMPORTED}" ] ; then
 	eval "$TYPE='$IMPORTED'"
@@ -401,11 +401,13 @@ typedef $uint32_t ${macro_prefix}uint32_t;
 typedef ${clock_t-int /* default */} ${macro_prefix}clock_t;
 typedef ${dev_t-int /* default */} ${macro_prefix}dev_t;
 typedef ${fpos_t-long /* default */} ${macro_prefix}fpos_t;
+typedef ${fpos64_t-long /* default */} ${macro_prefix}fpos64_t;
 typedef ${gid_t-int /* default */} ${macro_prefix}gid_t;
 typedef ${ino_t-int /* default */} ${macro_prefix}ino_t;
 typedef ${mode_t-int /* default */} ${macro_prefix}mode_t;
 typedef ${nlink_t-int /* default */} ${macro_prefix}nlink_t;
 typedef ${off_t-long /* default */} ${macro_prefix}off_t;
+typedef ${off64_t-long /* default */} ${macro_prefix}off64_t;
 typedef ${pid_t-int /* default */} ${macro_prefix}pid_t;
 #ifndef __PTRDIFF_TYPE__
 #define __PTRDIFF_TYPE__ ${ptrdiff_t-long int /* default */}

@@ -79,6 +79,7 @@ if [ "${shared}" = "yes" ]; then
     *-*-solaris*)	frags="${frags} sol2shm.ml" ;;
     *-*-sunos4*)	frags="${frags} sunos4.ml" ;;
     *-*-aix*)		frags="${frags} aix.ml" ;;
+    *-*-beos*)		frags="${frags} beos.ml" ;;
     i[3456]86-*-interix*)	frags="${frags} x86-interix.ml" ;;
     *-*-gnu*)		frags="${frags} gnu.ml" ;;
   esac
@@ -193,7 +194,7 @@ if test x${gxx_include_dir} = x; then
   if test x${enable_version_specific_runtime_libs} = xyes; then
     gxx_include_dir='${libsubdir}/include/g++'
   else
-    gxx_include_dir='${prefix}/include/g++'-${libstdcxx_interface}
+    gxx_include_dir='${prefix}/include/g++'
   fi
 fi
 

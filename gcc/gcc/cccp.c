@@ -287,6 +287,10 @@ static int done_initializing = 0;
 /* Line where a newline was first seen in a string constant.  */
 
 static int multiline_string_line = 0;
+#ifdef FULL_PATHS_IN_ERRORS
+/* Nonzero if we should fully resolve pathnames in diagnostics.  */
+static int flag_full_paths_in_errors = 1;
+#endif
 
 /* I/O buffer structure.
    The `fname' field is nonzero for source files and #include files
@@ -1124,7 +1128,7 @@ print_help ()
   printf ("Usage: %s [switches] input output\n", progname);
   printf ("Switches:\n");
   printf ("  -include <file>           Include the contents of <file> before other files\n");
-  printf ("  -imacros <file>           Accept definition of marcos in <file>\n");
+  printf ("  -imacros <file>           Accept definition of macros in <file>\n");
   printf ("  -iprefix <path>           Specify <path> as a prefix for next two options\n");
   printf ("  -iwithprefix <dir>        Add <dir> to the end of the system include paths\n");
   printf ("  -iwithprefixbefore <dir>  Add <dir> to the end of the main include paths\n");
@@ -1138,7 +1142,7 @@ print_help ()
   printf ("  -traditional              Follow K&R pre-processor behaviour\n");
   printf ("  -trigraphs                Support ANSI C trigraphs\n");
   printf ("  -lang-c                   Assume that the input sources are in C\n");
-  printf ("  -lang-c89                 Assume that the input is C89; depricated\n");
+  printf ("  -lang-c89                 Assume that the input is C89; deprecated\n");
   printf ("  -lang-c++                 Assume that the input sources are in C++\n");
   printf ("  -lang-objc                Assume that the input sources are in ObjectiveC\n");
   printf ("  -lang-objc++              Assume that the input sources are in ObjectiveC++\n");
@@ -1537,6 +1541,12 @@ main (argc, argv)
 	  user_label_prefix = "_";
 	else if (!strcmp (argv[i], "-fno-leading-underscore"))
 	  user_label_prefix = "";
+#ifdef FULL_PATHS_IN_ERRORS
+	else if (!strcmp (argv[i], "-frelative-path-errors"))
+	  flag_full_paths_in_errors = 0;
+	else if (!strcmp (argv[i], "-fno-relative-path-errors"))
+	  flag_full_paths_in_errors = 1;
+#endif
 	break;
 
       case 'M':
@@ -9293,6 +9303,27 @@ vnotice (msgid, args)
   vfprintf (stderr, _(msgid), args);
 }
 
+
+#ifdef FULL_PATHS_IN_ERRORS
+extern char *convert_to_full_path PROTO ((const char *));
+
+static void
+print_converted_path (const char *s)
+{
+  char *full_path = convert_to_full_path(s);
+  eprint_string (full_path, strlen(full_path));
+}
+
+#define CONVERT_PATH(x) \
+  (flag_full_paths_in_errors ? convert_to_full_path(x) : (x))
+#define PRINT_CONVERTED_PATH(x, l) \
+  (flag_full_paths_in_errors ? print_converted_path(x) : eprint_string(x, l))
+#else
+#define CONVERT_PATH(x) (x)
+#define PRINT_CONVERTED_PATH(x, l) eprint_string(x, l)
+#endif
+
+
 /* error - print error message and increment count of errors.  */
 
 void
@@ -9330,7 +9361,7 @@ verror (msgid, args)
     }
 
   if (ip != NULL) {
-    eprint_string (ip->nominal_fname, ip->nominal_fname_len);
+    PRINT_CONVERTED_PATH (ip->nominal_fname, ip->nominal_fname_len);
     fprintf (stderr, ":%d: ", ip->lineno);
   }
   vnotice (msgid, args);
@@ -9357,7 +9388,7 @@ error_from_errno (name)
     }
 
   if (ip != NULL) {
-    eprint_string (ip->nominal_fname, ip->nominal_fname_len);
+    PRINT_CONVERTED_PATH (ip->nominal_fname, ip->nominal_fname_len);
     fprintf (stderr, ":%d: ", ip->lineno);
   }
 
@@ -9409,7 +9440,7 @@ vwarning (msgid, args)
     }
 
   if (ip != NULL) {
-    eprint_string (ip->nominal_fname, ip->nominal_fname_len);
+    PRINT_CONVERTED_PATH (ip->nominal_fname, ip->nominal_fname_len);
     fprintf (stderr, ":%d: ", ip->lineno);
   }
   notice ("warning: ");
@@ -9456,7 +9487,7 @@ verror_with_line (line, msgid, args)
     }
 
   if (ip != NULL) {
-    eprint_string (ip->nominal_fname, ip->nominal_fname_len);
+    PRINT_CONVERTED_PATH (ip->nominal_fname, ip->nominal_fname_len);
     fprintf (stderr, ":%d: ", line);
   }
   vnotice (msgid, args);
@@ -9508,7 +9539,7 @@ vwarning_with_line (line, msgid, args)
     }
 
   if (ip != NULL) {
-    eprint_string (ip->nominal_fname, ip->nominal_fname_len);
+    PRINT_CONVERTED_PATH (ip->nominal_fname, ip->nominal_fname_len);
     fprintf (stderr, line ? ":%d: " : ": ", line);
   }
   notice ("warning: ");
@@ -9590,7 +9621,7 @@ pedwarn_with_file_and_line VPROTO ((const char *file, size_t file_len, int line,
 #endif
  
   if (file) {
-    eprint_string (file, file_len);
+    PRINT_CONVERTED_PATH (file, file_len);
     fprintf (stderr, ":%d: ", line);
   }
   if (pedantic_errors)
@@ -9651,7 +9682,7 @@ print_containing_files ()
 	notice (",\n                 from ");
       }
 
-      eprint_string (ip->nominal_fname, ip->nominal_fname_len);
+      PRINT_CONVERTED_PATH (ip->nominal_fname, ip->nominal_fname_len);
       fprintf (stderr, ":%d", ip->lineno);
     }
   if (! first)

@@ -60,6 +60,7 @@ case "${target}" in
   *-sco3.2v[45]*)   frags=sco4.mt ;;
   *-isc*)        frags=isc.mt ;;
   *-netware*)    frags=netware.mt ;;
+  *-beos*)	 frags="beos.mt mtsafe.mt" ;;
   *)             frags=${target_cpu}.mt ;;
 esac
 
@@ -189,7 +190,7 @@ if test x${gxx_include_dir} = x; then
     gxx_include_dir='${libsubdir}/include/g++'
   else
     . ${topsrcdir}/config.if
-    gxx_include_dir='${prefix}/include/g++'-${libstdcxx_interface}
+    gxx_include_dir='${prefix}/include/g++'
   fi
 fi
 

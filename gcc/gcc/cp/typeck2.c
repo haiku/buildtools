@@ -343,8 +343,7 @@ my_friendly_abort (i)
 	    ack ("Internal compiler error.");
 	  else
 	    ack ("Internal compiler error %d.", i);
-	  ack ("Please submit a full bug report.");
-	  ack ("See %s for instructions.", GCCBUGURL);
+	  ack ("Please submit info to Oliver Tappe <gcc@hirschkaefer.de>.");
 	}
       else
 	error ("confused by earlier errors, bailing out");
@@ -358,8 +357,7 @@ my_friendly_abort (i)
   else
     error ("Internal compiler error %d.", i);
 
-  error ("Please submit a full bug report.");
-  fatal ("See %s for instructions.", GCCBUGURL);
+  fatal ("Please submit info to Oliver Tappe <gcc@hirschkaefer.de>.");
 }
 
 void

@@ -3546,6 +3546,23 @@ for machine in $build $host $target; do
 		tm_file=i386/i386-aout.h
 		tmake_file=i386/t-i386bare
 		;;
+	i[34567]86-*-beospe*)
+		xm_file=i386/xm-beos.h
+		xm_defines="USE_C_ALLOCA"
+		tmake_file=i386/t-beos
+		tm_file=i386/beos-pe.h
+		xmake_file=i386/x-beos
+		extra_objs=winnt.o
+		;;
+	i[34567]86-*-beoself* | i[34567]86-*-beos*)
+		xm_file=i386/xm-beos.h
+		tmake_file='i386/t-beos i386/t-crtpic'
+		tm_file=i386/beos-elf.h
+		xmake_file=i386/x-beos
+		extra_objs=winnt.o
+		extra_parts='crtbegin.o crtend.o'
+		fixincludes=Makefile.in
+		;;
 	i[34567]86-*-bsdi* | i[34567]86-*-bsd386*)
 		tm_file=i386/bsd386.h
 #		tmake_file=t-libc-ok

@@ -772,6 +772,11 @@ int flag_instrument_function_entry_exit = 0;
 
 int flag_no_ident = 0;
 
+#ifdef FULL_PATHS_IN_ERRORS
+/* Nonzero if we should fully resolve pathnames in diagnostics.  */
+int flag_full_paths_in_errors = 1;
+#endif
+
 /* Table of supported debugging formats.  */
 static struct
 {
@@ -978,6 +983,10 @@ lang_independent_options f_options[] =
    "Instrument function entry/exit with profiling calls"},
   {"leading-underscore", &flag_leading_underscore, 1,
    "External symbols have a leading underscore" },
+#ifdef FULL_PATHS_IN_ERRORS
+  {"relative-path-errors", &flag_full_paths_in_errors, 0,
+   "Warning and error messages are emitted with relative pathnames"},
+#endif
   {"ident", &flag_no_ident, 0,
    "Process #ident directives"}
 };
@@ -1533,6 +1542,14 @@ announce_function (decl)
     }
 }
 
+#ifdef FULL_PATHS_IN_ERRORS
+extern char * convert_to_full_path PROTO((const char *));
+#define CONVERT_PATH(x) \
+  (flag_full_paths_in_errors ? convert_to_full_path(x) : (x))
+#else
+#define CONVERT_PATH(x) (x)
+#endif
+
 /* The default function to print out name of current function that caused
    an error.  */
 
@@ -1543,7 +1560,7 @@ default_print_error_function (file)
   if (last_error_function != current_function_decl)
     {
       if (file)
-	fprintf (stderr, "%s: ", file);
+	fprintf (stderr, "%s: ", CONVERT_PATH(file));
 
       if (current_function_decl == NULL)
 	notice ("At top level:\n");
@@ -1569,7 +1586,7 @@ void (*print_error_function) PROTO((const char *)) =
 
 void
 report_error_function (file)
-  const char *file ATTRIBUTE_UNUSED;
+  const char *file;
 {
   struct file_stack *p;
 
@@ -1579,6 +1596,8 @@ report_error_function (file)
       need_error_newline = 0;
     }
 
+  (*print_error_function) (CONVERT_PATH(file));
+
   if (input_file_stack && input_file_stack->next != 0
       && input_file_stack_tick != last_error_tick)
     {
@@ -1586,7 +1605,7 @@ report_error_function (file)
 	notice ((p == input_file_stack->next
 		 ?    "In file included from %s:%d"
 		 : ",\n                 from %s:%d"),
-		p->name, p->line);
+		CONVERT_PATH(p->name), p->line);
       fprintf (stderr, ":\n");
       last_error_tick = input_file_stack_tick;
     }
@@ -1652,7 +1671,7 @@ report_file_and_line (file, line, warn)
      int warn;
 {
   if (file)
-    fprintf (stderr, "%s:%d: ", file, line);
+    fprintf (stderr, "%s:%d: ", CONVERT_PATH(file), line);
   else
     fprintf (stderr, "%s: ", progname);
 

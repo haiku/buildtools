@@ -2862,6 +2862,9 @@ and searches several directories.
 You need this special case of the @samp{-l} option in order to
 link an Objective C program.
 
+@item -nostart
+BeOS-specific synonym for @code{-shared}, see there.
+
 @item -nostartfiles
 Do not use the standard system startup files when linking.
 The standard system libraries are used normally, unless @code{-nostdlib}

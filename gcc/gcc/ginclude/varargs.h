@@ -101,7 +101,7 @@ typedef int __builtin_va_alist_t __attribute__((__mode__(__word__)));
 
 #ifndef __GNUC_VA_LIST
 #define __GNUC_VA_LIST
-#if defined(__svr4__) || defined(_AIX) || defined(_M_UNIX)
+#if defined(__svr4__) || defined(_AIX) || defined(_M_UNIX) || defined(__BEOS__)
 typedef char *__gnuc_va_list;
 #else
 typedef void *__gnuc_va_list;
@@ -201,7 +201,10 @@ typedef __gnuc_va_list va_list;
 #ifndef _VA_LIST
 /* The macro _VA_LIST_T_H is used in the Bull dpx2  */
 #ifndef _VA_LIST_T_H
+/* The macro __va_list__ is used by BeOS.  */
+#ifndef __va_list__
 typedef __gnuc_va_list va_list;
+#endif /* not __va_list__ */
 #endif /* not _VA_LIST_T_H */
 #endif /* not _VA_LIST */
 #endif /* not _VA_LIST_DEFINED */

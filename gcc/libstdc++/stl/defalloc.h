@@ -30,7 +30,11 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <limits.h>
+#if __BEOS__
+# include <stdio.h>
+#else
 #include <iostream.h>
+#endif
 #include <algobase.h>
 
 
@@ -39,7 +43,11 @@ inline T* allocate(ptrdiff_t size, T*) {
     set_new_handler(0);
     T* tmp = (T*)(::operator new((size_t)(size * sizeof(T))));
     if (tmp == 0) {
+#if __BEOS__
+	fprintf(stderr, "out of memory\n");
+#else
 	cerr << "out of memory" << endl; 
+#endif
 	exit(1);
     }
     return tmp;

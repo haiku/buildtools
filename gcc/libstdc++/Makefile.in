@@ -99,7 +99,7 @@ marlink:
 	@$(MAKE) $(MARLINK) "ARLINK=$(MARLINK)"
 
 $(SHLIB): piclist
-	$(CC) $(LIBCXXFLAGS) $(SHFLAGS) -shared -o $(SHLIB) `cat piclist` $(SHDEPS)
+	$(CC) $(LIBCXXFLAGS),-shared $(SHFLAGS) $(SHOPT) -o $(SHLIB) `cat piclist` $(SHDEPS)
 
 $(SHARLIB): $(SHLIB)
 	-rm -f t$(SHARLIB)
@@ -352,6 +352,7 @@ install:
 	    $(INSTALL_PROGRAM) $$FILE $${INSTALLDIR}$(MULTISUBDIR)/$$FILE ; \
 	    : On the HP, shared libraries must be mode 555. ;\
 	    chmod 555 $${INSTALLDIR}$(MULTISUBDIR)/$$FILE ; \
+	    strip --strip-unneeded $${INSTALLDIR}$(MULTISUBDIR)/$$FILE ; \
 	  else \
 	    $(INSTALL_DATA) $$FILE $${INSTALLDIR}$(MULTISUBDIR)/$$FILE ; \
 	    $(RANLIB) $${INSTALLDIR}$(MULTISUBDIR)/$$FILE ; \

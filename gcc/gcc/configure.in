@@ -169,7 +169,7 @@ if test x${gcc_gxx_include_dir} = x; then
   else
     topsrcdir=${srcdir}/.. . ${srcdir}/../config.if
 changequote(<<, >>)dnl
-    gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/include/g++"-${libstdcxx_interface}
+    gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/include/g++"
 changequote([, ])dnl
   fi
 fi
@@ -1139,6 +1139,27 @@ changequote(,)dnl
 changequote([,])dnl
 		tm_file=i386/i386-aout.h
 		tmake_file=i386/t-i386bare
+		;;
+changequote(,)dnl
+	i[34567]86-*-beospe*)
+changequote([,])dnl
+		xm_file=i386/xm-beos.h
+		xm_defines="USE_C_ALLOCA"
+		tmake_file=i386/t-beos
+		tm_file=i386/beos-pe.h
+		xmake_file=i386/x-beos
+		extra_objs=winnt.o
+		;;
+changequote(,)dnl
+	i[34567]86-*-beoself* | i[34567]86-*-beos*)
+changequote([,])dnl
+		xm_file=i386/xm-beos.h
+		tmake_file='i386/t-beos i386/t-crtpic'
+		tm_file=i386/beos-elf.h
+		xmake_file=i386/x-beos
+		extra_objs=winnt.o
+		extra_parts='crtbegin.o crtend.o'
+		fixincludes=Makefile.in
 		;;
 changequote(,)dnl
 	i[34567]86-*-bsdi* | i[34567]86-*-bsd386*)

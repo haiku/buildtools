@@ -3116,17 +3116,26 @@ eh_context_free (void *ptr)
   if (ptr)
     free (ptr);
 }
+
+/* __BEOS__ does not have a teardown toutine */
+
 #endif
 
 /* Pointer to function to return EH context. */
 
+#if !__BEOS__
 static struct eh_context *eh_context_initialize ();
 static struct eh_context *eh_context_static ();
-#if __GTHREADS
+#endif
+#if __GTHREADS || __BEOS__
 static struct eh_context *eh_context_specific ();
 #endif
 
+#if __BEOS__
+static struct eh_context *(*get_eh_context) () = &eh_context_specific;
+#else
 static struct eh_context *(*get_eh_context) () = &eh_context_initialize;
+#endif
 
 /* Routine to get EH context.
    This one will simply call the function pointer. */
@@ -3163,6 +3172,7 @@ eh_threads_initialize ()
    This will be called only once, since we change GET_EH_CONTEXT
    pointer to another routine. */
 
+#if !__BEOS__
 static struct eh_context *
 eh_context_initialize ()
 {
@@ -3207,6 +3217,8 @@ eh_context_static ()
   return &eh;
 }
 
+#endif	/* __BEOS__ */
+
 #if __GTHREADS
 /* Return a thread specific EH context. */
 
@@ -3224,6 +3236,63 @@ eh_context_specific ()
 
   return eh;
 }
+#elif __BEOS__
+
+static __gthread_mutex_t beos_throw_mutex = __GTHREAD_MUTEX_INIT;
+
+typedef struct __beos_throw_info {
+  thread_id thread;
+  struct eh_context context;
+} __beos_throw_info;
+
+#define BEOS_THREAD_LIMIT 256	/* after this, we will leak */
+
+static __beos_throw_info __beos_throw_table[BEOS_THREAD_LIMIT];	/* just some random limit */
+
+static struct eh_context *
+eh_context_specific()
+{
+  int ix;
+  thread_id us = find_thread(NULL);
+  thread_info info;
+  struct eh_context *fallback = NULL;
+  __gthread_mutex_lock(&beos_throw_mutex);
+
+  /* find a slot reserved for us */
+  for (ix = 0; ix < BEOS_THREAD_LIMIT - 1; ix++) {
+    /* check whether we've gotten a slot before */
+    if (__beos_throw_table[ix].thread == us) {
+      __gthread_mutex_unlock(&beos_throw_mutex);
+      goto got_it;
+    }
+    /* check whether there's an unused slot */
+    if (__beos_throw_table[ix].thread == 0) {
+      __beos_throw_table[ix].thread = us;
+      __gthread_mutex_unlock(&beos_throw_mutex);
+      goto got_it;
+    }
+  }
+  /* If we hit BEOS_THREAD_LIMIT - 1, we have seen 256 threads, Try to clean up table. */
+  for (ix = 0; ix < BEOS_THREAD_LIMIT - 1; ix++) {
+    if (get_thread_info(__beos_throw_table[ix].thread, &info) < 0) {
+      /* Thread is dead -- let's take his place! */
+      __beos_throw_table[ix].thread = us;
+      __gthread_mutex_unlock(&beos_throw_mutex);
+      goto got_it;
+    }
+  }
+  __gthread_mutex_unlock(&beos_throw_mutex);
+  /* Try to malloc() (from within throw? shudder!) */
+  fallback = (struct eh_context *)malloc(sizeof(struct eh_context));
+  /* Else, we will just use the BEOS_THREAD_LIMIT - 1 slot, even through it's not guaranteed only for */
+  /* us. Make sure you don't throw in more than on place at the same time if you have more than */
+  /* 256 threads active in your team, or suffer the consequence. */
+
+got_it:
+  /*assert((fallback != NULL) || (ix >= 0 && ix < BEOS_THREAD_LIMIT));*/
+  return (fallback ? fallback : &__beos_throw_table[ix].context);
+}
+
 #endif __GTHREADS
 
 /* Support routines for setjmp/longjmp exception handling.  */
@@ -4007,7 +4076,11 @@ void
 __pure_virtual ()
 {
 #ifndef inhibit_libc
+#if __BEOS__
+  debugger (MESSAGE);
+#else
   write (2, MESSAGE, sizeof (MESSAGE) - 1);
+#endif
 #endif
   __terminate ();
 }

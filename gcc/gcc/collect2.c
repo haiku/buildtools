@@ -54,6 +54,10 @@ Boston, MA 02111-1307, USA.  */
 #define obstack_chunk_alloc xmalloc
 #define obstack_chunk_free free
 
+#ifndef LIBRARY_PATH_ENV
+#define LIBRARY_PATH_ENV "LIBRARY_PATH"
+#endif
+
 extern char *make_temp_file PROTO ((char *));
 
 /* On certain systems, we have code that works by scanning the object file
@@ -1504,9 +1508,9 @@ main (argc, argv)
       if (ptr)
 	fprintf (stderr, "COMPILER_PATH       = %s\n", ptr);
 
-      ptr = getenv ("LIBRARY_PATH");
+      ptr = getenv (LIBRARY_PATH_ENV);
       if (ptr)
-	fprintf (stderr, "LIBRARY_PATH        = %s\n", ptr);
+	fprintf (stderr, "%-20s= %s\n", LIBRARY_PATH_ENV, ptr);
 
       fprintf (stderr, "\n");
     }

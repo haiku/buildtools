@@ -84,6 +84,11 @@ static char dir_separator_str[] = {DIR_SEPARATOR, 0};
 #define GET_ENV_PATH_LIST(VAR,NAME)	do { (VAR) = getenv (NAME); } while (0)
 #endif
 
+/* Most every one is fine with LIBRARY_PATH.  For some, it conflicts.  */
+#ifndef LIBRARY_PATH_ENV
+#define LIBRARY_PATH_ENV "LIBRARY_PATH"
+#endif
+
 #ifndef HAVE_KILL
 #define kill(p,s) raise(s)
 #endif
@@ -1374,7 +1379,9 @@ static const char *gcc_exec_prefix;
 #endif /* !defined STANDARD_EXEC_PREFIX */
 
 static const char *standard_exec_prefix = STANDARD_EXEC_PREFIX;
+#ifndef __BEOS__
 static const char *standard_exec_prefix_1 = "/usr/lib/gcc/";
+#endif
 #ifdef MD_EXEC_PREFIX
 static const char *md_exec_prefix = MD_EXEC_PREFIX;
 #endif
@@ -1390,8 +1397,10 @@ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
 static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
 #endif
 static const char *standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
+#ifndef __BEOS__
 static const char *standard_startfile_prefix_1 = "/lib/";
 static const char *standard_startfile_prefix_2 = "/usr/lib/";
+#endif
 
 #ifndef TOOLDIR_BASE_PREFIX
 #define TOOLDIR_BASE_PREFIX "/usr/local/"
@@ -2657,7 +2666,7 @@ process_command (argc, argv)
 	}
     }
 
-  GET_ENV_PATH_LIST (temp, "LIBRARY_PATH");
+  GET_ENV_PATH_LIST (temp, LIBRARY_PATH_ENV);
   if (temp && *cross_compile == '0')
     {
       const char *startp, *endp;
@@ -3060,14 +3069,18 @@ process_command (argc, argv)
 #ifndef OS2
   add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
 	      0, 2, warn_std_ptr);
+#ifndef __BEOS__
   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
 	      0, 2, warn_std_ptr);
+#endif
 #endif
 
   add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
 	      0, 1, warn_std_ptr);
+#ifndef __BEOS__
   add_prefix (&startfile_prefixes, standard_exec_prefix_1, "BINUTILS",
 	      0, 1, warn_std_ptr);
+#endif
 
   tooldir_prefix = concat (tooldir_base_prefix, spec_machine, 
 			   dir_separator_str, NULL_PTR);
@@ -4865,10 +4878,12 @@ main (argc, argv)
 		      NULL_PTR, 0, 0, NULL_PTR);
 	}		       
 
+#ifndef __BEOS__
       add_prefix (&startfile_prefixes, standard_startfile_prefix_1,
 		  "BINUTILS", 0, 0, NULL_PTR);
       add_prefix (&startfile_prefixes, standard_startfile_prefix_2,
 		  "BINUTILS", 0, 0, NULL_PTR);
+#endif
 #if 0 /* Can cause surprises, and one can use -B./ instead.  */
       add_prefix (&startfile_prefixes, "./", NULL_PTR, 0, 1, NULL_PTR);
 #endif
@@ -5132,7 +5147,7 @@ main (argc, argv)
       /* Rebuild the COMPILER_PATH and LIBRARY_PATH environment variables
 	 for collect.  */
       putenv_from_prefixes (&exec_prefixes, "COMPILER_PATH=");
-      putenv_from_prefixes (&startfile_prefixes, "LIBRARY_PATH=");
+      putenv_from_prefixes (&startfile_prefixes, LIBRARY_PATH_ENV "=");
 
       value = do_spec (link_command_spec);
       if (value < 0)

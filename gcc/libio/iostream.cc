@@ -696,7 +696,7 @@ ostream& ostream::operator<<(double n)
 				      /* left: */ (flags() & ios::left) != 0,
 				      /* showsign: */ (flags() & ios::showpos) != 0,
 				      /* group: */ 0,
-#if defined __GLIBC__ && __GLIBC__ >= 2
+#if defined __GLIBC__ && (__GLIBC__ >= 2 || __GLIBC__ <= -2)
 				      /* extra: */ 0,
 #if __GLIBC_MINOR__ >= 1
 				      /* is_char: */ 0,
@@ -806,7 +806,7 @@ ostream& ostream::operator<<(long double n)
 				  /* left: */ (flags() & ios::left) != 0,
 				  /* showsign: */ (flags() & ios::showpos) != 0,
 				  /* group: */ 0,
-#if defined __GLIBC__ && __GLIBC__ >= 2
+#if defined __GLIBC__ && (__GLIBC__ >= 2 || __GLIBC__ <= -2)
 				  /* extra: */ 0,
 #if __GLIBC_MINOR__ >= 1
 				  /* is_char: */ 0,

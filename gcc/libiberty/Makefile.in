@@ -164,11 +164,12 @@ install_to_tooldir: all
 # can't use anything encumbering.
 NEEDED = atexit calloc memchr memcmp memcpy memmove memset rename strchr \
 	 strerror strrchr strstr strtol strtoul tmpnam vfprintf vprintf \
-	 vfork waitpid bcmp bcopy bzero
+	 vfork waitpid bcmp bcopy bzero \
+	 basename getpagesize insque sigsetmask xexit xmalloc
 needed-list: Makefile
 	rm -f needed-list; touch needed-list; \
 	for f in $(NEEDED); do \
-	  for g in $(LIBOBJS) $(EXTRA_OFILES); do \
+	  for g in $(LIBOBJS) $(EXTRA_OFILES) xmalloc.o xexit.o; do \
 	    case "$$g" in \
 	      *$$f*) echo $$g >> needed-list ;; \
 	    esac; \

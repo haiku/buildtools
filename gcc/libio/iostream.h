@@ -68,6 +68,17 @@ class ostream : virtual public ios
       { return write((const char*)s, n);}
     ostream& write(const void *s, streamsize n)
       { return write((const char*)s, n);}
+#ifdef _STREAM_COMPAT
+    // [zooey]: added for R5-compatibility
+    ostream& write(const char *s, int n)
+      { return write((const char*)s, (streamsize)n);}
+    ostream& write(const unsigned char *s, int n)
+      { return write((const char*)s, (streamsize)n);}
+    ostream& write(const signed char *s, int n)
+      { return write((const char*)s, (streamsize)n);}
+    ostream& write(const void *s, int n)
+      { return write((const char*)s, (streamsize)n);}
+#endif
     ostream& seekp(streampos);
     ostream& seekp(streamoff, _seek_dir);
     streampos tellp();
@@ -141,6 +152,17 @@ protected:
       { return read((char*)ptr, n); }
     istream& read(void *ptr, streamsize n)
       { return read((char*)ptr, n); }
+#ifdef _STREAM_COMPAT
+    // [zooey]: added for R5-compatibility
+    istream& read(char *ptr, int n)
+      { return read((char*)ptr, (streamsize)n); }
+    istream& read(unsigned char *ptr, int n)
+      { return read((char*)ptr, (streamsize)n); }
+    istream& read(signed char *ptr, int n)
+      { return read((char*)ptr, (streamsize)n); }
+    istream& read(void *ptr, int n)
+      { return read((char*)ptr, (streamsize)n); }
+#endif
     istream& get(streambuf& sb, char delim = '\n');
     istream& gets(char **s, char delim = '\n');
     int ipfx(int need = 0) {

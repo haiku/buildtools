@@ -290,7 +290,8 @@
     !defined(__STL_NO_BOOL) && \
     !defined(__STL_NON_TYPE_TMPL_PARAM_BUG) && \
     !defined(__STL_LIMITED_DEFAULT_TEMPLATES) && \
-    !defined(__STL_USE_SGI_ALLOCATORS)
+    !defined(__STL_USE_SGI_ALLOCATORS) || \
+     defined(__BEOS__)
 #   define __STL_USE_STD_ALLOCATORS
 # endif
 

@@ -87,6 +87,8 @@ Boston, MA 02111-1307, USA.  */
 #include "gthr-dce.h"
 #elif _SOLARIS_THREADS
 #include "gthr-solaris.h"
+#elif __BEOS__
+#include "gthr-beos.h"
 
 /* Include GTHREAD_FILE if one is defined. */
 #elif defined(HAVE_GTHR_DEFAULT)

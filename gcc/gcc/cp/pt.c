@@ -6198,15 +6198,20 @@ tsubst (t, args, complain, in_decl)
 	    if (pedantic)
 	      pedwarn ("creating array with size zero");
 	  }
-	else if (integer_zerop (max) || INT_CST_LT (max, integer_zero_node))
+	// [zooey]: added this for BeOS-R5 compatibility:
+	// <beos-patch>
+	else if (integer_zerop (max))
+	  if (pedantic)
+		  pedwarn ("creating array with size zero");
+	// </beos-patch>
+	else if (INT_CST_LT (max, integer_zero_node))
 	  {
 	    /* [temp.deduct]
 
 	       Type deduction may fail for any of the following
 	       reasons:  
 
-		 Attempting to create an array with a size that is
-		 zero or negative.  */
+		 Attempting to create an array with a size that is negative.  */
 	    if (complain)
 	      cp_error ("creating array with size `%E'", max);
 
