@@ -6046,43 +6046,6 @@ finish_struct (t, fieldlist, attributes)
 
   TYPE_FIELDS (t) = fieldlist;
 
-  /* If there are lots of fields, sort so we can look through them fast.
-     We arbitrarily consider 16 or more elts to be "a lot".  */
-  {
-    int len = 0;
-
-    for (x = fieldlist; x; x = TREE_CHAIN (x))
-      {
-	if (len > 15)
-	  break;
-	len += 1;
-      }
-    if (len > 15)
-      {
-	tree *field_array;
-	char *space;
-
-	len += list_length (x);
-	/* Use the same allocation policy here that make_node uses, to
-	   ensure that this lives as long as the rest of the struct decl.
-	   All decls in an inline function need to be saved.  */
-	if (allocation_temporary_p ())
-	  space = savealloc (sizeof (struct lang_type) + len * sizeof (tree));
-	else
-	  space = oballoc (sizeof (struct lang_type) + len * sizeof (tree));
-
-	TYPE_LANG_SPECIFIC (t) = (struct lang_type *) space;
-	TYPE_LANG_SPECIFIC (t)->len = len;
-
-	field_array = &TYPE_LANG_SPECIFIC (t)->elts[0];
-	len = 0;
-	for (x = fieldlist; x; x = TREE_CHAIN (x))
-	  field_array[len++] = x;
-
-	qsort (field_array, len, sizeof (tree), field_decl_cmp);
-      }
-  }
-
   for (x = TYPE_MAIN_VARIANT (t); x; x = TYPE_NEXT_VARIANT (x))
     {
       TYPE_FIELDS (x) = TYPE_FIELDS (t);

@@ -1380,7 +1380,7 @@ delete_duplicate_fields_1 (field, fields)
   tree prev = 0;
   if (DECL_NAME (field) == 0)
     {
-      if (TREE_CODE (TREE_TYPE (field)) != UNION_TYPE)
+      if (! ANON_AGGR_TYPE_P (TREE_TYPE (field)))
 	return fields;
 
       for (x = TYPE_FIELDS (TREE_TYPE (field)); x; x = TREE_CHAIN (x))
@@ -1393,7 +1393,7 @@ delete_duplicate_fields_1 (field, fields)
 	{
 	  if (DECL_NAME (x) == 0)
 	    {
-	      if (TREE_CODE (TREE_TYPE (x)) != UNION_TYPE)
+	      if (! ANON_AGGR_TYPE_P (TREE_TYPE (x)))
 		continue;
 	      TYPE_FIELDS (TREE_TYPE (x))
 		= delete_duplicate_fields_1 (field, TYPE_FIELDS (TREE_TYPE (x)));
@@ -3297,7 +3297,7 @@ finish_struct_anon (t)
 	continue;
 
       if (DECL_NAME (field) == NULL_TREE
-	  && TREE_CODE (TREE_TYPE (field)) == UNION_TYPE)
+	  && ANON_AGGR_TYPE_P (TREE_TYPE (field)))
 	{
 	  tree* uelt = &TYPE_FIELDS (TREE_TYPE (field));
 	  for (; *uelt; uelt = &TREE_CHAIN (*uelt))
@@ -3478,9 +3478,6 @@ finish_struct_1 (t, warn_anon)
   int empty = 1;
   int has_pointers = 0;
   tree inline_friends;
-
-  if (warn_anon && code != UNION_TYPE && ANON_AGGRNAME_P (TYPE_IDENTIFIER (t)))
-    pedwarn ("anonymous class type not used to declare any objects");
 
   if (TYPE_SIZE (t))
     {
@@ -3870,8 +3867,7 @@ finish_struct_1 (t, warn_anon)
 	  while (TREE_CODE (type) == ARRAY_TYPE)
 	    type = TREE_TYPE (type);
 
-	  if (TYPE_LANG_SPECIFIC (type) && ! ANON_UNION_P (x)
-	      && ! TYPE_PTRMEMFUNC_P (type))
+ 	  if (CLASS_TYPE_P (type) && ! ANON_AGGR_TYPE_P (type))
 	    {
 	      /* Never let anything with uninheritable virtuals
 		 make it through without complaint.  */

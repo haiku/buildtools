@@ -2011,7 +2011,7 @@ lookup_anon_field (t, type)
 
       /* Otherwise, it could be nested, search harder.  */
       if (DECL_NAME (field) == NULL_TREE
-	  && TREE_CODE (TREE_TYPE (field)) == UNION_TYPE)
+	  && ANON_AGGR_TYPE_P (TREE_TYPE (field)))
 	{
 	  tree subfield = lookup_anon_field (TREE_TYPE (field), type);
 	  if (subfield)
@@ -2221,7 +2221,7 @@ build_component_ref (datum, component, basetype_path, protect)
       tree context = DECL_FIELD_CONTEXT (field);
       tree base = context;
       while (!same_type_p (base, basetype) && TYPE_NAME (base)
-	     && ANON_UNION_TYPE_P (base))
+	     && ANON_AGGR_TYPE_P (base))
 	{
 	  base = TYPE_CONTEXT (base);
 	}
@@ -2251,7 +2251,7 @@ build_component_ref (datum, component, basetype_path, protect)
       basetype = base;
  
       /* Handle things from anon unions here...  */
-      if (TYPE_NAME (context) && ANON_UNION_TYPE_P (context))
+      if (TYPE_NAME (context) && ANON_AGGR_TYPE_P (context))
 	{
 	  tree subfield = lookup_anon_field (basetype, context);
 	  tree subdatum = build_component_ref (datum, subfield,
@@ -6097,8 +6097,7 @@ build_modify_expr (lhs, modifycode, rhs)
 	  /* Functions are not modifiable, even though they are
 	     lvalues.  */
 	  || TREE_CODE (TREE_TYPE (lhs)) == FUNCTION_TYPE
-	  || ((TREE_CODE (lhstype) == RECORD_TYPE
-	       || TREE_CODE (lhstype) == UNION_TYPE)
+          || (IS_AGGR_TYPE_CODE (TREE_CODE (lhstype))
 	      && C_TYPE_FIELDS_READONLY (lhstype))
 	  || (TREE_CODE (lhstype) == REFERENCE_TYPE
 	      && CP_TYPE_CONST_P (TREE_TYPE (lhstype)))))
@@ -7280,8 +7279,7 @@ c_expand_asm_operands (string, outputs, inputs, clobbers, vol, filename, line)
 	{
 	  tree type = TREE_TYPE (o[i]);
 	  if (CP_TYPE_CONST_P (type)
-	      || ((TREE_CODE (type) == RECORD_TYPE
-		   || TREE_CODE (type) == UNION_TYPE)
+              || (IS_AGGR_TYPE_CODE (TREE_CODE (type))
 		  && C_TYPE_FIELDS_READONLY (type)))
 	    readonly_error (o[i], "modification by `asm'", 1);
 	}
