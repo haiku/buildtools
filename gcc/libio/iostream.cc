@@ -102,6 +102,24 @@ int istream::peek()
   return ch;
 }
 
+// [zooey]: added for R5-compatibility with bdb
+istream& istream::read(char *ptr, int n)
+{
+  return read((char*)ptr, (streamsize)n);
+}
+istream& istream::read(unsigned char *ptr, int n)
+{
+  return read((char*)ptr, (streamsize)n);
+}
+istream& istream::read(signed char *ptr, int n)
+{
+  return read((char*)ptr, (streamsize)n);
+}
+istream& istream::read(void *ptr, int n)
+{
+  return read((char*)ptr, (streamsize)n);
+}
+
 istream& istream::ignore(int n /* = 1 */, int delim /* = EOF */)
 {
     _gcount = 0;
@@ -1020,6 +1038,24 @@ ostream& ostream::write(const char *s, streamsize n)
 	_IO_cleanup_region_end (0);
     }
     return *this;
+}
+
+// [zooey]: added for R5-compatibility
+ostream& ostream::write(const char *s, int n)
+{
+  return write((const char*)s, (streamsize)n);
+}
+ostream& ostream::write(const unsigned char *s, int n)
+{
+  return write((const char*)s, (streamsize)n);
+}
+ostream& ostream::write(const signed char *s, int n)
+{
+  return write((const char*)s, (streamsize)n);
+}
+ostream& ostream::write(const void *s, int n)
+{ 
+  return write((const char*)s, (streamsize)n);
 }
 
 void ostream::do_osfx()

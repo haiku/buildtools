@@ -69,15 +69,12 @@ class ostream : virtual public ios
     ostream& write(const void *s, streamsize n)
       { return write((const char*)s, n);}
 #ifdef _STREAM_COMPAT
-    // [zooey]: added for R5-compatibility
-    ostream& write(const char *s, int n)
-      { return write((const char*)s, (streamsize)n);}
-    ostream& write(const unsigned char *s, int n)
-      { return write((const char*)s, (streamsize)n);}
-    ostream& write(const signed char *s, int n)
-      { return write((const char*)s, (streamsize)n);}
-    ostream& write(const void *s, int n)
-      { return write((const char*)s, (streamsize)n);}
+    // [zooey]: added for R5-compatibility with bdb,
+    // these can't be inlined as they wouldn't end up in the lib then.
+    ostream& write(const char *s, int n);
+    ostream& write(const unsigned char *s, int n);
+    ostream& write(const signed char *s, int n);
+    ostream& write(const void *s, int n);
 #endif
     ostream& seekp(streampos);
     ostream& seekp(streamoff, _seek_dir);
@@ -153,15 +150,12 @@ protected:
     istream& read(void *ptr, streamsize n)
       { return read((char*)ptr, n); }
 #ifdef _STREAM_COMPAT
-    // [zooey]: added for R5-compatibility
-    istream& read(char *ptr, int n)
-      { return read((char*)ptr, (streamsize)n); }
-    istream& read(unsigned char *ptr, int n)
-      { return read((char*)ptr, (streamsize)n); }
-    istream& read(signed char *ptr, int n)
-      { return read((char*)ptr, (streamsize)n); }
-    istream& read(void *ptr, int n)
-      { return read((char*)ptr, (streamsize)n); }
+    // [zooey]: added for R5-compatibility with bdb,
+    // these can't be inlined as they wouldn't end up in the lib then.
+    istream& read(char *ptr, int n);
+    istream& read(unsigned char *ptr, int n);
+    istream& read(signed char *ptr, int n);
+    istream& read(void *ptr, int n);
 #endif
     istream& get(streambuf& sb, char delim = '\n');
     istream& gets(char **s, char delim = '\n');
