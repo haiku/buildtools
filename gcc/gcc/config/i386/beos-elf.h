@@ -202,7 +202,7 @@ Boston, MA 02111-1307, USA.  */
 #define LIBGCC_SPEC ""
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart: %{!shared: start_dyn.o%s fix_bdirectwin_typeinfo.o%s}} init_term_dyn.o%s %{p:i386-mcount.o%s}"
+#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart: %{!shared: start_dyn.o%s}} init_term_dyn.o%s %{!no-beos-fixes: fix_bdirectwin_typeinfo.o%s} %{p:i386-mcount.o%s}"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
@@ -266,13 +266,9 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
    to handle vtables - the first pass won't do anything because
    DECL_CONTEXT (DECL) will be 0 so i386_pe_dll{ex,im}port_p will return 0.
    It's also used to handle dllimport override semantics.  */
-#if 0
 #define REDO_SECTION_INFO_P(DECL) \
   ((DECL_MACHINE_ATTRIBUTES (DECL) != NULL_TREE) \
    || (TREE_CODE (DECL) == VAR_DECL && DECL_VIRTUAL_P (DECL)))
-#else
-#define REDO_SECTION_INFO_P(DECL) 1
-#endif
 
 /* Used only here locally.  If the decl has been exported, emit the 
    necessary assembly.  */
