@@ -3952,7 +3952,34 @@ pushdecl (x)
 		current_function_decl = t;
 #endif
 	      if (TREE_CODE (t) == TYPE_DECL)
-		SET_IDENTIFIER_TYPE_VALUE (name, TREE_TYPE (t));
+		{
+		  /* If declaring a type as a typedef, copy the type (unless
+		     we're at line 0), and install this TYPE_DECL as the new
+		     type's typedef name.  See the extensive comment in
+		     ../c-decl.c (pushdecl). */
+		  tree type = TREE_TYPE (t);
+		  if (DECL_ORIGINAL_TYPE (t) == NULL
+		      && DECL_SOURCE_LINE (t) != 0
+		      && type != error_mark_node && TYPE_NAME (type) != t
+		      /* We don't want to copy the type when all we're
+			 doing is making a TYPE_DECL for the purposes of
+			 inlining.  */
+		      && (!TYPE_NAME (type)
+			  || TYPE_NAME (type) != DECL_ABSTRACT_ORIGIN (t)))
+		    {
+		      DECL_ORIGINAL_TYPE (t) = type;
+		      type = build_type_copy (type);
+		      TYPE_STUB_DECL (type) =
+			TYPE_STUB_DECL (DECL_ORIGINAL_TYPE (t));
+		      TYPE_NAME (type) = t;
+		      TREE_TYPE (t) = type;
+		      if (TYPE_IDENTIFIER (type))
+			set_identifier_type_value_with_scope (DECL_NAME (t),
+						type, current_binding_level);
+		    }
+			      
+		  SET_IDENTIFIER_TYPE_VALUE (name, TREE_TYPE (t));
+		}
 	      else if (TREE_CODE (t) == FUNCTION_DECL)
 		check_default_args (t);
 
