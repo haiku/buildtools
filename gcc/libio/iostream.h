@@ -287,7 +287,7 @@ inline ios& oct(ios& i)
 inline ios& fixed(ios& i)
 { i.setf(ios::fixed, ios::floatfield); return i; }
 inline ios& scientific(ios& i)
-{ i.setf(ios::fixed, ios::floatfield); return i; }
+{ i.setf(ios::scientific, ios::floatfield); return i; }
 } // extern "C++"
 
 #endif /*!_IOSTREAM_H*/
