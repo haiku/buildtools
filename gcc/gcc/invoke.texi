@@ -88,7 +88,7 @@ in the following sections.
 @item Overall Options
 @xref{Overall Options,,Options Controlling the Kind of Output}.
 @smallexample
--c  -S  -E  -o @var{file}  -pipe  -v  --help  -x @var{language}
+-c  -S  -E  -no-beos-fixes -o  @var{file}  -pipe  -priority=@var{prio}  -v  --help  -x @var{language}
 @end smallexample
 
 @item C Language Options
@@ -108,7 +108,8 @@ in the following sections.
 -fno-for-scope  -fno-gnu-keywords  -fguiding-decls  -fhandle-signatures
 -fhonor-std -fhuge-objects  -fno-implicit-templates  -finit-priority
 -fno-implement-inlines -fname-mangling-version-@var{n}  -fno-default-inline  
--foperator-names  -fno-optional-diags  -fpermissive -frepo  -fstrict-prototype
+-fmultiple-symbol-spaces -foperator-names  -fno-optional-diags  -fpermissive
+-frepo  -fstrict-prototype
 -fsquangle  -ftemplate-depth-@var{n}  -fthis-is-variable  -fvtable-thunks
 -nostdinc++  -Wctor-dtor-privacy -Wno-deprecated -Weffc++  
 -Wno-non-template-friend 
@@ -580,6 +581,10 @@ no trouble.
 @item -priority=<prio>
 Specify the BeOS thread-priority to use for all the tools. You can specify
 values between 1-10, the default is 5 (B_LOW_PRIORITY).
+
+@item -no-beos-fixes
+Disable any BeOS-R5 compatibility fixes (like the automatic linking of 
+fix_bdirectwindow_typeinfo.o).
 
 @item --help
 Print (on the standard output) a description of the command line options
@@ -1107,6 +1112,16 @@ requires GNU ld 2.10 or later.
 To save space, do not emit out-of-line copies of inline functions
 controlled by @samp{#pragma implementation}.  This will cause linker
 errors if these functions are not inlined everywhere they are called.
+
+@item -fmultiple-symbol-spaces
+Force the use of multiple symbol spaces. BeOS used to always activate
+multiple symbol spaces, although it is not neccessary with ELF (as all
+globals are exported anyway). 
+
+This gcc uses a single symbol space if optimization is active in order 
+to achieve smaller object files and libs.
+This switch can be used to revert to the original, strictly BeOS-compatible
+behaviour.
 
 @item -fname-mangling-version-@var{n}
 Control the way in which names are mangled.  Version 0 is compatible
