@@ -1,1 +1,1 @@
-char *version_string = "2.95.3-beos-041111";
+char *version_string = "2.95.3-beos-041202";
