@@ -2800,6 +2800,8 @@ wrapup_global_declarations (vec, len)
 	      && DECL_INITIAL (decl) != 0
 	      && DECL_SAVED_INSNS (decl) != 0
 	      && (flag_keep_inline_functions
+	          // [zooey] always output addressable functions:
+		  || TREE_ADDRESSABLE (decl)
 		  || (TREE_PUBLIC (decl) && !DECL_COMDAT (decl))
 		  || TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (decl))))
 	    {
