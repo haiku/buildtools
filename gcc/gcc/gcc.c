@@ -5040,9 +5040,13 @@ main (argc, argv)
 	  int len;
 
 	  if (cp->spec[0][0] == '#')
+	    {
 	    error ("%s: %s compiler not installed on this system",
 		   input_filename, &cp->spec[0][1]);
-
+	      this_file_error = 1;
+	    }
+	  else
+	    {
 	  input_basename = input_filename;
 	  for (p = input_filename; *p; p++)
 	    if (IS_DIR_SEPARATOR (*p))
@@ -5082,6 +5086,7 @@ main (argc, argv)
 	  }
 	  if (value < 0)
 	    this_file_error = 1;
+	    }
 	}
 
       /* If this file's name does not contain a recognized suffix,
