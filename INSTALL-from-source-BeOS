@@ -6,7 +6,7 @@ compile binutils:
 
 	mkdir binutils-obj
 	cd binutils-obj
-	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure --prefix=/boot/develop/tools/gnupro --enable-shared=yes
+	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure --prefix=/boot/develop/tools/gnupro --disable-nls --enable-shared=yes
 	make
 	cd ..
 
@@ -14,7 +14,7 @@ compile gcc:
 
 	mkdir gcc-obj
 	cd gcc-obj
-	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure --prefix=/boot/develop/tools/gnupro --enable-shared=yes --enable-languages=c,c++
+	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure --prefix=/boot/develop/tools/gnupro --disable-nls --enable-shared=yes --enable-languages=c,c++
 	make bootstrap
 	cd ..
 
@@ -35,11 +35,8 @@ That's it, gcc-2.95.3 and binutils-2.15 are now installed and active.
 For the installation, you'll need the following tools/libraries to be installed:
 	autoconf
 	automake
-	gettext
-	libdl
-	libiconv
 
-You'll find most of these in the GNU and LibPak packages on BeBits (http://www.bebits.com/app/2971, and http://www.bebits.com/app/3322 respectively).
+You'll find these in the GNU packages on BeBits (http://www.bebits.com/app/2971).
 
 So have fun!
 
