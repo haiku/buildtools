@@ -31,14 +31,12 @@ Boston, MA 02111-1307, USA.  */
 #include "tm.h"
 #include <signal.h>
 
-#ifdef __BEOS__
 #include "gnu-regex.h"
 #define xregcomp regcomp
 #define xregexec regexec
 #define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 #define TOUPPER(c) toupper((c))
 #define ISIDNUM(c) (isalnum((c))||(c)=='_')
-#endif
 
 #include "machname.h"
 #include "libiberty.h"

@@ -350,7 +350,7 @@ flush_repeats (nrepeats, type)
       return 0;
     }
 
-#ifdef __BEOS__
+#ifdef USE_EGCS_MANGLED_NAMES
   if (TREE_CODE(type) == POINTER_TYPE 
   && TREE_CODE(TREE_TYPE(type)) == ARRAY_TYPE)
     {

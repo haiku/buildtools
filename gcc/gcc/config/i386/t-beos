@@ -19,4 +19,4 @@ EXTRA_PARTS += fix_bdirectwin_typeinfo.o
 # function as provided by the Be-libs (which crashes GLTeapot). 
 #
 fix_bdirectwin_typeinfo.o: $(srcdir)/beos-specific/fix_bdirectwin_typeinfo.cpp
-	gcc -c -O0 $(srcdir)/beos-specific/fix_bdirectwin_typeinfo.cpp
+	$(GCC_FOR_TARGET) -c -O0 $(srcdir)/beos-specific/fix_bdirectwin_typeinfo.cpp

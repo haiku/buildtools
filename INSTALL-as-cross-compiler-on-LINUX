@@ -1,0 +1,74 @@
+How to build gcc-2.95.3 for BeOS under Linux (a cross-compiler), which 
+will allow you to compile BeOS projects under Linux, i.e. the apps
+that this compilers produces can only be executed on BeOS (not on Linux).
+
+*** the major work of creating the cross-compiler and describing the
+*** process how to build it has been done by Eric Petit <titer@m0k.org>, 
+*** so if you think this cross-compiler is great, please tell him.
+
+-----------------------------------------------------------------------
+On your Linux-box, open a shell...
+
+0 - Preparations
+----------------
+...and fetch the 'buildtools' module from the haiku CVS. You should then
+have a 'buildtools' folder that contains folders named 'binutils' and
+'gcc' (and this file, too!).
+
+	cd buildtools
+
+Now decide where you want to install the cross-compiler. The install 
+folder will be referred to as $PREFIX. I suggest to install to 
+/opt/cross-tools, but you can basically put it anywhere you like.
+
+	export PREFIX=/opt/cross-tools
+
+and add it the path:
+
+	export PATH=$PATH:$PREFIX/bin
+
+Create two folders for the headers and libraries, say $BEINC and
+$BELIB:
+	
+	mkdir beinc
+	export BEINC=$(pwd)/beinc
+	mkdir belib
+	export BELIB=$(pwd)/belib
+
+Copy all contents from /boot/develop/lib/x86/ on your BeOS install to
+$BELIBS on your Linux box (make sure symbolic links are followed). You
+should have $BELIBS/libbe.so, etc.
+
+Copy all contents from /boot/develop/headers/ on your BeOS install to
+$BEINCS on your Linux box. You should have $BEINCS/be/AppKit.h, etc.
+
+
+1 - Building binutils
+---------------------
+	mkdir binutils-obj
+	cd binutils-obj
+	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure --prefix=$PREFIX \
+	--target=i586-pc-beos --disable-nls --enable-shared=yes
+	make && make install
+	cd ..
+
+2 - Building gcc/g++
+--------------------
+	mkdir -p $PREFIX/lib/gcc-lib/i586-pc-beos/2.95.3-beos-041202
+	mkdir gcc-obj
+	cd gcc-obj
+	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure --prefix=$PREFIX \
+	--target=i586-pc-beos --disable-nls --enable-shared=yes \
+	--enable-languages=c,c++ --with-headers=$BEINC --with-libs=$BELIB
+	make cross && make install
+	cd ..
+
+Ok, now everything is compiled and installed, waiting to be used:
+
+	i586-pc-beos-gcc test.c
+	
+would compile the file test.c with the fresh cross-compiler.
+
+So have fun!
+
+Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
