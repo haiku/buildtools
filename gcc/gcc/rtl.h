@@ -168,7 +168,8 @@ typedef struct rtx_def
      either changing how we compute the frame address or saving and
      restoring registers in the prologue and epilogue.  
      1 in a MEM if the MEM refers to a scalar, rather than a member of
-     an aggregate.  */
+     an aggregate.
+     1 in a SYMBOL_REF if the symbol is weak.  */
   unsigned frame_related : 1;
   /* The first element of the operands of this rtx.
      The number of operands and their types are controlled
@@ -660,6 +661,9 @@ extern char *note_insn_name[];
 
 /* 1 means a SYMBOL_REF has been the library function in emit_library_call.  */
 #define SYMBOL_REF_USED(RTX) ((RTX)->used)
+
+/* 1 means a SYMBOL_REF is weak.  */
+#define SYMBOL_REF_WEAK(RTX) ((RTX)->frame_related)
 
 /* For an INLINE_HEADER rtx, FIRST_FUNCTION_INSN is the first insn
    of the function that is not involved in copying parameters to

@@ -723,6 +723,8 @@ make_decl_rtl (decl, asmspec, top_level)
 	 Also handle vars declared register invalidly.  */
       if (DECL_RTL (decl) == 0)
 	{
+	  rtx x;
+
 	  /* Can't use just the variable's own name for a variable
 	     whose scope is less than the whole file.
 	     Concatenate a distinguishing number.  */
@@ -752,8 +754,10 @@ make_decl_rtl (decl, asmspec, top_level)
 	      			   new_name, strlen (new_name));
 	    }
 
-	  DECL_RTL (decl) = gen_rtx_MEM (DECL_MODE (decl),
-					 gen_rtx_SYMBOL_REF (Pmode, name));
+	  x = gen_rtx_SYMBOL_REF (Pmode, name);
+	  SYMBOL_REF_WEAK (x) = DECL_WEAK (decl);
+	  DECL_RTL (decl) = gen_rtx_MEM (DECL_MODE (decl), x);
+
 	  MEM_ALIAS_SET (DECL_RTL (decl)) = get_alias_set (decl);
 	    
 	  /* If this variable is to be treated as volatile, show its
