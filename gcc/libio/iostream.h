@@ -284,6 +284,10 @@ inline ios& hex(ios& i)
 { i.setf(ios::hex, ios::dec|ios::hex|ios::oct); return i; }
 inline ios& oct(ios& i)
 { i.setf(ios::oct, ios::dec|ios::hex|ios::oct); return i; }
+inline ios& fixed(ios& i)
+{ i.setf(ios::fixed, ios::floatfield); return i; }
+inline ios& scientific(ios& i)
+{ i.setf(ios::fixed, ios::floatfield); return i; }
 } // extern "C++"
 
 #endif /*!_IOSTREAM_H*/
