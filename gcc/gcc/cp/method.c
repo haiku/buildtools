@@ -317,7 +317,11 @@ old_backref_index (type)
   /* The entry for this parm is at maxtype-1, so don't look there for
      something to repeat.  */
   for (tindex = 0; tindex < maxtype - 1; ++tindex)
+#ifdef USE_EGCS_MANGLED_NAMES
+    if (typevec[tindex] == type)
+#else /* USE_EGCS_MANGLED_NAMES */
     if (same_type_p (typevec[tindex], type))
+#endif /* USE_EGCS_MANGLED_NAMES */
       break;
 
   if (tindex == maxtype - 1)
@@ -345,6 +349,17 @@ flush_repeats (nrepeats, type)
       my_friendly_assert (nrepeats == 0, 990316);
       return 0;
     }
+
+#ifdef __BEOS__
+  if (TREE_CODE(type) == POINTER_TYPE 
+  && TREE_CODE(TREE_TYPE(type)) == ARRAY_TYPE)
+    {
+      /* [zooey]: Do not use repetition codes for array-pointers, but output 
+    		  the full mangled type for every occurrence (for BeOS) */ 
+      build_mangled_name_for_type (type);
+      return 1;
+    }
+#endif
 
   if (nrepeats > 1)
     {
@@ -1176,7 +1191,11 @@ build_mangled_name (parmtypes, begin, end)
 	      typevec[maxtype++] = parmtype;
 	    }
 
+#ifdef USE_EGCS_MANGLED_NAMES
+	  if (last_type && (parmtype == last_type))
+#else /* USE_EGCS_MANGLED_NAMES */
 	  if (last_type && same_type_p (parmtype, last_type))
+#endif /* USE_EGCS_MANGLED_NAMES */
 	    {
 	      if (flag_do_squangling 
 		  || (old_style_repeats
@@ -1334,7 +1353,10 @@ process_overload_item (parmtype, extra_Gcode)
         else
 	  {
 	    tree length = array_type_nelts (parmtype);
+#ifndef __BEOS__
+	// *always* add one under BeOS...
 	    if (TREE_CODE (length) != INTEGER_CST || flag_do_squangling)
+#endif
 	      {
 		length = fold (build (PLUS_EXPR, TREE_TYPE (length),
 				      length, integer_one_node));
