@@ -5624,7 +5624,7 @@ expand_expr (exp, target, tmode, modifier)
   enum expand_modifier ro_modifier;
 
   /* Handle ERROR_MARK before anybody tries to access its type. */
-  if (TREE_CODE (exp) == ERROR_MARK)
+  if (TREE_CODE (exp) == ERROR_MARK || TREE_CODE (type) == ERROR_MARK)
     {
       op0 = CONST0_RTX (tmode);
       if (op0 != 0)
