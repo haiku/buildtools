@@ -91,27 +91,62 @@ Bugs/Peculiarities:
 	entries in place, just change the type to R_386_NONE. This hack seems to 
 	work for all BeOS dynamic loaders.
 
+ - The Be-compilers had the habit of putting automatically generated functions 
+   into each object file that uses them. This behaviour corresponds to what gcc
+   calls multiple symbol spaces. For ELF, however, multiple symbol spaces do 
+   not make much sense, as all global symbols are automatically being exported
+   (i.e. there is only a single symbol space). 
+   This version of gcc activates multiple symbol spaces only when optimization 
+   is switched off. In optimizing mode, a single symbol space is used, in order
+   to yield smaller object files, libraries and apps.
+   You can use the new switch -f(no-)multiple-symbol-spaces to force gcc to
+   use (or not use) multiple symbol spaces.
+
  - Every app is now automatically linked against a (new) object file named
    fix_bdirectwin_typeinfo.o
-   Older compilers had the habit of generating typeinfo-functions in each 
-   object file that uses them (dynamic_cast). My version of gcc only does that 
-   if optimization is switched off. In optimizing mode, these functions are not 
-   kept in each object file, but they are taken from the library which "defines"
-   the class that is the target of the dynamic_cast. This works fine for most 
-   cases, but the Be-libraries seem to contain a broken version of the 
-   BDirectWindow-typeinfo-function.
+   As a result of the multiple / single symbol space issue, older compilers 
+   generate typeinfo-functions in each object file that uses them (via 
+   dynamic_cast). 
+   As this compiler uses a single symbol space when optimizing, type-info 
+   functions are not kept in each object file, but they are taken from the 
+   library which "defines" the class that is the target of the dynamic_cast. 
+   This works fine for most cases, but the Be-libraries seem to contain a 
+   broken version of the BDirectWindow-typeinfo-function.
 	The difference here is that older compilers never used this function, as the
 	linker always linked to the (object-file-)internal version of this funtion. 
 	Gcc-2.95.3 doesn't always generate these, so that the one living inside the 
-	Be-libraries is being used, which in turn leads to a crash (an example is
-	GLTeapot).
+	Be-libraries is being used, which in turn leads to a crash (examples are
+	GLTeapot or libSDL.so).
 	As a solution to this problem, I have created a new object file, named 
 	fix_bdirectwin_typeinfo.o, that contains an implementation of the 
-	BDirectWindow-typeinfo-funtion. Every app is now linked against this file 
-	automatically (by means of the specs-file), such that the broken 
+	BDirectWindow-typeinfo-funtion. Every app and library is now linked against
+	this file automatically (by means of the specs-file), such that the broken 
 	implementation from the libs isn't used.
-	What remains a mystery to me is how that broken function found its way into 
-	the libs in the first place...
+   You can use the new switch -no-beos-fixes to switch off this fix. This is
+   especially useful if you are debugging small test applications and you do
+   not want/need the symbols from fix_bdirectwin_typeinfo.o.
+	What remains a mystery to me is to what respect this function is broken
+	and how it found its way into the libs in the first place...
+
+ - gcc-2.95.3 is a bit more decisive when it comes to the handling of inline 
+   assembly operand constraints. The original gcc-2.95.3 contained a bug 
+   (or two rather) that resulted in a complaint about a "fixed or forbidden
+   register" bx or bp being spilled for an inline asm-clause that requires
+   rather a lot of register operands. This bug has been fixed (i.e. bx and
+   bp are now only spilled if it is safe to do so), but it's still quite
+   probable that inline assembly that compiled and worked for gnupro-000224 
+   may not compile instantly with gcc-2.95.3.
+   So far I have been able to fix all the inline assembly related problems by 
+   specifying other operand constraints, but I wouldn't be surprised if there
+   are projects out there for which this won't work.
+
+ - the generation of debugging info has been, and still is, problematic. So
+   whenever you encounter weird error messages or other strange behaviour, 
+   please try to deactivate debug-info (remove -g from the build). 
+   I think it is especially unwise to combine optimization with debug-info 
+   (which a lot of opensource projects seem to do by default), as this 
+   combination seems to be the least reliable during compilation and the 
+   resulting apps aren't useful in the debugger either.
 
  - I believe 2.95.3 improves upon the other available compilers for BeOS, but
    this does not mean that it is better for all purposes, it is just different!
