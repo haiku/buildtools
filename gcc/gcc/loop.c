@@ -330,7 +330,7 @@ static int basic_induction_var PROTO((rtx, enum machine_mode, rtx, rtx, rtx *, r
 static rtx simplify_giv_expr PROTO((rtx, int *));
 static int general_induction_var PROTO((rtx, rtx *, rtx *, rtx *, int, int *));
 static int consec_sets_giv PROTO((int, rtx, rtx, rtx, rtx *, rtx *, rtx *));
-static int check_dbra_loop PROTO((rtx, int, rtx, struct loop_info *));
+static int check_dbra_loop PROTO((rtx, int, rtx, struct loop_info *, rtx));
 static rtx express_from_1 PROTO((rtx, rtx, rtx));
 static rtx combine_givs_p PROTO((struct induction *, struct induction *));
 static void combine_givs PROTO((struct iv_class *));
@@ -4602,7 +4602,7 @@ strength_reduce (scan_start, end, loop_top, insn_count,
   /* Try to prove that the loop counter variable (if any) is always
      nonnegative; if so, record that fact with a REG_NONNEG note
      so that "decrement and branch until zero" insn can be used.  */
-  check_dbra_loop (loop_end, insn_count, loop_start, loop_info);
+  check_dbra_loop (loop_end, insn_count, loop_start, loop_info, loop_cont);
 
   /* Create reg_map to hold substitutions for replaceable giv regs.
      Some givs might have been made from biv increments, so look at
@@ -7699,11 +7699,12 @@ product_cheap_p (a, b)
    final_[bg]iv_value.  */
 
 static int
-check_dbra_loop (loop_end, insn_count, loop_start, loop_info)
+check_dbra_loop (loop_end, insn_count, loop_start, loop_info, loop_cont)
      rtx loop_end;
      int insn_count;
      rtx loop_start;
      struct loop_info *loop_info;
+     rtx loop_cont;
 {
   struct iv_class *bl;
   rtx reg;
@@ -7735,6 +7736,20 @@ check_dbra_loop (loop_end, insn_count, loop_start, loop_info)
     compare_and_branch = 2;
   else
     return 0;
+
+  {
+    /* If more than one condition is present to control the loop, then
+       do not proceed, as this function does not know how to rewrite
+       loop tests with more than one condition.
+
+       Look backwards from the first insn in the last comparison
+       sequence and see if we've got another comparison sequence.  */
+
+    rtx jump1;
+    if ((jump1 = prev_nonnote_insn (first_compare)) != loop_cont)
+      if (GET_CODE (jump1) == JUMP_INSN)
+        return 0;
+  }
 
   /* Check all of the bivs to see if the compare uses one of them.
      Skip biv's set more than once because we can't guarantee that
