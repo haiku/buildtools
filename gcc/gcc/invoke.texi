@@ -586,6 +586,10 @@ values between 1-10, the default is 5 (B_LOW_PRIORITY).
 Disable any BeOS-R5 compatibility fixes (like the automatic linking of 
 fix_bdirectwindow_typeinfo.o).
 
+@item --relative-path-errors
+Disable the BeOS-specific feature of absolute paths when displaying errors.
+If you specify this option, relative paths will be used instead.
+
 @item --help
 Print (on the standard output) a description of the command line options
 understood by @code{gcc}.  If the @code{-v} option is also specified
