@@ -858,6 +858,7 @@ struct option_map option_map[] =
    {"--library-directory", "-L", "a"},
    {"--machine", "-m", "aj"},
    {"--machine-", "-m", "*j"},
+   {"--no-beos-fixes", "-no-beos-fixes", 0},
    {"--no-line-commands", "-P", 0},
    {"--no-precompiled-includes", "-noprecomp", 0},
    {"--no-standard-includes", "-nostdinc", 0},
@@ -2518,6 +2519,7 @@ display_help ()
   printf ("                            'none' means revert to the default behaviour of\n");
   printf ("                            guessing the language based on the file's extension\n");
   printf ("  -priority=<prio>         Specify thread-priority to use (1-10, default is 5)\n");
+  printf ("  -no-beos-fixes           Disable any BeOS-R5 compatibility fixes\n");
 
   printf ("\nOptions starting with -g, -f, -m, -O or -W are automatically passed on to\n");
   printf ("the various sub-processes invoked by %s.  In order to pass other options\n",
@@ -2794,6 +2796,10 @@ process_command (argc, argv)
 	  add_preprocessor_option (argv[i], strlen(argv[i]));
 	  add_assembler_option (argv[i], strlen(argv[i]));
 	  add_linker_option (argv[i], strlen(argv[i]));
+	  n_switches++;
+	}
+      else if (!strcmp (argv[i], "-no-beos-fixes"))
+	{
 	  n_switches++;
 	}
 #endif
@@ -3189,6 +3195,16 @@ process_command (argc, argv)
 	;
       else if (! strcmp (argv[i], "-print-multi-directory"))
 	;
+      else if (! strcmp (argv[i], "-no-beos-fixes"))
+	{
+	  /* Preserve the switch so that it can be caught by the
+	     cc1 spec string.  */
+	  switches[n_switches].part1     = argv[i]+1;
+	  switches[n_switches].args      = 0;
+	  switches[n_switches].live_cond = 0;
+	  switches[n_switches].validated = 0;
+	  n_switches++;
+	}
       else if (! strncmp (argv[i], "-priority=", 10))
 	{
 	  /* Preserve the switch so that it can be caught by the
