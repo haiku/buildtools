@@ -5940,8 +5940,7 @@ fold (expr)
 	    && width <= HOST_BITS_PER_WIDE_INT
 	    && TREE_INT_CST_LOW (arg1) == ((HOST_WIDE_INT) 1 << (width - 1)) - 1
 	    && TREE_INT_CST_HIGH (arg1) == 0
-	    && (INTEGRAL_TYPE_P (TREE_TYPE (arg1))
-		|| POINTER_TYPE_P (TREE_TYPE (arg1)))
+	    && INTEGRAL_TYPE_P (TREE_TYPE (arg1))
 	    && TREE_UNSIGNED (TREE_TYPE (arg1)))
 	  {
 	    switch (TREE_CODE (t))
