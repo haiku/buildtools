@@ -3586,9 +3586,7 @@ maybe_get_template_decl_from_type_decl (decl)
    D1 is the PTYPENAME terminal, and ARGLIST is the list of arguments.
    (Actually ARGLIST may be either a TREE_LIST or a TREE_VEC.  It will
    be a TREE_LIST if called directly from the parser, and a TREE_VEC
-   otherwise.)  Since ARGLIST is build on the decl_obstack, we must
-   copy it here to keep it from being reclaimed when the decl storage
-   is reclaimed.
+   otherwise.)
 
    IN_DECL, if non-NULL, is the template declaration we are trying to
    instantiate.  
@@ -3830,22 +3828,19 @@ lookup_template_class (d1, arglist, in_decl, context, entering_scope)
 	    }
 	}
       
-      if (!found)
-	{
-	  for (found = DECL_TEMPLATE_INSTANTIATIONS (template);
-	       found; found = TREE_CHAIN (found))
-	    if (comp_template_args (TREE_PURPOSE (found), arglist))
-	      break;
-
-	  if (found)
-	    found = TREE_VALUE (found);
-	}
-      
       if (found)
 	{
 	  pop_momentary ();
 	  return found;
 	}
+
+      for (found = DECL_TEMPLATE_INSTANTIATIONS (template);
+	   found; found = TREE_CHAIN (found))
+	if (comp_template_args (TREE_PURPOSE (found), arglist))
+	  {
+	    pop_momentary ();
+	    return TREE_VALUE (found);
+	  }
 
       /* Since we didn't find the type, we'll have to create it.
 	 Since we'll be saving this type on the
@@ -3853,7 +3848,7 @@ lookup_template_class (d1, arglist, in_decl, context, entering_scope)
       push_obstacks (&permanent_obstack, &permanent_obstack);
       
       /* This type is a "partial instantiation" if any of the template
-	 arguments still inolve template parameters.  Note that we set
+	 arguments still involve template parameters.  Note that we set
 	 IS_PARTIAL_INSTANTIATION for partial specializations as
 	 well.  */
       is_partial_instantiation = uses_template_parms (arglist);
@@ -3908,9 +3903,8 @@ lookup_template_class (d1, arglist, in_decl, context, entering_scope)
 	found = template;
       else
 	{
-	  /* This is a full instantiation of a member template.  There
-	     should be some partial instantiation of which this is an
-	     instance.  */
+	  /* This is a full instantiation of a member template.  Look
+	     for a partial instantiation of which this is an instance.  */
 
 	  for (found = DECL_TEMPLATE_INSTANTIATIONS (template);
 	       found; found = TREE_CHAIN (found))
@@ -3946,12 +3940,25 @@ lookup_template_class (d1, arglist, in_decl, context, entering_scope)
 	    }
 
 	  if (!found)
-	    my_friendly_abort (0);
+	    {
+	      /* There was no partial instantiation. This happens
+                 where C<T> is a member template of A<T> and it's used
+                 in something like
+                
+                  template <typename T> struct B { A<T>::C<int> m; };
+                  B<float>;
+                
+                 Create the partial instantiation.
+               */
+              TREE_VEC_LENGTH (arglist)--;
+              template = tsubst (template, arglist, /*complain=*/0, NULL_TREE);
+              TREE_VEC_LENGTH (arglist)++;
+              found = template;
+            }
 	}
 
       arglist = copy_to_permanent (arglist);
-      SET_TYPE_TEMPLATE_INFO (t,
-			      tree_cons (found, arglist, NULL_TREE));  
+      SET_TYPE_TEMPLATE_INFO (t, tree_cons (found, arglist, NULL_TREE));  
       DECL_TEMPLATE_INSTANTIATIONS (template) 
 	= tree_cons (arglist, t, 
 		     DECL_TEMPLATE_INSTANTIATIONS (template));
