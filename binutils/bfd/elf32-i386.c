@@ -2311,10 +2311,32 @@ elf_i386_relocate_section (bfd *output_bfd,
 	  /* r_symndx will be zero only for relocs against symbols
 	     from removed linkonce sections, or sections discarded by
 	     a linker script.  */
-	  if (r_symndx == 0
-	      || (input_section->flags & SEC_ALLOC) == 0)
-	    break;
+	{
+	  bfd_boolean skip, relocate;
+	  skip = FALSE;
+	  relocate = FALSE;
 
+	  /* [zooey]: the dynamic loader of newer BeOS versions (BONE,Dano,Zeta)
+	              is broken to such an extent that crashes when it encounters
+	              a R_386_NONE reloc entry with a zero offset. In order to
+	              circumvent this bug, I changed the skip-handling below 
+	              such that it keeps the original offset (of the now defunct 
+	              relocation target) in place. This way, the loader
+	              accepts it (and ignores this reloc entry, as it should). */
+	  if (r_symndx == 0)
+	    skip = TRUE;
+#if 0
+	  if (r_symndx == 0)
+	    {
+	      /* Zero the section contents as a hint to unwinders and
+		 other consumers of exception handling info that this
+		 entry is invalid.  */
+	      bfd_put_32 (input_bfd, 0, contents + rel->r_offset);
+	      continue;
+	    }
+#endif 
+	  if ((input_section->flags & SEC_ALLOC) == 0)
+	    break;
 	  if ((info->shared
 	       && (h == NULL
 		   || ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
@@ -2335,15 +2357,11 @@ elf_i386_relocate_section (bfd *output_bfd,
 	    {
 	      Elf_Internal_Rela outrel;
 	      bfd_byte *loc;
-	      bfd_boolean skip, relocate;
 	      asection *sreloc;
 
 	      /* When generating a shared object, these relocations
 		 are copied into the output file to be resolved at run
 		 time.  */
-
-	      skip = FALSE;
-	      relocate = FALSE;
 
 	      outrel.r_offset =
 		_bfd_elf_section_offset (output_bfd, info, input_section,
@@ -2356,7 +2374,7 @@ elf_i386_relocate_section (bfd *output_bfd,
 				  + input_section->output_offset);
 
 	      if (skip)
-		memset (&outrel, 0, sizeof outrel);
+		outrel.r_info = ELF32_R_INFO (0, R_386_NONE);
 	      else if (h != NULL
 		       && h->dynindx != -1
 		       && (r_type == R_386_PC32
@@ -2388,7 +2406,7 @@ elf_i386_relocate_section (bfd *output_bfd,
 		continue;
 	    }
 	  break;
-
+	}
 	case R_386_TLS_IE:
 	  if (info->shared)
 	    {
