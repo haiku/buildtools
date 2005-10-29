@@ -687,7 +687,7 @@ fi
 if test -f skip-this-dir; then
 	# Perform the same cleanup as the trap handler, minus the "exit 1" of course,
 	# and reset the trap handler.
-	trap 0
+	trap '' 0
 	rm -f Makefile* ${tmpfile}.com ${tmpfile}.tgt ${tmpfile}.hst ${tmpfile}.pos
 	# Execute the final clean-up actions
 	${config_shell} skip-this-dir
@@ -1599,7 +1599,7 @@ fi
 # Perform the same cleanup as the trap handler, minus the "exit 1" of course,
 # and reset the trap handler.
 rm -f ${tmpfile}.com ${tmpfile}.tgt ${tmpfile}.hst ${tmpfile}.pos
-trap 0
+trap '' 0
 
 exit 0
 
