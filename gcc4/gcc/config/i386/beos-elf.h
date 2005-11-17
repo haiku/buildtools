@@ -72,9 +72,14 @@ Boston, MA 02111-1307, USA.  */
 	    builtin_define ("__PIC__");					\
 	    builtin_define ("__pic__");					\
 	  }								\
+    /* BeOS apparently doesn't support merging of symbols across shared \
+       object boundaries. Hence we need to explicitly specify that \
+       type_infos are not merged, so that they get compared by name \
+       instead of by pointer. */ \
+    builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0"); \
     }									\
   while (0)
-    
+
 /* BeOS uses lots of multichars, so don't warn about them unless the
    user explicitly asks for the warnings with -Wmultichar.  Note that
    CC1_SPEC is used for both cc1 and cc1plus.  */
@@ -99,7 +104,7 @@ Boston, MA 02111-1307, USA.  */
 
 /* LIB_SPEC for BeOS */
 #undef LIB_SPEC
-#define LIB_SPEC "-lnet -lroot"
+#define LIB_SPEC "-lroot"
 
 /* gcc runtime lib is built into libroot.so on BeOS */
 /* ??? This is gonna be lovely when the next release of gcc has 
@@ -238,3 +243,6 @@ Boston, MA 02111-1307, USA.  */
 
 /* BeOS uses explicit import from shared libraries.  */
 #define MULTIPLE_SYMBOL_SPACES 1
+
+#undef EXTRA_SECTIONS
+#define EXTRA_SECTIONS in_const, in_ctors, in_dtors, in_drectve
