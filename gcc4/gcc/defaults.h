@@ -338,7 +338,11 @@ do { fputs (integer_asm_op (POINTER_SIZE / BITS_PER_UNIT, TRUE), FILE); \
    at program start-up time.  */
 #if defined (TARGET_ASM_NAMED_SECTION) && SUPPORTS_WEAK
 #ifndef JCR_SECTION_NAME
+/* Hack to remove _Jv crap on BeOS. i know it should be made somehow through
+	config files, but i don't know how (in which file ;) */
+#ifndef __BEOS__
 #define JCR_SECTION_NAME ".jcr"
+#endif
 #endif
 #endif
 

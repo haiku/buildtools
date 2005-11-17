@@ -134,7 +134,9 @@ extern void *__deregister_frame_info_bases (const void *)
 extern void __do_global_ctors_1 (void);
 
 /* Likewise for _Jv_RegisterClasses.  */
+#ifdef JCR_SECTION_NAME
 extern void _Jv_RegisterClasses (void *) TARGET_ATTRIBUTE_WEAK;
+#endif
 
 #ifdef OBJECT_FORMAT_ELF
 
