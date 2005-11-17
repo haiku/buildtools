@@ -1156,6 +1156,9 @@ esac
 
 
 case "${target}" in
+  *-*-beos)
+    noconfigdirs="$noconfigdirs target-libiberty"
+    ;;
   *-*-chorusos)
     noconfigdirs="$noconfigdirs target-newlib target-libgloss ${libgcj}"
     ;;
