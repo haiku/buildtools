@@ -14,6 +14,7 @@
    attributes.  So we hide the declaration in errno.h (if any) using a
    macro. */
 #define sys_errlist sys_errlist__
+#define sys_nerr sys_nerr__
 #endif
 
 #include <stdio.h>
@@ -21,6 +22,7 @@
 
 #ifdef HAVE_SYS_ERRLIST
 #undef sys_errlist
+#undef sys_nerr
 #endif
 
 /*  Routines imported from standard C runtime libraries. */
