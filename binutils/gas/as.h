@@ -605,6 +605,26 @@ void print_dependencies (void);
 struct expressionS;
 struct fix;
 typedef struct symbol symbolS;
+
+/* JF moved this here [tc.h] from as.h under the theory that nobody except 
+   MACHINE.c and write.c care about it anyway.  */
+/* [zooey]: the above no longer holds with gcc4, as it keeps bugging about
+            incomplete element types in arrays, if relax_type isn't defined
+            here. So I moved the definition back from tc.h to here. */
+struct relax_type
+{
+  /* Forward reach. Signed number. > 0.  */
+  long rlx_forward;
+  /* Backward reach. Signed number. < 0.  */
+  long rlx_backward;
+
+  /* Bytes length of this address.  */
+  unsigned char rlx_length;
+
+  /* Next longer relax-state.  0 means there is no 'next' relax-state.  */
+  relax_substateT rlx_more;
+};
+
 struct relax_type;
 typedef struct frag fragS;
 
