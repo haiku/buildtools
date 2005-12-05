@@ -810,6 +810,12 @@ EOF
     BePC:BeOS:*:*)	# BeOS running on Intel PC compatible.
 	echo i586-pc-beos
 	exit 0 ;;
+    BeMac:Haiku:*:*)	# Haiku running on Mac or Mac clone, PPC only.
+	echo powerpc-apple-haiku
+	exit 0 ;;
+    BePC:Haiku:*:*)	# Haiku running on Intel PC compatible.
+	echo i586-pc-haiku
+	exit 0 ;;
 esac
 
 #echo '(No uname command or uname output not recognized.)' 1>&2
