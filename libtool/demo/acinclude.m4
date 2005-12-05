@@ -903,6 +903,12 @@ else
     ])
    ;;
 
+  haiku*)
+    lt_cv_dlopen="load_add_on"
+    lt_cv_dlopen_libs=
+    lt_cv_dlopen_self=yes
+    ;;
+
   *)
     AC_CHECK_FUNC([shl_load],
 	  [lt_cv_dlopen="shl_load"],
@@ -1350,6 +1356,12 @@ dgux*)
 
 freebsd1*)
   dynamic_linker=no
+  ;;
+
+haiku*)
+  library_names_spec='${libname}${shared_ext}'
+  dynamic_linker="$host_os ld.so"
+  shlibpath_var=LIBRARY_PATH
   ;;
 
 kfreebsd*-gnu)
@@ -2243,6 +2255,10 @@ gnu*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
+haiku*)
+  lt_cv_deplibs_check_method=pass_all
+  ;;
+
 hpux10.20* | hpux11*)
   lt_cv_file_magic_cmd=/usr/bin/file
   case $host_cpu in
@@ -2401,7 +2417,7 @@ AC_DEFUN([AC_CHECK_LIBM],
 [AC_REQUIRE([AC_CANONICAL_HOST])dnl
 LIBM=
 case $host in
-*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin*)
+*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin* | *-*-haiku*)
   # These system don't have libm, or don't need it
   ;;
 *-ncr-sysv4.3*)
@@ -4705,7 +4721,8 @@ AC_MSG_CHECKING([for $compiler option to produce PIC])
       # like `-m68040'.
       _LT_AC_TAGVAR(lt_prog_compiler_pic, $1)='-m68020 -resident32 -malways-restore-a4'
       ;;
-    beos* | cygwin* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+    beos* | cygwin* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* \
+    | osf5*)
       # PIC is the default for these OSes.
       ;;
     mingw* | os2* | pw32*)
@@ -4972,7 +4989,8 @@ AC_MSG_CHECKING([for $compiler option to produce PIC])
       _LT_AC_TAGVAR(lt_prog_compiler_pic, $1)='-m68020 -resident32 -malways-restore-a4'
       ;;
 
-    beos* | cygwin* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+    beos* | cygwin* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* \
+    | osf5*)
       # PIC is the default for these OSes.
       ;;
 
@@ -5353,6 +5371,11 @@ EOF
       else
 	_LT_AC_TAGVAR(ld_shlibs, $1)=no
       fi
+      ;;
+
+    haiku*)
+      _LT_AC_TAGVAR(allow_undefined_flag, $1)=unsupported
+      _LT_AC_TAGVAR(archive_cmds, $1)='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
       ;;
 
     linux*)
