@@ -175,6 +175,11 @@ EOF
       $CC $output_objdir/$soname-exp '$lt_cv_cc_dll_switch' -Wl,-e,'$dll_entry' -o $output_objdir/$soname '$ltdll_obj'$libobjs $deplibs $compiler_flags'
     ;;
 
+  haiku*)
+    allow_undefined_flag=unsupported
+    archive_cmds='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+    ;;
+
   netbsd* | knetbsd*-gnu)
     if echo __ELF__ | $CC -E - | grep __ELF__ >/dev/null; then
       archive_cmds='$LD -Bshareable $libobjs $deplibs $linker_flags -o $lib'

@@ -1,6 +1,6 @@
 /* Threads compatibility routines for libgcc2.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 1997, 1998, 2004 Free Software Foundation, Inc.
+/* Copyright (C) 1997, 1998 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -26,12 +26,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    This exception does not however invalidate any other reasons why
    the executable file might be covered by the GNU General Public License.  */
 
-#ifndef GCC_GTHR_H
-#define GCC_GTHR_H
-
-#ifndef HIDE_EXPORTS
-#pragma GCC visibility push(default)
-#endif
+#ifndef GCC_GTHR_HAIKU_H
+#define GCC_GTHR_HAIKU_H
 
 /* If this file is compiled with threads support, it must
        #define __GTHREADS 1
@@ -44,7 +40,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
      __gthread_key_t
      __gthread_once_t
      __gthread_mutex_t
-     __gthread_recursive_mutex_t
 
    The threads interface must define the following macros:
 
@@ -59,9 +54,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 		function which looks like this:
 		  void __GTHREAD_MUTEX_INIT_FUNCTION (__gthread_mutex_t *)
 		Don't define __GTHREAD_MUTEX_INIT in this case
-     __GTHREAD_RECURSIVE_MUTEX_INIT
-     __GTHREAD_RECURSIVE_MUTEX_INIT_FUNCTION
-     		as above, but for a recursive mutex.
 
    The threads interface must define the following static functions:
 
@@ -77,54 +69,87 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
      int __gthread_mutex_trylock (__gthread_mutex_t *mutex);
      int __gthread_mutex_unlock (__gthread_mutex_t *mutex);
 
-     int __gthread_recursive_mutex_lock (__gthread_recursive_mutex_t *mutex);
-     int __gthread_recursive_mutex_trylock (__gthread_recursive_mutex_t *mutex);
-     int __gthread_recursive_mutex_unlock (__gthread_recursive_mutex_t *mutex);
-
    All functions returning int should return zero on success or the error
    number.  If the operation is not supported, -1 is returned.
 
    Currently supported threads packages are
-     TPF threads with -D__tpf__
-     POSIX/Unix98 threads with -D_PTHREADS
-     POSIX/Unix95 threads with -D_PTHREADS95
+     POSIX threads with -D_PTHREADS
      DCE threads with -D_DCE_THREADS
      Solaris/UI threads with -D_SOLARIS_THREADS
+     Haiku threads with -D_HAIKU_THREADS
 */
 
-/* Check first for thread specific defines.  */
-#if defined (__tpf__)
-#include "gthr-tpf.h"
-#elif _PTHREADS
-#include "gthr-posix.h"
-#elif _PTHREADS95
-#include "gthr-posix95.h"
-#elif _DCE_THREADS
-#include "gthr-dce.h"
-#elif _SOLARIS_THREADS
-#include "gthr-solaris.h"
-/* Haiku also defines __BEOS__ for backwards compatibility, so check it first */
-#elif __HAIKU__
-#include "gthr-haiku.h"
-#elif __BEOS__
-#include "gthr-beos.h"
+#include <OS.h>
+#include <TLS.h>
 
-/* Include GTHREAD_FILE if one is defined.  */
-#elif defined(HAVE_GTHR_DEFAULT)
-#if SUPPORTS_WEAK
-#ifndef GTHREAD_USE_WEAK
-#define GTHREAD_USE_WEAK 1
-#endif
-#endif
-#include "gthr-default.h"
+#define __GTHREADS 1
 
-/* Fallback to single thread definitions.  */
-#else
-#include "gthr-single.h"
-#endif
+// for now __gthread_key_delete is not used anywhere, so we don't need to "emulate it" using additional arrays or something :)
+typedef int32 __gthread_key_t;
+typedef vint32 __gthread_once_t;
+typedef vint32 __gthread_mutex_t;
 
-#ifndef HIDE_EXPORTS
-#pragma GCC visibility pop
-#endif
+#define __GTHREAD_ONCE_INIT 0
+#define __GTHREAD_MUTEX_INIT 0
 
-#endif /* ! GCC_GTHR_H */
+static inline int __gthread_active_p ()
+{
+	return 1;
+}
+
+static inline int __gthread_once (__gthread_once_t *once, void (*func) ())
+{
+	if (atomic_or(once, 1) == 0) {
+		func();
+	}
+	return 0;
+}
+
+static inline int __gthread_key_create (__gthread_key_t *keyp, void (*dtor) (void *))
+{
+	*keyp = tls_allocate();
+	return 0;
+}
+
+// Haiku doesn't offer deleting TLS keys,
+// luckly delete is not used anywahere in gcc so we don't have to implement it (at least so for now :)
+// (and do create tricks with structs and arrays for keys, to run dtor for all tls_vars...)
+static inline int __gthread_key_delete (__gthread_key_t key)
+{
+	return -1;
+}
+
+static inline void *__gthread_getspecific (__gthread_key_t key)
+{
+	return tls_get(key);
+}
+
+static inline int __gthread_setspecific (__gthread_key_t key, const void *ptr)
+{
+	tls_set(key, (void*)ptr);
+	return 0;
+}
+
+static inline int __gthread_mutex_lock (__gthread_mutex_t *mutex)
+{
+	while (atomic_or(mutex, 1) != 0) {
+		snooze(3000);
+	}
+	return 0;
+}
+
+static inline int __gthread_mutex_trylock (__gthread_mutex_t *mutex)
+{
+	if (atomic_or(mutex, 1) == 0)
+		return 0;
+	else
+		return EBUSY;
+}
+
+static inline int __gthread_mutex_unlock (__gthread_mutex_t *mutex)
+{
+	atomic_and(mutex, 0);
+	return 0;
+}
+
+#endif /* ! GCC_GTHR_HAIKU_H */

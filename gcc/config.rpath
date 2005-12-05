@@ -159,6 +159,8 @@ if test "$with_gnu_ld" = yes; then
         ld_shlibs=no
       fi
       ;;
+    haiku*)
+      ;;
     netbsd*)
       ;;
     solaris* | sysv5*)
