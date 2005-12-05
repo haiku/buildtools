@@ -177,6 +177,7 @@ case ${generic_target} in
   i386-*-beos*)				fmt=elf ;;
   i386-*-coff)				fmt=coff ;;
   i386-*-elf)				fmt=elf ;;
+  i386-*-haiku*)			fmt=elf ;;
   i386-*-kaos*)				fmt=elf ;;
   i386-*-bsd*)				fmt=aout em=386bsd ;;
   i386-*-netbsd0.8)			fmt=aout em=386bsd ;;
@@ -332,6 +333,7 @@ case ${generic_target} in
   ppc-*-beos*)				fmt=coff ;;
   ppc-*-*n*bsd* | ppc-*-elf*)		fmt=elf ;;
   ppc-*-eabi* | ppc-*-sysv4*)		fmt=elf ;;
+  ppc-*-haiku*)				fmt=elf ;;
   ppc-*-linux-gnu*)			fmt=elf em=linux ;;
   ppc-*-solaris*)			fmt=elf ;;
   ppc-*-rtems*)				fmt=elf ;;
