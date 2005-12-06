@@ -304,7 +304,7 @@ case "${host}" in
   *-*-cygwin*)
     noconfigdirs="$noconfigdirs autoconf automake send-pr rcs guile perl"
     ;;
-  i[[3456789]]86-*-haiku*)
+  *-*-haiku*)
     noconfigdirs="$noconfigdirs tk itcl libgui gdb"
     ;;
   *-*-netbsd*)
@@ -641,9 +641,6 @@ case "${target}" in
   i[[3456789]]86-*-beos*)
     noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss ${libgcj}"
     ;;
-  i[[3456789]]86-*-haiku*)
-    noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss ${libgcj}"
-    ;;
   m32r-*-*)
     noconfigdirs="$noconfigdirs ${libgcj}"
     ;;
@@ -789,6 +786,9 @@ case "${target}" in
     ;;
   ip2k-*-*)
     noconfigdirs="$noconfigdirs target-libiberty target-libstdc++-v3 ${libgcj}"
+    ;;
+  *-*-haiku*)
+    noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss ${libgcj}"
     ;;
   *-*-linux* | *-*-gnu* | *-*-k*bsd*-gnu)
     noconfigdirs="$noconfigdirs target-newlib target-libgloss"

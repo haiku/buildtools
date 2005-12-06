@@ -970,8 +970,8 @@ x86_64-*-freebsd*)
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h ${fbsd_tm_file} i386/x86-64.h i386/freebsd.h i386/freebsd64.h"
 	;;
 i[34567]86-*-haiku*)
-	tmake_file='i386/t-haiku i386/t-crtpic'
-	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h i386/haiku-elf.h"
+	tmake_file='t-haiku i386/t-crtpic'
+	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h haiku.h i386/haiku.h"
 	extra_parts='crtbegin.o crtend.o'
 	;;
 i[34567]86-*-netbsdelf*)
@@ -1639,6 +1639,11 @@ powerpc-*-eabialtivec*)
 powerpc-*-eabi*)
 	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h rs6000/eabi.h"
 	tmake_file="rs6000/t-fprules rs6000/t-ppcgas rs6000/t-ppccomm"
+	;;
+powerpc-*-haiku*)
+	tmake_file="rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
+	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku-ppc.h"
+	extra_parts='crtbegin.o crtend.o'
 	;;
 powerpc-*-rtems*)
 	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h rs6000/eabi.h rs6000/rtems.h rtems.h"

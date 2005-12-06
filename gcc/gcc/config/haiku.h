@@ -1,5 +1,6 @@
-/* Definitions for Intel x86 running Haiku
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004
+/* Definitions of target machine for GCC.
+   Common Haiku definitions for all architectures.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -20,66 +21,20 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 
-#define TARGET_VERSION fprintf (stderr, " (i386 Haiku/ELF)");
-
 /* Change debugging to Dwarf2.  */
 #undef PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
-/* The SVR4 ABI for the i386 says that records and unions are returned
-   in memory.  */
-#undef DEFAULT_PCC_STRUCT_RETURN
-#define DEFAULT_PCC_STRUCT_RETURN 1
-
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START " #"
-
-#undef DBX_REGISTER_NUMBER
-#define DBX_REGISTER_NUMBER(n) \
-  (TARGET_64BIT ? dbx64_register_map[n] : svr4_dbx_register_map[n])
 
 /* Output assembler code to FILE to increment profiler label # LABELNO
    for profiling a function entry.  */
 
 #undef MCOUNT_NAME
-#define MCOUNT_NAME "mcount"
-
-#undef SIZE_TYPE
-#define SIZE_TYPE "long unsigned int"
- 
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE "long int"
-  
-#undef WCHAR_TYPE
-#define WCHAR_TYPE "short unsigned int"
-   
-#undef WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE 16
+#define MCOUNT_NAME "_mcount"
 
 #define TARGET_DECLSPEC 1
-
-#define TARGET_OS_CPP_BUILTINS()					\
-  do									\
-    {									\
-	builtin_define ("__BEOS__");					\
-	builtin_define ("__HAIKU__");					\
-	builtin_define ("__INTEL__");					\
-	builtin_define ("_X86_");					\
-	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
-	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
-	builtin_assert ("system=haiku");					\
-	if (flag_pic)							\
-	  {								\
-	    builtin_define ("__PIC__");					\
-	    builtin_define ("__pic__");					\
-	  }								\
-    /* Haiku apparently doesn't support merging of symbols across shared \
-       object boundaries. Hence we need to explicitly specify that \
-       type_infos are not merged, so that they get compared by name \
-       instead of by pointer. */ \
-    builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0"); \
-    }									\
-  while (0)
 
 /* Haiku uses lots of multichars, so don't warn about them unless the
    user explicitly asks for the warnings with -Wmultichar.  Note that
@@ -90,16 +45,6 @@ Boston, MA 02111-1307, USA.  */
 
 #undef CC1PLUS_SPEC
 #define CC1PLUS_SPEC "%{!Wctor-dtor-privacy:-Wno-ctor-dtor-privacy}"
-
-/* Provide a LINK_SPEC appropriate for Haiku.  Here we provide support
-   for the special GCC options -static and -shared, which allow us to
-   link things in one of these three modes by applying the appropriate
-   combinations of options at link-time.  */
-
-/* If ELF is the default format, we should not use /lib/elf.  */
-
-#undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf_i386_be -shared -Bsymbolic %{nostart:-e 0}"
 
 /* Provide start and end file specs appropriate to glibc.  */
 
@@ -113,32 +58,14 @@ Boston, MA 02111-1307, USA.  */
 #undef LIBGCC_SPEC
 #define LIBGCC_SPEC ""
 
+/* Note: There currently is no mcount.o on Haiku. In the BeOS specification
+   it was i386-mcount.o, but that doesn't exist in gcc 2.95.3 either. */
+
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart:start_dyn.o%s} init_term_dyn.o%s %{p:i386-mcount.o%s}"
+#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart:start_dyn.o%s} init_term_dyn.o%s %{p:mcount.o%s}"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
-
-/* A C statement (sans semicolon) to output to the stdio stream
-   FILE the assembler definition of uninitialized global DECL named
-   NAME whose size is SIZE bytes and alignment is ALIGN bytes.
-   Try to use asm_output_aligned_bss to implement this macro.  */
-
-#define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN) \
-  asm_output_aligned_bss (FILE, DECL, NAME, SIZE, ALIGN)
-
-/* A C statement to output to the stdio stream FILE an assembler
-   command to advance the location counter to a multiple of 1<<LOG
-   bytes if it is within MAX_SKIP bytes.
-
-   This is used to align code labels according to Intel recommendations.  */
-
-#ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
-#define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP) \
-  if ((LOG)!=0) \
-    if ((MAX_SKIP)==0) fprintf ((FILE), "\t.p2align %d\n", (LOG)); \
-    else fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP))
-#endif
 
 /* For native compiler, use standard Haiku include file search paths
    rooted in /boot/develop/headers.  For a cross compiler, don't
@@ -241,6 +168,3 @@ Boston, MA 02111-1307, USA.  */
 
 /* Haiku headers are C++-aware (and often use C++).  */
 #define NO_IMPLICIT_EXTERN_C
-
-#undef EXTRA_SECTIONS
-#define EXTRA_SECTIONS in_const, in_ctors, in_dtors, in_drectve
