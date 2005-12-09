@@ -42,6 +42,7 @@ Boston, MA 02111-1307, USA.  */
 	builtin_define ("__BEOS__");					\
 	builtin_define ("__HAIKU__");					\
 	builtin_define ("__POWERPC__");					\
+	builtin_define ("__powerpc__");					\
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
 	builtin_assert ("system=haiku");					\
