@@ -1026,6 +1026,7 @@ case "${targ}" in
     ;;
   powerpc-*-haiku*)
     targ_defvec=bfd_elf32_powerpc_vec
+    targ_cflags=-D__HAIKU_TARGET__
     ;;
   powerpc-*-macos*)
     targ_defvec=pmac_xcoff_vec

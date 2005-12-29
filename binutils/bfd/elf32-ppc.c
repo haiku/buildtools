@@ -6194,7 +6194,7 @@ static struct bfd_elf_special_section const ppc_elf_special_sections[]=
 #define TARGET_BIG_NAME		"elf32-powerpc"
 #define ELF_ARCH		bfd_arch_powerpc
 #define ELF_MACHINE_CODE	EM_PPC
-#ifdef __QNXTARGET__
+#if defined(__QNXTARGET__) || defined(__HAIKU_TARGET__)
 #define ELF_MAXPAGESIZE		0x1000
 #else
 #define ELF_MAXPAGESIZE		0x10000
