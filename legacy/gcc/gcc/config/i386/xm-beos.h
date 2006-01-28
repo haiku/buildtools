@@ -76,8 +76,3 @@ Boston, MA 02111-1307, USA.  */
 #define LIBRARY_PATH_ENV	"BELIBRARIES"
 #endif
 
-/* The origin of BeOS's gcc is egcs 1.1.x, and these version had a bug
-   in mangled name builder. The APIs of BeOS are furnished to the
-   developers as shared library of C++. And if we use fixed mangled
-   names in newer gcc, some APIs are hidden with name problem. */
-#define USE_EGCS_MANGLED_NAMES

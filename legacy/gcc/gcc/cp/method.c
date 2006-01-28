@@ -1353,7 +1353,7 @@ process_overload_item (parmtype, extra_Gcode)
         else
 	  {
 	    tree length = array_type_nelts (parmtype);
-#ifndef __BEOS__
+#ifndef USE_EGCS_MANGLED_NAMES
 	// *always* add one under BeOS...
 	    if (TREE_CODE (length) != INTEGER_CST || flag_do_squangling)
 #endif

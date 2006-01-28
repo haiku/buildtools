@@ -530,3 +530,9 @@ drectve_section ()							\
    */
 #define WORK_AROUND_PRAGMA_INTERFACE_BUG 1
 
+/* The origin of BeOS's gcc is egcs 1.1.x, and these version had a bug
+   in mangled name builder. The APIs of BeOS are furnished to the
+   developers as shared library of C++. And if we use fixed mangled
+   names in newer gcc, some APIs are hidden with name problem. */
+#define USE_EGCS_MANGLED_NAMES
+

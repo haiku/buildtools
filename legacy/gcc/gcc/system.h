@@ -402,17 +402,10 @@ extern void fatal PVPROTO((const char *, ...)) ATTRIBUTE_PRINTF_1 ATTRIBUTE_NORE
 #define abort() fatal ("Internal compiler error at %s:%d\n", \
 		       trim_filename (__FILE__), __LINE__)
 #else
-#if defined (__BEOS__)
 /* hm, Be is no more, so we are *very* local about bug reports >:oP */
 #define abort() fatal ("Internal compiler error in `%s', at %s:%d\n"	\
   "Please submit info to Oliver Tappe <gcc@hirschkaefer.de>.\n",\
   __PRETTY_FUNCTION__, trim_filename (__FILE__), __LINE__)
-#else
-#define abort() fatal ("Internal compiler error in `%s', at %s:%d\n"	\
-  "Please submit a full bug report.\n"	\
-  "See %s for instructions.", \
-  __PRETTY_FUNCTION__, trim_filename (__FILE__), __LINE__, GCCBUGURL)
-#endif /* __BEOS__ */
 #endif /* recent gcc */
 
 /* trim_filename is in toplev.c.  Define a stub macro for files that
