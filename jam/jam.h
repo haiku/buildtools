@@ -417,8 +417,7 @@
 # if defined( _i386_ ) || \
      defined( __i386__ ) || \
      defined( _M_IX86 )
-# if !defined( OS_FREEBSD ) && \
-     !defined( OS_OS2 ) && \
+# if !defined( OS_OS2 ) && \
      !defined( OS_AS400 )
 # define OSPLAT "OSPLAT=X86"
 # endif
