@@ -13,6 +13,10 @@ INSTALL_ASSERT_H =
 winnt.o: $(srcdir)/config/i386/winnt.c
 	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $(srcdir)/config/i386/winnt.c
 
+# in order to be able to compile fix_bdirectwin_typeinfo.cpp, we need a c++-compiler,
+# so we declare that we need it:
+EXTRA_PASSES += cc1plus$(exeext)
+
 EXTRA_PARTS += fix_bdirectwin_typeinfo.o
 # The purpose of this rule is to generate fix_bdirectwin_typeinfo.o.
 # This object-file is required to fix a problem with the BDirectWindow-typeinfo
