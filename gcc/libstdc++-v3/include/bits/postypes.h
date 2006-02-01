@@ -49,6 +49,10 @@
 #include <stdint.h> // For int64_t
 #endif
 
+#ifdef __BEOS__
+#include <inttypes.h> // BeOS has <inttypes.h>, but hasn't <stdint.h>
+#endif
+
 namespace std
 {
   // The types streamoff, streampos and wstreampos and the class

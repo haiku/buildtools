@@ -79,6 +79,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
      Haiku threads with -D_HAIKU_THREADS
 */
 
+#include <limits.h>
+
 #include <OS.h>
 #include <TLS.h>
 
