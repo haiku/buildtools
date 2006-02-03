@@ -1,0 +1,6 @@
+#!/bin/bash
+mkdir -p gcc-obj
+cd gcc-obj
+CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure --prefix=/boot/develop/tools/gnupro --disable-nls --enable-shared=yes --enable-languages=c,c++
+make bootstrap
+cd ..
