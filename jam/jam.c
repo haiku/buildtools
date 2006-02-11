@@ -320,6 +320,26 @@ main( int argc, char **argv, char **arg_environ )
 
 	var_defines( (const char **)use_environ );
 
+#ifdef OPT_JAM_TARGETS_VARIABLE_EXT
+	/* define the variable JAM_TARGETS containing the targets specified on
+	   the command line */
+	{
+		LIST *l = L0;
+		int i;
+		char **targets = argv;
+		int targetCount = argc;
+		if (targetCount == 0) {
+			targets = (char**)&all;
+			targetCount = 1;
+		}
+
+		for (i = 0; i < targetCount; i++)
+			l = list_new( l, targets[i], 0 );
+
+		var_set( "JAM_TARGETS", l, VAR_SET );
+	}
+#endif
+
 	/* Load up variables set on command line. */
 
 	for( n = 0; s = getoptval( optv, 's', n ); n++ )
@@ -367,6 +387,35 @@ main( int argc, char **argv, char **arg_environ )
 	    }
 	    globs.noexec++;
 	}
+
+#ifdef OPT_JAM_TARGETS_VARIABLE_EXT
+	/* get value of variable JAM_TARGETS and build the targets */
+	{
+		LIST *l = var_get( "JAM_TARGETS" );
+		int targetCount = list_length(l);
+		char **targets;
+		int i;
+
+		if (targetCount == 0) {
+			/* No targets. Nothing to do. */
+			exit( EXITOK );
+		}
+
+		targets = malloc(targetCount * sizeof(char*));
+		if (!targets) {
+			printf( "Memory allocation failed!\n" );
+			exit( EXITBAD );
+		}
+
+		for (i = 0; i < targetCount; i++) {
+			targets[i] = (char*)l->string;
+			l = l->next;
+		}
+
+		argv = targets;
+		argc = targetCount;
+	}
+#endif
 
 	/* Now make target */
 

@@ -52,10 +52,14 @@ if $(OS) = NT 			{ CCFLAGS += /DNT ; }
 
 ### LOCAL CHANGE
 # 
-# Include header caching.
+# Include:
+# * header caching
+# * jamfile caching
+# * definition of JAM_TARGETS variable
 #
 DEFINES += OPT_HEADER_CACHE_EXT ;
 DEFINES += OPT_JAMFILE_CACHE_EXT ;
+DEFINES += OPT_JAM_TARGETS_VARIABLE_EXT ;
 #
 ### LOCAL CHANGE
 
