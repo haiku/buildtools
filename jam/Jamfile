@@ -162,6 +162,17 @@ if $(BINDIR) 	{ InstallBin $(BINDIR) : jam ; }
 # Build stat cache server under BeOS.
 #
 if $(OS) = BEOS {
+	# RC must be defined, if we are to compile the resources.
+	if ! $(RC) && ! $(NO_STAT_CACHE_SERVER_RESOURCES) {
+		Echo "NOTE: The variable RC is not defined, and therefore the" ;
+		Echo "NOTE: built StatCacheServer won't have resources (it will thus" ;
+		Echo "NOTE: appear in the Deskbar). If you want to have resources," ;
+		Echo "NOTE: define RC as an absolute or relative path referring to" ;
+		Echo "NOTE: the rc program, or just the program name, if it lives in" ;
+		Echo "NOTE: the PATH." ;
+		NO_STAT_CACHE_SERVER_RESOURCES = 1 ;
+	}
+
 	rule CompileResources
 	{
 		SEARCH on $(2) += $(SEARCH_SOURCE) ;
@@ -170,36 +181,9 @@ if $(OS) = BEOS {
 		LocalClean clean : $(1) ;
 	}
 
-	# rc must exist, if we are to compile the resources. We hard-code the
-	# path where it should be located. Not nice, but good enough for the moment.
 	actions CompileResources
 	{
-		RC=
-		for arch in x86 ppc
-		do
-			for plat in r5 bone dano haiku
-			do
-				for version in release debug_1 debug_2
-				do
-					PATH=../../../generated/objects/${plat}/${arch}/${version}/tools/rc/rc
-					if [ -f $PATH ]
-					then
-						RC=$PATH
-						break 3
-					fi
-				done
-			done
-		done
-		if [ -f $RC ]; then
-			$RC -o "$(1)" "$(2)"
-		else
-			echo "Error: Couldn't find rc, the resources compiler. It should "
-			echo "Error: be located in objects/<arch>.<version>.<plat>/tools/rc/ and can be made"
-			echo "Error: by invoking \`jam rc'. You can also build the"
-			echo "Error: StatCacheServer without resources by running"
-			echo "Error:   NO_STAT_CACHE_SERVER_RESOURCES=1 jam"
-			exit 1;
-		fi
+		$(RC) -o "$(1)" "$(2)"
 	}
 
 	rule AddResources
