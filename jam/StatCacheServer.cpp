@@ -1205,8 +1205,13 @@ NodeManager::_EntryMoved(BMessage *message)
 
 	// get the node
 	Node *node = NodeManager::GetDefault()->GetNode(nodeRef);
-	if (!node)
+	if (!node) {
+		// create it if not present
+		Entry *entry;
+		entry_ref newRef(nodeRef.device, newDirID, name);
+		NodeManager::GetDefault()->CreateEntry(newRef, &entry);
 		return;
+	}
 
 	// move it
 	entry_ref newRef(nodeRef.device, newDirID, name);
