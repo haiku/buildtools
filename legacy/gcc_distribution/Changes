@@ -1,86 +1,18 @@
-Changes (svn-logs) from version 041202 to 060710:
+User relevant changes from version 041202 to 060710:
 
 binutils:
-	------------------------------------------------------------------------
-	r10420 | zooey | 2004-12-13 18:28:20 +0100 (Mon, 13 Dec 2004) | 3 lines
-	
-	- we no longer need to hard-patch ld to not allow undefined symbols in
-	  objects, as we now do this via gcc-specs.
-	
-	------------------------------------------------------------------------
-	r10421 | zooey | 2004-12-13 18:30:14 +0100 (Mon, 13 Dec 2004) | 4 lines
-	
-	- we no longer hard-patch ld to not use relocation combination (combreloc),
+	- ld is no longer patched to not allow undefined symbols in
+	  objects, as this is now done via gcc-specs.
+	- ld is no longer patched to not use relocation combination (combreloc),
 	  as the default (using it) seems to generate slightly smaller results and
-	  not break anything.
-	
-	------------------------------------------------------------------------
-	r11253 | zooey | 2005-02-05 00:18:59 +0100 (Sat, 05 Feb 2005) | 5 lines
-	
-	- patched $(MK_DOC) into the default dependencies, such that chow.c gets
-	  built during the make process. Before, it was being built during the
-	  install process, when gcc might not be available, if the install goes
-	  into an empty folder. Now, installs in empty folders work properly.
-	
-	------------------------------------------------------------------------
-	r11255 | zooey | 2005-02-05 00:37:16 +0100 (Sat, 05 Feb 2005) | 6 lines
-	
-	- switched some compile-time dependencies to target dependencies, such that
-	  cross-compiling with BeOS target works.
-	- tweaked build-procedure to allow for proper generation of a i586-pc-beos
-	  cross-compiler on LINUX.
-	- added documentation for creation of cross-compiler.
-	
-	------------------------------------------------------------------------
-	r11774 | bonefish | 2005-03-17 09:34:20 +0100 (Thu, 17 Mar 2005) | 1 line
-	
-	Move trunk into respective module.
-	------------------------------------------------------------------------
-	r15035 | bonefish | 2005-11-19 22:01:04 +0100 (Sat, 19 Nov 2005) | 2 lines
-	
-	Patch by Oliver to allow allow building with gcc 4.
-	
-	------------------------------------------------------------------------
-	r15072 | bonefish | 2005-11-22 16:54:23 +0100 (Tue, 22 Nov 2005) | 2 lines
-	
-	Moved the old binutils to their new home.
-	
-	------------------------------------------------------------------------
+	  does not break anything (apparently).
 
 gcc:
-	------------------------------------------------------------------------
-	r10418 | zooey | 2004-12-13 17:14:42 +0100 (Mon, 13 Dec 2004) | 2 lines
-	
 	- added missing documentation for --relative-path-errors option.
-	
-	------------------------------------------------------------------------
-	r10419 | zooey | 2004-12-13 17:17:00 +0100 (Mon, 13 Dec 2004) | 3 lines
-	
 	- added --no-undefined to the specs so that we can drop a patch that changed
 	  ld to use this as default.
-	
-	------------------------------------------------------------------------
-	r10475 | shatty | 2004-12-16 04:46:43 +0100 (Thu, 16 Dec 2004) | 2 lines
-	
-	provide convenience fixed(ios&) and scientific(ios&) inline functions
-	
-	------------------------------------------------------------------------
-	r10545 | shatty | 2004-12-30 00:38:46 +0100 (Thu, 30 Dec 2004) | 2 lines
-	
-	fixed scientific(ios& i) - thanks to John [Beta] Drinkwater
-	
-	------------------------------------------------------------------------
-	r11255 | zooey | 2005-02-05 00:37:16 +0100 (Sat, 05 Feb 2005) | 6 lines
-	
-	- switched some compile-time dependencies to target dependencies, such that
-	  cross-compiling with BeOS target works.
-	- tweaked build-procedure to allow for proper generation of a i586-pc-beos
-	  cross-compiler on LINUX.
-	- added documentation for creation of cross-compiler.
-	
-	------------------------------------------------------------------------
-	r11421 | zooey | 2005-02-19 14:01:14 +0100 (Sat, 19 Feb 2005) | 15 lines
-	
+	- provide convenience fixed(ios&) and scientific(ios&) inline functions
+	- fixed scientific(ios& i) (thanks to John [Beta] Drinkwater)
 	- Applied several (old, external) patches that enable the support for anonymous
 	  structs and unions in C as well as in C++ (application of this patch has
 	  been sugggested by execom through BeBits-talkback).
@@ -95,44 +27,3 @@ gcc:
 	      gcc-2.95-c++-anon-struct2.diff
 	  which can all be found here:
 	  		ftp://ftp.xraylith.wisc.edu/pub/khan/gnu-win32/cygwin/gcc-2.95/patches/
-	
-	------------------------------------------------------------------------
-	r11774 | bonefish | 2005-03-17 09:34:20 +0100 (Thu, 17 Mar 2005) | 1 line
-	
-	Move trunk into respective module.
-	------------------------------------------------------------------------
-	r14561 | bonefish | 2005-10-29 02:30:19 +0200 (Sat, 29 Oct 2005) | 1 line
-	
-	Avoid a clash of two different RETURN enums. Happens under Linux; don't know 
-	why not under BeOS.
-	------------------------------------------------------------------------
-	r14562 | bonefish | 2005-10-29 02:56:06 +0200 (Sat, 29 Oct 2005) | 3 lines
-	
-	When bash 3 is run POSIX compatible (e.g. as /bin/sh), invoking "trap"
-	without command argument is not allowed anymore.
-	
-	------------------------------------------------------------------------
-	r14978 | nwhitehorn | 2005-11-17 01:47:53 +0100 (Thu, 17 Nov 2005) | 2 lines
-	
-	Fixed libiberty to build on FreeBSD. A few more problems to go.
-	
-	------------------------------------------------------------------------
-	r15071 | bonefish | 2005-11-22 16:53:32 +0100 (Tue, 22 Nov 2005) | 2 lines
-	
-	Moved the old gcc to its new home.
-	
-	------------------------------------------------------------------------
-	r16119 | zooey | 2006-01-28 15:35:27 +0100 (Sat, 28 Jan 2006) | 4 lines
-	
-	moved USE_EGCS_MANGLED_NAMES from host to target config file in order to
-	generate "correct" (aka BeOS-specific) symbols when using the cross
-	compiler, too.
-	
-	------------------------------------------------------------------------
-	r16140 | zooey | 2006-01-29 19:06:48 +0100 (Sun, 29 Jan 2006) | 4 lines
-	
-	Added cc1plus as bootstrap-dependency such that fix_bdirectwin_typeinfo.cpp can
-	be compiled (it requires a c++-compiler, of course). 
-	This fixes the build on R5.
-	
-	------------------------------------------------------------------------
