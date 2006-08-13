@@ -272,29 +272,29 @@ execwait()
 	if( !cmdsrunning )
 	    return 0;
 
-	/* Pick up process pid and status */
+	do 
+	{
+	    /* Pick up process pid and status */
     
-	while( ( w = wait( &status ) ) == -1 && errno == EINTR )
+	    while( ( w = wait( &status ) ) == -1 && errno == EINTR )
 		;
 
-	if( w == -1 )
-	{
-	    printf( "child process(es) lost!\n" );
-	    perror("wait");
-	    exit( EXITBAD );
-	}
+	    if( w == -1 )
+	    {
+		printf( "child process(es) lost!\n" );
+		perror("wait");
+		exit( EXITBAD );
+	    }
 
-	/* Find the process in the cmdtab. */
+	    /* Find the process in the cmdtab. */
 
-	for( i = 0; i < MAXJOBS; i++ )
-	    if( w == cmdtab[ i ].pid )
-		break;
+	    for( i = 0; i < MAXJOBS; i++ )
+		if( w == cmdtab[ i ].pid )
+		    break;
 
-	if( i == MAXJOBS )
-	{
-	    printf( "waif child found!\n" );
-	    exit( EXITBAD );
-	}
+	    if( i == MAXJOBS )
+		printf( "jam: waif child process %ld found, ignoring it!\n", w );
+	} while( i == MAXJOBS );
 
 # ifdef USE_EXECNT
 	/* Clear the temp file */
