@@ -133,7 +133,6 @@ if $(VMS)
 }
 
 if $(OS) = BEOS {
-	DEFINES += _ZETA_USING_DEPRECATED_API_=1 ;
 }
 
 #
@@ -145,7 +144,14 @@ LinkLibraries 	jam : libjam.a ;
 GenFile 	jambase.c : mkjambase Jambase ;
 
 if $(OS) = BEOS {
-	LINKLIBS on jam += -lnet ;
+	local haveBone = [ GLOB /boot/develop/headers/be/bone/arpa : inet.h ] ;
+	if ! $(haveBone)	{
+		LINKLIBS on jam += -lnet ;
+	}
+	local haveZeta = [ GLOB /boot/beos/system/lib : libzeta.so ] ;
+	if $(haveZeta) {
+		DEFINES += _ZETA_USING_DEPRECATED_API_=1 ;
+	}
 }
 
 Library         libjam.a :
