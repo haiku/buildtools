@@ -1,0 +1,20 @@
+How to create a cross-compiler on LINUX (or any other supported build platform)
+for haiku (information is copied from haiku's README):
+
+Please chdir into haiku's base directory (the one where Jamrules and README live).
+
+If you want to build the default (legacy, 2.95.3) gcc, do this:
+
+  $ ./configure --build-cross-tools ../buildtools
+
+One of the last output lines should tell you that the tools have been built
+successfully.
+
+If you're not interested in binary compatibility (or want to build for the PowerPC architecture), you can build gcc4 instead by doing this:
+
+  $ ./configure --build-cross-tools-gcc4 <arch> ../buildtools
+
+Replace "<arch>" with either "x86" or "ppc", depending on which of the two
+architectures you want to build for.
+
+
