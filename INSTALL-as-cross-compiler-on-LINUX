@@ -2,6 +2,13 @@ How to build gcc-2.95.3 for BeOS under Linux (a cross-compiler), which
 will allow you to compile BeOS projects under Linux, i.e. the apps
 that this compilers produces can only be executed on BeOS (not on Linux).
 
+If all you are interested is compiling haiku on Linux, please refer to 
+the file 'INSTALL-as-haiku-cross-compiler' instead (that's easier).
+
+These instructions are required only if you want to compile something
+(applications, libraries) on LINUX which should be executed on BeOS R5,
+BONE or ZETA.
+
 *** the major work of creating the cross-compiler and describing the
 *** process how to build it has been done by Eric Petit <titer@m0k.org>, 
 *** so if you think this cross-compiler is great, please tell him.
@@ -11,11 +18,11 @@ On your Linux-box, open a shell...
 
 0 - Preparations
 ----------------
-...and fetch the 'buildtools' module from the haiku CVS. You should then
+...and fetch the 'buildtools' module from the haiku SVN. You should then
 have a 'buildtools' folder that contains folders named 'binutils' and
 'gcc' (and this file, too!).
 
-	cd buildtools
+	cd buildtools/legacy
 
 Now decide where you want to install the cross-compiler. The install 
 folder will be referred to as $PREFIX. I suggest to install to 
