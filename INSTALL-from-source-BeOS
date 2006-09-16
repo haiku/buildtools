@@ -1,6 +1,6 @@
 How to build gcc-2.95.3 for BeOS:
 
-cd into the buildtools folder (where this file lives)
+cd into the buildtools/legacy folder (where this file lives)
 
 compile binutils:
 
