@@ -1316,25 +1316,6 @@ fix = {
 
 
 /*
- *  Fix hpux 11.00 broken snprintf declaration
- *  (third argument is char *, needs to be const char * to prevent
- *  spurious warnings with -Wwrite-strings or in C++).
- */
-fix = {
-    hackname = hpux11_snprintf;
-    files    = stdio.h;
-    select   = '(extern int snprintf *\(char *\*, *(|__|_hpux_)size_t,)'
-                                    ' *(char *\*, *\.\.\.\);)';
-    c_fix     = format;
-    c_fix_arg = '%1 const %3';
-
-    test_text = "extern int snprintf(char *, size_t, char *, ...);\n"
-                "extern int snprintf(char *, __size_t, char *, ...);\n"
-                "extern int snprintf(char *, _hpux_size_t, char *, ...);";
-};
-
-
-/*
  * In inttypes.h on HPUX 11, the use of __CONCAT__ in the definition
  * of UINT32_C has undefined behavior according to ISO/ANSI:
  * the arguments to __CONCAT__ are not macro expanded before the
@@ -2651,40 +2632,6 @@ fix = {
                "/* not std C */\nint foo;\n"
                "\n#end-end-end-end-if :-)";
 };
-
-/*
- *  "__STDC__-0==0"
- *  is "!defined( __STRICT_ANSI__ )" on continued #if-s
- */
-fix = {
-    hackname = strict_ansi_not_ctd;
-    files    = math.h, limits.h, stdio.h, signal.h,
-               stdlib.h, sys/signal.h, time.h;
-    /*
-     * Starting at the beginning of a line, skip white space and
-     * a leading "(" or "&&" or "||".  One of those must be found.
-     * Then, zero, one or more copies of a "defined(_FOO_BAR_) &&"
-     * expression.  If these are nested, then they must accumulate
-     * because we won't match any closing parentheses.  Finally,
-     * after skipping over all that, we must then match our suspect
-     * phrase:  "__STDC__-0==0" with or without white space.
-     */
-    select   = "^([ \t]*" '(\(|&&|\|\|)'
-               "([ \t(]*!*[ \t]*defined\\([a-zA-Z_0-9]+\\)[ \t]*[|&][|&])*"
-               "[ \t(]*)"
-               "(__STDC__[ \t]*(|-[ \t]*0[ \t]*)==[ \t]*0)";
-    c_test   = stdc_0_in_system_headers;
-
-    c_fix     = format;
-    c_fix_arg = "%1 !defined(__STRICT_ANSI__)";
-
-    test_text = "#if 1 && \\\\\n"
-               "&& defined(mumbling) |& (__STDC__ - 0 == 0) \\\\\n"
-               "( __STDC__ == 0 && !defined(_XOPEN_SOURCE) \\\\\n"
-               "|| __STDC__ - 0 == 0 ) /* not std C */\n"
-               "int foo;\n#endif";
-};
-
 
 /*
  *  "__STDC__!=0" or "__STDC__==1" or "__STDC__-0==1"
