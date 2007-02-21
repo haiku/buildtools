@@ -24,65 +24,10 @@
 #include "elf-bfd.h"
 #include "elf/dwarf2.h"
 
+#define _raw_size rawsize
+#define _cooked_size rawsize
+
 #define EH_FRAME_HDR_SIZE 8
-
-/* Helper function for reading uleb128 encoded data.  */
-
-static bfd_vma
-read_unsigned_leb128 (bfd *abfd ATTRIBUTE_UNUSED,
-		      char *buf,
-		      unsigned int *bytes_read_ptr)
-{
-  bfd_vma result;
-  unsigned int num_read;
-  int shift;
-  unsigned char byte;
-
-  result = 0;
-  shift = 0;
-  num_read = 0;
-  do
-    {
-      byte = bfd_get_8 (abfd, (bfd_byte *) buf);
-      buf++;
-      num_read++;
-      result |= (((bfd_vma) byte & 0x7f) << shift);
-      shift += 7;
-    }
-  while (byte & 0x80);
-  *bytes_read_ptr = num_read;
-  return result;
-}
-
-/* Helper function for reading sleb128 encoded data.  */
-
-static bfd_signed_vma
-read_signed_leb128 (bfd *abfd ATTRIBUTE_UNUSED,
-		    char *buf,
-		    unsigned int * bytes_read_ptr)
-{
-  bfd_vma result;
-  int shift;
-  int num_read;
-  unsigned char byte;
-
-  result = 0;
-  shift = 0;
-  num_read = 0;
-  do
-    {
-      byte = bfd_get_8 (abfd, (bfd_byte *) buf);
-      buf ++;
-      num_read ++;
-      result |= (((bfd_vma) byte & 0x7f) << shift);
-      shift += 7;
-    }
-  while (byte & 0x80);
-  if (byte & 0x40)
-    result |= (((bfd_vma) -1) << (shift - 7)) << 7;
-  *bytes_read_ptr = num_read;
-  return result;
-}
 
 #define read_uleb128(VAR, BUF)					\
 do								\
@@ -729,7 +674,7 @@ _bfd_elf_maybe_strip_eh_frame_hdr (struct bfd_link_info *info)
 
   if (abfd == NULL)
     {
-      _bfd_strip_section_from_output (info, hdr_info->hdr_sec);
+      hdr_info->hdr_sec->flags |= SEC_EXCLUDE;
       hdr_info->hdr_sec = NULL;
       return TRUE;
     }
@@ -745,6 +690,7 @@ _bfd_elf_maybe_strip_eh_frame_hdr (struct bfd_link_info *info)
 
 bfd_vma
 _bfd_elf_eh_frame_section_offset (bfd *output_bfd ATTRIBUTE_UNUSED,
+				  struct bfd_link_info * dummy ATTRIBUTE_UNUSED, 
 				  asection *sec,
 				  bfd_vma offset)
 {
@@ -1190,6 +1136,14 @@ _bfd_elf_write_section_eh_frame_hdr (bfd *abfd, struct bfd_link_info *info)
 				     sec->_cooked_size);
   free (contents);
   return retval;
+}
+
+/* Return the width of FDE addresses.  This is the default implementation.  */
+
+unsigned int
+_bfd_elf_eh_frame_address_size (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
+{
+  return elf_elfheader (abfd)->e_ident[EI_CLASS] == ELFCLASS64 ? 8 : 4;
 }
 
 /* Decide whether we can use a PC-relative encoding within the given

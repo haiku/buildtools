@@ -6,20 +6,20 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # Written by Fabrizio Gennari <fabrizio.ge@tiscalinet.it>
 # Based on auto-import.exp  by Ralf.Habacker@freenet.de
 #
- 
+
 # This test can only be run on a cygwin platforms.
 if {![istarget *-pc-cygwin]} {
     verbose "Not a cygwin target."
@@ -36,7 +36,7 @@ proc run_dlltool { lib_file def_file } {
     global dlltool
     global base_dir
     global as
-    
+
     if ![info exists dlltool] then {
 	set dlltool [findfile $base_dir/../binutils/dlltool]
     }
@@ -108,7 +108,7 @@ set MYLDFLAGS "-Wl,--out-implib,$tmpdir/testexe.lib -nostartfiles -nostdlib"
 if ![run_dlltool $tmpdir/testdll.lib $srcdir/$subdir/testdll.def] {
     fail "building an export library for the shared lib"
     return
-} 
+}
 
 # Compile the executable.
 if ![ld_compile "$CC $CFLAGS" $srcdir/$subdir/testexe.c $tmpdir/testexe.o] {
@@ -119,7 +119,7 @@ if ![ld_compile "$CC $CFLAGS" $srcdir/$subdir/testexe.c $tmpdir/testexe.o] {
 if ![ld_special_link "$CC $LDFLAGS $MYLDFLAGS -e _testexe_main@16" $tmpdir/testexe.exe "$tmpdir/testexe.o $srcdir/$subdir/testexe.def $tmpdir/testdll.lib"] {
     fail "linking executable"
     return
-} 
+}
 
 # Compile the dll.
 if ![ld_compile "$CC $CFLAGS" $srcdir/$subdir/testdll.c $tmpdir/testdll.o] {
@@ -130,7 +130,7 @@ if ![ld_compile "$CC $CFLAGS" $srcdir/$subdir/testdll.c $tmpdir/testdll.o] {
 if ![ld_special_link "$CC $LDFLAGS -nostartfiles -nostdlib -e _testdll_main@12" $tmpdir/testdll.dll "$tmpdir/testdll.o $srcdir/$subdir/testdll.def $tmpdir/testexe.lib"] {
     fail "linking shared lib"
     return
-} 
+}
 
 # This is as far as we can go with a cross-compiler
 if ![isnative] then {
