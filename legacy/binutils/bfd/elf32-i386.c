@@ -2244,6 +2244,13 @@ tpoff (struct bfd_link_info *info, bfd_vma address)
 
 /* Relocate an i386 ELF section.  */
 
+/* [zooey]:
+	This implementation of elf_i386_relocate_section() is our patched version
+	from binutils-2.15, as I was unable to apply the required patch to the
+	implementation that is provided by binutils-2.17. 
+	It *seems* to work ok, but YMMV...
+*/
+
 static bfd_boolean
 elf_i386_relocate_section (bfd *output_bfd,
 			   struct bfd_link_info *info,
@@ -2434,19 +2441,38 @@ elf_i386_relocate_section (bfd *output_bfd,
 				   unresolved_reloc, warned);
 	}
 
+      {
+      bfd_boolean skip, relocate;
+      skip = FALSE;
+      relocate = FALSE;
+
       if (r_symndx == 0)
 	{
-	/* r_symndx will be zero only for relocs against symbols from
-	   removed linkonce sections, or sections discarded by a linker
-	   script.  For these relocs, we just want the section contents
-	   zeroed.  Avoid any special processing in the switch below.  */
-	  r_type = R_386_NONE;
+	if (r_type == R_386_32 || r_type == R_386_PC32)
+	  {
+            /* [zooey]: the dynamic loader of newer BeOS versions (BONE,Dano,Zeta)
+                  is broken to such an extent that crashes when it encounters
+                  a R_386_NONE reloc entry with a zero offset. In order to
+                  circumvent this bug, I changed the skip-handling below 
+                  such that it keeps the original offset (of the now defunct 
+                  relocation target) in place. This way, the loader
+                  accepts it (and ignores this reloc entry, as it should). */
+            skip = TRUE;
+	  }
+	else 
+	  {
+	    /* r_symndx will be zero only for relocs against symbols from
+	       removed linkonce sections, or sections discarded by a linker
+	       script.  For these relocs, we just want the section contents
+	       zeroed.  Avoid any special processing in the switch below.  */
+	    r_type = R_386_NONE;
 
-	  relocation = 0;
-	  if (howto->pc_relative)
-	    relocation = (input_section->output_section->vma
-			  + input_section->output_offset
-			  + rel->r_offset);
+	    relocation = 0;
+	    if (howto->pc_relative)
+	      relocation = (input_section->output_section->vma
+			   + input_section->output_offset
+			   + rel->r_offset);
+	  }
 	}
 
       switch (r_type)
@@ -2626,15 +2652,11 @@ elf_i386_relocate_section (bfd *output_bfd,
 	    {
 	      Elf_Internal_Rela outrel;
 	      bfd_byte *loc;
-	      bfd_boolean skip, relocate;
 	      asection *sreloc;
 
 	      /* When generating a shared object, these relocations
 		 are copied into the output file to be resolved at run
 		 time.  */
-
-	      skip = FALSE;
-	      relocate = FALSE;
 
 	      outrel.r_offset =
 		_bfd_elf_section_offset (output_bfd, info, input_section,
@@ -2647,7 +2669,7 @@ elf_i386_relocate_section (bfd *output_bfd,
 				  + input_section->output_offset);
 
 	      if (skip)
-		memset (&outrel, 0, sizeof outrel);
+		outrel.r_info = ELF32_R_INFO (0, R_386_NONE);
 	      else if (h != NULL
 		       && h->dynindx != -1
 		       && (r_type == R_386_PC32
@@ -3389,6 +3411,7 @@ elf_i386_relocate_section (bfd *output_bfd,
 	default:
 	  break;
 	}
+      }
 
       /* Dynamic relocs are not propagated for SEC_DEBUGGING sections
 	 because such sections are not SEC_ALLOC and thus ld.so will
