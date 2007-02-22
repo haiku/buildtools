@@ -18,6 +18,17 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
 
+/* [zooey]:
+	The eh_frame-related functions contained in this file have been mixed and
+	matched between binutils-2.17 and binutils-2.15, from where the function
+	_bfd_elf_discard_section_eh_frame() has been imported. I know this is crude, 
+	but the reason for that is that otherwise the eh_frame section would be
+	optimized in such a way that throwing exceptions across library borders
+	does not work (I guess that's caused by gcc-2.95.3 not setting up the 
+	section properly). This code seems to work fine, but YMMV...
+*/
+
+
 #include "bfd.h"
 #include "sysdep.h"
 #include "libbfd.h"
