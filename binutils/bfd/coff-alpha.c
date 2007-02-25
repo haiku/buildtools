@@ -18,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -481,10 +481,16 @@ alpha_ecoff_bad_format_hook (abfd, filehdr)
 {
   struct internal_filehdr *internal_f = (struct internal_filehdr *) filehdr;
 
-  if (ALPHA_ECOFF_BADMAG (*internal_f))
-    return FALSE;
+  if (! ALPHA_ECOFF_BADMAG (*internal_f))
+    return TRUE;
 
-  return TRUE;
+  if (ALPHA_ECOFF_COMPRESSEDMAG (*internal_f))
+    (*_bfd_error_handler)
+      (_("%B: Cannot handle compressed Alpha binaries.\n"
+	 "   Use compiler flags, or objZ, to generate uncompressed binaries."),
+       abfd);
+
+  return FALSE;
 }
 
 /* This is a hook called by coff_real_object_p to create any backend
@@ -603,8 +609,11 @@ alpha_ecoff_swap_reloc_out (abfd, intern, dst)
       size = intern->r_size;
     }
 
+  /* XXX FIXME:  The maximum symndx value used to be 14 but this
+     fails with object files produced by DEC's C++ compiler.
+     Where does the value 14 (or 15) come from anyway ?  */
   BFD_ASSERT (intern->r_extern
-	      || (intern->r_symndx >= 0 && intern->r_symndx <= 14));
+	      || (intern->r_symndx >= 0 && intern->r_symndx <= 15));
 
   H_PUT_64 (abfd, intern->r_vaddr, ext->r_vaddr);
   H_PUT_32 (abfd, symndx, ext->r_symndx);
@@ -632,7 +641,15 @@ alpha_adjust_reloc_in (abfd, intern, rptr)
      arelent *rptr;
 {
   if (intern->r_type > ALPHA_R_GPVALUE)
-    abort ();
+    {
+      (*_bfd_error_handler)
+	(_("%B: unknown/unsupported relocation type %d"),
+	 abfd, intern->r_type);
+      bfd_set_error (bfd_error_bad_value);
+      rptr->addend = 0;
+      rptr->howto  = NULL;
+      return;
+    }
 
   switch (intern->r_type)
     {
@@ -1521,8 +1538,26 @@ alpha_relocate_section (output_bfd, info, input_bfd, input_section,
 
       switch (r_type)
 	{
+	case ALPHA_R_GPRELHIGH:
+	  (*_bfd_error_handler)
+	    (_("%B: unsupported relocation: ALPHA_R_GPRELHIGH"),
+	     input_bfd);
+	  bfd_set_error (bfd_error_bad_value);
+	  continue;
+	  
+	case ALPHA_R_GPRELLOW:
+	  (*_bfd_error_handler)
+	    (_("%B: unsupported relocation: ALPHA_R_GPRELLOW"),
+	     input_bfd);
+	  bfd_set_error (bfd_error_bad_value);
+	  continue;
+	  
 	default:
-	  abort ();
+	  (*_bfd_error_handler)
+	    (_("%B: unknown relocation type %d"),
+	     input_bfd, (int) r_type);
+	  bfd_set_error (bfd_error_bad_value);
+	  continue;
 
 	case ALPHA_R_IGNORE:
 	  /* This reloc appears after a GPDISP reloc.  On earlier

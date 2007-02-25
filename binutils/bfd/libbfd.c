@@ -18,7 +18,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -30,6 +30,9 @@
 
 /*
 SECTION
+	Implementation details
+
+SUBSECTION
 	Internal functions
 
 DESCRIPTION
@@ -156,12 +159,76 @@ bfd_malloc (bfd_size_type size)
   return ptr;
 }
 
+/* Allocate memory using malloc, nmemb * size with overflow checking.  */
+
+void *
+bfd_malloc2 (bfd_size_type nmemb, bfd_size_type size)
+{
+  void *ptr;
+
+  if ((nmemb | size) >= HALF_BFD_SIZE_TYPE
+      && size != 0
+      && nmemb > ~(bfd_size_type) 0 / size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  size *= nmemb;
+
+  if (size != (size_t) size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  ptr = malloc ((size_t) size);
+  if (ptr == NULL && (size_t) size != 0)
+    bfd_set_error (bfd_error_no_memory);
+
+  return ptr;
+}
+
 /* Reallocate memory using realloc.  */
 
 void *
 bfd_realloc (void *ptr, bfd_size_type size)
 {
   void *ret;
+
+  if (size != (size_t) size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  if (ptr == NULL)
+    ret = malloc ((size_t) size);
+  else
+    ret = realloc (ptr, (size_t) size);
+
+  if (ret == NULL && (size_t) size != 0)
+    bfd_set_error (bfd_error_no_memory);
+
+  return ret;
+}
+
+/* Reallocate memory using realloc, nmemb * size with overflow checking.  */
+
+void *
+bfd_realloc2 (void *ptr, bfd_size_type nmemb, bfd_size_type size)
+{
+  void *ret;
+
+  if ((nmemb | size) >= HALF_BFD_SIZE_TYPE
+      && size != 0
+      && nmemb > ~(bfd_size_type) 0 / size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  size *= nmemb;
 
   if (size != (size_t) size)
     {
@@ -205,6 +272,44 @@ bfd_zmalloc (bfd_size_type size)
 
   return ptr;
 }
+
+/* Allocate memory using malloc (nmemb * size) with overflow checking
+   and clear it.  */
+
+void *
+bfd_zmalloc2 (bfd_size_type nmemb, bfd_size_type size)
+{
+  void *ptr;
+
+  if ((nmemb | size) >= HALF_BFD_SIZE_TYPE
+      && size != 0
+      && nmemb > ~(bfd_size_type) 0 / size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  size *= nmemb;
+
+  if (size != (size_t) size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  ptr = malloc ((size_t) size);
+
+  if ((size_t) size != 0)
+    {
+      if (ptr == NULL)
+	bfd_set_error (bfd_error_no_memory);
+      else
+	memset (ptr, 0, (size_t) size);
+    }
+
+  return ptr;
+}
+
 /*
 INTERNAL_FUNCTION
 	bfd_write_bigendian_4byte_int
@@ -917,4 +1022,24 @@ read_signed_leb128 (bfd *abfd ATTRIBUTE_UNUSED,
     result |= (((bfd_vma) -1) << shift);
   *bytes_read_ptr = num_read;
   return result;
+}
+
+bfd_boolean
+_bfd_generic_find_line (bfd *abfd ATTRIBUTE_UNUSED,
+		       asymbol **symbols ATTRIBUTE_UNUSED,
+		       asymbol *symbol ATTRIBUTE_UNUSED,
+		       const char **filename_ptr ATTRIBUTE_UNUSED,
+		       unsigned int *linenumber_ptr ATTRIBUTE_UNUSED)
+{
+  return FALSE;
+}
+
+bfd_boolean
+_bfd_generic_init_private_section_data (bfd *ibfd ATTRIBUTE_UNUSED,
+					asection *isec ATTRIBUTE_UNUSED,
+					bfd *obfd ATTRIBUTE_UNUSED,
+					asection *osec ATTRIBUTE_UNUSED,
+					struct bfd_link_info *link_info ATTRIBUTE_UNUSED)
+{
+  return TRUE;
 }

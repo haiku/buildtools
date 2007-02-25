@@ -18,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -33,10 +33,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 /* The hash functions are recorded here to help keep assembler code out of
    the disassembler and vice versa.  */
 
-static int asm_hash_insn_p PARAMS ((const CGEN_INSN *));
-static unsigned int asm_hash_insn PARAMS ((const char *));
-static int dis_hash_insn_p PARAMS ((const CGEN_INSN *));
-static unsigned int dis_hash_insn PARAMS ((const char *, CGEN_INSN_INT));
+static int asm_hash_insn_p        (const CGEN_INSN *);
+static unsigned int asm_hash_insn (const char *);
+static int dis_hash_insn_p        (const CGEN_INSN *);
+static unsigned int dis_hash_insn (const char *, CGEN_INSN_INT);
 
 /* Instruction formats.  */
 
@@ -1010,27 +1010,27 @@ static const CGEN_IBASE xstormy16_cgen_macro_insn_table[] =
 /* mov Rx,#$imm8 */
   {
     -1, "movimm8", "mov", 16,
-    { 0|A(ALIAS), { (1<<MACH_BASE) } }
+    { 0|A(ALIAS), { { { (1<<MACH_BASE), 0 } } } }
   },
 /* mov $Rm,#$imm8small */
   {
     -1, "movgrimm8", "mov", 16,
-    { 0|A(ALIAS), { (1<<MACH_BASE) } }
+    { 0|A(ALIAS), { { { (1<<MACH_BASE), 0 } } } }
   },
 /* mov $Rd,#$imm16 */
   {
     -1, "movgrimm16", "mov", 32,
-    { 0|A(ALIAS), { (1<<MACH_BASE) } }
+    { 0|A(ALIAS), { { { (1<<MACH_BASE), 0 } } } }
   },
 /* inc $Rd */
   {
     -1, "incgr", "inc", 16,
-    { 0|A(ALIAS), { (1<<MACH_BASE) } }
+    { 0|A(ALIAS), { { { (1<<MACH_BASE), 0 } } } }
   },
 /* dec $Rd */
   {
     -1, "decgr", "dec", 16,
-    { 0|A(ALIAS), { (1<<MACH_BASE) } }
+    { 0|A(ALIAS), { { { (1<<MACH_BASE), 0 } } } }
   },
 };
 
@@ -1144,14 +1144,10 @@ dis_hash_insn (buf, value)
   return CGEN_DIS_HASH (buf, value);
 }
 
-static void set_fields_bitsize PARAMS ((CGEN_FIELDS *, int));
-
 /* Set the recorded length of the insn in the CGEN_FIELDS struct.  */
 
 static void
-set_fields_bitsize (fields, size)
-     CGEN_FIELDS *fields;
-     int size;
+set_fields_bitsize (CGEN_FIELDS *fields, int size)
 {
   CGEN_FIELDS_BITSIZE (fields) = size;
 }
@@ -1160,15 +1156,15 @@ set_fields_bitsize (fields, size)
    This plugs the opcode entries and macro instructions into the cpu table.  */
 
 void
-xstormy16_cgen_init_opcode_table (cd)
-     CGEN_CPU_DESC cd;
+xstormy16_cgen_init_opcode_table (CGEN_CPU_DESC cd)
 {
   int i;
   int num_macros = (sizeof (xstormy16_cgen_macro_insn_table) /
 		    sizeof (xstormy16_cgen_macro_insn_table[0]));
   const CGEN_IBASE *ib = & xstormy16_cgen_macro_insn_table[0];
   const CGEN_OPCODE *oc = & xstormy16_cgen_macro_insn_opcode_table[0];
-  CGEN_INSN *insns = (CGEN_INSN *) xmalloc (num_macros * sizeof (CGEN_INSN));
+  CGEN_INSN *insns = xmalloc (num_macros * sizeof (CGEN_INSN));
+
   memset (insns, 0, num_macros * sizeof (CGEN_INSN));
   for (i = 0; i < num_macros; ++i)
     {

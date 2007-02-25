@@ -14,7 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # Written by Catherine Moore (clm@cygnus.com)
 # Make sure that constructors are handled correctly.
@@ -85,7 +85,7 @@ foreach testitem $seltests {
 	setup_xfail $xfail_target
     }
     setup_xfail "arc*-*" "d30v*-*" "dlx*-*" "i370*-*" "i860*-*"
-    setup_xfail "i960*-*" "mn10200-*" "or32-*" "pj-*" "sparc64*-*"
+    setup_xfail "i960*-*" "mn10200-*" "or32-*" "pj-*"
 
     # It's either C or C++ at the moment.
     if { $testtype == "C++" } {

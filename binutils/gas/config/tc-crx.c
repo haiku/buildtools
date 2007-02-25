@@ -19,8 +19,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the
-   Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-   MA 02111-1307, USA.  */
+   Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "as.h"
 #include "safe-ctype.h"
@@ -268,7 +268,8 @@ reset_vars (char *op)
   memset (& output_opcode, '\0', sizeof (output_opcode));
 
   /* Save a copy of the original OP (used in error messages).  */
-  strcpy (ins_parse, op);
+  strncpy (ins_parse, op, sizeof ins_parse - 1);
+  ins_parse [sizeof ins_parse - 1] = 0;
 }
 
 /* This macro decides whether a particular reloc is an entry in a
@@ -523,7 +524,7 @@ md_atof (int type, char *litP, int *sizeP)
    fixuping relocations of debug sections.  */
 
 void
-md_apply_fix3 (fixS *fixP, valueT *valP, segT seg)
+md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 {
   valueT val = * valP;
   char *buf = fixP->fx_frag->fr_literal + fixP->fx_where;
@@ -1376,6 +1377,12 @@ check_range (long *num, int bits, int unsigned flags, int update)
   int bin;
   long upper_64kb = 0xFFFF0000;
   long value = *num;
+
+  /* For hosts witah longs bigger than 32-bits make sure that the top 
+     bits of a 32-bit negative value read in by the parser are set,
+     so that the correct comparisons are made.  */
+  if (value & 0x80000000)
+    value |= (-1L << 31);
 
   /* Verify operand value is even.  */
   if (flags & OP_EVEN)

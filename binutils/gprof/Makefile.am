@@ -11,6 +11,7 @@ BFDDIR = $(BASEDIR)/bfd
 INCDIR	= $(BASEDIR)/include
 
 WARN_CFLAGS = @WARN_CFLAGS@
+NO_WERROR = @NO_WERROR@
 AM_CFLAGS = $(WARN_CFLAGS)
 
 MKDEP = gcc -MM
@@ -57,10 +58,15 @@ POD2MAN = pod2man --center="GNU" --release="binutils-$(VERSION)" --section=1
 info_TEXINFOS = gprof.texi
 man_MANS = gprof.1
 
+$(srcdir)/gprof.info: gprof.texi config.texi
+
+config.texi:
+	echo "@set top_srcdir $(top_srcdir)" >> ./config.texi
+
 # Build the man page from the texinfo file
 # The sed command removes the no-adjust Nroff command so that
 # the man output looks standard.
-gprof.1: $(srcdir)/gprof.texi
+gprof.1: $(srcdir)/gprof.texi config.texi
 	touch $@
 	-$(TEXI2POD) $(MANCONF) -Dgprof < $(srcdir)/gprof.texi > gprof.pod
 	-($(POD2MAN) gprof.pod | \
@@ -69,7 +75,53 @@ gprof.1: $(srcdir)/gprof.texi
 	       (rm -f $@.T$$$$ && exit 1)
 	rm -f gprof.pod
 
-Makefile: $(BFDDIR)/configure.in
+.PHONY: install-html install-html-am install-html-recursive
+
+html__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
+
+install-html: install-html-recursive  install-html-am
+
+install-html-am: $(HTMLS)
+	@$(NORMAL_INSTALL)
+	test -z "$(htmldir)" || $(mkdir_p) "$(DESTDIR)$(htmldir)"
+	@list='$(HTMLS)'; for p in $$list; do \
+	  if test -f "$$p" || test -d "$$p"; then d=""; else d="$(srcdir)/"; fi; \
+	  f=$(html__strip_dir) \
+	  if test -d "$$d$$p"; then \
+	    echo " $(mkdir_p) '$(DESTDIR)$(htmldir)/$$f'"; \
+	    $(mkdir_p) "$(DESTDIR)$(htmldir)/$$f" || exit 1; \
+	    echo " $(INSTALL_DATA) '$$d$$p'/* '$(DESTDIR)$(htmldir)/$$f'"; \
+	    $(INSTALL_DATA) "$$d$$p"/* "$(DESTDIR)$(htmldir)/$$f"; \
+	  else \
+	    echo " $(INSTALL_DATA) '$$d$$p' '$(DESTDIR)$(htmldir)/$$f'"; \
+	    $(INSTALL_DATA) "$$d$$p" "$(DESTDIR)$(htmldir)/$$f"; \
+	  fi; \
+	done
+
+install-html-recursive:
+	@failcom='exit 1'; \
+	for f in x $$MAKEFLAGS; do \
+	  case $$f in \
+	    *=* | --[!k]*);; \
+	    *k*) failcom='fail=yes';; \
+	  esac; \
+	done; \
+	dot_seen=no; \
+	target=`echo $@ | sed s/-recursive//`; \
+	list='$(SUBDIRS)'; for subdir in $$list; do \
+	  echo "Making $$target in $$subdir"; \
+	  if test "$$subdir" = "."; then \
+	    dot_seen=yes; \
+	    local_target="$$target-am"; \
+	  else \
+	    local_target="$$target"; \
+	  fi; \
+	  (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
+	  || eval $$failcom; \
+	done; \
+	if test "$$dot_seen" = "no"; then \
+	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
+	fi; test -z "$$fail"
 
 # We want install to imply install-info as per GNU standards, despite the
 # cygnus option.

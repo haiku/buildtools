@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /*
    Bugs: should use getopt the way tar does (complete w/optional -) and
@@ -49,8 +49,6 @@
 #define O_BINARY 0
 #endif
 
-#define BUFSIZE 8192
-
 /* Kludge declaration from BFD!  This is ugly!  FIXME!  XXX */
 
 struct ar_hdr *
@@ -76,7 +74,7 @@ static void usage (int);
 
 /** Globals and flags */
 
-int mri_mode;
+static int mri_mode;
 
 /* This flag distinguishes between ar and ranlib:
    1 means this is 'ranlib'; 0 means this is 'ar'.
@@ -244,7 +242,8 @@ usage (int help)
       fprintf (s, _("  [S]          - do not build a symbol table\n"));
       fprintf (s, _("  [v]          - be verbose\n"));
       fprintf (s, _("  [V]          - display the version number\n"));
-
+      fprintf (s, _("  @<file>      - read options from <file>\n"));
+ 
       ar_emul_usage (s);
     }
   else
@@ -253,6 +252,7 @@ usage (int help)
       fprintf (s, _("Usage: %s [options] archive\n"), program_name);
       fprintf (s, _(" Generate an index to speed access to archives\n"));
       fprintf (s, _(" The options are:\n\
+  @<file>                      Read options from <file>\n\
   -h --help                    Print this help message\n\
   -V --version                 Print version information\n"));
     }
@@ -361,6 +361,8 @@ main (int argc, char **argv)
 
   program_name = argv[0];
   xmalloc_set_program_name (program_name);
+
+  expandargv (&argc, &argv);
 
   if (is_ranlib < 0)
     {

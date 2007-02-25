@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -596,8 +596,13 @@ process_def_file (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 		 have.  */
 	      int lead_at = (*pe_def_file->exports[i].name == '@');
 	      char *tmp = xstrdup (pe_def_file->exports[i].name + lead_at);
+	      char *tmp_at = strchr (tmp, '@');
 
-	      *(strchr (tmp, '@')) = 0;
+	      if (tmp_at)
+	        *tmp_at = 0;
+	      else
+	        einfo (_("%XCannot export %s: invalid export name\n"),
+		       pe_def_file->exports[i].name);
 	      pe_def_file->exports[i].name = tmp;
 	    }
 	}
@@ -680,6 +685,27 @@ process_def_file (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
     {
       char *name;
 
+      /* Check for forward exports */
+      if (strchr (pe_def_file->exports[i].internal_name, '.'))
+	{
+	  count_exported++;
+	  if (!pe_def_file->exports[i].flag_noname)
+	    count_exported_byname++;
+
+	  pe_def_file->exports[i].flag_forward = 1;
+
+	  if (pe_def_file->exports[i].ordinal != -1)
+	    {
+	      if (max_ordinal < pe_def_file->exports[i].ordinal)
+		max_ordinal = pe_def_file->exports[i].ordinal;
+	      if (min_ordinal > pe_def_file->exports[i].ordinal)
+		min_ordinal = pe_def_file->exports[i].ordinal;
+	      count_with_ordinals++;
+	    }
+
+	  continue;
+	}
+
       name = xmalloc (strlen (pe_def_file->exports[i].internal_name) + 2);
       if (pe_details->underscored
  	  && (*pe_def_file->exports[i].internal_name != '@'))
@@ -757,7 +783,7 @@ build_filler_bfd (int include_edata)
 			     bfd_get_arch (output_bfd),
 			     bfd_get_mach (output_bfd)))
     {
-      einfo ("%X%P: can not create BFD %E\n");
+      einfo ("%X%P: can not create BFD: %E\n");
       return;
     }
 
@@ -837,7 +863,8 @@ generate_edata (bfd *abfd, struct bfd_link_info *info ATTRIBUTE_UNUSED)
   /* Now we need to assign ordinals to those that don't have them.  */
   for (i = 0; i < NE; i++)
     {
-      if (exported_symbol_sections[i])
+      if (exported_symbol_sections[i] ||
+          pe_def_file->exports[i].flag_forward)
 	{
 	  if (pe_def_file->exports[i].ordinal != -1)
 	    {
@@ -856,19 +883,26 @@ generate_edata (bfd *abfd, struct bfd_link_info *info ATTRIBUTE_UNUSED)
 	    }
 	  name_table_size += strlen (pe_def_file->exports[i].name) + 1;
 	}
+
+      /* Reserve space for the forward name. */
+      if (pe_def_file->exports[i].flag_forward)
+	{
+	  name_table_size += strlen (pe_def_file->exports[i].internal_name) + 1;
+	}
     }
 
   next_ordinal = min_ordinal;
   for (i = 0; i < NE; i++)
-    if (exported_symbol_sections[i])
-      if (pe_def_file->exports[i].ordinal == -1)
-	{
-	  while (exported_symbols[next_ordinal - min_ordinal] != -1)
-	    next_ordinal++;
+    if ((exported_symbol_sections[i] ||
+         pe_def_file->exports[i].flag_forward) &&
+        pe_def_file->exports[i].ordinal == -1)
+      {
+	while (exported_symbols[next_ordinal - min_ordinal] != -1)
+	  next_ordinal++;
 
-	  exported_symbols[next_ordinal - min_ordinal] = i;
-	  pe_def_file->exports[i].ordinal = next_ordinal;
-	}
+	exported_symbols[next_ordinal - min_ordinal] = i;
+	pe_def_file->exports[i].ordinal = next_ordinal;
+      }
 
   /* OK, now we can allocate some memory.  */
   edata_sz = (40				/* directory */
@@ -967,15 +1001,28 @@ fill_edata (bfd *abfd, struct bfd_link_info *info ATTRIBUTE_UNUSED)
   for (s = 0; s < NE; s++)
     {
       struct bfd_section *ssec = exported_symbol_sections[s];
-      if (ssec && pe_def_file->exports[s].ordinal != -1)
+      if (pe_def_file->exports[s].ordinal != -1 &&
+          (pe_def_file->exports[s].flag_forward || ssec != NULL))
 	{
-	  unsigned long srva = (exported_symbol_offsets[s]
-				+ ssec->output_section->vma
-				+ ssec->output_offset);
 	  int ord = pe_def_file->exports[s].ordinal;
 
-	  bfd_put_32 (abfd, srva - image_base,
-		      eaddresses + 4 * (ord - min_ordinal));
+	  if (pe_def_file->exports[s].flag_forward)
+	    {
+	      bfd_put_32 (abfd, ERVA (enamestr),
+		          eaddresses + 4 * (ord - min_ordinal));
+
+	      strcpy (enamestr, pe_def_file->exports[s].internal_name);
+	      enamestr += strlen (pe_def_file->exports[s].internal_name) + 1;
+	    }
+	  else
+	    {
+	      unsigned long srva = (exported_symbol_offsets[s]
+				    + ssec->output_section->vma
+				    + ssec->output_offset);
+
+	      bfd_put_32 (abfd, srva - image_base,
+		          eaddresses + 4 * (ord - min_ordinal));
+	    }
 
 	  if (!pe_def_file->exports[s].flag_noname)
 	    {
@@ -2237,8 +2284,8 @@ pe_dll_generate_implib (def_file *def, const char *impfilename)
     }
 
   /* xgettext:c-format */
-  einfo (_("Creating library file: %s\n"), impfilename);
-
+  info_msg (_("Creating library file: %s\n"), impfilename);
+ 
   bfd_set_format (outarch, bfd_archive);
   outarch->has_armap = 1;
 
@@ -2272,10 +2319,10 @@ pe_dll_generate_implib (def_file *def, const char *impfilename)
   head = ar_tail;
 
   if (! bfd_set_archive_head (outarch, head))
-    einfo ("%Xbfd_set_archive_head: %s\n", bfd_errmsg (bfd_get_error ()));
+    einfo ("%Xbfd_set_archive_head: %E\n");
 
   if (! bfd_close (outarch))
-    einfo ("%Xbfd_close %s: %s\n", impfilename, bfd_errmsg (bfd_get_error ()));
+    einfo ("%Xbfd_close %s: %E\n", impfilename);
 
   while (head != NULL)
     {
@@ -2297,7 +2344,7 @@ add_bfd_to_link (bfd *abfd, const char *name, struct bfd_link_info *link_info)
   ldlang_add_file (fake_file);
 
   if (!bfd_link_add_symbols (abfd, link_info))
-    einfo ("%Xaddsym %s: %s\n", name, bfd_errmsg (bfd_get_error ()));
+    einfo ("%Xaddsym %s: %E\n", name);
 }
 
 void
@@ -2445,7 +2492,7 @@ pe_implied_import_dll (const char *filename)
   dll = bfd_openr (filename, pe_details->target_name);
   if (!dll)
     {
-      einfo ("%Xopen %s: %s\n", filename, bfd_errmsg (bfd_get_error ()));
+      einfo ("%Xopen %s: %E\n", filename);
       return FALSE;
     }
 
@@ -2636,14 +2683,14 @@ pe_dll_fill_sections (bfd *abfd, struct bfd_link_info *info)
       bfd_set_section_size (filler_bfd, reloc_s, reloc_sz);
 
       /* Resize the sections.  */
-      lang_size_sections (stat_ptr->head, abs_output_section,
-			  &stat_ptr->head, 0, 0, NULL, TRUE);
+      lang_reset_memory_regions ();
+      lang_size_sections (NULL, TRUE);
 
       /* Redo special stuff.  */
       ldemul_after_allocation ();
 
       /* Do the assignments again.  */
-      lang_do_assignments (stat_ptr->head, abs_output_section, NULL, 0);
+      lang_do_assignments ();
     }
 
   fill_edata (abfd, info);
@@ -2667,14 +2714,14 @@ pe_exe_fill_sections (bfd *abfd, struct bfd_link_info *info)
       bfd_set_section_size (filler_bfd, reloc_s, reloc_sz);
 
       /* Resize the sections.  */
-      lang_size_sections (stat_ptr->head, abs_output_section,
-			  &stat_ptr->head, 0, 0, NULL, TRUE);
+      lang_reset_memory_regions ();
+      lang_size_sections (NULL, TRUE);
 
       /* Redo special stuff.  */
       ldemul_after_allocation ();
 
       /* Do the assignments again.  */
-      lang_do_assignments (stat_ptr->head, abs_output_section, NULL, 0);
+      lang_do_assignments ();
     }
   reloc_s->contents = reloc_d;
 }

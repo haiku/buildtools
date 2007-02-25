@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #ifndef GAS
 #define GAS 1
@@ -68,6 +68,19 @@ extern void *alloca ();
 # endif /* HAVE_ALLOCA_H */
 #endif /* __GNUC__ */
 
+/* Prefer varargs for non-ANSI compiler, since some will barf if the
+   ellipsis definition is used with a no-arguments declaration.  */
+#if defined (HAVE_VARARGS_H) && !defined (__STDC__)
+#undef HAVE_STDARG_H
+#endif
+
+#if defined (HAVE_STDARG_H)
+#define USE_STDARG
+#endif
+#if !defined (USE_STDARG) && defined (HAVE_VARARGS_H)
+#define USE_VARARGS
+#endif
+
 /* Now, tend to the rest of the configuration.  */
 
 /* System include files first...  */
@@ -88,6 +101,27 @@ extern void *alloca ();
 #ifdef HAVE_SYS_TYPES_H
 /* for size_t, pid_t */
 #include <sys/types.h>
+#endif
+
+#ifdef HAVE_ERRNO_H
+#include <errno.h>
+#endif
+
+#ifdef USE_STDARG
+#include <stdarg.h>
+#endif
+
+#ifdef USE_VARARGS
+#include <varargs.h>
+#endif
+
+#if !defined (USE_STDARG) && !defined (USE_VARARGS)
+/* Roll our own.  */
+#define va_alist REST
+#define va_dcl
+typedef int * va_list;
+#define va_start(ARGS)	ARGS = &REST
+#define va_end(ARGS)
 #endif
 
 #include "getopt.h"
@@ -111,9 +145,7 @@ extern void *alloca ();
 
 /* Now GNU header files...  */
 #include "ansidecl.h"
-#ifdef BFD_ASSEMBLER
 #include "bfd.h"
-#endif
 #include "libiberty.h"
 
 /* Define the standard progress macros.  */
@@ -127,21 +159,28 @@ extern void *alloca ();
 #endif /* !__MWERKS__ */
 
 /* Other stuff from config.h.  */
-#ifdef NEED_DECLARATION_STRSTR
-extern char *strstr ();
+#ifdef NEED_DECLARATION_ENVIRON
+extern char **environ;
+#endif
+#ifdef NEED_DECLARATION_ERRNO
+extern int errno;
+#endif
+#ifdef NEED_DECLARATION_FFS
+extern int ffs (int);
+#endif
+#ifdef NEED_DECLARATION_FREE
+extern void free ();
 #endif
 #ifdef NEED_DECLARATION_MALLOC
 extern PTR malloc ();
 extern PTR realloc ();
 #endif
-#ifdef NEED_DECLARATION_FREE
-extern void free ();
+#ifdef NEED_DECLARATION_STRSTR
+extern char *strstr ();
 #endif
-#ifdef NEED_DECLARATION_ERRNO
-extern int errno;
-#endif
-#ifdef NEED_DECLARATION_ENVIRON
-extern char **environ;
+
+#if !HAVE_DECL_VSNPRINTF
+extern int vsnprintf(char *, size_t, const char *, va_list);
 #endif
 
 /* This is needed for VMS.  */
@@ -204,14 +243,9 @@ extern char **environ;
 
 /* These are assembler-wide concepts */
 
-#ifdef BFD_ASSEMBLER
 extern bfd *stdoutput;
 typedef bfd_vma addressT;
 typedef bfd_signed_vma offsetT;
-#else
-typedef unsigned long addressT;
-typedef long offsetT;
-#endif
 
 /* Type of symbol value, etc.  For use in prototypes.  */
 typedef addressT valueT;
@@ -240,49 +274,11 @@ typedef addressT valueT;
 
 /* subsegs.c     Sub-segments. Also, segment(=expression type)s.*/
 
-#ifndef BFD_ASSEMBLER
-
-#ifdef MANY_SEGMENTS
-#include "bfd.h"
-#define N_SEGMENTS 40
-#define SEG_NORMAL(x) ((x) >= SEG_E0 && (x) <= SEG_E39)
-#define SEG_LIST SEG_E0,SEG_E1,SEG_E2,SEG_E3,SEG_E4,SEG_E5,SEG_E6,SEG_E7,SEG_E8,SEG_E9,\
-		 SEG_E10,SEG_E11,SEG_E12,SEG_E13,SEG_E14,SEG_E15,SEG_E16,SEG_E17,SEG_E18,SEG_E19,\
-		 SEG_E20,SEG_E21,SEG_E22,SEG_E23,SEG_E24,SEG_E25,SEG_E26,SEG_E27,SEG_E28,SEG_E29,\
-		 SEG_E30,SEG_E31,SEG_E32,SEG_E33,SEG_E34,SEG_E35,SEG_E36,SEG_E37,SEG_E38,SEG_E39
-#define SEG_TEXT SEG_E0
-#define SEG_DATA SEG_E1
-#define SEG_BSS SEG_E2
-#define SEG_LAST SEG_E39
-#else
-#define N_SEGMENTS 3
-#define SEG_NORMAL(x) ((x) == SEG_TEXT || (x) == SEG_DATA || (x) == SEG_BSS)
-#define SEG_LIST SEG_TEXT,SEG_DATA,SEG_BSS
-#endif
-
-typedef enum _segT
-{
-  SEG_ABSOLUTE = 0,
-  SEG_LIST,
-  SEG_UNKNOWN,
-  SEG_GOOF,			/* Only happens if AS has a logic error.  */
-  /* Invented so we don't crash printing
-     error message involving weird segment.  */
-  SEG_EXPR,			/* Intermediate expression values.  */
-  SEG_DEBUG,			/* Debug segment */
-  SEG_NTV,			/* Transfert vector preload segment.  */
-  SEG_PTV,			/* Transfert vector postload segment.  */
-  SEG_REGISTER			/* Mythical: a register-valued expression.  */
-} segT;
-
-#define SEG_MAXIMUM_ORDINAL (SEG_REGISTER)
-#else
 typedef asection *segT;
 #define SEG_NORMAL(SEG)		(   (SEG) != absolute_section	\
 				 && (SEG) != undefined_section	\
 				 && (SEG) != reg_section	\
 				 && (SEG) != expr_section)
-#endif
 typedef int subsegT;
 
 /* What subseg we are accessing now?  */
@@ -291,33 +287,13 @@ COMMON subsegT now_subseg;
 /* Segment our instructions emit to.  */
 COMMON segT now_seg;
 
-#ifdef BFD_ASSEMBLER
 #define segment_name(SEG)	bfd_get_section_name (stdoutput, SEG)
-#else
-extern char const *const seg_name[];
-#define segment_name(SEG)	seg_name[(int) (SEG)]
-#endif
 
-#ifndef BFD_ASSEMBLER
-extern int section_alignment[];
-#endif
-
-#ifdef BFD_ASSEMBLER
 extern segT reg_section, expr_section;
 /* Shouldn't these be eliminated someday?  */
 extern segT text_section, data_section, bss_section;
 #define absolute_section	bfd_abs_section_ptr
 #define undefined_section	bfd_und_section_ptr
-#else
-#define reg_section		SEG_REGISTER
-#define expr_section		SEG_EXPR
-#define text_section		SEG_TEXT
-#define data_section		SEG_DATA
-#define bss_section		SEG_BSS
-#define absolute_section	SEG_ABSOLUTE
-#define undefined_section	SEG_UNKNOWN
-#endif
-
 
 enum _relax_state
 {
@@ -504,19 +480,6 @@ struct _pseudo_type
 
 typedef struct _pseudo_type pseudo_typeS;
 
-/* Prefer varargs for non-ANSI compiler, since some will barf if the
-   ellipsis definition is used with a no-arguments declaration.  */
-#if defined (HAVE_VARARGS_H) && !defined (__STDC__)
-#undef HAVE_STDARG_H
-#endif
-
-#if defined (HAVE_STDARG_H)
-#define USE_STDARG
-#endif
-#if !defined (USE_STDARG) && defined (HAVE_VARARGS_H)
-#define USE_VARARGS
-#endif
-
 #ifdef USE_STDARG
 #if (__GNUC__ >= 2) && !defined(VMS)
 /* for use with -Wformat */
@@ -560,7 +523,6 @@ PRINTF_WHERE_LIKE (as_warn_where);
 
 void   as_assert (const char *, int, const char *);
 void   as_abort (const char *, int, const char *) ATTRIBUTE_NORETURN;
-void   fprint_value (FILE *, addressT);
 void   sprint_value (char *, addressT);
 int    had_errors (void);
 int    had_warnings (void);
@@ -582,7 +544,6 @@ void   cond_finish_check (int);
 void   cond_exit_macro (int);
 int    seen_at_least_1_file (void);
 void   app_pop (char *);
-void   as_howmuch (FILE *);
 void   as_perror (const char *, const char *);
 void   as_where (char **, unsigned int *);
 void   bump_line_counters (void);
@@ -601,9 +562,7 @@ int    seg_not_empty_p (segT);
 void   start_dependencies (char *);
 void   register_dependency (char *);
 void   print_dependencies (void);
-#ifdef BFD_ASSEMBLER
 segT   subseg_get (const char *, int);
-#endif
 
 struct expressionS;
 struct fix;
@@ -611,10 +570,8 @@ typedef struct symbol symbolS;
 struct relax_type;
 typedef struct frag fragS;
 
-#ifdef BFD_ASSEMBLER
 /* literal.c */
 valueT add_to_literal_pool (symbolS *, valueT, segT, int);
-#endif
 
 int check_eh_frame (struct expressionS *, unsigned int *);
 int eh_frame_estimate_size_before_relax (fragS *);
@@ -654,6 +611,7 @@ int generic_force_reloc (struct fix *);
 #ifdef TC_M68K
 /* True if we are assembling in m68k MRI mode.  */
 COMMON int flag_m68k_mri;
+#define DOLLAR_AMBIGU flag_m68k_mri
 #else
 #define flag_m68k_mri 0
 #endif
@@ -662,6 +620,10 @@ COMMON int flag_m68k_mri;
 COMMON int           warn_comment;
 COMMON unsigned int  found_comment;
 COMMON char *        found_comment_file;
+#endif
+
+#ifndef DOLLAR_AMBIGU
+#define DOLLAR_AMBIGU 0
 #endif
 
 #ifndef NUMBERS_WITH_SUFFIX

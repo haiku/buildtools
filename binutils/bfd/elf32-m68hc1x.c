@@ -1,5 +1,5 @@
 /* Motorola 68HC11/HC12-specific support for 32-bit ELF
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
@@ -17,7 +17,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -70,8 +70,9 @@ m68hc11_elf_hash_table_create (bfd *abfd)
     return NULL;
 
   memset (ret, 0, amt);
-  if (! _bfd_elf_link_hash_table_init (&ret->root, abfd,
-				       _bfd_elf_link_hash_newfunc))
+  if (!_bfd_elf_link_hash_table_init (&ret->root, abfd,
+				      _bfd_elf_link_hash_newfunc,
+				      sizeof (struct elf_link_hash_entry)))
     {
       free (ret);
       return NULL;
@@ -85,7 +86,8 @@ m68hc11_elf_hash_table_create (bfd *abfd)
       free (ret);
       return NULL;
     }
-  if (!bfd_hash_table_init (ret->stub_hash_table, stub_hash_newfunc))
+  if (!bfd_hash_table_init (ret->stub_hash_table, stub_hash_newfunc,
+			    sizeof (struct elf32_m68hc11_stub_hash_entry)))
     return NULL;
 
   ret->stub_bfd = NULL;
@@ -265,7 +267,7 @@ elf32_m68hc11_setup_section_lists (bfd *output_bfd, struct bfd_link_info *info)
 
   /* We can't use output_bfd->section_count here to find the top output
      section index as some sections may have been removed, and
-     _bfd_strip_section_from_output doesn't renumber the indices.  */
+     strip_excluded_output_sections doesn't renumber the indices.  */
   for (section = output_bfd->sections, top_index = 0;
        section != NULL;
        section = section->next)
@@ -885,7 +887,12 @@ elf32_m68hc11_check_relocs (bfd *abfd, struct bfd_link_info *info,
       if (r_symndx < symtab_hdr->sh_info)
         h = NULL;
       else
-        h = sym_hashes [r_symndx - symtab_hdr->sh_info];
+	{
+	  h = sym_hashes [r_symndx - symtab_hdr->sh_info];
+	  while (h->root.type == bfd_link_hash_indirect
+		 || h->root.type == bfd_link_hash_warning)
+	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+	}
 
       switch (ELF32_R_TYPE (rel->r_info))
         {

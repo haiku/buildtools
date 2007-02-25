@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GLD; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.
+Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+02110-1301, USA.
 
    This bit does the tree decoration when MRI style link scripts
    are parsed.
@@ -44,14 +44,14 @@ struct section_name_struct {
   int ok_to_load;
 };
 
-unsigned int symbol_truncate = 10000;
-struct section_name_struct *order;
-struct section_name_struct *only_load;
-struct section_name_struct *address;
-struct section_name_struct *alias;
+static unsigned int symbol_truncate = 10000;
+static struct section_name_struct *order;
+static struct section_name_struct *only_load;
+static struct section_name_struct *address;
+static struct section_name_struct *alias;
 
-struct section_name_struct *alignment;
-struct section_name_struct *subalignment;
+static struct section_name_struct *alignment;
+static struct section_name_struct *subalignment;
 
 static struct section_name_struct **
 lookup (const char *name, struct section_name_struct **list)

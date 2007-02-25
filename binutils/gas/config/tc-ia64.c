@@ -1,5 +1,5 @@
 /* tc-ia64.c -- Assembler for the HP/Intel IA-64 architecture.
-   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 /*
   TODO:
@@ -56,6 +56,9 @@
 #endif
 
 #define NELEMS(a)	((int) (sizeof (a)/sizeof ((a)[0])))
+
+/* Some systems define MIN in, e.g., param.h.  */
+#undef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 
 #define NUM_SLOTS	4
@@ -121,7 +124,6 @@ enum reg_symbol
     IND_DTR,
     IND_ITR,
     IND_IBR,
-    IND_MEM,
     IND_MSR,
     IND_PKR,
     IND_PMC,
@@ -156,6 +158,7 @@ struct label_fix
 {
   struct label_fix *next;
   struct symbol *sym;
+  bfd_boolean dw2_mark_labels;
 };
 
 /* This is the endianness of the current section.  */
@@ -190,7 +193,7 @@ const char line_comment_chars[] = "#";
 
 /* Characters which may be used to separate multiple commands on a
    single line.  */
-const char line_separator_chars[] = ";";
+const char line_separator_chars[] = ";{}";
 
 /* Characters which are used to indicate an exponent in a floating
    point number.  */
@@ -222,12 +225,17 @@ static struct
     struct hash_control *const_hash;	/* constant hash table */
     struct hash_control *entry_hash;    /* code entry hint hash table */
 
-    symbolS *regsym[REG_NUM];
-
     /* If X_op is != O_absent, the registername for the instruction's
        qualifying predicate.  If NULL, p0 is assumed for instructions
        that are predicatable.  */
     expressionS qp;
+
+    /* Optimize for which CPU.  */
+    enum
+      {
+	itanium1,
+	itanium2
+      } tune;
 
     /* What to do when hint.b is used.  */
     enum
@@ -318,8 +326,25 @@ static struct
 
     int pointer_size;       /* size in bytes of a pointer */
     int pointer_size_shift; /* shift size of a pointer for alignment */
+
+    symbolS *indregsym[IND_RR - IND_CPUID + 1];
   }
 md;
+
+/* These are not const, because they are modified to MMI for non-itanium1
+   targets below.  */
+/* MFI bundle of nops.  */
+static unsigned char le_nop[16] =
+{
+  0x0c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00
+};
+/* MFI bundle of nops with stop-bit.  */
+static unsigned char le_nop_stop[16] =
+{
+  0x0d, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+  0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00
+};
 
 /* application registers:  */
 
@@ -329,33 +354,52 @@ md;
 #define AR_BSP		17
 #define AR_BSPSTORE	18
 #define AR_RNAT		19
+#define AR_FCR		21
+#define AR_EFLAG	24
+#define AR_CSD		25
+#define AR_SSD		26
+#define AR_CFLG		27
+#define AR_FSR		28
+#define AR_FIR		29
+#define AR_FDR		30
+#define AR_CCV		32
 #define AR_UNAT		36
 #define AR_FPSR		40
 #define AR_ITC		44
 #define AR_PFS		64
 #define AR_LC		65
+#define AR_EC		66
 
 static const struct
   {
     const char *name;
-    int regnum;
+    unsigned int regnum;
   }
 ar[] =
   {
-    {"ar.k0", 0}, {"ar.k1", 1}, {"ar.k2", 2}, {"ar.k3", 3},
-    {"ar.k4", 4}, {"ar.k5", 5}, {"ar.k6", 6}, {"ar.k7", 7},
-    {"ar.rsc",		16}, {"ar.bsp",		17},
-    {"ar.bspstore",	18}, {"ar.rnat",	19},
-    {"ar.fcr",		21}, {"ar.eflag",	24},
-    {"ar.csd",		25}, {"ar.ssd",		26},
-    {"ar.cflg",		27}, {"ar.fsr",		28},
-    {"ar.fir",		29}, {"ar.fdr",		30},
-    {"ar.ccv",		32}, {"ar.unat",	36},
-    {"ar.fpsr",		40}, {"ar.itc",		44},
-    {"ar.pfs",		64}, {"ar.lc",		65},
-    {"ar.ec",		66},
+    {"ar.k0",		AR_K0},		{"ar.k1",	AR_K0 + 1},
+    {"ar.k2",		AR_K0 + 2},	{"ar.k3",	AR_K0 + 3},
+    {"ar.k4",		AR_K0 + 4},	{"ar.k5",	AR_K0 + 5},
+    {"ar.k6",		AR_K0 + 6},	{"ar.k7",	AR_K7},
+    {"ar.rsc",		AR_RSC},	{"ar.bsp",	AR_BSP},
+    {"ar.bspstore",	AR_BSPSTORE},	{"ar.rnat",	AR_RNAT},
+    {"ar.fcr",		AR_FCR},	{"ar.eflag",	AR_EFLAG},
+    {"ar.csd",		AR_CSD},	{"ar.ssd",	AR_SSD},
+    {"ar.cflg",		AR_CFLG},	{"ar.fsr",	AR_FSR},
+    {"ar.fir",		AR_FIR},	{"ar.fdr",	AR_FDR},
+    {"ar.ccv",		AR_CCV},	{"ar.unat",	AR_UNAT},
+    {"ar.fpsr",		AR_FPSR},	{"ar.itc",	AR_ITC},
+    {"ar.pfs",		AR_PFS},	{"ar.lc",	AR_LC},
+    {"ar.ec",		AR_EC},
   };
 
+/* control registers:  */
+
+#define CR_DCR           0
+#define CR_ITM           1
+#define CR_IVA           2
+#define CR_PTA           8
+#define CR_GPTA          9
 #define CR_IPSR         16
 #define CR_ISR          17
 #define CR_IIP          19
@@ -365,49 +409,52 @@ ar[] =
 #define CR_IFS          23
 #define CR_IIM          24
 #define CR_IHA          25
+#define CR_LID          64
 #define CR_IVR          65
 #define CR_TPR          66
 #define CR_EOI          67
 #define CR_IRR0         68
 #define CR_IRR3         71
+#define CR_ITV          72
+#define CR_PMV          73
+#define CR_CMCV         74
 #define CR_LRR0         80
 #define CR_LRR1         81
 
-/* control registers:  */
 static const struct
   {
     const char *name;
-    int regnum;
+    unsigned int regnum;
   }
 cr[] =
   {
-    {"cr.dcr",	 0},
-    {"cr.itm",	 1},
-    {"cr.iva",	 2},
-    {"cr.pta",	 8},
-    {"cr.gpta",	 9},
-    {"cr.ipsr",	16},
-    {"cr.isr",	17},
-    {"cr.iip",	19},
-    {"cr.ifa",	20},
-    {"cr.itir",	21},
-    {"cr.iipa",	22},
-    {"cr.ifs",	23},
-    {"cr.iim",	24},
-    {"cr.iha",	25},
-    {"cr.lid",	64},
-    {"cr.ivr",	65},
-    {"cr.tpr",	66},
-    {"cr.eoi",	67},
-    {"cr.irr0",	68},
-    {"cr.irr1",	69},
-    {"cr.irr2",	70},
-    {"cr.irr3",	71},
-    {"cr.itv",	72},
-    {"cr.pmv",	73},
-    {"cr.cmcv",	74},
-    {"cr.lrr0",	80},
-    {"cr.lrr1",	81}
+    {"cr.dcr",	CR_DCR},
+    {"cr.itm",	CR_ITM},
+    {"cr.iva",	CR_IVA},
+    {"cr.pta",	CR_PTA},
+    {"cr.gpta",	CR_GPTA},
+    {"cr.ipsr",	CR_IPSR},
+    {"cr.isr",	CR_ISR},
+    {"cr.iip",	CR_IIP},
+    {"cr.ifa",	CR_IFA},
+    {"cr.itir",	CR_ITIR},
+    {"cr.iipa",	CR_IIPA},
+    {"cr.ifs",	CR_IFS},
+    {"cr.iim",	CR_IIM},
+    {"cr.iha",	CR_IHA},
+    {"cr.lid",	CR_LID},
+    {"cr.ivr",	CR_IVR},
+    {"cr.tpr",	CR_TPR},
+    {"cr.eoi",	CR_EOI},
+    {"cr.irr0",	CR_IRR0},
+    {"cr.irr1",	CR_IRR0 + 1},
+    {"cr.irr2",	CR_IRR0 + 2},
+    {"cr.irr3",	CR_IRR3},
+    {"cr.itv",	CR_ITV},
+    {"cr.pmv",	CR_PMV},
+    {"cr.cmcv",	CR_CMCV},
+    {"cr.lrr0",	CR_LRR0},
+    {"cr.lrr1",	CR_LRR1}
   };
 
 #define PSR_MFL         4
@@ -465,7 +512,7 @@ const_bits[] =
 static const struct
   {
     const char *name;
-    int regnum;
+    unsigned int regnum;
   }
 indirect_reg[] =
   {
@@ -568,7 +615,7 @@ static const bfd_vma nop[IA64_NUM_UNITS] =
     0x0008000000LL,	/* M-unit nop */
     0x4000000000LL,	/* B-unit nop */
     0x0008000000LL,	/* F-unit nop */
-    0x0008000000LL,	/* L-"unit" nop */
+    0x0000000000LL,	/* L-"unit" nop immediate */
     0x0008000000LL,	/* X-unit nop */
   };
 
@@ -670,8 +717,6 @@ typedef struct unw_rec_list {
   unwind_record r;
   unsigned long slot_number;
   fragS *slot_frag;
-  unsigned long next_slot_number;
-  fragS *next_slot_frag;
   struct unw_rec_list *next;
 } unw_rec_list;
 
@@ -686,6 +731,12 @@ typedef struct label_prologue_count
   unsigned int prologue_count;
 } label_prologue_count;
 
+typedef struct proc_pending
+{
+  symbolS *sym;
+  struct proc_pending *next;
+} proc_pending;
+
 static struct
 {
   /* Maintain a list of unwind entries for the current function.  */
@@ -697,7 +748,7 @@ static struct
   unw_rec_list *current_entry;
 
   /* These are used to create the unwind table entry for this function.  */
-  symbolS *proc_start;
+  proc_pending proc_pending;
   symbolS *info;		/* pointer to unwind info */
   symbolS *personality_routine;
   segT saved_text_seg;
@@ -707,11 +758,15 @@ static struct
   /* TRUE if processing unwind directives in a prologue region.  */
   unsigned int prologue : 1;
   unsigned int prologue_mask : 4;
+  unsigned int prologue_gr : 7;
   unsigned int body : 1;
   unsigned int insn : 1;
   unsigned int prologue_count;	/* number of .prologues seen so far */
   /* Prologue counts at previous .label_state directives.  */
   struct label_prologue_count * saved_prologue_counts;
+
+  /* List of split up .save-s.  */
+  unw_p_record *pending_saves;
 } unwind;
 
 /* The input value is a negated offset from psp, and specifies an address
@@ -733,11 +788,9 @@ static void dot_proc PARAMS ((int));
 static void dot_fframe PARAMS ((int));
 static void dot_vframe PARAMS ((int));
 static void dot_vframesp PARAMS ((int));
-static void dot_vframepsp PARAMS ((int));
 static void dot_save PARAMS ((int));
 static void dot_restore PARAMS ((int));
 static void dot_restorereg PARAMS ((int));
-static void dot_restorereg_p PARAMS ((int));
 static void dot_handlerdata  PARAMS ((int));
 static void dot_unwentry PARAMS ((int));
 static void dot_altrp PARAMS ((int));
@@ -749,8 +802,6 @@ static void dot_savegf PARAMS ((int));
 static void dot_spill PARAMS ((int));
 static void dot_spillreg PARAMS ((int));
 static void dot_spillmem PARAMS ((int));
-static void dot_spillreg_p PARAMS ((int));
-static void dot_spillmem_p PARAMS ((int));
 static void dot_label_state PARAMS ((int));
 static void dot_copy_state PARAMS ((int));
 static void dot_unwabi PARAMS ((int));
@@ -780,14 +831,14 @@ static void dot_serialize PARAMS ((int));
 static void dot_dv_mode PARAMS ((int));
 static void dot_entry PARAMS ((int));
 static void dot_mem_offset PARAMS ((int));
-static void add_unwind_entry PARAMS((unw_rec_list *ptr));
-static symbolS *declare_register PARAMS ((const char *name, int regnum));
-static void declare_register_set PARAMS ((const char *, int, int));
+static void add_unwind_entry PARAMS((unw_rec_list *, int));
+static symbolS *declare_register PARAMS ((const char *name, unsigned int regnum));
+static void declare_register_set PARAMS ((const char *, unsigned int, unsigned int));
 static unsigned int operand_width PARAMS ((enum ia64_opnd));
 static enum operand_match_result operand_match PARAMS ((const struct ia64_opcode *idesc,
 							int index,
 							expressionS *e));
-static int parse_operand PARAMS ((expressionS *e));
+static int parse_operand PARAMS ((expressionS *, int));
 static struct ia64_opcode * parse_operands PARAMS ((struct ia64_opcode *));
 static void build_insn PARAMS ((struct slot *, bfd_vma *));
 static void emit_one_bundle PARAMS ((void));
@@ -908,15 +959,11 @@ static unw_rec_list *output_unwabi PARAMS ((unsigned long, unsigned long));
 static unw_rec_list *output_epilogue PARAMS ((unsigned long));
 static unw_rec_list *output_label_state PARAMS ((unsigned long));
 static unw_rec_list *output_copy_state PARAMS ((unsigned long));
-static unw_rec_list *output_spill_psprel PARAMS ((unsigned int, unsigned int, unsigned int));
-static unw_rec_list *output_spill_sprel PARAMS ((unsigned int, unsigned int, unsigned int));
-static unw_rec_list *output_spill_psprel_p PARAMS ((unsigned int, unsigned int, unsigned int,
+static unw_rec_list *output_spill_psprel PARAMS ((unsigned int, unsigned int, unsigned int,
 						    unsigned int));
-static unw_rec_list *output_spill_sprel_p PARAMS ((unsigned int, unsigned int, unsigned int,
+static unw_rec_list *output_spill_sprel PARAMS ((unsigned int, unsigned int, unsigned int,
 						   unsigned int));
 static unw_rec_list *output_spill_reg PARAMS ((unsigned int, unsigned int, unsigned int,
-					       unsigned int));
-static unw_rec_list *output_spill_reg_p PARAMS ((unsigned int, unsigned int, unsigned int,
 						 unsigned int, unsigned int));
 static void process_one_record PARAMS ((unw_rec_list *, vbyte_func));
 static void process_unw_records PARAMS ((unw_rec_list *, vbyte_func));
@@ -927,8 +974,9 @@ static unsigned long slot_index PARAMS ((unsigned long, fragS *,
 					 int));
 static unw_rec_list *optimize_unw_records PARAMS ((unw_rec_list *));
 static void fixup_unw_records PARAMS ((unw_rec_list *, int));
-static int convert_expr_to_ab_reg PARAMS ((expressionS *, unsigned int *, unsigned int *));
-static int convert_expr_to_xy_reg PARAMS ((expressionS *, unsigned int *, unsigned int *));
+static int parse_predicate_and_operand PARAMS ((expressionS *, unsigned *, const char *));
+static void convert_expr_to_ab_reg PARAMS ((const expressionS *, unsigned int *, unsigned int *, const char *, int));
+static void convert_expr_to_xy_reg PARAMS ((const expressionS *, unsigned int *, unsigned int *, const char *, int));
 static unsigned int get_saved_prologue_count PARAMS ((unsigned long));
 static void save_prologue_count PARAMS ((unsigned long, unsigned int));
 static void free_saved_prologue_counts PARAMS ((void));
@@ -1057,6 +1105,7 @@ ia64_flush_insns ()
   segT saved_seg;
   subsegT saved_subseg;
   unw_rec_list *ptr;
+  bfd_boolean mark;
 
   if (!md.last_text_seg)
     return;
@@ -1070,18 +1119,23 @@ ia64_flush_insns ()
     emit_one_bundle ();		/* force out queued instructions */
 
   /* In case there are labels following the last instruction, resolve
-     those now:  */
+     those now.  */
+  mark = FALSE;
   for (lfix = CURR_SLOT.label_fixups; lfix; lfix = lfix->next)
     {
-      S_SET_VALUE (lfix->sym, frag_now_fix ());
-      symbol_set_frag (lfix->sym, frag_now);
+      symbol_set_value_now (lfix->sym);
+      mark |= lfix->dw2_mark_labels;
+    }
+  if (mark)
+    {
+      dwarf2_where (&CURR_SLOT.debug_line);
+      CURR_SLOT.debug_line.flags |= DWARF2_FLAG_BASIC_BLOCK;
+      dwarf2_gen_line_info (frag_now_fix (), &CURR_SLOT.debug_line);
     }
   CURR_SLOT.label_fixups = 0;
+
   for (lfix = CURR_SLOT.tag_fixups; lfix; lfix = lfix->next)
-    {
-      S_SET_VALUE (lfix->sym, frag_now_fix ());
-      symbol_set_frag (lfix->sym, frag_now);
-    }
+    symbol_set_value_now (lfix->sym);
   CURR_SLOT.tag_fixups = 0;
 
   /* In case there are unwind directives following the last instruction,
@@ -1715,6 +1769,55 @@ output_X4_format (f, qp, ab, reg, x, y, treg, t)
   (*f) (count, bytes, NULL);
 }
 
+/* This function checks whether there are any outstanding .save-s and
+   discards them if so.  */
+
+static void
+check_pending_save (void)
+{
+  if (unwind.pending_saves)
+    {
+      unw_rec_list *cur, *prev;
+
+      as_warn ("Previous .save incomplete");
+      for (cur = unwind.list, prev = NULL; cur; )
+	if (&cur->r.record.p == unwind.pending_saves)
+	  {
+	    if (prev)
+	      prev->next = cur->next;
+	    else
+	      unwind.list = cur->next;
+	    if (cur == unwind.tail)
+	      unwind.tail = prev;
+	    if (cur == unwind.current_entry)
+	      unwind.current_entry = cur->next;
+	    /* Don't free the first discarded record, it's being used as
+	       terminator for (currently) br_gr and gr_gr processing, and
+	       also prevents leaving a dangling pointer to it in its
+	       predecessor.  */
+	    cur->r.record.p.grmask = 0;
+	    cur->r.record.p.brmask = 0;
+	    cur->r.record.p.frmask = 0;
+	    prev = cur->r.record.p.next;
+	    cur->r.record.p.next = NULL;
+	    cur = prev;
+	    break;
+	  }
+	else
+	  {
+	    prev = cur;
+	    cur = cur->next;
+	  }
+      while (cur)
+	{
+	  prev = cur;
+	  cur = cur->r.record.p.next;
+	  free (prev);
+	}
+      unwind.pending_saves = NULL;
+    }
+}
+
 /* This function allocates a record list structure, and initializes fields.  */
 
 static unw_rec_list *
@@ -1722,11 +1825,9 @@ alloc_record (unw_record_type t)
 {
   unw_rec_list *ptr;
   ptr = xmalloc (sizeof (*ptr));
-  ptr->next = NULL;
+  memset (ptr, 0, sizeof (*ptr));
   ptr->slot_number = SLOT_NUM_NOT_SET;
   ptr->r.type = t;
-  ptr->next_slot_number = 0;
-  ptr->next_slot_frag = 0;
   return ptr;
 }
 
@@ -1788,7 +1889,7 @@ output_psp_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (psp_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -1797,7 +1898,7 @@ output_psp_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (psp_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -1813,7 +1914,7 @@ output_rp_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (rp_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -1822,7 +1923,7 @@ output_rp_br (br)
      unsigned int br;
 {
   unw_rec_list *ptr = alloc_record (rp_br);
-  ptr->r.record.p.br = br;
+  ptr->r.record.p.r.br = br;
   return ptr;
 }
 
@@ -1831,7 +1932,7 @@ output_rp_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (rp_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -1840,7 +1941,7 @@ output_rp_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (rp_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -1856,7 +1957,7 @@ output_pfs_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (pfs_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -1865,7 +1966,7 @@ output_pfs_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (pfs_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -1874,7 +1975,7 @@ output_pfs_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (pfs_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -1890,7 +1991,7 @@ output_preds_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (preds_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -1899,7 +2000,7 @@ output_preds_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (preds_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -1908,7 +2009,7 @@ output_preds_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (preds_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -1917,8 +2018,24 @@ output_fr_mem (mask)
      unsigned int mask;
 {
   unw_rec_list *ptr = alloc_record (fr_mem);
-  ptr->r.record.p.rmask = mask;
-  return ptr;
+  unw_rec_list *cur = ptr;
+
+  ptr->r.record.p.frmask = mask;
+  unwind.pending_saves = &ptr->r.record.p;
+  for (;;)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      mask &= ~(mask & (~mask + 1));
+      if (!mask)
+	return ptr;
+      cur = alloc_record (fr_mem);
+      cur->r.record.p.frmask = mask;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.frmask ^= mask;
+      prev->r.record.p.next = cur;
+    }
 }
 
 static unw_rec_list *
@@ -1927,9 +2044,39 @@ output_frgr_mem (gr_mask, fr_mask)
      unsigned int fr_mask;
 {
   unw_rec_list *ptr = alloc_record (frgr_mem);
-  ptr->r.record.p.grmask = gr_mask;
-  ptr->r.record.p.frmask = fr_mask;
-  return ptr;
+  unw_rec_list *cur = ptr;
+
+  unwind.pending_saves = &cur->r.record.p;
+  cur->r.record.p.frmask = fr_mask;
+  while (fr_mask)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      fr_mask &= ~(fr_mask & (~fr_mask + 1));
+      if (!gr_mask && !fr_mask)
+	return ptr;
+      cur = alloc_record (frgr_mem);
+      cur->r.record.p.frmask = fr_mask;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.frmask ^= fr_mask;
+      prev->r.record.p.next = cur;
+    }
+  cur->r.record.p.grmask = gr_mask;
+  for (;;)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      gr_mask &= ~(gr_mask & (~gr_mask + 1));
+      if (!gr_mask)
+	return ptr;
+      cur = alloc_record (frgr_mem);
+      cur->r.record.p.grmask = gr_mask;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.grmask ^= gr_mask;
+      prev->r.record.p.next = cur;
+    }
 }
 
 static unw_rec_list *
@@ -1938,9 +2085,27 @@ output_gr_gr (mask, reg)
      unsigned int reg;
 {
   unw_rec_list *ptr = alloc_record (gr_gr);
+  unw_rec_list *cur = ptr;
+
   ptr->r.record.p.grmask = mask;
-  ptr->r.record.p.gr = reg;
-  return ptr;
+  ptr->r.record.p.r.gr = reg;
+  unwind.pending_saves = &ptr->r.record.p;
+  for (;;)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      mask &= ~(mask & (~mask + 1));
+      if (!mask)
+	return ptr;
+      cur = alloc_record (gr_gr);
+      cur->r.record.p.grmask = mask;
+      /* Indicate this record shouldn't be output.  */
+      cur->r.record.p.r.gr = REG_NUM;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.grmask ^= mask;
+      prev->r.record.p.next = cur;
+    }
 }
 
 static unw_rec_list *
@@ -1948,27 +2113,77 @@ output_gr_mem (mask)
      unsigned int mask;
 {
   unw_rec_list *ptr = alloc_record (gr_mem);
-  ptr->r.record.p.rmask = mask;
-  return ptr;
+  unw_rec_list *cur = ptr;
+
+  ptr->r.record.p.grmask = mask;
+  unwind.pending_saves = &ptr->r.record.p;
+  for (;;)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      mask &= ~(mask & (~mask + 1));
+      if (!mask)
+	return ptr;
+      cur = alloc_record (gr_mem);
+      cur->r.record.p.grmask = mask;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.grmask ^= mask;
+      prev->r.record.p.next = cur;
+    }
 }
 
 static unw_rec_list *
 output_br_mem (unsigned int mask)
 {
   unw_rec_list *ptr = alloc_record (br_mem);
+  unw_rec_list *cur = ptr;
+
   ptr->r.record.p.brmask = mask;
-  return ptr;
+  unwind.pending_saves = &ptr->r.record.p;
+  for (;;)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      mask &= ~(mask & (~mask + 1));
+      if (!mask)
+	return ptr;
+      cur = alloc_record (br_mem);
+      cur->r.record.p.brmask = mask;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.brmask ^= mask;
+      prev->r.record.p.next = cur;
+    }
 }
 
 static unw_rec_list *
-output_br_gr (save_mask, reg)
-     unsigned int save_mask;
+output_br_gr (mask, reg)
+     unsigned int mask;
      unsigned int reg;
 {
   unw_rec_list *ptr = alloc_record (br_gr);
-  ptr->r.record.p.brmask = save_mask;
-  ptr->r.record.p.gr = reg;
-  return ptr;
+  unw_rec_list *cur = ptr;
+
+  ptr->r.record.p.brmask = mask;
+  ptr->r.record.p.r.gr = reg;
+  unwind.pending_saves = &ptr->r.record.p;
+  for (;;)
+    {
+      unw_rec_list *prev = cur;
+
+      /* Clear least significant set bit.  */
+      mask &= ~(mask & (~mask + 1));
+      if (!mask)
+	return ptr;
+      cur = alloc_record (br_gr);
+      cur->r.record.p.brmask = mask;
+      /* Indicate this record shouldn't be output.  */
+      cur->r.record.p.r.gr = REG_NUM;
+      /* Retain only least significant bit.  */
+      prev->r.record.p.brmask ^= mask;
+      prev->r.record.p.next = cur;
+    }
 }
 
 static unw_rec_list *
@@ -1976,7 +2191,7 @@ output_spill_base (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (spill_base);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -1992,7 +2207,7 @@ output_unat_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (unat_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2001,7 +2216,7 @@ output_unat_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (unat_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2010,7 +2225,7 @@ output_unat_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (unat_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2026,7 +2241,7 @@ output_lc_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (lc_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2035,7 +2250,7 @@ output_lc_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (lc_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2044,7 +2259,7 @@ output_lc_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (lc_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2060,7 +2275,7 @@ output_fpsr_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (fpsr_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2069,7 +2284,7 @@ output_fpsr_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (fpsr_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2078,7 +2293,7 @@ output_fpsr_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (fpsr_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2101,7 +2316,7 @@ output_priunat_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (priunat_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2110,7 +2325,7 @@ output_priunat_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (priunat_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2119,7 +2334,7 @@ output_priunat_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (priunat_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2135,7 +2350,7 @@ output_bsp_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (bsp_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2144,7 +2359,7 @@ output_bsp_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (bsp_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2153,7 +2368,7 @@ output_bsp_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (bsp_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2169,7 +2384,7 @@ output_bspstore_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (bspstore_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2178,7 +2393,7 @@ output_bspstore_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (bspstore_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2187,7 +2402,7 @@ output_bspstore_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (bspstore_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2203,7 +2418,7 @@ output_rnat_gr (gr)
      unsigned int gr;
 {
   unw_rec_list *ptr = alloc_record (rnat_gr);
-  ptr->r.record.p.gr = gr;
+  ptr->r.record.p.r.gr = gr;
   return ptr;
 }
 
@@ -2212,7 +2427,7 @@ output_rnat_psprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (rnat_psprel);
-  ptr->r.record.p.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.p.off.psp = ENCODED_PSP_OFFSET (offset);
   return ptr;
 }
 
@@ -2221,7 +2436,7 @@ output_rnat_sprel (offset)
      unsigned int offset;
 {
   unw_rec_list *ptr = alloc_record (rnat_sprel);
-  ptr->r.record.p.spoff = offset / 4;
+  ptr->r.record.p.off.sp = offset / 4;
   return ptr;
 }
 
@@ -2261,88 +2476,47 @@ output_copy_state (unsigned long label)
 }
 
 static unw_rec_list *
-output_spill_psprel (ab, reg, offset)
-     unsigned int ab;
-     unsigned int reg;
-     unsigned int offset;
-{
-  unw_rec_list *ptr = alloc_record (spill_psprel);
-  ptr->r.record.x.ab = ab;
-  ptr->r.record.x.reg = reg;
-  ptr->r.record.x.pspoff = ENCODED_PSP_OFFSET (offset);
-  return ptr;
-}
-
-static unw_rec_list *
-output_spill_sprel (ab, reg, offset)
-     unsigned int ab;
-     unsigned int reg;
-     unsigned int offset;
-{
-  unw_rec_list *ptr = alloc_record (spill_sprel);
-  ptr->r.record.x.ab = ab;
-  ptr->r.record.x.reg = reg;
-  ptr->r.record.x.spoff = offset / 4;
-  return ptr;
-}
-
-static unw_rec_list *
-output_spill_psprel_p (ab, reg, offset, predicate)
+output_spill_psprel (ab, reg, offset, predicate)
      unsigned int ab;
      unsigned int reg;
      unsigned int offset;
      unsigned int predicate;
 {
-  unw_rec_list *ptr = alloc_record (spill_psprel_p);
+  unw_rec_list *ptr = alloc_record (predicate ? spill_psprel_p : spill_psprel);
   ptr->r.record.x.ab = ab;
   ptr->r.record.x.reg = reg;
-  ptr->r.record.x.pspoff = ENCODED_PSP_OFFSET (offset);
+  ptr->r.record.x.where.pspoff = ENCODED_PSP_OFFSET (offset);
   ptr->r.record.x.qp = predicate;
   return ptr;
 }
 
 static unw_rec_list *
-output_spill_sprel_p (ab, reg, offset, predicate)
+output_spill_sprel (ab, reg, offset, predicate)
      unsigned int ab;
      unsigned int reg;
      unsigned int offset;
      unsigned int predicate;
 {
-  unw_rec_list *ptr = alloc_record (spill_sprel_p);
+  unw_rec_list *ptr = alloc_record (predicate ? spill_sprel_p : spill_sprel);
   ptr->r.record.x.ab = ab;
   ptr->r.record.x.reg = reg;
-  ptr->r.record.x.spoff = offset / 4;
+  ptr->r.record.x.where.spoff = offset / 4;
   ptr->r.record.x.qp = predicate;
   return ptr;
 }
 
 static unw_rec_list *
-output_spill_reg (ab, reg, targ_reg, xy)
-     unsigned int ab;
-     unsigned int reg;
-     unsigned int targ_reg;
-     unsigned int xy;
-{
-  unw_rec_list *ptr = alloc_record (spill_reg);
-  ptr->r.record.x.ab = ab;
-  ptr->r.record.x.reg = reg;
-  ptr->r.record.x.treg = targ_reg;
-  ptr->r.record.x.xy = xy;
-  return ptr;
-}
-
-static unw_rec_list *
-output_spill_reg_p (ab, reg, targ_reg, xy, predicate)
+output_spill_reg (ab, reg, targ_reg, xy, predicate)
      unsigned int ab;
      unsigned int reg;
      unsigned int targ_reg;
      unsigned int xy;
      unsigned int predicate;
 {
-  unw_rec_list *ptr = alloc_record (spill_reg_p);
+  unw_rec_list *ptr = alloc_record (predicate ? spill_reg_p : spill_reg);
   ptr->r.record.x.ab = ab;
   ptr->r.record.x.reg = reg;
-  ptr->r.record.x.treg = targ_reg;
+  ptr->r.record.x.where.reg = targ_reg;
   ptr->r.record.x.xy = xy;
   ptr->r.record.x.qp = predicate;
   return ptr;
@@ -2356,7 +2530,7 @@ process_one_record (ptr, f)
      unw_rec_list *ptr;
      vbyte_func f;
 {
-  unsigned long fr_mask, gr_mask;
+  unsigned int fr_mask, gr_mask;
 
   switch (ptr->r.type)
     {
@@ -2422,13 +2596,13 @@ process_one_record (ptr, f)
     case bsp_gr:
     case bspstore_gr:
     case rnat_gr:
-      output_P3_format (f, ptr->r.type, ptr->r.record.p.gr);
+      output_P3_format (f, ptr->r.type, ptr->r.record.p.r.gr);
       break;
     case rp_br:
-      output_P3_format (f, rp_br, ptr->r.record.p.br);
+      output_P3_format (f, rp_br, ptr->r.record.p.r.br);
       break;
     case psp_sprel:
-      output_P7_format (f, psp_sprel, ptr->r.record.p.spoff, 0);
+      output_P7_format (f, psp_sprel, ptr->r.record.p.off.sp, 0);
       break;
     case rp_when:
     case pfs_when:
@@ -2445,7 +2619,7 @@ process_one_record (ptr, f)
     case lc_psprel:
     case fpsr_psprel:
     case spill_base:
-      output_P7_format (f, ptr->r.type, ptr->r.record.p.pspoff, 0);
+      output_P7_format (f, ptr->r.type, ptr->r.record.p.off.psp, 0);
       break;
     case rp_sprel:
     case pfs_sprel:
@@ -2457,13 +2631,29 @@ process_one_record (ptr, f)
     case bsp_sprel:
     case bspstore_sprel:
     case rnat_sprel:
-      output_P8_format (f, ptr->r.type, ptr->r.record.p.spoff);
+      output_P8_format (f, ptr->r.type, ptr->r.record.p.off.sp);
       break;
     case gr_gr:
-      output_P9_format (f, ptr->r.record.p.grmask, ptr->r.record.p.gr);
+      if (ptr->r.record.p.r.gr < REG_NUM)
+	{
+	  const unw_rec_list *cur = ptr;
+
+	  gr_mask = cur->r.record.p.grmask;
+	  while ((cur = cur->r.record.p.next) != NULL)
+	    gr_mask |= cur->r.record.p.grmask;
+	  output_P9_format (f, gr_mask, ptr->r.record.p.r.gr);
+	}
       break;
     case br_gr:
-      output_P2_format (f, ptr->r.record.p.brmask, ptr->r.record.p.gr);
+      if (ptr->r.record.p.r.gr < REG_NUM)
+	{
+	  const unw_rec_list *cur = ptr;
+
+	  gr_mask = cur->r.record.p.brmask;
+	  while ((cur = cur->r.record.p.next) != NULL)
+	    gr_mask |= cur->r.record.p.brmask;
+	  output_P2_format (f, gr_mask, ptr->r.record.p.r.gr);
+	}
       break;
     case spill_mask:
       as_bad ("spill_mask record unimplemented.");
@@ -2479,7 +2669,7 @@ process_one_record (ptr, f)
     case bsp_psprel:
     case bspstore_psprel:
     case rnat_psprel:
-      output_P8_format (f, ptr->r.type, ptr->r.record.p.pspoff);
+      output_P8_format (f, ptr->r.type, ptr->r.record.p.off.psp);
       break;
     case unwabi:
       output_P10_format (f, ptr->r.record.p.abi, ptr->r.record.p.context);
@@ -2494,32 +2684,32 @@ process_one_record (ptr, f)
     case spill_psprel:
       output_X1_format (f, ptr->r.type, ptr->r.record.x.ab,
 			ptr->r.record.x.reg, ptr->r.record.x.t,
-			ptr->r.record.x.pspoff);
+			ptr->r.record.x.where.pspoff);
       break;
     case spill_sprel:
       output_X1_format (f, ptr->r.type, ptr->r.record.x.ab,
 			ptr->r.record.x.reg, ptr->r.record.x.t,
-			ptr->r.record.x.spoff);
+			ptr->r.record.x.where.spoff);
       break;
     case spill_reg:
       output_X2_format (f, ptr->r.record.x.ab, ptr->r.record.x.reg,
 			ptr->r.record.x.xy >> 1, ptr->r.record.x.xy,
-			ptr->r.record.x.treg, ptr->r.record.x.t);
+			ptr->r.record.x.where.reg, ptr->r.record.x.t);
       break;
     case spill_psprel_p:
       output_X3_format (f, ptr->r.type, ptr->r.record.x.qp,
 			ptr->r.record.x.ab, ptr->r.record.x.reg,
-			ptr->r.record.x.t, ptr->r.record.x.pspoff);
+			ptr->r.record.x.t, ptr->r.record.x.where.pspoff);
       break;
     case spill_sprel_p:
       output_X3_format (f, ptr->r.type, ptr->r.record.x.qp,
 			ptr->r.record.x.ab, ptr->r.record.x.reg,
-			ptr->r.record.x.t, ptr->r.record.x.spoff);
+			ptr->r.record.x.t, ptr->r.record.x.where.spoff);
       break;
     case spill_reg_p:
       output_X4_format (f, ptr->r.record.x.qp, ptr->r.record.x.ab,
 			ptr->r.record.x.reg, ptr->r.record.x.xy >> 1,
-			ptr->r.record.x.xy, ptr->r.record.x.treg,
+			ptr->r.record.x.xy, ptr->r.record.x.where.reg,
 			ptr->r.record.x.t);
       break;
     default:
@@ -2549,6 +2739,28 @@ calc_record_size (list)
   process_unw_records (list, count_output);
   return vbyte_count;
 }
+
+/* Return the number of bits set in the input value.
+   Perhaps this has a better place...  */
+#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4)
+# define popcount __builtin_popcount
+#else
+static int
+popcount (unsigned x)
+{
+  static const unsigned char popcnt[16] =
+    {
+      0, 1, 1, 2,
+      1, 2, 2, 3,
+      1, 2, 2, 3,
+      2, 3, 3, 4
+    };
+
+  if (x < NELEMS (popcnt))
+    return popcnt[x];
+  return popcnt[x % NELEMS (popcnt)] + popcount (x / NELEMS (popcnt));
+}
+#endif
 
 /* Update IMASK bitmask to reflect the fact that one or more registers
    of type TYPE are saved starting at instruction with index T.  If N
@@ -2681,6 +2893,13 @@ slot_index (slot_addr, slot_frag, first_addr, first_frag, before_relax)
       /* Move to the beginning of the next frag.  */
       first_frag = first_frag->fr_next;
       first_addr = (unsigned long) &first_frag->fr_literal;
+
+      /* This can happen if there is section switching in the middle of a
+	 function, causing the frag chain for the function to be broken.
+	 It is too difficult to recover safely from this problem, so we just
+	 exit with an error.  */
+      if (first_frag == NULL)
+	as_fatal ("Section switching in code is not supported.");
     }
 
   /* Add in the used part of the last frag.  */
@@ -2813,8 +3032,8 @@ fixup_unw_records (list, before_relax)
 	      as_bad ("fr_mem record before region record!");
 	      return;
 	    }
-	  region->r.record.r.mask.fr_mem |= ptr->r.record.p.rmask;
-	  set_imask (region, ptr->r.record.p.rmask, t, 1);
+	  region->r.record.r.mask.fr_mem |= ptr->r.record.p.frmask;
+	  set_imask (region, ptr->r.record.p.frmask, t, 1);
 	  break;
 	case gr_mem:
 	  if (!region)
@@ -2822,8 +3041,8 @@ fixup_unw_records (list, before_relax)
 	      as_bad ("gr_mem record before region record!");
 	      return;
 	    }
-	  region->r.record.r.mask.gr_mem |= ptr->r.record.p.rmask;
-	  set_imask (region, ptr->r.record.p.rmask, t, 2);
+	  region->r.record.r.mask.gr_mem |= ptr->r.record.p.grmask;
+	  set_imask (region, ptr->r.record.p.grmask, t, 2);
 	  break;
 	case br_mem:
 	  if (!region)
@@ -2953,17 +3172,43 @@ ia64_convert_frag (fragS *frag)
 }
 
 static int
-convert_expr_to_ab_reg (e, ab, regp)
-     expressionS *e;
+parse_predicate_and_operand (e, qp, po)
+     expressionS * e;
+     unsigned * qp;
+     const char * po;
+{
+  int sep = parse_operand (e, ',');
+
+  *qp = e->X_add_number - REG_P;
+  if (e->X_op != O_register || *qp > 63)
+    {
+      as_bad ("First operand to .%s must be a predicate", po);
+      *qp = 0;
+    }
+  else if (*qp == 0)
+    as_warn ("Pointless use of p0 as first operand to .%s", po);
+  if (sep == ',')
+    sep = parse_operand (e, ',');
+  else
+    e->X_op = O_absent;
+  return sep;
+}
+
+static void
+convert_expr_to_ab_reg (e, ab, regp, po, n)
+     const expressionS *e;
      unsigned int *ab;
      unsigned int *regp;
+     const char * po;
+     int n;
 {
-  unsigned int reg;
+  unsigned int reg = e->X_add_number;
+
+  *ab = *regp = 0; /* Anything valid is good here.  */
 
   if (e->X_op != O_register)
-    return 0;
+    reg = REG_GR; /* Anything invalid is good here.  */
 
-  reg = e->X_add_number;
   if (reg >= (REG_GR + 4) && reg <= (REG_GR + 7))
     {
       *ab = 0;
@@ -2998,31 +3243,33 @@ convert_expr_to_ab_reg (e, ab, regp)
 	case REG_AR + AR_LC:	*regp = 10; break;
 
 	default:
-	  return 0;
+	  as_bad ("Operand %d to .%s must be a preserved register", n, po);
+	  break;
 	}
     }
-  return 1;
 }
 
-static int
-convert_expr_to_xy_reg (e, xy, regp)
-     expressionS *e;
+static void
+convert_expr_to_xy_reg (e, xy, regp, po, n)
+     const expressionS *e;
      unsigned int *xy;
      unsigned int *regp;
+     const char * po;
+     int n;
 {
-  unsigned int reg;
+  unsigned int reg = e->X_add_number;
+
+  *xy = *regp = 0; /* Anything valid is good here.  */
 
   if (e->X_op != O_register)
-    return 0;
+    reg = REG_GR; /* Anything invalid is good here.  */
 
-  reg = e->X_add_number;
-
-  if (/* reg >= REG_GR && */ reg <= (REG_GR + 127))
+  if (reg >= (REG_GR + 1) && reg <= (REG_GR + 127))
     {
       *xy = 0;
       *regp = reg - REG_GR;
     }
-  else if (reg >= REG_FR && reg <= (REG_FR + 127))
+  else if (reg >= (REG_FR + 2) && reg <= (REG_FR + 127))
     {
       *xy = 1;
       *regp = reg - REG_FR;
@@ -3033,8 +3280,7 @@ convert_expr_to_xy_reg (e, xy, regp)
       *regp = reg - REG_BR;
     }
   else
-    return -1;
-  return 1;
+    as_bad ("Operand %d to .%s must be a writable register", n, po);
 }
 
 static void
@@ -3049,17 +3295,20 @@ static void
 dot_radix (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
-  int radix;
+  char *radix;
+  int ch;
 
   SKIP_WHITESPACE ();
-  radix = *input_line_pointer++;
 
-  if (radix != 'C' && !is_end_of_line[(unsigned char) radix])
-    {
-      as_bad ("Radix `%c' unsupported", *input_line_pointer);
-      ignore_rest_of_line ();
-      return;
-    }
+  if (is_it_end_of_statement ())
+    return;
+  radix = input_line_pointer;
+  ch = get_symbol_end ();
+  ia64_canonicalize_symbol_name (radix);
+  if (strcasecmp (radix, "C"))
+    as_bad ("Radix `%s' unsupported or invalid", radix);
+  *input_line_pointer = ch;
+  demand_empty_rest_of_line ();
 }
 
 /* Helper function for .loc directives.  If the assembler is not generating
@@ -3107,7 +3356,7 @@ unwind_diagnostic (const char * region, const char *directive)
 static int
 in_procedure (const char *directive)
 {
-  if (unwind.proc_start
+  if (unwind.proc_pending.sym
       && (!unwind.saved_text_seg || strcmp (directive, "endp") == 0))
     return 1;
   return unwind_diagnostic ("procedure", directive);
@@ -3122,18 +3371,11 @@ static int
 in_prologue (const char *directive)
 {
   int in = in_procedure (directive);
-  if (in)
-    {
-      /* We are in a procedure. Check if we are in a prologue.  */
-      if (unwind.prologue)
-	return 1;
-      /* We only want to issue one message.  */
-      if (in == 1)
-	return unwind_diagnostic ("prologue", directive);
-      else
-	return -1;
-    }
-  return 0;
+
+  if (in > 0 && !unwind.prologue)
+    in = unwind_diagnostic ("prologue", directive);
+  check_pending_save ();
+  return in;
 }
 
 /* Return 1 if a directive is in a body, -1 if a directive isn't in
@@ -3145,33 +3387,55 @@ static int
 in_body (const char *directive)
 {
   int in = in_procedure (directive);
-  if (in)
-    {
-      /* We are in a procedure. Check if we are in a body.  */
-      if (unwind.body)
-	return 1;
-      /* We only want to issue one message.  */
-      if (in == 1)
-	return unwind_diagnostic ("body region", directive);
-      else
-	return -1;
-    }
-  return 0;
+
+  if (in > 0 && !unwind.body)
+    in = unwind_diagnostic ("body region", directive);
+  return in;
 }
 
 static void
-add_unwind_entry (ptr)
+add_unwind_entry (ptr, sep)
      unw_rec_list *ptr;
+     int sep;
 {
-  if (unwind.tail)
-    unwind.tail->next = ptr;
-  else
-    unwind.list = ptr;
-  unwind.tail = ptr;
+  if (ptr)
+    {
+      if (unwind.tail)
+	unwind.tail->next = ptr;
+      else
+	unwind.list = ptr;
+      unwind.tail = ptr;
+
+      /* The current entry can in fact be a chain of unwind entries.  */
+      if (unwind.current_entry == NULL)
+	unwind.current_entry = ptr;
+    }
 
   /* The current entry can in fact be a chain of unwind entries.  */
   if (unwind.current_entry == NULL)
     unwind.current_entry = ptr;
+
+  if (sep == ',')
+    {
+      /* Parse a tag permitted for the current directive.  */
+      int ch;
+
+      SKIP_WHITESPACE ();
+      ch = get_symbol_end ();
+      /* FIXME: For now, just issue a warning that this isn't implemented.  */
+      {
+	static int warned;
+
+	if (!warned)
+	  {
+	    warned = 1;
+	    as_warn ("Tags on unwind pseudo-ops aren't supported, yet");
+	  }
+      }
+      *input_line_pointer = ch;
+    }
+  if (sep != NOT_A_CHAR)
+    demand_empty_rest_of_line ();
 }
 
 static void
@@ -3179,16 +3443,19 @@ dot_fframe (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
   expressionS e;
+  int sep;
 
   if (!in_prologue ("fframe"))
     return;
 
-  parse_operand (&e);
+  sep = parse_operand (&e, ',');
 
   if (e.X_op != O_constant)
-    as_bad ("Operand to .fframe must be a constant");
-  else
-    add_unwind_entry (output_mem_stack_f (e.X_add_number));
+    {
+      as_bad ("First operand to .fframe must be a constant");
+      e.X_add_number = 0;
+    }
+  add_unwind_entry (output_mem_stack_f (e.X_add_number), sep);
 }
 
 static void
@@ -3197,58 +3464,47 @@ dot_vframe (dummy)
 {
   expressionS e;
   unsigned reg;
+  int sep;
 
   if (!in_prologue ("vframe"))
     return;
 
-  parse_operand (&e);
+  sep = parse_operand (&e, ',');
   reg = e.X_add_number - REG_GR;
-  if (e.X_op == O_register && reg < 128)
+  if (e.X_op != O_register || reg > 127)
     {
-      add_unwind_entry (output_mem_stack_v ());
-      if (! (unwind.prologue_mask & 2))
-	add_unwind_entry (output_psp_gr (reg));
+      as_bad ("First operand to .vframe must be a general register");
+      reg = 0;
     }
-  else
-    as_bad ("First operand to .vframe must be a general register");
+  add_unwind_entry (output_mem_stack_v (), sep);
+  if (! (unwind.prologue_mask & 2))
+    add_unwind_entry (output_psp_gr (reg), NOT_A_CHAR);
+  else if (reg != unwind.prologue_gr
+		  + (unsigned) popcount (unwind.prologue_mask & (-2 << 1)))
+    as_warn ("Operand of .vframe contradicts .prologue");
 }
 
 static void
-dot_vframesp (dummy)
-     int dummy ATTRIBUTE_UNUSED;
+dot_vframesp (psp)
+     int psp;
 {
   expressionS e;
+  int sep;
+
+  if (psp)
+    as_warn (".vframepsp is meaningless, assuming .vframesp was meant");
 
   if (!in_prologue ("vframesp"))
     return;
 
-  parse_operand (&e);
-  if (e.X_op == O_constant)
+  sep = parse_operand (&e, ',');
+  if (e.X_op != O_constant)
     {
-      add_unwind_entry (output_mem_stack_v ());
-      add_unwind_entry (output_psp_sprel (e.X_add_number));
+      as_bad ("Operand to .vframesp must be a constant (sp-relative offset)");
+      e.X_add_number = 0;
     }
-  else
-    as_bad ("Operand to .vframesp must be a constant (sp-relative offset)");
-}
-
-static void
-dot_vframepsp (dummy)
-     int dummy ATTRIBUTE_UNUSED;
-{
-  expressionS e;
-
-  if (!in_prologue ("vframepsp"))
-    return;
-
-  parse_operand (&e);
-  if (e.X_op == O_constant)
-    {
-      add_unwind_entry (output_mem_stack_v ());
-      add_unwind_entry (output_psp_sprel (e.X_add_number));
-    }
-  else
-    as_bad ("Operand to .vframepsp must be a constant (psp-relative offset)");
+  add_unwind_entry (output_mem_stack_v (), sep);
+  add_unwind_entry (output_psp_sprel (e.X_add_number), NOT_A_CHAR);
 }
 
 static void
@@ -3256,106 +3512,115 @@ dot_save (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
   expressionS e1, e2;
+  unsigned reg1, reg2;
   int sep;
-  int reg1, reg2;
 
   if (!in_prologue ("save"))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep != ',')
-    as_bad ("No second operand to .save");
-  sep = parse_operand (&e2);
+  sep = parse_operand (&e1, ',');
+  if (sep == ',')
+    sep = parse_operand (&e2, ',');
+  else
+    e2.X_op = O_absent;
 
   reg1 = e1.X_add_number;
-  reg2 = e2.X_add_number - REG_GR;
-
   /* Make sure its a valid ar.xxx reg, OR its br0, aka 'rp'.  */
-  if (e1.X_op == O_register)
+  if (e1.X_op != O_register)
     {
-      if (e2.X_op == O_register && reg2 >= 0 && reg2 < 128)
-	{
-	  switch (reg1)
-	    {
-	    case REG_AR + AR_BSP:
-	      add_unwind_entry (output_bsp_when ());
-	      add_unwind_entry (output_bsp_gr (reg2));
-	      break;
-	    case REG_AR + AR_BSPSTORE:
-	      add_unwind_entry (output_bspstore_when ());
-	      add_unwind_entry (output_bspstore_gr (reg2));
-	      break;
-	    case REG_AR + AR_RNAT:
-	      add_unwind_entry (output_rnat_when ());
-	      add_unwind_entry (output_rnat_gr (reg2));
-	      break;
-	    case REG_AR + AR_UNAT:
-	      add_unwind_entry (output_unat_when ());
-	      add_unwind_entry (output_unat_gr (reg2));
-	      break;
-	    case REG_AR + AR_FPSR:
-	      add_unwind_entry (output_fpsr_when ());
-	      add_unwind_entry (output_fpsr_gr (reg2));
-	      break;
-	    case REG_AR + AR_PFS:
-	      add_unwind_entry (output_pfs_when ());
-	      if (! (unwind.prologue_mask & 4))
-		add_unwind_entry (output_pfs_gr (reg2));
-	      break;
-	    case REG_AR + AR_LC:
-	      add_unwind_entry (output_lc_when ());
-	      add_unwind_entry (output_lc_gr (reg2));
-	      break;
-	    case REG_BR:
-	      add_unwind_entry (output_rp_when ());
-	      if (! (unwind.prologue_mask & 8))
-		add_unwind_entry (output_rp_gr (reg2));
-	      break;
-	    case REG_PR:
-	      add_unwind_entry (output_preds_when ());
-	      if (! (unwind.prologue_mask & 1))
-		add_unwind_entry (output_preds_gr (reg2));
-	      break;
-	    case REG_PRIUNAT:
-	      add_unwind_entry (output_priunat_when_gr ());
-	      add_unwind_entry (output_priunat_gr (reg2));
-	      break;
-	    default:
-	      as_bad ("First operand not a valid register");
-	    }
-	}
-      else
-	as_bad (" Second operand not a valid register");
+      as_bad ("First operand to .save not a register");
+      reg1 = REG_PR; /* Anything valid is good here.  */
     }
-  else
-    as_bad ("First operand not a register");
+  reg2 = e2.X_add_number - REG_GR;
+  if (e2.X_op != O_register || reg2 > 127)
+    {
+      as_bad ("Second operand to .save not a valid register");
+      reg2 = 0;
+    }
+  switch (reg1)
+    {
+    case REG_AR + AR_BSP:
+      add_unwind_entry (output_bsp_when (), sep);
+      add_unwind_entry (output_bsp_gr (reg2), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_BSPSTORE:
+      add_unwind_entry (output_bspstore_when (), sep);
+      add_unwind_entry (output_bspstore_gr (reg2), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_RNAT:
+      add_unwind_entry (output_rnat_when (), sep);
+      add_unwind_entry (output_rnat_gr (reg2), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_UNAT:
+      add_unwind_entry (output_unat_when (), sep);
+      add_unwind_entry (output_unat_gr (reg2), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_FPSR:
+      add_unwind_entry (output_fpsr_when (), sep);
+      add_unwind_entry (output_fpsr_gr (reg2), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_PFS:
+      add_unwind_entry (output_pfs_when (), sep);
+      if (! (unwind.prologue_mask & 4))
+	add_unwind_entry (output_pfs_gr (reg2), NOT_A_CHAR);
+      else if (reg2 != unwind.prologue_gr
+		       + (unsigned) popcount (unwind.prologue_mask & (-4 << 1)))
+	as_warn ("Second operand of .save contradicts .prologue");
+      break;
+    case REG_AR + AR_LC:
+      add_unwind_entry (output_lc_when (), sep);
+      add_unwind_entry (output_lc_gr (reg2), NOT_A_CHAR);
+      break;
+    case REG_BR:
+      add_unwind_entry (output_rp_when (), sep);
+      if (! (unwind.prologue_mask & 8))
+	add_unwind_entry (output_rp_gr (reg2), NOT_A_CHAR);
+      else if (reg2 != unwind.prologue_gr)
+	as_warn ("Second operand of .save contradicts .prologue");
+      break;
+    case REG_PR:
+      add_unwind_entry (output_preds_when (), sep);
+      if (! (unwind.prologue_mask & 1))
+	add_unwind_entry (output_preds_gr (reg2), NOT_A_CHAR);
+      else if (reg2 != unwind.prologue_gr
+		       + (unsigned) popcount (unwind.prologue_mask & (-1 << 1)))
+	as_warn ("Second operand of .save contradicts .prologue");
+      break;
+    case REG_PRIUNAT:
+      add_unwind_entry (output_priunat_when_gr (), sep);
+      add_unwind_entry (output_priunat_gr (reg2), NOT_A_CHAR);
+      break;
+    default:
+      as_bad ("First operand to .save not a valid register");
+      add_unwind_entry (NULL, sep);
+      break;
+    }
 }
 
 static void
 dot_restore (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
-  expressionS e1, e2;
+  expressionS e1;
   unsigned long ecount;	/* # of _additional_ regions to pop */
   int sep;
 
   if (!in_body ("restore"))
     return;
 
-  sep = parse_operand (&e1);
+  sep = parse_operand (&e1, ',');
   if (e1.X_op != O_register || e1.X_add_number != REG_GR + 12)
-    {
-      as_bad ("First operand to .restore must be stack pointer (sp)");
-      return;
-    }
+    as_bad ("First operand to .restore must be stack pointer (sp)");
 
   if (sep == ',')
     {
-      parse_operand (&e2);
+      expressionS e2;
+
+      sep = parse_operand (&e2, ',');
       if (e2.X_op != O_constant || e2.X_add_number < 0)
 	{
 	  as_bad ("Second operand to .restore must be a constant >= 0");
-	  return;
+	  e2.X_add_number = 0;
 	}
       ecount = e2.X_add_number;
     }
@@ -3366,10 +3631,10 @@ dot_restore (dummy)
     {
       as_bad ("Epilogue count of %lu exceeds number of nested prologues (%u)",
 	      ecount + 1, unwind.prologue_count);
-      return;
+      ecount = 0;
     }
 
-  add_unwind_entry (output_epilogue (ecount));
+  add_unwind_entry (output_epilogue (ecount), sep);
 
   if (ecount < unwind.prologue_count)
     unwind.prologue_count -= ecount + 1;
@@ -3378,58 +3643,27 @@ dot_restore (dummy)
 }
 
 static void
-dot_restorereg (dummy)
-     int dummy ATTRIBUTE_UNUSED;
-{
-  unsigned int ab, reg;
-  expressionS e;
-
-  if (!in_procedure ("restorereg"))
-    return;
-
-  parse_operand (&e);
-
-  if (!convert_expr_to_ab_reg (&e, &ab, &reg))
-    {
-      as_bad ("First operand to .restorereg must be a preserved register");
-      return;
-    }
-  add_unwind_entry (output_spill_reg (ab, reg, 0, 0));
-}
-
-static void
-dot_restorereg_p (dummy)
-     int dummy ATTRIBUTE_UNUSED;
+dot_restorereg (pred)
+     int pred;
 {
   unsigned int qp, ab, reg;
-  expressionS e1, e2;
+  expressionS e;
   int sep;
+  const char * const po = pred ? "restorereg.p" : "restorereg";
 
-  if (!in_procedure ("restorereg.p"))
+  if (!in_procedure (po))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep != ',')
+  if (pred)
+    sep = parse_predicate_and_operand (&e, &qp, po);
+  else
     {
-      as_bad ("No second operand to .restorereg.p");
-      return;
+      sep = parse_operand (&e, ',');
+      qp = 0;
     }
+  convert_expr_to_ab_reg (&e, &ab, &reg, po, 1 + pred);
 
-  parse_operand (&e2);
-
-  qp = e1.X_add_number - REG_P;
-  if (e1.X_op != O_register || qp > 63)
-    {
-      as_bad ("First operand to .restorereg.p must be a predicate");
-      return;
-    }
-
-  if (!convert_expr_to_ab_reg (&e2, &ab, &reg))
-    {
-      as_bad ("Second operand to .restorereg.p must be a preserved register");
-      return;
-    }
-  add_unwind_entry (output_spill_reg_p (ab, reg, 0, 0, qp));
+  add_unwind_entry (output_spill_reg (ab, reg, 0, 0, qp), sep);
 }
 
 static char *special_linkonce_name[] =
@@ -3438,7 +3672,7 @@ static char *special_linkonce_name[] =
   };
 
 static void
-start_unwind_section (const segT text_seg, int sec_index, int linkonce_empty)
+start_unwind_section (const segT text_seg, int sec_index)
 {
   /*
     Use a slightly ugly scheme to derive the unwind section names from
@@ -3500,8 +3734,6 @@ start_unwind_section (const segT text_seg, int sec_index, int linkonce_empty)
       prefix = special_linkonce_name [sec_index - SPECIAL_SECTION_UNWIND];
       suffix += sizeof (".gnu.linkonce.t.") - 1;
     }
-  else if (linkonce_empty)
-    return;
 
   prefix_len = strlen (prefix);
   suffix_len = strlen (suffix);
@@ -3512,7 +3744,8 @@ start_unwind_section (const segT text_seg, int sec_index, int linkonce_empty)
   sec_name [sec_name_len] = '\0';
 
   /* Handle COMDAT group.  */
-  if (suffix == text_name && (text_seg->flags & SEC_LINK_ONCE) != 0)
+  if ((text_seg->flags & SEC_LINK_ONCE) != 0
+      && (elf_section_flags (text_seg) & SHF_GROUP) != 0)
     {
       char *section;
       size_t len, group_name_len;
@@ -3558,7 +3791,7 @@ generate_unwind_image (const segT text_seg)
 
   /* Mark the end of the unwind info, so that we can compute the size of the
      last unwind region.  */
-  add_unwind_entry (output_endp ());
+  add_unwind_entry (output_endp (), NOT_A_CHAR);
 
   /* Force out pending instructions, to make sure all unwind records have
      a valid slot_number field.  */
@@ -3589,7 +3822,7 @@ generate_unwind_image (const segT text_seg)
       expressionS exp;
       bfd_reloc_code_real_type reloc;
 
-      start_unwind_section (text_seg, SPECIAL_SECTION_UNWIND_INFO, 0);
+      start_unwind_section (text_seg, SPECIAL_SECTION_UNWIND_INFO);
 
       /* Make sure the section has 4 byte alignment for ILP32 and
 	 8 byte alignment for LP64.  */
@@ -3630,8 +3863,6 @@ generate_unwind_image (const segT text_seg)
 	  unwind.personality_routine = 0;
 	}
     }
-  else
-    start_unwind_section (text_seg, SPECIAL_SECTION_UNWIND_INFO, 1);
 
   free_saved_prologue_counts ();
   unwind.list = unwind.tail = unwind.current_entry = NULL;
@@ -3676,12 +3907,14 @@ dot_altrp (dummy)
   if (!in_prologue ("altrp"))
     return;
 
-  parse_operand (&e);
+  parse_operand (&e, 0);
   reg = e.X_add_number - REG_BR;
-  if (e.X_op == O_register && reg < 8)
-    add_unwind_entry (output_rp_br (reg));
-  else
-    as_bad ("First operand not a valid branch register");
+  if (e.X_op != O_register || reg > 7)
+    {
+      as_bad ("First operand to .altrp not a valid branch register");
+      reg = 0;
+    }
+  add_unwind_entry (output_rp_br (reg), 0);
 }
 
 static void
@@ -3691,182 +3924,210 @@ dot_savemem (psprel)
   expressionS e1, e2;
   int sep;
   int reg1, val;
+  const char * const po = psprel ? "savepsp" : "savesp";
 
-  if (!in_prologue (psprel ? "savepsp" : "savesp"))
+  if (!in_prologue (po))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep != ',')
-    as_bad ("No second operand to .save%ssp", psprel ? "p" : "");
-  sep = parse_operand (&e2);
+  sep = parse_operand (&e1, ',');
+  if (sep == ',')
+    sep = parse_operand (&e2, ',');
+  else
+    e2.X_op = O_absent;
 
   reg1 = e1.X_add_number;
   val = e2.X_add_number;
 
   /* Make sure its a valid ar.xxx reg, OR its br0, aka 'rp'.  */
-  if (e1.X_op == O_register)
+  if (e1.X_op != O_register)
     {
-      if (e2.X_op == O_constant)
-	{
-	  switch (reg1)
-	    {
-	    case REG_AR + AR_BSP:
-	      add_unwind_entry (output_bsp_when ());
-	      add_unwind_entry ((psprel
-				 ? output_bsp_psprel
-				 : output_bsp_sprel) (val));
-	      break;
-	    case REG_AR + AR_BSPSTORE:
-	      add_unwind_entry (output_bspstore_when ());
-	      add_unwind_entry ((psprel
-				 ? output_bspstore_psprel
-				 : output_bspstore_sprel) (val));
-	      break;
-	    case REG_AR + AR_RNAT:
-	      add_unwind_entry (output_rnat_when ());
-	      add_unwind_entry ((psprel
-				 ? output_rnat_psprel
-				 : output_rnat_sprel) (val));
-	      break;
-	    case REG_AR + AR_UNAT:
-	      add_unwind_entry (output_unat_when ());
-	      add_unwind_entry ((psprel
-				 ? output_unat_psprel
-				 : output_unat_sprel) (val));
-	      break;
-	    case REG_AR + AR_FPSR:
-	      add_unwind_entry (output_fpsr_when ());
-	      add_unwind_entry ((psprel
-				 ? output_fpsr_psprel
-				 : output_fpsr_sprel) (val));
-	      break;
-	    case REG_AR + AR_PFS:
-	      add_unwind_entry (output_pfs_when ());
-	      add_unwind_entry ((psprel
-				 ? output_pfs_psprel
-				 : output_pfs_sprel) (val));
-	      break;
-	    case REG_AR + AR_LC:
-	      add_unwind_entry (output_lc_when ());
-	      add_unwind_entry ((psprel
-				 ? output_lc_psprel
-				 : output_lc_sprel) (val));
-	      break;
-	    case REG_BR:
-	      add_unwind_entry (output_rp_when ());
-	      add_unwind_entry ((psprel
-				 ? output_rp_psprel
-				 : output_rp_sprel) (val));
-	      break;
-	    case REG_PR:
-	      add_unwind_entry (output_preds_when ());
-	      add_unwind_entry ((psprel
-				 ? output_preds_psprel
-				 : output_preds_sprel) (val));
-	      break;
-	    case REG_PRIUNAT:
-	      add_unwind_entry (output_priunat_when_mem ());
-	      add_unwind_entry ((psprel
-				 ? output_priunat_psprel
-				 : output_priunat_sprel) (val));
-	      break;
-	    default:
-	      as_bad ("First operand not a valid register");
-	    }
-	}
-      else
-	as_bad (" Second operand not a valid constant");
+      as_bad ("First operand to .%s not a register", po);
+      reg1 = REG_PR; /* Anything valid is good here.  */
     }
-  else
-    as_bad ("First operand not a register");
+  if (e2.X_op != O_constant)
+    {
+      as_bad ("Second operand to .%s not a constant", po);
+      val = 0;
+    }
+
+  switch (reg1)
+    {
+    case REG_AR + AR_BSP:
+      add_unwind_entry (output_bsp_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_bsp_psprel
+			 : output_bsp_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_BSPSTORE:
+      add_unwind_entry (output_bspstore_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_bspstore_psprel
+			 : output_bspstore_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_RNAT:
+      add_unwind_entry (output_rnat_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_rnat_psprel
+			 : output_rnat_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_UNAT:
+      add_unwind_entry (output_unat_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_unat_psprel
+			 : output_unat_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_FPSR:
+      add_unwind_entry (output_fpsr_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_fpsr_psprel
+			 : output_fpsr_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_PFS:
+      add_unwind_entry (output_pfs_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_pfs_psprel
+			 : output_pfs_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_AR + AR_LC:
+      add_unwind_entry (output_lc_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_lc_psprel
+			 : output_lc_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_BR:
+      add_unwind_entry (output_rp_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_rp_psprel
+			 : output_rp_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_PR:
+      add_unwind_entry (output_preds_when (), sep);
+      add_unwind_entry ((psprel
+			 ? output_preds_psprel
+			 : output_preds_sprel) (val), NOT_A_CHAR);
+      break;
+    case REG_PRIUNAT:
+      add_unwind_entry (output_priunat_when_mem (), sep);
+      add_unwind_entry ((psprel
+			 ? output_priunat_psprel
+			 : output_priunat_sprel) (val), NOT_A_CHAR);
+      break;
+    default:
+      as_bad ("First operand to .%s not a valid register", po);
+      add_unwind_entry (NULL, sep);
+      break;
+    }
 }
 
 static void
 dot_saveg (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
-  expressionS e1, e2;
+  expressionS e;
+  unsigned grmask;
   int sep;
 
   if (!in_prologue ("save.g"))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep == ',')
-    parse_operand (&e2);
+  sep = parse_operand (&e, ',');
 
-  if (e1.X_op != O_constant)
-    as_bad ("First operand to .save.g must be a constant.");
-  else
+  grmask = e.X_add_number;
+  if (e.X_op != O_constant
+      || e.X_add_number <= 0
+      || e.X_add_number > 0xf)
     {
-      int grmask = e1.X_add_number;
-      if (sep != ',')
-	add_unwind_entry (output_gr_mem (grmask));
-      else
-	{
-	  int reg = e2.X_add_number - REG_GR;
-	  if (e2.X_op == O_register && reg >= 0 && reg < 128)
-	    add_unwind_entry (output_gr_gr (grmask, reg));
-	  else
-	    as_bad ("Second operand is an invalid register.");
-	}
+      as_bad ("First operand to .save.g must be a positive 4-bit constant");
+      grmask = 0;
     }
+
+  if (sep == ',')
+    {
+      unsigned reg;
+      int n = popcount (grmask);
+
+      parse_operand (&e, 0);
+      reg = e.X_add_number - REG_GR;
+      if (e.X_op != O_register || reg > 127)
+	{
+	  as_bad ("Second operand to .save.g must be a general register");
+	  reg = 0;
+	}
+      else if (reg > 128U - n)
+	{
+	  as_bad ("Second operand to .save.g must be the first of %d general registers", n);
+	  reg = 0;
+	}
+      add_unwind_entry (output_gr_gr (grmask, reg), 0);
+    }
+  else
+    add_unwind_entry (output_gr_mem (grmask), 0);
 }
 
 static void
 dot_savef (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
-  expressionS e1;
-  int sep;
+  expressionS e;
 
   if (!in_prologue ("save.f"))
     return;
 
-  sep = parse_operand (&e1);
+  parse_operand (&e, 0);
 
-  if (e1.X_op != O_constant)
-    as_bad ("Operand to .save.f must be a constant.");
-  else
-    add_unwind_entry (output_fr_mem (e1.X_add_number));
+  if (e.X_op != O_constant
+      || e.X_add_number <= 0
+      || e.X_add_number > 0xfffff)
+    {
+      as_bad ("Operand to .save.f must be a positive 20-bit constant");
+      e.X_add_number = 0;
+    }
+  add_unwind_entry (output_fr_mem (e.X_add_number), 0);
 }
 
 static void
 dot_saveb (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
-  expressionS e1, e2;
-  unsigned int reg;
-  unsigned char sep;
-  int brmask;
+  expressionS e;
+  unsigned brmask;
+  int sep;
 
   if (!in_prologue ("save.b"))
     return;
 
-  sep = parse_operand (&e1);
-  if (e1.X_op != O_constant)
+  sep = parse_operand (&e, ',');
+
+  brmask = e.X_add_number;
+  if (e.X_op != O_constant
+      || e.X_add_number <= 0
+      || e.X_add_number > 0x1f)
     {
-      as_bad ("First operand to .save.b must be a constant.");
-      return;
+      as_bad ("First operand to .save.b must be a positive 5-bit constant");
+      brmask = 0;
     }
-  brmask = e1.X_add_number;
 
   if (sep == ',')
     {
-      sep = parse_operand (&e2);
-      reg = e2.X_add_number - REG_GR;
-      if (e2.X_op != O_register || reg > 127)
+      unsigned reg;
+      int n = popcount (brmask);
+
+      parse_operand (&e, 0);
+      reg = e.X_add_number - REG_GR;
+      if (e.X_op != O_register || reg > 127)
 	{
-	  as_bad ("Second operand to .save.b must be a general register.");
-	  return;
+	  as_bad ("Second operand to .save.b must be a general register");
+	  reg = 0;
 	}
-      add_unwind_entry (output_br_gr (brmask, e2.X_add_number));
+      else if (reg > 128U - n)
+	{
+	  as_bad ("Second operand to .save.b must be the first of %d general registers", n);
+	  reg = 0;
+	}
+      add_unwind_entry (output_br_gr (brmask, reg), 0);
     }
   else
-    add_unwind_entry (output_br_mem (brmask));
-
-  if (!is_end_of_line[sep] && !is_it_end_of_statement ())
-    demand_empty_rest_of_line ();
+    add_unwind_entry (output_br_mem (brmask), 0);
 }
 
 static void
@@ -3874,23 +4135,38 @@ dot_savegf (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
   expressionS e1, e2;
-  int sep;
 
   if (!in_prologue ("save.gf"))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep == ',')
-    parse_operand (&e2);
-
-  if (e1.X_op != O_constant || sep != ',' || e2.X_op != O_constant)
-    as_bad ("Both operands of .save.gf must be constants.");
+  if (parse_operand (&e1, ',') == ',')
+    parse_operand (&e2, 0);
   else
+    e2.X_op = O_absent;
+
+  if (e1.X_op != O_constant
+      || e1.X_add_number < 0
+      || e1.X_add_number > 0xf)
     {
-      int grmask = e1.X_add_number;
-      int frmask = e2.X_add_number;
-      add_unwind_entry (output_frgr_mem (grmask, frmask));
+      as_bad ("First operand to .save.gf must be a non-negative 4-bit constant");
+      e1.X_op = O_absent;
+      e1.X_add_number = 0;
     }
+  if (e2.X_op != O_constant
+      || e2.X_add_number < 0
+      || e2.X_add_number > 0xfffff)
+    {
+      as_bad ("Second operand to .save.gf must be a non-negative 20-bit constant");
+      e2.X_op = O_absent;
+      e2.X_add_number = 0;
+    }
+  if (e1.X_op == O_constant
+      && e2.X_op == O_constant
+      && e1.X_add_number == 0
+      && e2.X_add_number == 0)
+    as_bad ("Operands to .save.gf may not be both zero");
+
+  add_unwind_entry (output_frgr_mem (e1.X_add_number, e2.X_add_number), 0);
 }
 
 static void
@@ -3898,201 +4174,93 @@ dot_spill (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
   expressionS e;
-  unsigned char sep;
 
   if (!in_prologue ("spill"))
     return;
 
-  sep = parse_operand (&e);
-  if (!is_end_of_line[sep] && !is_it_end_of_statement ())
-    demand_empty_rest_of_line ();
+  parse_operand (&e, 0);
 
   if (e.X_op != O_constant)
-    as_bad ("Operand to .spill must be a constant");
-  else
-    add_unwind_entry (output_spill_base (e.X_add_number));
+    {
+      as_bad ("Operand to .spill must be a constant");
+      e.X_add_number = 0;
+    }
+  add_unwind_entry (output_spill_base (e.X_add_number), 0);
 }
 
 static void
-dot_spillreg (dummy)
-     int dummy ATTRIBUTE_UNUSED;
+dot_spillreg (pred)
+     int pred;
 {
   int sep;
-  unsigned int ab, xy, reg, treg;
-  expressionS e1, e2;
+  unsigned int qp, ab, xy, reg, treg;
+  expressionS e;
+  const char * const po = pred ? "spillreg.p" : "spillreg";
 
-  if (!in_procedure ("spillreg"))
+  if (!in_procedure (po))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep != ',')
+  if (pred)
+    sep = parse_predicate_and_operand (&e, &qp, po);
+  else
     {
-      as_bad ("No second operand to .spillreg");
-      return;
+      sep = parse_operand (&e, ',');
+      qp = 0;
     }
+  convert_expr_to_ab_reg (&e, &ab, &reg, po, 1 + pred);
 
-  parse_operand (&e2);
+  if (sep == ',')
+    sep = parse_operand (&e, ',');
+  else
+    e.X_op = O_absent;
+  convert_expr_to_xy_reg (&e, &xy, &treg, po, 2 + pred);
 
-  if (!convert_expr_to_ab_reg (&e1, &ab, &reg))
-    {
-      as_bad ("First operand to .spillreg must be a preserved register");
-      return;
-    }
-
-  if (!convert_expr_to_xy_reg (&e2, &xy, &treg))
-    {
-      as_bad ("Second operand to .spillreg must be a register");
-      return;
-    }
-
-  add_unwind_entry (output_spill_reg (ab, reg, treg, xy));
+  add_unwind_entry (output_spill_reg (ab, reg, treg, xy, qp), sep);
 }
 
 static void
 dot_spillmem (psprel)
      int psprel;
 {
-  expressionS e1, e2;
-  int sep;
-  unsigned int ab, reg;
+  expressionS e;
+  int pred = (psprel < 0), sep;
+  unsigned int qp, ab, reg;
+  const char * po;
 
-  if (!in_procedure ("spillmem"))
+  if (pred)
+    {
+      psprel = ~psprel;
+      po = psprel ? "spillpsp.p" : "spillsp.p";
+    }
+  else
+    po = psprel ? "spillpsp" : "spillsp";
+
+  if (!in_procedure (po))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep != ',')
+  if (pred)
+    sep = parse_predicate_and_operand (&e, &qp, po);
+  else
     {
-      as_bad ("Second operand missing");
-      return;
+      sep = parse_operand (&e, ',');
+      qp = 0;
     }
+  convert_expr_to_ab_reg (&e, &ab, &reg, po, 1 + pred);
 
-  parse_operand (&e2);
-
-  if (!convert_expr_to_ab_reg (&e1, &ab, &reg))
+  if (sep == ',')
+    sep = parse_operand (&e, ',');
+  else
+    e.X_op = O_absent;
+  if (e.X_op != O_constant)
     {
-      as_bad ("First operand to .spill%s must be a preserved register",
-	      psprel ? "psp" : "sp");
-      return;
-    }
-
-  if (e2.X_op != O_constant)
-    {
-      as_bad ("Second operand to .spill%s must be a constant",
-	      psprel ? "psp" : "sp");
-      return;
+      as_bad ("Operand %d to .%s must be a constant", 2 + pred, po);
+      e.X_add_number = 0;
     }
 
   if (psprel)
-    add_unwind_entry (output_spill_psprel (ab, reg, e2.X_add_number));
+    add_unwind_entry (output_spill_psprel (ab, reg, e.X_add_number, qp), sep);
   else
-    add_unwind_entry (output_spill_sprel (ab, reg, e2.X_add_number));
-}
-
-static void
-dot_spillreg_p (dummy)
-     int dummy ATTRIBUTE_UNUSED;
-{
-  int sep;
-  unsigned int ab, xy, reg, treg;
-  expressionS e1, e2, e3;
-  unsigned int qp;
-
-  if (!in_procedure ("spillreg.p"))
-    return;
-
-  sep = parse_operand (&e1);
-  if (sep != ',')
-    {
-      as_bad ("No second and third operand to .spillreg.p");
-      return;
-    }
-
-  sep = parse_operand (&e2);
-  if (sep != ',')
-    {
-      as_bad ("No third operand to .spillreg.p");
-      return;
-    }
-
-  parse_operand (&e3);
-
-  qp = e1.X_add_number - REG_P;
-
-  if (e1.X_op != O_register || qp > 63)
-    {
-      as_bad ("First operand to .spillreg.p must be a predicate");
-      return;
-    }
-
-  if (!convert_expr_to_ab_reg (&e2, &ab, &reg))
-    {
-      as_bad ("Second operand to .spillreg.p must be a preserved register");
-      return;
-    }
-
-  if (!convert_expr_to_xy_reg (&e3, &xy, &treg))
-    {
-      as_bad ("Third operand to .spillreg.p must be a register");
-      return;
-    }
-
-  add_unwind_entry (output_spill_reg_p (ab, reg, treg, xy, qp));
-}
-
-static void
-dot_spillmem_p (psprel)
-     int psprel;
-{
-  expressionS e1, e2, e3;
-  int sep;
-  unsigned int ab, reg;
-  unsigned int qp;
-
-  if (!in_procedure ("spillmem.p"))
-    return;
-
-  sep = parse_operand (&e1);
-  if (sep != ',')
-    {
-      as_bad ("Second operand missing");
-      return;
-    }
-
-  parse_operand (&e2);
-  if (sep != ',')
-    {
-      as_bad ("Second operand missing");
-      return;
-    }
-
-  parse_operand (&e3);
-
-  qp = e1.X_add_number - REG_P;
-  if (e1.X_op != O_register || qp > 63)
-    {
-      as_bad ("First operand to .spill%s_p must be a predicate",
-	      psprel ? "psp" : "sp");
-      return;
-    }
-
-  if (!convert_expr_to_ab_reg (&e2, &ab, &reg))
-    {
-      as_bad ("Second operand to .spill%s_p must be a preserved register",
-	      psprel ? "psp" : "sp");
-      return;
-    }
-
-  if (e3.X_op != O_constant)
-    {
-      as_bad ("Third operand to .spill%s_p must be a constant",
-	      psprel ? "psp" : "sp");
-      return;
-    }
-
-  if (psprel)
-    add_unwind_entry (output_spill_psprel_p (ab, reg, e3.X_add_number, qp));
-  else
-    add_unwind_entry (output_spill_sprel_p (ab, reg, e3.X_add_number, qp));
+    add_unwind_entry (output_spill_sprel (ab, reg, e.X_add_number, qp), sep);
 }
 
 static unsigned int
@@ -4159,14 +4327,15 @@ dot_label_state (dummy)
   if (!in_body ("label_state"))
     return;
 
-  parse_operand (&e);
-  if (e.X_op != O_constant)
+  parse_operand (&e, 0);
+  if (e.X_op == O_constant)
+    save_prologue_count (e.X_add_number, unwind.prologue_count);
+  else
     {
       as_bad ("Operand to .label_state must be a constant");
-      return;
+      e.X_add_number = 0;
     }
-  add_unwind_entry (output_label_state (e.X_add_number));
-  save_prologue_count (e.X_add_number, unwind.prologue_count);
+  add_unwind_entry (output_label_state (e.X_add_number), 0);
 }
 
 static void
@@ -4178,14 +4347,15 @@ dot_copy_state (dummy)
   if (!in_body ("copy_state"))
     return;
 
-  parse_operand (&e);
-  if (e.X_op != O_constant)
+  parse_operand (&e, 0);
+  if (e.X_op == O_constant)
+    unwind.prologue_count = get_saved_prologue_count (e.X_add_number);
+  else
     {
       as_bad ("Operand to .copy_state must be a constant");
-      return;
+      e.X_add_number = 0;
     }
-  add_unwind_entry (output_copy_state (e.X_add_number));
-  unwind.prologue_count = get_saved_prologue_count (e.X_add_number);
+  add_unwind_entry (output_copy_state (e.X_add_number), 0);
 }
 
 static void
@@ -4195,32 +4365,28 @@ dot_unwabi (dummy)
   expressionS e1, e2;
   unsigned char sep;
 
-  if (!in_procedure ("unwabi"))
+  if (!in_prologue ("unwabi"))
     return;
 
-  sep = parse_operand (&e1);
-  if (sep != ',')
-    {
-      as_bad ("Second operand to .unwabi missing");
-      return;
-    }
-  sep = parse_operand (&e2);
-  if (!is_end_of_line[sep] && !is_it_end_of_statement ())
-    demand_empty_rest_of_line ();
+  sep = parse_operand (&e1, ',');
+  if (sep == ',')
+    parse_operand (&e2, 0);
+  else
+    e2.X_op = O_absent;
 
   if (e1.X_op != O_constant)
     {
       as_bad ("First operand to .unwabi must be a constant");
-      return;
+      e1.X_add_number = 0;
     }
 
   if (e2.X_op != O_constant)
     {
       as_bad ("Second operand to .unwabi must be a constant");
-      return;
+      e2.X_add_number = 0;
     }
 
-  add_unwind_entry (output_unwabi (e1.X_add_number, e2.X_add_number));
+  add_unwind_entry (output_unwabi (e1.X_add_number, e2.X_add_number), 0);
 }
 
 static void
@@ -4247,8 +4413,22 @@ dot_proc (dummy)
 {
   char *name, *p, c;
   symbolS *sym;
+  proc_pending *pending, *last_pending;
 
-  unwind.proc_start = 0;
+  if (unwind.proc_pending.sym)
+    {
+      (md.unwind_check == unwind_check_warning
+       ? as_warn
+       : as_bad) ("Missing .endp after previous .proc");
+      while (unwind.proc_pending.next)
+	{
+	  pending = unwind.proc_pending.next;
+	  unwind.proc_pending.next = pending->next;
+	  free (pending);
+	}
+    }
+  last_pending = NULL;
+
   /* Parse names of main and alternate entry points and mark them as
      function symbols:  */
   while (1)
@@ -4264,9 +4444,16 @@ dot_proc (dummy)
 	  sym = symbol_find_or_make (name);
 	  if (S_IS_DEFINED (sym))
 	    as_bad ("`%s' was already defined", name);
-	  else if (unwind.proc_start == 0)
+	  else if (!last_pending)
 	    {
-	      unwind.proc_start = sym;
+	      unwind.proc_pending.sym = sym;
+	      last_pending = &unwind.proc_pending;
+	    }
+	  else
+	    {
+	      pending = xmalloc (sizeof (*pending));
+	      pending->sym = sym;
+	      last_pending = last_pending->next = pending;
 	    }
 	  symbol_get_bfdsym (sym)->flags |= BSF_FUNCTION;
 	}
@@ -4276,8 +4463,12 @@ dot_proc (dummy)
 	break;
       ++input_line_pointer;
     }
-  if (unwind.proc_start == 0)
-    unwind.proc_start = expr_build_dot ();
+  if (!last_pending)
+    {
+      unwind.proc_pending.sym = expr_build_dot ();
+      last_pending = &unwind.proc_pending;
+    }
+  last_pending->next = NULL;
   demand_empty_rest_of_line ();
   ia64_do_align (16);
 
@@ -4297,21 +4488,20 @@ dot_body (dummy)
     return;
   if (!unwind.prologue && !unwind.body && unwind.insn)
     as_warn ("Initial .body should precede any instructions");
+  check_pending_save ();
 
   unwind.prologue = 0;
   unwind.prologue_mask = 0;
   unwind.body = 1;
 
-  add_unwind_entry (output_body ());
-  demand_empty_rest_of_line ();
+  add_unwind_entry (output_body (), 0);
 }
 
 static void
 dot_prologue (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
-  unsigned char sep;
-  int mask = 0, grsave = 0;
+  unsigned mask = 0, grsave = 0;
 
   if (!in_procedure ("prologue"))
     return;
@@ -4326,36 +4516,53 @@ dot_prologue (dummy)
 
   if (!is_it_end_of_statement ())
     {
-      expressionS e1, e2;
-      sep = parse_operand (&e1);
-      if (sep != ',')
-	as_bad ("No second operand to .prologue");
-      sep = parse_operand (&e2);
-      if (!is_end_of_line[sep] && !is_it_end_of_statement ())
-	demand_empty_rest_of_line ();
+      expressionS e;
+      int n, sep = parse_operand (&e, ',');
 
-      if (e1.X_op == O_constant)
-	{
-	  mask = e1.X_add_number;
-
-	  if (e2.X_op == O_constant)
-	    grsave = e2.X_add_number;
-	  else if (e2.X_op == O_register
-		   && (grsave = e2.X_add_number - REG_GR) < 128)
-	    ;
-	  else
-	    as_bad ("Second operand not a constant or general register");
-
-	  add_unwind_entry (output_prologue_gr (mask, grsave));
-	}
+      if (e.X_op != O_constant
+	  || e.X_add_number < 0
+	  || e.X_add_number > 0xf)
+	as_bad ("First operand to .prologue must be a positive 4-bit constant");
+      else if (e.X_add_number == 0)
+	as_warn ("Pointless use of zero first operand to .prologue");
       else
-	as_bad ("First operand not a constant");
+	mask = e.X_add_number;
+	n = popcount (mask);
+
+      if (sep == ',')
+	parse_operand (&e, 0);
+      else
+	e.X_op = O_absent;
+      if (e.X_op == O_constant
+	  && e.X_add_number >= 0
+	  && e.X_add_number < 128)
+	{
+	  if (md.unwind_check == unwind_check_error)
+	    as_warn ("Using a constant as second operand to .prologue is deprecated");
+	  grsave = e.X_add_number;
+	}
+      else if (e.X_op != O_register
+	       || (grsave = e.X_add_number - REG_GR) > 127)
+	{
+	  as_bad ("Second operand to .prologue must be a general register");
+	  grsave = 0;
+	}
+      else if (grsave > 128U - n)
+	{
+	  as_bad ("Second operand to .prologue must be the first of %d general registers", n);
+	  grsave = 0;
+	}
+
     }
+
+  if (mask)
+    add_unwind_entry (output_prologue_gr (mask, grsave), 0);
   else
-    add_unwind_entry (output_prologue ());
+    add_unwind_entry (output_prologue (), 0);
 
   unwind.prologue = 1;
   unwind.prologue_mask = mask;
+  unwind.prologue_gr = grsave;
   unwind.body = 0;
   ++unwind.prologue_count;
 }
@@ -4365,13 +4572,11 @@ dot_endp (dummy)
      int dummy ATTRIBUTE_UNUSED;
 {
   expressionS e;
-  char *ptr;
   int bytes_per_address;
   long where;
   segT saved_seg;
   subsegT saved_subseg;
-  char *name, *default_name, *p, c;
-  symbolS *sym;
+  proc_pending *pending;
   int unwind_check = md.unwind_check;
 
   md.unwind_check = unwind_check_error;
@@ -4404,7 +4609,7 @@ dot_endp (dummy)
       subseg_set (md.last_text_seg, 0);
       proc_end = expr_build_dot ();
 
-      start_unwind_section (saved_seg, SPECIAL_SECTION_UNWIND, 0);
+      start_unwind_section (saved_seg, SPECIAL_SECTION_UNWIND);
 
       /* Make sure that section has 4 byte alignment for ILP32 and
          8 byte alignment for LP64.  */
@@ -4412,7 +4617,7 @@ dot_endp (dummy)
 
       /* Need space for 3 pointers for procedure start, procedure end,
 	 and unwind info.  */
-      ptr = frag_more (3 * md.pointer_size);
+      memset (frag_more (3 * md.pointer_size), 0, 3 * md.pointer_size);
       where = frag_now_fix () - (3 * md.pointer_size);
       bytes_per_address = bfd_arch_bits_per_address (stdoutput) / 8;
 
@@ -4420,13 +4625,13 @@ dot_endp (dummy)
       e.X_op = O_pseudo_fixup;
       e.X_op_symbol = pseudo_func[FUNC_SEG_RELATIVE].u.sym;
       e.X_add_number = 0;
-      if (!S_IS_LOCAL (unwind.proc_start)
-	  && S_IS_DEFINED (unwind.proc_start))
-	e.X_add_symbol = symbol_temp_new (S_GET_SEGMENT (unwind.proc_start),
-					  S_GET_VALUE (unwind.proc_start),
-					  symbol_get_frag (unwind.proc_start));
+      if (!S_IS_LOCAL (unwind.proc_pending.sym)
+	  && S_IS_DEFINED (unwind.proc_pending.sym))
+	e.X_add_symbol = symbol_temp_new (S_GET_SEGMENT (unwind.proc_pending.sym),
+					  S_GET_VALUE (unwind.proc_pending.sym),
+					  symbol_get_frag (unwind.proc_pending.sym));
       else
-	e.X_add_symbol = unwind.proc_start;
+	e.X_add_symbol = unwind.proc_pending.sym;
       ia64_cons_fix_new (frag_now, where, bytes_per_address, &e);
 
       e.X_op = O_pseudo_fixup;
@@ -4445,72 +4650,25 @@ dot_endp (dummy)
 	  ia64_cons_fix_new (frag_now, where + (bytes_per_address * 2),
 			     bytes_per_address, &e);
 	}
-      else
-	md_number_to_chars (ptr + (bytes_per_address * 2), 0,
-			    bytes_per_address);
-
     }
-  else
-    start_unwind_section (saved_seg, SPECIAL_SECTION_UNWIND, 1);
-
   subseg_set (saved_seg, saved_subseg);
 
-  if (unwind.proc_start)
-    default_name = (char *) S_GET_NAME (unwind.proc_start);
-  else
-    default_name = NULL;
-
-  /* Parse names of main and alternate entry points and set symbol sizes.  */
-  while (1)
+  /* Set symbol sizes.  */
+  pending = &unwind.proc_pending;
+  if (S_GET_NAME (pending->sym))
     {
-      SKIP_WHITESPACE ();
-      name = input_line_pointer;
-      c = get_symbol_end ();
-      p = input_line_pointer;
-      if (!*name)
+      do
 	{
-	  if (md.unwind_check == unwind_check_warning)
+	  symbolS *sym = pending->sym;
+
+	  if (!S_IS_DEFINED (sym))
+	    as_bad ("`%s' was not defined within procedure", S_GET_NAME (sym));
+	  else if (S_GET_SIZE (sym) == 0
+		   && symbol_get_obj (sym)->size == NULL)
 	    {
-	      if (default_name)
-		{
-		  as_warn ("Empty argument of .endp. Use the default name `%s'",
-			   default_name);
-		  name = default_name;
-		}
-	      else
-		as_warn ("Empty argument of .endp");
-	    }
-	  else
-	    as_bad ("Empty argument of .endp");
-	}
-      if (*name)
-	{
-	  sym = symbol_find (name);
-	  if (!sym
-	      && md.unwind_check == unwind_check_warning
-	      && default_name
-	      && default_name != name)
-	    {
-	      /* We have a bad name. Try the default one if needed.  */
-	      as_warn ("`%s' was not defined within procedure. Use the default name `%s'",
-		       name, default_name);
-	      name = default_name;
-	      sym = symbol_find (name);
-	    }
-	  if (!sym || !S_IS_DEFINED (sym))
-	    as_bad ("`%s' was not defined within procedure", name);
-	  else if (unwind.proc_start
-	      && (symbol_get_bfdsym (sym)->flags & BSF_FUNCTION)
-	      && S_GET_SIZE (sym) == 0 && symbol_get_obj (sym)->size == NULL)
-	    {
-	      fragS *fr = symbol_get_frag (unwind.proc_start);
 	      fragS *frag = symbol_get_frag (sym);
 
-	      /* Check whether the function label is at or beyond last
-		 .proc directive.  */
-	      while (fr && fr != frag)
-		fr = fr->fr_next;
-	      if (fr)
+	      if (frag)
 		{
 		  if (frag == frag_now && SEG_NORMAL (now_seg))
 		    S_SET_SIZE (sym, frag_now_fix () - S_GET_VALUE (sym));
@@ -4527,6 +4685,36 @@ dot_endp (dummy)
 		    }
 		}
 	    }
+	} while ((pending = pending->next) != NULL);
+    }
+
+  /* Parse names of main and alternate entry points.  */
+  while (1)
+    {
+      char *name, *p, c;
+
+      SKIP_WHITESPACE ();
+      name = input_line_pointer;
+      c = get_symbol_end ();
+      p = input_line_pointer;
+      if (!*name)
+	(md.unwind_check == unwind_check_warning
+	 ? as_warn
+	 : as_bad) ("Empty argument of .endp");
+      else
+	{
+	  symbolS *sym = symbol_find (name);
+
+	  for (pending = &unwind.proc_pending; pending; pending = pending->next)
+	    {
+	      if (sym == pending->sym)
+		{
+		  pending->sym = NULL;
+		  break;
+		}
+	    }
+	  if (!sym || !pending)
+	    as_warn ("`%s' was not specified with previous .proc", name);
 	}
       *p = c;
       SKIP_WHITESPACE ();
@@ -4535,7 +4723,21 @@ dot_endp (dummy)
       ++input_line_pointer;
     }
   demand_empty_rest_of_line ();
-  unwind.proc_start = unwind.info = 0;
+
+  /* Deliberately only checking for the main entry point here; the
+     language spec even says all arguments to .endp are ignored.  */
+  if (unwind.proc_pending.sym
+      && S_GET_NAME (unwind.proc_pending.sym)
+      && strcmp (S_GET_NAME (unwind.proc_pending.sym), FAKE_LABEL_NAME))
+    as_warn ("`%s' should be an operand to this .endp",
+	     S_GET_NAME (unwind.proc_pending.sym));
+  while (unwind.proc_pending.next)
+    {
+      pending = unwind.proc_pending.next;
+      unwind.proc_pending.next = pending->next;
+      free (pending);
+    }
+  unwind.proc_pending.sym = unwind.info = NULL;
 }
 
 static void
@@ -4578,7 +4780,8 @@ static void
 dot_rot (type)
      int type;
 {
-  unsigned num_regs, num_alloced = 0;
+  offsetT num_regs;
+  valueT num_alloced = 0;
   struct dynreg **drpp, *dr;
   int ch, base_reg = 0;
   char *name, *start;
@@ -4621,6 +4824,11 @@ dot_rot (type)
       if (*input_line_pointer++ != ']')
 	{
 	  as_bad ("Expected ']'");
+	  goto err;
+	}
+      if (num_regs <= 0)
+	{
+	  as_bad ("Number of elements must be positive");
 	  goto err;
 	}
       SKIP_WHITESPACE ();
@@ -4909,7 +5117,7 @@ dot_reg_val (dummy)
 {
   expressionS reg;
 
-  expression (&reg);
+  expression_and_evaluate (&reg);
   if (reg.X_op != O_register)
     {
       as_bad (_("Register name expected"));
@@ -5081,7 +5289,7 @@ dot_pred_rel (type)
       int regno;
       expressionS pr, *pr1, *pr2;
 
-      expression (&pr);
+      expression_and_evaluate (&pr);
       if (pr.X_op == O_register
 	  && pr.X_add_number >= REG_P
 	  && pr.X_add_number <= REG_P + 63)
@@ -5265,11 +5473,11 @@ const pseudo_typeS md_pseudo_table[] =
     { "fframe", dot_fframe, 0 },
     { "vframe", dot_vframe, 0 },
     { "vframesp", dot_vframesp, 0 },
-    { "vframepsp", dot_vframepsp, 0 },
+    { "vframepsp", dot_vframesp, 1 },
     { "save", dot_save, 0 },
     { "restore", dot_restore, 0 },
     { "restorereg", dot_restorereg, 0 },
-    { "restorereg.p", dot_restorereg_p, 0 },
+    { "restorereg.p", dot_restorereg, 1 },
     { "handlerdata", dot_handlerdata, 0 },
     { "unwentry", dot_unwentry, 0 },
     { "altrp", dot_altrp, 0 },
@@ -5283,9 +5491,9 @@ const pseudo_typeS md_pseudo_table[] =
     { "spillreg", dot_spillreg, 0 },
     { "spillsp", dot_spillmem, 0 },
     { "spillpsp", dot_spillmem, 1 },
-    { "spillreg.p", dot_spillreg_p, 0 },
-    { "spillsp.p", dot_spillmem_p, 0 },
-    { "spillpsp.p", dot_spillmem_p, 1 },
+    { "spillreg.p", dot_spillreg, 1 },
+    { "spillsp.p", dot_spillmem, ~0 },
+    { "spillpsp.p", dot_spillmem, ~1 },
     { "label_state", dot_label_state, 0 },
     { "copy_state", dot_copy_state, 0 },
     { "unwabi", dot_unwabi, 0 },
@@ -5400,12 +5608,12 @@ pseudo_opcode[] =
 static symbolS *
 declare_register (name, regnum)
      const char *name;
-     int regnum;
+     unsigned int regnum;
 {
   const char *err;
   symbolS *sym;
 
-  sym = symbol_new (name, reg_section, regnum, &zero_address_frag);
+  sym = symbol_create (name, reg_section, regnum, &zero_address_frag);
 
   err = hash_insert (md.reg_hash, S_GET_NAME (sym), (PTR) sym);
   if (err)
@@ -5418,11 +5626,11 @@ declare_register (name, regnum)
 static void
 declare_register_set (prefix, num_regs, base_regnum)
      const char *prefix;
-     int num_regs;
-     int base_regnum;
+     unsigned int num_regs;
+     unsigned int base_regnum;
 {
   char name[8];
-  int i;
+  unsigned int i;
 
   for (i = 0; i < num_regs; ++i)
     {
@@ -5706,6 +5914,17 @@ operand_match (idesc, index, e)
 	return OPERAND_MATCH;
       break;
 
+    case IA64_OPND_IMMU5b:
+      if (e->X_op == O_constant)
+	{
+	  val = e->X_add_number;
+	  if (val >= 32 && val <= 63)
+	    return OPERAND_MATCH;
+	  else
+	    return OPERAND_OUT_OF_RANGE;
+	}
+      break;
+
     case IA64_OPND_CCNT5:
     case IA64_OPND_CNT5:
     case IA64_OPND_CNT6:
@@ -5948,7 +6167,7 @@ operand_match (idesc, index, e)
 	case O_symbol:
 	  fix = CURR_SLOT.fixup + CURR_SLOT.num_fixups;
 	  /* There are no external relocs for TAG13/TAG13b fields, so we
-	     create a dummy reloc.  This will not live past md_apply_fix3.  */
+	     create a dummy reloc.  This will not live past md_apply_fix.  */
 	  fix->code = BFD_RELOC_UNUSED;
 	  fix->code = ia64_gen_real_reloc_type (e->X_op_symbol, fix->code);
 	  fix->opnd = idesc->operands[index];
@@ -5978,27 +6197,19 @@ operand_match (idesc, index, e)
 }
 
 static int
-parse_operand (e)
+parse_operand (e, more)
      expressionS *e;
+     int more;
 {
   int sep = '\0';
 
   memset (e, 0, sizeof (*e));
   e->X_op = O_absent;
   SKIP_WHITESPACE ();
-  if (*input_line_pointer != '}')
-    expression (e);
-  sep = *input_line_pointer++;
-
-  if (sep == '}')
-    {
-      if (!md.manual_bundling)
-	as_warn ("Found '}' when manual bundling is off");
-      else
-	CURR_SLOT.manual_bundling_off = 1;
-      md.manual_bundling = 0;
-      sep = '\0';
-    }
+  expression_and_evaluate (e);
+  sep = *input_line_pointer;
+  if (more && (sep == ',' || sep == more))
+    ++input_line_pointer;
   return sep;
 }
 
@@ -6057,7 +6268,7 @@ parse_operands (idesc)
     {
       if (i < NELEMS (CURR_SLOT.opnd)) 
 	{
-	  sep = parse_operand (CURR_SLOT.opnd + i);
+	  sep = parse_operand (CURR_SLOT.opnd + i, '=');
 	  if (CURR_SLOT.opnd[i].X_op == O_absent)
 	    break;
 	}
@@ -6065,7 +6276,7 @@ parse_operands (idesc)
 	{
 	  expressionS dummy;
 
-	  sep = parse_operand (&dummy);
+	  sep = parse_operand (&dummy, '=');
 	  if (dummy.X_op == O_absent)
 	    break;
 	}
@@ -6092,34 +6303,38 @@ parse_operands (idesc)
   if (idesc->operands[2] == IA64_OPND_SOF
       || idesc->operands[1] == IA64_OPND_SOF)
     {
-      /* map alloc r1=ar.pfs,i,l,o,r to alloc r1=ar.pfs,(i+l+o),(i+l),r */
+      /* Map alloc r1=ar.pfs,i,l,o,r to alloc r1=ar.pfs,(i+l+o),(i+l),r.
+	 Note, however, that due to that mapping operand numbers in error
+	 messages for any of the constant operands will not be correct.  */
       know (strcmp (idesc->name, "alloc") == 0);
-      i = (CURR_SLOT.opnd[1].X_op == O_register
-          && CURR_SLOT.opnd[1].X_add_number == REG_AR + AR_PFS) ? 2 : 1;
-      if (num_operands == i + 3 /* first_arg not included in this count! */
-	  && CURR_SLOT.opnd[i].X_op == O_constant
-	  && CURR_SLOT.opnd[i + 1].X_op == O_constant
-	  && CURR_SLOT.opnd[i + 2].X_op == O_constant
-	  && CURR_SLOT.opnd[i + 3].X_op == O_constant)
-	{
-	  sof = set_regstack (CURR_SLOT.opnd[i].X_add_number,
-			      CURR_SLOT.opnd[i + 1].X_add_number,
-			      CURR_SLOT.opnd[i + 2].X_add_number,
-			      CURR_SLOT.opnd[i + 3].X_add_number);
+      /* The first operand hasn't been parsed/initialized, yet (but
+	 num_operands intentionally doesn't account for that).  */
+      i = num_operands > 4 ? 2 : 1;
+#define FORCE_CONST(n) (CURR_SLOT.opnd[n].X_op == O_constant \
+			? CURR_SLOT.opnd[n].X_add_number \
+			: 0)
+      sof = set_regstack (FORCE_CONST(i),
+			  FORCE_CONST(i + 1),
+			  FORCE_CONST(i + 2),
+			  FORCE_CONST(i + 3));
+#undef FORCE_CONST
 
-	  /* now we can parse the first arg:  */
-	  saved_input_pointer = input_line_pointer;
-	  input_line_pointer = first_arg;
-	  sep = parse_operand (CURR_SLOT.opnd + 0);
-	  if (sep != '=')
-	    --num_outputs;	/* force error */
-	  input_line_pointer = saved_input_pointer;
+      /* now we can parse the first arg:  */
+      saved_input_pointer = input_line_pointer;
+      input_line_pointer = first_arg;
+      sep = parse_operand (CURR_SLOT.opnd + 0, '=');
+      if (sep != '=')
+	--num_outputs;	/* force error */
+      input_line_pointer = saved_input_pointer;
 
-	  CURR_SLOT.opnd[i].X_add_number = sof;
-	  CURR_SLOT.opnd[i + 1].X_add_number
-	    = sof - CURR_SLOT.opnd[i + 2].X_add_number;
-	  CURR_SLOT.opnd[i + 2] = CURR_SLOT.opnd[i + 3];
-	}
+      CURR_SLOT.opnd[i].X_add_number = sof;
+      if (CURR_SLOT.opnd[i + 1].X_op == O_constant
+	  && CURR_SLOT.opnd[i + 2].X_op == O_constant)
+	CURR_SLOT.opnd[i + 1].X_add_number
+	  = sof - CURR_SLOT.opnd[i + 2].X_add_number;
+      else
+	CURR_SLOT.opnd[i + 1].X_op = O_illegal;
+      CURR_SLOT.opnd[i + 2] = CURR_SLOT.opnd[i + 3];
     }
 
   highest_unmatched_operand = -4;
@@ -6466,9 +6681,9 @@ emit_one_bundle ()
   struct ia64_opcode *idesc;
   int end_of_insn_group = 0, user_template = -1;
   int n, i, j, first, curr, last_slot;
-  unw_rec_list *ptr, *last_ptr, *end_ptr;
   bfd_vma t0 = 0, t1 = 0;
   struct label_fix *lfix;
+  bfd_boolean mark_label;
   struct insn_fix *ifix;
   char mnemonic[16];
   fixS *fix;
@@ -6521,7 +6736,9 @@ emit_one_bundle ()
   for (i = 0; i < 3 && md.num_slots_in_use > 0; ++i)
     {
       /* If we have unwind records, we may need to update some now.  */
-      ptr = md.slot[curr].unwind_record;
+      unw_rec_list *ptr = md.slot[curr].unwind_record;
+      unw_rec_list *end_ptr = NULL;
+
       if (ptr)
 	{
 	  /* Find the last prologue/body record in the list for the current
@@ -6531,9 +6748,11 @@ emit_one_bundle ()
 	     issued.  This matters because there may have been nops emitted
 	     meanwhile.  Any non-prologue non-body record followed by a
 	     prologue/body record must also refer to the current point.  */
-	  last_ptr = NULL;
-	  end_ptr = md.slot[(curr + 1) % NUM_SLOTS].unwind_record;
-	  for (; ptr != end_ptr; ptr = ptr->next)
+	  unw_rec_list *last_ptr;
+
+	  for (j = 1; end_ptr == NULL && j < md.num_slots_in_use; ++j)
+	    end_ptr = md.slot[(curr + j) % NUM_SLOTS].unwind_record;
+	  for (last_ptr = NULL; ptr != end_ptr; ptr = ptr->next)
 	    if (ptr->r.type == prologue || ptr->r.type == prologue_gr
 		|| ptr->r.type == body)
 	      last_ptr = ptr;
@@ -6636,6 +6855,10 @@ emit_one_bundle ()
 	         changing NOPs in front of this slot.  */
 	      for (j = i; j < 3; ++j)
 	        insn[j] = nop[ia64_templ_desc[required_template].exec_unit[j]];
+
+	      /* We just picked a template that includes the stop bit in the
+		 middle, so we don't need another one emitted later.  */
+	      md.slot[curr].end_of_insn_group = 0;
 	    }
 	  template = required_template;
 	}
@@ -6785,11 +7008,30 @@ emit_one_bundle ()
       if (insn_unit != required_unit)
 	continue;		/* Try next slot.  */
 
-      if (debug_type == DEBUG_DWARF2 || md.slot[curr].loc_directive_seen)
+      /* Now is a good time to fix up the labels for this insn.  */
+      mark_label = FALSE;
+      for (lfix = md.slot[curr].label_fixups; lfix; lfix = lfix->next)
+	{
+	  S_SET_VALUE (lfix->sym, frag_now_fix () - 16);
+	  symbol_set_frag (lfix->sym, frag_now);
+	  mark_label |= lfix->dw2_mark_labels;
+	}
+      for (lfix = md.slot[curr].tag_fixups; lfix; lfix = lfix->next)
+	{
+	  S_SET_VALUE (lfix->sym, frag_now_fix () - 16 + i);
+	  symbol_set_frag (lfix->sym, frag_now);
+	}
+
+      if (debug_type == DEBUG_DWARF2
+	  || md.slot[curr].loc_directive_seen
+	  || mark_label)
 	{
 	  bfd_vma addr = frag_now->fr_address + frag_now_fix () - 16 + i;
 
 	  md.slot[curr].loc_directive_seen = 0;
+	  if (mark_label)
+	    md.slot[curr].debug_line.flags |= DWARF2_FLAG_BASIC_BLOCK;
+
 	  dwarf2_gen_line_info (addr, &md.slot[curr].debug_line);
 	}
 
@@ -6801,7 +7043,6 @@ emit_one_bundle ()
 	  /* Set slot numbers for all remaining unwind records belonging to the
 	     current insn.  There can not be any prologue/body unwind records
 	     here.  */
-	  end_ptr = md.slot[(curr + 1) % NUM_SLOTS].unwind_record;
 	  for (; ptr != end_ptr; ptr = ptr->next)
 	    {
 	      ptr->slot_number = (unsigned long) f + i;
@@ -6818,19 +7059,6 @@ emit_one_bundle ()
 	}
       --md.num_slots_in_use;
       last_slot = i;
-
-      /* now is a good time to fix up the labels for this insn:  */
-      for (lfix = md.slot[curr].label_fixups; lfix; lfix = lfix->next)
-	{
-	  S_SET_VALUE (lfix->sym, frag_now_fix () - 16);
-	  symbol_set_frag (lfix->sym, frag_now);
-	}
-      /* and fix up the tags also.  */
-      for (lfix = md.slot[curr].tag_fixups; lfix; lfix = lfix->next)
-	{
-	  S_SET_VALUE (lfix->sym, frag_now_fix () - 16 + i);
-	  symbol_set_frag (lfix->sym, frag_now);
-	}
 
       for (j = 0; j < md.slot[curr].num_fixups; ++j)
 	{
@@ -6858,25 +7086,28 @@ emit_one_bundle ()
       curr = (curr + 1) % NUM_SLOTS;
       idesc = md.slot[curr].idesc;
     }
-  if (manual_bundling > 0)
+
+  /* A user template was specified, but the first following instruction did
+     not fit.  This can happen with or without manual bundling.  */
+  if (md.num_slots_in_use > 0 && last_slot < 0)
+    {
+      as_bad_where (md.slot[curr].src_file, md.slot[curr].src_line,
+		    "`%s' does not fit into %s template",
+		    idesc->name, ia64_templ_desc[template].name);
+      /* Drop first insn so we don't livelock.  */
+      --md.num_slots_in_use;
+      know (curr == first);
+      ia64_free_opcode (md.slot[curr].idesc);
+      memset (md.slot + curr, 0, sizeof (md.slot[curr]));
+      md.slot[curr].user_template = -1;
+    }
+  else if (manual_bundling > 0)
     {
       if (md.num_slots_in_use > 0)
 	{
 	  if (last_slot >= 2)
 	    as_bad_where (md.slot[curr].src_file, md.slot[curr].src_line,
 			  "`%s' does not fit into bundle", idesc->name);
-	  else if (last_slot < 0)
-	    {
-	      as_bad_where (md.slot[curr].src_file, md.slot[curr].src_line,
-			    "`%s' does not fit into %s template",
-			    idesc->name, ia64_templ_desc[template].name);
-	      /* Drop first insn so we don't livelock.  */
-	      --md.num_slots_in_use;
-	      know (curr == first);
-	      ia64_free_opcode (md.slot[curr].idesc);
-	      memset (md.slot + curr, 0, sizeof (md.slot[curr]));
-	      md.slot[curr].user_template = -1;
-	    }
 	  else
 	    {
 	      const char *where;
@@ -6896,6 +7127,7 @@ emit_one_bundle ()
 	as_bad_where (md.slot[curr].src_file, md.slot[curr].src_line,
 		      "Missing '}' at end of file");
     }
+	
   know (md.num_slots_in_use < NUM_SLOTS);
 
   t0 = end_of_insn_group | (template << 1) | (insn[0] << 5) | (insn[1] << 46);
@@ -6903,12 +7135,6 @@ emit_one_bundle ()
 
   number_to_chars_littleendian (f + 0, t0, 8);
   number_to_chars_littleendian (f + 8, t1, 8);
-
-  if (unwind.list)
-    {
-      unwind.list->next_slot_number = (unsigned long) f + 16;
-      unwind.list->next_slot_frag = frag_now;
-    }
 }
 
 int
@@ -6960,6 +7186,16 @@ md_parse_option (c, arg)
 	    md.hint_b = hint_b_warning;
 	  else if (strcmp (arg, "error") == 0)
 	    md.hint_b = hint_b_error;
+	  else
+	    return 0;
+	}
+      else if (strncmp (arg, "tune=", 5) == 0)
+	{
+	  arg += 5;
+	  if (strcmp (arg, "itanium1") == 0)
+	    md.tune = itanium1;
+	  else if (strcmp (arg, "itanium2") == 0)
+	    md.tune = itanium2;
 	  else
 	    return 0;
 	}
@@ -7075,6 +7311,8 @@ IA-64 options:\n\
 			  EF_IA_64_NOFUNCDESC_CONS_GP)\n\
   -milp32|-milp64|-mlp64|-mp64	select data model (default -mlp64)\n\
   -mle | -mbe		  select little- or big-endian byte order (default -mle)\n\
+  -mtune=[itanium1|itanium2]\n\
+			  tune for a specific CPU (default -mtune=itanium2)\n\
   -munwind-check=[warning|error]\n\
 			  unwind directive check (default -munwind-check=warning)\n\
   -mhint.b=[ok|warning|error]\n\
@@ -7122,17 +7360,37 @@ match (int templ, int type, int slot)
   return result;
 }
 
-/* Add a bit of extra goodness if a nop of type F or B would fit
-   in TEMPL at SLOT.  */
+/* For Itanium 1, add a bit of extra goodness if a nop of type F or B would fit
+   in TEMPL at SLOT.  For Itanium 2, add a bit of extra goodness if a nop of
+   type M or I would fit in TEMPL at SLOT.  */
 
 static inline int
 extra_goodness (int templ, int slot)
 {
-  if (slot == 1 && match (templ, IA64_TYPE_F, slot))
-    return 2;
-  if (slot == 2 && match (templ, IA64_TYPE_B, slot))
-    return 1;
-  return 0;
+  switch (md.tune)
+    {
+    case itanium1:
+      if (slot == 1 && match (templ, IA64_TYPE_F, slot))
+	return 2;
+      else if (slot == 2 && match (templ, IA64_TYPE_B, slot))
+	return 1;
+      else
+	return 0;
+      break;
+    case itanium2:
+      if (match (templ, IA64_TYPE_M, slot)
+	  || match (templ, IA64_TYPE_I, slot))
+	/* Favor M- and I-unit NOPs.  We definitely want to avoid
+	   F-unit and B-unit may cause split-issue or less-than-optimal
+	   branch-prediction.  */
+	return 2;
+      else
+	return 0;
+      break;
+    default:
+      abort ();
+      return 0;
+    }
 }
 
 /* This function is called once, at assembler startup time.  It sets
@@ -7141,7 +7399,7 @@ extra_goodness (int templ, int slot)
 void
 md_begin ()
 {
-  int i, j, k, t, total, ar_base, cr_base, goodness, best, regnum, ok;
+  int i, j, k, t, goodness, best, ok;
   const char *err;
   char name[8];
 
@@ -7227,11 +7485,17 @@ md_begin ()
     symbol_new (".<iplt>", undefined_section, FUNC_IPLT_RELOC,
 		&zero_address_frag);
 
+ if (md.tune != itanium1)
+   {
+     /* Convert MFI NOPs bundles into MMI NOPs bundles.  */
+     le_nop[0] = 0x8;
+     le_nop_stop[0] = 0x9;
+   }
+
   /* Compute the table of best templates.  We compute goodness as a
-     base 4 value, in which each match counts for 3, each F counts
-     for 2, each B counts for 1.  This should maximize the number of
-     F and B nops in the chosen bundles, which is good because these
-     pipelines are least likely to be overcommitted.  */
+     base 4 value, in which each match counts for 3.  Match-failures
+     result in NOPs and we use extra_goodness() to pick the execution
+     units that are best suited for issuing the NOP.  */
   for (i = 0; i < IA64_NUM_TYPES; ++i)
     for (j = 0; j < IA64_NUM_TYPES; ++j)
       for (k = 0; k < IA64_NUM_TYPES; ++k)
@@ -7244,7 +7508,7 @@ md_begin ()
 		{
 		  if (match (t, j, 1))
 		    {
-		      if (match (t, k, 2))
+		      if ((t == 2 && j == IA64_TYPE_X) || match (t, k, 2))
 			goodness = 3 + 3 + 3;
 		      else
 			goodness = 3 + 3 + extra_goodness (t, 2);
@@ -7260,7 +7524,7 @@ md_begin ()
 		}
 	      else if (match (t, i, 1))
 		{
-		  if (match (t, j, 2))
+		  if ((t == 2 && i == IA64_TYPE_X) || match (t, j, 2))
 		    goodness = 3 + 3;
 		  else
 		    goodness = 3 + extra_goodness (t, 2);
@@ -7275,6 +7539,21 @@ md_begin ()
 		}
 	    }
 	}
+
+#ifdef DEBUG_TEMPLATES
+  /* For debugging changes to the best_template calculations.  We don't care
+     about combinations with invalid instructions, so start the loops at 1.  */
+  for (i = 0; i < IA64_NUM_TYPES; ++i)
+    for (j = 0; j < IA64_NUM_TYPES; ++j)
+      for (k = 0; k < IA64_NUM_TYPES; ++k)
+	{
+	  char type_letter[IA64_NUM_TYPES] = { 'n', 'a', 'i', 'm', 'b', 'f',
+					       'x', 'd' };
+	  fprintf (stderr, "%c%c%c %s\n", type_letter[i], type_letter[j],
+		   type_letter[k],
+		   ia64_templ_desc[best_template[i][j][k]].name);
+	}
+#endif
 
   for (i = 0; i < NUM_SLOTS; ++i)
     md.slot[i].user_template = -1;
@@ -7295,90 +7574,51 @@ md_begin ()
   md.entry_hash = hash_new ();
 
   /* general registers:  */
-
-  total = 128;
-  for (i = 0; i < total; ++i)
-    {
-      sprintf (name, "r%d", i - REG_GR);
-      md.regsym[i] = declare_register (name, i);
-    }
+  declare_register_set ("r", 128, REG_GR);
+  declare_register ("gp", REG_GR +  1);
+  declare_register ("sp", REG_GR + 12);
+  declare_register ("tp", REG_GR + 13);
+  declare_register_set ("ret", 4, REG_GR + 8);
 
   /* floating point registers:  */
-  total += 128;
-  for (; i < total; ++i)
-    {
-      sprintf (name, "f%d", i - REG_FR);
-      md.regsym[i] = declare_register (name, i);
-    }
-
-  /* application registers:  */
-  total += 128;
-  ar_base = i;
-  for (; i < total; ++i)
-    {
-      sprintf (name, "ar%d", i - REG_AR);
-      md.regsym[i] = declare_register (name, i);
-    }
-
-  /* control registers:  */
-  total += 128;
-  cr_base = i;
-  for (; i < total; ++i)
-    {
-      sprintf (name, "cr%d", i - REG_CR);
-      md.regsym[i] = declare_register (name, i);
-    }
-
-  /* predicate registers:  */
-  total += 64;
-  for (; i < total; ++i)
-    {
-      sprintf (name, "p%d", i - REG_P);
-      md.regsym[i] = declare_register (name, i);
-    }
+  declare_register_set ("f", 128, REG_FR);
+  declare_register_set ("farg", 8, REG_FR + 8);
+  declare_register_set ("fret", 8, REG_FR + 8);
 
   /* branch registers:  */
-  total += 8;
-  for (; i < total; ++i)
-    {
-      sprintf (name, "b%d", i - REG_BR);
-      md.regsym[i] = declare_register (name, i);
-    }
+  declare_register_set ("b", 8, REG_BR);
+  declare_register ("rp", REG_BR + 0);
 
-  md.regsym[REG_IP] = declare_register ("ip", REG_IP);
-  md.regsym[REG_CFM] = declare_register ("cfm", REG_CFM);
-  md.regsym[REG_PR] = declare_register ("pr", REG_PR);
-  md.regsym[REG_PR_ROT] = declare_register ("pr.rot", REG_PR_ROT);
-  md.regsym[REG_PSR] = declare_register ("psr", REG_PSR);
-  md.regsym[REG_PSR_L] = declare_register ("psr.l", REG_PSR_L);
-  md.regsym[REG_PSR_UM] = declare_register ("psr.um", REG_PSR_UM);
+  /* predicate registers:  */
+  declare_register_set ("p", 64, REG_P);
+  declare_register ("pr", REG_PR);
+  declare_register ("pr.rot", REG_PR_ROT);
+
+  /* application registers:  */
+  declare_register_set ("ar", 128, REG_AR);
+  for (i = 0; i < NELEMS (ar); ++i)
+    declare_register (ar[i].name, REG_AR + ar[i].regnum);
+
+  /* control registers:  */
+  declare_register_set ("cr", 128, REG_CR);
+  for (i = 0; i < NELEMS (cr); ++i)
+    declare_register (cr[i].name, REG_CR + cr[i].regnum);
+
+  declare_register ("ip", REG_IP);
+  declare_register ("cfm", REG_CFM);
+  declare_register ("psr", REG_PSR);
+  declare_register ("psr.l", REG_PSR_L);
+  declare_register ("psr.um", REG_PSR_UM);
 
   for (i = 0; i < NELEMS (indirect_reg); ++i)
     {
-      regnum = indirect_reg[i].regnum;
-      md.regsym[regnum] = declare_register (indirect_reg[i].name, regnum);
+      unsigned int regnum = indirect_reg[i].regnum;
+
+      md.indregsym[regnum - IND_CPUID] = declare_register (indirect_reg[i].name, regnum);
     }
-
-  /* define synonyms for application registers:  */
-  for (i = REG_AR; i < REG_AR + NELEMS (ar); ++i)
-    md.regsym[i] = declare_register (ar[i - REG_AR].name,
-				     REG_AR + ar[i - REG_AR].regnum);
-
-  /* define synonyms for control registers:  */
-  for (i = REG_CR; i < REG_CR + NELEMS (cr); ++i)
-    md.regsym[i] = declare_register (cr[i - REG_CR].name,
-				     REG_CR + cr[i - REG_CR].regnum);
-
-  declare_register ("gp", REG_GR +  1);
-  declare_register ("sp", REG_GR + 12);
-  declare_register ("rp", REG_BR +  0);
 
   /* pseudo-registers used to specify unwind info:  */
   declare_register ("psp", REG_PSP);
-
-  declare_register_set ("ret", 4, REG_GR + 8);
-  declare_register_set ("farg", 8, REG_FR + 8);
-  declare_register_set ("fret", 8, REG_FR + 8);
 
   for (i = 0; i < NELEMS (const_bits); ++i)
     {
@@ -7432,6 +7672,7 @@ ia64_init (argc, argv)
   /* FIXME: We should change it to unwind_check_error someday.  */
   md.unwind_check = unwind_check_warning;
   md.hint_b = hint_b_error;
+  md.tune = itanium2;
 }
 
 /* Return a string for the target object file format.  */
@@ -7497,6 +7738,15 @@ ia64_end_of_source ()
 void
 ia64_start_line ()
 {
+  static int first;
+
+  if (!first) {
+    /* Make sure we don't reference input_line_pointer[-1] when that's
+       not valid.  */
+    first = 1;
+    return;
+  }
+
   if (md.qp.X_op == O_register)
     as_bad ("qualifying predicate not followed by instruction");
   md.qp.X_op = O_absent;
@@ -7519,38 +7769,8 @@ ia64_start_line ()
       else
 	insn_group_break (1, 0, 0);
     }
-}
-
-/* This is a hook for ia64_frob_label, so that it can distinguish tags from
-   labels.  */
-static int defining_tag = 0;
-
-int
-ia64_unrecognized_line (ch)
-     int ch;
-{
-  switch (ch)
+  else if (input_line_pointer[-1] == '{')
     {
-    case '(':
-      expression (&md.qp);
-      if (*input_line_pointer++ != ')')
-	{
-	  as_bad ("Expected ')'");
-	  return 0;
-	}
-      if (md.qp.X_op != O_register)
-	{
-	  as_bad ("Qualifying predicate expected");
-	  return 0;
-	}
-      if (md.qp.X_add_number < REG_P || md.qp.X_add_number >= REG_P + 64)
-	{
-	  as_bad ("Predicate register expected");
-	  return 0;
-	}
-      return 1;
-
-    case '{':
       if (md.manual_bundling)
 	as_warn ("Found '{' when manual bundling is already turned on");
       else
@@ -7567,9 +7787,9 @@ ia64_unrecognized_line (ch)
 	  else
 	    as_warn (_("Found '{' after explicit switch to automatic mode"));
 	}
-      return 1;
-
-    case '}':
+    }
+  else if (input_line_pointer[-1] == '}')
+    {
       if (!md.manual_bundling)
 	as_warn ("Found '}' when manual bundling is off");
       else
@@ -7582,17 +7802,36 @@ ia64_unrecognized_line (ch)
 	  && !md.mode_explicitly_set
 	  && !md.default_explicit_mode)
 	dot_dv_mode ('A');
+    }
+}
 
-      /* Allow '{' to follow on the same line.  We also allow ";;", but that
-	 happens automatically because ';' is an end of line marker.  */
-      SKIP_WHITESPACE ();
-      if (input_line_pointer[0] == '{')
+/* This is a hook for ia64_frob_label, so that it can distinguish tags from
+   labels.  */
+static int defining_tag = 0;
+
+int
+ia64_unrecognized_line (ch)
+     int ch;
+{
+  switch (ch)
+    {
+    case '(':
+      expression_and_evaluate (&md.qp);
+      if (*input_line_pointer++ != ')')
 	{
-	  input_line_pointer++;
-	  return ia64_unrecognized_line ('{');
+	  as_bad ("Expected ')'");
+	  return 0;
 	}
-
-      demand_empty_rest_of_line ();
+      if (md.qp.X_op != O_register)
+	{
+	  as_bad ("Qualifying predicate expected");
+	  return 0;
+	}
+      if (md.qp.X_add_number < REG_P || md.qp.X_add_number >= REG_P + 64)
+	{
+	  as_bad ("Predicate register expected");
+	  return 0;
+	}
       return 1;
 
     case '[':
@@ -7677,6 +7916,7 @@ ia64_frob_label (sym)
       fix = obstack_alloc (&notes, sizeof (*fix));
       fix->sym = sym;
       fix->next = CURR_SLOT.tag_fixups;
+      fix->dw2_mark_labels = FALSE;
       CURR_SLOT.tag_fixups = fix;
 
       return;
@@ -7688,6 +7928,7 @@ ia64_frob_label (sym)
       fix = obstack_alloc (&notes, sizeof (*fix));
       fix->sym = sym;
       fix->next = CURR_SLOT.label_fixups;
+      fix->dw2_mark_labels = dwarf2_loc_mark_labels;
       CURR_SLOT.label_fixups = fix;
 
       /* Keep track of how many code entry points we've seen.  */
@@ -7742,39 +7983,51 @@ ia64_optimize_expr (l, op, r)
      operatorT op;
      expressionS *r;
 {
-  unsigned num_regs;
-
-  if (op == O_index)
+  if (op != O_index)
+    return 0;
+  resolve_expression (l);
+  if (l->X_op == O_register)
     {
-      if (l->X_op == O_register && r->X_op == O_constant)
+      unsigned num_regs = l->X_add_number >> 16;
+
+      resolve_expression (r);
+      if (num_regs)
 	{
-	  num_regs = (l->X_add_number >> 16);
-	  if ((unsigned) r->X_add_number >= num_regs)
+	  /* Left side is a .rotX-allocated register.  */
+	  if (r->X_op != O_constant)
 	    {
-	      if (!num_regs)
-		as_bad ("No current frame");
-	      else
-		as_bad ("Index out of range 0..%u", num_regs - 1);
+	      as_bad ("Rotating register index must be a non-negative constant");
+	      r->X_add_number = 0;
+	    }
+	  else if ((valueT) r->X_add_number >= num_regs)
+	    {
+	      as_bad ("Index out of range 0..%u", num_regs - 1);
 	      r->X_add_number = 0;
 	    }
 	  l->X_add_number = (l->X_add_number & 0xffff) + r->X_add_number;
 	  return 1;
 	}
-      else if (l->X_op == O_register && r->X_op == O_register)
+      else if (l->X_add_number >= IND_CPUID && l->X_add_number <= IND_RR)
 	{
-	  if (l->X_add_number < IND_CPUID || l->X_add_number > IND_RR
-	      || l->X_add_number == IND_MEM)
+	  if (r->X_op != O_register
+	      || r->X_add_number < REG_GR
+	      || r->X_add_number > REG_GR + 127)
 	    {
-	      as_bad ("Indirect register set name expected");
-	      l->X_add_number = IND_CPUID;
+	      as_bad ("Indirect register index must be a general register");
+	      r->X_add_number = REG_GR;
 	    }
 	  l->X_op = O_index;
-	  l->X_op_symbol = md.regsym[l->X_add_number];
+	  l->X_op_symbol = md.indregsym[l->X_add_number - IND_CPUID];
 	  l->X_add_number = r->X_add_number;
 	  return 1;
 	}
     }
-  return 0;
+  as_bad ("Index can only be applied to rotating or indirect registers");
+  /* Fall back to some register use of which has as little as possible
+     side effects, to minimize subsequent error messages.  */
+  l->X_op = O_register;
+  l->X_add_number = REG_GR + 3;
+  return 1;
 }
 
 int
@@ -8089,6 +8342,8 @@ depends_on (depind, idesc)
    IC:rse-writers.
    15+16) Represents reserved instructions, which the assembler does not
    generate.
+   17) CR[TPR] has a RAW dependency only between mov-to-CR-TPR and
+   mov-to-PSR-l or ssm instructions that set PSR.i, PSR.pp or PSR.up.
 
    Memory resources (i.e. locations in memory) are *not* marked or tracked by
    this code; there are no dependency violations based on memory access.
@@ -8124,9 +8379,15 @@ specify_resource (dep, idesc, type, specs, note, path)
   tmpl.qp_regno = CURR_SLOT.qp_regno;
   tmpl.link_to_qp_branch = 1;
   tmpl.mem_offset.hint = 0;
+  tmpl.mem_offset.offset = 0;
+  tmpl.mem_offset.base = 0;
   tmpl.specific = 1;
   tmpl.index = -1;
   tmpl.cmp_type = CMP_NONE;
+  tmpl.depind = 0;
+  tmpl.file = NULL;
+  tmpl.line = 0;
+  tmpl.path = 0;
 
 #define UNHANDLED \
 as_warn (_("Unhandled dependency %s for %s (%s), note %d"), \
@@ -9171,8 +9432,9 @@ dep->name, idesc->name, (rsrc_write?"write":"read"), note)
       break;
 
     case IA64_RS_CRX:
-      /* Handle all CR[REG] resources */
-      if (note == 0 || note == 1)
+      /* Handle all CR[REG] resources.
+	 ??? FIXME: The rule 17 isn't really handled correctly.   */
+      if (note == 0 || note == 1 || note == 17)
 	{
 	  if (idesc->operands[!rsrc_write] == IA64_OPND_CR3)
 	    {
@@ -10645,7 +10907,7 @@ md_assemble (str)
 	  else if (ar_is_only_in_memory_unit (CURR_SLOT.opnd[rop].X_add_number))
 	    unit = 'm';
 	  if (unit != 'a' && unit != idesc->name [4])
-	    as_bad ("AR %d cannot be accessed by %c-unit",
+	    as_bad ("AR %d can only be accessed by %c-unit",
 		    (int) (CURR_SLOT.opnd[rop].X_add_number - REG_AR),
 		    TOUPPER (unit));
 	}
@@ -10709,13 +10971,25 @@ md_assemble (str)
   as_where (&CURR_SLOT.src_file, &CURR_SLOT.src_line);
   dwarf2_where (&CURR_SLOT.debug_line);
 
-  /* Add unwind entry, if there is one.  */
+  /* Add unwind entries, if there are any.  */
   if (unwind.current_entry)
     {
       CURR_SLOT.unwind_record = unwind.current_entry;
       unwind.current_entry = NULL;
     }
-  if (unwind.proc_start && S_IS_DEFINED (unwind.proc_start))
+  if (unwind.pending_saves)
+    {
+      if (unwind.pending_saves->next)
+	{
+	  /* Attach the next pending save to the next slot so that its
+	     slot number will get set correctly.  */
+	  add_unwind_entry (unwind.pending_saves->next, NOT_A_CHAR);
+	  unwind.pending_saves = &unwind.pending_saves->next->r.record.p;
+	}
+      else
+	unwind.pending_saves = NULL;
+    }
+  if (unwind.proc_pending.sym && S_IS_DEFINED (unwind.proc_pending.sym))
     unwind.insn = 1;
 
   /* Check for dependency violations.  */
@@ -10757,7 +11031,7 @@ md_operand (e)
     {
     case '[':
       ++input_line_pointer;
-      expression (e);
+      expression_and_evaluate (e);
       if (*input_line_pointer != ']')
 	{
 	  as_bad ("Closing bracket missing");
@@ -10765,8 +11039,13 @@ md_operand (e)
 	}
       else
 	{
-	  if (e->X_op != O_register)
-	    as_bad ("Register expected as index");
+	  if (e->X_op != O_register
+	      || e->X_add_number < REG_GR
+	      || e->X_add_number > REG_GR + 127)
+	    {
+	      as_bad ("Index must be a general register");
+	      e->X_add_number = REG_GR;
+	    }
 
 	  ++input_line_pointer;
 	  e->X_op = O_index;
@@ -10791,7 +11070,7 @@ ia64_fix_adjustable (fix)
      fixS *fix;
 {
   /* Prevent all adjustments to global symbols */
-  if (S_IS_EXTERN (fix->fx_addsy) || S_IS_WEAK (fix->fx_addsy))
+  if (S_IS_EXTERNAL (fix->fx_addsy) || S_IS_WEAK (fix->fx_addsy))
     return 0;
 
   switch (fix->fx_r_type)
@@ -10952,7 +11231,7 @@ ia64_cons_fix_new (f, where, nbytes, exp)
   fix = fix_new_exp (f, where, nbytes, exp, 0, code);
   /* We need to store the byte order in effect in case we're going
      to fix an 8 or 16 bit relocation (for which there no real
-     relocs available).  See md_apply_fix3().  */
+     relocs available).  See md_apply_fix().  */
   fix->tc_fix_data.bigendian = target_big_endian;
 }
 
@@ -11197,6 +11476,7 @@ ia64_gen_real_reloc_type (sym, r_type)
 	case BFD_RELOC_IA64_DIR32LSB: width = 32; suffix = "LSB"; break;
 	case BFD_RELOC_IA64_DIR64MSB: width = 64; suffix = "MSB"; break;
 	case BFD_RELOC_IA64_DIR64LSB: width = 64; suffix = "LSB"; break;
+	case BFD_RELOC_UNUSED:        width = 13; break;
 	case BFD_RELOC_IA64_IMM14:    width = 14; break;
 	case BFD_RELOC_IA64_IMM22:    width = 22; break;
 	case BFD_RELOC_IA64_IMM64:    width = 64; suffix = "I"; break;
@@ -11298,7 +11578,7 @@ fix_insn (fix, odesc, value)
    (if possible).  */
 
 void
-md_apply_fix3 (fix, valP, seg)
+md_apply_fix (fix, valP, seg)
      fixS *fix;
      valueT *valP;
      segT seg ATTRIBUTE_UNUSED;
@@ -11482,14 +11762,6 @@ void
 ia64_handle_align (fragp)
      fragS *fragp;
 {
-  /* Use mfi bundle of nops with no stop bits.  */
-  static const unsigned char le_nop[]
-    = { 0x0c, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
-	0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00};
-  static const unsigned char le_nop_stop[]
-    = { 0x0d, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
-	0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00};
-
   int bytes;
   char *p;
   const unsigned char *nop;
@@ -11616,7 +11888,7 @@ dot_alias (int section)
   if (name == end_name)
     {
       as_bad (_("expected symbol name"));
-      discard_rest_of_line ();
+      ignore_rest_of_line ();
       return;
     }
 

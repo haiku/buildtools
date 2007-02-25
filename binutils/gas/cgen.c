@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free Software
-   Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include <setjmp.h>
 #include "ansidecl.h"
@@ -225,7 +225,7 @@ gas_cgen_swap_fixups (i)
    At this point we do not use a bfd_reloc_code_real_type for
    operands residing in the insn, but instead just use the
    operand index.  This lets us easily handle fixups for any
-   operand type.  We pick a BFD reloc type in md_apply_fix3.  */
+   operand type.  We pick a BFD reloc type in md_apply_fix.  */
 
 fixS *
 gas_cgen_record_fixup (frag, where, insn, length, operand, opinfo, symbol, offset)
@@ -264,7 +264,7 @@ gas_cgen_record_fixup (frag, where, insn, length, operand, opinfo, symbol, offse
    At this point we do not use a bfd_reloc_code_real_type for
    operands residing in the insn, but instead just use the
    operand index.  This lets us easily handle fixups for any
-   operand type.  We pick a BFD reloc type in md_apply_fix3.  */
+   operand type.  We pick a BFD reloc type in md_apply_fix.  */
 
 fixS *
 gas_cgen_record_fixup_exp (frag, where, insn, length, operand, opinfo, exp)
@@ -320,9 +320,11 @@ gas_cgen_parse_operand (cd, want, strP, opindex, opinfo, resultP, valueP)
   /* These are volatile to survive the setjmp.  */
   char * volatile hold;
   enum cgen_parse_operand_result * volatile resultP_1;
+  volatile int opinfo_1;
 #else
   static char *hold;
   static enum cgen_parse_operand_result *resultP_1;
+  int opinfo_1;
 #endif
   const char *errmsg;
   expressionS exp;
@@ -336,6 +338,7 @@ gas_cgen_parse_operand (cd, want, strP, opindex, opinfo, resultP, valueP)
   resultP_1 = resultP;
   hold = input_line_pointer;
   input_line_pointer = (char *) *strP;
+  opinfo_1 = opinfo;
 
   /* We rely on md_operand to longjmp back to us.
      This is done via gas_cgen_md_operand.  */
@@ -356,7 +359,7 @@ gas_cgen_parse_operand (cd, want, strP, opindex, opinfo, resultP, valueP)
   input_line_pointer = hold;
 
 #ifdef TC_CGEN_PARSE_FIX_EXP
-  opinfo = TC_CGEN_PARSE_FIX_EXP (opinfo, & exp);
+  opinfo_1 = TC_CGEN_PARSE_FIX_EXP (opinfo_1, & exp);
 #endif 
 
   /* FIXME: Need to check `want'.  */
@@ -383,7 +386,7 @@ gas_cgen_parse_operand (cd, want, strP, opindex, opinfo, resultP, valueP)
       break;
     de_fault:
     default:
-      queue_fixup (opindex, opinfo, &exp);
+      queue_fixup (opindex, opinfo_1, &exp);
       *valueP = 0;
       *resultP = CGEN_PARSE_OPERAND_RESULT_QUEUED;
       break;
@@ -577,7 +580,7 @@ gas_cgen_finish_insn (insn, buf, length, relax_p, result)
    should handle them all.  */
 
 void
-gas_cgen_md_apply_fix3 (fixP, valP, seg)
+gas_cgen_md_apply_fix (fixP, valP, seg)
      fixS *   fixP;
      valueT * valP;
      segT     seg ATTRIBUTE_UNUSED;

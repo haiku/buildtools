@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -75,7 +75,7 @@ static const bfd_target *cisco_core_file_validate PARAMS ((bfd *, int));
 static const bfd_target *cisco_core_file_p PARAMS ((bfd *));
 char *cisco_core_file_failing_command PARAMS ((bfd *));
 int cisco_core_file_failing_signal PARAMS ((bfd *));
-bfd_boolean cisco_core_file_matches_executable_p PARAMS ((bfd *, bfd *));
+#define cisco_core_file_matches_executable_p generic_core_file_matches_executable_p
 
 /* Examine the file for a crash info struct at the offset given by
    CRASH_INFO_LOC.  */
@@ -316,14 +316,6 @@ cisco_core_file_failing_signal (abfd)
      bfd *abfd ATTRIBUTE_UNUSED;
 {
   return abfd->tdata.cisco_core_data->sig;
-}
-
-bfd_boolean
-cisco_core_file_matches_executable_p (core_bfd, exec_bfd)
-     bfd *core_bfd ATTRIBUTE_UNUSED;
-     bfd *exec_bfd ATTRIBUTE_UNUSED;
-{
-  return TRUE;
 }
 
 extern const bfd_target cisco_core_little_vec;

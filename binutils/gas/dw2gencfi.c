@@ -1,5 +1,5 @@
 /* dw2gencfi.c - Support for generating Dwarf2 CFI information.
-   Copyright 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
    Contributed by Michal Ludvig <mludvig@suse.cz>
 
    This file is part of GAS, the GNU Assembler.
@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "as.h"
 #include "dw2gencfi.h"
@@ -42,11 +42,7 @@
 #endif
 
 #ifndef EH_FRAME_ALIGNMENT
-# ifdef BFD_ASSEMBLER
-#  define EH_FRAME_ALIGNMENT (bfd_get_arch_size (stdoutput) == 64 ? 3 : 2)
-# else
-#  define EH_FRAME_ALIGNMENT 2
-# endif
+# define EH_FRAME_ALIGNMENT (bfd_get_arch_size (stdoutput) == 64 ? 3 : 2)
 #endif
 
 #ifndef tc_cfi_frame_initial_instructions
@@ -92,6 +88,7 @@ struct fde_entry
   struct cfi_insn_data *data;
   struct cfi_insn_data **last;
   unsigned int return_column;
+  unsigned int signal_frame;
 };
 
 struct cie_entry
@@ -99,6 +96,7 @@ struct cie_entry
   struct cie_entry *next;
   symbolS *start_address;
   unsigned int return_column;
+  unsigned int signal_frame;
   struct cfi_insn_data *first, *last;
 };
 
@@ -358,6 +356,7 @@ static void dot_cfi_endproc (int);
 #define CFI_return_column	0x101
 #define CFI_rel_offset		0x102
 #define CFI_escape		0x103
+#define CFI_signal_frame	0x104
 
 const pseudo_typeS cfi_pseudo_table[] =
   {
@@ -378,6 +377,7 @@ const pseudo_typeS cfi_pseudo_table[] =
     { "cfi_restore_state", dot_cfi, DW_CFA_restore_state },
     { "cfi_window_save", dot_cfi, DW_CFA_GNU_window_save },
     { "cfi_escape", dot_cfi_escape, 0 },
+    { "cfi_signal_frame", dot_cfi, CFI_signal_frame },
     { NULL, NULL, 0 }
   };
 
@@ -419,7 +419,7 @@ cfi_parse_reg (void)
     }
 #endif
 
-  expression (&exp);
+  expression_and_evaluate (&exp);
   switch (exp.X_op)
     {
     case O_register:
@@ -451,6 +451,7 @@ dot_cfi (int arg)
   if (!cur_fde_data)
     {
       as_bad (_("CFI instruction used without previous .cfi_startproc"));
+      ignore_rest_of_line ();
       return;
     }
 
@@ -505,13 +506,27 @@ dot_cfi (int arg)
       break;
 
     case DW_CFA_restore:
-      reg1 = cfi_parse_reg ();
-      cfi_add_CFA_restore (reg1);
+      for (;;)
+	{
+	  reg1 = cfi_parse_reg ();
+	  cfi_add_CFA_restore (reg1);
+	  SKIP_WHITESPACE ();
+	  if (*input_line_pointer != ',')
+	    break;
+	  ++input_line_pointer;
+	}
       break;
 
     case DW_CFA_undefined:
-      reg1 = cfi_parse_reg ();
-      cfi_add_CFA_undefined (reg1);
+      for (;;)
+	{
+	  reg1 = cfi_parse_reg ();
+	  cfi_add_CFA_undefined (reg1);
+	  SKIP_WHITESPACE ();
+	  if (*input_line_pointer != ',')
+	    break;
+	  ++input_line_pointer;
+	}
       break;
 
     case DW_CFA_same_value:
@@ -536,6 +551,10 @@ dot_cfi (int arg)
       cfi_add_CFA_insn (DW_CFA_GNU_window_save);
       break;
 
+    case CFI_signal_frame:
+      cur_fde_data->signal_frame = 1;
+      break;
+
     default:
       abort ();
     }
@@ -552,6 +571,7 @@ dot_cfi_escape (int ignored ATTRIBUTE_UNUSED)
   if (!cur_fde_data)
     {
       as_bad (_("CFI instruction used without previous .cfi_startproc"));
+      ignore_rest_of_line ();
       return;
     }
 
@@ -574,6 +594,9 @@ dot_cfi_escape (int ignored ATTRIBUTE_UNUSED)
   insn = alloc_cfi_insn_data ();
   insn->insn = CFI_escape;
   insn->u.esc = head;
+
+  --input_line_pointer;
+  demand_empty_rest_of_line ();
 }
 
 static void
@@ -584,6 +607,7 @@ dot_cfi_startproc (int ignored ATTRIBUTE_UNUSED)
   if (cur_fde_data)
     {
       as_bad (_("previous CFI entry not closed (missing .cfi_endproc)"));
+      ignore_rest_of_line ();
       return;
     }
 
@@ -618,10 +642,13 @@ dot_cfi_endproc (int ignored ATTRIBUTE_UNUSED)
   if (! cur_fde_data)
     {
       as_bad (_(".cfi_endproc without corresponding .cfi_startproc"));
+      ignore_rest_of_line ();
       return;
     }
 
   cfi_end_fde (symbol_temp_new_now ());
+
+  demand_empty_rest_of_line ();
 }
 
 
@@ -845,6 +872,8 @@ output_cie (struct cie_entry *cie)
   out_one (DW_CIE_VERSION);			/* Version.  */
   out_one ('z');				/* Augmentation.  */
   out_one ('R');
+  if (cie->signal_frame)
+    out_one ('S');
   out_one (0);
   out_uleb128 (DWARF2_LINE_MIN_INSN_LENGTH);	/* Code alignment.  */
   out_sleb128 (DWARF2_CIE_DATA_ALIGNMENT);	/* Data alignment.  */
@@ -925,7 +954,8 @@ select_cie_for_fde (struct fde_entry *fde, struct cfi_insn_data **pfirst)
 
   for (cie = cie_root; cie; cie = cie->next)
     {
-      if (cie->return_column != fde->return_column)
+      if (cie->return_column != fde->return_column
+	  || cie->signal_frame != fde->signal_frame)
 	continue;
       for (i = cie->first, j = fde->data;
 	   i != cie->last && j != NULL;
@@ -998,6 +1028,7 @@ select_cie_for_fde (struct fde_entry *fde, struct cfi_insn_data **pfirst)
   cie->next = cie_root;
   cie_root = cie;
   cie->return_column = fde->return_column;
+  cie->signal_frame = fde->signal_frame;
   cie->first = fde->data;
 
   for (i = cie->first; i ; i = i->next)
@@ -1032,10 +1063,8 @@ cfi_finish (void)
 
   /* Open .eh_frame section.  */
   cfi_seg = subseg_new (".eh_frame", 0);
-#ifdef BFD_ASSEMBLER
   bfd_set_section_flags (stdoutput, cfi_seg,
 			 SEC_ALLOC | SEC_LOAD | SEC_DATA | SEC_READONLY);
-#endif
   subseg_set (cfi_seg, 0);
   record_alignment (cfi_seg, EH_FRAME_ALIGNMENT);
 

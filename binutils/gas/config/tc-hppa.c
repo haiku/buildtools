@@ -1,6 +1,6 @@
 /* tc-hppa.c -- Assemble for the PA
    Copyright 1989, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* HP PA-RISC support was contributed by the Center for Software Science
    at the University of Utah.  */
@@ -771,11 +771,15 @@ static label_symbol_struct *label_symbols_rootp = NULL;
 /* Holds the last field selector.  */
 static int hppa_field_selector;
 
-/* Nonzero when strict syntax checking is enabled.  Zero otherwise.
+/* Nonzero when strict matching is enabled.  Zero otherwise.
 
-   Each opcode in the table has a flag which indicates whether or not
-   strict syntax checking should be enabled for that instruction.  */
-static int strict = 0;
+   Each opcode in the table has a flag which indicates whether or
+   not strict matching should be enabled for that instruction.
+
+   Mainly, strict causes errors to be ignored when a match failure
+   occurs.  However, it also affects the parsing of register fields
+   by pa_parse_number.  */
+static int strict;
 
 /* pa_parse_number returns values in `pa_number'.  Mostly
    pa_parse_number is used to return a register number, with floating
@@ -811,6 +815,7 @@ static int print_errors = 1;
 
    %r26 - %r23 have %arg0 - %arg3 as synonyms
    %r28 - %r29 have %ret0 - %ret1 as synonyms
+   %fr4 - %fr7 have %farg0 - %farg3 as synonyms
    %r30 has %sp as a synonym
    %r27 has %dp as a synonym
    %r2  has %rp as a synonym
@@ -854,10 +859,10 @@ static const struct pd_reg pre_defined_registers[] =
   {"%dp",    27},
   {"%eiem",  15},
   {"%eirr",  23},
-  {"%farg0",  5},
-  {"%farg1",  6},
-  {"%farg2",  7},
-  {"%farg3",  8},
+  {"%farg0",  4 + FP_REG_BASE},
+  {"%farg1",  5 + FP_REG_BASE},
+  {"%farg2",  6 + FP_REG_BASE},
+  {"%farg3",  7 + FP_REG_BASE},
   {"%fr0",    0 + FP_REG_BASE},
   {"%fr0l",   0 + FP_REG_BASE},
   {"%fr0r",   0 + FP_REG_BASE + FP_REG_RSEL},
@@ -1174,7 +1179,7 @@ static struct default_space_dict pa_def_spaces[] =
       } \
   }
 
-/* Variant of CHECK_FIELD for use in md_apply_fix3 and other places where
+/* Variant of CHECK_FIELD for use in md_apply_fix and other places where
    the current file and line number are not valid.  */
 
 #define CHECK_FIELD_WHERE(FIELD, HIGH, LOW, FILENAME, LINE) \
@@ -1286,6 +1291,10 @@ pa_define_label (symbol)
 
       label_symbols_rootp = label_chain;
     }
+
+#ifdef OBJ_ELF
+  dwarf2_emit_label (symbol);
+#endif
 }
 
 /* Removes a label definition for the current space.
@@ -1613,7 +1622,8 @@ pa_ip (str)
       break;
 
     default:
-      as_fatal (_("Unknown opcode: `%s'"), str);
+      as_bad (_("Unknown opcode: `%s'"), str);
+      return;
     }
 
   /* Look up the opcode in the has table.  */
@@ -1640,21 +1650,9 @@ pa_ip (str)
 
       the_insn.reloc = R_HPPA_NONE;
 
-      /* If this instruction is specific to a particular architecture,
-	 then set a new architecture.  */
-      /* But do not automatically promote to pa2.0.  The automatic promotion
-	 crud is for compatibility with HP's old assemblers only.  */
-      if (insn->arch < 20
+      if (insn->arch >= pa20
 	  && bfd_get_mach (stdoutput) < insn->arch)
-	{
-	  if (!bfd_set_arch_mach (stdoutput, bfd_arch_hppa, insn->arch))
-	    as_warn (_("could not update architecture and machine"));
-	}
-      else if (bfd_get_mach (stdoutput) < insn->arch)
-	{
-	  match = FALSE;
-	  goto failed;
-	}
+	goto failed;
 
       /* Build the opcode, checking as we go to make
          sure that the operands match.  */
@@ -1849,9 +1847,9 @@ pa_ip (str)
 			else if ((strncasecmp (s, "s ", 2) == 0)
 				 || (strncasecmp (s, "s,", 2) == 0))
 			  uu = 1;
-			/* When in strict mode this is a match failure.  */
 			else if (strict)
 			  {
+			    /* This is a match failure.  */
 			    s--;
 			    break;
 			  }
@@ -1877,28 +1875,25 @@ pa_ip (str)
 		    int m = 0;
 		    if (*s == ',')
 		      {
-			int found = 0;
 			s++;
 			if (strncasecmp (s, "ma", 2) == 0)
 			  {
 			    a = 0;
 			    m = 1;
-			    found = 1;
+			    s += 2;
 			  }
 			else if (strncasecmp (s, "mb", 2) == 0)
 			  {
 			    a = 1;
 			    m = 1;
-			    found = 1;
+			    s += 2;
 			  }
-
-			/* When in strict mode, pass through for cache op.  */
-			if (!found && strict)
+			else if (strict)
+			  /* This is a match failure.  */
 			  s--;
 			else
 			  {
-			    if (!found)
-			      as_bad (_("Invalid Short Load/Store Completer."));
+			    as_bad (_("Invalid Short Load/Store Completer."));
 			    s += 2;
 			  }
 		      }
@@ -1951,7 +1946,7 @@ pa_ip (str)
 			  a = 0;
 			else if (strncasecmp (s, "e", 1) == 0)
 			  a = 1;
-			/* When in strict mode this is a match failure.  */
+			/* In strict mode, this is a match failure.  */
 			else if (strict)
 			  {
 			    s--;
@@ -3075,6 +3070,8 @@ pa_ip (str)
 
 	    /* Handle 14 bit immediate, shifted left three times.  */
 	    case '#':
+	      if (bfd_get_mach (stdoutput) != pa20)
+		break;
 	      the_insn.field_selector = pa_chk_field_selector (&s);
 	      get_expression (s);
 	      s = expr_end;
@@ -3961,6 +3958,17 @@ pa_ip (str)
 	  break;
 	}
 
+      /* If this instruction is specific to a particular architecture,
+	 then set a new architecture.  This automatic promotion crud is
+	 for compatibility with HP's old assemblers only.  */
+      if (match == TRUE
+	  && bfd_get_mach (stdoutput) < insn->arch
+	  && !bfd_set_arch_mach (stdoutput, bfd_arch_hppa, insn->arch))
+	{
+	  as_warn (_("could not update architecture and machine"));
+	  match = FALSE;
+	}
+
  failed:
       /* Check if the args matched.  */
       if (!match)
@@ -4423,12 +4431,12 @@ md_undefined_symbol (name)
 /* Apply a fixup to an instruction.  */
 
 void
-md_apply_fix3 (fixP, valP, seg)
+md_apply_fix (fixP, valP, seg)
      fixS *fixP;
      valueT *valP;
      segT seg ATTRIBUTE_UNUSED;
 {
-  unsigned char *buf;
+  char *fixpos;
   struct hppa_fix_struct *hppa_fixP;
   offsetT new_val;
   int insn, val, fmt;
@@ -4462,8 +4470,7 @@ md_apply_fix3 (fixP, valP, seg)
   if (fixP->fx_addsy == NULL && fixP->fx_pcrel == 0)
     fixP->fx_done = 1;
 
-  /* There should have been an HPPA specific fixup associated
-     with the GAS fixup.  */
+  /* There should be a HPPA specific fixup associated with the GAS fixup.  */
   hppa_fixP = (struct hppa_fix_struct *) fixP->tc_fix_data;
   if (hppa_fixP == NULL)
     {
@@ -4473,8 +4480,16 @@ md_apply_fix3 (fixP, valP, seg)
       return;
     }
 
-  buf = (unsigned char *) (fixP->fx_frag->fr_literal + fixP->fx_where);
-  insn = bfd_get_32 (stdoutput, buf);
+  fixpos = fixP->fx_frag->fr_literal + fixP->fx_where;
+
+  if (fixP->fx_size != 4 || hppa_fixP->fx_r_format == 32)
+    {
+      /* Handle constant output. */
+      number_to_chars_bigendian (fixpos, *valP, fixP->fx_size);
+      return;
+    }
+
+  insn = bfd_get_32 (stdoutput, fixpos);
   fmt = bfd_hppa_insn2fmt (stdoutput, insn);
 
   /* If there is a symbol associated with this fixup, then it's something
@@ -4644,7 +4659,7 @@ md_apply_fix3 (fixP, valP, seg)
     }
 
   /* Insert the relocation.  */
-  bfd_put_32 (stdoutput, insn, buf);
+  bfd_put_32 (stdoutput, insn, fixpos);
 }
 
 /* Exactly what point is a PC-relative offset relative TO?
@@ -5938,10 +5953,7 @@ static void
 pa_block (z)
      int z ATTRIBUTE_UNUSED;
 {
-  char *p;
-  long int temp_fill;
   unsigned int temp_size;
-  unsigned int i;
 
 #ifdef OBJ_SOM
   /* We must have a valid space and subspace.  */
@@ -5950,20 +5962,16 @@ pa_block (z)
 
   temp_size = get_absolute_expression ();
 
-  /* Always fill with zeros, that's what the HP assembler does.  */
-  temp_fill = 0;
-
-  p = frag_var (rs_fill, (int) temp_size, (int) temp_size,
-		(relax_substateT) 0, (symbolS *) 0, (offsetT) 1, NULL);
-  memset (p, 0, temp_size);
-
-  /* Convert 2 bytes at a time.  */
-
-  for (i = 0; i < temp_size; i += 2)
+  if (temp_size > 0x3FFFFFFF)
     {
-      md_number_to_chars (p + i,
-			  (valueT) temp_fill,
-			  (int) ((temp_size - i) > 2 ? 2 : (temp_size - i)));
+      as_bad (_("Argument to .BLOCK/.BLOCKZ must be between 0 and 0x3fffffff"));
+      temp_size = 0;
+    }
+  else
+    {
+      /* Always fill with zeros, that's what the HP assembler does.  */
+      char *p = frag_var (rs_fill, 1, 1, 0, NULL, temp_size, NULL);
+      *p = 0;
     }
 
   pa_undefine_label ();
@@ -6392,7 +6400,7 @@ pa_comm (unused)
     {
       symbol_get_bfdsym (symbol)->flags |= BSF_OBJECT;
       S_SET_VALUE (symbol, size);
-      S_SET_SEGMENT (symbol, bfd_und_section_ptr);
+      S_SET_SEGMENT (symbol, bfd_com_section_ptr);
       S_SET_EXTERNAL (symbol);
 
       /* colon() has already set the frag to the current location in the
@@ -8388,12 +8396,8 @@ pa_lsym (unused)
    any fixup which creates entries in the DLT (eg they use "T" field
    selectors).
 
-   Reject reductions involving symbols with external scope; such
-   reductions make life a living hell for object file editors.
-
-   FIXME.  Also reject R_HPPA relocations which are 32bits wide in
-   the code space.  The SOM BFD backend doesn't know how to pull the
-   right bits out of an instruction.  */
+   ??? Reject reductions involving symbols with external scope; such
+   reductions make life a living hell for object file editors.  */
 
 int
 hppa_fix_adjustable (fixp)
@@ -8405,17 +8409,6 @@ hppa_fix_adjustable (fixp)
   struct hppa_fix_struct *hppa_fix;
 
   hppa_fix = (struct hppa_fix_struct *) fixp->tc_fix_data;
-
-#ifdef OBJ_SOM
-  /* Reject reductions of symbols in 32bit relocs unless they
-     are fake labels.  */
-  if (fixp->fx_r_type == R_HPPA
-      && hppa_fix->fx_r_format == 32
-      && strncmp (S_GET_NAME (fixp->fx_addsy),
-		  FAKE_LABEL_NAME,
-		  strlen (FAKE_LABEL_NAME)))
-    return 0;
-#endif
 
 #ifdef OBJ_ELF
   /* LR/RR selectors are implicitly used for a number of different relocation

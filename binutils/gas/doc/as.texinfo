@@ -45,9 +45,6 @@
 @ifset H8/300
 @set H8
 @end ifset
-@ifset H8/500
-@set H8
-@end ifset
 @ifset SH
 @set H8
 @end ifset
@@ -227,20 +224,19 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @smallexample
 @c man begin SYNOPSIS
 @value{AS} [@b{-a}[@b{cdhlns}][=@var{file}]] [@b{--alternate}] [@b{-D}]
- [@b{--defsym} @var{sym}=@var{val}] [@b{-f}] [@b{-g}] [@b{--gstabs}] [@b{--gstabs+}]
- [@b{--gdwarf-2}] [@b{--help}] [@b{-I} @var{dir}] [@b{-J}] [@b{-K}] [@b{-L}]
- [@b{--listing-lhs-width}=@var{NUM}] [@b{--listing-lhs-width2}=@var{NUM}]
- [@b{--listing-rhs-width}=@var{NUM}] [@b{--listing-cont-lines}=@var{NUM}]
- [@b{--keep-locals}] [@b{-o} @var{objfile}] [@b{-R}] [@b{--statistics}] [@b{-v}]
- [@b{-version}] [@b{--version}] [@b{-W}] [@b{--warn}] [@b{--fatal-warnings}] 
- [@b{-w}] [@b{-x}] [@b{-Z}] [@b{--target-help}] [@var{target-options}] 
+ [@b{--defsym} @var{sym}=@var{val}] [@b{-f}] [@b{-g}] [@b{--gstabs}]
+ [@b{--gstabs+}] [@b{--gdwarf-2}] [@b{--help}] [@b{-I} @var{dir}] [@b{-J}]
+ [@b{-K}] [@b{-L}] [@b{--listing-lhs-width}=@var{NUM}]
+ [@b{--listing-lhs-width2}=@var{NUM}] [@b{--listing-rhs-width}=@var{NUM}]
+ [@b{--listing-cont-lines}=@var{NUM}] [@b{--keep-locals}] [@b{-o}
+ @var{objfile}] [@b{-R}] [@b{--reduce-memory-overheads}] [@b{--statistics}]
+ [@b{-v}] [@b{-version}] [@b{--version}] [@b{-W}] [@b{--warn}]
+ [@b{--fatal-warnings}] [@b{-w}] [@b{-x}] [@b{-Z}] [@b{@@@var{FILE}}]
+ [@b{--target-help}] [@var{target-options}]
  [@b{--}|@var{files} @dots{}]
 @c
 @c Target dependent options are listed below.  Keep the list sorted.
 @c Add an empty line for separation. 
-@ifset A29K
-@c am29k has no machine-dependent assembler options
-@end ifset
 @ifset ALPHA
 
 @emph{Target Alpha options:}
@@ -315,6 +311,7 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mconstant-gp}|@b{-mauto-pic}]
    [@b{-milp32}|@b{-milp64}|@b{-mlp64}|@b{-mp64}]
    [@b{-mle}|@b{mbe}]
+   [@b{-mtune=itanium1}|@b{-mtune=itanium2}]
    [@b{-munwind-check=warning}|@b{-munwind-check=error}]
    [@b{-mhint.b=ok}|@b{-mhint.b=warning}|@b{-mhint.b=error}]
    [@b{-x}|@b{-xexplicit}] [@b{-xauto}] [@b{-xdebug}]
@@ -323,6 +320,11 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 
 @emph{Target IP2K options:}
    [@b{-mip2022}|@b{-mip2022ext}]
+@end ifset
+@ifset M32C
+
+@emph{Target M32C options:}
+   [@b{-m32c}|@b{-m16c}]
 @end ifset
 @ifset M32R
 
@@ -367,6 +369,8 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mips16}] [@b{-no-mips16}]
    [@b{-mips3d}] [@b{-no-mips3d}]
    [@b{-mdmx}] [@b{-no-mdmx}]
+   [@b{-mdsp}] [@b{-mno-dsp}]
+   [@b{-mmt}] [@b{-mno-mt}]
    [@b{-mdebug}] [@b{-no-mdebug}]
    [@b{-mpdr}] [@b{-mno-pdr}]
 @end ifset
@@ -417,6 +421,19 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
  [@b{-mcpu=54[123589]}|@b{-mcpu=54[56]lp}] [@b{-mfar-mode}|@b{-mf}] 
  [@b{-merrors-to-file} @var{<filename>}|@b{-me} @var{<filename>}]
 @end ifset
+
+@ifset Z80
+
+@emph{Target Z80 options:}
+  [@b{-z80}] [@b{-r800}]
+  [@b{ -ignore-undocumented-instructions}] [@b{-Wnud}]
+  [@b{ -ignore-unportable-instructions}] [@b{-Wnup}]
+  [@b{ -warn-undocumented-instructions}] [@b{-Wud}]
+  [@b{ -warn-unportable-instructions}] [@b{-Wup}]
+  [@b{ -forbid-undocumented-instructions}] [@b{-Fud}]
+  [@b{ -forbid-unportable-instructions}] [@b{-Fup}]
+@end ifset
+
 @ifset Z8000
 @c Z8000 has no machine-dependent assembler options
 @end ifset
@@ -434,6 +451,8 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @c man begin OPTIONS
 
 @table @gcctabopt
+@include at-file.texi
+
 @item -a[cdhlmns]
 Turn on listings, in any of a variety of ways:
 
@@ -552,6 +571,18 @@ Name the object-file output from @command{@value{AS}} @var{objfile}.
 
 @item -R
 Fold the data section into the text section.
+
+@kindex --hash-size=@var{number}
+Set the default size of GAS's hash tables to a prime number close to
+@var{number}.  Increasing this value can reduce the length of time it takes the
+assembler to perform its tasks, at the expense of increasing the assembler's
+memory requirements.  Similarly reducing this value can reduce the memory
+requirements at the expense of speed.
+
+@item --reduce-memory-overheads
+This option reduces GAS's memory requirements, at the expense of making the
+assembly processes slower.  Currently this switch is a synonym for
+@samp{--hash-size=4051}, but in the future it may have other effects as well.
 
 @item --statistics
 Print the maximum space (in bytes) and total time (in seconds) used by
@@ -694,6 +725,21 @@ Specifies that the extended IP2022 instructions are allowed.
 @item -mip2022
 Restores the default behaviour, which restricts the permitted instructions to
 just the basic IP2022 ones.
+
+@end table
+@end ifset
+
+@ifset M32C
+The following options are available when @value{AS} is configured for the
+Renesas M32C and M16C processors.
+
+@table @gcctabopt
+
+@item -m32c
+Assemble M32C instructions.
+
+@item -m16c
+Assemble M16C instructions (the default).
 
 @end table
 @end ifset
@@ -972,6 +1018,18 @@ Generate code for the MDMX Application Specific Extension.
 This tells the assembler to accept MDMX instructions.
 @samp{-no-mdmx} turns off this option.
 
+@item -mdsp
+@itemx -mno-dsp
+Generate code for the DSP Application Specific Extension.
+This tells the assembler to accept DSP instructions.
+@samp{-mno-dsp} turns off this option.
+
+@item -mmt
+@itemx -mno-mt
+Generate code for the MT Application Specific Extension.
+This tells the assembler to accept MT instructions.
+@samp{-mno-mt} turns off this option.
+
 @item --construct-floats
 @itemx --no-construct-floats
 The @samp{--no-construct-floats} option disables the construction of
@@ -1096,6 +1154,35 @@ instructions must be exactly as specified in the assembly source.
 @end table
 @end ifset
 
+@ifset Z80
+The following options are available when @value{AS} is configured for
+a Z80 family processor.
+@table @gcctabopt
+@item -z80
+Assemble for Z80 processor.
+@item -r800
+Assemble for R800 processor.
+@item  -ignore-undocumented-instructions 
+@itemx -Wnud
+Assemble undocumented Z80 instructions that also work on R800 without warning.
+@item  -ignore-unportable-instructions 
+@itemx -Wnup
+Assemble all undocumented Z80 instructions without warning.
+@item  -warn-undocumented-instructions 
+@itemx -Wud
+Issue a warning for undocumented Z80 instructions that also work on R800.
+@item  -warn-unportable-instructions 
+@itemx -Wup
+Issue a warning for undocumented Z80 instructions that do notwork on R800.  
+@item  -forbid-undocumented-instructions 
+@itemx -Fud
+Treat all undocumented instructions as errors.
+@item  -forbid-unportable-instructions 
+@itemx -Fup
+Treat undocumented Z80 intructions that do notwork on R800 as errors.
+@end table
+@end ifset
+
 @c man end
 
 @menu
@@ -1142,10 +1229,6 @@ machine architecture manual for this information.
 For information on the H8/300 machine instruction set, see @cite{H8/300
 Series Programming Manual}.  For the H8/300H, see @cite{H8/300H Series
 Programming Manual} (Renesas).
-@end ifset
-@ifset H8/500
-For information on the H8/500 machine instruction set, see @cite{H8/500
-Series Programming Manual} (Renesas M21T001).
 @end ifset
 @ifset SH
 For information on the Renesas (formerly Hitachi) / SuperH SH machine instruction set,
@@ -1236,10 +1319,6 @@ For the @value{TARGET} target, @command{@value{AS}} is configured to produce
 @value{OBJ-NAME} format object files.
 @end ifclear
 @c The following should exhaust all configs that set MULTI-OBJ, ideally
-@ifset A29K
-On the @value{TARGET}, @command{@value{AS}} can be configured to produce either
-@code{a.out} or COFF format object files.
-@end ifset
 @ifset I960
 On the @value{TARGET}, @command{@value{AS}} can be configured to produce either
 @code{b.out} or COFF format object files.
@@ -1406,14 +1485,6 @@ the current input file is used.  If a logical line number was given
 @ifset GENERIC
 (@pxref{Line,,@code{.line}})
 @end ifset
-@ifclear GENERIC
-@ifclear A29K
-(@pxref{Line,,@code{.line}})
-@end ifclear
-@ifset A29K
-(@pxref{Ln,,@code{.ln}})
-@end ifset
-@end ifclear
 then it is used to calculate the number printed,
 otherwise the actual line in the current source file is printed.  The
 message text is intended to be self explanatory (in the grand Unix
@@ -2053,9 +2124,6 @@ This means you may not nest these comments.
 @cindex line comment character
 Anything from the @dfn{line comment} character to the next newline
 is considered a comment and is ignored.  The line comment character is
-@ifset A29K
-@samp{;} for the AMD 29K family;
-@end ifset
 @ifset ARC
 @samp{;} on the ARC;
 @end ifset
@@ -2064,9 +2132,6 @@ is considered a comment and is ignored.  The line comment character is
 @end ifset
 @ifset H8/300
 @samp{;} for the H8/300 family;
-@end ifset
-@ifset H8/500
-@samp{!} for the H8/500 family;
 @end ifset
 @ifset HPPA
 @samp{;} for the HPPA;
@@ -2095,6 +2160,9 @@ is considered a comment and is ignored.  The line comment character is
 @ifset IP2K
 @samp{#} on the ip2k;
 @end ifset
+@ifset M32C
+@samp{#} on the m32c;
+@end ifset
 @ifset M32R
 @samp{#} on the m32r;
 @end ifset
@@ -2104,11 +2172,11 @@ is considered a comment and is ignored.  The line comment character is
 @ifset M68HC11
 @samp{#} on the 68HC11 and 68HC12;
 @end ifset
-@ifset M880X0
-@samp{;} on the M880x0;
-@end ifset
 @ifset VAX
 @samp{#} on the Vax;
+@end ifset
+@ifset Z80
+@samp{;} for the Z80;
 @end ifset
 @ifset Z8000
 @samp{!} for the Z8000;
@@ -2199,12 +2267,6 @@ the preceding statement.  Newlines and semicolons within character
 constants are an exception: they do not end statements.
 @end ifclear
 @ifset abnormal-separator
-@ifset A29K
-A @dfn{statement} ends at a newline character (@samp{\n}) or an ``at''
-sign (@samp{@@}).  The newline or at sign is considered part of the
-preceding statement.  Newlines and at signs within character constants
-are an exception: they do not end statements.
-@end ifset
 @ifset HPPA
 A @dfn{statement} ends at a newline character (@samp{\n}) or an exclamation 
 point (@samp{!}).  The newline or exclamation point is considered part of the
@@ -2213,9 +2275,7 @@ constants are an exception: they do not end statements.
 @end ifset
 @ifset H8
 A @dfn{statement} ends at a newline character (@samp{\n}); or (for the
-H8/300) a dollar sign (@samp{$}); or (for the
-Renesas-SH or the
-H8/500) a semicolon
+H8/300) a dollar sign (@samp{$}); or (for the Renesas-SH) a semicolon
 (@samp{;}).  The newline or separator character is considered part of
 the preceding statement.  Newlines and separators within character
 constants are an exception: they do not end statements.
@@ -2434,12 +2494,9 @@ grave accent.  A newline
 (or semicolon @samp{;})
 @end ifclear
 @ifset abnormal-separator
-@ifset A29K
-(or at sign @samp{@@})
-@end ifset
 @ifset H8
 (or dollar sign @samp{$}, for the H8/300; or semicolon @samp{;} for the
-Renesas SH or H8/500)
+Renesas SH)
 @end ifset
 @end ifset
 @end ifclear
@@ -2542,8 +2599,7 @@ A letter, to tell @command{@value{AS}} the rest of the number is a flonum.
 4.2 assembler seems to allow any of @samp{defghDEFGH}.)
 @end ignore
 
-On the H8/300, H8/500,
-Renesas / SuperH SH,
+On the H8/300, Renesas / SuperH SH,
 and AMD 29K architectures, the letter must be
 one of the letters @samp{DFPRSX} (in upper or lower case).
 
@@ -2556,9 +2612,6 @@ one of the letters @samp{DFT} (in upper or lower case).
 On the HPPA architecture, the letter must be @samp{E} (upper case only).
 @end ifset
 @ifclear GENERIC
-@ifset A29K
-One of the letters @samp{DFPRSX} (in upper or lower case).
-@end ifset
 @ifset ARC
 One of the letters @samp{DFRS} (in upper or lower case).
 @end ifset
@@ -2679,8 +2732,7 @@ run-time addresses to sections is called @dfn{relocation}.  It includes
 the task of adjusting mentions of object-file addresses so they refer to
 the proper run-time addresses.
 @ifset H8
-For the H8/300 and H8/500,
-and for the Renesas / SuperH SH,
+For the H8/300, and for the Renesas / SuperH SH,
 @command{@value{AS}} pads sections if needed to
 ensure they end on a word (sixteen bit) boundary.
 @end ifset
@@ -2972,7 +3024,7 @@ of @command{@value{AS}}.)
 @end ifset
 @ifclear GENERIC
 @ifset H8
-On the H8/300 and H8/500 platforms, each subsection is zero-padded to a word
+On the H8/300 platform, each subsection is zero-padded to a word
 boundary (two bytes).
 The same is true on the Renesas SH.
 @end ifset
@@ -2983,10 +3035,6 @@ The same is true on the Renesas SH.
 @c so for now I say nothing about it.  If this is a generic BFD issue,
 @c these paragraphs might need to vanish from this manual, and be
 @c discussed in BFD chapter of binutils (or some such).
-@end ifset
-@ifset A29K
-On the AMD 29K family, no particular padding is added to section or
-subsection sizes; @value{AS} forces no alignment on this platform.
 @end ifset
 @end ifclear
 
@@ -3119,7 +3167,9 @@ provides a special directive @code{.label} for defining labels more flexibly.
 A symbol can be given an arbitrary value by writing a symbol, followed
 by an equals sign @samp{=}, followed by an expression
 (@pxref{Expressions}).  This is equivalent to using the @code{.set}
-directive.  @xref{Set,,@code{.set}}.
+directive.  @xref{Set,,@code{.set}}.  In the same way, using a double
+equals sign @samp{=}@samp{=} here represents an equivalent of the
+@code{.eqv} directive.  @xref{Eqv,,@code{.eqv}}.
 
 @node Symbol Names
 @section Symbol Names
@@ -3133,15 +3183,10 @@ noted in @ref{Machine Dependencies}.  That character may be followed by any
 string of digits, letters, dollar signs (unless otherwise noted in
 @ref{Machine Dependencies}), and underscores.
 @end ifclear
-@ifset A29K
-For the AMD 29K family, @samp{?} is also allowed in the
-body of a symbol name, though not at its beginning.
-@end ifset
-
 @ifset SPECIAL-SYMS
 @ifset H8
 Symbol names begin with a letter or with one of @samp{._}.  On the
-Renesas SH or the H8/500, you can also use @code{$} in symbol names.  That
+Renesas SH you can also use @code{$} in symbol names.  That
 character may be followed by any string of digits, letters, dollar signs (save
 on the H8/300), and underscores.
 @end ifset
@@ -3263,11 +3308,6 @@ directive.  Thus, the expression @samp{.=.+4} is the same as saying
 @ifclear no-space-dir
 @samp{.space 4}.
 @end ifclear
-@ifset no-space-dir
-@ifset A29K
-@samp{.block 4}.
-@end ifset
-@end ifset
 
 @node Symbol Attributes
 @section Symbol Attributes
@@ -3577,12 +3617,10 @@ Highest Precedence
 @item %
 @dfn{Remainder}.
 
-@item <
-@itemx <<
+@item <<
 @dfn{Shift Left}.  Same as the C operator @samp{<<}.
 
-@item >
-@itemx >>
+@item >>
 @dfn{Shift Right}.  Same as the C operator @samp{>>}.
 @end table
 
@@ -3631,14 +3669,15 @@ You may not subtract arguments from different sections.
 @item  ==
 @dfn{Is Equal To}
 @item <>
+@itemx !=
 @dfn{Is Not Equal To}
 @item <
 @dfn{Is Less Than}
-@itemx >
+@item >
 @dfn{Is Greater Than}
-@itemx >=
+@item >=
 @dfn{Is Greater Than Or Equal To}
-@itemx <=
+@item <=
 @dfn{Is Less Than Or Equal To}
 
 The comparison operators can be used as infix operators.  A true results has a
@@ -3727,6 +3766,7 @@ Some machine configurations provide additional directives.
 * Endif::                       @code{.endif}
 * Equ::                         @code{.equ @var{symbol}, @var{expression}}
 * Equiv::                       @code{.equiv @var{symbol}, @var{expression}}
+* Eqv::                         @code{.eqv @var{symbol}, @var{expression}}
 * Err::				@code{.err}
 * Error::			@code{.error @var{string}}
 * Exitm::			@code{.exitm}
@@ -3762,9 +3802,12 @@ Some machine configurations provide additional directives.
 * Line::                        @code{.line @var{line-number}}
 @end ifclear
 
-* Ln::                          @code{.ln @var{line-number}}
 * Linkonce::			@code{.linkonce [@var{type}]}
 * List::                        @code{.list}
+* Ln::                          @code{.ln @var{line-number}}
+
+* LNS directives::              @code{.file}, @code{.loc}, etc.
+
 * Long::                        @code{.long @var{expressions}}
 @ignore
 * Lsym::                        @code{.lsym @var{symbol}, @var{expression}}
@@ -3847,6 +3890,7 @@ Some machine configurations provide additional directives.
 
 * Warning::			@code{.warning @var{string}}
 * Weak::                        @code{.weak @var{names}}
+* Weakref::                     @code{.weakref @var{alias}, @var{symbol}}
 * Word::                        @code{.word @var{expressions}}
 * Deprecated::                  Deprecated Directives
 @end menu
@@ -3900,7 +3944,7 @@ required alignment; this can be useful if you want the alignment to be filled
 with no-op instructions when appropriate.
 
 The way the required alignment is specified varies from system to system.
-For the a29k, arc, hppa, i386 using ELF, i860, iq2000, m68k, m88k, or32,
+For the arc, hppa, i386 using ELF, i860, iq2000, m68k, or32,
 s390, sparc, tic4x, tic80 and xtensa, the first expression is the
 alignment request in bytes.  For example @samp{.align 8} advances
 the location counter until it is a multiple of 8.  If the location counter
@@ -4058,6 +4102,9 @@ using the known displacement of the CFA register from the CFA.
 This is often easier to use, because the number will match the
 code it's annotating.
 
+@section @code{.cfi_signal_frame}
+Mark current function as signal trampoline.
+
 @section @code{.cfi_window_save}
 SPARC register window has been saved.
 
@@ -4065,6 +4112,61 @@ SPARC register window has been saved.
 Allows the user to add arbitrary bytes to the unwind info.  One
 might use this to add OS-specific CFI opcodes, or generic CFI
 opcodes that GAS does not yet support.
+
+@node LNS directives
+@section @code{.file @var{fileno} @var{filename}}
+@cindex @code{file} directive
+When emitting dwarf2 line number information @code{.file} assigns filenames
+to the @code{.debug_line} file name table.  The @var{fileno} operand should
+be a unique positive integer to use as the index of the entry in the table.
+The @var{filename} operand is a C string literal.
+
+The detail of filename indicies is exposed to the user because the filename
+table is shared with the @code{.debug_info} section of the dwarf2 debugging
+information, and thus the user must know the exact indicies that table
+entries will have.
+
+@section @code{.loc @var{fileno} @var{lineno} [@var{column}] [@var{options}]}
+@cindex @code{loc} directive
+The @code{.loc} directive will add row to the @code{.debug_line} line
+number matrix corresponding to the immediately following assembly
+instruction.  The @var{fileno}, @var{lineno}, and optional @var{column}
+arguments will be applied to the @code{.debug_line} state machine before
+the row is added.
+
+The @var{options} are a sequence of the following tokens in any order:
+
+@table @code
+@item basic_block
+This option will set the @code{basic_block} register in the
+@code{.debug_line} state machine to @code{true}.
+
+@item prologue_end
+This option will set the @code{prologue_end} register in the
+@code{.debug_line} state machine to @code{true}.
+
+@item epilogue_begin
+This option will set the @code{epilogue_begin} register in the
+@code{.debug_line} state machine to @code{true}.
+
+@item is_stmt @var{value}
+This option will set the @code{is_stmt} register in the
+@code{.debug_line} state machine to @code{value}, which must be 
+either 0 or 1.
+
+@item isa @var{value}
+This directive will set the @code{isa} register in the @code{.debug_line}
+state machine to @var{value}, which must be an unsigned integer.
+
+@end table
+
+@section @code{.loc_mark_blocks @var{enable}}
+@cindex @code{loc_mark_blocks} directive
+The @code{.loc_mark_blocks} directive makes the assembler emit an entry
+to the @code{.debug_line} line number matrix with the @code{basic_block}
+register in the state machine set whenever a code label is seen.
+The @var{enable} argument should be either 1 or 0, to enable or disable
+this function respectively.
 
 @node Data
 @section @code{.data @var{subsection}}
@@ -4221,6 +4323,14 @@ The syntax for @code{equ} on the HPPA is
 @samp{@var{symbol} .equ @var{expression}}.
 @end ifset
 
+@ifset Z80
+The syntax for @code{equ} on the Z80 is 
+@samp{@var{symbol} equ @var{expression}}. 
+On the Z80 it is an eror if @var{symbol} is already defined,
+but the symbol is not protected from later redefinition, 
+compare @xref{Equiv}.
+@end ifset
+
 @node Equiv
 @section @code{.equiv @var{symbol}, @var{expression}}
 @cindex @code{equiv} directive
@@ -4236,13 +4346,22 @@ Except for the contents of the error message, this is roughly equivalent to
 .endif
 .equ SYM,VAL
 @end smallexample
+plus it protects the symbol from later redefinition.
+
+@node Eqv
+@section @code{.eqv @var{symbol}, @var{expression}}
+@cindex @code{eqv} directive
+The @code{.eqv} directive is like @code{.equiv}, but no attempt is made to
+evaluate the expression or any part of it immediately.  Instead each time
+the resulting symbol is used in an expression, a snapshot of its current
+value is taken.
 
 @node Err
 @section @code{.err}
 @cindex @code{err} directive
 If @command{@value{AS}} assembles a @code{.err} directive, it will print an error
 message and, unless the @option{-Z} option was used, it will not generate an
-object file.  This can be used to signal error an conditionally compiled code.
+object file.  This can be used to signal an error in conditionally compiled code.
 
 @node Error
 @section @code{.error "@var{string}"}
@@ -4292,10 +4411,6 @@ recognized whether or not it is surrounded by quotes @samp{"}; but if you wish
 to specify an empty file name, you must give the quotes--@code{""}.  This
 statement may go away in future: it is only recognized to be compatible with
 old @command{@value{AS}} programs.
-@ifset A29K
-In some configurations of @command{@value{AS}}, @code{.file} has already been
-removed to avoid conflicts with other assemblers.  @xref{Machine Dependencies}.
-@end ifset
 @end ifclear
 
 @node Fill
@@ -4415,10 +4530,14 @@ This directive is a synonym for both @samp{.short} and @samp{.word}.
 @section @code{.ident}
 
 @cindex @code{ident} directive
-This directive is used by some assemblers to place tags in object files.
-@command{@value{AS}} simply accepts the directive for source-file
-compatibility with such assemblers, but does not actually emit anything
-for it.
+
+This directive is used by some assemblers to place tags in object files.  The
+behavior of this directive varies depending on the target.  When using the
+a.out object file format, @command{@value{AS}} simply accepts the directive for
+source-file compatibility with existing assemblers, but does not emit anything
+for it.  When using COFF, comments are emitted to the @code{.comment} or
+@code{.rdata} section, depending on the target.  When using ELF, comments are
+emitted to the @code{.comment} section.
 
 @node If
 @section @code{.if @var{absolute expression}}
@@ -4441,6 +4560,10 @@ The following variants of @code{.if} are also supported:
 Assembles the following section of code if the specified @var{symbol}
 has been defined.  Note a symbol which has been referenced but not yet defined
 is considered to be undefined.
+
+@cindex @code{ifb} directive
+@item .ifb @var{text}
+Assembles the following section of code if the operand is blank (empty).
 
 @cindex @code{ifc} directive
 @item .ifc @var{string1},@var{string2}
@@ -4475,6 +4598,11 @@ to zero.
 @cindex @code{iflt} directive
 @item .iflt @var{absolute expression}
 Assembles the following section of code if the argument is less than zero.
+
+@cindex @code{ifnb} directive
+@item .ifnb @var{text}
+Like @code{.ifb}, but the sense of the test is reversed: this assembles the
+following section of code if the operand is non-blank (non-empty).
 
 @cindex @code{ifnc} directive
 @item .ifnc @var{string1},@var{string2}.
@@ -4542,7 +4670,7 @@ of target the assembly is for.
 
 @ifclear GENERIC
 @ifset H8
-On the H8/500 and most forms of the H8/300, @code{.int} emits 16-bit
+On most forms of the H8/300, @code{.int} emits 16-bit
 integers.  On the H8/300H and the Renesas SH, however, @code{.int} emits
 32-bit integers.
 @end ifset
@@ -4593,6 +4721,9 @@ is equivalent to assembling
         move    d3,sp@@-
 @end example
 
+For some caveats with the spelling of @var{symbol}, see also the discussion
+at @xref{Macro}.
+
 @node Irpc
 @section @code{.irpc @var{symbol},@var{values}}@dots{}
 
@@ -4620,6 +4751,9 @@ is equivalent to assembling
         move    d2,sp@@-
         move    d3,sp@@-
 @end example
+
+For some caveats with the spelling of @var{symbol}, see also the discussion
+at @xref{Macro}.
 
 @node Lcomm
 @section @code{.lcomm @var{symbol} , @var{length}}
@@ -4672,12 +4806,6 @@ reported as on logical line number @var{line-number} @minus{} 1.  One day
 @command{@value{AS}} will no longer support this directive: it is recognized only
 for compatibility with existing assembler programs.
 
-@ifset GENERIC
-@ifset A29K
-@emph{Warning:} In the AMD29K configuration of @value{AS}, this command is
-not available; use the synonym @code{.ln} in that context.
-@end ifset
-@end ifset
 @end ifset
 
 @ifclear no-line-dir
@@ -4837,7 +4965,10 @@ With that definition, @samp{SUM 0,5} is equivalent to this assembly input:
 @cindex @code{macro} directive
 Begin the definition of a macro called @var{macname}.  If your macro
 definition requires arguments, specify their names after the macro name,
-separated by commas or spaces.  You can supply a default value for any
+separated by commas or spaces.  You can qualify the macro argument to
+indicate whether all invocations must specify a non-blank value (through
+@samp{:@code{req}}), or whether it takes all of the remaining arguments
+(through @samp{:@code{vararg}}).  You can supply a default value for any
 macro argument by following the name with @samp{=@var{deflt}}.  You
 cannot define two macros with the same @var{macname} unless it has been
 subject to the @code{.purgem} directive (@xref{Purgem}.) between the two
@@ -4864,9 +4995,41 @@ After the definition is complete, you can call the macro either as
 @samp{0}, and @samp{\p2} evaluating to @var{b}).
 @end table
 
+@item .macro m p1:req, p2=0, p3:vararg
+Begin the definition of a macro called @code{m}, with at least three
+arguments.  The first argument must always have a value specified, but
+not the second, which instead has a default value. The third formal
+will get assigned all remaining arguments specified at invocation time.
+
 When you call a macro, you can specify the argument values either by
 position, or by keyword.  For example, @samp{sum 9,17} is equivalent to
 @samp{sum to=17, from=9}.
+
+Note that since each of the @var{macargs} can be an identifier exactly
+as any other one permitted by the target architecture, there may be
+occasional problems if the target hand-crafts special meanings to certain
+characters when they occur in a special position.  For example, if colon
+(@code{:}) is generally permitted to be part of a symbol name, but the
+architecture specific code special-cases it when occuring as the final
+character of a symbol (to denote a label), then the macro parameter
+replacement code will have no way of knowing that and consider the whole
+construct (including the colon) an identifier, and check only this
+identifier for being the subject to parameter substitution.  In this
+example, besides the potential of just separating identifier and colon
+by white space, using alternate macro syntax (@xref{Altmacro}.) and
+ampersand (@code{&}) as the character to separate literal text from macro
+parameters (or macro parameters from one another) would provide a way to
+achieve the same effect:
+
+@example
+	.altmacro
+	.macro label l
+l&:
+	.endm
+@end example
+
+This applies identically to the identifiers used in @code{.irp} (@xref{Irp}.)
+and @code{.irpc} (@xref{Irpc}.).
 
 @item .endm
 @cindex @code{endm} directive
@@ -5279,7 +5442,7 @@ This is one of the ELF section stack manipulation directives.  The others are
 For ELF targets, the @code{.section} directive is used like this:
 
 @smallexample
-.section @var{name} [, "@var{flags}"[, @@@var{type}[,@var{flag_specific_arguments}]]
+.section @var{name} [, "@var{flags}"[, @@@var{type}[,@var{flag_specific_arguments}]]]
 @end smallexample
 
 The optional @var{flags} argument is a quoted string which may contain any
@@ -5412,6 +5575,11 @@ The syntax for @code{set} on the HPPA is
 @samp{@var{symbol} .set @var{expression}}.
 @end ifset
 
+@ifset Z80
+On Z80 @code{set} is a real instruction, use
+@samp{@var{symbol} defl @var{expression}} instead.
+@end ifset
+
 @node Short
 @section @code{.short @var{expressions}}
 
@@ -5537,21 +5705,6 @@ for a summary.
 @end quotation
 @end ifset
 @end ifclear
-
-@ifset A29K
-@ifclear GENERIC
-@node Space
-@section @code{.space}
-@cindex @code{space} directive
-@end ifclear
-On the AMD 29K, this directive is ignored; it is accepted for
-compatibility with other AMD 29K assemblers.
-
-@quotation
-@emph{Warning:} In most versions of the @sc{gnu} assembler, the directive
-@code{.space} has the effect of @code{.block}  @xref{Machine Dependencies}.
-@end quotation
-@end ifset
 
 @ifset have-stabs
 @node Stab
@@ -5905,6 +6058,25 @@ On the PE target, weak symbols are supported natively as weak aliases.
 When a weak symbol is created that is not an alias, GAS creates an 
 alternate symbol to hold the default value.
 
+@node Weakref
+@section @code{.weakref @var{alias}, @var{target}}
+
+@cindex @code{weakref} directive
+This directive creates an alias to the target symbol that enables the symbol to
+be referenced with weak-symbol semantics, but without actually making it weak.
+If direct references or definitions of the symbol are present, then the symbol
+will not be weak, but if all references to it are through weak references, the
+symbol will be marked as weak in the symbol table.
+
+The effect is equivalent to moving all references to the alias to a separate
+assembly source file, renaming the alias to the symbol in it, declaring the
+symbol as weak there, and running a reloadable link to merge the object files
+resulting from the assembly of the new source file and the old source file that
+had the references to the alias removed.
+
+The alias itself never makes to the symbol table, and is entirely handled
+within the assembler.
+
 @node Word
 @section @code{.word @var{expressions}}
 
@@ -6001,9 +6173,6 @@ include details on any machine's instruction set.  For details on that
 subject, see the hardware manufacturer's manual.
 
 @menu
-@ifset A29K
-* AMD29K-Dependent::            AMD 29K Dependent Features
-@end ifset
 @ifset ALPHA
 * Alpha-Dependent::		Alpha Dependent Features
 @end ifset
@@ -6012,6 +6181,9 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset ARM
 * ARM-Dependent::               ARM Dependent Features
+@end ifset
+@ifset BFIN
+* BFIN-Dependent::		BFIN Dependent Features
 @end ifset
 @ifset CRIS
 * CRIS-Dependent::              CRIS Dependent Features
@@ -6024,9 +6196,6 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset H8/300
 * H8/300-Dependent::            Renesas H8/300 Dependent Features
-@end ifset
-@ifset H8/500
-* H8/500-Dependent::            Renesas H8/500 Dependent Features
 @end ifset
 @ifset HPPA
 * HPPA-Dependent::              HPPA Dependent Features
@@ -6049,6 +6218,9 @@ subject, see the hardware manufacturer's manual.
 @ifset IP2K
 * IP2K-Dependent::              IP2K Dependent Features
 @end ifset
+@ifset M32C
+* M32C-Dependent::              M32C Dependent Features
+@end ifset
 @ifset M32R
 * M32R-Dependent::              M32R Dependent Features
 @end ifset
@@ -6057,9 +6229,6 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset M68HC11
 * M68HC11-Dependent::           M68HC11 and 68HC12 Dependent Features
-@end ifset
-@ifset M880X0
-* M88K-Dependent::		M880x0 Dependent Features
 @end ifset
 @ifset MIPS
 * MIPS-Dependent::              MIPS Dependent Features
@@ -6095,6 +6264,9 @@ subject, see the hardware manufacturer's manual.
 @ifset XTENSA
 * Xtensa-Dependent::            Xtensa Dependent Features
 @end ifset
+@ifset Z80
+* Z80-Dependent::               Z80 Dependent Features
+@end ifset
 @ifset Z8000
 * Z8000-Dependent::             Z8000 Dependent Features
 @end ifset
@@ -6114,10 +6286,6 @@ subject, see the hardware manufacturer's manual.
 @c node and sectioning commands; hence the repetition of @chapter BLAH
 @c in both conditional blocks.
 
-@ifset A29K
-@include c-a29k.texi
-@end ifset
-
 @ifset ALPHA
 @include c-alpha.texi
 @end ifset
@@ -6128,6 +6296,10 @@ subject, see the hardware manufacturer's manual.
 
 @ifset ARM
 @include c-arm.texi
+@end ifset
+
+@ifset BFIN
+@include c-bfin.texi
 @end ifset
 
 @ifset CRIS
@@ -6146,7 +6318,6 @@ family.
 
 @menu
 * H8/300-Dependent::            Renesas H8/300 Dependent Features
-* H8/500-Dependent::            Renesas H8/500 Dependent Features
 * SH-Dependent::                Renesas SH Dependent Features
 @end menu
 @lowersections
@@ -6163,10 +6334,6 @@ family.
 
 @ifset H8/300
 @include c-h8300.texi
-@end ifset
-
-@ifset H8/500
-@include c-h8500.texi
 @end ifset
 
 @ifset HPPA
@@ -6197,6 +6364,10 @@ family.
 @include c-ip2k.texi
 @end ifset
 
+@ifset M32C
+@include c-m32c.texi
+@end ifset
+
 @ifset M32R
 @include c-m32r.texi
 @end ifset
@@ -6207,10 +6378,6 @@ family.
 
 @ifset M68HC11
 @include c-m68hc11.texi
-@end ifset
-
-@ifset M880X0
-@include c-m88k.texi
 @end ifset
 
 @ifset MIPS
@@ -6252,6 +6419,10 @@ family.
 
 @ifset TIC54X
 @include c-tic54x.texi
+@end ifset
+
+@ifset Z80
+@include c-z80.texi
 @end ifset
 
 @ifset Z8000
@@ -6522,8 +6693,8 @@ Keith Knowles at the Open Software Foundation wrote the original MIPS back end
 (which hasn't been merged in yet).  Ralph Campbell worked with the MIPS code to
 support a.out format.
 
-Support for the Zilog Z8k and Renesas H8/300 and H8/500 processors (tc-z8k,
-tc-h8300, tc-h8500), and IEEE 695 object file format (obj-ieee), was written by
+Support for the Zilog Z8k and Renesas H8/300 processors (tc-z8k,
+tc-h8300), and IEEE 695 object file format (obj-ieee), was written by
 Steve Chamberlain of Cygnus Support.  Steve also modified the COFF back end to
 use BFD for some low-level operations, for use with the H8/300 and AMD 29k
 targets.

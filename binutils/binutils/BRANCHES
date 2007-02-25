@@ -12,6 +12,16 @@ for the branch (e.g., "no commits without permission of X or Y").
 	
 Organization Branches	Description
 ---------------------	-----------
+binutils-csl-arm-2005q1-branch
+			CodeSourcery toolchain release branches.
+			Please do not commit to these branches without
+			permission from a CodeSourcery developer.
+
+binutils-csl-gxxpro-3_4-branch
+binutils-csl-2_17-branch
+			CodeSourcery branded GNU Toolchain release branches.
+			Please do not commit to this branch without
+			permission from a CodeSourcery developer.
 
 Release Branches
 ----------------
@@ -21,3 +31,4 @@ binutils-2_12-branch
 binutils-2_13-branch
 binutils-2_14-branch
 binutils-2_15-branch
+binutils-2_16-branch

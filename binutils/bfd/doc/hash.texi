@@ -182,20 +182,18 @@ from.
 
 @example
 struct bfd_hash_entry *
-@var{function_name} (entry, table, string)
-     struct bfd_hash_entry *entry;
-     struct bfd_hash_table *table;
-     const char *string;
+@var{function_name} (struct bfd_hash_entry *entry,
+                     struct bfd_hash_table *table,
+                     const char *string)
 @{
   struct @var{entry_type} *ret = (@var{entry_type} *) entry;
 
  /* Allocate the structure if it has not already been allocated by a
     derived class.  */
-  if (ret == (@var{entry_type} *) NULL)
+  if (ret == NULL)
     @{
-      ret = ((@var{entry_type} *)
-             bfd_hash_allocate (table, sizeof (@var{entry_type})));
-      if (ret == (@var{entry_type} *) NULL)
+      ret = bfd_hash_allocate (table, sizeof (* ret));
+      if (ret == NULL)
         return NULL;
     @}
 

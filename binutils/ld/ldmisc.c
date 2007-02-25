@@ -1,6 +1,6 @@
 /* ldmisc.c
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005
+   2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support.
 
@@ -18,8 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "bfd.h"
 #include "bfdlink.h"
@@ -55,6 +55,8 @@
  %W hex bfd_vma with 0x with no leading zeros taking up 8 spaces
  %X no object output, fail return
  %d integer, like printf
+ %ld long, like printf
+ %lu unsigned long, like printf
  %s arbitrary string, like printf
  %u integer, like printf
  %v hex bfd_vma, no leading zeros
@@ -78,10 +80,6 @@ vfinfo (FILE *fp, const char *fmt, va_list arg, bfd_boolean is_warning)
 	  fmt++;
 	  switch (*fmt++)
 	    {
-	    default:
-	      fprintf (fp, "%%%c", fmt[-1]);
-	      break;
-
 	    case '%':
 	      /* literal % */
 	      putc ('%', fp);
@@ -190,7 +188,7 @@ vfinfo (FILE *fp, const char *fmt, va_list arg, bfd_boolean is_warning)
 		bfd *abfd = va_arg (arg, bfd *);
 
 		if (abfd == NULL)
-		  fprintf (fp, "<none>");
+		  fprintf (fp, "%s generated", program_name);
 		else if (abfd->my_archive)
 		  fprintf (fp, "%s(%s)", abfd->my_archive->filename,
 			   abfd->filename);
@@ -275,49 +273,62 @@ vfinfo (FILE *fp, const char *fmt, va_list arg, bfd_boolean is_warning)
 		section = va_arg (arg, asection *);
 		offset = va_arg (arg, bfd_vma);
 
-		entry = (lang_input_statement_type *) abfd->usrdata;
-		if (entry != (lang_input_statement_type *) NULL
-		    && entry->asymbols != (asymbol **) NULL)
-		  asymbols = entry->asymbols;
+		if (abfd == NULL)
+		  {
+		    entry = NULL;
+		    asymbols = NULL;
+		  }
 		else
 		  {
-		    long symsize;
-		    long symbol_count;
-
-		    symsize = bfd_get_symtab_upper_bound (abfd);
-		    if (symsize < 0)
-		      einfo (_("%B%F: could not read symbols\n"), abfd);
-		    asymbols = xmalloc (symsize);
-		    symbol_count = bfd_canonicalize_symtab (abfd, asymbols);
-		    if (symbol_count < 0)
-		      einfo (_("%B%F: could not read symbols\n"), abfd);
-		    if (entry != (lang_input_statement_type *) NULL)
+		    entry = (lang_input_statement_type *) abfd->usrdata;
+		    if (entry != (lang_input_statement_type *) NULL
+			&& entry->asymbols != (asymbol **) NULL)
+		      asymbols = entry->asymbols;
+		    else
 		      {
-			entry->asymbols = asymbols;
-			entry->symbol_count = symbol_count;
+			long symsize;
+			long sym_count;
+
+			symsize = bfd_get_symtab_upper_bound (abfd);
+			if (symsize < 0)
+			  einfo (_("%B%F: could not read symbols\n"), abfd);
+			asymbols = xmalloc (symsize);
+			sym_count = bfd_canonicalize_symtab (abfd, asymbols);
+			if (sym_count < 0)
+			  einfo (_("%B%F: could not read symbols\n"), abfd);
+			if (entry != (lang_input_statement_type *) NULL)
+			  {
+			    entry->asymbols = asymbols;
+			    entry->symbol_count = sym_count;
+			  }
 		      }
 		  }
 
-		/* The GNU Coding Standard requires that error messages be of the form:
+		/* The GNU Coding Standard requires that error messages
+		   be of the form:
 		   
 		     source-file-name:lineno: message
 
-		   We do not always have a line number available so if we cannot find
-		   them we print out the section name and offset instread.  */
+		   We do not always have a line number available so if
+		   we cannot find them we print out the section name and
+		   offset instread.  */
 		discard_last = TRUE;
-		if (bfd_find_nearest_line (abfd, section, asymbols, offset,
-					   &filename, &functionname,
-					   &linenumber))
+		if (abfd != NULL
+		    && bfd_find_nearest_line (abfd, section, asymbols, offset,
+					      &filename, &functionname,
+					      &linenumber))
 		  {
 		    if (functionname != NULL && fmt[-1] == 'C')
 		      {
-			/* Detect the case where we are printing out a message
-			   for the same function as the last call to vinfo ("%C").
-			   In this situation do not print out the ABFD filename
-			   or the function name again.  Note - we do still print
-			   out the source filename, as this will allow programs
-			   that parse the linker's output (eg emacs) to correctly
-			   locate multiple errors in the same source file.  */
+			/* Detect the case where we are printing out a
+			   message for the same function as the last
+			   call to vinfo ("%C").  In this situation do
+			   not print out the ABFD filename or the
+			   function name again.  Note - we do still
+			   print out the source filename, as this will
+			   allow programs that parse the linker's output
+			   (eg emacs) to correctly locate multiple
+			   errors in the same source file.  */
 			if (last_bfd == NULL
 			    || last_file == NULL
 			    || last_function == NULL
@@ -349,13 +360,10 @@ vfinfo (FILE *fp, const char *fmt, va_list arg, bfd_boolean is_warning)
 
 		    if (functionname != NULL && fmt[-1] == 'G')
 		      lfinfo (fp, "%T", functionname);
-		    else if (filename != NULL)
-		      {
-			if (linenumber != 0)
-			  fprintf (fp, "%u", linenumber);
-			else
-			  lfinfo (fp, "(%A+0x%v)", section, offset);
-		      }
+		    else if (filename != NULL && linenumber != 0)
+		      fprintf (fp, "%u", linenumber);
+		    else
+		      lfinfo (fp, "(%A+0x%v)", section, offset);
 		  }
 		else
 		  lfinfo (fp, "%B:(%A+0x%v)", abfd, section, offset);
@@ -393,6 +401,25 @@ vfinfo (FILE *fp, const char *fmt, va_list arg, bfd_boolean is_warning)
 	    case 'u':
 	      /* unsigned integer, like printf */
 	      fprintf (fp, "%u", va_arg (arg, unsigned int));
+	      break;
+
+	    case 'l':
+	      if (*fmt == 'd')
+		{
+		  fprintf (fp, "%ld", va_arg (arg, long));
+		  ++fmt;
+		  break;
+		}
+	      else if (*fmt == 'u')
+		{
+		  fprintf (fp, "%lu", va_arg (arg, unsigned long));
+		  ++fmt;
+		  break;
+		}
+	      /* Fall thru */
+
+	    default:
+	      fprintf (fp, "%%%c", fmt[-1]);
 	      break;
 	    }
 	}

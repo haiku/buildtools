@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* Written by Ian Lance Taylor <ian@cygnus.com>.
 
@@ -209,6 +209,8 @@ main (int argc, char **argv)
 
   program_name = argv[0];
   xmalloc_set_program_name (program_name);
+
+  expandargv (&argc, &argv);
 
   bfd_init ();
   set_default_bfd_target ();
@@ -1103,6 +1105,7 @@ show_usage (FILE *file, int status)
   -T --header-file=<file>       Read <file> for NLM header information\n\
   -l --linker=<linker>          Use <linker> for any linking\n\
   -d --debug                    Display on stderr the linker command line\n\
+  @<file>                       Read options from <file>.\n\
   -h --help                     Display this information\n\
   -v --version                  Display the program's version\n\
 "));

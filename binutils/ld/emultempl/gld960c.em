@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GLD; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /*
  * emulate the Intels port of  gld
@@ -152,7 +152,7 @@ struct ld_emulation_xfer_struct ld_gld960coff_emulation =
   gld960_get_script,
   "960coff",
   "",
-  NULL,	/* finish */
+  finish_default,
   NULL,	/* create output section statements */
   NULL,	/* open dynamic archive */
   NULL,	/* place orphan */

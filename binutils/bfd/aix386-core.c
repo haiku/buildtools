@@ -21,7 +21,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -204,14 +204,7 @@ aix386_core_file_failing_signal (abfd)
   return core_hdr (abfd)->cd_cursig;
 }
 
-static bfd_boolean
-aix386_core_file_matches_executable_p (core_bfd, exec_bfd)
-     bfd *core_bfd;
-     bfd *exec_bfd;
-{
-  /* FIXME: We have no way of telling at this point.  */
-  return TRUE;
-}
+#define aix386_core_file_matches_executable_p generic_core_file_matches_executable_p
 
 /* If somebody calls any byte-swapping routines, shoot them.  */
 

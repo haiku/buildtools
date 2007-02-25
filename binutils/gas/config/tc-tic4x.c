@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330, 
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor, 
+   Boston, MA 02110-1301, USA.  */
 /*
   TODOs:
   ------
@@ -257,7 +257,6 @@ const pseudo_typeS
 
 int md_short_jump_size = 4;
 int md_long_jump_size = 4;
-const int md_reloc_size = RELSZ;	/* Coff headers.  */
 
 /* This array holds the chars that always start a comment.  If the
    pre-processor is disabled, these aren't very useful.  */
@@ -1145,6 +1144,7 @@ tic4x_set (x)
 	  ignore_rest_of_line ();
 	  return;
 	}
+      ++input_line_pointer;
       symbolP = symbol_find_or_make (name);
     }
   else
@@ -2742,7 +2742,7 @@ md_atof (type, litP, sizeP)
 }
 
 void 
-md_apply_fix3 (fixP, value, seg)
+md_apply_fix (fixP, value, seg)
      fixS *fixP;
      valueT *value;
      segT seg ATTRIBUTE_UNUSED;

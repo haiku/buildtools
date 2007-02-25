@@ -258,7 +258,7 @@ link.  These files are linked through the @code{link_next} field
 of the @code{bfd} structure.
 
 Each section in the output file will have a list of
-@code{link_order} structures attached to the @code{link_order_head}
+@code{link_order} structures attached to the @code{map_head.link_order}
 field (the @code{link_order} structure is defined in
 @code{bfdlink.h}).  These structures describe how to create the
 contents of the output section in terms of the contents of

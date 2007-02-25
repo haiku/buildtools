@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef BFDLINK_H
 #define BFDLINK_H
@@ -301,9 +301,6 @@ struct bfd_link_info
   /* TRUE if global symbols in discarded sections should be stripped.  */
   unsigned int strip_discarded: 1;
 
-  /* TRUE if the final relax pass is needed.  */
-  unsigned int need_relax_finalize: 1;
-
   /* TRUE if generating a position independent executable.  */
   unsigned int pie: 1;
 
@@ -323,6 +320,9 @@ struct bfd_link_info
 
   /* TRUE if we should warn when adding a DT_TEXTREL to a shared object.  */
   unsigned int warn_shared_textrel: 1;
+
+  /* TRUE if unreferenced sections should be removed.  */
+  unsigned int gc_sections: 1;
 
   /* What to do with unresolved symbols in an object file.
      When producing executables the default is GENERATE_ERROR.
@@ -395,6 +395,12 @@ struct bfd_link_info
      unloaded.  */
   const char *fini_function;
 
+  /* Number of relaxation passes.  Usually only one relaxation pass
+     is needed.  But a backend can have as many relaxation passes as
+     necessary.  During bfd_relax_section call, it is set to the
+     current pass, starting from 0.  */
+  int relax_pass;
+
   /* Non-zero if auto-import thunks for DATA items in pei386 DLLs
      should be generated/linked against.  Set to 1 if this feature
      is explicitly requested by the user, -1 if enabled by default.  */
@@ -419,11 +425,11 @@ struct bfd_link_info
 };
 
 /* This structures holds a set of callback functions.  These are
-   called by the BFD linker routines.  The first argument to each
-   callback function is the bfd_link_info structure being used.  Each
-   function returns a boolean value.  If the function returns FALSE,
-   then the BFD function which called it will return with a failure
-   indication.  */
+   called by the BFD linker routines.  Except for einfo, the first
+   argument to each callback function is the bfd_link_info structure
+   being used and each function returns a boolean value.  If the
+   function returns FALSE, then the BFD function which called it should
+   return with a failure indication.  */
 
 struct bfd_link_callbacks
 {
@@ -507,8 +513,7 @@ struct bfd_link_callbacks
      const char *name, const char *reloc_name, bfd_vma addend,
      bfd *abfd, asection *section, bfd_vma address);
   /* A function which is called when a dangerous reloc is performed.
-     The canonical example is an a29k IHCONST reloc which does not
-     follow an IHIHALF reloc.  MESSAGE is an appropriate message.
+     MESSAGE is an appropriate message.
      ABFD, SECTION and ADDRESS identify the location at which the
      problem occurred; if this is the result of a
      bfd_section_reloc_link_order or bfd_symbol_reloc_link_order, then
@@ -532,6 +537,9 @@ struct bfd_link_callbacks
   bfd_boolean (*notice)
     (struct bfd_link_info *, const char *name,
      bfd *abfd, asection *section, bfd_vma address);
+  /* General link info message.  */
+  void (*einfo)
+    (const char *fmt, ...);
 };
 
 /* The linker builds link_order structures which tell the code how to
@@ -549,7 +557,7 @@ enum bfd_link_order_type
 };
 
 /* This is the link_order structure itself.  These form a chain
-   attached to the section whose contents they are describing.  */
+   attached to the output section whose contents they are describing.  */
 
 struct bfd_link_order
 {

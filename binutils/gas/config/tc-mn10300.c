@@ -1,6 +1,6 @@
 /* tc-mn10300.c -- Assembler code for the Matsushita 10300
-   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 #include <stdio.h>
 #include "as.h"
@@ -2005,6 +2005,18 @@ keep_going:
 
   if (relaxable && fc > 0)
     {
+      /* On a 64-bit host the size of an 'int' is not the same
+	 as the size of a pointer, so we need a union to convert
+	 the opindex field of the fr_cgen structure into a char *
+	 so that it can be stored in the frag.  We do not have
+	 to worry about loosing accuracy as we are not going to
+	 be even close to the 32bit limit of the int.  */
+      union
+      {
+	int opindex;
+	char * ptr;
+      }
+      opindex_converter;
       int type;
 
       /* We want to anchor the line info to the previous frag (if
@@ -2044,10 +2056,11 @@ keep_going:
       else
 	type = 3;
 
+      opindex_converter.opindex = fixups[0].opindex;
       f = frag_var (rs_machine_dependent, 8, 8 - size, type,
 		    fixups[0].exp.X_add_symbol,
 		    fixups[0].exp.X_add_number,
-		    (char *)fixups[0].opindex);
+		    opindex_converter.ptr);
 
       /* This is pretty hokey.  We basically just care about the
 	 opcode, so we have to write out the first word big endian.
@@ -2452,7 +2465,7 @@ md_pcrel_from (fixp)
 }
 
 void
-md_apply_fix3 (fixP, valP, seg)
+md_apply_fix (fixP, valP, seg)
      fixS * fixP;
      valueT * valP;
      segT seg;
@@ -2468,11 +2481,10 @@ md_apply_fix3 (fixP, valP, seg)
     abort ();
 
   /* The value we are passed in *valuep includes the symbol values.
-     Since we are using BFD_ASSEMBLER, if we are doing this relocation
-     the code in write.c is going to call bfd_install_relocation, which
-     is also going to use the symbol value.  That means that if the
-     reloc is fully resolved we want to use *valuep since
-     bfd_install_relocation is not being used.
+     If we are doing this relocation the code in write.c is going to
+     call bfd_install_relocation, which is also going to use the symbol
+     value.  That means that if the reloc is fully resolved we want to
+     use *valuep since bfd_install_relocation is not being used.
 
      However, if the reloc is not fully resolved we do not want to use
      *valuep, and must use fx_offset instead.  However, if the reloc
@@ -2744,9 +2756,10 @@ mn10300_end_of_match (cont, what)
 }  
 
 int
-mn10300_parse_name (name, exprP, nextcharP)
+mn10300_parse_name (name, exprP, mode, nextcharP)
      char const *name;
      expressionS *exprP;
+     enum expr_mode mode;
      char *nextcharP;
 {
   char *next = input_line_pointer;
@@ -2766,13 +2779,13 @@ mn10300_parse_name (name, exprP, nextcharP)
       /* If we have an absolute symbol or a reg,
 	 then we know its value now.  */
       segment = S_GET_SEGMENT (exprP->X_add_symbol);
-      if (segment == absolute_section)
+      if (mode != expr_defer && segment == absolute_section)
 	{
 	  exprP->X_op = O_constant;
 	  exprP->X_add_number = S_GET_VALUE (exprP->X_add_symbol);
 	  exprP->X_add_symbol = NULL;
 	}
-      else if (segment == reg_section)
+      else if (mode != expr_defer && segment == reg_section)
 	{
 	  exprP->X_op = O_register;
 	  exprP->X_add_number = S_GET_VALUE (exprP->X_add_symbol);

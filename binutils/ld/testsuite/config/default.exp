@@ -14,7 +14,7 @@
 # 
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # Written by Jeffrey Wheat (cassidy@cygnus.com)
 #
@@ -78,9 +78,9 @@ if {[file exists tmpdir/libpath.exp]} {
     }
 }
 
-# "CC=$(CC_FOR_TARGET)", and other similar parameters.  But, if the
-# user invokes runtest directly (as when testing an installed linker),
-# these flags may not be set.
+# The "make check" target in the Makefile passes in
+# "CC=$(CC_FOR_TARGET)".  But, if the user invokes runtest directly
+# (as when testing an installed linker), these flags may not be set.  
 if {![info exists CC]} {
     set CC [find_gcc]
 }

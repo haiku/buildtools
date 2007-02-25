@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "libiberty.h"
 #include "safe-ctype.h"
@@ -28,7 +28,7 @@
 #include "cg_arcs.h"
 #include "sym_ids.h"
 
-struct sym_id
+static struct sym_id
   {
     struct sym_id *next;
     char *spec;			/* Parsing modifies this.  */
@@ -59,7 +59,7 @@ static void extend_match
 Sym_Table syms[NUM_TABLES];
 
 #ifdef DEBUG
-const char *table_name[] =
+static const char *table_name[] =
 {
   "INCL_GRAPH", "EXCL_GRAPH",
   "INCL_ARCS", "EXCL_ARCS",

@@ -17,22 +17,16 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #define TC_PPC
 
-#ifdef ANSI_PROTOTYPES
 struct fix;
-#endif
 
 /* Set the endianness we are using.  Default to big endian.  */
 #ifndef TARGET_BYTES_BIG_ENDIAN
 #define TARGET_BYTES_BIG_ENDIAN 1
-#endif
-
-#ifndef BFD_ASSEMBLER
- #error PowerPC support requires BFD_ASSEMBLER
 #endif
 
 /* If OBJ_COFF is defined, and TE_PE is not defined, we are assembling
@@ -234,7 +228,7 @@ extern const char *ppc_comment_chars;
 #define tc_fix_adjustable(FIX) ppc_fix_adjustable (FIX)
 extern int ppc_fix_adjustable PARAMS ((struct fix *));
 
-/* Values passed to md_apply_fix3 don't include symbol values.  */
+/* Values passed to md_apply_fix don't include symbol values.  */
 #define MD_APPLY_SYM_VALUE(FIX) 0
 
 #define tc_frob_file_before_adjust ppc_frob_file_before_adjust
@@ -251,7 +245,7 @@ extern int ppc_force_relocation PARAMS ((struct fix *));
 #define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_section(FIX, SEC)
 extern long md_pcrel_from_section PARAMS ((struct fix *, segT));
 
-#define md_parse_name(name, exp, c) ppc_parse_name (name, exp)
+#define md_parse_name(name, exp, mode, c) ppc_parse_name (name, exp)
 extern int ppc_parse_name PARAMS ((const char *, struct expressionS *));
 
 #define md_operand(x)

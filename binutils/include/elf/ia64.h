@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef _ELF_IA64_H
 #define _ELF_IA64_H
@@ -56,6 +56,8 @@
 
 #define SHF_IA_64_SHORT		0x10000000	/* Section near gp.  */
 #define SHF_IA_64_NORECOV	0x20000000	/* Spec insns w/o recovery.  */
+
+#define SHF_IA_64_HP_TLS	0x01000000	/* HP specific TLS flag.  */
 
 /* Possible values for sh_type in Elf64_Shdr: */
 

@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* ldfile.c:  look after all the file stuff.  */
 
@@ -45,12 +45,12 @@ enum bfd_architecture ldfile_output_architecture;
 search_dirs_type * search_head;
 
 #ifdef VMS
-char * slash = "";
+static char * slash = "";
 #else
 #if defined (_WIN32) && ! defined (__CYGWIN32__)
-char * slash = "\\";
+static char * slash = "\\";
 #else
-char * slash = "/";
+static char * slash = "/";
 #endif
 #endif
 
@@ -462,7 +462,7 @@ try_open (const char *name, const char *exten)
 /* Try to open NAME; if that fails, look for it in any directories
    specified with -L, without and with EXTEND appended.  */
 
-FILE *
+static FILE *
 ldfile_find_command_file (const char *name, const char *extend)
 {
   search_dirs_type *search;

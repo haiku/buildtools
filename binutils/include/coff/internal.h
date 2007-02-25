@@ -1,7 +1,7 @@
 /* Internal format of COFF object file data structures, for GNU BFD.
    This file is part of BFD, the Binary File Descriptor library.
    
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004. 2005
    Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
@@ -16,7 +16,7 @@
    
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef GNU_COFF_INTERNAL_H
 #define GNU_COFF_INTERNAL_H 1
@@ -714,6 +714,11 @@ struct internal_reloc
 #define R_SEG     0x10		/* set if in segmented mode */
 #define R_IMM4H   0x24		/* high nibble */
 #define R_DISP7   0x25          /* djnz displacement */
+
+/* Z80 modes */
+#define R_OFF8    0x32		/* 8 bit signed abs, for (i[xy]+d) */
+#define R_IMM24   0x33          /* 24 bit abs */
+/* R_JR, R_IMM8, R_IMM16, R_IMM32 - as for Z8k */
 
 /* H8500 modes */
 

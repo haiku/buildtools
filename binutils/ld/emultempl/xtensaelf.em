@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright 2003, 2004, 2005
+#   Copyright 2003, 2004, 2005, 2006
 #   Free Software Foundation, Inc.
 #
 # This file is part of GLD, the Gnu Linker.
@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
 # This file is sourced from elf32.em, and defines extra xtensa-elf
@@ -32,6 +32,8 @@ cat >>e${EMULATION_NAME}.c <<EOF
 
 static void xtensa_wild_group_interleave (lang_statement_union_type *);
 static void xtensa_colocate_output_literals (lang_statement_union_type *);
+static void xtensa_strip_inconsistent_linkonce_sections
+  (lang_statement_list_type *);
 
 
 /* Flag for the emulation-specific "--no-relax" option.  */
@@ -55,17 +57,6 @@ elf_xtensa_choose_target (int argc ATTRIBUTE_UNUSED,
     return "${BIG_OUTPUT_FORMAT}";
   else
     return "${LITTLE_OUTPUT_FORMAT}";
-}
-
-
-static bfd_boolean
-elf_xtensa_place_orphan (lang_input_statement_type *file, asection *s)
-{
-  /* Early exit for relocatable links.  */
-  if (link_info.relocatable)
-    return FALSE;
-
-  return gld${EMULATION_NAME}_place_orphan (file, s);
 }
 
 
@@ -380,6 +371,8 @@ elf_xtensa_before_allocation (void)
 
   if (!disable_relaxation)
     command_line.relax = TRUE;
+
+  xtensa_strip_inconsistent_linkonce_sections (stat_ptr);
 
   gld${EMULATION_NAME}_before_allocation ();
 
@@ -1137,7 +1130,7 @@ ld_build_required_section_dependence (lang_statement_union_type *s)
 	{
 	  lang_input_section_type *input;
 	  input = &l->input_section;
-	  xtensa_callback_required_dependence (input->ifile->the_bfd,
+	  xtensa_callback_required_dependence (input->section->owner,
 					       input->section,
 					       &link_info,
 					       /* Use the same closure.  */
@@ -1166,6 +1159,145 @@ ld_count_children (lang_statement_union_type *s)
   return count;
 }
 #endif /* EXTRA_VALIDATION */
+
+
+/* Check if a particular section is included in the link.  This will only
+   be true for one instance of a particular linkonce section.  */
+
+static bfd_boolean input_section_found = FALSE;
+static asection *input_section_target = NULL;
+
+static void
+input_section_linked_worker (lang_statement_union_type *statement)
+{
+  if ((statement->header.type == lang_input_section_enum
+       && (statement->input_section.section == input_section_target)))
+    input_section_found = TRUE;
+}
+
+static bfd_boolean
+input_section_linked (asection *sec)
+{
+  input_section_found = FALSE;
+  input_section_target = sec;
+  lang_for_each_statement_worker (input_section_linked_worker, stat_ptr->head);
+  return input_section_found;
+}
+
+
+/* Strip out any linkonce literal sections or property tables where the
+   associated linkonce text is from a different object file.  Normally,
+   a matching set of linkonce sections is taken from the same object file,
+   but sometimes the files are compiled differently so that some of the
+   linkonce sections are not present in all files.  Stripping the
+   inconsistent sections like this is not completely robust -- a much
+   better solution is to use comdat groups.  */
+
+static int linkonce_len = sizeof (".gnu.linkonce.") - 1;
+
+static bfd_boolean
+is_inconsistent_linkonce_section (asection *sec)
+{
+  bfd *abfd = sec->owner;
+  const char *sec_name = bfd_get_section_name (abfd, sec);
+  char *prop_tag = 0;
+
+  if ((bfd_get_section_flags (abfd, sec) & SEC_LINK_ONCE) == 0
+      || strncmp (sec_name, ".gnu.linkonce.", linkonce_len) != 0)
+    return FALSE;
+
+  /* Check if this is an Xtensa property section.  */
+  if (strncmp (sec_name + linkonce_len, "p.", 2) == 0)
+    prop_tag = "p.";
+  else if (strncmp (sec_name + linkonce_len, "prop.", 5) == 0)
+    prop_tag = "prop.";
+  if (prop_tag)
+    {
+      int tag_len = strlen (prop_tag);
+      char *dep_sec_name = xmalloc (strlen (sec_name));
+      asection *dep_sec;
+
+      /* Get the associated linkonce text section and check if it is
+	 included in the link.  If not, this section is inconsistent
+	 and should be stripped.  */
+      strcpy (dep_sec_name, ".gnu.linkonce.");
+      strcat (dep_sec_name, sec_name + linkonce_len + tag_len);
+      dep_sec = bfd_get_section_by_name (abfd, dep_sec_name);
+      if (dep_sec == NULL || ! input_section_linked (dep_sec))
+	{
+	  free (dep_sec_name);
+	  return TRUE;
+	}
+      free (dep_sec_name);
+    }
+
+  return FALSE;
+}
+
+
+static void
+xtensa_strip_inconsistent_linkonce_sections (lang_statement_list_type *slist)
+{
+  lang_statement_union_type **s_p = &slist->head;
+  while (*s_p)
+    {
+      lang_statement_union_type *s = *s_p;
+      lang_statement_union_type *s_next = (*s_p)->header.next;
+
+      switch (s->header.type)
+	{
+	case lang_input_section_enum:
+	  if (is_inconsistent_linkonce_section (s->input_section.section))
+	    {
+	      *s_p = s_next;
+	      continue;
+	    }
+	  break;
+
+	case lang_constructors_statement_enum:
+	  xtensa_strip_inconsistent_linkonce_sections (&constructor_list);
+	  break;
+
+	case lang_output_section_statement_enum:
+	  if (s->output_section_statement.children.head)
+	    xtensa_strip_inconsistent_linkonce_sections
+	      (&s->output_section_statement.children);
+	  break;
+
+	case lang_wild_statement_enum:
+	  xtensa_strip_inconsistent_linkonce_sections
+	    (&s->wild_statement.children);
+	  break;
+
+	case lang_group_statement_enum:
+	  xtensa_strip_inconsistent_linkonce_sections
+	    (&s->group_statement.children);
+	  break;
+
+	case lang_data_statement_enum:
+	case lang_reloc_statement_enum:
+	case lang_object_symbols_statement_enum:
+	case lang_output_statement_enum:
+	case lang_target_statement_enum:
+	case lang_input_statement_enum:
+	case lang_assignment_statement_enum:
+	case lang_padding_statement_enum:
+	case lang_address_statement_enum:
+	case lang_fill_statement_enum:
+	  break;
+
+	default:
+	  FAIL ();
+	  break;
+	}
+
+      s_p = &(*s_p)->header.next;
+    }
+
+  /* Reset the tail of the list, in case the last entry was removed.  */
+  if (s_p != slist->tail)
+    slist->tail = s_p;
+}
 
 
 static void
@@ -1728,6 +1860,5 @@ PARSE_AND_LIST_ARGS_CASES='
 LDEMUL_BEFORE_PARSE=elf_xtensa_before_parse
 LDEMUL_AFTER_OPEN=elf_xtensa_after_open
 LDEMUL_CHOOSE_TARGET=elf_xtensa_choose_target
-LDEMUL_PLACE_ORPHAN=elf_xtensa_place_orphan
 LDEMUL_BEFORE_ALLOCATION=elf_xtensa_before_allocation
 

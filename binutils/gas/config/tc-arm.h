@@ -18,8 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #define TC_ARM 1
 
@@ -31,8 +31,6 @@
 
 #define COFF_MAGIC 	ARMMAGIC
 #define TARGET_ARCH 	bfd_arch_arm
-
-#define AOUT_MACHTYPE 	0
 
 #define DIFF_EXPR_OK
 
@@ -81,7 +79,12 @@ struct fix;
 
 #define TC_FORCE_RELOCATION(FIX) arm_force_relocation (FIX)
 
-#define md_convert_frag(b, s, f) { as_fatal (_("arm convert_frag\n")); }
+#define md_relax_frag(segment, fragp, stretch) \
+  arm_relax_frag(segment, fragp, stretch)
+extern int arm_relax_frag (asection *, struct frag *, long);
+
+#define md_optimize_expr(l,o,r)		arm_optimize_expr (l, o, r)
+extern int arm_optimize_expr (expressionS *, operatorT, expressionS *);
 
 #define md_cleanup() arm_cleanup ()
 
@@ -92,12 +95,17 @@ struct fix;
 /* We also need to mark assembler created symbols:  */
 #define tc_frob_fake_label(S) arm_frob_label (S)
 
+#ifdef OBJ_ELF
+#define md_end arm_md_end
+extern void arm_md_end (void);
+#endif
+
 /* NOTE: The fake label creation in stabs.c:s_stab_generic() has
    deliberately not been updated to mark assembler created stabs
    symbols as Thumb.  */
 
-#define TC_FIX_TYPE PTR
-#define TC_INIT_FIX_DATA(FIX) ((FIX)->tc_fix_data = NULL)
+#define TC_FIX_TYPE int
+#define TC_INIT_FIX_DATA(FIX) ((FIX)->tc_fix_data = 0)
 
 /* We need to keep some local information on symbols.  */
 
@@ -121,14 +129,13 @@ struct fix;
 #define TC_START_LABEL(C,STR)            (c == ':' || (c == '/' && arm_data_in_code ()))
 #define tc_canonicalize_symbol_name(str) arm_canonicalize_symbol_name (str);
 #define obj_adjust_symtab() 		 arm_adjust_symtab ()
-#define tc_aout_pre_write_hook(x)	 {;}	/* not used */
 
 #define LISTING_HEADER "ARM GAS "
 
 #define OPTIONAL_REGISTER_PREFIX '%'
 
-#define LOCAL_LABEL(name) (name[0] == '.' && (name[1] == 'L'))
-#define LOCAL_LABELS_FB   1
+#define LOCAL_LABEL(name)  (name[0] == '.' && name[1] == 'L')
+#define LOCAL_LABELS_FB    1
 
 /* This expression evaluates to true if the relocation is for a local
    object for which we still want to do the relocation at runtime.
@@ -140,10 +147,15 @@ struct fix;
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
   (!(FIX)->fx_pcrel					\
    || (FIX)->fx_plt					\
-   || (FIX)->fx_r_type == BFD_RELOC_ARM_GOT12		\
    || (FIX)->fx_r_type == BFD_RELOC_ARM_GOT32		\
    || (FIX)->fx_r_type == BFD_RELOC_32			\
    || TC_FORCE_RELOCATION (FIX))
+
+/* Force output of R_ARM_REL32 relocations against thumb function symbols.
+   This is needed to ensure the low bit is handled correctly.  */
+#define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG)	\
+  (THUMB_IS_FUNC ((FIX)->fx_addsy)		\
+   || !SEG_NORMAL (SEG))
 
 #define TC_CONS_FIX_NEW cons_fix_new_arm
 
@@ -169,8 +181,7 @@ struct fix;
 # define md_elf_section_change_hook()	arm_elf_change_section ()
 # define md_elf_section_type(str, len)	arm_elf_section_type (str, len)
 # define GLOBAL_OFFSET_TABLE_NAME	"_GLOBAL_OFFSET_TABLE_"
-# define LOCAL_LABEL_PREFIX 		'.'
-# define TC_SEGMENT_INFO_TYPE 		enum mstate
+# define TC_SEGMENT_INFO_TYPE 		struct arm_segment_info_type
 
 enum mstate
 {
@@ -178,6 +189,12 @@ enum mstate
   MAP_DATA,
   MAP_ARM,
   MAP_THUMB
+};
+
+struct arm_segment_info_type
+{
+  enum mstate mapstate;
+  unsigned int marked_pr_dependency;
 };
 
 /* We want .cfi_* pseudo-ops for generating unwind info.  */
@@ -201,12 +218,15 @@ enum mstate
 
 # define EXTERN_FORCE_RELOC 			1
 # define tc_fix_adjustable(FIX) 		arm_fix_adjustable (FIX)
-/* Values passed to md_apply_fix3 don't include the symbol value.  */
+/* Values passed to md_apply_fix don't include the symbol value.  */
 # define MD_APPLY_SYM_VALUE(FIX) 		0
 # define TC_VALIDATE_FIX(FIX, SEGTYPE, LABEL)	arm_validate_fix (FIX)
 
 #endif
 
+#define MD_PCREL_FROM_SECTION(F,S) md_pcrel_from_section(F,S)
+
+extern long md_pcrel_from_section (struct fix *, segT);
 extern void arm_frag_align_code (int, int);
 extern void arm_validate_fix (struct fix *);
 extern const char * elf32_arm_target_format (void);

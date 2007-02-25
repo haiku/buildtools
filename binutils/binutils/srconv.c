@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* Written by Steve Chamberlain (sac@cygnus.com)
 
@@ -1724,6 +1724,7 @@ show_usage (FILE *file, int status)
   -q --quick       (Obsolete - ignored)\n\
   -n --noprescan   Do not perform a scan to convert commons into defs\n\
   -d --debug       Display information about what is being done\n\
+  @<file>          Read options from <file>\n\
   -h --help        Display this information\n\
   -v --version     Print the program's version number\n"));
 
@@ -1760,6 +1761,8 @@ main (int ac, char **av)
 
   program_name = av[0];
   xmalloc_set_program_name (program_name);
+
+  expandargv (&ac, &av);
 
   while ((opt = getopt_long (ac, av, "dHhVvqn", long_options,
 			     (int *) NULL))

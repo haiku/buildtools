@@ -1,6 +1,32 @@
 @section Opening and closing BFDs
 
 
+@subsection Functions for opening and closing
+
+
+@findex bfd_fopen
+@subsubsection @code{bfd_fopen}
+@strong{Synopsis}
+@example
+bfd *bfd_fopen (const char *filename, const char *target,
+    const char *mode, int fd);
+@end example
+@strong{Description}@*
+Open the file @var{filename} with the target @var{target}.
+Return a pointer to the created BFD.  If @var{fd} is not -1,
+then @code{fdopen} is used to open the file; otherwise, @code{fopen}
+is used.  @var{mode} is passed directly to @code{fopen} or
+@code{fdopen}. 
+
+Calls @code{bfd_find_target}, so @var{target} is interpreted as by
+that function.
+
+The new BFD is marked as cacheable iff @var{fd} is -1.
+
+If @code{NULL} is returned then an error has occured.   Possible errors
+are @code{bfd_error_no_memory}, @code{bfd_error_invalid_target} or
+@code{system_call} error.
+
 @findex bfd_openr
 @subsubsection @code{bfd_openr}
 @strong{Synopsis}
@@ -201,6 +227,16 @@ void *bfd_alloc (bfd *abfd, bfd_size_type wanted);
 Allocate a block of @var{wanted} bytes of memory attached to
 @code{abfd} and return a pointer to it.
 
+@findex bfd_alloc2
+@subsubsection @code{bfd_alloc2}
+@strong{Synopsis}
+@example
+void *bfd_alloc2 (bfd *abfd, bfd_size_type nmemb, bfd_size_type size);
+@end example
+@strong{Description}@*
+Allocate a block of @var{nmemb} elements of @var{size} bytes each
+of memory attached to @code{abfd} and return a pointer to it.
+
 @findex bfd_zalloc
 @subsubsection @code{bfd_zalloc}
 @strong{Synopsis}
@@ -210,6 +246,16 @@ void *bfd_zalloc (bfd *abfd, bfd_size_type wanted);
 @strong{Description}@*
 Allocate a block of @var{wanted} bytes of zeroed memory
 attached to @code{abfd} and return a pointer to it.
+
+@findex bfd_zalloc2
+@subsubsection @code{bfd_zalloc2}
+@strong{Synopsis}
+@example
+void *bfd_zalloc2 (bfd *abfd, bfd_size_type nmemb, bfd_size_type size);
+@end example
+@strong{Description}@*
+Allocate a block of @var{nmemb} elements of @var{size} bytes each
+of zeroed memory attached to @code{abfd} and return a pointer to it.
 
 @findex bfd_calc_gnu_debuglink_crc32
 @subsubsection @code{bfd_calc_gnu_debuglink_crc32}

@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include <stdio.h>
 #include "as.h"
@@ -410,6 +410,8 @@ md_parse_option (c, arg)
 	    current_cpu = S390_OPCODE_Z900;
 	  else if (strcmp (arg + 5, "z990") == 0)
 	    current_cpu = S390_OPCODE_Z990;
+	  else if (strcmp (arg + 5, "z9-109") == 0)
+	    current_cpu = S390_OPCODE_Z9_109;
 	  else
 	    {
 	      as_bad (_("invalid switch -m%s"), arg);
@@ -1353,8 +1355,19 @@ md_gather_operands (str, insn, opcode)
 	      /* If there is a next operand it must be separated by a comma.  */
 	      if (opindex_ptr[1] != '\0')
 		{
-		  if (*str++ != ',')
-		    as_bad (_("syntax error; expected ,"));
+		  if (*str != ',')
+		    {
+		      while (opindex_ptr[1] != '\0')
+			{
+			  operand = s390_operands + *(++opindex_ptr);
+			  if (operand->flags & S390_OPERAND_OPTIONAL)
+			    continue;
+			  as_bad (_("syntax error; expected ,"));
+			  break;
+			}
+		    }
+		  else
+		    str++;
 		}
 	    }
 	  else
@@ -1386,8 +1399,19 @@ md_gather_operands (str, insn, opcode)
 	  /* If there is a next operand it must be separated by a comma.  */
 	  if (opindex_ptr[1] != '\0')
 	    {
-	      if (*str++ != ',')
-		as_bad (_("syntax error; expected ,"));
+	      if (*str != ',')
+		{
+		  while (opindex_ptr[1] != '\0')
+		    {
+		      operand = s390_operands + *(++opindex_ptr);
+		      if (operand->flags & S390_OPERAND_OPTIONAL)
+			continue;
+		      as_bad (_("syntax error; expected ,"));
+		      break;
+		    }
+		}
+	      else
+		str++;
 	    }
 	}
       else
@@ -1405,8 +1429,19 @@ md_gather_operands (str, insn, opcode)
 	  /* If there is a next operand it must be separated by a comma.  */
 	  if (opindex_ptr[1] != '\0')
 	    {
-	      if (*str++ != ',')
-		as_bad (_("syntax error; expected ,"));
+	      if (*str != ',')
+		{
+		  while (opindex_ptr[1] != '\0')
+		    {
+		      operand = s390_operands + *(++opindex_ptr);
+		      if (operand->flags & S390_OPERAND_OPTIONAL)
+			continue;
+		      as_bad (_("syntax error; expected ,"));
+		      break;
+		    }
+		}
+	      else
+		str++;
 	    }
 	}
     }
@@ -1449,7 +1484,7 @@ md_gather_operands (str, insn, opcode)
      BFD_RELOC_UNUSED plus the operand index.  This lets us easily
      handle fixups for any operand type, although that is admittedly
      not a very exciting feature.  We pick a BFD reloc type in
-     md_apply_fix3.  */
+     md_apply_fix.  */
   for (i = 0; i < fc; i++)
     {
 
@@ -1957,7 +1992,7 @@ tc_s390_force_relocation (fixp)
    fixup.  */
 
 void
-md_apply_fix3 (fixP, valP, seg)
+md_apply_fix (fixP, valP, seg)
      fixS *fixP;
      valueT *valP;
      segT seg ATTRIBUTE_UNUSED;

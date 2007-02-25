@@ -1,6 +1,6 @@
 /* strings -- print the strings of printable characters in files
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,8 +14,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* Usage: strings [options] file...
 
@@ -151,6 +151,15 @@ static struct option long_options[] =
   {NULL, 0, NULL, 0}
 };
 
+/* Records the size of a named file so that we
+   do not repeatedly run bfd_stat() on it.  */
+
+typedef struct
+{
+  const char *  filename;
+  bfd_size_type filesize;
+} filename_and_size_t;
+
 static void strings_a_section (bfd *, asection *, void *);
 static bfd_boolean strings_object_file (const char *);
 static bfd_boolean strings_file (char *file);
@@ -176,6 +185,9 @@ main (int argc, char **argv)
 
   program_name = argv[0];
   xmalloc_set_program_name (program_name);
+
+  expandargv (&argc, &argv);
+
   string_min = -1;
   print_addresses = FALSE;
   print_filenames = FALSE;
@@ -314,27 +326,62 @@ main (int argc, char **argv)
   return (exit_status);
 }
 
-/* Scan section SECT of the file ABFD, whose printable name is FILE.
-   If it contains initialized data,
-   set `got_a_section' and print the strings in it.  */
+/* Scan section SECT of the file ABFD, whose printable name is in
+   ARG->filename and whose size might be in ARG->filesize.  If it
+   contains initialized data set `got_a_section' and print the
+   strings in it.
+
+   FIXME: We ought to be able to return error codes/messages for
+   certain conditions.  */
 
 static void
-strings_a_section (bfd *abfd, asection *sect, void *filearg)
+strings_a_section (bfd *abfd, asection *sect, void *arg)
 {
-  const char *file = (const char *) filearg;
+  filename_and_size_t * filename_and_sizep;
+  bfd_size_type *filesizep;
+  bfd_size_type sectsize;
+  void *mem;
+     
+  if ((sect->flags & DATA_FLAGS) != DATA_FLAGS)
+    return;
 
-  if ((sect->flags & DATA_FLAGS) == DATA_FLAGS)
+  sectsize = bfd_get_section_size (sect);
+     
+  if (sectsize <= 0)
+    return;
+
+  /* Get the size of the file.  This might have been cached for us.  */
+  filename_and_sizep = (filename_and_size_t *) arg;
+  filesizep = & filename_and_sizep->filesize;
+
+  if (*filesizep == 0)
     {
-      bfd_size_type sz = bfd_get_section_size (sect);
-      void *mem = xmalloc (sz);
+      struct stat st;
+      
+      if (bfd_stat (abfd, &st))
+	return;
 
-      if (bfd_get_section_contents (abfd, sect, mem, (file_ptr) 0, sz))
-	{
-	  got_a_section = TRUE;
-	  print_strings (file, (FILE *) NULL, sect->filepos, 0, sz, mem);
-	}
-      free (mem);
+      /* Cache the result so that we do not repeatedly stat this file.  */
+      *filesizep = st.st_size;
     }
+
+  /* Compare the size of the section against the size of the file.
+     If the section is bigger then the file must be corrupt and
+     we should not try dumping it.  */
+  if (sectsize >= *filesizep)
+    return;
+
+  mem = xmalloc (sectsize);
+
+  if (bfd_get_section_contents (abfd, sect, mem, (file_ptr) 0, sectsize))
+    {
+      got_a_section = TRUE;
+
+      print_strings (filename_and_sizep->filename, NULL, sect->filepos,
+		     0, sectsize, mem);
+    }
+
+  free (mem);
 }
 
 /* Scan all of the sections in FILE, and print the strings
@@ -346,7 +393,10 @@ strings_a_section (bfd *abfd, asection *sect, void *filearg)
 static bfd_boolean
 strings_object_file (const char *file)
 {
-  bfd *abfd = bfd_openr (file, target);
+  filename_and_size_t filename_and_size;
+  bfd *abfd;
+
+  abfd = bfd_openr (file, target);
 
   if (abfd == NULL)
     /* Treat the file as a non-object file.  */
@@ -362,7 +412,9 @@ strings_object_file (const char *file)
     }
 
   got_a_section = FALSE;
-  bfd_map_over_sections (abfd, strings_a_section, (void *) file);
+  filename_and_size.filename = file;
+  filename_and_size.filesize = 0;
+  bfd_map_over_sections (abfd, strings_a_section, & filename_and_size);
 
   if (!bfd_close (abfd))
     {
@@ -447,7 +499,12 @@ get_char (FILE *stream, file_off *address, int *magiccount, char **magic)
 	{
 	  if (stream == NULL)
 	    return EOF;
-#ifdef HAVE_GETC_UNLOCKED
+
+	  /* Only use getc_unlocked if we found a declaration for it.
+	     Otherwise, libc is not thread safe by default, and we
+	     should not use it.  */
+
+#if defined(HAVE_GETC_UNLOCKED) && HAVE_DECL_GETC_UNLOCKED
 	  c = getc_unlocked (stream);
 #else
 	  c = getc (stream);
@@ -660,6 +717,7 @@ usage (FILE *stream, int status)
   -T --target=<BFDNAME>     Specify the binary file format\n\
   -e --encoding={s,S,b,l,B,L} Select character size and endianness:\n\
                             s = 7-bit, S = 8-bit, {b,l} = 16-bit, {B,L} = 32-bit\n\
+  @<file>                   Read options from <file>\n\
   -h --help                 Display this information\n\
   -v --version              Print the program's version number\n"));
   list_supported_targets (program_name, stream);

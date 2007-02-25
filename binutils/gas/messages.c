@@ -1,6 +1,6 @@
 /* messages.c - error reporter -
    Copyright 1987, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
-   2003, 2004
+   2003, 2004, 2005
    Free Software Foundation, Inc.
    This file is part of GAS, the GNU Assembler.
 
@@ -16,32 +16,10 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "as.h"
-
-#include <stdio.h>
-#ifdef HAVE_ERRNO_H
-#include <errno.h>
-#endif
-
-#ifdef USE_STDARG
-#include <stdarg.h>
-#endif
-
-#ifdef USE_VARARGS
-#include <varargs.h>
-#endif
-
-#if !defined (USE_STDARG) && !defined (USE_VARARGS)
-/* Roll our own.  */
-#define va_alist REST
-#define va_dcl
-typedef int * va_list;
-#define va_start(ARGS)	ARGS = &REST
-#define va_end(ARGS)
-#endif
 
 static void identify (char *);
 static void as_show_where (void);
@@ -150,16 +128,10 @@ as_perror (const char *gripe,		/* Unpunctuated error theme.  */
   as_show_where ();
   fprintf (stderr, gripe, filename);
   errno = saved_errno;
-#ifdef BFD_ASSEMBLER
   errtxt = bfd_errmsg (bfd_get_error ());
-#else
-  errtxt = xstrerror (errno);
-#endif
   fprintf (stderr, ": %s\n", errtxt);
   errno = 0;
-#ifdef BFD_ASSEMBLER
   bfd_set_error (bfd_error_no_error);
-#endif
 }
 
 /* Send to stderr a string as a warning, and locate warning
@@ -233,7 +205,7 @@ as_warn (const char *format, ...)
   if (!flag_no_warnings)
     {
       va_start (args, format);
-      vsprintf (buffer, format, args);
+      vsnprintf (buffer, sizeof (buffer), format, args);
       va_end (args);
       as_warn_internal ((char *) NULL, 0, buffer);
     }
@@ -250,7 +222,7 @@ as_warn (format, va_alist)
   if (!flag_no_warnings)
     {
       va_start (args);
-      vsprintf (buffer, format, args);
+      vsnprintf (buffer, sizeof (buffer), format, args);
       va_end (args);
       as_warn_internal ((char *) NULL, 0, buffer);
     }
@@ -271,7 +243,7 @@ as_warn_where (char *file, unsigned int line, const char *format, ...)
   if (!flag_no_warnings)
     {
       va_start (args, format);
-      vsprintf (buffer, format, args);
+      vsnprintf (buffer, sizeof (buffer), format, args);
       va_end (args);
       as_warn_internal (file, line, buffer);
     }
@@ -290,7 +262,7 @@ as_warn_where (file, line, format, va_alist)
   if (!flag_no_warnings)
     {
       va_start (args);
-      vsprintf (buffer, format, args);
+      vsnprintf (buffer, sizeof (buffer), format, args);
       va_end (args);
       as_warn_internal (file, line, buffer);
     }
@@ -332,7 +304,7 @@ as_bad (const char *format, ...)
   char buffer[2000];
 
   va_start (args, format);
-  vsprintf (buffer, format, args);
+  vsnprintf (buffer, sizeof (buffer), format, args);
   va_end (args);
 
   as_bad_internal ((char *) NULL, 0, buffer);
@@ -348,7 +320,7 @@ as_bad (format, va_alist)
   char buffer[2000];
 
   va_start (args);
-  vsprintf (buffer, format, args);
+  vsnprintf (buffer, sizeof (buffer), format, args);
   va_end (args);
 
   as_bad_internal ((char *) NULL, 0, buffer);
@@ -367,7 +339,7 @@ as_bad_where (char *file, unsigned int line, const char *format, ...)
   char buffer[2000];
 
   va_start (args, format);
-  vsprintf (buffer, format, args);
+  vsnprintf (buffer, sizeof (buffer), format, args);
   va_end (args);
 
   as_bad_internal (file, line, buffer);
@@ -385,7 +357,7 @@ as_bad_where (file, line, format, va_alist)
   char buffer[2000];
 
   va_start (args);
-  vsprintf (buffer, format, args);
+  vsnprintf (buffer, sizeof (buffer), format, args);
   va_end (args);
 
   as_bad_internal (file, line, buffer);
@@ -470,24 +442,6 @@ as_abort (const char *file, int line, const char *fn)
 /* Support routines.  */
 
 void
-fprint_value (FILE *file, valueT val)
-{
-  if (sizeof (val) <= sizeof (long))
-    {
-      fprintf (file, "%ld", (long) val);
-      return;
-    }
-#ifdef BFD_ASSEMBLER
-  if (sizeof (val) <= sizeof (bfd_vma))
-    {
-      fprintf_vma (file, val);
-      return;
-    }
-#endif
-  abort ();
-}
-
-void
 sprint_value (char *buf, valueT val)
 {
   if (sizeof (val) <= sizeof (long))
@@ -495,13 +449,11 @@ sprint_value (char *buf, valueT val)
       sprintf (buf, "%ld", (long) val);
       return;
     }
-#ifdef BFD_ASSEMBLER
   if (sizeof (val) <= sizeof (bfd_vma))
     {
       sprintf_vma (buf, val);
       return;
     }
-#endif
   abort ();
 }
 
@@ -522,14 +474,12 @@ as_internal_value_out_of_range (char *    prefix,
   if (prefix == NULL)
     prefix = "";
 
-#ifdef BFD_ASSEMBLER
   if (   val < HEX_MAX_THRESHOLD
       && min < HEX_MAX_THRESHOLD
       && max < HEX_MAX_THRESHOLD
       && val > HEX_MIN_THRESHOLD
       && min > HEX_MIN_THRESHOLD
       && max > HEX_MIN_THRESHOLD)
-#endif
     {
       /* xgettext:c-format  */
       err = _("%s out of range (%d is not between %d and %d)");
@@ -541,7 +491,6 @@ as_internal_value_out_of_range (char *    prefix,
 	as_warn_where (file, line, err,
 		       prefix, (int) val, (int) min, (int) max);
     }
-#ifdef BFD_ASSEMBLER
   else
     {
       char val_buf [sizeof (val) * 3 + 2];
@@ -563,7 +512,6 @@ as_internal_value_out_of_range (char *    prefix,
       else
 	as_warn_where (file, line, err, prefix, val_buf, min_buf, max_buf);
     }
-#endif
 }
 
 void

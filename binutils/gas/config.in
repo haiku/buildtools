@@ -3,9 +3,6 @@
 /* Define if using AIX 5.2 value for C_WEAKEXT. */
 #undef AIX_WEAK_SUPPORT
 
-/* Use BFD interface? */
-#undef BFD_ASSEMBLER
-
 /* assert broken? */
 #undef BROKEN_ASSERT
 
@@ -22,6 +19,9 @@
 
 /* Default architecture. */
 #undef DEFAULT_ARCH
+
+/* Default CRIS architecture. */
+#undef DEFAULT_CRIS_ARCH
 
 /* Default emulation. */
 #undef DEFAULT_EMULATION
@@ -44,6 +44,13 @@
 
 /* Define to 1 if you have the `dcgettext' function. */
 #undef HAVE_DCGETTEXT
+
+/* Is the prototype for getopt in <unistd.h> in the expected format? */
+#undef HAVE_DECL_GETOPT
+
+/* Define to 1 if you have the declaration of `vsnprintf', and to 0 if you
+   don't. */
+#undef HAVE_DECL_VSNPRINTF
 
 /* Define to 1 if you have the <errno.h> header file. */
 #undef HAVE_ERRNO_H
@@ -162,9 +169,6 @@
 /* Using m88k COFF? */
 #undef M88KCOFF
 
-/* old COFF support? */
-#undef MANY_SEGMENTS
-
 /* Default CPU for MIPS targets. */
 #undef MIPS_CPU_STRING_DEFAULT
 
@@ -179,6 +183,9 @@
 
 /* Define if errno is not declared in system header files. */
 #undef NEED_DECLARATION_ERRNO
+
+/* Define if ffs is not declared in system header files. */
+#undef NEED_DECLARATION_FFS
 
 /* Define if free is not declared in system header files. */
 #undef NEED_DECLARATION_FREE
@@ -210,17 +217,11 @@
 /* generic support? */
 #undef OBJ_MAYBE_GENERIC
 
-/* HP300 support? */
-#undef OBJ_MAYBE_HP300
-
 /* IEEE support? */
 #undef OBJ_MAYBE_IEEE
 
 /* SOM support? */
 #undef OBJ_MAYBE_SOM
-
-/* VMS support? */
-#undef OBJ_MAYBE_VMS
 
 /* Name of package */
 #undef PACKAGE
@@ -292,6 +293,10 @@
 
 /* Version number of package */
 #undef VERSION
+
+/* Define to 1 if your processor stores words with the most significant byte
+   first (like Motorola and SPARC, unlike Intel and VAX). */
+#undef WORDS_BIGENDIAN
 
 /* Define to 1 if `lex' declares `yytext' as a `char *' by default, not a
    `char[]'. */

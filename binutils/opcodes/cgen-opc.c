@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License along
    with this program; if not, write to the Free Software Foundation, Inc.,
-   59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "sysdep.h"
 #include <stdio.h>
@@ -157,7 +157,7 @@ cgen_keyword_search_init (CGEN_KEYWORD *kt, const char *spec)
 {
   CGEN_KEYWORD_SEARCH search;
 
-  /* FIXME: Need to specify format of PARAMS.  */
+  /* FIXME: Need to specify format of params.  */
   if (spec != NULL)
     abort ();
 

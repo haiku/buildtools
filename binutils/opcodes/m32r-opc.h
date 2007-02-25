@@ -18,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -39,8 +39,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
   : X (buffer) == 0x30 ? ((((unsigned char *) (buffer))[1] & 0x70) >> 4) \
   : ((((unsigned char *) (buffer))[1] & 0xf0) >> 4)))
 #else
-#define CGEN_DIS_HASH(buffer, value) m32r_cgen_dis_hash(buffer, value)
-extern unsigned int m32r_cgen_dis_hash(const char *, CGEN_INSN_INT);
+#define CGEN_DIS_HASH(buffer, value) m32r_cgen_dis_hash (buffer, value)
+extern unsigned int m32r_cgen_dis_hash (const char *, CGEN_INSN_INT);
 #endif
 
 /* -- */

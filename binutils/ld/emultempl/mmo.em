@@ -15,7 +15,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
 # This file is sourced from elf32.em and mmo.em, used to define
@@ -37,7 +37,7 @@ cat >>e${EMULATION_NAME}.c <<EOF
    from elf32.em.  */
 
 static bfd_boolean
-mmo_place_orphan (lang_input_statement_type *file, asection *s)
+mmo_place_orphan (asection *s)
 {
   static struct orphan_save hold_text =
     {
@@ -63,7 +63,7 @@ mmo_place_orphan (lang_input_statement_type *file, asection *s)
      (regardless of whether the linker script lists it as input).  */
   if (os != NULL)
     {
-      lang_add_section (&os->children, s, os, file);
+      lang_add_section (&os->children, s, os);
       return TRUE;
     }
 
@@ -83,7 +83,7 @@ mmo_place_orphan (lang_input_statement_type *file, asection *s)
 
   /* If there's an output section by this name, we'll use it, regardless
      of section flags, in contrast to what's done in elf32.em.  */
-  os = lang_insert_orphan (file, s, secname, after, place, NULL, NULL);
+  os = lang_insert_orphan (s, secname, after, place, NULL, NULL);
 
   /* We need an output section for .text as a root, so if there was none
      (might happen with a peculiar linker script such as in "map
@@ -112,6 +112,7 @@ static void
 mmo_finish (void)
 {
   bfd_map_over_sections (output_bfd, mmo_wipe_sec_reloc_flag, NULL);
+  finish_default ();
 }
 
 /* To get on-demand global register allocation right, we need to parse the

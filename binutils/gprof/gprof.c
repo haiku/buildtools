@@ -77,8 +77,6 @@ char copyright[] =
 
 static char *gmon_name = GMONNAME;	/* profile filename */
 
-bfd *abfd;
-
 /*
  * Functions that get excluded by default:
  */
@@ -169,7 +167,7 @@ Usage: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqQZ][name]] [-I dirs]\n\
 	[--no-static] [--print-path] [--separate-files]\n\
 	[--static-call-graph] [--sum] [--table-length=len] [--traditional]\n\
 	[--version] [--width=n] [--ignore-non-functions]\n\
-	[--demangle[=STYLE]] [--no-demangle]\n\
+	[--demangle[=STYLE]] [--no-demangle] [@FILE]\n\
 	[image-file] [profile-file...]\n"),
 	   whoami);
   if (status == 0)
@@ -191,11 +189,15 @@ main (int argc, char **argv)
 #if defined (HAVE_SETLOCALE)
   setlocale (LC_CTYPE, "");
 #endif
+#ifdef ENABLE_NLS
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
+#endif
 
   whoami = argv[0];
   xmalloc_set_program_name (whoami);
+
+  expandargv (&argc, &argv);
 
   while ((ch = getopt_long (argc, argv,
 	"aA::bBcCd::De:E:f:F:hiI:J::k:lLm:n::N::O:p::P::q::Q::st:Tvw:xyzZ::",

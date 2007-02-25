@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "libiberty.h"
 #include "gprof.h"
@@ -28,12 +28,12 @@
 #include "corefile.h"
 
 bfd *core_bfd;
-int core_num_syms;
-asymbol **core_syms;
+static int core_num_syms;
+static asymbol **core_syms;
 asection *core_text_sect;
 PTR core_text_space;
 
-int min_insn_size;
+static int min_insn_size;
 int offset_to_code;
 
 /* For mapping symbols to specific .o files during file ordering.  */
@@ -155,7 +155,7 @@ core_init (const char *aout_name)
 
   if (!bfd_check_format (core_bfd, bfd_object))
     {
-      fprintf (stderr, _("%s: %s: not in a.out format\n"), whoami, aout_name);
+      fprintf (stderr, _("%s: %s: not in executable format\n"), whoami, aout_name);
       done (1);
     }
 

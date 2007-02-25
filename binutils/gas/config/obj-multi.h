@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #ifndef _OBJ_MULTI_H
 #define _OBJ_MULTI_H
@@ -145,6 +145,8 @@
 	 : (void) 0)
 
 #define EMIT_SECTION_SYMBOLS (this_format->emit_section_symbols)
+
+#define FAKE_LABEL_NAME (this_emulation->fake_label_name)
 
 #ifdef OBJ_MAYBE_ELF
 /* We need OBJ_SYMFIELD_TYPE so that symbol_get_obj is defined in symbol.c

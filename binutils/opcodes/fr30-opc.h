@@ -18,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -28,9 +28,9 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 /* -- opc.h */
 
 /* ??? This can be improved upon.  */
-#undef CGEN_DIS_HASH_SIZE
+#undef  CGEN_DIS_HASH_SIZE
 #define CGEN_DIS_HASH_SIZE 16
-#undef CGEN_DIS_HASH
+#undef  CGEN_DIS_HASH
 #define CGEN_DIS_HASH(buffer, value) (((unsigned char *) (buffer))[0] >> 4)
 
 /* -- */

@@ -3,6 +3,8 @@
 #	NOP - four byte opcode for no-op (defaults to 0)
 #	NO_SMALL_DATA - no .sbss/.sbss2/.sdata/.sdata2 sections if not
 #		empty.
+#	SMALL_DATA_CTOR - .ctors contains small data.
+#	SMALL_DATA_DTOR - .dtors contains small data.
 #	DATA_ADDR - if end-of-text-plus-one-page isn't right for data start
 #	INITIAL_READONLY_SECTIONS - at start of text segment
 #	OTHER_READONLY_SECTIONS - other than .text .init .rodata ...
@@ -12,19 +14,26 @@
 #		(e.g., .PARISC.global)
 #	OTHER_RELRO_SECTIONS - other than .data.rel.ro ...
 #		(e.g. PPC32 .fixup, .got[12])
-#	OTHER_BSS_SECTIONS - other than .bss .sbss ...
 #	OTHER_SECTIONS - at the end
 #	EXECUTABLE_SYMBOLS - symbols that must be defined for an
 #		executable (e.g., _DYNAMIC_LINK)
+#       TEXT_START_ADDR - the first byte of the text segment, after any
+#               headers.
+#       TEXT_BASE_ADDRESS - the first byte of the text segment.
 #	TEXT_START_SYMBOLS - symbols that appear at the start of the
 #		.text section.
 #	DATA_START_SYMBOLS - symbols that appear at the start of the
 #		.data section.
+#	DATA_END_SYMBOLS - symbols that appear at the end of the
+#		writeable data sections.
 #	OTHER_GOT_SYMBOLS - symbols defined just before .got.
 #	OTHER_GOT_SECTIONS - sections just after .got.
 #	OTHER_SDATA_SECTIONS - sections just after .sdata.
 #	OTHER_BSS_SYMBOLS - symbols that appear at the start of the
 #		.bss section besides __bss_start.
+#	DATA_PLT - .plt should be in data segment, not text segment.
+#	PLT_BEFORE_GOT - .plt just before .got when .plt is in data segement.
+#	BSS_PLT - .plt should be in bss segment
 #	TEXT_DYNAMIC - .dynamic in text segment, not data segment.
 #	EMBEDDED - whether this is for an embedded system. 
 #	SHLIB_TEXT_START_ADDR - if set, add to SIZEOF_HEADERS to set
@@ -36,7 +45,13 @@
 #	FINI_START, FINI_END - statements just before and just after
 # 	combination of .fini sections.
 #	STACK_ADDR - start of a .stack section.
-#	OTHER_END_SYMBOLS - symbols to place right at the end of the script.
+#	OTHER_SYMBOLS - symbols to place right at the end of the script.
+#	ETEXT_NAME - name of a symbol for the end of the text section,
+#		normally etext.
+#	SEPARATE_GOTPLT - if set, .got.plt should be separate output section,
+#		so that .got can be in the RELRO area.  It should be set to
+#		the number of bytes in the beginning of .got.plt which can be
+#		in the RELRO area as well.
 #
 # When adding sections, do note that the names of some sections are used
 # when specifying the start address of the next.
@@ -66,22 +81,35 @@
 #  Each of these can also have corresponding .rel.* and .rela.* sections.
 
 test -z "$ENTRY" && ENTRY=_start
+test -z "${BIG_OUTPUT_FORMAT}" && BIG_OUTPUT_FORMAT=${OUTPUT_FORMAT}
+test -z "${LITTLE_OUTPUT_FORMAT}" && LITTLE_OUTPUT_FORMAT=${OUTPUT_FORMAT}
+if [ -z "$MACHINE" ]; then OUTPUT_ARCH=${ARCH}; else OUTPUT_ARCH=${ARCH}:${MACHINE}; fi
 test -z "${ELFSIZE}" && ELFSIZE=32
 test -z "${ALIGNMENT}" && ALIGNMENT="${ELFSIZE} / 8"
 test "$LD_FLAG" = "N" && DATA_ADDR=.
+test -z "${ETEXT_NAME}" && ETEXT_NAME=etext
 test -n "$CREATE_SHLIB$CREATE_PIE" && test -n "$SHLIB_DATA_ADDR" && COMMONPAGESIZE=""
 test -z "$CREATE_SHLIB$CREATE_PIE" && test -n "$DATA_ADDR" && COMMONPAGESIZE=""
+test -n "$RELRO_NOW" && unset SEPARATE_GOTPLT
 DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE}) + (. & (${MAXPAGESIZE} - 1))"
 DATA_SEGMENT_RELRO_END=""
 DATA_SEGMENT_END=""
 if test -n "${COMMONPAGESIZE}"; then
   DATA_SEGMENT_ALIGN="ALIGN (${SEGMENT_SIZE}) - ((${MAXPAGESIZE} - .) & (${MAXPAGESIZE} - 1)); . = DATA_SEGMENT_ALIGN (${MAXPAGESIZE}, ${COMMONPAGESIZE})"
   DATA_SEGMENT_END=". = DATA_SEGMENT_END (.);"
-  DATA_SEGMENT_RELRO_END=". = DATA_SEGMENT_RELRO_END (.);"
+  DATA_SEGMENT_RELRO_END=". = DATA_SEGMENT_RELRO_END (${SEPARATE_GOTPLT-0}, .);"
 fi
 INTERP=".interp       ${RELOCATING-0} : { *(.interp) }"
+if test -z "$PLT"; then
+  PLT=".plt          ${RELOCATING-0} : { *(.plt) }"
+fi
 if test -z "$GOT"; then
+  if test -z "$SEPARATE_GOTPLT"; then
+    GOT=".got          ${RELOCATING-0} : { *(.got.plt) *(.got) }"
+  else
     GOT=".got          ${RELOCATING-0} : { *(.got) }"
+    GOTPLT=".got.plt      ${RELOCATING-0} : { *(.got.plt) }"
+  fi
 fi
 DYNAMIC=".dynamic      ${RELOCATING-0} : { *(.dynamic) }"
 RODATA=".rodata       ${RELOCATING-0} : { *(.rodata${RELOCATING+ .rodata.* .gnu.linkonce.r.*}) }"
@@ -94,13 +122,10 @@ FINI=".fini         0 : { *(.fini)		}"
 if test -z "${NO_SMALL_DATA}"; then
   SBSS=".sbss         ${RELOCATING-0} :
   {
-    ${RELOCATING+PROVIDE (__sbss_start = .);}
-    ${RELOCATING+PROVIDE (___sbss_start = .);}
+    ${CREATE_SHLIB+*(.sbss2 .sbss2.* .gnu.linkonce.sb2.*)}
     *(.dynsbss)
     *(.sbss${RELOCATING+ .sbss.* .gnu.linkonce.sb.*})
     *(.scommon)
-    ${RELOCATING+PROVIDE (__sbss_end = .);}
-    ${RELOCATING+PROVIDE (___sbss_end = .);}
   }"
   SBSS2=".sbss2        ${RELOCATING-0} : { *(.sbss2${RELOCATING+ .sbss2.* .gnu.linkonce.sb2.*}) }"
   SDATA="/* We want the small data sections together, so single-instruction offsets
@@ -109,6 +134,7 @@ if test -z "${NO_SMALL_DATA}"; then
   .sdata        ${RELOCATING-0} : 
   {
     ${RELOCATING+${SDATA_START_SYMBOLS}}
+    ${CREATE_SHLIB+*(.sdata2 .sdata2.* .gnu.linkonce.s2.*)}
     *(.sdata${RELOCATING+ .sdata.* .gnu.linkonce.s.*})
   }"
   SDATA2=".sdata2       ${RELOCATING-0} : { *(.sdata2${RELOCATING+ .sdata2.* .gnu.linkonce.s2.*}) }"
@@ -123,6 +149,17 @@ if test -z "${NO_SMALL_DATA}"; then
 else
   NO_SMALL_DATA=" "
 fi
+if test -z "${DATA_GOT}"; then
+  if test -n "${NO_SMALL_DATA}"; then
+    DATA_GOT=" "
+  fi
+fi
+if test -z "${SDATA_GOT}"; then
+  if test -z "${NO_SMALL_DATA}"; then
+    SDATA_GOT=" "
+  fi
+fi
+test -n "$SEPARATE_GOTPLT" && SEPARATE_GOTPLT=" "
 CTOR=".ctors        ${CONSTRUCTING-0} : 
   {
     ${CONSTRUCTING+${CTOR_START}}
@@ -139,7 +176,7 @@ CTOR=".ctors        ${CONSTRUCTING-0} :
     KEEP (*crtbegin*.o(.ctors))
 
     /* We don't want to include the .ctor section from
-       from the crtend.o file until after the sorted ctors.
+       the crtend.o file until after the sorted ctors.
        The .ctor section from the crtend file contains the
        end of ctors marker and it must be last */
 
@@ -261,6 +298,7 @@ cat <<EOF
   ${RELOCATING-$INIT_LIT}
   ${RELOCATING-$INIT}
 
+  ${DATA_PLT-${BSS_PLT-${PLT}}}
   .text         ${RELOCATING-0} :
   {
     *(.got.plt* .plt*)
@@ -286,9 +324,9 @@ cat <<EOF
   ${RELOCATING-$FINI_LIT}
   ${RELOCATING-$FINI}
 
-  ${RELOCATING+PROVIDE (__etext = .);}
-  ${RELOCATING+PROVIDE (_etext = .);}
-  ${RELOCATING+PROVIDE (etext = .);}
+  ${RELOCATING+PROVIDE (__${ETEXT_NAME} = .);}
+  ${RELOCATING+PROVIDE (_${ETEXT_NAME} = .);}
+  ${RELOCATING+PROVIDE (${ETEXT_NAME} = .);}
   ${WRITABLE_RODATA-${RODATA}}
   .rodata1      ${RELOCATING-0} : { *(.rodata1) }
   ${CREATE_SHLIB-${SDATA2}}
@@ -312,32 +350,42 @@ cat <<EOF
   .tdata	${RELOCATING-0} : { *(.tdata${RELOCATING+ .tdata.* .gnu.linkonce.td.*}) }
   .tbss		${RELOCATING-0} : { *(.tbss${RELOCATING+ .tbss.* .gnu.linkonce.tb.*})${RELOCATING+ *(.tcommon)} }
 
-  /* Ensure the __preinit_array_start label is properly aligned.  We
-     could instead move the label definition inside the section, but
-     the linker would then create the section even if it turns out to
-     be empty, which isn't pretty.  */
-  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__preinit_array_start = .);}}
-  .preinit_array   ${RELOCATING-0} : { KEEP (*(.preinit_array)) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__preinit_array_end = .);}}
+  .preinit_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_start = .);}}
+    KEEP (*(.preinit_array))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_end = .);}}
+  }
+  .init_array   ${RELOCATING-0} :
+  {
+     ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_start = .);}}
+     KEEP (*(SORT(.init_array.*)))
+     KEEP (*(.init_array))
+     ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_end = .);}}
+  }
+  .fini_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_start = .);}}
+    KEEP (*(.fini_array))
+    KEEP (*(SORT(.fini_array.*)))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_end = .);}}
+  }
 
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__init_array_start = .);}}
-  .init_array   ${RELOCATING-0} : { KEEP (*(.init_array)) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__init_array_end = .);}}
-
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__fini_array_start = .);}}
-  .fini_array   ${RELOCATING-0} : { KEEP (*(.fini_array)) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__fini_array_end = .);}}
-
-  ${RELOCATING+${CTOR}}
-  ${RELOCATING+${DTOR}}
+  ${SMALL_DATA_CTOR-${RELOCATING+${CTOR}}}
+  ${SMALL_DATA_DTOR-${RELOCATING+${DTOR}}}
   .jcr          ${RELOCATING-0} : { KEEP (*(.jcr)) }
 
   ${RELOCATING+${DATARELRO}}
   ${OTHER_RELRO_SECTIONS}
   ${TEXT_DYNAMIC-${DYNAMIC}}
-  ${NO_SMALL_DATA+${GOT}}
+  ${DATA_GOT+${RELRO_NOW+${GOT}}}
+  ${DATA_GOT+${RELRO_NOW+${GOTPLT}}}
+  ${DATA_GOT+${RELRO_NOW-${SEPARATE_GOTPLT+${GOT}}}}
   ${RELOCATING+${DATA_SEGMENT_RELRO_END}}
+  ${DATA_GOT+${RELRO_NOW-${SEPARATE_GOTPLT-${GOT}}}}
+  ${DATA_GOT+${RELRO_NOW-${GOTPLT}}}
+
+  ${DATA_PLT+${PLT_BEFORE_GOT-${PLT}}}
 
   .data         ${RELOCATING-0} :
   {
@@ -349,18 +397,19 @@ cat <<EOF
   .data1        ${RELOCATING-0} : { *(.data1) }
   ${WRITABLE_RODATA+${RODATA}}
   ${OTHER_READWRITE_SECTIONS}
-  ${RELOCATING+${OTHER_GOT_SYMBOLS}}
-  ${NO_SMALL_DATA-${GOT}}
-  ${OTHER_GOT_SECTIONS}
-  ${CREATE_SHLIB+${SDATA2}}
-  ${CREATE_SHLIB+${SBSS2}}
+  ${SMALL_DATA_CTOR+${RELOCATING+${CTOR}}}
+  ${SMALL_DATA_DTOR+${RELOCATING+${DTOR}}}
+  ${DATA_PLT+${PLT_BEFORE_GOT+${PLT}}}
+  ${SDATA_GOT+${RELOCATING+${OTHER_GOT_SYMBOLS}}}
+  ${SDATA_GOT+${GOT}}
+  ${SDATA_GOT+${OTHER_GOT_SECTIONS}}
   ${SDATA}
   ${OTHER_SDATA_SECTIONS}
-  ${RELOCATING+_edata = .;}
-  ${RELOCATING+PROVIDE (edata = .);}
+  ${RELOCATING+${DATA_END_SYMBOLS-_edata = .; PROVIDE (edata = .);}}
   ${RELOCATING+__bss_start = .;}
   ${RELOCATING+${OTHER_BSS_SYMBOLS}}
   ${SBSS}
+  ${BSS_PLT+${PLT}}
   .bss          ${RELOCATING-0} :
   {
    *(.dynbss)
@@ -371,10 +420,10 @@ cat <<EOF
       .bss section disappears because there are no input sections.  */
    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
   }
-  ${OTHER_BSS_SECTIONS}
-  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
-  ${RELOCATING+_end = .;}
   ${RELOCATING+${OTHER_BSS_END_SYMBOLS}}
+  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+  ${RELOCATING+${OTHER_END_SYMBOLS}}
+  ${RELOCATING+_end = .;}
   ${RELOCATING+PROVIDE (end = .);}
   ${RELOCATING+${DATA_SEGMENT_END}}
 
@@ -421,7 +470,7 @@ cat <<EOF
 
   ${STACK_ADDR+${STACK}}
   ${OTHER_SECTIONS}
-  ${RELOCATING+${OTHER_END_SYMBOLS}}
+  ${RELOCATING+${OTHER_SYMBOLS}}
   ${RELOCATING+${STACKNOTE}}
 }
 EOF

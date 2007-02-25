@@ -87,8 +87,8 @@ struct bfd
   /* Pointer to linked list of sections.  */
   struct bfd_section *sections;
 
-  /* The place where we add to the section list.  */
-  struct bfd_section **section_tail;
+  /* The last section on the section list.  */
+  struct bfd_section *section_last;
 
   /* The number of sections.  */
   unsigned int section_count;
@@ -306,7 +306,10 @@ bfd_error_handler_type bfd_get_error_handler (void);
 @strong{Description}@*
 Return the BFD error handler function.
 
-@section Symbols
+@section Miscellaneous
+
+
+@subsection Miscellaneous functions
 
 
 @findex bfd_get_reloc_upper_bound
@@ -565,6 +568,14 @@ The following functions exist but have not yet been documented.
        BFD_SEND (abfd, _bfd_find_nearest_line, \
                  (abfd, sec, syms, off, file, func, line))
 
+#define bfd_find_line(abfd, syms, sym, file, line) \
+       BFD_SEND (abfd, _bfd_find_line, \
+                 (abfd, syms, sym, file, line))
+
+#define bfd_find_inliner_info(abfd, file, func, line) \
+       BFD_SEND (abfd, _bfd_find_inliner_info, \
+                 (abfd, file, func, line))
+
 #define bfd_debug_info_start(abfd) \
        BFD_SEND (abfd, _bfd_debug_info_start, (abfd))
 
@@ -663,7 +674,7 @@ struct bfd_preserve
   flagword flags;
   const struct bfd_arch_info *arch_info;
   struct bfd_section *sections;
-  struct bfd_section **section_tail;
+  struct bfd_section *section_last;
   unsigned int section_count;
   struct bfd_hash_table section_htab;
 @};

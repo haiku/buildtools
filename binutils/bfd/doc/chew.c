@@ -18,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* Yet another way of extracting documentation from source.
    No, I haven't finished it yet, but I hope you people like it better
@@ -83,10 +83,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
    Foo.  */
 
 #include "ansidecl.h"
-#include "sysdep.h"
 #include <assert.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define DEF_SIZE 5000
 #define STACK 50

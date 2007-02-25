@@ -1,7 +1,8 @@
 /* Main header file for the bfd library -- portable access to object files.
 
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -19,7 +20,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef __BFD_H_SEEN__
 #define __BFD_H_SEEN__
@@ -135,6 +136,9 @@ typedef unsigned long bfd_size_type;
 #define sprintf_vma(s,x) sprintf (s, "%08lx", x)
 
 #endif /* not BFD64  */
+
+#define HALF_BFD_SIZE_TYPE \
+  (((bfd_size_type) 1) << (8 * sizeof (bfd_size_type) / 2))
 
 #ifndef BFD_HOST_64_BIT
 /* Fall back on a 32 bit type.  The idea is to make these types always
@@ -372,6 +376,8 @@ struct bfd_hash_table
   struct bfd_hash_entry **table;
   /* The number of slots in the hash table.  */
   unsigned int size;
+  /* The size of elements.  */
+  unsigned int entsize;
   /* A function used to create new elements in the hash table.  The
      first entry is itself a pointer to an element.  When this
      function is first invoked, this pointer will be NULL.  However,
@@ -391,7 +397,8 @@ extern bfd_boolean bfd_hash_table_init
   (struct bfd_hash_table *,
    struct bfd_hash_entry *(*) (struct bfd_hash_entry *,
 			       struct bfd_hash_table *,
-			       const char *));
+			       const char *),
+   unsigned int);
 
 /* Initialize a hash table specifying a size.  */
 extern bfd_boolean bfd_hash_table_init_n
@@ -399,7 +406,7 @@ extern bfd_boolean bfd_hash_table_init_n
    struct bfd_hash_entry *(*) (struct bfd_hash_entry *,
 			       struct bfd_hash_table *,
 			       const char *),
-   unsigned int size);
+   unsigned int, unsigned int);
 
 /* Free up a hash table.  */
 extern void bfd_hash_table_free
@@ -630,14 +637,18 @@ enum dynamic_lib_link_class {
 };
 
 extern bfd_boolean bfd_elf_record_link_assignment
-  (bfd *, struct bfd_link_info *, const char *, bfd_boolean);
+  (bfd *, struct bfd_link_info *, const char *, bfd_boolean,
+   bfd_boolean);
 extern struct bfd_link_needed_list *bfd_elf_get_needed_list
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean bfd_elf_get_bfd_needed_list
   (bfd *, struct bfd_link_needed_list **);
 extern bfd_boolean bfd_elf_size_dynamic_sections
   (bfd *, const char *, const char *, const char *, const char * const *,
-   struct bfd_link_info *, struct bfd_section **, struct bfd_elf_version_tree *);
+   struct bfd_link_info *, struct bfd_section **,
+   struct bfd_elf_version_tree *);
+extern bfd_boolean bfd_elf_size_dynsym_hash_dynstr
+  (bfd *, struct bfd_link_info *);
 extern void bfd_elf_set_dt_needed_name
   (bfd *, const char *);
 extern const char *bfd_elf_get_dt_soname
@@ -650,6 +661,8 @@ extern struct bfd_link_needed_list *bfd_elf_get_runpath_list
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean bfd_elf_discard_info
   (bfd *, struct bfd_link_info *);
+extern unsigned int _bfd_elf_default_action_discarded
+  (struct bfd_section *);
 
 /* Return an upper bound on the number of bytes required to store a
    copy of ABFD's program header table entries.  Return -1 if an error
@@ -694,8 +707,20 @@ extern int bfd_get_sign_extend_vma
 extern struct bfd_section *_bfd_elf_tls_setup
   (bfd *, struct bfd_link_info *);
 
+extern void _bfd_fix_excluded_sec_syms
+  (bfd *, struct bfd_link_info *);
+
+extern unsigned bfd_m68k_mach_to_features (int);
+
+extern int bfd_m68k_features_to_mach (unsigned);
+
 extern bfd_boolean bfd_m68k_elf32_create_embedded_relocs
-  (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *, char **);
+  (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *,
+   char **);
+
+extern bfd_boolean bfd_bfin_elf32_create_embedded_relocs
+  (bfd *, struct bfd_link_info *, struct bfd_section *, struct bfd_section *,
+   char **);
 
 /* SunOS shared library support routines for the linker.  */
 
@@ -704,7 +729,8 @@ extern struct bfd_link_needed_list *bfd_sunos_get_needed_list
 extern bfd_boolean bfd_sunos_record_link_assignment
   (bfd *, struct bfd_link_info *, const char *);
 extern bfd_boolean bfd_sunos_size_dynamic_sections
-  (bfd *, struct bfd_link_info *, struct bfd_section **, struct bfd_section **, struct bfd_section **);
+  (bfd *, struct bfd_link_info *, struct bfd_section **,
+   struct bfd_section **, struct bfd_section **);
 
 /* Linux shared library support routines for the linker.  */
 
@@ -813,13 +839,17 @@ extern bfd_boolean bfd_elf32_arm_process_before_allocation
   (bfd *, struct bfd_link_info *, int);
 
 void bfd_elf32_arm_set_target_relocs
-  (struct bfd_link_info *, int, char *, int);
+  (struct bfd_link_info *, int, char *, int, int);
 
 extern bfd_boolean bfd_elf32_arm_get_bfd_for_interworking
   (bfd *, struct bfd_link_info *);
 
 extern bfd_boolean bfd_elf32_arm_add_glue_sections_to_bfd
   (bfd *, struct bfd_link_info *);
+
+/* ELF ARM mapping symbol support */
+extern bfd_boolean bfd_is_arm_mapping_symbol_name
+  (const char * name);
 
 /* ARM Note section processing.  */
 extern bfd_boolean bfd_arm_merge_machines

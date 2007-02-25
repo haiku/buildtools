@@ -16,15 +16,13 @@
 
    You should have received a copy of the GNU General Public
    License along with GAS; see the file COPYING.  If not, write
-   to the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   to the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 #ifndef TC_SPARC
 #define TC_SPARC 1
 
-#ifdef ANSI_PROTOTYPES
 struct frag;
-#endif
 
 /* This is used to set the default value for `target_big_endian'.  */
 #define TARGET_BYTES_BIG_ENDIAN 1
@@ -109,7 +107,7 @@ extern void sparc_handle_align PARAMS ((struct frag *));
 		       == S_GET_SEGMENT ((FIX)->fx_addsy)))		\
 	       || S_IS_LOCAL ((FIX)->fx_addsy)))))
 
-/* Values passed to md_apply_fix3 don't include the symbol value.  */
+/* Values passed to md_apply_fix don't include the symbol value.  */
 #define MD_APPLY_SYM_VALUE(FIX) 0
 
 /* Finish up the entire symtab.  */

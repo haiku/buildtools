@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -90,6 +90,11 @@ simple_dummy_multiple_definition (struct bfd_link_info *link_info ATTRIBUTE_UNUS
 				  bfd_vma nval ATTRIBUTE_UNUSED)
 {
   return TRUE;
+}
+
+static void
+simple_dummy_einfo (const char *fmt ATTRIBUTE_UNUSED, ...)
+{
 }
 
 struct saved_output_info
@@ -187,6 +192,7 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
   callbacks.reloc_dangerous = simple_dummy_reloc_dangerous;
   callbacks.unattached_reloc = simple_dummy_unattached_reloc;
   callbacks.multiple_definition = simple_dummy_multiple_definition;
+  callbacks.einfo = simple_dummy_einfo;
 
   memset (&link_order, 0, sizeof (link_order));
   link_order.next = NULL;

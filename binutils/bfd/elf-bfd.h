@@ -1,6 +1,6 @@
 /* BFD back-end data structures for ELF files.
    Copyright 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef _LIBELF_H_
 #define _LIBELF_H_ 1
@@ -349,13 +349,15 @@ struct elf_link_hash_table
 
   /* The value to use when initialising got.refcount/offset and
      plt.refcount/offset in an elf_link_hash_entry.  Set to zero when
-     the values are refcounts.  Set to init_offset in
-     size_dynamic_sections when the values may be offsets.  */
-  union gotplt_union init_refcount;
+     the values are refcounts.  Set to init_got_offset/init_plt_offset
+     in size_dynamic_sections when the values may be offsets.  */
+  union gotplt_union init_got_refcount;
+  union gotplt_union init_plt_refcount;
 
   /* The value to use for got.refcount/offset and plt.refcount/offset
      when the values may be offsets.  Normally (bfd_vma) -1.  */
-  union gotplt_union init_offset;
+  union gotplt_union init_got_offset;
+  union gotplt_union init_plt_offset;
 
   /* The number of symbols found in the link which must be put into
      the .dynsym section.  */
@@ -375,6 +377,9 @@ struct elf_link_hash_table
 
   /* The _GLOBAL_OFFSET_TABLE_ symbol.  */
   struct elf_link_hash_entry *hgot;
+
+  /* The _PROCEDURE_LINKAGE_TABLE_ symbol.  */
+  struct elf_link_hash_entry *hplt;
 
   /* A pointer to information used to merge SEC_MERGE sections.  */
   void *merge_info;
@@ -544,6 +549,12 @@ struct bfd_elf_special_section
   int attr;
 };
 
+enum action_discarded
+  {
+    COMPLAIN = 1,
+    PRETEND = 2
+  };
+
 struct elf_backend_data
 {
   /* The architecture for this backend.  */
@@ -629,12 +640,17 @@ struct elf_backend_data
   /* A function to handle unusual section types when creating BFD
      sections from ELF sections.  */
   bfd_boolean (*elf_backend_section_from_shdr)
-    (bfd *, Elf_Internal_Shdr *, const char *);
+    (bfd *, Elf_Internal_Shdr *, const char *, int);
 
-  /* A function to convert machine dependent section header flags to
+  /* A function to convert machine dependent ELF section header flags to
      BFD internal section header flags.  */
   bfd_boolean (*elf_backend_section_flags)
     (flagword *, const Elf_Internal_Shdr *);
+
+  /* A function that returns a struct containing ELF section flags and
+     type for the given BFD section.   */
+  const struct bfd_elf_special_section * (*get_sec_type_attr)
+    (bfd *, asection *);
 
   /* A function to handle unusual program segment types when creating BFD
      sections from ELF program segments.  */
@@ -817,6 +833,11 @@ struct elf_backend_data
   bfd_boolean (*elf_backend_modify_segment_map)
     (bfd *, struct bfd_link_info *);
 
+  /* This function is called during section garbage collection to
+     mark sections that define global symbols.  */
+  bfd_boolean (*gc_mark_dynamic_ref)
+    (struct elf_link_hash_entry *h, void *inf);
+
   /* This function is called during section gc to discover the section a
      particular relocation refers to.  */
   asection * (*gc_mark_hook)
@@ -857,7 +878,7 @@ struct elf_backend_data
      newly created and plt/got refcounts and dynamic indices should not
      be copied.  */
   void (*elf_backend_copy_indirect_symbol)
-    (const struct elf_backend_data *, struct elf_link_hash_entry *,
+    (struct bfd_link_info *, struct elf_link_hash_entry *,
      struct elf_link_hash_entry *);
 
   /* Modify any information related to dynamic linking such that the
@@ -865,15 +886,26 @@ struct elf_backend_data
   void (*elf_backend_hide_symbol)
     (struct bfd_link_info *, struct elf_link_hash_entry *, bfd_boolean);
 
+  /* A function to do additional symbol fixup, called by
+     _bfd_elf_fix_symbol_flags.  */
+  bfd_boolean (*elf_backend_fixup_symbol)
+    (struct bfd_link_info *, struct elf_link_hash_entry *);
+
   /* Merge the backend specific symbol attribute.  */
   void (*elf_backend_merge_symbol_attribute)
     (struct elf_link_hash_entry *, const Elf_Internal_Sym *, bfd_boolean,
      bfd_boolean);
 
+  /* Decide whether an undefined symbol is special and can be ignored.
+     This is the case for OPTIONAL symbols on IRIX.  */
+  bfd_boolean (*elf_backend_ignore_undef_symbol)
+    (struct elf_link_hash_entry *);
+
   /* Emit relocations.  Overrides default routine for emitting relocs,
      except during a relocatable link, or if all relocs are being emitted.  */
   bfd_boolean (*elf_backend_emit_relocs)
-    (bfd *, asection *, Elf_Internal_Shdr *, Elf_Internal_Rela *);
+    (bfd *, asection *, Elf_Internal_Shdr *, Elf_Internal_Rela *,
+     struct elf_link_hash_entry **);
 
   /* Count relocations.  Not called for relocatable links
      or if all relocs are being preserved in the output.  */
@@ -908,6 +940,11 @@ struct elf_backend_data
   /* This function, if defined, signals that the function above has removed
      the discarded relocations for this section.  */
   bfd_boolean (*elf_backend_ignore_discarded_relocs)
+    (asection *);
+
+  /* What to do when ld finds relocations against symbols defined in
+     discarded sections.  */
+  unsigned int (*action_discarded)
     (asection *);
 
   /* This function returns the width of FDE pointers in bytes, or 0 if
@@ -961,6 +998,30 @@ struct elf_backend_data
      see elf.c.  */
   bfd_vma (*plt_sym_val) (bfd_vma, const asection *, const arelent *);
 
+  /* Is symbol defined in common section?  */
+  bfd_boolean (*common_definition) (Elf_Internal_Sym *);
+
+  /* Return a common section index for section.  */
+  unsigned int (*common_section_index) (asection *);
+
+  /* Return a common section for section.  */
+  asection *(*common_section) (asection *);
+
+  /* Return TRUE if we can merge 2 definitions.  */
+  bfd_boolean (*merge_symbol) (struct bfd_link_info *,
+			       struct elf_link_hash_entry **,
+			       struct elf_link_hash_entry *,
+			       Elf_Internal_Sym *, asection **,
+			       bfd_vma *, unsigned int *,
+			       bfd_boolean *, bfd_boolean *,
+			       bfd_boolean *, bfd_boolean *,
+			       bfd_boolean *, bfd_boolean *,
+			       bfd_boolean *, bfd_boolean *,
+			       bfd *, asection **,
+			       bfd_boolean *, bfd_boolean *,
+			       bfd_boolean *, bfd_boolean *,
+			       bfd *, asection **);
+
   /* Used to handle bad SHF_LINK_ORDER input.  */
   bfd_error_handler_type link_order_error_handler;
 
@@ -973,12 +1034,8 @@ struct elf_backend_data
 
   const struct elf_size_info *s;
 
-  /* An array of target specific special section map.  */
+  /* An array of target specific special sections.  */
   const struct bfd_elf_special_section *special_sections;
-
-  /* offset of the _GLOBAL_OFFSET_TABLE_ symbol from the start of the
-     .got section */
-  bfd_vma got_symbol_offset;
 
   /* The size in bytes of the header for the GOT.  This includes the
      so-called reserved entries on some systems.  */
@@ -1059,8 +1116,7 @@ struct bfd_elf_section_data
   /* The number of relocations currently assigned to REL_HDR2.  */
   unsigned int rel_count2;
 
-  /* The ELF section number of this section.  Only used for an output
-     file.  */
+  /* The ELF section number of this section.  */
   int this_idx;
 
   /* The ELF section number of the reloc section indicated by
@@ -1116,7 +1172,7 @@ struct bfd_elf_section_data
   void *sec_info;
 };
 
-#define elf_section_data(sec)  ((struct bfd_elf_section_data*)sec->used_by_bfd)
+#define elf_section_data(sec)  ((struct bfd_elf_section_data*)(sec)->used_by_bfd)
 #define elf_linked_to_section(sec) (elf_section_data(sec)->linked_to)
 #define elf_section_type(sec)  (elf_section_data(sec)->this_hdr.sh_type)
 #define elf_section_flags(sec) (elf_section_data(sec)->this_hdr.sh_flags)
@@ -1373,7 +1429,7 @@ extern Elf_Internal_Sym *bfd_elf_get_elf_syms
   (bfd *, Elf_Internal_Shdr *, size_t, size_t, Elf_Internal_Sym *, void *,
    Elf_External_Sym_Shndx *);
 extern const char *bfd_elf_sym_name
-  (bfd *, Elf_Internal_Shdr *, Elf_Internal_Sym *);
+  (bfd *, Elf_Internal_Shdr *, Elf_Internal_Sym *, asection *);
 
 extern bfd_boolean _bfd_elf_copy_private_bfd_data
   (bfd *, bfd *);
@@ -1416,7 +1472,7 @@ extern bfd_boolean bfd_elf_mkcorefile
 extern Elf_Internal_Shdr *bfd_elf_find_section
   (bfd *, char *);
 extern bfd_boolean _bfd_elf_make_section_from_shdr
-  (bfd *, Elf_Internal_Shdr *, const char *);
+  (bfd *, Elf_Internal_Shdr *, const char *, int);
 extern bfd_boolean _bfd_elf_make_section_from_phdr
   (bfd *, Elf_Internal_Phdr *, int, const char *);
 extern struct bfd_hash_entry *_bfd_elf_link_hash_newfunc
@@ -1424,30 +1480,41 @@ extern struct bfd_hash_entry *_bfd_elf_link_hash_newfunc
 extern struct bfd_link_hash_table *_bfd_elf_link_hash_table_create
   (bfd *);
 extern void _bfd_elf_link_hash_copy_indirect
-  (const struct elf_backend_data *, struct elf_link_hash_entry *,
+  (struct bfd_link_info *, struct elf_link_hash_entry *,
    struct elf_link_hash_entry *);
 extern void _bfd_elf_link_hash_hide_symbol
   (struct bfd_link_info *, struct elf_link_hash_entry *, bfd_boolean);
+extern bfd_boolean _bfd_elf_link_hash_fixup_symbol
+  (struct bfd_link_info *, struct elf_link_hash_entry *);
 extern bfd_boolean _bfd_elf_link_hash_table_init
   (struct elf_link_hash_table *, bfd *,
    struct bfd_hash_entry *(*)
-     (struct bfd_hash_entry *, struct bfd_hash_table *, const char *));
+     (struct bfd_hash_entry *, struct bfd_hash_table *, const char *),
+   unsigned int);
 extern bfd_boolean _bfd_elf_slurp_version_tables
   (bfd *, bfd_boolean);
 extern bfd_boolean _bfd_elf_merge_sections
   (bfd *, struct bfd_link_info *);
+extern bfd_boolean _bfd_elf_match_sections_by_type
+  (bfd *, const asection *, bfd *, const asection *);
 extern bfd_boolean bfd_elf_is_group_section
   (bfd *, const struct bfd_section *);
 extern void _bfd_elf_section_already_linked
   (bfd *, struct bfd_section *);
 extern void bfd_elf_set_group_contents
   (bfd *, asection *, void *);
+extern asection *_bfd_elf_check_kept_section
+  (asection *);
 extern void _bfd_elf_link_just_syms
   (asection *, struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_copy_private_header_data
   (bfd *, bfd *);
 extern bfd_boolean _bfd_elf_copy_private_symbol_data
   (bfd *, asymbol *, bfd *, asymbol *);
+#define _bfd_generic_init_private_section_data \
+  _bfd_elf_init_private_section_data
+extern bfd_boolean _bfd_elf_init_private_section_data
+  (bfd *, asection *, bfd *, asection *, struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_copy_private_section_data
   (bfd *, asection *, bfd *, asection *);
 extern bfd_boolean _bfd_elf_write_object_contents
@@ -1487,6 +1554,11 @@ extern bfd_boolean _bfd_elf_set_arch_mach
 extern bfd_boolean _bfd_elf_find_nearest_line
   (bfd *, asection *, asymbol **, bfd_vma, const char **, const char **,
    unsigned int *);
+extern bfd_boolean _bfd_elf_find_line
+  (bfd *, asymbol **, asymbol *, const char **, unsigned int *);
+#define _bfd_generic_find_line _bfd_elf_find_line
+extern bfd_boolean _bfd_elf_find_inliner_info
+  (bfd *, const char **, const char **, unsigned int *);
 #define _bfd_elf_read_minisymbols _bfd_generic_read_minisymbols
 #define _bfd_elf_minisymbol_to_symbol _bfd_generic_minisymbol_to_symbol
 extern int _bfd_elf_sizeof_headers
@@ -1495,8 +1567,10 @@ extern bfd_boolean _bfd_elf_new_section_hook
   (bfd *, asection *);
 extern bfd_boolean _bfd_elf_init_reloc_shdr
   (bfd *, Elf_Internal_Shdr *, asection *, bfd_boolean);
+extern const struct bfd_elf_special_section *_bfd_elf_get_special_section
+  (const char *, const struct bfd_elf_special_section *, unsigned int);
 extern const struct bfd_elf_special_section *_bfd_elf_get_sec_type_attr
-  (bfd *, const char *);
+  (bfd *, asection *);
 
 /* If the target doesn't have reloc handling written yet:  */
 extern void _bfd_elf_no_info_to_howto
@@ -1592,8 +1666,8 @@ extern bfd_boolean _bfd_elf_create_dynamic_sections
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_create_got_section
   (bfd *, struct bfd_link_info *);
-extern unsigned long _bfd_elf_link_renumber_dynsyms
-  (bfd *, struct bfd_link_info *);
+extern struct elf_link_hash_entry *_bfd_elf_define_linkage_sym
+  (bfd *, struct bfd_link_info *, asection *, const char *);
 
 extern bfd_boolean _bfd_elfcore_make_pseudosection
   (bfd *, char *, size_t, ufile_ptr);
@@ -1607,7 +1681,8 @@ extern bfd_boolean _bfd_elf_link_size_reloc_section
   (bfd *, Elf_Internal_Shdr *, asection *);
 
 extern bfd_boolean _bfd_elf_link_output_relocs
-  (bfd *, asection *, Elf_Internal_Shdr *, Elf_Internal_Rela *);
+  (bfd *, asection *, Elf_Internal_Shdr *, Elf_Internal_Rela *,
+   struct elf_link_hash_entry **);
 
 extern bfd_boolean _bfd_elf_fix_symbol_flags
   (struct elf_link_hash_entry *, struct elf_info_failed *);
@@ -1627,7 +1702,7 @@ extern bfd_boolean _bfd_elf_symbol_refs_local_p
 extern bfd_boolean bfd_elf_match_symbols_in_sections
   (asection *sec1, asection *sec2);
 
-extern bfd_boolean _bfd_elf_setup_group_pointers
+extern bfd_boolean _bfd_elf_setup_sections
   (bfd *);
 
 extern const bfd_target *bfd_elf32_object_p
@@ -1729,12 +1804,28 @@ extern int bfd_elf_link_record_local_dynamic_symbol
 
 extern bfd_boolean _bfd_elf_close_and_cleanup
   (bfd *);
+
+extern bfd_boolean _bfd_elf_common_definition
+  (Elf_Internal_Sym *);
+
+extern unsigned int _bfd_elf_common_section_index
+  (asection *);
+
+extern asection *_bfd_elf_common_section
+  (asection *);
+
+extern void _bfd_dwarf2_cleanup_debug_info
+  (bfd *);
+
 extern bfd_reloc_status_type _bfd_elf_rel_vtable_reloc_fn
   (bfd *, arelent *, struct bfd_symbol *, void *,
    asection *, bfd *, char **);
 
 extern bfd_boolean bfd_elf_final_link
   (bfd *, struct bfd_link_info *);
+
+extern bfd_boolean bfd_elf_gc_mark_dynamic_ref_symbol
+  (struct elf_link_hash_entry *h, void *inf);
 
 extern bfd_boolean bfd_elf_gc_sections
   (bfd *, struct bfd_link_info *);
@@ -1785,6 +1876,9 @@ extern bfd *_bfd_elf32_bfd_from_remote_memory
 extern bfd *_bfd_elf64_bfd_from_remote_memory
   (bfd *templ, bfd_vma ehdr_vma, bfd_vma *loadbasep,
    int (*target_read_memory) (bfd_vma, bfd_byte *, int));
+
+/* Large common section.  */
+extern asection _bfd_elf_large_com_section;
 
 /* SH ELF specific routine.  */
 

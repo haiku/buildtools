@@ -2,7 +2,7 @@
    This does not include symbol information, found in sym.h and
    symconst.h.
 
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef ECOFF_H
 #define ECOFF_H
@@ -41,6 +41,8 @@
 /* Alpha magic numbers used in filehdr.  */
 #define ALPHA_MAGIC 0x183
 #define ALPHA_MAGIC_BSD 0x185
+/* A compressed version of an ALPHA_MAGIC file created by DEC's tools.  */
+#define ALPHA_MAGIC_COMPRESSED 0x188
 
 /* Magic numbers used in a.out header.  */
 #define ECOFF_AOUT_OMAGIC 0407	/* not demand paged (ld -N).  */

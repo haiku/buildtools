@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 #include "opcode/ia64.h"
 #include "elf/ia64.h"
@@ -129,7 +129,7 @@ extern void ia64_convert_frag (fragS *);
 #define tc_frob_symbol(s,p)		p |= ia64_frob_symbol (s)
 #endif /* TE_HPUX */
 #define md_flush_pending_output()	ia64_flush_pending_output ()
-#define md_parse_name(s,e,c)		ia64_parse_name (s, e, c)
+#define md_parse_name(s,e,m,c)		ia64_parse_name (s, e, c)
 #define tc_canonicalize_symbol_name(s)	ia64_canonicalize_symbol_name (s)
 #define tc_canonicalize_section_name(s)	ia64_canonicalize_symbol_name (s)
 #define md_optimize_expr(l,o,r)		ia64_optimize_expr (l, o, r)
@@ -241,7 +241,7 @@ typedef struct unw_r_record
   struct
   {
     unsigned char *i;
-    unsigned long fr_mem;
+    unsigned int fr_mem;
     unsigned char gr_mem;
     unsigned char br_mem;
   } mask;
@@ -249,17 +249,22 @@ typedef struct unw_r_record
 
 typedef struct unw_p_record
 {
-  void *imask;
+  struct unw_rec_list *next;
   unsigned long t;
   unsigned long size;
-  unsigned long spoff;
-  unsigned long br;
-  unsigned long pspoff;
-  unsigned short gr;
-  unsigned short rmask;
-  unsigned short grmask;
-  unsigned long frmask;
-  unsigned short brmask;
+  union
+  {
+    unsigned long sp;
+    unsigned long psp;
+  } off;
+  union
+  {
+    unsigned short gr;
+    unsigned short br;
+  } r;
+  unsigned char grmask;
+  unsigned char brmask;
+  unsigned int frmask;
   unsigned char abi;
   unsigned char context;
 } unw_p_record;
@@ -274,10 +279,13 @@ typedef struct unw_b_record
 typedef struct unw_x_record
 {
   unsigned long t;
-  unsigned long spoff;
-  unsigned long pspoff;
+  union
+  {
+    unsigned long spoff;
+    unsigned long pspoff;
+    unsigned int reg;
+  } where;
   unsigned short reg;
-  unsigned short treg;
   unsigned short qp;
   unsigned short ab;	/* Value of the AB field..  */
   unsigned short xy;	/* Value of the XY field..  */

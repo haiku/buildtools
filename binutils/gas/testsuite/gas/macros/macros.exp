@@ -27,8 +27,8 @@ if { ![istarget *c54x*-*-*] && ![istarget *c4x*-*-*] } {
     run_dump_test irp
     run_dump_test rept
     run_dump_test repeat
+    run_dump_test vararg
 }
-
 
 gas_test_error "err.s" "" "macro infinite recursion"
 
@@ -56,6 +56,7 @@ if { ![istarget hppa*-*-*] || [istarget *-*-linux*] } {
     setup_xfail "powerpc*-*-aix*" "powerpc*-*-beos*" "powerpc*-*-macos*"
     setup_xfail "powerpc*-*-pe" "powerpc*-*-*win*"
     setup_xfail "rs6000-*-*"
+    setup_xfail "z80-*-*"
 
     # FIXME: Due to difference in what "consecutive octets" means.
     setup_xfail "*c4x*-*-*" "*c54x*-*"
@@ -68,5 +69,22 @@ run_dump_test app3
 run_dump_test app4
 
 run_list_test badarg ""
+case $target_triplet in {
+    { *c54x*-*-* } { }
+    { *c4x*-*-* } { }
+    { h8500-*-* } { }
+    { m68*-*-* } { }
+    { m88*-*-* } { }
+    { mmix-* } { }
+    { z80-* } { }
+    default { run_list_test dot "-alm" }
+}
 run_list_test end ""
+run_list_test purge "--hash-size=8000"
 run_list_test redef ""
+
+# This test is valid only when '!' is not a comment character
+# (it is allowed to be a line comment character).
+if [string match "" [lindex [gas_run ../all/excl.s "-o /dev/null" ""] 0]] {
+    run_dump_test paren
+}

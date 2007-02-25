@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 /* Written By Steve Chamberlain <sac@cygnus.com>  */
 
@@ -124,8 +124,6 @@ const pseudo_typeS md_pseudo_table[] =
   {0, 0, 0}
 };
 
-/*int md_reloc_size; */
-
 int sh_relax;		/* set if -relax seen */
 
 /* Whether -small was seen.  */
@@ -136,7 +134,11 @@ int sh_small;
 
 static int dont_adjust_reloc_32;
 
-/* preset architecture set, if given; zero otherwise.  */
+/* Flag to indicate that '$' is allowed as a register prefix.  */
+
+static int allow_dollar_register_prefix;
+
+/* Preset architecture set, if given; zero otherwise.  */
 
 static unsigned int preset_target_arch;
 
@@ -871,8 +873,8 @@ static int reg_b;
 
 /* Try to parse a reg name.  Return the number of chars consumed.  */
 
-static int
-parse_reg (char *src, int *mode, int *reg)
+static unsigned int
+parse_reg_without_prefix (char *src, int *mode, int *reg)
 {
   char l0 = TOLOWER (src[0]);
   char l1 = l0 ? TOLOWER (src[1]) : 0;
@@ -1225,6 +1227,36 @@ parse_reg (char *src, int *mode, int *reg)
     }
 
   return 0;
+}
+
+/* Like parse_reg_without_prefix, but this version supports
+   $-prefixed register names if enabled by the user.  */
+
+static unsigned int
+parse_reg (char *src, int *mode, int *reg)
+{
+  unsigned int prefix;
+  unsigned int consumed;
+
+  if (src[0] == '$')
+    {
+      if (allow_dollar_register_prefix)
+	{
+	  src ++;
+	  prefix = 1;
+	}
+      else
+	return 0;
+    }
+  else
+    prefix = 0;
+  
+  consumed = parse_reg_without_prefix (src, mode, reg);
+
+  if (consumed == 0)
+    return 0;
+
+  return consumed + prefix;
 }
 
 static char *
@@ -2871,16 +2903,14 @@ md_assemble (char *str)
 	}
     }
 
-#ifdef BFD_ASSEMBLER
   dwarf2_emit_insn (size);
-#endif
 }
 
 /* This routine is called each time a label definition is seen.  It
    emits a BFD_RELOC_SH_LABEL reloc if necessary.  */
 
 void
-sh_frob_label (void)
+sh_frob_label (symbolS *sym)
 {
   static fragS *last_label_frag;
   static int last_label_offset;
@@ -2899,6 +2929,8 @@ sh_frob_label (void)
 	  last_label_offset = offset;
 	}
     }
+
+  dwarf2_emit_label (sym);
 }
 
 /* This routine is called when the assembler is about to output some
@@ -2921,24 +2953,6 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
 {
   return 0;
 }
-
-#ifdef OBJ_COFF
-#ifndef BFD_ASSEMBLER
-
-void
-tc_crawl_symbol_chain (object_headers *headers ATTRIBUTE_UNUSED)
-{
-  printf (_("call to tc_crawl_symbol_chain \n"));
-}
-
-void
-tc_headers_hook (object_headers *headers ATTRIBUTE_UNUSED)
-{
-  printf (_("call to tc_headers_hook \n"));
-}
-
-#endif
-#endif
 
 /* Various routines to kill one day.  */
 /* Equal to MAX_PRECISION in atof-ieee.c.  */
@@ -3025,31 +3039,39 @@ s_uses (int ignore ATTRIBUTE_UNUSED)
   demand_empty_rest_of_line ();
 }
 
+enum options
+{
+  OPTION_RELAX = OPTION_MD_BASE,
+  OPTION_BIG,
+  OPTION_LITTLE,
+  OPTION_SMALL,
+  OPTION_DSP,
+  OPTION_ISA,
+  OPTION_RENESAS,
+  OPTION_ALLOW_REG_PREFIX,
+#ifdef HAVE_SH64
+  OPTION_ABI,
+  OPTION_NO_MIX,
+  OPTION_SHCOMPACT_CONST_CRANGE,
+  OPTION_NO_EXPAND,
+  OPTION_PT32,
+#endif
+  OPTION_DUMMY  /* Not used.  This is just here to make it easy to add and subtract options from this enum.  */
+};
+
 const char *md_shortopts = "";
 struct option md_longopts[] =
 {
-#define OPTION_RELAX  (OPTION_MD_BASE)
-#define OPTION_BIG (OPTION_MD_BASE + 1)
-#define OPTION_LITTLE (OPTION_BIG + 1)
-#define OPTION_SMALL (OPTION_LITTLE + 1)
-#define OPTION_DSP (OPTION_SMALL + 1)
-#define OPTION_ISA                    (OPTION_DSP + 1)
-#define OPTION_RENESAS (OPTION_ISA + 1)
-
   {"relax", no_argument, NULL, OPTION_RELAX},
   {"big", no_argument, NULL, OPTION_BIG},
   {"little", no_argument, NULL, OPTION_LITTLE},
   {"small", no_argument, NULL, OPTION_SMALL},
   {"dsp", no_argument, NULL, OPTION_DSP},
-  {"isa",                    required_argument, NULL, OPTION_ISA},
+  {"isa", required_argument, NULL, OPTION_ISA},
   {"renesas", no_argument, NULL, OPTION_RENESAS},
+  {"allow-reg-prefix", no_argument, NULL, OPTION_ALLOW_REG_PREFIX},
 
 #ifdef HAVE_SH64
-#define OPTION_ABI                    (OPTION_RENESAS + 1)
-#define OPTION_NO_MIX                 (OPTION_ABI + 1)
-#define OPTION_SHCOMPACT_CONST_CRANGE (OPTION_NO_MIX + 1)
-#define OPTION_NO_EXPAND              (OPTION_SHCOMPACT_CONST_CRANGE + 1)
-#define OPTION_PT32                   (OPTION_NO_EXPAND + 1)
   {"abi",                    required_argument, NULL, OPTION_ABI},
   {"no-mix",                 no_argument, NULL, OPTION_NO_MIX},
   {"shcompact-const-crange", no_argument, NULL, OPTION_SHCOMPACT_CONST_CRANGE},
@@ -3090,6 +3112,10 @@ md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
       dont_adjust_reloc_32 = 1;
       break;
 
+    case OPTION_ALLOW_REG_PREFIX:
+      allow_dollar_register_prefix = 1;
+      break;
+
     case OPTION_ISA:
       if (strcasecmp (arg, "dsp") == 0)
 	preset_target_arch = arch_sh_up & ~(arch_sh_sp_fpu|arch_sh_dp_fpu);
@@ -3117,6 +3143,7 @@ md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 	{
 	  extern const bfd_arch_info_type bfd_sh_arch;
 	  bfd_arch_info_type const *bfd_arch = &bfd_sh_arch;
+
 	  preset_target_arch = 0;
 	  for (; bfd_arch; bfd_arch=bfd_arch->next)
 	    {
@@ -3193,19 +3220,21 @@ md_show_usage (FILE *stream)
 {
   fprintf (stream, _("\
 SH options:\n\
--little			generate little endian code\n\
--big			generate big endian code\n\
--relax			alter jump instructions for long displacements\n\
--renesas		disable optimization with section symbol for\n\
+--little		generate little endian code\n\
+--big			generate big endian code\n\
+--relax			alter jump instructions for long displacements\n\
+--renesas		disable optimization with section symbol for\n\
 			compatibility with Renesas assembler.\n\
--small			align sections to 4 byte boundaries, not 16\n\
--dsp			enable sh-dsp insns, and disable floating-point ISAs.\n\
--isa=[any		use most appropriate isa\n\
+--small			align sections to 4 byte boundaries, not 16\n\
+--dsp			enable sh-dsp insns, and disable floating-point ISAs.\n\
+--allow-reg-prefix	allow '$' as a register name prefix.\n\
+--isa=[any		use most appropriate isa\n\
     | dsp               same as '-dsp'\n\
     | fp"));
   {
     extern const bfd_arch_info_type bfd_sh_arch;
     bfd_arch_info_type const *bfd_arch = &bfd_sh_arch;
+
     for (; bfd_arch; bfd_arch=bfd_arch->next)
       if (bfd_arch->mach != bfd_mach_sh5)
 	{
@@ -3216,19 +3245,19 @@ SH options:\n\
   fprintf (stream, "]\n");
 #ifdef HAVE_SH64
   fprintf (stream, _("\
--isa=[shmedia		set as the default instruction set for SH64\n\
+--isa=[shmedia		set as the default instruction set for SH64\n\
     | SHmedia\n\
     | shcompact\n\
     | SHcompact]\n"));
   fprintf (stream, _("\
--abi=[32|64]		set size of expanded SHmedia operands and object\n\
+--abi=[32|64]		set size of expanded SHmedia operands and object\n\
 			file type\n\
--shcompact-const-crange	emit code-range descriptors for constants in\n\
+--shcompact-const-crange  emit code-range descriptors for constants in\n\
 			SHcompact code sections\n\
--no-mix			disallow SHmedia code in the same section as\n\
+--no-mix		disallow SHmedia code in the same section as\n\
 			constants and SHcompact code\n\
--no-expand		do not expand MOVI, PT, PTA or PTB instructions\n\
--expand-pt32		with -abi=64, expand PT, PTA and PTB instructions\n\
+--no-expand		do not expand MOVI, PT, PTA or PTB instructions\n\
+--expand-pt32		with -abi=64, expand PT, PTA and PTB instructions\n\
 			to 32 bits only\n"));
 #endif /* HAVE_SH64 */
 }
@@ -3245,8 +3274,7 @@ struct sh_count_relocs
 };
 
 /* Count the number of fixups in a section which refer to a particular
-   symbol.  When using BFD_ASSEMBLER, this is called via
-   bfd_map_over_sections.  */
+   symbol.  This is called via bfd_map_over_sections.  */
 
 static void
 sh_count_relocs (bfd *abfd ATTRIBUTE_UNUSED, segT sec, void *data)
@@ -3271,8 +3299,8 @@ sh_count_relocs (bfd *abfd ATTRIBUTE_UNUSED, segT sec, void *data)
     }
 }
 
-/* Handle the count relocs for a particular section.  When using
-   BFD_ASSEMBLER, this is called via bfd_map_over_sections.  */
+/* Handle the count relocs for a particular section.
+   This is called via bfd_map_over_sections.  */
 
 static void
 sh_frob_section (bfd *abfd ATTRIBUTE_UNUSED, segT sec,
@@ -3302,9 +3330,6 @@ sh_frob_section (bfd *abfd ATTRIBUTE_UNUSED, segT sec,
 	  || fix->fx_subsy != NULL
 	  || fix->fx_addnumber != 0
 	  || S_GET_SEGMENT (sym) != sec
-#if ! defined (BFD_ASSEMBLER) && defined (OBJ_COFF)
-	  || S_GET_STORAGE_CLASS (sym) == C_EXT
-#endif
 	  || S_IS_EXTERNAL (sym))
 	{
 	  as_warn_where (fix->fx_file, fix->fx_line,
@@ -3344,9 +3369,6 @@ sh_frob_section (bfd *abfd ATTRIBUTE_UNUSED, segT sec,
 	  || fscan->fx_subsy != NULL
 	  || fscan->fx_addnumber != 0
 	  || S_GET_SEGMENT (sym) != sec
-#if ! defined (BFD_ASSEMBLER) && defined (OBJ_COFF)
-	  || S_GET_STORAGE_CLASS (sym) == C_EXT
-#endif
 	  || S_IS_EXTERNAL (sym))
 	{
 	  as_warn_where (fix->fx_file, fix->fx_line,
@@ -3358,16 +3380,7 @@ sh_frob_section (bfd *abfd ATTRIBUTE_UNUSED, segT sec,
 	 counting the number of times we find a reference to sym.  */
       info.sym = sym;
       info.count = 0;
-#ifdef BFD_ASSEMBLER
       bfd_map_over_sections (stdoutput, sh_count_relocs, &info);
-#else
-      {
-	int iscan;
-
-	for (iscan = SEG_E0; iscan < SEG_UNKNOWN; iscan++)
-	  sh_count_relocs ((bfd *) NULL, iscan, &info);
-      }
-#endif
 
       if (info.count < 1)
 	abort ();
@@ -3402,28 +3415,14 @@ sh_frob_file (void)
   if (! sh_relax)
     return;
 
-#ifdef BFD_ASSEMBLER
   bfd_map_over_sections (stdoutput, sh_frob_section, NULL);
-#else
-  {
-    int iseg;
-
-    for (iseg = SEG_E0; iseg < SEG_UNKNOWN; iseg++)
-      sh_frob_section ((bfd *) NULL, iseg, NULL);
-  }
-#endif
 }
 
 /* Called after relaxing.  Set the correct sizes of the fragments, and
-   create relocs so that md_apply_fix3 will fill in the correct values.  */
+   create relocs so that md_apply_fix will fill in the correct values.  */
 
 void
-#ifdef BFD_ASSEMBLER
 md_convert_frag (bfd *headers ATTRIBUTE_UNUSED, segT seg, fragS *fragP)
-#else
-md_convert_frag (object_headers *headers ATTRIBUTE_UNUSED, segT seg,
-		 fragS *fragP)
-#endif
 {
   int donerelax = 0;
 
@@ -3496,12 +3495,7 @@ md_convert_frag (object_headers *headers ATTRIBUTE_UNUSED, segT seg,
 
 	/* Build a relocation to six / four bytes farther on.  */
 	subseg_change (seg, 0);
-	fix_new (fragP, fragP->fr_fix, 2,
-#ifdef BFD_ASSEMBLER
-		 section_symbol (seg),
-#else
-		 seg_info (seg)->dot,
-#endif
+	fix_new (fragP, fragP->fr_fix, 2, section_symbol (seg),
 		 fragP->fr_address + fragP->fr_fix + (delay ? 4 : 6),
 		 1, BFD_RELOC_SH_PCDISP8BY2);
 
@@ -3568,17 +3562,12 @@ md_convert_frag (object_headers *headers ATTRIBUTE_UNUSED, segT seg,
 valueT
 md_section_align (segT seg ATTRIBUTE_UNUSED, valueT size)
 {
-#ifdef BFD_ASSEMBLER
 #ifdef OBJ_ELF
   return size;
 #else /* ! OBJ_ELF */
   return ((size + (1 << bfd_get_section_alignment (stdoutput, seg)) - 1)
 	  & (-1 << bfd_get_section_alignment (stdoutput, seg)));
 #endif /* ! OBJ_ELF */
-#else /* ! BFD_ASSEMBLER */
-  return ((size + (1 << section_alignment[(int) seg]) - 1)
-	  & (-1 << section_alignment[(int) seg]));
-#endif /* ! BFD_ASSEMBLER */
 }
 
 /* This static variable is set by s_uacons to tell sh_cons_align that
@@ -3777,7 +3766,11 @@ sh_elf_final_processing (void)
   else
 #elif defined TARGET_SYMBIAN
     if (1)
-      val = sh_symbian_find_elf_flags (valid_arch);
+      {
+	extern int sh_symbian_find_elf_flags (unsigned int);
+
+	val = sh_symbian_find_elf_flags (valid_arch);
+      }
     else
 #endif /* HAVE_SH64 */
     val = sh_find_elf_flags (valid_arch);
@@ -3790,7 +3783,7 @@ sh_elf_final_processing (void)
 /* Apply a fixup to the object file.  */
 
 void
-md_apply_fix3 (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
+md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 {
   char *buf = fixP->fx_where + fixP->fx_frag->fr_literal;
   int lowbyte = target_big_endian ? 1 : 0;
@@ -3799,7 +3792,6 @@ md_apply_fix3 (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
   long max, min;
   int shift;
 
-#ifdef BFD_ASSEMBLER
   /* A difference between two symbols, the second of which is in the
      current section, is transformed in a PC-relative relocation to
      the other symbol.  We have to adjust the relocation type here.  */
@@ -3845,24 +3837,9 @@ md_apply_fix3 (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       && fixP->fx_addsy != NULL
       && S_IS_WEAK (fixP->fx_addsy))
     val -= S_GET_VALUE  (fixP->fx_addsy);
-#endif
 
-#ifdef BFD_ASSEMBLER
   if (SWITCH_TABLE (fixP))
     val -= S_GET_VALUE  (fixP->fx_subsy);
-#else
-  if (fixP->fx_r_type == 0)
-    {
-      if (fixP->fx_size == 2)
-	fixP->fx_r_type = BFD_RELOC_16;
-      else if (fixP->fx_size == 4)
-	fixP->fx_r_type = BFD_RELOC_32;
-      else if (fixP->fx_size == 1)
-	fixP->fx_r_type = BFD_RELOC_8;
-      else
-	abort ();
-    }
-#endif
 
   max = min = 0;
   shift = 0;
@@ -4011,7 +3988,7 @@ md_apply_fix3 (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
 
     case BFD_RELOC_SH_USES:
-      /* Pass the value into sh_coff_reloc_mangle.  */
+      /* Pass the value into sh_reloc().  */
       fixP->fx_addnumber = val;
       break;
 
@@ -4086,7 +4063,7 @@ md_apply_fix3 (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 
     default:
 #ifdef HAVE_SH64
-      shmedia_md_apply_fix3 (fixP, valP);
+      shmedia_md_apply_fix (fixP, valP);
       return;
 #else
       abort ();
@@ -4203,8 +4180,7 @@ md_number_to_chars (char *ptr, valueT use, int nbytes)
     number_to_chars_bigendian (ptr, use, nbytes);
 }
 
-/* This version is used in obj-coff.c when not using BFD_ASSEMBLER.
-   eg for the sh-hms target.  */
+/* This version is used in obj-coff.c eg. for the sh-hms target.  */
 
 long
 md_pcrel_from (fixS *fixP)
@@ -4229,167 +4205,6 @@ md_pcrel_from_section (fixS *fixP, segT sec)
 
   return md_pcrel_from (fixP);
 }
-
-#ifdef OBJ_COFF
-
-int
-tc_coff_sizemachdep (fragS *frag)
-{
-  return md_relax_table[frag->fr_subtype].rlx_length;
-}
-
-#endif /* OBJ_COFF */
-
-#ifndef BFD_ASSEMBLER
-#ifdef OBJ_COFF
-
-/* Map BFD relocs to SH COFF relocs.  */
-
-struct reloc_map
-{
-  bfd_reloc_code_real_type bfd_reloc;
-  int sh_reloc;
-};
-
-static const struct reloc_map coff_reloc_map[] =
-{
-  { BFD_RELOC_32, R_SH_IMM32 },
-  { BFD_RELOC_16, R_SH_IMM16 },
-  { BFD_RELOC_8, R_SH_IMM8 },
-  { BFD_RELOC_SH_PCDISP8BY2, R_SH_PCDISP8BY2 },
-  { BFD_RELOC_SH_PCDISP12BY2, R_SH_PCDISP },
-  { BFD_RELOC_SH_IMM4, R_SH_IMM4 },
-  { BFD_RELOC_SH_IMM4BY2, R_SH_IMM4BY2 },
-  { BFD_RELOC_SH_IMM4BY4, R_SH_IMM4BY4 },
-  { BFD_RELOC_SH_IMM8, R_SH_IMM8 },
-  { BFD_RELOC_SH_IMM8BY2, R_SH_IMM8BY2 },
-  { BFD_RELOC_SH_IMM8BY4, R_SH_IMM8BY4 },
-  { BFD_RELOC_SH_PCRELIMM8BY2, R_SH_PCRELIMM8BY2 },
-  { BFD_RELOC_SH_PCRELIMM8BY4, R_SH_PCRELIMM8BY4 },
-  { BFD_RELOC_8_PCREL, R_SH_SWITCH8 },
-  { BFD_RELOC_SH_SWITCH16, R_SH_SWITCH16 },
-  { BFD_RELOC_SH_SWITCH32, R_SH_SWITCH32 },
-  { BFD_RELOC_SH_USES, R_SH_USES },
-  { BFD_RELOC_SH_COUNT, R_SH_COUNT },
-  { BFD_RELOC_SH_ALIGN, R_SH_ALIGN },
-  { BFD_RELOC_SH_CODE, R_SH_CODE },
-  { BFD_RELOC_SH_DATA, R_SH_DATA },
-  { BFD_RELOC_SH_LABEL, R_SH_LABEL },
-  { BFD_RELOC_UNUSED, 0 }
-};
-
-/* Adjust a reloc for the SH.  This is similar to the generic code,
-   but does some minor tweaking.  */
-
-void
-sh_coff_reloc_mangle (segment_info_type *seg, fixS *fix,
-		      struct internal_reloc *intr, unsigned int paddr)
-{
-  symbolS *symbol_ptr = fix->fx_addsy;
-  symbolS *dot;
-
-  intr->r_vaddr = paddr + fix->fx_frag->fr_address + fix->fx_where;
-
-  if (! SWITCH_TABLE (fix))
-    {
-      const struct reloc_map *rm;
-
-      for (rm = coff_reloc_map; rm->bfd_reloc != BFD_RELOC_UNUSED; rm++)
-	if (rm->bfd_reloc == (bfd_reloc_code_real_type) fix->fx_r_type)
-	  break;
-      if (rm->bfd_reloc == BFD_RELOC_UNUSED)
-	as_bad_where (fix->fx_file, fix->fx_line,
-		      _("Can not represent %s relocation in this object file format"),
-		      bfd_get_reloc_code_name (fix->fx_r_type));
-      intr->r_type = rm->sh_reloc;
-      intr->r_offset = 0;
-    }
-  else
-    {
-      know (sh_relax);
-
-      if (fix->fx_r_type == BFD_RELOC_16)
-	intr->r_type = R_SH_SWITCH16;
-      else if (fix->fx_r_type == BFD_RELOC_8)
-	intr->r_type = R_SH_SWITCH8;
-      else if (fix->fx_r_type == BFD_RELOC_32)
-	intr->r_type = R_SH_SWITCH32;
-      else
-	abort ();
-
-      /* For a switch reloc, we set r_offset to the difference between
-         the reloc address and the subtrahend.  When the linker is
-         doing relaxing, it can use the determine the starting and
-         ending points of the switch difference expression.  */
-      intr->r_offset = intr->r_vaddr - S_GET_VALUE (fix->fx_subsy);
-    }
-
-  /* PC relative relocs are always against the current section.  */
-  if (symbol_ptr == NULL)
-    {
-      switch (fix->fx_r_type)
-	{
-	case BFD_RELOC_SH_PCRELIMM8BY2:
-	case BFD_RELOC_SH_PCRELIMM8BY4:
-	case BFD_RELOC_SH_PCDISP8BY2:
-	case BFD_RELOC_SH_PCDISP12BY2:
-	case BFD_RELOC_SH_USES:
-	  symbol_ptr = seg->dot;
-	  break;
-	default:
-	  break;
-	}
-    }
-
-  if (fix->fx_r_type == BFD_RELOC_SH_USES)
-    {
-      /* We can't store the offset in the object file, since this
-	 reloc does not take up any space, so we store it in r_offset.
-	 The fx_addnumber field was set in md_apply_fix3.  */
-      intr->r_offset = fix->fx_addnumber;
-    }
-  else if (fix->fx_r_type == BFD_RELOC_SH_COUNT)
-    {
-      /* We can't store the count in the object file, since this reloc
-         does not take up any space, so we store it in r_offset.  The
-         fx_offset field was set when the fixup was created in
-         sh_coff_frob_file.  */
-      intr->r_offset = fix->fx_offset;
-      /* This reloc is always absolute.  */
-      symbol_ptr = NULL;
-    }
-  else if (fix->fx_r_type == BFD_RELOC_SH_ALIGN)
-    {
-      /* Store the alignment in the r_offset field.  */
-      intr->r_offset = fix->fx_offset;
-      /* This reloc is always absolute.  */
-      symbol_ptr = NULL;
-    }
-  else if (fix->fx_r_type == BFD_RELOC_SH_CODE
-	   || fix->fx_r_type == BFD_RELOC_SH_DATA
-	   || fix->fx_r_type == BFD_RELOC_SH_LABEL)
-    {
-      /* These relocs are always absolute.  */
-      symbol_ptr = NULL;
-    }
-
-  /* Turn the segment of the symbol into an offset.  */
-  if (symbol_ptr != NULL)
-    {
-      dot = segment_info[S_GET_SEGMENT (symbol_ptr)].dot;
-      if (dot != NULL)
-	intr->r_symndx = dot->sy_number;
-      else
-	intr->r_symndx = symbol_ptr->sy_number;
-    }
-  else
-    intr->r_symndx = -1;
-}
-
-#endif /* OBJ_COFF */
-#endif /* ! BFD_ASSEMBLER */
-
-#ifdef BFD_ASSEMBLER
 
 /* Create a reloc.  */
 
@@ -4480,7 +4295,10 @@ sh_end_of_match (char *cont, char *what)
 }
 
 int
-sh_parse_name (char const *name, expressionS *exprP, char *nextcharP)
+sh_parse_name (char const *name,
+	       expressionS *exprP,
+	       enum expr_mode mode,
+	       char *nextcharP)
 {
   char *next = input_line_pointer;
   char *next_end;
@@ -4497,15 +4315,15 @@ sh_parse_name (char const *name, expressionS *exprP, char *nextcharP)
       exprP->X_add_symbol = GOT_symbol;
     no_suffix:
       /* If we have an absolute symbol or a reg, then we know its
-	     value now.  */
+	 value now.  */
       segment = S_GET_SEGMENT (exprP->X_add_symbol);
-      if (segment == absolute_section)
+      if (mode != expr_defer && segment == absolute_section)
 	{
 	  exprP->X_op = O_constant;
 	  exprP->X_add_number = S_GET_VALUE (exprP->X_add_symbol);
 	  exprP->X_add_symbol = NULL;
 	}
-      else if (segment == reg_section)
+      else if (mode != expr_defer && segment == reg_section)
 	{
 	  exprP->X_op = O_register;
 	  exprP->X_add_number = S_GET_VALUE (exprP->X_add_symbol);
@@ -4606,4 +4424,3 @@ sh_regname_to_dw2regnum (const char *regname)
   return regnum;
 }
 #endif /* OBJ_ELF */
-#endif /* BFD_ASSEMBLER */

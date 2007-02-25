@@ -18,7 +18,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along
 with this program; if not, write to the Free Software Foundation, Inc.,
-59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -31,7 +31,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #undef  CGEN_DIS_HASH
 #define CGEN_DIS_HASH(buffer, value) (((unsigned char *) (buffer))[0] >> 2)
 
-extern long openrisc_sign_extend_16bit PARAMS ((long));
+extern long openrisc_sign_extend_16bit (long);
 /* -- */
 /* Enum declaration for openrisc instruction types.  */
 typedef enum cgen_insn_type {

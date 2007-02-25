@@ -8,7 +8,6 @@
 #	OTHER_TEXT_SECTIONS - these get put in .text when relocating
 #	OTHER_READWRITE_SECTIONS - other than .data .bss .ctors .sdata ...
 #		(e.g., .PARISC.global)
-#	OTHER_BSS_SECTIONS - other than .bss .sbss ...
 #	OTHER_SECTIONS - at the end
 #	EXECUTABLE_SYMBOLS - symbols that must be defined for an
 #		executable (e.g., _DYNAMIC_LINK)
@@ -34,7 +33,7 @@
 #	FINI_START, FINI_END - statements just before and just after
 # 	combination of .fini sections.
 #	STACK_ADDR - start of a .stack section.
-#	OTHER_END_SYMBOLS - symbols to place right at the end of the script.
+#	OTHER_SYMBOLS - symbols to place right at the end of the script.
 #
 # When adding sections, do note that the names of some sections are used
 # when specifying the start address of the next.
@@ -100,7 +99,7 @@ CTOR=".ctors     ALIGN(4) :
     KEEP (*crtbegin*.o(.ctors))
 
     /* We don't want to include the .ctor section from
-       from the crtend.o file until after the sorted ctors.
+       the crtend.o file until after the sorted ctors.
        The .ctor section from the crtend file contains the
        end of ctors marker and it must be last */
 
@@ -205,22 +204,26 @@ SECTIONS
   /* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */
   . = ALIGN(128) + (. & (128 - 1));
-  /* Ensure the __preinit_array_start label is properly aligned.  We
-     could instead move the label definition inside the section, but
-     the linker would then create the section even if it turns out to
-     be empty, which isn't pretty.  */
-  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__preinit_array_start = .);}}
-  .preinit_array   ${RELOCATING-0} : { *(.preinit_array) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__preinit_array_end = .);}}
-
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__init_array_start = .);}}
-  .init_array   ${RELOCATING-0} : { *(.init_array) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__init_array_end = .);}}
-
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__fini_array_start = .);}}
-  .fini_array   ${RELOCATING-0} : { *(.fini_array) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__fini_array_end = .);}}
+  .preinit_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_start = .);}}
+    KEEP (*(.preinit_array))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_end = .);}}
+  }
+  .init_array   ${RELOCATING-0} :
+  {
+     ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_start = .);}}
+     KEEP (*(SORT(.init_array.*)))
+     KEEP (*(.init_array))
+     ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_end = .);}}
+  }
+  .fini_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_start = .);}}
+    KEEP (*(.fini_array))
+    KEEP (*(SORT(.fini_array.*)))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_end = .);}}
+  }
 
   ${CREATE_SHLIB-${CREATE_PIE-${RELOCATING+. = ${DATA_ADDR-${DATA_SEGMENT_ALIGN}};}}}
   ${CREATE_SHLIB+${RELOCATING+. = ${SHLIB_DATA_ADDR-${DATA_SEGMENT_ALIGN}};}}
@@ -257,10 +260,10 @@ SECTIONS
       .bss section disappears because there are no input sections.  */
    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
   } :data
-  ${OTHER_BSS_SECTIONS}
-  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
-  ${RELOCATING+_end = .;}
   ${RELOCATING+${OTHER_BSS_END_SYMBOLS}}
+  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+  ${RELOCATING+${OTHER_END_SYMBOLS}}
+  ${RELOCATING+_end = .;}
   ${RELOCATING+PROVIDE (end = .);}
   ${RELOCATING+${DATA_SEGMENT_END}}
 
@@ -371,7 +374,7 @@ cat <<EOF
 
   ${STACK_ADDR+${STACK}}
   ${OTHER_SECTIONS}
-  ${RELOCATING+${OTHER_END_SYMBOLS}}
+  ${RELOCATING+${OTHER_SYMBOLS}}
   ${RELOCATING+${STACKNOTE}}
 }
 EOF

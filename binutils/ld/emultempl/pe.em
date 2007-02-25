@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
 # It does some substitutions.
+test -z "${ENTRY}" && ENTRY="_mainCRTStartup"
 if [ -z "$MACHINE" ]; then
   OUTPUT_ARCH=${ARCH}
 else
@@ -24,7 +25,7 @@ cat >>e${EMULATION_NAME}.c <<EOF
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* For WINDOWS_NT */
 /* The original file generated returned different default scripts depending
@@ -135,14 +136,16 @@ gld_${EMULATION_NAME}_before_parse (void)
   config.dynamic_link = TRUE;
   config.has_shared = 1;
   link_info.pei386_auto_import = -1;
-  link_info.pei386_runtime_pseudo_reloc = FALSE;
+  link_info.pei386_runtime_pseudo_reloc = -1;
 
 #if (PE_DEF_SUBSYSTEM == 9) || (PE_DEF_SUBSYSTEM == 2)
 #if defined TARGET_IS_mipspe || defined TARGET_IS_armpe
-  lang_add_entry ("WinMainCRTStartup", FALSE);
+  lang_default_entry ("WinMainCRTStartup");
 #else
-  lang_add_entry ("_WinMainCRTStartup", FALSE);
+  lang_default_entry ("_WinMainCRTStartup");
 #endif
+#else
+  lang_default_entry ("${ENTRY}");
 #endif
 #endif
 }
@@ -457,7 +460,7 @@ set_pe_subsystem (void)
     {
       char *alc_entry;
 
-      /* lang_add_entry expects its argument to be permanently
+      /* lang_default_entry expects its argument to be permanently
 	 allocated, so we don't free this string.  */
       alc_entry = xmalloc (strlen (initial_symbol_char)
 			   + strlen (entry)
@@ -467,7 +470,7 @@ set_pe_subsystem (void)
       entry = alc_entry;
     }
 
-  lang_add_entry (entry, FALSE);
+  lang_default_entry (entry);
 
   return;
 }
@@ -667,7 +670,7 @@ static unsigned long
 compute_dll_image_base (const char *ofile)
 {
   unsigned long hash = strhash (ofile);
-  return 0x60000000 | ((hash << 16) & 0x0FFC0000);
+  return 0x61300000 + ((hash << 16) & 0x0FFC0000);
 }
 #endif
 
@@ -1287,6 +1290,8 @@ gld_${EMULATION_NAME}_before_allocation (void)
   /* We have seen it all. Allocate it, and carry on.  */
   bfd_arm_pe_allocate_interworking_sections (& link_info);
 #endif /* TARGET_IS_armpe */
+
+  before_allocation_default ();
 }
 
 #ifdef DLL_SUPPORT
@@ -1461,6 +1466,8 @@ gld_${EMULATION_NAME}_finish (void)
     }
 #endif /* defined(TARGET_IS_armpe) || defined(TARGET_IS_arm_epoc_pe) */
 
+  finish_default ();
+
 #ifdef DLL_SUPPORT
   if (link_info.shared
 #if !defined(TARGET_IS_shpe) && !defined(TARGET_IS_mipspe)
@@ -1511,7 +1518,7 @@ gld_${EMULATION_NAME}_finish (void)
    sort_sections.  */
 
 static bfd_boolean
-gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s)
+gld_${EMULATION_NAME}_place_orphan (asection *s)
 {
   const char *secname;
   const char *orig_secname;
@@ -1548,7 +1555,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 	 If the section already exists but does not have any flags set,
 	 then it has been created by the linker, probably as a result of
 	 a --section-start command line switch.  */
-      lang_add_section (&add_child, s, os, file);
+      lang_add_section (&add_child, s, os);
     }
   else
     {
@@ -1614,7 +1621,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 	    place->os = lang_output_section_find (place->name);
 	  after = place->os;
 	  if (after == NULL)
-	    after = lang_output_section_find_by_flags (s, &place->os);
+	    after = lang_output_section_find_by_flags (s, &place->os, NULL);
 	  if (after == NULL)
 	    /* *ABS* is always the first output section statement.  */
 	    after = (&lang_output_section_statement.head
@@ -1634,8 +1641,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 
       /* All sections in an executable must be aligned to a page boundary.  */
       address = exp_unop (ALIGN_K, exp_nameop (NAME, "__section_alignment__"));
-      os = lang_insert_orphan (file, s, secname, after, place, address,
-			       &add_child);
+      os = lang_insert_orphan (s, secname, after, place, address, &add_child);
     }
 
   {
@@ -1658,7 +1664,7 @@ gld_${EMULATION_NAME}_place_orphan (lang_input_statement_type *file, asection *s
 
 	    ls = &(*pl)->input_section;
 
-	    lname = bfd_get_section_name (ls->ifile->the_bfd, ls->section);
+	    lname = bfd_get_section_name (ls->section->owner, ls->section);
 	    if (strchr (lname, '$') == NULL)
 	      {
 		if (found_dollar)

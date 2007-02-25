@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 #include <stdio.h>
 #include "as.h"
@@ -574,7 +574,7 @@ iq2000_cgen_record_fixup_exp (fragS *              frag,
 #define FX_OPINFO_R_TYPE(f) ((f)->fx_cgen.opinfo)
 
 /* Sort any unmatched HI16 relocs so that they immediately precede
-   the corresponding LO16 reloc.  This is called before md_apply_fix3 and
+   the corresponding LO16 reloc.  This is called before md_apply_fix and
    tc_gen_reloc.  */
 
 void
@@ -800,7 +800,7 @@ iq2000_fix_adjustable (fixS * fixP)
     return TRUE;
 
   /* Prevent all adjustments to global symbols.  */
-  if (S_IS_EXTERN (fixP->fx_addsy))
+  if (S_IS_EXTERNAL (fixP->fx_addsy))
     return FALSE;
 
   if (S_IS_WEAK (fixP->fx_addsy))

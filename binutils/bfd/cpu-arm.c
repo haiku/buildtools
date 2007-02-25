@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -400,3 +400,16 @@ bfd_arm_get_mach_from_notes (bfd *abfd, const char *note_section)
     free (buffer);
   return bfd_mach_arm_unknown;
 }
+
+bfd_boolean
+bfd_is_arm_mapping_symbol_name (const char * name)
+{
+  /* The ARM compiler outputs several obsolete forms.  Recognize them
+     in addition to the standard $a, $t and $d.  */
+  return (name != NULL)
+    && (name[0] == '$')
+    && ((name[1] == 'a') || (name[1] == 't') || (name[1] == 'd')
+	|| (name[1] == 'm') || (name[1] == 'f') || (name[1] == 'p'))
+    && (name[2] == 0 || name[2] == '.');
+}
+

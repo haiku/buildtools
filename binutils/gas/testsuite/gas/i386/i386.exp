@@ -32,7 +32,6 @@ proc gas_32_check { } {
     return [regexp "targets:.*i386" $nm_help]
 }
 
-
 if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]]  then {
 
     global ASFLAGS
@@ -42,6 +41,8 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
     run_list_test "float" "-al"
     run_list_test "general" "-al --listing-lhs-width=2"
     run_list_test "inval" "-al"
+    run_list_test "segment" "-al"
+    run_list_test "inval-seg" "-al"
     run_list_test "modrm" "-al --listing-lhs-width=2"
     run_dump_test "naked"
     run_dump_test "opcode"
@@ -58,19 +59,18 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
     run_dump_test "sub"
     run_dump_test "prescott"
     run_dump_test "sib"
-
-    if {![istarget "*-*-aix*"]
-	&& (![is_elf_format] || [istarget "*-*-linux*"]
-	    || [istarget "*-*-netbsd*"]
-	    || [istarget "*-*-freebsd*"]
-	    || [istarget "*-*-netware*"])} {
-	# Don't run this test on targets where '/' starts comments.
-	run_dump_test "divide"
-    }
-
+    run_dump_test "vmx"
+    run_dump_test "suffix"
+    run_dump_test "immed32"
+    run_dump_test "equ"
+    run_dump_test "divide"
     run_dump_test "padlock"
     run_dump_test "crx"
     run_list_test "cr-err" ""
+    run_dump_test "svme"
+    run_dump_test "merom"
+    run_dump_test "rep"
+    run_dump_test "rep-suffix"
 
     # These tests require support for 8 and 16 bit relocs,
     # so we only run them for ELF and COFF targets.
@@ -97,6 +97,10 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
 	run_dump_test "tlsd"
 	run_dump_test "tlspic"
 	run_dump_test "tlsnopic"
+	run_dump_test "bss"
+	run_dump_test "reloc32"
+	run_list_test "reloc32" "--defsym _bad_=1"
+	run_dump_test "mixed-mode-reloc32"
     }
 
     # This is a PE specific test.
@@ -120,7 +124,39 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
     run_dump_test "x86-64-opcode"
     run_dump_test "x86-64-pcrel"
     run_dump_test "x86-64-rip"
+    run_dump_test "x86-64-stack"
+    run_dump_test "x86-64-stack-intel"
+    run_dump_test "x86-64-stack-suffix"
     run_list_test "x86-64-inval" "-al"
+    run_list_test "x86-64-segment" "-al"
+    run_list_test "x86-64-inval-seg" "-al"
+    run_dump_test "x86-64-branch"
+    run_dump_test "svme64"
+    run_dump_test "x86-64-vmx"
+    run_dump_test "immed64"
+    run_dump_test "x86-64-prescott"
+    run_dump_test "x86-64-crx"
+    run_dump_test "x86-64-crx-suffix"
+    run_dump_test "x86-64-drx"
+    run_dump_test "x86-64-drx-suffix"
+    run_dump_test "x86-64-merom"
+    run_dump_test "x86-64-rep"
+    run_dump_test "x86-64-rep-suffix"
+
+    if { ![istarget "*-*-aix*"]
+      && ![istarget "*-*-beos*"]
+      && ![istarget "*-*-*bsd*"]
+      && ![istarget "*-*-chaos*"]
+      && ![istarget "*-*-kaos*"]
+      && ![istarget "*-*-lynx*"]
+      && ![istarget "*-*-moss*"]
+      && ![istarget "*-*-nto-qnx*"]
+      && ![istarget "*-*-rtems*"]
+      && ![istarget "*-*-sco*"]
+      && ![istarget "*-*-solaris*"]
+      && ![istarget "*-*-sysv*"] } then {
+	run_dump_test "rex"
+    }
 
     # For ELF targets verify that @unwind works.
     if { ([istarget "*-*-elf*"] || [istarget "*-*-linux*"]
@@ -128,6 +164,13 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
 	 && ![istarget *-*-linux*aout*]
 	 && ![istarget *-*-linux*oldld*] } then {
 	run_dump_test "x86-64-unwind"
+    }
+
+    # ELF specific tests
+    if [is_elf_format] then {
+	run_dump_test "reloc64"
+	run_list_test "reloc64" "--defsym _bad_=1"
+	run_dump_test "mixed-mode-reloc64"
     }
 
     set ASFLAGS "$old_ASFLAGS"

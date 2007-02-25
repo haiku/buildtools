@@ -17,7 +17,7 @@
 
      You should have received a copy of the GNU General Public License
      along with this program; if not, write to the Free Software
-     Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+     Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include <stdio.h>
 #include "libiberty.h"
@@ -648,13 +648,30 @@ def_file_add_directive (def_file *my_def, const char *param, int len)
 static void
 def_image_name (const char *name, int base, int is_dll)
 {
-  const char* image_name = lbasename (name);
-  if (image_name != name)
-    einfo ("%s:%d: Warning: path components stripped from %s, '%s'\n",
-	  def_filename, linenumber, is_dll ? "LIBRARY" : "NAME", name);
-  if (def->name)
-    free (def->name);
-  def->name = xstrdup (image_name);
+  /* If a LIBRARY or NAME statement is specified without a name, there is nothing
+     to do here.  We retain the output filename specified on command line.  */
+  if (*name)
+    {
+      const char* image_name = lbasename (name);
+      if (image_name != name)
+	einfo ("%s:%d: Warning: path components stripped from %s, '%s'\n",
+	       def_filename, linenumber, is_dll ? "LIBRARY" : "NAME",
+	       name);
+      if (def->name)
+	free (def->name);
+      /* Append the default suffix, if none specified.  */ 
+      if (strchr (image_name, '.') == 0)
+	{
+	  const char * suffix = is_dll ? ".dll" : ".exe";
+
+	  def->name = xmalloc (strlen (image_name) + strlen (suffix) + 1);
+	  sprintf (def->name, "%s%s", image_name, suffix);
+        }
+      else
+	def->name = xstrdup (image_name);
+    }
+
+  /* Honor a BASE address statement, even if LIBRARY string is empty.  */
   def->base_address = base;
   def->is_dll = is_dll;
 }

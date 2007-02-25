@@ -1,5 +1,5 @@
 /* tc-iq2000.h -- Header file for tc-iq2000.c.
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -15,15 +15,10 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA. */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor,
+   Boston, MA 02110-1301, USA. */
 
 #define TC_IQ2000
-
-#ifndef BFD_ASSEMBLER
-/* Leading space so will compile with cc.  */
- #error IQ2000 support requires BFD_ASSEMBLER
-#endif
 
 #define LISTING_HEADER "IQ2000 GAS "
 
@@ -43,7 +38,7 @@
 /* We don't need to handle .word strangely.  */
 #define WORKING_DOT_WORD
 
-#define md_apply_fix3 gas_cgen_md_apply_fix3
+#define md_apply_fix gas_cgen_md_apply_fix
 
 /* Call md_pcrel_from_section(), not md_pcrel_from().  */
 #define MD_PCREL_FROM_SECTION(FIXP, SEC) md_pcrel_from_section (FIXP, SEC)
@@ -59,7 +54,7 @@
 /* When relaxing, we need to emit various relocs we otherwise wouldn't.  */
 #define TC_FORCE_RELOCATION(fix) iq2000_force_relocation (fix)
 
-/* Values passed to md_apply_fix3 don't include the symbol value.  */
+/* Values passed to md_apply_fix don't include the symbol value.  */
 #define MD_APPLY_SYM_VALUE(FIX) 0
 
 #define tc_gen_reloc gas_cgen_tc_gen_reloc

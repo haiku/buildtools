@@ -1,6 +1,6 @@
 /* Main program of GNU linker.
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005
+   2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Written by Steve Chamberlain steve@cygnus.com
 
@@ -18,8 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -50,7 +50,7 @@
 #include <string.h>
 
 #ifdef HAVE_SBRK
-#ifdef NEED_DECLARATION_SBRK
+#if !HAVE_DECL_SBRK
 extern void *sbrk ();
 #endif
 #endif
@@ -160,7 +160,8 @@ static struct bfd_link_callbacks link_callbacks =
   reloc_overflow,
   reloc_dangerous,
   unattached_reloc,
-  notice
+  notice,
+  einfo
 };
 
 struct bfd_link_info link_info;
@@ -197,6 +198,8 @@ main (int argc, char **argv)
 
   START_PROGRESS (program_name, 0);
 
+  expandargv (&argc, &argv);
+
   bfd_init ();
 
   bfd_set_error_program_name (program_name);
@@ -209,7 +212,7 @@ main (int argc, char **argv)
     {
       if (*TARGET_SYSTEM_ROOT == 0)
 	{
-	  einfo ("%P%F: this linker was not configured to use sysroots");
+	  einfo ("%P%F: this linker was not configured to use sysroots\n");
 	  ld_sysroot = "";
 	}
       else
@@ -310,8 +313,9 @@ main (int argc, char **argv)
   link_info.spare_dynamic_tags = 5;
   link_info.flags = 0;
   link_info.flags_1 = 0;
-  link_info.need_relax_finalize = FALSE;
+  link_info.relax_pass = 1;
   link_info.warn_shared_textrel = FALSE;
+  link_info.gc_sections = FALSE;
 
   ldfile_add_arch ("");
 
@@ -335,16 +339,13 @@ main (int argc, char **argv)
 
   if (link_info.relocatable)
     {
-      if (command_line.gc_sections)
+      if (link_info.gc_sections)
 	einfo ("%P%F: --gc-sections and -r may not be used together\n");
       else if (command_line.relax)
 	einfo (_("%P%F: --relax and -r may not be used together\n"));
       if (link_info.shared)
 	einfo (_("%P%F: -r and -shared may not be used together\n"));
     }
-
-   if (!config.dynamic_link && link_info.shared)
-     einfo (_("%P%F: -static and -shared may not be used together\n"));
 
   if (! link_info.shared)
     {
@@ -472,6 +473,8 @@ main (int argc, char **argv)
     output_cref (config.map_file != NULL ? config.map_file : stdout);
   if (nocrossref_list != NULL)
     check_nocrossrefs ();
+
+  lang_finish ();
 
   /* Even if we're producing relocatable output, some non-fatal errors should
      be reported in the exit status.  (What non-fatal errors, if any, do we
@@ -774,9 +777,10 @@ add_ysym (const char *name)
   if (link_info.notice_hash == NULL)
     {
       link_info.notice_hash = xmalloc (sizeof (struct bfd_hash_table));
-      if (! bfd_hash_table_init_n (link_info.notice_hash,
-				   bfd_hash_newfunc,
-				   61))
+      if (!bfd_hash_table_init_n (link_info.notice_hash,
+				  bfd_hash_newfunc,
+				  sizeof (struct bfd_hash_entry),
+				  61))
 	einfo (_("%P%F: bfd_hash_table_init failed: %E\n"));
     }
 
@@ -792,9 +796,10 @@ add_wrap (const char *name)
   if (link_info.wrap_hash == NULL)
     {
       link_info.wrap_hash = xmalloc (sizeof (struct bfd_hash_table));
-      if (! bfd_hash_table_init_n (link_info.wrap_hash,
-				   bfd_hash_newfunc,
-				   61))
+      if (!bfd_hash_table_init_n (link_info.wrap_hash,
+				  bfd_hash_newfunc,
+				  sizeof (struct bfd_hash_entry),
+				  61))
 	einfo (_("%P%F: bfd_hash_table_init failed: %E\n"));
     }
 
@@ -824,7 +829,8 @@ add_keepsyms_file (const char *filename)
     }
 
   link_info.keep_hash = xmalloc (sizeof (struct bfd_hash_table));
-  if (! bfd_hash_table_init (link_info.keep_hash, bfd_hash_newfunc))
+  if (!bfd_hash_table_init (link_info.keep_hash, bfd_hash_newfunc,
+			    sizeof (struct bfd_hash_entry)))
     einfo (_("%P%F: bfd_hash_table_init failed: %E\n"));
 
   bufsize = 100;
@@ -872,7 +878,7 @@ add_keepsyms_file (const char *filename)
    a link.  */
 
 static bfd_boolean
-add_archive_element (struct bfd_link_info *info ATTRIBUTE_UNUSED,
+add_archive_element (struct bfd_link_info *info,
 		     bfd *abfd,
 		     const char *name)
 {
@@ -903,7 +909,7 @@ add_archive_element (struct bfd_link_info *info ATTRIBUTE_UNUSED,
       bfd *from;
       int len;
 
-      h = bfd_link_hash_lookup (link_info.hash, name, FALSE, FALSE, TRUE);
+      h = bfd_link_hash_lookup (info->hash, name, FALSE, FALSE, TRUE);
 
       if (h == NULL)
 	from = NULL;
@@ -1144,7 +1150,7 @@ constructor_callback (struct bfd_link_info *info,
   /* Ensure that BFD_RELOC_CTOR exists now, so that we can give a
      useful error message.  */
   if (bfd_reloc_type_lookup (output_bfd, BFD_RELOC_CTOR) == NULL
-      && (link_info.relocatable
+      && (info->relocatable
 	  || bfd_reloc_type_lookup (abfd, BFD_RELOC_CTOR) == NULL))
     einfo (_("%P%F: BFD backend error: BFD_RELOC_CTOR unsupported\n"));
 
@@ -1323,7 +1329,8 @@ undefined_symbol (struct bfd_link_info *info ATTRIBUTE_UNUSED,
       if (hash == NULL)
 	{
 	  hash = xmalloc (sizeof (struct bfd_hash_table));
-	  if (! bfd_hash_table_init (hash, bfd_hash_newfunc))
+	  if (!bfd_hash_table_init (hash, bfd_hash_newfunc,
+				    sizeof (struct bfd_hash_entry)))
 	    einfo (_("%F%P: bfd_hash_table_init failed: %E\n"));
 	}
 
@@ -1421,10 +1428,7 @@ reloc_overflow (struct bfd_link_info *info ATTRIBUTE_UNUSED,
   if (overflow_cutoff_limit == -1)
     return TRUE;
 
-  if (abfd == NULL)
-    einfo (_("%P%X: generated"));
-  else
-    einfo ("%X%C:", abfd, section, address);
+  einfo ("%X%C:", abfd, section, address);
 
   if (overflow_cutoff_limit >= 0
       && overflow_cutoff_limit-- == 0)
@@ -1449,7 +1453,9 @@ reloc_overflow (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 	case bfd_link_hash_defweak:
 	  einfo (_(" relocation truncated to fit: %s against symbol `%T' defined in %A section in %B"),
 		 reloc_name, entry->root.string,
-		 entry->u.def.section, entry->u.def.section->owner);
+		 entry->u.def.section,
+		 entry->u.def.section == bfd_abs_section_ptr
+		 ? output_bfd : entry->u.def.section->owner);
 	  break;
 	default:
 	  abort ();
@@ -1474,11 +1480,8 @@ reloc_dangerous (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 		 asection *section,
 		 bfd_vma address)
 {
-  if (abfd == NULL)
-    einfo (_("%P%X: generated"));
-  else
-    einfo ("%X%C:", abfd, section, address);
-  einfo (_("dangerous relocation: %s\n"), message);
+  einfo (_("%X%C: dangerous relocation: %s\n"),
+	 abfd, section, address, message);
   return TRUE;
 }
 
@@ -1492,11 +1495,8 @@ unattached_reloc (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 		  asection *section,
 		  bfd_vma address)
 {
-  if (abfd == NULL)
-    einfo (_("%P%X: generated"));
-  else
-    einfo ("%X%C:", abfd, section, address);
-  einfo (_(" reloc refers to symbol `%T' which is not being output\n"), name);
+  einfo (_("%X%C: reloc refers to symbol `%T' which is not being output\n"),
+	 abfd, section, address, name);
   return TRUE;
 }
 

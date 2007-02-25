@@ -20,7 +20,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 
 #include "bfd.h"
@@ -169,6 +169,7 @@ msdos_set_section_contents (abfd, section, location, offset, count)
 #define msdos_print_symbol _bfd_nosymbols_print_symbol
 #define msdos_get_symbol_info _bfd_nosymbols_get_symbol_info
 #define msdos_find_nearest_line _bfd_nosymbols_find_nearest_line
+#define msdos_find_inliner_info _bfd_nosymbols_find_inliner_info
 #define msdos_get_lineno _bfd_nosymbols_get_lineno
 #define msdos_bfd_is_target_special_symbol ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
 #define msdos_bfd_is_local_label_name _bfd_nosymbols_bfd_is_local_label_name

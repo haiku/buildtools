@@ -1,6 +1,6 @@
 /* COFF specific linker code.
    Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2004, 2005 Free Software Foundation, Inc.
+   2004, 2005, 2006 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* This file contains the COFF backend linker code.  */
 
@@ -94,10 +94,11 @@ _bfd_coff_link_hash_table_init (struct coff_link_hash_table *table,
 				bfd *abfd,
 				struct bfd_hash_entry *(*newfunc) (struct bfd_hash_entry *,
 								   struct bfd_hash_table *,
-								   const char *))
+								   const char *),
+				unsigned int entsize)
 {
   memset (&table->stab_info, 0, sizeof (table->stab_info));
-  return _bfd_link_hash_table_init (&table->root, abfd, newfunc);
+  return _bfd_link_hash_table_init (&table->root, abfd, newfunc, entsize);
 }
 
 /* Create a COFF linker hash table.  */
@@ -113,7 +114,8 @@ _bfd_coff_link_hash_table_create (bfd *abfd)
     return NULL;
 
   if (! _bfd_coff_link_hash_table_init (ret, abfd,
-					_bfd_coff_link_hash_newfunc))
+					_bfd_coff_link_hash_newfunc,
+					sizeof (struct coff_link_hash_entry)))
     {
       free (ret);
       return (struct bfd_link_hash_table *) NULL;
@@ -693,7 +695,7 @@ _bfd_coff_final_link (bfd *abfd,
     {
       o->reloc_count = 0;
       o->lineno_count = 0;
-      for (p = o->link_order_head; p != NULL; p = p->next)
+      for (p = o->map_head.link_order; p != NULL; p = p->next)
 	{
 	  if (p->type == bfd_indirect_link_order)
 	    {
@@ -888,7 +890,7 @@ _bfd_coff_final_link (bfd *abfd,
 
   for (o = abfd->sections; o != NULL; o = o->next)
     {
-      for (p = o->link_order_head; p != NULL; p = p->next)
+      for (p = o->map_head.link_order; p != NULL; p = p->next)
 	{
 	  if (p->type == bfd_indirect_link_order
 	      && bfd_family_coff (p->u.indirect.section->owner))
@@ -2937,9 +2939,11 @@ _bfd_coff_generic_relocate_section (bfd *output_bfd,
 		     Note that weak symbols without aux records are a GNU
 		     extension.
 		     FIXME: All weak externals are treated as having
-		     characteristics IMAGE_WEAK_EXTERN_SEARCH_LIBRARY (2).
-		     There are no known uses of the other two types of
-		     weak externals.  */
+		     characteristic IMAGE_WEAK_EXTERN_SEARCH_NOLIBRARY (1).
+		     These behave as per SVR4 ABI:  A library member
+		     will resolve a weak external only if a normal
+		     external causes the library member to be linked.
+		     See also linker.c: generic_link_check_archive_element. */
 		  asection *sec;
 		  struct coff_link_hash_entry *h2 =
 		    input_bfd->tdata.coff_obj_data->sym_hashes[

@@ -1,5 +1,22 @@
 -*- text -*-
 
+* Support for the Infineon XC16X has been added by KPIT Cummins Infosystems.
+
+* Modify the Linux linker search order to better match ld.so search order.
+  Look for DT_NEEDED libraries in paths specified by ld.so.conf before
+  searching the default directories, rather than vice versa.
+  Use $prefix/etc/ld.so.conf if it exists, otherwise /etc/ld.so.conf.
+
+* PE-COFF: Forward exports from DLL's can now be specified in .def files
+  passed directly to ld.
+
+* Support for the Z80 processor family has been added.
+
+* Add support for the "@<file>" syntax to the command line, so that extra
+  switches can be read from <file>.
+
+Changes in 2.16:
+
 * Support for the R_ARM_V4BX relocation as defined in the ARM AAELF
   specification has been added via the --fix-v4bx command-line option.
 

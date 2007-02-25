@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #define OBJ_HEADER "obj-elf.h"
 #include "as.h"
@@ -53,6 +53,10 @@
 #include "elf/i370.h"
 #endif
 
+#ifdef TC_I386
+#include "elf/x86-64.h"
+#endif
+
 static void obj_elf_line (int);
 static void obj_elf_size (int);
 static void obj_elf_type (int);
@@ -65,6 +69,7 @@ static void obj_elf_subsection (int);
 static void obj_elf_popsection (int);
 static void obj_elf_tls_common (int);
 static void obj_elf_lcomm (int);
+static void obj_elf_struct (int);
 
 static const pseudo_typeS elf_pseudo_table[] =
 {
@@ -110,9 +115,12 @@ static const pseudo_typeS elf_pseudo_table[] =
   /* These are used for dwarf2.  */
   { "file", (void (*) (int)) dwarf2_directive_file, 0 },
   { "loc",  dwarf2_directive_loc,  0 },
+  { "loc_mark_labels", dwarf2_directive_loc_mark_labels, 0 },
 
   /* We need to trap the section changing calls to handle .previous.  */
   {"data", obj_elf_data, 0},
+  {"offset", obj_elf_struct, 0},
+  {"struct", obj_elf_struct, 0},
   {"text", obj_elf_text, 0},
 
   {"tls_common", obj_elf_tls_common, 0},
@@ -171,6 +179,8 @@ static const pseudo_typeS ecoff_debug_pseudo_table[] =
 
 /* This is called when the assembler starts.  */
 
+asection *elf_com_section_ptr;
+
 void
 elf_begin (void)
 {
@@ -183,6 +193,7 @@ elf_begin (void)
   symbol_table_insert (section_symbol (s));
   s = bfd_get_section_by_name (stdoutput, BSS_SECTION_NAME);
   symbol_table_insert (section_symbol (s));
+  elf_com_section_ptr = bfd_com_section_ptr;
 }
 
 void
@@ -267,7 +278,7 @@ elf_file_symbol (const char *s, int appfile)
 /* Called from read.c:s_comm after we've parsed .comm symbol, size.
    Parse a possible alignment value.  */
 
-static symbolS *
+symbolS *
 elf_common_parse (int ignore ATTRIBUTE_UNUSED, symbolS *symbolP, addressT size)
 {
   addressT align = 0;
@@ -331,7 +342,7 @@ elf_common_parse (int ignore ATTRIBUTE_UNUSED, symbolS *symbolP, addressT size)
       S_SET_VALUE (symbolP, size);
       S_SET_ALIGN (symbolP, align);
       S_SET_EXTERNAL (symbolP);
-      S_SET_SEGMENT (symbolP, bfd_com_section_ptr);
+      S_SET_SEGMENT (symbolP, elf_com_section_ptr);
     }
 
   symbol_get_bfdsym (symbolP)->flags |= BSF_OBJECT;
@@ -517,6 +528,7 @@ obj_elf_change_section (const char *name,
   asection *old_sec;
   segT sec;
   flagword flags;
+  const struct elf_backend_data *bed;
   const struct bfd_elf_special_section *ssect;
 
 #ifdef md_flush_pending_output
@@ -548,7 +560,8 @@ obj_elf_change_section (const char *name,
   else
     sec = subseg_force_new (name, 0);
 
-  ssect = _bfd_elf_get_sec_type_attr (stdoutput, name);
+  bed = get_elf_backend_data (stdoutput);
+  ssect = (*bed->get_sec_type_attr) (stdoutput, sec);
 
   if (ssect != NULL)
     {
@@ -564,7 +577,16 @@ obj_elf_change_section (const char *name,
 		 .section .init_array,"aw",@progbits
 
 		 for __attribute__ ((section (".init_array"))).
+		 "@progbits" is incorrect.  Also for x86-64 large bss
+		 sections, gcc, as of 2005-07-06, will emit
+
+		 .section .lbss,"aw",@progbits
+
 		 "@progbits" is incorrect.  */
+#ifdef TC_I386
+	      && (bed->s->arch_size != 64
+		  || !(ssect->attr & SHF_X86_64_LARGE))
+#endif
 	      && ssect->type != SHT_INIT_ARRAY
 	      && ssect->type != SHT_FINI_ARRAY
 	      && ssect->type != SHT_PREINIT_ARRAY)
@@ -1030,6 +1052,24 @@ obj_elf_text (int i)
   previous_section = now_seg;
   previous_subsection = now_subseg;
   s_text (i);
+
+#ifdef md_elf_section_change_hook
+  md_elf_section_change_hook ();
+#endif
+}
+
+/* Change to the *ABS* section.  */
+
+void
+obj_elf_struct (int i)
+{
+#ifdef md_flush_pending_output
+  md_flush_pending_output ();
+#endif
+
+  previous_section = now_seg;
+  previous_subsection = now_subseg;
+  s_struct (i);
 
 #ifdef md_elf_section_change_hook
   md_elf_section_change_hook ();

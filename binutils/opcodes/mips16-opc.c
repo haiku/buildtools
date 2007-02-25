@@ -16,8 +16,8 @@ the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this file; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include <stdio.h>
 #include "sysdep.h"
@@ -221,6 +221,19 @@ const struct mips_opcode mips16_opcodes[] =
 {"sw",	    "x,V(S)",	0xd000, 0xf800, RD_x|RD_SP,	0,	0 },
 {"sw",	    "R,V(S)",	0x6200, 0xff00, RD_31|RD_SP,	0,	0 },
 {"xor",	    "x,y",	0xe80e, 0xf81f, WR_x|RD_x|RD_y, 0,	0 },
+  /* MIPS16e additions */
+{"jalrc",   "x",	0xe8c0, 0xf8ff, WR_31|RD_x|TRAP, 0,     0 },
+{"jalrc",   "R,x",	0xe8c0, 0xf8ff, WR_31|RD_x|TRAP, 0,     0 },
+{"jrc",     "x",	0xe880, 0xf8ff, RD_x|TRAP,	0,      0 },
+{"jrc",     "R",	0xe8a0, 0xffff, RD_31|TRAP,	0,      0 },
+{"restore", "M",	0x6400, 0xff80, WR_31|RD_SP|WR_SP|TRAP,	0,	0 },
+{"save",    "m",	0x6480, 0xff80, RD_31|RD_SP|WR_SP|TRAP,	0,	0 },
+{"seb",	    "x",	0xe891, 0xf8ff, WR_x|RD_x,	0,      0 },
+{"seh",	    "x",	0xe8b1, 0xf8ff, WR_x|RD_x,	0,      0 },
+{"sew",	    "x",	0xe8d1, 0xf8ff, WR_x|RD_x,	0,      I3 },
+{"zeb",	    "x",	0xe811, 0xf8ff, WR_x|RD_x,	0,      0 },
+{"zeh",	    "x",	0xe831, 0xf8ff, WR_x|RD_x,	0,      0 },
+{"zew",	    "x",	0xe851, 0xf8ff, WR_x|RD_x,	0,      I3 },
 };
 
 const int bfd_mips16_num_opcodes =

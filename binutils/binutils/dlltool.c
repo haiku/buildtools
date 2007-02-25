@@ -1,6 +1,6 @@
 /* dlltool.c -- tool to generate stuff for PE style DLLs
    Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005 Free Software Foundation, Inc.
+   2005, 2006 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 
 /* This program allows you to build the files necessary to create
@@ -254,13 +254,7 @@
 
 #include <time.h>
 #include <sys/stat.h>
-
-#ifdef ANSI_PROTOTYPES
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
-
 #include <assert.h>
 
 #ifdef DLLTOOL_ARM
@@ -360,6 +354,7 @@ static char *dll_name;
 
 static int add_indirect = 0;
 static int add_underscore = 0;
+static int add_stdcall_underscore = 0;
 static int dontdeltemps = 0;
 
 /* TRUE if we should export all symbols.  Otherwise, we only export
@@ -703,13 +698,11 @@ static void gen_lib_file (void);
 static int pfunc (const void *, const void *);
 static int nfunc (const void *, const void *);
 static void remove_null_names (export_type **);
-static void dtab (export_type **);
 static void process_duplicates (export_type **);
 static void fill_ordinals (export_type **);
-static int alphafunc (const void *, const void *);
 static void mangle_defs (void);
 static void usage (FILE *, int);
-static void inform (const char *, ...);
+static void inform (const char *, ...) ATTRIBUTE_PRINTF_1;
 static void set_dll_name_from_def (const char *);
 
 static char *
@@ -2002,7 +1995,9 @@ xlate (const char *name)
 {
   int lead_at = (*name == '@');
 
-  if (add_underscore &&  !lead_at)
+  if (!lead_at && (add_underscore
+		   || (add_stdcall_underscore
+		       && strchr (name, '@'))))
     {
       char *copy = xmalloc (strlen (name) + 2);
 
@@ -2835,8 +2830,16 @@ nfunc (const void *a, const void *b)
 {
   export_type *ap = *(export_type **) a;
   export_type *bp = *(export_type **) b;
+  const char *an = ap->name;
+  const char *bn = bp->name;
 
-  return (strcmp (ap->name, bp->name));
+  if (killat)
+    {
+      an = (an[0] == '@') ? an + 1 : an;
+      bn = (bn[0] == '@') ? bn + 1 : bn;
+    }
+
+  return (strcmp (an, bn));
 }
 
 static void
@@ -2857,27 +2860,6 @@ remove_null_names (export_type **ptr)
 }
 
 static void
-dtab (export_type **ptr ATTRIBUTE_UNUSED)
-{
-#ifdef SACDEBUG
-  int i;
-  for (i = 0; i < d_nfuncs; i++)
-    {
-      if (ptr[i])
-	{
-	  printf ("%d %s @ %d %s%s%s\n",
-		  i, ptr[i]->name, ptr[i]->ordinal,
-		  ptr[i]->noname ? "NONAME " : "",
-		  ptr[i]->constant ? "CONSTANT" : "",
-		  ptr[i]->data ? "DATA" : "");
-	}
-      else
-	printf ("empty\n");
-    }
-#endif
-}
-
-static void
 process_duplicates (export_type **d_export_vec)
 {
   int more = 1;
@@ -2889,7 +2871,6 @@ process_duplicates (export_type **d_export_vec)
       /* Remove duplicates.  */
       qsort (d_export_vec, d_nfuncs, sizeof (export_type *), nfunc);
 
-      dtab (d_export_vec);
       for (i = 0; i < d_nfuncs - 1; i++)
 	{
 	  if (strcmp (d_export_vec[i]->name,
@@ -2918,9 +2899,7 @@ process_duplicates (export_type **d_export_vec)
 	      d_export_vec[i] = 0;
 	    }
 
-	  dtab (d_export_vec);
 	  remove_null_names (d_export_vec);
-	  dtab (d_export_vec);
 	}
     }
 
@@ -3004,15 +2983,6 @@ fill_ordinals (export_type **d_export_vec)
     }
 }
 
-static int
-alphafunc (const void *av, const void *bv)
-{
-  const export_type **a = (const export_type **) av;
-  const export_type **b = (const export_type **) bv;
-
-  return strcmp ((*a)->name, (*b)->name);
-}
-
 static void
 mangle_defs (void)
 {
@@ -3048,7 +3018,7 @@ mangle_defs (void)
 
   d_exports_lexically[i] = 0;
 
-  qsort (d_exports_lexically, i, sizeof (export_type *), alphafunc);
+  qsort (d_exports_lexically, i, sizeof (export_type *), nfunc);
 
   /* Fill exp entries with their hint values.  */
   for (i = 0; i < d_nfuncs; i++)
@@ -3079,7 +3049,8 @@ usage (FILE *file, int status)
   fprintf (file, _("   -b --base-file <basefile> Read linker generated base file.\n"));
   fprintf (file, _("   -x --no-idata4            Don't generate idata$4 section.\n"));
   fprintf (file, _("   -c --no-idata5            Don't generate idata$5 section.\n"));
-  fprintf (file, _("   -U --add-underscore       Add underscores to symbols in interface library.\n"));
+  fprintf (file, _("   -U --add-underscore       Add underscores to all symbols in interface library.\n"));
+  fprintf (file, _("      --add-stdcall-underscore Add underscores to stdcall symbols in interface library.\n"));
   fprintf (file, _("   -k --kill-at              Kill @<n> from exported names.\n"));
   fprintf (file, _("   -A --add-stdcall-alias    Add aliases without @<n>.\n"));
   fprintf (file, _("   -p --ext-prefix-alias <prefix> Add aliases with <prefix>.\n"));
@@ -3091,6 +3062,7 @@ usage (FILE *file, int status)
   fprintf (file, _("   -v --verbose              Be verbose.\n"));
   fprintf (file, _("   -V --version              Display the program version.\n"));
   fprintf (file, _("   -h --help                 Display this information.\n"));
+  fprintf (file, _("   @<file>                   Read options from <file>.\n"));
 #ifdef DLLTOOL_MCORE_ELF
   fprintf (file, _("   -M --mcore-elf <outname>  Process mcore-elf object files into <outname>.\n"));
   fprintf (file, _("   -L --linker <name>        Use <name> as the linker.\n"));
@@ -3103,6 +3075,7 @@ usage (FILE *file, int status)
 #define OPTION_NO_EXPORT_ALL_SYMS	(OPTION_EXPORT_ALL_SYMS + 1)
 #define OPTION_EXCLUDE_SYMS		(OPTION_NO_EXPORT_ALL_SYMS + 1)
 #define OPTION_NO_DEFAULT_EXCLUDES	(OPTION_EXCLUDE_SYMS + 1)
+#define OPTION_ADD_STDCALL_UNDERSCORE	(OPTION_NO_DEFAULT_EXCLUDES + 1)
 
 static const struct option long_options[] =
 {
@@ -3120,6 +3093,7 @@ static const struct option long_options[] =
   {"def", required_argument, NULL, 'd'}, /* for compatibility with older versions */
   {"input-def", required_argument, NULL, 'd'},
   {"add-underscore", no_argument, NULL, 'U'},
+  {"add-stdcall-underscore", no_argument, NULL, OPTION_ADD_STDCALL_UNDERSCORE},
   {"kill-at", no_argument, NULL, 'k'},
   {"add-stdcall-alias", no_argument, NULL, 'A'},
   {"ext-prefix-alias", required_argument, NULL, 'p'},
@@ -3157,6 +3131,8 @@ main (int ac, char **av)
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
 
+  expandargv (&ac, &av);
+
   while ((c = getopt_long (ac, av,
 #ifdef DLLTOOL_MCORE_ELF
 			   "m:e:l:aD:d:z:b:xp:cCuUkAS:f:nvVHhM:L:F:",
@@ -3179,6 +3155,9 @@ main (int ac, char **av)
 	  break;
 	case OPTION_NO_DEFAULT_EXCLUDES:
 	  do_default_excludes = FALSE;
+	  break;
+	case OPTION_ADD_STDCALL_UNDERSCORE:
+	  add_stdcall_underscore = 1;
 	  break;
 	case 'x':
 	  no_idata4 = 1;

@@ -15,7 +15,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
 # This file is sourced from elf32.em, and defines extra sh64
@@ -520,13 +520,6 @@ sh64_elf_${EMULATION_NAME}_after_allocation (void)
 			bfd_put_32 (output_bfd, isec->output_offset,
 				    crangesp + SH64_CRANGE_CR_ADDR_OFFSET);
 			cr_addr_order->u.reloc.p->addend = 0;
-
-			/* We must update the number of relocations here,
-			   since the elf linker does not take link orders
-			   into account when setting header sizes.  The
-			   actual relocation orders are however executed
-			   correctly.  */
-			elf_section_data(cranges)->rel_count++;
 		      }
 		    else
 		      bfd_put_32 (output_bfd,
@@ -564,4 +557,5 @@ sh64_elf_${EMULATION_NAME}_after_allocation (void)
   sh64_elf_section_data (cranges)->sh64_info->cranges_growth
     = crangesp - cranges->contents - cranges->size;
   cranges->size = crangesp - cranges->contents;
+  cranges->rawsize = cranges->size;
 }

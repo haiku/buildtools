@@ -19,7 +19,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* This file supports the 64-bit MIPS ELF ABI.
 
@@ -299,9 +299,11 @@ static reloc_howto_type mips_elf64_howto_table_rel[] =
 	 0x0000ffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 16 bit PC relative reference.  */
+  /* 16 bit PC relative reference.  Note that the ABI document has a typo
+     and claims R_MIPS_PC16 to be not rightshifted, rendering it useless.
+     We do the right thing here.  */
   HOWTO (R_MIPS_PC16,		/* type */
-	 0,			/* rightshift */
+	 2,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
 	 TRUE,			/* pc_relative */
@@ -948,9 +950,11 @@ static reloc_howto_type mips_elf64_howto_table_rela[] =
 	 0x0000ffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 16 bit PC relative reference.  */
+  /* 16 bit PC relative reference.  Note that the ABI document has a typo
+     and claims R_MIPS_PC16 to be not rightshifted, rendering it useless.
+     We do the right thing here.  */
   HOWTO (R_MIPS_PC16,		/* type */
-	 0,			/* rightshift */
+	 2,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
 	 TRUE,			/* pc_relative */
@@ -2133,7 +2137,7 @@ static const struct elf_reloc_map mips_reloc_map[] =
   /* There is no BFD reloc for R_MIPS_REL32.  */
   { BFD_RELOC_64, R_MIPS_64 },
   { BFD_RELOC_CTOR, R_MIPS_64 },
-  { BFD_RELOC_16_PCREL, R_MIPS_PC16 },
+  { BFD_RELOC_16_PCREL_S2, R_MIPS_PC16 },
   { BFD_RELOC_HI16_S, R_MIPS_HI16 },
   { BFD_RELOC_LO16, R_MIPS_LO16 },
   { BFD_RELOC_GPREL16, R_MIPS_GPREL16 },
@@ -2217,8 +2221,6 @@ bfd_elf64_bfd_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
       return &elf_mips_gnu_vtinherit_howto;
     case BFD_RELOC_VTABLE_ENTRY:
       return &elf_mips_gnu_vtentry_howto;
-    case BFD_RELOC_16_PCREL_S2:
-      return &elf_mips_gnu_rela16_s2;
     default:
       bfd_set_error (bfd_error_bad_value);
       return NULL;
@@ -3102,6 +3104,7 @@ const struct elf_size_info mips_elf64_size_info =
    MIPS-specific function only applies to IRIX5, which had no 64-bit
    ABI.  */
 #define bfd_elf64_find_nearest_line	_bfd_mips_elf_find_nearest_line
+#define bfd_elf64_find_inliner_info	_bfd_mips_elf_find_inliner_info
 #define bfd_elf64_new_section_hook	_bfd_mips_elf_new_section_hook
 #define bfd_elf64_set_section_contents	_bfd_mips_elf_set_section_contents
 #define bfd_elf64_bfd_get_relocated_section_contents \

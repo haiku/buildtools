@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "bfd.h"
 #include "progress.h"
@@ -254,6 +254,7 @@ usage (FILE *stream, int status)
       --target=BFDNAME   Specify the target object format as BFDNAME\n\
   -u, --undefined-only   Display only undefined symbols\n\
   -X 32_64               (ignored)\n\
+  @FILE                  Read options from FILE\n\
   -h, --help             Display this information\n\
   -V, --version          Display this program's version number\n\
 \n"));
@@ -905,9 +906,10 @@ print_symbol (bfd *abfd, asymbol *sym, bfd_vma ssize, bfd *archive_bfd)
 	}
       else if (bfd_get_section (sym)->owner == abfd)
 	{
-	  if (bfd_find_nearest_line (abfd, bfd_get_section (sym), syms,
-				     sym->value, &filename, &functionname,
-				     &lineno)
+	  if ((bfd_find_line (abfd, syms, sym, &filename, &lineno)
+	       || bfd_find_nearest_line (abfd, bfd_get_section (sym),
+					 syms, sym->value, &filename,
+					 &functionname, &lineno))
 	      && filename != NULL
 	      && lineno != 0)
 	    printf ("\t%s:%u", filename, lineno);
@@ -1489,6 +1491,8 @@ main (int argc, char **argv)
   xmalloc_set_program_name (program_name);
 
   START_PROGRESS (program_name, 0);
+
+  expandargv (&argc, &argv);
 
   bfd_init ();
   set_default_bfd_target ();

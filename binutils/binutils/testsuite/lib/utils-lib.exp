@@ -13,7 +13,7 @@
 # 
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 # Please email any bugs, comments, and/or additions to this file to:
 # bug-dejagnu@prep.ai.mit.edu
@@ -73,6 +73,12 @@ proc default_binutils_run { prog progargs } {
     if {![string match "" $exec_output]} then {
 	send_log "$exec_output\n"
 	verbose "$exec_output"
+    } else {
+	if { [lindex $state 0] != 0 } {
+	    set exec_output "$prog exited with status [lindex $state 0]"
+	    send_log "$exec_output\n"
+	    verbose "$exec_output"
+	}
     }
     return $exec_output
 }

@@ -22,11 +22,9 @@ Section Headers:
   \[10\] \.dynamic +.*
   \[11\] \.got +.*
   \[12\] \.got.plt +.*
-  \[13\] \.data +.*
-  \[14\] \.bss +.*
-  \[15\] \.shstrtab +.*
-  \[16\] \.symtab +.*
-  \[17\] \.strtab +.*
+  \[13\] \.shstrtab +.*
+  \[14\] \.symtab +.*
+  \[15\] \.strtab +.*
 Key to Flags:
 .*
 .*
@@ -52,47 +50,44 @@ Program Headers:
 
 Relocation section '.rel.dyn' at offset 0x[0-9a-f]+ contains 26 entries:
  Offset +Info +Type +Sym.Value +Sym. Name
-[0-9a-f]+ +0+23 R_386_TLS_DTPMOD3
-[0-9a-f]+ +0+25 R_386_TLS_TPOFF32
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+25 R_386_TLS_TPOFF32
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+23 R_386_TLS_DTPMOD3
-[0-9a-f]+ +0+23 R_386_TLS_DTPMOD3
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+25 R_386_TLS_TPOFF32
-[0-9a-f]+ +0+25 R_386_TLS_TPOFF32
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+25 R_386_TLS_TPOFF32
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+0e R_386_TLS_TPOFF *
-[0-9a-f]+ +0+23 R_386_TLS_DTPMOD3
-[0-9a-f]+ +0+25 R_386_TLS_TPOFF32
-[0-9a-f]+ +0+80e R_386_TLS_TPOFF   0+8   sg3
-[0-9a-f]+ +0+925 R_386_TLS_TPOFF32 0+c   sg4
-[0-9a-f]+ +0+90e R_386_TLS_TPOFF   0+c   sg4
-[0-9a-f]+ +0+a0e R_386_TLS_TPOFF   0+10   sg5
-[0-9a-f]+ +0+b23 R_386_TLS_DTPMOD3 0+   sg1
-[0-9a-f]+ +0+b24 R_386_TLS_DTPOFF3 0+   sg1
-[0-9a-f]+ +0+e25 R_386_TLS_TPOFF32 0+4   sg2
+[0-9a-f ]+R_386_TLS_DTPMOD3
+[0-9a-f ]+R_386_TLS_TPOFF32
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF32
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_DTPMOD3
+[0-9a-f ]+R_386_TLS_DTPMOD3
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF32
+[0-9a-f ]+R_386_TLS_TPOFF32
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF32
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_TPOFF *
+[0-9a-f ]+R_386_TLS_DTPMOD3
+[0-9a-f ]+R_386_TLS_TPOFF32
+[0-9a-f ]+R_386_TLS_TPOFF   0+8   sg3
+[0-9a-f ]+R_386_TLS_TPOFF32 0+c   sg4
+[0-9a-f ]+R_386_TLS_TPOFF   0+c   sg4
+[0-9a-f ]+R_386_TLS_TPOFF   0+10   sg5
+[0-9a-f ]+R_386_TLS_DTPMOD3 0+   sg1
+[0-9a-f ]+R_386_TLS_DTPOFF3 0+   sg1
+[0-9a-f ]+R_386_TLS_TPOFF32 0+4   sg2
 
 Relocation section '.rel.plt' at offset 0x[0-9a-f]+ contains 1 entries:
- Offset     Info    Type            Sym.Value  Sym. Name
-[0-9a-f]+  0+1307 R_386_JUMP_SLOT   0+   ___tls_get_addr
+ Offset +Info +Type +Sym.Value +Sym. Name
+[0-9a-f ]+R_386_JUMP_SLOT   0+   ___tls_get_addr
 
-Symbol table '.dynsym' contains 20 entries:
- +Num: + Value  Size Type + Bind +Vis +Ndx Name
+Symbol table '.dynsym' contains 17 entries:
+ +Num: +Value  Size Type +Bind +Vis +Ndx Name
  +[0-9]+: 0+ +0 NOTYPE  LOCAL  DEFAULT  UND *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +7 *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +8 *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +9 *
- +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +13 *
- +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +14 *
  +[0-9]+: 0+1c +0 TLS +GLOBAL DEFAULT +8 sg8
- +[0-9]+: [0-9a-f]+ +0 OBJECT  GLOBAL DEFAULT  ABS _DYNAMIC
  +[0-9]+: 0+8 +0 TLS +GLOBAL DEFAULT +8 sg3
  +[0-9]+: 0+c +0 TLS +GLOBAL DEFAULT +8 sg4
  +[0-9]+: 0+10 +0 TLS +GLOBAL DEFAULT +8 sg5
@@ -106,7 +101,7 @@ Symbol table '.dynsym' contains 20 entries:
  +[0-9]+: [0-9a-f]+ +0 NOTYPE  GLOBAL DEFAULT  ABS _end
  +[0-9]+: 0+ +0 NOTYPE  GLOBAL DEFAULT  UND ___tls_get_addr
 
-Symbol table '.symtab' contains 57 entries:
+Symbol table '.symtab' contains 55 entries:
  +Num: +Value  Size Type +Bind +Vis +Ndx Name
  +[0-9]+: 0+ +0 NOTYPE  LOCAL  DEFAULT  UND *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +1 *
@@ -124,8 +119,6 @@ Symbol table '.symtab' contains 57 entries:
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +13 *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +14 *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +15 *
- +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +16 *
- +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +17 *
  +[0-9]+: 0+20 +0 TLS +LOCAL  DEFAULT +8 sl1
  +[0-9]+: 0+24 +0 TLS +LOCAL  DEFAULT +8 sl2
  +[0-9]+: 0+28 +0 TLS +LOCAL  DEFAULT +8 sl3
@@ -135,6 +128,7 @@ Symbol table '.symtab' contains 57 entries:
  +[0-9]+: 0+38 +0 TLS +LOCAL  DEFAULT +8 sl7
  +[0-9]+: 0+3c +0 TLS +LOCAL  DEFAULT +8 sl8
  +[0-9]+: 0+60 +0 TLS +LOCAL  HIDDEN +9 sH1
+ +[0-9]+: [0-9a-f]+ +0 OBJECT  LOCAL  HIDDEN  ABS _DYNAMIC
  +[0-9]+: 0+48 +0 TLS +LOCAL  HIDDEN +8 sh3
  +[0-9]+: 0+64 +0 TLS +LOCAL  HIDDEN +9 sH2
  +[0-9]+: 0+78 +0 TLS +LOCAL  HIDDEN +9 sH7
@@ -152,7 +146,6 @@ Symbol table '.symtab' contains 57 entries:
  +[0-9]+: 0+44 +0 TLS +LOCAL  HIDDEN +8 sh2
  +[0-9]+: 0+54 +0 TLS +LOCAL  HIDDEN +8 sh6
  +[0-9]+: 0+1c +0 TLS +GLOBAL DEFAULT +8 sg8
- +[0-9]+: [0-9a-f]+ +0 OBJECT  GLOBAL DEFAULT  ABS _DYNAMIC
  +[0-9]+: 0+8 +0 TLS +GLOBAL DEFAULT +8 sg3
  +[0-9]+: 0+c +0 TLS +GLOBAL DEFAULT +8 sg4
  +[0-9]+: 0+10 +0 TLS +GLOBAL DEFAULT +8 sg5

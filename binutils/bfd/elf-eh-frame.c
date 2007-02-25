@@ -1,5 +1,5 @@
 /* .eh_frame section optimization.
-   Copyright 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
    Written by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -613,6 +613,8 @@ _bfd_elf_discard_section_eh_frame
 		    ENSURE_NO_RELOCS (buf);
 		    REQUIRE (get_DW_EH_PE_width (cie.fde_encoding, ptr_size));
 		    break;
+		  case 'S':
+		    break;
 		  case 'P':
 		    {
 		      int per_width;
@@ -853,8 +855,8 @@ _bfd_elf_discard_section_eh_frame_hdr (bfd *abfd, struct bfd_link_info *info)
 
 /* This function is called from size_dynamic_sections.
    It needs to decide whether .eh_frame_hdr should be output or not,
-   because later on it is too late for calling _bfd_strip_section_from_output,
-   since dynamic symbol table has been sized.  */
+   because when the dynamic symbol table has been sized it is too late
+   to strip sections.  */
 
 bfd_boolean
 _bfd_elf_maybe_strip_eh_frame_hdr (struct bfd_link_info *info)
@@ -888,7 +890,7 @@ _bfd_elf_maybe_strip_eh_frame_hdr (struct bfd_link_info *info)
 
   if (abfd == NULL)
     {
-      _bfd_strip_section_from_output (info, hdr_info->hdr_sec);
+      hdr_info->hdr_sec->flags |= SEC_EXCLUDE;
       hdr_info->hdr_sec = NULL;
       return TRUE;
     }
@@ -1074,12 +1076,12 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
       end = buf + ent->size;
       new_size = size_of_output_cie_fde (ent, ptr_size);
 
-      /* Install the new size, filling the extra bytes with DW_CFA_nops.  */
+      /* Update the size.  It may be shrinked.  */
+      bfd_put_32 (abfd, new_size - 4, buf);
+
+      /* Filling the extra bytes with DW_CFA_nops.  */
       if (new_size != ent->size)
-	{
-	  memset (end, 0, new_size - ent->size);
-	  bfd_put_32 (abfd, new_size - 4, buf);
-	}
+	memset (end, 0, new_size - ent->size);
 
       if (ent->cie)
 	{
@@ -1178,6 +1180,8 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
 		      }
 		    buf++;
 		    break;
+		  case 'S':
+		    break;
 		  default:
 		    BFD_FAIL ();
 		  }
@@ -1259,40 +1263,13 @@ _bfd_elf_write_section_eh_frame (bfd *abfd,
 	}
     }
 
-    {
-      unsigned int alignment = 1 << sec->alignment_power;
-      unsigned int pad = sec->size % alignment;
-
-      /* Don't pad beyond the raw size of the output section. It
-	 can happen at the last input section.  */
-      if (pad
-	  && ((sec->output_offset + sec->size + pad)
-	      <= sec->output_section->size))
-	{
-	  bfd_byte *buf;
-	  unsigned int new_size;
-
-	  /* Find the last CIE/FDE.  */
-	  ent = sec_info->entry + sec_info->count;
-	  while (--ent != sec_info->entry)
-	    if (!ent->removed)
-	      break;
-
-	  /* The size of the last CIE/FDE must be at least 4.  */
-	  if (ent->removed || ent->size < 4)
-	    abort ();
-
-	  pad = alignment - pad;
-	  buf = contents + ent->new_offset - sec->output_offset;
-	  new_size = size_of_output_cie_fde (ent, ptr_size);
-
-	  /* Pad it with DW_CFA_nop  */
-	  memset (buf + new_size, 0, pad);
-	  bfd_put_32 (abfd, new_size + pad - 4, buf);
-
-	  sec->size += pad;
-	}
-    }
+  /* We don't align the section to its section alignment since the
+     runtime library only expects all CIE/FDE records aligned at
+     the pointer size. _bfd_elf_discard_section_eh_frame should 
+     have padded CIE/FDE records to multiple of pointer size with
+     size_of_output_cie_fde.  */
+  if ((sec->size % ptr_size) != 0)
+    abort ();
 
   return bfd_set_section_contents (abfd, sec->output_section,
 				   contents, (file_ptr) sec->output_offset,

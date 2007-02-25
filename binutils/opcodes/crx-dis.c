@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "dis-asm.h"
 #include "sysdep.h"
@@ -30,7 +30,7 @@
 
 /* Extract 'n_bits' from 'a' starting from offset 'offs'.  */
 #define EXTRACT(a, offs, n_bits)	    \
-  (n_bits == 32 ? (((a) >> (offs)) & ~0L)   \
+  (n_bits == 32 ? (((a) >> (offs)) & 0xffffffffL)   \
   : (((a) >> (offs)) & ((1 << (n_bits)) -1)))
 
 /* Set Bit Mask - a mask to set all bits starting from offset 'offs'.  */
@@ -547,7 +547,7 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
 		    func (stream, "%s", string);
 		  }
 		else
-		  func (stream, "$0x%x", a->constant);
+		  func (stream, "$0x%lx", a->constant);
 	    }
 	  else
             {
@@ -556,11 +556,11 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
             }
         }
       else
-	func (stream, "$0x%x", a->constant);
+	func (stream, "$0x%lx", a->constant);
       break;
 
     case arg_idxr:
-      func (stream, "0x%x(%s,%s,%d)", a->constant, getregname (a->r),
+      func (stream, "0x%lx(%s,%s,%d)", a->constant, getregname (a->r),
 	    getregname (a->i_r), powerof2 (a->scale));
       break;
 
@@ -569,7 +569,7 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
       break;
 
     case arg_cr:
-      func (stream, "0x%x(%s)", a->constant, getregname (a->r));
+      func (stream, "0x%lx(%s)", a->constant, getregname (a->r));
 
       if (IS_INSN_TYPE (LD_STOR_INS_INC))
 	func (stream, "+");

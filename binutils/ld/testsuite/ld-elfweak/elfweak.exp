@@ -13,7 +13,7 @@
 # 
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # Written by H.J. Lu (hjl@gnu.org)
 #	     Eric Youngdale (eric@andante.jic.com)
@@ -493,3 +493,6 @@ if ![ld_compile "$CC $CFLAGS" $srcdir/$subdir/size_main.c $tmpdir/size_main.o] {
 }
 
 build_exec "ELF weak size" size_main "size_main.o libsize_foo.so libsize_bar.so" "-Wl,-rpath,." size "" ""
+
+verbose "size2"
+run_dump_test $srcdir/$subdir/size2

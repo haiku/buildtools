@@ -17,7 +17,7 @@ the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this file; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include <stdio.h>
 #include "sysdep.h"
@@ -31,11 +31,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  *
    chip.  */
 
 static int print_insn_powerpc (bfd_vma, struct disassemble_info *, int, int);
-
-struct dis_private {
-  /* Stash the result of parsing disassembler_options here.  */
-  int dialect;
-};
 
 /* Determine which set of machines to disassemble for.  PPC403/601 or
    BookE.  For convenience, also disassemble instructions supported
@@ -63,6 +58,9 @@ powerpc_dialect (struct disassemble_info *info)
   else if (info->disassembler_options
 	   && strstr (info->disassembler_options, "efs") != NULL)
     dialect |= PPC_OPCODE_EFS;
+  else if (info->disassembler_options
+	   && strstr (info->disassembler_options, "e300") != NULL)
+    dialect |= PPC_OPCODE_E300 | PPC_OPCODE_CLASSIC | PPC_OPCODE_COMMON;
   else
     dialect |= (PPC_OPCODE_403 | PPC_OPCODE_601 | PPC_OPCODE_CLASSIC
 		| PPC_OPCODE_COMMON | PPC_OPCODE_ALTIVEC);
@@ -70,6 +68,10 @@ powerpc_dialect (struct disassemble_info *info)
   if (info->disassembler_options
       && strstr (info->disassembler_options, "power4") != NULL)
     dialect |= PPC_OPCODE_POWER4;
+
+  if (info->disassembler_options
+      && strstr (info->disassembler_options, "power5") != NULL)
+    dialect |= PPC_OPCODE_POWER4 | PPC_OPCODE_POWER5;
 
   if (info->disassembler_options
       && strstr (info->disassembler_options, "any") != NULL)
@@ -83,7 +85,7 @@ powerpc_dialect (struct disassemble_info *info)
 	dialect |= PPC_OPCODE_64;
     }
 
-  ((struct dis_private *) &info->private_data)->dialect = dialect;
+  info->private_data = (char *) 0 + dialect;
   return dialect;
 }
 
@@ -92,7 +94,7 @@ powerpc_dialect (struct disassemble_info *info)
 int
 print_insn_big_powerpc (bfd_vma memaddr, struct disassemble_info *info)
 {
-  int dialect = ((struct dis_private *) &info->private_data)->dialect;
+  int dialect = (char *) info->private_data - (char *) 0;
   return print_insn_powerpc (memaddr, info, 1, dialect);
 }
 
@@ -101,7 +103,7 @@ print_insn_big_powerpc (bfd_vma memaddr, struct disassemble_info *info)
 int
 print_insn_little_powerpc (bfd_vma memaddr, struct disassemble_info *info)
 {
-  int dialect = ((struct dis_private *) &info->private_data)->dialect;
+  int dialect = (char *) info->private_data - (char *) 0;
   return print_insn_powerpc (memaddr, info, 0, dialect);
 }
 
@@ -245,7 +247,7 @@ print_insn_powerpc (bfd_vma memaddr,
 	  else
 	    {
 	      if (operand->bits == 3)
-		(*info->fprintf_func) (info->stream, "cr%d", value);
+		(*info->fprintf_func) (info->stream, "cr%ld", value);
 	      else
 		{
 		  static const char *cbnames[4] = { "lt", "gt", "eq", "so" };
@@ -299,9 +301,11 @@ The following PPC specific disassembler options are supported for use with\n\
 the -M switch:\n");
 
   fprintf (stream, "  booke|booke32|booke64    Disassemble the BookE instructions\n");
+  fprintf (stream, "  e300                     Disassemble the e300 instructions\n");
   fprintf (stream, "  e500|e500x2              Disassemble the e500 instructions\n");
   fprintf (stream, "  efs                      Disassemble the EFS instructions\n");
   fprintf (stream, "  power4                   Disassemble the Power4 instructions\n");
+  fprintf (stream, "  power5                   Disassemble the Power5 instructions\n");
   fprintf (stream, "  32                       Do not disassemble 64-bit instructions\n");
   fprintf (stream, "  64                       Allow disassembly of 64-bit instructions\n");
 }

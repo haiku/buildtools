@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /*
 SECTION
@@ -38,6 +38,8 @@ SECTION
 
 	The BFD contains the result of an executable core dump.
 
+SUBSECTION
+	File format functions
 */
 
 #include "bfd.h"
@@ -173,6 +175,14 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	  if (matching)
 	    free (matching_vector);
 
+	  /* If the file was opened for update, then `output_has_begun'
+	     some time ago when the file was created.  Do not recompute
+	     sections sizes or alignments in _bfd_set_section_contents.
+	     We can not set this flag until after checking the format,
+	     because it will interfere with creation of BFD sections.  */
+	  if (abfd->direction == both_direction)
+	    abfd->output_has_begun = TRUE;
+
 	  return TRUE;			/* File position has moved, BTW.  */
 	}
 
@@ -207,7 +217,9 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       const bfd_target *temp;
       bfd_error_type err;
 
-      if (*target == &binary_vec)
+      /* Don't check the default target twice.  */
+      if (*target == &binary_vec
+	  || (!abfd->target_defaulted && *target == save_targ))
 	continue;
 
       abfd->xvec = *target;	/* Change BFD's target temporarily.  */
@@ -318,6 +330,14 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 
       if (matching)
 	free (matching_vector);
+
+      /* If the file was opened for update, then `output_has_begun'
+	 some time ago when the file was created.  Do not recompute
+	 sections sizes or alignments in _bfd_set_section_contents.
+	 We can not set this flag until after checking the format,
+	 because it will interfere with creation of BFD sections.  */
+      if (abfd->direction == both_direction)
+	abfd->output_has_begun = TRUE;
 
       return TRUE;			/* File position has moved, BTW.  */
     }

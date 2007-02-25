@@ -28,7 +28,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #define TARGET_IS_${EMULATION_NAME}
 
@@ -810,6 +810,8 @@ gld${EMULATION_NAME}_before_allocation (void)
       else
 	hdyn->u.def.section = bfd_abs_section_ptr;
     }
+
+  before_allocation_default ();
 }
 
 /* This is called by the before_allocation routine via
@@ -1014,7 +1016,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   gld${EMULATION_NAME}_get_script,
   "${EMULATION_NAME}",
   "${OUTPUT_FORMAT}",
-  NULL,	/* finish */
+  finish_default,
   gld${EMULATION_NAME}_create_output_section_statements,
   NULL,	/* open dynamic archive */
   NULL,	/* place orphan */

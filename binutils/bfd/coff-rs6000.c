@@ -1,5 +1,5 @@
 /* BFD back-end for IBM RS/6000 "XCOFF" files.
-   Copyright 1990-1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright 1990-1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    FIXME: Can someone provide a transliteration of this name into ASCII?
    Using the following chars caused a compiler warning on HIUX (so I replaced
@@ -24,7 +24,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -1294,10 +1294,12 @@ _bfd_xcoff_archive_p (abfd)
   if (bfd_ardata (abfd) == (struct artdata *) NULL)
     goto error_ret_restore;
 
-  bfd_ardata (abfd)->cache = NULL;
-  bfd_ardata (abfd)->archive_head = NULL;
-  bfd_ardata (abfd)->symdefs = NULL;
-  bfd_ardata (abfd)->extended_names = NULL;
+  /* Cleared by bfd_zalloc above.
+     bfd_ardata (abfd)->cache = NULL;
+     bfd_ardata (abfd)->archive_head = NULL;
+     bfd_ardata (abfd)->symdefs = NULL;
+     bfd_ardata (abfd)->extended_names = NULL;
+     bfd_ardata (abfd)->extended_names_size = 0;  */
 
   /* Now handle the two formats.  */
   if (magic[1] != 'b')
@@ -2081,7 +2083,7 @@ xcoff_write_archive_contents_old (abfd)
   char decbuf[XCOFFARMAG_ELEMENT_SIZE + 1];
 
   memset (&fhdr, 0, sizeof fhdr);
-  strncpy (fhdr.magic, XCOFFARMAG, SXCOFFARMAG);
+  (void) strncpy (fhdr.magic, XCOFFARMAG, SXCOFFARMAG);
   sprintf (fhdr.firstmemoff, "%d", SIZEOF_AR_FILE_HDR);
   sprintf (fhdr.freeoff, "%d", 0);
 
@@ -4133,6 +4135,7 @@ const bfd_target rs6000coff_vec =
     /* Copy */
     _bfd_xcoff_copy_private_bfd_data,
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
+    _bfd_generic_init_private_section_data,
     ((bfd_boolean (*) (bfd *, asection *, bfd *, asection *)) bfd_true),
     ((bfd_boolean (*) (bfd *, asymbol *, bfd *, asymbol *)) bfd_true),
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
@@ -4166,6 +4169,8 @@ const bfd_target rs6000coff_vec =
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
     coff_find_nearest_line,
+    _bfd_generic_find_line,
+    coff_find_inliner_info,
     coff_bfd_make_debug_symbol,
     _bfd_generic_read_minisymbols,
     _bfd_generic_minisymbol_to_symbol,
@@ -4380,6 +4385,7 @@ const bfd_target pmac_xcoff_vec =
     /* Copy */
     _bfd_xcoff_copy_private_bfd_data,
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
+    _bfd_generic_init_private_section_data,
     ((bfd_boolean (*) (bfd *, asection *, bfd *, asection *)) bfd_true),
     ((bfd_boolean (*) (bfd *, asymbol *, bfd *, asymbol *)) bfd_true),
     ((bfd_boolean (*) (bfd *, bfd *)) bfd_true),
@@ -4413,6 +4419,8 @@ const bfd_target pmac_xcoff_vec =
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
     coff_find_nearest_line,
+    _bfd_generic_find_line,
+    coff_find_inliner_info,
     coff_bfd_make_debug_symbol,
     _bfd_generic_read_minisymbols,
     _bfd_generic_minisymbol_to_symbol,

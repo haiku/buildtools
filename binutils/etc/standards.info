@@ -1,4 +1,4 @@
-This is standards.info, produced by makeinfo version 4.7 from
+This is standards.info, produced by makeinfo version 4.8 from
 .././etc/standards.texi.
 
 START-INFO-DIR-ENTRY
@@ -1611,7 +1611,7 @@ meanings, so we can update the table.
      `-q' in Make.
 
 `quiet'
-     Used in many programs to inhibit the usual output.  *Note:* every
+     Used in many programs to inhibit the usual output.  *Note_* every
      program accepting `--quiet' should accept `--silent' as a synonym.
 
 `quiet-unshar'
@@ -1723,7 +1723,7 @@ meanings, so we can update the table.
      `-T' in `cat'.
 
 `silent'
-     Used in many programs to inhibit the usual output.  *Note:* every
+     Used in many programs to inhibit the usual output.  *Note_* every
      program accepting `--silent' should accept `--quiet' as a synonym.
 
 `size'

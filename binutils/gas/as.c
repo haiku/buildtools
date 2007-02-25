@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* Main program for AS; a 32-bit assembler of GNU.
    Understands command arguments.
@@ -42,10 +42,8 @@
 #include "macro.h"
 #include "dwarf2dbg.h"
 #include "dw2gencfi.h"
-
-#ifdef BFD_ASSEMBLER
+#include "hash.h"
 #include "bfdver.h"
-#endif
 
 #ifdef HAVE_ITBL_CPU
 #include "itbl-ops.h"
@@ -98,7 +96,7 @@ static enum debug_info_type (*md_debug_format_selector) (int *) = MD_DEBUG_FORMA
 int max_macro_nest = 100;
 
 /* argv[0]  */
-char * myname;
+static char * myname;
 
 /* The default obstack chunk size.  If we set this to zero, the
    obstack code will use whatever will fit in a 4096 byte block.  */
@@ -111,13 +109,11 @@ int debug_memory = 0;
 /* Enable verbose mode.  */
 int verbose = 0;
 
-#ifdef BFD_ASSEMBLER
 segT reg_section;
 segT expr_section;
 segT text_section;
 segT data_section;
 segT bss_section;
-#endif
 
 /* Name of listing file.  */
 static char *listing_filename = NULL;
@@ -224,13 +220,8 @@ print_version_id (void)
     return;
   printed = 1;
 
-#ifdef BFD_ASSEMBLER
-  fprintf (stderr, _("GNU assembler version %s (%s) using BFD version %s"),
+  fprintf (stderr, _("GNU assembler version %s (%s) using BFD version %s\n"),
 	   VERSION, TARGET_ALIAS, BFD_VERSION_STRING);
-#else
-  fprintf (stderr, _("GNU assembler version %s (%s)"), VERSION, TARGET_ALIAS);
-#endif
-  fprintf (stderr, "\n");
 }
 
 static void
@@ -275,7 +266,7 @@ Options:\n\
                           emulate output (default %s)\n"), def_em);
   }
 #endif
-#if defined BFD_ASSEMBLER && (defined OBJ_ELF || defined OBJ_MAYBE_ELF)
+#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
   fprintf (stream, _("\
   --execstack             require executable stack for this object\n"));
   fprintf (stream, _("\
@@ -291,6 +282,8 @@ Options:\n\
   --gstabs+               generate STABS debug info with GNU extensions\n"));
   fprintf (stream, _("\
   --gdwarf-2              generate DWARF2 debugging information\n"));
+  fprintf (stream, _("\
+  --hash-size=<value>     set the hash table size close to <value>\n"));
   fprintf (stream, _("\
   --help                  show this message and exit\n"));
   fprintf (stream, _("\
@@ -313,6 +306,10 @@ Options:\n\
   -o OBJFILE              name the object-file output OBJFILE (default a.out)\n"));
   fprintf (stream, _("\
   -R                      fold data section into text section\n"));
+  fprintf (stream, _("\
+  --reduce-memory-overheads \n\
+                          prefer smaller memory use at the cost of longer\n\
+                          assembly times\n"));
   fprintf (stream, _("\
   --statistics            print various measured statistics from execution\n"));
   fprintf (stream, _("\
@@ -349,6 +346,8 @@ Options:\n\
   fprintf (stream, _("\
   --listing-cont-lines    set the maximum number of continuation lines used\n\
                           for the output data column of the listing\n"));
+  fprintf (stream, _("\
+  @FILE                   read options from FILE\n")); 
 
   md_show_usage (stream);
 
@@ -426,6 +425,9 @@ parse_args (int * pargc, char *** pargv)
       OPTION_EXECSTACK,
       OPTION_NOEXECSTACK,
       OPTION_ALTERNATE,
+      OPTION_AL,
+      OPTION_HASH_TABLE_SIZE,
+      OPTION_REDUCE_MEMORY_OVERHEADS,
       OPTION_WARN_FATAL
     /* When you add options here, check that they do
        not collide with OPTION_MD_BASE.  See as.h.  */
@@ -442,10 +444,12 @@ parse_args (int * pargc, char *** pargv)
        necessary because -a=<FILE> is a valid switch but getopt would
        normally reject it since --alternate does not take an argument.  */
     ,{"a", optional_argument, NULL, 'a'}
+    /* Handle -al=<FILE>.  */
+    ,{"al", optional_argument, NULL, OPTION_AL}
     ,{"defsym", required_argument, NULL, OPTION_DEFSYM}
     ,{"dump-config", no_argument, NULL, OPTION_DUMPCONFIG}
     ,{"emulation", required_argument, NULL, OPTION_EMULATION}
-#if defined BFD_ASSEMBLER && (defined OBJ_ELF || defined OBJ_MAYBE_ELF)
+#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
     ,{"execstack", no_argument, NULL, OPTION_EXECSTACK}
     ,{"noexecstack", no_argument, NULL, OPTION_NOEXECSTACK}
 #endif
@@ -457,6 +461,7 @@ parse_args (int * pargc, char *** pargv)
     ,{"gen-debug", no_argument, NULL, 'g'}
     ,{"gstabs", no_argument, NULL, OPTION_GSTABS}
     ,{"gstabs+", no_argument, NULL, OPTION_GSTABS_PLUS}
+    ,{"hash-size", required_argument, NULL, OPTION_HASH_TABLE_SIZE}
     ,{"help", no_argument, NULL, OPTION_HELP}
     /* New option for extending instruction set (see also -t above).
        The "-t file" or "--itbl file" option extends the basic set of
@@ -478,6 +483,7 @@ parse_args (int * pargc, char *** pargv)
     ,{"mri", no_argument, NULL, 'M'}
     ,{"nocpp", no_argument, NULL, OPTION_NOCPP}
     ,{"no-warn", no_argument, NULL, 'W'}
+    ,{"reduce-memory-overheads", no_argument, NULL, OPTION_REDUCE_MEMORY_OVERHEADS}
     ,{"statistics", no_argument, NULL, OPTION_STATISTICS}
     ,{"strip-local-absolute", no_argument, NULL, OPTION_STRIP_LOCAL_ABSOLUTE}
     ,{"version", no_argument, NULL, OPTION_VERSION}
@@ -584,11 +590,7 @@ parse_args (int * pargc, char *** pargv)
 
 	case OPTION_VERSION:
 	  /* This output is intended to follow the GNU standards document.  */
-#ifdef BFD_ASSEMBLER
 	  printf (_("GNU assembler %s\n"), BFD_VERSION_STRING);
-#else
-	  printf (_("GNU assembler %s\n"), VERSION);
-#endif
 	  printf (_("Copyright 2005 Free Software Foundation, Inc.\n"));
 	  printf (_("\
 This program is free software; you may redistribute it under the terms of\n\
@@ -629,11 +631,7 @@ the GNU General Public License.  This program has absolutely no warranty.\n"));
 	    if (*s == '\0')
 	      as_fatal (_("bad defsym; format is --defsym name=value"));
 	    *s++ = '\0';
-#ifdef BFD_ASSEMBLER
 	    i = bfd_scan_vma (s, (const char **) NULL, 0);
-#else
-	    i = strtol (s, (char **) NULL, 0);
-#endif
 	    n = xmalloc (sizeof *n);
 	    n->next = defsyms;
 	    n->name = optarg;
@@ -760,7 +758,7 @@ the GNU General Public License.  This program has absolutely no warranty.\n"));
 	  flag_fatal_warnings = 1;
 	  break;
 
-#if defined BFD_ASSEMBLER && (defined OBJ_ELF || defined OBJ_MAYBE_ELF)
+#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
 	case OPTION_EXECSTACK:
 	  flag_execstack = 1;
 	  flag_noexecstack = 0;
@@ -773,6 +771,12 @@ the GNU General Public License.  This program has absolutely no warranty.\n"));
 #endif
 	case 'Z':
 	  flag_always_generate_output = 1;
+	  break;
+
+ 	case OPTION_AL:
+	  listing |= LISTING_LISTING;
+	  if (optarg)
+	    listing_filename = xstrdup (optarg);
 	  break;
 
  	case OPTION_ALTERNATE:
@@ -865,6 +869,24 @@ the GNU General Public License.  This program has absolutely no warranty.\n"));
 	case 'X':
 	  /* -X means treat warnings as errors.  */
 	  break;
+
+	case OPTION_REDUCE_MEMORY_OVERHEADS:
+	  /* The only change we make at the moment is to reduce
+	     the size of the hash tables that we use.  */
+	  set_gas_hash_table_size (4051);
+	  break;
+
+	case OPTION_HASH_TABLE_SIZE:
+	  {
+	    unsigned long new_size;
+
+            new_size = strtoul (optarg, NULL, 0);
+            if (new_size)
+              set_gas_hash_table_size (new_size);
+            else
+              as_fatal (_("--hash-size needs a numeric argument"));
+	    break;
+	  }
 	}
     }
 
@@ -908,6 +930,14 @@ dump_statistics (void)
 #endif
 }
 
+#ifndef OBJ_VMS
+static void
+close_output_file (void)
+{
+  output_file_close (out_file_name);
+}
+#endif
+
 /* The interface between the macro code and gas expression handling.  */
 
 static int
@@ -920,7 +950,7 @@ macro_expr (const char *emsg, int idx, sb *in, int *val)
 
   hold = input_line_pointer;
   input_line_pointer = in->ptr + idx;
-  expression (&ex);
+  expression_and_evaluate (&ex);
   idx = input_line_pointer - in->ptr;
   input_line_pointer = hold;
 
@@ -945,44 +975,10 @@ static void
 perform_an_assembly_pass (int argc, char ** argv)
 {
   int saw_a_file = 0;
-#ifdef BFD_ASSEMBLER
   flagword applicable;
-#endif
 
   need_pass_2 = 0;
 
-#ifndef BFD_ASSEMBLER
-#ifdef MANY_SEGMENTS
-  {
-    unsigned int i;
-    for (i = SEG_E0; i < SEG_UNKNOWN; i++)
-      segment_info[i].fix_root = 0;
-  }
-  /* Create the three fixed ones.  */
-  {
-    segT seg;
-
-#ifdef TE_APOLLO
-    seg = subseg_new (".wtext", 0);
-#else
-    seg = subseg_new (".text", 0);
-#endif
-    assert (seg == SEG_E0);
-    seg = subseg_new (".data", 0);
-    assert (seg == SEG_E1);
-    seg = subseg_new (".bss", 0);
-    assert (seg == SEG_E2);
-#ifdef TE_APOLLO
-    create_target_segments ();
-#endif
-  }
-
-#else /* not MANY_SEGMENTS.  */
-  text_fix_root = NULL;
-  data_fix_root = NULL;
-  bss_fix_root = NULL;
-#endif /* not MANY_SEGMENTS.  */
-#else /* BFD_ASSEMBLER.  */
   /* Create the standard sections, and those the assembler uses
      internally.  */
   text_section = subseg_new (TEXT_SECTION_NAME, 0);
@@ -1004,12 +1000,10 @@ perform_an_assembly_pass (int argc, char ** argv)
   reg_section = subseg_new ("*GAS `reg' section*", 0);
   expr_section = subseg_new ("*GAS `expr' section*", 0);
 
-#endif /* BFD_ASSEMBLER.  */
-
   subseg_set (text_section, 0);
 
   /* This may add symbol table entries, which requires having an open BFD,
-     and sections already created, in BFD_ASSEMBLER mode.  */
+     and sections already created.  */
   md_begin ();
 
 #ifdef USING_CGEN
@@ -1066,6 +1060,8 @@ main (int argc, char ** argv)
   myname = argv[0];
   xmalloc_set_program_name (myname);
 
+  expandargv (&argc, &argv);
+
   START_PROGRESS (myname, 0);
 
 #ifndef OBJ_DEFAULT_OUTPUT_FILE_NAME
@@ -1075,23 +1071,28 @@ main (int argc, char ** argv)
   out_file_name = OBJ_DEFAULT_OUTPUT_FILE_NAME;
 
   hex_init ();
-#ifdef BFD_ASSEMBLER
   bfd_init ();
   bfd_set_error_program_name (myname);
-#endif
 
 #ifdef USE_EMULATIONS
   select_emulation_mode (argc, argv);
 #endif
 
   PROGRESS (1);
+  /* Call parse_args before any of the init/begin functions
+     so that switches like --hash-size can be honored.  */
+  parse_args (&argc, &argv);
   symbol_begin ();
   frag_init ();
   subsegs_begin ();
-  parse_args (&argc, &argv);
   read_begin ();
   input_scrub_begin ();
   expr_begin ();
+
+#ifndef OBJ_VMS /* Does its own file handling.  */
+  /* It has to be called after dump_statistics ().  */
+  xatexit (close_output_file);
+#endif
 
   if (flag_print_statistics)
     xatexit (dump_statistics);
@@ -1100,21 +1101,13 @@ main (int argc, char ** argv)
 #ifdef TC_I960
   macro_strip_at = flag_mri;
 #endif
-#ifdef TC_A29K
-  /* For compatibility with the AMD 29K family macro assembler
-     specification.  */
-  flag_macro_alternate = 1;
-  macro_strip_at = 1;
-#endif
 
   macro_init (flag_macro_alternate, flag_mri, macro_strip_at, macro_expr);
 
   PROGRESS (1);
 
-#ifdef BFD_ASSEMBLER
   output_file_create (out_file_name);
   assert (stdoutput != 0);
-#endif
 
 #ifdef tc_init_after_args
   tc_init_after_args ();
@@ -1149,7 +1142,7 @@ main (int argc, char ** argv)
   md_end ();
 #endif
 
-#if defined BFD_ASSEMBLER && (defined OBJ_ELF || defined OBJ_MAYBE_ELF)
+#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
   if ((flag_execstack || flag_noexecstack)
       && OUTPUT_FLAVOR == bfd_target_elf_flavour)
     {
@@ -1176,26 +1169,17 @@ main (int argc, char ** argv)
   else
     keep_it = 0;
 
-#if defined (BFD_ASSEMBLER) || !defined (BFD)
   /* This used to be done at the start of write_object_file in
      write.c, but that caused problems when doing listings when
      keep_it was zero.  This could probably be moved above md_end, but
      I didn't want to risk the change.  */
   subsegs_finish ();
-#endif
 
   if (keep_it)
     write_object_file ();
 
 #ifndef NO_LISTING
   listing_print (listing_filename);
-#endif
-
-#ifndef OBJ_VMS /* Does its own file handling.  */
-#ifndef BFD_ASSEMBLER
-  if (keep_it)
-#endif
-    output_file_close (out_file_name);
 #endif
 
   if (flag_fatal_warnings && had_warnings () > 0 && had_errors () == 0)

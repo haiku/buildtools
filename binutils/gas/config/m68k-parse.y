@@ -1,5 +1,5 @@
 /* m68k.y -- bison grammar for m68k operand parsing
-   Copyright 1995, 1996, 1997, 1998, 2001, 2003, 2004
+   Copyright 1995, 1996, 1997, 1998, 2001, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Written by Ken Raeburn and Ian Lance Taylor, Cygnus Support
 
@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* This file holds a bison grammar to parse m68k operands.  The m68k
    has a complicated operand syntax, and gas supports two main
@@ -83,9 +83,9 @@
 
 /* Internal functions.  */
 
-static enum m68k_register m68k_reg_parse PARAMS ((char **));
-static int yylex PARAMS ((void));
-static void yyerror PARAMS ((const char *));
+static enum m68k_register m68k_reg_parse (char **);
+static int yylex (void);
+static void yyerror (const char *);
 
 /* The parser sets fields pointed to by this global variable.  */
 static struct m68k_op *op;

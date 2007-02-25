@@ -15,7 +15,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
 # This file is sourced from elf32.em, and defines extra powerpc64-elf
@@ -110,14 +110,14 @@ ppc_before_allocation (void)
 	{
 	  /* Size the sections.  This is premature, but we want to know the
 	     TLS segment layout so that certain optimizations can be done.  */
-	  lang_size_sections (stat_ptr->head, abs_output_section,
-			      &stat_ptr->head, 0, 0, NULL, TRUE);
+	  expld.phase = lang_mark_phase_enum;
+	  expld.dataseg.phase = exp_dataseg_none;
+	  one_lang_size_sections_pass (NULL, TRUE);
 
 	  if (!ppc64_elf_tls_optimize (output_bfd, &link_info))
 	    einfo ("%X%P: TLS problem %E\n");
 
 	  /* We must not cache anything from the preliminary sizing.  */
-	  elf_tdata (output_bfd)->program_header_size = 0;
 	  lang_reset_memory_regions ();
 	}
 
@@ -235,7 +235,7 @@ ppc_add_stub_section (const char *stub_sec_name, asection *input_section)
 
   info.input_section = input_section;
   lang_list_init (&info.add);
-  lang_add_section (&info.add, stub_sec, os, stub_file);
+  lang_add_section (&info.add, stub_sec, os);
 
   if (info.add.head == NULL)
     goto err_ret;
@@ -260,17 +260,7 @@ ppc_layout_sections_again (void)
      add even more stubs.  */
   need_laying_out = 0;
 
-  lang_reset_memory_regions ();
-
-  /* Resize the sections.  */
-  lang_size_sections (stat_ptr->head, abs_output_section,
-		      &stat_ptr->head, 0, 0, NULL, TRUE);
-
-  /* Recalculate TOC base.  */
-  ldemul_after_allocation ();
-
-  /* Do the assignments again.  */
-  lang_do_assignments (stat_ptr->head, abs_output_section, NULL, 0);
+  gld${EMULATION_NAME}_layout_sections_again ();
 }
 
 
@@ -287,26 +277,33 @@ gld${EMULATION_NAME}_after_allocation (void)
 static void
 build_toc_list (lang_statement_union_type *statement)
 {
-  if (statement->header.type == lang_input_section_enum
-      && !statement->input_section.ifile->just_syms_flag
-      && (statement->input_section.section->flags & SEC_EXCLUDE) == 0
-      && statement->input_section.section->output_section == toc_section)
-    ppc64_elf_next_toc_section (&link_info, statement->input_section.section);
+  if (statement->header.type == lang_input_section_enum)
+    {
+      asection *i = statement->input_section.section;
+
+      if (!((lang_input_statement_type *) i->owner->usrdata)->just_syms_flag
+	  && (i->flags & SEC_EXCLUDE) == 0
+	  && i->output_section == toc_section)
+	ppc64_elf_next_toc_section (&link_info, i);
+    }
 }
 
 
 static void
 build_section_lists (lang_statement_union_type *statement)
 {
-  if (statement->header.type == lang_input_section_enum
-      && !statement->input_section.ifile->just_syms_flag
-      && (statement->input_section.section->flags & SEC_EXCLUDE) == 0
-      && statement->input_section.section->output_section != NULL
-      && statement->input_section.section->output_section->owner == output_bfd)
+  if (statement->header.type == lang_input_section_enum)
     {
-      if (!ppc64_elf_next_input_section (&link_info,
-					 statement->input_section.section))
-	einfo ("%X%P: can not size stub section: %E\n");
+      asection *i = statement->input_section.section;
+
+      if (!((lang_input_statement_type *) i->owner->usrdata)->just_syms_flag
+	  && (i->flags & SEC_EXCLUDE) == 0
+	  && i->output_section != NULL
+	  && i->output_section->owner == output_bfd)
+	{
+	  if (!ppc64_elf_next_input_section (&link_info, i))
+	    einfo ("%X%P: can not size stub section: %E\n");
+	}
     }
 }
 
@@ -314,7 +311,7 @@ build_section_lists (lang_statement_union_type *statement)
 /* Final emulation specific call.  */
 
 static void
-gld${EMULATION_NAME}_finish (void)
+ppc_finish (void)
 {
   /* e_entry on PowerPC64 points to the function descriptor for
      _start.  If _start is missing, default to the first function
@@ -389,6 +386,7 @@ gld${EMULATION_NAME}_finish (void)
     }
 
   ppc64_elf_restore_symbols (&link_info);
+  finish_default ();
 }
 
 
@@ -576,6 +574,6 @@ PARSE_AND_LIST_ARGS_CASES='
 #
 LDEMUL_BEFORE_ALLOCATION=ppc_before_allocation
 LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
-LDEMUL_FINISH=gld${EMULATION_NAME}_finish
+LDEMUL_FINISH=ppc_finish
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=ppc_create_output_section_statements
 LDEMUL_NEW_VERS_PATTERN=gld${EMULATION_NAME}_new_vers_pattern

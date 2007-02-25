@@ -5,7 +5,7 @@
 #readelf: -Ssrl
 #target: i?86-*-*
 
-There are 19 section headers, starting at offset 0x[0-9a-f]+:
+There are 17 section headers, starting at offset 0x[0-9a-f]+:
 
 Section Headers:
   \[Nr\] Name +Type +Addr +Off +Size +ES Flg Lk Inf Al
@@ -23,11 +23,9 @@ Section Headers:
   \[11\] \.dynamic +DYNAMIC +0+804a060 .*
   \[12\] \.got +PROGBITS +0+804a100 .*
   \[13\] \.got\.plt +PROGBITS +0+804a124 .*
-  \[14\] \.data +.*
-  \[15\] \.bss +.*
-  \[16\] \.shstrtab +.*
-  \[17\] \.symtab +.*
-  \[18\] \.strtab +.*
+  \[14\] \.shstrtab +.*
+  \[15\] \.symtab +.*
+  \[16\] \.strtab +.*
 Key to Flags:
 .*
 .*
@@ -58,26 +56,25 @@ Program Headers:
 
 Relocation section '.rel.dyn' at offset 0x[0-9a-f]+ contains 9 entries:
  Offset +Info +Type +Sym.Value +Sym. Name
-0+804a100  0000010e R_386_TLS_TPOFF +0+ +sG3
-0+804a104  0000020e R_386_TLS_TPOFF +0+ +sG5
-0+804a108  0000040e R_386_TLS_TPOFF +0+ +sG7
-0+804a10c  00000525 R_386_TLS_TPOFF32 0+ +sG2
-0+804a110  00000625 R_386_TLS_TPOFF32 0+ +sG4
-0+804a114  0000060e R_386_TLS_TPOFF +0+ +sG4
-0+804a118  00000825 R_386_TLS_TPOFF32 0+ +sG6
-0+804a11c  00000925 R_386_TLS_TPOFF32 0+ +sG1
-0+804a120  00000c0e R_386_TLS_TPOFF +0+ +sG8
+[0-9a-f ]+R_386_TLS_TPOFF +0+ +sG3
+[0-9a-f ]+R_386_TLS_TPOFF +0+ +sG5
+[0-9a-f ]+R_386_TLS_TPOFF +0+ +sG7
+[0-9a-f ]+R_386_TLS_TPOFF32 0+ +sG2
+[0-9a-f ]+R_386_TLS_TPOFF32 0+ +sG4
+[0-9a-f ]+R_386_TLS_TPOFF +0+ +sG4
+[0-9a-f ]+R_386_TLS_TPOFF32 0+ +sG6
+[0-9a-f ]+R_386_TLS_TPOFF32 0+ +sG1
+[0-9a-f ]+R_386_TLS_TPOFF +0+ +sG8
 
 Relocation section '.rel.plt' at offset 0x[0-9a-f]+ contains 1 entries:
  Offset +Info +Type +Sym.Value  Sym. Name
-0+804a130  00000d07 R_386_JUMP_SLOT +[0-9a-f]+ +___tls_get_addr
+[0-9a-f ]+R_386_JUMP_SLOT +[0-9a-f]+ +___tls_get_addr
 
-Symbol table '.dynsym' contains 14 entries:
+Symbol table '.dynsym' contains 13 entries:
  +Num: +Value  Size Type +Bind +Vis +Ndx Name
  +[0-9]+: 0+ +0 NOTYPE  LOCAL  DEFAULT  UND *
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG3
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG5
- +[0-9]+: 0+804a060 +0 OBJECT  GLOBAL DEFAULT  ABS _DYNAMIC
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG7
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG2
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG4
@@ -89,7 +86,7 @@ Symbol table '.dynsym' contains 14 entries:
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG8
  +[0-9]+: [0-9a-f]+ +0 FUNC +GLOBAL DEFAULT  UND ___tls_get_addr
 
-Symbol table '.symtab' contains 75 entries:
+Symbol table '.symtab' contains 73 entries:
  +Num: +Value  Size Type +Bind +Vis +Ndx Name
  +[0-9]+: 0+ +0 NOTYPE  LOCAL  DEFAULT  UND *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +1 *
@@ -108,8 +105,6 @@ Symbol table '.symtab' contains 75 entries:
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +14 *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +15 *
  +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +16 *
- +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +17 *
- +[0-9]+: [0-9a-f]+ +0 SECTION LOCAL  DEFAULT +18 *
  +[0-9]+: 00000020 +0 TLS +LOCAL  DEFAULT +9 sl1
  +[0-9]+: 00000024 +0 TLS +LOCAL  DEFAULT +9 sl2
  +[0-9]+: 00000028 +0 TLS +LOCAL  DEFAULT +9 sl3
@@ -126,13 +121,14 @@ Symbol table '.symtab' contains 75 entries:
  +[0-9]+: 00000094 +0 TLS +LOCAL  DEFAULT +10 bl6
  +[0-9]+: 00000098 +0 TLS +LOCAL  DEFAULT +10 bl7
  +[0-9]+: 0000009c +0 TLS +LOCAL  DEFAULT +10 bl8
+ +[0-9]+: 0+804a060 +0 OBJECT  LOCAL +HIDDEN +11 _DYNAMIC
+ +[0-9]+: [0-9a-f]+ +0 OBJECT  LOCAL +HIDDEN +13 _GLOBAL_OFFSET_TABLE_
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG3
  +[0-9]+: 0000001c +0 TLS +GLOBAL DEFAULT +9 sg8
  +[0-9]+: 0000007c +0 TLS +GLOBAL DEFAULT +10 bg8
  +[0-9]+: 00000074 +0 TLS +GLOBAL DEFAULT +10 bg6
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG5
  +[0-9]+: 00000068 +0 TLS +GLOBAL DEFAULT +10 bg3
- +[0-9]+: 0+804a060 +0 OBJECT  GLOBAL DEFAULT  ABS _DYNAMIC
  +[0-9]+: 00000008 +0 TLS +GLOBAL DEFAULT +9 sg3
  +[0-9]+: 0+ +0 TLS +GLOBAL DEFAULT  UND sG7
  +[0-9]+: 00000048 +0 TLS +GLOBAL HIDDEN +9 sh3
@@ -157,7 +153,6 @@ Symbol table '.symtab' contains 75 entries:
  +[0-9]+: 00000014 +0 TLS +GLOBAL DEFAULT +9 sg6
  +[0-9]+: 00000018 +0 TLS +GLOBAL DEFAULT +9 sg7
  +[0-9]+: [0-9a-f]+ +0 NOTYPE  GLOBAL DEFAULT  ABS _edata
- +[0-9]+: [0-9a-f]+ +0 OBJECT  GLOBAL HIDDEN   13 _GLOBAL_OFFSET_TABLE_
  +[0-9]+: [0-9a-f]+ +0 NOTYPE  GLOBAL DEFAULT  ABS _end
  +[0-9]+: 00000044 +0 TLS +GLOBAL HIDDEN +9 sh2
  +[0-9]+: 00000054 +0 TLS +GLOBAL HIDDEN +9 sh6

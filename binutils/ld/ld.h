@@ -1,6 +1,6 @@
 /* ld.h -- general linker header file
    Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004
+   2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
    This file is part of GLD, the Gnu Linker.
@@ -17,13 +17,49 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #ifndef LD_H
 #define LD_H
 
 #ifdef HAVE_LOCALE_H
+#endif
+#ifndef SEEK_CUR
+#define SEEK_CUR 1
+#endif
+#ifndef SEEK_END
+#define SEEK_END 2
+#endif
+
+#if defined(__GNUC__) && !defined(C_ALLOCA)
+# undef alloca
+# define alloca __builtin_alloca
+#else
+# if defined(HAVE_ALLOCA_H) && !defined(C_ALLOCA)
+#  include <alloca.h>
+# else
+#  ifndef alloca /* predefined by HP cc +Olibcalls */
+#   if !defined (__STDC__) && !defined (__hpux)
+char *alloca ();
+#   else
+void *alloca ();
+#   endif /* __STDC__, __hpux */
+#  endif /* alloca */
+# endif /* HAVE_ALLOCA_H */
+#endif
+
+
+#ifdef HAVE_LOCALE_H
+# ifndef ENABLE_NLS
+   /* The Solaris version of locale.h always includes libintl.h.  If we have
+      been configured with --disable-nls then ENABLE_NLS will not be defined
+      and the dummy definitions of bindtextdomain (et al) below will conflict
+      with the defintions in libintl.h.  So we define these values to prevent
+      the bogus inclusion of libintl.h.  */
+#  define _LIBINTL_H
+#  define _LIBGETTEXT_H
+# endif
 # include <locale.h>
 #endif
 
@@ -89,27 +125,14 @@ struct map_symbol_def {
   struct map_symbol_def *next;
 };
 
-/* Extra information we hold on sections */
-typedef struct lean_user_section_struct {
-  /* For output sections: pointer to the section where this data will go.  */
-  struct lang_input_statement_struct *file;
-} lean_section_userdata_type;
-
 /* The initial part of fat_user_section_struct has to be idential with
    lean_user_section_struct.  */
 typedef struct fat_user_section_struct {
-  /* For output sections: pointer to the section where this data will go.  */
-  struct lang_input_statement_struct *file;
   /* For input sections, when writing a map file: head / tail of a linked
      list of hash table entries for symbols defined in this section.  */
   struct map_symbol_def *map_symbol_def_head;
   struct map_symbol_def **map_symbol_def_tail;
 } fat_section_userdata_type;
-
-#define SECTION_USERDATA_SIZE \
- (command_line.reduce_memory_overheads \
-  ? sizeof (lean_section_userdata_type) \
-  : sizeof (fat_section_userdata_type))
 
 #define get_userdata(x) ((x)->userdata)
 
@@ -155,9 +178,6 @@ typedef struct {
   /* If TRUE (which is the default), warn about mismatched input
      files.  */
   bfd_boolean warn_mismatch;
-
-  /* Remove unreferenced sections?  */
-  bfd_boolean gc_sections;
 
   /* Name of shared object whose symbol table should be filtered with
      this shared object.  From the --filter option.  */
@@ -253,12 +273,6 @@ typedef struct {
 } ld_config_type;
 
 extern ld_config_type config;
-
-typedef enum {
-  lang_first_phase_enum,
-  lang_allocating_phase_enum,
-  lang_final_phase_enum
-} lang_phase_type;
 
 extern FILE * saved_script_handle;
 extern bfd_boolean force_make_executable;

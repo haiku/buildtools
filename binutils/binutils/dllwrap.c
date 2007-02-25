@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* AIX requires this to be the first thing in the file.  */
 #ifndef __GNUC__
@@ -38,12 +38,7 @@
 
 #include <time.h>
 #include <sys/stat.h>
-
-#ifdef ANSI_PROTOTYPES
 #include <stdarg.h>
-#else
-#include <varargs.h>
-#endif
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
@@ -118,9 +113,9 @@ static int run (const char *, char *);
 static char *mybasename (const char *);
 static int strhash (const char *);
 static void usage (FILE *, int);
-static void display (const char *, va_list);
-static void inform (const char *, ...);
-static void warn (const char *, ...);
+static void display (const char *, va_list) ATTRIBUTE_PRINTF(1,0);
+static void inform (const char *, ...) ATTRIBUTE_PRINTF_1;
+static void warn (const char *, ...) ATTRIBUTE_PRINTF_1;
 static char *look_for_prog (const char *, const char *, int);
 static char *deduce_name (const char *);
 static void delete_temp_files (void);
@@ -478,6 +473,7 @@ usage (FILE *file, int status)
 {
   fprintf (file, _("Usage %s <option(s)> <object-file(s)>\n"), prog_name);
   fprintf (file, _("  Generic options:\n"));
+  fprintf (file, _("   @<file>                Read options from <file>\n"));    
   fprintf (file, _("   --quiet, -q            Work quietly\n"));
   fprintf (file, _("   --verbose, -v          Verbose\n"));
   fprintf (file, _("   --version              Print dllwrap version\n"));
@@ -631,6 +627,8 @@ main (int argc, char **argv)
 #endif
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
+
+  expandargv (&argc, &argv);
 
   saved_argv = (char **) xmalloc (argc * sizeof (char*));
   dlltool_arg_indices = (int *) xmalloc (argc * sizeof (int));

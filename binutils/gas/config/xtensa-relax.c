@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330, Boston, 
-   MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 /* This file contains the code for generating runtime data structures
    for relaxation pattern matching from statically specified strings.
@@ -25,7 +25,7 @@
    matches.  The preconditions can specify that two operands are the
    same or an operand is a specific constant or register.  The expansion
    uses the bound variables from the pattern to specify that specific
-   operands from the pattern should be used in the result.  
+   operands from the pattern should be used in the result.
 
    The code determines whether the condition applies to a constant or
    a register depending on the type of the operand.  You may get
@@ -46,10 +46,10 @@
    OPTIONPRED   ::= OPTIONNAME ('+' OPTIONNAME)
    OPTIONNAME   ::= '"' id '"'
 
-   The replacement language 
+   The replacement language
    INSN_REPL      ::= INSN_LABEL_LIT ( ';' INSN_LABEL_LIT )*
-   INSN_LABEL_LIT ::= INSN_TEMPL 
-                      | 'LABEL' num 
+   INSN_LABEL_LIT ::= INSN_TEMPL
+                      | 'LABEL' num
                       | 'LITERAL' num ' ' VARIABLE
 
    The operands in a PRECOND must be constants or variables bound by
@@ -75,7 +75,7 @@
    {"beqz %as,%label", "bnez %as,%LABEL0;j %label;LABEL0"}
    would convert a branch to a negated branch to the following instruction
    with a jump to the original label.
-   
+
    An Xtensa-specific example that generates a literal:
    {"movi %at,%imm", "LITERAL0 %imm; l32r %at,%LITERAL0"}
    will convert a movi instruction to an l32r of a literal
@@ -100,6 +100,10 @@
 #include "xtensa-relax.h"
 #include <stddef.h>
 #include "xtensa-config.h"
+
+#ifndef XCHAL_HAVE_WIDE_BRANCHES
+#define XCHAL_HAVE_WIDE_BRANCHES 0
+#endif
 
 /* Imported from bfd.  */
 extern xtensa_isa xtensa_default_isa;
@@ -263,9 +267,9 @@ static string_pattern_pair widen_spec_list[] =
   {"slli %ar,%as,0", "or %ar,%as,%as"},
 
   /* Widening with literals or const16.  */
-  {"movi %at,%imm ? IsaUseL32R ", 
+  {"movi %at,%imm ? IsaUseL32R ",
    "LITERAL0 %imm; l32r %at,%LITERAL0"},
-  {"movi %at,%imm ? IsaUseConst16", 
+  {"movi %at,%imm ? IsaUseConst16",
    "const16 %at,HI16U(%imm); const16 %at,LOW16U(%imm)"},
 
   {"addi %ar,%as,%imm", "addmi %ar,%as,%imm"},
@@ -339,13 +343,55 @@ static string_pattern_pair widen_spec_list[] =
    "addi    %as, %as, 1;"	/* density -> addi.n %as, %as, 1 */
    "LABEL0"},
 
+  /* Relaxing to wide branches.  Order is important here.  With wide
+     branches, there is more than one correct relaxation for an
+     out-of-range branch.  Put the wide branch relaxations first in the
+     table since they are more efficient than the branch-around
+     relaxations.  */
+  
+  {"beqz %as,%label ? IsaUseWideBranches", "WIDE.beqz %as,%label"},
+  {"bnez %as,%label ? IsaUseWideBranches", "WIDE.bnez %as,%label"},
+  {"bgez %as,%label ? IsaUseWideBranches", "WIDE.bgez %as,%label"},
+  {"bltz %as,%label ? IsaUseWideBranches", "WIDE.bltz %as,%label"},
+  {"beqi %as,%imm,%label ? IsaUseWideBranches", "WIDE.beqi %as,%imm,%label"},
+  {"bnei %as,%imm,%label ? IsaUseWideBranches", "WIDE.bnei %as,%imm,%label"},
+  {"bgei %as,%imm,%label ? IsaUseWideBranches", "WIDE.bgei %as,%imm,%label"},
+  {"blti %as,%imm,%label ? IsaUseWideBranches", "WIDE.blti %as,%imm,%label"},
+  {"bgeui %as,%imm,%label ? IsaUseWideBranches", "WIDE.bgeui %as,%imm,%label"},
+  {"bltui %as,%imm,%label ? IsaUseWideBranches", "WIDE.bltui %as,%imm,%label"},
+  {"bbci %as,%imm,%label ? IsaUseWideBranches", "WIDE.bbci %as,%imm,%label"},
+  {"bbsi %as,%imm,%label ? IsaUseWideBranches", "WIDE.bbsi %as,%imm,%label"},
+  {"beq %as,%at,%label ? IsaUseWideBranches", "WIDE.beq %as,%at,%label"},
+  {"bne %as,%at,%label ? IsaUseWideBranches", "WIDE.bne %as,%at,%label"},
+  {"bge %as,%at,%label ? IsaUseWideBranches", "WIDE.bge %as,%at,%label"},
+  {"blt %as,%at,%label ? IsaUseWideBranches", "WIDE.blt %as,%at,%label"},
+  {"bgeu %as,%at,%label ? IsaUseWideBranches", "WIDE.bgeu %as,%at,%label"},
+  {"bltu %as,%at,%label ? IsaUseWideBranches", "WIDE.bltu %as,%at,%label"},
+  {"bany %as,%at,%label ? IsaUseWideBranches", "WIDE.bany %as,%at,%label"},
+  {"bnone %as,%at,%label ? IsaUseWideBranches", "WIDE.bnone %as,%at,%label"},
+  {"ball %as,%at,%label ? IsaUseWideBranches", "WIDE.ball %as,%at,%label"},
+  {"bnall %as,%at,%label ? IsaUseWideBranches", "WIDE.bnall %as,%at,%label"},
+  {"bbc %as,%at,%label ? IsaUseWideBranches", "WIDE.bbc %as,%at,%label"},
+  {"bbs %as,%at,%label ? IsaUseWideBranches", "WIDE.bbs %as,%at,%label"},
+  
+  /* Widening branch comparisons eq/ne to zero.  Prefer relaxing to narrow
+     branches if the density option is available.  */
   {"beqz %as,%label ? IsaUseDensityInstruction", "bnez.n %as,%LABEL0;j %label;LABEL0"},
   {"bnez %as,%label ? IsaUseDensityInstruction", "beqz.n %as,%LABEL0;j %label;LABEL0"},
   {"beqz %as,%label", "bnez %as,%LABEL0;j %label;LABEL0"},
   {"bnez %as,%label", "beqz %as,%LABEL0;j %label;LABEL0"},
+
+  /* Widening expect-taken branches.  */
   {"beqzt %as,%label ? IsaUsePredictedBranches", "bnez %as,%LABEL0;j %label;LABEL0"},
   {"bnezt %as,%label ? IsaUsePredictedBranches", "beqz %as,%LABEL0;j %label;LABEL0"},
+  {"beqt %as,%at,%label ? IsaUsePredictedBranches", "bne %as,%at,%LABEL0;j %label;LABEL0"},
+  {"bnet %as,%at,%label ? IsaUsePredictedBranches", "beq %as,%at,%LABEL0;j %label;LABEL0"},
 
+  /* Widening branches from the Xtensa boolean option.  */
+  {"bt %bs,%label ? IsaUseBooleans", "bf %bs,%LABEL0;j %label;LABEL0"},
+  {"bf %bs,%label ? IsaUseBooleans", "bt %bs,%LABEL0;j %label;LABEL0"},
+
+  /* Other branch-around-jump widenings.  */
   {"bgez %as,%label", "bltz %as,%LABEL0;j %label;LABEL0"},
   {"bltz %as,%label", "bgez %as,%LABEL0;j %label;LABEL0"},
   {"beqi %as,%imm,%label", "bnei %as,%imm,%LABEL0;j %label;LABEL0"},
@@ -358,17 +404,11 @@ static string_pattern_pair widen_spec_list[] =
   {"bbsi %as,%imm,%label", "bbci %as,%imm,%LABEL0;j %label;LABEL0"},
   {"beq %as,%at,%label", "bne %as,%at,%LABEL0;j %label;LABEL0"},
   {"bne %as,%at,%label", "beq %as,%at,%LABEL0;j %label;LABEL0"},
-  {"beqt %as,%at,%label ? IsaUsePredictedBranches", "bne %as,%at,%LABEL0;j %label;LABEL0"},
-  {"bnet %as,%at,%label ? IsaUsePredictedBranches", "beq %as,%at,%LABEL0;j %label;LABEL0"},
   {"bge %as,%at,%label", "blt %as,%at,%LABEL0;j %label;LABEL0"},
   {"blt %as,%at,%label", "bge %as,%at,%LABEL0;j %label;LABEL0"},
   {"bgeu %as,%at,%label", "bltu %as,%at,%LABEL0;j %label;LABEL0"},
   {"bltu %as,%at,%label", "bgeu %as,%at,%LABEL0;j %label;LABEL0"},
   {"bany %as,%at,%label", "bnone %as,%at,%LABEL0;j %label;LABEL0"},
-
-  {"bt %bs,%label ? IsaUseBooleans", "bf %bs,%LABEL0;j %label;LABEL0"},
-  {"bf %bs,%label ? IsaUseBooleans", "bt %bs,%LABEL0;j %label;LABEL0"},
-
   {"bnone %as,%at,%label", "bany %as,%at,%LABEL0;j %label;LABEL0"},
   {"ball %as,%at,%label", "bnall %as,%at,%LABEL0;j %label;LABEL0"},
   {"bnall %as,%at,%label", "ball %as,%at,%LABEL0;j %label;LABEL0"},
@@ -1278,7 +1318,7 @@ clone_req_option_list (ReqOption *req_option)
   new_req_option = (ReqOption *) xmalloc (sizeof (ReqOption));
   new_req_option->or_option_terms = NULL;
   new_req_option->next = NULL;
-  new_req_option->or_option_terms = 
+  new_req_option->or_option_terms =
     clone_req_or_option_list (req_option->or_option_terms);
   new_req_option->next = clone_req_option_list (req_option->next);
   return new_req_option;
@@ -1325,7 +1365,7 @@ parse_option_cond (const char *s, ReqOption *option)
       req->next = NULL;
 
       /* Append to list.  */
-      for (r_p = &option->or_option_terms; (*r_p) != NULL; 
+      for (r_p = &option->or_option_terms; (*r_p) != NULL;
 	   r_p = &(*r_p)->next)
 	;
       (*r_p) = req;
@@ -1366,7 +1406,7 @@ parse_insn_pattern (const char *in, insn_pattern *insn)
       clear_split_rec (&optionrec);
       return FALSE;
     }
-  
+
   init_split_rec (&rec);
 
   split_string (&rec, optionrec.vec[0], '|', TRUE);
@@ -1409,7 +1449,7 @@ parse_insn_pattern (const char *in, insn_pattern *insn)
       ReqOption *req_option = (ReqOption *) xmalloc (sizeof (ReqOption));
       req_option->or_option_terms = NULL;
       req_option->next = NULL;
-      
+
       if (!parse_option_cond (optionrec.vec[i], req_option))
 	{
 	  clear_split_rec (&rec);
@@ -1477,7 +1517,7 @@ transition_applies (insn_pattern *initial_insn,
 	  || req_or_option->next != NULL)
 	continue;
 
-      if (strncmp (req_or_option->option_name, "IsaUse", 6) == 0) 
+      if (strncmp (req_or_option->option_name, "IsaUse", 6) == 0)
 	{
 	  bfd_boolean option_available = FALSE;
 	  char *option_name = req_or_option->option_name + 6;
@@ -1489,6 +1529,8 @@ transition_applies (insn_pattern *initial_insn,
 	    option_available = (XCHAL_HAVE_CONST16 == 1);
 	  else if (!strcmp (option_name, "Loops"))
 	    option_available = (XCHAL_HAVE_LOOPS == 1);
+	  else if (!strcmp (option_name, "WideBranches"))
+	    option_available = (XCHAL_HAVE_WIDE_BRANCHES == 1);
 	  else if (!strcmp (option_name, "PredictedBranches"))
 	    option_available = (XCHAL_HAVE_PREDICTED_BRANCHES == 1);
 	  else if (!strcmp (option_name, "Booleans"))
@@ -1501,7 +1543,7 @@ transition_applies (insn_pattern *initial_insn,
 	}
       else if (strcmp (req_or_option->option_name, "realnop") == 0)
 	{
-	  bfd_boolean nop_available = 
+	  bfd_boolean nop_available =
 	    (xtensa_opcode_lookup (xtensa_default_isa, "nop")
 	     != XTENSA_UNDEFINED);
 	  if ((nop_available ^ req_or_option->is_true) != 0)
@@ -1509,6 +1551,31 @@ transition_applies (insn_pattern *initial_insn,
 	}
     }
   return TRUE;
+}
+
+
+static bfd_boolean
+wide_branch_opcode (const char *opcode_name,
+		    char *suffix,
+		    xtensa_opcode *popcode)
+{
+  xtensa_isa isa = xtensa_default_isa;
+  xtensa_opcode opcode;
+  static char wbr_name_buf[20];
+
+  if (strncmp (opcode_name, "WIDE.", 5) != 0)
+    return FALSE;
+
+  strcpy (wbr_name_buf, opcode_name + 5);
+  strcat (wbr_name_buf, suffix);
+  opcode = xtensa_opcode_lookup (isa, wbr_name_buf);
+  if (opcode != XTENSA_UNDEFINED)
+    {
+      *popcode = opcode;
+      return TRUE;
+    }
+
+  return FALSE;
 }
 
 
@@ -1689,15 +1756,21 @@ build_transition (insn_pattern *initial_insn,
       else
 	{
 	  bi->typ = INSTR_INSTR;
-	  bi->opcode = xtensa_opcode_lookup (isa, r->t.opcode_name);
+	  if (wide_branch_opcode (opcode_name, ".w18", &bi->opcode)
+	      || wide_branch_opcode (opcode_name, ".w15", &bi->opcode))
+	    opcode_name = xtensa_opcode_name (isa, bi->opcode);
+	  else
+	    bi->opcode = xtensa_opcode_lookup (isa, opcode_name);
+
 	  if (bi->opcode == XTENSA_UNDEFINED)
 	    {
 	      as_warn (_("invalid opcode '%s' in transition rule '%s'"),
-		       r->t.opcode_name, to_string);
+		       opcode_name, to_string);
 	      return NULL;
 	    }
+
 	  /* Check for the right number of ops.  */
-	  if (xtensa_opcode_num_operands (isa, bi->opcode) 
+	  if (xtensa_opcode_num_operands (isa, bi->opcode)
 	      != (int) operand_count)
 	    as_fatal (_("opcode '%s': replacement does not have %d ops"),
 		      opcode_name,

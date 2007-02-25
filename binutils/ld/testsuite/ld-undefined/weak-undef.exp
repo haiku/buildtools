@@ -14,7 +14,7 @@
 # 
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 set testname "weak undefined symbols"
 
@@ -45,6 +45,8 @@ if { [istarget *-*-linux*aout*] \
 if {! [istarget i?86-*-*]} {
     setup_xfail *-*-pe*
 }
+
+setup_xfail hppa64-*-* pj-*-*
 
 if {! [ld_assemble $as $srcdir/$subdir/weak-undef.s tmpdir/weak-undef.o]} then {
     # It's OK if .weak doesn't work on this target.

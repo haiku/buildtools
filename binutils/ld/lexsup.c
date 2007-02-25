@@ -17,9 +17,10 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
+#include "config.h"
 #include "bfd.h"
 #include "sysdep.h"
 #include "libiberty.h"
@@ -809,7 +810,7 @@ parse_args (unsigned argc, char **argv)
 	  /* Ignore.  */
 	  break;
 	case OPTION_GC_SECTIONS:
-	  command_line.gc_sections = TRUE;
+	  link_info.gc_sections = TRUE;
 	  break;
 	case OPTION_HELP:
 	  help ();
@@ -852,7 +853,7 @@ parse_args (unsigned argc, char **argv)
 	  demangling = FALSE;
 	  break;
 	case OPTION_NO_GC_SECTIONS:
-	  command_line.gc_sections = FALSE;
+	  link_info.gc_sections = FALSE;
 	  break;
 	case OPTION_NO_KEEP_MEMORY:
 	  link_info.keep_memory = FALSE;
@@ -1441,6 +1442,7 @@ help (void)
 {
   unsigned i;
   const char **targets, **pp;
+  int len;
 
   printf (_("Usage: %s [options] file...\n"), program_name);
 
@@ -1450,7 +1452,6 @@ help (void)
       if (ld_options[i].doc != NULL)
 	{
 	  bfd_boolean comma;
-	  int len;
 	  unsigned j;
 
 	  printf ("  ");
@@ -1523,6 +1524,10 @@ help (void)
 	  printf ("%s\n", _(ld_options[i].doc));
 	}
     }
+  printf (_("  @FILE"));
+  for (len = strlen ("  @FILE"); len < 30; len++)
+    putchar (' ');
+  printf (_("Read options from FILE\n"));
 
   /* Note: Various tools (such as libtool) depend upon the
      format of the listings below - do not change them.  */

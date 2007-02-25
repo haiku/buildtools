@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #define SH64_ELF
 
@@ -63,7 +63,7 @@ static bfd_boolean sh64_elf_link_output_symbol_hook
   (struct bfd_link_info *, const char *, Elf_Internal_Sym *, asection *,
    struct elf_link_hash_entry *);
 static bfd_boolean sh64_backend_section_from_shdr
-  (bfd *, Elf_Internal_Shdr *, const char *);
+  (bfd *, Elf_Internal_Shdr *, const char *, int);
 static void sh64_elf_final_write_processing
   (bfd *, bfd_boolean);
 static bfd_boolean sh64_bfd_elf_copy_private_section_data
@@ -253,13 +253,14 @@ sh64_elf_merge_private_data (bfd *ibfd, bfd *obfd)
 }
 
 /* Handle a SH64-specific section when reading an object file.  This
-   is called when elfcode.h finds a section with an unknown type.
+   is called when bfd_section_from_shdr finds a section with an unknown
+   type.
 
    We only recognize SHT_SH5_CR_SORTED, on the .cranges section.  */
 
 bfd_boolean
 sh64_backend_section_from_shdr (bfd *abfd, Elf_Internal_Shdr *hdr,
-				const char *name)
+				const char *name, int shindex)
 {
   flagword flags = 0;
 
@@ -284,7 +285,7 @@ sh64_backend_section_from_shdr (bfd *abfd, Elf_Internal_Shdr *hdr,
       return FALSE;
     }
 
-  if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name))
+  if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex))
     return FALSE;
 
   if (flags
@@ -753,7 +754,7 @@ sh64_elf_merge_symbol_attribute (struct elf_link_hash_entry *h,
   return;
 }
 
-static struct bfd_elf_special_section const sh64_elf_special_sections[]=
+static const struct bfd_elf_special_section sh64_elf_special_sections[] =
 {
   { ".cranges", 8, 0, SHT_PROGBITS, 0 },
   { NULL,       0, 0, 0,            0 }

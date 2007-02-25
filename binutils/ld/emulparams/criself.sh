@@ -44,10 +44,10 @@ OTHER_SDATA_SECTIONS="${RELOCATING+PROVIDE (__Edata = .);}"
 # end symbol.
 OTHER_BSS_END_SYMBOLS='
  PROVIDE (__Ebss = .);
- PROVIDE (__end = .);
  __Sbss = ADDR (.bss);
  PROVIDE (_bss_start = __Sbss);
 '
+OTHER_END_SYMBOLS='PROVIDE (__end = .);'
 
 INIT_START='
  . = ALIGN(2);
@@ -90,7 +90,7 @@ CTOR_END='
 '
 
 # Also add the other symbols provided for rsim/xsim and elinux.
-OTHER_END_SYMBOLS='
+OTHER_SYMBOLS='
   PROVIDE (__Eall = .);
   PROVIDE (__Endmem = 0x10000000); 
   PROVIDE (__Stacksize = 0);

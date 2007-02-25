@@ -20,7 +20,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GLD; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "libiberty.h"
 #include "bfd.h"
@@ -127,11 +127,6 @@ lnk960_after_parse (void)
 
   add_on (hll_list, lang_input_file_is_l_enum);
   add_on (syslib_list, lang_input_file_is_search_file_enum);
-}
-
-static void
-lnk960_before_allocation (void)
-{
 }
 
 static void
@@ -273,11 +268,11 @@ struct ld_emulation_xfer_struct ld_lnk960_emulation =
   lnk960_after_allocation,
   lnk960_set_output_arch,
   lnk960_choose_target,
-  lnk960_before_allocation,
+  before_allocation_default,
   lnk960_get_script,
   "lnk960",
   "",
-  NULL,	/* finish */
+  finish_default,
   NULL,	/* create output section statements */
   NULL,	/* open dynamic archive */
   NULL,	/* place orphan */

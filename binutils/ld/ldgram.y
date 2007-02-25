@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 %{
 /*
@@ -46,10 +46,8 @@
 #endif
 
 static enum section_type sectype;
+static lang_memory_region_type *region;
 
-lang_memory_region_type *region;
-
-bfd_boolean ldgram_want_filename = TRUE;
 FILE *saved_script_handle = NULL;
 bfd_boolean force_make_executable = FALSE;
 
@@ -94,7 +92,7 @@ static int error_index;
 }
 
 %type <etree> exp opt_exp_with_type mustbe_exp opt_at phdr_type phdr_val
-%type <etree> opt_exp_without_type opt_subalign
+%type <etree> opt_exp_without_type opt_subalign opt_align
 %type <fill> fill_opt fill_exp
 %type <name_list> exclude_name_list
 %type <wildcard_list> file_NAME_list
@@ -144,7 +142,7 @@ static int error_index;
 %token STARTUP HLL SYSLIB FLOAT NOFLOAT NOCROSSREFS
 %token ORIGIN FILL
 %token LENGTH CREATE_OBJECT_SYMBOLS INPUT GROUP OUTPUT CONSTRUCTORS
-%token ALIGNMOD AT SUBALIGN PROVIDE AS_NEEDED
+%token ALIGNMOD AT SUBALIGN PROVIDE PROVIDE_HIDDEN AS_NEEDED
 %type <token> assign_op atype attributes_opt sect_constraint
 %type <name>  filename
 %token CHIP LIST SECT ABSOLUTE  LOAD NEWLINE ENDWORD ORDER NAMEWORD ASSERT_K
@@ -152,7 +150,7 @@ static int error_index;
 %token INPUT_SCRIPT INPUT_MRI_SCRIPT INPUT_DEFSYM CASE EXTERN START
 %token <name> VERS_TAG VERS_IDENTIFIER
 %token GLOBAL LOCAL VERSIONK INPUT_VERSION_SCRIPT
-%token KEEP ONLY_IF_RO ONLY_IF_RW
+%token KEEP ONLY_IF_RO ONLY_IF_RW SPECIAL
 %token EXCLUDE_FILE
 %type <versyms> vers_defns
 %type <versnode> vers_tag
@@ -601,10 +599,7 @@ length:
 fill_exp:
 	mustbe_exp
 		{
-		  $$ = exp_get_fill ($1,
-				     0,
-				     "fill value",
-				     lang_first_phase_enum);
+		  $$ = exp_get_fill ($1, 0, "fill value");
 		}
 	;
 
@@ -653,7 +648,11 @@ assignment:
 		}
 	|	PROVIDE '(' NAME '=' mustbe_exp ')'
 		{
-		  lang_add_assignment (exp_provide ($3, $5));
+		  lang_add_assignment (exp_provide ($3, $5, FALSE));
+		}
+	|	PROVIDE_HIDDEN '(' NAME '=' mustbe_exp ')'
+		{
+		  lang_add_assignment (exp_provide ($3, $5, TRUE));
 		}
 	;
 
@@ -682,18 +681,16 @@ memory_spec: 	NAME
 
 origin_spec:
 	ORIGIN '=' mustbe_exp
-		{ region->current =
-		 region->origin =
-		 exp_get_vma($3, 0L,"origin", lang_first_phase_enum);
-}
+		{
+		  region->origin = exp_get_vma ($3, 0, "origin");
+		  region->current = region->origin;
+		}
 	;
 
 length_spec:
              LENGTH '=' mustbe_exp
-               { region->length = exp_get_vma($3,
-					       ~((bfd_vma)0),
-					       "length",
-					       lang_first_phase_enum);
+		{
+		  region->length = exp_get_vma ($3, -1, "length");
 		}
 	;
 
@@ -892,6 +889,11 @@ opt_at:
 	|	{ $$ = 0; }
 	;
 
+opt_align:
+		ALIGN_K '(' exp ')' { $$ = $3; }
+	|	{ $$ = 0; }
+	;
+
 opt_subalign:
 		SUBALIGN '(' exp ')' { $$ = $3; }
 	|	{ $$ = 0; }
@@ -900,26 +902,28 @@ opt_subalign:
 sect_constraint:
 		ONLY_IF_RO { $$ = ONLY_IF_RO; }
 	|	ONLY_IF_RW { $$ = ONLY_IF_RW; }
+	|	SPECIAL { $$ = SPECIAL; }
 	|	{ $$ = 0; }
 	;
 
 section:	NAME 		{ ldlex_expression(); }
 		opt_exp_with_type
 		opt_at
+		opt_align
 		opt_subalign	{ ldlex_popstate (); ldlex_script (); }
 		sect_constraint
 		'{'
 			{
 			  lang_enter_output_section_statement($1, $3,
 							      sectype,
-							      0, $5, $4, $7);
+							      $5, $6, $4, $8);
 			}
 		statement_list_opt
  		'}' { ldlex_popstate (); ldlex_expression (); }
 		memspec_opt memspec_at_opt phdr_opt fill_opt
 		{
 		  ldlex_popstate ();
-		  lang_leave_output_section_statement ($16, $13, $15, $14);
+		  lang_leave_output_section_statement ($17, $14, $16, $15);
 		}
 		opt_comma
 		{}
@@ -1215,11 +1219,19 @@ vers_tag:
 vers_defns:
 		VERS_IDENTIFIER
 		{
-		  $$ = lang_new_vers_pattern (NULL, $1, ldgram_vers_current_lang);
+		  $$ = lang_new_vers_pattern (NULL, $1, ldgram_vers_current_lang, FALSE);
+		}
+        |       NAME
+		{
+		  $$ = lang_new_vers_pattern (NULL, $1, ldgram_vers_current_lang, TRUE);
 		}
 	|	vers_defns ';' VERS_IDENTIFIER
 		{
-		  $$ = lang_new_vers_pattern ($1, $3, ldgram_vers_current_lang);
+		  $$ = lang_new_vers_pattern ($1, $3, ldgram_vers_current_lang, FALSE);
+		}
+	|	vers_defns ';' NAME
+		{
+		  $$ = lang_new_vers_pattern ($1, $3, ldgram_vers_current_lang, TRUE);
 		}
 	|	vers_defns ';' EXTERN NAME '{'
 			{
@@ -1228,6 +1240,9 @@ vers_defns:
 			}
 		vers_defns opt_semicolon '}'
 			{
+			  struct bfd_elf_version_expr *pat;
+			  for (pat = $7; pat->next != NULL; pat = pat->next);
+			  pat->next = $1;
 			  $$ = $7;
 			  ldgram_vers_current_lang = $<name>6;
 			}
@@ -1241,6 +1256,30 @@ vers_defns:
 			  $$ = $5;
 			  ldgram_vers_current_lang = $<name>4;
 			}
+	|	GLOBAL
+		{
+		  $$ = lang_new_vers_pattern (NULL, "global", ldgram_vers_current_lang, FALSE);
+		}
+	|	vers_defns ';' GLOBAL
+		{
+		  $$ = lang_new_vers_pattern ($1, "global", ldgram_vers_current_lang, FALSE);
+		}
+	|	LOCAL
+		{
+		  $$ = lang_new_vers_pattern (NULL, "local", ldgram_vers_current_lang, FALSE);
+		}
+	|	vers_defns ';' LOCAL
+		{
+		  $$ = lang_new_vers_pattern ($1, "local", ldgram_vers_current_lang, FALSE);
+		}
+	|	EXTERN
+		{
+		  $$ = lang_new_vers_pattern (NULL, "extern", ldgram_vers_current_lang, FALSE);
+		}
+	|	vers_defns ';' EXTERN
+		{
+		  $$ = lang_new_vers_pattern ($1, "extern", ldgram_vers_current_lang, FALSE);
+		}
 	;
 
 opt_semicolon:

@@ -1,5 +1,5 @@
 /* 32-bit ELF support for ARM
-   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -16,17 +16,45 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
-#include "elf/arm.h"
 #include "bfd.h"
 #include "sysdep.h"
+#include "libiberty.h"
 #include "libbfd.h"
 #include "elf-bfd.h"
+#include "elf-vxworks.h"
+#include "elf/arm.h"
 
 #ifndef NUM_ELEM
 #define NUM_ELEM(a)  (sizeof (a) / (sizeof (a)[0]))
 #endif
+
+/* Return the relocation section associated with NAME.  HTAB is the
+   bfd's elf32_arm_link_hash_entry.  */
+#define RELOC_SECTION(HTAB, NAME) \
+  ((HTAB)->use_rel ? ".rel" NAME : ".rela" NAME)
+
+/* Return size of a relocation entry.  HTAB is the bfd's
+   elf32_arm_link_hash_entry.  */
+#define RELOC_SIZE(HTAB) \
+  ((HTAB)->use_rel \
+   ? sizeof (Elf32_External_Rel) \
+   : sizeof (Elf32_External_Rela))
+
+/* Return function to swap relocations in.  HTAB is the bfd's
+   elf32_arm_link_hash_entry.  */
+#define SWAP_RELOC_IN(HTAB) \
+  ((HTAB)->use_rel \
+   ? bfd_elf32_swap_reloc_in \
+   : bfd_elf32_swap_reloca_in)
+
+/* Return function to swap relocations out.  HTAB is the bfd's
+   elf32_arm_link_hash_entry.  */
+#define SWAP_RELOC_OUT(HTAB) \
+  ((HTAB)->use_rel \
+   ? bfd_elf32_swap_reloc_out \
+   : bfd_elf32_swap_reloca_out)
 
 #define elf_info_to_howto               0
 #define elf_info_to_howto_rel           elf32_arm_info_to_howto
@@ -34,18 +62,13 @@
 #define ARM_ELF_ABI_VERSION		0
 #define ARM_ELF_OS_ABI_VERSION		ELFOSABI_ARM
 
-static reloc_howto_type * elf32_arm_reloc_type_lookup
-  PARAMS ((bfd * abfd, bfd_reloc_code_real_type code));
-static bfd_boolean elf32_arm_nabi_grok_prstatus
-  PARAMS ((bfd *abfd, Elf_Internal_Note *note));
-static bfd_boolean elf32_arm_nabi_grok_psinfo
-  PARAMS ((bfd *abfd, Elf_Internal_Note *note));
+static const struct elf_backend_data elf32_arm_vxworks_bed;
 
 /* Note: code such as elf32_arm_reloc_type_lookup expect to use e.g.
    R_ARM_PC24 as an index into this, and find the R_ARM_PC24 HOWTO
    in that slot.  */
 
-static reloc_howto_type elf32_arm_howto_table[] =
+static reloc_howto_type elf32_arm_howto_table_1[] =
 {
   /* No relocation */
   HOWTO (R_ARM_NONE,		/* type */
@@ -106,7 +129,7 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 TRUE),			/* pcrel_offset */
 
-  /* 8 bit absolute */
+  /* 8 bit absolute - R_ARM_LDR_PC_G0 in AAELF */
   HOWTO (R_ARM_PC13,		/* type */
 	 0,			/* rightshift */
 	 0,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -147,8 +170,8 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_ARM_ABS12",		/* name */
 	 FALSE,			/* partial_inplace */
-	 0x000008ff,		/* src_mask */
-	 0x000008ff,		/* dst_mask */
+	 0x00000fff,		/* src_mask */
+	 0x00000fff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
   HOWTO (R_ARM_THM_ABS5,	/* type */
@@ -194,7 +217,8 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  HOWTO (R_ARM_THM_PC22,	/* type */
+  /* FIXME: Has two more bits of offset in Thumb32.  */
+  HOWTO (R_ARM_THM_CALL,	/* type */
 	 1,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
 	 23,			/* bitsize */
@@ -202,7 +226,7 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_THM_PC22",	/* name */
+	 "R_ARM_THM_CALL",	/* name */
 	 FALSE,			/* partial_inplace */
 	 0x07ff07ff,		/* src_mask */
 	 0x07ff07ff,		/* dst_mask */
@@ -222,19 +246,19 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0x000000ff,		/* dst_mask */
 	 TRUE),			/* pcrel_offset */
 
-  HOWTO (R_ARM_AMP_VCALL9,	/* type */
+  HOWTO (R_ARM_BREL_ADJ,	/* type */
 	 1,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 8,			/* bitsize */
-	 TRUE,			/* pc_relative */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_signed,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_AMP_VCALL9",	/* name */
+	 "R_ARM_BREL_ADJ",	/* name */
 	 FALSE,			/* partial_inplace */
-	 0x000000ff,		/* src_mask */
-	 0x000000ff,		/* dst_mask */
-	 TRUE),			/* pcrel_offset */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 
   HOWTO (R_ARM_SWI24,		/* type */
 	 0,			/* rightshift */
@@ -294,49 +318,49 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0x07ff07ff,		/* dst_mask */
 	 TRUE),			/* pcrel_offset */
 
-  /* These next three relocs are not defined, but we need to fill the space.  */
+  /* Dynamic TLS relocations.  */
 
-  HOWTO (R_ARM_NONE,		/* type */
-	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont,/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_unknown_17",	/* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  HOWTO (R_ARM_TLS_DTPMOD32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         bfd_elf_generic_reloc, /* special_function */
+         "R_ARM_TLS_DTPMOD32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
 
-  HOWTO (R_ARM_NONE,		/* type */
-	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont,/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_unknown_18",	/* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  HOWTO (R_ARM_TLS_DTPOFF32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         bfd_elf_generic_reloc, /* special_function */
+         "R_ARM_TLS_DTPOFF32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
 
-  HOWTO (R_ARM_NONE,		/* type */
-	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont,/* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_unknown_19",	/* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  HOWTO (R_ARM_TLS_TPOFF32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         bfd_elf_generic_reloc, /* special_function */
+         "R_ARM_TLS_TPOFF32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
 
   /* Relocs used in ARM Linux */
 
@@ -396,7 +420,7 @@ static reloc_howto_type elf32_arm_howto_table[] =
          0xffffffff,		/* dst_mask */
          FALSE),                /* pcrel_offset */
 
-  HOWTO (R_ARM_GOTOFF,		/* type */
+  HOWTO (R_ARM_GOTOFF32,	/* type */
          0,                     /* rightshift */
          2,                     /* size (0 = byte, 1 = short, 2 = long) */
          32,                    /* bitsize */
@@ -404,7 +428,7 @@ static reloc_howto_type elf32_arm_howto_table[] =
          0,                     /* bitpos */
          complain_overflow_bitfield,/* complain_on_overflow */
          bfd_elf_generic_reloc, /* special_function */
-         "R_ARM_GOTOFF",	/* name */
+         "R_ARM_GOTOFF32",	/* name */
          TRUE,			/* partial_inplace */
          0xffffffff,		/* src_mask */
          0xffffffff,		/* dst_mask */
@@ -441,13 +465,13 @@ static reloc_howto_type elf32_arm_howto_table[] =
   HOWTO (R_ARM_PLT32,		/* type */
          2,                     /* rightshift */
          2,                     /* size (0 = byte, 1 = short, 2 = long) */
-         26,                    /* bitsize */
+         24,                    /* bitsize */
          TRUE,			/* pc_relative */
          0,                     /* bitpos */
          complain_overflow_bitfield,/* complain_on_overflow */
          bfd_elf_generic_reloc, /* special_function */
          "R_ARM_PLT32",		/* name */
-         TRUE,			/* partial_inplace */
+         FALSE,			/* partial_inplace */
          0x00ffffff,		/* src_mask */
          0x00ffffff,		/* dst_mask */
          TRUE),			/* pcrel_offset */
@@ -480,32 +504,32 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0x00ffffff,		/* dst_mask */
 	 TRUE),			/* pcrel_offset */
 
-  HOWTO (R_ARM_NONE,		/* type */
-	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
+  HOWTO (R_ARM_THM_JUMP24,	/* type */
+	 1,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 24,			/* bitsize */
+	 TRUE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont,/* complain_on_overflow */
+	 complain_overflow_signed,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_unknown_30",	/* name */
+	 "R_ARM_THM_JUMP24",	/* name */
 	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+	 0x07ff2fff,		/* src_mask */
+	 0x07ff2fff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
 
-  HOWTO (R_ARM_NONE,		/* type */
+  HOWTO (R_ARM_BASE_ABS,	/* type */
 	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_dont,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_unknown_31",	/* name */
+	 "R_ARM_BASE_ABS",	/* name */
 	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
   HOWTO (R_ARM_ALU_PCREL7_0,	/* type */
@@ -661,74 +685,329 @@ static reloc_howto_type elf32_arm_howto_table[] =
 	 0x7fffffff,		/* src_mask */
 	 0x7fffffff,		/* dst_mask */
 	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_MOVW_ABS_NC,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_MOVW_ABS_NC",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_MOVT_ABS,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_MOVT_ABS",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_MOVW_PREL_NC,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_MOVW_PREL_NC",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_MOVT_PREL,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_MOVT_PREL",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVW_ABS_NC,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVW_ABS_NC",/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVT_ABS,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVT_ABS",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVW_PREL_NC,/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVW_PREL_NC",/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVT_PREL,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVT_PREL",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_JUMP19,	/* type */
+	 1,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 19,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_signed,/* complain_on_overflow */
+	 bfd_elf_generic_reloc, /* special_function */
+	 "R_ARM_THM_JUMP19",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x043f2fff,		/* src_mask */
+	 0x043f2fff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_JUMP6,	/* type */
+	 1,			/* rightshift */
+	 1,			/* size (0 = byte, 1 = short, 2 = long) */
+	 6,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_unsigned,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_JUMP6",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x02f8,		/* src_mask */
+	 0x02f8,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  /* These are declared as 13-bit signed relocations because we can
+     address -4095 .. 4095(base) by altering ADDW to SUBW or vice
+     versa.  */
+  HOWTO (R_ARM_THM_ALU_PREL_11_0,/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 13,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_signed,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_ALU_PREL_11_0",/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040070ff,		/* src_mask */
+	 0x040070ff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_PC12,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 13,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_signed,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_PC12",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040070ff,		/* src_mask */
+	 0x040070ff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_ABS32_NOI,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_ABS32_NOI",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_REL32_NOI,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_REL32_NOI",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 };
 
-  /* GNU extension to record C++ vtable hierarchy */
-static reloc_howto_type elf32_arm_vtinherit_howto =
-  HOWTO (R_ARM_GNU_VTINHERIT, /* type */
-         0,                     /* rightshift */
-         2,                     /* size (0 = byte, 1 = short, 2 = long) */
-         0,                     /* bitsize */
-         FALSE,                 /* pc_relative */
-         0,                     /* bitpos */
-         complain_overflow_dont, /* complain_on_overflow */
-         NULL,                  /* special_function */
-         "R_ARM_GNU_VTINHERIT", /* name */
-         FALSE,                 /* partial_inplace */
-         0,                     /* src_mask */
-         0,                     /* dst_mask */
-         FALSE);                /* pcrel_offset */
+/* Relocations 57 .. 83 are the "group relocations" which we do not
+   support.  */
 
-  /* GNU extension to record C++ vtable member usage */
-static reloc_howto_type elf32_arm_vtentry_howto =
-  HOWTO (R_ARM_GNU_VTENTRY,     /* type */
-         0,                     /* rightshift */
-         2,                     /* size (0 = byte, 1 = short, 2 = long) */
-         0,                     /* bitsize */
-         FALSE,                 /* pc_relative */
-         0,                     /* bitpos */
-         complain_overflow_dont, /* complain_on_overflow */
-         _bfd_elf_rel_vtable_reloc_fn,  /* special_function */
-         "R_ARM_GNU_VTENTRY",   /* name */
-         FALSE,                 /* partial_inplace */
-         0,                     /* src_mask */
-         0,                     /* dst_mask */
-         FALSE);                /* pcrel_offset */
-
-  /* 12 bit pc relative */
-static reloc_howto_type elf32_arm_thm_pc11_howto =
-  HOWTO (R_ARM_THM_PC11,	/* type */
-	 1,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 11,			/* bitsize */
-	 TRUE,			/* pc_relative */
+static reloc_howto_type elf32_arm_howto_table_2[] =
+{
+  HOWTO (R_ARM_MOVW_BREL_NC,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_signed,	/* complain_on_overflow */
+	 complain_overflow_dont,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_THM_PC11",	/* name */
+	 "R_ARM_MOVW_BREL_NC",	/* name */
 	 FALSE,			/* partial_inplace */
-	 0x000007ff,		/* src_mask */
-	 0x000007ff,		/* dst_mask */
-	 TRUE);			/* pcrel_offset */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 
-  /* 12 bit pc relative */
-static reloc_howto_type elf32_arm_thm_pc9_howto =
-  HOWTO (R_ARM_THM_PC9,		/* type */
-	 1,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 8,			/* bitsize */
-	 TRUE,			/* pc_relative */
+  HOWTO (R_ARM_MOVT_BREL,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_signed,	/* complain_on_overflow */
+	 complain_overflow_bitfield,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_ARM_THM_PC9",	/* name */
+	 "R_ARM_MOVT_BREL",	/* name */
 	 FALSE,			/* partial_inplace */
-	 0x000000ff,		/* src_mask */
-	 0x000000ff,		/* dst_mask */
-	 TRUE);			/* pcrel_offset */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
 
-/* Place relative GOT-indirect.  */
-static reloc_howto_type elf32_arm_got_prel =
+  HOWTO (R_ARM_MOVW_BREL,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_MOVW_BREL",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x0000ffff,		/* src_mask */
+	 0x0000ffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVW_BREL_NC,/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVW_BREL_NC",/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVT_BREL,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVT_BREL",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_MOVW_BREL,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_MOVW_BREL",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x040f70ff,		/* src_mask */
+	 0x040f70ff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  EMPTY_HOWTO (90),   /* unallocated */
+  EMPTY_HOWTO (91),
+  EMPTY_HOWTO (92),
+  EMPTY_HOWTO (93),
+
+  HOWTO (R_ARM_PLT32_ABS,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_PLT32_ABS",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_GOT_ABS,		/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_dont,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_GOT_ABS",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0xffffffff,		/* src_mask */
+	 0xffffffff,		/* dst_mask */
+	 FALSE),			/* pcrel_offset */
+
   HOWTO (R_ARM_GOT_PREL,	/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -741,10 +1020,217 @@ static reloc_howto_type elf32_arm_got_prel =
 	 FALSE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
-	 TRUE);			/* pcrel_offset */
+	 TRUE),			/* pcrel_offset */
 
-/* Currently unused relocations.  */
-static reloc_howto_type elf32_arm_r_howto[4] =
+  HOWTO (R_ARM_GOT_BREL12,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 12,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_GOT_BREL12",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x00000fff,		/* src_mask */
+	 0x00000fff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_GOTOFF12,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 12,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_GOTOFF12",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x00000fff,		/* src_mask */
+	 0x00000fff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  EMPTY_HOWTO (R_ARM_GOTRELAX),  /* reserved for future GOT-load optimizations */
+
+  /* GNU extension to record C++ vtable member usage */
+  HOWTO (R_ARM_GNU_VTENTRY,     /* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         0,                     /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_dont, /* complain_on_overflow */
+         _bfd_elf_rel_vtable_reloc_fn,  /* special_function */
+         "R_ARM_GNU_VTENTRY",   /* name */
+         FALSE,                 /* partial_inplace */
+         0,                     /* src_mask */
+         0,                     /* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  /* GNU extension to record C++ vtable hierarchy */
+  HOWTO (R_ARM_GNU_VTINHERIT, /* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         0,                     /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_dont, /* complain_on_overflow */
+         NULL,                  /* special_function */
+         "R_ARM_GNU_VTINHERIT", /* name */
+         FALSE,                 /* partial_inplace */
+         0,                     /* src_mask */
+         0,                     /* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  HOWTO (R_ARM_THM_JUMP11,	/* type */
+	 1,			/* rightshift */
+	 1,			/* size (0 = byte, 1 = short, 2 = long) */
+	 11,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_JUMP11",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x000007ff,		/* src_mask */
+	 0x000007ff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  HOWTO (R_ARM_THM_JUMP8,	/* type */
+	 1,			/* rightshift */
+	 1,			/* size (0 = byte, 1 = short, 2 = long) */
+	 8,			/* bitsize */
+	 TRUE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_signed,	/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_THM_JUMP8",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x000000ff,		/* src_mask */
+	 0x000000ff,		/* dst_mask */
+	 TRUE),			/* pcrel_offset */
+
+  /* TLS relocations */
+  HOWTO (R_ARM_TLS_GD32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         NULL,			/* special_function */
+         "R_ARM_TLS_GD32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_LDM32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         bfd_elf_generic_reloc, /* special_function */
+         "R_ARM_TLS_LDM32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_LDO32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         bfd_elf_generic_reloc, /* special_function */
+         "R_ARM_TLS_LDO32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_IE32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                  /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         NULL,			/* special_function */
+         "R_ARM_TLS_IE32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_LE32,	/* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         32,                    /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_bitfield,/* complain_on_overflow */
+         bfd_elf_generic_reloc, /* special_function */
+         "R_ARM_TLS_LE32",	/* name */
+         TRUE,			/* partial_inplace */
+         0xffffffff,		/* src_mask */
+         0xffffffff,		/* dst_mask */
+         FALSE),                /* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_LDO12,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 12,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_TLS_LDO12",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x00000fff,		/* src_mask */
+	 0x00000fff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_LE12,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 12,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_TLS_LE12",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x00000fff,		/* src_mask */
+	 0x00000fff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+
+  HOWTO (R_ARM_TLS_IE12GP,	/* type */
+	 0,			/* rightshift */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 12,			/* bitsize */
+	 FALSE,			/* pc_relative */
+	 0,			/* bitpos */
+	 complain_overflow_bitfield,/* complain_on_overflow */
+	 bfd_elf_generic_reloc,	/* special_function */
+	 "R_ARM_TLS_IE12GP",	/* name */
+	 FALSE,			/* partial_inplace */
+	 0x00000fff,		/* src_mask */
+	 0x00000fff,		/* dst_mask */
+	 FALSE),		/* pcrel_offset */
+};
+
+/* 112-127 private relocations
+   128 R_ARM_ME_TOO, obsolete
+   129-255 unallocated in AAELF.
+
+   249-255 extended, currently unused, relocations:  */
+
+static reloc_howto_type elf32_arm_howto_table_3[4] =
 {
   HOWTO (R_ARM_RREL32,		/* type */
 	 0,			/* rightshift */
@@ -806,35 +1292,18 @@ static reloc_howto_type elf32_arm_r_howto[4] =
 static reloc_howto_type *
 elf32_arm_howto_from_type (unsigned int r_type)
 {
-  if (r_type < NUM_ELEM (elf32_arm_howto_table))
-    return &elf32_arm_howto_table[r_type];
-    
-  switch (r_type)
-    {
-    case R_ARM_GOT_PREL:
-      return &elf32_arm_got_prel;
+  if (r_type < NUM_ELEM (elf32_arm_howto_table_1))
+    return &elf32_arm_howto_table_1[r_type];
 
-    case R_ARM_GNU_VTINHERIT:
-      return &elf32_arm_vtinherit_howto;
+  if (r_type >= R_ARM_MOVW_BREL_NC
+      && r_type < R_ARM_MOVW_BREL_NC + NUM_ELEM (elf32_arm_howto_table_2))
+    return &elf32_arm_howto_table_2[r_type - R_ARM_MOVW_BREL_NC];
 
-    case R_ARM_GNU_VTENTRY:
-      return &elf32_arm_vtentry_howto;
+  if (r_type >= R_ARM_RREL32
+      && r_type < R_ARM_RREL32 + NUM_ELEM (elf32_arm_howto_table_2))
+    return &elf32_arm_howto_table_3[r_type - R_ARM_RREL32];
 
-    case R_ARM_THM_PC11:
-      return &elf32_arm_thm_pc11_howto;
-
-    case R_ARM_THM_PC9:
-      return &elf32_arm_thm_pc9_howto;
-
-    case R_ARM_RREL32:
-    case R_ARM_RABS32:
-    case R_ARM_RPC24:
-    case R_ARM_RBASE:
-      return &elf32_arm_r_howto[r_type - R_ARM_RREL32];
-
-    default:
-      return NULL;
-    }
+  return NULL;
 }
 
 static void
@@ -858,6 +1327,8 @@ static const struct elf32_arm_reloc_map elf32_arm_reloc_map[] =
   {
     {BFD_RELOC_NONE,                 R_ARM_NONE},
     {BFD_RELOC_ARM_PCREL_BRANCH,     R_ARM_PC24},
+    {BFD_RELOC_ARM_PCREL_CALL,	     R_ARM_CALL},
+    {BFD_RELOC_ARM_PCREL_JUMP,	     R_ARM_JUMP24},
     {BFD_RELOC_ARM_PCREL_BLX,        R_ARM_XPC25},
     {BFD_RELOC_THUMB_PCREL_BLX,      R_ARM_THM_XPC22},
     {BFD_RELOC_32,                   R_ARM_ABS32},
@@ -866,12 +1337,16 @@ static const struct elf32_arm_reloc_map elf32_arm_reloc_map[] =
     {BFD_RELOC_16,                   R_ARM_ABS16},
     {BFD_RELOC_ARM_OFFSET_IMM,       R_ARM_ABS12},
     {BFD_RELOC_ARM_THUMB_OFFSET,     R_ARM_THM_ABS5},
-    {BFD_RELOC_THUMB_PCREL_BRANCH23, R_ARM_THM_PC22},
-    {BFD_RELOC_ARM_COPY,             R_ARM_COPY},
+    {BFD_RELOC_THUMB_PCREL_BRANCH25, R_ARM_THM_JUMP24},
+    {BFD_RELOC_THUMB_PCREL_BRANCH23, R_ARM_THM_CALL},
+    {BFD_RELOC_THUMB_PCREL_BRANCH12, R_ARM_THM_JUMP11},
+    {BFD_RELOC_THUMB_PCREL_BRANCH20, R_ARM_THM_JUMP19},
+    {BFD_RELOC_THUMB_PCREL_BRANCH9,  R_ARM_THM_JUMP8},
+    {BFD_RELOC_THUMB_PCREL_BRANCH7,  R_ARM_THM_JUMP6},
     {BFD_RELOC_ARM_GLOB_DAT,         R_ARM_GLOB_DAT},
     {BFD_RELOC_ARM_JUMP_SLOT,        R_ARM_JUMP_SLOT},
     {BFD_RELOC_ARM_RELATIVE,         R_ARM_RELATIVE},
-    {BFD_RELOC_ARM_GOTOFF,           R_ARM_GOTOFF},
+    {BFD_RELOC_ARM_GOTOFF,           R_ARM_GOTOFF32},
     {BFD_RELOC_ARM_GOTPC,            R_ARM_GOTPC},
     {BFD_RELOC_ARM_GOT32,            R_ARM_GOT32},
     {BFD_RELOC_ARM_PLT32,            R_ARM_PLT32},
@@ -879,44 +1354,35 @@ static const struct elf32_arm_reloc_map elf32_arm_reloc_map[] =
     {BFD_RELOC_ARM_ROSEGREL32,	     R_ARM_ROSEGREL32},
     {BFD_RELOC_ARM_SBREL32,	     R_ARM_SBREL32},
     {BFD_RELOC_ARM_PREL31,	     R_ARM_PREL31},
-    {BFD_RELOC_ARM_TARGET2,	     R_ARM_TARGET2}
+    {BFD_RELOC_ARM_TARGET2,	     R_ARM_TARGET2},
+    {BFD_RELOC_ARM_PLT32,            R_ARM_PLT32},
+    {BFD_RELOC_ARM_TLS_GD32,	     R_ARM_TLS_GD32},
+    {BFD_RELOC_ARM_TLS_LDO32,	     R_ARM_TLS_LDO32},
+    {BFD_RELOC_ARM_TLS_LDM32,	     R_ARM_TLS_LDM32},
+    {BFD_RELOC_ARM_TLS_DTPMOD32,     R_ARM_TLS_DTPMOD32},
+    {BFD_RELOC_ARM_TLS_DTPOFF32,     R_ARM_TLS_DTPOFF32},
+    {BFD_RELOC_ARM_TLS_TPOFF32,      R_ARM_TLS_TPOFF32},
+    {BFD_RELOC_ARM_TLS_IE32,         R_ARM_TLS_IE32},
+    {BFD_RELOC_ARM_TLS_LE32,         R_ARM_TLS_LE32},
+    {BFD_RELOC_VTABLE_INHERIT,	     R_ARM_GNU_VTINHERIT},
+    {BFD_RELOC_VTABLE_ENTRY,	     R_ARM_GNU_VTENTRY},
   };
 
 static reloc_howto_type *
-elf32_arm_reloc_type_lookup (abfd, code)
-     bfd *abfd ATTRIBUTE_UNUSED;
-     bfd_reloc_code_real_type code;
+elf32_arm_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+			     bfd_reloc_code_real_type code)
 {
   unsigned int i;
+  for (i = 0; i < NUM_ELEM (elf32_arm_reloc_map); i ++)
+    if (elf32_arm_reloc_map[i].bfd_reloc_val == code)
+      return elf32_arm_howto_from_type (elf32_arm_reloc_map[i].elf_reloc_val);
 
-  switch (code)
-    {
-    case BFD_RELOC_VTABLE_INHERIT:
-      return & elf32_arm_vtinherit_howto;
-
-    case BFD_RELOC_VTABLE_ENTRY:
-      return & elf32_arm_vtentry_howto;
-
-    case BFD_RELOC_THUMB_PCREL_BRANCH12:
-      return & elf32_arm_thm_pc11_howto;
-
-    case BFD_RELOC_THUMB_PCREL_BRANCH9:
-      return & elf32_arm_thm_pc9_howto;
-
-    default:
-      for (i = 0; i < NUM_ELEM (elf32_arm_reloc_map); i ++)
-	if (elf32_arm_reloc_map[i].bfd_reloc_val == code)
-	  return & elf32_arm_howto_table[elf32_arm_reloc_map[i].elf_reloc_val];
-
-      return NULL;
-   }
+  return NULL;
 }
 
 /* Support for core dump NOTE sections */
 static bfd_boolean
-elf32_arm_nabi_grok_prstatus (abfd, note)
-     bfd *abfd;
-     Elf_Internal_Note *note;
+elf32_arm_nabi_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 {
   int offset;
   size_t size;
@@ -946,9 +1412,7 @@ elf32_arm_nabi_grok_prstatus (abfd, note)
 }
 
 static bfd_boolean
-elf32_arm_nabi_grok_psinfo (abfd, note)
-     bfd *abfd;
-     Elf_Internal_Note *note;
+elf32_arm_nabi_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 {
   switch (note->descsz)
     {
@@ -988,9 +1452,10 @@ elf32_arm_nabi_grok_psinfo (abfd, note)
 typedef unsigned long int insn32;
 typedef unsigned short int insn16;
 
-/* In lieu of proper flags, assume all EABIv4 objects are interworkable.  */
+/* In lieu of proper flags, assume all EABIv4 or later objects are
+   interworkable.  */
 #define INTERWORK_FLAG(abfd)  \
-  (EF_ARM_EABI_VERSION (elf_elfheader (abfd)->e_flags) == EF_ARM_EABI_VER4 \
+  (EF_ARM_EABI_VERSION (elf_elfheader (abfd)->e_flags) >= EF_ARM_EABI_VER4 \
   || (elf_elfheader (abfd)->e_flags & EF_ARM_INTERWORK))
 
 /* The linker script knows the section names for placement.
@@ -1057,6 +1522,38 @@ static const bfd_vma elf32_arm_plt_entry [] =
 
 #endif
 
+/* The format of the first entry in the procedure linkage table
+   for a VxWorks executable.  */
+static const bfd_vma elf32_arm_vxworks_exec_plt0_entry[] =
+  {
+    0xe52dc008,	        /* str    ip,[sp,#-8]!			*/
+    0xe59fc000,         /* ldr    ip,[pc]			*/
+    0xe59cf008,         /* ldr    pc,[ip,#8]			*/
+    0x00000000,         /* .long  _GLOBAL_OFFSET_TABLE_		*/
+  };
+
+/* The format of subsequent entries in a VxWorks executable.  */
+static const bfd_vma elf32_arm_vxworks_exec_plt_entry[] =
+  {
+    0xe59fc000,         /* ldr    ip,[pc]			*/
+    0xe59cf000,         /* ldr    pc,[ip]			*/
+    0x00000000,         /* .long  @got				*/
+    0xe59fc000,         /* ldr    ip,[pc]			*/
+    0xea000000,         /* b      _PLT				*/
+    0x00000000,         /* .long  @pltindex*sizeof(Elf32_Rela)	*/
+  };
+
+/* The format of entries in a VxWorks shared library.  */
+static const bfd_vma elf32_arm_vxworks_shared_plt_entry[] =
+  {
+    0xe59fc000,         /* ldr    ip,[pc]			*/
+    0xe79cf009,         /* ldr    pc,[ip,r9]			*/
+    0x00000000,         /* .long  @got				*/
+    0xe59fc000,         /* ldr    ip,[pc]			*/
+    0xe599f008,         /* ldr    pc,[r9,#8]			*/
+    0x00000000,         /* .long  @pltindex*sizeof(Elf32_Rela)	*/
+  };
+
 /* An initial stub used if the PLT entry is referenced from Thumb code.  */
 #define PLT_THUMB_STUB_SIZE 4
 static const bfd_vma elf32_arm_plt_thumb_stub [] =
@@ -1083,15 +1580,62 @@ typedef struct elf32_elf_section_map
 }
 elf32_arm_section_map;
 
-struct _arm_elf_section_data
+typedef struct _arm_elf_section_data
 {
   struct bfd_elf_section_data elf;
-  int mapcount;
+  unsigned int mapcount;
   elf32_arm_section_map *map;
-};
+}
+_arm_elf_section_data;
 
 #define elf32_arm_section_data(sec) \
-  ((struct _arm_elf_section_data *) elf_section_data (sec))
+  ((_arm_elf_section_data *) elf_section_data (sec))
+
+/* The size of the thread control block.  */
+#define TCB_SIZE	8
+
+#define NUM_KNOWN_ATTRIBUTES 32
+
+typedef struct aeabi_attribute
+{
+  int type;
+  unsigned int i;
+  char *s;
+} aeabi_attribute;
+
+typedef struct aeabi_attribute_list
+{
+  struct aeabi_attribute_list *next;
+  int tag;
+  aeabi_attribute attr;
+} aeabi_attribute_list;
+
+struct elf32_arm_obj_tdata
+{
+  struct elf_obj_tdata root;
+
+  /* tls_type for each local got entry.  */
+  char *local_got_tls_type;
+
+  aeabi_attribute known_eabi_attributes[NUM_KNOWN_ATTRIBUTES];
+  aeabi_attribute_list *other_eabi_attributes;
+};
+
+#define elf32_arm_tdata(abfd) \
+  ((struct elf32_arm_obj_tdata *) (abfd)->tdata.any)
+
+#define elf32_arm_local_got_tls_type(abfd) \
+  (elf32_arm_tdata (abfd)->local_got_tls_type)
+
+static bfd_boolean
+elf32_arm_mkobject (bfd *abfd)
+{
+  bfd_size_type amt = sizeof (struct elf32_arm_obj_tdata);
+  abfd->tdata.any = bfd_zalloc (abfd, amt);
+  if (abfd->tdata.any == NULL)
+    return FALSE;
+  return TRUE;
+}
 
 /* The ARM linker needs to keep track of the number of relocs that it
    decides to copy in check_relocs for each symbol.  This is so that
@@ -1099,8 +1643,8 @@ struct _arm_elf_section_data
    linking with -Bsymbolic.  We store the information in a field
    extending the regular ELF linker hash table.  */
 
-/* This structure keeps track of the number of PC relative relocs we
-   have copied for a given symbol.  */
+/* This structure keeps track of the number of relocs we have copied
+   for a given symbol.  */
 struct elf32_arm_relocs_copied
   {
     /* Next section.  */
@@ -1109,7 +1653,11 @@ struct elf32_arm_relocs_copied
     asection * section;
     /* Number of relocs copied in this section.  */
     bfd_size_type count;
+    /* Number of PC-relative relocs copied in this section.  */
+    bfd_size_type pc_count;
   };
+
+#define elf32_arm_hash_entry(ent) ((struct elf32_arm_link_hash_entry *)(ent))
 
 /* Arm ELF linker hash entry.  */
 struct elf32_arm_link_hash_entry
@@ -1127,6 +1675,12 @@ struct elf32_arm_link_hash_entry
        used, we need to record the index into .got.plt instead of
        recomputing it from the PLT offset.  */
     bfd_signed_vma plt_got_offset;
+
+#define GOT_UNKNOWN	0
+#define GOT_NORMAL	1
+#define GOT_TLS_GD	2
+#define GOT_TLS_IE	4
+    unsigned char tls_type;
   };
 
 /* Traverse an arm ELF linker hash table.  */
@@ -1168,11 +1722,17 @@ struct elf32_arm_link_hash_table
     /* Nonzero to fix BX instructions for ARMv4 targets.  */
     int fix_v4bx;
 
+    /* Nonzero if the ARM/Thumb BLX instructions are available for use.  */
+    int use_blx;
+
     /* The number of bytes in the initial entry in the PLT.  */
     bfd_size_type plt_header_size;
 
     /* The number of bytes in the subsequent PLT etries.  */
     bfd_size_type plt_entry_size;
+
+    /* True if the target system is VxWorks.  */
+    int vxworks_p;
 
     /* True if the target system is Symbian OS.  */
     int symbian_p;
@@ -1189,6 +1749,15 @@ struct elf32_arm_link_hash_table
     asection *sdynbss;
     asection *srelbss;
 
+    /* The (unloaded but important) VxWorks .rela.plt.unloaded section.  */
+    asection *srelplt2;
+
+    /* Data for R_ARM_TLS_LDM32 relocations.  */
+    union {
+      bfd_signed_vma refcount;
+      bfd_vma offset;
+    } tls_ldm_got;
+    
     /* Small local sym to section mapping cache.  */
     struct sym_sec_cache sym_sec;
 
@@ -1220,6 +1789,7 @@ elf32_arm_link_hash_newfunc (struct bfd_hash_entry * entry,
   if (ret != NULL)
     {
       ret->relocs_copied = NULL;
+      ret->tls_type = GOT_UNKNOWN;
       ret->plt_thumb_refcount = 0;
       ret->plt_got_offset = -1;
     }
@@ -1227,7 +1797,20 @@ elf32_arm_link_hash_newfunc (struct bfd_hash_entry * entry,
   return (struct bfd_hash_entry *) ret;
 }
 
-/* Create .got, .gotplt, and .rel.got sections in DYNOBJ, and set up
+/* Return true if NAME is the name of the relocation section associated
+   with S.  */
+
+static bfd_boolean
+reloc_section_p (struct elf32_arm_link_hash_table *htab,
+		 const char *name, asection *s)
+{
+  if (htab->use_rel)
+    return strncmp (name, ".rel", 4) == 0 && strcmp (s->name, name + 4) == 0;
+  else
+    return strncmp (name, ".rela", 5) == 0 && strcmp (s->name, name + 5) == 0;
+}
+
+/* Create .got, .gotplt, and .rel(a).got sections in DYNOBJ, and set up
    shortcuts to them in our hash table.  */
 
 static bfd_boolean
@@ -1248,19 +1831,21 @@ create_got_section (bfd *dynobj, struct bfd_link_info *info)
   if (!htab->sgot || !htab->sgotplt)
     abort ();
 
-  htab->srelgot = bfd_make_section (dynobj, ".rel.got");
+  htab->srelgot = bfd_make_section_with_flags (dynobj,
+					       RELOC_SECTION (htab, ".got"),
+					       (SEC_ALLOC | SEC_LOAD
+						| SEC_HAS_CONTENTS
+						| SEC_IN_MEMORY
+						| SEC_LINKER_CREATED
+						| SEC_READONLY));
   if (htab->srelgot == NULL
-      || ! bfd_set_section_flags (dynobj, htab->srelgot,
-				  (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS
-				   | SEC_IN_MEMORY | SEC_LINKER_CREATED
-				   | SEC_READONLY))
       || ! bfd_set_section_alignment (dynobj, htab->srelgot, 2))
     return FALSE;
   return TRUE;
 }
 
-/* Create .plt, .rel.plt, .got, .got.plt, .rel.got, .dynbss, and
-   .rel.bss sections in DYNOBJ, and set up shortcuts to them in our
+/* Create .plt, .rel(a).plt, .got, .got.plt, .rel(a).got, .dynbss, and
+   .rel(a).bss sections in DYNOBJ, and set up shortcuts to them in our
    hash table.  */
 
 static bfd_boolean
@@ -1276,10 +1861,32 @@ elf32_arm_create_dynamic_sections (bfd *dynobj, struct bfd_link_info *info)
     return FALSE;
 
   htab->splt = bfd_get_section_by_name (dynobj, ".plt");
-  htab->srelplt = bfd_get_section_by_name (dynobj, ".rel.plt");
+  htab->srelplt = bfd_get_section_by_name (dynobj,
+					   RELOC_SECTION (htab, ".plt"));
   htab->sdynbss = bfd_get_section_by_name (dynobj, ".dynbss");
   if (!info->shared)
-    htab->srelbss = bfd_get_section_by_name (dynobj, ".rel.bss");
+    htab->srelbss = bfd_get_section_by_name (dynobj,
+					     RELOC_SECTION (htab, ".bss"));
+
+  if (htab->vxworks_p)
+    {
+      if (!elf_vxworks_create_dynamic_sections (dynobj, info, &htab->srelplt2))
+	return FALSE;
+
+      if (info->shared)
+	{
+	  htab->plt_header_size = 0;
+	  htab->plt_entry_size
+	    = 4 * ARRAY_SIZE (elf32_arm_vxworks_shared_plt_entry);
+	}
+      else
+	{
+	  htab->plt_header_size
+	    = 4 * ARRAY_SIZE (elf32_arm_vxworks_exec_plt0_entry);
+	  htab->plt_entry_size
+	    = 4 * ARRAY_SIZE (elf32_arm_vxworks_exec_plt_entry);
+	}
+    }
 
   if (!htab->splt 
       || !htab->srelplt
@@ -1293,7 +1900,7 @@ elf32_arm_create_dynamic_sections (bfd *dynobj, struct bfd_link_info *info)
 /* Copy the extra info we tack onto an elf_link_hash_entry.  */
 
 static void
-elf32_arm_copy_indirect_symbol (const struct elf_backend_data *bed,
+elf32_arm_copy_indirect_symbol (struct bfd_link_info *info,
 				struct elf_link_hash_entry *dir,
 				struct elf_link_hash_entry *ind)
 {
@@ -1309,10 +1916,7 @@ elf32_arm_copy_indirect_symbol (const struct elf_backend_data *bed,
 	  struct elf32_arm_relocs_copied **pp;
 	  struct elf32_arm_relocs_copied *p;
 
-	  if (ind->root.type == bfd_link_hash_indirect)
-	    abort ();
-
-	  /* Add reloc counts against the weak sym to the strong sym
+	  /* Add reloc counts against the indirect sym to the direct sym
 	     list.  Merge any entries against the same section.  */
 	  for (pp = &eind->relocs_copied; (p = *pp) != NULL; )
 	    {
@@ -1321,6 +1925,7 @@ elf32_arm_copy_indirect_symbol (const struct elf_backend_data *bed,
 	      for (q = edir->relocs_copied; q != NULL; q = q->next)
 		if (q->section == p->section)
 		  {
+		    q->pc_count += p->pc_count;
 		    q->count += p->count;
 		    *pp = p->next;
 		    break;
@@ -1335,18 +1940,18 @@ elf32_arm_copy_indirect_symbol (const struct elf_backend_data *bed,
       eind->relocs_copied = NULL;
     }
 
-  /* If the direct symbol already has an associated PLT entry, the
-     indirect symbol should not.  If it doesn't, swap refcount information
-     from the indirect symbol.  */
-  if (edir->plt_thumb_refcount == 0)
-    {
-      edir->plt_thumb_refcount = eind->plt_thumb_refcount;
-      eind->plt_thumb_refcount = 0;
-    }
-  else
-    BFD_ASSERT (eind->plt_thumb_refcount == 0);
+  /* Copy over PLT info.  */
+  edir->plt_thumb_refcount += eind->plt_thumb_refcount;
+  eind->plt_thumb_refcount = 0;
 
-  _bfd_elf_link_hash_copy_indirect (bed, dir, ind);
+  if (ind->root.type == bfd_link_hash_indirect
+      && dir->got.refcount <= 0)
+    {
+      edir->tls_type = eind->tls_type;
+      eind->tls_type = GOT_UNKNOWN;
+    }
+
+  _bfd_elf_link_hash_copy_indirect (info, dir, ind);
 }
 
 /* Create an ARM elf linker hash table.  */
@@ -1362,7 +1967,8 @@ elf32_arm_link_hash_table_create (bfd *abfd)
     return NULL;
 
   if (!_bfd_elf_link_hash_table_init (& ret->root, abfd,
-				      elf32_arm_link_hash_newfunc))
+				      elf32_arm_link_hash_newfunc,
+				      sizeof (struct elf32_arm_link_hash_entry)))
     {
       free (ret);
       return NULL;
@@ -1375,6 +1981,7 @@ elf32_arm_link_hash_table_create (bfd *abfd)
   ret->srelplt = NULL;
   ret->sdynbss = NULL;
   ret->srelbss = NULL;
+  ret->srelplt2 = NULL;
   ret->thumb_glue_size = 0;
   ret->arm_glue_size = 0;
   ret->bfd_of_glue_owner = NULL;
@@ -1388,10 +1995,14 @@ elf32_arm_link_hash_table_create (bfd *abfd)
   ret->plt_header_size = 20;
   ret->plt_entry_size = 12;
 #endif
+  ret->fix_v4bx = 0;
+  ret->use_blx = 0;
+  ret->vxworks_p = 0;
   ret->symbian_p = 0;
   ret->use_rel = 1;
   ret->sym_sec.abfd = NULL;
   ret->obfd = abfd;
+  ret->tls_ldm_got.refcount = 0;
 
   return &ret->root.root;
 }
@@ -1464,19 +2075,34 @@ find_arm_glue (struct bfd_link_info *link_info,
   return myh;
 }
 
-/* ARM->Thumb glue:
+/* ARM->Thumb glue (static images):
 
    .arm
    __func_from_arm:
    ldr r12, __func_addr
    bx  r12
    __func_addr:
-   .word func    @ behave as if you saw a ARM_32 reloc.  */
+   .word func    @ behave as if you saw a ARM_32 reloc.  
 
-#define ARM2THUMB_GLUE_SIZE 12
+   (relocatable images)
+   .arm
+   __func_from_arm:
+   ldr r12, __func_offset
+   add r12, r12, pc
+   bx  r12
+   __func_offset:
+   .word func - .
+   */
+
+#define ARM2THUMB_STATIC_GLUE_SIZE 12
 static const insn32 a2t1_ldr_insn = 0xe59fc000;
 static const insn32 a2t2_bx_r12_insn = 0xe12fff1c;
 static const insn32 a2t3_func_addr_insn = 0x00000001;
+
+#define ARM2THUMB_PIC_GLUE_SIZE 16
+static const insn32 a2t1p_ldr_insn = 0xe59fc004;
+static const insn32 a2t2p_add_pc_insn = 0xe08cc00f;
+static const insn32 a2t3p_bx_r12_insn = 0xe12fff1c;
 
 /* Thumb->ARM:                          Thumb->(non-interworking aware) ARM
 
@@ -1597,7 +2223,10 @@ record_arm_to_thumb_glue (struct bfd_link_info * link_info,
 
   free (tmp_name);
 
-  globals->arm_glue_size += ARM2THUMB_GLUE_SIZE;
+  if ((link_info->shared || globals->root.is_relocatable_executable))
+    globals->arm_glue_size += ARM2THUMB_PIC_GLUE_SIZE;
+  else
+    globals->arm_glue_size += ARM2THUMB_STATIC_GLUE_SIZE;
 
   return;
 }
@@ -1702,10 +2331,11 @@ bfd_elf32_arm_add_glue_sections_to_bfd (bfd *abfd,
 	 of this section.  */
       flags = SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS | SEC_IN_MEMORY | SEC_CODE | SEC_READONLY;
 
-      sec = bfd_make_section (abfd, ARM2THUMB_GLUE_SECTION_NAME);
+      sec = bfd_make_section_with_flags (abfd,
+					 ARM2THUMB_GLUE_SECTION_NAME,
+					 flags);
 
       if (sec == NULL
-	  || !bfd_set_section_flags (abfd, sec, flags)
 	  || !bfd_set_section_alignment (abfd, sec, 2))
 	return FALSE;
 
@@ -1721,10 +2351,11 @@ bfd_elf32_arm_add_glue_sections_to_bfd (bfd *abfd,
       flags = SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS | SEC_IN_MEMORY
 	| SEC_CODE | SEC_READONLY;
 
-      sec = bfd_make_section (abfd, THUMB2ARM_GLUE_SECTION_NAME);
+      sec = bfd_make_section_with_flags (abfd,
+					 THUMB2ARM_GLUE_SECTION_NAME,
+					 flags);
 
       if (sec == NULL
-	  || !bfd_set_section_flags (abfd, sec, flags)
 	  || !bfd_set_section_alignment (abfd, sec, 2))
 	return FALSE;
 
@@ -1764,6 +2395,12 @@ bfd_elf32_arm_get_bfd_for_interworking (bfd *abfd, struct bfd_link_info *info)
   return TRUE;
 }
 
+static void check_use_blx(struct elf32_arm_link_hash_table *globals)
+{
+  if (elf32_arm_get_eabi_attr_int (globals->obfd, Tag_CPU_arch) > 2)
+    globals->use_blx = 1;
+}
+
 bfd_boolean
 bfd_elf32_arm_process_before_allocation (bfd *abfd,
 					 struct bfd_link_info *link_info,
@@ -1785,6 +2422,7 @@ bfd_elf32_arm_process_before_allocation (bfd *abfd,
   /* Here we have a bfd that is to be included on the link.  We have a hook
      to do reloc rummaging, before section sizes are nailed down.  */
   globals = elf32_arm_hash_table (link_info);
+  check_use_blx (globals);
 
   BFD_ASSERT (globals != NULL);
   BFD_ASSERT (globals->bfd_of_glue_owner != NULL);
@@ -1832,11 +2470,9 @@ bfd_elf32_arm_process_before_allocation (bfd *abfd,
 	  /* These are the only relocation types we care about.  */
 	  if (   r_type != R_ARM_PC24
 	      && r_type != R_ARM_PLT32
-#ifndef OLD_ARM_ABI
 	      && r_type != R_ARM_CALL
 	      && r_type != R_ARM_JUMP24
-#endif
-	      && r_type != R_ARM_THM_PC22)
+	      && r_type != R_ARM_THM_CALL)
 	    continue;
 
 	  /* Get the section contents if we haven't done so already.  */
@@ -1879,22 +2515,21 @@ bfd_elf32_arm_process_before_allocation (bfd *abfd,
 	    {
 	    case R_ARM_PC24:
 	    case R_ARM_PLT32:
-#ifndef OLD_ARM_ABI
 	    case R_ARM_CALL:
 	    case R_ARM_JUMP24:
-#endif
 	      /* This one is a call from arm code.  We need to look up
 	         the target of the call.  If it is a thumb target, we
 	         insert glue.  */
-	      if (ELF_ST_TYPE(h->type) == STT_ARM_TFUNC)
+	      if (ELF_ST_TYPE(h->type) == STT_ARM_TFUNC
+		  && !(r_type == R_ARM_CALL && globals->use_blx))
 		record_arm_to_thumb_glue (link_info, h);
 	      break;
 
-	    case R_ARM_THM_PC22:
+	    case R_ARM_THM_CALL:
 	      /* This one is a call from thumb code.  We look
 	         up the target of the call.  If it is not a thumb
                  target, we insert glue.  */
-	      if (ELF_ST_TYPE (h->type) != STT_ARM_TFUNC)
+	      if (ELF_ST_TYPE (h->type) != STT_ARM_TFUNC && !globals->use_blx)
 		record_thumb_to_arm_glue (link_info, h);
 	      break;
 
@@ -1929,14 +2564,14 @@ error_return:
 #endif
 
 
-#ifndef OLD_ARM_ABI
 /* Set target relocation values needed during linking.  */
 
 void
 bfd_elf32_arm_set_target_relocs (struct bfd_link_info *link_info,
 				 int target1_is_rel,
 				 char * target2_type,
-                                 int fix_v4bx)
+                                 int fix_v4bx,
+				 int use_blx)
 {
   struct elf32_arm_link_hash_table *globals;
 
@@ -1955,8 +2590,8 @@ bfd_elf32_arm_set_target_relocs (struct bfd_link_info *link_info,
 			  target2_type);
     }
   globals->fix_v4bx = fix_v4bx;
+  globals->use_blx |= use_blx;
 }
-#endif
 
 /* The thumb form of a long branch is a bit finicky, because the offset
    encoding is split over two fields, each in it's own instruction. They
@@ -2171,15 +2806,39 @@ elf32_arm_to_thumb_stub (struct bfd_link_info * info,
       --my_offset;
       myh->root.u.def.value = my_offset;
 
-      bfd_put_32 (output_bfd, (bfd_vma) a2t1_ldr_insn,
-		  s->contents + my_offset);
+      if ((info->shared || globals->root.is_relocatable_executable))
+	{
+	  /* For relocatable objects we can't use absolute addresses,
+	     so construct the address from a relative offset.  */
+	  /* TODO: If the offset is small it's probably worth
+	     constructing the address with adds.  */
+	  bfd_put_32 (output_bfd, (bfd_vma) a2t1p_ldr_insn,
+		      s->contents + my_offset);
+	  bfd_put_32 (output_bfd, (bfd_vma) a2t2p_add_pc_insn,
+		      s->contents + my_offset + 4);
+	  bfd_put_32 (output_bfd, (bfd_vma) a2t3p_bx_r12_insn,
+		      s->contents + my_offset + 8);
+	  /* Adjust the offset by 4 for the position of the add,
+	     and 8 for the pipeline offset.  */
+	  ret_offset = (val - (s->output_offset
+			       + s->output_section->vma
+			       + my_offset + 12))
+		       | 1;
+	  bfd_put_32 (output_bfd, ret_offset,
+		      s->contents + my_offset + 12);
+	}
+      else
+	{
+	  bfd_put_32 (output_bfd, (bfd_vma) a2t1_ldr_insn,
+		      s->contents + my_offset);
 
-      bfd_put_32 (output_bfd, (bfd_vma) a2t2_bx_r12_insn,
-		  s->contents + my_offset + 4);
+	  bfd_put_32 (output_bfd, (bfd_vma) a2t2_bx_r12_insn,
+		      s->contents + my_offset + 4);
 
-      /* It's a thumb address.  Add the low order bit.  */
-      bfd_put_32 (output_bfd, val | a2t3_func_addr_insn,
-		  s->contents + my_offset + 8);
+	  /* It's a thumb address.  Add the low order bit.  */
+	  bfd_put_32 (output_bfd, val | a2t3_func_addr_insn,
+		      s->contents + my_offset + 8);
+	}
     }
 
   BFD_ASSERT (my_offset <= globals->arm_glue_size);
@@ -2203,8 +2862,6 @@ elf32_arm_to_thumb_stub (struct bfd_link_info * info,
   return TRUE;
 }
 
-
-#ifndef OLD_ARM_ABI
 /* Some relocations map to different relocations depending on the
    target.  Return the real relocation.  */
 static int
@@ -2226,8 +2883,49 @@ arm_real_reloc_type (struct elf32_arm_link_hash_table * globals,
       return r_type;
     }
 }
-#endif /* OLD_ARM_ABI */
 
+/* Return the base VMA address which should be subtracted from real addresses
+   when resolving @dtpoff relocation.
+   This is PT_TLS segment p_vaddr.  */
+
+static bfd_vma
+dtpoff_base (struct bfd_link_info *info)
+{
+  /* If tls_sec is NULL, we should have signalled an error already.  */
+  if (elf_hash_table (info)->tls_sec == NULL)
+    return 0;
+  return elf_hash_table (info)->tls_sec->vma;
+}
+
+/* Return the relocation value for @tpoff relocation
+   if STT_TLS virtual address is ADDRESS.  */
+
+static bfd_vma
+tpoff (struct bfd_link_info *info, bfd_vma address)
+{
+  struct elf_link_hash_table *htab = elf_hash_table (info);
+  bfd_vma base;
+
+  /* If tls_sec is NULL, we should have signalled an error already.  */
+  if (htab->tls_sec == NULL)
+    return 0;
+  base = align_power ((bfd_vma) TCB_SIZE, htab->tls_sec->alignment_power);
+  return address - htab->tls_sec->vma + base;
+}
+
+/* Perform an R_ARM_ABS12 relocation on the field pointed to by DATA.
+   VALUE is the relocation value.  */
+
+static bfd_reloc_status_type
+elf32_arm_abs12_reloc (bfd *abfd, void *data, bfd_vma value)
+{
+  if (value > 0xfff)
+    return bfd_reloc_overflow;
+
+  value |= bfd_get_32 (abfd, data) & 0xfffff000;
+  bfd_put_32 (abfd, value, data);
+  return bfd_reloc_ok;
+}
 
 /* Perform a relocation as part of a final link.  */
 
@@ -2262,13 +2960,11 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 
   globals = elf32_arm_hash_table (info);
 
-#ifndef OLD_ARM_ABI
   /* Some relocation type map to different relocations depending on the
      target.  We pick the right one here.  */
   r_type = arm_real_reloc_type (globals, r_type);
   if (r_type != howto->type)
     howto = elf32_arm_howto_from_type (r_type);
-#endif /* OLD_ARM_ABI */
 
   /* If the start address has been set, then set the EF_ARM_HASENTRY
      flag.  Setting this more than once is redundant, but the cost is
@@ -2317,15 +3013,17 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
       *unresolved_reloc_p = FALSE;
       return bfd_reloc_ok;
 
+    case R_ARM_ABS12:
+      if (!globals->vxworks_p)
+	return elf32_arm_abs12_reloc (input_bfd, hit_data, value + addend);
+
     case R_ARM_PC24:
     case R_ARM_ABS32:
     case R_ARM_REL32:
-#ifndef OLD_ARM_ABI
     case R_ARM_CALL:
     case R_ARM_JUMP24:
     case R_ARM_XPC25:
     case R_ARM_PREL31:
-#endif
     case R_ARM_PLT32:
       /* r_symndx will be zero only for relocs against symbols
 	 from removed linkonce sections, or sections discarded by
@@ -2353,7 +3051,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	  *unresolved_reloc_p = FALSE;
 	  return _bfd_final_link_relocate (howto, input_bfd, input_section,
 					   contents, rel->r_offset, value,
-					   (bfd_vma) 0);
+					   rel->r_addend);
 	}
 
       /* When generating a shared object or relocatable executable, these
@@ -2367,11 +3065,9 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	      || ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
 	      || h->root.type != bfd_link_hash_undefweak)
 	  && r_type != R_ARM_PC24
-#ifndef OLD_ARM_ABI
 	  && r_type != R_ARM_CALL
 	  && r_type != R_ARM_JUMP24
 	  && r_type != R_ARM_PREL31
-#endif
 	  && r_type != R_ARM_PLT32)
 	{
 	  Elf_Internal_Rela outrel;
@@ -2391,10 +3087,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	      if (name == NULL)
 		return bfd_reloc_notsupported;
 
-	      BFD_ASSERT (strncmp (name, ".rel", 4) == 0
-			  && strcmp (bfd_get_section_name (input_bfd,
-							   input_section),
-				     name + 4) == 0);
+	      BFD_ASSERT (reloc_section_p (globals, name, input_section));
 
 	      sreloc = bfd_get_section_by_name (dynobj, name);
 	      BFD_ASSERT (sreloc != NULL);
@@ -2403,6 +3096,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	  skip = FALSE;
 	  relocate = FALSE;
 
+	  outrel.r_addend = addend;
 	  outrel.r_offset =
 	    _bfd_elf_section_offset (output_bfd, info, input_section,
 				     rel->r_offset);
@@ -2426,7 +3120,6 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	      int symbol;
 
 	      /* This symbol is local, or marked to become local.  */
-	      relocate = TRUE;
 	      if (sym_flags == STT_ARM_TFUNC)
 		value |= 1;
 	      if (globals->symbian_p)
@@ -2439,7 +3132,10 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		     the section symbol as it is convenient.  (We
 		     cannot use the symbol given by "h" directly as it
 		     will not appear in the dynamic symbol table.)  */
-		  symbol = elf_section_data (sym_sec->output_section)->dynindx;
+		  if (sym_sec)
+		    symbol = elf_section_data (sym_sec->output_section)->dynindx;
+		  else
+		    symbol = elf_section_data (input_section->output_section)->dynindx;
 		  BFD_ASSERT (symbol != 0);
 		}
 	      else
@@ -2448,11 +3144,15 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		   so the symbol does not matter.  */
 		symbol = 0;
 	      outrel.r_info = ELF32_R_INFO (symbol, R_ARM_RELATIVE);
+	      if (globals->use_rel)
+		relocate = TRUE;
+	      else
+		outrel.r_addend += value;
 	    }
 
 	  loc = sreloc->contents;
-	  loc += sreloc->reloc_count++ * sizeof (Elf32_External_Rel);
-	  bfd_elf32_swap_reloc_out (output_bfd, &outrel, loc);
+	  loc += sreloc->reloc_count++ * RELOC_SIZE (globals);
+	  SWAP_RELOC_OUT (globals) (output_bfd, &outrel, loc);
 
 	  /* If this reloc is against an external symbol, we do not want to
 	     fiddle with the addend.  Otherwise, we need to include the symbol
@@ -2466,14 +3166,14 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	}
       else switch (r_type)
 	{
-#ifndef OLD_ARM_ABI
+	case R_ARM_ABS12:
+	  return elf32_arm_abs12_reloc (input_bfd, hit_data, value + addend);
+
 	case R_ARM_XPC25:	  /* Arm BLX instruction.  */
 	case R_ARM_CALL:
 	case R_ARM_JUMP24:
-#endif
 	case R_ARM_PC24:	  /* Arm B/BL instruction */
 	case R_ARM_PLT32:
-#ifndef OLD_ARM_ABI
 	  if (r_type == R_ARM_XPC25)
 	    {
 	      /* Check for Arm calling Arm function.  */
@@ -2485,8 +3185,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		   input_bfd,
 		   h ? h->root.root.string : "(local)");
 	    }
-	  else
-#endif
+	  else if (r_type != R_ARM_CALL || !globals->use_blx)
 	    {
 	      /* Check for Arm calling Thumb function.  */
 	      if (sym_flags == STT_ARM_TFUNC)
@@ -2542,16 +3241,30 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		return bfd_reloc_overflow;
 	    }
 
-#ifndef OLD_ARM_ABI
-	  /* If necessary set the H bit in the BLX instruction.  */
-	  if (r_type == R_ARM_XPC25 && ((value & 2) == 2))
-	    value = (signed_addend & howto->dst_mask)
-	      | (bfd_get_32 (input_bfd, hit_data) & (~ howto->dst_mask))
-	      | (1 << 24);
-	  else
-#endif
-	    value = (signed_addend & howto->dst_mask)
-	      | (bfd_get_32 (input_bfd, hit_data) & (~ howto->dst_mask));
+	  addend = (value & 2);
+
+	  value = (signed_addend & howto->dst_mask)
+	    | (bfd_get_32 (input_bfd, hit_data) & (~ howto->dst_mask));
+
+	  /* Set the H bit in the BLX instruction.  */
+	  if (sym_flags == STT_ARM_TFUNC)
+	    {
+	      if (addend)
+		value |= (1 << 24);
+	      else
+		value &= ~(bfd_vma)(1 << 24);
+	    }
+	  if (r_type == R_ARM_CALL)
+	    {
+	      /* Select the correct instruction (BL or BLX).  */
+	      if (sym_flags == STT_ARM_TFUNC)
+		value |= (1 << 28);
+	      else
+		{
+		  value &= ~(bfd_vma)(1 << 28);
+		  value |= (1 << 24);
+		}
+	    }
 	  break;
 
 	case R_ARM_ABS32:
@@ -2561,12 +3274,13 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	  break;
 
 	case R_ARM_REL32:
+	  value += addend;
+	  if (sym_flags == STT_ARM_TFUNC)
+	    value |= 1;
 	  value -= (input_section->output_section->vma
 		    + input_section->output_offset + rel->r_offset);
-	  value += addend;
 	  break;
 
-#ifndef OLD_ARM_ABI
 	case R_ARM_PREL31:
 	  value -= (input_section->output_section->vma
 		    + input_section->output_offset + rel->r_offset);
@@ -2582,7 +3296,6 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	  if (sym_flags == STT_ARM_TFUNC)
 	    value |= 1;
 	  break;
-#endif
 	}
 
       bfd_put_32 (input_bfd, value, hit_data);
@@ -2605,18 +3318,6 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
       bfd_put_16 (input_bfd, value, hit_data);
       return bfd_reloc_ok;
 
-    case R_ARM_ABS12:
-      /* Support ldr and str instruction for the arm */
-      /* Also thumb b (unconditional branch).  ??? Really?  */
-      value += addend;
-
-      if ((long) value > 0x7ff || (long) value < -0x800)
-	return bfd_reloc_overflow;
-
-      value |= (bfd_get_32 (input_bfd, hit_data) & 0xfffff000);
-      bfd_put_32 (input_bfd, value, hit_data);
-      return bfd_reloc_ok;
-
     case R_ARM_THM_ABS5:
       /* Support ldr and str instructions for the thumb.  */
       if (globals->use_rel)
@@ -2637,10 +3338,8 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
       bfd_put_16 (input_bfd, value, hit_data);
       return bfd_reloc_ok;
 
-#ifndef OLD_ARM_ABI
     case R_ARM_THM_XPC22:
-#endif
-    case R_ARM_THM_PC22:
+    case R_ARM_THM_CALL:
       /* Thumb BL (branch long instruction).  */
       {
 	bfd_vma relocation;
@@ -2662,7 +3361,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	    addend = (upper << 12) | (lower << 1);
 	    signed_addend = addend;
 	  }
-#ifndef OLD_ARM_ABI
+
 	if (r_type == R_ARM_THM_XPC22)
 	  {
 	    /* Check for Thumb to Thumb call.  */
@@ -2675,7 +3374,6 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		 h ? h->root.root.string : "(local)");
 	  }
 	else
-#endif
 	  {
 	    /* If it is not a call to Thumb, assume call to Arm.
 	       If it is a call relative to a section name, then it is not a
@@ -2685,12 +3383,22 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		&& (h == NULL || splt == NULL
 		    || h->plt.offset == (bfd_vma) -1))
 	      {
-		if (elf32_thumb_to_arm_stub
+		if (globals->use_blx)
+		  {
+		    /* Convert BL to BLX.  */
+		    lower_insn = (lower_insn & ~0x1000) | 0x0800;
+		  }
+		else if (elf32_thumb_to_arm_stub
 		    (info, sym_name, input_bfd, output_bfd, input_section,
 		     hit_data, sym_sec, rel->r_offset, signed_addend, value))
 		  return bfd_reloc_ok;
 		else
 		  return bfd_reloc_dangerous;
+	      }
+	    else if (sym_flags == STT_ARM_TFUNC && globals->use_blx)
+	      {
+		/* Make sure this is a BL.  */
+		lower_insn |= 0x1800;
 	      }
 	  }
 
@@ -2700,8 +3408,15 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	    value = (splt->output_section->vma
 		     + splt->output_offset
 		     + h->plt.offset);
-	    /* Target the Thumb stub before the ARM PLT entry.  */
-	    value -= 4;
+ 	    if (globals->use_blx)
+ 	      {
+ 		/* If the Thumb BLX instruction is available, convert the
+		   BL to a BLX instruction to call the ARM-mode PLT entry.  */
+		lower_insn = (lower_insn & ~0x1000) | 0x0800;
+ 	      }
+ 	    else
+ 	      /* Target the Thumb stub before the ARM PLT entry.  */
+ 	      value -= PLT_THUMB_STUB_SIZE;
 	    *unresolved_reloc_p = FALSE;
 	  }
 
@@ -2724,15 +3439,13 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	if (signed_check > reloc_signed_max || signed_check < reloc_signed_min)
 	  overflow = TRUE;
 
-#ifndef OLD_ARM_ABI
-	if (r_type == R_ARM_THM_XPC22
-	    && ((lower_insn & 0x1800) == 0x0800))
+	if ((lower_insn & 0x1800) == 0x0800)
 	  /* For a BLX instruction, make sure that the relocation is rounded up
 	     to a word boundary.  This follows the semantics of the instruction
 	     which specifies that bit 1 of the target address will come from bit
 	     1 of the base address.  */
 	  relocation = (relocation + 2) & ~ 3;
-#endif
+
 	/* Put RELOCATION back into the insn.  */
 	upper_insn = (upper_insn & ~(bfd_vma) 0x7ff) | ((relocation >> 12) & 0x7ff);
 	lower_insn = (lower_insn & ~(bfd_vma) 0x7ff) | ((relocation >> 1) & 0x7ff);
@@ -2745,14 +3458,163 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
       }
       break;
 
-    case R_ARM_THM_PC11:
-    case R_ARM_THM_PC9:
+    case R_ARM_THM_JUMP24:
+      /* Thumb32 unconditional branch instruction.  */
+      {
+	bfd_vma relocation;
+	bfd_boolean overflow = FALSE;
+	bfd_vma upper_insn = bfd_get_16 (input_bfd, hit_data);
+	bfd_vma lower_insn = bfd_get_16 (input_bfd, hit_data + 2);
+	bfd_signed_vma reloc_signed_max = ((1 << (howto->bitsize - 1)) - 1) >> howto->rightshift;
+	bfd_signed_vma reloc_signed_min = ~ reloc_signed_max;
+	bfd_vma check;
+	bfd_signed_vma signed_check;
+
+	/* Need to refetch the addend, reconstruct the top three bits, and glue the
+	   two pieces together.  */
+	if (globals->use_rel)
+	  {
+	    bfd_vma S  = (upper_insn & 0x0400) >> 10;
+	    bfd_vma hi = (upper_insn & 0x03ff);
+	    bfd_vma I1 = (lower_insn & 0x2000) >> 13;
+	    bfd_vma I2 = (lower_insn & 0x0800) >> 11;
+	    bfd_vma lo = (lower_insn & 0x07ff);
+
+	    I1 = !(I1 ^ S);
+	    I2 = !(I2 ^ S);
+	    S  = !S;
+
+	    signed_addend = (S << 24) | (I1 << 23) | (I2 << 22) | (hi << 12) | (lo << 1);
+	    signed_addend -= (1 << 24); /* Sign extend.  */
+	  }
+
+	/* ??? Should handle interworking?  GCC might someday try to
+	   use this for tail calls.  */
+
+      	relocation = value + signed_addend;
+	relocation -= (input_section->output_section->vma
+		       + input_section->output_offset
+		       + rel->r_offset);
+
+	check = relocation >> howto->rightshift;
+
+	/* If this is a signed value, the rightshift just dropped
+	   leading 1 bits (assuming twos complement).  */
+	if ((bfd_signed_vma) relocation >= 0)
+	  signed_check = check;
+	else
+	  signed_check = check | ~((bfd_vma) -1 >> howto->rightshift);
+
+	/* Assumes two's complement.  */
+	if (signed_check > reloc_signed_max || signed_check < reloc_signed_min)
+	  overflow = TRUE;
+
+	/* Put RELOCATION back into the insn.  */
+	{
+	  bfd_vma S  = (relocation & 0x01000000) >> 24;
+	  bfd_vma I1 = (relocation & 0x00800000) >> 23;
+	  bfd_vma I2 = (relocation & 0x00400000) >> 22;
+	  bfd_vma hi = (relocation & 0x003ff000) >> 12;
+	  bfd_vma lo = (relocation & 0x00000ffe) >>  1;
+
+	  I1 = !(I1 ^ S);
+	  I2 = !(I2 ^ S);
+
+	  upper_insn = (upper_insn & (bfd_vma) 0xf800) | (S << 10) | hi;
+	  lower_insn = (lower_insn & (bfd_vma) 0xd000) | (I1 << 13) | (I2 << 11) | lo;
+	}
+
+	/* Put the relocated value back in the object file:  */
+	bfd_put_16 (input_bfd, upper_insn, hit_data);
+	bfd_put_16 (input_bfd, lower_insn, hit_data + 2);
+
+	return (overflow ? bfd_reloc_overflow : bfd_reloc_ok);
+      }
+
+    case R_ARM_THM_JUMP19:
+      /* Thumb32 conditional branch instruction.  */
+      {
+	bfd_vma relocation;
+	bfd_boolean overflow = FALSE;
+	bfd_vma upper_insn = bfd_get_16 (input_bfd, hit_data);
+	bfd_vma lower_insn = bfd_get_16 (input_bfd, hit_data + 2);
+	bfd_signed_vma reloc_signed_max = ((1 << (howto->bitsize - 1)) - 1) >> howto->rightshift;
+	bfd_signed_vma reloc_signed_min = ~ reloc_signed_max;
+	bfd_vma check;
+	bfd_signed_vma signed_check;
+
+	/* Need to refetch the addend, reconstruct the top three bits,
+	   and squish the two 11 bit pieces together.  */
+	if (globals->use_rel)
+	  {
+	    bfd_vma S     = (upper_insn & 0x0400) >> 10;
+	    bfd_vma upper = (upper_insn & 0x001f);
+	    bfd_vma J1    = (lower_insn & 0x2000) >> 13;
+	    bfd_vma J2    = (lower_insn & 0x0800) >> 11;
+	    bfd_vma lower = (lower_insn & 0x07ff);
+
+	    upper |= J2 << 6;
+	    upper |= J1 << 7;
+	    upper |= ~S << 8;
+	    upper -= 0x0100; /* Sign extend.  */
+
+	    addend = (upper << 12) | (lower << 1);
+	    signed_addend = addend;
+	  }
+
+	/* ??? Should handle interworking?  GCC might someday try to
+	   use this for tail calls.  */
+
+      	relocation = value + signed_addend;
+	relocation -= (input_section->output_section->vma
+		       + input_section->output_offset
+		       + rel->r_offset);
+
+	check = relocation >> howto->rightshift;
+
+	/* If this is a signed value, the rightshift just dropped
+	   leading 1 bits (assuming twos complement).  */
+	if ((bfd_signed_vma) relocation >= 0)
+	  signed_check = check;
+	else
+	  signed_check = check | ~((bfd_vma) -1 >> howto->rightshift);
+
+	/* Assumes two's complement.  */
+	if (signed_check > reloc_signed_max || signed_check < reloc_signed_min)
+	  overflow = TRUE;
+
+	/* Put RELOCATION back into the insn.  */
+	{
+	  bfd_vma S  = (relocation & 0x00100000) >> 20;
+	  bfd_vma J2 = (relocation & 0x00080000) >> 19;
+	  bfd_vma J1 = (relocation & 0x00040000) >> 18;
+	  bfd_vma hi = (relocation & 0x0003f000) >> 12;
+	  bfd_vma lo = (relocation & 0x00000ffe) >>  1;
+
+	  upper_insn = (upper_insn & 0xfb30) | (S << 10) | hi;
+	  lower_insn = (lower_insn & 0xd000) | (J1 << 13) | (J2 << 11) | lo;
+	}
+
+	/* Put the relocated value back in the object file:  */
+	bfd_put_16 (input_bfd, upper_insn, hit_data);
+	bfd_put_16 (input_bfd, lower_insn, hit_data + 2);
+
+	return (overflow ? bfd_reloc_overflow : bfd_reloc_ok);
+      }
+
+    case R_ARM_THM_JUMP11:
+    case R_ARM_THM_JUMP8:
+    case R_ARM_THM_JUMP6:
       /* Thumb B (branch) instruction).  */
       {
 	bfd_signed_vma relocation;
 	bfd_signed_vma reloc_signed_max = (1 << (howto->bitsize - 1)) - 1;
 	bfd_signed_vma reloc_signed_min = ~ reloc_signed_max;
 	bfd_signed_vma signed_check;
+
+	/* CZB cannot jump backward.  */
+	if (r_type == R_ARM_THM_JUMP6)
+	  reloc_signed_min = 0;
 
 	if (globals->use_rel)
 	  {
@@ -2779,7 +3641,11 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 
 	relocation >>= howto->rightshift;
 	signed_check = relocation;
-	relocation &= howto->dst_mask;
+
+	if (r_type == R_ARM_THM_JUMP6)
+	  relocation = ((relocation & 0x0020) << 4) | ((relocation & 0x001f) << 3);
+	else
+	  relocation &= howto->dst_mask;
 	relocation |= (bfd_get_16 (input_bfd, hit_data) & (~ howto->dst_mask));
 
 	bfd_put_16 (input_bfd, relocation, hit_data);
@@ -2791,7 +3657,6 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	return bfd_reloc_ok;
       }
 
-#ifndef OLD_ARM_ABI
     case R_ARM_ALU_PCREL7_0:
     case R_ARM_ALU_PCREL15_8:
     case R_ARM_ALU_PCREL23_15:
@@ -2817,25 +3682,12 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	bfd_put_32 (input_bfd, value, hit_data);
       }
       return bfd_reloc_ok;
-#endif
 
     case R_ARM_GNU_VTINHERIT:
     case R_ARM_GNU_VTENTRY:
       return bfd_reloc_ok;
 
-    case R_ARM_COPY:
-      return bfd_reloc_notsupported;
-
-    case R_ARM_GLOB_DAT:
-      return bfd_reloc_notsupported;
-
-    case R_ARM_JUMP_SLOT:
-      return bfd_reloc_notsupported;
-
-    case R_ARM_RELATIVE:
-      return bfd_reloc_notsupported;
-
-    case R_ARM_GOTOFF:
+    case R_ARM_GOTOFF32:
       /* Relocation is relative to the start of the
          global offset table.  */
 
@@ -2857,7 +3709,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
       value -= sgot->output_section->vma;
       return _bfd_final_link_relocate (howto, input_bfd, input_section,
 				       contents, rel->r_offset, value,
-				       (bfd_vma) 0);
+				       rel->r_addend);
 
     case R_ARM_GOTPC:
       /* Use global offset table as symbol value.  */
@@ -2870,12 +3722,10 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
       value = sgot->output_section->vma;
       return _bfd_final_link_relocate (howto, input_bfd, input_section,
 				       contents, rel->r_offset, value,
-				       (bfd_vma) 0);
+				       rel->r_addend);
 
     case R_ARM_GOT32:
-#ifndef OLD_ARM_ABI
     case R_ARM_GOT_PREL:
-#endif
       /* Relocation is to the entry for this symbol in the
          global offset table.  */
       if (sgot == NULL)
@@ -2902,7 +3752,7 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		 always be a multiple of 4, we use the least significant bit
 		 to record whether we have initialized it already.
 
-		 When doing a dynamic link, we create a .rel.got relocation
+		 When doing a dynamic link, we create a .rel(a).got relocation
 		 entry to initialize the value.  This is done in the
 		 finish_dynamic_symbol routine.  */
 	      if ((off & 1) != 0)
@@ -2948,7 +3798,8 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 	      if (sym_flags == STT_ARM_TFUNC)
 		value |= 1;
 
-	      bfd_put_32 (output_bfd, value, sgot->contents + off);
+	      if (globals->use_rel)
+		bfd_put_32 (output_bfd, value, sgot->contents + off);
 
 	      if (info->shared)
 		{
@@ -2956,16 +3807,18 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 		  Elf_Internal_Rela outrel;
 		  bfd_byte *loc;
 
-		  srelgot = bfd_get_section_by_name (dynobj, ".rel.got");
+		  srelgot = (bfd_get_section_by_name
+			     (dynobj, RELOC_SECTION (globals, ".got")));
 		  BFD_ASSERT (srelgot != NULL);
 
+		  outrel.r_addend = addend + value;
 		  outrel.r_offset = (sgot->output_section->vma
 				     + sgot->output_offset
 				     + off);
 		  outrel.r_info = ELF32_R_INFO (0, R_ARM_RELATIVE);
 		  loc = srelgot->contents;
-		  loc += srelgot->reloc_count++ * sizeof (Elf32_External_Rel);
-		  bfd_elf32_swap_reloc_out (output_bfd, &outrel, loc);
+		  loc += srelgot->reloc_count++ * RELOC_SIZE (globals);
+		  SWAP_RELOC_OUT (globals) (output_bfd, &outrel, loc);
 		}
 
 	      local_got_offsets[r_symndx] |= 1;
@@ -2978,31 +3831,238 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
 
       return _bfd_final_link_relocate (howto, input_bfd, input_section,
 				       contents, rel->r_offset, value,
-				       (bfd_vma) 0);
+				       rel->r_addend);
 
-    case R_ARM_SBREL32:
-      return bfd_reloc_notsupported;
+    case R_ARM_TLS_LDO32:
+      value = value - dtpoff_base (info);
 
-    case R_ARM_AMP_VCALL9:
-      return bfd_reloc_notsupported;
+      return _bfd_final_link_relocate (howto, input_bfd, input_section,
+				       contents, rel->r_offset, value,
+				       rel->r_addend);
 
-    case R_ARM_RSBREL32:
-      return bfd_reloc_notsupported;
+    case R_ARM_TLS_LDM32:
+      {
+	bfd_vma off;
 
-    case R_ARM_THM_RPC22:
-      return bfd_reloc_notsupported;
+	if (globals->sgot == NULL)
+	  abort ();
 
-    case R_ARM_RREL32:
-      return bfd_reloc_notsupported;
+	off = globals->tls_ldm_got.offset;
 
-    case R_ARM_RABS32:
-      return bfd_reloc_notsupported;
+	if ((off & 1) != 0)
+	  off &= ~1;
+	else
+	  {
+	    /* If we don't know the module number, create a relocation
+	       for it.  */
+	    if (info->shared)
+	      {
+		Elf_Internal_Rela outrel;
+		bfd_byte *loc;
 
-    case R_ARM_RPC24:
-      return bfd_reloc_notsupported;
+		if (globals->srelgot == NULL)
+		  abort ();
 
-    case R_ARM_RBASE:
-      return bfd_reloc_notsupported;
+		outrel.r_addend = 0;
+		outrel.r_offset = (globals->sgot->output_section->vma
+				   + globals->sgot->output_offset + off);
+		outrel.r_info = ELF32_R_INFO (0, R_ARM_TLS_DTPMOD32);
+
+		if (globals->use_rel)
+		  bfd_put_32 (output_bfd, outrel.r_addend,
+			      globals->sgot->contents + off);
+
+		loc = globals->srelgot->contents;
+		loc += globals->srelgot->reloc_count++ * RELOC_SIZE (globals);
+		SWAP_RELOC_OUT (globals) (output_bfd, &outrel, loc);
+	      }
+	    else
+	      bfd_put_32 (output_bfd, 1, globals->sgot->contents + off);
+
+	    globals->tls_ldm_got.offset |= 1;
+	  }
+
+	value = globals->sgot->output_section->vma + globals->sgot->output_offset + off 
+	  - (input_section->output_section->vma + input_section->output_offset + rel->r_offset);
+
+	return _bfd_final_link_relocate (howto, input_bfd, input_section,
+					 contents, rel->r_offset, value,
+					 rel->r_addend);
+      }
+
+    case R_ARM_TLS_GD32:
+    case R_ARM_TLS_IE32:
+      {
+	bfd_vma off;
+	int indx;
+	char tls_type;
+
+	if (globals->sgot == NULL)
+	  abort ();
+
+	indx = 0;
+	if (h != NULL)
+	  {
+	    bfd_boolean dyn;
+	    dyn = globals->root.dynamic_sections_created;
+	    if (WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, info->shared, h)
+		&& (!info->shared
+		    || !SYMBOL_REFERENCES_LOCAL (info, h)))
+	      {
+		*unresolved_reloc_p = FALSE;
+		indx = h->dynindx;
+	      }
+	    off = h->got.offset;
+	    tls_type = ((struct elf32_arm_link_hash_entry *) h)->tls_type;
+	  }
+	else
+	  {
+	    if (local_got_offsets == NULL)
+	      abort ();
+	    off = local_got_offsets[r_symndx];
+	    tls_type = elf32_arm_local_got_tls_type (input_bfd)[r_symndx];
+	  }
+
+	if (tls_type == GOT_UNKNOWN)
+	  abort ();
+
+	if ((off & 1) != 0)
+	  off &= ~1;
+	else
+	  {
+	    bfd_boolean need_relocs = FALSE;
+	    Elf_Internal_Rela outrel;
+	    bfd_byte *loc = NULL;
+	    int cur_off = off;
+
+	    /* The GOT entries have not been initialized yet.  Do it
+	       now, and emit any relocations.  If both an IE GOT and a
+	       GD GOT are necessary, we emit the GD first.  */
+
+	    if ((info->shared || indx != 0)
+		&& (h == NULL
+		    || ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
+		    || h->root.type != bfd_link_hash_undefweak))
+	      {
+		need_relocs = TRUE;
+		if (globals->srelgot == NULL)
+		  abort ();
+		loc = globals->srelgot->contents;
+		loc += globals->srelgot->reloc_count * RELOC_SIZE (globals);
+	      }
+
+	    if (tls_type & GOT_TLS_GD)
+	      {
+		if (need_relocs)
+		  {
+		    outrel.r_addend = 0;
+		    outrel.r_offset = (globals->sgot->output_section->vma
+				       + globals->sgot->output_offset
+				       + cur_off);
+		    outrel.r_info = ELF32_R_INFO (indx, R_ARM_TLS_DTPMOD32);
+
+		    if (globals->use_rel)
+		      bfd_put_32 (output_bfd, outrel.r_addend,
+				  globals->sgot->contents + cur_off);
+
+		    SWAP_RELOC_OUT (globals) (output_bfd, &outrel, loc);
+		    globals->srelgot->reloc_count++;
+		    loc += RELOC_SIZE (globals);
+
+		    if (indx == 0)
+		      bfd_put_32 (output_bfd, value - dtpoff_base (info),
+				  globals->sgot->contents + cur_off + 4);
+		    else
+		      {
+			outrel.r_addend = 0;
+			outrel.r_info = ELF32_R_INFO (indx,
+						      R_ARM_TLS_DTPOFF32);
+			outrel.r_offset += 4;
+
+			if (globals->use_rel)
+			  bfd_put_32 (output_bfd, outrel.r_addend,
+				      globals->sgot->contents + cur_off + 4);
+
+
+			SWAP_RELOC_OUT (globals) (output_bfd, &outrel, loc);
+			globals->srelgot->reloc_count++;
+			loc += RELOC_SIZE (globals);
+		      }
+		  }
+		else
+		  {
+		    /* If we are not emitting relocations for a
+		       general dynamic reference, then we must be in a
+		       static link or an executable link with the
+		       symbol binding locally.  Mark it as belonging
+		       to module 1, the executable.  */
+		    bfd_put_32 (output_bfd, 1,
+				globals->sgot->contents + cur_off);
+		    bfd_put_32 (output_bfd, value - dtpoff_base (info),
+				globals->sgot->contents + cur_off + 4);
+		  }
+
+		cur_off += 8;
+	      }
+
+	    if (tls_type & GOT_TLS_IE)
+	      {
+		if (need_relocs)
+		  {
+		    if (indx == 0)
+		      outrel.r_addend = value - dtpoff_base (info);
+		    else
+		      outrel.r_addend = 0;
+		    outrel.r_offset = (globals->sgot->output_section->vma
+				       + globals->sgot->output_offset
+				       + cur_off);
+		    outrel.r_info = ELF32_R_INFO (indx, R_ARM_TLS_TPOFF32);
+
+		    if (globals->use_rel)
+		      bfd_put_32 (output_bfd, outrel.r_addend,
+				  globals->sgot->contents + cur_off);
+
+		    SWAP_RELOC_OUT (globals) (output_bfd, &outrel, loc);
+		    globals->srelgot->reloc_count++;
+		    loc += RELOC_SIZE (globals);
+		  }
+		else
+		  bfd_put_32 (output_bfd, tpoff (info, value),
+			      globals->sgot->contents + cur_off);
+		cur_off += 4;
+	      }
+
+	    if (h != NULL)
+	      h->got.offset |= 1;
+	    else
+	      local_got_offsets[r_symndx] |= 1;
+	  }
+
+	if ((tls_type & GOT_TLS_GD) && r_type != R_ARM_TLS_GD32)
+	  off += 8;
+	value = globals->sgot->output_section->vma + globals->sgot->output_offset + off 
+	  - (input_section->output_section->vma + input_section->output_offset + rel->r_offset);
+
+	return _bfd_final_link_relocate (howto, input_bfd, input_section,
+					 contents, rel->r_offset, value,
+					 rel->r_addend);
+      }
+
+    case R_ARM_TLS_LE32:
+      if (info->shared)
+	{
+	  (*_bfd_error_handler)
+	    (_("%B(%A+0x%lx): R_ARM_TLS_LE32 relocation not permitted in shared object"),
+	     input_bfd, input_section,
+	     (long) rel->r_offset, howto->name);
+	  return FALSE;	  
+	}
+      else
+	value = tpoff (info, value);
+      
+      return _bfd_final_link_relocate (howto, input_bfd, input_section,
+				       contents, rel->r_offset, value,
+				       rel->r_addend);
 
     case R_ARM_V4BX:
       if (globals->fix_v4bx)
@@ -3025,6 +4085,194 @@ elf32_arm_final_link_relocate (reloc_howto_type *           howto,
     }
 }
 
+
+static int
+uleb128_size (unsigned int i)
+{
+  int size;
+  size = 1;
+  while (i >= 0x80)
+    {
+      i >>= 7;
+      size++;
+    }
+  return size;
+}
+
+/* Return TRUE if the attribute has the default value (0/"").  */
+static bfd_boolean
+is_default_attr (aeabi_attribute *attr)
+{
+  if ((attr->type & 1) && attr->i != 0)
+    return FALSE;
+  if ((attr->type & 2) && attr->s && *attr->s)
+    return FALSE;
+
+  return TRUE;
+}
+
+/* Return the size of a single attribute.  */
+static bfd_vma
+eabi_attr_size(int tag, aeabi_attribute *attr)
+{
+  bfd_vma size;
+
+  if (is_default_attr (attr))
+    return 0;
+
+  size = uleb128_size (tag);
+  if (attr->type & 1)
+    size += uleb128_size (attr->i);
+  if (attr->type & 2)
+    size += strlen ((char *)attr->s) + 1;
+  return size;
+}
+  
+/* Returns the size of the eabi object attributess section.  */
+bfd_vma
+elf32_arm_eabi_attr_size (bfd *abfd)
+{
+  bfd_vma size;
+  aeabi_attribute *attr;
+  aeabi_attribute_list *list;
+  int i;
+
+  attr = elf32_arm_tdata (abfd)->known_eabi_attributes;
+  size = 16; /* 'A' <size> "aeabi" 0x1 <size>.  */
+  for (i = 4; i < NUM_KNOWN_ATTRIBUTES; i++)
+    size += eabi_attr_size (i, &attr[i]);
+
+  for (list = elf32_arm_tdata (abfd)->other_eabi_attributes;
+       list;
+       list = list->next)
+    size += eabi_attr_size (list->tag, &list->attr);
+
+  return size;
+}
+
+static bfd_byte *
+write_uleb128 (bfd_byte *p, unsigned int val)
+{
+  bfd_byte c;
+  do
+    {
+      c = val & 0x7f;
+      val >>= 7;
+      if (val)
+	c |= 0x80;
+      *(p++) = c;
+    }
+  while (val);
+  return p;
+}
+
+/* Write attribute ATTR to butter P, and return a pointer to the following
+   byte.  */
+static bfd_byte *
+write_eabi_attribute (bfd_byte *p, int tag, aeabi_attribute *attr)
+{
+  /* Suppress default entries.  */
+  if (is_default_attr(attr))
+    return p;
+
+  p = write_uleb128 (p, tag);
+  if (attr->type & 1)
+    p = write_uleb128 (p, attr->i);
+  if (attr->type & 2)
+    {
+      int len;
+
+      len = strlen (attr->s) + 1;
+      memcpy (p, attr->s, len);
+      p += len;
+    }
+
+  return p;
+}
+
+/* Write the contents of the eabi attributes section to p.  */
+void
+elf32_arm_set_eabi_attr_contents (bfd *abfd, bfd_byte *contents, bfd_vma size)
+{
+  bfd_byte *p;
+  aeabi_attribute *attr;
+  aeabi_attribute_list *list;
+  int i;
+
+  p = contents;
+  *(p++) = 'A';
+  bfd_put_32 (abfd, size - 1, p);
+  p += 4;
+  memcpy (p, "aeabi", 6);
+  p += 6;
+  *(p++) = Tag_File;
+  bfd_put_32 (abfd, size - 11, p);
+  p += 4;
+
+  attr = elf32_arm_tdata (abfd)->known_eabi_attributes;
+  for (i = 4; i < NUM_KNOWN_ATTRIBUTES; i++)
+    p = write_eabi_attribute (p, i, &attr[i]);
+
+  for (list = elf32_arm_tdata (abfd)->other_eabi_attributes;
+       list;
+       list = list->next)
+    p = write_eabi_attribute (p, list->tag, &list->attr);
+}
+
+/* Override final_link to handle EABI object attribute sections.  */
+
+static bfd_boolean
+elf32_arm_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
+{
+  asection *o;
+  struct bfd_link_order *p;
+  asection *attr_section = NULL;
+  bfd_byte *contents;
+  bfd_vma size = 0;
+
+  /* elf32_arm_merge_private_bfd_data will already have merged the
+     object attributes.  Remove the input sections from the link, and set
+     the contents of the output secton.  */
+  for (o = abfd->sections; o != NULL; o = o->next)
+    {
+      if (strcmp (o->name, ".ARM.attributes") == 0)
+	{
+	  for (p = o->map_head.link_order; p != NULL; p = p->next)
+	    {
+	      asection *input_section;
+
+	      if (p->type != bfd_indirect_link_order)
+		continue;
+	      input_section = p->u.indirect.section;
+	      /* Hack: reset the SEC_HAS_CONTENTS flag so that
+		 elf_link_input_bfd ignores this section.  */
+	      input_section->flags &= ~SEC_HAS_CONTENTS;
+	    }
+	    
+	  size = elf32_arm_eabi_attr_size (abfd);
+	  bfd_set_section_size (abfd, o, size);
+	  attr_section = o;
+	  /* Skip this section later on.  */
+	  o->map_head.link_order = NULL;
+	}
+    }
+  /* Invoke the ELF linker to do all the work.  */
+  if (!bfd_elf_final_link (abfd, info))
+    return FALSE;
+
+  if (attr_section)
+    {
+      contents = bfd_malloc(size);
+      if (contents == NULL)
+	return FALSE;
+      elf32_arm_set_eabi_attr_contents (abfd, contents, size);
+      bfd_set_section_contents (abfd, attr_section, contents, 0, size);
+      free (contents);
+    }
+  return TRUE;
+}
+
+
 /* Add INCREMENT to the reloc (of type HOWTO) at ADDRESS.  */
 static void
 arm_add_to_rel (bfd *              abfd,
@@ -3034,7 +4282,7 @@ arm_add_to_rel (bfd *              abfd,
 {
   bfd_signed_vma addend;
 
-  if (howto->type == R_ARM_THM_PC22)
+  if (howto->type == R_ARM_THM_CALL)
     {
       int upper_insn, lower_insn;
       int upper, lower;
@@ -3080,10 +4328,8 @@ arm_add_to_rel (bfd *              abfd,
 
 	case R_ARM_PC24:
 	case R_ARM_PLT32:
-#ifndef OLD_ARM_ABI
 	case R_ARM_CALL:
 	case R_ARM_JUMP24:
-#endif
 	  addend <<= howto->size;
 	  addend += increment;
 
@@ -3099,6 +4345,16 @@ arm_add_to_rel (bfd *              abfd,
       bfd_put_32 (abfd, contents, address);
     }
 }
+
+#define IS_ARM_TLS_RELOC(R_TYPE)	\
+  ((R_TYPE) == R_ARM_TLS_GD32		\
+   || (R_TYPE) == R_ARM_TLS_LDO32	\
+   || (R_TYPE) == R_ARM_TLS_LDM32	\
+   || (R_TYPE) == R_ARM_TLS_DTPOFF32	\
+   || (R_TYPE) == R_ARM_TLS_DTPMOD32	\
+   || (R_TYPE) == R_ARM_TLS_TPOFF32	\
+   || (R_TYPE) == R_ARM_TLS_LE32	\
+   || (R_TYPE) == R_ARM_TLS_IE32)
 
 /* Relocate an ARM ELF section.  */
 static bfd_boolean
@@ -3138,6 +4394,7 @@ elf32_arm_relocate_section (bfd *                  output_bfd,
       bfd_vma                      relocation;
       bfd_reloc_status_type        r;
       arelent                      bfd_reloc;
+      char                         sym_type;
       bfd_boolean                  unresolved_reloc = FALSE;
 
       r_symndx = ELF32_R_SYM (rel->r_info);
@@ -3181,6 +4438,7 @@ elf32_arm_relocate_section (bfd *                  output_bfd,
       if (r_symndx < symtab_hdr->sh_info)
 	{
 	  sym = local_syms + r_symndx;
+	  sym_type = ELF32_ST_TYPE (sym->st_info);
 	  sec = local_sections[r_symndx];
 	  if (globals->use_rel)
 	    {
@@ -3234,6 +4492,8 @@ elf32_arm_relocate_section (bfd *                  output_bfd,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
 				   unresolved_reloc, warned);
+
+	  sym_type = h->type;
 	}
 
       if (h != NULL)
@@ -3244,6 +4504,24 @@ elf32_arm_relocate_section (bfd *                  output_bfd,
 		  (input_bfd, symtab_hdr->sh_link, sym->st_name));
 	  if (name == NULL || *name == '\0')
 	    name = bfd_section_name (input_bfd, sec);
+	}
+
+      if (r_symndx != 0
+	  && r_type != R_ARM_NONE
+	  && (h == NULL
+	      || h->root.type == bfd_link_hash_defined
+	      || h->root.type == bfd_link_hash_defweak)
+	  && IS_ARM_TLS_RELOC (r_type) != (sym_type == STT_TLS))
+	{
+	  (*_bfd_error_handler)
+	    ((sym_type == STT_TLS
+	      ? _("%B(%A+0x%lx): %s used with TLS symbol %s")
+	      : _("%B(%A+0x%lx): %s used with non-TLS symbol %s")),
+	     input_bfd,
+	     input_section,
+	     (long) rel->r_offset,
+	     howto->name,
+	     name);
 	}
 
       r = elf32_arm_final_link_relocate (howto, input_bfd, output_bfd,
@@ -3261,9 +4539,12 @@ elf32_arm_relocate_section (bfd *                  output_bfd,
                && h->def_dynamic))
 	{
 	  (*_bfd_error_handler)
-	    (_("%B(%A+0x%lx): warning: unresolvable relocation %d against symbol `%s'"),
-	     input_bfd, input_section, (long) rel->r_offset,
-	     r_type, h->root.root.string);
+	    (_("%B(%A+0x%lx): unresolvable %s relocation against symbol `%s'"),
+	     input_bfd,
+	     input_section,
+	     (long) rel->r_offset,
+	     howto->name,
+	     h->root.root.string);
 	  return FALSE;
 	}
 
@@ -3322,6 +4603,130 @@ elf32_arm_relocate_section (bfd *                  output_bfd,
   return TRUE;
 }
 
+/* Allocate/find an object attribute.  */
+static aeabi_attribute *
+elf32_arm_new_eabi_attr (bfd *abfd, int tag)
+{
+  aeabi_attribute *attr;
+  aeabi_attribute_list *list;
+  aeabi_attribute_list *p;
+  aeabi_attribute_list **lastp;
+
+
+  if (tag < NUM_KNOWN_ATTRIBUTES)
+    {
+      /* Knwon tags are preallocated.  */
+      attr = &elf32_arm_tdata (abfd)->known_eabi_attributes[tag];
+    }
+  else
+    {
+      /* Create a new tag.  */
+      list = (aeabi_attribute_list *)
+	bfd_alloc (abfd, sizeof (aeabi_attribute_list));
+      memset (list, 0, sizeof (aeabi_attribute_list));
+      list->tag = tag;
+      /* Keep the tag list in order.  */
+      lastp = &elf32_arm_tdata (abfd)->other_eabi_attributes;
+      for (p = *lastp; p; p = p->next)
+	{
+	  if (tag < p->tag)
+	    break;
+	  lastp = &p->next;
+	}
+      list->next = *lastp;
+      *lastp = list;
+      attr = &list->attr;
+    }
+
+  return attr;
+}
+
+int
+elf32_arm_get_eabi_attr_int (bfd *abfd, int tag)
+{
+  aeabi_attribute_list *p;
+
+  if (tag < NUM_KNOWN_ATTRIBUTES)
+    {
+      /* Knwon tags are preallocated.  */
+      return elf32_arm_tdata (abfd)->known_eabi_attributes[tag].i;
+    }
+  else
+    {
+      for (p = elf32_arm_tdata (abfd)->other_eabi_attributes;
+	   p;
+	   p = p->next)
+	{
+	  if (tag == p->tag)
+	    return p->attr.i;
+	  if (tag < p->tag)
+	    break;
+	}
+      return 0;
+    }
+}
+
+void
+elf32_arm_add_eabi_attr_int (bfd *abfd, int tag, unsigned int i)
+{
+  aeabi_attribute *attr;
+
+  attr = elf32_arm_new_eabi_attr (abfd, tag);
+  attr->type = 1;
+  attr->i = i;
+}
+
+static char *
+attr_strdup (bfd *abfd, const char * s)
+{
+  char * p;
+  int len;
+  
+  len = strlen (s) + 1;
+  p = (char *)bfd_alloc(abfd, len);
+  return memcpy (p, s, len);
+}
+
+void
+elf32_arm_add_eabi_attr_string (bfd *abfd, int tag, const char *s)
+{
+  aeabi_attribute *attr;
+
+  attr = elf32_arm_new_eabi_attr (abfd, tag);
+  attr->type = 2;
+  attr->s = attr_strdup (abfd, s);
+}
+
+void
+elf32_arm_add_eabi_attr_compat (bfd *abfd, unsigned int i, const char *s)
+{
+  aeabi_attribute_list *list;
+  aeabi_attribute_list *p;
+  aeabi_attribute_list **lastp;
+
+  list = (aeabi_attribute_list *)
+    bfd_alloc (abfd, sizeof (aeabi_attribute_list));
+  memset (list, 0, sizeof (aeabi_attribute_list));
+  list->tag = Tag_compatibility;
+  list->attr.type = 3;
+  list->attr.i = i;
+  list->attr.s = attr_strdup (abfd, s);
+
+  lastp = &elf32_arm_tdata (abfd)->other_eabi_attributes;
+  for (p = *lastp; p; p = p->next)
+    {
+      int cmp;
+      if (p->tag != Tag_compatibility)
+	break;
+      cmp = strcmp(s, p->attr.s);
+      if (cmp < 0 || (cmp == 0 && i < p->attr.i))
+	break;
+      lastp = &p->next;
+    }
+  list->next = *lastp;
+  *lastp = list;
+}
+
 /* Set the right machine number.  */
 
 static bfd_boolean
@@ -3371,6 +4776,49 @@ elf32_arm_set_private_flags (bfd *abfd, flagword flags)
 
   return TRUE;
 }
+
+/* Copy the eabi object attribute from IBFD to OBFD.  */
+static void
+copy_eabi_attributes (bfd *ibfd, bfd *obfd)
+{
+  aeabi_attribute *in_attr;
+  aeabi_attribute *out_attr;
+  aeabi_attribute_list *list;
+  int i;
+
+  in_attr = elf32_arm_tdata (ibfd)->known_eabi_attributes;
+  out_attr = elf32_arm_tdata (obfd)->known_eabi_attributes;
+  for (i = 4; i < NUM_KNOWN_ATTRIBUTES; i++)
+    {
+      out_attr->i = in_attr->i;
+      if (in_attr->s && *in_attr->s)
+	out_attr->s = attr_strdup (obfd, in_attr->s);
+      in_attr++;
+      out_attr++;
+    }
+
+  for (list = elf32_arm_tdata (ibfd)->other_eabi_attributes;
+       list;
+       list = list->next)
+    {
+      in_attr = &list->attr;
+      switch (in_attr->type)
+	{
+	case 1:
+	  elf32_arm_add_eabi_attr_int (obfd, list->tag, in_attr->i);
+	  break;
+	case 2:
+	  elf32_arm_add_eabi_attr_string (obfd, list->tag, in_attr->s);
+	  break;
+	case 3:
+	  elf32_arm_add_eabi_attr_compat (obfd, in_attr->i, in_attr->s);
+	  break;
+	default:
+	  abort();
+	}
+    }
+}
+
 
 /* Copy backend specific data from one object module to another.  */
 
@@ -3423,7 +4871,307 @@ elf32_arm_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
   elf_elfheader (obfd)->e_ident[EI_OSABI] =
     elf_elfheader (ibfd)->e_ident[EI_OSABI];
 
+  /* Copy EABI object attributes.  */
+  copy_eabi_attributes (ibfd, obfd);
+
   return TRUE;
+}
+
+/* Values for Tag_ABI_PCS_R9_use.  */
+enum
+{
+  AEABI_R9_V6,
+  AEABI_R9_SB,
+  AEABI_R9_TLS,
+  AEABI_R9_unused
+};
+
+/* Values for Tag_ABI_PCS_RW_data.  */
+enum
+{
+  AEABI_PCS_RW_data_absolute,
+  AEABI_PCS_RW_data_PCrel,
+  AEABI_PCS_RW_data_SBrel,
+  AEABI_PCS_RW_data_unused
+};
+
+/* Values for Tag_ABI_enum_size.  */
+enum
+{
+  AEABI_enum_unused,
+  AEABI_enum_short,
+  AEABI_enum_wide,
+  AEABI_enum_forced_wide
+};
+
+/* Merge EABI object attributes from IBFD into OBFD.  Raise an error if there
+   are conflicting attributes.  */
+static bfd_boolean
+elf32_arm_merge_eabi_attributes (bfd *ibfd, bfd *obfd)
+{
+  aeabi_attribute *in_attr;
+  aeabi_attribute *out_attr;
+  aeabi_attribute_list *in_list;
+  aeabi_attribute_list *out_list;
+  /* Some tags have 0 = don't care, 1 = strong requirement,
+     2 = weak requirement.  */
+  static const int order_312[3] = {3, 1, 2};
+  int i;
+
+  if (!elf32_arm_tdata (ibfd)->known_eabi_attributes[0].i)
+    {
+      /* This is the first object.  Copy the attributes.  */
+      copy_eabi_attributes (ibfd, obfd);
+      return TRUE;
+    }
+
+  /* Use the Tag_null value to indicate the attributes have been
+     initialized.  */
+  elf32_arm_tdata (ibfd)->known_eabi_attributes[0].i = 1;
+
+  in_attr = elf32_arm_tdata (ibfd)->known_eabi_attributes;
+  out_attr = elf32_arm_tdata (obfd)->known_eabi_attributes;
+  /* This needs to happen before Tag_ABI_FP_number_model is merged.  */
+  if (in_attr[Tag_ABI_VFP_args].i != out_attr[Tag_ABI_VFP_args].i)
+    {
+      /* Ignore mismatches if teh object doesn't use floating point.  */
+      if (out_attr[Tag_ABI_FP_number_model].i == 0)
+	out_attr[Tag_ABI_VFP_args].i = in_attr[Tag_ABI_VFP_args].i;
+      else if (in_attr[Tag_ABI_FP_number_model].i != 0)
+	{
+	  _bfd_error_handler
+	    (_("ERROR: %B uses VFP register arguments, %B does not"),
+	     ibfd, obfd);
+	  return FALSE;
+	}
+    }
+
+  for (i = 4; i < NUM_KNOWN_ATTRIBUTES; i++)
+    {
+      /* Merge this attribute with existing attributes.  */
+      switch (i)
+	{
+	case Tag_CPU_raw_name:
+	case Tag_CPU_name:
+	  /* Use whichever has the greatest architecture requirements.  */
+	  if (in_attr[Tag_CPU_arch].i > out_attr[Tag_CPU_arch].i)
+	    out_attr[i].s = attr_strdup(obfd, in_attr[i].s);
+	  break;
+
+	case Tag_ABI_optimization_goals:
+	case Tag_ABI_FP_optimization_goals:
+	  /* Use the first value seen.  */
+	  break;
+
+	case Tag_CPU_arch:
+	case Tag_ARM_ISA_use:
+	case Tag_THUMB_ISA_use:
+	case Tag_VFP_arch:
+	case Tag_WMMX_arch:
+	case Tag_NEON_arch:
+	  /* ??? Do NEON and WMMX conflict?  */
+	case Tag_ABI_FP_rounding:
+	case Tag_ABI_FP_denormal:
+	case Tag_ABI_FP_exceptions:
+	case Tag_ABI_FP_user_exceptions:
+	case Tag_ABI_FP_number_model:
+	case Tag_ABI_align8_preserved:
+	case Tag_ABI_HardFP_use:
+	  /* Use the largest value specified.  */
+	  if (in_attr[i].i > out_attr[i].i)
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+
+	case Tag_CPU_arch_profile:
+	  /* Warn if conflicting architecture profiles used.  */
+	  if (out_attr[i].i && in_attr[i].i && in_attr[i].i != out_attr[i].i)
+	    {
+	      _bfd_error_handler
+		(_("ERROR: %B: Conflicting architecture profiles %c/%c"),
+		 ibfd, in_attr[i].i, out_attr[i].i);
+	      return FALSE;
+	    }
+	  if (in_attr[i].i)
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_PCS_config:
+	  if (out_attr[i].i == 0)
+	    out_attr[i].i = in_attr[i].i;
+	  else if (in_attr[i].i != 0 && out_attr[i].i != 0)
+	    {
+	      /* It's sometimes ok to mix different configs, so this is only
+	         a warning.  */
+	      _bfd_error_handler
+		(_("Warning: %B: Conflicting platform configuration"), ibfd);
+	    }
+	  break;
+	case Tag_ABI_PCS_R9_use:
+	  if (out_attr[i].i != AEABI_R9_unused
+	      && in_attr[i].i != AEABI_R9_unused)
+	    {
+	      _bfd_error_handler
+		(_("ERROR: %B: Conflicting use of R9"), ibfd);
+	      return FALSE;
+	    }
+	  if (out_attr[i].i == AEABI_R9_unused)
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_ABI_PCS_RW_data:
+	  if (in_attr[i].i == AEABI_PCS_RW_data_SBrel
+	      && out_attr[Tag_ABI_PCS_R9_use].i != AEABI_R9_SB
+	      && out_attr[Tag_ABI_PCS_R9_use].i != AEABI_R9_unused)
+	    {
+	      _bfd_error_handler
+		(_("ERROR: %B: SB relative addressing conflicts with use of R9"),
+		 ibfd);
+	      return FALSE;
+	    }
+	  /* Use the smallest value specified.  */
+	  if (in_attr[i].i < out_attr[i].i)
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_ABI_PCS_RO_data:
+	  /* Use the smallest value specified.  */
+	  if (in_attr[i].i < out_attr[i].i)
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_ABI_PCS_GOT_use:
+	  if (in_attr[i].i > 2 || out_attr[i].i > 2
+	      || order_312[in_attr[i].i] < order_312[out_attr[i].i])
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_ABI_PCS_wchar_t:
+	  if (out_attr[i].i && in_attr[i].i && out_attr[i].i != in_attr[i].i)
+	    {
+	      _bfd_error_handler
+		(_("ERROR: %B: Conflicting definitions of wchar_t"), ibfd);
+	      return FALSE;
+	    }
+	  if (in_attr[i].i)
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_ABI_align8_needed:
+	  /* ??? Check against Tag_ABI_align8_preserved.  */
+	  if (in_attr[i].i > 2 || out_attr[i].i > 2
+	      || order_312[in_attr[i].i] < order_312[out_attr[i].i])
+	    out_attr[i].i = in_attr[i].i;
+	  break;
+	case Tag_ABI_enum_size:
+	  if (in_attr[i].i != AEABI_enum_unused)
+	    {
+	      if (out_attr[i].i == AEABI_enum_unused
+		  || out_attr[i].i == AEABI_enum_forced_wide)
+		{
+		  /* The existing object is compatible with anything.
+		     Use whatever requirements the new object has.  */
+		  out_attr[i].i = in_attr[i].i;
+		}
+	      else if (in_attr[i].i != AEABI_enum_forced_wide
+		       && out_attr[i].i != in_attr[i].i)
+		{
+		  _bfd_error_handler
+		    (_("ERROR: %B: Conflicting enum sizes"), ibfd);
+		}
+	    }
+	  break;
+	case Tag_ABI_VFP_args:
+	  /* Aready done.  */
+	  break;
+	case Tag_ABI_WMMX_args:
+	  if (in_attr[i].i != out_attr[i].i)
+	    {
+	      _bfd_error_handler
+		(_("ERROR: %B uses iWMMXt register arguments, %B does not"),
+		 ibfd, obfd);
+	      return FALSE;
+	    }
+	  break;
+	default: /* All known attributes should be explicitly covered.   */
+	  abort ();
+	}
+    }
+
+  in_list = elf32_arm_tdata (ibfd)->other_eabi_attributes;
+  out_list = elf32_arm_tdata (ibfd)->other_eabi_attributes;
+  while (in_list && in_list->tag == Tag_compatibility)
+    {
+      in_attr = &in_list->attr;
+      if (in_attr->i == 0)
+	continue;
+      if (in_attr->i == 1)
+	{
+	  _bfd_error_handler
+	    (_("ERROR: %B: Must be processed by '%s' toolchain"),
+	     ibfd, in_attr->s);
+	  return FALSE;
+	}
+      if (!out_list || out_list->tag != Tag_compatibility
+	  || strcmp (in_attr->s, out_list->attr.s) != 0)
+	{
+	  /* Add this compatibility tag to the output.  */
+	  elf32_arm_add_eabi_attr_compat (obfd, in_attr->i, in_attr->s);
+	  continue;
+	}
+      out_attr = &out_list->attr;
+      /* Check all the input tags with the same identifier.  */
+      for (;;)
+	{
+	  if (out_list->tag != Tag_compatibility
+	      || in_attr->i != out_attr->i
+	      || strcmp (in_attr->s, out_attr->s) != 0)
+	    {
+	      _bfd_error_handler
+		(_("ERROR: %B: Incompatible object tag '%s':%d"),
+		 ibfd, in_attr->s, in_attr->i);
+	      return FALSE;
+	    }
+	  in_list = in_list->next;
+	  if (in_list->tag != Tag_compatibility
+	      || strcmp (in_attr->s, in_list->attr.s) != 0)
+	    break;
+	  in_attr = &in_list->attr;
+	  out_list = out_list->next;
+	  if (out_list)
+	    out_attr = &out_list->attr;
+	}
+
+      /* Check the output doesn't have extra tags with this identifier.  */
+      if (out_list && out_list->tag == Tag_compatibility
+	  && strcmp (in_attr->s, out_list->attr.s) == 0)
+	{
+	  _bfd_error_handler
+	    (_("ERROR: %B: Incompatible object tag '%s':%d"),
+	     ibfd, in_attr->s, out_list->attr.i);
+	  return FALSE;
+	}
+    }
+
+  for (; in_list; in_list = in_list->next)
+    {
+      if ((in_list->tag & 128) < 64)
+	{
+	  _bfd_error_handler
+	    (_("Warning: %B: Unknown EABI object attribute %d"),
+	     ibfd, in_list->tag);
+	  break;
+	}
+    }
+  return TRUE;
+}
+
+
+/* Return TRUE if the two EABI versions are incompatible.  */
+
+static bfd_boolean
+elf32_arm_versions_compatible (unsigned iver, unsigned over)
+{
+  /* v4 and v5 are the same spec before and after it was released,
+     so allow mixing them.  */
+  if ((iver == EF_ARM_EABI_VER4 && over == EF_ARM_EABI_VER5)
+      || (iver == EF_ARM_EABI_VER5 && over == EF_ARM_EABI_VER4))
+    return TRUE;
+
+  return (iver == over);
 }
 
 /* Merge backend specific data from an object file to the output
@@ -3444,6 +5192,9 @@ elf32_arm_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
   if (   bfd_get_flavour (ibfd) != bfd_target_elf_flavour
       || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
     return TRUE;
+
+  if (!elf32_arm_merge_eabi_attributes (ibfd, obfd))
+    return FALSE;
 
   /* The input BFD must have had its flags initialised.  */
   /* The following seems bogus to me -- The flags are initialized in
@@ -3487,7 +5238,7 @@ elf32_arm_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
 
   /* Check to see if the input BFD actually contains any sections.  If
      not, its flags may not have been initialised either, but it
-     cannot actually cause any incompatibility.  Do not short-circuit
+     cannot actually cause any incompatiblity.  Do not short-circuit
      dynamic objects; their section list may be emptied by
     elf_link_add_object_symbols.
 
@@ -3521,7 +5272,8 @@ elf32_arm_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
     }
 
   /* Complain about various flag mismatches.  */
-  if (EF_ARM_EABI_VERSION (in_flags) != EF_ARM_EABI_VERSION (out_flags))
+  if (!elf32_arm_versions_compatible (EF_ARM_EABI_VERSION (in_flags),
+				      EF_ARM_EABI_VERSION (out_flags)))
     {
       _bfd_error_handler
 	(_("ERROR: Source object %B has EABI version %d, but target %B has EABI version %d"),
@@ -3532,7 +5284,10 @@ elf32_arm_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
     }
 
   /* Not sure what needs to be checked for EABI versions >= 1.  */
-  if (EF_ARM_EABI_VERSION (in_flags) == EF_ARM_EABI_UNKNOWN)
+  /* VxWorks libraries do not use these flags.  */
+  if (get_elf_backend_data (obfd) != &elf32_arm_vxworks_bed
+      && get_elf_backend_data (ibfd) != &elf32_arm_vxworks_bed
+      && EF_ARM_EABI_VERSION (in_flags) == EF_ARM_EABI_UNKNOWN)
     {
       if ((in_flags & EF_ARM_APCS_26) != (out_flags & EF_ARM_APCS_26))
 	{
@@ -3729,7 +5484,11 @@ elf32_arm_print_private_bfd_data (bfd *abfd, void * ptr)
 
     case EF_ARM_EABI_VER4:
       fprintf (file, _(" [Version4 EABI]"));
+      goto eabi;
 
+    case EF_ARM_EABI_VER5:
+      fprintf (file, _(" [Version5 EABI]"));
+    eabi:
       if (flags & EF_ARM_BE8)
 	fprintf (file, _(" [BE8]"));
 
@@ -3775,7 +5534,7 @@ elf32_arm_get_symbol_type (Elf_Internal_Sym * elf_sym, int type)
 	 This allows us to distinguish between data used by Thumb instructions
 	 and non-data (which is probably code) inside Thumb regions of an
 	 executable.  */
-      if (type != STT_OBJECT)
+      if (type != STT_OBJECT && type != STT_TLS)
 	return ELF_ST_TYPE (elf_sym->st_info);
       break;
 
@@ -3825,10 +5584,10 @@ elf32_arm_gc_mark_hook (asection *                   sec,
 /* Update the got entry reference counts for the section being removed.  */
 
 static bfd_boolean
-elf32_arm_gc_sweep_hook (bfd *                     abfd ATTRIBUTE_UNUSED,
-			 struct bfd_link_info *    info ATTRIBUTE_UNUSED,
-			 asection *                sec ATTRIBUTE_UNUSED,
-			 const Elf_Internal_Rela * relocs ATTRIBUTE_UNUSED)
+elf32_arm_gc_sweep_hook (bfd *                     abfd,
+			 struct bfd_link_info *    info,
+			 asection *                sec,
+			 const Elf_Internal_Rela * relocs)
 {
   Elf_Internal_Shdr *symtab_hdr;
   struct elf_link_hash_entry **sym_hashes;
@@ -3861,15 +5620,13 @@ elf32_arm_gc_sweep_hook (bfd *                     abfd ATTRIBUTE_UNUSED,
 	}
 
       r_type = ELF32_R_TYPE (rel->r_info);
-#ifndef OLD_ARM_ABI
       r_type = arm_real_reloc_type (globals, r_type);
-#endif
       switch (r_type)
 	{
 	case R_ARM_GOT32:
-#ifndef OLD_ARM_ABI
 	case R_ARM_GOT_PREL:
-#endif
+	case R_ARM_TLS_GD32:
+	case R_ARM_TLS_IE32:
 	  if (h != NULL)
 	    {
 	      if (h->got.refcount > 0)
@@ -3882,16 +5639,18 @@ elf32_arm_gc_sweep_hook (bfd *                     abfd ATTRIBUTE_UNUSED,
 	    }
 	  break;
 
+	case R_ARM_TLS_LDM32:
+	  elf32_arm_hash_table (info)->tls_ldm_got.refcount -= 1;
+	  break;
+
 	case R_ARM_ABS32:
 	case R_ARM_REL32:
 	case R_ARM_PC24:
 	case R_ARM_PLT32:
-#ifndef OLD_ARM_ABI
 	case R_ARM_CALL:
 	case R_ARM_JUMP24:
 	case R_ARM_PREL31:
-#endif
-	case R_ARM_THM_PC22:
+	case R_ARM_THM_CALL:
 	  /* Should the interworking branches be here also?  */
 
 	  if (h != NULL)
@@ -3905,7 +5664,7 @@ elf32_arm_gc_sweep_hook (bfd *                     abfd ATTRIBUTE_UNUSED,
 	      if (h->plt.refcount > 0)
 		{
 		  h->plt.refcount -= 1;
-		  if (ELF32_R_TYPE (rel->r_info) == R_ARM_THM_PC22)
+		  if (ELF32_R_TYPE (rel->r_info) == R_ARM_THM_CALL)
 		    eh->plt_thumb_refcount--;
 		}
 
@@ -3917,6 +5676,8 @@ elf32_arm_gc_sweep_hook (bfd *                     abfd ATTRIBUTE_UNUSED,
 		  if (p->section == sec)
 		    {
 		      p->count -= 1;
+		      if (ELF32_R_TYPE (rel->r_info) == R_ARM_REL32)
+			p->pc_count -= 1;
 		      if (p->count == 0)
 			*pp = p->next;
 		      break;
@@ -3985,51 +5746,96 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
       r_symndx = ELF32_R_SYM (rel->r_info);
       r_type = ELF32_R_TYPE (rel->r_info);
-#ifndef OLD_ARM_ABI
       r_type = arm_real_reloc_type (htab, r_type);
-#endif
+
+      if (r_symndx >= NUM_SHDR_ENTRIES (symtab_hdr))
+	{
+	  (*_bfd_error_handler) (_("%B: bad symbol index: %d"), abfd,
+				 r_symndx);
+	  return FALSE;
+	}
+
       if (r_symndx < symtab_hdr->sh_info)
         h = NULL;
       else
-        h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+	{
+	  h = sym_hashes[r_symndx - symtab_hdr->sh_info];
+	  while (h->root.type == bfd_link_hash_indirect
+		 || h->root.type == bfd_link_hash_warning)
+	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+	}
 
       eh = (struct elf32_arm_link_hash_entry *) h;
 
       switch (r_type)
         {
 	  case R_ARM_GOT32:
-#ifndef OLD_ARM_ABI
 	  case R_ARM_GOT_PREL:
-#endif
+	  case R_ARM_TLS_GD32:
+	  case R_ARM_TLS_IE32:
 	    /* This symbol requires a global offset table entry.  */
-	    if (h != NULL)
-	      {
-		h->got.refcount++;
-	      }
-	    else
-	      {
-		bfd_signed_vma *local_got_refcounts;
+	    {
+	      int tls_type, old_tls_type;
 
-		/* This is a global offset table entry for a local symbol.  */
-		local_got_refcounts = elf_local_got_refcounts (abfd);
-		if (local_got_refcounts == NULL)
-		  {
-		    bfd_size_type size;
+	      switch (r_type)
+		{
+		case R_ARM_TLS_GD32: tls_type = GOT_TLS_GD; break;
+		case R_ARM_TLS_IE32: tls_type = GOT_TLS_IE; break;
+		default: tls_type = GOT_NORMAL; break;
+		}
 
-		    size = symtab_hdr->sh_info;
-		    size *= (sizeof (bfd_signed_vma) + sizeof (char));
-		    local_got_refcounts = bfd_zalloc (abfd, size);
-		    if (local_got_refcounts == NULL)
-		      return FALSE;
-		    elf_local_got_refcounts (abfd) = local_got_refcounts;
-		  }
-		local_got_refcounts[r_symndx] += 1;
-	      }
-	    if (r_type == R_ARM_GOT32)
-	      break;
-	    /* Fall through.  */
+	      if (h != NULL)
+		{
+		  h->got.refcount++;
+		  old_tls_type = elf32_arm_hash_entry (h)->tls_type;
+		}
+	      else
+		{
+		  bfd_signed_vma *local_got_refcounts;
 
-	  case R_ARM_GOTOFF:
+		  /* This is a global offset table entry for a local symbol.  */
+		  local_got_refcounts = elf_local_got_refcounts (abfd);
+		  if (local_got_refcounts == NULL)
+		    {
+		      bfd_size_type size;
+		      
+		      size = symtab_hdr->sh_info;
+		      size *= (sizeof (bfd_signed_vma) + sizeof(char));
+		      local_got_refcounts = bfd_zalloc (abfd, size);
+		      if (local_got_refcounts == NULL)
+			return FALSE;
+		      elf_local_got_refcounts (abfd) = local_got_refcounts;
+		      elf32_arm_local_got_tls_type (abfd)
+			= (char *) (local_got_refcounts + symtab_hdr->sh_info);
+		    }
+		  local_got_refcounts[r_symndx] += 1;
+		  old_tls_type = elf32_arm_local_got_tls_type (abfd) [r_symndx];
+		}
+
+	      /* We will already have issued an error message if there is a
+		 TLS / non-TLS mismatch, based on the symbol type.  We don't
+		 support any linker relaxations.  So just combine any TLS
+		 types needed.  */
+	      if (old_tls_type != GOT_UNKNOWN && old_tls_type != GOT_NORMAL
+		  && tls_type != GOT_NORMAL)
+		tls_type |= old_tls_type;
+
+	      if (old_tls_type != tls_type)
+		{
+		  if (h != NULL)
+		    elf32_arm_hash_entry (h)->tls_type = tls_type;
+		  else
+		    elf32_arm_local_got_tls_type (abfd) [r_symndx] = tls_type;
+		}
+	    }
+	    /* Fall through */
+
+	  case R_ARM_TLS_LDM32:
+	    if (r_type == R_ARM_TLS_LDM32)
+		htab->tls_ldm_got.refcount++;
+	    /* Fall through */
+
+	  case R_ARM_GOTOFF32:
 	  case R_ARM_GOTPC:
 	    if (htab->sgot == NULL)
 	      {
@@ -4040,16 +5846,21 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	      }
 	    break;
 
+	  case R_ARM_ABS12:
+	    /* VxWorks uses dynamic R_ARM_ABS12 relocations for
+	       ldr __GOTT_INDEX__ offsets.  */
+	    if (!htab->vxworks_p)
+	      break;
+	    /* Fall through */
+
 	  case R_ARM_ABS32:
 	  case R_ARM_REL32:
 	  case R_ARM_PC24:
 	  case R_ARM_PLT32:
-#ifndef OLD_ARM_ABI
 	  case R_ARM_CALL:
 	  case R_ARM_JUMP24:
 	  case R_ARM_PREL31:
-#endif
-	  case R_ARM_THM_PC22:
+	  case R_ARM_THM_CALL:
 	    /* Should the interworking branches be listed here?  */
 	    if (h != NULL)
 	      {
@@ -4067,20 +5878,18 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		   sure yet, because something later might force the
 		   symbol local.  */
 		if (r_type == R_ARM_PC24
-#ifndef OLD_ARM_ABI
 		    || r_type == R_ARM_CALL
 		    || r_type == R_ARM_JUMP24
 		    || r_type == R_ARM_PREL31
-#endif
 		    || r_type == R_ARM_PLT32
-		    || r_type == R_ARM_THM_PC22)
+		    || r_type == R_ARM_THM_CALL)
 		  h->needs_plt = 1;
 
 		/* If we create a PLT entry, this relocation will reference
 		   it, even if it's an ABS32 relocation.  */
 		h->plt.refcount += 1;
 
-		if (r_type == R_ARM_THM_PC22)
+		if (r_type == R_ARM_THM_CALL)
 		  eh->plt_thumb_refcount += 1;
 	      }
 
@@ -4118,16 +5927,13 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		    if (name == NULL)
 		      return FALSE;
 
-		    BFD_ASSERT (strncmp (name, ".rel", 4) == 0
-			        && strcmp (bfd_get_section_name (abfd, sec),
-					   name + 4) == 0);
+		    BFD_ASSERT (reloc_section_p (htab, name, sec));
 
 		    sreloc = bfd_get_section_by_name (dynobj, name);
 		    if (sreloc == NULL)
 		      {
 		        flagword flags;
 
-		        sreloc = bfd_make_section (dynobj, name);
 		        flags = (SEC_HAS_CONTENTS | SEC_READONLY
 			         | SEC_IN_MEMORY | SEC_LINKER_CREATED);
 		        if ((sec->flags & SEC_ALLOC) != 0
@@ -4135,8 +5941,10 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 			       relocations mapped.  */
 			    && !htab->symbian_p)
 			  flags |= SEC_ALLOC | SEC_LOAD;
+		        sreloc = bfd_make_section_with_flags (dynobj,
+							      name,
+							      flags);
 		        if (sreloc == NULL
-			    || ! bfd_set_section_flags (dynobj, sreloc, flags)
 			    || ! bfd_set_section_alignment (dynobj, sreloc, 2))
 			  return FALSE;
 		      }
@@ -4157,13 +5965,15 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		       easily.  Oh well.  */
 
 		    asection *s;
+		    void *vpp;
+
 		    s = bfd_section_from_r_symndx (abfd, &htab->sym_sec,
 						   sec, r_symndx);
 		    if (s == NULL)
 		      return FALSE;
 
-		    head = ((struct elf32_arm_relocs_copied **)
-			    &elf_section_data (s)->local_dynrel);
+		    vpp = &elf_section_data (s)->local_dynrel;
+		    head = (struct elf32_arm_relocs_copied **) vpp;
 		  }
 
 		p = *head;
@@ -4178,8 +5988,11 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		    *head = p;
 		    p->section = sec;
 		    p->count = 0;
+		    p->pc_count = 0;
 		  }
 
+		if (r_type == R_ARM_REL32)
+		  p->pc_count += 1;
 		p->count += 1;
 	      }
 	    break;
@@ -4203,21 +6016,12 @@ elf32_arm_check_relocs (bfd *abfd, struct bfd_link_info *info,
   return TRUE;
 }
 
-static bfd_boolean
-is_arm_mapping_symbol_name (const char * name)
-{
-  return (name != NULL)
-    && (name[0] == '$')
-    && ((name[1] == 'a') || (name[1] == 't') || (name[1] == 'd'))
-    && (name[2] == 0);
-}
-
 /* Treat mapping symbols as special target symbols.  */
 
 static bfd_boolean
 elf32_arm_is_target_special_symbol (bfd * abfd ATTRIBUTE_UNUSED, asymbol * sym)
 {
-  return is_arm_mapping_symbol_name (sym->name);
+  return bfd_is_arm_mapping_symbol_name (sym->name);
 }
 
 /* This is a copy of elf_find_function() from elf.c except that
@@ -4252,12 +6056,12 @@ arm_elf_find_function (bfd *         abfd ATTRIBUTE_UNUSED,
 	  break;
 	case STT_FUNC:
 	case STT_ARM_TFUNC:
+	case STT_NOTYPE:
 	  /* Skip $a and $t symbols.  */
 	  if ((q->symbol.flags & BSF_LOCAL)
-	      && is_arm_mapping_symbol_name (q->symbol.name))
+	      && bfd_is_arm_mapping_symbol_name (q->symbol.name))
 	    continue;
 	  /* Fall through.  */
-	case STT_NOTYPE:
 	  if (bfd_get_section (&q->symbol) == section
 	      && q->symbol.value >= low_func
 	      && q->symbol.value <= offset)
@@ -4329,6 +6133,19 @@ elf32_arm_find_nearest_line (bfd *          abfd,
 
   *line_ptr = 0;
   return TRUE;
+}
+
+static bfd_boolean
+elf32_arm_find_inliner_info (bfd *          abfd,
+			     const char **  filename_ptr,
+			     const char **  functionname_ptr,
+			     unsigned int * line_ptr)
+{
+  bfd_boolean found;
+  found = _bfd_dwarf2_find_inliner_info (abfd, filename_ptr,
+					 functionname_ptr, line_ptr,
+					 & elf_tdata (abfd)->dwarf2_find_line_info);
+  return found;
 }
 
 /* Adjust a symbol defined by a dynamic object and referenced by a
@@ -4406,6 +6223,11 @@ elf32_arm_adjust_dynamic_symbol (struct bfd_link_info * info,
       return TRUE;
     }
 
+  /* If there are no non-GOT references, we do not need a copy
+     relocation.  */
+  if (!h->non_got_ref)
+    return TRUE;
+
   /* This is a reference to a symbol defined by a dynamic object which
      is not a function.  */
 
@@ -4417,6 +6239,13 @@ elf32_arm_adjust_dynamic_symbol (struct bfd_link_info * info,
      do anything here.  */
   if (info->shared || globals->root.is_relocatable_executable)
     return TRUE;
+
+  if (h->size == 0)
+    {
+      (*_bfd_error_handler) (_("dynamic variable `%s' is zero size"),
+			     h->root.root.string);
+      return TRUE;
+    }
 
   /* We must allocate the symbol in our .dynbss section, which will
      become part of the .bss section of the executable.  There will be
@@ -4433,14 +6262,14 @@ elf32_arm_adjust_dynamic_symbol (struct bfd_link_info * info,
   /* We must generate a R_ARM_COPY reloc to tell the dynamic linker to
      copy the initial value out of the dynamic object and into the
      runtime process image.  We need to remember the offset into the
-     .rel.bss section we are going to use.  */
+     .rel(a).bss section we are going to use.  */
   if ((h->root.u.def.section->flags & SEC_ALLOC) != 0)
     {
       asection *srel;
 
-      srel = bfd_get_section_by_name (dynobj, ".rel.bss");
+      srel = bfd_get_section_by_name (dynobj, RELOC_SECTION (globals, ".bss"));
       BFD_ASSERT (srel != NULL);
-      srel->size += sizeof (Elf32_External_Rel);
+      srel->size += RELOC_SIZE (globals);
       h->needs_copy = 1;
     }
 
@@ -4519,7 +6348,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
 
 	  /* If we will insert a Thumb trampoline before this PLT, leave room
 	     for it.  */
-	  if (!htab->symbian_p && eh->plt_thumb_refcount > 0)
+	  if (!htab->use_blx && eh->plt_thumb_refcount > 0)
 	    {
 	      h->plt.offset += PLT_THUMB_STUB_SIZE;
 	      s->size += PLT_THUMB_STUB_SIZE;
@@ -4554,8 +6383,24 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
 	      htab->sgotplt->size += 4;
 	    }
 
-	  /* We also need to make an entry in the .rel.plt section.  */
-	  htab->srelplt->size += sizeof (Elf32_External_Rel);
+	  /* We also need to make an entry in the .rel(a).plt section.  */
+	  htab->srelplt->size += RELOC_SIZE (htab);
+
+	  /* VxWorks executables have a second set of relocations for
+	     each PLT entry.  They go in a separate relocation section,
+	     which is processed by the kernel loader.  */
+	  if (htab->vxworks_p && !info->shared)
+	    {
+	      /* There is a relocation for the initial PLT entry:
+		 an R_ARM_32 relocation for _GLOBAL_OFFSET_TABLE_.  */
+	      if (h->plt.offset == htab->plt_header_size)
+		htab->srelplt2->size += RELOC_SIZE (htab);
+
+	      /* There are two extra relocations for each subsequent
+		 PLT entry: an R_ARM_32 relocation for the GOT entry,
+		 and an R_ARM_32 relocation for the PLT entry.  */
+	      htab->srelplt2->size += RELOC_SIZE (htab) * 2;
+	    }
 	}
       else
 	{
@@ -4573,6 +6418,8 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
     {
       asection *s;
       bfd_boolean dyn;
+      int tls_type = elf32_arm_hash_entry (h)->tls_type;
+      int indx;
 
       /* Make sure this symbol is output as a dynamic symbol.
 	 Undefined weak syms won't yet be marked as dynamic.  */
@@ -4587,13 +6434,50 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
 	{
 	  s = htab->sgot;
 	  h->got.offset = s->size;
-	  s->size += 4;
+
+	  if (tls_type == GOT_UNKNOWN)
+	    abort ();
+
+	  if (tls_type == GOT_NORMAL)
+	    /* Non-TLS symbols need one GOT slot.  */
+	    s->size += 4;
+	  else
+	    {
+	      if (tls_type & GOT_TLS_GD)
+		/* R_ARM_TLS_GD32 needs 2 consecutive GOT slots.  */
+		s->size += 8;
+	      if (tls_type & GOT_TLS_IE)
+		/* R_ARM_TLS_IE32 needs one GOT slot.  */
+		s->size += 4;
+	    }
+
 	  dyn = htab->root.dynamic_sections_created;
-	  if ((ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
-	       || h->root.type != bfd_link_hash_undefweak)
-	      && (info->shared
-		  || WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, 0, h)))
-	    htab->srelgot->size += sizeof (Elf32_External_Rel);
+
+	  indx = 0;
+	  if (WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, info->shared, h)
+	      && (!info->shared
+		  || !SYMBOL_REFERENCES_LOCAL (info, h)))
+	    indx = h->dynindx;
+
+	  if (tls_type != GOT_NORMAL
+	      && (info->shared || indx != 0)
+	      && (ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
+		  || h->root.type != bfd_link_hash_undefweak))
+	    {
+	      if (tls_type & GOT_TLS_IE)
+		htab->srelgot->size += RELOC_SIZE (htab);
+
+	      if (tls_type & GOT_TLS_GD)
+		htab->srelgot->size += RELOC_SIZE (htab);
+
+	      if ((tls_type & GOT_TLS_GD) && indx != 0)
+		htab->srelgot->size += RELOC_SIZE (htab);
+	    }
+	  else if ((ELF_ST_VISIBILITY (h->other) == STV_DEFAULT
+		    || h->root.type != bfd_link_hash_undefweak)
+		   && (info->shared
+	    	   || WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, 0, h)))
+	    htab->srelgot->size += RELOC_SIZE (htab);
 	}
     }
   else
@@ -4610,11 +6494,45 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
 
   if (info->shared || htab->root.is_relocatable_executable)
     {
-      /* Discard relocs on undefined weak syms with non-default
+      /* The only reloc that uses pc_count is R_ARM_REL32, which will
+	 appear on something like ".long foo - .".  We want calls to
+	 protected symbols to resolve directly to the function rather
+	 than going via the plt.  If people want function pointer
+	 comparisons to work as expected then they should avoid
+	 writing assembly like ".long foo - .".  */
+      if (SYMBOL_CALLS_LOCAL (info, h))
+	{
+	  struct elf32_arm_relocs_copied **pp;
+
+	  for (pp = &eh->relocs_copied; (p = *pp) != NULL; )
+	    {
+	      p->count -= p->pc_count;
+	      p->pc_count = 0;
+	      if (p->count == 0)
+		*pp = p->next;
+	      else
+		pp = &p->next;
+	    }
+	}
+
+      /* Also discard relocs on undefined weak syms with non-default
          visibility.  */
-      if (ELF_ST_VISIBILITY (h->other) != STV_DEFAULT
+      if (eh->relocs_copied != NULL
 	  && h->root.type == bfd_link_hash_undefweak)
-	eh->relocs_copied = NULL;
+	{
+	  if (ELF_ST_VISIBILITY (h->other) != STV_DEFAULT)
+	    eh->relocs_copied = NULL;
+
+	  /* Make sure undefined weak symbols are output as a dynamic
+	     symbol in PIEs.  */
+	  else if (h->dynindx == -1
+		   && !h->forced_local)
+	    {
+	      if (! bfd_elf_link_record_dynamic_symbol (info, h))
+		return FALSE;
+	    }
+	}
+
       else if (htab->root.is_relocatable_executable && h->dynindx == -1
 	       && h->root.type == bfd_link_hash_new)
 	{
@@ -4663,7 +6581,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
   for (p = eh->relocs_copied; p != NULL; p = p->next)
     {
       asection *sreloc = elf_section_data (p->section)->sreloc;
-      sreloc->size += p->count * sizeof (Elf32_External_Rel);
+      sreloc->size += p->count * RELOC_SIZE (htab);
     }
 
   return TRUE;
@@ -4714,6 +6632,7 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
   htab = elf32_arm_hash_table (info);
   dynobj = elf_hash_table (info)->dynobj;
   BFD_ASSERT (dynobj != NULL);
+  check_use_blx (htab);
 
   if (elf_hash_table (info)->dynamic_sections_created)
     {
@@ -4745,10 +6664,7 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	{
 	  struct elf32_arm_relocs_copied *p;
 
-	  for (p = *((struct elf32_arm_relocs_copied **)
-		     &elf_section_data (s)->local_dynrel);
-	       p != NULL;
-	       p = p->next)
+	  for (p = elf_section_data (s)->local_dynrel; p != NULL; p = p->next)
 	    {
 	      if (!bfd_is_abs_section (p->section)
 		  && bfd_is_abs_section (p->section->output_section))
@@ -4761,7 +6677,7 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	      else if (p->count != 0)
 		{
 		  srel = elf_section_data (p->section)->sreloc;
-		  srel->size += p->count * sizeof (Elf32_External_Rel);
+		  srel->size += p->count * RELOC_SIZE (htab);
 		  if ((p->section->output_section->flags & SEC_READONLY) != 0)
 		    info->flags |= DF_TEXTREL;
 		}
@@ -4775,6 +6691,7 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
       symtab_hdr = &elf_tdata (ibfd)->symtab_hdr;
       locsymcount = symtab_hdr->sh_info;
       end_local_got = local_got + locsymcount;
+      local_tls_type = elf32_arm_local_got_tls_type (ibfd);
       s = htab->sgot;
       srel = htab->srelgot;
       for (; local_got < end_local_got; ++local_got, ++local_tls_type)
@@ -4782,14 +6699,33 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	  if (*local_got > 0)
 	    {
 	      *local_got = s->size;
-	      s->size += 4;
-	      if (info->shared)
-		srel->size += sizeof (Elf32_External_Rel);
+	      if (*local_tls_type & GOT_TLS_GD)
+		/* TLS_GD relocs need an 8-byte structure in the GOT.  */
+		s->size += 8;
+	      if (*local_tls_type & GOT_TLS_IE)
+		s->size += 4;
+	      if (*local_tls_type == GOT_NORMAL)
+		s->size += 4;
+
+	      if (info->shared || *local_tls_type == GOT_TLS_GD)
+		srel->size += RELOC_SIZE (htab);
 	    }
 	  else
 	    *local_got = (bfd_vma) -1;
 	}
     }
+
+  if (htab->tls_ldm_got.refcount > 0)
+    {
+      /* Allocate two GOT entries and one dynamic relocation (if necessary)
+	 for R_ARM_TLS_LDM32 relocations.  */
+      htab->tls_ldm_got.offset = htab->sgot->size;
+      htab->sgot->size += 8;
+      if (info->shared)
+	htab->srelgot->size += RELOC_SIZE (htab);
+    }
+  else
+    htab->tls_ldm_got.offset = -1;
 
   /* Allocate global sym .plt and .got entries, and space for global
      sym dynamic relocs.  */
@@ -4803,7 +6739,6 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
   for (s = dynobj->sections; s != NULL; s = s->next)
     {
       const char * name;
-      bfd_boolean strip;
 
       if ((s->flags & SEC_LINKER_CREATED) == 0)
 	continue;
@@ -4812,42 +6747,18 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	 of the dynobj section names depend upon the input files.  */
       name = bfd_get_section_name (dynobj, s);
 
-      strip = FALSE;
-
       if (strcmp (name, ".plt") == 0)
 	{
-	  if (s->size == 0)
-	    {
-	      /* Strip this section if we don't need it; see the
-                 comment below.  */
-	      strip = TRUE;
-	    }
-	  else
-	    {
-	      /* Remember whether there is a PLT.  */
-	      plt = TRUE;
-	    }
+	  /* Remember whether there is a PLT.  */
+	  plt = s->size != 0;
 	}
       else if (strncmp (name, ".rel", 4) == 0)
 	{
-	  if (s->size == 0)
-	    {
-	      /* If we don't need this section, strip it from the
-		 output file.  This is mostly to handle .rel.bss and
-		 .rel.plt.  We must create both sections in
-		 create_dynamic_sections, because they must be created
-		 before the linker maps input sections to output
-		 sections.  The linker does that before
-		 adjust_dynamic_symbol is called, and it is that
-		 function which decides whether anything needs to go
-		 into these sections.  */
-	      strip = TRUE;
-	    }
-	  else
+	  if (s->size != 0)
 	    {
 	      /* Remember whether there are any reloc sections other
-                 than .rel.plt.  */
-	      if (strcmp (name, ".rel.plt") != 0)
+		 than .rel(a).plt and .rela.plt.unloaded.  */
+	      if (s != htab->srelplt && s != htab->srelplt2)
 		relocs = TRUE;
 
 	      /* We use the reloc_count field as a counter if we need
@@ -4855,21 +6766,34 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	      s->reloc_count = 0;
 	    }
 	}
-      else if (strncmp (name, ".got", 4) != 0)
+      else if (strncmp (name, ".got", 4) != 0
+	       && strcmp (name, ".dynbss") != 0)
 	{
 	  /* It's not one of our sections, so don't allocate space.  */
 	  continue;
 	}
 
-      if (strip)
+      if (s->size == 0)
 	{
-	  _bfd_strip_section_from_output (info, s);
+	  /* If we don't need this section, strip it from the
+	     output file.  This is mostly to handle .rel(a).bss and
+	     .rel(a).plt.  We must create both sections in
+	     create_dynamic_sections, because they must be created
+	     before the linker maps input sections to output
+	     sections.  The linker does that before
+	     adjust_dynamic_symbol is called, and it is that
+	     function which decides whether anything needs to go
+	     into these sections.  */
+	  s->flags |= SEC_EXCLUDE;
 	  continue;
 	}
 
+      if ((s->flags & SEC_HAS_CONTENTS) == 0)
+	continue;
+
       /* Allocate memory for the section contents.  */
       s->contents = (bfd_byte *) bfd_zalloc (dynobj, s->size);
-      if (s->contents == NULL && s->size != 0)
+      if (s->contents == NULL)
 	return FALSE;
     }
 
@@ -4883,7 +6807,7 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 #define add_dynamic_entry(TAG, VAL) \
   _bfd_elf_add_dynamic_entry (info, TAG, VAL)
 
-      if (!info->shared)
+     if (info->executable)
 	{
 	  if (!add_dynamic_entry (DT_DEBUG, 0))
 	    return FALSE;
@@ -4893,17 +6817,28 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	{
 	  if (   !add_dynamic_entry (DT_PLTGOT, 0)
 	      || !add_dynamic_entry (DT_PLTRELSZ, 0)
-	      || !add_dynamic_entry (DT_PLTREL, DT_REL)
+	      || !add_dynamic_entry (DT_PLTREL,
+				     htab->use_rel ? DT_REL : DT_RELA)
 	      || !add_dynamic_entry (DT_JMPREL, 0))
 	    return FALSE;
 	}
 
       if (relocs)
 	{
-	  if (   !add_dynamic_entry (DT_REL, 0)
-	      || !add_dynamic_entry (DT_RELSZ, 0)
-	      || !add_dynamic_entry (DT_RELENT, sizeof (Elf32_External_Rel)))
-	    return FALSE;
+	  if (htab->use_rel)
+	    {
+	      if (!add_dynamic_entry (DT_REL, 0)
+		  || !add_dynamic_entry (DT_RELSZ, 0)
+		  || !add_dynamic_entry (DT_RELENT, RELOC_SIZE (htab)))
+		return FALSE;
+	    }
+	  else
+	    {
+	      if (!add_dynamic_entry (DT_RELA, 0)
+		  || !add_dynamic_entry (DT_RELASZ, 0)
+		  || !add_dynamic_entry (DT_RELAENT, RELOC_SIZE (htab)))
+		return FALSE;
+	    }
 	}
 
       /* If any dynamic relocs apply to a read-only section,
@@ -4916,10 +6851,9 @@ elf32_arm_size_dynamic_sections (bfd * output_bfd ATTRIBUTE_UNUSED,
 	{
 	  if (!add_dynamic_entry (DT_TEXTREL, 0))
 	    return FALSE;
-	  info->flags |= DF_TEXTREL;
 	}
     }
-#undef add_synamic_entry
+#undef add_dynamic_entry
 
   return TRUE;
 }
@@ -4953,7 +6887,7 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
       BFD_ASSERT (h->dynindx != -1);
 
       splt = bfd_get_section_by_name (dynobj, ".plt");
-      srel = bfd_get_section_by_name (dynobj, ".rel.plt");
+      srel = bfd_get_section_by_name (dynobj, RELOC_SECTION (htab, ".plt"));
       BFD_ASSERT (splt != NULL && srel != NULL);
 
       /* Fill in the entry in the procedure linkage table.  */
@@ -4980,7 +6914,7 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
 	}
       else
 	{
-	  bfd_vma got_offset;
+	  bfd_vma got_offset, got_address, plt_address;
 	  bfd_vma got_displacement;
 	  asection * sgot;
 	  
@@ -4998,38 +6932,103 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
 	     symbols appear in the same order as in .plt.  */
 	  plt_index = (got_offset - 12) / 4;
 
-	  /* Calculate the displacement between the PLT slot and the
-	     entry in the GOT.  The eight-byte offset accounts for the
-	     value produced by adding to pc in the first instruction
-	     of the PLT stub.  */
-	  got_displacement = (sgot->output_section->vma
-			      + sgot->output_offset
-			      + got_offset
-			      - splt->output_section->vma
-			      - splt->output_offset
-			      - h->plt.offset
-			      - 8);
+	  /* Calculate the address of the GOT entry.  */
+	  got_address = (sgot->output_section->vma
+			 + sgot->output_offset
+			 + got_offset);
 
-	  BFD_ASSERT ((got_displacement & 0xf0000000) == 0);
+	  /* ...and the address of the PLT entry.  */
+	  plt_address = (splt->output_section->vma
+			 + splt->output_offset
+			 + h->plt.offset);
 
-	  if (eh->plt_thumb_refcount > 0)
+	  if (htab->vxworks_p && info->shared)
 	    {
-	      bfd_put_16 (output_bfd, elf32_arm_plt_thumb_stub[0],
-			  splt->contents + h->plt.offset - 4);
-	      bfd_put_16 (output_bfd, elf32_arm_plt_thumb_stub[1],
-			  splt->contents + h->plt.offset - 2);
-	    }
+	      unsigned int i;
+	      bfd_vma val;
 
-	  bfd_put_32 (output_bfd, elf32_arm_plt_entry[0] | ((got_displacement & 0x0ff00000) >> 20),
-		      splt->contents + h->plt.offset + 0);
-	  bfd_put_32 (output_bfd, elf32_arm_plt_entry[1] | ((got_displacement & 0x000ff000) >> 12),
-		      splt->contents + h->plt.offset + 4);
-	  bfd_put_32 (output_bfd, elf32_arm_plt_entry[2] | (got_displacement & 0x00000fff),
-		      splt->contents + h->plt.offset + 8);
+	      for (i = 0; i != htab->plt_entry_size / 4; i++)
+		{
+		  val = elf32_arm_vxworks_shared_plt_entry[i];
+		  if (i == 2)
+		    val |= got_address - sgot->output_section->vma;
+		  if (i == 5)
+		    val |= plt_index * RELOC_SIZE (htab);
+		  bfd_put_32 (output_bfd, val,
+			      htab->splt->contents + h->plt.offset + i * 4);
+		}
+	    }
+	  else if (htab->vxworks_p)
+	    {
+	      unsigned int i;
+	      bfd_vma val;
+
+	      for (i = 0; i != htab->plt_entry_size / 4; i++)
+		{
+		  val = elf32_arm_vxworks_exec_plt_entry[i];
+		  if (i == 2)
+		    val |= got_address;
+		  if (i == 4)
+		    val |= 0xffffff & -((h->plt.offset + i * 4 + 8) >> 2);
+		  if (i == 5)
+		    val |= plt_index * RELOC_SIZE (htab);
+		  bfd_put_32 (output_bfd, val,
+			      htab->splt->contents + h->plt.offset + i * 4);
+		}
+
+	      loc = (htab->srelplt2->contents
+		     + (plt_index * 2 + 1) * RELOC_SIZE (htab));
+
+	      /* Create the .rela.plt.unloaded R_ARM_ABS32 relocation
+		 referencing the GOT for this PLT entry.  */
+	      rel.r_offset = plt_address + 8;
+	      rel.r_info = ELF32_R_INFO (htab->root.hgot->indx, R_ARM_ABS32);
+	      rel.r_addend = got_offset;
+	      SWAP_RELOC_OUT (htab) (output_bfd, &rel, loc);
+	      loc += RELOC_SIZE (htab);
+
+	      /* Create the R_ARM_ABS32 relocation referencing the
+		 beginning of the PLT for this GOT entry.  */
+	      rel.r_offset = got_address;
+	      rel.r_info = ELF32_R_INFO (htab->root.hplt->indx, R_ARM_ABS32);
+	      rel.r_addend = 0;
+	      SWAP_RELOC_OUT (htab) (output_bfd, &rel, loc);
+	    }
+	  else
+	    {
+	      /* Calculate the displacement between the PLT slot and the
+		 entry in the GOT.  The eight-byte offset accounts for the
+		 value produced by adding to pc in the first instruction
+		 of the PLT stub.  */
+	      got_displacement = got_address - (plt_address + 8);
+
+	      BFD_ASSERT ((got_displacement & 0xf0000000) == 0);
+
+	      if (!htab->use_blx && eh->plt_thumb_refcount > 0)
+		{
+		  bfd_put_16 (output_bfd, elf32_arm_plt_thumb_stub[0],
+			      splt->contents + h->plt.offset - 4);
+		  bfd_put_16 (output_bfd, elf32_arm_plt_thumb_stub[1],
+			      splt->contents + h->plt.offset - 2);
+		}
+
+	      bfd_put_32 (output_bfd,
+			  elf32_arm_plt_entry[0]
+			  | ((got_displacement & 0x0ff00000) >> 20),
+			  splt->contents + h->plt.offset + 0);
+	      bfd_put_32 (output_bfd,
+			  elf32_arm_plt_entry[1]
+			  | ((got_displacement & 0x000ff000) >> 12),
+			  splt->contents + h->plt.offset + 4);
+	      bfd_put_32 (output_bfd,
+			  elf32_arm_plt_entry[2]
+			  | (got_displacement & 0x00000fff),
+			  splt->contents + h->plt.offset + 8);
 #ifdef FOUR_WORD_PLT
-	  bfd_put_32 (output_bfd, elf32_arm_plt_entry[3],
-		      splt->contents + h->plt.offset + 12);
+	      bfd_put_32 (output_bfd, elf32_arm_plt_entry[3],
+			  splt->contents + h->plt.offset + 12);
 #endif
+	    }
 
 	  /* Fill in the entry in the global offset table.  */
 	  bfd_put_32 (output_bfd,
@@ -5037,15 +7036,14 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
 		       + splt->output_offset),
 		      sgot->contents + got_offset);
 	  
-	  /* Fill in the entry in the .rel.plt section.  */
-	  rel.r_offset = (sgot->output_section->vma
-			  + sgot->output_offset
-			  + got_offset);
+	  /* Fill in the entry in the .rel(a).plt section.  */
+	  rel.r_addend = 0;
+	  rel.r_offset = got_address;
 	  rel.r_info = ELF32_R_INFO (h->dynindx, R_ARM_JUMP_SLOT);
 	}
 
-      loc = srel->contents + plt_index * sizeof (Elf32_External_Rel);
-      bfd_elf32_swap_reloc_out (output_bfd, &rel, loc);
+      loc = srel->contents + plt_index * RELOC_SIZE (htab);
+      SWAP_RELOC_OUT (htab) (output_bfd, &rel, loc);
 
       if (!h->def_regular)
 	{
@@ -5061,22 +7059,27 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
 	}
     }
 
-  if (h->got.offset != (bfd_vma) -1)
+  if (h->got.offset != (bfd_vma) -1
+      && (elf32_arm_hash_entry (h)->tls_type & GOT_TLS_GD) == 0
+      && (elf32_arm_hash_entry (h)->tls_type & GOT_TLS_IE) == 0)
     {
       asection * sgot;
       asection * srel;
       Elf_Internal_Rela rel;
       bfd_byte *loc;
+      bfd_vma offset;
 
       /* This symbol has an entry in the global offset table.  Set it
 	 up.  */
       sgot = bfd_get_section_by_name (dynobj, ".got");
-      srel = bfd_get_section_by_name (dynobj, ".rel.got");
+      srel = bfd_get_section_by_name (dynobj, RELOC_SECTION (htab, ".got"));
       BFD_ASSERT (sgot != NULL && srel != NULL);
 
+      offset = (h->got.offset & ~(bfd_vma) 1);
+      rel.r_addend = 0;
       rel.r_offset = (sgot->output_section->vma
 		      + sgot->output_offset
-		      + (h->got.offset &~ (bfd_vma) 1));
+		      + offset);
 
       /* If this is a static link, or it is a -Bsymbolic link and the
 	 symbol is defined locally or was forced to be local because
@@ -5088,16 +7091,21 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
 	{
 	  BFD_ASSERT((h->got.offset & 1) != 0);
 	  rel.r_info = ELF32_R_INFO (0, R_ARM_RELATIVE);
+	  if (!htab->use_rel)
+	    {
+	      rel.r_addend = bfd_get_32 (output_bfd, sgot->contents + offset);
+	      bfd_put_32 (output_bfd, (bfd_vma) 0, sgot->contents + offset);
+	    }
 	}
       else
 	{
 	  BFD_ASSERT((h->got.offset & 1) == 0);
-	  bfd_put_32 (output_bfd, (bfd_vma) 0, sgot->contents + h->got.offset);
+	  bfd_put_32 (output_bfd, (bfd_vma) 0, sgot->contents + offset);
 	  rel.r_info = ELF32_R_INFO (h->dynindx, R_ARM_GLOB_DAT);
 	}
 
-      loc = srel->contents + srel->reloc_count++ * sizeof (Elf32_External_Rel);
-      bfd_elf32_swap_reloc_out (output_bfd, &rel, loc);
+      loc = srel->contents + srel->reloc_count++ * RELOC_SIZE (htab);
+      SWAP_RELOC_OUT (htab) (output_bfd, &rel, loc);
     }
 
   if (h->needs_copy)
@@ -5112,20 +7120,23 @@ elf32_arm_finish_dynamic_symbol (bfd * output_bfd, struct bfd_link_info * info,
 		      || h->root.type == bfd_link_hash_defweak));
 
       s = bfd_get_section_by_name (h->root.u.def.section->owner,
-				   ".rel.bss");
+				   RELOC_SECTION (htab, ".bss"));
       BFD_ASSERT (s != NULL);
 
+      rel.r_addend = 0;
       rel.r_offset = (h->root.u.def.value
 		      + h->root.u.def.section->output_section->vma
 		      + h->root.u.def.section->output_offset);
       rel.r_info = ELF32_R_INFO (h->dynindx, R_ARM_COPY);
-      loc = s->contents + s->reloc_count++ * sizeof (Elf32_External_Rel);
-      bfd_elf32_swap_reloc_out (output_bfd, &rel, loc);
+      loc = s->contents + s->reloc_count++ * RELOC_SIZE (htab);
+      SWAP_RELOC_OUT (htab) (output_bfd, &rel, loc);
     }
 
-  /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
+  /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  On VxWorks,
+     the _GLOBAL_OFFSET_TABLE_ symbol is not absolute: it is relative
+     to the ".got" section.  */
   if (strcmp (h->root.root.string, "_DYNAMIC") == 0
-      || strcmp (h->root.root.string, "_GLOBAL_OFFSET_TABLE_") == 0)
+      || (!htab->vxworks_p && h == htab->root.hgot))
     sym->st_shndx = SHN_ABS;
 
   return TRUE;
@@ -5197,7 +7208,7 @@ elf32_arm_finish_dynamic_sections (bfd * output_bfd, struct bfd_link_info * info
 	      name = ".got";
 	      goto get_vma;
 	    case DT_JMPREL:
-	      name = ".rel.plt";
+	      name = RELOC_SECTION (htab, ".plt");
 	    get_vma:
 	      s = bfd_get_section_by_name (output_bfd, name);
 	      BFD_ASSERT (s != NULL);
@@ -5217,13 +7228,15 @@ elf32_arm_finish_dynamic_sections (bfd * output_bfd, struct bfd_link_info * info
 	      break;
 
 	    case DT_PLTRELSZ:
-	      s = bfd_get_section_by_name (output_bfd, ".rel.plt");
+	      s = bfd_get_section_by_name (output_bfd,
+					   RELOC_SECTION (htab, ".plt"));
 	      BFD_ASSERT (s != NULL);
 	      dyn.d_un.d_val = s->size;
 	      bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
 	      break;
 	      
 	    case DT_RELSZ:
+	    case DT_RELASZ:
 	      if (!htab->symbian_p)
 		{
 		  /* My reading of the SVR4 ABI indicates that the
@@ -5232,10 +7245,11 @@ elf32_arm_finish_dynamic_sections (bfd * output_bfd, struct bfd_link_info * info
 		     what Solaris does.  However, UnixWare can not handle
 		     that case.  Therefore, we override the DT_RELSZ entry
 		     here to make it not include the JMPREL relocs.  Since
-		     the linker script arranges for .rel.plt to follow all
+		     the linker script arranges for .rel(a).plt to follow all
 		     other relocation sections, we don't have to worry
 		     about changing the DT_REL entry.  */
-		  s = bfd_get_section_by_name (output_bfd, ".rel.plt");
+		  s = bfd_get_section_by_name (output_bfd,
+					       RELOC_SECTION (htab, ".plt"));
 		  if (s != NULL)
 		    dyn.d_un.d_val -= s->size;
 		  bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
@@ -5245,7 +7259,6 @@ elf32_arm_finish_dynamic_sections (bfd * output_bfd, struct bfd_link_info * info
 
 	    case DT_REL:
 	    case DT_RELA:
-	    case DT_RELASZ:
 	      /* In the BPABI, the DT_REL tag must point at the file
 		 offset, not the VMA, of the first relocation
 		 section.  So, we use code similar to that in
@@ -5308,31 +7321,83 @@ elf32_arm_finish_dynamic_sections (bfd * output_bfd, struct bfd_link_info * info
       /* Fill in the first entry in the procedure linkage table.  */
       if (splt->size > 0 && elf32_arm_hash_table (info)->plt_header_size)
 	{
-	  bfd_vma got_displacement;
+	  const bfd_vma *plt0_entry;
+	  bfd_vma got_address, plt_address, got_displacement;
 
-	  /* Calculate the displacement between the PLT slot and &GOT[0].  */
-	  got_displacement = (sgot->output_section->vma
-			      + sgot->output_offset
-			      - splt->output_section->vma
-			      - splt->output_offset
-			      - 16);
+	  /* Calculate the addresses of the GOT and PLT.  */
+	  got_address = sgot->output_section->vma + sgot->output_offset;
+	  plt_address = splt->output_section->vma + splt->output_offset;
 
-	  bfd_put_32 (output_bfd, elf32_arm_plt0_entry[0], splt->contents +  0);
-	  bfd_put_32 (output_bfd, elf32_arm_plt0_entry[1], splt->contents +  4);
-	  bfd_put_32 (output_bfd, elf32_arm_plt0_entry[2], splt->contents +  8);
-	  bfd_put_32 (output_bfd, elf32_arm_plt0_entry[3], splt->contents + 12);
+	  if (htab->vxworks_p)
+	    {
+	      /* The VxWorks GOT is relocated by the dynamic linker.
+		 Therefore, we must emit relocations rather than simply
+		 computing the values now.  */
+	      Elf_Internal_Rela rel;
+
+	      plt0_entry = elf32_arm_vxworks_exec_plt0_entry;
+	      bfd_put_32 (output_bfd, plt0_entry[0], splt->contents + 0);
+	      bfd_put_32 (output_bfd, plt0_entry[1], splt->contents + 4);
+	      bfd_put_32 (output_bfd, plt0_entry[2], splt->contents + 8);
+	      bfd_put_32 (output_bfd, got_address, splt->contents + 12);
+
+	      /* Generate a relocation for _GLOBAL_OFFSET_TABLE_. */
+	      rel.r_offset = plt_address + 12;
+	      rel.r_info = ELF32_R_INFO (htab->root.hgot->indx, R_ARM_ABS32);
+	      rel.r_addend = 0;
+	      SWAP_RELOC_OUT (htab) (output_bfd, &rel,
+				     htab->srelplt2->contents);
+	    }
+	  else
+	    {
+	      got_displacement = got_address - (plt_address + 16);
+
+	      plt0_entry = elf32_arm_plt0_entry;
+	      bfd_put_32 (output_bfd, plt0_entry[0], splt->contents + 0);
+	      bfd_put_32 (output_bfd, plt0_entry[1], splt->contents + 4);
+	      bfd_put_32 (output_bfd, plt0_entry[2], splt->contents + 8);
+	      bfd_put_32 (output_bfd, plt0_entry[3], splt->contents + 12);
+
 #ifdef FOUR_WORD_PLT
-	  /* The displacement value goes in the otherwise-unused last word of
-	     the second entry.  */
-	  bfd_put_32 (output_bfd, got_displacement,        splt->contents + 28);
+	      /* The displacement value goes in the otherwise-unused
+		 last word of the second entry.  */
+	      bfd_put_32 (output_bfd, got_displacement, splt->contents + 28);
 #else
-	  bfd_put_32 (output_bfd, got_displacement,        splt->contents + 16);
+	      bfd_put_32 (output_bfd, got_displacement, splt->contents + 16);
 #endif
+	    }
 	}
 
       /* UnixWare sets the entsize of .plt to 4, although that doesn't
 	 really seem like the right value.  */
       elf_section_data (splt->output_section)->this_hdr.sh_entsize = 4;
+
+      if (htab->vxworks_p && !info->shared && htab->splt->size > 0)
+	{
+	  /* Correct the .rel(a).plt.unloaded relocations.  They will have
+	     incorrect symbol indexes.  */
+	  int num_plts;
+	  unsigned char *p;
+
+	  num_plts = ((htab->splt->size - htab->plt_header_size)
+		      / htab->plt_entry_size);
+	  p = htab->srelplt2->contents + RELOC_SIZE (htab);
+
+	  for (; num_plts; num_plts--)
+	    {
+	      Elf_Internal_Rela rel;
+
+	      SWAP_RELOC_IN (htab) (output_bfd, p, &rel);
+	      rel.r_info = ELF32_R_INFO (htab->root.hgot->indx, R_ARM_ABS32);
+	      SWAP_RELOC_OUT (htab) (output_bfd, &rel, p);
+	      p += RELOC_SIZE (htab);
+
+	      SWAP_RELOC_IN (htab) (output_bfd, p, &rel);
+	      rel.r_info = ELF32_R_INFO (htab->root.hplt->indx, R_ARM_ABS32);
+	      SWAP_RELOC_OUT (htab) (output_bfd, &rel, p);
+	      p += RELOC_SIZE (htab);
+	    }
+	}
     }
 
   /* Fill in the first three entries in the global offset table.  */
@@ -5440,16 +7505,134 @@ elf32_arm_fake_sections (bfd * abfd, Elf_Internal_Shdr * hdr, asection * sec)
       hdr->sh_type = SHT_ARM_EXIDX;
       hdr->sh_flags |= SHF_LINK_ORDER;
     }
+  else if (strcmp(name, ".ARM.attributes") == 0)
+    {
+      hdr->sh_type = SHT_ARM_ATTRIBUTES;
+    }
   return TRUE;
 }
 
-/* Handle an ARM specific section when reading an object file.
-   This is called when elf.c finds a section with an unknown type.  */
+/* Parse an Arm EABI attributes section.  */
+static void
+elf32_arm_parse_attributes (bfd *abfd, Elf_Internal_Shdr * hdr)
+{
+  bfd_byte *contents;
+  bfd_byte *p;
+  bfd_vma len;
+
+  contents = bfd_malloc (hdr->sh_size);
+  if (!contents)
+    return;
+  if (!bfd_get_section_contents (abfd, hdr->bfd_section, contents, 0,
+				 hdr->sh_size))
+    {
+      free (contents);
+      return;
+    }
+  p = contents;
+  if (*(p++) == 'A')
+    {
+      len = hdr->sh_size - 1;
+      while (len > 0)
+	{
+	  int namelen;
+	  bfd_vma section_len;
+
+	  section_len = bfd_get_32 (abfd, p);
+	  p += 4;
+	  if (section_len > len)
+	    section_len = len;
+	  len -= section_len;
+	  namelen = strlen ((char *)p) + 1;
+	  section_len -= namelen + 4;
+	  if (strcmp((char *)p, "aeabi") != 0)
+	    {
+	      /* Vendor section.  Ignore it.  */
+	      p += namelen + section_len;
+	    }
+	  else
+	    {
+	      p += namelen;
+	      while (section_len > 0)
+		{
+		  int tag;
+		  unsigned int n;
+		  unsigned int val;
+		  bfd_vma subsection_len;
+		  bfd_byte *end;
+
+		  tag = read_unsigned_leb128 (abfd, p, &n);
+		  p += n;
+		  subsection_len = bfd_get_32 (abfd, p);
+		  p += 4;
+		  if (subsection_len > section_len)
+		    subsection_len = section_len;
+		  section_len -= subsection_len;
+		  subsection_len -= n + 4;
+		  end = p + subsection_len;
+		  switch (tag)
+		    {
+		    case Tag_File:
+		      while (p < end)
+			{
+			  bfd_boolean is_string;
+
+			  tag = read_unsigned_leb128 (abfd, p, &n);
+			  p += n;
+			  if (tag == 4 || tag == 5)
+			    is_string = 1;
+			  else if (tag < 32)
+			    is_string = 0;
+			  else
+			    is_string = (tag & 1) != 0;
+			  if (tag == Tag_compatibility)
+			    {
+			      val = read_unsigned_leb128 (abfd, p, &n);
+			      p += n;
+			      elf32_arm_add_eabi_attr_compat (abfd, val,
+							      (char *)p);
+			      p += strlen ((char *)p) + 1;
+			    }
+			  else if (is_string)
+			    {
+			      elf32_arm_add_eabi_attr_string (abfd, tag,
+							      (char *)p);
+			      p += strlen ((char *)p) + 1;
+			    }
+			  else
+			    {
+			      val = read_unsigned_leb128 (abfd, p, &n);
+			      p += n;
+			      elf32_arm_add_eabi_attr_int (abfd, tag, val);
+			    }
+			}
+		      break;
+		    case Tag_Section:
+		    case Tag_Symbol:
+		      /* Don't have anywhere convenient to attach these.
+		         Fall through for now.  */
+		    default:
+		      /* Ignore things we don't kow about.  */
+		      p += subsection_len;
+		      subsection_len = 0;
+		      break;
+		    }
+		}
+	    }
+	}
+    }
+  free (contents);
+}
+
+/* Handle an ARM specific section when reading an object file.  This is
+   called when bfd_section_from_shdr finds a section with an unknown
+   type.  */
 
 static bfd_boolean
 elf32_arm_section_from_shdr (bfd *abfd,
 			     Elf_Internal_Shdr * hdr,
-			     const char *name)
+			     const char *name,
+			     int shindex)
 {
   /* There ought to be a place to keep ELF backend specific flags, but
      at the moment there isn't one.  We just keep track of the
@@ -5459,16 +7642,121 @@ elf32_arm_section_from_shdr (bfd *abfd,
   switch (hdr->sh_type)
     {
     case SHT_ARM_EXIDX:
+    case SHT_ARM_PREEMPTMAP:
+    case SHT_ARM_ATTRIBUTES:
       break;
 
     default:
       return FALSE;
     }
 
-  if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name))
+  if (! _bfd_elf_make_section_from_shdr (abfd, hdr, name, shindex))
     return FALSE;
 
+  if (hdr->sh_type == SHT_ARM_ATTRIBUTES)
+    elf32_arm_parse_attributes(abfd, hdr);
   return TRUE;
+}
+
+/* A structure used to record a list of sections, independently
+   of the next and prev fields in the asection structure.  */
+typedef struct section_list
+{
+  asection * sec;
+  struct section_list * next;
+  struct section_list * prev;
+}
+section_list;
+
+/* Unfortunately we need to keep a list of sections for which
+   an _arm_elf_section_data structure has been allocated.  This
+   is because it is possible for functions like elf32_arm_write_section
+   to be called on a section which has had an elf_data_structure
+   allocated for it (and so the used_by_bfd field is valid) but
+   for which the ARM extended version of this structure - the
+   _arm_elf_section_data structure - has not been allocated.  */
+static section_list * sections_with_arm_elf_section_data = NULL;
+
+static void
+record_section_with_arm_elf_section_data (asection * sec)
+{
+  struct section_list * entry;
+
+  entry = bfd_malloc (sizeof (* entry));
+  if (entry == NULL)
+    return;
+  entry->sec = sec;
+  entry->next = sections_with_arm_elf_section_data;
+  entry->prev = NULL;
+  if (entry->next != NULL)
+    entry->next->prev = entry;
+  sections_with_arm_elf_section_data = entry;
+}
+
+static struct section_list *
+find_arm_elf_section_entry (asection * sec)
+{
+  struct section_list * entry;
+  static struct section_list * last_entry = NULL;
+
+  /* This is a short cut for the typical case where the sections are added
+     to the sections_with_arm_elf_section_data list in forward order and
+     then looked up here in backwards order.  This makes a real difference
+     to the ld-srec/sec64k.exp linker test.  */
+  entry = sections_with_arm_elf_section_data;
+  if (last_entry != NULL)
+    {
+      if (last_entry->sec == sec)
+	entry = last_entry;
+      else if (last_entry->next != NULL
+	       && last_entry->next->sec == sec)
+	entry = last_entry->next;
+    }
+
+  for (; entry; entry = entry->next)
+    if (entry->sec == sec)
+      break;
+
+  if (entry)
+    /* Record the entry prior to this one - it is the entry we are most
+       likely to want to locate next time.  Also this way if we have been
+       called from unrecord_section_with_arm_elf_section_data() we will not
+       be caching a pointer that is about to be freed.  */
+    last_entry = entry->prev;
+
+  return entry;
+}
+
+static _arm_elf_section_data *
+get_arm_elf_section_data (asection * sec)
+{
+  struct section_list * entry;
+
+  entry = find_arm_elf_section_entry (sec);
+
+  if (entry)
+    return elf32_arm_section_data (entry->sec);
+  else
+    return NULL;
+}
+
+static void
+unrecord_section_with_arm_elf_section_data (asection * sec)
+{
+  struct section_list * entry;
+
+  entry = find_arm_elf_section_entry (sec);
+
+  if (entry)
+    {
+      if (entry->prev != NULL)
+	entry->prev->next = entry->next;
+      if (entry->next != NULL)
+	entry->next->prev = entry->prev;
+      if (entry == sections_with_arm_elf_section_data)
+	sections_with_arm_elf_section_data = entry->next;
+      free (entry);
+    }
 }
 
 /* Called for each symbol.  Builds a section map based on mapping symbols.
@@ -5479,50 +7767,70 @@ elf32_arm_output_symbol_hook (struct bfd_link_info *info,
 			      const char *name,
 			      Elf_Internal_Sym *elfsym,
 			      asection *input_sec,
-			      struct elf_link_hash_entry *h ATTRIBUTE_UNUSED)
+			      struct elf_link_hash_entry *h)
 {
   int mapcount;
   elf32_arm_section_map *map;
+  elf32_arm_section_map *newmap;
+  _arm_elf_section_data *arm_data;
   struct elf32_arm_link_hash_table *globals;
+
+  globals = elf32_arm_hash_table (info);
+  if (globals->vxworks_p
+      && !elf_vxworks_link_output_symbol_hook (info, name, elfsym,
+					       input_sec, h))
+    return FALSE;
 
   /* Only do this on final link.  */
   if (info->relocatable)
     return TRUE;
 
   /* Only build a map if we need to byteswap code.  */
-  globals = elf32_arm_hash_table (info);
   if (!globals->byteswap_code)
     return TRUE;
 
   /* We only want mapping symbols.  */
-  if (! is_arm_mapping_symbol_name (name))
+  if (! bfd_is_arm_mapping_symbol_name (name))
     return TRUE;
 
-  mapcount = ++(elf32_arm_section_data (input_sec)->mapcount);
-  map = elf32_arm_section_data (input_sec)->map;
+  /* If this section has not been allocated an _arm_elf_section_data
+     structure then we cannot record anything.  */
+  arm_data = get_arm_elf_section_data (input_sec);
+  if (arm_data == NULL)
+    return TRUE;
+
+  mapcount = arm_data->mapcount + 1;
+  map = arm_data->map;
+
   /* TODO: This may be inefficient, but we probably don't usually have many
      mapping symbols per section.  */
-  map = bfd_realloc (map, mapcount * sizeof (elf32_arm_section_map));
-  elf32_arm_section_data (input_sec)->map = map;
+  newmap = bfd_realloc (map, mapcount * sizeof (* map));
+  if (newmap != NULL)
+    {
+      arm_data->map = newmap;
+      arm_data->mapcount = mapcount;
 
-  map[mapcount - 1].vma = elfsym->st_value;
-  map[mapcount - 1].type = name[1];
+      newmap[mapcount - 1].vma = elfsym->st_value;
+      newmap[mapcount - 1].type = name[1];
+    }
+
   return TRUE;
 }
-
 
 /* Allocate target specific section data.  */
 
 static bfd_boolean
 elf32_arm_new_section_hook (bfd *abfd, asection *sec)
 {
-  struct _arm_elf_section_data *sdata;
+  _arm_elf_section_data *sdata;
   bfd_size_type amt = sizeof (*sdata);
 
   sdata = bfd_zalloc (abfd, amt);
   if (sdata == NULL)
     return FALSE;
   sec->used_by_bfd = sdata;
+
+  record_section_with_arm_elf_section_data (sec);
 
   return _bfd_elf_new_section_hook (abfd, sec);
 }
@@ -5546,6 +7854,7 @@ elf32_arm_write_section (bfd *output_bfd ATTRIBUTE_UNUSED, asection *sec,
 			 bfd_byte *contents)
 {
   int mapcount;
+  _arm_elf_section_data *arm_data;
   elf32_arm_section_map *map;
   bfd_vma ptr;
   bfd_vma end;
@@ -5553,14 +7862,19 @@ elf32_arm_write_section (bfd *output_bfd ATTRIBUTE_UNUSED, asection *sec,
   bfd_byte tmp;
   int i;
 
-  mapcount = elf32_arm_section_data (sec)->mapcount;
-  map = elf32_arm_section_data (sec)->map;
+  /* If this section has not been allocated an _arm_elf_section_data
+     structure then we cannot record anything.  */
+  arm_data = get_arm_elf_section_data (sec);
+  if (arm_data == NULL)
+    return FALSE;
+
+  mapcount = arm_data->mapcount;
+  map = arm_data->map;
 
   if (mapcount == 0)
     return FALSE;
 
-  qsort (map, mapcount, sizeof (elf32_arm_section_map),
-	 elf32_arm_compare_mapping);
+  qsort (map, mapcount, sizeof (* map), elf32_arm_compare_mapping);
 
   offset = sec->output_section->vma + sec->output_offset;
   ptr = map[0].vma - offset;
@@ -5604,8 +7918,29 @@ elf32_arm_write_section (bfd *output_bfd ATTRIBUTE_UNUSED, asection *sec,
 	}
       ptr = end;
     }
+
   free (map);
+  arm_data->mapcount = 0;
+  arm_data->map = NULL;
+  unrecord_section_with_arm_elf_section_data (sec);
+
   return FALSE;
+}
+
+static void
+unrecord_section_via_map_over_sections (bfd * abfd ATTRIBUTE_UNUSED,
+					asection * sec,
+					void * ignore ATTRIBUTE_UNUSED)
+{
+  unrecord_section_with_arm_elf_section_data (sec);
+}
+
+static bfd_boolean
+elf32_arm_close_and_cleanup (bfd * abfd)
+{
+  bfd_map_over_sections (abfd, unrecord_section_via_map_over_sections, NULL);
+
+  return _bfd_elf_close_and_cleanup (abfd);
 }
 
 /* Display STT_ARM_TFUNC symbols as functions.  */
@@ -5754,6 +8089,8 @@ const struct elf_size_info elf32_arm_size_info = {
 #endif
 #define ELF_MINPAGESIZE			0x1000
 
+#define bfd_elf32_mkobject		        elf32_arm_mkobject
+
 #define bfd_elf32_bfd_copy_private_bfd_data	elf32_arm_copy_private_bfd_data
 #define bfd_elf32_bfd_merge_private_bfd_data	elf32_arm_merge_private_bfd_data
 #define bfd_elf32_bfd_set_private_flags		elf32_arm_set_private_flags
@@ -5761,8 +8098,11 @@ const struct elf_size_info elf32_arm_size_info = {
 #define bfd_elf32_bfd_link_hash_table_create    elf32_arm_link_hash_table_create
 #define bfd_elf32_bfd_reloc_type_lookup		elf32_arm_reloc_type_lookup
 #define bfd_elf32_find_nearest_line	        elf32_arm_find_nearest_line
+#define bfd_elf32_find_inliner_info	        elf32_arm_find_inliner_info
 #define bfd_elf32_new_section_hook		elf32_arm_new_section_hook
 #define bfd_elf32_bfd_is_target_special_symbol	elf32_arm_is_target_special_symbol
+#define bfd_elf32_close_and_cleanup             elf32_arm_close_and_cleanup
+#define bfd_elf32_bfd_final_link		elf32_arm_bfd_final_link
 
 #define elf_backend_get_symbol_type             elf32_arm_get_symbol_type
 #define elf_backend_gc_mark_hook                elf32_arm_gc_mark_hook
@@ -5826,11 +8166,19 @@ elf32_arm_vxworks_link_hash_table_create (bfd *abfd)
   if (ret)
     {
       struct elf32_arm_link_hash_table *htab
-	= (struct elf32_arm_link_hash_table *)ret;
+	= (struct elf32_arm_link_hash_table *) ret;
       htab->use_rel = 0;
+      htab->vxworks_p = 1;
     }
   return ret;
 }     
+
+static void
+elf32_arm_vxworks_final_write_processing (bfd *abfd, bfd_boolean linker)
+{
+  elf32_arm_final_write_processing (abfd, linker);
+  elf_vxworks_final_write_processing (abfd, linker);
+}
 
 #undef elf32_bed
 #define elf32_bed elf32_arm_vxworks_bed
@@ -5838,15 +8186,28 @@ elf32_arm_vxworks_link_hash_table_create (bfd *abfd)
 #undef bfd_elf32_bfd_link_hash_table_create
 #define bfd_elf32_bfd_link_hash_table_create \
   elf32_arm_vxworks_link_hash_table_create
+#undef elf_backend_add_symbol_hook
+#define elf_backend_add_symbol_hook \
+  elf_vxworks_add_symbol_hook
+#undef elf_backend_final_write_processing
+#define elf_backend_final_write_processing \
+  elf32_arm_vxworks_final_write_processing
+#undef elf_backend_emit_relocs
+#define elf_backend_emit_relocs \
+  elf_vxworks_emit_relocs
 
 #undef elf_backend_may_use_rel_p
-#define elf_backend_may_use_rel_p   0
+#define elf_backend_may_use_rel_p	0
 #undef elf_backend_may_use_rela_p
-#define elf_backend_may_use_rela_p  1
+#define elf_backend_may_use_rela_p	1
 #undef elf_backend_default_use_rela_p
-#define elf_backend_default_use_rela_p 1
+#define elf_backend_default_use_rela_p	1
 #undef elf_backend_rela_normal
-#define elf_backend_rela_normal     1
+#define elf_backend_rela_normal		1
+#undef elf_backend_want_plt_sym
+#define elf_backend_want_plt_sym	1
+#undef ELF_MAXPAGESIZE
+#define ELF_MAXPAGESIZE			0x1000
 
 #include "elf32-target.h"
 
@@ -5879,13 +8240,15 @@ elf32_arm_symbian_link_hash_table_create (bfd *abfd)
       /* The PLT entries are each three instructions.  */
       htab->plt_entry_size = 4 * NUM_ELEM (elf32_arm_symbian_plt_entry);
       htab->symbian_p = 1;
+      /* Symbian uses armv5t or above, so use_blx is always true.  */
+      htab->use_blx = 1;
       htab->root.is_relocatable_executable = 1;
     }
   return ret;
 }     
 
-static struct bfd_elf_special_section const 
-  elf32_arm_symbian_special_sections[]=
+static const struct bfd_elf_special_section
+elf32_arm_symbian_special_sections[] =
 {
   /* In a BPABI executable, the dynamic linking sections do not go in
      the loadable read-only segment.  The post-linker may wish to
@@ -5956,6 +8319,7 @@ elf32_arm_symbian_modify_segment_map (bfd *abfd,
 #undef bfd_elf32_bfd_link_hash_table_create
 #define bfd_elf32_bfd_link_hash_table_create \
   elf32_arm_symbian_link_hash_table_create
+#undef elf_backend_add_symbol_hook
 
 #undef elf_backend_special_sections
 #define elf_backend_special_sections elf32_arm_symbian_special_sections
@@ -5963,6 +8327,10 @@ elf32_arm_symbian_modify_segment_map (bfd *abfd,
 #undef elf_backend_begin_write_processing
 #define elf_backend_begin_write_processing \
     elf32_arm_symbian_begin_write_processing
+#undef elf_backend_final_write_processing
+#define elf_backend_final_write_processing \
+  elf32_arm_final_write_processing
+#undef elf_backend_emit_relocs
 
 #undef elf_backend_modify_segment_map
 #define elf_backend_modify_segment_map elf32_arm_symbian_modify_segment_map
@@ -5976,12 +8344,16 @@ elf32_arm_symbian_modify_segment_map (bfd *abfd,
 #define elf_backend_want_got_plt 0
 
 #undef elf_backend_may_use_rel_p
-#define elf_backend_may_use_rel_p   1
+#define elf_backend_may_use_rel_p	1
 #undef elf_backend_may_use_rela_p
-#define elf_backend_may_use_rela_p  0
+#define elf_backend_may_use_rela_p	0
 #undef elf_backend_default_use_rela_p
-#define elf_backend_default_use_rela_p 0
+#define elf_backend_default_use_rela_p	0
 #undef elf_backend_rela_normal
-#define elf_backend_rela_normal     0
+#define elf_backend_rela_normal		0
+#undef elf_backend_want_plt_sym
+#define elf_backend_want_plt_sym	0
+#undef ELF_MAXPAGESIZE
+#define ELF_MAXPAGESIZE			0x8000
 
 #include "elf32-target.h"

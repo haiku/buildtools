@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GLD; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /*
 This was written by steve chamberlain
@@ -303,6 +303,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <EXPRESSION,BOTH,SCRIPT>"OVERLAY"	{ RTOKEN(OVERLAY);}
 <EXPRESSION,BOTH,SCRIPT>"ONLY_IF_RO"	{ RTOKEN(ONLY_IF_RO); }
 <EXPRESSION,BOTH,SCRIPT>"ONLY_IF_RW"	{ RTOKEN(ONLY_IF_RW); }
+<EXPRESSION,BOTH,SCRIPT>"SPECIAL"	{ RTOKEN(SPECIAL); }
 <BOTH,SCRIPT>"o"			{ RTOKEN(ORIGIN);}
 <BOTH,SCRIPT>"org"			{ RTOKEN(ORIGIN);}
 <BOTH,SCRIPT>"l"			{ RTOKEN( LENGTH);}
@@ -312,6 +313,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <EXPRESSION,BOTH,SCRIPT>"AT"		{ RTOKEN(AT);}
 <EXPRESSION,BOTH,SCRIPT>"SUBALIGN"	{ RTOKEN(SUBALIGN);}
 <EXPRESSION,BOTH,SCRIPT>"PROVIDE"	{ RTOKEN(PROVIDE); }
+<EXPRESSION,BOTH,SCRIPT>"PROVIDE_HIDDEN" { RTOKEN(PROVIDE_HIDDEN); }
 <EXPRESSION,BOTH,SCRIPT>"KEEP"		{ RTOKEN(KEEP); }
 <EXPRESSION,BOTH,SCRIPT>"EXCLUDE_FILE"  { RTOKEN(EXCLUDE_FILE); }
 <MRI>"#".*\n?			{ ++ lineno; }

@@ -1,6 +1,6 @@
 /* linker.c -- BFD linker routines
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006 Free Software Foundation, Inc.
    Written by Steve Chamberlain and Ian Lance Taylor, Cygnus Support
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -17,7 +17,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "sysdep.h"
@@ -309,7 +309,7 @@ SUBSUBSECTION
 	of the <<bfd>> structure.
 
 	Each section in the output file will have a list of
-	<<link_order>> structures attached to the <<link_order_head>>
+	<<link_order>> structures attached to the <<map_head.link_order>>
 	field (the <<link_order>> structure is defined in
 	<<bfdlink.h>>).  These structures describe how to create the
 	contents of the output section in terms of the contents of
@@ -472,14 +472,15 @@ _bfd_link_hash_table_init
    bfd *abfd,
    struct bfd_hash_entry *(*newfunc) (struct bfd_hash_entry *,
 				      struct bfd_hash_table *,
-				      const char *))
+				      const char *),
+   unsigned int entsize)
 {
   table->creator = abfd->xvec;
   table->undefs = NULL;
   table->undefs_tail = NULL;
   table->type = bfd_link_generic_hash_table;
 
-  return bfd_hash_table_init (&table->table, newfunc);
+  return bfd_hash_table_init (&table->table, newfunc, entsize);
 }
 
 /* Look up a symbol in a link hash table.  If follow is TRUE, we
@@ -709,7 +710,8 @@ _bfd_generic_link_hash_table_create (bfd *abfd)
   if (ret == NULL)
     return NULL;
   if (! _bfd_link_hash_table_init (&ret->root, abfd,
-				   _bfd_generic_link_hash_newfunc))
+				   _bfd_generic_link_hash_newfunc,
+				   sizeof (struct generic_link_hash_entry)))
     {
       free (ret);
       return NULL;
@@ -901,9 +903,10 @@ archive_hash_table_init
   (struct archive_hash_table *table,
    struct bfd_hash_entry *(*newfunc) (struct bfd_hash_entry *,
 				      struct bfd_hash_table *,
-				      const char *))
+				      const char *),
+   unsigned int entsize)
 {
-  return bfd_hash_table_init (&table->table, newfunc);
+  return bfd_hash_table_init (&table->table, newfunc, entsize);
 }
 
 /* Look up an entry in an archive hash table.  */
@@ -981,7 +984,8 @@ _bfd_generic_link_add_archive_symbols
 
   /* In order to quickly determine whether an symbol is defined in
      this archive, we build a hash table of the symbols.  */
-  if (! archive_hash_table_init (&arsym_hash, archive_hash_newfunc))
+  if (! archive_hash_table_init (&arsym_hash, archive_hash_newfunc,
+				 sizeof (struct archive_hash_entry)))
     return FALSE;
   for (arsym = arsyms, indx = 0; arsym < arsym_end; arsym++, indx++)
     {
@@ -2009,7 +2013,7 @@ _bfd_generic_final_link (bfd *abfd, struct bfd_link_info *info)
 
   /* Mark all sections which will be included in the output file.  */
   for (o = abfd->sections; o != NULL; o = o->next)
-    for (p = o->link_order_head; p != NULL; p = p->next)
+    for (p = o->map_head.link_order; p != NULL; p = p->next)
       if (p->type == bfd_indirect_link_order)
 	p->u.indirect.section->linker_mark = TRUE;
 
@@ -2038,7 +2042,7 @@ _bfd_generic_final_link (bfd *abfd, struct bfd_link_info *info)
       for (o = abfd->sections; o != NULL; o = o->next)
 	{
 	  o->reloc_count = 0;
-	  for (p = o->link_order_head; p != NULL; p = p->next)
+	  for (p = o->map_head.link_order; p != NULL; p = p->next)
 	    {
 	      if (p->type == bfd_section_reloc_link_order
 		  || p->type == bfd_symbol_reloc_link_order)
@@ -2094,7 +2098,7 @@ _bfd_generic_final_link (bfd *abfd, struct bfd_link_info *info)
   /* Handle all the link order information for the sections.  */
   for (o = abfd->sections; o != NULL; o = o->next)
     {
-      for (p = o->link_order_head; p != NULL; p = p->next)
+      for (p = o->map_head.link_order; p != NULL; p = p->next)
 	{
 	  switch (p->type)
 	    {
@@ -2363,12 +2367,11 @@ _bfd_generic_link_output_symbols (bfd *output_bfd,
 	abort ();
 
       /* If this symbol is in a section which is not being included
-	 in the output file, then we don't want to output the symbol.
-
-	 Gross.  .bss and similar sections won't have the linker_mark
-	 field set.  */
-      if ((sym->section->flags & SEC_HAS_CONTENTS) != 0
-	  && ! sym->section->linker_mark)
+	 in the output file, then we don't want to output the
+	 symbol.  */
+      if (!bfd_is_abs_section (sym->section)
+	  && bfd_section_removed_from_list (output_bfd,
+					    sym->section->output_section))
 	output = FALSE;
 
       if (output)
@@ -2612,11 +2615,11 @@ bfd_new_link_order (bfd *abfd, asection *section)
 
   new->type = bfd_undefined_link_order;
 
-  if (section->link_order_tail != NULL)
-    section->link_order_tail->next = new;
+  if (section->map_tail.link_order != NULL)
+    section->map_tail.link_order->next = new;
   else
-    section->link_order_head = new;
-  section->link_order_tail = new;
+    section->map_head.link_order = new;
+  section->map_tail.link_order = new;
 
   return new;
 }
@@ -2718,11 +2721,10 @@ default_indirect_link_order (bfd *output_bfd,
 
   BFD_ASSERT ((output_section->flags & SEC_HAS_CONTENTS) != 0);
 
-  if (link_order->size == 0)
-    return TRUE;
-
   input_section = link_order->u.indirect.section;
   input_bfd = input_section->owner;
+  if (input_section->size == 0)
+    return TRUE;
 
   BFD_ASSERT (input_section->output_section == output_section);
   BFD_ASSERT (input_section->output_offset == link_order->offset);
@@ -2811,9 +2813,9 @@ default_indirect_link_order (bfd *output_bfd,
     goto error_return;
 
   /* Output the section contents.  */
-  loc = link_order->offset * bfd_octets_per_byte (output_bfd);
+  loc = input_section->output_offset * bfd_octets_per_byte (output_bfd);
   if (! bfd_set_section_contents (output_bfd, output_section,
-				  new_contents, loc, link_order->size))
+				  new_contents, loc, input_section->size))
     goto error_return;
 
   if (contents != NULL)
@@ -2954,7 +2956,9 @@ bfd_boolean
 bfd_section_already_linked_table_init (void)
 {
   return bfd_hash_table_init_n (&_bfd_section_already_linked_table,
-				already_linked_newfunc, 42);
+				already_linked_newfunc,
+				sizeof (struct bfd_section_already_linked_hash_entry),
+				42);
 }
 
 void
@@ -3068,4 +3072,37 @@ _bfd_generic_section_already_linked (bfd *abfd, asection *sec)
 
   /* This is the first section with this name.  Record it.  */
   bfd_section_already_linked_table_insert (already_linked_list, sec);
+}
+
+/* Convert symbols in excluded output sections to absolute.  */
+
+static bfd_boolean
+fix_syms (struct bfd_link_hash_entry *h, void *data)
+{
+  bfd *obfd = (bfd *) data;
+
+  if (h->type == bfd_link_hash_warning)
+    h = h->u.i.link;
+
+  if (h->type == bfd_link_hash_defined
+      || h->type == bfd_link_hash_defweak)
+    {
+      asection *s = h->u.def.section;
+      if (s != NULL
+	  && s->output_section != NULL
+	  && (s->output_section->flags & SEC_EXCLUDE) != 0
+	  && bfd_section_removed_from_list (obfd, s->output_section))
+	{
+	  h->u.def.value += s->output_offset + s->output_section->vma;
+	  h->u.def.section = bfd_abs_section_ptr;
+	}
+    }
+
+  return TRUE;
+}
+
+void
+_bfd_fix_excluded_sec_syms (bfd *obfd, struct bfd_link_info *info)
+{
+  bfd_link_hash_traverse (info->hash, fix_syms, obfd);
 }

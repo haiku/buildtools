@@ -16,7 +16,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* Extensions/incompatibilities:
    o - BSD output has filenames at the end.
@@ -45,7 +45,9 @@ enum
   }
 radix = decimal;
 
-int berkeley_format = BSD_DEFAULT;	/* 0 means use AT&T-style output.  */
+/* 0 means use AT&T-style output.  */
+static int berkeley_format = BSD_DEFAULT;
+
 int show_version = 0;
 int show_help = 0;
 int show_totals = 0;
@@ -85,6 +87,7 @@ usage (FILE *stream, int status)
   -o|-d|-x  --radix={8|10|16}         Display numbers in octal, decimal or hex\n\
   -t        --totals                  Display the total sizes (Berkeley only)\n\
             --target=<bfdname>        Set the binary file format\n\
+            @<file>                   Read options from <file>\n\
   -h        --help                    Display this information\n\
   -v        --version                 Display the program's version\n\
 \n"),
@@ -100,7 +103,7 @@ usage (FILE *stream, int status)
   exit (status);
 }
 
-struct option long_options[] =
+static struct option long_options[] =
 {
   {"format", required_argument, 0, 200},
   {"radix", required_argument, 0, 201},
@@ -130,6 +133,8 @@ main (int argc, char **argv)
 
   program_name = *argv;
   xmalloc_set_program_name (program_name);
+
+  expandargv (&argc, &argv);
 
   bfd_init ();
   set_default_bfd_target ();

@@ -38,6 +38,8 @@ if [istarget m68*-*-*] then {
     run_dump_test mode5
     run_dump_test mcf-mac
     run_dump_test mcf-emac
+    run_dump_test mcf-fpu
+    run_dump_test arch-cpu-1
 
     set testname "68000 operands"
     gas_run "operands.s" "-m68000" "2>err.out"

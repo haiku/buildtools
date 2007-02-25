@@ -1,5 +1,5 @@
 /* tc-tic54x.c -- Assembly code for the Texas Instruments TMS320C54X
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* Texas Instruments TMS320C54X machine specific gas.
    Written by Timothy Wall (twall@alum.mit.edu).
@@ -2700,29 +2700,10 @@ tic54x_macro_start ()
 }
 
 void
-tic54x_macro_info (info)
-     void *info;
+tic54x_macro_info (macro)
+     const macro_entry *macro;
 {
-  struct formal_struct
-  {
-    struct formal_struct *next;	/* Next formal in list  */
-    sb name;			/* Name of the formal  */
-    sb def;			/* The default value  */
-    sb actual;			/* The actual argument (changed on
-                                   each expansion) */
-    int index;			/* The index of the formal
-                                   0 .. formal_count - 1 */
-  } *entry;
-  struct macro_struct
-  {
-    sb sub;			/* Substitution text.  */
-    int formal_count;		/* Number of formal args.  */
-    struct formal_struct *formals;	/* Pointer to list of
-                                           formal_structs.  */
-    struct hash_control *formal_hash; /* Hash table of formals.  */
-  } *macro;
-
-  macro = (struct macro_struct *) info;
+  const formal_entry *entry;
 
   /* Put the formal args into the substitution symbol table.  */
   for (entry = macro->formals; entry; entry = entry->next)
@@ -5004,7 +4985,7 @@ subsym_substitute (line, forced)
 		      if (beg < 1)
 			{
 			  as_bad (_("Invalid subscript (use 1 to %d)"),
-				  strlen (value));
+				  (int) strlen (value));
 			  break;
 			}
 		      if (*input_line_pointer == ',')
@@ -5014,7 +4995,7 @@ subsym_substitute (line, forced)
 			  if (beg + len > strlen (value))
 			    {
 			      as_bad (_("Invalid length (use 0 to %d"),
-				      strlen (value) - beg);
+				      (int) strlen (value) - beg);
 			      break;
 			    }
 			}
@@ -5500,7 +5481,7 @@ tic54x_cons_fix_new (frag, where, octets, exp)
    If fixp->fx_addsy is non-NULL, we'll have to generate a reloc entry.   */
 
 void
-md_apply_fix3 (fixP, valP, seg)
+md_apply_fix (fixP, valP, seg)
      fixS *fixP;
      valueT * valP;
      segT seg ATTRIBUTE_UNUSED;
@@ -5567,17 +5548,6 @@ md_pcrel_from (fixP)
 {
   return 0;
 }
-
-#if defined OBJ_COFF
-
-short
-tc_coff_fix2rtype (fixP)
-     fixS *fixP;
-{
-  return (fixP->fx_r_type);
-}
-
-#endif /* OBJ_COFF */
 
 /* Mostly little-endian, but longwords (4 octets) get MS word stored
    first.  */

@@ -19,8 +19,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GAS; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #ifndef TC_MIPS
 #define TC_MIPS
@@ -75,6 +75,9 @@ enum mips_pic_level
 
   /* Generate PIC code as in the SVR4 MIPS ABI.  */
   SVR4_PIC,
+
+  /* VxWorks's PIC model.  */
+  VXWORKS_PIC
 };
 
 extern enum mips_pic_level mips_pic;
@@ -107,7 +110,7 @@ extern void mips_frob_file_after_relocs (void);
 #define tc_fix_adjustable(fixp) mips_fix_adjustable (fixp)
 extern int mips_fix_adjustable (struct fix *);
 
-/* Values passed to md_apply_fix3 don't include symbol values.  */
+/* Values passed to md_apply_fix don't include symbol values.  */
 #define MD_APPLY_SYM_VALUE(FIX) 0
 
 /* Global syms must not be resolved, to support ELF shared libraries.  */
@@ -121,15 +124,6 @@ extern int mips_force_relocation (struct fix *);
 
 #define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG) \
   (! SEG_NORMAL (SEG) || mips_force_relocation (FIX))
-
-/* We use this to turn branches to global symbols into branches to
-   local symbols, so that they can be simplified.  */
-#define TC_VALIDATE_FIX(fixp, this_segment, skip_label) \
-  do \
-    if (! mips_validate_fix ((fixp), (this_segment))) \
-      goto skip_label; \
-  while (0)
-extern int mips_validate_fix (struct fix *, asection *);
 
 /* Register mask variables.  These are set by the MIPS assembly code
    and used by ECOFF and possibly other object file formats.  */

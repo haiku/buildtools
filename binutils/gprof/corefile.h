@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #ifndef corefile_h
 #define corefile_h
@@ -31,11 +31,8 @@ extern struct function_map *symbol_map;
 extern unsigned int symbol_map_count;
 
 extern bfd *core_bfd;		/* BFD for core-file.  */
-extern int core_num_syms;	/* # of entries in symbol-table.  */
-extern asymbol **core_syms;	/* Symbol table in a.out.  */
 extern asection *core_text_sect;/* Core text section.  */
 extern PTR core_text_space;	/* Text space of a.out in core.  */
-extern int min_insn_size;	/* Size of smallest instruction, in bytes.  */
 extern int offset_to_code;	/* Offset (in bytes) of code from entry
 				   address of routine.  */
 

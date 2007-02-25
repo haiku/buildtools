@@ -1,3 +1,79 @@
+2006-04-10  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* lib/utils-lib.exp (default_binutils_run): Check exit status.
+
+2005-12-24  Ben Elliston  <bje@gnu.org>
+
+	* config/default.exp: Do not load the unneeded util-defs.exp.
+
+2005-11-15  Jan Beulich  <jbeulich@novell.com>
+
+	* config/default.exp (link_or_copy): New. Use it for setting
+	up assembler and linker for the compiler to use.
+
+2005-10-20  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR ld/251
+	* binutils-all/group.s: New file.
+
+	* binutils-all/objcopy.exp (objcopy_test_readelf): New
+	procedure.
+	Use it to test ELF group.
+
+2005-10-19  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR ld/1487
+	* binutils-all/objcopy.exp (objcopy_test): New procedure.
+	Use it to test simple copy, ia64 link order and ELF unknown
+	section type.
+
+	* binutils-all/unknown.s: New file.
+
+2005-10-19  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/1321
+	* binutils-all/link-order.s: New.
+
+	* binutils-all/objcopy.exp: Check ia64 link order.
+
+2005-10-11  Danny Smith  <dannysmith@users.sourceforge.net>
+
+	* binutils-all/windres/escapex-2.rc: New file.
+	* binutils-all/windres/escapex-2.rsd: Generate.
+
+2005-08-26  Christian Groessler  <chris@groessler.org>
+
+	* binutils-all/objcopy.exp: Don't setup_xfail "z8*-*".
+
+2005-08-18  Alan Modra  <amodra@bigpond.net.au>
+
+	* binutils-all/objcopy.exp: Remove a29k support.
+	* binutils-all/objdump.exp: Likewise, alliant and convex too.
+
+2005-05-07  Nick Clifton  <nickc@redhat.com>
+
+	* Update the address and phone number of the FSF organization in
+	the GPL notices in the following files:
+	binutils-all/ar.exp, binutils-all/dlltool.exp,
+	binutils-all/nm.exp, binutils-all/objcopy.exp,
+	binutils-all/objdump.exp, binutils-all/readelf.exp,
+	binutils-all/size.exp, binutils-all/hppa/objdump.exp,
+	binutils-all/m68k/objdump.exp, binutils-all/vax/objdump.exp,
+	binutils-all/windres/msupdate, binutils-all/windres/windres.exp,
+	config/default.exp, lib/utils-lib.exp
+
+2005-04-04  Jan-Benedict Glaw  <jbglaw@lug-owl.>
+
+	* binutils-all/vax/objdump.exp: Condense the two tests into one
+	and add a "-M entry:" for the second label.
+
+2005-03-29  Jan-Benedict Glaw  <jbglaw@lug-owl.de>
+
+	* binutils-all/vax: New directory.
+	* binutils-all/vax/objdump.exp: New script.  Test the -Mentry:
+	switch added to the VAX disassembler.
+	* binutils-all/vax/entrymask.s: New assembler source file.
+
 2005-03-08  Ben Elliston  <bje@au.ibm.com>
 
        * config/default.exp: Remove send_user call for stray output.

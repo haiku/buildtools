@@ -10,7 +10,7 @@ cat >e${EMULATION_NAME}.c <<EOF
 
 /* AIX emulation code for ${EMULATION_NAME}
    Copyright 1991, 1993, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004
+   2003, 2004, 2005
    Free Software Foundation, Inc.
    Written by Steve Chamberlain <sac@cygnus.com>
    AIX support by Ian Lance Taylor <ian@cygnus.com>
@@ -30,7 +30,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #define TARGET_IS_${EMULATION_NAME}
 
@@ -787,6 +787,8 @@ gld${EMULATION_NAME}_before_allocation (void)
 				 &is->header.next);
 	}
     }
+
+  before_allocation_default ();
 }
 
 static char *
@@ -1340,7 +1342,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation = {
   gld${EMULATION_NAME}_get_script,
   "${EMULATION_NAME}",
   "${OUTPUT_FORMAT}",
-  0,				/* finish */
+  finish_default,
   gld${EMULATION_NAME}_create_output_section_statements,
   0,				/* open_dynamic_archive */
   0,				/* place_orphan */

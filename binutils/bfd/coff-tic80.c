@@ -21,13 +21,21 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+Foundation, 51 Franklin Street - Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "bfd.h"
 #include "bfdlink.h"
 #include "sysdep.h"
 #include "libbfd.h"
+#ifdef _CONST
+/* Newlib-based hosts define _CONST as a STDC-safe alias for const,
+  but to the tic80 toolchain it means something altogether different.
+  Since sysdep.h will have pulled in stdio.h and hence _ansi.h which
+  contains this definition, we must undef it before including the 
+  tic80-specific definition. */
+#undef _CONST
+#endif /* _CONST */
 #include "coff/tic80.h"
 #include "coff/internal.h"
 #include "libcoff.h"

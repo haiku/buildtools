@@ -80,7 +80,7 @@ CTOR=".ctors        ${CONSTRUCTING-0} :
     KEEP (*crtbegin*.o(.ctors))
 
     /* We don't want to include the .ctor section from
-       from the crtend.o file until after the sorted ctors.
+       the crtend.o file until after the sorted ctors.
        The .ctor section from the crtend file contains the
        end of ctors marker and it must be last */
 
@@ -211,26 +211,30 @@ cat <<EOF
      segment; there is no runtime relocation applied to these
      arrays.  */
 
-  /* Ensure the __preinit_array_start label is properly aligned.  We
-     could instead move the label definition inside the section, but
-     the linker would then create the section even if it turns out to
-     be empty, which isn't pretty.  */
-  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__preinit_array_start = .);}}
-  .preinit_array   ${RELOCATING-0} : { *(.preinit_array) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__preinit_array_end = .);}}
-
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__init_array_start = .);}}
-  /* SymbianOS uses this symbol.  */
-  ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Base = .);}
-  .init_array   ${RELOCATING-0} : { *(.init_array) }
-  /* SymbianOS uses this symbol.  */
-  ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Limit = .);}
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__init_array_end = .);}}
-
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__fini_array_start = .);}}
-  .fini_array   ${RELOCATING-0} : { *(.fini_array) }
-  ${RELOCATING+${CREATE_SHLIB-PROVIDE (__fini_array_end = .);}}
+  .preinit_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_start = .);}}
+    KEEP (*(.preinit_array))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__preinit_array_end = .);}}
+  }
+  .init_array   ${RELOCATING-0} :
+  {
+    /* SymbianOS uses this symbol.  */
+    ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Base = .);}
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_start = .);}}
+    KEEP (*(SORT(.init_array.*)))
+    KEEP (*(.init_array))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__init_array_end = .);}}
+    /* SymbianOS uses this symbol.  */
+    ${RELOCATING+PROVIDE (SHT\$\$INIT_ARRAY\$\$Limit = .);}
+  }
+  .fini_array   ${RELOCATING-0} :
+  {
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_start = .);}}
+    KEEP (*(.fini_array))
+    KEEP (*(SORT(.fini_array.*)))
+    ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (__fini_array_end = .);}}
+  }
 
   ${OTHER_READONLY_SECTIONS}
   .eh_frame_hdr : { *(.eh_frame_hdr) }
@@ -293,10 +297,10 @@ cat <<EOF
       .bss section disappears because there are no input sections.  */
    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
   }
-  ${OTHER_BSS_SECTIONS}
-  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
-  ${RELOCATING+_end = .;}
   ${RELOCATING+${OTHER_BSS_END_SYMBOLS}}
+  ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+  ${RELOCATING+${OTHER_END_SYMBOLS}}
+  ${RELOCATING+_end = .;}
   ${RELOCATING+PROVIDE (end = .);}
   ${RELOCATING+${DATA_SEGMENT_END}}
 
@@ -353,7 +357,7 @@ cat <<EOF
 
   ${STACK_ADDR+${STACK}}
   ${OTHER_SECTIONS}
-  ${RELOCATING+${OTHER_END_SYMBOLS}}
+  ${RELOCATING+${OTHER_SYMBOLS}}
   ${RELOCATING+${STACKNOTE}}
 EOF
 
@@ -392,6 +396,10 @@ eval $COMBRELOCCAT <<EOF
   ${REL_SBSS2}
   .rel.bss      0 : { *(.rel.bss${RELOCATING+ .rel.bss.* .rel.gnu.linkonce.b.*}) }
   .rela.bss     0 : { *(.rela.bss${RELOCATING+ .rela.bss.* .rela.gnu.linkonce.b.*}) }
+  .rel.init_array  0 : { *(.rel.init_array) }
+  .rela.init_array 0 : { *(.rela.init_array) }
+  .rel.fini_array  0 : { *(.rel.fini_array) }
+  .rela.fini_array 0 : { *(.rela.fini_array) }
 EOF
 if [ -n "$COMBRELOC" ]; then
 cat <<EOF
@@ -413,5 +421,8 @@ cat <<EOF
   .rel.plt      0 : { *(.rel.plt) }
   .rela.plt     0 : { *(.rela.plt) }
   ${OTHER_PLT_RELOC_SECTIONS}
+  .rel.other    0 : { *(.rel.*) }
+  .rela.other   0 : { *(.rela.*) }
+  .reli.other   0 : { *(.reli.*) }
 }
 EOF
