@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -81,10 +81,6 @@ finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)
   if (TYPE_P (*tp))
     *walk_subtrees = 0;
 
-  /* If this is a RETURN_EXPR, set the expression being returned to RESULT.  */
-  else if (TREE_CODE (*tp) == RETURN_EXPR)
-    TREE_OPERAND (*tp, 0) = dp->result;
-
   /* Otherwise replace all occurrences of VAR with RESULT.  */
   else if (*tp == dp->var)
     *tp = dp->result;
@@ -112,6 +108,7 @@ tree_nrv (void)
   tree result_type = TREE_TYPE (result);
   tree found = NULL;
   basic_block bb;
+  block_stmt_iterator bsi;
   struct nrv_data data;
 
   /* If this function does not return an aggregate type in memory, then
@@ -119,49 +116,53 @@ tree_nrv (void)
   if (!aggregate_value_p (result, current_function_decl))
     return;
 
-  /* Look through each block for suitable return expressions.   RETURN_EXPRs
-     end basic blocks, so we only have to look at the last statement in
-     each block.  That makes this very fast.  */
+  /* Look through each block for assignments to the RESULT_DECL.  */
   FOR_EACH_BB (bb)
     {
-      tree stmt = last_stmt (bb);
-
-      if (stmt && TREE_CODE (stmt) == RETURN_EXPR)
+      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
 	{
-	  tree ret_expr = TREE_OPERAND (stmt, 0);
+	  tree stmt = bsi_stmt (bsi);
+	  tree ret_expr;
 
-	  /* This probably should not happen, but just to be safe do
-	     not perform NRV optimizations if only some of the return
-	     statement return a value.  */
-	  if (!ret_expr
-	      || TREE_CODE (ret_expr) != MODIFY_EXPR
-	      || TREE_CODE (TREE_OPERAND (ret_expr, 0)) != RESULT_DECL)
-	    return;
-
-	  /* Now verify that this return statement uses the same value
-	     as any previously encountered return statement.  */
-	  if (found != NULL)
+	  if (TREE_CODE (stmt) == RETURN_EXPR)
 	    {
-	      /* If we found a return statement using a different variable
-		 than previous return statements, then we can not perform
-		 NRV optimizations.  */
-	      if (found != TREE_OPERAND (ret_expr, 1))
+	      /* In a function with an aggregate return value, the
+		 gimplifier has changed all non-empty RETURN_EXPRs to
+		 return the RESULT_DECL.  */
+	      ret_expr = TREE_OPERAND (stmt, 0);
+	      if (ret_expr)
+		gcc_assert (ret_expr == result);
+	    }
+	  else if (TREE_CODE (stmt) == MODIFY_EXPR
+		   && TREE_OPERAND (stmt, 0) == result)
+	    {
+	      ret_expr = TREE_OPERAND (stmt, 1);
+
+	      /* Now verify that this return statement uses the same value
+		 as any previously encountered return statement.  */
+	      if (found != NULL)
+		{
+		  /* If we found a return statement using a different variable
+		     than previous return statements, then we can not perform
+		     NRV optimizations.  */
+		  if (found != ret_expr)
+		    return;
+		}
+	      else
+		found = ret_expr;
+
+	      /* The returned value must be a local automatic variable of the
+		 same type and alignment as the function's result.  */
+	      if (TREE_CODE (found) != VAR_DECL
+		  || TREE_THIS_VOLATILE (found)
+		  || DECL_CONTEXT (found) != current_function_decl
+		  || TREE_STATIC (found)
+		  || TREE_ADDRESSABLE (found)
+		  || DECL_ALIGN (found) > DECL_ALIGN (result)
+		  || !lang_hooks.types_compatible_p (TREE_TYPE (found), 
+						     result_type))
 		return;
 	    }
-	  else
-	    found = TREE_OPERAND (ret_expr, 1);
-
-	  /* The returned value must be a local automatic variable of the
-	     same type and alignment as the function's result.  */
-	  if (TREE_CODE (found) != VAR_DECL
-	      || TREE_THIS_VOLATILE (found)
-	      || DECL_CONTEXT (found) != current_function_decl
-	      || TREE_STATIC (found)
-	      || TREE_ADDRESSABLE (found)
-	      || DECL_ALIGN (found) > DECL_ALIGN (result)
-              || !lang_hooks.types_compatible_p (TREE_TYPE (found), 
- 		 result_type))
-	    return;
 	}
     }
 
@@ -192,10 +193,20 @@ tree_nrv (void)
   data.result = result;
   FOR_EACH_BB (bb)
     {
-      block_stmt_iterator bsi;
-
-      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
-	walk_tree (bsi_stmt_ptr (bsi), finalize_nrv_r, &data, 0);
+      for (bsi = bsi_start (bb); !bsi_end_p (bsi); )
+	{
+	  tree *tp = bsi_stmt_ptr (bsi);
+	  /* If this is a copy from VAR to RESULT, remove it.  */
+	  if (TREE_CODE (*tp) == MODIFY_EXPR
+	      && TREE_OPERAND (*tp, 0) == result
+	      && TREE_OPERAND (*tp, 1) == found)
+	    bsi_remove (&bsi);
+	  else
+	    {
+	      walk_tree (tp, finalize_nrv_r, &data, 0);
+	      bsi_next (&bsi);
+	    }
+	}
     }
 
   /* FOUND is no longer used.  Ensure it gets removed.  */
@@ -216,5 +227,81 @@ struct tree_opt_pass pass_nrv =
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_dump_func | TODO_ggc_collect,			/* todo_flags_finish */
+  0					/* letter */
+};
+
+/* Walk through the function looking for MODIFY_EXPRs with calls that
+   return in memory on the RHS.  For each of these, determine whether it is
+   safe to pass the address of the LHS as the return slot, and mark the
+   call appropriately if so.
+
+   The NRV shares the return slot with a local variable in the callee; this
+   optimization shares the return slot with the target of the call within
+   the caller.  If the NRV is performed (which we can't know in general),
+   this optimization is safe if the address of the target has not
+   escaped prior to the call.  If it has, modifications to the local
+   variable will produce visible changes elsewhere, as in PR c++/19317.  */
+
+static void
+execute_return_slot_opt (void)
+{
+  basic_block bb;
+
+  FOR_EACH_BB (bb)
+    {
+      block_stmt_iterator i;
+      for (i = bsi_start (bb); !bsi_end_p (i); bsi_next (&i))
+	{
+	  tree stmt = bsi_stmt (i);
+	  tree call;
+
+	  if (TREE_CODE (stmt) == MODIFY_EXPR
+	      && (call = TREE_OPERAND (stmt, 1),
+		  TREE_CODE (call) == CALL_EXPR)
+	      && !CALL_EXPR_RETURN_SLOT_OPT (call)
+	      && aggregate_value_p (call, call))
+	    {
+	      def_operand_p def_p;
+	      ssa_op_iter op_iter;
+
+	      /* We determine whether or not the LHS address escapes by
+		 asking whether it is call clobbered.  When the LHS isn't a
+		 simple decl, we need to check the VDEFs, so it's simplest
+		 to just loop through all the DEFs.  */
+	      FOR_EACH_SSA_DEF_OPERAND (def_p, stmt, op_iter, SSA_OP_ALL_DEFS)
+		{
+		  tree def = DEF_FROM_PTR (def_p);
+		  if (TREE_CODE (def) == SSA_NAME)
+		    def = SSA_NAME_VAR (def);
+		  if (is_call_clobbered (def))
+		    goto unsafe;
+		}
+
+	      /* No defs are call clobbered, so the optimization is safe.  */
+	      CALL_EXPR_RETURN_SLOT_OPT (call) = 1;
+	      /* This is too late to mark the target addressable like we do
+		 in gimplify_modify_expr_rhs, but that's OK; anything that
+		 wasn't already addressable was handled there.  */
+
+	      unsafe:;
+	    }
+	}
+    }
+}
+
+struct tree_opt_pass pass_return_slot = 
+{
+  "retslot",				/* name */
+  NULL,					/* gate */
+  execute_return_slot_opt,		/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  0,					/* tv_id */
+  PROP_ssa | PROP_alias,		/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0,					/* todo_flags_finish */
   0					/* letter */
 };

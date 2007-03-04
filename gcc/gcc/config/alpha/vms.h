@@ -1,5 +1,5 @@
 /* Output variables, constants and external declarations, for GNU compiler.
-   Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2004
+   Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #define TARGET_OBJECT_SUFFIX ".obj"
 #define TARGET_EXECUTABLE_SUFFIX ".exe"
@@ -42,7 +42,7 @@ Boston, MA 02111-1307, USA.  */
     } while (0)
 
 #undef TARGET_DEFAULT
-#define TARGET_DEFAULT (MASK_FP|MASK_FPREGS|MASK_GAS)
+#define TARGET_DEFAULT (MASK_FPREGS|MASK_GAS)
 #undef TARGET_ABI_OPEN_VMS
 #define TARGET_ABI_OPEN_VMS 1
 
@@ -136,15 +136,20 @@ Boston, MA 02111-1307, USA.  */
 
 #undef INITIAL_ELIMINATION_OFFSET
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
-{ if ((FROM) == FRAME_POINTER_REGNUM)					\
-    (OFFSET) = alpha_sa_size () + alpha_pv_save_size ();		\
-  else if ((FROM) == ARG_POINTER_REGNUM)				\
-    (OFFSET) = (ALPHA_ROUND (alpha_sa_size () + alpha_pv_save_size ()	\
-			     + get_frame_size ()			\
-			     + current_function_pretend_args_size)	\
-		- current_function_pretend_args_size);			\
-  else									\
-    abort();								\
+{ switch (FROM)								\
+    {									\
+    case FRAME_POINTER_REGNUM:						\
+      (OFFSET) = alpha_sa_size () + alpha_pv_save_size ();		\
+      break;								\
+    case ARG_POINTER_REGNUM:						\
+      (OFFSET) = (ALPHA_ROUND (alpha_sa_size () + alpha_pv_save_size ()	\
+			       + get_frame_size ()			\
+			       + current_function_pretend_args_size)	\
+		  - current_function_pretend_args_size);		\
+      break;								\
+    default:								\
+      gcc_unreachable ();						\
+    }									\
   if ((TO) == STACK_POINTER_REGNUM)					\
     (OFFSET) += ALPHA_ROUND (current_function_outgoing_args_size);	\
 }
@@ -227,7 +232,7 @@ extern void link_section (void);
 extern void literals_section (void);
 
 #undef ASM_OUTPUT_ADDR_DIFF_ELT
-#define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) abort ()
+#define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) gcc_unreachable ()
 
 #undef ASM_OUTPUT_ADDR_VEC_ELT
 #define ASM_OUTPUT_ADDR_VEC_ELT(FILE, VALUE) \

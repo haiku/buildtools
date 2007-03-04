@@ -3,7 +3,7 @@
 LIB1ASMSRC = bfin/lib1funcs.asm
 LIB1ASMFUNCS = _divsi3 _udivsi3 _umodsi3 _modsi3
 
-EXTRA_PARTS = crtbegin.o crtend.o crti.o crtn.o
+EXTRA_PARTS = crtbegin.o crtend.o crti.o crtn.o crtlibid.o
 
 FPBIT = fp-bit.c
 DPBIT = dp-bit.c
@@ -19,6 +19,11 @@ fp-bit.c: $(srcdir)/config/fp-bit.c
 # it is fixed in binutils (if it is necessary).
 GCC_CFLAGS += -N
 
+MULTILIB_OPTIONS=mid-shared-library
+MULTILIB_DEFAULTS=
+MULTILIB_DIRNAMES=
+MULTILIB_EXCEPTIONS=
+
 # Assemble startup files.
 $(T)crti.o: $(srcdir)/config/bfin/crti.s $(GCC_PASSES)
 	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(MULTILIB_CFLAGS) $(INCLUDES) \
@@ -27,3 +32,10 @@ $(T)crti.o: $(srcdir)/config/bfin/crti.s $(GCC_PASSES)
 $(T)crtn.o: $(srcdir)/config/bfin/crtn.s $(GCC_PASSES)
 	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(MULTILIB_CFLAGS) $(INCLUDES) \
 	-c -o $(T)crtn.o -x assembler-with-cpp $(srcdir)/config/bfin/crtn.s
+
+$(T)crtlibid.o: $(srcdir)/config/bfin/crtlibid.s $(GCC_PASSES)
+	$(GCC_FOR_TARGET) $(GCC_CFLAGS) $(MULTILIB_CFLAGS) $(INCLUDES) \
+	-c -o $(T)crtlibid.o -x assembler-with-cpp \
+	$(srcdir)/config/bfin/crtlibid.s
+
+EXTRA_MULTILIB_PARTS= crtbegin.o crtend.o crti.o crtn.o crtlibid.o

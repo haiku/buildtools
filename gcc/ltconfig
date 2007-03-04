@@ -17,7 +17,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # As a special exception to the GNU General Public License, if you
 # distribute this file as part of a program that contains a
@@ -626,7 +626,7 @@ old_postuninstall_cmds=
 
 if test -n "$RANLIB"; then
   old_archive_cmds="$old_archive_cmds~\$RANLIB \$oldlib"
-  old_postinstall_cmds="\$RANLIB \$oldlib~$old_postinstall_cmds"
+  old_postinstall_cmds="~$old_postinstall_cmds~\$RANLIB \$oldlib"
 fi
 
 # Source the script associated with the $tagname tag configuration.
@@ -2215,7 +2215,7 @@ case $ltmain in
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # As a special exception to the GNU General Public License, if you
 # distribute this file as part of a program that contains a
@@ -2648,7 +2648,7 @@ EOF
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program; if not, write to the Free Software
-#  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #  */
 #
 #  #include <stdio.h>		/* for printf() */

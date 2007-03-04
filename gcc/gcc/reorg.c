@@ -18,8 +18,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Instruction reorganization pass.
 
@@ -133,6 +133,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "resource.h"
 #include "except.h"
 #include "params.h"
+#include "timevar.h"
+#include "target.h"
+#include "tree-pass.h"
 
 #ifdef DELAY_SLOTS
 
@@ -384,7 +387,7 @@ find_end_label (void)
       /* If the basic block reorder pass moves the return insn to
 	 some other place try to locate it again and put our
 	 end_of_function_label there.  */
-      while (insn && ! (GET_CODE (insn) == JUMP_INSN
+      while (insn && ! (JUMP_P (insn)
 		        && (GET_CODE (PATTERN (insn)) == RETURN)))
 	insn = PREV_INSN (insn);
       if (insn)
@@ -1334,7 +1337,7 @@ steal_delay_list_from_target (rtx insn, rtx condition, rtx seq,
       if (! must_annul
 	  && ((condition == const_true_rtx
 	       || (! insn_sets_resource_p (trial, other_needed, 0)
-		   && ! may_trap_p (PATTERN (trial)))))
+		   && ! may_trap_or_fault_p (PATTERN (trial)))))
 	  ? eligible_for_delay (insn, total_slots_filled, trial, flags)
 	  : (must_annul || (delay_list == NULL && new_delay_list == NULL))
 	     && (must_annul = 1,
@@ -1428,7 +1431,7 @@ steal_delay_list_from_fallthrough (rtx insn, rtx condition, rtx seq,
       if (! must_annul
 	  && ((condition == const_true_rtx
 	       || (! insn_sets_resource_p (trial, other_needed, 0)
-		   && ! may_trap_p (PATTERN (trial)))))
+		   && ! may_trap_or_fault_p (PATTERN (trial)))))
 	  ? eligible_for_delay (insn, *pslots_filled, trial, flags)
 	  : (must_annul || delay_list == NULL) && (must_annul = 1,
 	     check_annul_list_true_false (1, delay_list)
@@ -1931,7 +1934,7 @@ reorg_redirect_jump (rtx jump, rtx nlabel)
    that reference values used in INSN.  If we find one, then we move the
    REG_DEAD note to INSN.
 
-   This is needed to handle the case where an later insn (after INSN) has a
+   This is needed to handle the case where a later insn (after INSN) has a
    REG_DEAD note for a register used by INSN, and this later insn subsequently
    gets moved before a CODE_LABEL because it is a redundant insn.  In this
    case, mark_target_live_regs may be confused into thinking the register
@@ -2320,7 +2323,7 @@ fill_simple_delay_slots (int non_jumps_p)
 #ifdef HAVE_cc0
 		    && ! (reg_mentioned_p (cc0_rtx, pat) && ! sets_cc0_p (pat))
 #endif
-		    && ! (maybe_never && may_trap_p (pat))
+		    && ! (maybe_never && may_trap_or_fault_p (pat))
 		    && (trial = try_split (pat, trial, 0))
 		    && eligible_for_delay (insn, slots_filled, trial, flags)
 		    && ! can_throw_internal(trial))
@@ -2373,7 +2376,7 @@ fill_simple_delay_slots (int non_jumps_p)
 #ifdef HAVE_cc0
 	      && ! reg_mentioned_p (cc0_rtx, PATTERN (next_trial))
 #endif
-	      && ! (maybe_never && may_trap_p (PATTERN (next_trial)))
+	      && ! (maybe_never && may_trap_or_fault_p (PATTERN (next_trial)))
 	      && (next_trial = try_split (PATTERN (next_trial), next_trial, 0))
 	      && eligible_for_delay (insn, slots_filled, next_trial, flags)
 	      && ! can_throw_internal (trial))
@@ -2653,7 +2656,7 @@ fill_slots_from_thread (rtx insn, rtx condition, rtx thread,
 	  if (!must_annul
 	      && (condition == const_true_rtx
 	          || (! insn_sets_resource_p (trial, &opposite_needed, 1)
-		      && ! may_trap_p (pat))))
+		      && ! may_trap_or_fault_p (pat))))
 	    {
 	      old_trial = trial;
 	      trial = try_split (pat, trial, 0);
@@ -2864,6 +2867,8 @@ fill_slots_from_thread (rtx insn, rtx condition, rtx thread,
       dest = SET_DEST (pat), src = SET_SRC (pat);
       if ((GET_CODE (src) == PLUS || GET_CODE (src) == MINUS)
 	  && rtx_equal_p (XEXP (src, 0), dest)
+	  && (!FLOAT_MODE_P (GET_MODE (src))
+	      || flag_unsafe_math_optimizations)
 	  && ! reg_overlap_mentioned_p (dest, XEXP (src, 1))
 	  && ! side_effects_p (pat))
 	{
@@ -3374,12 +3379,13 @@ relax_delay_slots (rtx first)
 	  continue;
 	}
 
-      /* See if this jump (with its delay slots) branches around another
-	 jump (without delay slots).  If so, invert this jump and point
-	 it to the target of the second jump.  We cannot do this for
-	 annulled jumps, though.  Again, don't convert a jump to a RETURN
-	 here.  */
+      /* See if this jump (with its delay slots) conditionally branches
+	 around an unconditional jump (without delay slots).  If so, invert
+	 this jump and point it to the target of the second jump.  We cannot
+	 do this for annulled jumps, though.  Again, don't convert a jump to
+	 a RETURN here.  */
       if (! INSN_ANNULLED_BRANCH_P (delay_insn)
+	  && any_condjump_p (delay_insn)
 	  && next && JUMP_P (next)
 	  && (simplejump_p (next) || GET_CODE (PATTERN (next)) == RETURN)
 	  && next_active_insn (target_label) == next_active_insn (next)
@@ -3582,17 +3588,6 @@ dbr_schedule (rtx first, FILE *file)
 {
   rtx insn, next, epilogue_insn = 0;
   int i;
-#if 0
-  int old_flag_no_peephole = flag_no_peephole;
-
-  /* Execute `final' once in prescan mode to delete any insns that won't be
-     used.  Don't let final try to do any peephole optimization--it will
-     ruin dataflow information for this pass.  */
-
-  flag_no_peephole = 1;
-  final (first, 0, NO_DEBUG, 1, 1);
-  flag_no_peephole = old_flag_no_peephole;
-#endif
 
   /* If the current function has no insns other than the prologue and
      epilogue, then do not try to fill any delay slots.  */
@@ -3820,3 +3815,73 @@ dbr_schedule (rtx first, FILE *file)
 #endif
 }
 #endif /* DELAY_SLOTS */
+
+static bool
+gate_handle_delay_slots (void)
+{
+#ifdef DELAY_SLOTS
+  return flag_delayed_branch;
+#else 
+  return 0;
+#endif
+}
+
+/* Run delay slot optimization.  */
+static void
+rest_of_handle_delay_slots (void)
+{
+#ifdef DELAY_SLOTS
+  dbr_schedule (get_insns (), dump_file);
+#endif
+}   
+
+struct tree_opt_pass pass_delay_slots =
+{
+  "dbr",                                /* name */
+  gate_handle_delay_slots,              /* gate */
+  rest_of_handle_delay_slots,           /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_DBR_SCHED,                         /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  'd'                                   /* letter */
+};
+
+/* Machine dependent reorg pass.  */
+static bool
+gate_handle_machine_reorg (void)
+{
+  return targetm.machine_dependent_reorg != 0;
+}
+
+
+static void
+rest_of_handle_machine_reorg (void)
+{
+  targetm.machine_dependent_reorg ();
+}
+
+struct tree_opt_pass pass_machine_reorg =
+{
+  "mach",                               /* name */
+  gate_handle_machine_reorg,            /* gate */
+  rest_of_handle_machine_reorg,         /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_MACH_DEP,                          /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  'M'                                   /* letter */
+};
+

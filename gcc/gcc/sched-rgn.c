@@ -18,8 +18,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* This pass implements list scheduling within basic blocks.  It is
    run twice: (1) after flow analysis, but before register allocation,
@@ -65,6 +65,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "params.h"
 #include "sched-int.h"
 #include "target.h"
+#include "timevar.h"
+#include "tree-pass.h"
 
 /* Define when we want to do count REG_DEAD notes before and after scheduling
    for sanity checking.  We can't do that when conditional execution is used,
@@ -249,10 +251,6 @@ static void compute_dom_prob_ps (int);
 #define IS_SPECULATIVE_INSN(INSN) (IS_SPECULATIVE (BLOCK_TO_BB (BLOCK_NUM (INSN))))
 #define INSN_BB(INSN) (BLOCK_TO_BB (BLOCK_NUM (INSN)))
 
-/* Parameters affecting the decision of rank_for_schedule().
-   ??? Nope.  But MIN_PROBABILITY is used in compute_trg_info.  */
-#define MIN_PROBABILITY 40
-
 /* Speculative scheduling functions.  */
 static int check_live_1 (int, rtx);
 static void update_live_1 (int, rtx);
@@ -337,8 +335,8 @@ is_cfg_nonregular (void)
   FOR_EACH_BB (b)
     {
       if (EDGE_COUNT (b->preds) == 0
-	  || (EDGE_PRED (b, 0)->src == b
-	      && EDGE_COUNT (b->preds) == 1))
+	  || (single_pred_p (b)
+	      && single_pred (b) == b))
 	return 1;
     }
 
@@ -351,7 +349,8 @@ is_cfg_nonregular (void)
 static void
 extract_edgelst (sbitmap set, edgelst *el)
 {
-  int i;
+  unsigned int i = 0;
+  sbitmap_iterator sbi;
 
   /* edgelst table space is reused in each call to extract_edgelst.  */
   edgelst_last = 0;
@@ -360,11 +359,11 @@ extract_edgelst (sbitmap set, edgelst *el)
   el->nr_members = 0;
 
   /* Iterate over each word in the bitset.  */
-  EXECUTE_IF_SET_IN_SBITMAP (set, 0, i,
-  {
-    edgelst_table[edgelst_last++] = rgn_edges[i];
-    el->nr_members++;
-  });
+  EXECUTE_IF_SET_IN_SBITMAP (set, 0, i, sbi)
+    {
+      edgelst_table[edgelst_last++] = rgn_edges[i];
+      el->nr_members++;
+    }
 }
 
 /* Functions for the construction of regions.  */
@@ -537,7 +536,7 @@ find_rgns (void)
 
   /* DFS traversal to find inner loops in the cfg.  */
 
-  current_edge = ei_start (EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest->succs);
+  current_edge = ei_start (single_succ (ENTRY_BLOCK_PTR)->succs);
   sp = -1;
 
   while (1)
@@ -727,8 +726,8 @@ find_rgns (void)
 		  FOR_EACH_BB (jbb)
 		    /* Leaf nodes have only a single successor which must
 		       be EXIT_BLOCK.  */
-		    if (EDGE_COUNT (jbb->succs) == 1
-			&& EDGE_SUCC (jbb, 0)->dest == EXIT_BLOCK_PTR)
+		    if (single_succ_p (jbb)
+			&& single_succ (jbb) == EXIT_BLOCK_PTR)
 		      {
 			queue[++tail] = jbb->index;
 			SET_BIT (in_queue, jbb->index);
@@ -1010,7 +1009,7 @@ compute_trg_info (int trg)
       if (sp->is_valid)
 	{
 	  sp->src_prob = GET_SRC_PROB (i, trg);
-	  sp->is_valid = (sp->src_prob >= MIN_PROBABILITY);
+	  sp->is_valid = (sp->src_prob >= PARAM_VALUE (PARAM_MIN_SPEC_PROB));
 	}
 
       if (sp->is_valid)
@@ -1183,7 +1182,8 @@ check_live_1 (int src, rtx x)
 		{
 		  basic_block b = candidate_table[src].split_bbs.first_member[i];
 
-		  if (REGNO_REG_SET_P (b->global_live_at_start, regno + j))
+		  if (REGNO_REG_SET_P (b->il.rtl->global_live_at_start,
+				       regno + j))
 		    {
 		      return 0;
 		    }
@@ -1197,7 +1197,7 @@ check_live_1 (int src, rtx x)
 	    {
 	      basic_block b = candidate_table[src].split_bbs.first_member[i];
 
-	      if (REGNO_REG_SET_P (b->global_live_at_start, regno))
+	      if (REGNO_REG_SET_P (b->il.rtl->global_live_at_start, regno))
 		{
 		  return 0;
 		}
@@ -1256,7 +1256,8 @@ update_live_1 (int src, rtx x)
 		{
 		  basic_block b = candidate_table[src].update_bbs.first_member[i];
 
-		  SET_REGNO_REG_SET (b->global_live_at_start, regno + j);
+		  SET_REGNO_REG_SET (b->il.rtl->global_live_at_start,
+				     regno + j);
 		}
 	    }
 	}
@@ -1266,7 +1267,7 @@ update_live_1 (int src, rtx x)
 	    {
 	      basic_block b = candidate_table[src].update_bbs.first_member[i];
 
-	      SET_REGNO_REG_SET (b->global_live_at_start, regno);
+	      SET_REGNO_REG_SET (b->il.rtl->global_live_at_start, regno);
 	    }
 	}
     }
@@ -1323,7 +1324,7 @@ update_live (rtx insn, int src)
   (bb_from == bb_to							\
    || IS_RGN_ENTRY (bb_from)						\
    || (TEST_BIT (ancestor_edges[bb_to],					\
-	 EDGE_TO_BIT (EDGE_PRED (BASIC_BLOCK (BB_TO_BLOCK (bb_from)), 0)))))
+	 EDGE_TO_BIT (single_pred_edge (BASIC_BLOCK (BB_TO_BLOCK (bb_from)))))))
 
 /* Turns on the fed_by_spec_load flag for insns fed by load_insn.  */
 
@@ -1878,6 +1879,8 @@ add_branch_dependences (rtx head, rtx tail)
      cc0 setters remain at the end because they can't be moved away from
      their cc0 user.
 
+     COND_EXEC insns cannot be moved past a branch (see e.g. PR17808).
+
      Insns setting CLASS_LIKELY_SPILLED_P registers (usually return values)
      are not moved before reload because we can wind up with register
      allocation failures.  */
@@ -1901,7 +1904,8 @@ add_branch_dependences (rtx head, rtx tail)
 	{
 	  if (last != 0 && !find_insn_list (insn, LOG_LINKS (last)))
 	    {
-	      add_dependence (last, insn, REG_DEP_ANTI);
+	      if (! sched_insns_conditions_mutex_p (last, insn))
+		add_dependence (last, insn, REG_DEP_ANTI);
 	      INSN_REF_COUNT (insn)++;
 	    }
 
@@ -1927,9 +1931,61 @@ add_branch_dependences (rtx head, rtx tail)
 	if (INSN_REF_COUNT (insn) != 0)
 	  continue;
 
-	add_dependence (last, insn, REG_DEP_ANTI);
+	if (! sched_insns_conditions_mutex_p (last, insn))
+	  add_dependence (last, insn, REG_DEP_ANTI);
 	INSN_REF_COUNT (insn) = 1;
       }
+
+#ifdef HAVE_conditional_execution
+  /* Finally, if the block ends in a jump, and we are doing intra-block
+     scheduling, make sure that the branch depends on any COND_EXEC insns
+     inside the block to avoid moving the COND_EXECs past the branch insn.
+
+     We only have to do this after reload, because (1) before reload there
+     are no COND_EXEC insns, and (2) the region scheduler is an intra-block
+     scheduler after reload.
+
+     FIXME: We could in some cases move COND_EXEC insns past the branch if
+     this scheduler would be a little smarter.  Consider this code:
+
+		T = [addr]
+	C  ?	addr += 4
+	!C ?	X += 12
+	C  ?	T += 1
+	C  ?	jump foo
+
+     On a target with a one cycle stall on a memory access the optimal
+     sequence would be:
+
+		T = [addr]
+	C  ?	addr += 4
+	C  ?	T += 1
+	C  ?	jump foo
+	!C ?	X += 12
+
+     We don't want to put the 'X += 12' before the branch because it just
+     wastes a cycle of execution time when the branch is taken.
+
+     Note that in the example "!C" will always be true.  That is another
+     possible improvement for handling COND_EXECs in this scheduler: it
+     could remove always-true predicates.  */
+
+  if (!reload_completed || ! JUMP_P (tail))
+    return;
+
+  insn = tail;
+  while (insn != head)
+    {
+      insn = PREV_INSN (insn);
+
+      /* Note that we want to add this dependency even when
+	 sched_insns_conditions_mutex_p returns true.  The whole point
+	 is that we _want_ this dependency, even if these insns really
+	 are independent.  */
+      if (INSN_P (insn) && GET_CODE (PATTERN (insn)) == COND_EXEC)
+	add_dependence (tail, insn, REG_DEP_ANTI);
+    }
+#endif
 }
 
 /* Data structures for the computation of data dependences in a regions.  We
@@ -2585,3 +2641,95 @@ schedule_insns (FILE *dump_file)
   sbitmap_free (large_region_blocks);
 }
 #endif
+
+static bool
+gate_handle_sched (void)
+{
+#ifdef INSN_SCHEDULING
+  return flag_schedule_insns;
+#else
+  return 0;
+#endif
+}
+
+/* Run instruction scheduler.  */
+static void
+rest_of_handle_sched (void)
+{
+#ifdef INSN_SCHEDULING
+  /* Do control and data sched analysis,
+     and write some of the results to dump file.  */
+
+  schedule_insns (dump_file);
+#endif
+}
+
+static bool
+gate_handle_sched2 (void)
+{
+#ifdef INSN_SCHEDULING
+  return optimize > 0 && flag_schedule_insns_after_reload;
+#else
+  return 0;
+#endif
+}
+
+/* Run second scheduling pass after reload.  */
+static void
+rest_of_handle_sched2 (void)
+{
+#ifdef INSN_SCHEDULING
+  /* Do control and data sched analysis again,
+     and write some more of the results to dump file.  */
+
+  split_all_insns (1);
+
+  if (flag_sched2_use_superblocks || flag_sched2_use_traces)
+    {
+      schedule_ebbs (dump_file);
+      /* No liveness updating code yet, but it should be easy to do.
+         reg-stack recomputes the liveness when needed for now.  */
+      count_or_remove_death_notes (NULL, 1);
+      cleanup_cfg (CLEANUP_EXPENSIVE);
+    }
+  else
+    schedule_insns (dump_file);
+#endif
+}
+
+struct tree_opt_pass pass_sched =
+{
+  "sched1",                             /* name */
+  gate_handle_sched,                    /* gate */
+  rest_of_handle_sched,                 /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_SCHED,                             /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  'S'                                   /* letter */
+};
+
+struct tree_opt_pass pass_sched2 =
+{
+  "sched2",                             /* name */
+  gate_handle_sched2,                   /* gate */
+  rest_of_handle_sched2,                /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_SCHED2,                            /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  'R'                                   /* letter */
+};
+

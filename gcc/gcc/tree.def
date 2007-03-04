@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* For tcc_references, tcc_expression, tcc_comparison, tcc_unary,
@@ -148,7 +148,7 @@ DEFTREECODE (OFFSET_TYPE, "offset_type", tcc_type, 0)
 DEFTREECODE (ENUMERAL_TYPE, "enumeral_type", tcc_type, 0)
 
 /* Boolean type (true or false are the only values).  Looks like an
-   INTEGRAL_TYPE. */
+   INTEGRAL_TYPE.  */
 DEFTREECODE (BOOLEAN_TYPE, "boolean_type", tcc_type, 0)
 
 /* CHAR in Java; not used in C.  Looks like an INTEGRAL_TYPE.  */
@@ -171,7 +171,7 @@ DEFTREECODE (REAL_TYPE, "real_type", tcc_type, 0)
 /* The ordering of the following codes is optimized for the checking
    macros in tree.h.  Changing the order will degrade the speed of the
    compiler.  POINTER_TYPE, REFERENCE_TYPE.  Note that this range
-   overlaps the previous range of ordered types. */
+   overlaps the previous range of ordered types.  */
      
 /* All pointer-to-x types have code POINTER_TYPE.
    The TREE_TYPE points to the node for the type pointed to.  */
@@ -254,9 +254,6 @@ DEFTREECODE (FUNCTION_TYPE, "function_type", tcc_type, 0)
    includes the hidden argument for "self".  */
 DEFTREECODE (METHOD_TYPE, "method_type", tcc_type, 0)
 
-/* Used for Pascal; details not determined right now.  */
-DEFTREECODE (FILE_TYPE, "file_type", tcc_type, 0)
-
 /* This is a language-specific kind of type.
    Its meaning is defined by the language front end.
    layout_type does not know how to lay this out,
@@ -329,8 +326,8 @@ DEFTREECODE (STRING_CST, "string_cst", tcc_constant, 0)
 
    FUNCTION_DECLs use four special fields:
    DECL_ARGUMENTS holds a chain of PARM_DECL nodes for the arguments.
-   DECL_RESULT holds a RESULT_DECL node for the value of a function,
-    or it is 0 for a function that returns no value.
+   DECL_RESULT holds a RESULT_DECL node for the value of a function.
+    The DECL_RTL field is 0 for a function that returns no value.
     (C functions returning void have zero here.)
     The TREE_TYPE field is the type in which the result is actually
     returned.  This is usually the same as the return type of the
@@ -438,19 +435,19 @@ DEFTREECODE (FILTER_EXPR, "filter_expr", tcc_expression, 0)
 
 /* Constructor: return an aggregate value made from specified components.
    In C, this is used only for structure and array initializers.
-   The operand is a list of component values made out of a chain of
-   TREE_LIST nodes.
+   The operand is a sequence of component values made out of a VEC of
+   struct constructor_elt.
 
    For ARRAY_TYPE:
-   The TREE_PURPOSE of each node is the corresponding index.
-   If the TREE_PURPOSE is a RANGE_EXPR, it is a short-hand for many nodes,
-   one for each index in the range.  (If the corresponding TREE_VALUE
+   The field INDEX of each constructor_elt is the corresponding index.
+   If the index is a RANGE_EXPR, it is a short-hand for many nodes,
+   one for each index in the range.  (If the corresponding field VALUE
    has side-effects, they are evaluated once for each element.  Wrap the
    value in a SAVE_EXPR if you want to evaluate side effects only once.)
 
    For RECORD_TYPE, UNION_TYPE, or QUAL_UNION_TYPE:
-   The TREE_PURPOSE of each node is a FIELD_DECL.  */
-DEFTREECODE (CONSTRUCTOR, "constructor", tcc_expression, 1)
+   The field INDEX of each node is a FIELD_DECL.  */
+DEFTREECODE (CONSTRUCTOR, "constructor", tcc_exceptional, 0)
 
 /* The expression types are mostly straightforward, with the fourth argument
    of DEFTREECODE saying how many operands there are.
@@ -466,7 +463,8 @@ DEFTREECODE (COMPOUND_EXPR, "compound_expr", tcc_expression, 2)
 DEFTREECODE (MODIFY_EXPR, "modify_expr", tcc_expression, 2)
 
 /* Initialization expression.  Operand 0 is the variable to initialize;
-   Operand 1 is the initializer.  */
+   Operand 1 is the initializer.  This differs from MODIFY_EXPR in that any
+   reference to the referent of operand 0 within operand 1 is undefined.  */
 DEFTREECODE (INIT_EXPR, "init_expr", tcc_expression, 2)
 
 /* For TARGET_EXPR, operand 0 is the target of an initialization,
@@ -867,7 +865,7 @@ DEFTREECODE (SSA_NAME, "ssa_name", tcc_exceptional, 0)
    PHI_ARG_ELT returns the Ith tuple <ssa_name, edge> from the
    argument list.  Each tuple contains the incoming reaching
    definition (SSA_NAME node) and the edge via which that definition
-   is coming through.   */
+   is coming through.  */
 DEFTREECODE (PHI_NODE, "phi_node", tcc_exceptional, 0)
 
 /* Used to represent a typed exception handler.  CATCH_TYPES is the type (or
@@ -902,6 +900,20 @@ DEFTREECODE (STATEMENT_LIST, "statement_list", tcc_exceptional, 0)
    the same value, they will be assigned the same value handle.  */
 DEFTREECODE (VALUE_HANDLE, "value_handle", tcc_exceptional, 0)
 
+/* Predicate assertion.  Artificial expression generated by the optimizers
+   to keep track of predicate values.  This expression may only appear on
+   the RHS of assignments.
+   
+   Given X = ASSERT_EXPR <Y, EXPR>, the optimizers can infer
+   two things:
+
+   	1- X is a copy of Y.
+	2- EXPR is a GIMPLE conditional expression (as defined by
+	   is_gimple_condexpr) and is known to be true.
+
+   The type of the expression is the same as Y.  */
+DEFTREECODE (ASSERT_EXPR, "assert_expr", tcc_expression, 2)
+
 /* Base class information. Holds information about a class as a
    baseclass of itself or another class.  */
 DEFTREECODE (TREE_BINFO, "tree_binfo", tcc_exceptional, 0)
@@ -923,6 +935,34 @@ DEFTREECODE (WITH_SIZE_EXPR, "with_size_expr", tcc_expression, 2)
    which case its low log2(VS)-1 bits define the offset, or it can be a mask 
    generated by the builtin targetm.vectorize.mask_for_load_builtin_decl.  */
 DEFTREECODE (REALIGN_LOAD_EXPR, "realign_load", tcc_expression, 3)
+
+/* Low-level memory addressing.  Operands are SYMBOL (static or global
+   variable), BASE (register), INDEX (register), STEP (integer constant),
+   OFFSET (integer constant).  Corresponding address is
+   SYMBOL + BASE + STEP * INDEX + OFFSET.  Only variations and values valid on
+   the target are allowed.
+   
+   The sixth argument is the reference to the original memory access, which
+   is preserved for the purposes of the RTL alias analysis.  The seventh
+   argument is a tag representing results of the tree level alias analysis.  */
+
+DEFTREECODE (TARGET_MEM_REF, "target_mem_ref", tcc_reference, 7)
+
+/* Reduction operations. 
+   Operations that take a vector of elements and "reduce" it to a scalar
+   result (e.g. summing the elements of the vector, finding the minimum over
+   the vector elements, etc).
+   Operand 0 is a vector; the first element in the vector has the result.
+   Operand 1 is a vector.  */ 
+DEFTREECODE (REDUC_MAX_EXPR, "reduc_max_expr", tcc_unary, 1)
+DEFTREECODE (REDUC_MIN_EXPR, "reduc_min_expr", tcc_unary, 1)
+DEFTREECODE (REDUC_PLUS_EXPR, "reduc_plus_expr", tcc_unary, 1)
+
+/* Whole vector left/right shift in bits.
+   Operand 0 is a vector to be shifted.
+   Operand 1 is an integer shift amount in bits.  */
+DEFTREECODE (VEC_LSHIFT_EXPR, "vec_lshift_expr", tcc_binary, 2)
+DEFTREECODE (VEC_RSHIFT_EXPR, "vec_rshift_expr", tcc_binary, 2)
 
 /*
 Local variables:

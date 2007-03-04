@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Testing allocator for the C++ library testsuite.
 //
-// Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -16,7 +16,7 @@
 //
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 //
 // As a special exception, you may use this file as part of a free software
@@ -184,7 +184,7 @@ namespace __gnu_test
     check_new(Alloc a = Alloc())
     {
       bool test __attribute__((unused)) = true;
-      typename Alloc::pointer p = a.allocate(10);
+      a.allocate(10);
       test &= ( new_called == uses_global_new );
       return test;
     }
@@ -208,6 +208,7 @@ namespace __gnu_test
       Alloc  a;
       a.deallocate(NULL, 1);
       a.deallocate(NULL, 10);
+      return true;
     }
 
   template<typename Alloc>
@@ -229,7 +230,6 @@ namespace __gnu_test
 	}
       throw;
     }
-
 }; // namespace __gnu_test
 
 #endif // _GLIBCXX_TESTSUITE_ALLOCATOR_H

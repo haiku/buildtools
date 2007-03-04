@@ -2,7 +2,7 @@
 
 // Utility subroutines for the C++ library testsuite. 
 //
-// Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -17,7 +17,7 @@
 //
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 //
 // As a special exception, you may use this file as part of a free software
@@ -89,6 +89,16 @@ namespace __gnu_test
 #endif
 
     // Virtual memory.
+    // On x86_64-linux, the default is -z max-page-size=0x200000
+    // which means up to 2MB of address space are accounted for
+    // PROT_NONE mappings between text and data segments of
+    // each shared library.  There are 4 shared libs involved
+    // in addition to the dynamic linker.  Use at least 16MB address space
+    // limit.
+#if defined(__x86_64__) && defined(__linux__)
+    if (limit < 16777216)
+      limit = 16777216;
+#endif
     // On HP-UX 11.23, a trivial C++ program that sets RLIMIT_AS to
     // anything less than 128MB cannot "malloc" even 1K of memory.
     // Therefore, we skip RLIMIT_AS on HP-UX.
@@ -162,7 +172,7 @@ namespace __gnu_test
     bool test = true;
     
     // Set the global locale. 
-    locale loc_name = try_named_locale(name);
+    locale loc_name = locale(name);
     locale orig = locale::global(loc_name);
 
     const char* res = setlocale(LC_ALL, name);
@@ -192,7 +202,7 @@ namespace __gnu_test
     
 #ifdef _GLIBCXX_HAVE_SETENV 
     // Set the global locale. 
-    locale loc_name = try_named_locale(name);
+    locale loc_name = locale(name);
     locale orig = locale::global(loc_name);
 
     // Set environment variable env to value in name. 
@@ -210,25 +220,6 @@ namespace __gnu_test
 	s += string(" to ");
 	s += string(name);
 	__throw_runtime_error(s.c_str());
-      }
-#endif
-  }
-
-  std::locale 
-  try_named_locale(const char* name)
-  {
-    try
-      {
-	return std::locale(name);
-      }
-#ifdef __EXCEPTIONS
-    catch (std::runtime_error& ex)
-      {
-	// Thrown by generic and gnu implemenation if named locale fails.
-	if (std::strstr(ex.what(), "name not valid"))
-	  exit(0);
-	else
-	  throw;
       }
 #endif
   }
@@ -320,5 +311,23 @@ namespace __gnu_test
     if (semop(sem_set_, op, 1) == -1)
       std::__throw_runtime_error("could not wait for semaphore");
 #endif    
+  }
+
+  // For use in 22_locale/time_get and time_put.
+  tm
+  test_tm(int sec, int min, int hour, int mday, int mon,
+	  int year, int wday, int yday, int isdst)
+  {
+    static tm tmp;
+    tmp.tm_sec = sec;
+    tmp.tm_min = min;
+    tmp.tm_hour = hour;
+    tmp.tm_mday = mday;
+    tmp.tm_mon = mon;
+    tmp.tm_year = year;
+    tmp.tm_wday = wday;
+    tmp.tm_yday = yday;
+    tmp.tm_isdst = isdst;
+    return tmp;
   }
 }; // namespace __gnu_test

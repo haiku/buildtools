@@ -1,3 +1,35 @@
+/* Implementation header for mudflap runtime library.
+   Mudflap: narrow-pointer bounds-checking by tree rewriting.
+   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Contributed by Frank Ch. Eigler <fche@redhat.com>
+   and Graydon Hoare <graydon@redhat.com>
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 2, or (at your option) any later
+version.
+
+In addition to the permissions in the GNU General Public License, the
+Free Software Foundation gives you unlimited permission to link the
+compiled version of this file into combinations with other programs,
+and to distribute those combinations without any restriction coming
+from the use of this file.  (The General Public License restrictions
+do apply in other respects; for example, they cover modification of
+the file, and distribution when not linked into a combine
+executable.)
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with GCC; see the file COPYING.  If not, write to the Free
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
+
 /* Public libmudflap declarations -*- C -*- */
 
 #ifndef MF_RUNTIME_H
@@ -51,7 +83,7 @@ extern "C" {
 
 extern void __mf_check (void *ptr, __mf_size_t sz, int type, const char *location)
        __attribute((nothrow));
-extern void __mf_register (void *ptr, __mf_size_t sz, int type, const char *name) 
+extern void __mf_register (void *ptr, __mf_size_t sz, int type, const char *name)
        __attribute((nothrow));
 extern void __mf_unregister (void *ptr, __mf_size_t sz, int type)
        __attribute((nothrow));
@@ -65,33 +97,33 @@ extern int __mf_set_options (const char *opts);
    done by simple #define rather than linker wrapping, since only
    instrumented modules are meant to be affected.  */
 
-#ifdef _MUDFLAP  
-#pragma redefine_extname memcpy __mfwrap_memcpy 
+#ifdef _MUDFLAP
+#pragma redefine_extname memcpy __mfwrap_memcpy
 #pragma redefine_extname memmove __mfwrap_memmove
-#pragma redefine_extname memset __mfwrap_memset 
-#pragma redefine_extname memcmp __mfwrap_memcmp 
-#pragma redefine_extname memchr __mfwrap_memchr 
+#pragma redefine_extname memset __mfwrap_memset
+#pragma redefine_extname memcmp __mfwrap_memcmp
+#pragma redefine_extname memchr __mfwrap_memchr
 #pragma redefine_extname memrchr __mfwrap_memrchr
-#pragma redefine_extname strcpy __mfwrap_strcpy 
-#pragma redefine_extname strncpy __mfwrap_strncpy 
-#pragma redefine_extname strcat __mfwrap_strcat 
+#pragma redefine_extname strcpy __mfwrap_strcpy
+#pragma redefine_extname strncpy __mfwrap_strncpy
+#pragma redefine_extname strcat __mfwrap_strcat
 #pragma redefine_extname strncat __mfwrap_strncat
-#pragma redefine_extname strcmp __mfwrap_strcmp 
-#pragma redefine_extname strcasecmp __mfwrap_strcasecmp 
-#pragma redefine_extname strncmp __mfwrap_strncmp 
+#pragma redefine_extname strcmp __mfwrap_strcmp
+#pragma redefine_extname strcasecmp __mfwrap_strcasecmp
+#pragma redefine_extname strncmp __mfwrap_strncmp
 #pragma redefine_extname strncasecmp __mfwrap_strncasecmp
-#pragma redefine_extname strdup __mfwrap_strdup 
-#pragma redefine_extname strndup __mfwrap_strndup 
-#pragma redefine_extname strchr __mfwrap_strchr 
+#pragma redefine_extname strdup __mfwrap_strdup
+#pragma redefine_extname strndup __mfwrap_strndup
+#pragma redefine_extname strchr __mfwrap_strchr
 #pragma redefine_extname strrchr __mfwrap_strrchr
-#pragma redefine_extname strstr __mfwrap_strstr 
-#pragma redefine_extname memmem __mfwrap_memmem 
-#pragma redefine_extname strlen __mfwrap_strlen 
+#pragma redefine_extname strstr __mfwrap_strstr
+#pragma redefine_extname memmem __mfwrap_memmem
+#pragma redefine_extname strlen __mfwrap_strlen
 #pragma redefine_extname strnlen __mfwrap_strnlen
-#pragma redefine_extname bzero __mfwrap_bzero 
-#pragma redefine_extname bcopy __mfwrap_bcopy 
-#pragma redefine_extname bcmp __mfwrap_bcmp 
-#pragma redefine_extname index __mfwrap_index 
+#pragma redefine_extname bzero __mfwrap_bzero
+#pragma redefine_extname bcopy __mfwrap_bcopy
+#pragma redefine_extname bcmp __mfwrap_bcmp
+#pragma redefine_extname index __mfwrap_index
 #pragma redefine_extname rindex __mfwrap_rindex
 #pragma redefine_extname asctime __mfwrap_asctime
 #pragma redefine_extname ctime __mfwrap_ctime

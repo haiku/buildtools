@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 #include "config.h"
@@ -223,10 +223,13 @@ rtx_varies_p (rtx x, int for_alias)
   return 0;
 }
 
-/* Return 0 if the use of X as an address in a MEM can cause a trap.  */
+/* Return nonzero if the use of X as an address in a MEM can cause a trap.
+   MODE is the mode of the MEM (not that of X) and UNALIGNED_MEMS controls
+   whether nonzero is returned for unaligned memory accesses on strict
+   alignment machines.  */
 
-int
-rtx_addr_can_trap_p (rtx x)
+static int
+rtx_addr_can_trap_p_1 (rtx x, enum machine_mode mode, bool unaligned_mems)
 {
   enum rtx_code code = GET_CODE (x);
 
@@ -252,27 +255,54 @@ rtx_addr_can_trap_p (rtx x)
       return 1;
 
     case CONST:
-      return rtx_addr_can_trap_p (XEXP (x, 0));
+      return rtx_addr_can_trap_p_1 (XEXP (x, 0), mode, unaligned_mems);
 
     case PLUS:
-      /* An address is assumed not to trap if it is an address that can't
-	 trap plus a constant integer or it is the pic register plus a
-	 constant.  */
-      return ! ((! rtx_addr_can_trap_p (XEXP (x, 0))
-		 && GET_CODE (XEXP (x, 1)) == CONST_INT)
-		|| (XEXP (x, 0) == pic_offset_table_rtx
-		    && CONSTANT_P (XEXP (x, 1))));
+      /* An address is assumed not to trap if:
+	 - it is an address that can't trap plus a constant integer,
+	   with the proper remainder modulo the mode size if we are
+	   considering unaligned memory references.  */
+      if (!rtx_addr_can_trap_p_1 (XEXP (x, 0), mode, unaligned_mems)
+	  && GET_CODE (XEXP (x, 1)) == CONST_INT)
+	{
+	  HOST_WIDE_INT offset;
+
+	  if (!STRICT_ALIGNMENT
+	      || !unaligned_mems
+	      || GET_MODE_SIZE (mode) == 0)
+	    return 0;
+
+	  offset = INTVAL (XEXP (x, 1));
+
+#ifdef SPARC_STACK_BOUNDARY_HACK
+	  /* ??? The SPARC port may claim a STACK_BOUNDARY higher than
+	     the real alignment of %sp.  However, when it does this, the
+	     alignment of %sp+STACK_POINTER_OFFSET is STACK_BOUNDARY.  */
+	  if (SPARC_STACK_BOUNDARY_HACK
+	      && (XEXP (x, 0) == stack_pointer_rtx
+		  || XEXP (x, 0) == hard_frame_pointer_rtx))
+	    offset -= STACK_POINTER_OFFSET;
+#endif
+
+	  return offset % GET_MODE_SIZE (mode) != 0;
+	}
+
+      /* - or it is the pic register plus a constant.  */
+      if (XEXP (x, 0) == pic_offset_table_rtx && CONSTANT_P (XEXP (x, 1)))
+	return 0;
+
+      return 1;
 
     case LO_SUM:
     case PRE_MODIFY:
-      return rtx_addr_can_trap_p (XEXP (x, 1));
+      return rtx_addr_can_trap_p_1 (XEXP (x, 1), mode, unaligned_mems);
 
     case PRE_DEC:
     case PRE_INC:
     case POST_DEC:
     case POST_INC:
     case POST_MODIFY:
-      return rtx_addr_can_trap_p (XEXP (x, 0));
+      return rtx_addr_can_trap_p_1 (XEXP (x, 0), mode, unaligned_mems);
 
     default:
       break;
@@ -280,6 +310,14 @@ rtx_addr_can_trap_p (rtx x)
 
   /* If it isn't one of the case above, it can cause a trap.  */
   return 1;
+}
+
+/* Return nonzero if the use of X as an address in a MEM can cause a trap.  */
+
+int
+rtx_addr_can_trap_p (rtx x)
+{
+  return rtx_addr_can_trap_p_1 (x, VOIDmode, false);
 }
 
 /* Return true if X is an address that is known to not be zero.  */
@@ -666,9 +704,7 @@ reg_used_between_p (rtx reg, rtx from_insn, rtx to_insn)
   for (insn = NEXT_INSN (from_insn); insn != to_insn; insn = NEXT_INSN (insn))
     if (INSN_P (insn)
 	&& (reg_overlap_mentioned_p (reg, PATTERN (insn))
-	   || (CALL_P (insn)
-	      && (find_reg_fusage (insn, USE, reg)
-		  || find_reg_fusage (insn, CLOBBER, reg)))))
+	   || (CALL_P (insn) && find_reg_fusage (insn, USE, reg))))
       return 1;
   return 0;
 }
@@ -817,10 +853,10 @@ modified_between_p (rtx x, rtx start, rtx end)
       return 1;
 
     case MEM:
-      if (MEM_READONLY_P (x))
-	return 0;
       if (modified_between_p (XEXP (x, 0), start, end))
 	return 1;
+      if (MEM_READONLY_P (x))
+	return 0;
       for (insn = NEXT_INSN (start); insn != end; insn = NEXT_INSN (insn))
 	if (memory_modified_in_insn_p (x, insn))
 	  return 1;
@@ -875,10 +911,10 @@ modified_in_p (rtx x, rtx insn)
       return 1;
 
     case MEM:
-      if (MEM_READONLY_P (x))
-	return 0;
       if (modified_in_p (XEXP (x, 0), insn))
 	return 1;
+      if (MEM_READONLY_P (x))
+	return 0;
       if (memory_modified_in_insn_p (x, insn))
 	return 1;
       return 0;
@@ -2067,10 +2103,12 @@ side_effects_p (rtx x)
   return 0;
 }
 
-/* Return nonzero if evaluating rtx X might cause a trap.  */
+/* Return nonzero if evaluating rtx X might cause a trap.  UNALIGNED_MEMS
+   controls whether nonzero is returned for unaligned memory accesses on
+   strict alignment machines.  */
 
-int
-may_trap_p (rtx x)
+static int
+may_trap_p_1 (rtx x, bool unaligned_mems)
 {
   int i;
   enum rtx_code code;
@@ -2104,9 +2142,11 @@ may_trap_p (rtx x)
 
       /* Memory ref can trap unless it's a static var or a stack slot.  */
     case MEM:
-      if (MEM_NOTRAP_P (x))
+      if (MEM_NOTRAP_P (x)
+	  && (!STRICT_ALIGNMENT || !unaligned_mems))
 	return 0;
-      return rtx_addr_can_trap_p (XEXP (x, 0));
+      return
+	rtx_addr_can_trap_p_1 (XEXP (x, 0), GET_MODE (x), unaligned_mems);
 
       /* Division by a non-constant might trap.  */
     case DIV:
@@ -2115,11 +2155,9 @@ may_trap_p (rtx x)
     case UMOD:
       if (HONOR_SNANS (GET_MODE (x)))
 	return 1;
-      if (! CONSTANT_P (XEXP (x, 1))
-	  || (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT
-	      && flag_trapping_math))
-	return 1;
-      if (XEXP (x, 1) == const0_rtx)
+      if (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
+	return flag_trapping_math;
+      if (!CONSTANT_P (XEXP (x, 1)) || (XEXP (x, 1) == const0_rtx))
 	return 1;
       break;
 
@@ -2168,6 +2206,7 @@ may_trap_p (rtx x)
 
     case NEG:
     case ABS:
+    case SUBREG:
       /* These operations don't trap even with floating point.  */
       break;
 
@@ -2183,18 +2222,72 @@ may_trap_p (rtx x)
     {
       if (fmt[i] == 'e')
 	{
-	  if (may_trap_p (XEXP (x, i)))
+	  if (may_trap_p_1 (XEXP (x, i), unaligned_mems))
 	    return 1;
 	}
       else if (fmt[i] == 'E')
 	{
 	  int j;
 	  for (j = 0; j < XVECLEN (x, i); j++)
-	    if (may_trap_p (XVECEXP (x, i, j)))
+	    if (may_trap_p_1 (XVECEXP (x, i, j), unaligned_mems))
 	      return 1;
 	}
     }
   return 0;
+}
+
+/* Return nonzero if evaluating rtx X might cause a trap.  */
+
+int
+may_trap_p (rtx x)
+{
+  return may_trap_p_1 (x, false);
+}
+
+/* Same as above, but additionally return non-zero if evaluating rtx X might
+   cause a fault.  We define a fault for the purpose of this function as a
+   erroneous execution condition that cannot be encountered during the normal
+   execution of a valid program; the typical example is an unaligned memory
+   access on a strict alignment machine.  The compiler guarantees that it
+   doesn't generate code that will fault from a valid program, but this
+   guarantee doesn't mean anything for individual instructions.  Consider
+   the following example:
+
+      struct S { int d; union { char *cp; int *ip; }; };
+
+      int foo(struct S *s)
+      {
+	if (s->d == 1)
+	  return *s->ip;
+	else
+	  return *s->cp;
+      }
+
+   on a strict alignment machine.  In a valid program, foo will never be
+   invoked on a structure for which d is equal to 1 and the underlying
+   unique field of the union not aligned on a 4-byte boundary, but the
+   expression *s->ip might cause a fault if considered individually.
+
+   At the RTL level, potentially problematic expressions will almost always
+   verify may_trap_p; for example, the above dereference can be emitted as
+   (mem:SI (reg:P)) and this expression is may_trap_p for a generic register.
+   However, suppose that foo is inlined in a caller that causes s->cp to
+   point to a local character variable and guarantees that s->d is not set
+   to 1; foo may have been effectively translated into pseudo-RTL as:
+
+      if ((reg:SI) == 1)
+	(set (reg:SI) (mem:SI (%fp - 7)))
+      else
+	(set (reg:QI) (mem:QI (%fp - 7)))
+
+   Now (mem:SI (%fp - 7)) is considered as not may_trap_p since it is a
+   memory reference to a stack slot, but it will certainly cause a fault
+   on a strict alignment machine.  */
+
+int
+may_trap_or_fault_p (rtx x)
+{
+  return may_trap_p_1 (x, true);
 }
 
 /* Return nonzero if X contains a comparison that is not either EQ or NE,
@@ -3051,7 +3144,12 @@ subreg_regno_offset (unsigned int xregno, enum machine_mode xmode,
 
   gcc_assert (xregno < FIRST_PSEUDO_REGISTER);
 
-  nregs_xmode = hard_regno_nregs[xregno][xmode];
+  /* Adjust nregs_xmode to allow for 'holes'.  */
+  if (HARD_REGNO_NREGS_HAS_PADDING (xregno, xmode))
+    nregs_xmode = HARD_REGNO_NREGS_WITH_PADDING (xregno, xmode);
+  else
+    nregs_xmode = hard_regno_nregs[xregno][xmode];
+    
   nregs_ymode = hard_regno_nregs[xregno][ymode];
 
   /* If this is a big endian paradoxical subreg, which uses more actual
@@ -3066,7 +3164,7 @@ subreg_regno_offset (unsigned int xregno, enum machine_mode xmode,
   if (offset == 0 || nregs_xmode == nregs_ymode)
     return 0;
 
-  /* size of ymode must not be greater than the size of xmode.  */
+  /* Size of ymode must not be greater than the size of xmode.  */
   mode_multiple = GET_MODE_SIZE (xmode) / GET_MODE_SIZE (ymode);
   gcc_assert (mode_multiple != 0);
 
@@ -3081,7 +3179,7 @@ subreg_regno_offset (unsigned int xregno, enum machine_mode xmode,
    xmode  - The mode of xregno.
    offset - The byte offset.
    ymode  - The mode of a top level SUBREG (or what may become one).
-   RETURN - The regno offset which would be used.  */
+   RETURN - Whether the offset is representable.  */
 bool
 subreg_offset_representable_p (unsigned int xregno, enum machine_mode xmode,
 			       unsigned int offset, enum machine_mode ymode)
@@ -3089,28 +3187,73 @@ subreg_offset_representable_p (unsigned int xregno, enum machine_mode xmode,
   int nregs_xmode, nregs_ymode;
   int mode_multiple, nregs_multiple;
   int y_offset;
+  int regsize_xmode, regsize_ymode;
 
   gcc_assert (xregno < FIRST_PSEUDO_REGISTER);
 
-  nregs_xmode = hard_regno_nregs[xregno][xmode];
+  /* If there are holes in a non-scalar mode in registers, we expect
+     that it is made up of its units concatenated together.  */
+  if (HARD_REGNO_NREGS_HAS_PADDING (xregno, xmode))
+    {
+      enum machine_mode xmode_unit;
+
+      nregs_xmode = HARD_REGNO_NREGS_WITH_PADDING (xregno, xmode);
+      if (GET_MODE_INNER (xmode) == VOIDmode)
+	xmode_unit = xmode;
+      else
+	xmode_unit = GET_MODE_INNER (xmode);
+      gcc_assert (HARD_REGNO_NREGS_HAS_PADDING (xregno, xmode_unit));
+      gcc_assert (nregs_xmode
+		  == (GET_MODE_NUNITS (xmode)
+		      * HARD_REGNO_NREGS_WITH_PADDING (xregno, xmode_unit)));
+      gcc_assert (hard_regno_nregs[xregno][xmode]
+		  == (hard_regno_nregs[xregno][xmode_unit]
+		      * GET_MODE_NUNITS (xmode)));
+
+      /* You can only ask for a SUBREG of a value with holes in the middle
+	 if you don't cross the holes.  (Such a SUBREG should be done by
+	 picking a different register class, or doing it in memory if
+	 necessary.)  An example of a value with holes is XCmode on 32-bit
+	 x86 with -m128bit-long-double; it's represented in 6 32-bit registers,
+	 3 for each part, but in memory it's two 128-bit parts.  
+	 Padding is assumed to be at the end (not necessarily the 'high part')
+	 of each unit.  */
+      if ((offset / GET_MODE_SIZE (xmode_unit) + 1 
+	   < GET_MODE_NUNITS (xmode))
+	  && (offset / GET_MODE_SIZE (xmode_unit)
+	      != ((offset + GET_MODE_SIZE (ymode) - 1)
+		  / GET_MODE_SIZE (xmode_unit))))
+	return false;
+    }
+  else
+    nregs_xmode = hard_regno_nregs[xregno][xmode];
+  
   nregs_ymode = hard_regno_nregs[xregno][ymode];
 
-  /* Paradoxical subregs are always valid.  */
+  /* Paradoxical subregs are otherwise valid.  */
   if (offset == 0
       && nregs_ymode > nregs_xmode
       && (GET_MODE_SIZE (ymode) > UNITS_PER_WORD
 	  ? WORDS_BIG_ENDIAN : BYTES_BIG_ENDIAN))
     return true;
 
-  /* Lowpart subregs are always valid.  */
+  /* If registers store different numbers of bits in the different
+     modes, we cannot generally form this subreg.  */
+  regsize_xmode = GET_MODE_SIZE (xmode) / nregs_xmode;
+  regsize_ymode = GET_MODE_SIZE (ymode) / nregs_ymode;
+  if (regsize_xmode > regsize_ymode && nregs_ymode > 1)
+    return false;
+  if (regsize_ymode > regsize_xmode && nregs_xmode > 1)
+    return false;
+
+  /* Lowpart subregs are otherwise valid.  */
   if (offset == subreg_lowpart_offset (ymode, xmode))
     return true;
 
-  /* This should always pass, otherwise we don't know how to verify the
-     constraint.  These conditions may be relaxed but subreg_offset would
-     need to be redesigned.  */
+  /* This should always pass, otherwise we don't know how to verify
+     the constraint.  These conditions may be relaxed but
+     subreg_regno_offset would need to be redesigned.  */
   gcc_assert ((GET_MODE_SIZE (xmode) % GET_MODE_SIZE (ymode)) == 0);
-  gcc_assert ((GET_MODE_SIZE (ymode) % nregs_ymode) == 0);
   gcc_assert ((nregs_xmode % nregs_ymode) == 0);
 
   /* The XMODE value can be seen as a vector of NREGS_XMODE
@@ -3121,7 +3264,7 @@ subreg_offset_representable_p (unsigned int xregno, enum machine_mode xmode,
 						  / nregs_xmode,
 						  MODE_INT, 0));
 
-  /* size of ymode must not be greater than the size of xmode.  */
+  /* Size of ymode must not be greater than the size of xmode.  */
   mode_multiple = GET_MODE_SIZE (xmode) / GET_MODE_SIZE (ymode);
   gcc_assert (mode_multiple != 0);
 
@@ -3589,12 +3732,14 @@ nonzero_bits1 (rtx x, enum machine_mode mode, rtx known_x,
     case GE:  case GEU:  case UNGE:
     case LE:  case LEU:  case UNLE:
     case UNORDERED: case ORDERED:
-
       /* If this produces an integer result, we know which bits are set.
 	 Code here used to clear bits outside the mode of X, but that is
 	 now done above.  */
-
-      if (GET_MODE_CLASS (mode) == MODE_INT
+      /* Mind that MODE is the mode the caller wants to look at this 
+	 operation in, and not the actual operation mode.  We can wind 
+	 up with (subreg:DI (gt:V4HI x y)), and we don't have anything
+	 that describes the results of a vector compare.  */
+      if (GET_MODE_CLASS (GET_MODE (x)) == MODE_INT
 	  && mode_width <= HOST_BITS_PER_WIDE_INT)
 	nonzero = STORE_FLAG_VALUE;
       break;

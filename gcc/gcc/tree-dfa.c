@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -31,7 +31,6 @@ Boston, MA 02111-1307, USA.  */
 #include "hard-reg-set.h"
 #include "basic-block.h"
 #include "output.h"
-#include "errors.h"
 #include "timevar.h"
 #include "expr.h"
 #include "ggc.h"
@@ -66,28 +65,17 @@ struct dfa_stats_d
 };
 
 
-/* State information for find_vars_r.  */
-struct walk_state
-{
-  /* Hash table used to avoid adding the same variable more than once.  */
-  htab_t vars_found;
-};
-
-
 /* Local functions.  */
 static void collect_dfa_stats (struct dfa_stats_d *);
 static tree collect_dfa_stats_r (tree *, int *, void *);
-static void add_immediate_use (tree, tree);
 static tree find_vars_r (tree *, int *, void *);
-static void add_referenced_var (tree, struct walk_state *);
-static void compute_immediate_uses_for_phi (tree, bool (*)(tree));
-static void compute_immediate_uses_for_stmt (tree, int, bool (*)(tree));
+static void add_referenced_var (tree, bool);
 
 
 /* Global declarations.  */
 
 /* Array of all variables referenced in the function.  */
-varray_type referenced_vars;
+htab_t referenced_vars;
 
 
 /*---------------------------------------------------------------------------
@@ -104,23 +92,16 @@ varray_type referenced_vars;
 static void
 find_referenced_vars (void)
 {
-  htab_t vars_found;
   basic_block bb;
   block_stmt_iterator si;
-  struct walk_state walk_state;
-
-  vars_found = htab_create (50, htab_hash_pointer, htab_eq_pointer, NULL);
-  memset (&walk_state, 0, sizeof (walk_state));
-  walk_state.vars_found = vars_found;
 
   FOR_EACH_BB (bb)
     for (si = bsi_start (bb); !bsi_end_p (si); bsi_next (&si))
       {
 	tree *stmt_p = bsi_stmt_ptr (si);
-	walk_tree (stmt_p, find_vars_r, &walk_state, NULL);
+	walk_tree (stmt_p, find_vars_r, NULL, NULL);
       }
 
-  htab_delete (vars_found);
 }
 
 struct tree_opt_pass pass_referenced_vars =
@@ -139,263 +120,6 @@ struct tree_opt_pass pass_referenced_vars =
   0,                                    /* todo_flags_finish */
   0				        /* letter */
 };
-
-
-/* Compute immediate uses.
-
-   CALC_FOR is an optional function pointer which indicates whether
-      immediate uses information should be calculated for a given SSA
-      variable.  If NULL, then information is computed for all
-      variables.
-
-   FLAGS is one of {TDFA_USE_OPS, TDFA_USE_VOPS}.  It is used by
-      compute_immediate_uses_for_stmt to determine whether to look at
-      virtual and/or real operands while computing def-use chains.  */
-
-void
-compute_immediate_uses (int flags, bool (*calc_for)(tree))
-{
-  basic_block bb;
-  block_stmt_iterator si;
-
-  FOR_EACH_BB (bb)
-    {
-      tree phi;
-
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
-	{
-	  if (is_gimple_reg (PHI_RESULT (phi)))
-	    {
-	      if (!(flags & TDFA_USE_OPS))
-		continue;
-	    }
-	  else
-	    {
-	      if (!(flags & TDFA_USE_VOPS))
-		continue;
-	    }
-
-	  compute_immediate_uses_for_phi (phi, calc_for);
-	}
-
-      for (si = bsi_start (bb); !bsi_end_p (si); bsi_next (&si))
-        {
-	  tree stmt = bsi_stmt (si);
-	  get_stmt_operands (stmt);
-	  compute_immediate_uses_for_stmt (stmt, flags, calc_for);
-	}
-    }
-}
-
-
-/* Invalidates dataflow information for a statement STMT.  */
-
-void
-free_df_for_stmt (tree stmt)
-{
-  dataflow_t *df;
-
-  if (TREE_CODE (stmt) == PHI_NODE)
-    df = &PHI_DF (stmt);
-  else
-    {
-      stmt_ann_t ann = stmt_ann (stmt);
-
-      if (!ann)
-	return;
-
-      df = &ann->df;
-    }
-
-  if (!*df)
-    return;
-      
-  /* If we have a varray of immediate uses, then go ahead and release
-     it for re-use.  */
-  if ((*df)->immediate_uses)
-    ggc_free ((*df)->immediate_uses);
-
-  /* Similarly for the main dataflow structure.  */
-  ggc_free (*df);
-  *df = NULL;
-}
-
-
-/* Invalidate dataflow information for the whole function. 
-
-   Note this only invalidates dataflow information on statements and
-   PHI nodes which are reachable.
-
-   A deleted statement may still have attached dataflow information
-   on it.  */
-
-void
-free_df (void)
-{
-  basic_block bb;
-  block_stmt_iterator si;
-
-  FOR_EACH_BB (bb)
-    {
-      tree phi;
-
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
-	free_df_for_stmt (phi);
-
-      for (si = bsi_start (bb); !bsi_end_p (si); bsi_next (&si))
-        {
-	  tree stmt = bsi_stmt (si);
-	  free_df_for_stmt (stmt);
-	}
-    }
-}
-
-
-/* Helper for compute_immediate_uses.  Check all the USE and/or VUSE
-   operands in phi node PHI and add a def-use edge between their
-   defining statement and PHI.  CALC_FOR is as in
-   compute_immediate_uses.
-
-   PHI nodes are easy, we only need to look at their arguments.  */
-
-static void
-compute_immediate_uses_for_phi (tree phi, bool (*calc_for)(tree))
-{
-  int i;
-
-  gcc_assert (TREE_CODE (phi) == PHI_NODE);
-
-  for (i = 0; i < PHI_NUM_ARGS (phi); i++)
-    {
-      tree arg = PHI_ARG_DEF (phi, i);
-
-      if (TREE_CODE (arg) == SSA_NAME && (!calc_for || calc_for (arg)))
-	{
-	  tree imm_rdef_stmt = SSA_NAME_DEF_STMT (PHI_ARG_DEF (phi, i));
-	  if (!IS_EMPTY_STMT (imm_rdef_stmt))
-	    add_immediate_use (imm_rdef_stmt, phi);
-	}
-    }
-}
-
-
-/* Another helper for compute_immediate_uses.  Depending on the value
-   of FLAGS, check all the USE and/or VUSE operands in STMT and add a
-   def-use edge between their defining statement and STMT.  CALC_FOR
-   is as in compute_immediate_uses.  */
-
-static void
-compute_immediate_uses_for_stmt (tree stmt, int flags, bool (*calc_for)(tree))
-{
-  tree use;
-  ssa_op_iter iter;
-
-  /* PHI nodes are handled elsewhere.  */
-  gcc_assert (TREE_CODE (stmt) != PHI_NODE);
-
-  /* Look at USE_OPS or VUSE_OPS according to FLAGS.  */
-  if (flags & TDFA_USE_OPS)
-    {
-      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
-	{
-	  tree imm_stmt = SSA_NAME_DEF_STMT (use);
-	  if (!IS_EMPTY_STMT (imm_stmt) && (!calc_for || calc_for (use)))
-	    add_immediate_use (imm_stmt, stmt);
-	}
-    }
-
-  if (flags & TDFA_USE_VOPS)
-    {
-      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_VIRTUAL_USES)
-	{
-	  tree imm_rdef_stmt = SSA_NAME_DEF_STMT (use);
-	  if (!IS_EMPTY_STMT (imm_rdef_stmt) && (!calc_for || calc_for (use)))
-	    add_immediate_use (imm_rdef_stmt, stmt);
-	}
-      
-      FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_ALL_KILLS)
-	{
-	  tree imm_rdef_stmt = SSA_NAME_DEF_STMT (use);
-	  if (!IS_EMPTY_STMT (imm_rdef_stmt) && (!calc_for || calc_for (use)))
-	    add_immediate_use (imm_rdef_stmt, stmt);
-	}
-    }  
-}
-
-
-/* Add statement USE_STMT to the list of statements that use definitions
-    made by STMT.  */
-
-static void
-add_immediate_use (tree stmt, tree use_stmt)
-{
-  struct dataflow_d **df;
-
-  if (TREE_CODE (stmt) == PHI_NODE)
-    df = &PHI_DF (stmt);
-  else
-    {
-      stmt_ann_t ann = get_stmt_ann (stmt);
-      df = &ann->df;
-    }
-
-  if (*df == NULL)
-    {
-      *df = ggc_alloc (sizeof (struct dataflow_d));
-      memset ((void *) *df, 0, sizeof (struct dataflow_d));
-      (*df)->uses[0] = use_stmt;
-      return;
-    }
-
-  if (!(*df)->uses[1])
-    {
-      (*df)->uses[1] = use_stmt;
-      return;
-    }
-
-  if ((*df)->immediate_uses == NULL)
-    VARRAY_TREE_INIT ((*df)->immediate_uses, 4, "immediate_uses");
-
-  VARRAY_PUSH_TREE ((*df)->immediate_uses, use_stmt);
-}
-
-
-/* If the immediate use of USE points to OLD, then redirect it to NEW.  */
-
-static void
-redirect_immediate_use (tree use, tree old, tree new)
-{
-  tree imm_stmt = SSA_NAME_DEF_STMT (use);
-  struct dataflow_d *df = get_immediate_uses (imm_stmt);
-  unsigned int num_uses = num_immediate_uses (df);
-  unsigned int i;
-
-  for (i = 0; i < num_uses; i++)
-    {
-      if (immediate_use (df, i) == old)
-	{
-	  if (i == 0 || i == 1)
-	    df->uses[i] = new;
-	  else
-	    VARRAY_TREE (df->immediate_uses, i - 2) = new;
-	}
-    }
-}
-
-
-/* Redirect all immediate uses for operands in OLD so that they point
-   to NEW.  This routine should have no knowledge of how immediate
-   uses are stored.  */
-
-void
-redirect_immediate_uses (tree old, tree new)
-{
-  ssa_op_iter iter;
-  tree val;
-
-  FOR_EACH_SSA_TREE_OPERAND (val, old, iter, SSA_OP_ALL_USES)
-    redirect_immediate_use (val, old, new);
-}
 
 
 /*---------------------------------------------------------------------------
@@ -446,7 +170,6 @@ create_stmt_ann (tree t)
   return ann;
 }
 
-
 /* Create a new annotation for a tree T.  */
 
 tree_ann_t
@@ -472,11 +195,16 @@ tree
 make_rename_temp (tree type, const char *prefix)
 {
   tree t = create_tmp_var (type, prefix);
+
+  if (TREE_CODE (type) == COMPLEX_TYPE)
+    DECL_COMPLEX_GIMPLE_REG_P (t) = 1;
+
   if (referenced_vars)
     {
       add_referenced_tmp_var (t);
-      bitmap_set_bit (vars_to_rename, var_ann (t)->uid);
+      mark_sym_for_renaming (t);
     }
+
   return t;
 }
 
@@ -491,14 +219,14 @@ make_rename_temp (tree type, const char *prefix)
 void
 dump_referenced_vars (FILE *file)
 {
-  size_t i;
-
+  tree var;
+  referenced_var_iterator rvi;
+  
   fprintf (file, "\nReferenced variables in %s: %u\n\n",
 	   get_name (current_function_decl), (unsigned) num_referenced_vars);
-
-  for (i = 0; i < num_referenced_vars; i++)
+  
+  FOR_EACH_REFERENCED_VAR (var, rvi)
     {
-      tree var = referenced_var (i);
       fprintf (file, "Variable: ");
       dump_variable (file, var);
       fprintf (file, "\n");
@@ -512,6 +240,37 @@ void
 debug_referenced_vars (void)
 {
   dump_referenced_vars (stderr);
+}
+
+
+/* Dump sub-variables for VAR to FILE.  */
+
+void
+dump_subvars_for (FILE *file, tree var)
+{
+  subvar_t sv = get_subvars_for_var (var);
+
+  if (!sv)
+    return;
+
+  fprintf (file, "{ ");
+
+  for (; sv; sv = sv->next)
+    {
+      print_generic_expr (file, sv->var, dump_flags);
+      fprintf (file, " ");
+    }
+
+  fprintf (file, "}");
+}
+
+
+/* Dumb sub-variables for VAR to stderr.  */
+
+void
+debug_subvars_for (tree var)
+{
+  dump_subvars_for (stderr, var);
 }
 
 
@@ -539,18 +298,18 @@ dump_variable (FILE *file, tree var)
 
   ann = var_ann (var);
 
-  fprintf (file, ", UID %u", (unsigned) ann->uid);
+  fprintf (file, ", UID %u", (unsigned) DECL_UID (var));
 
   fprintf (file, ", ");
   print_generic_expr (file, TREE_TYPE (var), dump_flags);
 
-  if (ann->type_mem_tag)
+  if (ann && ann->type_mem_tag)
     {
       fprintf (file, ", type memory tag: ");
       print_generic_expr (file, ann->type_mem_tag, dump_flags);
     }
 
-  if (ann->is_alias_tag)
+  if (ann && ann->is_alias_tag)
     fprintf (file, ", is an alias tag");
 
   if (TREE_ADDRESSABLE (var))
@@ -565,16 +324,22 @@ dump_variable (FILE *file, tree var)
   if (is_call_clobbered (var))
     fprintf (file, ", call clobbered");
 
-  if (ann->default_def)
+  if (default_def (var))
     {
       fprintf (file, ", default def: ");
-      print_generic_expr (file, ann->default_def, dump_flags);
+      print_generic_expr (file, default_def (var), dump_flags);
     }
 
-  if (ann->may_aliases)
+  if (may_aliases (var))
     {
       fprintf (file, ", may aliases: ");
       dump_may_aliases_for (file, var);
+    }
+
+  if (get_subvars_for_var (var))
+    {
+      fprintf (file, ", sub-vars: ");
+      dump_subvars_for (file, var);
     }
 
   fprintf (file, "\n");
@@ -587,79 +352,6 @@ void
 debug_variable (tree var)
 {
   dump_variable (stderr, var);
-}
-
-
-/* Dump def-use edges on FILE.  */
-
-void
-dump_immediate_uses (FILE *file)
-{
-  basic_block bb;
-  block_stmt_iterator si;
-  const char *funcname
-    = lang_hooks.decl_printable_name (current_function_decl, 2);
-
-  fprintf (file, "\nDef-use edges for function %s\n", funcname);
-
-  FOR_EACH_BB (bb)
-    {
-      tree phi;
-
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
-	dump_immediate_uses_for (file, phi);
-
-      for (si = bsi_start (bb); !bsi_end_p (si); bsi_next (&si))
-	dump_immediate_uses_for (file, bsi_stmt (si));
-    }
-
-  fprintf (file, "\n");
-}
-
-
-/* Dump def-use edges on stderr.  */
-
-void
-debug_immediate_uses (void)
-{
-  dump_immediate_uses (stderr);
-}
-
-
-/* Dump all immediate uses for STMT on FILE.  */
-
-void
-dump_immediate_uses_for (FILE *file, tree stmt)
-{
-  dataflow_t df = get_immediate_uses (stmt);
-  int num_imm_uses = num_immediate_uses (df);
-
-  if (num_imm_uses > 0)
-    {
-      int i;
-
-      fprintf (file, "-> ");
-      print_generic_stmt (file, stmt, TDF_SLIM);
-      fprintf (file, "\n");
-
-      for (i = 0; i < num_imm_uses; i++)
-	{
-	  fprintf (file, "\t");
-	  print_generic_stmt (file, immediate_use (df, i), TDF_SLIM);
-	  fprintf (file, "\n");
-	}
-
-      fprintf (file, "\n");
-    }
-}
-
-
-/* Dump immediate uses for STMT on stderr.  */
-
-void
-debug_immediate_uses_for (tree stmt)
-{
-  dump_immediate_uses_for (stderr, stmt);
 }
 
 
@@ -760,7 +452,7 @@ debug_dfa_stats (void)
 }
 
 
-/* Collect DFA statistics and store them in the structure pointed by
+/* Collect DFA statistics and store them in the structure pointed to by
    DFA_STATS_P.  */
 
 static void
@@ -814,15 +506,13 @@ collect_dfa_stats_r (tree *tp, int *walk_subtrees ATTRIBUTE_UNUSED,
 	{
 	case STMT_ANN:
 	  {
-	    stmt_ann_t ann = (stmt_ann_t) t->common.ann;
 	    dfa_stats_p->num_stmt_anns++;
-	    dfa_stats_p->num_defs += NUM_DEFS (DEF_OPS (ann));
-	    dfa_stats_p->num_uses += NUM_USES (USE_OPS (ann));
-	    dfa_stats_p->num_v_may_defs +=
-	                 NUM_V_MAY_DEFS (V_MAY_DEF_OPS (ann));
-	    dfa_stats_p->num_vuses += NUM_VUSES (VUSE_OPS (ann));
-	    dfa_stats_p->num_v_must_defs +=
-	                 NUM_V_MUST_DEFS (V_MUST_DEF_OPS (ann));
+	    dfa_stats_p->num_defs += NUM_SSA_OPERANDS (t, SSA_OP_DEF);
+	    dfa_stats_p->num_uses += NUM_SSA_OPERANDS (t, SSA_OP_USE);
+	    dfa_stats_p->num_v_may_defs += NUM_SSA_OPERANDS (t, SSA_OP_VMAYDEF);
+	    dfa_stats_p->num_vuses += NUM_SSA_OPERANDS (t, SSA_OP_VUSE);
+	    dfa_stats_p->num_v_must_defs += 
+				  NUM_SSA_OPERANDS (t, SSA_OP_VMUSTDEF);
 	    break;
 	  }
 
@@ -846,14 +536,12 @@ collect_dfa_stats_r (tree *tp, int *walk_subtrees ATTRIBUTE_UNUSED,
    the function.  */
 
 static tree
-find_vars_r (tree *tp, int *walk_subtrees, void *data)
+find_vars_r (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
 {
-  struct walk_state *walk_state = (struct walk_state *) data;
-
   /* If T is a regular variable that the optimizers are interested
      in, add it to the list of variables.  */
   if (SSA_VAR_P (*tp))
-    add_referenced_var (*tp, walk_state);
+    add_referenced_var (*tp, false);
 
   /* Type, _DECL and constant nodes have no interesting children.
      Ignore them.  */
@@ -864,6 +552,53 @@ find_vars_r (tree *tp, int *walk_subtrees, void *data)
 }
 
 
+/* Lookup UID in the referenced_vars hashtable and return the associated
+   variable or NULL if it is not there.  */
+
+tree 
+referenced_var_lookup_if_exists (unsigned int uid)
+{
+  struct int_tree_map *h, in;
+  in.uid = uid;
+  h = htab_find_with_hash (referenced_vars, &in, uid);
+  if (h)
+    return h->to;
+  return NULL_TREE;
+}
+
+/* Lookup UID in the referenced_vars hashtable and return the associated
+   variable.  */
+
+tree 
+referenced_var_lookup (unsigned int uid)
+{
+  struct int_tree_map *h, in;
+  in.uid = uid;
+  h = htab_find_with_hash (referenced_vars, &in, uid);
+  gcc_assert (h || uid == 0);
+  if (h)
+    return h->to;
+  return NULL_TREE;
+}
+
+/* Insert the pair UID, TO into the referenced_vars hashtable.  */
+
+static void
+referenced_var_insert (unsigned int uid, tree to)
+{ 
+  struct int_tree_map *h;
+  void **loc;
+
+  h = ggc_alloc (sizeof (struct int_tree_map));
+  h->uid = uid;
+  h->to = to;
+  loc = htab_find_slot_with_hash (referenced_vars, h, uid, INSERT);
+  /* This assert can only trigger if a variable with the same UID has been 
+     inserted already.  */
+  gcc_assert ((*(struct int_tree_map **)loc) == NULL);
+  *(struct int_tree_map **)  loc = h;
+}
+
 /* Add VAR to the list of dereferenced variables.
 
    WALK_STATE contains a hash table used to avoid adding the same
@@ -872,27 +607,27 @@ find_vars_r (tree *tp, int *walk_subtrees, void *data)
       duplicate checking is done.  */
 
 static void
-add_referenced_var (tree var, struct walk_state *walk_state)
+add_referenced_var (tree var, bool always)
 {
-  void **slot;
   var_ann_t v_ann;
+  tree ref;
 
   v_ann = get_var_ann (var);
+  gcc_assert (DECL_P (var));
 
-  if (walk_state)
-    slot = htab_find_slot (walk_state->vars_found, (void *) var, INSERT);
-  else
-    slot = NULL;
+  ref = referenced_var_lookup_if_exists (DECL_UID (var));  
 
-  if (slot == NULL || *slot == NULL)
+  /* Catch PRs 26757 and 27793.  If this assert triggers, REF and VAR are
+     two different variables in this function with the same DECL_UID.  */
+  gcc_assert (!ref || ref == var);
+
+  if (always || ref == NULL_TREE)
     {
       /* This is the first time we find this variable, add it to the
          REFERENCED_VARS array and annotate it with attributes that are
 	 intrinsic to the variable.  */
-      if (slot)
-	*slot = (void *) var;
-      v_ann->uid = num_referenced_vars;
-      VARRAY_PUSH_TREE (referenced_vars, var);
+      
+      referenced_var_insert (DECL_UID (var), var);
 
       /* Global variables are always call-clobbered.  */
       if (is_global_var (var))
@@ -901,8 +636,15 @@ add_referenced_var (tree var, struct walk_state *walk_state)
       /* Scan DECL_INITIAL for pointer variables as they may contain
 	 address arithmetic referencing the address of other
 	 variables.  */
-      if (DECL_INITIAL (var))
-      	walk_tree (&DECL_INITIAL (var), find_vars_r, walk_state, 0);
+      if (DECL_INITIAL (var)
+	  /* Initializers of external variables are not useful to the
+	     optimizers.  */
+          && !DECL_EXTERNAL (var)
+	  /* It's not necessary to walk the initial value of non-constant
+	     variables because it cannot be propagated by the
+	     optimizers.  */
+	  && (TREE_CONSTANT (var) || TREE_READONLY (var)))
+      	walk_tree (&DECL_INITIAL (var), find_vars_r, NULL, 0);
     }
 }
 
@@ -939,15 +681,15 @@ get_virtual_var (tree var)
 void
 add_referenced_tmp_var (tree var)
 {
-  add_referenced_var (var, NULL);
+  add_referenced_var (var, true);
 }
 
 
-/* Add all the non-SSA variables found in STMT's operands to the bitmap
-   VARS_TO_RENAME.  */
+/* Mark all the non-SSA variables found in STMT's operands to be
+   processed by update_ssa.  */
 
 void
-mark_new_vars_to_rename (tree stmt, bitmap vars_to_rename)
+mark_new_vars_to_rename (tree stmt)
 {
   ssa_op_iter iter;
   tree val;
@@ -955,6 +697,9 @@ mark_new_vars_to_rename (tree stmt, bitmap vars_to_rename)
   bool found_exposed_symbol = false;
   int v_may_defs_before, v_may_defs_after;
   int v_must_defs_before, v_must_defs_after;
+
+  if (TREE_CODE (stmt) == PHI_NODE)
+    return;
 
   vars_in_vops_to_rename = BITMAP_ALLOC (NULL);
 
@@ -967,33 +712,30 @@ mark_new_vars_to_rename (tree stmt, bitmap vars_to_rename)
      We flag them in a separate bitmap because we don't really want to
      rename them if there are not any newly exposed symbols in the
      statement operands.  */
-  v_may_defs_before = NUM_V_MAY_DEFS (STMT_V_MAY_DEF_OPS (stmt));
-  v_must_defs_before = NUM_V_MUST_DEFS (STMT_V_MUST_DEF_OPS (stmt));
+  v_may_defs_before = NUM_SSA_OPERANDS (stmt, SSA_OP_VMAYDEF);
+  v_must_defs_before = NUM_SSA_OPERANDS (stmt, SSA_OP_VMUSTDEF);
 
   FOR_EACH_SSA_TREE_OPERAND (val, stmt, iter, 
 			     SSA_OP_VMAYDEF | SSA_OP_VUSE | SSA_OP_VMUSTDEF)
     {
       if (!DECL_P (val))
 	val = SSA_NAME_VAR (val);
-      bitmap_set_bit (vars_in_vops_to_rename, var_ann (val)->uid);
+      bitmap_set_bit (vars_in_vops_to_rename, DECL_UID (val));
     }
 
   /* Now force an operand re-scan on the statement and mark any newly
      exposed variables.  */
-  modify_stmt (stmt);
-  get_stmt_operands (stmt);
+  update_stmt (stmt);
 
-  v_may_defs_after = NUM_V_MAY_DEFS (STMT_V_MAY_DEF_OPS (stmt));
-  v_must_defs_after = NUM_V_MUST_DEFS (STMT_V_MUST_DEF_OPS (stmt));
+  v_may_defs_after = NUM_SSA_OPERANDS (stmt, SSA_OP_VMAYDEF);
+  v_must_defs_after = NUM_SSA_OPERANDS (stmt, SSA_OP_VMUSTDEF);
 
   FOR_EACH_SSA_TREE_OPERAND (val, stmt, iter, SSA_OP_ALL_OPERANDS)
-    {
-      if (DECL_P (val))
-	{
-	  found_exposed_symbol = true;
-	  bitmap_set_bit (vars_to_rename, var_ann (val)->uid);
-	}
-    }
+    if (DECL_P (val))
+      {
+	found_exposed_symbol = true;
+	mark_sym_for_renaming (val);
+      }
 
   /* If we found any newly exposed symbols, or if there are fewer VDEF
      operands in the statement, add the variables we had set in
@@ -1003,7 +745,7 @@ mark_new_vars_to_rename (tree stmt, bitmap vars_to_rename)
   if (found_exposed_symbol
       || v_may_defs_before > v_may_defs_after
       || v_must_defs_before > v_must_defs_after)
-    bitmap_ior_into (vars_to_rename, vars_in_vops_to_rename);
+    mark_set_for_renaming (vars_in_vops_to_rename);
 
   BITMAP_FREE (vars_in_vops_to_rename);
 }
@@ -1018,7 +760,10 @@ find_new_referenced_vars_1 (tree *tp, int *walk_subtrees,
   tree t = *tp;
 
   if (TREE_CODE (t) == VAR_DECL && !var_ann (t))
-    add_referenced_tmp_var (t);
+    {
+      add_referenced_tmp_var (t);
+      mark_sym_for_renaming (t);
+    }
 
   if (IS_TYPE_OR_DECL_P (t))
     *walk_subtrees = 0;
@@ -1033,16 +778,45 @@ find_new_referenced_vars (tree *stmt_p)
 }
 
 
-/* Mark all call-clobbered variables for renaming.  */
+/* If REF is a COMPONENT_REF for a structure that can have sub-variables, and
+   we know where REF is accessing, return the variable in REF that has the
+   sub-variables.  If the return value is not NULL, POFFSET will be the
+   offset, in bits, of REF inside the return value, and PSIZE will be the
+   size, in bits, of REF inside the return value.  */
 
-void
-mark_call_clobbered_vars_to_rename (void)
+tree
+okay_component_ref_for_subvars (tree ref, unsigned HOST_WIDE_INT *poffset,
+				unsigned HOST_WIDE_INT *psize)
 {
-  unsigned i;
-  bitmap_iterator bi;
-  EXECUTE_IF_SET_IN_BITMAP (call_clobbered_vars, 0, i, bi)
+  tree result = NULL;
+  HOST_WIDE_INT bitsize;
+  HOST_WIDE_INT bitpos;
+  tree offset;
+  enum machine_mode mode;
+  int unsignedp;
+  int volatilep;
+
+  gcc_assert (!SSA_VAR_P (ref));
+  *poffset = 0;  
+  *psize = (unsigned int) -1;
+  
+  if (ref_contains_array_ref (ref))
+    return result;
+  ref = get_inner_reference (ref, &bitsize, &bitpos, &offset, &mode,
+			     &unsignedp, &volatilep, false);
+  if (TREE_CODE (ref) == INDIRECT_REF)
+    return result;
+  else if (offset == NULL && bitsize != -1 && SSA_VAR_P (ref))
     {
-      tree var = referenced_var (i);
-      bitmap_set_bit (vars_to_rename, var_ann (var)->uid);
+      *poffset = bitpos;      
+      *psize = bitsize;
+      if (get_subvars_for_var (ref) != NULL)
+	return ref;
     }
+  else if (SSA_VAR_P (ref))
+    {
+      if (get_subvars_for_var (ref) != NULL)
+	return ref;
+    }
+  return NULL_TREE;
 }

@@ -1,5 +1,5 @@
 /* Support routines for the various generation passes.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "bconfig.h"
 #include "system.h"
@@ -317,7 +317,10 @@ process_rtx (rtx desc, int lineno)
 	   insn condition to create the new split condition.  */
 	split_cond = XSTR (desc, 4);
 	if (split_cond[0] == '&' && split_cond[1] == '&')
-	  split_cond = concat (XSTR (desc, 2), split_cond, NULL);
+	  {
+	    copy_rtx_ptr_loc (split_cond + 2, split_cond);
+	    split_cond = join_c_conditions (XSTR (desc, 2), split_cond + 2);
+	  }
 	XSTR (split, 1) = split_cond;
 	XVEC (split, 2) = XVEC (desc, 5);
 	XSTR (split, 3) = XSTR (desc, 6);
@@ -663,16 +666,8 @@ static const char *
 alter_test_for_insn (struct queue_elem *ce_elem,
 		     struct queue_elem *insn_elem)
 {
-  const char *ce_test, *insn_test;
-
-  ce_test = XSTR (ce_elem->data, 1);
-  insn_test = XSTR (insn_elem->data, 2);
-  if (!ce_test || *ce_test == '\0')
-    return insn_test;
-  if (!insn_test || *insn_test == '\0')
-    return ce_test;
-
-  return concat ("(", ce_test, ") && (", insn_test, ")", NULL);
+  return join_c_conditions (XSTR (ce_elem->data, 1),
+			    XSTR (insn_elem->data, 2));
 }
 
 /* Adjust all of the operand numbers in SRC to match the shift they'll
@@ -1223,10 +1218,7 @@ add_predicate (struct pred_data *pred)
 }
 
 /* This array gives the initial content of the predicate table.  It
-   has entries for all predicates defined in recog.c.  The back end
-   can define PREDICATE_CODES to give additional entries for the
-   table; this is considered an obsolete mechanism (use
-   define_predicate instead).  */
+   has entries for all predicates defined in recog.c.  */
 
 struct old_pred_table
 {
@@ -1256,31 +1248,21 @@ static const struct old_pred_table old_preds[] = {
   {"indirect_operand", {SUBREG, MEM}},
   {"comparison_operator", {EQ, NE, LE, LT, GE, GT, LEU, LTU, GEU, GTU,
 			   UNORDERED, ORDERED, UNEQ, UNGE, UNGT, UNLE,
-			   UNLT, LTGT}},
-#ifdef PREDICATE_CODES
-  PREDICATE_CODES
-#endif
+			   UNLT, LTGT}}
 };
 #define NUM_KNOWN_OLD_PREDS ARRAY_SIZE (old_preds)
 
-/* This table gives the initial set of special predicates.  It has
-   entries for all special predicates defined in recog.c.  The back
-   end can define SPECIAL_MODE_PREDICATES to give additional entries
-   for the table; this is considered an obsolete mechanism (use
-   define_special_predicate instead).  */
+/* This table gives the set of special predicates.  It has entries for
+   all special predicates defined in recog.c.  */
 static const char *const old_special_pred_table[] = {
   "address_operand",
   "pmode_register_operand",
-#ifdef SPECIAL_MODE_PREDICATES
-  SPECIAL_MODE_PREDICATES
-#endif
 };
 
 #define NUM_OLD_SPECIAL_MODE_PREDS ARRAY_SIZE (old_special_pred_table)
 
 /* Initialize the table of predicate definitions, starting with
-   the information we have on generic predicates, and the old-style
-   PREDICATE_CODES definitions.  */
+   the information we have on generic predicates.  */
 
 static void
 init_predicate_table (void)

@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -122,6 +122,7 @@ namespace _GLIBCXX_STD
       _List_iterator()
       : _M_node() { }
 
+      explicit
       _List_iterator(_List_node_base* __x)
       : _M_node(__x) { }
 
@@ -199,6 +200,7 @@ namespace _GLIBCXX_STD
       _List_const_iterator()
       : _M_node() { }
 
+      explicit
       _List_const_iterator(const _List_node_base* __x)
       : _M_node(__x) { }
 
@@ -290,19 +292,20 @@ namespace _GLIBCXX_STD
       //
       // We put this to the test in the constructors and in
       // get_allocator, where we use conversions between
-      // allocator_type and _Node_Alloc_type. The conversion is
+      // allocator_type and _Node_alloc_type. The conversion is
       // required by table 32 in [20.1.5].
       typedef typename _Alloc::template rebind<_List_node<_Tp> >::other
+        _Node_alloc_type;
 
-      _Node_Alloc_type;
+      typedef typename _Alloc::template rebind<_Tp>::other _Tp_alloc_type;
 
       struct _List_impl 
-      : public _Node_Alloc_type
+      : public _Node_alloc_type
       {
 	_List_node_base _M_node;
 
-	_List_impl (const _Node_Alloc_type& __a)
-        : _Node_Alloc_type(__a), _M_node()
+	_List_impl(const _Node_alloc_type& __a)
+	: _Node_alloc_type(__a), _M_node()
 	{ }
       };
 
@@ -310,19 +313,22 @@ namespace _GLIBCXX_STD
 
       _List_node<_Tp>*
       _M_get_node()
-      { return _M_impl._Node_Alloc_type::allocate(1); }
+      { return _M_impl._Node_alloc_type::allocate(1); }
       
       void
       _M_put_node(_List_node<_Tp>* __p)
-      { _M_impl._Node_Alloc_type::deallocate(__p, 1); }
+      { _M_impl._Node_alloc_type::deallocate(__p, 1); }
       
   public:
       typedef _Alloc allocator_type;
 
+      _Tp_alloc_type
+      _M_get_Tp_allocator() const
+      { return *static_cast<const _Node_alloc_type*>(&this->_M_impl); }
+
       allocator_type
       get_allocator() const
-      { return allocator_type(*static_cast<
-			      const _Node_Alloc_type*>(&this->_M_impl)); }
+      { return _M_get_Tp_allocator(); }
 
       _List_base(const allocator_type& __a)
       : _M_impl(__a)
@@ -392,28 +398,31 @@ namespace _GLIBCXX_STD
     class list : protected _List_base<_Tp, _Alloc>
     {
       // concept requirements
+      typedef typename _Alloc::value_type                _Alloc_value_type;
       __glibcxx_class_requires(_Tp, _SGIAssignableConcept)
+      __glibcxx_class_requires2(_Tp, _Alloc_value_type, _SameTypeConcept)
 
-      typedef _List_base<_Tp, _Alloc>                   _Base;
+      typedef _List_base<_Tp, _Alloc>                    _Base;
+      typedef typename _Base::_Tp_alloc_type		 _Tp_alloc_type;
 
     public:
       typedef _Tp                                        value_type;
-      typedef typename _Alloc::pointer                   pointer;
-      typedef typename _Alloc::const_pointer             const_pointer;
-      typedef typename _Alloc::reference                 reference;
-      typedef typename _Alloc::const_reference           const_reference;
+      typedef typename _Tp_alloc_type::pointer           pointer;
+      typedef typename _Tp_alloc_type::const_pointer     const_pointer;
+      typedef typename _Tp_alloc_type::reference         reference;
+      typedef typename _Tp_alloc_type::const_reference   const_reference;
       typedef _List_iterator<_Tp>                        iterator;
       typedef _List_const_iterator<_Tp>                  const_iterator;
       typedef std::reverse_iterator<const_iterator>      const_reverse_iterator;
       typedef std::reverse_iterator<iterator>            reverse_iterator;
       typedef size_t                                     size_type;
       typedef ptrdiff_t                                  difference_type;
-      typedef typename _Base::allocator_type             allocator_type;
+      typedef _Alloc                                     allocator_type;
 
     protected:
       // Note that pointers-to-_Node's can be ctor-converted to
       // iterator types.
-      typedef _List_node<_Tp>				_Node;
+      typedef _List_node<_Tp>				 _Node;
 
       /** @if maint
        *  One data member plus two memory-handling functions.  If the
@@ -424,6 +433,7 @@ namespace _GLIBCXX_STD
       using _Base::_M_impl;
       using _Base::_M_put_node;
       using _Base::_M_get_node;
+      using _Base::_M_get_Tp_allocator;
 
       /**
        *  @if maint
@@ -438,7 +448,7 @@ namespace _GLIBCXX_STD
 	_Node* __p = this->_M_get_node();
 	try
 	  {
-	    this->get_allocator().construct(&__p->_M_data, __x);
+	    _M_get_Tp_allocator().construct(&__p->_M_data, __x);
 	  }
 	catch(...)
 	  {
@@ -465,22 +475,11 @@ namespace _GLIBCXX_STD
        *
        *  This constructor fills the %list with @a n copies of @a value.
        */
-      list(size_type __n, const value_type& __value,
+      explicit
+      list(size_type __n, const value_type& __value = value_type(),
 	   const allocator_type& __a = allocator_type())
       : _Base(__a)
       { this->insert(begin(), __n, __value); }
-
-      /**
-       *  @brief  Create a %list with default elements.
-       *  @param  n  The number of elements to initially create.
-       *
-       *  This constructor fills the %list with @a n copies of a
-       *  default-constructed element.
-       */
-      explicit
-      list(size_type __n)
-      : _Base(allocator_type())
-      { this->insert(begin(), __n, value_type()); }
 
       /**
        *  @brief  %List copy constructor.
@@ -578,7 +577,7 @@ namespace _GLIBCXX_STD
        */
       iterator
       begin()
-      { return this->_M_impl._M_node._M_next; }
+      { return iterator(this->_M_impl._M_node._M_next); }
 
       /**
        *  Returns a read-only (constant) iterator that points to the
@@ -587,7 +586,7 @@ namespace _GLIBCXX_STD
        */
       const_iterator
       begin() const
-      { return this->_M_impl._M_node._M_next; }
+      { return const_iterator(this->_M_impl._M_node._M_next); }
 
       /**
        *  Returns a read/write iterator that points one past the last
@@ -595,7 +594,8 @@ namespace _GLIBCXX_STD
        *  order.
        */
       iterator
-      end() { return &this->_M_impl._M_node; }
+      end()
+      { return iterator(&this->_M_impl._M_node); }
 
       /**
        *  Returns a read-only (constant) iterator that points one past
@@ -604,7 +604,7 @@ namespace _GLIBCXX_STD
        */
       const_iterator
       end() const
-      { return &this->_M_impl._M_node; }
+      { return const_iterator(&this->_M_impl._M_node); }
 
       /**
        *  Returns a read/write reverse iterator that points to the last
@@ -672,20 +672,7 @@ namespace _GLIBCXX_STD
        *  extended and new elements are populated with given data.
        */
       void
-      resize(size_type __new_size, const value_type& __x);
-
-      /**
-       *  @brief  Resizes the %list to the specified number of elements.
-       *  @param  new_size  Number of elements the %list should contain.
-       *
-       *  This function will resize the %list to the specified number of
-       *  elements.  If the number is smaller than the %list's current
-       *  size the %list is truncated, otherwise the %list is extended
-       *  and new elements are default-constructed.
-       */
-      void
-      resize(size_type __new_size)
-      { this->resize(__new_size, value_type()); }
+      resize(size_type __new_size, value_type __x = value_type());
 
       // element access
       /**
@@ -786,7 +773,7 @@ namespace _GLIBCXX_STD
        */
       void
       pop_back()
-      { this->_M_erase(this->_M_impl._M_node._M_prev); }
+      { this->_M_erase(iterator(this->_M_impl._M_node._M_prev)); }
 
       /**
        *  @brief  Inserts given value into %list before specified iterator.
@@ -1159,7 +1146,7 @@ namespace _GLIBCXX_STD
       {
         __position._M_node->unhook();
         _Node* __n = static_cast<_Node*>(__position._M_node);
-        this->get_allocator().destroy(&__n->_M_data);
+        _M_get_Tp_allocator().destroy(&__n->_M_data);
         _M_put_node(__n);
       }
     };

@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler,
    for ATMEL AVR at90s8515, ATmega103/103L, ATmega603/603L microcontrollers.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
    Contributed by Denis Chertykov (denisc@overta.ru)
 
@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Names to predefine in the preprocessor for this target machine.  */
 
@@ -42,53 +42,6 @@ Boston, MA 02111-1307, USA.  */
     }						\
   while (0)
 
-/* This declaration should be present.  */
-extern int target_flags;
-
-#define MASK_ALL_DEBUG		0x00000FE0
-#define MASK_ORDER_1		0x00001000
-#define MASK_INSN_SIZE_DUMP	0x00002000
-#define MASK_ORDER_2		0x00004000
-#define MASK_NO_TABLEJUMP	0x00008000
-#define MASK_INT8		0x00010000
-#define MASK_NO_INTERRUPTS	0x00020000
-#define MASK_CALL_PROLOGUES	0x00040000
-#define MASK_TINY_STACK		0x00080000
-#define MASK_SHORT_CALLS	0x00100000
-
-#define TARGET_ORDER_1		(target_flags & MASK_ORDER_1)
-#define TARGET_ORDER_2		(target_flags & MASK_ORDER_2)
-#define TARGET_INT8		(target_flags & MASK_INT8)
-#define TARGET_NO_INTERRUPTS	(target_flags & MASK_NO_INTERRUPTS)
-#define TARGET_INSN_SIZE_DUMP	(target_flags & MASK_INSN_SIZE_DUMP)
-#define TARGET_CALL_PROLOGUES	(target_flags & MASK_CALL_PROLOGUES)
-#define TARGET_TINY_STACK	(target_flags & MASK_TINY_STACK)
-#define TARGET_NO_TABLEJUMP	(target_flags & MASK_NO_TABLEJUMP)
-#define TARGET_SHORT_CALLS	(target_flags & MASK_SHORT_CALLS)
-#define TARGET_ALL_DEBUG	(target_flags & MASK_ALL_DEBUG)
-
-#define TARGET_SWITCHES {						\
-  { "order1", MASK_ORDER_1, NULL },					\
-  { "order2", MASK_ORDER_2, NULL },					\
-  { "int8", MASK_INT8, N_("Assume int to be 8 bit integer") },		\
-  { "no-interrupts", MASK_NO_INTERRUPTS,				\
-    N_("Change the stack pointer without disabling interrupts") },	\
-  { "call-prologues", MASK_CALL_PROLOGUES,				\
-    N_("Use subroutines for function prologue/epilogue") },		\
-  { "tiny-stack", MASK_TINY_STACK,					\
-    N_("Change only the low 8 bits of the stack pointer") },		\
-  { "no-tablejump", MASK_NO_TABLEJUMP,					\
-    N_("Do not generate tablejump insns") },				\
-  { "short-calls", MASK_SHORT_CALLS,					\
-    N_("Use rjmp/rcall (limited range) on >8K devices") },		\
-  { "size", MASK_INSN_SIZE_DUMP,					\
-    N_("Output instruction sizes to the asm file") },			\
-  { "deb", MASK_ALL_DEBUG, NULL },					\
-  { "", 0, NULL } }
-
-extern const char *avr_init_stack;
-extern const char *avr_mcu_name;
-
 extern const char *avr_base_arch_macro;
 extern const char *avr_extra_arch_macro;
 extern int avr_mega_p;
@@ -97,10 +50,6 @@ extern int avr_asm_only_p;
 
 #define AVR_MEGA (avr_mega_p && !TARGET_SHORT_CALLS)
 #define AVR_ENHANCED (avr_enhanced_p)
-
-#define TARGET_OPTIONS {						      \
- { "init-stack=", &avr_init_stack, N_("Specify the initial stack address"), 0}, \
- { "mcu=", &avr_mcu_name, N_("Specify the MCU name"), 0} }
 
 #define TARGET_VERSION fprintf (stderr, " (GNU assembler syntax)");
 
@@ -348,6 +297,9 @@ enum reg_class {
 #define STATIC_CHAIN_REGNUM 2
 
 #define FRAME_POINTER_REQUIRED frame_pointer_required_p()
+
+/* Offset from the frame pointer register value to the top of the stack.  */
+#define FRAME_POINTER_CFA_OFFSET(FNDECL) 0
 
 #define ELIMINABLE_REGS {					\
       {ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM},		\
@@ -719,15 +671,13 @@ sprintf (STRING, "*.%s%lu", PREFIX, (unsigned long)(NUM))
 
 #define ASM_OUTPUT_REG_PUSH(STREAM, REGNO)	\
 {						\
-  if (REGNO > 31)				\
-    abort ();					\
+  gcc_assert (REGNO < 32);			\
   fprintf (STREAM, "\tpush\tr%d", REGNO);	\
 }
 
 #define ASM_OUTPUT_REG_POP(STREAM, REGNO)	\
 {						\
-  if (REGNO > 31)				\
-    abort ();					\
+  gcc_assert (REGNO < 32);			\
   fprintf (STREAM, "\tpop\tr%d", REGNO);	\
 }
 
@@ -916,3 +866,7 @@ extern int avr_case_values_threshold;
 #define ZERO_REGNO 1
 
 #define PREFERRED_DEBUGGING_TYPE DBX_DEBUG
+
+#define DWARF2_DEBUGGING_INFO 1
+
+#define OBJECT_FORMAT_ELF

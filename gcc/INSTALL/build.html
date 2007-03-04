@@ -74,13 +74,12 @@ that type mismatches occur, this could be the cause.
 
    <p>The solution is not to use such a directory for building GCC.
 
-   <p>When building from CVS or snapshots, or if you modify parser sources,
-you need the Bison parser generator installed.  Any version 1.25 or
-later should work; older versions may also work.  If you do not modify
+   <p>When building from SVN or snapshots, or if you modify parser sources,
+you need the Bison parser generator installed.  If you do not modify
 parser sources, releases contain the Bison-generated files and you do
 not need Bison installed to build them.
 
-   <p>When building from CVS or snapshots, or if you modify Texinfo
+   <p>When building from SVN or snapshots, or if you modify Texinfo
 documentation, you need version 4.2 or later of Texinfo installed if you
 want Info documentation to be regenerated.  Releases contain Info
 documentation pre-built for the unmodified documentation in the release.
@@ -154,11 +153,7 @@ need to disable comparison in the <samp><span class="file">Makefile</span></samp
 
 <h3 class="section"><a name="TOC1"></a>0.2 Building a cross compiler</h3>
 
-<p>We recommend reading the
-<a href="http://www.objsw.com/CrossGCC/">crossgcc FAQ</a>
-for information about building cross compilers.
-
-   <p>When building a cross compiler, it is not generally possible to do a
+<p>When building a cross compiler, it is not generally possible to do a
 3-stage bootstrap of the compiler.  This makes for an interesting problem
 as parts of GCC can only be built with GCC.
 
@@ -172,8 +167,7 @@ your cross compiler, issue the command <samp><span class="command">make</span></
 following steps:
 
      <ul>
-<li>Build host tools necessary to build the compiler such as texinfo, bison,
-gperf.
+<li>Build host tools necessary to build the compiler.
 
      <li>Build target tools for use by the compiler such as binutils (bfd,
 binutils, gas, gprof, ld, and opcodes)

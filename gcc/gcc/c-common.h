@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_C_COMMON_H
 #define GCC_C_COMMON_H
@@ -30,9 +30,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    0: TREE_NEGATED_INT (in INTEGER_CST).
       IDENTIFIER_MARKED (used by search routines).
       DECL_PRETTY_FUNCTION_P (in VAR_DECL)
-      STMT_EXPR_NO_SCOPE (in STMT_EXPR)
    1: C_DECLARED_LABEL_FLAG (in LABEL_DECL)
-      STMT_IS_FULL_EXPR_P (in _STMT)
       STATEMENT_LIST_STMT_EXPR (in STATEMENT_LIST)
    2: unused
    3: STATEMENT_LIST_HAS_LABEL (in STATEMENT_LIST)
@@ -222,10 +220,6 @@ struct sorted_fields_type GTY(())
 /* Mark which labels are explicitly declared.
    These may be shadowed, and may be referenced from nested functions.  */
 #define C_DECLARED_LABEL_FLAG(label) TREE_LANG_FLAG_1 (label)
-
-/* Flag strings given by __FUNCTION__ and __PRETTY_FUNCTION__ for a
-   warning if they undergo concatenation.  */
-#define C_ARTIFICIAL_STRING_P(NODE) TREE_LANG_FLAG_0 (NODE)
 
 typedef enum c_language_kind
 {
@@ -455,10 +449,6 @@ extern int warn_main;
 
 extern int flag_gen_declaration;
 
-/* Generate code for GNU or NeXT runtime environment.  */
-
-extern int flag_next_runtime;
-
 /* Tells the compiler that this is a special run.  Do not perform any
    compiling, instead we are to test some platform dependent features
    and output a C header file with appropriate definitions.  */
@@ -651,7 +641,7 @@ extern tree c_common_signed_type (tree);
 extern tree c_common_signed_or_unsigned_type (int, tree);
 extern tree c_common_truthvalue_conversion (tree);
 extern void c_apply_type_quals_to_decl (int, tree);
-extern tree c_sizeof_or_alignof_type (tree, enum tree_code, int);
+extern tree c_sizeof_or_alignof_type (tree, bool, int);
 extern tree c_alignof_expr (tree);
 /* Print an error message for invalid operands to arith operation CODE.
    NOP_EXPR is used as a special case (see truthvalue_conversion).  */
@@ -659,14 +649,15 @@ extern void binary_op_error (enum tree_code);
 extern tree fix_string_type (tree);
 struct varray_head_tag;
 extern void constant_expression_warning (tree);
+extern void strict_aliasing_warning(tree, tree, tree);
 extern tree convert_and_check (tree, tree);
 extern void overflow_warning (tree);
 extern void unsigned_conversion_warning (tree, tree);
 extern bool c_determine_visibility (tree);
 extern bool same_scalar_type_ignoring_signedness (tree, tree);
 
-#define c_sizeof(T)  c_sizeof_or_alignof_type (T, SIZEOF_EXPR, 1)
-#define c_alignof(T) c_sizeof_or_alignof_type (T, ALIGNOF_EXPR, 1)
+#define c_sizeof(T)  c_sizeof_or_alignof_type (T, true, 1)
+#define c_alignof(T) c_sizeof_or_alignof_type (T, false, 1)
 
 /* Subroutine of build_binary_op, used for comparison operations.
    See if the operands have both been converted from subword integer types
@@ -686,6 +677,8 @@ extern void c_common_nodes_and_builtins (void);
 extern void set_builtin_user_assembler_name (tree decl, const char *asmspec);
 
 extern void disable_builtin_function (const char *);
+
+extern void set_compound_literal_name (tree decl);
 
 extern tree build_va_arg (tree, tree);
 
@@ -710,12 +703,6 @@ extern void finish_file	(void);
 
 /* These macros provide convenient access to the various _STMT nodes.  */
 
-/* Nonzero if this statement should be considered a full-expression,
-   i.e., if temporaries created during this statement should have
-   their destructors run at the end of this statement.  (In C, this
-   will always be false, since there are no destructors.)  */
-#define STMT_IS_FULL_EXPR_P(NODE) TREE_LANG_FLAG_1 ((NODE))
-
 /* Nonzero if a given STATEMENT_LIST represents the outermost binding
    if a statement expression.  */
 #define STATEMENT_LIST_STMT_EXPR(NODE) \
@@ -724,39 +711,6 @@ extern void finish_file	(void);
 /* Nonzero if a label has been added to the statement list.  */
 #define STATEMENT_LIST_HAS_LABEL(NODE) \
   TREE_LANG_FLAG_3 (STATEMENT_LIST_CHECK (NODE))
-
-/* WHILE_STMT accessors. These give access to the condition of the
-   while statement and the body of the while statement, respectively.  */
-#define WHILE_COND(NODE)        TREE_OPERAND (WHILE_STMT_CHECK (NODE), 0)
-#define WHILE_BODY(NODE)        TREE_OPERAND (WHILE_STMT_CHECK (NODE), 1)
-
-/* DO_STMT accessors. These give access to the condition of the do
-   statement and the body of the do statement, respectively.  */
-#define DO_COND(NODE)           TREE_OPERAND (DO_STMT_CHECK (NODE), 0)
-#define DO_BODY(NODE)           TREE_OPERAND (DO_STMT_CHECK (NODE), 1)
-
-/* EXPR_STMT accessor. This gives the expression associated with an
-   expression statement.  */
-#define EXPR_STMT_EXPR(NODE)    TREE_OPERAND (EXPR_STMT_CHECK (NODE), 0)
-
-/* FOR_STMT accessors. These give access to the init statement,
-   condition, update expression, and body of the for statement,
-   respectively.  */
-#define FOR_INIT_STMT(NODE)     TREE_OPERAND (FOR_STMT_CHECK (NODE), 0)
-#define FOR_COND(NODE)          TREE_OPERAND (FOR_STMT_CHECK (NODE), 1)
-#define FOR_EXPR(NODE)          TREE_OPERAND (FOR_STMT_CHECK (NODE), 2)
-#define FOR_BODY(NODE)          TREE_OPERAND (FOR_STMT_CHECK (NODE), 3)
-
-#define SWITCH_STMT_COND(NODE)	TREE_OPERAND (SWITCH_STMT_CHECK (NODE), 0)
-#define SWITCH_STMT_BODY(NODE)	TREE_OPERAND (SWITCH_STMT_CHECK (NODE), 1)
-#define SWITCH_STMT_TYPE(NODE)	TREE_OPERAND (SWITCH_STMT_CHECK (NODE), 2)
-
-/* STMT_EXPR accessor.  */
-#define STMT_EXPR_STMT(NODE)    TREE_OPERAND (STMT_EXPR_CHECK (NODE), 0)
-
-/* Nonzero if this statement-expression does not have an associated scope.  */
-#define STMT_EXPR_NO_SCOPE(NODE) \
-   TREE_LANG_FLAG_0 (STMT_EXPR_CHECK (NODE))
 
 /* COMPOUND_LITERAL_EXPR accessors.  */
 #define COMPOUND_LITERAL_EXPR_DECL_STMT(NODE)		\
@@ -774,26 +728,6 @@ enum c_tree_code {
 
 #undef DEFTREECODE
 
-#define c_common_stmt_codes				\
-   EXPR_STMT,		FOR_STMT,			\
-   WHILE_STMT,		DO_STMT,			\
-   BREAK_STMT,		CONTINUE_STMT,	SWITCH_STMT
-
-/* TRUE if a code represents a statement.  The front end init
-   langhook should take care of initialization of this array.  */
-extern bool statement_code_p[MAX_TREE_CODES];
-
-#define STATEMENT_CODE_P(CODE) statement_code_p[(int) (CODE)]
-
-#define INIT_STATEMENT_CODES(STMT_CODES)			\
-  do {								\
-    unsigned int i;						\
-    memset (&statement_code_p, 0, sizeof (statement_code_p));	\
-    for (i = 0; i < ARRAY_SIZE (STMT_CODES); i++)		\
-      statement_code_p[STMT_CODES[i]] = true;			\
-  } while (0)
-
-extern int stmts_are_full_exprs_p (void);
 extern int anon_aggr_type_p (tree);
 
 /* For a VAR_DECL that is an anonymous union, these are the various
@@ -812,16 +746,13 @@ extern void emit_local_var (tree);
 extern tree do_case (tree, tree);
 extern tree build_stmt (enum tree_code, ...);
 extern tree build_case_label (tree, tree, tree);
-extern tree build_continue_stmt (void);
-extern tree build_break_stmt (void);
 
 /* These functions must be defined by each front-end which implements
    a variant of the C language.  They are used in c-common.c.  */
 
 extern tree build_unary_op (enum tree_code, tree, int);
 extern tree build_binary_op (enum tree_code, tree, tree, int);
-extern int lvalue_p (tree);
-extern tree default_conversion (tree);
+extern tree perform_integral_promotions (tree);
 
 /* Given two integer or real types, return the type for their sum.
    Given two compatible ANSI C types, returns the merged type.  */
@@ -837,9 +768,11 @@ extern int case_compare (splay_tree_key, splay_tree_key);
 
 extern tree c_add_case_label (splay_tree, tree, tree, tree, tree);
 
-extern void c_do_switch_warnings (splay_tree, tree);
+extern void c_do_switch_warnings (splay_tree, location_t, tree, tree);
 
 extern tree build_function_call (tree, tree);
+
+extern tree resolve_overloaded_builtin (tree, tree);
 
 extern tree finish_label_address_expr (tree);
 
@@ -889,7 +822,7 @@ extern void verify_sequence_points (tree);
 extern tree fold_offsetof (tree);
 
 /* Places where an lvalue, or modifiable lvalue, may be required.
-   Used to select diagnostic messages in lvalue_or_else and
+   Used to select diagnostic messages in lvalue_error and
    readonly_error.  */
 enum lvalue_use {
   lv_assign,
@@ -899,9 +832,11 @@ enum lvalue_use {
   lv_asm
 };
 
-extern int lvalue_or_else (tree, enum lvalue_use);
+extern void lvalue_error (enum lvalue_use);
 
 extern int complete_array_type (tree *, tree, bool);
+
+extern tree builtin_type_for_size (int, bool);
 
 /* In c-gimplify.c  */
 extern void c_genericize (tree);
@@ -916,6 +851,10 @@ extern void c_common_read_pch (cpp_reader *pfile, const char *name, int fd,
 extern void c_common_write_pch (void);
 extern void c_common_no_more_pch (void);
 extern void c_common_pch_pragma (cpp_reader *pfile);
+extern void c_common_print_pch_checksum (FILE *f);
+
+/* In *-checksum.c */
+extern const unsigned char executable_checksum[16];
 
 extern void builtin_define_with_value (const char *, const char *, int);
 extern void c_stddef_cpp_builtins (void);
@@ -930,7 +869,10 @@ extern tree objc_is_class_name (tree);
 extern tree objc_is_object_ptr (tree);
 extern void objc_check_decl (tree);
 extern int objc_is_reserved_word (tree);
-extern int objc_comptypes (tree, tree, int);
+extern bool objc_compare_types (tree, tree, int, tree);
+extern void objc_volatilize_decl (tree);
+extern bool objc_type_quals_match (tree, tree);
+extern tree objc_rewrite_function_call (tree, tree);
 extern tree objc_message_selector (void);
 extern tree objc_lookup_ivar (tree, tree);
 extern void objc_clear_super_receiver (void);
@@ -959,7 +901,7 @@ extern void objc_continue_implementation (void);
 extern void objc_finish_implementation (void);
 extern void objc_set_visibility (int);
 extern void objc_set_method_type (enum tree_code);
-extern tree objc_build_method_signature (tree, tree, tree);
+extern tree objc_build_method_signature (tree, tree, tree, bool);
 extern void objc_add_method_declaration (tree);
 extern void objc_start_method_definition (tree);
 extern void objc_finish_method_definition (tree);
@@ -967,13 +909,14 @@ extern void objc_add_instance_variable (tree);
 extern tree objc_build_keyword_decl (tree, tree, tree);
 extern tree objc_build_throw_stmt (tree);
 extern void objc_begin_try_stmt (location_t, tree);
-extern void objc_finish_try_stmt (void);
+extern tree objc_finish_try_stmt (void);
 extern void objc_begin_catch_clause (tree);
 extern void objc_finish_catch_clause (void);
 extern void objc_build_finally_clause (location_t, tree);
-extern void objc_build_synchronized (location_t, tree, tree);
+extern tree objc_build_synchronized (location_t, tree, tree);
 extern int objc_static_init_needed_p (void);
 extern tree objc_generate_static_init_call (tree);
+extern tree objc_generate_write_barrier (tree, enum tree_code, tree);
 
 /* The following are provided by the C and C++ front-ends, and called by
    ObjC/ObjC++.  */
@@ -985,5 +928,15 @@ extern void init_pp_output (FILE *);
 extern void preprocess_file (cpp_reader *);
 extern void pp_file_change (const struct line_map *);
 extern void pp_dir_change (cpp_reader *, const char *);
+extern bool check_missing_format_attribute (tree, tree);
+
+/* In order for the format checking to accept the C frontend
+   diagnostic framework extensions, you must include this file before
+   toplev.h, not after.  The C front end formats are a subset of those
+   for C++, so they are the appropriate set to use in common code;
+   cp-tree.h overrides this for C++.  */
+#ifndef GCC_DIAG_STYLE
+#define GCC_DIAG_STYLE __gcc_cdiag__
+#endif
 
 #endif /* ! GCC_C_COMMON_H */

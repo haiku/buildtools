@@ -19,7 +19,7 @@
 
 ## You should have received a copy of the GNU General Public License along
 ## with this library; see the file COPYING.  If not, write to the Free
-## Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+## Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 ## USA.
 
 include $(top_srcdir)/fragment.am
@@ -28,10 +28,11 @@ include $(top_srcdir)/fragment.am
 toolexeclib_LTLIBRARIES = libstdc++.la
 
 # Symbol versioning for shared libraries.
-if GLIBCXX_BUILD_VERSIONED_SHLIB
-version_arg = -Wl,--version-script=libstdc++-symbol.ver
-version_dep = libstdc++-symbol.ver
-libstdc++-symbol.ver:  ${glibcxx_srcdir}/$(SYMVER_MAP)
+# This could be conditional on
+# ENABLE_SYMVERS_GNU || ENABLE_SYMVERS_DARWIN_EXPORT
+# but automake doesn't support OR operations in conditionals.
+libstdc++-symbol.ver:  ${glibcxx_srcdir}/$(SYMVER_MAP) \
+		$(port_specific_symbol_files)
 	cp ${glibcxx_srcdir}/$(SYMVER_MAP) ./libstdc++-symbol.ver
 	if test "x$(port_specific_symbol_files)" != x; then \
 	  sed -n '1,/DO NOT DELETE/p' $@ > tmp.top; \
@@ -39,9 +40,27 @@ libstdc++-symbol.ver:  ${glibcxx_srcdir}/$(SYMVER_MAP)
 	  cat tmp.top $(port_specific_symbol_files) tmp.bottom > $@; \
 	  rm tmp.top tmp.bottom; \
 	fi
+
+if ENABLE_SYMVERS_GNU
+version_arg = -Wl,--version-script=libstdc++-symbol.ver
+version_dep = libstdc++-symbol.ver
+else
+if ENABLE_SYMVERS_DARWIN_EXPORT
+version_arg = -Wl,-exported_symbols_list,libstdc++-symbol.explist
+version_dep = libstdc++-symbol.explist
+libstdc++-symbol.explist : libstdc++-symbol.ver \
+		${glibcxx_srcdir}/scripts/make_exports.pl \
+		$(libstdc___la_OBJECTS) $(libstdc___la_LIBADD)
+	perl ${glibcxx_srcdir}/scripts/make_exports.pl \
+	  libstdc++-symbol.ver \
+	  $(libstdc___la_OBJECTS:%.lo=.libs/%.o) \
+	 `echo $(libstdc___la_LIBADD) | \
+	    sed 's,/\([^/.]*\)\.la,/.libs/\1.a,g'` \
+	 > $@ || (rm -f $@ ; exit 1)
 else
 version_arg =
 version_dep =
+endif
 endif
 
 
@@ -125,7 +144,8 @@ sources = \
 	concept-inst.cc \
 	fstream-inst.cc \
 	ext-inst.cc \
-	io-inst.cc \
+	ios-inst.cc \
+	iostream-inst.cc \
 	istream-inst.cc \
 	istream.cc \
 	locale-inst.cc \
@@ -154,7 +174,6 @@ libstdc___la_DEPENDENCIES = ${version_dep} $(libstdc___la_LIBADD)
 
 libstdc___la_LDFLAGS = \
 	-version-info $(libtool_VERSION) ${version_arg} -lm 
-
 
 # Use special rules for the deprecated source files so that they find
 # deprecated include files.

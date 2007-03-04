@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* This (greedy) algorithm constructs traces in several rounds.
    The construction starts from "seeds".  The seed for the first round
@@ -82,6 +82,12 @@
 #include "obstack.h"
 #include "expr.h"
 #include "params.h"
+#include "toplev.h"
+#include "tree-pass.h"
+
+#ifndef HAVE_conditional_execution
+#define HAVE_conditional_execution 0
+#endif
 
 /* The number of rounds.  In most cases there will only be 4 rounds, but
    when partitioning hot and cold basic blocks into separate sections of
@@ -119,6 +125,9 @@ typedef struct bbro_basic_block_data_def
   /* Which trace is the bb end of (-1 means it is not an end of a trace).  */
   int end_of_trace;
 
+  /* Which trace is the bb in?  */
+  int in_trace;
+
   /* Which heap is BB in (if any)?  */
   fibheap_t heap;
 
@@ -153,8 +162,8 @@ struct trace
 };
 
 /* Maximum frequency and count of one of the entry blocks.  */
-int max_entry_frequency;
-gcov_type max_entry_count;
+static int max_entry_frequency;
+static gcov_type max_entry_count;
 
 /* Local function prototypes.  */
 static void find_traces (int *, struct trace *);
@@ -169,11 +178,9 @@ static void connect_traces (int, struct trace *);
 static bool copy_bb_p (basic_block, int);
 static int get_uncond_jump_length (void);
 static bool push_to_next_round_p (basic_block, int, int, int, gcov_type);
-static void add_unlikely_executed_notes (void);
 static void find_rarely_executed_basic_blocks_and_crossing_edges (edge *, 
 								  int *,
 								  int *);
-static void mark_bb_for_unlikely_executed_section  (basic_block);
 static void add_labels_and_missing_jumps (edge *, int);
 static void add_reg_crossing_jump_notes (void);
 static void fix_up_fall_thru_edges (void);
@@ -194,26 +201,16 @@ push_to_next_round_p (basic_block bb, int round, int number_of_rounds,
 		      int exec_th, gcov_type count_th)
 {
   bool there_exists_another_round;
-  bool cold_block;
   bool block_not_hot_enough;
-  bool next_round_is_last;
 
   there_exists_another_round = round < number_of_rounds - 1;
-  next_round_is_last = round + 1 == number_of_rounds - 1;
-
-  cold_block = (flag_reorder_blocks_and_partition 
-		&& BB_PARTITION (bb) == BB_COLD_PARTITION);
 
   block_not_hot_enough = (bb->frequency < exec_th 
 			  || bb->count < count_th
 			  || probably_never_executed_bb_p (bb));
 
-  if (flag_reorder_blocks_and_partition
-      && next_round_is_last
-      && BB_PARTITION (bb) != BB_COLD_PARTITION)
-    return false;
-  else if (there_exists_another_round
-      && (cold_block || block_not_hot_enough))
+  if (there_exists_another_round
+      && block_not_hot_enough)
     return true;
   else 
     return false;
@@ -237,8 +234,6 @@ find_traces (int *n_traces, struct trace *traces)
      cold blocks (and ONLY the cold blocks).  */
 
   number_of_rounds = N_ROUNDS - 1;
-  if (flag_reorder_blocks_and_partition)
-    number_of_rounds = N_ROUNDS;
 
   /* Insert entry points of function into heap.  */
   heap = fibheap_new ();
@@ -282,7 +277,7 @@ find_traces (int *n_traces, struct trace *traces)
 	  basic_block bb;
 	  fprintf (dump_file, "Trace %d (round %d):  ", i + 1,
 		   traces[i].round + 1);
-	  for (bb = traces[i].first; bb != traces[i].last; bb = bb->rbi->next)
+	  for (bb = traces[i].first; bb != traces[i].last; bb = bb->aux)
 	    fprintf (dump_file, "%d [%d] ", bb->index, bb->frequency);
 	  fprintf (dump_file, "%d [%d]\n", bb->index, bb->frequency);
 	}
@@ -316,14 +311,14 @@ rotate_loop (edge back_edge, struct trace *trace, int trace_n)
 
       FOR_EACH_EDGE (e, ei, bb->succs)
 	if (e->dest != EXIT_BLOCK_PTR
-	    && e->dest->rbi->visited != trace_n
+	    && e->dest->il.rtl->visited != trace_n
 	    && (e->flags & EDGE_CAN_FALLTHRU)
 	    && !(e->flags & EDGE_COMPLEX))
 	{
 	  if (is_preferred)
 	    {
 	      /* The best edge is preferred.  */
-	      if (!e->dest->rbi->visited
+	      if (!e->dest->il.rtl->visited
 		  || bbd[e->dest->index].start_of_trace >= 0)
 		{
 		  /* The current edge E is also preferred.  */
@@ -339,7 +334,7 @@ rotate_loop (edge back_edge, struct trace *trace, int trace_n)
 	    }
 	  else
 	    {
-	      if (!e->dest->rbi->visited
+	      if (!e->dest->il.rtl->visited
 		  || bbd[e->dest->index].start_of_trace >= 0)
 		{
 		  /* The current edge E is preferred.  */
@@ -362,7 +357,7 @@ rotate_loop (edge back_edge, struct trace *trace, int trace_n)
 		}
 	    }
 	}
-      bb = bb->rbi->next;
+      bb = bb->aux;
     }
   while (bb != back_edge->dest);
 
@@ -372,31 +367,29 @@ rotate_loop (edge back_edge, struct trace *trace, int trace_n)
 	 the trace.  */
       if (back_edge->dest == trace->first)
 	{
-	  trace->first = best_bb->rbi->next;
+	  trace->first = best_bb->aux;
 	}
       else
 	{
 	  basic_block prev_bb;
 
 	  for (prev_bb = trace->first;
-	       prev_bb->rbi->next != back_edge->dest;
-	       prev_bb = prev_bb->rbi->next)
+	       prev_bb->aux != back_edge->dest;
+	       prev_bb = prev_bb->aux)
 	    ;
-	  prev_bb->rbi->next = best_bb->rbi->next;
+	  prev_bb->aux = best_bb->aux;
 
 	  /* Try to get rid of uncond jump to cond jump.  */
-	  if (EDGE_COUNT (prev_bb->succs) == 1)
+	  if (single_succ_p (prev_bb))
 	    {
-	      basic_block header = EDGE_SUCC (prev_bb, 0)->dest;
+	      basic_block header = single_succ (prev_bb);
 
 	      /* Duplicate HEADER if it is a small block containing cond jump
 		 in the end.  */
 	      if (any_condjump_p (BB_END (header)) && copy_bb_p (header, 0)
 		  && !find_reg_note (BB_END (header), REG_CROSSING_JUMP, 
 				     NULL_RTX))
-		{
-		  copy_bb (header, EDGE_SUCC (prev_bb, 0), prev_bb, trace_n);
-		}
+		copy_bb (header, single_succ_edge (prev_bb), prev_bb, trace_n);
 	    }
 	}
     }
@@ -405,7 +398,7 @@ rotate_loop (edge back_edge, struct trace *trace, int trace_n)
       /* We have not found suitable loop tail so do no rotation.  */
       best_bb = back_edge->src;
     }
-  best_bb->rbi->next = NULL;
+  best_bb->aux = NULL;
   return best_bb;
 }
 
@@ -414,7 +407,7 @@ rotate_loop (edge back_edge, struct trace *trace, int trace_n)
 static void
 mark_bb_visited (basic_block bb, int trace)
 {
-  bb->rbi->visited = trace;
+  bb->il.rtl->visited = trace;
   if (bbd[bb->index].heap)
     {
       fibheap_delete_node (bbd[bb->index].heap, bbd[bb->index].node);
@@ -436,11 +429,6 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 		     struct trace *traces, int *n_traces, int round,
 		     fibheap_t *heap, int number_of_rounds)
 {
-  /* The following variable refers to the last round in which non-"cold" 
-     blocks may be collected into a trace.  */
-
-  int last_round = N_ROUNDS - 1;
-
   /* Heap for discarded basic blocks which are possible starting points for
      the next round.  */
   fibheap_t new_heap = fibheap_new ();
@@ -483,6 +471,7 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
       trace->first = bb;
       trace->round = round;
       trace->length = 0;
+      bbd[bb->index].in_trace = *n_traces;
       (*n_traces)++;
 
       do
@@ -512,16 +501,15 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 	      if (e->dest == EXIT_BLOCK_PTR)
 		continue;
 
-	      if (e->dest->rbi->visited
-		  && e->dest->rbi->visited != *n_traces)
+	      if (e->dest->il.rtl->visited
+		  && e->dest->il.rtl->visited != *n_traces)
 		continue;
 
-	      if (BB_PARTITION (e->dest) == BB_COLD_PARTITION
-		  && round < last_round)
+	      if (BB_PARTITION (e->dest) != BB_PARTITION (bb))
 		continue;
 
 	      prob = e->probability;
-	      freq = EDGE_FREQUENCY (e);
+	      freq = e->dest->frequency;
 
 	      /* The only sensible preference for a call instruction is the
 		 fallthru edge.  Don't bother selecting anything else.  */
@@ -539,7 +527,8 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 	      /* Edge that cannot be fallthru or improbable or infrequent
 		 successor (i.e. it is unsuitable successor).  */
 	      if (!(e->flags & EDGE_CAN_FALLTHRU) || (e->flags & EDGE_COMPLEX)
-		  || prob < branch_th || freq < exec_th || e->count < count_th)
+		  || prob < branch_th || EDGE_FREQUENCY (e) < exec_th
+		  || e->count < count_th)
 		continue;
 
 	      /* If partitioning hot/cold basic blocks, don't consider edges
@@ -566,7 +555,7 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 	    {
 	      if (e == best_edge
 		  || e->dest == EXIT_BLOCK_PTR
-		  || e->dest->rbi->visited)
+		  || e->dest->il.rtl->visited)
 		continue;
 
 	      key = bb_to_key (e->dest);
@@ -627,7 +616,7 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 
 	  if (best_edge) /* Suitable successor was found.  */
 	    {
-	      if (best_edge->dest->rbi->visited == *n_traces)
+	      if (best_edge->dest->il.rtl->visited == *n_traces)
 		{
 		  /* We do nothing with one basic block loops.  */
 		  if (best_edge->dest != bb)
@@ -647,7 +636,9 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 					   "Rotating loop %d - %d\n",
 					   best_edge->dest->index, bb->index);
 				}
-			      bb->rbi->next = best_edge->dest;
+			      bb->aux = best_edge->dest;
+			      bbd[best_edge->dest->index].in_trace = 
+				                             (*n_traces) - 1;
 			      bb = rotate_loop (best_edge, trace, *n_traces);
 			    }
 			}
@@ -655,11 +646,12 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 			{
 			  /* The loop has less than 4 iterations.  */
 
-			  if (EDGE_COUNT (bb->succs) == 1
+			  if (single_succ_p (bb)
 			      && copy_bb_p (best_edge->dest, !optimize_size))
 			    {
 			      bb = copy_bb (best_edge->dest, best_edge, bb,
 					    *n_traces);
+			      trace->length++;
 			    }
 			}
 		    }
@@ -694,13 +686,14 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 		    if (e != best_edge
 			&& (e->flags & EDGE_CAN_FALLTHRU)
 			&& !(e->flags & EDGE_COMPLEX)
-			&& !e->dest->rbi->visited
-			&& EDGE_COUNT (e->dest->preds) == 1
+			&& !e->dest->il.rtl->visited
+			&& single_pred_p (e->dest)
 			&& !(e->flags & EDGE_CROSSING)
-			&& EDGE_COUNT (e->dest->succs) == 1
-			&& (EDGE_SUCC (e->dest, 0)->flags & EDGE_CAN_FALLTHRU)
-			&& !(EDGE_SUCC (e->dest, 0)->flags & EDGE_COMPLEX)
-			&& EDGE_SUCC (e->dest, 0)->dest == best_edge->dest
+			&& single_succ_p (e->dest)
+			&& (single_succ_edge (e->dest)->flags
+			    & EDGE_CAN_FALLTHRU)
+			&& !(single_succ_edge (e->dest)->flags & EDGE_COMPLEX)
+			&& single_succ (e->dest) == best_edge->dest
 			&& 2 * e->dest->frequency >= EDGE_FREQUENCY (best_edge))
 		      {
 			best_edge = e;
@@ -710,7 +703,8 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
 			break;
 		      }
 
-		  bb->rbi->next = best_edge->dest;
+		  bb->aux = best_edge->dest;
+		  bbd[best_edge->dest->index].in_trace = (*n_traces) - 1;
 		  bb = best_edge->dest;
 		}
 	    }
@@ -726,7 +720,7 @@ find_traces_1_round (int branch_th, int exec_th, gcov_type count_th,
       FOR_EACH_EDGE (e, ei, bb->succs)
 	{
 	  if (e->dest == EXIT_BLOCK_PTR
-	      || e->dest->rbi->visited)
+	      || e->dest->il.rtl->visited)
 	    continue;
 
 	  if (bbd[e->dest->index].heap)
@@ -764,19 +758,19 @@ copy_bb (basic_block old_bb, edge e, basic_block bb, int trace)
 {
   basic_block new_bb;
 
-  new_bb = duplicate_block (old_bb, e);
+  new_bb = duplicate_block (old_bb, e, bb);
   BB_COPY_PARTITION (new_bb, old_bb);
 
   gcc_assert (e->dest == new_bb);
-  gcc_assert (!e->dest->rbi->visited);
+  gcc_assert (!e->dest->il.rtl->visited);
 
   if (dump_file)
     fprintf (dump_file,
 	     "Duplicated bb %d (created bb %d)\n",
 	     old_bb->index, new_bb->index);
-  new_bb->rbi->visited = trace;
-  new_bb->rbi->next = bb->rbi->next;
-  bb->rbi->next = new_bb;
+  new_bb->il.rtl->visited = trace;
+  new_bb->aux = bb->aux;
+  bb->aux = new_bb;
 
   if (new_bb->index >= array_size || last_basic_block > array_size)
     {
@@ -789,6 +783,7 @@ copy_bb (basic_block old_bb, edge e, basic_block bb, int trace)
       for (i = array_size; i < new_size; i++)
 	{
 	  bbd[i].start_of_trace = -1;
+	  bbd[i].in_trace = -1;
 	  bbd[i].end_of_trace = -1;
 	  bbd[i].heap = NULL;
 	  bbd[i].node = NULL;
@@ -802,6 +797,8 @@ copy_bb (basic_block old_bb, edge e, basic_block bb, int trace)
 		   array_size);
 	}
     }
+
+  bbd[new_bb->index].in_trace = trace;
 
   return new_bb;
 }
@@ -900,11 +897,11 @@ static void
 connect_traces (int n_traces, struct trace *traces)
 {
   int i;
-  int unconnected_hot_trace_count = 0;
-  bool cold_connected = true;
   bool *connected;
-  bool *cold_traces;
+  bool two_passes;
   int last_trace;
+  int current_pass;
+  int current_partition;
   int freq_threshold;
   gcov_type count_threshold;
 
@@ -916,66 +913,43 @@ connect_traces (int n_traces, struct trace *traces)
 
   connected = xcalloc (n_traces, sizeof (bool));
   last_trace = -1;
-
-  /* If we are partitioning hot/cold basic blocks, mark the cold
-     traces as already connected, to remove them from consideration
-     for connection to the hot traces.  After the hot traces have all
-     been connected (determined by "unconnected_hot_trace_count"), we
-     will go back and connect the cold traces.  */
-
-  cold_traces = xcalloc (n_traces, sizeof (bool));
+  current_pass = 1;
+  current_partition = BB_PARTITION (traces[0].first);
+  two_passes = false;
 
   if (flag_reorder_blocks_and_partition)
-    for (i = 0; i < n_traces; i++)
-      {
-	if (BB_PARTITION (traces[i].first) == BB_COLD_PARTITION)
-	  {
-	    connected[i] = true;
-	    cold_traces[i] = true;
-	    cold_connected = false;
-	  }
-	else
-	  unconnected_hot_trace_count++;
-      }
-  
-  for (i = 0; i < n_traces || !cold_connected ; i++)
+    for (i = 0; i < n_traces && !two_passes; i++)
+      if (BB_PARTITION (traces[0].first) 
+	  != BB_PARTITION (traces[i].first))
+	two_passes = true;
+
+  for (i = 0; i < n_traces || (two_passes && current_pass == 1) ; i++)
     {
       int t = i;
       int t2;
       edge e, best;
       int best_len;
 
-      /* If we are partitioning hot/cold basic blocks, check to see
-	 if all the hot traces have been connected.  If so, go back
-	 and mark the cold traces as unconnected so we can connect
-	 them up too.  Re-set "i" to the first (unconnected) cold
-	 trace. Use flag "cold_connected" to make sure we don't do
-         this step more than once.  */
-
-      if (flag_reorder_blocks_and_partition
-	  && (i >= n_traces || unconnected_hot_trace_count <= 0)
-	  && !cold_connected)
+      if (i >= n_traces)
 	{
-	  int j;
-	  int first_cold_trace = -1;
-
-	  for (j = 0; j < n_traces; j++)
-	    if (cold_traces[j])
-	      {
-		connected[j] = false;
-		if (first_cold_trace == -1)
-		  first_cold_trace = j;
-	      }
-	  i = t = first_cold_trace;
-	  cold_connected = true;
+	  gcc_assert (two_passes && current_pass == 1);
+	  i = 0;
+	  t = i;
+	  current_pass = 2;
+	  if (current_partition == BB_HOT_PARTITION)
+	    current_partition = BB_COLD_PARTITION;
+	  else
+	    current_partition = BB_HOT_PARTITION;
 	}
-
+      
       if (connected[t])
 	continue;
 
+      if (two_passes 
+	  && BB_PARTITION (traces[t].first) != current_partition)
+	continue;
+
       connected[t] = true;
-      if (unconnected_hot_trace_count > 0)
-	unconnected_hot_trace_count--;
 
       /* Find the predecessor traces.  */
       for (t2 = t; t2 > 0;)
@@ -992,6 +966,7 @@ connect_traces (int n_traces, struct trace *traces)
 		  && !(e->flags & EDGE_COMPLEX)
 		  && bbd[si].end_of_trace >= 0
 		  && !connected[bbd[si].end_of_trace]
+		  && (BB_PARTITION (e->src) == current_partition)
 		  && (!best
 		      || e->probability > best->probability
 		      || (e->probability == best->probability
@@ -1003,12 +978,9 @@ connect_traces (int n_traces, struct trace *traces)
 	    }
 	  if (best)
 	    {
-	      best->src->rbi->next = best->dest;
+	      best->src->aux = best->dest;
 	      t2 = bbd[best->src->index].end_of_trace;
 	      connected[t2] = true;
-
-	      if (unconnected_hot_trace_count > 0)
-		unconnected_hot_trace_count--;
 
 	      if (dump_file)
 		{
@@ -1021,7 +993,7 @@ connect_traces (int n_traces, struct trace *traces)
 	}
 
       if (last_trace >= 0)
-	traces[last_trace].last->rbi->next = traces[t2].first;
+	traces[last_trace].last->aux = traces[t2].first;
       last_trace = t;
 
       /* Find the successor traces.  */
@@ -1040,6 +1012,7 @@ connect_traces (int n_traces, struct trace *traces)
 		  && !(e->flags & EDGE_COMPLEX)
 		  && bbd[di].start_of_trace >= 0
 		  && !connected[bbd[di].start_of_trace]
+		  && (BB_PARTITION (e->dest) == current_partition)
 		  && (!best
 		      || e->probability > best->probability
 		      || (e->probability == best->probability
@@ -1058,10 +1031,8 @@ connect_traces (int n_traces, struct trace *traces)
 			   best->src->index, best->dest->index);
 		}
 	      t = bbd[best->dest->index].start_of_trace;
-	      traces[last_trace].last->rbi->next = traces[t].first;
+	      traces[last_trace].last->aux = traces[t].first;
 	      connected[t] = true;
-	      if (unconnected_hot_trace_count > 0)
-		unconnected_hot_trace_count--;
 	      last_trace = t;
 	    }
 	  else
@@ -1102,6 +1073,7 @@ connect_traces (int n_traces, struct trace *traces)
 				&& !(e2->flags & EDGE_COMPLEX)
 				&& bbd[di].start_of_trace >= 0
 				&& !connected[bbd[di].start_of_trace]
+				&& (BB_PARTITION (e2->dest) == current_partition)
 				&& (EDGE_FREQUENCY (e2) >= freq_threshold)
 				&& (e2->count >= count_threshold)
 				&& (!best2
@@ -1152,10 +1124,8 @@ connect_traces (int n_traces, struct trace *traces)
 		  if (next_bb && next_bb != EXIT_BLOCK_PTR)
 		    {
 		      t = bbd[next_bb->index].start_of_trace;
-		      traces[last_trace].last->rbi->next = traces[t].first;
+		      traces[last_trace].last->aux = traces[t].first;
 		      connected[t] = true;
-		      if (unconnected_hot_trace_count > 0)
-			unconnected_hot_trace_count--;
 		      last_trace = t;
 		    }
 		  else
@@ -1172,14 +1142,13 @@ connect_traces (int n_traces, struct trace *traces)
       basic_block bb;
 
       fprintf (dump_file, "Final order:\n");
-      for (bb = traces[0].first; bb; bb = bb->rbi->next)
+      for (bb = traces[0].first; bb; bb = bb->aux)
 	fprintf (dump_file, "%d ", bb->index);
       fprintf (dump_file, "\n");
       fflush (dump_file);
     }
 
   FREE (connected);
-  FREE (cold_traces);
 }
 
 /* Return true when BB can and should be copied. CODE_MAY_GROW is true
@@ -1204,12 +1173,12 @@ copy_bb_p (basic_block bb, int code_may_grow)
     return false;
 
   if (code_may_grow && maybe_hot_bb_p (bb))
-    max_size *= 8;
+    max_size *= PARAM_VALUE (PARAM_MAX_GROW_COPY_BB_INSNS);
 
   FOR_BB_INSNS (bb, insn)
     {
       if (INSN_P (insn))
-	size += get_attr_length (insn);
+	size += get_attr_min_length (insn);
     }
 
   if (size <= max_size)
@@ -1236,23 +1205,11 @@ get_uncond_jump_length (void)
   label = emit_label_before (gen_label_rtx (), get_insns ());
   jump = emit_jump_insn (gen_jump (label));
 
-  length = get_attr_length (jump);
+  length = get_attr_min_length (jump);
 
   delete_insn (jump);
   delete_insn (label);
   return length;
-}
-
-static void
-add_unlikely_executed_notes (void)
-{
-  basic_block bb;
-
-  /* Add the UNLIKELY_EXECUTED_NOTES to each cold basic block.  */
-
-  FOR_EACH_BB (bb)
-    if (BB_PARTITION (bb) == BB_COLD_PARTITION)
-      mark_bb_for_unlikely_executed_section (bb);
 }
 
 /* Find the basic blocks that are rarely executed and need to be moved to
@@ -1283,77 +1240,29 @@ find_rarely_executed_basic_blocks_and_crossing_edges (edge *crossing_edges,
 	}
     }
 
-  /* Since all "hot" basic blocks will eventually be scheduled before all
-     cold basic blocks, make *sure* the real function entry block is in
-     the hot partition (if there is one).  */
-  
-  if (has_hot_blocks)
-    FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR->succs)
-      if (e->dest->index >= 0)
-	{
-	  BB_SET_PARTITION (e->dest, BB_HOT_PARTITION);
-	  break;
-	}
-
   /* Mark every edge that crosses between sections.  */
 
   i = 0;
-  if (targetm.have_named_sections)
+  FOR_EACH_BB (bb)
+    FOR_EACH_EDGE (e, ei, bb->succs)
     {
-      FOR_EACH_BB (bb)
-        FOR_EACH_EDGE (e, ei, bb->succs)
-	  {
-	    if (e->src != ENTRY_BLOCK_PTR
-		&& e->dest != EXIT_BLOCK_PTR
-		&& BB_PARTITION (e->src) != BB_PARTITION (e->dest))
-	      {
-		e->flags |= EDGE_CROSSING;
-		if (i == *max_idx)
-		  {
-		    *max_idx *= 2;
-		    crossing_edges = xrealloc (crossing_edges,
-					       (*max_idx) * sizeof (edge));
-		  }
-		crossing_edges[i++] = e;
-	      }
-	    else
-	      e->flags &= ~EDGE_CROSSING;
-	  }
+      if (e->src != ENTRY_BLOCK_PTR
+	  && e->dest != EXIT_BLOCK_PTR
+	  && BB_PARTITION (e->src) != BB_PARTITION (e->dest))
+	{
+	  e->flags |= EDGE_CROSSING;
+	  if (i == *max_idx)
+	    {
+	      *max_idx *= 2;
+	      crossing_edges = xrealloc (crossing_edges,
+					 (*max_idx) * sizeof (edge));
+	    }
+	  crossing_edges[i++] = e;
+	}
+      else
+	e->flags &= ~EDGE_CROSSING;
     }
   *n_crossing_edges = i;
-}
-
-/* Add NOTE_INSN_UNLIKELY_EXECUTED_CODE to top of basic block.   This note
-   is later used to mark the basic block to be put in the 
-   unlikely-to-be-executed section of the .o file.  */
-
-static void
-mark_bb_for_unlikely_executed_section (basic_block bb) 
-{
-  rtx cur_insn;
-  rtx insert_insn = NULL;
-  rtx new_note;
-  
-  /* Insert new NOTE immediately after  BASIC_BLOCK note.  */
-
-  for (cur_insn = BB_HEAD (bb); cur_insn != NEXT_INSN (BB_END (bb));
-       cur_insn = NEXT_INSN (cur_insn))
-    if (GET_CODE (cur_insn) == NOTE
-	&& NOTE_LINE_NUMBER (cur_insn) == NOTE_INSN_BASIC_BLOCK)
-      {
-	insert_insn = cur_insn;
-	break;
-      }
-    
-  /* If basic block does not contain a NOTE_INSN_BASIC_BLOCK, there is
-     a major problem.  */
-  gcc_assert (insert_insn);
-
-  /* Insert note and assign basic block number to it.  */
-  
-  new_note = emit_note_after (NOTE_INSN_UNLIKELY_EXECUTED_CODE, 
-			      insert_insn);
-  NOTE_BASIC_BLOCK (new_note) = bb;
 }
 
 /* If any destination of a crossing edge does not have a label, add label;
@@ -1391,7 +1300,7 @@ add_labels_and_missing_jumps (edge *crossing_edges, int n_crossing_edges)
  		    /* bb just falls through.  */
  		    {
  		      /* make sure there's only one successor */
-		      gcc_assert (EDGE_COUNT (src->succs) == 1);
+		      gcc_assert (single_succ_p (src));
 		      
 		      /* Find label in dest block.  */
 		      label = block_label (dest);
@@ -1401,7 +1310,7 @@ add_labels_and_missing_jumps (edge *crossing_edges, int n_crossing_edges)
 		      barrier = emit_barrier_after (new_jump);
 		      JUMP_LABEL (new_jump) = label;
 		      LABEL_NUSES (label) += 1;
-		      src->rbi->footer = unlink_insn_chain (barrier, barrier);
+		      src->il.rtl->footer = unlink_insn_chain (barrier, barrier);
 		      /* Mark edge as non-fallthru.  */
 		      crossing_edges[i]->flags &= ~EDGE_FALLTHRU;
  		    } /* end: 'if (GET_CODE ... '  */
@@ -1491,7 +1400,7 @@ fix_up_fall_thru_edges (void)
  		     the cond jump does).  */
  		  
 		  if (!cond_jump_crosses
-		      && cur_bb->rbi->next == cond_jump->dest)
+		      && cur_bb->aux == cond_jump->dest)
  		    {
  		      /* Find label in fall_thru block. We've already added
  		         any missing labels, so there must be one.  */
@@ -1526,14 +1435,14 @@ fix_up_fall_thru_edges (void)
 		  
  		  if (new_bb)
  		    {
- 		      new_bb->rbi->next = cur_bb->rbi->next;
- 		      cur_bb->rbi->next = new_bb;
+ 		      new_bb->aux = cur_bb->aux;
+ 		      cur_bb->aux = new_bb;
 		      
  		      /* Make sure new fall-through bb is in same 
 			 partition as bb it's falling through from.  */
 
 		      BB_COPY_PARTITION (new_bb, cur_bb);
-		      EDGE_SUCC (new_bb, 0)->flags |= EDGE_CROSSING;
+		      single_succ_edge (new_bb)->flags |= EDGE_CROSSING;
  		    }
 		  
  		  /* Add barrier after new jump */
@@ -1541,13 +1450,13 @@ fix_up_fall_thru_edges (void)
  		  if (new_bb)
  		    {
  		      barrier = emit_barrier_after (BB_END (new_bb));
- 		      new_bb->rbi->footer = unlink_insn_chain (barrier, 
+ 		      new_bb->il.rtl->footer = unlink_insn_chain (barrier, 
  							       barrier);
  		    }
  		  else
  		    {
  		      barrier = emit_barrier_after (BB_END (cur_bb));
- 		      cur_bb->rbi->footer = unlink_insn_chain (barrier,
+ 		      cur_bb->il.rtl->footer = unlink_insn_chain (barrier,
  							       barrier);
  		    }
  		}
@@ -1693,19 +1602,19 @@ fix_crossing_conditional_branches (void)
 		     conditional jump.  */
 		  
 		  new_bb = create_basic_block (NULL, NULL, last_bb);
-		  new_bb->rbi->next = last_bb->rbi->next;
-		  last_bb->rbi->next = new_bb;
+		  new_bb->aux = last_bb->aux;
+		  last_bb->aux = new_bb;
 		  prev_bb = last_bb;
 		  last_bb = new_bb;
 		  
 		  /* Update register liveness information.  */
 		  
-		  new_bb->global_live_at_start = ALLOC_REG_SET (&reg_obstack);
-		  new_bb->global_live_at_end = ALLOC_REG_SET (&reg_obstack);
-		  COPY_REG_SET (new_bb->global_live_at_end,
-				prev_bb->global_live_at_end);
-		  COPY_REG_SET (new_bb->global_live_at_start,
-				prev_bb->global_live_at_end);
+		  new_bb->il.rtl->global_live_at_start = ALLOC_REG_SET (&reg_obstack);
+		  new_bb->il.rtl->global_live_at_end = ALLOC_REG_SET (&reg_obstack);
+		  COPY_REG_SET (new_bb->il.rtl->global_live_at_end,
+				prev_bb->il.rtl->global_live_at_end);
+		  COPY_REG_SET (new_bb->il.rtl->global_live_at_start,
+				prev_bb->il.rtl->global_live_at_end);
 		  
 		  /* Put appropriate instructions in new bb.  */
 		  
@@ -1730,7 +1639,7 @@ fix_crossing_conditional_branches (void)
 		  
 		  barrier = emit_barrier_after (new_jump);
 		  JUMP_LABEL (new_jump) = old_label;
-		  new_bb->rbi->footer = unlink_insn_chain (barrier, 
+		  new_bb->il.rtl->footer = unlink_insn_chain (barrier, 
 							   barrier);
 		  
 		  /* Make sure new bb is in same partition as source
@@ -1783,6 +1692,10 @@ fix_crossing_unconditional_branches (void)
   FOR_EACH_BB (cur_bb)
     {
       last_insn = BB_END (cur_bb);
+
+      if (EDGE_COUNT (cur_bb->succs) < 1)
+	continue;
+
       succ = EDGE_SUCC (cur_bb, 0);
 
       /* Check to see if bb ends in a crossing (unconditional) jump.  At
@@ -1826,7 +1739,8 @@ fix_crossing_unconditional_branches (void)
 	      for (cur_insn = indirect_jump_sequence; cur_insn;
 		   cur_insn = NEXT_INSN (cur_insn))
 		{
-		  BLOCK_FOR_INSN (cur_insn) = cur_bb;
+		  if (!BARRIER_P (cur_insn))
+		    BLOCK_FOR_INSN (cur_insn) = cur_bb;
 		  if (JUMP_P (cur_insn))
 		    jump_insn = cur_insn;
 		}
@@ -1865,19 +1779,19 @@ add_reg_crossing_jump_notes (void)
 								  (e->src)));
 }
 
-/* Basic blocks containing NOTE_INSN_UNLIKELY_EXECUTED_CODE will be
-   put in a separate section of the .o file, to reduce paging and
-   improve cache performance (hopefully).  This can result in bits of
-   code from the same function being widely separated in the .o file.
-   However this is not obvious to the current bb structure.  Therefore
-   we must take care to ensure that: 1). There are no fall_thru edges
-   that cross between sections;  2). For those architectures which
-   have "short" conditional branches, all conditional branches that
-   attempt to cross between sections are converted to unconditional
-   branches; and, 3). For those architectures which have "short"
-   unconditional branches, all unconditional branches that attempt
-   to cross between sections are converted to indirect jumps.
-   
+/* Hot and cold basic blocks are partitioned and put in separate
+   sections of the .o file, to reduce paging and improve cache
+   performance (hopefully).  This can result in bits of code from the
+   same function being widely separated in the .o file.  However this
+   is not obvious to the current bb structure.  Therefore we must take
+   care to ensure that: 1). There are no fall_thru edges that cross
+   between sections; 2). For those architectures which have "short"
+   conditional branches, all conditional branches that attempt to
+   cross between sections are converted to unconditional branches;
+   and, 3). For those architectures which have "short" unconditional
+   branches, all unconditional branches that attempt to cross between
+   sections are converted to indirect jumps.
+
    The code for fixing up fall_thru edges that cross between hot and
    cold basic blocks does so by creating new basic blocks containing 
    unconditional branches to the appropriate label in the "other" 
@@ -1911,36 +1825,63 @@ fix_edges_for_rarely_executed_code (edge *crossing_edges,
   
   fix_up_fall_thru_edges ();
   
-  /* Only do the parts necessary for writing separate sections if
-     the target architecture has the ability to write separate sections
-     (i.e. it has named sections).  Otherwise, the hot/cold partitioning
-     information will be used when reordering blocks to try to put all
-     the hot blocks together, then all the cold blocks, but no actual
-     section partitioning will be done.  */
-
-  if (targetm.have_named_sections)
+  /* If the architecture does not have conditional branches that can
+     span all of memory, convert crossing conditional branches into
+     crossing unconditional branches.  */
+  
+  if (!HAS_LONG_COND_BRANCH)
+    fix_crossing_conditional_branches ();
+  
+  /* If the architecture does not have unconditional branches that
+     can span all of memory, convert crossing unconditional branches
+     into indirect jumps.  Since adding an indirect jump also adds
+     a new register usage, update the register usage information as
+     well.  */
+  
+  if (!HAS_LONG_UNCOND_BRANCH)
     {
-      /* If the architecture does not have conditional branches that can
-	 span all of memory, convert crossing conditional branches into
-	 crossing unconditional branches.  */
-  
-      if (!HAS_LONG_COND_BRANCH)
-	fix_crossing_conditional_branches ();
-  
-      /* If the architecture does not have unconditional branches that
-	 can span all of memory, convert crossing unconditional branches
-	 into indirect jumps.  Since adding an indirect jump also adds
-	 a new register usage, update the register usage information as
-	 well.  */
-      
-      if (!HAS_LONG_UNCOND_BRANCH)
-	{
-	  fix_crossing_unconditional_branches ();
-	  reg_scan (get_insns(), max_reg_num ());
-	}
-
-      add_reg_crossing_jump_notes ();
+      fix_crossing_unconditional_branches ();
+      reg_scan (get_insns(), max_reg_num ());
     }
+  
+  add_reg_crossing_jump_notes ();
+}
+
+/* Verify, in the basic block chain, that there is at most one switch
+   between hot/cold partitions. This is modelled on
+   rtl_verify_flow_info_1, but it cannot go inside that function
+   because this condition will not be true until after
+   reorder_basic_blocks is called.  */
+
+static void
+verify_hot_cold_block_grouping (void)
+{
+  basic_block bb;
+  int err = 0;
+  bool switched_sections = false;
+  int current_partition = 0;
+  
+  FOR_EACH_BB (bb)
+    {
+      if (!current_partition)
+	current_partition = BB_PARTITION (bb);
+      if (BB_PARTITION (bb) != current_partition)
+	{
+	  if (switched_sections)
+	    {
+	      error ("multiple hot/cold transitions found (bb %i)",
+		     bb->index);
+	      err = 1;
+	    }
+	  else
+	    {
+	      switched_sections = true;
+	      current_partition = BB_PARTITION (bb);
+	    }
+	}
+    }
+  
+  gcc_assert(!err);
 }
 
 /* Reorder basic blocks.  The main entry point to this file.  FLAGS is
@@ -1959,8 +1900,6 @@ reorder_basic_blocks (unsigned int flags)
   if (targetm.cannot_modify_jumps_p ())
     return;
 
-  timevar_push (TV_REORDER_BLOCKS);
-
   cfg_layout_initialize (flags);
 
   set_edge_can_fallthru_flag ();
@@ -1977,6 +1916,7 @@ reorder_basic_blocks (unsigned int flags)
   for (i = 0; i < array_size; i++)
     {
       bbd[i].start_of_trace = -1;
+      bbd[i].in_trace = -1;
       bbd[i].end_of_trace = -1;
       bbd[i].heap = NULL;
       bbd[i].node = NULL;
@@ -1992,13 +1932,38 @@ reorder_basic_blocks (unsigned int flags)
   if (dump_file)
     dump_flow_info (dump_file);
 
-  if (flag_reorder_blocks_and_partition
-      && targetm.have_named_sections)
-    add_unlikely_executed_notes ();
-
   cfg_layout_finalize ();
+  if (flag_reorder_blocks_and_partition)
+    verify_hot_cold_block_grouping ();
+}
 
-  timevar_pop (TV_REORDER_BLOCKS);
+/* Determine which partition the first basic block in the function
+   belongs to, then find the first basic block in the current function
+   that belongs to a different section, and insert a
+   NOTE_INSN_SWITCH_TEXT_SECTIONS note immediately before it in the
+   instruction stream.  When writing out the assembly code,
+   encountering this note will make the compiler switch between the
+   hot and cold text sections.  */
+
+static void
+insert_section_boundary_note (void)
+{
+  basic_block bb;
+  rtx new_note;
+  int first_partition = 0;
+  
+  if (flag_reorder_blocks_and_partition)
+    FOR_EACH_BB (bb)
+    {
+      if (!first_partition)
+	first_partition = BB_PARTITION (bb);
+      if (BB_PARTITION (bb) != first_partition)
+	{
+	  new_note = emit_note_before (NOTE_INSN_SWITCH_TEXT_SECTIONS,
+				       BB_HEAD (bb));
+	  break;
+	}
+    }
 }
 
 /* Duplicate the blocks containing computed gotos.  This basically unfactors
@@ -2007,7 +1972,14 @@ reorder_basic_blocks (unsigned int flags)
    which can seriously pessimize code with many computed jumps in the source
    code, such as interpreters.  See e.g. PR15242.  */
 
-void
+static bool
+gate_duplicate_computed_gotos (void)
+{
+  return (optimize > 0 && flag_expensive_optimizations && !optimize_size);
+}
+
+
+static void
 duplicate_computed_gotos (void)
 {
   basic_block bb, new_bb;
@@ -2019,8 +1991,6 @@ duplicate_computed_gotos (void)
 
   if (targetm.cannot_modify_jumps_p ())
     return;
-
-  timevar_push (TV_REORDER_BLOCKS);
 
   cfg_layout_initialize (0);
 
@@ -2045,7 +2015,7 @@ duplicate_computed_gotos (void)
 
       /* Build the reorder chain for the original order of blocks.  */
       if (bb->next_bb != EXIT_BLOCK_PTR)
-	bb->rbi->next = bb->next_bb;
+	bb->aux = bb->next_bb;
 
       /* Obviously the block has to end in a computed jump.  */
       if (!computed_jump_p (BB_END (bb)))
@@ -2061,7 +2031,7 @@ duplicate_computed_gotos (void)
       FOR_BB_INSNS (bb, insn)
 	if (INSN_P (insn))
 	  {
-	    size += get_attr_length (insn);
+	    size += get_attr_min_length (insn);
 	    if (size > max_size)
 	       break;
 	  }
@@ -2085,37 +2055,53 @@ duplicate_computed_gotos (void)
   /* Duplicate computed gotos.  */
   FOR_EACH_BB (bb)
     {
-      if (bb->rbi->visited)
+      if (bb->il.rtl->visited)
 	continue;
 
-      bb->rbi->visited = 1;
+      bb->il.rtl->visited = 1;
 
       /* BB must have one outgoing edge.  That edge must not lead to
          the exit block or the next block.
 	 The destination must have more than one predecessor.  */
-      if (EDGE_COUNT(bb->succs) != 1
-	  || EDGE_SUCC(bb,0)->dest == EXIT_BLOCK_PTR
-	  || EDGE_SUCC(bb,0)->dest == bb->next_bb
-	  || EDGE_COUNT(EDGE_SUCC(bb,0)->dest->preds) <= 1)
+      if (!single_succ_p (bb)
+	  || single_succ (bb) == EXIT_BLOCK_PTR
+	  || single_succ (bb) == bb->next_bb
+	  || single_pred_p (single_succ (bb)))
 	continue;
 
       /* The successor block has to be a duplication candidate.  */
-      if (!bitmap_bit_p (candidates, EDGE_SUCC(bb,0)->dest->index))
+      if (!bitmap_bit_p (candidates, single_succ (bb)->index))
 	continue;
 
-      new_bb = duplicate_block (EDGE_SUCC(bb,0)->dest, EDGE_SUCC(bb,0));
-      new_bb->rbi->next = bb->rbi->next;
-      bb->rbi->next = new_bb;
-      new_bb->rbi->visited = 1;
+      new_bb = duplicate_block (single_succ (bb), single_succ_edge (bb), bb);
+      new_bb->aux = bb->aux;
+      bb->aux = new_bb;
+      new_bb->il.rtl->visited = 1;
     }
 
 done:
   cfg_layout_finalize ();
 
   BITMAP_FREE (candidates);
-
-  timevar_pop (TV_REORDER_BLOCKS);
 }
+
+struct tree_opt_pass pass_duplicate_computed_gotos =
+{
+  "compgotos",                          /* name */
+  gate_duplicate_computed_gotos,        /* gate */
+  duplicate_computed_gotos,             /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_REORDER_BLOCKS,                    /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  0                                     /* letter */
+};
+
 
 /* This function is the main 'entrance' for the optimization that
    partitions hot and cold basic blocks into separate sections of the
@@ -2128,15 +2114,14 @@ done:
    function above).
 
    This optimization checks the feedback information to determine
-   which basic blocks are hot/cold and causes reorder_basic_blocks to
-   add NOTE_INSN_UNLIKELY_EXECUTED_CODE to non-hot basic blocks.  The
-   presence or absence of this note is later used for writing out
-   sections in the .o file.  Because hot and cold sections can be
-   arbitrarily large (within the bounds of memory), far beyond the
-   size of a single function, it is necessary to fix up all edges that
-   cross section boundaries, to make sure the instructions used can
-   actually span the required distance.  The fixes are described
-   below.
+   which basic blocks are hot/cold, updates flags on the basic blocks
+   to indicate which section they belong in.  This information is
+   later used for writing out sections in the .o file.  Because hot
+   and cold sections can be arbitrarily large (within the bounds of
+   memory), far beyond the size of a single function, it is necessary
+   to fix up all edges that cross section boundaries, to make sure the
+   instructions used can actually span the required distance.  The
+   fixes are described below.
 
    Fall-through edges must be changed into jumps; it is not safe or
    legal to fall through across a section boundary.  Whenever a
@@ -2194,7 +2179,7 @@ partition_hot_cold_basic_blocks (void)
   FOR_EACH_BB (cur_bb)
     if (cur_bb->index >= 0
  	&& cur_bb->next_bb->index >= 0)
-      cur_bb->rbi->next = cur_bb->next_bb;
+      cur_bb->aux = cur_bb->next_bb;
   
   find_rarely_executed_basic_blocks_and_crossing_edges (crossing_edges, 
 							&n_crossing_edges, 
@@ -2207,3 +2192,107 @@ partition_hot_cold_basic_blocks (void)
 
   cfg_layout_finalize();
 }
+
+static bool
+gate_handle_reorder_blocks (void)
+{
+  return (optimize > 0);
+}
+
+
+/* Reorder basic blocks.  */
+static void
+rest_of_handle_reorder_blocks (void)
+{
+  bool changed;
+  unsigned int liveness_flags;
+
+  /* Last attempt to optimize CFG, as scheduling, peepholing and insn
+     splitting possibly introduced more crossjumping opportunities.  */
+  liveness_flags = (!HAVE_conditional_execution ? CLEANUP_UPDATE_LIFE : 0);
+  changed = cleanup_cfg (CLEANUP_EXPENSIVE | liveness_flags);
+
+  if (flag_sched2_use_traces && flag_schedule_insns_after_reload)
+    {
+      timevar_push (TV_TRACER);
+      tracer (liveness_flags);
+      timevar_pop (TV_TRACER);
+    }
+
+  if (flag_reorder_blocks || flag_reorder_blocks_and_partition)
+    reorder_basic_blocks (liveness_flags);
+  if (flag_reorder_blocks || flag_reorder_blocks_and_partition
+      || (flag_sched2_use_traces && flag_schedule_insns_after_reload))
+    changed |= cleanup_cfg (CLEANUP_EXPENSIVE | liveness_flags);
+
+  /* On conditional execution targets we can not update the life cheaply, so
+     we deffer the updating to after both cleanups.  This may lose some cases
+     but should not be terribly bad.  */
+  if (changed && HAVE_conditional_execution)
+    update_life_info (NULL, UPDATE_LIFE_GLOBAL_RM_NOTES,
+                      PROP_DEATH_NOTES);
+
+  /* Add NOTE_INSN_SWITCH_TEXT_SECTIONS notes.  */
+  insert_section_boundary_note ();
+}
+
+struct tree_opt_pass pass_reorder_blocks =
+{
+  "bbro",                               /* name */
+  gate_handle_reorder_blocks,           /* gate */
+  rest_of_handle_reorder_blocks,        /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_REORDER_BLOCKS,                    /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'B'                                   /* letter */
+};
+
+static bool
+gate_handle_partition_blocks (void)
+{
+  /* The optimization to partition hot/cold basic blocks into separate
+     sections of the .o file does not work well with linkonce or with
+     user defined section attributes.  Don't call it if either case
+     arises.  */
+
+  return (flag_reorder_blocks_and_partition
+          && !DECL_ONE_ONLY (current_function_decl)
+          && !user_defined_section_attribute);
+}
+
+/* Partition hot and cold basic blocks.  */
+static void
+rest_of_handle_partition_blocks (void)
+{
+  no_new_pseudos = 0;
+  partition_hot_cold_basic_blocks ();
+  allocate_reg_life_data ();
+  update_life_info (NULL, UPDATE_LIFE_GLOBAL_RM_NOTES,
+                    PROP_LOG_LINKS | PROP_REG_INFO | PROP_DEATH_NOTES);
+  no_new_pseudos = 1;
+}
+
+struct tree_opt_pass pass_partition_blocks =
+{
+  "bbpart",                             /* name */
+  gate_handle_partition_blocks,         /* gate */
+  rest_of_handle_partition_blocks,      /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_REORDER_BLOCKS,                    /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  0                                     /* letter */
+};
+
+

@@ -1,5 +1,5 @@
 /* Natural loop functions
-   Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+   Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_CFGLOOP_H
 #define GCC_CFGLOOP_H
@@ -69,9 +69,6 @@ struct loop
   /* Basic block of loop latch.  */
   basic_block latch;
 
-  /* Basic block of loop preheader or NULL if it does not exist.  */
-  basic_block pre_header;
-
   /* For loop unrolling/peeling decision.  */
   struct lpt_decision lpt_decision;
 
@@ -80,14 +77,6 @@ struct loop
 
   /* Average number of executed insns per iteration.  */
   unsigned av_ninsns;
-
-  /* Array of edges along the preheader extended basic block trace.
-     The source of the first edge is the root node of preheader
-     extended basic block, if it exists.  */
-  edge *pre_header_edges;
-
-  /* Number of edges along the pre_header extended basic block trace.  */
-  int num_pre_header_edges;
 
   /* The first block in the loop.  This is not necessarily the same as
      the loop header.  */
@@ -99,21 +88,6 @@ struct loop
 
   /* Number of blocks contained within the loop.  */
   unsigned num_nodes;
-
-  /* Array of edges that enter the loop.  */
-  edge *entry_edges;
-
-  /* Number of edges that enter the loop.  */
-  int num_entries;
-
-  /* Array of edges that exit the loop.  */
-  edge *exit_edges;
-
-  /* Number of edges that exit the loop.  */
-  int num_exits;
-
-  /* Bitmap of blocks that dominate all exits of the loop.  */
-  sbitmap exits_doms;
 
   /* The loop nesting depth.  */
   int depth;
@@ -254,24 +228,16 @@ struct loops
 
 extern struct loops *current_loops;
 
-/* Flags for loop discovery.  */
-
-#define LOOP_TREE		1	/* Build loop hierarchy tree.  */
-#define LOOP_PRE_HEADER		2	/* Analyze loop preheader.  */
-#define LOOP_ENTRY_EDGES	4	/* Find entry edges.  */
-#define LOOP_EXIT_EDGES		8	/* Find exit edges.  */
-#define LOOP_EDGES		(LOOP_ENTRY_EDGES | LOOP_EXIT_EDGES)
-#define LOOP_ALL	       15	/* All of the above  */
-
 /* Loop recognition.  */
-extern int flow_loops_find (struct loops *, int flags);
+extern int flow_loops_find (struct loops *);
 extern void flow_loops_free (struct loops *);
 extern void flow_loops_dump (const struct loops *, FILE *,
 			     void (*)(const struct loop *, FILE *, int), int);
 extern void flow_loop_dump (const struct loop *, FILE *,
 			    void (*)(const struct loop *, FILE *, int), int);
-extern int flow_loop_scan (struct loop *, int);
 extern void flow_loop_free (struct loop *);
+int flow_loop_nodes_find (basic_block, struct loop *);
+void fix_loop_structure (struct loops *, bitmap changed_bbs);
 void mark_irreducible_loops (struct loops *);
 void mark_single_exit_loops (struct loops *);
 extern void create_loop_notes (void);
@@ -288,6 +254,8 @@ extern unsigned tree_num_loop_insns (struct loop *);
 extern int num_loop_insns (struct loop *);
 extern int average_num_loop_insns (struct loop *);
 extern unsigned get_loop_level (const struct loop *);
+extern bool loop_exit_edge_p (const struct loop *, edge);
+extern void mark_loop_exit_edges (struct loops *);
 
 /* Loops & cfg manipulation.  */
 extern basic_block *get_loop_body (const struct loop *);
@@ -319,22 +287,29 @@ extern void force_single_succ_latches (struct loops *);
 extern void verify_loop_structure (struct loops *);
 
 /* Loop analysis.  */
-extern bool just_once_each_iteration_p (struct loop *, basic_block);
+extern bool just_once_each_iteration_p (const struct loop *, basic_block);
 extern unsigned expected_loop_iterations (const struct loop *);
+extern rtx doloop_condition_get (rtx);
 
 /* Loop manipulation.  */
 extern bool can_duplicate_loop_p (struct loop *loop);
 
 #define DLTHE_FLAG_UPDATE_FREQ	1	/* Update frequencies in
 					   duplicate_loop_to_header_edge.  */
+#define DLTHE_RECORD_COPY_NUMBER 2	/* Record copy number in the aux
+					   field of newly create BB.  */
+#define DLTHE_FLAG_COMPLETTE_PEEL 4	/* Update frequencies expecting
+					   a complete peeling.  */
 
 extern struct loop * duplicate_loop (struct loops *, struct loop *,
 				     struct loop *);
-extern int duplicate_loop_to_header_edge (struct loop *, edge, struct loops *,
-					  unsigned, sbitmap, edge, edge *,
-					  unsigned *, int);
+extern bool duplicate_loop_to_header_edge (struct loop *, edge, struct loops *,
+					   unsigned, sbitmap, edge, edge *,
+					   unsigned *, int);
 extern struct loop *loopify (struct loops *, edge, edge,
 			     basic_block, edge, edge, bool);
+struct loop * loop_version (struct loops *, struct loop *, void *,
+			    basic_block *, bool);
 extern bool remove_path (struct loops *, edge);
 extern edge split_loop_bb (basic_block, void *);
 

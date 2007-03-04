@@ -1,6 +1,6 @@
 /* The tracer pass for the GNU compiler.
    Contributed by Jan Hubicka, SuSE Labs.
-   Copyright (C) 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* This pass performs the tail duplication needed for superblock formation.
    For more information see:
@@ -48,6 +48,7 @@
 #include "timevar.h"
 #include "params.h"
 #include "coverage.h"
+#include "tree-pass.h"
 
 static int count_insns (basic_block);
 static bool ignore_bb_p (basic_block);
@@ -65,7 +66,7 @@ static int branch_ratio_cutoff;
 /* Return true if BB has been seen - it is connected to some trace
    already.  */
 
-#define seen(bb) (bb->rbi->visited || bb->rbi->next)
+#define seen(bb) (bb->il.rtl->visited || bb->aux)
 
 /* Return true if we should ignore the basic block for purposes of tracing.  */
 static bool
@@ -280,7 +281,7 @@ tail_duplicate (void)
 	      e = find_edge (bb, bb2);
 
 	      nduplicated += counts [bb2->index];
-	      bb2 = duplicate_block (bb2, e);
+	      bb2 = duplicate_block (bb2, e, bb);
 
 	      /* Reconsider the original copy of block we've duplicated.
 	         Removing the most common predecessor may make it to be
@@ -292,8 +293,8 @@ tail_duplicate (void)
 		fprintf (dump_file, "Duplicated %i as %i [%i]\n",
 			 old->index, bb2->index, bb2->frequency);
 	    }
-	  bb->rbi->next = bb2;
-	  bb2->rbi->visited = 1;
+	  bb->aux = bb2;
+	  bb2->il.rtl->visited = 1;
 	  bb = bb2;
 	  /* In case the trace became infrequent, stop duplicating.  */
 	  if (ignore_bb_p (bb))
@@ -321,35 +322,35 @@ tail_duplicate (void)
 static void
 layout_superblocks (void)
 {
-  basic_block end = EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest;
-  basic_block bb = EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest->next_bb;
+  basic_block end = single_succ (ENTRY_BLOCK_PTR);
+  basic_block bb = end->next_bb;
 
   while (bb != EXIT_BLOCK_PTR)
     {
       edge_iterator ei;
       edge e, best = NULL;
-      while (end->rbi->next)
-	end = end->rbi->next;
+      while (end->aux)
+	end = end->aux;
 
       FOR_EACH_EDGE (e, ei, end->succs)
 	if (e->dest != EXIT_BLOCK_PTR
-	    && e->dest != EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest
-	    && !e->dest->rbi->visited
+	    && e->dest != single_succ (ENTRY_BLOCK_PTR)
+	    && !e->dest->il.rtl->visited
 	    && (!best || EDGE_FREQUENCY (e) > EDGE_FREQUENCY (best)))
 	  best = e;
 
       if (best)
 	{
-	  end->rbi->next = best->dest;
-	  best->dest->rbi->visited = 1;
+	  end->aux = best->dest;
+	  best->dest->il.rtl->visited = 1;
 	}
       else
 	for (; bb != EXIT_BLOCK_PTR; bb = bb->next_bb)
 	  {
-	    if (!bb->rbi->visited)
+	    if (!bb->il.rtl->visited)
 	      {
-		end->rbi->next = bb;
-		bb->rbi->visited = 1;
+		end->aux = bb;
+		bb->il.rtl->visited = 1;
 		break;
 	      }
 	  }
@@ -365,8 +366,6 @@ tracer (unsigned int flags)
   if (n_basic_blocks <= 1)
     return;
 
-  timevar_push (TV_TRACER);
-
   cfg_layout_initialize (flags);
   mark_dfs_back_edges ();
   if (dump_file)
@@ -379,6 +378,39 @@ tracer (unsigned int flags)
 
   /* Merge basic blocks in duplicated traces.  */
   cleanup_cfg (CLEANUP_EXPENSIVE);
-
-  timevar_pop (TV_TRACER);
 }
+
+static bool
+gate_handle_tracer (void)
+{
+  return (optimize > 0 && flag_tracer);
+}
+
+/* Run tracer.  */
+static void
+rest_of_handle_tracer (void)
+{
+  if (dump_file)
+    dump_flow_info (dump_file);
+  tracer (0);
+  cleanup_cfg (CLEANUP_EXPENSIVE);
+  reg_scan (get_insns (), max_reg_num ());
+}
+
+struct tree_opt_pass pass_tracer =
+{
+  "tracer",                             /* name */
+  gate_handle_tracer,                   /* gate */
+  rest_of_handle_tracer,                /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_TRACER,                            /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'T'                                   /* letter */
+};
+

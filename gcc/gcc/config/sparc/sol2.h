@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Supposedly the same as vanilla sparc svr4, except for the stuff below: */
 
@@ -83,7 +83,7 @@ Boston, MA 02111-1307, USA.  */
     {								\
       HOST_WIDE_INT size;					\
 								\
-      if (DECL_THREAD_LOCAL (DECL))				\
+      if (DECL_THREAD_LOCAL_P (DECL))				\
 	ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "tls_object");	\
       else							\
 	ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "object");	\
@@ -104,13 +104,6 @@ Boston, MA 02111-1307, USA.  */
 /* The Solaris assembler cannot grok .stabd directives.  */
 #undef NO_DBX_BNSYM_ENSYM
 #define NO_DBX_BNSYM_ENSYM 1
-
-/* The Solaris assembler cannot grok r_tls_dtpoff.  This is
-   a kludge as ASM_OUTPUT_DWARF_DTPREL is defined in sparc.h,
-   undefined here and defined again in sol2-gas.h.  */
-#ifdef HAVE_AS_TLS
-#undef ASM_OUTPUT_DWARF_DTPREL
-#endif
 
 
 #undef  ENDFILE_SPEC

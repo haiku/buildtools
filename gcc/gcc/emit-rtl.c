@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* Middle-to-low level generation of rtx code and insns.
@@ -55,6 +55,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "ggc.h"
 #include "debug.h"
 #include "langhooks.h"
+#include "tree-pass.h"
 
 /* Commonly used modes.  */
 
@@ -253,7 +254,7 @@ mem_attrs_htab_hash (const void *x)
   return (p->alias ^ (p->align * 1000)
 	  ^ ((p->offset ? INTVAL (p->offset) : 0) * 50000)
 	  ^ ((p->size ? INTVAL (p->size) : 0) * 2500000)
-	  ^ (size_t) p->expr);
+	  ^ (size_t) iterative_hash_expr (p->expr, 0));
 }
 
 /* Returns nonzero if the value represented by X (which is really a
@@ -266,8 +267,11 @@ mem_attrs_htab_eq (const void *x, const void *y)
   mem_attrs *p = (mem_attrs *) x;
   mem_attrs *q = (mem_attrs *) y;
 
-  return (p->alias == q->alias && p->expr == q->expr && p->offset == q->offset
-	  && p->size == q->size && p->align == q->align);
+  return (p->alias == q->alias && p->offset == q->offset
+	  && p->size == q->size && p->align == q->align
+	  && (p->expr == q->expr
+	      || (p->expr != NULL_TREE && q->expr != NULL_TREE
+		  && operand_equal_p (p->expr, q->expr, 0))));
 }
 
 /* Allocate a new mem_attrs structure and insert it into the hash table if
@@ -425,7 +429,7 @@ const_double_from_real_value (REAL_VALUE_TYPE value, enum machine_mode mode)
   rtx real = rtx_alloc (CONST_DOUBLE);
   PUT_MODE (real, mode);
 
-  memcpy (&CONST_DOUBLE_LOW (real), &value, sizeof (REAL_VALUE_TYPE));
+  real->u.rv = value;
 
   return lookup_const_double (real);
 }
@@ -603,6 +607,31 @@ gen_const_mem (enum machine_mode mode, rtx addr)
   rtx mem = gen_rtx_MEM (mode, addr);
   MEM_READONLY_P (mem) = 1;
   MEM_NOTRAP_P (mem) = 1;
+  return mem;
+}
+
+/* Generate a MEM referring to fixed portions of the frame, e.g., register
+   save areas.  */
+
+rtx
+gen_frame_mem (enum machine_mode mode, rtx addr)
+{
+  rtx mem = gen_rtx_MEM (mode, addr);
+  MEM_NOTRAP_P (mem) = 1;
+  set_mem_alias_set (mem, get_frame_alias_set ());
+  return mem;
+}
+
+/* Generate a MEM referring to a temporary use of the stack, not part
+    of the fixed stack frame.  For example, something which is pushed
+    by a target splitter.  */
+rtx
+gen_tmp_stack_mem (enum machine_mode mode, rtx addr)
+{
+  rtx mem = gen_rtx_MEM (mode, addr);
+  MEM_NOTRAP_P (mem) = 1;
+  if (!current_function_calls_alloca)
+    set_mem_alias_set (mem, get_frame_alias_set ());
   return mem;
 }
 
@@ -953,7 +982,7 @@ set_reg_attrs_for_parm (rtx parm_rtx, rtx mem)
 void
 set_decl_rtl (tree t, rtx x)
 {
-  DECL_CHECK (t)->decl.rtl = x;
+  DECL_WRTL_CHECK (t)->decl_with_rtl.rtl = x;
 
   if (!x)
     return;
@@ -1117,7 +1146,8 @@ gen_lowpart_common (enum machine_mode mode, rtx x)
   /* Unfortunately, this routine doesn't take a parameter for the mode of X,
      so we have to make one up.  Yuk.  */
   innermode = GET_MODE (x);
-  if (GET_CODE (x) == CONST_INT && msize <= HOST_BITS_PER_WIDE_INT)
+  if (GET_CODE (x) == CONST_INT
+      && msize * BITS_PER_UNIT <= HOST_BITS_PER_WIDE_INT)
     innermode = mode_for_size (HOST_BITS_PER_WIDE_INT, MODE_INT, 0);
   else if (innermode == VOIDmode)
     innermode = mode_for_size (HOST_BITS_PER_WIDE_INT * 2, MODE_INT, 0);
@@ -1330,9 +1360,10 @@ operand_subword (rtx op, unsigned int offset, int validate_address, enum machine
   return simplify_gen_subreg (word_mode, op, mode, (offset * UNITS_PER_WORD));
 }
 
-/* Similar to `operand_subword', but never return 0.  If we can't extract
-   the required subword, put OP into a register and try again.  If that fails,
-   abort.  We always validate the address in this case.
+/* Similar to `operand_subword', but never return 0.  If we can't
+   extract the required subword, put OP into a register and try again.
+   The second attempt must succeed.  We always validate the address in
+   this case.
 
    MODE is the mode of OP, in case it is CONST_INT.  */
 
@@ -1358,38 +1389,6 @@ operand_subword_force (rtx op, unsigned int offset, enum machine_mode mode)
   gcc_assert (result);
 
   return result;
-}
-
-/* Given a compare instruction, swap the operands.
-   A test instruction is changed into a compare of 0 against the operand.  */
-
-void
-reverse_comparison (rtx insn)
-{
-  rtx body = PATTERN (insn);
-  rtx comp;
-
-  if (GET_CODE (body) == SET)
-    comp = SET_SRC (body);
-  else
-    comp = SET_SRC (XVECEXP (body, 0, 0));
-
-  if (GET_CODE (comp) == COMPARE)
-    {
-      rtx op0 = XEXP (comp, 0);
-      rtx op1 = XEXP (comp, 1);
-      XEXP (comp, 0) = op1;
-      XEXP (comp, 1) = op0;
-    }
-  else
-    {
-      rtx new = gen_rtx_COMPARE (VOIDmode,
-				 CONST0_RTX (GET_MODE (comp)), comp);
-      if (GET_CODE (body) == SET)
-	SET_SRC (body) = new;
-      else
-	SET_SRC (XVECEXP (body, 0, 0)) = new;
-    }
 }
 
 /* Within a MEM_EXPR, we care about either (1) a component ref of a decl,
@@ -1498,7 +1497,6 @@ set_mem_attributes_minus_bitpos (rtx ref, tree t, int objectp,
   MEM_VOLATILE_P (ref) |= TYPE_VOLATILE (type);
   MEM_IN_STRUCT_P (ref) = AGGREGATE_TYPE_P (type);
   MEM_POINTER (ref) = POINTER_TYPE_P (type);
-  MEM_NOTRAP_P (ref) = TREE_THIS_NOTRAP (t);
 
   /* If we are making an object of this type, or if this is a DECL, we know
      that it is a scalar if the type is not an aggregate.  */
@@ -1529,16 +1527,7 @@ set_mem_attributes_minus_bitpos (rtx ref, tree t, int objectp,
      the expression.  */
   if (! TYPE_P (t))
     {
-      tree base = get_base_address (t);
-      if (base && DECL_P (base)
-	  && TREE_READONLY (base)
-	  && (TREE_STATIC (base) || DECL_EXTERNAL (base)))
-	{
-	  tree base_type = TREE_TYPE (base);
-	  gcc_assert (!(base_type && TYPE_NEEDS_CONSTRUCTING (base_type))
-		      || DECL_ARTIFICIAL (base));
-	  MEM_READONLY_P (ref) = 1;
-	}
+      tree base;
 
       if (TREE_THIS_VOLATILE (t))
 	MEM_VOLATILE_P (ref) = 1;
@@ -1550,6 +1539,36 @@ set_mem_attributes_minus_bitpos (rtx ref, tree t, int objectp,
 	     || TREE_CODE (t) == VIEW_CONVERT_EXPR
 	     || TREE_CODE (t) == SAVE_EXPR)
 	t = TREE_OPERAND (t, 0);
+
+      /* We may look through structure-like accesses for the purposes of
+	 examining TREE_THIS_NOTRAP, but not array-like accesses.  */
+      base = t;
+      while (TREE_CODE (base) == COMPONENT_REF
+	     || TREE_CODE (base) == REALPART_EXPR
+	     || TREE_CODE (base) == IMAGPART_EXPR
+	     || TREE_CODE (base) == BIT_FIELD_REF)
+	base = TREE_OPERAND (base, 0);
+
+      if (DECL_P (base))
+	{
+	  if (CODE_CONTAINS_STRUCT (TREE_CODE (base), TS_DECL_WITH_VIS))
+	    MEM_NOTRAP_P (ref) = !DECL_WEAK (base);
+	  else
+	    MEM_NOTRAP_P (ref) = 1;
+	}
+      else
+	MEM_NOTRAP_P (ref) = TREE_THIS_NOTRAP (base);
+
+      base = get_base_address (base);
+      if (base && DECL_P (base)
+	  && TREE_READONLY (base)
+	  && (TREE_STATIC (base) || DECL_EXTERNAL (base)))
+	{
+	  tree base_type = TREE_TYPE (base);
+	  gcc_assert (!(base_type && TYPE_NEEDS_CONSTRUCTING (base_type))
+		      || DECL_ARTIFICIAL (base));
+	  MEM_READONLY_P (ref) = 1;
+	}
 
       /* If this expression uses it's parent's alias set, mark it such
 	 that we won't change it.  */
@@ -1610,8 +1629,8 @@ set_mem_attributes_minus_bitpos (rtx ref, tree t, int objectp,
 		 index, then convert to sizetype and multiply by the size of
 		 the array element.  */
 	      if (! integer_zerop (low_bound))
-		index = fold (build2 (MINUS_EXPR, TREE_TYPE (index),
-				      index, low_bound));
+		index = fold_build2 (MINUS_EXPR, TREE_TYPE (index),
+				     index, low_bound);
 
 	      off_tree = size_binop (PLUS_EXPR,
 				     size_binop (MULT_EXPR, convert (sizetype,
@@ -2166,6 +2185,24 @@ unshare_all_rtl (void)
   unshare_all_rtl_1 (current_function_decl, get_insns ());
 }
 
+struct tree_opt_pass pass_unshare_all_rtl =
+{
+  "unshare",                            /* name */
+  NULL,                                 /* gate */
+  unshare_all_rtl,                      /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  0,                                    /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  0                                     /* letter */
+};
+
+
 /* Check that ORIG is not marked when it should not be and mark ORIG as in use,
    Recursively does the same for subexpressions.  */
 
@@ -2229,11 +2266,11 @@ verify_rtx_sharing (rtx orig, rtx insn)
 #ifdef ENABLE_CHECKING
   if (RTX_FLAG (x, used))
     {
-      error ("Invalid rtl sharing found in the insn");
+      error ("invalid rtl sharing found in the insn");
       debug_rtx (insn);
-      error ("Shared rtx");
+      error ("shared rtx");
       debug_rtx (x);
-      internal_error ("Internal consistency failure");
+      internal_error ("internal consistency failure");
     }
 #endif
   gcc_assert (!RTX_FLAG (x, used));
@@ -2728,7 +2765,7 @@ get_first_nonnote_insn (void)
 	  continue;
       else
 	{
-	  if (GET_CODE (insn) == INSN
+	  if (NONJUMP_INSN_P (insn)
 	      && GET_CODE (PATTERN (insn)) == SEQUENCE)
 	    insn = XVECEXP (PATTERN (insn), 0, 0);
 	}
@@ -2754,7 +2791,7 @@ get_last_nonnote_insn (void)
 	  continue;
       else
 	{
-	  if (GET_CODE (insn) == INSN
+	  if (NONJUMP_INSN_P (insn)
 	      && GET_CODE (PATTERN (insn)) == SEQUENCE)
 	    insn = XVECEXP (PATTERN (insn), 0,
 			    XVECLEN (PATTERN (insn), 0) - 1);
@@ -3206,7 +3243,6 @@ try_split (rtx pat, rtx trial, int last)
 
 	case REG_NORETURN:
 	case REG_SETJMP:
-	case REG_ALWAYS_RETURN:
 	  insn = insn_last;
 	  while (insn != NULL_RTX)
 	    {
@@ -3298,7 +3334,7 @@ make_insn_raw (rtx pattern)
 	  || (GET_CODE (insn) == SET
 	      && SET_DEST (insn) == pc_rtx)))
     {
-      warning ("ICE: emit_insn used where emit_jump_insn needed:\n");
+      warning (0, "ICE: emit_insn used where emit_jump_insn needed:\n");
       debug_rtx (insn);
     }
 #endif
@@ -3736,6 +3772,23 @@ remove_unnecessary_notes (void)
   /* Too many EH_REGION_BEG notes.  */
   gcc_assert (!eh_stack);
 }
+
+struct tree_opt_pass pass_remove_unnecessary_notes =
+{
+  "eunotes",                            /* name */ 
+  NULL,					/* gate */
+  remove_unnecessary_notes,             /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  0,					/* tv_id */ 
+  0,					/* properties_required */
+  0,                                    /* properties_provided */
+  0,					/* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,			/* todo_flags_finish */
+  0                                     /* letter */ 
+};
 
 
 /* Emit insn(s) of given code and pattern

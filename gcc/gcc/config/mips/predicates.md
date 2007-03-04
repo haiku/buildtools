@@ -15,8 +15,8 @@
 ;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
 
 (define_predicate "const_uns_arith_operand"
   (and (match_code "const_int")
@@ -32,6 +32,18 @@
 
 (define_predicate "arith_operand"
   (ior (match_operand 0 "const_arith_operand")
+       (match_operand 0 "register_operand")))
+
+(define_predicate "const_uimm6_operand"
+  (and (match_code "const_int")
+       (match_test "UIMM6_OPERAND (INTVAL (op))")))
+
+(define_predicate "const_imm10_operand"
+  (and (match_code "const_int")
+       (match_test "IMM10_OPERAND (INTVAL (op))")))
+
+(define_predicate "reg_imm10_operand"
+  (ior (match_operand 0 "const_imm10_operand")
        (match_operand 0 "register_operand")))
 
 (define_predicate "sle_operand"
@@ -69,10 +81,6 @@
   (and (match_code "reg")
        (match_test "FP_REG_P (REGNO (op))")))
 
-(define_predicate "hilo_operand"
-  (and (match_code "reg")
-       (match_test "MD_REG_P (REGNO (op))")))
-
 (define_predicate "lo_operand"
   (and (match_code "reg")
        (match_test "REGNO (op) == LO_REGNUM")))
@@ -95,8 +103,10 @@
   switch (symbol_type)
     {
     case SYMBOL_GENERAL:
-      /* If -mlong-calls, force all calls to use register addressing.  */
-      return !TARGET_LONG_CALLS;
+      /* If -mlong-calls, force all calls to use register addressing.  Also,
+	 if this function has the long_call attribute, we must use register
+	 addressing.  */
+      return !TARGET_LONG_CALLS && !SYMBOL_REF_LONG_CALL_P (op);
 
     case SYMBOL_GOT_GLOBAL:
       /* Without explicit relocs, there is no special syntax for

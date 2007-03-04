@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 #include "bconfig.h"
@@ -79,6 +79,7 @@ gen_attr (rtx attr)
       puts ("\
 extern void shorten_branches (rtx);\n\
 extern int insn_default_length (rtx);\n\
+extern int insn_min_length (rtx);\n\
 extern int insn_variable_length_p (rtx);\n\
 extern int insn_current_length (rtx);\n\n\
 #include \"insn-addr.h\"\n");

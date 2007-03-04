@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "CPP 1"
-.TH CPP 1 "2005-09-28" "gcc-4.0.2" "GNU"
+.TH CPP 1 "2007-02-14" "gcc-4.1.2" "GNU"
 .SH "NAME"
 cpp \- The C Preprocessor
 .SH "SYNOPSIS"
@@ -636,6 +636,10 @@ Append \fIdir\fR to the prefix specified previously with
 \&\fB\-iprefix\fR, and add the resulting directory to the include search
 path.  \fB\-iwithprefixbefore\fR puts it in the same place \fB\-I\fR
 would; \fB\-iwithprefix\fR puts it where \fB\-idirafter\fR would.
+.IP "\fB\-isysroot\fR \fIdir\fR" 4
+.IX Item "-isysroot dir"
+This option is like the \fB\-\-sysroot\fR option, but applies only to
+header files.  See the \fB\-\-sysroot\fR option for more information.
 .IP "\fB\-isystem\fR \fIdir\fR" 4
 .IX Item "-isystem dir"
 Search \fIdir\fR for header files, after all directories specified by
@@ -652,6 +656,11 @@ Search \fIdir\fR only for header files requested with
 .IX Item "-fdollars-in-identifiers"
 @anchor{fdollars\-in\-identifiers}
 Accept \fB$\fR in identifiers.
+.IP "\fB\-fextended\-identifiers\fR" 4
+.IX Item "-fextended-identifiers"
+Accept universal character names in identifiers.  This option is
+experimental; in a future version of \s-1GCC\s0, it will be enabled by
+default for C99 and \*(C+.
 .IP "\fB\-fpreprocessed\fR" 4
 .IX Item "-fpreprocessed"
 Indicate to the preprocessor that the input file has already been

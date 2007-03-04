@@ -1,7 +1,7 @@
 /* This is a software floating point library which can be used
    for targets without hardware floating point. 
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2004
-   Free Software Foundation, Inc.
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003,
+   2004, 2005 Free Software Foundation, Inc.
 
 This file is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -23,8 +23,8 @@ General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* As a special exception, if you link this library with other files,
    some of which are compiled with GCC, to produce an executable,
@@ -947,7 +947,7 @@ multiply (FLO_type arg_a, FLO_type arg_b)
 
   return pack_d (res);
 }
-#endif /* L_mul_sf || L_mul_df */
+#endif /* L_mul_sf || L_mul_df || L_mul_tf */
 
 #if defined(L_div_sf) || defined(L_div_df) || defined(L_div_tf)
 static inline __attribute__ ((__always_inline__)) fp_number_type *

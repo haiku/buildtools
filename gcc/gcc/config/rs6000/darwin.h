@@ -1,5 +1,6 @@
 /* Target definitions for PowerPC running Darwin (Mac OS X).
-   Copyright (C) 1997, 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 1997, 2000, 2001, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
    This file is part of GCC.
@@ -16,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the
-   Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-   MA 02111-1307, USA.  */
+   Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #undef  TARGET_VERSION
 #define TARGET_VERSION fprintf (stderr, " (Darwin/PowerPC)");
@@ -39,11 +40,8 @@
 #undef  PTRDIFF_TYPE
 #define PTRDIFF_TYPE (TARGET_64BIT ? "long int" : "int")
 
-/* Darwin switches.  */
-/* Use dynamic-no-pic codegen (no picbase reg; not suitable for shlibs.)  */
-#define MASK_MACHO_DYNAMIC_NO_PIC 0x00800000
-
-#define TARGET_DYNAMIC_NO_PIC	(target_flags & MASK_MACHO_DYNAMIC_NO_PIC)
+/* Translate config/rs6000/darwin.opt to config/darwin.h.  */
+#define TARGET_DYNAMIC_NO_PIC (TARGET_MACHO_DYNAMIC_NO_PIC)
 
 /* Handle #pragma weak and #pragma pack.  */
 #define HANDLE_SYSV_PRAGMA 1
@@ -56,22 +54,10 @@
       if (TARGET_64BIT) builtin_define ("__ppc64__");  \
       builtin_define ("__POWERPC__");           \
       builtin_define ("__NATURAL_ALIGNMENT__"); \
-      builtin_define ("__MACH__");              \
-      builtin_define ("__APPLE__");             \
+      darwin_cpp_builtins (pfile);		\
+      SUBTARGET_OS_CPP_BUILTINS ();             \
     }                                           \
   while (0)
-
-
-/*  */
-#undef	SUBTARGET_SWITCHES
-#define SUBTARGET_SWITCHES						\
-  { "64",     MASK_64BIT | MASK_POWERPC64, \
-        N_("Generate 64-bit code") }, \
-  { "32",     - (MASK_64BIT | MASK_POWERPC64), \
-        N_("Generate 32-bit code") }, \
-  {"dynamic-no-pic",	MASK_MACHO_DYNAMIC_NO_PIC,			\
-      N_("Generate code suitable for executables (NOT shared libs)")},	\
-  {"no-dynamic-no-pic",	-MASK_MACHO_DYNAMIC_NO_PIC, ""},
 
 
 /* The Darwin ABI always includes AltiVec, can't be (validly) turned
@@ -80,37 +66,26 @@
 #define SUBTARGET_OVERRIDE_OPTIONS					\
 do {									\
   rs6000_altivec_abi = 1;						\
-  rs6000_altivec_vrsave = 1;						\
+  TARGET_ALTIVEC_VRSAVE = 1;						\
   if (DEFAULT_ABI == ABI_DARWIN)					\
   {									\
     if (MACHO_DYNAMIC_NO_PIC_P)						\
       {									\
         if (flag_pic)							\
-            warning ("-mdynamic-no-pic overrides -fpic or -fPIC");	\
+            warning (0, "-mdynamic-no-pic overrides -fpic or -fPIC");	\
         flag_pic = 0;							\
       }									\
     else if (flag_pic == 1)						\
       {									\
         /* Darwin doesn't support -fpic.  */				\
-        warning ("-fpic is not supported; -fPIC assumed");		\
+        warning (0, "-fpic is not supported; -fPIC assumed");		\
         flag_pic = 2;							\
-      }									\
-									\
-    /* Handle -mfix-and-continue.  */					\
-    if (darwin_fix_and_continue_switch)					\
-      {									\
-	const char *base = darwin_fix_and_continue_switch;		\
-	while (base[-1] != 'm') base--;					\
-									\
-	if (*darwin_fix_and_continue_switch != '\0')			\
-	  error ("invalid option %qs", base);				\
-	darwin_fix_and_continue = (base[0] != 'n');			\
       }									\
   }									\
   if (TARGET_64BIT && ! TARGET_POWERPC64)				\
     {									\
       target_flags |= MASK_POWERPC64;					\
-      warning ("-m64 requires PowerPC64 architecture, enabling");	\
+      warning (0, "-m64 requires PowerPC64 architecture, enabling");	\
     }									\
 } while(0)
 
@@ -149,9 +124,14 @@ do {									\
    mcpu=G5:ppc970;				\
    :ppc}}"
 
+/* crt2.o is at least partially required for 10.3.x and earlier.  */
+#define DARWIN_CRT2_SPEC \
+  "%{!m64:%:version-compare(!> 10.4 mmacosx-version-min= crt2.o%s)}"
+
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS			\
   { "darwin_arch", "%{m64:ppc64;:ppc}" },	\
+  { "darwin_crt2", DARWIN_CRT2_SPEC },		\
   { "darwin_subarch", DARWIN_SUBARCH_SPEC },
 
 /* Output a .machine directive.  */
@@ -176,8 +156,8 @@ do {									\
 
 /* Base register for access to local variables of the function.  */
 
-#undef  FRAME_POINTER_REGNUM
-#define FRAME_POINTER_REGNUM 30
+#undef  HARD_FRAME_POINTER_REGNUM
+#define HARD_FRAME_POINTER_REGNUM 30
 
 #undef  RS6000_PIC_OFFSET_TABLE_REGNUM
 #define RS6000_PIC_OFFSET_TABLE_REGNUM 31
@@ -186,9 +166,10 @@ do {									\
 
 #undef STARTING_FRAME_OFFSET
 #define STARTING_FRAME_OFFSET						\
-  (RS6000_ALIGN (current_function_outgoing_args_size, 16)		\
-   + RS6000_VARARGS_AREA						\
-   + RS6000_SAVE_AREA)
+  (FRAME_GROWS_DOWNWARD							\
+   ? 0									\
+   : (RS6000_ALIGN (current_function_outgoing_args_size, 16)		\
+      + RS6000_SAVE_AREA))
 
 #undef STACK_DYNAMIC_OFFSET
 #define STACK_DYNAMIC_OFFSET(FUNDECL)					\
@@ -231,7 +212,8 @@ do {									\
     "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",             \
     "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",             \
     "vrsave", "vscr",							\
-    "spe_acc", "spefscr"                                                \
+    "spe_acc", "spefscr",                                               \
+    "sfp"								\
 }
 
 /* This outputs NAME to FILE.  */
@@ -294,6 +276,19 @@ do {									\
 
 /* Generate insns to call the profiler.  */
 
+#ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
+/* This is supported in cctools 465 and later.  The macro test
+   above prevents using it in earlier build environments.  */
+#define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP)           \
+   if ((LOG) != 0)                                             \
+     {                                                         \
+       if ((MAX_SKIP) == 0)                                    \
+         fprintf ((FILE), "\t.p2align %d\n", (LOG));           \
+       else                                                    \
+         fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP)); \
+     }
+#endif
+
 #define PROFILE_HOOK(LABEL)   output_profile_hook (LABEL)
 
 /* Function name to call to do profiling.  */
@@ -318,6 +313,8 @@ do {									\
 /* Darwin only runs on PowerPC, so short-circuit POWER patterns.  */
 #undef  TARGET_POWER
 #define TARGET_POWER 0
+#undef  TARGET_IEEEQUAD
+#define TARGET_IEEEQUAD 0
 
 /* Since Darwin doesn't do TOCs, stub this out.  */
 
@@ -391,11 +388,16 @@ do {									\
 /* For binary compatibility with 2.95; Darwin C APIs use bool from
    stdbool.h, which was an int-sized enum in 2.95.  Users can explicitly
    choose to have sizeof(bool)==1 with the -mone-byte-bool switch. */
-extern const char *darwin_one_byte_bool;
 #define BOOL_TYPE_SIZE (darwin_one_byte_bool ? CHAR_TYPE_SIZE : INT_TYPE_SIZE)
 
 #undef REGISTER_TARGET_PRAGMAS
-#define REGISTER_TARGET_PRAGMAS DARWIN_REGISTER_TARGET_PRAGMAS
+#define REGISTER_TARGET_PRAGMAS() \
+  do \
+    { \
+      DARWIN_REGISTER_TARGET_PRAGMAS(); \
+      targetm.resolve_overloaded_builtin = altivec_resolve_overloaded_builtin; \
+    } \
+  while (0)
 
 #ifdef IN_LIBGCC2
 #include <stdbool.h>
@@ -406,9 +408,22 @@ extern const char *darwin_one_byte_bool;
 #define HAS_MD_FALLBACK_FRAME_STATE_FOR 1
 
 /* True, iff we're generating fast turn around debugging code.  When
-   true, we arrange for function prologues to start with 4 nops so
-   that gdb may insert code to redirect them, and for data to accessed
-   indirectly.  The runtime uses this indirection to forward
+   true, we arrange for function prologues to start with 5 nops so
+   that gdb may insert code to redirect them, and for data to be
+   accessed indirectly.  The runtime uses this indirection to forward
    references for data to the original instance of that data.  */
 
 #define TARGET_FIX_AND_CONTINUE (darwin_fix_and_continue)
+
+/* This is the reserved direct dispatch address for Objective-C.  */
+#define OFFS_MSGSEND_FAST		0xFFFEFF00
+
+/* This is the reserved ivar address Objective-C.  */
+#define OFFS_ASSIGNIVAR_FAST		0xFFFEFEC0
+
+/* Old versions of Mac OS/Darwin don't have C99 functions available.  */
+#undef TARGET_C99_FUNCTIONS
+#define TARGET_C99_FUNCTIONS					\
+  (TARGET_64BIT							\
+   || (darwin_macosx_version_min				\
+       && strverscmp (darwin_macosx_version_min, "10.3") >= 0))

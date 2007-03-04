@@ -49,7 +49,7 @@ for both native and cross targets.
    <p>We use <var>srcdir</var> to refer to the toplevel source directory for
 GCC; we use <var>objdir</var> to refer to the toplevel build/object directory.
 
-   <p>If you obtained the sources via CVS, <var>srcdir</var> must refer to the top
+   <p>If you obtained the sources via SVN, <var>srcdir</var> must refer to the top
 <samp><span class="file">gcc</span></samp> directory, the one where the <samp><span class="file">MAINTAINERS</span></samp> can be found,
 and not its <samp><span class="file">gcc</span></samp> subdirectory, otherwise the build will fail.
 
@@ -385,7 +385,7 @@ tools can not generate or interpret stabs.
 
      <br><dt><code>--disable-multilib</code><dd>Specify that multiple target
 libraries to support different target variants, calling
-conventions, etc should not be built.  The default is to build a
+conventions, etc. should not be built.  The default is to build a
 predefined set of them.
 
      <p>Some targets provide finer-grained control over which multilibs are built
@@ -445,6 +445,16 @@ missing and thus this setting will cause a known bootstrap failure.)
 <br><dt><code>nks</code><dd>Novell Kernel Services thread support. 
 </dl>
 
+     <br><dt><code>--enable-tls</code><dd>Specify that the target supports TLS (Thread Local Storage).  Usually
+configure can correctly determine if TLS is supported.  In cases where
+it guesses incorrectly, TLS can be explicitly enabled or disabled with
+<samp><span class="option">--enable-tls</span></samp> or <samp><span class="option">--disable-tls</span></samp>.  This can happen if
+the assembler supports TLS but the C library does not, or if the
+assumptions made by the configure test are incorrect.
+
+     <br><dt><code>--disable-tls</code><dd>Specify that the target does not support TLS. 
+This is an alias for <samp><span class="option">--enable-tls=no</span></samp>.
+
      <br><dt><code>--with-cpu=</code><var>cpu</var><dd>Specify which cpu variant the compiler should generate code for by default. 
 <var>cpu</var> will be used as the default value of the <samp><span class="option">-mcpu=</span></samp> switch. 
 This option is only supported on some targets, including ARM, i386, PowerPC,
@@ -496,18 +506,18 @@ catalog, configuring with <samp><span class="option">--enable-maintainer-mode</s
 this.  Note that you need a recent version of the <code>gettext</code> tools
 to do so.
 
-     <br><dt><code>--enable-generated-files-in-srcdir</code><dd>Neither the .c and .h files that are generated from bison and flex nor the
+     <br><dt><code>--enable-generated-files-in-srcdir</code><dd>Neither the .c and .h files that are generated from Bison and flex nor the
 info manuals and man pages that are built from the .texi files are present
-in the CVS development tree.  When building GCC from that development tree,
-or from a snapshot which are created from CVS, then those generated files
-are placed in your build directory, which allows for the source to be in a
-readonly directory.
+in the SVN development tree.  When building GCC from that development tree,
+or from one of our snapshots, those generated files are placed in your
+build directory, which allows for the source to be in a readonly
+directory.
 
      <p>If you configure with <samp><span class="option">--enable-generated-files-in-srcdir</span></samp> then those
 generated files will go into the source directory.  This is mainly intended
 for generating release or prerelease tarballs of the GCC sources, since it
-is not a requirement that the users of source releases to have flex, bison, or
-makeinfo.
+is not a requirement that the users of source releases to have flex, Bison,
+or makeinfo.
 
      <br><dt><code>--enable-version-specific-runtime-libs</code><dd>Specify
 that runtime libraries should be installed in the compiler specific
@@ -533,22 +543,38 @@ their runtime libraries should be built.  For a list of valid values for
      <pre class="smallexample">          grep language= */config-lang.in
      </pre>
      <p>Currently, you can use any of the following:
-<code>all</code>, <code>ada</code>, <code>c</code>, <code>c++</code>, <code>f95</code>, <code>java</code>,
-<code>objc</code>, <code>treelang</code>. 
+<code>all</code>, <code>ada</code>, <code>c</code>, <code>c++</code>, <code>fortran</code>, <code>java</code>,
+<code>objc</code>, <code>obj-c++</code>, <code>treelang</code>. 
 Building the Ada compiler has special requirements, see below. 
 If you do not pass this flag, or specify the option <code>all</code>, then all
 default languages available in the <samp><span class="file">gcc</span></samp> sub-tree will be configured. 
-Ada and treelang are not default languages; the rest are.  Re-defining
-<code>LANGUAGES</code> when calling `<samp><span class="samp">make bootstrap</span></samp>' <strong>does not</strong> work
-anymore, as those language sub-directories might not have been configured!
+Ada, Objective-C++, and treelang are not default languages; the rest are. 
+Re-defining <code>LANGUAGES</code> when calling `<samp><span class="samp">make bootstrap</span></samp>'
+<strong>does not</strong> work anymore, as those language sub-directories might
+not have been configured!
 
      <br><dt><code>--disable-libada</code><dd>Specify that the run-time libraries and tools used by GNAT should not
 be built.  This can be useful for debugging, or for compatibility with
 previous Ada build procedures, when it was required to explicitly
 do a `<samp><span class="samp">make -C gcc gnatlib_and_tools</span></samp>'.
 
+     <br><dt><code>--disable-libssp</code><dd>Specify that the run-time libraries for stack smashing protection
+should not be built.
+
      <br><dt><code>--with-dwarf2</code><dd>Specify that the compiler should
 use DWARF 2 debugging information as the default.
+
+     <br><dt><code>--enable-targets=all</code><dt><code>--enable-targets=</code><var>target_list</var><dd>Some GCC targets, e.g. powerpc64-linux, build bi-arch compilers. 
+These are compilers that are able to generate either 64-bit or 32-bit
+code.  Typically, the corresponding 32-bit target, e.g. 
+powerpc-linux for powerpc64-linux, only generates 32-bit code.  This
+option enables the 32-bit target to be a bi-arch compiler, which is
+useful when you want a bi-arch compiler that defaults to 32-bit, and
+you are building a bi-arch or multi-arch binutils in a combined tree. 
+Currently, this option only affects powerpc-linux.
+
+     <br><dt><code>--enable-secureplt</code><dd>This option enables <samp><span class="option">-msecure-plt</span></samp> by default for powerpc-linux. 
+See &ldquo;RS/6000 and PowerPC Options&rdquo; in the main manual
 
      <br><dt><code>--enable-win32-registry</code><dt><code>--enable-win32-registry=</code><var>key</var><dt><code>--disable-win32-registry</code><dd>The <samp><span class="option">--enable-win32-registry</span></samp> option enables Microsoft Windows-hosted GCC
 to look up installations paths in the registry using the following key:
@@ -574,29 +600,29 @@ development trunk.  However it defaults to off for release branches and
 final releases.  The specific files which get <samp><span class="option">-Werror</span></samp> are
 controlled by the Makefiles.
 
-     <br><dt><code>--enable-checking</code><dt><code>--enable-checking=</code><var>list</var><dd>When you specify this option, the compiler is built to perform checking
-of tree node types when referencing fields of that node, and some other
-internal consistency checks.  This does not change the generated code,
-but adds error checking within the compiler.  This will slow down the
-compiler and may only work properly if you are building the compiler
-with GCC.  This is on by default when building from CVS or snapshots,
-but off for releases.  More control over the checks may be had by
-specifying <var>list</var>; the categories of checks available are
-`<samp><span class="samp">release</span></samp>', `<samp><span class="samp">assert</span></samp>', `<samp><span class="samp">misc</span></samp>', `<samp><span class="samp">tree</span></samp>', `<samp><span class="samp">gc</span></samp>',
-`<samp><span class="samp">rtl</span></samp>', `<samp><span class="samp">rtlflag</span></samp>', `<samp><span class="samp">fold</span></samp>', `<samp><span class="samp">gcac</span></samp>' and
-`<samp><span class="samp">valgrind</span></samp>'.  The `<samp><span class="samp">release</span></samp>' category enables only those checks
-suitable for release builds, currently this is just `<samp><span class="samp">assert</span></samp>'.  The
-check `<samp><span class="samp">valgrind</span></samp>' requires the external <samp><span class="command">valgrind</span></samp>
-simulator, available from <a href="http://valgrind.org/">http://valgrind.org/</a>.  The checks
-`<samp><span class="samp">rtl</span></samp>', `<samp><span class="samp">gcac</span></samp>' and `<samp><span class="samp">valgrind</span></samp>' are very expensive.  The
-default when <var>list</var> is not specified is
-`<samp><span class="samp">assert,misc,tree,gc,rtlflag</span></samp>'.  That is also the default for
-development builds, when `<samp><span class="samp">--enable-checking</span></samp>' is not specified.  For
-release builds the default, when `<samp><span class="samp">--enable-checking</span></samp>' is not given,
-is `<samp><span class="samp">release</span></samp>'.  To disable all checking, `<samp><span class="samp">--disable-checking</span></samp>'
-must be explicitly requested.  Disabling assertions will make the
-compiler slightly faster but increase the risk of undetected internal
-errors causing wrong code to be generated.
+     <br><dt><code>--enable-checking</code><dt><code>--enable-checking=</code><var>list</var><dd>When you specify this option, the compiler is built to perform internal
+consistency checks of the requested complexity.  This does not change the
+generated code, but adds error checking within the compiler.  This will
+slow down the compiler and may only work properly if you are building
+the compiler with GCC.  This is `<samp><span class="samp">yes</span></samp>' by default when building
+from SVN or snapshots, but `<samp><span class="samp">release</span></samp>' for releases.  More control
+over the checks may be had by specifying <var>list</var>.  The categories of
+checks available are `<samp><span class="samp">yes</span></samp>' (most common checks
+`<samp><span class="samp">assert,misc,tree,gc,rtlflag,runtime</span></samp>'), `<samp><span class="samp">no</span></samp>' (no checks at
+all), `<samp><span class="samp">all</span></samp>' (all but `<samp><span class="samp">valgrind</span></samp>'), `<samp><span class="samp">release</span></samp>' (cheapest
+checks `<samp><span class="samp">assert,runtime</span></samp>') or `<samp><span class="samp">none</span></samp>' (same as `<samp><span class="samp">no</span></samp>'). 
+Individual checks can be enabled with these flags `<samp><span class="samp">assert</span></samp>',
+`<samp><span class="samp">fold</span></samp>', `<samp><span class="samp">gc</span></samp>', `<samp><span class="samp">gcac</span></samp>' `<samp><span class="samp">misc</span></samp>', `<samp><span class="samp">rtl</span></samp>',
+`<samp><span class="samp">rtlflag</span></samp>', `<samp><span class="samp">runtime</span></samp>', `<samp><span class="samp">tree</span></samp>', and `<samp><span class="samp">valgrind</span></samp>'.
+
+     <p>The `<samp><span class="samp">valgrind</span></samp>' check requires the external <samp><span class="command">valgrind</span></samp>
+simulator, available from <a href="http://valgrind.org/">http://valgrind.org/</a>.  The
+`<samp><span class="samp">rtl</span></samp>', `<samp><span class="samp">gcac</span></samp>' and `<samp><span class="samp">valgrind</span></samp>' checks are very expensive. 
+To disable all checking, `<samp><span class="samp">--disable-checking</span></samp>' or
+`<samp><span class="samp">--enable-checking=none</span></samp>' must be explicitly requested.  Disabling
+assertions will make the compiler and runtime slightly faster but
+increase the risk of undetected internal errors causing wrong code to be
+generated.
 
      <br><dt><code>--enable-coverage</code><dt><code>--enable-coverage=</code><var>level</var><dd>With this option, the compiler is built to collect self coverage
 information, every time it is run.  This is for internal development
@@ -657,6 +683,18 @@ in case <samp><span class="option">--with-sysroot</span></samp> is not given an 
 subdirectory of <samp><span class="option">${exec_prefix}</span></samp>, then it will be found relative to
 the GCC binaries if the installation tree is moved.
 
+     <br><dt><code>--with-build-sysroot</code><dt><code>--with-build-sysroot=</code><var>dir</var><dd>Tells GCC to consider <var>dir</var> as the system root (see
+<samp><span class="option">--with-sysroot</span></samp>) while building target libraries, instead of
+the directory specified with <samp><span class="option">--with-sysroot</span></samp>.  This option is
+only useful when you are already using <samp><span class="option">--with-sysroot</span></samp>.  You
+can use <samp><span class="option">--with-build-sysroot</span></samp> when you are configuring with
+<samp><span class="option">--prefix</span></samp> set to a directory that is different from the one in
+which you are installing GCC and your target libraries.
+
+     <p>This option affects the system root for the compiler used to build
+target libraries (which runs on the build system); it does not affect
+the compiler which is used to build GCC itself.
+
      <br><dt><code>--with-headers</code><dt><code>--with-headers=</code><var>dir</var><dd>Deprecated in favor of <samp><span class="option">--with-sysroot</span></samp>. 
 Specifies that target headers are available when building a cross compiler. 
 The <var>dir</var> argument specifies a directory which has the target include
@@ -669,9 +707,7 @@ will be run on these files to make them compatible with GCC.
 
      <br><dt><code>--without-headers</code><dd>Tells GCC not use any target headers from a libc when building a cross
 compiler.  When crossing to GNU/Linux, you need the headers so GCC
-can build the exception handling for libgcc. 
-See <a href="http://www.objsw.com/CrossGCC/">CrossGCC</a> for more information
-on this option.
+can build the exception handling for libgcc.
 
      <br><dt><code>--with-libs</code><dt><code>--with-libs=``</code><var>dir1</var> <var>dir2</var><code> ... </code><var>dirN</var><code>''</code><dd>Deprecated in favor of <samp><span class="option">--with-sysroot</span></samp>. 
 Specifies a list of directories which contain the target runtime

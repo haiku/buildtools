@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -110,8 +110,11 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
     }
   else
     {
-      gcc_assert (!STATEMENT_LIST_TAIL (i->container));
-      STATEMENT_LIST_HEAD (i->container) = head;
+      head->prev = STATEMENT_LIST_TAIL (i->container);
+      if (head->prev)
+       head->prev->next = head;
+      else
+       STATEMENT_LIST_HEAD (i->container) = head;
       STATEMENT_LIST_TAIL (i->container) = tail;
     }
 
@@ -127,7 +130,6 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
       i->ptr = tail;
       break;
     case TSI_SAME_STMT:
-      gcc_assert (cur);
       break;
     }
 }

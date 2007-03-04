@@ -1,5 +1,5 @@
 /* Generic dominator tree walker
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -145,6 +145,14 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
   void *bd = NULL;
   basic_block dest;
   block_stmt_iterator bsi;
+  bool is_interesting;
+
+  /* If block BB is not interesting to the caller, then none of the
+     callbacks that walk the statements in BB are going to be
+     executed.  */
+  is_interesting = bb->index < 0
+		   || walk_data->interesting_blocks == NULL
+		   || TEST_BIT (walk_data->interesting_blocks, bb->index);
 
   /* Callback to initialize the local data structure.  */
   if (walk_data->initialize_block_local_data)
@@ -153,10 +161,9 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
 
       /* First get some local data, reusing any local data pointer we may
 	 have saved.  */
-      if (VARRAY_ACTIVE_SIZE (walk_data->free_block_data) > 0)
+      if (VEC_length (void_p, walk_data->free_block_data) > 0)
 	{
-	  bd = VARRAY_TOP_GENERIC_PTR (walk_data->free_block_data);
-	  VARRAY_POP (walk_data->free_block_data);
+	  bd = VEC_pop (void_p, walk_data->free_block_data);
 	  recycled = 1;
 	}
       else
@@ -166,7 +173,7 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
 	}
 
       /* Push the local data into the local data stack.  */
-      VARRAY_PUSH_GENERIC_PTR (walk_data->block_data_stack, bd);
+      VEC_safe_push (void_p, heap, walk_data->block_data_stack, bd);
 
       /* Call the initializer.  */
       walk_data->initialize_block_local_data (walk_data, bb, recycled);
@@ -179,7 +186,7 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
     (*walk_data->before_dom_children_before_stmts) (walk_data, bb);
 
   /* Statement walk before walking dominator children.  */
-  if (walk_data->before_dom_children_walk_stmts)
+  if (is_interesting && walk_data->before_dom_children_walk_stmts)
     {
       if (walk_data->walk_stmts_backward)
 	for (bsi = bsi_last (bb); !bsi_end_p (bsi); bsi_prev (&bsi))
@@ -211,7 +218,7 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
     (*walk_data->after_dom_children_before_stmts) (walk_data, bb);
 
   /* Statement walk after walking dominator children.  */
-  if (walk_data->after_dom_children_walk_stmts)
+  if (is_interesting && walk_data->after_dom_children_walk_stmts)
     {
       if (walk_data->walk_stmts_backward)
 	for (bsi = bsi_last (bb); !bsi_end_p (bsi); bsi_prev (&bsi))
@@ -229,26 +236,18 @@ walk_dominator_tree (struct dom_walk_data *walk_data, basic_block bb)
   if (walk_data->initialize_block_local_data)
     {
       /* And save the block data so that we can re-use it.  */
-      VARRAY_PUSH_GENERIC_PTR (walk_data->free_block_data, bd);
+      VEC_safe_push (void_p, heap, walk_data->free_block_data, bd);
 
       /* And finally pop the record off the block local data stack.  */
-      VARRAY_POP (walk_data->block_data_stack);
+      VEC_pop (void_p, walk_data->block_data_stack);
     }
 }
 
 void
 init_walk_dominator_tree (struct dom_walk_data *walk_data)
 {
-  if (walk_data->initialize_block_local_data)
-    {
-      VARRAY_GENERIC_PTR_INIT (walk_data->free_block_data, 2, "freelist ");
-      VARRAY_GENERIC_PTR_INIT (walk_data->block_data_stack, 2, "block_data");
-    }
-  else
-    {
-      walk_data->free_block_data = NULL;
-      walk_data->block_data_stack = NULL;
-    }
+  walk_data->free_block_data = NULL;
+  walk_data->block_data_stack = NULL;
 }
 
 void
@@ -256,10 +255,10 @@ fini_walk_dominator_tree (struct dom_walk_data *walk_data)
 {
   if (walk_data->initialize_block_local_data)
     {
-      while (VARRAY_ACTIVE_SIZE (walk_data->free_block_data) > 0)
-	{
-	  free (VARRAY_TOP_GENERIC_PTR (walk_data->free_block_data));
-	  VARRAY_POP (walk_data->free_block_data);
-	}
+      while (VEC_length (void_p, walk_data->free_block_data) > 0)
+	free (VEC_pop (void_p, walk_data->free_block_data));
     }
+
+  VEC_free (void_p, heap, walk_data->free_block_data);
+  VEC_free (void_p, heap, walk_data->block_data_stack);
 }

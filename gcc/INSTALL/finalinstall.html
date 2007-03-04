@@ -45,7 +45,10 @@ Now that GCC has been built (and optionally tested), you can install it with
 <pre class="smallexample">     cd <var>objdir</var>; make install
 </pre>
    <p>We strongly recommend to install into a target directory where there is
-no previous version of GCC present.
+no previous version of GCC present.  Also, the GNAT runtime should not
+be stripped, as this would break certain features of the debugger that
+depend on this debugging information (catching Ada exceptions for
+instance).
 
    <p>That step completes the installation of GCC; user level binaries can
 be found in <samp><var>prefix</var><span class="file">/bin</span></samp> where <var>prefix</var> is the value

@@ -39,6 +39,9 @@
 #   atomic_word_dir        location of atomic_word.h
 #                          defaults to generic.
 #
+#   cpu_defines_dir        location of cpu_defines.h
+#                          defaults to generic.
+#
 # It possibly modifies the following variables:
 #
 #   OPT_LDFLAGS            extra flags to pass when linking the library, of
@@ -64,6 +67,7 @@
 c_model=c_std
 c_compatibility=no
 atomic_word_dir=cpu/generic
+cpu_defines_dir=cpu/generic
 
 # HOST-SPECIFIC OVERRIDES
 # Set any CPU-dependent bits.
@@ -115,11 +119,28 @@ esac
 # Set specific CPU overrides for atomic_word_dir. Most can just use generic.
 # THIS TABLE IS SORTED.  KEEP IT THAT WAY.
 case "${host_cpu}" in
+  alpha*)
+    atomic_word_dir=cpu/alpha
+    ;;
   cris*)
     atomic_word_dir=cpu/cris
     ;;
+  ia64)
+    atomic_word_dir=cpu/ia64
+    ;;
+  powerpc* | rs6000)
+    atomic_word_dir=cpu/powerpc
+    ;;
   sparc* | ultrasparc)
     atomic_word_dir=cpu/sparc
+    ;;
+esac
+
+# Set specific CPU overrides for cpu_defines_dir. Most can just use generic.
+# THIS TABLE IS SORTED.  KEEP IT THAT WAY.
+case "${host_cpu}" in
+  powerpc* | rs6000)
+    cpu_defines_dir=cpu/powerpc
     ;;
 esac
 
@@ -269,6 +290,9 @@ case "${host}" in
     atomicity_dir="cpu/mips"
     abi_baseline_pair="mips-linux-gnu"
     cpu_include_dir="cpu/mips"
+    ;;
+  powerpc*-*-darwin*)
+    port_specific_symbol_files="\$(srcdir)/../config/os/bsd/darwin/ppc-extra.ver"
     ;;
   powerpc64-*-linux*)
     abi_baseline_pair="powerpc64-linux-gnu"

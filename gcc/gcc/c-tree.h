@@ -16,26 +16,20 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_C_TREE_H
 #define GCC_C_TREE_H
 
 #include "c-common.h"
+#include "toplev.h"
 #include "diagnostic.h"
 
 /* struct lang_identifier is private to c-decl.c, but langhooks.c needs to
    know how big it is.  This is sanity-checked in c-decl.c.  */
 #define C_SIZEOF_STRUCT_LANG_IDENTIFIER \
   (sizeof (struct c_common_identifier) + 3 * sizeof (void *))
-
-/* For gc purposes, return the most likely link for the longest chain.  */
-#define C_LANG_TREE_NODE_CHAIN_NEXT(T)				\
-  ((union lang_tree_node *)					\
-   (TREE_CODE (T) == INTEGER_TYPE ? TYPE_NEXT_VARIANT (T)	\
-    : TREE_CODE (T) == COMPOUND_EXPR ? TREE_OPERAND (T, 1)	\
-    : TREE_CHAIN (T)))
 
 /* Language-specific declaration information.  */
 
@@ -234,6 +228,10 @@ struct c_declspecs {
   enum c_typespec_keyword typespec_word;
   /* The storage class specifier, or csc_none if none.  */
   enum c_storage_class storage_class;
+  /* Whether any declaration specifiers have been seen at all.  */
+  BOOL_BITFIELD declspecs_seen_p : 1;
+  /* Whether a type specifier has been seen.  */
+  BOOL_BITFIELD type_seen_p : 1;
   /* Whether something other than a storage class specifier or
      attribute has been seen.  This is used to warn for the
      obsolescent usage of storage class specifiers other than at the
@@ -312,6 +310,7 @@ struct c_declarator {
   enum c_declarator_kind kind;
   /* Except for cdk_id, the contained declarator.  For cdk_id, NULL.  */
   struct c_declarator *declarator;
+  location_t id_loc; /* Currently only set for cdk_id. */
   union {
     /* For identifiers, an IDENTIFIER_NODE or NULL_TREE if an abstract
        declarator.  */
@@ -414,7 +413,7 @@ struct c_label_context_vm
 };
 
 
-/* in c-parse.in */
+/* in c-parser.c */
 extern void c_parse_init (void);
 
 /* in c-aux-info.c */
@@ -442,7 +441,7 @@ extern tree build_enumerator (tree, tree);
 extern void check_for_loop_decls (void);
 extern void mark_forward_parm_decls (void);
 extern void declare_parm_level (void);
-extern void undeclared_variable (tree);
+extern void undeclared_variable (tree, location_t);
 extern tree declare_label (tree);
 extern tree define_label (location_t, tree);
 extern void finish_decl (tree, tree, tree);
@@ -524,14 +523,17 @@ extern int comptypes (tree, tree);
 extern bool c_mark_addressable (tree);
 extern void c_incomplete_type_error (tree, tree);
 extern tree c_type_promotes_to (tree);
+extern tree default_conversion (tree);
+extern struct c_expr default_function_array_conversion (struct c_expr);
 extern tree composite_type (tree, tree);
 extern tree build_component_ref (tree, tree);
 extern tree build_indirect_ref (tree, const char *);
 extern tree build_array_ref (tree, tree);
-extern tree build_external_ref (tree, int);
+extern tree build_external_ref (tree, int, location_t);
 extern void pop_maybe_used (bool);
 extern struct c_expr c_expr_sizeof_expr (struct c_expr);
 extern struct c_expr c_expr_sizeof_type (struct c_type_name *);
+extern struct c_expr parser_build_unary_op (enum tree_code, struct c_expr);
 extern struct c_expr parser_build_binary_op (enum tree_code, struct c_expr,
 					     struct c_expr);
 extern tree build_conditional_expr (tree, tree, tree);
@@ -608,8 +610,7 @@ extern void c_write_global_declarations (void);
 /* In order for the format checking to accept the C frontend
    diagnostic framework extensions, you must include this file before
    toplev.h, not after.  */
-#define GCC_DIAG_STYLE __gcc_cdiag__
-#if GCC_VERSION >= 3005
+#if GCC_VERSION >= 4001
 #define ATTRIBUTE_GCC_CDIAG(m, n) __attribute__ ((__format__ (GCC_DIAG_STYLE, m ,n))) ATTRIBUTE_NONNULL(m)
 #else
 #define ATTRIBUTE_GCC_CDIAG(m, n) ATTRIBUTE_NONNULL(m)

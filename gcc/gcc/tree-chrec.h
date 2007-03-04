@@ -1,5 +1,5 @@
 /* Chains of recurrences.
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <s.pop@laposte.net>
 
 This file is part of GCC.
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_TREE_CHREC_H
 #define GCC_TREE_CHREC_H
@@ -67,8 +67,8 @@ tree_is_chrec (tree expr)
 extern tree chrec_fold_plus (tree, tree, tree);
 extern tree chrec_fold_minus (tree, tree, tree);
 extern tree chrec_fold_multiply (tree, tree, tree);
-extern tree chrec_convert (tree, tree);
-extern tree count_ev_in_wider_type (tree, tree);
+extern tree chrec_convert (tree, tree, tree);
+extern tree chrec_convert_aggressive (tree, tree);
 extern tree chrec_type (tree);
 
 /* Operations.  */
@@ -146,6 +146,7 @@ evolution_function_is_constant_p (tree chrec)
     }
 }
 
+extern bool evolution_function_is_invariant_p (tree, int);
 /* Determine whether the given tree is an affine evolution function or not.  */
 
 static inline bool 
@@ -157,8 +158,10 @@ evolution_function_is_affine_p (tree chrec)
   switch (TREE_CODE (chrec))
     {
     case POLYNOMIAL_CHREC:
-      if (evolution_function_is_constant_p (CHREC_LEFT (chrec))
-	  && evolution_function_is_constant_p (CHREC_RIGHT (chrec)))
+      if (evolution_function_is_invariant_p (CHREC_LEFT (chrec), 
+					     CHREC_VARIABLE (chrec))
+	  && evolution_function_is_invariant_p (CHREC_RIGHT (chrec),
+						CHREC_VARIABLE (chrec)))
 	return true;
       else
 	return false;

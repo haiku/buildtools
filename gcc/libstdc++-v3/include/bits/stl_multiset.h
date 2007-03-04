@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -73,13 +73,13 @@ namespace _GLIBCXX_STD
 
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator==(const multiset<_Key,_Compare,_Alloc>& __x,
-	       const multiset<_Key,_Compare,_Alloc>& __y);
+    operator==(const multiset<_Key, _Compare, _Alloc>& __x,
+	       const multiset<_Key, _Compare, _Alloc>& __y);
 
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator<(const multiset<_Key,_Compare,_Alloc>& __x,
-	      const multiset<_Key,_Compare,_Alloc>& __y);
+    operator<(const multiset<_Key, _Compare, _Alloc>& __x,
+	      const multiset<_Key, _Compare, _Alloc>& __y);
 
   /**
    *  @brief A standard container made up of elements, which can be retrieved
@@ -105,9 +105,11 @@ namespace _GLIBCXX_STD
     class multiset
     {
       // concept requirements
+      typedef typename _Alloc::value_type                   _Alloc_value_type;
       __glibcxx_class_requires(_Key, _SGIAssignableConcept)
       __glibcxx_class_requires4(_Compare, bool, _Key, _Key,
 				_BinaryFunctionConcept)
+      __glibcxx_class_requires2(_Key, _Alloc_value_type, _SameTypeConcept)	
 
     public:
       // typedefs:
@@ -115,35 +117,37 @@ namespace _GLIBCXX_STD
       typedef _Key     value_type;
       typedef _Compare key_compare;
       typedef _Compare value_compare;
+      typedef _Alloc   allocator_type;
 
     private:
       /// @if maint  This turns a red-black tree into a [multi]set.  @endif
-      typedef _Rb_tree<key_type, value_type,
-		       _Identity<value_type>, key_compare, _Alloc> _Rep_type;
+      typedef typename _Alloc::template rebind<_Key>::other _Key_alloc_type;
+
+      typedef _Rb_tree<key_type, value_type, _Identity<value_type>,
+		       key_compare, _Key_alloc_type> _Rep_type;
       /// @if maint  The actual tree structure.  @endif
       _Rep_type _M_t;
 
     public:
-      typedef typename _Alloc::pointer pointer;
-      typedef typename _Alloc::const_pointer const_pointer;
-      typedef typename _Alloc::reference reference;
-      typedef typename _Alloc::const_reference const_reference;
+      typedef typename _Key_alloc_type::pointer             pointer;
+      typedef typename _Key_alloc_type::const_pointer       const_pointer;
+      typedef typename _Key_alloc_type::reference           reference;
+      typedef typename _Key_alloc_type::const_reference     const_reference;
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // DR 103. set::iterator is required to be modifiable,
       // but this allows modification of keys.
-      typedef typename _Rep_type::const_iterator iterator;
-      typedef typename _Rep_type::const_iterator const_iterator;
-      typedef typename _Rep_type::const_reverse_iterator reverse_iterator;
-      typedef typename _Rep_type::const_reverse_iterator const_reverse_iterator;
-      typedef typename _Rep_type::size_type size_type;
-      typedef typename _Rep_type::difference_type difference_type;
-      typedef typename _Rep_type::allocator_type allocator_type;
+      typedef typename _Rep_type::const_iterator            iterator;
+      typedef typename _Rep_type::const_iterator            const_iterator;
+      typedef typename _Rep_type::const_reverse_iterator    reverse_iterator;
+      typedef typename _Rep_type::const_reverse_iterator    const_reverse_iterator;
+      typedef typename _Rep_type::size_type                 size_type;
+      typedef typename _Rep_type::difference_type           difference_type;
 
-    // allocation/deallocation
+      // allocation/deallocation
 
-    /**
-     *  @brief  Default constructor creates no elements.
-     */
+      /**
+       *  @brief  Default constructor creates no elements.
+       */
       multiset()
       : _M_t(_Compare(), allocator_type()) { }
 
@@ -286,7 +290,7 @@ namespace _GLIBCXX_STD
        *  std::swap(s1,s2) will feed to this function.
        */
       void
-      swap(multiset<_Key,_Compare,_Alloc>& __x)
+      swap(multiset<_Key, _Compare, _Alloc>& __x)
       { _M_t.swap(__x._M_t); }
 
       // insert/erase
@@ -327,10 +331,7 @@ namespace _GLIBCXX_STD
        */
       iterator
       insert(iterator __position, const value_type& __x)
-      {
-	typedef typename _Rep_type::iterator _Rep_iterator;
-	return _M_t.insert_equal((_Rep_iterator&)__position, __x);
-      }
+      { return _M_t.insert_equal(__position, __x); }
 
       /**
        *  @brief A template function that attemps to insert a range of elements.
@@ -357,10 +358,7 @@ namespace _GLIBCXX_STD
        */
       void
       erase(iterator __position)
-      {
-	typedef typename _Rep_type::iterator _Rep_iterator;
-	_M_t.erase((_Rep_iterator&)__position);
-      }
+      { _M_t.erase(__position); }
 
       /**
        *  @brief Erases elements according to the provided key.
@@ -390,10 +388,7 @@ namespace _GLIBCXX_STD
        */
       void
       erase(iterator __first, iterator __last)
-      {
-	typedef typename _Rep_type::iterator _Rep_iterator;
-	_M_t.erase((_Rep_iterator&)__first, (_Rep_iterator&)__last);
-      }
+      { _M_t.erase(__first, __last); }
 
       /**
        *  Erases all elements in a %multiset.  Note that this function only
@@ -492,23 +487,23 @@ namespace _GLIBCXX_STD
        *
        *  This function probably only makes sense for multisets.
        */
-      std::pair<iterator,iterator>
+      std::pair<iterator, iterator>
       equal_range(const key_type& __x)
       { return _M_t.equal_range(__x); }
 
-      std::pair<const_iterator,const_iterator>
+      std::pair<const_iterator, const_iterator>
       equal_range(const key_type& __x) const
       { return _M_t.equal_range(__x); }
 
       template <class _K1, class _C1, class _A1>
         friend bool
-        operator== (const multiset<_K1,_C1,_A1>&,
-		    const multiset<_K1,_C1,_A1>&);
+        operator== (const multiset<_K1, _C1, _A1>&,
+		    const multiset<_K1, _C1, _A1>&);
 
       template <class _K1, class _C1, class _A1>
         friend bool
-        operator< (const multiset<_K1,_C1,_A1>&,
-		   const multiset<_K1,_C1,_A1>&);
+        operator< (const multiset<_K1, _C1, _A1>&,
+		   const multiset<_K1, _C1, _A1>&);
     };
 
   /**
@@ -524,8 +519,8 @@ namespace _GLIBCXX_STD
   */
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator==(const multiset<_Key,_Compare,_Alloc>& __x,
-	       const multiset<_Key,_Compare,_Alloc>& __y)
+    operator==(const multiset<_Key, _Compare, _Alloc>& __x,
+	       const multiset<_Key, _Compare, _Alloc>& __y)
     { return __x._M_t == __y._M_t; }
 
   /**
@@ -541,15 +536,15 @@ namespace _GLIBCXX_STD
   */
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator<(const multiset<_Key,_Compare,_Alloc>& __x,
-	      const multiset<_Key,_Compare,_Alloc>& __y)
+    operator<(const multiset<_Key, _Compare, _Alloc>& __x,
+	      const multiset<_Key, _Compare, _Alloc>& __y)
     { return __x._M_t < __y._M_t; }
 
   ///  Returns !(x == y).
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator!=(const multiset<_Key,_Compare,_Alloc>& __x,
-	       const multiset<_Key,_Compare,_Alloc>& __y)
+    operator!=(const multiset<_Key, _Compare, _Alloc>& __x,
+	       const multiset<_Key, _Compare, _Alloc>& __y)
     { return !(__x == __y); }
 
   ///  Returns y < x.
@@ -562,22 +557,22 @@ namespace _GLIBCXX_STD
   ///  Returns !(y < x)
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator<=(const multiset<_Key,_Compare,_Alloc>& __x,
-	       const multiset<_Key,_Compare,_Alloc>& __y)
+    operator<=(const multiset<_Key, _Compare, _Alloc>& __x,
+	       const multiset<_Key, _Compare, _Alloc>& __y)
     { return !(__y < __x); }
 
   ///  Returns !(x < y)
   template <class _Key, class _Compare, class _Alloc>
     inline bool
-    operator>=(const multiset<_Key,_Compare,_Alloc>& __x,
-	       const multiset<_Key,_Compare,_Alloc>& __y)
+    operator>=(const multiset<_Key, _Compare, _Alloc>& __x,
+	       const multiset<_Key, _Compare, _Alloc>& __y)
     { return !(__x < __y); }
 
   /// See std::multiset::swap().
   template <class _Key, class _Compare, class _Alloc>
     inline void
-    swap(multiset<_Key,_Compare,_Alloc>& __x,
-	 multiset<_Key,_Compare,_Alloc>& __y)
+    swap(multiset<_Key, _Compare, _Alloc>& __x,
+	 multiset<_Key, _Compare, _Alloc>& __y)
     { __x.swap(__y); }
 
 } // namespace std

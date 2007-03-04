@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* This file contains subroutines used only from the file reload1.c.
    It knows how to scan one insn for operands and values
@@ -671,7 +671,7 @@ clear_secondary_mem (void)
 /* Find the largest class which has at least one register valid in
    mode INNER, and which for every such register, that register number
    plus N is also valid in OUTER (if in range) and is cheap to move
-   into REGNO.  Abort if no such class exists.  */
+   into REGNO.  Such a class must exist.  */
 
 static enum reg_class
 find_valid_class (enum machine_mode outer ATTRIBUTE_UNUSED,
@@ -1329,7 +1329,9 @@ push_reload (rtx in, rtx out, rtx *inloc, rtx *outloc,
 
 #ifdef SECONDARY_MEMORY_NEEDED
       /* If a memory location is needed for the copy, make one.  */
-      if (in != 0 && (REG_P (in) || GET_CODE (in) == SUBREG)
+      if (in != 0
+	  && (REG_P (in)
+	      || (GET_CODE (in) == SUBREG && REG_P (SUBREG_REG (in))))
 	  && reg_or_subregno (in) < FIRST_PSEUDO_REGISTER
 	  && SECONDARY_MEMORY_NEEDED (REGNO_REG_CLASS (reg_or_subregno (in)),
 				      class, inmode))
@@ -1359,7 +1361,9 @@ push_reload (rtx in, rtx out, rtx *inloc, rtx *outloc,
       n_reloads++;
 
 #ifdef SECONDARY_MEMORY_NEEDED
-      if (out != 0 && (REG_P (out) || GET_CODE (out) == SUBREG)
+      if (out != 0
+          && (REG_P (out)
+	      || (GET_CODE (out) == SUBREG && REG_P (SUBREG_REG (out))))
 	  && reg_or_subregno (out) < FIRST_PSEUDO_REGISTER
 	  && SECONDARY_MEMORY_NEEDED (class,
 				      REGNO_REG_CLASS (reg_or_subregno (out)),
@@ -1537,7 +1541,7 @@ push_reload (rtx in, rtx out, rtx *inloc, rtx *outloc,
 	    /* Check that we don't use a hardreg for an uninitialized
 	       pseudo.  See also find_dummy_reload().  */
 	    && (ORIGINAL_REGNO (XEXP (note, 0)) < FIRST_PSEUDO_REGISTER
-		|| ! bitmap_bit_p (ENTRY_BLOCK_PTR->global_live_at_end,
+		|| ! bitmap_bit_p (ENTRY_BLOCK_PTR->il.rtl->global_live_at_end,
 				   ORIGINAL_REGNO (XEXP (note, 0))))
 	    && ! refers_to_regno_for_reload_p (regno,
 					       (regno
@@ -2011,7 +2015,7 @@ find_dummy_reload (rtx real_in, rtx real_out, rtx *inloc, rtx *outloc,
 	   as they would clobber the other live pseudo using the same.
 	   See also PR20973.  */
       && (ORIGINAL_REGNO (in) < FIRST_PSEUDO_REGISTER
-          || ! bitmap_bit_p (ENTRY_BLOCK_PTR->global_live_at_end,
+          || ! bitmap_bit_p (ENTRY_BLOCK_PTR->il.rtl->global_live_at_end,
 			     ORIGINAL_REGNO (in))))
     {
       unsigned int regno = REGNO (in) + in_offset;
@@ -2208,19 +2212,29 @@ operands_match_p (rtx x, rtx y)
 
  slow:
 
-  /* Now we have disposed of all the cases
-     in which different rtx codes can match.  */
+  /* Now we have disposed of all the cases in which different rtx codes
+     can match.  */
   if (code != GET_CODE (y))
     return 0;
-  if (code == LABEL_REF)
-    return XEXP (x, 0) == XEXP (y, 0);
-  if (code == SYMBOL_REF)
-    return XSTR (x, 0) == XSTR (y, 0);
 
   /* (MULT:SI x y) and (MULT:HI x y) are NOT equivalent.  */
-
   if (GET_MODE (x) != GET_MODE (y))
     return 0;
+
+  switch (code)
+    {
+    case CONST_INT:
+    case CONST_DOUBLE:
+      return 0;
+
+    case LABEL_REF:
+      return XEXP (x, 0) == XEXP (y, 0);
+    case SYMBOL_REF:
+      return XSTR (x, 0) == XSTR (y, 0);
+
+    default:
+      break;
+    }
 
   /* Compare the elements.  If any pair of corresponding elements
      fail to match, return 0 for the whole things.  */
@@ -2389,7 +2403,7 @@ decompose (rtx x)
     case REG:
       val.reg_flag = 1;
       val.start = true_regnum (x);
-      if (val.start < 0)
+      if (val.start < 0 || val.start >= FIRST_PSEUDO_REGISTER)
 	{
 	  /* A pseudo with no hard reg.  */
 	  val.start = REGNO (x);
@@ -2406,7 +2420,7 @@ decompose (rtx x)
 	return decompose (SUBREG_REG (x));
       val.reg_flag = 1;
       val.start = true_regnum (x);
-      if (val.start < 0)
+      if (val.start < 0 || val.start >= FIRST_PSEUDO_REGISTER)
 	return decompose (SUBREG_REG (x));
       else
 	/* A hard reg.  */
@@ -2927,11 +2941,15 @@ find_reloads (rtx insn, int replace, int ind_levels, int live_known,
 	  int constmemok = 0;
 	  int earlyclobber = 0;
 
+#ifndef KEEP_UNARY_OPERATORS_AT_CONSTRAINT_CHECKING
+	  /* See comment at similar #ifndef in recog.c.  */
+
 	  /* If the predicate accepts a unary operator, it means that
 	     we need to reload the operand, but do not do this for
 	     match_operator and friends.  */
 	  if (UNARY_P (operand) && *p != 0)
 	    operand = XEXP (operand, 0);
+#endif
 
 	  /* If the operand is a SUBREG, extract
 	     the REG or MEM (or maybe even a constant) within.
@@ -4559,26 +4577,28 @@ find_reloads_toplev (rtx x, int opnum, enum reload_type type,
 
   if (code == SUBREG && REG_P (SUBREG_REG (x)))
     {
-      /* Check for SUBREG containing a REG that's equivalent to a constant.
-	 If the constant has a known value, truncate it right now.
-	 Similarly if we are extracting a single-word of a multi-word
-	 constant.  If the constant is symbolic, allow it to be substituted
-	 normally.  push_reload will strip the subreg later.  If the
-	 constant is VOIDmode, abort because we will lose the mode of
-	 the register (this should never happen because one of the cases
-	 above should handle it).  */
+      /* Check for SUBREG containing a REG that's equivalent to a
+	 constant.  If the constant has a known value, truncate it
+	 right now.  Similarly if we are extracting a single-word of a
+	 multi-word constant.  If the constant is symbolic, allow it
+	 to be substituted normally.  push_reload will strip the
+	 subreg later.  The constant must not be VOIDmode, because we
+	 will lose the mode of the register (this should never happen
+	 because one of the cases above should handle it).  */
 
       int regno = REGNO (SUBREG_REG (x));
       rtx tem;
 
       if (subreg_lowpart_p (x)
-	  && regno >= FIRST_PSEUDO_REGISTER && reg_renumber[regno] < 0
+	  && regno >= FIRST_PSEUDO_REGISTER
+	  && reg_renumber[regno] < 0
 	  && reg_equiv_constant[regno] != 0
 	  && (tem = gen_lowpart_common (GET_MODE (x),
 					reg_equiv_constant[regno])) != 0)
 	return tem;
 
-      if (regno >= FIRST_PSEUDO_REGISTER && reg_renumber[regno] < 0
+      if (regno >= FIRST_PSEUDO_REGISTER
+	  && reg_renumber[regno] < 0
 	  && reg_equiv_constant[regno] != 0)
 	{
 	  tem =
@@ -4601,7 +4621,7 @@ find_reloads_toplev (rtx x, int opnum, enum reload_type type,
 	 a wider mode if we have a paradoxical SUBREG.  find_reloads will
 	 force a reload in that case.  So we should not do anything here.  */
 
-      else if (regno >= FIRST_PSEUDO_REGISTER
+      if (regno >= FIRST_PSEUDO_REGISTER
 #ifdef LOAD_EXTEND_OP
 	       && (GET_MODE_SIZE (GET_MODE (x))
 		   <= GET_MODE_SIZE (GET_MODE (SUBREG_REG (x))))
@@ -5301,7 +5321,9 @@ update_auto_inc_notes (rtx insn ATTRIBUTE_UNUSED, int regno ATTRIBUTE_UNUSED,
    occurs as part of an address.
    Also, this is not fully machine-customizable; it works for machines
    such as VAXen and 68000's and 32000's, but other possible machines
-   could have addressing modes that this does not handle right.  */
+   could have addressing modes that this does not handle right.
+   If you add push_reload calls here, you need to make sure gen_reload
+   handles those cases gracefully.  */
 
 static int
 find_reloads_address_1 (enum machine_mode mode, rtx x, int context,
@@ -5685,6 +5707,24 @@ find_reloads_address_1 (enum machine_mode mode, rtx x, int context,
 	}
       return 0;
 
+    case TRUNCATE:
+    case SIGN_EXTEND:
+    case ZERO_EXTEND:
+      /* Look for parts to reload in the inner expression and reload them
+	 too, in addition to this operation.  Reloading all inner parts in
+	 addition to this one shouldn't be necessary, but at this point,
+	 we don't know if we can possibly omit any part that *can* be
+	 reloaded.  Targets that are better off reloading just either part
+	 (or perhaps even a different part of an outer expression), should
+	 define LEGITIMIZE_RELOAD_ADDRESS.  */
+      find_reloads_address_1 (GET_MODE (XEXP (x, 0)), XEXP (x, 0),
+			      context, &XEXP (x, 0), opnum,
+			      type, ind_levels, insn);
+      push_reload (x, NULL_RTX, loc, (rtx*) 0,
+		   context_reg_class,
+		   GET_MODE (x), VOIDmode, 0, 0, opnum, type);
+      return 1;
+
     case MEM:
       /* This is probably the result of a substitution, by eliminate_regs, of
 	 an equivalent address for a pseudo that was not allocated to a hard
@@ -5794,7 +5834,8 @@ find_reloads_address_1 (enum machine_mode mode, rtx x, int context,
 	      if ((unsigned) CLASS_MAX_NREGS (class, GET_MODE (SUBREG_REG (x)))
 		  > reg_class_size[class])
 		{
-		  x = find_reloads_subreg_address (x, 0, opnum, type,
+		  x = find_reloads_subreg_address (x, 0, opnum, 
+						   ADDR_TYPE (type),
 						   ind_levels, insn);
 		  push_reload (x, NULL_RTX, loc, (rtx*) 0, class,
 			       GET_MODE (x), VOIDmode, 0, 0, opnum, type);
@@ -5935,7 +5976,7 @@ find_reloads_subreg_address (rtx x, int force_replace, int opnum,
 	      /* If this was a paradoxical subreg that we replaced, the
 		 resulting memory must be sufficiently aligned to allow
 		 us to widen the mode of the memory.  */
-	      if (outer_size > inner_size && STRICT_ALIGNMENT)
+	      if (outer_size > inner_size)
 		{
 		  rtx base;
 
@@ -5954,7 +5995,7 @@ find_reloads_subreg_address (rtx x, int force_replace, int opnum,
 		}
 
 	      find_reloads_address (GET_MODE (tem), &tem, XEXP (tem, 0),
-				    &XEXP (tem, 0), opnum, ADDR_TYPE (type),
+				    &XEXP (tem, 0), opnum, type,
 				    ind_levels, insn);
 
 	      /* If this is not a toplevel operand, find_reloads doesn't see
@@ -6022,9 +6063,12 @@ subst_reloads (rtx insn)
 	     register refers to.  */
 	  if (GET_CODE (*r->where) == LABEL_REF
 	      && JUMP_P (insn))
-	    REG_NOTES (insn) = gen_rtx_INSN_LIST (REG_LABEL,
-						  XEXP (*r->where, 0),
-						  REG_NOTES (insn));
+	    {
+	      REG_NOTES (insn) = gen_rtx_INSN_LIST (REG_LABEL,
+						    XEXP (*r->where, 0),
+						    REG_NOTES (insn));
+	      JUMP_LABEL (insn) = XEXP (*r->where, 0);
+	   }
 
 	  /* Encapsulate RELOADREG so its machine mode matches what
 	     used to be there.  Note that gen_lowpart_common will
@@ -6244,7 +6288,8 @@ refers_to_regno_for_reload_p (unsigned int regno, unsigned int endregno,
 						 reg_equiv_memory_loc[r],
 						 (rtx*) 0);
 
-	  gcc_assert (reg_equiv_constant[r]);
+	  gcc_assert (reg_equiv_constant[r]
+		      || (reg_equiv_invariant[r] && reg_equiv_init[r]));
 	  return 0;
 	}
 
@@ -6536,7 +6581,7 @@ find_equiv_reg (rtx goal, rtx insn, enum reg_class class, int other,
 		 different from what they were when calculating the need for
 		 spills.  If we notice an input-reload insn here, we will
 		 reject it below, but it might hide a usable equivalent.
-		 That makes bad code.  It may even abort: perhaps no reg was
+		 That makes bad code.  It may even fail: perhaps no reg was
 		 spilled for this insn because it was assumed we would find
 		 that equivalent.  */
 	      || INSN_UID (p) < reload_first_uid))
@@ -6961,9 +7006,39 @@ find_inc_amount (rtx x, rtx inced)
   return 0;
 }
 
+/* Return 1 if registers from REGNO to ENDREGNO are the subjects of a
+   REG_INC note in insn INSN.  REGNO must refer to a hard register.  */
+
+#ifdef AUTO_INC_DEC
+static int 
+reg_inc_found_and_valid_p (unsigned int regno, unsigned int endregno,
+			   rtx insn)
+{
+  rtx link;
+
+  gcc_assert (insn);
+
+  if (! INSN_P (insn))
+    return 0;
+    
+  for (link = REG_NOTES (insn); link; link = XEXP (link, 1))
+    if (REG_NOTE_KIND (link) == REG_INC)
+      {
+	unsigned int test = (int) REGNO (XEXP (link, 0));
+	if (test >= regno && test < endregno)
+	  return 1; 
+      }
+  return 0;
+}
+#else
+
+#define reg_inc_found_and_valid_p(regno,endregno,insn) 0
+
+#endif 
+
 /* Return 1 if register REGNO is the subject of a clobber in insn INSN.
-   If SETS is nonzero, also consider SETs.  REGNO must refer to a hard
-   register.  */
+   If SETS is 1, also consider SETs.  If SETS is 2, enable checking
+   REG_INC.  REGNO must refer to a hard register.  */
 
 int
 regno_clobbered_p (unsigned int regno, rtx insn, enum machine_mode mode,
@@ -6978,7 +7053,7 @@ regno_clobbered_p (unsigned int regno, rtx insn, enum machine_mode mode,
   endregno = regno + nregs;
 
   if ((GET_CODE (PATTERN (insn)) == CLOBBER
-       || (sets && GET_CODE (PATTERN (insn)) == SET))
+       || (sets == 1 && GET_CODE (PATTERN (insn)) == SET))
       && REG_P (XEXP (PATTERN (insn), 0)))
     {
       unsigned int test = REGNO (XEXP (PATTERN (insn), 0));
@@ -6986,6 +7061,9 @@ regno_clobbered_p (unsigned int regno, rtx insn, enum machine_mode mode,
       return test >= regno && test < endregno;
     }
 
+  if (sets == 2 && reg_inc_found_and_valid_p (regno, endregno, insn))
+    return 1; 
+  
   if (GET_CODE (PATTERN (insn)) == PARALLEL)
     {
       int i = XVECLEN (PATTERN (insn), 0) - 1;
@@ -6994,7 +7072,7 @@ regno_clobbered_p (unsigned int regno, rtx insn, enum machine_mode mode,
 	{
 	  rtx elt = XVECEXP (PATTERN (insn), 0, i);
 	  if ((GET_CODE (elt) == CLOBBER
-	       || (sets && GET_CODE (PATTERN (insn)) == SET))
+	       || (sets == 1 && GET_CODE (PATTERN (insn)) == SET))
 	      && REG_P (XEXP (elt, 0)))
 	    {
 	      unsigned int test = REGNO (XEXP (elt, 0));
@@ -7002,6 +7080,9 @@ regno_clobbered_p (unsigned int regno, rtx insn, enum machine_mode mode,
 	      if (test >= regno && test < endregno)
 		return 1;
 	    }
+	  if (sets == 2
+	      && reg_inc_found_and_valid_p (regno, endregno, elt))
+	    return 1; 
 	}
     }
 

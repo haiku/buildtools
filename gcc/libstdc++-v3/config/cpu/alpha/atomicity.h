@@ -1,6 +1,7 @@
 // Low-level functions for atomic operations: Alpha version  -*- C++ -*-
 
-// Copyright (C) 1999, 2000, 2001, 2003, 2004 Free Software Foundation, Inc.
+// Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -29,47 +30,16 @@
 
 #include <bits/atomicity.h>
 
-/* @@@ With gas we can play nice .subsection games to get the
-   non-predicted branch pointing forward.  But Digital assemblers
-   don't understand those directives.  This isn't a terribly
-   important issue, so just ignore it.  */
-
 namespace __gnu_cxx
 {
   _Atomic_word
   __attribute__ ((__unused__))
   __exchange_and_add(volatile _Atomic_word* __mem, int __val)
-  {
-    register int __result, __tmp;
-    
-    __asm__ __volatile__ (
-      "\n$Lxadd_%=:\n\t"
-      "ldl_l  %0,%3\n\t"
-      "addl   %0,%4,%1\n\t"
-      "stl_c  %1,%2\n\t"
-      "beq    %1,$Lxadd_%=\n\t"
-      "mb"
-      : "=&r"(__result), "=&r"(__tmp), "=m"(*__mem)
-      : "m" (*__mem), "r"(__val));
-
-    return __result;
-  }
+  { return __sync_fetch_and_add(__mem, __val); }
 
   void
   __attribute__ ((__unused__))
   __atomic_add(volatile _Atomic_word* __mem, int __val)
-  {
-    register _Atomic_word __result;
-
-    __asm__ __volatile__ (
-      "\n$Ladd_%=:\n\t"
-      "ldl_l  %0,%2\n\t"
-      "addl   %0,%3,%0\n\t"
-      "stl_c  %0,%1\n\t"
-      "beq    %0,$Ladd_%=\n\t"
-      "mb"
-      : "=&r"(__result), "=m"(*__mem)
-      : "m" (*__mem), "r"(__val));
-  }
+  { __sync_fetch_and_add(__mem, __val); }
 } // namespace __gnu_cxx
 

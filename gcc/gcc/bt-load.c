@@ -15,8 +15,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -34,6 +34,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "function.h"
 #include "except.h"
 #include "tm_p.h"
+#include "toplev.h"
+#include "tree-pass.h"
 
 /* Target register optimizations - these are performed after reload.  */
 
@@ -476,7 +478,7 @@ compute_defs_uses_and_gen (fibheap_t all_btr_defs, btr_def *def_array,
       CLEAR_HARD_REG_SET (info.btrs_written_in_block);
       for (reg = first_btr; reg <= last_btr; reg++)
 	if (TEST_HARD_REG_BIT (all_btrs, reg)
-	    && REGNO_REG_SET_P (bb->global_live_at_start, reg))
+	    && REGNO_REG_SET_P (bb->il.rtl->global_live_at_start, reg))
 	  SET_HARD_REG_BIT (info.btrs_live_in_block, reg);
 
       for (insn = BB_HEAD (bb), last = NEXT_INSN (BB_END (bb));
@@ -505,6 +507,22 @@ compute_defs_uses_and_gen (fibheap_t all_btr_defs, btr_def *def_array,
 		  defs_this_bb = def;
 		  SET_BIT (btr_defset[regno - first_btr], insn_uid);
 		  note_other_use_this_block (regno, info.users_this_bb);
+		}
+	      /* Check for the blockage emitted by expand_nl_goto_receiver.  */
+	      else if (current_function_has_nonlocal_label
+		       && GET_CODE (PATTERN (insn)) == ASM_INPUT)
+		{
+		  btr_user user;
+
+		  /* Do the equivalent of calling note_other_use_this_block
+		     for every target register.  */
+		  for (user = info.users_this_bb; user != NULL;
+		       user = user->next)
+		    if (user->use)
+		      user->other_use_this_block = 1;
+		  IOR_HARD_REG_SET (info.btrs_written_in_block, all_btrs);
+		  IOR_HARD_REG_SET (info.btrs_live_in_block, all_btrs);
+		  sbitmap_zero (info.bb_gen);
 		}
 	      else
 		{
@@ -561,7 +579,7 @@ compute_defs_uses_and_gen (fibheap_t all_btr_defs, btr_def *def_array,
       COPY_HARD_REG_SET (btrs_live[i], info.btrs_live_in_block);
       COPY_HARD_REG_SET (btrs_written[i], info.btrs_written_in_block);
 
-      REG_SET_TO_HARD_REG_SET (btrs_live_at_end[i], bb->global_live_at_end);
+      REG_SET_TO_HARD_REG_SET (btrs_live_at_end[i], bb->il.rtl->global_live_at_end);
       /* If this block ends in a jump insn, add any uses or even clobbers
 	 of branch target registers that it might have.  */
       for (insn = BB_END (bb); insn != BB_HEAD (bb) && ! INSN_P (insn); )
@@ -683,7 +701,8 @@ link_btr_uses (btr_def *def_array, btr_user *use_array, sbitmap *bb_out,
 		{
 		  /* Find all the reaching defs for this use.  */
 		  sbitmap reaching_defs_of_reg = sbitmap_alloc(max_uid);
-		  int uid;
+		  unsigned int uid = 0;
+		  sbitmap_iterator sbi;
 
 		  if (user->use)
 		    sbitmap_a_and_b (
@@ -704,7 +723,7 @@ link_btr_uses (btr_def *def_array, btr_user *use_array, sbitmap *bb_out,
 			    reaching_defs,
 			    btr_defset[reg - first_btr]);
 		    }
-		  EXECUTE_IF_SET_IN_SBITMAP (reaching_defs_of_reg, 0, uid,
+		  EXECUTE_IF_SET_IN_SBITMAP (reaching_defs_of_reg, 0, uid, sbi)
 		    {
 		      btr_def def = def_array[uid];
 
@@ -736,7 +755,7 @@ link_btr_uses (btr_def *def_array, btr_user *use_array, sbitmap *bb_out,
 			def->other_btr_uses_after_use = 1;
 		      user->next = def->uses;
 		      def->uses = user;
-		    });
+		    }
 		  sbitmap_free (reaching_defs_of_reg);
 		}
 
@@ -1008,7 +1027,7 @@ btr_def_live_range (btr_def def, HARD_REG_SET *btrs_live_in_range)
 			    def->bb, user->bb,
 			    (flag_btr_bb_exclusive
 			     || user->insn != BB_END (def->bb)
-			     || GET_CODE (user->insn) != JUMP_INSN));
+			     || !JUMP_P (user->insn)));
     }
   else
     {
@@ -1072,7 +1091,7 @@ combine_btr_defs (btr_def def, HARD_REG_SET *btrs_live_in_range)
 				def->bb, user->bb,
 				(flag_btr_bb_exclusive
 				 || user->insn != BB_END (def->bb)
-				 || GET_CODE (user->insn) != JUMP_INSN));
+				 || !JUMP_P (user->insn)));
 
 	  btr = choose_btr (combined_btrs_live);
 	  if (btr != -1)
@@ -1462,3 +1481,50 @@ branch_target_load_optimize (bool after_prologue_epilogue_gen)
 			PROP_DEATH_NOTES | PROP_REG_INFO);
     }
 }
+
+static bool
+gate_handle_branch_target_load_optimize (void)
+{
+  return (optimize > 0 && flag_branch_target_load_optimize2);
+}
+
+
+static void
+rest_of_handle_branch_target_load_optimize (void)
+{
+  static int warned = 0;
+
+  /* Leave this a warning for now so that it is possible to experiment
+     with running this pass twice.  In 3.6, we should either make this
+     an error, or use separate dump files.  */
+  if (flag_branch_target_load_optimize
+      && flag_branch_target_load_optimize2
+      && !warned)
+    {
+      warning (0, "branch target register load optimization is not intended "
+                  "to be run twice");
+
+      warned = 1;
+    }
+
+  branch_target_load_optimize (epilogue_completed);
+}
+
+struct tree_opt_pass pass_branch_target_load_optimize =
+{
+  "btl",                               /* name */
+  gate_handle_branch_target_load_optimize,      /* gate */
+  rest_of_handle_branch_target_load_optimize,   /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  0,		                        /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  'd'                                   /* letter */
+};
+

@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Don't assume anything about the header files.  */
 #define NO_IMPLICIT_EXTERN_C
@@ -99,8 +99,8 @@ Boston, MA 02111-1307, USA.  */
 #define USE_LD_AS_NEEDED 1
 #endif
 
-/* Determine whether the the entire c99 runtime
+/* Determine whether the entire c99 runtime
    is present in the runtime library.  */
 #define TARGET_C99_FUNCTIONS 1
 
-#define TARGET_HAS_F_SETLKW
+#define TARGET_POSIX_IO

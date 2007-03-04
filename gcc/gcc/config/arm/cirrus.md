@@ -1,5 +1,5 @@
 ;; Cirrus EP9312 "Maverick" ARM floating point co-processor description.
-;; Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+;; Copyright (C) 2003, 2004, 2005 Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;; Written by Aldy Hernandez (aldyh@redhat.com)
 
@@ -17,8 +17,8 @@
 
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.
 
 
 ; Cirrus types for invalid insn combinations
@@ -391,7 +391,7 @@
     /* Shifting by 0 will just copy %1 into %0.  */
     case 7: return \"cfsh64%?\\t%V0, %V1, #0\";
 
-    default: abort ();
+    default: gcc_unreachable ();
     }
   }"
   [(set_attr "length"         "  8,   8,     8,   8,     8,     4,     4,     4")
@@ -468,7 +468,7 @@
     case 7: return \"cfmvdlr\\t%V0, %Q1\;cfmvdhr%?\\t%V0, %R1\";
     case 8: return \"cfmvrdl%?\\t%Q0, %V1\;cfmvrdh%?\\t%R0, %V1\";
     case 9: return \"cfstrd%?\\t%V1, %0\";
-    default: abort ();
+    default: gcc_unreachable ();
     }
   }"
   [(set_attr "type"           "load1,store2,  *,store2,load1,     *,  load1,   *,     *,store2")

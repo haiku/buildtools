@@ -478,6 +478,11 @@ Append @var{dir} to the prefix specified previously with
 path.  @option{-iwithprefixbefore} puts it in the same place @option{-I}
 would; @option{-iwithprefix} puts it where @option{-idirafter} would.
 
+@item -isysroot @var{dir}
+@opindex isysroot
+This option is like the @option{--sysroot} option, but applies only to
+header files.  See the @option{--sysroot} option for more information.
+
 @item -isystem @var{dir}
 @opindex isystem
 Search @var{dir} for header files, after all directories specified by
@@ -505,6 +510,12 @@ Accept @samp{$} in identifiers.
 @ifset cppmanual
   @xref{Identifier characters}.
 @end ifset
+
+@item -fextended-identifiers
+@opindex fextended-identifiers
+Accept universal character names in identifiers.  This option is
+experimental; in a future version of GCC, it will be enabled by
+default for C99 and C++.
 
 @item -fpreprocessed
 @opindex fpreprocessed

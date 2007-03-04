@@ -18,7 +18,7 @@ AutoGen definitions Makefile.tpl;
 // 
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
 
 // "missing" indicates that that module doesn't supply
@@ -37,8 +37,8 @@ host_modules= { module= ash; };
 host_modules= { module= autoconf; };
 host_modules= { module= automake; };
 host_modules= { module= bash; };
-host_modules= { module= bfd; bootstrap=true; };
-host_modules= { module= opcodes; bootstrap=true; };
+host_modules= { module= bfd; lib_path=.; bootstrap=true; };
+host_modules= { module= opcodes; lib_path=.; bootstrap=true; };
 host_modules= { module= binutils; bootstrap=true; };
 host_modules= { module= bison; no_check_cross= true; };
 host_modules= { module= byacc; no_check_cross= true; };
@@ -60,7 +60,7 @@ host_modules= { module= fixincludes;
 host_modules= { module= flex; no_check_cross= true; };
 host_modules= { module= gas; bootstrap=true; };
 host_modules= { module= gcc; bootstrap=true; 
-		target="`if [ -f gcc/stage_last ]; then echo quickstrap ; else echo all; fi`";
+		target="`if [ -f stage_last ]; then echo quickstrap ; else echo all; fi`";
 		extra_make_flags="$(EXTRA_GCC_FLAGS)"; };
 host_modules= { module= gawk; };
 host_modules= { module= gettext; };
@@ -111,13 +111,15 @@ host_modules= { module= libtermcap; no_check=true;
                 missing=distclean;
                 missing=maintainer-clean; };
 host_modules= { module= utils; no_check=true; };
+host_modules= { module= gnattools; };
 
-target_modules = { module= libstdc++-v3; raw_cxx=true; };
-target_modules = { module= libmudflap; };
+target_modules = { module= libstdc++-v3; lib_path=.libs; raw_cxx=true; };
+target_modules = { module= libmudflap; lib_path=.libs; };
+target_modules = { module= libssp; lib_path=.libs; };
 target_modules = { module= newlib; };
 target_modules = { module= libgfortran; };
 target_modules = { module= libobjc; };
-target_modules = { module= libtermcap; no_check=true; stage=true;
+target_modules = { module= libtermcap; no_check=true;
                    missing=mostlyclean;
                    missing=clean;
                    missing=distclean;
@@ -129,7 +131,7 @@ target_modules = { module= gperf; };
 target_modules = { module= examples; no_check=true; no_install=true; };
 target_modules = { module= libffi; };
 target_modules = { module= libjava; raw_cxx=true; };
-target_modules = { module= zlib; stage=true; };
+target_modules = { module= zlib; };
 target_modules = { module= boehm-gc; };
 target_modules = { module= qthreads; };
 target_modules = { module= rda; };
@@ -171,8 +173,6 @@ flags_to_pass = { flag= infodir ; };
 flags_to_pass = { flag= libdir ; };
 flags_to_pass = { flag= libexecdir ; };
 flags_to_pass = { flag= lispdir ; };
-flags_to_pass = { flag= libstdcxx_incdir ; };
-flags_to_pass = { flag= libsubdir ; };
 flags_to_pass = { flag= localstatedir ; };
 flags_to_pass = { flag= mandir ; };
 flags_to_pass = { flag= oldincludedir ; };
@@ -182,14 +182,12 @@ flags_to_pass = { flag= sharedstatedir ; };
 flags_to_pass = { flag= sysconfdir ; };
 flags_to_pass = { flag= tooldir ; };
 flags_to_pass = { flag= build_tooldir ; };
-flags_to_pass = { flag= gxx_include_dir ; };
-flags_to_pass = { flag= gcc_version ; };
-flags_to_pass = { flag= gcc_version_trigger ; };
 flags_to_pass = { flag= target_alias ; };
 
 // Build tools
 flags_to_pass = { flag= BISON ; };
 flags_to_pass = { flag= CC_FOR_BUILD ; };
+flags_to_pass = { flag= CFLAGS_FOR_BUILD ; };
 flags_to_pass = { flag= CXX_FOR_BUILD ; };
 flags_to_pass = { flag= EXPECT ; };
 flags_to_pass = { flag= FLEX ; };
@@ -225,10 +223,14 @@ flags_to_pass = { flag= DLLTOOL_FOR_TARGET ; };
 flags_to_pass = { flag= GCJ_FOR_TARGET ; };
 flags_to_pass = { flag= GFORTRAN_FOR_TARGET ; };
 flags_to_pass = { flag= LD_FOR_TARGET ; };
+flags_to_pass = { flag= LIPO_FOR_TARGET ; };
+flags_to_pass = { flag= LDFLAGS_FOR_TARGET ; };
 flags_to_pass = { flag= LIBCFLAGS_FOR_TARGET ; };
 flags_to_pass = { flag= LIBCXXFLAGS_FOR_TARGET ; };
 flags_to_pass = { flag= NM_FOR_TARGET ; };
+flags_to_pass = { flag= OBJDUMP_FOR_TARGET ; };
 flags_to_pass = { flag= RANLIB_FOR_TARGET ; };
+flags_to_pass = { flag= STRIP_FOR_TARGET ; };
 flags_to_pass = { flag= WINDRES_FOR_TARGET ; };
 
 // Inter-module dependencies
@@ -246,9 +248,9 @@ dependencies = { module=all-build-fixincludes; on=all-build-libiberty; };
 
 // Host modules specific to gcc.
 dependencies = { module=configure-gcc; on=configure-intl; };
-dependencies = { module=configure-gcc; on=configure-binutils; };
-dependencies = { module=configure-gcc; on=configure-gas; };
-dependencies = { module=configure-gcc; on=configure-ld; };
+dependencies = { module=configure-gcc; on=all-binutils; };
+dependencies = { module=configure-gcc; on=all-gas; };
+dependencies = { module=configure-gcc; on=all-ld; };
 dependencies = { module=all-gcc; on=all-libiberty; hard=true; };
 dependencies = { module=all-gcc; on=all-intl; };
 dependencies = { module=all-gcc; on=all-build-texinfo; };
@@ -257,9 +259,6 @@ dependencies = { module=all-gcc; on=all-build-byacc; };
 dependencies = { module=all-gcc; on=all-build-flex; };
 dependencies = { module=all-gcc; on=all-build-libiberty; };
 dependencies = { module=all-gcc; on=all-build-fixincludes; };
-dependencies = { module=all-gcc; on=all-binutils; };
-dependencies = { module=all-gcc; on=all-gas; };
-dependencies = { module=all-gcc; on=all-ld; };
 dependencies = { module=all-gcc; on=all-zlib; };
 dependencies = { module=all-gcc; on=all-libcpp; hard=true; };
 dependencies = { module=all-gcc; on=all-libiberty; };
@@ -273,10 +272,9 @@ dependencies = { module=all-libcpp; on=all-intl; };
 
 dependencies = { module=all-fixincludes; on=all-libiberty; };
 
+dependencies = { module=all-gnattools; on=all-target-libada; };
+
 // Host modules specific to gdb.
-dependencies = { module=configure-gdb; on=configure-itcl; };
-dependencies = { module=configure-gdb; on=configure-tcl; };
-dependencies = { module=configure-gdb; on=configure-tk; };
 dependencies = { module=configure-gdb; on=configure-sim; };
 dependencies = { module=all-gdb; on=all-libiberty; };
 dependencies = { module=all-gdb; on=all-opcodes; };
@@ -285,10 +283,6 @@ dependencies = { module=all-gdb; on=all-readline; };
 dependencies = { module=all-gdb; on=all-build-bison; };
 dependencies = { module=all-gdb; on=all-build-byacc; };
 dependencies = { module=all-gdb; on=all-sim; };
-dependencies = { module=install-gdb; on=install-tcl; };
-dependencies = { module=install-gdb; on=install-tk; };
-dependencies = { module=install-gdb; on=install-itcl; };
-dependencies = { module=install-gdb; on=install-libgui; };
 
 dependencies = { module=configure-libgui; on=configure-tcl; };
 dependencies = { module=configure-libgui; on=configure-tk; };
@@ -418,7 +412,9 @@ lang_env_dependencies = { module=libada; };
 lang_env_dependencies = { module=libgfortran; };
 lang_env_dependencies = { module=libffi; };
 lang_env_dependencies = { module=libjava; cxx=true; };
+lang_env_dependencies = { module=libmudflap; };
 lang_env_dependencies = { module=libobjc; };
+lang_env_dependencies = { module=libssp; };
 lang_env_dependencies = { module=libstdc++-v3; };
 lang_env_dependencies = { module=zlib; };
 
@@ -478,6 +474,7 @@ bootstrap_stage = {
 	stage_configure_flags="@stage2_werror_flag@" ;
 	stage_make_flags='CFLAGS="$(BOOT_CFLAGS) -fprofile-generate"' ; };
 bootstrap_stage = {
-	id=feedback ; prev=1 ;
+	id=feedback ; prev=profile ;
+	bootstrap_target=profiledbootstrap ;
 	stage_configure_flags="@stage2_werror_flag@" ;
 	stage_make_flags='CFLAGS="$(BOOT_CFLAGS) -fprofile-use"' ; };

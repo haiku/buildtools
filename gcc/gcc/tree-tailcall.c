@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -132,19 +132,21 @@ static void find_tail_calls (basic_block, struct tailcall **);
 static bool
 suitable_for_tail_opt_p (void)
 {
-  int i;
+  referenced_var_iterator rvi;
+  tree var;
 
   if (current_function_stdarg)
     return false;
 
-  /* No local variable should be call-clobbered.  We ignore any kind
-     of memory tag, as these are not real variables.  */
-  for (i = 0; i < (int) VARRAY_ACTIVE_SIZE (referenced_vars); i++)
+  /* No local variable nor structure field should be call-clobbered.  We
+     ignore any kind of memory tag, as these are not real variables.  */
+
+  FOR_EACH_REFERENCED_VAR (var, rvi)
     {
-      tree var = VARRAY_TREE (referenced_vars, i);
 
       if (!(TREE_STATIC (var) || DECL_EXTERNAL (var))
-	  && var_ann (var)->mem_tag_kind == NOT_A_TAG
+	  && (var_ann (var)->mem_tag_kind == NOT_A_TAG
+	      || var_ann (var)->mem_tag_kind == STRUCT_FIELD)
 	  && is_call_clobbered (var))
 	return false;
     }
@@ -190,7 +192,7 @@ suitable_for_tail_call_opt_p (void)
 }
 
 /* Checks whether the expression EXPR in stmt AT is independent of the
-   statement pointed by BSI (in a sense that we already know EXPR's value
+   statement pointed to by BSI (in a sense that we already know EXPR's value
    at BSI).  We use the fact that we are only called from the chain of
    basic blocks that have only single successor.  Returns the expression
    containing the value of EXPR at BSI.  */
@@ -211,7 +213,7 @@ independent_of_stmt_p (tree expr, tree at, block_stmt_iterator bsi)
   /* Mark the blocks in the chain leading to the end.  */
   at_bb = bb_for_stmt (at);
   call_bb = bb_for_stmt (bsi_stmt (bsi));
-  for (bb = call_bb; bb != at_bb; bb = EDGE_SUCC (bb, 0)->dest)
+  for (bb = call_bb; bb != at_bb; bb = single_succ (bb))
     bb->aux = &bb->aux;
   bb->aux = &bb->aux;
 
@@ -255,7 +257,7 @@ independent_of_stmt_p (tree expr, tree at, block_stmt_iterator bsi)
     }
 
   /* Unmark the blocks.  */
-  for (bb = call_bb; bb != at_bb; bb = EDGE_SUCC (bb, 0)->dest)
+  for (bb = call_bb; bb != at_bb; bb = single_succ (bb))
     bb->aux = NULL;
   bb->aux = NULL;
 
@@ -382,7 +384,7 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
   basic_block abb;
   stmt_ann_t ann;
 
-  if (EDGE_COUNT (bb->succs) > 1)
+  if (!single_succ_p (bb))
     return;
 
   for (bsi = bsi_last (bb); !bsi_end_p (bsi); bsi_prev (&bsi))
@@ -392,8 +394,6 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
       /* Ignore labels.  */
       if (TREE_CODE (stmt) == LABEL_EXPR)
 	continue;
-
-      get_stmt_operands (stmt);
 
       /* Check for a call.  */
       if (TREE_CODE (stmt) == MODIFY_EXPR)
@@ -414,9 +414,7 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
 
       /* If the statement has virtual or volatile operands, fail.  */
       ann = stmt_ann (stmt);
-      if (NUM_V_MAY_DEFS (V_MAY_DEF_OPS (ann))
-          || NUM_V_MUST_DEFS (V_MUST_DEF_OPS (ann))
-	  || NUM_VUSES (VUSE_OPS (ann))
+      if (!ZERO_SSA_OPERANDS (stmt, (SSA_OP_VUSE | SSA_OP_VIRTUAL_DEFS))
 	  || ann->has_volatile_ops)
 	return;
     }
@@ -482,8 +480,8 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
 
       while (bsi_end_p (absi))
 	{
-	  ass_var = propagate_through_phis (ass_var, EDGE_SUCC (abb, 0));
-	  abb = EDGE_SUCC (abb, 0)->dest;
+	  ass_var = propagate_through_phis (ass_var, single_succ_edge (abb));
+	  abb = single_succ (abb);
 	  absi = bsi_start (abb);
 	}
 
@@ -667,7 +665,30 @@ adjust_return_value (basic_block bb, tree m, tree a)
     }
 
   TREE_OPERAND (ret_stmt, 0) = var;
-  modify_stmt (ret_stmt);
+  update_stmt (ret_stmt);
+}
+
+/* Subtract COUNT and FREQUENCY from the basic block and it's
+   outgoing edge.  */
+static void
+decrease_profile (basic_block bb, gcov_type count, int frequency)
+{
+  edge e;
+  bb->count -= count;
+  if (bb->count < 0)
+    bb->count = 0;
+  bb->frequency -= frequency;
+  if (bb->frequency < 0)
+    bb->frequency = 0;
+  if (!single_succ_p (bb))
+    {
+      gcc_assert (!EDGE_COUNT (bb->succs));
+      return;
+    }
+  e = single_succ_edge (bb);
+  e->count -= count;
+  if (e->count < 0)
+    e->count = 0;
 }
 
 /* Eliminates tail call described by T.  TMP_VARS is a list of
@@ -680,14 +701,13 @@ eliminate_tail_call (struct tailcall *t)
   basic_block bb, first;
   edge e;
   tree phi;
-  stmt_ann_t ann;
-  v_may_def_optype v_may_defs;
-  unsigned i;
   block_stmt_iterator bsi;
+  use_operand_p mayuse;
+  def_operand_p maydef;
+  ssa_op_iter iter;
+  tree orig_stmt;
 
-  stmt = bsi_stmt (t->call_bsi);
-  get_stmt_operands (stmt);
-  ann = stmt_ann (stmt);
+  stmt = orig_stmt = bsi_stmt (t->call_bsi);
   bb = t->call_block;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
@@ -701,7 +721,7 @@ eliminate_tail_call (struct tailcall *t)
   if (TREE_CODE (stmt) == MODIFY_EXPR)
     stmt = TREE_OPERAND (stmt, 1);
 
-  first = EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest;
+  first = single_succ (ENTRY_BLOCK_PTR);
 
   /* Remove the code after call_bsi that will become unreachable.  The
      possibly unreachable code in other blocks is removed later in
@@ -720,8 +740,15 @@ eliminate_tail_call (struct tailcall *t)
       release_defs (t);
     }
 
+  /* Number of executions of function has reduced by the tailcall.  */
+  e = single_succ_edge (t->call_block);
+  decrease_profile (EXIT_BLOCK_PTR, e->count, EDGE_FREQUENCY (e));
+  decrease_profile (ENTRY_BLOCK_PTR, e->count, EDGE_FREQUENCY (e));
+  if (e->dest != EXIT_BLOCK_PTR)
+    decrease_profile (e->dest, e->count, EDGE_FREQUENCY (e));
+
   /* Replace the call by a jump to the start of function.  */
-  e = redirect_edge_and_branch (EDGE_SUCC (t->call_block, 0), first);
+  e = redirect_edge_and_branch (single_succ_edge (t->call_block), first);
   gcc_assert (e);
   PENDING_STMT (e) = NULL_TREE;
 
@@ -750,17 +777,16 @@ eliminate_tail_call (struct tailcall *t)
     }
 
   /* Add phi nodes for the call clobbered variables.  */
-  v_may_defs = V_MAY_DEF_OPS (ann);
-  for (i = 0; i < NUM_V_MAY_DEFS (v_may_defs); i++)
+  FOR_EACH_SSA_MAYDEF_OPERAND (maydef, mayuse, orig_stmt, iter)
     {
-      param = SSA_NAME_VAR (V_MAY_DEF_RESULT (v_may_defs, i));
+      param = SSA_NAME_VAR (DEF_FROM_PTR (maydef));
       for (phi = phi_nodes (first); phi; phi = PHI_CHAIN (phi))
 	if (param == SSA_NAME_VAR (PHI_RESULT (phi)))
 	  break;
 
       if (!phi)
 	{
-	  tree name = var_ann (param)->default_def;
+	  tree name = default_def (param);
 	  tree new_name;
 
 	  if (!name)
@@ -773,10 +799,10 @@ eliminate_tail_call (struct tailcall *t)
 	    }
 	  new_name = make_ssa_name (param, SSA_NAME_DEF_STMT (name));
 
-	  var_ann (param)->default_def = new_name;
+	  set_default_def (param, new_name);
 	  phi = create_phi_node (name, first);
 	  SSA_NAME_DEF_STMT (name) = phi;
-	  add_phi_arg (phi, new_name, EDGE_SUCC (ENTRY_BLOCK_PTR, 0));
+	  add_phi_arg (phi, new_name, single_succ_edge (ENTRY_BLOCK_PTR));
 
 	  /* For all calls the same set of variables should be clobbered.  This
 	     means that there always should be the appropriate phi node except
@@ -784,7 +810,7 @@ eliminate_tail_call (struct tailcall *t)
 	  gcc_assert (EDGE_COUNT (first->preds) <= 2);
 	}
 
-      add_phi_arg (phi, V_MAY_DEF_OP (v_may_defs, i), e);
+      add_phi_arg (phi, USE_FROM_PTR (mayuse), e);
     }
 
   /* Update the values of accumulators.  */
@@ -843,7 +869,7 @@ tree_optimize_tail_calls_1 (bool opt_tailcalls)
   bool phis_constructed = false;
   struct tailcall *tailcalls = NULL, *act, *next;
   bool changed = false;
-  basic_block first = EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->dest;
+  basic_block first = single_succ (ENTRY_BLOCK_PTR);
   tree stmt, param, ret_type, tmp, phi;
   edge_iterator ei;
 
@@ -872,9 +898,10 @@ tree_optimize_tail_calls_1 (bool opt_tailcalls)
 
       if (!phis_constructed)
 	{
+	  tree name;
 	  /* Ensure that there is only one predecessor of the block.  */
-	  if (EDGE_COUNT (first->preds) > 1)
-	    first = split_edge (EDGE_SUCC (ENTRY_BLOCK_PTR, 0));
+	  if (!single_pred_p (first))
+	    first = split_edge (single_succ_edge (ENTRY_BLOCK_PTR));
 
 	  /* Copy the args if needed.  */
 	  for (param = DECL_ARGUMENTS (current_function_decl);
@@ -884,17 +911,16 @@ tree_optimize_tail_calls_1 (bool opt_tailcalls)
 		&& var_ann (param)
 		/* Also parameters that are only defined but never used need not
 		   be copied.  */
-		&& (var_ann (param)->default_def
-		    && TREE_CODE (var_ann (param)->default_def) == SSA_NAME))
+		&& ((name = default_def (param))
+		    && TREE_CODE (name) == SSA_NAME))
 	    {
-	      tree name = var_ann (param)->default_def;
 	      tree new_name = make_ssa_name (param, SSA_NAME_DEF_STMT (name));
 	      tree phi;
 
-	      var_ann (param)->default_def = new_name;
+	      set_default_def (param, new_name);
 	      phi = create_phi_node (name, first);
 	      SSA_NAME_DEF_STMT (name) = phi;
-	      add_phi_arg (phi, new_name, EDGE_PRED (first, 0));
+	      add_phi_arg (phi, new_name, single_pred_edge (first));
 	    }
 	  phis_constructed = true;
 	}
@@ -911,7 +937,7 @@ tree_optimize_tail_calls_1 (bool opt_tailcalls)
 		       /* RET_TYPE can be a float when -ffast-maths is
 			  enabled.  */
 		       fold_convert (ret_type, integer_zero_node),
-		       EDGE_PRED (first, 0));
+		       single_pred_edge (first));
 	  a_acc = PHI_RESULT (phi);
 	}
 
@@ -927,7 +953,7 @@ tree_optimize_tail_calls_1 (bool opt_tailcalls)
 		       /* RET_TYPE can be a float when -ffast-maths is
 			  enabled.  */
 		       fold_convert (ret_type, integer_one_node),
-		       EDGE_PRED (first, 0));
+		       single_pred_edge (first));
 	  m_acc = PHI_RESULT (phi);
 	}
     }
@@ -980,7 +1006,7 @@ execute_tail_calls (void)
 struct tree_opt_pass pass_tail_recursion = 
 {
   "tailr",				/* name */
-  NULL,					/* gate */
+  gate_tail_calls,			/* gate */
   execute_tail_recursion,		/* execute */
   NULL,					/* sub */
   NULL,					/* next */

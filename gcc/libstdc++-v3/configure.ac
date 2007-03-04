@@ -1,5 +1,4 @@
-# Process this file with autoconf to produce a configure script, like so:
-# aclocal && autoconf && autoheader && automake
+# Process this file with autoreconf to produce a configure script.
 
 AC_PREREQ(2.59)
 AC_INIT(package-unused, version-unused,, libstdc++)
@@ -13,7 +12,7 @@ AC_CONFIG_HEADER(config.h)
 ### am handles this now?  ORIGINAL_LD_FOR_MULTILIBS=$LD
 
 # For libtool versioning info, format is CURRENT:REVISION:AGE
-libtool_VERSION=6:6:0
+libtool_VERSION=6:8:0
 AC_SUBST(libtool_VERSION)
 
 # Find the rest of the source tree framework.
@@ -42,7 +41,24 @@ target_alias=${target_alias-$host_alias}
 if test "$build" != "$host"; then
   # We are being configured with some form of cross compiler.
   GLIBCXX_IS_NATIVE=false
-  GCC_NO_EXECUTABLES
+  case "$host","$target" in
+    # Darwin crosses can use the host system's libraries and headers,
+    # because of the fat library support.  Of course, it must be the
+    # same version of Darwin on both sides.  Allow the user to
+    # just say --target=foo-darwin without a version number to mean
+    # "the version on this system".
+      *-*-darwin*,*-*-darwin*)
+	hostos=`echo $host | sed 's/.*-darwin/darwin/'`
+	targetos=`echo $target | sed 's/.*-darwin/darwin/'`
+	if test $hostos = $targetos -o $targetos = darwin ; then
+	  GLIBCXX_IS_NATIVE=true
+	fi
+	;;
+
+      *)
+	GCC_NO_EXECUTABLES
+	;;
+  esac
 else
   GLIBCXX_IS_NATIVE=true
 fi
@@ -58,38 +74,36 @@ fi
 #  no-dependencies:  turns off auto dependency generation (just for now)
 #  -Wall:  turns on all automake warnings...
 #  -Wno-portability:  ...except this one, since GNU make is now required.
-AM_INIT_AUTOMAKE([1.9.1 no-define foreign no-dependencies -Wall -Wno-portability -Wno-override])
+AM_INIT_AUTOMAKE([1.9.3 no-define foreign no-dependencies -Wall -Wno-portability -Wno-override])
+AH_TEMPLATE(PACKAGE, [Name of package])
+AH_TEMPLATE(VERSION, [Version number of package])
 
 # Runs configure.host, finds CC, CXX, and assorted other critical bits.  Sets
 # up critical shell variables.
 GLIBCXX_CONFIGURE
 
-#AC_MSG_NOTICE([====== Starting libtool configuration])
 AC_LIBTOOL_DLOPEN
 AM_PROG_LIBTOOL
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
-#AC_MSG_NOTICE([====== Finished libtool configuration]) ; sleep 10
 
 # Possibly disable most of the library.
-## XXX Consider skipping unncessary tests altogether in this case, rather
+## TODO: Consider skipping unncessary tests altogether in this case, rather
 ## than just ignoring the results.  Faster /and/ more correct, win win.
 GLIBCXX_ENABLE_HOSTED
 
-# Check for support bits and g++ features that don't require linking.
+# Check for compiler support that doesn't require linking.
 GLIBCXX_ENABLE_SJLJ_EXCEPTIONS
 GLIBCXX_ENABLE_PCH($is_hosted)
 
 # Enable all the variable C++ runtime options.  
-# NB: C_MBCHAR must come early.
 GLIBCXX_ENABLE_CSTDIO
 GLIBCXX_ENABLE_CLOCALE
 GLIBCXX_ENABLE_ALLOCATOR
 GLIBCXX_ENABLE_CHEADERS($c_model)  dnl c_model from configure.host
-GLIBCXX_ENABLE_C_MBCHAR([yes])
-GLIBCXX_ENABLE_C99([yes])
 GLIBCXX_ENABLE_LONG_LONG([yes])
-GLIBCXX_ENABLE_THREADS
+GLIBCXX_ENABLE_WCHAR_T([yes])
+GLIBCXX_ENABLE_C99([yes])
 GLIBCXX_ENABLE_CONCEPT_CHECKS([no])
 GLIBCXX_ENABLE_DEBUG_FLAGS(["-g3 -O0"])
 GLIBCXX_ENABLE_DEBUG([no])
@@ -97,6 +111,7 @@ GLIBCXX_ENABLE_CXX_FLAGS
 GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING([no])
 
 # No surprises, no surprises...
+GLIBCXX_ENABLE_THREADS
 if test $atomicity_dir = cpu/generic ; then
   AC_MSG_WARN([No native atomic operations are provided for this platform.])
   if test $target_thread_file = single; then
@@ -124,7 +139,7 @@ if $GLIBCXX_IS_NATIVE; then
   GLIBCXX_CHECK_MATH_SUPPORT
   GLIBCXX_CHECK_BUILTIN_MATH_SUPPORT
   GLIBCXX_CHECK_COMPLEX_MATH_SUPPORT
-  GLIBCXX_CHECK_WCHAR_T_SUPPORT
+  GLIBCXX_CHECK_ICONV_SUPPORT
   GLIBCXX_CHECK_STDLIB_SUPPORT
 
   # For showmanyc_helper().
@@ -141,6 +156,9 @@ if $GLIBCXX_IS_NATIVE; then
 
   # For LFS support.
   GLIBCXX_CHECK_LFS
+
+  # For TLS support.
+  GCC_CHECK_TLS
 
   AC_LC_MESSAGES
 
@@ -225,7 +243,7 @@ else
     AC_DEFINE(HAVE_S_ISREG)
     AC_DEFINE(HAVE_S_IFREG)
   else
-    m4_include([crossconfig.m4])
+    GLIBCXX_CROSSCONFIG
   fi
 
   # At some point, we should differentiate between architectures
@@ -269,10 +287,12 @@ GLIBCXX_CONFIGURE_TESTSUITE
 # Propagate the target-specific source directories through the build chain.
 ATOMICITY_SRCDIR=config/${atomicity_dir}
 ATOMIC_WORD_SRCDIR=config/${atomic_word_dir}
+CPU_DEFINES_SRCDIR=config/${cpu_defines_dir}
 OS_INC_SRCDIR=config/${os_include_dir}
 ABI_TWEAKS_SRCDIR=config/${abi_tweaks_dir}
 AC_SUBST(ATOMICITY_SRCDIR)
 AC_SUBST(ATOMIC_WORD_SRCDIR)
+AC_SUBST(CPU_DEFINES_SRCDIR)
 AC_SUBST(ABI_TWEAKS_SRCDIR)
 AC_SUBST(OS_INC_SRCDIR)
 

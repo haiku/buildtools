@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Utility subroutines for the C++ library testsuite. 
 //
-// Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+// Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -17,7 +17,7 @@
 //
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 //
 // As a special exception, you may use this file as part of a free software
@@ -104,10 +104,9 @@ namespace __gnu_test
   // bitmask_operators
   template<typename bitmask_type>
     void
-    bitmask_operators()
+    bitmask_operators(bitmask_type a = bitmask_type(),
+		      bitmask_type b = bitmask_type())
     {
-      bitmask_type a;
-      bitmask_type b;
       a | b;
       a & b;
       a ^ b;
@@ -160,9 +159,22 @@ namespace __gnu_test
   void 
   run_tests_wrapped_env(const char*, const char*, const func_callback&);
 
-  // Try to create a locale with the given name. If it fails, bail.
-  std::locale
-  try_named_locale(const char* name);
+
+  // For containers (23.1/3).
+  struct NonDefaultConstructible
+  {
+    NonDefaultConstructible(int) { }
+  };
+ 
+  inline bool
+  operator==(const NonDefaultConstructible&,
+	     const NonDefaultConstructible&)
+  { return false; }
+
+  inline bool
+  operator<(const NonDefaultConstructible&,
+	    const NonDefaultConstructible&)
+  { return false; }
 
 
   // Counting.
@@ -373,6 +385,11 @@ namespace __gnu_test
 
     pid_t pid_;
   };
+
+  // For use in 22_locale/time_get and time_put.
+  tm test_tm(int sec, int min, int hour, int mday, int mon,
+	     int year, int wday, int yday, int isdst);
+
 } // namespace __gnu_test
 
 #endif // _GLIBCXX_TESTSUITE_HOOKS_H

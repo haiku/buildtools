@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* References:
 
@@ -171,8 +171,8 @@ rtl_predicted_by_p (basic_block bb, enum br_predictor predictor)
 bool
 tree_predicted_by_p (basic_block bb, enum br_predictor predictor)
 {
-  struct edge_prediction *i = bb_ann (bb)->predictions;
-  for (i = bb_ann (bb)->predictions; i; i = i->next)
+  struct edge_prediction *i;
+  for (i = bb->predictions; i; i = i->next)
     if (i->predictor == predictor)
       return true;
   return false;
@@ -181,8 +181,7 @@ tree_predicted_by_p (basic_block bb, enum br_predictor predictor)
 static void
 predict_insn (rtx insn, enum br_predictor predictor, int probability)
 {
-  if (!any_condjump_p (insn))
-    abort ();
+  gcc_assert (any_condjump_p (insn));
   if (!flag_guess_branch_prob)
     return;
 
@@ -232,13 +231,36 @@ rtl_predict_edge (edge e, enum br_predictor predictor, int probability)
 void
 tree_predict_edge (edge e, enum br_predictor predictor, int probability)
 {
-  struct edge_prediction *i = ggc_alloc (sizeof (struct edge_prediction));
+  gcc_assert (profile_status != PROFILE_GUESSED);
+  if ((e->src != ENTRY_BLOCK_PTR && EDGE_COUNT (e->src->succs) > 1)
+      && flag_guess_branch_prob && optimize)
+    {
+      struct edge_prediction *i = ggc_alloc (sizeof (struct edge_prediction));
 
-  i->next = bb_ann (e->src)->predictions;
-  bb_ann (e->src)->predictions = i;
-  i->probability = probability;
-  i->predictor = predictor;
-  i->edge = e;
+      i->next = e->src->predictions;
+      e->src->predictions = i;
+      i->probability = probability;
+      i->predictor = predictor;
+      i->edge = e;
+    }
+}
+
+/* Remove all predictions on given basic block that are attached
+   to edge E.  */
+void
+remove_predictions_associated_with_edge (edge e)
+{
+  if (e->src->predictions)
+    {
+      struct edge_prediction **prediction = &e->src->predictions;
+      while (*prediction)
+	{
+	  if ((*prediction)->edge == e)
+	    *prediction = (*prediction)->next;
+	  else
+	    prediction = &((*prediction)->next);
+	}
+    }
 }
 
 /* Return true when we can store prediction on insn INSN.
@@ -434,14 +456,14 @@ combine_predictions_for_insn (rtx insn, basic_block bb)
 
       /* Save the prediction into CFG in case we are seeing non-degenerated
 	 conditional jump.  */
-      if (EDGE_COUNT (bb->succs) > 1)
+      if (!single_succ_p (bb))
 	{
 	  BRANCH_EDGE (bb)->probability = combined_probability;
 	  FALLTHRU_EDGE (bb)->probability
 	    = REG_BR_PROB_BASE - combined_probability;
 	}
     }
-  else if (EDGE_COUNT (bb->succs) > 1)
+  else if (!single_succ_p (bb))
     {
       int prob = INTVAL (XEXP (prob_note, 0));
 
@@ -449,7 +471,7 @@ combine_predictions_for_insn (rtx insn, basic_block bb)
       FALLTHRU_EDGE (bb)->probability = REG_BR_PROB_BASE - prob;
     }
   else
-    EDGE_SUCC (bb, 0)->probability = REG_BR_PROB_BASE;
+    single_succ_edge (bb)->probability = REG_BR_PROB_BASE;
 }
 
 /* Combine predictions into single probability and store them into CFG.
@@ -489,7 +511,7 @@ combine_predictions_for_bb (FILE *file, basic_block bb)
     {
       if (!bb->count)
 	set_even_probabilities (bb);
-      bb_ann (bb)->predictions = NULL;
+      bb->predictions = NULL;
       if (file)
 	fprintf (file, "%i edges in bb %i predicted to even probabilities\n",
 		 nedges, bb->index);
@@ -501,7 +523,7 @@ combine_predictions_for_bb (FILE *file, basic_block bb)
 
   /* We implement "first match" heuristics and use probability guessed
      by predictor with smallest index.  */
-  for (pred = bb_ann (bb)->predictions; pred; pred = pred->next)
+  for (pred = bb->predictions; pred; pred = pred->next)
     {
       int predictor = pred->predictor;
       int probability = pred->probability;
@@ -547,7 +569,7 @@ combine_predictions_for_bb (FILE *file, basic_block bb)
     combined_probability = best_probability;
   dump_prediction (file, PRED_COMBINED, combined_probability, bb, true);
 
-  for (pred = bb_ann (bb)->predictions; pred; pred = pred->next)
+  for (pred = bb->predictions; pred; pred = pred->next)
     {
       int predictor = pred->predictor;
       int probability = pred->probability;
@@ -557,7 +579,7 @@ combine_predictions_for_bb (FILE *file, basic_block bb)
       dump_prediction (file, predictor, probability, bb,
 		       !first_match || best_predictor == predictor);
     }
-  bb_ann (bb)->predictions = NULL;
+  bb->predictions = NULL;
 
   if (!bb->count)
     {
@@ -583,13 +605,13 @@ predict_loops (struct loops *loops_info, bool rtlsimpleloops)
     {
       basic_block bb, *bbs;
       unsigned j;
-      int exits;
+      unsigned n_exits;
       struct loop *loop = loops_info->parray[i];
       struct niter_desc desc;
       unsigned HOST_WIDE_INT niter;
+      edge *exits;
 
-      flow_loop_scan (loop, LOOP_EXIT_EDGES);
-      exits = loop->num_exits;
+      exits = get_loop_exit_edges (loop, &n_exits);
 
       if (rtlsimpleloops)
 	{
@@ -602,6 +624,9 @@ predict_loops (struct loops *loops_info, bool rtlsimpleloops)
 	      niter = desc.niter + 1;
 	      if (niter == 0)        /* We might overflow here.  */
 		niter = desc.niter;
+	      if (niter
+		  > (unsigned int) PARAM_VALUE (PARAM_MAX_PREDICTED_ITERATIONS))
+		niter = PARAM_VALUE (PARAM_MAX_PREDICTED_ITERATIONS);
 
 	      prob = (REG_BR_PROB_BASE
 		      - (REG_BR_PROB_BASE + niter /2) / niter);
@@ -615,16 +640,13 @@ predict_loops (struct loops *loops_info, bool rtlsimpleloops)
 	}
       else
 	{
-	  edge *exits;
-	  unsigned j, n_exits;
 	  struct tree_niter_desc niter_desc;
 
-	  exits = get_loop_exit_edges (loop, &n_exits);
 	  for (j = 0; j < n_exits; j++)
 	    {
 	      tree niter = NULL;
 
-	      if (number_of_iterations_exit (loop, exits[j], &niter_desc))
+	      if (number_of_iterations_exit (loop, exits[j], &niter_desc, false))
 		niter = niter_desc.niter;
 	      if (!niter || TREE_CODE (niter_desc.niter) != INTEGER_CST)
 	        niter = loop_niter_by_eval (loop, exits[j]);
@@ -632,23 +654,24 @@ predict_loops (struct loops *loops_info, bool rtlsimpleloops)
 	      if (TREE_CODE (niter) == INTEGER_CST)
 		{
 		  int probability;
+		  int max = PARAM_VALUE (PARAM_MAX_PREDICTED_ITERATIONS);
 		  if (host_integerp (niter, 1)
 		      && tree_int_cst_lt (niter,
-				          build_int_cstu (NULL_TREE,
-						       REG_BR_PROB_BASE - 1)))
+				          build_int_cstu (NULL_TREE, max - 1)))
 		    {
 		      HOST_WIDE_INT nitercst = tree_low_cst (niter, 1) + 1;
-		      probability = (REG_BR_PROB_BASE + nitercst / 2) / nitercst;
+		      probability = ((REG_BR_PROB_BASE + nitercst / 2)
+				     / nitercst);
 		    }
 		  else
-		    probability = 1;
+		    probability = ((REG_BR_PROB_BASE + max / 2) / max);
 
 		  predict_edge (exits[j], PRED_LOOP_ITERATIONS, probability);
 		}
 	    }
 
-	  free (exits);
 	}
+      free (exits);
 
       bbs = get_loop_body (loop);
 
@@ -690,7 +713,7 @@ predict_loops (struct loops *loops_info, bool rtlsimpleloops)
 		  (e, PRED_LOOP_EXIT,
 		   (REG_BR_PROB_BASE
 		    - predictor_info [(int) PRED_LOOP_EXIT].hitrate)
-		   / exits);
+		   / n_exits);
 	}
       
       /* Free basic blocks from get_loop_body.  */
@@ -698,7 +721,10 @@ predict_loops (struct loops *loops_info, bool rtlsimpleloops)
     }
 
   if (!rtlsimpleloops)
-    scev_finalize ();
+    {
+      scev_finalize ();
+      current_loops = NULL;
+    }
 }
 
 /* Attempt to predict probabilities of BB outgoing edges using local
@@ -833,8 +859,8 @@ estimate_probability (struct loops *loops_info)
 	     care for error returns and other are often used for fast paths
 	     trought function.  */
 	  if ((e->dest == EXIT_BLOCK_PTR
-	       || (EDGE_COUNT (e->dest->succs) == 1
-		   && EDGE_SUCC (e->dest, 0)->dest == EXIT_BLOCK_PTR))
+	       || (single_succ_p (e->dest)
+		   && single_succ (e->dest) == EXIT_BLOCK_PTR))
 	       && !predicted_by_p (bb, PRED_NULL_RETURN)
 	       && !predicted_by_p (bb, PRED_CONST_RETURN)
 	       && !predicted_by_p (bb, PRED_NEGATIVE_RETURN)
@@ -972,7 +998,7 @@ expr_expected_value (tree expr, bitmap visited)
       op1 = expr_expected_value (TREE_OPERAND (expr, 1), visited);
       if (!op1)
 	return NULL;
-      res = fold (build (TREE_CODE (expr), TREE_TYPE (expr), op0, op1));
+      res = fold_build2 (TREE_CODE (expr), TREE_TYPE (expr), op0, op1);
       if (TREE_CONSTANT (res))
 	return res;
       return NULL;
@@ -983,7 +1009,7 @@ expr_expected_value (tree expr, bitmap visited)
       op0 = expr_expected_value (TREE_OPERAND (expr, 0), visited);
       if (!op0)
 	return NULL;
-      res = fold (build1 (TREE_CODE (expr), TREE_TYPE (expr), op0));
+      res = fold_build1 (TREE_CODE (expr), TREE_TYPE (expr), op0);
       if (TREE_CONSTANT (res))
 	return res;
       return NULL;
@@ -1014,7 +1040,7 @@ strip_builtin_expect (void)
 	      && TREE_CHAIN (arglist))
 	    {
 	      TREE_OPERAND (stmt, 1) = TREE_VALUE (arglist);
-	      modify_stmt (stmt);
+	      update_stmt (stmt);
 	    }
 	}
     }
@@ -1184,7 +1210,7 @@ return_prediction (tree val, enum prediction *prediction)
 static void
 apply_return_prediction (int *heads)
 {
-  tree return_stmt;
+  tree return_stmt = NULL;
   tree return_val;
   edge e;
   tree phi;
@@ -1210,14 +1236,9 @@ apply_return_prediction (int *heads)
       || !SSA_NAME_DEF_STMT (return_val)
       || TREE_CODE (SSA_NAME_DEF_STMT (return_val)) != PHI_NODE)
     return;
-  phi = SSA_NAME_DEF_STMT (return_val);
-  while (phi)
-    {
-      tree next = PHI_CHAIN (phi);
-      if (PHI_RESULT (phi) == return_val)
-	break;
-      phi = next;
-    }
+  for (phi = SSA_NAME_DEF_STMT (return_val); phi; phi = PHI_CHAIN (phi))
+    if (PHI_RESULT (phi) == return_val)
+      break;
   if (!phi)
     return;
   phi_num_args = PHI_NUM_ARGS (phi);
@@ -1293,7 +1314,7 @@ tree_estimate_probability (void)
   basic_block bb;
   struct loops loops_info;
 
-  flow_loops_find (&loops_info, LOOP_TREE);
+  flow_loops_find (&loops_info);
   if (dump_file && (dump_flags & TDF_DETAILS))
     flow_loops_dump (&loops_info, dump_file, NULL, 0);
 
@@ -1319,7 +1340,7 @@ tree_estimate_probability (void)
 	     fast paths trought function.  */
 	  if (e->dest == EXIT_BLOCK_PTR
 	      && TREE_CODE (last_stmt (bb)) == RETURN_EXPR
-	      && EDGE_COUNT (bb->preds) > 1)
+	      && !single_pred_p (bb))
 	    {
 	      edge e1;
 	      edge_iterator ei1;
@@ -1366,7 +1387,7 @@ tree_estimate_probability (void)
   FOR_EACH_BB (bb)
     combine_predictions_for_bb (dump_file, bb);
 
-  if (0)  /* FIXME: Enable once we are pass down the profile to RTL level.  */
+  if (!flag_loop_optimize)
     strip_builtin_expect ();
   estimate_bb_frequencies (&loops_info);
   free_dominance_info (CDI_POST_DOMINATORS);
@@ -1445,8 +1466,7 @@ expected_value_to_br_prob (void)
       cond = simplify_rtx (cond);
 
       /* Turn the condition into a scaled branch probability.  */
-      if (cond != const_true_rtx && cond != const0_rtx)
-	abort ();
+      gcc_assert (cond == const_true_rtx || cond == const0_rtx);
       predict_insn_def (insn, PRED_BUILTIN_EXPECT,
 		        cond == const_true_rtx ? TAKEN : NOT_TAKEN);
     }
@@ -1462,8 +1482,8 @@ last_basic_block_p (basic_block bb)
 
   return (bb->next_bb == EXIT_BLOCK_PTR
 	  || (bb->next_bb->next_bb == EXIT_BLOCK_PTR
-	      && EDGE_COUNT (bb->succs) == 1
-	      && EDGE_SUCC (bb, 0)->dest->next_bb == EXIT_BLOCK_PTR));
+	      && single_succ_p (bb)
+	      && single_succ (bb)->next_bb == EXIT_BLOCK_PTR));
 }
 
 /* Sets branch probabilities according to PREDiction and
@@ -1541,11 +1561,11 @@ typedef struct block_info_def
 /* Similar information for edges.  */
 typedef struct edge_info_def
 {
-  /* In case edge is an loopback edge, the probability edge will be reached
+  /* In case edge is a loopback edge, the probability edge will be reached
      in case header is.  Estimated number of iterations of the loop can be
      then computed as 1 / (1 - back_edge_prob).  */
   sreal back_edge_prob;
-  /* True if the edge is an loopback edge in the natural loop.  */
+  /* True if the edge is a loopback edge in the natural loop.  */
   unsigned int back_edge:1;
 } *edge_info;
 
@@ -1615,9 +1635,8 @@ propagate_freq (struct loop *loop, bitmap tovisit)
 	{
 #ifdef ENABLE_CHECKING
 	  FOR_EACH_EDGE (e, ei, bb->preds)
-	    if (bitmap_bit_p (tovisit, e->src->index)
-		&& !(e->flags & EDGE_DFS_BACK))
-	      abort ();
+	    gcc_assert (!bitmap_bit_p (tovisit, e->src->index)
+			|| (e->flags & EDGE_DFS_BACK));
 #endif
 
 	  FOR_EACH_EDGE (e, ei, bb->preds)
@@ -1761,8 +1780,7 @@ expensive_function_p (int threshold)
 
   /* We can not compute accurately for large thresholds due to scaled
      frequencies.  */
-  if (threshold > BB_FREQ_MAX)
-    abort ();
+  gcc_assert (threshold <= BB_FREQ_MAX);
 
   /* Frequencies are out of range.  This either means that function contains
      internal loop executing more than BB_FREQ_MAX times or profile feedback
@@ -1816,7 +1834,7 @@ estimate_bb_frequencies (struct loops *loops)
 
       mark_dfs_back_edges ();
 
-      EDGE_SUCC (ENTRY_BLOCK_PTR, 0)->probability = REG_BR_PROB_BASE;
+      single_succ_edge (ENTRY_BLOCK_PTR)->probability = REG_BR_PROB_BASE;
 
       /* Set up block info for each basic block.  */
       tovisit = BITMAP_ALLOC (NULL);
@@ -1913,11 +1931,16 @@ choose_function_section (void)
 		    UNLIKELY_EXECUTED_TEXT_SECTION_NAME);
 }
 
+static bool
+gate_estimate_probability (void)
+{
+  return flag_guess_branch_prob;
+}
 
 struct tree_opt_pass pass_profile = 
 {
   "profile",				/* name */
-  NULL,					/* gate */
+  gate_estimate_probability,		/* gate */
   tree_estimate_probability,		/* execute */
   NULL,					/* sub */
   NULL,					/* next */

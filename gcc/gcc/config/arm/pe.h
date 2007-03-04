@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for ARM with PE obj format.
-   Copyright (C) 1995, 1996, 1999, 2000, 2002, 2003, 2004
+   Copyright (C) 1995, 1996, 1999, 2000, 2002, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Doug Evans (dje@cygnus.com).
    
@@ -17,8 +17,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 /* Enable PE specific code.  */
 #define ARM_PE		1
@@ -45,22 +45,8 @@
 #undef  SUBTARGET_CPP_SPEC
 #define SUBTARGET_CPP_SPEC "-D__pe__"
 
-
-/* Experimental addition for pr 7885.
-   Ignore dllimport for functions.  */
-#define TARGET_FLAG_NOP_FUN	(1 << 24)
-
-#undef  TARGET_NOP_FUN_DLLIMPORT
-#define TARGET_NOP_FUN_DLLIMPORT (target_flags & TARGET_FLAG_NOP_FUN)
-
-#undef  SUBTARGET_SWITCHES
-#define SUBTARGET_SWITCHES					\
-{ "nop-fun-dllimport",		  TARGET_FLAG_NOP_FUN,		\
-  N_("Ignore dllimport attribute for functions") },		\
-{ "no-nop-fun-dllimport",	- TARGET_FLAG_NOP_FUN, "" },
-
 #undef  TARGET_DEFAULT
-#define TARGET_DEFAULT	(TARGET_FLAG_NOP_FUN)
+#define TARGET_DEFAULT	(MASK_NOP_FUN_DLLIMPORT)
 
 #undef  MULTILIB_DEFAULTS
 #define MULTILIB_DEFAULTS \

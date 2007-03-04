@@ -35,6 +35,14 @@ Boston, MA 02111-1307, USA.  */
 #undef WCHAR_TYPE_SIZE
 #define WCHAR_TYPE_SIZE 16
 
+/* long double is 128 bits wide; the documentation claims
+   LIBGCC2_LONG_DOUBLE_TYPE_SIZE to default to LONG_DOUBLE_TYPE_SIZE, but
+   it apparently does not */
+/*#undef LONG_DOUBLE_TYPE_SIZE
+#define LONG_DOUBLE_TYPE_SIZE 128
+#undef LIBGCC2_LONG_DOUBLE_TYPE_SIZE
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE 128*/
+
 #undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\

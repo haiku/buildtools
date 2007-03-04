@@ -16,7 +16,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
  In other words, you are welcome to use, share and improve this program.
  You are forbidden to forbid anyone else to use, share and improve
@@ -236,6 +236,19 @@ typedef CPPCHAR_SIGNED_T cppchar_signed_t;
 /* Style of header dependencies to generate.  */
 enum cpp_deps_style { DEPS_NONE = 0, DEPS_USER, DEPS_SYSTEM };
 
+/* The possible normalization levels, from most restrictive to least.  */
+enum cpp_normalize_level {
+  /* In NFKC.  */
+  normalized_KC = 0,
+  /* In NFC.  */
+  normalized_C,
+  /* In NFC, except for subsequences where being in NFC would make
+     the identifier invalid.  */
+  normalized_identifier_C,
+  /* Not normalized at all.  */
+  normalized_none
+};
+
 /* This structure is nested inside struct cpp_reader, and
    carries all the options visible to the command line.  */
 struct cpp_options
@@ -332,6 +345,9 @@ struct cpp_options
   /* Zero means dollar signs are punctuation.  */
   unsigned char dollars_in_ident;
 
+  /* Nonzero means UCNs are accepted in identifiers.  */
+  unsigned char extended_identifiers;
+
   /* True if we should warn about dollars in identifiers or numbers
      for this translation unit.  */
   unsigned char warn_dollars;
@@ -372,6 +388,10 @@ struct cpp_options
 
   /* Holds the name of the input character set.  */
   const char *input_charset;
+
+  /* The minimum permitted level of normalization before a warning
+     is generated.  */
+  enum cpp_normalize_level warn_normalize;
 
   /* True to warn about precompiled header files we couldn't use.  */
   bool warn_invalid_pch;
@@ -415,6 +435,9 @@ struct cpp_options
   /* True means return pragmas as tokens rather than processing
      them directly. */
   bool defer_pragmas;
+
+  /* True means error callback should be used for diagnostics.  */
+  bool client_diagnostic;
 };
 
 /* Callback for header lookup for HEADER, which is the name of a
@@ -439,7 +462,7 @@ struct cpp_callbacks
 
   void (*dir_change) (cpp_reader *, const char *);
   void (*include) (cpp_reader *, unsigned int, const unsigned char *,
-		   const char *, int);
+		   const char *, int, const cpp_token **);
   void (*define) (cpp_reader *, unsigned int, cpp_hashnode *);
   void (*undef) (cpp_reader *, unsigned int, cpp_hashnode *);
   void (*ident) (cpp_reader *, unsigned int, const cpp_string *);
@@ -447,6 +470,11 @@ struct cpp_callbacks
   int (*valid_pch) (cpp_reader *, const char *, int);
   void (*read_pch) (cpp_reader *, const char *, int, const char *);
   missing_header_cb missing_header;
+
+  /* Called to emit a diagnostic if client_diagnostic option is true.
+     This callback receives the translated message.  */
+  void (*error) (cpp_reader *, int, const char *, va_list *)
+       ATTRIBUTE_FPTR_PRINTF(3,0);
 };
 
 /* Chain of directories to look for include files in.  */
@@ -552,6 +580,19 @@ enum {
 /* The common part of an identifier node shared amongst all 3 C front
    ends.  Also used to store CPP identifiers, which are a superset of
    identifiers in the grammatical sense.  */
+
+union _cpp_hashnode_value GTY(())
+{
+  /* If a macro.  */
+  cpp_macro * GTY((tag ("NTV_MACRO"))) macro;
+  /* Answers to an assertion.  */
+  struct answer * GTY ((tag ("NTV_ANSWER"))) answers;
+  /* Code for a builtin macro.  */
+  enum builtin_type GTY ((tag ("NTV_BUILTIN"))) builtin;
+  /* Macro argument index.  */
+  unsigned short GTY ((tag ("NTV_ARGUMENT"))) arg_index;
+};
+
 struct cpp_hashnode GTY(())
 {
   struct ht_identifier ident;
@@ -563,17 +604,7 @@ struct cpp_hashnode GTY(())
   ENUM_BITFIELD(node_type) type : 8;	/* CPP node type.  */
   unsigned char flags;			/* CPP flags.  */
 
-  union _cpp_hashnode_value
-  {
-    /* If a macro.  */
-    cpp_macro * GTY((tag ("NTV_MACRO"))) macro;
-    /* Answers to an assertion.  */
-    struct answer * GTY ((tag ("NTV_ANSWER"))) answers;
-    /* Code for a builtin macro.  */
-    enum builtin_type GTY ((tag ("NTV_BUILTIN"))) builtin;
-    /* Macro argument index.  */
-    unsigned short GTY ((tag ("NTV_ARGUMENT"))) arg_index;
-  } GTY ((desc ("CPP_HASHNODE_VALUE_IDX (%1)"))) value;
+  union _cpp_hashnode_value GTY ((desc ("CPP_HASHNODE_VALUE_IDX (%1)"))) value;
 };
 
 /* Call this first to get a handle to pass to other functions.
@@ -637,7 +668,7 @@ extern unsigned int cpp_errors (cpp_reader *);
 extern unsigned int cpp_token_len (const cpp_token *);
 extern unsigned char *cpp_token_as_text (cpp_reader *, const cpp_token *);
 extern unsigned char *cpp_spell_token (cpp_reader *, const cpp_token *,
-				       unsigned char *);
+				       unsigned char *, bool);
 extern void cpp_register_pragma (cpp_reader *, const char *, const char *,
 				 void (*) (cpp_reader *), bool);
 extern void cpp_handle_deferred_pragma (cpp_reader *, const cpp_string *);

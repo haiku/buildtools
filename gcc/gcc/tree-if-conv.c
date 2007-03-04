@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* This pass implements tree level if-conversion transformation of loops.
    Initial goal is to help vectorizer vectorize loops with conditions.
@@ -84,7 +84,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "errors.h"
 #include "tree.h"
 #include "c-common.h"
 #include "flags.h"
@@ -111,13 +110,14 @@ static void tree_if_convert_cond_expr (struct loop *, tree, tree,
 static bool if_convertible_phi_p (struct loop *, basic_block, tree);
 static bool if_convertible_modify_expr_p (struct loop *, basic_block, tree);
 static bool if_convertible_stmt_p (struct loop *, basic_block, tree);
-static bool if_convertible_bb_p (struct loop *, basic_block, bool);
+static bool if_convertible_bb_p (struct loop *, basic_block, basic_block);
 static bool if_convertible_loop_p (struct loop *, bool);
 static void add_to_predicate_list (basic_block, tree);
 static tree add_to_dst_predicate_list (struct loop * loop, basic_block, tree, tree,
 				       block_stmt_iterator *);
 static void clean_predicate_lists (struct loop *loop);
-static basic_block find_phi_replacement_condition (basic_block, tree *,
+static basic_block find_phi_replacement_condition (struct loop *loop,
+						   basic_block, tree *,
 						   block_stmt_iterator *);
 static void replace_phi_with_cond_modify_expr (tree, tree, basic_block,
                                                block_stmt_iterator *);
@@ -126,7 +126,7 @@ static void combine_blocks (struct loop *);
 static tree ifc_temp_var (tree, tree);
 static bool pred_blocks_visited_p (basic_block, bitmap *);
 static basic_block * get_loop_body_in_if_conv_order (const struct loop *loop);
-static bool bb_with_exit_edge_p (basic_block);
+static bool bb_with_exit_edge_p (struct loop *, basic_block);
 
 /* List of basic blocks in if-conversion-suitable order.  */
 static basic_block *ifc_bbs;
@@ -160,7 +160,6 @@ tree_if_conversion (struct loop *loop, bool for_vectorizer)
 	  ifc_bbs = NULL;
 	}
       free_dominance_info (CDI_POST_DOMINATORS);
-      free_df ();
       return false;
     }
 
@@ -187,9 +186,9 @@ tree_if_conversion (struct loop *loop, bool for_vectorizer)
 
       /* If current bb has only one successor, then consider it as an
 	 unconditional goto.  */
-      if (EDGE_COUNT (bb->succs) == 1)
+      if (single_succ_p (bb))
 	{
-	  basic_block bb_n = EDGE_SUCC (bb, 0)->dest;
+	  basic_block bb_n = single_succ (bb);
 	  if (cond != NULL_TREE)
 	    add_to_predicate_list (bb_n, cond);
 	  cond = NULL_TREE;
@@ -205,7 +204,6 @@ tree_if_conversion (struct loop *loop, bool for_vectorizer)
   clean_predicate_lists (loop);
   free (ifc_bbs);
   ifc_bbs = NULL;
-  free_df ();
 
   return true;
 }
@@ -242,13 +240,6 @@ tree_if_convert_stmt (struct loop *  loop, tree t, tree cond,
 	 program.  */
       break;
 
-    case GOTO_EXPR:
-      /* Unconditional goto */
-      add_to_predicate_list (bb_for_stmt (TREE_OPERAND (t, 1)), cond);
-      bsi_remove (bsi);
-      cond = NULL_TREE;
-      break;
-
     case COND_EXPR:
       /* Update destination blocks' predicate list and remove this
 	 condition expression.  */
@@ -271,22 +262,12 @@ static void
 tree_if_convert_cond_expr (struct loop *loop, tree stmt, tree cond,
 			   block_stmt_iterator *bsi)
 {
-  tree c, c2, new_cond;
+  tree c, c2;
   edge true_edge, false_edge;
-  new_cond = NULL_TREE;
 
   gcc_assert (TREE_CODE (stmt) == COND_EXPR);
 
   c = COND_EXPR_COND (stmt);
-
-  /* Create temp. for condition.  */
-  if (!is_gimple_condexpr (c))
-    {
-      tree new_stmt;
-      new_stmt = ifc_temp_var (TREE_TYPE (c), unshare_expr (c));
-      bsi_insert_before (bsi, new_stmt, BSI_SAME_STMT);
-      c = TREE_OPERAND (new_stmt, 0);
-    }
 
   extract_true_false_edges_from_block (bb_for_stmt (stmt),
  				       &true_edge, &false_edge);
@@ -294,16 +275,8 @@ tree_if_convert_cond_expr (struct loop *loop, tree stmt, tree cond,
   /* Add new condition into destination's predicate list.  */
 
   /* If 'c' is true then TRUE_EDGE is taken.  */
-  new_cond = add_to_dst_predicate_list (loop, true_edge->dest, cond,
-					unshare_expr (c), bsi);
-
-  if (!is_gimple_reg(c) && is_gimple_condexpr (c))
-    {
-      tree new_stmt;
-      new_stmt = ifc_temp_var (TREE_TYPE (c), unshare_expr (c));
-      bsi_insert_before (bsi, new_stmt, BSI_SAME_STMT);
-      c = TREE_OPERAND (new_stmt, 0);
-    }
+  add_to_dst_predicate_list (loop, true_edge->dest, cond,
+			     unshare_expr (c), bsi);
 
   /* If 'c' is false then FALSE_EDGE is taken.  */
   c2 = invert_truthvalue (unshare_expr (c));
@@ -312,7 +285,7 @@ tree_if_convert_cond_expr (struct loop *loop, tree stmt, tree cond,
   /* Now this conditional statement is redundant. Remove it.
      But, do not remove exit condition! Update exit condition
      using new condition.  */
-  if (!bb_with_exit_edge_p (bb_for_stmt (stmt)))
+  if (!bb_with_exit_edge_p (loop, bb_for_stmt (stmt)))
     {
       bsi_remove (bsi);
       cond = NULL_TREE;
@@ -344,13 +317,11 @@ if_convertible_phi_p (struct loop *loop, basic_block bb, tree phi)
 
   if (!is_gimple_reg (SSA_NAME_VAR (PHI_RESULT (phi))))
     {
-      int j;
-      dataflow_t df = get_immediate_uses (phi);
-      int num_uses = num_immediate_uses (df);
-      for (j = 0; j < num_uses; j++)
+      imm_use_iterator imm_iter;
+      use_operand_p use_p;
+      FOR_EACH_IMM_USE_FAST (use_p, imm_iter, PHI_RESULT (phi))
 	{
-	  tree use = immediate_use (df, j);
-	  if (TREE_CODE (use) == PHI_NODE)
+	  if (TREE_CODE (USE_STMT (use_p)) == PHI_NODE)
 	    {
 	      if (dump_file && (dump_flags & TDF_DETAILS))
 		fprintf (dump_file, "Difficult to handle this virtual phi.\n");
@@ -405,7 +376,7 @@ if_convertible_modify_expr_p (struct loop *loop, basic_block bb, tree m_expr)
 
   if (TREE_CODE (TREE_OPERAND (m_expr, 0)) != SSA_NAME
       && bb != loop->header
-      && !bb_with_exit_edge_p (bb))
+      && !bb_with_exit_edge_p (loop, bb))
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
@@ -422,7 +393,7 @@ if_convertible_modify_expr_p (struct loop *loop, basic_block bb, tree m_expr)
 /* Return true, iff STMT is if-convertible.
    Statement is if-convertible if,
    - It is if-convertible MODIFY_EXPR
-   - IT is LABEL_EXPR, GOTO_EXPR or COND_EXPR.
+   - IT is LABEL_EXPR or COND_EXPR.
    STMT is inside block BB, which is inside loop LOOP.  */
 
 static bool
@@ -439,7 +410,6 @@ if_convertible_stmt_p (struct loop *loop, basic_block bb, tree stmt)
 	return false;
       break;
 
-    case GOTO_EXPR:
     case COND_EXPR:
       break;
 
@@ -467,7 +437,7 @@ if_convertible_stmt_p (struct loop *loop, basic_block bb, tree stmt)
    BB is inside loop LOOP.  */
 
 static bool
-if_convertible_bb_p (struct loop *loop, basic_block bb, bool exit_bb_seen)
+if_convertible_bb_p (struct loop *loop, basic_block bb, basic_block exit_bb)
 {
   edge e;
   edge_iterator ei;
@@ -475,7 +445,7 @@ if_convertible_bb_p (struct loop *loop, basic_block bb, bool exit_bb_seen)
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "----------[%d]-------------\n", bb->index);
 
-  if (exit_bb_seen)
+  if (exit_bb)
     {
       if (bb != loop->latch)
 	{
@@ -489,6 +459,14 @@ if_convertible_bb_p (struct loop *loop, basic_block bb, bool exit_bb_seen)
 	    fprintf (dump_file, "non empty basic block after exit bb\n");
 	  return false;
 	}
+      else if (bb == loop->latch 
+	       && bb != exit_bb
+	       && !dominated_by_p (CDI_DOMINATORS, bb, exit_bb))
+	  {
+	    if (dump_file && (dump_flags & TDF_DETAILS))
+	      fprintf (dump_file, "latch is not dominated by exit_block\n");
+	    return false;
+	  }
     }
 
   /* Be less adventurous and handle only normal edges.  */
@@ -524,7 +502,7 @@ if_convertible_loop_p (struct loop *loop, bool for_vectorizer ATTRIBUTE_UNUSED)
   unsigned int i;
   edge e;
   edge_iterator ei;
-  bool exit_bb_seen = false;
+  basic_block exit_bb = NULL;
 
   /* Handle only inner most loop.  */
   if (!loop || loop->inner)
@@ -533,8 +511,6 @@ if_convertible_loop_p (struct loop *loop, bool for_vectorizer ATTRIBUTE_UNUSED)
 	fprintf (dump_file, "not inner most loop\n");
       return false;
     }
-
-  flow_loop_scan (loop, LOOP_ALL);
 
   /* If only one block, no need for if-conversion.  */
   if (loop->num_nodes <= 2)
@@ -545,7 +521,7 @@ if_convertible_loop_p (struct loop *loop, bool for_vectorizer ATTRIBUTE_UNUSED)
     }
 
   /* More than one loop exit is too much to handle.  */
-  if (loop->num_exits > 1)
+  if (!loop->single_exit)
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "multiple exits\n");
@@ -557,10 +533,10 @@ if_convertible_loop_p (struct loop *loop, bool for_vectorizer ATTRIBUTE_UNUSED)
   /* If one of the loop header's edge is exit edge then do not apply
      if-conversion.  */
   FOR_EACH_EDGE (e, ei, loop->header->succs)
-    if ( e->flags & EDGE_LOOP_EXIT)
-      return false;
-
-  compute_immediate_uses (TDFA_USE_OPS|TDFA_USE_VOPS, NULL);
+    {
+      if (loop_exit_edge_p (loop, e))
+	return false;
+    }
 
   calculate_dominance_info (CDI_DOMINATORS);
   calculate_dominance_info (CDI_POST_DOMINATORS);
@@ -579,7 +555,7 @@ if_convertible_loop_p (struct loop *loop, bool for_vectorizer ATTRIBUTE_UNUSED)
     {
       bb = ifc_bbs[i];
 
-      if (!if_convertible_bb_p (loop, bb, exit_bb_seen))
+      if (!if_convertible_bb_p (loop, bb, exit_bb))
 	return false;
 
       /* Check statements.  */
@@ -593,8 +569,8 @@ if_convertible_loop_p (struct loop *loop, bool for_vectorizer ATTRIBUTE_UNUSED)
 	if (!if_convertible_phi_p (loop, bb, phi))
 	  return false;
 
-      if (bb_with_exit_edge_p (bb))
-	exit_bb_seen = true;
+      if (bb_with_exit_edge_p (loop, bb))
+	exit_bb = bb;
     }
 
   /* OK. Did not find any potential issues so go ahead in if-convert
@@ -614,8 +590,8 @@ add_to_predicate_list (basic_block bb, tree new_cond)
   tree cond = bb->aux;
 
   if (cond)
-    cond = fold (build (TRUTH_OR_EXPR, boolean_type_node,
-			unshare_expr (cond), new_cond));
+    cond = fold_build2 (TRUTH_OR_EXPR, boolean_type_node,
+			unshare_expr (cond), new_cond);
   else
     cond = new_cond;
 
@@ -684,57 +660,93 @@ clean_predicate_lists (struct loop *loop)
    whose phi arguments are selected when cond is true.  */
 
 static basic_block
-find_phi_replacement_condition (basic_block bb, tree *cond,
+find_phi_replacement_condition (struct loop *loop, 
+				basic_block bb, tree *cond,
                                 block_stmt_iterator *bsi)
 {
-  edge e;
-  basic_block p1 = NULL;
-  basic_block p2 = NULL;
-  basic_block true_bb = NULL; 
-  tree tmp_cond;
-  edge_iterator ei;
+  basic_block first_bb = NULL;
+  basic_block second_bb = NULL;
+  tree tmp_cond, new_stmts;
 
-  FOR_EACH_EDGE (e, ei, bb->preds)
-    {
-      if (p1 == NULL)
-	p1 = e->src;
-      else 
-	{
-	  gcc_assert (!p2);
-	  p2 = e->src;
-	}
-    }
+  gcc_assert (EDGE_COUNT (bb->preds) == 2);
+  first_bb = (EDGE_PRED (bb, 0))->src;
+  second_bb = (EDGE_PRED (bb, 1))->src;
 
-  /* Use condition that is not TRUTH_NOT_EXPR in conditional modify expr.  */
-  tmp_cond = p1->aux;
+  /* Use condition based on following criteria:
+     1)
+       S1: x = !c ? a : b;
+
+       S2: x = c ? b : a;
+
+       S2 is preferred over S1. Make 'b' first_bb and use its condition.
+       
+     2) Do not make loop header first_bb.
+
+     3)
+       S1: x = !(c == d)? a : b;
+
+       S21: t1 = c == d;
+       S22: x = t1 ? b : a;
+
+       S3: x = (c == d) ? b : a;
+
+       S3 is preferred over S1 and S2*, Make 'b' first_bb and use 
+       its condition.  
+
+     4) If  pred B is dominated by pred A then use pred B's condition.
+        See PR23115.  */
+
+  /* Select condition that is not TRUTH_NOT_EXPR.  */
+  tmp_cond = first_bb->aux;
   if (TREE_CODE (tmp_cond) == TRUTH_NOT_EXPR)
     {
-      *cond  = p2->aux;
-      true_bb = p2;
+      basic_block tmp_bb;
+      tmp_bb = first_bb;
+      first_bb = second_bb;
+      second_bb = tmp_bb;
+    }
+
+  /* Check if FIRST_BB is loop header or not and make sure that
+     FIRST_BB does not dominate SECOND_BB.  */
+  if (first_bb == loop->header
+      || dominated_by_p (CDI_DOMINATORS, second_bb, first_bb))
+    {
+      tmp_cond = second_bb->aux;
+      if (TREE_CODE (tmp_cond) == TRUTH_NOT_EXPR)
+	{
+	  /* Select non loop header condition but do not switch basic blocks.  */
+	  *cond = invert_truthvalue (unshare_expr (tmp_cond));
+	}
+      else
+	{
+	  /* Select non loop header condition.  */
+	  first_bb = second_bb;
+	  *cond = first_bb->aux;
+	}
     }
   else
-    {
-      *cond  = p1->aux;
-      true_bb = p1;
-    }
+    /* FIRST_BB is not loop header */
+    *cond = first_bb->aux;
 
   /* Create temp. for the condition. Vectorizer prefers to have gimple
      value as condition. Various targets use different means to communicate
      condition in vector compare operation. Using gimple value allows compiler
      to emit vector compare and select RTL without exposing compare's result.  */
+  *cond = force_gimple_operand (*cond, &new_stmts, false, NULL_TREE);
+  if (new_stmts)
+    bsi_insert_before (bsi, new_stmts, BSI_SAME_STMT);
   if (!is_gimple_reg (*cond) && !is_gimple_condexpr (*cond))
     {
       tree new_stmt;
 
       new_stmt = ifc_temp_var (TREE_TYPE (*cond), unshare_expr (*cond));
-      bsi_insert_after (bsi, new_stmt, BSI_SAME_STMT);
-      bsi_next (bsi);
+      bsi_insert_before (bsi, new_stmt, BSI_SAME_STMT);
       *cond = TREE_OPERAND (new_stmt, 0);
     }
 
   gcc_assert (*cond);
 
-  return true_bb;
+  return first_bb;
 }
 
 
@@ -793,13 +805,9 @@ replace_phi_with_cond_modify_expr (tree phi, tree cond, basic_block true_bb,
   /* Make new statement definition of the original phi result.  */
   SSA_NAME_DEF_STMT (PHI_RESULT (phi)) = new_stmt;
 
-  /* Set basic block and insert using iterator.  */
-  set_bb_for_stmt (new_stmt, bb);
-
-  bsi_insert_after (bsi, new_stmt, BSI_SAME_STMT);
-  bsi_next (bsi);
-
-  modify_stmt (new_stmt);
+  /* Insert using iterator.  */
+  bsi_insert_before (bsi, new_stmt, BSI_SAME_STMT);
+  update_stmt (new_stmt);
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -835,7 +843,7 @@ process_phi_nodes (struct loop *loop)
       /* BB has two predecessors. Using predecessor's aux field, set
 	 appropriate condition for the PHI node replacement.  */
       if (phi)
-	true_bb = find_phi_replacement_condition (bb, &cond, &bsi);
+	true_bb = find_phi_replacement_condition (loop, bb, &cond, &bsi);
 
       while (phi)
 	{
@@ -844,7 +852,7 @@ process_phi_nodes (struct loop *loop)
 	  release_phi_node (phi);
 	  phi = next;
 	}
-      bb_ann (bb)->phi_nodes = NULL;
+      bb->phi_nodes = NULL;
     }
   return;
 }
@@ -858,68 +866,73 @@ combine_blocks (struct loop *loop)
   basic_block bb, exit_bb, merge_target_bb;
   unsigned int orig_loop_num_nodes = loop->num_nodes;
   unsigned int i;
-  unsigned int n_exits;
-  edge *exits = get_loop_exit_edges (loop, &n_exits);
+  edge e;
+  edge_iterator ei;
+
   /* Process phi nodes to prepare blocks for merge.  */
   process_phi_nodes (loop);
 
+  /* Merge basic blocks.  First remove all the edges in the loop, except
+     for those from the exit block.  */
   exit_bb = NULL;
+  for (i = 0; i < orig_loop_num_nodes; i++)
+    {
+      bb = ifc_bbs[i];
+      if (bb_with_exit_edge_p (loop, bb))
+	{
+	  exit_bb = bb;
+	  break;
+	}
+    }
+  gcc_assert (exit_bb != loop->latch);
 
-  /* Merge basic blocks */
+  for (i = 1; i < orig_loop_num_nodes; i++)
+    {
+      bb = ifc_bbs[i];
+
+      for (ei = ei_start (bb->preds); (e = ei_safe_edge (ei));)
+	{
+	  if (e->src == exit_bb)
+	    ei_next (&ei);
+	  else
+	    remove_edge (e);
+	}
+    }
+
+  if (exit_bb != NULL)
+    {
+      if (exit_bb != loop->header)
+	{
+	  /* Connect this node with loop header.  */
+	  make_edge (loop->header, exit_bb, EDGE_FALLTHRU);
+	  set_immediate_dominator (CDI_DOMINATORS, exit_bb, loop->header);
+	}
+
+      /* Redirect non-exit edges to loop->latch.  */
+      FOR_EACH_EDGE (e, ei, exit_bb->succs)
+	{
+	  if (!loop_exit_edge_p (loop, e))
+	    redirect_edge_and_branch (e, loop->latch);
+	}
+      set_immediate_dominator (CDI_DOMINATORS, loop->latch, exit_bb);
+    }
+  else
+    {
+      /* If the loop does not have exit then reconnect header and latch.  */
+      make_edge (loop->header, loop->latch, EDGE_FALLTHRU);
+      set_immediate_dominator (CDI_DOMINATORS, loop->latch, loop->header);
+    }
+
   merge_target_bb = loop->header;
   for (i = 1; i < orig_loop_num_nodes; i++)
     {
-      edge e;
       block_stmt_iterator bsi;
       tree_stmt_iterator last;
 
       bb = ifc_bbs[i];
 
-      if (!exit_bb && bb_with_exit_edge_p (bb))
-	  exit_bb = bb;
-
-      if (bb == exit_bb)
-	{
-	  edge new_e;
-	  edge_iterator ei;
-
-	  /* Connect this node with loop header.  */
-	  new_e = make_edge (ifc_bbs[0], bb, EDGE_FALLTHRU);
-	  set_immediate_dominator (CDI_DOMINATORS, bb, ifc_bbs[0]);
-
-	  if (exit_bb != loop->latch)
-	    {
-	      /* Redirect non-exit edge to loop->latch.  */
-	      FOR_EACH_EDGE (e, ei, bb->succs)
-		if (!(e->flags & EDGE_LOOP_EXIT))
-		  {
-		    redirect_edge_and_branch (e, loop->latch);
-		    set_immediate_dominator (CDI_DOMINATORS, loop->latch, bb);
-		  }
-	    }
-	  continue;
-	}
-
-      if (bb == loop->latch && empty_block_p (bb))
+      if (bb == exit_bb || bb == loop->latch)
 	continue;
-
-      /* It is time to remove this basic block.	 First remove edges.  */
-      while (EDGE_COUNT (bb->preds) > 0)
-	remove_edge (EDGE_PRED (bb, 0));
-
-      /* This is loop latch and loop does not have exit then do not
- 	 delete this basic block. Just remove its PREDS and reconnect 
- 	 loop->header and loop->latch blocks.  */
-      if (bb == loop->latch && n_exits == 0)
- 	{
-	  exits = NULL; /* To suppress unused warning.  */
- 	  make_edge (loop->header, loop->latch, EDGE_FALLTHRU);
- 	  set_immediate_dominator (CDI_DOMINATORS, loop->latch, loop->header);
-	  continue;
- 	}
-
-      while (EDGE_COUNT (bb->succs) > 0)
-	remove_edge (EDGE_SUCC (bb, 0));
 
       /* Remove labels and make stmts member of loop->header.  */
       for (bsi = bsi_start (bb); !bsi_end_p (bsi); )
@@ -945,8 +958,6 @@ combine_blocks (struct loop *loop)
 	delete_from_dominance_info (CDI_POST_DOMINATORS, bb);
 
       /* Remove basic block.  */
-      if (bb == loop->latch)
-	loop->latch = merge_target_bb;
       remove_bb_from_loops (bb);
       expunge_block (bb);
     }
@@ -955,15 +966,11 @@ combine_blocks (struct loop *loop)
      This reduces number of basic blocks to 2. Auto vectorizer addresses
      loops with two nodes only.  FIXME: Use cleanup_tree_cfg().  */
   if (exit_bb
-      && loop->header != loop->latch
-      && exit_bb != loop->latch 
-      && empty_block_p (loop->latch))
+      && exit_bb != loop->header
+      && can_merge_blocks_p (loop->header, exit_bb))
     {
-      if (can_merge_blocks_p (loop->header, exit_bb))
-	{
-	  remove_bb_from_loops (exit_bb);
-	  merge_blocks (loop->header, exit_bb);
-	}
+      remove_bb_from_loops (exit_bb);
+      merge_blocks (loop->header, exit_bb);
     }
 }
 
@@ -1069,17 +1076,17 @@ get_loop_body_in_if_conv_order (const struct loop *loop)
   return blocks;
 }
 
-/* Return true if one of the basic block BB edge is loop exit.  */
+/* Return true if one of the basic block BB edge is exit of LOOP.  */
 
 static bool
-bb_with_exit_edge_p (basic_block bb)
+bb_with_exit_edge_p (struct loop *loop, basic_block bb)
 {
   edge e;
   edge_iterator ei;
   bool exit_edge_found = false;
 
   FOR_EACH_EDGE (e, ei, bb->succs)
-    if (e->flags & EDGE_LOOP_EXIT)
+    if (loop_exit_edge_p (loop, e))
       {
 	exit_edge_found = true;
 	break;
@@ -1119,20 +1126,18 @@ gate_tree_if_conversion (void)
 
 struct tree_opt_pass pass_if_conversion =
 {
-  "ifcvt",                           /* name */
-  gate_tree_if_conversion,           /* gate */
-  main_tree_if_conversion,           /* execute */
-  NULL,                              /* sub */
-  NULL,                              /* next */
-  0,                                 /* static_pass_number */
-  0,                                 /* tv_id */
-  PROP_cfg | PROP_ssa | PROP_alias,  /* properties_required */
-  0,                                 /* properties_provided */
-  0,                                 /* properties_destroyed */
-  TODO_dump_func,                    /* todo_flags_start */
-  TODO_dump_func
-    | TODO_verify_ssa
-    | TODO_verify_stmts
-    | TODO_verify_flow,              /* todo_flags_finish */
-  0				     /* letter */
+  "ifcvt",				/* name */
+  gate_tree_if_conversion,		/* gate */
+  main_tree_if_conversion,		/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  0,					/* tv_id */
+  PROP_cfg | PROP_ssa | PROP_alias,	/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_dump_func | TODO_verify_loops | TODO_verify_stmts | TODO_verify_flow,	
+                                        /* todo_flags_finish */
+  0					/* letter */
 };

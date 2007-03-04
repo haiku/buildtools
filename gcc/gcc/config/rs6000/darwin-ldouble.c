@@ -1,5 +1,6 @@
 /* 128-bit long double support routines for Darwin.
-   Copyright (C) 1993, 2003, 2004, 2005 Free Software Foundation, Inc.
+   Copyright (C) 1993, 2003, 2004, 2005, 2006
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -24,8 +25,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Implementations of floating-point long double basic arithmetic
    functions called by the IBM C compiler when generating code for
@@ -48,7 +49,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
    This code currently assumes big-endian.  */
 
-#if !_SOFT_FLOAT && (defined (__MACH__) || defined (__powerpc64__) || defined (_AIX))
+#if (!defined (__NO_FPRS__) && !defined (__LITTLE_ENDIAN__) \
+     && (defined (__MACH__) || defined (__powerpc__) || defined (_AIX)))
 
 #define fabs(x) __builtin_fabs(x)
 #define isless(x, y) __builtin_isless (x, y)
@@ -67,8 +69,9 @@ extern long double __gcc_qsub (double, double, double, double);
 extern long double __gcc_qmul (double, double, double, double);
 extern long double __gcc_qdiv (double, double, double, double);
 
-#if defined __ELF__ && defined SHARED
-/* Provide definitions of the old symbol names to statisfy apps and
+#if defined __ELF__ && defined SHARED \
+    && (defined __powerpc64__ || !(defined __linux__ || defined __gnu_hurd__))
+/* Provide definitions of the old symbol names to satisfy apps and
    shared libs built against an older libgcc.  To access the _xlq
    symbols an explicit version reference is needed, so these won't
    satisfy an unadorned reference like _xlqadd.  If dot symbols are
@@ -115,8 +118,12 @@ __gcc_qadd (double a, double aa, double c, double cc)
     {
       q = a - z;
       zz = q + c + (a - (q + z)) + aa + cc;
-      xh = z + zz;
 
+      /* Keep -0 result.  */
+      if (zz == 0.0)
+	return z;
+
+      xh = z + zz;
       if (nonfinite (xh))
 	return xh;
 

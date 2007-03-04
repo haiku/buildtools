@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Random number that should be large enough for all purposes.  */
 #define MAX_RECOG_ALTERNATIVES 30
@@ -74,7 +74,9 @@ extern void init_recog_no_volatile (void);
 extern int check_asm_operands (rtx);
 extern int asm_operand_ok (rtx, const char *);
 extern int validate_change (rtx, rtx *, rtx, int);
+extern int validate_change_maybe_volatile (rtx, rtx *, rtx);
 extern int insn_invalid_p (rtx);
+extern void confirm_change_group (void);
 extern int apply_change_group (void);
 extern int num_validated_changes (void);
 extern void cancel_changes (int);
@@ -263,3 +265,4 @@ struct insn_data
 };
 
 extern const struct insn_data insn_data[];
+extern int peep2_current_count;

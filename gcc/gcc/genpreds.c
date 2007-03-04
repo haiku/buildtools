@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "bconfig.h"
 #include "system.h"
@@ -122,7 +122,7 @@ write_predicate_subfunction (struct pred_data *p)
   obstack_grow (rtl_obstack, p->name, strlen (p->name));
   obstack_grow (rtl_obstack, "_1 (op, mode)",
 		sizeof "_1 (op, mode)");
-  match_test_str = obstack_finish (rtl_obstack);
+  match_test_str = XOBFINISH (rtl_obstack, const char *);
 
   /* Add the function-call expression to the complete expression to be
      evaluated.  */
@@ -138,6 +138,7 @@ write_predicate_subfunction (struct pred_data *p)
   printf ("static inline int\n"
 	  "%s_1 (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)\n",
 	  p->name);
+  print_rtx_ptr_loc (p->c_block);
   if (p->c_block[0] == '{')
     fputs (p->c_block, stdout);
   else
@@ -377,7 +378,7 @@ write_predicate_expr (const char *name, rtx exp)
       break;
 
     case MATCH_TEST:
-      fputs (XSTR (exp, 0), stdout);
+      print_c_condition (XSTR (exp, 0));
       break;
 
     default:

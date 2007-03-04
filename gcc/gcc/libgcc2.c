@@ -26,32 +26,41 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
-
-/* We include auto-host.h here to get HAVE_GAS_HIDDEN.  This is
-   supposedly valid even though this is a "target" file.  */
-#include "auto-host.h"
-
-/* It is incorrect to include config.h here, because this file is being
-   compiled for the target, and hence definitions concerning only the host
-   do not apply.  */
 #include "tconfig.h"
 #include "tsystem.h"
 #include "coretypes.h"
 #include "tm.h"
-
-/* Don't use `fancy_abort' here even if config.h says to use it.  */
-#ifdef abort
-#undef abort
-#endif
 
 #ifdef HAVE_GAS_HIDDEN
 #define ATTRIBUTE_HIDDEN  __attribute__ ((__visibility__ ("hidden")))
 #else
 #define ATTRIBUTE_HIDDEN
 #endif
+
+#ifndef MIN_UNITS_PER_WORD
+#define MIN_UNITS_PER_WORD UNITS_PER_WORD
+#endif
+
+/* Work out the largest "word" size that we can deal with on this target.  */
+#if MIN_UNITS_PER_WORD > 4
+# define LIBGCC2_MAX_UNITS_PER_WORD 8
+#elif (MIN_UNITS_PER_WORD > 2 \
+       || (MIN_UNITS_PER_WORD > 1 && LONG_LONG_TYPE_SIZE > 32))
+# define LIBGCC2_MAX_UNITS_PER_WORD 4
+#else
+# define LIBGCC2_MAX_UNITS_PER_WORD MIN_UNITS_PER_WORD
+#endif
+
+/* Work out what word size we are using for this compilation.
+   The value can be set on the command line.  */
+#ifndef LIBGCC2_UNITS_PER_WORD
+#define LIBGCC2_UNITS_PER_WORD LIBGCC2_MAX_UNITS_PER_WORD
+#endif
+
+#if LIBGCC2_UNITS_PER_WORD <= LIBGCC2_MAX_UNITS_PER_WORD
 
 #include "libgcc2.h"
 
@@ -661,7 +670,7 @@ __udiv_w_sdiv (UWtype *rp __attribute__ ((__unused__)),
 #endif
 
 #ifdef L_clz
-const UQItype __clz_tab[] =
+const UQItype __clz_tab[256] =
 {
   0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
   6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
@@ -670,7 +679,7 @@ const UQItype __clz_tab[] =
   8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
   8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
   8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-  8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
+  8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
 };
 #endif
 
@@ -738,13 +747,8 @@ __ctzDI2 (UDWtype x)
 }
 #endif
 
-#if (defined (L_popcountsi2) || defined (L_popcountdi2)	\
-     || defined (L_popcount_tab))
-extern const UQItype __popcount_tab[] ATTRIBUTE_HIDDEN;
-#endif
-
 #ifdef L_popcount_tab
-const UQItype __popcount_tab[] =
+const UQItype __popcount_tab[256] =
 {
     0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,
     1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,
@@ -753,7 +757,7 @@ const UQItype __popcount_tab[] =
     1,2,2,3,2,3,3,4,2,3,3,4,3,4,4,5,2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,
     2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,
     2,3,3,4,3,4,4,5,3,4,4,5,4,5,5,6,3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,
-    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,4,5,5,6,5,6,6,7,5,6,6,7,6,7,7,8,
+    3,4,4,5,4,5,5,6,4,5,5,6,5,6,6,7,4,5,5,6,5,6,6,7,5,6,6,7,6,7,7,8
 };
 #endif
 
@@ -1538,10 +1542,12 @@ __fixunssfSI (SFtype a)
 #  define NAME __powitf2
 # endif
 
+#undef int
+#undef unsigned
 TYPE
-NAME (TYPE x, Wtype m)
+NAME (TYPE x, int m)
 {
-  UWtype n = m < 0 ? -m : m;
+  unsigned int n = m < 0 ? -m : m;
   TYPE y = n % 2 ? x : 1;
   while (n >>= 1)
     {
@@ -1727,7 +1733,7 @@ CONCAT3(__div,MODE,3) (MTYPE a, MTYPE b, MTYPE c, MTYPE d)
      are nonzero/zero, infinite/finite, and finite/infinite.  */
   if (isnan (x) && isnan (y))
     {
-      if (denom == 0.0 && (!isnan (a) || !isnan (b)))
+      if (c == 0.0 && d == 0.0 && (!isnan (a) || !isnan (b)))
 	{
 	  x = COPYSIGN (INFINITY, c) * a;
 	  y = COPYSIGN (INFINITY, c) * b;
@@ -1903,6 +1909,7 @@ TRANSFER_FROM_TRAMPOLINE
 #ifdef L__main
 
 #include "gbl-ctors.h"
+
 /* Some systems use __main in a way incompatible with its use in gcc, in these
    cases use the macros NAME__MAIN to give a quoted symbol and SYMBOL__MAIN to
    give the same symbol without quotes for an alternative entry point.  You
@@ -1912,7 +1919,7 @@ TRANSFER_FROM_TRAMPOLINE
 #define SYMBOL__MAIN __main
 #endif
 
-#ifdef INIT_SECTION_ASM_OP
+#if defined (INIT_SECTION_ASM_OP) || defined (INIT_ARRAY_SECTION_ASM_OP)
 #undef HAS_INIT_SECTION
 #define HAS_INIT_SECTION
 #endif
@@ -2025,3 +2032,4 @@ func_ptr __DTOR_LIST__[2];
 #endif
 #endif /* no INIT_SECTION_ASM_OP and not CTOR_LISTS_DEFINED_EXTERNALLY */
 #endif /* L_ctors */
+#endif /* LIBGCC2_UNITS_PER_WORD <= MIN_UNITS_PER_WORD */

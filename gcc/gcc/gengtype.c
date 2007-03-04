@@ -15,8 +15,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "bconfig.h"
 #include "system.h"
@@ -628,14 +628,6 @@ adjust_field_rtx_def (type_p t, options_p ARG_UNUSED (opt))
 	      subfields->opt->name = "desc";
 	      subfields->opt->info = "NOTE_LINE_NUMBER (&%0)";
 	    }
-	  else if (t == basic_block_tp)
-	    {
-	      /* We don't presently GC basic block structures...  */
-	      subfields->opt = XNEW (struct options);
-	      subfields->opt->next = nodot;
-	      subfields->opt->name = "skip";
-	      subfields->opt->info = NULL;
-	    }
 	  else
 	    subfields->opt = nodot;
 	}
@@ -1018,8 +1010,8 @@ create_file (const char *name, const char *oname)
     "\n",
     "You should have received a copy of the GNU General Public License\n",
     "along with GCC; see the file COPYING.  If not, write to the Free\n",
-    "Software Foundation, 59 Temple Place - Suite 330, Boston, MA\n",
-    "02111-1307, USA.  */\n",
+    "Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA\n",
+    "02110-1301, USA.  */\n",
     "\n",
     "/* This file is machine generated.  Do not edit.  */\n"
   };
@@ -1088,7 +1080,7 @@ open_base_files (void)
       "hard-reg-set.h", "basic-block.h", "cselib.h", "insn-addr.h",
       "optabs.h", "libfuncs.h", "debug.h", "ggc.h", "cgraph.h",
       "tree-flow.h", "reload.h", "cpp-id-data.h", "tree-chrec.h",
-      NULL
+      "except.h", NULL
     };
     const char *const *ifp;
     outf_p gtype_desc_c;
@@ -1238,6 +1230,15 @@ get_output_file_with_visibility (const char *input_file)
     output_name = "gt-c-common.h", for_name = "c-common.c";
   else if (strcmp (basename, "c-tree.h") == 0)
     output_name = "gt-c-decl.h", for_name = "c-decl.c";
+  else if (strncmp (basename, "cp", 2) == 0 && IS_DIR_SEPARATOR (basename[2])
+	   && strcmp (basename + 3, "cp-tree.h") == 0)
+    output_name = "gt-cp-tree.h", for_name = "cp/tree.c";
+  else if (strncmp (basename, "cp", 2) == 0 && IS_DIR_SEPARATOR (basename[2])
+	   && strcmp (basename + 3, "decl.h") == 0)
+    output_name = "gt-cp-decl.h", for_name = "cp/decl.c";
+  else if (strncmp (basename, "cp", 2) == 0 && IS_DIR_SEPARATOR (basename[2])
+	   && strcmp (basename + 3, "name-lookup.h") == 0)
+    output_name = "gt-cp-name-lookup.h", for_name = "cp/name-lookup.c";
   else if (strncmp (basename, "objc", 4) == 0 && IS_DIR_SEPARATOR (basename[4])
 	   && strcmp (basename + 5, "objc-act.h") == 0)
     output_name = "gt-objc-objc-act.h", for_name = "objc/objc-act.c";
@@ -1928,6 +1929,21 @@ write_types_process_field (type_p f, const struct walk_type_data *d)
 	    }
 	  else
 	    oprintf (d->of, ", gt_%sa_%s", wtd->param_prefix, d->prev_val[0]);
+
+	  if (f->u.p->kind == TYPE_PARAM_STRUCT
+	      && f->u.p->u.s.line.file != NULL)
+	    {
+	      oprintf (d->of, ", gt_e_");
+	      output_mangled_typename (d->of, f);
+	    }
+	  else if (UNION_OR_STRUCT_P (f)
+		   && f->u.p->u.s.line.file != NULL)
+	    {
+	      oprintf (d->of, ", gt_ggc_e_");
+	      output_mangled_typename (d->of, f);
+	    }
+	  else
+	    oprintf (d->of, ", gt_types_enum_last");
 	}
       oprintf (d->of, ");\n");
       if (d->reorder_fn && wtd->reorder_note_routine)
@@ -1959,6 +1975,25 @@ write_types_process_field (type_p f, const struct walk_type_data *d)
     default:
       gcc_unreachable ();
     }
+}
+
+/* A subroutine of write_func_for_structure.  Write the enum tag for S.  */
+
+static void
+output_type_enum (outf_p of, type_p s)
+{
+  if (s->kind == TYPE_PARAM_STRUCT && s->u.s.line.file != NULL)
+    {
+      oprintf (of, ", gt_e_");
+      output_mangled_typename (of, s);
+    }
+  else if (UNION_OR_STRUCT_P (s) && s->u.s.line.file != NULL)
+    {
+      oprintf (of, ", gt_ggc_e_");
+      output_mangled_typename (of, s);
+    }
+  else
+    oprintf (of, ", gt_types_enum_last");
 }
 
 /* For S, a structure that's part of ORIG_S, and using parameters
@@ -2035,6 +2070,7 @@ write_func_for_structure (type_p orig_s, type_p s, type_p *param,
 	{
 	  oprintf (d.of, ", x, gt_%s_", wtd->param_prefix);
 	  output_mangled_typename (d.of, orig_s);
+	  output_type_enum (d.of, orig_s);
 	}
       oprintf (d.of, "))\n");
     }
@@ -2045,6 +2081,7 @@ write_func_for_structure (type_p orig_s, type_p s, type_p *param,
 	{
 	  oprintf (d.of, ", xlimit, gt_%s_", wtd->param_prefix);
 	  output_mangled_typename (d.of, orig_s);
+	  output_type_enum (d.of, orig_s);
 	}
       oprintf (d.of, "))\n");
       oprintf (d.of, "   xlimit = (");
@@ -2070,6 +2107,7 @@ write_func_for_structure (type_p orig_s, type_p s, type_p *param,
 	    {
 	      oprintf (d.of, ", xprev, gt_%s_", wtd->param_prefix);
 	      output_mangled_typename (d.of, orig_s);
+	      output_type_enum (d.of, orig_s);
 	    }
 	  oprintf (d.of, ");\n");
 	  oprintf (d.of, "      }\n");

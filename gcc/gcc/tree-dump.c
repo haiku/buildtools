@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -38,7 +38,6 @@ static void dump_index (dump_info_p, unsigned int);
 static void dequeue_and_dump (dump_info_p);
 static void dump_new_line (dump_info_p);
 static void dump_maybe_newline (dump_info_p);
-static void dump_string_field (dump_info_p, const char *, const char *);
 static int dump_enable_all (int, int);
 
 /* Add T to the end of the queue of nodes to dump.  Returns the index
@@ -195,7 +194,7 @@ dump_string (dump_info_p di, const char *string)
 
 /* Dump the string field S.  */
 
-static void
+void
 dump_string_field (dump_info_p di, const char *field, const char *string)
 {
   dump_maybe_newline (di);
@@ -254,12 +253,12 @@ dequeue_and_dump (dump_info_p di)
     {
       unsigned ix;
       tree base;
-      VEC (tree) *accesses = BINFO_BASE_ACCESSES (t);
+      VEC(tree,gc) *accesses = BINFO_BASE_ACCESSES (t);
 
       dump_child ("type", BINFO_TYPE (t));
 
       if (BINFO_VIRTUAL_P (t))
-	dump_string (di, "virt");
+	dump_string_field (di, "spec", "virt");
 
       dump_int (di, "bases", BINFO_N_BASE_BINFOS (t));
       for (ix = 0; BINFO_BASE_ITERATE (t, ix, base); ix++)
@@ -277,7 +276,7 @@ dequeue_and_dump (dump_info_p di)
 	  else
 	    gcc_unreachable ();
 
-	  dump_string (di, string);
+	  dump_string_field (di, "accs", string);
 	  queue_and_dump_index (di, "binf", base, DUMP_BINFO);
 	}
 
@@ -322,6 +321,8 @@ dequeue_and_dump (dump_info_p di)
       if (DECL_ASSEMBLER_NAME_SET_P (t)
 	  && DECL_ASSEMBLER_NAME (t) != DECL_NAME (t))
 	dump_child ("mngl", DECL_ASSEMBLER_NAME (t));
+      if (DECL_ABSTRACT_ORIGIN (t))
+        dump_child ("orig", DECL_ABSTRACT_ORIGIN (t));
       /* And types.  */
       queue_and_dump_type (di, t);
       dump_child ("scpe", DECL_CONTEXT (t));
@@ -343,7 +344,7 @@ dequeue_and_dump (dump_info_p di)
 	}
       /* And any declaration can be compiler-generated.  */
       if (DECL_ARTIFICIAL (t))
-	dump_string (di, "artificial");
+	dump_string_field (di, "note", "artificial");
       if (TREE_CHAIN (t) && !dump_flag (di, TDF_SLIM, NULL))
 	dump_child ("chan", TREE_CHAIN (t));
     }
@@ -425,8 +426,7 @@ dequeue_and_dump (dump_info_p di)
     case INTEGER_TYPE:
     case ENUMERAL_TYPE:
       dump_int (di, "prec", TYPE_PRECISION (t));
-      if (TYPE_UNSIGNED (t))
-	dump_string (di, "unsigned");
+      dump_string_field (di, "sign", TYPE_UNSIGNED (t) ? "unsigned": "signed");
       dump_child ("min", TYPE_MIN_VALUE (t));
       dump_child ("max", TYPE_MAX_VALUE (t));
 
@@ -463,9 +463,9 @@ dequeue_and_dump (dump_info_p di)
     case RECORD_TYPE:
     case UNION_TYPE:
       if (TREE_CODE (t) == RECORD_TYPE)
-	dump_string (di, "struct");
+	dump_string_field (di, "tag", "struct");
       else
-	dump_string (di, "union");
+	dump_string_field (di, "tag", "union");
 
       dump_child ("flds", TYPE_FIELDS (t));
       dump_child ("fncs", TYPE_METHODS (t));
@@ -498,18 +498,18 @@ dequeue_and_dump (dump_info_p di)
 	{
 	  dump_int (di, "used", TREE_USED (t));
 	  if (DECL_REGISTER (t))
-	    dump_string (di, "register");
+	    dump_string_field (di, "spec", "register");
 	}
       break;
 
     case FUNCTION_DECL:
       dump_child ("args", DECL_ARGUMENTS (t));
       if (DECL_EXTERNAL (t))
-	dump_string (di, "undefined");
+	dump_string_field (di, "body", "undefined");
       if (TREE_PUBLIC (t))
-	dump_string (di, "extern");
+	dump_string_field (di, "link", "extern");
       else
-	dump_string (di, "static");
+	dump_string_field (di, "link", "static");
       if (DECL_LANG_SPECIFIC (t) && !dump_flag (di, TDF_SLIM, t))
 	dump_child ("body", DECL_SAVED_TREE (t));
       break;
@@ -572,13 +572,28 @@ dequeue_and_dump (dump_info_p di)
       dump_child ("op 2", TREE_OPERAND (t, 2));
       break;
 
+    case TRY_FINALLY_EXPR:
+      dump_child ("op 0", TREE_OPERAND (t, 0));
+      dump_child ("op 1", TREE_OPERAND (t, 1));
+      break;
+
     case CALL_EXPR:
       dump_child ("fn", TREE_OPERAND (t, 0));
       dump_child ("args", TREE_OPERAND (t, 1));
       break;
 
     case CONSTRUCTOR:
-      dump_child ("elts", CONSTRUCTOR_ELTS (t));
+      {
+	unsigned HOST_WIDE_INT cnt;
+	tree index, value;
+	dump_int (di, "lngt", VEC_length (constructor_elt,
+					  CONSTRUCTOR_ELTS (t)));
+	FOR_EACH_CONSTRUCTOR_ELT (CONSTRUCTOR_ELTS (t), cnt, index, value)
+	  {
+	    dump_child ("idx", index);
+	    dump_child ("val", value);
+	  }
+      }
       break;
 
     case BIND_EXPR:
@@ -594,6 +609,10 @@ dequeue_and_dump (dump_info_p di)
       dump_child ("cond", TREE_OPERAND (t, 0));
       break;
 
+    case RETURN_EXPR:
+      dump_child ("expr", TREE_OPERAND (t, 0));
+      break;
+
     case TARGET_EXPR:
       dump_child ("decl", TREE_OPERAND (t, 0));
       dump_child ("init", TREE_OPERAND (t, 1));
@@ -605,6 +624,29 @@ dequeue_and_dump (dump_info_p di)
       dump_child ("init", TREE_OPERAND (t, 3));
       break;
 
+    case CASE_LABEL_EXPR:
+      dump_child ("name", CASE_LABEL (t));
+      if (CASE_LOW (t)) {
+        dump_child ("low ", CASE_LOW (t));
+	if (CASE_HIGH (t)) {
+	  dump_child ("high", CASE_HIGH (t));
+	}
+      }
+      break;
+    case LABEL_EXPR:
+      dump_child ("name", TREE_OPERAND (t,0));
+      break;
+    case GOTO_EXPR:
+      dump_child ("labl", TREE_OPERAND (t, 0));
+      break;
+    case SWITCH_EXPR:
+      dump_child ("cond", TREE_OPERAND (t, 0));
+      dump_child ("body", TREE_OPERAND (t, 1));
+      if (TREE_OPERAND (t, 2))
+        {
+      	  dump_child ("labl", TREE_OPERAND (t,2));
+        }
+      break;
     default:
       /* There are no additional fields to print.  */
       break;
@@ -672,7 +714,7 @@ static struct dump_file_info dump_files[TDI_end] =
   {".tu", "translation-unit", NULL, TDF_TREE, 0, 0, 0},
   {".class", "class-hierarchy", NULL, TDF_TREE, 0, 1, 0},
   {".original", "tree-original", NULL, TDF_TREE, 0, 2, 0},
-  {".generic", "tree-generic", NULL, TDF_TREE, 0, 3, 0},
+  {".gimple", "tree-gimple", NULL, TDF_TREE, 0, 3, 0},
   {".nested", "tree-nested", NULL, TDF_TREE, 0, 4, 0},
   {".inlined", "tree-inlined", NULL, TDF_TREE, 0, 5, 0},
   {".vcg", "tree-vcg", NULL, TDF_TREE, 0, 6, 0},
@@ -680,44 +722,7 @@ static struct dump_file_info dump_files[TDI_end] =
   {NULL, "rtl-all", NULL, TDF_RTL, 0, 0, 0},
   {NULL, "ipa-all", NULL, TDF_IPA, 0, 0, 0},
 
-  { ".cgraph", "ipa-cgraph", NULL,	TDF_IPA, 0,  1, 0},
-
-  { ".sibling", "rtl-sibling", NULL,	TDF_RTL, 0,  1, 'i'},
-  { ".eh", "rtl-eh", NULL,		TDF_RTL, 0,  2, 'h'},
-  { ".jump", "rtl-jump", NULL,		TDF_RTL, 0,  3, 'j'},
-  { ".cse", "rtl-cse", NULL,    	 TDF_RTL, 0,  4, 's'},
-  { ".gcse", "rtl-gcse", NULL,		TDF_RTL, 0,  5, 'G'},
-  { ".loop", "rtl-loop", NULL,		TDF_RTL, 0,  6, 'L'},
-  { ".bypass", "rtl-bypass", NULL,		TDF_RTL, 0,  7, 'G'},
-  { ".cfg", "rtl-cfg", NULL,			TDF_RTL, 0,  8, 'f'},
-  { ".bp", "rtl-bp", NULL,			TDF_RTL, 0,  9, 'b'},
-  { ".vpt", "rtl-vpt", NULL,			TDF_RTL, 0, 10, 'V'},
-  { ".ce1", "rtl-ce1", NULL,			TDF_RTL, 0, 11, 'C'},
-  { ".tracer", "rtl-tracer", NULL,		TDF_RTL, 0, 12, 'T'},
-  { ".loop2", "rtl-loop2", NULL,		TDF_RTL, 0, 13, 'L'},
-  { ".web", "rtl-web", NULL,			TDF_RTL, 0, 14, 'Z'},
-  { ".cse2", "rtl-cse2", NULL,		TDF_RTL, 0, 15, 't'},
-  { ".life", "rtl-life", NULL,		TDF_RTL, 0, 16, 'f'},
-  { ".combine", "rtl-combine", NULL,		TDF_RTL, 0, 17, 'c'},
-  { ".ce2", "rtl-ce2", NULL,			TDF_RTL, 0, 18, 'C'},
-  { ".regmove", "rtl-regmove", NULL,		TDF_RTL, 0, 19, 'N'},
-  { ".sms", "rtl-sms", NULL,			TDF_RTL, 0, 20, 'm'},
-  { ".sched", "rtl-sched", NULL,		TDF_RTL, 0, 21, 'S'},
-  { ".lreg", "rtl-lreg", NULL,		TDF_RTL, 0, 22, 'l'},
-  { ".greg", "rtl-greg", NULL,		TDF_RTL, 0, 23, 'g'},
-  { ".postreload", "rtl-postreload", NULL,	TDF_RTL, 0, 24, 'o'},
-  { ".gcse2", "rtl-gcse2", NULL,		TDF_RTL, 0, 25, 'J'},
-  { ".flow2", "rtl-flow2", NULL,		TDF_RTL, 0, 26, 'w'},
-  { ".peephole2", "rtl-peephole2", NULL,	TDF_RTL, 0, 27, 'z'},
-  { ".ce3", "rtl-ce3", NULL,			TDF_RTL, 0, 28, 'E'},
-  { ".rnreg", "rtl-rnreg", NULL,		TDF_RTL, 0, 29, 'n'},
-  { ".bbro", "rtl-bbro", NULL,		TDF_RTL, 0, 30, 'B'},
-  { ".btl", "rtl-btl", NULL,			TDF_RTL, 0, 31, 'd'},
-  { ".sched2", "rtl-sched2", NULL,		TDF_RTL, 0, 32, 'R'},
-  { ".stack", "rtl-stack", NULL,		TDF_RTL, 0, 33, 'k'},
-  { ".vartrack", "rtl-vartrack", NULL,	TDF_RTL, 0, 34, 'V'},
-  { ".mach", "rtl-mach", NULL,		TDF_RTL, 0, 35, 'M'},
-  { ".dbr", "rtl-dbr", NULL,			TDF_RTL, 0, 36, 'd'}
+  { ".cgraph", "ipa-cgraph", NULL,	TDF_IPA, 0,  0, 0},
 };
 
 /* Dynamically registered tree dump files and switches.  */
@@ -745,8 +750,9 @@ static const struct dump_option_value_info dump_options[] =
   {"vops", TDF_VOPS},
   {"lineno", TDF_LINENO},
   {"uid", TDF_UID},
-  {"all", ~(TDF_RAW | TDF_SLIM | TDF_LINENO | TDF_TREE | TDF_RTL | TDF_IPA
-	    | TDF_GRAPH)},
+  {"stmtaddr", TDF_STMTADDR},
+  {"all", ~(TDF_RAW | TDF_SLIM | TDF_LINENO | TDF_TREE | TDF_RTL | TDF_IPA 
+	    | TDF_STMTADDR | TDF_GRAPH)},
   {NULL, 0}
 };
 
@@ -858,13 +864,28 @@ dump_begin (enum tree_dump_index phase, int *flag_ptr)
   return stream;
 }
 
-/* Returns nonzero if tree dump PHASE is enabled.  */
+/* Returns nonzero if tree dump PHASE is enabled.  If PHASE is
+   TDI_tree_all, return nonzero if any dump is enabled.  */
 
 int
 dump_enabled_p (enum tree_dump_index phase)
 {
-  struct dump_file_info *dfi = get_dump_file_info (phase);
-  return dfi->state;
+  if (phase == TDI_tree_all)
+    {
+      size_t i;
+      for (i = TDI_none + 1; i < (size_t) TDI_end; i++)
+	if (dump_files[i].state)
+	  return 1;
+      for (i = 0; i < extra_dump_files_in_use; i++)
+	if (extra_dump_files[i].state)
+	  return 1;
+      return 0;
+    }
+  else
+    {
+      struct dump_file_info *dfi = get_dump_file_info (phase);
+      return dfi->state;
+    }
 }
 
 /* Returns nonzero if tree dump PHASE has been initialized.  */
@@ -963,7 +984,7 @@ dump_switch_p_1 (const char *arg, struct dump_file_info *dfi, bool doglob)
 	    flags |= option_ptr->value;
 	    goto found;
 	  }
-      warning ("ignoring unknown option %q.*s in %<-fdump-%s%>",
+      warning (0, "ignoring unknown option %q.*s in %<-fdump-%s%>",
 	       length, ptr, dfi->swtch);
     found:;
       ptr = end_ptr;

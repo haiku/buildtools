@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 /* This header defines all the internal data structures and functions
    that need to be visible across files.  It should not be used outside
@@ -503,8 +503,8 @@ extern void _cpp_destroy_hashtable (cpp_reader *);
 
 /* In files.c */
 typedef struct _cpp_file _cpp_file;
-extern _cpp_file *_cpp_find_file (cpp_reader *, const char *fname,
-				  cpp_dir *start_dir, bool fake);
+extern _cpp_file *_cpp_find_file (cpp_reader *, const char *, cpp_dir *,
+				  bool, int);
 extern bool _cpp_find_failed (_cpp_file *);
 extern void _cpp_mark_file_once_only (cpp_reader *, struct _cpp_file *);
 extern void _cpp_fake_include (cpp_reader *, const char *);
@@ -564,13 +564,39 @@ extern unsigned char *_cpp_copy_replacement_text (const cpp_macro *,
 extern size_t _cpp_replacement_text_len (const cpp_macro *);
 
 /* In charset.c.  */
+
+/* The normalization state at this point in the sequence.
+   It starts initialized to all zeros, and at the end
+   'level' is the normalization level of the sequence.  */
+
+struct normalize_state 
+{
+  /* The previous character.  */
+  cppchar_t previous;
+  /* The combining class of the previous character.  */
+  unsigned char prev_class;
+  /* The lowest normalization level so far.  */
+  enum cpp_normalize_level level;
+};
+#define INITIAL_NORMALIZE_STATE { 0, 0, normalized_KC }
+#define NORMALIZE_STATE_RESULT(st) ((st)->level)
+
+/* We saw a character that matches ISIDNUM(), update a
+   normalize_state appropriately.  */
+#define NORMALIZE_STATE_UPDATE_IDNUM(st) \
+  ((st)->previous = 0, (st)->prev_class = 0)
+
 extern cppchar_t _cpp_valid_ucn (cpp_reader *, const unsigned char **,
-				 const unsigned char *, int);
+				 const unsigned char *, int,
+				 struct normalize_state *state);
 extern void _cpp_destroy_iconv (cpp_reader *);
 extern unsigned char *_cpp_convert_input (cpp_reader *, const char *,
 					  unsigned char *, size_t, size_t,
 					  off_t *);
 extern const char *_cpp_default_encoding (void);
+extern cpp_hashnode * _cpp_interpret_identifier (cpp_reader *pfile,
+						 const unsigned char *id,
+						 size_t len);
 
 /* Utility routines and macros.  */
 #define DSC(str) (const unsigned char *)str, sizeof str - 1

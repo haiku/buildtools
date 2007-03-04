@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_C_OBJC_COMMON
 #define GCC_C_OBJC_COMMON
@@ -52,8 +52,6 @@ extern void c_initialize_diagnostics (diagnostic_context *);
 #define LANG_HOOKS_MARK_ADDRESSABLE c_mark_addressable
 #undef LANG_HOOKS_PARSE_FILE
 #define LANG_HOOKS_PARSE_FILE c_common_parse_file
-#undef LANG_HOOKS_TRUTHVALUE_CONVERSION
-#define LANG_HOOKS_TRUTHVALUE_CONVERSION c_objc_common_truthvalue_conversion
 #undef LANG_HOOKS_FINISH_INCOMPLETE_DECL
 #define LANG_HOOKS_FINISH_INCOMPLETE_DECL c_finish_incomplete_decl
 #undef LANG_HOOKS_REDUCE_BIT_FIELD_OPERATIONS
@@ -129,6 +127,8 @@ extern void c_initialize_diagnostics (diagnostic_context *);
 
 #undef LANG_HOOKS_GETDECLS
 #define LANG_HOOKS_GETDECLS lhd_return_null_tree_v
+#undef LANG_HOOKS_LOOKUP_NAME
+#define LANG_HOOKS_LOOKUP_NAME lookup_name
 #undef LANG_HOOKS_WRITE_GLOBALS
 #define LANG_HOOKS_WRITE_GLOBALS c_write_global_declarations
 

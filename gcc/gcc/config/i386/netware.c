@@ -1,6 +1,6 @@
 /* Subroutines for insn-output.c for NetWare.
    Contributed by Jan Beulich (jbeulich@novell.com)
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -121,7 +121,7 @@ gen_regparm_prefix (tree decl, unsigned nregs)
 
   if (nregs > total / BITS_PER_WORD)
     nregs = total / BITS_PER_WORD;
-  if (nregs > 9) abort();
+  gcc_assert (nregs <= 9);
   newsym = alloca (3 + strlen (asmname) + 1);
   return get_identifier_with_length (newsym,
 				     sprintf (newsym,
@@ -182,8 +182,12 @@ i386_nlm_strip_name_encoding (const char *str)
 	  ++name;
 	  if (ISDIGIT (p[1]))
 	    name = ggc_alloc_string (name, p - name);
-	  else if (!ISDIGIT (*name) || ++name != p)
-	    abort();
+	  else
+	    {
+	      gcc_assert (ISDIGIT (*name));
+	      name++;
+	      gcc_assert (name == p);
+	    }
 	}
     }
   return name;

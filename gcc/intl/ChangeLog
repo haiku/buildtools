@@ -1,14 +1,39 @@
-2005-09-20  Release Manager
+2007-02-13  Release Manager
 
-	* GCC 4.0.2 released.
+	* GCC 4.1.2 released.
 
-2005-07-07  Release Manager
+2006-09-13  Eric Botcazou  <ebotcazou@libertysurf.fr>
 
-	* GCC 4.0.1 released.
+	PR other/23541
+	PR other/26507
+	Backport from gettext repository:
 
-2005-04-20  Release Manager
+	2003-09-04  Bruno Haible  <bruno@clisp.org>
+	* dgettext.c: Include <locale.h> after gettextP.h, not before. This
+	ensures that libintl_dcgettext is correctly declared on Solaris.
+	(Needed because Solaris <locale.h> includes libintl.h.)
+	* dngettext.c: Likewise, for the libintl_dcngettext declaration.
 
-	* GCC 4.0.0 released.
+2006-05-24  Release Manager
+
+	* GCC 4.1.1 released.
+
+2006-02-28  Release Manager
+
+	* GCC 4.1.0 released.
+
+2005-05-13  Nick Clifton  <nickc@redhat.com>
+
+	* Update the address and phone number of the FSF organization in
+	the GPL notices in the following files:
+	Makefile.in, bindtextdom.c, dcgettext.c, dcigettext.c,
+	dcngettext.c, dgettext.c, dngettext.c, eval-plural.h,
+	explodename.c, finddomain.c, gettext.c, gettextP.h, gmo.h,
+	hash-string.h, intl-compat.c, l10nflist.c, libgnuintl.h,
+	loadinfo.h, loadmsgcat.c, localcharset.c, localcharset.h,
+	locale.alias, localealias.c, localename.c, log.c, ngettext.c,
+	osdep.c, plural-exp.c, plural-exp.h, plural.c, plural.y,
+	relocatable.c, relocatable.h, textdomain.c
 
 2004-11-24  Kelley Cook  <kcook@gcc.gnu.org>
 

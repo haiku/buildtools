@@ -1,6 +1,6 @@
 /* Move registers around to reduce number of move instructions needed.
    Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* This module looks for cases where matching constraints would force
@@ -43,6 +43,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "except.h"
 #include "toplev.h"
 #include "reload.h"
+#include "timevar.h"
+#include "tree-pass.h"
 
 
 /* Turn STACK_GROWS_DOWNWARD into a boolean.  */
@@ -135,7 +137,7 @@ try_auto_increment (rtx insn, rtx inc_insn, rtx inc_insn_set, rtx reg,
 		  /* If there is a REG_DEAD note on this insn, we must
 		     change this not to REG_UNUSED meaning that the register
 		     is set, but the value is dead.  Failure to do so will
-		     result in a sched1 abort -- when it recomputes lifetime
+		     result in a sched1 dieing -- when it recomputes lifetime
 		     information, the number of REG_DEAD notes will have
 		     changed.  */
 		  rtx note = find_reg_note (insn, REG_DEAD, reg);
@@ -266,7 +268,7 @@ mark_flags_life_zones (rtx flags)
       {
 	int i;
 	for (i = 0; i < flags_nregs; ++i)
-	  live |= REGNO_REG_SET_P (block->global_live_at_start,
+	  live |= REGNO_REG_SET_P (block->il.rtl->global_live_at_start,
 				   flags_regno + i);
       }
 #endif
@@ -857,13 +859,13 @@ reg_is_remote_constant_p (rtx reg, rtx insn, rtx first)
     return 0;
 
   /* Look for the set.  */
-  for (p = LOG_LINKS (insn); p; p = XEXP (p, 1))
+  for (p = BB_HEAD (BLOCK_FOR_INSN (insn)); p != insn; p = NEXT_INSN (p))
     {
       rtx s;
 
-      if (REG_NOTE_KIND (p) != 0)
+      if (!INSN_P (p))
 	continue;
-      s = single_set (XEXP (p, 0));
+      s = single_set (p);
       if (s != 0
 	  && REG_P (SET_DEST (s))
 	  && REGNO (SET_DEST (s)) == REGNO (reg))
@@ -2461,3 +2463,80 @@ combine_stack_adjustments_for_block (basic_block bb)
   if (memlist)
     free_csa_memlist (memlist);
 }
+
+static bool
+gate_handle_regmove (void)
+{
+  return (optimize > 0 && flag_regmove);
+}
+
+
+/* Register allocation pre-pass, to reduce number of moves necessary
+   for two-address machines.  */
+static void
+rest_of_handle_regmove (void)
+{
+  regmove_optimize (get_insns (), max_reg_num (), dump_file);
+  cleanup_cfg (CLEANUP_EXPENSIVE | CLEANUP_UPDATE_LIFE);
+}
+
+struct tree_opt_pass pass_regmove =
+{
+  "regmove",                            /* name */
+  gate_handle_regmove,                  /* gate */
+  rest_of_handle_regmove,               /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_REGMOVE,                           /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  'N'                                   /* letter */
+};
+
+
+static bool
+gate_handle_stack_adjustments (void)
+{
+  return (optimize > 0);
+}
+
+static void
+rest_of_handle_stack_adjustments (void)
+{
+  life_analysis (dump_file, PROP_POSTRELOAD);
+  cleanup_cfg (CLEANUP_EXPENSIVE | CLEANUP_UPDATE_LIFE
+               | (flag_crossjumping ? CLEANUP_CROSSJUMP : 0));
+
+  /* This is kind of a heuristic.  We need to run combine_stack_adjustments
+     even for machines with possibly nonzero RETURN_POPS_ARGS
+     and ACCUMULATE_OUTGOING_ARGS.  We expect that only ports having
+     push instructions will have popping returns.  */
+#ifndef PUSH_ROUNDING
+  if (!ACCUMULATE_OUTGOING_ARGS)
+#endif
+    combine_stack_adjustments ();
+}
+
+struct tree_opt_pass pass_stack_adjustments =
+{
+  "csa",                                /* name */
+  gate_handle_stack_adjustments,        /* gate */
+  rest_of_handle_stack_adjustments,     /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  0,                                    /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_ggc_collect,                     /* todo_flags_finish */
+  0                                     /* letter */
+};
+

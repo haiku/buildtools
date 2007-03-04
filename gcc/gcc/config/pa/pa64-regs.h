@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Standard register usage.
 
@@ -157,7 +157,8 @@ Boston, MA 02111-1307, USA.  */
 #define VALID_FP_MODE_P(MODE)						\
   ((MODE) == SFmode || (MODE) == DFmode					\
    || (MODE) == SCmode || (MODE) == DCmode				\
-   || (MODE) == SImode || (MODE) == DImode)
+   || (MODE) == QImode || (MODE) == HImode || (MODE) == SImode		\
+   || (MODE) == DImode)
 
 /* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.
    On the HP-PA, the cpu registers can hold any mode.  We

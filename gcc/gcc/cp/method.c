@@ -1,11 +1,11 @@
 /* Handle the hair of processing (but not expanding) inline functions.
    Also manage function and variable name overloading.
-   Copyright (C) 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 
+   Copyright (C) 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
    1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
-   
+
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2, or (at your option)
@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 
 /* Handle method declarations.  */
@@ -36,6 +36,7 @@ Boston, MA 02111-1307, USA.  */
 #include "toplev.h"
 #include "tm_p.h"
 #include "target.h"
+#include "tree-pass.h"
 #include "diagnostic.h"
 
 /* Various flags to control the mangling process.  */
@@ -88,22 +89,22 @@ make_thunk (tree function, bool this_adjusting,
 {
   HOST_WIDE_INT d;
   tree thunk;
-  
+
   gcc_assert (TREE_CODE (function) == FUNCTION_DECL);
   /* We can have this thunks to covariant thunks, but not vice versa.  */
   gcc_assert (!DECL_THIS_THUNK_P (function));
   gcc_assert (!DECL_RESULT_THUNK_P (function) || this_adjusting);
-  
+
   /* Scale the VIRTUAL_OFFSET to be in terms of bytes.  */
   if (this_adjusting && virtual_offset)
-    virtual_offset 
+    virtual_offset
       = size_binop (MULT_EXPR,
- 		    virtual_offset,
-  		    convert (ssizetype,
-  			     TYPE_SIZE_UNIT (vtable_entry_type)));
-  
+		    virtual_offset,
+		    convert (ssizetype,
+			     TYPE_SIZE_UNIT (vtable_entry_type)));
+
   d = tree_low_cst (fixed_offset, 0);
-  
+
   /* See if we already have the thunk in question.  For this_adjusting
      thunks VIRTUAL_OFFSET will be an INTEGER_CST, for covariant thunks it
      will be a BINFO.  */
@@ -117,7 +118,7 @@ make_thunk (tree function, bool this_adjusting,
 				      virtual_offset)
 		: THUNK_VIRTUAL_OFFSET (thunk) == virtual_offset)))
       return thunk;
-  
+
   /* All thunks must be created before FUNCTION is actually emitted;
      the ABI requires that all thunks be emitted together with the
      function to which they transfer control.  */
@@ -131,7 +132,7 @@ make_thunk (tree function, bool this_adjusting,
   DECL_LANG_SPECIFIC (thunk) = DECL_LANG_SPECIFIC (function);
   cxx_dup_lang_specific_decl (thunk);
   DECL_THUNKS (thunk) = NULL_TREE;
-  
+
   DECL_CONTEXT (thunk) = DECL_CONTEXT (function);
   TREE_READONLY (thunk) = TREE_READONLY (function);
   TREE_THIS_VOLATILE (thunk) = TREE_THIS_VOLATILE (function);
@@ -143,7 +144,7 @@ make_thunk (tree function, bool this_adjusting,
   THUNK_FIXED_OFFSET (thunk) = d;
   THUNK_VIRTUAL_OFFSET (thunk) = virtual_offset;
   THUNK_ALIAS (thunk) = NULL_TREE;
-  
+
   /* The thunk itself is not a constructor or destructor, even if
      the thing it is thunking to is.  */
   DECL_INTERFACE_KNOWN (thunk) = 1;
@@ -162,7 +163,7 @@ make_thunk (tree function, bool this_adjusting,
   DECL_DECLARED_INLINE_P (thunk) = 0;
   /* Nor has it been deferred.  */
   DECL_DEFERRED_FN (thunk) = 0;
-  
+
   /* Add it to the list of thunks associated with FUNCTION.  */
   TREE_CHAIN (thunk) = DECL_THUNKS (function);
   DECL_THUNKS (function) = thunk;
@@ -205,7 +206,7 @@ finish_thunk (tree thunk)
 	    break;
 	  }
     }
-  
+
   DECL_NAME (thunk) = name;
   SET_DECL_ASSEMBLER_NAME (thunk, name);
 }
@@ -221,8 +222,8 @@ thunk_adjust (tree ptr, bool this_adjusting,
 {
   if (this_adjusting)
     /* Adjust the pointer by the constant.  */
-    ptr = fold (build2 (PLUS_EXPR, TREE_TYPE (ptr), ptr,
-			ssize_int (fixed_offset)));
+    ptr = fold_build2 (PLUS_EXPR, TREE_TYPE (ptr), ptr,
+		       ssize_int (fixed_offset));
 
   /* If there's a virtual offset, look up that value in the vtable and
      adjust the pointer again.  */
@@ -233,7 +234,7 @@ thunk_adjust (tree ptr, bool this_adjusting,
       ptr = save_expr (ptr);
       /* The vptr is always at offset zero in the object.  */
       vtable = build1 (NOP_EXPR,
-		       build_pointer_type (build_pointer_type 
+		       build_pointer_type (build_pointer_type
 					   (vtable_entry_type)),
 		       ptr);
       /* Form the vtable address.  */
@@ -243,13 +244,13 @@ thunk_adjust (tree ptr, bool this_adjusting,
       /* Get the offset itself.  */
       vtable = build1 (INDIRECT_REF, TREE_TYPE (TREE_TYPE (vtable)), vtable);
       /* Adjust the `this' pointer.  */
-      ptr = fold (build2 (PLUS_EXPR, TREE_TYPE (ptr), ptr, vtable));
+      ptr = fold_build2 (PLUS_EXPR, TREE_TYPE (ptr), ptr, vtable);
     }
-  
+
   if (!this_adjusting)
     /* Adjust the pointer by the constant.  */
-    ptr = fold (build2 (PLUS_EXPR, TREE_TYPE (ptr), ptr,
-			ssize_int (fixed_offset)));
+    ptr = fold_build2 (PLUS_EXPR, TREE_TYPE (ptr), ptr,
+		       ssize_int (fixed_offset));
 
   return ptr;
 }
@@ -258,16 +259,10 @@ static GTY (()) int thunk_labelno;
 
 /* Create a static alias to function.  */
 
-static tree
-make_alias_for_thunk (tree function)
+tree
+make_alias_for (tree function, tree newid)
 {
-  tree alias;
-  char buf[256];
-
-  ASM_GENERATE_INTERNAL_LABEL (buf, "LTHUNK", thunk_labelno);
-  thunk_labelno++;
-  alias = build_decl (FUNCTION_DECL, get_identifier (buf),
-		      TREE_TYPE (function));
+  tree alias = build_decl (FUNCTION_DECL, newid, TREE_TYPE (function));
   DECL_LANG_SPECIFIC (alias) = DECL_LANG_SPECIFIC (function);
   cxx_dup_lang_specific_decl (alias);
   DECL_CONTEXT (alias) = NULL;
@@ -296,8 +291,23 @@ make_alias_for_thunk (tree function)
   TREE_USED (alias) = 1;
   SET_DECL_ASSEMBLER_NAME (alias, DECL_NAME (alias));
   TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (alias)) = 1;
+  return alias;
+}
+
+static tree
+make_alias_for_thunk (tree function)
+{
+  tree alias;
+  char buf[256];
+
+  ASM_GENERATE_INTERNAL_LABEL (buf, "LTHUNK", thunk_labelno);
+  thunk_labelno++;
+
+  alias = make_alias_for (function, get_identifier (buf));
+
   if (!flag_syntax_only)
     assemble_alias (alias, DECL_ASSEMBLER_NAME (function));
+
   return alias;
 }
 
@@ -322,7 +332,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
 
   if (TREE_ASM_WRITTEN (thunk_fndecl))
     return;
-  
+
   function = THUNK_TARGET (thunk_fndecl);
   if (DECL_RESULT (thunk_fndecl))
     /* We already turned this thunk into an ordinary function.
@@ -332,7 +342,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
   if (DECL_THUNK_P (function))
     /* The target is itself a thunk, process it now.  */
     use_thunk (function, emit_p);
-  
+
   /* Thunks are always addressable; they only appear in vtables.  */
   TREE_ADDRESSABLE (thunk_fndecl) = 1;
 
@@ -360,7 +370,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
     }
   else
     virtual_value = 0;
-  
+
   /* And, if we need to emit the thunk, it's used.  */
   mark_used (thunk_fndecl);
   /* This thunk is actually defined.  */
@@ -369,7 +379,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
      rewrite.  */
   TREE_PUBLIC (thunk_fndecl) = TREE_PUBLIC (function);
   DECL_VISIBILITY (thunk_fndecl) = DECL_VISIBILITY (function);
-  DECL_VISIBILITY_SPECIFIED (thunk_fndecl) 
+  DECL_VISIBILITY_SPECIFIED (thunk_fndecl)
     = DECL_VISIBILITY_SPECIFIED (function);
   if (flag_weak && TREE_PUBLIC (thunk_fndecl))
     comdat_linkage (thunk_fndecl);
@@ -408,12 +418,13 @@ use_thunk (tree thunk_fndecl, bool emit_p)
       TREE_CHAIN (x) = t;
       DECL_CONTEXT (x) = thunk_fndecl;
       SET_DECL_RTL (x, NULL_RTX);
+      DECL_HAS_VALUE_EXPR_P (x) = 0;
       t = x;
     }
   a = nreverse (t);
   DECL_ARGUMENTS (thunk_fndecl) = a;
   BLOCK_VARS (DECL_INITIAL (thunk_fndecl)) = a;
-  
+
   if (this_adjusting
       && targetm.asm_out.can_output_mi_thunk (thunk_fndecl, fixed_offset,
 					      virtual_value, alias))
@@ -431,6 +442,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
 				       fixed_offset, virtual_value, alias);
 
       assemble_end_function (thunk_fndecl, fnname);
+      init_insn_lengths ();
       current_function_decl = 0;
       cfun = 0;
       TREE_ASM_WRITTEN (thunk_fndecl) = 1;
@@ -458,7 +470,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
       if (this_adjusting)
 	t = thunk_adjust (t, /*this_adjusting=*/1,
 			  fixed_offset, virtual_offset);
-      
+
       /* Build up the call to the real function.  */
       t = tree_cons (NULL_TREE, t, NULL_TREE);
       for (a = TREE_CHAIN (a); a; a = TREE_CHAIN (a))
@@ -466,7 +478,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
       t = nreverse (t);
       t = build_call (alias, t);
       CALL_FROM_THUNK_P (t) = 1;
-      
+
       if (VOID_TYPE_P (TREE_TYPE (t)))
 	finish_expr_stmt (t);
       else
@@ -484,14 +496,15 @@ use_thunk (tree thunk_fndecl, bool emit_p)
 		  t = save_expr (t);
 		  cond = cp_convert (boolean_type_node, t);
 		}
-	      
+
 	      t = thunk_adjust (t, /*this_adjusting=*/0,
 				fixed_offset, virtual_offset);
 	      if (cond)
 		t = build3 (COND_EXPR, TREE_TYPE (t), cond, t,
 			    cp_convert (TREE_TYPE (t), integer_zero_node));
 	    }
-	  t = force_target_expr (TREE_TYPE (t), t);
+	  if (IS_AGGR_TYPE (TREE_TYPE (t)))
+	    t = build_cplus_new (TREE_TYPE (t), t);
 	  finish_return_stmt (t);
 	}
 
@@ -505,7 +518,9 @@ use_thunk (tree thunk_fndecl, bool emit_p)
       /* Re-enable access control.  */
       pop_deferring_access_checks ();
 
-      expand_body (finish_function (0));
+      thunk_fndecl = finish_function (0);
+      tree_lowering_passes (thunk_fndecl);
+      expand_body (thunk_fndecl);
     }
 
   pop_from_top_level ();
@@ -538,7 +553,7 @@ do_build_copy_constructor (tree fndecl)
       int cvquals = cp_type_quals (TREE_TYPE (parm));
       int i;
       tree binfo, base_binfo;
-      VEC (tree) *vbases;
+      VEC(tree,gc) *vbases;
 
       /* Initialize all the base-classes with the parameter converted
 	 to their type so that we get their copy constructor and not
@@ -548,7 +563,7 @@ do_build_copy_constructor (tree fndecl)
       for (vbases = CLASSTYPE_VBASECLASSES (current_class_type), i = 0;
 	   VEC_iterate (tree, vbases, i, binfo); i++)
 	{
-	  member_init_list 
+	  member_init_list
 	    = tree_cons (binfo,
 			 build_tree_list (NULL_TREE,
 					  build_base_path (PLUS_EXPR, parm,
@@ -560,9 +575,9 @@ do_build_copy_constructor (tree fndecl)
 	   BINFO_BASE_ITERATE (binfo, i, base_binfo); i++)
 	{
 	  if (BINFO_VIRTUAL_P (base_binfo))
-	    continue; 
+	    continue;
 
-	  member_init_list 
+	  member_init_list
 	    = tree_cons (base_binfo,
 			 build_tree_list (NULL_TREE,
 					  build_base_path (PLUS_EXPR, parm,
@@ -599,12 +614,12 @@ do_build_copy_constructor (tree fndecl)
 	  if (TREE_CODE (expr_type) != REFERENCE_TYPE)
 	    {
 	      int quals = cvquals;
-	      
+
 	      if (DECL_MUTABLE_P (field))
 		quals &= ~TYPE_QUAL_CONST;
 	      expr_type = cp_build_qualified_type (expr_type, quals);
 	    }
-	  
+
 	  init = build3 (COMPONENT_REF, expr_type, init, field, NULL_TREE);
 	  init = build_tree_list (NULL_TREE, init);
 
@@ -649,18 +664,18 @@ do_build_assign_ref (tree fndecl)
 	     explicitly since the base class may be ambiguous.  */
 	  converted_parm = build_base_path (PLUS_EXPR, parm, base_binfo, 1);
 	  /* Call the base class assignment operator.  */
-	  finish_expr_stmt 
-	    (build_special_member_call (current_class_ref, 
+	  finish_expr_stmt
+	    (build_special_member_call (current_class_ref,
 					ansi_assopname (NOP_EXPR),
-					build_tree_list (NULL_TREE, 
+					build_tree_list (NULL_TREE,
 							 converted_parm),
 					base_binfo,
 					LOOKUP_NORMAL | LOOKUP_NONVIRTUAL));
 	}
 
       /* Assign to each of the non-static data members.  */
-      for (fields = TYPE_FIELDS (current_class_type); 
-	   fields; 
+      for (fields = TYPE_FIELDS (current_class_type);
+	   fields;
 	   fields = TREE_CHAIN (fields))
 	{
 	  tree comp = current_class_ref;
@@ -673,17 +688,17 @@ do_build_assign_ref (tree fndecl)
 	    continue;
 
 	  expr_type = TREE_TYPE (field);
-	  
+
 	  if (CP_TYPE_CONST_P (expr_type))
 	    {
-              error ("non-static const member %q#D, can't use default "
-                     "assignment operator", field);
+	      error ("non-static const member %q#D, can't use default "
+		     "assignment operator", field);
 	      continue;
 	    }
 	  else if (TREE_CODE (expr_type) == REFERENCE_TYPE)
 	    {
 	      error ("non-static reference member %q#D, can't use "
-                     "default assignment operator", field);
+		     "default assignment operator", field);
 	      continue;
 	    }
 
@@ -700,13 +715,13 @@ do_build_assign_ref (tree fndecl)
 	    continue;
 
 	  comp = build3 (COMPONENT_REF, expr_type, comp, field, NULL_TREE);
-	  
+
 	  /* Compute the type of init->field  */
 	  quals = cvquals;
 	  if (DECL_MUTABLE_P (field))
 	    quals &= ~TYPE_QUAL_CONST;
 	  expr_type = cp_build_qualified_type (expr_type, quals);
-	  
+
 	  init = build3 (COMPONENT_REF, expr_type, init, field, NULL_TREE);
 
 	  if (DECL_NAME (field))
@@ -737,7 +752,7 @@ synthesize_method (tree fndecl)
      deferred, and thus have saved where we were first needed.  */
   DECL_SOURCE_LOCATION (fndecl)
     = DECL_SOURCE_LOCATION (TYPE_NAME (DECL_CONTEXT (fndecl)));
-  
+
   /* If we've been asked to synthesize a clone, just synthesize the
      cloned function instead.  Doing so will automatically fill in the
      body for the clone.  */
@@ -794,8 +809,8 @@ synthesize_method (tree fndecl)
   pop_deferring_access_checks ();
 
   if (error_count != errorcount || warning_count != warningcount)
-    warning ("%Hsynthesized method %qD first required here ",
-	     &input_location, fndecl);
+    inform ("%Hsynthesized method %qD first required here ",
+	    &input_location, fndecl);
 }
 
 /* Use EXTRACTOR to locate the relevant function called for each base &
@@ -806,7 +821,7 @@ synthesize_method (tree fndecl)
 
 static tree
 synthesize_exception_spec (tree type, tree (*extractor) (tree, void*),
-                           void *client)
+			   void *client)
 {
   tree raises = empty_except_spec;
   tree fields = TYPE_FIELDS (type);
@@ -818,31 +833,31 @@ synthesize_exception_spec (tree type, tree (*extractor) (tree, void*),
     {
       tree fn = (*extractor) (BINFO_TYPE (base_binfo), client);
       if (fn)
-        {
-          tree fn_raises = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (fn));
-          
-          raises = merge_exception_specifiers (raises, fn_raises);
-        }
+	{
+	  tree fn_raises = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (fn));
+
+	  raises = merge_exception_specifiers (raises, fn_raises);
+	}
     }
   for (; fields; fields = TREE_CHAIN (fields))
     {
       tree type = TREE_TYPE (fields);
       tree fn;
-      
+
       if (TREE_CODE (fields) != FIELD_DECL || DECL_ARTIFICIAL (fields))
-        continue;
+	continue;
       while (TREE_CODE (type) == ARRAY_TYPE)
-  	type = TREE_TYPE (type);
-      if (TREE_CODE (type) != RECORD_TYPE)
-        continue;
-      
+	type = TREE_TYPE (type);
+      if (!CLASS_TYPE_P (type))
+	continue;
+
       fn = (*extractor) (type, client);
       if (fn)
-        {
-          tree fn_raises = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (fn));
-          
-          raises = merge_exception_specifiers (raises, fn_raises);
-        }
+	{
+	  tree fn_raises = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (fn));
+
+	  raises = merge_exception_specifiers (raises, fn_raises);
+	}
     }
   return raises;
 }
@@ -861,7 +876,7 @@ static tree
 locate_ctor (tree type, void *client ATTRIBUTE_UNUSED)
 {
   tree fns;
-  
+
   if (!TYPE_HAS_DEFAULT_CONSTRUCTOR (type))
     return NULL_TREE;
 
@@ -874,11 +889,13 @@ locate_ctor (tree type, void *client ATTRIBUTE_UNUSED)
     {
       tree fn = OVL_CURRENT (fns);
       tree parms = TYPE_ARG_TYPES (TREE_TYPE (fn));
-      
-      if (sufficient_parms_p (TREE_CHAIN (parms)))
-        return fn;
+
+      parms = skip_artificial_parms_for (fn, parms);
+
+      if (sufficient_parms_p (parms))
+	return fn;
     }
-  return NULL_TREE;
+  gcc_unreachable ();
 }
 
 struct copy_data
@@ -898,7 +915,7 @@ locate_copy (tree type, void *client_)
   tree fns;
   tree best = NULL_TREE;
   bool excess_p = false;
-  
+
   if (client->name)
     {
       int ix;
@@ -924,27 +941,31 @@ locate_copy (tree type, void *client_)
       tree src_type;
       int excess;
       int quals;
-      
-      parms = TREE_CHAIN (parms);
+
+      parms = skip_artificial_parms_for (fn, parms);
       if (!parms)
-        continue;
+	continue;
       src_type = non_reference (TREE_VALUE (parms));
+
+      if (src_type == error_mark_node)
+        return NULL_TREE;
+
       if (!same_type_ignoring_top_level_qualifiers_p (src_type, type))
-        continue;
+	continue;
       if (!sufficient_parms_p (TREE_CHAIN (parms)))
-        continue;
+	continue;
       quals = cp_type_quals (src_type);
       if (client->quals & ~quals)
-        continue;
+	continue;
       excess = quals & ~client->quals;
       if (!best || (excess_p && !excess))
-        {
-          best = fn;
-          excess_p = excess;
-        }
+	{
+	  best = fn;
+	  excess_p = excess;
+	}
       else
-        /* Ambiguous */
-        return NULL_TREE;
+	/* Ambiguous */
+	return NULL_TREE;
     }
   return best;
 }
@@ -967,7 +988,7 @@ implicitly_declare_fn (special_function_kind kind, tree type, bool const_p)
   tree name;
   HOST_WIDE_INT saved_processing_template_decl;
 
-  /* Because we create declarations for implictly declared functions
+  /* Because we create declarations for implicitly declared functions
      lazily, we may be creating the declaration for a member of TYPE
      while in some completely different context.  However, TYPE will
      never be a dependent class (because we never want to do lookups
@@ -1010,23 +1031,23 @@ implicitly_declare_fn (special_function_kind kind, tree type, bool const_p)
     case sfk_assignment_operator:
     {
       struct copy_data data;
-      
+
       data.name = NULL;
       data.quals = 0;
       if (kind == sfk_assignment_operator)
-        {
+	{
 	  return_type = build_reference_type (type);
-          name = ansi_assopname (NOP_EXPR);
-          data.name = name;
-        }
+	  name = ansi_assopname (NOP_EXPR);
+	  data.name = name;
+	}
       else
 	name = constructor_name (type);
 
       if (const_p)
-        {
-          data.quals = TYPE_QUAL_CONST;
+	{
+	  data.quals = TYPE_QUAL_CONST;
 	  rhs_parm_type = build_qualified_type (type, TYPE_QUAL_CONST);
-        }
+	}
       else
 	rhs_parm_type = type;
       rhs_parm_type = build_reference_type (rhs_parm_type);
@@ -1109,7 +1130,7 @@ lazily_declare_fn (special_function_kind sfk, tree type)
   /* Add it to CLASSTYPE_METHOD_VEC.  */
   add_method (type, fn, NULL_TREE);
   /* Add it to TYPE_METHODS.  */
-  if (sfk == sfk_destructor 
+  if (sfk == sfk_destructor
       && DECL_VIRTUAL_P (fn)
       && abi_version_at_least (2))
     /* The ABI requires that a virtual destructor go at the end of the
@@ -1119,9 +1140,9 @@ lazily_declare_fn (special_function_kind sfk, tree type)
     {
       /* G++ 3.2 put the implicit destructor at the *beginning* of the
 	 TYPE_METHODS list, which cause the destructor to be emitted
-	 in an incorrect location in the vtable.  */ 
+	 in an incorrect location in the vtable.  */
       if (warn_abi && DECL_VIRTUAL_P (fn))
-	warning ("vtable layout for class %qT may not be ABI-compliant"
+	warning (0, "vtable layout for class %qT may not be ABI-compliant"
 		 "and may change in a future version of GCC due to "
 		 "implicit virtual destructor",
 		 type);

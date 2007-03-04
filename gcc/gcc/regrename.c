@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -36,6 +36,8 @@
 #include "flags.h"
 #include "toplev.h"
 #include "obstack.h"
+#include "timevar.h"
+#include "tree-pass.h"
 
 struct du_chain
 {
@@ -56,7 +58,11 @@ enum scan_actions
   terminate_write,
   terminate_dead,
   mark_read,
-  mark_write
+  mark_write,
+  /* mark_access is for marking the destination regs in
+     REG_FRAME_RELATED_EXPR notes (as if they were read) so that the
+     note is updated properly.  */
+  mark_access
 };
 
 static const char * const scan_actions_name[] =
@@ -66,7 +72,8 @@ static const char * const scan_actions_name[] =
   "terminate_write",
   "terminate_dead",
   "mark_read",
-  "mark_write"
+  "mark_write",
+  "mark_access"
 };
 
 static struct obstack rename_obstack;
@@ -142,7 +149,7 @@ merge_overlapping_regs (basic_block b, HARD_REG_SET *pset,
   rtx insn;
   HARD_REG_SET live;
 
-  REG_SET_TO_HARD_REG_SET (live, b->global_live_at_start);
+  REG_SET_TO_HARD_REG_SET (live, b->il.rtl->global_live_at_start);
   insn = BB_HEAD (b);
   while (t)
     {
@@ -406,8 +413,7 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
       return;
     }
 
-  if ((type == OP_OUT && action != terminate_write)
-      || (type != OP_OUT && action == terminate_write))
+  if ((type == OP_OUT) != (action == terminate_write || action == mark_access))
     return;
 
   for (p = &open_chains; *p;)
@@ -436,7 +442,7 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
 	      continue;
 	    }
 
-	  if (action == mark_read)
+	  if (action == mark_read || action == mark_access)
 	    {
 	      gcc_assert (exact_match);
 
@@ -507,7 +513,7 @@ scan_rtx_address (rtx insn, rtx *loc, enum reg_class cl,
   const char *fmt;
   int i, j;
 
-  if (action == mark_write)
+  if (action == mark_write || action == mark_access)
     return;
 
   switch (code)
@@ -864,17 +870,19 @@ build_def_use (basic_block bb)
 		scan_rtx (insn, loc, cl, mark_read, type, 0);
 	    }
 
-	  /* Step 4: Close chains for registers that die here.
-	     Also record updates for REG_INC notes.  */
+	  /* Step 3B: Record updates for regs in REG_INC notes, and
+	     source regs in REG_FRAME_RELATED_EXPR notes.  */
 	  for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
-	    {
-	      if (REG_NOTE_KIND (note) == REG_DEAD)
-		scan_rtx (insn, &XEXP (note, 0), NO_REGS, terminate_dead,
-			  OP_IN, 0);
-	      else if (REG_NOTE_KIND (note) == REG_INC)
-		scan_rtx (insn, &XEXP (note, 0), ALL_REGS, mark_read,
-			  OP_INOUT, 0);
-	    }
+	    if (REG_NOTE_KIND (note) == REG_INC
+		|| REG_NOTE_KIND (note) == REG_FRAME_RELATED_EXPR)
+	      scan_rtx (insn, &XEXP (note, 0), ALL_REGS, mark_read,
+			OP_INOUT, 0);
+
+	  /* Step 4: Close chains for registers that die here.  */
+	  for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
+	    if (REG_NOTE_KIND (note) == REG_DEAD)
+	      scan_rtx (insn, &XEXP (note, 0), NO_REGS, terminate_dead,
+			OP_IN, 0);
 
 	  /* Step 4B: If this is a call, any chain live at this point
 	     requires a caller-saved reg.  */
@@ -946,6 +954,13 @@ build_def_use (basic_block bb)
 		  scan_rtx (insn, loc, cl, mark_write, OP_OUT,
 			    recog_op_alt[opn][alt].earlyclobber);
 	      }
+
+	  /* Step 6B: Record destination regs in REG_FRAME_RELATED_EXPR
+	     notes for update.  */
+	  for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
+	    if (REG_NOTE_KIND (note) == REG_FRAME_RELATED_EXPR)
+	      scan_rtx (insn, &XEXP (note, 0), ALL_REGS, mark_access,
+			OP_INOUT, 0);
 
 	  /* Step 7: Close chains for registers that were never
 	     really used here.  */
@@ -1225,6 +1240,12 @@ copy_value (rtx dest, rtx src, struct value_data *vd)
   if (frame_pointer_needed && dr == HARD_FRAME_POINTER_REGNUM)
     return;
 
+  /* Do not propagate copies to fixed or global registers, patterns
+     can be relying to see particular fixed register or users can
+     expect the chosen global register in asm.  */
+  if (fixed_regs[dr] || global_regs[dr])
+    return;
+
   /* If SRC and DEST overlap, don't record anything.  */
   dn = hard_regno_nregs[dr][GET_MODE (dest)];
   sn = hard_regno_nregs[sr][GET_MODE (dest)];
@@ -1387,7 +1408,7 @@ replace_oldest_value_reg (rtx *loc, enum reg_class cl, rtx insn,
 	fprintf (dump_file, "insn %u: replaced reg %u with %u\n",
 		 INSN_UID (insn), REGNO (*loc), REGNO (new));
 
-      *loc = new;
+      validate_change (insn, loc, new, 1);
       return true;
     }
   return false;
@@ -1553,8 +1574,9 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
   for (insn = BB_HEAD (bb); ; insn = NEXT_INSN (insn))
     {
       int n_ops, i, alt, predicated;
-      bool is_asm;
+      bool is_asm, any_replacements;
       rtx set;
+      bool replaced[MAX_RECOG_OPERANDS];
 
       if (! INSN_P (insn))
 	{
@@ -1666,11 +1688,13 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	}
       no_move_special_case:
 
+      any_replacements = false;
+
       /* For each input operand, replace a hard register with the
 	 eldest live copy that's in an appropriate register class.  */
       for (i = 0; i < n_ops; i++)
 	{
-	  bool replaced = false;
+	  replaced[i] = false;
 
 	  /* Don't scan match_operand here, since we've no reg class
 	     information to pass down.  Any operands that we could
@@ -1687,37 +1711,57 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	  if (recog_data.operand_type[i] == OP_IN)
 	    {
 	      if (recog_op_alt[i][alt].is_address)
-		replaced
+		replaced[i]
 		  = replace_oldest_value_addr (recog_data.operand_loc[i],
 					       recog_op_alt[i][alt].cl,
 					       VOIDmode, insn, vd);
 	      else if (REG_P (recog_data.operand[i]))
-		replaced
+		replaced[i]
 		  = replace_oldest_value_reg (recog_data.operand_loc[i],
 					      recog_op_alt[i][alt].cl,
 					      insn, vd);
 	      else if (MEM_P (recog_data.operand[i]))
-		replaced = replace_oldest_value_mem (recog_data.operand[i],
-						     insn, vd);
+		replaced[i] = replace_oldest_value_mem (recog_data.operand[i],
+							insn, vd);
 	    }
 	  else if (MEM_P (recog_data.operand[i]))
-	    replaced = replace_oldest_value_mem (recog_data.operand[i],
-						 insn, vd);
+	    replaced[i] = replace_oldest_value_mem (recog_data.operand[i],
+						    insn, vd);
 
 	  /* If we performed any replacement, update match_dups.  */
-	  if (replaced)
+	  if (replaced[i])
 	    {
 	      int j;
 	      rtx new;
-
-	      changed = true;
 
 	      new = *recog_data.operand_loc[i];
 	      recog_data.operand[i] = new;
 	      for (j = 0; j < recog_data.n_dups; j++)
 		if (recog_data.dup_num[j] == i)
-		  *recog_data.dup_loc[j] = new;
+		  validate_change (insn, recog_data.dup_loc[j], new, 1);
+
+	      any_replacements = true;
 	    }
+	}
+
+      if (any_replacements)
+	{
+	  if (! apply_change_group ())
+	    {
+	      for (i = 0; i < n_ops; i++)
+		if (replaced[i])
+		  {
+		    rtx old = *recog_data.operand_loc[i];
+		    recog_data.operand[i] = old;
+		  }
+
+	      if (dump_file)
+		fprintf (dump_file,
+			 "insn %u: reg replacements not verified\n",
+			 INSN_UID (insn));
+	    }
+	  else
+	    changed = true;
 	}
 
     did_replacement:
@@ -1766,11 +1810,11 @@ copyprop_hardreg_forward (void)
 	 processed, begin with the value data that was live at
 	 the end of the predecessor block.  */
       /* ??? Ought to use more intelligent queuing of blocks.  */
-      if (EDGE_COUNT (bb->preds) == 1
+      if (single_pred_p (bb)
 	  && TEST_BIT (visited,
-		       EDGE_PRED (bb, 0)->src->index - (INVALID_BLOCK + 1))
-	  && ! (EDGE_PRED (bb, 0)->flags & (EDGE_ABNORMAL_CALL | EDGE_EH)))
-	all_vd[bb->index] = all_vd[EDGE_PRED (bb, 0)->src->index];
+		       single_pred (bb)->index - (INVALID_BLOCK + 1))
+	  && ! (single_pred_edge (bb)->flags & (EDGE_ABNORMAL_CALL | EDGE_EH)))
+	all_vd[bb->index] = all_vd[single_pred (bb)->index];
       else
 	init_value_data (all_vd + bb->index);
 
@@ -1901,3 +1945,38 @@ validate_value_data (struct value_data *vd)
 		      vd->e[i].next_regno);
 }
 #endif
+
+static bool
+gate_handle_regrename (void)
+{
+  return (optimize > 0 && (flag_rename_registers || flag_cprop_registers));
+}
+
+
+/* Run the regrename and cprop passes.  */
+static void
+rest_of_handle_regrename (void)
+{
+  if (flag_rename_registers)
+    regrename_optimize ();
+  if (flag_cprop_registers)
+    copyprop_hardreg_forward ();
+}
+
+struct tree_opt_pass pass_regrename =
+{
+  "rnreg",                              /* name */
+  gate_handle_regrename,                /* gate */
+  rest_of_handle_regrename,             /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_RENAME_REGISTERS,                  /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'n'                                   /* letter */
+};
+

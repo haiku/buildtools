@@ -1,5 +1,5 @@
 /* Loop header copying on trees.
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
    
 This file is part of GCC.
    
@@ -15,8 +15,8 @@ for more details.
    
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -60,7 +60,7 @@ should_duplicate_loop_header_p (basic_block header, struct loop *loop,
     return false;
 
   gcc_assert (EDGE_COUNT (header->succs) > 0);
-  if (EDGE_COUNT (header->succs) == 1)
+  if (single_succ_p (header))
     return false;
   if (flow_bb_inside_loop_p (loop, EDGE_SUCC (header, 0)->dest)
       && flow_bb_inside_loop_p (loop, EDGE_SUCC (header, 1)->dest))
@@ -68,7 +68,7 @@ should_duplicate_loop_header_p (basic_block header, struct loop *loop,
 
   /* If this is not the original loop header, we want it to have just
      one predecessor in order to match the && pattern.  */
-  if (header != loop->header && EDGE_COUNT (header->preds) >= 2)
+  if (header != loop->header && !single_pred_p (header))
     return false;
 
   last = last_stmt (header);
@@ -127,14 +127,15 @@ copy_loop_headers (void)
   unsigned i;
   struct loop *loop;
   basic_block header;
-  edge exit;
-  basic_block *bbs;
+  edge exit, entry;
+  basic_block *bbs, *copied_bbs;
   unsigned n_bbs;
+  unsigned bbs_size;
+  bool copied_p;
 
   loops = loop_optimizer_init (dump_file);
   if (!loops)
     return;
-  rewrite_into_loop_closed_ssa ();
   
   /* We do not try to keep the information about irreducible regions
      up-to-date.  */
@@ -145,7 +146,10 @@ copy_loop_headers (void)
 #endif
 
   bbs = xmalloc (sizeof (basic_block) * n_basic_blocks);
+  copied_bbs = xmalloc (sizeof (basic_block) * n_basic_blocks);
+  bbs_size = n_basic_blocks;
 
+  copied_p = 0;
   for (i = 1; i < loops->num; i++)
     {
       /* Copy at most 20 insns.  */
@@ -180,6 +184,7 @@ copy_loop_headers (void)
 	  else
 	    exit = EDGE_SUCC (header, 1);
 	  bbs[n_bbs++] = header;
+	  gcc_assert (bbs_size > n_bbs);
 	  header = exit->dest;
 	}
 
@@ -193,11 +198,14 @@ copy_loop_headers (void)
 
       /* Ensure that the header will have just the latch as a predecessor
 	 inside the loop.  */
-      if (EDGE_COUNT (exit->dest->preds) > 1)
-	exit = EDGE_SUCC (loop_split_edge_with (exit, NULL), 0);
+      if (!single_pred_p (exit->dest))
+	exit = single_pred_edge (loop_split_edge_with (exit, NULL));
 
-      if (!tree_duplicate_sese_region (loop_preheader_edge (loop), exit,
-				       bbs, n_bbs, NULL))
+      entry = loop_preheader_edge (loop);
+
+      if (tree_duplicate_sese_region (entry, exit, bbs, n_bbs, copied_bbs))
+	copied_p = true;
+      else
 	{
 	  fprintf (dump_file, "Duplication failed.\n");
 	  continue;
@@ -209,11 +217,11 @@ copy_loop_headers (void)
       loop_split_edge_with (loop_latch_edge (loop), NULL);
     }
 
-  free (bbs);
+  if (copied_p)
+    update_ssa (TODO_update_ssa);
 
-#ifdef ENABLE_CHECKING
-  verify_loop_closed_ssa ();
-#endif
+  free (bbs);
+  free (copied_bbs);
 
   loop_optimizer_finalize (loops, NULL);
 }

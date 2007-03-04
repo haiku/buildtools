@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Variables defined in ia64.c.  */
 
@@ -41,17 +41,21 @@ extern bool ia64_legitimate_constant_p (rtx);
 
 extern rtx ia64_expand_move (rtx, rtx);
 extern int ia64_move_ok (rtx, rtx);
+extern int ia64_load_pair_ok (rtx, rtx);
 extern int addp4_optimize_ok (rtx, rtx);
 extern void ia64_emit_cond_move (rtx, rtx, rtx);
 extern int ia64_depz_field_mask (rtx, rtx);
 extern void ia64_split_tmode_move (rtx[]);
-extern rtx spill_xfmode_operand (rtx, int);
+extern bool ia64_expand_movxf_movrf (enum machine_mode, rtx[]);
 extern rtx ia64_expand_compare (enum rtx_code, enum machine_mode);
 extern void ia64_expand_vecint_cmov (rtx[]);
 extern bool ia64_expand_vecint_minmax (enum rtx_code, enum machine_mode, rtx[]);
+extern void ia64_expand_widen_sum (rtx[], bool);
+extern void ia64_expand_dot_prod_v8qi (rtx[], bool);
 extern void ia64_expand_call (rtx, rtx, rtx, int);
 extern void ia64_split_call (rtx, rtx, rtx, rtx, rtx, int, int);
 extern void ia64_reload_gp (void);
+extern void ia64_expand_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx);
 
 extern HOST_WIDE_INT ia64_initial_elimination_offset (int, int);
 extern void ia64_expand_prologue (void);
@@ -67,7 +71,6 @@ extern void ia64_print_operand (FILE *, rtx, int);
 extern enum reg_class ia64_preferred_reload_class (rtx, enum reg_class);
 extern enum reg_class ia64_secondary_reload_class (enum reg_class,
 						   enum machine_mode, rtx);
-extern void ia64_output_dwarf_dtprel (FILE*, int, rtx);
 extern void process_for_unwind_directive (FILE *, rtx);
 extern const char *get_bundle_name (int);
 #endif /* RTX_CODE */
@@ -114,3 +117,4 @@ extern enum direction ia64_hpux_function_arg_padding (enum machine_mode, tree);
 
 extern void ia64_hpux_handle_builtin_pragma (struct cpp_reader *);
 extern void ia64_output_function_profiler (FILE *, int);
+extern void ia64_profile_hook (int);

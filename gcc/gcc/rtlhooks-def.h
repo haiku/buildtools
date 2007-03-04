@@ -1,5 +1,5 @@
 /* Default macros to initialize an rtl_hooks data structure.
-   Copyright 2004 Free Software Foundation, Inc.
+   Copyright 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #ifndef GCC_RTL_HOOKS_DEF_H
 #define GCC_RTL_HOOKS_DEF_H
@@ -24,17 +24,20 @@ Boston, MA 02111-1307, USA.  */
 #include "rtl.h"
 
 #define RTL_HOOKS_GEN_LOWPART gen_lowpart_general
+#define RTL_HOOKS_GEN_LOWPART_NO_EMIT gen_lowpart_no_emit_general
 #define RTL_HOOKS_REG_NONZERO_REG_BITS reg_nonzero_bits_general
 #define RTL_HOOKS_REG_NUM_SIGN_BIT_COPIES reg_num_sign_bit_copies_general
 
 /* The structure is defined in rtl.h.  */
 #define RTL_HOOKS_INITIALIZER {			\
   RTL_HOOKS_GEN_LOWPART,			\
+  RTL_HOOKS_GEN_LOWPART_NO_EMIT,		\
   RTL_HOOKS_REG_NONZERO_REG_BITS,		\
   RTL_HOOKS_REG_NUM_SIGN_BIT_COPIES,		\
 }
 
 extern rtx gen_lowpart_general (enum machine_mode, rtx);
+extern rtx gen_lowpart_no_emit_general (enum machine_mode, rtx);
 extern rtx reg_nonzero_bits_general (rtx, enum machine_mode, rtx,
 				     enum machine_mode,
 				     unsigned HOST_WIDE_INT,

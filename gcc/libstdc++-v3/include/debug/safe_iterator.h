@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -31,10 +31,12 @@
 #ifndef _GLIBCXX_DEBUG_SAFE_ITERATOR_H
 #define _GLIBCXX_DEBUG_SAFE_ITERATOR_H 1
 
-#include <bits/stl_pair.h>
 #include <debug/debug.h>
+#include <debug/macros.h>
+#include <debug/functions.h>
 #include <debug/formatter.h>
 #include <debug/safe_base.h>
+#include <bits/stl_pair.h>
 #include <bits/cpp_type_traits.h>
 
 namespace __gnu_debug
@@ -46,7 +48,8 @@ namespace __gnu_debug
    *  _Safe_iterators can be determined singular or non-singular via
    *  _Safe_iterator_base.
    */
-  inline bool __check_singular_aux(const _Safe_iterator_base* __x)
+  inline bool 
+  __check_singular_aux(const _Safe_iterator_base* __x)
   { return __x->_M_singular(); }
 
   /** \brief Safe iterator wrapper.

@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -361,6 +361,26 @@ namespace std
 	{
 	  __value = (sizeof(__gnu_internal::__test_type<_Tp>(0))
 		     != sizeof(__gnu_internal::__one))
+	};
+    };
+
+  //
+  // A stripped-down version of std::tr1::is_empty
+  //
+  template<typename _Tp>
+    struct __is_empty
+    { 
+    private:
+      template<typename>
+        struct __first { };
+      template<typename _Up>
+        struct __second
+        : public _Up { };
+           
+    public:
+      enum
+	{
+	  __value = sizeof(__first<_Tp>) == sizeof(__second<_Tp>)
 	};
     };
 

@@ -1,38 +1,528 @@
-2005-09-20  Release Manager
+2007-02-13  Release Manager
 
-	* GCC 4.0.2 released.
+	* GCC 4.1.2 released.
+
+2006-11-21  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* configure.in (--with-mpfr-dir): Also look in .libs and _libs for
+	libmpfr.a.
+	* configure: Regenerate.
+
+2006-11-14  Jie Zhang  <jie.zhang@analog.com>
+
+	* configure.in: Remove target-libgloss from noconfigdirs for
+	bfin-*-*.
+	* configure: Regenerated.
+
+2006-07-04  Peter O'Gorman  <peter@pogma.com>
+
+	* ltconfig: chmod 644 before ranlib during install.
+
+2006-05-24  Release Manager
+
+	* GCC 4.1.1 released.
+
+2006-04-04  Alex Deiter  <tiamat@komi.mts.ru>
+
+	PR bootstrap/27023
+	* Makefile.tpl (multilib.out): Remove trailing backslash.
+	* Makefile.in: Regenerate.
+
+2006-03-22  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* MAINTAINERS (Write After Approval): Remove myself. 
+	(Language Front End Maintainers): Add myself as fortran 95 maintainer.
+
+2006-03-01  Thomas Koenig  <Thomas.Koenig@online.de>
+
+	* MAINTAINERS (Write After Approval):  Remove myself.
+	(Language Front End Maintainers):  Add myself as
+	fortran 95 maintainer.
+
+2006-02-28  Release Manager
+
+	* GCC 4.1.0 released.
+
+2005-12-16  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* configure.in: Replace ms1 with mt.
+	* configure: Rebuilt.
+	* config.sub: Replace ms1 with mt.  Allow ms1 as an alias.
+
+2005-12-14  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.in: Regenerate.
+
+2005-12-14  Paolo Bonzini  <bonzini@gnu.org>
+
+	* configure.in (CONFIGURED_BISON, CONFIGURED_YACC, CONFIGURED_M4,
+	CONFIGURED_FLEX, CONFIGURED_LEX, CONFIGURED_MAKEINFO): Remove
+	"CONFIGURED_" from the AC_CHECK_PROGS invocation.  Move below.
+	Find in-tree tools if available.
+	(EXPECT, RUNTEST, LIPO, STRIP): Find them and substitute them.
+	(CONFIGURED_*_FOR_TARGET): Don't set nor substitute.
+	(*_FOR_TARGET): Set them with GCC_TARGET_TOOL.
+	(COMPILER_*_FOR_TARGET): New.
+	* Makefile.tpl (HOST_EXPORTS): Add *_FOR_TARGET symbols that gcc needs.
+	(BASE_TARGET_EXPORTS): Use COMPILER_*_FOR_TARGET symbols.
+	(CONFIGURED_*, USUAL_*): Remove.
+	(BISON, YACC, FLEX, LEX, M4, MAKEINFO, EXPECT, RUNTEST, LIPO,
+	STRIP): Use autoconf substitutions.
+	(COMPILER_AS_FOR_TARGET, COMPILER_LD_FOR_TARGET,
+	COMPILER_NM_FOR_TARGET): New.
+	(EXTRA_HOST_FLAGS): Pass LIPO and STRIP.
+
+	(all): Make all-host and all-target in parallel.
+	(do-[+make_target+], do-check, install, [+compare-target+]): Ensure
+	that $$r and $$s are set before invoking a recursive make.
+	(stage[+id+]-bubble): Likewise, and invoke the comparison at the end.
+	([+bootstrap-target+]): Inline most of the `all' target.
+
+2005-10-24  Kean Johnston  <jkj@sco.com>
+
+	* config.sub, config.guess: Sync from upstream sources.
+
+2005-11-18  Andreas Tobler  <a.tobler@schweiz.ch>
+
+	* ltcf-c.sh (whole_archive_flag_spec): Remove '-all_load $convenience'
+	to match upstream libtool for darwin.
+
+2005-11-11  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.def: Remove gdb dependencies for gdbtk.
+	* Makefile.tpl (CONFIGURE_GDB_TK, INSTALL_GDB_TK): New variables.
+	(configure-gdb, install-gdb): New rules.
+	* configure.in: Set CONFIGURE_GDB_TK and INSTALL_GDB_TK.
+	* Makefile.in, configure: Regenerated.
+
+2005-11-06  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	* MAINTAINERS (Write After Approval): Add myself.
+
+2005-11-06  Erik Edelmann  <eedelman@gcc.gnu.org>
+
+	* MAINTAINERS (Write After Approval): Add myself.
+
+2005-10-24  Diego Novillo  <dnovillo@redhat.com>
+
+	* MAINTAINERS (alias analysis): Add Daniel Berlin and
+	Diego Novillo.
+
+2005-10-22  Paolo Bonzini  <bonzini@gnu.org>
+
+	PR bootstrap/24297
+	* Makefile.tpl (do-[+make-target+], do-check, install,
+	stage[+id+]-bubble, [+compare-target+]): Ensure $$r and $$s
+	are set before recursing.
+	* Makefile.in: Regenerate.
+
+2005-10-20  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR bootstrap/18939
+	* Makefile.def (gcc) <target>: Fix thinko.
+	* Makefile.in: Regenerate.
+
+2005-10-17  Bernd Schmidt  <bernd.schmidt@analog.com>
+
+	* configure.in (bfin-*-*): Use test, not brackets, in if statement.
+	* configure: Regenerate.
+
+2005-10-15  Jie Zhang  <jie.zhang@analog.com>
+
+	* MAINTAINERS (Write After Approval): Add self.
+
+2005-10-08  Kazu Hirata  <kazu@codesourcery.com>
+
+	* configure.in (arm-*-linux-gnueabi): Add to noconfigdirs
+	target-libffi, target-qthreads, target-libjava, and
+	targetlibobjc.
+	* configure: Regenerate.
+
+2005-10-06  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* Makefile.def (flags_to_pass): Add OBJDUMP_FOR_TARGET.
+	* Makefile.tpl (BASE_TARGET_EXPORTS): Add OBJDUMP.
+	(OBJDUMP_FOR_TARGET, CONFIGURED_OBJDUMP_FOR_TARGET)
+	(USUAL_OBJDUMP_FOR_TARGET): New.
+	(EXTRA_TARGET_FLAGS): Add OBJDUMP.
+	* configure.in: Check for $OBJDUMP_FOR_TARGET.
+	* configure, Makefile: Regenerated.
+
+2005-10-05  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.tpl (all) [gcc-no-bootstrap]: Make prebootstrap packages
+	before other host packages.
+
+2005-10-05  Kaz Kojima  <kkojima@gcc.gnu.org>
+
+	* MAINTAINERS: Add self as sh libraries/configury maintainer.
+
+2005-10-05  Paolo Bonzini  <bonzini@gnu.org>
+
+	PR bootstrap/22340
+
+	* configure.in (default_target): Remove.
+	* Makefile.tpl (all): Do not use prerequisites as subroutines
+	(all) [gcc-bootstrap]: Bootstrap gcc first if it was not done yet.
+	(do-[+make_target+], check, install, [+bootstrap_target+]): Do not
+	use prerequisites as subroutines.
+	(check-host, check-target): New.
+	(bootstrap configure & all targets): Do not use stage*-start
+	if the directory layout is already ok.
+	(non-bootstrap configure & all targets): Prepend a $(unstage).
+	(stage[+id+]-bubble): Do that here.  Do not use NOTPARALLEL.
+	(NOTPARALLEL): Remove.
+	(unstage, stage variables): New variables.
+	(unstage, stage targets): Simply expand to those variables.
+
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+
+2005-10-04  James E Wilson  <wilson@specifix.com>
+
+	* Makefile.def (lang_env_dependencies): Add libmudflap.
+	* Makefile.in: Regenerate.
+
+2005-10-03  Andreas Schwab  <schwab@suse.de>
+
+	Backport from libtool CVS:
+	2002-11-03  Ossama Othman  <ossama@doc.ece.uci.edu>
+
+	* ltmain.sh: add support for installing into temporary
+	staging area (e.g. 'make install DESTDIR=...')
+
+2005-10-03  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure.in (*-*-darwin*): Build bfd, binutils and opcodes.
+	* configure: Regenerated.
+
+2005-09-30  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	* configure: Regenerate with the correct
+	autoconf version.
+
+2005-09-30  Catherine Moore  <clm@cm00re.com>
+
+	* configure.in (bfin-*-*): New.
+	* configure: Regenerated.
+
+2005-09-28  Geoffrey Keating  <geoffk@apple.com>
+
+	* Makefile.tpl (BASE_TARGET_EXPORTS): Add LIPO, STRIP.
+	(LIPO_FOR_TARGET): New.
+	(CONFIGURED_LIPO_FOR_TARGET): New.
+	(USUAL_LIPO_FOR_TARGET): New.
+	(STRIP_FOR_TARGET): New.
+	(CONFIGURED_STRIP_FOR_TARGET): New.
+	(USUAL_STRIP_FOR_TARGET): New.
+	* Makefile.def (flags_to_pass): Add LIPO_FOR_TARGET and
+	STRIP_FOR_TARGET.
+	* configure.in: Set LIPO_FOR_TARGET, STRIP_FOR_TARGET,
+	CONFIGURED_LIPO_FOR_TARGET, CONFIGURED_STRIP_FOR_TARGET.
+	* Makefile.in: Regenerate.
+	* configure: Regenerate.
+	
+2005-09-19  David Edelsohn  <edelsohn@gnu.org>
+
+	* configure.in (powerpc-*-aix*): Add target-libssp to noconfigdirs.
+	(rs6000-*-aix*): Same.
+	* configure: Regenerate.
+
+2005-09-16  Tom Tromey  <tromey@redhat.com>
+
+	* MAINTAINERS: Add self as java maintainer.
 
 2005-09-14  Francois-Xavier Coudert  <coudert@clipper.ens.fr>
 
-	* configure.in: Recognize fortran in the --enable-languages option,
-	and substitute it for f95, issuing a warning.
+	* configure.in: Recognize f95 in the --enable-languages option,
+	and substitute it for fortran, issuing a warning.
 	* configure: Regenerate.
 
-2005-08-12  Thomas Schwinge  <schwinge@nic-nac-project.de>
+2005-08-30  Phil Edwards  <phil@codesourcery.com>
 
-	* Makefile.tpl: Add whitespace between FLAGS_TO_PASS and
-	extra_make_flags.
+	* configure.in (*-*-vxworks*):  Add target-libstdc++-v3 to noconfigdirs.
+	* configure:  Regenerated.
+
+2005-08-22  Aldy Hernandez  <aldyh@redhat.com>
+
+	* MAINTAINERS: Add self as ms1 maintainer.
+
+2005-08-20  Richard Earnshaw  <richard.earnshaw@arm.com>
+
+	* Makefile.def (libssp): Add to lang_env_dependencies.
 	* Makefile.in: Regenerate.
 
-2005-07-07  Release Manager
+2005-08-18  Ian Lance Taylor  <ian@airs.com>
 
-	* GCC 4.0.1 released.
+	* MAINTAINERS: Add myself as middle-end maintainer.
 
-2005-06-22  Eric Christopher  <echristo@redhat.com>
+2005-08-17  Christian Groessler  <chris@groessler.org>
 
-	PR bootstrap/17383
-	* configure.in: Reject building in the source directory.
+	* Makefile.tpl: (USUAL_CC_FOR_TARGET): Add missing trailing slash.
+	* Makefile.in: Regenerate.
+
+2005-08-15  Andreas Krebbel  <krebbel1@de.ibm.com>
+
+	* MAINTAINERS (write after approval): Added myself.
+
+2005-08-12  Maciej W. Rozycki  <macro@linux-mips.org>
+
+	* MAINTAINERS (Write After Approval): Add myself.
+
+2005-08-12  Paolo Bonzini  <bonzini@gnu.org>
+
+	* configure.in: Replace NCN_STRICT_CHECK_TOOL with
+	NCN_STRICT_CHECK_TOOLS, and likewise for NCN_STRICT_CHECK_TARGET_TOOLS.
+	Look for alternate names of the target cc and c++
 	* configure: Regenerate.
 
-2005-06-06  Tobias Schl"uter  <tobias.schlueter@physik.uni-muenchen.de>
+2005-08-08  Paolo Bonzini  <bonzini@gnu.org>
 
-	* configure.in: Don't add another '/mpfr' to the directory given
-	in --with-mpfr-dir.
+	* configure.in (CC_FOR_TARGET, CXX_FOR_TARGET, GCJ_FOR_TARGET,
+	GCC_FOR_TARGET, RAW_CXX_FOR_TARGET, GFORTRAN_FOR_TARGET): Find
+	them with NCN_STRICT_CHECK_TARGET_TOOL, like the other target
+	tools; remove code to manually set them.
+	(Target tools): Look in the environment for them.
+	* Makefile.tpl (CC_FOR_TARGET, CXX_FOR_TARGET, GCJ_FOR_TARGET,
+	GCC_FOR_TARGET, RAW_CXX_FOR_TARGET, GFORTRAN_FOR_TARGET): Redefine.
+	(AS_FOR_TARGET, LD_FOR_TARGET, NM_FOR_TARGET): Look into gcc
+	build directory.
+	(CONFIGURED_CC_FOR_TARGET, CONFIGURED_CXX_FOR_TARGET,
+	CONFIGURED_GCJ_FOR_TARGET, CONFIGURED_GCC_FOR_TARGET,
+	CONFIGURED_GFORTRAN_FOR_TARGET, USUAL_CC_FOR_TARGET,
+	USUAL_CXX_FOR_TARGET, USUAL_GCJ_FOR_TARGET, USUAL_GCC_FOR_TARGET,
+	USUAL_RAW_CXX_FOR_TARGET, USUAL_GFORTRAN_FOR_TARGET): New.
+	(CXX_FOR_TARGET_FOR_RECURSIVE_MAKE,
+	RAW_CXX_FOR_TARGET_FOR_RECURSIVE_MAKE, RECURSE_FLAGS): Delete.
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+
+2005-07-28  Ben Elliston  <bje@au.ibm.com>
+
+	* MAINTAINERS: Update for removed CPU targets.
+
+2005-07-27  Mark Mitchell  <mark@codesourcery.com>
+
+	* Makefile.tpl (EXTRA_TARGET_FLAGS): Set LDFLAGS=LDFLAGS_FOR_TARGET.
+	* Makefile.def (flags_to_pass): Add LDFLAGS_FOR_TARGET. 
+	* Makefile.in: Regenerated.
+
+2005-07-26  Mark Mitchell  <mark@codesourcery.com>
+
+	* Makefile.tpl (SYSROOT_CFLAGS_FOR_TARGET): New variable.
+	(CFLAGS_FOR_TARGET): Use it.
+	(CXXFLAGS_FOR_TARGET): Likewise.
+	* Makefile.in: Regenerated.
+	* configure.in (--with-build-sysroot): New option.
+	* configure: Regenerated.
+
+2005-07-24  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.tpl: Wrap install between unstage and stage
+	* Makefile.in: Regenerate.
+
+2005-07-21  Eric Christopher  <echristo@apple.com>
+
+	* MAINTAINERS: Update affiliation.
+
+2005-07-21  Paul Woegerer  <paul.woegerer@nsc.com>
+
+	* MAINTAINERS: Add self as crx port maintainer.
+
+2005-07-20  DJ Delorie  <dj@redhat.com>
+
+	* MAINTAINERS: Add self as m32c maintainer.
+
+2005-07-16  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* all files: Update FSF address.
+
+2005-07-15  Eric Christopher  <echristo@redhat.com>
+
+	* MAINTAINERS: Change affiliation.
+
+2005-07-14  Jim Blandy  <jimb@redhat.com>
+
+	* configure.in: Add cases for Renesas m32c.
+	* configure: Regenerated.
+	
+2005-07-14  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* COPYING.LIB: Update from fsf.org.
+
+2005-07-14  Kelley Cook  <kcook@gcc.gnu.org>
+
+	* COPYING, compile, config.guess,
+	config.sub, install-sh, missing, mkinstalldirs,
+	symlink-tree, ylwrap: Sync from upstream sources.
+	* config-ml.in: Update FSF address.
+
+2005-07-13  Eric Christopher  <echristo@redhat.com>
+
+	* configure.in: Add toplevel noconfigdir support for tpf.
 	* configure: Regenerate.
 
-2005-05-13  David Edelsohn  <edelsohn@gnu.org>
+2005-07-11  Paolo Bonzini  <bonzini@gnu.org>
 
-	Backport from mainline:
+	PR ada/22340
+
+	* Makefile.tpl (POSTSTAGE1_FLAGS_TO_PASS): Fix pasto.
+	* Makefile.in: Regenerate.
+
+2005-07-07  Mark Mitchell  <mark@codesourcery.com>
+
+	* MAINTAINERS: Remove Dave Brolley as a cpplib maintainer.  Add Dave
+	Brolley to write-after-approval. 
+
+2005-07-07  Andreas Schwab  <schwab@suse.de>
+
+	* Makefile.def (flags_to_pass): Add CFLAGS_FOR_BUILD.
+	* Makefile.tpl (EXTRA_GCC_FLAGS): Don't pass CFLAGS_FOR_BUILD here.
+	* Makefile.in: Regenerated.
+
+2005-07-06  Geoffrey Keating  <geoffk@apple.com>
+
+	* configure.in: Don't build sim or rda when targetting darwin.
+	* configure: Regenerate.
+
+2005-07-06  Kazu Hirata  <kazu@codesourcery.com>
+
+	* configure.in: Add --enable-libssp and --disable-libssp.
+	* configure: Regenerate with autoconf-2.13.
+
+2005-07-02  Jakub Jelinek  <jakub@redhat.com>
+
+	* Makefile.def (target_modules): Add libssp.
+	* configure.in (target_libraries): Add target-libssp.
+	* configure: Rebuilt.
+	* Makefile.in: Rebuilt.
+
+2005-07-01  Zack Weinberg  <zackw@panix.com>
+
+	* MAINTAINERS: Change email address.  Resign from maintainership.
+
+2005-07-01  Richard Guenther  <rguenther@suse.de>
+
+	* MAINTAINERS: Change my e-mail address and affiliation.
+
+2005-06-22  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.def (stagefeedback): Come after profile.
+	Define profiledbootstrap target.
+	* Makefile.tpl (profiledbootstrap): Remove.
+	(stageprofile-end): Zap stagefeedback.
+	(stagefeedback-start): Copy all .gcda files, not only GCC's.
+	* Makefile.in: Regenerate.
+
+2005-06-13  Richard Sandiford  <richard@codesourcery.com>
+
+	* MAINTAINERS: Update my email address.
+
+2005-06-13  Zack Weinberg  <zack@codesourcery.com>
+
+	* depcomp: Update from automake CVS.  Add 'ia64hp' stanza.
+	In 'cpp' stanza, support '#line' as well as '# '.
+
+2005-06-08  Andreas Schwab  <schwab@suse.de>
+
+	* MAINTAINERS: Move myself from 'Write After Approval' to
+	'CPU Port Maintainers' section as m68k maintainer.
+
+2005-06-07  Hans-Peter Nilsson  <hp@axis.com>
+
+	* configure.in (unsupported_languages): New macro.
+	<mmix-knuth-mmixware>: Set unsupported_languages.  Name explicit
+	non-ported target libraries in noconfigdirs.
+	<cris-*, crisv32-*> Ditto, except for non-aout, non-elf,
+	non-linux-gnu.  Remove libgcj_ex_libffi.
+ 	<lang_frag loop>: Set add_this_lang=no if the language is in
+	unsupported_languages.
+	* configure: Regenerate.
+
+2005-06-04  Tobias Schl"uter  <tobias.schlueter@physik.uni-muenchen.de>
+
+	* configure.in: Fix typo in handling of --with-mpfr-dir.
+	* configure: Regenerate.
+
+2005-06-04  Richard Sandiford  <rsandifo@nildram.co.uk>
+
+	* MAINTAINERS: Update my email address.
+
+2005-06-02  Jim Blandy  <jimb@redhat.com>
+
+	* config.sub: Add cases for the Renesas m32c.  (This patch has been
+	accepted into the master sources.)
+
+2005-06-02  Aldy Hernandez  <aldyh@redhat.com>
+	    Michael Snyder  <msnyder@redhat.com>
+	    Stan Cox  <scox@redhat.com>
+
+	* configure.in: Set noconfigdirs for ms1.
+
+	* configure: Regenerate.
+
+2005-06-01  Jerry DeLisle  <jvdelisle@verizon.net>
+
+	* MAINTAINERS (Write After Approval): Add self.
+
+2005-06-01  Josh Conner  <jconner@apple.com>
+
+	* MAINTAINERS (Write After Approval): Add self.
+
+2005-06-01  Kazu Hirata  <kazu@codesourcery.com>
+
+	* MAINTAINERS: Update my email address.
+
+2005-05-27  Ziga Mahkovec  <ziga.mahkovec@klika.si>
+
+	* MAINTAINERS (Write After Approval): Add self.
+
+2005-05-26  Chris Demetriou  <cgd@broadcom.com>
+
+	* MAINTAINERS (Write After Approval): Remove self.
+
+2005-05-25  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.tpl (stage[+id+]-start): Iterate over target module as well.
+	(Dependencies): Consider target modules for bootstrap dependencies.
+	Make target bootstrap modules depend on each stage's gcc.
+	* Makefile.in: Regenerate.
+
+2005-05-20  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.def (configure-gcc): Depend on binutils having been built.
+	(all-gcc): No need to do it here.
+	* Makefile.in: Regenerate.
+
+2005-05-19  Paul Brook  <paul@codesourcery.com>
+
+	* configure.in: Rewrite misleading error message when requested
+	language cannot be built.
+	* configure: Regenerate.
+
+2005-05-15  Daniel Jacobowitz  <dan@codesourcery.com>
+
+	* ylwrap: Import from Automake 1.9.5.
+
+2005-05-13  David Ung  <davidu@mips.com>
+
+	* MAINTAINERS (Write After Approval): Add self.
+
+2005-05-09  Mike Stump  <mrs@apple.com>
+
+	* libtool.m4 (AC_LIBTOOL_SYS_MAX_CMD_LEN): Use quotes on
+	lt_cv_sys_max_cmd_len for now.
+
+2005-05-09  Stan Cox  <scox@redhat.com>
+
+	* MAINTAINERS: Remove self, add Nick Clifton as iq2000 maintainer.
+
+2005-05-08  Matt Kraai  <kraai@ftbfs.org>
+
+	* README.SCO: Update the URL.
+
+2005-05-05  David Edelsohn  <edelsohn@gnu.org>
+
 	* ltconfig: Define file_list_spec.  Pass file_list_spec and
 	with_gnu_ld to libtool.
 	* ltcf-c.sh (aix[45]): Define file_list_spec.
@@ -41,48 +531,133 @@
 	* ltmain.sh: If command exceeds max_cmd_len and file_list_spec
 	exists, write list of input files to temporary file.
 
-2005-05-08  Matt Kraai  <kraai@ftbfs.org>
+2005-05-04  Mike Stump  <mrs@apple.com>
 
-	* README.SCO: Update the URL.
+	* configure.in: Always pass --target to target configures as
+	otherwise rebuilds that do --recheck will fail.
+	* confiugure: Rebuilt.
 
-2005-05-06  Andreas Tobler  <a.tobler@schweiz.ch>
+2005-05-04  Paolo Bonzini  <bonzini@gnu.org>
 
-	PR target/21325
-	* configure.in (powerpc-*-darwin*): Remove ${libgcj} from noconfigdirs.
-	* configure: Regenerated.
+	* Makefile.tpl (POSTSTAGE1_HOST_EXPORTS): Rename from
+	STAGE_HOST_EXPORTS.
+	(configure, all): Add bootstrap support.
+	(Host modules, target modules): Pass post-stage1 flags and exports.
+	(Top-level bootstrap): Remove bootstrap rules, expanded elsewhere.
+	* Makefile.in: Regenerate.
 
-2005-04-25  Bernd Schmidt  <bernd.schmidt@analog.com>
+2005-04-29  Paolo Bonzini  <bonzini@gnu.org>
 
-	* MAINTAINERS: Add self as Blackfin maintainer
-	* config.sub: Import from master version.
+	* configure: Regenerate.
 
-2005-04-20  Release Manager
+2005-04-27  Mike Stump  <mrs@apple.com>
 
-	* GCC 4.0.0 released.
+	* MAINTAINERS: Add self as darwin maintainer.
 
-2005-04-20  Geoffrey Keating  <geoffk@apple.com>
+2005-04-22  Bernd Schmidt  <bernd.schmidt@analog.com>
 
-	* configure.in (powerpc-*-darwin*): Add ${libgcj} to noconfigdirs.
-	* configure: Regenerated.
+	* config.sub: Update from master copy.
 
-2005-04-19  Paolo Bonzini  <bonzini@gnu.org>
+2005-04-21  Mike Stump  <mrs@apple.com>
 
-	* configure: Regenerate after change to config/acx.m4.
+	* MAINTAINERS: Add self as Objective-C/Objective-C++ maintainer.
+	* MAINTAINERS: Add Zem as Objective-C++ maintainer.
+
+2005-04-19  Hans-Peter Nilsson  <hp@axis.com>
+
+	* configure.in <crisv32-*-*, cris-*-*>: New local variable
+	libgcj_ex_libffi.  Have specific match for *-*-linux*.  Separate
+	matches for "*-*-aout" and "*-*-elf".  Don't disable libffi for
+	"*-*-elf" and "*-*-linux*".
+	* configure: Regenerate.
 
 2005-04-14  Joseph S. Myers  <joseph@codesourcery.com>
 
 	* MAINTAINERS (Various Maintainers): Add self as i18n maintainer.
 
+2005-04-12  Mike Stump  <mrs@apple.com>
+
+	* libtool.m4: Update AC_LIBTOOL_SYS_MAX_CMD_LEN bits from upstream.
+
 2005-04-04  Thomas Koenig  <Thomas.Koenig@online.de>
 
-        * MAINTAINERS (Write After Approval): Add myself.
+	* MAINTAINERS (Write After Approval): Add myself.
+
+2005-04-07  Bernd Schmidt  <bernd.schmidt@analog.com>
+
+	* MAINTAINERS (Port Maintainers): Add self for Blackfin.
+
+2005-04-06  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.tpl (BUILD_CONFIGARGS): Include --with-build-subdir.
+	(TARGET_CONFIGARGS): Include --with-target-subdir.
+	(configure, all): New macros.  Use them throughout.
+	* Makefile.in: Regenerate.
+
+2005-04-04  Jon Grimm  <jgrimm2@us.ibm.com>
+
+	* MAINTAINERS (Write After Approval): Add myself.
+
+2005-03-31  Zdenek Dvorak  <rakdver@atrey.karlin.mff.cuni.cz>
+
+	* MAINTAINERS: Remove 'loop unrolling' maintainer.
+
+2005-03-30  Gerald Pfeifer  <gerald@pfeifer.com>
+
+	* MAINTAINERS: Move John Carr to Write After Approval.
+
+2005-03-30  J"orn Rennecke <joern.rennecke@st.com>
+
+	* config/mh-mingw32: Delete.
+	* configure.in: Don't use it.
+	* configure: Regenerate.
+
+2005-03-31  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.def (bfd, opcodes, libstdc++-v3, libmudflap): Set lib_path.
+	* Makefile.tpl (SET_LIB_PATH, REALLY_SET_LIB_PATH): Remove.
+	(HOST_EXPORTS, STAGE_HOST_EXPORTS, TARGET_EXPORTS): Set $(RPATH_ENVVAR).
+	(HOST_LIB_PATH): Generate from Makefile.def.
+	(TARGET_LIB_PATH): Likewise.
+	(Old bootstrap targets): Include TARGET_LIB_PATH into RPATH_ENVVAR.
+	* Makefile.in: Regenerate.
+	* configure.in (set_lib_path, SET_LIB_PATH, SET_GCC_LIB_PATH): Remove.
+	(RPATH_ENVVAR): Include Darwin case.
+	* configure: Regenerate.
+
+2005-03-29  Thomas Fitzsimmons  <fitzsim@redhat.com>
+
+	* MAINTAINERS (Various Maintainers): Remove self.
+	(Write After Approval): Add self.
+
+2005-03-26  Thomas Fitzsimmons  <fitzsim@redhat.com>
+
+	* MAINTAINERS (Various Maintainers): Add self.
 
 2005-03-25  Paolo Bonzini  <bonzini@gnu.org>
 
 	* configure.in (RPATH_ENVVAR): Set to DYLD_LIBRARY_PATH on Darwin.
 	* configure: Regenerate.
 
-2005-03-14  Feng Wang  <fengwang@nudt.edu.cn>
+2005-03-21  Zack Weinberg  <zack@codesourcery.com>
+
+	* Makefile.def: Remove libstdcxx_incdir, libsubdir, gxx_include_dir,
+	gcc_version, and gcc_version_trigger from set of flags to pass.
+	* Makefile.tpl: Remove definitions of above variables.
+	(config.status): Remove dependency on $(gcc_version_trigger).
+	* Makefile.in: Regenerate.
+	* configure.in: Do not reference config/gcc-version.m4 nor
+	config/gxx-include-dir.m4.  Do not invoke TL_AC_GCC_VERSION nor
+	TL_AC_GXX_INCLUDE_DIR.  Do not set gcc_version_trigger.
+	* configure: Regenerate.
+
+2005-03-16  Manfred Hollstein  <manfred.h@gmx.net>
+	    Andrew Pinski <pinskia@physics.uc.edu>
+
+	* Makefile.tpl (check-[+module+]): Fix shell statement inside if ... fi.
+	* Makefile.in: Regenerate.
+
+2005-03-13  Feng Wang  <fengwang@nudt.edu.cn>
 
 	* MAINTAINERS (Write After Approval): Add myself.
 
@@ -95,6 +670,50 @@
 	PR libgcj/20160
 	* ltmain.sh: Avoid creating archives with components that have
 	duplicate basenames.
+
+2005-02-28  Andrew Pinski  <pinskia@physics.uc.edu>
+
+	PR bootstrap/20250
+	* Makefile.tpl (HOST target installs): Fix copy and pasto, use install
+	instead of check.
+	* Makefile.in: Regenerate.
+
+2005-02-28  Paolo Bonzini  <bonzini@gnu.org>
+
+	* Makefile.in: Regenerate to fix conflict between the previous two
+	patches.
+
+2005-02-28  Paolo Bonzini  <bonzini@gnu.org>
+
+	PR bootstrap/17383
+	* Makefile.def (target_modules): Remove "stage", now unnecessary.
+	* Makefile.tpl (HOST_SUBDIR): New substitution.
+	(STAGE_HOST_EXPORTS, EXPECT, HOST_LIB_PATH, USUAL_AR_FOR_TARGET,
+	USUAL_AS_FOR_TARGET, USUAL_DLLTOOL_FOR_TARGET, USUAL_GCC_FOR_TARGET,
+	USUAL_LD_FOR_TARGET, USUAL_NM_FOR_TARGET, USUAL_OBJDUMP_FOR_TARGET,
+	USUAL_RANLIB_FOR_TARGET, USUAL_WINDRES_FOR_TARGET): Use it.
+	(Host modules, Bootstrapped modules): Use it.
+	(Build modules, Target modules): Do not create symlink trees,
+	always configure out-of-srcdir.
+	(distclean): Try removing $(host_subdir) with rm before using rm -rf.
+	* configure.in (FLAGS_FOR_TARGET, CC_FOR_TARGET, GCJ_FOR_TARGET,
+	GFORTRAN_FOR_TARGET, CXX_FOR_TARGET, RAW_CXX_FOR_TARGET): Use
+	$(HOST_SUBDIR).  Create a symlink for host_subdir.
+
+	* Makefile.in: Regenerate.
+	* configure: Regenerate.
+
+2005-02-28  Nathanael Nerode  <neroden@gcc.gnu.org>
+
+	Merged from libada-gnattools-branch:
+	2004-11-28  Nathanael Nerode  <neroden@gcc.gnu.org>
+
+	* gnattools: New directory.
+	* Makefile.def: Add gnattools as a module, depending on target-libada.
+	* Makefile.in: Regenerate.
+	* configure.in: Include gnattools in host_tools; disable it if ada
+	is disabled.
+	* configure: Regenerate.
 
 2005-02-24  James A. Morrison  <phython@gcc.gnu.org>
 
@@ -414,7 +1033,7 @@
 2004-10-05  Tomer Levi  <Tomer.Levi@nsc.com>
 
 	* configure.in: Enable target-libgloss for crx-*-*.
-        * configure: Regenerate.
+	* configure: Regenerate.
 
 2004-10-04  Kazu Hirata  <kazu@cs.umass.edu>
 
@@ -626,7 +1245,7 @@
 	* configure.in: add test for powerpc-*-darwin* to specify makefile frag
 	* configure: regenerate
 	* config/mh-ppc-darwin: create file, override BOOT_CFLAGS for
-        -mdynamic-no-pic
+	-mdynamic-no-pic
 
 
 2004-08-31  Paolo Bonzini  <bonzini@gnu.org>

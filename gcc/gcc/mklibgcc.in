@@ -24,6 +24,7 @@
 # FPBIT
 # FPBIT_FUNCS
 # LIB2_DIVMOD_FUNCS
+# LIB2_SIDITI_CONV_FUNCS
 # DPBIT
 # DPBIT_FUNCS
 # TPBIT
@@ -40,6 +41,7 @@
 # SHLIB_INSTALL
 # MULTILIB_OSDIRNAMES
 # ASM_HIDDEN_OP
+# GCC_FOR_TARGET
 
 # Make needs VPATH to be literal.
 echo 'srcdir = @srcdir@'
@@ -52,17 +54,47 @@ echo 'all: stmp-dirs'
 echo 'dirs = libgcc'
 echo
 
-# Library members defined in libgcc2.c.
+# The floating-point conversion routines that involve a single-word integer.
+# XX stands for the integer mode.
+swfloatfuncs=
+for mode in sf df xf; do
+  swfloatfuncs="$swfloatfuncs _fixuns${mode}XX"
+done
+
+# Likewise double-word routines.
+dwfloatfuncs=
+for mode in sf df xf tf; do
+  dwfloatfuncs="$dwfloatfuncs _fix${mode}XX _fixuns${mode}XX"
+  dwfloatfuncs="$dwfloatfuncs _floatXX${mode}"
+done
+
+# Entries of the form <objfile>:<func>:<wordsize> indicate that libgcc2.c
+# should be compiled with L<func> defined and with LIBGCC2_UNITS_PER_WORD
+# set to <wordsize>.  <objfile> is the name of the associated object file
+
 lib2funcs='_muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3
-	_cmpdi2 _ucmpdi2 _floatdidf _floatdisf _fixunsdfsi _fixunssfsi
-	_fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi
-	_floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf _clear_cache
+	_cmpdi2 _ucmpdi2 _clear_cache
 	_enable_execute_stack _trampoline __main _absvsi2 _absvdi2 _addvsi3
 	_addvdi3 _subvsi3 _subvdi3 _mulvsi3 _mulvdi3 _negvsi2 _negvdi2 _ctors
 	_ffssi2 _ffsdi2 _clz _clzsi2 _clzdi2 _ctzsi2 _ctzdi2 _popcount_tab
 	_popcountsi2 _popcountdi2 _paritysi2 _paritydi2 _powisf2 _powidf2
 	_powixf2 _powitf2 _mulsc3 _muldc3 _mulxc3 _multc3 _divsc3 _divdc3
 	_divxc3 _divtc3'
+
+if [ "$LIB2_SIDITI_CONV_FUNCS" ]; then
+  for func in $swfloatfuncs; do
+    sifunc=`echo $func | sed -e 's/XX/si/'`
+    lib2funcs="$lib2funcs $sifunc:$sifunc:4"
+  done
+  for func in $dwfloatfuncs; do
+    difunc=`echo $func | sed -e 's/XX/di/'`
+    tifunc=`echo $func | sed -e 's/XX/ti/'`
+    lib2funcs="$lib2funcs $difunc:$difunc:4 $tifunc:$difunc:8"
+  done
+else
+  lib2funcs="$lib2funcs `echo $swfloatfuncs | sed -e 's/XX/si/g'`"
+  lib2funcs="$lib2funcs `echo $dwfloatfuncs | sed -e 's/XX/di/g'`"
+fi
 
 # Disable SHLIB_LINK if shared libgcc not enabled.
 if [ "@enable_shared@" = "no" ]; then
@@ -144,8 +176,8 @@ fi
 # Remove any objects from lib2funcs and LIB2_DIVMOD_FUNCS that are
 # defined as optimized assembly code in LIB1ASMFUNCS.
 for name in $LIB1ASMFUNCS; do
-  lib2funcs=`echo $lib2funcs | sed -e 's/^'$name' //' \
-				   -e 's/ '$name' / /' \
+  lib2funcs=`echo $lib2funcs | sed -e 's/^'$name'[ :]//' \
+				   -e 's/ '$name'[ :]/ /' \
 				   -e 's/ '$name'$//'`
   LIB2_DIVMOD_FUNCS=`echo $LIB2_DIVMOD_FUNCS | sed -e 's/^'$name' //' \
 				                   -e 's/ '$name' / /' \
@@ -178,7 +210,7 @@ for ml in $MULTILIBS; do
     if [ "$LIBUNWIND" ]; then
       libunwind_so=$dir/libunwind${SHLIB_EXT}
     fi
-    os_multilib_dir=`./xgcc -B./ $flags --print-multi-os-directory`
+    os_multilib_dir=`$GCC_FOR_TARGET $flags --print-multi-os-directory`
     if [ "$os_multilib_dir" != . ]; then
       shlib_slibdir_qual="/$os_multilib_dir"
     fi
@@ -247,16 +279,25 @@ for ml in $MULTILIBS; do
   #
 
   for name in $lib2funcs; do
+    case $name in
+      *:*:*)
+	defines=`echo $name | sed -e 's/.*:\(.*\):\(.*\)/-DL\1 -DLIBGCC2_UNITS_PER_WORD=\2/'`
+	name=`echo $name | sed -e 's/\(.*\):.*:.*/\1/'`
+	;;
+      *)
+	defines="-DL$name"
+	;;
+    esac
     if [ "$libgcc_s_so" ]; then
       out="libgcc/${dir}/${name}${objext}"
       outS="libgcc/${dir}/${name}_s${objext}"
 
       echo $outS: $libgcc2_c_dep
-      echo "	$gcc_s_compile" $flags -DL$name -c '$(srcdir)/libgcc2.c' \
+      echo "	$gcc_s_compile" $flags $defines -c '$(srcdir)/libgcc2.c' \
 	-o $outS
 
       echo $out: $libgcc2_c_dep
-      echo "	$gcc_compile" $flags -DL$name '$(vis_hide)' \
+      echo "	$gcc_compile" $flags $defines '$(vis_hide)' \
         -c '$(srcdir)/libgcc2.c' -o $out
 
       echo $libgcc_a: $out
@@ -267,7 +308,7 @@ for ml in $MULTILIBS; do
     else
       out="libgcc/${dir}/${name}${objext}"
       echo ${out}: stmp-dirs '$(srcdir)/config/$(LIB1ASMSRC)'
-      echo "	$gcc_compile" $flags -DL$name -c '$(srcdir)/libgcc2.c' -o $out
+      echo "	$gcc_compile" $flags $defines -c '$(srcdir)/libgcc2.c' -o $out
       echo $libgcc_a: $out
     fi
   done
@@ -314,6 +355,7 @@ for ml in $MULTILIBS; do
 
   if [ "$FPBIT" ]; then
     for name in $FPBIT_FUNCS; do
+      [ "$name" = _sf_to_tf -a -z "$TPBIT" ] && continue
       if [ "$libgcc_s_so" ]; then
 	out="libgcc/${dir}/${name}${objext}"
 	outS="libgcc/${dir}/${name}_s${objext}"
@@ -344,6 +386,7 @@ for ml in $MULTILIBS; do
 
   if [ "$DPBIT" ]; then
     for name in $DPBIT_FUNCS; do
+      [ "$name" = _df_to_tf -a -z "$TPBIT" ] && continue
       if [ "$libgcc_s_so" ]; then
 	out="libgcc/${dir}/${name}${objext}"
 	outS="libgcc/${dir}/${name}_s${objext}"
@@ -509,36 +552,55 @@ for ml in $MULTILIBS; do
 
   # If we don't have libgcc_eh.a, only LIB2ADDEH matters.  If we do, only
   # LIB2ADDEHSTATIC and LIB2ADDEHSHARED matter.  (Usually all three are
-  # identical.)  We do _not_ handle assembly files in this context.
+  # identical.)
 
   if [ "$libgcc_eh_a" ]; then
     for file in $LIB2ADDEHSTATIC; do
-      case $file in
-        *.c) ;;
-	*)   echo "Unhandled extension: $file">&2; exit 1 ;;
-       esac
-
-      name=`echo $file | sed -e 's/[.]c$//'`
+      name=`echo $file | sed -e 's/[.][cSo]$//' -e 's/[.]asm$//'`
       oname=`echo $name | sed -e 's,.*/,,'`
       out="libgcc/${dir}/${oname}${objext}"
 
-      echo $out: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
-      echo "	$gcc_compile" $flags '$(vis_hide)' -fexceptions -c $file -o $out
+      case $file in
+        *.c)
+	  echo $out: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
+	  echo "	$gcc_compile" $flags -fexceptions '$(vis_hide)' -c $file -o $out
+	  ;;
+	*.asm | *.S)
+	  # We have to compile it twice in order to establish the list
+	  # of symbols to be marked hidden.
+	  outV="libgcc/${dir}/${oname}.vis"
+	  outT="libgcc/${dir}/${oname}_t${objext}"
+	  echo ${outT}: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
+	  echo "	$gcc_compile" $flags -xassembler-with-cpp \
+		  -c $file -o ${outT}
+	  echo $out: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep $outV
+	  echo "	$gcc_compile" $flags -xassembler-with-cpp \
+		  -include $outV -c $file -o $out
+	  echo "${outV}: ${outT}; \$(gen-hide-list)"
+	  ;;
+	*)   echo "Unhandled extension: $file">&2; exit 1 ;;
+      esac
+
       echo $libgcc_eh_a: $out
     done
 
     for file in $LIB2ADDEHSHARED; do
-      case $file in
-        *.c) ;;
-	*)   echo "Unhandled extension: $file">&2; exit 1 ;;
-       esac
-
-      name=`echo $file | sed -e 's/[.]c$//'`
+      name=`echo $file | sed -e 's/[.][cSo]$//' -e 's/[.]asm$//'`
       oname=`echo $name | sed -e 's,.*/,,'`
       outS="libgcc/${dir}/${oname}_s${objext}"
 
-      echo $outS: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
-      echo "	$gcc_s_compile" $flags -fexceptions -c $file -o $outS
+      case $file in
+        *.c)
+	  echo $outS: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
+	  echo "	$gcc_s_compile" $flags -fexceptions -c $file -o $outS
+	  ;;
+	*.asm | *.S)
+	  echo $outS: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
+	  echo "	$gcc_s_compile" $flags -xassembler-with-cpp -c $file -o $outS
+	  ;;
+	*)   echo "Unhandled extension: $file">&2; exit 1 ;;
+      esac
+
       echo $libgcc_s_so: $outS
       if [ "$SHLIB_MKMAP" ]; then
 	echo libgcc/${dir}/libgcc.map: $outS
@@ -560,22 +622,28 @@ for ml in $MULTILIBS; do
 
   else # no libgcc_eh.a
     for file in $LIB2ADDEH; do
-      case $file in
-        *.c) ;;
-	*)   echo "Unhandled extension: $file">&2; exit 1 ;;
-       esac
-
-      name=`echo $file | sed -e 's/[.]c$//'`
+      name=`echo $file | sed -e 's/[.][cSo]$//' -e 's/[.]asm$//'`
       oname=`echo $name | sed -e 's,.*/,,'`
       out="libgcc/${dir}/${oname}${objext}"
 
-      echo $out: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
-      echo "	$gcc_compile" $flags -fexceptions '$(vis_hide)' -c $file -o $out
+      case $file in
+        *.c)
+	  echo $out: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
+	  echo "	$gcc_compile" $flags '$(vis_hide)' -fexceptions -c $file -o $out
+	  ;;
+	*.asm | *.S)
+	  echo $out: stmp-dirs $file $LIB2ADDEHDEP $libgcc_dep
+	  echo "	$gcc_compile" $flags -xassembler-with-cpp \
+		  -c $file -o $out
+	  ;;
+	*)   echo "Unhandled extension: $file">&2; exit 1 ;;
+      esac
+
       echo $libgcc_a: $out
     done
   fi
 
-  # Again, this does not handle assembly.
+  # We do _not_ handle assembly files in this context.
   if [ "$LIBUNWIND" ]; then
     for file in $LIBUNWIND; do
       case $file in
@@ -780,7 +848,7 @@ echo "	if [ -f stmp-dirs ]; then true; else touch stmp-dirs; fi"
 
 if [ "$need_eh_dummy" ]; then
   echo "eh_dummy.c:"
-  echo "	echo 'struct eh_dummy;' > \$@"
+  echo "	echo 'int __libgcc_eh_dummy;' > \$@"
 fi
 
 echo ""
@@ -795,16 +863,19 @@ for ml in $MULTILIBS; do
     ldir='$(DESTDIR)$(libsubdir)'
   fi
   echo '	$(INSTALL_DATA)' ${dir}/libgcc.a ${ldir}/
+  echo '	chmod 644'  ${ldir}/libgcc.a
   echo '	$(RANLIB_FOR_TARGET)' ${ldir}/libgcc.a
   echo '	$(INSTALL_DATA)' ${dir}/libgcov.a ${ldir}/
+  echo '	chmod 644'  ${ldir}/libgcov.a
   echo '	$(RANLIB_FOR_TARGET)' ${ldir}/libgcov.a
 
   if [ "$SHLIB_LINK" ]; then
     echo '	$(INSTALL_DATA)' ${dir}/libgcc_eh.a ${ldir}/
+    echo '	chmod 644'  ${ldir}/libgcc_eh.a
     echo '	$(RANLIB_FOR_TARGET)' ${ldir}/libgcc_eh.a
 
     shlib_slibdir_qual=
-    os_multilib_dir=`./xgcc -B./ $flags --print-multi-os-directory`
+    os_multilib_dir=`$GCC_FOR_TARGET $flags --print-multi-os-directory`
     if [ "$os_multilib_dir" != . ]; then
       shlib_slibdir_qual="/$os_multilib_dir"
     fi
@@ -819,6 +890,7 @@ for ml in $MULTILIBS; do
 	      -e "s%@shlib_slibdir_qual@%$shlib_slibdir_qual%g"
       libunwinddir='$(DESTDIR)$(slibdir)$(shlib_slibdir_qual)/$(shlib_dir)'
       echo '	$(INSTALL_DATA)' ${dir}/libunwind.a ${libunwinddir}/
+      echo '	chmod 644' ${dir}/libunwind.a
       echo '	$(RANLIB_FOR_TARGET)' ${libunwinddir}/libunwind.a
     fi
   fi

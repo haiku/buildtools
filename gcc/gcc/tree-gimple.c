@@ -1,5 +1,5 @@
 /* Functions to analyze and validate GIMPLE trees.
-   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
    Rewritten by Jason Merrill <jason@redhat.com>
 
@@ -17,8 +17,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -34,8 +34,6 @@ Boston, MA 02111-1307, USA.  */
 #include "bitmap.h"
 
 /* For the definitive definition of GIMPLE, see doc/tree-ssa.texi.  */
-
-static inline bool is_gimple_id (tree);
 
 /* Validation of GIMPLE expressions.  */
 
@@ -73,6 +71,7 @@ is_gimple_formal_tmp_rhs (tree t)
     case COMPLEX_CST:
     case VECTOR_CST:
     case OBJ_TYPE_REF:
+    case ASSERT_EXPR:
       return true;
 
     default:
@@ -243,7 +242,7 @@ is_gimple_variable (tree t)
 
 /*  Return true if T is a GIMPLE identifier (something with an address).  */
 
-static inline bool
+bool
 is_gimple_id (tree t)
 {
   return (is_gimple_variable (t)
@@ -259,21 +258,22 @@ is_gimple_id (tree t)
 bool
 is_gimple_reg_type (tree type)
 {
-  return (!AGGREGATE_TYPE_P (type)
-          && TREE_CODE (type) != COMPLEX_TYPE);
+  return !AGGREGATE_TYPE_P (type);
 }
 
-
-/* Return true if T is a scalar register variable.  */
+/* Return true if T is a non-aggregate register variable.  */
 
 bool
 is_gimple_reg (tree t)
 {
+  var_ann_t ann;
+
   if (TREE_CODE (t) == SSA_NAME)
     t = SSA_NAME_VAR (t);
 
   if (!is_gimple_variable (t))
     return false;
+
   if (!is_gimple_reg_type (TREE_TYPE (t)))
     return false;
 
@@ -300,8 +300,20 @@ is_gimple_reg (tree t)
   if (TREE_CODE (t) == VAR_DECL && DECL_HARD_REGISTER (t))
     return false;
 
+  /* Complex values must have been put into ssa form.  That is, no 
+     assignments to the individual components.  */
+  if (TREE_CODE (TREE_TYPE (t)) == COMPLEX_TYPE)
+    return DECL_COMPLEX_GIMPLE_REG_P (t);
+
+  /* Some compiler temporaries are created to be used exclusively in
+     virtual operands (currently memory tags and sub-variables).
+     These variables should never be considered GIMPLE registers.  */
+  if (DECL_ARTIFICIAL (t) && (ann = var_ann (t)) != NULL)
+    return ann->mem_tag_kind == NOT_A_TAG;
+
   return true;
 }
+
 
 /* Returns true if T is a GIMPLE formal temporary variable.  */
 

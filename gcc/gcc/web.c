@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Simple optimization pass that splits independent uses of each pseudo,
    increasing effectiveness of other optimizations.  The optimization can
@@ -56,6 +56,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "output.h"
 #include "df.h"
 #include "function.h"
+#include "timevar.h"
+#include "tree-pass.h"
 
 
 /* This entry is allocated for each reference in the insn stream.  */
@@ -271,3 +273,36 @@ web_main (void)
   free (used);
   df_finish (df);
 }
+
+static bool
+gate_handle_web (void)
+{
+  return (optimize > 0 && flag_web);
+}
+
+static void
+rest_of_handle_web (void)
+{
+  web_main ();
+  delete_trivially_dead_insns (get_insns (), max_reg_num ());
+  cleanup_cfg (CLEANUP_EXPENSIVE);
+  reg_scan (get_insns (), max_reg_num ());
+}
+
+struct tree_opt_pass pass_web =
+{
+  "web",                                /* name */
+  gate_handle_web,                      /* gate */
+  rest_of_handle_web,                   /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_WEB,                               /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'Z'                                   /* letter */
+};
+

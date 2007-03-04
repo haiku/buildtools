@@ -1,3 +1,4 @@
+// { dg-require-namedlocale "" }
 // { dg-require-fork "" }
 // { dg-require-mkfifo "" }
 
@@ -18,7 +19,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 #include <fstream>
@@ -37,7 +38,7 @@ void test01()
   using namespace __gnu_test;
   bool test __attribute__((unused)) = true;
 
-  locale loc_us = try_named_locale("en_US");
+  locale loc_us = locale("en_US");
 
   const char* name = "tmp_14975-2";
 

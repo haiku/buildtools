@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 extern int alpha_next_sequence_number;
 
@@ -101,6 +101,15 @@ extern rtx alpha_emit_setcc (enum rtx_code);
 extern int alpha_split_conditional_move (enum rtx_code, rtx, rtx, rtx, rtx);
 extern void alpha_emit_xfloating_arith (enum rtx_code, rtx[]);
 extern void alpha_emit_xfloating_cvt (enum rtx_code, rtx[]);
+extern void alpha_split_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx, rtx);
+extern void alpha_split_compare_and_swap (rtx, rtx, rtx, rtx, rtx);
+extern void alpha_expand_compare_and_swap_12 (rtx, rtx, rtx, rtx);
+extern void alpha_split_compare_and_swap_12 (enum machine_mode, rtx, rtx,
+					     rtx, rtx, rtx, rtx, rtx);
+extern void alpha_split_lock_test_and_set (rtx, rtx, rtx, rtx);
+extern void alpha_expand_lock_test_and_set_12 (rtx, rtx, rtx);
+extern void alpha_split_lock_test_and_set_12 (enum machine_mode, rtx, rtx,
+					      rtx, rtx, rtx);
 #endif
 
 extern rtx alpha_need_linkage (const char *, int);

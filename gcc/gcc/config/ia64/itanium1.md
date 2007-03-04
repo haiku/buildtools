@@ -17,8 +17,8 @@
 ;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.  */
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.  */
 ;;
 
 
@@ -528,6 +528,10 @@
 (define_insn_reservation "1_fld"     9
   (and (and (eq_attr "cpu" "itanium")
             (eq_attr "itanium_class" "fld"))
+       (eq (symbol_ref "bundling_p") (const_int 0))) "1_M")
+(define_insn_reservation "1_fldp"    9
+  (and (and (eq_attr "cpu" "itanium")
+            (eq_attr "itanium_class" "fldp"))
        (eq (symbol_ref "bundling_p") (const_int 0))) "1_M")
 (define_insn_reservation "1_fmac"    5
   (and (and (eq_attr "cpu" "itanium")
@@ -1406,6 +1410,10 @@
 (define_insn_reservation "1b_fld"     9
   (and (and (eq_attr "cpu" "itanium")
             (eq_attr "itanium_class" "fld"))
+       (ne (symbol_ref "bundling_p") (const_int 0))) "1b_M")
+(define_insn_reservation "1b_fldp"    9
+  (and (and (eq_attr "cpu" "itanium")
+            (eq_attr "itanium_class" "fldp"))
        (ne (symbol_ref "bundling_p") (const_int 0))) "1b_M")
 (define_insn_reservation "1b_fmac"    5
   (and (and (eq_attr "cpu" "itanium")

@@ -49,10 +49,10 @@ described below.
 <h3 class="heading"><a name="TOC0"></a>Tools/packages necessary for building GCC</h3>
 
      <dl>
-<dt>ISO C90 compiler<dd>Necessary to bootstrap the GCC package, although versions of GCC prior
+<dt>ISO C90 compiler<dd>Necessary to bootstrap GCC, although versions of GCC prior
 to 3.4 also allow bootstrapping with a traditional (K&amp;R) C compiler.
 
-     <p>To make all languages in a cross-compiler or other configuration where
+     <p>To build all languages in a cross-compiler or other configuration where
 3-stage bootstrap is not performed, you need to start with an existing
 GCC binary (version 2.95 or later) because source code for language
 frontends other than C might use GCC extensions.
@@ -66,8 +66,8 @@ specific information.
      <br><dt>A &ldquo;working&rdquo; POSIX compatible shell, or GNU bash<dd>
 Necessary when running <samp><span class="command">configure</span></samp> because some
 <samp><span class="command">/bin/sh</span></samp> shells have bugs and may crash when configuring the
-target libraries.  In other cases, <samp><span class="command">/bin/sh</span></samp> or even some
-<samp><span class="command">ksh</span></samp> have disastrous corner-case performance problems.  This
+target libraries.  In other cases, <samp><span class="command">/bin/sh</span></samp> or <samp><span class="command">ksh</span></samp>
+have disastrous corner-case performance problems.  This
 can cause target <samp><span class="command">configure</span></samp> runs to literally take days to
 complete in some cases.
 
@@ -92,7 +92,7 @@ obtained via FTP mirror sites.
      <br><dt>GNU make version 3.79.1 (or later)<dd>
 You must have GNU make installed to build GCC.
 
-     <br><dt>GNU tar version 1.12 (or later)<dd>
+     <br><dt>GNU tar version 1.14 (or later)<dd>
 Necessary (only on some platforms) to untar the source code.  Many
 systems' <samp><span class="command">tar</span></samp> programs will also work, only try GNU
 <samp><span class="command">tar</span></samp> if you have problems.
@@ -143,32 +143,32 @@ Necessary when modifying <samp><span class="command">gperf</span></samp> input f
 <samp><span class="file">gcc/cp/cfns.gperf</span></samp> to regenerate its associated header file, e.g. 
 <samp><span class="file">gcc/cp/cfns.h</span></samp>.
 
-     <br><dt>expect version ???<dt>tcl version ???<dt>dejagnu version 1.4.4 (or later)<dd>
-Necessary to run the GCC testsuite.
+     <br><dt>DejaGnu 1.4.4<dt>Expect<dt>Tcl<dd>
+Necessary to run the GCC testsuite; see the section on testing for details.
 
      <br><dt>autogen version 5.5.4 (or later) and<dt>guile version 1.4.1 (or later)<dd>
 Necessary to regenerate <samp><span class="file">fixinc/fixincl.x</span></samp> from
 <samp><span class="file">fixinc/inclhack.def</span></samp> and <samp><span class="file">fixinc/*.tpl</span></samp>.
 
-     <p>Necessary to run the <samp><span class="file">fixinc</span></samp> <samp><span class="command">make check</span></samp>.
+     <p>Necessary to run `<samp><span class="samp">make check</span></samp>' for <samp><span class="file">fixinc</span></samp>.
 
      <p>Necessary to regenerate the top level <samp><span class="file">Makefile.in</span></samp> file from
 <samp><span class="file">Makefile.tpl</span></samp> and <samp><span class="file">Makefile.def</span></samp>.
 
      <br><dt>GNU Bison version 1.28 (or later)<dd>Berkeley <samp><span class="command">yacc</span></samp> (<samp><span class="command">byacc</span></samp>) is also reported to work other
-than for java.
+than for GCJ.
 
      <p>Necessary when modifying <samp><span class="file">*.y</span></samp> files.
 
      <p>Necessary to build GCC during development because the generated output
-files are not included in the CVS repository.  They are included in
+files are not included in the SVN repository.  They are included in
 releases.
 
      <br><dt>Flex version 2.5.4 (or later)<dd>
 Necessary when modifying <samp><span class="file">*.l</span></samp> files.
 
      <p>Necessary to build GCC during development because the generated output
-files are not included in the CVS repository.  They are included in
+files are not included in the SVN repository.  They are included in
 releases.
 
      <br><dt>Texinfo version 4.2 (or later)<dd>
@@ -176,26 +176,28 @@ Necessary for running <samp><span class="command">makeinfo</span></samp> when mo
 files to test your changes.
 
      <p>Necessary to build GCC documentation during development because the
-generated output files are not included in the CVS repository.  They are
+generated output files are not included in the SVN repository.  They are
 included in releases.
 
      <br><dt>TeX (any working version)<dd>
 Necessary for running <samp><span class="command">texi2dvi</span></samp>, used when running
 <samp><span class="command">make dvi</span></samp> to create DVI files.
 
-     <br><dt>cvs version 1.10 (or later)<dt>ssh (any version)<dd>
-Necessary to access the CVS repository.  Public releases and weekly
+     <br><dt>SVN (any version)<dt>SSH (any version)<dd>
+Necessary to access the SVN repository.  Public releases and weekly
 snapshots of the development sources are also available via FTP.
 
-     <br><dt>perl version 5.6.1 (or later)<dd>
+     <br><dt>Perl version 5.6.1 (or later)<dd>
 Necessary when regenerating <samp><span class="file">Makefile</span></samp> dependencies in libiberty. 
 Necessary when regenerating <samp><span class="file">libiberty/functions.texi</span></samp>. 
 Necessary when generating manpages from Texinfo manuals. 
-Used by various scripts to generate some files included in CVS (mainly
+Necessary when targetting Darwin, building libstdc++,
+and not using <samp><span class="option">--disable-symvers</span></samp>. 
+Used by various scripts to generate some files included in SVN (mainly
 Unicode-related and rarely changing) from source tables.
 
      <br><dt>GNU diffutils version 2.7 (or later)<dd>
-Necessary when creating changes to GCC source code to submit for review.
+Useful when submitting patches for the GCC source code.
 
      <br><dt>patch version 2.5.4 (or later)<dd>
 Necessary when applying patches, created with <samp><span class="command">diff</span></samp>, to one's

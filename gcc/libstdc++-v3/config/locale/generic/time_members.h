@@ -1,6 +1,6 @@
 // std::time_get, std::time_put implementation, generic version -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -55,10 +55,18 @@
 				     size_t __refs) 
     : facet(__refs), _M_data(NULL)
     { 
-      char* __tmp = new char[std::strlen(__s) + 1];
-      std::strcpy(__tmp, __s);
+      const size_t __len = std::strlen(__s) + 1;
+      char* __tmp = new char[__len];
+      std::memcpy(__tmp, __s, __len);
       _M_name_timepunct = __tmp;
-      _M_initialize_timepunct(__cloc); 
+
+      try
+	{ _M_initialize_timepunct(__cloc); }
+      catch(...)
+	{ 
+	  delete [] _M_name_timepunct;
+	  __throw_exception_again;
+	}
     }
 
   template<typename _CharT>

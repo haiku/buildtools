@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -60,7 +60,7 @@ namespace std
     public:
       ///  Construct end of input stream iterator.
       istream_iterator()
-      : _M_stream(0), _M_ok(false) {}
+      : _M_stream(0), _M_value(), _M_ok(false) {}
 
       ///  Construct start of input stream iterator.
       istream_iterator(istream_type& __s)

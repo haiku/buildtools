@@ -1,6 +1,6 @@
 // Input streams -*- C++ -*-
 
-// Copyright (C) 1997, 1998, 1999, 2001, 2002, 2003, 2004
+// Copyright (C) 1997, 1998, 1999, 2001, 2002, 2003, 2004, 2005
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -723,7 +723,12 @@ namespace std
   template<typename _CharT, typename _Traits>
     basic_istream<_CharT, _Traits>&
     operator>>(basic_istream<_CharT, _Traits>& __in, _CharT* __s);
-  
+
+  // Explicit specialization declaration, defined in src/istream.cc.
+  template<>
+    basic_istream<char>&
+    operator>>(basic_istream<char>& __in, char* __s);
+
   template<class _Traits>
     basic_istream<char, _Traits>&
     operator>>(basic_istream<char, _Traits>& __in, unsigned char* __s)

@@ -1,6 +1,6 @@
 /* Check calls to formatted I/O functions (-Wformat).
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -25,8 +25,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tm.h"
 #include "tree.h"
 #include "flags.h"
-#include "toplev.h"
 #include "c-common.h"
+#include "toplev.h"
 #include "intl.h"
 #include "diagnostic.h"
 #include "langhooks.h"
@@ -58,8 +58,9 @@ set_Wformat (int setting)
    format_type_error.  Target-specific format types do not have
    matching enum values.  */
 enum format_type { printf_format_type, asm_fprintf_format_type,
-		   gcc_diag_format_type, gcc_cdiag_format_type,
-		   gcc_cxxdiag_format_type,
+		   gcc_diag_format_type, gcc_tdiag_format_type,
+		   gcc_cdiag_format_type,
+		   gcc_cxxdiag_format_type, gcc_gfc_format_type,
 		   scanf_format_type, strftime_format_type,
 		   strfmon_format_type, format_type_error = -1};
 
@@ -147,17 +148,12 @@ check_format_string (tree argument, unsigned HOST_WIDE_INT format_num,
   return true;
 }
 
-/* Strip any conversions from the expression, verify it is a constant,
-   and store its value. If validated_p is true, abort on errors.
+/* Verify EXPR is a constant, and store its value.
+   If validated_p is true there should be no errors.
    Returns true on success, false otherwise.  */
 static bool
 get_constant (tree expr, unsigned HOST_WIDE_INT *value, int validated_p)
 {
-  while (TREE_CODE (expr) == NOP_EXPR
-	 || TREE_CODE (expr) == CONVERT_EXPR
-	 || TREE_CODE (expr) == NON_LVALUE_EXPR)
-    expr = TREE_OPERAND (expr, 0);
-
   if (TREE_CODE (expr) != INTEGER_CST || TREE_INT_CST_HIGH (expr) != 0)
     {
       gcc_assert (!validated_p);
@@ -169,12 +165,12 @@ get_constant (tree expr, unsigned HOST_WIDE_INT *value, int validated_p)
   return true;
 }
 
-/* Decode the arguments to a "format" attribute into a function_format_info
-   structure.  It is already known that the list is of the right length.
-   If VALIDATED_P is true, then these attributes have already been validated
-   and this function will abort if they are erroneous; if false, it
-   will give an error message.  Returns true if the attributes are
-   successfully decoded, false otherwise.  */
+/* Decode the arguments to a "format" attribute into a
+   function_format_info structure.  It is already known that the list
+   is of the right length.  If VALIDATED_P is true, then these
+   attributes have already been validated and must not be erroneous;
+   if false, it will give an error message.  Returns true if the
+   attributes are successfully decoded, false otherwise.  */
 
 static bool
 decode_format_attr (tree args, function_format_info *info, int validated_p)
@@ -199,7 +195,8 @@ decode_format_attr (tree args, function_format_info *info, int validated_p)
       if (info->format_type == format_type_error)
 	{
 	  gcc_assert (!validated_p);
-	  warning ("%qs is an unrecognized format function type", p);
+	  warning (OPT_Wformat, "%qE is an unrecognized format function type",
+		   format_type_id);
 	  return false;
 	}
     }
@@ -314,6 +311,7 @@ static const format_length_info gcc_diag_length_specs[] =
 };
 
 /* The custom diagnostics all accept the same length specifiers.  */
+#define gcc_tdiag_length_specs gcc_diag_length_specs
 #define gcc_cdiag_length_specs gcc_diag_length_specs
 #define gcc_cxxdiag_length_specs gcc_diag_length_specs
 
@@ -390,17 +388,25 @@ static const format_flag_pair gcc_diag_flag_pairs[] =
   { 0, 0, 0, 0 }
 };
 
+#define gcc_tdiag_flag_pairs gcc_diag_flag_pairs
 #define gcc_cdiag_flag_pairs gcc_diag_flag_pairs
 #define gcc_cxxdiag_flag_pairs gcc_diag_flag_pairs
 
+static const format_flag_pair gcc_gfc_flag_pairs[] =
+{
+  { 0, 0, 0, 0 }
+};
+
 static const format_flag_spec gcc_diag_flag_specs[] =
 {
+  { '+',  0, 0, N_("'+' flag"),        N_("the '+' printf flag"),              STD_C89 },
   { 'q',  0, 0, N_("'q' flag"),        N_("the 'q' diagnostic flag"),          STD_C89 },
   { 'p',  0, 0, N_("precision"),       N_("precision in printf format"),       STD_C89 },
   { 'L',  0, 0, N_("length modifier"), N_("length modifier in printf format"), STD_C89 },
   { 0, 0, 0, NULL, NULL, 0 }
 };
 
+#define gcc_tdiag_flag_specs gcc_diag_flag_specs
 #define gcc_cdiag_flag_specs gcc_diag_flag_specs
 
 static const format_flag_spec gcc_cxxdiag_flag_specs[] =
@@ -546,6 +552,29 @@ static const format_char_info gcc_diag_char_table[] =
   { NULL,  0, 0, NOLENGTHS, NULL, NULL, NULL }
 };
 
+static const format_char_info gcc_tdiag_char_table[] =
+{
+  /* C89 conversion specifiers.  */
+  { "di",  0, STD_C89, { T89_I,   BADLEN,  BADLEN,  T89_L,   T9L_LL,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "",   NULL },
+  { "ox",  0, STD_C89, { T89_UI,  BADLEN,  BADLEN,  T89_UL,  T9L_ULL, BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "",   NULL },
+  { "u",   0, STD_C89, { T89_UI,  BADLEN,  BADLEN,  T89_UL,  T9L_ULL, BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "",   NULL },
+  { "c",   0, STD_C89, { T89_I,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "",   NULL },
+  { "s",   1, STD_C89, { T89_C,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "pq", "cR", NULL },
+  { "p",   1, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "c",  NULL },
+
+  /* Custom conversion specifiers.  */
+
+  /* %H will require "location_t" at runtime.  */
+  { "H",   0, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "",   NULL },
+
+  /* These will require a "tree" at runtime.  */
+  { "DFJT", 0, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q+", "",   NULL },
+
+  { "<>'", 0, STD_C89, NOARGUMENTS, "",      "",   NULL },
+  { "m",   0, STD_C89, NOARGUMENTS, "q",     "",   NULL },
+  { NULL,  0, 0, NOLENGTHS, NULL, NULL, NULL }
+};
+
 static const format_char_info gcc_cdiag_char_table[] =
 {
   /* C89 conversion specifiers.  */
@@ -562,7 +591,7 @@ static const format_char_info gcc_cdiag_char_table[] =
   { "H",   0, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q",  "",   NULL },
 
   /* These will require a "tree" at runtime.  */
-  { "DEFJT", 0, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q", "",   NULL },
+  { "DEFJT", 0, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q+", "",   NULL },
 
   { "<>'", 0, STD_C89, NOARGUMENTS, "",      "",   NULL },
   { "m",   0, STD_C89, NOARGUMENTS, "q",     "",   NULL },
@@ -592,6 +621,23 @@ static const format_char_info gcc_cxxdiag_char_table[] =
 
   { "<>'", 0, STD_C89, NOARGUMENTS, "",      "",   NULL },
   { "m",   0, STD_C89, NOARGUMENTS, "q",     "",   NULL },
+  { NULL,  0, 0, NOLENGTHS, NULL, NULL, NULL }
+};
+
+static const format_char_info gcc_gfc_char_table[] =
+{
+  /* C89 conversion specifiers.  */
+  { "di",  0, STD_C89, { T89_I,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "", "", NULL },
+  { "c",   0, STD_C89, { T89_I,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "", "", NULL },
+  { "s",   1, STD_C89, { T89_C,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "", "cR", NULL },
+
+  /* gfc conversion specifiers.  */
+
+  { "C",   0, STD_C89, NOARGUMENTS, "",      "",   NULL },
+
+  /* This will require a "locus" at runtime.  */
+  { "L",   0, STD_C89, { T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "", "R", NULL },
+
   { NULL,  0, 0, NOLENGTHS, NULL, NULL, NULL }
 };
 
@@ -663,13 +709,19 @@ static const format_kind_info format_types_orig[] =
     'w', 0, 'p', 0, 'L',
     NULL, NULL
   },
-  { "gcc_diag",   gcc_diag_length_specs,  gcc_diag_char_table, "q", NULL, 
+  { "gcc_diag",   gcc_diag_length_specs,  gcc_diag_char_table, "q+", NULL, 
     gcc_diag_flag_specs, gcc_diag_flag_pairs,
     FMT_FLAG_ARG_CONVERT,
     0, 0, 'p', 0, 'L',
     NULL, &integer_type_node
   },
-  { "gcc_cdiag",   gcc_cdiag_length_specs,  gcc_cdiag_char_table, "q", NULL, 
+  { "gcc_tdiag",   gcc_tdiag_length_specs,  gcc_tdiag_char_table, "q+", NULL, 
+    gcc_tdiag_flag_specs, gcc_tdiag_flag_pairs,
+    FMT_FLAG_ARG_CONVERT,
+    0, 0, 'p', 0, 'L',
+    NULL, &integer_type_node
+  },
+  { "gcc_cdiag",   gcc_cdiag_length_specs,  gcc_cdiag_char_table, "q+", NULL, 
     gcc_cdiag_flag_specs, gcc_cdiag_flag_pairs,
     FMT_FLAG_ARG_CONVERT,
     0, 0, 'p', 0, 'L',
@@ -680,6 +732,12 @@ static const format_kind_info format_types_orig[] =
     FMT_FLAG_ARG_CONVERT,
     0, 0, 'p', 0, 'L',
     NULL, &integer_type_node
+  },
+  { "gcc_gfc", NULL, gcc_gfc_char_table, "", NULL, 
+    NULL, gcc_gfc_flag_pairs,
+    FMT_FLAG_ARG_CONVERT,
+    0, 0, 0, 0, 0,
+    NULL, NULL
   },
   { "scanf",    scanf_length_specs,   scan_char_table,  "*'I", NULL, 
     scanf_flag_specs, scanf_flag_pairs,
@@ -806,7 +864,8 @@ check_function_format (tree attrs, tree params)
 	  /* Yup; check it.  */
 	  function_format_info info;
 	  decode_format_attr (TREE_VALUE (a), &info, 1);
-	  check_format_info (&info, params);
+	  if (warn_format)
+	    check_format_info (&info, params);
 	  if (warn_missing_format_attribute && info.first_arg_num == 0
 	      && (format_types[info.format_type].flags
 		  & (int) FMT_FLAG_ARG_CONVERT))
@@ -837,7 +896,8 @@ check_function_format (tree attrs, tree params)
 			break;
 		    }
 		  if (args != 0)
-		    warning ("function might be possible candidate for %qs format attribute",
+		    warning (OPT_Wmissing_format_attribute, "function might "
+			     "be possible candidate for %qs format attribute",
 			     format_types[info.format_type].name);
 		}
 	    }
@@ -928,7 +988,7 @@ maybe_read_dollar_number (const char **format,
     {
       if (dollar_needed)
 	{
-	  warning ("missing $ operand number in format");
+	  warning (OPT_Wformat, "missing $ operand number in format");
 	  return -1;
 	}
       else
@@ -949,7 +1009,7 @@ maybe_read_dollar_number (const char **format,
     {
       if (dollar_needed)
 	{
-	  warning ("missing $ operand number in format");
+	  warning (OPT_Wformat, "missing $ operand number in format");
 	  return -1;
 	}
       else
@@ -958,14 +1018,14 @@ maybe_read_dollar_number (const char **format,
   *format = fcp + 1;
   if (pedantic && !dollar_format_warned)
     {
-      warning ("%s does not support %%n$ operand number formats",
+      warning (OPT_Wformat, "%s does not support %%n$ operand number formats",
 	       C_STD_NAME (STD_EXT));
       dollar_format_warned = 1;
     }
   if (overflow_flag || argnum == 0
       || (dollar_first_arg_num && argnum > dollar_arguments_count))
     {
-      warning ("operand number out of range in format");
+      warning (OPT_Wformat, "operand number out of range in format");
       return -1;
     }
   if (argnum > dollar_max_arg_used)
@@ -988,7 +1048,7 @@ maybe_read_dollar_number (const char **format,
       && dollar_arguments_used[argnum - 1] == 1)
     {
       dollar_arguments_used[argnum - 1] = 2;
-      warning ("format argument %d used more than once in %s format",
+      warning (OPT_Wformat, "format argument %d used more than once in %s format",
 	       argnum, fki->name);
     }
   else
@@ -1020,7 +1080,7 @@ avoid_dollar_number (const char *format)
     format++;
   if (*format == '$')
     {
-      warning ("$ operand number used after format without operand number");
+      warning (OPT_Wformat, "$ operand number used after format without operand number");
       return true;
     }
   return false;
@@ -1050,7 +1110,8 @@ finish_dollar_format_checking (format_check_results *res, int pointer_gap_ok)
 				 || dollar_arguments_pointer_p[i]))
 	    found_pointer_gap = true;
 	  else
-	    warning ("format argument %d unused before used argument %d in $-style format",
+	    warning (OPT_Wformat,
+		     "format argument %d unused before used argument %d in $-style format",
 		     i + 1, dollar_max_arg_used);
 	}
     }
@@ -1067,10 +1128,10 @@ finish_dollar_format_checking (format_check_results *res, int pointer_gap_ok)
 /* Retrieve the specification for a format flag.  SPEC contains the
    specifications for format flags for the applicable kind of format.
    FLAG is the flag in question.  If PREDICATES is NULL, the basic
-   spec for that flag must be retrieved and this function aborts if
-   it cannot be found.  If PREDICATES is not NULL, it is a string listing
-   possible predicates for the spec entry; if an entry predicated on any
-   of these is found, it is returned, otherwise NULL is returned.  */
+   spec for that flag must be retrieved and must exist.  If
+   PREDICATES is not NULL, it is a string listing possible predicates
+   for the spec entry; if an entry predicated on any of these is
+   found, it is returned, otherwise NULL is returned.  */
 
 static const format_flag_spec *
 get_flag_spec (const format_flag_spec *spec, int flag, const char *predicates)
@@ -1144,8 +1205,8 @@ check_format_info (function_format_info *info, tree params)
 	{
 	  /* For strftime-like formats, warn for not checking the format
 	     string; but there are no arguments to check.  */
-	  if (warn_format_nonliteral)
-	    warning ("format not a string literal, format string not checked");
+	  warning (OPT_Wformat_nonliteral,
+		   "format not a string literal, format string not checked");
 	}
       else if (info->first_arg_num != 0)
 	{
@@ -1158,10 +1219,15 @@ check_format_info (function_format_info *info, tree params)
 	      params = TREE_CHAIN (params);
 	      ++arg_num;
 	    }
-	  if (params == 0 && (warn_format_nonliteral || warn_format_security))
-	    warning ("format not a string literal and no format arguments");
-	  else if (warn_format_nonliteral)
-	    warning ("format not a string literal, argument types not checked");
+	  if (params == 0 && warn_format_security)
+	    warning (OPT_Wformat_security,
+		     "format not a string literal and no format arguments");
+	  else if (params == 0 && warn_format_nonliteral)
+	    warning (OPT_Wformat_nonliteral,
+		     "format not a string literal and no format arguments");
+	  else
+	    warning (OPT_Wformat_nonliteral,
+		     "format not a string literal, argument types not checked");
 	}
     }
 
@@ -1173,21 +1239,21 @@ check_format_info (function_format_info *info, tree params)
      If the format is an empty string, this should be counted similarly to the
      case of extra format arguments.  */
   if (res.number_extra_args > 0 && res.number_non_literal == 0
-      && res.number_other == 0 && warn_format_extra_args)
-    warning ("too many arguments for format");
+      && res.number_other == 0)
+    warning (OPT_Wformat_extra_args, "too many arguments for format");
   if (res.number_dollar_extra_args > 0 && res.number_non_literal == 0
-      && res.number_other == 0 && warn_format_extra_args)
-    warning ("unused arguments in $-style format");
+      && res.number_other == 0)
+    warning (OPT_Wformat_extra_args, "unused arguments in $-style format");
   if (res.number_empty > 0 && res.number_non_literal == 0
-      && res.number_other == 0 && warn_format_zero_length)
-    warning ("zero-length %s format string",
+      && res.number_other == 0)
+    warning (OPT_Wformat_zero_length, "zero-length %s format string",
 	     format_types[info->format_type].name);
 
   if (res.number_wide > 0)
-    warning ("format is a wide character string");
+    warning (OPT_Wformat, "format is a wide character string");
 
   if (res.number_unterminated > 0)
-    warning ("unterminated format string");
+    warning (OPT_Wformat, "unterminated format string");
 }
 
 /* Callback from check_function_arguments_recurse to check a
@@ -1264,6 +1330,10 @@ check_format_arg (void *ctx, tree format_tree,
       return;
     }
   format_tree = TREE_OPERAND (format_tree, 0);
+  if (TREE_CODE (format_tree) == ARRAY_REF
+      && host_integerp (TREE_OPERAND (format_tree, 1), 0)
+      && (offset += tree_low_cst (TREE_OPERAND (format_tree, 1), 0)) >= 0)
+    format_tree = TREE_OPERAND (format_tree, 0);
   if (TREE_CODE (format_tree) == VAR_DECL
       && TREE_CODE (TREE_TYPE (format_tree)) == ARRAY_TYPE
       && (array_init = decl_constant_value (format_tree)) != format_tree
@@ -1397,7 +1467,7 @@ check_format_info_main (format_check_results *res,
       if (*format_chars == 0)
 	{
 	  if (format_chars - orig_format_chars != format_length)
-	    warning ("embedded %<\\0%> in format");
+	    warning (OPT_Wformat, "embedded %<\\0%> in format");
 	  if (info->first_arg_num != 0 && params != 0
 	      && has_operand_number <= 0)
 	    {
@@ -1412,7 +1482,7 @@ check_format_info_main (format_check_results *res,
 	continue;
       if (*format_chars == 0)
 	{
-	  warning ("spurious trailing %<%%%> in format");
+	  warning (OPT_Wformat, "spurious trailing %<%%%> in format");
 	  continue;
 	}
       if (*format_chars == '%')
@@ -1456,7 +1526,7 @@ check_format_info_main (format_check_results *res,
 						     *format_chars, NULL);
 	  if (strchr (flag_chars, *format_chars) != 0)
 	    {
-	      warning ("repeated %s in format", _(s->name));
+	      warning (OPT_Wformat, "repeated %s in format", _(s->name));
 	    }
 	  else
 	    {
@@ -1469,7 +1539,7 @@ check_format_info_main (format_check_results *res,
 	      ++format_chars;
 	      if (*format_chars == 0)
 		{
-		  warning ("missing fill character at end of strfmon format");
+		  warning (OPT_Wformat, "missing fill character at end of strfmon format");
 		  return;
 		}
 	    }
@@ -1513,7 +1583,7 @@ check_format_info_main (format_check_results *res,
 		{
 		  if (params == 0)
 		    {
-		      warning ("too few arguments for format");
+		      warning (OPT_Wformat, "too few arguments for format");
 		      return;
 		    }
 		  cur_param = TREE_VALUE (params);
@@ -1554,7 +1624,7 @@ check_format_info_main (format_check_results *res,
 		}
 	      if (found_width && !non_zero_width_char &&
 		  (fki->flags & (int) FMT_FLAG_ZERO_WIDTH_BAD))
-		warning ("zero width in %s format", fki->name);
+		warning (OPT_Wformat, "zero width in %s format", fki->name);
 	      if (found_width)
 		{
 		  i = strlen (flag_chars);
@@ -1572,7 +1642,7 @@ check_format_info_main (format_check_results *res,
 	  flag_chars[i++] = fki->left_precision_char;
 	  flag_chars[i] = 0;
 	  if (!ISDIGIT (*format_chars))
-	    warning ("empty left precision in %s format", fki->name);
+	    warning (OPT_Wformat, "empty left precision in %s format", fki->name);
 	  while (ISDIGIT (*format_chars))
 	    ++format_chars;
 	}
@@ -1615,7 +1685,7 @@ check_format_info_main (format_check_results *res,
 		{
 		  if (params == 0)
 		    {
-		      warning ("too few arguments for format");
+		      warning (OPT_Wformat, "too few arguments for format");
 		      return;
 		    }
 		  cur_param = TREE_VALUE (params);
@@ -1645,7 +1715,7 @@ check_format_info_main (format_check_results *res,
 	    {
 	      if (!(fki->flags & (int) FMT_FLAG_EMPTY_PREC_OK)
 		  && !ISDIGIT (*format_chars))
-		warning ("empty precision in %s format", fki->name);
+		warning (OPT_Wformat, "empty precision in %s format", fki->name);
 	      while (ISDIGIT (*format_chars))
 		++format_chars;
 	    }
@@ -1684,7 +1754,8 @@ check_format_info_main (format_check_results *res,
 	    {
 	      /* Warn if the length modifier is non-standard.  */
 	      if (ADJ_STD (length_chars_std) > C_STD_VER)
-		warning ("%s does not support the %qs %s length modifier",
+		warning (OPT_Wformat,
+			 "%s does not support the %qs %s length modifier",
 			 C_STD_NAME (length_chars_std), length_chars,
 			 fki->name);
 	    }
@@ -1700,7 +1771,7 @@ check_format_info_main (format_check_results *res,
 		{
 		  const format_flag_spec *s = get_flag_spec (flag_specs,
 							     *format_chars, NULL);
-		  warning ("repeated %s in format", _(s->name));
+		  warning (OPT_Wformat, "repeated %s in format", _(s->name));
 		}
 	      else
 		{
@@ -1734,7 +1805,7 @@ check_format_info_main (format_check_results *res,
 	  || (!(fki->flags & (int) FMT_FLAG_FANCY_PERCENT_OK)
 	      && format_char == '%'))
 	{
-	  warning ("conversion lacks type at end of format");
+	  warning (OPT_Wformat, "conversion lacks type at end of format");
 	  continue;
 	}
       format_chars++;
@@ -1745,17 +1816,17 @@ check_format_info_main (format_check_results *res,
       if (fci->format_chars == 0)
 	{
           if (ISGRAPH (format_char))
-	    warning ("unknown conversion type character %qc in format",
+	    warning (OPT_Wformat, "unknown conversion type character %qc in format",
 		     format_char);
 	  else
-	    warning ("unknown conversion type character 0x%x in format",
+	    warning (OPT_Wformat, "unknown conversion type character 0x%x in format",
 		     format_char);
 	  continue;
 	}
       if (pedantic)
 	{
 	  if (ADJ_STD (fci->std) > C_STD_VER)
-	    warning ("%s does not support the %<%%%c%> %s format",
+	    warning (OPT_Wformat, "%s does not support the %<%%%c%> %s format",
 		     C_STD_NAME (fci->std), format_char, fki->name);
 	}
 
@@ -1771,7 +1842,7 @@ check_format_info_main (format_check_results *res,
 	      continue;
 	    if (strchr (fci->flag_chars, flag_chars[i]) == 0)
 	      {
-		warning ("%s used with %<%%%c%> %s format",
+		warning (OPT_Wformat, "%s used with %<%%%c%> %s format",
 			 _(s->name), format_char, fki->name);
 		d++;
 		continue;
@@ -1780,7 +1851,7 @@ check_format_info_main (format_check_results *res,
 	      {
 		const format_flag_spec *t;
 		if (ADJ_STD (s->std) > C_STD_VER)
-		  warning ("%s does not support %s",
+		  warning (OPT_Wformat, "%s does not support %s",
 			   C_STD_NAME (s->std), _(s->long_name));
 		t = get_flag_spec (flag_specs, flag_chars[i], fci->flags2);
 		if (t != NULL && ADJ_STD (t->std) > ADJ_STD (s->std))
@@ -1789,7 +1860,8 @@ check_format_info_main (format_check_results *res,
 					     ? t->long_name
 					     : s->long_name);
 		    if (ADJ_STD (t->std) > C_STD_VER)
-		      warning ("%s does not support %s with the %<%%%c%> %s format",
+		      warning (OPT_Wformat,
+			       "%s does not support %s with the %<%%%c%> %s format",
 			       C_STD_NAME (t->std), _(long_name),
 			       format_char, fki->name);
 		  }
@@ -1822,21 +1894,23 @@ check_format_info_main (format_check_results *res,
 	  if (bad_flag_pairs[i].ignored)
 	    {
 	      if (bad_flag_pairs[i].predicate != 0)
-		warning ("%s ignored with %s and %<%%%c%> %s format",
+		warning (OPT_Wformat,
+			 "%s ignored with %s and %<%%%c%> %s format",
 			 _(s->name), _(t->name), format_char,
 			 fki->name);
 	      else
-		warning ("%s ignored with %s in %s format",
+		warning (OPT_Wformat, "%s ignored with %s in %s format",
 			 _(s->name), _(t->name), fki->name);
 	    }
 	  else
 	    {
 	      if (bad_flag_pairs[i].predicate != 0)
-		warning ("use of %s and %s together with %<%%%c%> %s format",
+		warning (OPT_Wformat,
+			 "use of %s and %s together with %<%%%c%> %s format",
 			 _(s->name), _(t->name), format_char,
 			 fki->name);
 	      else
-		warning ("use of %s and %s together in %s format",
+		warning (OPT_Wformat, "use of %s and %s together in %s format",
 			 _(s->name), _(t->name), fki->name);
 	    }
 	}
@@ -1855,10 +1929,11 @@ check_format_info_main (format_check_results *res,
 	  else if (strchr (fci->flags2, '2') != 0)
 	    y2k_level = 2;
 	  if (y2k_level == 3)
-	    warning ("%<%%%c%> yields only last 2 digits of year in some locales",
-		     format_char);
+	    warning (OPT_Wformat_y2k, "%<%%%c%> yields only last 2 digits of "
+		     "year in some locales", format_char);
 	  else if (y2k_level == 2)
-	    warning ("%<%%%c%> yields only last 2 digits of year", format_char);
+	    warning (OPT_Wformat_y2k, "%<%%%c%> yields only last 2 digits of "
+		     "year", format_char);
 	}
 
       if (strchr (fci->flags2, '[') != 0)
@@ -1874,7 +1949,7 @@ check_format_info_main (format_check_results *res,
 	    ++format_chars;
 	  if (*format_chars != ']')
 	    /* The end of the format string was reached.  */
-	    warning ("no closing %<]%> for %<%%[%> format");
+	    warning (OPT_Wformat, "no closing %<]%> for %<%%[%> format");
 	}
 
       wanted_type = 0;
@@ -1887,14 +1962,15 @@ check_format_info_main (format_check_results *res,
 	  wanted_type_std = fci->types[length_chars_val].std;
 	  if (wanted_type == 0)
 	    {
-	      warning ("use of %qs length modifier with %qc type character",
+	      warning (OPT_Wformat,
+		       "use of %qs length modifier with %qc type character",
 		       length_chars, format_char);
 	      /* Heuristic: skip one argument when an invalid length/type
 		 combination is encountered.  */
 	      arg_num++;
 	      if (params == 0)
 		{
-		  warning ("too few arguments for format");
+		  warning (OPT_Wformat, "too few arguments for format");
 		  return;
 		}
 	      params = TREE_CHAIN (params);
@@ -1908,7 +1984,8 @@ check_format_info_main (format_check_results *res,
 		   && ADJ_STD (wanted_type_std) > ADJ_STD (fci->std))
 	    {
 	      if (ADJ_STD (wanted_type_std) > C_STD_VER)
-		warning ("%s does not support the %<%%%s%c%> %s format",
+		warning (OPT_Wformat,
+			 "%s does not support the %<%%%s%c%> %s format",
 			 C_STD_NAME (wanted_type_std), length_chars,
 			 format_char, fki->name);
 	    }
@@ -1925,9 +2002,11 @@ check_format_info_main (format_check_results *res,
 	  if (main_arg_num != 0)
 	    {
 	      if (suppressed)
-		warning ("operand number specified with suppressed assignment");
+		warning (OPT_Wformat, "operand number specified with "
+			 "suppressed assignment");
 	      else
-		warning ("operand number specified for format taking no argument");
+		warning (OPT_Wformat, "operand number specified for format "
+			 "taking no argument");
 	    }
 	}
       else
@@ -1944,7 +2023,7 @@ check_format_info_main (format_check_results *res,
 	      ++arg_num;
 	      if (has_operand_number > 0)
 		{
-		  warning ("missing $ operand number in format");
+		  warning (OPT_Wformat, "missing $ operand number in format");
 		  return;
 		}
 	      else
@@ -1956,7 +2035,7 @@ check_format_info_main (format_check_results *res,
 	    {
 	      if (params == 0)
 		{
-		  warning ("too few arguments for format");
+		  warning (OPT_Wformat, "too few arguments for format");
 		  return;
 		}
 
@@ -2069,16 +2148,16 @@ check_format_types (format_wanted_type *types, const char *format_start,
 		  && i == 0
 		  && cur_param != 0
 		  && integer_zerop (cur_param))
-		warning ("writing through null pointer (argument %d)",
-			 arg_num);
+		warning (OPT_Wformat, "writing through null pointer "
+			 "(argument %d)", arg_num);
 
 	      /* Check for reading through a NULL pointer.  */
 	      if (types->reading_from_flag
 		  && i == 0
 		  && cur_param != 0
 		  && integer_zerop (cur_param))
-		warning ("reading through null pointer (argument %d)",
-			 arg_num);
+		warning (OPT_Wformat, "reading through null pointer "
+			 "(argument %d)", arg_num);
 
 	      if (cur_param != 0 && TREE_CODE (cur_param) == ADDR_EXPR)
 		cur_param = TREE_OPERAND (cur_param, 0);
@@ -2097,8 +2176,8 @@ check_format_types (format_wanted_type *types, const char *format_start,
 			  && (CONSTANT_CLASS_P (cur_param)
 			      || (DECL_P (cur_param)
 				  && TREE_READONLY (cur_param))))))
-		warning ("writing into constant object (argument %d)",
-			 arg_num);
+		warning (OPT_Wformat, "writing into constant object "
+			 "(argument %d)", arg_num);
 
 	      /* If there are extra type qualifiers beyond the first
 		 indirection, then this makes the types technically
@@ -2108,8 +2187,8 @@ check_format_types (format_wanted_type *types, const char *format_start,
 		  && (TYPE_READONLY (cur_type)
 		      || TYPE_VOLATILE (cur_type)
 		      || TYPE_RESTRICT (cur_type)))
-		warning ("extra type qualifiers in format argument "
-			 "(argument %d)",
+		warning (OPT_Wformat, "extra type qualifiers in format "
+			 "argument (argument %d)",
 			 arg_num);
 
 	    }
@@ -2137,7 +2216,7 @@ check_format_types (format_wanted_type *types, const char *format_start,
 			  || cur_type == unsigned_char_type_node);
 
       /* Check the type of the "real" argument, if there's a type we want.  */
-      if (wanted_type == cur_type)
+      if (lang_hooks.types_compatible_p (wanted_type, cur_type))
 	continue;
       /* If we want 'void *', allow any pointer type.
 	 (Anything else would already have got a warning.)
@@ -2219,20 +2298,24 @@ format_type_warning (const char *descr, const char *format_start,
   if (wanted_type_name)
     {
       if (descr)
-	warning ("%s should have type %<%s%s%>, but argument %d has type %qT",
+	warning (OPT_Wformat, "%s should have type %<%s%s%>, "
+		 "but argument %d has type %qT",
 		 descr, wanted_type_name, p, arg_num, arg_type);
       else
-	warning ("format %q.*s expects type %<%s%s%>, but argument %d has type %qT",
+	warning (OPT_Wformat, "format %q.*s expects type %<%s%s%>, "
+		 "but argument %d has type %qT",
 		 format_length, format_start, wanted_type_name, p,
 		 arg_num, arg_type);
     }
   else
     {
       if (descr)
-	warning ("%s should have type %<%T%s%>, but argument %d has type %qT",
+	warning (OPT_Wformat, "%s should have type %<%T%s%>, "
+		 "but argument %d has type %qT",
 		 descr, wanted_type, p, arg_num, arg_type);
       else
-	warning ("format %q.*s expects type %<%T%s%>, but argument %d has type %qT",
+	warning (OPT_Wformat, "format %q.*s expects type %<%T%s%>, "
+		 "but argument %d has type %qT",
 		 format_length, format_start, wanted_type, p, arg_num, arg_type);
     }
 }
@@ -2240,7 +2323,7 @@ format_type_warning (const char *descr, const char *format_start,
 
 /* Given a format_char_info array FCI, and a character C, this function
    returns the index into the conversion_specs where that specifier's
-   data is located.  If the character isn't found it aborts.  */
+   data is located.  The character must exist.  */
 static unsigned int
 find_char_info_specifier_index (const format_char_info *fci, int c)
 {
@@ -2256,8 +2339,7 @@ find_char_info_specifier_index (const format_char_info *fci, int c)
 
 /* Given a format_length_info array FLI, and a character C, this
    function returns the index into the conversion_specs where that
-   modifier's data is located.  If the character isn't found it
-   aborts.  */
+   modifier's data is located.  The character must exist.  */
 static unsigned int
 find_length_info_modifier_index (const format_length_info *fli, int c)
 {
@@ -2330,6 +2412,55 @@ init_dynamic_asm_fprintf_info (void)
     }
 }
 
+/* Determine the type of a "locus" in the code being compiled for use
+   in GCC's __gcc_gfc__ custom format attribute.  You must have set
+   dynamic_format_types before calling this function.  */
+static void
+init_dynamic_gfc_info (void)
+{
+  static tree locus;
+  
+  if (!locus)
+    {
+      static format_char_info *gfc_fci;
+
+      /* For the GCC __gcc_gfc__ custom format specifier to work, one
+	 must have declared 'locus' prior to using this attribute.  If
+	 we haven't seen this declarations then you shouldn't use the
+	 specifier requiring that type.  */
+      if ((locus = maybe_get_identifier ("locus")))
+	{
+	  locus = identifier_global_value (locus);
+	  if (locus)
+	    {
+	      if (TREE_CODE (locus) != TYPE_DECL)
+		{
+		  error ("%<locus%> is not defined as a type");
+		  locus = 0;
+		}
+	      else
+		locus = TREE_TYPE (locus);
+	    }
+	}
+
+      /* Assign the new data for use.  */
+
+      /* Handle the __gcc_gfc__ format specifics.  */
+      if (!gfc_fci)
+	dynamic_format_types[gcc_gfc_format_type].conversion_specs =
+	  gfc_fci = (format_char_info *)
+		     xmemdup (gcc_gfc_char_table,
+			      sizeof (gcc_gfc_char_table),
+			      sizeof (gcc_gfc_char_table));
+      if (locus)
+        {
+	  const unsigned i = find_char_info_specifier_index (gfc_fci, 'L');
+	  gfc_fci[i].types[0].type = &locus;
+	  gfc_fci[i].pointer_count = 1;
+	}
+    }
+}
+
 /* Determine the types of "tree" and "location_t" in the code being
    compiled for use in GCC's diagnostic custom format attributes.  You
    must have set dynamic_format_types before calling this function.  */
@@ -2340,7 +2471,7 @@ init_dynamic_diag_info (void)
 
   if (!loc || !t || !hwi)
     {
-      static format_char_info *diag_fci, *cdiag_fci, *cxxdiag_fci;
+      static format_char_info *diag_fci, *tdiag_fci, *cdiag_fci, *cxxdiag_fci;
       static format_length_info *diag_ls;
       unsigned int i;
 
@@ -2421,6 +2552,7 @@ init_dynamic_diag_info (void)
       /* All the GCC diag formats use the same length specs.  */
       if (!diag_ls)
 	dynamic_format_types[gcc_diag_format_type].length_char_specs =
+	  dynamic_format_types[gcc_tdiag_format_type].length_char_specs =
 	  dynamic_format_types[gcc_cdiag_format_type].length_char_specs =
 	  dynamic_format_types[gcc_cxxdiag_format_type].length_char_specs =
 	  diag_ls = (format_length_info *)
@@ -2457,6 +2589,30 @@ init_dynamic_diag_info (void)
 	  i = find_char_info_specifier_index (diag_fci, 'J');
 	  diag_fci[i].types[0].type = &t;
 	  diag_fci[i].pointer_count = 1;
+	}
+
+      /* Handle the __gcc_tdiag__ format specifics.  */
+      if (!tdiag_fci)
+	dynamic_format_types[gcc_tdiag_format_type].conversion_specs =
+	  tdiag_fci = (format_char_info *)
+		      xmemdup (gcc_tdiag_char_table,
+			       sizeof (gcc_tdiag_char_table),
+			       sizeof (gcc_tdiag_char_table));
+      if (loc)
+        {
+	  i = find_char_info_specifier_index (tdiag_fci, 'H');
+	  tdiag_fci[i].types[0].type = &loc;
+	  tdiag_fci[i].pointer_count = 1;
+	}
+      if (t)
+        {
+	  /* All specifiers taking a tree share the same struct.  */
+	  i = find_char_info_specifier_index (tdiag_fci, 'D');
+	  tdiag_fci[i].types[0].type = &t;
+	  tdiag_fci[i].pointer_count = 1;
+	  i = find_char_info_specifier_index (tdiag_fci, 'J');
+	  tdiag_fci[i].types[0].type = &t;
+	  tdiag_fci[i].pointer_count = 1;
 	}
 
       /* Handle the __gcc_cdiag__ format specifics.  */
@@ -2582,7 +2738,9 @@ handle_format_attribute (tree *node, tree ARG_UNUSED (name), tree args,
   /* If this is a custom GCC-internal format type, we have to
      initialize certain bits a runtime.  */
   if (info.format_type == asm_fprintf_format_type
+      || info.format_type == gcc_gfc_format_type
       || info.format_type == gcc_diag_format_type
+      || info.format_type == gcc_tdiag_format_type
       || info.format_type == gcc_cdiag_format_type
       || info.format_type == gcc_cxxdiag_format_type)
     {
@@ -2597,9 +2755,14 @@ handle_format_attribute (tree *node, tree ARG_UNUSED (name), tree args,
          GCC's notion of HOST_WIDE_INT for checking %wd.  */
       if (info.format_type == asm_fprintf_format_type)
 	init_dynamic_asm_fprintf_info ();
+      /* If this is format __gcc_gfc__, we have to initialize GCC's
+	 notion of 'locus' at runtime for %L.  */
+      else if (info.format_type == gcc_gfc_format_type)
+	init_dynamic_gfc_info ();
       /* If this is one of the diagnostic attributes, then we have to
          initialize 'location_t' and 'tree' at runtime.  */
       else if (info.format_type == gcc_diag_format_type
+	       || info.format_type == gcc_tdiag_format_type
 	       || info.format_type == gcc_cdiag_format_type
 	       || info.format_type == gcc_cxxdiag_format_type)
 	init_dynamic_diag_info ();

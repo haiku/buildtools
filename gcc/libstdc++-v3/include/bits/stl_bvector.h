@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -259,7 +259,7 @@ namespace _GLIBCXX_STD
     }
 
     reference
-    operator[](difference_type __i)
+    operator[](difference_type __i) const
     { return *(*this + __i); }
   };
 
@@ -345,7 +345,7 @@ namespace _GLIBCXX_STD
     }
 
     const_reference
-    operator[](difference_type __i)
+    operator[](difference_type __i) const
     { return *(*this + __i); }
   };
 
@@ -807,6 +807,14 @@ template<typename _Alloc>
     const_reference
     back() const
     { return *(end() - 1); }
+
+    // _GLIBCXX_RESOLVE_LIB_DEFECTS
+    // DR 464. Suggestion for new member functions in standard containers.
+    // N.B. DR 464 says nothing about vector<bool> but we need something
+    // here due to the way we are implementing DR 464 in the debug-mode
+    // vector class.
+    void
+    data() { }
 
     void
     push_back(bool __x)

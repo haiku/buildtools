@@ -16,8 +16,8 @@
 ;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to the Free
-;; Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-;; 02111-1307, USA.  */
+;; Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+;; 02110-1301, USA.  */
 
 ;; Additional register numbers
 (define_constants
@@ -55,53 +55,63 @@
 
 (define_cpu_unit "vfp_ls" "vfp11")
 
+(define_cpu_unit "fmstat" "vfp11")
+
+(exclusion_set "fmac,ds" "fmstat")
+
 ;; The VFP "type" attributes differ from those used in the FPA model.
 ;; ffarith	Fast floating point insns, e.g. abs, neg, cpy, cmp.
 ;; farith	Most arithmetic insns.
 ;; fmul		Double precision multiply.
 ;; fdivs	Single precision sqrt or division.
 ;; fdivd	Double precision sqrt or division.
-;; f_load	Floating point load from memory.
-;; f_store	Floating point store to memory.
+;; f_flag	fmstat operation
+;; f_load[sd]	Floating point load from memory.
+;; f_store[sd]	Floating point store to memory.
 ;; f_2_r	Transfer vfp to arm reg.
 ;; r_2_f	Transfer arm to vfp reg.
+;; f_cvt	Convert floating<->integral
 
 (define_insn_reservation "vfp_ffarith" 4
- (and (eq_attr "fpu" "vfp")
+ (and (eq_attr "generic_vfp" "yes")
       (eq_attr "type" "ffarith"))
  "fmac")
 
 (define_insn_reservation "vfp_farith" 8
- (and (eq_attr "fpu" "vfp")
-      (eq_attr "type" "farith"))
+ (and (eq_attr "generic_vfp" "yes")
+      (eq_attr "type" "farith,f_cvt"))
  "fmac")
 
 (define_insn_reservation "vfp_fmul" 9
- (and (eq_attr "fpu" "vfp")
+ (and (eq_attr "generic_vfp" "yes")
       (eq_attr "type" "fmul"))
  "fmac*2")
 
 (define_insn_reservation "vfp_fdivs" 19
- (and (eq_attr "fpu" "vfp")
+ (and (eq_attr "generic_vfp" "yes")
       (eq_attr "type" "fdivs"))
  "ds*15")
 
 (define_insn_reservation "vfp_fdivd" 33
- (and (eq_attr "fpu" "vfp")
+ (and (eq_attr "generic_vfp" "yes")
       (eq_attr "type" "fdivd"))
  "fmac+ds*29")
 
 ;; Moves to/from arm regs also use the load/store pipeline.
 (define_insn_reservation "vfp_fload" 4
- (and (eq_attr "fpu" "vfp")
-      (eq_attr "type" "f_load,r_2_f"))
+ (and (eq_attr "generic_vfp" "yes")
+      (eq_attr "type" "f_loads,f_loadd,r_2_f"))
  "vfp_ls")
 
 (define_insn_reservation "vfp_fstore" 4
- (and (eq_attr "fpu" "vfp")
-      (eq_attr "type" "f_load,f_2_r"))
+ (and (eq_attr "generic_vfp" "yes")
+      (eq_attr "type" "f_stores,f_stored,f_2_r"))
  "vfp_ls")
 
+(define_insn_reservation "vfp_to_cpsr" 4
+ (and (eq_attr "generic_vfp" "yes")
+      (eq_attr "type" "f_flag"))
+ "fmstat,vfp_ls*3")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Insn pattern
@@ -127,7 +137,7 @@
   flds%?\\t%0, %1\\t%@ int
   fsts%?\\t%1, %0\\t%@ int"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "*,*,load1,store1,r_2_f,f_2_r,ffarith,f_load,f_store")
+   (set_attr "type" "*,*,load1,store1,r_2_f,f_2_r,ffarith,f_loads,f_stores")
    (set_attr "pool_range"     "*,*,4096,*,*,*,*,1020,*")
    (set_attr "neg_pool_range" "*,*,4084,*,*,*,*,1008,*")]
 )
@@ -148,9 +158,9 @@
     case 2:
       return output_move_double (operands);
     case 3:
-      return \"fmdrr%?\\t%P0, %1\\t%@ int\";
+      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
     case 4:
-      return \"fmrrd%?\\t%0, %1\\t%@ int\";
+      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
     case 5:
       return \"fcpyd%?\\t%P0, %P1\\t%@ int\";
     case 6:
@@ -158,10 +168,10 @@
     case 7:
       return \"fstd%?\\t%P1, %0\\t%@ int\";
     default:
-      abort ();
+      gcc_unreachable ();
     }
   "
-  [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarith,f_load,f_store")
+  [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarith,f_loadd,f_stored")
    (set_attr "length" "8,8,8,4,4,4,4,4")
    (set_attr "pool_range"     "*,1020,*,*,*,*,1020,*")
    (set_attr "neg_pool_range" "*,1008,*,*,*,*,1008,*")]
@@ -186,7 +196,7 @@
   fcpys%?\\t%0, %1
   mov%?\\t%0, %1\\t%@ float"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "r_2_f,f_2_r,ffarith,*,f_load,f_store,load1,store1")
+   (set_attr "type" "r_2_f,f_2_r,ffarith,*,f_loads,f_stores,load1,store1")
    (set_attr "pool_range" "*,*,1020,*,4096,*,*,*")
    (set_attr "neg_pool_range" "*,*,1008,*,4080,*,*,*")]
 )
@@ -217,11 +227,11 @@
       case 7:
         return \"#\";
       default:
-	abort ();
+	gcc_unreachable ();
       }
     }
   "
-  [(set_attr "type" "r_2_f,f_2_r,ffarith,*,load2,store2,f_load,f_store")
+  [(set_attr "type" "r_2_f,f_2_r,ffarith,*,load2,store2,f_loadd,f_stored")
    (set_attr "length" "4,4,8,8,4,4,4,8")
    (set_attr "pool_range" "*,*,1020,*,1020,*,*,*")
    (set_attr "neg_pool_range" "*,*,1008,*,1008,*,*,*")]
@@ -298,20 +308,59 @@
 )
 
 (define_insn "*negsf2_vfp"
-  [(set (match_operand:SF	  0 "s_register_operand" "+w")
-	(neg:SF (match_operand:SF 1 "s_register_operand" "w")))]
+  [(set (match_operand:SF	  0 "s_register_operand" "=w,?r")
+	(neg:SF (match_operand:SF 1 "s_register_operand" "w,r")))]
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
-  "fnegs%?\\t%0, %1"
+  "@
+   fnegs%?\\t%0, %1
+   eor%?\\t%0, %1, #-2147483648"
   [(set_attr "predicable" "yes")
    (set_attr "type" "ffarith")]
 )
 
-(define_insn "*negdf2_vfp"
-  [(set (match_operand:DF	  0 "s_register_operand" "+w")
-	(neg:DF (match_operand:DF 1 "s_register_operand" "w")))]
+(define_insn_and_split "*negdf2_vfp"
+  [(set (match_operand:DF	  0 "s_register_operand" "=w,?r,?r")
+	(neg:DF (match_operand:DF 1 "s_register_operand" "w,0,r")))]
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
-  "fnegd%?\\t%P0, %P1"
+  "@
+   fnegd%?\\t%P0, %P1
+   #
+   #"
+  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP && reload_completed
+   && arm_general_register_operand (operands[0], DFmode)"
+  [(set (match_dup 0) (match_dup 1))]
+  "
+  if (REGNO (operands[0]) == REGNO (operands[1]))
+    {
+      operands[0] = gen_highpart (SImode, operands[0]);
+      operands[1] = gen_rtx_XOR (SImode, operands[0], GEN_INT (0x80000000));
+    }
+  else
+    {
+      rtx in_hi, in_lo, out_hi, out_lo;
+
+      in_hi = gen_rtx_XOR (SImode, gen_highpart (SImode, operands[1]),
+			   GEN_INT (0x80000000));
+      in_lo = gen_lowpart (SImode, operands[1]);
+      out_hi = gen_highpart (SImode, operands[0]);
+      out_lo = gen_lowpart (SImode, operands[0]);
+
+      if (REGNO (in_lo) == REGNO (out_hi))
+        {
+          emit_insn (gen_rtx_SET (SImode, out_lo, in_lo));
+	  operands[0] = out_hi;
+          operands[1] = in_hi;
+        }
+      else
+        {
+          emit_insn (gen_rtx_SET (SImode, out_hi, in_hi));
+	  operands[0] = out_lo;
+          operands[1] = in_lo;
+        }
+    }
+  "
   [(set_attr "predicable" "yes")
+   (set_attr "length" "4,4,8")
    (set_attr "type" "ffarith")]
 )
 
@@ -533,7 +582,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fcvtds%?\\t%P0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 (define_insn "*truncdfsf2_vfp"
@@ -542,7 +591,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fcvtsd%?\\t%0, %P1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 (define_insn "*truncsisf2_vfp"
@@ -551,7 +600,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "ftosizs%?\\t%0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 (define_insn "*truncsidf2_vfp"
@@ -560,7 +609,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "ftosizd%?\\t%0, %P1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 
@@ -570,7 +619,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "ftouizs%?\\t%0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 (define_insn "fixuns_truncdfsi2"
@@ -579,7 +628,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "ftouizd%?\\t%0, %P1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 
@@ -589,7 +638,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fsitos%?\\t%0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 (define_insn "*floatsidf2_vfp"
@@ -598,7 +647,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fsitod%?\\t%P0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 
@@ -608,7 +657,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fuitos%?\\t%0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 (define_insn "floatunssidf2"
@@ -617,7 +666,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fuitod%?\\t%P0, %1"
   [(set_attr "predicable" "yes")
-   (set_attr "type" "farith")]
+   (set_attr "type" "f_cvt")]
 )
 
 
@@ -650,7 +699,7 @@
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "fmstat%?"
   [(set_attr "conds" "set")
-   (set_attr "type" "ffarith")]
+   (set_attr "type" "f_flag")]
 )
 
 (define_insn_and_split "*cmpsf_split_vfp"
@@ -774,7 +823,7 @@
 		      UNSPEC_PUSH_MULT))])]
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP"
   "* return vfp_output_fstmx (operands);"
-  [(set_attr "type" "f_store")]
+  [(set_attr "type" "f_stored")]
 )
 
 

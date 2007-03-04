@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* So we can conditionalize small amounts of code in pa.c or pa.md.  */
 #undef TARGET_SOM
@@ -33,15 +33,6 @@ Boston, MA 02111-1307, USA.  */
 /* gdb needs a null N_SO at the end of each file for scattered loading.  */
 
 #define DBX_OUTPUT_NULL_N_SO_AT_MAIN_SOURCE_FILE_END
-
-/* Select a format to encode pointers in exception handling data.  CODE
-   is 0 for data, 1 for code labels, 2 for function pointers.  GLOBAL is
-   true if the symbol may be affected by dynamic relocations.  Because
-   the HP assembler does auto alignment, it is necessary to use
-   DW_EH_PE_aligned instead of the default DW_EH_PE_absptr.  */
-
-#define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL) \
-  (TARGET_GAS ? DW_EH_PE_absptr : DW_EH_PE_aligned)
 
 /* HPUX has a program 'chatr' to list the dependencies of dynamically
    linked executables and shared libraries.  */

@@ -1,5 +1,6 @@
 /* Various declarations for language-independent diagnostics subroutines.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005
+   Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@codesourcery.com>
 
 This file is part of GCC.
@@ -16,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_DIAGNOSTIC_H
 #define GCC_DIAGNOSTIC_H
@@ -42,6 +43,8 @@ typedef struct
   location_t location;
   /* The kind of diagnostic it is about.  */
   diagnostic_t kind;
+  /* Which OPT_* directly controls this diagnostic.  */
+  int option_index;
 } diagnostic_info;
 
 #define pedantic_error_kind() (flag_pedantic_errors ? DK_ERROR : DK_WARNING)
@@ -69,6 +72,10 @@ struct diagnostic_context
   
   /* True if it has been requested that warnings be treated as errors.  */
   bool warning_as_error_requested;
+
+  /* True if we should print the command line option which controls
+     each diagnostic, if known.  */
+  bool show_option_requested;
 
   /* True if we should raise a SIGABRT on errors.  */
   bool abort_on_error;
@@ -113,11 +120,11 @@ struct diagnostic_context
 #define diagnostic_format_decoder(DC) ((DC)->printer->format_decoder)
 
 /* Same as output_prefixing_rule.  Works on 'diagnostic_context *'.  */
-#define diagnostic_prefixing_rule(DC) ((DC)->printer->prefixing_rule)
+#define diagnostic_prefixing_rule(DC) ((DC)->printer->wrapping.rule)
 
 /* Maximum characters per line in automatic line wrapping mode.
    Zero means don't wrap lines.  */
-#define diagnostic_line_cutoff(DC) ((DC)->printer->ideal_maximum_length)
+#define diagnostic_line_cutoff(DC) ((DC)->printer->wrapping.line_cutoff)
 
 #define diagnostic_flush_buffer(DC) pp_base_flush ((DC)->printer)
 
@@ -174,15 +181,18 @@ extern void diagnostic_report_current_module (diagnostic_context *);
 extern void diagnostic_report_current_function (diagnostic_context *);
 extern void diagnostic_report_diagnostic (diagnostic_context *,
 					  diagnostic_info *);
+#ifdef ATTRIBUTE_GCC_DIAG
 extern void diagnostic_set_info (diagnostic_info *, const char *, va_list *,
-				 location_t, diagnostic_t);
+				 location_t, diagnostic_t) ATTRIBUTE_GCC_DIAG(2,0);
+extern void diagnostic_set_info_translated (diagnostic_info *, const char *,
+					    va_list *, location_t,
+					    diagnostic_t)
+     ATTRIBUTE_GCC_DIAG(2,0);
+#endif
 extern char *diagnostic_build_prefix (diagnostic_info *);
 
 /* Pure text formatting support functions.  */
-extern void verbatim (const char *, ...);
 extern char *file_name_as_prefix (const char *);
-
-extern void debug_output_buffer (pretty_printer *);
 
 /* In tree-pretty-print.c  */
 extern int dump_generic_node (pretty_printer *, tree, int, int, bool);

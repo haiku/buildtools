@@ -1,5 +1,5 @@
 /* General-purpose hooks.
-   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -13,7 +13,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
  In other words, you are welcome to use, share and improve this program.
  You are forbidden to forbid anyone else to use, share and improve
@@ -102,6 +102,14 @@ hook_bool_constcharptr_size_t_false (const char *a ATTRIBUTE_UNUSED,
 }
 
 bool
+hook_bool_size_t_constcharptr_int_true (size_t a ATTRIBUTE_UNUSED,
+					const char *b ATTRIBUTE_UNUSED,
+					int c ATTRIBUTE_UNUSED)
+{
+  return true;
+}
+
+bool
 default_can_output_mi_thunk_no_vcall (tree a ATTRIBUTE_UNUSED,
 				      HOST_WIDE_INT b ATTRIBUTE_UNUSED,
 				      HOST_WIDE_INT c,
@@ -184,6 +192,12 @@ hook_bool_rtx_false (rtx a ATTRIBUTE_UNUSED)
 }
 
 bool
+hook_bool_rtx_int_false (rtx a ATTRIBUTE_UNUSED, int code ATTRIBUTE_UNUSED)
+{
+  return false;
+}
+
+bool
 hook_bool_uintp_uintp_false (unsigned int *a ATTRIBUTE_UNUSED,
 			     unsigned int *b ATTRIBUTE_UNUSED)
 {
@@ -220,11 +234,12 @@ hook_rtx_tree_int_null (tree a ATTRIBUTE_UNUSED, int b ATTRIBUTE_UNUSED)
   return NULL;
 }
 
-/* Generic hook that takes a tree and returns it as is.  */
+/* Generic hook that takes three trees and returns the last one as is.  */
 tree
-hook_tree_tree_identity (tree a)
+hook_tree_tree_tree_tree_3rd_identity (tree a ATTRIBUTE_UNUSED,
+				       tree b ATTRIBUTE_UNUSED, tree c)
 {
-  return a;
+  return c;
 }
 
 /* Generic hook that takes a tree and returns a NULL string.  */
@@ -235,7 +250,37 @@ hook_constcharptr_tree_null (tree t ATTRIBUTE_UNUSED)
 }
 
 tree
-hook_tree_tree_bool_null (tree t ATTRIBUTE_UNUSED, bool ignore ATTRIBUTE_UNUSED)
+hook_tree_tree_tree_bool_null (tree t0 ATTRIBUTE_UNUSED, tree t1 ATTRIBUTE_UNUSED,
+			       bool ignore ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
+/* Generic hook that takes a rtx and returns a NULL string.  */
+const char *
+hook_constcharptr_rtx_null (rtx r ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
+const char *
+hook_constcharptr_tree_tree_null (tree t0 ATTRIBUTE_UNUSED,
+				  tree t1 ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
+const char *
+hook_constcharptr_int_tree_null (int i ATTRIBUTE_UNUSED,
+				 tree t0 ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
+const char *
+hook_constcharptr_int_tree_tree_null (int i ATTRIBUTE_UNUSED,
+				      tree t0 ATTRIBUTE_UNUSED,
+				      tree t1 ATTRIBUTE_UNUSED)
 {
   return NULL;
 }

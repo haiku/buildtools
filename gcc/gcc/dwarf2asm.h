@@ -15,8 +15,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 extern void dw2_assemble_integer (int, rtx);
@@ -38,9 +38,9 @@ extern void dw2_asm_output_addr (int, const char *, const char *, ...)
 extern void dw2_asm_output_addr_rtx (int, rtx, const char *, ...)
      ATTRIBUTE_NULL_PRINTF_3;
 
-extern void dw2_asm_output_encoded_addr_rtx (int, rtx,
+extern void dw2_asm_output_encoded_addr_rtx (int, rtx, bool,
 					     const char *, ...)
-     ATTRIBUTE_NULL_PRINTF_3;
+     ATTRIBUTE_NULL_PRINTF_4;
 
 extern void dw2_asm_output_nstring (const char *, size_t,
 				    const char *, ...)

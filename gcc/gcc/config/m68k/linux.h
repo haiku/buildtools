@@ -17,8 +17,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #undef TARGET_VERSION
 #define TARGET_VERSION fprintf (stderr, " (68k GNU/Linux with ELF)");
@@ -36,10 +36,6 @@ Boston, MA 02111-1307, USA.  */
 
 #undef STRICT_ALIGNMENT
 #define STRICT_ALIGNMENT 0
-
-#undef SUBTARGET_SWITCHES
-#define SUBTARGET_SWITCHES	{"ieee-fp", 0, \
-  N_("Use IEEE math for fp comparisons")},
 
 /* Here are four prefixes that are used by asm_fprintf to
    facilitate customization for alternate assembler syntaxes.

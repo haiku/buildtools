@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_BITMAP_H
 #define GCC_BITMAP_H
@@ -49,8 +49,15 @@ typedef struct bitmap_obstack GTY (())
 
 /* Bitmap set element.  We use a linked list to hold only the bits that
    are set.  This allows for use to grow the bitset dynamically without
-   having to realloc and copy a giant bit array.  The `prev' field is
-   undefined for an element on the free list.  */
+   having to realloc and copy a giant bit array.  
+
+   The free list is implemented as a list of lists.  There is one
+   outer list connected together by prev fields.  Each element of that
+   outer is an inner list (that may consist only of the outer list
+   element) that are connected by the next fields.  The prev pointer
+   is undefined for interior elements.  This allows
+   bitmap_elt_clear_from to be implemented in unit time rather than
+   linear in the number of elements to be freed.  */
 
 typedef struct bitmap_element_def GTY(())
 {
@@ -129,7 +136,7 @@ extern void debug_bitmap_file (FILE *, bitmap);
 /* Print a bitmap.  */
 extern void bitmap_print (FILE *, bitmap, const char *, const char *);
 
-/* Initialize and releas a bitmap obstack.  */
+/* Initialize and release a bitmap obstack.  */
 extern void bitmap_obstack_initialize (bitmap_obstack *);
 extern void bitmap_obstack_release (bitmap_obstack *);
 

@@ -18,8 +18,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
    
 
 
@@ -251,7 +251,7 @@ do {					\
   "s8",  "s9",  "s10", "s11", "s12", "s13", "s14", "s15", \
   "s16", "s17", "s18", "s19", "s20", "s21", "s22", "s23", \
   "s24", "s25", "s26", "s27", "s28", "s29", "s30", "s31",  \
-  "vfpcc"
+  "vfpcc"					\
 }
 
 #define ADDITIONAL_REGISTER_NAMES		\
@@ -271,7 +271,7 @@ do {					\
   {"r12", 12}, {"ip", 12}, 			\
   {"r13", 13}, {"sp", 13}, 			\
   {"r14", 14}, {"lr", 14},			\
-  {"r15", 15}, {"pc", 15}			\
+  {"r15", 15}, {"pc", 15},			\
   {"d0", 63},					\
   {"d1", 65},					\
   {"d2", 67},					\
@@ -287,7 +287,7 @@ do {					\
   {"d12", 87},					\
   {"d13", 89},					\
   {"d14", 91},					\
-  {"d15", 93},					\
+  {"d15", 93}					\
 }
 
 #define REGISTER_PREFIX "__"

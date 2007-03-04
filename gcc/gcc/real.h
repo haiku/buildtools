@@ -16,8 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #ifndef GCC_REAL_H
 #define GCC_REAL_H
@@ -138,8 +138,13 @@ struct real_format
   /* The maximum integer, x, such that b**(x-1) is representable.  */
   int emax;
 
-  /* The bit position of the sign bit, or -1 for a complex encoding.  */
-  int signbit;
+  /* The bit position of the sign bit, for determining whether a value
+     is positive/negative, or -1 for a complex encoding.  */
+  int signbit_ro;
+
+  /* The bit position of the sign bit, for changing the sign of a number,
+     or -1 for a complex encoding.  */
+  int signbit_rw;
 
   /* Properties of the format.  */
   bool has_nans;
@@ -359,7 +364,7 @@ REAL_VALUE_TYPE real_value_from_int_cst (tree, tree);
 
 /* Given a CONST_DOUBLE in FROM, store into TO the value it represents.  */
 #define REAL_VALUE_FROM_CONST_DOUBLE(to, from) \
-  memcpy (&(to), &CONST_DOUBLE_LOW ((from)), sizeof (REAL_VALUE_TYPE))
+  ((to) = *CONST_DOUBLE_REAL_VALUE (from))
 
 /* Return a CONST_DOUBLE with value R and mode M.  */
 #define CONST_DOUBLE_FROM_REAL_VALUE(r, m) \

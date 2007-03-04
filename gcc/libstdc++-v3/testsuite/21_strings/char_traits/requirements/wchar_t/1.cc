@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // 21.1.1 Characher traits requirements
@@ -33,12 +33,12 @@ void test02(void)
   // 21.1.1 character traits requirements
 
   // Key for decoding what function signatures really mean:
-  // X                == char_traits<_CharT>
+  // X        == char_traits<_CharT>
   // [c,d]    == _CharT
   // [p,q]    == const _CharT*
-  // s                == _CharT*
+  // s        == _CharT*
   // [n,i,j]  == size_t
-  // f                == X::int_type
+  // f        == X::int_type
   // pos      == X::pos_type
   // state    == X::state_type
 

@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -304,10 +304,9 @@ namespace std
    *
    *  This is not a true container, but an @e adaptor.  It holds
    *  another container, and provides a wrapper interface to that
-   *  container.  The wrapper is what enforces sorting and
-   *  first-in-first-out %queue behavior.  Very few of the standard
-   *  container/sequence interface requirements are met (e.g.,
-   *  iterators).
+   *  container.  The wrapper is what enforces priority-based sorting 
+   *  and %queue behavior.  Very few of the standard container/sequence
+   *  interface requirements are met (e.g., iterators).
    *
    *  The second template parameter defines the type of the underlying
    *  sequence/container.  It defaults to std::vector, but it can be
@@ -321,8 +320,7 @@ namespace std
    *
    *  Members not found in "normal" containers are @c container_type,
    *  which is a typedef for the second Sequence parameter, and @c
-   *  push, @c pop, and @c top, which are standard %queue/FIFO
-   *  operations.
+   *  push, @c pop, and @c top, which are standard %queue operations.
    *
    *  @note No equality/comparison operators are provided for
    *  %priority_queue.

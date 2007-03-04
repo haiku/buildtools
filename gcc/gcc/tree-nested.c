@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to
-   the Free Software Foundation, 59 Temple Place - Suite 330,
-   Boston, MA 02111-1307, USA.  */
+   the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -77,19 +77,19 @@
    been written as independent functions without change.  */
 
 
-struct var_map_elt
+struct var_map_elt GTY(())
 {
   tree old;
   tree new;
 };
 
-struct nesting_info
+struct nesting_info GTY ((chain_next ("%h.next")))
 {
   struct nesting_info *outer;
   struct nesting_info *inner;
   struct nesting_info *next;
   
-  htab_t var_map;
+  htab_t GTY ((param_is (struct var_map_elt))) var_map;
   tree context;
   tree new_local_var_chain;
   tree frame_type;
@@ -143,17 +143,23 @@ create_tmp_var_for (struct nesting_info *info, tree type, const char *prefix)
   DECL_CONTEXT (tmp_var) = info->context;
   TREE_CHAIN (tmp_var) = info->new_local_var_chain;
   DECL_SEEN_IN_BIND_EXPR_P (tmp_var) = 1;
+  if (TREE_CODE (type) == COMPLEX_TYPE)
+    DECL_COMPLEX_GIMPLE_REG_P (tmp_var) = 1;
+
   info->new_local_var_chain = tmp_var;
 
   return tmp_var;
 }
 
-/* Take the address of EXP.  Mark it for addressability as necessary.  */
+/* Take the address of EXP to be used within function CONTEXT.
+   Mark it for addressability as necessary.  */
 
 tree
-build_addr (tree exp)
+build_addr (tree exp, tree context)
 {
   tree base = exp;
+  tree save_context;
+  tree retval;
 
   while (handled_component_p (base))
     base = TREE_OPERAND (base, 0);
@@ -161,7 +167,18 @@ build_addr (tree exp)
   if (DECL_P (base))
     TREE_ADDRESSABLE (base) = 1;
 
-  return build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (exp)), exp);
+  /* Building the ADDR_EXPR will compute a set of properties for
+     that ADDR_EXPR.  Those properties are unfortunately context
+     specific.  ie, they are dependent on CURRENT_FUNCTION_DECL.
+
+     Temporarily set CURRENT_FUNCTION_DECL to the desired context,
+     build the ADDR_EXPR, then restore CURRENT_FUNCTION_DECL.  That
+     way the properties are for the ADDR_EXPR are computed properly.  */
+  save_context = current_function_decl;
+  current_function_decl = context;
+  retval = build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (exp)), exp);
+  current_function_decl = save_context;;
+  return retval;
 }
 
 /* Insert FIELD into TYPE, sorted by alignment requirements.  */
@@ -206,6 +223,14 @@ get_frame_type (struct nesting_info *info)
 
       info->frame_type = type;
       info->frame_decl = create_tmp_var_for (info, type, "FRAME");
+
+      /* ??? Always make it addressable for now, since it is meant to
+	 be pointed to by the static chain pointer.  This pessimizes
+	 when it turns out that no static chains are needed because
+	 the nested functions referencing non-local variables are not
+	 reachable, but the true pessimization is to create the non-
+	 local frame structure in the first place.  */
+      TREE_ADDRESSABLE (info->frame_decl) = 1;
     }
   return type;
 }
@@ -274,7 +299,7 @@ lookup_field_for_decl (struct nesting_info *info, tree decl,
 
       insert_field_into_struct (get_frame_type (info), field);
   
-      elt = xmalloc (sizeof (*elt));
+      elt = ggc_alloc (sizeof (*elt));
       elt->old = decl;
       elt->new = field;
       *slot = elt;
@@ -460,7 +485,7 @@ lookup_tramp_for_decl (struct nesting_info *info, tree decl,
 
       insert_field_into_struct (get_frame_type (info), field);
 
-      elt = xmalloc (sizeof (*elt));
+      elt = ggc_alloc (sizeof (*elt));
       elt->old = decl;
       elt->new = field;
       *slot = elt;
@@ -684,8 +709,8 @@ check_for_nested_with_variably_modified (tree fndecl, tree orig_fndecl)
 static struct nesting_info *
 create_nesting_tree (struct cgraph_node *cgn)
 {
-  struct nesting_info *info = xcalloc (1, sizeof (*info));
-  info->var_map = htab_create (7, var_map_hash, var_map_eq, free);
+  struct nesting_info *info = ggc_calloc (1, sizeof (*info));
+  info->var_map = htab_create_ggc (7, var_map_hash, var_map_eq, ggc_free);
   info->context = cgn->decl;
 
   for (cgn = cgn->nested; cgn ; cgn = cgn->next_nested)
@@ -716,7 +741,7 @@ get_static_chain (struct nesting_info *info, tree target_context,
 
   if (info->context == target_context)
     {
-      x = build_addr (info->frame_decl);
+      x = build_addr (info->frame_decl, target_context);
     }
   else
     {
@@ -857,9 +882,14 @@ convert_nonlocal_reference (tree *tp, int *walk_subtrees, void *data)
 
 	if (wi->changed)
 	  {
+	    tree save_context;
+
 	    /* If we changed anything, then TREE_INVARIANT is be wrong,
 	       since we're no longer directly referencing a decl.  */
+	    save_context = current_function_decl;
+	    current_function_decl = info->context;
 	    recompute_tree_invarant_for_addr_expr (t);
+	    current_function_decl = save_context;
 
 	    /* If the callback converted the address argument in a context
 	       where we only accept variables (and min_invariant, presumably),
@@ -986,7 +1016,7 @@ convert_local_reference (tree *tp, int *walk_subtrees, void *data)
 
 	  /* Then the frame decl is now addressable.  */
 	  TREE_ADDRESSABLE (info->frame_decl) = 1;
-
+	    
 	  save_context = current_function_decl;
 	  current_function_decl = info->context;
 	  recompute_tree_invarant_for_addr_expr (t);
@@ -1062,7 +1092,7 @@ convert_nl_goto_reference (tree *tp, int *walk_subtrees, void *data)
   struct walk_stmt_info *wi = data;
   struct nesting_info *info = wi->info, *i;
   tree t = *tp, label, new_label, target_context, x, arg, field;
-  struct var_map_elt *elt;
+  struct var_map_elt *elt, dummy;
   void **slot;
 
   *walk_subtrees = 0;
@@ -1083,25 +1113,31 @@ convert_nl_goto_reference (tree *tp, int *walk_subtrees, void *data)
      control transfer.  This new label will be marked LABEL_NONLOCAL; this
      mark will trigger proper behavior in the cfg, as well as cause the
      (hairy target-specific) non-local goto receiver code to be generated
-     when we expand rtl.  */
-  new_label = create_artificial_label ();
-  DECL_NONLOCAL (new_label) = 1;
+     when we expand rtl.  Enter this association into var_map so that we
+     can insert the new label into the IL during a second pass.  */
+  dummy.old = label;
+  slot = htab_find_slot (i->var_map, &dummy, INSERT);
+  elt = *slot;
+  if (elt == NULL)
+    {
+      new_label = create_artificial_label ();
+      DECL_NONLOCAL (new_label) = 1;
 
-  /* Enter this association into var_map so that we can insert the new
-     label into the IL during a second pass.  */
-  elt = xmalloc (sizeof (*elt));
-  elt->old = label;
-  elt->new = new_label;
-  slot = htab_find_slot (i->var_map, elt, INSERT);
-  *slot = elt;
+      elt = ggc_alloc (sizeof (*elt));
+      elt->old = label;
+      elt->new = new_label;
+      *slot = elt;
+    }
+  else
+    new_label = elt->new;
   
   /* Build: __builtin_nl_goto(new_label, &chain->nl_goto_field).  */
   field = get_nl_goto_field (i);
   x = get_frame_field (info, target_context, field, &wi->tsi);
-  x = build_addr (x);
+  x = build_addr (x, target_context);
   x = tsi_gimplify_val (info, x, &wi->tsi);
   arg = tree_cons (NULL, x, NULL);
-  x = build_addr (new_label);
+  x = build_addr (new_label, target_context);
   arg = tree_cons (NULL, x, arg);
   x = implicit_built_in_decls[BUILT_IN_NONLOCAL_GOTO];
   x = build_function_call_expr (x, arg);
@@ -1196,7 +1232,7 @@ convert_tramp_reference (tree *tp, int *walk_subtrees, void *data)
 
       /* Compute the address of the field holding the trampoline.  */
       x = get_frame_field (info, target_context, x, &wi->tsi);
-      x = build_addr (x);
+      x = build_addr (x, target_context);
       x = tsi_gimplify_val (info, x, &wi->tsi);
       arg = tree_cons (NULL, x, NULL);
 
@@ -1309,7 +1345,12 @@ finalize_nesting_tree_1 (struct nesting_info *root)
      out at this time.  */
   if (root->frame_type)
     {
+      /* In some cases the frame type will trigger the -Wpadded warning.
+	 This is not helpful; suppress it. */
+      int save_warn_padded = warn_padded;
+      warn_padded = 0;
       layout_type (root->frame_type);
+      warn_padded = save_warn_padded;
       layout_decl (root->frame_decl, 0);
     }
 
@@ -1328,7 +1369,7 @@ finalize_nesting_tree_1 (struct nesting_info *root)
 	    continue;
 
 	  if (use_pointer_in_frame (p))
-	    x = build_addr (p);
+	    x = build_addr (p, context);
 	  else
 	    x = p;
 
@@ -1364,15 +1405,15 @@ finalize_nesting_tree_1 (struct nesting_info *root)
 	  if (DECL_NO_STATIC_CHAIN (i->context))
 	    x = null_pointer_node;
 	  else
-	    x = build_addr (root->frame_decl);
+	    x = build_addr (root->frame_decl, context);
 	  arg = tree_cons (NULL, x, NULL);
 
-	  x = build_addr (i->context);
+	  x = build_addr (i->context, context);
 	  arg = tree_cons (NULL, x, arg);
 
 	  x = build (COMPONENT_REF, TREE_TYPE (field),
 		     root->frame_decl, field, NULL_TREE);
-	  x = build_addr (x);
+	  x = build_addr (x, context);
 	  arg = tree_cons (NULL, x, arg);
 
 	  x = implicit_built_in_decls[BUILT_IN_INIT_TRAMPOLINE];
@@ -1450,11 +1491,13 @@ free_nesting_tree (struct nesting_info *root)
 	free_nesting_tree (root->inner);
       htab_delete (root->var_map);
       next = root->next;
-      free (root);
+      ggc_free (root);
       root = next;
     }
   while (root);
 }
+
+static GTY(()) struct nesting_info *root;
 
 /* Main entry point for this pass.  Process FNDECL and all of its nested
    subroutines and turn them into something less tightly bound.  */
@@ -1462,7 +1505,6 @@ free_nesting_tree (struct nesting_info *root)
 void
 lower_nested_functions (tree fndecl)
 {
-  struct nesting_info *root;
   struct cgraph_node *cgn;
 
   /* If there are no nested functions, there's nothing to do.  */
@@ -1478,6 +1520,7 @@ lower_nested_functions (tree fndecl)
   convert_all_function_calls (root);
   finalize_nesting_tree (root);
   free_nesting_tree (root);
+  root = NULL;
 }
 
 #include "gt-tree-nested.h"

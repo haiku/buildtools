@@ -1,6 +1,6 @@
 /* Generate code from machine description to emit insns as rtl.
    Copyright (C) 1987, 1988, 1991, 1994, 1995, 1997, 1998, 1999, 2000, 2001,
-   2003, 2004 Free Software Foundation, Inc.
+   2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 #include "bconfig.h"
@@ -509,6 +509,7 @@ gen_expand (rtx expand)
 
       /* Output the special code to be executed before the sequence
 	 is generated.  */
+      print_rtx_ptr_loc (XSTR (expand, 3));
       printf ("%s\n", XSTR (expand, 3));
 
       /* Output code to copy the arguments back out of `operands'
@@ -630,7 +631,10 @@ gen_split (rtx split)
      before the actual construction.  */
 
   if (XSTR (split, 3))
-    printf ("%s\n", XSTR (split, 3));
+    {
+      print_rtx_ptr_loc (XSTR (split, 3));
+      printf ("%s\n", XSTR (split, 3));
+    }
 
   /* Output code to copy the arguments back out of `operands'  */
   for (i = 0; i < operands; i++)
@@ -841,6 +845,7 @@ from the machine description file `md'.  */\n\n");
   printf ("#include \"reload.h\"\n");
   printf ("#include \"toplev.h\"\n");
   printf ("#include \"ggc.h\"\n\n");
+  printf ("#include \"basic-block.h\"\n\n");
   printf ("#define FAIL return (end_sequence (), _val)\n");
   printf ("#define DONE return (_val = get_insns (), end_sequence (), _val)\n\n");
 

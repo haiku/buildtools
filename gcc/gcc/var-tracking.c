@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 /* This file contains the variable tracking pass.  It computes where
    variables are located (which registers or where in memory) at each position
@@ -104,6 +104,8 @@
 #include "hashtab.h"
 #include "regs.h"
 #include "expr.h"
+#include "timevar.h"
+#include "tree-pass.h"
 
 /* Type of micro operation.  */
 enum micro_operation_type
@@ -266,19 +268,12 @@ static htab_t changed_variables;
 /* Shall notes be emitted?  */
 static bool emit_notes;
 
-/* Fake variable for stack pointer.  */
-tree frame_base_decl;
-
-/* Stack adjust caused by function prologue.  */
-static HOST_WIDE_INT frame_stack_adjust;
-
 /* Local function prototypes.  */
 static void stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
 					  HOST_WIDE_INT *);
 static void insn_stack_adjust_offset_pre_post (rtx, HOST_WIDE_INT *,
 					       HOST_WIDE_INT *);
 static void bb_stack_adjust_offset (basic_block);
-static HOST_WIDE_INT prologue_stack_adjust (void);
 static bool vt_stack_adjustments (void);
 static rtx adjust_stack_reference (rtx, HOST_WIDE_INT);
 static hashval_t variable_htab_hash (const void *);
@@ -333,7 +328,6 @@ static void dump_dataflow_set (dataflow_set *);
 static void dump_dataflow_sets (void);
 
 static void variable_was_changed (variable, htab_t);
-static void set_frame_base_location (dataflow_set *, rtx);
 static void set_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT);
 static void delete_variable_part (dataflow_set *, rtx, tree, HOST_WIDE_INT);
 static int emit_note_insn_var_location (void **, void *);
@@ -389,9 +383,9 @@ stack_adjust_offset_pre_post (rtx pattern, HOST_WIDE_INT *pre,
 	    {
 	      rtx val = XEXP (XEXP (src, 1), 1);
 	      /* We handle only adjustments by constant amount.  */
-	      if (GET_CODE (XEXP (src, 1)) != PLUS ||
-		  GET_CODE (val) != CONST_INT)
-		abort ();
+	      gcc_assert (GET_CODE (XEXP (src, 1)) == PLUS &&
+			  GET_CODE (val) == CONST_INT);
+	      
 	      if (code == PRE_MODIFY)
 		*pre -= INTVAL (val);
 	      else
@@ -489,38 +483,6 @@ bb_stack_adjust_offset (basic_block bb)
   VTI (bb)->out.stack_adjust = offset;
 }
 
-/* Compute stack adjustment caused by function prologue.  */
-
-static HOST_WIDE_INT
-prologue_stack_adjust (void)
-{
-  HOST_WIDE_INT offset = 0;
-  basic_block bb = ENTRY_BLOCK_PTR->next_bb;
-  rtx insn;
-  rtx end;
-
-  if (!BB_END (bb))
-    return 0;
-
-  end = NEXT_INSN (BB_END (bb));
-  for (insn = BB_HEAD (bb); insn != end; insn = NEXT_INSN (insn))
-    {
-      if (NOTE_P (insn)
-	  && NOTE_LINE_NUMBER (insn) == NOTE_INSN_PROLOGUE_END)
-	break;
-
-      if (INSN_P (insn))
-	{
-	  HOST_WIDE_INT tmp;
-
-	  insn_stack_adjust_offset_pre_post (insn, &tmp, &tmp);
-	  offset += tmp;
-	}
-    }
-
-  return offset;
-}
-
 /* Compute stack adjustments for all blocks by traversing DFS tree.
    Return true when the adjustments on all incoming edges are consistent.
    Heavily borrowed from flow_depth_first_order_compute.  */
@@ -533,7 +495,7 @@ vt_stack_adjustments (void)
 
   /* Initialize entry block.  */
   VTI (ENTRY_BLOCK_PTR)->visited = true;
-  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = frame_stack_adjust;
+  VTI (ENTRY_BLOCK_PTR)->out.stack_adjust = INCOMING_FRAME_SP_OFFSET;
 
   /* Allocate stack for back-tracking up CFG.  */
   stack = xmalloc ((n_basic_blocks + 1) * sizeof (edge_iterator));
@@ -587,27 +549,28 @@ vt_stack_adjustments (void)
   return true;
 }
 
-/* Adjust stack reference MEM by ADJUSTMENT bytes and return the new rtx.  */
+/* Adjust stack reference MEM by ADJUSTMENT bytes and make it relative
+   to the argument pointer.  Return the new rtx.  */
 
 static rtx
 adjust_stack_reference (rtx mem, HOST_WIDE_INT adjustment)
 {
-  rtx adjusted_mem;
-  rtx tmp;
+  rtx addr, cfa, tmp;
 
-  if (adjustment == 0)
-    return mem;
+#ifdef FRAME_POINTER_CFA_OFFSET
+  adjustment -= FRAME_POINTER_CFA_OFFSET (current_function_decl);
+  cfa = plus_constant (frame_pointer_rtx, adjustment);
+#else
+  adjustment -= ARG_POINTER_CFA_OFFSET (current_function_decl);
+  cfa = plus_constant (arg_pointer_rtx, adjustment);
+#endif
 
-  adjusted_mem = copy_rtx (mem);
-  XEXP (adjusted_mem, 0) = replace_rtx (XEXP (adjusted_mem, 0),
-					stack_pointer_rtx,
-					gen_rtx_PLUS (Pmode, stack_pointer_rtx,
-						      GEN_INT (adjustment)));
-  tmp = simplify_rtx (XEXP (adjusted_mem, 0));
+  addr = replace_rtx (copy_rtx (XEXP (mem, 0)), stack_pointer_rtx, cfa);
+  tmp = simplify_rtx (addr);
   if (tmp)
-    XEXP (adjusted_mem, 0) = tmp;
+    addr = tmp;
 
-  return adjusted_mem;
+  return replace_equiv_address_nv (mem, addr);
 }
 
 /* The hash function for variable_htab, computes the hash value
@@ -641,10 +604,7 @@ variable_htab_free (void *elem)
   variable var = (variable) elem;
   location_chain node, next;
 
-#ifdef ENABLE_CHECKING
-  if (var->refcount <= 0)
-    abort ();
-#endif
+  gcc_assert (var->refcount > 0);
 
   var->refcount--;
   if (var->refcount > 0)
@@ -1021,22 +981,14 @@ variable_union (void **slot, void *data)
 	 a copy of the variable.  */
       for (k = 0; k < src->n_var_parts; k++)
 	{
+	  gcc_assert (!src->var_part[k].loc_chain
+		      == !src->var_part[k].cur_loc);
 	  if (src->var_part[k].loc_chain)
 	    {
-#ifdef ENABLE_CHECKING
-	      if (src->var_part[k].cur_loc == NULL)
-		abort ();
-#endif
+	      gcc_assert (src->var_part[k].cur_loc);
 	      if (src->var_part[k].cur_loc != src->var_part[k].loc_chain->loc)
 		break;
 	    }
-#ifdef ENABLE_CHECKING
-	  else
-	    {
-	      if (src->var_part[k].cur_loc != NULL)
-		abort ();
-	    }
-#endif
 	}
       if (k < src->n_var_parts)
 	unshare_variable (set, src);
@@ -1049,10 +1001,7 @@ variable_union (void **slot, void *data)
   else
     dst = *dstp;
 
-#ifdef ENABLE_CHECKING
-  if (src->n_var_parts == 0)
-    abort ();
-#endif
+  gcc_assert (src->n_var_parts);
 
   /* Count the number of location parts, result is K.  */
   for (i = 0, j = 0, k = 0;
@@ -1070,12 +1019,10 @@ variable_union (void **slot, void *data)
     }
   k += src->n_var_parts - i;
   k += dst->n_var_parts - j;
-#ifdef ENABLE_CHECKING
+
   /* We track only variables whose size is <= MAX_VAR_PARTS bytes
      thus there are at most MAX_VAR_PARTS different offsets.  */
-  if (k > MAX_VAR_PARTS)
-    abort ();
-#endif
+  gcc_assert (k <= MAX_VAR_PARTS);
 
   if (dst->refcount > 1 && dst->n_var_parts != k)
     dst = unshare_variable (set, dst);
@@ -1358,12 +1305,9 @@ dataflow_set_different_2 (void **slot, void *data)
       return 0;
     }
 
-#ifdef ENABLE_CHECKING
   /* If both variables are defined they have been already checked for
      equivalence.  */
-  if (variable_different_p (var1, var2, false))
-    abort ();
-#endif
+  gcc_assert (!variable_different_p (var1, var2, false));
 
   /* Continue traversing the hash table.  */
   return 1;
@@ -1462,8 +1406,7 @@ track_expr_p (tree expr)
      don't need to track this expression if the ultimate declaration is
      ignored.  */
   realdecl = expr;
-  if (DECL_DEBUG_EXPR (realdecl)
-      && DECL_DEBUG_EXPR_IS_FROM (realdecl))
+  if (DECL_DEBUG_EXPR_IS_FROM (realdecl) && DECL_DEBUG_EXPR (realdecl))
     {
       realdecl = DECL_DEBUG_EXPR (realdecl);
       /* ??? We don't yet know how to emit DW_OP_piece for variable
@@ -1519,17 +1462,14 @@ count_uses (rtx *loc, void *insn)
 
   if (REG_P (*loc))
     {
-#ifdef ENABLE_CHECKING
-	if (REGNO (*loc) >= FIRST_PSEUDO_REGISTER)
-	  abort ();
-#endif
-	VTI (bb)->n_mos++;
+      gcc_assert (REGNO (*loc) < FIRST_PSEUDO_REGISTER);
+      VTI (bb)->n_mos++;
     }
   else if (MEM_P (*loc)
 	   && MEM_EXPR (*loc)
 	   && track_expr_p (MEM_EXPR (*loc)))
     {
-	  VTI (bb)->n_mos++;
+      VTI (bb)->n_mos++;
     }
 
   return 0;
@@ -1673,14 +1613,7 @@ compute_bb_dataflow (basic_block bb)
 	    break;
 
 	  case MO_ADJUST:
-	    {
-	      rtx base;
-
-	      out->stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-							out->stack_adjust));
-	      set_frame_base_location (out, base);
-	    }
+	    out->stack_adjust += VTI (bb)->mos[i].u.adjust;
 	    break;
 	}
     }
@@ -1803,8 +1736,7 @@ dump_attrs_list (attrs list)
   for (; list; list = list->next)
     {
       print_mem_expr (dump_file, list->decl);
-      fprintf (dump_file, "+");
-      fprintf (dump_file, HOST_WIDE_INT_PRINT_DEC, list->offset);
+      fprintf (dump_file, "+" HOST_WIDE_INT_PRINT_DEC, list->offset);
     }
   fprintf (dump_file, "\n");
 }
@@ -1854,9 +1786,8 @@ dump_dataflow_set (dataflow_set *set)
 {
   int i;
 
-  fprintf (dump_file, "Stack adjustment: ");
-  fprintf (dump_file, HOST_WIDE_INT_PRINT_DEC, set->stack_adjust);
-  fprintf (dump_file, "\n");
+  fprintf (dump_file, "Stack adjustment: " HOST_WIDE_INT_PRINT_DEC "\n",
+	   set->stack_adjust);
   for (i = 1; i < FIRST_PSEUDO_REGISTER; i++)
     {
       if (set->regs[i])
@@ -1924,10 +1855,7 @@ variable_was_changed (variable var, htab_t htab)
     }
   else
     {
-#ifdef ENABLE_CHECKING
-      if (!htab)
-	abort ();
-#endif
+      gcc_assert (htab);
       if (var->n_var_parts == 0)
 	{
 	  void **slot = htab_find_slot_with_hash (htab, var->decl, hash,
@@ -1936,37 +1864,6 @@ variable_was_changed (variable var, htab_t htab)
 	    htab_clear_slot (htab, slot);
 	}
     }
-}
-
-/* Set the location of frame_base_decl to LOC in dataflow set SET.  This
-   function expects that frame_base_decl has already one location for offset 0
-   in the variable table.  */
-
-static void
-set_frame_base_location (dataflow_set *set, rtx loc)
-{
-  variable var;
-  
-  var = htab_find_with_hash (set->vars, frame_base_decl,
-			     VARIABLE_HASH_VAL (frame_base_decl));
-#ifdef ENABLE_CHECKING
-  if (!var)
-    abort ();
-  if (var->n_var_parts != 1)
-    abort ();
-  if (var->var_part[0].offset != 0)
-    abort ();
-  if (!var->var_part[0].loc_chain)
-    abort ();
-#endif
-
-  /* If frame_base_decl is shared unshare it first.  */
-  if (var->refcount > 1)
-    var = unshare_variable (set, var);
-
-  var->var_part[0].loc_chain->loc = loc;
-  var->var_part[0].cur_loc = loc;
-  variable_was_changed (var, set->vars);
 }
 
 /* Set the part of variable's location in the dataflow set SET.  The variable
@@ -2042,12 +1939,9 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset)
 	  if (var->refcount > 1)
 	    var = unshare_variable (set, var);
 
-#ifdef ENABLE_CHECKING
 	  /* We track only variables whose size is <= MAX_VAR_PARTS bytes
 	     thus there are at most MAX_VAR_PARTS different offsets.  */
-	  if (var->n_var_parts >= MAX_VAR_PARTS)
-	    abort ();
-#endif
+	  gcc_assert (var->n_var_parts < MAX_VAR_PARTS);
 
 	  /* We have to move the elements of array starting at index low to the
 	     next position.  */
@@ -2211,10 +2105,7 @@ emit_note_insn_var_location (void **varp, void *data)
   HOST_WIDE_INT offsets[MAX_VAR_PARTS];
   rtx loc[MAX_VAR_PARTS];
 
-#ifdef ENABLE_CHECKING
-  if (!var->decl)
-    abort ();
-#endif
+  gcc_assert (var->decl);
 
   complete = true;
   last_limit = 0;
@@ -2499,15 +2390,7 @@ emit_notes_in_bb (basic_block bb)
 	    break;
 
 	  case MO_ADJUST:
-	    {
-	      rtx base;
-
-	      set.stack_adjust += VTI (bb)->mos[i].u.adjust;
-	      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-							set.stack_adjust));
-	      set_frame_base_location (&set, base);
-	      emit_notes_for_changes (insn, EMIT_NOTE_AFTER_INSN);
-	    }
+	    set.stack_adjust += VTI (bb)->mos[i].u.adjust;
 	    break;
 	}
     }
@@ -2523,10 +2406,7 @@ vt_emit_notes (void)
   dataflow_set *last_out;
   dataflow_set empty;
 
-#ifdef ENABLE_CHECKING
-  if (htab_elements (changed_variables))
-    abort ();
-#endif
+  gcc_assert (!htab_elements (changed_variables));
 
   /* Enable emitting notes by functions (mainly by set_variable_part and
      delete_variable_part).  */
@@ -2612,28 +2492,19 @@ vt_add_function_parameters (void)
       if (!decl)
 	continue;
 
-#ifdef ENABLE_CHECKING
-      if (parm != decl)
-	abort ();
-#endif
+      gcc_assert (parm == decl);
 
-      incoming = eliminate_regs (incoming, 0, NULL_RTX);
       out = &VTI (ENTRY_BLOCK_PTR)->out;
 
       if (REG_P (incoming))
 	{
-#ifdef ENABLE_CHECKING
-	  if (REGNO (incoming) >= FIRST_PSEUDO_REGISTER)
-	    abort ();
-#endif
+	  gcc_assert (REGNO (incoming) < FIRST_PSEUDO_REGISTER);
 	  attrs_list_insert (&out->regs[REGNO (incoming)],
 			     parm, offset, incoming);
 	  set_variable_part (out, incoming, parm, offset);
 	}
       else if (MEM_P (incoming))
-	{
-	  set_variable_part (out, incoming, parm, offset);
-	}
+	set_variable_part (out, incoming, parm, offset);
     }
 }
 
@@ -2650,7 +2521,7 @@ vt_initialize (void)
   FOR_EACH_BB (bb)
     {
       rtx insn;
-      HOST_WIDE_INT pre, post;
+      HOST_WIDE_INT pre, post = 0;
 
       /* Count the number of micro operations.  */
       VTI (bb)->n_mos = 0;
@@ -2778,28 +2649,6 @@ vt_initialize (void)
   changed_variables = htab_create (10, variable_htab_hash, variable_htab_eq,
 				   NULL);
   vt_add_function_parameters ();
-
-  if (!frame_pointer_needed)
-    {
-      rtx base;
-
-      /* Create fake variable for tracking stack pointer changes.  */
-      frame_base_decl = make_node (VAR_DECL);
-      DECL_NAME (frame_base_decl) = get_identifier ("___frame_base_decl");
-      TREE_TYPE (frame_base_decl) = char_type_node;
-      DECL_ARTIFICIAL (frame_base_decl) = 1;
-      DECL_IGNORED_P (frame_base_decl) = 1;
-
-      /* Set its initial "location".  */
-      frame_stack_adjust = -prologue_stack_adjust ();
-      base = gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx,
-						frame_stack_adjust));
-      set_variable_part (&VTI (ENTRY_BLOCK_PTR)->out, base, frame_base_decl, 0);
-    }
-  else
-    {
-      frame_base_decl = NULL;
-    }
 }
 
 /* Free the data structures needed for variable tracking.  */
@@ -2856,3 +2705,29 @@ variable_tracking_main (void)
 
   vt_finalize ();
 }
+
+static bool
+gate_handle_var_tracking (void)
+{
+  return (flag_var_tracking);
+}
+
+
+
+struct tree_opt_pass pass_variable_tracking =
+{
+  "vartrack",                           /* name */
+  gate_handle_var_tracking,             /* gate */
+  variable_tracking_main,               /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_VAR_TRACKING,                      /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'V'                                   /* letter */
+};
+

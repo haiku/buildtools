@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* This file contains two passes of the compiler: reg_scan and reg_class.
@@ -172,11 +172,11 @@ unsigned int reg_class_size[N_REG_CLASSES];
 
 /* For each reg class, table listing all the containing classes.  */
 
-enum reg_class reg_class_superclasses[N_REG_CLASSES][N_REG_CLASSES];
+static enum reg_class reg_class_superclasses[N_REG_CLASSES][N_REG_CLASSES];
 
 /* For each reg class, table listing all the classes contained in it.  */
 
-enum reg_class reg_class_subclasses[N_REG_CLASSES][N_REG_CLASSES];
+static enum reg_class reg_class_subclasses[N_REG_CLASSES][N_REG_CLASSES];
 
 /* For each pair of reg classes,
    a largest reg class contained in their union.  */
@@ -778,7 +778,7 @@ fix_register (const char *name, int fixed, int call_used)
     }
   else
     {
-      warning ("unknown register name: %s", name);
+      warning (0, "unknown register name: %s", name);
     }
 }
 
@@ -792,12 +792,12 @@ globalize_reg (int i)
 
   if (global_regs[i])
     {
-      warning ("register used for two global register variables");
+      warning (0, "register used for two global register variables");
       return;
     }
 
   if (call_used_regs[i] && ! fixed_regs[i])
-    warning ("call-clobbered register used for global register variable");
+    warning (0, "call-clobbered register used for global register variable");
 
   global_regs[i] = 1;
 

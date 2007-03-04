@@ -1,6 +1,7 @@
 // Wrapper for underlying C-language localization -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005 
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -46,16 +47,13 @@ namespace std
     __convert_to_v(const char* __s, float& __v, ios_base::iostate& __err, 
 		   const __c_locale& __cloc)
     {
-      if (!(__err & ios_base::failbit))
-	{
-	  char* __sanity;
-	  errno = 0;
-	  float __f = __strtof_l(__s, &__sanity, __cloc);
-          if (__sanity != __s && errno != ERANGE)
-	    __v = __f;
-	  else
-	    __err |= ios_base::failbit;
-	}
+      char* __sanity;
+      errno = 0;
+      float __f = __strtof_l(__s, &__sanity, __cloc);
+      if (__sanity != __s && errno != ERANGE)
+	__v = __f;
+      else
+	__err |= ios_base::failbit;
     }
 
   template<>
@@ -63,16 +61,13 @@ namespace std
     __convert_to_v(const char* __s, double& __v, ios_base::iostate& __err, 
 		   const __c_locale& __cloc)
     {
-      if (!(__err & ios_base::failbit))
-	{
-	  char* __sanity;
-	  errno = 0;
-	  double __d = __strtod_l(__s, &__sanity, __cloc);
-          if (__sanity != __s && errno != ERANGE)
-	    __v = __d;
-	  else
-	    __err |= ios_base::failbit;
-	}
+      char* __sanity;
+      errno = 0;
+      double __d = __strtod_l(__s, &__sanity, __cloc);
+      if (__sanity != __s && errno != ERANGE)
+	__v = __d;
+      else
+	__err |= ios_base::failbit;
     }
 
   template<>
@@ -80,16 +75,19 @@ namespace std
     __convert_to_v(const char* __s, long double& __v, ios_base::iostate& __err,
 		   const __c_locale& __cloc)
     {
-      if (!(__err & ios_base::failbit))
-	{
-	  char* __sanity;
-	  errno = 0;
-	  long double __ld = __strtold_l(__s, &__sanity, __cloc);
-          if (__sanity != __s && errno != ERANGE)
-	    __v = __ld;
-	  else
-	    __err |= ios_base::failbit;
-	}
+      char* __sanity;
+      errno = 0;
+#if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2)
+      // Prefer strtold_l, as __strtold_l isn't prototyped in more recent
+      // glibc versions.
+      long double __ld = strtold_l(__s, &__sanity, __cloc);
+#else
+      long double __ld = __strtold_l(__s, &__sanity, __cloc);
+#endif
+      if (__sanity != __s && errno != ERANGE)
+	__v = __ld;
+      else
+	__err |= ios_base::failbit;
     }
 
   void
@@ -108,7 +106,7 @@ namespace std
   void
   locale::facet::_S_destroy_c_locale(__c_locale& __cloc)
   {
-    if (_S_get_c_locale() != __cloc)
+    if (__cloc && _S_get_c_locale() != __cloc)
       __freelocale(__cloc); 
   }
 

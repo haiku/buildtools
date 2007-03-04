@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef _LINUX_H
 #define _LINUX_H
@@ -89,9 +89,19 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
           %{m31:-dynamic-linker /lib/ld.so.1} \
           %{m64:-dynamic-linker /lib/ld64.so.1}}}}"
 
+#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
 
 #define MD_UNWIND_SUPPORT "config/s390/linux-unwind.h"
+
+#ifdef TARGET_LIBC_PROVIDES_SSP
+/* s390 glibc provides __stack_chk_guard in 0x14(tp),
+   s390x glibc provides it at 0x28(tp).  */
+#define TARGET_THREAD_SSP_OFFSET        (TARGET_64BIT ? 0x28 : 0x14)
+#endif
+
+/* Define if long doubles should be mangled as 'g'.  */
+#define TARGET_ALTERNATE_LONG_DOUBLE_MANGLING
 
 #endif

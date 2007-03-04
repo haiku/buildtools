@@ -18,7 +18,7 @@
 //
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 //
 // As a special exception, you may use this file as part of a free software
@@ -72,13 +72,15 @@ namespace __gnu_test
   typedef character<unsigned char, unsigned int, pod_state>  	pod_uchar;
   typedef character<unsigned short, unsigned int>	   	pod_ushort;
   typedef character<unsigned int, unsigned long>	   	pod_uint;  
+}
 
+namespace __gnu_cxx {
   // Specializations.
   // pod_char
   template<>
     template<typename V2>
-      inline pod_char::char_type
-      pod_char::char_type::from(const V2& v)
+      inline __gnu_test::pod_char::char_type
+      __gnu_test::pod_char::char_type::from(const V2& v)
       {
 	char_type ret = { static_cast<value_type>(v.value) };
 	return ret;
@@ -87,17 +89,16 @@ namespace __gnu_test
   template<>
     template<typename V2>
       inline V2
-      pod_char::char_type::to(const char_type& c)
+      __gnu_test::pod_char::char_type::to(const char_type& c)
       {
 	V2 ret = { c.value };
 	return ret;
       }
   
-  // pod_uchar
   template<>
     template<typename V2>
-      inline pod_uchar::char_type
-      pod_uchar::char_type::from(const V2& v)
+      inline __gnu_test::pod_uchar::char_type
+      __gnu_test::pod_uchar::char_type::from(const V2& v)
       {
 	char_type ret;
 	ret.value = (v >> 5);
@@ -107,7 +108,7 @@ namespace __gnu_test
   template<>
     template<typename V2>
       inline V2
-      pod_uchar::char_type::to(const char_type& c)
+      __gnu_test::pod_uchar::char_type::to(const char_type& c)
       { return static_cast<V2>(c.value << 5); }
 }; // namespace __gnu_test
 
@@ -321,7 +322,7 @@ namespace std
       { }
 
       virtual bool
-      do_is(mask m, char_type c) const
+      do_is(mask, char_type) const
       { return false; }
 
       virtual const char_type*
@@ -332,11 +333,11 @@ namespace std
       }
 
       virtual const char_type*
-      do_scan_is(mask m, const char_type* low, const char_type* high) const
+      do_scan_is(mask, const char_type*, const char_type* high) const
       { return high; }
 
       virtual const char_type*
-      do_scan_not(mask m, const char_type* low, const char_type* high) const
+      do_scan_not(mask, const char_type* low, const char_type*) const
       { return low; }
 
       virtual char_type
@@ -344,7 +345,7 @@ namespace std
       { return c; }
 
       virtual const char_type*
-      do_toupper(char_type*  low, const char_type*  high) const
+      do_toupper(char_type*, const char_type*  high) const
       { return high; }
 
       virtual char_type
@@ -352,7 +353,7 @@ namespace std
       { return c; }
 
       virtual const char_type*
-      do_tolower(char_type*  low, const char_type*  high) const
+      do_tolower(char_type*, const char_type*  high) const
       { return high; }
 
       virtual char_type

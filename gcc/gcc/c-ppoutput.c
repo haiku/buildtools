@@ -15,7 +15,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.  */
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -54,7 +54,7 @@ static void cb_line_change (cpp_reader *, const cpp_token *, int);
 static void cb_define (cpp_reader *, source_location, cpp_hashnode *);
 static void cb_undef (cpp_reader *, source_location, cpp_hashnode *);
 static void cb_include (cpp_reader *, source_location, const unsigned char *,
-			const char *, int);
+			const char *, int, const cpp_token **);
 static void cb_ident (cpp_reader *, source_location, const cpp_string *);
 static void cb_def_pragma (cpp_reader *, source_location);
 static void cb_read_pch (cpp_reader *pfile, const char *name,
@@ -256,7 +256,8 @@ print_line (source_location src_loc, const char *special_flags)
       p = cpp_quote_string (to_file_quoted,
 			    (unsigned char *) map->to_file, to_file_len);
       *p = '\0';
-      fprintf (print.outf, "# %u \"%s\"%s", print.src_line,
+      fprintf (print.outf, "# %u \"%s\"%s",
+	       print.src_line == 0 ? 1 : print.src_line,
 	       to_file_quoted, special_flags);
 
       if (map->sysp == 2)
@@ -336,13 +337,27 @@ cb_undef (cpp_reader *pfile ATTRIBUTE_UNUSED, source_location line,
 
 static void
 cb_include (cpp_reader *pfile ATTRIBUTE_UNUSED, source_location line,
-	    const unsigned char *dir, const char *header, int angle_brackets)
+	    const unsigned char *dir, const char *header, int angle_brackets,
+	    const cpp_token **comments)
 {
   maybe_print_line (line);
   if (angle_brackets)
-    fprintf (print.outf, "#%s <%s>\n", dir, header);
+    fprintf (print.outf, "#%s <%s>", dir, header);
   else
-    fprintf (print.outf, "#%s \"%s\"\n", dir, header);
+    fprintf (print.outf, "#%s \"%s\"", dir, header);
+
+  if (comments != NULL)
+    {
+      while (*comments != NULL)
+	{
+	  if ((*comments)->flags & PREV_WHITE)
+	    putc (' ', print.outf);
+	  cpp_output_token (*comments, print.outf);
+	  ++comments;
+	}
+    }
+
+  putc ('\n', print.outf);
   print.src_line++;
 }
 

@@ -114,15 +114,28 @@ then
   mkdir pth
 fi
 
-pthread_create_version='""'
-AC_CHECK_HEADER(pthread.h,[
-AC_DEFINE_UNQUOTED(HAVE_PTHREAD_H, 1, [define if you have <pthread.h>])
-ac_have_pthread_h=yes
-],[
-ac_have_pthread_h=
-])
-AM_CONDITIONAL(LIBMUDFLAPTH, [test "x$ac_have_pthread_h" != "x"])
-if test "x$ac_have_pthread_h" != "x"
+AC_CHECK_HEADERS(pthread.h)
+
+AC_MSG_CHECKING([for thread model used by GCC])
+target_thread_file=`$CC -v 2>&1 | sed -n 's/^Thread model: //p'`
+AC_MSG_RESULT([$target_thread_file])
+
+# We only support posix threads, or no threads at all.
+posix_threads=
+case ${target_thread_file} in
+  posix)
+    posix_threads=yes
+    ;;
+  single)
+    ;;
+  *)
+    echo "${target_thread_file} is an unsupported thread package" 1>&2
+    exit 1
+    ;;
+esac
+
+AM_CONDITIONAL(LIBMUDFLAPTH, [test "x$posix_threads" != "x"])
+if test "x$posix_threads" != "x"
 then
         build_libmudflapth=1
 else
@@ -132,8 +145,6 @@ AC_SUBST(build_libmudflapth)
 
 AC_CHECK_LIB(dl, dlsym)
 
-TL_AC_GCC_VERSION([$srcdir/..])
-
 # Calculate toolexeclibdir
 # Also toolexecdir, though it's only used in toolexeclibdir
 case ${version_specific_libs} in
@@ -142,7 +153,7 @@ case ${version_specific_libs} in
     # and header files if --enable-version-specific-runtime-libs option
     # is selected.
     toolexecdir='$(libdir)/gcc/$(target_alias)'
-    toolexeclibdir='$(toolexecdir)/'${gcc_version}'$(MULTISUBDIR)'
+    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
     ;;
   no)
     if test -n "$with_cross_host" &&
@@ -164,7 +175,8 @@ esac
 AC_SUBST(toolexecdir)
 AC_SUBST(toolexeclibdir)
 
-if test "x$enable_shared" = "xyes" && test "x$ac_have_pthread_h" != "x"; then
+pthread_create_version='""'
+if test "x$enable_shared" = "xyes" && test "x$posix_threads" != "x"; then
   # NB: don't check for -lpthread here, because then it would be
   # added to LIBS.  For the thread-unaware libmudflap.la, we don't
   # want it there.
@@ -225,11 +237,29 @@ AC_MSG_RESULT($ac_fdsections)
 AC_SUBST(SECTION_FLAGS)
 
 
+# Check for the name of the symbol used for the entry point.
+AC_CACHE_CHECK([for the name of the symbol used for the entry point],
+  [mudflap_cv_entry_point], [
+for name in _start __start unknown; do
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([extern char $name@<:@@:>@;], [$name@<:@0@:>@ = 0;])],
+		 [break])
+done
+mudflap_cv_entry_point="$name"])
+if test "$mudflap_cv_entry_point" = unknown; then
+  AC_MSG_ERROR([none of the known symbol names works])
+fi
+AC_DEFINE_UNQUOTED([ENTRY_POINT], [$mudflap_cv_entry_point],
+  [Define to the name of the symbol used for the entry point.])
+
+
 if test ${multilib} = yes; then
   multilib_arg="--enable-multilib"
 else
   multilib_arg=
 fi
+
+# See if we support thread-local storage.
+GCC_CHECK_TLS
 
 AC_CONFIG_FILES([Makefile testsuite/Makefile testsuite/mfconfig.exp])
 AC_OUTPUT

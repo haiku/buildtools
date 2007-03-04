@@ -1,6 +1,6 @@
 // Debugging mode support code -*- C++ -*-
 
-// Copyright (C) 2003, 2004
+// Copyright (C) 2003, 2004, 2005
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -32,10 +32,8 @@
 #include <debug/safe_sequence.h>
 #include <debug/safe_iterator.h>
 #include <algorithm>
-#include <cstdlib>
 #include <cassert>
 #include <cstring>
-#include <cstdio>
 #include <cctype>
 #include <bits/concurrence.h>
 
@@ -148,23 +146,18 @@ namespace __gnu_debug
 	  __old->_M_attach(0, true);
       }
   }
-  
-  void 
+
+  void
   _Safe_sequence_base::
   _M_revalidate_singular()
   {
-    _Safe_iterator_base* __iter;
-    for (__iter = _M_iterators; __iter; __iter = __iter->_M_next)
-      {
-	__iter->_M_version = _M_version;
-	__iter = __iter->_M_next;
-      }
-    
-    for (__iter = _M_const_iterators; __iter; __iter = __iter->_M_next)
-      {
-	__iter->_M_version = _M_version;
-	__iter = __iter->_M_next;
-      }
+    for (_Safe_iterator_base* __iter = _M_iterators; __iter;
+	 __iter = __iter->_M_next)
+      __iter->_M_version = _M_version;
+
+    for (_Safe_iterator_base* __iter2 = _M_const_iterators; __iter2;
+	 __iter2 = __iter2->_M_next)
+      __iter2->_M_version = _M_version;
   }
 
   void 
@@ -507,7 +500,7 @@ namespace __gnu_debug
   template<typename _Tp>
     void
     _Error_formatter::_M_format_word(char* __buf, 
-				     int __n __attribute__((__unused__)), 
+				     int __n __attribute__ ((__unused__)), 
 				     const char* __fmt, _Tp __s) const
     {
 #ifdef _GLIBCXX_USE_C99
@@ -653,21 +646,20 @@ namespace __gnu_debug
   // Instantiations.
   template
     void
-    _Error_formatter::_M_format_word(char* __buf, int __n, const char* __fmt, 
-				     const void* __s) const;
+    _Error_formatter::_M_format_word(char*, int, const char*, 
+				     const void*) const;
 
   template
     void
-    _Error_formatter::_M_format_word(char* __buf, int __n, const char* __fmt, 
-				     long __s) const;
+    _Error_formatter::_M_format_word(char*, int, const char*, long) const;
 
   template
     void
-    _Error_formatter::_M_format_word(char* __buf, int __n, const char* __fmt, 
-				     std::size_t __s) const;
+    _Error_formatter::_M_format_word(char*, int, const char*, 
+				     std::size_t) const;
 
   template
     void
-    _Error_formatter::_M_format_word(char* __buf, int __n, const char* __fmt, 
-				     const char* __s) const;
+    _Error_formatter::_M_format_word(char*, int, const char*, 
+				     const char*) const;
 } // namespace __gnu_debug

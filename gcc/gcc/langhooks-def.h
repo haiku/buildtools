@@ -16,8 +16,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #ifndef GCC_LANG_HOOKS_DEF_H
 #define GCC_LANG_HOOKS_DEF_H
@@ -126,6 +126,7 @@ extern int lhd_gimplify_expr (tree *, tree *, tree *);
 #define LANG_HOOKS_BUILTIN_FUNCTION	builtin_function
 #define LANG_HOOKS_EXPR_TO_DECL		lhd_expr_to_decl
 #define LANG_HOOKS_TO_TARGET_CHARSET	lhd_to_target_charset
+#define LANG_HOOKS_INIT_TS		lhd_do_nothing
 
 #define LANG_HOOKS_FUNCTION_INIT	lhd_do_nothing_f
 #define LANG_HOOKS_FUNCTION_FINAL	lhd_do_nothing_f
@@ -233,6 +234,7 @@ extern tree lhd_make_node (enum tree_code);
 #define LANG_HOOKS_INSERT_BLOCK	insert_block
 #define LANG_HOOKS_PUSHDECL	pushdecl
 #define LANG_HOOKS_GETDECLS	getdecls
+#define LANG_HOOKS_LOOKUP_NAME	lhd_return_null_tree
 #define LANG_HOOKS_WARN_UNUSED_GLOBAL_DECL lhd_warn_unused_global_decl
 #define LANG_HOOKS_WRITE_GLOBALS write_global_declarations
 #define LANG_HOOKS_PREPARE_ASSEMBLE_VARIABLE NULL
@@ -244,6 +246,7 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_INSERT_BLOCK, \
   LANG_HOOKS_PUSHDECL, \
   LANG_HOOKS_GETDECLS, \
+  LANG_HOOKS_LOOKUP_NAME, \
   LANG_HOOKS_WARN_UNUSED_GLOBAL_DECL, \
   LANG_HOOKS_WRITE_GLOBALS, \
   LANG_HOOKS_PREPARE_ASSEMBLE_VARIABLE, \
@@ -269,7 +272,6 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_EXPAND_CONSTANT, \
   LANG_HOOKS_EXPAND_EXPR, \
   LANG_HOOKS_EXPAND_DECL, \
-  LANG_HOOKS_TRUTHVALUE_CONVERSION, \
   LANG_HOOKS_SAFE_FROM_P, \
   LANG_HOOKS_FINISH_INCOMPLETE_DECL, \
   LANG_HOOKS_MARK_ADDRESSABLE, \
@@ -302,6 +304,7 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_GIMPLIFY_EXPR, \
   LANG_HOOKS_FOLD_OBJ_TYPE_REF, \
   LANG_HOOKS_BUILTIN_FUNCTION, \
+  LANG_HOOKS_INIT_TS,          \
   LANG_HOOKS_EXPR_TO_DECL, \
 }
 

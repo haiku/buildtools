@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Output at beginning of assembler file.  */
 /* The .file command should always begin the output.  */
@@ -121,6 +121,12 @@ Boston, MA 02111-1307, USA.  */
 	%{!dynamic-linker:-dynamic-linker %(dynamic_linker)}} \
 	%{static:-static}}}"
 
+/* Similar to standard Linux, but adding -ffast-math support.  */
+#undef  ENDFILE_SPEC
+#define ENDFILE_SPEC \
+  "%{ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+   %{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
+
 /* A C statement (sans semicolon) to output to the stdio stream
    FILE the assembler definition of uninitialized global DECL named
    NAME whose size is SIZE bytes and alignment is ALIGN bytes.
@@ -185,3 +191,8 @@ Boston, MA 02111-1307, USA.  */
 
 /* This macro may be overridden in i386/k*bsd-gnu.h.  */
 #define REG_NAME(reg) reg
+
+#ifdef TARGET_LIBC_PROVIDES_SSP
+/* i386 glibc provides __stack_chk_guard in %gs:0x14.  */
+#define TARGET_THREAD_SSP_OFFSET	0x14
+#endif

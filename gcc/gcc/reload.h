@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 
 /* If secondary reloads are the same for inputs and outputs, define those
@@ -166,9 +166,17 @@ extern int n_reloads;
 
 extern GTY (()) struct varray_head_tag *reg_equiv_memory_loc_varray;
 extern rtx *reg_equiv_constant;
+extern rtx *reg_equiv_invariant;
 extern rtx *reg_equiv_memory_loc;
 extern rtx *reg_equiv_address;
 extern rtx *reg_equiv_mem;
+
+/* Element N is the list of insns that initialized reg N from its equivalent
+   constant or memory slot.  */
+extern GTY((length("reg_equiv_init_size"))) rtx *reg_equiv_init;
+
+/* The size of the previous array, for GC purposes.  */
+extern GTY(()) int reg_equiv_init_size;
 
 /* All the "earlyclobber" operands of the current insn
    are recorded here.  */

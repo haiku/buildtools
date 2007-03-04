@@ -1,5 +1,5 @@
 /* Functions to support a pool of allocatable objects.
-   Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2003, 2004
+   Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005
    Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dan@cgsoftware.com>
 
@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -332,6 +332,9 @@ void dump_alloc_pool_statistics (void)
 {
 #ifdef GATHER_STATISTICS
   struct output_info info;
+
+  if (!alloc_pool_hash)
+    return;
 
   fprintf (stderr, "\nAlloc-pool Kind        Pools  Allocated      Peak        Leak\n");
   fprintf (stderr, "-------------------------------------------------------------\n");

@@ -45,6 +45,7 @@
 #include "recog.h"
 #include "ggc.h"
 #include "integrate.h"
+#include "cgraph.h"
 #include "langhooks.h"
 #include "bfin-protos.h"
 #include "tm-preds.h"
@@ -69,7 +70,8 @@ const char *byte_reg_names[]   =  BYTE_REGISTER_NAMES;
 
 static int arg_regs[] = FUNCTION_ARG_REGISTERS;
 
-const char *bfin_library_id_string;
+/* Nonzero if -mshared-library-id was given.  */
+static int bfin_lib_id_given;
 
 static void
 bfin_globalize_label (FILE *stream, const char *name)
@@ -120,20 +122,109 @@ static e_funkind funkind (tree funtype)
     return SUBROUTINE;
 }
 
+/* Legitimize PIC addresses.  If the address is already position-independent,
+   we return ORIG.  Newly generated position-independent addresses go into a
+   reg.  This is REG if nonzero, otherwise we allocate register(s) as
+   necessary.  PICREG is the register holding the pointer to the PIC offset
+   table.  */
+
+rtx
+legitimize_pic_address (rtx orig, rtx reg, rtx picreg)
+{
+  rtx addr = orig;
+  rtx new = orig;
+
+  if (GET_CODE (addr) == SYMBOL_REF || GET_CODE (addr) == LABEL_REF)
+    {
+      if (GET_CODE (addr) == SYMBOL_REF && CONSTANT_POOL_ADDRESS_P (addr))
+	reg = new = orig;
+      else
+	{
+	  if (reg == 0)
+	    {
+	      gcc_assert (!no_new_pseudos);
+	      reg = gen_reg_rtx (Pmode);
+	    }
+
+	  if (flag_pic == 2)
+	    {
+	      emit_insn (gen_movsi_high_pic (reg, addr));
+	      emit_insn (gen_movsi_low_pic (reg, reg, addr));
+	      emit_insn (gen_addsi3 (reg, reg, picreg));
+	      new = gen_const_mem (Pmode, reg);
+	    }
+	  else
+	    {
+	      rtx tmp = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, addr),
+					UNSPEC_MOVE_PIC);
+	      new = gen_const_mem (Pmode,
+				   gen_rtx_PLUS (Pmode, picreg, tmp));
+	    }
+	  emit_move_insn (reg, new);
+	}
+      if (picreg == pic_offset_table_rtx)
+	current_function_uses_pic_offset_table = 1;
+      return reg;
+    }
+
+  else if (GET_CODE (addr) == CONST || GET_CODE (addr) == PLUS)
+    {
+      rtx base;
+
+      if (GET_CODE (addr) == CONST)
+	{
+	  addr = XEXP (addr, 0);
+	  gcc_assert (GET_CODE (addr) == PLUS);
+	}
+
+      if (XEXP (addr, 0) == picreg)
+	return orig;
+
+      if (reg == 0)
+	{
+	  gcc_assert (!no_new_pseudos);
+	  reg = gen_reg_rtx (Pmode);
+	}
+
+      base = legitimize_pic_address (XEXP (addr, 0), reg, picreg);
+      addr = legitimize_pic_address (XEXP (addr, 1),
+				     base == reg ? NULL_RTX : reg,
+				     picreg);
+
+      if (GET_CODE (addr) == CONST_INT)
+	{
+	  gcc_assert (! reload_in_progress && ! reload_completed);
+	  addr = force_reg (Pmode, addr);
+	}
+
+      if (GET_CODE (addr) == PLUS && CONSTANT_P (XEXP (addr, 1)))
+	{
+	  base = gen_rtx_PLUS (Pmode, base, XEXP (addr, 0));
+	  addr = XEXP (addr, 1);
+	}
+
+      return gen_rtx_PLUS (Pmode, base, addr);
+    }
+
+  return new;
+}
+
 /* Stack frame layout. */
 
 /* Compute the number of DREGS to save with a push_multiple operation.
    This could include registers that aren't modified in the function,
-   since push_multiple only takes a range of registers.  */
+   since push_multiple only takes a range of registers.
+   If IS_INTHANDLER, then everything that is live must be saved, even
+   if normally call-clobbered.  */
 
 static int
-n_dregs_to_save (void)
+n_dregs_to_save (bool is_inthandler)
 {
   unsigned i;
 
   for (i = REG_R0; i <= REG_R7; i++)
     {
-      if (regs_ever_live[i] && ! call_used_regs[i])
+      if (regs_ever_live[i] && (is_inthandler || ! call_used_regs[i]))
 	return REG_R7 - i + 1;
 
       if (current_function_calls_eh_return)
@@ -156,12 +247,12 @@ n_dregs_to_save (void)
 /* Like n_dregs_to_save, but compute number of PREGS to save.  */
 
 static int
-n_pregs_to_save (void)
+n_pregs_to_save (bool is_inthandler)
 {
   unsigned i;
 
   for (i = REG_P0; i <= REG_P5; i++)
-    if ((regs_ever_live[i] && ! call_used_regs[i])
+    if ((regs_ever_live[i] && (is_inthandler || ! call_used_regs[i]))
 	|| (i == PIC_OFFSET_TABLE_REGNUM
 	    && (current_function_uses_pic_offset_table
 		|| (TARGET_ID_SHARED_LIBRARY && ! current_function_is_leaf))))
@@ -174,7 +265,7 @@ n_pregs_to_save (void)
 static bool
 must_save_fp_p (void)
 {
-  return (frame_pointer_needed || regs_ever_live[REG_FP]);
+  return frame_pointer_needed || regs_ever_live[REG_FP];
 }
 
 static bool
@@ -189,13 +280,14 @@ stack_frame_needed_p (void)
 
 /* Emit code to save registers in the prologue.  SAVEALL is nonzero if we
    must save all registers; this is used for interrupt handlers.
-   SPREG contains (reg:SI REG_SP).  */
+   SPREG contains (reg:SI REG_SP).  IS_INTHANDLER is true if we're doing
+   this for an interrupt (or exception) handler.  */
 
 static void
-expand_prologue_reg_save (rtx spreg, int saveall)
+expand_prologue_reg_save (rtx spreg, int saveall, bool is_inthandler)
 {
-  int ndregs = saveall ? 8 : n_dregs_to_save ();
-  int npregs = saveall ? 6 : n_pregs_to_save ();
+  int ndregs = saveall ? 8 : n_dregs_to_save (is_inthandler);
+  int npregs = saveall ? 6 : n_pregs_to_save (is_inthandler);
   int dregno = REG_R7 + 1 - ndregs;
   int pregno = REG_P5 + 1 - npregs;
   int total = ndregs + npregs;
@@ -240,13 +332,14 @@ expand_prologue_reg_save (rtx spreg, int saveall)
 
 /* Emit code to restore registers in the epilogue.  SAVEALL is nonzero if we
    must save all registers; this is used for interrupt handlers.
-   SPREG contains (reg:SI REG_SP).  */
+   SPREG contains (reg:SI REG_SP).  IS_INTHANDLER is true if we're doing
+   this for an interrupt (or exception) handler.  */
 
 static void
-expand_epilogue_reg_restore (rtx spreg, int saveall)
+expand_epilogue_reg_restore (rtx spreg, bool saveall, bool is_inthandler)
 {
-  int ndregs = saveall ? 8 : n_dregs_to_save ();
-  int npregs = saveall ? 6 : n_pregs_to_save ();
+  int ndregs = saveall ? 8 : n_dregs_to_save (is_inthandler);
+  int npregs = saveall ? 6 : n_pregs_to_save (is_inthandler);
   int total = ndregs + npregs;
   int i, regno;
   rtx pat, insn;
@@ -322,7 +415,7 @@ setup_incoming_varargs (CUMULATIVE_ARGS *cum,
 
   /* The move for named arguments will be generated automatically by the
      compiler.  We need to generate the move rtx for the unnamed arguments
-     if they are in the first 3 words.  We assume atleast 1 named argument
+     if they are in the first 3 words.  We assume at least 1 named argument
      exists, so we never generate [ARGP] = R0 here.  */
 
   for (i = cum->words + 1; i < max_arg_registers; i++)
@@ -347,7 +440,7 @@ bfin_frame_pointer_required (void)
   if (fkind != SUBROUTINE)
     return 1;
 
-  /* We turn on on -fomit-frame-pointer if -momit-leaf-frame-pointer is used,
+  /* We turn on -fomit-frame-pointer if -momit-leaf-frame-pointer is used,
      so we have to override it for non-leaf functions.  */
   if (TARGET_OMIT_LEAF_FRAME_POINTER && ! current_function_is_leaf)
     return 1;
@@ -361,9 +454,15 @@ static int
 n_regs_saved_by_prologue (void)
 {
   e_funkind fkind = funkind (TREE_TYPE (current_function_decl));
-  int n = n_dregs_to_save () + n_pregs_to_save ();
+  bool is_inthandler = fkind != SUBROUTINE;
+  tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (current_function_decl));
+  bool all = (lookup_attribute ("saveall", attrs) != NULL_TREE
+	      || (is_inthandler && !current_function_is_leaf));
+  int ndregs = all ? 8 : n_dregs_to_save (is_inthandler);
+  int npregs = all ? 6 : n_pregs_to_save (is_inthandler);  
+  int n = ndregs + npregs;
 
-  if (stack_frame_needed_p ())
+  if (all || stack_frame_needed_p ())
     /* We use a LINK instruction in this case.  */
     n += 2;
   else
@@ -376,8 +475,6 @@ n_regs_saved_by_prologue (void)
 
   if (fkind != SUBROUTINE)
     {
-      tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (current_function_decl));
-      tree all = lookup_attribute ("saveall", attrs);
       int i;
 
       /* Increment once for ASTAT.  */
@@ -421,11 +518,11 @@ bfin_initial_elimination_offset (int from, int to)
 }
 
 /* Emit code to load a constant CONSTANT into register REG; setting
-   RTX_FRAME_RELATED_P on all insns we generate.  Make sure that the insns
-   we generate need not be split.  */
+   RTX_FRAME_RELATED_P on all insns we generate if RELATED is true.
+   Make sure that the insns we generate need not be split.  */
 
 static void
-frame_related_constant_load (rtx reg, HOST_WIDE_INT constant)
+frame_related_constant_load (rtx reg, HOST_WIDE_INT constant, bool related)
 {
   rtx insn;
   rtx cst = GEN_INT (constant);
@@ -437,10 +534,12 @@ frame_related_constant_load (rtx reg, HOST_WIDE_INT constant)
       /* We don't call split_load_immediate here, since dwarf2out.c can get
 	 confused about some of the more clever sequences it can generate.  */
       insn = emit_insn (gen_movsi_high (reg, cst));
-      RTX_FRAME_RELATED_P (insn) = 1;
+      if (related)
+	RTX_FRAME_RELATED_P (insn) = 1;
       insn = emit_insn (gen_movsi_low (reg, reg, cst));
     }
-  RTX_FRAME_RELATED_P (insn) = 1;
+  if (related)
+    RTX_FRAME_RELATED_P (insn) = 1;
 }
 
 /* Generate efficient code to add a value to the frame pointer.  We
@@ -462,7 +561,7 @@ add_to_sp (rtx spreg, HOST_WIDE_INT value, int frame)
       rtx insn;
 
       if (frame)
-	frame_related_constant_load (tmpreg, value);
+	frame_related_constant_load (tmpreg, value, TRUE);
       else
 	{
 	  insn = emit_move_insn (tmpreg, GEN_INT (value));
@@ -517,8 +616,7 @@ emit_link_insn (rtx spreg, HOST_WIDE_INT frame_size)
   for (i = 0; i < XVECLEN (PATTERN (insn), 0); i++)
     {
       rtx set = XVECEXP (PATTERN (insn), 0, i);
-      if (GET_CODE (set) != SET)
-	abort ();
+      gcc_assert (GET_CODE (set) == SET);
       RTX_FRAME_RELATED_P (set) = 1;
     }
 
@@ -529,7 +627,7 @@ emit_link_insn (rtx spreg, HOST_WIDE_INT frame_size)
       /* Must use a call-clobbered PREG that isn't the static chain.  */
       rtx tmpreg = gen_rtx_REG (Pmode, REG_P1);
 
-      frame_related_constant_load (tmpreg, -frame_size);
+      frame_related_constant_load (tmpreg, -frame_size, TRUE);
       insn = emit_insn (gen_addsi3 (spreg, spreg, tmpreg));
       RTX_FRAME_RELATED_P (insn) = 1;
     }
@@ -551,14 +649,16 @@ arg_area_size (void)
   return 0;
 }
 
-/* Save RETS and FP, and allocate a stack frame.  */
+/* Save RETS and FP, and allocate a stack frame.  ALL is true if the
+   function must save all its registers (true only for certain interrupt
+   handlers).  */
 
 static void
-do_link (rtx spreg, HOST_WIDE_INT frame_size)
+do_link (rtx spreg, HOST_WIDE_INT frame_size, bool all)
 {
   frame_size += arg_area_size ();
 
-  if (stack_frame_needed_p ()
+  if (all || stack_frame_needed_p ()
       || (must_save_fp_p () && ! current_function_is_leaf))
     emit_link_insn (spreg, frame_size);
   else
@@ -586,11 +686,11 @@ do_link (rtx spreg, HOST_WIDE_INT frame_size)
 /* Like do_link, but used for epilogues to deallocate the stack frame.  */
 
 static void
-do_unlink (rtx spreg, HOST_WIDE_INT frame_size)
+do_unlink (rtx spreg, HOST_WIDE_INT frame_size, bool all)
 {
   frame_size += arg_area_size ();
 
-  if (stack_frame_needed_p ())
+  if (all || stack_frame_needed_p ())
     emit_insn (gen_unlink ());
   else 
     {
@@ -624,7 +724,7 @@ expand_interrupt_handler_prologue (rtx spreg, e_funkind fkind)
   rtx predec = gen_rtx_MEM (SImode, predec1);
   rtx insn;
   tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (current_function_decl));
-  tree all = lookup_attribute ("saveall", attrs);
+  bool all = lookup_attribute ("saveall", attrs) != NULL_TREE;
   tree kspisusp = lookup_attribute ("kspisusp", attrs);
 
   if (kspisusp)
@@ -644,7 +744,11 @@ expand_interrupt_handler_prologue (rtx spreg, e_funkind fkind)
   insn = emit_move_insn (predec, gen_rtx_REG (SImode, REG_ASTAT));
   RTX_FRAME_RELATED_P (insn) = 1;
 
-  expand_prologue_reg_save (spreg, all != NULL_TREE);
+  /* If we're calling other functions, they won't save their call-clobbered
+     registers, so we must save everything here.  */
+  if (!current_function_is_leaf)
+    all = true;
+  expand_prologue_reg_save (spreg, all, true);
 
   for (i = REG_P7 + 1; i < REG_CC; i++)
     if (all 
@@ -668,7 +772,7 @@ expand_interrupt_handler_prologue (rtx spreg, e_funkind fkind)
       RTX_FRAME_RELATED_P (insn) = 1;
     }
 
-  do_link (spreg, frame_size);
+  do_link (spreg, frame_size, all);
 
   if (fkind == EXCPT_HANDLER)
     {
@@ -703,19 +807,19 @@ expand_interrupt_handler_prologue (rtx spreg, e_funkind fkind)
    SPREG contains (reg:SI REG_SP).  */
 
 static void
-expand_interrupt_handler_epilogue (rtx spreg, e_funkind fkind) 
+expand_interrupt_handler_epilogue (rtx spreg, e_funkind fkind)
 {
   int i;
   rtx postinc1 = gen_rtx_POST_INC (SImode, spreg);
   rtx postinc = gen_rtx_MEM (SImode, postinc1);
   tree attrs = TYPE_ATTRIBUTES (TREE_TYPE (current_function_decl));
-  tree all = lookup_attribute ("saveall", attrs);
+  bool all = lookup_attribute ("saveall", attrs) != NULL_TREE;
 
   /* A slightly crude technique to stop flow from trying to delete "dead"
      insns.  */
   MEM_VOLATILE_P (postinc) = 1;
 
-  do_unlink (spreg, get_frame_size ());
+  do_unlink (spreg, get_frame_size (), all);
 
   if (lookup_attribute ("nesting", attrs))
     {
@@ -725,9 +829,14 @@ expand_interrupt_handler_epilogue (rtx spreg, e_funkind fkind)
       emit_move_insn (srcreg, postinc);
     }
 
+  /* If we're calling other functions, they won't save their call-clobbered
+     registers, so we must save (and restore) everything here.  */
+  if (!current_function_is_leaf)
+    all = true;
+
   for (i = REG_CC - 1; i > REG_P7; i--)
     if (all
-	|| regs_ever_live[i] 
+	|| regs_ever_live[i]
 	|| (!leaf_function_p () && call_used_regs[i]))
       {
 	if (i == REG_A0 || i == REG_A1)
@@ -740,7 +849,7 @@ expand_interrupt_handler_epilogue (rtx spreg, e_funkind fkind)
 	  emit_move_insn (gen_rtx_REG (SImode, i), postinc);
       }
 
-  expand_epilogue_reg_restore (spreg, all != NULL_TREE);
+  expand_epilogue_reg_restore (spreg, all, true);
 
   emit_move_insn (gen_rtx_REG (SImode, REG_ASTAT), postinc);
 
@@ -752,6 +861,34 @@ expand_interrupt_handler_epilogue (rtx spreg, e_funkind fkind)
   emit_jump_insn (gen_return_internal (GEN_INT (fkind)));
 }
 
+/* Used while emitting the prologue to generate code to load the correct value
+   into the PIC register, which is passed in DEST.  */
+
+static rtx
+bfin_load_pic_reg (rtx dest)
+{
+  struct cgraph_local_info *i = NULL;
+  rtx addr, insn;
+ 
+  if (flag_unit_at_a_time)
+    i = cgraph_local_info (current_function_decl);
+ 
+  /* Functions local to the translation unit don't need to reload the
+     pic reg, since the caller always passes a usable one.  */
+  if (i && i->local)
+    return pic_offset_table_rtx;
+      
+  if (bfin_lib_id_given)
+    addr = plus_constant (pic_offset_table_rtx, -4 - bfin_library_id * 4);
+  else
+    addr = gen_rtx_PLUS (Pmode, pic_offset_table_rtx,
+			 gen_rtx_UNSPEC (Pmode, gen_rtvec (1, const0_rtx),
+					 UNSPEC_LIBRARY_OFFSET));
+  insn = emit_insn (gen_movsi (dest, gen_rtx_MEM (Pmode, addr)));
+  REG_NOTES (insn) = gen_rtx_EXPR_LIST (REG_MAYBE_DEAD, const0_rtx, NULL);
+  return dest;
+}
+
 /* Generate RTL for the prologue of the current function.  */
 
 void
@@ -761,6 +898,7 @@ bfin_expand_prologue (void)
   HOST_WIDE_INT frame_size = get_frame_size ();
   rtx spreg = gen_rtx_REG (Pmode, REG_SP);
   e_funkind fkind = funkind (TREE_TYPE (current_function_decl));
+  rtx pic_reg_loaded = NULL_RTX;
 
   if (fkind != SUBROUTINE)
     {
@@ -768,26 +906,46 @@ bfin_expand_prologue (void)
       return;
     }
 
-  expand_prologue_reg_save (spreg, 0);
+  if (current_function_limit_stack)
+    {
+      HOST_WIDE_INT offset
+	= bfin_initial_elimination_offset (ARG_POINTER_REGNUM,
+					   STACK_POINTER_REGNUM);
+      rtx lim = stack_limit_rtx;
 
-  do_link (spreg, frame_size);
+      if (GET_CODE (lim) == SYMBOL_REF)
+	{
+	  rtx p2reg = gen_rtx_REG (Pmode, REG_P2);
+	  if (TARGET_ID_SHARED_LIBRARY)
+	    {
+	      rtx p1reg = gen_rtx_REG (Pmode, REG_P1);
+	      rtx val;
+	      pic_reg_loaded = bfin_load_pic_reg (p2reg);
+	      val = legitimize_pic_address (stack_limit_rtx, p1reg,
+					    pic_reg_loaded);
+	      emit_move_insn (p1reg, val);
+	      frame_related_constant_load (p2reg, offset, FALSE);
+	      emit_insn (gen_addsi3 (p2reg, p2reg, p1reg));
+	      lim = p2reg;
+	    }
+	  else
+	    {
+	      rtx limit = plus_constant (stack_limit_rtx, offset);
+	      emit_move_insn (p2reg, limit);
+	      lim = p2reg;
+	    }
+	}
+      emit_insn (gen_compare_lt (bfin_cc_rtx, spreg, lim));
+      emit_insn (gen_trapifcc ());
+    }
+  expand_prologue_reg_save (spreg, 0, false);
+
+  do_link (spreg, frame_size, false);
 
   if (TARGET_ID_SHARED_LIBRARY
       && (current_function_uses_pic_offset_table
 	  || !current_function_is_leaf))
-    {
-      rtx addr;
-      
-      if (bfin_library_id_string)
-	addr = plus_constant (pic_offset_table_rtx, atoi (bfin_library_id_string));
-      else
-	addr = gen_rtx_PLUS (Pmode, pic_offset_table_rtx,
-			     gen_rtx_UNSPEC (Pmode, gen_rtvec (1, const0_rtx),
-					     UNSPEC_LIBRARY_OFFSET));
-      insn = emit_insn (gen_movsi (pic_offset_table_rtx,
-				   gen_rtx_MEM (Pmode, addr)));
-      REG_NOTES (insn) = gen_rtx_EXPR_LIST (REG_MAYBE_DEAD, const0_rtx, NULL);
-    }
+    bfin_load_pic_reg (pic_offset_table_rtx);
 }
 
 /* Generate RTL for the epilogue of the current function.  NEED_RETURN is zero
@@ -806,9 +964,9 @@ bfin_expand_epilogue (int need_return, int eh_return)
       return;
     }
 
-  do_unlink (spreg, get_frame_size ());
+  do_unlink (spreg, get_frame_size (), false);
 
-  expand_epilogue_reg_restore (spreg, 0);
+  expand_epilogue_reg_restore (spreg, false, false);
 
   /* Omit the return insn if this is for a sibcall.  */
   if (! need_return)
@@ -866,6 +1024,25 @@ legitimize_address (rtx x ATTRIBUTE_UNUSED, rtx oldx ATTRIBUTE_UNUSED,
   return NULL_RTX;
 }
 
+static rtx
+bfin_delegitimize_address (rtx orig_x)
+{
+  rtx x = orig_x, y;
+
+  if (GET_CODE (x) != MEM)
+    return orig_x;
+
+  x = XEXP (x, 0);
+  if (GET_CODE (x) == PLUS
+      && GET_CODE (XEXP (x, 1)) == UNSPEC
+      && XINT (XEXP (x, 1), 1) == UNSPEC_MOVE_PIC
+      && GET_CODE (XEXP (x, 0)) == REG
+      && REGNO (XEXP (x, 0)) == PIC_OFFSET_TABLE_REGNUM)
+    return XVECEXP (XEXP (x, 1), 0, 0);
+
+  return orig_x;
+}
+
 /* This predicate is used to compute the length of a load/store insn.
    OP is a MEM rtx, we return nonzero if its addressing mode requires a
    32 bit instruction.  */
@@ -878,11 +1055,12 @@ effective_address_32bit_p (rtx op, enum machine_mode mode)
   mode = GET_MODE (op);
   op = XEXP (op, 0);
 
-  if (REG_P (op) || GET_CODE (op) == POST_INC
-      || GET_CODE (op) == PRE_DEC || GET_CODE (op) == POST_DEC)
-    return 0;
   if (GET_CODE (op) != PLUS)
-    abort ();
+    {
+      gcc_assert (REG_P (op) || GET_CODE (op) == POST_INC
+		  || GET_CODE (op) == PRE_DEC || GET_CODE (op) == POST_DEC);
+      return 0;
+    }
 
   offset = INTVAL (XEXP (op, 1));
 
@@ -917,9 +1095,6 @@ bfin_address_cost (rtx addr ATTRIBUTE_UNUSED)
 void
 print_address_operand (FILE *file, rtx x)
 {
-  if (GET_CODE (x) == MEM) 
-    abort ();
-
   switch (GET_CODE (x))
     {
     case PLUS:
@@ -942,7 +1117,9 @@ print_address_operand (FILE *file, rtx x)
       break;
 
     default:
+      gcc_assert (GET_CODE (x) != MEM);
       print_operand (file, x, 0);
+      break;
     }
 }
 
@@ -1073,8 +1250,7 @@ print_operand (FILE *file, rtx x, char code)
 	    }
 	  else if (code == 'T')
 	    {
-	      if (REGNO (x) > 7)
-		abort ();
+	      gcc_assert (D_REGNO_P (REGNO (x)));
 	      fprintf (file, "%s", byte_reg_names[REGNO (x)]);
 	    }
 	  else 
@@ -1107,8 +1283,6 @@ print_operand (FILE *file, rtx x, char code)
 
 	case SYMBOL_REF:
 	  output_addr_const (file, x);
-	  if (code == 'G' && flag_pic)
-	    fprintf (file, "@GOT");
 	  break;
 
 	case CONST_DOUBLE:
@@ -1116,15 +1290,20 @@ print_operand (FILE *file, rtx x, char code)
 	  break;
 
 	case UNSPEC:
-	  if (XINT (x, 1) == UNSPEC_MOVE_PIC)
+	  switch (XINT (x, 1))
 	    {
+	    case UNSPEC_MOVE_PIC:
 	      output_addr_const (file, XVECEXP (x, 0, 0));
 	      fprintf (file, "@GOT");
+	      break;
+
+	    case UNSPEC_LIBRARY_OFFSET:
+	      fprintf (file, "_current_shared_library_p5_offset_");
+	      break;
+
+	    default:
+	      gcc_unreachable ();
 	    }
-	  else if (XINT (x, 1) == UNSPEC_LIBRARY_OFFSET)
-	    fprintf (file, "_current_shared_library_p5_offset_");
-	  else
-	    abort ();
 	  break;
 
 	default:
@@ -1336,7 +1515,8 @@ static bool
 bfin_function_ok_for_sibcall (tree decl ATTRIBUTE_UNUSED,
 			      tree exp ATTRIBUTE_UNUSED)
 {
-  return true;
+  e_funkind fkind = funkind (TREE_TYPE (current_function_decl));
+  return fkind == SUBROUTINE;
 }
 
 /* Emit RTL insns to initialize the variable parts of a trampoline at
@@ -1364,97 +1544,6 @@ initialize_trampoline (tramp, fnaddr, cxt)
   emit_move_insn (gen_rtx_MEM (HImode, addr), gen_lowpart (HImode, t2));
 }
 
-/* Legitimize PIC addresses.  If the address is already position-independent,
-   we return ORIG.  Newly generated position-independent addresses go into a
-   reg.  This is REG if nonzero, otherwise we allocate register(s) as
-   necessary.  */
-
-rtx
-legitimize_pic_address (rtx orig, rtx reg)
-{
-  rtx addr = orig;
-  rtx new = orig;
-
-  if (GET_CODE (addr) == SYMBOL_REF || GET_CODE (addr) == LABEL_REF)
-    {
-      if (GET_CODE (addr) == SYMBOL_REF && CONSTANT_POOL_ADDRESS_P (addr))
-	reg = new = orig;
-      else
-	{
-	  if (reg == 0)
-	    {
-	      if (no_new_pseudos)
-		abort ();
-	      reg = gen_reg_rtx (Pmode);
-	    }
-
-	  if (flag_pic == 2)
-	    {
-	      emit_insn (gen_movsi_high_pic (reg, addr));
-	      emit_insn (gen_movsi_low_pic (reg, reg, addr));
-	      emit_insn (gen_addsi3 (reg, reg, pic_offset_table_rtx));
-	      new = gen_rtx_MEM (Pmode, reg);
-	    }
-	  else
-	    {
-	      rtx tmp = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, addr),
-					UNSPEC_MOVE_PIC);
-	      new = gen_rtx_MEM (Pmode,
-				 gen_rtx_PLUS (Pmode, pic_offset_table_rtx,
-					       tmp));
-	    }
-	  emit_move_insn (reg, new);
-	}
-      current_function_uses_pic_offset_table = 1;
-      return reg;
-    }
-
-  else if (GET_CODE (addr) == CONST || GET_CODE (addr) == PLUS)
-    {
-      rtx base;
-
-      if (GET_CODE (addr) == CONST)
-	{
-	  addr = XEXP (addr, 0);
-	  if (GET_CODE (addr) != PLUS)
-	    abort ();
-	}
-
-      if (XEXP (addr, 0) == pic_offset_table_rtx)
-	return orig;
-
-      if (reg == 0)
-	{
-	  if (no_new_pseudos)
-	    abort ();
-	  reg = gen_reg_rtx (Pmode);
-	}
-
-      base = legitimize_pic_address (XEXP (addr, 0), reg);
-      addr = legitimize_pic_address (XEXP (addr, 1),
-				     base == reg ? NULL_RTX : reg);
-
-      if (GET_CODE (addr) == CONST_INT)
-	{
-	  if (! reload_in_progress && ! reload_completed)
-	    addr = force_reg (Pmode, addr);
-	  else
-	    /* If we reach here, then something is seriously wrong.  */
-	    abort ();
-	}
-
-      if (GET_CODE (addr) == PLUS && CONSTANT_P (XEXP (addr, 1)))
-	{
-	  base = gen_rtx_PLUS (Pmode, base, XEXP (addr, 0));
-	  addr = XEXP (addr, 1);
-	}
-
-      return gen_rtx_PLUS (Pmode, base, addr);
-    }
-
-  return new;
-}
-
 /* Emit insns to move operands[1] into operands[0].  */
 
 void
@@ -1465,7 +1554,8 @@ emit_pic_move (rtx *operands, enum machine_mode mode ATTRIBUTE_UNUSED)
   if (GET_CODE (operands[0]) == MEM && SYMBOLIC_CONST (operands[1]))
     operands[1] = force_reg (SImode, operands[1]);
   else
-    operands[1] = legitimize_pic_address (operands[1], temp);
+    operands[1] = legitimize_pic_address (operands[1], temp,
+					  pic_offset_table_rtx);
 }
 
 /* Expand a move operation in mode MODE.  The operands are in OPERANDS.  */
@@ -1730,6 +1820,25 @@ secondary_output_reload_class (enum reg_class class, enum machine_mode mode,
   return secondary_input_reload_class (class, mode, x);
 }
 
+/* Implement TARGET_HANDLE_OPTION.  */
+
+static bool
+bfin_handle_option (size_t code, const char *arg, int value)
+{
+  switch (code)
+    {
+    case OPT_mshared_library_id_:
+      if (value > MAX_LIBRARY_ID)
+	error ("-mshared-library-id=%s is not between 0 and %d",
+	       arg, MAX_LIBRARY_ID);
+      bfin_lib_id_given = 1;
+      return true;
+
+    default:
+      return true;
+    }
+}
+
 /* Implement the macro OVERRIDE_OPTIONS.  */
 
 void
@@ -1739,19 +1848,8 @@ override_options (void)
     flag_omit_frame_pointer = 1;
 
   /* Library identification */
-  if (bfin_library_id_string)
-    {
-      int id;
-
-      if (! TARGET_ID_SHARED_LIBRARY)
-	error ("-mshared-library-id= specified without -mid-shared-library");
-      id = atoi (bfin_library_id_string);
-      if (id < 0 || id > MAX_LIBRARY_ID)
-	error ("-mshared-library-id=%d is not between 0 and %d", id, MAX_LIBRARY_ID);
-
-      /* From now on, bfin_library_id_string will contain the library offset.  */
-      asprintf ((char **)&bfin_library_id_string, "%d", (id * -4) - 4);
-    }
+  if (bfin_lib_id_given && ! TARGET_ID_SHARED_LIBRARY)
+    error ("-mshared-library-id= specified without -mid-shared-library");
 
   if (TARGET_ID_SHARED_LIBRARY)
     /* ??? Provide a way to use a bigger GOT.  */
@@ -1833,8 +1931,7 @@ asm_conditional_branch (rtx insn, rtx *operands, int n_nops, int predict_taken)
   int bp = predict_taken && len == 0 ? 1 : cbranch_predicted_taken_p (insn);
   int idx = (bp << 1) | (GET_CODE (operands[0]) == EQ ? BRF : BRT);
   output_asm_insn (ccbranch_templates[idx][len], operands);
-  if (n_nops > 0 && bp)
-    abort ();
+  gcc_assert (n_nops == 0 || !bp);
   if (len == 0)
     while (n_nops-- > 0)
       output_asm_insn ("nop;", NULL);
@@ -1855,10 +1952,8 @@ bfin_gen_compare (rtx cmp, enum machine_mode mode ATTRIBUTE_UNUSED)
      do not need to emit another comparison.  */
   if (GET_MODE (op0) == BImode)
     {
-      if ((code == NE || code == EQ) && op1 == const0_rtx)
-	tem = op0, code2 = code;
-      else
-	abort ();
+      gcc_assert ((code == NE || code == EQ) && op1 == const0_rtx);
+      tem = op0, code2 = code;
     }
   else
     {
@@ -2292,15 +2387,19 @@ void
 output_push_multiple (rtx insn, rtx *operands)
 {
   char buf[80];
+  int ok;
+  
   /* Validate the insn again, and compute first_[dp]reg_to_save. */
-  if (! push_multiple_operation (PATTERN (insn), VOIDmode))
-    abort ();
+  ok = push_multiple_operation (PATTERN (insn), VOIDmode);
+  gcc_assert (ok);
+  
   if (first_dreg_to_save == 8)
     sprintf (buf, "[--sp] = ( p5:%d );\n", first_preg_to_save);
   else if (first_preg_to_save == 6)
     sprintf (buf, "[--sp] = ( r7:%d );\n", first_dreg_to_save);
   else
-    sprintf (buf, "[--sp] = ( r7:%d, p5:%d );\n", first_dreg_to_save, first_preg_to_save);
+    sprintf (buf, "[--sp] = ( r7:%d, p5:%d );\n",
+	     first_dreg_to_save, first_preg_to_save);
 
   output_asm_insn (buf, operands);
 }
@@ -2312,16 +2411,19 @@ void
 output_pop_multiple (rtx insn, rtx *operands)
 {
   char buf[80];
+  int ok;
+  
   /* Validate the insn again, and compute first_[dp]reg_to_save. */
-  if (! pop_multiple_operation (PATTERN (insn), VOIDmode))
-    abort ();
+  ok = pop_multiple_operation (PATTERN (insn), VOIDmode);
+  gcc_assert (ok);
 
   if (first_dreg_to_save == 8)
     sprintf (buf, "( p5:%d ) = [sp++];\n", first_preg_to_save);
   else if (first_preg_to_save == 6)
     sprintf (buf, "( r7:%d ) = [sp++];\n", first_dreg_to_save);
   else
-    sprintf (buf, "( r7:%d, p5:%d ) = [sp++];\n", first_dreg_to_save, first_preg_to_save);
+    sprintf (buf, "( r7:%d, p5:%d ) = [sp++];\n",
+	     first_dreg_to_save, first_preg_to_save);
 
   output_asm_insn (buf, operands);
 }
@@ -2329,7 +2431,7 @@ output_pop_multiple (rtx insn, rtx *operands)
 /* Adjust DST and SRC by OFFSET bytes, and generate one move in mode MODE.  */
 
 static void
-single_move_for_strmov (rtx dst, rtx src, enum machine_mode mode, HOST_WIDE_INT offset)
+single_move_for_movmem (rtx dst, rtx src, enum machine_mode mode, HOST_WIDE_INT offset)
 {
   rtx scratch = gen_reg_rtx (mode);
   rtx srcmem, dstmem;
@@ -2345,7 +2447,7 @@ single_move_for_strmov (rtx dst, rtx src, enum machine_mode mode, HOST_WIDE_INT 
    back on a different method.  */
 
 bool
-bfin_expand_strmov (rtx dst, rtx src, rtx count_exp, rtx align_exp)
+bfin_expand_movmem (rtx dst, rtx src, rtx count_exp, rtx align_exp)
 {
   rtx srcreg, destreg, countreg;
   HOST_WIDE_INT align = 0;
@@ -2390,7 +2492,7 @@ bfin_expand_strmov (rtx dst, rtx src, rtx count_exp, rtx align_exp)
 	{
 	  if ((count & ~3) == 4)
 	    {
-	      single_move_for_strmov (dst, src, SImode, offset);
+	      single_move_for_movmem (dst, src, SImode, offset);
 	      offset = 4;
 	    }
 	  else if (count & ~3)
@@ -2400,12 +2502,17 @@ bfin_expand_strmov (rtx dst, rtx src, rtx count_exp, rtx align_exp)
 
 	      emit_insn (gen_rep_movsi (destreg, srcreg, countreg, destreg, srcreg));
 	    }
+	  if (count & 2)
+	    {
+	      single_move_for_movmem (dst, src, HImode, offset);
+	      offset += 2;
+	    }
 	}
       else
 	{
 	  if ((count & ~1) == 2)
 	    {
-	      single_move_for_strmov (dst, src, HImode, offset);
+	      single_move_for_movmem (dst, src, HImode, offset);
 	      offset = 2;
 	    }
 	  else if (count & ~1)
@@ -2416,14 +2523,9 @@ bfin_expand_strmov (rtx dst, rtx src, rtx count_exp, rtx align_exp)
 	      emit_insn (gen_rep_movhi (destreg, srcreg, countreg, destreg, srcreg));
 	    }
 	}
-      if (count & 2)
-	{
-	  single_move_for_strmov (dst, src, HImode, offset);
-	  offset += 2;
-	}
       if (count & 1)
 	{
-	  single_move_for_strmov (dst, src, QImode, offset);
+	  single_move_for_movmem (dst, src, QImode, offset);
 	}
       return true;
     }
@@ -2475,7 +2577,7 @@ bfin_adjust_cost (rtx insn, rtx link, rtx dep_insn, int cost)
    which perform the memory reference, are allowed to execute before the
    jump condition is evaluated.
    Therefore, we must insert additional instructions in all places where this
-   could lead to incorrect behaviour.  The manual recommends CSYNC, while
+   could lead to incorrect behavior.  The manual recommends CSYNC, while
    VDSP seems to use NOPs (even though its corresponding compiler option is
    named CSYNC).
 
@@ -2645,7 +2747,7 @@ handle_int_attribute (tree *node, tree name,
 
   if (TREE_CODE (x) != FUNCTION_TYPE)
     {
-      warning ("%qs attribute only applies to functions",
+      warning (OPT_Wattributes, "%qs attribute only applies to functions",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -2706,7 +2808,7 @@ bfin_handle_longcall_attribute (tree *node, tree name,
       && TREE_CODE (*node) != FIELD_DECL
       && TREE_CODE (*node) != TYPE_DECL)
     {
-      warning ("`%s' attribute only applies to functions",
+      warning (OPT_Wattributes, "`%s' attribute only applies to functions",
 	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
@@ -2716,7 +2818,8 @@ bfin_handle_longcall_attribute (tree *node, tree name,
       || (strcmp (IDENTIFIER_POINTER (name), "shortcall") == 0
 	  && lookup_attribute ("longcall", TYPE_ATTRIBUTES (*node))))
     {
-      warning ("can't apply both longcall and shortcall attributes to the same function");
+      warning (OPT_Wattributes,
+	       "can't apply both longcall and shortcall attributes to the same function");
       *no_add_attrs = true;
     }
 
@@ -2925,5 +3028,14 @@ bfin_expand_builtin (tree exp, rtx target ATTRIBUTE_UNUSED,
 
 #undef TARGET_VECTOR_MODE_SUPPORTED_P
 #define TARGET_VECTOR_MODE_SUPPORTED_P bfin_vector_mode_supported_p
+
+#undef TARGET_HANDLE_OPTION
+#define TARGET_HANDLE_OPTION bfin_handle_option
+
+#undef TARGET_DEFAULT_TARGET_FLAGS
+#define TARGET_DEFAULT_TARGET_FLAGS TARGET_DEFAULT
+
+#undef TARGET_DELEGITIMIZE_ADDRESS
+#define TARGET_DELEGITIMIZE_ADDRESS bfin_delegitimize_address
 
 struct gcc_target targetm = TARGET_INITIALIZER;

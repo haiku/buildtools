@@ -16,8 +16,8 @@
 ;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING.  If not, write to
-;; the Free Software Foundation, 59 Temple Place - Suite 330,
-;; Boston, MA 02111-1307, USA.  */
+;; the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+;; Boston, MA 02110-1301, USA.  */
 ;;
 
 /* This is description of pipeline hazards based on DFA.  The
@@ -734,6 +734,11 @@
   (and (and (eq_attr "cpu" "itanium2")
             (eq_attr "itanium_class" "fld"))
        (eq (symbol_ref "bundling_p") (const_int 0))) "2_M")
+(define_insn_reservation "2_fldp"    6
+  (and (and (eq_attr "cpu" "itanium2")
+            (eq_attr "itanium_class" "fldp"))
+       (eq (symbol_ref "bundling_p") (const_int 0)))
+  "2_M_only_um01")
 (define_insn_reservation "2_fmac"    4
   (and (and (eq_attr "cpu" "itanium2")
             (eq_attr "itanium_class" "fmac"))
@@ -1541,6 +1546,11 @@
   (and (and (eq_attr "cpu" "itanium2")
             (eq_attr "itanium_class" "fld"))
        (ne (symbol_ref "bundling_p") (const_int 0))) "2b_M")
+(define_insn_reservation "2b_fldp"    6
+  (and (and (eq_attr "cpu" "itanium2")
+            (eq_attr "itanium_class" "fldp"))
+       (ne (symbol_ref "bundling_p") (const_int 0)))
+  "2b_M_only_um01")
 (define_insn_reservation "2b_fmac"    4
   (and (and (eq_attr "cpu" "itanium2")
             (eq_attr "itanium_class" "fmac"))

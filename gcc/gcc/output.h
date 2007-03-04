@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_OUTPUT_H
 #define GCC_OUTPUT_H
@@ -49,6 +49,10 @@ extern void init_insn_lengths (void);
    get its actual length.  Otherwise, get its maximum length.  */
 extern int get_attr_length (rtx);
 
+/* Obtain the current length of an insn.  If branch shortening has been done,
+   get its actual length.  Otherwise, get its minimum length.  */
+extern int get_attr_min_length (rtx);
+
 /* Make a pass over all insns and compute their actual lengths by shortening
    any branches of variable length if possible.  */
 extern void shorten_branches (rtx);
@@ -66,12 +70,12 @@ extern void final_start_function (rtx, FILE *, int);
 extern void final_end_function (void);
 
 /* Output assembler code for some insns: all or part of a function.  */
-extern void final (rtx, FILE *, int, int);
+extern void final (rtx, FILE *, int);
 
 /* The final scan for one insn, INSN.  Args are same as in `final', except
    that INSN is the insn being scanned.  Value returned is the next insn to
    be scanned.  */
-extern rtx final_scan_insn (rtx, FILE *, int, int, int, int *);
+extern rtx final_scan_insn (rtx, FILE *, int, int, int *);
 
 /* Replace a SUBREG with a REG or a MEM, based on the thing it is a
    subreg of.  */
@@ -209,6 +213,9 @@ extern void named_section (tree, const char *, int);
 /* Tell assembler to switch to the section for function DECL.  */
 extern void function_section (tree);
 
+/* Tell assembler to switch to the most recently used text section.  */
+extern void current_function_section (tree);
+
 /* Tell assembler to switch to the section for string merging.  */
 extern void mergeable_string_section (tree, unsigned HOST_WIDE_INT,
 				      unsigned int);
@@ -317,8 +324,8 @@ extern bool default_assemble_integer (rtx, unsigned int, int);
 
 /* Assemble the integer constant X into an object of SIZE bytes.  ALIGN is
    the alignment of the integer in bits.  Return 1 if we were able to output
-   the constant, otherwise 0.  If FORCE is nonzero, abort if we can't output
-   the constant.  */
+   the constant, otherwise 0.  If FORCE is nonzero the constant must
+   be outputable. */
 extern bool assemble_integer (rtx, unsigned, unsigned, int);
 
 /* An interface to assemble_integer for the common case in which a value is
@@ -422,7 +429,7 @@ extern rtx current_insn_predicate;
 extern rtx current_output_insn;
 
 /* Nonzero while outputting an `asm' with operands.
-   This means that inconsistencies are the user's fault, so don't abort.
+   This means that inconsistencies are the user's fault, so don't die.
    The precise value is the insn being output, to pass to error_for_asm.  */
 extern rtx this_is_asm_operands;
 
@@ -430,6 +437,29 @@ extern rtx this_is_asm_operands;
    to ASM_FINISH_DECLARE_OBJECT.  */
 extern int size_directive_output;
 extern tree last_assemble_variable_decl;
+
+enum in_section { no_section, in_text, in_unlikely_executed_text, in_data,
+                 in_named
+#ifdef BSS_SECTION_ASM_OP
+  , in_bss
+#endif
+#ifdef CTORS_SECTION_ASM_OP
+  , in_ctors
+#endif
+#ifdef DTORS_SECTION_ASM_OP
+  , in_dtors
+#endif
+#ifdef READONLY_DATA_SECTION_ASM_OP
+  , in_readonly_data
+#endif
+#ifdef EXTRA_SECTIONS
+  , EXTRA_SECTIONS
+#endif
+};
+
+extern const char *last_text_section_name;
+extern enum in_section last_text_section;
+extern bool first_function_block_is_cold;
 
 /* Decide whether DECL needs to be in a writable section.
    RELOC is the same as for SELECT_SECTION.  */
@@ -474,6 +504,44 @@ extern void no_asm_to_stream (FILE *);
 #define SECTION_NOTYPE	 0x80000	/* don't output @progbits */
 #define SECTION_MACH_DEP 0x100000	/* subsequent bits reserved for target */
 
+/* A helper function for default_elf_select_section and
+   default_elf_unique_section.  Categorizes the DECL.  */
+
+enum section_category
+{
+  SECCAT_TEXT,
+
+  SECCAT_RODATA,
+  SECCAT_RODATA_MERGE_STR,
+  SECCAT_RODATA_MERGE_STR_INIT,
+  SECCAT_RODATA_MERGE_CONST,
+  SECCAT_SRODATA,
+
+  SECCAT_DATA,
+
+  /* To optimize loading of shared programs, define following subsections
+     of data section:
+	_REL	Contains data that has relocations, so they get grouped
+		together and dynamic linker will visit fewer pages in memory.
+	_RO	Contains data that is otherwise read-only.  This is useful
+		with prelinking as most relocations won't be dynamically
+		linked and thus stay read only.
+	_LOCAL	Marks data containing relocations only to local objects.
+		These relocations will get fully resolved by prelinking.  */
+  SECCAT_DATA_REL,
+  SECCAT_DATA_REL_LOCAL,
+  SECCAT_DATA_REL_RO,
+  SECCAT_DATA_REL_RO_LOCAL,
+
+  SECCAT_SDATA,
+  SECCAT_TDATA,
+
+  SECCAT_BSS,
+  SECCAT_SBSS,
+  SECCAT_TBSS
+};
+
+
 extern bool set_named_section_flags (const char *, unsigned int);
 #define named_section_flags(NAME, FLAGS) \
   named_section_real((NAME), (FLAGS), /*decl=*/NULL_TREE)
@@ -484,6 +552,7 @@ extern unsigned int default_section_type_flags_1 (tree, const char *, int, int);
 
 extern void default_no_named_section (const char *, unsigned int, tree);
 extern void default_elf_asm_named_section (const char *, unsigned int, tree);
+extern enum section_category categorize_decl_for_section (tree, int, int);
 extern void default_coff_asm_named_section (const char *, unsigned int, tree);
 extern void default_pe_asm_named_section (const char *, unsigned int, tree);
 

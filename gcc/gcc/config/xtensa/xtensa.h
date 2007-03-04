@@ -1,5 +1,5 @@
 /* Definitions of Tensilica's Xtensa target machine for GNU compiler.
-   Copyright 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
 This file is part of GCC.
@@ -16,15 +16,14 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Get Xtensa configuration settings */
 #include "xtensa-config.h"
 
 /* Standard GCC variables that we reference.  */
 extern int current_function_calls_alloca;
-extern int target_flags;
 extern int optimize;
 
 /* External variables defined in xtensa.c.  */
@@ -41,10 +40,6 @@ enum cmp_type {
 extern struct rtx_def * branch_cmp[2];	/* operands for compare */
 extern enum cmp_type branch_type;	/* what type of branch to use */
 extern unsigned xtensa_current_frame_size;
-
-/* Masks for the -m switches */
-#define MASK_NO_FUSED_MADD	0x00000001	/* avoid f-p mul/add */
-#define MASK_CONST16		0x00000002	/* use CONST16 instruction */
 
 /* Macros used in the machine description to select various Xtensa
    configuration options.  */
@@ -66,40 +61,23 @@ extern unsigned xtensa_current_frame_size;
 #define TARGET_ABS		XCHAL_HAVE_ABS
 #define TARGET_ADDX		XCHAL_HAVE_ADDX
 
-/* Macros controlled by command-line options.  */
-#define TARGET_NO_FUSED_MADD	(target_flags & MASK_NO_FUSED_MADD)
-#define TARGET_CONST16		(target_flags & MASK_CONST16)
-
 #define TARGET_DEFAULT (						\
   (XCHAL_HAVE_L32R	? 0 : MASK_CONST16))
 
-#define TARGET_SWITCHES							\
-{									\
-  {"const16",			MASK_CONST16,				\
-    N_("Use CONST16 instruction to load constants")},			\
-  {"no-const16",		-MASK_CONST16,				\
-    N_("Use PC-relative L32R instruction to load constants")},		\
-  {"no-fused-madd",		MASK_NO_FUSED_MADD,			\
-    N_("Disable fused multiply/add and multiply/subtract FP instructions")}, \
-  {"fused-madd",		-MASK_NO_FUSED_MADD,			\
-    N_("Enable fused multiply/add and multiply/subtract FP instructions")}, \
-  {"text-section-literals",	0,					\
-    N_("Intersperse literal pools with code in the text section")},	\
-  {"no-text-section-literals",	0,					\
-    N_("Put literal pools in a separate literal section")},		\
-  {"target-align",		0,					\
-    N_("Automatically align branch targets to reduce branch penalties")}, \
-  {"no-target-align",		0,					\
-    N_("Do not automatically align branch targets")},			\
-  {"longcalls",			0,					\
-    N_("Use indirect CALLXn instructions for large programs")},		\
-  {"no-longcalls",		0,					\
-    N_("Use direct CALLn instructions for fast calls")},		\
-  {"",				TARGET_DEFAULT, 0}			\
-}
-
-
 #define OVERRIDE_OPTIONS override_options ()
+
+/* Reordering blocks for Xtensa is not a good idea unless the compiler
+   understands the range of conditional branches.  Currently all branch
+   relaxation for Xtensa is handled in the assembler, so GCC cannot do a
+   good job of reordering blocks.  Do not enable reordering unless it is
+   explicitly requested.  */
+#define OPTIMIZATION_OPTIONS(LEVEL, SIZE)				\
+  do									\
+    {									\
+      flag_reorder_blocks = 0;						\
+    }									\
+  while (0)
+
 
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS()					\
@@ -545,29 +523,16 @@ extern enum reg_class xtensa_char_to_class[256];
 
    For Xtensa:
 
-   I = 12-bit signed immediate for movi
-   J = 8-bit signed immediate for addi
+   I = 12-bit signed immediate for MOVI
+   J = 8-bit signed immediate for ADDI
    K = 4-bit value in (b4const U {0})
    L = 4-bit value in b4constu
-   M = 7-bit value in simm7
-   N = 8-bit unsigned immediate shifted left by 8 bits for addmi
-   O = 4-bit value in ai4const
-   P = valid immediate mask value for extui */
+   M = 7-bit immediate value for MOVI.N
+   N = 8-bit unsigned immediate shifted left by 8 bits for ADDMI
+   O = 4-bit immediate for ADDI.N
+   P = valid immediate mask value for EXTUI */
 
-#define CONST_OK_FOR_LETTER_P(VALUE, C)					\
-  ((C) == 'I' ? (xtensa_simm12b (VALUE))				\
-   : (C) == 'J' ? (xtensa_simm8 (VALUE))				\
-   : (C) == 'K' ? (((VALUE) == 0) || xtensa_b4const (VALUE))		\
-   : (C) == 'L' ? (xtensa_b4constu (VALUE))				\
-   : (C) == 'M' ? (xtensa_simm7 (VALUE))				\
-   : (C) == 'N' ? (xtensa_simm8x256 (VALUE))				\
-   : (C) == 'O' ? (xtensa_ai4const (VALUE))				\
-   : (C) == 'P' ? (xtensa_mask_immediate (VALUE))			\
-   : FALSE)
-
-
-/* Similar, but for floating constants, and defining letters G and H.
-   Here VALUE is the CONST_DOUBLE rtx itself.  */
+#define CONST_OK_FOR_LETTER_P  xtensa_const_ok_for_letter_p
 #define CONST_DOUBLE_OK_FOR_LETTER_P(VALUE, C) (0)
 
 
@@ -591,15 +556,7 @@ extern enum reg_class xtensa_char_to_class[256];
    address will be checked anyway because of the code in
    GO_IF_LEGITIMATE_ADDRESS.  */
 
-#define EXTRA_CONSTRAINT(OP, CODE)					\
-  ((GET_CODE (OP) != MEM) ?						\
-       ((CODE) >= 'R' && (CODE) <= 'U'					\
-	&& reload_in_progress && GET_CODE (OP) == REG			\
-        && REGNO (OP) >= FIRST_PSEUDO_REGISTER)				\
-   : ((CODE) == 'R') ? smalloffset_mem_p (OP)				\
-   : ((CODE) == 'T') ? !TARGET_CONST16 && constantpool_mem_p (OP)	\
-   : ((CODE) == 'U') ? !constantpool_mem_p (OP)				\
-   : FALSE)
+#define EXTRA_CONSTRAINT  xtensa_extra_constraint
 
 #define PREFERRED_RELOAD_CLASS(X, CLASS)				\
   xtensa_preferred_reload_class (X, CLASS, 0)
@@ -644,12 +601,17 @@ extern enum reg_class xtensa_char_to_class[256];
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
   do {									\
     compute_frame_size (get_frame_size ());				\
-    if ((FROM) == FRAME_POINTER_REGNUM)					\
-      (OFFSET) = 0;							\
-    else if ((FROM) == ARG_POINTER_REGNUM)				\
-      (OFFSET) = xtensa_current_frame_size;				\
-    else								\
-      abort ();								\
+    switch (FROM)							\
+      {									\
+      case FRAME_POINTER_REGNUM:					\
+        (OFFSET) = 0;							\
+	break;								\
+      case ARG_POINTER_REGNUM:						\
+        (OFFSET) = xtensa_current_frame_size;				\
+	break;								\
+      default:								\
+	gcc_unreachable ();						\
+      }									\
   } while (0)
 
 /* If defined, the maximum amount of space required for outgoing
@@ -831,7 +793,7 @@ typedef struct xtensa_args
 
 #define TRAMPOLINE_TEMPLATE(STREAM)					\
   do {									\
-    fprintf (STREAM, "\t.begin no-generics\n");				\
+    fprintf (STREAM, "\t.begin no-transform\n");			\
     fprintf (STREAM, "\tentry\tsp, %d\n", MIN_FRAME_SIZE);		\
 									\
     /* save the return address */					\
@@ -869,11 +831,13 @@ typedef struct xtensa_args
     /* jump to the instruction following the entry */			\
     fprintf (STREAM, "\taddi\ta8, a8, 3\n");				\
     fprintf (STREAM, "\tjx\ta8\n");					\
-    fprintf (STREAM, "\t.end no-generics\n");				\
+    fprintf (STREAM, "\t.byte\t0\n");					\
+    fprintf (STREAM, "\t.end no-transform\n");				\
   } while (0)
 
-/* Size in bytes of the trampoline, as an integer.  */
-#define TRAMPOLINE_SIZE 59
+/* Size in bytes of the trampoline, as an integer.  Make sure this is
+   a multiple of TRAMPOLINE_ALIGNMENT to avoid -Wpadded warnings.  */
+#define TRAMPOLINE_SIZE 60
 
 /* Alignment required for trampolines, in bits.  */
 #define TRAMPOLINE_ALIGNMENT (32)
@@ -1148,37 +1112,6 @@ typedef struct xtensa_args
 #define MEMORY_MOVE_COST(MODE, CLASS, IN) 4
 
 #define BRANCH_COST 3
-
-/* Optionally define this if you have added predicates to
-   'MACHINE.c'.  This macro is called within an initializer of an
-   array of structures.  The first field in the structure is the
-   name of a predicate and the second field is an array of rtl
-   codes.  For each predicate, list all rtl codes that can be in
-   expressions matched by the predicate.  The list should have a
-   trailing comma.  */
-
-#define PREDICATE_CODES							\
-  {"add_operand",		{ REG, CONST_INT, SUBREG }},		\
-  {"arith_operand",		{ REG, CONST_INT, SUBREG }},		\
-  {"nonimmed_operand",		{ REG, SUBREG, MEM }},			\
-  {"mem_operand",		{ MEM }},				\
-  {"mask_operand",		{ REG, CONST_INT, SUBREG }},		\
-  {"extui_fldsz_operand",	{ CONST_INT }},				\
-  {"sext_fldsz_operand",	{ CONST_INT }},				\
-  {"lsbitnum_operand",		{ CONST_INT }},				\
-  {"fpmem_offset_operand",	{ CONST_INT }},				\
-  {"sext_operand",		{ REG, SUBREG, MEM }},			\
-  {"branch_operand",		{ REG, CONST_INT, SUBREG }},		\
-  {"ubranch_operand",		{ REG, CONST_INT, SUBREG }},		\
-  {"call_insn_operand",		{ CONST_INT, CONST, SYMBOL_REF, REG }},	\
-  {"move_operand",		{ REG, SUBREG, MEM, CONST_INT, CONST_DOUBLE, \
-				  CONST, SYMBOL_REF, LABEL_REF }},	\
-  {"const_float_1_operand",	{ CONST_DOUBLE }},			\
-  {"branch_operator",		{ EQ, NE, LT, GE }},			\
-  {"ubranch_operator",		{ LTU, GEU }},				\
-  {"boolean_operator",		{ EQ, NE }},
-
-/* Control the assembler format that we output.  */
 
 /* How to refer to registers in assembler output.
    This sequence is indexed by compiler's hard-register-number (see above).  */

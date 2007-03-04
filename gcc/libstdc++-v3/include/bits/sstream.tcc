@@ -1,6 +1,6 @@
 // String based streams -*- C++ -*-
 
-// Copyright (C) 1997, 1998, 1999, 2001, 2002, 2003, 2004
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -198,7 +198,7 @@ namespace std
       const bool __testout = (ios_base::out & this->_M_mode & __mode) != 0;
 
       const char_type* __beg = __testin ? this->eback() : this->pbase();
-      if (__beg && (__testin || __testout))
+      if ((__beg || !off_type(__sp)) && (__testin || __testout))
 	{
 	  _M_update_egptr();
 
@@ -215,6 +215,38 @@ namespace std
 	    }
 	}
       return __ret;
+    }
+
+  template <class _CharT, class _Traits, class _Alloc>
+    void
+    basic_stringbuf<_CharT, _Traits, _Alloc>::
+    _M_sync(char_type* __base, __size_type __i, __size_type __o)
+    {
+      const bool __testin = _M_mode & ios_base::in;
+      const bool __testout = _M_mode & ios_base::out;
+      char_type* __endg = __base + _M_string.size();
+      char_type* __endp = __base + _M_string.capacity();
+
+      if (__base != _M_string.data())
+	{
+	  // setbuf: __i == size of buffer area (_M_string.size() == 0).
+	  __endg += __i;
+	  __i = 0;
+	  __endp = __endg;
+	}
+
+      if (__testin)
+	this->setg(__base, __base + __i, __endg);
+      if (__testout)
+	{
+	  this->setp(__base, __endp);
+	  this->pbump(__o);
+	  // egptr() always tracks the string end.  When !__testin,
+	  // for the correct functioning of the streambuf inlines
+	  // the other get area pointers are identical.
+	  if (!__testin)
+	    this->setg(__endg, __endg, __endg);
+	}
     }
 
   // Inhibit implicit instantiations for required instantiations,

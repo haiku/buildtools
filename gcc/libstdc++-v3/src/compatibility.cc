@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -361,3 +361,28 @@ namespace std
 #undef _GLIBCXX_APPLY_SYMVER
 
 #endif
+
+#ifdef __APPLE__
+#if (defined(__ppc__) || defined (__ppc64__)) && defined (PIC)
+/* __eprintf shouldn't have been made visible from libstdc++, or
+   anywhere, but on Mac OS X 10.4 it was defined in
+   libstdc++.6.0.3.dylib; so on that platform we have to keep defining
+   it to keep binary compatibility.  We can't just put the libgcc
+   version in the export list, because that doesn't work; once a
+   symbol is marked as hidden, it stays that way.  */
+
+#include <cstdio>
+#include <cstdlib>
+
+using namespace std;
+
+extern "C" void
+__eprintf (const char *string, const char *expression,
+	   unsigned int line, const char *filename)
+{
+  fprintf (stderr, string, expression, line, filename);
+  fflush (stderr);
+  abort ();
+}
+#endif
+#endif /* __APPLE__ */

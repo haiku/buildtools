@@ -17,8 +17,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 /* Allow some special handling for IRIX 6.  */
 #undef TARGET_IRIX6
@@ -32,7 +32,7 @@ Boston, MA 02111-1307, USA.  */
    easier to write.  Default to the mips2 ISA for the O32 ABI.  */
 #define DRIVER_SELF_SPECS \
   "%{!mabi=*: -mabi=n32}", \
-  "%{mabi=32: %{!mips*: -mips2}}"
+  "%{mabi=32: %{!mips*: %{!march*: -mips2}}}"
 
 /* Force the generation of dwarf .debug_frame sections even if not
    compiling -g.  This guarantees that we can unwind the stack.  */

@@ -1,5 +1,5 @@
 /* General-purpose hooks.
-   Copyright (C) 2002, 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -13,7 +13,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
  In other words, you are welcome to use, share and improve this program.
  You are forbidden to forbid anyone else to use, share and improve
@@ -35,9 +35,11 @@ extern bool hook_bool_tree_hwi_hwi_tree_false (tree, HOST_WIDE_INT, HOST_WIDE_IN
 extern bool hook_bool_tree_hwi_hwi_tree_true (tree, HOST_WIDE_INT, HOST_WIDE_INT,
 				       tree);
 extern bool hook_bool_rtx_false (rtx);
+extern bool hook_bool_rtx_int_false (rtx, int);
 extern bool hook_bool_uintp_uintp_false (unsigned int *, unsigned int *);
 extern bool hook_bool_rtx_int_int_intp_false (rtx, int, int, int *);
 extern bool hook_bool_constcharptr_size_t_false (const char *, size_t);
+extern bool hook_bool_size_t_constcharptr_int_true (size_t, const char *, int);
 
 extern void hook_void_void (void);
 extern void hook_void_constcharptr (const char *);
@@ -61,7 +63,11 @@ extern bool hook_bool_tree_tree_false (tree, tree);
 extern rtx hook_rtx_rtx_identity (rtx);
 extern rtx hook_rtx_rtx_null (rtx);
 extern rtx hook_rtx_tree_int_null (tree, int);
-extern tree hook_tree_tree_identity (tree a);
+extern tree hook_tree_tree_tree_tree_3rd_identity (tree, tree, tree);
 extern const char *hook_constcharptr_tree_null (tree);
-extern tree hook_tree_tree_bool_null (tree, bool);
+extern tree hook_tree_tree_tree_bool_null (tree, tree, bool);
+extern const char *hook_constcharptr_rtx_null (rtx);
+extern const char *hook_constcharptr_tree_tree_null (tree, tree);
+extern const char *hook_constcharptr_int_tree_null (int, tree);
+extern const char *hook_constcharptr_int_tree_tree_null (int, tree, tree);
 #endif

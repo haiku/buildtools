@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -43,7 +43,7 @@ Boston, MA 02111-1307, USA.  */
 #include "langhooks.h"
 #include "target.h"
 #include "tm_p.h"
-#include "errors.h"
+#include "toplev.h"
 #include "hashtab.h"
 
 /* Darwin supports a feature called fix-and-continue, which is used
@@ -55,12 +55,12 @@ Boston, MA 02111-1307, USA.  */
    running program and replace existing functions and methods of that
    translation unit with with versions of those functions and methods
    from the newly compiled translation unit.  The new functions access
-   the existing static data from the old translation unit, if the data
-   existed in the unit to be replaced, and from the new translation
-   unit, for new data.
+   the existing static symbols from the old translation unit, if the
+   symbol existed in the unit to be replaced, and from the new
+   translation unit, otherwise.
 
-   The changes are to insert 4 nops at the beginning of all functions
-   and to use indirection to get at static duration data.  The 4 nops
+   The changes are to insert 5 nops at the beginning of all functions
+   and to use indirection to get at static symbols.  The 5 nops
    are required by consumers of the generated code.  Currently, gdb
    uses this to patch in a jump to the overriding function, this
    allows all uses of the old name to forward to the replacement,
@@ -68,18 +68,14 @@ Boston, MA 02111-1307, USA.  */
    rs6000_emit_prologue for the code that handles the nop insertions.
  
    The added indirection allows gdb to redirect accesses to static
-   duration data from the newly loaded translation unit to the
-   existing data, if any.  @code{static} data is special and is
-   handled by setting the second word in the .non_lazy_symbol_pointer
-   data structure to the address of the data.  See indirect_data for
-   the code that handles the extra indirection, and
-   machopic_output_indirection and its use of MACHO_SYMBOL_STATIC for
-   the code that handles @code{static} data indirection.  */
+   symbols from the newly loaded translation unit to the existing
+   symbol, if any.  @code{static} symbols are special and are handled by
+   setting the second word in the .non_lazy_symbol_pointer data
+   structure to symbol.  See indirect_data for the code that handles
+   the extra indirection, and machopic_output_indirection and its use
+   of MACHO_SYMBOL_STATIC for the code that handles @code{static}
+   symbol indirection.  */
 
-
-/* Nonzero if the user passes the -mone-byte-bool switch, which forces
-   sizeof(bool) to be 1. */
-const char *darwin_one_byte_bool = 0;
 
 int
 name_needs_quotes (const char *name)
@@ -195,8 +191,8 @@ void
 machopic_define_symbol (rtx mem)
 {
   rtx sym_ref;
-  if (GET_CODE (mem) != MEM)
-    abort ();
+  
+  gcc_assert (GET_CODE (mem) == MEM);
   sym_ref = XEXP (mem, 0);
   SYMBOL_REF_FLAGS (sym_ref) |= MACHO_SYMBOL_FLAG_DEFINED;
 }
@@ -207,8 +203,7 @@ const char *
 machopic_function_base_name (void)
 {
   /* if dynamic-no-pic is on, we should not get here */
-  if (MACHO_DYNAMIC_NO_PIC_P)
-    abort ();
+  gcc_assert (!MACHO_DYNAMIC_NO_PIC_P);
 
   if (function_base == NULL)
     function_base =
@@ -252,8 +247,7 @@ machopic_output_function_base_name (FILE *file)
   const char *current_name;
 
   /* If dynamic-no-pic is on, we should not get here.  */
-  if (MACHO_DYNAMIC_NO_PIC_P)
-    abort ();
+  gcc_assert (!MACHO_DYNAMIC_NO_PIC_P);
   current_name =
     IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (current_function_decl));
   if (function_base_func_name != current_name)
@@ -317,43 +311,55 @@ machopic_indirection_name (rtx sym_ref, bool stub_p)
   size_t namelen = strlen (name);
   machopic_indirection *p;
   void ** slot;
-  
-  /* Construct the name of the non-lazy pointer or stub.  */
-  if (stub_p)
-    {
-      int needs_quotes = name_needs_quotes (name);
-      buffer = alloca (strlen ("&L")
-		       + namelen
-		       + strlen (STUB_SUFFIX)
-		       + 2 /* possible quotes */
-		       + 1 /* '\0' */);
+  bool saw_star = false;
+  bool needs_quotes;
+  const char *suffix;
+  const char *prefix = user_label_prefix;
+  const char *quote = "";
+  tree id;
 
-      if (needs_quotes)
-	{
-	  if (name[0] == '*')
-	    sprintf (buffer, "&\"L%s" STUB_SUFFIX "\"", name + 1);
-	  else
-	    sprintf (buffer, "&\"L%s%s" STUB_SUFFIX "\"", user_label_prefix, 
-		     name);
-	}
-      else if (name[0] == '*')
-	sprintf (buffer, "&L%s" STUB_SUFFIX, name + 1);
-      else
-	sprintf (buffer, "&L%s%s" STUB_SUFFIX, user_label_prefix, name);
-    }
-  else
+  id = maybe_get_identifier (name);
+  if (id)
     {
-      buffer = alloca (strlen ("&L")
-		       + strlen (user_label_prefix)
-		       + namelen
-		       + strlen (NON_LAZY_POINTER_SUFFIX)
-		       + 1 /* '\0' */);
-      if (name[0] == '*')
-	sprintf (buffer, "&L%s" NON_LAZY_POINTER_SUFFIX, name + 1);
-      else
-	sprintf (buffer, "&L%s%s" NON_LAZY_POINTER_SUFFIX, 
-		 user_label_prefix, name);
+      tree id_orig = id;
+
+      while (IDENTIFIER_TRANSPARENT_ALIAS (id))
+	id = TREE_CHAIN (id);
+      if (id != id_orig)
+	{
+	  name = IDENTIFIER_POINTER (id);
+	  namelen = strlen (name);
+	}
     }
+  
+  if (name[0] == '*')
+    {
+      saw_star = true;
+      prefix = "";
+      ++name;
+      --namelen;
+    }
+
+  needs_quotes = name_needs_quotes (name);
+  if (needs_quotes)
+    {
+      quote = "\"";
+    }
+
+  if (stub_p)
+    suffix = STUB_SUFFIX;
+  else
+    suffix = NON_LAZY_POINTER_SUFFIX;
+
+  buffer = alloca (strlen ("&L")
+		   + strlen (prefix)
+		   + namelen
+		   + strlen (suffix)
+		   + 2 * strlen (quote)
+		   + 1 /* '\0' */);
+
+  /* Construct the name of the non-lazy pointer or stub.  */
+  sprintf (buffer, "&%sL%s%s%s%s", quote, prefix, name, suffix, quote);
 
   if (!machopic_indirections)
     machopic_indirections = htab_create_ggc (37, 
@@ -439,11 +445,13 @@ machopic_indirect_data_reference (rtx orig, rtx reg)
       if (defined && MACHO_DYNAMIC_NO_PIC_P)
 	{
 #if defined (TARGET_TOC)
- 	  emit_insn (gen_macho_high (reg, orig));
- 	  emit_insn (gen_macho_low (reg, reg, orig));
+	  /* Create a new register for CSE opportunities.  */
+	  rtx hi_reg = (no_new_pseudos ? reg : gen_reg_rtx (Pmode));
+ 	  emit_insn (gen_macho_high (hi_reg, orig));
+ 	  emit_insn (gen_macho_low (reg, hi_reg, orig));
 #else
 	   /* some other cpu -- writeme!  */
-	   abort ();
+	   gcc_unreachable ();
 #endif
 	   return reg;
 	}
@@ -457,8 +465,7 @@ machopic_indirect_data_reference (rtx orig, rtx reg)
 #if defined (TARGET_TOC) /* i.e., PowerPC */
 	  rtx hi_sum_reg = (no_new_pseudos ? reg : gen_reg_rtx (Pmode));
 
-	  if (reg == NULL)
-	    abort ();
+	  gcc_assert (reg);
 
 	  emit_insn (gen_rtx_SET (Pmode, hi_sum_reg,
 			      gen_rtx_PLUS (Pmode, pic_offset_table_rtx,
@@ -469,7 +476,7 @@ machopic_indirect_data_reference (rtx orig, rtx reg)
 	  orig = reg;
 #else
 #if defined (HAVE_lo_sum)
-	  if (reg == 0) abort ();
+	  gcc_assert (reg);
 
 	  emit_insn (gen_rtx_SET (VOIDmode, reg,
 				  gen_rtx_HIGH (Pmode, offset)));
@@ -619,10 +626,8 @@ machopic_legitimize_pic_address (rtx orig, enum machine_mode mode, rtx reg)
 	{
 	  if (reg == 0)
 	    {
-	      if (reload_in_progress)
-		abort ();
-	      else
-		reg = gen_reg_rtx (Pmode);
+	      gcc_assert (!reload_in_progress);
+	      reg = gen_reg_rtx (Pmode);
 	    }
 
 #ifdef HAVE_lo_sum
@@ -641,7 +646,7 @@ machopic_legitimize_pic_address (rtx orig, enum machine_mode mode, rtx reg)
 	      emit_insn (gen_rtx_SET (VOIDmode, reg, mem));
 #else
 	      /* Some other CPU -- WriteMe! but right now there are no other platform that can use dynamic-no-pic  */
-	      abort ();
+	      gcc_unreachable ();
 #endif
 	      pic_ref = reg;
 	    }
@@ -726,10 +731,8 @@ machopic_legitimize_pic_address (rtx orig, enum machine_mode mode, rtx reg)
 
 	      if (reg == 0)
 		{
-		  if (reload_in_progress)
-		    abort ();
-		  else
-		    reg = gen_reg_rtx (Pmode);
+		  gcc_assert (!reload_in_progress);
+		  reg = gen_reg_rtx (Pmode);
 		}
 
 	      hi_sum_reg = reg;
@@ -873,6 +876,18 @@ machopic_output_indirection (void **slot, void *data)
     {
       char *sym;
       char *stub;
+      tree id;
+
+      id = maybe_get_identifier (sym_name);
+      if (id)
+	{
+	  tree id_orig = id;
+
+	  while (IDENTIFIER_TRANSPARENT_ALIAS (id))
+	    id = TREE_CHAIN (id);
+	  if (id != id_orig)
+	    sym_name = IDENTIFIER_POINTER (id);
+	}
 
       sym = alloca (strlen (sym_name) + 2);
       if (sym_name[0] == '*' || sym_name[0] == '&')
@@ -918,7 +933,7 @@ machopic_output_indirection (void **slot, void *data)
 	 the non-lazy symbol pointer data structure when they are
 	 defined.  This allows the runtime to rebind newer instances
 	 of the translation unit with the original instance of the
-	 data.  */
+	 symbol.  */
 
       if ((SYMBOL_REF_FLAGS (symbol) & MACHO_SYMBOL_STATIC)
 	  && machopic_symbol_defined_p (symbol))
@@ -994,9 +1009,7 @@ darwin_encode_section_info (tree decl, rtx rtl, int first ATTRIBUTE_UNUSED)
 	      && DECL_INITIAL (decl) != error_mark_node)))
     SYMBOL_REF_FLAGS (sym_ref) |= MACHO_SYMBOL_FLAG_DEFINED;
 
-  if (TREE_CODE (decl) == VAR_DECL
-      && indirect_data (sym_ref)
-      && ! TREE_PUBLIC (decl))
+  if (! TREE_PUBLIC (decl))
     SYMBOL_REF_FLAGS (sym_ref) |= MACHO_SYMBOL_STATIC;
 }
 
@@ -1016,12 +1029,17 @@ machopic_select_section (tree exp, int reloc,
   bool weak_p = DECL_P (exp) && DECL_WEAK (exp);
   static void (* const base_funs[][2])(void) = {
     { text_section, text_coal_section },
-    { text_unlikely_section, text_unlikely_coal_section },
+    { unlikely_text_section, text_unlikely_coal_section },
     { readonly_data_section, const_coal_section },
     { const_data_section, const_data_coal_section },
     { data_section, data_coal_section }
   };
 
+  if (reloc == 0
+      && (last_text_section == in_text_unlikely
+	  || last_text_section == in_text_unlikely_coal))
+    reloc = 1;
+    
   if (TREE_CODE (exp) == FUNCTION_DECL)
     base_function = base_funs[reloc][weak_p];
   else if (decl_readonly_section_1 (exp, reloc, MACHOPIC_INDIRECT))
@@ -1059,10 +1077,14 @@ machopic_select_section (tree exp, int reloc,
       tree name = TYPE_NAME (TREE_TYPE (exp));
       if (TREE_CODE (name) == TYPE_DECL)
 	name = DECL_NAME (name);
-      if (!strcmp (IDENTIFIER_POINTER (name), "NSConstantString"))
-	objc_constant_string_object_section ();
-      else if (!strcmp (IDENTIFIER_POINTER (name), "NXConstantString"))
-	objc_string_object_section ();
+
+      if (!strcmp (IDENTIFIER_POINTER (name), "__builtin_ObjCString"))
+	{
+	  if (flag_next_runtime)
+	    objc_constant_string_object_section ();
+	  else
+	    objc_string_object_section ();
+	}
       else
 	base_function ();
     }
@@ -1211,7 +1233,8 @@ darwin_handle_weak_import_attribute (tree *node, tree name,
 {
   if (TREE_CODE (*node) != FUNCTION_DECL && TREE_CODE (*node) != VAR_DECL)
     {
-      warning ("%qs attribute ignored", IDENTIFIER_POINTER (name));
+      warning (OPT_Wattributes, "%qs attribute ignored",
+	       IDENTIFIER_POINTER (name));
       *no_add_attrs = true;
     }
   else
@@ -1238,8 +1261,7 @@ darwin_emit_unwind_label (FILE *file, tree decl, int for_eh, int empty)
     ? DECL_ASSEMBLER_NAME (decl)
     : DECL_NAME (decl);
 
-  const char *prefix = "_";
-  const int prefix_len = 1;
+  const char *prefix = user_label_prefix;
 
   const char *base = IDENTIFIER_POINTER (id);
   unsigned int base_len = IDENTIFIER_LENGTH (id);
@@ -1253,7 +1275,8 @@ darwin_emit_unwind_label (FILE *file, tree decl, int for_eh, int empty)
   if (! for_eh)
     suffix = ".eh1";
 
-  lab = xmalloc (prefix_len + base_len + strlen (suffix) + quotes_len + 1);
+  lab = xmalloc (strlen (prefix)
+		 + base_len + strlen (suffix) + quotes_len + 1);
   lab[0] = '\0';
 
   if (need_quotes)
@@ -1297,8 +1320,7 @@ darwin_non_lazy_pcrel (FILE *file, rtx addr)
 {
   const char *nlp_name;
 
-  if (GET_CODE (addr) != SYMBOL_REF)
-    abort ();
+  gcc_assert (GET_CODE (addr) == SYMBOL_REF);
 
   nlp_name = machopic_indirection_name (addr, /*stub_p=*/false);
   fputs ("\t.long\t", file);
@@ -1325,8 +1347,8 @@ darwin_assemble_visibility (tree decl, int vis)
       fputs ("\n", asm_out_file);
     }
   else
-    warning ("internal and protected visibility attributes not supported "
-	     "in this configuration; ignored");
+    warning (OPT_Wattributes, "internal and protected visibility attributes "
+	     "not supported in this configuration; ignored");
 }
 
 /* Output a difference of two labels that will be an assembly time
@@ -1370,13 +1392,13 @@ darwin_file_end (void)
   fprintf (asm_out_file, "\t.subsections_via_symbols\n");
 }
 
-/* True, iff we're generating fast turn around debugging code.  When
-   true, we arrange for function prologues to start with 4 nops so
-   that gdb may insert code to redirect them, and for data to accessed
-   indirectly.  The runtime uses this indirection to forward
-   references for data to the original instance of that data.  */
+/* Cross-module name binding.  Darwin does not support overriding
+   functions at dynamic-link time.  */
 
-int darwin_fix_and_continue;
-const char *darwin_fix_and_continue_switch;
+bool
+darwin_binds_local_p (tree decl)
+{
+  return default_binds_local_p_1 (decl, 0);
+}
 
 #include "gt-darwin.h"

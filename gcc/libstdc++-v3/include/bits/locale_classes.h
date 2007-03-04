@@ -1,6 +1,6 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -307,7 +307,7 @@ namespace std
     // macros. For GNU systems, the following are also valid:
     // LC_PAPER, LC_NAME, LC_ADDRESS, LC_TELEPHONE, LC_MEASUREMENT,
     // and LC_IDENTIFICATION.
-    static const size_t _S_categories_size = 6 + _GLIBCXX_NUM_CATEGORIES;
+    enum { _S_categories_size = 6 + _GLIBCXX_NUM_CATEGORIES };
 
 #ifdef __GTHREADS
     static __gthread_once_t _S_once;
@@ -559,11 +559,7 @@ namespace std
       { _M_install_facet(&_Facet::id, __facet); }
 
     void
-    _M_install_cache(const facet* __cache, size_t __index) throw()
-    {
-      __cache->_M_add_reference();
-      _M_caches[__index] = __cache;
-    }
+    _M_install_cache(const facet*, size_t);
   };
 
   template<typename _Facet>

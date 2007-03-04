@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_FUNCTION_H
 #define GCC_FUNCTION_H
@@ -162,17 +162,24 @@ struct expr_status GTY(())
 struct function GTY(())
 {
   struct eh_status *eh;
+  struct eh_status *saved_eh;
   struct expr_status *expr;
   struct emit_status *emit;
   struct varasm_status *varasm;
+
+  /* The control flow graph for this function.  */
+  struct control_flow_graph *cfg;
+  struct control_flow_graph *saved_cfg;
+  bool after_inlining;
 
   /* For tree-optimize.c.  */
 
   /* Saved tree and arguments during tree optimization.  Used later for
      inlining */
-  tree saved_tree;
   tree saved_args;
   tree saved_static_chain_decl;
+  tree saved_blocks;
+  tree saved_unexpanded_var_list;
 
   /* For function.c.  */
 
@@ -349,6 +356,24 @@ struct function GTY(())
   /* The variables unexpanded so far.  */
   tree unexpanded_var_list;
 
+  /* Assembly labels for the hot and cold text sections, to
+     be used by debugger functions for determining the size of text
+     sections.  */
+
+  const char *hot_section_label;
+  const char *cold_section_label;
+  const char *hot_section_end_label;
+  const char *cold_section_end_label;
+
+  /* String to be used for name of cold text sections, via
+     targetm.asm_out.named_section.  */
+
+  const char *unlikely_text_section_name;
+
+  /* A variable living at the top of the frame that holds a known value.
+     Used for detecting stack clobbers.  */
+  tree stack_protect_guard;
+
   /* Collected bit flags.  */
 
   /* Nonzero if function being compiled needs to be given an address
@@ -369,6 +394,10 @@ struct function GTY(())
      either as a subroutine or builtin.  */
   unsigned int calls_alloca : 1;
 
+  /* Nonzero if function being compiled called builtin_return_addr or
+     builtin_frame_address with non-zero count.  */
+  unsigned int accesses_prior_frames : 1;
+
   /* Nonzero if the function calls __builtin_eh_return.  */
   unsigned int calls_eh_return : 1;
 
@@ -379,9 +408,6 @@ struct function GTY(())
   /* Nonzero if function being compiled has nonlocal gotos to parent
      function.  */
   unsigned int has_nonlocal_goto : 1;
-
-  /* Nonzero if function being compiled contains nested functions.  */
-  unsigned int contains_functions : 1;
 
   /* Nonzero if the current function is a thunk, i.e., a lightweight
      function implemented by the output_mi_thunk hook) that just
@@ -395,10 +421,6 @@ struct function GTY(())
      function, however, should be treated as throwing if any of its callees
      can throw.  */
   unsigned int all_throwers_are_sibcalls : 1;
-
-  /* Nonzero if instrumentation calls for function entry and exit should be
-     generated.  */
-  unsigned int instrument_entry_exit : 1;
 
   /* Nonzero if profiling code should be generated.  */
   unsigned int profile : 1;
@@ -430,7 +452,21 @@ struct function GTY(())
 
   /* Nonzero if code to initialize arg_pointer_save_area has been emitted.  */
   unsigned int arg_pointer_save_area_init : 1;
+
+  /* Number of units of general registers that need saving in stdarg
+     function.  What unit is depends on the backend, either it is number
+     of bytes, or it can be number of registers.  */
+  unsigned int va_list_gpr_size : 8;
+
+  /* Number of units of floating point registers that need saving in stdarg
+     function.  */
+  unsigned int va_list_fpr_size : 8;
 };
+
+/* If va_list_[gf]pr_size is set to this, it means we don't know how
+   many units need to be saved.  */
+#define VA_LIST_MAX_GPR_SIZE	255
+#define VA_LIST_MAX_FPR_SIZE	255
 
 /* The function currently being compiled.  */
 extern GTY(()) struct function *cfun;
@@ -451,8 +487,8 @@ extern int trampolines_created;
 #define current_function_returns_pointer (cfun->returns_pointer)
 #define current_function_calls_setjmp (cfun->calls_setjmp)
 #define current_function_calls_alloca (cfun->calls_alloca)
+#define current_function_accesses_prior_frames (cfun->accesses_prior_frames)
 #define current_function_calls_eh_return (cfun->calls_eh_return)
-#define current_function_contains_functions (cfun->contains_functions)
 #define current_function_is_thunk (cfun->is_thunk)
 #define current_function_args_info (cfun->args_info)
 #define current_function_args_size (cfun->args_size)
@@ -462,7 +498,6 @@ extern int trampolines_created;
 #define current_function_stdarg (cfun->stdarg)
 #define current_function_internal_arg_pointer (cfun->internal_arg_pointer)
 #define current_function_return_rtx (cfun->return_rtx)
-#define current_function_instrument_entry_exit (cfun->instrument_entry_exit)
 #define current_function_profile (cfun->profile)
 #define current_function_funcdef_no (cfun->funcdef_no)
 #define current_function_limit_stack (cfun->limit_stack)
@@ -482,7 +517,6 @@ extern int trampolines_created;
 #define used_temp_slots (cfun->x_used_temp_slots)
 #define avail_temp_slots (cfun->x_avail_temp_slots)
 #define temp_slot_level (cfun->x_temp_slot_level)
-#define nonlocal_labels (cfun->x_nonlocal_labels)
 #define nonlocal_goto_handler_labels (cfun->x_nonlocal_goto_handler_labels)
 
 /* Given a function decl for a containing function,
@@ -508,8 +542,6 @@ extern void free_block_changes (void);
    This size counts from zero.  It is not rounded to STACK_BOUNDARY;
    the caller may have to do that.  */
 extern HOST_WIDE_INT get_frame_size (void);
-/* Likewise, but for a different than the current function.  */
-extern HOST_WIDE_INT get_func_frame_size (struct function *);
 
 /* A pointer to a function to create target specific, per-function
    data structures.  */
@@ -534,9 +566,6 @@ extern void instantiate_virtual_regs (void);
 
 /* Returns the name of the current function.  */
 extern const char *current_function_name (void);
-
-/* Called once, at initialization, to initialize function.c.  */
-extern void init_function_once (void);
 
 extern void do_warn_unused_parameter (tree);
 

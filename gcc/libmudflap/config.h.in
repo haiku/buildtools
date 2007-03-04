@@ -1,5 +1,8 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Define to the name of the symbol used for the entry point. */
+#undef ENTRY_POINT
+
 /* Define to 1 if you have the `addmntent' function. */
 #undef HAVE_ADDMNTENT
 
@@ -221,6 +224,9 @@
 
 /* Define to 1 if you have the <sys/wait.h> header file. */
 #undef HAVE_SYS_WAIT_H
+
+/* Define to 1 if the target supports thread-local storage. */
+#undef HAVE_TLS
 
 /* union semun defined in sys/ipc.h or sys/sem.h */
 #undef HAVE_UNION_SEMUN

@@ -1,6 +1,6 @@
 // Stream buffer classes -*- C++ -*-
 
-// Copyright (C) 2004 Free Software Foundation, Inc.
+// Copyright (C) 2004, 2005 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,7 +15,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -45,10 +45,10 @@ namespace std
       traits_type::int_type __c = __sbin->sgetc();
       while (!traits_type::eq_int_type(__c, traits_type::eof()))
 	{
-	  const size_t __n = __sbin->egptr() - __sbin->gptr();
+	  const streamsize __n = __sbin->egptr() - __sbin->gptr();
 	  if (__n > 1)
 	    {
-	      const size_t __wrote = __sbout->sputn(__sbin->gptr(), __n);
+	      const streamsize __wrote = __sbout->sputn(__sbin->gptr(), __n);
 	      __sbin->gbump(__wrote);
 	      __ret += __wrote;
 	      if (__wrote < __n)
@@ -78,10 +78,10 @@ namespace std
       traits_type::int_type __c = __sbin->sgetc();
       while (!traits_type::eq_int_type(__c, traits_type::eof()))
 	{
-	  const size_t __n = __sbin->egptr() - __sbin->gptr();
+	  const streamsize __n = __sbin->egptr() - __sbin->gptr();
 	  if (__n > 1)
 	    {
-	      const size_t __wrote = __sbout->sputn(__sbin->gptr(), __n);
+	      const streamsize __wrote = __sbout->sputn(__sbin->gptr(), __n);
 	      __sbin->gbump(__wrote);
 	      __ret += __wrote;
 	      if (__wrote < __n)

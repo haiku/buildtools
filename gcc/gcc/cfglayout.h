@@ -15,8 +15,8 @@
 
    You should have received a copy of the GNU General Public License
    along with GCC; see the file COPYING.  If not, write to the Free
-   Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-   02111-1307, USA.  */
+   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+   02110-1301, USA.  */
 
 #ifndef GCC_CFGLAYOUT_H
 #define GCC_CFGLAYOUT_H
@@ -31,8 +31,8 @@ extern void insn_locators_initialize (void);
 extern void reemit_insn_block_notes (void);
 extern bool can_copy_bbs_p (basic_block *, unsigned);
 extern void copy_bbs (basic_block *, unsigned, basic_block *,
-		      edge *, unsigned, edge *, struct loop *);
-extern bool scan_ahead_for_unlikely_executed_note (rtx);
+		      edge *, unsigned, edge *, struct loop *,
+		      basic_block);
 extern rtx duplicate_insn_chain (rtx, rtx);
 
 #endif /* GCC_CFGLAYOUT_H */

@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* This file is compiled twice: once for the generator programs
    once for the compiler.  */
@@ -33,7 +33,11 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "rtl.h"
 #include "real.h"
 #include "ggc.h"
-#include "errors.h"
+#ifdef GENERATOR_FILE
+# include "errors.h"
+#else
+# include "toplev.h"
+#endif
 
 
 /* Indexed by rtx code, gives number of operands for an rtx with that code.
@@ -174,8 +178,7 @@ rtx_alloc_stat (RTX_CODE code MEM_STAT_DECL)
 {
   rtx rt;
 
-  rt = (rtx) ggc_alloc_typed_stat (gt_ggc_e_7rtx_def,
-				   RTX_SIZE (code) PASS_MEM_STAT);
+  rt = (rtx) ggc_alloc_zone_pass_stat (RTX_SIZE (code), &rtl_zone);
 
   /* We want to clear everything up to the FLD array.  Normally, this
      is one int, but we don't want to assume that and it isn't very
@@ -309,8 +312,8 @@ shallow_copy_rtx_stat (rtx orig MEM_STAT_DECL)
 {
   rtx copy;
 
-  copy = (rtx) ggc_alloc_typed_stat (gt_ggc_e_7rtx_def,
-				     RTX_SIZE (GET_CODE (orig)) PASS_MEM_STAT);
+  copy = (rtx) ggc_alloc_zone_pass_stat (RTX_SIZE (GET_CODE (orig)),
+					 &rtl_zone);
   memcpy (copy, orig, RTX_SIZE (GET_CODE (orig)));
   return copy;
 }
@@ -510,6 +513,21 @@ rtl_check_failed_code2 (rtx r, enum rtx_code code1, enum rtx_code code2,
     ("RTL check: expected code '%s' or '%s', have '%s' in %s, at %s:%d",
      GET_RTX_NAME (code1), GET_RTX_NAME (code2), GET_RTX_NAME (GET_CODE (r)),
      func, trim_filename (file), line);
+}
+
+void
+rtl_check_failed_code_mode (rtx r, enum rtx_code code, enum machine_mode mode,
+			    bool not_mode, const char *file, int line,
+			    const char *func)
+{
+  internal_error ((not_mode
+		   ? ("RTL check: expected code '%s' and not mode '%s', "
+		      "have code '%s' and mode '%s' in %s, at %s:%d")
+		   : ("RTL check: expected code '%s' and mode '%s', "
+		      "have code '%s' and mode '%s' in %s, at %s:%d")),
+		  GET_RTX_NAME (code), GET_MODE_NAME (mode),
+		  GET_RTX_NAME (GET_CODE (r)), GET_MODE_NAME (GET_MODE (r)),
+		  func, trim_filename (file), line);
 }
 
 /* XXX Maybe print the vector?  */

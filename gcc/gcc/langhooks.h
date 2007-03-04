@@ -15,8 +15,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #ifndef GCC_LANG_HOOKS_H
 #define GCC_LANG_HOOKS_H
@@ -120,7 +120,7 @@ struct lang_hooks_for_types
   /* Given a type, apply default promotions to unnamed function
      arguments and return the new type.  Return the same type if no
      change.  Required by any language that supports variadic
-     arguments.  The default hook aborts.  */
+     arguments.  The default hook dies.  */
   tree (*type_promotes_to) (tree);
 
   /* Register TYPE as a builtin type with the indicated NAME.  The
@@ -170,6 +170,12 @@ struct lang_hooks_for_decls
   /* Returns the chain of decls so far in the current scope level.  */
   tree (*getdecls) (void);
 
+/* Look up NAME in the current scope and its superiors
+   in the namespace of variables, functions and typedefs.
+   Return a ..._DECL node of some kind representing its definition,
+   or return 0 if it is undefined.  */
+  tree (*lookup_name) (tree);
+
   /* Returns true when we should warn for an unused global DECL.
      We will already have checked that it has static binding.  */
   bool (*warn_unused_global) (tree);
@@ -207,7 +213,7 @@ struct lang_hooks
 
   /* Determines the size of any language-specific tcc_constant or
      tcc_exceptional nodes.  Since it is called from make_node, the
-     only information available is the tree code.  Expected to abort
+     only information available is the tree code.  Expected to die
      on unrecognized codes.  */
   size_t (*tree_size) (enum tree_code);
 
@@ -276,19 +282,6 @@ struct lang_hooks
   /* Called by expand_expr to generate the definition of a decl.  Returns
      1 if handled, 0 otherwise.  */
   int (*expand_decl) (tree);
-
-  /* Prepare expr to be an argument of a TRUTH_NOT_EXPR or other logical
-     operation.
-
-     This preparation consists of taking the ordinary representation
-     of an expression expr and producing a valid tree boolean
-     expression describing whether expr is nonzero.  We could simply
-     always do build_binary_op (NE_EXPR, expr, integer_zero_node, 1),
-     but we optimize comparisons, &&, ||, and !.
-
-     The result should be an expression of boolean type (if not an
-     error_mark_node).  */
-  tree (*truthvalue_conversion) (tree);
 
   /* Hook called by safe_from_p for language-specific tree codes.  It is
      up to the language front-end to install a hook if it has any such
@@ -424,6 +417,9 @@ struct lang_hooks
   tree (*builtin_function) (const char *name, tree type, int function_code,
 			    enum built_in_class bt_class,
 			    const char *library_name, tree attrs);
+
+  /* Used to set up the tree_contains_structure array for a frontend. */
+  void (*init_ts) (void);
 
   /* Called by recompute_tree_invarant_for_addr_expr to go from EXPR
      to a contained expression or DECL, possibly updating *TC, *TI or

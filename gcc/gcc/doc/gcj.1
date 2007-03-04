@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "GCJ 1"
-.TH GCJ 1 "2005-09-28" "gcc-4.0.2" "GNU"
+.TH GCJ 1 "2007-02-14" "gcc-4.1.2" "GNU"
 .SH "NAME"
 gcj \- Ahead\-of\-time compiler for the Java language
 .SH "SYNOPSIS"
@@ -223,7 +223,7 @@ class path.
 .IX Item "--classpath=path"
 This sets the class path to \fIpath\fR, a colon-separated list of paths
 (on Windows-based systems, a semicolon-separate list of paths).
-This does not override the builtin (``boot'') search path.
+This does not override the builtin (\*(L"boot\*(R") search path.
 .IP "\fB\-\-CLASSPATH=\fR\fIpath\fR" 4
 .IX Item "--CLASSPATH=path"
 Deprecated synonym for \f(CW\*(C`\-\-classpath\*(C'\fR.
@@ -463,6 +463,15 @@ from source.  \s-1CNI\s0 also does not yet work with the binary compatibility
 .Sp
 However, if you compile \s-1CNI\s0 code with the standard \s-1ABI\s0, you can call
 it from code built with the binary compatibility \s-1ABI\s0.
+.IP "\fB\-fbootstrap\-classes\fR" 4
+.IX Item "-fbootstrap-classes"
+This option can be use to tell \f(CW\*(C`libgcj\*(C'\fR that the compiled classes
+should be loaded by the bootstrap loader, not the system class loader.
+By default, if you compile a class and link it into an executable, it
+will be treated as if it was loaded using the system class loader.
+This is convenient, as it means that things like
+\&\f(CW\*(C`Class.forName()\*(C'\fR will search \fB\s-1CLASSPATH\s0\fR to find the
+desired class.
 .Sh "Configure-time Options"
 .IX Subsection "Configure-time Options"
 Some \fBgcj\fR code generations options affect the resulting \s-1ABI\s0, and
@@ -504,7 +513,7 @@ Copyright (c) 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the \s-1GNU\s0 Free Documentation License, Version 1.2 or
 any later version published by the Free Software Foundation; with the
-Invariant Sections being ``\s-1GNU\s0 General Public License'', the Front-Cover
+Invariant Sections being \*(L"\s-1GNU\s0 General Public License\*(R", the Front-Cover
 texts being (a) (see below), and with the Back-Cover Texts being (b)
 (see below).  A copy of the license is included in the
 man page \fIgfdl\fR\|(7).

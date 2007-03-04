@@ -14,7 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 
  In other words, you are welcome to use, share and improve this program.
  You are forbidden to forbid anyone else to use, share and improve
@@ -47,7 +47,7 @@ static cpp_dir *cmd_line_searchpath;
 static void
 add_clm (const char *macro, bool is_undef)
 {
-  struct cmd_line_macro *clm = xmalloc (sizeof (struct cmd_line_macro));
+  struct cmd_line_macro *clm = XNEW (struct cmd_line_macro);
   clm->next = cmd_line_macros;
   clm->is_undef = is_undef;
   clm->macro = macro;
@@ -57,7 +57,7 @@ add_clm (const char *macro, bool is_undef)
 static void
 add_dir (char *name, bool sysp)
 {
-  cpp_dir *dir = xmalloc (sizeof (cpp_dir));
+  cpp_dir *dir = XNEW (cpp_dir);
   dir->next = cmd_line_searchpath;
   dir->name = name;
   dir->sysp = sysp;

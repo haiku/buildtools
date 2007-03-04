@@ -84,7 +84,7 @@ GLIBCXX_3.4 {
       std::locale::[A-Zj-z]*;
       std::locale::_[A-Ha-z]*;
       std::locale::_Impl::[A-Za-z]*;
-      std::locale::_Impl::_M_[A-Za-z]*;
+#     std::locale::_Impl::_M_[A-Za-z]*;
       std::locale::_[J-Ra-z]*;
       std::locale::_S_normalize_category*;
       std::locale::_[T-Za-z]*;
@@ -468,6 +468,12 @@ GLIBCXX_3.4 {
 
     _ZNSt19istreambuf_iteratorI[cw]St11char_traitsI[cw]EEppEv;
 
+    # std::locale::Impl _M_ members
+    _ZNSt6locale5_Impl16_M_install_facetEPKNS_2idEPKNS_5facetE;
+    _ZNSt6locale5_Impl16_M_replace_facetEPKS0_PKNS_2idE;
+    _ZNSt6locale5_Impl19_M_replace_categoryEPKS0_PKPKNS_2idE;
+    _ZNSt6locale5_Impl21_M_replace_categoriesEPKS0_i;
+
   # DO NOT DELETE THIS LINE.  Port-specific symbols, if any, will be here.
 
   local:
@@ -571,9 +577,21 @@ GLIBCXX_3.4.6 {
 
     _ZNKSt15basic_stringbufIwSt11char_traitsIwESaIwEE3strEv;
 
-   _ZN9__gnu_cxx6__poolILb1EE13_M_initializeEv;
+    _ZN9__gnu_cxx6__poolILb1EE13_M_initializeEv;
 
 } GLIBCXX_3.4.5;
+
+GLIBCXX_3.4.7 {
+
+    _ZNSt6locale5_Impl16_M_install_cacheEPKNS_5facetE[jm];
+
+} GLIBCXX_3.4.6;
+
+GLIBCXX_3.4.8 {
+
+    _ZSt17__copy_streambufsI[cw]St11char_traitsI[cw]EElPSt15basic_streambuf*;
+
+} GLIBCXX_3.4.7;
 
 # Symbols in the support library (libsupc++) have their own tag.
 CXXABI_1.3 {
@@ -583,10 +601,12 @@ CXXABI_1.3 {
     __cxa_bad_cast;
     __cxa_bad_typeid;
     __cxa_begin_catch;
+    __cxa_begin_cleanup;
     __cxa_call_unexpected;
     __cxa_current_exception_type;
     __cxa_demangle;
     __cxa_end_catch;
+    __cxa_end_cleanup;
     __cxa_free_exception;
     __cxa_get_globals;
     __cxa_get_globals_fast;
@@ -596,6 +616,7 @@ CXXABI_1.3 {
     __cxa_pure_virtual;
     __cxa_rethrow;
     __cxa_throw;
+    __cxa_type_match;
     __cxa_vec_cctor;
     __cxa_vec_cleanup;
     __cxa_vec_ctor;

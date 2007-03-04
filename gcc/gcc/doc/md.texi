@@ -1552,7 +1552,10 @@ instruction is defined:
 GCC can only handle one commutative pair in an asm; if you use more,
 the compiler may fail.  Note that you need not use the modifier if
 the two alternatives are strictly identical; this would only waste
-time in the reload pass.
+time in the reload pass.  The modifier is not operational after
+register allocation, so the result of @code{define_peephole2}
+and @code{define_split}s performed after reload cannot rely on
+@samp{%} to make the intended insn match.
 
 @cindex @samp{#} in constraint
 @item #
@@ -1746,6 +1749,37 @@ Constant integer 1
 A floating point constant 0.0
 @end table
 
+@item CRX Architecture---@file{crx.h}
+@table @code
+
+@item b
+Registers from r0 to r14 (registers without stack pointer)
+
+@item l
+Register r16 (64-bit accumulator lo register)
+
+@item h
+Register r17 (64-bit accumulator hi register)
+
+@item k
+Register pair r16-r17. (64-bit accumulator lo-hi pair)
+
+@item I
+Constant that fits in 3 bits
+
+@item J
+Constant that fits in 4 bits
+
+@item K
+Constant that fits in 5 bits
+
+@item L
+Constant that is one of -1, 4, -4, 7, 8, 12, 16, 20, 32, 48
+
+@item G
+Floating point constant that is legal for store immediate
+@end table
+
 @item PowerPC and IBM RS6000---@file{rs6000.h}
 @table @code
 @item b
@@ -1822,6 +1856,35 @@ Constant suitable as a 32-bit mask operand
 
 @item U
 System V Release 4 small data area reference
+@end table
+
+@item MorphoTech family---@file{mt.h}
+@table @code
+@item I
+Constant for an arithmetic insn (16-bit signed integer).
+
+@item J
+The constant 0.
+
+@item K
+Constant for a logical insn (16-bit zero-extended integer).
+
+@item L
+A constant that can be loaded with @code{lui} (i.e.@: the bottom 16
+bits are zero).
+
+@item M
+A constant that takes two words to load (i.e.@: not matched by
+@code{I}, @code{K}, or @code{L}).
+
+@item N
+Negative 16-bit constants other than -65536.
+
+@item O
+A 15-bit signed integer constant.
+
+@item P
+A positive 16-bit constant.
 @end table
 
 @item Intel 386---@file{i386.h}
@@ -2165,75 +2228,134 @@ An integer constant with all bits set except exactly one.
 Any SYMBOL_REF.
 @end table
 
-@item IP2K---@file{ip2k.h}
-@table @code
-@item a
-@samp{DP} or @samp{IP} registers (general address)
+@item M32C---@file{m32c.c}
 
-@item f
-@samp{IP} register
+@item Rsp
+@itemx Rfb
+@itemx Rsb
+@samp{$sp}, @samp{$fb}, @samp{$sb}.
 
-@item j
-@samp{IPL} register
+@item Rcr
+Any control register, when they're 16 bits wide (nothing if control
+registers are 24 bits wide)
 
-@item k
-@samp{IPH} register
+@item Rcl
+Any control register, when they're 24 bits wide.
 
-@item b
-@samp{DP} register
+@item R0w
+@itemx R1w
+@itemx R2w
+@itemx R3w
+$r0, $r1, $r2, $r3.
 
-@item y
-@samp{DPH} register
+@item R02
+$r0 or $r2, or $r2r0 for 32 bit values.
 
-@item z
-@samp{DPL} register
+@item R13
+$r1 or $r3, or $r3r1 for 32 bit values.
 
-@item q
-@samp{SP} register
+@item Rdi
+A register that can hold a 64 bit value.
 
-@item c
-@samp{DP} or @samp{SP} registers (offsettable address)
+@item Rhl
+$r0 or $r1 (registers with addressable high/low bytes)
 
-@item d
-Non-pointer registers (not @samp{SP}, @samp{DP}, @samp{IP})
+@item R23
+$r2 or $r3
 
-@item u
-Non-SP registers (everything except @samp{SP})
+@item Raa
+Address registers
 
-@item R
-Indirect through @samp{IP}---Avoid this except for @code{QImode}, since we
-can't access extra bytes
+@item Raw
+Address registers when they're 16 bits wide.
 
-@item S
-Indirect through @samp{SP} or @samp{DP} with short displacement (0..127)
+@item Ral
+Address registers when they're 24 bits wide.
 
-@item T
-Data-section immediate value
+@item Rqi
+Registers that can hold QI values.
 
-@item I
-Integers from @minus{}255 to @minus{}1
+@item Rad
+Registers that can be used with displacements ($a0, $a1, $sb).
 
-@item J
-Integers from 0 to 7---valid bit number in a register
+@item Rsi
+Registers that can hold 32 bit values.
 
-@item K
-Integers from 0 to 127---valid displacement for addressing mode
+@item Rhi
+Registers that can hold 16 bit values.
 
-@item L
-Integers from 1 to 127
+@item Rhc
+Registers chat can hold 16 bit values, including all control
+registers.
 
-@item M
-Integer @minus{}1
+@item Rra
+$r0 through R1, plus $a0 and $a1.
 
-@item N
-Integer 1
+@item Rfl
+The flags register.
 
-@item O
-Zero
+@item Rmm
+The memory-based pseudo-registers $mem0 through $mem15.
 
-@item P
-Integers from 0 to 255
-@end table
+@item Rpi
+Registers that can hold pointers (16 bit registers for r8c, m16c; 24
+bit registers for m32cm, m32c).
+
+@item Rpa
+Matches multiple registers in a PARALLEL to form a larger register.
+Used to match function return values.
+
+@item Is3
+-8 @dots{} 7
+
+@item IS1
+-128 @dots{} 127
+
+@item IS2
+-32768 @dots{} 32767
+
+@item IU2
+0 @dots{} 65535
+
+@item In4
+-8 @dots{} -1 or 1 @dots{} 8
+
+@item In5
+-16 @dots{} -1 or 1 @dots{} 16
+
+@item In4
+-8 @dots{} -1 or 1 @dots{} 8
+
+@item IM2
+-65536 @dots{} -1
+
+@item Ilb
+An 8 bit value with exactly one bit set.
+
+@item Ilw
+A 16 bit value with exactly one bit set.
+
+@item Sd
+The common src/dest memory addressing modes.
+
+@item Sa
+Memory addressed using $a0 or $a1.
+
+@item Si
+Memory addressed with immediate addresses.
+
+@item Ss
+Memory addressed using the stack pointer ($sp).
+
+@item Sf
+Memory addressed using the frame base register ($fb).
+
+@item Ss
+Memory addressed using the small base register ($sb).
+
+@item S1
+$r1h
+
 
 @item MIPS---@file{mips.h}
 @table @code
@@ -2910,8 +3032,8 @@ specify field index and operand 0 place to store value into.
 Initialize the vector to given values.  Operand 0 is the vector to initialize
 and operand 1 is parallel containing values for individual fields.
 
-@cindex @code{push@var{m}} instruction pattern
-@item @samp{push@var{m}}
+@cindex @code{push@var{m}1} instruction pattern
+@item @samp{push@var{m}1}
 Output a push instruction.  Operand 0 is value to push.  Used only when
 @code{PUSH_ROUNDING} is defined.  For historical reason, this pattern may be
 missing and in such case an @code{mov} expander is used instead, with a
@@ -2948,6 +3070,43 @@ Similar, for other arithmetic operations.
 Signed minimum and maximum operations.  When used with floating point,
 if both operands are zeros, or if either operand is @code{NaN}, then
 it is unspecified which of the two operands is returned as the result.
+
+@cindex @code{reduc_smin_@var{m}} instruction pattern
+@cindex @code{reduc_smax_@var{m}} instruction pattern
+@item @samp{reduc_smin_@var{m}}, @samp{reduc_smax_@var{m}}
+Find the signed minimum/maximum of the elements of a vector. The vector is
+operand 1, and the scalar result is stored in the least significant bits of
+operand 0 (also a vector). The output and input vector should have the same
+modes.
+
+@cindex @code{reduc_umin_@var{m}} instruction pattern
+@cindex @code{reduc_umax_@var{m}} instruction pattern
+@item @samp{reduc_umin_@var{m}}, @samp{reduc_umax_@var{m}}
+Find the unsigned minimum/maximum of the elements of a vector. The vector is
+operand 1, and the scalar result is stored in the least significant bits of
+operand 0 (also a vector). The output and input vector should have the same
+modes.
+
+@cindex @code{reduc_splus_@var{m}} instruction pattern
+@item @samp{reduc_splus_@var{m}}
+Compute the sum of the signed elements of a vector. The vector is operand 1,
+and the scalar result is stored in the least significant bits of operand 0
+(also a vector). The output and input vector should have the same modes.
+
+@cindex @code{reduc_uplus_@var{m}} instruction pattern
+@item @samp{reduc_uplus_@var{m}}
+Compute the sum of the unsigned elements of a vector. The vector is operand 1,
+and the scalar result is stored in the least significant bits of operand 0
+(also a vector). The output and input vector should have the same modes.
+
+@cindex @code{vec_shl_@var{m}} instruction pattern
+@cindex @code{vec_shr_@var{m}} instruction pattern
+@item @samp{vec_shl_@var{m}}, @samp{vec_shr_@var{m}}
+Whole vector left/right shift in bits.
+Operand 1 is a vector to be shifted.
+Operand 2 is an integer shift amount in bits.
+Operand 0 is where the resulting shifted vector is stored.
+The output and input vectors should have the same modes.
 
 @cindex @code{mulhisi3} instruction pattern
 @item @samp{mulhisi3}
@@ -3100,8 +3259,8 @@ corresponds to the C data type @code{double} and the @code{floorf}
 built-in function uses the mode which corresponds to the C data
 type @code{float}.
 
-@cindex @code{trunc@var{m}2} instruction pattern
-@item @samp{trunc@var{m}2}
+@cindex @code{btrunc@var{m}2} instruction pattern
+@item @samp{btrunc@var{m}2}
 Store the argument rounded to integer towards zero.
 
 The @code{trunc} built-in function of C always uses the mode which
@@ -3133,6 +3292,27 @@ Store the argument rounded according to the default rounding mode
 
 The @code{nearbyint} built-in function of C always uses the mode which
 corresponds to the C data type @code{double} and the @code{nearbyintf}
+built-in function uses the mode which corresponds to the C data
+type @code{float}.
+
+@cindex @code{rint@var{m}2} instruction pattern
+@item @samp{rint@var{m}2}
+Store the argument rounded according to the default rounding mode and
+raise the inexact exception when the result differs in value from
+the argument
+
+The @code{rint} built-in function of C always uses the mode which
+corresponds to the C data type @code{double} and the @code{rintf}
+built-in function uses the mode which corresponds to the C data
+type @code{float}.
+
+@cindex @code{copysign@var{m}3} instruction pattern
+@item @samp{copysign@var{m}3}
+Store a value with the magnitude of operand 1 and the sign of operand
+2 into operand 0.
+
+The @code{copysign} built-in function of C always uses the mode which
+corresponds to the C data type @code{double} and the @code{copysignf}
 built-in function uses the mode which corresponds to the C data
 type @code{float}.
 
@@ -3242,22 +3422,24 @@ destination and source strings are operands 1 and 2, and both are
 the expansion of this pattern should store in operand 0 the address in
 which the @code{NUL} terminator was stored in the destination string.
 
-@cindex @code{clrmem@var{m}} instruction pattern
-@item @samp{clrmem@var{m}}
-Block clear instruction.  The destination string is the first operand,
+@cindex @code{setmem@var{m}} instruction pattern
+@item @samp{setmem@var{m}}
+Block set instruction.  The destination string is the first operand,
 given as a @code{mem:BLK} whose address is in mode @code{Pmode}.  The
-number of bytes to clear is the second operand, in mode @var{m}.  See
+number of bytes to set is the second operand, in mode @var{m}.  The value to
+initialize the memory with is the third operand. Targets that only support the
+clearing of memory should reject any value that is not the constant 0.  See
 @samp{movmem@var{m}} for a discussion of the choice of mode.
 
-The third operand is the known alignment of the destination, in the form
+The fourth operand is the known alignment of the destination, in the form
 of a @code{const_int} rtx.  Thus, if the compiler knows that the
 destination is word-aligned, it may provide the value 4 for this
 operand.
 
-The use for multiple @code{clrmem@var{m}} is as for @code{movmem@var{m}}.
+The use for multiple @code{setmem@var{m}} is as for @code{movmem@var{m}}.
 
-@cindex @code{cmpstr@var{m}} instruction pattern
-@item @samp{cmpstr@var{m}}
+@cindex @code{cmpstrn@var{m}} instruction pattern
+@item @samp{cmpstrn@var{m}}
 String compare instruction, with five operands.  Operand 0 is the output;
 it has mode @var{m}.  The remaining four operands are like the operands
 of @samp{movmem@var{m}}.  The two memory blocks specified are compared
@@ -3267,6 +3449,25 @@ at a time since either string may end in the first byte and reading past
 that may access an invalid page or segment and cause a fault.  The
 effect of the instruction is to store a value in operand 0 whose sign
 indicates the result of the comparison.
+
+@cindex @code{cmpstr@var{m}} instruction pattern
+@item @samp{cmpstr@var{m}}
+String compare instruction, without known maximum length.  Operand 0 is the
+output; it has mode @var{m}.  The second and third operand are the blocks of
+memory to be compared; both are @code{mem:BLK} with an address in mode
+@code{Pmode}.
+
+The fourth operand is the known shared alignment of the source and
+destination, in the form of a @code{const_int} rtx.  Thus, if the
+compiler knows that both source and destination are word-aligned,
+it may provide the value 4 for this operand.
+
+The two memory blocks specified are compared byte by byte in lexicographic
+order starting at the beginning of each string.  The instruction is not allowed
+to prefetch more than one byte at a time since either string may end in the
+first byte and reading past that may access an invalid page or segment and
+cause a fault.  The effect of the instruction is to store a value in operand 0
+whose sign indicates the result of the comparison.
 
 @cindex @code{cmpmem@var{m}} instruction pattern
 @item @samp{cmpmem@var{m}}
@@ -3360,7 +3561,7 @@ Operand 1 may have mode @code{byte_mode} or @code{word_mode}; often
 be valid for @code{word_mode}.
 
 The RTL generation pass generates this instruction only with constants
-for operands 2 and 3.
+for operands 2 and 3 and the constant is never zero for operand 2.
 
 The bit-field value is sign-extended to a full word integer
 before it is stored in operand 0.
@@ -3378,7 +3579,7 @@ operand 2 the starting bit.  Operand 0 may have mode @code{byte_mode} or
 Operands 1 and 2 must be valid for @code{word_mode}.
 
 The RTL generation pass generates this instruction only with constants
-for operands 1 and 2.
+for operands 1 and 2 and the constant is never zero for operand 1.
 
 @cindex @code{mov@var{mode}cc} instruction pattern
 @item @samp{mov@var{mode}cc}
@@ -3936,6 +4137,175 @@ respectively, a low or moderate degree of temporal locality.
 Targets that do not support write prefetches or locality hints can ignore
 the values of operands 1 and 2.
 
+@cindex @code{memory_barrier} instruction pattern
+@item @samp{memory_barrier}
+
+If the target memory model is not fully synchronous, then this pattern
+should be defined to an instruction that orders both loads and stores
+before the instruction with respect to loads and stores after the instruction.
+This pattern has no operands.
+
+@cindex @code{sync_compare_and_swap@var{mode}} instruction pattern
+@item @samp{sync_compare_and_swap@var{mode}}
+
+This pattern, if defined, emits code for an atomic compare-and-swap
+operation.  Operand 1 is the memory on which the atomic operation is
+performed.  Operand 2 is the ``old'' value to be compared against the
+current contents of the memory location.  Operand 3 is the ``new'' value
+to store in the memory if the compare succeeds.  Operand 0 is the result
+of the operation; it should contain the contents of the memory
+before the operation.  If the compare succeeds, this should obviously be
+a copy of operand 2.
+
+This pattern must show that both operand 0 and operand 1 are modified.
+
+This pattern must issue any memory barrier instructions such that all
+memory operations before the atomic operation occur before the atomic
+operation and all memory operations after the atomic operation occur
+after the atomic operation.
+
+@cindex @code{sync_compare_and_swap_cc@var{mode}} instruction pattern
+@item @samp{sync_compare_and_swap_cc@var{mode}}
+
+This pattern is just like @code{sync_compare_and_swap@var{mode}}, except
+it should act as if compare part of the compare-and-swap were issued via
+@code{cmp@var{m}}.  This comparison will only be used with @code{EQ} and
+@code{NE} branches and @code{setcc} operations.
+
+Some targets do expose the success or failure of the compare-and-swap
+operation via the status flags.  Ideally we wouldn't need a separate
+named pattern in order to take advantage of this, but the combine pass
+does not handle patterns with multiple sets, which is required by
+definition for @code{sync_compare_and_swap@var{mode}}.
+
+@cindex @code{sync_add@var{mode}} instruction pattern
+@cindex @code{sync_sub@var{mode}} instruction pattern
+@cindex @code{sync_ior@var{mode}} instruction pattern
+@cindex @code{sync_and@var{mode}} instruction pattern
+@cindex @code{sync_xor@var{mode}} instruction pattern
+@cindex @code{sync_nand@var{mode}} instruction pattern
+@item @samp{sync_add@var{mode}}, @samp{sync_sub@var{mode}}
+@itemx @samp{sync_ior@var{mode}}, @samp{sync_and@var{mode}}
+@itemx @samp{sync_xor@var{mode}}, @samp{sync_nand@var{mode}}
+
+These patterns emit code for an atomic operation on memory.
+Operand 0 is the memory on which the atomic operation is performed.
+Operand 1 is the second operand to the binary operator.
+
+The ``nand'' operation is @code{~op0 & op1}.
+
+This pattern must issue any memory barrier instructions such that all
+memory operations before the atomic operation occur before the atomic
+operation and all memory operations after the atomic operation occur
+after the atomic operation.
+
+If these patterns are not defined, the operation will be constructed
+from a compare-and-swap operation, if defined.
+
+@cindex @code{sync_old_add@var{mode}} instruction pattern
+@cindex @code{sync_old_sub@var{mode}} instruction pattern
+@cindex @code{sync_old_ior@var{mode}} instruction pattern
+@cindex @code{sync_old_and@var{mode}} instruction pattern
+@cindex @code{sync_old_xor@var{mode}} instruction pattern
+@cindex @code{sync_old_nand@var{mode}} instruction pattern
+@item @samp{sync_old_add@var{mode}}, @samp{sync_old_sub@var{mode}}
+@itemx @samp{sync_old_ior@var{mode}}, @samp{sync_old_and@var{mode}}
+@itemx @samp{sync_old_xor@var{mode}}, @samp{sync_old_nand@var{mode}}
+
+These patterns are emit code for an atomic operation on memory,
+and return the value that the memory contained before the operation.
+Operand 0 is the result value, operand 1 is the memory on which the
+atomic operation is performed, and operand 2 is the second operand
+to the binary operator.
+
+This pattern must issue any memory barrier instructions such that all
+memory operations before the atomic operation occur before the atomic
+operation and all memory operations after the atomic operation occur
+after the atomic operation.
+
+If these patterns are not defined, the operation will be constructed
+from a compare-and-swap operation, if defined.
+
+@cindex @code{sync_new_add@var{mode}} instruction pattern
+@cindex @code{sync_new_sub@var{mode}} instruction pattern
+@cindex @code{sync_new_ior@var{mode}} instruction pattern
+@cindex @code{sync_new_and@var{mode}} instruction pattern
+@cindex @code{sync_new_xor@var{mode}} instruction pattern
+@cindex @code{sync_new_nand@var{mode}} instruction pattern
+@item @samp{sync_new_add@var{mode}}, @samp{sync_new_sub@var{mode}}
+@itemx @samp{sync_new_ior@var{mode}}, @samp{sync_new_and@var{mode}}
+@itemx @samp{sync_new_xor@var{mode}}, @samp{sync_new_nand@var{mode}}
+
+These patterns are like their @code{sync_old_@var{op}} counterparts,
+except that they return the value that exists in the memory location
+after the operation, rather than before the operation.
+
+@cindex @code{sync_lock_test_and_set@var{mode}} instruction pattern
+@item @samp{sync_lock_test_and_set@var{mode}}
+
+This pattern takes two forms, based on the capabilities of the target.
+In either case, operand 0 is the result of the operand, operand 1 is
+the memory on which the atomic operation is performed, and operand 2
+is the value to set in the lock.
+
+In the ideal case, this operation is an atomic exchange operation, in
+which the previous value in memory operand is copied into the result
+operand, and the value operand is stored in the memory operand.
+
+For less capable targets, any value operand that is not the constant 1
+should be rejected with @code{FAIL}.  In this case the target may use
+an atomic test-and-set bit operation.  The result operand should contain
+1 if the bit was previously set and 0 if the bit was previously clear.
+The true contents of the memory operand are implementation defined.
+
+This pattern must issue any memory barrier instructions such that the
+pattern as a whole acts as an acquire barrier, that is all memory
+operations after the pattern do not occur until the lock is acquired.
+
+If this pattern is not defined, the operation will be constructed from
+a compare-and-swap operation, if defined.
+
+@cindex @code{sync_lock_release@var{mode}} instruction pattern
+@item @samp{sync_lock_release@var{mode}}
+
+This pattern, if defined, releases a lock set by
+@code{sync_lock_test_and_set@var{mode}}.  Operand 0 is the memory
+that contains the lock; operand 1 is the value to store in the lock.
+
+If the target doesn't implement full semantics for
+@code{sync_lock_test_and_set@var{mode}}, any value operand which is not
+the constant 0 should be rejected with @code{FAIL}, and the true contents
+of the memory operand are implementation defined.
+
+This pattern must issue any memory barrier instructions such that the
+pattern as a whole acts as a release barrier, that is the lock is
+released only after all previous memory operations have completed.
+
+If this pattern is not defined, then a @code{memory_barrier} pattern
+will be emitted, followed by a store of the value to the memory operand.
+
+@cindex @code{stack_protect_set} instruction pattern
+@item @samp{stack_protect_set}
+
+This pattern, if defined, moves a @code{Pmode} value from the memory
+in operand 1 to the memory in operand 0 without leaving the value in
+a register afterward.  This is to avoid leaking the value some place
+that an attacker might use to rewrite the stack guard slot after
+having clobbered it.
+
+If this pattern is not defined, then a plain move pattern is generated.
+
+@cindex @code{stack_protect_test} instruction pattern
+@item @samp{stack_protect_test}
+
+This pattern, if defined, compares a @code{Pmode} value from the
+memory in operand 1 with the memory in operand 0 without leaving the
+value in a register afterward and branches to operand 2 if the values
+weren't equal.
+
+If this pattern is not defined, then a plain compare pattern and
+conditional branch pattern is used.
+
 @end table
 
 @end ifset
@@ -4135,9 +4505,9 @@ different formats of the condition code register.
 Registers used to store the condition code value should have a mode that
 is in class @code{MODE_CC}.  Normally, it will be @code{CCmode}.  If
 additional modes are required (as for the add example mentioned above in
-the SPARC), define the macro @code{EXTRA_CC_MODES} to list the
-additional modes required (@pxref{Condition Code}).  Also define
-@code{SELECT_CC_MODE} to choose a mode given an operand of a compare.
+the SPARC), define them in @file{@var{machine}-modes.def}
+(@pxref{Condition Code}).  Also define @code{SELECT_CC_MODE} to choose
+a mode given an operand of a compare.
 
 If it is known during RTL generation that a different mode will be
 required (for example, if the machine has separate compare instructions
@@ -4804,9 +5174,9 @@ jump.  When new sequence contains multiple jump instructions or new labels,
 more assistance is needed.  Splitter is required to create only unconditional
 jumps, or simple conditional jump instructions.  Additionally it must attach a
 @code{REG_BR_PROB} note to each conditional jump.  A global variable
-@code{split_branch_probability} hold the probability of original branch in case
+@code{split_branch_probability} holds the probability of the original branch in case
 it was an simple conditional jump, @minus{}1 otherwise.  To simplify
-recomputing of edge frequencies, new sequence is required to have only
+recomputing of edge frequencies, the new sequence is required to have only
 forward jumps to the newly created labels.
 
 @findex define_insn_and_split
@@ -6328,9 +6698,7 @@ the treatment of operator @samp{|} in the regular expressions.  The
 usual treatment of the operator is to try the first alternative and,
 if the reservation is not possible, the second alternative.  The
 nondeterministic treatment means trying all alternatives, some of them
-may be rejected by reservations in the subsequent insns.  You can not
-query functional unit reservations in nondeterministic automaton
-states.
+may be rejected by reservations in the subsequent insns.
 
 @item
 @dfn{progress} means output of a progress bar showing how many states
@@ -6573,7 +6941,7 @@ rtx-based construct, such as a @code{define_insn},
 
 @menu
 * Defining Mode Macros:: Defining a new mode macro.
-* String Substitutions:: Combining mode macros with string substitutions
+* Substitutions::	 Combining mode macros with substitutions
 * Examples::             Examples
 @end menu
 
@@ -6619,14 +6987,15 @@ but that the @code{:SI} expansion has no such constraint.
 
 Macros are applied in the order they are defined.  This can be
 significant if two macros are used in a construct that requires
-string substitutions.  @xref{String Substitutions}.
+substitutions.  @xref{Substitutions}.
 
-@node String Substitutions
-@subsubsection String Substitution in Mode Macros
+@node Substitutions
+@subsubsection Substitution in Mode Macros
 @findex define_mode_attr
 
 If an @file{.md} file construct uses mode macros, each version of the
-construct will often need slightly different strings.  For example:
+construct will often need slightly different strings or modes.  For
+example:
 
 @itemize @bullet
 @item
@@ -6637,6 +7006,11 @@ appropriate mode name for @var{m}.
 @item
 When a @code{define_insn} defines several instruction patterns,
 each instruction will often use a different assembler mnemonic.
+
+@item
+When a @code{define_insn} requires operands with different modes,
+using a macro for one of the operand modes usually requires a specific
+mode for the other operand(s).
 @end itemize
 
 GCC supports such variations through a system of ``mode attributes''.
@@ -6651,12 +7025,12 @@ upper case.  You can define other attributes using:
 where @var{name} is the name of the attribute and @var{valuei}
 is the value associated with @var{modei}.
 
-When GCC replaces some @var{:macro} with @var{:mode}, it will
-scan each string in the pattern for sequences of the form
-@code{<@var{macro}:@var{attr}>}, where @var{attr} is the name of
-a mode attribute.  If the attribute is defined for @var{mode}, the
-whole @code{<...>} sequence will be replaced by the appropriate
-attribute value.
+When GCC replaces some @var{:macro} with @var{:mode}, it will scan
+each string and mode in the pattern for sequences of the form
+@code{<@var{macro}:@var{attr}>}, where @var{attr} is the name of a
+mode attribute.  If the attribute is defined for @var{mode}, the whole
+@code{<...>} sequence will be replaced by the appropriate attribute
+value.
 
 For example, suppose an @file{.md} file has:
 
@@ -6669,6 +7043,15 @@ If one of the patterns that uses @code{:P} contains the string
 @code{"<P:load>\t%0,%1"}, the @code{SI} version of that pattern
 will use @code{"lw\t%0,%1"} and the @code{DI} version will use
 @code{"ld\t%0,%1"}.
+
+Here is an example of using an attribute for a mode:
+
+@smallexample
+(define_mode_macro LONG [SI DI])
+(define_mode_attr SHORT [(SI "HI") (DI "SI")])
+(define_insn ...
+  (sign_extend:LONG (match_operand:<LONG:SHORT> ...)) ...)
+@end smallexample
 
 The @code{@var{macro}:} prefix may be omitted, in which case the
 substitution will be attempted for every macro expansion.

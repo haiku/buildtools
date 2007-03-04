@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* This file contains various simple utilities to analyze the CFG.  */
 #include "config.h"
@@ -69,7 +69,7 @@ flow_active_insn_p (rtx insn)
      programs that fail to return a value.  Its effect is to
      keep the return value from being live across the entire
      function.  If we allow it to be skipped, we introduce the
-     possibility for register livetime aborts.  */
+     possibility for register lifetime confusion.  */
   if (GET_CODE (PATTERN (insn)) == CLOBBER
       && REG_P (XEXP (PATTERN (insn), 0))
       && REG_FUNCTION_VALUE_P (XEXP (PATTERN (insn), 0)))
@@ -87,7 +87,7 @@ forwarder_block_p (basic_block bb)
   rtx insn;
 
   if (bb == EXIT_BLOCK_PTR || bb == ENTRY_BLOCK_PTR
-      || EDGE_COUNT (bb->succs) != 1)
+      || !single_succ_p (bb))
     return false;
 
   for (insn = BB_HEAD (bb); insn != BB_END (bb); insn = NEXT_INSN (insn))
@@ -521,13 +521,15 @@ find_edge_index (struct edge_list *edge_list, basic_block pred, basic_block succ
 void
 flow_nodes_print (const char *str, const sbitmap nodes, FILE *file)
 {
-  int node;
+  unsigned int node = 0;
+  sbitmap_iterator sbi;
 
   if (! nodes)
     return;
 
   fprintf (file, "%s { ", str);
-  EXECUTE_IF_SET_IN_SBITMAP (nodes, 0, node, {fprintf (file, "%d ", node);});
+  EXECUTE_IF_SET_IN_SBITMAP (nodes, 0, node, sbi)
+    fprintf (file, "%d ", node);
   fputs ("}\n", file);
 }
 
@@ -900,10 +902,45 @@ dfs_enumerate_from (basic_block bb, int reverse,
 {
   basic_block *st, lbb;
   int sp = 0, tv = 0;
+  unsigned size;
+
+  /* A bitmap to keep track of visited blocks.  Allocating it each time
+     this function is called is not possible, since dfs_enumerate_from
+     is often used on small (almost) disjoint parts of cfg (bodies of
+     loops), and allocating a large sbitmap would lead to quadratic
+     behavior.  */
+  static sbitmap visited;
+  static unsigned v_size;
+
+#define MARK_VISITED(BB) (SET_BIT (visited, (BB)->index + 2))
+#define UNMARK_VISITED(BB) (RESET_BIT (visited, (BB)->index + 2))
+#define VISITED_P(BB) (TEST_BIT (visited, (BB)->index + 2))
+
+  /* Resize the VISITED sbitmap if necessary.  */
+  size = last_basic_block + 2;
+  if (size < 10)
+    size = 10;
+
+  if (!visited)
+    {
+
+      visited = sbitmap_alloc (size);
+      sbitmap_zero (visited);
+      v_size = size;
+    }
+  else if (v_size < size)
+    {
+      /* Ensure that we increase the size of the sbitmap exponentially.  */
+      if (2 * v_size > size)
+	size = 2 * v_size;
+
+      visited = sbitmap_resize (visited, size, 0);
+      v_size = size;
+    }
 
   st = xcalloc (rslt_max, sizeof (basic_block));
   rslt[tv++] = st[sp++] = bb;
-  bb->flags |= BB_VISITED;
+  MARK_VISITED (bb);
   while (sp)
     {
       edge e;
@@ -912,28 +949,31 @@ dfs_enumerate_from (basic_block bb, int reverse,
       if (reverse)
         {
 	  FOR_EACH_EDGE (e, ei, lbb->preds)
-	    if (!(e->src->flags & BB_VISITED) && predicate (e->src, data))
+	    if (!VISITED_P (e->src) && predicate (e->src, data))
 	      {
 	        gcc_assert (tv != rslt_max);
 	        rslt[tv++] = st[sp++] = e->src;
-	        e->src->flags |= BB_VISITED;
+	        MARK_VISITED (e->src);
 	      }
         }
       else
         {
 	  FOR_EACH_EDGE (e, ei, lbb->succs)
-	    if (!(e->dest->flags & BB_VISITED) && predicate (e->dest, data))
+	    if (!VISITED_P (e->dest) && predicate (e->dest, data))
 	      {
 	        gcc_assert (tv != rslt_max);
 	        rslt[tv++] = st[sp++] = e->dest;
-	        e->dest->flags |= BB_VISITED;
+	        MARK_VISITED (e->dest);
 	      }
 	}
     }
   free (st);
   for (sp = 0; sp < tv; sp++)
-    rslt[sp]->flags &= ~BB_VISITED;
+    UNMARK_VISITED (rslt[sp]);
   return tv;
+#undef MARK_VISITED
+#undef UNMARK_VISITED
+#undef VISITED_P
 }
 
 

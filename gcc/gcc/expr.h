@@ -17,8 +17,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #ifndef GCC_EXPR_H
 #define GCC_EXPR_H
@@ -75,10 +75,10 @@ enum expand_modifier {EXPAND_NORMAL = 0, EXPAND_STACK_PARM, EXPAND_SUM,
 #endif
 
 /* If a clear memory operation would take CLEAR_RATIO or more simple
-   move-instruction sequences, we will do a clrmem or libcall instead.  */
+   move-instruction sequences, we will do a setmem or libcall instead.  */
 
 #ifndef CLEAR_RATIO
-#if defined (HAVE_clrmemqi) || defined (HAVE_clrmemhi) || defined (HAVE_clrmemsi) || defined (HAVE_clrmemdi) || defined (HAVE_clrmemti)
+#if defined (HAVE_setmemqi) || defined (HAVE_setmemhi) || defined (HAVE_setmemsi) || defined (HAVE_setmemdi) || defined (HAVE_setmemti)
 #define CLEAR_RATIO 2
 #else
 /* If we are optimizing for space, cut down the default clear ratio.  */
@@ -310,6 +310,11 @@ int can_conditionally_move_p (enum machine_mode mode);
 rtx emit_conditional_add (rtx, enum rtx_code, rtx, rtx, enum machine_mode,
 			  rtx, rtx, enum machine_mode, int);
 
+rtx expand_val_compare_and_swap (rtx, rtx, rtx, rtx);
+rtx expand_bool_compare_and_swap (rtx, rtx, rtx, rtx);
+rtx expand_sync_operation (rtx, rtx, enum rtx_code);
+rtx expand_sync_fetch_operation (rtx, rtx, enum rtx_code, bool, rtx);
+rtx expand_sync_lock_test_and_set (rtx, rtx, rtx);
 
 /* Functions from expmed.c:  */
 
@@ -336,6 +341,7 @@ extern rtx default_expand_builtin (tree, rtx, rtx, enum machine_mode, int);
 extern void expand_builtin_setjmp_setup (rtx, rtx);
 extern void expand_builtin_setjmp_receiver (rtx);
 extern rtx expand_builtin_saveregs (void);
+extern void expand_builtin_trap (void);
 
 /* Functions from expr.c:  */
 
@@ -417,6 +423,9 @@ extern void use_group_regs (rtx *, rtx);
 /* Write zeros through the storage of OBJECT.
    If OBJECT has BLKmode, SIZE is its length in bytes.  */
 extern rtx clear_storage (rtx, rtx, enum block_op_methods);
+
+/* Expand a setmem pattern; return true if successful.  */
+extern bool set_storage_via_setmem (rtx, rtx, rtx, unsigned int);
 
 /* Determine whether the LEN bytes can be moved by using several move
    instructions.  Return nonzero if a call to move_by_pieces should
@@ -542,7 +551,7 @@ extern HOST_WIDE_INT int_expr_size (tree);
 
 /* Return an rtx that refers to the value returned by a function
    in its original home.  This becomes invalid if any more code is emitted.  */
-extern rtx hard_function_value (tree, tree, int);
+extern rtx hard_function_value (tree, tree, tree, int);
 
 extern rtx prepare_call_address (rtx, rtx, rtx *, int, int);
 
@@ -583,7 +592,7 @@ extern rtx eliminate_constant_term (rtx, rtx *);
    by emitting insns to perform arithmetic if nec.  */
 extern rtx memory_address (enum machine_mode, rtx);
 
-/* Like `memory_address' but pretent `flag_force_addr' is 0.  */
+/* Like `memory_address' but pretend `flag_force_addr' is 0.  */
 extern rtx memory_address_noforce (enum machine_mode, rtx);
 
 /* Return a memory reference like MEMREF, but with its mode changed

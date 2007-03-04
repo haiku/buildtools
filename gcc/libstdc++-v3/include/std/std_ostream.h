@@ -16,7 +16,7 @@
 
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 // USA.
 
 // As a special exception, you may use this file as part of a free software
@@ -173,34 +173,16 @@ namespace std
       operator<<(bool __n);
 
       __ostream_type& 
-      operator<<(short __n)
-      { 
-	const ios_base::fmtflags __fmt = this->flags() & ios_base::basefield;
-	if (__fmt == ios_base::oct || __fmt == ios_base::hex)
-	  return this->operator<<(static_cast<long>
-				  (static_cast<unsigned short>(__n)));
-	else
-	  return this->operator<<(static_cast<long>(__n));
-      }
+      operator<<(short __n);
 
       __ostream_type& 
-      operator<<(unsigned short __n)
-      { return this->operator<<(static_cast<unsigned long>(__n)); }
+      operator<<(unsigned short __n);
 
       __ostream_type& 
-      operator<<(int __n)
-      { 
-	const ios_base::fmtflags __fmt = this->flags() & ios_base::basefield;
-	if (__fmt == ios_base::oct || __fmt == ios_base::hex)
-	  return this->operator<<(static_cast<long>
-				  (static_cast<unsigned int>(__n)));
-	else
-	  return this->operator<<(static_cast<long>(__n));
-      }
+      operator<<(int __n);
 
       __ostream_type& 
-      operator<<(unsigned int __n)
-      { return this->operator<<(static_cast<unsigned long>(__n)); }
+      operator<<(unsigned int __n);
 
 #ifdef _GLIBCXX_USE_LONG_LONG
       __ostream_type& 
@@ -214,8 +196,7 @@ namespace std
       operator<<(double __f);
 
       __ostream_type& 
-      operator<<(float __f)
-      { return this->operator<<(static_cast<double>(__f)); }
+      operator<<(float __f);
 
       __ostream_type& 
       operator<<(long double __f);

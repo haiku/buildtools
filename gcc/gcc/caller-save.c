@@ -1,6 +1,6 @@
 /* Save and restore call-clobbered registers which are live across a call.
    Copyright (C) 1989, 1992, 1994, 1995, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
@@ -82,10 +82,6 @@ static int n_regs_saved;
 /* Computed by mark_referenced_regs, all regs referenced in a given
    insn.  */
 static HARD_REG_SET referenced_regs;
-
-/* Computed in mark_set_regs, holds all registers set by the current
-   instruction.  */
-static HARD_REG_SET this_insn_sets;
 
 
 static void mark_set_regs (rtx, rtx, void *);
@@ -370,6 +366,10 @@ save_call_clobbered_regs (void)
   struct insn_chain *chain, *next;
   enum machine_mode save_mode [FIRST_PSEUDO_REGISTER];
 
+  /* Computed in mark_set_regs, holds all registers set by the current
+     instruction.  */
+  HARD_REG_SET this_insn_sets;
+
   CLEAR_HARD_REG_SET (hard_regs_saved);
   n_regs_saved = 0;
 
@@ -448,7 +448,12 @@ save_call_clobbered_regs (void)
 		 multi-hard-reg pseudo; then the pseudo is considered live
 		 during the call, but the subreg that is set isn't.  */
 	      CLEAR_HARD_REG_SET (this_insn_sets);
-	      note_stores (PATTERN (insn), mark_set_regs, NULL);
+	      note_stores (PATTERN (insn), mark_set_regs, &this_insn_sets);
+	      /* Sibcalls are considered to set the return value,
+		 compare flow.c:propagate_one_insn.  */
+	      if (SIBLING_CALL_P (insn) && current_function_return_rtx)
+		mark_set_regs (current_function_return_rtx, NULL_RTX,
+			       &this_insn_sets);
 
 	      /* Compute which hard regs must be saved before this call.  */
 	      AND_COMPL_HARD_REG_SET (hard_regs_to_save, call_fixed_reg_set);
@@ -484,16 +489,17 @@ save_call_clobbered_regs (void)
     }
 }
 
-/* Here from note_stores when an insn stores a value in a register.
+/* Here from note_stores, or directly from save_call_clobbered_regs, when
+   an insn stores a value in a register.
    Set the proper bit or bits in this_insn_sets.  All pseudos that have
    been assigned hard regs have had their register number changed already,
    so we can ignore pseudos.  */
 static void
-mark_set_regs (rtx reg, rtx setter ATTRIBUTE_UNUSED,
-	       void *data ATTRIBUTE_UNUSED)
+mark_set_regs (rtx reg, rtx setter ATTRIBUTE_UNUSED, void *data)
 {
   int regno, endregno, i;
   enum machine_mode mode = GET_MODE (reg);
+  HARD_REG_SET *this_insn_sets = data;
 
   if (GET_CODE (reg) == SUBREG)
     {
@@ -511,7 +517,7 @@ mark_set_regs (rtx reg, rtx setter ATTRIBUTE_UNUSED,
   endregno = regno + hard_regno_nregs[regno][mode];
 
   for (i = regno; i < endregno; i++)
-    SET_HARD_REG_BIT (this_insn_sets, i);
+    SET_HARD_REG_BIT (*this_insn_sets, i);
 }
 
 /* Here from note_stores when an insn stores a value in a register.
@@ -637,12 +643,12 @@ insert_restore (struct insn_chain *chain, int before_p, int regno,
   struct insn_chain *new;
   rtx mem;
 
-  /* A common failure mode if register status is not correct in the RTL
-     is for this routine to be called with a REGNO we didn't expect to
-     save.  That will cause us to write an insn with a (nil) SET_DEST
-     or SET_SRC.  Instead of doing so and causing a crash later, check
-     for this common case and abort here instead.  This will remove one
-     step in debugging such problems.  */
+  /* A common failure mode if register status is not correct in the
+     RTL is for this routine to be called with a REGNO we didn't
+     expect to save.  That will cause us to write an insn with a (nil)
+     SET_DEST or SET_SRC.  Instead of doing so and causing a crash
+     later, check for this common case here instead.  This will remove
+     one step in debugging such problems.  */
   gcc_assert (regno_save_mem[regno][1]);
 
   /* Get the pattern to emit and update our status.
@@ -710,11 +716,11 @@ insert_save (struct insn_chain *chain, int before_p, int regno,
   struct insn_chain *new;
   rtx mem;
 
-  /* A common failure mode if register status is not correct in the RTL
-     is for this routine to be called with a REGNO we didn't expect to
-     save.  That will cause us to write an insn with a (nil) SET_DEST
-     or SET_SRC.  Instead of doing so and causing a crash later, check
-     for this common case and abort here instead.  This will remove one
+  /* A common failure mode if register status is not correct in the
+     RTL is for this routine to be called with a REGNO we didn't
+     expect to save.  That will cause us to write an insn with a (nil)
+     SET_DEST or SET_SRC.  Instead of doing so and causing a crash
+     later, check for this common case here.  This will remove one
      step in debugging such problems.  */
   gcc_assert (regno_save_mem[regno][1]);
 

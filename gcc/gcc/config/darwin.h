@@ -18,8 +18,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 59 Temple Place - Suite 330,
-Boston, MA 02111-1307, USA.  */
+the Free Software Foundation, 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA.  */
 
 #ifndef CONFIG_DARWIN_H
 #define CONFIG_DARWIN_H
@@ -96,12 +96,12 @@ Boston, MA 02111-1307, USA.  */
    name, that also takes an argument, needs to be modified so the
    prefix is different, otherwise a '*' after the shorter option will
    match with the longer one.
-   
+
    The SUBTARGET_OPTION_TRANSLATE_TABLE macro, which _must_ be defined
    in gcc/config/{i386,rs6000}/darwin.h, should contain any additional
    command-line option translations specific to the particular target
    architecture.  */
-   
+
 #define TARGET_OPTION_TRANSLATE_TABLE \
   { "-all_load", "-Zall_load" },  \
   { "-allowable_client", "-Zallowable_client" },  \
@@ -140,23 +140,13 @@ Boston, MA 02111-1307, USA.  */
   { "-unexported_symbols_list", "-Zunexported_symbols_list" }, \
   SUBTARGET_OPTION_TRANSLATE_TABLE
 
-/* Nonzero if the user has chosen to force sizeof(bool) to be 1
-   by providing the -mone-byte-bool switch.  It would be better
-   to use SUBTARGET_SWITCHES for this instead of SUBTARGET_OPTIONS,
-   but there are no more bits in rs6000 TARGET_SWITCHES.  Note
-   that this switch has no "no-" variant. */
-extern const char *darwin_one_byte_bool;
-  
-extern int darwin_fix_and_continue;
-extern const char *darwin_fix_and_continue_switch;
-
-#undef SUBTARGET_OPTIONS
-#define SUBTARGET_OPTIONS \
-  {"one-byte-bool", &darwin_one_byte_bool, N_("Set sizeof(bool) to 1"), 0 }, \
-  {"fix-and-continue", &darwin_fix_and_continue_switch,			\
-   N_("Generate code suitable for fast turn around debugging"), 0},	\
-  {"no-fix-and-continue", &darwin_fix_and_continue_switch,		\
-   N_("Don't generate code suitable for fast turn around debugging"), 0}
+#define SUBTARGET_OS_CPP_BUILTINS()                     \
+  do							\
+    {							\
+      if (flag_pic)					\
+	builtin_define ("__PIC__");			\
+    }							\
+  while (0)
 
 /* These compiler options take n arguments.  */
 
@@ -203,13 +193,11 @@ extern const char *darwin_fix_and_continue_switch;
    !strcmp (STR, "dylinker_install_name") ? 1 : \
    0)
 
-/* Machine dependent cpp options.  __APPLE_CC__ is defined as the
-   Apple include files expect it to be defined and won't work if it
-   isn't.  */
+/* Machine dependent cpp options.  Don't add more options here, add
+   them to darwin_cpp_builtins in darwin-c.c.  */
 
 #undef	CPP_SPEC
-#define CPP_SPEC "%{static:%{!dynamic:-D__STATIC__}}%{!static:-D__DYNAMIC__}\
-    -D__APPLE_CC__=1"
+#define CPP_SPEC "%{static:%{!dynamic:-D__STATIC__}}%{!static:-D__DYNAMIC__}"
 
 /* This is mostly a clone of the standard LINK_COMMAND_SPEC, plus
    precomp, libtool, and fat build additions.  Also we
@@ -226,8 +214,8 @@ extern const char *darwin_fix_and_continue_switch;
     %{!Zdynamiclib:%{A} %{e*} %{m} %{N} %{n} %{r} %{u*} %{x} %{z}} \
     %{@:-o %f%u.out}%{!@:%{o*}%{!o:-o a.out}} \
     %{!Zdynamiclib:%{!A:%{!nostdlib:%{!nostartfiles:%S}}}} \
-    %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate:-lgcov} \
-    %{!nostdlib:%{!nodefaultlibs:%G %L}} \
+    %{L*} %(link_libgcc) %o %{fprofile-arcs|fprofile-generate|coverage:-lgcov} \
+    %{!nostdlib:%{!nodefaultlibs:%(link_ssp) %G %L}} \
     %{!A:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} %{F*} }}}}}}}}"
 
 /* Please keep the random linker options in alphabetical order (modulo
@@ -280,6 +268,7 @@ extern const char *darwin_fix_and_continue_switch;
    %{headerpad_max_install_names*} \
    %{Zimage_base*:-image_base %*} \
    %{Zinit*:-init %*} \
+   %{mmacosx-version-min=*:-macosx_version_min %*} \
    %{nomultidefs} \
    %{Zmulti_module:-multi_module} %{Zsingle_module:-single_module} \
    %{Zmultiply_defined*:-multiply_defined %*} \
@@ -293,6 +282,7 @@ extern const char *darwin_fix_and_continue_switch;
    %{Zseg_addr_table*: -seg_addr_table %*} \
    %{Zseg_addr_table_filename*:-seg_addr_table_filename %*} \
    %{sub_library*} %{sub_umbrella*} \
+   %{isysroot*:-syslibroot %*} \
    %{twolevel_namespace} %{twolevel_namespace_hints} \
    %{umbrella*} \
    %{undefined*} \
@@ -308,25 +298,35 @@ extern const char *darwin_fix_and_continue_switch;
    %{dylinker} %{Mach} "
 
 
-/* Machine dependent libraries but do not redefine it if we already on 7.0 and
-   above as it needs to link with libmx also.  */
+/* Machine dependent libraries.  */
 
-#ifndef	LIB_SPEC
 #define LIB_SPEC "%{!static:-lSystem}"
-#endif
 
-/* -dynamiclib implies -shared-libgcc just like -shared would on linux.  */
-#define REAL_LIBGCC_SPEC \
-   "%{static|static-libgcc:-lgcc -lgcc_eh}\
-    %{!static:%{!static-libgcc:\
-      %{!Zdynamiclib:%{!shared-libgcc:-lgcc -lgcc_eh}\
-      %{shared-libgcc:-lgcc_s -lgcc}} %{Zdynamiclib:-lgcc_s -lgcc}}}"
+/* Support -mmacosx-version-min by supplying different (stub) libgcc_s.dylib
+   libraries to link against, and by not linking against libgcc_s on
+   earlier-than-10.3.9.
 
+   Note that by default, -lgcc_eh is not linked against!  This is
+   because in a future version of Darwin the EH frame information may
+   be in a new format, or the fallback routine might be changed; if
+   you want to explicitly link against the static version of those
+   routines, because you know you don't need to unwind through system
+   libraries, you need to explicitly say -static-libgcc.  
+   
+   If it is linked against, it has to be before -lgcc, because it may
+   need symbols from -lgcc.  */
+#undef REAL_LIBGCC_SPEC
+#define REAL_LIBGCC_SPEC						   \
+   "%{static-libgcc|static: -lgcc_eh -lgcc;				   \
+      shared-libgcc|fexceptions:					   \
+       %:version-compare(!> 10.5 mmacosx-version-min= -lgcc_s.10.4)	   \
+       %:version-compare(>= 10.5 mmacosx-version-min= -lgcc_s.10.5)	   \
+       -lgcc;								   \
+      :%:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_s.10.4) \
+       %:version-compare(>= 10.5 mmacosx-version-min= -lgcc_s.10.5)	   \
+       -lgcc}"
+			 
 /* We specify crt0.o as -lcrt0.o so that ld will search the library path.  */
-/* We don't want anything to do with crt2.o in the 64-bit case;
-   testing the PowerPC-specific -m64 flag here is a little irregular,
-   but it's overkill to make copies of this spec for each target
-   arch.  */
 
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC  \
@@ -334,11 +334,11 @@ extern const char *darwin_fix_and_continue_switch;
      %{!Zbundle:%{pg:%{static:-lgcrt0.o} \
                      %{!static:%{object:-lgcrt0.o} \
                                %{!object:%{preload:-lgcrt0.o} \
-                                 %{!preload:-lgcrt1.o %{!m64: crt2.o%s}}}}} \
+                                 %{!preload:-lgcrt1.o %(darwin_crt2)}}}} \
                 %{!pg:%{static:-lcrt0.o} \
                       %{!static:%{object:-lcrt0.o} \
                                 %{!object:%{preload:-lcrt0.o} \
-                                  %{!preload:-lcrt1.o %{!m64: crt2.o%s}}}}}}}"
+                                  %{!preload:-lcrt1.o %(darwin_crt2)}}}}}}"
 
 /* The native Darwin linker doesn't necessarily place files in the order
    that they're specified on the link line.  Thus, it is pointless
@@ -392,7 +392,7 @@ extern const char *darwin_fix_and_continue_switch;
   do {									\
     if (ALIAS)								\
       {									\
-	warning ("alias definitions not supported in Mach-O; ignored");	\
+	warning (0, "alias definitions not supported in Mach-O; ignored");	\
 	break;								\
       }									\
  									\
@@ -415,9 +415,9 @@ extern const char *darwin_fix_and_continue_switch;
    links to, so there's no need for weak-ness for that.  */
 #define GTHREAD_USE_WEAK 0
 
-/* The Darwin linker imposes two limitations on common symbols: they 
+/* The Darwin linker imposes two limitations on common symbols: they
    can't have hidden visibility, and they can't appear in dylibs.  As
-   a consequence, we should never use common symbols to represent 
+   a consequence, we should never use common symbols to represent
    vague linkage. */
 #undef USE_COMMON_FOR_ONE_ONLY
 #define USE_COMMON_FOR_ONE_ONLY 0
@@ -436,7 +436,7 @@ extern const char *darwin_fix_and_continue_switch;
 #undef FRAME_BEGIN_LABEL
 #define FRAME_BEGIN_LABEL "EH_frame"
 
-/* Emit a label for the FDE corresponding to DECL.  EMPTY means 
+/* Emit a label for the FDE corresponding to DECL.  EMPTY means
    emit a label for an empty FDE. */
 #define TARGET_ASM_EMIT_UNWIND_LABEL darwin_emit_unwind_label
 
@@ -551,7 +551,12 @@ extern const char *darwin_fix_and_continue_switch;
 	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
 	   else if (len > 14 && !strcmp ("$non_lazy_ptr", xname + len - 13)) \
 	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
-	   fputs (&xname[1], FILE);					     \
+	   else if (len > 15 && !strcmp ("$non_lazy_ptr\"", xname + len - 14)) \
+	     machopic_validate_stub_or_non_lazy_ptr (xname);		     \
+	   if (xname[1] != '"' && name_needs_quotes (&xname[1]))	     \
+	     fprintf (FILE, "\"%s\"", &xname[1]);			     \
+	   else								     \
+	     fputs (&xname[1], FILE); 					     \
 	 }								     \
        else if (xname[0] == '+' || xname[0] == '-')			     \
          fprintf (FILE, "\"%s\"", xname);				     \
@@ -559,6 +564,8 @@ extern const char *darwin_fix_and_continue_switch;
          fprintf (FILE, "L%s", xname);					     \
        else if (!strncmp (xname, ".objc_class_name_", 17))		     \
 	 fprintf (FILE, "%s", xname);					     \
+       else if (xname[0] != '"' && name_needs_quotes (xname))		     \
+	 fprintf (FILE, "\"%s\"", xname);				     \
        else								     \
          asm_fprintf (FILE, "%U%s", xname);				     \
   } while (0)
@@ -582,12 +589,14 @@ extern const char *darwin_fix_and_continue_switch;
 
 /* Ensure correct alignment of bss data.  */
 
-#undef	ASM_OUTPUT_ALIGNED_DECL_LOCAL					
+#undef	ASM_OUTPUT_ALIGNED_DECL_LOCAL
 #define ASM_OUTPUT_ALIGNED_DECL_LOCAL(FILE, DECL, NAME, SIZE, ALIGN)	\
   do {									\
+    unsigned HOST_WIDE_INT _new_size = SIZE;				\
     fputs (".lcomm ", (FILE));						\
     assemble_name ((FILE), (NAME));					\
-    fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n", (SIZE),	\
+    if (_new_size == 0) _new_size = 1;					\
+    fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n", _new_size,	\
 	     floor_log2 ((ALIGN) / BITS_PER_UNIT));			\
     if ((DECL) && ((TREE_STATIC (DECL)					\
 	 && (!DECL_COMMON (DECL) || !TREE_PUBLIC (DECL)))		\
@@ -619,6 +628,10 @@ FUNCTION (void)								\
       if (asm_out_file)							\
 	fputs ("\t" DIRECTIVE "\n", asm_out_file);			\
       in_section = SECTION;						\
+      if ((SECTION == in_text_coal)                                     \
+	  || (SECTION == in_text_unlikely)                              \
+	  || (SECTION == in_text_unlikely_coal))                        \
+        last_text_section = SECTION;                                    \
     }									\
 }									\
 
@@ -657,10 +670,6 @@ static void objc_section_init (void);				\
 SECTION_FUNCTION (text_coal_section,				\
 		  in_text_coal,					\
 		  ".section __TEXT,__textcoal_nt,coalesced,"	\
-		    "pure_instructions", 0)			\
-SECTION_FUNCTION (text_unlikely_section,			\
-		  in_text_unlikely,				\
-		  ".section __TEXT,__text_unlikely,coalesced,"	\
 		    "pure_instructions", 0)			\
 SECTION_FUNCTION (text_unlikely_coal_section,			\
 		  in_text_unlikely_coal,			\
@@ -1039,12 +1048,10 @@ void darwin_register_objc_includes (const char *, const char *, int);
 void add_framework_path (char *);
 #define TARGET_OPTF add_framework_path
 
-#define TARGET_HAS_F_SETLKW
+#define TARGET_POSIX_IO
 
-/* Darwin before 7.0 does not have C99 functions.   */
-#ifndef TARGET_C99_FUNCTIONS
-#define TARGET_C99_FUNCTIONS 0
-#endif
+/* All new versions of Darwin have C99 functions.  */
+#define TARGET_C99_FUNCTIONS 1
 
 #define WINT_TYPE "int"
 

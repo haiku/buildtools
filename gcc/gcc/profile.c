@@ -1,6 +1,6 @@
 /* Calculate branch probabilities, and basic block execution counts.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004  Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005  Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
    Further mangling by Bob Manson, Cygnus Support.
@@ -19,8 +19,8 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 /* Generate basic block profile instrumentation and auxiliary files.
    Profile generation is optimized, so that not all arcs in the basic
@@ -65,6 +65,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "tree.h"
 #include "cfghooks.h"
 #include "tree-flow.h"
+#include "timevar.h"
+#include "cfgloop.h"
+#include "tree-pass.h"
 
 /* Hooks for profiling.  */
 static struct profile_hooks* profile_hooks;
@@ -150,8 +153,7 @@ instrument_edges (struct edge_list *el)
 
 	  if (!inf->ignore && !inf->on_tree)
 	    {
-	      if (e->flags & EDGE_ABNORMAL)
-		abort ();
+	      gcc_assert (!(e->flags & EDGE_ABNORMAL));
 	      if (dump_file)
 		fprintf (dump_file, "Edge %d to %d instrumented%s\n",
 			 e->src->index, e->dest->index,
@@ -197,7 +199,7 @@ instrument_values (histogram_values values)
 	  break;
 
 	default:
-	  abort ();
+	  gcc_unreachable ();
 	}
       if (!coverage_counter_alloc (t, hist->n_counters))
 	continue;
@@ -221,7 +223,7 @@ instrument_values (histogram_values values)
 	  break;
 
 	default:
-	  abort ();
+	  gcc_unreachable ();
 	}
     }
 }
@@ -429,8 +431,7 @@ compute_branch_probabilities (void)
 		  /* Calculate count for remaining edge by conservation.  */
 		  total = bb->count - total;
 
-		  if (! e)
-		    abort ();
+		  gcc_assert (e);
 		  EDGE_INFO (e)->count_valid = 1;
 		  e->count = total;
 		  bi->succ_count--;
@@ -457,8 +458,7 @@ compute_branch_probabilities (void)
 		  /* Calculate count for remaining edge by conservation.  */
 		  total = bb->count - total + e->count;
 
-		  if (! e)
-		    abort ();
+		  gcc_assert (e);
 		  EDGE_INFO (e)->count_valid = 1;
 		  e->count = total;
 		  bi->pred_count--;
@@ -480,8 +480,7 @@ compute_branch_probabilities (void)
      succ and pred count of zero.  */
   FOR_EACH_BB (bb)
     {
-      if (BB_INFO (bb)->succ_count || BB_INFO (bb)->pred_count)
-	abort ();
+      gcc_assert (!BB_INFO (bb)->succ_count && !BB_INFO (bb)->pred_count);
     }
 
   /* For every edge, calculate its branch probability and add a reg_note
@@ -641,7 +640,7 @@ compute_branch_probabilities (void)
 }
 
 /* Load value histograms values whose description is stored in VALUES array
-   from .da file.  */
+   from .gcda file.  */
 
 static void
 compute_value_histograms (histogram_values values)
@@ -651,14 +650,13 @@ compute_value_histograms (histogram_values values)
   gcov_type *histogram_counts[GCOV_N_VALUE_COUNTERS];
   gcov_type *act_count[GCOV_N_VALUE_COUNTERS];
   gcov_type *aact_count;
-  histogram_value hist;
  
   for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
     n_histogram_counters[t] = 0;
 
   for (i = 0; i < VEC_length (histogram_value, values); i++)
     {
-      hist = VEC_index (histogram_value, values, i);
+      histogram_value hist = VEC_index (histogram_value, values, i);
       n_histogram_counters[(int) hist->type] += hist->n_counters;
     }
 
@@ -683,26 +681,21 @@ compute_value_histograms (histogram_values values)
 
   for (i = 0; i < VEC_length (histogram_value, values); i++)
     {
-      rtx hist_list = NULL_RTX;
+      histogram_value hist = VEC_index (histogram_value, values, i);
+      tree stmt = hist->hvalue.stmt;
+      stmt_ann_t ann = get_stmt_ann (stmt);
 
-      hist = VEC_index (histogram_value, values, i);
       t = (int) hist->type;
 
-      /* FIXME: make this work for trees.  */
-      if (!ir_type ())
-	{
-	  aact_count = act_count[t];
-	  act_count[t] += hist->n_counters;
-	  for (j = hist->n_counters; j > 0; j--)
-	    hist_list = alloc_EXPR_LIST (0, GEN_INT (aact_count[j - 1]), 
-					hist_list);
-	      hist_list = alloc_EXPR_LIST (0, 
-			    copy_rtx ((rtx) hist->value), hist_list);
-	  hist_list = alloc_EXPR_LIST (0, GEN_INT (hist->type), hist_list);
-	      REG_NOTES ((rtx) hist->insn) =
-		  alloc_EXPR_LIST (REG_VALUE_PROFILE, hist_list,
-				   REG_NOTES ((rtx) hist->insn));
-	}
+      aact_count = act_count[t];
+      act_count[t] += hist->n_counters;
+
+      hist->hvalue.next = ann->histograms;
+      ann->histograms = hist;
+      hist->hvalue.counters = 
+	    xmalloc (sizeof (gcov_type) * hist->n_counters);
+      for (j = 0; j < hist->n_counters; j++)
+	hist->hvalue.counters[j] = aact_count[j];
     }
 
   for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
@@ -812,6 +805,40 @@ branch_prob (void)
 
       FOR_EACH_EDGE (e, ei, bb->succs)
 	{
+	  block_stmt_iterator bsi;
+	  tree last = NULL;
+
+	  /* It may happen that there are compiler generated statements
+	     without a locus at all.  Go through the basic block from the
+	     last to the first statement looking for a locus.  */
+	  for (bsi = bsi_last (bb); !bsi_end_p (bsi); bsi_prev (&bsi))
+	    {
+	      last = bsi_stmt (bsi);
+	      if (EXPR_LOCUS (last))
+		break;
+	    }
+
+	  /* Edge with goto locus might get wrong coverage info unless
+	     it is the only edge out of BB.   
+	     Don't do that when the locuses match, so 
+	     if (blah) goto something;
+	     is not computed twice.  */
+	  if (last && EXPR_LOCUS (last)
+	      && e->goto_locus
+	      && !single_succ_p (bb)
+#ifdef USE_MAPPED_LOCATION
+	      && (LOCATION_FILE (e->goto_locus)
+	          != LOCATION_FILE (EXPR_LOCATION  (last))
+		  || (LOCATION_LINE (e->goto_locus)
+		      != LOCATION_LINE (EXPR_LOCATION  (last)))))
+#else
+	      && (e->goto_locus->file != EXPR_LOCUS (last)->file
+		  || (e->goto_locus->line != EXPR_LOCUS (last)->line)))
+#endif
+	    {
+	      basic_block new = split_edge (e);
+	      single_succ_edge (new)->goto_locus = e->goto_locus;
+	    }
 	  if ((e->flags & (EDGE_ABNORMAL | EDGE_ABNORMAL_CALL))
 	       && e->dest != EXIT_BLOCK_PTR)
 	    need_exit_edge = 1;
@@ -1052,10 +1079,10 @@ branch_prob (void)
 
 	      /* Notice GOTO expressions we eliminated while constructing the
 		 CFG.  */
-	      if (EDGE_COUNT (bb->succs) == 1 && EDGE_SUCC (bb, 0)->goto_locus)
+	      if (single_succ_p (bb) && single_succ_edge (bb)->goto_locus)
 		{
 		  /* ??? source_locus type is marked deprecated in input.h.  */
-		  source_locus curr_location = EDGE_SUCC (bb, 0)->goto_locus;
+		  source_locus curr_location = single_succ_edge (bb)->goto_locus;
 		  /* ??? The FILE/LINE API is inconsistent for these cases.  */
 #ifdef USE_MAPPED_LOCATION 
 		  output_location (LOCATION_FILE (curr_location),
@@ -1104,8 +1131,7 @@ branch_prob (void)
 
       n_instrumented = instrument_edges (el);
 
-      if (n_instrumented != num_instrumented)
-	abort ();
+      gcc_assert (n_instrumented == num_instrumented);
 
       if (flag_profile_values)
 	instrument_values (values);
@@ -1131,9 +1157,11 @@ branch_prob (void)
 	dump_flow_info (profile_dump_file());
     }
 
+  VEC_free (histogram_value, heap, values);
   free_edge_list (el);
   if (flag_branch_probabilities)
     profile_status = PROFILE_READ;
+  coverage_end_function ();
 }
 
 /* Union find algorithm implementation for the basic blocks using
@@ -1165,8 +1193,7 @@ union_groups (basic_block bb1, basic_block bb2)
 
   /* ??? I don't have a place for the rank field.  OK.  Lets go w/o it,
      this code is unlikely going to be performance problem anyway.  */
-  if (bb1g == bb2g)
-    abort ();
+  gcc_assert (bb1g != bb2g);
 
   bb1g->aux = bb2g;
 }
@@ -1310,17 +1337,49 @@ end_branch_prob (void)
 void
 tree_register_profile_hooks (void)
 {
+  gcc_assert (ir_type ());
   profile_hooks = &tree_profile_hooks;
-  if (!ir_type ())
-    abort ();
 }
 
-/* Set up hooks to enable RTL-based profiling.  */
-
-void
-rtl_register_profile_hooks (void)
+
+/* Do branch profiling and static profile estimation passes.  */
+static void
+rest_of_handle_branch_prob (void)
 {
-  profile_hooks = &rtl_profile_hooks;
-  if (ir_type ())
-    abort ();
+  struct loops loops;
+
+  /* Discover and record the loop depth at the head of each basic
+     block.  The loop infrastructure does the real job for us.  */
+  flow_loops_find (&loops);
+
+  if (dump_file)
+    flow_loops_dump (&loops, dump_file, NULL, 0);
+
+  /* Estimate using heuristics if no profiling info is available.  */
+  if (flag_guess_branch_prob
+      && profile_status == PROFILE_ABSENT)
+    estimate_probability (&loops);
+
+  flow_loops_free (&loops);
+  free_dominance_info (CDI_DOMINATORS);
 }
+
+struct tree_opt_pass pass_branch_prob =
+{
+  "bp",                                 /* name */
+  NULL,                                 /* gate */   
+  rest_of_handle_branch_prob,           /* execute */       
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_BRANCH_PROB,                       /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func,                       /* todo_flags_finish */
+  'b'                                   /* letter */
+};
+
+
+

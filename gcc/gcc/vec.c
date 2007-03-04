@@ -1,5 +1,5 @@
 /* Vector API for GNU compiler.
-   Copyright (C) 2004 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005 Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
 
 This file is part of GCC.
@@ -16,16 +16,16 @@ for more details.
 
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
+02110-1301, USA.  */
 
 #include "config.h"
 #include "system.h"
 #include "ggc.h"
 #include "vec.h"
-#include "errors.h"
 #include "coretypes.h"
 #include "tree.h"
+#include "toplev.h"
 
 struct vec_prefix 
 {
@@ -34,9 +34,54 @@ struct vec_prefix
   void *vec[1];
 };
 
-/* Ensure there are at least RESERVE free slots in VEC, if RESERVE >=
-   0.  If RESERVE < 0 increase the current allocation exponentially.
-   VEC can be NULL, to create a new vector.  */
+/* Calculate the new ALLOC value, making sure that abs(RESERVE) slots
+   are free.  If RESERVE < 0 grow exactly, otherwise grow
+   exponentially.  */
+
+static inline unsigned
+calculate_allocation (const struct vec_prefix *pfx, int reserve)
+{
+  unsigned alloc = 0;
+  unsigned num = 0;
+
+  if (pfx)
+    {
+      alloc = pfx->alloc;
+      num = pfx->num;
+    }
+  else if (!reserve)
+    /* If there's no prefix, and we've not requested anything, then we
+       will create a NULL vector.  */
+    return 0;
+  
+  /* We must have run out of room.  */
+  gcc_assert (alloc - num < (unsigned)(reserve < 0 ? -reserve : reserve));
+  
+  if (reserve < 0)
+    /* Exact size.  */
+    alloc = num + -reserve;
+  else
+    {
+      /* Exponential growth. */
+      if (!alloc)
+	alloc = 4;
+      else if (alloc < 16)
+	/* Double when small.  */
+	alloc = alloc * 2;
+      else
+	/* Grow slower when large.  */
+	alloc = (alloc * 3 / 2);
+      
+      /* If this is still too small, set it to the right size. */
+      if (alloc < num + reserve)
+	alloc = num + reserve;
+    }
+  return alloc;
+}
+
+/* Ensure there are at least abs(RESERVE) free slots in VEC.  If
+   RESERVE < 0 grow exactly, else grow exponentially.  As a special
+   case, if VEC is NULL, and RESERVE is 0, no vector will be created. */
 
 void *
 vec_gc_p_reserve (void *vec, int reserve MEM_STAT_DECL)
@@ -46,28 +91,19 @@ vec_gc_p_reserve (void *vec, int reserve MEM_STAT_DECL)
 			   PASS_MEM_STAT);
 }
 
-/* Ensure there are at least RESERVE free slots in VEC, if RESERVE >=
-   0.  If RESERVE < 0, increase the current allocation exponentially.
-   VEC can be NULL, in which case a new vector is created.  The
-   vector's trailing array is at VEC_OFFSET offset and consists of
-   ELT_SIZE sized elements.  */
+/* As vec_gc_p_reserve, but for object vectors.  The vector's trailing
+   array is at VEC_OFFSET offset and consists of ELT_SIZE sized
+   elements.  */
 
 void *
 vec_gc_o_reserve (void *vec, int reserve, size_t vec_offset, size_t elt_size
 		   MEM_STAT_DECL)
 {
   struct vec_prefix *pfx = vec;
-  unsigned alloc = pfx ? pfx->num : 0;
-
-  if (reserve >= 0)
-    alloc += reserve;
-  else if (alloc)
-    alloc *= 2;
-  else
-    alloc = 4;
-
-  if (pfx && pfx->alloc >= alloc)
-    abort ();
+  unsigned alloc = alloc = calculate_allocation (pfx, reserve);
+  
+  if (!alloc)
+    return NULL;
   
   vec = ggc_realloc_stat (vec, vec_offset + alloc * elt_size PASS_MEM_STAT);
   ((struct vec_prefix *)vec)->alloc = alloc;
@@ -77,17 +113,7 @@ vec_gc_o_reserve (void *vec, int reserve, size_t vec_offset, size_t elt_size
   return vec;
 }
 
-/* Explicitly release a vector.  */
-
-void
-vec_gc_free (void *vec)
-{
-  ggc_free (vec);
-}
-
-/* Ensure there are at least RESERVE free slots in VEC, if RESERVE >=
-   0.  If RESERVE < 0 increase the current allocation exponentially.
-   VEC can be NULL, to create a new vector.  */
+/* As for vec_gc_p_reserve, but for heap allocated vectors.  */
 
 void *
 vec_heap_p_reserve (void *vec, int reserve MEM_STAT_DECL)
@@ -97,28 +123,17 @@ vec_heap_p_reserve (void *vec, int reserve MEM_STAT_DECL)
 			     PASS_MEM_STAT);
 }
 
-/* Ensure there are at least RESERVE free slots in VEC, if RESERVE >=
-   0.  If RESERVE < 0, increase the current allocation exponentially.
-   VEC can be NULL, in which case a new vector is created.  The
-   vector's trailing array is at VEC_OFFSET offset and consists of
-   ELT_SIZE sized elements.  */
+/* As for vec_gc_o_reserve, but for heap allocated vectors.  */
 
 void *
 vec_heap_o_reserve (void *vec, int reserve, size_t vec_offset, size_t elt_size
 		    MEM_STAT_DECL)
 {
   struct vec_prefix *pfx = vec;
-  unsigned alloc = pfx ? pfx->num : 0;
+  unsigned alloc = calculate_allocation (pfx, reserve);
 
-  if (reserve >= 0)
-    alloc += reserve;
-  else if (alloc)
-    alloc *= 2;
-  else
-    alloc = 4;
-
-  if (pfx && pfx->alloc >= alloc)
-    abort ();
+  if (!alloc)
+    return NULL;
   
   vec = xrealloc (vec, vec_offset + alloc * elt_size);
   ((struct vec_prefix *)vec)->alloc = alloc;
@@ -126,14 +141,6 @@ vec_heap_o_reserve (void *vec, int reserve, size_t vec_offset, size_t elt_size
     ((struct vec_prefix *)vec)->num = 0;
   
   return vec;
-}
-
-/* Explicitly release a vector.  */
-
-void
-vec_heap_free (void *vec)
-{
-  free (vec);
 }
 
 #if ENABLE_CHECKING
