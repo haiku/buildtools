@@ -1716,6 +1716,7 @@ powerpc-*-eabi*)
 powerpc-*-haiku*)
 	tmake_file="rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
 	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku-ppc.h"
+	extra_options="${extra_options} rs6000/sysv4.opt"
 	extra_parts='crtbegin.o crtend.o'
 	;;
 powerpc-*-rtems*)
