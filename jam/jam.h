@@ -458,7 +458,7 @@
  */
 
 # ifndef MAXLINE
-# define MAXLINE 20480	/* longest 'together' actions' */
+# define MAXLINE 40960	/* longest 'together' actions' */
 # endif
 
 # ifndef EXITOK
