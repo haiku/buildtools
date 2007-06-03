@@ -18,7 +18,7 @@
 
 //#define DBG(x) { x; }
 #define DBG(x)
-#define OUT printf
+#define OUT(format...) {printf(format); fflush(stdout);}
 
 static const int32 kMaxSymlinks = 32;
 
@@ -28,6 +28,14 @@ static const int32 kNodeMonitorLimitIncrement = 512;
 
 // private BeOS syscall to set the  node monitor slot limits
 extern "C" int _kset_mon_limit_(int num);
+
+static inline bool
+is_dot_or_dotdot(const char* name)
+{
+	if (name && name[0] == '.')
+		return (name[1] == '\0' || name[1] == '.' && name[2] == '\0');
+	return false;
+}
 
 // get_dirent_size
 static inline
@@ -138,7 +146,7 @@ Entry::SetNode(Node *node)
 		fNode = node;
 		if (fNode) {
 			fNode->AddReference();
-			if (!fNode->GetEntry())
+			if (!fNode->GetEntry() && !is_dot_or_dotdot(fName.c_str()))
 				fNode->SetEntry(this);
 		}
 	}
@@ -379,7 +387,7 @@ Directory::FindEntry(const char *name, Entry **entry)
 {
 	entry_ref ref(fStat.st_dev, fStat.st_ino, name);
 	if (!fIsComplete)
-		return NodeManager::GetDefault()->CreateEntry(ref, entry);
+		return NodeManager::GetDefault()->CreateEntry(ref, NULL, entry);
 	*entry = NodeManager::GetDefault()->GetEntry(ref);
 	return (*entry ? B_OK : B_ENTRY_NOT_FOUND);
 }
@@ -869,9 +877,19 @@ NodeManager::GetEntry(const entry_ref &entryRef)
 
 // CreateEntry
 status_t
-NodeManager::CreateEntry(const entry_ref &entryRef, Entry **_entry)
+NodeManager::CreateEntry(const entry_ref &entryRef, const node_ref *nodeRef,
+	Entry **_entry)
 {
 	Entry *entry = GetEntry(entryRef);
+
+	// If the entry is known, but its node is not the one it should be, we
+	// remove the entry.
+	if (nodeRef && entry && entry->GetNode()
+		&& entry->GetNode()->GetNodeRef() != *nodeRef) {
+		RemoveEntry(entry);
+		entry = NULL;
+	}
+
 	if (!entry) {
 		// entry does not yet exist -- create it
 
@@ -901,8 +919,22 @@ NodeManager::CreateEntry(const entry_ref &entryRef, Entry **_entry)
 				delete entry;
 				return error;
 			}
+
+			// If the node already existed, but points to another entry, we
+			// remove that entry now. We probably missed the respective
+			// B_ENTRY_REMOVED notification.
+			if (node->GetEntry() && node->GetEntry() != entry
+				&& !is_dot_or_dotdot(entry->GetName())) {
+				RemoveEntry(node->GetEntry());
+
+				// reinit node watching
+				StopWatching(node);
+				StartWatching(node);
+			}
+
 			entry->SetNode(node);
 			node->RemoveReference();
+				// reference acquired by _CreateNode()
 
 			// initialization successful: add the entry to the dir and to the
 			// entry map
@@ -985,7 +1017,8 @@ OUT("entry removed: `%s'\n", path.c_str());
 
 // MoveEntry
 void
-NodeManager::MoveEntry(Entry *entry, const entry_ref &newRef)
+NodeManager::MoveEntry(Entry *entry, const entry_ref &newRef,
+	const node_ref &nodeRef)
 {
 	// get the target directory
 	node_ref newDirRef;
@@ -998,18 +1031,19 @@ NodeManager::MoveEntry(Entry *entry, const entry_ref &newRef)
 		return;
 	}
 
-	// If the directory and/or the name changed, we remove the old entry and
-	// create a new one.
+	// If the directory, the name, or the node (missed B_ENTRY_REMOVED and
+	// B_ENTRY_CREATED) changed, we remove the old entry and create a new one.
+	Node *node = entry->GetNode();
 	if (newDir != entry->GetParent()
-		|| strcmp(newRef.name, entry->GetName()) != 0) {
+		|| strcmp(newRef.name, entry->GetName()) != 0
+		|| (node && node->GetNodeRef() != nodeRef)) {
 		// get a temporary reference to the node, so it won't be unnecessarily
 		// deleted
-		Node *node = entry->GetNode();
 		if (node)
 			node->AddReference();
 
 		RemoveEntry(entry);
-		CreateEntry(newRef, &entry);
+		CreateEntry(newRef, &nodeRef, &entry);
 
 		if (node)
 			node->RemoveReference();
@@ -1141,13 +1175,15 @@ NodeManager::_EntryCreated(BMessage *message)
 {
 	// get the info
 	node_ref dirNodeRef;
+	node_ref nodeRef;
 	const char* name;
 	if (message->FindInt32("device", &dirNodeRef.device) != B_OK
 		|| message->FindInt64("directory", &dirNodeRef.node) != B_OK
-//		|| message->FindInt64("node", &nodeID) != B_OK
+		|| message->FindInt64("node", &nodeRef.node) != B_OK
 		|| message->FindString("name", &name) != B_OK) {
 		return;
 	}
+	nodeRef.device = dirNodeRef.device;
 
 	// get the directory
 	Node *node = NodeManager::GetDefault()->GetNode(dirNodeRef);
@@ -1160,7 +1196,7 @@ NodeManager::_EntryCreated(BMessage *message)
 		Entry *entry;
 		if (dir->FindEntry(name, &entry) != B_OK) {
 			entry_ref ref(dirNodeRef.device, dirNodeRef.node, name);
-			NodeManager::GetDefault()->CreateEntry(ref, &entry);
+			NodeManager::GetDefault()->CreateEntry(ref, &nodeRef, &entry);
 		}
 	}
 }
@@ -1209,13 +1245,13 @@ NodeManager::_EntryMoved(BMessage *message)
 		// create it if not present
 		Entry *entry;
 		entry_ref newRef(nodeRef.device, newDirID, name);
-		NodeManager::GetDefault()->CreateEntry(newRef, &entry);
+		NodeManager::GetDefault()->CreateEntry(newRef, &nodeRef, &entry);
 		return;
 	}
 
 	// move it
 	entry_ref newRef(nodeRef.device, newDirID, name);
-	NodeManager::GetDefault()->MoveEntry(node->GetEntry(), newRef);
+	NodeManager::GetDefault()->MoveEntry(node->GetEntry(), newRef, nodeRef);
 }
 
 // _StatChanged

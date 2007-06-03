@@ -225,11 +225,13 @@ public:
 	Node *GetNode(const node_ref &nodeRef);
 	Entry *GetEntry(const entry_ref &entryRef);
 
-	status_t CreateEntry(const entry_ref &entryRef, Entry **_entry);
+	status_t CreateEntry(const entry_ref &entryRef, const node_ref *nodeRef,
+		Entry **_entry);
 	status_t CreateDirectory(const node_ref &nodeRef, Directory **_dir);
 
 	void RemoveEntry(Entry *entry);
-	void MoveEntry(Entry *entry, const entry_ref &newRef);
+	void MoveEntry(Entry *entry, const entry_ref &newRef,
+		const node_ref &nodeRef);
 
 	void EntryUnreferenced(Entry *entry);
 	void NodeUnreferenced(Node *node);
