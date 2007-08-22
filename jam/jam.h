@@ -416,6 +416,7 @@
 
 # if defined( _i386_ ) || \
      defined( __i386__ ) || \
+     defined( __amd64__ ) || \
      defined( _M_IX86 )
 # if !defined( OS_OS2 ) && \
      !defined( OS_AS400 )
