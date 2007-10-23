@@ -1440,6 +1440,12 @@ m68k-*-rtems*)
 	tm_defines="MOTOROLA USE_GAS"
 	extra_parts="crtbegin.o crtend.o"
 	;;
+m68k-*-haiku*)
+	tmake_file="m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
+	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
+	tm_defines="MOTOROLA USE_GAS"
+	extra_parts="crtbegin.o crtend.o"
+	;;
 mcore-*-elf)
 	tm_file="dbxelf.h elfos.h svr4.h ${tm_file} mcore/mcore-elf.h"
 	tmake_file=mcore/t-mcore
