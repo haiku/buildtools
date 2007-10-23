@@ -88,8 +88,6 @@ Boston, MA 02110-1301, USA.  */
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
 	builtin_assert ("system=haiku");				\
-	builtin_assert ("cpu=m68k");					\
-	builtin_assert ("machine=m68k");				\
     /* Haiku apparently doesn't support merging of symbols across shared\
        object boundaries. Hence we need to explicitly specify that 	\
        type_infos are not merged, so that they get compared by name 	\
