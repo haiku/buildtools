@@ -337,6 +337,8 @@ m68*-*-psos*)		targ_emul=m68kpsos ;;
 m68*-*-rtemscoff*)	targ_emul=m68kcoff ;;
 m68*-*-rtems*)		targ_emul=m68kelf
 			;;
+m68*-*-haiku*)		targ_emul=m68kelf
+			targ_extra_emuls=m68kcoff ;;
 m8*-*-*)		targ_emul=m88kbcs
 			;;
 maxq-*-coff)            targ_emul=maxqcoff
