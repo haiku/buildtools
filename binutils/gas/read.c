@@ -1011,7 +1011,12 @@ read_a_source_file (char *name)
 	      bump_line_counters ();
 	      s = input_line_pointer;
 	      if (strncmp (s, "APP\n", 4))
-		continue;	/* We ignore it */
+		{
+		  /* We ignore it */
+		  ignore_rest_of_line ();
+		  continue;
+		}
+	      bump_line_counters ();
 	      s += 4;
 
 	      sb_new (&sbuf);
