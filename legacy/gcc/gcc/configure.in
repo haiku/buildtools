@@ -1160,6 +1160,7 @@ changequote([,])dnl
 		extra_objs=winnt.o
 		extra_parts='crtbegin.o crtend.o'
 		fixincludes=Makefile.in
+		float_format=i386
 		;;
 changequote(,)dnl
 	i[34567]86-*-bsdi* | i[34567]86-*-bsd386*)
