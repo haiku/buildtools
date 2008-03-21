@@ -1,0 +1,106 @@
+diff -ur libtool-1.5.26-orig/libltdl/ltdl.c libtool-1.5.26/libltdl/ltdl.c
+--- libtool-1.5.26-orig/libltdl/ltdl.c	2007-11-15 19:36:41.000000000 +0000
++++ libtool-1.5.26/libltdl/ltdl.c	2008-03-20 16:21:34.000000000 +0000
+@@ -1458,7 +1458,7 @@
+ /* --- LOAD_ADD_ON() INTERFACE LOADER --- */
+ 
+ 
+-#ifdef __BEOS__
++#if defined(__BEOS__) && !defined(__HAIKU__)
+ 
+ /* dynamic linking for BeOS */
+ 
+@@ -2241,7 +2241,7 @@
+ #ifdef __WINDOWS__
+       errors += lt_dlloader_add (lt_dlloader_next (0), &sys_wll, "dlopen");
+ #endif
+-#ifdef __BEOS__
++#if defined(__BEOS__) && !defined(__HAIKU__)
+       errors += lt_dlloader_add (lt_dlloader_next (0), &sys_bedl, "dlopen");
+ #endif
+ #if HAVE_DLD
+diff -ur libtool-1.5.26-orig/libtool.m4 libtool-1.5.26/libtool.m4
+--- libtool-1.5.26-orig/libtool.m4	2008-02-01 16:26:47.000000000 +0000
++++ libtool-1.5.26/libtool.m4	2008-03-21 13:34:17.000000000 +0000
+@@ -1579,6 +1579,18 @@
+   hardcode_into_libs=yes
+   ;;
+ 
++haiku*)
++  version_type=linux
++  need_lib_prefix=no
++  need_version=no
++  dynamic_linker="$host_os runtime_loader"
++  library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}${major} ${libname}${shared_ext}'
++  soname_spec='${libname}${release}${shared_ext}$major'
++  shlibpath_var=LIBRARY_PATH
++  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
++  hardcode_into_libs=yes
++  ;;
++
+ hpux9* | hpux10* | hpux11*)
+   # Give a soname corresponding to the major version so that dld.sl refuses to
+   # link against other versions.
+@@ -2452,6 +2464,10 @@
+   lt_cv_deplibs_check_method=pass_all
+   ;;
+ 
++haiku*)
++  lt_cv_deplibs_check_method=pass_all
++  ;;
++
+ hpux10.20* | hpux11*)
+   lt_cv_file_magic_cmd=/usr/bin/file
+   case $host_cpu in
+@@ -2625,7 +2641,7 @@
+ [AC_REQUIRE([AC_CANONICAL_HOST])dnl
+ LIBM=
+ case $host in
+-*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin*)
++*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin* | *-*-haiku*)
+   # These system don't have libm, or don't need it
+   ;;
+ *-ncr-sysv4.3*)
+@@ -3226,6 +3242,11 @@
+     ;;
+   gnu*)
+     ;;
++  haiku*)
++    # Undefined symbols will be supported soon.
++    _LT_AC_TAGVAR(allow_undefined_flag, $1)=unsupported
++    _LT_AC_TAGVAR(archive_cmds, $1)='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
++    ;;
+   hpux9*)
+     _LT_AC_TAGVAR(hardcode_libdir_flag_spec, $1)='${wl}+b ${wl}$libdir'
+     _LT_AC_TAGVAR(hardcode_libdir_separator, $1)=:
+@@ -5021,7 +5042,7 @@
+       # like `-m68040'.
+       _LT_AC_TAGVAR(lt_prog_compiler_pic, $1)='-m68020 -resident32 -malways-restore-a4'
+       ;;
+-    beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
++    beos* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+       # PIC is the default for these OSes.
+       ;;
+     mingw* | cygwin* | os2* | pw32*)
+@@ -5305,7 +5326,7 @@
+       _LT_AC_TAGVAR(lt_prog_compiler_pic, $1)='-m68020 -resident32 -malways-restore-a4'
+       ;;
+ 
+-    beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
++    beos* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+       # PIC is the default for these OSes.
+       ;;
+ 
+@@ -5736,6 +5757,12 @@
+       fi
+       ;;
+ 
++    haiku*)
++      # Undefined symbols will be supported soon.
++      _LT_AC_TAGVAR(allow_undefined_flag, $1)=unsupported
++      _LT_AC_TAGVAR(archive_cmds, $1)='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
++    ;;
++
+     interix[[3-9]]*)
+       _LT_AC_TAGVAR(hardcode_direct, $1)=no
+       _LT_AC_TAGVAR(hardcode_shlibpath_var, $1)=no
