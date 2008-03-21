@@ -104,3 +104,24 @@ diff -ur libtool-1.5.26-orig/libtool.m4 libtool-1.5.26/libtool.m4
      interix[[3-9]]*)
        _LT_AC_TAGVAR(hardcode_direct, $1)=no
        _LT_AC_TAGVAR(hardcode_shlibpath_var, $1)=no
+diff -ur libtool-1.5.26-orig/ltmain.in libtool-1.5.26/ltmain.in
+--- libtool-1.5.26-orig/ltmain.in	2008-02-01 16:12:00.000000000 +0000
++++ libtool-1.5.26/ltmain.in	2008-03-20 14:02:27.000000000 +0000
+@@ -1599,7 +1599,7 @@
+       -l*)
+ 	if test "X$arg" = "X-lc" || test "X$arg" = "X-lm"; then
+ 	  case $host in
+-	  *-*-cygwin* | *-*-mingw* | *-*-pw32* | *-*-beos*)
++	  *-*-cygwin* | *-*-mingw* | *-*-pw32* | *-*-beos* | *-*-haiku*)
+ 	    # These systems don't actually have a C or math library (as such)
+ 	    continue
+ 	    ;;
+@@ -3526,7 +3526,7 @@
+       if test "$build_libtool_libs" = yes; then
+ 	if test -n "$rpath"; then
+ 	  case $host in
+-	  *-*-cygwin* | *-*-mingw* | *-*-pw32* | *-*-os2* | *-*-beos*)
++	  *-*-cygwin* | *-*-mingw* | *-*-pw32* | *-*-os2* | *-*-beos* | *-*-haiku*)
+ 	    # these systems don't actually have a c library (as such)!
+ 	    ;;
+ 	  *-*-rhapsody* | *-*-darwin1.[012])
