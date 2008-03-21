@@ -858,7 +858,9 @@ struct option_map option_map[] =
    {"--library-directory", "-L", "a"},
    {"--machine", "-m", "aj"},
    {"--machine-", "-m", "*j"},
+#ifndef __HAIKU__
    {"--no-beos-fixes", "-no-beos-fixes", 0},
+#endif
    {"--no-line-commands", "-P", 0},
    {"--no-precompiled-includes", "-noprecomp", 0},
    {"--no-standard-includes", "-nostdinc", 0},
@@ -2519,7 +2521,9 @@ display_help ()
   printf ("                            'none' means revert to the default behaviour of\n");
   printf ("                            guessing the language based on the file's extension\n");
   printf ("  -priority=<prio>         Specify thread-priority to use (1-10, default is 5)\n");
+#ifndef __HAIKU__
   printf ("  -no-beos-fixes           Disable any BeOS-R5 compatibility fixes\n");
+#endif
 
   printf ("\nOptions starting with -g, -f, -m, -O or -W are automatically passed on to\n");
   printf ("the various sub-processes invoked by %s.  In order to pass other options\n",
@@ -2798,10 +2802,12 @@ process_command (argc, argv)
 	  add_linker_option (argv[i], strlen(argv[i]));
 	  n_switches++;
 	}
+#ifndef __HAIKU__
       else if (!strcmp (argv[i], "-no-beos-fixes"))
 	{
 	  n_switches++;
 	}
+#endif	/* !__HAIKU__ */
 #endif
       else if (! strcmp (argv[i], "-print-search-dirs"))
 	print_search_dirs = 1;
@@ -3195,6 +3201,7 @@ process_command (argc, argv)
 	;
       else if (! strcmp (argv[i], "-print-multi-directory"))
 	;
+#ifndef __HAIKU__
       else if (! strcmp (argv[i], "-no-beos-fixes"))
 	{
 	  /* Preserve the switch so that it can be caught by the
@@ -3205,6 +3212,7 @@ process_command (argc, argv)
 	  switches[n_switches].validated = 0;
 	  n_switches++;
 	}
+#endif /* !__HAIKU__ */
       else if (! strncmp (argv[i], "-priority=", 10))
 	{
 	  /* Preserve the switch so that it can be caught by the

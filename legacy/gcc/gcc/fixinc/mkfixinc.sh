@@ -18,7 +18,8 @@ fixincludes="${machine}"
 #
 case $build in
 	i?86-*-msdosdjgpp* | \
-	*-*-beos* )
+	*-*-beos* \
+	*-*-haiku* )
 		MAKE="${MAKE} TARGETS=twoprocess"
 		CFLAGS="${CFLAGS} -DSEPARATE_FIX_PROC"
 		;;

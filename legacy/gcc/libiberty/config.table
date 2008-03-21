@@ -6,6 +6,7 @@ case "${host}" in
   *-*-freebsd2.2.[012])	frag=mh-fbsd21 ;;
   i[345]86-*-windows*)	frag=mh-windows ;;
   *-*-beos*)		frag=mh-beos ;;
+  *-*-haiku*)		frag=mh-haiku ;;
 esac
 
 frags=$frag

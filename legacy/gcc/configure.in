@@ -535,6 +535,9 @@ case "${host}" in
   powerpc-*-beos*)
      noconfigdirs="$noconfigdirs tk itcl tix libgui gdb readline"
 	 ;;
+  i[3456789]86-*-haiku*)
+     noconfigdirs="$noconfigdirs tk itcl tix libgui gdb"
+     ;;
   *-*-cygwin32)
      noconfigdirs="autoconf automake send-pr gprof rcs guile perl apache inet"
     ;;
@@ -695,6 +698,9 @@ case "${target}" in
     noconfigdirs="$noconfigdirs emacs emacs19 target-libgloss"
     ;;
   i[3456]86-*-beos*)
+     noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss"
+     ;;
+  i[3456789]86-*-haiku*)
      noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss"
      ;;
   mn10200-*-*)
