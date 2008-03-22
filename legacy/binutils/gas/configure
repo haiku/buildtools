@@ -3328,6 +3328,10 @@ beos*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
+haiku*)
+  lt_cv_deplibs_check_method=pass_all
+  ;;
+
 bsdi4*)
   lt_cv_deplibs_check_method='file_magic ELF [0-9][0-9]*-bit [ML]SB (shared object|dynamic lib)'
   lt_cv_file_magic_cmd='/usr/bin/file -L'
@@ -10210,7 +10214,7 @@ case "${need_libm}" in
 yes)
   LIBM=
 case $host in
-*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin*)
+*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin* | *-*-haiku*)
   # These system don't have libm
   # on darwin the libm is a symbolic link to libSystem.dylib
   ;;

@@ -98,6 +98,11 @@ EOF
     fi
     ;;
 
+  haiku*)
+    allow_undefined_flag=unsupported
+    archive_cmds='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+    ;;
+
   cygwin* | mingw*)
     # hardcode_libdir_flag_spec is actually meaningless, as there is
     # no search path for DLLs.
@@ -663,7 +668,7 @@ else
       # like `-m68040'.
       ac_cv_prog_cc_pic='-m68020 -resident32 -malways-restore-a4'
       ;;
-    beos* | irix5* | irix6* | osf3* | osf4* | osf5*)
+    beos* | irix5* | irix6* | osf3* | osf4* | osf5* | haiku*)
       # PIC is the default for these OSes.
       ;;
     cygwin* | mingw* | os2*)

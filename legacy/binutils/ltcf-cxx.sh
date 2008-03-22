@@ -704,7 +704,7 @@ if test "$with_gcc" = yes; then
     # like `-m68040'.
     ac_cv_prog_cc_pic='-m68020 -resident32 -malways-restore-a4'
     ;;
-  beos* | irix5* | irix6* | osf3* | osf4* | osf5*)
+  beos* | irix5* | irix6* | osf3* | osf4* | osf5* | haiku*)
     # PIC is the default for these OSes.
     ;;
   cygwin* | mingw* | os2*)

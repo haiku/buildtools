@@ -1052,6 +1052,12 @@ beos*)
   lt_cv_dlopen_self=yes
   ;;
 
+haiku*)
+  library_names_spec='${libname}.so'
+  dynamic_linker="$host_os runtime_loader"
+  shlibpath_var=LIBRARY_PATH
+  ;;
+
 bsdi4*)
   version_type=linux
   need_version=no

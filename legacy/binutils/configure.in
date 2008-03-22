@@ -285,6 +285,9 @@ case "${host}" in
   i[[3456789]]86-*-beos*)
     noconfigdirs="$noconfigdirs tk itcl libgui gdb"
     ;;
+  i[[3456789]]86-*-haiku*)
+    noconfigdirs="$noconfigdirs tk itcl libgui gdb"
+    ;;
   *-*-cygwin*)
     noconfigdirs="$noconfigdirs autoconf automake send-pr rcs guile perl"
     ;;
@@ -676,6 +679,9 @@ case "${target}" in
     noconfigdirs="$noconfigdirs target-libgloss ${libgcj}"
     ;;
   i[[3456789]]86-*-beos*)
+    noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss ${libgcj}"
+    ;;
+  i[[3456789]]86-*-haiku*)
     noconfigdirs="$noconfigdirs gdb target-newlib target-libgloss ${libgcj}"
     ;;
   i[[3456789]]86-*-rdos*)

@@ -2836,7 +2836,7 @@ fi
 
 # Define the identity of the package.
  PACKAGE=bfd
- VERSION=2.17-beos-20070218
+ VERSION=2.17-haiku-20080322
 
 
 cat >>confdefs.h <<_ACEOF
@@ -3490,6 +3490,10 @@ aix*)
   ;;
 
 beos*)
+  lt_cv_deplibs_check_method=pass_all
+  ;;
+
+haiku*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
