@@ -874,6 +874,12 @@ EOF
     BePC:BeOS:*:*)	# BeOS running on Intel PC compatible.
 	echo i586-pc-beos
 	exit 0 ;;
+    BeMac:Haiku:*:*)
+	echo powerpc-apple-haiku
+	exit 0 ;;
+    BePC:Haiku:*:*)
+	echo i586-pc-haiku
+	exit 0 ;;
 esac
 
 #echo '(No uname command or uname output not recognized.)' 1>&2

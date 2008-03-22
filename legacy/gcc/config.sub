@@ -937,13 +937,13 @@ case $os in
 	      | -udi* | -eabi* | -lites* | -ieee* | -go32* | -aux* \
 	      | -cygwin* | -pe* | -psos* | -moss* | -proelf* | -rtems* \
 	      | -mingw32* | -linux-gnu* | -uxpv* | -beos* | -mpeix* | -udk* \
-	      | -interix* | -uwin* )
+	      | -interix* | -uwin* | -haiku* )
 	# Remember, each alternative MUST END IN *, to match a version number.
 		;;
 	# EGCS LOCAL
 	-sim | -es1800* | -hms* | -xray | -os68k* | -none* | -v88r* \
 	      | -windows* | -osx | -abug |  -netware* | -os9* | -beos* \
-	      | -macos* | -mpw* | -magic* | -mon960* | -lnews* )
+	      | -macos* | -mpw* | -magic* | -mon960* | -lnews* | -haiku* )
 		;;
 	-mac*)
 		os=`echo $os | sed -e 's|mac|macos|'`
@@ -1083,6 +1083,9 @@ case $basic_machine in
 	*-be)
 		os=-beos
 		;;
+	*-haiku)
+		os=-haiku
+		;;
 	*-ibm)
 		os=-aix
 		;;
@@ -1190,6 +1193,9 @@ case $basic_machine in
 				;;
 			-beos*)
 				vendor=be
+				;;
+			-haiku*)
+				vendor=haiku
 				;;
 			-hpux*)
 				vendor=hp

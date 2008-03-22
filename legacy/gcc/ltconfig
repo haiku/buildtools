@@ -614,7 +614,7 @@ if test "$with_gcc" = yes; then
   link_static_flag='-static'
 
   case "$host_os" in
-  beos* | irix5* | irix6* | osf3* | osf4*)
+  beos* | irix5* | irix6* | osf3* | osf4* | haiku*)
     # PIC is the default for these OSes.
     ;;
   aix*)
@@ -1073,6 +1073,11 @@ EOF
       archive_cmds='$CC -nostart $libobjs $deplibs $linkopts ${wl}-soname $wl$soname -o $lib'
     else
       ld_shlibs=no
+    fi
+    ;;
+
+  haiku*)
+    archive_cmds='$CC -shared $libobjs $deplibs $linkopts ${wl}-soname $wl$soname -o $lib'
     fi
     ;;
 
@@ -1627,6 +1632,12 @@ amigaos*)
 beos*)
   library_names_spec='${libname}.so'
   dynamic_linker="$host_os ld.so"
+  shlibpath_var=LIBRARY_PATH
+  ;;
+
+haiku*)
+  library_names_spec='${libname}.so'
+  dynamic_linker="$host_os runtime_loader"
   shlibpath_var=LIBRARY_PATH
   ;;
 

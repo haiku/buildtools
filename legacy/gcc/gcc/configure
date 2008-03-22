@@ -3564,6 +3564,16 @@ for machine in $build $host $target; do
 		fixincludes=Makefile.in
 		float_format=i386
 		;;
+	i[3456789]86-*-haiku*)
+		xm_file=i386/xm-haiku.h
+		tmake_file='i386/t-haiku i386/t-crtpic'
+		tm_file=i386/haiku.h
+		xmake_file=i386/x-haiku
+		extra_objs=winnt.o
+		extra_parts='crtbegin.o crtend.o'
+		fixincludes=Makefile.in
+		float_format=i386
+		;;
 	i[34567]86-*-bsdi* | i[34567]86-*-bsd386*)
 		tm_file=i386/bsd386.h
 #		tmake_file=t-libc-ok
