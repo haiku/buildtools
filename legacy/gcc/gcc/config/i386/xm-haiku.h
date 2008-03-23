@@ -34,23 +34,6 @@ Boston, MA 02111-1307, USA.  */
 
 #define	ONLY_INT_FIELDS
 
-/* use ANSI/SYSV style byte manipulation routines instead of BSD ones */
-
-#undef bcopy
-#define bcopy(s,d,n)	memmove((d),(s),(n))
-#undef bzero
-#define bzero(d,n)	memset((d),0,(n))
-#undef bcmp
-#define bcmp(l,r,n)	memcmp((l),(r),(n))
-#undef index
-#define index		strchr
-#undef rindex
-#define rindex		strrchr
-
-/* Haiku is closer to USG than BSD */
-
-#define USG
-
 /* Define various things that the Haiku host has. */
 
 #ifndef HAVE_VPRINTF
