@@ -3566,6 +3566,7 @@ for machine in $build $host $target; do
 		;;
 	i[3456789]86-*-haiku*)
 		xm_file=i386/xm-haiku.h
+		xm_defines="USG HAVE_ATEXIT POSIX"
 		tmake_file='i386/t-haiku i386/t-crtpic'
 		tm_file=i386/haiku.h
 		xmake_file=i386/x-haiku
