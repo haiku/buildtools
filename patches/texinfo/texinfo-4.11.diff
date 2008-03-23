@@ -1,0 +1,12 @@
+diff -ur texinfo-4.11/system.h texinfo-4.11-orig/system.h
+--- texinfo-4.11/system.h	2008-03-22 14:32:09.000000000 +0000
++++ texinfo-4.11-orig/system.h	2007-07-01 21:20:28.000000000 +0000
+@@ -154,7 +154,7 @@
+ # define va_end(args)
+ #endif
+ 
+-#if O_BINARY && !defined(__BEOS__)
++#if O_BINARY
+ # ifdef HAVE_IO_H
+ #  include <io.h>
+ # endif
