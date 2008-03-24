@@ -185,7 +185,8 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf. */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf_i386_haiku -shared -Bsymbolic %{nostart:-e 0} %{shared:-e 0}"
+#define LINK_SPEC "%{!o*:-o %b} -m elf_i386_haiku -shared -Bsymbolic " \
+	"%{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: --no-undefined}}"
 
 /* Provide start and end file specs appropriate to glibc.  */
 
