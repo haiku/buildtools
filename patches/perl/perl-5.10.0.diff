@@ -1,7 +1,7 @@
 Index: perlio.h
 ===================================================================
---- perlio.h	(.../vendor/perl/current)	(revision 18)
-+++ perlio.h	(.../trunk)	(revision 18)
+--- perlio.h	(.../vendor/perl/current)	(revision 21)
++++ perlio.h	(.../trunk)	(revision 21)
 @@ -64,7 +64,7 @@
   */
  #include <stdio.h>
@@ -14,7 +14,7 @@ Index: perlio.h
 Index: haiku/haikuish.h
 ===================================================================
 --- haiku/haikuish.h	(.../vendor/perl/current)	(revision 0)
-+++ haiku/haikuish.h	(.../trunk)	(revision 18)
++++ haiku/haikuish.h	(.../trunk)	(revision 21)
 @@ -0,0 +1,11 @@
 +#ifndef PERL_HAIKU_HAIKUISH_H
 +#define PERL_HAIKU_HAIKUISH_H
@@ -29,8 +29,8 @@ Index: haiku/haikuish.h
 +
 Index: perl.c
 ===================================================================
---- perl.c	(.../vendor/perl/current)	(revision 18)
-+++ perl.c	(.../trunk)	(revision 18)
+--- perl.c	(.../vendor/perl/current)	(revision 21)
++++ perl.c	(.../trunk)	(revision 21)
 @@ -107,7 +107,7 @@
  
  #endif
@@ -51,8 +51,8 @@ Index: perl.c
  #endif
 Index: perl.h
 ===================================================================
---- perl.h	(.../vendor/perl/current)	(revision 18)
-+++ perl.h	(.../trunk)	(revision 18)
+--- perl.h	(.../vendor/perl/current)	(revision 21)
++++ perl.h	(.../trunk)	(revision 21)
 @@ -2551,7 +2551,10 @@
  #   define ISHISH "macos classic"
  #endif
@@ -81,8 +81,8 @@ Index: perl.h
      /* If you have O_TEXT different from your O_BINARY but you still are
 Index: lib/CPANPLUS/Internals/Constants/Report.pm
 ===================================================================
---- lib/CPANPLUS/Internals/Constants/Report.pm	(.../vendor/perl/current)	(revision 18)
-+++ lib/CPANPLUS/Internals/Constants/Report.pm	(.../trunk)	(revision 18)
+--- lib/CPANPLUS/Internals/Constants/Report.pm	(.../vendor/perl/current)	(revision 21)
++++ lib/CPANPLUS/Internals/Constants/Report.pm	(.../trunk)	(revision 21)
 @@ -29,6 +29,7 @@
      Cygwin      => 'cygwin',
      Darwin      => 'darwin',
@@ -93,8 +93,8 @@ Index: lib/CPANPLUS/Internals/Constants/Report.pm
      MSDOS       => 'dos|os2|MSWin32|cygwin',
 Index: lib/CPANPLUS/t/20_CPANPLUS-Dist-MM.t
 ===================================================================
---- lib/CPANPLUS/t/20_CPANPLUS-Dist-MM.t	(.../vendor/perl/current)	(revision 18)
-+++ lib/CPANPLUS/t/20_CPANPLUS-Dist-MM.t	(.../trunk)	(revision 18)
+--- lib/CPANPLUS/t/20_CPANPLUS-Dist-MM.t	(.../vendor/perl/current)	(revision 21)
++++ lib/CPANPLUS/t/20_CPANPLUS-Dist-MM.t	(.../trunk)	(revision 21)
 @@ -45,7 +45,13 @@
  $conf->set_conf( cpantest => 0 );
  
@@ -112,8 +112,8 @@ Index: lib/CPANPLUS/t/20_CPANPLUS-Dist-MM.t
  ### test::harness create test counter mismatches
 Index: lib/Module/Build.pm
 ===================================================================
---- lib/Module/Build.pm	(.../vendor/perl/current)	(revision 18)
-+++ lib/Module/Build.pm	(.../trunk)	(revision 18)
+--- lib/Module/Build.pm	(.../vendor/perl/current)	(revision 21)
++++ lib/Module/Build.pm	(.../trunk)	(revision 21)
 @@ -30,6 +30,7 @@
  		 dynixptx  Unix
  		 freebsd   Unix
@@ -124,8 +124,8 @@ Index: lib/Module/Build.pm
  		 darwin    Unix
 Index: lib/Term/ReadLine.pm
 ===================================================================
---- lib/Term/ReadLine.pm	(.../vendor/perl/current)	(revision 18)
-+++ lib/Term/ReadLine.pm	(.../trunk)	(revision 18)
+--- lib/Term/ReadLine.pm	(.../vendor/perl/current)	(revision 21)
++++ lib/Term/ReadLine.pm	(.../trunk)	(revision 21)
 @@ -222,7 +222,8 @@
  	$console = "sys\$command";
      }
@@ -138,8 +138,8 @@ Index: lib/Term/ReadLine.pm
      elsif ($^O eq 'os2') {
 Index: lib/ExtUtils/MM.pm
 ===================================================================
---- lib/ExtUtils/MM.pm	(.../vendor/perl/current)	(revision 18)
-+++ lib/ExtUtils/MM.pm	(.../trunk)	(revision 18)
+--- lib/ExtUtils/MM.pm	(.../vendor/perl/current)	(revision 21)
++++ lib/ExtUtils/MM.pm	(.../trunk)	(revision 21)
 @@ -69,6 +69,7 @@
  $Is{VOS}    = $^O eq 'vos';
  $Is{QNX}    = $^O eq 'qnx';
@@ -151,7 +151,7 @@ Index: lib/ExtUtils/MM.pm
 Index: lib/ExtUtils/MM_Haiku.pm
 ===================================================================
 --- lib/ExtUtils/MM_Haiku.pm	(.../vendor/perl/current)	(revision 0)
-+++ lib/ExtUtils/MM_Haiku.pm	(.../trunk)	(revision 18)
++++ lib/ExtUtils/MM_Haiku.pm	(.../trunk)	(revision 21)
 @@ -0,0 +1,62 @@
 +package ExtUtils::MM_Haiku;
 +
@@ -215,19 +215,32 @@ Index: lib/ExtUtils/MM_Haiku.pm
 +1;
 +__END__
 +
+Index: t/io/fs.t
+===================================================================
+--- t/io/fs.t	(.../vendor/perl/current)	(revision 21)
++++ t/io/fs.t	(.../trunk)	(revision 21)
+@@ -275,7 +275,7 @@
+ 		is( $atime, 500000001,          'atime' );
+ 		is( $mtime, 500000000 + $delta, 'mtime' );
+ 	    }
+-	    elsif ($^O eq 'beos') {
++	    elsif ($^O eq 'beos' || $^O eq 'haiku') {
+             SKIP: {
+ 		    skip "atime not updated", 1;
+ 		}
 Index: hints/haiku.sh
 ===================================================================
 --- hints/haiku.sh	(.../vendor/perl/current)	(revision 0)
-+++ hints/haiku.sh	(.../trunk)	(revision 18)
-@@ -0,0 +1,65 @@
++++ hints/haiku.sh	(.../trunk)	(revision 21)
+@@ -0,0 +1,56 @@
 +# Haiku hints file
 +# $Id$
 +
 +prefix="/boot/home/config"
 +
-+libpth='/boot/beos/system/lib /boot/home/config/lib'
++libpth='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
 +usrinc='/boot/develop/headers/posix'
-+locinc='/boot/develop/headers/ /boot/home/config/include'
++locinc='/boot/home/config/include /boot/common/include /boot/develop/headers'
 +
 +libc='/boot/beos/system/lib/libroot.so'
 +libs=' '
@@ -276,19 +289,10 @@ Index: hints/haiku.sh
 +case "$ldlibpthname" in
 +'') ldlibpthname=LIBRARY_PATH ;;
 +esac
-+
-+# the waitpid() wrapper (among other things)
-+#archobjs="beos.o"
-+#test -f beos.c || cp beos/beos.c .
-+
-+# TODO: Remove when using a native Haiku compiler!
-+ccflags="$ccflags -g -O0 -D__HAIKU__ -fno-strict-aliasing -pipe"
-+cppflags="$cppflags -D__HAIKU__"
-+
 Index: ext/Errno/Errno_pm.PL
 ===================================================================
---- ext/Errno/Errno_pm.PL	(.../vendor/perl/current)	(revision 18)
-+++ ext/Errno/Errno_pm.PL	(.../trunk)	(revision 18)
+--- ext/Errno/Errno_pm.PL	(.../vendor/perl/current)	(revision 21)
++++ ext/Errno/Errno_pm.PL	(.../trunk)	(revision 21)
 @@ -155,7 +155,7 @@
  	# we might miss out on compiler-specific ones
  	$file{"$ENV{GUSI}include:sys:errno.h"} = 1;
@@ -325,8 +329,8 @@ Index: ext/Errno/Errno_pm.PL
  	    print C <<EOF;
 Index: ext/Compress/Raw/Zlib/zlib-src/zutil.h
 ===================================================================
---- ext/Compress/Raw/Zlib/zlib-src/zutil.h	(.../vendor/perl/current)	(revision 18)
-+++ ext/Compress/Raw/Zlib/zlib-src/zutil.h	(.../trunk)	(revision 18)
+--- ext/Compress/Raw/Zlib/zlib-src/zutil.h	(.../vendor/perl/current)	(revision 21)
++++ ext/Compress/Raw/Zlib/zlib-src/zutil.h	(.../trunk)	(revision 21)
 @@ -147,7 +147,7 @@
  #  define OS_CODE  0x0f
  #endif
@@ -338,8 +342,8 @@ Index: ext/Compress/Raw/Zlib/zlib-src/zutil.h
  
 Index: ext/Time/HiRes/t/HiRes.t
 ===================================================================
---- ext/Time/HiRes/t/HiRes.t	(.../vendor/perl/current)	(revision 18)
-+++ ext/Time/HiRes/t/HiRes.t	(.../trunk)	(revision 18)
+--- ext/Time/HiRes/t/HiRes.t	(.../vendor/perl/current)	(revision 21)
++++ ext/Time/HiRes/t/HiRes.t	(.../trunk)	(revision 21)
 @@ -337,7 +337,8 @@
  	&& defined &Time::HiRes::getitimer
  	&& has_symbol('ITIMER_VIRTUAL')
@@ -353,7 +357,7 @@ Index: ext/Time/HiRes/t/HiRes.t
 Index: ext/Haiku/Makefile.PL
 ===================================================================
 --- ext/Haiku/Makefile.PL	(.../vendor/perl/current)	(revision 0)
-+++ ext/Haiku/Makefile.PL	(.../trunk)	(revision 18)
++++ ext/Haiku/Makefile.PL	(.../trunk)	(revision 21)
 @@ -0,0 +1,20 @@
 +use 5.006;
 +use ExtUtils::MakeMaker;
@@ -378,7 +382,7 @@ Index: ext/Haiku/Makefile.PL
 Index: ext/Haiku/Haiku.xs
 ===================================================================
 --- ext/Haiku/Haiku.xs	(.../vendor/perl/current)	(revision 0)
-+++ ext/Haiku/Haiku.xs	(.../trunk)	(revision 18)
++++ ext/Haiku/Haiku.xs	(.../trunk)	(revision 21)
 @@ -0,0 +1,141 @@
 +#define PERL_NO_GET_CONTEXT
 +#include "EXTERN.h"
@@ -524,7 +528,7 @@ Index: ext/Haiku/Haiku.xs
 Index: ext/Haiku/Haiku.pm
 ===================================================================
 --- ext/Haiku/Haiku.pm	(.../vendor/perl/current)	(revision 0)
-+++ ext/Haiku/Haiku.pm	(.../trunk)	(revision 18)
++++ ext/Haiku/Haiku.pm	(.../trunk)	(revision 21)
 @@ -0,0 +1,54 @@
 +package Haiku;
 +
@@ -582,8 +586,8 @@ Index: ext/Haiku/Haiku.pm
 +=cut
 Index: Configure
 ===================================================================
---- Configure	(.../vendor/perl/current)	(revision 18)
-+++ Configure	(.../trunk)	(revision 18)
+--- Configure	(.../vendor/perl/current)	(revision 21)
++++ Configure	(.../trunk)	(revision 21)
 @@ -7864,6 +7864,7 @@
      case "$lddlflags" in
      '') case "$osname" in
