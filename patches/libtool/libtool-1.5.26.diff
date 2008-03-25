@@ -21,7 +21,7 @@ diff -ur libtool-1.5.26-orig/libltdl/ltdl.c libtool-1.5.26/libltdl/ltdl.c
  #if HAVE_DLD
 diff -ur libtool-1.5.26-orig/libtool.m4 libtool-1.5.26/libtool.m4
 --- libtool-1.5.26-orig/libtool.m4	2008-02-01 16:26:47.000000000 +0000
-+++ libtool-1.5.26/libtool.m4	2008-03-21 13:34:17.000000000 +0000
++++ libtool-1.5.26/libtool.m4	2008-03-24 22:35:06.000000000 +0000
 @@ -1579,6 +1579,18 @@
    hardcode_into_libs=yes
    ;;
@@ -61,19 +61,17 @@ diff -ur libtool-1.5.26-orig/libtool.m4 libtool-1.5.26/libtool.m4
    # These system don't have libm, or don't need it
    ;;
  *-ncr-sysv4.3*)
-@@ -3226,6 +3242,11 @@
+@@ -3226,6 +3242,9 @@
      ;;
    gnu*)
      ;;
 +  haiku*)
-+    # Undefined symbols will be supported soon.
-+    _LT_AC_TAGVAR(allow_undefined_flag, $1)=unsupported
 +    _LT_AC_TAGVAR(archive_cmds, $1)='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
 +    ;;
    hpux9*)
      _LT_AC_TAGVAR(hardcode_libdir_flag_spec, $1)='${wl}+b ${wl}$libdir'
      _LT_AC_TAGVAR(hardcode_libdir_separator, $1)=:
-@@ -5021,7 +5042,7 @@
+@@ -5021,7 +5040,7 @@
        # like `-m68040'.
        _LT_AC_TAGVAR(lt_prog_compiler_pic, $1)='-m68020 -resident32 -malways-restore-a4'
        ;;
@@ -82,7 +80,7 @@ diff -ur libtool-1.5.26-orig/libtool.m4 libtool-1.5.26/libtool.m4
        # PIC is the default for these OSes.
        ;;
      mingw* | cygwin* | os2* | pw32*)
-@@ -5305,7 +5326,7 @@
+@@ -5305,7 +5324,7 @@
        _LT_AC_TAGVAR(lt_prog_compiler_pic, $1)='-m68020 -resident32 -malways-restore-a4'
        ;;
  
@@ -91,13 +89,11 @@ diff -ur libtool-1.5.26-orig/libtool.m4 libtool-1.5.26/libtool.m4
        # PIC is the default for these OSes.
        ;;
  
-@@ -5736,6 +5757,12 @@
+@@ -5736,6 +5755,10 @@
        fi
        ;;
  
 +    haiku*)
-+      # Undefined symbols will be supported soon.
-+      _LT_AC_TAGVAR(allow_undefined_flag, $1)=unsupported
 +      _LT_AC_TAGVAR(archive_cmds, $1)='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
 +    ;;
 +
