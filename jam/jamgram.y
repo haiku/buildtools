@@ -1,20 +1,24 @@
-%token _BANG_t
-%token _BANG_EQUALS_t
-%token _AMPER_t
-%token _AMPERAMPER_t
-%token _LPAREN_t
-%token _RPAREN_t
-%token _PLUS_EQUALS_t
-%token _COLON_t
-%token _SEMIC_t
 %token _LANGLE_t
 %token _LANGLE_EQUALS_t
 %token _EQUALS_t
 %token _RANGLE_t
 %token _RANGLE_EQUALS_t
+%token _BAR_t
+%token _BARBAR_t
+%token _SEMIC_t
+%token _COLON_t
+%token _BANG_t
+%token _BANG_EQUALS_t
 %token _QUESTION_EQUALS_t
+%token _LPAREN_t
+%token _RPAREN_t
 %token _LBRACKET_t
 %token _RBRACKET_t
+%token _LBRACE_t
+%token _RBRACE_t
+%token _AMPER_t
+%token _AMPERAMPER_t
+%token _PLUS_EQUALS_t
 %token ACTIONS_t
 %token BIND_t
 %token BREAK_t
@@ -40,10 +44,6 @@
 %token TOGETHER_t
 %token UPDATED_t
 %token WHILE_t
-%token _LBRACE_t
-%token _BAR_t
-%token _BARBAR_t
-%token _RBRACE_t
 /*
  * Copyright 1993-2002 Christopher Seiwald and Perforce Software, Inc.
  *

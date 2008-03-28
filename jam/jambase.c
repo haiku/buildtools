@@ -211,7 +211,7 @@ const char *jambase[] = {
 "YACCFILES	?= y.tab ;\n",
 "YACCFLAGS	?= -d ;\n",
 "}\n",
-"else if $(OS) = BEOS \n",
+"else if $(OS) = BEOS || $(OS) = HAIKU\n",
 "{\n",
 "BINDIR		?= /boot/home/config/bin ;\n",
 "CC		?= gcc ;\n",
