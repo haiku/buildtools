@@ -208,7 +208,7 @@
 # define OSMINOR "OS=AMIGA"
 # define OS_AMIGA
 # endif
-# ifdef __BEOS__
+# if defined(__BEOS__) && !defined(__HAIKU__)
 # define unix
 # define OSMINOR "OS=BEOS"
 # define OS_BEOS
@@ -234,6 +234,11 @@
 # ifdef __DGUX__
 # define OSMINOR "OS=DGUX"
 # define OS_DGUX
+# endif
+# ifdef __HAIKU__
+# define unix
+# define OSMINOR "OS=HAIKU"
+# define OS_HAIKU
 # endif
 # ifdef __hpux
 # define OSMINOR "OS=HPUX"

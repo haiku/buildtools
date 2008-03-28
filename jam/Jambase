@@ -396,7 +396,7 @@ else if $(OS) = BEOS && $(OSPLAT) = PPC
 	YACCFILES	?= y.tab ;
 	YACCFLAGS	?= -d ;
 }
-else if $(OS) = BEOS 
+else if $(OS) = BEOS || $(OS) = HAIKU
 {
 	BINDIR		?= /boot/home/config/bin ;
 	CC		?= gcc ;
