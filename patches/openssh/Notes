@@ -1,0 +1,26 @@
+Notes for OpenSSH 4.7p1 (Haiku r24683)
+======================================
+
+configure
+---------
+
+  rm config.sub config.guess
+  automake --add-missing
+  autoreconf --force
+
+  ./configure --prefix=/boot/home/config --with-ssl-dir=/boot/home/config
+
+* automake will fail, but it will replace config.{sub,guess} anyway, which is
+  all we want.
+* Edit config.h:
+  - Undefined HAVE_CONTROL_IN_MSGHDR: Haiku doesn't really support it.
+  - define HAVE_U_INT64_T: Only to get rid of warnings while compiling. The
+    configure test only includes <sys/types.h>, which doesn't define Haiku's
+    u_int64_t (<stdint.h> does).
+
+make/install
+------------
+
+  make
+  make install
+
