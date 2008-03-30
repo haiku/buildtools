@@ -1,0 +1,17 @@
+Notes for OpenSSL 0.9.8g (Haiku r24681)
+=======================================
+
+configure
+---------
+
+  ./config --prefix=/boot/home/config zlib shared no-sse2
+
+* zlib instead of zlib-dynamic: dlopen() in Haiku needs fixing.
+* no-sse2: Haiku SSE2 support is broken/non-existent.
+
+make/install
+------------
+
+  make
+  make install
+
