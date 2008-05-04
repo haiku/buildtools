@@ -1,0 +1,5 @@
+Package:		OpenSSH
+Version:		5.0p1
+Copyright:		2005-2008 Tatu Ylonen et al.
+License:		OpenSSH
+URL:			http://www.openssh.org/
