@@ -67,6 +67,7 @@ arm*-*-linux-*)	        targ_emul=armelf_linux; targ_extra_emuls=armelf ;;
 arm*-*-uclinux*)	targ_emul=armelf_linux; targ_extra_emuls=armelf ;;
 arm-*-vxworks)		targ_emul=armelf_vxworks ;;
 arm*-*-conix*)		targ_emul=armelf ;;
+arm*-*-haiku*)		targ_emul=armelf_haiku; targ_extra_emuls=armelf ;;
 thumb-*-linux-* | thumb-*-uclinux*)	targ_emul=armelf_linux; targ_extra_emuls=armelf ;;
 strongarm-*-coff)	targ_emul=armcoff ;;
 strongarm-*-elf)	targ_emul=armelf ;;
@@ -335,10 +336,10 @@ m68*-*-netbsdaout* | m68*-*-netbsd*)
 			targ_extra_emuls="m68kelfnbsd m68k4knbsd" ;;
 m68*-*-psos*)		targ_emul=m68kpsos ;;
 m68*-*-rtemscoff*)	targ_emul=m68kcoff ;;
-m68*-*-rtems*)		targ_emul=m68kelf
-			;;
+m68*-*-rtems*)		targ_emul=m68kelf ;;
 m68*-*-haiku*)		targ_emul=m68kelf
-			targ_extra_emuls=m68kcoff ;;
+			targ_extra_emuls=m68kcoff 
+			;;
 m8*-*-*)		targ_emul=m88kbcs
 			;;
 maxq-*-coff)            targ_emul=maxqcoff
