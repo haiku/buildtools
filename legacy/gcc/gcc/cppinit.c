@@ -102,7 +102,7 @@ static char *known_suffixes[] =
 #endif
 
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -112,7 +112,7 @@ static int priority = B_LOW_PRIORITY;
    It may be overridden by the various -I and -ixxx options.
 
    #include "file" looks in the same directory as the current file,
-   then this list. 
+   then this list.
    #include <file> just looks in this list.
 
    All these directories are treated as `system' include directories
@@ -449,7 +449,7 @@ base_name (fname)
   if ((p = rindex (s, '/'))) s = p + 1;
   return s;
 }
-     
+
 
 /* Append DIR to include path PATH.  DIR must be permanently allocated
    and writable. */
@@ -484,7 +484,7 @@ append_include_chain (pfile, pend, dir, path)
   len = strlen (dir);
   if (len > pfile->max_include_len)
     pfile->max_include_len = len;
-  
+
   new = (struct file_name_list *)xmalloc (sizeof (struct file_name_list));
   new->name = dir;
   new->nlen = len;
@@ -678,7 +678,7 @@ initialize_dependency_output (pfile)
 {
   cpp_options *opts = CPP_OPTIONS (pfile);
   char *spec, *s, *output_file;
-  
+
   /* Either of two environment variables can specify output of deps.
      Its value is either "OUTPUT_FILE" or "OUTPUT_FILE DEPS_TARGET",
      where OUTPUT_FILE is the file to write deps info to
@@ -802,7 +802,7 @@ cpp_start_read (pfile, fname)
   /* Set this if it hasn't been set already. */
   if (user_label_prefix == NULL)
     user_label_prefix = USER_LABEL_PREFIX;
-  
+
   /* Now that we know dollars_in_ident, we can initialize the syntax
      tables. */
   initialize_char_syntax (opts->dollars_in_ident);
@@ -855,7 +855,7 @@ cpp_start_read (pfile, fname)
       free (p);
       p = q;
     }
-  
+
   opts->done_initializing = 1;
 
   /* Several environment variables may add to the include search path.
@@ -1002,7 +1002,7 @@ cpp_start_read (pfile, fname)
   /* The -imacros files can be scanned now, but the -include files
      have to be pushed onto the include stack and processed later,
      in the main loop calling cpp_get_token.  */
-  
+
   pfile->no_record_file++;
   opts->no_output++;
   p = opts->pending->imacros_head;
@@ -1087,7 +1087,7 @@ cpp_finish (pfile)
     cpp_fatal (pfile,
 	       "cpplib internal error: buffers still stacked in cpp_finish");
   cpp_pop_buffer (pfile);
-  
+
   if (opts->print_deps)
     {
       /* Stream on which to print the dependency information.  */
@@ -1266,7 +1266,7 @@ cpp_handle_option (pfile, argc, argv)
 		memcpy (fname, GCC_INCLUDE_DIR, sizeof GCC_INCLUDE_DIR - 9);
 		memcpy (fname + sizeof GCC_INCLUDE_DIR - 9, argv[i], len + 1);
 	      }
-	  
+
 	    append_include_chain (pfile, opts->pending, fname, SYSTEM);
 	  }
 	/* Add directory to main path for includes,
@@ -1292,7 +1292,7 @@ cpp_handle_option (pfile, argc, argv)
 		memcpy (fname, GCC_INCLUDE_DIR, sizeof GCC_INCLUDE_DIR - 9);
 		memcpy (fname + sizeof GCC_INCLUDE_DIR - 9, argv[i], len + 1);
 	      }
-	  
+
 	    append_include_chain (pfile, opts->pending, fname, BRACKET);
 	  }
 	/* Add directory to end of path for includes.  */
@@ -1317,7 +1317,7 @@ cpp_handle_option (pfile, argc, argv)
 	  opts->output_conditionals = 1;
 
 	break;
-      
+
       case 'o':
 	if (opts->out_fname != NULL)
 	  {
@@ -1330,7 +1330,7 @@ cpp_handle_option (pfile, argc, argv)
 	if (!strcmp (opts->out_fname, "-"))
 	  opts->out_fname = "";
 	break;
-      
+
       case 'p':
 	if (!strcmp (argv[i], "-pedantic"))
 	  CPP_PEDANTIC (pfile) = 1;
@@ -1350,12 +1350,12 @@ cpp_handle_option (pfile, argc, argv)
 	  no_precomp = 1;
 	}
 #endif
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
         else if (!strncmp (argv[i], "-priority=", 10))
 	  priority = atol (argv[i] + 10);
 #endif
 	break;
-      
+
       case 't':
 	if (!strcmp (argv[i], "-traditional"))
 	  {
@@ -1365,7 +1365,7 @@ cpp_handle_option (pfile, argc, argv)
 	else if (!strcmp (argv[i], "-trigraphs"))
 	  opts->trigraphs = 1;
 	break;
-      
+
       case 'l':
 	if (! strcmp (argv[i], "-lang-c"))
 	  opts->cplusplus = 0, opts->cplusplus_comments = 1, opts->c89 = 0,
@@ -1390,7 +1390,7 @@ cpp_handle_option (pfile, argc, argv)
 	  opts->objc = 0, opts->cplusplus = 0, opts->chill = 1,
 	    opts->traditional = 1;
 	break;
-      
+
       case '+':
 	opts->cplusplus = 1, opts->cplusplus_comments = 1;
 	break;
@@ -1412,7 +1412,7 @@ cpp_handle_option (pfile, argc, argv)
       case 'w':
 	opts->inhibit_warnings = 1;
 	break;
-      
+
       case 'W':
 	if (!strcmp (argv[i], "-Wtrigraphs"))
 	  opts->warn_trigraphs = 1;
@@ -1448,7 +1448,7 @@ cpp_handle_option (pfile, argc, argv)
 	    opts->warn_comments = 1;
 	  }
 	break;
-      
+
       case 'M':
 	/* The style of the choices here is a bit mixed.
 	   The chosen scheme is a hybrid of keeping all options in one string
@@ -1460,7 +1460,7 @@ cpp_handle_option (pfile, argc, argv)
 	/* ??? -MG must be specified in addition to one of -M or -MM.
 	   This can be relaxed in the future without breaking anything.
 	   The converse isn't true.  */
-      
+
 	/* -MG isn't valid with -MD or -MMD.  This is checked for later.  */
 	if (!strcmp (argv[i], "-MG"))
 	  {
@@ -1487,9 +1487,9 @@ cpp_handle_option (pfile, argc, argv)
 	    /* For -M and -MM, write deps on standard output
 	       and suppress the usual output.  */
 	    opts->no_output = 1;
-	  }	  
+	  }
 	break;
-      
+
       case 'd':
 	{
 	  char *p = argv[i] + 2;
@@ -1516,12 +1516,12 @@ cpp_handle_option (pfile, argc, argv)
 	    }
 	}
 	break;
-    
+
       case 'g':
 	if (argv[i][2] == '3')
 	  opts->debug_output = 1;
 	break;
-      
+
       case '-':
 	if (!strcmp (argv[i], "--help"))
 	  print_help ();
@@ -1529,7 +1529,7 @@ cpp_handle_option (pfile, argc, argv)
 	  cpp_notice ("GNU CPP version %s\n", version_string);
 	exit (0);  /* XXX */
 	break;
-	
+
       case 'v':
 	cpp_notice ("GNU CPP version %s", version_string);
 #ifdef TARGET_VERSION
@@ -1538,11 +1538,11 @@ cpp_handle_option (pfile, argc, argv)
 	fputc ('\n', stderr);
 	opts->verbose = 1;
 	break;
-      
+
       case 'H':
 	opts->print_include_names = 1;
 	break;
-      
+
       case 'D':
 	{
 	  struct pending_option *o = (struct pending_option *)
@@ -1562,11 +1562,11 @@ cpp_handle_option (pfile, argc, argv)
 	  APPEND (opts->pending, define, o);
 	}
 	break;
-      
+
       case 'A':
 	{
 	  char *p;
-	
+
 	  if (argv[i][2] != 0)
 	    p = argv[i] + 2;
 	  else if (i + 1 == argc)
@@ -1576,7 +1576,7 @@ cpp_handle_option (pfile, argc, argv)
 	    }
 	  else
 	    p = argv[++i];
-	
+
 	  if (strcmp (p, "-"))
 	    {
 	      struct pending_option *o = (struct pending_option *)
@@ -1616,12 +1616,12 @@ cpp_handle_option (pfile, argc, argv)
 	    }
 	}
 	break;
-    
+
       case 'U':
 	{
 	  struct pending_option *o = (struct pending_option *)
 	    xmalloc (sizeof (struct pending_option));
-	  
+
 	  if (argv[i][2] != 0)
 	    o->arg = argv[i] + 2;
 	  else if (i + 1 == argc)
@@ -1637,22 +1637,22 @@ cpp_handle_option (pfile, argc, argv)
 	  APPEND (opts->pending, define, o);
 	}
 	break;
-      
+
       case 'C':
 	opts->put_out_comments = 1;
 	break;
-      
+
       case 'E':			/* -E comes from cc -E; ignore it.  */
 	break;
-      
+
       case 'P':
 	opts->no_line_commands = 1;
 	break;
-      
+
       case '$':			/* Don't include $ in identifiers.  */
 	opts->dollars_in_ident = 0;
 	break;
-      
+
       case 'n':
 	if (!strcmp (argv[i], "-nostdinc"))
 	  /* -nostdinc causes no default include directories.
@@ -1666,12 +1666,12 @@ cpp_handle_option (pfile, argc, argv)
 	  no_precomp = 1;
 #endif
 	break;
-      
+
       case 'r':
 	if (!strcmp (argv[i], "-remap"))
 	  opts->remap = 1;
 	break;
-      
+
       case '\0': /* JF handle '-' as file name meaning stdin or stdout */
 	if (opts->in_fname == NULL)
 	  opts->in_fname = "";
@@ -1685,14 +1685,14 @@ cpp_handle_option (pfile, argc, argv)
 	return i;
       }
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   set_thread_priority (find_thread(NULL), priority);
   {
     char priobuf[20];
     sprintf (priobuf, "-priority=%d", priority);
-    if (opts->verbose)    
+    if (opts->verbose)
       cpp_notice ("using priority %d\n", priority);
-  }  
+  }
 #endif
 
   return i + 1;

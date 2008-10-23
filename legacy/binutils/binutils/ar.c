@@ -18,7 +18,7 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
-
+
 /*
    Bugs: should use getopt the way tar does (complete w/optional -) and
    should have long options too. GNU ar used to check file against filesystem
@@ -49,7 +49,7 @@
 #define O_BINARY 0
 #endif
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -77,7 +77,7 @@ static void write_archive (bfd *);
 static void ranlib_only (const char *archname);
 static void ranlib_touch (const char *archname);
 static void usage (int);
-
+
 /** Globals and flags */
 
 static int mri_mode;
@@ -209,7 +209,7 @@ map_over_members (bfd *arch, void (*function)(bfd *), char **files, int count)
 	fprintf (stderr, _("no entry %s in archive\n"), *files);
     }
 }
-
+
 bfd_boolean operation_alters_arch = FALSE;
 
 static void
@@ -249,7 +249,7 @@ usage (int help)
       fprintf (s, _("  [v]          - be verbose\n"));
       fprintf (s, _("  [V]          - display the version number\n"));
       fprintf (s, _("  @<file>      - read options from <file>\n"));
- 
+
       ar_emul_usage (s);
     }
   else
@@ -407,7 +407,7 @@ main (int argc, char **argv)
 	  else
 	    print_version ("ar");
 	}
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
       else if (!strncmp (argv[1], "-priority=", 10))
 	{
 	  priority = atol (argv[1] + 10);
@@ -415,7 +415,7 @@ main (int argc, char **argv)
 #endif
     }
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   set_thread_priority (find_thread(NULL), priority);
 #endif
 

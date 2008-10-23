@@ -58,7 +58,7 @@ extern PTR sbrk ();
 #endif
 #endif
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -437,7 +437,7 @@ parse_args (int * pargc, char *** pargv)
       OPTION_HASH_TABLE_SIZE,
       OPTION_REDUCE_MEMORY_OVERHEADS,
       OPTION_WARN_FATAL
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
       ,
       OPTION_PRIORITY
 #endif
@@ -495,7 +495,7 @@ parse_args (int * pargc, char *** pargv)
     ,{"mri", no_argument, NULL, 'M'}
     ,{"nocpp", no_argument, NULL, OPTION_NOCPP}
     ,{"no-warn", no_argument, NULL, 'W'}
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 	,{"priority", required_argument, NULL, OPTION_PRIORITY}
 #endif
     ,{"reduce-memory-overheads", no_argument, NULL, OPTION_REDUCE_MEMORY_OVERHEADS}
@@ -588,7 +588,7 @@ parse_args (int * pargc, char *** pargv)
 	  show_usage (stdout);
 	  exit (EXIT_SUCCESS);
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 	case OPTION_PRIORITY:
 	  priority = atol (optarg);
 	  break;
@@ -917,7 +917,7 @@ the GNU General Public License.  This program has absolutely no warranty.\n"));
   *pargc = new_argc;
   *pargv = new_argv;
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   set_thread_priority (find_thread(NULL), priority);
 #endif
 

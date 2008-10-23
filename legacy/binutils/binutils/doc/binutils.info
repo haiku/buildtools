@@ -1,5 +1,7 @@
-This is ../../../binutils/binutils/doc/binutils.info, produced by
-makeinfo version 4.7 from ../../../binutils/binutils/doc/binutils.texi.
+This is
+/home/bonefish/develop/haiku/buildtools/legacy/binutils/binutils/doc/binutils.info,
+produced by makeinfo version 4.9 from
+/home/bonefish/develop/haiku/buildtools/legacy/binutils/binutils/doc/binutils.texi.
 
 START-INFO-DIR-ENTRY
 * Binutils: (binutils).         The GNU binary utilities.
@@ -3803,33 +3805,33 @@ Index
 
 
 Tag Table:
-Node: Top1771
-Node: ar3324
-Node: ar cmdline5502
-Node: ar scripts13645
-Node: nm19333
-Node: objcopy27529
-Node: objdump50581
-Node: ranlib65494
-Node: size66249
-Node: strings69096
-Node: strip71446
-Node: c++filt76925
-Ref: c++filt-Footnote-181853
-Node: addr2line81959
-Node: nlmconv85230
-Node: windres87836
-Node: dlltool93569
-Node: def file format104407
-Node: readelf106145
-Node: Common Options110853
-Node: Selecting The Target System111893
-Node: Target Selection112825
-Node: Architecture Selection114807
-Node: Reporting Bugs115635
-Node: Bug Criteria116414
-Node: Bug Reporting116967
-Node: GNU Free Documentation License124061
-Node: Index143793
+Node: Top1847
+Node: ar3400
+Node: ar cmdline5578
+Node: ar scripts13721
+Node: nm19409
+Node: objcopy27605
+Node: objdump50657
+Node: ranlib65570
+Node: size66325
+Node: strings69172
+Node: strip71522
+Node: c++filt77001
+Ref: c++filt-Footnote-181929
+Node: addr2line82035
+Node: nlmconv85306
+Node: windres87912
+Node: dlltool93645
+Node: def file format104483
+Node: readelf106221
+Node: Common Options110929
+Node: Selecting The Target System111969
+Node: Target Selection112901
+Node: Architecture Selection114883
+Node: Reporting Bugs115711
+Node: Bug Criteria116490
+Node: Bug Reporting117043
+Node: GNU Free Documentation License124137
+Node: Index143869
 
 End Tag Table

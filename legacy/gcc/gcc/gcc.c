@@ -31,7 +31,7 @@ and deleting the temporary files at the end.
 CC recognizes how to compile each input file by suffixes in the file names.
 Once it knows which kind of compilation to perform, the procedure for
 compilation is specified by a string called a "spec".  */
-
+
 #include "config.h"
 #include "system.h"
 #include <signal.h>
@@ -93,7 +93,7 @@ static char dir_separator_str[] = {DIR_SEPARATOR, 0};
 #define kill(p,s) raise(s)
 #endif
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -241,7 +241,7 @@ extern int lang_specific_pre_link ();
 
 /* Number of extra output files that lang_specific_pre_link may generate. */
 extern int lang_specific_extra_outfiles;
-
+
 /* Specs are strings containing lines, each of which (if not blank)
 is made up of a program name, and arguments separated by spaces.
 The program name must be exact and start from root, since no path
@@ -395,7 +395,7 @@ to tell which compilers to run.
 CC also knows implicitly that arguments starting in `-l' are to be
 treated as compiler output files, and passed to the linker in their
 proper position among the other output files.  */
-
+
 /* Define the macros used for specs %a, %l, %L, %S, %c, %C, %1.  */
 
 /* config.h can define ASM_SPEC to provide extra args to the assembler
@@ -547,7 +547,7 @@ static struct user_specs *user_specs_head, *user_specs_tail;
 #ifndef WORD_SWITCH_TAKES_ARG
 #define WORD_SWITCH_TAKES_ARG(STR) DEFAULT_WORD_SWITCH_TAKES_ARG (STR)
 #endif
-
+
 
 #ifdef HAVE_EXECUTABLE_SUFFIX
 /* This defines which switches stop a full compilation.  */
@@ -757,7 +757,7 @@ static int n_default_compilers
 #ifdef LINK_COMMAND_SPEC
 /* Provide option to override link_command_spec from machine specific
    configuration files.  */
-static const char *link_command_spec = 
+static const char *link_command_spec =
 	LINK_COMMAND_SPEC;
 #else
 #ifdef LINK_LIBGCC_SPECIAL
@@ -804,7 +804,7 @@ static char **assembler_options;
    and substituted into the preprocessor command with %Z.  */
 static int n_preprocessor_options;
 static char **preprocessor_options;
-
+
 /* Define how to map long options into short ones.  */
 
 /* This structure describes one mapping.  */
@@ -907,7 +907,7 @@ struct option_map option_map[] =
    {"--write-user-dependencies", "-MMD", 0},
    {"--", "-f", "*j"}
  };
-
+
 /* Translate the options described by *ARGCP and *ARGVP.
    Make a new vector and store it back in *ARGVP,
    and store its length in *ARGVC.  */
@@ -1071,7 +1071,7 @@ translate_options (argcp, argvp)
   *argvp = newv;
   *argcp = newindex;
 }
-
+
 char *
 xstrerror(e)
      int e;
@@ -1091,7 +1091,7 @@ xstrerror(e)
   return "errno = ?";
 #endif
 }
-
+
 static char *
 skip_whitespace (p)
      char *p;
@@ -1115,7 +1115,7 @@ skip_whitespace (p)
 
   return p;
 }
-
+
 /* Structure to keep track of the specs that have been defined so far.
    These are accessed using %(specname) or %[specname] in a compiler
    or link spec.  */
@@ -1179,7 +1179,7 @@ static struct spec_list * extra_specs = (struct spec_list *)0;
 
 static struct spec_list *specs = (struct spec_list *)0;
 
-
+
 /* Initialize the specs lookup routines.  */
 
 static void
@@ -1201,7 +1201,7 @@ init_spec ()
 	     (sizeof(extra_specs_1)/sizeof(extra_specs_1[0])));
   bzero ((PTR) extra_specs, sizeof(struct spec_list) *
 	 (sizeof(extra_specs_1)/sizeof(extra_specs_1[0])));
-  
+
   for (i = (sizeof(extra_specs_1) / sizeof(extra_specs_1[0])) - 1; i >= 0; i--)
     {
       sl = &extra_specs[i];
@@ -1224,7 +1224,7 @@ init_spec ()
   specs = sl;
 }
 
-
+
 /* Change the value of spec NAME to SPEC.  If SPEC is empty, then the spec is
    removed; If the spec starts with a + then SPEC is added to the end of the
    current spec.  */
@@ -1287,7 +1287,7 @@ set_spec (name, spec)
 
   sl->alloc_p = 1;
 }
-
+
 /* Accumulate a command (program name and args), and run it.  */
 
 /* Vector of pointers to arguments in the current line of specifications.  */
@@ -1334,7 +1334,7 @@ static int signal_count;
 /* Name with which this program was invoked.  */
 
 static const char *programname;
-
+
 /* Structures to keep track of prefixes to try when looking for files.  */
 
 struct prefix_list
@@ -1392,7 +1392,7 @@ static const char *gcc_exec_prefix;
 #endif /* !defined STANDARD_EXEC_PREFIX */
 
 static const char *standard_exec_prefix = STANDARD_EXEC_PREFIX;
-#ifndef __BEOS__
+#if !defined(__BEOS__) && !defined(__HAIKU__)
 static const char *standard_exec_prefix_1 = "/usr/lib/gcc/";
 #endif
 #ifdef MD_EXEC_PREFIX
@@ -1410,7 +1410,7 @@ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
 static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
 #endif
 static const char *standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
-#ifndef __BEOS__
+#if !defined(__BEOS__) && !defined(__HAIKU__)
 static const char *standard_startfile_prefix_1 = "/lib/";
 static const char *standard_startfile_prefix_2 = "/usr/lib/";
 #endif
@@ -1456,7 +1456,7 @@ store_arg (arg, delete_always, delete_failure)
   if (delete_always || delete_failure)
     record_temp_file (arg, delete_always, delete_failure);
 }
-
+
 /* Read compilation specs from a file named FILENAME,
    replacing the default ones.
 
@@ -1714,7 +1714,7 @@ read_specs (filename, main_p)
   if (link_command_spec == 0)
     fatal ("spec file has no spec for linking");
 }
-
+
 /* Record the names of temporary files we tell compilers to write,
    and delete them at the end of the run.  */
 
@@ -1846,7 +1846,7 @@ clear_failure_queue ()
 {
   failure_delete_queue = 0;
 }
-
+
 /* Routine to add variables to the environment.  We do this to pass
    the pathname of the gcc driver, and the directories search to the
    collect2 program, which is being run as ld.  This way, we can be
@@ -1901,7 +1901,7 @@ putenv (str)
 
 #endif	/* HAVE_PUTENV */
 
-
+
 /* Build a list of search directories from PATHS.
    PREFIX is a string to prepend to the list.
    If CHECK_DIR_P is non-zero we ensure the directory exists.
@@ -1932,7 +1932,7 @@ build_search_list (paths, prefix, check_dir_p)
 	{
 	  if (!first_time)
 	    obstack_1grow (&collect_obstack, PATH_SEPARATOR);
-	    
+
 	  first_time = FALSE;
 	  obstack_grow (&collect_obstack, pprefix->prefix, len);
 	  obstack_grow (&collect_obstack, machine_suffix, suffix_len);
@@ -1945,7 +1945,7 @@ build_search_list (paths, prefix, check_dir_p)
 	{
 	  if (! first_time)
 	    obstack_1grow (&collect_obstack, PATH_SEPARATOR);
-	    
+
 	  first_time = FALSE;
 	  obstack_grow (&collect_obstack, pprefix->prefix, len);
 	  obstack_grow (&collect_obstack, just_machine_suffix,
@@ -1976,7 +1976,7 @@ putenv_from_prefixes (paths, env_var)
 {
   putenv (build_search_list (paths, env_var, 1));
 }
-
+
 /* Search for NAME using the prefix list PREFIXES.  MODE is passed to
    access to check permissions.
    Return 0 if not found, otherwise return its name, allocated with malloc.  */
@@ -2211,7 +2211,7 @@ unused_prefix_warnings (pprefix)
     }
 }
 
-
+
 /* Execute the command specified by the arguments on the current line of spec.
    When using pipes, this includes several piped-together commands
    with `|' between them.
@@ -2277,7 +2277,7 @@ execute ()
       /* For help listings, put a blank line between sub-processes.  */
       if (print_help_list)
 	fputc ('\n', stderr);
-      
+
       /* Print each piped command as a separate line.  */
       for (i = 0; i < n_commands ; i++)
 	{
@@ -2372,7 +2372,7 @@ execute ()
     return ret_code;
   }
 }
-
+
 /* Find all the switches given to us
    and make a vector describing them.
    The elements of the vector are strings, one per switch given.
@@ -2426,7 +2426,7 @@ static int warn_std;
 /* Gives value to pass as "warn" to add_prefix for standard prefixes.  */
 static int *warn_std_ptr = 0;
 
-
+
 #if defined(HAVE_OBJECT_SUFFIX) || defined(HAVE_EXECUTABLE_SUFFIX)
 
 /* Convert NAME to a new name if it is the standard suffix.  DO_EXE
@@ -2442,7 +2442,7 @@ convert_filename (name, do_exe)
 
   if (name == NULL)
     return NULL;
-  
+
   len = strlen (name);
 
 #ifdef HAVE_OBJECT_SUFFIX
@@ -2479,7 +2479,7 @@ convert_filename (name, do_exe)
   return name;
 }
 #endif
-
+
 /* Display the command line switches accepted by gcc.  */
 static void
 display_help ()
@@ -2534,13 +2534,13 @@ display_help ()
      sub-processes.  */
 }
 
-static void 								
-add_preprocessor_option (option, len)					
+static void
+add_preprocessor_option (option, len)
      const char * option;
      int len;
-{									
+{
   n_preprocessor_options++;
-									
+
   if (! preprocessor_options)
     preprocessor_options
       = (char **) xmalloc (n_preprocessor_options * sizeof (char *));
@@ -2548,13 +2548,13 @@ add_preprocessor_option (option, len)
     preprocessor_options
       = (char **) xrealloc (preprocessor_options,
 			    n_preprocessor_options * sizeof (char *));
-  									
+
   preprocessor_options [n_preprocessor_options - 1] =
     save_string (option, len);
 }
-     
-static void 								
-add_assembler_option (option, len)					
+
+static void
+add_assembler_option (option, len)
      const char * option;
      int len;
 {
@@ -2570,9 +2570,9 @@ add_assembler_option (option, len)
 
   assembler_options [n_assembler_options - 1] = save_string (option, len);
 }
-     
-static void 								
-add_linker_option (option, len)					
+
+static void
+add_linker_option (option, len)
      const char * option;
      int    len;
 {
@@ -2588,7 +2588,7 @@ add_linker_option (option, len)
 
   linker_options [n_linker_options - 1] = save_string (option, len);
 }
-
+
 /* Create the vector `switches' and its contents.
    Store its length in `n_switches'.  */
 
@@ -2788,12 +2788,12 @@ process_command (argc, argv)
 	  /* We will be passing a dummy file on to the sub-processes.  */
 	  n_infiles++;
 	  n_switches++;
-	  
+
 	  add_preprocessor_option ("--help", 6);
 	  add_assembler_option ("--help", 6);
 	  add_linker_option ("--help", 6);
 	}
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
       else if (!strncmp (argv[i], "-priority=", 10))
 	{
 	  priority = atol (argv[i] + 10);
@@ -2834,7 +2834,7 @@ process_command (argc, argv)
 		add_assembler_option (argv[i] + prev, j - prev);
 		prev = j + 1;
 	      }
-	  
+
 	  /* Record the part after the last comma.  */
 	  add_assembler_option (argv[i] + prev, j - prev);
 	}
@@ -2851,7 +2851,7 @@ process_command (argc, argv)
 		add_preprocessor_option (argv[i] + prev, j - prev);
 		prev = j + 1;
 	      }
-	  
+
 	  /* Record the part after the last comma.  */
 	  add_preprocessor_option (argv[i] + prev, j - prev);
 	}
@@ -3040,7 +3040,7 @@ process_command (argc, argv)
 	      if (! have_c)
 		{
 		  int skip;
-		  
+
 		  /* Forward scan, just in case -S or -c is specified
 		     after -o.  */
 		  int j = i + 1;
@@ -3093,14 +3093,14 @@ process_command (argc, argv)
   if (have_c && have_o && lang_n_infiles > 1)
     fatal ("cannot specify -o with -c or -S and multiple compilations");
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   set_thread_priority (find_thread(NULL), priority);
   {
     char priobuf[20];
     sprintf (priobuf, "-priority=%d", priority);
     if (verbose_flag)
       notice ("using priority %d\n", priority);
-  }  
+  }
 #endif
 
   /* Set up the search paths before we go looking for config files.  */
@@ -3112,7 +3112,7 @@ process_command (argc, argv)
 #ifndef OS2
   add_prefix (&exec_prefixes, standard_exec_prefix, "BINUTILS",
 	      0, 2, warn_std_ptr);
-#ifndef __BEOS__
+#if !defined(__BEOS__) && !defined(__HAIKU__)
   add_prefix (&exec_prefixes, standard_exec_prefix_1, "BINUTILS",
 	      0, 2, warn_std_ptr);
 #endif
@@ -3120,12 +3120,12 @@ process_command (argc, argv)
 
   add_prefix (&startfile_prefixes, standard_exec_prefix, "BINUTILS",
 	      0, 1, warn_std_ptr);
-#ifndef __BEOS__
+#if !defined(__BEOS__) && !defined(__HAIKU__)
   add_prefix (&startfile_prefixes, standard_exec_prefix_1, "BINUTILS",
 	      0, 1, warn_std_ptr);
 #endif
 
-  tooldir_prefix = concat (tooldir_base_prefix, spec_machine, 
+  tooldir_prefix = concat (tooldir_base_prefix, spec_machine,
 			   dir_separator_str, NULL_PTR);
 
   /* If tooldir is relative, base it on exec_prefixes.  A relative
@@ -3144,21 +3144,21 @@ process_command (argc, argv)
 		      spec_version, dir_separator_str, tooldir_prefix, NULL_PTR);
 
 	  add_prefix (&exec_prefixes,
-		      concat (gcc_exec_tooldir_prefix, "bin", 
+		      concat (gcc_exec_tooldir_prefix, "bin",
 			      dir_separator_str, NULL_PTR),
 		      NULL_PTR, 0, 0, NULL_PTR);
 	  add_prefix (&startfile_prefixes,
-		      concat (gcc_exec_tooldir_prefix, "lib", 
+		      concat (gcc_exec_tooldir_prefix, "lib",
 			      dir_separator_str, NULL_PTR),
 		      NULL_PTR, 0, 0, NULL_PTR);
 	}
 
       tooldir_prefix = concat (standard_exec_prefix, spec_machine,
-			       dir_separator_str, spec_version, 
+			       dir_separator_str, spec_version,
 			       dir_separator_str, tooldir_prefix, NULL_PTR);
     }
 
-  add_prefix (&exec_prefixes, 
+  add_prefix (&exec_prefixes,
               concat (tooldir_prefix, "bin", dir_separator_str, NULL_PTR),
 	      "BINUTILS", 0, 0, NULL_PTR);
   add_prefix (&startfile_prefixes,
@@ -3231,14 +3231,14 @@ process_command (argc, argv)
 		 the various sub-processes.  */
 	      infiles[n_infiles].language = "c";
 	      infiles[n_infiles++].name   = "help-dummy";
-	      
+
 	      /* Preserve the --help switch so that it can be caught by the
 		 cc1 spec string.  */
 	      switches[n_switches].part1     = "--help";
 	      switches[n_switches].args      = 0;
 	      switches[n_switches].live_cond = 0;
 	      switches[n_switches].validated     = 0;
-	      
+
 	      n_switches++;
 	    }
 	}
@@ -3340,7 +3340,7 @@ process_command (argc, argv)
 	      char *part1 = (char *) xmalloc (2);
 	      part1[0] = c;
 	      part1[1] = '\0';
-	      
+
 	      switches[n_switches].part1 = part1;
 	      switches[n_switches].args = (char **) xmalloc (2 * sizeof (char *));
 	      switches[n_switches].args[0] = xmalloc (strlen (p));
@@ -3388,7 +3388,7 @@ process_command (argc, argv)
   switches[n_switches].part1 = 0;
   infiles[n_infiles].name = 0;
 }
-
+
 /* Process a spec string, accumulating and running commands.  */
 
 /* These variables describe the input file name.
@@ -4356,7 +4356,7 @@ next_member:
 
 	  while (*q++ != ':') continue;
 	  body = q;
-	  
+
 	  while (count > 0)
 	    {
 	      if (*q == '{')
@@ -4504,7 +4504,7 @@ next_member:
 
   return endbody;
 }
-
+
 /* Return 0 iff switch number SWITCHNUM is obsoleted by a later switch
    on the command line.  PREFIX_LENGTH is the length of XXX in an {XXX*}
    spec, or -1 if either exact match or %* is used.
@@ -4580,7 +4580,7 @@ check_live_switch (switchnum, prefix_length)
   switches[switchnum].live_cond = 1;
   return 1;
 }
-
+
 /* Pass a switch to the current accumulating command
    in the same form that we received it.
    SWITCHNUM identifies the switch; it is an index into
@@ -4618,7 +4618,7 @@ give_switch (switchnum, omit_first_word, include_blanks)
   do_spec_1 (" ", 0, NULL_PTR);
   switches[switchnum].validated = 1;
 }
-
+
 /* Search for a file named NAME trying various prefixes including the
    user's -B prefix and some standard ones.
    Return the absolute file name found.  If nothing is found, return NAME.  */
@@ -4687,17 +4687,17 @@ is_directory (path1, path2, linker)
   /* Exclude directories that the linker is known to search.  */
   if (linker
       && ((cp - path == 6
-	   && strcmp (path, concat (dir_separator_str, "lib", 
+	   && strcmp (path, concat (dir_separator_str, "lib",
 				    dir_separator_str, ".", NULL_PTR)) == 0)
 	  || (cp - path == 10
-	      && strcmp (path, concat (dir_separator_str, "usr", 
-				       dir_separator_str, "lib", 
+	      && strcmp (path, concat (dir_separator_str, "usr",
+				       dir_separator_str, "lib",
 				       dir_separator_str, ".", NULL_PTR)) == 0)))
     return 0;
 
   return (stat (path, &st) >= 0 && S_ISDIR (st.st_mode));
 }
-
+
 /* On fatal signals, delete all the temporary files.  */
 
 static void
@@ -4896,7 +4896,7 @@ main (argc, argv)
   strcat (specs_file, "specs");
   if (access (specs_file, R_OK) == 0)
     read_specs (specs_file, TRUE);
- 
+
   /* If not cross-compiling, look for startfiles in the standard places.  */
   if (*cross_compile == '0')
     {
@@ -4941,9 +4941,9 @@ main (argc, argv)
 			      machine_suffix,
 			      standard_startfile_prefix, NULL_PTR),
 		      NULL_PTR, 0, 0, NULL_PTR);
-	}		       
+	}
 
-#ifndef __BEOS__
+#if !defined(__BEOS__) && !defined(__HAIKU__)
       add_prefix (&startfile_prefixes, standard_startfile_prefix_1,
 		  "BINUTILS", 0, 0, NULL_PTR);
       add_prefix (&startfile_prefixes, standard_startfile_prefix_2,
@@ -5045,7 +5045,7 @@ main (argc, argv)
 	{
 	  printf ("\nFor bug reporting instructions, please see:\n");
 	  printf ("%s.\n", GCCBUGURL);
-	  
+
 	  exit (0);
 	}
 
@@ -5053,7 +5053,7 @@ main (argc, argv)
 	 called 'help-dummy' which needs to be compiled, and we pass this
 	 on the the various sub-processes, along with the --help switch.  */
     }
-  
+
   if (verbose_flag)
     {
       int n;
@@ -5152,7 +5152,7 @@ main (argc, argv)
 
 	  {
 	    char *p1 = (char *) xmalloc (len + 1);
-	    
+
 	    len = 0;
 	    for (j = 0; j < sizeof cp->spec / sizeof cp->spec[0]; j++)
 	      if (cp->spec[j])
@@ -5160,7 +5160,7 @@ main (argc, argv)
 		  strcpy (p1 + len, cp->spec[j]);
 		  len += strlen (cp->spec[j]);
 		}
-	    
+
 	    value = do_spec (p1);
 	    free (p1);
 	  }
@@ -5244,7 +5244,7 @@ main (argc, argv)
       printf ("\nFor bug reporting instructions, please see:\n");
       printf ("%s\n", GCCBUGURL);
     }
-  
+
   exit (error_count > 0 ? (signal_count ? 2 : 1) : 0);
   /* NOTREACHED */
   return 0;
@@ -5319,7 +5319,7 @@ lookup_compiler (name, length, language)
 
   return 0;
 }
-
+
 PTR
 xmalloc (size)
   size_t size;
@@ -5401,7 +5401,7 @@ fancy_abort ()
 {
   fatal ("Internal gcc abort.");
 }
-
+
 /* Output an error message and exit */
 
 void
@@ -5465,7 +5465,7 @@ notice VPROTO((const char *msgid, ...))
   va_end (ap);
 }
 
-
+
 static void
 validate_all_switches ()
 {
@@ -5549,7 +5549,7 @@ validate_switches (start)
 	}
     }
 }
-
+
 /* Check whether a particular argument was used.  The first time we
    canonicalize the switches to keep only the ones we care about.  */
 
@@ -5767,7 +5767,7 @@ set_multilib_dir ()
 	}
 
       ++p;
-    }      
+    }
 }
 
 /* Print out the multiple library subdirectory selection

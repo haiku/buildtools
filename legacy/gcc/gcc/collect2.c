@@ -43,7 +43,7 @@ Boston, MA 02111-1307, USA.  */
                lib$get_current_invo_context(decc$$get_vfork_jmpbuf()) : -1)
 #endif /* VMS */
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -65,7 +65,7 @@ static int priority = B_LOW_PRIORITY;
 #endif
 
 extern char *make_temp_file PROTO ((char *));
-
+
 /* On certain systems, we have code that works by scanning the object file
    directly.  But this code uses system-specific header files and library
    functions, so turn it off in a cross-compiler.  Likewise, the names of
@@ -110,7 +110,7 @@ extern char *make_temp_file PROTO ((char *));
 
 /* Some systems have an ISCOFF macro, but others do not.  In some cases
    the macro may be wrong.  MY_ISCOFF is defined in tm.h files for machines
-   that either do not have an ISCOFF macro in /usr/include or for those 
+   that either do not have an ISCOFF macro in /usr/include or for those
    where it is wrong.  */
 
 #ifndef MY_ISCOFF
@@ -167,10 +167,10 @@ int do_collecting = 1;
 #else
 int do_collecting = 0;
 #endif
-
+
 /* Linked lists of constructor and destructor names.  */
 
-struct id 
+struct id
 {
   struct id *next;
   int sequence;
@@ -275,7 +275,7 @@ static char *libexts[3] = {"a", "so", NULL};  /* possible library extentions */
 #endif
 
 void error		PVPROTO((const char *, ...)) ATTRIBUTE_PRINTF_1;
-void fatal		PVPROTO((const char *, ...)) 
+void fatal		PVPROTO((const char *, ...))
   ATTRIBUTE_PRINTF_1 ATTRIBUTE_NORETURN;
 void fatal_perror	PVPROTO((const char *, ...))
   ATTRIBUTE_PRINTF_1 ATTRIBUTE_NORETURN;
@@ -314,7 +314,7 @@ static char *resolve_lib_name	PROTO((char *));
 static int use_import_list	PROTO((char *));
 static int ignore_library	PROTO((char *));
 #endif
-
+
 #ifdef NO_DUP2
 int
 dup2 (oldfd, newfd)
@@ -324,7 +324,7 @@ dup2 (oldfd, newfd)
   int fdtmp[256];
   int fdx = 0;
   int fd;
- 
+
   if (oldfd == newfd)
     return oldfd;
   close (newfd);
@@ -379,7 +379,7 @@ my_strsignal (s)
     return NULL;
 #endif /* HAVE_STRSIGNAL */
 }
-
+
 /* Delete tempfiles and exit function.  */
 
 void
@@ -412,7 +412,7 @@ collect_exit (status)
   exit (status);
 }
 
-
+
 /* Notify user of a non-error.  */
 void
 notice VPROTO((char *msgid, ...))
@@ -466,13 +466,13 @@ fatal VPROTO((const char * msgid, ...))
   const char *msgid;
 #endif
   va_list ap;
-  
+
   VA_START (ap, msgid);
 
 #ifndef ANSI_PROTOTYPES
   msgid = va_arg (ap, const char *);
 #endif
-  
+
   fprintf (stderr, "collect2: ");
   vfprintf (stderr, _(msgid), ap);
   fprintf (stderr, "\n");
@@ -490,9 +490,9 @@ error VPROTO((const char * msgid, ...))
   const char * msgid;
 #endif
   va_list ap;
- 
+
   VA_START (ap, msgid);
-  
+
 #ifndef ANSI_PROTOTYPES
   msgid = va_arg (ap, const char *);
 #endif
@@ -511,7 +511,7 @@ fancy_abort ()
 {
   fatal ("internal error");
 }
-
+
 static void
 handler (signo)
      int signo;
@@ -537,7 +537,7 @@ handler (signo)
   kill (getpid (), signo);
 }
 
-
+
 PTR
 xcalloc (size1, size2)
   size_t size1, size2;
@@ -624,7 +624,7 @@ extract_string (pp)
   *pp = p;
   return obstack_finish (&temporary_obstack);
 }
-
+
 void
 dump_file (name)
      char *name;
@@ -682,7 +682,7 @@ dump_file (name)
     }
   fclose (stream);
 }
-
+
 /* Decide whether the given symbol is:
    a constructor (1), a destructor (2), or neither (0).  */
 
@@ -742,7 +742,7 @@ is_ctor_dtor (s)
     }
   return 0;
 }
-
+
 /* Routine to add variables to the environment.  */
 
 #ifndef HAVE_PUTENV
@@ -790,7 +790,7 @@ putenv (str)
 }
 
 #endif	/* HAVE_PUTENV */
-
+
 /* By default, colon separates directories in a path.  */
 #ifndef PATH_SEPARATOR
 #define PATH_SEPARATOR ':'
@@ -809,7 +809,7 @@ static char *target_machine = TARGET_MACHINE;
 #endif
 
 /* Search for NAME using prefix list PPREFIX.  We only look for executable
-   files. 
+   files.
 
    Return 0 if not found, otherwise return its name, allocated with malloc.  */
 
@@ -824,7 +824,7 @@ find_a_file (pprefix, name)
 
   if (debug)
     fprintf (stderr, "Looking for '%s'\n", name);
-  
+
 #ifdef EXECUTABLE_SUFFIX
   len += strlen (EXECUTABLE_SUFFIX);
 #endif
@@ -845,7 +845,7 @@ find_a_file (pprefix, name)
 
 	  if (debug)
 	    fprintf (stderr, "  - found: absolute path\n");
-	  
+
 	  return temp;
 	}
 
@@ -854,7 +854,7 @@ find_a_file (pprefix, name)
 	   So try appending that.  */
       strcpy (temp, name);
 	strcat (temp, EXECUTABLE_SUFFIX);
-	
+
 	if (access (temp, X_OK) == 0)
 	  return temp;
 #endif
@@ -867,7 +867,7 @@ find_a_file (pprefix, name)
       {
 	strcpy (temp, pl->prefix);
 	strcat (temp, name);
-	
+
 	if (access (temp, X_OK) == 0)
 	  return temp;
 
@@ -875,7 +875,7 @@ find_a_file (pprefix, name)
 	/* Some systems have a suffix for executable files.
 	   So try appending that.  */
 	strcat (temp, EXECUTABLE_SUFFIX);
-	
+
 	if (access (temp, X_OK) == 0)
 	  return temp;
 #endif
@@ -922,7 +922,7 @@ add_prefix (pprefix, prefix)
     pl->next = (struct prefix_list *) 0;
   *prev = pl;
 }
-
+
 /* Take the value of the environment variable ENV, break it into a path, and
    add of the entries to PPREFIX.  */
 
@@ -948,7 +948,7 @@ prefix_from_string (p, pprefix)
 
   if (debug)
     fprintf (stderr, "Convert string '%s' into prefixes, separator = '%c'\n", p, PATH_SEPARATOR);
-  
+
   startp = endp = p;
   while (1)
     {
@@ -969,7 +969,7 @@ prefix_from_string (p, pprefix)
 
 	  if (debug)
 	    fprintf (stderr, "  - add prefix: %s\n", nstore);
-	  
+
 	  add_prefix (pprefix, nstore);
 	  if (*endp == 0)
 	    break;
@@ -979,7 +979,7 @@ prefix_from_string (p, pprefix)
 	endp++;
     }
 }
-
+
 /* Main program.  */
 
 int
@@ -1049,13 +1049,13 @@ main (argc, argv)
      are called.  */
   {
     int i;
-    
+
     for (i = 1; argv[i] != NULL; i ++)
       if (! strcmp (argv[i], "-debug"))
 	debug = 1;
     vflag = debug;
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
     for (i = 1; argv[i] != NULL; i ++)
       if (! strncmp (argv[i], "-priority=",10))
 	  priority = atol (argv[i] + 10);
@@ -1159,7 +1159,7 @@ main (argc, argv)
   strcpy (full_strip_suffix, target_machine);
   strcat (full_strip_suffix, "-");
   strcat (full_strip_suffix, strip_suffix);
-  
+
   full_gstrip_suffix
     = xcalloc (strlen (gstrip_suffix) + strlen (target_machine) + 2, 1);
   strcpy (full_gstrip_suffix, target_machine);
@@ -1273,7 +1273,7 @@ main (argc, argv)
   add_prefix (&libpath_lib_dirs, "/usr/lib");
 #endif
 
-  /* Get any options that the upper GCC wants to pass to the sub-GCC.  
+  /* Get any options that the upper GCC wants to pass to the sub-GCC.
 
      AIX support needs to know if -shared has been specified before
      parsing commandline arguments.  */
@@ -1417,7 +1417,7 @@ main (argc, argv)
 #ifdef COLLECT_EXPORT_LIST
 	  /* libraries can be specified directly, i.e. without -l flag.  */
        	  else
-       	    { 
+       	    {
 	      /* If we will use an import list for this library,
 		 we should exclude it from ld args.  */
 	      if (use_import_list (arg))
@@ -1678,7 +1678,7 @@ main (argc, argv)
   /* Let scan_prog_file do any final mods (OSF/rose needs this for
      constructors/destructors in shared libraries.  */
   scan_prog_file (output_file, PASS_SECOND);
-#endif 
+#endif
 
   maybe_unlink (c_file);
   maybe_unlink (o_file);
@@ -1691,7 +1691,7 @@ main (argc, argv)
   return 0;
 }
 
-
+
 /* Wait for a process to finish, and exit if a non-zero status is found.  */
 
 int
@@ -1733,7 +1733,7 @@ do_wait (prog)
     }
 }
 
-
+
 /* Execute a program, and wait for the reply.  */
 
 void
@@ -1818,7 +1818,7 @@ fork_execute (prog, argv)
   collect_execute (prog, argv, NULL);
   do_wait (prog);
 }
-
+
 /* Unlink a file unless we are debugging.  */
 
 static void
@@ -1831,7 +1831,7 @@ maybe_unlink (file)
     notice ("[Leaving %s]\n", file);
 }
 
-
+
 static long sequence_number = 0;
 
 /* Add a name to a linked list.  */
@@ -2153,7 +2153,7 @@ write_c_file_glob (stream, name)
   int frames = (frame_tables.number > 0);
 
   fprintf (stream, "typedef void entry_pt();\n\n");
-    
+
   write_list_with_asm (stream, "extern entry_pt ", constructors.first);
 
   if (frames)
@@ -2243,7 +2243,7 @@ write_import_file (stream)
     fprintf (stream, "%s\n", list->name);
 }
 #endif
-
+
 #ifdef OBJECT_FORMAT_NONE
 
 /* Generic version to scan the name list of the loaded program for
@@ -2353,7 +2353,7 @@ scan_prog_file (prog_name, which_pass)
 
       if (ch != '_')
 	continue;
-  
+
       name = p;
       /* Find the end of the symbol name.
 	 Do not include `|', because Encore nm can tack that on the end.  */
@@ -2542,7 +2542,7 @@ locatelib (name)
       char *ld_rules;
       char *ldr = 0;
       /* counting elements in array, need 1 extra for null */
-      cnt = 1;  
+      cnt = 1;
       ld_rules = (char *) (ld_2->ld_rules + code);
       if (ld_rules)
 	{
@@ -2570,7 +2570,7 @@ locatelib (name)
       if (ldr)
 	{
 	  *pp++ = ldr;
-	  for (; *ldr != 0; ldr++) 
+	  for (; *ldr != 0; ldr++)
 	    if (*ldr == ':')
 	      {
 		*ldr++ = 0;
@@ -2580,7 +2580,7 @@ locatelib (name)
       if (q)
 	{
 	  *pp++ = q;
-	  for (; *q != 0; q++) 
+	  for (; *q != 0; q++)
 	    if (*q == ':')
 	      {
 		*q++ = 0;
@@ -2619,7 +2619,7 @@ locatelib (name)
 /* Scan the _DYNAMIC structure of the output file to find shared libraries
    that it depends upon and any constructors or destructors they contain.  */
 
-static void 
+static void
 scan_libraries (prog_name)
      char *prog_name;
 {
@@ -2694,7 +2694,7 @@ scan_libraries (prog_name)
    the output file depends upon and their initialization/finalization
    routines, if any.  */
 
-static void 
+static void
 scan_libraries (prog_name)
      char *prog_name;
 {
@@ -2791,7 +2791,7 @@ scan_libraries (prog_name)
 	fatal ("dynamic dependency %s not found", buf);
 
       /* Find the end of the symbol name.  */
-      for (end = p; 
+      for (end = p;
 	   (ch2 = *end) != '\0' && ch2 != '\n' && !ISSPACE (ch2) && ch2 != '|';
 	   end++)
 	continue;
@@ -2829,7 +2829,7 @@ scan_libraries (prog_name)
 
 #endif /* OBJECT_FORMAT_NONE */
 
-
+
 /*
  * COFF specific stuff.
  */
@@ -2989,7 +2989,7 @@ scan_prog_file (prog_name, which_pass)
 			  /* If we are building a shared object on AIX we need
 			     to explicitly export all global symbols or add
 			     them to import list.  */
-			  if (shared_obj) 
+			  if (shared_obj)
 			    {
 			      if (which_pass == PASS_OBJ && (! export_flag))
 				add_to_list (&exports, name);
@@ -3147,7 +3147,7 @@ ignore_library (name)
 
 #endif /* OBJECT_FORMAT_COFF */
 
-
+
 /*
  * OSF/rose specific stuff.
  */
@@ -3202,7 +3202,7 @@ static void print_load_command	PROTO((load_union_t *, size_t, int));
 static void bad_header		PROTO((int));
 static struct file_info	*read_file  PROTO((char *, int, int));
 static void end_file		PROTO((struct file_info *));
-
+
 /* OSF/rose specific version to scan the name list of the loaded
    program for the symbols g++ uses for static constructors and
    destructors.
@@ -3482,7 +3482,7 @@ scan_prog_file (prog_name, which_pass)
     fprintf (stderr, "\n");
 }
 
-
+
 /* Add a function table to the load commands to call a function
    on initiation or termination of the process.  */
 
@@ -3562,7 +3562,7 @@ add_func_table (hdr_p, load_array, sym, type)
 
 }
 
-
+
 /* Print the global header for an OSF/rose object.  */
 
 static void
@@ -3605,7 +3605,7 @@ print_header (hdr_ptr)
   return;
 }
 
-
+
 /* Print a short summary of a load command.  */
 
 static void
@@ -3672,7 +3672,7 @@ print_load_command (load_hdr, offset, number)
   return;
 }
 
-
+
 /* Fatal error when {en,de}code_mach_o_header fails.  */
 
 static void
@@ -3692,7 +3692,7 @@ bad_header (status)
     }
 }
 
-
+
 /* Read a file into a memory buffer.  */
 
 static struct file_info *
@@ -3757,7 +3757,7 @@ read_file (name, fd, rw)
 
   return p;
 }
-
+
 /* Do anything necessary to write a file back from memory.  */
 
 static void

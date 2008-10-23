@@ -74,9 +74,9 @@ Boston, MA 02111-1307, USA.  */
 #ifdef XCOFF_DEBUGGING_INFO
 #include "xcoffout.h"
 #endif
-
 
-#ifdef __BEOS__
+
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -108,7 +108,7 @@ vms_fopen (fname, type)
 #endif
 
 /* If more than one debugging type is supported, you must define
-   PREFERRED_DEBUGGING_TYPE to choose a format in a system-dependent way. 
+   PREFERRED_DEBUGGING_TYPE to choose a format in a system-dependent way.
 
    This is one long line cause VAXC can't handle a \-newline.  */
 #if 1 < (defined (DBX_DEBUGGING_INFO) + defined (SDB_DEBUGGING_INFO) + defined (DWARF_DEBUGGING_INFO) + defined (DWARF2_DEBUGGING_INFO) + defined (XCOFF_DEBUGGING_INFO))
@@ -248,7 +248,7 @@ char *progname;
 /* Copy of arguments to main.  */
 int save_argc;
 char **save_argv;
-
+
 /* Name of current original source file (what was input to cpp).
    This comes from each #-command in the actual input.  */
 
@@ -429,7 +429,7 @@ int obey_regdecls = 0;
    times taken by the various passes.  -quiet.  */
 
 int quiet_flag = 0;
-
+
 /* -f flags.  */
 
 /* Nonzero means `char' should be signed.  */
@@ -554,7 +554,7 @@ int flag_omit_frame_pointer = 0;
 int flag_function_sections = 0;
 
 /* ... and similar for data.  */
- 
+
 int flag_data_sections = 0;
 
 /* Nonzero to inhibit use of define_optimization peephole opts.  */
@@ -656,7 +656,7 @@ int flag_pic;
 
 int flag_exceptions;
 
-/* Nonzero means use the new model for exception handling. Replaces 
+/* Nonzero means use the new model for exception handling. Replaces
    -DNEW_EH_MODEL as a compile option. */
 
 int flag_new_exceptions = 0;
@@ -707,7 +707,7 @@ int flag_schedule_speculative_load_dangerous = 0;
 int flag_branch_on_count_reg;
 
 /* -finhibit-size-directive inhibits output of .size for ELF.
-   This is used only for compiling crtstuff.c, 
+   This is used only for compiling crtstuff.c,
    and it may be extended to other effects
    needed for crtstuff.c on other systems.  */
 int flag_inhibit_size_directive = 0;
@@ -1147,12 +1147,12 @@ documented_lang_options[] =
   { "-nostdinc++", "" },
   { "-trigraphs", "" },
   { "-undef", "" },
-  
+
 #define DEFINE_LANG_NAME(NAME) { NULL, NAME },
-  
+
   /* These are for obj c.  */
   DEFINE_LANG_NAME ("Objective C")
-  
+
   { "-lang-objc", "" },
   { "-gen-decls", "Dump decls to a .decl file" },
   { "-fgnu-runtime", "Generate code for GNU runtime environment" },
@@ -1167,7 +1167,7 @@ documented_lang_options[] =
     "Generate C header of platform specific features" },
 
 #include "options.h"
-  
+
 };
 
 /* Here is a table, controlled by the tm.h file, listing each -m switch
@@ -1195,7 +1195,7 @@ struct
 }
 target_options [] = TARGET_OPTIONS;
 #endif
-
+
 /* Options controlling warnings */
 
 /* Don't print warning messages.  -w.  */
@@ -1246,7 +1246,7 @@ unsigned id_clash_len;
 /* Nonzero means warn about any objects definitions whose size is larger
    than N bytes.  Also want about function definitions whose returned
    values are larger than N bytes. The value N is in `larger_than_size'.  */
- 
+
 int warn_larger_than;
 unsigned larger_than_size;
 
@@ -1277,7 +1277,7 @@ lang_independent_options W_options[] =
   {"inline", &warn_inline, 1,
    "Warn when an inlined function cannot be inlined"}
 };
-
+
 /* Output files for assembler code (real compiler output)
    and debugging dumps.  */
 
@@ -1289,7 +1289,7 @@ FILE *rtl_dump_file = NULL;
    If the string is indeed an integer return its numeric value else
    issue an Invalid Option error for the option PNAME and return DEFVAL.
    If PNAME is zero just return DEFVAL, do not call error.               */
-   
+
 int
 read_integral_parameter (p, pname, defval)
      const char *p;
@@ -1344,7 +1344,7 @@ int stack_reg_time;
 int final_time;
 int symout_time;
 int dump_time;
-
+
 /* Return time used so far, in microseconds.  */
 
 long
@@ -1353,7 +1353,7 @@ get_run_time ()
   if (quiet_flag)
     return 0;
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   return 0;
 #else /* not BeOS */
 #if defined (_WIN32) && !defined (__CYGWIN__)
@@ -1411,7 +1411,7 @@ get_run_time ()
 #endif	/* USG */
 #endif  /* _SC_CLK_TCK */
 #endif	/* _WIN32 */
-#endif	/* __BEOS__ */
+#endif	/* __BEOS__ || __HAIKU__ */
 }
 
 #define TIMEVAR(VAR, BODY)    \
@@ -1520,7 +1520,7 @@ decl_name (decl, verbosity)
 {
   return IDENTIFIER_POINTER (DECL_NAME (decl));
 }
-
+
 static int need_error_newline;
 
 /* Function of last error message;
@@ -1620,7 +1620,7 @@ report_error_function (file)
 
   (*print_error_function) (input_filename);
 }
-
+
 /* Print a message.  */
 
 static void
@@ -1751,7 +1751,7 @@ v_message_with_decl (decl, warn, msgid, ap)
     {
       char fmt[sizeof "%.255s"];
       long width = p - _(msgid);
-             
+
       if (width > 255L) width = 255L;	/* arbitrary */
       sprintf (fmt, "%%.%lds", width);
       fprintf (stderr, fmt, _(msgid));
@@ -2271,7 +2271,7 @@ sorry VPROTO((const char *msgid, ...))
   vsorry (msgid, ap);
   va_end (ap);
 }
-
+
 /* Given a partial pathname as input, return another pathname that shares
    no elements with the pathname of __FILE__.  This is used by abort() to
    print `Internal compiler error in expr.c' instead of `Internal compiler
@@ -2362,7 +2362,7 @@ xcalloc (size1, size2)
 }
 
 
-/* Same as `realloc' but report error if no memory available.  
+/* Same as `realloc' but report error if no memory available.
    Also handle null PTR even if the vendor realloc gets it wrong.  */
 
 PTR
@@ -2396,7 +2396,7 @@ xstrdup (s)
   strcpy (result, s);
   return result;
 }
-
+
 /* Return the logarithm of X, base 2, considering X unsigned,
    if X is a power of 2.  Otherwise, returns -1.
 
@@ -2617,7 +2617,7 @@ output_file_directive (asm_file, input_name)
 #endif
 #endif
 }
-
+
 #ifdef ASM_IDENTIFY_LANGUAGE
 /* Routine to build language identifier for object file.  */
 static void
@@ -2646,21 +2646,21 @@ open_dump_file (suffix, function_name)
 
        if (rtl_dump_file != NULL)
 	 fclose (rtl_dump_file);
-  
+
        strcpy (dumpname, dump_base_name);
        strcat (dumpname, suffix);
-       
+
        rtl_dump_file = fopen (dumpname, "a");
-       
+
        if (rtl_dump_file == NULL)
 	 pfatal_with_name (dumpname);
-       
+
        free (dumpname);
 
        if (function_name)
 	 fprintf (rtl_dump_file, "\n;; Function %s\n\n", function_name);
      });
-  
+
   return;
 }
 
@@ -2675,10 +2675,10 @@ close_dump_file (func, insns)
      {
        if (func)
 	 func (rtl_dump_file, insns);
-       
+
        fflush (rtl_dump_file);
        fclose (rtl_dump_file);
-       
+
        rtl_dump_file = NULL;
      });
 
@@ -2708,24 +2708,24 @@ clean_dump_file (suffix)
 
   strcpy (dumpname, dump_base_name);
   strcat (dumpname, suffix);
-       
+
   rtl_dump_file = fopen (dumpname, "w");
 
   if (rtl_dump_file == NULL)
-    pfatal_with_name (dumpname);       
+    pfatal_with_name (dumpname);
 
   free (dumpname);
 
   fclose (rtl_dump_file);
   rtl_dump_file = NULL;
-  
+
   return;
 }
 
 /* Do any final processing required for the declarations in VEC, of
    which there are LEN.  We write out inline functions and variables
    that have been deferred until this point, but which are required.
-   Returns non-zero if anything was put out.  */ 
+   Returns non-zero if anything was put out.  */
 int
 wrapup_global_declarations (vec, len)
      tree *vec;
@@ -2739,10 +2739,10 @@ wrapup_global_declarations (vec, len)
   for (i = 0; i < len; i++)
     {
       decl = vec[i];
-      
+
       /* We're not deferring this any longer.  */
       DECL_DEFER_OUTPUT (decl) = 0;
-      
+
       if (TREE_CODE (decl) == VAR_DECL && DECL_SIZE (decl) == 0
 	  && incomplete_decl_finalize_hook != 0)
 	(*incomplete_decl_finalize_hook) (decl);
@@ -3244,7 +3244,7 @@ compile_file (name)
       Therefore, I took out that change.
       In future versions we should find another way to solve
       that dbx problem.  -- rms, 23 May 93.  */
-      
+
   /* Don't let the first function fall at the same address
      as gcc_compiled., if profiling.  */
   if (profile_flag || profile_block_flag)
@@ -3388,15 +3388,15 @@ compile_file (name)
   /* Output some stuff at end of file if nec.  */
 
   end_final (dump_base_name);
-   
+
   if (branch_prob_dump)
     open_dump_file (".bp", NULL);
-   
+
   TIMEVAR (dump_time, end_branch_prob (rtl_dump_file));
-   
+
   if (branch_prob_dump)
     close_dump_file (NULL, NULL_RTX);
-   
+
 #ifdef ASM_FILE_END
   ASM_FILE_END (asm_out_file);
 #endif
@@ -3517,7 +3517,7 @@ compile_file (name)
       print_time ("dump", dump_time);
     }
 }
-
+
 /* This is called from various places for FUNCTION_DECL, VAR_DECL,
    and TYPE_DECL nodes.
 
@@ -3680,10 +3680,10 @@ rest_of_compilation (decl)
       if (rtl_dump)
 	{
 	  open_dump_file (".rtl", decl_printable_name (decl, 2));
-	  
+
 	  if (DECL_SAVED_INSNS (decl))
 	    fprintf (rtl_dump_file, ";; (integrable)\n\n");
-	  
+
 	  close_dump_file (print_rtl, insns);
 	}
 
@@ -3961,17 +3961,17 @@ rest_of_compilation (decl)
     {
       if (loop_dump)
 	open_dump_file (".loop", decl_printable_name (decl, 2));
-	
+
       TIMEVAR
 	(loop_time,
 	 {
 	   if (flag_rerun_loop_opt)
 	     {
 	       /* We only want to perform unrolling once.  */
-	       
+
 	       loop_optimize (insns, rtl_dump_file, 0, 0);
-	       
-	
+
+
 	       /* The first call to loop_optimize makes some instructions
 		  trivially dead.  We delete those instructions now in the
 		  hope that doing so will make the heuristics in loop work
@@ -4011,7 +4011,7 @@ rest_of_compilation (decl)
 	  TIMEVAR (jump_time, jump_optimize (insns, !JUMP_CROSS_JUMP,
 					     !JUMP_NOOP_MOVES,
 					     JUMP_AFTER_REGSCAN));
-	  
+
 	  TIMEVAR (cse2_time, reg_scan (insns, max_reg_num (), 0));
 	  TIMEVAR (cse2_time, tem = cse_main (insns, max_reg_num (),
 					      1, rtl_dump_file));
@@ -4076,7 +4076,7 @@ rest_of_compilation (decl)
 
   if (flow_dump)
     open_dump_file (".flow", decl_printable_name (decl, 2));
-  
+
   if (obey_regdecls)
     {
       TIMEVAR (flow_time,
@@ -4181,7 +4181,7 @@ rest_of_compilation (decl)
   current_function_is_leaf = leaf_function_p ();
 
   /* Unless we did stupid register allocation,
-     allocate pseudo-regs that are used only within 1 basic block. 
+     allocate pseudo-regs that are used only within 1 basic block.
 
      RUN_JUMP_AFTER_RELOAD records whether or not we need to rerun the
      jump optimizer after register allocation and reloading are finished.  */
@@ -4278,7 +4278,7 @@ rest_of_compilation (decl)
   /* Re-create the death notes which were deleted during reload.  */
   if (flow2_dump)
     open_dump_file (".flow2", decl_printable_name (decl, 2));
-  
+
   if (optimize)
     {
       TIMEVAR
@@ -4526,15 +4526,15 @@ rest_of_compilation (decl)
   /* Reset global variables.  */
   free_basic_block_vars (0);
 }
-
+
 static void
 display_help ()
 {
   int    undoc;
   unsigned long	 i;
   const char * lang;
-  
-#ifndef USE_CPPLIB  
+
+#ifndef USE_CPPLIB
   printf ("Usage: %s input [switches]\n", progname);
   printf ("Switches:\n");
 #endif
@@ -4546,47 +4546,47 @@ display_help ()
   for (i = NUM_ELEM (f_options); i--;)
     {
       const char * description = f_options[i].description;
-      
+
       if (description != NULL && * description != 0)
 	printf ("  -f%-21s %s\n",
 		f_options[i].string, description);
     }
-  
+
   printf ("  -O[number]              Set optimisation level to [number]\n");
   printf ("  -Os                     Optimise for space rather than speed\n");
   printf ("  -pedantic               Issue warnings needed by strict compliance to ANSI C\n");
   printf ("  -pedantic-errors        Like -pedantic except that errors are produced\n");
   printf ("  -w                      Suppress warnings\n");
   printf ("  -W                      Enable extra warnings\n");
-  
+
   for (i = NUM_ELEM (W_options); i--;)
     {
       const char * description = W_options[i].description;
-      
+
       if (description != NULL && * description != 0)
 	printf ("  -W%-21s %s\n",
 		W_options[i].string, description);
     }
-  
+
   printf ("  -Wid-clash-<num>        Warn if 2 identifiers have the same first <num> chars\n");
   printf ("  -Wlarger-than-<number>  Warn if an object is larger than <number> bytes\n");
   printf ("  -p                      Enable function profiling\n");
 #if defined (BLOCK_PROFILER) || defined (FUNCTION_BLOCK_PROFILER)
   printf ("  -a                      Enable block profiling \n");
-#endif  
+#endif
 #if defined (BLOCK_PROFILER) || defined (FUNCTION_BLOCK_PROFILER) || defined FUNCTION_BLOCK_PROFILER_EXIT
   printf ("  -ax                     Enable jump profiling \n");
-#endif  
+#endif
   printf ("  -o <file>               Place output into <file> \n");
   printf ("  -G <number>             Put global and static data smaller than <number>\n");
   printf ("                           bytes into a special section (on some targets)\n");
-  
+
   for (i = NUM_ELEM (debug_args); i--;)
     {
       if (debug_args[i].description != NULL)
 	printf ("  -%-22s %s\n", debug_args[i].arg, debug_args[i].description);
     }
-  
+
   printf ("  -aux-info <file>        Emit declaration info into <file>.X\n");
   printf ("  -quiet                  Do not display functions compiled or elapsed time\n");
   printf ("  -version                Display the compiler's version\n");
@@ -4600,7 +4600,7 @@ display_help ()
 
   undoc = 0;
   lang  = "language";
-  
+
   /* Display descriptions of language specific options.
      If there is no description, note that there is an undocumented option.
      If the description is empty, do not display anything.  (This allows
@@ -4608,7 +4608,7 @@ display_help ()
      If the option string is missing, then this is a marker, indicating
      that the description string is in fact the name of a language, whose
      language specific options are to follow.  */
-  
+
   if (NUM_ELEM (documented_lang_options) > 1)
     {
       printf ("\nLanguage specific options:\n");
@@ -4634,7 +4634,7 @@ display_help ()
 		  ("\nThere are undocumented %s specific options as well.\n",
 			lang);
 	      undoc = 0;
-	      
+
 	      printf ("\n Options for %s:\n", description);
 
 	      lang = description;
@@ -4654,9 +4654,9 @@ display_help ()
       )
     {
       int doc = 0;
-      
+
       undoc = 0;
-  
+
       printf ("\nTarget specific options:\n");
 
       for (i = NUM_ELEM (target_switches); i--;)
@@ -4669,15 +4669,15 @@ display_help ()
 	  else if (description == NULL)
 	    {
 	      undoc = 1;
-	      
+
 	      if (extra_warnings)
 		printf ("  -m%-21.21s [undocumented]\n", option);
 	    }
 	  else if (* description != 0)
 	    doc += printf ("  -m%-21.21s %s\n", option, description);
 	}
-      
-#ifdef TARGET_OPTIONS      
+
+#ifdef TARGET_OPTIONS
       for (i = NUM_ELEM (target_options); i--;)
 	{
 	  const char * option      = target_options[i].prefix;
@@ -4688,7 +4688,7 @@ display_help ()
 	  else if (description == NULL)
 	    {
 	      undoc = 1;
-	      
+
 	      if (extra_warnings)
 		printf ("  -m%-21.21s [undocumented]\n", option);
 	    }
@@ -4720,7 +4720,7 @@ check_lang_option (option, lang_option)
   int    numopts;
   long   k;
   char * space;
-  
+
   /* Ignore NULL entries.  */
   if (option == NULL || lang_option == NULL)
     return 0;
@@ -4729,23 +4729,23 @@ check_lang_option (option, lang_option)
     len = space - lang_option;
   else
     len = strlen (lang_option);
-  
+
   /* If they do not match to the first n characters then fail.  */
   if (strncmp (option, lang_option, len) != 0)
     return 0;
-  
+
   /* Do not accept a lang option, if it matches a normal -f or -W
      option.  Chill defines a -fpack, but we want to support
      -fpack-struct.  */
-  
+
   /* An exact match is OK  */
   if ((int) strlen (option) == len)
     return 1;
-  
+
   /* If it is not an -f or -W option allow the match */
   if (option[0] != '-')
     return 1;
-  
+
   switch (option[1])
     {
     case 'f':
@@ -4758,31 +4758,31 @@ check_lang_option (option, lang_option)
       break;
     default:  return 1;
     }
-  
+
   /* The option is a -f or -W option.
      Skip past the prefix and search for the remainder in the
      appropriate table of options.  */
   option += 2;
-  
+
   if (option[0] == 'n' && option[1] == 'o' && option[2] == '-')
     option += 3;
-  
+
   for (k = numopts; k--;)
     {
       if (!strcmp (option, indep_options[k].string))
 	{
 	  /* The option matched a language independent option,
 	     do not allow the language specific match.  */
-	  
+
 	  return 0;
 	}
     }
-  
+
   /* The option matches the start of the langauge specific option
      and it is not an exact match for a language independent option.  */
   return 1;
 }
-
+
 /* Entry point of cc1/c++.  Decode command args, then call compile_file.
    Exit code is 35 if can't open files, 34 if fatal error,
    33 if had nonfatal errors, else success.  */
@@ -4861,16 +4861,16 @@ main (argc, argv)
 	{
 	  /* Handle -Os, -O2, -O3, -O69, ...  */
 	  char *p = &argv[i][2];
-	  
+
 	  if ((p[0] == 's') && (p[1] == 0))
 	    {
 	      optimize_size = 1;
-	      
+
 	      /* Optimizing for size forces optimize to be 2. */
 	      optimize = 2;
 	    }
 	  else
-	    {	    
+	    {
 	      const int optimize_val = read_integral_parameter (p, p - 2, -1);
 	      if (optimize_val != -1)
 		{
@@ -4934,25 +4934,25 @@ main (argc, argv)
   for (i = 1; i < argc; i++)
     {
       size_t j;
-      
+
       /* If this is a language-specific option,
 	 decode it in a language-specific way.  */
       for (j = NUM_ELEM (documented_lang_options); j--;)
 	if (check_lang_option (argv[i], documented_lang_options[j].option))
 	  break;
-      
+
       if (j != (size_t)-1)
 	{
 	  /* If the option is valid for *some* language,
 	     treat it as valid even if this language doesn't understand it.  */
 	  int strings_processed = lang_decode_option (argc - i, argv + i);
-	  
+
 	  if (!strcmp (argv[i], "--help"))
 	    {
 	      display_help ();
 	      exit (0);
 	    }
-	  
+
 	  if (strings_processed != 0)
 	    i += strings_processed - 1;
 	}
@@ -5033,7 +5033,7 @@ main (argc, argv)
 		  case 'J':
 		    jump2_opt_dump = 1;
 		    break;
-#ifdef STACK_REGS		    
+#ifdef STACK_REGS
 		  case 'k':
 		    stack_reg_dump = 1;
 		    break;
@@ -5149,7 +5149,7 @@ main (argc, argv)
 	    pedantic = 1;
 	  else if (!strcmp (str, "pedantic-errors"))
 	    flag_pedantic_errors = pedantic = 1;
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 	  else if (!strncmp (str, "priority=", 9))
 	    priority = atol (str + 9);
 #endif
@@ -5238,7 +5238,7 @@ main (argc, argv)
 #if !defined (FUNCTION_BLOCK_PROFILER_EXIT) || !defined (BLOCK_PROFILER) || !defined (FUNCTION_BLOCK_PROFILER)
 	      warning ("`-ax' option (jump profiling) not supported");
 #else
-	      profile_block_flag = (!profile_block_flag 
+	      profile_block_flag = (!profile_block_flag
 	                               || profile_block_flag == 2) ? 2 : 3;
 #endif
 	    }
@@ -5276,13 +5276,13 @@ main (argc, argv)
 
 		      if (*p && (*p < '0' || *p > '9'))
 			continue;
-		      
+
 		      /* A debug flag without a level defaults to level 2.
 			 Note we do not want to call read_integral_parameter
-			 for that case since it will call atoi which 
+			 for that case since it will call atoi which
 			 will return zero.
 
-			 ??? We may want to generalize the interface to 
+			 ??? We may want to generalize the interface to
 			 read_integral_parameter to better handle this case
 			 if this case shows up often.  */
 		      if (*p)
@@ -5366,7 +5366,7 @@ main (argc, argv)
 	      const int g_switch_val = (str[1] != '\0') ?
 	                               read_integral_parameter(str + 1, 0, -1) :
 			               read_integral_parameter(argv[++i], 0, -1);
-	      
+
 	      if (g_switch_val != -1)
 	        {
 		  g_switch_set = TRUE;
@@ -5396,7 +5396,7 @@ main (argc, argv)
 	filename = argv[i];
     }
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   set_thread_priority (find_thread(NULL), priority);
   {
     char priobuf[20];
@@ -5471,7 +5471,7 @@ main (argc, argv)
   user_label_prefix = USER_LABEL_PREFIX;
   if (flag_leading_underscore != -1)
     {
-      /* If the default prefix is more complicated than "" or "_", 
+      /* If the default prefix is more complicated than "" or "_",
 	 issue a warning and ignore this option.  */
       if (user_label_prefix[0] == 0 ||
 	  (user_label_prefix[0] == '_' && user_label_prefix[1] == 0))
@@ -5519,7 +5519,7 @@ main (argc, argv)
   exit (SUCCESS_EXIT_CODE);
   return 0;
 }
-
+
 /* Decode -m switches.  */
 /* Decode the switch -mNAME.  */
 
@@ -5556,7 +5556,7 @@ set_target_switch (name)
   if (!valid_target_option)
     error ("Invalid option `%s'", name);
 }
-
+
 /* Print version information to FILE.
    Each line begins with INDENT (for the case where FILE is the
    assembler output file).  */
@@ -5608,7 +5608,7 @@ print_single_switch (file, pos, max, indent, sep, term, type, name)
   pos += len;
   return pos;
 }
-     
+
 /* Print active target switches to FILE.
    POS is the current cursor position and MAX is the size of a "line".
    Each line begins with INDENT and ends with TERM.
@@ -5707,7 +5707,7 @@ debug_start_source_file (filename)
   if (debug_info_level == DINFO_LEVEL_VERBOSE
       && write_symbols == DWARF2_DEBUG)
     dwarf2out_start_source_file (filename);
-#endif /* DWARF2_DEBUGGING_INFO */  
+#endif /* DWARF2_DEBUGGING_INFO */
 #ifdef SDB_DEBUGGING_INFO
   if (write_symbols == SDB_DEBUG)
     sdbout_start_new_source_file (filename);

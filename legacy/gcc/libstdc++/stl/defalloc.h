@@ -18,7 +18,7 @@
 // This file WILL BE REMOVED in a future release.
 //
 // DO NOT USE THIS FILE unless you have an old container implementation
-// that requires an allocator with the HP-style interface.  
+// that requires an allocator with the HP-style interface.
 //
 // Standard-conforming allocators have a very different interface.  The
 // standard default allocator is declared in the header <memory>.
@@ -30,7 +30,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <limits.h>
-#if __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 # include <stdio.h>
 #else
 #include <iostream.h>
@@ -43,10 +43,10 @@ inline T* allocate(ptrdiff_t size, T*) {
     set_new_handler(0);
     T* tmp = (T*)(::operator new((size_t)(size * sizeof(T))));
     if (tmp == 0) {
-#if __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 	fprintf(stderr, "out of memory\n");
 #else
-	cerr << "out of memory" << endl; 
+	cerr << "out of memory" << endl;
 #endif
 	exit(1);
     }
@@ -69,19 +69,19 @@ public:
     typedef const T& const_reference;
     typedef size_t size_type;
     typedef ptrdiff_t difference_type;
-    pointer allocate(size_type n) { 
+    pointer allocate(size_type n) {
 	return ::allocate((difference_type)n, (pointer)0);
     }
     void deallocate(pointer p) { ::deallocate(p); }
     pointer address(reference x) { return (pointer)&x; }
-    const_pointer const_address(const_reference x) { 
-	return (const_pointer)&x; 
+    const_pointer const_address(const_reference x) {
+	return (const_pointer)&x;
     }
-    size_type init_page_size() { 
-	return max(size_type(1), size_type(4096/sizeof(T))); 
+    size_type init_page_size() {
+	return max(size_type(1), size_type(4096/sizeof(T)));
     }
-    size_type max_size() const { 
-	return max(size_type(1), size_type(UINT_MAX/sizeof(T))); 
+    size_type max_size() const {
+	return max(size_type(1), size_type(UINT_MAX/sizeof(T)));
     }
 };
 

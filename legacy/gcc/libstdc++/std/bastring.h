@@ -61,12 +61,12 @@ extern void __length_error (const char *);
 
 #endif
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 // Needed for atomic_add():
 typedef long int32;
 typedef volatile long vint32;
 extern "C" int32 atomic_add(vint32* value, int32 addvalue);
-#endif	/* __BEOS__ */
+#endif	/* __BEOS__ || __HAIKU__ */
 
 template <class charT, class traits = string_char_traits<charT>,
 	  class Allocator = alloc >
@@ -79,7 +79,7 @@ private:
 
     charT* data () { return reinterpret_cast<charT *>(this + 1); }
     charT& operator[] (size_t s) { return data () [s]; }
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
     charT* grab () { if (selfish) return clone (); atomic_add((vint32*) &ref, 1); return data (); }
     void release() { if (atomic_add((int32*) &ref, -1) == 1) delete this; }
 #else
@@ -89,8 +89,8 @@ private:
       {
 	size_t __val;
 	// This opcode exists as a .byte instead of as a mnemonic for the
-	// benefit of SCO OpenServer 5.  The system assembler (which is 
-	// essentially required on this target) can't assemble xaddl in 
+	// benefit of SCO OpenServer 5.  The system assembler (which is
+	// essentially required on this target) can't assemble xaddl in
 	//COFF mode.
 	asm (".byte 0xf0, 0x0f, 0xc1, 0x02" // lock; xaddl %eax, (%edx)
 	    : "=a" (__val)
@@ -119,7 +119,7 @@ private:
 #else
     void release () { if (--ref == 0) delete this; }
 #endif
-#endif /* __BEOS__ */
+#endif /* __BEOS__ || __HAIKU__ */
     inline static void * operator new (size_t, size_t);
     inline static void operator delete (void *);
     inline static Rep* create (size_t);
@@ -221,7 +221,7 @@ public:
 
   void push_back(charT __c)
   { append(1, __c); }
-  
+
   basic_string& assign (const basic_string& str, size_type pos = 0,
 			size_type n = npos)
     { return replace (0, npos, str, pos, n); }

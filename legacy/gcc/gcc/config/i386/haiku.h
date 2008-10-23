@@ -144,21 +144,21 @@ Boston, MA 02111-1307, USA.  */
 
 #undef SIZE_TYPE
 #define SIZE_TYPE "long unsigned int"
- 
+
 #undef PTRDIFF_TYPE
 #define PTRDIFF_TYPE "long int"
-  
+
 #undef WCHAR_TYPE
 #define WCHAR_TYPE "short unsigned int"
-   
+
 #undef WCHAR_UNSIGNED
 #define WCHAR_UNSIGNED 1
 
 #undef WCHAR_TYPE_SIZE
 #define WCHAR_TYPE_SIZE 16
-    
+
 #undef CPP_PREDEFINES
-#define CPP_PREDEFINES "-D__ELF__ -D__HAIKU__ -D__BEOS__ -D__INTEL__ -D_X86_=1 \
+#define CPP_PREDEFINES "-D__ELF__ -D__HAIKU__ -D__INTEL__ -D_X86_=1 \
 -D__stdcall=__attribute__((__stdcall__)) \
 -D__cdecl=__attribute__((__cdecl__)) \
 -D__declspec(x)=__attribute__((x)) \
@@ -195,7 +195,7 @@ Boston, MA 02111-1307, USA.  */
 #define LIB_SPEC "-lroot"
 
 /* gcc runtime lib is built into libroot.so on Haiku */
-/* ??? This is gonna be lovely when the next release of gcc has 
+/* ??? This is gonna be lovely when the next release of gcc has
    some new symbol in, so that links start failing.  */
 #undef LIBGCC_SPEC
 #define LIBGCC_SPEC ""
@@ -269,7 +269,7 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
   ((DECL_MACHINE_ATTRIBUTES (DECL) != NULL_TREE) \
    || (TREE_CODE (DECL) == VAR_DECL && DECL_VIRTUAL_P (DECL)))
 
-/* Used only here locally.  If the decl has been exported, emit the 
+/* Used only here locally.  If the decl has been exported, emit the
    necessary assembly.  */
 
 #define ASM_EXPORT_DECL(FILE, NAME, DECL)				\
@@ -490,7 +490,7 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 /* [bonefish]:
     Review! */
 #undef ASM_IDENTIFY_GCC
-#define ASM_IDENTIFY_GCC(FILE) 
+#define ASM_IDENTIFY_GCC(FILE)
 
 /* required to compile winnt.c */
 /* [bonefish]:
@@ -520,7 +520,7 @@ drectve_section ()							\
 #define EXTRA_SECTIONS in_const, in_ctors, in_dtors, in_drectve
 
 /* [zooey]:
-   '#pragma interface' seems to trigger a bug which causes 
+   '#pragma interface' seems to trigger a bug which causes
    global constructors and destructors (keyed to the first function in
    a translation unit) not being generated, causing the link to fail.
    So we ignore '#pragma interface' for Haiku.

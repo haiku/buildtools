@@ -41,7 +41,7 @@
 #include "ldemul.h"
 #include "demangle.h"
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 #include <OS.h>
 /* the thread priority used for all gcc-tools */
 static int priority = B_LOW_PRIORITY;
@@ -709,7 +709,7 @@ parse_args (unsigned argc, char **argv)
 	  else
 	    einfo (_("%P%F: unrecognized -assert option `%s'\n"), optarg);
 	  break;
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 	case OPTION_PRIORITY:
 	  priority = atol (optarg);
 	  break;
@@ -1364,7 +1364,7 @@ parse_args (unsigned argc, char **argv)
 	}
     }
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   set_thread_priority (find_thread(NULL), priority);
 #endif
 

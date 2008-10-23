@@ -65,7 +65,7 @@ enum cache_flag {
 
 #define BFD_CACHE_MAX_OPEN 10
 
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
 static unsigned char _bfdio_files[OPEN_MAX+1];
 #endif
 
@@ -258,7 +258,7 @@ cache_bseek (struct bfd *abfd, file_ptr offset, int whence)
   FILE *f = bfd_cache_lookup (abfd, whence != SEEK_CUR ? CACHE_NO_SEEK : 0);
   if (f == NULL)
     return -1;
-#ifdef __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   _bfdio_files[fileno(f)] = 1;
 #endif
   return real_fseek (f, offset, whence);
@@ -325,7 +325,7 @@ cache_bwrite (struct bfd *abfd, const void *where, file_ptr nbytes)
   FILE *f = bfd_cache_lookup (abfd, 0);
   if (f == NULL)
     return 0;
-#if defined __BEOS__
+#if defined(__BEOS__) || defined(__HAIKU__)
   {
     if (_bfdio_files[fileno(f)] == 1)
       {
