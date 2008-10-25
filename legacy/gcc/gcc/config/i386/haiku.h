@@ -365,11 +365,11 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
+    { "/boot/common/include", 0, 0, 0 },\
     { "/boot/develop/headers/be/add-ons/graphics", 0, 0, 0 },\
     { "/boot/develop/headers/be/devel", 0, 0, 0 },\
     { "/boot/develop/headers/be/translation", 0, 0, 0 },\
     { "/boot/develop/headers/be/mail", 0, 0, 0 },\
-    { "/boot/develop/headers/gnu", 0, 0, 0 },\
     { "/boot/develop/headers/be/drivers", 0, 0, 0 },\
     { "/boot/develop/headers/be/opengl", 0, 0, 0 },\
     { "/boot/develop/headers/be/game", 0, 0, 0 },\
@@ -395,6 +395,8 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { "/boot/develop/headers/be/net/netinet", 0, 0, 0 },\
     { "/boot/develop/headers/be/storage", 0, 0, 0 },\
     { "/boot/develop/headers/be", 0, 0, 0 },\
+    { "/boot/develop/headers/3rdparty", 0, 0, 0 },\
+    { "/boot/develop/headers/bsd", 0, 0, 0 },\
     { "/boot/develop/headers/cpp", 0, 0, 0 },\
     { "/boot/develop/headers/posix", 0, 0, 0 },\
     { "/boot/develop/headers", 0, 0, 0 }, \
@@ -411,7 +413,6 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { CROSS_INCLUDE_DIR "/be/devel", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be/translation", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be/mail", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be/drivers", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be/opengl", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be/game", 0, 0, 0 },\
@@ -437,6 +438,8 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { CROSS_INCLUDE_DIR "/be/net/netinet", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be/storage", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/be", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/posix", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
