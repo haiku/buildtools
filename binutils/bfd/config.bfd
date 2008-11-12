@@ -1063,7 +1063,7 @@ case "${targ}" in
     ;;
   powerpc-*-haiku*)
     targ_defvec=bfd_elf32_powerpc_vec
-    targ_selvecs="rs6000coff_vec bfd_elf32_powerpcle_vec ppcboot_vec pmac_xcoff_vec"
+    targ_selvecs="rs6000coff_vec bfd_elf32_powerpcle_vec pef_vec pef_xlib_vec pmac_xcoff_vec ppcboot_vec"
     targ_cflags=-D__HAIKU_TARGET__
     ;;
   powerpc-*-macos*)
