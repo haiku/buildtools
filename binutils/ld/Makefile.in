@@ -341,6 +341,7 @@ ALL_EMULATIONS = \
 	earmelf.o \
 	earmelfb.o \
 	earmelf_fbsd.o \
+	earmelf_haiku.o \
 	earmelf_linux.o \
 	earmelf_linux_eabi.o \
 	earmelfb_linux.o \
@@ -1324,6 +1325,10 @@ earmelf_fbsd.c: $(srcdir)/emulparams/armelf_fbsd.sh \
   $(srcdir)/emultempl/elf32.em $(srcdir)/emultempl/armelf.em \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 	${GENSCRIPTS} armelf_fbsd "$(tdir_armelf_fbsd)"
+earmelf_haiku.c: $(srcdir)/emulparams/armelf_haiku.sh \
+  $(srcdir)/emultempl/elf32.em $(srcdir)/emultempl/armelf.em \
+  $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+	${GENSCRIPTS} armelf_haiku "$(tdir_armelf_haiku)"
 earmelf_linux.c: $(srcdir)/emulparams/armelf_linux.sh \
   $(srcdir)/emultempl/elf32.em $(srcdir)/emultempl/armelf.em \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
