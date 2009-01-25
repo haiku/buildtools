@@ -123,6 +123,7 @@ case ${generic_target} in
   arm-wince-pe | arm-*-wince)		fmt=coff em=wince-pe ;;
   arm-*-pe | thumb-*-pe)		fmt=coff em=pe ;;
   arm-*-riscix*)			fmt=aout em=riscix ;;
+  arm-*-haiku*)				fmt=elf  em=haiku ;;
 
   avr-*-*)				fmt=elf bfd_gas=yes ;;
 
@@ -174,9 +175,10 @@ case ${generic_target} in
   i386-ibm-aix*)			fmt=coff em=i386aix ;;
   i386-sequent-bsd*)			fmt=aout em=dynix ;;
   i386-*-beospe*)			fmt=coff em=pe ;;
-  i386-*-beos*)				fmt=elf ;;
+  i386-*-beos*)				fmt=elf em=beos ;;
   i386-*-coff)				fmt=coff ;;
   i386-*-elf)				fmt=elf ;;
+  i386-*-haiku*)			fmt=elf em=haiku ;;
   i386-*-kaos*)				fmt=elf ;;
   i386-*-bsd*)				fmt=aout em=386bsd ;;
   i386-*-netbsd0.8)			fmt=aout em=386bsd ;;
@@ -262,6 +264,7 @@ case ${generic_target} in
   m68k-*-netbsd*)			fmt=aout em=nbsd bfd_gas=yes ;;
   m68k-*-openbsd*)			fmt=aout em=nbsd bfd_gas=yes ;;
   m68k-*-psos*)				fmt=elf em=psos;;
+  m68k-*-haiku*)			fmt=elf em=haiku ;;
 
   maxq-*-coff)      			fmt=coff bfd_gas=yes ;;
 
@@ -318,9 +321,10 @@ case ${generic_target} in
   ppc-*-aix5.[01])			fmt=coff em=aix5 ;;
   ppc-*-aix5.*)				fmt=coff em=aix5 ;;
   ppc-*-aix*)				fmt=coff ;;
-  ppc-*-beos*)				fmt=coff ;;
+  ppc-*-beos*)				fmt=coff em=beos ;;
   ppc-*-*n*bsd* | ppc-*-elf*)		fmt=elf ;;
   ppc-*-eabi* | ppc-*-sysv4*)		fmt=elf ;;
+  ppc-*-haiku*)				fmt=elf em=haiku ;;
   ppc-*-linux-*)			fmt=elf em=linux ;;
   ppc-*-solaris*)			fmt=elf em=solaris ;;
   ppc-*-rtems*)				fmt=elf ;;
