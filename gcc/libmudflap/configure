@@ -7585,7 +7585,7 @@ echo $ECHO_N "checking for $compiler option to produce PIC... $ECHO_C" >&6
       fi
       ;;
 
-    beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+    beos* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
 
@@ -8219,6 +8219,11 @@ _LT_EOF
       else
 	ld_shlibs=no
       fi
+      ;;
+
+    haiku*)
+      allow_undefined_flag=unsupported
+      archive_cmds='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
       ;;
 
     interix[3-9]*)
@@ -9683,6 +9688,12 @@ gnu*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LD_LIBRARY_PATH
   hardcode_into_libs=yes
+  ;;
+
+haiku*)
+  library_names_spec='${libname}${shared_ext}'
+  dynamic_linker="$host_os ld.so"
+  shlibpath_var=LIBRARY_PATH
   ;;
 
 hpux9* | hpux10* | hpux11*)

@@ -1369,7 +1369,7 @@ case ${enable_threads} in
     # default
     target_thread_file='single'
     ;;
-  aix | dce | gnat | irix | posix | posix95 | rtems | \
+  aix | dce | gnat | haiku | irix | posix | posix95 | rtems | \
   single | solaris | vxworks | win32 | mipssde)
     target_thread_file=${enable_threads}
     ;;

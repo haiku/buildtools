@@ -57,6 +57,9 @@ relative prefix can be found, return @code{NULL}.
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif
 
 #include <string.h>
 
@@ -254,6 +257,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
 	    {
 	      if (*endp == PATH_SEPARATOR || *endp == 0)
 		{
+		  struct stat st;
 		  if (endp == startp)
 		    {
 		      nstore[0] = '.';
@@ -271,10 +275,11 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
 		      else
 			nstore[endp - startp] = 0;
 		    }
+
 		  strcat (nstore, progname);
-		  if (! access (nstore, X_OK)
+		  if ((! stat(nstore, &st) && S_ISREG (st.st_mode) && ! access (nstore, X_OK))
 #ifdef HAVE_HOST_EXECUTABLE_SUFFIX
-                      || ! access (strcat (nstore, HOST_EXECUTABLE_SUFFIX), X_OK)
+                      || (! stat (strcat (nstore, HOST_EXECUTABLE_SUFFIX)) && S_ISREG (st.st_mode) && ! access (nstore, X_OK))
 #endif
 		      )
 		    {
