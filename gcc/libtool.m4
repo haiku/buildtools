@@ -1598,7 +1598,7 @@ else
   lt_cv_dlopen_libs=
 
   case $host_os in
-  beos*)
+  beos* | haiku* )
     lt_cv_dlopen="load_add_on"
     lt_cv_dlopen_libs=
     lt_cv_dlopen_self=yes
@@ -2047,7 +2047,7 @@ amigaos*)
   fi
   ;;
 
-beos*)
+beos* | haiku*)
   library_names_spec='${libname}${shared_ext}'
   dynamic_linker="$host_os ld.so"
   shlibpath_var=LIBRARY_PATH
@@ -2209,12 +2209,6 @@ gnu*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LD_LIBRARY_PATH
   hardcode_into_libs=yes
-  ;;
-
-haiku*)
-  library_names_spec='${libname}${shared_ext}'
-  dynamic_linker="$host_os ld.so"
-  shlibpath_var=LIBRARY_PATH
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -2844,7 +2838,7 @@ aix[[4-9]]*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
-beos*)
+beos* | haiku*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
@@ -3116,7 +3110,7 @@ AC_DEFUN([LT_LIB_M],
 [AC_REQUIRE([AC_CANONICAL_HOST])dnl
 LIBM=
 case $host in
-*-*-beos* | *-*-haiku* | *-*-cygwin* | *-*-pw32* | *-*-darwin*)
+*-*-beos* | *-*-cygwin* | *-*-pw32* | *-*-darwin* | *-*-haiku*)
   # These system don't have libm, or don't need it
   ;;
 *-ncr-sysv4.3*)
@@ -5608,6 +5602,11 @@ if test "$_lt_caught_CXX_error" != yes; then
         ;;
 
       gnu*)
+        ;;
+
+      haiku*)
+        _LT_TAGVAR(allow_undefined_flag, $1)=unsupported
+        _LT_TAGVAR(archive_cmds, $1)='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
         ;;
 
       hpux9*)
