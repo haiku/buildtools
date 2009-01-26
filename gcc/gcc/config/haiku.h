@@ -77,76 +77,79 @@ Boston, MA 02111-1307, USA.  */
 #undef INCLUDE_DEFAULTS
 #define INCLUDE_DEFAULTS \
     { \
-    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
-    { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
-    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
-    { "/boot/develop/headers/os", 0, 0, 0 },\
-    { "/boot/develop/headers/os/app", 0, 0, 0 },\
-    { "/boot/develop/headers/os/device", 0, 0, 0 },\
-    { "/boot/develop/headers/os/drivers", 0, 0, 0 },\
-    { "/boot/develop/headers/os/game", 0, 0, 0 },\
-    { "/boot/develop/headers/os/interface", 0, 0, 0 },\
-    { "/boot/develop/headers/os/kernel", 0, 0, 0 },\
-    { "/boot/develop/headers/os/mail", 0, 0, 0 },\
-    { "/boot/develop/headers/os/media", 0, 0, 0 },\
-    { "/boot/develop/headers/os/midi", 0, 0, 0 },\
-    { "/boot/develop/headers/os/midi2", 0, 0, 0 },\
-    { "/boot/develop/headers/os/net", 0, 0, 0 },\
-    { "/boot/develop/headers/os/opengl", 0, 0, 0 },\
-    { "/boot/develop/headers/os/storage", 0, 0, 0 },\
-    { "/boot/develop/headers/os/support", 0, 0, 0 },\
-    { "/boot/develop/headers/os/translation", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/graphics", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/input_server", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/screen_saver", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0 },\
-    { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0 },\
-    { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/gnu", 0, 0, 0 },\
-    { "/boot/develop/headers/cpp", 0, 0, 0 },\
-    { "/boot/develop/headers/bsd", 0, 0, 0 },\
-    { "/boot/develop/headers/posix", 0, 0, 0 },\
-    { "/boot/develop/headers", 0, 0, 0 }, \
-    { 0, 0, 0, 0 } \
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 0, 0 }, \
+    { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
+    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
+    { "/boot/develop/headers/os", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/app", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/device", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/drivers", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/game", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/interface", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/kernel", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/mail", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/media", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/midi", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/midi2", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/net", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/opengl", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/storage", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/support", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/translation", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/add-ons/graphics", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/add-ons/input_server", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/add-ons/screen_saver", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/add-ons/tracker", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/gnu", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/cpp", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/bsd", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/posix", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers", 0, 0, 0, 0, 0 }, \
+    { 0, 0, 0, 0, 0, 0 } \
     }
 #else /* CROSS_DIRECTORY_STRUCTURE */
 #undef	INCLUDE_DEFAULTS
 #define INCLUDE_DEFAULTS				\
     { \
-    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
-    { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
-    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
-    { CROSS_INCLUDE_DIR "/os", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/net/netinet", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/posix", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
-    { 0, 0, 0, 0 } \
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 1, 0 }, \
+    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1, 1, 0 } \
+    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 1, 0 } \
+    { GCC_INCLUDE_DIR, "GCC", 0, 0, 1, 0 }, \
+    { FIXED_INCLUDE_DIR, "GCC", 0, 0, 1, 0 } \
+    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/net/netinet", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/posix", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR , 0, 0, 0, 1, 0 }, \
+    { 0, 0, 0, 0, 0, 0 } \
     }
 #endif /* CROSS_DIRECTORY_STRUCTURE */
 
