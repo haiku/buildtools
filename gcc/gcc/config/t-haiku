@@ -1,4 +1,0 @@
-# The LIMITS_H_TEST looks for limits.h in $(SYSTEM_HEADERS_DIR), but it is in
-# .../posix.
-LIMITS_H_TEST = [ -f $(SYSTEM_HEADER_DIR)/posix/limits.h ]
-
