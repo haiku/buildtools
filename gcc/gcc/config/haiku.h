@@ -115,8 +115,8 @@ Boston, MA 02111-1307, USA.  */
 #define INCLUDE_DEFAULTS				\
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 1, 0 }, \
-    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1, 1, 0 } \
-    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 1, 0 } \
+    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1, 1, 0 }, \
+    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 1, 0 }, \
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 1, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 1, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 1, 0 }, \
