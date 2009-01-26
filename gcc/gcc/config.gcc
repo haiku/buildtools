@@ -733,6 +733,12 @@ arm*-*-netbsd*)
 	extra_parts=""
 	use_collect2=yes
 	;;
+arm*-*-haiku*)
+	tmake_file="${tmake_file} t-haiku arm/t-arm arm/t-arm-elf"
+	tm_file="dbxelf.h elfos.h haiku.h arm/elf.h arm/aout.h arm/haiku.h arm/arm.h"
+	tm_defines="USE_GAS"
+	use_fixproto=yes
+	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tm_file="dbxelf.h elfos.h linux.h arm/elf.h arm/linux-gas.h arm/linux-elf.h"
 	case $target in
@@ -1638,6 +1644,11 @@ m68k-*-rtems*)
 	tm_defines="${tm_defines} MOTOROLA=1"
 	extra_parts="crtbegin.o crtend.o"
 	;;
+m68k-*-haiku*)
+	tmake_file="m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
+	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
+	tm_defines="MOTOROLA USE_GAS"
+	;;
 mcore-*-elf)
 	tm_file="dbxelf.h elfos.h svr4.h ${tm_file} mcore/mcore-elf.h"
 	tmake_file=mcore/t-mcore
@@ -1950,6 +1961,11 @@ powerpc-*-eabi*)
 	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h rs6000/eabi.h rs6000/e500.h"
 	extra_options="${extra_options} rs6000/sysv4.opt"
 	tmake_file="rs6000/t-fprules rs6000/t-fprules-fpbit rs6000/t-ppcgas rs6000/t-ppccomm"
+	;;
+powerpc-*-haiku*)
+	tmake_file="rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
+	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku.h"
+	extra_options="${extra_options} rs6000/sysv4.opt"
 	;;
 powerpc-*-rtems*)
 	tm_file="${tm_file} dbxelf.h elfos.h svr4.h freebsd-spec.h rs6000/sysv4.h rs6000/eabi.h rs6000/e500.h rs6000/rtems.h rtems.h"
