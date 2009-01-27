@@ -4913,7 +4913,7 @@ aix[4-9]*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
-beos*)
+beos* | haiku*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
@@ -9177,7 +9177,7 @@ amigaos*)
   fi
   ;;
 
-beos*)
+beos* | haiku*)
   library_names_spec='${libname}${shared_ext}'
   dynamic_linker="$host_os ld.so"
   shlibpath_var=LIBRARY_PATH
@@ -9339,12 +9339,6 @@ gnu*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LD_LIBRARY_PATH
   hardcode_into_libs=yes
-  ;;
-
-haiku*)
-  library_names_spec='${libname}${shared_ext}'
-  dynamic_linker="$host_os ld.so"
-  shlibpath_var=LIBRARY_PATH
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -9873,7 +9867,7 @@ else
   lt_cv_dlopen_libs=
 
   case $host_os in
-  beos*)
+  beos* | haiku*)
     lt_cv_dlopen="load_add_on"
     lt_cv_dlopen_libs=
     lt_cv_dlopen_self=yes
@@ -13103,7 +13097,7 @@ amigaos*)
   fi
   ;;
 
-beos*)
+beos* | haiku*)
   library_names_spec='${libname}${shared_ext}'
   dynamic_linker="$host_os ld.so"
   shlibpath_var=LIBRARY_PATH
@@ -13264,12 +13258,6 @@ gnu*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LD_LIBRARY_PATH
   hardcode_into_libs=yes
-  ;;
-
-haiku*)
-  library_names_spec='${libname}${shared_ext}'
-  dynamic_linker="$host_os ld.so"
-  shlibpath_var=LIBRARY_PATH
   ;;
 
 hpux9* | hpux10* | hpux11*)
