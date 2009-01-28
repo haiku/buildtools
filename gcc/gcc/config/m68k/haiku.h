@@ -80,7 +80,6 @@ Boston, MA 02110-1301, USA.  */
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
-	builtin_define ("__BEOS__");					\
 	builtin_define ("__HAIKU__");					\
 	builtin_define ("__M68K__");					\
 	builtin_define_std ("mc68000");					\
