@@ -1666,7 +1666,7 @@ uninstall-info: uninstall-info-recursive
 
 
 get_patches.c: PATCHES get_patches.sh
-	./get_patches.sh > $@ || rm -f $@
+	$(srcdir)/get_patches.sh > $@ || rm -f $@
 
 tune:
 	$(MAKE) $(AM_MAKEFLAGS) tuneup$(EXEEXT)
