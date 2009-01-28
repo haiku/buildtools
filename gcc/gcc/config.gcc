@@ -1128,7 +1128,7 @@ x86_64-*-freebsd*)
 	tmake_file="${tmake_file} i386/t-crtstuff"
 	;;
 i[34567]86-*-haiku*)
-	tmake_file='i386/t-haiku i386/t-crtpic'
+	tmake_file='t-haiku i386/t-crtpic'
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h haiku.h i386/haiku.h"
 	extra_parts='crtbegin.o crtend.o'
 	;;
