@@ -222,6 +222,8 @@ arm*-*-netbsdelf*)
 	;;
 arm*-*-netbsd*)
 	;;
+arm-*-haiku*)
+	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	;;
 arm*-*-uclinux*)		# ARM ucLinux
