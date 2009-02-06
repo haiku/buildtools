@@ -313,7 +313,7 @@ i[34567]86-*-freebsd*)
 	;;
 x86_64-*-freebsd*)
 	;;
-i[34567]86-*-haikuelf* | i[34567]86-*-haiku*)
+i[34567]86-*-haiku*)
 	;;
 i[34567]86-*-netbsdelf*)
 	;;
@@ -417,6 +417,8 @@ m68k-*-aout*)
 	;;
 m68k-*-coff*)
 	;;
+m68k-*-haiku*)
+	;;
 m68020-*-elf* | m68k-*-elf*)
 	;;
 m68010-*-netbsdelf* | m68k*-*-netbsdelf*)
@@ -494,6 +496,8 @@ powerpc-*-darwin*)
 powerpc64-*-darwin*)
 	;;
 powerpc*-*-freebsd*)
+	;;
+powerpc-*-haiku*)
 	;;
 powerpc-*-netbsd*)
 	;;
