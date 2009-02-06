@@ -1645,6 +1645,8 @@ m68k-*-rtems*)
 	extra_parts="crtbegin.o crtend.o"
 	;;
 m68k-*-haiku*)
+	default_m68k_cpu=68020
+	default_cf_cpu=5206
 	tmake_file="m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
 	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
 	tm_defines="MOTOROLA USE_GAS"
