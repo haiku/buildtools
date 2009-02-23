@@ -62,7 +62,7 @@ Boston, MA 02111-1307, USA.  */
    it was i386-mcount.o, but that doesn't exist in gcc 2.95.3 either. */
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart:start_dyn.o%s} init_term_dyn.o%s %{p:mcount.o%s}"
+#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!shared:%{!nostart:start_dyn.o%s}} init_term_dyn.o%s %{p:mcount.o%s}"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
