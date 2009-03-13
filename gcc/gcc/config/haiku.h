@@ -83,6 +83,8 @@ Boston, MA 02111-1307, USA.  */
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
+    { "/boot/home/config/include", 0, 0, 0, 0, 0 }, \
+    { "/boot/common/include", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/app", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/device", 0, 0, 0, 0, 0 }, \
@@ -106,7 +108,7 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/gnu", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/3rdparty", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/cpp", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/bsd", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/posix", 0, 0, 0, 0, 0 }, \
@@ -146,7 +148,7 @@ Boston, MA 02111-1307, USA.  */
     { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0, 1, 0 }, \
-    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/posix", 0, 0, 0, 1, 0 }, \
