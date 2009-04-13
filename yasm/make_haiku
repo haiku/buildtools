@@ -1,4 +1,0 @@
-#! /bin/sh
-cp /boot/common/share/libtool/config/config.* config/
-./configure --prefix=/boot/common LDFLAGS=-L/boot/common/lib CPPFLAGS=-I/boot/common/include
-make
