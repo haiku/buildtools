@@ -41,7 +41,6 @@ Boston, MA 02111-1307, USA.  */
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\
-	builtin_define ("__BEOS__");					\
 	builtin_define ("__HAIKU__");					\
 	builtin_define ("__MIPS__");					\
 	builtin_define ("_MIPSEL_");					\
