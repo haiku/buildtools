@@ -212,6 +212,7 @@ ALL_EMULATIONS = \
 	eelf_i386_haiku.o \
 	eelf_i386_ldso.o \
 	eelf_ppc_haiku.o \
+	eelf_mipsel_haiku.o \
 	eelf_i386_vxworks.o \
 	eelf_s390.o \
 	egld960.o \
@@ -1039,6 +1040,9 @@ eelf_i386_ldso.c: $(srcdir)/emulparams/elf_i386_ldso.sh \
 eelf_ppc_haiku.c: $(srcdir)/emulparams/elf_ppc_haiku.sh \
   $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 	${GENSCRIPTS} elf_ppc_haiku "$(tdir_elf_ppc_haiku)"
+eelf_mipsel_haiku.c: $(srcdir)/emulparams/elf_mipsel_haiku.sh \
+  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+	${GENSCRIPTS} elf_mipsel_haiku "$(tdir_elf_mipsel_haiku)"
 eelf_i386_vxworks.c: $(srcdir)/emulparams/elf_i386_vxworks.sh \
   $(srcdir)/emulparams/vxworks.sh $(srcdir)/emultempl/vxworks.em \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}

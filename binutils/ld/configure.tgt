@@ -369,6 +369,9 @@ mips*-*-ecoff*)		targ_emul=mipsidt ;;
 mips*el-*-netbsd*)	targ_emul=elf32ltsmip
 			targ_extra_emuls="elf32btsmip elf64ltsmip elf64btsmip"
 			;;
+mips*el-*-haiku*)	targ_emul=elf_mipsel_haiku
+			targ_extra_emuls="elf32ltsmip elf32btsmip elf32ltsmipn32 elf64ltsmip elf32btsmipn32 elf64btsmip" 
+			;;
 mips*-*-netbsd*)	targ_emul=elf32btsmip
 			targ_extra_emuls="elf32ltsmip elf64btsmip elf64ltsmip"
   			;;

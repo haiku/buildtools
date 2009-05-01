@@ -449,6 +449,8 @@ mips*-*-linux*)				# Linux MIPS, either endian.
 	;;
 mips*-*-openbsd*)
 	;;
+mips*-*-haiku*)
+	;;
 mipsisa32-*-elf* | mipsisa32el-*-elf*)
 	;;
 mipsisa32r2-*-elf* | mipsisa32r2el-*-elf*)

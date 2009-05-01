@@ -1802,6 +1802,11 @@ mips-*-elf* | mipsel-*-elf*)
 	tmake_file="mips/t-elf mips/t-libgcc-mips16"
 	use_fixproto=yes
 	;;
+mipsel-*-haiku*)
+	tmake_file='mips/t-elf t-haiku'
+	tm_file="elfos.h ${tm_file} haiku.h mips/haiku.h"
+	extra_parts='crtbegin.o crtend.o'
+	;;
 mips64-*-elf* | mips64el-*-elf*)
 	tm_file="elfos.h ${tm_file} mips/elf.h"
 	tmake_file="mips/t-elf mips/t-libgcc-mips16"
