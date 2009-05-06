@@ -21,7 +21,8 @@
 
 #undef TARGET_VERSION
 #define TARGET_VERSION fprintf (stderr, " (ARM Haiku/ELF)");
-
+#undef ASM_COMMENT_START
+#define ASM_COMMENT_START "@"
 /* Unsigned chars produces much better code than signed.  */
 #define DEFAULT_SIGNED_CHAR  0
 

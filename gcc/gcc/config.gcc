@@ -737,7 +737,6 @@ arm*-*-haiku*)
 	tmake_file="${tmake_file} t-haiku arm/t-arm arm/t-arm-elf"
 	tm_file="dbxelf.h elfos.h haiku.h arm/elf.h arm/aout.h arm/haiku.h arm/arm.h"
 	tm_defines="USE_GAS"
-	use_fixproto=yes
 	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tm_file="dbxelf.h elfos.h linux.h arm/elf.h arm/linux-gas.h arm/linux-elf.h"
