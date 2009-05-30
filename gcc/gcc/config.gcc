@@ -736,7 +736,6 @@ arm*-*-netbsd*)
 arm*-*-haiku*)
 	tmake_file="${tmake_file} t-haiku arm/t-arm arm/t-arm-elf"
 	tm_file="dbxelf.h elfos.h haiku.h arm/elf.h arm/aout.h arm/haiku.h arm/arm.h"
-	tm_defines="USE_GAS"
 	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tm_file="dbxelf.h elfos.h linux.h arm/elf.h arm/linux-gas.h arm/linux-elf.h"
@@ -1648,7 +1647,7 @@ m68k-*-haiku*)
 	default_cf_cpu=5206
 	tmake_file="m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
 	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
-	tm_defines="MOTOROLA USE_GAS"
+	tm_defines="${tm_defines} MOTOROLA=1"
 	;;
 mcore-*-elf)
 	tm_file="dbxelf.h elfos.h svr4.h ${tm_file} mcore/mcore-elf.h"
