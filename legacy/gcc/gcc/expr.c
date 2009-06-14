@@ -6448,9 +6448,16 @@ expand_expr (exp, target, tmode, modifier)
 			 && TREE_INT_CST_HIGH (index) == 0
 			 && (TREE_INT_CST_LOW (index)
 			     < TREE_STRING_LENGTH (init)))
-		  return (GEN_INT
-			  (TREE_STRING_POINTER
-			   (init)[TREE_INT_CST_LOW (index)]));
+                  {
+                    tree type = TREE_TYPE (TREE_TYPE (init));
+                    enum machine_mode mode = TYPE_MODE (type);
+
+                    if (GET_MODE_CLASS (mode) == MODE_INT
+                        && GET_MODE_SIZE (mode) == 1)
+                      return (GEN_INT
+                              (TREE_STRING_POINTER
+                               (init)[TREE_INT_CST_LOW (index)]));
+                  }
 	      }
 	  }
       }
