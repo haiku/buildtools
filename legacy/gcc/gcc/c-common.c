@@ -335,7 +335,7 @@ combine_strings (strings)
   TREE_STATIC (value) = 1;
   return value;
 }
-
+
 /* To speed up processing of attributes, we maintain an array of
    IDENTIFIER_NODES and the corresponding attribute types.  */
 
@@ -396,7 +396,7 @@ init_attributes ()
   add_attribute (A_NO_INSTRUMENT_FUNCTION, "no_instrument_function", 0, 0, 1);
   add_attribute (A_NO_CHECK_MEMORY_USAGE, "no_check_memory_usage", 0, 0, 1);
 }
-
+
 /* Default implementation of valid_lang_attribute, below.  By default, there
    are no language-specific attributes.  */
 
@@ -448,11 +448,11 @@ decl_attributes (node, attributes, prefix_attributes)
      anything done here.  */
   PRAGMA_INSERT_ATTRIBUTES (node, & attributes, & prefix_attributes);
 #endif
-  
+
 #ifdef INSERT_ATTRIBUTES
   INSERT_ATTRIBUTES (node, & attributes, & prefix_attributes);
 #endif
-  
+
   attributes = chainon (prefix_attributes, attributes);
 
   for (a = attributes; a; a = TREE_CHAIN (a))
@@ -679,7 +679,7 @@ decl_attributes (node, attributes, prefix_attributes)
 	      = (args ? TREE_VALUE (args)
 		 : size_int (BIGGEST_ALIGNMENT / BITS_PER_UNIT));
 	    int align;
-	    
+
 	    /* Strip any NOPs of any kind.  */
 	    while (TREE_CODE (align_expr) == NOP_EXPR
 		   || TREE_CODE (align_expr) == CONVERT_EXPR
@@ -725,7 +725,7 @@ decl_attributes (node, attributes, prefix_attributes)
 			 "argument format specified for non-function `%s'");
 		continue;
 	      }
-	
+
 	    if (TREE_CODE (format_type_id) != IDENTIFIER_NODE)
 	      {
 		error ("unrecognized format specifier");
@@ -734,7 +734,7 @@ decl_attributes (node, attributes, prefix_attributes)
 	    else
 	      {
 		const char *p = IDENTIFIER_POINTER (format_type_id);
-		
+
 		if (!strcmp (p, "printf") || !strcmp (p, "__printf__"))
 		  format_type = printf_format_type;
 		else if (!strcmp (p, "scanf") || !strcmp (p, "__scanf__"))
@@ -966,7 +966,7 @@ split_specs_attrs (specs_attrs, declspecs, prefix_attributes)
   tree t, s, a, next, specs, attrs;
 
   /* This can happen after an __extension__ in pedantic mode.  */
-  if (specs_attrs != NULL_TREE 
+  if (specs_attrs != NULL_TREE
       && TREE_CODE (specs_attrs) == INTEGER_CST)
     {
       *declspecs = NULL_TREE;
@@ -1050,7 +1050,7 @@ strip_attrs (specs_attrs)
 
   return specs;
 }
-
+
 /* Check a printf/fprintf/sprintf/scanf/fscanf/sscanf format against
    a parameter list.  */
 
@@ -1091,7 +1091,7 @@ typedef struct {
   /* Type of argument if length modifier `L' is used.
      If NULL, then this modifier is not allowed.  */
   tree *bigllen;
-  /* Type of argument if length modifier `Z' is used.
+  /* Type of argument if length modifier `Z' or 'z' is used.
      If NULL, then this modifier is not allowed.  */
   tree *zlen;
   /* List of other modifier characters allowed with these options.  */
@@ -1300,7 +1300,7 @@ tfaff ()
 {
   warning ("too few arguments for format");
 }
-
+
 /* Check the argument list of a call to printf, scanf, etc.
    NAME is the function identifier.
    ASSEMBLER_NAME is the function's assembler identifier.
@@ -1648,6 +1648,12 @@ check_format_info (info, params)
 	      if (pedantic)
 		warning ("ANSI C does not support the `Z' length modifier");
 	    }
+	  else if (*format_chars == 'z')
+	    {
+	      length_char = *format_chars++;
+	      if (pedantic)
+		warning ("ANSI C does not support the `z' length modifier");
+	    }
 	  else
 	    length_char = 0;
 	  if (length_char == 'l' && *format_chars == 'l')
@@ -1791,6 +1797,7 @@ check_format_info (info, params)
 	case 'q': wanted_type = fci->qlen ? *(fci->qlen) : 0; break;
 	case 'L': wanted_type = fci->bigllen ? *(fci->bigllen) : 0; break;
 	case 'Z': wanted_type = fci->zlen ? *fci->zlen : 0; break;
+	case 'z': wanted_type = fci->zlen ? *fci->zlen : 0; break;
 	}
       if (wanted_type == 0)
 	warning ("use of `%c' length character with `%c' type character",
@@ -1914,7 +1921,7 @@ check_format_info (info, params)
 	}
     }
 }
-
+
 /* Print a warning if a constant expression had overflow in folding.
    Invoke this function on every expression that the language
    requires to be a constant expression.
@@ -2021,7 +2028,7 @@ convert_and_check (type, expr)
     }
   return t;
 }
-
+
 void
 c_expand_expr_stmt (expr)
      tree expr;
@@ -2039,7 +2046,7 @@ c_expand_expr_stmt (expr)
 
   expand_expr_stmt (expr);
 }
-
+
 /* Validate the expression after `case' and apply default promotions.  */
 
 tree
@@ -2066,7 +2073,7 @@ check_case_value (value)
 
   return value;
 }
-
+
 /* Return an integer type with BITS bits of precision,
    that is unsigned if UNSIGNEDP is nonzero, otherwise signed.  */
 
@@ -2164,7 +2171,7 @@ type_for_mode (mode, unsignedp)
 
   return 0;
 }
-
+
 /* Return the minimum number of bits needed to represent VALUE in a
    signed or unsigned type, UNSIGNEDP says which.  */
 
@@ -2195,7 +2202,7 @@ min_precision (value, unsignedp)
 
   return log + 1 + ! unsignedp;
 }
-
+
 /* Print an error message for invalid operands to arith operation CODE.
    NOP_EXPR is used as a special case (see truthvalue_conversion).  */
 
@@ -2261,7 +2268,7 @@ binary_op_error (code)
     }
   error ("invalid operands to binary %s", opname);
 }
-
+
 /* Subroutine of build_binary_op, used for comparison operations.
    See if the operands have both been converted from subword integer types
    and, if so, perhaps change them both back to their original type.
@@ -2606,7 +2613,7 @@ shorten_compare (op0_ptr, op1_ptr, restype_ptr, rescode_ptr)
 
   return 0;
 }
-
+
 /* Prepare expr to be an argument of a TRUTH_NOT_EXPR,
    or validate its data type for an `if' or `while' statement or ?..: exp.
 
@@ -2791,7 +2798,7 @@ truthvalue_conversion (expr)
 
   return build_binary_op (NE_EXPR, expr, integer_zero_node, 1);
 }
-
+
 #if USE_CPPLIB
 /* Read the rest of a #-directive from input stream FINPUT.
    In normal use, the directive name and the white space after it
@@ -2974,7 +2981,7 @@ get_directive_line (finput)
     }
 }
 #endif /* !USE_CPPLIB */
-
+
 /* Make a variant type in the proper way for C/C++, propagating qualifiers
    down to the element type of an array.  */
 
@@ -3035,9 +3042,9 @@ c_apply_type_quals_to_decl (type_quals, decl)
 	     alias set for the type pointed to by the type of the
 	     decl.  */
 
-	  int pointed_to_alias_set 
+	  int pointed_to_alias_set
 	    = get_alias_set (TREE_TYPE (TREE_TYPE (decl)));
-	  
+
 	  if (!pointed_to_alias_set)
 	    /* It's not legal to make a subset of alias set zero.  */
 	    ;
@@ -3071,7 +3078,7 @@ c_find_base_decl (t)
 
   decl = NULL_TREE;
 
-  if (TREE_CODE (t) == FIELD_DECL 
+  if (TREE_CODE (t) == FIELD_DECL
       || TREE_CODE (t) == PARM_DECL
       || TREE_CODE (t) == VAR_DECL)
     /* Aha, we found a pointer-typed declaration.  */
@@ -3167,7 +3174,7 @@ c_get_alias_set (t)
       && DECL_BIT_FIELD_TYPE (TREE_OPERAND (t, 1)))
     /* Since build_modify_expr calls get_unwidened for stores to
        component references, the type of a bit field can be changed
-       from (say) `unsigned int : 16' to `unsigned short' or from 
+       from (say) `unsigned int : 16' to `unsigned short' or from
        `enum E : 16' to `short'.  We want the real type of the
        bit-field in this case, not some the integral equivalent.  */
     type = DECL_BIT_FIELD_TYPE (TREE_OPERAND (t, 1));
@@ -3204,7 +3211,7 @@ c_get_alias_set (t)
   else if (TREE_CODE (type) == FUNCTION_TYPE)
     /* There are no objects of FUNCTION_TYPE, so there's no point in
        using up an alias set for them.  (There are, of course,
-       pointers and references to functions, but that's 
+       pointers and references to functions, but that's
        different.)  */
     TYPE_ALIAS_SET (type) = 0;
   else if (TREE_CODE (type) == RECORD_TYPE
@@ -3224,7 +3231,7 @@ c_get_alias_set (t)
 	 In particular, if we have `typedef int I', then `int *', and
 	 `I *' are different types.  So, we have to pick a canonical
 	 representative.  We do this below.
-	 
+
 	 Technically, this approach is actually more conservative that
 	 it needs to be.  In particular, `const int *' and `int *'
 	 chould be in different alias sets, according to the C and C++
@@ -3250,7 +3257,7 @@ c_get_alias_set (t)
 	TYPE_ALIAS_SET (type) = c_get_alias_set (t);
     }
 
-  if (!TYPE_ALIAS_SET_KNOWN_P (type)) 
+  if (!TYPE_ALIAS_SET_KNOWN_P (type))
     {
       /* Types that are not allocated on the permanent obstack are not
 	 placed in the type hash table.  Thus, there can be multiple
