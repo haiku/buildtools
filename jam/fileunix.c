@@ -58,6 +58,10 @@
 # define STRUCT_DIRENT struct dirent 
 # endif
 
+# ifdef __CYGWIN__
+# include <unistd.h>
+# endif
+
 # ifdef OS_COHERENT
 # include <arcoff.h>
 # define HAVE_AR
