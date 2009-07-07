@@ -31,18 +31,6 @@ Boston, MA 02111-1307, USA.  */
 #define DBX_REGISTER_NUMBER(n) \
   (TARGET_64BIT ? dbx64_register_map[n] : svr4_dbx_register_map[n])
 
-#undef SIZE_TYPE
-#define SIZE_TYPE "long unsigned int"
- 
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE "long int"
-  
-#undef WCHAR_TYPE
-#define WCHAR_TYPE "short unsigned int"
-   
-#undef WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE 16
-
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\

@@ -23,18 +23,6 @@ Boston, MA 02111-1307, USA.  */
 #undef TARGET_VERSION
 #define TARGET_VERSION fprintf (stderr, " (PowerPC Haiku/ELF)");
 
-#undef SIZE_TYPE
-#define SIZE_TYPE "long unsigned int"
- 
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE "long int"
-  
-#undef WCHAR_TYPE
-#define WCHAR_TYPE "short unsigned int"
-   
-#undef WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE 16
-
 /* long double is 128 bits wide; the documentation claims
    LIBGCC2_LONG_DOUBLE_TYPE_SIZE to default to LONG_DOUBLE_TYPE_SIZE, but
    it apparently does not */

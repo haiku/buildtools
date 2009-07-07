@@ -28,41 +28,45 @@ Boston, MA 02111-1307, USA.  */
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START " #"
 
-/* Output assembler code to FILE to increment profiler label # LABELNO
-   for profiling a function entry.  */
-
 #undef MCOUNT_NAME
 #define MCOUNT_NAME "_mcount"
 
 #define TARGET_DECLSPEC 1
 
+#undef SIZE_TYPE
+#define SIZE_TYPE "long unsigned int"
+
+#undef PTRDIFF_TYPE
+#define PTRDIFF_TYPE "long int"
+
+#undef WCHAR_TYPE
+#define WCHAR_TYPE "int"
+
+#undef WCHAR_TYPE_SIZE
+#define WCHAR_TYPE_SIZE 32
+
 /* Haiku uses lots of multichars, so don't warn about them unless the
    user explicitly asks for the warnings with -Wmultichar.  Note that
    CC1_SPEC is used for both cc1 and cc1plus.  */
-
 #undef CC1_SPEC
 #define CC1_SPEC "%{!no-fpic:%{!fno-pic:%{!fno-pie:%{!fpie:%{!fPIC:%{!fPIE:-fpic}}}}}} %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
 
 #undef CC1PLUS_SPEC
 #define CC1PLUS_SPEC "%{!Wctor-dtor-privacy:-Wno-ctor-dtor-privacy}"
 
-/* Provide start and end file specs appropriate to glibc.  */
-
 /* LIB_SPEC for Haiku */
 #undef LIB_SPEC
 #define LIB_SPEC "-lroot"
 
 /* gcc runtime lib is built into libroot.so on Haiku */
-/* ??? This is gonna be lovely when the next release of gcc has 
+/* ??? This is gonna be lovely when the next release of gcc has
    some new symbol in, so that links start failing.  */
 #undef LIBGCC_SPEC
 #define LIBGCC_SPEC ""
 
-/* Note: There currently is no mcount.o on Haiku. In the BeOS specification
-   it was i386-mcount.o, but that doesn't exist in gcc 2.95.3 either. */
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!shared:%{!nostart:start_dyn.o%s}} init_term_dyn.o%s %{p:mcount.o%s}"
+#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!shared:%{!nostart:start_dyn.o%s}} init_term_dyn.o%s"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
@@ -83,7 +87,6 @@ Boston, MA 02111-1307, USA.  */
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
-    { "/boot/home/config/include", 0, 0, 0, 0, 0 }, \
     { "/boot/common/include", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/app", 0, 0, 0, 0, 0 }, \
@@ -92,6 +95,7 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/develop/headers/os/game", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/interface", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/kernel", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/os/locale", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/mail", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/media", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/midi", 0, 0, 0, 0, 0 }, \
@@ -108,9 +112,10 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/3rdparty", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/cpp", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/3rdparty", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/bsd", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/glibc", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/posix", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers", 0, 0, 0, 0, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
@@ -132,6 +137,7 @@ Boston, MA 02111-1307, USA.  */
     { CROSS_INCLUDE_DIR "/os/game", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/os/locale", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/media", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 0, 1, 0 }, \
@@ -148,9 +154,10 @@ Boston, MA 02111-1307, USA.  */
     { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0, 1, 0 }, \
-    { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/glibc", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/posix", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR , 0, 0, 0, 1, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \

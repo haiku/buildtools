@@ -1,9 +1,9 @@
 /*	Definitions for ARM running Haiku systems using ELF
 	Copyright (C) 1993, 1994, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
 	2005 Free Software Foundation, Inc.
- 
+
 	This file is part of GCC.
- 
+
 	GCC is free software; you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
 	the Free Software Foundation; either version 2, or (at your option)
@@ -38,18 +38,6 @@
 
 #undef SUBTARGET_CPU_DEFAULT
 #define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm920t
-
-#undef SIZE_TYPE
-#define SIZE_TYPE "long unsigned int"
-
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE "long int"
-
-#undef WCHAR_TYPE
-#define WCHAR_TYPE "short unsigned int"
-
-#undef WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE 16
 
 /* Now we define the strings used to build the spec file.  */
 

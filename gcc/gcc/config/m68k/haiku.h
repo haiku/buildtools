@@ -62,18 +62,6 @@ Boston, MA 02110-1301, USA.  */
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START "|"
 
-#undef SIZE_TYPE
-#define SIZE_TYPE "long unsigned int"
- 
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE "long int"
-  
-#undef WCHAR_TYPE
-#define WCHAR_TYPE "short unsigned int"
-   
-#undef WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE 16
-
 /* Target OS builtins.  */
 
 #undef TARGET_OS_CPP_BUILTINS
@@ -134,7 +122,7 @@ Boston, MA 02110-1301, USA.  */
 
 /* Currently, JUMP_TABLES_IN_TEXT_SECTION must be defined in order to
    keep switch tables in the text section.  */
-   
+
 #define JUMP_TABLES_IN_TEXT_SECTION 1
 
 /* This is how to output an assembler line that says to advance the

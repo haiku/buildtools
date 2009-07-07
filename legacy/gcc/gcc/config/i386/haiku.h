@@ -149,13 +149,10 @@ Boston, MA 02111-1307, USA.  */
 #define PTRDIFF_TYPE "long int"
 
 #undef WCHAR_TYPE
-#define WCHAR_TYPE "short unsigned int"
-
-#undef WCHAR_UNSIGNED
-#define WCHAR_UNSIGNED 1
+#define WCHAR_TYPE "int"
 
 #undef WCHAR_TYPE_SIZE
-#define WCHAR_TYPE_SIZE 16
+#define WCHAR_TYPE_SIZE 32
 
 #undef CPP_PREDEFINES
 #define CPP_PREDEFINES "-D__ELF__ -D__HAIKU__ -D__INTEL__ -D_X86_=1 \
@@ -201,7 +198,7 @@ Boston, MA 02111-1307, USA.  */
 #define LIBGCC_SPEC ""
 
 #undef  STARTFILE_SPEC
-#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart: %{!shared: start_dyn.o%s}} init_term_dyn.o%s %{p:i386-mcount.o%s}"
+#define STARTFILE_SPEC "crti.o%s crtbegin.o%s %{!nostart: %{!shared: start_dyn.o%s}} init_term_dyn.o%s"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
@@ -366,38 +363,34 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
     { "/boot/common/include", 0, 0, 0 },\
-    { "/boot/develop/headers/be/add-ons/graphics", 0, 0, 0 },\
-    { "/boot/develop/headers/be/devel", 0, 0, 0 },\
-    { "/boot/develop/headers/be/translation", 0, 0, 0 },\
-    { "/boot/develop/headers/be/mail", 0, 0, 0 },\
-    { "/boot/develop/headers/be/drivers", 0, 0, 0 },\
-    { "/boot/develop/headers/be/opengl", 0, 0, 0 },\
-    { "/boot/develop/headers/be/game", 0, 0, 0 },\
-    { "/boot/develop/headers/be/support", 0, 0, 0 },\
-    { "/boot/develop/headers/be/storage", 0, 0, 0 },\
-    { "/boot/develop/headers/be/kernel", 0, 0, 0 },\
-    { "/boot/develop/headers/be/net", 0, 0, 0 },\
-    { "/boot/develop/headers/be/midi", 0, 0, 0 },\
-    { "/boot/develop/headers/be/midi2", 0, 0, 0 },\
-    { "/boot/develop/headers/be/media", 0, 0, 0 },\
-    { "/boot/develop/headers/be/interface", 0, 0, 0 },\
-    { "/boot/develop/headers/be/device", 0, 0, 0 },\
-    { "/boot/develop/headers/be/app", 0, 0, 0 },\
-    { "/boot/develop/headers/be/precompiled", 0, 0, 0 },\
-    { "/boot/develop/headers/be/add-ons/input_server", 0, 0, 0 },\
-    { "/boot/develop/headers/be/add-ons/net_server", 0, 0, 0 },\
-    { "/boot/develop/headers/be/add-ons/screen_saver", 0, 0, 0 },\
-    { "/boot/develop/headers/be/add-ons/tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/be/be_apps/Deskbar", 0, 0, 0 },\
-    { "/boot/develop/headers/be/be_apps/NetPositive", 0, 0, 0 },\
-    { "/boot/develop/headers/be/be_apps/Tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/be/drivers/tty", 0, 0, 0 },\
-    { "/boot/develop/headers/be/net/netinet", 0, 0, 0 },\
-    { "/boot/develop/headers/be/storage", 0, 0, 0 },\
-    { "/boot/develop/headers/be", 0, 0, 0 },\
+    { "/boot/develop/headers/os", 0, 0, 0 },\
+    { "/boot/develop/headers/os/app", 0, 0, 0 },\
+    { "/boot/develop/headers/os/device", 0, 0, 0 },\
+    { "/boot/develop/headers/os/drivers", 0, 0, 0 },\
+    { "/boot/develop/headers/os/game", 0, 0, 0 },\
+    { "/boot/develop/headers/os/interface", 0, 0, 0 },\
+    { "/boot/develop/headers/os/kernel", 0, 0, 0 },\
+    { "/boot/develop/headers/os/locale", 0, 0, 0 },\
+    { "/boot/develop/headers/os/mail", 0, 0, 0 },\
+    { "/boot/develop/headers/os/media", 0, 0, 0 },\
+    { "/boot/develop/headers/os/midi", 0, 0, 0 },\
+    { "/boot/develop/headers/os/midi2", 0, 0, 0 },\
+    { "/boot/develop/headers/os/net", 0, 0, 0 },\
+    { "/boot/develop/headers/os/opengl", 0, 0, 0 },\
+    { "/boot/develop/headers/os/storage", 0, 0, 0 },\
+    { "/boot/develop/headers/os/support", 0, 0, 0 },\
+    { "/boot/develop/headers/os/translation", 0, 0, 0 },\
+    { "/boot/develop/headers/os/add-ons/graphics", 0, 0, 0 },\
+    { "/boot/develop/headers/os/add-ons/input_server", 0, 0, 0 },\
+    { "/boot/develop/headers/os/add-ons/screen_saver", 0, 0, 0 },\
+    { "/boot/develop/headers/os/add-ons/tracker", 0, 0, 0 },\
+    { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0 },\
+    { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0 },\
+    { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0 },\
+    { "/boot/develop/headers/cpp", 0, 0, 0 },\
     { "/boot/develop/headers/3rdparty", 0, 0, 0 },\
     { "/boot/develop/headers/bsd", 0, 0, 0 },\
-    { "/boot/develop/headers/cpp", 0, 0, 0 },\
+    { "/boot/develop/headers/glibc", 0, 0, 0 },\
     { "/boot/develop/headers/posix", 0, 0, 0 },\
     { "/boot/develop/headers", 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
@@ -409,38 +402,34 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
-    { CROSS_INCLUDE_DIR "/be/add-ons/graphics", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/devel", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/translation", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/mail", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/drivers", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/opengl", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/game", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/support", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/storage", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/kernel", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/net", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/midi", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/midi2", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/media", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/interface", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/device", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/app", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/precompiled", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/add-ons/input_server", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/add-ons/net_server", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/add-ons/screen_saver", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/add-ons/tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/be_apps/Deskbar", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/be_apps/NetPositive", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/be_apps/Tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/drivers/tty", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/net/netinet", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be/storage", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/be", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/locale", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/glibc", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/posix", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
