@@ -29,18 +29,25 @@
 #undef  TARGET_DEFAULT_FLOAT_ABI
 #define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
 
-#undef  TARGET_DEFAULT
-#define TARGET_DEFAULT (0)
+/* bpabi.h sets FPUTYPE_DEFAULT to VFP */
+/* bpabi.h sets ARM_DEFAULT_ABI */
 
 #undef  MULTILIB_DEFAULTS
 #define MULTILIB_DEFAULTS \
   { "marm", "mlittle-endian", "msoft-float", "mno-thumb-interwork" }
 
+/* Default is set by bpabi.h */
+/*
+#undef TARGET_DEFAULT
+*/
+
 #undef SUBTARGET_CPU_DEFAULT
-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm920t
+#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm6
 
 /* Now we define the strings used to build the spec file.  */
+/* interestingly, bpabi defines __GXX_TYPEINFO_EQUALITY_INLINE=0 too as we do. */
 
+#undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS()		\
   do									\
     {									\
@@ -55,11 +62,18 @@
          type_infos are not merged, so that they get compared by name \
          instead of by pointer. */ \
       builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0"); \
-      builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0");\
+      /*builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0"); done in bpabi: */\
+      TARGET_BPABI_CPP_BUILTINS();					\
     }									\
   while (0)
+
+/* Use the default LIBGCC_SPEC, not the empty version in haiku.h, as we
+   do not use multilib (needed ??).  */
+#undef LIBGCC_SPEC
 
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m armelf -shared -no-undefined -Bsymbolic %{nostart:-e 0}"
+#define LINK_SPEC "%{!o*:-o %b} -m armelf -shared -no-undefined -Bsymbolic %{nostart:-e 0} \
+  %{mbig-endian:-EB} %{mlittle-endian:-EL} -X" 
+
