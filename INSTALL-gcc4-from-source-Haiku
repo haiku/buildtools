@@ -1,0 +1,39 @@
+How to build gcc-4.3 natively on Haiku:
+
+checkout the buildtools from the haiku repository
+cd into the buildtools folder (where this file lives)
+
+compile binutils:
+
+	mkdir binutils-obj
+	cd binutils-obj
+	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure --prefix=/boot/develop/tools/gnupro --disable-nls --enable-shared=yes
+	make
+	cd ..
+
+compile gcc:	
+
+	mkdir gcc-obj
+	cd gcc-obj
+	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
+		--prefix=/boot/develop/tools/gnupro \
+		--enable-shared --enable-languages=c,c++ \
+		--disable-nls --without-libiconv-prefix --disable-libstdcxx-pch
+	make bootstrap
+	cd ..
+
+Ok, now everything is compiled and ready, waiting to be installed:
+
+	mv /boot/develop/abi/current/tools/gcc-4.3.3-haiku-xxxxxx \
+		/boot/develop/abi/current/tools/gcc-4.3.3-haiku-xxxxxx_orig
+	mkdir /boot/develop/abi/current/tools/gcc-4.3.3-haiku-090629
+	ln -sfn /boot/develop/abi/current/tools/gcc-4.3.3-haiku-090629 \
+		/boot/develop/abi/current/tools/current
+	cd binutils-obj
+	make install
+	cd ..
+	cd gcc-obj
+	make install
+	cd ..
+	
+Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
