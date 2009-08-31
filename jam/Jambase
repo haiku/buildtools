@@ -396,7 +396,7 @@ else if $(OS) = BEOS && $(OSPLAT) = PPC
 	YACCFILES	?= y.tab ;
 	YACCFLAGS	?= -d ;
 }
-else if $(OS) = BEOS || $(OS) = HAIKU
+else if $(OS) = BEOS
 {
 	BINDIR		?= /boot/home/config/bin ;
 	CC		?= gcc ;
@@ -409,6 +409,27 @@ else if $(OS) = BEOS || $(OS) = HAIKU
 	LIBDIR		?= /boot/home/config/lib ;
 	LINK		?= gcc ;
 	MANDIR		?= /boot/home/config/man ;
+	NOARSCAN	?= true ;
+	RANLIB		?= ranlib ;
+	STDHDRS		?= /boot/develop/headers/posix ;
+	YACC		?= bison -y ;
+	YACCGEN		?= .c ;
+	YACCFILES	?= y.tab ;
+	YACCFLAGS	?= -d ;
+}
+else if $(OS) = HAIKU
+{
+	BINDIR		?= /boot/common/bin ;
+	CC		?= gcc ;
+	C++		?= $(CC) ;
+	CHMOD		?= chmod ;
+	CHGRP		?= chgrp ;
+	CHOWN		?= chown ;
+	FORTRAN		?= "" ;
+	LEX		?= flex ;
+	LIBDIR		?= /boot/common/lib ;
+	LINK		?= gcc ;
+	MANDIR		?= /boot/common/man ;
 	NOARSCAN	?= true ;
 	RANLIB		?= ranlib ;
 	STDHDRS		?= /boot/develop/headers/posix ;
