@@ -38,6 +38,12 @@
 
 # ifdef USE_PATHUNIX
 
+# if defined( OS_MACOSX )
+/* need unistd for the prototype for getcwd to avoid defaulting return to int on 64bit */
+/* XXX: others too ? */
+# include <unistd.h>
+# endif
+
 /*
  * path_parse() - split a file name into dir/base/suffix/member
  */
