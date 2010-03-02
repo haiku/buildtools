@@ -578,8 +578,8 @@ write_jcache(jamfile_cache* cache)
 					int j;
 					// the lines
 					for (j = 0; result && j < entry->strings->count; j++) {
-						result = (fprintf(file,
-										  entry->strings->strings[j]) > 0);
+						const char* string = entry->strings->strings[j];
+						result = (fwrite(string, strlen(string), 1, file) > 0);
 					}
 				} else
 					result = 0;
