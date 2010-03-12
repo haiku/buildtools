@@ -29021,7 +29021,7 @@ echo "define(<M4WRAP_SPURIOUS>,<$gmp_cv_m4_m4wrap_spurious>)" >> $gmp_tmpconfigm
 
 
 else
-  M4=m4-not-needed
+  M4=m4
 fi
 
 # Only do the GMP_ASM checks if there's a .S or .asm wanting them.
