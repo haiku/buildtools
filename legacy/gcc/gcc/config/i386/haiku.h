@@ -387,7 +387,7 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0 },\
     { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0 },\
     { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/cpp", 0, 0, 0 },\
+    { "/boot/develop/headers/cpp", 0, 1, 1 },\
     { "/boot/develop/headers/3rdparty", 0, 0, 0 },\
     { "/boot/develop/headers/bsd", 0, 0, 0 },\
     { "/boot/develop/headers/glibc", 0, 0, 0 },\
@@ -426,7 +426,7 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/cpp", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/cpp", 0, 1, 1 },\
     { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0 },\
     { CROSS_INCLUDE_DIR "/glibc", 0, 0, 0 },\
