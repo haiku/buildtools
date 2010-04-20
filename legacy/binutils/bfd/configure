@@ -2835,8 +2835,8 @@ fi
 
 
 # Define the identity of the package.
- PACKAGE=bfd
- VERSION=2.17-haiku-20080323
+PACKAGE=bfd
+VERSION=2.17-haiku-20100420
 
 
 cat >>confdefs.h <<_ACEOF
