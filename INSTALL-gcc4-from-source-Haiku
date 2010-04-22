@@ -3,12 +3,18 @@ How to build gcc-4.3 natively on Haiku:
 checkout the buildtools from the haiku repository
 cd into the buildtools folder (where this file lives)
 
+declare the current gcc-version-date like this:
+	export GCCDATE=100421
+(just use the current date instead of '100421')
+
 compile binutils:
 
 	mkdir binutils-obj
 	cd binutils-obj
-	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure --prefix=/boot/develop/tools/gnupro --disable-nls --enable-shared=yes
-	make
+	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure \
+		--prefix=/boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE} \
+		--disable-nls --enable-shared=yes
+	make -j2
 	cd ..
 
 compile gcc:	
@@ -16,19 +22,16 @@ compile gcc:
 	mkdir gcc-obj
 	cd gcc-obj
 	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
-		--prefix=/boot/develop/tools/gnupro \
+		--prefix=/boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE} \
 		--enable-shared --enable-languages=c,c++ \
 		--disable-nls --without-libiconv-prefix --disable-libstdcxx-pch
-	make bootstrap
+	make -j2 bootstrap
 	cd ..
 
 Ok, now everything is compiled and ready, waiting to be installed:
 
-	mv /boot/develop/abi/current/tools/gcc-4.3.3-haiku-xxxxxx \
-		/boot/develop/abi/current/tools/gcc-4.3.3-haiku-xxxxxx_orig
-	mkdir /boot/develop/abi/current/tools/gcc-4.3.3-haiku-090629
-	ln -sfn /boot/develop/abi/current/tools/gcc-4.3.3-haiku-090629 \
-		/boot/develop/abi/current/tools/current
+	mkdir /boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE}
+	ln -sfn gcc-4.3.3-haiku-${GCCDATE} /boot/develop/abi/x86/gcc4/tools/current
 	cd binutils-obj
 	make install
 	cd ..
