@@ -15,6 +15,9 @@
 /* Define to 1 if you have the `backtrace_symbols' function. */
 #undef HAVE_BACKTRACE_SYMBOLS
 
+/* Define to 1 if the target assembler supports thread-local storage. */
+#undef HAVE_CC_TLS
+
 /* Define to 1 if you have the <ctype.h> header file. */
 #undef HAVE_CTYPE_H
 
@@ -246,6 +249,10 @@
 /* Define to 1 if you have the `__libc_freeres' function. */
 #undef HAVE___LIBC_FREERES
 
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
+
 /* Name of package */
 #undef PACKAGE
 
@@ -269,6 +276,9 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
+
+/* Define to 1 if the target use emutls for thread-local storage. */
+#undef USE_EMUTLS
 
 /* Version number of package */
 #undef VERSION

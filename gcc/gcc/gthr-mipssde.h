@@ -1,13 +1,13 @@
 /* MIPS SDE threads compatibility routines for libgcc2 and libobjc.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+/* Copyright (C) 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Nigel Stephens <nigel@mips.com>
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free
-Software Foundation; either version 2, or (at your option) any later
+Software Foundation; either version 3, or (at your option) any later
 version.
 
 GCC is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -15,17 +15,14 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 59 Temple Place - Suite 330, Boston, MA
-02111-1307, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with other files,
-   some of which are compiled with GCC, to produce an executable,
-   this library does not by itself cause the resulting executable
-   to be covered by the GNU General Public License.
-   This exception does not however invalidate any other reasons why
-   the executable file might be covered by the GNU General Public License.  */
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 #ifndef GCC_GTHR_MIPSSDE_H
 #define GCC_GTHR_MIPSSDE_H
@@ -55,7 +52,7 @@ typedef struct {
 #define __GTHREAD_MUTEX_INIT __SDETHREAD_MUTEX_INITIALIZER("gthr")
 #define __GTHREAD_ONCE_INIT __SDETHREAD_ONCE_INIT
 static inline int
-__gthread_recursive_mutex_init_function(__gthread_recursive_mutex_t *mutex);
+__gthread_recursive_mutex_init_function(__gthread_recursive_mutex_t *__mutex);
 #define __GTHREAD_RECURSIVE_MUTEX_INIT_FUNCTION __gthread_recursive_mutex_init_function
 
 #if SUPPORTS_WEAK && GTHREAD_USE_WEAK
@@ -102,119 +99,125 @@ __gthread_active_p (void)
 #endif /* SUPPORTS_WEAK */
 
 static inline int
-__gthread_once (__gthread_once_t *once, void (*func) (void))
+__gthread_once (__gthread_once_t *__once, void (*__func) (void))
 {
   if (__gthread_active_p ())
-    return __gthrw_(__sdethread_once) (once, func);
+    return __gthrw_(__sdethread_once) (__once, __func);
   else
     return -1;
 }
 
 static inline int
-__gthread_key_create (__gthread_key_t *key, void (*dtor) (void *))
+__gthread_key_create (__gthread_key_t *__key, void (*__dtor) (void *))
 {
-  return __gthrw_(__sdethread_key_create) (key, dtor);
+  return __gthrw_(__sdethread_key_create) (__key, __dtor);
 }
 
 static inline int
-__gthread_key_delete (__gthread_key_t key)
+__gthread_key_delete (__gthread_key_t __key)
 {
-  return __gthrw_(__sdethread_key_delete) (key);
+  return __gthrw_(__sdethread_key_delete) (__key);
 }
 
 static inline void *
-__gthread_getspecific (__gthread_key_t key)
+__gthread_getspecific (__gthread_key_t __key)
 {
-  return __gthrw_(__sdethread_getspecific) (key);
+  return __gthrw_(__sdethread_getspecific) (__key);
 }
 
 static inline int
-__gthread_setspecific (__gthread_key_t key, const void *ptr)
+__gthread_setspecific (__gthread_key_t __key, const void *__ptr)
 {
-  return __gthrw_(__sdethread_setspecific) (key, ptr);
+  return __gthrw_(__sdethread_setspecific) (__key, __ptr);
 }
 
 static inline int
-__gthread_mutex_lock (__gthread_mutex_t *mutex)
+__gthread_mutex_destroy (__gthread_mutex_t * UNUSED(__mutex))
+{
+  return 0;
+}
+
+static inline int
+__gthread_mutex_lock (__gthread_mutex_t *__mutex)
 {
   if (__gthread_active_p ())
-    return __gthrw_(__sdethread_mutex_lock) (mutex);
+    return __gthrw_(__sdethread_mutex_lock) (__mutex);
   else
     return 0;
 }
 
 static inline int
-__gthread_mutex_trylock (__gthread_mutex_t *mutex)
+__gthread_mutex_trylock (__gthread_mutex_t *__mutex)
 {
   if (__gthread_active_p ())
-    return __gthrw_(__sdethread_mutex_trylock) (mutex);
+    return __gthrw_(__sdethread_mutex_trylock) (__mutex);
   else
     return 0;
 }
 
 static inline int
-__gthread_mutex_unlock (__gthread_mutex_t *mutex)
+__gthread_mutex_unlock (__gthread_mutex_t *__mutex)
 {
   if (__gthread_active_p ())
-    return __gthrw_(__sdethread_mutex_unlock) (mutex);
+    return __gthrw_(__sdethread_mutex_unlock) (__mutex);
   else
     return 0;
 }
 
 static inline int
-__gthread_recursive_mutex_init_function (__gthread_recursive_mutex_t *mutex)
+__gthread_recursive_mutex_init_function (__gthread_recursive_mutex_t *__mutex)
 {
-  mutex->depth = 0;
-  mutex->owner = __gthrw_(__sdethread_self) ();
-  return __gthrw_(__sdethread_mutex_init) (&mutex->actual, NULL);
+  __mutex->depth = 0;
+  __mutex->owner = __gthrw_(__sdethread_self) ();
+  return __gthrw_(__sdethread_mutex_init) (&__mutex->actual, NULL);
 }
 
 static inline int
-__gthread_recursive_mutex_lock (__gthread_recursive_mutex_t *mutex)
+__gthread_recursive_mutex_lock (__gthread_recursive_mutex_t *__mutex)
 {
   if (__gthread_active_p ())
     {
-      __sdethread_t me = __gthrw_(__sdethread_self) ();
+      __sdethread_t __me = __gthrw_(__sdethread_self) ();
 
-      if (mutex->owner != me)
+      if (__mutex->owner != __me)
 	{
-	  __gthrw_(__sdethread_mutex_lock) (&mutex->actual);
-	  mutex->owner = me;
+	  __gthrw_(__sdethread_mutex_lock) (&__mutex->actual);
+	  __mutex->owner = __me;
 	}
 
-      mutex->depth++;
+      __mutex->depth++;
     }
   return 0;
 }
 
 static inline int
-__gthread_recursive_mutex_trylock (__gthread_recursive_mutex_t *mutex)
+__gthread_recursive_mutex_trylock (__gthread_recursive_mutex_t *__mutex)
 {
   if (__gthread_active_p ())
     {
-      __sdethread_t me = __gthrw_(__sdethread_self) ();
+      __sdethread_t __me = __gthrw_(__sdethread_self) ();
 
-      if (mutex->owner != me)
+      if (__mutex->owner != __me)
 	{
-	  if (__gthrw_(__sdethread_mutex_trylock) (&mutex->actual))
+	  if (__gthrw_(__sdethread_mutex_trylock) (&__mutex->actual))
 	    return 1;
-	  mutex->owner = me;
+	  __mutex->owner = __me;
 	}
 
-      mutex->depth++;
+      __mutex->depth++;
     }
   return 0;
 }
 
 static inline int
-__gthread_recursive_mutex_unlock (__gthread_recursive_mutex_t *mutex)
+__gthread_recursive_mutex_unlock (__gthread_recursive_mutex_t *__mutex)
 {
   if (__gthread_active_p ())
     {
-      if (--mutex->depth == 0)
+      if (--__mutex->depth == 0)
 	{
-	   mutex->owner = (__sdethread_t) 0;
-	   __gthrw_(__sdethread_mutex_unlock) (&mutex->actual);
+	   __mutex->owner = (__sdethread_t) 0;
+	   __gthrw_(__sdethread_mutex_unlock) (&__mutex->actual);
 	}
     }
   return 0;

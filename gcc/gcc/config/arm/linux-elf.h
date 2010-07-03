@@ -1,6 +1,6 @@
 /* Definitions for ARM running Linux-based GNU systems using ELF
    Copyright (C) 1993, 1994, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007
+   2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Philip Blundell <philb@gnu.org>
 
@@ -111,10 +111,10 @@
 /* The GNU/Linux profiler clobbers the link register.  Make sure the
    prologue knows to save it.  */
 #define PROFILE_HOOK(X)						\
-  emit_insn (gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (SImode, LR_REGNUM)))
+  emit_clobber (gen_rtx_REG (SImode, LR_REGNUM))
 
 /* The GNU/Linux profiler needs a frame pointer.  */
-#define SUBTARGET_FRAME_POINTER_REQUIRED current_function_profile
+#define SUBTARGET_FRAME_POINTER_REQUIRED crtl->profile
 
 /* Add .note.GNU-stack.  */
 #undef NEED_INDICATE_EXEC_STACK

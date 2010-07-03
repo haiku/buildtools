@@ -1,5 +1,5 @@
 @c Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-@c 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
+@c 2000, 2001, 2002, 2003, 2004, 2005, 2008 Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gccint.texi.
 
@@ -22,9 +22,9 @@ definitions, consider using the @code{xm_defines} variable in your
 header.  @xref{System Config}.
 
 @menu
-* Host Common::		Things every host probably needs implemented.
+* Host Common::         Things every host probably needs implemented.
 * Filesystem::          Your host can't have the letter `a' in filenames?
-* Host Misc::         	Rare configuration options for hosts.
+* Host Misc::           Rare configuration options for hosts.
 @end menu
 
 @node Host Common

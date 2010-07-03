@@ -1,4 +1,4 @@
-#  Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+#  Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 #
 #  This file is free software; you can redistribute it and/or modify it under
 #  the terms of the GNU General Public License as published by the Free
@@ -29,6 +29,10 @@ TARGET_LIBGCC2_CFLAGS = -fPIC -mwarn-reloc -D__IN_LIBGCC2
 # own versions below.
 LIB2FUNCS_EXCLUDE = _floatdisf _floatundisf
 
+# We provide our own version of __divdf3 that performs better and has
+# better support for non-default rounding modes.
+DPBIT_FUNCS := $(filter-out _div_df, $(DPBIT_FUNCS))
+
 LIB2FUNCS_STATIC_EXTRA = $(srcdir)/config/spu/float_unssidf.c \
 			 $(srcdir)/config/spu/float_unsdidf.c \
 			 $(srcdir)/config/spu/float_unsdisf.c \
@@ -39,7 +43,8 @@ LIB2FUNCS_STATIC_EXTRA = $(srcdir)/config/spu/float_unssidf.c \
 			 $(srcdir)/config/spu/mfc_multi_tag_reserve.c \
 			 $(srcdir)/config/spu/mfc_multi_tag_release.c \
 			 $(srcdir)/config/spu/multi3.c \
-			 $(srcdir)/config/spu/divmodti4.c
+			 $(srcdir)/config/spu/divmodti4.c \
+			 $(srcdir)/config/spu/divv2df3.c
 
 LIB2ADDEH = $(srcdir)/unwind-dw2.c $(srcdir)/unwind-dw2-fde.c \
    $(srcdir)/unwind-sjlj.c $(srcdir)/unwind-c.c
@@ -80,13 +85,10 @@ spu.o: $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
   output.h $(BASIC_BLOCK_H) $(INTEGRATE_H) toplev.h $(GGC_H) $(HASHTAB_H) \
   $(TM_P_H) $(TARGET_H) $(TARGET_DEF_H) langhooks.h reload.h cfglayout.h \
   $(srcdir)/config/spu/spu-protos.h \
-  $(srcdir)/config/spu/spu-builtins.h \
   $(srcdir)/config/spu/spu-builtins.def 
 
 spu-c.o: $(srcdir)/config/spu/spu-c.c \
     $(srcdir)/config/spu/spu-protos.h \
-    $(srcdir)/config/spu/spu-builtins.h \
-    $(srcdir)/config/spu/spu-builtins.def \
     $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(CPPLIB_H) \
     $(TM_P_H) c-pragma.h errors.h coretypes.h $(TM_H) insn-codes.h
 	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $(srcdir)/config/spu/spu-c.c

@@ -1,6 +1,7 @@
 /* Common subexpression elimination library for GNU compiler.
    Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -78,7 +79,6 @@ static htab_t cselib_hash_table;
 /* This is a global so we don't have to pass this through every function.
    It is used in new_elt_loc_list to set SETTING_INSN.  */
 static rtx cselib_current_insn;
-static bool cselib_current_insn_in_libcall;
 
 /* Every new unknown value gets a unique number.  */
 static unsigned int next_unknown_value;
@@ -143,7 +143,7 @@ static inline struct elt_list *
 new_elt_list (struct elt_list *next, cselib_val *elt)
 {
   struct elt_list *el;
-  el = pool_alloc (elt_list_pool);
+  el = (struct elt_list *) pool_alloc (elt_list_pool);
   el->next = next;
   el->elt = elt;
   return el;
@@ -156,11 +156,10 @@ static inline struct elt_loc_list *
 new_elt_loc_list (struct elt_loc_list *next, rtx loc)
 {
   struct elt_loc_list *el;
-  el = pool_alloc (elt_loc_list_pool);
+  el = (struct elt_loc_list *) pool_alloc (elt_loc_list_pool);
   el->next = next;
   el->loc = loc;
   el->setting_insn = cselib_current_insn;
-  el->in_libcall = cselib_current_insn_in_libcall;
   return el;
 }
 
@@ -234,7 +233,7 @@ entry_and_rtx_equal_p (const void *entry, const void *x_arg)
 {
   struct elt_loc_list *l;
   const cselib_val *const v = (const cselib_val *) entry;
-  rtx x = (rtx) x_arg;
+  rtx x = CONST_CAST_RTX ((const_rtx)x_arg);
   enum machine_mode mode = GET_MODE (x);
 
   gcc_assert (GET_CODE (x) != CONST_INT && GET_CODE (x) != CONST_FIXED
@@ -751,7 +750,7 @@ cselib_hash_rtx (rtx x, int create)
 static inline cselib_val *
 new_cselib_val (unsigned int value, enum machine_mode mode)
 {
-  cselib_val *e = pool_alloc (cselib_val_pool);
+  cselib_val *e = (cselib_val *) pool_alloc (cselib_val_pool);
 
   gcc_assert (value);
 
@@ -761,7 +760,7 @@ new_cselib_val (unsigned int value, enum machine_mode mode)
      precisely when we can have VALUE RTXen (when cselib is active)
      so we don't need to put them in garbage collected memory.
      ??? Why should a VALUE be an RTX in the first place?  */
-  e->val_rtx = pool_alloc (value_pool);
+  e->val_rtx = (rtx) pool_alloc (value_pool);
   memset (e->val_rtx, 0, RTX_HDR_SIZE);
   PUT_CODE (e->val_rtx, VALUE);
   PUT_MODE (e->val_rtx, mode);
@@ -867,12 +866,18 @@ expand_loc (struct elt_loc_list *p, bitmap regs_active, int max_depth)
 	continue;
       else if (!REG_P (p->loc))
 	{
-	  rtx result;
+	  rtx result, note;
 	  if (dump_file)
 	    {
 	      print_inline_rtx (dump_file, p->loc, 0);
 	      fprintf (dump_file, "\n");
 	    }
+	  if (GET_CODE (p->loc) == LO_SUM
+	      && GET_CODE (XEXP (p->loc, 1)) == SYMBOL_REF
+	      && p->setting_insn
+	      && (note = find_reg_note (p->setting_insn, REG_EQUAL, NULL_RTX))
+	      && XEXP (note, 0) == XEXP (p->loc, 1))
+	    return XEXP (p->loc, 1);
 	  result = cselib_expand_value_rtx (p->loc, regs_active, max_depth - 1);
 	  if (result)
 	    return result;
@@ -930,6 +935,7 @@ cselib_expand_value_rtx (rtx orig, bitmap regs_active, int max_depth)
   int i, j;
   RTX_CODE code;
   const char *format_ptr;
+  enum machine_mode mode;
 
   code = GET_CODE (orig);
 
@@ -1009,25 +1015,30 @@ cselib_expand_value_rtx (rtx orig, bitmap regs_active, int max_depth)
 	return orig;
       break;
 
+    case SUBREG:
+      {
+	rtx subreg = cselib_expand_value_rtx (SUBREG_REG (orig), regs_active,
+					      max_depth - 1);
+	if (!subreg)
+	  return NULL;
+	scopy = simplify_gen_subreg (GET_MODE (orig), subreg,
+				     GET_MODE (SUBREG_REG (orig)),
+				     SUBREG_BYTE (orig));
+	if (scopy == NULL
+	    || (GET_CODE (scopy) == SUBREG
+		&& !REG_P (SUBREG_REG (scopy))
+		&& !MEM_P (SUBREG_REG (scopy))))
+	  return shallow_copy_rtx (orig);
+	return scopy;
+      }
 
     case VALUE:
-      {
-	rtx result;
-	if (dump_file)
-	  fprintf (dump_file, "expanding value %s into: ", GET_MODE_NAME (GET_MODE (orig)));
-	
-	result = expand_loc (CSELIB_VAL_PTR (orig)->locs, regs_active, max_depth);
-	if (result 
-	    && GET_CODE (result) == CONST_INT
-	    && GET_MODE (orig) != VOIDmode)
-	  {
-	    result = gen_rtx_CONST (GET_MODE (orig), result);
-	    if (dump_file)
-	      fprintf (dump_file, "  wrapping const_int result in const to preserve mode %s\n", 
-		       GET_MODE_NAME (GET_MODE (orig)));
-	  }
-	return result;
-      }
+      if (dump_file)
+	fprintf (dump_file, "expanding value %s into: ",
+		 GET_MODE_NAME (GET_MODE (orig)));
+
+      return expand_loc (CSELIB_VAL_PTR (orig)->locs, regs_active, max_depth);
+
     default:
       break;
     }
@@ -1038,9 +1049,9 @@ cselib_expand_value_rtx (rtx orig, bitmap regs_active, int max_depth)
      us to explicitly document why we are *not* copying a flag.  */
   copy = shallow_copy_rtx (orig);
 
-  format_ptr = GET_RTX_FORMAT (GET_CODE (copy));
+  format_ptr = GET_RTX_FORMAT (code);
 
-  for (i = 0; i < GET_RTX_LENGTH (GET_CODE (copy)); i++)
+  for (i = 0; i < GET_RTX_LENGTH (code); i++)
     switch (*format_ptr++)
       {
       case 'e':
@@ -1084,6 +1095,70 @@ cselib_expand_value_rtx (rtx orig, bitmap regs_active, int max_depth)
 	gcc_unreachable ();
       }
 
+  mode = GET_MODE (copy);
+  /* If an operand has been simplified into CONST_INT, which doesn't
+     have a mode and the mode isn't derivable from whole rtx's mode,
+     try simplify_*_operation first with mode from original's operand
+     and as a fallback wrap CONST_INT into gen_rtx_CONST.  */
+  scopy = copy;
+  switch (GET_RTX_CLASS (code))
+    {
+    case RTX_UNARY:
+      if (CONST_INT_P (XEXP (copy, 0))
+	  && GET_MODE (XEXP (orig, 0)) != VOIDmode)
+	{
+	  scopy = simplify_unary_operation (code, mode, XEXP (copy, 0),
+					    GET_MODE (XEXP (orig, 0)));
+	  if (scopy)
+	    return scopy;
+	}
+      break;
+    case RTX_COMM_ARITH:
+    case RTX_BIN_ARITH:
+      /* These expressions can derive operand modes from the whole rtx's mode.  */
+      break;
+    case RTX_TERNARY:
+    case RTX_BITFIELD_OPS:
+      if (CONST_INT_P (XEXP (copy, 0))
+	  && GET_MODE (XEXP (orig, 0)) != VOIDmode)
+	{
+	  scopy = simplify_ternary_operation (code, mode,
+					      GET_MODE (XEXP (orig, 0)),
+					      XEXP (copy, 0), XEXP (copy, 1),
+					      XEXP (copy, 2));
+	  if (scopy)
+	    return scopy;
+	}
+      break;
+    case RTX_COMPARE:
+    case RTX_COMM_COMPARE:
+      if (CONST_INT_P (XEXP (copy, 0))
+	  && GET_MODE (XEXP (copy, 1)) == VOIDmode
+	  && (GET_MODE (XEXP (orig, 0)) != VOIDmode
+	      || GET_MODE (XEXP (orig, 1)) != VOIDmode))
+	{
+	  scopy = simplify_relational_operation (code, mode,
+						 (GET_MODE (XEXP (orig, 0))
+						  != VOIDmode)
+						 ? GET_MODE (XEXP (orig, 0))
+						 : GET_MODE (XEXP (orig, 1)),
+						 XEXP (copy, 0),
+						 XEXP (copy, 1));
+	  if (scopy)
+	    return scopy;
+	}
+      break;
+    default:
+      break;
+    }
+  if (scopy == NULL_RTX)
+    {
+      XEXP (copy, 0)
+	= gen_rtx_CONST (GET_MODE (XEXP (orig, 0)), XEXP (copy, 0));
+      if (dump_file)
+	fprintf (dump_file, "  wrapping const_int result in const to preserve mode %s\n",
+		 GET_MODE_NAME (GET_MODE (XEXP (copy, 0))));
+    }
   scopy = simplify_rtx (copy);
   if (scopy)
     return scopy;
@@ -1408,7 +1483,7 @@ cselib_invalidate_mem (rtx mem_rtx)
 	    }
 	  if (num_mems < PARAM_VALUE (PARAM_MAX_CSELIB_MEMORY_LOCATIONS)
 	      && ! canon_true_dependence (mem_rtx, GET_MODE (mem_rtx), mem_addr,
-		      			  x, cselib_rtx_varies_p))
+		      			  x, NULL_RTX, cselib_rtx_varies_p))
 	    {
 	      has_mem = true;
 	      num_mems++;
@@ -1583,6 +1658,17 @@ cselib_record_sets (rtx insn)
 	}
     }
 
+  if (n_sets == 1
+      && MEM_P (sets[0].src)
+      && !cselib_record_memory
+      && MEM_READONLY_P (sets[0].src))
+    {
+      rtx note = find_reg_equal_equiv_note (insn);
+
+      if (note && CONSTANT_P (XEXP (note, 0)))
+	sets[0].src = XEXP (note, 0);
+    }
+
   /* Look up the values that are read.  Do this before invalidating the
      locations that are written.  */
   for (i = 0; i < n_sets; i++)
@@ -1600,7 +1686,7 @@ cselib_record_sets (rtx insn)
         {
 	  rtx src = sets[i].src;
 	  if (cond)
-	    src = gen_rtx_IF_THEN_ELSE (GET_MODE (src), cond, src, dest);
+	    src = gen_rtx_IF_THEN_ELSE (GET_MODE (dest), cond, src, dest);
 	  sets[i].src_elt = cselib_lookup (src, GET_MODE (dest), 1);
 	  if (MEM_P (dest))
 	    sets[i].dest_addr_elt = cselib_lookup (XEXP (dest, 0), Pmode, 1);
@@ -1655,8 +1741,6 @@ cselib_process_insn (rtx insn)
   int i;
   rtx x;
 
-  if (find_reg_note (insn, REG_LIBCALL, NULL))
-    cselib_current_insn_in_libcall = true;
   cselib_current_insn = insn;
 
   /* Forget everything at a CODE_LABEL, a volatile asm, or a setjmp.  */
@@ -1667,16 +1751,12 @@ cselib_process_insn (rtx insn)
 	  && GET_CODE (PATTERN (insn)) == ASM_OPERANDS
 	  && MEM_VOLATILE_P (PATTERN (insn))))
     {
-      if (find_reg_note (insn, REG_RETVAL, NULL))
-        cselib_current_insn_in_libcall = false;
       cselib_clear_table ();
       return;
     }
 
   if (! INSN_P (insn))
     {
-      if (find_reg_note (insn, REG_RETVAL, NULL))
-        cselib_current_insn_in_libcall = false;
       cselib_current_insn = 0;
       return;
     }
@@ -1693,7 +1773,11 @@ cselib_process_insn (rtx insn)
 		      GET_MODE (REG_VALUES (i)->elt->val_rtx))))
 	  cselib_invalidate_regno (i, reg_raw_mode[i]);
 
-      if (! CONST_OR_PURE_CALL_P (insn))
+      /* Since it is not clear how cselib is going to be used, be
+	 conservative here and treat looping pure or const functions
+	 as if they were regular functions.  */
+      if (RTL_LOOPING_CONST_OR_PURE_CALL_P (insn)
+	  || !(RTL_CONST_OR_PURE_CALL_P (insn)))
 	cselib_invalidate_mem (callmem);
     }
 
@@ -1715,8 +1799,6 @@ cselib_process_insn (rtx insn)
       if (GET_CODE (XEXP (x, 0)) == CLOBBER)
 	cselib_invalidate_rtx (XEXP (XEXP (x, 0), 0));
 
-  if (find_reg_note (insn, REG_RETVAL, NULL))
-    cselib_current_insn_in_libcall = false;
   cselib_current_insn = 0;
 
   if (n_useless_values > MAX_USELESS_VALUES
@@ -1765,7 +1847,6 @@ cselib_init (bool record_memory)
   n_used_regs = 0;
   cselib_hash_table = htab_create (31, get_value_hash,
 				   entry_and_rtx_equal_p, NULL);
-  cselib_current_insn_in_libcall = false;
 }
 
 /* Called when the current user is done with cselib.  */

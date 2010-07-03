@@ -1,6 +1,6 @@
 /* Target definitions for GCC for Intel 80386 running Solaris 2
    Copyright (C) 1993, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2004, 2007 Free Software Foundation, Inc.
+   2004, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Fred Fish (fnf@cygnus.com).
 
 This file is part of GCC.
@@ -96,6 +96,9 @@ along with GCC; see the file COPYING3.  If not see
 #define SUBTARGET_INSERT_ATTRIBUTES solaris_insert_attributes
 #define SUBTARGET_ATTRIBUTE_TABLE SOLARIS_ATTRIBUTE_TABLE
 
+/* Register the Solaris-specific #pragma directives.  */
+#define REGISTER_SUBTARGET_PRAGMAS() solaris_register_pragmas ()
+
 /* Output a simple call for .init/.fini.  */
 #define ASM_OUTPUT_CALL(FILE, FN)				\
   do								\
@@ -109,3 +112,9 @@ along with GCC; see the file COPYING3.  If not see
 /* We do not need NT_VERSION notes.  */
 #undef X86_FILE_START_VERSION_DIRECTIVE
 #define X86_FILE_START_VERSION_DIRECTIVE false
+
+/* Only recent versions of Solaris 11 ld properly support hidden .gnu.linkonce
+   sections, so don't use them.  */
+#ifndef TARGET_GNU_LD
+#define USE_HIDDEN_LINKONCE 0
+#endif

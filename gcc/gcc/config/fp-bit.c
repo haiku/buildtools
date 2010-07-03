@@ -1,33 +1,28 @@
 /* This is a software floating point library which can be used
    for targets without hardware floating point. 
    Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003,
-   2004, 2005 Free Software Foundation, Inc.
+   2004, 2005, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free
-Software Foundation; either version 2, or (at your option) any later
+Software Foundation; either version 3, or (at your option) any later
 version.
-
-In addition to the permissions in the GNU General Public License, the
-Free Software Foundation gives you unlimited permission to link the
-compiled version of this file into combinations with other programs,
-and to distribute those combinations without any restriction coming
-from the use of this file.  (The General Public License restrictions
-do apply in other respects; for example, they cover modification of
-the file, and distribution when not linked into a combine
-executable.)
 
 GCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 /* This implements IEEE 754 format arithmetic, but does not provide a
    mechanism for setting the rounding mode, or for generating or handling
@@ -139,22 +134,21 @@ extern const fp_number_type __thenan_df;
 #endif
 
 INLINE
-static fp_number_type *
-nan (void)
+static const fp_number_type *
+makenan (void)
 {
-  /* Discard the const qualifier...  */
 #ifdef TFLOAT
-  return (fp_number_type *) (& __thenan_tf);
+  return & __thenan_tf;
 #elif defined FLOAT  
-  return (fp_number_type *) (& __thenan_sf);
+  return & __thenan_sf;
 #else
-  return (fp_number_type *) (& __thenan_df);
+  return & __thenan_df;
 #endif
 }
 
 INLINE
 static int
-isnan ( fp_number_type *  x)
+isnan (const fp_number_type *x)
 {
   return __builtin_expect (x->class == CLASS_SNAN || x->class == CLASS_QNAN,
 			   0);
@@ -162,7 +156,7 @@ isnan ( fp_number_type *  x)
 
 INLINE
 static int
-isinf ( fp_number_type *  x)
+isinf (const fp_number_type *  x)
 {
   return __builtin_expect (x->class == CLASS_INFINITY, 0);
 }
@@ -171,7 +165,7 @@ isinf ( fp_number_type *  x)
 
 INLINE
 static int
-iszero ( fp_number_type *  x)
+iszero (const fp_number_type *  x)
 {
   return x->class == CLASS_ZERO;
 }
@@ -199,11 +193,11 @@ clzusi (USItype n)
     return __clzsi2 (n);
 }
 
-extern FLO_type pack_d ( fp_number_type * );
+extern FLO_type pack_d (const fp_number_type * );
 
 #if defined(L_pack_df) || defined(L_pack_sf) || defined(L_pack_tf)
 FLO_type
-pack_d ( fp_number_type *  src)
+pack_d (const fp_number_type *src)
 {
   FLO_union_type dst;
   fractype fraction = src->fraction.ll;	/* wasn't unsigned before? */
@@ -596,7 +590,7 @@ unpack_d (FLO_union_type * src, fp_number_type * dst)
 #endif /* L_unpack_df || L_unpack_sf */
 
 #if defined(L_addsub_sf) || defined(L_addsub_df) || defined(L_addsub_tf)
-static fp_number_type *
+static const fp_number_type *
 _fpadd_parts (fp_number_type * a,
 	      fp_number_type * b,
 	      fp_number_type * tmp)
@@ -621,7 +615,7 @@ _fpadd_parts (fp_number_type * a,
     {
       /* Adding infinities with opposite signs yields a NaN.  */
       if (isinf (b) && a->sign != b->sign)
-	return nan ();
+	return makenan ();
       return a;
     }
   if (isinf (b))
@@ -734,7 +728,6 @@ _fpadd_parts (fp_number_type * a,
       tmp->normal_exp++;
     }
   return tmp;
-
 }
 
 FLO_type
@@ -743,7 +736,7 @@ add (FLO_type arg_a, FLO_type arg_b)
   fp_number_type a;
   fp_number_type b;
   fp_number_type tmp;
-  fp_number_type *res;
+  const fp_number_type *res;
   FLO_union_type au, bu;
 
   au.value = arg_a;
@@ -763,7 +756,7 @@ sub (FLO_type arg_a, FLO_type arg_b)
   fp_number_type a;
   fp_number_type b;
   fp_number_type tmp;
-  fp_number_type *res;
+  const fp_number_type *res;
   FLO_union_type au, bu;
 
   au.value = arg_a;
@@ -781,7 +774,7 @@ sub (FLO_type arg_a, FLO_type arg_b)
 #endif /* L_addsub_sf || L_addsub_df */
 
 #if defined(L_mul_sf) || defined(L_mul_df) || defined(L_mul_tf)
-static inline __attribute__ ((__always_inline__)) fp_number_type *
+static inline __attribute__ ((__always_inline__)) const fp_number_type *
 _fpmul_parts ( fp_number_type *  a,
 	       fp_number_type *  b,
 	       fp_number_type * tmp)
@@ -802,7 +795,7 @@ _fpmul_parts ( fp_number_type *  a,
   if (isinf (a))
     {
       if (iszero (b))
-	return nan ();
+	return makenan ();
       a->sign = a->sign != b->sign;
       return a;
     }
@@ -810,7 +803,7 @@ _fpmul_parts ( fp_number_type *  a,
     {
       if (iszero (a))
 	{
-	  return nan ();
+	  return makenan ();
 	}
       b->sign = a->sign != b->sign;
       return b;
@@ -949,7 +942,7 @@ multiply (FLO_type arg_a, FLO_type arg_b)
   fp_number_type a;
   fp_number_type b;
   fp_number_type tmp;
-  fp_number_type *res;
+  const fp_number_type *res;
   FLO_union_type au, bu;
 
   au.value = arg_a;
@@ -965,7 +958,7 @@ multiply (FLO_type arg_a, FLO_type arg_b)
 #endif /* L_mul_sf || L_mul_df || L_mul_tf */
 
 #if defined(L_div_sf) || defined(L_div_df) || defined(L_div_tf)
-static inline __attribute__ ((__always_inline__)) fp_number_type *
+static inline __attribute__ ((__always_inline__)) const fp_number_type *
 _fpdiv_parts (fp_number_type * a,
 	      fp_number_type * b)
 {
@@ -988,7 +981,7 @@ _fpdiv_parts (fp_number_type * a,
   if (isinf (a) || iszero (a))
     {
       if (a->class == b->class)
-	return nan ();
+	return makenan ();
       return a;
     }
 
@@ -1067,7 +1060,7 @@ divide (FLO_type arg_a, FLO_type arg_b)
 {
   fp_number_type a;
   fp_number_type b;
-  fp_number_type *res;
+  const fp_number_type *res;
   FLO_union_type au, bu;
 
   au.value = arg_a;

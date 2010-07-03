@@ -1,6 +1,6 @@
 /* Perform instruction reorganizations for delay slot filling.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu).
    Hacked by Michael Tiemann (tiemann@cygnus.com).
@@ -428,7 +428,7 @@ find_end_label (void)
 	     epilogue has filled delay-slots; we would have to try and
 	     move the delay-slot fillers to the delay-slots for the new
 	     return insn or in front of the new return insn.  */
-	  if (current_function_epilogue_delay_list == NULL
+	  if (crtl->epilogue_delay_list == NULL
 	      && HAVE_return)
 	    {
 	      /* The return we make may have delay slots too.  */
@@ -792,7 +792,7 @@ optimize_skip (rtx insn)
      In both of these cases, inverting the jump and annulling the delay
      slot give the same effect in fewer insns.  */
   if ((next_trial == next_active_insn (JUMP_LABEL (insn))
-       && ! (next_trial == 0 && current_function_epilogue_delay_list != 0))
+       && ! (next_trial == 0 && crtl->epilogue_delay_list != 0))
       || (next_trial != 0
 	  && JUMP_P (next_trial)
 	  && JUMP_LABEL (insn) == JUMP_LABEL (next_trial)
@@ -1529,12 +1529,12 @@ try_merge_delay_insns (rtx insn, rtx thread)
 	    {
 	      if (! annul_p)
 		{
-		  rtx new;
+		  rtx new_rtx;
 
 		  update_block (dtrial, thread);
-		  new = delete_from_delay_slot (dtrial);
+		  new_rtx = delete_from_delay_slot (dtrial);
 	          if (INSN_DELETED_P (thread))
-		    thread = new;
+		    thread = new_rtx;
 		  INSN_FROM_TARGET_P (next_to_match) = 0;
 		}
 	      else
@@ -1567,12 +1567,12 @@ try_merge_delay_insns (rtx insn, rtx thread)
 	{
 	  if (GET_MODE (merged_insns) == SImode)
 	    {
-	      rtx new;
+	      rtx new_rtx;
 
 	      update_block (XEXP (merged_insns, 0), thread);
-	      new = delete_from_delay_slot (XEXP (merged_insns, 0));
+	      new_rtx = delete_from_delay_slot (XEXP (merged_insns, 0));
 	      if (INSN_DELETED_P (thread))
-		thread = new;
+		thread = new_rtx;
 	    }
 	  else
 	    {
@@ -2410,7 +2410,7 @@ fill_simple_delay_slots (int non_jumps_p)
      The only thing we can do is scan backwards from the end of the
      function.  If we did this in a previous pass, it is incorrect to do it
      again.  */
-  if (current_function_epilogue_delay_list)
+  if (crtl->epilogue_delay_list)
     return;
 
   slots_to_fill = DELAY_SLOTS_FOR_EPILOGUE;
@@ -2470,9 +2470,9 @@ fill_simple_delay_slots (int non_jumps_p)
 	      /* Here as well we are searching backward, so put the
 		 insns we find on the head of the list.  */
 
-	      current_function_epilogue_delay_list
+	      crtl->epilogue_delay_list
 		= gen_rtx_INSN_LIST (VOIDmode, trial,
-				     current_function_epilogue_delay_list);
+				     crtl->epilogue_delay_list);
 	      mark_end_of_function_resources (trial, 1);
 	      update_block (trial, trial);
 	      delete_related_insns (trial);
@@ -3155,7 +3155,7 @@ delete_prior_computation (rtx note, rtx insn)
       /* If we reach a CALL which is not calling a const function
 	 or the callee pops the arguments, then give up.  */
       if (CALL_P (our_prev)
-	  && (! CONST_OR_PURE_CALL_P (our_prev)
+	  && (! RTL_CONST_CALL_P (our_prev)
 	      || GET_CODE (pat) != SET || GET_CODE (SET_SRC (pat)) != CALL))
 	break;
 
@@ -3217,9 +3217,7 @@ delete_prior_computation (rtx note, rtx insn)
 		{
 		  int i;
 
-		  REG_NOTES (our_prev)
-		    = gen_rtx_EXPR_LIST (REG_UNUSED, reg,
-					 REG_NOTES (our_prev));
+		  add_reg_note (our_prev, REG_UNUSED, reg);
 
 		  for (i = dest_regno; i < dest_endregno; i++)
 		    if (! find_regno_note (our_prev, REG_UNUSED, i))
@@ -3281,8 +3279,7 @@ delete_computation (rtx insn)
 	    delete_computation (prev);
 	  else
 	    /* Otherwise, show that cc0 won't be used.  */
-	    REG_NOTES (prev) = gen_rtx_EXPR_LIST (REG_UNUSED,
-						  cc0_rtx, REG_NOTES (prev));
+	    add_reg_note (prev, REG_UNUSED, cc0_rtx);
 	}
     }
 #endif
@@ -3442,7 +3439,7 @@ relax_delay_slots (rtx first)
 
 	 Only do so if optimizing for size since this results in slower, but
 	 smaller code.  */
-      if (optimize_size
+      if (optimize_function_for_size_p (cfun)
 	  && GET_CODE (PATTERN (delay_insn)) == RETURN
 	  && next
 	  && JUMP_P (next)
@@ -3695,7 +3692,7 @@ make_return_insns (rtx first)
      delay slot filler insns.  It is also unknown whether such a
      transformation would actually be profitable.  Note that the existing
      code only cares for branches with (some) filled delay slots.  */
-  if (current_function_epilogue_delay_list != NULL)
+  if (crtl->epilogue_delay_list != NULL)
     return;
 #endif
 
@@ -3834,7 +3831,7 @@ dbr_schedule (rtx first)
 	epilogue_insn = insn;
     }
 
-  uid_to_ruid = xmalloc ((max_uid + 1) * sizeof (int));
+  uid_to_ruid = XNEWVEC (int, max_uid + 1);
   for (i = 0, insn = first; insn; i++, insn = NEXT_INSN (insn))
     uid_to_ruid[INSN_UID (insn)] = i;
 
@@ -3842,7 +3839,7 @@ dbr_schedule (rtx first)
   if (unfilled_firstobj == 0)
     {
       gcc_obstack_init (&unfilled_slots_obstack);
-      unfilled_firstobj = obstack_alloc (&unfilled_slots_obstack, 0);
+      unfilled_firstobj = XOBNEWVAR (&unfilled_slots_obstack, rtx, 0);
     }
 
   for (insn = next_active_insn (first); insn; insn = next_active_insn (insn))
@@ -3917,7 +3914,7 @@ dbr_schedule (rtx first)
   obstack_free (&unfilled_slots_obstack, unfilled_firstobj);
 
   /* It is not clear why the line below is needed, but it does seem to be.  */
-  unfilled_firstobj = obstack_alloc (&unfilled_slots_obstack, 0);
+  unfilled_firstobj = XOBNEWVAR (&unfilled_slots_obstack, rtx, 0);
 
   if (dump_file)
     {
@@ -4024,9 +4021,7 @@ dbr_schedule (rtx first)
 	continue;
 
       pred_flags = get_jump_flags (insn, JUMP_LABEL (insn));
-      REG_NOTES (insn) = gen_rtx_EXPR_LIST (REG_BR_PRED,
-					    GEN_INT (pred_flags),
-					    REG_NOTES (insn));
+      add_reg_note (insn, REG_BR_PRED, GEN_INT (pred_flags));
     }
   free_resource_info ();
   free (uid_to_ruid);
@@ -4036,13 +4031,14 @@ dbr_schedule (rtx first)
   {
     rtx link;
 
-    for (link = current_function_epilogue_delay_list;
+    for (link = crtl->epilogue_delay_list;
          link;
          link = XEXP (link, 1))
       INSN_LOCATOR (XEXP (link, 0)) = 0;
   }
 
 #endif
+  crtl->dbr_scheduled_p = true;
 }
 #endif /* DELAY_SLOTS */
 
@@ -4050,7 +4046,8 @@ static bool
 gate_handle_delay_slots (void)
 {
 #ifdef DELAY_SLOTS
-  return flag_delayed_branch;
+  /* At -O0 dataflow info isn't updated after RA.  */
+  return optimize > 0 && flag_delayed_branch && !crtl->dbr_scheduled_p;
 #else
   return 0;
 #endif
@@ -4066,8 +4063,10 @@ rest_of_handle_delay_slots (void)
   return 0;
 }
 
-struct tree_opt_pass pass_delay_slots =
+struct rtl_opt_pass pass_delay_slots =
 {
+ {
+  RTL_PASS,
   "dbr",                                /* name */
   gate_handle_delay_slots,              /* gate */
   rest_of_handle_delay_slots,           /* execute */
@@ -4080,8 +4079,8 @@ struct tree_opt_pass pass_delay_slots =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func |
-  TODO_ggc_collect,                     /* todo_flags_finish */
-  'd'                                   /* letter */
+  TODO_ggc_collect                      /* todo_flags_finish */
+ }
 };
 
 /* Machine dependent reorg pass.  */
@@ -4099,8 +4098,10 @@ rest_of_handle_machine_reorg (void)
   return 0;
 }
 
-struct tree_opt_pass pass_machine_reorg =
+struct rtl_opt_pass pass_machine_reorg =
 {
+ {
+  RTL_PASS,
   "mach",                               /* name */
   gate_handle_machine_reorg,            /* gate */
   rest_of_handle_machine_reorg,         /* execute */
@@ -4113,6 +4114,6 @@ struct tree_opt_pass pass_machine_reorg =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func |
-  TODO_ggc_collect,                     /* todo_flags_finish */
-  'M'                                   /* letter */
+  TODO_ggc_collect                      /* todo_flags_finish */
+ }
 };

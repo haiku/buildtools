@@ -1,36 +1,26 @@
 /* DWARF2 EH unwinding support for PowerPC and PowerPC64 Linux.
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
    GCC is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published
-   by the Free Software Foundation; either version 2, or (at your
+   by the Free Software Foundation; either version 3, or (at your
    option) any later version.
-
-   In addition to the permissions in the GNU General Public License,
-   the Free Software Foundation gives you unlimited permission to link
-   the compiled version of this file with other programs, and to
-   distribute those programs without any restriction coming from the
-   use of this file.  (The General Public License restrictions do
-   apply in other respects; for example, they cover modification of
-   the file, and distribution when not linked into another program.)
 
    GCC is distributed in the hope that it will be useful, but WITHOUT
    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
    License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with GCC; see the file COPYING.  If not, write to the
-   Free Software Foundation, 51 Franklin Street, Fifth Floor, Boston,
-   MA 02110-1301, USA.  */
+   Under Section 7 of GPL version 3, you are granted additional
+   permissions described in the GCC Runtime Library Exception, version
+   3.1, as published by the Free Software Foundation.
 
-/* This file defines our own versions of various kernel and user
-   structs, so that system headers are not needed, which otherwise
-   can make bootstrapping a new toolchain difficult.  Do not use
-   these structs elsewhere;  Many fields are missing, particularly
-   from the end of the structures.  */
+   You should have received a copy of the GNU General Public License and
+   a copy of the GCC Runtime Library Exception along with this program;
+   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   <http://www.gnu.org/licenses/>.  */
 
 #define R_LR		65
 #define R_CR2		70
@@ -162,10 +152,10 @@ get_regs (struct _Unwind_Context *context)
   /* li r0, 0x0077; sc  (sigreturn new)  */
   /* li r0, 0x6666; sc  (rt_sigreturn old)  */
   /* li r0, 0x00AC; sc  (rt_sigreturn new)  */
-  if (*(unsigned int *) (pc + 4) != 0x44000002)
+  if (*(const unsigned int *) (pc + 4) != 0x44000002)
     return NULL;
-  if (*(unsigned int *) (pc + 0) == 0x38007777
-      || *(unsigned int *) (pc + 0) == 0x38000077)
+  if (*(const unsigned int *) (pc + 0) == 0x38007777
+      || *(const unsigned int *) (pc + 0) == 0x38000077)
     {
       struct sigframe {
 	char gap[SIGNAL_FRAMESIZE];
@@ -174,8 +164,8 @@ get_regs (struct _Unwind_Context *context)
       } *frame = (struct sigframe *) context->cfa;
       return frame->regs;
     }
-  else if (*(unsigned int *) (pc + 0) == 0x38006666
-	   || *(unsigned int *) (pc + 0) == 0x380000AC)
+  else if (*(const unsigned int *) (pc + 0) == 0x38006666
+	   || *(const unsigned int *) (pc + 0) == 0x380000AC)
     {
       struct rt_sigframe {
 	char gap[SIGNAL_FRAMESIZE + 16];
@@ -361,7 +351,7 @@ frob_update_context (struct _Unwind_Context *context, _Unwind_FrameState *fs ATT
 	 we have no good way to determine at compile time what to do.  */
       unsigned int *insn
 	= (unsigned int *) _Unwind_GetGR (context, R_LR);
-      if (*insn == 0xE8410028)
+      if (insn && *insn == 0xE8410028)
 	_Unwind_SetGRPtr (context, 2, context->cfa + 40);
     }
 #endif

@@ -1,6 +1,6 @@
 /* Structure for saving state for a nested function.
    Copyright (C) 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2003, 2004, 2005, 2006, 2007, 2008
+   1999, 2000, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -24,6 +24,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "tree.h"
 #include "hashtab.h"
+#include "varray.h"
 
 /* Stack of pending (incomplete) sequences saved by `start_sequence'.
    Each element describes one pending sequence.
@@ -78,20 +79,22 @@ struct emit_status GTY(())
   /* Indexed by pseudo register number, if nonzero gives the known alignment
      for that pseudo (if REG_POINTER is set in x_regno_reg_rtx).
      Allocated in parallel with x_regno_reg_rtx.  */
-  unsigned char * GTY ((length ("%h.x_reg_rtx_no")))
-    regno_pointer_align;
-
-  /* Indexed by pseudo register number, gives the rtx for that pseudo.
-     Allocated in parallel with regno_pointer_align.  */
-  rtx * GTY ((length ("%h.x_reg_rtx_no"))) x_regno_reg_rtx;
+  unsigned char * GTY((skip)) regno_pointer_align;
 };
 
-/* For backward compatibility... eventually these should all go away.  */
-#define reg_rtx_no (cfun->emit->x_reg_rtx_no)
-#define regno_reg_rtx (cfun->emit->x_regno_reg_rtx)
-#define seq_stack (cfun->emit->sequence_stack)
 
-#define REGNO_POINTER_ALIGN(REGNO) (cfun->emit->regno_pointer_align[REGNO])
+/* Indexed by pseudo register number, gives the rtx for that pseudo.
+   Allocated in parallel with regno_pointer_align.  
+   FIXME: We could put it into emit_status struct, but gengtype is not able to deal
+   with length attribute nested in top level structures.  */
+
+extern GTY ((length ("crtl->emit.x_reg_rtx_no"))) rtx * regno_reg_rtx;
+
+/* For backward compatibility... eventually these should all go away.  */
+#define reg_rtx_no (crtl->emit.x_reg_rtx_no)
+#define seq_stack (crtl->emit.sequence_stack)
+
+#define REGNO_POINTER_ALIGN(REGNO) (crtl->emit.regno_pointer_align[REGNO])
 
 struct expr_status GTY(())
 {
@@ -134,19 +137,53 @@ struct expr_status GTY(())
   rtx x_forced_labels;
 };
 
-#define pending_stack_adjust (cfun->expr->x_pending_stack_adjust)
-#define inhibit_defer_pop (cfun->expr->x_inhibit_defer_pop)
-#define saveregs_value (cfun->expr->x_saveregs_value)
-#define apply_args_value (cfun->expr->x_apply_args_value)
-#define forced_labels (cfun->expr->x_forced_labels)
-#define stack_pointer_delta (cfun->expr->x_stack_pointer_delta)
+typedef struct call_site_record *call_site_record;
+DEF_VEC_P(call_site_record);
+DEF_VEC_ALLOC_P(call_site_record, gc);
+
+/* RTL representation of exception handling.  */
+struct rtl_eh GTY(())
+{
+  rtx filter;
+  rtx exc_ptr;
+
+  int built_landing_pads;
+
+  rtx ehr_stackadj;
+  rtx ehr_handler;
+  rtx ehr_label;
+
+  rtx sjlj_fc;
+  rtx sjlj_exit_after;
+
+  htab_t GTY ((param_is (struct ehl_map_entry))) exception_handler_label_map;
+
+  VEC(tree,gc) *ttype_data;
+  varray_type ehspec_data;
+  varray_type action_record_data;
+
+  VEC(call_site_record,gc) *call_site_record;
+};
+
+#define pending_stack_adjust (crtl->expr.x_pending_stack_adjust)
+#define inhibit_defer_pop (crtl->expr.x_inhibit_defer_pop)
+#define saveregs_value (crtl->expr.x_saveregs_value)
+#define apply_args_value (crtl->expr.x_apply_args_value)
+#define forced_labels (crtl->expr.x_forced_labels)
+#define stack_pointer_delta (crtl->expr.x_stack_pointer_delta)
 
 struct gimple_df;
 struct temp_slot;
 typedef struct temp_slot *temp_slot_p;
+struct call_site_record;
 
 DEF_VEC_P(temp_slot_p);
 DEF_VEC_ALLOC_P(temp_slot_p,gc);
+struct ipa_opt_pass;
+typedef struct ipa_opt_pass *ipa_opt_pass;
+
+DEF_VEC_P(ipa_opt_pass);
+DEF_VEC_ALLOC_P(ipa_opt_pass,heap);
 
 enum function_frequency {
   /* This function most likely won't be executed at all.
@@ -159,35 +196,19 @@ enum function_frequency {
   FUNCTION_FREQUENCY_HOT
 };
 
-/* This structure can save all the important global and static variables
-   describing the status of the current function.  */
-
-struct function GTY(())
+struct varasm_status GTY(())
 {
-  struct eh_status *eh;
-  struct expr_status *expr;
-  struct emit_status *emit;
-  struct varasm_status *varasm;
+  /* If we're using a per-function constant pool, this is it.  */
+  struct rtx_constant_pool *pool;
 
-  /* The control flow graph for this function.  */
-  struct control_flow_graph *cfg;
-  /* SSA and dataflow information.  */
-  struct gimple_df *gimple_df;
+  /* Number of tree-constants deferred during the expansion of this
+     function.  */
+  unsigned int deferred_constants;
+};
 
-  /* The loops in this function.  */
-  struct loops *x_current_loops;
-
-  /* Value histograms attached to particular statements.  */
-  htab_t GTY((skip)) value_histograms;
-
-  /* For function.c.  */
-
-  /* Points to the FUNCTION_DECL of this function.  */
-  tree decl;
-
-  /* Function containing this function, if any.  */
-  struct function *outer;
-
+/* Information mainlined about RTL representation of incoming arguments.  */
+struct incoming_args GTY(())
+{
   /* Number of bytes of args popped by function being compiled on its return.
      Zero if no bytes are to be popped.
      May affect compilation of return insn or of function epilogue.  */
@@ -196,16 +217,12 @@ struct function GTY(())
   /* If function's args have a fixed size, this is that size, in bytes.
      Otherwise, it is -1.
      May affect compilation of return insn or of function epilogue.  */
-  int args_size;
+  int size;
 
   /* # bytes the prologue should push and pretend that the caller pushed them.
      The prologue must do this, but only if parms can be passed in
      registers.  */
   int pretend_args_size;
-
-  /* # of bytes of outgoing arguments.  If ACCUMULATE_OUTGOING_ARGS is
-     defined, the needed space is pushed by the prologue.  */
-  int outgoing_args_size;
 
   /* This is the offset from the arg pointer to the place where the first
      anonymous arg can be found, if there is one.  */
@@ -213,7 +230,45 @@ struct function GTY(())
 
   /* Quantities of various kinds of registers
      used for the current function's args.  */
-  CUMULATIVE_ARGS args_info;
+  CUMULATIVE_ARGS info;
+
+  /* The arg pointer hard register, or the pseudo into which it was copied.  */
+  rtx internal_arg_pointer;
+};
+
+/* Data for function partitioning.  */
+struct function_subsections GTY(())
+{
+  /* Assembly labels for the hot and cold text sections, to
+     be used by debugger functions for determining the size of text
+     sections.  */
+
+  const char *hot_section_label;
+  const char *cold_section_label;
+  const char *hot_section_end_label;
+  const char *cold_section_end_label;
+
+  /* String to be used for name of cold text sections, via
+     targetm.asm_out.named_section.  */
+
+  const char *unlikely_text_section_name;
+};
+
+/* Datastructures maintained for currently processed function in RTL form.  */
+struct rtl_data GTY(())
+{
+  struct expr_status expr;
+  struct emit_status emit;
+  struct varasm_status varasm;
+  struct incoming_args args;
+  struct function_subsections subsections;
+  struct rtl_eh eh;
+
+  /* For function.c  */
+
+  /* # of bytes of outgoing arguments.  If ACCUMULATE_OUTGOING_ARGS is
+     defined, the needed space is pushed by the prologue.  */
+  int outgoing_args_size;
 
   /* If nonzero, an RTL expression for the location at which the current
      function returns its result.  If the current function returns its
@@ -221,12 +276,13 @@ struct function GTY(())
      the hard register containing the result.  */
   rtx return_rtx;
 
-  /* The arg pointer hard register, or the pseudo into which it was copied.  */
-  rtx internal_arg_pointer;
-
   /* Opaque pointer used by get_hard_reg_initial_val and
      has_hard_reg_initial_val (see integrate.[hc]).  */
   struct initial_value_struct *hard_reg_initial_vals;
+
+  /* A variable living at the top of the frame that holds a known value.
+     Used for detecting stack clobbers.  */
+  tree stack_protect_guard;
 
   /* List (chain of EXPR_LIST) of labels heading the current handlers for
      nonlocal gotos.  */
@@ -255,19 +311,13 @@ struct function GTY(())
      needed by inner routines.  */
   rtx x_arg_pointer_save_area;
 
+  /* Dynamic Realign Argument Pointer used for realigning stack.  */
+  rtx drap_reg;
+
   /* Offset to end of allocated area of stack frame.
      If stack grows down, this is the address of the last stack slot allocated.
      If stack grows up, this is the address for the next slot.  */
   HOST_WIDE_INT x_frame_offset;
-
-  /* A PARM_DECL that should contain the static chain for this function.
-     It will be initialized at the beginning of the function.  */
-  tree static_chain_decl;
-
-  /* An expression that contains the non-local goto save area.  The first
-     word is the saved frame pointer and the second is the saved stack 
-     pointer.  */
-  tree nonlocal_goto_save_area;
 
   /* Insn after which register parms and SAVE_EXPRs are born, if nonopt.  */
   rtx x_parm_birth_insn;
@@ -281,28 +331,28 @@ struct function GTY(())
   /* Current nesting level for temporaries.  */
   int x_temp_slot_level;
 
-  /* Highest label number in current function.  */
-  int inl_max_label_num;
-
-  /* Function sequence number for profiling, debugging, etc.  */
-  int funcdef_no;
-
-  /* For md files.  */
-
-  /* tm.h can use this to store whatever it likes.  */
-  struct machine_function * GTY ((maybe_undef)) machine;
-
-  /* The largest alignment of slot allocated on the stack.  */
+  /* The largest alignment needed on the stack, including requirement
+     for outgoing stack alignment.  */
   unsigned int stack_alignment_needed;
 
-  /* Preferred alignment of the end of stack frame.  */
+  /* Preferred alignment of the end of stack frame, which is preferred
+     to call other functions.  */
   unsigned int preferred_stack_boundary;
 
-  /* Language-specific code can use this to store whatever it likes.  */
-  struct language_function * language;
+  /* The minimum alignment of parameter stack.  */
+  unsigned int parm_stack_boundary;
 
-  /* Used types hash table.  */
-  htab_t GTY ((param_is (union tree_node))) used_types_hash;
+  /* The largest alignment of slot allocated on the stack.  */
+  unsigned int max_used_stack_slot_alignment;
+
+  /* The stack alignment estimated before reload, with consideration of
+     following factors:
+     1. Alignment of local stack variables (max_used_stack_slot_alignment)
+     2. Alignment requirement to call other functions 
+        (preferred_stack_boundary)
+     3. Alignment of non-local stack variables but might be spilled in
+        local stack.  */
+  unsigned int stack_alignment_estimated;
 
   /* For reorg.  */
 
@@ -310,40 +360,180 @@ struct function GTY(())
      delay list for them is recorded here.  */
   rtx epilogue_delay_list;
 
-  /* Maximal number of entities in the single jumptable.  Used to estimate
-     final flowgraph size.  */
-  int max_jumptable_ents;
+  /* Nonzero if function being compiled called builtin_return_addr or
+     builtin_frame_address with nonzero count.  */
+  bool accesses_prior_frames;
 
-  /* UIDs for LABEL_DECLs.  */
-  int last_label_uid;
+  /* Nonzero if the function calls __builtin_eh_return.  */
+  bool calls_eh_return;
+
+  /* Nonzero if function saves all registers, e.g. if it has a nonlocal
+     label that can reach the exit block via non-exceptional paths. */
+  bool saves_all_registers;
+
+  /* Nonzero if function being compiled has nonlocal gotos to parent
+     function.  */
+  bool has_nonlocal_goto;
+  
+  /* Nonzero if function being compiled has an asm statement.  */
+  bool has_asm_statement;
+
+  /* This bit is used by the exception handling logic.  It is set if all
+     calls (if any) are sibling calls.  Such functions do not have to
+     have EH tables generated, as they cannot throw.  A call to such a
+     function, however, should be treated as throwing if any of its callees
+     can throw.  */
+  bool all_throwers_are_sibcalls;
+
+  /* Nonzero if stack limit checking should be enabled in the current
+     function.  */
+  bool limit_stack;
+
+  /* Nonzero if profiling code should be generated.  */
+  bool profile;
+
+  /* Nonzero if the current function uses the constant pool.  */
+  bool uses_const_pool;
+
+  /* Nonzero if the current function uses pic_offset_table_rtx.  */
+  bool uses_pic_offset_table;
+
+  /* Nonzero if the current function needs an lsda for exception handling.  */
+  bool uses_eh_lsda;
+
+  /* Set when the tail call has been produced.  */
+  bool tail_call_emit;
+
+  /* Nonzero if code to initialize arg_pointer_save_area has been emitted.  */
+  bool arg_pointer_save_area_init;
+
+  /* Nonzero if current function must be given a frame pointer.
+     Set in global.c if anything is allocated on the stack there.  */
+  bool frame_pointer_needed;
+
+  /* When set, expand should optimize for speed.  */
+  bool maybe_hot_insn_p;
+
+  /* Nonzero if function stack realignment is needed.  This flag may be
+     set twice: before and after reload.  It is set before reload wrt
+     stack alignment estimation before reload.  It will be changed after
+     reload if by then criteria of stack realignment is different.
+     The value set after reload is the accurate one and is finalized.  */
+  bool stack_realign_needed;
+
+  /* Nonzero if function stack realignment is tried.  This flag is set
+     only once before reload.  It affects register elimination.  This
+     is used to generate DWARF debug info for stack variables.  */
+  bool stack_realign_tried;
+
+  /* Nonzero if function being compiled needs dynamic realigned
+     argument pointer (drap) if stack needs realigning.  */
+  bool need_drap;
+
+  /* Nonzero if function stack realignment estimation is done, namely
+     stack_realign_needed flag has been set before reload wrt estimated
+     stack alignment info.  */
+  bool stack_realign_processed;
+
+  /* Nonzero if function stack realignment has been finalized, namely
+     stack_realign_needed flag has been set and finalized after reload.  */
+  bool stack_realign_finalized;
+
+  /* True if dbr_schedule has already been called for this function.  */
+  bool dbr_scheduled_p;
+};
+
+#define return_label (crtl->x_return_label)
+#define naked_return_label (crtl->x_naked_return_label)
+#define stack_slot_list (crtl->x_stack_slot_list)
+#define parm_birth_insn (crtl->x_parm_birth_insn)
+#define frame_offset (crtl->x_frame_offset)
+#define stack_check_probe_note (crtl->x_stack_check_probe_note)
+#define arg_pointer_save_area (crtl->x_arg_pointer_save_area)
+#define used_temp_slots (crtl->x_used_temp_slots)
+#define avail_temp_slots (crtl->x_avail_temp_slots)
+#define temp_slot_level (crtl->x_temp_slot_level)
+#define nonlocal_goto_handler_labels (crtl->x_nonlocal_goto_handler_labels)
+#define frame_pointer_needed (crtl->frame_pointer_needed)
+#define stack_realign_fp (crtl->stack_realign_needed && !crtl->need_drap)
+#define stack_realign_drap (crtl->stack_realign_needed && crtl->need_drap)
+
+extern GTY(()) struct rtl_data x_rtl;
+
+/* Accessor to RTL datastructures.  We keep them statically allocated now since
+   we never keep multiple functions.  For threaded compiler we might however
+   want to do differently.  */
+#define crtl (&x_rtl)
+
+/* This structure can save all the important global and static variables
+   describing the status of the current function.  */
+
+struct function GTY(())
+{
+  struct eh_status *eh;
+
+  /* The control flow graph for this function.  */
+  struct control_flow_graph *cfg;
+
+  /* GIMPLE body for this function.  */
+  struct gimple_seq_d *gimple_body;
+
+  /* SSA and dataflow information.  */
+  struct gimple_df *gimple_df;
+
+  /* The loops in this function.  */
+  struct loops *x_current_loops;
+
+  /* Value histograms attached to particular statements.  */
+  htab_t GTY((skip)) value_histograms;
+
+  /* For function.c.  */
+
+  /* Points to the FUNCTION_DECL of this function.  */
+  tree decl;
+
+  /* A PARM_DECL that should contain the static chain for this function.
+     It will be initialized at the beginning of the function.  */
+  tree static_chain_decl;
+
+  /* An expression that contains the non-local goto save area.  The first
+     word is the saved frame pointer and the second is the saved stack 
+     pointer.  */
+  tree nonlocal_goto_save_area;
+
+  /* List of function local variables, functions, types and constants.  */
+  tree local_decls;
+
+  /* For md files.  */
+
+  /* tm.h can use this to store whatever it likes.  */
+  struct machine_function * GTY ((maybe_undef)) machine;
+
+  /* Language-specific code can use this to store whatever it likes.  */
+  struct language_function * language;
+
+  /* Used types hash table.  */
+  htab_t GTY ((param_is (union tree_node))) used_types_hash;
+
+  /* Last statement uid.  */
+  int last_stmt_uid;
+
+  /* Function sequence number for profiling, debugging, etc.  */
+  int funcdef_no;
+
+  /* Line number of the start of the function for debugging purposes.  */
+  location_t function_start_locus;
 
   /* Line number of the end of the function.  */
   location_t function_end_locus;
 
-  /* The variables unexpanded so far.  */
-  tree unexpanded_var_list;
-
-  /* Assembly labels for the hot and cold text sections, to
-     be used by debugger functions for determining the size of text
-     sections.  */
-
-  const char *hot_section_label;
-  const char *cold_section_label;
-  const char *hot_section_end_label;
-  const char *cold_section_end_label;
-
-  /* String to be used for name of cold text sections, via
-     targetm.asm_out.named_section.  */
-
-  const char *unlikely_text_section_name;
-
-  /* A variable living at the top of the frame that holds a known value.
-     Used for detecting stack clobbers.  */
-  tree stack_protect_guard;
-
   /* Properties used by the pass manager.  */
   unsigned int curr_properties;
   unsigned int last_verified;
+  /* Interprocedural passes scheduled to have their transform functions
+     applied next time we execute local pass on them.  We maintain it
+     per-function in order to allow IPA passes to introduce new functions.  */
+  VEC(ipa_opt_pass,heap) * GTY((skip)) ipa_transforms_to_apply;
 
   /* Collected bit flags.  */
 
@@ -368,49 +558,9 @@ struct function GTY(())
      either as a subroutine or builtin.  */
   unsigned int calls_alloca : 1;
 
-  /* Nonzero if function being compiled called builtin_return_addr or
-     builtin_frame_address with nonzero count.  */
-  unsigned int accesses_prior_frames : 1;
-
-  /* Nonzero if the function calls __builtin_eh_return.  */
-  unsigned int calls_eh_return : 1;
-
-
   /* Nonzero if function being compiled receives nonlocal gotos
      from nested functions.  */
   unsigned int has_nonlocal_label : 1;
-
-  /* Nonzero if function saves all registers, e.g. if it has a nonlocal
-     label that can reach the exit block via non-exceptional paths. */
-  unsigned int saves_all_registers : 1;
-
-  /* Nonzero if function being compiled has nonlocal gotos to parent
-     function.  */
-  unsigned int has_nonlocal_goto : 1;
-  
-  /* Nonzero if function being compiled has an asm statement.  */
-  unsigned int has_asm_statement : 1;
-
-  /* Nonzero if the current function is a thunk, i.e., a lightweight
-     function implemented by the output_mi_thunk hook) that just
-     adjusts one of its arguments and forwards to another
-     function.  */
-  unsigned int is_thunk : 1;
-
-  /* This bit is used by the exception handling logic.  It is set if all
-     calls (if any) are sibling calls.  Such functions do not have to
-     have EH tables generated, as they cannot throw.  A call to such a
-     function, however, should be treated as throwing if any of its callees
-     can throw.  */
-  unsigned int all_throwers_are_sibcalls : 1;
-
-  /* Nonzero if profiling code should be generated.  */
-  unsigned int profile : 1;
-
-  /* Nonzero if stack limit checking should be enabled in the current
-     function.  */
-  unsigned int limit_stack : 1;
-
 
   /* Nonzero if current function uses stdarg.h or equivalent.  */
   unsigned int stdarg : 1;
@@ -422,33 +572,10 @@ struct function GTY(())
      variable-sized type, then the size of the parameter is computed
      when the function body is entered.  However, some front-ends do
      not desire this behavior.  */
-  unsigned int x_dont_save_pending_sizes_p : 1;
-
-  /* Nonzero if the current function uses the constant pool.  */
-  unsigned int uses_const_pool : 1;
-
-  /* Nonzero if the current function uses pic_offset_table_rtx.  */
-  unsigned int uses_pic_offset_table : 1;
-
-  /* Nonzero if the current function needs an lsda for exception handling.  */
-  unsigned int uses_eh_lsda : 1;
-
-  /* Nonzero if code to initialize arg_pointer_save_area has been emitted.  */
-  unsigned int arg_pointer_save_area_init : 1;
+  unsigned int dont_save_pending_sizes_p : 1;
 
   unsigned int after_inlining : 1;
-
-  /* Set when the call to function itself has been emit.  */
-  unsigned int recursive_call_emit : 1;
-
-
-  /* Set when the tail call has been produced.  */
-  unsigned int tail_call_emit : 1;
-
-  /* FIXME tuples: This bit is temporarily here to mark when a
-     function has been gimplified, so we can make sure we're not
-     creating non GIMPLE tuples after gimplification.  */
-  unsigned int gimplified : 1;
+  unsigned int always_inline_functions_inlined : 1;
 
   /* Fields below this point are not set for abstract functions; see
      allocate_struct_function.  */
@@ -463,6 +590,16 @@ struct function GTY(())
 
   /* Nonzero if pass_tree_profile was run on this function.  */
   unsigned int after_tree_profile : 1;
+
+  /* Nonzero if this function has local DECL_HARD_REGISTER variables.
+     In this case code motion has to be done more carefully.  */
+  unsigned int has_local_explicit_reg_vars : 1;
+
+  /* Nonzero if the current function is a thunk, i.e., a lightweight
+     function implemented by the output_mi_thunk hook) that just
+     adjusts one of its arguments and forwards to another
+     function.  */
+  unsigned int is_thunk : 1;
 };
 
 /* If va_list_[gf]pr_size is set to this, it means we don't know how
@@ -478,14 +615,33 @@ extern GTY(()) struct function *cfun;
    push_cfun or set_cfun.  */
 #define cfun (cfun + 0)
 
-/* Pointer to chain of `struct function' for containing functions.  */
-extern GTY(()) struct function *outer_function_chain;
-
 /* Nonzero if we've already converted virtual regs to hard regs.  */
 extern int virtuals_instantiated;
 
 /* Nonzero if at least one trampoline has been created.  */
 extern int trampolines_created;
+
+struct types_used_by_vars_entry GTY(()) {
+  tree type;
+  tree var_decl;
+};
+
+/* Hash table making the relationship between a global variable
+   and the types it references in its initializer. The key of the
+   entry is a referenced type, and the value is the DECL of the global
+   variable. types_use_by_vars_do_hash and types_used_by_vars_eq below are
+   the hash and equality functions to use for this hash table.  */
+extern GTY((param_is (struct types_used_by_vars_entry))) htab_t
+  types_used_by_vars_hash;
+
+hashval_t types_used_by_vars_do_hash (const void*);
+int types_used_by_vars_eq (const void *, const void *);
+void types_used_by_var_decl_insert (tree type, tree var_decl);
+
+/* During parsing of a global variable, this linked list points to
+   the list of types referenced by the global variable.  */
+extern GTY(()) tree types_used_by_cur_var_decl;
+
 
 /* cfun shouldn't be set directly; use one of these functions instead.  */
 extern void set_cfun (struct function *new_cfun);
@@ -494,53 +650,12 @@ extern void pop_cfun (void);
 extern void instantiate_decl_rtl (rtx x);
 
 /* For backward compatibility... eventually these should all go away.  */
-#define current_function_pops_args (cfun->pops_args)
-#define current_function_returns_struct (cfun->returns_struct)
-#define current_function_returns_pcc_struct (cfun->returns_pcc_struct)
-#define current_function_calls_setjmp (cfun->calls_setjmp)
-#define current_function_calls_alloca (cfun->calls_alloca)
-#define current_function_accesses_prior_frames (cfun->accesses_prior_frames)
-#define current_function_calls_eh_return (cfun->calls_eh_return)
-#define current_function_is_thunk (cfun->is_thunk)
-#define current_function_args_info (cfun->args_info)
-#define current_function_args_size (cfun->args_size)
-#define current_function_pretend_args_size (cfun->pretend_args_size)
-#define current_function_outgoing_args_size (cfun->outgoing_args_size)
-#define current_function_arg_offset_rtx (cfun->arg_offset_rtx)
-#define current_function_stdarg (cfun->stdarg)
-#define current_function_internal_arg_pointer (cfun->internal_arg_pointer)
-#define current_function_return_rtx (cfun->return_rtx)
-#define current_function_profile (cfun->profile)
 #define current_function_funcdef_no (cfun->funcdef_no)
-#define current_function_limit_stack (cfun->limit_stack)
-#define current_function_uses_pic_offset_table (cfun->uses_pic_offset_table)
-#define current_function_uses_const_pool (cfun->uses_const_pool)
-#define current_function_epilogue_delay_list (cfun->epilogue_delay_list)
-#define current_function_has_nonlocal_label (cfun->has_nonlocal_label)
-#define current_function_saves_all_registers (cfun->saves_all_registers)
-#define current_function_has_nonlocal_goto (cfun->has_nonlocal_goto)
-#define current_function_has_asm_statement (cfun->has_asm_statement)
 
-#define return_label (cfun->x_return_label)
-#define naked_return_label (cfun->x_naked_return_label)
-#define stack_slot_list (cfun->x_stack_slot_list)
-#define parm_birth_insn (cfun->x_parm_birth_insn)
-#define frame_offset (cfun->x_frame_offset)
-#define stack_check_probe_note (cfun->x_stack_check_probe_note)
-#define arg_pointer_save_area (cfun->x_arg_pointer_save_area)
-#define used_temp_slots (cfun->x_used_temp_slots)
-#define avail_temp_slots (cfun->x_avail_temp_slots)
-#define temp_slot_level (cfun->x_temp_slot_level)
-#define nonlocal_goto_handler_labels (cfun->x_nonlocal_goto_handler_labels)
-#define rtl_df (cfun->df)
 #define current_loops (cfun->x_current_loops)
 #define dom_computed (cfun->cfg->x_dom_computed)
 #define n_bbs_in_dom_tree (cfun->cfg->x_n_bbs_in_dom_tree)
 #define VALUE_HISTOGRAMS(fun) (fun)->value_histograms
-
-/* Given a function decl for a containing function,
-   return the `struct function' for it.  */
-struct function *find_function_data (tree);
 
 /* Identify BLOCKs referenced by more than one NOTE_INSN_BLOCK_{BEG,END},
    and create duplicate blocks.  */
@@ -570,14 +685,14 @@ extern struct machine_function * (*init_machine_status) (void);
 extern void free_after_parsing (struct function *);
 extern void free_after_compilation (struct function *);
 
-extern void init_varasm_status (struct function *);
+extern void init_varasm_status (void);
 
 #ifdef RTX_CODE
 extern void diddle_return_value (void (*)(rtx, void*), void*);
 extern void clobber_return_register (void);
 #endif
 
-extern rtx get_arg_pointer_save_area (struct function *);
+extern rtx get_arg_pointer_save_area (void);
 
 /* Returns the name of the current function.  */
 extern const char *current_function_name (void);

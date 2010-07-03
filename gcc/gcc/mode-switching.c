@@ -1,6 +1,6 @@
 /* CPU mode switching
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
+   2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -585,7 +585,7 @@ optimize_mode_switching (void)
   for (i = 0; i < max_num_modes; i++)
     {
       int current_mode[N_ENTITIES];
-      sbitmap *delete;
+      sbitmap *del;
       sbitmap *insert;
 
       /* Set the anticipatable and computing arrays.  */
@@ -612,7 +612,7 @@ optimize_mode_switching (void)
       FOR_EACH_BB (bb)
 	sbitmap_not (kill[bb->index], transp[bb->index]);
       edge_list = pre_edge_lcm (n_entities, transp, comp, antic,
-				kill, &insert, &delete);
+				kill, &insert, &del);
 
       for (j = n_entities - 1; j >= 0; j--)
 	{
@@ -663,7 +663,7 @@ optimize_mode_switching (void)
 	    }
 
 	  FOR_EACH_BB_REVERSE (bb)
-	    if (TEST_BIT (delete[bb->index], j))
+	    if (TEST_BIT (del[bb->index], j))
 	      {
 		make_preds_opaque (bb, j);
 		/* Cancel the 'deleted' mode set.  */
@@ -671,7 +671,7 @@ optimize_mode_switching (void)
 	      }
 	}
 
-      sbitmap_vector_free (delete);
+      sbitmap_vector_free (del);
       sbitmap_vector_free (insert);
       clear_aux_for_edges ();
       free_edge_list (edge_list);
@@ -756,9 +756,11 @@ rest_of_handle_mode_switching (void)
 }
 
 
-struct tree_opt_pass pass_mode_switching =
+struct rtl_opt_pass pass_mode_switching =
 {
-  "mode-sw",                            /* name */
+ {
+  RTL_PASS,
+  "mode_sw",                            /* name */
   gate_mode_switching,                  /* gate */
   rest_of_handle_mode_switching,        /* execute */
   NULL,                                 /* sub */
@@ -770,6 +772,6 @@ struct tree_opt_pass pass_mode_switching =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func,                       /* todo_flags_finish */
-  0                                     /* letter */
+  TODO_dump_func                        /* todo_flags_finish */
+ }
 };

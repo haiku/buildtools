@@ -1,11 +1,11 @@
 // { dg-options "-std=gnu++0x" }
 
-// Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,9 +14,10 @@
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
-// USA.
+// with this library; see the file COPYING3.  If not see
+// <http://www.gnu.org/licenses/>.
+
+// { dg-options "-std=gnu++0x -DITERATIONS=5" { target simulator } }
 
 // 25.3.6 Heap operations [lib.alg.heap.operations]
 
@@ -27,6 +28,10 @@
 #include <testsuite_hooks.h>
 #include <testsuite_iterators.h>
 #include <testsuite_rvalref.h>
+
+#ifndef ITERATIONS
+#define ITERATIONS 9
+#endif
 
 using __gnu_test::test_container;
 using __gnu_test::random_access_iterator_wrapper;
@@ -115,7 +120,7 @@ void
 test01()
 {
   int array[9];
-  for (int i = 1; i < 9; ++i)
+  for (int i = 1; i < ITERATIONS; ++i)
     {
       for(int z = 0; z < i; ++z)
 	array[z] = z;

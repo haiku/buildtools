@@ -1,7 +1,7 @@
 /* This file contains the definitions for the tree structure
    enumeration used in GCC.  
 
-Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -59,9 +59,10 @@ DEFTREESTRUCT(TS_BLOCK, "block")
 DEFTREESTRUCT(TS_BINFO, "binfo")
 DEFTREESTRUCT(TS_STATEMENT_LIST, "statement list")
 DEFTREESTRUCT(TS_GIMPLE_STATEMENT, "gimple statement")
-DEFTREESTRUCT(TS_VALUE_HANDLE, "value handle")
 DEFTREESTRUCT(TS_CONSTRUCTOR, "constructor")
 DEFTREESTRUCT(TS_MEMORY_TAG, "memory tag")
-DEFTREESTRUCT(TS_STRUCT_FIELD_TAG, "struct field tag")
 DEFTREESTRUCT(TS_OMP_CLAUSE, "omp clause")
 DEFTREESTRUCT(TS_MEMORY_PARTITION_TAG, "memory partition tag")
+DEFTREESTRUCT(TS_OPTIMIZATION, "optimization options")
+DEFTREESTRUCT(TS_TARGET_OPTION, "target options")
+

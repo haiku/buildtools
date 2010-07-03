@@ -1,12 +1,12 @@
 /* Library functions.
-   Copyright (C) 2000, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2003, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
   
    This file is part of GCC.
   
    GCC is free software ; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation * either version 2, or (at your option)
+   the Free Software Foundation; either version 3, or (at your option)
    any later version.
   
    GCC is distributed in the hope that it will be useful,
@@ -14,17 +14,14 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
   
-   You should have received a copy of the GNU General Public License
-   along with GCC; see the file COPYING.  If not, write to
-   the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   Under Section 7 of GPL version 3, you are granted additional
+   permissions described in the GCC Runtime Library Exception, version
+   3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with other files,
-   some of which are compiled with GCC, to produce an executable,
-   this library does not by itself cause the resulting executable
-   to be covered by the GNU General Public License.
-   This exception does not however invalidate any other reasons why
-   the executable file might be covered by the GNU General Public License.  */
+   You should have received a copy of the GNU General Public License and
+   a copy of the GCC Runtime Library Exception along with this program;
+   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   <http://www.gnu.org/licenses/>.  */
 
 #include <frv-asm.h>
 
@@ -32,7 +29,6 @@
 #ifdef L_cmpll
 /* icc0 = __cmpll (long long a, long long b)  */
 
-	.file	"_cmpll.s"
 	.globl	EXT(__cmpll)
 	.type	EXT(__cmpll),@function
 	.text
@@ -51,7 +47,6 @@ EXT(__cmpll):
 /* Note, because this function returns the result in ICC0, it means it can't
    handle NaNs.  */
 
-	.file	"_cmpf.s"
 	.globl	EXT(__cmpf)
 	.type	EXT(__cmpf),@function
 	.text
@@ -91,7 +86,6 @@ EXT(__cmpf):
 /* Note, because this function returns the result in ICC0, it means it can't
    handle NaNs.  */
 
-	.file	"_cmpd.s"
 	.globl	EXT(__cmpd)
 	.type	EXT(__cmpd),@function
 	.text
@@ -118,7 +112,6 @@ EXT(__cmpd):
 /* Note, gcc will never call this function, but it is present in case an
    ABI program calls it.  */
 
-	.file	"_addll.s"
 	.globl	EXT(__addll)
 	.type	EXT(__addll),@function
 	.text
@@ -136,7 +129,6 @@ EXT(__addll):
 /* Note, gcc will never call this function, but it is present in case an
    ABI program calls it.  */
 
-	.file	"_subll.s"
 	.globl	EXT(__subll)
 	.type	EXT(__subll),@function
 	.text
@@ -154,7 +146,6 @@ EXT(__subll):
 /* Note, gcc will never call this function, but it is present in case an
    ABI program calls it.  */
 
-	.file	"_andll.s"
 	.globl	EXT(__andll)
 	.type	EXT(__andll),@function
 	.text
@@ -172,7 +163,6 @@ EXT(__andll):
 /* Note, gcc will never call this function, but it is present in case an
    ABI program calls it.  */
 
-	.file	"_orll.s"
 	.globl	EXT(__orll)
 	.type	EXT(__orll),@function
 	.text
@@ -190,7 +180,6 @@ EXT(__orll):
 /* Note, gcc will never call this function, but it is present in case an
    ABI program calls it.  */
 
-	.file	"_xorll.s"
 	.globl	EXT(__xorll)
 	.type	EXT(__xorll),@function
 	.text
@@ -208,7 +197,6 @@ EXT(__xorll):
 /* Note, gcc will never call this function, but it is present in case an
    ABI program calls it.  */
 
-	.file	"_notll.s"
 	.globl	EXT(__notll)
 	.type	EXT(__notll),@function
 	.text
@@ -241,7 +229,6 @@ EXT(__notll):
  * }
  */
 
-	.file	"_cmov.s"
 	.globl	EXT(__cmov)
 	.type	EXT(__cmov),@function
 	.text

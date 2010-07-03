@@ -1,6 +1,7 @@
 /* Definitions of target machine for GNU compiler, for Sun SPARC.
    Copyright (C) 1987, 1988, 1989, 1992, 1994, 1995, 1996, 1997, 1998, 1999
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com).
    64-bit SPARC-V9 support by Michael Tiemann, Jim Wilson, and Doug Evans,
    at Cygnus Support.
@@ -606,7 +607,7 @@ extern struct sparc_cpu_select sparc_select[];
 #define MIN_UNITS_PER_WORD	4
 #endif
 
-#define UNITS_PER_SIMD_WORD	(TARGET_VIS ? 8 : UNITS_PER_WORD)
+#define UNITS_PER_SIMD_WORD(MODE) (TARGET_VIS ? 8 : UNITS_PER_WORD)
 
 /* Now define the sizes of the C data types.  */
 
@@ -616,9 +617,13 @@ extern struct sparc_cpu_select sparc_select[];
 #define LONG_LONG_TYPE_SIZE	64
 #define FLOAT_TYPE_SIZE		32
 #define DOUBLE_TYPE_SIZE	64
+
 /* LONG_DOUBLE_TYPE_SIZE is defined per OS even though the
    SPARC ABI says that it is 128-bit wide.  */
 /* #define LONG_DOUBLE_TYPE_SIZE	128 */
+
+/* The widest floating-point format really supported by the hardware.  */
+#define WIDEST_HARDWARE_FP_SIZE 64
 
 /* Width in bits of a pointer.
    See also the macro `Pmode' defined below.  */
@@ -953,7 +958,7 @@ extern int sparc_mode_class[];
 /* Given the stack bias, the stack pointer isn't actually aligned.  */
 #define INIT_EXPANDERS							 \
   do {									 \
-    if (cfun && cfun->emit->regno_pointer_align && SPARC_STACK_BIAS)	 \
+    if (crtl->emit.regno_pointer_align && SPARC_STACK_BIAS)	 \
       {									 \
 	REGNO_POINTER_ALIGN (STACK_POINTER_REGNUM) = BITS_PER_UNIT;	 \
 	REGNO_POINTER_ALIGN (HARD_FRAME_POINTER_REGNUM) = BITS_PER_UNIT; \
@@ -981,9 +986,12 @@ extern int sparc_mode_class[];
 
 /* Pick a default value we can notice from override_options:
    !v9: Default is on.
-   v9: Default is off.  */
+   v9: Default is off.
+   Originally it was -1, but later on the container of options changed to
+   unsigned byte, so we decided to pick 127 as default value, which does
+   reflect an undefined default value in case of 0/1.  */
 
-#define DEFAULT_PCC_STRUCT_RETURN -1
+#define DEFAULT_PCC_STRUCT_RETURN 127
 
 /* Functions which return large structures get the address
    to place the wanted value at offset 64 from the frame.
@@ -1074,6 +1082,19 @@ enum reg_class { NO_REGS, FPCC_REGS, I64_REGS, GENERAL_REGS, FP_REGS,
    {-1, -1, 0, 0x20},	/* GENERAL_OR_FP_REGS */	\
    {-1, -1, -1, 0x20},	/* GENERAL_OR_EXTRA_FP_REGS */	\
    {-1, -1, -1, 0x3f}}	/* ALL_REGS */
+
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+
+#define IRA_COVER_CLASSES						     \
+{									     \
+  GENERAL_REGS, EXTRA_FP_REGS, FPCC_REGS, LIM_REG_CLASSES		     \
+}
 
 /* Defines invalid mode changes.  Borrowed from pa64-regs.h.
 
@@ -1190,42 +1211,6 @@ extern char leaf_reg_remap[];
 /* Local macro to handle the two v9 classes of FP regs.  */
 #define FP_REG_CLASS_P(CLASS) ((CLASS) == FP_REGS || (CLASS) == EXTRA_FP_REGS)
 
-/* Get reg_class from a letter such as appears in the machine description.
-   In the not-v9 case, coerce v9's 'e' class to 'f', so we can use 'e' in the
-   .md file for v8 and v9.
-   'd' and 'b' are used for single and double precision VIS operations,
-   if TARGET_VIS.
-   'h' is used for V8+ 64 bit global and out registers.  */
-
-#define REG_CLASS_FROM_LETTER(C)		\
-(TARGET_V9					\
- ? ((C) == 'f' ? FP_REGS			\
-    : (C) == 'e' ? EXTRA_FP_REGS 		\
-    : (C) == 'c' ? FPCC_REGS			\
-    : ((C) == 'd' && TARGET_VIS) ? FP_REGS\
-    : ((C) == 'b' && TARGET_VIS) ? EXTRA_FP_REGS\
-    : ((C) == 'h' && TARGET_V8PLUS) ? I64_REGS\
-    : NO_REGS)					\
- : ((C) == 'f' ? FP_REGS			\
-    : (C) == 'e' ? FP_REGS			\
-    : (C) == 'c' ? FPCC_REGS			\
-    : NO_REGS))
-
-/* The letters I, J, K, L, M, N, O, P in a register constraint string
-   can be used to stand for particular ranges of CONST_INTs.
-   This macro defines what the ranges are.
-   C is the letter, and VALUE is a constant value.
-   Return 1 if VALUE is in the range specified by C.
-
-   `I' is used for the range of constants an insn can actually contain.
-   `J' is used for the range which is just zero (since that is R0).
-   `K' is used for constants which can be loaded with a single sethi insn.
-   `L' is used for the range of constants supported by the movcc insns.
-   `M' is used for the range of constants supported by the movrcc insns.
-   `N' is like K, but for constants wider than 32 bits.
-   `O' is used for the range which is just 4096.
-   `P' is free.  */
-
 /* Predicates for 10-bit, 11-bit and 13-bit signed constants.  */
 #define SPARC_SIMM10_P(X) ((unsigned HOST_WIDE_INT) (X) + 0x200 < 0x400)
 #define SPARC_SIMM11_P(X) ((unsigned HOST_WIDE_INT) (X) + 0x400 < 0x800)
@@ -1251,24 +1236,6 @@ extern char leaf_reg_remap[];
 /* Version of the above predicate for SImode constants and below.  */
 #define SPARC_SETHI32_P(X) \
   (SPARC_SETHI_P ((unsigned HOST_WIDE_INT) (X) & GET_MODE_MASK (SImode)))
-
-#define CONST_OK_FOR_LETTER_P(VALUE, C)  \
-  ((C) == 'I' ? SPARC_SIMM13_P (VALUE)			\
-   : (C) == 'J' ? (VALUE) == 0				\
-   : (C) == 'K' ? SPARC_SETHI32_P (VALUE)		\
-   : (C) == 'L' ? SPARC_SIMM11_P (VALUE)		\
-   : (C) == 'M' ? SPARC_SIMM10_P (VALUE)		\
-   : (C) == 'N' ? SPARC_SETHI_P (VALUE)			\
-   : (C) == 'O' ? (VALUE) == 4096			\
-   : 0)
-
-/* Similar, but for CONST_DOUBLEs, and defining letters G and H.
-   Here VALUE is the CONST_DOUBLE rtx itself.  */
-
-#define CONST_DOUBLE_OK_FOR_LETTER_P(VALUE, C)	\
-  ((C) == 'G' ? const_zero_operand (VALUE, GET_MODE (VALUE))	\
-   : (C) == 'H' ? arith_double_operand (VALUE, DImode)		\
-   : 0)
 
 /* Given an rtx X being reloaded into a reg required to be
    in class CLASS, return the class of reg to actually use.
@@ -1351,16 +1318,6 @@ extern char leaf_reg_remap[];
 #define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, MODE) \
   (FP_REG_CLASS_P (CLASS1) != FP_REG_CLASS_P (CLASS2))
 
-/* Return the stack location to use for secondary memory needed reloads.
-   We want to use the reserved location just below the frame pointer.
-   However, we must ensure that there is a frame, so use assign_stack_local
-   if the frame size is zero.  */
-#define SECONDARY_MEMORY_NEEDED_RTX(MODE) \
-  (get_frame_size () == 0						\
-   ? assign_stack_local (MODE, GET_MODE_SIZE (MODE), 0)			\
-   : gen_rtx_MEM (MODE, plus_constant (frame_pointer_rtx,		\
-				       STARTING_FRAME_OFFSET)))
-
 /* Get_secondary_mem widens its argument to BITS_PER_WORD which loses on v9
    because the movsi and movsf patterns don't handle r/f moves.
    For v8 we copy the default definition.  */
@@ -1396,11 +1353,7 @@ extern char leaf_reg_remap[];
    If FRAME_GROWS_DOWNWARD, this is the offset to the END of the
    first local allocated.  Otherwise, it is the offset to the BEGINNING
    of the first local allocated.  */
-/* This allows space for one TFmode floating point value, which is used
-   by SECONDARY_MEMORY_NEEDED_RTX.  */
-#define STARTING_FRAME_OFFSET \
-  (TARGET_ARCH64 ? -16 \
-   : (-SPARC_STACK_ALIGN (LONG_DOUBLE_TYPE_SIZE / BITS_PER_UNIT)))
+#define STARTING_FRAME_OFFSET 0
 
 /* Offset of first parameter from the argument pointer register value.
    !v9: This is 64 for the ins and locals, plus 4 for the struct-return reg
@@ -1678,11 +1631,11 @@ do {									\
 
 #define EXIT_IGNORE_STACK	\
  (get_frame_size () != 0	\
-  || current_function_calls_alloca || current_function_outgoing_args_size)
+  || cfun->calls_alloca || crtl->outgoing_args_size)
 
 /* Define registers used by the epilogue and return instruction.  */
 #define EPILOGUE_USES(REGNO) ((REGNO) == 31 \
-  || (current_function_calls_eh_return && (REGNO) == 1))
+  || (crtl->calls_eh_return && (REGNO) == 1))
 
 /* Length in units of the trampoline for entering a nested function.  */
 
@@ -1724,7 +1677,7 @@ do {									\
 /* This is the offset of the return address to the true next instruction to be
    executed for the current function.  */
 #define RETURN_ADDR_OFFSET \
-  (8 + 4 * (! TARGET_ARCH64 && current_function_returns_struct))
+  (8 + 4 * (! TARGET_ARCH64 && cfun->returns_struct))
 
 /* The current return address is in %i7.  The return address of anything
    farther back is in the register window save area at [%fp+60].  */
@@ -1868,30 +1821,6 @@ do {									\
    After reload, it makes no difference, since pseudo regs have
    been eliminated by then.  */
 
-/* Optional extra constraints for this machine.
-
-   'D' handles vector constants.
-
-   'Q' handles floating point constants which can be moved into
-       an integer register with a single sethi instruction.
-
-   'R' handles floating point constants which can be moved into
-       an integer register with a single mov instruction.
-
-   'S' handles floating point constants which can be moved into
-       an integer register using a high/lo_sum sequence.
-
-   'T' handles memory addresses where the alignment is known to
-       be at least 8 bytes.
-
-   `U' handles all pseudo registers or a hard even numbered
-       integer register, needed for ldd/std instructions.
-
-   'W' handles the memory operand when moving operands in/out
-       of 'e' constraint floating point registers.
-
-   'Y' handles the zero vector constant.  */
-
 #ifndef REG_OK_STRICT
 
 /* Nonzero if X is a hard reg that can be used as an index
@@ -1905,24 +1834,12 @@ do {									\
    or if it is a pseudo reg.  */
 #define REG_OK_FOR_BASE_P(X)  REG_OK_FOR_INDEX_P (X)
 
-/* 'T', 'U' are for aligned memory loads which aren't needed for arch64.
-   'W' is like 'T' but is assumed true on arch64.
-
-   Remember to accept pseudo-registers for memory constraints if reload is
-   in progress.  */
-
-#define EXTRA_CONSTRAINT(OP, C) \
-	sparc_extra_constraint_check(OP, C, 0)
-
 #else
 
 /* Nonzero if X is a hard reg that can be used as an index.  */
 #define REG_OK_FOR_INDEX_P(X) REGNO_OK_FOR_INDEX_P (REGNO (X))
 /* Nonzero if X is a hard reg that can be used as a base reg.  */
 #define REG_OK_FOR_BASE_P(X) REGNO_OK_FOR_BASE_P (REGNO (X))
-
-#define EXTRA_CONSTRAINT(OP, C) \
-	sparc_extra_constraint_check(OP, C, 1)
 
 #endif
 
@@ -2085,7 +2002,7 @@ do {                                                                    \
 /* If a memory-to-memory move would take MOVE_RATIO or more simple
    move-instruction pairs, we will do a movmem or libcall instead.  */
 
-#define MOVE_RATIO (optimize_size ? 3 : 8)
+#define MOVE_RATIO(speed) ((speed) ? 8 : 3)
 
 /* Define if operations between registers always perform the operation
    on the full register even if a narrower mode is specified.  */
@@ -2182,7 +2099,7 @@ do {                                                                    \
    On Niagara-2, a not-taken branch costs 1 cycle whereas a taken
    branch costs 6 cycles.  */
 
-#define BRANCH_COST \
+#define BRANCH_COST(speed_p, predictable_p) \
 	((sparc_cpu == PROCESSOR_V9 \
 	  || sparc_cpu == PROCESSOR_ULTRASPARC) \
 	 ? 7 \
@@ -2380,9 +2297,6 @@ extern int sparc_indent_opcode;
       }					\
   } while (0)
 
-#define SPARC_SYMBOL_REF_TLS_P(RTX) \
-  (GET_CODE (RTX) == SYMBOL_REF && SYMBOL_REF_TLS_MODEL (RTX) != 0)
-
 #define PRINT_OPERAND_PUNCT_VALID_P(CHAR) \
   ((CHAR) == '#' || (CHAR) == '*' || (CHAR) == '('		\
    || (CHAR) == ')' || (CHAR) == '_' || (CHAR) == '&')
@@ -2485,3 +2399,6 @@ extern int sparc_indent_opcode;
 
 /* The number of Pmode words for the setjmp buffer.  */
 #define JMP_BUF_SIZE 12
+
+/* We use gcc _mcount for profiling.  */
+#define NO_PROFILE_COUNTERS 0

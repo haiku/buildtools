@@ -1,5 +1,5 @@
 /* Lambda matrix transformations.
-   Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dberlin@dberlin.org>.
 
 This file is part of GCC.
@@ -25,6 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ggc.h"
 #include "tree.h"
 #include "target.h"
+#include "tree-flow.h"
 #include "lambda.h"
 
 /* Allocate a new transformation matrix.  */

@@ -1,13 +1,13 @@
 # @configure_input@
 # Makefile for libcpp.  Run 'configure' to generate Makefile from Makefile.in
 
-# Copyright (C) 2004 Free Software Foundation, Inc.
+# Copyright (C) 2004, 2008, 2009 Free Software Foundation, Inc.
 
 #This file is part of libcpp.
 
 #libcpp is free software; you can redistribute it and/or modify
 #it under the terms of the GNU General Public License as published by
-#the Free Software Foundation; either version 2, or (at your option)
+#the Free Software Foundation; either version 3, or (at your option)
 #any later version.
 
 #libcpp is distributed in the hope that it will be useful,
@@ -16,9 +16,8 @@
 #GNU General Public License for more details.
 
 #You should have received a copy of the GNU General Public License
-#along with libcpp; see the file COPYING.  If not, write to
-#the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-#Boston MA 02110-1301, USA.
+#along with libcpp; see the file COPYING3.  If not see
+#<http://www.gnu.org/licenses/>.
 
 @SET_MAKE@
 
@@ -54,6 +53,7 @@ XGETTEXT = @XGETTEXT@
 DEPMODE = @CCDEPMODE@
 DEPDIR = @DEPDIR@
 
+datarootdir = @datarootdir@
 datadir = @datadir@
 exec_prefix = @prefix@
 libdir = @libdir@
@@ -109,6 +109,7 @@ $(srcdir)/aclocal.m4: @MAINT@ $(srcdir)/../config/acx.m4 \
 	$(srcdir)/../config/gettext-sister.m4 $(srcdir)/../config/iconv.m4 \
 	$(srcdir)/../config/codeset.m4 $(srcdir)/../config/lib-ld.m4 \
 	$(srcdir)/../config/lib-link.m4 $(srcdir)/../config/lib-prefix.m4 \
+	$(srcdir)/../config/override.m4 $(srcdir)/../config/proginstall.m4 \
 	$(srcdir)/configure.ac
 	cd $(srcdir) && $(ACLOCAL) -I ../config
 
@@ -119,7 +120,7 @@ stamp-h1: $(srcdir)/config.in config.status
 	-rm -f stamp-h1
 	$(SHELL) ./config.status config.h
 
-$(srcdir)/config.in: @MAINT@ $(srcdir)/configure
+$(srcdir)/config.in: @MAINT@ $(srcdir)/configure.ac
 	cd $(srcdir) && $(AUTOHEADER)
 	-rm -f stamp-h1
 
@@ -197,20 +198,28 @@ update-po: $(CATALOGS:.gmo=.pox)
 # Dependency rule.
 COMPILE.base = $(CC) $(DEFS) $(INCLUDES) $(CPPFLAGS) $(ALL_CFLAGS) -c
 ifeq ($(DEPMODE),depmode=gcc3)
-COMPILE = $(COMPILE.base) -o $@ -MT $@ -MMD -MP -MF $(DEPDIR)/$*.Po
+# Note that we put the dependencies into a .Tpo file, then move them
+# into place if the compile succeeds.  We need this because gcc does
+# not atomically write the dependency output file.
+COMPILE = $(COMPILE.base) -o $@ -MT $@ -MMD -MP -MF $(DEPDIR)/$*.Tpo
+POSTCOMPILE = @mv $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
 else
 COMPILE = source='$<' object='$@' libtool=no DEPDIR=$(DEPDIR) $(DEPMODE) \
 	  $(depcomp) $(COMPILE.base)
+# depcomp handles atomicity for us, so we don't need a postcompile
+# step.
+POSTCOMPILE =
 endif
 
 # Implicit rules and I18N
 
 .c.o:
 	$(COMPILE) $<
+	$(POSTCOMPILE)
 
 # N.B. We do not attempt to copy these into $(srcdir).
 .po.gmo:
-	-test -d po || mkdir po
+	$(mkinstalldirs) po
 	$(GMSGFMT) --statistics -o $@ $<
 
 # The new .po has to be gone over by hand, so we deposit it into
@@ -218,7 +227,7 @@ endif
 # If build/po/$(PACKAGE).pot exists, use it (it was just created),
 # else use the one in srcdir.
 .po.pox:
-	-test -d po || mkdir po
+	$(mkinstalldirs) po
 	$(MSGMERGE) $< `if test -f po/$(PACKAGE).pot; \
 	                then echo po/$(PACKAGE).pot; \
 	                else echo $(srcdir)/po/$(PACKAGE).pot; fi` -o $@
@@ -226,7 +235,7 @@ endif
 # Rule for regenerating the message template.
 $(PACKAGE).pot: po/$(PACKAGE).pot
 po/$(PACKAGE).pot: $(libcpp_a_SOURCES)
-	-test -d $(srcdir)/po || mkdir $(srcdir)/po
+	$(mkinstalldirs) $(srcdir)/po
 	$(XGETTEXT) --default-domain=$(PACKAGE) \
 	  --keyword=_ --keyword=N_ \
 	  --keyword=cpp_error:3 --keyword=cpp_errno:3 \
@@ -238,6 +247,12 @@ po/$(PACKAGE).pot: $(libcpp_a_SOURCES)
 	sed 's:$(srcdir)/::g' <po/$(PACKAGE).pot.tmp >po/$(PACKAGE).pot
 	rm po/$(PACKAGE).pot.tmp
 
+TAGS_SOURCES = $(libcpp_a_SOURCES) makedepend.c internal.h ucnid.h \
+    include/line-map.h include/symtab.h include/cpp-id-data.h \
+    include/cpplib.h include/mkdeps.h system.h
+
+TAGS: $(TAGS_SOURCES)
+	cd $(srcdir) && etags $(TAGS_SOURCES)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

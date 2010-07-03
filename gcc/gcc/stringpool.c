@@ -1,5 +1,5 @@
 /* String pool for GCC.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -18,9 +18,8 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* String text, identifier text and identifier node allocator.  Strings
-   allocated by ggc_alloc_string are stored in an obstack which is
-   never shrunk.  Identifiers are uniquely stored in a hash table.
+/* String text, identifier text and identifier node allocator.
+   Identifiers are uniquely stored in a hash table.
 
    We use cpplib's hash table implementation.  libiberty's
    hashtab.c is not used because it requires 100% average space
@@ -47,7 +46,6 @@ const char digit_vector[] = {
 };
 
 struct ht *ident_hash;
-static struct obstack string_stack;
 
 static hashnode alloc_node (hash_table *);
 static int mark_ident (struct cpp_reader *, hashnode, const void *);
@@ -66,7 +64,6 @@ init_stringpool (void)
   ident_hash = ht_create (14);
   ident_hash->alloc_node = alloc_node;
   ident_hash->alloc_subobject = stringpool_ggc_alloc;
-  gcc_obstack_init (&string_stack);
 }
 
 /* Allocate a hash node.  */
@@ -78,13 +75,13 @@ alloc_node (hash_table *table ATTRIBUTE_UNUSED)
 
 /* Allocate and return a string constant of length LENGTH, containing
    CONTENTS.  If LENGTH is -1, CONTENTS is assumed to be a
-   nul-terminated string, and the length is calculated using strlen.
-   If the same string constant has been allocated before, that copy is
-   returned this time too.  */
+   nul-terminated string, and the length is calculated using strlen.  */
 
 const char *
 ggc_alloc_string (const char *contents, int length)
 {
+  char *result;
+
   if (length == -1)
     length = strlen (contents);
 
@@ -93,8 +90,10 @@ ggc_alloc_string (const char *contents, int length)
   if (length == 1 && ISDIGIT (contents[0]))
     return digit_string (contents[0] - '0');
 
-  obstack_grow0 (&string_stack, contents, length);
-  return XOBFINISH (&string_stack, const char *);
+  result = GGC_NEWVAR (char, length + 1);
+  memcpy (result, contents, length);
+  result[length] = '\0';
+  return (const char *) result;
 }
 
 /* Return an IDENTIFIER_NODE whose name is TEXT (a null-terminated string).
@@ -163,9 +162,18 @@ mark_ident (struct cpp_reader *pfile ATTRIBUTE_UNUSED, hashnode h,
   return 1;
 }
 
+/* Return true if an identifier should be removed from the table.  */
+
+static int
+maybe_delete_ident (struct cpp_reader *pfile ATTRIBUTE_UNUSED, hashnode h,
+		    const void *v ATTRIBUTE_UNUSED)
+{
+  return !ggc_marked_p (HT_IDENT_TO_GCC_IDENT (h));
+}
+
 /* Mark the trees hanging off the identifier node for GGC.  These are
-   handled specially (not using gengtype) because of the special
-   treatment for strings.  */
+   handled specially (not using gengtype) because identifiers are only
+   roots during one part of compilation.  */
 
 void
 ggc_mark_stringpool (void)
@@ -173,13 +181,13 @@ ggc_mark_stringpool (void)
   ht_forall (ident_hash, mark_ident, NULL);
 }
 
-/* Strings are _not_ GCed, but this routine exists so that a separate
-   roots table isn't needed for the few global variables that refer
-   to strings.  */
+/* Purge the identifier hash of identifiers which are no longer
+   referenced.  */
 
 void
-gt_ggc_m_S (void *x ATTRIBUTE_UNUSED)
+ggc_purge_stringpool (void)
 {
+  ht_purge (ident_hash, maybe_delete_ident, NULL);
 }
 
 /* Pointer-walking routine for strings (not very interesting, since
@@ -197,8 +205,8 @@ gt_pch_p_S (void *obj ATTRIBUTE_UNUSED, void *x ATTRIBUTE_UNUSED,
 void
 gt_pch_n_S (const void *x)
 {
-  gt_pch_note_object ((void *)x, (void *)x, &gt_pch_p_S,
-		      gt_types_enum_last);
+  gt_pch_note_object (CONST_CAST (void *, x), CONST_CAST (void *, x),
+		      &gt_pch_p_S, gt_types_enum_last);
 }
 
 /* Handle saving and restoring the string pool for PCH.  */
@@ -224,10 +232,10 @@ static GTY(()) struct string_pool_data * spd;
 void
 gt_pch_save_stringpool (void)
 {
-  spd = ggc_alloc (sizeof (*spd));
+  spd = GGC_NEW (struct string_pool_data);
   spd->nslots = ident_hash->nslots;
   spd->nelements = ident_hash->nelements;
-  spd->entries = ggc_alloc (sizeof (spd->entries[0]) * spd->nslots);
+  spd->entries = GGC_NEWVEC (struct ht_identifier *, spd->nslots);
   memcpy (spd->entries, ident_hash->entries,
 	  spd->nslots * sizeof (spd->entries[0]));
 }

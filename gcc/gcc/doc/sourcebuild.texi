@@ -1,5 +1,5 @@
-@c Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008 Free Software Foundation,
-@c Inc.
+@c Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009
+@c Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -42,6 +42,13 @@ pages from Texinfo manuals as part of the GCC build process.
 An implementation of the @command{jar} command, used with the Java
 front end.
 
+@item fixincludes
+The support for fixing system headers to work with GCC@.  See
+@file{fixincludes/README} for more information.  The headers fixed by
+this mechanism are installed in @file{@var{libsubdir}/include-fixed}.
+Along with those headers, @file{README-fixinc} is also installed, as
+@file{@var{libsubdir}/include-fixed/README}.
+
 @item gcc
 The main sources of GCC itself (except for runtime libraries),
 including optimizers, support for different target architectures,
@@ -50,6 +57,10 @@ language front ends, and testsuites.  @xref{gcc Directory, , The
 
 @item include
 Headers for the @code{libiberty} library.
+
+@item intl
+GNU @code{libintl}, from GNU @code{gettext}, for systems which do not
+include it in libc.
 
 @item libada
 The Ada runtime library.
@@ -142,23 +153,11 @@ Texinfo documentation for GCC, together with automatically generated
 man pages and support for converting the installation manual to
 HTML@.  @xref{Documentation}.
 
-@item fixinc
-The support for fixing system headers to work with GCC@.  See
-@file{fixinc/README} for more information.  The headers fixed by this
-mechanism are installed in @file{@var{libsubdir}/include}.  Along with
-those headers, @file{README-fixinc} is also installed, as
-@file{@var{libsubdir}/include/README}.
-
 @item ginclude
 System headers installed by GCC, mainly those required by the C
 standard of freestanding implementations.  @xref{Headers, , Headers
 Installed by GCC}, for details of when these and other headers are
 installed.
-
-@item intl
-GNU @code{libintl}, from GNU @code{gettext}, for systems which do not
-include it in libc.  Properly, this directory should be at top level,
-parallel to the @file{gcc} directory.
 
 @item po
 Message catalogs with translations of messages produced by GCC into
@@ -198,9 +197,7 @@ timestamp.
 
 @itemize @bullet
 @item The standard GNU @file{config.sub} and @file{config.guess}
-files, kept in the top level directory, are used.  FIXME: when is the
-@file{config.guess} file in the @file{gcc} directory (that just calls
-the top level one) used?
+files, kept in the top level directory, are used.
 
 @item The file @file{config.gcc} is used to handle configuration
 specific to the particular target machine.  The file
@@ -643,6 +640,9 @@ all generated files in the source directory that are not checked into
 CVS, but should not delete anything checked into CVS@.
 @end table
 
+@file{Make-lang.in} must also define a variable @code{@var{lang}_OBJS}
+to a list of host object files that are used by that language.
+
 @item lang.opt
 This file registers the set of switches that the front end accepts on
 the command line, and their @option{--help} text.  @xref{Options}.
@@ -1021,7 +1021,11 @@ an empty @var{exclude-opts} list.
 
 @item  @{ dg-xfail-if @var{comment} @{ @var{selector} @} @{ @var{include-opts} @} @{ @var{exclude-opts} @} @}
 Expect the test to fail if the conditions (which are the same as for
-@code{dg-skip-if}) are met.
+@code{dg-skip-if}) are met.  This does not affect the execute step.
+
+@item  @{ dg-xfail-run-if @var{comment} @{ @var{selector} @} @{ @var{include-opts} @} @{ @var{exclude-opts} @} @}
+Expect the execute step of a test to fail if the conditions (which are
+the same as for @code{dg-skip-if}) and @code{dg-xfail-if}) are met.
 
 @item @{ dg-require-@var{support} args @}
 Skip the test if the target does not provide the required support;
@@ -1571,7 +1575,7 @@ Finalize use of torture lists.
 @end table
 
 The @file{.exp} file for a set of tests that use torture options must
-include calls to these three procecures if:
+include calls to these three procedures if:
 
 @itemize @bullet
 @item It calls @code{gcc-dg-runtest} and overrides @var{DG_TORTURE_OPTIONS}.
@@ -1588,4 +1592,12 @@ to call the torture procedures if the tests should use the list in
 @var{DG_TORTURE_OPTIONS} defined in @file{gcc-dg.exp}.
 
 Most uses of torture options can override the default lists by defining
-@var{TORTURE_OPTIONS} in a @file{.dejagnurc} file.
+@var{TORTURE_OPTIONS} or add to the default list by defining
+@var{ADDITIONAL_TORTURE_OPTIONS}.  Define these in a @file{.dejagnurc}
+file or add them to the @file{site.exp} file; for example
+
+@smallexample
+set ADDITIONAL_TORTURE_OPTIONS  [list \
+  @{ -O2 -ftree-loop-linear @} \
+  @{ -O2 -fpeel-loops @} ]
+@end smallexample

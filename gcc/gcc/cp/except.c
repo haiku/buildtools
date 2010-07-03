@@ -1,6 +1,7 @@
 /* Handle exceptional things in C++.
    Copyright (C) 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007  Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Michael Tiemann <tiemann@cygnus.com>
    Rewritten by Mike Stump <mrs@cygnus.com>, based upon an
    initial re-implementation courtesy Tad Hunt.
@@ -38,6 +39,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-inline.h"
 #include "tree-iterator.h"
 #include "target.h"
+#include "gimple.h"
 
 static void push_eh_cleanup (tree);
 static tree prepare_eh_type (tree);
@@ -52,7 +54,7 @@ static tree wrap_cleanups_r (tree *, int *, void *);
 static int complete_ptr_ref_or_void_ptr_p (tree, tree);
 static bool is_admissible_throw_operand (tree);
 static int can_convert_eh (tree, tree);
-static tree cp_protect_cleanup_actions (void);
+static gimple cp_protect_cleanup_actions (void);
 
 /* Sets up all the global eh stuff that needs to be initialized at the
    start of compilation.  */
@@ -91,14 +93,14 @@ init_exception_processing (void)
 /* Returns an expression to be executed if an unhandled exception is
    propagated out of a cleanup region.  */
 
-static tree
+static gimple
 cp_protect_cleanup_actions (void)
 {
   /* [except.terminate]
 
      When the destruction of an object during stack unwinding exits
      using an exception ... void terminate(); is called.  */
-  return build_call_n (terminate_node, 0);
+  return gimple_build_call (terminate_node, 0);
 }
 
 static tree
@@ -160,6 +162,21 @@ build_exc_ptr (void)
   return build0 (EXC_PTR_EXPR, ptr_type_node);
 }
 
+/* Declare a function NAME, returning RETURN_TYPE, taking a single
+   parameter PARM_TYPE, with an empty exception specification.
+
+   Note that the C++ ABI document does not have a throw-specifier on
+   the routines declared below via this function.  The declarations
+   are consistent with the actual implementations in libsupc++.  */
+
+static tree
+declare_nothrow_library_fn (tree name, tree return_type, tree parm_type)
+{
+  tree tmp = tree_cons (NULL_TREE, parm_type, void_list_node);
+  return push_library_fn (name, build_function_type (return_type, tmp),
+			  empty_except_spec);
+}
+
 /* Build up a call to __cxa_get_exception_ptr so that we can build a
    copy constructor for the thrown object.  */
 
@@ -171,13 +188,13 @@ do_get_exception_ptr (void)
   fn = get_identifier ("__cxa_get_exception_ptr");
   if (!get_global_value_if_present (fn, &fn))
     {
-      /* Declare void* __cxa_get_exception_ptr (void *).  */
-      tree tmp = tree_cons (NULL_TREE, ptr_type_node, void_list_node);
-      fn = push_library_fn (fn, build_function_type (ptr_type_node, tmp));
+      /* Declare void* __cxa_get_exception_ptr (void *) throw().  */
+      fn = declare_nothrow_library_fn (fn, ptr_type_node, ptr_type_node);
     }
 
-  return build_function_call (fn, tree_cons (NULL_TREE, build_exc_ptr (),
-					     NULL_TREE));
+  return cp_build_function_call (fn, tree_cons (NULL_TREE, build_exc_ptr (),
+						NULL_TREE),
+				 tf_warning_or_error);
 }
 
 /* Build up a call to __cxa_begin_catch, to tell the runtime that the
@@ -191,13 +208,13 @@ do_begin_catch (void)
   fn = get_identifier ("__cxa_begin_catch");
   if (!get_global_value_if_present (fn, &fn))
     {
-      /* Declare void* __cxa_begin_catch (void *).  */
-      tree tmp = tree_cons (NULL_TREE, ptr_type_node, void_list_node);
-      fn = push_library_fn (fn, build_function_type (ptr_type_node, tmp));
+      /* Declare void* __cxa_begin_catch (void *) throw().  */
+      fn = declare_nothrow_library_fn (fn, ptr_type_node, ptr_type_node);
     }
 
-  return build_function_call (fn, tree_cons (NULL_TREE, build_exc_ptr (),
-					     NULL_TREE));
+  return cp_build_function_call (fn, tree_cons (NULL_TREE, build_exc_ptr (),
+						NULL_TREE),
+				 tf_warning_or_error);
 }
 
 /* Returns nonzero if cleaning up an exception of type TYPE (which can be
@@ -235,7 +252,7 @@ do_end_catch (tree type)
       TREE_NOTHROW (fn) = 0;
     }
 
-  cleanup = build_function_call (fn, NULL_TREE);
+  cleanup = cp_build_function_call (fn, NULL_TREE, tf_warning_or_error);
   TREE_NOTHROW (cleanup) = dtor_nothrow (type);
 
   return cleanup;
@@ -377,7 +394,7 @@ initialize_handler_parm (tree decl, tree exp)
      pointer catch parm with the address of the temporary.  */
   if (TREE_CODE (init_type) == REFERENCE_TYPE
       && TYPE_PTR_P (TREE_TYPE (init_type)))
-    exp = build_unary_op (ADDR_EXPR, exp, 1);
+    exp = cp_build_unary_op (ADDR_EXPR, exp, 1, tf_warning_or_error);
 
   exp = ocp_convert (init_type, exp, CONV_IMPLICIT|CONV_FORCE_TEMP, 0);
 
@@ -434,7 +451,7 @@ expand_start_catch_block (tree decl)
       exp = build2 (POINTER_PLUS_EXPR, TREE_TYPE (exp), exp,
 		    fold_build1 (NEGATE_EXPR, sizetype,
 			 	 TYPE_SIZE_UNIT (TREE_TYPE (exp))));
-      exp = build_indirect_ref (exp, NULL);
+      exp = cp_build_indirect_ref (exp, NULL, tf_warning_or_error);
       initialize_handler_parm (decl, exp);
       return type;
     }
@@ -541,13 +558,14 @@ do_allocate_exception (tree type)
   fn = get_identifier ("__cxa_allocate_exception");
   if (!get_global_value_if_present (fn, &fn))
     {
-      /* Declare void *__cxa_allocate_exception(size_t).  */
-      tree tmp = tree_cons (NULL_TREE, size_type_node, void_list_node);
-      fn = push_library_fn (fn, build_function_type (ptr_type_node, tmp));
+      /* Declare void *__cxa_allocate_exception(size_t) throw().  */
+      fn = declare_nothrow_library_fn (fn, ptr_type_node, size_type_node);
     }
 
-  return build_function_call (fn, tree_cons (NULL_TREE, size_in_bytes (type),
-					     NULL_TREE));
+  return cp_build_function_call (fn, 
+				 tree_cons (NULL_TREE, size_in_bytes (type),
+					    NULL_TREE),
+				 tf_warning_or_error);
 }
 
 /* Call __cxa_free_exception from a cleanup.  This is never invoked
@@ -561,12 +579,12 @@ do_free_exception (tree ptr)
   fn = get_identifier ("__cxa_free_exception");
   if (!get_global_value_if_present (fn, &fn))
     {
-      /* Declare void __cxa_free_exception (void *).  */
-      fn = push_void_library_fn (fn, tree_cons (NULL_TREE, ptr_type_node,
-						void_list_node));
+      /* Declare void __cxa_free_exception (void *) throw().  */
+      fn = declare_nothrow_library_fn (fn, void_type_node, ptr_type_node);
     }
 
-  return build_function_call (fn, tree_cons (NULL_TREE, ptr, NULL_TREE));
+  return cp_build_function_call (fn, tree_cons (NULL_TREE, ptr, NULL_TREE),
+				 tf_warning_or_error);
 }
 
 /* Wrap all cleanups for TARGET_EXPRs in MUST_NOT_THROW_EXPR.
@@ -644,7 +662,8 @@ build_throw (tree exp)
 	  return error_mark_node;
 	}
       fn = OVL_CURRENT (fn);
-      exp = build_function_call (fn, tree_cons (NULL_TREE, exp, NULL_TREE));
+      exp = cp_build_function_call (fn, tree_cons (NULL_TREE, exp, NULL_TREE),
+				    tf_warning_or_error);
     }
   else if (exp)
     {
@@ -708,7 +727,7 @@ build_throw (tree exp)
       allocate_expr = get_target_expr (allocate_expr);
       ptr = TARGET_EXPR_SLOT (allocate_expr);
       object = build_nop (build_pointer_type (temp_type), ptr);
-      object = build_indirect_ref (object, NULL);
+      object = cp_build_indirect_ref (object, NULL, tf_warning_or_error);
 
       elided = (TREE_CODE (exp) == TARGET_EXPR);
 
@@ -733,7 +752,7 @@ build_throw (tree exp)
 		 (object, complete_ctor_identifier,
 		  build_tree_list (NULL_TREE, exp),
 		  TREE_TYPE (object),
-		  flags));
+		  flags, tf_warning_or_error));
 	  if (exp == error_mark_node)
 	    {
 	      error ("  in thrown expression");
@@ -812,7 +831,7 @@ build_throw (tree exp)
       tmp = tree_cons (NULL_TREE, throw_type, tmp);
       tmp = tree_cons (NULL_TREE, ptr, tmp);
       /* ??? Indicate that this function call throws throw_type.  */
-      tmp = build_function_call (fn, tmp);
+      tmp = cp_build_function_call (fn, tmp, tf_warning_or_error);
 
       /* Tack on the initialization stuff.  */
       exp = build2 (COMPOUND_EXPR, TREE_TYPE (tmp), exp, tmp);
@@ -831,7 +850,7 @@ build_throw (tree exp)
 
       /* ??? Indicate that this function call allows exceptions of the type
 	 of the enclosing catch block (if known).  */
-      exp = build_function_call (fn, NULL_TREE);
+      exp = cp_build_function_call (fn, NULL_TREE, tf_warning_or_error);
     }
 
   exp = build1 (THROW_EXPR, void_type_node, exp);
@@ -1009,8 +1028,8 @@ check_handlers (tree handlers)
 	if (tsi_end_p (i))
 	  break;
 	if (TREE_TYPE (handler) == NULL_TREE)
-	  pedwarn ("%H%<...%> handler must be the last handler for"
-		   " its try block", EXPR_LOCUS (handler));
+	  permerror (input_location, "%H%<...%> handler must be the last handler for"
+		     " its try block", EXPR_LOCUS (handler));
 	else
 	  check_handlers_1 (handler, i);
       }

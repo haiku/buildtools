@@ -1,6 +1,6 @@
 /* Perform simple optimizations to clean up the result of reload.
    Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
-   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -233,6 +233,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
 #ifdef LOAD_EXTEND_OP
   enum rtx_code extend_op = UNKNOWN;
 #endif
+  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
 
   dreg = true_regnum (SET_DEST (set));
   if (dreg < 0)
@@ -267,7 +268,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
     old_cost = REGISTER_MOVE_COST (GET_MODE (src),
 				   REGNO_REG_CLASS (REGNO (src)), dclass);
   else
-    old_cost = rtx_cost (src, SET);
+    old_cost = rtx_cost (src, SET, speed);
 
   for (l = val->locs; l; l = l->next)
     {
@@ -302,7 +303,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
 	      this_rtx = GEN_INT (this_val);
 	    }
 #endif
-	  this_cost = rtx_cost (this_rtx, SET);
+	  this_cost = rtx_cost (this_rtx, SET, speed);
 	}
       else if (REG_P (this_rtx))
 	{
@@ -310,7 +311,7 @@ reload_cse_simplify_set (rtx set, rtx insn)
 	  if (extend_op != UNKNOWN)
 	    {
 	      this_rtx = gen_rtx_fmt_e (extend_op, word_mode, this_rtx);
-	      this_cost = rtx_cost (this_rtx, SET);
+	      this_cost = rtx_cost (this_rtx, SET, speed);
 	    }
 	  else
 #endif
@@ -394,9 +395,9 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
   if (! constrain_operands (1))
     fatal_insn_not_found (insn);
 
-  alternative_reject = alloca (recog_data.n_alternatives * sizeof (int));
-  alternative_nregs = alloca (recog_data.n_alternatives * sizeof (int));
-  alternative_order = alloca (recog_data.n_alternatives * sizeof (int));
+  alternative_reject = XALLOCAVEC (int, recog_data.n_alternatives);
+  alternative_nregs = XALLOCAVEC (int, recog_data.n_alternatives);
+  alternative_order = XALLOCAVEC (int, recog_data.n_alternatives);
   memset (alternative_reject, 0, recog_data.n_alternatives * sizeof (int));
   memset (alternative_nregs, 0, recog_data.n_alternatives * sizeof (int));
 
@@ -487,7 +488,7 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
       int regno;
       const char *p;
 
-      op_alt_regno[i] = alloca (recog_data.n_alternatives * sizeof (int));
+      op_alt_regno[i] = XALLOCAVEC (int, recog_data.n_alternatives);
       for (j = 0; j < recog_data.n_alternatives; j++)
 	op_alt_regno[i][j] = -1;
 
@@ -518,7 +519,7 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
 
       for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
 	{
-	  int class = (int) NO_REGS;
+	  int rclass = (int) NO_REGS;
 
 	  if (! TEST_HARD_REG_BIT (equiv_regs[i], regno))
 	    continue;
@@ -542,23 +543,23 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
 		case '*':  case '%':
 		case '0':  case '1':  case '2':  case '3':  case '4':
 		case '5':  case '6':  case '7':  case '8':  case '9':
-		case 'm':  case '<':  case '>':  case 'V':  case 'o':
+		case '<':  case '>':  case 'V':  case 'o':
 		case 'E':  case 'F':  case 'G':  case 'H':
 		case 's':  case 'i':  case 'n':
 		case 'I':  case 'J':  case 'K':  case 'L':
 		case 'M':  case 'N':  case 'O':  case 'P':
-		case 'p': case 'X':
+		case 'p':  case 'X':  case TARGET_MEM_CONSTRAINT:
 		  /* These don't say anything we care about.  */
 		  break;
 
 		case 'g': case 'r':
-		  class = reg_class_subunion[(int) class][(int) GENERAL_REGS];
+		  rclass = reg_class_subunion[(int) rclass][(int) GENERAL_REGS];
 		  break;
 
 		default:
-		  class
+		  rclass
 		    = (reg_class_subunion
-		       [(int) class]
+		       [(int) rclass]
 		       [(int) REG_CLASS_FROM_CONSTRAINT ((unsigned char) c, p)]);
 		  break;
 
@@ -568,16 +569,18 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
 		     alternative yet and the operand being replaced is not
 		     a cheap CONST_INT.  */
 		  if (op_alt_regno[i][j] == -1
-		      && reg_fits_class_p (testreg, class, 0, mode)
+		      && reg_fits_class_p (testreg, rclass, 0, mode)
 		      && (GET_CODE (recog_data.operand[i]) != CONST_INT
-			  || (rtx_cost (recog_data.operand[i], SET)
-			      > rtx_cost (testreg, SET))))
+			  || (rtx_cost (recog_data.operand[i], SET,
+			  		optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn)))
+			      > rtx_cost (testreg, SET,
+			  		optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn))))))
 		    {
 		      alternative_nregs[j]++;
 		      op_alt_regno[i][j] = regno;
 		    }
 		  j++;
-		  class = (int) NO_REGS;
+		  rclass = (int) NO_REGS;
 		  break;
 		}
 	      p += CONSTRAINT_LEN (c, p);
@@ -661,7 +664,7 @@ reload_cse_simplify_operands (rtx insn, rtx testreg)
    replace them with reg+reg addressing.  */
 #define RELOAD_COMBINE_MAX_USES 6
 
-/* INSN is the insn where a register has ben used, and USEP points to the
+/* INSN is the insn where a register has been used, and USEP points to the
    location of the register within the rtl.  */
 struct reg_use { rtx insn, *usep; };
 
@@ -1240,6 +1243,8 @@ reload_cse_move2add (rtx first)
 		{
 		  rtx new_src = gen_int_mode (INTVAL (src) - reg_offset[regno],
 					      GET_MODE (reg));
+		  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
+
 		  /* (set (reg) (plus (reg) (const_int 0))) is not canonical;
 		     use (set (reg) (reg)) instead.
 		     We don't delete this insn, nor do we convert it into a
@@ -1255,7 +1260,7 @@ reload_cse_move2add (rtx first)
 		      if (INTVAL (src) == reg_offset [regno])
 			validate_change (insn, &SET_SRC (pat), reg, 0);
 		    }
-		  else if (rtx_cost (new_src, PLUS) < rtx_cost (src, SET)
+		  else if (rtx_cost (new_src, PLUS, speed) < rtx_cost (src, SET, speed)
 			   && have_add2_insn (reg, new_src))
 		    {
 		      rtx tem = gen_rtx_PLUS (GET_MODE (reg), reg, new_src);
@@ -1331,14 +1336,15 @@ reload_cse_move2add (rtx first)
 				      + base_offset
 				      - regno_offset,
 				      GET_MODE (reg));
-		      int success = 0;
+		      bool success = false;
+		      bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
 
 		      if (new_src == const0_rtx)
 			/* See above why we create (set (reg) (reg)) here.  */
 			success
 			  = validate_change (next, &SET_SRC (set), reg, 0);
-		      else if ((rtx_cost (new_src, PLUS)
-				< COSTS_N_INSNS (1) + rtx_cost (src3, SET))
+		      else if ((rtx_cost (new_src, PLUS, speed)
+				< COSTS_N_INSNS (1) + rtx_cost (src3, SET, speed))
 			       && have_add2_insn (reg, new_src))
 			{
 			  rtx newpat = gen_rtx_SET (VOIDmode,
@@ -1565,7 +1571,7 @@ move2add_note_store (rtx dst, const_rtx set, void *data ATTRIBUTE_UNUSED)
 static bool
 gate_handle_postreload (void)
 {
-  return (optimize > 0);
+  return (optimize > 0 && reload_completed);
 }
 
 
@@ -1585,8 +1591,10 @@ rest_of_handle_postreload (void)
   return 0;
 }
 
-struct tree_opt_pass pass_postreload_cse =
+struct rtl_opt_pass pass_postreload_cse =
 {
+ {
+  RTL_PASS,
   "postreload",                         /* name */
   gate_handle_postreload,               /* gate */
   rest_of_handle_postreload,            /* execute */
@@ -1599,7 +1607,7 @@ struct tree_opt_pass pass_postreload_cse =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func,                       /* todo_flags_finish */
-  'o'                                   /* letter */
+  TODO_dump_func                        /* todo_flags_finish */
+ }
 };
 

@@ -1,7 +1,7 @@
 /* Handle the hair of processing (but not expanding) inline functions.
    Also manage function and variable name overloading.
    Copyright (C) 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
@@ -38,6 +38,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "target.h"
 #include "tree-pass.h"
 #include "diagnostic.h"
+#include "cgraph.h"
 
 /* Various flags to control the mangling process.  */
 
@@ -154,7 +155,6 @@ make_thunk (tree function, bool this_adjusting,
   DECL_NO_STATIC_CHAIN (thunk) = 1;
   /* The THUNK is not a pending inline, even if the FUNCTION is.  */
   DECL_PENDING_INLINE_P (thunk) = 0;
-  DECL_INLINE (thunk) = 0;
   DECL_DECLARED_INLINE_P (thunk) = 0;
   /* Nor has it been deferred.  */
   DECL_DEFERRED_FN (thunk) = 0;
@@ -280,7 +280,6 @@ make_alias_for (tree function, tree newid)
   DECL_ARTIFICIAL (alias) = 1;
   DECL_NO_STATIC_CHAIN (alias) = 1;
   DECL_PENDING_INLINE_P (alias) = 0;
-  DECL_INLINE (alias) = 0;
   DECL_DECLARED_INLINE_P (alias) = 0;
   DECL_DEFERRED_FN (alias) = 0;
   DECL_USE_TEMPLATE (alias) = 0;
@@ -381,7 +380,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
   DECL_VISIBILITY (thunk_fndecl) = DECL_VISIBILITY (function);
   DECL_VISIBILITY_SPECIFIED (thunk_fndecl)
     = DECL_VISIBILITY_SPECIFIED (function);
-  if (DECL_ONE_ONLY (function))
+  if (DECL_ONE_ONLY (function) || DECL_WEAK (function))
     make_decl_one_only (thunk_fndecl);
 
   if (flag_syntax_only)
@@ -437,7 +436,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
       BLOCK_VARS (fn_block) = a;
       DECL_INITIAL (thunk_fndecl) = fn_block;
       init_function_start (thunk_fndecl);
-      current_function_is_thunk = 1;
+      cfun->is_thunk = 1;
       assemble_start_function (thunk_fndecl, fnname);
 
       targetm.asm_out.output_mi_thunk (asm_out_file, thunk_fndecl,
@@ -507,7 +506,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
 		t = build3 (COND_EXPR, TREE_TYPE (t), cond, t,
 			    cp_convert (TREE_TYPE (t), integer_zero_node));
 	    }
-	  if (IS_AGGR_TYPE (TREE_TYPE (t)))
+	  if (MAYBE_CLASS_TYPE_P (TREE_TYPE (t)))
 	    t = build_cplus_new (TREE_TYPE (t), t);
 	  finish_return_stmt (t);
 	}
@@ -523,8 +522,7 @@ use_thunk (tree thunk_fndecl, bool emit_p)
       pop_deferring_access_checks ();
 
       thunk_fndecl = finish_function (0);
-      tree_lowering_passes (thunk_fndecl);
-      tree_rest_of_compilation (thunk_fndecl);
+      cgraph_add_new_function (thunk_fndecl, false);
     }
 
   pop_from_top_level ();
@@ -674,7 +672,8 @@ do_build_assign_ref (tree fndecl)
 					build_tree_list (NULL_TREE,
 							 converted_parm),
 					base_binfo,
-					LOOKUP_NORMAL | LOOKUP_NONVIRTUAL));
+					LOOKUP_NORMAL | LOOKUP_NONVIRTUAL,
+                                        tf_warning_or_error));
 	}
 
       /* Assign to each of the non-static data members.  */
@@ -729,7 +728,8 @@ do_build_assign_ref (tree fndecl)
 	  init = build3 (COMPONENT_REF, expr_type, init, field, NULL_TREE);
 
 	  if (DECL_NAME (field))
-	    init = build_modify_expr (comp, NOP_EXPR, init);
+	    init = cp_build_modify_expr (comp, NOP_EXPR, init, 
+					 tf_warning_or_error);
 	  else
 	    init = build2 (MODIFY_EXPR, TREE_TYPE (comp), comp, init);
 	  finish_expr_stmt (init);
@@ -770,7 +770,7 @@ synthesize_method (tree fndecl)
   if (! context)
     push_to_top_level ();
   else if (nested)
-    push_function_context_to (context);
+    push_function_context ();
 
   input_location = DECL_SOURCE_LOCATION (fndecl);
 
@@ -808,13 +808,13 @@ synthesize_method (tree fndecl)
   if (! context)
     pop_from_top_level ();
   else if (nested)
-    pop_function_context_from (context);
+    pop_function_context ();
 
   pop_deferring_access_checks ();
 
   if (error_count != errorcount || warning_count != warningcount)
-    inform ("%Hsynthesized method %qD first required here ",
-	    &input_location, fndecl);
+    inform (input_location, "synthesized method %qD first required here ",
+	    fndecl);
 }
 
 /* Use EXTRACTOR to locate the relevant function called for each base &
@@ -1106,9 +1106,9 @@ implicitly_declare_fn (special_function_kind kind, tree type, bool const_p)
   rest_of_decl_compilation (fn, toplevel_bindings_p (), at_eof);
   DECL_IN_AGGR_P (fn) = 1;
   DECL_ARTIFICIAL (fn) = 1;
+  DECL_DEFAULTED_FN (fn) = 1;
   DECL_NOT_REALLY_EXTERN (fn) = 1;
   DECL_DECLARED_INLINE_P (fn) = 1;
-  DECL_INLINE (fn) = 1;
   gcc_assert (!TREE_USED (fn));
 
   /* Restore PROCESSING_TEMPLATE_DECL.  */

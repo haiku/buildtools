@@ -1,12 +1,12 @@
 // { dg-options "-std=gnu++0x" }
 // { dg-do compile }
 
-// Copyright (C) 2007 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -15,9 +15,8 @@
 // GNU General Public License for more details.
 
 // You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// with this library; see the file COPYING3.  If not see
+// <http://www.gnu.org/licenses/>.
 
 // 17.4.1.2 Headers
 
@@ -36,6 +35,7 @@
 #include <csetjmp>
 #include <csignal>
 #include <cstdarg>
+#include <cstdatomic>
 #include <cstdbool>
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +67,7 @@
 #include <math.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdarg.h>
 #ifdef _GLIBCXX_HAVE_STDBOOL_H
 #include <stdbool.h>
@@ -93,9 +94,12 @@
 #include <algorithm>
 #include <array>
 #include <bitset>
+#include <chrono>
 #include <complex>
+#include <condition_variable>
 #include <deque>
 #include <exception>
+#include <forward_list>
 #include <fstream>
 #include <functional>
 #include <iomanip>
@@ -109,11 +113,13 @@
 #include <locale>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <numeric>
 #include <ostream>
 #include <queue>
 #include <random>
+#include <ratio>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -121,6 +127,8 @@
 #include <stdexcept>
 #include <streambuf>
 #include <string>
+#include <system_error>
+#include <thread>
 #include <tuple>
 #include <typeinfo>
 #include <type_traits>

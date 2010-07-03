@@ -1,5 +1,5 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005, 2007
+;; Copyright (C) 2005, 2007, 2008
 ;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
@@ -284,7 +284,7 @@
 
 (define_predicate "m32c_1mask8_operand"
   (and (match_operand 0 "const_int_operand")
-       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"Imb\")")))
+       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"ImB\")")))
 
 (define_predicate "m32c_1mask16_operand"
   (and (match_operand 0 "const_int_operand")

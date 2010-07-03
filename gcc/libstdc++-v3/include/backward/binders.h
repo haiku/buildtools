@@ -1,12 +1,12 @@
 // Functor implementations -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  *
@@ -59,13 +54,15 @@
  *  You should not attempt to use it directly.
  */
 
-#ifndef _GLIBCXX_BINDERS_H
-#define _GLIBCXX_BINDERS_H 1
+#ifndef _BACKWARD_BINDERS_H
+#define _BACKWARD_BINDERS_H 1
 
 _GLIBCXX_BEGIN_NAMESPACE(std)
 
   // 20.3.6 binders
-  /** @defgroup s20_3_6_binder Binder Classes
+  /** @defgroup binders Binder Classes
+   * @ingroup functors
+   *
    *  Binders turn functions/functors with two arguments into functors with
    *  a single argument, storing an argument to be applied later.  For
    *  example, a variable @c B of type @c binder1st is constructed from a
@@ -95,7 +92,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
    *
    *  @{
    */
-  /// One of the @link s20_3_6_binder binder functors@endlink.
+  /// One of the @link binders binder functors@endlink.
   template<typename _Operation>
     class binder1st
     : public unary_function<typename _Operation::second_argument_type,
@@ -121,7 +118,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return op(value, __x); }
     } _GLIBCXX_DEPRECATED_ATTR;
 
-  /// One of the @link s20_3_6_binder binder functors@endlink.
+  /// One of the @link binders binder functors@endlink.
   template<typename _Operation, typename _Tp>
     inline binder1st<_Operation>
     bind1st(const _Operation& __fn, const _Tp& __x)
@@ -130,7 +127,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       return binder1st<_Operation>(__fn, _Arg1_type(__x));
     }
 
-  /// One of the @link s20_3_6_binder binder functors@endlink.
+  /// One of the @link binders binder functors@endlink.
   template<typename _Operation>
     class binder2nd
     : public unary_function<typename _Operation::first_argument_type,
@@ -156,7 +153,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return op(__x, value); }
     } _GLIBCXX_DEPRECATED_ATTR;
 
-  /// One of the @link s20_3_6_binder binder functors@endlink.
+  /// One of the @link binders binder functors@endlink.
   template<typename _Operation, typename _Tp>
     inline binder2nd<_Operation>
     bind2nd(const _Operation& __fn, const _Tp& __x)
@@ -168,4 +165,4 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
 _GLIBCXX_END_NAMESPACE
 
-#endif /* _GLIBCXX_BINDERS_H */
+#endif /* _BACKWARD_BINDERS_H */

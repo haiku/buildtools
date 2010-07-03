@@ -1,6 +1,7 @@
 /* Output sdb-format symbol table information from GNU compiler.
    Copyright (C) 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -306,6 +307,7 @@ const struct gcc_debug_hooks sdb_debug_hooks =
 {
   sdbout_init,			         /* init */
   sdbout_finish,		         /* finish */
+  debug_nothing_void,			 /* assembly_start */
   debug_nothing_int_charstar,	         /* define */
   debug_nothing_int_charstar,	         /* undef */
   sdbout_start_source_file,	         /* start_source_file */
@@ -329,7 +331,7 @@ const struct gcc_debug_hooks sdb_debug_hooks =
   debug_nothing_tree,		         /* function_decl */
   sdbout_global_decl,		         /* global_decl */
   sdbout_symbol,			 /* type_decl */
-  debug_nothing_tree_tree,               /* imported_module_or_decl */
+  debug_nothing_tree_tree_tree_bool,	 /* imported_module_or_decl */
   debug_nothing_tree,		         /* deferred_inline_function */
   debug_nothing_tree,		         /* outlining_inline_function */
   sdbout_label,			         /* label */
@@ -1177,14 +1179,21 @@ sdbout_one_type (tree type)
 	if (TREE_CODE (type) == ENUMERAL_TYPE)
 	  {
 	    for (tem = TYPE_VALUES (type); tem; tem = TREE_CHAIN (tem))
-	      if (host_integerp (TREE_VALUE (tem), 0))
-		{
-		  PUT_SDB_DEF (IDENTIFIER_POINTER (TREE_PURPOSE (tem)));
-		  PUT_SDB_INT_VAL (tree_low_cst (TREE_VALUE (tem), 0));
-		  PUT_SDB_SCL (C_MOE);
-		  PUT_SDB_TYPE (T_MOE);
-		  PUT_SDB_ENDEF;
-		}
+	      {
+	        tree value = TREE_VALUE (tem);
+
+	        if (TREE_CODE (value) == CONST_DECL)
+	          value = DECL_INITIAL (value);
+
+	        if (host_integerp (value, 0))
+		  {
+		    PUT_SDB_DEF (IDENTIFIER_POINTER (TREE_PURPOSE (tem)));
+		    PUT_SDB_INT_VAL (tree_low_cst (value, 0));
+		    PUT_SDB_SCL (C_MOE);
+		    PUT_SDB_TYPE (T_MOE);
+		    PUT_SDB_ENDEF;
+		  }
+	      }
 	  }
 	else			/* record or union type */
 	  for (tem = TYPE_FIELDS (type); tem; tem = TREE_CHAIN (tem))
@@ -1636,7 +1645,7 @@ sdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
 			  const char *filename ATTRIBUTE_UNUSED)
 {
 #ifdef MIPS_DEBUGGING_INFO
-  struct sdb_file *n = xmalloc (sizeof *n);
+  struct sdb_file *n = XNEW (struct sdb_file);
 
   n->next = current_file;
   n->name = filename;
@@ -1668,7 +1677,7 @@ sdbout_init (const char *input_file_name ATTRIBUTE_UNUSED)
   tree t;
 
 #ifdef MIPS_DEBUGGING_INFO
-  current_file = xmalloc (sizeof *current_file);
+  current_file = XNEW (struct sdb_file);
   current_file->next = NULL;
   current_file->name = input_file_name;
 #endif

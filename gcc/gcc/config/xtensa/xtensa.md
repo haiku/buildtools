@@ -1,5 +1,5 @@
 ;; GCC machine description for Tensilica's Xtensa architecture.
-;; Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+;; Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 ;; Free Software Foundation, Inc.
 ;; Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
@@ -29,13 +29,20 @@
   (UNSPEC_NOP		2)
   (UNSPEC_PLT		3)
   (UNSPEC_RET_ADDR	4)
+  (UNSPEC_TPOFF		5)
+  (UNSPEC_DTPOFF	6)
+  (UNSPEC_TLS_FUNC	7)
+  (UNSPEC_TLS_ARG	8)
+  (UNSPEC_TLS_CALL	9)
+  (UNSPEC_TP		10)
+  (UNSPEC_MEMW		11)
 
   (UNSPECV_SET_FP	1)
   (UNSPECV_ENTRY	2)
-  (UNSPECV_MEMW		3)
   (UNSPECV_S32RI	4)
   (UNSPECV_S32C1I	5)
   (UNSPECV_EH_RETURN	6)
+  (UNSPECV_SET_TP	7)
 ])
 
 ;; This code iterator allows signed and unsigned widening multiplications
@@ -59,13 +66,18 @@
 
 ;; This code iterator allows all branch instructions to be generated from
 ;; a single define_expand template.
-(define_code_iterator any_cond [eq ne gt ge lt le gtu geu ltu leu])
+(define_code_iterator any_cond [eq ne gt ge lt le gtu geu ltu leu
+				uneq ltgt ungt unge unlt unle
+				unordered ordered])
 
 ;; This code iterator is for setting a register from a comparison.
 (define_code_iterator any_scc [eq ne gt ge lt le])
 
 ;; This code iterator is for floating-point comparisons.
-(define_code_iterator any_scc_sf [eq lt le])
+(define_code_iterator any_scc_sf [eq lt le uneq unlt unle unordered])
+(define_code_attr scc_sf [(eq "oeq") (lt "olt") (le "ole") 
+			  (uneq "ueq") (unlt "ult") (unle "ule")
+			  (unordered "un")])
 
 ;; This iterator and attribute allow to combine most atomic operations.
 (define_code_iterator ATOMIC [and ior xor plus minus mult])
@@ -875,6 +887,40 @@
    (set_attr "mode"	"QI")
    (set_attr "length"	"2,2,3,3,3,3,3,3")])
 
+;; Sub-word reloads from the constant pool.
+
+(define_expand "reload<mode>_literal"
+  [(parallel [(match_operand:HQI 0 "register_operand" "=r")
+	      (match_operand:HQI 1 "constantpool_operand" "")
+	      (match_operand:SI 2 "register_operand" "=&r")])]
+  ""
+{
+  rtx lit, scratch;
+  unsigned word_off, byte_off;
+
+  if (MEM_P (operands[1]))
+    {
+      lit = operands[1];
+      word_off = 0;
+      byte_off = 0;
+    }
+  else
+    {
+      gcc_assert (GET_CODE (operands[1]) == SUBREG);
+      lit = SUBREG_REG (operands[1]);
+      word_off = SUBREG_BYTE (operands[1]) & ~(UNITS_PER_WORD - 1);
+      byte_off = SUBREG_BYTE (operands[1]) - word_off;
+    }
+
+  lit = adjust_address (lit, SImode, word_off);
+  scratch = operands[2];
+  emit_insn (gen_movsi (scratch, lit));
+  emit_insn (gen_mov<mode> (operands[0],
+			    gen_rtx_SUBREG (<MODE>mode, scratch, byte_off)));
+
+  DONE;
+})
+
 ;; 32-bit floating point moves
 
 (define_expand "movsf"
@@ -929,7 +975,7 @@
 	(plus:SI (match_dup 1) (match_dup 2)))]
   "TARGET_HARD_FLOAT"
 {
-  if (volatile_refs_p (PATTERN (insn)))
+  if (TARGET_SERIALIZE_VOLATILE && volatile_refs_p (PATTERN (insn)))
     output_asm_insn ("memw", operands);
   return "lsiu\t%0, %1, %2";
 }
@@ -945,7 +991,7 @@
 	(plus:SI (match_dup 0) (match_dup 1)))]
   "TARGET_HARD_FLOAT"
 {
-  if (volatile_refs_p (PATTERN (insn)))
+  if (TARGET_SERIALIZE_VOLATILE && volatile_refs_p (PATTERN (insn)))
     output_asm_insn ("memw", operands);
   return "ssiu\t%2, %0, %1";
 }
@@ -1416,7 +1462,7 @@
 	(any_scc_sf:CC (match_operand:SF 1 "register_operand" "f")
 		       (match_operand:SF 2 "register_operand" "f")))]
   "TARGET_HARD_FLOAT"
-  "o<code>.s\t%0, %1, %2"
+  "<scc_sf>.s\t%0, %1, %2"
   [(set_attr "type"	"farith")
    (set_attr "mode"	"BL")
    (set_attr "length"	"3")])
@@ -1530,9 +1576,9 @@
 })
 
 (define_insn "call_value_internal"
-   [(set (match_operand 0 "register_operand" "=a")
-         (call (mem (match_operand:SI 1 "call_insn_operand" "nir"))
-               (match_operand 2 "" "i")))]
+  [(set (match_operand 0 "register_operand" "=a")
+        (call (mem (match_operand:SI 1 "call_insn_operand" "nir"))
+              (match_operand 2 "" "i")))]
   ""
 {
   return xtensa_emit_call (1, operands);
@@ -1668,6 +1714,69 @@
    (set_attr "length"	"0")])
 
 
+;; TLS support
+
+(define_expand "sym_TPOFF"
+  [(const (unspec [(match_operand:SI 0 "" "")] UNSPEC_TPOFF))]
+  ""
+  "")
+
+(define_expand "sym_DTPOFF"
+  [(const (unspec [(match_operand:SI 0 "" "")] UNSPEC_DTPOFF))]
+  ""
+  "")
+
+(define_insn "load_tp"
+  [(set (match_operand:SI 0 "register_operand" "=a")
+	(unspec:SI [(const_int 0)] UNSPEC_TP))]
+  "TARGET_THREADPTR"
+  "rur\t%0, THREADPTR"
+  [(set_attr "type"	"rsr")
+   (set_attr "mode"	"SI")
+   (set_attr "length"	"3")])
+
+(define_insn "set_tp"
+  [(unspec_volatile [(match_operand:SI 0 "register_operand" "r")]
+		    UNSPECV_SET_TP)]
+  "TARGET_THREADPTR"
+  "wur\t%0, THREADPTR"
+  [(set_attr "type"	"wsr")
+   (set_attr "mode"	"SI")
+   (set_attr "length"	"3")])
+
+(define_insn "tls_func"
+  [(set (match_operand:SI 0 "register_operand" "=a")
+	(unspec:SI [(match_operand:SI 1 "tls_symbol_operand" "")]
+		   UNSPEC_TLS_FUNC))]
+  "TARGET_THREADPTR && HAVE_AS_TLS"
+  "movi\t%0, %1@TLSFUNC"
+  [(set_attr "type"	"load")
+   (set_attr "mode"	"SI")
+   (set_attr "length"	"3")])
+
+(define_insn "tls_arg"
+  [(set (match_operand:SI 0 "register_operand" "=a")
+	(unspec:SI [(match_operand:SI 1 "tls_symbol_operand" "")]
+		   UNSPEC_TLS_ARG))]
+  "TARGET_THREADPTR && HAVE_AS_TLS"
+  "movi\t%0, %1@TLSARG"
+  [(set_attr "type"	"load")
+   (set_attr "mode"	"SI")
+   (set_attr "length"	"3")])
+
+(define_insn "tls_call"
+  [(set (match_operand:SI 0 "register_operand" "=a")
+	(call (mem:SI (unspec:SI [(match_operand:SI 1 "register_operand" "r")
+				  (match_operand:SI 2 "tls_symbol_operand" "")]
+				  UNSPEC_TLS_CALL))
+	      (match_operand 3 "" "i")))]
+  "TARGET_THREADPTR && HAVE_AS_TLS"
+  "callx8.tls %1, %2@TLSCALL"
+  [(set_attr "type"	"call")
+   (set_attr "mode"	"none")
+   (set_attr "length"	"3")])
+
+
 ;; Instructions for the Xtensa "boolean" option.
 
 (define_insn "*booltrue"
@@ -1710,17 +1819,17 @@
 ;; Atomic operations
 
 (define_expand "memory_barrier"
-  [(set (mem:BLK (match_dup 0))
-	(unspec_volatile:BLK [(mem:BLK (match_dup 0))] UNSPECV_MEMW))]
+  [(set (match_dup 0)
+	(unspec:BLK [(match_dup 0)] UNSPEC_MEMW))]
   ""
 {
-  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (SImode));
+  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
   MEM_VOLATILE_P (operands[0]) = 1;
 })
 
 (define_insn "*memory_barrier"
   [(set (match_operand:BLK 0 "" "")
-	(unspec_volatile:BLK [(match_operand:BLK 1 "" "")] UNSPECV_MEMW))]
+	(unspec:BLK [(match_dup 0)] UNSPEC_MEMW))]
   ""
   "memw"
   [(set_attr "type"	"unknown")

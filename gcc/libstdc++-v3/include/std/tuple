@@ -1,11 +1,11 @@
 // <tuple> -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,32 +13,27 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-// Boston, MA 02110-1301, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file include/tuple
  *  This is a Standard C++ Library header.
  */
 
-#ifndef _GLIBCXX_CXX0X_TUPLE
-#define _GLIBCXX_CXX0X_TUPLE 1
+#ifndef _GLIBCXX_TUPLE
+#define _GLIBCXX_TUPLE 1
 
 #pragma GCC system_header
 
 #ifndef __GXX_EXPERIMENTAL_CXX0X__
 # include <c++0x_warning.h>
-#endif
+#else
 
 #include <utility>
 
@@ -62,10 +57,10 @@ namespace std
     struct __add_ref<_Tp&>
     { typedef _Tp& type; };
 
-  template<int _Idx, typename _Head, bool _IsEmpty>
+  template<std::size_t _Idx, typename _Head, bool _IsEmpty>
     struct _Head_base;
 
-  template<int _Idx, typename _Head>
+  template<std::size_t _Idx, typename _Head>
     struct _Head_base<_Idx, _Head, true>
     : public _Head
     {
@@ -76,14 +71,16 @@ namespace std
       : _Head(__h) { }
 
       template<typename _UHead>
-      _Head_base(_UHead&& __h)
-      : _Head(std::forward<_UHead>(__h)) { }
+        _Head_base(_UHead&& __h)
+	: _Head(std::forward<_UHead>(__h)) { }
 
       _Head&       _M_head()       { return *this; }
       const _Head& _M_head() const { return *this; }
+    
+      void _M_swap_impl(_Head&&) { /* no-op */ }
     };
 
-  template<int _Idx, typename _Head>
+  template<std::size_t _Idx, typename _Head>
     struct _Head_base<_Idx, _Head, false>
     {
       _Head_base()
@@ -93,11 +90,18 @@ namespace std
       : _M_head_impl(__h) { }
 
       template<typename _UHead>
-      _Head_base(_UHead&& __h)
-      : _M_head_impl(std::forward<_UHead>(__h)) { }
+        _Head_base(_UHead&& __h)
+	: _M_head_impl(std::forward<_UHead>(__h)) { }
 
       _Head&       _M_head()       { return _M_head_impl; }
       const _Head& _M_head() const { return _M_head_impl; }        
+
+      void
+      _M_swap_impl(_Head&& __h)
+      { 
+	using std::swap;
+	swap(__h, _M_head_impl);
+      }
 
       _Head _M_head_impl; 
     };
@@ -110,22 +114,26 @@ namespace std
    * point in the hierarchy; we use it to implement a constant-time
    * get() operation.
    */
-  template<int _Idx, typename... _Elements>
+  template<std::size_t _Idx, typename... _Elements>
     struct _Tuple_impl; 
 
   /**
    * Zero-element tuple implementation. This is the basis case for the 
    * inheritance recursion.
    */
-  template<int _Idx>
-    struct _Tuple_impl<_Idx> { };
+  template<std::size_t _Idx>
+    struct _Tuple_impl<_Idx>
+    { 
+    protected:
+      void _M_swap_impl(_Tuple_impl&&) { /* no-op */ }
+    };
 
   /**
    * Recursive tuple implementation. Here we store the @c Head element
    * and derive from a @c Tuple_impl containing the remaining elements
    * (which contains the @c Tail).
    */
-  template<int _Idx, typename _Head, typename... _Tail>
+  template<std::size_t _Idx, typename _Head, typename... _Tail>
     struct _Tuple_impl<_Idx, _Head, _Tail...>
     : public _Tuple_impl<_Idx + 1, _Tail...>,
       private _Head_base<_Idx, _Head, std::is_empty<_Head>::value>
@@ -203,6 +211,14 @@ namespace std
 	  _M_tail() = std::move(__in._M_tail());
 	  return *this;
 	}
+
+    protected:
+      void
+      _M_swap_impl(_Tuple_impl&& __in)
+      {
+	_Base::_M_swap_impl(__in._M_head());
+	_Inherited::_M_swap_impl(__in._M_tail());
+      }
     };
 
   /// tuple
@@ -274,11 +290,19 @@ namespace std
 	  static_cast<_Inherited&>(*this) = std::move(__in);
 	  return *this;
 	}
+
+      void
+      swap(tuple&& __in)
+      { _Inherited::_M_swap_impl(__in); }
     };
 
 
   template<>  
-    class tuple<> { };
+    class tuple<>
+    {
+    public:
+      void swap(tuple&&) { /* no-op */ }
+    };
 
   /// tuple (2-element), with construction and assignment from a pair.
   template<typename _T1, typename _T2>
@@ -368,18 +392,26 @@ namespace std
 	  this->_M_tail()._M_head() = std::move(__in.second);
 	  return *this;
 	}
+
+      void
+      swap(tuple&& __in)
+      { 
+	using std::swap;
+	swap(this->_M_head(), __in._M_head());
+	swap(this->_M_tail()._M_head(), __in._M_tail()._M_head());	
+      }
     };
 
 
   /// Gives the type of the ith element of a given tuple type.
-  template<int __i, typename _Tp>
+  template<std::size_t __i, typename _Tp>
     struct tuple_element;
 
   /**
    * Recursive case for tuple_element: strip off the first element in
    * the tuple and retrieve the (i-1)th element of the remaining tuple.
    */
-  template<int __i, typename _Head, typename... _Tail>
+  template<std::size_t __i, typename _Head, typename... _Tail>
     struct tuple_element<__i, tuple<_Head, _Tail...> >
     : tuple_element<__i - 1, tuple<_Tail...> > { };
 
@@ -400,32 +432,32 @@ namespace std
   template<typename... _Elements>
     struct tuple_size<tuple<_Elements...> >
     {
-      static const int value = sizeof...(_Elements);
+      static const std::size_t value = sizeof...(_Elements);
     };
 
   template<typename... _Elements>
-    const int tuple_size<tuple<_Elements...> >::value;
+    const std::size_t tuple_size<tuple<_Elements...> >::value;
 
-  template<int __i, typename _Head, typename... _Tail>
+  template<std::size_t __i, typename _Head, typename... _Tail>
     inline typename __add_ref<_Head>::type
     __get_helper(_Tuple_impl<__i, _Head, _Tail...>& __t)
     { return __t._M_head(); }
 
-  template<int __i, typename _Head, typename... _Tail>
+  template<std::size_t __i, typename _Head, typename... _Tail>
     inline typename __add_c_ref<_Head>::type
     __get_helper(const _Tuple_impl<__i, _Head, _Tail...>& __t)
     { return __t._M_head(); }
 
   // Return a reference (const reference) to the ith element of a tuple.
   // Any const or non-const ref elements are returned with their original type.
-  template<int __i, typename... _Elements>
+  template<std::size_t __i, typename... _Elements>
     inline typename __add_ref<
                       typename tuple_element<__i, tuple<_Elements...> >::type
                     >::type
     get(tuple<_Elements...>& __t)
     { return __get_helper<__i>(__t); }
 
-  template<int __i, typename... _Elements>
+  template<std::size_t __i, typename... _Elements>
     inline typename __add_c_ref<
                       typename tuple_element<__i, tuple<_Elements...> >::type
                     >::type
@@ -433,28 +465,28 @@ namespace std
     { return __get_helper<__i>(__t); }
 
   // This class helps construct the various comparison operations on tuples
-  template<int __check_equal_size, int __i, int __j,
+  template<std::size_t __check_equal_size, std::size_t __i, std::size_t __j,
 	   typename _Tp, typename _Up>
     struct __tuple_compare;
 
-  template<int __i, int __j, typename _Tp, typename _Up>
+  template<std::size_t __i, std::size_t __j, typename _Tp, typename _Up>
     struct __tuple_compare<0, __i, __j, _Tp, _Up>
     {
       static bool __eq(const _Tp& __t, const _Up& __u)
       {
 	return (get<__i>(__t) == get<__i>(__u) &&
-		__tuple_compare<0, __i+1, __j, _Tp, _Up>::__eq(__t, __u));
+		__tuple_compare<0, __i + 1, __j, _Tp, _Up>::__eq(__t, __u));
       }
      
       static bool __less(const _Tp& __t, const _Up& __u)
       {
 	return ((get<__i>(__t) < get<__i>(__u))
 		|| !(get<__i>(__u) < get<__i>(__t)) &&
-		__tuple_compare<0, __i+1, __j, _Tp, _Up>::__less(__t, __u));
+		__tuple_compare<0, __i + 1, __j, _Tp, _Up>::__less(__t, __u));
       }
     };
 
-  template<int __i, typename _Tp, typename _Up>
+  template<std::size_t __i, typename _Tp, typename _Up>
     struct __tuple_compare<0, __i, __i, _Tp, _Up>
     {
       static bool __eq(const _Tp&, const _Up&)
@@ -520,12 +552,13 @@ namespace std
       return __result_type(std::forward<_Elements>(__args)...);
     }
 
-  template<int...> struct __index_holder { };    
+  template<std::size_t...> struct __index_holder { };    
 
-  template<int __i, typename _IdxHolder, typename... _Elements>
+  template<std::size_t __i, typename _IdxHolder, typename... _Elements>
     struct __index_holder_impl;
 
-  template<int __i, int... _Indexes, typename _IdxHolder, typename... _Elements>
+  template<std::size_t __i, std::size_t... _Indexes, typename _IdxHolder,
+	   typename... _Elements>
     struct __index_holder_impl<__i, __index_holder<_Indexes...>,
 			       _IdxHolder, _Elements...> 
     {
@@ -534,7 +567,7 @@ namespace std
 					   _Elements...>::type type;
     };
  
-  template<int __i, int... _Indexes>
+  template<std::size_t __i, std::size_t... _Indexes>
     struct __index_holder_impl<__i, __index_holder<_Indexes...> >
     { typedef __index_holder<_Indexes...> type; };
 
@@ -542,8 +575,8 @@ namespace std
     struct __make_index_holder 
     : __index_holder_impl<0, __index_holder<>, _Elements...> { };
     
-  template<typename... _TElements, int... _TIdx,
-	   typename... _UElements, int... _UIdx> 
+  template<typename... _TElements, std::size_t... _TIdx,
+	   typename... _UElements, std::size_t... _UIdx> 
     inline tuple<_TElements..., _UElements...> 
     __tuple_cat_helper(const tuple<_TElements...>& __t,
 		       const __index_holder<_TIdx...>&,
@@ -552,8 +585,8 @@ namespace std
     { return tuple<_TElements..., _UElements...>(get<_TIdx>(__t)...,
 						 get<_UIdx>(__u)...); }
 
-  template<typename... _TElements, int... _TIdx,
-	   typename... _UElements, int... _UIdx> 
+  template<typename... _TElements, std::size_t... _TIdx,
+	   typename... _UElements, std::size_t... _UIdx> 
     inline tuple<_TElements..., _UElements...> 
     __tuple_cat_helper(tuple<_TElements...>&& __t,
 		       const __index_holder<_TIdx...>&, 
@@ -562,8 +595,8 @@ namespace std
     { return tuple<_TElements..., _UElements...>
 	(std::move(get<_TIdx>(__t))..., get<_UIdx>(__u)...); }
 
-  template<typename... _TElements, int... _TIdx,
-	   typename... _UElements, int... _UIdx>
+  template<typename... _TElements, std::size_t... _TIdx,
+	   typename... _UElements, std::size_t... _UIdx>
     inline tuple<_TElements..., _UElements...> 
     __tuple_cat_helper(const tuple<_TElements...>& __t,
 		       const __index_holder<_TIdx...>&, 
@@ -572,8 +605,8 @@ namespace std
     { return tuple<_TElements..., _UElements...>
 	(get<_TIdx>(__t)..., std::move(get<_UIdx>(__u))...); }
 
-  template<typename... _TElements, int... _TIdx,
-	   typename... _UElements, int... _UIdx> 
+  template<typename... _TElements, std::size_t... _TIdx,
+	   typename... _UElements, std::size_t... _UIdx> 
     inline tuple<_TElements..., _UElements...> 
     __tuple_cat_helper(tuple<_TElements...>&& __t,
 		       const __index_holder<_TIdx...>&, 
@@ -585,7 +618,7 @@ namespace std
   template<typename... _TElements, typename... _UElements>
     inline tuple<_TElements..., _UElements...> 
     tuple_cat(const tuple<_TElements...>& __t, const tuple<_UElements...>& __u)
-    { 
+    {
       return __tuple_cat_helper(__t, typename
 				__make_index_holder<_TElements...>::type(),
 				__u, typename
@@ -627,6 +660,21 @@ namespace std
     tie(_Elements&... __args)
     { return tuple<_Elements&...>(__args...); }
 
+  template<typename... _Elements>
+    inline void 
+    swap(tuple<_Elements...>& __x, tuple<_Elements...>& __y)
+    { __x.swap(__y); }
+
+  template<typename... _Elements>
+    inline void
+    swap(tuple<_Elements...>&& __x, tuple<_Elements...>& __y)
+    { __x.swap(__y); }
+
+  template<typename... _Elements>
+    inline void
+    swap(tuple<_Elements...>& __x, tuple<_Elements...>&& __y)
+    { __x.swap(__y); }
+
   // A class (and instance) which can be used in 'tie' when an element
   // of a tuple is not required
   struct _Swallow_assign
@@ -644,4 +692,6 @@ namespace std
   }; // anonymous namespace
 }
 
-#endif // _GLIBCXX_CXX0X_TUPLE
+#endif // __GXX_EXPERIMENTAL_CXX0X__
+
+#endif // _GLIBCXX_TUPLE

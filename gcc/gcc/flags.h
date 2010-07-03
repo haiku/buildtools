@@ -1,6 +1,6 @@
 /* Compilation switch flag definitions for GCC.
    Copyright (C) 1987, 1988, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2002,
-   2003, 2004, 2005, 2006, 2007
+   2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -24,6 +24,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "coretypes.h"
 #include "options.h"
+#include "real.h"
 
 enum debug_info_type
 {
@@ -115,12 +116,6 @@ extern int optimize_size;
 
 extern bool extra_warnings;
 
-/* Nonzero to warn about unused variables, functions et.al.  Use
-   set_Wunused() to update the -Wunused-* flags that correspond to the
-   -Wunused option.  */
-
-extern void set_Wunused (int setting);
-
 /* Used to set the level of -Wstrict-aliasing, when no level is specified.  
    The external way to set the default level is to use
    -Wstrict-aliasing=level.  
@@ -137,10 +132,11 @@ extern void set_Wstrict_aliasing (int onoff);
 extern bool warn_larger_than;
 extern HOST_WIDE_INT larger_than_size;
 
-/* Temporarily suppress certain warnings.
-   This is set while reading code from a system header file.  */
+/* Nonzero means warn about any function whose frame size is larger
+   than N bytes. */
 
-extern int in_system_header;
+extern bool warn_frame_larger_than;
+extern HOST_WIDE_INT frame_larger_than_size;
 
 /* Nonzero for -dp: annotate the assembly with a comment describing the
    pattern and alternative used.  */
@@ -168,11 +164,6 @@ extern int flag_pcc_struct_return;
 
 extern int flag_complex_method;
 
-/* Nonzero means that we don't want inlining by virtue of -fno-inline,
-   not just because the tree inliner turned us off.  */
-
-extern int flag_really_no_inline;
-
 /* Nonzero if we are only using compiler to check syntax errors.  */
 
 extern int rtl_dump_and_exit;
@@ -190,6 +181,10 @@ extern int flag_dump_unnumbered;
    Usually these are warnings about failure to conform to some standard.  */
 
 extern int flag_pedantic_errors;
+
+/* Nonzero means make permerror produce warnings instead of errors.  */
+
+extern int flag_permissive;
 
 /* Nonzero if we are compiling code for a shared library, zero for
    executable.  */
@@ -210,14 +205,30 @@ extern int flag_debug_asm;
 extern int flag_next_runtime;
 
 extern int flag_dump_rtl_in_asm;
+
+/* The algorithm used for the integrated register allocator (IRA).  */
+enum ira_algorithm
+{
+  IRA_ALGORITHM_CB,
+  IRA_ALGORITHM_PRIORITY
+};
+
+extern enum ira_algorithm flag_ira_algorithm;
+
+/* The regions used for the integrated register allocator (IRA).  */
+enum ira_region
+{
+  IRA_REGION_ONE,
+  IRA_REGION_ALL,
+  IRA_REGION_MIXED
+};
+
+extern enum ira_region flag_ira_region;
+
+extern unsigned int flag_ira_verbose;
+
 
 /* Other basic status info about current function.  */
-
-/* Nonzero means current function must be given a frame pointer.
-   Set in stmt.c if anything is allocated on the stack there.
-   Set in reload1.c if anything is allocated on the stack there.  */
-
-extern int frame_pointer_needed;
 
 /* Nonzero if subexpressions must be evaluated from left-to-right.  */
 extern int flag_evaluation_order;
@@ -225,6 +236,9 @@ extern int flag_evaluation_order;
 /* Value of the -G xx switch, and whether it was passed or not.  */
 extern unsigned HOST_WIDE_INT g_switch_value;
 extern bool g_switch_set;
+
+/* Same for selective scheduling.  */
+extern bool sel_sched_switch_set;
 
 /* Values of the -falign-* flags: how much to align labels in code. 
    0 means `use default', 1 means `don't align'.  
@@ -264,6 +278,27 @@ extern int flag_var_tracking;
 /* True if flag_speculative_prefetching was set by user.  Used to suppress
    warning message in case flag was set by -fprofile-{generate,use}.  */
 extern bool flag_speculative_prefetching_set;
+
+/* Type of stack check.  */
+enum stack_check_type
+{
+  /* Do not check the stack.  */
+  NO_STACK_CHECK = 0,
+
+  /* Check the stack generically, i.e. assume no specific support
+     from the target configuration files.  */
+  GENERIC_STACK_CHECK,
+
+  /* Check the stack and rely on the target configuration files to
+     check the static frame of functions, i.e. use the generic
+     mechanism only for dynamic stack allocations.  */
+  STATIC_BUILTIN_STACK_CHECK,
+
+  /* Check the stack and entirely rely on the target configuration
+     files, i.e. do not use the generic mechanism at all.  */
+  FULL_BUILTIN_STACK_CHECK
+};
+extern enum stack_check_type flag_stack_check;
 
 /* Returns TRUE if generated code should match ABI version N or
    greater is in use.  */

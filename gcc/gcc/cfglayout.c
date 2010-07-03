@@ -1,5 +1,5 @@
 /* Basic block reordering routines for the GNU compiler.
-   Copyright (C) 2000, 2001, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -255,13 +255,8 @@ insn_locators_alloc (void)
   locations_locators_locs = VEC_alloc (int, heap, 32);
   locations_locators_vals = VEC_alloc (location_t, heap, 32);
 
-#ifdef USE_MAPPED_LOCATION
   last_location = -1;
   curr_location = -1;
-#else
-  last_location.line = -1;
-  curr_location.line = -1;
-#endif
   curr_block = NULL;
   last_block = NULL;
   curr_rtl_loc = 0;
@@ -276,6 +271,19 @@ insn_locators_finalize (void)
   curr_rtl_loc = -1;
 }
 
+/* Allocate insn locator datastructure.  */
+void
+insn_locators_free (void)
+{
+  prologue_locator = epilogue_locator = 0;
+
+  VEC_free (int, heap, block_locators_locs);
+  VEC_free (tree,gc, block_locators_blocks);
+  VEC_free (int, heap, locations_locators_locs);
+  VEC_free (location_t, heap, locations_locators_vals);
+}
+
+
 /* Set current location.  */
 void
 set_curr_insn_source_location (location_t location)
@@ -284,15 +292,8 @@ set_curr_insn_source_location (location_t location)
      time locators are not initialized.  */
   if (curr_rtl_loc == -1)
     return;
-#ifdef USE_MAPPED_LOCATION
   if (location == last_location)
     return;
-#else
-  if (location.file && last_location.file
-      && !strcmp (location.file, last_location.file)
-      && location.line == last_location.line)
-    return;
-#endif
   curr_location = location;
 }
 
@@ -321,12 +322,7 @@ curr_insn_locator (void)
       VEC_safe_push (tree, gc, block_locators_blocks, curr_block);
       last_block = curr_block;
     }
-#ifdef USE_MAPPED_LOCATION
   if (last_location != curr_location)
-#else
-  if (last_location.file != curr_location.file
-      || last_location.line != curr_location.line)
-#endif
     {
       curr_rtl_loc++;
       VEC_safe_push (int, heap, locations_locators_locs, curr_rtl_loc);
@@ -357,8 +353,10 @@ outof_cfg_layout_mode (void)
   return 0;
 }
 
-struct tree_opt_pass pass_into_cfg_layout_mode =
+struct rtl_opt_pass pass_into_cfg_layout_mode =
 {
+ {
+  RTL_PASS,
   "into_cfglayout",                     /* name */
   NULL,                                 /* gate */
   into_cfg_layout_mode,                 /* execute */
@@ -371,11 +369,13 @@ struct tree_opt_pass pass_into_cfg_layout_mode =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func,                       /* todo_flags_finish */
-  0                                     /* letter */
+ }
 };
 
-struct tree_opt_pass pass_outof_cfg_layout_mode =
+struct rtl_opt_pass pass_outof_cfg_layout_mode =
 {
+ {
+  RTL_PASS,
   "outof_cfglayout",                    /* name */
   NULL,                                 /* gate */
   outof_cfg_layout_mode,                /* execute */
@@ -388,10 +388,10 @@ struct tree_opt_pass pass_outof_cfg_layout_mode =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func,                       /* todo_flags_finish */
-  0                                     /* letter */
+ }
 };
 
-/* Return sope resulting from combination of S1 and S2.  */
+/* Return scope resulting from combination of S1 and S2.  */
 static tree
 choose_inner_scope (tree s1, tree s2)
 {
@@ -448,13 +448,12 @@ change_scope (rtx orig_insn, tree s1, tree s2)
     }
 }
 
-/* Return lexical scope block insn belong to.  */
+/* Return lexical scope block locator belongs to.  */
 static tree
-insn_scope (const_rtx insn)
+locator_scope (int loc)
 {
   int max = VEC_length (int, block_locators_locs);
   int min = 0;
-  int loc = INSN_LOCATOR (insn);
 
   /* When block_locators_locs was initialized, the pro- and epilogue
      insns didn't exist yet and can therefore not be found this way.
@@ -488,8 +487,15 @@ insn_scope (const_rtx insn)
   return VEC_index (tree, block_locators_blocks, min);
 }
 
+/* Return lexical scope block insn belongs to.  */
+static tree
+insn_scope (const_rtx insn)
+{
+  return locator_scope (INSN_LOCATOR (insn));
+}
+
 /* Return line number of the statement specified by the locator.  */
-static location_t
+location_t
 locator_location (int loc)
 {
   int max = VEC_length (int, locations_locators_locs);
@@ -549,6 +555,17 @@ const char *
 insn_file (const_rtx insn)
 {
   return locator_file (INSN_LOCATOR (insn));
+}
+
+/* Return true if LOC1 and LOC2 locators have the same location and scope.  */
+bool
+locator_eq (int loc1, int loc2)
+{
+  if (loc1 == loc2)
+    return true;
+  if (locator_location (loc1) != locator_location (loc2))
+    return false;
+  return locator_scope (loc1) == locator_scope (loc2);
 }
 
 /* Rebuild all the NOTE_INSN_BLOCK_BEG and NOTE_INSN_BLOCK_END notes based
@@ -868,8 +885,7 @@ fixup_reorder_chain (void)
 	      && JUMP_P (BB_END (bb))
 	      && !any_condjump_p (BB_END (bb))
 	      && (EDGE_SUCC (bb, 0)->flags & EDGE_CROSSING))
-	    REG_NOTES (BB_END (bb)) = gen_rtx_EXPR_LIST
-	      (REG_CROSSING_JUMP, NULL_RTX, REG_NOTES (BB_END (bb)));
+	    add_reg_note (BB_END (bb), REG_CROSSING_JUMP, NULL_RTX);
 	}
     }
 
@@ -888,6 +904,52 @@ fixup_reorder_chain (void)
       if (e && !can_fallthru (e->src, e->dest))
 	force_nonfallthru (e);
     }
+
+  /* Ensure goto_locus from edges has some instructions with that locus
+     in RTL.  */
+  if (!optimize)
+    FOR_EACH_BB (bb)
+      {
+        edge e;
+        edge_iterator ei;
+
+        FOR_EACH_EDGE (e, ei, bb->succs)
+	  if (e->goto_locus && !(e->flags & EDGE_ABNORMAL))
+	    {
+	      basic_block nb;
+	      rtx end;
+
+	      insn = BB_END (e->src);
+	      end = PREV_INSN (BB_HEAD (e->src));
+	      while (insn != end
+		     && (!INSN_P (insn) || INSN_LOCATOR (insn) == 0))
+		insn = PREV_INSN (insn);
+	      if (insn != end
+		  && locator_eq (INSN_LOCATOR (insn), (int) e->goto_locus))
+		continue;
+	      if (simplejump_p (BB_END (e->src))
+		  && INSN_LOCATOR (BB_END (e->src)) == 0)
+		{
+		  INSN_LOCATOR (BB_END (e->src)) = e->goto_locus;
+		  continue;
+		}
+	      if (e->dest != EXIT_BLOCK_PTR)
+		{
+		  insn = BB_HEAD (e->dest);
+		  end = NEXT_INSN (BB_END (e->dest));
+		  while (insn != end && !INSN_P (insn))
+		    insn = NEXT_INSN (insn);
+		  if (insn != end && INSN_LOCATOR (insn)
+		      && locator_eq (INSN_LOCATOR (insn), (int) e->goto_locus))
+		    continue;
+		}
+	      nb = split_edge (e);
+	      if (!INSN_P (BB_END (nb)))
+		BB_END (nb) = emit_insn_after_noloc (gen_nop (), BB_END (nb),
+						     nb);
+	      INSN_LOCATOR (BB_END (nb)) = e->goto_locus;
+	    }
+      }
 }
 
 /* Perform sanity checks on the insn chain.

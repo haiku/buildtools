@@ -1,5 +1,5 @@
 /* Various diagnostic subroutines for the GNU C language.
-   Copyright (C) 2000, 2001, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@codesourcery.com>
 
 This file is part of GCC.
@@ -31,14 +31,15 @@ along with GCC; see the file COPYING3.  If not see
 /* Issue an ISO C99 pedantic warning MSGID.  */
 
 void
-pedwarn_c99 (const char *gmsgid, ...)
+pedwarn_c99 (location_t location, int opt, const char *gmsgid, ...)
 {
   diagnostic_info diagnostic;
   va_list ap;
 
   va_start (ap, gmsgid);
-  diagnostic_set_info (&diagnostic, gmsgid, &ap, input_location,
-		       flag_isoc99 ? pedantic_error_kind () : DK_WARNING);
+  diagnostic_set_info (&diagnostic, gmsgid, &ap, location,
+		       flag_isoc99 ? DK_PEDWARN : DK_WARNING);
+  diagnostic.option_index = opt;
   report_diagnostic (&diagnostic);
   va_end (ap);
 }
@@ -49,14 +50,15 @@ pedwarn_c99 (const char *gmsgid, ...)
    (There is no flag_c90.)  */
 
 void
-pedwarn_c90 (const char *gmsgid, ...)
+pedwarn_c90 (location_t location, int opt, const char *gmsgid, ...)
 {
   diagnostic_info diagnostic;
   va_list ap;
 
   va_start (ap, gmsgid);
-  diagnostic_set_info (&diagnostic, gmsgid, &ap, input_location,
-		       flag_isoc99 ? DK_WARNING : pedantic_error_kind ());
+  diagnostic_set_info (&diagnostic, gmsgid, &ap, location,
+		       flag_isoc99 ? DK_WARNING : DK_PEDWARN);
+  diagnostic.option_index = opt;
   report_diagnostic (&diagnostic);
   va_end (ap);
 }

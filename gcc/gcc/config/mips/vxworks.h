@@ -1,4 +1,4 @@
-/* Copyright (C) 1999, 2003, 2004, 2007 Free Software Foundation, Inc.
+/* Copyright (C) 1999, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -78,9 +78,6 @@ VXWORKS_LINK_SPEC
 /* No sdata.  */
 #undef MIPS_DEFAULT_GVALUE
 #define MIPS_DEFAULT_GVALUE 0
-
-/* Other formats are already disabled in config/vxworks.h.  */
-#undef MIPS_DEBUGGING_INFO
 
 /* No _mcount profiling on VxWorks.  */
 #undef FUNCTION_PROFILER

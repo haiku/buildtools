@@ -1,6 +1,6 @@
 /* Subroutines used for code generation on the Argonaut ARC cpu.
    Copyright (C) 1994, 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -92,8 +92,8 @@ static void arc_internal_label (FILE *, const char *, unsigned long);
 static void arc_va_start (tree, rtx);
 static void arc_setup_incoming_varargs (CUMULATIVE_ARGS *, enum machine_mode,
 					tree, int *, int);
-static bool arc_rtx_costs (rtx, int, int, int *);
-static int arc_address_cost (rtx);
+static bool arc_rtx_costs (rtx, int, int, int *, bool);
+static int arc_address_cost (rtx, bool);
 static void arc_external_libcall (rtx);
 static bool arc_return_in_memory (const_tree, const_tree);
 static bool arc_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
@@ -173,11 +173,11 @@ arc_init (void)
   char *tmp;
   
   /* Set the pseudo-ops for the various standard sections.  */
-  arc_text_section = tmp = xmalloc (strlen (arc_text_string) + sizeof (ARC_SECTION_FORMAT) + 1);
+  arc_text_section = tmp = XNEWVEC (char, strlen (arc_text_string) + sizeof (ARC_SECTION_FORMAT) + 1);
   sprintf (tmp, ARC_SECTION_FORMAT, arc_text_string);
-  arc_data_section = tmp = xmalloc (strlen (arc_data_string) + sizeof (ARC_SECTION_FORMAT) + 1);
+  arc_data_section = tmp = XNEWVEC (char, strlen (arc_data_string) + sizeof (ARC_SECTION_FORMAT) + 1);
   sprintf (tmp, ARC_SECTION_FORMAT, arc_data_string);
-  arc_rodata_section = tmp = xmalloc (strlen (arc_rodata_string) + sizeof (ARC_SECTION_FORMAT) + 1);
+  arc_rodata_section = tmp = XNEWVEC (char, strlen (arc_rodata_string) + sizeof (ARC_SECTION_FORMAT) + 1);
   sprintf (tmp, ARC_SECTION_FORMAT, arc_rodata_string);
 
   arc_init_reg_tables ();
@@ -830,7 +830,8 @@ arc_setup_incoming_varargs (CUMULATIVE_ARGS *cum,
    scanned.  In either case, *TOTAL contains the cost result.  */
 
 static bool
-arc_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total)
+arc_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total,
+	       bool speed ATTRIBUTE_UNUSED)
 {
   switch (code)
     {
@@ -884,7 +885,7 @@ arc_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total)
    If ADDR is not a valid address, its cost is irrelevant.  */
 
 static int
-arc_address_cost (rtx addr)
+arc_address_cost (rtx addr, bool speed ATTRIBUTE_UNUSED)
 {
   switch (GET_CODE (addr))
     {
@@ -1079,11 +1080,11 @@ arc_compute_frame_size (int size /* # of var. bytes allocated.  */)
   int interrupt_p;
 
   var_size	= size;
-  args_size	= current_function_outgoing_args_size;
-  pretend_size	= current_function_pretend_args_size;
+  args_size	= crtl->outgoing_args_size;
+  pretend_size	= crtl->args.pretend_args_size;
   extra_size	= FIRST_PARM_OFFSET (0);
   total_size	= extra_size + pretend_size + args_size + var_size;
-  reg_offset	= FIRST_PARM_OFFSET(0) + current_function_outgoing_args_size;
+  reg_offset	= FIRST_PARM_OFFSET(0) + crtl->outgoing_args_size;
   reg_size	= 0;
   gmask		= 0;
 
@@ -1254,7 +1255,7 @@ arc_output_function_prologue (FILE *file, HOST_WIDE_INT size)
 static void
 arc_output_function_epilogue (FILE *file, HOST_WIDE_INT size)
 {
-  rtx epilogue_delay = current_function_epilogue_delay_list;
+  rtx epilogue_delay = crtl->epilogue_delay_list;
   int noepilogue = FALSE;
   enum arc_function_type fn_type = arc_compute_function_type (current_function_decl);
 
@@ -1283,7 +1284,7 @@ arc_output_function_epilogue (FILE *file, HOST_WIDE_INT size)
       unsigned int pretend_size = current_frame_info.pretend_size;
       unsigned int frame_size = size - pretend_size;
       int restored, fp_restored_p;
-      int can_trust_sp_p = !current_function_calls_alloca;
+      int can_trust_sp_p = !cfun->calls_alloca;
       const char *sp_str = reg_names[STACK_POINTER_REGNUM];
       const char *fp_str = reg_names[FRAME_POINTER_REGNUM];
 
@@ -2282,8 +2283,8 @@ static void
 arc_va_start (tree valist, rtx nextarg)
 {
   /* See arc_setup_incoming_varargs for reasons for this oddity.  */
-  if (current_function_args_info < 8
-      && (current_function_args_info & 1))
+  if (crtl->args.info < 8
+      && (crtl->args.info & 1))
     nextarg = plus_constant (nextarg, UNITS_PER_WORD);
 
   std_expand_builtin_va_start (valist, nextarg);

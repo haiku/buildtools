@@ -1,4 +1,5 @@
-@c Copyright (C) 2001, 2002, 2003, 2004, 2006 Free Software Foundation, Inc.
+@c Copyright (C) 2001, 2002, 2003, 2004, 2006, 2008
+@c Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -103,8 +104,8 @@ compiler as bootstrapping from scratch, but it ensures that the new
 code is syntactically correct (e.g., that you did not use GCC extensions
 by mistake), and avoids spurious bootstrap comparison
 failures@footnote{Except if the compiler was buggy and miscompiled
-  some of the files that were not modified.  In this case, it's best
-  to use @command{make restrap}.}.
+some of the files that were not modified.  In this case, it's best
+to use @command{make restrap}.}.
 
 Other targets available from the top level include:
 
@@ -149,7 +150,7 @@ the system compiler is rebuilt.
 For each package that is bootstrapped, rename directories so that,
 for example, @file{gcc} points to the stage@var{N} GCC, compiled
 with the stage@var{N-1} GCC@footnote{Customarily, the system compiler
-  is also termed the @file{stage0} GCC.}.
+is also termed the @file{stage0} GCC.}.
 
 You will invoke this target if you need to test or debug the
 stage@var{N} GCC@.  If you only need to execute GCC (but you need

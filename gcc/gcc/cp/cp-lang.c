@@ -1,5 +1,5 @@
 /* Language-dependent hooks for C++.
-   Copyright 2001, 2002, 2004, 2007 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva  <aoliva@redhat.com>
 
 This file is part of GCC.
@@ -57,52 +57,9 @@ static enum classify_record cp_classify_record (tree type);
 #define LANG_HOOKS_FOLD_OBJ_TYPE_REF cp_fold_obj_type_ref
 #undef LANG_HOOKS_INIT_TS
 #define LANG_HOOKS_INIT_TS cp_init_ts
-#undef LANG_HOOKS_REDUCE_BIT_FIELD_OPERATIONS
-#define LANG_HOOKS_REDUCE_BIT_FIELD_OPERATIONS true
 
 /* Each front end provides its own lang hook initializer.  */
 const struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
-
-/* Tree code classes.  */
-
-#define DEFTREECODE(SYM, NAME, TYPE, LENGTH) TYPE,
-
-const enum tree_code_class tree_code_type[] = {
-#include "tree.def"
-  tcc_exceptional,
-#include "c-common.def"
-  tcc_exceptional,
-#include "cp-tree.def"
-};
-#undef DEFTREECODE
-
-/* Table indexed by tree code giving number of expression
-   operands beyond the fixed part of the node structure.
-   Not used for types or decls.  */
-
-#define DEFTREECODE(SYM, NAME, TYPE, LENGTH) LENGTH,
-
-const unsigned char tree_code_length[] = {
-#include "tree.def"
-  0,
-#include "c-common.def"
-  0,
-#include "cp-tree.def"
-};
-#undef DEFTREECODE
-
-/* Names of tree components.
-   Used for printing out the tree and error messages.  */
-#define DEFTREECODE(SYM, NAME, TYPE, LEN) NAME,
-
-const char *const tree_code_name[] = {
-#include "tree.def"
-  "@@dummy",
-#include "c-common.def"
-  "@@dummy",
-#include "cp-tree.def"
-};
-#undef DEFTREECODE
 
 /* Lang hook routines common to C++ and ObjC++ appear in cp/cp-objcp-common.c;
    there should be very few routines below.  */

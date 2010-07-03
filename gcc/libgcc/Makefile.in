@@ -1,12 +1,12 @@
 # Makefile.in
 
-# Copyright (C) 2005, 2006 Free Software Foundation
+# Copyright (C) 2005, 2006, 2009 Free Software Foundation
 #
 # This file is part of GCC.
 #
 # GCC is free software; you can redistribute it and/or modify it under the
 # terms of the GNU Library General Public License as published by the Free
-# Software Foundation; either version 2 of the License, or (at your option)
+# Software Foundation; either version 3 of the License, or (at your option)
 # any later version.
 #
 # GCC is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -15,9 +15,8 @@
 # more details.
 #
 # You should have received a copy of the GNU General Public License along
-# with GCC; see the file COPYING.  If not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301,
-# USA.
+# with GCC; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
 #
 
 libgcc_topdir = @libgcc_topdir@
@@ -138,7 +137,7 @@ config.h: stamp-h ; @true
 stamp-h: $(srcdir)/config.in config.status Makefile
 	CONFIG_FILES= CONFIG_HEADERS=config.h:$(srcdir)/config.in $(SHELL) ./config.status
 
-config.status: $(srcdir)/configure
+config.status: $(srcdir)/configure $(srcdir)/config.host
 	$(SHELL) ./config.status --recheck
 
 include $(gcc_objdir)/libgcc.mvars
@@ -265,7 +264,9 @@ ASM_HIDDEN_OP = @asm_hidden_op@
 
 define gen-hide-list
 $(NM) -pg $< | \
-  $(AWK) 'NF == 3 && $$2 !~ /^[UN]$$/ { print "\t$(ASM_HIDDEN_OP)", $$3 }' > $@T
+  $(AWK) 'NF == 3 && $$2 !~ /^[UN]$$/ && $$3 !~ /.*_compat/ \
+         && $$3 !~ /.*@.*/ \
+	 { print "\t$(ASM_HIDDEN_OP)", $$3 }' > $@T
 mv -f $@T $@
 endef
 else
@@ -575,6 +576,54 @@ endif
 libgcc-objects += $(d128pbit-o)
 endif
 
+endif
+
+ifeq ($(LIBGCC_SYNC),yes)
+libgcc-sync-size-funcs := $(foreach op, add sub or and xor nand, \
+			    sync_fetch_and_$(op) \
+			    sync_$(op)_and_fetch) \
+			  sync_bool_compare_and_swap \
+			  sync_val_compare_and_swap \
+			  sync_lock_test_and_set
+
+libgcc-sync-size-funcs := $(foreach prefix, $(libgcc-sync-size-funcs), \
+			    $(foreach suffix, 1 2 4 8 16, \
+			      $(prefix)_$(suffix)))
+
+libgcc-sync-size-funcs-o = $(patsubst %,%$(objext),$(libgcc-sync-size-funcs))
+$(libgcc-sync-size-funcs-o): %$(objext): $(gcc_srcdir)/config/sync.c
+	$(gcc_compile) $(LIBGCC_SYNC_CFLAGS) \
+	  -DFN=`echo "$*" | sed 's/_[^_]*$$//'` \
+	  -DSIZE=`echo "$*" | sed 's/.*_//'` \
+	  -c $(gcc_srcdir)/config/sync.c $(vis_hide)
+libgcc-objects += $(libgcc-sync-size-funcs-o)
+
+libgcc-sync-funcs := sync_synchronize
+
+libgcc-sync-funcs-o = $(patsubst %,%$(objext),$(libgcc-sync-funcs))
+$(libgcc-sync-funcs-o): %$(objext): $(gcc_srcdir)/config/sync.c
+	$(gcc_compile) $(LIBGCC_SYNC_CFLAGS) \
+	  -DL$* \
+	  -c $(gcc_srcdir)/config/sync.c $(vis_hide)
+libgcc-objects += $(libgcc-sync-funcs-o)
+
+ifeq ($(enable_shared),yes)
+libgcc-sync-size-funcs-s-o = $(patsubst %,%_s$(objext), \
+			       $(libgcc-sync-size-funcs))
+$(libgcc-sync-size-funcs-s-o): %_s$(objext): $(gcc_srcdir)/config/sync.c
+	$(gcc_s_compile) $(LIBGCC_SYNC_CFLAGS) \
+	  -DFN=`echo "$*" | sed 's/_[^_]*$$//'` \
+	  -DSIZE=`echo "$*" | sed 's/.*_//'` \
+	  -c $(gcc_srcdir)/config/sync.c
+libgcc-s-objects += $(libgcc-sync-size-funcs-s-o)
+
+libgcc-sync-funcs-s-o = $(patsubst %,%_s$(objext),$(libgcc-sync-funcs))
+$(libgcc-sync-funcs-s-o): %_s$(objext): $(gcc_srcdir)/config/sync.c
+	$(gcc_s_compile) $(LIBGCC_SYNC_CFLAGS) \
+	  -DL$*	\
+	  -c $(gcc_srcdir)/config/sync.c
+libgcc-s-objects += $(libgcc-sync-funcs-s-o)
+endif
 endif
 
 # Build fixed-point support.

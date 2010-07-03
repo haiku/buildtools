@@ -35,6 +35,10 @@ if test $enable_linux_futex = yes; then
 	config_path="linux/ia64 linux posix"
 	;;
 
+    mips*-*-linux*)
+	config_path="linux/mips linux posix"
+	;;
+
     powerpc*-*-linux*)
 	config_path="linux/powerpc linux posix"
 	;;
@@ -105,6 +109,10 @@ case "${target}" in
   *-*-solaris2.[56]*)
 	config_path="posix95 posix"
 	XLDFLAGS="${XLDFLAGS} -lposix4"
+	;;
+
+  *-*-darwin*)
+	config_path="bsd posix"
 	;;
 
   *)

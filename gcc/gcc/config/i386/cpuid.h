@@ -1,43 +1,39 @@
 /*
- * Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+ * Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
  *
  * This file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
- * Free Software Foundation; either version 2, or (at your option) any
+ * Free Software Foundation; either version 3, or (at your option) any
  * later version.
- * 
- * In addition to the permissions in the GNU General Public License, the
- * Free Software Foundation gives you unlimited permission to link the
- * compiled version of this file with other programs, and to distribute
- * those programs without any restriction coming from the use of this
- * file.  (The General Public License restrictions do apply in other
- * respects; for example, they cover modification of the file, and
- * distribution when not linked into another program.)
  * 
  * This file is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  * 
- * You should have received a copy of the GNU General Public License
- * along with this program; see the file COPYING.  If not, write to
- * the Free Software Foundation, 51 Franklin Street, Fifth Floor,
- * Boston, MA 02110-1301, USA.
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the GCC Runtime Library Exception, version
+ * 3.1, as published by the Free Software Foundation.
  * 
- *    As a special exception, if you link this library with files
- *    compiled with GCC to produce an executable, this does not cause
- *    the resulting executable to be covered by the GNU General Public License.
- *    This exception does not however invalidate any other reasons why
- *    the executable file might be covered by the GNU General Public License.
+ * You should have received a copy of the GNU General Public License and
+ * a copy of the GCC Runtime Library Exception along with this program;
+ * see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ * <http://www.gnu.org/licenses/>.
  */
 
 /* %ecx */
 #define bit_SSE3	(1 << 0)
+#define bit_PCLMUL	(1 << 1)
 #define bit_SSSE3	(1 << 9)
+#define bit_FMA		(1 << 12)
 #define bit_CMPXCHG16B	(1 << 13)
 #define bit_SSE4_1	(1 << 19)
 #define bit_SSE4_2	(1 << 20)
 #define bit_POPCNT	(1 << 23)
+#define bit_AES		(1 << 25)
+#define bit_XSAVE	(1 << 26)
+#define bit_OSXSAVE	(1 << 27)
+#define bit_AVX		(1 << 28)
 
 /* %edx */
 #define bit_CMPXCHG8B	(1 << 8)
@@ -68,6 +64,13 @@
 	   "xchg{l}\t{%%}ebx, %1\n\t"			\
 	   : "=a" (a), "=r" (b), "=c" (c), "=d" (d)	\
 	   : "0" (level))
+
+#define __cpuid_count(level, count, a, b, c, d)		\
+  __asm__ ("xchg{l}\t{%%}ebx, %1\n\t"			\
+	   "cpuid\n\t"					\
+	   "xchg{l}\t{%%}ebx, %1\n\t"			\
+	   : "=a" (a), "=r" (b), "=c" (c), "=d" (d)	\
+	   : "0" (level), "2" (count))
 #else
 /* Host GCCs older than 3.0 weren't supporting Intel asm syntax
    nor alternatives in i386 code.  */
@@ -77,12 +80,24 @@
 	   "xchgl\t%%ebx, %1\n\t"			\
 	   : "=a" (a), "=r" (b), "=c" (c), "=d" (d)	\
 	   : "0" (level))
+
+#define __cpuid_count(level, count, a, b, c, d)		\
+  __asm__ ("xchgl\t%%ebx, %1\n\t"			\
+	   "cpuid\n\t"					\
+	   "xchgl\t%%ebx, %1\n\t"			\
+	   : "=a" (a), "=r" (b), "=c" (c), "=d" (d)	\
+	   : "0" (level), "2" (count))
 #endif
 #else
 #define __cpuid(level, a, b, c, d)			\
   __asm__ ("cpuid\n\t"					\
 	   : "=a" (a), "=b" (b), "=c" (c), "=d" (d)	\
 	   : "0" (level))
+
+#define __cpuid_count(level, count, a, b, c, d)		\
+  __asm__ ("cpuid\n\t"					\
+	   : "=a" (a), "=b" (b), "=c" (c), "=d" (d)	\
+	   : "0" (level), "2" (count))
 #endif
 
 /* Return highest supported input value for cpuid instruction.  ext can

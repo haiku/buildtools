@@ -1,5 +1,5 @@
 ;; ARM NEON coprocessor Machine Description
-;; Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+;; Copyright (C) 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 ;; Written by CodeSourcery.
 ;;
 ;; This file is part of GCC.
@@ -427,76 +427,7 @@
 ;; neon_type attribute definitions.
 (define_attr "vqh_mnem" "vadd,vmin,vmax" (const_string "vadd"))
 
-;; Classification of NEON instructions for scheduling purposes.
-;; Do not set this attribute and the "type" attribute together in
-;; any one instruction pattern.
-(define_attr "neon_type"
-   "neon_int_1,\
-   neon_int_2,\
-   neon_int_3,\
-   neon_int_4,\
-   neon_int_5,\
-   neon_vqneg_vqabs,\
-   neon_vmov,\
-   neon_vaba,\
-   neon_vsma,\
-   neon_vaba_qqq,\
-   neon_mul_ddd_8_16_qdd_16_8_long_32_16_long,\
-   neon_mul_qqq_8_16_32_ddd_32,\
-   neon_mul_qdd_64_32_long_qqd_16_ddd_32_scalar_64_32_long_scalar,\
-   neon_mla_ddd_8_16_qdd_16_8_long_32_16_long,\
-   neon_mla_qqq_8_16,\
-   neon_mla_ddd_32_qqd_16_ddd_32_scalar_qdd_64_32_long_scalar_qdd_64_32_long,\
-   neon_mla_qqq_32_qqd_32_scalar,\
-   neon_mul_ddd_16_scalar_32_16_long_scalar,\
-   neon_mul_qqd_32_scalar,\
-   neon_mla_ddd_16_scalar_qdd_32_16_long_scalar,\
-   neon_shift_1,\
-   neon_shift_2,\
-   neon_shift_3,\
-   neon_vshl_ddd,\
-   neon_vqshl_vrshl_vqrshl_qqq,\
-   neon_vsra_vrsra,\
-   neon_fp_vadd_ddd_vabs_dd,\
-   neon_fp_vadd_qqq_vabs_qq,\
-   neon_fp_vsum,\
-   neon_fp_vmul_ddd,\
-   neon_fp_vmul_qqd,\
-   neon_fp_vmla_ddd,\
-   neon_fp_vmla_qqq,\
-   neon_fp_vmla_ddd_scalar,\
-   neon_fp_vmla_qqq_scalar,\
-   neon_fp_vrecps_vrsqrts_ddd,\
-   neon_fp_vrecps_vrsqrts_qqq,\
-   neon_bp_simple,\
-   neon_bp_2cycle,\
-   neon_bp_3cycle,\
-   neon_ldr,\
-   neon_str,\
-   neon_vld1_1_2_regs,\
-   neon_vld1_3_4_regs,\
-   neon_vld2_2_regs_vld1_vld2_all_lanes,\
-   neon_vld2_4_regs,\
-   neon_vld3_vld4,\
-   neon_vst1_1_2_regs_vst2_2_regs,\
-   neon_vst1_3_4_regs,\
-   neon_vst2_4_regs_vst3_vst4,\
-   neon_vst3_vst4,\
-   neon_vld1_vld2_lane,\
-   neon_vld3_vld4_lane,\
-   neon_vst1_vst2_lane,\
-   neon_vst3_vst4_lane,\
-   neon_vld3_vld4_all_lanes,\
-   neon_mcr,\
-   neon_mcr_2_mcrr,\
-   neon_mrc,\
-   neon_mrrc,\
-   neon_ldm_2,\
-   neon_stm_2,\
-   none"
- (const_string "none"))
-
-;; Predicates used for setting the above attribute.
+;; Predicates used for setting neon_type
 
 (define_mode_attr Is_float_mode [(V8QI "false") (V16QI "false")
 				 (V4HI "false") (V8HI "false")
@@ -639,7 +570,8 @@
     default: gcc_unreachable ();
     }
 }
-  [(set_attr "length" "<V_slen>,<V_slen>,<V_slen>")])
+  [(set_attr "neon_type" "neon_int_1,neon_stm_2,neon_ldm_2")
+   (set_attr "length" "<V_slen>,<V_slen>,<V_slen>")])
 
 (define_split
   [(set (match_operand:EI 0 "s_register_operand" "")
@@ -735,7 +667,10 @@
           (match_operand:SI 2 "immediate_operand" "i")))]
   "TARGET_NEON"
 {
-  operands[2] = GEN_INT (ffs ((int) INTVAL (operands[2]) - 1));
+  int elt = ffs ((int) INTVAL (operands[2]) - 1);
+  if (BYTES_BIG_ENDIAN)
+    elt = GET_MODE_NUNITS (<MODE>mode) - 1 - elt;
+  operands[2] = GEN_INT (elt);
   
   return "vmov%?.<V_uf_sclr>\t%P0[%c2], %1";
 }
@@ -756,6 +691,9 @@
   int elt = elem % half_elts;
   int hi = (elem / half_elts) * 2;
   int regno = REGNO (operands[0]);
+
+  if (BYTES_BIG_ENDIAN)
+    elt = half_elts - 1 - elt;
 
   operands[0] = gen_rtx_REG (<V_HALF>mode, regno + hi);
   operands[2] = GEN_INT (elt);
@@ -804,7 +742,15 @@
           (match_operand:VD 1 "s_register_operand" "w")
           (parallel [(match_operand:SI 2 "immediate_operand" "i")])))]
   "TARGET_NEON"
-  "vmov%?.<V_uf_sclr>\t%0, %P1[%c2]"
+{
+  if (BYTES_BIG_ENDIAN)
+    {
+      int elt = INTVAL (operands[2]);
+      elt = GET_MODE_NUNITS (<MODE>mode) - 1 - elt;
+      operands[2] = GEN_INT (elt);
+    }
+  return "vmov%?.<V_uf_sclr>\t%0, %P1[%c2]";
+}
   [(set_attr "predicable" "yes")
    (set_attr "neon_type" "neon_bp_simple")]
 )
@@ -820,6 +766,9 @@
   int elt = INTVAL (operands[2]) % half_elts;
   int hi = (INTVAL (operands[2]) / half_elts) * 2;
   int regno = REGNO (operands[1]);
+
+  if (BYTES_BIG_ENDIAN)
+    elt = half_elts - 1 - elt;
 
   operands[1] = gen_rtx_REG (<V_HALF>mode, regno + hi);
   operands[2] = GEN_INT (elt);
@@ -2413,7 +2362,15 @@
 	    (match_operand:VD 1 "s_register_operand" "w")
 	    (parallel [(match_operand:SI 2 "immediate_operand" "i")]))))]
   "TARGET_NEON"
-  "vmov%?.s<V_sz_elem>\t%0, %P1[%c2]"
+{
+  if (BYTES_BIG_ENDIAN)
+    {
+      int elt = INTVAL (operands[2]);
+      elt = GET_MODE_NUNITS (<MODE>mode) - 1 - elt;
+      operands[2] = GEN_INT (elt);
+    }
+  return "vmov%?.s<V_sz_elem>\t%0, %P1[%c2]";
+}
   [(set_attr "predicable" "yes")
    (set_attr "neon_type" "neon_bp_simple")]
 )
@@ -2425,7 +2382,15 @@
 	    (match_operand:VD 1 "s_register_operand" "w")
 	    (parallel [(match_operand:SI 2 "immediate_operand" "i")]))))]
   "TARGET_NEON"
-  "vmov%?.u<V_sz_elem>\t%0, %P1[%c2]"
+{
+  if (BYTES_BIG_ENDIAN)
+    {
+      int elt = INTVAL (operands[2]);
+      elt = GET_MODE_NUNITS (<MODE>mode) - 1 - elt;
+      operands[2] = GEN_INT (elt);
+    }
+  return "vmov%?.u<V_sz_elem>\t%0, %P1[%c2]";
+}
   [(set_attr "predicable" "yes")
    (set_attr "neon_type" "neon_bp_simple")]
 )
@@ -2442,10 +2407,14 @@
   int regno = REGNO (operands[1]);
   unsigned int halfelts = GET_MODE_NUNITS (<MODE>mode) / 2;
   unsigned int elt = INTVAL (operands[2]);
+  unsigned int elt_adj = elt % halfelts;
+
+  if (BYTES_BIG_ENDIAN)
+    elt_adj = halfelts - 1 - elt_adj;
 
   ops[0] = operands[0];
   ops[1] = gen_rtx_REG (<V_HALF>mode, regno + 2 * (elt / halfelts));
-  ops[2] = GEN_INT (elt % halfelts);
+  ops[2] = GEN_INT (elt_adj);
   output_asm_insn ("vmov%?.s<V_sz_elem>\t%0, %P1[%c2]", ops);
 
   return "";
@@ -2466,10 +2435,14 @@
   int regno = REGNO (operands[1]);
   unsigned int halfelts = GET_MODE_NUNITS (<MODE>mode) / 2;
   unsigned int elt = INTVAL (operands[2]);
+  unsigned int elt_adj = elt % halfelts;
+
+  if (BYTES_BIG_ENDIAN)
+    elt_adj = halfelts - 1 - elt_adj;
 
   ops[0] = operands[0];
   ops[1] = gen_rtx_REG (<V_HALF>mode, regno + 2 * (elt / halfelts));
-  ops[2] = GEN_INT (elt % halfelts);
+  ops[2] = GEN_INT (elt_adj);
   output_asm_insn ("vmov%?.u<V_sz_elem>\t%0, %P1[%c2]", ops);
 
   return "";
@@ -2489,6 +2462,20 @@
   rtx insn;
 
   neon_lane_bounds (operands[2], 0, GET_MODE_NUNITS (<MODE>mode));
+
+  if (BYTES_BIG_ENDIAN)
+    {
+      /* The intrinsics are defined in terms of a model where the
+	 element ordering in memory is vldm order, whereas the generic
+	 RTL is defined in terms of a model where the element ordering
+	 in memory is array order.  Convert the lane number to conform
+	 to this model.  */
+      unsigned int elt = INTVAL (operands[2]);
+      unsigned int reg_nelts
+	= 64 / GET_MODE_BITSIZE (GET_MODE_INNER (<MODE>mode));
+      elt ^= reg_nelts - 1;
+      operands[2] = GEN_INT (elt);
+    }
 
   if ((magic & 3) == 3 || GET_MODE_BITSIZE (GET_MODE_INNER (<MODE>mode)) == 32)
     insn = gen_vec_extract<mode> (operands[0], operands[1], operands[2]);
@@ -3624,7 +3611,8 @@
 			  UNSPEC_VSHLL_N))]
   "TARGET_NEON"
 {
-  neon_const_bounds (operands[2], 0, neon_element_bits (<MODE>mode));
+  /* The boundaries are: 0 < imm <= size.  */
+  neon_const_bounds (operands[2], 0, neon_element_bits (<MODE>mode) + 1);
   return "vshll.%T3%#<V_sz_elem>\t%q0, %P1, %2";
 }
   [(set_attr "neon_type" "neon_shift_1")]

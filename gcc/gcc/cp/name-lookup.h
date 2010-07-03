@@ -1,5 +1,5 @@
 /* Declarations for C++ name lookup routines.
-   Copyright (C) 2003, 2004, 2005, 2007  Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008  Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -113,6 +113,8 @@ typedef enum scope_kind {
 			for-init-statement.  */
   sk_function_parms, /* The scope containing function parameters.  */
   sk_class,	     /* The scope containing the members of a class.  */
+  sk_scoped_enum,    /* The scope containing the enumertors of a C++0x
+                        scoped enumeration.  */
   sk_namespace,	     /* The scope containing the members of a
 			namespace, including the global scope.  */
   sk_template_parms, /* A scope for template parameters.  */
@@ -261,7 +263,7 @@ struct cp_binding_level GTY(())
 /* The binding level currently in effect.  */
 
 #define current_binding_level			\
-  (*(cfun && cp_function_chain->bindings	\
+  (*(cfun && cp_function_chain && cp_function_chain->bindings \
    ? &cp_function_chain->bindings		\
    : &scope_chain->bindings))
 

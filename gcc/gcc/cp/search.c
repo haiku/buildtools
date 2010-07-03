@@ -1,7 +1,8 @@
 /* Breadth-first and depth-first routines for
    searching multiple-inheritance lattice for GNU C++.
    Copyright (C) 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -720,20 +721,13 @@ protected_accessible_p (tree decl, tree derived, tree binfo)
 
        m as a member of N is protected, and the reference occurs in a
        member or friend of class N, or in a member or friend of a
-       class P derived from N, where m as a member of P is private or
-       protected.
+       class P derived from N, where m as a member of P is public, private
+       or protected.
 
-    Here DERIVED is a possible P and DECL is m.  accessible_p will
-    iterate over various values of N, but the access to m in DERIVED
-    does not change.
+    Here DERIVED is a possible P, DECL is m and BINFO_TYPE (binfo) is N.  */
 
-    Note that I believe that the passage above is wrong, and should read
-    "...is private or protected or public"; otherwise you get bizarre results
-    whereby a public using-decl can prevent you from accessing a protected
-    member of a base.  (jason 2000/02/28)  */
-
-  /* If DERIVED isn't derived from m's class, then it can't be a P.  */
-  if (!DERIVED_FROM_P (context_for_name_lookup (decl), derived))
+  /* If DERIVED isn't derived from N, then it can't be a P.  */
+  if (!DERIVED_FROM_P (BINFO_TYPE (binfo), derived))
     return 0;
 
   access = access_in_type (derived, decl);
@@ -1212,7 +1206,7 @@ lookup_member (tree xbasetype, tree name, int protect, bool want_type)
     }
   else
     {
-      if (!IS_AGGR_TYPE_CODE (TREE_CODE (xbasetype)))
+      if (!RECORD_OR_UNION_CODE_P (TREE_CODE (xbasetype)))
 	return NULL_TREE;
       type = xbasetype;
       xbasetype = NULL_TREE;
@@ -1911,6 +1905,20 @@ check_final_overrider (tree overrider, tree basefn)
       return 0;
     }
 
+  if (DECL_DELETED_FN (basefn) != DECL_DELETED_FN (overrider))
+    {
+      if (DECL_DELETED_FN (overrider))
+	{
+	  error ("deleted function %q+D", overrider);
+	  error ("overriding non-deleted function %q+D", basefn);
+	}
+      else
+	{
+	  error ("non-deleted function %q+D", overrider);
+	  error ("overriding deleted function %q+D", basefn);
+	}
+      return 0;
+    }
   return 1;
 }
 

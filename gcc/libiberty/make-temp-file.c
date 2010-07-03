@@ -23,6 +23,7 @@ Boston, MA 02110-1301, USA.  */
 
 #include <stdio.h>	/* May get P_tmpdir.  */
 #include <sys/types.h>
+#include <errno.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -34,6 +35,9 @@ Boston, MA 02110-1301, USA.  */
 #endif
 #ifdef HAVE_SYS_FILE_H
 #include <sys/file.h>   /* May get R_OK, etc. on some systems.  */
+#endif
+#if defined(_WIN32) && !defined(__CYGWIN__)
+#include <windows.h>
 #endif
 
 #ifndef R_OK
@@ -54,6 +58,8 @@ extern int mkstemps (char *, int);
    mktemp requires 6 trailing X's.  */
 #define TEMP_FILE "ccXXXXXX"
 #define TEMP_FILE_LEN (sizeof(TEMP_FILE) - 1)
+
+#if !defined(_WIN32) || defined(__CYGWIN__)
 
 /* Subroutine of choose_tmpdir.
    If BASE is non-NULL, return it.
@@ -80,6 +86,8 @@ static const char usrtmp[] =
 static const char vartmp[] =
 { DIR_SEPARATOR, 'v', 'a', 'r', DIR_SEPARATOR, 't', 'm', 'p', 0 };
 
+#endif
+
 static char *memoized_tmpdir;
 
 /*
@@ -96,40 +104,58 @@ files in.
 char *
 choose_tmpdir (void)
 {
-  const char *base = 0;
-  char *tmpdir;
-  unsigned int len;
-
-  if (memoized_tmpdir)
-    return memoized_tmpdir;
-
-  base = try_dir (getenv ("TMPDIR"), base);
-  base = try_dir (getenv ("TMP"), base);
-  base = try_dir (getenv ("TEMP"), base);
-
+  if (!memoized_tmpdir)
+    {
+#if !defined(_WIN32) || defined(__CYGWIN__)
+      const char *base = 0;
+      char *tmpdir;
+      unsigned int len;
+      
+      base = try_dir (getenv ("TMPDIR"), base);
+      base = try_dir (getenv ("TMP"), base);
+      base = try_dir (getenv ("TEMP"), base);
+      
 #ifdef P_tmpdir
-  base = try_dir (P_tmpdir, base);
+      base = try_dir (P_tmpdir, base);
 #endif
 
-  /* Try /var/tmp, /usr/tmp, then /tmp.  */
-  base = try_dir (vartmp, base);
-  base = try_dir (usrtmp, base);
-  base = try_dir (tmp, base);
- 
-  /* If all else fails, use the current directory!  */
-  if (base == 0)
-    base = ".";
+      /* Try /var/tmp, /usr/tmp, then /tmp.  */
+      base = try_dir (vartmp, base);
+      base = try_dir (usrtmp, base);
+      base = try_dir (tmp, base);
+      
+      /* If all else fails, use the current directory!  */
+      if (base == 0)
+	base = ".";
+      /* Append DIR_SEPARATOR to the directory we've chosen
+	 and return it.  */
+      len = strlen (base);
+      tmpdir = XNEWVEC (char, len + 2);
+      strcpy (tmpdir, base);
+      tmpdir[len] = DIR_SEPARATOR;
+      tmpdir[len+1] = '\0';
+      memoized_tmpdir = tmpdir;
+#else /* defined(_WIN32) && !defined(__CYGWIN__) */
+      DWORD len;
 
-  /* Append DIR_SEPARATOR to the directory we've chosen
-     and return it.  */
-  len = strlen (base);
-  tmpdir = XNEWVEC (char, len + 2);
-  strcpy (tmpdir, base);
-  tmpdir[len] = DIR_SEPARATOR;
-  tmpdir[len+1] = '\0';
+      /* Figure out how much space we need.  */
+      len = GetTempPath(0, NULL);
+      if (len)
+	{
+	  memoized_tmpdir = XNEWVEC (char, len);
+	  if (!GetTempPath(len, memoized_tmpdir))
+	    {
+	      XDELETEVEC (memoized_tmpdir);
+	      memoized_tmpdir = NULL;
+	    }
+	}
+      if (!memoized_tmpdir)
+	/* If all else fails, use the current directory.  */
+	memoized_tmpdir = xstrdup (".\\");
+#endif /* defined(_WIN32) && !defined(__CYGWIN__) */
+    }
 
-  memoized_tmpdir = tmpdir;
-  return tmpdir;
+  return memoized_tmpdir;
 }
 
 /*
@@ -166,11 +192,14 @@ make_temp_file (const char *suffix)
   strcpy (temp_filename + base_len + TEMP_FILE_LEN, suffix);
 
   fd = mkstemps (temp_filename, suffix_len);
-  /* If mkstemps failed, then something bad is happening.  Maybe we should
-     issue a message about a possible security attack in progress?  */
+  /* Mkstemps failed.  It may be EPERM, ENOSPC etc.  */
   if (fd == -1)
-    abort ();
-  /* Similarly if we can not close the file.  */
+    {
+      fprintf (stderr, "Cannot create temporary file in %s: %s\n",
+	       base, strerror (errno));
+      abort ();
+    }
+  /* We abort on failed close out of sheer paranoia.  */
   if (close (fd))
     abort ();
   return temp_filename;

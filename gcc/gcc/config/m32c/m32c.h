@@ -1,5 +1,5 @@
 /* Target Definitions for R8C/M16C/M32C
-   Copyright (C) 2005, 2007
+   Copyright (C) 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Red Hat.
 
@@ -143,6 +143,17 @@ machine_function;
 #define UNITS_PER_WORD 2
 #define POINTER_SIZE (TARGET_A16 ? 16 : 32)
 #define POINTERS_EXTEND_UNSIGNED 1
+/* We have a problem with libgcc2.  It only defines two versions of
+   each function, one for "int" and one for "long long".  Ie it assumes
+   that "sizeof (int) == sizeof (long)".  For the M32C this is not true
+   and we need a third set of functions.  We explicitly define
+   LIBGCC2_UNITS_PER_WORD here so that it is clear that we are expecting
+   to get the SI and DI versions from the libgcc2.c sources, and we
+   provide our own set of HI functions in m32c-lib2.c, which is why this
+   definition is surrounded by #ifndef..#endif.  */
+#ifndef LIBGCC2_UNITS_PER_WORD
+#define LIBGCC2_UNITS_PER_WORD 4
+#endif
 
 /* These match the alignment enforced by the two types of stack operations.  */
 #define PARM_BOUNDARY (TARGET_A16 ? 8 : 16)
@@ -153,6 +164,11 @@ machine_function;
    desired.  */
 #define FUNCTION_BOUNDARY 8
 #define BIGGEST_ALIGNMENT 8
+
+/* Since we have a maximum structure alignment of 8 there
+   is no need to enforce any alignment of bitfield types.  */
+#undef  PCC_BITFIELD_TYPE_MATTERS
+#define PCC_BITFIELD_TYPE_MATTERS 0
 
 #define STRICT_ALIGNMENT 0
 #define SLOW_BYTE_ACCESS 1
@@ -224,7 +240,7 @@ machine_function;
 
 #define REG_ALLOC_ORDER { \
 	0, 1, 2, 3, 4, 5, /* r0..r3, a0, a1 */ \
-	12, 13, 14, 15, 16, 17, 18, /* mem0..mem7 */  \
+        12, 13, 14, 15, 16, 17, 18, 19, /* mem0..mem7 */	\
 	6, 7, 8, 9, 10, 11 /* sb, fb, sp, pc, flg, ap */ }
 
 /* How Values Fit in Registers */
@@ -270,6 +286,7 @@ machine_function;
   { 0x000001f0 }, /* PS  - a0 a1 sb fp sp */\
   { 0x0000000f }, /* SI  - r0r2 r1r3 a0a1 */\
   { 0x0000003f }, /* HI  - r0 r1 r2 r3 a0 a1 */\
+  { 0x00000033 }, /* R02A  - r0r2 a0 a1 */ \
   { 0x0000003f }, /* RA  - r0..r3 a0 a1 */\
   { 0x0000007f }, /* GENERAL */\
   { 0x00000400 }, /* FLG */\
@@ -308,6 +325,7 @@ enum reg_class
   PS_REGS,
   SI_REGS,
   HI_REGS,
+  R02A_REGS,
   RA_REGS,
   GENERAL_REGS,
   FLG_REGS,
@@ -348,6 +366,7 @@ enum reg_class
 "PS_REGS", \
 "SI_REGS", \
 "HI_REGS", \
+"R02A_REGS", \
 "RA_REGS", \
 "GENERAL_REGS", \
 "FLG_REGS", \

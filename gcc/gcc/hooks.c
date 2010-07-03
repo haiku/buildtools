@@ -1,5 +1,6 @@
 /* General-purpose hooks.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -154,6 +155,12 @@ hook_int_rtx_0 (rtx a ATTRIBUTE_UNUSED)
 }
 
 int
+hook_int_rtx_bool_0 (rtx a ATTRIBUTE_UNUSED, bool b ATTRIBUTE_UNUSED)
+{
+  return 0;
+}
+
+int
 hook_int_size_t_constcharptr_int_0 (size_t a ATTRIBUTE_UNUSED,
 				    const char *b ATTRIBUTE_UNUSED,
 				    int c ATTRIBUTE_UNUSED)
@@ -233,10 +240,11 @@ hook_bool_uintp_uintp_false (unsigned int *a ATTRIBUTE_UNUSED,
 }
 
 bool
-hook_bool_rtx_int_int_intp_false (rtx a ATTRIBUTE_UNUSED,
-				  int b ATTRIBUTE_UNUSED,
-				  int c ATTRIBUTE_UNUSED,
-				  int *d ATTRIBUTE_UNUSED)
+hook_bool_rtx_int_int_intp_bool_false (rtx a ATTRIBUTE_UNUSED,
+				       int b ATTRIBUTE_UNUSED,
+				       int c ATTRIBUTE_UNUSED,
+				       int *d ATTRIBUTE_UNUSED,
+				       bool speed_p ATTRIBUTE_UNUSED)
 {
   return false;
 }
@@ -287,6 +295,14 @@ hook_tree_tree_tree_bool_null (tree t0 ATTRIBUTE_UNUSED,
 
 tree
 hook_tree_tree_tree_null (tree t0 ATTRIBUTE_UNUSED, tree t1 ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
+tree
+hook_tree_tree_tree_tree_null (tree t0 ATTRIBUTE_UNUSED,
+			       tree t1 ATTRIBUTE_UNUSED,
+			       tree t2 ATTRIBUTE_UNUSED)
 {
   return NULL;
 }

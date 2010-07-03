@@ -1,6 +1,6 @@
 /* Specific flags and argument handling of the C++ front end.
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2007  Free Software Foundation, Inc.
+   2007, 2008  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -43,6 +43,9 @@ along with GCC; see the file COPYING3.  If not see
 #endif
 #ifndef LIBSTDCXX_PROFILE
 #define LIBSTDCXX_PROFILE LIBSTDCXX
+#endif
+#ifndef LIBSTDCXX_STATIC
+#define LIBSTDCXX_STATIC LIBSTDCXX
 #endif
 
 void
@@ -315,7 +318,8 @@ lang_specific_driver (int *in_argc, const char *const **in_argv,
   /* Add `-lstdc++' if we haven't already done so.  */
   if (library > 0)
     {
-      arglist[j] = saw_profile_flag ? LIBSTDCXX_PROFILE : LIBSTDCXX;
+      arglist[j] = shared_libgcc == 0 ? LIBSTDCXX_STATIC
+	: saw_profile_flag ? LIBSTDCXX_PROFILE : LIBSTDCXX;
       if (arglist[j][0] != '-' || arglist[j][1] == 'l')
 	added_libraries++;
       j++;

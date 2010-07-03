@@ -1,6 +1,6 @@
 /* Control flow graph manipulation code for GNU compiler.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -67,6 +67,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "alloc-pool.h"
 #include "df.h"
 #include "cfgloop.h"
+#include "tree-flow.h"
 
 /* The obstack on which the flow graph components are allocated.  */
 
@@ -80,17 +81,21 @@ static void free_edge (edge);
 /* Called once at initialization time.  */
 
 void
-init_flow (void)
+init_flow (struct function *the_fun)
 {
-  if (!cfun->cfg)
-    cfun->cfg = GGC_CNEW (struct control_flow_graph);
-  n_edges = 0;
-  ENTRY_BLOCK_PTR = GGC_CNEW (struct basic_block_def);
-  ENTRY_BLOCK_PTR->index = ENTRY_BLOCK;
-  EXIT_BLOCK_PTR = GGC_CNEW (struct basic_block_def);
-  EXIT_BLOCK_PTR->index = EXIT_BLOCK;
-  ENTRY_BLOCK_PTR->next_bb = EXIT_BLOCK_PTR;
-  EXIT_BLOCK_PTR->prev_bb = ENTRY_BLOCK_PTR;
+  if (!the_fun->cfg)
+    the_fun->cfg = GGC_CNEW (struct control_flow_graph);
+  n_edges_for_function (the_fun) = 0;
+  ENTRY_BLOCK_PTR_FOR_FUNCTION (the_fun)
+    = GGC_CNEW (struct basic_block_def);
+  ENTRY_BLOCK_PTR_FOR_FUNCTION (the_fun)->index = ENTRY_BLOCK;
+  EXIT_BLOCK_PTR_FOR_FUNCTION (the_fun)
+    = GGC_CNEW (struct basic_block_def);
+  EXIT_BLOCK_PTR_FOR_FUNCTION (the_fun)->index = EXIT_BLOCK;
+  ENTRY_BLOCK_PTR_FOR_FUNCTION (the_fun)->next_bb 
+    = EXIT_BLOCK_PTR_FOR_FUNCTION (the_fun);
+  EXIT_BLOCK_PTR_FOR_FUNCTION (the_fun)->prev_bb 
+    = ENTRY_BLOCK_PTR_FOR_FUNCTION (the_fun);
 }
 
 /* Helper function for remove_edge and clear_edges.  Frees edge structure
@@ -359,6 +364,9 @@ remove_edge_raw (edge e)
   disconnect_src (e);
   disconnect_dest (e);
 
+  /* This is probably not needed, but it doesn't hurt.  */
+  redirect_edge_var_map_clear (e);
+
   free_edge (e);
 }
 
@@ -395,6 +403,7 @@ redirect_edge_succ_nodup (edge e, basic_block new_succ)
 	s->probability = REG_BR_PROB_BASE;
       s->count += e->count;
       remove_edge (e);
+      redirect_edge_var_map_dup (s, e);
       e = s;
     }
   else
@@ -588,7 +597,7 @@ dump_reg_info (FILE *file)
   fprintf (file, "%d registers.\n", max);
   for (i = FIRST_PSEUDO_REGISTER; i < max; i++)
     {
-      enum reg_class class, altclass;
+      enum reg_class rclass, altclass;
       
       if (regstat_n_sets_and_refs)
 	fprintf (file, "\nRegister %d used %d times across %d insns",
@@ -619,17 +628,17 @@ dump_reg_info (FILE *file)
 	  && PSEUDO_REGNO_BYTES (i) != UNITS_PER_WORD)
 	fprintf (file, "; %d bytes", PSEUDO_REGNO_BYTES (i));
       
-      class = reg_preferred_class (i);
+      rclass = reg_preferred_class (i);
       altclass = reg_alternate_class (i);
-      if (class != GENERAL_REGS || altclass != ALL_REGS)
+      if (rclass != GENERAL_REGS || altclass != ALL_REGS)
 	{
-	  if (altclass == ALL_REGS || class == ALL_REGS)
-	    fprintf (file, "; pref %s", reg_class_names[(int) class]);
+	  if (altclass == ALL_REGS || rclass == ALL_REGS)
+	    fprintf (file, "; pref %s", reg_class_names[(int) rclass]);
 	  else if (altclass == NO_REGS)
-	    fprintf (file, "; %s or none", reg_class_names[(int) class]);
+	    fprintf (file, "; %s or none", reg_class_names[(int) rclass]);
 	  else
 	    fprintf (file, "; pref %s, else %s",
-		     reg_class_names[(int) class],
+		     reg_class_names[(int) rclass],
 		     reg_class_names[(int) altclass]);
 	}
       

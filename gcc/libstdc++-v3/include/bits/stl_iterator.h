@@ -1,12 +1,12 @@
 // Iterators -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  *
@@ -68,7 +63,7 @@
 
 #include <bits/cpp_type_traits.h>
 #include <ext/type_traits.h>
-#include <bits/stl_move.h>
+#include <bits/move.h>
 
 _GLIBCXX_BEGIN_NAMESPACE(std)
 
@@ -365,9 +360,17 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     { return !(__x < __y); }
 
   template<typename _IteratorL, typename _IteratorR>
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+    // DR 685.
+    inline auto
+    operator-(const reverse_iterator<_IteratorL>& __x,
+	      const reverse_iterator<_IteratorR>& __y)
+    -> decltype(__y.base() - __x.base())
+#else
     inline typename reverse_iterator<_IteratorL>::difference_type
     operator-(const reverse_iterator<_IteratorL>& __x,
 	      const reverse_iterator<_IteratorR>& __y)
+#endif
     { return __y.base() - __x.base(); }
   //@}
 
@@ -835,9 +838,17 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
   // operators but also operator- must accept mixed iterator/const_iterator
   // parameters.
   template<typename _IteratorL, typename _IteratorR, typename _Container>
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+    // DR 685.
+    inline auto
+    operator-(const __normal_iterator<_IteratorL, _Container>& __lhs,
+	      const __normal_iterator<_IteratorR, _Container>& __rhs)
+    -> decltype(__lhs.base() - __rhs.base())
+#else
     inline typename __normal_iterator<_IteratorL, _Container>::difference_type
     operator-(const __normal_iterator<_IteratorL, _Container>& __lhs,
 	      const __normal_iterator<_IteratorR, _Container>& __rhs)
+#endif
     { return __lhs.base() - __rhs.base(); }
 
   template<typename _Iterator, typename _Container>
@@ -1001,10 +1012,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	       const move_iterator<_IteratorR>& __y)
     { return !(__x < __y); }
 
+  // DR 685.
   template<typename _IteratorL, typename _IteratorR>
-    inline typename move_iterator<_IteratorL>::difference_type
+    inline auto
     operator-(const move_iterator<_IteratorL>& __x,
 	      const move_iterator<_IteratorR>& __y)
+    -> decltype(__x.base() - __y.base())
     { return __x.base() - __y.base(); }
 
   template<typename _Iterator>

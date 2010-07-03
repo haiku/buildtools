@@ -1,6 +1,6 @@
 /* Output xcoff-format symbol table information from GNU compiler.
    Copyright (C) 1992, 1994, 1995, 1997, 1998, 1999, 2000, 2002, 2003, 2004,
-   2007  Free Software Foundation, Inc.
+   2007, 2008  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -413,7 +413,7 @@ xcoffout_declare_function (FILE *file, tree decl, const char *name)
   len = strlen (name);
   if (name[len - 1] == ']')
     {
-      char *n = alloca (len - 3);
+      char *n = XALLOCAVEC (char, len - 3);
       memcpy (n, name, len - 4);
       n[len - 4] = '\0';
       name = n;

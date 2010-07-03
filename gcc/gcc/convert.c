@@ -1,6 +1,6 @@
 /* Utility routines for data type conversion for GCC.
    Copyright (C) 1987, 1988, 1991, 1992, 1993, 1994, 1995, 1997, 1998,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -81,7 +81,7 @@ strip_float_extensions (tree exp)
       it properly and handle it like (type)(narrowest_type)constant.
       This way we can optimize for instance a=a*2.0 where "a" is float
       but 2.0 is double constant.  */
-  if (TREE_CODE (exp) == REAL_CST)
+  if (TREE_CODE (exp) == REAL_CST && !DECIMAL_FLOAT_TYPE_P (TREE_TYPE (exp)))
     {
       REAL_VALUE_TYPE orig;
       tree type = NULL;
@@ -98,8 +98,7 @@ strip_float_extensions (tree exp)
 	return build_real (type, real_value_truncate (TYPE_MODE (type), orig));
     }
 
-  if (TREE_CODE (exp) != NOP_EXPR
-      && TREE_CODE (exp) != CONVERT_EXPR)
+  if (!CONVERT_EXPR_P (exp))
     return exp;
 
   sub = TREE_OPERAND (exp, 0);
@@ -107,6 +106,9 @@ strip_float_extensions (tree exp)
   expt = TREE_TYPE (exp);
 
   if (!FLOAT_TYPE_P (subt))
+    return exp;
+
+  if (DECIMAL_FLOAT_TYPE_P (expt) != DECIMAL_FLOAT_TYPE_P (subt))
     return exp;
 
   if (TYPE_PRECISION (subt) > TYPE_PRECISION (expt))
@@ -137,40 +139,45 @@ convert_to_real (tree type, tree expr)
       switch (fcode)
         {
 #define CASE_MATHFN(FN) case BUILT_IN_##FN: case BUILT_IN_##FN##L:
-	  CASE_MATHFN (ACOS)
-	  CASE_MATHFN (ACOSH)
-	  CASE_MATHFN (ASIN)
-	  CASE_MATHFN (ASINH)
-	  CASE_MATHFN (ATAN)
-	  CASE_MATHFN (ATANH)
-	  CASE_MATHFN (CBRT)
-	  CASE_MATHFN (COS)
 	  CASE_MATHFN (COSH)
-	  CASE_MATHFN (ERF)
-	  CASE_MATHFN (ERFC)
 	  CASE_MATHFN (EXP)
 	  CASE_MATHFN (EXP10)
 	  CASE_MATHFN (EXP2)
-	  CASE_MATHFN (EXPM1)
-	  CASE_MATHFN (FABS)
+ 	  CASE_MATHFN (EXPM1)
 	  CASE_MATHFN (GAMMA)
 	  CASE_MATHFN (J0)
 	  CASE_MATHFN (J1)
 	  CASE_MATHFN (LGAMMA)
-	  CASE_MATHFN (LOG)
-	  CASE_MATHFN (LOG10)
-	  CASE_MATHFN (LOG1P)
-	  CASE_MATHFN (LOG2)
-	  CASE_MATHFN (LOGB)
 	  CASE_MATHFN (POW10)
-	  CASE_MATHFN (SIN)
 	  CASE_MATHFN (SINH)
-	  CASE_MATHFN (SQRT)
-	  CASE_MATHFN (TAN)
-	  CASE_MATHFN (TANH)
 	  CASE_MATHFN (TGAMMA)
 	  CASE_MATHFN (Y0)
 	  CASE_MATHFN (Y1)
+	    /* The above functions may set errno differently with float
+	       input or output so this transformation is not safe with
+	       -fmath-errno.  */
+	    if (flag_errno_math)
+	      break;
+	  CASE_MATHFN (ACOS)
+	  CASE_MATHFN (ACOSH)
+	  CASE_MATHFN (ASIN)
+ 	  CASE_MATHFN (ASINH)
+ 	  CASE_MATHFN (ATAN)
+	  CASE_MATHFN (ATANH)
+ 	  CASE_MATHFN (CBRT)
+ 	  CASE_MATHFN (COS)
+ 	  CASE_MATHFN (ERF)
+ 	  CASE_MATHFN (ERFC)
+ 	  CASE_MATHFN (FABS)
+	  CASE_MATHFN (LOG)
+	  CASE_MATHFN (LOG10)
+	  CASE_MATHFN (LOG2)
+ 	  CASE_MATHFN (LOG1P)
+ 	  CASE_MATHFN (LOGB)
+ 	  CASE_MATHFN (SIN)
+	  CASE_MATHFN (SQRT)
+ 	  CASE_MATHFN (TAN)
+ 	  CASE_MATHFN (TANH)
 #undef CASE_MATHFN
 	    {
 	      tree arg0 = strip_float_extensions (CALL_EXPR_ARG (expr, 0));
@@ -261,18 +268,22 @@ convert_to_real (tree type, tree expr)
 	     tree arg1 = strip_float_extensions (TREE_OPERAND (expr, 1));
 
 	     if (FLOAT_TYPE_P (TREE_TYPE (arg0))
-		 && FLOAT_TYPE_P (TREE_TYPE (arg1)))
+		 && FLOAT_TYPE_P (TREE_TYPE (arg1))
+		 && DECIMAL_FLOAT_TYPE_P (itype) == DECIMAL_FLOAT_TYPE_P (type))
 	       {
 		  tree newtype = type;
 
 		  if (TYPE_MODE (TREE_TYPE (arg0)) == SDmode
-		      || TYPE_MODE (TREE_TYPE (arg1)) == SDmode)
+		      || TYPE_MODE (TREE_TYPE (arg1)) == SDmode
+		      || TYPE_MODE (type) == SDmode)
 		    newtype = dfloat32_type_node;
 		  if (TYPE_MODE (TREE_TYPE (arg0)) == DDmode
-		      || TYPE_MODE (TREE_TYPE (arg1)) == DDmode)
+		      || TYPE_MODE (TREE_TYPE (arg1)) == DDmode
+		      || TYPE_MODE (type) == DDmode)
 		    newtype = dfloat64_type_node;
 		  if (TYPE_MODE (TREE_TYPE (arg0)) == TDmode
-		      || TYPE_MODE (TREE_TYPE (arg1)) == TDmode)
+		      || TYPE_MODE (TREE_TYPE (arg1)) == TDmode
+		      || TYPE_MODE (type) == TDmode)
                     newtype = dfloat128_type_node;
 		  if (newtype == dfloat32_type_node
 		      || newtype == dfloat64_type_node
@@ -290,7 +301,32 @@ convert_to_real (tree type, tree expr)
 		    newtype = TREE_TYPE (arg0);
 		  if (TYPE_PRECISION (TREE_TYPE (arg1)) > TYPE_PRECISION (newtype))
 		    newtype = TREE_TYPE (arg1);
-		  if (TYPE_PRECISION (newtype) < TYPE_PRECISION (itype))
+		  /* Sometimes this transformation is safe (cannot
+		     change results through affecting double rounding
+		     cases) and sometimes it is not.  If NEWTYPE is
+		     wider than TYPE, e.g. (float)((long double)double
+		     + (long double)double) converted to
+		     (float)(double + double), the transformation is
+		     unsafe regardless of the details of the types
+		     involved; double rounding can arise if the result
+		     of NEWTYPE arithmetic is a NEWTYPE value half way
+		     between two representable TYPE values but the
+		     exact value is sufficiently different (in the
+		     right direction) for this difference to be
+		     visible in ITYPE arithmetic.  If NEWTYPE is the
+		     same as TYPE, however, the transformation may be
+		     safe depending on the types involved: it is safe
+		     if the ITYPE has strictly more than twice as many
+		     mantissa bits as TYPE, can represent infinities
+		     and NaNs if the TYPE can, and has sufficient
+		     exponent range for the product or ratio of two
+		     values representable in the TYPE to be within the
+		     range of normal values of ITYPE.  */
+		  if (TYPE_PRECISION (newtype) < TYPE_PRECISION (itype)
+		      && (flag_unsafe_math_optimizations
+			  || (TYPE_PRECISION (newtype) == TYPE_PRECISION (type)
+			      && real_can_shorten_arithmetic (TYPE_MODE (itype),
+							      TYPE_MODE (type)))))
 		    {
 		      expr = build2 (TREE_CODE (expr), newtype,
 				     fold (convert_to_real (newtype, arg0)),
@@ -462,6 +498,7 @@ convert_to_integer (tree type, tree expr)
     case INTEGER_TYPE:
     case ENUMERAL_TYPE:
     case BOOLEAN_TYPE:
+    case OFFSET_TYPE:
       /* If this is a logical operation, which just returns 0 or 1, we can
 	 change the type of the expression.  */
 
@@ -703,10 +740,16 @@ convert_to_integer (tree type, tree expr)
 
 	case COND_EXPR:
 	  /* It is sometimes worthwhile to push the narrowing down through
-	     the conditional and never loses.  */
+	     the conditional and never loses.  A COND_EXPR may have a throw
+	     as one operand, which then has void type.  Just leave void
+	     operands as they are.  */
 	  return fold_build3 (COND_EXPR, type, TREE_OPERAND (expr, 0),
-			      convert (type, TREE_OPERAND (expr, 1)),
-			      convert (type, TREE_OPERAND (expr, 2)));
+			      VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (expr, 1)))
+			      ? TREE_OPERAND (expr, 1)
+			      : convert (type, TREE_OPERAND (expr, 1)),
+			      VOID_TYPE_P (TREE_TYPE (TREE_OPERAND (expr, 2)))
+			      ? TREE_OPERAND (expr, 2)
+			      : convert (type, TREE_OPERAND (expr, 2)));
 
 	default:
 	  break;

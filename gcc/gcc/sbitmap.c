@@ -1,5 +1,5 @@
 /* Simple bitmaps.
-   Copyright (C) 1999, 2000, 2002, 2003, 2004, 2006, 2007
+   Copyright (C) 1999, 2000, 2002, 2003, 2004, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -79,7 +79,7 @@ sbitmap_alloc (unsigned int n_elms)
   bytes = size * sizeof (SBITMAP_ELT_TYPE);
   amt = (sizeof (struct simple_bitmap_def)
 	 + bytes - sizeof (SBITMAP_ELT_TYPE));
-  bmap = xmalloc (amt);
+  bmap = (sbitmap) xmalloc (amt);
   bmap->n_bits = n_elms;
   bmap->size = size;
   bmap->popcount = NULL;
@@ -92,7 +92,7 @@ sbitmap
 sbitmap_alloc_with_popcount (unsigned int n_elms)
 {
   sbitmap const bmap = sbitmap_alloc (n_elms);  
-  bmap->popcount = xmalloc (bmap->size * sizeof (unsigned char));
+  bmap->popcount = XNEWVEC (unsigned char, bmap->size);
   return bmap;
 }
 
@@ -112,10 +112,9 @@ sbitmap_resize (sbitmap bmap, unsigned int n_elms, int def)
     {
       amt = (sizeof (struct simple_bitmap_def)
 	    + bytes - sizeof (SBITMAP_ELT_TYPE));
-      bmap = xrealloc (bmap, amt);
+      bmap = (sbitmap) xrealloc (bmap, amt);
       if (bmap->popcount)
-	bmap->popcount = xrealloc (bmap->popcount,
-				   size * sizeof (unsigned char));
+	bmap->popcount = XRESIZEVEC (unsigned char, bmap->popcount, size);
     }
 
   if (n_elms > bmap->n_bits)
@@ -218,7 +217,7 @@ sbitmap_vector_alloc (unsigned int n_vecs, unsigned int n_elms)
   }
 
   amt = vector_bytes + (n_vecs * elm_bytes);
-  bitmap_vector = xmalloc (amt);
+  bitmap_vector = (sbitmap *) xmalloc (amt);
 
   for (i = 0, offset = vector_bytes; i < n_vecs; i++, offset += elm_bytes)
     {
@@ -272,6 +271,57 @@ sbitmap_empty_p (const_sbitmap bmap)
 
   return true;
 }
+
+/* Return false if any of the N bits are set in MAP starting at
+   START.  */
+
+bool 
+sbitmap_range_empty_p (const_sbitmap bmap, unsigned int start, unsigned int n)
+{
+  unsigned int i = start / SBITMAP_ELT_BITS;
+  SBITMAP_ELT_TYPE elm;
+  unsigned int shift = start % SBITMAP_ELT_BITS;
+
+  gcc_assert (bmap->n_bits >= start + n);
+
+  elm = bmap->elms[i];
+  elm = elm >> shift;
+
+  if (shift + n <= SBITMAP_ELT_BITS)
+    {
+      /* The bits are totally contained in a single element.  */
+      if (shift + n < SBITMAP_ELT_BITS)
+        elm &= ((1 << n) - 1);
+      return (elm == 0);
+    }
+
+  if (elm) 
+    return false;
+
+  n -= SBITMAP_ELT_BITS - shift;
+  i++;
+
+  /* Deal with full elts.  */
+  while (n >= SBITMAP_ELT_BITS)
+    {
+      if (bmap->elms[i])
+	return false;
+      i++;
+      n -= SBITMAP_ELT_BITS;
+    }
+
+  /* The leftover bits.  */
+  if (n)
+    {
+      elm = bmap->elms[i];
+      elm &= ((1 << n) - 1);
+      return (elm == 0);
+    }  
+
+  return true;
+}
+
+
 
 /* Zero all elements in a bitmap.  */
 

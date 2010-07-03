@@ -1,5 +1,5 @@
 ;; GCC machine description for IA-64 synchronization instructions.
-;; Copyright (C) 2005, 2007
+;; Copyright (C) 2005, 2007, 2008, 2009
 ;; Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
@@ -27,9 +27,18 @@
 (define_code_attr fetchop_name
   [(plus "add") (minus "sub") (ior "ior") (xor "xor") (and "and")])
 
-(define_insn "memory_barrier"
-  [(set (mem:BLK (match_scratch:DI 0 "X"))
-	(unspec:BLK [(mem:BLK (match_scratch:DI 1 "X"))] UNSPEC_MF))]
+(define_expand "memory_barrier"
+  [(set (match_dup 0)
+	(unspec:BLK [(match_dup 0)] UNSPEC_MF))]
+  ""
+{
+  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+  MEM_VOLATILE_P (operands[0]) = 1;
+})
+
+(define_insn "*memory_barrier"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec:BLK [(match_dup 0)] UNSPEC_MF))]
   ""
   "mf"
   [(set_attr "itanium_class" "syst_m")])
@@ -57,8 +66,9 @@
 
 (define_expand "sync_nand<mode>"
   [(set (match_operand:IMODE 0 "memory_operand" "")
-	(and:IMODE (not:IMODE (match_dup 0))
-	  (match_operand:IMODE 1 "general_operand" "")))]
+	(not:IMODE
+	  (and:IMODE (match_dup 0)
+		     (match_operand:IMODE 1 "general_operand" ""))))]
   ""
 {
   ia64_expand_atomic_op (NOT, operands[0], operands[1], NULL, NULL);
@@ -78,9 +88,9 @@
 
 (define_expand "sync_old_nand<mode>"
   [(set (match_operand:IMODE 0 "gr_register_operand" "")
-	(and:IMODE 
-	  (not:IMODE (match_operand:IMODE 1 "memory_operand" ""))
-	  (match_operand:IMODE 2 "general_operand" "")))]
+	(not:IMODE 
+	  (and:IMODE (match_operand:IMODE 1 "memory_operand" "")
+		     (match_operand:IMODE 2 "general_operand" ""))))]
   ""
 {
   ia64_expand_atomic_op (NOT, operands[1], operands[2], operands[0], NULL);
@@ -100,9 +110,9 @@
 
 (define_expand "sync_new_nand<mode>"
   [(set (match_operand:IMODE 0 "gr_register_operand" "")
-	(and:IMODE 
-	  (not:IMODE (match_operand:IMODE 1 "memory_operand" ""))
-	  (match_operand:IMODE 2 "general_operand" "")))]
+	(not:IMODE 
+	  (and:IMODE (match_operand:IMODE 1 "memory_operand" "")
+		     (match_operand:IMODE 2 "general_operand" ""))))]
   ""
 {
   ia64_expand_atomic_op (NOT, operands[1], operands[2], NULL, operands[0]);

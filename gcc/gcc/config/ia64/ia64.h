@@ -1,5 +1,5 @@
 /* Definitions of target machine GNU compiler.  IA-64 version.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by James E. Wilson <wilson@cygnus.com> and
    		  David Mosberger <davidm@hpl.hp.com>.
@@ -800,6 +800,19 @@ enum reg_class
     0xFFFFFFFF, 0xFFFFFFFF, 0x3FFF },			\
 }
 
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+
+#define IRA_COVER_CLASSES						     \
+{									     \
+  PR_REGS, BR_REGS, AR_M_REGS, AR_I_REGS, GR_REGS, FR_REGS, LIM_REG_CLASSES  \
+}
+
 /* A C expression whose value is a register class containing hard register
    REGNO.  In general there is more than one such class; choose a class which
    is "minimal", meaning that no smaller class also contains the register.  */
@@ -982,7 +995,7 @@ enum reg_class
 #define INIT_EXPANDERS					\
   do {							\
     ia64_init_expanders ();                             \
-    if (cfun && cfun->emit->regno_pointer_align)	\
+    if (crtl->emit.regno_pointer_align)	\
       REGNO_POINTER_ALIGN (ARG_POINTER_REGNUM) = 64;	\
   } while (0)
 
@@ -1029,7 +1042,7 @@ enum reg_class
 
 /* If defined, the maximum amount of space required for outgoing arguments will
    be computed and placed into the variable
-   `current_function_outgoing_args_size'.  */
+   `crtl->outgoing_args_size'.  */
 
 #define ACCUMULATE_OUTGOING_ARGS 1
 
@@ -1371,7 +1384,7 @@ do {									\
    many additional insn groups we run into, vs how good the dynamic
    branch predictor is.  */
 
-#define BRANCH_COST 6
+#define BRANCH_COST(speed_p, predictable_p) 6
 
 /* Define this macro as a C expression which is nonzero if accessing less than
    a word of memory (i.e. a `char' or a `short') is no faster than accessing a

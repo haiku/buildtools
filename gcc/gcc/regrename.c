@@ -1,5 +1,5 @@
 /* Register renaming for the GNU compiler.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -89,7 +89,7 @@ static void scan_rtx (rtx, rtx *, enum reg_class, enum scan_actions,
 static struct du_chain *build_def_use (basic_block);
 static void dump_def_use_chain (struct du_chain *);
 static void note_sets (rtx, const_rtx, void *);
-static void clear_dead_regs (HARD_REG_SET *, enum machine_mode, rtx);
+static void clear_dead_regs (HARD_REG_SET *, enum reg_note, rtx);
 static void merge_overlapping_regs (basic_block, HARD_REG_SET *,
 				    struct du_chain *);
 
@@ -114,7 +114,7 @@ note_sets (rtx x, const_rtx set ATTRIBUTE_UNUSED, void *data)
    in the list NOTES.  */
 
 static void
-clear_dead_regs (HARD_REG_SET *pset, enum machine_mode kind, rtx notes)
+clear_dead_regs (HARD_REG_SET *pset, enum reg_note kind, rtx notes)
 {
   rtx note;
   for (note = notes; note; note = XEXP (note, 1))
@@ -137,12 +137,12 @@ merge_overlapping_regs (basic_block b, HARD_REG_SET *pset,
   struct du_chain *t = chain;
   rtx insn;
   HARD_REG_SET live;
-  struct df_ref **def_rec;
+  df_ref *def_rec;
 
   REG_SET_TO_HARD_REG_SET (live, df_get_live_in (b));
   for (def_rec = df_get_artificial_defs (b->index); *def_rec; def_rec++)
     {
-      struct df_ref *def = *def_rec;
+      df_ref def = *def_rec;
       if (DF_REF_FLAGS (def) & DF_REF_AT_TOP)
 	SET_HARD_REG_BIT (live, DF_REF_REGNO (def));
     }
@@ -196,7 +196,7 @@ regrename_optimize (void)
   memset (tick, 0, sizeof tick);
 
   gcc_obstack_init (&rename_obstack);
-  first_obj = obstack_alloc (&rename_obstack, 0);
+  first_obj = XOBNEWVAR (&rename_obstack, char, 0);
 
   FOR_EACH_BB (bb)
     {
@@ -229,13 +229,13 @@ regrename_optimize (void)
 	{
 	  int new_reg, best_new_reg;
 	  int n_uses;
-	  struct du_chain *this = all_chains;
+	  struct du_chain *this_du = all_chains;
 	  struct du_chain *tmp, *last;
 	  HARD_REG_SET this_unavailable;
-	  int reg = REGNO (*this->loc);
+	  int reg = REGNO (*this_du->loc);
 	  int i;
 
-	  all_chains = this->next_chain;
+	  all_chains = this_du->next_chain;
 
 	  best_new_reg = reg;
 
@@ -263,7 +263,7 @@ regrename_optimize (void)
 	     count number of uses, and narrow the set of registers we can
 	     use for renaming.  */
 	  n_uses = 0;
-	  for (last = this; last->next_use; last = last->next_use)
+	  for (last = this_du; last->next_use; last = last->next_use)
 	    {
 	      n_uses++;
 	      IOR_COMPL_HARD_REG_SET (this_unavailable,
@@ -275,16 +275,16 @@ regrename_optimize (void)
 	  IOR_COMPL_HARD_REG_SET (this_unavailable,
 				  reg_class_contents[last->cl]);
 
-	  if (this->need_caller_save_reg)
+	  if (this_du->need_caller_save_reg)
 	    IOR_HARD_REG_SET (this_unavailable, call_used_reg_set);
 
-	  merge_overlapping_regs (bb, &this_unavailable, this);
+	  merge_overlapping_regs (bb, &this_unavailable, this_du);
 
 	  /* Now potential_regs is a reasonable approximation, let's
 	     have a closer look at each register still in there.  */
 	  for (new_reg = 0; new_reg < FIRST_PSEUDO_REGISTER; new_reg++)
 	    {
-	      int nregs = hard_regno_nregs[new_reg][GET_MODE (*this->loc)];
+	      int nregs = hard_regno_nregs[new_reg][GET_MODE (*this_du->loc)];
 
 	      for (i = nregs - 1; i >= 0; --i)
 	        if (TEST_HARD_REG_BIT (this_unavailable, new_reg + i)
@@ -309,7 +309,7 @@ regrename_optimize (void)
 
 	      /* See whether it accepts all modes that occur in
 		 definition and uses.  */
-	      for (tmp = this; tmp; tmp = tmp->next_use)
+	      for (tmp = this_du; tmp; tmp = tmp->next_use)
 		if (! HARD_REGNO_MODE_OK (new_reg, GET_MODE (*tmp->loc))
 		    || (tmp->need_caller_save_reg
 			&& ! (HARD_REGNO_CALL_PART_CLOBBERED
@@ -340,12 +340,12 @@ regrename_optimize (void)
 	      continue;
 	    }
 
-	  do_replace (this, best_new_reg);
-	  tick[best_new_reg] = ++this_tick;
-	  df_set_regs_ever_live (best_new_reg, true);
-
 	  if (dump_file)
 	    fprintf (dump_file, ", renamed as %s\n", reg_names[best_new_reg]);
+
+	  do_replace (this_du, best_new_reg);
+	  tick[best_new_reg] = ++this_tick;
+	  df_set_regs_ever_live (best_new_reg, true);
 	}
 
       obstack_free (&rename_obstack, first_obj);
@@ -364,11 +364,13 @@ do_replace (struct du_chain *chain, int reg)
     {
       unsigned int regno = ORIGINAL_REGNO (*chain->loc);
       struct reg_attrs * attr = REG_ATTRS (*chain->loc);
+      int reg_ptr = REG_POINTER (*chain->loc);
 
       *chain->loc = gen_raw_REG (GET_MODE (*chain->loc), reg);
       if (regno >= FIRST_PSEUDO_REGISTER)
 	ORIGINAL_REGNO (*chain->loc) = regno;
       REG_ATTRS (*chain->loc) = attr;
+      REG_POINTER (*chain->loc) = reg_ptr;
       df_insn_rescan (chain->insn);
       chain = chain->next_use;
     }
@@ -392,16 +394,15 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
     {
       if (type == OP_OUT)
 	{
-	  struct du_chain *this
-	    = obstack_alloc (&rename_obstack, sizeof (struct du_chain));
-	  this->next_use = 0;
-	  this->next_chain = open_chains;
-	  this->loc = loc;
-	  this->insn = insn;
-	  this->cl = cl;
-	  this->need_caller_save_reg = 0;
-	  this->earlyclobber = earlyclobber;
-	  open_chains = this;
+	  struct du_chain *this_du = XOBNEW (&rename_obstack, struct du_chain);
+	  this_du->next_use = 0;
+	  this_du->next_chain = open_chains;
+	  this_du->loc = loc;
+	  this_du->insn = insn;
+	  this_du->cl = cl;
+	  this_du->need_caller_save_reg = 0;
+	  this_du->earlyclobber = earlyclobber;
+	  open_chains = this_du;
 	}
       return;
     }
@@ -411,7 +412,7 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
 
   for (p = &open_chains; *p;)
     {
-      struct du_chain *this = *p;
+      struct du_chain *this_du = *p;
 
       /* Check if the chain has been terminated if it has then skip to
 	 the next chain.
@@ -420,18 +421,18 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
 	 the chain in Step 3, but are trying to hide in-out operands
 	 from terminate_write in Step 5.  */
 
-      if (*this->loc == cc0_rtx)
-	p = &this->next_chain;
+      if (*this_du->loc == cc0_rtx)
+	p = &this_du->next_chain;
       else
 	{
-	  int regno = REGNO (*this->loc);
-	  int nregs = hard_regno_nregs[regno][GET_MODE (*this->loc)];
+	  int regno = REGNO (*this_du->loc);
+	  int nregs = hard_regno_nregs[regno][GET_MODE (*this_du->loc)];
 	  int exact_match = (regno == this_regno && nregs == this_nregs);
 
 	  if (regno + nregs <= this_regno
 	      || this_regno + this_nregs <= regno)
 	    {
-	      p = &this->next_chain;
+	      p = &this_du->next_chain;
 	      continue;
 	    }
 
@@ -445,23 +446,23 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
 		 be replaced with, terminate the chain.  */
 	      if (cl != NO_REGS)
 		{
-		  this = obstack_alloc (&rename_obstack, sizeof (struct du_chain));
-		  this->next_use = 0;
-		  this->next_chain = (*p)->next_chain;
-		  this->loc = loc;
-		  this->insn = insn;
-		  this->cl = cl;
-		  this->need_caller_save_reg = 0;
+		  this_du = XOBNEW (&rename_obstack, struct du_chain);
+		  this_du->next_use = 0;
+		  this_du->next_chain = (*p)->next_chain;
+		  this_du->loc = loc;
+		  this_du->insn = insn;
+		  this_du->cl = cl;
+		  this_du->need_caller_save_reg = 0;
 		  while (*p)
 		    p = &(*p)->next_use;
-		  *p = this;
+		  *p = this_du;
 		  return;
 		}
 	    }
 
 	  if (action != terminate_overlapping_read || ! exact_match)
 	    {
-	      struct du_chain *next = this->next_chain;
+	      struct du_chain *next = this_du->next_chain;
 
 	      /* Whether the terminated chain can be used for renaming
 	         depends on the action and this being an exact match.
@@ -470,12 +471,12 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
 	      if ((action == terminate_dead || action == terminate_write)
 		  && exact_match)
 		{
-		  this->next_chain = closed_chains;
-		  closed_chains = this;
+		  this_du->next_chain = closed_chains;
+		  closed_chains = this_du;
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "Closing chain %s at insn %d (%s)\n",
-			     reg_names[REGNO (*this->loc)], INSN_UID (insn),
+			     reg_names[REGNO (*this_du->loc)], INSN_UID (insn),
 			     scan_actions_name[(int) action]);
 		}
 	      else
@@ -483,13 +484,13 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl,
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "Discarding chain %s at insn %d (%s)\n",
-			     reg_names[REGNO (*this->loc)], INSN_UID (insn),
+			     reg_names[REGNO (*this_du->loc)], INSN_UID (insn),
 			     scan_actions_name[(int) action]);
 		}
 	      *p = next;
 	    }
 	  else
-	    p = &this->next_chain;
+	    p = &this_du->next_chain;
 	}
     }
 }
@@ -820,7 +821,7 @@ build_def_use (basic_block bb)
 		    OP_IN, 0);
 
 	  for (i = 0; i < recog_data.n_dups; i++)
-	    *recog_data.dup_loc[i] = copy_rtx (old_dups[i]);
+	    *recog_data.dup_loc[i] = old_dups[i];
 	  for (i = 0; i < n_ops; i++)
 	    *recog_data.operand_loc[i] = old_operands[i];
 	  if (recog_data.n_dups)
@@ -984,15 +985,15 @@ dump_def_use_chain (struct du_chain *chains)
 {
   while (chains)
     {
-      struct du_chain *this = chains;
-      int r = REGNO (*this->loc);
-      int nregs = hard_regno_nregs[r][GET_MODE (*this->loc)];
+      struct du_chain *this_du = chains;
+      int r = REGNO (*this_du->loc);
+      int nregs = hard_regno_nregs[r][GET_MODE (*this_du->loc)];
       fprintf (dump_file, "Register %s (%d):", reg_names[r], nregs);
-      while (this)
+      while (this_du)
 	{
-	  fprintf (dump_file, " %d [%s]", INSN_UID (this->insn),
-		   reg_class_names[this->cl]);
-	  this = this->next_use;
+	  fprintf (dump_file, " %d [%s]", INSN_UID (this_du->insn),
+		   reg_class_names[this_du->cl]);
+	  this_du = this_du->next_use;
 	}
       fprintf (dump_file, "\n");
       chains = chains->next_chain;
@@ -1172,7 +1173,7 @@ init_value_data (struct value_data *vd)
 static void
 kill_clobbered_value (rtx x, const_rtx set, void *data)
 {
-  struct value_data *vd = data;
+  struct value_data *const vd = (struct value_data *) data;
   if (GET_CODE (set) == CLOBBER)
     kill_value (x, vd);
 }
@@ -1183,7 +1184,7 @@ kill_clobbered_value (rtx x, const_rtx set, void *data)
 static void
 kill_set_value (rtx x, const_rtx set, void *data)
 {
-  struct value_data *vd = data;
+  struct value_data *const vd = (struct value_data *) data;
   if (GET_CODE (set) != CLOBBER)
     {
       kill_value (x, vd);
@@ -1200,7 +1201,7 @@ static int
 kill_autoinc_value (rtx *px, void *data)
 {
   rtx x = *px;
-  struct value_data *vd = data;
+  struct value_data *const vd = (struct value_data *) data;
 
   if (GET_RTX_CLASS (GET_CODE (x)) == RTX_AUTOINC)
     {
@@ -1377,17 +1378,18 @@ find_oldest_value_reg (enum reg_class cl, rtx reg, struct value_data *vd)
   for (i = vd->e[regno].oldest_regno; i != regno; i = vd->e[i].next_regno)
     {
       enum machine_mode oldmode = vd->e[i].mode;
-      rtx new;
+      rtx new_rtx;
 
       if (!in_hard_reg_set_p (reg_class_contents[cl], mode, i))
 	return NULL_RTX;
 
-      new = maybe_mode_change (oldmode, vd->e[regno].mode, mode, i, regno);
-      if (new)
+      new_rtx = maybe_mode_change (oldmode, vd->e[regno].mode, mode, i, regno);
+      if (new_rtx)
 	{
-	  ORIGINAL_REGNO (new) = ORIGINAL_REGNO (reg);
-	  REG_ATTRS (new) = REG_ATTRS (reg);
-	  return new;
+	  ORIGINAL_REGNO (new_rtx) = ORIGINAL_REGNO (reg);
+	  REG_ATTRS (new_rtx) = REG_ATTRS (reg);
+	  REG_POINTER (new_rtx) = REG_POINTER (reg);
+	  return new_rtx;
 	}
     }
 
@@ -1401,14 +1403,14 @@ static bool
 replace_oldest_value_reg (rtx *loc, enum reg_class cl, rtx insn,
 			  struct value_data *vd)
 {
-  rtx new = find_oldest_value_reg (cl, *loc, vd);
-  if (new)
+  rtx new_rtx = find_oldest_value_reg (cl, *loc, vd);
+  if (new_rtx)
     {
       if (dump_file)
 	fprintf (dump_file, "insn %u: replaced reg %u with %u\n",
-		 INSN_UID (insn), REGNO (*loc), REGNO (new));
+		 INSN_UID (insn), REGNO (*loc), REGNO (new_rtx));
 
-      validate_change (insn, loc, new, 1);
+      validate_change (insn, loc, new_rtx, 1);
       return true;
     }
   return false;
@@ -1646,7 +1648,7 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	  unsigned int regno = REGNO (src);
 	  enum machine_mode mode = GET_MODE (src);
 	  unsigned int i;
-	  rtx new;
+	  rtx new_rtx;
 
 	  /* If we are accessing SRC in some mode other that what we
 	     set it in, make sure that the replacement is valid.  */
@@ -1661,13 +1663,13 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	     register in the same class.  */
 	  if (REG_P (SET_DEST (set)))
 	    {
-	      new = find_oldest_value_reg (REGNO_REG_CLASS (regno), src, vd);
-	      if (new && validate_change (insn, &SET_SRC (set), new, 0))
+	      new_rtx = find_oldest_value_reg (REGNO_REG_CLASS (regno), src, vd);
+	      if (new_rtx && validate_change (insn, &SET_SRC (set), new_rtx, 0))
 		{
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "insn %u: replaced reg %u with %u\n",
-			     INSN_UID (insn), regno, REGNO (new));
+			     INSN_UID (insn), regno, REGNO (new_rtx));
 		  changed = true;
 		  goto did_replacement;
 		}
@@ -1677,18 +1679,19 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	  for (i = vd->e[regno].oldest_regno; i != regno;
 	       i = vd->e[i].next_regno)
 	    {
-	      new = maybe_mode_change (vd->e[i].mode, vd->e[regno].mode,
+	      new_rtx = maybe_mode_change (vd->e[i].mode, vd->e[regno].mode,
 				       mode, i, regno);
-	      if (new != NULL_RTX)
+	      if (new_rtx != NULL_RTX)
 		{
-		  if (validate_change (insn, &SET_SRC (set), new, 0))
+		  if (validate_change (insn, &SET_SRC (set), new_rtx, 0))
 		    {
-		      ORIGINAL_REGNO (new) = ORIGINAL_REGNO (src);
-		      REG_ATTRS (new) = REG_ATTRS (src);
+		      ORIGINAL_REGNO (new_rtx) = ORIGINAL_REGNO (src);
+		      REG_ATTRS (new_rtx) = REG_ATTRS (src);
+		      REG_POINTER (new_rtx) = REG_POINTER (src);
 		      if (dump_file)
 			fprintf (dump_file,
 				 "insn %u: replaced reg %u with %u\n",
-				 INSN_UID (insn), regno, REGNO (new));
+				 INSN_UID (insn), regno, REGNO (new_rtx));
 		      changed = true;
 		      goto did_replacement;
 		    }
@@ -1741,13 +1744,13 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	  if (replaced[i])
 	    {
 	      int j;
-	      rtx new;
+	      rtx new_rtx;
 
-	      new = *recog_data.operand_loc[i];
-	      recog_data.operand[i] = new;
+	      new_rtx = *recog_data.operand_loc[i];
+	      recog_data.operand[i] = new_rtx;
 	      for (j = 0; j < recog_data.n_dups; j++)
 		if (recog_data.dup_num[j] == i)
-		  validate_unshare_change (insn, recog_data.dup_loc[j], new, 1);
+		  validate_unshare_change (insn, recog_data.dup_loc[j], new_rtx, 1);
 
 	      any_replacements = true;
 	    }
@@ -1949,8 +1952,10 @@ rest_of_handle_regrename (void)
   return 0;
 }
 
-struct tree_opt_pass pass_regrename =
+struct rtl_opt_pass pass_regrename =
 {
+ {
+  RTL_PASS,
   "rnreg",                              /* name */
   gate_handle_regrename,                /* gate */
   rest_of_handle_regrename,             /* execute */
@@ -1963,8 +1968,8 @@ struct tree_opt_pass pass_regrename =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func,                       /* todo_flags_finish */
-  'n'                                   /* letter */
+  TODO_dump_func                        /* todo_flags_finish */
+ }
 };
 
 static bool
@@ -1982,8 +1987,10 @@ rest_of_handle_cprop (void)
   return 0;
 }
 
-struct tree_opt_pass pass_cprop_hardreg =
+struct rtl_opt_pass pass_cprop_hardreg =
 {
+ {
+  RTL_PASS,
   "cprop_hardreg",                      /* name */
   gate_handle_cprop,                    /* gate */
   rest_of_handle_cprop,                 /* execute */
@@ -1995,7 +2002,6 @@ struct tree_opt_pass pass_cprop_hardreg =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func | TODO_verify_rtl_sharing, /* todo_flags_finish */
-  'n'                                   /* letter */
+  TODO_dump_func | TODO_verify_rtl_sharing /* todo_flags_finish */
+ }
 };
-

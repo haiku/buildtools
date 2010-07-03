@@ -1,5 +1,6 @@
 /* Subroutines used for code generation on Vitesse IQ2000 processors
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -161,8 +162,8 @@ static bool iq2000_return_in_memory   (const_tree, const_tree);
 static void iq2000_setup_incoming_varargs (CUMULATIVE_ARGS *,
 					   enum machine_mode, tree, int *,
 					   int);
-static bool iq2000_rtx_costs          (rtx, int, int, int *);
-static int  iq2000_address_cost       (rtx);
+static bool iq2000_rtx_costs          (rtx, int, int, int *, bool);
+static int  iq2000_address_cost       (rtx, bool);
 static section *iq2000_select_section (tree, int, unsigned HOST_WIDE_INT);
 static bool iq2000_pass_by_reference  (CUMULATIVE_ARGS *, enum machine_mode,
 				       const_tree, bool);
@@ -744,7 +745,7 @@ iq2000_move_1word (rtx operands[], rtx insn, int unsignedp)
 /* Provide the costs of an addressing mode that contains ADDR.  */
 
 static int
-iq2000_address_cost (rtx addr)
+iq2000_address_cost (rtx addr, bool speed)
 {
   switch (GET_CODE (addr))
     {
@@ -795,7 +796,7 @@ iq2000_address_cost (rtx addr)
 	  case LABEL_REF:
 	  case HIGH:
 	  case LO_SUM:
-	    return iq2000_address_cost (plus1) + 1;
+	    return iq2000_address_cost (plus1, speed) + 1;
 
 	  default:
 	    break;
@@ -937,15 +938,15 @@ gen_int_relational (enum rtx_code test_code, rtx result, rtx cmp0, rtx cmp1,
     {
       if (p_info->const_add != 0)
 	{
-	  HOST_WIDE_INT new = INTVAL (cmp1) + p_info->const_add;
+	  HOST_WIDE_INT new_const = INTVAL (cmp1) + p_info->const_add;
 
 	  /* If modification of cmp1 caused overflow,
 	     we would get the wrong answer if we follow the usual path;
 	     thus, x > 0xffffffffU would turn into x > 0U.  */
 	  if ((p_info->unsignedp
-	       ? (unsigned HOST_WIDE_INT) new >
+	       ? (unsigned HOST_WIDE_INT) new_const >
 	       (unsigned HOST_WIDE_INT) INTVAL (cmp1)
-	       : new > INTVAL (cmp1))
+	       : new_const > INTVAL (cmp1))
 	      != (p_info->const_add > 0))
 	    {
 	      /* This test is always true, but if INVERT is true then
@@ -955,7 +956,7 @@ gen_int_relational (enum rtx_code test_code, rtx result, rtx cmp0, rtx cmp1,
 	      return result;
 	    }
 	  else
-	    cmp1 = GEN_INT (new);
+	    cmp1 = GEN_INT (new_const);
 	}
     }
 
@@ -1368,7 +1369,7 @@ iq2000_va_start (tree valist, rtx nextarg)
   /* Find out how many non-float named formals.  */
   int gpr_save_area_size;
   /* Note UNITS_PER_WORD is 4 bytes.  */
-  int_arg_words = current_function_args_info.arg_words;
+  int_arg_words = crtl->args.info.arg_words;
 
   if (int_arg_words < 8 )
     /* Adjust for the prologue's economy measure.  */
@@ -1389,7 +1390,7 @@ iq2000_init_machine_status (void)
 {
   struct machine_function *f;
 
-  f = ggc_alloc_cleared (sizeof (struct machine_function));
+  f = GGC_CNEW (struct machine_function);
 
   return f;
 }
@@ -1615,11 +1616,11 @@ compute_frame_size (HOST_WIDE_INT size)
   mask = 0;
   extra_size = IQ2000_STACK_ALIGN ((0));
   var_size = IQ2000_STACK_ALIGN (size);
-  args_size = IQ2000_STACK_ALIGN (current_function_outgoing_args_size);
+  args_size = IQ2000_STACK_ALIGN (crtl->outgoing_args_size);
 
   /* If a function dynamically allocates the stack and
      has 0 for STACK_DYNAMIC_OFFSET then allocate some stack space.  */
-  if (args_size == 0 && current_function_calls_alloca)
+  if (args_size == 0 && cfun->calls_alloca)
     args_size = 4 * UNITS_PER_WORD;
 
   total_size = var_size + args_size + extra_size;
@@ -1635,7 +1636,7 @@ compute_frame_size (HOST_WIDE_INT size)
     }
 
   /* We need to restore these for the handler.  */
-  if (current_function_calls_eh_return)
+  if (crtl->calls_eh_return)
     {
       unsigned int i;
 
@@ -1660,7 +1661,7 @@ compute_frame_size (HOST_WIDE_INT size)
       && ! profile_flag)
     total_size = extra_size = 0;
 
-  total_size += IQ2000_STACK_ALIGN (current_function_pretend_args_size);
+  total_size += IQ2000_STACK_ALIGN (crtl->args.pretend_args_size);
 
   /* Save other computed information.  */
   cfun->machine->total_size = total_size;
@@ -1872,7 +1873,7 @@ iq2000_expand_prologue (void)
 
   /* If struct value address is treated as the first argument.  */
   if (aggregate_value_p (DECL_RESULT (fndecl), fndecl)
-      && ! current_function_returns_pcc_struct
+      && !cfun->returns_pcc_struct
       && targetm.calls.struct_value_rtx (TREE_TYPE (fndecl), 1) == 0)
     {
       tree type = build_pointer_type (fntype);
@@ -2064,7 +2065,7 @@ iq2000_expand_epilogue (void)
 
       save_restore_insns (0);
 
-      if (current_function_calls_eh_return)
+      if (crtl->calls_eh_return)
 	{
 	  rtx eh_ofs = EH_RETURN_STACKADJ_RTX;
 	  emit_insn (gen_addsi3 (eh_ofs, eh_ofs, tsize_rtx));
@@ -2073,20 +2074,19 @@ iq2000_expand_epilogue (void)
 
       emit_insn (gen_blockage ());
 
-      if (tsize != 0 || current_function_calls_eh_return)
+      if (tsize != 0 || crtl->calls_eh_return)
 	{
 	  emit_insn (gen_addsi3 (stack_pointer_rtx, stack_pointer_rtx,
 				 tsize_rtx));
 	}
     }
 
-  if (current_function_calls_eh_return)
+  if (crtl->calls_eh_return)
     {
       /* Perform the additional bump for __throw.  */
       emit_move_insn (gen_rtx_REG (Pmode, HARD_FRAME_POINTER_REGNUM),
 		      stack_pointer_rtx);
-      emit_insn (gen_rtx_USE (VOIDmode, gen_rtx_REG (Pmode,
-						  HARD_FRAME_POINTER_REGNUM)));
+      emit_use (gen_rtx_REG (Pmode, HARD_FRAME_POINTER_REGNUM));
       emit_jump_insn (gen_eh_return_internal ());
     }
   else
@@ -3204,7 +3204,8 @@ print_operand (FILE *file, rtx op, int letter)
 }
 
 static bool
-iq2000_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int * total)
+iq2000_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int * total,
+		  bool speed ATTRIBUTE_UNUSED)
 {
   enum machine_mode mode = GET_MODE (x);
 

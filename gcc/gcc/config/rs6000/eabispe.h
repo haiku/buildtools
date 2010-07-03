@@ -1,6 +1,6 @@
 /* Core target definitions for GNU compiler
    for PowerPC embedded targeted systems with SPE support.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Aldy Hernandez (aldyh@redhat.com).
 
@@ -37,8 +37,6 @@
     rs6000_float_gprs = 1; \
   if (!rs6000_explicit_options.spe) \
     rs6000_spe = 1; \
-  if (!rs6000_explicit_options.isel) \
-    rs6000_isel = 1; \
   if (target_flags & MASK_64BIT) \
     error ("-m64 not supported in this configuration")
 

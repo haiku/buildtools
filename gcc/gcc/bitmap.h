@@ -1,6 +1,6 @@
 /* Functions to support general ended bitmaps.
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007 Free Software Foundation, Inc.
+   2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,6 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_BITMAP_H
 #include "hashtab.h"
 #include "statistics.h"
+#include "obstack.h"
 
 /* Fundamental storage type for bitmap.  */
 
@@ -135,11 +136,11 @@ extern bool bitmap_ior_and_compl (bitmap DST, const_bitmap A, const_bitmap B, co
 /* A |= (B & ~C).  Return true if A changes.  */
 extern bool bitmap_ior_and_compl_into (bitmap DST, const_bitmap B, const_bitmap C);
 
-/* Clear a single register in a register set.  */
-extern void bitmap_clear_bit (bitmap, int);
+/* Clear a single bit in a bitmap.  Return true if the bit changed.  */
+extern bool bitmap_clear_bit (bitmap, int);
 
-/* Set a single register in a register set.  */
-extern void bitmap_set_bit (bitmap, int);
+/* Set a single bit in a bitmap.  Return true if the bit changed.  */
+extern bool bitmap_set_bit (bitmap, int);
 
 /* Return true if a register is set in a register set.  */
 extern int bitmap_bit_p (bitmap, int);
@@ -193,8 +194,8 @@ extern hashval_t bitmap_hash(const_bitmap);
 #define BITMAP_GGC_ALLOC() bitmap_gc_alloc ()
 
 /* Do any cleanup needed on a bitmap when it is no longer used.  */
-#define BITMAP_FREE(BITMAP)			\
-	((void)(bitmap_obstack_free (BITMAP), (BITMAP) = NULL))
+#define BITMAP_FREE(BITMAP) \
+       ((void) (bitmap_obstack_free ((bitmap) BITMAP), (BITMAP) = (bitmap) NULL))
 
 /* Iterator for bitmaps.  */
 

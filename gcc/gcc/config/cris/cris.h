@@ -1,5 +1,5 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
@@ -597,6 +597,8 @@ enum reg_class
 
 #define INDEX_REG_CLASS GENERAL_REGS
 
+#define IRA_COVER_CLASSES { GENERAL_REGS, SPECIAL_REGS, LIM_REG_CLASSES }
+
 #define REG_CLASS_FROM_LETTER(C)		\
   (						\
    (C) == 'a' ? ACR_REGS :			\
@@ -642,12 +644,17 @@ enum reg_class
   ? GENERAL_REGS : (CLASS))
 
 /* We can't move special registers to and from memory in smaller than
-   word_mode.  */
-#define SECONDARY_RELOAD_CLASS(CLASS, MODE, X)		\
-  (((CLASS) != SPECIAL_REGS && (CLASS) != MOF_REGS)	\
-   || GET_MODE_SIZE (MODE) == 4				\
-   || !MEM_P (X)					\
-   ? NO_REGS : GENERAL_REGS)
+   word_mode.  We also can't move between special registers.  Luckily,
+   -1, as returned by true_regnum for non-sub/registers, is valid as a
+   parameter to our REGNO_REG_CLASS, returning GENERAL_REGS, so we get
+   the effect that any X that isn't a special-register is treated as
+   a non-empty intersection with GENERAL_REGS.  */
+#define SECONDARY_RELOAD_CLASS(CLASS, MODE, X)				\
+ ((((CLASS) == SPECIAL_REGS || (CLASS) == MOF_REGS)			\
+   && ((GET_MODE_SIZE (MODE) < 4 && MEM_P (X))				\
+       || !reg_classes_intersect_p (REGNO_REG_CLASS (true_regnum (X)),	\
+				    GENERAL_REGS)))			\
+   ? GENERAL_REGS : NO_REGS)
 
 /* FIXME: Fix regrename.c; it should check validity of replacements,
    not just with a silly pass-specific macro.  We may miss some
@@ -668,7 +675,7 @@ enum reg_class
 
 /* We are now out of letters; we could use ten more.  This forces us to
    use C-code in the 'md' file.  FIXME: Use some EXTRA_CONSTRAINTS.  */
-#define CONST_OK_FOR_LETTER_P(VALUE, C)			\
+#define CRIS_CONST_OK_FOR_LETTER_P(VALUE, C)		\
  (							\
   /* MOVEQ, CMPQ, ANDQ, ORQ.  */			\
   (C) == 'I' ? (VALUE) >= -32 && (VALUE) <= 31 :	\
@@ -690,6 +697,16 @@ enum reg_class
   /* A 16-bit number signed *or* unsigned.  */		\
   (C) == 'P' ? (VALUE) >= -32768 && (VALUE) <= 65535 :	\
   0)
+
+#define CONST_OK_FOR_CONSTRAINT_P(VALUE, C, S)	\
+ (						\
+  ((C) != 'K' || (S)[1] == 'c')			\
+   ? CRIS_CONST_OK_FOR_LETTER_P (VALUE, C) :	\
+  ((C) == 'K' && (S)[1] == 'p')			\
+   ? exact_log2 (VALUE) >= 0 :			\
+  0)
+
+#define CONSTRAINT_LEN(C, S) ((C) == 'K' ? 2 : DEFAULT_CONSTRAINT_LEN (C, S))
 
 /* It is really simple to make up a 0.0; it is the same as int-0 in
    IEEE754.  */
@@ -839,8 +856,9 @@ enum reg_class
 /* Node: Elimination */
 
 /* Really only needed if the stack frame has variable length (alloca
-   or variable sized local arguments (GNU C extension).  */
-#define FRAME_POINTER_REQUIRED 0
+   or variable sized local arguments (GNU C extension).  See PR39499 and
+   PR38609 for the reason this isn't just 0.  */
+#define FRAME_POINTER_REQUIRED (!current_function_sp_is_unchanging)
 
 #define ELIMINABLE_REGS				\
  {{ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},	\
@@ -922,14 +940,6 @@ struct cum_args {int regs;};
 
 
 /* Node: Aggregate Return */
-
-#if 0
-/* FIXME: Let's try this some time, so we return structures in registers.
-   We would cast the result of int_size_in_bytes to unsigned, so we will
-   get a huge number for "structures" of variable size (-1).  */
-#define RETURN_IN_MEMORY(TYPE) \
- ((unsigned) int_size_in_bytes (TYPE) > CRIS_MAX_ARGS_IN_REGS * UNITS_PER_WORD)
-#endif
 
 #define CRIS_STRUCT_VALUE_REGNUM ((CRIS_FIRST_ARG_REG) - 1)
 
@@ -1240,7 +1250,7 @@ struct cum_args {int regs;};
    word-length sizes will be emitted.  The "9" will translate to
    (9 - 1) * 4 = 32 bytes maximum moved, but using 16 instructions
    (8 instruction sequences) or less.  */
-#define MOVE_RATIO 9
+#define MOVE_RATIO(speed) 9
 
 
 /* Node: Sections */

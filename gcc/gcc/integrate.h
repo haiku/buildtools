@@ -1,6 +1,6 @@
 /* Function integration definitions for GCC
    Copyright (C) 1990, 1995, 1998, 1999, 2000, 2001, 2003, 2004, 2005,
-   2007  Free Software Foundation, Inc.
+   2007, 2008  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -24,7 +24,7 @@ extern rtx get_hard_reg_initial_val (enum machine_mode, unsigned int);
 extern rtx has_hard_reg_initial_val (enum machine_mode, unsigned int);
 /* If a pseudo represents an initial hard reg (or expression), return
    it, else return NULL_RTX.  */
-extern rtx get_hard_reg_initial_reg (struct function *, rtx);
+extern rtx get_hard_reg_initial_reg (rtx);
 /* Called from rest_of_compilation.  */
 extern unsigned int emit_initial_value_sets (void);
 extern void allocate_initial_values (rtx *);

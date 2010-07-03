@@ -1,5 +1,6 @@
 /* RTL-level loop invariant motion.
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,9 +19,9 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* This implements the loop invariant motion pass.  It is very simple
-   (no calls, libcalls, etc.).  This should be sufficient to cleanup things
-   like address arithmetics -- other more complicated invariants should be
-   eliminated on tree level either in tree-ssa-loop-im.c or in tree-ssa-pre.c.
+   (no calls, no loads/stores, etc.).  This should be sufficient to cleanup
+   things like address arithmetics -- other more complicated invariants should
+   be eliminated on GIMPLE either in tree-ssa-loop-im.c or in tree-ssa-pre.c.
 
    We proceed loop by loop -- it is simpler than trying to handle things
    globally and should not lose much.  First we inspect all sets inside loop
@@ -52,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "df.h"
 #include "hashtab.h"
 #include "except.h"
+#include "params.h"
 
 /* The data stored for the loop.  */
 
@@ -164,8 +166,7 @@ check_invariant_table_size (void)
   if (invariant_table_size < DF_DEFS_TABLE_SIZE())
     {
       unsigned int new_size = DF_DEFS_TABLE_SIZE () + (DF_DEFS_TABLE_SIZE () / 4);
-      invariant_table = xrealloc (invariant_table, 
-				  sizeof (struct rtx_iv *) * new_size);
+      invariant_table = XRESIZEVEC (struct invariant *, invariant_table, new_size);
       memset (&invariant_table[invariant_table_size], 0, 
 	      (new_size - invariant_table_size) * sizeof (struct rtx_iv *));
       invariant_table_size = new_size;
@@ -206,7 +207,7 @@ check_maybe_invariant (rtx x)
 
       /* Just handle the most trivial case where we load from an unchanging
 	 location (most importantly, pic tables).  */
-      if (MEM_READONLY_P (x))
+      if (MEM_READONLY_P (x) && !MEM_VOLATILE_P (x))
 	break;
 
       return false;
@@ -244,13 +245,13 @@ check_maybe_invariant (rtx x)
    invariant.  */
 
 static struct invariant *
-invariant_for_use (struct df_ref *use)
+invariant_for_use (df_ref use)
 {
   struct df_link *defs;
-  struct df_ref *def;
-  basic_block bb = BLOCK_FOR_INSN (use->insn), def_bb;
+  df_ref def;
+  basic_block bb = DF_REF_BB (use), def_bb;
 
-  if (use->flags & DF_REF_READ_WRITE)
+  if (DF_REF_FLAGS (use) & DF_REF_READ_WRITE)
     return NULL;
 
   defs = DF_REF_CHAIN (use);
@@ -277,7 +278,7 @@ hash_invariant_expr_1 (rtx insn, rtx x)
   const char *fmt;
   hashval_t val = code;
   int do_not_record_p;
-  struct df_ref *use;
+  df_ref use;
   struct invariant *inv;
 
   switch (code)
@@ -331,7 +332,7 @@ invariant_expr_equal_p (rtx insn1, rtx e1, rtx insn2, rtx e2)
   enum rtx_code code = GET_CODE (e1);
   int i, j;
   const char *fmt;
-  struct df_ref *use1, *use2;
+  df_ref use1, use2;
   struct invariant *inv1 = NULL, *inv2 = NULL;
   rtx sub1, sub2;
 
@@ -417,7 +418,8 @@ invariant_expr_equal_p (rtx insn1, rtx e1, rtx insn2, rtx e2)
 static hashval_t
 hash_invariant_expr (const void *e)
 {
-  const struct invariant_expr_entry *entry = e;
+  const struct invariant_expr_entry *const entry =
+    (const struct invariant_expr_entry *) e;
 
   return entry->hash;
 }
@@ -427,8 +429,10 @@ hash_invariant_expr (const void *e)
 static int
 eq_invariant_expr (const void *e1, const void *e2)
 {
-  const struct invariant_expr_entry *entry1 = e1;
-  const struct invariant_expr_entry *entry2 = e2;
+  const struct invariant_expr_entry *const entry1 =
+    (const struct invariant_expr_entry *) e1;
+  const struct invariant_expr_entry *const entry2 =
+    (const struct invariant_expr_entry *) e2;
 
   if (entry1->mode != entry2->mode)
     return 0;
@@ -454,7 +458,7 @@ find_or_insert_inv (htab_t eq, rtx expr, enum machine_mode mode,
   pentry.inv = inv;
   pentry.mode = mode;
   slot = htab_find_slot_with_hash (eq, &pentry, hash, INSERT);
-  entry = *slot;
+  entry = (struct invariant_expr_entry *) *slot;
 
   if (entry)
     return entry->inv;
@@ -563,7 +567,8 @@ find_exits (struct loop *loop, basic_block *body,
 	  FOR_BB_INSNS (body[i], insn)
 	    {
 	      if (CALL_P (insn)
-		  && !CONST_OR_PURE_CALL_P (insn))
+		  && (RTL_LOOPING_CONST_OR_PURE_CALL_P (insn)
+		      || !RTL_CONST_OR_PURE_CALL_P (insn)))
 		{
 		  has_call = true;
 		  bitmap_set_bit (may_exit, i);
@@ -665,6 +670,7 @@ create_new_invariant (struct def *def, rtx insn, bitmap depends_on,
 {
   struct invariant *inv = XNEW (struct invariant);
   rtx set = single_set (insn);
+  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
 
   inv->def = def;
   inv->always_executed = always_executed;
@@ -673,9 +679,9 @@ create_new_invariant (struct def *def, rtx insn, bitmap depends_on,
   /* If the set is simple, usually by moving it we move the whole store out of
      the loop.  Otherwise we save only cost of the computation.  */
   if (def)
-    inv->cost = rtx_cost (set, SET);
+    inv->cost = rtx_cost (set, SET, speed);
   else
-    inv->cost = rtx_cost (SET_SRC (set), SET);
+    inv->cost = rtx_cost (SET_SRC (set), SET, speed);
 
   inv->move = false;
   inv->reg = NULL_RTX;
@@ -720,15 +726,15 @@ record_use (struct def *def, rtx *use, rtx insn)
    loop invariants, false otherwise.  */
 
 static bool
-check_dependency (basic_block bb, struct df_ref *use, bitmap depends_on)
+check_dependency (basic_block bb, df_ref use, bitmap depends_on)
 {
-  struct df_ref *def;
+  df_ref def;
   basic_block def_bb;
   struct df_link *defs;
   struct def *def_data;
   struct invariant *inv;
   
-  if (use->flags & DF_REF_READ_WRITE)
+  if (DF_REF_FLAGS (use) & DF_REF_READ_WRITE)
     return false;
   
   defs = DF_REF_CHAIN (use);
@@ -767,13 +773,14 @@ check_dependency (basic_block bb, struct df_ref *use, bitmap depends_on)
 static bool
 check_dependencies (rtx insn, bitmap depends_on)
 {
-  struct df_ref **use_rec;
+  struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
+  df_ref *use_rec;
   basic_block bb = BLOCK_FOR_INSN (insn);
 
-  for (use_rec = DF_INSN_USES (insn); *use_rec; use_rec++)
+  for (use_rec = DF_INSN_INFO_USES (insn_info); *use_rec; use_rec++)
     if (!check_dependency (bb, *use_rec, depends_on))
       return false;
-  for (use_rec = DF_INSN_EQ_USES (insn); *use_rec; use_rec++)
+  for (use_rec = DF_INSN_INFO_EQ_USES (insn_info); *use_rec; use_rec++)
     if (!check_dependency (bb, *use_rec, depends_on))
       return false;
 	
@@ -787,18 +794,12 @@ check_dependencies (rtx insn, bitmap depends_on)
 static void
 find_invariant_insn (rtx insn, bool always_reached, bool always_executed)
 {
-  struct df_ref *ref;
+  df_ref ref;
   struct def *def;
   bitmap depends_on;
   rtx set, dest;
   bool simple = true;
   struct invariant *inv;
-
-  /* Until we get rid of LIBCALLS.  */
-  if (find_reg_note (insn, REG_RETVAL, NULL_RTX)
-      || find_reg_note (insn, REG_LIBCALL, NULL_RTX)
-      || find_reg_note (insn, REG_NO_CONFLICT, NULL_RTX))
-    return;
 
 #ifdef HAVE_cc0
   /* We can't move a CC0 setter without the user.  */
@@ -825,7 +826,7 @@ find_invariant_insn (rtx insn, bool always_reached, bool always_executed)
     return;
 
   /* We cannot make trapping insn executed, unless it was executed before.  */
-  if (may_trap_after_code_motion_p (PATTERN (insn)) && !always_reached)
+  if (may_trap_or_fault_p (PATTERN (insn)) && !always_reached)
     return;
 
   depends_on = BITMAP_ALLOC (NULL);
@@ -855,19 +856,20 @@ find_invariant_insn (rtx insn, bool always_reached, bool always_executed)
 static void
 record_uses (rtx insn)
 {
-  struct df_ref **use_rec;
+  struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
+  df_ref *use_rec;
   struct invariant *inv;
 
-  for (use_rec = DF_INSN_USES (insn); *use_rec; use_rec++)
+  for (use_rec = DF_INSN_INFO_USES (insn_info); *use_rec; use_rec++)
     {
-      struct df_ref *use = *use_rec;
+      df_ref use = *use_rec;
       inv = invariant_for_use (use);
       if (inv)
 	record_use (inv->def, DF_REF_REAL_LOC (use), DF_REF_INSN (use));
     }
-  for (use_rec = DF_INSN_EQ_USES (insn); *use_rec; use_rec++)
+  for (use_rec = DF_INSN_INFO_EQ_USES (insn_info); *use_rec; use_rec++)
     {
-      struct df_ref *use = *use_rec;
+      df_ref use = *use_rec;
       inv = invariant_for_use (use);
       if (inv)
 	record_use (inv->def, DF_REF_REAL_LOC (use), DF_REF_INSN (use));
@@ -904,7 +906,8 @@ find_invariants_bb (basic_block bb, bool always_reached, bool always_executed)
 
       if (always_reached
 	  && CALL_P (insn)
-	  && !CONST_OR_PURE_CALL_P (insn))
+	  && (RTL_LOOPING_CONST_OR_PURE_CALL_P (insn)
+	      || ! RTL_CONST_OR_PURE_CALL_P (insn)))
 	always_reached = false;
     }
 }
@@ -1048,15 +1051,15 @@ get_inv_cost (struct invariant *inv, int *comp_cost, unsigned *regs_needed)
 
 static int
 gain_for_invariant (struct invariant *inv, unsigned *regs_needed,
-		    unsigned new_regs, unsigned regs_used)
+		    unsigned new_regs, unsigned regs_used, bool speed)
 {
   int comp_cost, size_cost;
 
   get_inv_cost (inv, &comp_cost, regs_needed);
   actual_stamp++;
 
-  size_cost = (estimate_reg_pressure_cost (new_regs + *regs_needed, regs_used)
-	       - estimate_reg_pressure_cost (new_regs, regs_used));
+  size_cost = (estimate_reg_pressure_cost (new_regs + *regs_needed, regs_used, speed)
+	       - estimate_reg_pressure_cost (new_regs, regs_used, speed));
 
   return comp_cost - size_cost;
 }
@@ -1069,7 +1072,7 @@ gain_for_invariant (struct invariant *inv, unsigned *regs_needed,
 
 static int
 best_gain_for_invariant (struct invariant **best, unsigned *regs_needed,
-			 unsigned new_regs, unsigned regs_used)
+			 unsigned new_regs, unsigned regs_used, bool speed)
 {
   struct invariant *inv;
   int gain = 0, again;
@@ -1084,7 +1087,8 @@ best_gain_for_invariant (struct invariant **best, unsigned *regs_needed,
       if (inv->eqto != inv->invno)
 	continue;
 
-      again = gain_for_invariant (inv, &aregs_needed, new_regs, regs_used);
+      again = gain_for_invariant (inv, &aregs_needed, new_regs, regs_used,
+      				  speed);
       if (again > gain)
 	{
 	  gain = again;
@@ -1123,7 +1127,7 @@ set_move_mark (unsigned invno)
 /* Determines which invariants to move.  */
 
 static void
-find_invariants_to_move (void)
+find_invariants_to_move (bool speed)
 {
   unsigned i, regs_used, regs_needed = 0, new_regs;
   struct invariant *inv = NULL;
@@ -1147,7 +1151,7 @@ find_invariants_to_move (void)
     }
 
   new_regs = 0;
-  while (best_gain_for_invariant (&inv, &regs_needed, new_regs, regs_used) > 0)
+  while (best_gain_for_invariant (&inv, &regs_needed, new_regs, regs_used, speed) > 0)
     {
       set_move_mark (inv->invno);
       new_regs += regs_needed;
@@ -1203,14 +1207,16 @@ move_invariant_reg (struct loop *loop, unsigned invno)
       emit_insn_after (gen_move_insn (dest, reg), inv->insn);
       reorder_insns (inv->insn, inv->insn, BB_END (preheader));
 
-      /* If there is a REG_EQUAL note on the insn we just moved, and
-	 insn is in a basic block that is not always executed, the note
-	 may no longer be valid after we move the insn.
-	 Note that uses in REG_EQUAL notes are taken into account in
-	 the computation of invariants.  Hence it is safe to retain the
-	 note even if the note contains register references.  */
-      if (! inv->always_executed
-	  && (note = find_reg_note (inv->insn, REG_EQUAL, NULL_RTX)))
+      /* If there is a REG_EQUAL note on the insn we just moved, and the
+	 insn is in a basic block that is not always executed or the note
+	 contains something for which we don't know the invariant status,
+	 the note may no longer be valid after we move the insn.  Note that
+	 uses in REG_EQUAL notes are taken into account in the computation
+	 of invariants, so it is safe to retain the note even if it contains
+	 register references for which we know the invariant status.  */
+      if ((note = find_reg_note (inv->insn, REG_EQUAL, NULL_RTX))
+	  && (!inv->always_executed
+	      || !check_maybe_invariant (XEXP (note, 0))))
 	remove_note (inv->insn, note);
     }
   else
@@ -1314,7 +1320,7 @@ move_single_loop_invariants (struct loop *loop)
   init_inv_motion_data ();
 
   find_invariants (loop);
-  find_invariants_to_move ();
+  find_invariants_to_move (optimize_loop_for_speed_p (loop));
   move_invariants (loop);
 
   free_inv_motion_data ();
@@ -1343,7 +1349,10 @@ move_loop_invariants (void)
   /* Process the loops, innermost first.  */
   FOR_EACH_LOOP (li, loop, LI_FROM_INNERMOST)
     {
-      move_single_loop_invariants (loop);
+      /* move_single_loop_invariants for very large loops
+	 is time consuming and might need a lot of memory.  */
+      if (loop->num_nodes <= (unsigned) LOOP_INVARIANT_MAX_BBS_IN_LOOP)
+	move_single_loop_invariants (loop);
     }
 
   FOR_EACH_LOOP (li, loop, 0)

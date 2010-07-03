@@ -1,10 +1,107 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
+
+2010-01-21  Release Manager
+
+	* GCC 4.4.3 released.
+
+2009-11-10  Joseph Myers  <joseph@codesourcery.com>
+
+	* id.po: Update.
+
+2009-10-15  Release Manager
+
+	* GCC 4.4.2 released.
+
+2009-09-03  Joseph Myers  <joseph@codesourcery.com>
+
+	* fi.po: Update.
+
+2009-08-31  Joseph Myers  <joseph@codesourcery.com>
+
+	* sv.po: Update.
+
+2009-08-06  Joseph Myers  <joseph@codesourcery.com>
+
+	* es.po: Update.
+
+2009-07-29  Joseph Myers  <joseph@codesourcery.com>
+
+	* sv.po: Update.
+
+2009-07-23  Joseph Myers  <joseph@codesourcery.com>
+
+	* be.po, da.po, de.po, el.po, es.po, fi.po, fr.po, id.po, ja.po,
+	nl.po, ru.po, sr.po, sv.po, tr.po, zh_CN.po, zh_TW.po: Update.
+
+2009-07-22  Release Manager
+
+	* GCC 4.4.1 released.
+
+2009-07-15  Jakub Jelinek  <jakub@redhat.com>
+
+	* gcc.pot: Regenerate.
+
+2009-04-22  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc.pot: Regenerate.
+
+2009-04-22  Joseph Myers  <joseph@codesourcery.com>
+
+	* exgettext: Also look for */*/config-lang.in to find language
+	subdirectories.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-04-09  Jakub Jelinek  <jakub@redhat.com>
+
+	* exgettext: Change copyright header to refer to version
+	3 of the GNU General Public License and to point readers at the
+	COPYING3 file and the FSF's license web page.
+
+2009-04-08  Joseph Myers  <joseph@codesourcery.com>
+
+	* zh_CN.po: Update.
+
+2009-03-28  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc.pot: Regenerate.
+
+2009-03-03  Joseph Myers  <joseph@codesourcery.com>
+
+	* es.po: Update.
+
+2009-02-22  Joseph Myers  <joseph@codesourcery.com>
+
+	* zh_CN.po: Update.
+
+2009-02-03  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* fi.po: Update.
+
+2009-01-12  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* sv.po: Update.
+
+2008-12-06  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* id.po: Update.
+
+2008-11-29  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* be.po, da.po, de.po, el.po, es.po, fi.po, fr.po, id.po, ja.po,
+	nl.po, ru.po, sr.po, sv.po, tr.po, zh_CN.po, zh_TW.po: Update.
 
 2008-11-23  Joseph S. Myers  <joseph@codesourcery.com>
 
 	* ru.po: Update.
+
+2008-11-18  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* gcc.pot: Regenerate.
 
 2008-11-18  Joseph S. Myers  <joseph@codesourcery.com>
 
@@ -34,10 +131,6 @@
 
 	* fi.po: New.
 
-2008-08-27  Release Manager
-
-	* GCC 4.3.2 released.
-
 2008-08-27  Joseph S. Myers  <joseph@codesourcery.com>
 
 	* gcc.pot: Regenerate.
@@ -45,10 +138,6 @@
 2008-08-09  Joseph S. Myers  <joseph@codesourcery.com>
 
 	* sv.po: Update.
-
-2008-06-06  Release Manager
-
-	* GCC 4.3.1 released.
 
 2008-05-11  Joseph S. Myers  <joseph@codesourcery.com>
 
@@ -91,14 +180,6 @@
 	* be.po, da.po, de.po, el.po, es.po, fr.po, ja.po, nl.po, ru.po,
 	sr.po, sv.po, tr.po, zh_CN.po, zh_TW.po: Update.
 	* ca.po, rw.po: Remove.
-
-2008-03-05  Release Manager
-
-	* GCC 4.3.0 released.
-
-2008-03-05  Jakub Jelinek  <jakub@redhat.com>
-
-	* gcc.pot: Regenerate.
 
 2008-02-08  Joseph S. Myers  <joseph@codesourcery.com>
 
@@ -748,11 +829,11 @@
 	* exgettext: Merge changes from diffutils.  Scan .def files in
 	addition to .c and .h.  Add --language=c to xgettext command line.
 
-2001-12-05  Martin v. Löwis  <loewis@informatik.hu-berlin.de>
+2001-12-05  Martin v. LÃ¶wis  <loewis@informatik.hu-berlin.de>
 
 	* es.po: Update to 3.0 template.
 
-2001-12-05  Martin v. Löwis  <loewis@informatik.hu-berlin.de>
+2001-12-05  Martin v. LÃ¶wis  <loewis@informatik.hu-berlin.de>
 
 	* da.po, es.po, fr.po, ja.po: New files.
 

@@ -12,7 +12,7 @@ AC_CONFIG_HEADER(config.h)
 ### am handles this now?  ORIGINAL_LD_FOR_MULTILIBS=$LD
 
 # For libtool versioning info, format is CURRENT:REVISION:AGE
-libtool_VERSION=6:10:0
+libtool_VERSION=6:13:0
 AC_SUBST(libtool_VERSION)
 
 # Find the rest of the source tree framework.
@@ -97,8 +97,13 @@ GLIBCXX_ENABLE_HOSTED
 # Enable compiler support that doesn't require linking.
 GLIBCXX_ENABLE_SJLJ_EXCEPTIONS
 GLIBCXX_ENABLE_PCH($is_hosted)
+GLIBCXX_ENABLE_THREADS
+GLIBCXX_ENABLE_ATOMIC_BUILTINS
 
-# Enable all the variable C++ runtime options that doesn't require linking.
+# Checks for compiler support that doesn't require linking.
+GLIBCXX_CHECK_COMPILER_FEATURES
+
+# Enable all the variable C++ runtime options that don't require linking.
 GLIBCXX_ENABLE_CSTDIO
 GLIBCXX_ENABLE_CLOCALE
 GLIBCXX_ENABLE_ALLOCATOR
@@ -109,82 +114,68 @@ GLIBCXX_ENABLE_C99([yes])
 GLIBCXX_ENABLE_CONCEPT_CHECKS([no])
 GLIBCXX_ENABLE_DEBUG_FLAGS(["-g3 -O0"])
 GLIBCXX_ENABLE_DEBUG([no])
-GLIBCXX_ENABLE_PARALLEL
+GLIBCXX_ENABLE_PARALLEL([yes])
 GLIBCXX_ENABLE_CXX_FLAGS
 GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING([no])
 
-# Checks for operating systems support that don't require linking.
+# Checks for operating systems support that doesn't require linking.
+GLIBCXX_CHECK_SYSTEM_ERROR
 
-# No surprises, no surprises...
-GLIBCXX_ENABLE_THREADS
-GLIBCXX_ENABLE_ATOMIC_BUILTINS
-if test $atomicity_dir = cpu/generic/atomicity_mutex ; then
-  AC_MSG_WARN([No native atomic operations are provided for this platform.])
-  if test $target_thread_file = single; then
-    AC_MSG_WARN([They cannot be faked when thread support is disabled.])
-    AC_MSG_WARN([Thread-safety of certain classes is not guaranteed.])
-  else
-    AC_MSG_WARN([They will be faked using a mutex.])
-    AC_MSG_WARN([Performance of certain classes will degrade as a result.])
-  fi
-fi
+# For the streamoff typedef.
+GLIBCXX_CHECK_INT64_T
 
-GLIBCXX_CHECK_COMPILER_FEATURES
+# For LFS support.
+GLIBCXX_CHECK_LFS
 
+# For showmanyc_helper().
+AC_CHECK_HEADERS(sys/ioctl.h sys/filio.h)
+GLIBCXX_CHECK_POLL
+GLIBCXX_CHECK_S_ISREG_OR_S_IFREG
+
+# For xsputn_2().
+AC_CHECK_HEADERS(sys/uio.h)
+GLIBCXX_CHECK_WRITEV
+
+# For C99 support to TR1.
+GLIBCXX_CHECK_C99_TR1
+
+# For common values of EOF, SEEK_CUR, SEEK_END.
+GLIBCXX_CHECK_STDIO_MACROS
+
+# For gettimeofday support.
+GLIBCXX_CHECK_GETTIMEOFDAY
+
+# For clock_gettime, nanosleep and sched_yield support.
+# NB: The default is [no], because otherwise it requires linking.
+GLIBCXX_ENABLE_LIBSTDCXX_TIME([no])
+
+# For gthread support
+GLIBCXX_CHECK_GTHREADS
+
+AC_LC_MESSAGES
+
+# Check for available headers.
+AC_CHECK_HEADERS([endian.h float.h fp.h ieeefp.h inttypes.h locale.h \
+machine/endian.h machine/param.h nan.h stdint.h stdlib.h string.h \
+strings.h sys/ipc.h sys/isa_defs.h sys/machine.h sys/param.h \
+sys/resource.h sys/sem.h sys/stat.h sys/time.h sys/types.h unistd.h \
+wchar.h wctype.h])
+
+# Only do link tests if native. Else, hardcode.
 if $GLIBCXX_IS_NATIVE; then
 
   # We can do more elaborate tests that assume a working linker.
   CANADIAN=no
 
-  # Check for available headers.
-  AC_CHECK_HEADERS([nan.h ieeefp.h endian.h sys/isa_defs.h machine/endian.h \
-  machine/param.h sys/machine.h fp.h locale.h float.h inttypes.h gconv.h \
-  sys/types.h sys/ipc.h sys/sem.h])
-
   GLIBCXX_CHECK_LINKER_FEATURES
   GLIBCXX_CHECK_MATH_SUPPORT
-  GLIBCXX_CHECK_BUILTIN_MATH_SUPPORT
-  GLIBCXX_CHECK_COMPLEX_MATH_SUPPORT
   GLIBCXX_CHECK_STDLIB_SUPPORT
 
-  # For showmanyc_helper().
-  AC_CHECK_HEADERS(sys/ioctl.h sys/filio.h)
-  GLIBCXX_CHECK_POLL
-  GLIBCXX_CHECK_S_ISREG_OR_S_IFREG
-
-  # For xsputn_2().
-  AC_CHECK_HEADERS(sys/uio.h)
-  GLIBCXX_CHECK_WRITEV
-
-  # For the __streamoff_base_type typedef.
-  GLIBCXX_CHECK_INT64_T
-
-  # For LFS support.
-  GLIBCXX_CHECK_LFS
-
-  # For C99 support to TR1.
-  GLIBCXX_CHECK_C99_TR1
-
-  # For dev/random and dev/urandom for TR1.
+  # For /dev/random and /dev/urandom for TR1.
   GLIBCXX_CHECK_RANDOM_TR1
 
   # For TLS support.
   GCC_CHECK_TLS
-
-  # For _Unwind_GetIPInfo.
-  GCC_CHECK_UNWIND_GETIPINFO
-
-  AC_LC_MESSAGES
-
-  AC_TRY_COMPILE(
-    [#include <setjmp.h>],
-    [sigjmp_buf env;
-     while (! sigsetjmp (env, 1))
-       siglongjmp (env, 1);
-    ],
-    [AC_DEFINE(HAVE_SIGSETJMP, 1, [Define if sigsetjmp is available.])])
-
-  AC_FUNC_MMAP
 
   # For iconv support.
   AM_ICONV
@@ -217,7 +208,6 @@ else
   fi
 
   # Construct crosses by hand, eliminating bits that need ld...
-  # GLIBCXX_CHECK_BUILTIN_MATH_SUPPORT
   # GLIBCXX_CHECK_MATH_SUPPORT
 
   # First, test for "known" system libraries.  We may be using newlib even
@@ -228,16 +218,12 @@ else
 
     # GLIBCXX_CHECK_STDLIB_SUPPORT
     AC_DEFINE(HAVE_STRTOF)        
-    # AC_FUNC_MMAP
-    AC_DEFINE(HAVE_MMAP)
 
     AC_DEFINE(HAVE_ACOSF)
     AC_DEFINE(HAVE_ASINF)
     AC_DEFINE(HAVE_ATAN2F)
     AC_DEFINE(HAVE_ATANF)
     AC_DEFINE(HAVE_CEILF)
-    AC_DEFINE(HAVE_COPYSIGN)
-    AC_DEFINE(HAVE_COPYSIGNF)
     AC_DEFINE(HAVE_COSF)
     AC_DEFINE(HAVE_COSHF)
     AC_DEFINE(HAVE_EXPF)
@@ -256,9 +242,6 @@ else
     AC_DEFINE(HAVE_TANF)
     AC_DEFINE(HAVE_TANHF)
 
-    AC_DEFINE(HAVE_S_ISREG)
-    AC_DEFINE(HAVE_S_IFREG)
-
     AC_DEFINE(HAVE_ICONV)
   else
     GLIBCXX_CROSSCONFIG
@@ -273,7 +256,6 @@ else
     AC_DEFINE(HAVE_ATAN2L)
     AC_DEFINE(HAVE_ATANL)
     AC_DEFINE(HAVE_CEILL)
-    AC_DEFINE(HAVE_COPYSIGNL)
     AC_DEFINE(HAVE_COSL)
     AC_DEFINE(HAVE_COSHL)
     AC_DEFINE(HAVE_EXPL)
@@ -293,12 +275,15 @@ else
     AC_DEFINE(HAVE_TANL)
     AC_DEFINE(HAVE_TANHL)
   fi
-
-  # Assume we have _Unwind_GetIPInfo for cross-compiles.
-  AC_DEFINE(HAVE_GETIPINFO)
 fi
 
+# Check for _Unwind_GetIPInfo.
+GCC_CHECK_UNWIND_GETIPINFO
+
+
 GCC_LINUX_FUTEX([AC_DEFINE(HAVE_LINUX_FUTEX, 1, [Define if futex syscall is available.])])
+
+GCC_HEADER_STDINT(include/gstdint.h)
 
 # This depends on GLIBCXX CHECK_LINKER_FEATURES, but without it assumes no.
 GLIBCXX_ENABLE_SYMVERS([yes])
@@ -347,8 +332,6 @@ AC_SUBST(ERROR_CONSTANTS_SRCDIR)
 # Determine cross-compile flags and AM_CONDITIONALs.
 #AC_SUBST(GLIBCXX_IS_NATIVE)
 #AM_CONDITIONAL(CANADIAN, test $CANADIAN = yes)
-# from GLIBCXX_CHECK_COMPLEX_MATH_SUPPORT:
-#AM_CONDITIONAL(GLIBCXX_BUILD_LIBMATH,  test $need_libmath = yes)
 GLIBCXX_EVALUATE_CONDITIONALS
  
 AC_CACHE_SAVE

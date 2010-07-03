@@ -1,11 +1,11 @@
 // Internal header for TR1 unordered_set and unordered_map -*- C++ -*-
 
-// Copyright (C) 2007 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file tr1_impl/hashtable
  *  This is an internal header file, included by other library headers.
@@ -149,6 +144,8 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       // hasher, if present, comes from _Hash_code_base.
       typedef typename _Allocator::difference_type        difference_type;
       typedef typename _Allocator::size_type              size_type;
+      typedef typename _Allocator::pointer                pointer;
+      typedef typename _Allocator::const_pointer          const_pointer;
       typedef typename _Allocator::reference              reference;
       typedef typename _Allocator::const_reference        const_reference;
       
@@ -294,7 +291,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 
       size_type
       max_size() const
-      { return _M_get_Value_allocator().max_size(); }
+      { return _M_node_allocator.max_size(); }
 
       // Observers
       key_equal
@@ -326,18 +323,29 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       local_iterator
       begin(size_type __n)
       { return local_iterator(_M_buckets[__n]); }
-  
+
       local_iterator
       end(size_type)
       { return local_iterator(0); }
-  
+
       const_local_iterator
       begin(size_type __n) const
       { return const_local_iterator(_M_buckets[__n]); }
-  
+
       const_local_iterator
       end(size_type) const
       { return const_local_iterator(0); }
+
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+      // DR 691.
+      const_local_iterator
+      cbegin(size_type __n) const
+      { return const_local_iterator(_M_buckets[__n]); }
+
+      const_local_iterator
+      cend(size_type) const
+      { return const_local_iterator(0); }
+#endif
 
       float
       load_factor() const
@@ -423,6 +431,12 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
         void
         insert(_InputIterator __first, _InputIterator __last);
 
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+      void
+      insert(initializer_list<value_type> __l)
+      { this->insert(__l.begin(), __l.end()); }
+#endif
+
       iterator
       erase(iterator);
 
@@ -463,13 +477,17 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
     _M_allocate_node(const value_type& __v)
     {
       _Node* __n = _M_node_allocator.allocate(1);
-      try
+      __try
 	{
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+	  _M_node_allocator.construct(__n, __v);
+#else
 	  _M_get_Value_allocator().construct(&__n->_M_v, __v);
+#endif
 	  __n->_M_next = 0;
 	  return __n;
 	}
-      catch(...)
+      __catch(...)
 	{
 	  _M_node_allocator.deallocate(__n, 1);
 	  __throw_exception_again;
@@ -485,7 +503,11 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 	       _H1, _H2, _Hash, _RehashPolicy, __chc, __cit, __uk>::
     _M_deallocate_node(_Node* __n)
     {
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+      _M_node_allocator.destroy(__n);
+#else
       _M_get_Value_allocator().destroy(&__n->_M_v);
+#endif
       _M_node_allocator.deallocate(__n, 1);
     }
 
@@ -597,12 +619,12 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 						       __distance_fw(__f,
 								     __l)));
 	_M_buckets = _M_allocate_buckets(_M_bucket_count);
-	try
+	__try
 	  {
 	    for (; __f != __l; ++__f)
 	      this->insert(*__f);
 	  }
-	catch(...)
+	__catch(...)
 	  {
 	    clear();
 	    _M_deallocate_buckets(_M_buckets, _M_bucket_count);
@@ -627,7 +649,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       _M_rehash_policy(__ht._M_rehash_policy)
     {
       _M_buckets = _M_allocate_buckets(_M_bucket_count);
-      try
+      __try
 	{
 	  for (size_type __i = 0; __i < __ht._M_bucket_count; ++__i)
 	    {
@@ -642,7 +664,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 		}
 	    }
 	}
-      catch(...)
+      __catch(...)
 	{
 	  clear();
 	  _M_deallocate_buckets(_M_buckets, _M_bucket_count);
@@ -919,7 +941,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       // do a rehash if the allocation throws.
       _Node* __new_node = _M_allocate_node(__v);
 
-      try
+      __try
 	{
 	  if (__do_rehash.first)
 	    {
@@ -934,7 +956,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 	  ++_M_element_count;
 	  return iterator(__new_node, _M_buckets + __n);
 	}
-      catch(...)
+      __catch(...)
 	{
 	  _M_deallocate_node(__new_node);
 	  __throw_exception_again;
@@ -1212,7 +1234,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
     _M_rehash(size_type __n)
     {
       _Node** __new_array = _M_allocate_buckets(__n);
-      try
+      __try
 	{
 	  for (size_type __i = 0; __i < _M_bucket_count; ++__i)
 	    while (_Node* __p = _M_buckets[__i])
@@ -1226,7 +1248,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 	  _M_bucket_count = __n;
 	  _M_buckets = __new_array;
 	}
-      catch(...)
+      __catch(...)
 	{
 	  // A failure here means that a hash function threw an exception.
 	  // We can't restore the previous state without calling the hash

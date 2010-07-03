@@ -1,6 +1,6 @@
 /* Pragma related interfaces.
    Copyright (C) 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007  Free Software Foundation, Inc.
+   2007, 2008  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -41,6 +41,8 @@ typedef enum pragma_kind {
   PRAGMA_OMP_SECTION,
   PRAGMA_OMP_SECTIONS,
   PRAGMA_OMP_SINGLE,
+  PRAGMA_OMP_TASK,
+  PRAGMA_OMP_TASKWAIT,
   PRAGMA_OMP_THREADPRIVATE,
 
   PRAGMA_GCC_PCH_PREPROCESS,
@@ -49,11 +51,12 @@ typedef enum pragma_kind {
 } pragma_kind;
 
 
-/* All clauses defined by OpenMP 2.5.
+/* All clauses defined by OpenMP 2.5 and 3.0.
    Used internally by both C and C++ parsers.  */
 typedef enum pragma_omp_clause {
   PRAGMA_OMP_CLAUSE_NONE = 0,
 
+  PRAGMA_OMP_CLAUSE_COLLAPSE,
   PRAGMA_OMP_CLAUSE_COPYIN,
   PRAGMA_OMP_CLAUSE_COPYPRIVATE,
   PRAGMA_OMP_CLAUSE_DEFAULT,
@@ -66,7 +69,8 @@ typedef enum pragma_omp_clause {
   PRAGMA_OMP_CLAUSE_PRIVATE,
   PRAGMA_OMP_CLAUSE_REDUCTION,
   PRAGMA_OMP_CLAUSE_SCHEDULE,
-  PRAGMA_OMP_CLAUSE_SHARED
+  PRAGMA_OMP_CLAUSE_SHARED,
+  PRAGMA_OMP_CLAUSE_UNTIED
 } pragma_omp_clause;
 
 extern struct cpp_reader* parse_in;
@@ -123,5 +127,7 @@ extern enum cpp_ttype pragma_lex (tree *);
    having enum cpp_ttype declared.  */
 extern enum cpp_ttype c_lex_with_flags (tree *, location_t *, unsigned char *,
 					int);
+
+extern void c_pp_lookup_pragma (unsigned int, const char **, const char **);
 
 #endif /* GCC_C_PRAGMA_H */

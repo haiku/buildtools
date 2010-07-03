@@ -1,5 +1,6 @@
 /* Data references and dependences detectors. 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Sebastian Pop <pop@cri.ensmp.fr>
 
 This file is part of GCC.
@@ -24,6 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "graphds.h"
 #include "lambda.h"
 #include "omega.h"
+#include "tree-chrec.h"
 
 /*
   innermost_loop_behavior describes the evolution of the address of the memory
@@ -38,6 +40,7 @@ along with GCC; see the file COPYING3.  If not see
                        Example 1                      Example 2
       data-ref         a[j].b[i][j]                   *(p + x + 16B + 4B * j)
       
+
   innermost_loop_behavior
       base_address     &a                             p
       offset           i * D_i			      x
@@ -86,7 +89,6 @@ struct dr_alias
   /* The alias information that should be used for new pointers to this
      location.  SYMBOL_TAG is either a DECL or a SYMBOL_MEMORY_TAG.  */
   tree symbol_tag;
-  subvar_t subvars;
   struct ptr_info_def *ptr_info;
 
   /* The set of virtual operands corresponding to this memory reference,
@@ -95,10 +97,75 @@ struct dr_alias
   bitmap vops;
 };
 
+typedef struct scop *scop_p;
+
+/* Each vector of the access matrix represents a linear access
+   function for a subscript.  First elements correspond to the
+   leftmost indices, ie. for a[i][j] the first vector corresponds to
+   the subscript in "i".  The elements of a vector are relative to
+   the loop nests in which the data reference is considered,
+   i.e. the vector is relative to the SCoP that provides the context
+   in which this data reference occurs.
+
+   For example, in
+
+   | loop_1
+   |    loop_2
+   |      a[i+3][2*j+n-1]
+
+   if "i" varies in loop_1 and "j" varies in loop_2, the access 
+   matrix with respect to the loop nest {loop_1, loop_2} is:
+
+   | loop_1  loop_2  param_n  cst
+   |   1       0        0      3
+   |   0       2        1     -1
+
+   whereas the access matrix with respect to loop_2 considers "i" as
+   a parameter:
+
+   | loop_2  param_i  param_n  cst
+   |   0       1         0      3
+   |   2       0         1     -1
+*/
+struct access_matrix
+{
+  VEC (loop_p, heap) *loop_nest;
+  int nb_induction_vars;
+  VEC (tree, heap) *parameters;
+  VEC (lambda_vector, gc) *matrix;
+};
+
+#define AM_LOOP_NEST(M) (M)->loop_nest
+#define AM_NB_INDUCTION_VARS(M) (M)->nb_induction_vars
+#define AM_PARAMETERS(M) (M)->parameters
+#define AM_MATRIX(M) (M)->matrix
+#define AM_NB_PARAMETERS(M) (VEC_length (tree, AM_PARAMETERS(M)))
+#define AM_CONST_COLUMN_INDEX(M) (AM_NB_INDUCTION_VARS (M) + AM_NB_PARAMETERS (M))
+#define AM_NB_COLUMNS(M) (AM_NB_INDUCTION_VARS (M) + AM_NB_PARAMETERS (M) + 1)
+#define AM_GET_SUBSCRIPT_ACCESS_VECTOR(M, I) VEC_index (lambda_vector, AM_MATRIX (M), I)
+#define AM_GET_ACCESS_MATRIX_ELEMENT(M, I, J) AM_GET_SUBSCRIPT_ACCESS_VECTOR (M, I)[J]
+
+/* Return the column in the access matrix of LOOP_NUM.  */
+
+static inline int
+am_vector_index_for_loop (struct access_matrix *access_matrix, int loop_num)
+{
+  int i;
+  loop_p l;
+
+  for (i = 0; VEC_iterate (loop_p, AM_LOOP_NEST (access_matrix), i, l); i++)
+    if (l->num == loop_num)
+      return i;
+
+  gcc_unreachable();
+}
+
+int access_matrix_get_index_for_parameter (tree, struct access_matrix *);
+
 struct data_reference
 {
   /* A pointer to the statement that contains this DR.  */
-  tree stmt;
+  gimple stmt;
   
   /* A pointer to the memory reference.  */
   tree ref;
@@ -112,17 +179,20 @@ struct data_reference
   /* Behavior of the memory reference in the innermost loop.  */
   struct innermost_loop_behavior innermost;
 
-  /* Decomposition to indices for alias analysis.  */
+  /* Subscripts of this data reference.  */
   struct indices indices;
 
   /* Alias information for the data reference.  */
   struct dr_alias alias;
+
+  /* The SCoP in which the data reference was analyzed.  */
+  scop_p scop;
+
+  /* Matrix representation for the data access functions.  */
+  struct access_matrix *access_matrix;
 };
 
-typedef struct data_reference *data_reference_p;
-DEF_VEC_P(data_reference_p);
-DEF_VEC_ALLOC_P (data_reference_p, heap);
-
+#define DR_SCOP(DR)                (DR)->scop
 #define DR_STMT(DR)                (DR)->stmt
 #define DR_REF(DR)                 (DR)->ref
 #define DR_BASE_OBJECT(DR)         (DR)->indices.base_object
@@ -136,9 +206,13 @@ DEF_VEC_ALLOC_P (data_reference_p, heap);
 #define DR_STEP(DR)                (DR)->innermost.step
 #define DR_SYMBOL_TAG(DR)          (DR)->alias.symbol_tag
 #define DR_PTR_INFO(DR)            (DR)->alias.ptr_info
-#define DR_SUBVARS(DR)             (DR)->alias.subvars
 #define DR_VOPS(DR)		   (DR)->alias.vops
 #define DR_ALIGNED_TO(DR)          (DR)->innermost.aligned_to
+#define DR_ACCESS_MATRIX(DR)       (DR)->access_matrix
+
+typedef struct data_reference *data_reference_p;
+DEF_VEC_P(data_reference_p);
+DEF_VEC_ALLOC_P (data_reference_p, heap);
 
 enum data_dependence_direction {
   dir_positive, 
@@ -217,10 +291,6 @@ struct data_dependence_relation
   struct data_reference *a;
   struct data_reference *b;
 
-  /* When the dependence relation is affine, it can be represented by
-     a distance vector.  */
-  bool affine_p;
-
   /* A "yes/no/maybe" field for the dependence relation:
      
      - when "ARE_DEPENDENT == NULL_TREE", there exist a dependence
@@ -242,18 +312,26 @@ struct data_dependence_relation
   /* The analyzed loop nest.  */
   VEC (loop_p, heap) *loop_nest;
 
-  /* An index in loop_nest for the innermost loop that varies for
-     this data dependence relation.  */
-  unsigned inner_loop;
-
   /* The classic direction vector.  */
   VEC (lambda_vector, heap) *dir_vects;
 
   /* The classic distance vector.  */
   VEC (lambda_vector, heap) *dist_vects;
 
+  /* An index in loop_nest for the innermost loop that varies for
+     this data dependence relation.  */
+  unsigned inner_loop;
+
   /* Is the dependence reversed with respect to the lexicographic order?  */
   bool reversed_p;
+
+  /* When the dependence relation is affine, it can be represented by
+     a distance vector.  */
+  bool affine_p;
+
+  /* Set to true when the dependence relation is on the same data
+     access.  */
+  bool self_reference_p;
 };
 
 typedef struct data_dependence_relation *ddr_p;
@@ -273,6 +351,7 @@ DEF_VEC_ALLOC_P(ddr_p,heap);
    the loop nest.  */
 #define DDR_NB_LOOPS(DDR) (VEC_length (loop_p, DDR_LOOP_NEST (DDR)))
 #define DDR_INNER_LOOP(DDR) DDR->inner_loop
+#define DDR_SELF_REFERENCE(DDR) DDR->self_reference_p
 
 #define DDR_DIST_VECTS(DDR) ((DDR)->dist_vects)
 #define DDR_DIR_VECTS(DDR) ((DDR)->dir_vects)
@@ -302,11 +381,13 @@ typedef struct data_ref_loc_d
 DEF_VEC_O (data_ref_loc);
 DEF_VEC_ALLOC_O (data_ref_loc, heap);
 
-bool get_references_in_stmt (tree, VEC (data_ref_loc, heap) **);
-void dr_analyze_innermost (struct data_reference *);
-extern void compute_data_dependences_for_loop (struct loop *, bool,
+bool get_references_in_stmt (gimple, VEC (data_ref_loc, heap) **);
+bool dr_analyze_innermost (struct data_reference *);
+extern bool compute_data_dependences_for_loop (struct loop *, bool,
 					       VEC (data_reference_p, heap) **,
 					       VEC (ddr_p, heap) **);
+extern tree find_data_references_in_loop (struct loop *, 
+                                          VEC (data_reference_p, heap) **);
 extern void print_direction_vector (FILE *, lambda_vector, int);
 extern void print_dir_vectors (FILE *, VEC (lambda_vector, heap) *, int);
 extern void print_dist_vectors (FILE *, VEC (lambda_vector, heap) *, int);
@@ -319,26 +400,115 @@ extern void debug_data_dependence_relation (struct data_dependence_relation *);
 extern void dump_data_dependence_relation (FILE *, 
 					   struct data_dependence_relation *);
 extern void dump_data_dependence_relations (FILE *, VEC (ddr_p, heap) *);
+extern void debug_data_dependence_relations (VEC (ddr_p, heap) *);
 extern void dump_data_dependence_direction (FILE *, 
 					    enum data_dependence_direction);
 extern void free_dependence_relation (struct data_dependence_relation *);
 extern void free_dependence_relations (VEC (ddr_p, heap) *);
+extern void free_data_ref (data_reference_p);
 extern void free_data_refs (VEC (data_reference_p, heap) *);
-struct data_reference *create_data_ref (struct loop *, tree, tree, bool);
-bool find_loop_nest (struct loop *, VEC (loop_p, heap) **);
-void compute_all_dependences (VEC (data_reference_p, heap) *,
-			      VEC (ddr_p, heap) **, VEC (loop_p, heap) *, bool);
+extern bool find_data_references_in_stmt (struct loop *, gimple,
+					  VEC (data_reference_p, heap) **);
+struct data_reference *create_data_ref (struct loop *, tree, gimple, bool);
+extern bool find_loop_nest (struct loop *, VEC (loop_p, heap) **);
+extern void compute_all_dependences (VEC (data_reference_p, heap) *,
+				     VEC (ddr_p, heap) **, VEC (loop_p, heap) *,
+				     bool);
+
+extern void create_rdg_vertices (struct graph *, VEC (gimple, heap) *);
+extern bool dr_may_alias_p (const struct data_reference *,
+			    const struct data_reference *);
+extern bool stmt_simple_memref_p (struct loop *, gimple, tree);
+
+/* Return true when the DDR contains two data references that have the
+   same access functions.  */
+
+static inline bool
+same_access_functions (const struct data_dependence_relation *ddr)
+{
+  unsigned i;
+
+  for (i = 0; i < DDR_NUM_SUBSCRIPTS (ddr); i++)
+    if (!eq_evolutions_p (DR_ACCESS_FN (DDR_A (ddr), i),
+			  DR_ACCESS_FN (DDR_B (ddr), i)))
+      return false;
+
+  return true;
+}
+
+/* Return true when DDR is an anti-dependence relation.  */
+
+static inline bool
+ddr_is_anti_dependent (ddr_p ddr)
+{
+  return (DDR_ARE_DEPENDENT (ddr) == NULL_TREE
+	  && DR_IS_READ (DDR_A (ddr))
+	  && !DR_IS_READ (DDR_B (ddr))
+	  && !same_access_functions (ddr));
+}
+
+/* Return true when DEPENDENCE_RELATIONS contains an anti-dependence.  */
+
+static inline bool
+ddrs_have_anti_deps (VEC (ddr_p, heap) *dependence_relations)
+{
+  unsigned i;
+  ddr_p ddr;
+
+  for (i = 0; VEC_iterate (ddr_p, dependence_relations, i, ddr); i++)
+    if (ddr_is_anti_dependent (ddr))
+      return true;
+
+  return false;
+}
+
+/* Return the dependence level for the DDR relation.  */
+
+static inline unsigned
+ddr_dependence_level (ddr_p ddr)
+{
+  unsigned vector;
+  unsigned level = 0;
+
+  if (DDR_DIST_VECTS (ddr))
+    level = dependence_level (DDR_DIST_VECT (ddr, 0), DDR_NB_LOOPS (ddr));
+
+  for (vector = 1; vector < DDR_NUM_DIST_VECTS (ddr); vector++)
+    level = MIN (level, dependence_level (DDR_DIST_VECT (ddr, vector),
+					  DDR_NB_LOOPS (ddr)));
+  return level;
+}
 
 
 
-/* A RDG vertex representing a statement.  */
+/* A Reduced Dependence Graph (RDG) vertex representing a statement.  */
 typedef struct rdg_vertex
 {
   /* The statement represented by this vertex.  */
-  tree stmt;
+  gimple stmt;
+
+  /* True when the statement contains a write to memory.  */
+  bool has_mem_write;
+
+  /* True when the statement contains a read from memory.  */
+  bool has_mem_reads;
 } *rdg_vertex_p;
 
-#define RDGV_STMT(V)       ((struct rdg_vertex *) ((V)->data))->stmt
+#define RDGV_STMT(V)     ((struct rdg_vertex *) ((V)->data))->stmt
+#define RDGV_HAS_MEM_WRITE(V) ((struct rdg_vertex *) ((V)->data))->has_mem_write
+#define RDGV_HAS_MEM_READS(V) ((struct rdg_vertex *) ((V)->data))->has_mem_reads
+#define RDG_STMT(RDG, I) RDGV_STMT (&(RDG->vertices[I]))
+#define RDG_MEM_WRITE_STMT(RDG, I) RDGV_HAS_MEM_WRITE (&(RDG->vertices[I]))
+#define RDG_MEM_READS_STMT(RDG, I) RDGV_HAS_MEM_READS (&(RDG->vertices[I]))
+
+void dump_rdg_vertex (FILE *, struct graph *, int);
+void debug_rdg_vertex (struct graph *, int);
+void dump_rdg_component (FILE *, struct graph *, int, bitmap);
+void debug_rdg_component (struct graph *, int);
+void dump_rdg (FILE *, struct graph *);
+void debug_rdg (struct graph *);
+void dot_rdg (struct graph *);
+int rdg_vertex_for_stmt (struct graph *, gimple);
 
 /* Data dependence type.  */
 
@@ -363,11 +533,23 @@ typedef struct rdg_edge
 {
   /* Type of the dependence.  */
   enum rdg_dep_type type;
+
+  /* Levels of the dependence: the depth of the loops that carry the
+     dependence.  */
+  unsigned level;
+
+  /* Dependence relation between data dependences, NULL when one of
+     the vertices is a scalar.  */
+  ddr_p relation;
 } *rdg_edge_p;
 
 #define RDGE_TYPE(E)        ((struct rdg_edge *) ((E)->data))->type
+#define RDGE_LEVEL(E)       ((struct rdg_edge *) ((E)->data))->level
+#define RDGE_RELATION(E)    ((struct rdg_edge *) ((E)->data))->relation
 
 struct graph *build_rdg (struct loop *);
+struct graph *build_empty_rdg (int);
+void free_rdg (struct graph *);
 
 /* Return the index of the variable VAR in the LOOP_NEST array.  */
 
@@ -385,10 +567,44 @@ index_in_loop_nest (int var, VEC (loop_p, heap) *loop_nest)
   return var_index;
 }
 
-/* In lambda-code.c  */
-bool lambda_transform_legal_p (lambda_trans_matrix, int, VEC (ddr_p, heap) *);
+void stores_from_loop (struct loop *, VEC (gimple, heap) **);
+void remove_similar_memory_refs (VEC (gimple, heap) **);
+bool rdg_defs_used_in_other_loops_p (struct graph *, int);
+bool have_similar_memory_accesses (gimple, gimple);
 
-/* In tree-data-refs.c  */
+/* Determines whether RDG vertices V1 and V2 access to similar memory
+   locations, in which case they have to be in the same partition.  */
+
+static inline bool
+rdg_has_similar_memory_accesses (struct graph *rdg, int v1, int v2)
+{
+  return have_similar_memory_accesses (RDG_STMT (rdg, v1),
+				       RDG_STMT (rdg, v2));
+}
+
+/* In lambda-code.c  */
+bool lambda_transform_legal_p (lambda_trans_matrix, int,
+			       VEC (ddr_p, heap) *);
+void lambda_collect_parameters (VEC (data_reference_p, heap) *,
+				VEC (tree, heap) **);
+bool lambda_compute_access_matrices (VEC (data_reference_p, heap) *,
+				     VEC (tree, heap) *, VEC (loop_p, heap) *);
+
+/* In tree-data-ref.c  */
 void split_constant_offset (tree , tree *, tree *);
+
+/* Strongly connected components of the reduced data dependence graph.  */
+
+typedef struct rdg_component
+{
+  int num;
+  VEC (int, heap) *vertices;
+} *rdgc;
+
+DEF_VEC_P (rdgc);
+DEF_VEC_ALLOC_P (rdgc, heap);
+
+DEF_VEC_P (bitmap);
+DEF_VEC_ALLOC_P (bitmap, heap);
 
 #endif  /* GCC_TREE_DATA_REF_H  */

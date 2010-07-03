@@ -1,18 +1,84 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
 
-2008-08-27  Release Manager
+2010-01-21  Release Manager
 
-	* GCC 4.3.2 released.
+	* GCC 4.4.3 released.
 
-2008-06-06  Release Manager
+2009-10-15  Release Manager
 
-	* GCC 4.3.1 released.
+	* GCC 4.4.2 released.
 
-2008-03-05  Release Manager
+2009-07-22  Release Manager
 
-	* GCC 4.3.0 released.
+	* GCC 4.4.1 released.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-03-17  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_FUNCTION_PARAM.
+
+2008-12-10  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add 
+	DEMANGLE_COMPONENT_FIXED_TYPE.
+
+2008-11-19  Bob Wilson  <bob.wilson@acm.org>
+	
+	* xtensa-config.h (XCHAL_HAVE_MUL16, XCHAL_HAVE_MUL32, XCHAL_HAVE_DIV32)
+	(XCHAL_HAVE_MINMAX, XCHAL_HAVE_SEXT, XCHAL_HAVE_THREADPTR)
+	(XCHAL_HAVE_RELEASE_SYNC, XCHAL_HAVE_S32C1I): Change to 1.
+	(XCHAL_NUM_AREGS): Change to 32.
+	(XCHAL_ICACHE_SIZE, XCHAL_DCACHE_SIZE): Change to 16K.
+	(XCHAL_ICACHE_LINESIZE, XCHAL_DCACHE_LINESIZE): Change to 32.
+	(XCHAL_ICACHE_LINEWIDTH, XCHAL_DCACHE_LINEWIDTH): Change to 5.
+	(XCHAL_DCACHE_IS_WRITEBACK): Change to 1.
+	(XCHAL_DEBUGLEVEL): Change to 6.
+	
+2008-10-21  Alan Modra  <amodra@bigpond.net.au>
+
+	* obstack.h (obstack_finish <!__GNUC__>): Cast result to void *.
+
+2008-10-06  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_PACK_EXPANSION.
+
+2008-09-09  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_DECLTYPE.
+
+2008-07-07  Joel Brobecker  <brobecker@adacore.com>
+
+	* safe-ctype.h: Add #include of ctype.h before redefining
+	the ctype.h macros.
+
+2008-07-04  Joel Brobecker  <brobecker@adacore.com>
+
+	* safe-ctype.h: Remove #error when detecting that ctype.h has been
+	included. Redefine the various macros provided by ctype.h as
+	undefined variables.
+
+2008-06-23  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* libiberty.h (XALLOCA, XDUP, XALLOCAVEC, XDUPVEC, XALLOCAVAR,
+	XDUPVAR, XOBNEWVEC, XOBNEWVAR): New.
+
+2008-03-24  Ian Lance Taylor  <iant@google.com>
+
+	* sha1.h: New file, from gnulib.
+
+	* md5.h: Add extern "C" when compiled with C++.
+
+2008-03-21  Ian Lance Taylor  <iant@google.com>
+
+	* filenames.h: Add extern "C" when compiled with C++.
 
 2008-02-11  Bob Wilson  <bob.wilson@acm.org>
 

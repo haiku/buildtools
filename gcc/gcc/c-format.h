@@ -1,6 +1,6 @@
 /* Check calls to formatted I/O functions (-Wformat).
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2001, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -80,12 +80,13 @@ enum
      of whether length modifiers can occur (length_char_specs).  */
 };
 
-
 /* Structure describing a length modifier supported in format checking, and
    possibly a doubled version such as "hh".  */
 typedef struct
 {
-  /* Name of the single-character length modifier.  */
+  /* Name of the single-character length modifier. If prefixed by
+     a zero character, it describes a multi character length
+     modifier, like I64, I32, etc.  */
   const char *name;
   /* Index into a format_char_info.types array.  */
   enum format_lengths index;
@@ -116,7 +117,7 @@ typedef struct
 
 /* Macros to fill out tables of these.  */
 #define NOARGUMENTS	{ T89_V, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN }
-#define BADLEN	{ 0, NULL, NULL }
+#define BADLEN	{ STD_C89, NULL, NULL }
 #define NOLENGTHS	{ BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN }
 
 
@@ -305,5 +306,17 @@ typedef struct
 #define TEX_D64 { STD_EXT, "_Decimal64", T_D64 }
 #define T_D128  &dfloat128_type_node
 #define TEX_D128 { STD_EXT, "_Decimal128", T_D128 }
+
+/* Structure describing how format attributes such as "printf" are
+   interpreted as "gnu_printf" or "ms_printf" on a particular system.
+   TARGET_OVERRIDES_FORMAT_ATTRIBUTES is used to specify target-specific
+   defaults.  */
+typedef struct
+{
+  /* The name of the to be copied format attribute. */
+  const char *named_attr_src;
+  /* The name of the to be overridden format attribute. */
+  const char *named_attr_dst;
+} target_ovr_attr;
 
 #endif /* GCC_C_FORMAT_H */

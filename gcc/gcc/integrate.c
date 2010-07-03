@@ -1,6 +1,7 @@
 /* Procedure integration for GCC.
    Copyright (C) 1988, 1991, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -206,9 +207,9 @@ set_decl_abstract_flags (tree decl, int setting)
    the function.  */
 
 rtx
-get_hard_reg_initial_reg (struct function *fun, rtx reg)
+get_hard_reg_initial_reg (rtx reg)
 {
-  struct initial_value_struct *ivs = fun->hard_reg_initial_vals;
+  struct initial_value_struct *ivs = crtl->hard_reg_initial_vals;
   int i;
 
   if (ivs == 0)
@@ -234,22 +235,21 @@ get_hard_reg_initial_val (enum machine_mode mode, unsigned int regno)
   if (rv)
     return rv;
 
-  ivs = cfun->hard_reg_initial_vals;
+  ivs = crtl->hard_reg_initial_vals;
   if (ivs == 0)
     {
-      ivs = ggc_alloc (sizeof (initial_value_struct));
+      ivs = GGC_NEW (initial_value_struct);
       ivs->num_entries = 0;
       ivs->max_entries = 5;
-      ivs->entries = ggc_alloc (5 * sizeof (initial_value_pair));
-      cfun->hard_reg_initial_vals = ivs;
+      ivs->entries = GGC_NEWVEC (initial_value_pair, 5);
+      crtl->hard_reg_initial_vals = ivs;
     }
 
   if (ivs->num_entries >= ivs->max_entries)
     {
       ivs->max_entries += 5;
-      ivs->entries = ggc_realloc (ivs->entries,
-				  ivs->max_entries
-				  * sizeof (initial_value_pair));
+      ivs->entries = GGC_RESIZEVEC (initial_value_pair, ivs->entries,
+				    ivs->max_entries);
     }
 
   ivs->entries[ivs->num_entries].hard_reg = gen_rtx_REG (mode, regno);
@@ -268,7 +268,7 @@ has_hard_reg_initial_val (enum machine_mode mode, unsigned int regno)
   struct initial_value_struct *ivs;
   int i;
 
-  ivs = cfun->hard_reg_initial_vals;
+  ivs = crtl->hard_reg_initial_vals;
   if (ivs != 0)
     for (i = 0; i < ivs->num_entries; i++)
       if (GET_MODE (ivs->entries[i].hard_reg) == mode
@@ -281,7 +281,7 @@ has_hard_reg_initial_val (enum machine_mode mode, unsigned int regno)
 unsigned int
 emit_initial_value_sets (void)
 {
-  struct initial_value_struct *ivs = cfun->hard_reg_initial_vals;
+  struct initial_value_struct *ivs = crtl->hard_reg_initial_vals;
   int i;
   rtx seq;
 
@@ -298,8 +298,10 @@ emit_initial_value_sets (void)
   return 0;
 }
 
-struct tree_opt_pass pass_initial_value_sets =
+struct rtl_opt_pass pass_initial_value_sets =
 {
+ {
+  RTL_PASS,
   "initvals",                           /* name */
   NULL,                                 /* gate */
   emit_initial_value_sets,              /* execute */
@@ -311,8 +313,8 @@ struct tree_opt_pass pass_initial_value_sets =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func,                       /* todo_flags_finish */
-  0                                     /* letter */
+  TODO_dump_func                        /* todo_flags_finish */
+ }
 };
 
 /* If the backend knows where to allocate pseudos for hard
@@ -322,7 +324,7 @@ allocate_initial_values (rtx *reg_equiv_memory_loc)
 {
   if (targetm.allocate_initial_value)
     {
-      struct initial_value_struct *ivs = cfun->hard_reg_initial_vals;
+      struct initial_value_struct *ivs = crtl->hard_reg_initial_vals;
       int i;
 
       if (ivs == 0)

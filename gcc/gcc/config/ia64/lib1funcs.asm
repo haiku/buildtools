@@ -1,11 +1,11 @@
-/* Copyright (C) 2000, 2001, 2003, 2005 Free Software Foundation, Inc.
+/* Copyright (C) 2000, 2001, 2003, 2005, 2009 Free Software Foundation, Inc.
    Contributed by James E. Wilson <wilson@cygnus.com>.
 
    This file is part of GCC.
 
    GCC is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2, or (at your option)
+   the Free Software Foundation; either version 3, or (at your option)
    any later version.
 
    GCC is distributed in the hope that it will be useful,
@@ -13,17 +13,14 @@
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with GCC; see the file COPYING.  If not, write to
-   the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   Under Section 7 of GPL version 3, you are granted additional
+   permissions described in the GCC Runtime Library Exception, version
+   3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with other files,
-   some of which are compiled with GCC, to produce an executable,
-   this library does not by itself cause the resulting executable
-   to be covered by the GNU General Public License.
-   This exception does not however invalidate any other reasons why
-   the executable file might be covered by the GNU General Public License.  */
+   You should have received a copy of the GNU General Public License and
+   a copy of the GCC Runtime Library Exception along with this program;
+   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   <http://www.gnu.org/licenses/>.  */
 
 #ifdef L__divxf3
 // Compute a 80-bit IEEE double-extended quotient.
@@ -38,10 +35,12 @@
 	.text
 	.align 16
 	.global __divxf3
-	.global __divtf3
 	.proc __divxf3
 __divxf3:
+#ifdef SHARED
+	.global __divtf3
 __divtf3:
+#endif
 	cmp.eq p7, p0 = r0, r0
 	frcpa.s0 f10, p6 = farg0, farg1
 	;;
@@ -757,6 +756,7 @@ __ia64_trampoline:
 	.endp __ia64_trampoline
 #endif
 
+#ifdef SHARED
 // Thunks for backward compatibility.
 #ifdef L_fixtfdi
 	.text
@@ -781,7 +781,7 @@ __fixunstfti:
 	}
 	.endp __fixunstfti
 #endif
-#if L_floatditf
+#ifdef L_floatditf
 	.align 16
 	.global __floattitf
 	.proc __floattitf
@@ -791,4 +791,5 @@ __floattitf:
 	  ;;
 	}
 	.endp __floattitf
+#endif
 #endif

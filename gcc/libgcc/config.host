@@ -1,12 +1,12 @@
 # libgcc host-specific configuration file.
 # Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-# 2008 Free Software Foundation, Inc.
+# 2008, 2009 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
 #GCC is free software; you can redistribute it and/or modify it under
 #the terms of the GNU General Public License as published by the Free
-#Software Foundation; either version 2, or (at your option) any later
+#Software Foundation; either version 3, or (at your option) any later
 #version.
 
 #GCC is distributed in the hope that it will be useful, but WITHOUT
@@ -15,9 +15,8 @@
 #for more details.
 
 #You should have received a copy of the GNU General Public License
-#along with GCC; see the file COPYING.  If not, write to the Free
-#Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
-#02110-1301, USA.
+#along with GCC; see the file COPYING3.  If not see
+#<http://www.gnu.org/licenses/>.
 
 # This is the libgcc host-specific configuration file
 # where a configuration type is mapped to different system-specific
@@ -71,25 +70,19 @@ alpha*-*-*)
 am33_2.0-*-linux*)
 	cpu_type=mn10300
 	;;
-strongarm*-*-*)
-	cpu_type=arm
-	;;
 arm*-*-*)
 	cpu_type=arm
 	;;
+avr-*-*)
+	cpu_type=avr
+	;;    
 bfin*-*)
 	cpu_type=bfin
-	;;
-ep9312*-*-*)
-	cpu_type=arm
 	;;
 fido-*-*)
 	cpu_type=m68k
 	;;
 frv*)	cpu_type=frv
-	;;
-xscale-*-*)
-	cpu_type=arm
 	;;
 i[34567]86-*-*)
 	cpu_type=i386
@@ -99,15 +92,12 @@ x86_64-*-*)
 	;;
 ia64-*-*)
 	;;
-hppa*-*-* | parisc*-*-*)
+hppa*-*-*)
 	cpu_type=pa
 	;;
 m32r*-*-*)
         cpu_type=m32r
         ;;
-m680[012]0-*-*)
-	cpu_type=m68k
-	;;
 m68k-*-*)
 	;;
 mips*-*-*)
@@ -159,14 +149,8 @@ case ${host} in
   # machine-specific sections may refine and add to this
   # configuration.
   ;;
-*-*-linux*libc1* | *-*-linux*aout*)
-  # Avoid the generic linux case.
-  ;;
-*-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-knetbsd*-gnu)
-  # Must come before *-*-gnu* (because of *-*-linux-gnu* systems).
+*-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-knetbsd*-gnu | *-*-gnu*)
   extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
-  ;;
-*-*-gnu*)
   ;;
 *-*-netbsd*)
   ;;
@@ -188,13 +172,9 @@ case ${host} in
 	then tmake_file=${cpu_type}/t-$rest
 	fi
 	;;
-alpha*-*-unicosmk*)
-	;;
-alpha*-*-linux*)
+alpha*-*-linux* | alpha*-*-gnu*)
 	tmake_file="${tmake_file} alpha/t-crtfm"
 	extra_parts="$extra_parts crtfastmath.o"
-	;;
-alpha*-*-gnu*)
 	;;
 alpha*-*-freebsd*)
 	;;
@@ -216,7 +196,7 @@ arm-semi-aof | armel-semi-aof)
 	;;
 arm-wrs-vxworks)
 	;;
-arm*-*-freebsd*|strongarm*-*-freebsd*)
+arm*-*-freebsd*)
 	;;
 arm*-*-netbsdelf*)
 	;;
@@ -234,17 +214,17 @@ arm*-*-eabi* | arm*-*-symbianelf* )
 	;;
 arm*-*-rtems*)
 	;;
-arm*-*-elf | ep9312-*-elf)
+arm*-*-elf)
 	;;
 arm*-wince-pe*)
 	;;
 arm-*-pe*)
 	;;
-arm*-*-kaos*)
-	;;
 avr-*-rtems*)
 	;;
 avr-*-*)
+    # Make HImode functions for AVR
+    tmake_file=${cpu_type}/t-avr
 	;;
 bfin*-elf*)
         ;;
@@ -257,8 +237,6 @@ bfin*-linux-uclibc*)
 	;;
 bfin*-*)
         ;;
-cris-*-aout)
-	;;
 crisv32-*-elf | crisv32-*-none | cris-*-elf | cris-*-none)
 	extra_parts="crtbegin.o crtend.o"
 	;;
@@ -280,15 +258,9 @@ h8300-*-elf*)
 	;;
 h8300-*-*)
 	;;
-hppa*64*-*-linux* | parisc*64*-*-linux*)
+hppa*64*-*-linux*)
 	;;
-hppa*-*-linux* | parisc*-*-linux*)
-	;;
-hppa1.1-*-pro*)
-	;;
-hppa1.1-*-osf*)
-	;;
-hppa1.1-*-bsd*)
+hppa*-*-linux*)
 	;;
 hppa[12]*-*-hpux10*)
 	;;
@@ -305,11 +277,7 @@ i[34567]86-*-elf*)
 	;;
 x86_64-*-elf*)
 	;;
-i[34567]86-sequent-ptx4* | i[34567]86-sequent-sysv4*)
-	;;
 i[34567]86-*-aout*)
-	;;
-i[34567]86-*-beoself* | i[34567]86-*-beos*)
 	;;
 i[34567]86-*-freebsd*)
 	;;
@@ -331,15 +299,13 @@ i[34567]86-*-openbsd*)
 	;;
 i[34567]86-*-coff*)
 	;;
-i[34567]86-*-linux* | i[34567]86-*-kfreebsd*-gnu | i[34567]86-*-knetbsd*-gnu)
+i[34567]86-*-linux* | i[34567]86-*-kfreebsd*-gnu | i[34567]86-*-knetbsd*-gnu | i[34567]86-*-gnu*)
 	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
 	tmake_file="${tmake_file} i386/t-crtpc i386/t-crtfm"
 	;;
 x86_64-*-linux* | x86_64-*-kfreebsd*-gnu | x86_64-*-knetbsd*-gnu)
 	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
 	tmake_file="${tmake_file} i386/t-crtpc i386/t-crtfm"
-	;;
-i[34567]86-*-gnu*)
 	;;
 i[34567]86-pc-msdosdjgpp*)
 	;;
@@ -356,8 +322,6 @@ i[34567]86-*-nto-qnx*)
 	;;
 i[34567]86-*-rtems*)
 	;;
-i[34567]86-*-sco3.2v5*)	# 80386 running SCO Open Server 5
-	;;
 i[34567]86-*-solaris2*)
 	tmake_file="${tmake_file} i386/t-sol2"
 	case ${host} in
@@ -371,10 +335,6 @@ i[34567]86-*-solaris2*)
 		;;
 	esac
 	;;
-i[34567]86-*-sysv5*)           # Intel x86 on System V Release 5
-       ;;
-i[34567]86-*-sysv4*)		# Intel 80386's running system V.4
-	;;
 i[4567]86-wrs-vxworks|i[4567]86-wrs-vxworksae)
 	;;
 i[34567]86-*-pe)
@@ -385,11 +345,7 @@ i[34567]86-*-cygwin* | i[34567]86-*-mingw*)
 	;;
 x86_64-*-mingw*)
 	;;
-i[34567]86-*-uwin*)
-	;;
 i[34567]86-*-interix3*)
-	;;
-i[34567]86-*-kaos*)
 	;;
 ia64*-*-elf*)
 	extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o crtfastmath.o"
@@ -399,13 +355,13 @@ ia64*-*-freebsd*)
 	;;
 ia64*-*-linux*)
 	extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o crtfastmath.o"
-	tmake_file="ia64/t-ia64"
+	tmake_file="ia64/t-ia64 t-softfp ia64/t-fprules-softfp ia64/t-softfp-compat"
 	;;
 ia64*-*-hpux*)
 	;;
 iq2000*-*-elf*)
         ;;
-m32r-*-elf*)
+m32r-*-elf*|m32r-*-rtems*)
  	;;
 m32rle-*-elf*)
 	;;
@@ -423,9 +379,9 @@ m68k-*-coff*)
 	;;
 m68k-*-haiku*)
 	;;
-m68020-*-elf* | m68k-*-elf*)
+m68k-*-elf*)
 	;;
-m68010-*-netbsdelf* | m68k*-*-netbsdelf*)
+m68k*-*-netbsdelf*)
 	;;
 m68k*-*-openbsd*)
 	;;
@@ -459,6 +415,8 @@ mipsisa32r2-*-elf* | mipsisa32r2el-*-elf*)
 	;;
 mipsisa64-*-elf* | mipsisa64el-*-elf*)
 	;;
+mipsisa64r2-*-elf* | mipsisa64r2el-*-elf*)
+	;;
 mipsisa64sr71k-*-elf*)
         ;;
 mipsisa64sb1-*-elf* | mipsisa64sb1el-*-elf*)
@@ -475,27 +433,23 @@ mips*-*-rtems*)
 	;;
 mips-wrs-vxworks)
 	;;
-mips-wrs-windiss)	# Instruction-level simulator for VxWorks.
-	;;
 mipstx39-*-elf* | mipstx39el-*-elf*)
 	;;
 mmix-knuth-mmixware)
 	;;
 mn10300-*-*)
 	;;
-mt-*-elf)
-        ;;
 pdp11-*-bsd)
         ;;
 pdp11-*-*)
 	;;
+picochip-*-*)
+        ;;
 powerpc64-*-linux*)
-	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128"
+	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128 t-softfp"
 	;;
 powerpc64-*-gnu*)
-	tmake_file="${tmake_file} rs6000/t-ldbl128"
-	;;
-powerpc-*-beos*)
+	tmake_file="${tmake_file} rs6000/t-ldbl128 t-softfp"
 	;;
 powerpc-*-darwin*)
 	;;
@@ -506,8 +460,6 @@ powerpc*-*-freebsd*)
 powerpc-*-haiku*)
 	;;
 powerpc-*-netbsd*)
-	;;
-powerpc-*-chorusos*)
 	;;
 powerpc-*-eabispe*)
 	;;
@@ -527,10 +479,10 @@ powerpc-*-linux*altivec*)
 	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128"
 	;;
 powerpc-*-linux*spe*)
-	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128"
+	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128 t-softfp"
 	;;
 powerpc-*-linux*)
-	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128"
+	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-ldbl128 t-softfp"
 	;;
 powerpc-*-gnu-gnualtivec*)
 	tmake_file="${tmake_file} rs6000/t-ldbl128"
@@ -540,21 +492,13 @@ powerpc-*-gnu*)
 	;;
 powerpc-wrs-vxworks|powerpc-wrs-vxworksae)
 	;;
-powerpc-wrs-windiss*)  # Instruction-level simulator for VxWorks.
-	;;
 powerpc-*-lynxos*)
-	;;
-powerpcle-*-sysv*)
 	;;
 powerpcle-*-elf*)
 	;;
 powerpcle-*-eabisim*)
 	;;
 powerpcle-*-eabi*)
-	;;
-powerpc-*-kaos*)
-	;;
-powerpcle-*-kaos*)
 	;;
 rs6000-ibm-aix4.[12]* | powerpc-ibm-aix4.[12]*)
 	;;
@@ -572,9 +516,9 @@ s390x-ibm-tpf*)
 	;;
 score-*-elf)
         ;;
-sh-*-elf* | sh[12346l]*-*-elf* | sh*-*-kaos* | \
+sh-*-elf* | sh[12346l]*-*-elf* | \
 sh-*-symbianelf* | sh[12346l]*-*-symbianelf* | \
-  sh-*-linux* | sh[346lbe]*-*-linux* | \
+  sh-*-linux* | sh[2346lbe]*-*-linux* | \
   sh-*-netbsdelf* | shl*-*-netbsdelf* | sh5-*-netbsd* | sh5l*-*-netbsd* | \
    sh64-*-netbsd* | sh64l*-*-netbsd*)
 	case ${host} in
@@ -605,8 +549,6 @@ sparc64-*-solaris2* | sparcv9-*-solaris2*)
 	;;
 sparc-*-solaris2*)
 	;;
-sparc-*-sysv4*)
-	;;
 sparc64-*-elf*)
 	;;
 sparc-wrs-vxworks)
@@ -621,21 +563,11 @@ sparc64-*-netbsd*)
 	;;
 spu-*-elf*)
 	;;
-strongarm-*-elf*)
-	;;
-strongarm-*-pe)
-	;;
-strongarm-*-kaos*)
-	;;
 v850e1-*-*)
 	;;
 v850e-*-*)
 	;;
 v850-*-*)
-	;;
-vax-*-bsd*)			# VAXen running BSD
-	;;
-vax-*-sysv*)			# VAXen running system V
 	;;
 vax-*-netbsdelf*)
 	;;
@@ -643,22 +575,16 @@ vax-*-netbsd*)
 	;;
 vax-*-openbsd*)
 	;;
-vax-*-ultrix*)			# VAXen running ultrix
-	;;
-xscale-*-elf)
-	;;
-xscale-*-coff)
-	;;
 xstormy16-*-elf)
 	;;
-xtensa-*-elf*)
+xtensa*-*-elf*)
 	;;
-xtensa-*-linux*)
+xtensa*-*-linux*)
 	;;
 am33_2.0-*-linux*)
 	extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o"
 	;;
-m32c-*-elf*)
+m32c-*-elf*|m32c-*-rtems*)
  	;;
 *)
 	echo "*** Configuration ${host} not supported" 1>&2
@@ -667,7 +593,28 @@ m32c-*-elf*)
 esac
 
 case ${host} in
-i[34567]86-*-linux* | x86_64-*-linux*)
+i[34567]86-*-linux* | x86_64-*-linux* | \
+  i[34567]86-*-kfreebsd*-gnu | i[34567]86-*-knetbsd*-gnu | \
+  i[34567]86-*-gnu*)
 	tmake_file="${tmake_file} t-tls"
+	;;
+esac
+
+case ${host} in
+i[34567]86-*-darwin* | x86_64-*-darwin* | \
+  i[34567]86-*-kfreebsd*-gnu | x86_64-*-kfreebsd*-gnu | \
+  i[34567]86-*-linux* | x86_64-*-linux*)
+	if test "${host_address}" = 32; then
+		tmake_file="${tmake_file} t-softfp i386/${host_address}/t-fprules-softfp"
+	fi
+	;;
+esac
+
+case ${host} in
+i[34567]86-*-linux* | x86_64-*-linux*)
+	# Provide backward binary compatibility for 64bit Linux/x86.
+	if test "${host_address}" = 64; then
+		tmake_file="${tmake_file} i386/${host_address}/t-softfp-compat"
+	fi
 	;;
 esac

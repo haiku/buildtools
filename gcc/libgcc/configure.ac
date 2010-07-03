@@ -4,6 +4,7 @@ sinclude(../config/enable.m4)
 sinclude(../config/tls.m4)
 sinclude(../config/acx.m4)
 sinclude(../config/no-executables.m4)
+sinclude(../config/override.m4)
 
 AC_PREREQ(2.59)
 AC_INIT([GNU C Runtime Library], 1.0,,[libgcc])
@@ -151,6 +152,21 @@ AC_CACHE_CHECK([whether fixed-point is supported], [libgcc_cv_fixed_point],
 				  [libgcc_cv_fixed_point=no])])
 fixed_point=$libgcc_cv_fixed_point
 AC_SUBST(fixed_point)
+
+# Check 32bit or 64bit for x86.
+case ${host} in
+i?86*-*-* | x86_64*-*-*)
+  cat > conftest.c <<EOF
+#ifdef __x86_64__
+host_address=64
+#else
+host_address=32
+#endif
+EOF
+    eval `${CC-cc} -E conftest.c | grep host_address=`
+    rm -f conftest.c
+    ;;
+esac
 
 # Collect host-machine-specific information.
 . ${srcdir}/config.host

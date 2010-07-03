@@ -1,6 +1,6 @@
 ; Options for the Blackfin port of the compiler
 ;
-; Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+; Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
 ;
@@ -79,3 +79,23 @@ Enable inlining of PLT in function calls
 mstack-check-l1
 Target Report Mask(STACK_CHECK_L1)
 Do stack checking using bounds in L1 scratch memory
+
+mmulticore
+Target Report Mask(MULTICORE)
+Enable multicore support
+
+mcorea
+Target Report Mask(COREA)
+Build for Core A
+
+mcoreb
+Target Report Mask(COREB)
+Build for Core B
+
+msdram
+Target Report Mask(SDRAM)
+Build for SDRAM
+
+micplb
+Target Report Mask(ICPLB)
+Assume ICPLBs are enabled at runtime.

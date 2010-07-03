@@ -1,6 +1,6 @@
 ## Makefile for the doc subdirectory of the GNU C++ Standard library.
 ##
-## Copyright (C) 2008 Free Software Foundation, Inc.
+## Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
 ## Process this file with automake to produce Makefile.in.
@@ -8,7 +8,7 @@
 ## This file is part of the GNU ISO C++ Library.  This library is free
 ## software; you can redistribute it and/or modify it under the
 ## terms of the GNU General Public License as published by the
-## Free Software Foundation; either version 2, or (at your option)
+## Free Software Foundation; either version 3, or (at your option)
 ## any later version.
 
 ## This library is distributed in the hope that it will be useful,
@@ -17,9 +17,8 @@
 ## GNU General Public License for more details.
 
 ## You should have received a copy of the GNU General Public License along
-## with this library; see the file COPYING.  If not, write to the Free
-## Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-## USA.
+## with this library; see the file COPYING3.  If not see
+## <http://www.gnu.org/licenses/>.
 
 include $(top_srcdir)/fragment.am
 
@@ -79,7 +78,6 @@ xml_sources = \
 	${xml_srcdir}/manual/auto_ptr.xml \
 	${xml_srcdir}/manual/backwards_compatibility.xml \
 	${xml_srcdir}/manual/bitmap_allocator.xml \
-	${xml_srcdir}/manual/build.xml \
 	${xml_srcdir}/manual/build_hacking.xml \
 	${xml_srcdir}/manual/codecvt.xml \
 	${xml_srcdir}/manual/concurrency.xml \
@@ -101,6 +99,7 @@ xml_sources = \
 	${xml_srcdir}/manual/mt_allocator.xml \
 	${xml_srcdir}/manual/numerics.xml \
 	${xml_srcdir}/manual/parallel_mode.xml \
+	${xml_srcdir}/manual/prerequisites.xml \
 	${xml_srcdir}/manual/internals.xml \
 	${xml_srcdir}/manual/shared_ptr.xml \
 	${xml_srcdir}/manual/spine.xml \

@@ -1,5 +1,5 @@
 /* Routines for liveness in SSA trees.
-   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod  <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -82,7 +82,7 @@ typedef struct _var_map
 
 /* Partition number of a  non ssa-name variable.  */
 #define VAR_ANN_PARTITION(ann) (ann->partition)
-/* Index iot the basevar table of a non ssa-name variable.  */
+/* Index to the basevar table of a non ssa-name variable.  */
 #define VAR_ANN_BASE_INDEX(ann) (ann->base_index)
 
 
@@ -361,8 +361,8 @@ extern var_map coalesce_ssa_name (void);
 
 
 /* From tree-ssa-ter.c  */
-extern tree *find_replaceable_exprs (var_map);
-extern void dump_replaceable_exprs (FILE *, tree *);
+extern gimple *find_replaceable_exprs (var_map);
+extern void dump_replaceable_exprs (FILE *, gimple *);
 
 
 #endif /* _TREE_SSA_LIVE_H  */

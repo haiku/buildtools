@@ -1,7 +1,7 @@
 /*{{{  Comment.  */ 
 
 /* Definitions of FR30 target. 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
@@ -282,6 +282,11 @@ enum reg_class
 #define GENERAL_REGS 	REAL_REGS
 #define N_REG_CLASSES 	((int) LIM_REG_CLASSES)
 
+#define IRA_COVER_CLASSES				\
+{							\
+  REAL_REGS, MULTIPLY_64_REG, LIM_REG_CLASSES		\
+}
+
 /* An initializer containing the names of the register classes as C string
    constants.  These names are used in writing some of the debugging dumps.  */
 #define REG_CLASS_NAMES \
@@ -534,7 +539,7 @@ enum reg_class
    register.  See `FIXED_REGISTERS' for more information.  */
 /* #define FRAME_POINTER_REQUIRED 0 */
 #define FRAME_POINTER_REQUIRED \
-     (flag_omit_frame_pointer == 0 || current_function_pretend_args_size > 0)
+     (flag_omit_frame_pointer == 0 || crtl->args.pretend_args_size > 0)
 
 /* If defined, this macro specifies a table of register pairs used to eliminate
    unneeded registers that point into the stack frame.  If it is not defined,
@@ -586,7 +591,7 @@ enum reg_class
 
 /* If defined, the maximum amount of space required for outgoing arguments will
    be computed and placed into the variable
-   `current_function_outgoing_args_size'.  No space will be pushed onto the
+   `crtl->outgoing_args_size'.  No space will be pushed onto the
    stack for each call; instead, the function prologue should increase the
    stack frame size by this amount.
 
@@ -726,7 +731,7 @@ enum reg_class
    in memory.  Since this results in slower code, this should be defined only
    if needed for compatibility with other compilers or with an ABI.  If you
    define this macro to be 0, then the conventions used for structure and union
-   return values are decided by the `RETURN_IN_MEMORY' macro.
+   return values are decided by the `TARGET_RETURN_IN_MEMORY' macro.
 
    If not defined, this defaults to the value 1.  */
 #define DEFAULT_PCC_STRUCT_RETURN 1

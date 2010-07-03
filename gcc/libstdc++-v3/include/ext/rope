@@ -1,12 +1,12 @@
 // SGI's rope class -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  * Copyright (c) 1997
@@ -1689,9 +1684,9 @@ protected:
 	
 	__uninitialized_copy_n_a(__s, __size, __buf, __a);
 	_S_cond_store_eos(__buf[__size]);
-	try
+	__try
 	  { return _S_new_RopeLeaf(__buf, __size, __a); }
-	catch(...)
+	__catch(...)
 	  {
 	    _RopeRep::__STL_FREE_STRING(__buf, __size, __a);
 	    __throw_exception_again;
@@ -1845,12 +1840,12 @@ protected:
 	_CharT* __buf = this->_Data_allocate(_S_rounded_up_size(1));
 	
 	_M_get_allocator().construct(__buf, __c);
-	try
+	__try
 	  {
 	    this->_M_tree_ptr = _S_new_RopeLeaf(__buf, 1,
 						_M_get_allocator());
 	  }
-	catch(...)
+	__catch(...)
 	  {
 	    _RopeRep::__STL_FREE_STRING(__buf, 1, _M_get_allocator());
 	    __throw_exception_again;
@@ -1924,13 +1919,13 @@ protected:
 	_RopeRep* __old = this->_M_tree_ptr;
 	_RopeRep* __left =
 	  __STL_ROPE_FROM_UNOWNED_CHAR_PTR(&__x, 1, _M_get_allocator());
-	try
+	__try
 	  {
 	    this->_M_tree_ptr = _S_concat(__left, this->_M_tree_ptr);
 	    _S_unref(__old);
 	    _S_unref(__left);
 	  }
-	catch(...)
+	__catch(...)
 	  {
 	    _S_unref(__left);
 	    __throw_exception_again;

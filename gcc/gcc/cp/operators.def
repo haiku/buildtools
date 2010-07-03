@@ -5,7 +5,7 @@
    non-overloadable operators (like the `?:' ternary operator).
    Written by Mark Mitchell <mark@codesourcery.com>
 
-   Copyright (C) 2000, 2001, 2002, 2003, 2005, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -56,7 +56,7 @@ along with GCC; see the file COPYING3.  If not see
 
      A boolean value.  If nonzero, this is an assignment operator.
 
-   Before including this file, you should define DEFOPERATOR
+   Before including this file, you should define DEF_OPERATOR
    to take these arguments.
 
    There is code (such as in grok_op_properties) that depends on the
@@ -94,7 +94,7 @@ DEF_SIMPLE_OPERATOR ("++", PREINCREMENT_EXPR, "pp", 1)
 DEF_SIMPLE_OPERATOR ("--", PREDECREMENT_EXPR, "mm", 1)
 DEF_SIMPLE_OPERATOR ("sizeof", SIZEOF_EXPR, "sz", 1)
 /* These are extensions.  */
-DEF_SIMPLE_OPERATOR ("alignof", ALIGNOF_EXPR, "v17alignof", 1)
+DEF_SIMPLE_OPERATOR ("alignof", ALIGNOF_EXPR, "az", 1)
 DEF_SIMPLE_OPERATOR ("__imag__", IMAGPART_EXPR, "v18__imag__", 1)
 DEF_SIMPLE_OPERATOR ("__real__", REALPART_EXPR, "v18__real__", 1)
 
@@ -152,4 +152,4 @@ DEF_SIMPLE_OPERATOR ("?:", COND_EXPR, "qu", 3)
 DEF_SIMPLE_OPERATOR ("()", CALL_EXPR, "cl", -1)
 
 /* Variadic templates extension. */
-DEF_SIMPLE_OPERATOR ("...", EXPR_PACK_EXPANSION, "pu", 1)
+DEF_SIMPLE_OPERATOR ("...", EXPR_PACK_EXPANSION, "sp", 1)

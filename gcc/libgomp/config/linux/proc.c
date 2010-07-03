@@ -1,29 +1,27 @@
-/* Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+/* Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
-   under the terms of the GNU Lesser General Public License as published by
-   the Free Software Foundation; either version 2.1 of the License, or
-   (at your option) any later version.
+   under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 3, or (at your option)
+   any later version.
 
    Libgomp is distributed in the hope that it will be useful, but WITHOUT ANY
    WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-   FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
+   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
    more details.
 
-   You should have received a copy of the GNU Lesser General Public License 
-   along with libgomp; see the file COPYING.LIB.  If not, write to the
-   Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-   MA 02110-1301, USA.  */
+   Under Section 7 of GPL version 3, you are granted additional
+   permissions described in the GCC Runtime Library Exception, version
+   3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with other files, some
-   of which are compiled with GCC, to produce an executable, this library
-   does not by itself cause the resulting executable to be covered by the
-   GNU General Public License.  This exception does not however invalidate
-   any other reasons why the executable file might be covered by the GNU
-   General Public License.  */
+   You should have received a copy of the GNU General Public License and
+   a copy of the GCC Runtime Library Exception along with this program;
+   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   <http://www.gnu.org/licenses/>.  */
 
 /* This file contains system specific routines related to counting
    online processors and dynamic load balancing.  */
@@ -78,14 +76,14 @@ gomp_init_num_threads (void)
   if (pthread_getaffinity_np (pthread_self (), sizeof (cpuset), &cpuset) == 0)
     {
       /* Count only the CPUs this process can use.  */
-      gomp_nthreads_var = cpuset_popcount (&cpuset);
-      if (gomp_nthreads_var == 0)
-	gomp_nthreads_var = 1;
+      gomp_global_icv.nthreads_var = cpuset_popcount (&cpuset);
+      if (gomp_global_icv.nthreads_var == 0)
+	gomp_global_icv.nthreads_var = 1;
       return;
     }
 #endif
 #ifdef _SC_NPROCESSORS_ONLN
-  gomp_nthreads_var = sysconf (_SC_NPROCESSORS_ONLN);
+  gomp_global_icv.nthreads_var = sysconf (_SC_NPROCESSORS_ONLN);
 #endif
 }
 
@@ -107,32 +105,19 @@ get_num_procs (void)
     }
   else
     {
-      size_t idx;
-      static int affinity_cpus;
-
       /* We can't use pthread_getaffinity_np in this case
 	 (we have changed it ourselves, it binds to just one CPU).
 	 Count instead the number of different CPUs we are
-	 using.  */
-      CPU_ZERO (&cpuset);
-      if (affinity_cpus == 0)
-	{
-	  int cpus = 0;
-	  for (idx = 0; idx < gomp_cpu_affinity_len; idx++)
-	    if (! CPU_ISSET (gomp_cpu_affinity[idx], &cpuset))
-	      {
-		cpus++;
-		CPU_SET (gomp_cpu_affinity[idx], &cpuset);
-	      }
-	  affinity_cpus = cpus;
-	}
-      return affinity_cpus;
+	 using.  gomp_init_affinity updated gomp_available_cpus to
+	 the number of CPUs in the GOMP_AFFINITY mask that we are
+	 allowed to use though.  */
+      return gomp_available_cpus;
     }
 #endif
 #ifdef _SC_NPROCESSORS_ONLN
   return sysconf (_SC_NPROCESSORS_ONLN);
 #else
-  return gomp_nthreads_var;
+  return gomp_icv (false)->nthreads_var;
 #endif
 }
 
@@ -146,11 +131,11 @@ get_num_procs (void)
 unsigned
 gomp_dynamic_max_threads (void)
 {
-  unsigned n_onln, loadavg;
+  unsigned n_onln, loadavg, nthreads_var = gomp_icv (false)->nthreads_var;
 
   n_onln = get_num_procs ();
-  if (n_onln > gomp_nthreads_var)
-    n_onln = gomp_nthreads_var;
+  if (n_onln > nthreads_var)
+    n_onln = nthreads_var;
 
   loadavg = 0;
 #ifdef HAVE_GETLOADAVG

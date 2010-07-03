@@ -1,18 +1,61 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
 
-2008-08-27  Release Manager
+2010-03-31  Joseph Myers  <joseph@codesourcery.com>
 
-	* GCC 4.3.2 released.
+	* gcc_release (build_tarfiles): Make directories mode 755, not
+	777.
 
-2008-06-06  Release Manager
+2010-01-21  Release Manager
 
-	* GCC 4.3.1 released.
+	* GCC 4.4.3 released.
 
-2008-03-05  Release Manager
+2009-10-15  Release Manager
 
-	* GCC 4.3.0 released.
+	* GCC 4.4.2 released.
+
+2009-07-22  Release Manager
+
+	* GCC 4.4.1 released.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-04-09  Jakub Jelinek  <jakub@redhat.com>
+
+	* gcc_release: Change copyright header to refer to version
+	3 of the GNU General Public License and to point readers at the
+	COPYING3 file and the FSF's license web page.
+	* maintainer-addresses: Likewise.
+
+2009-02-21  Gerald Pfeifer  <gerald@pfeifer.com>
+
+	* update_version_svn (ADD_BRANCHES): Remove autovect-branch
+	and document format.
+
+2009-01-17  Richard Guenther  <rguenther@suse.de>
+
+	* gcc_release (JAVA_DIRS): Remove fastjar.
+
+2008-10-04  Gerald Pfeifer  <gerald@pfeifer.com>
+
+	* gcc_release: Fix a couple of comments.
+
+2008-07-04  Joseph Myers  <joseph@codesourcery.com>
+
+	* crontab: Remove 4.1 snapshots job.
+	* update_version: Remove.
+	* gcc_release: Remove support for g77 and release status in
+	version.c.
+	* update_version_svn: Ignore 4.1 branch.  Remove support for
+	updating files other than DATESTAMP.
+	* update_web_docs_svn: Remove support for g77 manual.
+
+2008-02-18  Jakub Jelinek  <jakub@redhat.com>
+
+	* crontab: Add 4.3 branch.  Set trunk to 4.4.
 
 2008-01-28  Joseph Myers  <joseph@codesourcery.com>
 
@@ -331,7 +374,7 @@
 
 	* update_version: Add some documentation.
 
-2004-01-02  Pop Sébastian  <pop@gauvain.u-strasbg.fr>
+2004-01-02  Pop SÃ©bastian  <pop@gauvain.u-strasbg.fr>
 
 	* update_version (ADD_BRANCHES): Add lno-branch.
 

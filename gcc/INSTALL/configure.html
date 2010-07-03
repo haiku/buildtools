@@ -3,12 +3,13 @@
 <title>Installing GCC: Configuration</title>
 <meta http-equiv="Content-Type" content="text/html">
 <meta name="description" content="Installing GCC: Configuration">
-<meta name="generator" content="makeinfo 4.12">
+<meta name="generator" content="makeinfo 4.13">
 <link title="Top" rel="top" href="#Top">
 <link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
 <!--
-Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
+1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+2008 Free Software Foundation, Inc.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.2 or
@@ -162,7 +163,7 @@ files.  The default is <samp><var>prefix</var></samp>.
 internal data files of GCC.  The default is <samp><var>exec-prefix</var><span class="file">/lib</span></samp>.
 
           <br><dt><code>--libexecdir=</code><var>dirname</var><dd>Specify the installation directory for internal executables of GCC. 
-  The default is <samp><var>exec-prefix</var><span class="file">/libexec</span></samp>.
+The default is <samp><var>exec-prefix</var><span class="file">/libexec</span></samp>.
 
           <br><dt><code>--with-slibdir=</code><var>dirname</var><dd>Specify the installation directory for the shared libgcc library.  The
 default is <samp><var>libdir</var></samp>.
@@ -331,18 +332,9 @@ whether you use the GNU assembler.  On any other system,
           <ul>
 <li>&lsquo;<samp><span class="samp">hppa1.0-</span><var>any</var><span class="samp">-</span><var>any</var></samp>&rsquo;
 <li>&lsquo;<samp><span class="samp">hppa1.1-</span><var>any</var><span class="samp">-</span><var>any</var></samp>&rsquo;
-<li>&lsquo;<samp><span class="samp">i386-</span><var>any</var><span class="samp">-sysv</span></samp>&rsquo;
-<li>&lsquo;<samp><span class="samp">m68k-bull-sysv</span></samp>&rsquo;
-<li>&lsquo;<samp><span class="samp">m68k-hp-hpux</span></samp>&rsquo;
-<li>&lsquo;<samp><span class="samp">m68000-hp-hpux</span></samp>&rsquo;
-<li>&lsquo;<samp><span class="samp">m68000-att-sysv</span></samp>&rsquo;
 <li>&lsquo;<samp><span class="samp">sparc-sun-solaris2.</span><var>any</var></samp>&rsquo;
 <li>&lsquo;<samp><span class="samp">sparc64-</span><var>any</var><span class="samp">-solaris2.</span><var>any</var></samp>&rsquo;
 </ul>
-
-     <p>On the systems listed above (except for the HP-PA, the SPARC, for ISC on
-the 386, if you use the GNU assembler, you should also use the GNU linker
-(and specify <samp><span class="option">--with-gnu-ld</span></samp>).
 
      <br><dt><code><a name="with_002das"></a>--with-as=</code><var>pathname</var><dd>Specify that the compiler should use the assembler pointed to by
 <var>pathname</var>, rather than the one found by the standard rules to find
@@ -482,12 +474,15 @@ assumptions made by the configure test are incorrect.
      <br><dt><code>--disable-tls</code><dd>Specify that the target does not support TLS. 
 This is an alias for <samp><span class="option">--enable-tls=no</span></samp>.
 
-     <br><dt><code>--with-cpu=</code><var>cpu</var><dd>Specify which cpu variant the compiler should generate code for by default. 
+     <br><dt><code>--with-cpu=</code><var>cpu</var><dt><code>--with-cpu-32=</code><var>cpu</var><dt><code>--with-cpu-64=</code><var>cpu</var><dd>Specify which cpu variant the compiler should generate code for by default. 
 <var>cpu</var> will be used as the default value of the <samp><span class="option">-mcpu=</span></samp> switch. 
 This option is only supported on some targets, including ARM, i386, M68k,
-PowerPC, and SPARC.
+PowerPC, and SPARC.  The <samp><span class="option">--with-cpu-32</span></samp> and
+<samp><span class="option">--with-cpu-64</span></samp> options specify separate default CPUs for
+32-bit and 64-bit modes; these options are only supported for i386 and
+x86-64.
 
-     <br><dt><code>--with-schedule=</code><var>cpu</var><dt><code>--with-arch=</code><var>cpu</var><dt><code>--with-tune=</code><var>cpu</var><dt><code>--with-abi=</code><var>abi</var><dt><code>--with-fpu=</code><var>type</var><dt><code>--with-float=</code><var>type</var><dd>These configure options provide default values for the <samp><span class="option">-mschedule=</span></samp>,
+     <br><dt><code>--with-schedule=</code><var>cpu</var><dt><code>--with-arch=</code><var>cpu</var><dt><code>--with-arch-32=</code><var>cpu</var><dt><code>--with-arch-64=</code><var>cpu</var><dt><code>--with-tune=</code><var>cpu</var><dt><code>--with-tune-32=</code><var>cpu</var><dt><code>--with-tune-64=</code><var>cpu</var><dt><code>--with-abi=</code><var>abi</var><dt><code>--with-fpu=</code><var>type</var><dt><code>--with-float=</code><var>type</var><dd>These configure options provide default values for the <samp><span class="option">-mschedule=</span></samp>,
 <samp><span class="option">-march=</span></samp>, <samp><span class="option">-mtune=</span></samp>, <samp><span class="option">-mabi=</span></samp>, and <samp><span class="option">-mfpu=</span></samp>
 options and for <samp><span class="option">-mhard-float</span></samp> or <samp><span class="option">-msoft-float</span></samp>.  As with
 <samp><span class="option">--with-cpu</span></samp>, which switches will be accepted and acceptable values
@@ -514,6 +509,11 @@ not provide them.
 
      <br><dt><code>--without-llsc</code><dd>On MIPS targets, make <samp><span class="option">-mno-llsc</span></samp> the default when no
 <samp><span class="option">-mllsc</span></samp> option is passed.
+
+     <br><dt><code>--with-mips-plt</code><dd>On MIPS targets, make use of copy relocations and PLTs. 
+These features are extensions to the traditional
+SVR4-based MIPS ABIs and require support from GNU binutils
+and the runtime C library.
 
      <br><dt><code>--enable-__cxa_atexit</code><dd>Define if you want to use __cxa_atexit, rather than atexit, to
 register C++ destructors for local statics and global objects. 
@@ -589,11 +589,11 @@ their runtime libraries should be built.  For a list of valid values for
 </pre>
      <p>Currently, you can use any of the following:
 <code>all</code>, <code>ada</code>, <code>c</code>, <code>c++</code>, <code>fortran</code>, <code>java</code>,
-<code>objc</code>, <code>obj-c++</code>, <code>treelang</code>. 
+<code>objc</code>, <code>obj-c++</code>. 
 Building the Ada compiler has special requirements, see below. 
 If you do not pass this flag, or specify the option <code>all</code>, then all
 default languages available in the <samp><span class="file">gcc</span></samp> sub-tree will be configured. 
-Ada, Objective-C++, and treelang are not default languages; the rest are. 
+Ada and Objective-C++ are not default languages; the rest are. 
 Re-defining <code>LANGUAGES</code> when calling &lsquo;<samp><span class="samp">make</span></samp>&rsquo; <strong>does not</strong>
 work anymore, as those language sub-directories might not have been
 configured!
@@ -632,7 +632,8 @@ powerpc-linux for powerpc64-linux, only generates 32-bit code.  This
 option enables the 32-bit target to be a bi-arch compiler, which is
 useful when you want a bi-arch compiler that defaults to 32-bit, and
 you are building a bi-arch or multi-arch binutils in a combined tree. 
-Currently, this option only affects powerpc-linux and x86-linux.
+Currently, this option only affects sparc-linux, powerpc-linux and
+x86-linux.
 
      <br><dt><code>--enable-secureplt</code><dd>This option enables <samp><span class="option">-msecure-plt</span></samp> by default for powerpc-linux. 
 See &ldquo;RS/6000 and PowerPC Options&rdquo; in the main manual
@@ -669,7 +670,8 @@ consistency checks of the requested complexity.  This does not change the
 generated code, but adds error checking within the compiler.  This will
 slow down the compiler and may only work properly if you are building
 the compiler with GCC.  This is &lsquo;<samp><span class="samp">yes</span></samp>&rsquo; by default when building
-from SVN or snapshots, but &lsquo;<samp><span class="samp">release</span></samp>&rsquo; for releases.  More control
+from SVN or snapshots, but &lsquo;<samp><span class="samp">release</span></samp>&rsquo; for releases.  The default
+for building the stage1 compiler is &lsquo;<samp><span class="samp">yes</span></samp>&rsquo;.  More control
 over the checks may be had by specifying <var>list</var>.  The categories of
 checks available are &lsquo;<samp><span class="samp">yes</span></samp>&rsquo; (most common checks
 &lsquo;<samp><span class="samp">assert,misc,tree,gc,rtlflag,runtime</span></samp>&rsquo;), &lsquo;<samp><span class="samp">no</span></samp>&rsquo; (no checks at
@@ -687,6 +689,16 @@ To disable all checking, &lsquo;<samp><span class="samp">--disable-checking</spa
 assertions will make the compiler and runtime slightly faster but
 increase the risk of undetected internal errors causing wrong code to be
 generated.
+
+     <br><dt><code>--disable-stage1-checking</code><br><dt><code>--enable-stage1-checking</code><dt><code>--enable-stage1-checking=</code><var>list</var><dd>If no <samp><span class="option">--enable-checking</span></samp> option is specified the stage1
+compiler will be built with &lsquo;<samp><span class="samp">yes</span></samp>&rsquo; checking enabled, otherwise
+the stage1 checking flags are the same as specified by
+<samp><span class="option">--enable-checking</span></samp>.  To build the stage1 compiler with
+different checking options use <samp><span class="option">--enable-stage1-checking</span></samp>. 
+The list of checking options is the same as for <samp><span class="option">--enable-checking</span></samp>. 
+If your system is too slow or too small to bootstrap a released compiler
+with checking for stage1 enabled, you can use &lsquo;<samp><span class="samp">--disable-stage1-checking</span></samp>&rsquo;
+to disable checking for the stage1 compiler.
 
      <br><dt><code>--enable-coverage</code><dt><code>--enable-coverage=</code><var>level</var><dd>With this option, the compiler is built to collect self coverage
 information, every time it is run.  This is for internal development
@@ -732,14 +744,13 @@ is removed entirely in the next major release, unless someone steps
 forward to maintain the port.
 
      <br><dt><code>--enable-decimal-float</code><dt><code>--enable-decimal-float=yes</code><dt><code>--enable-decimal-float=no</code><dt><code>--enable-decimal-float=bid</code><dt><code>--enable-decimal-float=dpd</code><dt><code>--disable-decimal-float</code><dd>Enable (or disable) support for the C decimal floating point extension
-that is in the IEEE 754R extension to the IEEE754 floating point
-standard.  This is enabled by default only on PowerPC, i386, and
-x86_64 GNU/Linux systems.  Other systems may also support it, but
-require the user to specifically enable it.  You can optionally
-control which decimal floating point format is used (either &lsquo;<samp><span class="samp">bid</span></samp>&rsquo;
-or &lsquo;<samp><span class="samp">dpd</span></samp>&rsquo;).  The &lsquo;<samp><span class="samp">bid</span></samp>&rsquo; (binary integer decimal) format is
-default on i386 and x86_64 systems, and the &lsquo;<samp><span class="samp">dpd</span></samp>&rsquo; (densely packed
-decimal) format is default on PowerPC systems.
+that is in the IEEE 754-2008 standard.  This is enabled by default only
+on PowerPC, i386, and x86_64 GNU/Linux systems.  Other systems may also
+support it, but require the user to specifically enable it.  You can
+optionally control which decimal floating point format is used (either
+&lsquo;<samp><span class="samp">bid</span></samp>&rsquo; or &lsquo;<samp><span class="samp">dpd</span></samp>&rsquo;).  The &lsquo;<samp><span class="samp">bid</span></samp>&rsquo; (binary integer decimal)
+format is default on i386 and x86_64 systems, and the &lsquo;<samp><span class="samp">dpd</span></samp>&rsquo;
+(densely packed decimal) format is default on PowerPC systems.
 
      <br><dt><code>--enable-fixed-point</code><dt><code>--disable-fixed-point</code><dd>Enable (or disable) support for C fixed-point arithmetic. 
 This option is enabled by default for some targets (such as MIPS) which
@@ -766,6 +777,28 @@ GCC, you can explicitly specify the directory where they are installed
 <samp><span class="option">--with-mpfr-include=</span><var>mpfrinstalldir</var><span class="option">/include</span></samp>.  If these
 shorthand assumptions are not correct, you can use the explicit
 include and lib options directly.
+
+     <br><dt><code>--with-ppl=</code><var>pathname</var><dt><code>--with-ppl-include=</code><var>pathname</var><dt><code>--with-ppl-lib=</code><var>pathname</var><dt><code>--with-cloog=</code><var>pathname</var><dt><code>--with-cloog-include=</code><var>pathname</var><dt><code>--with-cloog-lib=</code><var>pathname</var><dd>If you do not have PPL (the Parma Polyhedra Library) and the CLooG
+libraries installed in a standard location and you want to build GCC,
+you can explicitly specify the directory where they are installed
+(&lsquo;<samp><span class="samp">--with-ppl=</span><var>pplinstalldir</var></samp>&rsquo;,
+&lsquo;<samp><span class="samp">--with-cloog=</span><var>clooginstalldir</var></samp>&rsquo;). The
+<samp><span class="option">--with-ppl=</span><var>pplinstalldir</var></samp> option is shorthand for
+<samp><span class="option">--with-ppl-lib=</span><var>pplinstalldir</var><span class="option">/lib</span></samp> and
+<samp><span class="option">--with-ppl-include=</span><var>pplinstalldir</var><span class="option">/include</span></samp>.  Likewise the
+<samp><span class="option">--with-cloog=</span><var>clooginstalldir</var></samp> option is shorthand for
+<samp><span class="option">--with-cloog-lib=</span><var>clooginstalldir</var><span class="option">/lib</span></samp> and
+<samp><span class="option">--with-cloog-include=</span><var>clooginstalldir</var><span class="option">/include</span></samp>.  If these
+shorthand assumptions are not correct, you can use the explicit
+include and lib options directly.
+
+     <br><dt><code>--with-host-libstdcxx=</code><var>linker-args</var><dd>If you are linking with a static copy of PPL, you can use this option
+to specify how the linker should find the standard C++ library used
+internally by PPL.  Typical values of <var>linker-args</var> might be
+&lsquo;<samp><span class="samp">-lstdc++</span></samp>&rsquo; or &lsquo;<samp><span class="samp">-Wl,-Bstatic,-lstdc++,-Bdynamic -lm</span></samp>&rsquo;.  If you are
+linking with a shared copy of PPL, you probably do not need this
+option; shared library dependencies will cause the linker to search
+for the standard C++ library automatically.
 
      <br><dt><code>--with-debug-prefix-map=</code><var>map</var><dd>Convert source directory names using <samp><span class="option">-fdebug-prefix-map</span></samp> when
 building runtime libraries.  &lsquo;<samp><var>map</var></samp>&rsquo; is a space-separated
@@ -923,6 +956,12 @@ these options.  This allows the compile-time linker to resolve
 dependencies when statically linking to libgcj.  However it makes it
 impossible to override the affected portions of libgcj at run-time.
 
+     <br><dt><code>--enable-reduced-reflection</code><dd>Build most of libgcj with <samp><span class="option">-freduced-reflection</span></samp>.  This reduces
+the size of libgcj at the expense of not being able to do accurate
+reflection on the classes it contains.  This option is safe if you
+know that code using libgcj will never use reflection on the standard
+runtime classes in libgcj (including using serialization, RMI or CORBA).
+
      <br><dt><code>--with-ecos</code><dd>Enable runtime eCos target support.
 
      <br><dt><code>--without-libffi</code><dd>Don't use &lsquo;<samp><span class="samp">libffi</span></samp>&rsquo;.  This will disable the interpreter and JNI
@@ -947,6 +986,36 @@ Only use this option if you are sure you need a different setting.
 
      <br><dt><code>--with-win32-nlsapi=ansi, unicows or unicode</code><dd>Indicates how MinGW &lsquo;<samp><span class="samp">libgcj</span></samp>&rsquo; translates between UNICODE
 characters and the Win32 API.
+
+     <br><dt><code>--enable-java-home</code><dd>If enabled, this creates a JPackage compatible SDK environment during install. 
+Note that if &ndash;enable-java-home is used, &ndash;with-arch-directory=ARCH must also
+be specified.
+
+     <br><dt><code>--with-arch-directory=ARCH</code><dd>Specifies the name to use for the <samp><span class="file">jre/lib/ARCH</span></samp> directory in the SDK
+environment created when &ndash;enable-java-home is passed. Typical names for this
+directory include i386, amd64, ia64, etc.
+
+     <br><dt><code>--with-os-directory=DIR</code><dd>Specifies the OS directory for the SDK include directory. This is set to auto
+detect, and is typically 'linux'.
+
+     <br><dt><code>--with-origin-name=NAME</code><dd>Specifies the JPackage origin name. This defaults to the 'gcj' in
+java-1.5.0-gcj.
+
+     <br><dt><code>--with-arch-suffix=SUFFIX</code><dd>Specifies the suffix for the sdk directory. Defaults to the empty string. 
+Examples include '.x86_64' in 'java-1.5.0-gcj-1.5.0.0.x86_64'.
+
+     <br><dt><code>--with-jvm-root-dir=DIR</code><dd>Specifies where to install the SDK. Default is $(prefix)/lib/jvm.
+
+     <br><dt><code>--with-jvm-jar-dir=DIR</code><dd>Specifies where to install jars. Default is $(prefix)/lib/jvm-exports.
+
+     <br><dt><code>--with-python-dir=DIR</code><dd>Specifies where to install the Python modules used for aot-compile. DIR should
+not include the prefix used in installation. For example, if the Python modules
+are to be installed in /usr/lib/python2.5/site-packages, then
+&ndash;with-python-dir=/lib/python2.5/site-packages should be passed. If this is
+not specified, then the Python modules are installed in $(prefix)/share/python.
+
+     <br><dt><code>--enable-aot-compile-rpm</code><dd>Adds aot-compile-rpm to the list of installed scripts.
+
           <dl>
 <dt><code>ansi</code><dd>Use the single-byte <code>char</code> and the Win32 A functions natively,
 translating to and from UNICODE when using these functions.  If

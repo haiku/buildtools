@@ -1,6 +1,6 @@
 /* Subroutines used for code generation on the Renesas M32R cpu.
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2007 Free Software Foundation, Inc.
+   2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -85,7 +85,7 @@ static bool m32r_return_in_memory (const_tree, const_tree);
 static void m32r_setup_incoming_varargs (CUMULATIVE_ARGS *, enum machine_mode,
 					 tree, int *, int);
 static void init_idents (void);
-static bool m32r_rtx_costs (rtx, int, int, int *);
+static bool m32r_rtx_costs (rtx, int, int, int *, bool speed);
 static bool m32r_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
 				    const_tree, bool);
 static int m32r_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
@@ -126,7 +126,7 @@ static int m32r_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
 #undef  TARGET_RTX_COSTS
 #define TARGET_RTX_COSTS m32r_rtx_costs
 #undef  TARGET_ADDRESS_COST
-#define TARGET_ADDRESS_COST hook_int_rtx_0
+#define TARGET_ADDRESS_COST hook_int_rtx_bool_0
 
 #undef  TARGET_PROMOTE_PROTOTYPES
 #define TARGET_PROMOTE_PROTOTYPES hook_bool_const_tree_true
@@ -1092,7 +1092,8 @@ m32r_issue_rate (void)
 /* Cost functions.  */
 
 static bool
-m32r_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total)
+m32r_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total,
+		bool speed ATTRIBUTE_UNUSED)
 {
   switch (code)
     {
@@ -1253,7 +1254,7 @@ static struct m32r_frame_info zero_frame_info;
    && (df_regs_ever_live_p (regno) && (!call_really_used_regs[regno] || interrupt_p)))
 
 #define MUST_SAVE_FRAME_POINTER (df_regs_ever_live_p (FRAME_POINTER_REGNUM))
-#define MUST_SAVE_RETURN_ADDR   (df_regs_ever_live_p (RETURN_ADDR_REGNUM) || current_function_profile)
+#define MUST_SAVE_RETURN_ADDR   (df_regs_ever_live_p (RETURN_ADDR_REGNUM) || crtl->profile)
 
 #define SHORT_INSN_SIZE 2	/* Size of small instructions.  */
 #define LONG_INSN_SIZE 4	/* Size of long instructions.  */
@@ -1272,12 +1273,12 @@ m32r_compute_frame_size (int size)	/* # of var. bytes allocated.  */
   unsigned int gmask;
   enum m32r_function_type fn_type;
   int interrupt_p;
-  int pic_reg_used = flag_pic && (current_function_uses_pic_offset_table
-                                  | current_function_profile);
+  int pic_reg_used = flag_pic && (crtl->uses_pic_offset_table
+                                  | crtl->profile);
 
   var_size	= M32R_STACK_ALIGN (size);
-  args_size	= M32R_STACK_ALIGN (current_function_outgoing_args_size);
-  pretend_size	= current_function_pretend_args_size;
+  args_size	= M32R_STACK_ALIGN (crtl->outgoing_args_size);
+  pretend_size	= crtl->args.pretend_args_size;
   extra_size	= FIRST_PARM_OFFSET (0);
   total_size	= extra_size + pretend_size + args_size + var_size;
   reg_size	= 0;
@@ -1349,7 +1350,7 @@ m32r_reload_lr (rtx sp, int size)
       emit_insn (gen_movsi (lr, gen_frame_mem (Pmode, tmp)));
     }
 
-  emit_insn (gen_rtx_USE (VOIDmode, lr));
+  emit_use (lr);
 }
 
 void
@@ -1361,7 +1362,7 @@ m32r_load_pic_register (void)
 
   /* Need to emit this whether or not we obey regdecls,
      since setjmp/longjmp can cause life info to screw up.  */
-  emit_insn (gen_rtx_USE (VOIDmode, pic_offset_table_rtx));
+  emit_use (pic_offset_table_rtx);
 }
 
 /* Expand the m32r prologue as a series of insns.  */
@@ -1372,8 +1373,8 @@ m32r_expand_prologue (void)
   int regno;
   int frame_size;
   unsigned int gmask;
-  int pic_reg_used = flag_pic && (current_function_uses_pic_offset_table
-                                  | current_function_profile);
+  int pic_reg_used = flag_pic && (crtl->uses_pic_offset_table
+                                  | crtl->profile);
 
   if (! current_frame_info.initialized)
     m32r_compute_frame_size (get_frame_size ());
@@ -1434,7 +1435,7 @@ m32r_expand_prologue (void)
   if (frame_pointer_needed)
     emit_insn (gen_movsi (frame_pointer_rtx, stack_pointer_rtx));
 
-  if (current_function_profile)
+  if (crtl->profile)
     /* Push lr for mcount (form_pc, x).  */
     emit_insn (gen_movsi_push (stack_pointer_rtx,
                                gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)));
@@ -1443,10 +1444,10 @@ m32r_expand_prologue (void)
     {
       m32r_load_pic_register ();
       m32r_reload_lr (stack_pointer_rtx,
-                      (current_function_profile ? 0 : frame_size));
+                      (crtl->profile ? 0 : frame_size));
     }
 
-  if (current_function_profile && !pic_reg_used)
+  if (crtl->profile && !pic_reg_used)
     emit_insn (gen_blockage ());
 }
 
@@ -1519,7 +1520,7 @@ m32r_expand_epilogue (void)
       unsigned int var_size = current_frame_info.var_size;
       unsigned int args_size = current_frame_info.args_size;
       unsigned int gmask = current_frame_info.gmask;
-      int can_trust_sp_p = !current_function_calls_alloca;
+      int can_trust_sp_p = !cfun->calls_alloca;
 
       if (flag_exceptions)
         emit_insn (gen_blockage ());
@@ -1664,7 +1665,7 @@ m32r_legitimize_pic_address (rtx orig, rtx reg)
       else
         address = reg;
 
-      current_function_uses_pic_offset_table = 1;
+      crtl->uses_pic_offset_table = 1;
 
       if (GET_CODE (orig) == LABEL_REF
           || (GET_CODE (orig) == SYMBOL_REF && SYMBOL_REF_LOCAL_P (orig)))

@@ -1,6 +1,6 @@
 /* Definitions of target machine for GCC, for SPARC running Solaris 2
    Copyright 1992, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2005,
-   2006, 2007 Free Software Foundation, Inc.
+   2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@netcom.com).
    Additional changes by David V. Henkel-Wallace (gumby@cygnus.com).
 
@@ -138,9 +138,6 @@ along with GCC; see the file COPYING3.  If not see
    SPARC ABI says that long double is 4 words.  */
 #define LONG_DOUBLE_TYPE_SIZE 128
 
-/* But indicate that it isn't supported by the hardware.  */
-#define WIDEST_HARDWARE_FP_SIZE 64
-
 /* Solaris's _Qp_* library routine implementation clobbers the output
    memory before the inputs are fully consumed.  */
 
@@ -167,6 +164,9 @@ along with GCC; see the file COPYING3.  If not see
 #define SUBTARGET_INSERT_ATTRIBUTES solaris_insert_attributes
 #define SUBTARGET_ATTRIBUTE_TABLE SOLARIS_ATTRIBUTE_TABLE
 
+/* Register the Solaris-specific #pragma directives.  */
+#define REGISTER_TARGET_PRAGMAS() solaris_register_pragmas ()
+
 /* Output a simple call for .init/.fini.  */
 #define ASM_OUTPUT_CALL(FILE, FN)			        \
   do								\
@@ -175,4 +175,22 @@ along with GCC; see the file COPYING3.  If not see
       print_operand (FILE, XEXP (DECL_RTL (FN), 0), 0);	\
       fprintf (FILE, "\n\tnop\n");				\
     }								\
+  while (0)
+
+/* Solaris 'as' has a bug: a .common directive in .tbss section
+   behaves as .tls_common rather than normal non-TLS .common.  */
+#undef  ASM_OUTPUT_ALIGNED_COMMON
+#define ASM_OUTPUT_ALIGNED_COMMON(FILE, NAME, SIZE, ALIGN)		\
+  do									\
+    {									\
+      if (TARGET_SUN_TLS						\
+	  && in_section							\
+	  && ((in_section->common.flags & (SECTION_TLS | SECTION_BSS))	\
+	      == (SECTION_TLS | SECTION_BSS)))				\
+	switch_to_section (bss_section);				\
+      fprintf ((FILE), "%s", COMMON_ASM_OP);				\
+      assemble_name ((FILE), (NAME));					\
+      fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
+	       (SIZE), (ALIGN) / BITS_PER_UNIT);			\
+    }									\
   while (0)

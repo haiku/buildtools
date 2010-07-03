@@ -1,5 +1,6 @@
 /* Rtl-level induction variable analysis.
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    
 This file is part of GCC.
    
@@ -173,8 +174,7 @@ check_iv_ref_table_size (void)
   if (iv_ref_table_size < DF_DEFS_TABLE_SIZE())
     {
       unsigned int new_size = DF_DEFS_TABLE_SIZE () + (DF_DEFS_TABLE_SIZE () / 4);
-      iv_ref_table = xrealloc (iv_ref_table, 
-			       sizeof (struct rtx_iv *) * new_size);
+      iv_ref_table = XRESIZEVEC (struct rtx_iv *, iv_ref_table, new_size);
       memset (&iv_ref_table[iv_ref_table_size], 0, 
 	      (new_size - iv_ref_table_size) * sizeof (struct rtx_iv *));
       iv_ref_table_size = new_size;
@@ -294,15 +294,15 @@ iv_analysis_loop_init (struct loop *loop)
    is set to NULL and true is returned.  */
 
 static bool
-latch_dominating_def (rtx reg, struct df_ref **def)
+latch_dominating_def (rtx reg, df_ref *def)
 {
-  struct df_ref *single_rd = NULL, *adef;
+  df_ref single_rd = NULL, adef;
   unsigned regno = REGNO (reg);
   struct df_rd_bb_info *bb_info = DF_RD_BB_INFO (current_loop->latch);
 
-  for (adef = DF_REG_DEF_CHAIN (regno); adef; adef = adef->next_reg)
+  for (adef = DF_REG_DEF_CHAIN (regno); adef; adef = DF_REF_NEXT_REG (adef))
     {
-      if (!bitmap_bit_p (df->blocks_to_analyze, DF_REF_BB (adef)->index)
+      if (!bitmap_bit_p (df->blocks_to_analyze, DF_REF_BBNO (adef))
 	  || !bitmap_bit_p (bb_info->out, DF_REF_ID (adef)))
 	continue;
 
@@ -323,9 +323,9 @@ latch_dominating_def (rtx reg, struct df_ref **def)
 /* Gets definition of REG reaching its use in INSN and stores it to DEF.  */
 
 static enum iv_grd_result
-iv_get_reaching_def (rtx insn, rtx reg, struct df_ref **def)
+iv_get_reaching_def (rtx insn, rtx reg, df_ref *def)
 {
-  struct df_ref *use, *adef;
+  df_ref use, adef;
   basic_block def_bb, use_bb;
   rtx def_insn;
   bool dom_p;
@@ -350,7 +350,7 @@ iv_get_reaching_def (rtx insn, rtx reg, struct df_ref **def)
   adef = DF_REF_CHAIN (use)->ref;
 
   /* We do not handle setting only part of the register.  */
-  if (adef->flags & DF_REF_READ_WRITE)
+  if (DF_REF_FLAGS (adef) & DF_REF_READ_WRITE)
     return GRD_INVALID;
 
   def_insn = DF_REF_INSN (adef);
@@ -617,7 +617,7 @@ iv_shift (struct rtx_iv *iv, rtx mby)
    at get_biv_step.  */
 
 static bool
-get_biv_step_1 (struct df_ref *def, rtx reg,
+get_biv_step_1 (df_ref def, rtx reg,
 		rtx *inner_step, enum machine_mode *inner_mode,
 		enum rtx_code *extend, enum machine_mode outer_mode,
 		rtx *outer_step)
@@ -626,7 +626,7 @@ get_biv_step_1 (struct df_ref *def, rtx reg,
   rtx next, nextr, tmp;
   enum rtx_code code;
   rtx insn = DF_REF_INSN (def);
-  struct df_ref *next_def;
+  df_ref next_def;
   enum iv_grd_result res;
 
   set = single_set (insn);
@@ -784,7 +784,7 @@ get_biv_step_1 (struct df_ref *def, rtx reg,
    LAST_DEF is the definition of REG that dominates loop latch.  */
 
 static bool
-get_biv_step (struct df_ref *last_def, rtx reg, rtx *inner_step,
+get_biv_step (df_ref last_def, rtx reg, rtx *inner_step,
 	      enum machine_mode *inner_mode, enum rtx_code *extend,
 	      enum machine_mode *outer_mode, rtx *outer_step)
 {
@@ -804,7 +804,7 @@ get_biv_step (struct df_ref *last_def, rtx reg, rtx *inner_step,
 /* Records information that DEF is induction variable IV.  */
 
 static void
-record_iv (struct df_ref *def, struct rtx_iv *iv)
+record_iv (df_ref def, struct rtx_iv *iv)
 {
   struct rtx_iv *recorded_iv = XNEW (struct rtx_iv);
 
@@ -819,7 +819,8 @@ record_iv (struct df_ref *def, struct rtx_iv *iv)
 static bool
 analyzed_for_bivness_p (rtx def, struct rtx_iv *iv)
 {
-  struct biv_entry *biv = htab_find_with_hash (bivs, def, REGNO (def));
+  struct biv_entry *biv =
+    (struct biv_entry *) htab_find_with_hash (bivs, def, REGNO (def));
 
   if (!biv)
     return false;
@@ -849,7 +850,7 @@ iv_analyze_biv (rtx def, struct rtx_iv *iv)
   rtx inner_step, outer_step;
   enum machine_mode inner_mode, outer_mode;
   enum rtx_code extend;
-  struct df_ref *last_def;
+  df_ref last_def;
 
   if (dump_file)
     {
@@ -1042,7 +1043,7 @@ iv_analyze_expr (rtx insn, rtx rhs, enum machine_mode mode, struct rtx_iv *iv)
 /* Analyzes iv DEF and stores the result to *IV.  */
 
 static bool
-iv_analyze_def (struct df_ref *def, struct rtx_iv *iv)
+iv_analyze_def (df_ref def, struct rtx_iv *iv)
 {
   rtx insn = DF_REF_INSN (def);
   rtx reg = DF_REF_REG (def);
@@ -1107,7 +1108,7 @@ iv_analyze_def (struct df_ref *def, struct rtx_iv *iv)
 static bool
 iv_analyze_op (rtx insn, rtx op, struct rtx_iv *iv)
 {
-  struct df_ref *def = NULL;
+  df_ref def = NULL;
   enum iv_grd_result res;
 
   if (dump_file)
@@ -1190,7 +1191,7 @@ iv_analyze (rtx insn, rtx val, struct rtx_iv *iv)
 bool
 iv_analyze_result (rtx insn, rtx def, struct rtx_iv *iv)
 {
-  struct df_ref *adef;
+  df_ref adef;
 
   adef = df_find_def (insn, def);
   if (!adef)
@@ -1207,7 +1208,7 @@ bool
 biv_p (rtx insn, rtx reg)
 {
   struct rtx_iv iv;
-  struct df_ref *def, *last_def;
+  df_ref def, last_def;
 
   if (!simple_reg_p (reg))
     return false;
@@ -1304,7 +1305,7 @@ altered_reg_used (rtx *reg, void *alt)
   if (!REG_P (*reg))
     return 0;
 
-  return REGNO_REG_SET_P (alt, REGNO (*reg));
+  return REGNO_REG_SET_P ((bitmap) alt, REGNO (*reg));
 }
 
 /* Marks registers altered by EXPR in set ALT.  */
@@ -1317,7 +1318,7 @@ mark_altered (rtx expr, const_rtx by ATTRIBUTE_UNUSED, void *alt)
   if (!REG_P (expr))
     return;
 
-  SET_REGNO_REG_SET (alt, REGNO (expr));
+  SET_REGNO_REG_SET ((bitmap) alt, REGNO (expr));
 }
 
 /* Checks whether RHS is simple enough to process.  */
@@ -1337,13 +1338,26 @@ simple_rhs_p (rtx rhs)
     case MINUS:
       op0 = XEXP (rhs, 0);
       op1 = XEXP (rhs, 1);
-      /* Allow reg + const sets only.  */
-      if (REG_P (op0) && !HARD_REGISTER_P (op0) && CONSTANT_P (op1))
-	return true;
-      if (REG_P (op1) && !HARD_REGISTER_P (op1) && CONSTANT_P (op0))
-	return true;
+      /* Allow reg + const and reg + reg.  */
+      if (!(REG_P (op0) && !HARD_REGISTER_P (op0))
+	  && !CONSTANT_P (op0))
+	return false;
+      if (!(REG_P (op1) && !HARD_REGISTER_P (op1))
+	  && !CONSTANT_P (op1))
+	return false;
 
-      return false;
+      return true;
+
+    case ASHIFT:
+      op0 = XEXP (rhs, 0);
+      op1 = XEXP (rhs, 1);
+      /* Allow reg << const.  */
+      if (!(REG_P (op0) && !HARD_REGISTER_P (op0)))
+	return false;
+      if (!CONSTANT_P (op1))
+	return false;
+
+      return true;
 
     default:
       return false;
@@ -1543,7 +1557,8 @@ implies_p (rtx a, rtx b)
       && ((GET_CODE (a) == GT && op1 == constm1_rtx)
 	  || INTVAL (op1) >= 0)
       && GET_CODE (b) == LTU
-      && GET_CODE (opb1) == CONST_INT)
+      && GET_CODE (opb1) == CONST_INT
+      && rtx_equal_p (op0, opb0))
     return INTVAL (opb1) < 0;
 
   return false;
@@ -2786,7 +2801,9 @@ get_simple_loop_desc (struct loop *loop)
   if (desc)
     return desc;
 
-  desc = XNEW (struct niter_desc);
+  /* At least desc->infinite is not always initialized by
+     find_simple_loop_exit.  */
+  desc = XCNEW (struct niter_desc);
   iv_analysis_loop_init (loop);
   find_simple_exit (loop, desc);
   loop->aux = desc;

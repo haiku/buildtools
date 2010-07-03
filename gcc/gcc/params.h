@@ -1,5 +1,6 @@
 /* params.h - Run-time parameters.
-   Copyright (C) 2001, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>.
 
 This file is part of GCC.
@@ -93,10 +94,6 @@ typedef enum compiler_param
   (compiler_params[(int) ENUM].set)
 
 /* Macros for the various parameters.  */
-#define SALIAS_MAX_IMPLICIT_FIELDS \
-  PARAM_VALUE (PARAM_SALIAS_MAX_IMPLICIT_FIELDS)
-#define SALIAS_MAX_ARRAY_ELEMENTS \
-  PARAM_VALUE (PARAM_SALIAS_MAX_ARRAY_ELEMENTS)
 #define SRA_MAX_STRUCTURE_SIZE \
   PARAM_VALUE (PARAM_SRA_MAX_STRUCTURE_SIZE)
 #define SRA_MAX_STRUCTURE_COUNT \
@@ -171,4 +168,12 @@ typedef enum compiler_param
   PARAM_VALUE (PARAM_L2_CACHE_SIZE)
 #define USE_CANONICAL_TYPES \
   PARAM_VALUE (PARAM_USE_CANONICAL_TYPES)
+#define IRA_MAX_LOOPS_NUM \
+  PARAM_VALUE (PARAM_IRA_MAX_LOOPS_NUM)
+#define IRA_MAX_CONFLICT_TABLE_SIZE \
+  PARAM_VALUE (PARAM_IRA_MAX_CONFLICT_TABLE_SIZE)
+#define SWITCH_CONVERSION_BRANCH_RATIO \
+  PARAM_VALUE (PARAM_SWITCH_CONVERSION_BRANCH_RATIO)
+#define LOOP_INVARIANT_MAX_BBS_IN_LOOP \
+  PARAM_VALUE (PARAM_LOOP_INVARIANT_MAX_BBS_IN_LOOP)
 #endif /* ! GCC_PARAMS_H */

@@ -1,6 +1,6 @@
 /* Functions to support a pool of allocatable objects.
-   Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006,
+   2007, 2008  Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dan@cgsoftware.com>
 
 This file is part of GCC.
@@ -64,14 +64,25 @@ static ALLOC_POOL_ID_TYPE last_id;
 
 #ifdef GATHER_STATISTICS
 
-/* Store information about each particular alloc_pool.  */
+/* Store information about each particular alloc_pool.  Note that this
+   will underestimate the amount the amount of storage used by a small amount:
+   1) The overhead in a pool is not accounted for.
+   2) The unallocated elements in a block are not accounted for.  Note
+   that this can at worst case be one element smaller that the block
+   size for that pool.  */
 struct alloc_pool_descriptor
 {
   const char *name;
-  int allocated;
-  int created;
-  int peak;
-  int current;
+  /* Number of pools allocated.  */
+  unsigned long created;
+  /* Gross allocated storage.  */
+  unsigned long allocated;
+  /* Amount of currently active storage. */
+  unsigned long current;
+  /* Peak amount of storage used.  */
+  unsigned long peak;
+  /* Size of element in the pool.  */
+  int elt_size;
 };
 
 /* Hashtable mapping alloc_pool names to descriptors.  */
@@ -81,13 +92,15 @@ static htab_t alloc_pool_hash;
 static hashval_t
 hash_descriptor (const void *p)
 {
-  const struct alloc_pool_descriptor *d = p;
+  const struct alloc_pool_descriptor *const d =
+    (const struct alloc_pool_descriptor * )p;
   return htab_hash_pointer (d->name);
 }
 static int
 eq_descriptor (const void *p1, const void *p2)
 {
-  const struct alloc_pool_descriptor *d = p1;
+  const struct alloc_pool_descriptor *const d =
+    (const struct alloc_pool_descriptor *) p1;
   return d->name == p2;
 }
 
@@ -106,7 +119,7 @@ alloc_pool_descriptor (const char *name)
 			      1);
   if (*slot)
     return *slot;
-  *slot = xcalloc (sizeof (**slot), 1);
+  *slot = XCNEW (struct alloc_pool_descriptor);
   (*slot)->name = name;
   return *slot;
 }
@@ -119,7 +132,7 @@ alloc_pool
 create_alloc_pool (const char *name, size_t size, size_t num)
 {
   alloc_pool pool;
-  size_t pool_size, header_size;
+  size_t header_size;
 #ifdef GATHER_STATISTICS
   struct alloc_pool_descriptor *desc;
 #endif
@@ -141,16 +154,14 @@ create_alloc_pool (const char *name, size_t size, size_t num)
   /* Um, we can't really allocate 0 elements per block.  */
   gcc_assert (num);
 
-  /* Find the size of the pool structure, and the name.  */
-  pool_size = sizeof (struct alloc_pool_def);
-
-  /* and allocate that much memory.  */
-  pool = xmalloc (pool_size);
+  /* Allocate memory for the pool structure.  */
+  pool = XNEW (struct alloc_pool_def);
 
   /* Now init the various pieces of our pool structure.  */
   pool->name = /*xstrdup (name)*/name;
 #ifdef GATHER_STATISTICS
   desc = alloc_pool_descriptor (name);
+  desc->elt_size = size;
   desc->created++;
 #endif
   pool->elt_size = size;
@@ -197,11 +208,11 @@ empty_alloc_pool (alloc_pool pool)
     {
       next_block = block->next;
       free (block);
-#ifdef GATHER_STATISTICS
-      desc->current -= pool->block_size;
-#endif
     }
 
+#ifdef GATHER_STATISTICS
+  desc->current -= (pool->elts_allocated - pool->elts_free) * pool->elt_size;
+#endif
   pool->returned_free_list = NULL;
   pool->virgin_free_list = NULL;
   pool->virgin_elts_remaining = 0;
@@ -243,7 +254,10 @@ pool_alloc (alloc_pool pool)
 #ifdef GATHER_STATISTICS
   struct alloc_pool_descriptor *desc = alloc_pool_descriptor (pool->name);
 
-  desc->allocated+=pool->elt_size;
+  desc->allocated += pool->elt_size;
+  desc->current += pool->elt_size;
+  if (desc->peak < desc->current)
+    desc->peak = desc->current;
 #endif
 
   gcc_assert (pool);
@@ -260,11 +274,6 @@ pool_alloc (alloc_pool pool)
 	  block = XNEWVEC (char, pool->block_size);
 	  block_header = (alloc_pool_list) block;
 	  block += align_eight (sizeof (struct alloc_pool_list_def));
-#ifdef GATHER_STATISTICS
-	  desc->current += pool->block_size;
-	  if (desc->peak < desc->current)
-	    desc->peak = desc->current;
-#endif
 	  
 	  /* Throw it on the block list.  */
 	  block_header->next = pool->block_list;
@@ -315,6 +324,9 @@ void
 pool_free (alloc_pool pool, void *ptr)
 {
   alloc_pool_list header;
+#ifdef GATHER_STATISTICS
+  struct alloc_pool_descriptor *desc = alloc_pool_descriptor (pool->name);
+#endif
 
   gcc_assert (ptr);
 
@@ -335,6 +347,11 @@ pool_free (alloc_pool pool, void *ptr)
   header->next = pool->returned_free_list;
   pool->returned_free_list = header;
   pool->elts_free++;
+
+#ifdef GATHER_STATISTICS
+  desc->current -= pool->elt_size;
+#endif
+
 }
 /* Output per-alloc_pool statistics.  */
 #ifdef GATHER_STATISTICS
@@ -342,8 +359,8 @@ pool_free (alloc_pool pool, void *ptr)
 /* Used to accumulate statistics about alloc_pool sizes.  */
 struct output_info
 {
-  int count;
-  int size;
+  unsigned long total_created;
+  unsigned long total_allocated;
 };
 
 /* Called via htab_traverse.  Output alloc_pool descriptor pointed out by SLOT
@@ -356,10 +373,12 @@ print_statistics (void **slot, void *b)
 
   if (d->allocated)
     {
-      fprintf (stderr, "%-21s %6d %10d %10d %10d\n", d->name,
-	       d->created, d->allocated, d->peak, d->current);
-      i->size += d->allocated;
-      i->count += d->created;
+      fprintf (stderr, "%-22s %6d %10lu %10lu(%10lu) %10lu(%10lu) %10lu(%10lu)\n", d->name,
+	       d->elt_size, d->created, d->allocated, d->allocated / d->elt_size, 
+	       d->peak, d->peak / d->elt_size, 
+	       d->current, d->current / d->elt_size);
+      i->total_allocated += d->allocated;
+      i->total_created += d->created;
     }
   return 1;
 }
@@ -375,14 +394,14 @@ dump_alloc_pool_statistics (void)
   if (!alloc_pool_hash)
     return;
 
-  fprintf (stderr, "\nAlloc-pool Kind        Pools  Allocated      Peak        Leak\n");
-  fprintf (stderr, "-------------------------------------------------------------\n");
-  info.count = 0;
-  info.size = 0;
+  fprintf (stderr, "\nAlloc-pool Kind         Elt size  Pools  Allocated (elts)            Peak (elts)            Leak (elts)\n");
+  fprintf (stderr, "--------------------------------------------------------------------------------------------------------------\n");
+  info.total_created = 0;
+  info.total_allocated = 0;
   htab_traverse (alloc_pool_hash, print_statistics, &info);
-  fprintf (stderr, "-------------------------------------------------------------\n");
-  fprintf (stderr, "%-20s %7d %10d\n",
-	   "Total", info.count, info.size);
-  fprintf (stderr, "-------------------------------------------------------------\n");
+  fprintf (stderr, "--------------------------------------------------------------------------------------------------------------\n");
+  fprintf (stderr, "%-22s           %7lu %10lu\n",
+	   "Total", info.total_created, info.total_allocated);
+  fprintf (stderr, "--------------------------------------------------------------------------------------------------------------\n");
 #endif
 }

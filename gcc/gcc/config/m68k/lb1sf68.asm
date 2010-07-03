@@ -1,36 +1,26 @@
 /* libgcc routines for 68000 w/o floating-point hardware.
-   Copyright (C) 1994, 1996, 1997, 1998 Free Software Foundation, Inc.
+   Copyright (C) 1994, 1996, 1997, 1998, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
+Free Software Foundation; either version 3, or (at your option) any
 later version.
-
-In addition to the permissions in the GNU General Public License, the
-Free Software Foundation gives you unlimited permission to link the
-compiled version of this file with other programs, and to distribute
-those programs without any restriction coming from the use of this
-file.  (The General Public License restrictions do apply in other
-respects; for example, they cover modification of the file, and
-distribution when not linked into another program.)
 
 This file is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; see the file COPYING.  If not, write to
-the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with files
-   compiled with GCC to produce an executable, this does not cause
-   the resulting executable to be covered by the GNU General Public License.
-   This exception does not however invalidate any other reasons why
-   the executable file might be covered by the GNU General Public License.  */
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 /* Use this one for any 680x0; assumes no floating point hardware.
    The trailing " '" appearing on some lines is for ANSI preprocessors.  Yuk.
@@ -129,27 +119,11 @@ Boston, MA 02110-1301, USA.  */
 
 #else /* __PIC__ */
 
-	/* Common for -mid-shared-libary and -msep-data */
+# if defined (__uClinux__)
 
-	.macro PICCALL addr
-#if defined (__mcoldfire__) && !defined (__mcfisab__)
-	lea	\addr-.-8,a0
-	jsr	pc@(a0)
-#else
-	bsr	\addr
-#endif
-	.endm
+	/* Versions for uClinux */
 
-	.macro PICJUMP addr
-#if defined (__mcoldfire__) && !defined (__mcfisab__)
-	lea	\addr-.-8,a0
-	jmp	pc@(a0)
-#else
-	bra	\addr
-#endif
-	.endm
-
-# if defined(__ID_SHARED_LIBRARY__)
+#  if defined(__ID_SHARED_LIBRARY__)
 
 	/* -mid-shared-library versions  */
 
@@ -163,7 +137,17 @@ Boston, MA 02110-1301, USA.  */
 	movel	\sym@GOT(\areg), sp@-
 	.endm
 
-# else /* !__ID_SHARED_LIBRARY__ */
+	.macro PICCALL addr
+	PICLEA	\addr,a0
+	jsr	a0@
+	.endm
+
+	.macro PICJUMP addr
+	PICLEA	\addr,a0
+	jmp	a0@
+	.endm
+
+#  else /* !__ID_SHARED_LIBRARY__ */
 
 	/* Versions for -msep-data */
 
@@ -175,7 +159,67 @@ Boston, MA 02110-1301, USA.  */
 	movel	\sym@GOT(a5), sp@-
 	.endm
 
-# endif /* !__ID_SHARED_LIBRARY__ */
+	.macro PICCALL addr
+#if defined (__mcoldfire__) && !defined (__mcfisab__) && !defined (__mcfisac__)
+	lea	\addr-.-8,a0
+	jsr	pc@(a0)
+#else
+	bsr	\addr
+#endif
+	.endm
+
+	.macro PICJUMP addr
+	/* ISA C has no bra.l instruction, and since this assembly file
+	   gets assembled into multiple object files, we avoid the
+	   bra instruction entirely.  */
+#if defined (__mcoldfire__) && !defined (__mcfisab__)
+	lea	\addr-.-8,a0
+	jmp	pc@(a0)
+#else
+	bra	\addr
+#endif
+	.endm
+
+#  endif
+
+# else /* !__uClinux__ */
+
+	/* Versions for Linux */
+
+	.macro PICLEA sym, reg
+	movel	#_GLOBAL_OFFSET_TABLE_@GOTPC, \reg
+	lea	(-6, pc, \reg), \reg
+	movel	\sym@GOT(\reg), \reg
+	.endm
+
+	.macro PICPEA sym, areg
+	movel	#_GLOBAL_OFFSET_TABLE_@GOTPC, \areg
+	lea	(-6, pc, \areg), \areg
+	movel	\sym@GOT(\areg), sp@-
+	.endm
+
+	.macro PICCALL addr
+#if defined (__mcoldfire__) && !defined (__mcfisab__) && !defined (__mcfisac__)
+	lea	\addr-.-8,a0
+	jsr	pc@(a0)
+#else
+	bsr	\addr
+#endif
+	.endm
+
+	.macro PICJUMP addr
+	/* ISA C has no bra.l instruction, and since this assembly file
+	   gets assembled into multiple object files, we avoid the
+	   bra instruction entirely.  */
+#if defined (__mcoldfire__) && !defined (__mcfisab__)
+	lea	\addr-.-8,a0
+	jmp	pc@(a0)
+#else
+	bra	\addr
+#endif
+	.endm
+
+# endif
 #endif /* __PIC__ */
 
 
@@ -622,6 +666,7 @@ ROUND_TO_MINUS    = 3 | round result towards minus infinity
 	.globl SYM (__negdf2)
 	.globl SYM (__cmpdf2)
 	.globl SYM (__cmpdf2_internal)
+	.hidden SYM (__cmpdf2_internal)
 
 	.text
 	.even
@@ -2384,7 +2429,7 @@ SYM (__cmpdf2):
 	movl	a6@(16),sp@-
 	movl	a6@(12),sp@-
 	movl	a6@(8),sp@-
-	bsr	SYM (__cmpdf2_internal)
+	PICCALL	SYM (__cmpdf2_internal)
 	unlk	a6
 	rts
 
@@ -2536,6 +2581,7 @@ ROUND_TO_MINUS    = 3 | round result towards minus infinity
 	.globl SYM (__negsf2)
 	.globl SYM (__cmpsf2)
 	.globl SYM (__cmpsf2_internal)
+	.hidden SYM (__cmpsf2_internal)
 
 | These are common routines to return and signal exceptions.	
 
@@ -3790,7 +3836,7 @@ SYM (__cmpsf2):
 	pea	1
 	movl	a6@(12),sp@-
 	movl	a6@(8),sp@-
-	bsr (__cmpsf2_internal)
+	PICCALL SYM (__cmpsf2_internal)
 	unlk	a6
 	rts
 
@@ -4063,3 +4109,8 @@ SYM (__lesf2):
 	unlk	a6
 	rts
 #endif /* L_lesf2 */
+
+#if defined (__ELF__) && defined (__linux__)
+	/* Make stack non-executable for ELF linux targets.  */
+	.section	.note.GNU-stack,"",@progbits
+#endif

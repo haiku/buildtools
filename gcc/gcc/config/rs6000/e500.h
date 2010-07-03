@@ -1,5 +1,5 @@
 /* Enable E500 support.
-   Copyright (C) 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008 Free Software Foundation, Inc.
    This file is part of GCC.
 
    GCC is free software; you can redistribute it and/or modify it
@@ -19,7 +19,6 @@
 #undef TARGET_SPE_ABI
 #undef TARGET_SPE
 #undef TARGET_E500
-#undef TARGET_ISEL
 #undef TARGET_FPRS
 #undef TARGET_E500_SINGLE
 #undef TARGET_E500_DOUBLE
@@ -28,13 +27,12 @@
 #define TARGET_SPE_ABI rs6000_spe_abi
 #define TARGET_SPE rs6000_spe
 #define TARGET_E500 (rs6000_cpu == PROCESSOR_PPC8540)
-#define TARGET_ISEL rs6000_isel
 #define TARGET_FPRS (rs6000_float_gprs == 0)
 #define TARGET_E500_SINGLE (TARGET_HARD_FLOAT && rs6000_float_gprs == 1)
 #define TARGET_E500_DOUBLE (TARGET_HARD_FLOAT && rs6000_float_gprs == 2)
 #define CHECK_E500_OPTIONS						\
   do {									\
-    if (TARGET_E500 || TARGET_SPE || TARGET_SPE_ABI || TARGET_ISEL	\
+    if (TARGET_E500 || TARGET_SPE || TARGET_SPE_ABI			\
 	|| TARGET_E500_SINGLE || TARGET_E500_DOUBLE)			\
       {									\
 	if (TARGET_ALTIVEC)						\

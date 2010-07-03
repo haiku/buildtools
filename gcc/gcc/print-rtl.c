@@ -1,6 +1,6 @@
 /* Print RTL for GCC.
    Copyright (C) 1987, 1988, 1992, 1997, 1998, 1999, 2000, 2002, 2003,
-   2004, 2005, 2007
+   2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -384,7 +384,7 @@ print_rtx (const_rtx in_rtx)
 	fprintf (outfile, HOST_WIDE_INT_PRINT_DEC, XWINT (in_rtx, i));
 	if (! flag_simple)
 	  fprintf (outfile, " [" HOST_WIDE_INT_PRINT_HEX "]",
-		   XWINT (in_rtx, i));
+		   (unsigned HOST_WIDE_INT) XWINT (in_rtx, i));
 	break;
 
       case 'i':

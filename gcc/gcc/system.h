@@ -1,6 +1,6 @@
 /* Get common system includes and various definitions and declarations based
    on autoconf macros.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -744,6 +744,9 @@ extern void fancy_abort (const char *, int, const char *) ATTRIBUTE_NORETURN;
 	LANG_HOOKS_MAYBE_BUILD_CLEANUP LANG_HOOKS_UPDATE_DECL_AFTER_SAVING \
 	LANG_HOOKS_POPLEVEL LANG_HOOKS_TRUTHVALUE_CONVERSION
 
+/* Miscellaneous macros that are no longer used.  */
+ #pragma GCC poison USE_MAPPED_LOCATION
+
 /* Libiberty macros that are no longer used in GCC.  */
 #undef ANSI_PROTOTYPES
 #undef PTR_CONST
@@ -783,8 +786,9 @@ extern void fancy_abort (const char *, int, const char *) ATTRIBUTE_NORETURN;
    change after the fact).  Beyond these uses, most other cases of
    using this macro should be viewed with extreme caution.  */
 
-#if defined(__GNUC__) && GCC_VERSION != 4000
-/* GCC 4.0.x has a bug where it may ICE on this expression.  */
+#if defined(__GNUC__) && GCC_VERSION > 4000
+/* GCC 4.0.x has a bug where it may ICE on this expression,
+   so does GCC 3.4.x (PR17436).  */
 #define CONST_CAST2(TOTYPE,FROMTYPE,X) ((__extension__(union {FROMTYPE _q; TOTYPE _nq;})(X))._nq)
 #else
 #define CONST_CAST2(TOTYPE,FROMTYPE,X) ((TOTYPE)(FROMTYPE)(X))
@@ -793,15 +797,41 @@ extern void fancy_abort (const char *, int, const char *) ATTRIBUTE_NORETURN;
 #define CONST_CAST_TREE(X) CONST_CAST(union tree_node *, (X))
 #define CONST_CAST_RTX(X) CONST_CAST(struct rtx_def *, (X))
 #define CONST_CAST_BB(X) CONST_CAST(struct basic_block_def *, (X))
+#define CONST_CAST_GIMPLE(X) CONST_CAST(union gimple_statement_d *, (X))
 
-/* Activate -Wcast-qual as a warning (not an error/-Werror).  */
+/* Activate certain diagnostics as warnings (not errors via the
+   -Werror flag).  */
 #if GCC_VERSION >= 4003
-#pragma GCC diagnostic warning "-Wcast-qual"
 /* If asserts are disabled, activate -Wuninitialized as a warning (not
    an error/-Werror).  */
-#ifndef ASSERT_CHECKING
+#ifndef ENABLE_ASSERT_CHECKING
 #pragma GCC diagnostic warning "-Wuninitialized"
 #endif
+#endif
+
+#ifdef ENABLE_VALGRIND_CHECKING
+# ifdef HAVE_VALGRIND_MEMCHECK_H
+#  include <valgrind/memcheck.h>
+# elif defined HAVE_MEMCHECK_H
+#  include <memcheck.h>
+# else
+#  include <valgrind.h>
+# endif
+/* Compatibility macros to let valgrind 3.1 work.  */
+# ifndef VALGRIND_MAKE_MEM_NOACCESS
+#  define VALGRIND_MAKE_MEM_NOACCESS VALGRIND_MAKE_NOACCESS
+# endif
+# ifndef VALGRIND_MAKE_MEM_DEFINED
+#  define VALGRIND_MAKE_MEM_DEFINED VALGRIND_MAKE_READABLE
+# endif
+# ifndef VALGRIND_MAKE_MEM_UNDEFINED
+#  define VALGRIND_MAKE_MEM_UNDEFINED VALGRIND_MAKE_WRITABLE
+# endif
+#else
+/* Avoid #ifdef:s when we can help it.  */
+#define VALGRIND_DISCARD(x)
+#define VALGRIND_MALLOCLIKE_BLOCK(w,x,y,z)
+#define VALGRIND_FREELIKE_BLOCK(x,y)
 #endif
 
 #endif /* ! GCC_SYSTEM_H */

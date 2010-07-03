@@ -1,12 +1,12 @@
 // Deque implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  *
@@ -65,6 +60,7 @@
 #include <bits/concept_check.h>
 #include <bits/stl_iterator_base_types.h>
 #include <bits/stl_iterator_base_funcs.h>
+#include <initializer_list>
 
 _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 
@@ -512,9 +508,9 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 			+ (this->_M_impl._M_map_size - __num_nodes) / 2);
       _Tp** __nfinish = __nstart + __num_nodes;
 
-      try
+      __try
 	{ _M_create_nodes(__nstart, __nfinish); }
-      catch(...)
+      __catch(...)
 	{
 	  _M_deallocate_map(this->_M_impl._M_map, this->_M_impl._M_map_size);
 	  this->_M_impl._M_map = 0;
@@ -536,12 +532,12 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
     _M_create_nodes(_Tp** __nstart, _Tp** __nfinish)
     {
       _Tp** __cur;
-      try
+      __try
 	{
 	  for (__cur = __nstart; __cur < __nfinish; ++__cur)
 	    *__cur = this->_M_allocate_node();
 	}
-      catch(...)
+      __catch(...)
 	{
 	  _M_destroy_nodes(__nstart, __cur);
 	  __throw_exception_again;
@@ -561,8 +557,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
    *  @brief  A standard container using fixed-size memory allocation and
    *  constant-time manipulation of elements at either end.
    *
-   *  @ingroup Containers
-   *  @ingroup Sequences
+   *  @ingroup sequences
    *
    *  Meets the requirements of a <a href="tables.html#65">container</a>, a
    *  <a href="tables.html#66">reversible container</a>, and a
@@ -740,6 +735,25 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        */
       deque(deque&&  __x)
       : _Base(std::forward<_Base>(__x)) { }
+
+      /**
+       *  @brief  Builds a %deque from an initializer list.
+       *  @param  l  An initializer_list.
+       *  @param  a  An allocator object.
+       *
+       *  Create a %deque consisting of copies of the elements in the
+       *  initializer_list @a l.
+       *
+       *  This will call the element type's copy constructor N times
+       *  (where N is l.size()) and do no memory reallocation.
+       */
+      deque(initializer_list<value_type> __l,
+	    const allocator_type& __a = allocator_type())
+	: _Base(__a)
+        {
+	  _M_range_initialize(__l.begin(), __l.end(),
+			      random_access_iterator_tag());
+	}
 #endif
 
       /**
@@ -801,6 +815,24 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	this->swap(__x); 
 	return *this;
       }
+
+      /**
+       *  @brief  Assigns an initializer list to a %deque.
+       *  @param  l  An initializer_list.
+       *
+       *  This function fills a %deque with copies of the elements in the
+       *  initializer_list @a l.
+       *
+       *  Note that the assignment completely changes the %deque and that the
+       *  resulting %deque's size is the same as the number of elements
+       *  assigned.  Old data may be lost.
+       */
+      deque&
+      operator=(initializer_list<value_type> __l)
+      {
+	this->assign(__l.begin(), __l.end());
+	return *this;
+      }
 #endif
 
       /**
@@ -836,6 +868,23 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	  typedef typename std::__is_integer<_InputIterator>::__type _Integral;
 	  _M_assign_dispatch(__first, __last, _Integral());
 	}
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      /**
+       *  @brief  Assigns an initializer list to a %deque.
+       *  @param  l  An initializer_list.
+       *
+       *  This function fills a %deque with copies of the elements in the
+       *  initializer_list @a l.
+       *
+       *  Note that the assignment completely changes the %deque and that the
+       *  resulting %deque's size is the same as the number of elements
+       *  assigned.  Old data may be lost.
+       */
+      void
+      assign(initializer_list<value_type> __l)
+      { this->assign(__l.begin(), __l.end()); }
+#endif
 
       /// Get a copy of the memory allocation object.
       allocator_type
@@ -1117,7 +1166,6 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  data to it.  Due to the nature of a %deque this operation
        *  can be done in constant time.
        */
-#ifndef __GXX_EXPERIMENTAL_CXX0X__
       void
       push_front(const value_type& __x)
       {
@@ -1129,20 +1177,15 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	else
 	  _M_push_front_aux(__x);
       }
-#else
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      void
+      push_front(value_type&& __x)
+      { emplace_front(std::move(__x)); }
+
       template<typename... _Args>
         void
-        push_front(_Args&&... __args)
-	{
-	  if (this->_M_impl._M_start._M_cur != this->_M_impl._M_start._M_first)
-	    {
-	      this->_M_impl.construct(this->_M_impl._M_start._M_cur - 1,
-				      std::forward<_Args>(__args)...);
-	      --this->_M_impl._M_start._M_cur;
-	    }
-	  else
-	    _M_push_front_aux(std::forward<_Args>(__args)...);
-	}
+        emplace_front(_Args&&... __args);
 #endif
 
       /**
@@ -1154,7 +1197,6 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  to it.  Due to the nature of a %deque this operation can be
        *  done in constant time.
        */
-#ifndef __GXX_EXPERIMENTAL_CXX0X__
       void
       push_back(const value_type& __x)
       {
@@ -1167,21 +1209,15 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	else
 	  _M_push_back_aux(__x);
       }
-#else
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      void
+      push_back(value_type&& __x)
+      { emplace_back(std::move(__x)); }
+
       template<typename... _Args>
         void
-        push_back(_Args&&... __args)
-	{
-	  if (this->_M_impl._M_finish._M_cur
-	      != this->_M_impl._M_finish._M_last - 1)
-	    {
-	      this->_M_impl.construct(this->_M_impl._M_finish._M_cur,
-				      std::forward<_Args>(__args)...);
-	      ++this->_M_impl._M_finish._M_cur;
-	    }
-	  else
-	    _M_push_back_aux(std::forward<_Args>(__args)...);
-	}
+        emplace_back(_Args&&... __args);
 #endif
 
       /**
@@ -1266,6 +1302,19 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       iterator
       insert(iterator __position, value_type&& __x)
       { return emplace(__position, std::move(__x)); }
+
+      /**
+       *  @brief  Inserts an initializer list into the %deque.
+       *  @param  p  An iterator into the %deque.
+       *  @param  l  An initializer_list.
+       *
+       *  This function will insert copies of the data in the
+       *  initializer_list @a l into the %deque before the location
+       *  specified by @a p.  This is known as "list insert."
+       */
+      void
+      insert(iterator __p, initializer_list<value_type> __l)
+      { this->insert(__p, __l.begin(), __l.end()); }
 #endif
 
       /**

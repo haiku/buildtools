@@ -1,6 +1,6 @@
 ; Options for the rs6000 port of the compiler
 ;
-; Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+; Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 ; Contributed by Aldy Hernandez <aldy@quesejoda.com>.
 ;
 ; This file is part of GCC.
@@ -119,6 +119,10 @@ mupdate
 Target Report RejectNegative InverseMask(NO_UPDATE, UPDATE)
 Generate load/store with update instructions
 
+mavoid-indexed-addresses
+Target Report Var(TARGET_AVOID_XFORM) Init(-1)
+Avoid generation of indexed load/store instructions when possible
+
 mno-fused-madd
 Target Report RejectNegative Mask(NO_FUSED_MADD)
 Do not generate fused multiply/add instructions
@@ -190,7 +194,7 @@ Target RejectNegative Joined
 -mvrsave=yes/no	Deprecated option.  Use -mvrsave/-mno-vrsave instead
 
 misel
-Target Var(rs6000_isel)
+Target
 Generate isel instructions
 
 misel=
@@ -198,7 +202,7 @@ Target RejectNegative Joined
 -misel=yes/no	Deprecated option.  Use -misel/-mno-isel instead
 
 mspe
-Target Var(rs6000_spe)
+Target
 Generate SPE SIMD instructions on E500
 
 mpaired
@@ -233,6 +237,14 @@ mlongcall
 Target Report Var(rs6000_default_long_calls)
 Avoid all range limits on call instructions
 
+mgen-cell-microcode
+Target Report Var(rs6000_gen_cell_microcode) Init(-1)
+Generate Cell microcode
+
+mwarn-cell-microcode
+Target Var(rs6000_warn_cell_microcode) Init(0) Warning
+Warn when a Cell microcoded instruction is emitted
+
 mwarn-altivec-long
 Target Var(rs6000_warn_altivec_long) Init(1)
 Warn about deprecated 'vector long ...' AltiVec type usage
@@ -260,3 +272,25 @@ Specify alignment of structure fields default/natural
 mprioritize-restricted-insns=
 Target RejectNegative Joined UInteger Var(rs6000_sched_restricted_insns_priority)
 Specify scheduling priority for dispatch slot restricted insns
+
+msingle-float
+Target RejectNegative Var(rs6000_single_float)
+Single-precision floating point unit
+
+mdouble-float
+Target RejectNegative Var(rs6000_double_float)
+Double-precision floating point unit
+
+msimple-fpu
+Target RejectNegative Var(rs6000_simple_fpu)
+Floating point unit does not support divide & sqrt
+
+mfpu=
+Target RejectNegative Joined 
+-mfpu=	Specify FP (sp, dp, sp-lite, dp-lite) (implies -mxilinx-fpu)
+
+mxilinx-fpu
+Target Var(rs6000_xilinx_fpu)
+Specify Xilinx FPU.
+
+

@@ -1,5 +1,5 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005, 2007
+;; Copyright (C) 2005, 2007, 2008
 ;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
@@ -111,3 +111,23 @@ switch (which_alternative) {
 }"
   [(set_attr "flags" "x,x,x")]
   )
+
+(define_expand "untyped_call"
+  [(parallel [(call (match_operand 0 "" "")
+                    (const_int 0))
+              (match_operand 1 "" "")
+              (match_operand 2 "" "")])]
+  ""
+  "
+{
+  int i;
+
+  emit_call_insn (gen_call (operands[0], const0_rtx, const0_rtx));
+
+  for (i = 0; i < XVECLEN (operands[2], 0); i++)
+    {
+      rtx set = XVECEXP (operands[2], 0, i);
+      emit_move_insn (SET_DEST (set), SET_SRC (set));
+    }
+  DONE;
+}")

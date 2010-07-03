@@ -1,4 +1,4 @@
-@c Copyright (c) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+@c Copyright (c) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
 @c Free Software Foundation, Inc.
 @c This is part of the CPP and GCC manuals.
 @c For copying conditions, see the file gcc.texi.
@@ -114,10 +114,6 @@ equivalent, and problematic constructs which should be avoided.
 @ifset cppmanual
 @xref{Traditional Mode}.
 @end ifset
-
-@item -Wimport
-@opindex Wimport
-Warn the first time @samp{#import} is used.
 
 @item -Wundef
 @opindex Wundef
@@ -545,7 +541,7 @@ files previously preprocessed with @code{-E -fdirectives-only}.
 @anchor{fdollars-in-identifiers}
 Accept @samp{$} in identifiers.
 @ifset cppmanual
-  @xref{Identifier characters}.
+@xref{Identifier characters}.
 @end ifset
 
 @item -fextended-identifiers
@@ -633,7 +629,7 @@ Make an assertion with the predicate @var{predicate} and answer
 @var{predicate}(@var{answer})}, which is still supported, because
 it does not use shell special characters.
 @ifset cppmanual
-@xref{Assertions}.
+@xref{Obsolete Features}.
 @end ifset
 
 @item -A -@var{predicate}=@var{answer}
@@ -682,6 +678,14 @@ Like @samp{D}, but emit only the macro names, not their expansions.
 @opindex dI
 Output @samp{#include} directives in addition to the result of
 preprocessing.
+
+@item U
+@opindex dU
+Like @samp{D} except that only macros that are expanded, or whose
+definedness is tested in preprocessor directives, are output; the
+output is delayed until the use or test of the macro; and
+@samp{#undef} directives are also output for macros tested but
+undefined at the time.
 @end table
 
 @item -P

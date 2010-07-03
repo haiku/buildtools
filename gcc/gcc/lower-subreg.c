@@ -1,5 +1,5 @@
 /* Decompose multiword subregs.
-   Copyright (C) 2007 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>
 		  Ian Lance Taylor <iant@google.com>
 
@@ -225,11 +225,9 @@ enum classify_move_insn
 {
   /* Not a simple move from one location to another.  */
   NOT_SIMPLE_MOVE,
-  /* A simple move from one pseudo-register to another with no
-     REG_RETVAL note.  */
+  /* A simple move from one pseudo-register to another.  */
   SIMPLE_PSEUDO_REG_MOVE,
-  /* A simple move involving a non-pseudo-register, or from one
-     pseudo-register to another with a REG_RETVAL note.  */
+  /* A simple move involving a non-pseudo-register.  */
   SIMPLE_MOVE
 };
 
@@ -304,10 +302,10 @@ find_decomposable_subregs (rtx *px, void *data)
 
 	 If this is not a simple copy from one location to another,
 	 then we can not decompose this register.  If this is a simple
-	 copy from one pseudo-register to another, with no REG_RETVAL
-	 note, and the mode is right, then we mark the register as
-	 decomposable.  Otherwise we don't say anything about this
-	 register--it could be decomposed, but whether that would be
+	 copy from one pseudo-register to another, and the mode is right
+	 then we mark the register as decomposable.
+	 Otherwise we don't say anything about this register --
+	 it could be decomposed, but whether that would be
 	 profitable depends upon how it is used elsewhere.
 
 	 We only set bits in the bitmap for multi-word
@@ -553,62 +551,7 @@ move_eh_region_note (rtx insn, rtx insns)
 	  || (flag_non_call_exceptions
 	      && INSN_P (p)
 	      && may_trap_p (PATTERN (p))))
-	REG_NOTES (p) = gen_rtx_EXPR_LIST (REG_EH_REGION, XEXP (note, 0),
-					   REG_NOTES (p));
-    }
-}
-
-/* If there is a REG_LIBCALL note on OLD_START, move it to NEW_START,
-   and link the corresponding REG_RETVAL note to NEW_START.  */
-
-static void
-move_libcall_note (rtx old_start, rtx new_start)
-{
-  rtx note0, note1, end;
-
-  note0 = find_reg_note (old_start, REG_LIBCALL, NULL);
-  if (note0 == NULL_RTX)
-    return;
-
-  remove_note (old_start, note0);
-  end = XEXP (note0, 0);
-  note1 = find_reg_note (end, REG_RETVAL, NULL);
-
-  XEXP (note0, 1) = REG_NOTES (new_start);
-  REG_NOTES (new_start) = note0;
-  XEXP (note1, 0) = new_start;
-}
-
-/* Remove any REG_RETVAL note, the corresponding REG_LIBCALL note, and
-   any markers for a no-conflict block.  We have decomposed the
-   registers so the non-conflict is now obvious.  */
-
-static void
-remove_retval_note (rtx insn1)
-{
-  rtx note0, insn0, note1, insn;
-
-  note1 = find_reg_note (insn1, REG_RETVAL, NULL);
-  if (note1 == NULL_RTX)
-    return;
-
-  insn0 = XEXP (note1, 0);
-  note0 = find_reg_note (insn0, REG_LIBCALL, NULL);
-
-  remove_note (insn0, note0);
-  remove_note (insn1, note1);
-
-  for (insn = insn0; insn != insn1; insn = NEXT_INSN (insn))
-    {
-      while (1)
-	{
-	  rtx note;
-
-	  note = find_reg_note (insn, REG_NO_CONFLICT, NULL);
-	  if (note == NULL_RTX)
-	    break;
-	  remove_note (insn, note);
-	}
+	add_reg_note (p, REG_EH_REGION, XEXP (note, 0));
     }
 }
 
@@ -625,10 +568,7 @@ resolve_reg_notes (rtx insn)
     {
       int old_count = num_validated_changes ();
       if (for_each_rtx (&XEXP (note, 0), resolve_subreg_use, NULL))
-	{
-	  remove_note (insn, note);
-	  remove_retval_note (insn);
-	}
+	remove_note (insn, note);
       else
 	if (old_count != num_validated_changes ())
 	  df_notes_rescan (insn);
@@ -637,23 +577,22 @@ resolve_reg_notes (rtx insn)
   pnote = &REG_NOTES (insn);
   while (*pnote != NULL_RTX)
     {
-      bool delete = false;
+      bool del = false;
 
       note = *pnote;
       switch (REG_NOTE_KIND (note))
 	{
-	case REG_NO_CONFLICT:
 	case REG_DEAD:
 	case REG_UNUSED:
 	  if (resolve_reg_p (XEXP (note, 0)))
-	    delete = true;
+	    del = true;
 	  break;
 
 	default:
 	  break;
 	}
 
-      if (delete)
+      if (del)
 	*pnote = XEXP (note, 1);
       else
 	pnote = &XEXP (note, 1);
@@ -850,7 +789,7 @@ resolve_simple_move (rtx set, rtx insn)
       unsigned int i;
 
       if (REG_P (dest) && !HARD_REGISTER_NUM_P (REGNO (dest)))
-	emit_insn (gen_rtx_CLOBBER (VOIDmode, dest));
+	emit_clobber (dest);
 
       for (i = 0; i < words; ++i)
 	emit_move_insn (simplify_gen_subreg_concatn (word_mode, dest,
@@ -884,8 +823,6 @@ resolve_simple_move (rtx set, rtx insn)
 
   emit_insn_before (insns, insn);
 
-  move_libcall_note (insn, insns);
-  remove_retval_note (insn);
   delete_insn (insn);
 
   return insns;
@@ -897,7 +834,7 @@ resolve_simple_move (rtx set, rtx insn)
 static bool
 resolve_clobber (rtx pat, rtx insn)
 {
-  rtx reg, note;
+  rtx reg;
   enum machine_mode orig_mode;
   unsigned int words, i;
   int ret;
@@ -905,17 +842,6 @@ resolve_clobber (rtx pat, rtx insn)
   reg = XEXP (pat, 0);
   if (!resolve_reg_p (reg) && !resolve_subreg_p (reg))
     return false;
-
-  /* If this clobber has a REG_LIBCALL note, then it is the initial
-     clobber added by emit_no_conflict_block.  We were able to
-     decompose the register, so we no longer need the clobber.  */
-  note = find_reg_note (insn, REG_LIBCALL, NULL_RTX);
-  if (note != NULL_RTX)
-    {
-      remove_retval_note (XEXP (note, 0));
-      delete_insn (insn);
-      return true;
-    }
 
   orig_mode = GET_MODE (reg);
   words = GET_MODE_SIZE (orig_mode);
@@ -1181,34 +1107,8 @@ decompose_multiword_subregs (void)
 	    cmi = NOT_SIMPLE_MOVE;
 	  else
 	    {
-	      bool retval;
-
-	      retval = find_reg_note (insn, REG_RETVAL, NULL_RTX) != NULL_RTX;
-
-	      if (find_pseudo_copy (set) && !retval)
+	      if (find_pseudo_copy (set))
 		cmi = SIMPLE_PSEUDO_REG_MOVE;
-	      else if (retval
-		       && REG_P (SET_SRC (set))
-		       && HARD_REGISTER_P (SET_SRC (set)))
-		{
-		  rtx note;
-
-		  /* We don't want to decompose an assignment which
-		     copies the value returned by a libcall to a
-		     pseudo-register.  Doing that will lose the RETVAL
-		     note with no real gain.  */
-		  cmi = NOT_SIMPLE_MOVE;
-
-		  /* If we have a RETVAL note, there should be an
-		     EQUAL note.  We don't want to decompose any
-		     registers which that EQUAL note refers to
-		     directly.  If we do, we will no longer know the
-		     value of the libcall.  */
-		  note = find_reg_equal_equiv_note (insn);
-		  if (note != NULL_RTX)
-		    for_each_rtx (&XEXP (note, 0), find_decomposable_subregs,
-				  &cmi);
-		}
 	      else
 		cmi = SIMPLE_MOVE;
 	    }
@@ -1302,8 +1202,6 @@ decompose_multiword_subregs (void)
 		      insn = resolve_simple_move (set, insn);
 		      if (insn != orig_insn)
 			{
-			  remove_retval_note (insn);
-
 			  recog_memoized (insn);
 			  extract_insn (insn);
 
@@ -1344,8 +1242,6 @@ decompose_multiword_subregs (void)
 
 		      i = apply_change_group ();
 		      gcc_assert (i);
-
-		      remove_retval_note (insn);
 		    }
 		}
 	    }
@@ -1425,9 +1321,11 @@ rest_of_handle_lower_subreg2 (void)
   return 0;
 }
 
-struct tree_opt_pass pass_lower_subreg =
+struct rtl_opt_pass pass_lower_subreg =
 {
-  "subreg",	                        /* name */
+ {
+  RTL_PASS,
+  "subreg1",	                        /* name */
   gate_handle_lower_subreg,             /* gate */
   rest_of_handle_lower_subreg,          /* execute */
   NULL,                                 /* sub */
@@ -1440,12 +1338,14 @@ struct tree_opt_pass pass_lower_subreg =
   0,                                    /* todo_flags_start */
   TODO_dump_func |
   TODO_ggc_collect |
-  TODO_verify_flow,                     /* todo_flags_finish */
-  'u'                                   /* letter */
+  TODO_verify_flow                      /* todo_flags_finish */
+ }
 };
 
-struct tree_opt_pass pass_lower_subreg2 =
+struct rtl_opt_pass pass_lower_subreg2 =
 {
+ {
+  RTL_PASS,
   "subreg2",	                        /* name */
   gate_handle_lower_subreg,             /* gate */
   rest_of_handle_lower_subreg2,          /* execute */
@@ -1460,6 +1360,6 @@ struct tree_opt_pass pass_lower_subreg2 =
   TODO_df_finish | TODO_verify_rtl_sharing |
   TODO_dump_func |
   TODO_ggc_collect |
-  TODO_verify_flow,                     /* todo_flags_finish */
-  'U'                                   /* letter */
+  TODO_verify_flow                      /* todo_flags_finish */
+ }
 };

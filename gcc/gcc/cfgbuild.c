@@ -1,6 +1,7 @@
 /* Control flow graph building code for GNU compiler.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -170,7 +171,7 @@ count_basic_blocks (const_rtx f)
      check for the edge case of do-nothing functions with no basic blocks.  */
   if (count == NUM_FIXED_BLOCKS)
     {
-      emit_insn (gen_rtx_USE (VOIDmode, const0_rtx));
+      emit_use (const0_rtx);
       count = NUM_FIXED_BLOCKS + 1;
     }
 
@@ -256,7 +257,7 @@ make_edges (basic_block min, basic_block max, int update_p)
   /* Heavy use of computed goto in machine-generated code can lead to
      nearly fully-connected CFGs.  In that case we spend a significant
      amount of time searching the edge lists for duplicates.  */
-  if (forced_labels || cfun->max_jumptable_ents > 100)
+  if (forced_labels || cfun->cfg->max_jumptable_ents > 100)
     edge_cache = sbitmap_alloc (last_basic_block);
 
   /* By nature of the way these get numbered, ENTRY_BLOCK_PTR->next_bb block

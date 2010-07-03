@@ -1,5 +1,6 @@
 /* Liveness for SSA trees.
-   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009 Free Software Foundation,
+   Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -46,7 +47,7 @@ static void  verify_live_on_entry (tree_live_info_p);
    At the end of out-of-ssa, each partition becomes a "real" variable and is
    rewritten as a compiler variable.
 
-   The var_map datat structure is used to manage these partitions.  It allows
+   The var_map data structure is used to manage these partitions.  It allows
    partitions to be combined, and determines which partition belongs to what
    ssa_name or variable, and vice versa.  */
 
@@ -402,8 +403,7 @@ static inline void mark_all_vars_used (tree *, void *data);
 /* Helper function for mark_all_vars_used, called via walk_tree.  */
 
 static tree
-mark_all_vars_used_1 (tree *tp, int *walk_subtrees,
-		      void *data)
+mark_all_vars_used_1 (tree *tp, int *walk_subtrees, void *data)
 {
   tree t = *tp;
   enum tree_code_class c = TREE_CODE_CLASS (TREE_CODE (t));
@@ -411,8 +411,8 @@ mark_all_vars_used_1 (tree *tp, int *walk_subtrees,
 
   if (TREE_CODE (t) == SSA_NAME)
     t = SSA_NAME_VAR (t);
-  if ((IS_EXPR_CODE_CLASS (c)
-       || IS_GIMPLE_STMT_CODE_CLASS (c))
+
+  if (IS_EXPR_CODE_CLASS (c)
       && (b = TREE_BLOCK (t)) != NULL)
     TREE_USED (b) = true;
 
@@ -485,9 +485,19 @@ remove_unused_scope_block_p (tree scope)
       next = &TREE_CHAIN (*t);
 
       /* Debug info of nested function refers to the block of the
-	 function.  */
+	 function.  We might stil call it even if all statements
+	 of function it was nested into was elliminated.
+	 
+	 TODO: We can actually look into cgraph to see if function
+	 will be output to file.  */
       if (TREE_CODE (*t) == FUNCTION_DECL)
 	unused = false;
+      /* Remove everything we don't generate debug info for.  */
+      else if (DECL_IGNORED_P (*t))
+	{
+	  *t = TREE_CHAIN (*t);
+	  next = t;
+	}
 
       /* When we are outputting debug info, we usually want to output
 	 info about optimized-out variables in the scope blocks.
@@ -499,15 +509,24 @@ remove_unused_scope_block_p (tree scope)
 
       /* When we are not doing full debug info, we however can keep around
 	 only the used variables for cfgexpand's memory packing saving quite
-	 a lot of memory.  */
+	 a lot of memory.  
+
+	 For sake of -g3, we keep around those vars but we don't count this as
+	 use of block, so innermost block with no used vars and no instructions
+	 can be considered dead.  We only want to keep around blocks user can
+	 breakpoint into and ask about value of optimized out variables. 
+
+	 Similarly we need to keep around types at least until all variables of
+	 all nested blocks are gone.  We track no information on whether given
+	 type is used or not.  */
+
       else if (debug_info_level == DINFO_LEVEL_NORMAL
 	       || debug_info_level == DINFO_LEVEL_VERBOSE
 	       /* Removing declarations before inlining is going to affect
 		  DECL_UID that in turn is going to affect hashtables and
 		  code generation.  */
 	       || !cfun->after_inlining)
-	unused = false;
-
+	;
       else
 	{
 	  *t = TREE_CHAIN (*t);
@@ -522,41 +541,80 @@ remove_unused_scope_block_p (tree scope)
 	  {
 	    tree next = BLOCK_CHAIN (*t);
 	    tree supercontext = BLOCK_SUPERCONTEXT (*t);
+
 	    *t = BLOCK_SUBBLOCKS (*t);
-	    gcc_assert (!BLOCK_CHAIN (*t));
+	    while (BLOCK_CHAIN (*t))
+	      {
+	        BLOCK_SUPERCONTEXT (*t) = supercontext;
+	        t = &BLOCK_CHAIN (*t);
+	      }
 	    BLOCK_CHAIN (*t) = next;
 	    BLOCK_SUPERCONTEXT (*t) = supercontext;
 	    t = &BLOCK_CHAIN (*t);
 	    nsubblocks ++;
 	  }
 	else
-	  {
-	    gcc_assert (!BLOCK_VARS (*t));
-	    *t = BLOCK_CHAIN (*t);
-	  }
+	  *t = BLOCK_CHAIN (*t);
       }
     else
       {
         t = &BLOCK_CHAIN (*t);
 	nsubblocks ++;
       }
+
+
+   if (!unused)
+     ;
    /* Outer scope is always used.  */
-   if (!BLOCK_SUPERCONTEXT (scope)
-       || TREE_CODE (BLOCK_SUPERCONTEXT (scope)) == FUNCTION_DECL)
+   else if (!BLOCK_SUPERCONTEXT (scope)
+            || TREE_CODE (BLOCK_SUPERCONTEXT (scope)) == FUNCTION_DECL)
      unused = false;
-   /* If there are more than one live subblocks, it is used.  */
-   else if (nsubblocks > 1)
+   /* Innermost blocks with no live variables nor statements can be always
+      eliminated.  */
+   else if (!nsubblocks)
+     ;
+   /* If there are live subblocks and we still have some unused variables
+      or types declared, we must keep them.
+      Before inliing we must not depend on debug info verbosity to keep
+      DECL_UIDs stable.  */
+   else if (!cfun->after_inlining && BLOCK_VARS (scope))
      unused = false;
-   /* When there is only one subblock, see if it is just wrapper we can
-      ignore.  Wrappers are not declaring any variables and not changing
-      abstract origin.  */
-   else if (nsubblocks == 1
-	    && (BLOCK_VARS (scope)
-		|| ((debug_info_level == DINFO_LEVEL_NORMAL
-		     || debug_info_level == DINFO_LEVEL_VERBOSE)
-		    && ((BLOCK_ABSTRACT_ORIGIN (scope)
-			!= BLOCK_ABSTRACT_ORIGIN (BLOCK_SUPERCONTEXT (scope)))))))
+   /* For terse debug info we can eliminate info on unused variables.  */
+   else if (debug_info_level == DINFO_LEVEL_NONE
+	    || debug_info_level == DINFO_LEVEL_TERSE)
+     {
+       /* Even for -g0/-g1 don't prune outer scopes from artificial
+	  functions, otherwise diagnostics using tree_nonartificial_location
+	  will not be emitted properly.  */
+       if (inlined_function_outer_scope_p (scope))
+	 {
+	   tree ao = scope;
+
+	   while (ao
+		  && TREE_CODE (ao) == BLOCK
+		  && BLOCK_ABSTRACT_ORIGIN (ao) != ao)
+	     ao = BLOCK_ABSTRACT_ORIGIN (ao);
+	   if (ao
+	       && TREE_CODE (ao) == FUNCTION_DECL
+	       && DECL_DECLARED_INLINE_P (ao)
+	       && lookup_attribute ("artificial", DECL_ATTRIBUTES (ao)))
+	     unused = false;
+	 }
+     }
+   else if (BLOCK_VARS (scope) || BLOCK_NUM_NONLOCALIZED_VARS (scope))
      unused = false;
+   /* See if this block is important for representation of inlined function.
+      Inlined functions are always represented by block with
+      block_ultimate_origin being set to FUNCTION_DECL and DECL_SOURCE_LOCATION
+      set...  */
+   else if (inlined_function_outer_scope_p (scope))
+     unused = false;
+   else
+   /* Verfify that only blocks with source location set
+      are entry points to the inlined functions.  */
+     gcc_assert (BLOCK_SOURCE_LOCATION (scope) == UNKNOWN_LOCATION);
+
+   TREE_USED (scope) = !unused;
    return unused;
 }
 
@@ -569,6 +627,65 @@ mark_all_vars_used (tree *expr_p, void *data)
   walk_tree (expr_p, mark_all_vars_used_1, data, NULL);
 }
 
+/* Dump scope blocks.  */
+
+static void
+dump_scope_block (FILE *file, int indent, tree scope, int flags)
+{
+  tree var, t;
+  unsigned int i;
+
+  fprintf (file, "\n%*s{ Scope block #%i%s%s",indent, "" , BLOCK_NUMBER (scope),
+  	   TREE_USED (scope) ? "" : " (unused)",
+	   BLOCK_ABSTRACT (scope) ? " (abstract)": "");
+  if (BLOCK_SOURCE_LOCATION (scope) != UNKNOWN_LOCATION)
+    {
+      expanded_location s = expand_location (BLOCK_SOURCE_LOCATION (scope));
+      fprintf (file, " %s:%i", s.file, s.line);
+    }
+  if (BLOCK_ABSTRACT_ORIGIN (scope))
+    {
+      tree origin = block_ultimate_origin (scope);
+      if (origin)
+	{
+	  fprintf (file, " Originating from :");
+	  if (DECL_P (origin))
+	    print_generic_decl (file, origin, flags);
+	  else
+	    fprintf (file, "#%i", BLOCK_NUMBER (origin));
+	}
+    }
+  fprintf (file, " \n");
+  for (var = BLOCK_VARS (scope); var; var = TREE_CHAIN (var))
+    {
+      bool used = false;
+      var_ann_t ann;
+
+      if ((ann = var_ann (var))
+	  && ann->used)
+	used = true;
+
+      fprintf (file, "%*s",indent, "");
+      print_generic_decl (file, var, flags);
+      fprintf (file, "%s\n", used ? "" : " (unused)");
+    }
+  for (i = 0; i < BLOCK_NUM_NONLOCALIZED_VARS (scope); i++)
+    {
+      fprintf (file, "%*s",indent, "");
+      print_generic_decl (file, BLOCK_NONLOCALIZED_VAR (scope, i),
+      			  flags);
+      fprintf (file, " (nonlocalized)\n");
+    }
+  for (t = BLOCK_SUBBLOCKS (scope); t ; t = BLOCK_CHAIN (t))
+    dump_scope_block (file, indent + 2, t, flags);
+  fprintf (file, "\n%*s}\n",indent, "");
+}
+
+void
+dump_scope_blocks (FILE *file, int flags)
+{
+  dump_scope_block (file, 0, DECL_INITIAL (current_function_decl), flags);
+}
 
 /* Remove local variables that are not referenced in the IL.  */
 
@@ -581,7 +698,14 @@ remove_unused_locals (void)
   var_ann_t ann;
   bitmap global_unused_vars = NULL;
 
+  /* Removing declarations from lexical blocks when not optimizing is
+     not only a waste of time, it actually causes differences in stack
+     layout.  */
+  if (!optimize)
+    return;
+
   mark_scope_block_unused (DECL_INITIAL (current_function_decl));
+
   /* Assume all locals are unused.  */
   FOR_EACH_REFERENCED_VAR (t, rvi)
     var_ann (t)->used = false;
@@ -589,23 +713,36 @@ remove_unused_locals (void)
   /* Walk the CFG marking all referenced symbols.  */
   FOR_EACH_BB (bb)
     {
-      block_stmt_iterator bsi;
-      tree phi, def;
+      gimple_stmt_iterator gsi;
+      size_t i;
+      edge_iterator ei;
+      edge e;
 
       /* Walk the statements.  */
-      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
-	mark_all_vars_used (bsi_stmt_ptr (bsi), NULL);
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gimple stmt = gsi_stmt (gsi);
+	  tree b = gimple_block (stmt);
 
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+	  if (b)
+	    TREE_USED (b) = true;
+
+	  for (i = 0; i < gimple_num_ops (stmt); i++)
+	    mark_all_vars_used (gimple_op_ptr (gsi_stmt (gsi), i), NULL);
+	}
+
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
           use_operand_p arg_p;
           ssa_op_iter i;
+	  tree def;
+	  gimple phi = gsi_stmt (gsi);
 
 	  /* No point processing globals.  */
-	  if (is_global_var (SSA_NAME_VAR (PHI_RESULT (phi))))
+	  if (is_global_var (SSA_NAME_VAR (gimple_phi_result (phi))))
 	    continue;
 
-          def = PHI_RESULT (phi);
+	  def = gimple_phi_result (phi);
 	  mark_all_vars_used (&def, NULL);
 
           FOR_EACH_PHI_ARG (arg_p, phi, i, SSA_OP_ALL_USES)
@@ -614,10 +751,16 @@ remove_unused_locals (void)
 	      mark_all_vars_used (&arg, NULL);
             }
         }
+
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	if (e->goto_locus)
+	  TREE_USED (e->goto_block) = true;
     }
 
-  /* Remove unmarked local vars from unexpanded_var_list.  */
-  for (cell = &cfun->unexpanded_var_list; *cell; )
+  cfun->has_local_explicit_reg_vars = false;
+
+  /* Remove unmarked local vars from local_decls.  */
+  for (cell = &cfun->local_decls; *cell; )
     {
       tree var = TREE_VALUE (*cell);
 
@@ -637,13 +780,17 @@ remove_unused_locals (void)
 	      continue;
 	    }
 	}
+      else if (TREE_CODE (var) == VAR_DECL
+	       && DECL_HARD_REGISTER (var)
+	       && !is_global_var (var))
+	cfun->has_local_explicit_reg_vars = true;
       cell = &TREE_CHAIN (*cell);
     }
 
-  /* Remove unmarked global vars from unexpanded_var_list.  */
+  /* Remove unmarked global vars from local_decls.  */
   if (global_unused_vars != NULL)
     {
-      for (t = cfun->unexpanded_var_list; t; t = TREE_CHAIN (t))
+      for (t = cfun->local_decls; t; t = TREE_CHAIN (t))
 	{
 	  tree var = TREE_VALUE (t);
 
@@ -654,7 +801,7 @@ remove_unused_locals (void)
 	    mark_all_vars_used (&DECL_INITIAL (var), global_unused_vars);
 	}
 
-      for (cell = &cfun->unexpanded_var_list; *cell; )
+      for (cell = &cfun->local_decls; *cell; )
 	{
 	  tree var = TREE_VALUE (*cell);
 
@@ -683,6 +830,11 @@ remove_unused_locals (void)
 	&& !TREE_ADDRESSABLE (t))
       remove_referenced_var (t);
   remove_unused_scope_block_p (DECL_INITIAL (current_function_decl));
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    {
+      fprintf (dump_file, "Scope blocks after cleanups:\n");
+      dump_scope_blocks (dump_file, dump_flags);
+    }
 }
 
 
@@ -817,7 +969,7 @@ static void
 set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
 {
   int p;
-  tree stmt;
+  gimple stmt;
   use_operand_p use;
   basic_block def_bb = NULL;
   imm_use_iterator imm_iter;
@@ -830,7 +982,7 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
   stmt = SSA_NAME_DEF_STMT (ssa_name);
   if (stmt)
     {
-      def_bb = bb_for_stmt (stmt);
+      def_bb = gimple_bb (stmt);
       /* Mark defs in liveout bitmap temporarily.  */
       if (def_bb)
 	bitmap_set_bit (live->liveout[def_bb->index], p);
@@ -842,16 +994,16 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
      add it to the list of live on entry blocks.  */
   FOR_EACH_IMM_USE_FAST (use, imm_iter, ssa_name)
     {
-      tree use_stmt = USE_STMT (use);
+      gimple use_stmt = USE_STMT (use);
       basic_block add_block = NULL;
 
-      if (TREE_CODE (use_stmt) == PHI_NODE)
+      if (gimple_code (use_stmt) == GIMPLE_PHI)
         {
 	  /* Uses in PHI's are considered to be live at exit of the SRC block
 	     as this is where a copy would be inserted.  Check to see if it is
 	     defined in that block, or whether its live on entry.  */
 	  int index = PHI_ARG_INDEX_FROM_USE (use);
-	  edge e = PHI_ARG_EDGE (use_stmt, index);
+	  edge e = gimple_phi_arg_edge (use_stmt, index);
 	  if (e->src != ENTRY_BLOCK_PTR)
 	    {
 	      if (e->src != def_bb)
@@ -861,7 +1013,7 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
       else
         {
 	  /* If its not defined in this block, its live on entry.  */
-	  basic_block use_bb = bb_for_stmt (use_stmt);
+	  basic_block use_bb = gimple_bb (use_stmt);
 	  if (use_bb != def_bb)
 	    add_block = use_bb;
 	}  
@@ -886,9 +1038,6 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
 void
 calculate_live_on_exit (tree_live_info_p liveinfo)
 {
-  unsigned i;
-  int p;
-  tree t, phi;
   basic_block bb;
   edge e;
   edge_iterator ei;
@@ -900,20 +1049,29 @@ calculate_live_on_exit (tree_live_info_p liveinfo)
   /* Set all the live-on-exit bits for uses in PHIs.  */
   FOR_EACH_BB (bb)
     {
+      gimple_stmt_iterator gsi;
+      size_t i;
+
       /* Mark the PHI arguments which are live on exit to the pred block.  */
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
-	for (i = 0; i < (unsigned)PHI_NUM_ARGS (phi); i++)
-	  { 
-	    t = PHI_ARG_DEF (phi, i);
-	    if (TREE_CODE (t) != SSA_NAME)
-	      continue;
-	    p = var_to_partition (liveinfo->map, t);
-	    if (p == NO_PARTITION)
-	      continue;
-	    e = PHI_ARG_EDGE (phi, i);
-	    if (e->src != ENTRY_BLOCK_PTR)
-	      bitmap_set_bit (liveinfo->liveout[e->src->index], p);
-	  }
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gimple phi = gsi_stmt (gsi);
+	  for (i = 0; i < gimple_phi_num_args (phi); i++)
+	    { 
+	      tree t = PHI_ARG_DEF (phi, i);
+	      int p;
+
+	      if (TREE_CODE (t) != SSA_NAME)
+		continue;
+
+	      p = var_to_partition (liveinfo->map, t);
+	      if (p == NO_PARTITION)
+		continue;
+	      e = gimple_phi_arg_edge (phi, i);
+	      if (e->src != ENTRY_BLOCK_PTR)
+		bitmap_set_bit (liveinfo->liveout[e->src->index], p);
+	    }
+	}
 
       /* Add each successors live on entry to this bock live on exit.  */
       FOR_EACH_EDGE (e, ei, bb->succs)
@@ -1062,7 +1220,7 @@ verify_live_on_entry (tree_live_info_p live)
 {
   unsigned i;
   tree var;
-  tree phi, stmt;
+  gimple stmt;
   basic_block bb;
   edge e;
   int num;
@@ -1086,13 +1244,13 @@ verify_live_on_entry (tree_live_info_p live)
 	  bitmap loe;
 	  var = partition_to_var (map, i);
 	  stmt = SSA_NAME_DEF_STMT (var);
-	  tmp = bb_for_stmt (stmt);
+	  tmp = gimple_bb (stmt);
 	  d = gimple_default_def (cfun, SSA_NAME_VAR (var));
 
 	  loe = live_on_entry (live, e->dest);
 	  if (loe && bitmap_bit_p (loe, i))
 	    {
-	      if (!IS_EMPTY_STMT (stmt))
+	      if (!gimple_nop_p (stmt))
 		{
 		  num++;
 		  print_generic_expr (stderr, var, TDF_SLIM);
@@ -1100,7 +1258,7 @@ verify_live_on_entry (tree_live_info_p live)
 		  if (tmp)
 		    fprintf (stderr, " in BB%d, ", tmp->index);
 		  fprintf (stderr, "by:\n");
-		  print_generic_expr (stderr, stmt, TDF_SLIM);
+		  print_gimple_stmt (stderr, stmt, 0, TDF_SLIM);
 		  fprintf (stderr, "\nIt is also live-on-entry to entry BB %d", 
 			   entry_block);
 		  fprintf (stderr, " So it appears to have multiple defs.\n");
@@ -1111,7 +1269,8 @@ verify_live_on_entry (tree_live_info_p live)
 		    {
 		      num++;
 		      print_generic_expr (stderr, var, TDF_SLIM);
-		      fprintf (stderr, " is live-on-entry to BB%d ",entry_block);
+		      fprintf (stderr, " is live-on-entry to BB%d ",
+			       entry_block);
 		      if (d)
 		        {
 			  fprintf (stderr, " but is not the default def of ");
@@ -1128,15 +1287,18 @@ verify_live_on_entry (tree_live_info_p live)
 	      {
 		/* The only way this var shouldn't be marked live on entry is 
 		   if it occurs in a PHI argument of the block.  */
-		int z, ok = 0;
-		for (phi = phi_nodes (e->dest); 
-		     phi && !ok; 
-		     phi = PHI_CHAIN (phi))
+		size_t z;
+		bool ok = false;
+		gimple_stmt_iterator gsi;
+		for (gsi = gsi_start_phis (e->dest);
+		     !gsi_end_p (gsi) && !ok;
+		     gsi_next (&gsi))
 		  {
-		    for (z = 0; z < PHI_NUM_ARGS (phi); z++)
-		      if (var == PHI_ARG_DEF (phi, z))
+		    gimple phi = gsi_stmt (gsi);
+		    for (z = 0; z < gimple_phi_num_args (phi); z++)
+		      if (var == gimple_phi_arg_def (phi, z))
 			{
-			  ok = 1;
+			  ok = true;
 			  break;
 			}
 		  }

@@ -1,11 +1,81 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
 
-2008-12-02  Janis Johnson  <janis187@us.ibm.com>
+2010-03-15  David S. Miller  <davem@davemloft.net>
 
-	Backport from mainline:
-	2008-11-26  Janis Johnson  <janis187@us.ibm.com>
+	* testsuite/libmudflap.c/pass54-frag.c: Add explicit return from
+	main.
+
+2010-01-21  Release Manager
+
+	* GCC 4.4.3 released.
+
+2010-01-09  Jakub Jelinek  <jakub@redhat.com>
+
+	* mf-runtime.c (__mf_usage): Update copyright notice dates.
+
+2009-10-15  Release Manager
+
+	* GCC 4.4.2 released.
+
+2009-07-22  Release Manager
+
+	* GCC 4.4.1 released.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-04-09  Nick Clifton  <nickc@redhat.com>
+
+	* mf-hooks1.c: Change copyright header to refer to version 3
+	of the GNU General Public License with version 3.1 of the GCC
+	Runtime Library Exception and to point readers at the COPYING3
+	and COPYING3.RUNTIME files and the FSF's license web page.
+	* mf-heuristics.c: Likewise.
+	* mf-hooks2.c: Likewise.
+	* mf-hooks3.c: Likewise.
+	* mf-impl.h: Likewise.
+	* mf-runtime.c: Likewise.
+	* mf-runtime.h: Likewise.
+
+2009-04-09  Jakub Jelinek  <jakub@redhat.com>
+
+	* testsuite/lib/mfdg.exp: Change copyright header to refer to
+	version 3 of the GNU General Public License and to point readers
+	at the COPYING3 file and the FSF's license web page.
+	* testsuite/lib/libmudflap.exp: Likewise.
+
+2009-03-31  Ben Elliston  <bje@au.ibm.com>
+
+	PR libmudflap/38462
+	* testsuite/libmudflap.c/fail27-frag.c: Match `mudflap dead
+	object', not `mudflap object'.
+
+2009-03-01  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2009-02-03  Jakub Jelinek  <jakub@redhat.com>
+
+	* mf-runtime.c (__mf_usage): Update copyright notice dates.
+
+2009-01-23  Jie Zhang  <jie.zhang@analog.com>
+
+	* mf-impl.h (__mf_get_state, __mf_set_state): Don't use
+	__thread when TLS support is emulated.
+	* mf-hooks3.c (__mf_get_state, __mf_set_state): Likewise.
+	* mf-runtime.c (__mf_state_1): Likewise.
+	* configure.ac: Use GCC_CHECK_EMUTLS.
+	* configure: Regenerate.
+	* config.h.in: Regenerate.
+
+2008-12-18  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2008-11-26  Janis Johnson  <janis187@us.ibm.com>
 
 	PR testsuite/28870
 	* testsuite/lib/mfdg.exp (dg-test): Use new timeout support.
@@ -14,23 +84,57 @@
 	* testsuite/lib/libmudflap.exp: Include new timeout library files.
 	(libmudflap_target_compile): Set timeout value from new proc.
 
-2008-08-27  Release Manager
+2008-11-10  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 4.3.2 released.
+	PR middle-end/35314
+	* testsuite/libmudflap.c/pass67-frag.c: New test.
 
-2008-06-06  Release Manager
+2008-10-09  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 4.3.1 released.
+	PR c++/37568
+	* testsuite/libmudflap.c++/pass66-frag.cxx: New test.
 
-2008-03-05  Release Manager
+2008-09-26  Peter O'Gorman  <pogma@thewrittenword.com>
+            Steve Ellcey  <sje@cup.hp.com>
 
-	* GCC 4.3.0 released.
+	* configure: Regenerate for new libtool.
+	* Makefile.in: Ditto.
+	* testsuite/Makefile.in: Ditto.
+
+2008-09-15  Jakub Jelinek  <jakub@redhat.com>
+
+	PR libmudflap/36397
+	* testsuite/libmudflap.c/pass64-frag.c: New test.
+
+2008-06-17  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.in: Regenerate.
+	* config.h.in: Regenerate.
+	* configure: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
+2008-04-18  Paolo Bonzini  <bonzini@gnu.org>
+
+	PR bootstrap/35457
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+
+2008-03-20  Volker Reichelt  <v.reichelt@netcologne.de>
+
+	* testsuite/libmudflap.c/pass63-frag.c: New test.
+
+2008-03-16  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* aclocal.m4: Regenerate.
+	* configure: Likewise.
+	* Makefile.in: Likewise.
+	* testsuite/Makefile.in: Likewise.
 
 2008-03-02  Jakub Jelinek  <jakub@redhat.com>
 
 	* mf-runtime.c (__mf_usage): Update copyright notice dates.
 
-2008-02-28  Uros Bizjak  <ubizjak@gmail.com>
+2008-02-21  Uros Bizjak  <ubizjak@gmail.com>
 
 	* testsuite/libmudflap.c/fail8-frag.c: Adjust scan pattern for
 	mudflap dead object.

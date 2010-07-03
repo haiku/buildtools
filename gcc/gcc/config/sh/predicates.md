@@ -1,5 +1,5 @@
 ;; Predicate definitions for Renesas / SuperH SH.
-;; Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -112,6 +112,7 @@
 	  || satisfies_constraint_Css (op))
 	return 1;
       else if (GET_CODE (op) == TRUNCATE
+	       && GET_CODE (XEXP (op, 0)) == REG
 	       && ! system_reg_operand (XEXP (op, 0), VOIDmode)
 	       && (mode == VOIDmode || mode == GET_MODE (op))
 	       && (GET_MODE_SIZE (GET_MODE (op))
@@ -391,12 +392,6 @@
       if (GET_CODE (inside) == PRE_DEC)
 	return 0;
     }
-
-  if ((mode == QImode || mode == HImode)
-      && (GET_CODE (op) == SUBREG
-	  && GET_CODE (XEXP (op, 0)) == REG
-	  && system_reg_operand (XEXP (op, 0), mode)))
-    return 0;
 
   if (TARGET_SHMEDIA
       && (GET_CODE (op) == PARALLEL || GET_CODE (op) == CONST_VECTOR)
@@ -788,4 +783,20 @@
       && GET_MODE_SIZE (GET_MODE (SUBREG_REG (op))) > 4)
     return 0;
   return arith_reg_operand (op, mode);
+})
+
+(define_predicate "bitwise_memory_operand"
+  (match_code "mem")
+{
+  if (GET_CODE (op) == MEM)
+    {
+      if (REG_P (XEXP (op, 0)))
+	return 1;
+
+      if (GET_CODE (XEXP (op, 0)) == PLUS
+	  && GET_CODE (XEXP (XEXP (op, 0), 0)) == REG
+	  && satisfies_constraint_K12 (XEXP (XEXP (op, 0), 1)))
+        return 1;
+    }
+  return 0;
 })

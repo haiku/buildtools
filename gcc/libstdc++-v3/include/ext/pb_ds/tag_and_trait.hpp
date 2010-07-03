@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005, 2006 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 // Copyright (C) 2004 Ami Tavory and Vladimir Dreizin, IBM-HRL.
 
@@ -89,70 +83,77 @@ namespace __gnu_pbds
   { };
 
 
-  // A mapped-policy indicating that an associative container is a set.
+  /// A mapped-policy indicating that an associative container is a set.
   // XXX should this be a trait of the form is_set<T> ??
   struct null_mapped_type { };
 
 
-  // Base data structure tag.
+  /// Base data structure tag.
   struct container_tag
   { };
 
-  // Basic associative-container.
+  /// Basic string container, inclusive of strings, ropes, etc.
+  struct string_tag : public container_tag { };
+
+  /// Basic sequence.
+  struct sequence_tag : public container_tag { };
+
+  /// Basic associative-container.
   struct associative_container_tag : public container_tag { };
 
-  // Basic hash.
+  /// Basic hash.
   struct basic_hash_tag : public associative_container_tag { };
 
-  // Collision-chaining hash.
+  /// Collision-chaining hash.
   struct cc_hash_tag : public basic_hash_tag { };
 
-  // General-probing hash.
+  /// General-probing hash.
   struct gp_hash_tag : public basic_hash_tag { };
 
-  // Basic tree.
+  /// Basic tree.
   struct basic_tree_tag : public associative_container_tag { };
 
-  // tree.
+  /// tree.
   struct tree_tag : public basic_tree_tag { };
 
-  // Red-black tree.
+  /// Red-black tree.
   struct rb_tree_tag : public tree_tag { };
 
-  // Splay tree.
+  /// Splay tree.
   struct splay_tree_tag : public tree_tag { };
 
-  // Ordered-vector tree.
+  /// Ordered-vector tree.
   struct ov_tree_tag : public tree_tag { };
 
-  // trie.
+  /// trie.
   struct trie_tag : public basic_tree_tag { };
 
-  // PATRICIA trie.
+  /// PATRICIA trie.
   struct pat_trie_tag : public trie_tag { };
 
-  // List-update.
+  /// List-update.
   struct list_update_tag : public associative_container_tag { };
 
-  // Basic priority-queue.
+  /// Basic priority-queue.
   struct priority_queue_tag : public container_tag { };
 
-  // Pairing-heap.
+  /// Pairing-heap.
   struct pairing_heap_tag : public priority_queue_tag { };
 
-  // Binomial-heap.
+  /// Binomial-heap.
   struct binomial_heap_tag : public priority_queue_tag { };
 
-  // Redundant-counter binomial-heap.
+  /// Redundant-counter binomial-heap.
   struct rc_binomial_heap_tag : public priority_queue_tag { };
 
-  // Binary-heap (array-based).
+  /// Binary-heap (array-based).
   struct binary_heap_tag : public priority_queue_tag { };
 
-  // Thin heap.
+  /// Thin heap.
   struct thin_heap_tag : public priority_queue_tag { };
 
 
+  /// Base traits type for containers.
   template<typename Tag>
   struct container_traits_base;
 
@@ -337,7 +338,8 @@ namespace __gnu_pbds
       };
   };
 
-  
+
+  /// container_traits
   // See Matt Austern for the name, S. Meyers MEFC++ #2, others.
   template<typename Cntnr>
   struct container_traits 

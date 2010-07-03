@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler,
    for ATMEL AVR at90s8515, ATmega103/103L, ATmega603/603L microcontrollers.
    Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 
-   2008 Free Software Foundation, Inc.
+   2008, 2009 Free Software Foundation, Inc.
    Contributed by Denis Chertykov (denisc@overta.ru)
 
 This file is part of GCC.
@@ -56,8 +56,8 @@ extern const struct base_arch_s *avr_current_arch;
   do						\
     {						\
       builtin_define_std ("AVR");		\
-      if (avr_base_arch_macro)			\
-	builtin_define (avr_base_arch_macro);	\
+      if (avr_current_arch->macro)		\
+	builtin_define (avr_current_arch->macro);	\
       if (avr_extra_arch_macro)			\
 	builtin_define (avr_extra_arch_macro);	\
       if (avr_current_arch->have_elpm)		\
@@ -66,43 +66,52 @@ extern const struct base_arch_s *avr_current_arch;
 	builtin_define ("__AVR_HAVE_ELPM__");	\
       if (avr_current_arch->have_elpmx)		\
 	builtin_define ("__AVR_HAVE_ELPMX__");	\
-      if (avr_have_movw_lpmx_p)			\
-	builtin_define ("__AVR_HAVE_MOVW__");	\
-      if (avr_have_movw_lpmx_p)			\
-	builtin_define ("__AVR_HAVE_LPMX__");	\
-      if (avr_asm_only_p)			\
+      if (avr_current_arch->have_movw_lpmx)	\
+	{					\
+	  builtin_define ("__AVR_HAVE_MOVW__");	\
+	  builtin_define ("__AVR_HAVE_LPMX__");	\
+	}					\
+      if (avr_current_arch->asm_only)		\
 	builtin_define ("__AVR_ASM_ONLY__");	\
-      if (avr_have_mul_p)			\
-	builtin_define ("__AVR_ENHANCED__");	\
-      if (avr_have_mul_p)			\
-	builtin_define ("__AVR_HAVE_MUL__");	\
+      if (avr_current_arch->have_mul)		\
+	{					\
+	  builtin_define ("__AVR_ENHANCED__");	\
+	  builtin_define ("__AVR_HAVE_MUL__");	\
+ 	}					\
       if (avr_current_arch->have_jmp_call)	\
-	builtin_define ("__AVR_MEGA__");	\
-      if (avr_current_arch->have_jmp_call)	\
-	builtin_define ("__AVR_HAVE_JMP_CALL__"); \
+	{					\
+	  builtin_define ("__AVR_MEGA__");	\
+	  builtin_define ("__AVR_HAVE_JMP_CALL__");	\
+ 	}					\
+      if (avr_current_arch->have_eijmp_eicall)	\
+        {					\
+	  builtin_define ("__AVR_HAVE_EIJMP_EICALL__");	\
+	  builtin_define ("__AVR_3_BYTE_PC__");	\
+	}					\
+      else					\
+        {					\
+	  builtin_define ("__AVR_2_BYTE_PC__");	\
+	}					\
       if (TARGET_NO_INTERRUPTS)			\
 	builtin_define ("__NO_INTERRUPTS__");	\
     }						\
   while (0)
 
-extern const char *avr_base_arch_macro;
 extern const char *avr_extra_arch_macro;
-extern int avr_mega_p;
-extern int avr_have_mul_p;
-extern int avr_asm_only_p;
-extern int avr_have_movw_lpmx_p;
+
 #if !defined(IN_LIBGCC2) && !defined(IN_TARGET_LIBS)
 extern GTY(()) section *progmem_section;
 #endif
 
-#define AVR_MEGA (avr_mega_p && !TARGET_SHORT_CALLS)
-#define AVR_HAVE_MUL (avr_have_mul_p)
-#define AVR_HAVE_MOVW (avr_have_movw_lpmx_p)
-#define AVR_HAVE_LPMX (avr_have_movw_lpmx_p)
+#define AVR_HAVE_JMP_CALL (avr_current_arch->have_jmp_call && !TARGET_SHORT_CALLS)
+#define AVR_HAVE_MUL (avr_current_arch->have_mul)
+#define AVR_HAVE_MOVW (avr_current_arch->have_movw_lpmx)
+#define AVR_HAVE_LPMX (avr_current_arch->have_movw_lpmx)
 #define AVR_HAVE_RAMPZ (avr_current_arch->have_elpm)
+#define AVR_HAVE_EIJMP_EICALL (avr_current_arch->have_eijmp_eicall)
 
-#define AVR_2_BYTE_PC 1
-#define AVR_3_BYTE_PC 0
+#define AVR_2_BYTE_PC (!AVR_HAVE_EIJMP_EICALL)
+#define AVR_3_BYTE_PC (AVR_HAVE_EIJMP_EICALL)
 
 #define TARGET_VERSION fprintf (stderr, " (GNU assembler syntax)");
 
@@ -282,6 +291,19 @@ enum reg_class {
 
 #define REGNO_REG_CLASS(R) avr_regno_reg_class(R)
 
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+
+#define IRA_COVER_CLASSES               \
+{                                       \
+  GENERAL_REGS, LIM_REG_CLASSES         \
+}
+
 #define BASE_REG_CLASS (reload_completed ? BASE_POINTER_REGS : POINTER_REGS)
 
 #define INDEX_REG_CLASS NO_REGS
@@ -376,8 +398,6 @@ extern int avr_reg_order[];
 
 #define RET_REGISTER avr_ret_register ()
 
-#define FUNCTION_VALUE(VALTYPE, FUNC) avr_function_value (VALTYPE, FUNC)
-
 #define LIBCALL_VALUE(MODE)  avr_libcall_value (MODE)
 
 #define FUNCTION_VALUE_REGNO_P(N) ((int) (N) == RET_REGISTER)
@@ -463,10 +483,6 @@ do {									    \
 		           OPNUM, TYPE);				    \
 	      goto WIN;							    \
 	    }								    \
-	  push_reload (XEXP (X, 0), NULL_RTX, &XEXP (X, 0), NULL,	    \
-		       BASE_POINTER_REGS, GET_MODE (X), VOIDmode, 0, 0,	    \
-		       OPNUM, TYPE);					    \
-          goto WIN;							    \
 	}								    \
       else if (! (frame_pointer_needed && XEXP (X,0) == frame_pointer_rtx)) \
 	{								    \
@@ -491,7 +507,7 @@ do {									    \
 					 (MODE)==SImode ? 8 :	\
 					 (MODE)==SFmode ? 8 : 16)
 
-#define BRANCH_COST 0
+#define BRANCH_COST(speed_p, predictable_p) 0
 
 #define SLOW_BYTE_ACCESS 0
 
@@ -516,6 +532,8 @@ do {									    \
 #define TARGET_ASM_CONSTRUCTOR avr_asm_out_ctor
 
 #define TARGET_ASM_DESTRUCTOR avr_asm_out_dtor
+
+#define SUPPORTS_INIT_PRIORITY 0
 
 #define JUMP_TABLES_IN_TEXT_SECTION 0
 
@@ -572,10 +590,7 @@ do {									\
    specific tm.h file (depending upon the particulars of your assembler).  */
 
 #define ASM_DECLARE_FUNCTION_NAME(FILE, NAME, DECL)		\
-do {								\
-     ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "function");	\
-     ASM_OUTPUT_LABEL (FILE, NAME);				\
-} while (0)
+avr_asm_declare_function_name ((FILE), (NAME), (DECL))
 
 #define ASM_DECLARE_FUNCTION_SIZE(FILE, FNAME, DECL)			\
   do {									\
@@ -681,7 +696,7 @@ sprintf (STRING, "*.%s%lu", PREFIX, (unsigned long)(NUM))
 
 #define PRINT_OPERAND(STREAM, X, CODE) print_operand (STREAM, X, CODE)
 
-#define PRINT_OPERAND_PUNCT_VALID_P(CODE) ((CODE) == '~')
+#define PRINT_OPERAND_PUNCT_VALID_P(CODE) ((CODE) == '~' || (CODE) == '!')
 
 #define PRINT_OPERAND_ADDRESS(STREAM, X) print_operand_address(STREAM, X)
 
@@ -808,7 +823,8 @@ mmcu=*:-mmcu=%*}"
   mmcu=at90s8*|\
   mmcu=at90c8*|\
   mmcu=at86rf401|\
-  mmcu=attiny13|\
+  mmcu=ata6289|\
+  mmcu=attiny13*|\
   mmcu=attiny2313|\
   mmcu=attiny24|\
   mmcu=attiny25|\
@@ -819,14 +835,17 @@ mmcu=*:-mmcu=%*}"
   mmcu=at43*|\
   mmcu=at76*|\
   mmcu=at90usb82|\
-  mmcu=at90usb162: -m avr3}\
+  mmcu=at90usb162|\
+  mmcu=attiny16*|\
+  mmcu=attiny32*: -m avr3}\
 %{mmcu=atmega8*|\
-  mmcu=atmega48*|\
+  mmcu=atmega4*|\
   mmcu=at90pwm1|\
   mmcu=at90pwm2|\
   mmcu=at90pwm2b|\
   mmcu=at90pwm3|\
-  mmcu=at90pwm3b: -m avr4}\
+  mmcu=at90pwm3b|\
+  mmcu=at90pwm81: -m avr4}\
 %{mmcu=atmega16*|\
   mmcu=atmega32*|\
   mmcu=atmega406|\
@@ -835,9 +854,13 @@ mmcu=*:-mmcu=%*}"
   mmcu=at90can*|\
   mmcu=at90pwm216|\
   mmcu=at90pwm316|\
+  mmcu=at90scr100|\
   mmcu=at90usb64*|\
   mmcu=at90usb128*|\
-  mmcu=at94k: -m avr5}\
+  mmcu=at94k|\
+  mmcu=m3000*|\
+  mmcu=m3001*: -m avr5}\
+%{mmcu=atmega256*:-m avr6}\
 %{mmcu=atmega324*|\
   mmcu=atmega325*|\
   mmcu=atmega328p|\
@@ -856,17 +879,37 @@ mmcu=*:-mmcu=%*}"
   mmcu=atmega165*|\
   mmcu=atmega168*|\
   mmcu=atmega169*|\
-  mmcu=atmega8hva|\
-  mmcu=atmega16hva|\
-  mmcu=atmega32hvb|\
+  mmcu=atmega4hv*|\
+  mmcu=atmega8hv*|\
+  mmcu=atmega16hv*|\
+  mmcu=atmega32hv*|\
   mmcu=attiny48|\
   mmcu=attiny88|\
+  mmcu=attiny87|\
+  mmcu=attiny167|\
+  mmcu=attiny327|\
   mmcu=at90can*|\
   mmcu=at90pwm*|\
+  mmcu=atmega8c1|\
+  mmcu=atmega16c1|\
+  mmcu=atmega32c1|\
+  mmcu=atmega64c1|\
+  mmcu=atmega8m1|\
+  mmcu=atmega16m1|\
+  mmcu=atmega32m1|\
+  mmcu=atmega64m1|\
+  mmcu=atmega16u4|\
+  mmcu=atmega32u*|\
+  mmcu=at90scr100|\
+  mmcu=ata6289|\
   mmcu=at90usb*: -Tdata 0x800100}\
 %{mmcu=atmega640|\
   mmcu=atmega1280|\
-  mmcu=atmega1281: -Tdata 0x800200} "
+  mmcu=atmega1281|\
+  mmcu=atmega256*|\
+  mmcu=atmega128rfa1: -Tdata 0x800200}\
+%{mmcu=m3000*|\
+  mmcu=m3001*: -Tdata 0x801000}"
 
 #define LIB_SPEC \
   "%{!mmcu=at90s1*:%{!mmcu=attiny11:%{!mmcu=attiny12:%{!mmcu=attiny15:%{!mmcu=attiny28: -lc }}}}}"
@@ -901,6 +944,7 @@ mmcu=*:-mmcu=%*}"
 %{mmcu=at90s8535:crts8535.o%s} \
 %{mmcu=at86rf401:crt86401.o%s} \
 %{mmcu=attiny13:crttn13.o%s} \
+%{mmcu=attiny13a:crttn13a.o%s} \
 %{mmcu=attiny2313|mmcu=avr25:crttn2313.o%s} \
 %{mmcu=attiny24:crttn24.o%s} \
 %{mmcu=attiny44:crttn44.o%s} \
@@ -912,14 +956,18 @@ mmcu=*:-mmcu=%*}"
 %{mmcu=attiny461:crttn461.o%s} \
 %{mmcu=attiny861:crttn861.o%s} \
 %{mmcu=attiny43u:crttn43u.o%s} \
+%{mmcu=attiny87:crttn87.o%s} \
 %{mmcu=attiny48:crttn48.o%s} \
 %{mmcu=attiny88:crttn88.o%s} \
-%{mmcu=at43usb320|mmcu=avr3:crt43320.o%s} \
-%{mmcu=at43usb355:crt43355.o%s} \
+%{mmcu=ata6289:crta6289.o%s} \
+%{mmcu=at43usb355|mmcu=avr3:crt43355.o%s} \
 %{mmcu=at76c711:crt76711.o%s} \
 %{mmcu=atmega103|mmcu=avr31:crtm103.o%s} \
+%{mmcu=at43usb320:crt43320.o%s} \
 %{mmcu=at90usb162|mmcu=avr35:crtusb162.o%s} \
 %{mmcu=at90usb82:crtusb82.o%s} \
+%{mmcu=attiny167:crttn167.o%s} \
+%{mmcu=attiny327:crttn327.o%s} \
 %{mmcu=atmega8|mmcu=avr4:crtm8.o%s} \
 %{mmcu=atmega48:crtm48.o%s} \
 %{mmcu=atmega48p:crtm48p.o%s} \
@@ -927,11 +975,14 @@ mmcu=*:-mmcu=%*}"
 %{mmcu=atmega88p:crtm88p.o%s} \
 %{mmcu=atmega8515:crtm8515.o%s} \
 %{mmcu=atmega8535:crtm8535.o%s} \
+%{mmcu=atmega8c1:crtm8c1.o%s} \
+%{mmcu=atmega8m1:crtm8m1.o%s} \
 %{mmcu=at90pwm1:crt90pwm1.o%s} \
 %{mmcu=at90pwm2:crt90pwm2.o%s} \
 %{mmcu=at90pwm2b:crt90pwm2b.o%s} \
 %{mmcu=at90pwm3:crt90pwm3.o%s} \
 %{mmcu=at90pwm3b:crt90pwm3b.o%s} \
+%{mmcu=at90pwm81:crt90pwm81.o%s} \
 %{mmcu=atmega16:crtm16.o%s} \
 %{mmcu=atmega161|mmcu=avr5:crtm161.o%s} \
 %{mmcu=atmega162:crtm162.o%s} \
@@ -955,7 +1006,6 @@ mmcu=*:-mmcu=%*}"
 %{mmcu=atmega329p:crtm329p.o%s} \
 %{mmcu=atmega3290:crtm3290.o%s} \
 %{mmcu=atmega3290p:crtm3290p.o%s} \
-%{mmcu=atmega32hvb:crtm32hvb.o%s} \
 %{mmcu=atmega406:crtm406.o%s} \
 %{mmcu=atmega64:crtm64.o%s} \
 %{mmcu=atmega640:crtm640.o%s} \
@@ -967,10 +1017,24 @@ mmcu=*:-mmcu=%*}"
 %{mmcu=atmega6490:crtm6490.o%s} \
 %{mmcu=atmega8hva:crtm8hva.o%s} \
 %{mmcu=atmega16hva:crtm16hva.o%s} \
+%{mmcu=atmega16hvb:crtm16hvb.o%s} \
+%{mmcu=atmega32hvb:crtm32hvb.o%s} \
+%{mmcu=atmega4hvd:crtm4hvd.o%s} \
+%{mmcu=atmega8hvd:crtm8hvd.o%s} \
 %{mmcu=at90can32:crtcan32.o%s} \
 %{mmcu=at90can64:crtcan64.o%s} \
 %{mmcu=at90pwm216:crt90pwm216.o%s} \
 %{mmcu=at90pwm316:crt90pwm316.o%s} \
+%{mmcu=atmega16c1:crtm16c1.o%s} \
+%{mmcu=atmega32c1:crtm32c1.o%s} \
+%{mmcu=atmega64c1:crtm64c1.o%s} \
+%{mmcu=atmega16m1:crtm16m1.o%s} \
+%{mmcu=atmega32m1:crtm32m1.o%s} \
+%{mmcu=atmega64m1:crtm64m1.o%s} \
+%{mmcu=atmega16u4:crtm16u4.o%s} \
+%{mmcu=atmega32u4:crtm32u4.o%s} \
+%{mmcu=atmega32u6:crtm32u6.o%s} \
+%{mmcu=at90scr100:crt90scr100.o%s} \
 %{mmcu=at90usb646:crtusb646.o%s} \
 %{mmcu=at90usb647:crtusb647.o%s} \
 %{mmcu=at94k:crtat94k.o%s} \
@@ -979,8 +1043,14 @@ mmcu=*:-mmcu=%*}"
 %{mmcu=atmega1281:crtm1281.o%s} \
 %{mmcu=atmega1284p:crtm1284p.o%s} \
 %{mmcu=at90can128:crtcan128.o%s} \
+%{mmcu=atmega128rfa1:crtm128rfa1.o%s} \
 %{mmcu=at90usb1286:crtusb1286.o%s} \
-%{mmcu=at90usb1287:crtusb1287.o%s}"
+%{mmcu=at90usb1287:crtusb1287.o%s} \
+%{mmcu=m3000f:crtm3000f.o%s} \
+%{mmcu=m3000s:crtm3000s.o%s} \
+%{mmcu=m3001b:crtm3001b.o%s} \
+%{mmcu=atmega2560|mmcu=avr6:crtm2560.o%s} \
+%{mmcu=atmega2561:crtm2561.o%s}"
 
 #define EXTRA_SPECS {"crt_binutils", CRT_BINUTILS_SPECS},
 
@@ -1019,11 +1089,8 @@ mmcu=*:-mmcu=%*}"
 
 #define OBJECT_FORMAT_ELF
 
-/* Interrupt functions can only use registers that have already been
-   saved by the prologue, even if they would normally be
-   call-clobbered.  */
-#define HARD_REGNO_RENAME_OK(OLD_REG, NEW_REG)		\
-   avr_hard_regno_rename_ok (OLD_REG, NEW_REG)
+#define HARD_REGNO_RENAME_OK(OLD_REG, NEW_REG) \
+  avr_hard_regno_rename_ok (OLD_REG, NEW_REG)
 
 /* A C structure for machine-specific, per-function data.
    This is added to the cfun structure.  */
@@ -1043,7 +1110,11 @@ struct machine_function GTY(())
      as specified by the "signal" attribute.  */
   int is_signal;
   
-  /* 'true' - if current function is a signal function 
+  /* 'true' - if current function is a 'task' function 
      as specified by the "OS_task" attribute.  */
   int is_OS_task;
+
+  /* 'true' - if current function is a 'main' function 
+     as specified by the "OS_main" attribute.  */
+  int is_OS_main;
 };

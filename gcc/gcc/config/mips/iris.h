@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.  Generic IRIX version.
    Copyright (C) 1993, 1995, 1996, 1998, 2000,
-   2001, 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2001, 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,6 +21,9 @@ along with GCC; see the file COPYING3.  If not see
 /* We are compiling for IRIX now.  */
 #undef TARGET_IRIX
 #define TARGET_IRIX 1
+
+/* MIPS specific debugging info */
+#define MIPS_DEBUGGING_INFO 1
 
 /* The size in bytes of a DWARF field indicating an offset or length
    relative to a debug info section, specified to be 4 bytes in the DWARF-2

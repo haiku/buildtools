@@ -1,5 +1,5 @@
 /* Target definitions for PowerPC running Darwin (Mac OS X).
-   Copyright (C) 1997, 2000, 2001, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1997, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
@@ -173,12 +173,12 @@
 #define STARTING_FRAME_OFFSET						\
   (FRAME_GROWS_DOWNWARD							\
    ? 0									\
-   : (RS6000_ALIGN (current_function_outgoing_args_size, 16)		\
+   : (RS6000_ALIGN (crtl->outgoing_args_size, 16)		\
       + RS6000_SAVE_AREA))
 
 #undef STACK_DYNAMIC_OFFSET
 #define STACK_DYNAMIC_OFFSET(FUNDECL)					\
-  (RS6000_ALIGN (current_function_outgoing_args_size, 16)		\
+  (RS6000_ALIGN (crtl->outgoing_args_size, 16)		\
    + (STACK_POINTER_OFFSET))
 
 /* These are used by -fbranch-probabilities */
@@ -191,6 +191,8 @@
 
 #undef	FP_SAVE_INLINE
 #define FP_SAVE_INLINE(FIRST_REG) ((FIRST_REG) < 64)
+#undef GP_SAVE_INLINE
+#define GP_SAVE_INLINE(FIRST_REG) ((FIRST_REG) < 32)
 
 /* Darwin uses a function call if everything needs to be saved/restored.  */
 #undef WORLD_SAVE_P

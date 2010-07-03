@@ -1,32 +1,28 @@
 /* 128-bit long double support routines for Darwin.
-   Copyright (C) 1993, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1993, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free
-Software Foundation; either version 2, or (at your option) any later
+Software Foundation; either version 3, or (at your option) any later
 version.
-
-In addition to the permissions in the GNU General Public License, the
-Free Software Foundation gives you unlimited permission to link the
-compiled version of this file into combinations with other programs,
-and to distribute those combinations without any restriction coming
-from the use of this file.  (The General Public License restrictions
-do apply in other respects; for example, they cover modification of
-the file, and distribution when not linked into a combine
-executable.)
 
 GCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
+
 
 /* Implementations of floating-point long double basic arithmetic
    functions called by the IBM C compiler when generating code for
@@ -387,7 +383,7 @@ fmsub (double a, double b, double c)
     FP_DECL_Q(V);
     FP_DECL_D(R);
     double r;
-    long double u, v, x, y, z;
+    long double u, x, y, z;
 
     FP_INIT_ROUNDMODE;
     FP_UNPACK_RAW_D (A, a);
@@ -422,15 +418,13 @@ fmsub (double a, double b, double c)
     FP_UNPACK_SEMIRAW_Q(U,u);
     FP_UNPACK_SEMIRAW_Q(Z,z);
     FP_SUB_Q(V,U,Z);
-    FP_PACK_SEMIRAW_Q(v,V);
-    FP_HANDLE_EXCEPTIONS;
 
     /* Truncate quad to double.  */
-    FP_INIT_ROUNDMODE;
-    FP_UNPACK_SEMIRAW_Q(V,v);
 #if (2 * _FP_W_TYPE_SIZE) < _FP_FRACBITS_Q
+    V_f[3] &= 0x0007ffff;
     FP_TRUNC(D,Q,2,4,R,V);
 #else
+    V_f1 &= 0x0007ffffffffffffL;
     FP_TRUNC(D,Q,1,2,R,V);
 #endif
     FP_PACK_SEMIRAW_D(r,R);

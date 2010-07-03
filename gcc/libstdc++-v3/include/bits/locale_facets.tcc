@@ -1,13 +1,13 @@
 // Locale support -*- C++ -*-
 
 // Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-// 2006, 2007
+// 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -15,19 +15,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file locale_facets.tcc
  *  This is an internal header file, included by other library headers.
@@ -62,12 +57,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	if (!__caches[__i])
 	  {
 	    __numpunct_cache<_CharT>* __tmp = NULL;
-	    try
+	    __try
 	      {
 		__tmp = new __numpunct_cache<_CharT>;
 		__tmp->_M_cache(__loc);
 	      }
-	    catch(...)
+	    __catch(...)
 	      {
 		delete __tmp;
 		__throw_exception_again;
@@ -91,7 +86,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __np.grouping().copy(__grouping, _M_grouping_size);
       _M_grouping = __grouping;
       _M_use_grouping = (_M_grouping_size
-			 && static_cast<signed char>(__np.grouping()[0]) > 0);
+			 && static_cast<signed char>(_M_grouping[0]) > 0
+			 && (_M_grouping[0]
+			     != __gnu_cxx::__numeric_traits<char>::__max));
 
       _M_truename_size = __np.truename().size();
       _CharT* __truename = new _CharT[_M_truename_size];
@@ -345,12 +342,9 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
           if (!std::__verify_grouping(__lc->_M_grouping, 
 				      __lc->_M_grouping_size,
 				      __found_grouping))
-	    __err |= ios_base::failbit;
+	    __err = ios_base::failbit;
         }
 
-      // Finish up.
-      if (__testeof)
-        __err |= ios_base::eofbit;
       return __beg;
     }
 
@@ -385,8 +379,7 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 	if (!__testeof)
 	  {
 	    __c = *__beg;
-	    if (__gnu_cxx::__numeric_traits<_ValueT>::__is_signed)
-	      __negative = __c == __lit[__num_base::_S_iminus];
+	    __negative = __c == __lit[__num_base::_S_iminus];
 	    if ((__negative || __c == __lit[__num_base::_S_iplus])
 		&& !(__lc->_M_use_grouping && __c == __lc->_M_thousands_sep)
 		&& !(__c == __lc->_M_decimal_point))
@@ -454,7 +447,9 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 	if (__lc->_M_use_grouping)
 	  __found_grouping.reserve(32);
 	bool __testfail = false;
-	const __unsigned_type __max = __negative
+	bool __testoverflow = false;
+	const __unsigned_type __max =
+	  (__negative && __gnu_cxx::__numeric_traits<_ValueT>::__is_signed)
 	  ? -__gnu_cxx::__numeric_traits<_ValueT>::__min
 	  : __gnu_cxx::__numeric_traits<_ValueT>::__max;
 	const __unsigned_type __smax = __max / __base;
@@ -471,11 +466,11 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 		break;
 	      
 	      if (__result > __smax)
-		__testfail = true;
+		__testoverflow = true;
 	      else
 		{
 		  __result *= __base;
-		  __testfail |= __result > __max - __digit;
+		  __testoverflow |= __result > __max - __digit;
 		  __result += __digit;
 		  ++__sep_pos;
 		}
@@ -518,11 +513,11 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 		  if (__digit > 15)
 		    __digit -= 6;
 		  if (__result > __smax)
-		    __testfail = true;
+		    __testoverflow = true;
 		  else
 		    {
 		      __result *= __base;
-		      __testfail |= __result > __max - __digit;
+		      __testoverflow |= __result > __max - __digit;
 		      __result += __digit;
 		      ++__sep_pos;
 		    }
@@ -544,14 +539,28 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 	    if (!std::__verify_grouping(__lc->_M_grouping,
 					__lc->_M_grouping_size,
 					__found_grouping))
-	      __err |= ios_base::failbit;
+	      __err = ios_base::failbit;
 	  }
 
-	if (!__testfail && (__sep_pos || __found_zero 
-			    || __found_grouping.size()))
-	  __v = __negative ? -__result : __result;
+	// _GLIBCXX_RESOLVE_LIB_DEFECTS
+	// 23. Num_get overflow result.
+	if ((!__sep_pos && !__found_zero && !__found_grouping.size())
+	    || __testfail)
+	  {
+	    __v = 0;
+	    __err = ios_base::failbit;
+	  }
+	else if (__testoverflow)
+	  {
+	    if (__negative
+		&& __gnu_cxx::__numeric_traits<_ValueT>::__is_signed)
+	      __v = __gnu_cxx::__numeric_traits<_ValueT>::__min;
+	    else
+	      __v = __gnu_cxx::__numeric_traits<_ValueT>::__max;
+	    __err = ios_base::failbit;
+	  }
 	else
-	  __err |= ios_base::failbit;
+	  __v = __negative ? -__result : __result;
 
 	if (__testeof)
 	  __err |= ios_base::eofbit;
@@ -576,102 +585,85 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 	  if (__l == 0 || __l == 1)
 	    __v = bool(__l);
 	  else
-            __err |= ios_base::failbit;
+	    {
+	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+	      // 23. Num_get overflow result.
+	      __v = true;
+	      __err = ios_base::failbit;
+	      if (__beg == __end)
+		__err |= ios_base::eofbit;
+	    }
         }
       else
         {
 	  // Parse bool values as alphanumeric.
-	  typedef __numpunct_cache<_CharT>              __cache_type;
+	  typedef __numpunct_cache<_CharT>  __cache_type;
 	  __use_cache<__cache_type> __uc;
 	  const locale& __loc = __io._M_getloc();
 	  const __cache_type* __lc = __uc(__loc);
 
 	  bool __testf = true;
 	  bool __testt = true;
-	  size_t __n;
-	  bool __testeof = __beg == __end;
-          for (__n = 0; !__testeof; ++__n)
-            {
+	  bool __donef = __lc->_M_falsename_size == 0;
+	  bool __donet = __lc->_M_truename_size == 0;
+	  bool __testeof = false;
+	  size_t __n = 0;
+	  while (!__donef || !__donet)
+	    {
+	      if (__beg == __end)
+		{
+		  __testeof = true;
+		  break;
+		}
+
 	      const char_type __c = *__beg;
 
-	      if (__testf)
-	        {
-		  if (__n < __lc->_M_falsename_size)
-		    __testf = __c == __lc->_M_falsename[__n];
-		  else
-		    break;
-		}
+	      if (!__donef)
+		__testf = __c == __lc->_M_falsename[__n];
 
-	      if (__testt)
-	        {
-		  if (__n < __lc->_M_truename_size)
-		    __testt = __c == __lc->_M_truename[__n];
-		  else
-		    break;
-		}
-
-	      if (!__testf && !__testt)
+	      if (!__testf && __donet)
 		break;
-	      
-	      if (++__beg == __end)
-		__testeof = true;
-            }
-	  if (__testf && __n == __lc->_M_falsename_size)
-	    __v = false;
-	  else if (__testt && __n == __lc->_M_truename_size)
-	    __v = true;
-	  else
-	    __err |= ios_base::failbit;
 
-          if (__testeof)
-            __err |= ios_base::eofbit;
-        }
+	      if (!__donet)
+		__testt = __c == __lc->_M_truename[__n];
+
+	      if (!__testt && __donef)
+		break;
+
+	      if (!__testt && !__testf)
+		break;
+
+	      ++__n;
+	      ++__beg;
+
+	      __donef = !__testf || __n >= __lc->_M_falsename_size;
+	      __donet = !__testt || __n >= __lc->_M_truename_size;
+	    }
+	  if (__testf && __n == __lc->_M_falsename_size && __n)
+	    {
+	      __v = false;
+	      if (__testt && __n == __lc->_M_truename_size)
+		__err = ios_base::failbit;
+	      else
+		__err = __testeof ? ios_base::eofbit : ios_base::goodbit;
+	    }
+	  else if (__testt && __n == __lc->_M_truename_size && __n)
+	    {
+	      __v = true;
+	      __err = __testeof ? ios_base::eofbit : ios_base::goodbit;
+	    }
+	  else
+	    {
+	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+	      // 23. Num_get overflow result.
+	      __v = false;
+	      __err = ios_base::failbit;
+	      if (__testeof)
+		__err |= ios_base::eofbit;
+	    }
+	}
       return __beg;
     }
-
-  template<typename _CharT, typename _InIter>
-    _InIter
-    num_get<_CharT, _InIter>::
-    do_get(iter_type __beg, iter_type __end, ios_base& __io,
-           ios_base::iostate& __err, long& __v) const
-    { return _M_extract_int(__beg, __end, __io, __err, __v); }
-
-  template<typename _CharT, typename _InIter>
-    _InIter
-    num_get<_CharT, _InIter>::
-    do_get(iter_type __beg, iter_type __end, ios_base& __io,
-           ios_base::iostate& __err, unsigned short& __v) const
-    { return _M_extract_int(__beg, __end, __io, __err, __v); }
-
-  template<typename _CharT, typename _InIter>
-    _InIter
-    num_get<_CharT, _InIter>::
-    do_get(iter_type __beg, iter_type __end, ios_base& __io,
-           ios_base::iostate& __err, unsigned int& __v) const
-    { return _M_extract_int(__beg, __end, __io, __err, __v); }
-
-  template<typename _CharT, typename _InIter>
-    _InIter
-    num_get<_CharT, _InIter>::
-    do_get(iter_type __beg, iter_type __end, ios_base& __io,
-           ios_base::iostate& __err, unsigned long& __v) const
-    { return _M_extract_int(__beg, __end, __io, __err, __v); }
-
-#ifdef _GLIBCXX_USE_LONG_LONG
-  template<typename _CharT, typename _InIter>
-    _InIter
-    num_get<_CharT, _InIter>::
-    do_get(iter_type __beg, iter_type __end, ios_base& __io,
-           ios_base::iostate& __err, long long& __v) const
-    { return _M_extract_int(__beg, __end, __io, __err, __v); }
-
-  template<typename _CharT, typename _InIter>
-    _InIter
-    num_get<_CharT, _InIter>::
-    do_get(iter_type __beg, iter_type __end, ios_base& __io,
-           ios_base::iostate& __err, unsigned long long& __v) const
-    { return _M_extract_int(__beg, __end, __io, __err, __v); }
-#endif
 
   template<typename _CharT, typename _InIter>
     _InIter
@@ -683,6 +675,8 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
       __xtrc.reserve(32);
       __beg = _M_extract_float(__beg, __end, __io, __err, __xtrc);
       std::__convert_to_v(__xtrc.c_str(), __v, __err, _S_get_c_locale());
+      if (__beg == __end)
+	__err |= ios_base::eofbit;
       return __beg;
     }
 
@@ -696,6 +690,8 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
       __xtrc.reserve(32);
       __beg = _M_extract_float(__beg, __end, __io, __err, __xtrc);
       std::__convert_to_v(__xtrc.c_str(), __v, __err, _S_get_c_locale());
+      if (__beg == __end)
+	__err |= ios_base::eofbit;
       return __beg;
     }
 
@@ -710,6 +706,8 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
       __xtrc.reserve(32);
       __beg = _M_extract_float(__beg, __end, __io, __err, __xtrc);
       std::__convert_to_v(__xtrc.c_str(), __v, __err, _S_get_c_locale());
+      if (__beg == __end)
+	__err |= ios_base::eofbit;
       return __beg;
     }
 #endif
@@ -724,6 +722,8 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
       __xtrc.reserve(32);
       __beg = _M_extract_float(__beg, __end, __io, __err, __xtrc);
       std::__convert_to_v(__xtrc.c_str(), __v, __err, _S_get_c_locale());
+      if (__beg == __end)
+	__err |= ios_base::eofbit;
       return __beg;
     }
 
@@ -748,8 +748,7 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
       // Reset from hex formatted input.
       __io.flags(__fmt);
 
-      if (!(__err & ios_base::failbit))
-	__v = reinterpret_cast<void*>(__ul);
+      __v = reinterpret_cast<void*>(__ul);
       return __beg;
     }
 
@@ -1095,45 +1094,31 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 	  const streamsize __w = __io.width();
 	  if (__w > static_cast<streamsize>(__len))
 	    {
-	      _CharT* __cs
+	      const streamsize __plen = __w - __len;
+	      _CharT* __ps
 		= static_cast<_CharT*>(__builtin_alloca(sizeof(_CharT)
-							* __w));
-	      _M_pad(__fill, __w, __io, __cs, __name, __len);
-	      __name = __cs;
+							* __plen));
+
+	      char_traits<_CharT>::assign(__ps, __plen, __fill);
+	      __io.width(0);
+
+	      if ((__flags & ios_base::adjustfield) == ios_base::left)
+		{
+		  __s = std::__write(__s, __name, __len);
+		  __s = std::__write(__s, __ps, __plen);
+		}
+	      else
+		{
+		  __s = std::__write(__s, __ps, __plen);
+		  __s = std::__write(__s, __name, __len);
+		}
+	      return __s;
 	    }
 	  __io.width(0);
 	  __s = std::__write(__s, __name, __len);
 	}
       return __s;
     }
-
-  template<typename _CharT, typename _OutIter>
-    _OutIter
-    num_put<_CharT, _OutIter>::
-    do_put(iter_type __s, ios_base& __io, char_type __fill, long __v) const
-    { return _M_insert_int(__s, __io, __fill, __v); }
-
-  template<typename _CharT, typename _OutIter>
-    _OutIter
-    num_put<_CharT, _OutIter>::
-    do_put(iter_type __s, ios_base& __io, char_type __fill,
-           unsigned long __v) const
-    { return _M_insert_int(__s, __io, __fill, __v); }
-
-#ifdef _GLIBCXX_USE_LONG_LONG
-  template<typename _CharT, typename _OutIter>
-    _OutIter
-    num_put<_CharT, _OutIter>::
-    do_put(iter_type __s, ios_base& __io, char_type __fill, long long __v) const
-    { return _M_insert_int(__s, __io, __fill, __v); }
-
-  template<typename _CharT, typename _OutIter>
-    _OutIter
-    num_put<_CharT, _OutIter>::
-    do_put(iter_type __s, ios_base& __io, char_type __fill,
-           unsigned long long __v) const
-    { return _M_insert_int(__s, __io, __fill, __v); }
-#endif
 
   template<typename _CharT, typename _OutIter>
     _OutIter
@@ -1164,8 +1149,7 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
     {
       const ios_base::fmtflags __flags = __io.flags();
       const ios_base::fmtflags __fmt = ~(ios_base::basefield
-					 | ios_base::uppercase
-					 | ios_base::internal);
+					 | ios_base::uppercase);
       __io.flags((__flags & __fmt) | (ios_base::hex | ios_base::showbase));
 
       typedef __gnu_cxx::__conditional_type<(sizeof(const void*)
@@ -1191,8 +1175,7 @@ _GLIBCXX_END_LDBL_NAMESPACE
     void
     __pad<_CharT, _Traits>::_S_pad(ios_base& __io, _CharT __fill,
 				   _CharT* __news, const _CharT* __olds,
-				   const streamsize __newlen,
-				   const streamsize __oldlen)
+				   streamsize __newlen, streamsize __oldlen)
     {
       const size_t __plen = static_cast<size_t>(__newlen - __oldlen);
       const ios_base::fmtflags __adjust = __io.flags() & ios_base::adjustfield;
@@ -1247,7 +1230,8 @@ _GLIBCXX_END_LDBL_NAMESPACE
       size_t __ctr = 0;
 
       while (__last - __first > __gbeg[__idx]
-	     && static_cast<signed char>(__gbeg[__idx]) > 0)
+	     && static_cast<signed char>(__gbeg[__idx]) > 0
+	     && __gbeg[__idx] != __gnu_cxx::__numeric_traits<char>::__max)
 	{
 	  __last -= __gbeg[__idx];
 	  __idx < __gsize - 1 ? ++__idx : ++__ctr;
@@ -1284,6 +1268,10 @@ _GLIBCXX_END_LDBL_NAMESPACE
   extern template class ctype_byname<char>;
 
   extern template
+    const ctype<char>&
+    use_facet<ctype<char> >(const locale&);
+
+  extern template
     const numpunct<char>&
     use_facet<numpunct<char> >(const locale&);
 
@@ -1317,6 +1305,10 @@ _GLIBCXX_END_LDBL_NAMESPACE
   extern template class _GLIBCXX_LDBL_NAMESPACE num_get<wchar_t>;
   extern template class _GLIBCXX_LDBL_NAMESPACE num_put<wchar_t>;
   extern template class ctype_byname<wchar_t>;
+
+  extern template
+    const ctype<wchar_t>&
+    use_facet<ctype<wchar_t> >(const locale&);
 
   extern template
     const numpunct<wchar_t>&

@@ -1,22 +1,81 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
 
-2008-12-04  Janis Johnson  <janis187@us.ibm.com>
+2010-01-21  Release Manager
 
-	Backport from mainline:
-	2008-10-18  Jakub Jelinek  <jakub@redhat.com>
-	            Janis Johnson  <janis187@us.ibm.com>
+	* GCC 4.4.3 released.
+
+2009-10-15  Release Manager
+
+	* GCC 4.4.2 released.
+
+2009-08-18  Alexandre Oliva  <aoliva@redhat.com>
+
+	* compare-debug: Don't fail just because of .eh_frame
+	differences.  Drop .eh_frame relocations too.
+
+2009-07-22  Release Manager
+
+	* GCC 4.4.1 released.
+
+2009-06-20  Gerald Pfeifer  <gerald@pfeifer.com>
+
+	* test_summary: Only include LAST_UPDATED if it exists.
+	Complete copyright years.
+
+2009-04-27  Jakub Jelinek  <jakub@redhat.com>
+
+	PR testsuite/39807
+	* dg-extract-results.sh: Close open files and use >> instead of >
+	to decrease number of concurrently open files from awk.  Avoid
+	= at the beginning of a regexp and redirect to a file determined
+	by curfile variable rather than concatenated strings to workaround
+	Solaris nawk bug.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-04-14  Jakub Jelinek  <jakub@redhat.com>
+
+	* gennews (files): Reference GCC 4.4 web pages.
+
+2009-04-09  Jakub Jelinek  <jakub@redhat.com>
+
+	* reghunt/date_based/reg_periodic: Change copyright header to refer
+	to version 3 of the GNU General Public License and to point readers
+	at the COPYING3 file and the FSF's license web page.
+	* reghunt/date_based/reg_search: Likewise.
+	* regression/GCC_Regression_Tester.wdgt/widget.html: Likewise.
+	* regression/btest-gcc.sh: Likewise.
+	* regression/objs-gcc.sh: Likewise.
+
+2009-03-01  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* check_warning_flags.sh: Update flag exceptions.
+
+2008-11-18  Ben Elliston  <bje@au.ibm.com>
+
+	* dg-cmp-results.sh: Do not print usage if either .sum file cannot
+	be opened; print a more meaningful error instead.
+
+2008-10-24  Janis Johnson  <janis187@us.ibm.com>
+	    Jakub Jelinek  <jakub@redhat.com>
 
 	* dg-extract-results.sh: New file.
 
-2008-08-27  Release Manager
+2008-07-14  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 
-	* GCC 4.3.2 released.
+	* check_makefile_deps.sh: New file.
 
-2008-06-06  Release Manager
+2008-05-08  Sebastian Pop  <sebastian.pop@amd.com>
 
-	* GCC 4.3.1 released.
+	* patch_tester.sh (report): Do not print "Checker: ".
+
+2008-04-23  Sebastian Pop  <sebastian.pop@amd.com>
+
+	* patch_tester.sh (report): Do not print the time.
 
 2008-04-01  Joseph Myers  <joseph@codesourcery.com>
 
@@ -24,9 +83,34 @@
 	Handle @heading.  Handle enumerated lists with starting numbers
 	and extra headings.
 
-2008-03-05  Release Manager
+2008-03-10  Janis Johnson  <janis187@us.ibm.com>
 
-	* GCC 4.3.0 released.
+	* patch_tester.sh (initialization): Initialize svnpatch and stop.
+	(usage): Add -svnpath and -stop.	
+	(makedir): New.
+	(argument handling): Process -stop and -svnpath.
+	(setup code): Use makedir, error out if initial svn checkout fails.
+	(update): Use svnpath.  Invoke contrib/gcc_update.
+	(apply_patch): Require that patch was created at top level.  Use eval
+	with option variables.  Don't use bootstrap target for make.  Verify
+	that some tests were run.
+	(bootntest_patched): Use snvpath.
+	(main loop): For -stop, exit when there are no more patches to test.
+
+2008-03-09  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* check_warning_flags.sh: Instead of invoke.texi, take the path
+	to the doc directory as argument.  Check that warnings listed in
+	'gcc --help' are accepted by the compiler, and listed in the
+	manuals.
+
+2008-03-06  Tom Tromey  <tromey@redhat.com>
+
+	* patch_tester.sh (usage): Watermark is not lexicographic.
+	Load $STATE/defaults if it exists.
+	(selfexec): Use $0.
+	(apply_patch): Handle deletions.
+	(bootntest): Handle default settings.
 
 2008-03-05  Jakub Jelinek  <jakub@redhat.com>
 
@@ -636,7 +720,7 @@
 	* texi2pod.pl: Handle @include, @ftable, @vtable.
 	Reformat some code for clarity.
 
-2002-02-24  Christian Jönsson  <c.christian.joensson@telia.com>
+2002-02-24  Christian JÃ¶nsson  <c.christian.joensson@telia.com>
 
 	* test_summary: Additional to XPASS and FAIL, add UNRESOLVED,
 	WARNING and ERROR output from the *.sum files.
@@ -1041,7 +1125,7 @@ Sun Nov 28 00:41:44 1999  William Bader (william@nscs.fast.net)
 
 	* gcc_update: Allow patches compressed by bzip2.
 
-1999-10-11  Martin v. Löwis <loewis@informatik.hu-berlin.de>
+1999-10-11  Martin v. LÃ¶wis <loewis@informatik.hu-berlin.de>
 
 	* newcvsroot: New file.
 

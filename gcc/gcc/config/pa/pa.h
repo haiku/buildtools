@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for the HP Spectrum.
-   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) of Cygnus Support
    and Tim Moore (moore@defmacro.cs.utah.edu) of the Center for
    Software Science at the University of Utah.
@@ -101,17 +101,18 @@ extern int flag_pa_unix;
    calls.  They are used only in non-pic code.  */
 #define TARGET_LONG_ABS_CALL (TARGET_SOM && !TARGET_GAS)
 
-/* Define to a C expression evaluating to true to use long pic symbol
-   difference calls.  This is a call variant similar to the long pic
-   pc-relative call.  Long pic symbol difference calls are only used with
-   the HP SOM linker.  Currently, only the HP assembler supports these
-   calls.  GAS doesn't allow an arbitrary difference of two symbols.  */
-#define TARGET_LONG_PIC_SDIFF_CALL (!TARGET_GAS)
+/* Define to a C expression evaluating to true to use long PIC symbol
+   difference calls.  Long PIC symbol difference calls are only used with
+   the HP assembler and linker.  The HP assembler detects this instruction
+   sequence and treats it as long pc-relative call.  Currently, GAS only
+   allows a difference of two symbols in the same subspace, and it doesn't
+   detect the sequence as a pc-relative call.  */
+#define TARGET_LONG_PIC_SDIFF_CALL (!TARGET_GAS && TARGET_HPUX)
 
-/* Define to a C expression evaluating to true to use long pic
-   pc-relative calls.  Long pic pc-relative calls are only used with
-   GAS.  Currently, they are usable for calls within a module but
-   not for external calls.  */
+/* Define to a C expression evaluating to true to use long PIC
+   pc-relative calls.  Long PIC pc-relative calls are only used with
+   GAS.  Currently, they are usable for calls which bind local to a
+   module but not for external calls.  */
 #define TARGET_LONG_PIC_PCREL_CALL 0
 
 /* Define to a C expression evaluating to true to use SOM secondary
@@ -365,13 +366,13 @@ typedef struct machine_function GTY(())
 
 /* Value should be nonzero if functions must have frame pointers.  */
 #define FRAME_POINTER_REQUIRED \
-  (current_function_calls_alloca)
+  (cfun->calls_alloca)
 
 /* Don't allow hard registers to be renamed into r2 unless r2
    is already live or already being saved (due to eh).  */
 
 #define HARD_REGNO_RENAME_OK(OLD_REG, NEW_REG) \
-  ((NEW_REG) != 2 || df_regs_ever_live_p (2) || current_function_calls_eh_return)
+  ((NEW_REG) != 2 || df_regs_ever_live_p (2) || crtl->calls_eh_return)
 
 /* C statement to store the difference between the frame pointer
    and the stack pointer values immediately after the function prologue.
@@ -548,7 +549,7 @@ extern struct rtx_def *hppa_pic_save_rtx (void);
 
 /* Define this if the above stack space is to be considered part of the
    space allocated by the caller.  */
-#define OUTGOING_REG_PARM_STACK_SPACE 1
+#define OUTGOING_REG_PARM_STACK_SPACE(FNTYPE) 1
 
 /* Keep the stack pointer constant throughout the function.
    This is both an optimization and a necessity: longjmp
@@ -565,12 +566,12 @@ extern struct rtx_def *hppa_pic_save_rtx (void);
    marker, although the runtime documentation only describes a 16
    byte marker.  For compatibility, we allocate 48 bytes.  */
 #define STACK_POINTER_OFFSET \
-  (TARGET_64BIT ? -(current_function_outgoing_args_size + 48): -32)
+  (TARGET_64BIT ? -(crtl->outgoing_args_size + 48): -32)
 
 #define STACK_DYNAMIC_OFFSET(FNDECL)	\
   (TARGET_64BIT				\
    ? (STACK_POINTER_OFFSET)		\
-   : ((STACK_POINTER_OFFSET) - current_function_outgoing_args_size))
+   : ((STACK_POINTER_OFFSET) - crtl->outgoing_args_size))
 
 /* Value is 1 if returning from a function call automatically
    pops the arguments described by the number-of-args field in the call.
@@ -790,7 +791,7 @@ extern int may_call_alloca;
 
 #define EXIT_IGNORE_STACK	\
  (get_frame_size () != 0	\
-  || current_function_calls_alloca || current_function_outgoing_args_size)
+  || cfun->calls_alloca || crtl->outgoing_args_size)
 
 /* Output assembler code for a block containing the constant parts
    of a trampoline, leaving space for the variable parts.\
@@ -920,8 +921,8 @@ extern int may_call_alloca;
       emit_insn (gen_andsi3 (end_addr, tmp,				\
 			     GEN_INT (-MIN_CACHELINE_SIZE)));		\
       emit_move_insn (line_length, GEN_INT (MIN_CACHELINE_SIZE));	\
-      emit_insn (gen_dcacheflush (start_addr, end_addr, line_length));	\
-      emit_insn (gen_icacheflush (start_addr, end_addr, line_length,	\
+      emit_insn (gen_dcacheflushsi (start_addr, end_addr, line_length));\
+      emit_insn (gen_icacheflushsi (start_addr, end_addr, line_length,	\
 				  gen_reg_rtx (Pmode),			\
 				  gen_reg_rtx (Pmode)));		\
     }									\
@@ -952,8 +953,8 @@ extern int may_call_alloca;
       emit_insn (gen_anddi3 (end_addr, tmp,				\
 			     GEN_INT (-MIN_CACHELINE_SIZE)));		\
       emit_move_insn (line_length, GEN_INT (MIN_CACHELINE_SIZE));	\
-      emit_insn (gen_dcacheflush (start_addr, end_addr, line_length));	\
-      emit_insn (gen_icacheflush (start_addr, end_addr, line_length,	\
+      emit_insn (gen_dcacheflushdi (start_addr, end_addr, line_length));\
+      emit_insn (gen_icacheflushdi (start_addr, end_addr, line_length,	\
 				  gen_reg_rtx (Pmode),			\
 				  gen_reg_rtx (Pmode)));		\
     }									\
@@ -1376,7 +1377,7 @@ extern int may_call_alloca;
 #define LEGITIMIZE_RELOAD_ADDRESS(AD, MODE, OPNUM, TYPE, IND, WIN) 	\
 do { 									\
   long offset, newoffset, mask;						\
-  rtx new, temp = NULL_RTX;						\
+  rtx new_rtx, temp = NULL_RTX;						\
 									\
   mask = (GET_MODE_CLASS (MODE) == MODE_FLOAT				\
 	  ? (INT14_OK_STRICT ? 0x3fff : 0x1f) : 0x3fff);		\
@@ -1385,14 +1386,14 @@ do { 									\
     temp = simplify_binary_operation (PLUS, Pmode,			\
 				      XEXP (AD, 0), XEXP (AD, 1));	\
 									\
-  new = temp ? temp : AD;						\
+  new_rtx = temp ? temp : AD;						\
 									\
   if (optimize								\
-      && GET_CODE (new) == PLUS						\
-      && GET_CODE (XEXP (new, 0)) == REG				\
-      && GET_CODE (XEXP (new, 1)) == CONST_INT)				\
+      && GET_CODE (new_rtx) == PLUS						\
+      && GET_CODE (XEXP (new_rtx, 0)) == REG				\
+      && GET_CODE (XEXP (new_rtx, 1)) == CONST_INT)				\
     {									\
-      offset = INTVAL (XEXP ((new), 1));				\
+      offset = INTVAL (XEXP ((new_rtx), 1));				\
 									\
       /* Choose rounding direction.  Round up if we are >= halfway.  */	\
       if ((offset & mask) >= ((mask + 1) / 2))				\
@@ -1408,7 +1409,7 @@ do { 									\
 									\
       if (newoffset != 0 && VAL_14_BITS_P (newoffset))			\
 	{								\
-	  temp = gen_rtx_PLUS (Pmode, XEXP (new, 0),			\
+	  temp = gen_rtx_PLUS (Pmode, XEXP (new_rtx, 0),			\
 			       GEN_INT (newoffset));			\
 	  AD = gen_rtx_PLUS (Pmode, temp, GEN_INT (offset - newoffset));\
 	  push_reload (XEXP (AD, 0), 0, &XEXP (AD, 0), 0,		\
@@ -1505,7 +1506,7 @@ do { 									\
    arguments passed in registers to avoid infinite recursion during argument
    setup for a function call.  Why?  Consider how we copy the stack slots
    reserved for parameters when they may be trashed by a call.  */
-#define MOVE_RATIO (TARGET_64BIT ? 8 : 4)
+#define MOVE_RATIO(speed) (TARGET_64BIT ? 8 : 4)
 
 /* Define if operations between registers always perform the operation
    on the full register even if a narrower mode is specified.  */
@@ -1569,7 +1570,7 @@ do { 									\
   : 2)
 
 /* Adjust the cost of branches.  */
-#define BRANCH_COST (pa_cpu == PROCESSOR_8000 ? 2 : 1)
+#define BRANCH_COST(speed_p, predictable_p) (pa_cpu == PROCESSOR_8000 ? 2 : 1)
 
 /* Handling the special cases is going to get too complicated for a macro,
    just call `pa_adjust_insn_length' to do the real work.  */

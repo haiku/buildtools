@@ -1,5 +1,6 @@
 /* General-purpose hooks.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -44,7 +45,7 @@ extern bool hook_bool_const_tree_hwi_hwi_const_tree_true (const_tree,
 							  const_tree);
 extern bool hook_bool_rtx_false (rtx);
 extern bool hook_bool_uintp_uintp_false (unsigned int *, unsigned int *);
-extern bool hook_bool_rtx_int_int_intp_false (rtx, int, int, int *);
+extern bool hook_bool_rtx_int_int_intp_bool_false (rtx, int, int, int *, bool);
 extern bool hook_bool_constcharptr_size_t_false (const char *, size_t);
 extern bool hook_bool_size_t_constcharptr_int_true (size_t, const char *, int);
 extern bool hook_bool_tree_tree_false (tree, tree);
@@ -59,10 +60,12 @@ extern void hook_void_tree_treeptr (tree, tree *);
 extern int hook_int_const_tree_0 (const_tree);
 extern int hook_int_const_tree_const_tree_1 (const_tree, const_tree);
 extern int hook_int_rtx_0 (rtx);
+extern int hook_int_rtx_bool_0 (rtx, bool);
 extern int hook_int_size_t_constcharptr_int_0 (size_t, const char *, int);
 extern int hook_int_void_no_regs (void);
 
 extern tree hook_tree_tree_tree_null (tree, tree);
+extern tree hook_tree_tree_tree_tree_null (tree, tree, tree);
 extern tree hook_tree_tree_tree_tree_3rd_identity (tree, tree, tree);
 extern tree hook_tree_tree_tree_bool_null (tree, tree, bool);
 

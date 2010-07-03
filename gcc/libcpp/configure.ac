@@ -119,7 +119,7 @@ case $target in
 	arm*-*-symbianelf* | \
 	x86_64-*-* | \
 	ia64-*-* | \
-	hppa*64*-*-* | parisc*64*-*-* | \
+	hppa*64*-*-* | \
 	i[34567]86-*-darwin* | \
 	i[34567]86-*-solaris2.1[0-9]* | \
 	mips*-*-* | \
@@ -127,11 +127,9 @@ case $target in
 	powerpc*-*-* | \
 	rs6000*-*-* | \
 	s390*-*-* | \
-	sparc64*-*-* | ultrasparc-*-freebsd* | \
-	sparcv9-*-solaris2* | \
-	sparc-*-solaris2.[789] | sparc-*-solaris2.1[0-9]* | \
+	sparc*-*-* | \
 	spu-*-* | \
-	sh[123456789l]*-*-*)
+	sh[123456789lbe]*-*-* | sh-*-*)
 		need_64bit_hwint=yes ;;
 	i[34567]86-*-linux*)
 		if test "x$enable_targets" = xall; then

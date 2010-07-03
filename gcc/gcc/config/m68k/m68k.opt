@@ -1,6 +1,6 @@
 ; Options for the Motorola 68000 port of the compiler.
 
-; Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+; Copyright (C) 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
 ;
@@ -178,3 +178,7 @@ Do not use unaligned memory references
 mtune=
 Target RejectNegative Joined
 Tune for the specified target CPU or architecture
+
+mxgot
+Target Report Mask(XGOT)
+Support more than 8192 GOT entries on ColdFire

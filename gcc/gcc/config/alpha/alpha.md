@@ -1,6 +1,7 @@
 ;; Machine description for DEC Alpha for GNU C compiler
 ;; Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-;; 2000, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+;; 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 ;;
 ;; This file is part of GCC.
@@ -255,16 +256,7 @@
 	(sign_extend:DI (match_dup 1)))]
   "")
 
-;; Don't say we have addsi3 if optimizing.  This generates better code.  We
-;; have the anonymous addsi3 pattern below in case combine wants to make it.
-(define_expand "addsi3"
-  [(set (match_operand:SI 0 "register_operand" "")
-	(plus:SI (match_operand:SI 1 "reg_or_0_operand" "")
-		 (match_operand:SI 2 "add_operand" "")))]
-  "! optimize"
-  "")
-
-(define_insn "*addsi_internal"
+(define_insn "addsi3"
   [(set (match_operand:SI 0 "register_operand" "=r,r,r,r")
 	(plus:SI (match_operand:SI 1 "reg_or_0_operand" "%rJ,rJ,rJ,rJ")
 		 (match_operand:SI 2 "add_operand" "rI,O,K,L")))]
@@ -474,11 +466,11 @@
    && INTVAL (operands[2])
 	< (0x7fff8000
 	   - FIRST_PSEUDO_REGISTER * UNITS_PER_WORD
-	   - ALPHA_ROUND(current_function_outgoing_args_size)
+	   - ALPHA_ROUND(crtl->outgoing_args_size)
 	   - (ALPHA_ROUND (get_frame_size ()
 			   + max_reg_num () * UNITS_PER_WORD
-			   + current_function_pretend_args_size)
-	      - current_function_pretend_args_size))"
+			   + crtl->args.pretend_args_size)
+	      - crtl->args.pretend_args_size))"
   "@
    lda %0,%2(%1)
    ldah %0,%h2(%1)
@@ -618,14 +610,7 @@
   ""
   "subqv $31,%1,%0")
 
-(define_expand "subsi3"
-  [(set (match_operand:SI 0 "register_operand" "")
-	(minus:SI (match_operand:SI 1 "reg_or_0_operand" "")
-		  (match_operand:SI 2 "reg_or_8bit_operand" "")))]
-  "! optimize"
-  "")
-
-(define_insn "*subsi_internal"
+(define_insn "subsi3"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(minus:SI (match_operand:SI 1 "reg_or_0_operand" "rJ")
 		  (match_operand:SI 2 "reg_or_8bit_operand" "rI")))]
@@ -3715,19 +3700,7 @@
 	(match_operator:DF 1 "alpha_fp_comparison_operator"
 			   [(match_operand:DF 2 "reg_or_0_operand" "fG")
 			    (match_operand:DF 3 "reg_or_0_operand" "fG")]))]
-  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
-  "cmp%-%C1%/ %R2,%R3,%0"
-  [(set_attr "type" "fadd")
-   (set_attr "trap" "yes")
-   (set_attr "trap_suffix" "su")])
-
-(define_insn "*cmpdf_ieee_ext1"
-  [(set (match_operand:DF 0 "register_operand" "=&f")
-	(match_operator:DF 1 "alpha_fp_comparison_operator"
-			   [(float_extend:DF
-			     (match_operand:SF 2 "reg_or_0_operand" "fG"))
-			    (match_operand:DF 3 "reg_or_0_operand" "fG")]))]
-  "TARGET_FP && alpha_fptm >= ALPHA_FPTM_SU"
+  "TARGET_FP"
   "cmp%-%C1%/ %R2,%R3,%0"
   [(set_attr "type" "fadd")
    (set_attr "trap" "yes")
@@ -3745,18 +3718,6 @@
    (set_attr "trap" "yes")
    (set_attr "trap_suffix" "su")])
 
-(define_insn "*cmpdf_ieee_ext2"
-  [(set (match_operand:DF 0 "register_operand" "=&f")
-	(match_operator:DF 1 "alpha_fp_comparison_operator"
-			   [(match_operand:DF 2 "reg_or_0_operand" "fG")
-			    (float_extend:DF
-			     (match_operand:SF 3 "reg_or_0_operand" "fG"))]))]
-  "TARGET_FP && alpha_fptm >= ALPHA_FPTM_SU"
-  "cmp%-%C1%/ %R2,%R3,%0"
-  [(set_attr "type" "fadd")
-   (set_attr "trap" "yes")
-   (set_attr "trap_suffix" "su")])
-
 (define_insn "*cmpdf_ext2"
   [(set (match_operand:DF 0 "register_operand" "=f")
 	(match_operator:DF 1 "alpha_fp_comparison_operator"
@@ -3764,19 +3725,6 @@
 			    (float_extend:DF
 			     (match_operand:SF 3 "reg_or_0_operand" "fG"))]))]
   "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
-  "cmp%-%C1%/ %R2,%R3,%0"
-  [(set_attr "type" "fadd")
-   (set_attr "trap" "yes")
-   (set_attr "trap_suffix" "su")])
-
-(define_insn "*cmpdf_ieee_ext3"
-  [(set (match_operand:DF 0 "register_operand" "=&f")
-	(match_operator:DF 1 "alpha_fp_comparison_operator"
-			   [(float_extend:DF
-			     (match_operand:SF 2 "reg_or_0_operand" "fG"))
-			    (float_extend:DF
-			     (match_operand:SF 3 "reg_or_0_operand" "fG"))]))]
-  "TARGET_FP && alpha_fptm >= ALPHA_FPTM_SU"
   "cmp%-%C1%/ %R2,%R3,%0"
   [(set_attr "type" "fadd")
    (set_attr "trap" "yes")
@@ -3831,7 +3779,7 @@
 			  (match_operand:DF 2 "const0_operand" "G,G")])
 	 (float_extend:DF (match_operand:SF 1 "reg_or_0_operand" "fG,0"))
 	 (match_operand:DF 5 "reg_or_0_operand" "0,fG")))]
-  "TARGET_FP"
+  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
   "@
    fcmov%C3 %R4,%R1,%0
    fcmov%D3 %R4,%R5,%0"
@@ -3846,7 +3794,7 @@
 			  (match_operand:DF 2 "const0_operand" "G,G")])
 	 (match_operand:DF 1 "reg_or_0_operand" "fG,0")
 	 (match_operand:DF 5 "reg_or_0_operand" "0,fG")))]
-  "TARGET_FP"
+  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
   "@
    fcmov%C3 %R4,%R1,%0
    fcmov%D3 %R4,%R5,%0"
@@ -3861,7 +3809,7 @@
 			  (match_operand:DF 2 "const0_operand" "G,G")])
 	 (match_operand:SF 1 "reg_or_0_operand" "fG,0")
 	 (match_operand:SF 5 "reg_or_0_operand" "0,fG")))]
-  "TARGET_FP"
+  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
   "@
    fcmov%C3 %R4,%R1,%0
    fcmov%D3 %R4,%R5,%0"
@@ -3876,7 +3824,7 @@
 			  (match_operand:DF 2 "const0_operand" "G,G")])
 	 (float_extend:DF (match_operand:SF 1 "reg_or_0_operand" "fG,0"))
 	 (match_operand:DF 5 "reg_or_0_operand" "0,fG")))]
-  "TARGET_FP"
+  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
   "@
    fcmov%C3 %R4,%R1,%0
    fcmov%D3 %R4,%R5,%0"
@@ -3915,7 +3863,7 @@
    (set (match_operand:SF 0 "register_operand" "")
 	(if_then_else:SF (eq (match_dup 3) (match_dup 4))
 			 (match_dup 1) (match_dup 2)))]
-  "TARGET_FP"
+  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
 {
   operands[3] = gen_reg_rtx (DFmode);
   operands[4] = CONST0_RTX (DFmode);
@@ -3928,7 +3876,7 @@
    (set (match_operand:SF 0 "register_operand" "")
 	(if_then_else:SF (ne (match_dup 3) (match_dup 4))
 		      (match_dup 1) (match_dup 2)))]
-  "TARGET_FP"
+  "TARGET_FP && alpha_fptm < ALPHA_FPTM_SU"
 {
   operands[3] = gen_reg_rtx (DFmode);
   operands[4] = CONST0_RTX (DFmode);
@@ -4391,20 +4339,22 @@
 		   (match_operand:SI 3 "const48_operand" "I")
 		   (const_int 0))
 	         (match_operand:SI 4 "sext_add_operand" "rIO")))
-   (clobber (match_scratch:SI 5 "=r"))]
+   (clobber (match_scratch:DI 5 "=r"))]
   ""
   "#"
   ""
   [(set (match_dup 5)
-	(match_op_dup:SI 1 [(match_dup 2) (const_int 0)]))
+	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(plus:SI (mult:SI (match_dup 5) (match_dup 3))
+	(plus:SI (mult:SI (match_dup 6) (match_dup 3))
 		 (match_dup 4)))]
 {
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
-    operands[5] = operands[0];
+    operands[5] = gen_lowpart (DImode, operands[0]);
+
+  operands[6] = gen_lowpart (SImode, operands[5]);
 })
 
 (define_insn_and_split "*cmp_sadd_sidi"
@@ -4417,20 +4367,22 @@
 		     (match_operand:SI 3 "const48_operand" "I")
 		     (const_int 0))
 	           (match_operand:SI 4 "sext_add_operand" "rIO"))))
-   (clobber (match_scratch:SI 5 "=r"))]
+   (clobber (match_scratch:DI 5 "=r"))]
   ""
   "#"
   ""
   [(set (match_dup 5)
-	(match_op_dup:SI 1 [(match_dup 2) (const_int 0)]))
+	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(sign_extend:DI (plus:SI (mult:SI (match_dup 5) (match_dup 3))
+	(sign_extend:DI (plus:SI (mult:SI (match_dup 6) (match_dup 3))
 				 (match_dup 4))))]
 {
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
     operands[5] = operands[0];
+
+  operands[6] = gen_lowpart (SImode, operands[5]);
 })
 
 (define_insn_and_split "*cmp_ssub_di"
@@ -4467,20 +4419,22 @@
 		    (match_operand:SI 3 "const48_operand" "I")
 		    (const_int 0))
 	          (match_operand:SI 4 "reg_or_8bit_operand" "rI")))
-   (clobber (match_scratch:SI 5 "=r"))]
+   (clobber (match_scratch:DI 5 "=r"))]
   ""
   "#"
   ""
   [(set (match_dup 5)
-	(match_op_dup:SI 1 [(match_dup 2) (const_int 0)]))
+	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(minus:SI (mult:SI (match_dup 5) (match_dup 3))
+	(minus:SI (mult:SI (match_dup 6) (match_dup 3))
 		 (match_dup 4)))]
 {
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
-    operands[5] = operands[0];
+    operands[5] = gen_lowpart (DImode, operands[0]);
+
+  operands[6] = gen_lowpart (SImode, operands[5]);
 })
 
 (define_insn_and_split "*cmp_ssub_sidi"
@@ -4493,20 +4447,22 @@
 		      (match_operand:SI 3 "const48_operand" "I")
 		      (const_int 0))
 	            (match_operand:SI 4 "reg_or_8bit_operand" "rI"))))
-   (clobber (match_scratch:SI 5 "=r"))]
+   (clobber (match_scratch:DI 5 "=r"))]
   ""
   "#"
   ""
   [(set (match_dup 5)
-	(match_op_dup:SI 1 [(match_dup 2) (const_int 0)]))
+	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(sign_extend:DI (minus:SI (mult:SI (match_dup 5) (match_dup 3))
+	(sign_extend:DI (minus:SI (mult:SI (match_dup 6) (match_dup 3))
 				  (match_dup 4))))]
 {
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
     operands[5] = operands[0];
+
+  operands[6] = gen_lowpart (SImode, operands[5]);
 })
 
 ;; Here are the CALL and unconditional branch insns.  Calls on NT and OSF
@@ -6051,7 +6007,7 @@
 	(mem:DI (and:DI (match_operand:DI 0 "address_operand" "")
 			(const_int -8))))
    (set (match_operand:DI 2 "register_operand" "")
-	(plus:DI (match_dup 0) (const_int 1)))
+	(plus:DI (match_dup 5) (const_int 1)))
    (set (match_dup 3)
 	(and:DI (not:DI (ashift:DI
 			  (const_int 65535)
@@ -6066,7 +6022,7 @@
    (set (mem:DI (and:DI (match_dup 0) (const_int -8)))
 	(match_dup 4))]
   "WORDS_BIG_ENDIAN"
-  "")
+  "operands[5] = force_reg (DImode, operands[0]);")
 
 ;; Here are the define_expand's for QI and HI moves that use the above
 ;; patterns.  We have the normal sets, plus the ones that need scratch
@@ -6948,8 +6904,8 @@
   emit_move_insn (hard_frame_pointer_rtx, fp);
   emit_move_insn (pv, lab);
   emit_stack_restore (SAVE_NONLOCAL, stack, NULL_RTX);
-  emit_insn (gen_rtx_USE (VOIDmode, hard_frame_pointer_rtx));
-  emit_insn (gen_rtx_USE (VOIDmode, stack_pointer_rtx));
+  emit_use (hard_frame_pointer_rtx);
+  emit_use (stack_pointer_rtx);
 
   /* Load the label we are jumping through into $27 so that we know
      where to look for it when we get back to setjmp's function for

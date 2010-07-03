@@ -1,6 +1,6 @@
 /* Define control and data flow tables, and regsets.
    Copyright (C) 1987, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007 Free Software Foundation, Inc.
+   2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -106,6 +106,11 @@ typedef bitmap_iterator reg_set_iterator;
 #define EXECUTE_IF_AND_IN_REG_SET(REGSET1, REGSET2, MIN, REGNUM, RSI) \
   EXECUTE_IF_AND_IN_BITMAP (REGSET1, REGSET2, MIN, REGNUM, RSI)	\
 
+/* Same information as REGS_INVALIDATED_BY_CALL but in regset form to be used
+   in dataflow more conveniently.  */
+
+extern regset regs_invalidated_by_call_regset;
+
 /* Type we use to hold basic block counters.  Should be at least
    64bit.  Although a counter cannot be negative, we use a signed
    type, because erroneous negative counts can be generated when the
@@ -122,15 +127,16 @@ struct edge_def GTY(())
 
   /* Instructions queued on the edge.  */
   union edge_def_insns {
-    tree GTY ((tag ("true"))) t;
+    gimple_seq GTY ((tag ("true"))) g;
     rtx GTY ((tag ("false"))) r;
   } GTY ((desc ("current_ir_type () == IR_GIMPLE"))) insns;
 
   /* Auxiliary info specific to a pass.  */
   PTR GTY ((skip (""))) aux;
 
-  /* Location of any goto implicit in the edge, during tree-ssa.  */
-  source_locus goto_locus;
+  /* Location of any goto implicit in the edge and associated BLOCK.  */
+  tree goto_block;
+  location_t goto_locus;
 
   /* The index number corresponding to this edge in the edge vector
      dest->preds.  */
@@ -231,7 +237,7 @@ struct basic_block_def GTY((chain_next ("%h.next_bb"), chain_prev ("%h.prev_bb")
   struct basic_block_def *next_bb;
 
   union basic_block_il_dependent {
-      struct tree_bb_info * GTY ((tag ("0"))) tree;
+      struct gimple_bb_info * GTY ((tag ("0"))) gimple;
       struct rtl_bb_info * GTY ((tag ("1"))) rtl;
     } GTY ((desc ("((%1.flags & BB_RTL) != 0)"))) il;
 
@@ -266,13 +272,13 @@ struct rtl_bb_info GTY(())
   int visited;
 };
 
-struct tree_bb_info GTY(())
+struct gimple_bb_info GTY(())
 {
-  /* Pointers to the first and last trees of the block.  */
-  tree stmt_list;
+  /* Sequence of statements in this block.  */
+  gimple_seq seq;
 
-  /* Chain of PHI nodes for this block.  */
-  tree phi_nodes;
+  /* PHI nodes for this block.  */
+  gimple_seq phi_nodes;
 };
 
 typedef struct basic_block_def *basic_block;
@@ -383,7 +389,7 @@ struct control_flow_graph GTY(())
   int x_last_basic_block;
 
   /* Mapping of labels to their associated blocks.  At present
-     only used for the tree CFG.  */
+     only used for the gimple CFG.  */
   VEC(basic_block,gc) *x_label_to_block_map;
 
   enum profile_status {
@@ -397,6 +403,13 @@ struct control_flow_graph GTY(())
 
   /* Number of basic blocks in the dominance tree.  */
   unsigned x_n_bbs_in_dom_tree[2];
+
+  /* Maximal number of entities in the single jumptable.  Used to estimate
+     final flowgraph size.  */
+  int max_jumptable_ents;
+
+  /* UIDs for LABEL_DECLs.  */
+  int last_label_uid;
 };
 
 /* Defines for accessing the fields of the CFG structure for function FN.  */
@@ -407,9 +420,12 @@ struct control_flow_graph GTY(())
 #define n_edges_for_function(FN)	     ((FN)->cfg->x_n_edges)
 #define last_basic_block_for_function(FN)    ((FN)->cfg->x_last_basic_block)
 #define label_to_block_map_for_function(FN)  ((FN)->cfg->x_label_to_block_map)
+#define profile_status_for_function(FN)	     ((FN)->cfg->x_profile_status)
 
 #define BASIC_BLOCK_FOR_FUNCTION(FN,N) \
   (VEC_index (basic_block, basic_block_info_for_function(FN), (N)))
+#define SET_BASIC_BLOCK_FOR_FUNCTION(FN,N,BB) \
+  (VEC_replace (basic_block, basic_block_info_for_function(FN), (N), (BB)))
 
 /* Defines for textual backward source compatibility.  */
 #define ENTRY_BLOCK_PTR		(cfun->cfg->x_entry_block_ptr)
@@ -519,6 +535,7 @@ extern int dfs_enumerate_from (basic_block, int,
 			       bool (*)(const_basic_block, const void *),
 			       basic_block *, int, const void *);
 extern void compute_dominance_frontiers (bitmap *);
+extern bitmap compute_idf (bitmap, bitmap *);
 extern void dump_bb_info (basic_block, bool, bool, int, const char *, FILE *);
 extern void dump_edge_info (FILE *, edge, int);
 extern void brief_dump_cfg (FILE *);
@@ -805,17 +822,6 @@ edge find_edge (basic_block, basic_block);
 					   insns.  */
 #define CLEANUP_CFGLAYOUT	32	/* Do cleanup in cfglayout mode.  */
 
-/* The following are ORed in on top of the CLEANUP* flags in calls to
-   struct_equiv_block_eq.  */
-#define STRUCT_EQUIV_START	64	 /* Initializes the search range.  */
-#define STRUCT_EQUIV_RERUN	128	/* Rerun to find register use in
-					   found equivalence.  */
-#define STRUCT_EQUIV_FINAL	256	/* Make any changes necessary to get
-					   actual equivalence.  */
-#define STRUCT_EQUIV_NEED_FULL_BLOCK 512 /* struct_equiv_block_eq is required
-					     to match only full blocks  */
-#define STRUCT_EQUIV_MATCH_JUMPS 1024	/* Also include the jumps at the end of the block in the comparison.  */
-
 /* In lcm.c */
 extern struct edge_list *pre_edge_lcm (int, sbitmap *, sbitmap *,
 				       sbitmap *, sbitmap *, sbitmap **,
@@ -828,22 +834,33 @@ extern void compute_available (sbitmap *, sbitmap *, sbitmap *, sbitmap *);
 
 /* In predict.c */
 extern bool maybe_hot_bb_p (const_basic_block);
-extern bool probably_cold_bb_p (const_basic_block);
+extern bool maybe_hot_edge_p (edge);
 extern bool probably_never_executed_bb_p (const_basic_block);
-extern bool tree_predicted_by_p (const_basic_block, enum br_predictor);
+extern bool optimize_bb_for_size_p (const_basic_block);
+extern bool optimize_bb_for_speed_p (const_basic_block);
+extern bool optimize_edge_for_size_p (edge);
+extern bool optimize_edge_for_speed_p (edge);
+extern bool optimize_function_for_size_p (struct function *);
+extern bool optimize_function_for_speed_p (struct function *);
+extern bool optimize_loop_for_size_p (struct loop *);
+extern bool optimize_loop_for_speed_p (struct loop *);
+extern bool optimize_loop_nest_for_size_p (struct loop *);
+extern bool optimize_loop_nest_for_speed_p (struct loop *);
+extern bool gimple_predicted_by_p (const_basic_block, enum br_predictor);
 extern bool rtl_predicted_by_p (const_basic_block, enum br_predictor);
-extern void tree_predict_edge (edge, enum br_predictor, int);
+extern void gimple_predict_edge (edge, enum br_predictor, int);
 extern void rtl_predict_edge (edge, enum br_predictor, int);
 extern void predict_edge_def (edge, enum br_predictor, enum prediction);
 extern void guess_outgoing_edge_probabilities (basic_block);
 extern void remove_predictions_associated_with_edge (edge);
 extern bool edge_probability_reliable_p (const_edge);
 extern bool br_prob_note_reliable_p (const_rtx);
+extern bool predictable_edge_p (edge);
 
 /* In cfg.c  */
 extern void dump_regset (regset, FILE *);
 extern void debug_regset (regset);
-extern void init_flow (void);
+extern void init_flow (struct function *);
 extern void debug_bb (basic_block);
 extern basic_block debug_bb_n (int);
 extern void dump_regset (regset, FILE *);
@@ -955,171 +972,6 @@ extern rtx insert_insn_end_bb_new (rtx, basic_block);
 
 #include "cfghooks.h"
 
-/* In struct-equiv.c */
-
-/* Constants used to size arrays in struct equiv_info (currently only one).
-   When these limits are exceeded, struct_equiv returns zero.
-   The maximum number of pseudo registers that are different in the two blocks,
-   but appear in equivalent places and are dead at the end (or where one of
-   a pair is dead at the end).  */
-#define STRUCT_EQUIV_MAX_LOCAL 16
-/* The maximum number of references to an input register that struct_equiv
-   can handle.  */
-
-/* Structure used to track state during struct_equiv that can be rolled
-   back when we find we can't match an insn, or if we want to match part
-   of it in a different way.
-   This information pertains to the pair of partial blocks that has been
-   matched so far.  Since this pair is structurally equivalent, this is
-   conceptually just one partial block expressed in two potentially
-   different ways.  */
-struct struct_equiv_checkpoint
-{
-  int ninsns;       /* Insns are matched so far.  */
-  int local_count;  /* Number of block-local registers.  */
-  int input_count;  /* Number of inputs to the block.  */
-
-  /* X_START and Y_START are the first insns (in insn stream order)
-     of the partial blocks that have been considered for matching so far.
-     Since we are scanning backwards, they are also the instructions that
-     are currently considered - or the last ones that have been considered -
-     for matching (Unless we tracked back to these because a preceding
-     instruction failed to match).  */
-  rtx x_start, y_start;
-
-  /*  INPUT_VALID indicates if we have actually set up X_INPUT / Y_INPUT
-      during the current pass; we keep X_INPUT / Y_INPUT around between passes
-      so that we can match REG_EQUAL / REG_EQUIV notes referring to these.  */
-  bool input_valid;
-
-  /* Some information would be expensive to exactly checkpoint, so we
-     merely increment VERSION any time information about local
-     registers, inputs and/or register liveness changes.  When backtracking,
-     it is decremented for changes that can be undone, and if a discrepancy
-     remains, NEED_RERUN in the relevant struct equiv_info is set to indicate
-     that a new pass should be made over the entire block match to get
-     accurate register information.  */
-  int version;
-};
-
-/* A struct equiv_info is used to pass information to struct_equiv and
-   to gather state while two basic blocks are checked for structural
-   equivalence.  */
-
-struct equiv_info
-{
-  /* Fields set up by the caller to struct_equiv_block_eq */
-
-  basic_block x_block, y_block;  /* The two blocks being matched.  */
-
-  /* MODE carries the mode bits from cleanup_cfg if we are called from
-     try_crossjump_to_edge, and additionally it carries the
-     STRUCT_EQUIV_* bits described above.  */
-  int mode;
-
-  /* INPUT_COST is the cost that adding an extra input to the matched blocks
-     is supposed to have, and is taken into account when considering if the
-     matched sequence should be extended backwards.  input_cost < 0 means
-     don't accept any inputs at all.  */
-  int input_cost;
-
-
-  /* Fields to track state inside of struct_equiv_block_eq.  Some of these
-     are also outputs.  */
-
-  /* X_INPUT and Y_INPUT are used by struct_equiv to record a register that
-     is used as an input parameter, i.e. where different registers are used
-     as sources.  This is only used for a register that is live at the end
-     of the blocks, or in some identical code at the end of the blocks;
-     Inputs that are dead at the end go into X_LOCAL / Y_LOCAL.  */
-  rtx x_input, y_input;
-  /* When a previous pass has identified a valid input, INPUT_REG is set
-     by struct_equiv_block_eq, and it is henceforth replaced in X_BLOCK
-     for the input.  */
-  rtx input_reg;
-
-  /* COMMON_LIVE keeps track of the registers which are currently live
-     (as we scan backwards from the end) and have the same numbers in both
-     blocks.  N.B. a register that is in common_live is unsuitable to become
-     a local reg.  */
-  regset common_live;
-  /* Likewise, X_LOCAL_LIVE / Y_LOCAL_LIVE keep track of registers that are
-     local to one of the blocks; these registers must not be accepted as
-     identical when encountered in both blocks.  */
-  regset x_local_live, y_local_live;
-
-  /* EQUIV_USED indicates for which insns a REG_EQUAL or REG_EQUIV note is
-     being used, to avoid having to backtrack in the next pass, so that we
-     get accurate life info for this insn then.  For each such insn,
-     the bit with the number corresponding to the CUR.NINSNS value at the
-     time of scanning is set.  */
-  bitmap equiv_used;
-
-  /* Current state that can be saved & restored easily.  */
-  struct struct_equiv_checkpoint cur;
-  /* BEST_MATCH is used to store the best match so far, weighing the
-     cost of matched insns COSTS_N_INSNS (CUR.NINSNS) against the cost
-     CUR.INPUT_COUNT * INPUT_COST of setting up the inputs.  */
-  struct struct_equiv_checkpoint best_match;
-  /* If a checkpoint restore failed, or an input conflict newly arises,
-     NEED_RERUN is set.  This has to be tested by the caller to re-run
-     the comparison if the match appears otherwise sound.  The state kept in
-     x_start, y_start, equiv_used and check_input_conflict ensures that
-     we won't loop indefinitely.  */
-  bool need_rerun;
-  /* If there is indication of an input conflict at the end,
-     CHECK_INPUT_CONFLICT is set so that we'll check for input conflicts
-     for each insn in the next pass.  This is needed so that we won't discard
-     a partial match if there is a longer match that has to be abandoned due
-     to an input conflict.  */
-  bool check_input_conflict;
-  /* HAD_INPUT_CONFLICT is set if CHECK_INPUT_CONFLICT was already set and we
-     have passed a point where there were multiple dying inputs.  This helps
-     us decide if we should set check_input_conflict for the next pass.  */
-  bool had_input_conflict;
-
-  /* LIVE_UPDATE controls if we want to change any life info at all.  We
-     set it to false during REG_EQUAL / REG_EUQIV note comparison of the final
-     pass so that we don't introduce new registers just for the note; if we
-     can't match the notes without the current register information, we drop
-     them.  */
-  bool live_update;
-
-  /* X_LOCAL and Y_LOCAL are used to gather register numbers of register pairs
-     that are local to X_BLOCK and Y_BLOCK, with CUR.LOCAL_COUNT being the index
-     to the next free entry.  */
-  rtx x_local[STRUCT_EQUIV_MAX_LOCAL], y_local[STRUCT_EQUIV_MAX_LOCAL];
-  /* LOCAL_RVALUE is nonzero if the corresponding X_LOCAL / Y_LOCAL entry
-     was a source operand (including STRICT_LOW_PART) for the last invocation
-     of struct_equiv mentioning it, zero if it was a destination-only operand.
-     Since we are scanning backwards, this means the register is input/local
-     for the (partial) block scanned so far.  */
-  bool local_rvalue[STRUCT_EQUIV_MAX_LOCAL];
-
-
-  /* Additional fields that are computed for the convenience of the caller.  */
-
-  /* DYING_INPUTS is set to the number of local registers that turn out
-     to be inputs to the (possibly partial) block.  */
-  int dying_inputs;
-  /* X_END and Y_END are the last insns in X_BLOCK and Y_BLOCK, respectively,
-     that are being compared.  A final jump insn will not be included.  */
-  rtx x_end, y_end;
-
-  /* If we are matching tablejumps, X_LABEL in X_BLOCK corresponds to
-     Y_LABEL in Y_BLOCK.  */
-  rtx x_label, y_label;
-
-};
-
-extern bool insns_match_p (rtx, rtx, struct equiv_info *);
-extern int struct_equiv_block_eq (int, struct equiv_info *);
-extern bool struct_equiv_init (int, struct equiv_info *);
-extern bool rtx_equiv_p (rtx *, rtx, int, struct equiv_info *);
-
-/* In cfgcleanup.c */
-extern bool condjump_equiv_p (struct equiv_info *, bool);
-
 /* Return true when one of the predecessor edges of BB is marked with EDGE_EH.  */
 static inline bool
 bb_has_eh_pred (basic_block bb)
@@ -1152,6 +1004,11 @@ bb_has_abnormal_pred (basic_block bb)
 
 /* In cfgloopmanip.c.  */
 extern edge mfb_kj_edge;
-bool mfb_keep_just (edge);
+extern bool mfb_keep_just (edge);
+
+/* In cfgexpand.c.  */
+extern void rtl_profile_for_bb (basic_block);
+extern void rtl_profile_for_edge (edge);
+extern void default_rtl_profile (void);
 
 #endif /* GCC_BASIC_BLOCK_H */

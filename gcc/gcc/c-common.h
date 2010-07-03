@@ -1,6 +1,7 @@
 /* Definitions for c-common.c.
    Copyright (C) 1987, 1993, 1994, 1995, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -74,6 +75,10 @@ enum rid
   RID_DFLOAT32, RID_DFLOAT64, RID_DFLOAT128,
   RID_FRACT, RID_ACCUM,
 
+  /* This means to warn that this is a C++ keyword, and then treat it
+     as a normal identifier.  */
+  RID_CXX_COMPAT_WARN,
+
   /* Too many ways of getting the name of a function as a string */
   RID_FUNCTION_NAME, RID_PRETTY_FUNCTION_NAME, RID_C99_FUNCTION_NAME,
 
@@ -85,7 +90,7 @@ enum rid
   RID_NEW,      RID_OFFSETOF, RID_OPERATOR,
   RID_THIS,     RID_THROW,    RID_TRUE,
   RID_TRY,      RID_TYPENAME, RID_TYPEID,
-  RID_USING,
+  RID_USING,    RID_CHAR16,   RID_CHAR32,
 
   /* casts */
   RID_CONSTCAST, RID_DYNCAST, RID_REINTCAST, RID_STATCAST,
@@ -143,6 +148,8 @@ extern GTY ((length ("(int) RID_MAX"))) tree *ridpointers;
 
 enum c_tree_index
 {
+    CTI_CHAR16_TYPE,
+    CTI_CHAR32_TYPE,
     CTI_WCHAR_TYPE,
     CTI_SIGNED_WCHAR_TYPE,
     CTI_UNSIGNED_WCHAR_TYPE,
@@ -155,6 +162,8 @@ enum c_tree_index
     CTI_WIDEST_UINT_LIT_TYPE,
 
     CTI_CHAR_ARRAY_TYPE,
+    CTI_CHAR16_ARRAY_TYPE,
+    CTI_CHAR32_ARRAY_TYPE,
     CTI_WCHAR_ARRAY_TYPE,
     CTI_INT_ARRAY_TYPE,
     CTI_STRING_TYPE,
@@ -180,7 +189,12 @@ enum c_tree_index
     CTI_MAX
 };
 
-#define C_RID_CODE(id)	(((struct c_common_identifier *) (id))->node.rid_code)
+#define C_CPP_HASHNODE(id) \
+  (&(((struct c_common_identifier *) (id))->node))
+#define C_RID_CODE(id) \
+  ((enum rid) (((struct c_common_identifier *) (id))->node.rid_code))
+#define C_SET_RID_CODE(id, code) \
+  (((struct c_common_identifier *) (id))->node.rid_code = (unsigned char) code)
 
 /* Identifier part common to the C front ends.  Inherits from
    tree_identifier, despite appearances.  */
@@ -190,6 +204,38 @@ struct c_common_identifier GTY(())
   struct cpp_hashnode node;
 };
 
+/* An entry in the reserved keyword table.  */
+
+struct c_common_resword
+{
+  const char *const word;
+  ENUM_BITFIELD(rid) const rid : 16;
+  const unsigned int disable   : 16;
+};
+
+/* Disable mask.  Keywords are disabled if (reswords[i].disable &
+   mask) is _true_.  Thus for keywords which are present in all
+   languages the disable field is zero.  */
+
+#define D_CONLY		0x001	/* C only (not in C++).  */
+#define D_CXXONLY	0x002	/* C++ only (not in C).  */
+#define D_C99		0x004	/* In C, C99 only.  */
+#define D_CXX0X         0x008	/* In C++, C++0X only.  */
+#define D_EXT		0x010	/* GCC extension.  */
+#define D_EXT89		0x020	/* GCC extension incorporated in C99.  */
+#define D_ASM		0x040	/* Disabled by -fno-asm.  */
+#define D_OBJC		0x080	/* In Objective C and neither C nor C++.  */
+#define D_CXX_OBJC	0x100	/* In Objective C, and C++, but not C.  */
+#define D_CXXWARN	0x200	/* In C warn with -Wcxx-compat.  */
+
+/* The reserved keyword table.  */
+extern const struct c_common_resword c_common_reswords[];
+
+/* The number of items in the reserved keyword table.  */
+extern const unsigned int num_c_common_reswords;
+
+#define char16_type_node		c_global_trees[CTI_CHAR16_TYPE]
+#define char32_type_node		c_global_trees[CTI_CHAR32_TYPE]
 #define wchar_type_node			c_global_trees[CTI_WCHAR_TYPE]
 #define signed_wchar_type_node		c_global_trees[CTI_SIGNED_WCHAR_TYPE]
 #define unsigned_wchar_type_node	c_global_trees[CTI_UNSIGNED_WCHAR_TYPE]
@@ -206,6 +252,8 @@ struct c_common_identifier GTY(())
 #define truthvalue_false_node		c_global_trees[CTI_TRUTHVALUE_FALSE]
 
 #define char_array_type_node		c_global_trees[CTI_CHAR_ARRAY_TYPE]
+#define char16_array_type_node		c_global_trees[CTI_CHAR16_ARRAY_TYPE]
+#define char32_array_type_node		c_global_trees[CTI_CHAR32_ARRAY_TYPE]
 #define wchar_array_type_node		c_global_trees[CTI_WCHAR_ARRAY_TYPE]
 #define int_array_type_node		c_global_trees[CTI_INT_ARRAY_TYPE]
 #define string_type_node		c_global_trees[CTI_STRING_TYPE]
@@ -253,8 +301,6 @@ extern c_language_kind c_language;
 
 #define c_dialect_cxx()		(c_language & clk_cxx)
 #define c_dialect_objc()	(c_language & clk_objc)
-
-extern bool lang_fortran;
 
 /* Information about a statement tree.  */
 
@@ -311,8 +357,8 @@ extern tree add_stmt (tree);
 extern void push_cleanup (tree, tree, bool);
 extern tree pushdecl_top_level (tree);
 extern tree pushdecl (tree);
-extern tree build_modify_expr (tree, enum tree_code, tree);
-extern tree build_indirect_ref (tree, const char *);
+extern tree build_modify_expr (location_t, tree, enum tree_code, tree);
+extern tree build_indirect_ref (location_t, tree, const char *);
 
 extern int c_expand_decl (tree);
 
@@ -358,8 +404,8 @@ extern char flag_no_line_commands;
 
 extern char flag_no_output;
 
-/* Nonzero means dump macros in some fashion; contains the 'D', 'M' or
-   'N' of the command line switch.  */
+/* Nonzero means dump macros in some fashion; contains the 'D', 'M',
+   'N' or 'U' of the command line switch.  */
 
 extern char flag_dump_macros;
 
@@ -452,11 +498,6 @@ extern int flag_isoc99;
 /* Nonzero means that we have builtin functions, and main is an int.  */
 
 extern int flag_hosted;
-
-/* Warn if main is suspicious.  */
-
-extern int warn_main;
-
 
 /* ObjC language option variables.  */
 
@@ -584,11 +625,6 @@ extern int flag_use_cxa_atexit;
 
 extern int flag_use_cxa_get_exception_ptr;
 
-/* Nonzero means make the default pedwarns warnings instead of errors.
-   The value of this flag is ignored if -pedantic is specified.  */
-
-extern int flag_permissive;
-
 /* Nonzero means to implement standard semantics for exception
    specifications, calling unexpected if an exception is thrown that
    doesn't match the specification.  Zero means to treat them as
@@ -655,7 +691,7 @@ extern tree build_void_list_node (void);
 extern void start_fname_decls (void);
 extern void finish_fname_decls (void);
 extern const char *fname_as_string (int);
-extern tree fname_decl (unsigned, tree);
+extern tree fname_decl (location_t, unsigned, tree);
 
 extern void check_function_arguments (tree, int, tree *, tree);
 extern void check_function_arguments_recurse (void (*)
@@ -663,6 +699,7 @@ extern void check_function_arguments_recurse (void (*)
 					       unsigned HOST_WIDE_INT),
 					      void *, tree,
 					      unsigned HOST_WIDE_INT);
+extern bool check_builtin_function_arguments (tree, int, tree *);
 extern void check_function_format (tree, int, tree *);
 extern void set_Wformat (int);
 extern tree handle_format_attribute (tree *, tree, tree, int, bool *);
@@ -678,18 +715,18 @@ extern tree c_common_signed_type (tree);
 extern tree c_common_signed_or_unsigned_type (int, tree);
 extern tree c_build_bitfield_integer_type (unsigned HOST_WIDE_INT, int);
 extern bool decl_with_nonnull_addr_p (const_tree);
-extern tree c_common_truthvalue_conversion (tree);
+extern tree c_common_truthvalue_conversion (location_t, tree);
 extern void c_apply_type_quals_to_decl (int, tree);
 extern tree c_sizeof_or_alignof_type (tree, bool, int);
 extern tree c_alignof_expr (tree);
 /* Print an error message for invalid operands to arith operation CODE.
    NOP_EXPR is used as a special case (see truthvalue_conversion).  */
-extern void binary_op_error (enum tree_code, tree, tree);
+extern void binary_op_error (location_t, enum tree_code, tree, tree);
 extern tree fix_string_type (tree);
 struct varray_head_tag;
 extern void constant_expression_warning (tree);
+extern void constant_expression_error (tree);
 extern bool strict_aliasing_warning (tree, tree, tree);
-extern void empty_if_body_warning (tree, tree);
 extern void warnings_for_convert_and_check (tree, tree, tree);
 extern tree convert_and_check (tree, tree);
 extern void overflow_warning (tree);
@@ -701,13 +738,15 @@ extern bool same_scalar_type_ignoring_signedness (tree, tree);
 #define c_sizeof(T)  c_sizeof_or_alignof_type (T, true, 1)
 #define c_alignof(T) c_sizeof_or_alignof_type (T, false, 1)
 
+/* Subroutine of build_binary_op, used for certain operations.  */
+extern tree shorten_binary_op (tree result_type, tree op0, tree op1, bool bitwise);
+
 /* Subroutine of build_binary_op, used for comparison operations.
    See if the operands have both been converted from subword integer types
    and, if so, perhaps change them both back to their original type.  */
 extern tree shorten_compare (tree *, tree *, tree *, enum tree_code *);
 
 extern tree pointer_int_sum (enum tree_code, tree, tree);
-extern unsigned int min_precision (tree, int);
 
 /* Add qualifiers to a type, in the fashion for C.  */
 extern tree c_build_qualified_type (tree, int);
@@ -733,7 +772,6 @@ extern alias_set_type c_common_get_alias_set (tree);
 extern void c_register_builtin_type (tree, const char*);
 extern bool c_promoting_integer_type_p (const_tree);
 extern int self_promoting_args_p (const_tree);
-extern tree strip_array_types (tree);
 extern tree strip_pointer_operator (tree);
 extern tree strip_pointer_or_array_types (tree);
 extern HOST_WIDE_INT c_common_to_target_charset (HOST_WIDE_INT);
@@ -761,22 +799,6 @@ extern void finish_file	(void);
 #define COMPOUND_LITERAL_EXPR_DECL(NODE)			\
   DECL_EXPR_DECL (COMPOUND_LITERAL_EXPR_DECL_STMT (NODE))
 
-#define DEFTREECODE(SYM, NAME, TYPE, LENGTH) SYM,
-
-enum c_tree_code {
-  C_DUMMY_TREE_CODE = LAST_AND_UNUSED_TREE_CODE,
-#include "c-common.def"
-  LAST_C_TREE_CODE
-};
-
-#undef DEFTREECODE
-
-extern int anon_aggr_type_p (const_tree);
-
-/* For a VAR_DECL that is an anonymous union, these are the various
-   sub-variables that make up the anonymous union.  */
-#define DECL_ANON_UNION_ELEMS(NODE) DECL_ARGUMENTS ((NODE))
-
 /* In a FIELD_DECL, nonzero if the decl was originally a bitfield.  */
 #define DECL_C_BIT_FIELD(NODE) \
   (DECL_LANG_FLAG_4 (FIELD_DECL_CHECK (NODE)) == 1)
@@ -793,8 +815,8 @@ extern tree build_case_label (tree, tree, tree);
 /* These functions must be defined by each front-end which implements
    a variant of the C language.  They are used in c-common.c.  */
 
-extern tree build_unary_op (enum tree_code, tree, int);
-extern tree build_binary_op (enum tree_code, tree, tree, int);
+extern tree build_unary_op (location_t, enum tree_code, tree, int);
+extern tree build_binary_op (location_t, enum tree_code, tree, tree, int);
 extern tree perform_integral_promotions (tree);
 
 /* These functions must be defined by each front-end which implements
@@ -822,13 +844,14 @@ extern tree build_function_call (tree, tree);
 
 extern tree resolve_overloaded_builtin (tree, tree);
 
-extern tree finish_label_address_expr (tree);
+extern tree finish_label_address_expr (tree, location_t);
 
 /* Same function prototype, but the C and C++ front ends have
    different implementations.  Used in c-common.c.  */
 extern tree lookup_label (tree);
 extern tree lookup_name (tree);
 
+extern bool vector_targets_convertible_p (const_tree t1, const_tree t2);
 extern bool vector_types_convertible_p (const_tree t1, const_tree t2, bool emit_lax_note);
 
 extern rtx c_expand_expr (tree, rtx, enum machine_mode, int, rtx *);
@@ -838,6 +861,7 @@ extern tree c_staticp (tree);
 extern void init_c_lex (void);
 
 extern void c_cpp_builtins (cpp_reader *);
+extern void c_cpp_builtins_optimize_pragma (cpp_reader *, tree, tree);
 
 /* Positive if an implicit `extern "C"' scope has just been entered;
    negative if such a scope has just been exited.  */
@@ -864,7 +888,7 @@ extern void dump_time_statistics (void);
 
 extern bool c_dump_tree (void *, tree);
 
-extern void c_warn_unused_result (tree *);
+extern void c_warn_unused_result (gimple_seq);
 
 extern void verify_sequence_points (tree);
 
@@ -888,15 +912,20 @@ extern int complete_array_type (tree *, tree, bool);
 extern tree builtin_type_for_size (int, bool);
 
 extern void warn_array_subscript_with_type_char (tree);
-extern void warn_about_parentheses (enum tree_code, enum tree_code,
-				    enum tree_code);
+extern void warn_about_parentheses (enum tree_code,
+				    enum tree_code, tree,
+				    enum tree_code, tree);
 extern void warn_for_unused_label (tree label);
-extern void warn_for_div_by_zero (tree divisor);
-
+extern void warn_for_div_by_zero (location_t, tree divisor);
+extern void warn_for_sign_compare (location_t,
+				   tree orig_op0, tree orig_op1, 
+				   tree op0, tree op1, 
+				   tree result_type, 
+				   enum tree_code resultcode);
 
 /* In c-gimplify.c  */
 extern void c_genericize (tree);
-extern int c_gimplify_expr (tree *, tree *, tree *);
+extern int c_gimplify_expr (tree *, gimple_seq *, gimple_seq *);
 extern tree c_build_bind_expr (tree, tree);
 
 /* In c-pch.c  */
@@ -912,6 +941,8 @@ extern void c_common_print_pch_checksum (FILE *f);
 /* In *-checksum.c */
 extern const unsigned char executable_checksum[16];
 
+/* In c-cppbuiltin.c  */
+extern void builtin_define_std (const char *macro);
 extern void builtin_define_with_value (const char *, const char *, int);
 extern void c_stddef_cpp_builtins (void);
 extern void fe_file_change (const struct line_map *);
@@ -993,6 +1024,7 @@ extern tree c_finish_omp_ordered (tree);
 extern void c_finish_omp_barrier (void);
 extern tree c_finish_omp_atomic (enum tree_code, tree, tree);
 extern void c_finish_omp_flush (void);
+extern void c_finish_omp_taskwait (void);
 extern tree c_finish_omp_for (location_t, tree, tree, tree, tree, tree, tree);
 extern void c_split_parallel_clauses (tree, tree *, tree *);
 extern enum omp_clause_default_kind c_omp_predetermined_sharing (tree);
@@ -1000,6 +1032,7 @@ extern enum omp_clause_default_kind c_omp_predetermined_sharing (tree);
 /* Not in c-omp.c; provided by the front end.  */
 extern bool c_omp_sharing_predetermined (tree);
 extern tree c_omp_remap_decl (tree, bool);
+extern void record_types_used_by_current_var_decl (tree);
 
 /* In order for the format checking to accept the C frontend
    diagnostic framework extensions, you must include this file before

@@ -1,5 +1,5 @@
 /* Define builtin-in macros for the C family front ends.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "c-pragma.h"
 #include "output.h"
 #include "except.h"		/* For USING_SJLJ_EXCEPTIONS.  */
+#include "debug.h"		/* For dwarf2out_do_frame.  */
 #include "toplev.h"
 #include "tm_p.h"		/* Target prototypes.  */
 #include "target.h"
@@ -48,8 +49,6 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Non-static as some targets don't use it.  */
 void builtin_define_std (const char *) ATTRIBUTE_UNUSED;
-static void builtin_define_with_value_n (const char *, const char *,
-					 size_t);
 static void builtin_define_with_int_value (const char *, HOST_WIDE_INT);
 static void builtin_define_with_hex_fp_value (const char *, tree,
 					      int, const char *,
@@ -280,7 +279,7 @@ builtin_define_decimal_float_constants (const char *name_prefix,
 
   /* Compute the minimum representable value.  */
   sprintf (name, "__%s_MIN__", name_prefix);
-  sprintf (buf, "1E%d%s", fmt->emin, suffix);
+  sprintf (buf, "1E%d%s", fmt->emin - 1, suffix);
   builtin_define_with_value (name, buf, 0); 
 
   /* Compute the maximum representable value.  */
@@ -293,8 +292,9 @@ builtin_define_decimal_float_constants (const char *name_prefix,
 	*p++ = '.';
     }
   *p = 0;
-  /* fmt->p plus 1, to account for the decimal point.  */
-  sprintf (&buf[fmt->p + 1], "E%d%s", fmt->emax, suffix); 
+  /* fmt->p plus 1, to account for the decimal point and fmt->emax
+     minus 1 because the digits are nines, not 1.0.  */
+  sprintf (&buf[fmt->p + 1], "E%d%s", fmt->emax - 1, suffix); 
   builtin_define_with_value (name, buf, 0);
 
   /* Compute epsilon (the difference between 1 and least value greater
@@ -303,8 +303,8 @@ builtin_define_decimal_float_constants (const char *name_prefix,
   sprintf (buf, "1E-%d%s", fmt->p - 1, suffix);
   builtin_define_with_value (name, buf, 0);
 
-  /* Minimum denormalized postive decimal value.  */
-  sprintf (name, "__%s_DEN__", name_prefix);
+  /* Minimum subnormal positive decimal value.  */
+  sprintf (name, "__%s_SUBNORMAL_MIN__", name_prefix);
   p = buf;
   for (digits = fmt->p; digits > 1; digits--)
     {
@@ -313,7 +313,7 @@ builtin_define_decimal_float_constants (const char *name_prefix,
 	*p++ = '.';
     }
   *p = 0;
-  sprintf (&buf[fmt->p], "1E%d%s", fmt->emin, suffix); 
+  sprintf (&buf[fmt->p], "1E%d%s", fmt->emin - 1, suffix); 
   builtin_define_with_value (name, buf, 0);
 }
 
@@ -375,40 +375,19 @@ builtin_define_fixed_point_constants (const char *name_prefix,
 static void
 define__GNUC__ (void)
 {
-  /* The format of the version string, enforced below, is
-     ([^0-9]*-)?[0-9]+[.][0-9]+([.][0-9]+)?([- ].*)?  */
-  const char *q, *v = version_string;
+  int major, minor, patchlevel;
 
-  while (*v && !ISDIGIT (*v))
-    v++;
-  gcc_assert (*v && (v <= version_string || v[-1] == '-'));
-
-  q = v;
-  while (ISDIGIT (*v))
-    v++;
-  builtin_define_with_value_n ("__GNUC__", q, v - q);
-  if (c_dialect_cxx ())
-    builtin_define_with_value_n ("__GNUG__", q, v - q);
-
-  gcc_assert (*v == '.' && ISDIGIT (v[1]));
-
-  q = ++v;
-  while (ISDIGIT (*v))
-    v++;
-  builtin_define_with_value_n ("__GNUC_MINOR__", q, v - q);
-
-  if (*v == '.')
+  if (sscanf (BASEVER, "%d.%d.%d", &major, &minor, &patchlevel) != 3)
     {
-      gcc_assert (ISDIGIT (v[1]));
-      q = ++v;
-      while (ISDIGIT (*v))
-	v++;
-      builtin_define_with_value_n ("__GNUC_PATCHLEVEL__", q, v - q);
+      sscanf (BASEVER, "%d.%d", &major, &minor);
+      patchlevel = 0;
     }
-  else
-    builtin_define_with_value_n ("__GNUC_PATCHLEVEL__", "0", 1);
+  cpp_define_formatted (parse_in, "__GNUC__=%d", major);
+  cpp_define_formatted (parse_in, "__GNUC_MINOR__=%d", minor);
+  cpp_define_formatted (parse_in, "__GNUC_PATCHLEVEL__=%d", patchlevel);
 
-  gcc_assert (!*v || *v == ' ' || *v == '-');
+  if (c_dialect_cxx ())
+    cpp_define_formatted (parse_in, "__GNUG__=%d", major);
 }
 
 /* Define macros used by <stdint.h>.  Currently only defines limits
@@ -427,6 +406,58 @@ builtin_define_stdint_macros (void)
     gcc_unreachable ();
   builtin_define_type_max ("__INTMAX_MAX__", intmax_type_node, intmax_long);
 }
+
+/* Adjust the optimization macros when a #pragma GCC optimization is done to
+   reflect the current level.  */
+void
+c_cpp_builtins_optimize_pragma (cpp_reader *pfile, tree prev_tree,
+				tree cur_tree)
+{
+  struct cl_optimization *prev = TREE_OPTIMIZATION (prev_tree);
+  struct cl_optimization *cur  = TREE_OPTIMIZATION (cur_tree);
+  bool prev_fast_math;
+  bool cur_fast_math;
+
+  /* -undef turns off target-specific built-ins.  */
+  if (flag_undef)
+    return;
+
+  /* Other target-independent built-ins determined by command-line
+     options.  */
+  if (!prev->optimize_size && cur->optimize_size)
+    cpp_define (pfile, "__OPTIMIZE_SIZE__");
+  else if (prev->optimize_size && !cur->optimize_size)
+    cpp_undef (pfile, "__OPTIMIZE_SIZE__");
+
+  if (!prev->optimize && cur->optimize)
+    cpp_define (pfile, "__OPTIMIZE__");
+  else if (prev->optimize && !cur->optimize)
+    cpp_undef (pfile, "__OPTIMIZE__");
+
+  prev_fast_math = fast_math_flags_struct_set_p (prev);
+  cur_fast_math  = fast_math_flags_struct_set_p (cur);
+  if (!prev_fast_math && cur_fast_math)
+    cpp_define (pfile, "__FAST_MATH__");
+  else if (prev_fast_math && !cur_fast_math)
+    cpp_undef (pfile, "__FAST_MATH__");
+
+  if (!prev->flag_signaling_nans && cur->flag_signaling_nans)
+    cpp_define (pfile, "__SUPPORT_SNAN__");
+  else if (prev->flag_signaling_nans && !cur->flag_signaling_nans)
+    cpp_undef (pfile, "__SUPPORT_SNAN__");
+
+  if (!prev->flag_finite_math_only && cur->flag_finite_math_only)
+    {
+      cpp_undef (pfile, "__FINITE_MATH_ONLY__");
+      cpp_define (pfile, "__FINITE_MATH_ONLY__=1");
+    }
+  else if (!prev->flag_finite_math_only && cur->flag_finite_math_only)
+    {
+      cpp_undef (pfile, "__FINITE_MATH_ONLY__");
+      cpp_define (pfile, "__FINITE_MATH_ONLY__=0");
+    }
+}
+
 
 /* Hook that registers front end and target-specific built-ins.  */
 void
@@ -607,7 +638,7 @@ c_cpp_builtins (cpp_reader *pfile)
 
   if (fast_math_flags_set_p ())
     cpp_define (pfile, "__FAST_MATH__");
-  if (flag_really_no_inline)
+  if (flag_no_inline)
     cpp_define (pfile, "__NO_INLINE__");
   if (flag_signaling_nans)
     cpp_define (pfile, "__SUPPORT_SNAN__");
@@ -662,6 +693,11 @@ c_cpp_builtins (cpp_reader *pfile)
     cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16");
 #endif
 
+#ifdef DWARF2_UNWIND_INFO
+  if (dwarf2out_do_cfi_asm ())
+    cpp_define (pfile, "__GCC_HAVE_DWARF2_CFI_ASM");
+#endif
+
   /* Make the choice of ObjC runtime visible to source code.  */
   if (c_dialect_objc () && flag_next_runtime)
     cpp_define (pfile, "__NEXT_RUNTIME__");
@@ -682,10 +718,7 @@ c_cpp_builtins (cpp_reader *pfile)
     cpp_define (pfile, "__SSP__=1");
 
   if (flag_openmp)
-    cpp_define (pfile, "_OPENMP=200505");
-
-  if (lang_fortran)
-    cpp_define (pfile, "__GFORTRAN__=1");
+    cpp_define (pfile, "_OPENMP=200805");
 
   builtin_define_type_sizeof ("__SIZEOF_INT__", integer_type_node);
   builtin_define_type_sizeof ("__SIZEOF_LONG__", long_integer_type_node);
@@ -729,6 +762,9 @@ c_cpp_builtins (cpp_reader *pfile)
      format.  */
   if (ENABLE_DECIMAL_FLOAT && ENABLE_DECIMAL_BID_FORMAT)
     cpp_define (pfile, "__DECIMAL_BID_FORMAT__");
+
+  builtin_define_with_int_value ("__BIGGEST_ALIGNMENT__",
+				 BIGGEST_ALIGNMENT / BITS_PER_UNIT);
 }
 
 /* Pass an object-like macro.  If it doesn't lie in the user's
@@ -799,23 +835,6 @@ builtin_define_with_value (const char *macro, const char *expansion, int is_str)
   cpp_define (parse_in, buf);
 }
 
-/* Pass an object-like macro and a value to define it to.  The third
-   parameter is the length of the expansion.  */
-static void
-builtin_define_with_value_n (const char *macro, const char *expansion, size_t elen)
-{
-  char *buf;
-  size_t mlen = strlen (macro);
-
-  /* Space for an = and a NUL.  */
-  buf = (char *) alloca (mlen + elen + 2);
-  memcpy (buf, macro, mlen);
-  buf[mlen] = '=';
-  memcpy (buf + mlen + 1, expansion, elen);
-  buf[mlen + elen + 1] = '\0';
-
-  cpp_define (parse_in, buf);
-}
 
 /* Pass an object-like macro and an integer value to define it to.  */
 static void

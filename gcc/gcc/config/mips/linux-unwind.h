@@ -1,30 +1,26 @@
 /* DWARF2 EH unwinding support for MIPS Linux.
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
+the Free Software Foundation; either version 3, or (at your option)
 any later version.
-
-In addition to the permissions in the GNU General Public License, the
-Free Software Foundation gives you unlimited permission to link the
-compiled version of this file with other programs, and to distribute
-those programs without any restriction coming from the use of this
-file.  (The General Public License restrictions do apply in other
-respects; for example, they cover modification of the file, and
-distribution when not linked into another program.)
 
 GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 #ifndef inhibit_libc
 /* Do code reading to identify a signal frame, and set the frame
@@ -106,12 +102,17 @@ mips_fallback_frame_state (struct _Unwind_Context *context,
     fs->regs.reg[i].loc.offset
       = (_Unwind_Ptr)&(sc->sc_regs[i]) + reg_offset - new_cfa;
   }
-  /* The PC points to the faulting instruction, but the unwind tables
-     expect it point to the following instruction.  We compensate by
-     reporting a return address at the next instruction. */
+  /* "PC & -2" points to the faulting instruction, but the unwind code
+     searches for "(ADDR & -2) - 1".  (See MASK_RETURN_ADDR for the source
+     of the -2 mask.)  Adding 2 here ensures that "(ADDR & -2) - 1" is the
+     address of the second byte of the faulting instruction.
+
+     Note that setting fs->signal_frame would not work.  As the comment
+     above MASK_RETURN_ADDR explains, MIPS unwinders must earch for an
+     odd-valued address.  */
   fs->regs.reg[DWARF_ALT_FRAME_RETURN_COLUMN].how = REG_SAVED_VAL_OFFSET;
   fs->regs.reg[DWARF_ALT_FRAME_RETURN_COLUMN].loc.offset
-    = (_Unwind_Ptr)(sc->sc_pc) + 4 - new_cfa;
+    = (_Unwind_Ptr)(sc->sc_pc) + 2 - new_cfa;
   fs->retaddr_column = DWARF_ALT_FRAME_RETURN_COLUMN;
 
   return _URC_NO_REASON;

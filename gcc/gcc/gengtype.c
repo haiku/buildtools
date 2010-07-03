@@ -1,5 +1,5 @@
 /* Process source files and output type information.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -148,10 +148,16 @@ static outf_p header_file;
 static const char *srcdir;
 
 /* Length of srcdir name.  */
-static int srcdir_len = 0;
+static size_t srcdir_len = 0;
 
 static outf_p create_file (const char *, const char *);
+
 static const char * get_file_basename (const char *);
+static const char * get_file_realbasename (const char *);
+static const char * get_file_srcdir_relative_path (const char *);
+
+static int get_prefix_langdir_index (const char *);
+static const char * get_file_langdir (const char *);
 
 
 /* Nonzero iff an error has occurred.  */
@@ -308,6 +314,10 @@ read_input_line (FILE *list, char **herep, char **linep,
   char *line;
   int c = getc (list);
 
+  /* Read over whitespace.  */
+  while (c == '\n' || c == ' ')
+    c = getc (list);
+
   if (c == EOF)
     {
       *linep = 0;
@@ -433,7 +443,7 @@ read_input_list (const char *listname)
 				     : lang_dir_names[langno - 1]);
 
 		    bmap |= curlangs;
-		    set_lang_bitmap ((char *)gt_files[i], bmap);
+		    set_lang_bitmap (CONST_CAST(char *, gt_files[i]), bmap);
 		    here = committed;
 		    goto next_line;
 		  }
@@ -521,16 +531,11 @@ do_typedef (const char *s, type_p t, struct fileloc *pos)
 {
   pair_p p;
 
-  /* temporary kludge - gengtype doesn't handle conditionals or macros.
-     Ignore any attempt to typedef CUMULATIVE_ARGS, location_t,
-     expanded_location, or source_locus, unless it is coming from
-     this file (main() sets them up with safe dummy definitions).  */
-  if ((!strcmp (s, "CUMULATIVE_ARGS")
-       || !strcmp (s, "location_t")
-       || !strcmp (s, "source_locus")
-       || !strcmp (s, "source_location")
-       || !strcmp (s, "expanded_location"))
-      && pos->file != this_file)
+  /* temporary kludge - gengtype doesn't handle conditionals or
+     macros.  Ignore any attempt to typedef CUMULATIVE_ARGS, unless it
+     is coming from this file (main() sets them up with safe dummy
+     definitions).  */
+  if (!strcmp (s, "CUMULATIVE_ARGS") && pos->file != this_file)
     return;
 
   for (p = typedefs; p != NULL; p = p->next)
@@ -1271,9 +1276,9 @@ adjust_field_type (type_p t, options_p opt)
 	if (params[num] != NULL)
 	  error_at_line (&lexer_line, "duplicate `%s' option", opt->name);
 	if (! ISDIGIT (opt->name[5]))
-	  params[num] = create_pointer ((type_p) opt->info);
+	  params[num] = create_pointer (CONST_CAST2(type_p, const char *, opt->info));
 	else
-	  params[num] = (type_p) opt->info;
+	  params[num] = CONST_CAST2 (type_p, const char *, opt->info);
       }
     else if (strcmp (opt->name, "special") == 0)
       {
@@ -1322,7 +1327,8 @@ process_gc_options (options_p opt, enum gc_used_enum level, int *maybe_undef,
   options_p o;
   for (o = opt; o; o = o->next)
     if (strcmp (o->name, "ptr_alias") == 0 && level == GC_POINTED_TO)
-      set_gc_used_type ((type_p) o->info, GC_POINTED_TO, NULL);
+      set_gc_used_type (CONST_CAST2 (type_p, const char *, o->info),
+			GC_POINTED_TO, NULL);
     else if (strcmp (o->name, "maybe_undef") == 0)
       *maybe_undef = 1;
     else if (strcmp (o->name, "use_params") == 0)
@@ -1535,7 +1541,7 @@ open_base_files (void)
       "hard-reg-set.h", "basic-block.h", "cselib.h", "insn-addr.h",
       "optabs.h", "libfuncs.h", "debug.h", "ggc.h", "cgraph.h",
       "tree-flow.h", "reload.h", "cpp-id-data.h", "tree-chrec.h",
-      "cfglayout.h", "except.h", "output.h", "cfgloop.h", NULL
+      "cfglayout.h", "except.h", "output.h", "gimple.h", "cfgloop.h", NULL
     };
     const char *const *ifp;
     outf_p gtype_desc_c;
@@ -1550,41 +1556,114 @@ open_base_files (void)
   }
 }
 
-/* Determine the pathname to F relative to $(srcdir).  */
+/* For F a filename, return the real basename of F, with all the directory
+   components skipped.  */
+
+static const char *
+get_file_realbasename (const char *f)
+{
+  const char * lastslash = strrchr (f, '/');
+  
+  return (lastslash != NULL) ? lastslash + 1 : f;
+}
+
+/* For F a filename, return the relative path to F from $(srcdir) if the
+   latter is a prefix in F, NULL otherwise.  */
+
+static const char *
+get_file_srcdir_relative_path (const char *f)
+{
+  if (strlen (f) > srcdir_len
+      && IS_DIR_SEPARATOR (f[srcdir_len])
+      && memcmp (f, srcdir, srcdir_len) == 0)
+    return f + srcdir_len + 1;
+  else
+    return NULL;
+}
+
+/* For F a filename, return the relative path to F from $(srcdir) if the
+   latter is a prefix in F, or the real basename of F otherwise.  */
 
 static const char *
 get_file_basename (const char *f)
 {
-  const char *basename;
-  unsigned i;
+  const char * srcdir_path = get_file_srcdir_relative_path (f);
 
-  basename = strrchr (f, '/');
+  return (srcdir_path != NULL) ? srcdir_path : get_file_realbasename (f);
+}
 
-  if (!basename)
-    return f;
+/* For F a filename, return the lang_dir_names relative index of the language
+   directory that is a prefix in F, if any, -1 otherwise.  */
 
-  basename++;
+static int
+get_prefix_langdir_index (const char *f)
+{
+  size_t f_len = strlen (f);
+  size_t lang_index;
 
-  for (i = 0; i < num_lang_dirs; i++)
+  for (lang_index = 0; lang_index < num_lang_dirs; lang_index++)
     {
-      const char * s1;
-      const char * s2;
-      int l1;
-      int l2;
-      s1 = basename - strlen (lang_dir_names [i]) - 1;
-      s2 = lang_dir_names [i];
-      l1 = strlen (s1);
-      l2 = strlen (s2);
-      if (l1 >= l2 && IS_DIR_SEPARATOR (s1[-1]) && !memcmp (s1, s2, l2))
-        {
-          basename -= l2 + 1;
-          if ((basename - f - 1) != srcdir_len)
-	    fatal ("filename `%s' should be preceded by $srcdir", f);
-          break;
-        }
+      const char * langdir = lang_dir_names [lang_index];
+      size_t langdir_len = strlen (langdir);
+	  
+      if (f_len > langdir_len
+	  && IS_DIR_SEPARATOR (f[langdir_len])
+	  && memcmp (f, langdir, langdir_len) == 0)
+	return lang_index;
     }
 
-  return basename;
+  return -1;
+}
+
+/* For F a filename, return the name of language directory where F is located,
+   if any, NULL otherwise.  */
+
+static const char *
+get_file_langdir (const char *f)
+{
+  /* Get the relative path to F from $(srcdir) and find the language by
+     comparing the prefix with language directory names.  If F is not even
+     srcdir relative, no point in looking further.  */
+
+  int lang_index;
+  const char * srcdir_relative_path = get_file_srcdir_relative_path (f);
+
+  if (!srcdir_relative_path)
+    return NULL;
+
+  lang_index = get_prefix_langdir_index (srcdir_relative_path);
+
+  return (lang_index >= 0) ? lang_dir_names [lang_index] : NULL;
+}
+
+/* The gt- output file name for F.  */
+
+static const char *
+get_file_gtfilename (const char *f)
+{
+  /* Cook up an initial version of the gt- file name from the file real
+     basename and the language name, if any.  */
+
+  const char *basename = get_file_realbasename (f);
+  const char *langdir = get_file_langdir (f);
+  
+  char * result =
+    (langdir ? xasprintf ("gt-%s-%s", langdir, basename)
+     : xasprintf ("gt-%s", basename));
+
+  /* Then replace all non alphanumerics characters by '-' and change the
+     extenstion to ".h".  We expect the input filename extension was at least
+     one character long.  */
+
+  char *s = result;
+
+  for (; *s != '.'; s++)
+    if (! ISALNUM (*s) && *s != '-')
+      *s = '-';
+
+  memcpy (s, ".h", sizeof (".h"));
+
+  return result;
 }
 
 /* An output file, suitable for definitions, that can see declarations
@@ -1614,13 +1693,7 @@ get_output_file_with_visibility (const char *input_file)
       || (len > 2 && memcmp (basename+len-2, ".y", 2) == 0)
       || (len > 3 && memcmp (basename+len-3, ".in", 3) == 0))
     {
-      char *s;
-
-      output_name = s = xasprintf ("gt-%s", basename);
-      for (; *s != '.'; s++)
-	if (! ISALNUM (*s) && *s != '-')
-	  *s = '-';
-      memcpy (s, ".h", sizeof (".h"));
+      output_name = get_file_gtfilename (input_file); 
       for_name = basename;
     }
   /* Some headers get used by more than one front-end; hence, it
@@ -1646,12 +1719,10 @@ get_output_file_with_visibility (const char *input_file)
     output_name = "gt-objc-objc-act.h", for_name = "objc/objc-act.c";
   else 
     {
-      size_t i;
+      int lang_index = get_prefix_langdir_index (basename);
 
-      for (i = 0; i < num_lang_dirs; i++)
-	if (memcmp (basename, lang_dir_names[i], strlen (lang_dir_names[i])) == 0
-	    && basename[strlen(lang_dir_names[i])] == '/')
-	  return base_files[i];
+      if (lang_index >= 0)
+	return base_files[lang_index];
 
       output_name = "gtype-desc.c";
       for_name = NULL;
@@ -2362,9 +2433,6 @@ write_types_process_field (type_p f, const struct walk_type_data *d)
       break;
 
     case TYPE_STRING:
-      if (wtd->param_prefix == NULL)
-	break;
-
     case TYPE_STRUCT:
     case TYPE_UNION:
     case TYPE_LANG_STRUCT:
@@ -3016,6 +3084,8 @@ write_root (outf_p f, pair_p v, type_p type, const char *name, int has_length,
 		skip_p = 1;
 	      else if (strcmp (o->name, "desc") == 0)
 		desc = o->info;
+	      else if (strcmp (o->name, "param_is") == 0)
+		;
 	      else
 		error_at_line (line,
 		       "field `%s' of global `%s' has unknown option `%s'",
@@ -3137,7 +3207,7 @@ write_root (outf_p f, pair_p v, type_p type, const char *name, int has_length,
 	oprintf (f, "    &%s,\n", name);
 	oprintf (f, "    1, \n");
 	oprintf (f, "    sizeof (%s),\n", v->name);
-	oprintf (f, "    &gt_ggc_m_S,\n");
+	oprintf (f, "    (gt_pointer_walker) &gt_ggc_m_S,\n");
 	oprintf (f, "    (gt_pointer_walker) &gt_pch_n_S\n");
 	oprintf (f, "  },\n");
       }
@@ -3463,22 +3533,22 @@ write_roots (pair_p variables)
    where the GTY(()) tags are only present if is_scalar is _false_.  */
 
 void
-note_def_vec (const char *typename, bool is_scalar, struct fileloc *pos)
+note_def_vec (const char *type_name, bool is_scalar, struct fileloc *pos)
 {
   pair_p fields;
   type_p t;
   options_p o;
   type_p len_ty = create_scalar_type ("unsigned");
-  const char *name = concat ("VEC_", typename, "_base", (char *)0);
+  const char *name = concat ("VEC_", type_name, "_base", (char *)0);
 
   if (is_scalar)
     {
-      t = create_scalar_type (typename);
+      t = create_scalar_type (type_name);
       o = 0;
     }
   else
     {
-      t = resolve_typedef (typename, pos);
+      t = resolve_typedef (type_name, pos);
       o = create_option (0, "length", "%h.num");
     }
 
@@ -3507,36 +3577,6 @@ note_def_vec_alloc (const char *type, const char *astrat, struct fileloc *pos)
 				  "base", 0, pos);
 
   do_typedef (astratname, new_structure (astratname, 0, pos, field, 0), pos);
-}
-
-/* Yet more temporary kludge since gengtype doesn't understand conditionals.
-   This must be kept in sync with input.h.  */
-static void
-define_location_structures (void)
-{
-  pair_p fields;
-  type_p locs;
-  static struct fileloc pos = { this_file, __LINE__ };
-  do_scalar_typedef ("source_location", &pos);
-
-#ifdef USE_MAPPED_LOCATION
-    fields = create_field (0, &scalar_nonchar, "column");
-    fields = create_field (fields, &scalar_nonchar, "line");
-    fields = create_field (fields, &string_type, "file");
-    locs = new_structure ("anon:expanded_location", 0, &pos, fields, 0);
-
-    do_typedef ("expanded_location", locs, &pos);
-    do_scalar_typedef ("location_t", &pos);
-    do_scalar_typedef ("source_locus", &pos);
-#else
-    fields = create_field (0, &scalar_nonchar, "line");
-    fields = create_field (fields, &string_type, "file");
-    locs = new_structure ("location_s", 0, &pos, fields, 0);
-
-    do_typedef ("expanded_location", locs, &pos);
-    do_typedef ("location_t", locs, &pos);
-    do_typedef ("source_locus", create_pointer (locs), &pos);
-#endif
 }
 
 
@@ -3575,7 +3615,6 @@ main (int argc, char **argv)
   do_scalar_typedef ("JCF_u2", &pos); pos.line++;
   do_scalar_typedef ("void", &pos); pos.line++;
   do_typedef ("PTR", create_pointer (resolve_typedef ("void", &pos)), &pos);
-  define_location_structures ();
 
   for (i = 0; i < num_gt_files; i++)
     parse_file (gt_files[i]);

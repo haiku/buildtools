@@ -1,5 +1,5 @@
 /* score-protos.h for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -39,7 +39,7 @@ extern const char * score_move (rtx *ops);
 extern bool score_unaligned_load (rtx* ops);
 extern bool score_unaligned_store (rtx* ops);
 extern bool score_block_move (rtx* ops);
-extern int score_address_cost (rtx addr);
+extern int score_address_cost (rtx addr, bool speed);
 extern rtx score_function_arg (const CUMULATIVE_ARGS *cum,
                                enum machine_mode mode,
                                tree type, int named);
@@ -62,13 +62,13 @@ extern void score_declare_object (FILE *stream, const char *name,
                                   const char *directive, const char *fmt, ...);
 extern int score_output_external (FILE *file, tree decl, const char *name);
 extern void score_override_options (void);
-extern enum reg_class score_secondary_reload_class (enum reg_class class,
+extern enum reg_class score_secondary_reload_class (enum reg_class rclass,
                                                     enum machine_mode mode,
                                                     rtx x);
 extern rtx score_function_value (tree valtype, tree func,
                                  enum machine_mode mode);
 extern enum reg_class score_preferred_reload_class (rtx x,
-                                                    enum reg_class class);
+                                                    enum reg_class rclass);
 extern HOST_WIDE_INT score_initial_elimination_offset (int from, int to);
 extern void score_print_operand (FILE *file, rtx op, int letter);
 extern void score_print_operand_address (FILE *file, rtx addr);
@@ -85,7 +85,7 @@ extern const char * score_select (rtx *ops, const char *inst_pre, bool commu,
 extern const char * score_output_casesi (rtx *operands);
 extern const char * score_rpush (rtx *ops);
 extern const char * score_rpop (rtx *ops);
-extern bool score_rtx_costs (rtx x, int code, int outer_code, int *total);
+extern bool score_rtx_costs (rtx x, int code, int outer_code, int *total, bool speed);
 
 #ifdef RTX_CODE
 extern enum machine_mode score_select_cc_mode (enum rtx_code op, rtx x, rtx y);

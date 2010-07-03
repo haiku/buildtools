@@ -1,5 +1,5 @@
 /* The lang_hooks data structure.
-   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -52,26 +52,6 @@ struct lang_hooks_for_callgraph
 
   /* Emit thunks associated to function.  */
   void (*emit_associated_thunks) (tree);
-};
-
-/* Lang hooks for management of language-specific data or status
-   when entering / leaving functions etc.  */
-struct lang_hooks_for_functions
-{
-  /* Called when entering a function.  */
-  void (*init) (struct function *);
-
-  /* Called when leaving a function.  */
-  void (*final) (struct function *);
-
-  /* Called when entering a nested function.  */
-  void (*enter_nested) (struct function *);
-
-  /* Called when leaving a nested function.  */
-  void (*leave_nested) (struct function *);
-
-  /* Determines if it's ok for a function to have no noreturn attribute.  */
-  bool (*missing_noreturn_ok_p) (tree);
 };
 
 /* The following hooks are used by tree-dump.c.  */
@@ -170,11 +150,6 @@ struct lang_hooks_for_decls
      returns -1 for an undocumented reason used in stor-layout.c.  */
   int (*global_bindings_p) (void);
 
-  /* Insert BLOCK at the end of the list of subblocks of the
-     current binding level.  This is used when a BIND_EXPR is expanded,
-     to handle the BLOCK node inside the BIND_EXPR.  */
-  void (*insert_block) (tree);
-
   /* Function to add a decl to the current scope level.  Takes one
      argument, a decl to add.  Returns that decl, or, if the same
      symbol is already declared, may return a different decl for that
@@ -222,9 +197,14 @@ struct lang_hooks_for_decls
      be put into OMP_CLAUSE_PRIVATE_DEBUG.  */
   bool (*omp_private_debug_clause) (tree, bool);
 
+  /* Return true if DECL in private clause needs
+     OMP_CLAUSE_PRIVATE_OUTER_REF on the private clause.  */
+  bool (*omp_private_outer_ref) (tree);
+
   /* Build and return code for a default constructor for DECL in
-     response to CLAUSE.  Return NULL if nothing to be done.  */
-  tree (*omp_clause_default_ctor) (tree clause, tree decl);
+     response to CLAUSE.  OUTER is corresponding outer region's
+     variable if needed.  Return NULL if nothing to be done.  */
+  tree (*omp_clause_default_ctor) (tree clause, tree decl, tree outer);
 
   /* Build and return code for a copy constructor from SRC to DST.  */
   tree (*omp_clause_copy_ctor) (tree clause, tree dst, tree src);
@@ -235,6 +215,9 @@ struct lang_hooks_for_decls
   /* Build and return code destructing DECL.  Return NULL if nothing
      to be done.  */
   tree (*omp_clause_dtor) (tree clause, tree decl);
+
+  /* Do language specific checking on an implicitly determined clause.  */
+  void (*omp_finish_clause) (tree clause);
 };
 
 /* Language-specific hooks.  See langhooks-def.h for defaults.  */
@@ -300,8 +283,8 @@ struct lang_hooks
      parsers to dump debugging information during parsing.  */
   void (*parse_file) (int);
 
-  /* Called immediately after parsing to clear the binding stack.  */
-  void (*clear_binding_stack) (void);
+  /* Determines if it's ok for a function to have no noreturn attribute.  */
+  bool (*missing_noreturn_ok_p) (tree);
 
   /* Called to obtain the alias set to be used for an expression or type.
      Returns -1 if the language does nothing special for it.  */
@@ -310,10 +293,6 @@ struct lang_hooks
   /* Called by expand_expr for language-specific tree codes.
      Fourth argument is actually an enum expand_modifier.  */
   rtx (*expand_expr) (tree, rtx, enum machine_mode, int, rtx *);
-
-  /* Called by expand_expr to generate the definition of a decl.  Returns
-     1 if handled, 0 otherwise.  */
-  int (*expand_decl) (tree);
 
   /* Function to finish handling an incomplete decl at the end of
      compilation.  Default hook is does nothing.  */
@@ -337,15 +316,6 @@ struct lang_hooks
      Otherwise, set it to the ERROR_MARK_NODE to ensure that the
      assembler does not talk about it.  */
   void (*set_decl_assembler_name) (tree);
-
-  /* Nonzero if operations on types narrower than their mode should
-     have their results reduced to the precision of the type.  */
-  bool reduce_bit_field_operations;
-
-  /* Nonzero if this front end does not generate a dummy BLOCK between
-     the outermost scope of the function and the FUNCTION_DECL.  See
-     is_body_block in stmt.c, and its callers.  */
-  bool no_body_blocks;
 
   /* The front end can add its own statistics to -fmem-report with
      this hook.  It should output to stderr.  */
@@ -379,9 +349,6 @@ struct lang_hooks
      in contexts where erroneously returning 0 causes problems.  */
   int (*types_compatible_p) (tree x, tree y);
 
-  /* Given a CALL_EXPR, return a function decl that is its target.  */
-  tree (*lang_get_callee_fndecl) (const_tree);
-
   /* Called by report_error_function to print out function name.  */
   void (*print_error_function) (struct diagnostic_context *, const char *,
 				struct diagnostic_info *);
@@ -410,9 +377,6 @@ struct lang_hooks
   const struct attribute_spec *common_attribute_table;
   const struct attribute_spec *format_attribute_table;
 
-  /* Function-related language hooks.  */
-  struct lang_hooks_for_functions function;
-
   struct lang_hooks_for_tree_inlining tree_inlining;
 
   struct lang_hooks_for_callgraph callgraph;
@@ -425,7 +389,7 @@ struct lang_hooks
 
   /* Perform language-specific gimplification on the argument.  Returns an
      enum gimplify_status, though we can't see that type here.  */
-  int (*gimplify_expr) (tree *, tree *, tree *);
+  int (*gimplify_expr) (tree *, gimple_seq *, gimple_seq *);
 
   /* Fold an OBJ_TYPE_REF expression to the address of a function.
      KNOWN_TYPE carries the true type of the OBJ_TYPE_REF_OBJECT.  */
@@ -434,14 +398,21 @@ struct lang_hooks
   /* Do language specific processing in the builtin function DECL  */
   tree (*builtin_function) (tree decl);
 
+  /* Like builtin_function, but make sure the scope is the external scope.
+     This is used to delay putting in back end builtin functions until the ISA
+     that defines the builtin is declared via function specific target options,
+     which can save memory for machines like the x86_64 that have multiple
+     ISAs.  If this points to the same function as builtin_function, the
+     backend must add all of the builtins at program initialization time.  */
+  tree (*builtin_function_ext_scope) (tree decl);
+
   /* Used to set up the tree_contains_structure array for a frontend. */
   void (*init_ts) (void);
 
   /* Called by recompute_tree_invariant_for_addr_expr to go from EXPR
-     to a contained expression or DECL, possibly updating *TC, *TI or
-     *SE if in the process TREE_CONSTANT, TREE_INVARIANT or
-     TREE_SIDE_EFFECTS need updating.  */
-  tree (*expr_to_decl) (tree expr, bool *tc, bool *ti, bool *se);
+     to a contained expression or DECL, possibly updating *TC or *SE
+     if in the process TREE_CONSTANT or TREE_SIDE_EFFECTS need updating.  */
+  tree (*expr_to_decl) (tree expr, bool *tc, bool *se);
 
   /* Whenever you add entries here, make sure you adjust langhooks-def.h
      and langhooks.c accordingly.  */
@@ -453,5 +424,11 @@ extern tree add_builtin_function (const char *name, tree type,
 				  int function_code, enum built_in_class cl,
 				  const char *library_name,
 				  tree attrs);
+
+extern tree add_builtin_function_ext_scope (const char *name, tree type,
+					    int function_code,
+					    enum built_in_class cl,
+					    const char *library_name,
+					    tree attrs);
 
 #endif /* GCC_LANG_HOOKS_H */

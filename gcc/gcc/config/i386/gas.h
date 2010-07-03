@@ -1,5 +1,5 @@
 /* Definitions for Intel 386 using GAS.
-   Copyright (C) 1988, 1993, 1994, 1996, 2002, 2004, 2007
+   Copyright (C) 1988, 1993, 1994, 1996, 2002, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -86,6 +86,7 @@ along with GCC; see the file COPYING3.  If not see
    GAS version 1.38.1 doesn't understand the `repz' opcode mnemonic.
    So use `repe' instead.  */
 
+#undef ASM_OUTPUT_OPCODE
 #define ASM_OUTPUT_OPCODE(STREAM, PTR)	\
 {									\
   if ((PTR)[0] == 'r'							\
@@ -103,6 +104,8 @@ along with GCC; see the file COPYING3.  If not see
 	  (PTR) += 5;							\
 	}								\
     }									\
+  else									\
+    ASM_OUTPUT_AVX_PREFIX ((STREAM), (PTR));				\
 }
 
 /* Define macro used to output shift-double opcodes when the shift

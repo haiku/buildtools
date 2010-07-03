@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file parallel/multiseq_selection.h
  *  @brief Functions to find elements of a certain global rank in
@@ -183,14 +177,11 @@ namespace __gnu_parallel
 	  nmax = std::max(nmax, ns[i]);
 	}
 
-      r = log2(nmax) + 1;
+      r = __log2(nmax) + 1;
 
       // Pad all lists to this length, at least as long as any ns[i],
       // equality iff nmax = 2^k - 1.
       l = (1ULL << r) - 1;
-
-      // From now on, including padding.
-      N = l * m;
 
       for (int i = 0; i < m; i++)
 	{
@@ -216,7 +207,7 @@ namespace __gnu_parallel
 	if (n >= ns[i])	//sequence too short, conceptual infinity
 	  sample.push_back(std::make_pair(S(i)[0] /*dummy element*/, i));
 
-      difference_type localrank = rank * m / N ;
+      difference_type localrank = rank / l;
 
       int j;
       for (j = 0; j < localrank && ((n + 1) <= ns[sample[j].second]); ++j)
@@ -264,15 +255,11 @@ namespace __gnu_parallel
 		b[i] -= n + 1;
 	    }
 
-	  difference_type leftsize = 0, total = 0;
+	  difference_type leftsize = 0;
 	  for (int i = 0; i < m; i++)
-	    {
 	      leftsize += a[i] / (n + 1);
-	      total += l / (n + 1);
-	    }
 	  
-	  difference_type skew = static_cast<difference_type>
-	    (static_cast<uint64>(total) * rank / N - leftsize);
+	  difference_type skew = rank / (n + 1) - leftsize;
 
 	  if (skew > 0)
 	    {
@@ -429,14 +416,11 @@ namespace __gnu_parallel
 	  nmax = std::max(nmax, ns[i]);
 	}
 
-      r = log2(nmax) + 1;
+      r = __log2(nmax) + 1;
 
       // Pad all lists to this length, at least as long as any ns[i],
       // equality iff nmax = 2^k - 1
       l = pow2(r) - 1;
-
-      // From now on, including padding.
-      N = l * m;
 
       for (int i = 0; i < m; ++i)
 	{
@@ -464,7 +448,7 @@ namespace __gnu_parallel
 	if (n >= ns[i])
 	  sample.push_back(std::make_pair(S(i)[0] /*dummy element*/, i));
 
-      difference_type localrank = rank * m / N ;
+      difference_type localrank = rank / l;
 
       int j;
       for (j = 0; j < localrank && ((n + 1) <= ns[sample[j].second]); ++j)
@@ -502,15 +486,11 @@ namespace __gnu_parallel
 		b[i] -= n + 1;
 	    }
 
-	  difference_type leftsize = 0, total = 0;
+	  difference_type leftsize = 0;
 	  for (int i = 0; i < m; ++i)
-	    {
 	      leftsize += a[i] / (n + 1);
-	      total += l / (n + 1);
-	    }
 
-	  difference_type skew = ((unsigned long long)total * rank / N
-				  - leftsize);
+	  difference_type skew = rank / (n + 1) - leftsize;
 
 	  if (skew > 0)
 	    {
@@ -636,5 +616,4 @@ namespace __gnu_parallel
 
 #undef S
 
-#endif
-
+#endif /* _GLIBCXX_PARALLEL_MULTISEQ_SELECTION_H */

@@ -1,5 +1,5 @@
 ;; GCC machine description for Alpha synchronization instructions.
-;; Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -28,17 +28,17 @@
 
 
 (define_expand "memory_barrier"
-  [(set (mem:BLK (match_dup 0))
-	(unspec:BLK [(mem:BLK (match_dup 0))] UNSPEC_MB))]
+  [(set (match_dup 0)
+	(unspec:BLK [(match_dup 0)] UNSPEC_MB))]
   ""
 {
-  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (DImode));
+  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
   MEM_VOLATILE_P (operands[0]) = 1;
 })
 
-(define_insn "*mb_internal"
+(define_insn "*memory_barrier"
   [(set (match_operand:BLK 0 "" "")
-	(unspec:BLK [(match_operand:BLK 1 "" "")] UNSPEC_MB))]
+	(unspec:BLK [(match_dup 0)] UNSPEC_MB))]
   ""
   "mb"
   [(set_attr "type" "mb")])
@@ -62,11 +62,8 @@
   [(set_attr "type" "st_c")])
 
 ;; The Alpha Architecture Handbook says that it is UNPREDICTABLE whether
-;; the lock is cleared by a TAKEN branch.  If we were to honor that, it
-;; would mean that we could not expand a ll/sc sequence until after the
-;; final basic-block reordering pass.  Fortunately, it appears that no
-;; Alpha implementation ever built actually clears the lock on branches,
-;; taken or not.
+;; the lock is cleared by a TAKEN branch.  This means that we can not
+;; expand a ll/sc sequence until after the final basic-block reordering pass.
 
 (define_insn_and_split "sync_<fetchop_name><mode>"
   [(set (match_operand:I48MODE 0 "memory_operand" "+m")
@@ -77,7 +74,7 @@
    (clobber (match_scratch:I48MODE 2 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_atomic_op (<CODE>, operands[0], operands[1],
@@ -89,13 +86,14 @@
 (define_insn_and_split "sync_nand<mode>"
   [(set (match_operand:I48MODE 0 "memory_operand" "+m")
 	(unspec:I48MODE
-	  [(and:I48MODE (not:I48MODE (match_dup 0))
-	     (match_operand:I48MODE 1 "register_operand" "r"))]
+	  [(not:I48MODE
+	     (and:I48MODE (match_dup 0)
+	       (match_operand:I48MODE 1 "register_operand" "r")))]
 	  UNSPEC_ATOMIC))
    (clobber (match_scratch:I48MODE 2 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_atomic_op (NOT, operands[0], operands[1],
@@ -115,7 +113,7 @@
    (clobber (match_scratch:I48MODE 3 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_atomic_op (<CODE>, operands[1], operands[2],
@@ -129,13 +127,14 @@
 	(match_operand:I48MODE 1 "memory_operand" "+m"))
    (set (match_dup 1)
 	(unspec:I48MODE
-	  [(and:I48MODE (not:I48MODE (match_dup 1))
-	     (match_operand:I48MODE 2 "register_operand" "r"))]
+	  [(not:I48MODE
+	     (and:I48MODE (match_dup 1)
+	       (match_operand:I48MODE 2 "register_operand" "r")))]
 	  UNSPEC_ATOMIC))
    (clobber (match_scratch:I48MODE 3 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_atomic_op (NOT, operands[1], operands[2],
@@ -156,7 +155,7 @@
    (clobber (match_scratch:I48MODE 3 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_atomic_op (<CODE>, operands[1], operands[2],
@@ -167,17 +166,17 @@
 
 (define_insn_and_split "sync_new_nand<mode>"
   [(set (match_operand:I48MODE 0 "register_operand" "=&r")
-	(and:I48MODE 
-	  (not:I48MODE (match_operand:I48MODE 1 "memory_operand" "+m"))
-	  (match_operand:I48MODE 2 "register_operand" "r")))
+	(not:I48MODE
+	  (and:I48MODE (match_operand:I48MODE 1 "memory_operand" "+m")
+	    (match_operand:I48MODE 2 "register_operand" "r"))))
    (set (match_dup 1)
 	(unspec:I48MODE
-	  [(and:I48MODE (not:I48MODE (match_dup 1)) (match_dup 2))]
+	  [(not:I48MODE (and:I48MODE (match_dup 1) (match_dup 2)))]
 	  UNSPEC_ATOMIC))
    (clobber (match_scratch:I48MODE 3 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_atomic_op (NOT, operands[1], operands[2],
@@ -212,7 +211,7 @@
    (clobber (match_scratch:DI 6 "=X,&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_compare_and_swap_12 (<MODE>mode, operands[0], operands[1],
@@ -249,7 +248,7 @@
    (clobber (match_scratch:I48MODE 4 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_compare_and_swap (operands[0], operands[1], operands[2],
@@ -280,7 +279,7 @@
    (clobber (match_scratch:DI 4 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_lock_test_and_set_12 (<MODE>mode, operands[0], operands[1],
@@ -299,7 +298,7 @@
    (clobber (match_scratch:I48MODE 3 "=&r"))]
   ""
   "#"
-  "reload_completed"
+  "epilogue_completed"
   [(const_int 0)]
 {
   alpha_split_lock_test_and_set (operands[0], operands[1],

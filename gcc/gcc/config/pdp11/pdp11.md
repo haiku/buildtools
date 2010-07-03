@@ -1,6 +1,6 @@
 ;;- Machine description for the pdp11 for GNU C compiler
 ;; Copyright (C) 1994, 1995, 1997, 1998, 1999, 2000, 2001, 2004, 2005
-;; 2007 Free Software Foundation, Inc.
+;; 2007, 2008 Free Software Foundation, Inc.
 ;; Contributed by Michael K. Gschwind (mike@vlsivie.tuwien.ac.at).
 
 ;; This file is part of GCC.
@@ -1593,7 +1593,7 @@
 ;
 ;  /* allow REG_NOTES to be set on last insn (labels don't have enough
 ;     fields, and can't be used for REG_NOTES anyway).  */
-;  emit_insn (gen_rtx_USE (VOIDmode, stack_pointer_rtx));
+;  emit_use (stack_pointer_rtx);
 ;  DONE;
 ;}")
 

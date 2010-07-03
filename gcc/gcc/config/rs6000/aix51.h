@@ -1,6 +1,7 @@
 /* Definitions of target machine for GNU compiler,
    for IBM RS/6000 POWER running AIX V5.
-   Copyright (C) 2001, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by David Edelsohn (edelsohn@gnu.org).
 
    This file is part of GCC.
@@ -185,3 +186,8 @@ do {									\
 
 /* This target uses the aix64.opt file.  */
 #define TARGET_USES_AIX64_OPT 1
+
+/* This target defines SUPPORTS_WEAK and TARGET_ASM_NAMED_SECTION,
+   but does not have crtbegin/end.  */
+
+#define TARGET_USE_JCR_SECTION 0

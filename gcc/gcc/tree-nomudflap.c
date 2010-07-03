@@ -1,5 +1,5 @@
 /* Mudflap: narrow-pointer bounds-checking by tree rewriting.
-   Copyright (C) 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Frank Ch. Eigler <fche@redhat.com>
 
 This file is part of GCC.
@@ -27,7 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-inline.h"
 #include "c-tree.h"
 #include "c-common.h"
-#include "tree-gimple.h"
+#include "gimple.h"
 #include "diagnostic.h"
 #include "hashtab.h"
 #include "output.h"
@@ -90,8 +90,10 @@ gate_mudflap (void)
   return flag_mudflap != 0;
 }
 
-struct tree_opt_pass pass_mudflap_1 = 
+struct gimple_opt_pass pass_mudflap_1 = 
 {
+ {
+  GIMPLE_PASS,
   "mudflap1",				/* name */
   gate_mudflap,                         /* gate */
   NULL,					/* execute */
@@ -103,12 +105,14 @@ struct tree_opt_pass pass_mudflap_1 =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  0,                                    /* todo_flags_finish */
-  0				        /* letter */
+  0                                     /* todo_flags_finish */
+ }
 };
 
-struct tree_opt_pass pass_mudflap_2 = 
+struct gimple_opt_pass pass_mudflap_2 = 
 {
+ {
+  GIMPLE_PASS,
   "mudflap2",				/* name */
   gate_mudflap,                         /* gate */
   NULL,					/* execute */
@@ -120,8 +124,8 @@ struct tree_opt_pass pass_mudflap_2 =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  0,                                    /* todo_flags_finish */
-  0				        /* letter */
+  0                                     /* todo_flags_finish */
+ }
 };
 
 /* Instead of:

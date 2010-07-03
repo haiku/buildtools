@@ -1,5 +1,5 @@
 /* Subroutines for code generation on Motorola 68HC11 and 68HC12.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
@@ -67,10 +67,10 @@ static void m68hc11_reorg (void);
 static int go_if_legitimate_address_internal (rtx, enum machine_mode, int);
 static rtx m68hc11_expand_compare (enum rtx_code, rtx, rtx);
 static int must_parenthesize (rtx);
-static int m68hc11_address_cost (rtx);
+static int m68hc11_address_cost (rtx, bool);
 static int m68hc11_shift_cost (enum machine_mode, rtx, int);
 static int m68hc11_rtx_costs_1 (rtx, enum rtx_code, enum rtx_code);
-static bool m68hc11_rtx_costs (rtx, int, int, int *);
+static bool m68hc11_rtx_costs (rtx, int, int, int *, bool);
 static tree m68hc11_handle_fntype_attribute (tree *, tree, tree, int, bool *);
 const struct attribute_spec m68hc11_attribute_table[];
 
@@ -435,7 +435,7 @@ m68hc11_hard_regno_rename_ok (int reg1, int reg2)
 }
 
 enum reg_class
-preferred_reload_class (rtx operand, enum reg_class class)
+preferred_reload_class (rtx operand, enum reg_class rclass)
 {
   enum machine_mode mode;
 
@@ -443,97 +443,97 @@ preferred_reload_class (rtx operand, enum reg_class class)
 
   if (debug_m6811)
     {
-      printf ("Preferred reload: (class=%s): ", reg_class_names[class]);
+      printf ("Preferred reload: (class=%s): ", reg_class_names[rclass]);
     }
 
-  if (class == D_OR_A_OR_S_REGS && SP_REG_P (operand))
+  if (rclass == D_OR_A_OR_S_REGS && SP_REG_P (operand))
     return m68hc11_base_reg_class;
 
-  if (class >= S_REGS && (GET_CODE (operand) == MEM
+  if (rclass >= S_REGS && (GET_CODE (operand) == MEM
 			  || GET_CODE (operand) == CONST_INT))
     {
       /* S_REGS class must not be used.  The movhi template does not
          work to move a memory to a soft register.
          Restrict to a hard reg.  */
-      switch (class)
+      switch (rclass)
 	{
 	default:
 	case G_REGS:
 	case D_OR_A_OR_S_REGS:
-	  class = A_OR_D_REGS;
+	  rclass = A_OR_D_REGS;
 	  break;
 	case A_OR_S_REGS:
-	  class = A_REGS;
+	  rclass = A_REGS;
 	  break;
 	case D_OR_SP_OR_S_REGS:
-	  class = D_OR_SP_REGS;
+	  rclass = D_OR_SP_REGS;
 	  break;
 	case D_OR_Y_OR_S_REGS:
-	  class = D_OR_Y_REGS;
+	  rclass = D_OR_Y_REGS;
 	  break;
 	case D_OR_X_OR_S_REGS:
-	  class = D_OR_X_REGS;
+	  rclass = D_OR_X_REGS;
 	  break;
 	case SP_OR_S_REGS:
-	  class = SP_REGS;
+	  rclass = SP_REGS;
 	  break;
 	case Y_OR_S_REGS:
-	  class = Y_REGS;
+	  rclass = Y_REGS;
 	  break;
 	case X_OR_S_REGS:
-	  class = X_REGS;
+	  rclass = X_REGS;
 	  break;
 	case D_OR_S_REGS:
-	  class = D_REGS;
+	  rclass = D_REGS;
 	}
     }
-  else if (class == Y_REGS && GET_CODE (operand) == MEM)
+  else if (rclass == Y_REGS && GET_CODE (operand) == MEM)
     {
-      class = Y_REGS;
+      rclass = Y_REGS;
     }
-  else if (class == A_OR_D_REGS && GET_MODE_SIZE (mode) == 4)
+  else if (rclass == A_OR_D_REGS && GET_MODE_SIZE (mode) == 4)
     {
-      class = D_OR_X_REGS;
+      rclass = D_OR_X_REGS;
     }
-  else if (class >= S_REGS && S_REG_P (operand))
+  else if (rclass >= S_REGS && S_REG_P (operand))
     {
-      switch (class)
+      switch (rclass)
 	{
 	default:
 	case G_REGS:
 	case D_OR_A_OR_S_REGS:
-	  class = A_OR_D_REGS;
+	  rclass = A_OR_D_REGS;
 	  break;
 	case A_OR_S_REGS:
-	  class = A_REGS;
+	  rclass = A_REGS;
 	  break;
 	case D_OR_SP_OR_S_REGS:
-	  class = D_OR_SP_REGS;
+	  rclass = D_OR_SP_REGS;
 	  break;
 	case D_OR_Y_OR_S_REGS:
-	  class = D_OR_Y_REGS;
+	  rclass = D_OR_Y_REGS;
 	  break;
 	case D_OR_X_OR_S_REGS:
-	  class = D_OR_X_REGS;
+	  rclass = D_OR_X_REGS;
 	  break;
 	case SP_OR_S_REGS:
-	  class = SP_REGS;
+	  rclass = SP_REGS;
 	  break;
 	case Y_OR_S_REGS:
-	  class = Y_REGS;
+	  rclass = Y_REGS;
 	  break;
 	case X_OR_S_REGS:
-	  class = X_REGS;
+	  rclass = X_REGS;
 	  break;
 	case D_OR_S_REGS:
-	  class = D_REGS;
+	  rclass = D_REGS;
 	}
     }
-  else if (class >= S_REGS)
+  else if (rclass >= S_REGS)
     {
       if (debug_m6811)
 	{
-	  printf ("Class = %s for: ", reg_class_names[class]);
+	  printf ("Class = %s for: ", reg_class_names[rclass]);
 	  fflush (stdout);
 	  debug_rtx (operand);
 	}
@@ -541,12 +541,12 @@ preferred_reload_class (rtx operand, enum reg_class class)
 
   if (debug_m6811)
     {
-      printf (" => class=%s\n", reg_class_names[class]);
+      printf (" => class=%s\n", reg_class_names[rclass]);
       fflush (stdout);
       debug_rtx (operand);
     }
 
-  return class;
+  return rclass;
 }
 
 /* Return 1 if the operand is a valid indexed addressing mode.
@@ -1172,7 +1172,7 @@ m68hc11_encode_label (tree decl)
 {
   const char *str = XSTR (XEXP (DECL_RTL (decl), 0), 0);
   int len = strlen (str);
-  char *newstr = alloca (len + 2);
+  char *newstr = XALLOCAVEC (char, len + 2);
 
   newstr[0] = '@';
   strcpy (&newstr[1], str);
@@ -1597,7 +1597,7 @@ expand_prologue (void)
      If the first argument is a 32-bit quantity, the D+X registers
      are used.  Use Y to compute the frame.  Otherwise, X is cheaper.
      For 68HC12, this scratch register is not used.  */
-  if (current_function_args_info.nregs == 2)
+  if (crtl->args.info.nregs == 2)
     scratch = iy_reg;
   else
     scratch = ix_reg;
@@ -1685,12 +1685,12 @@ expand_epilogue (void)
   /* If we are returning a value in two registers, we have to preserve the
      X register and use the Y register to restore the stack and the saved
      registers.  Otherwise, use X because it's faster (and smaller).  */
-  if (current_function_return_rtx == 0)
+  if (crtl->return_rtx == 0)
     return_size = 0;
-  else if (GET_CODE (current_function_return_rtx) == MEM)
+  else if (GET_CODE (crtl->return_rtx) == MEM)
     return_size = HARD_REG_SIZE;
   else
-    return_size = GET_MODE_SIZE (GET_MODE (current_function_return_rtx));
+    return_size = GET_MODE_SIZE (GET_MODE (crtl->return_rtx));
 
   if (return_size > HARD_REG_SIZE && return_size <= 2 * HARD_REG_SIZE)
     scratch = iy_reg;
@@ -1960,7 +1960,7 @@ m68hc11_gen_highpart (enum machine_mode mode, rtx x)
   switch (GET_CODE (x))
     {
     case SUBREG:
-      return gen_rtx_SUBREG (mode, XEXP (x, 0), XEXP (x, 1));
+      return gen_rtx_SUBREG (mode, XEXP (x, 0), XINT (x, 1));
     case REG:
       if (REGNO (x) < FIRST_PSEUDO_REGISTER)
         return gen_rtx_REG (mode, REGNO (x));
@@ -5097,10 +5097,10 @@ m68hc11_init_libfuncs (void)
 
 /* Cost of moving memory.  */
 int
-m68hc11_memory_move_cost (enum machine_mode mode, enum reg_class class,
+m68hc11_memory_move_cost (enum machine_mode mode, enum reg_class rclass,
                           int in ATTRIBUTE_UNUSED)
 {
-  if (class <= H_REGS && class > NO_REGS)
+  if (rclass <= H_REGS && rclass > NO_REGS)
     {
       if (GET_MODE_SIZE (mode) <= 2)
 	return COSTS_N_INSNS (1) + (reload_completed | reload_in_progress);
@@ -5145,7 +5145,7 @@ m68hc11_register_move_cost (enum machine_mode mode, enum reg_class from,
    If ADDR is not a valid address, its cost is irrelevant.  */
 
 static int
-m68hc11_address_cost (rtx addr)
+m68hc11_address_cost (rtx addr, bool speed ATTRIBUTE_UNUSED)
 {
   int cost = 4;
 
@@ -5230,7 +5230,7 @@ m68hc11_shift_cost (enum machine_mode mode, rtx x, int shift)
 {
   int total;
 
-  total = rtx_cost (x, SET);
+  total = rtx_cost (x, SET, !optimize_size);
   if (mode == QImode)
     total += m68hc11_cost->shiftQI_const[shift % 8];
   else if (mode == HImode)
@@ -5274,14 +5274,14 @@ m68hc11_rtx_costs_1 (rtx x, enum rtx_code code,
           return m68hc11_shift_cost (mode, XEXP (x, 0), INTVAL (XEXP (x, 1)));
 	}
 
-      total = rtx_cost (XEXP (x, 0), code) + rtx_cost (XEXP (x, 1), code);
+      total = rtx_cost (XEXP (x, 0), code, !optimize_size) + rtx_cost (XEXP (x, 1), code, !optimize_size);
       total += m68hc11_cost->shift_var;
       return total;
 
     case AND:
     case XOR:
     case IOR:
-      total = rtx_cost (XEXP (x, 0), code) + rtx_cost (XEXP (x, 1), code);
+      total = rtx_cost (XEXP (x, 0), code, !optimize_size) + rtx_cost (XEXP (x, 1), code, !optimize_size);
       total += m68hc11_cost->logical;
 
       /* Logical instructions are byte instructions only.  */
@@ -5290,7 +5290,7 @@ m68hc11_rtx_costs_1 (rtx x, enum rtx_code code,
 
     case MINUS:
     case PLUS:
-      total = rtx_cost (XEXP (x, 0), code) + rtx_cost (XEXP (x, 1), code);
+      total = rtx_cost (XEXP (x, 0), code, !optimize_size) + rtx_cost (XEXP (x, 1), code, !optimize_size);
       total += m68hc11_cost->add;
       if (GET_MODE_SIZE (mode) > 2)
 	{
@@ -5301,7 +5301,7 @@ m68hc11_rtx_costs_1 (rtx x, enum rtx_code code,
     case UDIV:
     case DIV:
     case MOD:
-      total = rtx_cost (XEXP (x, 0), code) + rtx_cost (XEXP (x, 1), code);
+      total = rtx_cost (XEXP (x, 0), code, !optimize_size) + rtx_cost (XEXP (x, 1), code, !optimize_size);
       switch (mode)
         {
         case QImode:
@@ -5324,18 +5324,19 @@ m68hc11_rtx_costs_1 (rtx x, enum rtx_code code,
       if (mode == HImode && GET_CODE (XEXP (x, 0)) == ZERO_EXTEND
           && GET_CODE (XEXP (x, 1)) == ZERO_EXTEND)
         return m68hc11_cost->multQI
-          + rtx_cost (XEXP (XEXP (x, 0), 0), code)
-          + rtx_cost (XEXP (XEXP (x, 1), 0), code);
+          + rtx_cost (XEXP (XEXP (x, 0), 0), code, !optimize_size)
+          + rtx_cost (XEXP (XEXP (x, 1), 0), code, !optimize_size);
 
       /* emul instruction produces 32-bit result for 68HC12.  */
       if (TARGET_M6812 && mode == SImode
           && GET_CODE (XEXP (x, 0)) == ZERO_EXTEND
           && GET_CODE (XEXP (x, 1)) == ZERO_EXTEND)
         return m68hc11_cost->multHI
-          + rtx_cost (XEXP (XEXP (x, 0), 0), code)
-          + rtx_cost (XEXP (XEXP (x, 1), 0), code);
+          + rtx_cost (XEXP (XEXP (x, 0), 0), code, !optimize_size)
+          + rtx_cost (XEXP (XEXP (x, 1), 0), code, !optimize_size);
 
-      total = rtx_cost (XEXP (x, 0), code) + rtx_cost (XEXP (x, 1), code);
+      total = rtx_cost (XEXP (x, 0), code, !optimize_size)
+      	      + rtx_cost (XEXP (x, 1), code, !optimize_size);
       switch (mode)
         {
         case QImode:
@@ -5362,7 +5363,7 @@ m68hc11_rtx_costs_1 (rtx x, enum rtx_code code,
     case COMPARE:
     case ABS:
     case ZERO_EXTEND:
-      total = extra_cost + rtx_cost (XEXP (x, 0), code);
+      total = extra_cost + rtx_cost (XEXP (x, 0), code, !optimize_size);
       if (mode == QImode)
 	{
 	  return total + COSTS_N_INSNS (1);
@@ -5389,7 +5390,8 @@ m68hc11_rtx_costs_1 (rtx x, enum rtx_code code,
 }
 
 static bool
-m68hc11_rtx_costs (rtx x, int code, int outer_code, int *total)
+m68hc11_rtx_costs (rtx x, int code, int outer_code, int *total,
+		   bool speed ATTRIBUTE_UNUSED)
 {
   switch (code)
     {

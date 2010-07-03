@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file parallel/par_loop.h
  *  @brief Parallelization of embarrassingly parallel execution by
@@ -42,6 +36,7 @@
 #include <omp.h>
 #include <parallel/settings.h>
 #include <parallel/base.h>
+#include <parallel/equally_split.h>
 
 namespace __gnu_parallel
 {
@@ -80,9 +75,9 @@ template<typename RandomAccessIterator,
   {
     typedef std::iterator_traits<RandomAccessIterator> traits_type;
     typedef typename traits_type::difference_type difference_type;
-
     const difference_type length = end - begin;
     Result *thread_results;
+    bool* constructed;
 
     thread_index_t num_threads =
       __gnu_parallel::min<difference_type>(get_max_threads(), length);
@@ -92,13 +87,15 @@ template<typename RandomAccessIterator,
 #       pragma omp single
           {
             num_threads = omp_get_num_threads();
-            thread_results = new Result[num_threads];
+            thread_results = static_cast<Result*>(
+                                ::operator new(num_threads * sizeof(Result)));
+            constructed = new bool[num_threads];
           }
 
         thread_index_t iam = omp_get_thread_num();
 
         // Neutral element.
-        Result reduct = Result();
+        Result* reduct = static_cast<Result*>(::operator new(sizeof(Result)));
 
         difference_type
             start = equally_split_point(length, num_threads, iam),
@@ -106,26 +103,33 @@ template<typename RandomAccessIterator,
 
         if (start < stop)
           {
-            reduct = f(o, begin + start);
+            new(reduct) Result(f(o, begin + start));
             ++start;
+            constructed[iam] = true;
           }
+        else
+          constructed[iam] = false;
 
         for (; start < stop; ++start)
-          reduct = r(reduct, f(o, begin + start));
+          *reduct = r(*reduct, f(o, begin + start));
 
-        thread_results[iam] = reduct;
+        thread_results[iam] = *reduct;
       } //parallel
 
     for (thread_index_t i = 0; i < num_threads; ++i)
-      output = r(output, thread_results[i]);
+        if (constructed[i])
+            output = r(output, thread_results[i]);
 
     // Points to last element processed (needed as return value for
     // some algorithms like transform).
     f.finish_iterator = begin + length;
+
+    delete[] thread_results;
+    delete[] constructed;
 
     return o;
   }
 
 } // end namespace
 
-#endif
+#endif /* _GLIBCXX_PARALLEL_PAR_LOOP_H */

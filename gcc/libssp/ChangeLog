@@ -1,18 +1,90 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
 
-2008-08-27  Release Manager
+2010-01-21  Release Manager
 
-	* GCC 4.3.2 released.
+	* GCC 4.4.3 released.
 
-2008-06-06  Release Manager
+2009-10-15  Release Manager
 
-	* GCC 4.3.1 released.
+	* GCC 4.4.2 released.
 
-2008-03-05  Release Manager
+2009-07-22  Release Manager
 
-	* GCC 4.3.0 released.
+	* GCC 4.4.1 released.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-04-09  Nick Clifton  <nickc@redhat.com>
+
+	* strcat-chk.c: Change copyright header to refer to version 3
+	of the GNU General Public License with version 3.1 of the GCC
+	Runtime Library Exception and to point readers at the COPYING3
+	and COPYING3.RUNTIME files and the FSF's license web page.
+	* gets-chk.c: Likewise.
+	* memcpy-chk.c: Likewise.
+	* memmove-chk.c: Likewise.
+	* mempcpy-chk.c: Likewise.
+	* memset-chk.c: Likewise.
+	* snprintf-chk.c: Likewise.
+	* sprintf-chk.c: Likewise.
+	* ssp-local.c: Likewise.
+	* ssp.c: Likewise.
+	* ssp/ssp.h.in: Likewise.
+	* ssp/stdio.h: Likewise.
+	* ssp/string.h: Likewise.
+	* ssp/unistd.h: Likewise.
+	* stpcpy-chk.c: Likewise.
+	* strcpy-chk.c: Likewise.
+	* strncat-chk.c: Likewise.
+	* strncpy-chk.c: Likewise.
+	* vsnprintf-chk.c: Likewise.
+	* vsprintf-chk.c: Likewise.
+
+2009-03-01  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2009-02-02  Danny Smith  <dannysmith@users.sourcforge.net>
+
+	* ssp.c (_PATH_TTY): Define as "CONOUT$" for _WIN32.
+
+2008-12-18  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2008-09-26  Peter O'Gorman  <pogma@thewrittenword.com>
+            Steve Ellcey  <sje@cup.hp.com>
+
+	* configure: Regenerate for new libtool.
+	* Makefile.in: Ditto.
+	* aclocal.m4: Ditto.
+
+2008-08-21  Aaron W. LaFramboise  <aaronavay62@aaronwl.com>
+
+	* Makefile.am: Add -no-undefined
+	* Makefile.in: Regenerate.
+
+2008-06-17  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.in: Regenerate.
+	* config.h.in: Regenerate.
+	* configure: Regenerate.
+
+2008-04-18  Paolo Bonzini  <bonzini@gnu.org>
+
+	PR bootstrap/35457
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+
+2008-03-16  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* aclocal.m4: Regenerate.
+	* configure: Likewise.
+	* Makefile.in: Likewise.
 
 2008-01-24  David Edelsohn  <edelsohn@gnu.org>
 

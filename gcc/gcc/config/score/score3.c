@@ -1,5 +1,5 @@
 /* score3.c for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Sunnorth
 
    This file is part of GCC.
@@ -49,6 +49,7 @@
 #include "langhooks.h"
 #include "cfglayout.h"
 #include "score3.h"
+#include "df.h"
 
 #define BITSET_P(VALUE, BIT)      (((VALUE) & (1L << (BIT))) != 0)
 #define INS_BUF_SZ                128
@@ -183,13 +184,13 @@ score3_compute_frame_size (HOST_WIDE_INT size)
   f->gp_reg_size = 0;
   f->mask = 0;
   f->var_size = SCORE3_STACK_ALIGN (size);
-  f->args_size = current_function_outgoing_args_size;
+  f->args_size = crtl->outgoing_args_size;
   f->cprestore_size = flag_pic ? UNITS_PER_WORD : 0;
 
   if (f->var_size == 0 && current_function_is_leaf)
     f->args_size = f->cprestore_size = 0;
 
-  if (f->args_size == 0 && current_function_calls_alloca)
+  if (f->args_size == 0 && cfun->calls_alloca)
     f->args_size = UNITS_PER_WORD;
 
   f->total_size = f->var_size + f->args_size + f->cprestore_size;
@@ -202,7 +203,7 @@ score3_compute_frame_size (HOST_WIDE_INT size)
         }
     }
 
-  if (current_function_calls_eh_return)
+  if (crtl->calls_eh_return)
     {
       unsigned int i;
       for (i = 0;; ++i)
@@ -323,7 +324,7 @@ score3_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
                         HOST_WIDE_INT delta, HOST_WIDE_INT vcall_offset,
                         tree function)
 {
-  rtx this, temp1, insn, fnaddr;
+  rtx this_rtx, temp1, insn, fnaddr;
 
   /* Pretend to be a post-reload pass while generating rtl.  */
   reload_completed = 1;
@@ -336,11 +337,11 @@ score3_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 
   /* Find out which register contains the "this" pointer.  */
   if (aggregate_value_p (TREE_TYPE (TREE_TYPE (function)), function))
-    this = gen_rtx_REG (Pmode, ARG_REG_FIRST + 1);
+    this_rtx = gen_rtx_REG (Pmode, ARG_REG_FIRST + 1);
   else
-    this = gen_rtx_REG (Pmode, ARG_REG_FIRST);
+    this_rtx = gen_rtx_REG (Pmode, ARG_REG_FIRST);
 
-  /* Add DELTA to THIS.  */
+  /* Add DELTA to THIS_RTX.  */
   if (delta != 0)
     {
       rtx offset = GEN_INT (delta);
@@ -349,23 +350,23 @@ score3_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
           emit_move_insn (temp1, offset);
           offset = temp1;
         }
-      emit_insn (gen_add3_insn (this, this, offset));
+      emit_insn (gen_add3_insn (this_rtx, this_rtx, offset));
     }
 
-  /* If needed, add *(*THIS + VCALL_OFFSET) to THIS.  */
+  /* If needed, add *(*THIS_RTX + VCALL_OFFSET) to THIS_RTX.  */
   if (vcall_offset != 0)
     {
       rtx addr;
 
-      /* Set TEMP1 to *THIS.  */
-      emit_move_insn (temp1, gen_rtx_MEM (Pmode, this));
+      /* Set TEMP1 to *THIS_RTX.  */
+      emit_move_insn (temp1, gen_rtx_MEM (Pmode, this_rtx));
 
-      /* Set ADDR to a legitimate address for *THIS + VCALL_OFFSET.  */
+      /* Set ADDR to a legitimate address for *THIS_RTX + VCALL_OFFSET.  */
       addr = score3_add_offset (temp1, vcall_offset);
 
-      /* Load the offset and add it to THIS.  */
+      /* Load the offset and add it to THIS_RTX.  */
       emit_move_insn (temp1, gen_rtx_MEM (Pmode, addr));
-      emit_insn (gen_add3_insn (this, this, temp1));
+      emit_insn (gen_add3_insn (this_rtx, this_rtx, temp1));
     }
 
   /* Jump to the target function.  */
@@ -382,6 +383,7 @@ score3_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
+  free_after_compilation (cfun);
 
   /* Clean up the vars set above.  Note that final_end_function resets
      the global pointer for us.  */
@@ -690,19 +692,19 @@ score3_reg_class (int regno)
 
 /* Implement PREFERRED_RELOAD_CLASS macro.  */
 enum reg_class
-score3_preferred_reload_class (rtx x ATTRIBUTE_UNUSED, enum reg_class class)
+score3_preferred_reload_class (rtx x ATTRIBUTE_UNUSED, enum reg_class rclass)
 {
-  if (reg_class_subset_p (G16_REGS, class))
+  if (reg_class_subset_p (G16_REGS, rclass))
     return G16_REGS;
-  if (reg_class_subset_p (G32_REGS, class))
+  if (reg_class_subset_p (G32_REGS, rclass))
     return G32_REGS;
-  return class;
+  return rclass;
 }
 
 /* Implement SECONDARY_INPUT_RELOAD_CLASS
    and SECONDARY_OUTPUT_RELOAD_CLASS macro.  */
 enum reg_class
-score3_secondary_reload_class (enum reg_class class,
+score3_secondary_reload_class (enum reg_class rclass,
                                enum machine_mode mode ATTRIBUTE_UNUSED,
                                rtx x)
 {
@@ -710,7 +712,7 @@ score3_secondary_reload_class (enum reg_class class,
   if (GET_CODE (x) == REG || GET_CODE(x) == SUBREG)
     regno = true_regnum (x);
 
-  if (!GR_REG_CLASS_P (class))
+  if (!GR_REG_CLASS_P (rclass))
     return GP_REG_P (regno) ? NO_REGS : G32_REGS;
   return NO_REGS;
 }
@@ -767,21 +769,21 @@ int
 score3_hard_regno_mode_ok (unsigned int regno, enum machine_mode mode)
 {
   int size = GET_MODE_SIZE (mode);
-  enum mode_class class = GET_MODE_CLASS (mode);
+  enum mode_class mclass = GET_MODE_CLASS (mode);
 
-  if (class == MODE_CC)
+  if (mclass == MODE_CC)
     return regno == CC_REGNUM;
   else if (regno == FRAME_POINTER_REGNUM
            || regno == ARG_POINTER_REGNUM)
-    return class == MODE_INT;
+    return mclass == MODE_INT;
   else if (GP_REG_P (regno))
     return !(regno & 1) || (size <= UNITS_PER_WORD);
   else if (CE_REG_P (regno))
-    return (class == MODE_INT
+    return (mclass == MODE_INT
             && ((size <= UNITS_PER_WORD)
                 || (regno == CE_REG_FIRST && size == 2 * UNITS_PER_WORD)));
   else
-    return (class == MODE_INT) && (size <= UNITS_PER_WORD);
+    return (mclass == MODE_INT) && (size <= UNITS_PER_WORD);
 }
 
 /* Implement INITIAL_ELIMINATION_OFFSET.  FROM is either the frame
@@ -999,7 +1001,8 @@ score3_address_insns (rtx x, enum machine_mode mode)
 
 /* Implement TARGET_RTX_COSTS macro.  */
 bool
-score3_rtx_costs (rtx x, int code, int outer_code, int *total)
+score3_rtx_costs (rtx x, int code, int outer_code, int *total,
+		  bool speed ATTRIBUTE_UNUSED)
 {
   enum machine_mode mode = GET_MODE (x);
 
@@ -1466,7 +1469,7 @@ rpush (int rd, int cnt)
   rtx mem = gen_rtx_MEM (SImode, gen_rtx_PRE_DEC (SImode, stack_pointer_rtx));
   rtx reg = gen_rtx_REG (SImode, rd);
 
-  if (!current_function_calls_eh_return)
+  if (!crtl->calls_eh_return)
     MEM_READONLY_P (mem) = 1;
 
   if (cnt == 1)
@@ -1580,7 +1583,7 @@ rpop (int rd, int cnt)
   rtx mem = gen_rtx_MEM (SImode, gen_rtx_POST_INC (SImode, stack_pointer_rtx));
   rtx reg = gen_rtx_REG (SImode, rd);
 
-  if (!current_function_calls_eh_return)
+  if (!crtl->calls_eh_return)
     MEM_READONLY_P (mem) = 1;
 
   if (cnt == 1)
@@ -1624,7 +1627,7 @@ score3_epilogue (int sibcall_p)
   if (base != stack_pointer_rtx)
     emit_move_insn (stack_pointer_rtx, base);
 
-  if (current_function_calls_eh_return)
+  if (crtl->calls_eh_return)
     emit_insn (gen_add3_insn (stack_pointer_rtx,
                               stack_pointer_rtx,
                               EH_RETURN_STACKADJ_RTX));

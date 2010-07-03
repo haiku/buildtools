@@ -1,5 +1,5 @@
 /* Tree browser.
-   Copyright (C) 2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <s.pop@laposte.net>
 
 This file is part of GCC.
@@ -71,11 +71,14 @@ struct tb_tree_code {
 };
 
 #define DEFTREECODE(SYM, STRING, TYPE, NARGS) { SYM, STRING, sizeof (STRING) - 1 },
+#define END_OF_BASE_TREE_CODES \
+  { LAST_AND_UNUSED_TREE_CODE, "@dummy", sizeof ("@dummy") - 1 },
 static const struct tb_tree_code tb_tree_codes[] =
 {
-#include "tree.def"
+#include "all-tree.def"
 };
 #undef DEFTREECODE
+#undef END_OF_BASE_TREE_CODES
 
 #define TB_TREE_CODE(N) (tb_tree_codes[N].code)
 #define TB_TREE_CODE_TEXT(N) (tb_tree_codes[N].code_string)

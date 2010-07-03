@@ -1,6 +1,6 @@
 /* Control flow optimization code for GNU compiler.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -55,6 +55,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "df.h"
 #include "dce.h"
+#include "dbgcnt.h"
 
 #define FORWARDER_BLOCK_P(BB) ((BB)->flags & BB_FORWARDER_BLOCK)
 
@@ -417,8 +418,8 @@ try_forward_edges (int mode, basic_block b)
      and cold sections.
 
      Basic block partitioning may result in some jumps that appear to
-     be optimizable (or blocks that appear to be mergeable), but which really m
-     ust be left untouched (they are required to make it safely across
+     be optimizable (or blocks that appear to be mergeable), but which really
+     must be left untouched (they are required to make it safely across
      partition boundaries).  See the comments at the top of
      bb-reorder.c:partition_hot_cold_basic_blocks for complete details.  */
 
@@ -428,7 +429,7 @@ try_forward_edges (int mode, basic_block b)
   for (ei = ei_start (b->succs); (e = ei_safe_edge (ei)); )
     {
       basic_block target, first;
-      int counter;
+      int counter, goto_locus;
       bool threaded = false;
       int nthreaded_edges = 0;
       bool may_thread = first_pass | df_get_bb_dirty (b);
@@ -446,6 +447,7 @@ try_forward_edges (int mode, basic_block b)
 
       target = first = e->dest;
       counter = NUM_FIXED_BLOCKS;
+      goto_locus = e->goto_locus;
 
       /* If we are partitioning hot/cold basic_blocks, we don't want to mess
 	 up jumps that cross between hot/cold sections.
@@ -475,6 +477,28 @@ try_forward_edges (int mode, basic_block b)
 	      new_target = single_succ (target);
 	      if (target == new_target)
 		counter = n_basic_blocks;
+	      else if (!optimize)
+		{
+		  /* When not optimizing, ensure that edges or forwarder
+		     blocks with different locus are not optimized out.  */
+		  int locus = single_succ_edge (target)->goto_locus;
+
+		  if (locus && goto_locus && !locator_eq (locus, goto_locus))
+		    counter = n_basic_blocks;
+		  else if (locus)
+		    goto_locus = locus;
+
+		  if (INSN_P (BB_END (target)))
+		    {
+		      locus = INSN_LOCATOR (BB_END (target));
+
+		      if (locus && goto_locus
+			  && !locator_eq (locus, goto_locus))
+			counter = n_basic_blocks;
+		      else if (locus)
+			goto_locus = locus;
+		    }
+		}
 	    }
 
 	  /* Allow to thread only over one edge at time to simplify updating
@@ -537,6 +561,8 @@ try_forward_edges (int mode, basic_block b)
 	  int edge_probability = e->probability;
 	  int edge_frequency;
 	  int n = 0;
+
+	  e->goto_locus = goto_locus;
 
 	  /* Don't force if target is exit block.  */
 	  if (threaded && target != EXIT_BLOCK_PTR)
@@ -1133,134 +1159,6 @@ flow_find_cross_jump (int mode ATTRIBUTE_UNUSED, basic_block bb1,
   return ninsns;
 }
 
-/* Return true iff the condbranches at the end of BB1 and BB2 match.  */
-bool
-condjump_equiv_p (struct equiv_info *info, bool call_init)
-{
-  basic_block bb1 = info->x_block;
-  basic_block bb2 = info->y_block;
-  edge b1 = BRANCH_EDGE (bb1);
-  edge b2 = BRANCH_EDGE (bb2);
-  edge f1 = FALLTHRU_EDGE (bb1);
-  edge f2 = FALLTHRU_EDGE (bb2);
-  bool reverse, match;
-  rtx set1, set2, cond1, cond2;
-  rtx src1, src2;
-  enum rtx_code code1, code2;
-
-  /* Get around possible forwarders on fallthru edges.  Other cases
-     should be optimized out already.  */
-  if (FORWARDER_BLOCK_P (f1->dest))
-    f1 = single_succ_edge (f1->dest);
-
-  if (FORWARDER_BLOCK_P (f2->dest))
-    f2 = single_succ_edge (f2->dest);
-
-  /* To simplify use of this function, return false if there are
-     unneeded forwarder blocks.  These will get eliminated later
-     during cleanup_cfg.  */
-  if (FORWARDER_BLOCK_P (f1->dest)
-      || FORWARDER_BLOCK_P (f2->dest)
-      || FORWARDER_BLOCK_P (b1->dest)
-      || FORWARDER_BLOCK_P (b2->dest))
-    return false;
-
-  if (f1->dest == f2->dest && b1->dest == b2->dest)
-    reverse = false;
-  else if (f1->dest == b2->dest && b1->dest == f2->dest)
-    reverse = true;
-  else
-    return false;
-
-  set1 = pc_set (BB_END (bb1));
-  set2 = pc_set (BB_END (bb2));
-  if ((XEXP (SET_SRC (set1), 1) == pc_rtx)
-      != (XEXP (SET_SRC (set2), 1) == pc_rtx))
-    reverse = !reverse;
-
-  src1 = SET_SRC (set1);
-  src2 = SET_SRC (set2);
-  cond1 = XEXP (src1, 0);
-  cond2 = XEXP (src2, 0);
-  code1 = GET_CODE (cond1);
-  if (reverse)
-    code2 = reversed_comparison_code (cond2, BB_END (bb2));
-  else
-    code2 = GET_CODE (cond2);
-
-  if (code2 == UNKNOWN)
-    return false;
-
-  if (call_init && !struct_equiv_init (STRUCT_EQUIV_START | info->mode, info))
-    gcc_unreachable ();
-  /* Make the sources of the pc sets unreadable so that when we call
-     insns_match_p it won't process them.
-     The death_notes_match_p from insns_match_p won't see the local registers
-     used for the pc set, but that could only cause missed optimizations when
-     there are actually condjumps that use stack registers.  */
-  SET_SRC (set1) = pc_rtx;
-  SET_SRC (set2) = pc_rtx;
-  /* Verify codes and operands match.  */
-  if (code1 == code2)
-    {
-      match = (insns_match_p (BB_END (bb1), BB_END (bb2), info)
-	       && rtx_equiv_p (&XEXP (cond1, 0), XEXP (cond2, 0), 1, info)
-	       && rtx_equiv_p (&XEXP (cond1, 1), XEXP (cond2, 1), 1, info));
-
-    }
-  else if (code1 == swap_condition (code2))
-    {
-      match = (insns_match_p (BB_END (bb1), BB_END (bb2), info)
-	       && rtx_equiv_p (&XEXP (cond1, 1), XEXP (cond2, 0), 1, info)
-	       && rtx_equiv_p (&XEXP (cond1, 0), XEXP (cond2, 1), 1, info));
-
-    }
-  else
-    match = false;
-  SET_SRC (set1) = src1;
-  SET_SRC (set2) = src2;
-  match &= verify_changes (0);
-
-  /* If we return true, we will join the blocks.  Which means that
-     we will only have one branch prediction bit to work with.  Thus
-     we require the existing branches to have probabilities that are
-     roughly similar.  */
-  if (match
-      && !optimize_size
-      && maybe_hot_bb_p (bb1)
-      && maybe_hot_bb_p (bb2))
-    {
-      int prob2;
-
-      if (b1->dest == b2->dest)
-	prob2 = b2->probability;
-      else
-	/* Do not use f2 probability as f2 may be forwarded.  */
-	prob2 = REG_BR_PROB_BASE - b2->probability;
-
-      /* Fail if the difference in probabilities is greater than 50%.
-	 This rules out two well-predicted branches with opposite
-	 outcomes.  */
-      if (abs (b1->probability - prob2) > REG_BR_PROB_BASE / 2)
-	{
-	  if (dump_file)
-	    fprintf (dump_file,
-		     "Outcomes of branch in bb %i and %i differ too much (%i %i)\n",
-		     bb1->index, bb2->index, b1->probability, prob2);
-
-	  match = false;
-	}
-    }
-
-  if (dump_file && match)
-    fprintf (dump_file, "Conditionals in bb %i and %i match.\n",
-	     bb1->index, bb2->index);
-
-  if (!match)
-    cancel_changes (0);
-  return match;
-}
-
 /* Return true iff outgoing edges of BB1 and BB2 match, together with
    the branch instruction.  This means that if we commonize the control
    flow before end of the basic block, the semantic remains unchanged.
@@ -1362,9 +1260,8 @@ outgoing_edges_match (int mode, basic_block bb1, basic_block bb2)
 	 we require the existing branches to have probabilities that are
 	 roughly similar.  */
       if (match
-	  && !optimize_size
-	  && maybe_hot_bb_p (bb1)
-	  && maybe_hot_bb_p (bb2))
+	  && optimize_bb_for_speed_p (bb1)
+	  && optimize_bb_for_speed_p (bb2))
 	{
 	  int prob2;
 
@@ -1811,7 +1708,7 @@ try_crossjump_bb (int mode, basic_block bb)
 
   /* Don't crossjump if this block ends in a computed jump,
      unless we are optimizing for size.  */
-  if (!optimize_size
+  if (optimize_bb_for_size_p (bb)
       && bb != EXIT_BLOCK_PTR
       && computed_jump_p (BB_END (bb)))
     return false;
@@ -2250,6 +2147,9 @@ cleanup_cfg (int mode)
   if (mode & CLEANUP_CROSSJUMP)
     add_noreturn_fake_exit_edges ();
 
+  if (!dbg_cnt (cfg_cleanup))
+    return changed;
+
   while (try_optimize_cfg (mode))
     {
       delete_unreachable_blocks (), changed = true;
@@ -2300,13 +2200,15 @@ rest_of_handle_jump (void)
 {
   delete_unreachable_blocks ();
 
-  if (cfun->tail_call_emit)
+  if (crtl->tail_call_emit)
     fixup_tail_calls ();
   return 0;
 }
 
-struct tree_opt_pass pass_jump =
+struct rtl_opt_pass pass_jump =
 {
+ {
+  RTL_PASS,
   "sibling",                            /* name */
   NULL,                                 /* gate */
   rest_of_handle_jump,			/* execute */
@@ -2319,7 +2221,7 @@ struct tree_opt_pass pass_jump =
   0,                                    /* properties_destroyed */
   TODO_ggc_collect,                     /* todo_flags_start */
   TODO_verify_flow,                     /* todo_flags_finish */
-  'i'                                   /* letter */
+ }
 };
 
 
@@ -2335,8 +2237,10 @@ rest_of_handle_jump2 (void)
 }
 
 
-struct tree_opt_pass pass_jump2 =
+struct rtl_opt_pass pass_jump2 =
 {
+ {
+  RTL_PASS,
   "jump",                               /* name */
   NULL,                                 /* gate */
   rest_of_handle_jump2,			/* execute */
@@ -2349,7 +2253,7 @@ struct tree_opt_pass pass_jump2 =
   0,                                    /* properties_destroyed */
   TODO_ggc_collect,                     /* todo_flags_start */
   TODO_dump_func | TODO_verify_rtl_sharing,/* todo_flags_finish */
-  'j'                                   /* letter */
+ }
 };
 
 

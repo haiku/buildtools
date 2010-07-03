@@ -1,5 +1,6 @@
 /* Lambda matrix and vector interface.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dberlin@dberlin.org>
 
 This file is part of GCC.
@@ -28,13 +29,20 @@ along with GCC; see the file COPYING3.  If not see
    and scalar multiplication.  In this vector space, an element is a list of
    integers.  */
 typedef int *lambda_vector;
-
 DEF_VEC_P(lambda_vector);
 DEF_VEC_ALLOC_P(lambda_vector,heap);
+DEF_VEC_ALLOC_P(lambda_vector,gc);
+
+typedef VEC(lambda_vector, heap) *lambda_vector_vec_p;
+DEF_VEC_P (lambda_vector_vec_p);
+DEF_VEC_ALLOC_P (lambda_vector_vec_p, heap);
 
 /* An integer matrix.  A matrix consists of m vectors of length n (IE
    all vectors are the same length).  */
 typedef lambda_vector *lambda_matrix;
+
+DEF_VEC_P (lambda_matrix);
+DEF_VEC_ALLOC_P (lambda_matrix, heap);
 
 /* A transformation matrix, which is a self-contained ROWSIZE x COLSIZE
    matrix.  Rather than use floats, we simply keep a single DENOMINATOR that
@@ -206,10 +214,11 @@ lambda_loopnest gcc_loopnest_to_lambda_loopnest (struct loop *,
                                                  struct obstack *);
 void lambda_loopnest_to_gcc_loopnest (struct loop *,
 				      VEC(tree,heap) *, VEC(tree,heap) *,
-				      VEC(tree,heap) **,
+				      VEC(gimple,heap) **,
                                       lambda_loopnest, lambda_trans_matrix,
                                       struct obstack *);
-void remove_iv (tree);
+void remove_iv (gimple);
+tree find_induction_var_from_exit_cond (struct loop *);
 
 static inline void lambda_vector_negate (lambda_vector, lambda_vector, int);
 static inline void lambda_vector_mult_const (lambda_vector, lambda_vector, int, int);
@@ -371,6 +380,33 @@ lambda_vector_matrix_mult (lambda_vector vect, int m, lambda_matrix mat,
       dest[i] += mat[j][i] * vect[j];
 }
 
+/* Compare two vectors returning an integer less than, equal to, or
+   greater than zero if the first argument is considered to be respectively
+   less than, equal to, or greater than the second.  
+   We use the lexicographic order.  */
+
+static inline int
+lambda_vector_compare (lambda_vector vec1, int length1, lambda_vector vec2,
+                       int length2)
+{
+  int min_length;
+  int i;
+
+  if (length1 < length2)
+    min_length = length1;
+  else
+    min_length = length2;
+
+  for (i = 0; i < min_length; i++)
+    if (vec1[i] < vec2[i])
+      return -1;
+    else if (vec1[i] > vec2[i])
+      return 1;
+    else
+      continue;
+
+  return length1 - length2;
+}
 
 /* Print out a vector VEC of length N to OUTFILE.  */
 
@@ -469,5 +505,21 @@ build_linear_expr (tree type, lambda_vector coefs, VEC (tree, heap) *ivs)
   return expr;
 }
 
-#endif /* LAMBDA_H  */
+/* Returns the dependence level for a vector DIST of size LENGTH.
+   LEVEL = 0 means a lexicographic dependence, i.e. a dependence due
+   to the sequence of statements, not carried by any loop.  */
 
+
+static inline unsigned
+dependence_level (lambda_vector dist_vect, int length)
+{
+  int i;
+
+  for (i = 0; i < length; i++)
+    if (dist_vect[i] != 0)
+      return i + 1;
+
+  return 0;
+}
+
+#endif /* LAMBDA_H  */

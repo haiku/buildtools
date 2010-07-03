@@ -1,5 +1,5 @@
 @c Copyright (C) 1988,1989,1992,1993,1994,1995,1996,1997,1998,1999,2000,
-@c 2001,2002,2003,2004,2005,2006,2007 Free Software Foundation, Inc.
+@c 2001,2002,2003,2004,2005,2006,2007,2008,2009 Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -666,7 +666,7 @@ Geoff Noer for his work on getting cygwin native builds working.
 
 @item
 Diego Novillo for his work on Tree SSA, OpenMP, SPEC performance
-tracking web pages and assorted fixes.
+tracking web pages, GIMPLE tuples, and assorted fixes.
 
 @item
 David O'Brien for the FreeBSD/alpha, FreeBSD/AMD x86-64, FreeBSD/ARM,
@@ -916,6 +916,10 @@ Teemu Torma for thread safe exception handling support.
 @item
 Leonard Tower wrote parts of the parser, RTL generator, and RTL
 definitions, and of the VAX machine description.
+
+@item 
+Daniel Towner and Hariharan Sandanagobalane contributed and 
+maintain the picoChip port.
 
 @item
 Tom Tromey for internationalization support and for his many Java
@@ -1415,6 +1419,9 @@ Sidney Cadot
 Bradford Castalia
 
 @item
+Robert Clark
+
+@item
 Jonathan Corbet
 
 @item
@@ -1607,5 +1614,6 @@ David E. Young
 And many others
 @end itemize
 
-And finally we'd like to thank everyone who uses the compiler, submits bug
-reports and generally reminds us why we're doing this work in the first place.
+And finally we'd like to thank everyone who uses the compiler, provides
+feedback and generally reminds us why we're doing this work in the first
+place.

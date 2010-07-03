@@ -1,5 +1,5 @@
 /* Language hooks common to C++ and ObjC++ front ends.
-   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Ziemowit Laski  <zlaski@apple.com>
 
 This file is part of GCC.
@@ -52,8 +52,6 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
 #define LANG_HOOKS_GET_ALIAS_SET cxx_get_alias_set
 #undef LANG_HOOKS_EXPAND_EXPR
 #define LANG_HOOKS_EXPAND_EXPR c_expand_expr
-#undef LANG_HOOKS_EXPAND_DECL
-#define LANG_HOOKS_EXPAND_DECL c_expand_decl
 #undef LANG_HOOKS_PARSE_FILE
 #define LANG_HOOKS_PARSE_FILE c_common_parse_file
 #undef LANG_HOOKS_STATICP
@@ -86,15 +84,12 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
 #define LANG_HOOKS_COMDAT_GROUP cxx_comdat_group
 #undef  LANG_HOOKS_BUILTIN_FUNCTION
 #define LANG_HOOKS_BUILTIN_FUNCTION cxx_builtin_function
+#undef  LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE
+#define LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE cxx_builtin_function_ext_scope
 #undef	LANG_HOOKS_TYPE_HASH_EQ
 #define LANG_HOOKS_TYPE_HASH_EQ	cxx_type_hash_eq
-
-#undef LANG_HOOKS_FUNCTION_INIT
-#define LANG_HOOKS_FUNCTION_INIT cxx_push_function_context
-#undef LANG_HOOKS_FUNCTION_FINAL
-#define LANG_HOOKS_FUNCTION_FINAL cxx_pop_function_context
-#undef LANG_HOOKS_FUNCTION_MISSING_NORETURN_OK_P
-#define LANG_HOOKS_FUNCTION_MISSING_NORETURN_OK_P cp_missing_noreturn_ok_p
+#undef LANG_HOOKS_MISSING_NORETURN_OK_P
+#define LANG_HOOKS_MISSING_NORETURN_OK_P cp_missing_noreturn_ok_p
 
 /* Attribute hooks.  */
 #undef LANG_HOOKS_COMMON_ATTRIBUTE_TABLE
@@ -146,6 +141,8 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
 #define LANG_HOOKS_OMP_CLAUSE_ASSIGN_OP cxx_omp_clause_assign_op
 #undef LANG_HOOKS_OMP_CLAUSE_DTOR
 #define LANG_HOOKS_OMP_CLAUSE_DTOR cxx_omp_clause_dtor
+#undef LANG_HOOKS_OMP_FINISH_CLAUSE
+#define LANG_HOOKS_OMP_FINISH_CLAUSE cxx_omp_finish_clause
 #undef LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE
 #define LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE cxx_omp_privatize_by_reference
 

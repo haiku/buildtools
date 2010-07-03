@@ -1,5 +1,5 @@
 /* coverage.h - Defines data exported from coverage.c
-   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -38,6 +38,8 @@ extern int coverage_begin_output (void);
 extern int coverage_counter_alloc (unsigned /*counter*/, unsigned/*num*/);
 /* Use a counter from the most recent allocation.  */
 extern tree tree_coverage_counter_ref (unsigned /*counter*/, unsigned/*num*/);
+/* Use a counter address from the most recent allocation.  */
+extern tree tree_coverage_counter_addr (unsigned /*counter*/, unsigned/*num*/);
 
 /* Get all the counters for the current function.  */
 extern gcov_type *get_coverage_counts (unsigned /*counter*/,

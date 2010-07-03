@@ -1,6 +1,7 @@
 /* ET-trees data structure implementation.
    Contributed by Pavel Nejedly
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008 Free Software
+   Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -446,7 +447,7 @@ et_new_occ (struct et_node *node)
   
   if (!et_occurrences)
     et_occurrences = create_alloc_pool ("et_occ pool", sizeof (struct et_occ), 300);
-  nw = pool_alloc (et_occurrences);
+  nw = (struct et_occ *) pool_alloc (et_occurrences);
 
   nw->of = node;
   nw->parent = NULL;
@@ -469,7 +470,7 @@ et_new_tree (void *data)
   
   if (!et_nodes)
     et_nodes = create_alloc_pool ("et_node pool", sizeof (struct et_node), 300);
-  nw = pool_alloc (et_nodes);
+  nw = (struct et_node *) pool_alloc (et_nodes);
 
   nw->data = data;
   nw->father = NULL;
@@ -754,7 +755,7 @@ et_root (struct et_node *node)
 {
   struct et_occ *occ = node->rightmost_occ, *r;
 
-  /* The root of the tree corresponds to the rightmost occurence in the
+  /* The root of the tree corresponds to the rightmost occurrence in the
      represented path.  */
   et_splay (occ);
   for (r = occ; r->next; r = r->next)

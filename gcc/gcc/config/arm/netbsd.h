@@ -1,5 +1,5 @@
 /* NetBSD/arm a.out version.
-   Copyright (C) 1993, 1994, 1997, 1998, 2003, 2004, 2005, 2007
+   Copyright (C) 1993, 1994, 1997, 1998, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Mark Brinicombe (amb@physig.ph.kcl.ac.uk)
 
@@ -101,7 +101,7 @@
 /* Although not normally relevant (since by default, all aggregates
    are returned in memory) compiling some parts of libc requires
    non-APCS style struct returns.  */
-#undef RETURN_IN_MEMORY
+#undef TARGET_RETURN_IN_MEMORY
 
 /* VERY BIG NOTE : Change of structure alignment for RiscBSD.
    There are consequences you should be aware of...

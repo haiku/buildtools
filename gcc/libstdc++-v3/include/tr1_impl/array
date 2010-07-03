@@ -1,11 +1,11 @@
 // class template array -*- C++ -*-
 
-// Copyright (C) 2007 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file tr1_impl/array
  *  This is an internal header file, included by other library headers.
@@ -36,8 +31,20 @@ namespace std
 {
 _GLIBCXX_BEGIN_NAMESPACE_TR1
 
-  /// array.
-  /// NB: Requires complete type _Tp.
+  /**
+   *  @brief A standard container for storing a fixed size sequence of elements.
+   *
+   *  @ingroup sequences
+   *
+   *  Meets the requirements of a <a href="tables.html#65">container</a>, a
+   *  <a href="tables.html#66">reversible container</a>, and a
+   *  <a href="tables.html#67">sequence</a>.
+   *
+   *  Sets support random access iterators.
+   *
+   *  @param  Tp  Type of element. Required to be a complete type.
+   *  @param  N  Number of elements.
+  */
   template<typename _Tp, std::size_t _Nm>
     struct array
     {
@@ -56,11 +63,16 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 
       // No explicit construct/copy/destroy for aggregate type.
 
-      void 
+      void
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+      // DR 776.
+      fill(const value_type& __u)
+#else
       assign(const value_type& __u)
+#endif
       { std::fill_n(begin(), size(), __u); }
 
-      void 
+      void
       swap(array& __other)
       { std::swap_ranges(begin(), end(), __other.begin()); }
 
@@ -74,7 +86,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       { return const_iterator(&_M_instance[0]); }
 
       iterator
-      end() 
+      end()
       { return iterator(&_M_instance[_Nm]); }
 
       const_iterator
@@ -222,26 +234,51 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
     class tuple_size;
 
   /// tuple_element
-  template<int _Int, typename _Tp> 
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+  template<std::size_t _Int, typename _Tp>
+#else
+  template<int _Int, typename _Tp>
+#endif
     class tuple_element;
 
   template<typename _Tp, std::size_t _Nm>
     struct tuple_size<array<_Tp, _Nm> >
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+    { static const std::size_t value = _Nm; };
+#else
     { static const int value = _Nm; };
+#endif
 
   template<typename _Tp, std::size_t _Nm>
-    const int tuple_size<array<_Tp, _Nm> >::value;
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+    const std::size_t
+#else
+    const int
+#endif
+    tuple_size<array<_Tp, _Nm> >::value;  
 
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+  template<std::size_t _Int, typename _Tp, std::size_t _Nm>
+#else
   template<int _Int, typename _Tp, std::size_t _Nm>
+#endif
     struct tuple_element<_Int, array<_Tp, _Nm> >
     { typedef _Tp type; };
 
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+  template<std::size_t _Int, typename _Tp, std::size_t _Nm>
+#else
   template<int _Int, typename _Tp, std::size_t _Nm>
+#endif
     inline _Tp&
     get(array<_Tp, _Nm>& __arr)
     { return __arr[_Int]; }
 
+#ifdef _GLIBCXX_INCLUDE_AS_CXX0X
+  template<std::size_t _Int, typename _Tp, std::size_t _Nm>
+#else
   template<int _Int, typename _Tp, std::size_t _Nm>
+#endif
     inline const _Tp&
     get(const array<_Tp, _Nm>& __arr)
     { return __arr[_Int]; }

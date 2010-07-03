@@ -1,5 +1,5 @@
-@c Copyright (c) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
-@c Free Software Foundation, Inc.
+@c Copyright (c) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+@c 2009  Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -1298,7 +1298,7 @@ tree structure; back ends must look at the @code{DECL_CONTEXT} for the
 referenced @code{VAR_DECL}.  If the @code{DECL_CONTEXT} for the
 referenced @code{VAR_DECL} is not the same as the function currently
 being processed, and neither @code{DECL_EXTERNAL} nor
-@code{DECL_STATIC} hold, then the reference is to a local variable in
+@code{TREE_STATIC} hold, then the reference is to a local variable in
 a containing function, and the back end must take appropriate action.
 
 @menu
@@ -1330,6 +1330,8 @@ a containing function, and the back end must take appropriate action.
 @findex DECL_GLOBAL_CTOR_P
 @findex DECL_GLOBAL_DTOR_P
 @findex GLOBAL_INIT_PRIORITY
+@findex DECL_FUNCTION_SPECIFIC_TARGET
+@findex DECL_FUNCTION_SPECIFIC_OPTIMIZATION
 
 The following macros and functions can be used on a @code{FUNCTION_DECL}:
 @ftable @code
@@ -1508,12 +1510,23 @@ whose @code{TREE_VALUE} represents a type.
 
 @item TYPE_NOTHROW_P
 This predicate holds when the exception-specification of its arguments
-if of the form `@code{()}'.
+is of the form `@code{()}'.
 
 @item DECL_ARRAY_DELETE_OPERATOR_P
 This predicate holds if the function an overloaded
 @code{operator delete[]}.
 
+@item DECL_FUNCTION_SPECIFIC_TARGET
+This macro returns a tree node that holds the target options that are
+to be used to compile this particular function or @code{NULL_TREE} if
+the function is to be compiled with the target options specified on
+the command line.
+
+@item DECL_FUNCTION_SPECIFIC_OPTIMIZATION
+This macro returns a tree node that holds the optimization options
+that are to be used to compile this particular function or
+@code{NULL_TREE} if the function is to be compiled with the
+optimization options specified on the command line.
 @end ftable
 
 @c ---------------------------------------------------------------------

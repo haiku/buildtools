@@ -1,5 +1,5 @@
 ;; Machine description of the Argonaut ARC cpu for GNU C compiler
-;; Copyright (C) 1994, 1997, 1998, 1999, 2000, 2004, 2005, 2007
+;; Copyright (C) 1994, 1997, 1998, 1999, 2000, 2004, 2005, 2007, 2008
 ;; Free Software Foundation, Inc.
 
 ;; This file is part of GCC.
@@ -313,7 +313,7 @@
 ;{
 ;  /* Flow doesn't understand that this is effectively a DFmode move.
 ;     It doesn't know that all of `operands[0]' is set.  */
-;  emit_insn (gen_rtx_CLOBBER (VOIDmode, operands[0]));
+;  emit_clobber (operands[0]);
 ;
 ;  /* Emit insns that movsi_insn can handle.  */
 ;  emit_insn (gen_movsi (operand_subword (operands[0], 0, 0, DImode),
@@ -406,7 +406,7 @@
 ;{
 ;  /* Flow doesn't understand that this is effectively a DFmode move.
 ;     It doesn't know that all of `operands[0]' is set.  */
-;  emit_insn (gen_rtx_CLOBBER (VOIDmode, operands[0]));
+;  emit_clobber (operands[0]);
 ;
 ;  /* Emit insns that movsi_insn can handle.  */
 ;  emit_insn (gen_movsi (operand_subword (operands[0], 0, 0, DFmode),

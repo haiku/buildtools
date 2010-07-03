@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for HP PA-RISC
-   Copyright (C) 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -106,7 +106,8 @@ along with GCC; see the file COPYING3.  If not see
    want dereferencing of a NULL pointer to cause a SEGV.  */
 #undef LINK_SPEC
 #define LINK_SPEC \
-  "%{!shared:%{p:-L/lib/libp -L/usr/lib/libp %{!static:\
+  "%<fwhole-program\
+   %{!shared:%{p:-L/lib/libp -L/usr/lib/libp %{!static:\
      %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{pg:-L/lib/libp -L/usr/lib/libp %{!static:\

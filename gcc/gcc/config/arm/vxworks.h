@@ -1,6 +1,7 @@
 /* Definitions of target machine for GCC,
    for ARM with targetting the VXWorks run time environment. 
-   Copyright (C) 1999, 2000, 2003, 2004, 2007 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
    Contributed by: Mike Stump <mrs@wrs.com>
    Brought up to date by CodeSourcery, LLC.
@@ -113,3 +114,6 @@ along with GCC; see the file COPYING3.  If not see
    cannot allow arbitrary offsets for shared libraries either.  */
 #undef ARM_OFFSETS_MUST_BE_WITHIN_SECTIONS_P
 #define ARM_OFFSETS_MUST_BE_WITHIN_SECTIONS_P 1
+
+#undef TARGET_DEFAULT_WORD_RELOCATIONS
+#define TARGET_DEFAULT_WORD_RELOCATIONS 1

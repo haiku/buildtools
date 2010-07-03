@@ -1,5 +1,6 @@
 /* Loop unrolling and peeling.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -269,7 +270,7 @@ decide_unrolling_and_peeling (int flags)
 	fprintf (dump_file, "\n;; *** Considering loop %d ***\n", loop->num);
 
       /* Do not peel cold areas.  */
-      if (!maybe_hot_bb_p (loop->header))
+      if (optimize_loop_for_size_p (loop))
 	{
 	  if (dump_file)
 	    fprintf (dump_file, ";; Not considering loop, cold area\n");
@@ -368,7 +369,7 @@ decide_peel_completely (struct loop *loop, int flags ATTRIBUTE_UNUSED)
     }
 
   /* Do not peel cold areas.  */
-  if (!maybe_hot_bb_p (loop->header))
+  if (optimize_loop_for_size_p (loop))
     {
       if (dump_file)
 	fprintf (dump_file, ";; Not considering loop, cold area\n");
@@ -1491,8 +1492,8 @@ si_info_hash (const void *ivts)
 static int
 si_info_eq (const void *ivts1, const void *ivts2)
 {
-  const struct iv_to_split *i1 = ivts1;
-  const struct iv_to_split *i2 = ivts2;
+  const struct iv_to_split *const i1 = (const struct iv_to_split *) ivts1;
+  const struct iv_to_split *const i2 = (const struct iv_to_split *) ivts2;
 
   return i1->insn == i2->insn;
 }
@@ -1511,8 +1512,8 @@ ve_info_hash (const void *ves)
 static int
 ve_info_eq (const void *ivts1, const void *ivts2)
 {
-  const struct var_to_expand *i1 = ivts1;
-  const struct var_to_expand *i2 = ivts2;
+  const struct var_to_expand *const i1 = (const struct var_to_expand *) ivts1;
+  const struct var_to_expand *const i2 = (const struct var_to_expand *) ivts2;
   
   return i1->insn == i2->insn;
 }
@@ -1867,7 +1868,7 @@ get_ivts_expr (rtx expr, struct iv_to_split *ivts)
 static int
 allocate_basic_variable (void **slot, void *data ATTRIBUTE_UNUSED)
 {
-  struct iv_to_split *ivts = *slot;
+  struct iv_to_split *ivts = (struct iv_to_split *) *slot;
   rtx expr = *get_ivts_expr (single_set (ivts->insn), ivts);
 
   ivts->base_var = gen_reg_rtx (GET_MODE (expr));
@@ -2040,7 +2041,7 @@ expand_var_during_unrolling (struct var_to_expand *ve, rtx insn)
 static int
 insert_var_expansion_initialization (void **slot, void *place_p)
 {
-  struct var_to_expand *ve = *slot;
+  struct var_to_expand *ve = (struct var_to_expand *) *slot;
   basic_block place = (basic_block)place_p;
   rtx seq, var, zero_init, insn;
   unsigned i;
@@ -2088,7 +2089,7 @@ insert_var_expansion_initialization (void **slot, void *place_p)
 static int
 combine_var_copies_in_loop_exit (void **slot, void *place_p)
 {
-  struct var_to_expand *ve = *slot;
+  struct var_to_expand *ve = (struct var_to_expand *) *slot;
   basic_block place = (basic_block)place_p;
   rtx sum = ve->reg;
   rtx expr, seq, var, insn;
@@ -2181,7 +2182,8 @@ apply_opt_in_copies (struct opt_info *opt_info,
           /* Apply splitting iv optimization.  */
           if (opt_info->insns_to_split)
             {
-              ivts = htab_find (opt_info->insns_to_split, &ivts_templ);
+              ivts = (struct iv_to_split *)
+		htab_find (opt_info->insns_to_split, &ivts_templ);
               
               if (ivts)
                 {
@@ -2196,7 +2198,8 @@ apply_opt_in_copies (struct opt_info *opt_info,
           /* Apply variable expansion optimization.  */
           if (unrolling && opt_info->insns_with_var_to_expand)
             {
-              ves = htab_find (opt_info->insns_with_var_to_expand, &ve_templ);
+              ves = (struct var_to_expand *)
+		htab_find (opt_info->insns_with_var_to_expand, &ve_templ);
               if (ves)
                 { 
 		  gcc_assert (GET_CODE (PATTERN (insn))
@@ -2246,7 +2249,8 @@ apply_opt_in_copies (struct opt_info *opt_info,
           ivts_templ.insn = orig_insn;
           if (opt_info->insns_to_split)
             {
-              ivts = htab_find (opt_info->insns_to_split, &ivts_templ);
+              ivts = (struct iv_to_split *)
+		htab_find (opt_info->insns_to_split, &ivts_templ);
               if (ivts)
                 {
                   if (!delta)
@@ -2266,7 +2270,7 @@ apply_opt_in_copies (struct opt_info *opt_info,
 static int
 release_var_copies (void **slot, void *data ATTRIBUTE_UNUSED)
 {
-  struct var_to_expand *ve = *slot;
+  struct var_to_expand *ve = (struct var_to_expand *) *slot;
   
   VEC_free (rtx, heap, ve->var_expansions);
   

@@ -1,6 +1,6 @@
 /* Subroutines for insn-output.c for NEC V850 series
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007 Free Software Foundation, Inc.
+   2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Jeff Law (law@cygnus.com).
 
    This file is part of GCC.
@@ -53,7 +53,7 @@ static bool v850_handle_option       (size_t, const char *, int);
 static void const_double_split       (rtx, HOST_WIDE_INT *, HOST_WIDE_INT *);
 static int  const_costs_int          (HOST_WIDE_INT, int);
 static int  const_costs		     (rtx, enum rtx_code);
-static bool v850_rtx_costs	     (rtx, int, int, int *);
+static bool v850_rtx_costs	     (rtx, int, int, int *, bool);
 static void substitute_ep_register   (rtx, rtx, int, int, rtx *, rtx *);
 static void v850_reorg		     (void);
 static int  ep_memory_offset         (enum machine_mode, int);
@@ -137,7 +137,7 @@ static GTY(()) section *zbss_section;
 #define TARGET_RTX_COSTS v850_rtx_costs
 
 #undef TARGET_ADDRESS_COST
-#define TARGET_ADDRESS_COST hook_int_rtx_0
+#define TARGET_ADDRESS_COST hook_int_rtx_bool_0
 
 #undef TARGET_MACHINE_DEPENDENT_REORG
 #define TARGET_MACHINE_DEPENDENT_REORG v850_reorg
@@ -422,7 +422,7 @@ static bool
 v850_rtx_costs (rtx x,
                 int code,
                 int outer_code ATTRIBUTE_UNUSED,
-                int * total)
+                int * total, bool speed)
 {
   switch (code)
     {
@@ -438,7 +438,7 @@ v850_rtx_costs (rtx x,
     case DIV:
     case UMOD:
     case UDIV:
-      if (TARGET_V850E && optimize_size)
+      if (TARGET_V850E && !speed)
         *total = 6;
       else
 	*total = 60;
@@ -1386,7 +1386,7 @@ compute_register_save_size (long * p_reg_saved)
   long reg_saved = 0;
 
   /* Count the return pointer if we need to save it.  */
-  if (current_function_profile && !call_p)
+  if (crtl->profile && !call_p)
     {
       df_set_regs_ever_live (LINK_POINTER_REGNUM, true);
       call_p = 1;
@@ -1488,7 +1488,7 @@ compute_frame_size (int size, long * p_reg_saved)
 {
   return (size
 	  + compute_register_save_size (p_reg_saved)
-	  + current_function_outgoing_args_size);
+	  + crtl->outgoing_args_size);
 }
 
 
@@ -1525,7 +1525,7 @@ expand_prologue (void)
     }
 
   /* Save arg registers to the stack if necessary.  */
-  else if (current_function_args_info.anonymous_args)
+  else if (crtl->args.info.anonymous_args)
     {
       if (TARGET_PROLOG_FUNCTION && TARGET_V850E && !TARGET_DISABLE_CALLT)
 	emit_insn (gen_save_r6_r9_v850e ());
@@ -1909,7 +1909,7 @@ Saved %d bytes via epilogue function (%d vs. %d) in function %s\n",
 					   plus_constant (stack_pointer_rtx,
 							  offset)));
 
-	      emit_insn (gen_rtx_USE (VOIDmode, restore_regs[i]));
+	      emit_use (restore_regs[i]);
 	      offset -= 4;
 	    }
 

@@ -1,12 +1,12 @@
 // Functor implementations -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  *
@@ -65,7 +60,9 @@
 _GLIBCXX_BEGIN_NAMESPACE(std)
 
   // 20.3.1 base classes
-  /** @defgroup s20_3_1_base Functor Base Classes
+  /** @defgroup functors Function Objects
+   * @ingroup utilities
+   *
    *  Function objects, or @e functors, are objects with an @c operator()
    *  defined and accessible.  They can be passed as arguments to algorithm
    *  templates and used in place of a function pointer.  Not only is the
@@ -97,7 +94,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
    *  @{
    */
   /**
-   *  This is one of the @link s20_3_1_base functor base classes@endlink.
+   *  This is one of the @link functors functor base classes@endlink.
    */
   template<typename _Arg, typename _Result>
     struct unary_function
@@ -109,7 +106,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     };
 
   /**
-   *  This is one of the @link s20_3_1_base functor base classes@endlink.
+   *  This is one of the @link functors functor base classes@endlink.
    */
   template<typename _Arg1, typename _Arg2, typename _Result>
     struct binary_function
@@ -123,16 +120,17 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   /** @}  */
 
   // 20.3.2 arithmetic
-  /** @defgroup s20_3_2_arithmetic Arithmetic Classes
-
+  /** @defgroup arithmetic_functors Arithmetic Classes
+   * @ingroup functors
+   *
    *  Because basic math often needs to be done during an algorithm,
    *  the library provides functors for those operations.  See the
-   *  documentation for @link s20_3_1_base the base classes@endlink
+   *  documentation for @link functors the base classes@endlink
    *  for examples of their use.
    *
    *  @{
    */
-  /// One of the @link s20_3_2_arithmetic math functors@endlink.
+  /// One of the @link arithmetic_functors math functors@endlink.
   template<typename _Tp>
     struct plus : public binary_function<_Tp, _Tp, _Tp>
     {
@@ -141,7 +139,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x + __y; }
     };
 
-  /// One of the @link s20_3_2_arithmetic math functors@endlink.
+  /// One of the @link arithmetic_functors math functors@endlink.
   template<typename _Tp>
     struct minus : public binary_function<_Tp, _Tp, _Tp>
     {
@@ -150,7 +148,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x - __y; }
     };
 
-  /// One of the @link s20_3_2_arithmetic math functors@endlink.
+  /// One of the @link arithmetic_functors math functors@endlink.
   template<typename _Tp>
     struct multiplies : public binary_function<_Tp, _Tp, _Tp>
     {
@@ -159,7 +157,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x * __y; }
     };
 
-  /// One of the @link s20_3_2_arithmetic math functors@endlink.
+  /// One of the @link arithmetic_functors math functors@endlink.
   template<typename _Tp>
     struct divides : public binary_function<_Tp, _Tp, _Tp>
     {
@@ -168,7 +166,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x / __y; }
     };
 
-  /// One of the @link s20_3_2_arithmetic math functors@endlink.
+  /// One of the @link arithmetic_functors math functors@endlink.
   template<typename _Tp>
     struct modulus : public binary_function<_Tp, _Tp, _Tp>
     {
@@ -177,7 +175,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x % __y; }
     };
 
-  /// One of the @link s20_3_2_arithmetic math functors@endlink.
+  /// One of the @link arithmetic_functors math functors@endlink.
   template<typename _Tp>
     struct negate : public unary_function<_Tp, _Tp>
     {
@@ -188,13 +186,15 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   /** @}  */
 
   // 20.3.3 comparisons
-  /** @defgroup s20_3_3_comparisons Comparison Classes
+  /** @defgroup comparison_functors Comparison Classes
+   * @ingroup functors
+   *
    *  The library provides six wrapper functors for all the basic comparisons
    *  in C++, like @c <.
    *
    *  @{
    */
-  /// One of the @link s20_3_3_comparisons comparison functors@endlink.
+  /// One of the @link comparison_functors comparison functors@endlink.
   template<typename _Tp>
     struct equal_to : public binary_function<_Tp, _Tp, bool>
     {
@@ -203,7 +203,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x == __y; }
     };
 
-  /// One of the @link s20_3_3_comparisons comparison functors@endlink.
+  /// One of the @link comparison_functors comparison functors@endlink.
   template<typename _Tp>
     struct not_equal_to : public binary_function<_Tp, _Tp, bool>
     {
@@ -212,7 +212,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x != __y; }
     };
 
-  /// One of the @link s20_3_3_comparisons comparison functors@endlink.
+  /// One of the @link comparison_functors comparison functors@endlink.
   template<typename _Tp>
     struct greater : public binary_function<_Tp, _Tp, bool>
     {
@@ -221,7 +221,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x > __y; }
     };
 
-  /// One of the @link s20_3_3_comparisons comparison functors@endlink.
+  /// One of the @link comparison_functors comparison functors@endlink.
   template<typename _Tp>
     struct less : public binary_function<_Tp, _Tp, bool>
     {
@@ -230,7 +230,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x < __y; }
     };
 
-  /// One of the @link s20_3_3_comparisons comparison functors@endlink.
+  /// One of the @link comparison_functors comparison functors@endlink.
   template<typename _Tp>
     struct greater_equal : public binary_function<_Tp, _Tp, bool>
     {
@@ -239,7 +239,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x >= __y; }
     };
 
-  /// One of the @link s20_3_3_comparisons comparison functors@endlink.
+  /// One of the @link comparison_functors comparison functors@endlink.
   template<typename _Tp>
     struct less_equal : public binary_function<_Tp, _Tp, bool>
     {
@@ -250,13 +250,15 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   /** @}  */
 
   // 20.3.4 logical operations
-  /** @defgroup s20_3_4_logical Boolean Operations Classes
+  /** @defgroup logical_functors Boolean Operations Classes
+   * @ingroup functors
+   *
    *  Here are wrapper functors for Boolean operations: @c &&, @c ||,
    *  and @c !.
    *
    *  @{
    */
-  /// One of the @link s20_3_4_logical Boolean operations functors@endlink.
+  /// One of the @link logical_functors Boolean operations functors@endlink.
   template<typename _Tp>
     struct logical_and : public binary_function<_Tp, _Tp, bool>
     {
@@ -265,7 +267,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x && __y; }
     };
 
-  /// One of the @link s20_3_4_logical Boolean operations functors@endlink.
+  /// One of the @link logical_functors Boolean operations functors@endlink.
   template<typename _Tp>
     struct logical_or : public binary_function<_Tp, _Tp, bool>
     {
@@ -274,7 +276,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return __x || __y; }
     };
 
-  /// One of the @link s20_3_4_logical Boolean operations functors@endlink.
+  /// One of the @link logical_functors Boolean operations functors@endlink.
   template<typename _Tp>
     struct logical_not : public unary_function<_Tp, bool>
     {
@@ -311,7 +313,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     };
 
   // 20.3.5 negators
-  /** @defgroup s20_3_5_negators Negators
+  /** @defgroup negators Negators
+   * @ingroup functors
+   *
    *  The functions @c not1 and @c not2 each take a predicate functor
    *  and return an instance of @c unary_negate or
    *  @c binary_negate, respectively.  These classes are functors whose
@@ -337,7 +341,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
    *
    *  @{
    */
-  /// One of the @link s20_3_5_negators negation functors@endlink.
+  /// One of the @link negators negation functors@endlink.
   template<typename _Predicate>
     class unary_negate
     : public unary_function<typename _Predicate::argument_type, bool>
@@ -354,13 +358,13 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return !_M_pred(__x); }
     };
 
-  /// One of the @link s20_3_5_negators negation functors@endlink.
+  /// One of the @link negators negation functors@endlink.
   template<typename _Predicate>
     inline unary_negate<_Predicate>
     not1(const _Predicate& __pred)
     { return unary_negate<_Predicate>(__pred); }
 
-  /// One of the @link s20_3_5_negators negation functors@endlink.
+  /// One of the @link negators negation functors@endlink.
   template<typename _Predicate>
     class binary_negate
     : public binary_function<typename _Predicate::first_argument_type,
@@ -379,7 +383,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return !_M_pred(__x, __y); }
     };
 
-  /// One of the @link s20_3_5_negators negation functors@endlink.
+  /// One of the @link negators negation functors@endlink.
   template<typename _Predicate>
     inline binary_negate<_Predicate>
     not2(const _Predicate& __pred)
@@ -387,7 +391,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   /** @}  */
 
   // 20.3.7 adaptors pointers functions
-  /** @defgroup s20_3_7_adaptors Adaptors for pointers to functions
+  /** @defgroup pointer_adaptors Adaptors for pointers to functions
+   * @ingroup functors
+   *
    *  The advantage of function objects over pointers to functions is that
    *  the objects in the standard library declare nested typedefs describing
    *  their argument and result types with uniform names (e.g., @c result_type
@@ -406,7 +412,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
    *
    *  @{
    */
-  /// One of the @link s20_3_7_adaptors adaptors for function pointers@endlink.
+  /// One of the @link pointer_adaptors adaptors for function pointers@endlink.
   template<typename _Arg, typename _Result>
     class pointer_to_unary_function : public unary_function<_Arg, _Result>
     {
@@ -425,13 +431,13 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return _M_ptr(__x); }
     };
 
-  /// One of the @link s20_3_7_adaptors adaptors for function pointers@endlink.
+  /// One of the @link pointer_adaptors adaptors for function pointers@endlink.
   template<typename _Arg, typename _Result>
     inline pointer_to_unary_function<_Arg, _Result>
     ptr_fun(_Result (*__x)(_Arg))
     { return pointer_to_unary_function<_Arg, _Result>(__x); }
 
-  /// One of the @link s20_3_7_adaptors adaptors for function pointers@endlink.
+  /// One of the @link pointer_adaptors adaptors for function pointers@endlink.
   template<typename _Arg1, typename _Arg2, typename _Result>
     class pointer_to_binary_function
     : public binary_function<_Arg1, _Arg2, _Result>
@@ -451,7 +457,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return _M_ptr(__x, __y); }
     };
 
-  /// One of the @link s20_3_7_adaptors adaptors for function pointers@endlink.
+  /// One of the @link pointer_adaptors adaptors for function pointers@endlink.
   template<typename _Arg1, typename _Arg2, typename _Result>
     inline pointer_to_binary_function<_Arg1, _Arg2, _Result>
     ptr_fun(_Result (*__x)(_Arg1, _Arg2))
@@ -497,7 +503,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     };
 
   // 20.3.8 adaptors pointers members
-  /** @defgroup s20_3_8_memadaptors Adaptors for pointers to members
+  /** @defgroup memory_adaptors Adaptors for pointers to members
+   * @ingroup functors
+   *
    *  There are a total of 8 = 2^3 function objects in this family.
    *   (1) Member functions taking no arguments vs member functions taking
    *        one argument.
@@ -510,7 +518,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
    *
    *  @{
    */
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp>
     class mem_fun_t : public unary_function<_Tp*, _Ret>
@@ -528,7 +536,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)();
     };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp>
     class const_mem_fun_t : public unary_function<const _Tp*, _Ret>
@@ -546,7 +554,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)() const;
     };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp>
     class mem_fun_ref_t : public unary_function<_Tp, _Ret>
@@ -564,7 +572,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)();
   };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp>
     class const_mem_fun_ref_t : public unary_function<_Tp, _Ret>
@@ -582,7 +590,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)() const;
     };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp, typename _Arg>
     class mem_fun1_t : public binary_function<_Tp*, _Arg, _Ret>
@@ -600,7 +608,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)(_Arg);
     };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp, typename _Arg>
     class const_mem_fun1_t : public binary_function<const _Tp*, _Arg, _Ret>
@@ -618,7 +626,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)(_Arg) const;
     };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp, typename _Arg>
     class mem_fun1_ref_t : public binary_function<_Tp, _Arg, _Ret>
@@ -636,7 +644,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ret (_Tp::*_M_f)(_Arg);
     };
 
-  /// One of the @link s20_3_8_memadaptors adaptors for member
+  /// One of the @link memory_adaptors adaptors for member
   /// pointers@endlink.
   template<typename _Ret, typename _Tp, typename _Arg>
     class const_mem_fun1_ref_t : public binary_function<_Tp, _Arg, _Ret>

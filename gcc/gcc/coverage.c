@@ -1,6 +1,7 @@
 /* Read and write coverage files, and associated functionality.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   2000, 2001, 2003, 2004, 2005, 2007, 2008 Free Software Foundation,
+   Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
    Further mangling by Bob Manson, Cygnus Support.
@@ -37,12 +38,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "function.h"
 #include "toplev.h"
+#include "tm_p.h"
 #include "ggc.h"
 #include "coverage.h"
 #include "langhooks.h"
 #include "hashtab.h"
 #include "tree-iterator.h"
 #include "cgraph.h"
+#include "tree-pass.h"
 
 #include "gcov-io.c"
 
@@ -139,7 +142,7 @@ get_gcov_unsigned_t (void)
 static hashval_t
 htab_counts_entry_hash (const void *of)
 {
-  const counts_entry_t *entry = of;
+  const counts_entry_t *const entry = (const counts_entry_t *) of;
 
   return entry->ident * GCOV_COUNTERS + entry->ctr;
 }
@@ -147,8 +150,8 @@ htab_counts_entry_hash (const void *of)
 static int
 htab_counts_entry_eq (const void *of1, const void *of2)
 {
-  const counts_entry_t *entry1 = of1;
-  const counts_entry_t *entry2 = of2;
+  const counts_entry_t *const entry1 = (const counts_entry_t *) of1;
+  const counts_entry_t *const entry2 = (const counts_entry_t *) of2;
 
   return entry1->ident == entry2->ident && entry1->ctr == entry2->ctr;
 }
@@ -156,7 +159,7 @@ htab_counts_entry_eq (const void *of1, const void *of2)
 static void
 htab_counts_entry_del (void *of)
 {
-  counts_entry_t *entry = of;
+  counts_entry_t *const entry = (counts_entry_t *) of;
 
   free (entry->counts);
   free (entry);
@@ -332,7 +335,7 @@ get_coverage_counts (unsigned counter, unsigned expected,
       static int warned = 0;
 
       if (!warned++)
-	inform ((flag_guess_branch_prob
+	inform (input_location, (flag_guess_branch_prob
 		 ? "file %s not found, execution counts estimated"
 		 : "file %s not found, execution counts assumed to be zero"),
 		da_file_name);
@@ -341,7 +344,7 @@ get_coverage_counts (unsigned counter, unsigned expected,
 
   elt.ident = current_function_funcdef_no + 1;
   elt.ctr = counter;
-  entry = htab_find (counts_hash, &elt);
+  entry = (counts_entry_t *) htab_find (counts_hash, &elt);
   if (!entry)
     {
       warning (0, "no coverage for function %qs found", IDENTIFIER_POINTER
@@ -367,9 +370,9 @@ get_coverage_counts (unsigned counter, unsigned expected,
       if (!inhibit_warnings)
 	{
 	  if (entry->checksum != checksum)
-	    inform ("checksum is %x instead of %x", entry->checksum, checksum);
+	    inform (input_location, "checksum is %x instead of %x", entry->checksum, checksum);
 	  else
-	    inform ("number of counters is %d instead of %d",
+	    inform (input_location, "number of counters is %d instead of %d",
 		    entry->summary.num, expected);
 	}
 
@@ -377,12 +380,12 @@ get_coverage_counts (unsigned counter, unsigned expected,
 	  && !inhibit_warnings
 	  && !warned++)
 	{
-	  inform ("coverage mismatch ignored due to -Wcoverage-mismatch");
-	  inform (flag_guess_branch_prob
+	  inform (input_location, "coverage mismatch ignored due to -Wcoverage-mismatch");
+	  inform (input_location, flag_guess_branch_prob
 		  ? "execution counts estimated"
 		  : "execution counts assumed to be zero");
 	  if (!flag_guess_branch_prob)
-	    inform ("this can result in poorly optimized code");
+	    inform (input_location, "this can result in poorly optimized code");
 	}
 
       return NULL;
@@ -421,6 +424,9 @@ coverage_counter_alloc (unsigned counter, unsigned num)
       ASM_GENERATE_INTERNAL_LABEL (buf, "LPBX", counter + 1);
       DECL_NAME (tree_ctr_tables[counter]) = get_identifier (buf);
       DECL_ALIGN (tree_ctr_tables[counter]) = TYPE_ALIGN (gcov_type_node);
+
+      if (dump_file)
+	fprintf (dump_file, "Using data file %s\n", da_file_name);
     }
   fn_b_ctrs[counter] = fn_n_ctrs[counter];
   fn_n_ctrs[counter] += num;
@@ -441,6 +447,23 @@ tree_coverage_counter_ref (unsigned counter, unsigned no)
   /* "no" here is an array index, scaled to bytes later.  */
   return build4 (ARRAY_REF, gcov_type_node, tree_ctr_tables[counter],
 		 build_int_cst (NULL_TREE, no), NULL, NULL);
+}
+
+/* Generate a tree to access the address of COUNTER NO.  */
+
+tree
+tree_coverage_counter_addr (unsigned counter, unsigned no)
+{
+  tree gcov_type_node = get_gcov_type ();
+
+  gcc_assert (no < fn_n_ctrs[counter] - fn_b_ctrs[counter]);
+  no += prg_n_ctrs[counter] + fn_b_ctrs[counter];
+
+  /* "no" here is an array index, scaled to bytes later.  */
+  return build_fold_addr_expr (build4 (ARRAY_REF, gcov_type_node,
+				       tree_ctr_tables[counter],
+				       build_int_cst (NULL_TREE, no),
+				       NULL, NULL));
 }
 
 /* Generate a checksum for a string.  CHKSUM is the current
@@ -468,7 +491,7 @@ coverage_checksum_string (unsigned chksum, const char *string)
          _GLOBAL__N_<filename>_<wrongmagicnumber>_<magicnumber>functionname
        since filename might contain extra underscores there seems
        to be no better chance then walk all possible offsets looking
-       for magicnuber.  */
+       for magicnumber.  */
       if (offset)
 	{
 	  for (i = i + offset; string[i]; i++)
@@ -528,7 +551,9 @@ compute_checksum (void)
 int
 coverage_begin_output (void)
 {
-  if (no_coverage)
+  /* We don't need to output .gcno file unless we're under -ftest-coverage
+     (e.g. -fprofile-arcs/generate/use don't need .gcno to work). */
+  if (no_coverage || !flag_test_coverage)
     return 0;
 
   if (!bbg_function_announced)
@@ -785,8 +810,7 @@ build_gcov_info (void)
   tree field, fields = NULL_TREE;
   tree value = NULL_TREE;
   tree filename_string;
-  char *filename;
-  int filename_len;
+  int da_file_name_len;
   unsigned n_fns;
   const struct function_list *fn;
   tree string_type;
@@ -825,17 +849,11 @@ build_gcov_info (void)
   field = build_decl (FIELD_DECL, NULL_TREE, string_type);
   TREE_CHAIN (field) = fields;
   fields = field;
-  filename = getpwd ();
-  filename = (filename && da_file_name[0] != '/'
-	      ? concat (filename, "/", da_file_name, NULL)
-	      : da_file_name);
-  filename_len = strlen (filename);
-  filename_string = build_string (filename_len + 1, filename);
-  if (filename != da_file_name)
-    free (filename);
+  da_file_name_len = strlen (da_file_name);
+  filename_string = build_string (da_file_name_len + 1, da_file_name);
   TREE_TYPE (filename_string) = build_array_type
     (char_type_node, build_index_type
-     (build_int_cst (NULL_TREE, filename_len)));
+     (build_int_cst (NULL_TREE, da_file_name_len)));
   value = tree_cons (field, build1 (ADDR_EXPR, string_type, filename_string),
 		     value);
 
@@ -962,10 +980,27 @@ void
 coverage_init (const char *filename)
 {
   int len = strlen (filename);
+  /* + 1 for extra '/', in case prefix doesn't end with /.  */
+  int prefix_len;
+ 
+  if (profile_data_prefix == 0 && filename[0] != '/')
+    profile_data_prefix = getpwd ();
+
+  prefix_len = (profile_data_prefix) ? strlen (profile_data_prefix) + 1 : 0;
 
   /* Name of da file.  */
-  da_file_name = XNEWVEC (char, len + strlen (GCOV_DATA_SUFFIX) + 1);
-  strcpy (da_file_name, filename);
+  da_file_name = XNEWVEC (char, len + strlen (GCOV_DATA_SUFFIX) 
+			  + prefix_len + 1);
+
+  if (profile_data_prefix)
+    {
+      strcpy (da_file_name, profile_data_prefix);
+      da_file_name[prefix_len - 1] = '/';
+      da_file_name[prefix_len] = 0;
+    }
+  else
+    da_file_name[0] = 0;
+  strcat (da_file_name, filename);
   strcat (da_file_name, GCOV_DATA_SUFFIX);
 
   /* Name of bbg file.  */
@@ -973,7 +1008,8 @@ coverage_init (const char *filename)
   strcpy (bbg_file_name, filename);
   strcat (bbg_file_name, GCOV_NOTE_SUFFIX);
 
-  read_counts_file ();
+  if (flag_profile_use)
+    read_counts_file ();
 }
 
 /* Performs file-level cleanup.  Close graph file, generate coverage

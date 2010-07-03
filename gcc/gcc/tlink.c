@@ -1,7 +1,7 @@
 /* Scan linker error messages for missing template instantiations and provide
    them.
 
-   Copyright (C) 1995, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007
+   Copyright (C) 1995, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Jason Merrill (jason@cygnus.com).
 
@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "hashtab.h"
 #include "demangle.h"
 #include "collect2.h"
+#include "libiberty.h"
 
 #define MAX_ITERATIONS 17
 
@@ -38,7 +39,7 @@ extern int prepends_underscore;
 
 static int tlink_verbose;
 
-static char initial_cwd[MAXPATHLEN + 1];
+static char *initial_cwd;
 
 /* Hash table boilerplate for working with htab_t.  We have hash tables
    for symbol names, file names, and demangled symbols.  */
@@ -127,7 +128,7 @@ symbol_hash_lookup (const char *string, int create)
       *e = v = XCNEW (struct symbol_hash_entry);
       v->key = xstrdup (string);
     }
-  return *e;
+  return (struct symbol_hash_entry *) *e;
 }
 
 static htab_t file_table;
@@ -147,7 +148,7 @@ file_hash_lookup (const char *string)
       *e = v = XCNEW (struct file_hash_entry);
       v->key = xstrdup (string);
     }
-  return *e;
+  return (struct file_hash_entry *) *e;
 }
 
 static htab_t demangled_table;
@@ -169,7 +170,7 @@ demangled_hash_lookup (const char *string, int create)
       *e = v = XCNEW (struct demangled_hash_entry);
       v->key = xstrdup (string);
     }
-  return *e;
+  return (struct demangled_hash_entry *) *e;
 }
 
 /* Stack code.  */
@@ -193,8 +194,8 @@ struct file_stack_entry *file_stack;
 static void
 symbol_push (symbol *p)
 {
-  struct symbol_stack_entry *ep = obstack_alloc
-    (&symbol_stack_obstack, sizeof (struct symbol_stack_entry));
+  struct symbol_stack_entry *ep
+    = XOBNEW (&symbol_stack_obstack, struct symbol_stack_entry);
   ep->value = p;
   ep->next = symbol_stack;
   symbol_stack = ep;
@@ -221,8 +222,7 @@ file_push (file *p)
   if (p->tweaking)
     return;
 
-  ep = obstack_alloc
-    (&file_stack_obstack, sizeof (struct file_stack_entry));
+  ep = XOBNEW (&file_stack_obstack, struct file_stack_entry);
   ep->value = p;
   ep->next = file_stack;
   file_stack = ep;
@@ -274,7 +274,7 @@ tlink_init (void)
 	tlink_verbose = 3;
     }
 
-  getcwd (initial_cwd, sizeof (initial_cwd));
+  initial_cwd = getpwd ();
 }
 
 static int
@@ -298,7 +298,7 @@ frob_extension (const char *s, const char *ext)
     p = s + strlen (s);
 
   obstack_grow (&temporary_obstack, s, p - s);
-  return obstack_copy0 (&temporary_obstack, ext, strlen (ext));
+  return (char *) obstack_copy0 (&temporary_obstack, ext, strlen (ext));
 }
 
 static char *
@@ -683,6 +683,9 @@ scan_linker_output (const char *fname)
 	  /* Then try "double quotes".  */
 	  else if (p = strchr (oldq, '"'), p)
 	    p++, q = strchr (p, '"');
+	  /* Then try 'single quotes'.  */
+	  else if (p = strchr (oldq, '\''), p)
+	    p++, q = strchr (p, '\'');
 	  else {
 	    /* Then try entire line.  */
 	    q = strchr (oldq, 0);

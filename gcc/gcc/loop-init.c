@@ -1,5 +1,6 @@
 /* Loop optimizer initialization routines and RTL loop optimization passes.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -66,7 +67,14 @@ loop_optimizer_init (unsigned flags)
 
   /* Create pre-headers.  */
   if (flags & LOOPS_HAVE_PREHEADERS)
-    create_preheaders (CP_SIMPLE_PREHEADERS);
+    {
+      int cp_flags = CP_SIMPLE_PREHEADERS;
+
+      if (flags & LOOPS_HAVE_FALLTHRU_PREHEADERS)
+        cp_flags |= CP_FALLTHRU_PREHEADERS;
+      
+      create_preheaders (cp_flags);
+    }
 
   /* Force all latches to have only single successor.  */
   if (flags & LOOPS_HAVE_SIMPLE_LATCHES)
@@ -118,7 +126,10 @@ loop_optimizer_finalize (void)
 
   /* Checking.  */
 #ifdef ENABLE_CHECKING
-  verify_flow_info ();
+  /* FIXME: no point to verify flow info after bundling on ia64.  Use this 
+     hack for achieving this.  */
+  if (!reload_completed)
+    verify_flow_info ();
 #endif
 }
 
@@ -140,8 +151,10 @@ gate_handle_loop2 (void)
 	      ));
 }
 
-struct tree_opt_pass pass_loop2 =
+struct rtl_opt_pass pass_loop2 =
 {
+ {
+  RTL_PASS,
   "loop2",                              /* name */
   gate_handle_loop2, 		        /* gate */
   NULL,                                 /* execute */
@@ -154,8 +167,8 @@ struct tree_opt_pass pass_loop2 =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func |
-  TODO_ggc_collect,                     /* todo_flags_finish */
-  'L'                                   /* letter */
+  TODO_ggc_collect                      /* todo_flags_finish */
+ }
 };
 
 
@@ -172,8 +185,10 @@ rtl_loop_init (void)
   return 0;
 }
 
-struct tree_opt_pass pass_rtl_loop_init =
+struct rtl_opt_pass pass_rtl_loop_init =
 {
+ {
+  RTL_PASS,
   "loop2_init",                           /* name */
   NULL,                                 /* gate */
   rtl_loop_init,                        /* execute */
@@ -185,8 +200,8 @@ struct tree_opt_pass pass_rtl_loop_init =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func | TODO_verify_rtl_sharing, /* todo_flags_finish */
-  'L'                                   /* letter */
+  TODO_dump_func | TODO_verify_rtl_sharing /* todo_flags_finish */
+ }
 };
 
 
@@ -205,8 +220,10 @@ rtl_loop_done (void)
   return 0;
 }
 
-struct tree_opt_pass pass_rtl_loop_done =
+struct rtl_opt_pass pass_rtl_loop_done =
 {
+ {
+  RTL_PASS,
   "loop2_done",                          /* name */
   NULL,                                 /* gate */
   rtl_loop_done,                        /* execute */
@@ -218,8 +235,8 @@ struct tree_opt_pass pass_rtl_loop_done =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func | TODO_verify_rtl_sharing, /* todo_flags_finish */
-  'L'                                   /* letter */
+  TODO_dump_func | TODO_verify_rtl_sharing /* todo_flags_finish */
+ }
 };
 
 
@@ -238,8 +255,10 @@ rtl_move_loop_invariants (void)
   return 0;
 }
 
-struct tree_opt_pass pass_rtl_move_loop_invariants =
+struct rtl_opt_pass pass_rtl_move_loop_invariants =
 {
+ {
+  RTL_PASS,
   "loop2_invariant",                    /* name */
   gate_rtl_move_loop_invariants,        /* gate */
   rtl_move_loop_invariants,             /* execute */
@@ -253,8 +272,8 @@ struct tree_opt_pass pass_rtl_move_loop_invariants =
   0,                                    /* todo_flags_start */ 
   TODO_df_verify |
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func,                       /* todo_flags_finish */
-  'L'                                   /* letter */
+  TODO_dump_func                        /* todo_flags_finish */
+ }
 };
 
 
@@ -273,8 +292,10 @@ rtl_unswitch (void)
   return 0;
 }
 
-struct tree_opt_pass pass_rtl_unswitch =
+struct rtl_opt_pass pass_rtl_unswitch =
 {
+ {
+  RTL_PASS,
   "loop2_unswitch",                      /* name */
   gate_rtl_unswitch,                    /* gate */
   rtl_unswitch,                         /* execute */
@@ -287,7 +308,7 @@ struct tree_opt_pass pass_rtl_unswitch =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func | TODO_verify_rtl_sharing, /* todo_flags_finish */
-  'L'                                   /* letter */
+ }
 };
 
 
@@ -319,8 +340,10 @@ rtl_unroll_and_peel_loops (void)
   return 0;
 }
 
-struct tree_opt_pass pass_rtl_unroll_and_peel_loops =
+struct rtl_opt_pass pass_rtl_unroll_and_peel_loops =
 {
+ {
+  RTL_PASS,
   "loop2_unroll",                        /* name */
   gate_rtl_unroll_and_peel_loops,       /* gate */
   rtl_unroll_and_peel_loops,            /* execute */
@@ -333,7 +356,7 @@ struct tree_opt_pass pass_rtl_unroll_and_peel_loops =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_dump_func | TODO_verify_rtl_sharing, /* todo_flags_finish */
-  'L'                                   /* letter */
+ }
 };
 
 
@@ -358,8 +381,10 @@ rtl_doloop (void)
   return 0;
 }
 
-struct tree_opt_pass pass_rtl_doloop =
+struct rtl_opt_pass pass_rtl_doloop =
 {
+ {
+  RTL_PASS,
   "loop2_doloop",                        /* name */
   gate_rtl_doloop,                      /* gate */
   rtl_doloop,                           /* execute */
@@ -371,7 +396,7 @@ struct tree_opt_pass pass_rtl_doloop =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func | TODO_verify_rtl_sharing, /* todo_flags_finish */
-  'L'                                   /* letter */
+  TODO_dump_func | TODO_verify_rtl_sharing /* todo_flags_finish */
+ }
 };
 

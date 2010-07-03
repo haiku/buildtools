@@ -1,5 +1,5 @@
 /* Basic error reporting routines.
-   Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005, 2007
+   Copyright (C) 1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -33,7 +33,7 @@ along with GCC; see the file COPYING3.  If not see
    version of warning().  For those, you'd pass an OPT_W* value from
    options.h, but in generator programs it has no effect, so it's OK
    to just pass zero for calls from generator-only files.  */
-extern void warning (int, const char *, ...) ATTRIBUTE_PRINTF_2 ATTRIBUTE_COLD;
+extern bool warning (int, const char *, ...) ATTRIBUTE_PRINTF_2 ATTRIBUTE_COLD;
 extern void error (const char *, ...) ATTRIBUTE_PRINTF_1 ATTRIBUTE_COLD;
 extern void fatal (const char *, ...) ATTRIBUTE_NORETURN ATTRIBUTE_PRINTF_1 ATTRIBUTE_COLD;
 extern void internal_error (const char *, ...) ATTRIBUTE_NORETURN ATTRIBUTE_PRINTF_1 ATTRIBUTE_COLD;

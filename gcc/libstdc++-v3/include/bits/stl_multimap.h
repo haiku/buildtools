@@ -1,12 +1,12 @@
 // Multimap implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  *
@@ -63,6 +58,7 @@
 #define _STL_MULTIMAP_H 1
 
 #include <bits/concept_check.h>
+#include <initializer_list>
 
 _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 
@@ -70,8 +66,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
    *  @brief A standard container made up of (key,value) pairs, which can be
    *  retrieved based on a key, in logarithmic time.
    *
-   *  @ingroup Containers
-   *  @ingroup Assoc_containers
+   *  @ingroup associative_containers
    *
    *  Meets the requirements of a <a href="tables.html#65">container</a>, a
    *  <a href="tables.html#66">reversible container</a>, and an
@@ -183,6 +178,22 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        */
       multimap(multimap&& __x)
       : _M_t(std::forward<_Rep_type>(__x._M_t)) { }
+
+      /**
+       *  @brief  Builds a %multimap from an initializer_list.
+       *  @param  l  An initializer_list.
+       *  @param  comp  A comparison functor.
+       *  @param  a  An allocator object.
+       *
+       *  Create a %multimap consisting of copies of the elements from
+       *  the initializer_list.  This is linear in N if the list is already
+       *  sorted, and NlogN otherwise (where N is @a __l.size()).
+       */
+      multimap(initializer_list<value_type> __l,
+	       const _Compare& __comp = _Compare(),
+	       const allocator_type& __a = allocator_type())
+      : _M_t(__comp, __a)
+      { _M_t._M_insert_equal(__l.begin(), __l.end()); }
 #endif
 
       /**
@@ -254,6 +265,25 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	// NB: DR 675.
 	this->clear();
 	this->swap(__x); 
+	return *this;
+      }
+
+      /**
+       *  @brief  %Multimap list assignment operator.
+       *  @param  l  An initializer_list.
+       *
+       *  This function fills a %multimap with copies of the elements
+       *  in the initializer list @a l.
+       *
+       *  Note that the assignment completely changes the %multimap and
+       *  that the resulting %multimap's size is the same as the number
+       *  of elements assigned.  Old data may be lost.
+       */
+      multimap&
+      operator=(initializer_list<value_type> __l)
+      {
+	this->clear();
+	this->insert(__l.begin(), __l.end());
 	return *this;
       }
 #endif
@@ -444,6 +474,19 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
         void
         insert(_InputIterator __first, _InputIterator __last)
         { _M_t._M_insert_equal(__first, __last); }
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      /**
+       *  @brief Attempts to insert a list of std::pairs into the %multimap.
+       *  @param  list  A std::initializer_list<value_type> of pairs to be
+       *                inserted.
+       *
+       *  Complexity similar to that of the range constructor.
+       */
+      void
+      insert(initializer_list<value_type> __l)
+      { this->insert(__l.begin(), __l.end()); }
+#endif
 
       /**
        *  @brief Erases an element from a %multimap.

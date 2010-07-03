@@ -1,37 +1,187 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
+
+2010-01-21  Release Manager
+
+	* GCC 4.4.3 released.
+
+2009-10-15  Release Manager
+
+	* GCC 4.4.2 released.
+
+2009-07-22  Release Manager
+
+	* GCC 4.4.1 released.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-04-09  Jakub Jelinek  <jakub@redhat.com>
+
+	* Makefile.in: Change copyright header to refer to version
+	3 of the GNU General Public License and to point readers at the
+	COPYING3 file and the FSF's license web page.
+	* fixfixes.c: Likewise.
+	* fixinc.in: Likewise.
+	* fixincl.c: Likewise.
+	* fixlib.c: Likewise.
+	* fixlib.h: Likewise.
+	* fixopts.c: Likewise.
+	* fixtests.c: Likewise.
+	* genfixes: Likewise.
+	* mkheaders.in: Likewise.
+	* system.h: Likewise.
+
+2009-03-01  Bruce Korb  <bkorb@gnu.org>
+	Apply a positively ancient patch:
+
+	2004-10-15  Giovanni Bajo  <giovannibajo@libero.it>
+
+	* inclhack.def (alpha_if_semicolon): new fix from long, long ago
+	* tests/base/net/if.h: Add new test.
+
+2009-01-06  Andreas Tobler  <a.tobler@schweiz.org>
+
+	* tests/base/locale.h: Add new test.
+	* tests/base/stdarg.h: Likewise.
 
 2009-01-05  Steve Ellcey  <sje@cup.hp.com>
 
 	* inclhack.def (hpux_spu_info):  Add files line.
 	* fixincl.x: Regenerate.
 
-2008-12-10  Steve Ellcey  <sje@cup.hp.com>
+2009-01-01  Andreas Tobler  <a.tobler@schweiz.org>
+
+	* inclhack.def (openbsd_null_definition): Redefine NULL to (void *)0
+	in case of C.
+	* fixincl.x: Regenerate.
+
+2008-12-31  Andreas Tobler  <a.tobler@schweiz.org>
+
+	PR target/35460
+	* inclhack.def (openbsd_va_start): Use __builtin_va_start
+	for OpenBSD.
+	* fixincl.x: Regenerate.
+
+2008-12-18  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2008-12-15  Steve Ellcey  <sje@cup.hp.com>
 
 	* inclhack.def (hpux_spu_info): Match PA as well as IA64.
 	* fixincl.x: Regenerate.
 
-2008-08-27  Release Manager
+2008-09-06  H.J. Lu  <hongjiu.lu@intel.com>
 
-	* GCC 4.3.2 released.
+	* configure.ac: Fix a typo.
+	* configured: Regenerate.
 
-2008-06-06  Release Manager
+2008-09-06  Bruce Korb  <bkorb@gnu.org>
 
-	* GCC 4.3.1 released.
+	* fixincl.tpl (sed): make the program executable configurable.
+	Some platforms have some rather oddball defaults.
+	* config.h.in (SED_PROGRAM): define the default sed.
+	* fixincl.x: regenerated
+	* tests/base/internal/wchar_core.h: fix bad sample text
+	* tests/base/math.h: fix bad sample text
+	* configure.ac: search for working sed
+	* inclhack.def (glibc_mutex_init): fix non-portable construct
+	and re-order a few misordered entries.
 
-2008-03-06  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+2008-06-17  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2008-06-07  Joseph Myers  <joseph@codesourcery.com>
+
+	* inclhack.def (AAB_svr4_replace_byteorder,
+	AAB_ultrix_ansi_compat, AAB_ultrix_limits, AAB_ultrix_memory,
+	libc1_G_va_list, libc1_ifdefd_memx, nested_motorola,
+	ptx_sys_mc_param_h, sco_regset, sco_static_func, sco_utime,
+	solaris_mutex_init_1, solaris_socket, solaris_unistd,
+	solaris_widec, svr4_krnl, ultrix_atexit_param, ultrix_atof_param,
+	ultrix_const3, ultrix_fix_fixproto, ultrix_ifdef, ultrix_locale,
+	ultrix_math_ifdef, ultrix_nested_ioctl, ultrix_nested_svc,
+	ultrix_stat, ultrix_static, ultrix_stdlib, ultrix_strings,
+	ultrix_strings2, ultrix_sys_time, ultrix_unistd,
+	unicosmk_restrict, uw7_byteorder_fix, windiss_math1,
+	windiss_math2, windiss_valist): Remove.
+	* fixincl.x: Regenerate.
+	* mkfixinc.sh: (arm-semi-aof, hppa1.1-*-osf*, hppa1.1-*-bsd*,
+	i370-*-openedition, i?86-*-moss*, i?86-*-uwin*,
+	powerpc-*-eabiaix*): Remove.
+	* tests/base/math.h: Update.
+	* tests/base/pthread.h: Update.
+	* tests/base/stdio.h: Update.
+	* tests/base/stdlib.h: Update.
+	* tests/base/string.h: Update.
+	* tests/base/strings.h: Update.
+	* tests/base/sys/file.h: Update.
+	* tests/base/sys/limits.h: Update.
+	* tests/base/sys/socket.h: Update.
+	* tests/base/sys/stat.h: Update.
+	* tests/base/sys/time.h: Update.
+	* tests/base/testing.h: Update.
+	* tests/base/unistd.h: Update.
+	* tests/base/_G_config.h: Remove.
+	* tests/base/arpa: Remove directory.
+	* tests/base/fs: Remove directory.
+	* tests/base/locale.h: Remove.
+	* tests/base/machine: Remove directory.
+	* tests/base/rpc/svc.h: Remove.
+	* tests/base/sys/ioctl.h: Remove.
+	* tests/base/sys/regset.h: Remove.
+	* tests/base/sys/times.h: Remove.
+	* tests/base/sys/utsname.h: Remove.
+	* tests/base/widec.h: Remove.
+
+2008-05-24  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
+
+	* inclhack.def (solaris_math_4): Use GCC's __builtin_fpclassify.
+	* tests/base/iso/math_c99.h: Update.
+	* fixincl.x: Regenerate.
+
+2008-05-14  Joseph Myers  <joseph@codesourcery.com>
+
+	* inclhack.def (AAB_fd_zero_asm_posix_types_h): Bypass on
+	posix_types_64.
+	* fixincl.x: Regenerate.
+
+2008-04-25  Kai Tietz  <kai.tietz@onvision.com>
+
+	* fixincl.c (fix_with_system): Cast pointer difference to long.
+	* fixlib.c (make_raw_shell_str): Cast compare to avoid sign warning.
+
+2008-04-18  Paolo Bonzini  <bonzini@gnu.org>
+
+	PR bootstrap/35457
+	* Makefile.in: Rewrite aclocal.m4 rule.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+
+2008-03-07  Peter O'Gorman  <pogma@thewrittenword.com>
+
+	PR c++/20366
+	* inclhack.def (AAB_aix_stdio): Hack stdio.h for -D_LARGE_FILES.
+	* fixincl.x: Regenerate.
+	* tests/base/stdio.h: Add test.
+
+2008-02-25  Ben Elliston  <bje@au.ibm.com>
+
+	PR other/32948
+	* fixincl.c (fix_applies): Remove unused variable `name_len'.
+
+2008-02-19  Kaveh R. Ghazi  <ghazi@caip.rutgers.edu>
 
 	* inclhack.def (solaris_math_10): New.
 	* tests/base/iso/math_c99.h: Update.
 
 	* fixincl.x: Regenerate.
 
-2008-03-05  Release Manager
-
-	* GCC 4.3.0 released.
-
-2008-02-04  Ismail Dönmez  <ismail@pardus.org.tr>
+2008-02-04  Ismail DÃ¶nmez  <ismail@pardus.org.tr>
 
 	* inclhack.def: (bsd_stdio_attrs_conflict, freebsd_gcc3_breakage,
 	freebsd_gcc4_breakage, hppa_hpux_fp_macros, hpux11_abs,

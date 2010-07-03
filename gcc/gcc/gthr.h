@@ -1,12 +1,12 @@
 /* Threads compatibility routines for libgcc2.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 1997, 1998, 2004 Free Software Foundation, Inc.
+/* Copyright (C) 1997, 1998, 2004, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free
-Software Foundation; either version 2, or (at your option) any later
+Software Foundation; either version 3, or (at your option) any later
 version.
 
 GCC is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -14,17 +14,14 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with other files,
-   some of which are compiled with GCC, to produce an executable,
-   this library does not by itself cause the resulting executable
-   to be covered by the GNU General Public License.
-   This exception does not however invalidate any other reasons why
-   the executable file might be covered by the GNU General Public License.  */
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 #ifndef GCC_GTHR_H
 #define GCC_GTHR_H
@@ -73,6 +70,8 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
      void *__gthread_getspecific (__gthread_key_t key)
      int __gthread_setspecific (__gthread_key_t key, const void *ptr)
 
+     int __gthread_mutex_destroy (__gthread_mutex_t *mutex);
+
      int __gthread_mutex_lock (__gthread_mutex_t *mutex);
      int __gthread_mutex_trylock (__gthread_mutex_t *mutex);
      int __gthread_mutex_unlock (__gthread_mutex_t *mutex);
@@ -102,12 +101,43 @@ Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
    All functions returning int should return zero on success or the error
    number.  If the operation is not supported, -1 is returned.
 
+   If the following are also defined, you should 
+     #define __GTHREADS_CXX0X 1
+   to enable the c++0x thread library. 
+ 
+   Types:
+     __gthread_t
+     __gthread_time_t
+
+   Interface:
+     int __gthread_create (__gthread_t *thread, void *(*func) (void*), 
+                           void *args);
+     int __gthread_join (__gthread_t thread, void **value_ptr);
+     int __gthread_detach (__gthread_t thread);
+     int __gthread_equal (__gthread_t t1, __gthread_t t2);
+     __gthread_t __gthread_self (void);
+     int __gthread_yield (void);
+
+     int __gthread_mutex_timedlock (__gthread_mutex_t *m,
+                                    const __gthread_time_t *abs_timeout);
+     int __gthread_recursive_mutex_timedlock (__gthread_recursive_mutex_t *m,
+                                          const __gthread_time_t *abs_time);
+     
+     int __gthread_cond_signal (__gthread_cond_t *cond);
+     int __gthread_cond_timedwait (__gthread_cond_t *cond, 
+                                   __gthread_mutex_t *mutex,
+                                   const __gthread_time_t *abs_timeout);
+     int __gthread_cond_timedwait_recursive (__gthread_cond_t *cond,
+                                             __gthread_recursive_mutex_t *mutex,
+                                             const __gthread_time_t *abs_time)
+
    Currently supported threads packages are
      TPF threads with -D__tpf__
      POSIX/Unix98 threads with -D_PTHREADS
      POSIX/Unix95 threads with -D_PTHREADS95
      DCE threads with -D_DCE_THREADS
      Solaris/UI threads with -D_SOLARIS_THREADS
+   
 */
 
 /* Check first for thread specific defines.  */

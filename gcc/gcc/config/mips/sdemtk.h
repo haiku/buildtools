@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.
    MIPS SDE version, for use with the SDE C library rather than newlib.
-   Copyright (C) 2007
+   Copyright (C) 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -94,12 +94,20 @@ extern void mips_sync_icache (void *beg, unsigned long len);
 #define FUNCTION_PROFILER(FILE, LABELNO)				\
   {									\
     fprintf (FILE, "\t.set\tnoat\n");					\
+    /* _mcount treats $2 as the static chain register.  */		\
+    if (cfun->static_chain_decl != NULL)				\
+      fprintf (FILE, "\tmove\t%s,%s\n", reg_names[2],			\
+	       reg_names[STATIC_CHAIN_REGNUM]);				\
     /* MIPS16 code passes saved $ra in $v1 instead of $at.  */		\
     fprintf (FILE, "\tmove\t%s,%s\n",					\
 	     reg_names[GP_REG_FIRST + (TARGET_MIPS16 ? 3 : 1)],		\
 	     reg_names[GP_REG_FIRST + 31]);				\
     fprintf (FILE, "\tjal\t_mcount\n");					\
     fprintf (FILE, "\t.set\tat\n");					\
+    /* _mcount treats $2 as the static chain register.  */		\
+    if (cfun->static_chain_decl != NULL)				\
+      fprintf (FILE, "\tmove\t%s,%s\n", reg_names[STATIC_CHAIN_REGNUM],	\
+	       reg_names[2]);						\
   }
 
 /* ...nor does the call sequence preserve $31.  */

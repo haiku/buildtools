@@ -1,11 +1,12 @@
 // Input streams -*- C++ -*-
 
-// Copyright (C) 2004, 2005 Free Software Foundation, Inc.
+// Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 //
 // ISO C++ 14882: 27.6.1  Input streams
@@ -45,7 +41,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       sentry __cerb(*this, true);
       if (__cerb)
 	{
-          try
+          __try
 	    {
 	      const int_type __idelim = traits_type::to_int_type(__delim);
 	      const int_type __eof = traits_type::eof();
@@ -91,12 +87,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	      else
 		__err |= ios_base::failbit;
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      this->_M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    { this->_M_setstate(ios_base::badbit); }
 	}
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
@@ -123,7 +119,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       if (__cerb && __n > 0)
 	{
 	  ios_base::iostate __err = ios_base::iostate(ios_base::goodbit);
-	  try
+	  __try
 	    {
 	      const char_type __cdelim = traits_type::to_char_type(__delim);	      
 	      const int_type __eof = traits_type::eof();
@@ -182,12 +178,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 		  __sb->sbumpc();
 		}
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      this->_M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    { this->_M_setstate(ios_base::badbit); }
 	  if (__err)
 	    this->setstate(__err);
@@ -211,7 +207,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __istream_type::sentry __cerb(__in, false);
       if (__cerb)
 	{
-	  try
+	  __try
 	    {
 	      // Figure out how many characters to extract.
 	      streamsize __num = __in.width();
@@ -261,12 +257,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	      *__s = __char_type();
 	      __in.width(0);
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      __in._M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    { __in._M_setstate(ios_base::badbit); }
 	}
       if (!__extracted)
@@ -294,7 +290,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __istream_type::sentry __cerb(__in, false);
       if (__cerb)
 	{
-	  try
+	  __try
 	    {
 	      __str.erase();
 	      const streamsize __w = __in.width();
@@ -336,12 +332,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 		__err |= ios_base::eofbit;
 	      __in.width(0);
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      __in._M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    {
 	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
 	      // 91. Description of operator>> and getline() for string<>
@@ -376,7 +372,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __istream_type::sentry __cerb(__in, true);
       if (__cerb)
 	{
-	  try
+	  __try
 	    {
 	      __str.erase();
 	      const __int_type __idelim = __traits_type::to_int_type(__delim);
@@ -421,12 +417,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	      else
 		__err |= ios_base::failbit;
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      __in._M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    {
 	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
 	      // 91. Description of operator>> and getline() for string<>
@@ -452,7 +448,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       sentry __cerb(*this, true);
       if (__cerb)
 	{
-          try
+          __try
 	    {
 	      const int_type __idelim = traits_type::to_int_type(__delim);
 	      const int_type __eof = traits_type::eof();
@@ -498,12 +494,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	      else
 		__err |= ios_base::failbit;
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      this->_M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    { this->_M_setstate(ios_base::badbit); }
 	}
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
@@ -530,7 +526,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       if (__cerb && __n > 0)
 	{
 	  ios_base::iostate __err = ios_base::iostate(ios_base::goodbit);
-	  try
+	  __try
 	    {
 	      const char_type __cdelim = traits_type::to_char_type(__delim);	      
 	      const int_type __eof = traits_type::eof();
@@ -589,12 +585,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 		  __sb->sbumpc();
 		}
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      this->_M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    { this->_M_setstate(ios_base::badbit); }
 	  if (__err)
 	    this->setstate(__err);
@@ -622,7 +618,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __istream_type::sentry __cerb(__in, true);
       if (__cerb)
 	{
-	  try
+	  __try
 	    {
 	      __str.erase();
 	      const __int_type __idelim = __traits_type::to_int_type(__delim);
@@ -667,12 +663,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	      else
 		__err |= ios_base::failbit;
 	    }
-	  catch(__cxxabiv1::__forced_unwind&)
+	  __catch(__cxxabiv1::__forced_unwind&)
 	    {
 	      __in._M_setstate(ios_base::badbit);
 	      __throw_exception_again;
 	    }
-	  catch(...)
+	  __catch(...)
 	    {
 	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
 	      // 91. Description of operator>> and getline() for string<>

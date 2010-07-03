@@ -1,6 +1,6 @@
-/* Communication between reload.c and reload1.c.
-   Copyright (C) 1987, 1991, 1992, 1993, 1994, 1995, 1997, 1998,
-   1999, 2000, 2001, 2003, 2004, 2007 Free Software Foundation, Inc.
+/* Communication between reload.c, reload1.c and the rest of compiler.
+   Copyright (C) 1987, 1991, 1992, 1993, 1994, 1995, 1997, 1998, 1999,
+   2000, 2001, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -83,7 +83,7 @@ struct reload
   rtx out;
 
   /* The class of registers to reload into.  */
-  enum reg_class class;
+  enum reg_class rclass;
 
   /* The mode this operand should have when reloaded, on input.  */
   enum machine_mode inmode;
@@ -205,21 +205,11 @@ struct insn_chain
      all insns that need reloading.  */
   struct insn_chain *next_need_reload;
 
-  /* The basic block this insn is in.  */
-  int block;
   /* The rtx of the insn.  */
   rtx insn;
-  /* Register life information: record all live hard registers, and all
-     live pseudos that have a hard register.  */
-  regset_head live_throughout;
-  regset_head dead_or_set;
 
-  /* Copies of the global variables computed by find_reloads.  */
-  struct reload *rld;
-  int n_reloads;
-
-  /* Indicates which registers have already been used for spills.  */
-  HARD_REG_SET used_spill_regs;
+  /* The basic block this insn is in.  */
+  int block;
 
   /* Nonzero if find_reloads said the insn requires reloading.  */
   unsigned int need_reload:1;
@@ -230,6 +220,19 @@ struct insn_chain
   unsigned int need_elim:1;
   /* Nonzero if this insn was inserted by perform_caller_saves.  */
   unsigned int is_caller_save_insn:1;
+
+  /* Register life information: record all live hard registers, and
+     all live pseudos that have a hard register.  This set also
+     contains pseudos spilled by IRA.  */
+  regset_head live_throughout;
+  regset_head dead_or_set;
+
+  /* Copies of the global variables computed by find_reloads.  */
+  struct reload *rld;
+  int n_reloads;
+
+  /* Indicates which registers have already been used for spills.  */
+  HARD_REG_SET used_spill_regs;
 };
 
 /* A chain of insn_chain structures to describe all non-note insns in
@@ -345,6 +348,9 @@ extern bool elimination_target_reg_p (rtx);
 
 /* Deallocate the reload register used by reload number R.  */
 extern void deallocate_reload_reg (int r);
+
+/* True if caller-save has been reinitialized.  */
+extern bool caller_save_initialized_p;
 
 /* Functions in caller-save.c:  */
 

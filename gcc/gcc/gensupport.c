@@ -1,5 +1,5 @@
 /* Support routines for the various generation passes.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -1299,6 +1299,34 @@ lookup_predicate (const char *name)
   return (struct pred_data *) htab_find (predicate_table, &key);
 }
 
+/* Record that predicate PRED can accept CODE.  */
+
+void
+add_predicate_code (struct pred_data *pred, enum rtx_code code)
+{
+  if (!pred->codes[code])
+    {
+      pred->num_codes++;
+      pred->codes[code] = true;
+
+      if (GET_RTX_CLASS (code) != RTX_CONST_OBJ)
+	pred->allows_non_const = true;
+
+      if (code != REG
+	  && code != SUBREG
+	  && code != MEM
+	  && code != CONCAT
+	  && code != PARALLEL
+	  && code != STRICT_LOW_PART)
+	pred->allows_non_lvalue = true;
+
+      if (pred->num_codes == 1)
+	pred->singleton = code;
+      else if (pred->num_codes == 2)
+	pred->singleton = UNKNOWN;
+    }
+}
+
 void
 add_predicate (struct pred_data *pred)
 {
@@ -1320,32 +1348,31 @@ struct std_pred_table
 {
   const char *name;
   bool special;
+  bool allows_const_p;
   RTX_CODE codes[NUM_RTX_CODE];
 };
 
 static const struct std_pred_table std_preds[] = {
-  {"general_operand", false, {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
-			      LABEL_REF, SUBREG, REG, MEM }},
-  {"address_operand", true, {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
-			     LABEL_REF, SUBREG, REG, MEM,
-			     PLUS, MINUS, MULT}},
-  {"register_operand", false, {SUBREG, REG}},
-  {"pmode_register_operand", true, {SUBREG, REG}},
-  {"scratch_operand", false, {SCRATCH, REG}},
-  {"immediate_operand", false, {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
-				LABEL_REF}},
-  {"const_int_operand", false, {CONST_INT}},
-  {"const_double_operand", false, {CONST_INT, CONST_DOUBLE}},
-  {"nonimmediate_operand", false, {SUBREG, REG, MEM}},
-  {"nonmemory_operand", false, {CONST_INT, CONST_DOUBLE, CONST, SYMBOL_REF,
-			        LABEL_REF, SUBREG, REG}},
-  {"push_operand", false, {MEM}},
-  {"pop_operand", false, {MEM}},
-  {"memory_operand", false, {SUBREG, MEM}},
-  {"indirect_operand", false, {SUBREG, MEM}},
-  {"comparison_operator", false, {EQ, NE, LE, LT, GE, GT, LEU, LTU, GEU, GTU,
-				  UNORDERED, ORDERED, UNEQ, UNGE, UNGT, UNLE,
-				  UNLT, LTGT}}
+  {"general_operand", false, true, {SUBREG, REG, MEM}},
+  {"address_operand", true, true, {SUBREG, REG, MEM, PLUS, MINUS, MULT}},
+  {"register_operand", false, false, {SUBREG, REG}},
+  {"pmode_register_operand", true, false, {SUBREG, REG}},
+  {"scratch_operand", false, false, {SCRATCH, REG}},
+  {"immediate_operand", false, true, {0}},
+  {"const_int_operand", false, false, {CONST_INT}},
+  {"const_double_operand", false, false, {CONST_INT, CONST_DOUBLE}},
+  {"nonimmediate_operand", false, false, {SUBREG, REG, MEM}},
+  {"nonmemory_operand", false, true, {SUBREG, REG}},
+  {"push_operand", false, false, {MEM}},
+  {"pop_operand", false, false, {MEM}},
+  {"memory_operand", false, false, {SUBREG, MEM}},
+  {"indirect_operand", false, false, {SUBREG, MEM}},
+  {"comparison_operator", false, false, {EQ, NE,
+					 LE, LT, GE, GT,
+					 LEU, LTU, GEU, GTU,
+					 UNORDERED, ORDERED,
+					 UNEQ, UNGE, UNGT,
+					 UNLE, UNLT, LTGT}}
 };
 #define NUM_KNOWN_STD_PREDS ARRAY_SIZE (std_preds)
 
@@ -1369,22 +1396,12 @@ init_predicate_table (void)
       pred->special = std_preds[i].special;
 
       for (j = 0; std_preds[i].codes[j] != 0; j++)
-	{
-	  enum rtx_code code = std_preds[i].codes[j];
+	add_predicate_code (pred, std_preds[i].codes[j]);
 
-	  pred->codes[code] = true;
-	  if (GET_RTX_CLASS (code) != RTX_CONST_OBJ)
-	    pred->allows_non_const = true;
-	  if (code != REG
-	      && code != SUBREG
-	      && code != MEM
-	      && code != CONCAT
-	      && code != PARALLEL
-	      && code != STRICT_LOW_PART)
-	    pred->allows_non_lvalue = true;
-	}
-      if (j == 1)
-	pred->singleton = std_preds[i].codes[0];
+      if (std_preds[i].allows_const_p)
+	for (j = 0; j < NUM_RTX_CODE; j++)
+	  if (GET_RTX_CLASS (j) == RTX_CONST_OBJ)
+	    add_predicate_code (pred, j);
       
       add_predicate (pred);
     }
@@ -1411,13 +1428,13 @@ record_insn_name (int code, const char *name)
 {
   static const char *last_real_name = "insn";
   static int last_real_code = 0;
-  char *new;
+  char *new_name;
 
   if (insn_name_ptr_size <= code)
     {
       int new_size;
       new_size = (insn_name_ptr_size ? insn_name_ptr_size * 2 : 512);
-      insn_name_ptr = xrealloc (insn_name_ptr, sizeof(char *) * new_size);
+      insn_name_ptr = XRESIZEVEC (char *, insn_name_ptr, new_size);
       memset (insn_name_ptr + insn_name_ptr_size, 0,
 	      sizeof(char *) * (new_size - insn_name_ptr_size));
       insn_name_ptr_size = new_size;
@@ -1425,14 +1442,14 @@ record_insn_name (int code, const char *name)
 
   if (!name || name[0] == '\0')
     {
-      new = xmalloc (strlen (last_real_name) + 10);
-      sprintf (new, "%s+%d", last_real_name, code - last_real_code);
+      new_name = XNEWVAR (char, strlen (last_real_name) + 10);
+      sprintf (new_name, "%s+%d", last_real_name, code - last_real_code);
     }
   else
     {
-      last_real_name = new = xstrdup (name);
+      last_real_name = new_name = xstrdup (name);
       last_real_code = code;
     }
 
-  insn_name_ptr[code] = new;
+  insn_name_ptr[code] = new_name;
 }

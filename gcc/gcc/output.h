@@ -1,7 +1,7 @@
 /* Declarations for insn-output.c.  These functions are defined in recog.c,
    final.c, and varasm.c.
    Copyright (C) 1987, 1991, 1994, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -96,6 +96,9 @@ extern int label_to_alignment (rtx);
 
 /* Output a LABEL_REF, or a bare CODE_LABEL, as an assembler symbol.  */
 extern void output_asm_label (rtx);
+
+/* Marks SYMBOL_REFs in x as referenced through use of assemble_external.  */
+extern void mark_symbol_refs_as_used (rtx);
 
 /* Print a memory reference operand for address X
    using machine-dependent assembler syntax.  */
@@ -460,7 +463,10 @@ enum section_category
 
   SECCAT_BSS,
   SECCAT_SBSS,
-  SECCAT_TBSS
+  SECCAT_TBSS,
+
+  SECCAT_EMUTLS_VAR,
+  SECCAT_EMUTLS_TMPL
 };
 
 /* Information that is provided by all instances of the section type.  */
@@ -618,7 +624,7 @@ extern void default_elf_asm_output_external (FILE *file, tree,
 					     const char *);
 extern int maybe_assemble_visibility (tree);
 
-extern int default_address_cost (rtx);
+extern int default_address_cost (rtx, bool);
 
 /* dbxout helper functions */
 #if defined DBX_DEBUGGING_INFO || defined XCOFF_DEBUGGING_INFO

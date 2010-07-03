@@ -1,5 +1,5 @@
 /* Vector API for GNU compiler.
-   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
 
 This file is part of GCC.
@@ -429,7 +429,12 @@ extern void *vec_heap_p_reserve_exact (void *, int MEM_STAT_DECL);
 extern void *vec_heap_o_reserve (void *, int, size_t, size_t MEM_STAT_DECL);
 extern void *vec_heap_o_reserve_exact (void *, int, size_t, size_t
 				       MEM_STAT_DECL);
+extern void dump_vec_loc_statistics (void);
+#ifdef GATHER_STATISTICS
+void vec_heap_free (void *);
+#else
 #define vec_heap_free(V) free (V)
+#endif
 
 #if ENABLE_CHECKING
 #define VEC_CHECK_INFO ,__FILE__,__LINE__,__FUNCTION__

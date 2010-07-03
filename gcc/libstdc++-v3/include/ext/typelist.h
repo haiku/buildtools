@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005, 2006 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 // Copyright (C) 2004 Ami Tavory and Vladimir Dreizin, IBM-HRL.
 
@@ -71,9 +66,20 @@ namespace typelist
       typedef Typelist 	tail;
     };
 
-  template<typename Fn, class Typelist>
+  // Apply all typelist types to unary functor.
+  template<typename Fn, typename Typelist>
     void
     apply(Fn&, Typelist);
+
+  /// Apply all typelist types to generator functor.
+  template<typename Gn, typename Typelist>
+    void
+    apply_generator(Gn&, Typelist);
+
+  // Apply all typelist types and values to generator functor.
+  template<typename Gn, typename TypelistT, typename TypelistV>
+    void
+    apply_generator(Gn&, TypelistT, TypelistV);
 
   template<typename Typelist0, typename Typelist1>
     struct append;
@@ -135,20 +141,64 @@ namespace detail
     struct apply_<Fn, chain<Hd, Tl> >
     {
       void
-      operator() (Fn& f)
+      operator()(Fn& f)
       {
 	f.operator()(Hd());
 	apply_<Fn, Tl> next;
 	next(f);
       }
-  };
+    };
 
   template<typename Fn>
     struct apply_<Fn, null_type>
     {
       void
       operator()(Fn&) { }
-  };
+    };
+
+  template<typename Gn, typename Typelist_Chain>
+    struct apply_generator1_;
+
+  template<typename Gn, typename Hd, typename Tl>
+    struct apply_generator1_<Gn, chain<Hd, Tl> >
+    {
+      void
+      operator()(Gn& g)
+      {
+	g.template operator()<Hd>();
+	apply_generator1_<Gn, Tl> next;
+	next(g);
+      }
+    };
+
+  template<typename Gn>
+    struct apply_generator1_<Gn, null_type>
+    {
+      void
+      operator()(Gn&) { }
+    };
+
+  template<typename Gn, typename TypelistT_Chain, typename TypelistV_Chain>
+    struct apply_generator2_;
+
+  template<typename Gn, typename Hd1, typename TlT, typename Hd2, typename TlV>
+    struct apply_generator2_<Gn, chain<Hd1, TlT>, chain<Hd2, TlV> >
+    {
+      void
+      operator()(Gn& g)
+      {
+	g.template operator()<Hd1, Hd2>();
+	apply_generator2_<Gn, TlT, TlV> next;
+	next(g);
+      }
+    };
+
+  template<typename Gn>
+    struct apply_generator2_<Gn, null_type, null_type>
+    {
+      void
+      operator()(Gn&) { }
+    };
 
   template<typename Typelist_Chain0, typename Typelist_Chain1>
     struct append_;
@@ -294,20 +344,20 @@ namespace detail
     struct chain_flatten_;
 
   template<typename Hd_Tl>
-  struct chain_flatten_<chain<Hd_Tl, null_type> >
-  {
-    typedef typename Hd_Tl::root 				type;
-  };
+    struct chain_flatten_<chain<Hd_Tl, null_type> >
+    {
+      typedef typename Hd_Tl::root 				type;
+    };
 
   template<typename Hd_Typelist, class Tl_Typelist>
-  struct chain_flatten_<chain<Hd_Typelist, Tl_Typelist> >
-  {
-  private:
-    typedef typename chain_flatten_<Tl_Typelist>::type 		rest_type;
-    typedef append<Hd_Typelist, node<rest_type> >		append_type;
-  public:
-    typedef typename append_type::type::root 			type;
-  };
+    struct chain_flatten_<chain<Hd_Typelist, Tl_Typelist> >
+    {
+    private:
+      typedef typename chain_flatten_<Tl_Typelist>::type 	rest_type;
+      typedef append<Hd_Typelist, node<rest_type> >		append_type;
+    public:
+      typedef typename append_type::type::root 			type;
+    };
 } // namespace detail
 } // namespace typelist
 
@@ -333,11 +383,29 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
 namespace typelist
 {
-  template<typename Fn, class Typelist>
+  template<typename Fn, typename Typelist>
     void
     apply(Fn& fn, Typelist)
     {
       detail::apply_<Fn, typename Typelist::root> a;
+      a(fn);
+    }
+
+  template<typename Fn, typename Typelist>
+    void
+    apply_generator(Fn& fn, Typelist)
+    {
+      detail::apply_generator1_<Fn, typename Typelist::root> a;
+      a(fn);
+    }
+
+  template<typename Fn, typename TypelistT, typename TypelistV>
+    void
+    apply_generator(Fn& fn, TypelistT, TypelistV)
+    {
+      typedef typename TypelistT::root rootT;
+      typedef typename TypelistV::root rootV;
+      detail::apply_generator2_<Fn, rootT, rootV> a;
       a(fn);
     }
 

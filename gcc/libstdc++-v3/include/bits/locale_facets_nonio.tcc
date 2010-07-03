@@ -1,11 +1,11 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 2007 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file locale_facets_nonio.tcc
  *  This is an internal header file, included by other library headers.
@@ -50,12 +45,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	if (!__caches[__i])
 	  {
 	    __moneypunct_cache<_CharT, _Intl>* __tmp = NULL;
-	    try
+	    __try
 	      {
 		__tmp = new __moneypunct_cache<_CharT, _Intl>;
 		__tmp->_M_cache(__loc);
 	      }
-	    catch(...)
+	    __catch(...)
 	      {
 		delete __tmp;
 		__throw_exception_again;
@@ -81,8 +76,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __mp.grouping().copy(__grouping, _M_grouping_size);
       _M_grouping = __grouping;
       _M_use_grouping = (_M_grouping_size
-			 && static_cast<signed char>(__mp.grouping()[0]) > 0);
-      
+			 && static_cast<signed char>(_M_grouping[0]) > 0
+			 && (_M_grouping[0]
+			     != __gnu_cxx::__numeric_traits<char>::__max));
+
       _M_decimal_point = __mp.decimal_point();
       _M_thousands_sep = __mp.thousands_sep();
       _M_frac_digits = __mp.frac_digits();
@@ -229,6 +226,9 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 		    else if (__c == __lc->_M_decimal_point 
 			     && !__testdecfound)
 		      {
+			if (__lc->_M_frac_digits <= 0)
+			  break;
+
 			__last_pos = __n;
 			__n = 0;
 			__testdecfound = true;
@@ -311,11 +311,10 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
 	      }
 	    
 	    // Iff not enough digits were supplied after the decimal-point.
-	    if (__testdecfound && __lc->_M_frac_digits > 0
-		&& __n != __lc->_M_frac_digits)
+	    if (__testdecfound && __n != __lc->_M_frac_digits)
 	      __testvalid = false;
 	  }
-	
+
 	// Iff valid sequence is not recognized.
 	if (!__testvalid)
 	  __err |= ios_base::failbit;

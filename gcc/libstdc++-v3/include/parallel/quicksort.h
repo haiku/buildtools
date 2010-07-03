@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file parallel/quicksort.h
  *  @brief Implementation of a unbalanced parallel quicksort (in-place).
@@ -87,7 +81,8 @@ namespace __gnu_parallel
 
       __gnu_parallel::binder2nd<Comparator, value_type, value_type, bool>
         pred(comp, pivot);
-      difference_type split = parallel_partition(begin, end, pred, num_threads);
+      difference_type split =
+          parallel_partition(begin, end, pred, num_threads);
 
       ::operator delete(samples);
 
@@ -154,7 +149,6 @@ namespace __gnu_parallel
    *  @param begin Begin iterator of input sequence.
    *  @param end End iterator input sequence, ignored.
    *  @param comp Comparator.
-   *  @param n Length of input sequence.
    *  @param num_threads Number of threads that are allowed to work on
    *  this part.
    */
@@ -162,9 +156,8 @@ namespace __gnu_parallel
     void
     parallel_sort_qs(RandomAccessIterator begin,
 		     RandomAccessIterator end,
-		     Comparator comp, typename std::iterator_traits
-		     <RandomAccessIterator>::difference_type n,
-		     int num_threads)
+		     Comparator comp,
+		     thread_index_t num_threads)
     {
       _GLIBCXX_CALL(n)
 
@@ -172,16 +165,15 @@ namespace __gnu_parallel
       typedef typename traits_type::value_type value_type;
       typedef typename traits_type::difference_type difference_type;
 
-      if (n == 0)
-	return;
+      difference_type n = end - begin;
 
       // At least one element per processor.
       if (num_threads > n)
-	num_threads = static_cast<thread_index_t>(n);
+        num_threads = static_cast<thread_index_t>(n);
 
       parallel_sort_qs_conquer(begin, begin + n, comp, num_threads);
     }
 
 } //namespace __gnu_parallel
 
-#endif
+#endif /* _GLIBCXX_PARALLEL_QUICKSORT_H */

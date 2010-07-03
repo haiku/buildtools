@@ -1,8 +1,8 @@
-/* Copyright (C) 2006 Free Software Foundation, Inc.
+/* Copyright (C) 2006, 2008, 2009 Free Software Foundation, Inc.
   
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
-   Software Foundation; either version 2 of the License, or (at your option)
+   Software Foundation; either version 3 of the License, or (at your option)
    any later version.
   
    This file is distributed in the hope that it will be useful, but WITHOUT
@@ -10,16 +10,14 @@
    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
    for more details.
   
-   You should have received a copy of the GNU General Public License
-   along with this file; see the file COPYING.  If not, write to the Free
-   Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
-   02110-1301, USA.  */
+   Under Section 7 of GPL version 3, you are granted additional
+   permissions described in the GCC Runtime Library Exception, version
+   3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you link this library with files compiled with
-   GCC to produce an executable, this does not cause the resulting executable
-   to be covered by the GNU General Public License.  The exception does not
-   however invalidate any other reasons why the executable file might be covered
-   by the GNU General Public License. */
+   You should have received a copy of the GNU General Public License and
+   a copy of the GCC Runtime Library Exception along with this program;
+   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   <http://www.gnu.org/licenses/>.  */
 
 #include <spu_intrinsics.h>
 const unsigned char __didf_scale[16] __attribute__ ((__aligned__ (16))) = {
@@ -46,10 +44,10 @@ __float_unsdidf (qword DI)
   t0 = si_clz (DI);
   t1 = si_shl (DI, t0);
   t2 = si_ceqi (t0, 32);
-  t3 = si_sf (t0, *(qword *) __didf_scale);
+  t3 = si_sf (t0, *(const qword *) __didf_scale);
   t4 = si_a (t1, t1);
   t5 = si_andc (t3, t2);
-  t6 = si_shufb (t5, t4, *(qword *) __didf_pat);
+  t6 = si_shufb (t5, t4, *(const qword *) __didf_pat);
   t7 = si_shlqbii (t6, 4);
   t8 = si_shlqbyi (t7, 8);
   return si_dfa (t7, t8);

@@ -1,11 +1,12 @@
 // -*- C++ -*- The GNU C++ exception personality routine.
-// Copyright (C) 2001, 2002, 2003, 2006, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
 // GCC is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2, or (at your option)
+// the Free Software Foundation; either version 3, or (at your option)
 // any later version.
 //
 // GCC is distributed in the hope that it will be useful,
@@ -13,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License
-// along with GCC; see the file COPYING.  If not, write to
-// the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-// Boston, MA 02110-1301, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 #include <bits/c++config.h>
 #include <cstdlib>
@@ -377,7 +373,7 @@ PERSONALITY_FUNCTION (int version,
   const unsigned char *p;
   _Unwind_Ptr landing_pad, ip;
   int handler_switch_value;
-  void* thrown_ptr = ue_header + 1;
+  void* thrown_ptr = 0;
   bool foreign_exception;
   int ip_before_insn = 0;
 
@@ -543,26 +539,33 @@ PERSONALITY_FUNCTION (int version,
       bool saw_handler = false;
 
 #ifdef __ARM_EABI_UNWINDER__
+      // ??? How does this work - more importantly, how does it interact with
+      // dependent exceptions?
       throw_type = ue_header;
-      if ((actions & _UA_FORCE_UNWIND)
-	  || foreign_exception)
-	thrown_ptr = 0;
+      if (actions & _UA_FORCE_UNWIND)
+	{
+	  __GXX_INIT_FORCED_UNWIND_CLASS(ue_header->exception_class);
+	}
+      else if (!foreign_exception)
+	thrown_ptr = __get_object_from_ue (ue_header);
 #else
       // During forced unwinding, match a magic exception type.
       if (actions & _UA_FORCE_UNWIND)
 	{
 	  throw_type = &typeid(abi::__forced_unwind);
-	  thrown_ptr = 0;
 	}
       // With a foreign exception class, there's no exception type.
       // ??? What to do about GNU Java and GNU Ada exceptions?
       else if (foreign_exception)
 	{
 	  throw_type = &typeid(abi::__foreign_exception);
-	  thrown_ptr = 0;
 	}
       else
-	throw_type = xh->exceptionType;
+        {
+          thrown_ptr = __get_object_from_ue (ue_header);
+          throw_type = __get_exception_header_from_obj
+            (thrown_ptr)->exceptionType;
+        }
 #endif
 
       while (1)
@@ -657,9 +660,9 @@ PERSONALITY_FUNCTION (int version,
 	std::terminate ();
       else if (handler_switch_value < 0)
 	{
-	  try 
+	  __try 
 	    { std::unexpected (); } 
-	  catch(...) 
+	  __catch(...) 
 	    { std::terminate (); }
 	}
     }
@@ -746,21 +749,22 @@ __cxa_call_unexpected (void *exc_obj_in)
   xh_terminate_handler = xh->terminateHandler;
   info.ttype_base = (_Unwind_Ptr) xh->catchTemp;
 
-  try 
+  __try 
     { __unexpected (xh->unexpectedHandler); } 
-  catch(...) 
+  __catch(...) 
     {
       // Get the exception thrown from unexpected.
 
       __cxa_eh_globals *globals = __cxa_get_globals_fast ();
       __cxa_exception *new_xh = globals->caughtExceptions;
-      void *new_ptr = new_xh + 1;
+      void *new_ptr = __get_object_from_ambiguous_exception (new_xh);
 
       // We don't quite have enough stuff cached; re-parse the LSDA.
       parse_lsda_header (0, xh_lsda, &info);
 
       // If this new exception meets the exception spec, allow it.
-      if (check_exception_spec (&info, new_xh->exceptionType,
+      if (check_exception_spec (&info, __get_exception_header_from_obj
+                                  (new_ptr)->exceptionType,
 				new_ptr, xh_switch_value))
 	__throw_exception_again;
 

@@ -1,5 +1,5 @@
 /* Output routines for Motorola MCore processor
-   Copyright (C) 1993, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 1993, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -44,6 +44,7 @@
 #include "toplev.h"
 #include "target.h"
 #include "target-def.h"
+#include "df.h"
 
 /* Maximum size we are allowed to grow the stack in a single operation.
    If we want more, we must do it in increments of at most this size.
@@ -143,7 +144,7 @@ static const char *mcore_strip_name_encoding	(const char *);
 static int        mcore_const_costs            	(rtx, RTX_CODE);
 static int        mcore_and_cost               	(rtx);
 static int        mcore_ior_cost               	(rtx);
-static bool       mcore_rtx_costs		(rtx, int, int, int *);
+static bool       mcore_rtx_costs		(rtx, int, int, int *, bool);
 static void       mcore_external_libcall	(rtx);
 static bool       mcore_return_in_memory	(const_tree, const_tree);
 static int        mcore_arg_partial_bytes       (CUMULATIVE_ARGS *,
@@ -182,7 +183,7 @@ static int        mcore_arg_partial_bytes       (CUMULATIVE_ARGS *,
 #undef  TARGET_RTX_COSTS
 #define TARGET_RTX_COSTS 		mcore_rtx_costs
 #undef  TARGET_ADDRESS_COST
-#define TARGET_ADDRESS_COST 		hook_int_rtx_0
+#define TARGET_ADDRESS_COST 		hook_int_rtx_bool_0
 #undef  TARGET_MACHINE_DEPENDENT_REORG
 #define TARGET_MACHINE_DEPENDENT_REORG	mcore_reorg
 
@@ -479,7 +480,8 @@ mcore_ior_cost (rtx x)
 }
 
 static bool
-mcore_rtx_costs (rtx x, int code, int outer_code, int * total)
+mcore_rtx_costs (rtx x, int code, int outer_code, int * total,
+		 bool speed ATTRIBUTE_UNUSED)
 {
   switch (code)
     {
@@ -1651,7 +1653,7 @@ layout_mcore_frame (struct mcore_frame * infp)
 
   /* Might have to spill bytes to re-assemble a big argument that
      was passed partially in registers and partially on the stack.  */
-  nbytes = current_function_pretend_args_size;
+  nbytes = crtl->args.pretend_args_size;
   
   /* Determine how much space for spilled anonymous args (e.g., stdarg).  */
   if (current_function_anonymous_args)
@@ -1665,7 +1667,7 @@ layout_mcore_frame (struct mcore_frame * infp)
 
   /* And the rest of it... locals and space for overflowed outbounds.  */
   infp->local_size = get_frame_size ();
-  infp->outbound_size = current_function_outgoing_args_size;
+  infp->outbound_size = crtl->outgoing_args_size;
 
   /* Make sure we have a whole number of words for the locals.  */
   if (infp->local_size % STACK_BYTES)
@@ -1938,7 +1940,7 @@ mcore_expand_prolog (void)
       
       ASM_OUTPUT_CG_NODE (asm_out_file, mcore_current_function_name, space_allocated);
 
-      if (current_function_calls_alloca)
+      if (cfun->calls_alloca)
 	ASM_OUTPUT_CG_EDGE (asm_out_file, mcore_current_function_name, "alloca", 1);
 
       /* 970425: RBE:
@@ -1962,7 +1964,7 @@ mcore_expand_prolog (void)
   /* If we have a parameter passed partially in regs and partially in memory,
      the registers will have been stored to memory already in function.c.  So
      we only need to do something here for varargs functions.  */
-  if (fi.arg_size != 0 && current_function_pretend_args_size == 0)
+  if (fi.arg_size != 0 && crtl->args.pretend_args_size == 0)
     {
       int offset;
       int rn = FIRST_PARM_REG + NPARM_REGS - 1;
@@ -2602,30 +2604,30 @@ mcore_r15_operand_p (rtx x)
     }
 }
 
-/* Implement SECONDARY_RELOAD_CLASS.  If CLASS contains r15, and we can't
+/* Implement SECONDARY_RELOAD_CLASS.  If RCLASS contains r15, and we can't
    directly move X into it, use r1-r14 as a temporary.  */
 
 enum reg_class
-mcore_secondary_reload_class (enum reg_class class,
+mcore_secondary_reload_class (enum reg_class rclass,
 			      enum machine_mode mode ATTRIBUTE_UNUSED, rtx x)
 {
-  if (TEST_HARD_REG_BIT (reg_class_contents[class], 15)
+  if (TEST_HARD_REG_BIT (reg_class_contents[rclass], 15)
       && !mcore_r15_operand_p (x))
     return LRW_REGS;
   return NO_REGS;
 }
 
 /* Return the reg_class to use when reloading the rtx X into the class
-   CLASS.  If X is too complex to move directly into r15, prefer to
+   RCLASS.  If X is too complex to move directly into r15, prefer to
    use LRW_REGS instead.  */
 
 enum reg_class
-mcore_reload_class (rtx x, enum reg_class class)
+mcore_reload_class (rtx x, enum reg_class rclass)
 {
-  if (reg_class_subset_p (LRW_REGS, class) && !mcore_r15_operand_p (x))
+  if (reg_class_subset_p (LRW_REGS, rclass) && !mcore_r15_operand_p (x))
     return LRW_REGS;
 
-  return class;
+  return rclass;
 }
 
 /* Tell me if a pair of reg/subreg rtx's actually refer to the same
@@ -2851,7 +2853,7 @@ mcore_mark_dllexport (tree decl)
   if (mcore_dllexport_name_p (oldname))
     return;  /* Already done.  */
 
-  newname = alloca (strlen (oldname) + 4);
+  newname = XALLOCAVEC (char, strlen (oldname) + 4);
   sprintf (newname, "@e.%s", oldname);
 
   /* We pass newname through get_identifier to ensure it has a unique
@@ -2909,7 +2911,7 @@ mcore_mark_dllimport (tree decl)
       TREE_PUBLIC (decl) = 1;
     }
 
-  newname = alloca (strlen (oldname) + 11);
+  newname = XALLOCAVEC (char, strlen (oldname) + 11);
   sprintf (newname, "@i.__imp_%s", oldname);
 
   /* We pass newname through get_identifier to ensure it has a unique
@@ -3066,7 +3068,7 @@ mcore_unique_section (tree decl, int reloc ATTRIBUTE_UNUSED)
     prefix = ".data$";
   
   len = strlen (name) + strlen (prefix);
-  string = alloca (len + 1);
+  string = XALLOCAVEC (char, len + 1);
   
   sprintf (string, "%s%s", prefix, name);
 

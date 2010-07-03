@@ -1,5 +1,6 @@
 /* Coalesce SSA_NAMES together for the out-of-ssa pass.
-   Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -74,7 +75,7 @@ typedef struct coalesce_list_d
    possibly on CRITICAL edge and in HOT basic block.  */
 
 static inline int
-coalesce_cost (int frequency, bool hot, bool critical)
+coalesce_cost (int frequency, bool optimize_for_size, bool critical)
 {
   /* Base costs on BB frequencies bounded by 1.  */
   int cost = frequency;
@@ -82,12 +83,8 @@ coalesce_cost (int frequency, bool hot, bool critical)
   if (!cost)
     cost = 1;
 
-  if (optimize_size)
+  if (optimize_for_size)
     cost = 1;
-  else
-    /* It is more important to coalesce in HOT blocks.  */
-    if (hot)
-      cost *= 2;
 
   /* Inserting copy on critical edge costs more than inserting it elsewhere.  */
   if (critical)
@@ -101,7 +98,7 @@ coalesce_cost (int frequency, bool hot, bool critical)
 static inline int 
 coalesce_cost_bb (basic_block bb)
 {
-  return coalesce_cost (bb->frequency, maybe_hot_bb_p (bb), false);
+  return coalesce_cost (bb->frequency, optimize_bb_for_size_p (bb), false);
 }
 
 
@@ -114,7 +111,7 @@ coalesce_cost_edge (edge e)
     return MUST_COALESCE_COST;
 
   return coalesce_cost (EDGE_FREQUENCY (e), 
-			maybe_hot_bb_p (e->src), 
+			optimize_edge_for_size_p (e), 
 			EDGE_CRITICAL_P (e));
 }
 
@@ -287,8 +284,7 @@ add_cost_one_coalesce (coalesce_list_p cl, int p1, int p2)
 /* Add a coalesce between P1 and P2 in list CL with a cost of VALUE.  */
 
 static inline void 
-add_coalesce (coalesce_list_p cl, int p1, int p2,
-	      int value)
+add_coalesce (coalesce_list_p cl, int p1, int p2, int value)
 {
   coalesce_pair_p node;
 
@@ -298,13 +294,13 @@ add_coalesce (coalesce_list_p cl, int p1, int p2,
 
   node = find_coalesce_pair (cl, p1, p2, true);
 
-  /* Once the value is MUST_COALESCE_COST, leave it that way.  */
-  if (node->cost != MUST_COALESCE_COST)
+  /* Once the value is at least MUST_COALESCE_COST - 1, leave it that way.  */
+  if (node->cost < MUST_COALESCE_COST - 1)
     {
-      if (value == MUST_COALESCE_COST)
-	node->cost = value;
-      else
+      if (value < MUST_COALESCE_COST - 1)
 	node->cost += value;
+      else
+	node->cost = value;
     }
 }
 
@@ -314,8 +310,8 @@ add_coalesce (coalesce_list_p cl, int p1, int p2,
 static int 
 compare_pairs (const void *p1, const void *p2)
 {
-  const_coalesce_pair_p const * pp1 = p1;
-  const_coalesce_pair_p const * pp2 = p2;
+  const_coalesce_pair_p const *const pp1 = (const_coalesce_pair_p const *) p1;
+  const_coalesce_pair_p const *const pp2 = (const_coalesce_pair_p const *) p2;
   int result;
 
   result = (* pp2)->cost - (* pp1)->cost;
@@ -582,7 +578,7 @@ ssa_conflicts_merge (ssa_conflicts_p ptr, unsigned x, unsigned y)
     return;
 
   /* Add a conflict between X and every one Y has.  If the bitmap doesn't
-     exist, then it has already been coalesced, and we dont need to add a 
+     exist, then it has already been coalesced, and we don't need to add a
      conflict.  */
   EXECUTE_IF_SET_IN_BITMAP (ptr->conflicts[y], 0, z, bi)
     if (ptr->conflicts[z])
@@ -840,16 +836,15 @@ build_ssa_conflict_graph (tree_live_info_p liveinfo)
 
   FOR_EACH_BB (bb)
     {
-      block_stmt_iterator bsi;
-      tree phi;
+      gimple_stmt_iterator gsi;
 
       /* Start with live on exit temporaries.  */
       live_track_init (live, live_on_exit (liveinfo, bb));
 
-      for (bsi = bsi_last (bb); !bsi_end_p (bsi); bsi_prev (&bsi))
+      for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&gsi))
         {
 	  tree var;
-	  tree stmt = bsi_stmt (bsi);
+	  gimple stmt = gsi_stmt (gsi);
 
 	  /* A copy between 2 partitions does not introduce an interference 
 	     by itself.  If they did, you would never be able to coalesce 
@@ -858,12 +853,14 @@ build_ssa_conflict_graph (tree_live_info_p liveinfo)
 	     
 	     This is handled by simply removing the SRC of the copy from the 
 	     live list, and processing the stmt normally.  */
-	  if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT)
+	  if (is_gimple_assign (stmt))
 	    {
-	      tree lhs = GIMPLE_STMT_OPERAND (stmt, 0);
-	      tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
-	      if (TREE_CODE (lhs) == SSA_NAME && TREE_CODE (rhs) == SSA_NAME)
-		live_track_clear_var (live, rhs);
+	      tree lhs = gimple_assign_lhs (stmt);
+	      tree rhs1 = gimple_assign_rhs1 (stmt);
+	      if (gimple_assign_copy_p (stmt)
+                  && TREE_CODE (lhs) == SSA_NAME
+                  && TREE_CODE (rhs1) == SSA_NAME)
+		live_track_clear_var (live, rhs1);
 	    }
 
 	  FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, SSA_OP_DEF)
@@ -879,8 +876,9 @@ build_ssa_conflict_graph (tree_live_info_p liveinfo)
 	 There must be a conflict recorded between the result of the PHI and 
 	 any variables that are live.  Otherwise the out-of-ssa translation 
 	 may create incorrect code.  */
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
+	  gimple phi = gsi_stmt (gsi);
 	  tree result = PHI_RESULT (phi);
 	  if (live_track_live_p (live, result))
 	    live_track_process_def (live, result, graph);
@@ -914,11 +912,11 @@ print_exprs (FILE *f, const char *str1, tree expr1, const char *str2,
    printed and compilation is then terminated.  */
 
 static inline void
-abnormal_corrupt (tree phi, int i)
+abnormal_corrupt (gimple phi, int i)
 {
-  edge e = PHI_ARG_EDGE (phi, i);
-  tree res = PHI_RESULT (phi);
-  tree arg = PHI_ARG_DEF (phi, i);
+  edge e = gimple_phi_arg_edge (phi, i);
+  tree res = gimple_phi_result (phi);
+  tree arg = gimple_phi_arg_def (phi, i);
 
   fprintf (stderr, " Corrupt SSA across abnormal edge BB%d->BB%d\n",
 	   e->src->index, e->dest->index);
@@ -958,10 +956,10 @@ fail_abnormal_edge_coalesce (int x, int y)
 static var_map
 create_outofssa_var_map (coalesce_list_p cl, bitmap used_in_copy)
 {
-  block_stmt_iterator bsi;
+  gimple_stmt_iterator gsi;
   basic_block bb;
   tree var;
-  tree stmt;
+  gimple stmt;
   tree first;
   var_map map;
   ssa_op_iter iter;
@@ -980,24 +978,25 @@ create_outofssa_var_map (coalesce_list_p cl, bitmap used_in_copy)
 
   FOR_EACH_BB (bb)
     {
-      tree phi, arg;
+      tree arg;
 
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  int i;
+	  gimple phi = gsi_stmt (gsi);
+	  size_t i;
 	  int ver;
 	  tree res;
 	  bool saw_copy = false;
 
-	  res = PHI_RESULT (phi);
+	  res = gimple_phi_result (phi);
 	  ver = SSA_NAME_VERSION (res);
 	  register_ssa_partition (map, res);
 
 	  /* Register ssa_names and coalesces between the args and the result 
 	     of all PHI.  */
-	  for (i = 0; i < PHI_NUM_ARGS (phi); i++)
+	  for (i = 0; i < gimple_phi_num_args (phi); i++)
 	    {
-	      edge e = PHI_ARG_EDGE (phi, i);
+	      edge e = gimple_phi_arg_edge (phi, i);
 	      arg = PHI_ARG_DEF (phi, i);
 	      if (TREE_CODE (arg) == SSA_NAME)
 		register_ssa_partition (map, arg);
@@ -1023,27 +1022,29 @@ create_outofssa_var_map (coalesce_list_p cl, bitmap used_in_copy)
 	    bitmap_set_bit (used_in_copy, ver);
 	}
 
-      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
-	  stmt = bsi_stmt (bsi);
+	  stmt = gsi_stmt (gsi);
 
 	  /* Register USE and DEF operands in each statement.  */
 	  FOR_EACH_SSA_TREE_OPERAND (var, stmt, iter, (SSA_OP_DEF|SSA_OP_USE))
 	    register_ssa_partition (map, var);
 
 	  /* Check for copy coalesces.  */
-	  switch (TREE_CODE (stmt))
+	  switch (gimple_code (stmt))
 	    {
-	    case GIMPLE_MODIFY_STMT:
+	    case GIMPLE_ASSIGN:
 	      {
-		tree op1 = GIMPLE_STMT_OPERAND (stmt, 0);
-		tree op2 = GIMPLE_STMT_OPERAND (stmt, 1);
-		if (TREE_CODE (op1) == SSA_NAME 
-		    && TREE_CODE (op2) == SSA_NAME
-		    && SSA_NAME_VAR (op1) == SSA_NAME_VAR (op2))
+		tree lhs = gimple_assign_lhs (stmt);
+		tree rhs1 = gimple_assign_rhs1 (stmt);
+
+		if (gimple_assign_copy_p (stmt)
+                    && TREE_CODE (lhs) == SSA_NAME
+		    && TREE_CODE (rhs1) == SSA_NAME
+		    && SSA_NAME_VAR (lhs) == SSA_NAME_VAR (rhs1))
 		  {
-		    v1 = SSA_NAME_VERSION (op1);
-		    v2 = SSA_NAME_VERSION (op2);
+		    v1 = SSA_NAME_VERSION (lhs);
+		    v2 = SSA_NAME_VERSION (rhs1);
 		    cost = coalesce_cost_bb (bb);
 		    add_coalesce (cl, v1, v2, cost);
 		    bitmap_set_bit (used_in_copy, v1);
@@ -1052,23 +1053,30 @@ create_outofssa_var_map (coalesce_list_p cl, bitmap used_in_copy)
 	      }
 	      break;
 
-	    case ASM_EXPR:
+	    case GIMPLE_ASM:
 	      {
 		unsigned long noutputs, i;
+		unsigned long ninputs;
 		tree *outputs, link;
-		noutputs = list_length (ASM_OUTPUTS (stmt));
+		noutputs = gimple_asm_noutputs (stmt);
+		ninputs = gimple_asm_ninputs (stmt);
 		outputs = (tree *) alloca (noutputs * sizeof (tree));
-		for (i = 0, link = ASM_OUTPUTS (stmt); link;
-		     ++i, link = TREE_CHAIN (link))
+		for (i = 0; i < noutputs; ++i) {
+		  link = gimple_asm_output_op (stmt, i);
 		  outputs[i] = TREE_VALUE (link);
+                }
 
-		for (link = ASM_INPUTS (stmt); link; link = TREE_CHAIN (link))
+		for (i = 0; i < ninputs; ++i)
 		  {
-		    const char *constraint
-		      = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));
-		    tree input = TREE_VALUE (link);
+                    const char *constraint;
+                    tree input;
 		    char *end;
 		    unsigned long match;
+
+		    link = gimple_asm_input_op (stmt, i);
+		    constraint
+		      = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (link)));
+		    input = TREE_VALUE (link);
 
 		    if (TREE_CODE (input) != SSA_NAME)
 		      continue;
@@ -1086,7 +1094,7 @@ create_outofssa_var_map (coalesce_list_p cl, bitmap used_in_copy)
 		    if (SSA_NAME_VAR (outputs[match]) == SSA_NAME_VAR (input))
 		      {
 			cost = coalesce_cost (REG_BR_PROB_BASE, 
-					      maybe_hot_bb_p (bb),
+					      optimize_bb_for_size_p (bb),
 					      false);
 			add_coalesce (cl, v1, v2, cost);
 			bitmap_set_bit (used_in_copy, v1);
@@ -1246,7 +1254,7 @@ coalesce_partitions (var_map map, ssa_conflicts_p graph, coalesce_list_p cl,
 		     FILE *debug)
 {
   int x = 0, y = 0;
-  tree var1, var2, phi;
+  tree var1, var2;
   int cost;
   basic_block bb;
   edge e;
@@ -1261,8 +1269,11 @@ coalesce_partitions (var_map map, ssa_conflicts_p graph, coalesce_list_p cl,
       FOR_EACH_EDGE (e, ei, bb->preds)
 	if (e->flags & EDGE_ABNORMAL)
 	  {
-	    for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+	    gimple_stmt_iterator gsi;
+	    for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi);
+		 gsi_next (&gsi))
 	      {
+		gimple phi = gsi_stmt (gsi);
 		tree res = PHI_RESULT (phi);
 	        tree arg = PHI_ARG_DEF (phi, e->dest_idx);
 		int v1 = SSA_NAME_VERSION (res);
@@ -1296,6 +1307,24 @@ coalesce_partitions (var_map map, ssa_conflicts_p graph, coalesce_list_p cl,
     }
 }
 
+/* Returns a hash code for P.  */
+
+static hashval_t
+hash_ssa_name_by_var (const void *p)
+{
+  const_tree n = (const_tree) p;
+  return (hashval_t) htab_hash_pointer (SSA_NAME_VAR (n));
+}
+
+/* Returns nonzero if P1 and P2 are equal.  */
+
+static int
+eq_ssa_name_by_var (const void *p1, const void *p2)
+{
+  const_tree n1 = (const_tree) p1;
+  const_tree n2 = (const_tree) p2;
+  return SSA_NAME_VAR (n1) == SSA_NAME_VAR (n2);
+}
 
 /* Reduce the number of copies by coalescing variables in the function.  Return
    a partition map with the resulting coalesces.  */
@@ -1309,9 +1338,41 @@ coalesce_ssa_name (void)
   coalesce_list_p cl;
   bitmap used_in_copies = BITMAP_ALLOC (NULL);
   var_map map;
+  unsigned int i;
+  static htab_t ssa_name_hash;
 
   cl = create_coalesce_list ();
   map = create_outofssa_var_map (cl, used_in_copies);
+
+  /* We need to coalesce all names originating same SSA_NAME_VAR
+     so debug info remains undisturbed.  */
+  if (!optimize)
+    {
+      ssa_name_hash = htab_create (10, hash_ssa_name_by_var,
+      				   eq_ssa_name_by_var, NULL);
+      for (i = 1; i < num_ssa_names; i++)
+	{
+	  tree a = ssa_name (i);
+
+	  if (a && SSA_NAME_VAR (a) && !DECL_ARTIFICIAL (SSA_NAME_VAR (a)))
+	    {
+	      tree *slot = (tree *) htab_find_slot (ssa_name_hash, a, INSERT);
+
+	      if (!*slot)
+		*slot = a;
+	      else
+		{
+		  add_coalesce (cl, SSA_NAME_VERSION (a), SSA_NAME_VERSION (*slot),
+				MUST_COALESCE_COST - 1);
+		  bitmap_set_bit (used_in_copies, SSA_NAME_VERSION (a));
+		  bitmap_set_bit (used_in_copies, SSA_NAME_VERSION (*slot));
+		}
+	    }
+	}
+      htab_delete (ssa_name_hash);
+    }
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    dump_var_map (dump_file, map);
 
   /* Don't calculate live ranges for variables not in the coalesce list.  */
   partition_view_bitmap (map, used_in_copies, true);
@@ -1386,4 +1447,3 @@ coalesce_ssa_name (void)
 
   return map;
 }
-

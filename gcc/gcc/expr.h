@@ -1,6 +1,6 @@
 /* Definitions for code generation pass of GNU compiler.
    Copyright (C) 1987, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -36,7 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* The default branch cost is 1.  */
 #ifndef BRANCH_COST
-#define BRANCH_COST 1
+#define BRANCH_COST(speed_p, predictable_p) 1
 #endif
 
 /* This is the 4th arg to `expand_expr'.
@@ -66,10 +66,10 @@ enum expand_modifier {EXPAND_NORMAL = 0, EXPAND_STACK_PARM, EXPAND_SUM,
 
 #ifndef MOVE_RATIO
 #if defined (HAVE_movmemqi) || defined (HAVE_movmemhi) || defined (HAVE_movmemsi) || defined (HAVE_movmemdi) || defined (HAVE_movmemti)
-#define MOVE_RATIO 2
+#define MOVE_RATIO(speed) 2
 #else
 /* If we are optimizing for space (-Os), cut down the default move ratio.  */
-#define MOVE_RATIO (optimize_size ? 3 : 15)
+#define MOVE_RATIO(speed) ((speed) ? 15 : 3)
 #endif
 #endif
 
@@ -78,10 +78,10 @@ enum expand_modifier {EXPAND_NORMAL = 0, EXPAND_STACK_PARM, EXPAND_SUM,
 
 #ifndef CLEAR_RATIO
 #if defined (HAVE_setmemqi) || defined (HAVE_setmemhi) || defined (HAVE_setmemsi) || defined (HAVE_setmemdi) || defined (HAVE_setmemti)
-#define CLEAR_RATIO 2
+#define CLEAR_RATIO(speed) 2
 #else
 /* If we are optimizing for space, cut down the default clear ratio.  */
-#define CLEAR_RATIO (optimize_size ? 3 : 15)
+#define CLEAR_RATIO(speed) ((speed) ? 15 :3)
 #endif
 #endif
 
@@ -89,7 +89,7 @@ enum expand_modifier {EXPAND_NORMAL = 0, EXPAND_STACK_PARM, EXPAND_SUM,
    SET_RATIO or more simple move-instruction sequences, we will do a movmem
    or libcall instead.  */
 #ifndef SET_RATIO
-#define SET_RATIO MOVE_RATIO
+#define SET_RATIO(speed) MOVE_RATIO(speed)
 #endif
 
 enum direction {none, upward, downward};
@@ -208,8 +208,14 @@ do {								\
 
 /* Provide default values for the macros controlling stack checking.  */
 
+/* The default is neither full builtin stack checking...  */
 #ifndef STACK_CHECK_BUILTIN
 #define STACK_CHECK_BUILTIN 0
+#endif
+
+/* ...nor static builtin stack checking.  */
+#ifndef STACK_CHECK_STATIC_BUILTIN
+#define STACK_CHECK_STATIC_BUILTIN 0
 #endif
 
 /* The default interval is one page.  */
@@ -222,9 +228,24 @@ do {								\
 #define STACK_CHECK_PROBE_LOAD 0
 #endif
 
-/* This value is arbitrary, but should be sufficient for most machines.  */
+/* This is a kludge to try to capture the discrepancy between the old
+   mechanism (generic stack checking) and the new mechanism (static
+   builtin stack checking).  STACK_CHECK_PROTECT needs to be bumped
+   for the latter because part of the protection area is effectively
+   included in STACK_CHECK_MAX_FRAME_SIZE for the former.  */
+#ifdef STACK_CHECK_PROTECT
+#define STACK_OLD_CHECK_PROTECT STACK_CHECK_PROTECT
+#else
+#define STACK_OLD_CHECK_PROTECT \
+ (USING_SJLJ_EXCEPTIONS ? 75 * UNITS_PER_WORD : 8 * 1024)
+#endif
+
+/* Minimum amount of stack required to recover from an anticipated stack
+   overflow detection.  The default value conveys an estimate of the amount
+   of stack required to propagate an exception.  */
 #ifndef STACK_CHECK_PROTECT
-#define STACK_CHECK_PROTECT (75 * UNITS_PER_WORD)
+#define STACK_CHECK_PROTECT \
+ (USING_SJLJ_EXCEPTIONS ? 75 * UNITS_PER_WORD : 12 * 1024)
 #endif
 
 /* Make the maximum frame size be the largest we can and still only need
@@ -342,6 +363,9 @@ extern rtx emit_store_flag_force (rtx, enum rtx_code, rtx, rtx,
 /* Functions from builtins.c:  */
 extern rtx expand_builtin (tree, rtx, rtx, enum machine_mode, int);
 extern tree std_build_builtin_va_list (void);
+extern tree std_fn_abi_va_list (tree);
+extern tree std_canonical_va_list_type (tree);
+
 extern void std_expand_builtin_va_start (tree, rtx);
 extern rtx default_expand_builtin (tree, rtx, rtx, enum machine_mode, int);
 extern void expand_builtin_setjmp_setup (rtx, rtx);
@@ -380,6 +404,7 @@ enum block_op_methods
   BLOCK_OP_TAILCALL
 };
 
+extern GTY(()) tree block_clear_fn;
 extern void init_block_move_fn (const char *);
 extern void init_block_clear_fn (const char *);
 
@@ -520,8 +545,6 @@ expand_normal (tree exp)
   return expand_expr_real (exp, NULL_RTX, VOIDmode, EXPAND_NORMAL, NULL);
 }
 
-extern void expand_var (tree);
-
 /* At the start of a function, record that we have no previously-pushed
    arguments waiting to be popped.  */
 extern void init_pending_stack_adjust (void);
@@ -541,23 +564,23 @@ extern void do_pending_stack_adjust (void);
 extern tree string_constant (tree, tree *);
 
 /* Generate code to evaluate EXP and jump to LABEL if the value is zero.  */
-extern void jumpifnot (tree, rtx);
+extern void jumpifnot (tree, rtx, int);
 
 /* Generate code to evaluate EXP and jump to LABEL if the value is nonzero.  */
-extern void jumpif (tree, rtx);
+extern void jumpif (tree, rtx, int);
 
 /* Generate code to evaluate EXP and jump to IF_FALSE_LABEL if
    the result is zero, or IF_TRUE_LABEL if the result is one.  */
-extern void do_jump (tree, rtx, rtx);
+extern void do_jump (tree, rtx, rtx, int);
 
 /* Generate rtl to compare two rtx's, will call emit_cmp_insn.  */
 extern rtx compare_from_rtx (rtx, rtx, enum rtx_code, int, enum machine_mode,
 			     rtx);
 extern void do_compare_rtx_and_jump (rtx, rtx, enum rtx_code, int,
-				     enum machine_mode, rtx, rtx, rtx);
+				     enum machine_mode, rtx, rtx, rtx, int);
 
 /* Two different ways of generating switch statements.  */
-extern int try_casesi (tree, tree, tree, tree, rtx, rtx);
+extern int try_casesi (tree, tree, tree, tree, rtx, rtx, rtx);
 extern int try_tablejump (tree, tree, tree, tree, rtx, rtx);
 
 /* Smallest number of adjacent cases before we use a jump table.
@@ -673,6 +696,11 @@ extern void set_mem_attributes (rtx, tree, int);
    expecting that it'll be added back in later.  */
 extern void set_mem_attributes_minus_bitpos (rtx, tree, int, HOST_WIDE_INT);
 
+/* Return OFFSET if XEXP (MEM, 0) - OFFSET is known to be ALIGN
+   bits aligned for 0 <= OFFSET < ALIGN / BITS_PER_UNIT, or
+   -1 if not known.  */
+extern int get_mem_align_offset (rtx, int);
+
 /* Assemble the static constant template for function entry trampolines.  */
 extern rtx assemble_trampoline_template (void);
 
@@ -744,6 +772,7 @@ extern void store_bit_field (rtx, unsigned HOST_WIDE_INT,
 extern rtx extract_bit_field (rtx, unsigned HOST_WIDE_INT,
 			      unsigned HOST_WIDE_INT, int, rtx,
 			      enum machine_mode, enum machine_mode);
+extern rtx extract_low_bits (enum machine_mode, enum machine_mode, rtx);
 extern rtx expand_mult (enum machine_mode, rtx, rtx, rtx, int);
 extern rtx expand_mult_highpart_adjust (enum machine_mode, rtx, rtx, rtx, rtx, int);
 
@@ -757,6 +786,7 @@ extern void init_all_optabs (void);
 
 /* Call this to initialize an optab function entry.  */
 extern rtx init_one_libfunc (const char *);
+extern rtx set_user_assembler_libfunc (const char *, const char *);
 
 extern int vector_mode_valid_p (enum machine_mode);
 

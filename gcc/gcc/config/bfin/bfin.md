@@ -1,5 +1,5 @@
 ;;- Machine description for Blackfin for GNU compiler
-;;  Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+;;  Copyright 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 ;;  Contributed by Analog Devices.
 
 ;; This file is part of GCC.
@@ -145,7 +145,8 @@
    (UNSPEC_VOLATILE_CSYNC 1)
    (UNSPEC_VOLATILE_SSYNC 2)
    (UNSPEC_VOLATILE_LOAD_FUNCDESC 3)
-   (UNSPEC_VOLATILE_STORE_EH_HANDLER 4)])
+   (UNSPEC_VOLATILE_STORE_EH_HANDLER 4)
+   (UNSPEC_VOLATILE_DUMMY 5)])
 
 (define_constants
   [(MACFLAG_NONE 0)
@@ -258,7 +259,7 @@
 ;; Operand and operator predicates
 
 (include "predicates.md")
-
+(include "constraints.md")
 
 ;;; FRIO branches have been optimized for code density
 ;;; this comes at a slight cost of complexity when
@@ -458,8 +459,8 @@
 })
 
 (define_insn "movbi"
-  [(set (match_operand:BI 0 "nonimmediate_operand" "=x,x,d,md,C,d,C")
-        (match_operand:BI 1 "general_operand" "x,xKs3,md,d,d,C,P0"))]
+  [(set (match_operand:BI 0 "nonimmediate_operand" "=x,x,d,md,C,d,C,P1")
+        (match_operand:BI 1 "general_operand" "x,xKs3,md,d,d,C,P0,P1"))]
 
   ""
   "@
@@ -469,10 +470,11 @@
    B %0 = %1;
    CC = %1;
    %0 = CC;
-   R0 = R0 | R0; CC = AC0;"
-  [(set_attr "type" "move,mvi,mcld,mcst,compare,compare,alu0")
-   (set_attr "length" "2,2,*,*,2,2,4")
-   (set_attr "seq_insns" "*,*,*,*,*,*,multi")])
+   CC = R0 < R0;
+   CC = R0 == R0;"
+  [(set_attr "type" "move,mvi,mcld,mcst,compare,compare,compare,compare")
+   (set_attr "length" "2,2,*,*,2,2,2,2")
+   (set_attr "seq_insns" "*,*,*,*,*,*,*,*")])
 
 (define_insn "movpdi"
   [(set (match_operand:PDI 0 "nonimmediate_operand" "=e,<,e")
@@ -904,7 +906,7 @@
   enum insn_code icode = CODE_FOR_<optab>si3;
   if (!reg_overlap_mentioned_p (operands[0], operands[1])
       && !reg_overlap_mentioned_p (operands[0], operands[2]))
-    emit_insn (gen_rtx_CLOBBER (VOIDmode, operands[0]));
+    emit_clobber (operands[0]);
   split_di (operands, 3, lo_half, hi_half);
   if (!(*insn_data[icode].operand[2].predicate) (lo_half[2], SImode))
     lo_half[2] = force_reg (SImode, lo_half[2]);
@@ -1018,16 +1020,16 @@
   xops[7] = gen_rtx_REG (BImode, REG_CC);
   if (!register_operand (xops[4], SImode)
       && (GET_CODE (xops[4]) != CONST_INT
-          || !CONST_OK_FOR_K (INTVAL (xops[4]), "Ks7")))
+          || !satisfies_constraint_Ks7 (xops[4])))
     xops[4] = force_reg (SImode, xops[4]);
   if (!reg_overlap_mentioned_p (operands[0], operands[1])
       && !reg_overlap_mentioned_p (operands[0], operands[2]))
-    emit_insn (gen_rtx_CLOBBER (VOIDmode, operands[0]));
+    emit_clobber (operands[0]);
   emit_insn (gen_add_with_carry (xops[0], xops[2], xops[4], xops[7]));
   emit_insn (gen_movbisi (xops[6], xops[7]));
   if (!register_operand (xops[5], SImode)
       && (GET_CODE (xops[5]) != CONST_INT
-          || !CONST_OK_FOR_K (INTVAL (xops[5]), "Ks7")))
+          || !satisfies_constraint_Ks7 (xops[5])))
     xops[5] = force_reg (SImode, xops[5]);
   if (xops[5] != const0_rtx)
     emit_insn (gen_addsi3 (xops[1], xops[3], xops[5]));
@@ -1055,7 +1057,7 @@
   xops[7] = gen_rtx_REG (BImode, REG_CC);
   if (!reg_overlap_mentioned_p (operands[0], operands[1])
       && !reg_overlap_mentioned_p (operands[0], operands[2]))
-    emit_insn (gen_rtx_CLOBBER (VOIDmode, operands[0]));
+    emit_clobber (operands[0]);
   emit_insn (gen_sub_with_carry (xops[0], xops[2], xops[4], xops[7]));
   emit_insn (gen_notbi (xops[7], xops[7]));
   emit_insn (gen_movbisi (xops[6], xops[7]));
@@ -2588,7 +2590,7 @@
   return "";
 }
   [(set_attr "type" "brcc")
-   (set_attr "length" "6")])
+   (set_attr "length" "8")])
 
 ;; setcc insns.  */
 (define_expand "seq"
@@ -2826,6 +2828,16 @@
   gcc_unreachable ();
 })
 
+(define_insn "dummy_load"
+  [(unspec_volatile [(match_operand 0 "register_operand" "a")
+		     (match_operand 1 "register_operand" "C")]
+		    UNSPEC_VOLATILE_DUMMY)]
+  ""
+  "if cc jump 4;\n\tr7 = [%0];"
+ [(set_attr "type" "misc")
+  (set_attr "length" "4")
+  (set_attr "seq_insns" "multi")])
+
 (define_insn "csync"
   [(unspec_volatile [(const_int 0)] UNSPEC_VOLATILE_CSYNC)]
   ""
@@ -2886,16 +2898,16 @@
 			 (match_operand:HI 1 "register_operand" "d,d")))]
   ""
   "@
-   %d0 = %h2 << 0%!
+   %d0 = %h1 << 0%!
    #"
   "reload_completed"
   [(set (match_dup 0)
 	(vec_concat:V2HI
 	 (vec_select:HI (match_dup 0) (parallel [(const_int 0)]))
-	 (match_dup 2)))
+	 (match_dup 1)))
    (set (match_dup 0)
 	(vec_concat:V2HI
-	 (match_dup 1)
+	 (match_dup 2)
 	 (vec_select:HI (match_dup 0) (parallel [(const_int 1)]))))]
   ""
   [(set_attr "type" "dsp32")])
@@ -4253,3 +4265,13 @@
    %0 = %1 >> %N2 (V)%!"
   [(set_attr "type" "dsp32")])
 
+;; Load without alignment exception (masking off low bits)
+
+(define_insn "loadbytes"
+  [(set (match_operand:SI 0 "register_operand" "=d")
+	(mem:SI (and:SI (match_operand:SI 1 "register_operand" "b")
+			(const_int -4))))]
+  ""
+  "DISALGNEXCPT || %0 = [%1];"
+  [(set_attr "type" "mcld")
+   (set_attr "length" "8")])

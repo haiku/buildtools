@@ -1,5 +1,5 @@
 /* Sets (bit vectors) of hard registers, and operations on them.
-   Copyright (C) 1987, 1992, 1994, 2000, 2003, 2004, 2005, 2007
+   Copyright (C) 1987, 1992, 1994, 2000, 2003, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC
@@ -89,6 +89,8 @@ typedef HARD_REG_ELT_TYPE HARD_REG_SET[HARD_REG_SET_LONGS];
    hard_reg_set_intersect_p (X, Y), which returns true if X and Y intersect.
    hard_reg_set_empty_p (X), which returns true if X is empty.  */
 
+#define UHOST_BITS_PER_WIDE_INT ((unsigned) HOST_BITS_PER_WIDEST_FAST_INT)
+
 #ifdef HARD_REG_SET
 
 #define SET_HARD_REG_BIT(SET, BIT)  \
@@ -134,8 +136,6 @@ hard_reg_set_empty_p (const HARD_REG_SET x)
 }
 
 #else
-
-#define UHOST_BITS_PER_WIDE_INT ((unsigned) HOST_BITS_PER_WIDEST_FAST_INT)
 
 #define SET_HARD_REG_BIT(SET, BIT)		\
   ((SET)[(BIT) / UHOST_BITS_PER_WIDE_INT]	\
@@ -479,6 +479,100 @@ hard_reg_set_empty_p (const HARD_REG_SET x)
 #endif
 #endif
 
+/* Iterator for hard register sets.  */
+
+typedef struct
+{
+  /* Pointer to the current element.  */
+  HARD_REG_ELT_TYPE *pelt;
+
+  /* The length of the set.  */
+  unsigned short length;
+
+  /* Word within the current element.  */
+  unsigned short word_no;
+
+  /* Contents of the actually processed word.  When finding next bit
+     it is shifted right, so that the actual bit is always the least
+     significant bit of ACTUAL.  */
+  HARD_REG_ELT_TYPE bits;
+} hard_reg_set_iterator;
+
+#define HARD_REG_ELT_BITS UHOST_BITS_PER_WIDE_INT
+
+/* The implementation of the iterator functions is fully analogous to 
+   the bitmap iterators.  */
+static inline void
+hard_reg_set_iter_init (hard_reg_set_iterator *iter, HARD_REG_SET set, 
+                        unsigned min, unsigned *regno)
+{
+#ifdef HARD_REG_SET_LONGS
+  iter->pelt = set;
+  iter->length = HARD_REG_SET_LONGS;
+#else
+  iter->pelt = &set;
+  iter->length = 1;
+#endif
+  iter->word_no = min / HARD_REG_ELT_BITS;
+  if (iter->word_no < iter->length)
+    {
+      iter->bits = iter->pelt[iter->word_no];
+      iter->bits >>= min % HARD_REG_ELT_BITS;
+
+      /* This is required for correct search of the next bit.  */
+      min += !iter->bits;
+    }
+  *regno = min;
+}
+
+static inline bool 
+hard_reg_set_iter_set (hard_reg_set_iterator *iter, unsigned *regno)
+{
+  while (1)
+    {
+      /* Return false when we're advanced past the end of the set.  */
+      if (iter->word_no >= iter->length)
+        return false;
+
+      if (iter->bits)
+        {
+          /* Find the correct bit and return it.  */
+          while (!(iter->bits & 1))
+            {
+              iter->bits >>= 1;
+              *regno += 1;
+            }
+          return (*regno < FIRST_PSEUDO_REGISTER);
+        }
+  
+      /* Round to the beginning of the next word.  */
+      *regno = (*regno + HARD_REG_ELT_BITS - 1);
+      *regno -= *regno % HARD_REG_ELT_BITS;
+
+      /* Find the next non-zero word.  */
+      while (++iter->word_no < iter->length)
+        {
+          iter->bits = iter->pelt[iter->word_no];
+          if (iter->bits)
+            break;
+          *regno += HARD_REG_ELT_BITS;
+        }
+    }
+}
+
+static inline void
+hard_reg_set_iter_next (hard_reg_set_iterator *iter, unsigned *regno)
+{
+  iter->bits >>= 1;
+  *regno += 1;
+}
+
+#define EXECUTE_IF_SET_IN_HARD_REG_SET(SET, MIN, REGNUM, ITER)          \
+  for (hard_reg_set_iter_init (&(ITER), (SET), (MIN), &(REGNUM));       \
+       hard_reg_set_iter_set (&(ITER), &(REGNUM));                      \
+       hard_reg_set_iter_next (&(ITER), &(REGNUM)))
+
+
 /* Define some standard sets of registers.  */
 
 /* Indexed by hard register number, contains 1 for registers
@@ -507,9 +601,6 @@ extern char call_really_used_regs[];
 
 extern HARD_REG_SET call_used_reg_set;
   
-/* Registers that we don't want to caller save.  */
-extern HARD_REG_SET losing_caller_save_reg_set;
-
 /* Indexed by hard register number, contains 1 for registers that are
    fixed use -- i.e. in fixed_regs -- or a function value return register
    or TARGET_STRUCT_VALUE_RTX or STATIC_CHAIN_REGNUM.  These are the
@@ -538,6 +629,11 @@ extern char global_regs[FIRST_PSEUDO_REGISTER];
 
 extern HARD_REG_SET regs_invalidated_by_call;
 
+/* Call used hard registers which can not be saved because there is no
+   insn for this.  */
+
+extern HARD_REG_SET no_caller_save_reg_set;
+
 #ifdef REG_ALLOC_ORDER
 /* Table of register numbers in the order in which to try to use them.  */
 
@@ -555,6 +651,10 @@ extern HARD_REG_SET reg_class_contents[N_REG_CLASSES];
 /* For each reg class, number of regs it contains.  */
 
 extern unsigned int reg_class_size[N_REG_CLASSES];
+
+/* For each reg class, table listing all the classes contained in it.  */
+
+extern enum reg_class reg_class_subclasses[N_REG_CLASSES][N_REG_CLASSES];
 
 /* For each pair of reg classes,
    a largest reg class contained in their union.  */

@@ -1,11 +1,11 @@
 // <algorithm> parallel extensions -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file parallel/algorithmfwd.h
  *  This file is a GNU parallel extension to the Standard C++ Library.
@@ -99,7 +93,8 @@ namespace __parallel
   template<typename _RAIter, typename _Tp>
     typename iterator_traits<_RAIter>::difference_type
     count_switch(_RAIter, _RAIter, const _Tp&, random_access_iterator_tag,
-		 __gnu_parallel::_Parallelism);
+		 __gnu_parallel::_Parallelism parallelism
+		 = __gnu_parallel::parallel_unbalanced);
 
 
   template<typename _IIter, typename _Predicate>
@@ -121,7 +116,8 @@ namespace __parallel
   template<typename _RAIter, typename _Predicate>
     typename iterator_traits<_RAIter>::difference_type
     count_if_switch(_RAIter, _RAIter, _Predicate, random_access_iterator_tag,
-		    __gnu_parallel::_Parallelism);
+		    __gnu_parallel::_Parallelism parallelism
+		    = __gnu_parallel::parallel_unbalanced);
 
   // algobase.h
   template<typename _IIter1, typename _IIter2>
@@ -228,7 +224,8 @@ namespace __parallel
   template<typename _RAIter, typename _Function>
     _Function
     for_each_switch(_RAIter, _RAIter, _Function, random_access_iterator_tag, 
-		    __gnu_parallel::_Parallelism);
+		    __gnu_parallel::_Parallelism  parallelism
+		    = __gnu_parallel::parallel_balanced);
 
 
   template<typename _FIter, typename _Generator>
@@ -250,7 +247,8 @@ namespace __parallel
   template<typename _RAIter, typename _Generator>
     void
     generate_switch(_RAIter, _RAIter, _Generator, random_access_iterator_tag, 
-		    __gnu_parallel::_Parallelism);
+		    __gnu_parallel::_Parallelism parallelism
+		    = __gnu_parallel::parallel_balanced);
 
   template<typename _OIter, typename _Size, typename _Generator>
     _OIter
@@ -272,7 +270,8 @@ namespace __parallel
   template<typename _RAIter, typename _Size, typename _Generator>
     _RAIter
     generate_n_switch(_RAIter, _Size, _Generator, random_access_iterator_tag, 
-		      __gnu_parallel::_Parallelism);
+		      __gnu_parallel::_Parallelism parallelism
+		      = __gnu_parallel::parallel_balanced);
 
   template<typename _IIter1, typename _IIter2>
     bool
@@ -429,7 +428,8 @@ namespace __parallel
     _RAOIter
     transform1_switch(_RAIIter, _RAIIter, _RAOIter, UnaryOperation, 
 		      random_access_iterator_tag, random_access_iterator_tag, 
-		      __gnu_parallel::_Parallelism);
+		      __gnu_parallel::_Parallelism parallelism
+		      = __gnu_parallel::parallel_balanced);
 
 
   template<typename _IIter1, typename _IIter2, typename _OIter,
@@ -455,7 +455,8 @@ namespace __parallel
     transform2_switch(_RAIter1, _RAIter1, _RAIter2, _RAIter3, _BiOperation, 
 		      random_access_iterator_tag, random_access_iterator_tag, 
 		      random_access_iterator_tag,
-		      __gnu_parallel::_Parallelism);
+		      __gnu_parallel::_Parallelism parallelism
+		      = __gnu_parallel::parallel_balanced);
 
   template<typename _IIter1, typename _IIter2, typename _OIter,
 	   typename _BiOperation, typename _Tag1,
@@ -546,7 +547,8 @@ namespace __parallel
   template<typename _RAIter, typename _Compare>
     _RAIter
     max_element_switch(_RAIter, _RAIter, _Compare, random_access_iterator_tag, 
-		       __gnu_parallel::_Parallelism);
+		       __gnu_parallel::_Parallelism parallelism
+		       = __gnu_parallel::parallel_balanced);
 
 
   template<typename _IIter1, typename _IIter2, typename _OIter>
@@ -615,7 +617,8 @@ namespace __parallel
   template<typename _RAIter, typename _Compare>
     _RAIter
     min_element_switch(_RAIter, _RAIter, _Compare, random_access_iterator_tag, 
-		       __gnu_parallel::_Parallelism);
+		       __gnu_parallel::_Parallelism parallelism
+		       = __gnu_parallel::parallel_balanced);
 
   template<typename _RAIter>
     void
@@ -892,4 +895,4 @@ namespace __parallel
 } // end namespace __parallel
 } // end namespace std
 
-#endif
+#endif /* _GLIBCXX_PARALLEL_ALGORITHMFWD_H */

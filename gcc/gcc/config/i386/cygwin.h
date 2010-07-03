@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using a Unix style C library and tools.
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2007 Free Software Foundation, Inc.
+   2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -49,9 +49,26 @@ along with GCC; see the file COPYING3.  If not see
    GCC without making a new CYGWIN.DLL, so we leave it.  Profiling is handled
    by calling the init function from main.  */
 
-#undef LIBGCC_SPEC
-#define LIBGCC_SPEC \
-  "%{mno-cygwin: %{mthreads:-lmingwthrd} -lmingw32} -lgcc	\
+#ifdef ENABLE_SHARED_LIBGCC
+#define SHARED_LIBGCC_SPEC " \
+ %{static|static-libgcc:-lgcc -lgcc_eh} \
+ %{!static: \
+   %{!static-libgcc: \
+     %{!shared: \
+       %{!shared-libgcc:-lgcc -lgcc_eh} \
+       %{shared-libgcc:-lgcc_s -lgcc} \
+      } \
+     %{shared:-lgcc_s -lgcc} \
+    } \
+  } "
+#else
+#define SHARED_LIBGCC_SPEC " -lgcc "
+#endif
+
+#undef REAL_LIBGCC_SPEC
+#define REAL_LIBGCC_SPEC \
+  "%{mno-cygwin: %{mthreads:-lmingwthrd} -lmingw32} \
+   " SHARED_LIBGCC_SPEC " \
    %{mno-cygwin:-lmoldname -lmingwex -lmsvcrt}"
 
 /* We have to dynamic link to get to the system DLLs.  All of libc, libm and
@@ -77,7 +94,7 @@ along with GCC; see the file COPYING3.  If not see
   %{shared|mdll: -e \
     %{mno-cygwin:_DllMainCRTStartup@12} \
     %{!mno-cygwin:__cygwin_dll_entry@12}}\
-  %{!mno-cygwin:--dll-search-prefix=cyg}"
+  %{!mno-cygwin:--dll-search-prefix=cyg -tsaware}"
 
 /* Allocate space for all of the machine-spec-specific stuff.
    Allocate enough space for cygwin -> mingw32  munging plus
@@ -203,12 +220,12 @@ char *cvt_to_mingw[] =
 #undef GEN_CVT_ARRAY
 #endif /*GEN_CVT_ARRAY*/
 
-void mingw_scan (int, const char * const *, char **);
+void mingw_scan (int, const char * const *, const char **);
 #if 1
 #define GCC_DRIVER_HOST_INITIALIZATION \
 do \
 { \
-  mingw_scan(argc, (const char * const *) argv, (char **) &spec_machine); \
+  mingw_scan(argc, (const char * const *) argv, &spec_machine); \
   } \
 while (0)
 #else
@@ -242,3 +259,11 @@ while (0)
    and the -pthread flag is not recognized.  */
 #undef GOMP_SELF_SPECS
 #define GOMP_SELF_SPECS ""
+
+/* This matches SHLIB_SONAME and SHLIB_SOVERSION in t-cygwin. */
+#if DWARF2_UNWIND_INFO
+#define LIBGCC_EH_EXTN ""
+#else
+#define LIBGCC_EH_EXTN "-sjlj"
+#endif
+#define LIBGCC_SONAME "cyggcc_s" LIBGCC_EH_EXTN "-1.dll"

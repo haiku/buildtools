@@ -1,5 +1,6 @@
 /* Darwin support needed only by C/C++ frontends.
-   Copyright (C) 2001, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -26,7 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "c-pragma.h"
 #include "c-tree.h"
-#include "c-incpath.h"
+#include "incpath.h"
 #include "c-common.h"
 #include "toplev.h"
 #include "flags.h"
@@ -179,7 +180,7 @@ darwin_pragma_ms_struct (cpp_reader *pfile ATTRIBUTE_UNUSED)
     BAD ("junk at end of '#pragma ms_struct'");
 }
 
-static struct {
+static struct frameworks_in_use {
   size_t len;
   const char *name;
   cpp_dir* dir;
@@ -211,8 +212,8 @@ add_framework (const char *name, size_t len, cpp_dir *dir)
     {
       max_frameworks = i*2;
       max_frameworks += i == 0;
-      frameworks_in_use = xrealloc (frameworks_in_use,
-				    max_frameworks*sizeof(*frameworks_in_use));
+      frameworks_in_use = XRESIZEVEC (struct frameworks_in_use,
+				      frameworks_in_use, max_frameworks);
     }
   dir_name = XNEWVEC (char, len + 1);
   memcpy (dir_name, name, len);

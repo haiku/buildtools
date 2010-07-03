@@ -1,6 +1,7 @@
 /* Language-specific hook definitions for C front end.
    Copyright (C) 1991, 1995, 1997, 1998,
-   1999, 2000, 2001, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -46,41 +47,6 @@ enum c_language_kind c_language = clk_c;
 
 /* Each front end provides its own lang hook initializer.  */
 const struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
-
-/* Tree code classes.  */
-
-#define DEFTREECODE(SYM, NAME, TYPE, LENGTH) TYPE,
-
-const enum tree_code_class tree_code_type[] = {
-#include "tree.def"
-  tcc_exceptional,
-#include "c-common.def"
-};
-#undef DEFTREECODE
-
-/* Table indexed by tree code giving number of expression
-   operands beyond the fixed part of the node structure.
-   Not used for types or decls.  */
-
-#define DEFTREECODE(SYM, NAME, TYPE, LENGTH) LENGTH,
-
-const unsigned char tree_code_length[] = {
-#include "tree.def"
-  0,
-#include "c-common.def"
-};
-#undef DEFTREECODE
-
-/* Names of tree components.
-   Used for printing out the tree and error messages.  */
-#define DEFTREECODE(SYM, NAME, TYPE, LEN) NAME,
-
-const char *const tree_code_name[] = {
-#include "tree.def"
-  "@@dummy",
-#include "c-common.def"
-};
-#undef DEFTREECODE
 
 /* Final processing of file-scope data.  The Objective-C version of
    this function still does something.  */

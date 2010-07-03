@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for HP-UX.
-   Copyright (C) 1991, 1995, 1996, 2002, 2003, 2004, 2007
+   Copyright (C) 1991, 1995, 1996, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -97,10 +97,12 @@ along with GCC; see the file COPYING3.  If not see
 #undef LINK_SPEC
 #if ((TARGET_DEFAULT | TARGET_CPU_DEFAULT) & MASK_PA_11)
 #define LINK_SPEC \
-  "%{!mpa-risc-1-0:%{!march=1.0:%{static:-L/lib/pa1.1 -L/usr/lib/pa1.1 }}}%{mlinker-opt:-O} %{!shared:-u main} %{static:-a archive} %{g*:-a archive} %{shared:-b}"
+  "%<fwhole-program\
+   %{!mpa-risc-1-0:%{!march=1.0:%{static:-L/lib/pa1.1 -L/usr/lib/pa1.1 }}}%{mlinker-opt:-O} %{!shared:-u main} %{static:-a archive} %{g*:-a archive} %{shared:-b}"
 #else
 #define LINK_SPEC \
-  "%{mlinker-opt:-O} %{!shared:-u main} %{static:-a archive} %{g*:-a archive} %{shared:-b}"
+  "%<fwhole-program\
+   %{mlinker-opt:-O} %{!shared:-u main} %{static:-a archive} %{g*:-a archive} %{shared:-b}"
 #endif
 
 /* hpux8 and later have C++ compatible include files, so do not

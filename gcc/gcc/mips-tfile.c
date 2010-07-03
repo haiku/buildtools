@@ -3,7 +3,8 @@
    in the form of comments (the mips assembler does not support
    assembly access to debug information).
    Copyright (C) 1991, 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Michael Meissner (meissner@cygnus.com).
 
 This file is part of GCC.
@@ -56,7 +57,7 @@ along with GCC; see the file COPYING3.  If not see
 
    The auxiliary table is a series of 32 bit integers, that are
    referenced as needed from the local symbol table.  Unlike standard
-   COFF, the aux.  information does not follow the symbol that uses
+   COFF, the aux. information does not follow the symbol that uses
    it, but rather is a separate table.  In theory, this would allow
    the MIPS compilers to collapse duplicate aux. entries, but I've not
    noticed this happening with the 1.31 compiler suite.  The different
@@ -4470,7 +4471,7 @@ copy_object (void)
      (in case there are duplicate filenames, we collapse them into one
      file section, the MIPS assembler may or may not collapse them).  */
 
-  remap_file_number = alloca (sizeof (int) * orig_sym_hdr.ifdMax);
+  remap_file_number = (int *) alloca (sizeof (int) * orig_sym_hdr.ifdMax);
 
   for (fd = delete_ifd; fd < orig_sym_hdr.ifdMax; fd++)
     {
@@ -4780,7 +4781,7 @@ main (int argc, char **argv)
   if (version)
     {
       printf (_("mips-tfile %s%s\n"), pkgversion_string, version_string);
-      fputs ("Copyright (C) 2008 Free Software Foundation, Inc.\n", stdout);
+      fputs ("Copyright (C) 2010 Free Software Foundation, Inc.\n", stdout);
       fputs (_("This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"),
 	     stdout);

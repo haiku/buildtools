@@ -1,5 +1,6 @@
 /* Definitions of target machine for GNU compiler, for MMIX.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson (hp@bitrange.com)
 
 This file is part of GCC.
@@ -591,7 +592,7 @@ enum reg_class
 /* Node: Elimination */
 /* FIXME: Is this requirement built-in?  Anyway, we should try to get rid
    of it; we can deduce the value.  */
-#define FRAME_POINTER_REQUIRED  current_function_has_nonlocal_label
+#define FRAME_POINTER_REQUIRED  cfun->has_nonlocal_label
 
 /* The frame-pointer is stored in a location that either counts to the
    offset of incoming parameters, or that counts to the offset of the

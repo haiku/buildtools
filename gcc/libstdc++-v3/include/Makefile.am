@@ -1,6 +1,6 @@
 ## Makefile for the include subdirectory of the GNU C++ Standard library.
 ##
-## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 ## Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
@@ -9,7 +9,7 @@
 ## This file is part of the GNU ISO C++ Library.  This library is free
 ## software; you can redistribute it and/or modify it under the
 ## terms of the GNU General Public License as published by the
-## Free Software Foundation; either version 2, or (at your option)
+## Free Software Foundation; either version 3, or (at your option)
 ## any later version.
 
 ## This library is distributed in the hope that it will be useful,
@@ -18,9 +18,8 @@
 ## GNU General Public License for more details.
 
 ## You should have received a copy of the GNU General Public License along
-## with this library; see the file COPYING.  If not, write to the Free
-## Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-## USA.
+## with this library; see the file COPYING3.  If not see
+## <http://www.gnu.org/licenses/>.
 
 include $(top_srcdir)/fragment.am
 
@@ -32,8 +31,11 @@ std_headers = \
 	${std_srcdir}/array \
 	${std_srcdir}/bitset \
 	${std_srcdir}/c++0x_warning.h \
+	${std_srcdir}/chrono \
 	${std_srcdir}/complex \
+	${std_srcdir}/condition_variable \
 	${std_srcdir}/deque \
+	${std_srcdir}/forward_list \
 	${std_srcdir}/fstream \
 	${std_srcdir}/functional \
 	${std_srcdir}/iomanip \
@@ -47,10 +49,12 @@ std_headers = \
 	${std_srcdir}/locale \
 	${std_srcdir}/map \
 	${std_srcdir}/memory \
+	${std_srcdir}/mutex \
 	${std_srcdir}/numeric \
 	${std_srcdir}/ostream \
 	${std_srcdir}/queue \
 	${std_srcdir}/random \
+	${std_srcdir}/ratio \
 	${std_srcdir}/regex \
 	${std_srcdir}/set \
 	${std_srcdir}/sstream \
@@ -58,6 +62,8 @@ std_headers = \
 	${std_srcdir}/stdexcept \
 	${std_srcdir}/streambuf \
 	${std_srcdir}/string \
+	${std_srcdir}/system_error \
+	${std_srcdir}/thread \
 	${std_srcdir}/tuple \
 	${std_srcdir}/type_traits \
 	${std_srcdir}/unordered_map \
@@ -71,17 +77,22 @@ bits_builddir = ./bits
 bits_headers = \
         ${bits_srcdir}/algorithmfwd.h \
 	${bits_srcdir}/allocator.h \
+	${bits_srcdir}/atomicfwd_c.h \
+	${bits_srcdir}/atomicfwd_cxx.h \
+	${bits_srcdir}/atomic_0.h \
+	${bits_srcdir}/atomic_2.h \
 	${bits_srcdir}/basic_ios.h \
 	${bits_srcdir}/basic_ios.tcc \
 	${bits_srcdir}/basic_string.h \
 	${bits_srcdir}/basic_string.tcc \
 	${bits_srcdir}/boost_concept_check.h \
-	${bits_srcdir}/boost_sp_shared_count.h \
 	${bits_srcdir}/char_traits.h \
 	${bits_srcdir}/codecvt.h \
 	${bits_srcdir}/concept_check.h \
 	${bits_srcdir}/cpp_type_traits.h \
 	${bits_srcdir}/deque.tcc \
+	${bits_srcdir}/forward_list.h \
+	${bits_srcdir}/forward_list.tcc \
 	${bits_srcdir}/fstream.tcc \
 	${bits_srcdir}/functexcept.h \
 	${bits_srcdir}/functional_hash.h \
@@ -100,11 +111,13 @@ bits_headers = \
 	${bits_srcdir}/locale_facets_nonio.tcc \
 	${bits_srcdir}/localefwd.h \
 	${bits_srcdir}/mask_array.h \
+	${bits_srcdir}/move.h \
 	${bits_srcdir}/ostream.tcc \
 	${bits_srcdir}/ostream_insert.h \
 	${bits_srcdir}/postypes.h \
 	${bits_srcdir}/stream_iterator.h \
 	${bits_srcdir}/streambuf_iterator.h \
+	${bits_srcdir}/shared_ptr.h \
 	${bits_srcdir}/slice_array.h \
 	${bits_srcdir}/sstream.tcc \
 	${bits_srcdir}/stl_algo.h \
@@ -119,7 +132,6 @@ bits_headers = \
 	${bits_srcdir}/stl_iterator_base_types.h \
 	${bits_srcdir}/stl_list.h \
 	${bits_srcdir}/stl_map.h \
-	${bits_srcdir}/stl_move.h \
 	${bits_srcdir}/stl_multimap.h \
 	${bits_srcdir}/stl_multiset.h \
 	${bits_srcdir}/stl_numeric.h \
@@ -135,6 +147,7 @@ bits_headers = \
 	${bits_srcdir}/stl_vector.h \
 	${bits_srcdir}/streambuf.tcc \
 	${bits_srcdir}/stringfwd.h \
+	${bits_srcdir}/unique_ptr.h \
 	${bits_srcdir}/valarray_array.h \
 	${bits_srcdir}/valarray_array.tcc \
 	${bits_srcdir}/valarray_before.h \
@@ -474,10 +487,12 @@ ext_headers = \
 	${ext_srcdir}/atomicity.h \
 	${ext_srcdir}/array_allocator.h \
 	${ext_srcdir}/bitmap_allocator.h \
+	${ext_srcdir}/cast.h \
 	${ext_srcdir}/codecvt_specializations.h \
 	${ext_srcdir}/concurrence.h \
 	${ext_srcdir}/debug_allocator.h \
 	${ext_srcdir}/enc_filebuf.h \
+	${ext_srcdir}/extptr_allocator.h \
 	${ext_srcdir}/stdio_filebuf.h \
 	${ext_srcdir}/stdio_sync_filebuf.h \
 	${ext_srcdir}/functional \
@@ -489,11 +504,13 @@ ext_headers = \
 	${ext_srcdir}/numeric \
 	${ext_srcdir}/numeric_traits.h \
 	${ext_srcdir}/pod_char_traits.h \
+	${ext_srcdir}/pointer.h \
 	${ext_srcdir}/pool_allocator.h \
 	${ext_srcdir}/rb_tree \
 	${ext_srcdir}/rope \
 	${ext_srcdir}/ropeimpl.h \
 	${ext_srcdir}/slist \
+	${ext_srcdir}/string_conversions.h \
 	${ext_srcdir}/throw_allocator.h \
 	${ext_srcdir}/typelist.h \
 	${ext_srcdir}/type_traits.h \
@@ -515,7 +532,6 @@ tr1_headers = \
 	${tr1_srcdir}/array \
 	${tr1_srcdir}/bessel_function.tcc \
 	${tr1_srcdir}/beta_function.tcc \
-	${tr1_srcdir}/boost_sp_shared_count.h \
 	${tr1_srcdir}/ccomplex \
 	${tr1_srcdir}/cctype \
 	${tr1_srcdir}/cfenv \
@@ -555,6 +571,7 @@ tr1_headers = \
 	${tr1_srcdir}/random \
 	${tr1_srcdir}/regex \
 	${tr1_srcdir}/riemann_zeta.tcc \
+	${tr1_srcdir}/shared_ptr.h \
 	${tr1_srcdir}/special_function_util.h \
 	${tr1_srcdir}/stdarg.h \
 	${tr1_srcdir}/stdbool.h \
@@ -575,7 +592,6 @@ tr1_impl_srcdir = ${glibcxx_srcdir}/include/tr1_impl
 tr1_impl_builddir = ./tr1_impl
 tr1_impl_headers = \
 	${tr1_impl_srcdir}/array \
-	${tr1_impl_srcdir}/boost_shared_ptr.h \
 	${tr1_impl_srcdir}/boost_sp_counted_base.h \
 	${tr1_impl_srcdir}/cctype \
 	${tr1_impl_srcdir}/cfenv \
@@ -618,6 +634,7 @@ c_base_headers = \
 	${c_base_srcdir}/csetjmp \
 	${c_base_srcdir}/csignal \
 	${c_base_srcdir}/cstdarg \
+	${c_base_srcdir}/cstdatomic \
 	${c_base_srcdir}/cstdbool \
 	${c_base_srcdir}/cstddef \
 	${c_base_srcdir}/cstdint \
@@ -641,7 +658,8 @@ if GLIBCXX_C_HEADERS_C_GLOBAL
 c_compatibility_headers = \
 	${c_compatibility_srcdir}/complex.h \
 	${c_compatibility_srcdir}/fenv.h \
-	${c_compatibility_srcdir}/tgmath.h
+	${c_compatibility_srcdir}/tgmath.h \
+	${c_compatibility_srcdir}/stdatomic.h
 endif
 
 if GLIBCXX_C_HEADERS_C
@@ -687,7 +705,6 @@ debug_headers = \
 	${debug_srcdir}/map.h \
 	${debug_srcdir}/multimap.h \
 	${debug_srcdir}/multiset.h \
-	${debug_srcdir}/safe_association.h \
 	${debug_srcdir}/safe_base.h \
 	${debug_srcdir}/safe_iterator.h \
 	${debug_srcdir}/safe_iterator.tcc \
@@ -702,6 +719,7 @@ debug_headers = \
 # Parallel mode headers
 parallel_srcdir = ${glibcxx_srcdir}/include/parallel
 parallel_builddir = ./parallel
+if ENABLE_PARALLEL
 parallel_headers = \
         ${parallel_srcdir}/algo.h \
         ${parallel_srcdir}/algobase.h \
@@ -746,6 +764,9 @@ parallel_headers = \
         ${parallel_srcdir}/types.h \
         ${parallel_srcdir}/unique_copy.h \
         ${parallel_srcdir}/workstealing.h
+else
+parallel_headers =
+endif
 
 
 # Some of the different "C" header models need extra files.
@@ -774,6 +795,7 @@ host_headers = \
 	${glibcxx_srcdir}/$(ATOMIC_WORD_SRCDIR)/atomic_word.h \
 	${glibcxx_srcdir}/$(ABI_TWEAKS_SRCDIR)/cxxabi_tweaks.h \
 	${glibcxx_srcdir}/$(CPU_DEFINES_SRCDIR)/cpu_defines.h \
+	${glibcxx_srcdir}/$(ERROR_CONSTANTS_SRCDIR)/error_constants.h \
 	${glibcxx_srcdir}/include/precompiled/stdc++.h \
 	${glibcxx_srcdir}/include/precompiled/stdtr1c++.h \
 	${glibcxx_srcdir}/include/precompiled/extc++.h
@@ -828,7 +850,7 @@ pch_output_dirs = \
 	${pch1_output_builddir} ${pch2_output_builddir} ${pch3_output_builddir}
 pch_output_anchors = \
 	${pch1_output_anchor} ${pch2_output_anchor} ${pch3_output_anchor}
-PCHFLAGS=-Winvalid-pch -x c++-header $(CXXFLAGS)
+PCHFLAGS=-x c++-header $(CXXFLAGS)
 if GLIBCXX_BUILD_PCH
 pch_build = ${pch_output}
 else
@@ -1186,8 +1208,10 @@ install-headers:
 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${debug_builddir}
 	for file in ${debug_headers}; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${debug_builddir}; done
-	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${parallel_builddir}
-	for file in ${parallel_headers}; do \
+	parallel_headers_install='${parallel_headers}';\
+	test -z "$$parallel_headers_install" || \
+	  $(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${parallel_builddir};\
+	for file in $$parallel_headers_install; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${parallel_builddir}; done
 	$(mkinstalldirs) $(DESTDIR)${host_installdir}
 	for file in ${host_headers} ${host_headers_extra} \

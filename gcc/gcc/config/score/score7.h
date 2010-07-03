@@ -1,5 +1,5 @@
 /* score7.h for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Sunnorth
 
    This file is part of GCC.
@@ -93,9 +93,9 @@ extern void score7_asm_file_end (void);
 extern void score7_override_options (void);
 extern int score7_reg_class (int regno);
 extern enum reg_class score7_preferred_reload_class (rtx x ATTRIBUTE_UNUSED,
-                                                     enum reg_class class);
+                                                     enum reg_class rclass);
 extern enum
-reg_class score7_secondary_reload_class (enum reg_class class,
+reg_class score7_secondary_reload_class (enum reg_class rclass,
                                          enum machine_mode mode ATTRIBUTE_UNUSED,
                                          rtx x);
 extern int score7_const_ok_for_letter_p (HOST_WIDE_INT value, char c);
@@ -126,7 +126,7 @@ extern int score7_address_p (enum machine_mode mode, rtx x, int strict);
 extern int score7_register_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
                                       enum reg_class from,
                                       enum reg_class to);
-extern bool score7_rtx_costs (rtx x, int code, int outer_code, int *total);
+extern bool score7_rtx_costs (rtx x, int code, int outer_code, int *total, bool speed);
 extern int score7_address_cost (rtx addr);
 extern int score7_output_external (FILE *file ATTRIBUTE_UNUSED,
                                    tree decl,

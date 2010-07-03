@@ -1,5 +1,5 @@
 /* FR30 specific functions.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
@@ -140,7 +140,7 @@ static int fr30_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
    && ! call_used_regs [regno]         )
 
 #define MUST_SAVE_FRAME_POINTER	 (df_regs_ever_live_p (FRAME_POINTER_REGNUM)  || frame_pointer_needed)
-#define MUST_SAVE_RETURN_POINTER (df_regs_ever_live_p (RETURN_POINTER_REGNUM) || current_function_profile)
+#define MUST_SAVE_RETURN_POINTER (df_regs_ever_live_p (RETURN_POINTER_REGNUM) || crtl->profile)
 
 #if UNITS_PER_WORD == 4
 #define WORD_ALIGN(SIZE) (((SIZE) + 3) & ~3)
@@ -181,8 +181,8 @@ fr30_compute_frame_size (int from_reg, int to_reg)
   unsigned int 	gmask;
 
   var_size	= WORD_ALIGN (get_frame_size ());
-  args_size	= WORD_ALIGN (current_function_outgoing_args_size);
-  pretend_size	= current_function_pretend_args_size;
+  args_size	= WORD_ALIGN (crtl->outgoing_args_size);
+  pretend_size	= crtl->args.pretend_args_size;
 
   reg_size	= 0;
   gmask		= 0;
@@ -349,7 +349,7 @@ fr30_expand_prologue (void)
       RTX_FRAME_RELATED_P (insn) = 1;
     }
 
-  if (current_function_profile)
+  if (crtl->profile)
     emit_insn (gen_blockage ());
 }
 

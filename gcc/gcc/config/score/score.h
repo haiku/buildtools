@@ -1,5 +1,5 @@
 /* score.h for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Sunnorth.
 
    This file is part of GCC.
@@ -197,8 +197,6 @@
 /* long double is not a fixed mode, but the idea is that, if we
    support long double, we also want a 128-bit integer type.  */
 #define MAX_FIXED_MODE_SIZE            LONG_DOUBLE_TYPE_SIZE
-
-#define TARGET_FLOAT_FORMAT            IEEE_FLOAT_FORMAT
 
 /* Layout of Data Type.  */
 /* Set the sizes of the core types.  */
@@ -440,6 +438,18 @@ enum reg_class
    also contains the register.  */
 #define REGNO_REG_CLASS(REGNO)         score_reg_class (REGNO)
 
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+#define IRA_COVER_CLASSES					\
+{								\
+  G32_REGS, CE_REGS, SP_REGS, LIM_REG_CLASSES			\
+}
+
 /* A macro whose definition is the name of the class to which a
    valid base register must belong.  A base register is one used in
    an address which is the register value plus a displacement.  */
@@ -508,7 +518,7 @@ extern enum reg_class score_char_to_class[256];
 
 /* The offset of the first local variable from the beginning of the frame.
    See compute_frame_size for details about the frame layout.  */
-#define STARTING_FRAME_OFFSET           current_function_outgoing_args_size
+#define STARTING_FRAME_OFFSET           crtl->outgoing_args_size
 
 /* The argument pointer always points to the first argument.  */
 #define FIRST_PARM_OFFSET(FUNDECL)      0
@@ -549,7 +559,7 @@ extern enum reg_class score_char_to_class[256];
    Zero means the frame pointer need not be set up (and parms
    may be accessed via the stack pointer) in functions that seem suitable.
    This is computed in `reload', in reload1.c.  */
-#define FRAME_POINTER_REQUIRED          current_function_calls_alloca
+#define FRAME_POINTER_REQUIRED          cfun->calls_alloca
 
 #define ELIMINABLE_REGS                                \
   {{ ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},        \
@@ -578,8 +588,8 @@ extern enum reg_class score_char_to_class[256];
    allocate the area reserved for arguments passed in registers.
    If `ACCUMULATE_OUTGOING_ARGS' is also defined, the only effect
    of this macro is to determine whether the space is included in
-   `current_function_outgoing_args_size'.  */
-#define OUTGOING_REG_PARM_STACK_SPACE   1
+   `crtl->outgoing_args_size'.  */
+#define OUTGOING_REG_PARM_STACK_SPACE(FNTYPE) 1
 
 #define RETURN_POPS_ARGS(FUNDECL, FUNTYPE, STACK_SIZE) 0
 
@@ -795,7 +805,7 @@ typedef struct score_args
   (4 + memory_move_secondary_cost ((MODE), (CLASS), (TO_P)))
 
 /* Try to generate sequences that don't involve branches.  */
-#define BRANCH_COST                     2
+#define BRANCH_COST(speed_p, predictable_p) 2
 
 /* Nonzero if access to memory by bytes is slow and undesirable.  */
 #define SLOW_BYTE_ACCESS                1

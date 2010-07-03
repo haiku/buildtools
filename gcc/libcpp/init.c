@@ -1,13 +1,14 @@
 /* CPP Library.
    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
-Free Software Foundation; either version 2, or (at your option) any
+Free Software Foundation; either version 3, or (at your option) any
 later version.
 
 This program is distributed in the hope that it will be useful,
@@ -16,8 +17,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+along with this program; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
 #include "system.h"
@@ -76,20 +77,21 @@ struct lang_flags
   char std;
   char cplusplus_comments;
   char digraphs;
+  char uliterals;
 };
 
 static const struct lang_flags lang_defaults[] =
-{ /*              c99 c++ xnum xid std  //   digr  */
-  /* GNUC89   */  { 0,  0,  1,   0,  0,   1,   1     },
-  /* GNUC99   */  { 1,  0,  1,   0,  0,   1,   1     },
-  /* STDC89   */  { 0,  0,  0,   0,  1,   0,   0     },
-  /* STDC94   */  { 0,  0,  0,   0,  1,   0,   1     },
-  /* STDC99   */  { 1,  0,  1,   0,  1,   1,   1     },
-  /* GNUCXX   */  { 0,  1,  1,   0,  0,   1,   1     },
-  /* CXX98    */  { 0,  1,  1,   0,  1,   1,   1     },
-  /* GNUCXX0X */  { 1,  1,  1,   0,  0,   1,   1     },
-  /* CXX0X    */  { 1,  1,  1,   0,  1,   1,   1     },
-  /* ASM      */  { 0,  0,  1,   0,  0,   1,   0     }
+{ /*              c99 c++ xnum xid std  //   digr ulit */
+  /* GNUC89   */  { 0,  0,  1,   0,  0,   1,   1,   0 },
+  /* GNUC99   */  { 1,  0,  1,   0,  0,   1,   1,   1 },
+  /* STDC89   */  { 0,  0,  0,   0,  1,   0,   0,   0 },
+  /* STDC94   */  { 0,  0,  0,   0,  1,   0,   1,   0 },
+  /* STDC99   */  { 1,  0,  1,   0,  1,   1,   1,   0 },
+  /* GNUCXX   */  { 0,  1,  1,   0,  0,   1,   1,   0 },
+  /* CXX98    */  { 0,  1,  1,   0,  1,   1,   1,   0 },
+  /* GNUCXX0X */  { 1,  1,  1,   0,  0,   1,   1,   1 },
+  /* CXX0X    */  { 1,  1,  1,   0,  1,   1,   1,   1 },
+  /* ASM      */  { 0,  0,  1,   0,  0,   1,   0,   0 }
   /* xid should be 1 for GNUC99, STDC99, GNUCXX, CXX98, GNUCXX0X, and
      CXX0X when no longer experimental (when all uses of identifiers
      in the compiler have been audited for correct handling of
@@ -112,6 +114,7 @@ cpp_set_lang (cpp_reader *pfile, enum c_lang lang)
   CPP_OPTION (pfile, trigraphs)			 = l->std;
   CPP_OPTION (pfile, cplusplus_comments)	 = l->cplusplus_comments;
   CPP_OPTION (pfile, digraphs)			 = l->digraphs;
+  CPP_OPTION (pfile, uliterals)			 = l->uliterals;
 }
 
 /* Initialize library global state.  */
@@ -161,6 +164,7 @@ cpp_create_reader (enum c_lang lang, hash_table *table,
   CPP_OPTION (pfile, dollars_in_ident) = 1;
   CPP_OPTION (pfile, warn_dollars) = 1;
   CPP_OPTION (pfile, warn_variadic_macros) = 1;
+  CPP_OPTION (pfile, warn_builtin_macro_redefined) = 1;
   CPP_OPTION (pfile, warn_normalize) = normalized_C;
 
   /* Default CPP arithmetic to something sensible for the host for the
@@ -212,6 +216,9 @@ cpp_create_reader (enum c_lang lang, hash_table *table,
   pfile->a_buff = _cpp_get_buff (pfile, 0);
   pfile->u_buff = _cpp_get_buff (pfile, 0);
 
+  /* Initialize table for push_macro/pop_macro.  */
+  pfile->pushed_macros = 0;
+
   /* The expression parser stack.  */
   _cpp_expand_op_stack (pfile);
 
@@ -241,7 +248,9 @@ void
 cpp_destroy (cpp_reader *pfile)
 {
   cpp_context *context, *contextn;
+  struct def_pragma_macro *pmacro;
   tokenrun *run, *runn;
+  int i;
 
   free (pfile->op_stack);
 
@@ -284,6 +293,25 @@ cpp_destroy (cpp_reader *pfile)
       free (context);
     }
 
+  if (pfile->comments.entries)
+    {
+      for (i = 0; i < pfile->comments.count; i++)
+	free (pfile->comments.entries[i].comment);
+
+      free (pfile->comments.entries);
+    }
+  if (pfile->pushed_macros)
+    {
+      do
+	{
+	  pmacro = pfile->pushed_macros;
+	  pfile->pushed_macros = pmacro->next;
+	  free (pmacro->name);
+	  free (pmacro);
+	}
+      while (pfile->pushed_macros);
+    }
+
   free (pfile);
 }
 
@@ -301,31 +329,41 @@ cpp_destroy (cpp_reader *pfile)
    altered through #define, and #if recognizes them as operators.  In
    C, these are not entered into the hash table at all (but see
    <iso646.h>).  The value is a token-type enumerator.  */
-struct builtin
+struct builtin_macro
 {
-  const uchar *name;
-  unsigned short len;
-  unsigned short value;
+  const uchar *const name;
+  const unsigned short len;
+  const unsigned short value;
+  const bool always_warn_if_redefined;
+};
+
+#define B(n, t, f)    { DSC(n), t, f }
+static const struct builtin_macro builtin_array[] =
+{
+  B("__TIMESTAMP__",	 BT_TIMESTAMP,     false),
+  B("__TIME__",		 BT_TIME,          false),
+  B("__DATE__",		 BT_DATE,          false),
+  B("__FILE__",		 BT_FILE,          false),
+  B("__BASE_FILE__",	 BT_BASE_FILE,     false),
+  B("__LINE__",		 BT_SPECLINE,      true),
+  B("__INCLUDE_LEVEL__", BT_INCLUDE_LEVEL, true),
+  B("__COUNTER__",	 BT_COUNTER,       true),
+  /* Keep builtins not used for -traditional-cpp at the end, and
+     update init_builtins() if any more are added.  */
+  B("_Pragma",		 BT_PRAGMA,        true),
+  B("__STDC__",		 BT_STDC,          true),
+};
+#undef B
+
+struct builtin_operator
+{
+  const uchar *const name;
+  const unsigned short len;
+  const unsigned short value;
 };
 
 #define B(n, t)    { DSC(n), t }
-static const struct builtin builtin_array[] =
-{
-  B("__TIMESTAMP__",	 BT_TIMESTAMP),
-  B("__TIME__",		 BT_TIME),
-  B("__DATE__",		 BT_DATE),
-  B("__FILE__",		 BT_FILE),
-  B("__BASE_FILE__",	 BT_BASE_FILE),
-  B("__LINE__",		 BT_SPECLINE),
-  B("__INCLUDE_LEVEL__", BT_INCLUDE_LEVEL),
-  B("__COUNTER__",	 BT_COUNTER),
-  /* Keep builtins not used for -traditional-cpp at the end, and
-     update init_builtins() if any more are added.  */
-  B("_Pragma",		 BT_PRAGMA),
-  B("__STDC__",		 BT_STDC),
-};
-
-static const struct builtin operator_array[] =
+static const struct builtin_operator operator_array[] =
 {
   B("and",	CPP_AND_AND),
   B("and_eq",	CPP_AND_EQ),
@@ -345,7 +383,7 @@ static const struct builtin operator_array[] =
 static void
 mark_named_operators (cpp_reader *pfile)
 {
-  const struct builtin *b;
+  const struct builtin_operator *b;
 
   for (b = operator_array;
        b < (operator_array + ARRAY_SIZE (operator_array));
@@ -361,7 +399,7 @@ mark_named_operators (cpp_reader *pfile)
 void
 cpp_init_special_builtins (cpp_reader *pfile)
 {
-  const struct builtin *b;
+  const struct builtin_macro *b;
   size_t n = ARRAY_SIZE (builtin_array);
 
   if (CPP_OPTION (pfile, traditional))
@@ -374,7 +412,10 @@ cpp_init_special_builtins (cpp_reader *pfile)
     {
       cpp_hashnode *hp = cpp_lookup (pfile, b->name, b->len);
       hp->type = NT_MACRO;
-      hp->flags |= NODE_BUILTIN | NODE_WARN;
+      hp->flags |= NODE_BUILTIN;
+      if (b->always_warn_if_redefined
+          || CPP_OPTION (pfile, warn_builtin_macro_redefined))
+	hp->flags |= NODE_WARN;
       hp->value.builtin = (enum builtin_type) b->value;
     }
 }
@@ -529,9 +570,9 @@ read_original_filename (cpp_reader *pfile)
       pfile->state.in_directive = 0;
 
       /* If it's a #line directive, handle it.  */
-      if (token1->type == CPP_NUMBER)
+      if (token1->type == CPP_NUMBER
+	  && _cpp_handle_directive (pfile, token->flags & PREV_WHITE))
 	{
-	  _cpp_handle_directive (pfile, token->flags & PREV_WHITE);
 	  read_original_directory (pfile);
 	  return;
 	}

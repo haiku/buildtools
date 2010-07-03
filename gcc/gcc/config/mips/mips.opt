@@ -1,6 +1,6 @@
 ; Options for the MIPS port of the compiler
 ;
-; Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+; Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
 ;
@@ -112,6 +112,10 @@ mfix-r4400
 Target Report Mask(FIX_R4400)
 Work around certain R4400 errata
 
+mfix-r10000
+Target Report Mask(FIX_R10000)
+Work around certain R10000 errata
+
 mfix-sb1
 Target Report Var(TARGET_FIX_SB1)
 Work around errata for early SB-1 revision 2 cores
@@ -159,6 +163,10 @@ Use 64-bit general registers
 mgpopt
 Target Report Var(TARGET_GPOPT) Init(1)
 Use GP-relative addressing to access small data
+
+mplt
+Target Report Var(TARGET_PLT)
+When generating -mabicalls code, allow executables to use PLTs and copy relocations
 
 mhard-float
 Target Report RejectNegative InverseMask(SOFT_FLOAT_ABI, HARD_FLOAT_ABI)
@@ -231,6 +239,10 @@ Do not use MIPS-3D instructions
 mpaired-single
 Target Report Mask(PAIRED_SINGLE_FLOAT)
 Use paired-single floating-point instructions
+
+mr10k-cache-barrier=
+Target Joined RejectNegative
+-mr10k-cache-barrier=SETTING	Specify when r10k cache barriers should be inserted
 
 mshared
 Target Report Var(TARGET_SHARED) Init(1)

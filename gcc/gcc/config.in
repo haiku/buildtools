@@ -1,6 +1,6 @@
 /* config.in.  Generated from configure.ac by autoheader.  */
 
-/* Define as the number of bits in a byte, if \`limits.h' doesn't. */
+/* Define as the number of bits in a byte, if `limits.h' doesn't. */
 #ifndef USED_FOR_TARGET
 #undef CHAR_BIT
 #endif
@@ -93,6 +93,14 @@
 #endif
 
 
+/* Define if you want operations on GIMPLE (the basic data structure of the
+   high-level optimizers) to be checked for dynamic type safety at runtime.
+   This is moderately expensive. */
+#ifndef USED_FOR_TARGET
+#undef ENABLE_GIMPLE_CHECKING
+#endif
+
+
 /* Define to 1 if translation of program messages to the user's native
    language is requested. */
 #ifndef USED_FOR_TARGET
@@ -177,12 +185,6 @@
 /* mcontext_t fields start with __ */
 #ifndef USED_FOR_TARGET
 #undef HAS_MCONTEXT_T_UNDERSCORES
-#endif
-
-
-/* Define to 1 if you have the `alphasort' function. */
-#ifndef USED_FOR_TARGET
-#undef HAVE_ALPHASORT
 #endif
 
 
@@ -373,6 +375,12 @@
 /* Define if your assembler supports thread-local storage. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_TLS
+#endif
+
+
+/* Define if your assembler supports VSX instructions. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_VSX
 #endif
 
 
@@ -729,6 +737,12 @@
 #endif
 
 
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_DLFCN_H
+#endif
+
+
 /* Define to 1 if you have the <fcntl.h> header file. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_FCNTL_H
@@ -813,6 +827,24 @@
 #endif
 
 
+/* Define 0/1 if your assembler supports CFI directives. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_GAS_CFI_DIRECTIVE
+#endif
+
+
+/* Define 0/1 if your assembler supports .cfi_personality. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_GAS_CFI_PERSONALITY_DIRECTIVE
+#endif
+
+
+/* Define 0/1 if your assembler supports .cfi_sections. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_GAS_CFI_SECTIONS_DIRECTIVE
+#endif
+
+
 /* Define if your assembler uses the new HImode fild and fist notation. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_GAS_FILDS_FISTS
@@ -821,6 +853,12 @@
 
 /* Define if your assembler and linker support .hidden. */
 #undef HAVE_GAS_HIDDEN
+
+/* Define if your assembler supports .lcomm with an alignment field. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_GAS_LCOMM_WITH_ALIGNMENT
+#endif
+
 
 /* Define if your assembler supports .literal16. */
 #ifndef USED_FOR_TARGET
@@ -886,8 +924,11 @@
 #endif
 
 
-/* Define to 1 if system unwind library has _Unwind_GetIPInfo. */
+/* Define if _Unwind_GetIPInfo is available. */
+#ifndef USED_FOR_TARGET
 #undef HAVE_GETIPINFO
+#endif
+
 
 /* Define to 1 if you have the `getrlimit' function. */
 #ifndef USED_FOR_TARGET
@@ -1116,12 +1157,6 @@
 #endif
 
 
-/* Define to 1 if you have the `scandir' function. */
-#ifndef USED_FOR_TARGET
-#undef HAVE_SCANDIR
-#endif
-
-
 /* Define to 1 if you have the `setlocale' function. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_SETLOCALE
@@ -1309,9 +1344,22 @@
 #endif
 
 
+/* Define if cloog is in use. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_cloog
+#endif
+
+
 /* Define as const if the declaration of iconv() needs const. */
 #ifndef USED_FOR_TARGET
 #undef ICONV_CONST
+#endif
+
+
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#ifndef USED_FOR_TARGET
+#undef LT_OBJDIR
 #endif
 
 
@@ -1369,37 +1417,37 @@
 #endif
 
 
-/* The size of `int', as computed by sizeof. */
+/* The size of a `int', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_INT
 #endif
 
 
-/* The size of `long', as computed by sizeof. */
+/* The size of a `long', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_LONG
 #endif
 
 
-/* The size of `long long', as computed by sizeof. */
+/* The size of a `long long', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_LONG_LONG
 #endif
 
 
-/* The size of `short', as computed by sizeof. */
+/* The size of a `short', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_SHORT
 #endif
 
 
-/* The size of `void *', as computed by sizeof. */
+/* The size of a `void *', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_VOID_P
 #endif
 
 
-/* The size of `__int64', as computed by sizeof. */
+/* The size of a `__int64', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF___INT64
 #endif
@@ -1448,12 +1496,6 @@
 #endif
 
 
-/* Define if location_t is fileline integer cookie. */
-#ifndef USED_FOR_TARGET
-#undef USE_MAPPED_LOCATION
-#endif
-
-
 /* Define to be the last component of the Windows registry key under which to
    look for installation paths. The full key used will be
    HKEY_LOCAL_MACHINE/SOFTWARE/Free Software Foundation/{WIN32_REGISTRY_KEY}.
@@ -1470,9 +1512,50 @@
 #endif
 
 
-/* Always define this when using the GNU C Library */
+/* Define to 1 if on MINIX. */
 #ifndef USED_FOR_TARGET
-#undef _GNU_SOURCE
+#undef _MINIX
+#endif
+
+
+/* Define to 2 if the system does not provide POSIX.1 features except with
+   this defined. */
+#ifndef USED_FOR_TARGET
+#undef _POSIX_1_SOURCE
+#endif
+
+
+/* Define to 1 if you need to in order for `stat' and other things to work. */
+#ifndef USED_FOR_TARGET
+#undef _POSIX_SOURCE
+#endif
+
+
+/* Enable extensions on AIX 3, Interix.  */
+#ifndef _ALL_SOURCE
+# undef _ALL_SOURCE
+#endif
+/* Enable GNU extensions on systems that have them.  */
+#ifndef _GNU_SOURCE
+# undef _GNU_SOURCE
+#endif
+/* Enable threading extensions on Solaris.  */
+#ifndef _POSIX_PTHREAD_SEMANTICS
+# undef _POSIX_PTHREAD_SEMANTICS
+#endif
+/* Enable extensions on HP NonStop.  */
+#ifndef _TANDEM_SOURCE
+# undef _TANDEM_SOURCE
+#endif
+/* Enable general extensions on Solaris.  */
+#ifndef __EXTENSIONS__
+# undef __EXTENSIONS__
+#endif
+
+
+/* Define to `char *' if <sys/types.h> does not define. */
+#ifndef USED_FOR_TARGET
+#undef caddr_t
 #endif
 
 
@@ -1494,7 +1577,7 @@
 #endif
 
 
-/* Define to \`long' if <sys/resource.h> doesn't define. */
+/* Define to `long' if <sys/resource.h> doesn't define. */
 #ifndef USED_FOR_TARGET
 #undef rlim_t
 #endif

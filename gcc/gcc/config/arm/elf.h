@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler.
    For ARM with ELF obj format.
-   Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2007,
+   2008 Free Software Foundation, Inc.
    Contributed by Philip Blundell <philb@gnu.org> and
    Catherine Moore <clm@cygnus.com>
    
@@ -36,7 +36,8 @@
 #ifndef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS \
   { "subtarget_extra_asm_spec",	SUBTARGET_EXTRA_ASM_SPEC }, \
-  { "subtarget_asm_float_spec", SUBTARGET_ASM_FLOAT_SPEC },
+  { "subtarget_asm_float_spec", SUBTARGET_ASM_FLOAT_SPEC }, \
+  SUBSUBTARGET_EXTRA_SPECS
 #endif
 
 #ifndef SUBTARGET_EXTRA_ASM_SPEC
@@ -47,6 +48,9 @@
 #define SUBTARGET_ASM_FLOAT_SPEC "\
 %{mapcs-float:-mfloat}"
 #endif
+
+#undef SUBSUBTARGET_EXTRA_SPECS
+#define SUBSUBTARGET_EXTRA_SPECS
 
 #ifndef ASM_SPEC
 #define ASM_SPEC "\
@@ -144,4 +148,18 @@
 	fprintf (STREAM, "\t.align\t%d\n", POWER);	\
     }							\
   while (0)
+
+/* Horrible hack: We want to prevent some libgcc routines being included
+   for some multilibs.  */
+#ifndef __ARM_ARCH_6M__
+#undef L_fixdfsi
+#undef L_fixunsdfsi
+#undef L_truncdfsf2
+#undef L_fixsfsi
+#undef L_fixunssfsi
+#undef L_floatdidf
+#undef L_floatdisf
+#undef L_floatundidf
+#undef L_floatundisf
+#endif
 

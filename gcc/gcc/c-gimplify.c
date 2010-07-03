@@ -2,7 +2,8 @@
    by the C-based front ends.  The structure of gimplified, or
    language-independent, trees is dictated by the grammar described in this
    file.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
    Lowering of expressions contributed by Sebastian Pop <s.pop@laposte.net>
    Re-written to support lowering of whole function trees, documentation
    and miscellaneous cleanups by Diego Novillo <dnovillo@redhat.com>
@@ -31,7 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "varray.h"
 #include "c-tree.h"
 #include "c-common.h"
-#include "tree-gimple.h"
+#include "gimple.h"
 #include "hard-reg-set.h"
 #include "basic-block.h"
 #include "tree-flow.h"
@@ -87,7 +88,8 @@ c_genericize (tree fndecl)
       fprintf (dump_orig, "\n;; Function %s",
 	       lang_hooks.decl_printable_name (fndecl, 2));
       fprintf (dump_orig, " (%s)\n",
-	       IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (fndecl)));
+	       (!DECL_ASSEMBLER_NAME_SET_P (fndecl) ? "null"
+		: IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (fndecl))));
       fprintf (dump_orig, ";; enabled by -%s\n", dump_flag_name (TDI_original));
       fprintf (dump_orig, "\n");
 
@@ -104,7 +106,6 @@ c_genericize (tree fndecl)
   /* Go ahead and gimplify for now.  */
   gimplify_function_tree (fndecl);
 
-  /* Dump the genericized tree IR.  */
   dump_function (TDI_generic, fndecl);
 
   /* Genericize all nested functions now.  We do things in this order so
@@ -118,14 +119,16 @@ c_genericize (tree fndecl)
 static void
 add_block_to_enclosing (tree block)
 {
+  unsigned i;
   tree enclosing;
+  gimple bind;
+  VEC(gimple, heap) *stack = gimple_bind_expr_stack ();
 
-  for (enclosing = gimple_current_bind_expr ();
-       enclosing; enclosing = TREE_CHAIN (enclosing))
-    if (BIND_EXPR_BLOCK (enclosing))
+  for (i = 0; VEC_iterate (gimple, stack, i, bind); i++)
+    if (gimple_bind_block (bind))
       break;
 
-  enclosing = BIND_EXPR_BLOCK (enclosing);
+  enclosing = gimple_bind_block (bind);
   BLOCK_SUBBLOCKS (enclosing) = chainon (BLOCK_SUBBLOCKS (enclosing), block);
 }
 
@@ -178,7 +181,7 @@ c_build_bind_expr (tree block, tree body)
    decl instead.  */
 
 static enum gimplify_status
-gimplify_compound_literal_expr (tree *expr_p, tree *pre_p)
+gimplify_compound_literal_expr (tree *expr_p, gimple_seq *pre_p)
 {
   tree decl_s = COMPOUND_LITERAL_EXPR_DECL_STMT (*expr_p);
   tree decl = DECL_EXPR_DECL (decl_s);
@@ -249,10 +252,12 @@ optimize_compound_literals_in_ctor (tree orig_ctor)
   return ctor;
 }
 
-/* Do C-specific gimplification.  Args are as for gimplify_expr.  */
+/* Do C-specific gimplification on *EXPR_P.  PRE_P and POST_P are as in
+   gimplify_expr.  */
 
 int
-c_gimplify_expr (tree *expr_p, tree *pre_p, tree *post_p ATTRIBUTE_UNUSED)
+c_gimplify_expr (tree *expr_p, gimple_seq *pre_p,
+		 gimple_seq *post_p ATTRIBUTE_UNUSED)
 {
   enum tree_code code = TREE_CODE (*expr_p);
 

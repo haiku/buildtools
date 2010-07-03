@@ -1,12 +1,12 @@
 /* Struct-reorg optimization.
-   Copyright (C) 2002, 2003-2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003-2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Olga Golovanevsky <olga@il.ibm.com>
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify
 under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
+the Free Software Foundation; either version 3 of the License, or
 (at your option) any later version.
 
 GCC is distributed in the hope that it will be useful,
@@ -15,9 +15,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with GCC; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.  */
+along with GCC; see the file COPYING3.  If not see
+<http://www.gnu.org/licenses/>.  */
 
 #ifndef IPA_STRUCT_REORG_H
 #define IPA_STRUCT_REORG_H
@@ -37,15 +36,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 struct field_access_site
 {
   /* Statement in which the access site occurs.  */
-  tree stmt;             /* D.2169_25 = D.2168_24->b;  */
+  gimple stmt;           /* D.2169_25 = D.2168_24->b;  */
   tree comp_ref;         /* D.2168_24->b  */
   tree field_decl;       /* b */
   tree ref;              /* D.2168_24  */
   tree num;              /* i.6_20  */
   tree offset;           /* D2167_22  */
   tree base;             /* p.5_23  */
-  tree ref_def_stmt;     /* D.2168_24 = D.2167_22 + p.5_23;  */
-  tree cast_stmt;        /* D.2167_22 = (struct str_t *) D.2166_21;
+  gimple ref_def_stmt;   /* D.2168_24 = D.2167_22 + p.5_23;  */
+  gimple cast_stmt;      /* D.2167_22 = (struct str_t *) D.2166_21;
                             This statement is not always present.  */
 };
 
@@ -53,7 +52,7 @@ struct field_access_site
 struct access_site
 {
   /* A statement in which the access site occurs.  */
-  tree stmt;
+  gimple stmt;
   /* A list of structure variables in the access site.  */
   VEC (tree, heap) *vars;
 };
@@ -104,7 +103,7 @@ struct data_structure
   /* A data structure representing a reorganization decision.  */
   struct field_cluster *struct_clustering;
 
-  /* New types to replace an the original structure type.  */
+  /* New types to replace the original structure type.  */
   VEC(tree, heap) *new_types;
 };
 

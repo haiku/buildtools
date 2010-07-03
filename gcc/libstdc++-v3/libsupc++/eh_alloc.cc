@@ -1,12 +1,12 @@
 // -*- C++ -*- Allocate exception objects.
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
 // GCC is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
-// the Free Software Foundation; either version 2, or (at your option)
+// the Free Software Foundation; either version 3, or (at your option)
 // any later version.
 //
 // GCC is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License
-// along with GCC; see the file COPYING.  If not, write to
-// the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-// Boston, MA 02110-1301, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 // This is derived from the C++ ABI for IA-64.  Where we diverge
 // for cross-architecture compatibility are noted with "@@@".
@@ -89,6 +84,9 @@ typedef char one_buffer[EMERGENCY_OBJ_SIZE] __attribute__((aligned));
 static one_buffer emergency_buffer[EMERGENCY_OBJ_COUNT];
 static bitmask_type emergency_used;
 
+static __cxa_dependent_exception dependents_buffer[EMERGENCY_OBJ_COUNT];
+static bitmask_type dependents_used;
+
 namespace
 {
   // A single mutex controlling emergency allocations.
@@ -100,7 +98,7 @@ __cxxabiv1::__cxa_allocate_exception(std::size_t thrown_size) throw()
 {
   void *ret;
 
-  thrown_size += sizeof (__cxa_exception);
+  thrown_size += sizeof (__cxa_refcounted_exception);
   ret = malloc (thrown_size);
 
   if (! ret)
@@ -134,9 +132,9 @@ __cxxabiv1::__cxa_allocate_exception(std::size_t thrown_size) throw()
   __cxa_eh_globals *globals = __cxa_get_globals ();
   globals->uncaughtExceptions += 1;
 
-  memset (ret, 0, sizeof (__cxa_exception));
+  memset (ret, 0, sizeof (__cxa_refcounted_exception));
 
-  return (void *)((char *)ret + sizeof (__cxa_exception));
+  return (void *)((char *)ret + sizeof (__cxa_refcounted_exception));
 }
 
 
@@ -155,5 +153,68 @@ __cxxabiv1::__cxa_free_exception(void *vptr) throw()
       emergency_used &= ~((bitmask_type)1 << which);
     }
   else
-    free (ptr - sizeof (__cxa_exception));
+    free (ptr - sizeof (__cxa_refcounted_exception));
+}
+
+
+extern "C" __cxa_dependent_exception*
+__cxxabiv1::__cxa_allocate_dependent_exception() throw()
+{
+  __cxa_dependent_exception *ret;
+
+  ret = static_cast<__cxa_dependent_exception*>
+    (malloc (sizeof (__cxa_dependent_exception)));
+
+  if (!ret)
+    {
+      __gnu_cxx::__scoped_lock sentry(emergency_mutex);
+
+      bitmask_type used = dependents_used;
+      unsigned int which = 0;
+
+      while (used & 1)
+	{
+	  used >>= 1;
+	  if (++which >= EMERGENCY_OBJ_COUNT)
+	    goto failed;
+	}
+
+      dependents_used |= (bitmask_type)1 << which;
+      ret = &dependents_buffer[which];
+
+    failed:;
+
+      if (!ret)
+	std::terminate ();
+    }
+
+  // We have an uncaught exception as soon as we allocate memory.  This
+  // yields uncaught_exception() true during the copy-constructor that
+  // initializes the exception object.  See Issue 475.
+  __cxa_eh_globals *globals = __cxa_get_globals ();
+  globals->uncaughtExceptions += 1;
+
+  memset (ret, 0, sizeof (__cxa_dependent_exception));
+
+  return ret;
+}
+
+
+extern "C" void
+__cxxabiv1::__cxa_free_dependent_exception
+  (__cxa_dependent_exception *vptr) throw()
+{
+  char *base = (char *) dependents_buffer;
+  char *ptr = (char *) vptr;
+  if (ptr >= base
+      && ptr < base + sizeof (dependents_buffer))
+    {
+      const unsigned int which
+	= (unsigned) (ptr - base) / sizeof (__cxa_dependent_exception);
+
+      __gnu_cxx::__scoped_lock sentry(emergency_mutex);
+      dependents_used &= ~((bitmask_type)1 << which);
+    }
+  else
+    free (vptr);
 }

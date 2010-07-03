@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using GNU tools and the Windows32 API Library.
-   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008,
+   2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -38,7 +38,7 @@ along with GCC; see the file COPYING3.  If not see
       builtin_define_std ("WINNT");				\
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",	\
 				     TYPE_PRECISION (intmax_type_node));\
-      if (TARGET_64BIT_MS_ABI)					\
+      if (TARGET_64BIT && DEFAULT_ABI == MS_ABI)			\
 	{							\
 	  builtin_define ("__MINGW64__");			\
 	  builtin_define_std ("WIN64");				\
@@ -67,19 +67,39 @@ along with GCC; see the file COPYING3.  If not see
 #define LIB_SPEC "%{pg:-lgmon} %{mwindows:-lgdi32 -lcomdlg32} \
                   -luser32 -lkernel32 -ladvapi32 -lshell32"
 
-/* Include in the mingw32 libraries with libgcc */
-#undef LINK_SPEC
+/* Weak symbols do not get resolved if using a Windows dll import lib.
+   Make the unwind registration references strong undefs.  */
+#if DWARF2_UNWIND_INFO
+#define SHARED_LIBGCC_UNDEFS_SPEC \
+ "%{shared-libgcc: -u ___register_frame_info -u ___deregister_frame_info}"
+#else
+#define SHARED_LIBGCC_UNDEFS_SPEC ""
+#endif
+
+#undef  SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS						\
+  { "shared_libgcc_undefs", SHARED_LIBGCC_UNDEFS_SPEC }
+
 #define LINK_SPEC "%{mwindows:--subsystem windows} \
   %{mconsole:--subsystem console} \
   %{shared: %{mdll: %eshared and mdll are not compatible}} \
   %{shared: --shared} %{mdll:--dll} \
   %{static:-Bstatic} %{!static:-Bdynamic} \
-  %{shared|mdll: -e _DllMainCRTStartup@12}"
+  %{shared|mdll: -e _DllMainCRTStartup@12 --enable-auto-image-base} \
+  %(shared_libgcc_undefs)"
 
 /* Include in the mingw32 libraries with libgcc */
-#undef LIBGCC_SPEC
-#define LIBGCC_SPEC \
-  "%{mthreads:-lmingwthrd} -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt"
+#ifdef ENABLE_SHARED_LIBGCC
+#define SHARED_LIBGCC_SPEC "%{shared-libgcc:-lgcc_s} %{!shared-libgcc:-lgcc_eh}"
+#else
+#define SHARED_LIBGCC_SPEC /*empty*/
+#endif
+#undef REAL_LIBGCC_SPEC
+#define REAL_LIBGCC_SPEC \
+  "%{mthreads:-lmingwthrd} -lmingw32 \
+   "SHARED_LIBGCC_SPEC" \
+   -lgcc \
+   -lmoldname -lmingwex -lmsvcrt"
 
 #undef STARTFILE_SPEC
 #define STARTFILE_SPEC "%{shared|mdll:dllcrt2%O%s} \
@@ -143,10 +163,59 @@ do {						         \
    to register C++ static destructors.  */
 #define TARGET_CXX_USE_ATEXIT_FOR_CXA_ATEXIT hook_bool_void_true
 
-/* JCR_SECTION works on mingw32.  */
+/* Contains a pointer to type target_ovr_attr defining the target specific
+   overrides of format attributes.  See c-format.h for structure
+   definition.  */
+#undef TARGET_OVERRIDES_FORMAT_ATTRIBUTES
+#define TARGET_OVERRIDES_FORMAT_ATTRIBUTES mingw_format_attribute_overrides
+
+/* Specify the count of elements in TARGET_OVERRIDES_ATTRIBUTE.  */
+#undef TARGET_OVERRIDES_FORMAT_ATTRIBUTES_COUNT
+#define TARGET_OVERRIDES_FORMAT_ATTRIBUTES_COUNT 3
+
+/* Custom initialization for warning -Wpedantic-ms-format for c-format.  */
+#undef TARGET_OVERRIDES_FORMAT_INIT
+#define TARGET_OVERRIDES_FORMAT_INIT msformat_init
+
+/* MS specific format attributes for ms_printf, ms_scanf, ms_strftime.  */
+#undef TARGET_FORMAT_TYPES
+#define TARGET_FORMAT_TYPES mingw_format_attributes
+
+#undef TARGET_N_FORMAT_TYPES
+#define TARGET_N_FORMAT_TYPES 3
+
+/* Let defaults.h definition of TARGET_USE_JCR_SECTION apply. */
 #undef TARGET_USE_JCR_SECTION
-#define TARGET_USE_JCR_SECTION 1
+
+#undef MINGW_ENABLE_EXECUTE_STACK
+#define MINGW_ENABLE_EXECUTE_STACK     \
+extern void __enable_execute_stack (void *);    \
+void         \
+__enable_execute_stack (void *addr)					\
+{									\
+  MEMORY_BASIC_INFORMATION b;						\
+  if (!VirtualQuery (addr, &b, sizeof(b)))				\
+    abort ();								\
+  VirtualProtect (b.BaseAddress, b.RegionSize, PAGE_EXECUTE_READWRITE,	\
+		  &b.Protect);						\
+}
+
+#undef ENABLE_EXECUTE_STACK
+#define ENABLE_EXECUTE_STACK MINGW_ENABLE_EXECUTE_STACK
+
+#ifdef IN_LIBGCC2
+#include <windows.h>
+#endif
 
 #if !TARGET_64BIT
 #define MD_UNWIND_SUPPORT "config/i386/w32-unwind.h"
 #endif
+
+/* This matches SHLIB_SONAME and SHLIB_SOVERSION in t-cygming. */
+/* This matches SHLIB_SONAME and SHLIB_SOVERSION in t-cygwin. */
+#if DWARF2_UNWIND_INFO
+#define LIBGCC_EH_EXTN "_dw2"
+#else
+#define LIBGCC_EH_EXTN "_sjlj"
+#endif
+#define LIBGCC_SONAME "libgcc_s" LIBGCC_EH_EXTN "-1.dll"

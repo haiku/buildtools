@@ -1,5 +1,5 @@
 /* Array prefetching.
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
    
 This file is part of GCC.
    
@@ -156,7 +156,7 @@ along with GCC; see the file COPYING3.  If not see
 /* In some cases we are only able to determine that there is a certain
    probability that the two accesses hit the same cache line.  In this
    case, we issue the prefetches for both of them if this probability
-   is less then (1000 - ACCEPTABLE_MISS_RATE) promile.  */
+   is less then (1000 - ACCEPTABLE_MISS_RATE) per thousand.  */
 
 #ifndef ACCEPTABLE_MISS_RATE
 #define ACCEPTABLE_MISS_RATE 50
@@ -201,7 +201,7 @@ struct mem_ref_group
 
 struct mem_ref
 {
-  tree stmt;			/* Statement in that the reference appears.  */
+  gimple stmt;			/* Statement in that the reference appears.  */
   tree mem;			/* The reference.  */
   HOST_WIDE_INT delta;		/* Constant offset of the reference.  */
   struct mem_ref_group *group;	/* The group of references it belongs to.  */
@@ -278,7 +278,7 @@ find_or_create_group (struct mem_ref_group **groups, tree base,
    WRITE_P.  The reference occurs in statement STMT.  */
 
 static void
-record_ref (struct mem_ref_group *group, tree stmt, tree mem,
+record_ref (struct mem_ref_group *group, gimple stmt, tree mem,
 	    HOST_WIDE_INT delta, bool write_p)
 {
   struct mem_ref **aref;
@@ -344,7 +344,7 @@ release_mem_refs (struct mem_ref_group *groups)
 struct ar_data
 {
   struct loop *loop;			/* Loop of the reference.  */
-  tree stmt;				/* Statement of the reference.  */
+  gimple stmt;				/* Statement of the reference.  */
   HOST_WIDE_INT *step;			/* Step of the memory reference.  */
   HOST_WIDE_INT *delta;			/* Offset of the memory reference.  */
 };
@@ -364,7 +364,8 @@ idx_analyze_ref (tree base, tree *index, void *data)
       || TREE_CODE (base) == ALIGN_INDIRECT_REF)
     return false;
 
-  if (!simple_iv (ar_data->loop, ar_data->stmt, *index, &iv, false))
+  if (!simple_iv (ar_data->loop, loop_containing_stmt (ar_data->stmt),
+		  *index, &iv, false))
     return false;
   ibase = iv.base;
   step = iv.step;
@@ -411,7 +412,7 @@ idx_analyze_ref (tree base, tree *index, void *data)
 static bool
 analyze_ref (struct loop *loop, tree *ref_p, tree *base,
 	     HOST_WIDE_INT *step, HOST_WIDE_INT *delta,
-	     tree stmt)
+	     gimple stmt)
 {
   struct ar_data ar_data;
   tree off;
@@ -451,7 +452,7 @@ analyze_ref (struct loop *loop, tree *ref_p, tree *base,
 
 static bool
 gather_memory_references_ref (struct loop *loop, struct mem_ref_group **refs,
-			      tree ref, bool write_p, tree stmt)
+			      tree ref, bool write_p, gimple stmt)
 {
   tree base;
   HOST_WIDE_INT step, delta;
@@ -480,8 +481,9 @@ gather_memory_references (struct loop *loop, bool *no_other_refs)
   basic_block *body = get_loop_body_in_dom_order (loop);
   basic_block bb;
   unsigned i;
-  block_stmt_iterator bsi;
-  tree stmt, lhs, rhs, call;
+  gimple_stmt_iterator bsi;
+  gimple stmt;
+  tree lhs, rhs;
   struct mem_ref_group *refs = NULL;
 
   *no_other_refs = true;
@@ -494,22 +496,21 @@ gather_memory_references (struct loop *loop, bool *no_other_refs)
       if (bb->loop_father != loop)
 	continue;
 
-      for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+      for (bsi = gsi_start_bb (bb); !gsi_end_p (bsi); gsi_next (&bsi))
 	{
-	  stmt = bsi_stmt (bsi);
-	  call = get_call_expr_in (stmt);
-	  if (call && !(call_expr_flags (call) & ECF_CONST))
-	    *no_other_refs = false;
+	  stmt = gsi_stmt (bsi);
 
-	  if (TREE_CODE (stmt) != GIMPLE_MODIFY_STMT)
+	  if (gimple_code (stmt) != GIMPLE_ASSIGN)
 	    {
-	      if (!ZERO_SSA_OPERANDS (stmt, SSA_OP_ALL_VIRTUALS))
+	      if (!ZERO_SSA_OPERANDS (stmt, SSA_OP_ALL_VIRTUALS)
+		  || (is_gimple_call (stmt)
+		      && !(gimple_call_flags (stmt) & ECF_CONST)))
 		*no_other_refs = false;
 	      continue;
 	    }
 
-	  lhs = GIMPLE_STMT_OPERAND (stmt, 0);
-	  rhs = GIMPLE_STMT_OPERAND (stmt, 1);
+	  lhs = gimple_assign_lhs (stmt);
+	  rhs = gimple_assign_rhs1 (stmt);
 
 	  if (REFERENCE_CLASS_P (rhs))
 	    *no_other_refs &= gather_memory_references_ref (loop, &refs,
@@ -869,8 +870,9 @@ static void
 issue_prefetch_ref (struct mem_ref *ref, unsigned unroll_factor, unsigned ahead)
 {
   HOST_WIDE_INT delta;
-  tree addr, addr_base, prefetch, write_p, local;
-  block_stmt_iterator bsi;
+  tree addr, addr_base, write_p, local;
+  gimple prefetch;
+  gimple_stmt_iterator bsi;
   unsigned n_prefetches, ap;
   bool nontemporal = ref->reuse_distance >= L2_CACHE_SIZE_BYTES;
 
@@ -879,13 +881,13 @@ issue_prefetch_ref (struct mem_ref *ref, unsigned unroll_factor, unsigned ahead)
 	     nontemporal ? " nontemporal" : "",
 	     (void *) ref);
 
-  bsi = bsi_for_stmt (ref->stmt);
+  bsi = gsi_for_stmt (ref->stmt);
 
   n_prefetches = ((unroll_factor + ref->prefetch_mod - 1)
 		  / ref->prefetch_mod);
   addr_base = build_fold_addr_expr_with_type (ref->mem, ptr_type_node);
-  addr_base = force_gimple_operand_bsi (&bsi, unshare_expr (addr_base),
-					true, NULL, true, BSI_SAME_STMT);
+  addr_base = force_gimple_operand_gsi (&bsi, unshare_expr (addr_base),
+					true, NULL, true, GSI_SAME_STMT);
   write_p = ref->write_p ? integer_one_node : integer_zero_node;
   local = build_int_cst (integer_type_node, nontemporal ? 0 : 3);
 
@@ -895,13 +897,13 @@ issue_prefetch_ref (struct mem_ref *ref, unsigned unroll_factor, unsigned ahead)
       delta = (ahead + ap * ref->prefetch_mod) * ref->group->step;
       addr = fold_build2 (POINTER_PLUS_EXPR, ptr_type_node,
 			  addr_base, size_int (delta));
-      addr = force_gimple_operand_bsi (&bsi, unshare_expr (addr), true, NULL,
-				       true, BSI_SAME_STMT);
+      addr = force_gimple_operand_gsi (&bsi, unshare_expr (addr), true, NULL,
+				       true, GSI_SAME_STMT);
 
       /* Create the prefetch instruction.  */
-      prefetch = build_call_expr (built_in_decls[BUILT_IN_PREFETCH],
-				  3, addr, write_p, local);
-      bsi_insert_before (&bsi, prefetch, BSI_SAME_STMT);
+      prefetch = gimple_build_call (built_in_decls[BUILT_IN_PREFETCH],
+				    3, addr, write_p, local);
+      gsi_insert_before (&bsi, prefetch, GSI_SAME_STMT);
     }
 }
 
@@ -960,7 +962,7 @@ mark_nontemporal_store (struct mem_ref *ref)
     fprintf (dump_file, "Marked reference %p as a nontemporal store.\n",
 	     (void *) ref);
 
-  MOVE_NONTEMPORAL (ref->stmt) = true;
+  gimple_assign_set_nontemporal_move (ref->stmt, true);
   ref->storent_p = true;
 
   return true;
@@ -973,22 +975,22 @@ emit_mfence_after_loop (struct loop *loop)
 {
   VEC (edge, heap) *exits = get_loop_exit_edges (loop);
   edge exit;
-  tree call;
-  block_stmt_iterator bsi;
+  gimple call;
+  gimple_stmt_iterator bsi;
   unsigned i;
 
   for (i = 0; VEC_iterate (edge, exits, i, exit); i++)
     {
-      call = build_function_call_expr (FENCE_FOLLOWING_MOVNT, NULL_TREE);
+      call = gimple_build_call (FENCE_FOLLOWING_MOVNT, 0);
 
       if (!single_pred_p (exit->dest)
 	  /* If possible, we prefer not to insert the fence on other paths
 	     in cfg.  */
 	  && !(exit->flags & EDGE_ABNORMAL))
 	split_loop_exit_edge (exit);
-      bsi = bsi_after_labels (exit->dest);
+      bsi = gsi_after_labels (exit->dest);
 
-      bsi_insert_before (&bsi, call, BSI_NEW_STMT);
+      gsi_insert_before (&bsi, call, GSI_NEW_STMT);
       mark_virtual_ops_for_renaming (call);
     }
 
@@ -1358,7 +1360,7 @@ determine_loop_nest_reuse (struct loop *loop, struct mem_ref_group *refs,
   for (i = 0; VEC_iterate (data_reference_p, datarefs, i, dr); i++)
     {
       dist = self_reuse_distance (dr, loop_data_size, n, loop);
-      ref = dr->aux;
+      ref = (struct mem_ref *) dr->aux;
       if (ref->reuse_distance > dist)
 	ref->reuse_distance = dist;
 
@@ -1373,8 +1375,8 @@ determine_loop_nest_reuse (struct loop *loop, struct mem_ref_group *refs,
       if (DDR_ARE_DEPENDENT (dep) == chrec_known)
 	continue;
 
-      ref = DDR_A (dep)->aux;
-      refb = DDR_B (dep)->aux;
+      ref = (struct mem_ref *) DDR_A (dep)->aux;
+      refb = (struct mem_ref *) DDR_B (dep)->aux;
 
       if (DDR_ARE_DEPENDENT (dep) == chrec_dont_know
 	  || DDR_NUM_DIST_VECTS (dep) == 0)
@@ -1459,7 +1461,7 @@ loop_prefetch_arrays (struct loop *loop)
   struct tree_niter_desc desc;
   bool unrolled = false, no_other_refs;
 
-  if (!maybe_hot_bb_p (loop->header))
+  if (optimize_loop_nest_for_size_p (loop))
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "  ignored (cold area)\n");

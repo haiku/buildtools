@@ -1,6 +1,6 @@
 /* Instruction scheduling pass.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) Enhanced by,
    and currently maintained by, Jim Wilson (wilson@cygnus.com)
 
@@ -29,13 +29,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "hard-reg-set.h"
 #include "basic-block.h"
 #include "real.h"
+#include "insn-attr.h"
 #include "sched-int.h"
 #include "tree-pass.h"
 
 static char *safe_concat (char *, char *, const char *);
-static void print_exp (char *, const_rtx, int);
-static void print_value (char *, const_rtx, int);
-static void print_pattern (char *, const_rtx, int);
 
 #define BUF_LEN 2048
 
@@ -425,7 +423,7 @@ print_exp (char *buf, const_rtx x, int verbose)
 /* Prints rtxes, I customarily classified as values.  They're constants,
    registers, labels, symbols and memory accesses.  */
 
-static void
+void
 print_value (char *buf, const_rtx x, int verbose)
 {
   char t[BUF_LEN];
@@ -434,7 +432,8 @@ print_value (char *buf, const_rtx x, int verbose)
   switch (GET_CODE (x))
     {
     case CONST_INT:
-      sprintf (t, HOST_WIDE_INT_PRINT_HEX, INTVAL (x));
+      sprintf (t, HOST_WIDE_INT_PRINT_HEX,
+	       (unsigned HOST_WIDE_INT) INTVAL (x));
       cur = safe_concat (buf, cur, t);
       break;
     case CONST_DOUBLE:
@@ -531,7 +530,7 @@ print_value (char *buf, const_rtx x, int verbose)
 
 /* The next step in insn detalization, its pattern recognition.  */
 
-static void
+void
 print_pattern (char *buf, const_rtx x, int verbose)
 {
   char t1[BUF_LEN], t2[BUF_LEN], t3[BUF_LEN];
@@ -642,10 +641,10 @@ print_pattern (char *buf, const_rtx x, int verbose)
    depends now on sched.c inner variables ...)  */
 
 void
-print_insn (char *buf, rtx x, int verbose)
+print_insn (char *buf, const_rtx x, int verbose)
 {
   char t[BUF_LEN];
-  rtx insn = x;
+  const_rtx insn = x;
 
   switch (GET_CODE (x))
     {
@@ -680,7 +679,7 @@ print_insn (char *buf, rtx x, int verbose)
 	strcpy (t, "call <...>");
 #ifdef INSN_SCHEDULING
       if (verbose && current_sched_info)
-	sprintf (buf, "%s: %s", (*current_sched_info->print_insn) (x, 1), t);
+	sprintf (buf, "%s: %s", (*current_sched_info->print_insn) (insn, 1), t);
       else
 #endif
 	sprintf (buf, " %4d %s", INSN_UID (insn), t);
@@ -700,7 +699,6 @@ print_insn (char *buf, rtx x, int verbose)
 	       GET_RTX_NAME (GET_CODE (x)));
     }
 }				/* print_insn */
-
 
 /* Emit a slim dump of X (an insn) to the file F, including any register
    note attached to the instruction.  */
@@ -735,10 +733,21 @@ debug_insn_slim (rtx x)
 void
 print_rtl_slim_with_bb (FILE *f, rtx first, int flags)
 {
-  basic_block current_bb = NULL;
-  rtx insn;
+  print_rtl_slim (f, first, NULL, -1, flags);
+}
 
-  for (insn = first; NULL != insn; insn = NEXT_INSN (insn))
+/* Same as above, but stop at LAST or when COUNT == 0.  
+   If COUNT < 0 it will stop only at LAST or NULL rtx.  */
+void
+print_rtl_slim (FILE *f, rtx first, rtx last, int count, int flags)
+{
+  basic_block current_bb = NULL;
+  rtx insn, tail;
+
+  tail = last ? NEXT_INSN (last) : NULL_RTX;
+  for (insn = first; 
+       (insn != NULL) && (insn != tail) && (count != 0); 
+       insn = NEXT_INSN (insn))
     {
       if ((flags & TDF_BLOCKS)
 	  && (INSN_P (insn) || GET_CODE (insn) == NOTE)
@@ -758,6 +767,21 @@ print_rtl_slim_with_bb (FILE *f, rtx first, int flags)
 	  dump_bb_info (current_bb, false, true, flags, ";; ", f);
 	  current_bb = NULL;
 	}
+      if (count > 0)
+        count--;
     }
+}
+
+void 
+debug_bb_slim (struct basic_block_def *bb)
+{
+  print_rtl_slim (stderr, BB_HEAD (bb), BB_END (bb), -1, 32);
+}
+
+void
+debug_bb_n_slim (int n)
+{
+  struct basic_block_def *bb = BASIC_BLOCK (n);
+  debug_bb_slim (bb);
 }
 

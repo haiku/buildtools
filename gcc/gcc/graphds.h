@@ -1,5 +1,5 @@
 /* Graph representation.
-   Copyright (C) 2007
+   Copyright (C) 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -47,6 +47,7 @@ struct graph
   int n_vertices;	/* Number of vertices.  */
   struct vertex *vertices;
 			/* The vertices.  */
+  htab_t indices;	/* Fast lookup for indices.  */
 };
 
 struct graph *new_graph (int);

@@ -1,10 +1,10 @@
-/* Copyright (C) 2002, 2007 Free Software Foundation, Inc.
+/* Copyright (C) 2002, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
+the Free Software Foundation; either version 3, or (at your option)
 any later version.
 
 GCC is distributed in the hope that it will be useful,
@@ -12,17 +12,14 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
 
-/* As a special exception, if you include this header file into source
-   files compiled by GCC, this header file does not by itself cause
-   the resulting executable to be covered by the GNU General Public
-   License.  This exception does not however invalidate any other
-   reasons why the executable file might be covered by the GNU General
-   Public License.  */
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 /*
  * ISO C Standard:  5.2.4.2.2  Characteristics of floating types <float.h>
@@ -214,13 +211,13 @@ Boston, MA 02110-1301, USA.  */
 #define DEC64_MIN	__DEC64_MIN__
 #define DEC128_MIN	__DEC128_MIN__
 
-/* Minimum denormalized positive floating-point number. */
-#undef DEC32_DEN
-#undef DEC64_DEN
-#undef DEC128_DEN
-#define DEC32_DEN       __DEC32_DEN__
-#define DEC64_DEN       __DEC64_DEN__
-#define DEC128_DEN      __DEC128_DEN__
+/* Minimum subnormal positive floating-point number. */
+#undef DEC32_SUBNORMAL_MIN
+#undef DEC64_SUBNORMAL_MIN
+#undef DEC128_SUBNORMAL_MIN
+#define DEC32_SUBNORMAL_MIN       __DEC32_SUBNORMAL_MIN__
+#define DEC64_SUBNORMAL_MIN       __DEC64_SUBNORMAL_MIN__
+#define DEC128_SUBNORMAL_MIN      __DEC128_SUBNORMAL_MIN__
 
 /* The floating-point expression evaluation method.
          -1  indeterminate
@@ -233,8 +230,8 @@ Boston, MA 02110-1301, USA.  */
 	 2  evaluate all operations and constants to the range and
 	    precision of the _Decimal128 type.  */
 
-#undef DECFLT_EVAL_METHOD
-#define DECFLT_EVAL_METHOD	__DECFLT_EVAL_METHOD__
+#undef DEC_EVAL_METHOD
+#define DEC_EVAL_METHOD	__DEC_EVAL_METHOD__
 
 #endif /* __STDC_WANT_DEC_FP__ */
 

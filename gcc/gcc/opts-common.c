@@ -1,5 +1,5 @@
 /* Command line option handling.
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -131,8 +131,8 @@ void
 prune_options (int *argcp, char ***argvp)
 {
   int argc = *argcp;
-  int *options = xmalloc (argc * sizeof (*options));
-  char **argv = xmalloc (argc * sizeof (char *));
+  int *options = XNEWVEC (int, argc);
+  char **argv = XNEWVEC (char *, argc);
   int i, arg_count, need_prune = 0;
   const struct cl_option *option;
   size_t opt_index;

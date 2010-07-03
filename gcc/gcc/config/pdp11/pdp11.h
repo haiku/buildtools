@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for the pdp-11
    Copyright (C) 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2004, 2005,
-   2006, 2007 Free Software Foundation, Inc.
+   2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Michael K. Gschwind (mike@vlsivie.tuwien.ac.at).
 
 This file is part of GCC.
@@ -100,8 +100,6 @@ along with GCC; see the file COPYING3.  If not see
    big endian, opposite for what you need for float, the vax float
    conversion routines aren't actually used directly.  But the underlying
    format is indeed the vax/pdp11 float format.  */
-#define TARGET_FLOAT_FORMAT VAX_FLOAT_FORMAT
-
 extern const struct real_format pdp11_f_format;
 extern const struct real_format pdp11_d_format;
 
@@ -1059,7 +1057,7 @@ JMP	FUNCTION	0x0058  0x0000 <- FUNCTION
 /* there is no point in avoiding branches on a pdp, 
    since branches are really cheap - I just want to find out
    how much difference the BRANCH_COST macro makes in code */
-#define BRANCH_COST (TARGET_BRANCH_CHEAP ? 0 : 1)
+#define BRANCH_COST(speed_p, predictable_p) (TARGET_BRANCH_CHEAP ? 0 : 1)
 
 
 #define COMPARE_FLAG_MODE HImode

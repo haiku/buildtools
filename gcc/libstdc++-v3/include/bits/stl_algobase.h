@@ -1,12 +1,12 @@
 // Core algorithmic facilities -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /*
  *
@@ -74,7 +69,7 @@
 #include <bits/stl_iterator.h>
 #include <bits/concept_check.h>
 #include <debug/debug.h>
-#include <bits/stl_move.h> // For std::swap and _GLIBCXX_MOVE
+#include <bits/move.h> // For std::swap and _GLIBCXX_MOVE
 
 _GLIBCXX_BEGIN_NAMESPACE(std)
 
@@ -109,6 +104,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief Swaps the contents of two iterators.
+   *  @ingroup mutating_algorithms
    *  @param  a  An iterator.
    *  @param  b  Another iterator.
    *  @return   Nothing.
@@ -147,6 +143,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief Swap the elements of two sequences.
+   *  @ingroup mutating_algorithms
    *  @param  first1  A forward iterator.
    *  @param  last1   A forward iterator.
    *  @param  first2  A forward iterator.
@@ -175,6 +172,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief This does what you think it does.
+   *  @ingroup sorting_algorithms
    *  @param  a  A thing of arbitrary type.
    *  @param  b  Another thing of arbitrary type.
    *  @return   The lesser of the parameters.
@@ -197,6 +195,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief This does what you think it does.
+   *  @ingroup sorting_algorithms
    *  @param  a  A thing of arbitrary type.
    *  @param  b  Another thing of arbitrary type.
    *  @return   The greater of the parameters.
@@ -219,9 +218,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief This does what you think it does.
+   *  @ingroup sorting_algorithms
    *  @param  a  A thing of arbitrary type.
    *  @param  b  Another thing of arbitrary type.
-   *  @param  comp  A @link s20_3_3_comparisons comparison functor@endlink.
+   *  @param  comp  A @link comparison_functors comparison functor@endlink.
    *  @return   The lesser of the parameters.
    *
    *  This will work on temporary expressions, since they are only evaluated
@@ -239,9 +239,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief This does what you think it does.
+   *  @ingroup sorting_algorithms
    *  @param  a  A thing of arbitrary type.
    *  @param  b  Another thing of arbitrary type.
-   *  @param  comp  A @link s20_3_3_comparisons comparison functor@endlink.
+   *  @param  comp  A @link comparison_functors comparison functor@endlink.
    *  @return   The greater of the parameters.
    *
    *  This will work on temporary expressions, since they are only evaluated
@@ -437,6 +438,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief Copies the range [first,last) into result.
+   *  @ingroup mutating_algorithms
    *  @param  first  An input iterator.
    *  @param  last   An input iterator.
    *  @param  result An output iterator.
@@ -469,6 +471,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
   /**
    *  @brief Moves the range [first,last) into result.
+   *  @ingroup mutating_algorithms
    *  @param  first  An input iterator.
    *  @param  last   An input iterator.
    *  @param  result An output iterator.
@@ -604,6 +607,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief Copies the range [first,last) into result.
+   *  @ingroup mutating_algorithms
    *  @param  first  A bidirectional iterator.
    *  @param  last   A bidirectional iterator.
    *  @param  result A bidirectional iterator.
@@ -639,6 +643,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
   /**
    *  @brief Moves the range [first,last) into result.
+   *  @ingroup mutating_algorithms
    *  @param  first  A bidirectional iterator.
    *  @param  last   A bidirectional iterator.
    *  @param  result A bidirectional iterator.
@@ -710,6 +715,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief Fills the range [first,last) with copies of value.
+   *  @ingroup mutating_algorithms
    *  @param  first  A forward iterator.
    *  @param  last   A forward iterator.
    *  @param  value  A reference-to-const of arbitrary type.
@@ -764,6 +770,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief Fills the range [first,first+n) with copies of value.
+   *  @ingroup mutating_algorithms
    *  @param  first  An output iterator.
    *  @param  n      The count of copies to perform.
    *  @param  value  A reference-to-const of arbitrary type.
@@ -930,6 +937,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
 
   /**
    *  @brief Tests a range for element-wise equality.
+   *  @ingroup non_mutating_algorithms
    *  @param  first1  An input iterator.
    *  @param  last1   An input iterator.
    *  @param  first2  An input iterator.
@@ -958,10 +966,11 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
 
   /**
    *  @brief Tests a range for element-wise equality.
+   *  @ingroup non_mutating_algorithms
    *  @param  first1  An input iterator.
    *  @param  last1   An input iterator.
    *  @param  first2  An input iterator.
-   *  @param binary_pred A binary predicate @link s20_3_1_base
+   *  @param binary_pred A binary predicate @link functors
    *                  functor@endlink.
    *  @return         A boolean true or false.
    *
@@ -988,6 +997,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
 
   /**
    *  @brief Performs "dictionary" comparison on ranges.
+   *  @ingroup sorting_algorithms
    *  @param  first1  An input iterator.
    *  @param  last1   An input iterator.
    *  @param  first2  An input iterator.
@@ -1024,11 +1034,12 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
 
   /**
    *  @brief Performs "dictionary" comparison on ranges.
+   *  @ingroup sorting_algorithms
    *  @param  first1  An input iterator.
    *  @param  last1   An input iterator.
    *  @param  first2  An input iterator.
    *  @param  last2   An input iterator.
-   *  @param  comp  A @link s20_3_3_comparisons comparison functor@endlink.
+   *  @param  comp  A @link comparison_functors comparison functor@endlink.
    *  @return   A boolean true or false.
    *
    *  The same as the four-parameter @c lexicographical_compare, but uses the
@@ -1063,6 +1074,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
 
   /**
    *  @brief Finds the places in ranges which don't match.
+   *  @ingroup non_mutating_algorithms
    *  @param  first1  An input iterator.
    *  @param  last1   An input iterator.
    *  @param  first2  An input iterator.
@@ -1096,10 +1108,11 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
 
   /**
    *  @brief Finds the places in ranges which don't match.
+   *  @ingroup non_mutating_algorithms
    *  @param  first1  An input iterator.
    *  @param  last1   An input iterator.
    *  @param  first2  An input iterator.
-   *  @param binary_pred A binary predicate @link s20_3_1_base
+   *  @param binary_pred A binary predicate @link functors
    *         functor@endlink.
    *  @return   A pair of iterators pointing to the first mismatch.
    *

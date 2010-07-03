@@ -1,5 +1,6 @@
 /* Natural loop analysis code for GNU compiler.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -29,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "output.h"
 #include "graphds.h"
+#include "params.h"
 
 /* Checks whether BB is executed exactly once in each LOOP iteration.  */
 
@@ -294,7 +296,7 @@ get_loop_level (const struct loop *loop)
 /* Returns estimate on cost of computing SEQ.  */
 
 static unsigned
-seq_cost (const_rtx seq)
+seq_cost (const_rtx seq, bool speed)
 {
   unsigned cost = 0;
   rtx set;
@@ -303,7 +305,7 @@ seq_cost (const_rtx seq)
     {
       set = single_set (seq);
       if (set)
-	cost += rtx_cost (set, SET);
+	cost += rtx_cost (set, SET, speed);
       else
 	cost++;
     }
@@ -316,10 +318,10 @@ seq_cost (const_rtx seq)
 unsigned target_avail_regs;	/* Number of available registers.  */
 unsigned target_res_regs;	/* Number of registers reserved for temporary
 				   expressions.  */
-unsigned target_reg_cost;	/* The cost for register when there still
+unsigned target_reg_cost[2];	/* The cost for register when there still
 				   is some reserve, but we are approaching
 				   the number of available registers.  */
-unsigned target_spill_cost;	/* The cost for register when we need
+unsigned target_spill_cost[2];	/* The cost for register when we need
 				   to spill.  */
 
 /* Initialize the constants for computing set costs.  */
@@ -327,6 +329,7 @@ unsigned target_spill_cost;	/* The cost for register when we need
 void
 init_set_costs (void)
 {
+  int speed;
   rtx seq;
   rtx reg1 = gen_raw_REG (SImode, FIRST_PSEUDO_REGISTER);
   rtx reg2 = gen_raw_REG (SImode, FIRST_PSEUDO_REGISTER + 1);
@@ -342,27 +345,32 @@ init_set_costs (void)
 
   target_res_regs = 3;
 
-  /* Set up the costs for using extra registers:
+  for (speed = 0; speed < 2; speed++)
+     {
+      crtl->maybe_hot_insn_p = speed;
+      /* Set up the costs for using extra registers:
 
-     1) If not many free registers remain, we should prefer having an
-	additional move to decreasing the number of available registers.
-	(TARGET_REG_COST).
-     2) If no registers are available, we need to spill, which may require
-	storing the old value to memory and loading it back
-	(TARGET_SPILL_COST).  */
+	 1) If not many free registers remain, we should prefer having an
+	    additional move to decreasing the number of available registers.
+	    (TARGET_REG_COST).
+	 2) If no registers are available, we need to spill, which may require
+	    storing the old value to memory and loading it back
+	    (TARGET_SPILL_COST).  */
 
-  start_sequence ();
-  emit_move_insn (reg1, reg2);
-  seq = get_insns ();
-  end_sequence ();
-  target_reg_cost = seq_cost (seq);
+      start_sequence ();
+      emit_move_insn (reg1, reg2);
+      seq = get_insns ();
+      end_sequence ();
+      target_reg_cost [speed] = seq_cost (seq, speed);
 
-  start_sequence ();
-  emit_move_insn (mem, reg1);
-  emit_move_insn (reg2, mem);
-  seq = get_insns ();
-  end_sequence ();
-  target_spill_cost = seq_cost (seq);
+      start_sequence ();
+      emit_move_insn (mem, reg1);
+      emit_move_insn (reg2, mem);
+      seq = get_insns ();
+      end_sequence ();
+      target_spill_cost [speed] = seq_cost (seq, speed);
+    }
+  default_rtl_profile ();
 }
 
 /* Estimates cost of increased register pressure caused by making N_NEW new
@@ -370,8 +378,9 @@ init_set_costs (void)
    around the loop.  */
 
 unsigned
-estimate_reg_pressure_cost (unsigned n_new, unsigned n_old)
+estimate_reg_pressure_cost (unsigned n_new, unsigned n_old, bool speed)
 {
+  unsigned cost;
   unsigned regs_needed = n_new + n_old;
 
   /* If we have enough registers, we should use them and not restrict
@@ -379,12 +388,25 @@ estimate_reg_pressure_cost (unsigned n_new, unsigned n_old)
   if (regs_needed + target_res_regs <= target_avail_regs)
     return 0;
 
-  /* If we are close to running out of registers, try to preserve them.  */
   if (regs_needed <= target_avail_regs)
-    return target_reg_cost * n_new;
-  
-  /* If we run out of registers, it is very expensive to add another one.  */
-  return target_spill_cost * n_new;
+    /* If we are close to running out of registers, try to preserve
+       them.  */
+    cost = target_reg_cost [speed] * n_new;
+  else
+    /* If we run out of registers, it is very expensive to add another
+       one.  */
+    cost = target_spill_cost [speed] * n_new;
+
+  if (optimize && (flag_ira_region == IRA_REGION_ALL
+		   || flag_ira_region == IRA_REGION_MIXED)
+      && number_of_loops () <= (unsigned) IRA_MAX_LOOPS_NUM)
+    /* IRA regional allocation deals with high register pressure
+       better.  So decrease the cost (to do more accurate the cost
+       calculation for IRA, we need to know how many registers lives
+       through the loop transparently).  */
+    cost /= 2;
+
+  return cost;
 }
 
 /* Sets EDGE_LOOP_EXIT flag for all loop exits.  */

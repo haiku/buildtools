@@ -1,6 +1,6 @@
 ; Options for the SH port of the compiler.
 
-; Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+; Copyright (C) 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
 ;
@@ -212,6 +212,10 @@ mbigtable
 Target Report RejectNegative Mask(BIGTABLE)
 Generate 32-bit offsets in switch tables
 
+mbitops
+Target Report RejectNegative Mask(BITOPS)
+Generate bit instructions
+
 mbranch-cost=
 Target RejectNegative Joined UInteger Var(sh_branch_cost) Init(-1)
 Cost to assume for a branch insn
@@ -243,6 +247,10 @@ Division strategy, one of: call, call2, fp, inv, inv:minlat, inv20u, inv20l, inv
 mdivsi3_libfunc=
 Target RejectNegative Joined Var(sh_divsi3_libfunc) Init("")
 Specify name for 32 bit signed division function
+
+mfixed-range=
+Target RejectNegative Joined Var(sh_fixed_range_str)
+Specify range of registers to make fixed
 
 mfmovd
 Target RejectNegative Mask(FMOVD) Undocumented

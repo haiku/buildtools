@@ -1,7 +1,7 @@
 /* This file contains the definitions and documentation for the common
    tree codes used in the GNU C and C++ compilers (see c-common.def
    for the standard codes).
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Written by Benjamin Chelf (chelf@codesourcery.com).
 
@@ -43,7 +43,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "timevar.h"
 #include "predict.h"
 #include "tree-inline.h"
-#include "tree-gimple.h"
+#include "gimple.h"
+#include "tree-iterator.h"
 #include "langhooks.h"
 
 /* Create an empty statement tree rooted at T.  */

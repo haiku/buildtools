@@ -1,11 +1,11 @@
 // TR1 functional header -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file tr1_impl/functional
  *  This is an internal header file, included by other library headers.
@@ -827,9 +822,13 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
   /// The type of placeholder objects defined by libstdc++.
   template<int _Num> struct _Placeholder { };
 
-  // Define a large number of placeholders. There is no way to
-  // simplify this with variadic templates, because we're introducing
-  // unique names for each.
+  /** @namespace std::placeholders
+   *  @brief ISO C++ 0x entities sub namespace for functional.
+   *
+   *  Define a large number of placeholders. There is no way to
+   *  simplify this with variadic templates, because we're introducing
+   *  unique names for each.
+   */
   namespace placeholders 
   { 
     namespace 
@@ -943,7 +942,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
    *  function object [TR1 3.6.3/5]. Only the first parameter should
    *  be specified: the rest are used to determine among the various
    *  implementations. Note that, although this class is a function
-   *  object, isn't not entirely normal because it takes only two
+   *  object, it isn't entirely normal because it takes only two
    *  parameters regardless of the number of parameters passed to the
    *  bind expression. The first parameter is the bound argument and
    *  the second parameter is a tuple containing references to the
@@ -1531,10 +1530,11 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 	{
 	  switch (__op)
 	    {
+#ifdef __GXX_RTTI
 	    case __get_type_info:
 	      __dest._M_access<const type_info*>() = &typeid(_Functor);
 	      break;
-
+#endif
 	    case __get_functor_ptr:
 	      __dest._M_access<_Functor*>() = _M_get_pointer(__source);
 	      break;
@@ -1596,10 +1596,11 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 	{
 	  switch (__op)
 	    {
+#ifdef __GXX_RTTI
 	    case __get_type_info:
 	      __dest._M_access<const type_info*>() = &typeid(_Functor);
 	      break;
-	      
+#endif
 	    case __get_functor_ptr:
 	      __dest._M_access<_Functor*>() = *_Base::_M_get_pointer(__source);
 	      return is_const<_Functor>::value;
@@ -1730,10 +1731,11 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       {
         switch (__op)
 	  {
+#ifdef __GXX_RTTI
 	  case __get_type_info:
 	    __dest._M_access<const type_info*>() = &typeid(_Functor);
 	    break;
-	    
+#endif	    
 	  case __get_functor_ptr:
 	    __dest._M_access<_Functor*>() =
 	      &_Base::_M_get_pointer(__source)->__value;
@@ -1935,7 +1937,8 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
        *  stored by @c this.
        */
       _Res operator()(_ArgTypes... __args) const;
-      
+
+#ifdef __GXX_RTTI
       // [3.7.2.5] function target access
       /**
        *  @brief Determine the type of the target of this function object
@@ -1961,7 +1964,8 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       
       /// @overload
       template<typename _Functor> const _Functor* target() const;
-      
+#endif
+
     private:
       // [3.7.2.6] undefined operators
       template<typename _Function>
@@ -2020,6 +2024,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       return _M_invoker(_M_functor, __args...);
     }
 
+#ifdef __GXX_RTTI
   template<typename _Res, typename... _ArgTypes>
     const type_info&
     function<_Res(_ArgTypes...)>::
@@ -2069,6 +2074,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 	else
 	  return 0;
       }
+#endif
 
   // [3.7.2.7] null pointer comparisons
 

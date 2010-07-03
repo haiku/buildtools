@@ -1,5 +1,6 @@
 ;; Predicate definitions for IA-32 and x86-64.
-;; Copyright (C) 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+;; Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+;; Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -428,7 +429,8 @@
 	  || !CONST_INT_P (XEXP (op, 1)))
 	return 0;
       op = XEXP (op, 0);
-      if (GET_CODE (op) == UNSPEC)
+      if (GET_CODE (op) == UNSPEC
+	  && XINT (op, 1) != UNSPEC_MACHOPIC_OFFSET)
 	return 1;
     }
   return 0;
@@ -517,6 +519,22 @@
 			FIRST_PSEUDO_REGISTER, LAST_VIRTUAL_REGISTER));
 })
 
+;; P6 processors will jump to the address after the decrement when %esp
+;; is used as a call operand, so they will execute return address as a code.
+;; See Pentium Pro errata 70, Pentium 2 errata A33 and Pentium 3 errata E17.
+
+(define_predicate "call_register_no_elim_operand"
+  (match_operand 0 "register_operand")
+{
+  if (GET_CODE (op) == SUBREG)
+    op = SUBREG_REG (op);
+
+  if (!TARGET_64BIT && op == stack_pointer_rtx)
+    return 0;
+
+  return register_no_elim_operand (op, mode);
+})
+
 ;; Similarly, but include the stack pointer.  This is used to prevent esp
 ;; from being used as an index reg.
 (define_predicate "index_register_operand"
@@ -545,7 +563,7 @@
 ;; Test for a valid operand for a call instruction.
 (define_predicate "call_insn_operand"
   (ior (match_operand 0 "constant_call_address_operand")
-       (ior (match_operand 0 "register_no_elim_operand")
+       (ior (match_operand 0 "call_register_no_elim_operand")
 	    (match_operand 0 "memory_operand"))))
 
 ;; Similarly, but for tail calls, in which we cannot allow memory references.
@@ -629,15 +647,41 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 1, 31)")))
 
+;; Return nonzero if OP is CONST_INT >= 1 and <= 63 (a valid operand
+;; for 64bit shift & compare patterns, as shifting by 0 does not change flags).
+(define_predicate "const_1_to_63_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 1, 63)")))
+
 ;; Match 2 or 3.
 (define_predicate "const_2_to_3_operand"
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 2, 3)")))
 
+;; Match 4 to 5.
+(define_predicate "const_4_to_5_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 4, 5)")))
+
 ;; Match 4 to 7.
 (define_predicate "const_4_to_7_operand"
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 4, 7)")))
+
+;; Match 6 to 7.
+(define_predicate "const_6_to_7_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 6, 7)")))
+
+;; Match 8 to 11.
+(define_predicate "const_8_to_11_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 8, 11)")))
+
+;; Match 12 to 15.
+(define_predicate "const_12_to_15_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 12, 15)")))
 
 ;; Match exactly one bit in 2-bit mask.
 (define_predicate "const_pow2_1_to_2_operand"
@@ -859,6 +903,34 @@
   return parts.disp != NULL_RTX;
 })
 
+;; Returns 1 if OP is memory operand which will need zero or
+;; one register at most, not counting stack pointer or frame pointer.
+(define_predicate "cmpxchg8b_pic_memory_operand"
+  (match_operand 0 "memory_operand")
+{
+  struct ix86_address parts;
+  int ok;
+
+  ok = ix86_decompose_address (XEXP (op, 0), &parts);
+  gcc_assert (ok);
+  if (parts.base == NULL_RTX
+      || parts.base == arg_pointer_rtx
+      || parts.base == frame_pointer_rtx
+      || parts.base == hard_frame_pointer_rtx
+      || parts.base == stack_pointer_rtx)
+    return 1;
+
+  if (parts.index == NULL_RTX
+      || parts.index == arg_pointer_rtx
+      || parts.index == frame_pointer_rtx
+      || parts.index == hard_frame_pointer_rtx
+      || parts.index == stack_pointer_rtx)
+    return 1;
+
+  return 0;
+})
+
+
 ;; Returns 1 if OP is memory operand that cannot be represented
 ;; by the modRM array.
 (define_predicate "long_memory_operand"
@@ -908,6 +980,11 @@
 (define_special_predicate "sse_comparison_operator"
   (match_code "eq,lt,le,unordered,ne,unge,ungt,ordered"))
 
+;; Return 1 if OP is a comparison operator that can be issued by
+;; avx predicate generation instructions
+(define_predicate "avx_comparison_float_operator"
+  (match_code "ne,eq,ge,gt,le,lt,unordered,ordered,uneq,unge,ungt,unle,unlt,ltgt"))
+
 ;; Return 1 if OP is a comparison operator that can be issued by sse predicate
 ;; generation instructions
 (define_predicate "sse5_comparison_float_operator"
@@ -919,6 +996,9 @@
 
 (define_predicate "ix86_comparison_uns_operator"
   (match_code "ne,eq,geu,gtu,leu,ltu"))
+
+(define_predicate "bt_comparison_operator"
+  (match_code "ne,eq"))
 
 ;; Return 1 if OP is a valid comparison operator in valid mode.
 (define_predicate "ix86_comparison_operator"
@@ -1015,6 +1095,10 @@
   (match_code "plus,mult,and,ior,xor,smin,smax,umin,umax,compare,minus,div,
 	       mod,udiv,umod,ashift,rotate,ashiftrt,lshiftrt,rotatert"))
 
+;; Return true for COMMUTATIVE_P.
+(define_predicate "commutative_operator"
+  (match_code "plus,mult,and,ior,xor,smin,smax,umin,umax"))
+
 ;; Return 1 if OP is a binary operator that can be promoted to wider mode.
 (define_predicate "promotable_binary_operator"
   (ior (match_code "plus,and,ior,xor,ashift")
@@ -1043,3 +1127,20 @@
 
 (define_predicate "absneg_operator"
   (match_code "abs,neg"))
+
+;; Return 1 if OP is misaligned memory operand
+(define_predicate "misaligned_operand"
+  (and (match_code "mem")
+       (match_test "MEM_ALIGN (op) < GET_MODE_ALIGNMENT (mode)")))
+
+;; Return 1 if OP is a vzeroall operation, known to be a PARALLEL.
+(define_predicate "vzeroall_operation"
+  (match_code "parallel")
+{
+  int nregs = TARGET_64BIT ? 16 : 8;
+
+  if (XVECLEN (op, 0) != nregs + 1)
+    return 0;
+
+  return 1;
+})

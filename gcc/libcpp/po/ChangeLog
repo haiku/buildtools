@@ -1,22 +1,88 @@
-2009-01-24  Release Manager
+2010-04-29  Release Manager
 
-	* GCC 4.3.3 released.
+	* GCC 4.4.4 released.
+
+2010-01-21  Release Manager
+
+	* GCC 4.4.3 released.
+
+2009-10-15  Release Manager
+
+	* GCC 4.4.2 released.
+
+2009-09-19  Joseph Myers  <joseph@codesourcery.com>
+
+	* vi.po: Update.
+
+2009-09-08  Joseph Myers  <joseph@codesourcery.com>
+
+	* id.po: Update.
+
+2009-09-02  Joseph Myers  <joseph@codesourcery.com>
+
+	* es.po: Update.
+
+2009-08-04  Joseph Myers  <joseph@codesourcery.com>
+
+	* es.po: Update.
+
+2009-07-25  Joseph Myers  <joseph@codesourcery.com>
+
+	* nl.po: Update.
+
+2009-07-23  Joseph Myers  <joseph@codesourcery.com>
+
+	* be.po, ca.po, da.po, de.po, el.po, es.po, fr.po, id.po, ja.po,
+	nl.po, sv.po, tr.po, uk,po, vi.po, zh_CN.po, zh_TW.po: Update.
+
+2009-07-22  Release Manager
+
+	* GCC 4.4.1 released.
+
+2009-04-22  Joseph Myers  <joseph@codesourcery.com>
+
+	* cpplib.pot: Regenerate.
+
+2009-04-21  Release Manager
+
+	* GCC 4.4.0 released.
+
+2009-03-28  Joseph Myers  <joseph@codesourcery.com>
+
+	* cpplib.pot: Regenerate.
+
+2009-03-04  Joseph Myers  <joseph@codesourcery.com>
+
+	* es.po: Update.
+
+2009-02-13  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* zh_CN.po: Update.
+
+2009-02-06  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* vi.po: Update.
+
+2008-12-06  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* nl.po, sv.po: Update.
+
+2008-11-29  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* be.po, ca.po, da.po, de.po, el.po, es.po, fr.po, id.po, ja.po,
+	nl.po, sv.po, tr.po, uk,po, vi.po, zh_CN.po, zh_TW.po: Update.
+
+2008-11-18  Joseph S. Myers  <joseph@codesourcery.com>
+
+	* cpplib.pot: Regenerate.
 
 2008-11-13  Joseph S. Myers  <joseph@codesourcery.com>
 
 	* id.po: New.
 
-2008-08-27  Release Manager
-
-	* GCC 4.3.2 released.
-
 2008-08-27  Joseph S. Myers  <joseph@codesourcery.com>
 
 	* cpplib.pot: Regenerate.
-
-2008-06-06  Release Manager
-
-	* GCC 4.3.1 released.
 
 2008-03-28  Joseph S. Myers  <joseph@codesourcery.com>
 
@@ -47,10 +113,6 @@
 	* rw.po: Remove.
 	* be.po, ca.po, da.po, de.po, el.po, es.po, fr.po, ja.po, nl.po,
 	sv.po, tr.po, uk,po, vi.po, zh_CN.po, zh_TW.po: Update.
-
-2008-03-05  Release Manager
-
-	* GCC 4.3.0 released.
 
 2008-02-01  Joseph S. Myers  <joseph@codesourcery.com>
 

@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005, 2006 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 // Copyright (C) 2004 Ami Tavory and Vladimir Dreizin, IBM-HRL.
 
@@ -95,7 +89,7 @@ PB_DS_CLASS_NAME(const PB_DS_CLASS_C_DEC& other) :
   m_size = other.m_size;
   _GLIBCXX_DEBUG_ONLY(other.structure_only_assert_valid();)
 
-    try
+    __try
       {
         m_p_head->m_p_parent = recursive_copy_node(other.m_p_head->m_p_parent);
         if (m_p_head->m_p_parent != NULL)
@@ -103,7 +97,7 @@ PB_DS_CLASS_NAME(const PB_DS_CLASS_C_DEC& other) :
         m_size = other.m_size;
         initialize_min_max();
       }
-    catch(...)
+    __catch(...)
       {
         _GLIBCXX_DEBUG_ONLY(debug_base::clear();)
 	s_node_allocator.deallocate(m_p_head, 1);
@@ -163,11 +157,11 @@ recursive_copy_node(const node_pointer p_nd)
     return (NULL);
 
   node_pointer p_ret = s_node_allocator.allocate(1);
-  try
+  __try
     {
       new (p_ret) node(*p_nd);
     }
-  catch(...)
+  __catch(...)
     {
       s_node_allocator.deallocate(p_ret, 1);
       __throw_exception_again;
@@ -175,12 +169,12 @@ recursive_copy_node(const node_pointer p_nd)
 
   p_ret->m_p_left = p_ret->m_p_right = NULL;
 
-  try
+  __try
     {
       p_ret->m_p_left = recursive_copy_node(p_nd->m_p_left);
       p_ret->m_p_right = recursive_copy_node(p_nd->m_p_right);
     }
-  catch(...)
+  __catch(...)
     {
       clear_imp(p_ret);
       __throw_exception_again;

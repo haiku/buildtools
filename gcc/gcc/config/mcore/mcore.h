@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler,
    for Motorola M*CORE Processor.
-   Copyright (C) 1993, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1993, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007,
+   2008  Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -50,8 +50,6 @@
     }									  \
   while (0)
 
-/* If -m4align is ever re-enabled then add this line to the definition of CPP_SPEC
-   %{!m4align:-D__MCORE_ALIGN_8__} %{m4align:-D__MCORE__ALIGN_4__}.  */
 #undef  CPP_SPEC
 #define CPP_SPEC "%{m210:%{mlittle-endian:%ethe m210 does not have little endian support}}"
 
@@ -67,7 +65,6 @@
 
 #define TARGET_DEFAULT	\
   (MASK_HARDLIT		\
-   | MASK_8ALIGN	\
    | MASK_DIV		\
    | MASK_RELAX_IMM	\
    | MASK_M340		\
@@ -379,6 +376,12 @@ enum reg_class
 
 #define N_REG_CLASSES  (int) LIM_REG_CLASSES
 
+#define IRA_COVER_CLASSES		\
+{					\
+  GENERAL_REGS, C_REGS, LIM_REG_CLASSES	\
+}
+
+
 /* Give names of register classes as strings for dump file.  */
 #define REG_CLASS_NAMES  \
 {			\
@@ -538,7 +541,7 @@ extern const enum reg_class reg_class_from_letter[];
 
 /* If defined, the maximum amount of space required for outgoing arguments
    will be computed and placed into the variable
-   `current_function_outgoing_args_size'.  No space will be pushed
+   `crtl->outgoing_args_size'.  No space will be pushed
    onto the stack for each call; instead, the function prologue should
    increase the stack frame size by this amount.  */
 #define ACCUMULATE_OUTGOING_ARGS 1

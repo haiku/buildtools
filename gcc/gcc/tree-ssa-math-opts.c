@@ -1,5 +1,5 @@
 /* Global, SSA-based optimizations using mathematical identities.
-   Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
    
 This file is part of GCC.
    
@@ -110,9 +110,9 @@ struct occurrence {
      inserted in BB.  */
   tree recip_def;
 
-  /* If non-NULL, the GIMPLE_MODIFY_STMT for a reciprocal computation that
+  /* If non-NULL, the GIMPLE_ASSIGN for a reciprocal computation that
      was inserted in BB.  */
-  tree recip_def_stmt;
+  gimple recip_def_stmt;
 
   /* Pointer to a list of "struct occurrence"s for blocks dominated
      by BB.  */
@@ -271,15 +271,15 @@ compute_merit (struct occurrence *occ)
 
 /* Return whether USE_STMT is a floating-point division by DEF.  */
 static inline bool
-is_division_by (tree use_stmt, tree def)
+is_division_by (gimple use_stmt, tree def)
 {
-  return TREE_CODE (use_stmt) == GIMPLE_MODIFY_STMT
-	 && TREE_CODE (GIMPLE_STMT_OPERAND (use_stmt, 1)) == RDIV_EXPR
-	 && TREE_OPERAND (GIMPLE_STMT_OPERAND (use_stmt, 1), 1) == def
+  return is_gimple_assign (use_stmt)
+	 && gimple_assign_rhs_code (use_stmt) == RDIV_EXPR
+	 && gimple_assign_rhs2 (use_stmt) == def
 	 /* Do not recognize x / x as valid division, as we are getting
 	    confused later by replacing all immediate uses x in such
 	    a stmt.  */
-	 && TREE_OPERAND (GIMPLE_STMT_OPERAND (use_stmt, 1), 0) != def;
+	 && gimple_assign_rhs1 (use_stmt) != def;
 }
 
 /* Walk the subset of the dominator tree rooted at OCC, setting the
@@ -292,11 +292,12 @@ is_division_by (tree use_stmt, tree def)
    be used.  */
 
 static void
-insert_reciprocals (block_stmt_iterator *def_bsi, struct occurrence *occ,
+insert_reciprocals (gimple_stmt_iterator *def_gsi, struct occurrence *occ,
 		    tree def, tree recip_def, int threshold)
 {
-  tree type, new_stmt;
-  block_stmt_iterator bsi;
+  tree type;
+  gimple new_stmt;
+  gimple_stmt_iterator gsi;
   struct occurrence *occ_child;
 
   if (!recip_def
@@ -306,34 +307,31 @@ insert_reciprocals (block_stmt_iterator *def_bsi, struct occurrence *occ,
       /* Make a variable with the replacement and substitute it.  */
       type = TREE_TYPE (def);
       recip_def = make_rename_temp (type, "reciptmp");
-      new_stmt = build_gimple_modify_stmt (recip_def,
-					   fold_build2 (RDIV_EXPR, type,
-							build_one_cst (type),
-							def));
-  
+      new_stmt = gimple_build_assign_with_ops (RDIV_EXPR, recip_def,
+					       build_one_cst (type), def);
   
       if (occ->bb_has_division)
         {
           /* Case 1: insert before an existing division.  */
-          bsi = bsi_after_labels (occ->bb);
-          while (!bsi_end_p (bsi) && !is_division_by (bsi_stmt (bsi), def))
-	    bsi_next (&bsi);
+          gsi = gsi_after_labels (occ->bb);
+          while (!gsi_end_p (gsi) && !is_division_by (gsi_stmt (gsi), def))
+	    gsi_next (&gsi);
 
-          bsi_insert_before (&bsi, new_stmt, BSI_SAME_STMT);
+          gsi_insert_before (&gsi, new_stmt, GSI_SAME_STMT);
         }
-      else if (def_bsi && occ->bb == def_bsi->bb)
+      else if (def_gsi && occ->bb == def_gsi->bb)
         {
           /* Case 2: insert right after the definition.  Note that this will
 	     never happen if the definition statement can throw, because in
 	     that case the sole successor of the statement's basic block will
 	     dominate all the uses as well.  */
-          bsi_insert_after (def_bsi, new_stmt, BSI_NEW_STMT);
+          gsi_insert_after (def_gsi, new_stmt, GSI_NEW_STMT);
         }
       else
         {
           /* Case 3: insert in a basic block not containing defs/uses.  */
-          bsi = bsi_after_labels (occ->bb);
-          bsi_insert_before (&bsi, new_stmt, BSI_SAME_STMT);
+          gsi = gsi_after_labels (occ->bb);
+          gsi_insert_before (&gsi, new_stmt, GSI_SAME_STMT);
         }
 
       occ->recip_def_stmt = new_stmt;
@@ -341,7 +339,7 @@ insert_reciprocals (block_stmt_iterator *def_bsi, struct occurrence *occ,
 
   occ->recip_def = recip_def;
   for (occ_child = occ->children; occ_child; occ_child = occ_child->next)
-    insert_reciprocals (def_bsi, occ_child, def, recip_def, threshold);
+    insert_reciprocals (def_gsi, occ_child, def, recip_def, threshold);
 }
 
 
@@ -351,13 +349,14 @@ insert_reciprocals (block_stmt_iterator *def_bsi, struct occurrence *occ,
 static inline void
 replace_reciprocal (use_operand_p use_p)
 {
-  tree use_stmt = USE_STMT (use_p);
-  basic_block bb = bb_for_stmt (use_stmt);
+  gimple use_stmt = USE_STMT (use_p);
+  basic_block bb = gimple_bb (use_stmt);
   struct occurrence *occ = (struct occurrence *) bb->aux;
 
-  if (occ->recip_def && use_stmt != occ->recip_def_stmt)
+  if (optimize_bb_for_speed_p (bb)
+      && occ->recip_def && use_stmt != occ->recip_def_stmt)
     {
-      TREE_SET_CODE (GIMPLE_STMT_OPERAND (use_stmt, 1), MULT_EXPR);
+      gimple_assign_set_rhs_code (use_stmt, MULT_EXPR);
       SET_USE (use_p, occ->recip_def);
       fold_stmt_inplace (use_stmt);
       update_stmt (use_stmt);
@@ -398,7 +397,7 @@ free_bb (struct occurrence *occ)
    DEF must be a GIMPLE register of a floating-point type.  */
 
 static void
-execute_cse_reciprocals_1 (block_stmt_iterator *def_bsi, tree def)
+execute_cse_reciprocals_1 (gimple_stmt_iterator *def_gsi, tree def)
 {
   use_operand_p use_p;
   imm_use_iterator use_iter;
@@ -409,10 +408,10 @@ execute_cse_reciprocals_1 (block_stmt_iterator *def_bsi, tree def)
 
   FOR_EACH_IMM_USE_FAST (use_p, use_iter, def)
     {
-      tree use_stmt = USE_STMT (use_p);
+      gimple use_stmt = USE_STMT (use_p);
       if (is_division_by (use_stmt, def))
 	{
-	  register_division_in (bb_for_stmt (use_stmt));
+	  register_division_in (gimple_bb (use_stmt));
 	  count++;
 	}
     }
@@ -421,11 +420,11 @@ execute_cse_reciprocals_1 (block_stmt_iterator *def_bsi, tree def)
   threshold = targetm.min_divisions_for_recip_mul (TYPE_MODE (TREE_TYPE (def)));
   if (count >= threshold)
     {
-      tree use_stmt;
+      gimple use_stmt;
       for (occ = occ_head; occ; occ = occ->next)
 	{
 	  compute_merit (occ);
-	  insert_reciprocals (def_bsi, occ, def, NULL, threshold);
+	  insert_reciprocals (def_gsi, occ, def, NULL, threshold);
 	}
 
       FOR_EACH_IMM_USE_STMT (use_stmt, use_iter, def)
@@ -447,7 +446,7 @@ execute_cse_reciprocals_1 (block_stmt_iterator *def_bsi, tree def)
 static bool
 gate_cse_reciprocals (void)
 {
-  return optimize && !optimize_size && flag_reciprocal_math;
+  return optimize && flag_reciprocal_math;
 }
 
 /* Go through all the floating-point SSA_NAMEs, and call
@@ -478,56 +477,60 @@ execute_cse_reciprocals (void)
 
   FOR_EACH_BB (bb)
     {
-      block_stmt_iterator bsi;
-      tree phi, def;
+      gimple_stmt_iterator gsi;
+      gimple phi;
+      tree def;
 
-      for (phi = phi_nodes (bb); phi; phi = PHI_CHAIN (phi))
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
+	  phi = gsi_stmt (gsi);
 	  def = PHI_RESULT (phi);
 	  if (FLOAT_TYPE_P (TREE_TYPE (def))
 	      && is_gimple_reg (def))
 	    execute_cse_reciprocals_1 (NULL, def);
 	}
 
-      for (bsi = bsi_after_labels (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+      for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
-	  tree stmt = bsi_stmt (bsi);
+	  gimple stmt = gsi_stmt (gsi);
 
-	  if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT
+	  if (gimple_has_lhs (stmt)
 	      && (def = SINGLE_SSA_TREE_OPERAND (stmt, SSA_OP_DEF)) != NULL
 	      && FLOAT_TYPE_P (TREE_TYPE (def))
 	      && TREE_CODE (def) == SSA_NAME)
-	    execute_cse_reciprocals_1 (&bsi, def);
+	    execute_cse_reciprocals_1 (&gsi, def);
 	}
 
+      if (optimize_bb_for_size_p (bb))
+        continue;
+
       /* Scan for a/func(b) and convert it to reciprocal a*rfunc(b).  */
-      for (bsi = bsi_after_labels (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+      for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
-	  tree stmt = bsi_stmt (bsi);
+	  gimple stmt = gsi_stmt (gsi);
 	  tree fndecl;
 
-	  if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT
-	      && TREE_CODE (GIMPLE_STMT_OPERAND (stmt, 1)) == RDIV_EXPR)
+	  if (is_gimple_assign (stmt)
+	      && gimple_assign_rhs_code (stmt) == RDIV_EXPR)
 	    {
-	      tree arg1 = TREE_OPERAND (GIMPLE_STMT_OPERAND (stmt, 1), 1);
-	      tree stmt1;
+	      tree arg1 = gimple_assign_rhs2 (stmt);
+	      gimple stmt1;
 
 	      if (TREE_CODE (arg1) != SSA_NAME)
 		continue;
 
 	      stmt1 = SSA_NAME_DEF_STMT (arg1);
 
-	      if (TREE_CODE (stmt1) == GIMPLE_MODIFY_STMT
-		  && TREE_CODE (GIMPLE_STMT_OPERAND (stmt1, 1)) == CALL_EXPR
-		  && (fndecl
-		      = get_callee_fndecl (GIMPLE_STMT_OPERAND (stmt1, 1)))
+	      if (is_gimple_call (stmt1)
+		  && gimple_call_lhs (stmt1)
+		  && (fndecl = gimple_call_fndecl (stmt1))
 		  && (DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_NORMAL
 		      || DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_MD))
 		{
 		  enum built_in_function code;
-		  bool md_code;
-		  tree arg10;
-		  tree tmp;
+		  bool md_code, fail;
+		  imm_use_iterator ui;
+		  use_operand_p use_p;
 
 		  code = DECL_FUNCTION_CODE (fndecl);
 		  md_code = DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_MD;
@@ -536,14 +539,34 @@ execute_cse_reciprocals (void)
 		  if (!fndecl)
 		    continue;
 
-		  arg10 = CALL_EXPR_ARG (GIMPLE_STMT_OPERAND (stmt1, 1), 0);
-		  tmp = build_call_expr (fndecl, 1, arg10);
-		  GIMPLE_STMT_OPERAND (stmt1, 1) = tmp;
+		  /* Check that all uses of the SSA name are divisions,
+		     otherwise replacing the defining statement will do
+		     the wrong thing.  */
+		  fail = false;
+		  FOR_EACH_IMM_USE_FAST (use_p, ui, arg1)
+		    {
+		      gimple stmt2 = USE_STMT (use_p);
+		      if (!is_gimple_assign (stmt2)
+			  || gimple_assign_rhs_code (stmt2) != RDIV_EXPR
+			  || gimple_assign_rhs1 (stmt2) == arg1
+			  || gimple_assign_rhs2 (stmt2) != arg1)
+			{
+			  fail = true;
+			  break;
+			}
+		    }
+		  if (fail)
+		    continue;
+
+		  gimple_call_set_fndecl (stmt1, fndecl);
 		  update_stmt (stmt1);
 
-		  TREE_SET_CODE (GIMPLE_STMT_OPERAND (stmt, 1), MULT_EXPR);
-		  fold_stmt_inplace (stmt);
-		  update_stmt (stmt);
+		  FOR_EACH_IMM_USE_STMT (stmt, ui, arg1)
+		    {
+		      gimple_assign_set_rhs_code (stmt, MULT_EXPR);
+		      fold_stmt_inplace (stmt);
+		      update_stmt (stmt);
+		    }
 		}
 	    }
 	}
@@ -555,8 +578,10 @@ execute_cse_reciprocals (void)
   return 0;
 }
 
-struct tree_opt_pass pass_cse_reciprocals =
+struct gimple_opt_pass pass_cse_reciprocals =
 {
+ {
+  GIMPLE_PASS,
   "recip",				/* name */
   gate_cse_reciprocals,			/* gate */
   execute_cse_reciprocals,		/* execute */
@@ -569,8 +594,8 @@ struct tree_opt_pass pass_cse_reciprocals =
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_dump_func | TODO_update_ssa | TODO_verify_ssa
-    | TODO_verify_stmts,                /* todo_flags_finish */
-  0				        /* letter */
+    | TODO_verify_stmts                /* todo_flags_finish */
+ }
 };
 
 /* Records an occurrence at statement USE_STMT in the vector of trees
@@ -580,18 +605,18 @@ struct tree_opt_pass pass_cse_reciprocals =
    statements in the vector.  */
 
 static bool
-maybe_record_sincos (VEC(tree, heap) **stmts,
-		     basic_block *top_bb, tree use_stmt)
+maybe_record_sincos (VEC(gimple, heap) **stmts,
+		     basic_block *top_bb, gimple use_stmt)
 {
-  basic_block use_bb = bb_for_stmt (use_stmt);
+  basic_block use_bb = gimple_bb (use_stmt);
   if (*top_bb
       && (*top_bb == use_bb
 	  || dominated_by_p (CDI_DOMINATORS, use_bb, *top_bb)))
-    VEC_safe_push (tree, heap, *stmts, use_stmt);
+    VEC_safe_push (gimple, heap, *stmts, use_stmt);
   else if (!*top_bb
 	   || dominated_by_p (CDI_DOMINATORS, *top_bb, use_bb))
     {
-      VEC_safe_push (tree, heap, *stmts, use_stmt);
+      VEC_safe_push (gimple, heap, *stmts, use_stmt);
       *top_bb = use_bb;
     }
   else
@@ -611,20 +636,21 @@ maybe_record_sincos (VEC(tree, heap) **stmts,
 static void
 execute_cse_sincos_1 (tree name)
 {
-  block_stmt_iterator bsi;
+  gimple_stmt_iterator gsi;
   imm_use_iterator use_iter;
-  tree def_stmt, use_stmt, fndecl, res, call, stmt, type;
+  tree fndecl, res, type;
+  gimple def_stmt, use_stmt, stmt;
   int seen_cos = 0, seen_sin = 0, seen_cexpi = 0;
-  VEC(tree, heap) *stmts = NULL;
+  VEC(gimple, heap) *stmts = NULL;
   basic_block top_bb = NULL;
   int i;
 
   type = TREE_TYPE (name);
   FOR_EACH_IMM_USE_STMT (use_stmt, use_iter, name)
     {
-      if (TREE_CODE (use_stmt) != GIMPLE_MODIFY_STMT
-	  || TREE_CODE (GIMPLE_STMT_OPERAND (use_stmt, 1)) != CALL_EXPR
-	  || !(fndecl = get_callee_fndecl (GIMPLE_STMT_OPERAND (use_stmt, 1)))
+      if (gimple_code (use_stmt) != GIMPLE_CALL
+	  || !gimple_call_lhs (use_stmt)
+	  || !(fndecl = gimple_call_fndecl (use_stmt))
 	  || DECL_BUILT_IN_CLASS (fndecl) != BUILT_IN_NORMAL)
 	continue;
 
@@ -648,7 +674,7 @@ execute_cse_sincos_1 (tree name)
 
   if (seen_cos + seen_sin + seen_cexpi <= 1)
     {
-      VEC_free(tree, heap, stmts);
+      VEC_free(gimple, heap, stmts);
       return;
     }
 
@@ -658,51 +684,57 @@ execute_cse_sincos_1 (tree name)
   if (!fndecl)
     return;
   res = make_rename_temp (TREE_TYPE (TREE_TYPE (fndecl)), "sincostmp");
-  call = build_call_expr (fndecl, 1, name);
-  stmt = build_gimple_modify_stmt (res, call);
+  stmt = gimple_build_call (fndecl, 1, name);
+  gimple_call_set_lhs (stmt, res);
+
   def_stmt = SSA_NAME_DEF_STMT (name);
   if (!SSA_NAME_IS_DEFAULT_DEF (name)
-      && TREE_CODE (def_stmt) != PHI_NODE
-      && bb_for_stmt (def_stmt) == top_bb)
+      && gimple_code (def_stmt) != GIMPLE_PHI
+      && gimple_bb (def_stmt) == top_bb)
     {
-      bsi = bsi_for_stmt (def_stmt);
-      bsi_insert_after (&bsi, stmt, BSI_SAME_STMT);
+      gsi = gsi_for_stmt (def_stmt);
+      gsi_insert_after (&gsi, stmt, GSI_SAME_STMT);
     }
   else
     {
-      bsi = bsi_after_labels (top_bb);
-      bsi_insert_before (&bsi, stmt, BSI_SAME_STMT);
+      gsi = gsi_after_labels (top_bb);
+      gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
     }
   update_stmt (stmt);
 
   /* And adjust the recorded old call sites.  */
-  for (i = 0; VEC_iterate(tree, stmts, i, use_stmt); ++i)
+  for (i = 0; VEC_iterate(gimple, stmts, i, use_stmt); ++i)
     {
-      fndecl = get_callee_fndecl (GIMPLE_STMT_OPERAND (use_stmt, 1));
+      tree rhs = NULL;
+      fndecl = gimple_call_fndecl (use_stmt);
+
       switch (DECL_FUNCTION_CODE (fndecl))
 	{
 	CASE_FLT_FN (BUILT_IN_COS):
-	  GIMPLE_STMT_OPERAND (use_stmt, 1) = fold_build1 (REALPART_EXPR,
-							   type, res);
+	  rhs = fold_build1 (REALPART_EXPR, type, res);
 	  break;
 
 	CASE_FLT_FN (BUILT_IN_SIN):
-	  GIMPLE_STMT_OPERAND (use_stmt, 1) = fold_build1 (IMAGPART_EXPR,
-							   type, res);
+	  rhs = fold_build1 (IMAGPART_EXPR, type, res);
 	  break;
 
 	CASE_FLT_FN (BUILT_IN_CEXPI):
-	  GIMPLE_STMT_OPERAND (use_stmt, 1) = res;
+	  rhs = res;
 	  break;
 
 	default:;
 	  gcc_unreachable ();
 	}
 
-	update_stmt (use_stmt);
+	/* Replace call with a copy.  */
+	stmt = gimple_build_assign (gimple_call_lhs (use_stmt), rhs);
+
+	gsi = gsi_for_stmt (use_stmt);
+	gsi_insert_after (&gsi, stmt, GSI_SAME_STMT);
+	gsi_remove (&gsi, true); 
     }
 
-  VEC_free(tree, heap, stmts);
+  VEC_free(gimple, heap, stmts);
 }
 
 /* Go through all calls to sin, cos and cexpi and call execute_cse_sincos_1
@@ -717,16 +749,16 @@ execute_cse_sincos (void)
 
   FOR_EACH_BB (bb)
     {
-      block_stmt_iterator bsi;
+      gimple_stmt_iterator gsi;
 
-      for (bsi = bsi_after_labels (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+      for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
-	  tree stmt = bsi_stmt (bsi);
+	  gimple stmt = gsi_stmt (gsi);
 	  tree fndecl;
 
-	  if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT
-	      && TREE_CODE (GIMPLE_STMT_OPERAND (stmt, 1)) == CALL_EXPR
-	      && (fndecl = get_callee_fndecl (GIMPLE_STMT_OPERAND (stmt, 1)))
+	  if (is_gimple_call (stmt)
+	      && gimple_call_lhs (stmt)
+	      && (fndecl = gimple_call_fndecl (stmt))
 	      && DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_NORMAL)
 	    {
 	      tree arg;
@@ -736,8 +768,7 @@ execute_cse_sincos (void)
 		CASE_FLT_FN (BUILT_IN_COS):
 		CASE_FLT_FN (BUILT_IN_SIN):
 		CASE_FLT_FN (BUILT_IN_CEXPI):
-		  arg = GIMPLE_STMT_OPERAND (stmt, 1);
-		  arg = CALL_EXPR_ARG (arg, 0);
+		  arg = gimple_call_arg (stmt, 0);
 		  if (TREE_CODE (arg) == SSA_NAME)
 		    execute_cse_sincos_1 (arg);
 		  break;
@@ -761,8 +792,10 @@ gate_cse_sincos (void)
 	 && optimize;
 }
 
-struct tree_opt_pass pass_cse_sincos =
+struct gimple_opt_pass pass_cse_sincos =
 {
+ {
+  GIMPLE_PASS,
   "sincos",				/* name */
   gate_cse_sincos,			/* gate */
   execute_cse_sincos,			/* execute */
@@ -775,8 +808,8 @@ struct tree_opt_pass pass_cse_sincos =
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_dump_func | TODO_update_ssa | TODO_verify_ssa
-    | TODO_verify_stmts,                /* todo_flags_finish */
-  0				        /* letter */
+    | TODO_verify_stmts                 /* todo_flags_finish */
+ }
 };
 
 /* Find all expressions in the form of sqrt(a/b) and
@@ -789,23 +822,23 @@ execute_convert_to_rsqrt (void)
 
   FOR_EACH_BB (bb)
     {
-      block_stmt_iterator bsi;
+      gimple_stmt_iterator gsi;
 
-      for (bsi = bsi_after_labels (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+      for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
-	  tree stmt = bsi_stmt (bsi);
+	  gimple stmt = gsi_stmt (gsi);
 	  tree fndecl;
 
-	  if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT
-	      && TREE_CODE (GIMPLE_STMT_OPERAND (stmt, 1)) == CALL_EXPR
-	      && (fndecl = get_callee_fndecl (GIMPLE_STMT_OPERAND (stmt, 1)))
+	  if (is_gimple_call (stmt)
+	      && gimple_call_lhs (stmt)
+	      && (fndecl = gimple_call_fndecl (stmt))
 	      && (DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_NORMAL
 		  || DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_MD))
 	    {
 	      enum built_in_function code;
 	      bool md_code;
 	      tree arg1;
-	      tree stmt1;
+	      gimple stmt1;
 
 	      code = DECL_FUNCTION_CODE (fndecl);
 	      md_code = DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_MD;
@@ -814,30 +847,28 @@ execute_convert_to_rsqrt (void)
 	      if (!fndecl)
 		continue;
 
-	      arg1 = CALL_EXPR_ARG (GIMPLE_STMT_OPERAND (stmt, 1), 0);
+	      arg1 = gimple_call_arg (stmt, 0);
 
 	      if (TREE_CODE (arg1) != SSA_NAME)
 		continue;
 
 	      stmt1 = SSA_NAME_DEF_STMT (arg1);
 
-	      if (TREE_CODE (stmt1) == GIMPLE_MODIFY_STMT
-		  && TREE_CODE (GIMPLE_STMT_OPERAND (stmt1, 1)) == RDIV_EXPR)
+	      if (is_gimple_assign (stmt1)
+		  && gimple_assign_rhs_code (stmt1) == RDIV_EXPR)
 		{
 		  tree arg10, arg11;
-		  tree tmp;
 
-		  arg10 = TREE_OPERAND (GIMPLE_STMT_OPERAND (stmt1, 1), 0);
-		  arg11 = TREE_OPERAND (GIMPLE_STMT_OPERAND (stmt1, 1), 1);
+		  arg10 = gimple_assign_rhs1 (stmt1);
+		  arg11 = gimple_assign_rhs2 (stmt1);
 
 		  /* Swap operands of RDIV_EXPR.  */
-		  TREE_OPERAND (GIMPLE_STMT_OPERAND (stmt1, 1), 0) = arg11;
-		  TREE_OPERAND (GIMPLE_STMT_OPERAND (stmt1, 1), 1) = arg10;
+		  gimple_assign_set_rhs1 (stmt1, arg11);
+		  gimple_assign_set_rhs2 (stmt1, arg10);
 		  fold_stmt_inplace (stmt1);
 		  update_stmt (stmt1);
 
-		  tmp = build_call_expr (fndecl, 1, arg1);
-		  GIMPLE_STMT_OPERAND (stmt, 1) = tmp;
+		  gimple_call_set_fndecl (stmt, fndecl);
 		  update_stmt (stmt);
 		}
 	    }
@@ -853,8 +884,10 @@ gate_convert_to_rsqrt (void)
   return flag_unsafe_math_optimizations && optimize;
 }
 
-struct tree_opt_pass pass_convert_to_rsqrt =
+struct gimple_opt_pass pass_convert_to_rsqrt =
 {
+ {
+  GIMPLE_PASS,
   "rsqrt",				/* name */
   gate_convert_to_rsqrt,		/* gate */
   execute_convert_to_rsqrt,		/* execute */
@@ -867,6 +900,6 @@ struct tree_opt_pass pass_convert_to_rsqrt =
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_dump_func | TODO_update_ssa | TODO_verify_ssa
-    | TODO_verify_stmts,                /* todo_flags_finish */
-  0				        /* letter */
+    | TODO_verify_stmts                 /* todo_flags_finish */
+ }
 };

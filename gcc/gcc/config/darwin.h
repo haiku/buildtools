@@ -1,6 +1,6 @@
 /* Target definitions for Darwin (Mac OS X) systems.
    Copyright (C) 1989, 1990, 1991, 1992, 1993, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007
+   2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
@@ -8,7 +8,7 @@ This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2, or (at your option)
+the Free Software Foundation; either version 3, or (at your option)
 any later version.
 
 GCC is distributed in the hope that it will be useful,
@@ -16,10 +16,14 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to
-the Free Software Foundation, 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
 
 #ifndef CONFIG_DARWIN_H
 #define CONFIG_DARWIN_H
@@ -258,6 +262,7 @@ extern GTY(()) int darwin_ms_struct;
 #define LINK_SPEC  \
   "%{static}%{!static:-dynamic} \
    %{fgnu-runtime:%:replace-outfile(-lobjc -lobjc-gnu)}\
+   %{static|static-libgfortran:%:replace-outfile(-lgfortran libgfortran.a%s)}\
    %{!Zdynamiclib: \
      %{Zforce_cpusubtype_ALL:-arch %(darwin_arch) -force_cpusubtype_ALL} \
      %{!Zforce_cpusubtype_ALL:-arch %(darwin_subarch)} \
@@ -525,6 +530,9 @@ extern GTY(()) int darwin_ms_struct;
 
 #define USER_LABEL_PREFIX "_"
 
+/* A dummy symbol that will be replaced with the function base name.  */
+#define MACHOPIC_FUNCTION_BASE_NAME "<pic base>"
+
 /* Don't output a .file directive.  That is only used by the assembler for
    error reporting.  */
 #undef	TARGET_ASM_FILE_START_FILE_DIRECTIVE
@@ -609,7 +617,7 @@ extern GTY(()) int darwin_ms_struct;
 #define ASM_OUTPUT_LABELREF(FILE,NAME)					     \
   do {									     \
        const char *xname = (NAME);					     \
-       if (! strcmp (xname, "<pic base>"))				     \
+       if (! strcmp (xname, MACHOPIC_FUNCTION_BASE_NAME))		     \
          machopic_output_function_base_name(FILE);                           \
        else if (xname[0] == '&' || xname[0] == '*')			     \
          {								     \
@@ -892,8 +900,9 @@ enum machopic_addr_class {
 
 #define DARWIN_REGISTER_TARGET_PRAGMAS()			\
   do {								\
-    cpp_register_pragma (parse_in, NULL, "mark",		\
-			 darwin_pragma_ignore, false);		\
+    if (!flag_preprocess_only)					\
+      cpp_register_pragma (parse_in, NULL, "mark",		\
+			   darwin_pragma_ignore, false);	\
     c_register_pragma (0, "options", darwin_pragma_options);	\
     c_register_pragma (0, "segment", darwin_pragma_ignore);	\
     c_register_pragma (0, "unused", darwin_pragma_unused);	\
@@ -992,5 +1001,9 @@ extern void darwin_default_min_version (int * argc, char *** argv);
 #define GCC_DRIVER_HOST_INITIALIZATION \
   darwin_default_min_version (&argc, &argv)
 #endif /* CROSS_DIRECTORY_STRUCTURE */
+
+/* The Apple assembler and linker do not support constructor priorities.  */
+#undef SUPPORTS_INIT_PRIORITY
+#define SUPPORTS_INIT_PRIORITY 0
 
 #endif /* CONFIG_DARWIN_H */

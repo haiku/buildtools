@@ -1,8 +1,9 @@
 /* Definitions of target machine for GNU compiler, for IBM S/390
    Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
-   2007 Free Software Foundation, Inc.
+   2007, 2008 Free Software Foundation, Inc.
    Contributed by Hartmut Penner (hpenner@de.ibm.com) and
                   Ulrich Weigand (uweigand@de.ibm.com).
+                  Andreas Krebbel (Andreas.Krebbel@de.ibm.com)
 
 This file is part of GCC.
 
@@ -40,6 +41,7 @@ enum processor_type
   PROCESSOR_2064_Z900,
   PROCESSOR_2084_Z990,
   PROCESSOR_2094_Z9_109,
+  PROCESSOR_2097_Z10,
   PROCESSOR_max
 };
 
@@ -51,7 +53,8 @@ enum processor_flags
   PF_ZARCH = 2,
   PF_LONG_DISPLACEMENT = 4,
   PF_EXTIMM = 8,
-  PF_DFP = 16
+  PF_DFP = 16,
+  PF_Z10 = 32
 };
 
 extern enum processor_type s390_tune;
@@ -59,6 +62,10 @@ extern enum processor_flags s390_tune_flags;
 
 extern enum processor_type s390_arch;
 extern enum processor_flags s390_arch_flags;
+
+/* These flags indicate that the generated code should run on a cpu
+   providing the respective hardware facility regardless of the
+   current cpu mode (ESA or z/Architecture).  */
 
 #define TARGET_CPU_IEEE_FLOAT \
 	(s390_arch_flags & PF_IEEE_FLOAT)
@@ -70,13 +77,21 @@ extern enum processor_flags s390_arch_flags;
  	(s390_arch_flags & PF_EXTIMM)
 #define TARGET_CPU_DFP \
  	(s390_arch_flags & PF_DFP)
+#define TARGET_CPU_Z10 \
+ 	(s390_arch_flags & PF_Z10)
+
+/* These flags indicate that the generated code should run on a cpu
+   providing the respective hardware facility when run in
+   z/Architecture mode.  */
 
 #define TARGET_LONG_DISPLACEMENT \
        (TARGET_ZARCH && TARGET_CPU_LONG_DISPLACEMENT)
 #define TARGET_EXTIMM \
        (TARGET_ZARCH && TARGET_CPU_EXTIMM)
 #define TARGET_DFP \
-       (TARGET_ZARCH && TARGET_CPU_DFP)
+       (TARGET_ZARCH && TARGET_CPU_DFP && TARGET_HARD_FLOAT)
+#define TARGET_Z10 \
+       (TARGET_ZARCH && TARGET_CPU_Z10)
 
 /* Run-time target specification.  */
 
@@ -463,6 +478,30 @@ enum reg_class
   { 0xffffffff, 0x0000003f },	/* ALL_REGS */		\
 }
 
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+
+#define IRA_COVER_CLASSES						     \
+{									     \
+  GENERAL_REGS, FP_REGS, CC_REGS, ACCESS_REGS, LIM_REG_CLASSES		     \
+}
+
+/* In some case register allocation order is not enough for IRA to
+   generate a good code.  The following macro (if defined) increases
+   cost of REGNO for a pseudo approximately by pseudo usage frequency
+   multiplied by the macro value.
+
+   We avoid usage of BASE_REGNUM by nonzero macro value because the
+   reload can decide not to use the hard register because some
+   constant was forced to be in memory.  */
+#define IRA_HARD_REGNO_ADD_COST_MULTIPLIER(regno)	\
+  (regno == BASE_REGNUM ? 0.0 : 0.5)
+
 /* Register -> class mapping.  */
 extern const enum reg_class regclass_map[FIRST_PSEUDO_REGISTER];
 #define REGNO_REG_CLASS(REGNO) (regclass_map[REGNO])
@@ -485,11 +524,14 @@ extern const enum reg_class regclass_map[FIRST_PSEUDO_REGISTER];
 #define PREFERRED_RELOAD_CLASS(X, CLASS)	\
   s390_preferred_reload_class ((X), (CLASS))
 
-/* We need secondary memory to move data between GPRs and FPRs.  */
+/* We need secondary memory to move data between GPRs and FPRs.  With
+   DFP the ldgr lgdr instructions are available.  But these
+   instructions do not handle GPR pairs so it is not possible for 31
+   bit.  */
 #define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, MODE) \
  ((CLASS1) != (CLASS2)                                \
   && ((CLASS1) == FP_REGS || (CLASS2) == FP_REGS)     \
-  && (!TARGET_DFP || GET_MODE_SIZE (MODE) != 8))
+  && (!TARGET_DFP || !TARGET_64BIT || GET_MODE_SIZE (MODE) != 8))
 
 /* Get_secondary_mem widens its argument to BITS_PER_WORD which loses on 64bit
    because the movsi and movsf patterns don't handle r/f moves.  */
@@ -521,9 +563,8 @@ extern const enum reg_class regclass_map[FIRST_PSEUDO_REGISTER];
 
 /* Offset from the stack pointer register to an item dynamically
    allocated on the stack, e.g., by `alloca'.  */
-extern int current_function_outgoing_args_size;
 #define STACK_DYNAMIC_OFFSET(FUNDECL) \
-  (STACK_POINTER_OFFSET + current_function_outgoing_args_size)
+  (STACK_POINTER_OFFSET + crtl->outgoing_args_size)
 
 /* Offset of first parameter from the argument pointer register value.
    We have a fake argument pointer register that points directly to
@@ -696,6 +737,13 @@ CUMULATIVE_ARGS;
 /* Maximum number of registers that can appear in a valid memory address.  */
 #define MAX_REGS_PER_ADDRESS 2
 
+/* This definition replaces the formerly used 'm' constraint with a
+different constraint letter in order to avoid changing semantics of
+the 'm' constraint when accepting new address formats in
+legitimate_address_p.  The constraint letter defined here must not be
+used in insn definitions or inline assemblies.  */
+#define TARGET_MEM_CONSTRAINT 'e'
+
 /* S/390 has no mode dependent addresses.  */
 #define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
 
@@ -732,10 +780,10 @@ CUMULATIVE_ARGS;
    macro is used in only one place: `find_reloads_address' in reload.c.  */
 #define LEGITIMIZE_RELOAD_ADDRESS(AD, MODE, OPNUM, TYPE, IND, WIN)	\
 do {									\
-  rtx new = legitimize_reload_address (AD, MODE, OPNUM, (int)(TYPE));	\
-  if (new)								\
+  rtx new_rtx = legitimize_reload_address (AD, MODE, OPNUM, (int)(TYPE));	\
+  if (new_rtx)								\
     {									\
-      (AD) = new;							\
+      (AD) = new_rtx;							\
       goto WIN;								\
     }									\
 } while (0)
@@ -788,7 +836,7 @@ extern struct rtx_def *s390_compare_op0, *s390_compare_op1, *s390_compare_emitte
 
 /* A C expression for the cost of a branch instruction.  A value of 1
    is the default; other values are interpreted relative to that.  */
-#define BRANCH_COST 1
+#define BRANCH_COST(speed_p, predictable_p) 1
 
 /* Nonzero if access to memory by bytes is slow and undesirable.  */
 #define SLOW_BYTE_ACCESS 1
@@ -832,7 +880,7 @@ extern struct rtx_def *s390_compare_op0, *s390_compare_op1, *s390_compare_emitte
    in tree-sra with UNITS_PER_WORD to make a decision so we adjust it
    here to compensate for that factor since mvc costs exactly the same
    on 31 and 64 bit.  */
-#define MOVE_RATIO (TARGET_64BIT? 2 : 4)
+#define MOVE_RATIO(speed) (TARGET_64BIT? 2 : 4)
 
 
 /* Sections.  */
@@ -962,7 +1010,12 @@ do {									\
 #define CLZ_DEFINED_VALUE_AT_ZERO(MODE, VALUE) ((VALUE) = 64, 1)
 
 /* Machine-specific symbol_ref flags.  */
-#define SYMBOL_FLAG_ALIGN1	(SYMBOL_FLAG_MACH_DEP << 0)
+#define SYMBOL_FLAG_ALIGN1	          (SYMBOL_FLAG_MACH_DEP << 0)
+#define SYMBOL_REF_ALIGN1_P(X)		\
+  ((SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_ALIGN1))
+#define SYMBOL_FLAG_NOT_NATURALLY_ALIGNED (SYMBOL_FLAG_MACH_DEP << 1)
+#define SYMBOL_REF_NOT_NATURALLY_ALIGNED_P(X) \
+  ((SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_NOT_NATURALLY_ALIGNED))
 
 /* Check whether integer displacement is in range.  */
 #define DISP_IN_RANGE(d) \

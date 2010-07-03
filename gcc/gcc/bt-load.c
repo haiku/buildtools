@@ -1,5 +1,5 @@
 /* Perform branch target register load optimizations.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -279,8 +279,7 @@ find_btr_def_group (btr_def_group *all_btr_def_groups, btr_def def)
 
       if (!this_group)
 	{
-	  this_group = obstack_alloc (&migrate_btrl_obstack,
-				      sizeof (struct btr_def_group_s));
+	  this_group = XOBNEW (&migrate_btrl_obstack, struct btr_def_group_s);
 	  this_group->src = def_src;
 	  this_group->members = NULL;
 	  this_group->next = *all_btr_def_groups;
@@ -302,31 +301,30 @@ add_btr_def (fibheap_t all_btr_defs, basic_block bb, int insn_luid, rtx insn,
 	     unsigned int dest_reg, int other_btr_uses_before_def,
 	     btr_def_group *all_btr_def_groups)
 {
-  btr_def this
-    = obstack_alloc (&migrate_btrl_obstack, sizeof (struct btr_def_s));
-  this->bb = bb;
-  this->luid = insn_luid;
-  this->insn = insn;
-  this->btr = dest_reg;
-  this->cost = basic_block_freq (bb);
-  this->has_ambiguous_use = 0;
-  this->other_btr_uses_before_def = other_btr_uses_before_def;
-  this->other_btr_uses_after_use = 0;
-  this->next_this_bb = NULL;
-  this->next_this_group = NULL;
-  this->uses = NULL;
-  this->live_range = NULL;
-  find_btr_def_group (all_btr_def_groups, this);
+  btr_def this_def = XOBNEW (&migrate_btrl_obstack, struct btr_def_s);
+  this_def->bb = bb;
+  this_def->luid = insn_luid;
+  this_def->insn = insn;
+  this_def->btr = dest_reg;
+  this_def->cost = basic_block_freq (bb);
+  this_def->has_ambiguous_use = 0;
+  this_def->other_btr_uses_before_def = other_btr_uses_before_def;
+  this_def->other_btr_uses_after_use = 0;
+  this_def->next_this_bb = NULL;
+  this_def->next_this_group = NULL;
+  this_def->uses = NULL;
+  this_def->live_range = NULL;
+  find_btr_def_group (all_btr_def_groups, this_def);
 
-  fibheap_insert (all_btr_defs, -this->cost, this);
+  fibheap_insert (all_btr_defs, -this_def->cost, this_def);
 
   if (dump_file)
     fprintf (dump_file,
       "Found target reg definition: sets %u { bb %d, insn %d }%s priority %d\n",
-      dest_reg, bb->index, INSN_UID (insn), (this->group ? "" : ":not const"),
-      this->cost);
+	     dest_reg, bb->index, INSN_UID (insn),
+	     (this_def->group ? "" : ":not const"), this_def->cost);
 
-  return this;
+  return this_def;
 }
 
 /* Create a new target register user structure, for a use in block BB,
@@ -354,7 +352,7 @@ new_btr_user (basic_block bb, int insn_luid, rtx insn)
 	usep = NULL;
     }
   use = usep ? *usep : NULL_RTX;
-  user = obstack_alloc (&migrate_btrl_obstack, sizeof (struct btr_user_s));
+  user = XOBNEW (&migrate_btrl_obstack, struct btr_user_s);
   user->bb = bb;
   user->luid = insn_luid;
   user->insn = insn;
@@ -425,7 +423,7 @@ typedef struct {
 static void
 note_btr_set (rtx dest, const_rtx set ATTRIBUTE_UNUSED, void *data)
 {
-  defs_uses_info *info = data;
+  defs_uses_info *info = (defs_uses_info *) data;
   int regno, end_regno;
 
   if (!REG_P (dest))
@@ -508,7 +506,7 @@ compute_defs_uses_and_gen (fibheap_t all_btr_defs, btr_def *def_array,
 		  note_other_use_this_block (regno, info.users_this_bb);
 		}
 	      /* Check for the blockage emitted by expand_nl_goto_receiver.  */
-	      else if (current_function_has_nonlocal_label
+	      else if (cfun->has_nonlocal_label
 		       && GET_CODE (PATTERN (insn)) == UNSPEC_VOLATILE)
 		{
 		  btr_user user;
@@ -1275,7 +1273,7 @@ migrate_btr_def (btr_def def, int min_cost)
   HARD_REG_SET btrs_live_in_range;
   int btr_used_near_def = 0;
   int def_basic_block_freq;
-  basic_block try;
+  basic_block attempt;
   int give_up = 0;
   int def_moved = 0;
   btr_user user;
@@ -1329,31 +1327,31 @@ migrate_btr_def (btr_def def, int min_cost)
 
   def_basic_block_freq = basic_block_freq (def->bb);
 
-  for (try = get_immediate_dominator (CDI_DOMINATORS, def->bb);
-       !give_up && try && try != ENTRY_BLOCK_PTR && def->cost >= min_cost;
-       try = get_immediate_dominator (CDI_DOMINATORS, try))
+  for (attempt = get_immediate_dominator (CDI_DOMINATORS, def->bb);
+       !give_up && attempt && attempt != ENTRY_BLOCK_PTR && def->cost >= min_cost;
+       attempt = get_immediate_dominator (CDI_DOMINATORS, attempt))
     {
       /* Try to move the instruction that sets the target register into
-	 basic block TRY.  */
-      int try_freq = basic_block_freq (try);
+	 basic block ATTEMPT.  */
+      int try_freq = basic_block_freq (attempt);
       edge_iterator ei;
       edge e;
 
-      /* If TRY has abnormal edges, skip it.  */
-      FOR_EACH_EDGE (e, ei, try->succs)
+      /* If ATTEMPT has abnormal edges, skip it.  */
+      FOR_EACH_EDGE (e, ei, attempt->succs)
 	if (e->flags & EDGE_COMPLEX)
 	  break;
       if (e)
 	continue;
 
       if (dump_file)
-	fprintf (dump_file, "trying block %d ...", try->index);
+	fprintf (dump_file, "trying block %d ...", attempt->index);
 
       if (try_freq < def_basic_block_freq
 	  || (try_freq == def_basic_block_freq && btr_used_near_def))
 	{
 	  int btr;
-	  augment_live_range (live_range, &btrs_live_in_range, def->bb, try,
+	  augment_live_range (live_range, &btrs_live_in_range, def->bb, attempt,
 			      flag_btr_bb_exclusive);
 	  if (dump_file)
 	    {
@@ -1364,7 +1362,7 @@ migrate_btr_def (btr_def def, int min_cost)
 	  btr = choose_btr (btrs_live_in_range);
 	  if (btr != -1)
 	    {
-	      move_btr_def (try, btr, def, live_range, &btrs_live_in_range);
+	      move_btr_def (attempt, btr, def, live_range, &btrs_live_in_range);
 	      bitmap_copy(live_range, def->live_range);
 	      btr_used_near_def = 0;
 	      def_moved = 1;
@@ -1428,14 +1426,14 @@ migrate_btr_defs (enum reg_class btr_class, int allow_callee_save)
 	  first_btr = reg;
       }
 
-  btrs_live = xcalloc (n_basic_blocks, sizeof (HARD_REG_SET));
-  btrs_live_at_end = xcalloc (n_basic_blocks, sizeof (HARD_REG_SET));
+  btrs_live = XCNEWVEC (HARD_REG_SET, n_basic_blocks);
+  btrs_live_at_end = XCNEWVEC (HARD_REG_SET, n_basic_blocks);
 
   build_btr_def_use_webs (all_btr_defs);
 
   while (!fibheap_empty (all_btr_defs))
     {
-      btr_def def = fibheap_extract_min (all_btr_defs);
+      btr_def def = (btr_def) fibheap_extract_min (all_btr_defs);
       int min_cost = -fibheap_min_key (all_btr_defs);
       if (migrate_btr_def (def, min_cost))
 	{
@@ -1460,8 +1458,8 @@ migrate_btr_defs (enum reg_class btr_class, int allow_callee_save)
 static void
 branch_target_load_optimize (bool after_prologue_epilogue_gen)
 {
-  enum reg_class class = targetm.branch_target_register_class ();
-  if (class != NO_REGS)
+  enum reg_class klass = targetm.branch_target_register_class ();
+  if (klass != NO_REGS)
     {
       /* Initialize issue_rate.  */
       if (targetm.sched.issue_rate)
@@ -1483,7 +1481,7 @@ branch_target_load_optimize (bool after_prologue_epilogue_gen)
 
       /* Dominator info is also needed for migrate_btr_def.  */
       calculate_dominance_info (CDI_DOMINATORS);
-      migrate_btr_defs (class,
+      migrate_btr_defs (klass,
 		       (targetm.branch_target_register_callee_saved
 			(after_prologue_epilogue_gen)));
 
@@ -1505,8 +1503,10 @@ rest_of_handle_branch_target_load_optimize1 (void)
   return 0;
 }
 
-struct tree_opt_pass pass_branch_target_load_optimize1 =
+struct rtl_opt_pass pass_branch_target_load_optimize1 =
 {
+ {
+  RTL_PASS,
   "btl1",                               /* name */
   gate_handle_branch_target_load_optimize1,      /* gate */
   rest_of_handle_branch_target_load_optimize1,   /* execute */
@@ -1521,7 +1521,7 @@ struct tree_opt_pass pass_branch_target_load_optimize1 =
   TODO_dump_func |
   TODO_verify_rtl_sharing |
   TODO_ggc_collect,                     /* todo_flags_finish */
-  'd'                                   /* letter */
+ }
 };
 
 static bool
@@ -1553,8 +1553,10 @@ rest_of_handle_branch_target_load_optimize2 (void)
   return 0;
 }
 
-struct tree_opt_pass pass_branch_target_load_optimize2 =
+struct rtl_opt_pass pass_branch_target_load_optimize2 =
 {
+ {
+  RTL_PASS,
   "btl2",                               /* name */
   gate_handle_branch_target_load_optimize2,      /* gate */
   rest_of_handle_branch_target_load_optimize2,   /* execute */
@@ -1568,6 +1570,6 @@ struct tree_opt_pass pass_branch_target_load_optimize2 =
   0,                                    /* todo_flags_start */
   TODO_dump_func |
   TODO_ggc_collect,                     /* todo_flags_finish */
-  'd'                                   /* letter */
+ }
 };
 

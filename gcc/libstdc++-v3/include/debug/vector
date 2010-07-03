@@ -1,12 +1,12 @@
 // Debugging vector implementation -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file debug/vector
  *  This file is a GNU debug extension to the Standard C++ Library.
@@ -106,6 +101,11 @@ namespace __debug
 	this->_M_swap(__x);
 	__x._M_guaranteed_capacity = 0;
       }
+
+      vector(initializer_list<value_type> __l,
+	     const allocator_type& __a = allocator_type())
+      : _Base(__l, __a), _Safe_base(),
+	_M_guaranteed_capacity(__l.size()) { }
 #endif
 
       ~vector() { }
@@ -128,6 +128,15 @@ namespace __debug
 	swap(__x);
 	return *this;
       }
+
+      vector&
+      operator=(initializer_list<value_type> __l)
+      {
+	static_cast<_Base&>(*this) = __l;
+	this->_M_invalidate_all();
+	_M_update_guaranteed_capacity();
+	return *this;
+      }
 #endif
 
       template<typename _InputIterator>
@@ -147,6 +156,16 @@ namespace __debug
 	this->_M_invalidate_all();
 	_M_update_guaranteed_capacity();
       }
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      void
+      assign(initializer_list<value_type> __l)
+      {
+	_Base::assign(__l);
+	this->_M_invalidate_all();
+	_M_update_guaranteed_capacity();
+      }
+#endif
 
       using _Base::get_allocator;
 
@@ -216,7 +235,16 @@ namespace __debug
 	  this->_M_invalidate_all();
       }
 
-      using _Base::capacity;
+      size_type
+      capacity() const
+      {
+#ifdef _GLIBCXX_DEBUG_PEDANTIC
+	return _M_guaranteed_capacity;
+#else
+	return _Base::capacity();
+#endif
+      }
+
       using _Base::empty;
 
       void
@@ -280,7 +308,6 @@ namespace __debug
       using _Base::data;
 
       // 23.2.4.3 modifiers:
-#ifndef __GXX_EXPERIMENTAL_CXX0X__
       void
       push_back(const _Tp& __x)
       {
@@ -290,13 +317,20 @@ namespace __debug
 	  this->_M_invalidate_all();
 	_M_update_guaranteed_capacity();
       }
-#else
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      template<typename _Up = _Tp>
+        typename __gnu_cxx::__enable_if<!std::__are_same<_Up, bool>::__value,
+					void>::__type
+        push_back(_Tp&& __x)
+	{ emplace_back(std::move(__x)); }
+
       template<typename... _Args>
         void
-        push_back(_Args&&... __args)
+        emplace_back(_Args&&... __args)
 	{
 	  bool __realloc = _M_requires_reallocation(this->size() + 1);
-	  _Base::push_back(std::forward<_Args>(__args)...);
+	  _Base::emplace_back(std::forward<_Args>(__args)...);
 	  if (__realloc)
 	    this->_M_invalidate_all();
 	  _M_update_guaranteed_capacity();
@@ -347,9 +381,15 @@ namespace __debug
       }
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
-      iterator
-      insert(iterator __position, _Tp&& __x)
-      { return emplace(__position, std::move(__x)); }
+      template<typename _Up = _Tp>
+        typename __gnu_cxx::__enable_if<!std::__are_same<_Up, bool>::__value,
+					iterator>::__type
+        insert(iterator __position, _Tp&& __x)
+        { return emplace(__position, std::move(__x)); }
+
+      void
+      insert(iterator __position, initializer_list<value_type> __l)
+      { this->insert(__position, __l.begin(), __l.end()); }
 #endif
 
       void
@@ -442,13 +482,7 @@ namespace __debug
 
       bool
       _M_requires_reallocation(size_type __elements)
-      {
-#ifdef _GLIBCXX_DEBUG_PEDANTIC
-	return __elements > this->capacity();
-#else
-	return __elements > _M_guaranteed_capacity;
-#endif
-      }
+      { return __elements > this->capacity(); }
 
       void
       _M_update_guaranteed_capacity()

@@ -1,5 +1,6 @@
 /* Variable tracking routines for the GNU compiler.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -466,22 +467,31 @@ static void
 insn_stack_adjust_offset_pre_post (rtx insn, HOST_WIDE_INT *pre,
 				   HOST_WIDE_INT *post)
 {
+  rtx pattern;
+
   *pre = 0;
   *post = 0;
 
-  if (GET_CODE (PATTERN (insn)) == SET)
-    stack_adjust_offset_pre_post (PATTERN (insn), pre, post);
-  else if (GET_CODE (PATTERN (insn)) == PARALLEL
-	   || GET_CODE (PATTERN (insn)) == SEQUENCE)
+  pattern = PATTERN (insn);
+  if (RTX_FRAME_RELATED_P (insn))
+    {
+      rtx expr = find_reg_note (insn, REG_FRAME_RELATED_EXPR, NULL_RTX);
+      if (expr)
+	pattern = XEXP (expr, 0);
+    }
+
+  if (GET_CODE (pattern) == SET)
+    stack_adjust_offset_pre_post (pattern, pre, post);
+  else if (GET_CODE (pattern) == PARALLEL
+	   || GET_CODE (pattern) == SEQUENCE)
     {
       int i;
 
       /* There may be stack adjustments inside compound insns.  Search
 	 for them.  */
-      for ( i = XVECLEN (PATTERN (insn), 0) - 1; i >= 0; i--)
-	if (GET_CODE (XVECEXP (PATTERN (insn), 0, i)) == SET)
-	  stack_adjust_offset_pre_post (XVECEXP (PATTERN (insn), 0, i),
-					pre, post);
+      for ( i = XVECLEN (pattern, 0) - 1; i >= 0; i--)
+	if (GET_CODE (XVECEXP (pattern, 0, i)) == SET)
+	  stack_adjust_offset_pre_post (XVECEXP (pattern, 0, i), pre, post);
     }
 }
 
@@ -693,7 +703,7 @@ attrs_list_insert (attrs *listp, tree decl, HOST_WIDE_INT offset, rtx loc)
 {
   attrs list;
 
-  list = pool_alloc (attrs_pool);
+  list = (attrs) pool_alloc (attrs_pool);
   list->loc = loc;
   list->decl = decl;
   list->offset = offset;
@@ -711,7 +721,7 @@ attrs_list_copy (attrs *dstp, attrs src)
   attrs_list_clear (dstp);
   for (; src; src = src->next)
     {
-      n = pool_alloc (attrs_pool);
+      n = (attrs) pool_alloc (attrs_pool);
       n->loc = src->loc;
       n->decl = src->decl;
       n->offset = src->offset;
@@ -750,7 +760,7 @@ unshare_variable (dataflow_set *set, variable var,
   variable new_var;
   int i;
 
-  new_var = pool_alloc (var_pool);
+  new_var = (variable) pool_alloc (var_pool);
   new_var->decl = var->decl;
   new_var->refcount = 1;
   var->refcount--;
@@ -767,7 +777,7 @@ unshare_variable (dataflow_set *set, variable var,
 	{
 	  location_chain new_lc;
 
-	  new_lc = pool_alloc (loc_chain_pool);
+	  new_lc = (location_chain) pool_alloc (loc_chain_pool);
 	  new_lc->next = NULL;
 	  if (node->init > initialized)
 	    new_lc->init = node->init;
@@ -1095,8 +1105,10 @@ struct variable_union_info
 static int
 variable_union_info_cmp_pos (const void *n1, const void *n2)
 {
-  const struct variable_union_info *i1 = n1;
-  const struct variable_union_info *i2 = n2;
+  const struct variable_union_info *const i1 =
+    (const struct variable_union_info *) n1;
+  const struct variable_union_info *const i2 =
+    ( const struct variable_union_info *) n2;
 
   if (i1->pos != i2->pos)
     return i1->pos - i2->pos;
@@ -1275,7 +1287,7 @@ variable_union (void **slot, void *data)
 		  location_chain new_node;
 
 		  /* Copy the location from SRC.  */
-		  new_node = pool_alloc (loc_chain_pool);
+		  new_node = (location_chain) pool_alloc (loc_chain_pool);
 		  new_node->loc = node->loc;
 		  new_node->init = node->init;
 		  if (!node->set_src || MEM_P (node->set_src))
@@ -1326,7 +1338,7 @@ variable_union (void **slot, void *data)
 	    {
 	      location_chain new_lc;
 
-	      new_lc = pool_alloc (loc_chain_pool);
+	      new_lc = (location_chain) pool_alloc (loc_chain_pool);
 	      new_lc->next = NULL;
 	      new_lc->init = node->init;
 	      if (!node->set_src || MEM_P (node->set_src))
@@ -1455,7 +1467,7 @@ dataflow_set_different_1 (void **slot, void *data)
   variable var1, var2;
 
   var1 = *(variable *) slot;
-  var2 = htab_find_with_hash (htab, var1->decl,
+  var2 = (variable) htab_find_with_hash (htab, var1->decl,
 			      VARIABLE_HASH_VAL (var1->decl));
   if (!var2)
     {
@@ -1487,7 +1499,7 @@ dataflow_set_different_2 (void **slot, void *data)
   variable var1, var2;
 
   var1 = *(variable *) slot;
-  var2 = htab_find_with_hash (htab, var1->decl,
+  var2 = (variable) htab_find_with_hash (htab, var1->decl,
 			      VARIABLE_HASH_VAL (var1->decl));
   if (!var2)
     {
@@ -2177,7 +2189,7 @@ vt_find_locations (void)
 
       while (!fibheap_empty (worklist))
 	{
-	  bb = fibheap_extract_min (worklist);
+	  bb = (basic_block) fibheap_extract_min (worklist);
 	  RESET_BIT (in_worklist, bb->index);
 	  if (!TEST_BIT (visited, bb->index))
 	    {
@@ -2352,7 +2364,7 @@ variable_was_changed (variable var, htab_t htab)
 	  variable empty_var;
 	  void **old;
 
-	  empty_var = pool_alloc (var_pool);
+	  empty_var = (variable) pool_alloc (var_pool);
 	  empty_var->decl = var->decl;
 	  empty_var->refcount = 1;
 	  empty_var->n_var_parts = 0;
@@ -2433,7 +2445,7 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset,
   if (!*slot)
     {
       /* Create new variable information.  */
-      var = pool_alloc (var_pool);
+      var = (variable) pool_alloc (var_pool);
       var->decl = decl;
       var->refcount = 1;
       var->n_var_parts = 1;
@@ -2525,7 +2537,7 @@ set_variable_part (dataflow_set *set, rtx loc, tree decl, HOST_WIDE_INT offset,
     }
 
   /* Add the location to the beginning.  */
-  node = pool_alloc (loc_chain_pool);
+  node = (location_chain) pool_alloc (loc_chain_pool);
   node->loc = loc;
   node->init = initialized;
   node->set_src = set_src;
@@ -2888,7 +2900,7 @@ emit_notes_for_differences_1 (void **slot, void *data)
   variable old_var, new_var;
 
   old_var = *(variable *) slot;
-  new_var = htab_find_with_hash (new_vars, old_var->decl,
+  new_var = (variable) htab_find_with_hash (new_vars, old_var->decl,
 				 VARIABLE_HASH_VAL (old_var->decl));
 
   if (!new_var)
@@ -2896,7 +2908,7 @@ emit_notes_for_differences_1 (void **slot, void *data)
       /* Variable has disappeared.  */
       variable empty_var;
 
-      empty_var = pool_alloc (var_pool);
+      empty_var = (variable) pool_alloc (var_pool);
       empty_var->decl = old_var->decl;
       empty_var->refcount = 1;
       empty_var->n_var_parts = 0;
@@ -2921,7 +2933,7 @@ emit_notes_for_differences_2 (void **slot, void *data)
   variable old_var, new_var;
 
   new_var = *(variable *) slot;
-  old_var = htab_find_with_hash (old_vars, new_var->decl,
+  old_var = (variable) htab_find_with_hash (old_vars, new_var->decl,
 				 VARIABLE_HASH_VAL (new_var->decl));
   if (!old_var)
     {
@@ -3171,7 +3183,16 @@ vt_add_function_parameters (void)
       if (!decl)
 	continue;
 
-      gcc_assert (parm == decl);
+      if (parm != decl)
+	{
+	  /* Assume that DECL_RTL was a pseudo that got spilled to
+	     memory.  The spill slot sharing code will force the
+	     memory to reference spill_slot_decl (%sfp), so we don't
+	     match above.  That's ok, the pseudo must have referenced
+	     the entire parameter, so just reset OFFSET.  */
+	  gcc_assert (decl == get_spill_slot_decl (false));
+	  offset = 0;
+	}
 
       if (!track_loc_p (incoming, parm, offset, false, &mode, &offset))
 	continue;
@@ -3406,8 +3427,10 @@ gate_handle_var_tracking (void)
 
 
 
-struct tree_opt_pass pass_variable_tracking =
+struct rtl_opt_pass pass_variable_tracking =
 {
+ {
+  RTL_PASS,
   "vartrack",                           /* name */
   gate_handle_var_tracking,             /* gate */
   variable_tracking_main,               /* execute */
@@ -3419,7 +3442,7 @@ struct tree_opt_pass pass_variable_tracking =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func | TODO_verify_rtl_sharing,/* todo_flags_finish */
-  'V'                                   /* letter */
+  TODO_dump_func | TODO_verify_rtl_sharing/* todo_flags_finish */
+ }
 };
 

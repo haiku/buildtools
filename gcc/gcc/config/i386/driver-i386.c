@@ -1,5 +1,5 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -28,128 +28,321 @@ const char *host_detect_local_cpu (int argc, const char **argv);
 #ifdef __GNUC__
 #include "cpuid.h"
 
-/* Returns parameters that describe L1_ASSOC associative cache of size
-   L1_SIZEKB with lines of size L1_LINE.  */
+struct cache_desc
+{
+  unsigned sizekb;
+  unsigned assoc;
+  unsigned line;
+};
+
+/* Returns command line parameters that describe size and
+   cache line size of the processor caches.  */
 
 static char *
-describe_cache (unsigned l1_sizekb, unsigned l1_line,
-		unsigned l1_assoc ATTRIBUTE_UNUSED)
+describe_cache (struct cache_desc level1, struct cache_desc level2)
 {
-  char size[100], line[100];
+  char size[100], line[100], size2[100];
 
-  /* At the moment, gcc middle-end does not use the information about the
-     associativity of the cache.  */
+  /* At the moment, gcc does not use the information
+     about the associativity of the cache.  */
 
-  sprintf (size, "--param l1-cache-size=%u", l1_sizekb);
-  sprintf (line, "--param l1-cache-line-size=%u", l1_line);
+  sprintf (size, "--param l1-cache-size=%u", level1.sizekb);
+  sprintf (line, "--param l1-cache-line-size=%u", level1.line);
 
-  return concat (size, " ", line, " ", NULL);
+  sprintf (size2, "--param l2-cache-size=%u", level2.sizekb);
+
+  return concat (size, " ", line, " ", size2, " ", NULL);
+}
+
+/* Detect L2 cache parameters using CPUID extended function 0x80000006.  */
+
+static void
+detect_l2_cache (struct cache_desc *level2)
+{
+  unsigned eax, ebx, ecx, edx;
+  unsigned assoc;
+
+  __cpuid (0x80000006, eax, ebx, ecx, edx);
+
+  level2->sizekb = (ecx >> 16) & 0xffff;
+  level2->line = ecx & 0xff;
+
+  assoc = (ecx >> 12) & 0xf;
+  if (assoc == 6)
+    assoc = 8;
+  else if (assoc == 8)
+    assoc = 16;
+  else if (assoc >= 0xa && assoc <= 0xc)
+    assoc = 32 + (assoc - 0xa) * 16;
+  else if (assoc >= 0xd && assoc <= 0xe)
+    assoc = 96 + (assoc - 0xd) * 32;
+
+  level2->assoc = assoc;
 }
 
 /* Returns the description of caches for an AMD processor.  */
 
-static char *
+static const char *
 detect_caches_amd (unsigned max_ext_level)
 {
   unsigned eax, ebx, ecx, edx;
-  unsigned l1_sizekb, l1_line, l1_assoc;
+
+  struct cache_desc level1, level2 = {0, 0, 0};
 
   if (max_ext_level < 0x80000005)
-    return (char *) "";
+    return "";
 
   __cpuid (0x80000005, eax, ebx, ecx, edx);
 
-  l1_line = ecx & 0xff;
-  l1_sizekb = (ecx >> 24) & 0xff;
-  l1_assoc = (ecx >> 16) & 0xff;
+  level1.sizekb = (ecx >> 24) & 0xff;
+  level1.assoc = (ecx >> 16) & 0xff;
+  level1.line = ecx & 0xff;
 
-  return describe_cache (l1_sizekb, l1_line, l1_assoc);
+  if (max_ext_level >= 0x80000006)
+    detect_l2_cache (&level2);
+
+  return describe_cache (level1, level2);
 }
 
-/* Stores the size of the L1 cache and cache line, and the associativity
-   of the cache according to REG to L1_SIZEKB, L1_LINE and L1_ASSOC.  */
+/* Decodes the size, the associativity and the cache line size of
+   L1/L2 caches of an Intel processor.  Values are based on
+   "Intel Processor Identification and the CPUID Instruction"
+   [Application Note 485], revision -032, December 2007.  */
 
 static void
-decode_caches_intel (unsigned reg, unsigned *l1_sizekb, unsigned *l1_line,
-		     unsigned *l1_assoc)
+decode_caches_intel (unsigned reg, bool xeon_mp,
+		     struct cache_desc *level1, struct cache_desc *level2)
 {
-  unsigned i, val;
+  int i;
 
-  if (((reg >> 31) & 1) != 0)
-    return;
+  for (i = 24; i >= 0; i -= 8)
+    switch ((reg >> i) & 0xff)
+      {
+      case 0x0a:
+	level1->sizekb = 8; level1->assoc = 2; level1->line = 32;
+	break;
+      case 0x0c:
+	level1->sizekb = 16; level1->assoc = 4; level1->line = 32;
+	break;
+      case 0x2c:
+	level1->sizekb = 32; level1->assoc = 8; level1->line = 64;
+	break;
+      case 0x39:
+	level2->sizekb = 128; level2->assoc = 4; level2->line = 64;
+	break;
+      case 0x3a:
+	level2->sizekb = 192; level2->assoc = 6; level2->line = 64;
+	break;
+      case 0x3b:
+	level2->sizekb = 128; level2->assoc = 2; level2->line = 64;
+	break;
+      case 0x3c:
+	level2->sizekb = 256; level2->assoc = 4; level2->line = 64;
+	break;
+      case 0x3d:
+	level2->sizekb = 384; level2->assoc = 6; level2->line = 64;
+	break;
+      case 0x3e:
+	level2->sizekb = 512; level2->assoc = 4; level2->line = 64;
+	break;
+      case 0x41:
+	level2->sizekb = 128; level2->assoc = 4; level2->line = 32;
+	break;
+      case 0x42:
+	level2->sizekb = 256; level2->assoc = 4; level2->line = 32;
+	break;
+      case 0x43:
+	level2->sizekb = 512; level2->assoc = 4; level2->line = 32;
+	break;
+      case 0x44:
+	level2->sizekb = 1024; level2->assoc = 4; level2->line = 32;
+	break;
+      case 0x45:
+	level2->sizekb = 2048; level2->assoc = 4; level2->line = 32;
+	break;
+      case 0x49:
+	if (xeon_mp)
+	  break;
+	level2->sizekb = 4096; level2->assoc = 16; level2->line = 64;
+	break;
+      case 0x4e:
+	level2->sizekb = 6144; level2->assoc = 24; level2->line = 64;
+	break;
+      case 0x60:
+	level1->sizekb = 16; level1->assoc = 8; level1->line = 64;
+	break;
+      case 0x66:
+	level1->sizekb = 8; level1->assoc = 4; level1->line = 64;
+	break;
+      case 0x67:
+	level1->sizekb = 16; level1->assoc = 4; level1->line = 64;
+	break;
+      case 0x68:
+	level1->sizekb = 32; level1->assoc = 4; level1->line = 64;
+	break;
+      case 0x78:
+	level2->sizekb = 1024; level2->assoc = 4; level2->line = 64;
+	break;
+      case 0x79:
+	level2->sizekb = 128; level2->assoc = 8; level2->line = 64;
+	break;
+      case 0x7a:
+	level2->sizekb = 256; level2->assoc = 8; level2->line = 64;
+	break;
+      case 0x7b:
+	level2->sizekb = 512; level2->assoc = 8; level2->line = 64;
+	break;
+      case 0x7c:
+	level2->sizekb = 1024; level2->assoc = 8; level2->line = 64;
+	break;
+      case 0x7d:
+	level2->sizekb = 2048; level2->assoc = 8; level2->line = 64;
+	break;
+      case 0x7f:
+	level2->sizekb = 512; level2->assoc = 2; level2->line = 64;
+	break;
+      case 0x82:
+	level2->sizekb = 256; level2->assoc = 8; level2->line = 32;
+	break;
+      case 0x83:
+	level2->sizekb = 512; level2->assoc = 8; level2->line = 32;
+	break;
+      case 0x84:
+	level2->sizekb = 1024; level2->assoc = 8; level2->line = 32;
+	break;
+      case 0x85:
+	level2->sizekb = 2048; level2->assoc = 8; level2->line = 32;
+	break;
+      case 0x86:
+	level2->sizekb = 512; level2->assoc = 4; level2->line = 64;
+	break;
+      case 0x87:
+	level2->sizekb = 1024; level2->assoc = 8; level2->line = 64;
 
-  for (i = 0; i < 4; i++)
+      default:
+	break;
+      }
+}
+
+/* Detect cache parameters using CPUID function 2.  */
+
+static void
+detect_caches_cpuid2 (bool xeon_mp, 
+		      struct cache_desc *level1, struct cache_desc *level2)
+{
+  unsigned regs[4];
+  int nreps, i;
+
+  __cpuid (2, regs[0], regs[1], regs[2], regs[3]);
+
+  nreps = regs[0] & 0x0f;
+  regs[0] &= ~0x0f;
+
+  while (--nreps >= 0)
     {
-      val = reg & 0xff;
-      reg >>= 8;
+      for (i = 0; i < 4; i++)
+	if (regs[i] && !((regs[i] >> 31) & 1))
+	  decode_caches_intel (regs[i], xeon_mp, level1, level2);
 
-      switch (val)
+      if (nreps)
+	__cpuid (2, regs[0], regs[1], regs[2], regs[3]);
+    }
+}
+
+/* Detect cache parameters using CPUID function 4. This
+   method doesn't require hardcoded tables.  */
+
+enum cache_type
+{
+  CACHE_END = 0,
+  CACHE_DATA = 1,
+  CACHE_INST = 2,
+  CACHE_UNIFIED = 3
+};
+
+static void
+detect_caches_cpuid4 (struct cache_desc *level1, struct cache_desc *level2)
+{
+  struct cache_desc *cache;
+
+  unsigned eax, ebx, ecx, edx;
+  int count;
+
+  for (count = 0;; count++)
+    { 
+      __cpuid_count(4, count, eax, ebx, ecx, edx);
+      switch (eax & 0x1f)
 	{
-	case 0xa:
-	  *l1_sizekb = 8;
-	  *l1_line = 32;
-	  *l1_assoc = 2;
-	  break;
-	case 0xc:
-	  *l1_sizekb = 16;
-	  *l1_line = 32;
-	  *l1_assoc = 4;
-	  break;
-	case 0x2c:
-	  *l1_sizekb = 32;
-	  *l1_line = 64;
-	  *l1_assoc = 8;
-	  break;
-	case 0x60:
-	  *l1_sizekb = 16;
-	  *l1_line = 64;
-	  *l1_assoc = 8;
-	  break;
-	case 0x66:
-	  *l1_sizekb = 8;
-	  *l1_line = 64;
-	  *l1_assoc = 4;
-	  break;
-	case 0x67:
-	  *l1_sizekb = 16;
-	  *l1_line = 64;
-	  *l1_assoc = 4;
-	  break;
-	case 0x68:
-	  *l1_sizekb = 32;
-	  *l1_line = 64;
-	  *l1_assoc = 4;
-	  break;
+	case CACHE_END:
+	  return;
+	case CACHE_DATA:
+	case CACHE_UNIFIED:
+	  {
+	    switch ((eax >> 5) & 0x07)
+	      {
+	      case 1:
+		cache = level1;
+		break;
+	      case 2:
+		cache = level2;
+		break;
+	      default:
+		cache = NULL;
+	      }
 
+	    if (cache)
+	      {
+		unsigned sets = ecx + 1;
+		unsigned part = ((ebx >> 12) & 0x03ff) + 1;
+
+		cache->assoc = ((ebx >> 22) & 0x03ff) + 1;
+		cache->line = (ebx & 0x0fff) + 1;
+
+		cache->sizekb = (cache->assoc * part
+				 * cache->line * sets) / 1024;
+	      }	       
+	  }
 	default:
 	  break;
 	}
     }
 }
 
-/* Returns the description of caches for an intel processor.  */
+/* Returns the description of caches for an Intel processor.  */
 
-static char *
-detect_caches_intel (unsigned max_level)
+static const char *
+detect_caches_intel (bool xeon_mp, unsigned max_level, unsigned max_ext_level)
 {
-  unsigned eax, ebx, ecx, edx;
-  unsigned l1_sizekb = 0, l1_line = 0, assoc = 0;
+  struct cache_desc level1 = {0, 0, 0}, level2 = {0, 0, 0};
 
-  if (max_level < 2)
-    return (char *) "";
+  if (max_level >= 4)
+    detect_caches_cpuid4 (&level1, &level2);
+  else if (max_level >= 2)
+    detect_caches_cpuid2 (xeon_mp, &level1, &level2);
+  else
+    return "";
 
-  __cpuid (2, eax, ebx, ecx, edx);
+  if (level1.sizekb == 0)
+    return "";
 
-  decode_caches_intel (eax, &l1_sizekb, &l1_line, &assoc);
-  decode_caches_intel (ebx, &l1_sizekb, &l1_line, &assoc);
-  decode_caches_intel (ecx, &l1_sizekb, &l1_line, &assoc);
-  decode_caches_intel (edx, &l1_sizekb, &l1_line, &assoc);
+  /* Intel CPUs are equipped with AMD style L2 cache info.  Try this
+     method if other methods fail to provide L2 cache parameters.  */
+  if (level2.sizekb == 0 && max_ext_level >= 0x80000006)
+    detect_l2_cache (&level2);
 
-  if (!l1_sizekb)
-    return (char *) "";
-
-  return describe_cache (l1_sizekb, l1_line, assoc);
+  return describe_cache (level1, level2);
 }
+
+enum vendor_signatures
+{
+  SIG_INTEL =	0x756e6547 /* Genu */,
+  SIG_AMD =	0x68747541 /* Auth */
+};
+
+enum processor_signatures
+{
+  SIG_GEODE =	0x646f6547 /* Geod */
+};
 
 /* This will be called by the spec parser in gcc.c when it sees
    a %:local_cpu_detect(args) construct.  Currently it will be called
@@ -172,11 +365,12 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   const char *cache = "";
   const char *options = "";
 
- unsigned int eax, ebx, ecx, edx;
+  unsigned int eax, ebx, ecx, edx;
 
   unsigned int max_level, ext_level;
+
   unsigned int vendor;
-  unsigned int family;
+  unsigned int model, family;
 
   unsigned int has_sse3, has_ssse3, has_cmpxchg16b;
   unsigned int has_cmpxchg8b, has_cmov, has_mmx, has_sse, has_sse2;
@@ -184,6 +378,9 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   /* Extended features */
   unsigned int has_lahf_lm = 0, has_sse4a = 0;
   unsigned int has_longmode = 0, has_3dnowp = 0, has_3dnow = 0;
+  unsigned int has_sse4_1 = 0, has_sse4_2 = 0;
+  unsigned int has_popcnt = 0, has_aes = 0, has_avx = 0;
+  unsigned int has_pclmul = 0;
 
   bool arch;
 
@@ -202,11 +399,18 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   __cpuid (1, eax, ebx, ecx, edx);
 
   /* We don't care for extended family.  */
+  model = (eax >> 4) & 0x0f;
   family = (eax >> 8) & 0x0f;
 
   has_sse3 = ecx & bit_SSE3;
   has_ssse3 = ecx & bit_SSSE3;
+  has_sse4_1 = ecx & bit_SSE4_1;
+  has_sse4_2 = ecx & bit_SSE4_2;
+  has_avx = ecx & bit_AVX;
   has_cmpxchg16b = ecx & bit_CMPXCHG16B;
+  has_popcnt = ecx & bit_POPCNT;
+  has_aes = ecx & bit_AES;
+  has_pclmul = ecx & bit_PCLMUL;
 
   has_cmpxchg8b = edx & bit_CMPXCHG8B;
   has_cmov = edx & bit_CMOV;
@@ -231,27 +435,38 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 
   if (!arch)
     {
-      if (vendor == *(unsigned int*) "Auth")
+      if (vendor == SIG_AMD)
 	cache = detect_caches_amd (ext_level);
-      else if (vendor == *(unsigned int*) "Genu")
-	cache = detect_caches_intel (max_level);
+      else if (vendor == SIG_INTEL)
+	{
+	  bool xeon_mp = (family == 15 && model == 6);
+	  cache = detect_caches_intel (xeon_mp, max_level, ext_level);
+	}
     }
 
-  if (vendor == *(unsigned int*) "Auth")
+  if (vendor == SIG_AMD)
     {
-      processor = PROCESSOR_PENTIUM;
+      unsigned int name;
 
-      if (has_mmx)
-	processor = PROCESSOR_K6;
-      if (has_3dnowp)
-	processor = PROCESSOR_ATHLON;
-      if (has_sse2 || has_longmode)
-	processor = PROCESSOR_K8;
-      if (has_sse4a)
+      /* Detect geode processor by its processor signature.  */
+      if (ext_level > 0x80000001)
+	__cpuid (0x80000002, name, ebx, ecx, edx);
+      else
+	name = 0;
+
+      if (name == SIG_GEODE)
+	processor = PROCESSOR_GEODE;
+      else if (has_sse4a)
 	processor = PROCESSOR_AMDFAM10;
+      else if (has_sse2 || has_longmode)
+	processor = PROCESSOR_K8;
+      else if (has_3dnowp)
+	processor = PROCESSOR_ATHLON;
+      else if (has_mmx)
+	processor = PROCESSOR_K6;
+      else
+	processor = PROCESSOR_PENTIUM;
     }
-  else if (vendor == *(unsigned int*) "Geod")
-    processor = PROCESSOR_GEODE;
   else
     {
       switch (family)
@@ -382,6 +597,18 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 	options = concat (options, "-mcx16 ", NULL);
       if (has_lahf_lm)
 	options = concat (options, "-msahf ", NULL);
+      if (has_aes)
+	options = concat (options, "-maes ", NULL);
+      if (has_pclmul)
+	options = concat (options, "-mpclmul ", NULL);
+      if (has_popcnt)
+	options = concat (options, "-mpopcnt ", NULL);
+      if (has_avx)
+	options = concat (options, "-mavx ", NULL);
+      else if (has_sse4_2)
+	options = concat (options, "-msse4.2 ", NULL);
+      else if (has_sse4_1)
+	options = concat (options, "-msse4.1 ", NULL);
     }
 
 done:

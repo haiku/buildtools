@@ -1,5 +1,5 @@
 /* Implementation of subroutines for the GNU C++ pretty-printer.
-   Copyright (C) 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -452,7 +452,7 @@ pp_cxx_primary_expression (cxx_pretty_printer *pp, tree t)
      reinterpret_cast < type-id > ( expression )
      const_cast < type-id > ( expression )
      typeid ( expression )
-     typeif ( type-id )  */
+     typeid ( type-id )  */
 
 static void
 pp_cxx_postfix_expression (cxx_pretty_printer *pp, tree t)
@@ -636,6 +636,8 @@ static void
 pp_cxx_new_expression (cxx_pretty_printer *pp, tree t)
 {
   enum tree_code code = TREE_CODE (t);
+  tree type = TREE_OPERAND (t, 1);
+  tree init = TREE_OPERAND (t, 2);
   switch (code)
     {
     case NEW_EXPR:
@@ -648,18 +650,22 @@ pp_cxx_new_expression (cxx_pretty_printer *pp, tree t)
 	  pp_cxx_call_argument_list (pp, TREE_OPERAND (t, 0));
 	  pp_space (pp);
 	}
-      /* FIXME: array-types are built with one more element.  */
-      pp_cxx_type_id (pp, TREE_OPERAND (t, 1));
-      if (TREE_OPERAND (t, 2))
+      if (TREE_CODE (type) == ARRAY_REF)
+	type = build_cplus_array_type
+	  (TREE_OPERAND (type, 0),
+	   build_index_type (fold_build2 (MINUS_EXPR, integer_type_node,
+					  TREE_OPERAND (type, 1),
+					  integer_one_node)));
+      pp_cxx_type_id (pp, type);
+      if (init)
 	{
 	  pp_left_paren (pp);
-	  t = TREE_OPERAND (t, 2);
-	  if (TREE_CODE (t) == TREE_LIST)
-	    pp_c_expression_list (pp_c_base (pp), t);
-	  else if (t == void_zero_node)
+	  if (TREE_CODE (init) == TREE_LIST)
+	    pp_c_expression_list (pp_c_base (pp), init);
+	  else if (init == void_zero_node)
 	    ;			/* OK, empty initializer list.  */
 	  else
-	    pp_cxx_expression (pp, t);
+	    pp_cxx_expression (pp, init);
 	  pp_right_paren (pp);
 	}
       break;
@@ -804,7 +810,7 @@ pp_cxx_pm_expression (cxx_pretty_printer *pp, tree t)
 {
   switch (TREE_CODE (t))
     {
-      /* Handle unfortunate OFFESET_REF overloading here.  */
+      /* Handle unfortunate OFFSET_REF overloading here.  */
     case OFFSET_REF:
       if (TYPE_P (TREE_OPERAND (t, 0)))
 	{
@@ -2010,7 +2016,7 @@ pp_cxx_template_parameter (cxx_pretty_printer *pp, tree t)
 	pp_cxx_identifier (pp, "...");
       if (DECL_NAME (parameter))
 	pp_cxx_tree_identifier (pp, DECL_NAME (parameter));
-      /* FIXME: Chech if we should print also default argument.  */
+      /* FIXME: Check if we should print also default argument.  */
       break;
 
     case PARM_DECL:

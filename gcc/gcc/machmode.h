@@ -1,6 +1,6 @@
 /* Machine mode definitions for GCC; included by rtl.h and tree.h.
    Copyright (C) 1991, 1993, 1994, 1996, 1998, 1999, 2000, 2001, 2003,
-   2007  Free Software Foundation, Inc.
+   2007, 2008  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -202,7 +202,7 @@ extern const unsigned HOST_WIDE_INT mode_mask_array[NUM_MACHINE_MODES];
 /* Return the mode of the inner elements in a vector.  */
 
 extern const unsigned char mode_inner[NUM_MACHINE_MODES];
-#define GET_MODE_INNER(MODE) mode_inner[MODE]
+#define GET_MODE_INNER(MODE) ((enum machine_mode) mode_inner[MODE])
 
 /* Get the size in bytes of the basic parts of an object of mode MODE.  */
 

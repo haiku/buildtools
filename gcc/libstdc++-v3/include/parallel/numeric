@@ -1,11 +1,11 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
 // of the GNU General Public License as published by the Free Software
-// Foundation; either version 2, or (at your option) any later
+// Foundation; either version 3, or (at your option) any later
 // version.
 
 // This library is distributed in the hope that it will be useful, but
@@ -13,20 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 
-// You should have received a copy of the GNU General Public License
-// along with this library; see the file COPYING.  If not, write to
-// the Free Software Foundation, 59 Temple Place - Suite 330, Boston,
-// MA 02111-1307, USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free
-// software library without restriction.  Specifically, if other files
-// instantiate templates or use macros or inline functions from this
-// file, or you compile this file and link it with other files to
-// produce an executable, this file does not by itself cause the
-// resulting executable to be covered by the GNU General Public
-// License.  This exception does not however invalidate any other
-// reasons why the executable file might be covered by the GNU General
-// Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /**
  * @file parallel/numeric
@@ -103,13 +97,13 @@ namespace __parallel
 	  __gnu_parallel::accumulate_selector<_RandomAccessIterator>
 	    my_selector;
 	  __gnu_parallel::
-	    for_each_template_random_access(begin, end,
+	    for_each_template_random_access_ed(begin, end,
 					    __gnu_parallel::nothing(),
 					    my_selector,
 					    __gnu_parallel::
 					    accumulate_binop_reduct
 					    <BinaryOperation>(binary_op),
-					    res, res, -1, parallelism_tag);
+					    res, res, -1);
 	  return res;
 	}
       else
@@ -211,9 +205,9 @@ namespace __parallel
 	    inner_product_selector<RandomAccessIterator1,
 	    RandomAccessIterator2, T> my_selector(first1, first2);
 	  __gnu_parallel::
-	    for_each_template_random_access(first1, last1, binary_op2,
+	    for_each_template_random_access_ed(first1, last1, binary_op2,
 					    my_selector, binary_op1,
-					    res, res, -1, parallelism_tag);
+					    res, res, -1);
 	  return res;
 	}
       else
@@ -286,7 +280,7 @@ namespace __parallel
       typedef typename
 	__gnu_parallel::multiplies<value_type1, value_type2>::result
         multiplies_result_type;
-      return inner_product(first1, last1, first2, init,
+      return _GLIBCXX_STD_P::inner_product(first1, last1, first2, init,
                            __gnu_parallel::plus<T, multiplies_result_type>(),
                            __gnu_parallel::
 			   multiplies<value_type1, value_type2>(),
@@ -306,7 +300,7 @@ namespace __parallel
       typedef typename
 	__gnu_parallel::multiplies<value_type1, value_type2>::result
         multiplies_result_type;
-      return inner_product(first1, last1, first2, init,
+      return _GLIBCXX_STD_P::inner_product(first1, last1, first2, init,
                            __gnu_parallel::plus<T, multiplies_result_type>(),
                            __gnu_parallel::
 			   multiplies<value_type1, value_type2>());
@@ -361,7 +355,8 @@ namespace __parallel
     partial_sum(InputIterator begin, InputIterator end, OutputIterator result)
     {
       typedef typename iterator_traits<InputIterator>::value_type value_type;
-      return partial_sum(begin, end, result, std::plus<value_type>());
+      return _GLIBCXX_STD_P::partial_sum(begin, end, result,
+                                         std::plus<value_type>());
     }
 
   // Public interface
@@ -432,10 +427,10 @@ namespace __parallel
 	    end_pair(end, result + (end - begin));
 	  __gnu_parallel::adjacent_difference_selector<ip> functionality;
 	  __gnu_parallel::
-	    for_each_template_random_access(begin_pair, end_pair, bin_op,
+	    for_each_template_random_access_ed(begin_pair, end_pair, bin_op,
 					    functionality,
 					    __gnu_parallel::dummy_reduct(),
-					    dummy, dummy, -1, parallelism_tag);
+					    dummy, dummy, -1);
 	  return functionality.finish_iterator;
 	}
       else

@@ -1,13 +1,13 @@
 // Iostreams base classes -*- C++ -*-
 
 // Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-// 2006, 2007, 2008
+// 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -15,19 +15,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file ios_base.h
  *  This is an internal header file, included by other library headers.
@@ -46,7 +41,15 @@
 #include <ext/atomicity.h>
 #include <bits/localefwd.h>
 #include <bits/locale_classes.h>
-#include <cstdio>  // For SEEK_CUR, SEEK_END
+
+#ifndef _GLIBCXX_STDIO_MACROS
+# include <cstdio>   // For SEEK_CUR, SEEK_END
+# define _IOS_BASE_SEEK_CUR SEEK_CUR
+# define _IOS_BASE_SEEK_END SEEK_END
+#else
+# define _IOS_BASE_SEEK_CUR 1
+# define _IOS_BASE_SEEK_END 2
+#endif
 
 _GLIBCXX_BEGIN_NAMESPACE(std)
 
@@ -186,14 +189,15 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   enum _Ios_Seekdir 
     { 
       _S_beg = 0,
-      _S_cur = SEEK_CUR,
-      _S_end = SEEK_END,
+      _S_cur = _IOS_BASE_SEEK_CUR,
+      _S_end = _IOS_BASE_SEEK_END,
       _S_ios_seekdir_end = 1L << 16 
     };
 
   // 27.4.2  Class ios_base
   /**
    *  @brief  The base of the I/O class hierarchy.
+   *  @ingroup io
    *
    *  This class defines everything that can be defined about I/O that does
    *  not depend on the type of characters being input or output.  Most
@@ -204,8 +208,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   {
   public:
 
-    // 27.4.2.1.1  Class ios_base::failure
-    /// These are thrown to indicate problems.  Doc me.
+    /** 
+     *  @brief These are thrown to indicate problems with io.
+     *  @ingroup exceptions
+     *
+     *  27.4.2.1.1  Class ios_base::failure
+     */
     class failure : public exception
     {
     public:
@@ -966,6 +974,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   }
 
 _GLIBCXX_END_NAMESPACE
+
+#undef _IOS_BASE_SEEK_CUR
+#undef _IOS_BASE_SEEK_END
 
 #endif /* _IOS_BASE_H */
 

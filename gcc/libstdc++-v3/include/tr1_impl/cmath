@@ -1,11 +1,11 @@
 // TR1 cmath -*- C++ -*-
 
-// Copyright (C) 2007 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file tr1_impl/cmath
  *  This is an internal header file, included by other library headers.
@@ -119,8 +114,8 @@
 #undef remainderf
 #undef remainderl
 #undef remquo
-#undef remquo
-#undef remquo
+#undef remquof
+#undef remquol
 #undef rint
 #undef rintf
 #undef rintl
@@ -266,8 +261,8 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
   using ::remainderl;
 
   using ::remquo;
-  using ::remquo;
-  using ::remquo;
+  using ::remquof;
+  using ::remquol;
 
   using ::rint;
   using ::rintf;
@@ -763,7 +758,9 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
       return nexttoward(__type(__x), __y);
     }
 
-  using std::pow;
+  // DR 550. What should the return type of pow(float,int) be?
+  // NB: C++0x and TR1 != C++03.
+  //   using std::pow;
 
   inline float
   remainder(float __x, float __y)

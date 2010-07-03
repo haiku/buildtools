@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.
    MIPS SDE version.
-   Copyright (C) 2003, 2004, 2007
+   Copyright (C) 2003, 2004, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS						\
   /* Make sure a -mips option is present.  This helps us to pick	\
      the right multilib, and also makes the later specs easier		\
@@ -46,7 +47,10 @@ along with GCC; see the file COPYING3.  If not see
      The latter trumps the former.  */					\
   "%{mno-data-in-code: -mcode-readable=no}",				\
   "%{!mcode-readable=no: %{mcode-xonly: -mcode-readable=pcrel}}",	\
-  "%<mno-data-in-code %<mcode-xonly"
+  "%<mno-data-in-code %<mcode-xonly",					\
+									\
+  /* Configuration-independent MIPS rules.  */				\
+  BASE_DRIVER_SELF_SPECS				
 
 /* Use trap rather than break for all but MIPS I ISA.  Force -no-mips16,
    so that MIPS16 assembler code requires an explicit ".set mips16".
@@ -56,13 +60,12 @@ along with GCC; see the file COPYING3.  If not see
 #undef SUBTARGET_ASM_SPEC
 #define SUBTARGET_ASM_SPEC "\
 %{!mips1:--trap} \
-%{fPIC|fpic|fPIE|fpie:%{!mips16*:-KPIC}} \
 %{mips16:-no-mips16}"
 
 #undef LINK_SPEC
 #define LINK_SPEC "\
 %(endian_spec) \
-%{G*} %{mips1} %{mips2} %{mips3} %{mips4} %{mips32} %{mips32r2} %{mips64} \
+%{G*} %{mips1} %{mips2} %{mips3} %{mips4} %{mips32*} %{mips64*} \
 %{bestGnum} \
 %{shared} %{non_shared} %{call_shared} \
 %{mabi=n32:-melf32%{EB:b}%{EL:l}tsmipn32} \
@@ -72,9 +75,8 @@ along with GCC; see the file COPYING3.  If not see
 #undef DEFAULT_SIGNED_CHAR
 #define DEFAULT_SIGNED_CHAR 0
 
-/* SDE-MIPS won't ever support SDB or MIPS debugging info.  */
+/* SDE-MIPS won't ever support SDB debugging info.  */
 #undef SDB_DEBUGGING_INFO
-#undef MIPS_DEBUGGING_INFO
 
 /* Describe how we implement __builtin_eh_return.  */
 

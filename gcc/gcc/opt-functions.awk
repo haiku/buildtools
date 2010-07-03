@@ -1,4 +1,4 @@
-#  Copyright (C) 2003, 2004, 2007 Free Software Foundation, Inc.
+#  Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
 #  Contributed by Kelley Cook, June 2004.
 #  Original code from Neil Booth, May 2003.
 #
@@ -71,6 +71,7 @@ function switch_flags (flags)
 	result = result \
 	  test_flag("Common", flags, " | CL_COMMON") \
 	  test_flag("Target", flags, " | CL_TARGET") \
+	  test_flag("Save", flags, " | CL_SAVE") \
 	  test_flag("Joined", flags, " | CL_JOINED") \
 	  test_flag("JoinedOrMissing", flags, " | CL_JOINED | CL_MISSING_OK") \
 	  test_flag("Separate", flags, " | CL_SEPARATE") \
@@ -124,6 +125,23 @@ function var_type(flags)
 		return "int "
 	else if (flag_set_p("UInteger", flags))
 		return "int "
+	else
+		return "const char *"
+}
+
+# Return the type of variable that should be associated with the given flags
+# for use within a structure.  Simple variables are changed to unsigned char
+# type instead of int to save space.
+function var_type_struct(flags)
+{
+	if (flag_set_p("UInteger", flags))
+		return "int "
+	else if (!flag_set_p("Joined.*", flags)) {
+		if (flag_set_p(".*Mask.*", flags))
+			return "int "
+		else
+			return "unsigned char "
+	}
 	else
 		return "const char *"
 }

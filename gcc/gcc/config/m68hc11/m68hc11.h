@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.
    Motorola 68HC11 and 68HC12.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
@@ -1067,18 +1067,15 @@ extern enum reg_class m68hc11_index_reg_class;
    local-alloc.c.  */
 
 
-/* Internal macro, return 1 if REGNO is a valid base register.  */
-#define REG_VALID_P(REGNO) ((REGNO) >= 0)
-
 extern unsigned char m68hc11_reg_valid_for_base[FIRST_PSEUDO_REGISTER];
 #define REG_VALID_FOR_BASE_P(REGNO) \
-    (REG_VALID_P (REGNO) && (REGNO) < FIRST_PSEUDO_REGISTER \
+    ((REGNO) < FIRST_PSEUDO_REGISTER \
      && m68hc11_reg_valid_for_base[REGNO])
 
 /* Internal macro, return 1 if REGNO is a valid index register.  */
 extern unsigned char m68hc11_reg_valid_for_index[FIRST_PSEUDO_REGISTER];
 #define REG_VALID_FOR_INDEX_P(REGNO) \
-    (REG_VALID_P (REGNO) >= 0 && (REGNO) < FIRST_PSEUDO_REGISTER \
+    ((REGNO) < FIRST_PSEUDO_REGISTER \
      && m68hc11_reg_valid_for_index[REGNO])
 
 /* Internal macro, the nonstrict definition for REGNO_OK_FOR_BASE_P.  */
@@ -1266,7 +1263,7 @@ extern unsigned char m68hc11_reg_valid_for_index[FIRST_PSEUDO_REGISTER];
 
    Pretend branches are cheap because GCC generates sub-optimal code
    for the default value.  */
-#define BRANCH_COST 0
+#define BRANCH_COST(speed_p, predictable_p) 0
 
 /* Nonzero if access to memory by bytes is slow and undesirable.  */
 #define SLOW_BYTE_ACCESS	0
@@ -1508,7 +1505,7 @@ do {                                                                    \
 /* MOVE_RATIO is the number of move instructions that is better than a
    block move.  Make this small on 6811, since the code size grows very
    large with each move.  */
-#define MOVE_RATIO		3
+#define MOVE_RATIO(speed)	3
 
 /* Define if shifts truncate the shift count which implies one can omit
    a sign-extension or zero-extension of a shift count.  */

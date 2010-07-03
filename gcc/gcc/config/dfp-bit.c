@@ -1,33 +1,28 @@
 /* This is a software decimal floating point library.
-   Copyright (C) 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
 GCC is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free
-Software Foundation; either version 2, or (at your option) any later
+Software Foundation; either version 3, or (at your option) any later
 version.
-
-In addition to the permissions in the GNU General Public License, the
-Free Software Foundation gives you unlimited permission to link the
-compiled version of this file into combinations with other programs,
-and to distribute those combinations without any restriction coming
-from the use of this file.  (The General Public License restrictions
-do apply in other respects; for example, they cover modification of
-the file, and distribution when not linked into a combine
-executable.)
 
 GCC is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
 
-You should have received a copy of the GNU General Public License
-along with GCC; see the file COPYING.  If not, write to the Free
-Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.  */
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
 
-/* This implements IEEE 754R decimal floating point arithmetic, but
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
+
+/* This implements IEEE 754 decimal floating point arithmetic, but
    does not provide a mechanism for setting the rounding mode, or for
    generating or handling exceptions.  Conversions between decimal
    floating point types and other types depend on C library functions.
@@ -536,7 +531,7 @@ DFP_TO_INT (DFP_C_TYPE x)
   /* Rescale if the exponent is less than zero.  */
   decNumberToIntegralValue (&n2, &n1, &context);
   /* Get a value to use for the quantize call.  */
-  decNumberFromString (&qval, (char *) "1.", &context);
+  decNumberFromString (&qval, "1.", &context);
   /* Force the exponent to zero.  */
   decNumberQuantize (&n1, &n2, &qval, &context);
   /* Get a string, which at this point will not include an exponent.  */
@@ -573,7 +568,6 @@ INT_TO_DFP (INT_TYPE i)
   decContext context;
 
   decContextDefault (&context, DEC_INIT_DECIMAL128);
-  context.round = DEC_ROUND_DOWN;
   f64 = *DEC_FLOAT_FROM_INT (&f64, i);
   u32.f = *decSingleFromWider (&u32.f, &f64, &context);
   if (DFP_EXCEPTIONS_ENABLED && context.status != 0)
@@ -598,7 +592,7 @@ INT_TO_DFP (INT_TYPE i)
   DFP_INIT_ROUNDMODE (context.round);
 
   /* Use a C library function to get a floating point string.  */
-  sprintf (buf, INT_FMT ".0", CAST_FOR_FMT(i));
+  sprintf (buf, INT_FMT ".", CAST_FOR_FMT(i));
   /* Convert from the floating point string to a decimal* type.  */
   FROM_STRING (&s, buf, &context);
   IEEE_TO_HOST (s, &f);

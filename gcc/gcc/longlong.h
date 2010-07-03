@@ -1,6 +1,6 @@
 /* longlong.h -- definitions for mixed size 32/64 bit arithmetic.
    Copyright (C) 1991, 1992, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
    This file is part of the GNU C Library.
@@ -55,7 +55,12 @@
 #define UDWtype		UDItype
 #endif
 
-extern const UQItype __clz_tab[256];
+/* Used in glibc only.  */
+#ifndef attribute_hidden
+#define attribute_hidden
+#endif
+
+extern const UQItype __clz_tab[256] attribute_hidden;
 
 /* Define auxiliary asm macros.
 
@@ -239,6 +244,12 @@ UDItype __umulsidi3 (USItype, USItype);
 #define UDIV_TIME 100
 #endif /* __arm__ */
 
+#if defined(__arm__)
+/* Let gcc decide how best to implement count_leading_zeros.  */
+#define count_leading_zeros(COUNT,X)	((COUNT) = __builtin_clz (X))
+#define COUNT_LEADING_ZEROS_0 32
+#endif
+
 #if defined (__CRIS__) && __CRIS_arch_version >= 3
 #define count_leading_zeros(COUNT, X) ((COUNT) = __builtin_clz (X))
 #if __CRIS_arch_version >= 8
@@ -420,6 +431,55 @@ UDItype __umulsidi3 (USItype, USItype);
 	       "dI" ((USItype) (v)));					\
     __w; })
 #endif /* __i960__ */
+
+#if defined (__ia64) && W_TYPE_SIZE == 64
+/* This form encourages gcc (pre-release 3.4 at least) to emit predicated
+   "sub r=r,r" and "sub r=r,r,1", giving a 2 cycle latency.  The generic
+   code using "al<bl" arithmetically comes out making an actual 0 or 1 in a
+   register, which takes an extra cycle.  */
+#define sub_ddmmss(sh, sl, ah, al, bh, bl)				\
+  do {									\
+    UWtype __x;								\
+    __x = (al) - (bl);							\
+    if ((al) < (bl))							\
+      (sh) = (ah) - (bh) - 1;						\
+    else								\
+      (sh) = (ah) - (bh);						\
+    (sl) = __x;								\
+  } while (0)
+
+/* Do both product parts in assembly, since that gives better code with
+   all gcc versions.  Some callers will just use the upper part, and in
+   that situation we waste an instruction, but not any cycles.  */
+#define umul_ppmm(ph, pl, m0, m1)					\
+  __asm__ ("xma.hu %0 = %2, %3, f0\n\txma.l %1 = %2, %3, f0"		\
+	   : "=&f" (ph), "=f" (pl)					\
+	   : "f" (m0), "f" (m1))
+#define count_leading_zeros(count, x)					\
+  do {									\
+    UWtype _x = (x), _y, _a, _c;					\
+    __asm__ ("mux1 %0 = %1, @rev" : "=r" (_y) : "r" (_x));		\
+    __asm__ ("czx1.l %0 = %1" : "=r" (_a) : "r" (-_y | _y));		\
+    _c = (_a - 1) << 3;							\
+    _x >>= _c;								\
+    if (_x >= 1 << 4)							\
+      _x >>= 4, _c += 4;						\
+    if (_x >= 1 << 2)							\
+      _x >>= 2, _c += 2;						\
+    _c += _x >> 1;							\
+    (count) =  W_TYPE_SIZE - 1 - _c;					\
+  } while (0)
+/* similar to what gcc does for __builtin_ffs, but 0 based rather than 1
+   based, and we don't need a special case for x==0 here */
+#define count_trailing_zeros(count, x)					\
+  do {									\
+    UWtype __ctz_x = (x);						\
+    __asm__ ("popcnt %0 = %1"						\
+	     : "=r" (count)						\
+	     : "r" ((__ctz_x-1) & ~__ctz_x));				\
+  } while (0)
+#define UMUL_TIME 14
+#endif
 
 #if defined (__M32R__) && W_TYPE_SIZE == 32
 #define add_ssaaaa(sh, sl, ah, al, bh, bl) \
@@ -636,12 +696,12 @@ UDItype __umulsidi3 (USItype, USItype);
 #endif /* __m88000__ */
 
 #if defined (__mips__) && W_TYPE_SIZE == 32
-#define umul_ppmm(w1, w0, u, v) \
-  __asm__ ("multu %2,%3"						\
-	   : "=l" ((USItype) (w0)),					\
-	     "=h" ((USItype) (w1))					\
-	   : "d" ((USItype) (u)),					\
-	     "d" ((USItype) (v)))
+#define umul_ppmm(w1, w0, u, v)						\
+  do {									\
+    UDItype __x = (UDItype) (USItype) (u) * (USItype) (v);		\
+    (w1) = (USItype) (__x >> 32);					\
+    (w0) = (USItype) (__x);						\
+  } while (0)
 #define UMUL_TIME 10
 #define UDIV_TIME 100
 
@@ -922,7 +982,7 @@ UDItype __umulsidi3 (USItype, USItype);
 "	or r1,%0"							\
 	: "=r" (q), "=&z" (r)						\
 	: "1" (n1), "r" (n0), "rm" (d), "r" (&__udiv_qrnnd_16)		\
-	: "r1", "r2", "r4", "r5", "r6", "pr");				\
+	: "r1", "r2", "r4", "r5", "r6", "pr", "t");			\
   } while (0)
 
 #define UDIV_TIME 80
@@ -930,7 +990,7 @@ UDItype __umulsidi3 (USItype, USItype);
 #define sub_ddmmss(sh, sl, ah, al, bh, bl)				\
   __asm__ ("clrt;subc %5,%1; subc %4,%0"				\
 	   : "=r" (sh), "=r" (sl)					\
-	   : "0" (ah), "1" (al), "r" (bh), "r" (bl))
+	   : "0" (ah), "1" (al), "r" (bh), "r" (bl) : "t")
 
 #endif /* __sh__ */
 

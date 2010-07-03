@@ -1,5 +1,5 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005, 2007
+;; Copyright (C) 2005, 2007, 2008
 ;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
@@ -35,7 +35,7 @@
   [(set (mem:HI (plus:HI (reg:HI SP_REGNO) (const_int -2)))
 	(reg:HI FB_REGNO))
    (set (reg:HI FB_REGNO)
-	(reg:HI SP_REGNO))
+	(plus:HI (reg:HI SP_REGNO) (const_int -2)))
    (set (reg:HI SP_REGNO)
 	(minus:HI (reg:HI SP_REGNO)
 	           (match_operand 0 "const_int_operand" "i")))
@@ -54,7 +54,7 @@
   [(set (mem:SI (plus:PSI (reg:PSI SP_REGNO) (const_int -4)))
 	(reg:SI FB_REGNO))
    (set (reg:PSI FB_REGNO)
-	(reg:PSI SP_REGNO))
+	(plus:PSI (reg:PSI SP_REGNO) (const_int -4)))
    (set (reg:PSI SP_REGNO)
 	(minus:PSI (reg:PSI SP_REGNO)
 	           (match_operand 0 "const_int_operand" "i")))

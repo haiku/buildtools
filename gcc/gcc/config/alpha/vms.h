@@ -1,5 +1,5 @@
 /* Output variables, constants and external declarations, for GNU compiler.
-   Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2004, 2005, 2007
+   Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -143,14 +143,14 @@ along with GCC; see the file COPYING3.  If not see
     case ARG_POINTER_REGNUM:						\
       (OFFSET) = (ALPHA_ROUND (alpha_sa_size () + alpha_pv_save_size ()	\
 			       + get_frame_size ()			\
-			       + current_function_pretend_args_size)	\
-		  - current_function_pretend_args_size);		\
+			       + crtl->args.pretend_args_size)	\
+		  - crtl->args.pretend_args_size);		\
       break;								\
     default:								\
       gcc_unreachable ();						\
     }									\
   if ((TO) == STACK_POINTER_REGNUM)					\
-    (OFFSET) += ALPHA_ROUND (current_function_outgoing_args_size);	\
+    (OFFSET) += ALPHA_ROUND (crtl->outgoing_args_size);	\
 }
 
 /* Define a data type for recording info about an argument list

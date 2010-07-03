@@ -1,5 +1,5 @@
 /* Reassociation for trees.
-   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dan@dberlin.org>
 
 This file is part of GCC.
@@ -22,14 +22,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "errors.h"
 #include "ggc.h"
 #include "tree.h"
 #include "basic-block.h"
 #include "diagnostic.h"
 #include "tree-inline.h"
 #include "tree-flow.h"
-#include "tree-gimple.h"
+#include "gimple.h"
 #include "tree-dump.h"
 #include "timevar.h"
 #include "tree-iterator.h"
@@ -39,6 +38,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "pointer-set.h"
 #include "cfgloop.h"
+#include "flags.h"
 
 /*  This is a simple global reassociation pass.  It is, in part, based
     on the LLVM pass of the same name (They do some things more/less
@@ -153,7 +153,7 @@ along with GCC; see the file COPYING3.  If not see
     
     Thus, this is what we do.  When we have three ops left, we check to see
     what order to put them in, and call it a day.  As a nod to vector sum
-    reduction, we check if any of ops are a really a phi node that is a
+    reduction, we check if any of the ops are really a phi node that is a
     destructive update for the associating op, and keep the destructive
     update together for vector sum reduction recognition.  */
 
@@ -229,23 +229,21 @@ get_rank (tree e)
 
   if (TREE_CODE (e) == SSA_NAME)
     {
-      tree stmt;
-      tree rhs;
+      gimple stmt;
       long rank, maxrank;
-      int i;
-      int n;
+      int i, n;
 
       if (TREE_CODE (SSA_NAME_VAR (e)) == PARM_DECL
 	  && SSA_NAME_IS_DEFAULT_DEF (e))
 	return find_operand_rank (e);
 
       stmt = SSA_NAME_DEF_STMT (e);
-      if (bb_for_stmt (stmt) == NULL)
+      if (gimple_bb (stmt) == NULL)
 	return 0;
 
-      if (TREE_CODE (stmt) != GIMPLE_MODIFY_STMT
+      if (!is_gimple_assign (stmt)
 	  || !ZERO_SSA_OPERANDS (stmt, SSA_OP_VIRTUAL_DEFS))
-	return bb_rank[bb_for_stmt (stmt)->index];
+	return bb_rank[gimple_bb (stmt)->index];
 
       /* If we already have a rank for this expression, use that.  */
       rank = find_operand_rank (e);
@@ -255,19 +253,28 @@ get_rank (tree e)
       /* Otherwise, find the maximum rank for the operands, or the bb
 	 rank, whichever is less.   */
       rank = 0;
-      maxrank = bb_rank[bb_for_stmt(stmt)->index];
-      rhs = GIMPLE_STMT_OPERAND (stmt, 1);
-      n = TREE_OPERAND_LENGTH (rhs);
-      if (n == 0)
-	rank = MAX (rank, get_rank (rhs));
+      maxrank = bb_rank[gimple_bb(stmt)->index];
+      if (gimple_assign_single_p (stmt))
+	{
+	  tree rhs = gimple_assign_rhs1 (stmt);
+	  n = TREE_OPERAND_LENGTH (rhs);
+	  if (n == 0)
+	    rank = MAX (rank, get_rank (rhs));
+	  else
+	    {
+	      for (i = 0;
+		   i < n && TREE_OPERAND (rhs, i) && rank != maxrank; i++)
+		rank = MAX(rank, get_rank (TREE_OPERAND (rhs, i)));
+	    }
+	}
       else
 	{
-	  for (i = 0;
-	       i < n
-		 && TREE_OPERAND (rhs, i)
-		 && rank != maxrank;
-	       i++)
-	    rank = MAX(rank, get_rank (TREE_OPERAND (rhs, i)));
+	  n = gimple_num_ops (stmt);
+	  for (i = 1; i < n && rank != maxrank; i++)
+	    {
+	      gcc_assert (gimple_op (stmt, i));
+	      rank = MAX(rank, get_rank (gimple_op (stmt, i)));
+	    }
 	}
 
       if (dump_file && (dump_flags & TDF_DETAILS))
@@ -348,21 +355,21 @@ add_to_ops_vec (VEC(operand_entry_t, heap) **ops, tree op)
    operation with tree code CODE, and is inside LOOP.  */
 
 static bool
-is_reassociable_op (tree stmt, enum tree_code code, struct loop *loop)
+is_reassociable_op (gimple stmt, enum tree_code code, struct loop *loop)
 {
-  basic_block bb;
+  basic_block bb = gimple_bb (stmt);
 
-  if (IS_EMPTY_STMT (stmt))
+  if (gimple_bb (stmt) == NULL)
     return false;
 
-  bb = bb_for_stmt (stmt);
   if (!flow_bb_inside_loop_p (loop, bb))
     return false;
 
-  if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT
-      && TREE_CODE (GIMPLE_STMT_OPERAND (stmt, 1)) == code
-      && has_single_use (GIMPLE_STMT_OPERAND (stmt, 0)))
+  if (is_gimple_assign (stmt)
+      && gimple_assign_rhs_code (stmt) == code
+      && has_single_use (gimple_assign_lhs (stmt)))
     return true;
+
   return false;
 }
 
@@ -373,15 +380,13 @@ is_reassociable_op (tree stmt, enum tree_code code, struct loop *loop)
 static tree
 get_unary_op (tree name, enum tree_code opcode)
 {
-  tree stmt = SSA_NAME_DEF_STMT (name);
-  tree rhs;
+  gimple stmt = SSA_NAME_DEF_STMT (name);
 
-  if (TREE_CODE (stmt) != GIMPLE_MODIFY_STMT)
+  if (!is_gimple_assign (stmt))
     return NULL_TREE;
 
-  rhs = GIMPLE_STMT_OPERAND (stmt, 1);
-  if (TREE_CODE (rhs) == opcode)
-    return TREE_OPERAND (rhs, 0);
+  if (gimple_assign_rhs_code (stmt) == opcode)
+    return gimple_assign_rhs1 (stmt);
   return NULL_TREE;
 }
 
@@ -598,8 +603,10 @@ eliminate_using_constants (enum tree_code opcode,
 			   VEC(operand_entry_t, heap) **ops)
 {
   operand_entry_t oelast = VEC_last (operand_entry_t, *ops);
+  tree type = TREE_TYPE (oelast->op);
 
-  if (oelast->rank == 0 && INTEGRAL_TYPE_P (TREE_TYPE (oelast->op)))
+  if (oelast->rank == 0
+      && (INTEGRAL_TYPE_P (type) || FLOAT_TYPE_P (type)))
     {
       switch (opcode)
 	{
@@ -660,7 +667,11 @@ eliminate_using_constants (enum tree_code opcode,
 	    }
 	  break;
 	case MULT_EXPR:
-	  if (integer_zerop (oelast->op))
+	  if (integer_zerop (oelast->op)
+	      || (FLOAT_TYPE_P (type)
+		  && !HONOR_NANS (TYPE_MODE (type))
+		  && !HONOR_SIGNED_ZEROS (TYPE_MODE (type))
+		  && real_zerop (oelast->op)))
 	    {
 	      if (VEC_length (operand_entry_t, *ops) != 1)
 		{
@@ -675,7 +686,10 @@ eliminate_using_constants (enum tree_code opcode,
 		  return;
 		}
 	    }
-	  else if (integer_onep (oelast->op))
+	  else if (integer_onep (oelast->op)
+		   || (FLOAT_TYPE_P (type)
+		       && !HONOR_SNANS (TYPE_MODE (type))
+		       && real_onep (oelast->op)))
 	    {
 	      if (VEC_length (operand_entry_t, *ops) != 1)
 		{
@@ -690,7 +704,11 @@ eliminate_using_constants (enum tree_code opcode,
 	case BIT_XOR_EXPR:
 	case PLUS_EXPR:
 	case MINUS_EXPR:
-	  if (integer_zerop (oelast->op))
+	  if (integer_zerop (oelast->op)
+	      || (FLOAT_TYPE_P (type)
+		  && (opcode == PLUS_EXPR || opcode == MINUS_EXPR)
+		  && fold_real_zero_addition_p (type, oelast->op,
+						opcode == MINUS_EXPR)))
 	    {
 	      if (VEC_length (operand_entry_t, *ops) != 1)
 		{
@@ -707,6 +725,439 @@ eliminate_using_constants (enum tree_code opcode,
 	}
     }
 }
+
+
+static void linearize_expr_tree (VEC(operand_entry_t, heap) **, gimple,
+				 bool, bool);
+
+/* Structure for tracking and counting operands.  */
+typedef struct oecount_s {
+  int cnt;
+  enum tree_code oecode;
+  tree op;
+} oecount;
+
+DEF_VEC_O(oecount);
+DEF_VEC_ALLOC_O(oecount,heap);
+
+/* The heap for the oecount hashtable and the sorted list of operands.  */
+static VEC (oecount, heap) *cvec;
+
+/* Hash function for oecount.  */
+
+static hashval_t
+oecount_hash (const void *p)
+{
+  const oecount *c = VEC_index (oecount, cvec, (size_t)p - 42);
+  return htab_hash_pointer (c->op) ^ (hashval_t)c->oecode;
+}
+
+/* Comparison function for oecount.  */
+
+static int
+oecount_eq (const void *p1, const void *p2)
+{
+  const oecount *c1 = VEC_index (oecount, cvec, (size_t)p1 - 42);
+  const oecount *c2 = VEC_index (oecount, cvec, (size_t)p2 - 42);
+  return (c1->oecode == c2->oecode
+	  && c1->op == c2->op);
+}
+
+/* Comparison function for qsort sorting oecount elements by count.  */
+
+static int
+oecount_cmp (const void *p1, const void *p2)
+{
+  const oecount *c1 = (const oecount *)p1;
+  const oecount *c2 = (const oecount *)p2;
+  return c1->cnt - c2->cnt;
+}
+
+/* Walks the linear chain with result *DEF searching for an operation
+   with operand OP and code OPCODE removing that from the chain.  *DEF
+   is updated if there is only one operand but no operation left.  */
+
+static void
+zero_one_operation (tree *def, enum tree_code opcode, tree op)
+{
+  gimple stmt = SSA_NAME_DEF_STMT (*def);
+
+  do
+    {
+      tree name = gimple_assign_rhs1 (stmt);
+
+      /* If this is the operation we look for and one of the operands
+         is ours simply propagate the other operand into the stmts
+	 single use.  */
+      if (gimple_assign_rhs_code (stmt) == opcode
+	  && (name == op
+	      || gimple_assign_rhs2 (stmt) == op))
+	{
+	  gimple use_stmt;
+	  use_operand_p use;
+	  gimple_stmt_iterator gsi;
+	  if (name == op)
+	    name = gimple_assign_rhs2 (stmt);
+	  gcc_assert (has_single_use (gimple_assign_lhs (stmt)));
+	  single_imm_use (gimple_assign_lhs (stmt), &use, &use_stmt);
+	  if (gimple_assign_lhs (stmt) == *def)
+	    *def = name;
+	  SET_USE (use, name);
+	  if (TREE_CODE (name) != SSA_NAME)
+	    update_stmt (use_stmt);
+	  gsi = gsi_for_stmt (stmt);
+	  gsi_remove (&gsi, true);
+	  release_defs (stmt);
+	  return;
+	}
+
+      /* Continue walking the chain.  */
+      gcc_assert (name != op
+		  && TREE_CODE (name) == SSA_NAME);
+      stmt = SSA_NAME_DEF_STMT (name);
+    }
+  while (1);
+}
+
+/* Builds one statement performing OP1 OPCODE OP2 using TMPVAR for
+   the result.  Places the statement after the definition of either
+   OP1 or OP2.  Returns the new statement.  */
+
+static gimple
+build_and_add_sum (tree tmpvar, tree op1, tree op2, enum tree_code opcode)
+{
+  gimple op1def = NULL, op2def = NULL;
+  gimple_stmt_iterator gsi;
+  tree op;
+  gimple sum;
+
+  /* Create the addition statement.  */
+  sum = gimple_build_assign_with_ops (opcode, tmpvar, op1, op2);
+  op = make_ssa_name (tmpvar, sum);
+  gimple_assign_set_lhs (sum, op);
+
+  /* Find an insertion place and insert.  */
+  if (TREE_CODE (op1) == SSA_NAME)
+    op1def = SSA_NAME_DEF_STMT (op1);
+  if (TREE_CODE (op2) == SSA_NAME)
+    op2def = SSA_NAME_DEF_STMT (op2);
+  if ((!op1def || gimple_nop_p (op1def))
+      && (!op2def || gimple_nop_p (op2def)))
+    {
+      gsi = gsi_after_labels (single_succ (ENTRY_BLOCK_PTR));
+      gsi_insert_before (&gsi, sum, GSI_NEW_STMT);
+    }
+  else if ((!op1def || gimple_nop_p (op1def))
+	   || (op2def && !gimple_nop_p (op2def)
+	       && stmt_dominates_stmt_p (op1def, op2def)))
+    {
+      if (gimple_code (op2def) == GIMPLE_PHI)
+	{
+	  gsi = gsi_after_labels (gimple_bb (op2def));
+	  gsi_insert_before (&gsi, sum, GSI_NEW_STMT);
+	}
+      else
+	{
+	  if (!stmt_ends_bb_p (op2def))
+	    {
+	      gsi = gsi_for_stmt (op2def);
+	      gsi_insert_after (&gsi, sum, GSI_NEW_STMT);
+	    }
+	  else
+	    {
+	      edge e;
+	      edge_iterator ei;
+
+	      FOR_EACH_EDGE (e, ei, gimple_bb (op2def)->succs)
+		if (e->flags & EDGE_FALLTHRU)
+		  gsi_insert_on_edge_immediate (e, sum);
+	    }
+	}
+    }
+  else
+    {
+      if (gimple_code (op1def) == GIMPLE_PHI)
+	{
+	  gsi = gsi_after_labels (gimple_bb (op1def));
+	  gsi_insert_before (&gsi, sum, GSI_NEW_STMT);
+	}
+      else
+	{
+	  if (!stmt_ends_bb_p (op1def))
+	    {
+	      gsi = gsi_for_stmt (op1def);
+	      gsi_insert_after (&gsi, sum, GSI_NEW_STMT);
+	    }
+	  else
+	    {
+	      edge e;
+	      edge_iterator ei;
+
+	      FOR_EACH_EDGE (e, ei, gimple_bb (op1def)->succs)
+		if (e->flags & EDGE_FALLTHRU)
+		  gsi_insert_on_edge_immediate (e, sum);
+	    }
+	}
+    }
+  update_stmt (sum);
+
+  return sum;
+}
+
+/* Perform un-distribution of divisions and multiplications.
+   A * X + B * X is transformed into (A + B) * X and A / X + B / X
+   to (A + B) / X for real X.
+
+   The algorithm is organized as follows.
+
+    - First we walk the addition chain *OPS looking for summands that
+      are defined by a multiplication or a real division.  This results
+      in the candidates bitmap with relevant indices into *OPS.
+
+    - Second we build the chains of multiplications or divisions for
+      these candidates, counting the number of occurences of (operand, code)
+      pairs in all of the candidates chains.
+
+    - Third we sort the (operand, code) pairs by number of occurence and
+      process them starting with the pair with the most uses.
+
+      * For each such pair we walk the candidates again to build a
+        second candidate bitmap noting all multiplication/division chains
+	that have at least one occurence of (operand, code).
+
+      * We build an alternate addition chain only covering these
+        candidates with one (operand, code) operation removed from their
+	multiplication/division chain.
+
+      * The first candidate gets replaced by the alternate addition chain
+        multiplied/divided by the operand.
+
+      * All candidate chains get disabled for further processing and
+        processing of (operand, code) pairs continues.
+
+  The alternate addition chains built are re-processed by the main
+  reassociation algorithm which allows optimizing a * x * y + b * y * x
+  to (a + b ) * x * y in one invocation of the reassociation pass.  */
+
+static bool
+undistribute_ops_list (enum tree_code opcode,
+		       VEC (operand_entry_t, heap) **ops, struct loop *loop)
+{
+  unsigned int length = VEC_length (operand_entry_t, *ops);
+  operand_entry_t oe1;
+  unsigned i, j;
+  sbitmap candidates, candidates2;
+  unsigned nr_candidates, nr_candidates2;
+  sbitmap_iterator sbi0;
+  VEC (operand_entry_t, heap) **subops;
+  htab_t ctable;
+  bool changed = false;
+
+  if (length <= 1
+      || opcode != PLUS_EXPR)
+    return false;
+
+  /* Build a list of candidates to process.  */
+  candidates = sbitmap_alloc (length);
+  sbitmap_zero (candidates);
+  nr_candidates = 0;
+  for (i = 0; VEC_iterate (operand_entry_t, *ops, i, oe1); ++i)
+    {
+      enum tree_code dcode;
+      gimple oe1def;
+
+      if (TREE_CODE (oe1->op) != SSA_NAME)
+	continue;
+      oe1def = SSA_NAME_DEF_STMT (oe1->op);
+      if (!is_gimple_assign (oe1def))
+	continue;
+      dcode = gimple_assign_rhs_code (oe1def);
+      if ((dcode != MULT_EXPR
+	   && dcode != RDIV_EXPR)
+	  || !is_reassociable_op (oe1def, dcode, loop))
+	continue;
+
+      SET_BIT (candidates, i);
+      nr_candidates++;
+    }
+
+  if (nr_candidates < 2)
+    {
+      sbitmap_free (candidates);
+      return false;
+    }
+
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    {
+      fprintf (dump_file, "searching for un-distribute opportunities ");
+      print_generic_expr (dump_file,
+	VEC_index (operand_entry_t, *ops,
+		   sbitmap_first_set_bit (candidates))->op, 0);
+      fprintf (dump_file, " %d\n", nr_candidates);
+    }
+
+  /* Build linearized sub-operand lists and the counting table.  */
+  cvec = NULL;
+  ctable = htab_create (15, oecount_hash, oecount_eq, NULL);
+  subops = XCNEWVEC (VEC (operand_entry_t, heap) *,
+		     VEC_length (operand_entry_t, *ops));
+  EXECUTE_IF_SET_IN_SBITMAP (candidates, 0, i, sbi0)
+    {
+      gimple oedef;
+      enum tree_code oecode;
+      unsigned j;
+
+      oedef = SSA_NAME_DEF_STMT (VEC_index (operand_entry_t, *ops, i)->op);
+      oecode = gimple_assign_rhs_code (oedef);
+      linearize_expr_tree (&subops[i], oedef,
+			   associative_tree_code (oecode), false);
+
+      for (j = 0; VEC_iterate (operand_entry_t, subops[i], j, oe1); ++j)
+	{
+	  oecount c;
+	  void **slot;
+	  size_t idx;
+	  c.oecode = oecode;
+	  c.cnt = 1;
+	  c.op = oe1->op;
+	  VEC_safe_push (oecount, heap, cvec, &c);
+	  idx = VEC_length (oecount, cvec) + 41;
+	  slot = htab_find_slot (ctable, (void *)idx, INSERT);
+	  if (!*slot)
+	    {
+	      *slot = (void *)idx;
+	    }
+	  else
+	    {
+	      VEC_pop (oecount, cvec);
+	      VEC_index (oecount, cvec, (size_t)*slot - 42)->cnt++;
+	    }
+	}
+    }
+  htab_delete (ctable);
+
+  /* Sort the counting table.  */
+  qsort (VEC_address (oecount, cvec), VEC_length (oecount, cvec),
+	 sizeof (oecount), oecount_cmp);
+
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    {
+      oecount *c;
+      fprintf (dump_file, "Candidates:\n");
+      for (j = 0; VEC_iterate (oecount, cvec, j, c); ++j)
+	{
+	  fprintf (dump_file, "  %u %s: ", c->cnt,
+		   c->oecode == MULT_EXPR
+		   ? "*" : c->oecode == RDIV_EXPR ? "/" : "?");
+	  print_generic_expr (dump_file, c->op, 0);
+	  fprintf (dump_file, "\n");
+	}
+    }
+
+  /* Process the (operand, code) pairs in order of most occurence.  */
+  candidates2 = sbitmap_alloc (length);
+  while (!VEC_empty (oecount, cvec))
+    {
+      oecount *c = VEC_last (oecount, cvec);
+      if (c->cnt < 2)
+	break;
+
+      /* Now collect the operands in the outer chain that contain
+         the common operand in their inner chain.  */
+      sbitmap_zero (candidates2);
+      nr_candidates2 = 0;
+      EXECUTE_IF_SET_IN_SBITMAP (candidates, 0, i, sbi0)
+	{
+	  gimple oedef;
+	  enum tree_code oecode;
+	  unsigned j;
+	  tree op = VEC_index (operand_entry_t, *ops, i)->op;
+
+	  /* If we undistributed in this chain already this may be
+	     a constant.  */
+	  if (TREE_CODE (op) != SSA_NAME)
+	    continue;
+
+	  oedef = SSA_NAME_DEF_STMT (op);
+	  oecode = gimple_assign_rhs_code (oedef);
+	  if (oecode != c->oecode)
+	    continue;
+
+	  for (j = 0; VEC_iterate (operand_entry_t, subops[i], j, oe1); ++j)
+	    {
+	      if (oe1->op == c->op)
+		{
+		  SET_BIT (candidates2, i);
+		  ++nr_candidates2;
+		  break;
+		}
+	    }
+	}
+
+      if (nr_candidates2 >= 2)
+	{
+	  operand_entry_t oe1, oe2;
+	  tree tmpvar;
+	  gimple prod;
+	  int first = sbitmap_first_set_bit (candidates2);
+
+	  /* Build the new addition chain.  */
+	  oe1 = VEC_index (operand_entry_t, *ops, first);
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file, "Building (");
+	      print_generic_expr (dump_file, oe1->op, 0);
+	    }
+	  tmpvar = create_tmp_var (TREE_TYPE (oe1->op), NULL);
+	  add_referenced_var (tmpvar);
+	  zero_one_operation (&oe1->op, c->oecode, c->op);
+	  EXECUTE_IF_SET_IN_SBITMAP (candidates2, first+1, i, sbi0)
+	    {
+	      gimple sum;
+	      oe2 = VEC_index (operand_entry_t, *ops, i);
+	      if (dump_file && (dump_flags & TDF_DETAILS))
+		{
+		  fprintf (dump_file, " + ");
+		  print_generic_expr (dump_file, oe2->op, 0);
+		}
+	      zero_one_operation (&oe2->op, c->oecode, c->op);
+	      sum = build_and_add_sum (tmpvar, oe1->op, oe2->op, opcode);
+	      oe2->op = fold_convert (TREE_TYPE (oe2->op), integer_zero_node);
+	      oe2->rank = 0;
+	      oe1->op = gimple_get_lhs (sum);
+	    }
+
+	  /* Apply the multiplication/division.  */
+	  prod = build_and_add_sum (tmpvar, oe1->op, c->op, c->oecode);
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file, ") %s ", c->oecode == MULT_EXPR ? "*" : "/");
+	      print_generic_expr (dump_file, c->op, 0);
+	      fprintf (dump_file, "\n");
+	    }
+
+	  /* Record it in the addition chain and disable further
+	     undistribution with this op.  */
+	  oe1->op = gimple_assign_lhs (prod);
+	  oe1->rank = get_rank (oe1->op);
+	  VEC_free (operand_entry_t, heap, subops[first]);
+
+	  changed = true;
+	}
+
+      VEC_pop (oecount, cvec);
+    }
+
+  for (i = 0; i < VEC_length (operand_entry_t, *ops); ++i)
+    VEC_free (operand_entry_t, heap, subops[i]);
+  free (subops);
+  VEC_free (oecount, heap, cvec);
+  sbitmap_free (candidates);
+  sbitmap_free (candidates2);
+
+  return changed;
+}
+
 
 /* Perform various identities and other optimizations on the list of
    operand entries, stored in OPS.  The tree code for the binary
@@ -792,18 +1243,20 @@ optimize_ops_list (enum tree_code opcode,
    update" operation.  */
 
 static bool
-is_phi_for_stmt (tree stmt, tree operand)
+is_phi_for_stmt (gimple stmt, tree operand)
 {
-  tree def_stmt;
-  tree lhs = GIMPLE_STMT_OPERAND (stmt, 0);
+  gimple def_stmt;
+  tree lhs;
   use_operand_p arg_p;
   ssa_op_iter i;
 
   if (TREE_CODE (operand) != SSA_NAME)
     return false;
 
+  lhs = gimple_assign_lhs (stmt);
+
   def_stmt = SSA_NAME_DEF_STMT (operand);
-  if (TREE_CODE (def_stmt) != PHI_NODE)
+  if (gimple_code (def_stmt) != GIMPLE_PHI)
     return false;
 
   FOR_EACH_PHI_ARG (arg_p, def_stmt, i, SSA_OP_USE)
@@ -812,15 +1265,40 @@ is_phi_for_stmt (tree stmt, tree operand)
   return false;
 }
 
+/* Remove def stmt of VAR if VAR has zero uses and recurse
+   on rhs1 operand if so.  */
+
+static void
+remove_visited_stmt_chain (tree var)
+{
+  gimple stmt;
+  gimple_stmt_iterator gsi;
+
+  while (1)
+    {
+      if (TREE_CODE (var) != SSA_NAME || !has_zero_uses (var))
+	return;
+      stmt = SSA_NAME_DEF_STMT (var);
+      if (!is_gimple_assign (stmt)
+	  || !gimple_visited_p (stmt))
+	return;
+      var = gimple_assign_rhs1 (stmt);
+      gsi = gsi_for_stmt (stmt);
+      gsi_remove (&gsi, true);
+      release_defs (stmt);
+    }
+}
+
 /* Recursively rewrite our linearized statements so that the operators
    match those in OPS[OPINDEX], putting the computation in rank
    order.  */
 
 static void
-rewrite_expr_tree (tree stmt, unsigned int opindex,
-		   VEC(operand_entry_t, heap) * ops)
+rewrite_expr_tree (gimple stmt, unsigned int opindex,
+		   VEC(operand_entry_t, heap) * ops, bool moved)
 {
-  tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
+  tree rhs1 = gimple_assign_rhs1 (stmt);
+  tree rhs2 = gimple_assign_rhs2 (stmt);
   operand_entry_t oe;
 
   /* If we have three operands left, then we want to make sure the one
@@ -883,24 +1361,24 @@ rewrite_expr_tree (tree stmt, unsigned int opindex,
       oe1 = VEC_index (operand_entry_t, ops, opindex);
       oe2 = VEC_index (operand_entry_t, ops, opindex + 1);
 
-      if (TREE_OPERAND (rhs, 0) != oe1->op
-	  || TREE_OPERAND (rhs, 1) != oe2->op)
+      if (rhs1 != oe1->op || rhs2 != oe2->op)
 	{
-
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "Transforming ");
-	      print_generic_expr (dump_file, rhs, 0);
+	      print_gimple_stmt (dump_file, stmt, 0, 0);
 	    }
 
-	  TREE_OPERAND (rhs, 0) = oe1->op;
-	  TREE_OPERAND (rhs, 1) = oe2->op;
+	  gimple_assign_set_rhs1 (stmt, oe1->op);
+	  gimple_assign_set_rhs2 (stmt, oe2->op);
 	  update_stmt (stmt);
+	  if (rhs1 != oe1->op && rhs1 != oe2->op)
+	    remove_visited_stmt_chain (rhs1);
 
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, " into ");
-	      print_generic_stmt (dump_file, rhs, 0);
+	      print_gimple_stmt (dump_file, stmt, 0, 0);
 	    }
 
 	}
@@ -913,28 +1391,45 @@ rewrite_expr_tree (tree stmt, unsigned int opindex,
   /* Rewrite the next operator.  */
   oe = VEC_index (operand_entry_t, ops, opindex);
 
-  if (oe->op != TREE_OPERAND (rhs, 1))
+  if (oe->op != rhs2)
     {
+      if (!moved)
+	{
+	  gimple_stmt_iterator gsinow, gsirhs1;
+	  gimple stmt1 = stmt, stmt2;
+	  unsigned int count;
+
+	  gsinow = gsi_for_stmt (stmt);
+	  count = VEC_length (operand_entry_t, ops) - opindex - 2;
+	  while (count-- != 0)
+	    {
+	      stmt2 = SSA_NAME_DEF_STMT (gimple_assign_rhs1 (stmt1));
+	      gsirhs1 = gsi_for_stmt (stmt2);
+	      gsi_move_before (&gsirhs1, &gsinow);
+	      gsi_prev (&gsinow);
+	      stmt1 = stmt2;
+	    }
+	  moved = true;
+	}
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
 	  fprintf (dump_file, "Transforming ");
-	  print_generic_expr (dump_file, rhs, 0);
+	  print_gimple_stmt (dump_file, stmt, 0, 0);
 	}
 
-      TREE_OPERAND (rhs, 1) = oe->op;
+      gimple_assign_set_rhs2 (stmt, oe->op);
       update_stmt (stmt);
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
 	  fprintf (dump_file, " into ");
-	  print_generic_stmt (dump_file, rhs, 0);
+	  print_gimple_stmt (dump_file, stmt, 0, 0);
 	}
     }
   /* Recurse on the LHS of the binary operator, which is guaranteed to
      be the non-leaf side.  */
-  rewrite_expr_tree (SSA_NAME_DEF_STMT (TREE_OPERAND (rhs, 0)),
-		     opindex + 1, ops);
+  rewrite_expr_tree (SSA_NAME_DEF_STMT (rhs1), opindex + 1, ops, moved);
 }
 
 /* Transform STMT, which is really (A +B) + (C + D) into the left
@@ -942,114 +1437,114 @@ rewrite_expr_tree (tree stmt, unsigned int opindex,
    Recurse on D if necessary.  */
 
 static void
-linearize_expr (tree stmt)
+linearize_expr (gimple stmt)
 {
-  block_stmt_iterator bsinow, bsirhs;
-  tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
-  enum tree_code rhscode = TREE_CODE (rhs);
-  tree binrhs = SSA_NAME_DEF_STMT (TREE_OPERAND (rhs, 1));
-  tree binlhs = SSA_NAME_DEF_STMT (TREE_OPERAND (rhs, 0));
-  tree newbinrhs = NULL_TREE;
+  gimple_stmt_iterator gsinow, gsirhs;
+  gimple binlhs = SSA_NAME_DEF_STMT (gimple_assign_rhs1 (stmt));
+  gimple binrhs = SSA_NAME_DEF_STMT (gimple_assign_rhs2 (stmt));
+  enum tree_code rhscode = gimple_assign_rhs_code (stmt);
+  gimple newbinrhs = NULL;
   struct loop *loop = loop_containing_stmt (stmt);
 
-  gcc_assert (is_reassociable_op (binlhs, TREE_CODE (rhs), loop)
-	      && is_reassociable_op (binrhs, TREE_CODE (rhs), loop));
+  gcc_assert (is_reassociable_op (binlhs, rhscode, loop)
+	      && is_reassociable_op (binrhs, rhscode, loop));
 
-  bsinow = bsi_for_stmt (stmt);
-  bsirhs = bsi_for_stmt (binrhs);
-  bsi_move_before (&bsirhs, &bsinow);
+  gsinow = gsi_for_stmt (stmt);
+  gsirhs = gsi_for_stmt (binrhs);
+  gsi_move_before (&gsirhs, &gsinow);
 
-  TREE_OPERAND (rhs, 1) = TREE_OPERAND (GIMPLE_STMT_OPERAND (binrhs, 1), 0);
-  if (TREE_CODE (TREE_OPERAND (rhs, 1)) == SSA_NAME)
-    newbinrhs = SSA_NAME_DEF_STMT (TREE_OPERAND (rhs, 1));
-  TREE_OPERAND (GIMPLE_STMT_OPERAND (binrhs, 1), 0)
-    = GIMPLE_STMT_OPERAND (binlhs, 0);
-  TREE_OPERAND (rhs, 0) = GIMPLE_STMT_OPERAND (binrhs, 0);
+  gimple_assign_set_rhs2 (stmt, gimple_assign_rhs1 (binrhs));
+  gimple_assign_set_rhs1 (binrhs, gimple_assign_lhs (binlhs));
+  gimple_assign_set_rhs1 (stmt, gimple_assign_lhs (binrhs));
+
+  if (TREE_CODE (gimple_assign_rhs2 (stmt)) == SSA_NAME)
+    newbinrhs = SSA_NAME_DEF_STMT (gimple_assign_rhs2 (stmt));
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "Linearized: ");
-      print_generic_stmt (dump_file, rhs, 0);
+      print_gimple_stmt (dump_file, stmt, 0, 0);
     }
 
   reassociate_stats.linearized++;
   update_stmt (binrhs);
   update_stmt (binlhs);
   update_stmt (stmt);
-  TREE_VISITED (binrhs) = 1;
-  TREE_VISITED (binlhs) = 1;
-  TREE_VISITED (stmt) = 1;
+
+  gimple_set_visited (stmt, true);
+  gimple_set_visited (binlhs, true);
+  gimple_set_visited (binrhs, true);
 
   /* Tail recurse on the new rhs if it still needs reassociation.  */
   if (newbinrhs && is_reassociable_op (newbinrhs, rhscode, loop))
+    /* ??? This should probably be linearize_expr (newbinrhs) but I don't
+	   want to change the algorithm while converting to tuples.  */
     linearize_expr (stmt);
 }
 
-/* If LHS has a single immediate use that is a GIMPLE_MODIFY_STMT, return
+/* If LHS has a single immediate use that is a GIMPLE_ASSIGN statement, return
    it.  Otherwise, return NULL.  */
 
-static tree
+static gimple
 get_single_immediate_use (tree lhs)
 {
   use_operand_p immuse;
-  tree immusestmt;
+  gimple immusestmt;
 
   if (TREE_CODE (lhs) == SSA_NAME
-      && single_imm_use (lhs, &immuse, &immusestmt))
-    {
-      if (TREE_CODE (immusestmt) == RETURN_EXPR)
-	immusestmt = TREE_OPERAND (immusestmt, 0);
-      if (TREE_CODE (immusestmt) == GIMPLE_MODIFY_STMT)
-	return immusestmt;
-    }
-  return NULL_TREE;
-}
-static VEC(tree, heap) *broken_up_subtracts;
+      && single_imm_use (lhs, &immuse, &immusestmt)
+      && is_gimple_assign (immusestmt))
+    return immusestmt;
 
+  return NULL;
+}
+
+static VEC(tree, heap) *broken_up_subtracts;
 
 /* Recursively negate the value of TONEGATE, and return the SSA_NAME
    representing the negated value.  Insertions of any necessary
-   instructions go before BSI.
+   instructions go before GSI.
    This function is recursive in that, if you hand it "a_5" as the
    value to negate, and a_5 is defined by "a_5 = b_3 + b_4", it will
    transform b_3 + b_4 into a_5 = -b_3 + -b_4.  */
 
 static tree
-negate_value (tree tonegate, block_stmt_iterator *bsi)
+negate_value (tree tonegate, gimple_stmt_iterator *gsi)
 {
-  tree negatedef = tonegate;
+  gimple negatedefstmt= NULL;
   tree resultofnegate;
-
-  if (TREE_CODE (tonegate) == SSA_NAME)
-    negatedef = SSA_NAME_DEF_STMT (tonegate);
 
   /* If we are trying to negate a name, defined by an add, negate the
      add operands instead.  */
+  if (TREE_CODE (tonegate) == SSA_NAME)
+    negatedefstmt = SSA_NAME_DEF_STMT (tonegate);
   if (TREE_CODE (tonegate) == SSA_NAME
-      && TREE_CODE (negatedef) == GIMPLE_MODIFY_STMT
-      && TREE_CODE (GIMPLE_STMT_OPERAND (negatedef, 0)) == SSA_NAME
-      && has_single_use (GIMPLE_STMT_OPERAND (negatedef, 0))
-      && TREE_CODE (GIMPLE_STMT_OPERAND (negatedef, 1)) == PLUS_EXPR)
+      && is_gimple_assign (negatedefstmt)
+      && TREE_CODE (gimple_assign_lhs (negatedefstmt)) == SSA_NAME
+      && has_single_use (gimple_assign_lhs (negatedefstmt))
+      && gimple_assign_rhs_code (negatedefstmt) == PLUS_EXPR)
     {
-      block_stmt_iterator bsi;
-      tree binop = GIMPLE_STMT_OPERAND (negatedef, 1);
+      gimple_stmt_iterator gsi;
+      tree rhs1 = gimple_assign_rhs1 (negatedefstmt);
+      tree rhs2 = gimple_assign_rhs2 (negatedefstmt);
 
-      bsi = bsi_for_stmt (negatedef);
-      TREE_OPERAND (binop, 0) = negate_value (TREE_OPERAND (binop, 0),
-					      &bsi);
-      bsi = bsi_for_stmt (negatedef);
-      TREE_OPERAND (binop, 1) = negate_value (TREE_OPERAND (binop, 1),
-					      &bsi);
-      update_stmt (negatedef);
-      return GIMPLE_STMT_OPERAND (negatedef, 0);
+      gsi = gsi_for_stmt (negatedefstmt);
+      rhs1 = negate_value (rhs1, &gsi);
+      gimple_assign_set_rhs1 (negatedefstmt, rhs1);
+
+      gsi = gsi_for_stmt (negatedefstmt);
+      rhs2 = negate_value (rhs2, &gsi);
+      gimple_assign_set_rhs2 (negatedefstmt, rhs2);
+
+      update_stmt (negatedefstmt);
+      return gimple_assign_lhs (negatedefstmt);
     }
 
   tonegate = fold_build1 (NEGATE_EXPR, TREE_TYPE (tonegate), tonegate);
-  resultofnegate = force_gimple_operand_bsi (bsi, tonegate, true,
-					     NULL_TREE, true, BSI_SAME_STMT);
+  resultofnegate = force_gimple_operand_gsi (gsi, tonegate, true,
+					     NULL_TREE, true, GSI_SAME_STMT);
   VEC_safe_push (tree, heap, broken_up_subtracts, resultofnegate);
   return resultofnegate;
-
 }
 
 /* Return true if we should break up the subtract in STMT into an add
@@ -1059,14 +1554,12 @@ negate_value (tree tonegate, block_stmt_iterator *bsi)
    exposes the adds to reassociation.  */
 
 static bool
-should_break_up_subtract (tree stmt)
+should_break_up_subtract (gimple stmt)
 {
-
-  tree lhs = GIMPLE_STMT_OPERAND (stmt, 0);
-  tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
-  tree binlhs = TREE_OPERAND (rhs, 0);
-  tree binrhs = TREE_OPERAND (rhs, 1);
-  tree immusestmt;
+  tree lhs = gimple_assign_lhs (stmt);
+  tree binlhs = gimple_assign_rhs1 (stmt);
+  tree binrhs = gimple_assign_rhs2 (stmt);
+  gimple immusestmt;
   struct loop *loop = loop_containing_stmt (stmt);
 
   if (TREE_CODE (binlhs) == SSA_NAME
@@ -1079,28 +1572,29 @@ should_break_up_subtract (tree stmt)
 
   if (TREE_CODE (lhs) == SSA_NAME
       && (immusestmt = get_single_immediate_use (lhs))
-      && TREE_CODE (GIMPLE_STMT_OPERAND (immusestmt, 1)) == PLUS_EXPR)
+      && is_gimple_assign (immusestmt)
+      && (gimple_assign_rhs_code (immusestmt) == PLUS_EXPR
+	  ||  gimple_assign_rhs_code (immusestmt) == MULT_EXPR))
     return true;
   return false;
-
 }
 
 /* Transform STMT from A - B into A + -B.  */
 
 static void
-break_up_subtract (tree stmt, block_stmt_iterator *bsi)
+break_up_subtract (gimple stmt, gimple_stmt_iterator *gsip)
 {
-  tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
+  tree rhs1 = gimple_assign_rhs1 (stmt);
+  tree rhs2 = gimple_assign_rhs2 (stmt);
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "Breaking up subtract ");
-      print_generic_stmt (dump_file, stmt, 0);
+      print_gimple_stmt (dump_file, stmt, 0, 0);
     }
 
-  TREE_SET_CODE (GIMPLE_STMT_OPERAND (stmt, 1), PLUS_EXPR);
-  TREE_OPERAND (rhs, 1) = negate_value (TREE_OPERAND (rhs, 1), bsi);
-
+  rhs2 = negate_value (rhs2, gsip);
+  gimple_assign_set_rhs_with_ops (gsip, PLUS_EXPR, rhs1, rhs2);
   update_stmt (stmt);
 }
 
@@ -1108,19 +1602,19 @@ break_up_subtract (tree stmt, block_stmt_iterator *bsi)
    Place the operands of the expression tree in the vector named OPS.  */
 
 static void
-linearize_expr_tree (VEC(operand_entry_t, heap) **ops, tree stmt)
+linearize_expr_tree (VEC(operand_entry_t, heap) **ops, gimple stmt,
+		     bool is_associative, bool set_visited)
 {
-  block_stmt_iterator bsinow, bsilhs;
-  tree rhs = GENERIC_TREE_OPERAND (stmt, 1);
-  tree binrhs = TREE_OPERAND (rhs, 1);
-  tree binlhs = TREE_OPERAND (rhs, 0);
-  tree binlhsdef, binrhsdef;
+  tree binlhs = gimple_assign_rhs1 (stmt);
+  tree binrhs = gimple_assign_rhs2 (stmt);
+  gimple binlhsdef, binrhsdef;
   bool binlhsisreassoc = false;
   bool binrhsisreassoc = false;
-  enum tree_code rhscode = TREE_CODE (rhs);
+  enum tree_code rhscode = gimple_assign_rhs_code (stmt);
   struct loop *loop = loop_containing_stmt (stmt);
 
-  TREE_VISITED (stmt) = 1;
+  if (set_visited)
+    gimple_set_visited (stmt, true);
 
   if (TREE_CODE (binlhs) == SSA_NAME)
     {
@@ -1144,6 +1638,13 @@ linearize_expr_tree (VEC(operand_entry_t, heap) **ops, tree stmt)
     {
       tree temp;
 
+      /* If this is not a associative operation like division, give up.  */
+      if (!is_associative)
+	{
+	  add_to_ops_vec (ops, binrhs);
+	  return;
+	}
+
       if (!binrhsisreassoc)
 	{
 	  add_to_ops_vec (ops, binrhs);
@@ -1154,17 +1655,18 @@ linearize_expr_tree (VEC(operand_entry_t, heap) **ops, tree stmt)
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
 	  fprintf (dump_file, "swapping operands of ");
-	  print_generic_expr (dump_file, stmt, 0);
+	  print_gimple_stmt (dump_file, stmt, 0, 0);
 	}
 
-      swap_tree_operands (stmt, &TREE_OPERAND (rhs, 0),
-			  &TREE_OPERAND (rhs, 1));
+      swap_tree_operands (stmt,
+			  gimple_assign_rhs1_ptr (stmt),
+			  gimple_assign_rhs2_ptr (stmt));
       update_stmt (stmt);
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
 	  fprintf (dump_file, " is now ");
-	  print_generic_stmt (dump_file, stmt, 0);
+	  print_gimple_stmt (dump_file, stmt, 0, 0);
 	}
 
       /* We want to make it so the lhs is always the reassociative op,
@@ -1176,18 +1678,15 @@ linearize_expr_tree (VEC(operand_entry_t, heap) **ops, tree stmt)
   else if (binrhsisreassoc)
     {
       linearize_expr (stmt);
-      gcc_assert (rhs == GIMPLE_STMT_OPERAND (stmt, 1));
-      binlhs = TREE_OPERAND (rhs, 0);
-      binrhs = TREE_OPERAND (rhs, 1);
+      binlhs = gimple_assign_rhs1 (stmt);
+      binrhs = gimple_assign_rhs2 (stmt);
     }
 
   gcc_assert (TREE_CODE (binrhs) != SSA_NAME
 	      || !is_reassociable_op (SSA_NAME_DEF_STMT (binrhs),
 				      rhscode, loop));
-  bsinow = bsi_for_stmt (stmt);
-  bsilhs = bsi_for_stmt (SSA_NAME_DEF_STMT (binlhs));
-  bsi_move_before (&bsilhs, &bsinow);
-  linearize_expr_tree (ops, SSA_NAME_DEF_STMT (binlhs));
+  linearize_expr_tree (ops, SSA_NAME_DEF_STMT (binlhs),
+		       is_associative, set_visited);
   add_to_ops_vec (ops, binrhs);
 }
 
@@ -1202,7 +1701,7 @@ repropagate_negates (void)
 
   for (i = 0; VEC_iterate (tree, broken_up_subtracts, i, negate); i++)
     {
-      tree user = get_single_immediate_use (negate);
+      gimple user = get_single_immediate_use (negate);
 
       /* The negate operand can be either operand of a PLUS_EXPR
 	 (it can be the LHS if the RHS is a constant for example).
@@ -1210,27 +1709,27 @@ repropagate_negates (void)
 	 Force the negate operand to the RHS of the PLUS_EXPR, then
 	 transform the PLUS_EXPR into a MINUS_EXPR.  */
       if (user
-	  && TREE_CODE (user) == GIMPLE_MODIFY_STMT
-	  && TREE_CODE (GIMPLE_STMT_OPERAND (user, 1)) == PLUS_EXPR)
+	  && is_gimple_assign (user)
+	  && gimple_assign_rhs_code (user) == PLUS_EXPR)
 	{
-	  tree rhs = GIMPLE_STMT_OPERAND (user, 1);
-
 	  /* If the negated operand appears on the LHS of the
 	     PLUS_EXPR, exchange the operands of the PLUS_EXPR
 	     to force the negated operand to the RHS of the PLUS_EXPR.  */
-	  if (TREE_OPERAND (GIMPLE_STMT_OPERAND (user, 1), 0) == negate)
+	  if (gimple_assign_rhs1 (user) == negate)
 	    {
-	      tree temp = TREE_OPERAND (rhs, 0);
-	      TREE_OPERAND (rhs, 0) = TREE_OPERAND (rhs, 1);
-	      TREE_OPERAND (rhs, 1) = temp;
+	      swap_tree_operands (user,
+				  gimple_assign_rhs1_ptr (user),
+				  gimple_assign_rhs2_ptr (user));
 	    }
 
 	  /* Now transform the PLUS_EXPR into a MINUS_EXPR and replace
 	     the RHS of the PLUS_EXPR with the operand of the NEGATE_EXPR.  */
-	  if (TREE_OPERAND (GIMPLE_STMT_OPERAND (user, 1), 1) == negate)
+	  if (gimple_assign_rhs2 (user) == negate)
 	    {
-	      TREE_SET_CODE (rhs, MINUS_EXPR);
-	      TREE_OPERAND (rhs, 1) = get_unary_op (negate, NEGATE_EXPR);
+	      tree rhs1 = gimple_assign_rhs1 (user);
+	      tree rhs2 = get_unary_op (negate, NEGATE_EXPR);
+	      gimple_stmt_iterator gsi = gsi_for_stmt (user);
+	      gimple_assign_set_rhs_with_ops (&gsi, MINUS_EXPR, rhs1, rhs2);
 	      update_stmt (user);
 	    }
 	}
@@ -1250,43 +1749,50 @@ repropagate_negates (void)
    k = t - q
    
    we want to break up k = t - q, but we won't until we've transformed q
-   = b - r, which won't be broken up until we transform b = c - d.  */
+   = b - r, which won't be broken up until we transform b = c - d.
+
+   En passant, clear the GIMPLE visited flag on every statement.  */
 
 static void
 break_up_subtract_bb (basic_block bb)
 {
-  block_stmt_iterator bsi;
+  gimple_stmt_iterator gsi;
   basic_block son;
 
-  for (bsi = bsi_start (bb); !bsi_end_p (bsi); bsi_next (&bsi))
+  for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
     {
-      tree stmt = bsi_stmt (bsi);
+      gimple stmt = gsi_stmt (gsi);
+      gimple_set_visited (stmt, false);
 
-      if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT)
+      /* Look for simple gimple subtract operations.  */
+      if (is_gimple_assign (stmt)
+	  && gimple_assign_rhs_code (stmt) == MINUS_EXPR)
 	{
-	  tree lhs = GIMPLE_STMT_OPERAND (stmt, 0);
-	  tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
+	  tree lhs = gimple_assign_lhs (stmt);
+	  tree rhs1 = gimple_assign_rhs1 (stmt);
+	  tree rhs2 = gimple_assign_rhs2 (stmt);
 
-	  TREE_VISITED (stmt) = 0;
 	  /* If associative-math we can do reassociation for
 	     non-integral types.  Or, we can do reassociation for
 	     non-saturating fixed-point types.  */
 	  if ((!INTEGRAL_TYPE_P (TREE_TYPE (lhs))
-	       || !INTEGRAL_TYPE_P (TREE_TYPE (rhs)))
-	      && (!SCALAR_FLOAT_TYPE_P (TREE_TYPE (rhs))
-		  || !SCALAR_FLOAT_TYPE_P (TREE_TYPE(lhs))
+	       || !INTEGRAL_TYPE_P (TREE_TYPE (rhs1))
+	       || !INTEGRAL_TYPE_P (TREE_TYPE (rhs2)))
+	      && (!SCALAR_FLOAT_TYPE_P (TREE_TYPE (lhs))
+		  || !SCALAR_FLOAT_TYPE_P (TREE_TYPE(rhs1))
+		  || !SCALAR_FLOAT_TYPE_P (TREE_TYPE(rhs2))
 		  || !flag_associative_math)
-	      && (!NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE (rhs))
-		  || !NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE(lhs))))
+	      && (!NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE (lhs))
+		  || !NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE(rhs1))
+		  || !NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE(rhs2))))
 	    continue;
 
 	  /* Check for a subtract used only in an addition.  If this
 	     is the case, transform it into add of a negate for better
 	     reassociation.  IE transform C = A-B into C = A + -B if C
 	     is only used in an addition.  */
-	  if (TREE_CODE (rhs) == MINUS_EXPR)
-	    if (should_break_up_subtract (stmt))
-	      break_up_subtract (stmt, &bsi);
+	  if (should_break_up_subtract (stmt))
+	    break_up_subtract (stmt, &gsi);
 	}
     }
   for (son = first_dom_son (CDI_DOMINATORS, bb);
@@ -1301,36 +1807,69 @@ break_up_subtract_bb (basic_block bb)
 static void
 reassociate_bb (basic_block bb)
 {
-  block_stmt_iterator bsi;
+  gimple_stmt_iterator gsi;
   basic_block son;
 
-  for (bsi = bsi_last (bb); !bsi_end_p (bsi); bsi_prev (&bsi))
+  for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&gsi))
     {
-      tree stmt = bsi_stmt (bsi);
+      gimple stmt = gsi_stmt (gsi);
 
-      if (TREE_CODE (stmt) == GIMPLE_MODIFY_STMT)
+      if (is_gimple_assign (stmt))
 	{
-	  tree lhs = GIMPLE_STMT_OPERAND (stmt, 0);
-	  tree rhs = GIMPLE_STMT_OPERAND (stmt, 1);
+	  tree lhs, rhs1, rhs2;
+	  enum tree_code rhs_code = gimple_assign_rhs_code (stmt);
 
-	  /* If this was part of an already processed tree, we don't
-	     need to touch it again. */
-	  if (TREE_VISITED (stmt))
+	  /* If this is not a gimple binary expression, there is
+	     nothing for us to do with it.  */
+	  if (get_gimple_rhs_class (rhs_code) != GIMPLE_BINARY_RHS)
 	    continue;
+
+	  /* If this was part of an already processed statement,
+	     we don't need to touch it again. */
+	  if (gimple_visited_p (stmt))
+	    {
+	      /* This statement might have become dead because of previous
+		 reassociations.  */
+	      if (has_zero_uses (gimple_get_lhs (stmt)))
+		{
+		  gsi_remove (&gsi, true);
+		  release_defs (stmt);
+		  /* We might end up removing the last stmt above which
+		     places the iterator to the end of the sequence.
+		     Reset it to the last stmt in this case which might
+		     be the end of the sequence as well if we removed
+		     the last statement of the sequence.  In which case
+		     we need to bail out.  */
+		  if (gsi_end_p (gsi))
+		    {
+		      gsi = gsi_last_bb (bb);
+		      if (gsi_end_p (gsi))
+			break;
+		    }
+		}
+	      continue;
+	    }
+
+	  lhs = gimple_assign_lhs (stmt);
+	  rhs1 = gimple_assign_rhs1 (stmt);
+	  rhs2 = gimple_assign_rhs2 (stmt);
 
 	  /* If associative-math we can do reassociation for
 	     non-integral types.  Or, we can do reassociation for
 	     non-saturating fixed-point types.  */
 	  if ((!INTEGRAL_TYPE_P (TREE_TYPE (lhs))
-	       || !INTEGRAL_TYPE_P (TREE_TYPE (rhs)))
-	      && (!SCALAR_FLOAT_TYPE_P (TREE_TYPE (rhs))
-		  || !SCALAR_FLOAT_TYPE_P (TREE_TYPE(lhs))
+	       || !INTEGRAL_TYPE_P (TREE_TYPE (rhs1))
+	       || !INTEGRAL_TYPE_P (TREE_TYPE (rhs2)))
+	      && (!SCALAR_FLOAT_TYPE_P (TREE_TYPE (lhs))
+		  || !SCALAR_FLOAT_TYPE_P (TREE_TYPE(rhs1))
+		  || !SCALAR_FLOAT_TYPE_P (TREE_TYPE(rhs2))
 		  || !flag_associative_math)
-	      && (!NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE (rhs))
-		  || !NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE(lhs))))
+	      && (!NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE (lhs))
+		  || !NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE(rhs1))
+		  || !NON_SAT_FIXED_POINT_TYPE_P (TREE_TYPE(rhs2))))
 	    continue;
 
-	  if (associative_tree_code (TREE_CODE (rhs)))
+	  if (associative_tree_code (rhs_code))
 	    {
 	      VEC(operand_entry_t, heap) *ops = NULL;
 
@@ -1339,36 +1878,46 @@ reassociate_bb (basic_block bb)
 	      if (TREE_CODE (lhs) == SSA_NAME && has_zero_uses (lhs))
 		continue;
 
-	      TREE_VISITED (stmt) = 1;
-	      linearize_expr_tree (&ops, stmt);
+	      gimple_set_visited (stmt, true);
+	      linearize_expr_tree (&ops, stmt, true, true);
 	      qsort (VEC_address (operand_entry_t, ops),
 		     VEC_length (operand_entry_t, ops),
 		     sizeof (operand_entry_t),
 		     sort_by_operand_rank);
-	      optimize_ops_list (TREE_CODE (rhs), &ops);
+	      optimize_ops_list (rhs_code, &ops);
+	      if (undistribute_ops_list (rhs_code, &ops,
+					 loop_containing_stmt (stmt)))
+		{
+		  qsort (VEC_address (operand_entry_t, ops),
+			 VEC_length (operand_entry_t, ops),
+			 sizeof (operand_entry_t),
+			 sort_by_operand_rank);
+		  optimize_ops_list (rhs_code, &ops);
+		}
 
 	      if (VEC_length (operand_entry_t, ops) == 1)
 		{
 		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    {
 		      fprintf (dump_file, "Transforming ");
-		      print_generic_expr (dump_file, rhs, 0);
+		      print_gimple_stmt (dump_file, stmt, 0, 0);
 		    }
-		  GIMPLE_STMT_OPERAND (stmt, 1) 
-		    = VEC_last (operand_entry_t, ops)->op;
+
+		  rhs1 = gimple_assign_rhs1 (stmt);
+		  gimple_assign_set_rhs_from_tree (&gsi,
+						   VEC_last (operand_entry_t,
+							     ops)->op);
 		  update_stmt (stmt);
+		  remove_visited_stmt_chain (rhs1);
 
 		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    {
 		      fprintf (dump_file, " into ");
-		      print_generic_stmt (dump_file,
-					  GIMPLE_STMT_OPERAND (stmt, 1), 0);
+		      print_gimple_stmt (dump_file, stmt, 0, 0);
 		    }
 		}
 	      else
-		{
-		  rewrite_expr_tree (stmt, 0, ops);
-		}
+		rewrite_expr_tree (stmt, 0, ops, false);
 
 	      VEC_free (operand_entry_t, heap, ops);
 	    }
@@ -1394,7 +1943,7 @@ dump_ops_vector (FILE *file, VEC (operand_entry_t, heap) *ops)
   for (i = 0; VEC_iterate (operand_entry_t, ops, i, oe); i++)
     {
       fprintf (file, "Op %d -> rank: %d, tree: ", i, oe->rank);
-      print_generic_stmt (file, oe->op, 0);
+      print_generic_expr (file, oe->op, 0);
     }
 }
 
@@ -1473,18 +2022,14 @@ init_reassoc (void)
 static void
 fini_reassoc (void)
 {
-  if (dump_file && (dump_flags & TDF_STATS))
-    {
-      fprintf (dump_file, "Reassociation stats:\n");
-      fprintf (dump_file, "Linearized: %d\n", 
-	       reassociate_stats.linearized);
-      fprintf (dump_file, "Constants eliminated: %d\n",
-	       reassociate_stats.constants_eliminated);
-      fprintf (dump_file, "Ops eliminated: %d\n",
-	       reassociate_stats.ops_eliminated);
-      fprintf (dump_file, "Statements rewritten: %d\n",
-	       reassociate_stats.rewritten);
-    }
+  statistics_counter_event (cfun, "Linearized",
+			    reassociate_stats.linearized);
+  statistics_counter_event (cfun, "Constants eliminated",
+			    reassociate_stats.constants_eliminated);
+  statistics_counter_event (cfun, "Ops eliminated",
+			    reassociate_stats.ops_eliminated);
+  statistics_counter_event (cfun, "Statements rewritten",
+			    reassociate_stats.rewritten);
 
   pointer_map_destroy (operand_rank);
   free_alloc_pool (operand_entry_pool);
@@ -1514,8 +2059,10 @@ gate_tree_ssa_reassoc (void)
   return flag_tree_reassoc != 0;
 }
 
-struct tree_opt_pass pass_reassoc =
+struct gimple_opt_pass pass_reassoc =
 {
+ {
+  GIMPLE_PASS,
   "reassoc",				/* name */
   gate_tree_ssa_reassoc,		/* gate */
   execute_reassoc,			/* execute */
@@ -1527,6 +2074,7 @@ struct tree_opt_pass pass_reassoc =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_ggc_collect | TODO_verify_ssa, /* todo_flags_finish */
-  0					/* letter */
+  TODO_dump_func | TODO_ggc_collect | TODO_verify_ssa /* todo_flags_finish */
+ }
 };
+

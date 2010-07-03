@@ -1,5 +1,5 @@
 /* Natural loop discovery code for GNU compiler.
-   Copyright (C) 2000, 2001, 2003, 2004, 2005, 2006, 2007
+   Copyright (C) 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -563,11 +563,13 @@ find_subloop_latch_edge_by_profile (VEC (edge, heap) *latches)
    another edge.  */
 
 static edge
-find_subloop_latch_edge_by_ivs (struct loop *loop, VEC (edge, heap) *latches)
+find_subloop_latch_edge_by_ivs (struct loop *loop ATTRIBUTE_UNUSED, VEC (edge, heap) *latches)
 {
   edge e, latch = VEC_index (edge, latches, 0);
   unsigned i;
-  tree phi, lop;
+  gimple phi;
+  gimple_stmt_iterator psi;
+  tree lop;
   basic_block bb;
 
   /* Find the candidate for the latch edge.  */
@@ -582,15 +584,16 @@ find_subloop_latch_edge_by_ivs (struct loop *loop, VEC (edge, heap) *latches)
 
   /* Check for a phi node that would deny that this is a latch edge of
      a subloop.  */
-  for (phi = phi_nodes (loop->header); phi; phi = PHI_CHAIN (phi))
+  for (psi = gsi_start_phis (loop->header); !gsi_end_p (psi); gsi_next (&psi))
     {
+      phi = gsi_stmt (psi);
       lop = PHI_ARG_DEF_FROM_EDGE (phi, latch);
 
       /* Ignore the values that are not changed inside the subloop.  */
       if (TREE_CODE (lop) != SSA_NAME
 	  || SSA_NAME_DEF_STMT (lop) == phi)
 	continue;
-      bb = bb_for_stmt (SSA_NAME_DEF_STMT (lop));
+      bb = gimple_bb (SSA_NAME_DEF_STMT (lop));
       if (!bb || !flow_bb_inside_loop_p (loop, bb))
 	continue;
 
@@ -882,6 +885,19 @@ get_loop_body_in_dom_order (const struct loop *loop)
   gcc_assert (tv == (int) loop->num_nodes);
 
   return tovisit;
+}
+
+/* Gets body of a LOOP sorted via provided BB_COMPARATOR.  */
+
+basic_block *
+get_loop_body_in_custom_order (const struct loop *loop, 
+			       int (*bb_comparator) (const void *, const void *))
+{
+  basic_block *bbs = get_loop_body (loop);
+
+  qsort (bbs, loop->num_nodes, sizeof (basic_block), bb_comparator);
+
+  return bbs;
 }
 
 /* Get body of a LOOP in breadth first sort order.  */
@@ -1603,4 +1619,19 @@ single_exit (const struct loop *loop)
     return exit->e;
   else
     return NULL;
+}
+
+/* Returns true when BB has an edge exiting LOOP.  */
+
+bool
+is_loop_exit (struct loop *loop, basic_block bb)
+{
+  edge e;
+  edge_iterator ei;
+
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    if (loop_exit_edge_p (loop, e))
+      return true;
+
+  return false;
 }

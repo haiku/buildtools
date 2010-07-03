@@ -1,5 +1,6 @@
 /* Prototypes.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,14 +23,13 @@ extern int name_needs_quotes (const char *);
 
 extern void machopic_validate_stub_or_non_lazy_ptr (const char *);
 
-extern const char *machopic_function_base_name (void);
 extern void machopic_output_function_base_name (FILE *);
 extern const char *machopic_indirection_name (rtx, bool);
 extern const char *machopic_mcount_stub_name (void);
 
 #ifdef RTX_CODE
 
-extern rtx machopic_function_base_sym (void);
+extern rtx machopic_gen_offset (rtx);
 extern int machopic_operand_p (rtx);
 extern enum machopic_addr_class machopic_classify_symbol (rtx);
 

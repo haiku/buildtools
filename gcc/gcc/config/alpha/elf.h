@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for DEC Alpha w/ELF.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2007
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Richard Henderson (rth@tamu.edu).
 
@@ -422,4 +422,14 @@ extern int alpha_this_gpdisp_sequence_number;
    doesn't harm to make sure that the data exists to be used later.  */
 #if defined(HAVE_LD_EH_FRAME_HDR)
 #define LINK_EH_SPEC "%{!static:--eh-frame-hdr} "
+#endif
+
+/* A C statement (sans semicolon) to output to the stdio stream STREAM
+   any text necessary for declaring the name of an external symbol
+   named NAME which is referenced in this compilation but not defined.
+   It is needed to properly support non-default visibility.  */
+
+#ifndef ASM_OUTPUT_EXTERNAL
+#define ASM_OUTPUT_EXTERNAL(FILE, DECL, NAME) \
+  default_elf_asm_output_external (FILE, DECL, NAME)
 #endif

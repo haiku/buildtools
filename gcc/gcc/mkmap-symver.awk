@@ -1,5 +1,5 @@
 # Generate an ELF symbol version map a-la Solaris and GNU ld.
-#	Copyright (C) 2007  Free Software Foundation, Inc.
+#	Copyright (C) 2007, 2008  Free Software Foundation, Inc.
 #	Contributed by Richard Henderson <rth@cygnus.com>
 #
 # This file is part of GCC.
@@ -46,7 +46,8 @@ state == "nm" && ($1 == "U" || $2 == "U") {
 }
 
 state == "nm" && NF == 3 {
-  def[$3] = 1;
+  split ($3, s, "@")
+  def[s[1]] = 1;
   sawsymbol = 1;
   next;
 }
@@ -58,7 +59,7 @@ state == "nm" {
 # Now we process a simplified variant of the Solaris symbol version
 # script.  We have one symbol per line, no semicolons, simple markers
 # for beginning and ending each section, and %inherit markers for
-# describing version inheritence.  A symbol may appear in more than
+# describing version inheritance.  A symbol may appear in more than
 # one symbol version, and the last seen takes effect.
 # The magic version name '%exclude' causes all the symbols given that
 # version to be dropped from the output (unless a later version overrides).
@@ -82,10 +83,13 @@ $1 == "}" {
 
 {
   sym = prefix $1;
+  symbols[sym] = 1
   if (thislib != "%exclude")
-    ver[sym] = thislib;
-  else
-    delete ver[sym];
+    ver[sym, thislib] = 1;
+  else {
+    for (l in libs)
+      ver[sym, l] = 0;
+  }
   next;
 }
 
@@ -107,8 +111,8 @@ function output(lib) {
     output(inherit[lib]);
 
   empty=1
-  for (sym in ver)
-    if ((ver[sym] == lib) && (sym in def))
+  for (sym in symbols)
+    if ((ver[sym, lib] != 0) && (sym in def))
       {
 	if (empty)
 	  {

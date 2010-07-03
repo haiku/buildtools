@@ -153,7 +153,8 @@ AC_SUBST(libtool_VERSION)
 # Check header files.
 AC_STDC_HEADERS
 AC_HEADER_TIME
-AC_CHECK_HEADERS(unistd.h semaphore.h sys/loadavg.h sys/time.h)
+ACX_HEADER_STRING
+AC_CHECK_HEADERS(unistd.h semaphore.h sys/loadavg.h sys/time.h sys/time.h)
 
 GCC_HEADER_STDINT(gstdint.h)
 
@@ -177,7 +178,7 @@ AC_LINK_IFELSE(
    [AC_MSG_ERROR([Pthreads are required to build libgomp])])])
 
 # Check for functions needed.
-AC_CHECK_FUNCS(getloadavg clock_gettime)
+AC_CHECK_FUNCS(getloadavg clock_gettime strtoull)
 
 # Check for broken semaphore implementation on darwin.
 # sem_init returns: sem_init error: Function not implemented.
@@ -227,6 +228,11 @@ LIBGOMP_CHECK_ATTRIBUTE_DLLEXPORT
 LIBGOMP_CHECK_ATTRIBUTE_ALIAS
 LIBGOMP_ENABLE_SYMVERS
 
+if test $enable_symvers = gnu; then
+  AC_DEFINE(LIBGOMP_GNU_SYMBOL_VERSIONING, 1,
+	    [Define to 1 if GNU symbol versioning is used for libgomp.])
+fi
+
 # Get target configury.
 . ${srcdir}/configure.tgt
 CFLAGS="$save_CFLAGS $XCFLAGS"
@@ -271,7 +277,7 @@ AM_CONDITIONAL([USE_FORTRAN], [test "$ac_cv_fc_compiler_gnu" = yes])
 save_CFLAGS="$CFLAGS"
 for i in $config_path; do
   if test -f $srcdir/config/$i/omp-lock.h; then
-    CFLAGS="$CFLAGS -include $srcdir/config/$i/omp-lock.h"
+    CFLAGS="$CFLAGS -include confdefs.h -include $srcdir/config/$i/omp-lock.h"
     break
   fi
 done
@@ -281,6 +287,11 @@ _AC_COMPUTE_INT([sizeof (omp_lock_t)], [OMP_LOCK_SIZE],,
 _AC_COMPUTE_INT([__alignof (omp_lock_t)], [OMP_LOCK_ALIGN])
 _AC_COMPUTE_INT([sizeof (omp_nest_lock_t)], [OMP_NEST_LOCK_SIZE])
 _AC_COMPUTE_INT([__alignof (omp_nest_lock_t)], [OMP_NEST_LOCK_ALIGN])
+_AC_COMPUTE_INT([sizeof (omp_lock_25_t)], [OMP_LOCK_25_SIZE],,
+  [AC_MSG_ERROR([unsupported system, cannot find sizeof (omp_lock_25_t)])])
+_AC_COMPUTE_INT([__alignof (omp_lock_25_t)], [OMP_LOCK_25_ALIGN])
+_AC_COMPUTE_INT([sizeof (omp_nest_lock_25_t)], [OMP_NEST_LOCK_25_SIZE])
+_AC_COMPUTE_INT([__alignof (omp_nest_lock_25_t)], [OMP_NEST_LOCK_25_ALIGN])
 
 # If the lock fits in an integer, then arrange for Fortran to use that
 # integer.  If it doesn't, then arrange for Fortran to use a pointer.
@@ -295,6 +306,14 @@ fi
 if test $OMP_NEST_LOCK_SIZE -gt 8 || test $OMP_NEST_LOCK_ALIGN -gt $OMP_NEST_LOCK_SIZE; then
   OMP_NEST_LOCK_KIND=8
 fi
+OMP_LOCK_25_KIND=$OMP_LOCK_25_SIZE
+OMP_NEST_LOCK_25_KIND=$OMP_NEST_LOCK_25_SIZE
+if test $OMP_LOCK_25_SIZE -gt 8 || test $OMP_LOCK_25_ALIGN -gt $OMP_LOCK_25_SIZE; then
+  OMP_LOCK_25_KIND=8
+fi
+if test $OMP_NEST_LOCK_25_SIZE -gt 8 || test $OMP_NEST_LOCK_25_ALIGN -gt $OMP_NEST_LOCK_25_SIZE; then
+  OMP_NEST_LOCK_25_KIND=8
+fi
 
 AC_SUBST(OMP_LOCK_SIZE)
 AC_SUBST(OMP_LOCK_ALIGN)
@@ -302,6 +321,12 @@ AC_SUBST(OMP_NEST_LOCK_SIZE)
 AC_SUBST(OMP_NEST_LOCK_ALIGN)
 AC_SUBST(OMP_LOCK_KIND)
 AC_SUBST(OMP_NEST_LOCK_KIND)
+AC_SUBST(OMP_LOCK_25_SIZE)
+AC_SUBST(OMP_LOCK_25_ALIGN)
+AC_SUBST(OMP_NEST_LOCK_25_SIZE)
+AC_SUBST(OMP_NEST_LOCK_25_ALIGN)
+AC_SUBST(OMP_LOCK_25_KIND)
+AC_SUBST(OMP_NEST_LOCK_25_KIND)
 CFLAGS="$save_CFLAGS"
 
 AC_CONFIG_FILES(omp.h omp_lib.h omp_lib.f90 libgomp_f.h)

@@ -1,11 +1,11 @@
 // random number generation -*- C++ -*-
 
-// Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 
 // This library is distributed in the hope that it will be useful,
@@ -13,19 +13,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /**
  * @file tr1_impl/random
@@ -40,7 +35,8 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
   // [5.1] Random number generation
 
   /**
-   * @addtogroup tr1_random Random Number Generation
+   * @defgroup tr1_random Random Number Generation
+   * @ingroup numerics
    * A facility for generating random numbers on selected distributions.
    * @{
    */
@@ -79,8 +75,9 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
     template<typename _Engine, typename _Distribution>
       struct _Adaptor
       { 
-	typedef typename _Engine::result_type        _Engine_result_type;
-	typedef typename _Distribution::input_type   result_type;
+	typedef typename remove_reference<_Engine>::type _BEngine;
+	typedef typename _BEngine::result_type           _Engine_result_type;
+	typedef typename _Distribution::input_type       result_type;
 
       public:
 	_Adaptor(const _Engine& __g)
@@ -145,6 +142,69 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 
       private:
 	_Engine _M_g;
+      };
+
+    // Specialization for _Engine*.
+    template<typename _Engine, typename _Distribution>
+      struct _Adaptor<_Engine*, _Distribution>
+      {
+	typedef typename _Engine::result_type      _Engine_result_type;
+	typedef typename _Distribution::input_type result_type;
+
+      public:
+	_Adaptor(_Engine* __g)
+	: _M_g(__g) { }
+
+	result_type
+	min() const
+	{
+	  result_type __return_value;
+	  if (is_integral<_Engine_result_type>::value
+	      && is_integral<result_type>::value)
+	    __return_value = _M_g->min();
+	  else
+	    __return_value = result_type(0);
+	  return __return_value;
+	}
+
+	result_type
+	max() const
+	{
+	  result_type __return_value;
+	  if (is_integral<_Engine_result_type>::value
+	      && is_integral<result_type>::value)
+	    __return_value = _M_g->max();
+	  else if (!is_integral<result_type>::value)
+	    __return_value = result_type(1);
+	  else
+	    __return_value = std::numeric_limits<result_type>::max() - 1;
+	  return __return_value;
+	}
+
+	result_type
+	operator()()
+	{
+	  result_type __return_value;
+	  if (is_integral<_Engine_result_type>::value
+	      && is_integral<result_type>::value)
+	    __return_value = (*_M_g)();
+	  else if (!is_integral<_Engine_result_type>::value
+		   && !is_integral<result_type>::value)
+	    __return_value = result_type((*_M_g)() - _M_g->min())
+	      / result_type(_M_g->max() - _M_g->min());
+	  else if (is_integral<_Engine_result_type>::value
+		   && !is_integral<result_type>::value)
+	    __return_value = result_type((*_M_g)() - _M_g->min())
+	      / result_type(_M_g->max() - _M_g->min() + result_type(1));
+	  else
+	    __return_value = ((((*_M_g)() - _M_g->min()) 
+			       / (_M_g->max() - _M_g->min()))
+			      * std::numeric_limits<result_type>::max());
+	  return __return_value;
+	}
+
+      private:
+	_Engine* _M_g;
       };
   } // namespace __detail
 
@@ -248,7 +308,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
 
 
   /**
-   * @addtogroup tr1_random_generators Random Number Generators
+   * @defgroup tr1_random_generators Random Number Generators
    * @ingroup tr1_random
    *
    * These classes define objects which provide random or pseudorandom
@@ -1480,13 +1540,13 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
   /* @} */ // group tr1_random_generators
 
   /**
-   * @addtogroup tr1_random_distributions Random Number Distributions
+   * @defgroup tr1_random_distributions Random Number Distributions
    * @ingroup tr1_random
    * @{
    */
 
   /**
-   * @addtogroup tr1_random_distributions_discrete Discrete Distributions
+   * @defgroup tr1_random_distributions_discrete Discrete Distributions
    * @ingroup tr1_random_distributions
    * @{
    */
@@ -1983,7 +2043,7 @@ _GLIBCXX_BEGIN_NAMESPACE_TR1
   /* @} */ // group tr1_random_distributions_discrete
 
   /**
-   * @addtogroup tr1_random_distributions_continuous Continuous Distributions
+   * @defgroup tr1_random_distributions_continuous Continuous Distributions
    * @ingroup tr1_random_distributions
    * @{
    */

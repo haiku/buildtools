@@ -1,12 +1,12 @@
 // Special functions -*- C++ -*-
 
-// Copyright (C) 2006, 2007, 2008
+// Copyright (C) 2006, 2007, 2008, 2009
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
 //
 // This library is distributed in the hope that it will be useful,
@@ -14,19 +14,14 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
-//
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
+
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
 
 /** @file tr1/hypergeometric.tcc
  *  This is an internal header file, included by other library headers.
@@ -477,13 +472,13 @@ namespace tr1
 
               bool __ok_d1 = true;
               _Tp __lng_ad, __lng_ad1, __lng_bd1;
-              try
+              __try
                 {
                   __lng_ad = __log_gamma(__ad);
                   __lng_ad1 = __log_gamma(__a + __d1);
                   __lng_bd1 = __log_gamma(__b + __d1);
                 }
-              catch(...)
+              __catch(...)
                 {
                   __ok_d1 = false;
                 }
@@ -525,12 +520,12 @@ namespace tr1
           // Evaluate F2.
           bool __ok_d2 = true;
           _Tp __lng_ad2, __lng_bd2;
-          try
+          __try
             {
               __lng_ad2 = __log_gamma(__a + __d2);
               __lng_bd2 = __log_gamma(__b + __d2);
             }
-          catch(...)
+          __catch(...)
             {
               __ok_d2 = false;
             }
@@ -600,14 +595,14 @@ namespace tr1
           bool __ok1 = true;
           _Tp __sgn_g1ca = _Tp(0), __ln_g1ca = _Tp(0);
           _Tp __sgn_g1cb = _Tp(0), __ln_g1cb = _Tp(0);
-          try
+          __try
             {
               __sgn_g1ca = __log_gamma_sign(__c - __a);
               __ln_g1ca = __log_gamma(__c - __a);
               __sgn_g1cb = __log_gamma_sign(__c - __b);
               __ln_g1cb = __log_gamma(__c - __b);
             }
-          catch(...)
+          __catch(...)
             {
               __ok1 = false;
             }
@@ -615,14 +610,14 @@ namespace tr1
           bool __ok2 = true;
           _Tp __sgn_g2a = _Tp(0), __ln_g2a = _Tp(0);
           _Tp __sgn_g2b = _Tp(0), __ln_g2b = _Tp(0);
-          try
+          __try
             {
               __sgn_g2a = __log_gamma_sign(__a);
               __ln_g2a = __log_gamma(__a);
               __sgn_g2b = __log_gamma_sign(__b);
               __ln_g2b = __log_gamma(__b);
             }
-          catch(...)
+          __catch(...)
             {
               __ok2 = false;
             }

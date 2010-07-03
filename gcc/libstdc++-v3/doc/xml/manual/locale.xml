@@ -1,5 +1,4 @@
 <sect1 id="manual.localization.locales.locale" xreflabel="locale">
-<?dbhtml filename="locale.html"?>
  
 <sect1info>
   <keywordset>
@@ -100,7 +99,7 @@ which include the Single Unix (nee X/Open.)
 </para>
 
 <para>
-Because C and earlier versions of POSIX falls down so completely,
+Because C and earlier versions of POSIX fall down so completely,
 portability is an issue.
 </para>
 

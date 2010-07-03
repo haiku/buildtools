@@ -3345,7 +3345,7 @@ f<X>
 #
 --format=gnu-v3 --no-params
 _ZngILi42EEvN1AIXplT_Li2EEE1TE
-void operator-<42>(A<(42) + (2)>::T)
+void operator-<42>(A<(42)+(2)>::T)
 operator-<42>
 #
 --format=gnu-v3 --no-params
@@ -3385,7 +3385,7 @@ int* const volatile restrict _far
 # 
 --format=gnu-v3 --no-params
 _Z3fooILi2EEvRAplT_Li1E_i
-void foo<2>(int (&) [(2) + (1)])
+void foo<2>(int (&) [(2)+(1)])
 foo<2>
 # 
 --format=gnu-v3 --no-params
@@ -3397,6 +3397,26 @@ f
 _Z3fooc
 foo(char)
 foo
+#
+--format=gnu-v3 --no-params
+_Z2f0u8char16_t
+f0(char16_t)
+f0
+#
+--format=gnu-v3 --no-params
+_Z2f0Pu8char16_t
+f0(char16_t*)
+f0
+#
+--format=gnu-v3 --no-params
+_Z2f0u8char32_t
+f0(char32_t)
+f0
+#
+--format=gnu-v3 --no-params
+_Z2f0Pu8char32_t
+f0(char32_t*)
+f0
 #
 --format=gnu-v3 --no-params
 2CBIL_Z3foocEE
@@ -3592,13 +3612,13 @@ hairyfunc5
 # This is from gcc PR 8861
 --format=gnu-v3 --no-params
 _Z1fILi1ELc120EEv1AIXplT_cviLd810000000000000000703DAD7A370C5EEE
-void f<1, (char)120>(A<(1) + ((int)((double)[810000000000000000703DAD7A370C5]))>)
+void f<1, (char)120>(A<(1)+((int)((double)[810000000000000000703DAD7A370C5]))>)
 f<1, (char)120>
 #
 # This is also from gcc PR 8861
 --format=gnu-v3 --no-params
 _Z1fILi1EEv1AIXplT_cvingLf3f800000EEE
-void f<1>(A<(1) + ((int)(-((float)[3f800000])))>)
+void f<1>(A<(1)+((int)(-((float)[3f800000])))>)
 f<1>
 #
 # This is from a libstdc++ debug mode patch.
@@ -3623,7 +3643,7 @@ f
 # confusion with the '>' which ends the template parameters.
 --format=gnu-v3 --no-params
 _Z4dep9ILi3EEvP3fooIXgtT_Li2EEE
-void dep9<3>(foo<((3) > (2))>*)
+void dep9<3>(foo<((3)>(2))>*)
 dep9<3>
 #
 # Watch out for templated version of `operator<'--it needs an extra
@@ -3703,7 +3723,7 @@ foo<int (*) [3]>
 # This used to crash the demangler--PR 16240
 --format=gnu-v3 --no-params
 _ZN13PatternDriver23StringScalarDeleteValueC1ERKNS_25ConflateStringScalarValueERKNS_25AbstractStringScalarValueERKNS_12TemplateEnumINS_12pdcomplementELZNS_16complement_namesEELZNS_14COMPLEMENTENUMEEEE
-_ZN13PatternDriver23StringScalarDeleteValueC1ERKNS_25ConflateStringScalarValueERKNS_25AbstractStringScalarValueERKNS_12TemplateEnumINS_12pdcomplementELZNS_16complement_namesEELZNS_14COMPLEMENTENUMEEEE
+PatternDriver::StringScalarDeleteValue::StringScalarDeleteValue(PatternDriver::ConflateStringScalarValue const&, PatternDriver::AbstractStringScalarValue const&, PatternDriver::TemplateEnum<PatternDriver::pdcomplement, PatternDriver::complement_names, PatternDriver::COMPLEMENTENUM> const&)
 PatternDriver::StringScalarDeleteValue::StringScalarDeleteValue
 #
 # This used to cause the demangler to walk into undefined memory--PR 22268
@@ -3862,3 +3882,36 @@ myspace::foo()::localstruct::f(myspace::foo()::otherlocalstruct)
 --format=gnu-v3
 _ZGr32_java$Sutil$Siso4217$_properties
 java resource java/util/iso4217.properties
+# decltype/param placeholder test
+--format=gnu-v3
+_Z3addIidEDTplfp_fp0_ET_T0_
+decltype (parm#1+parm#2) add<int, double>(int, double)
+# decltype/fn call test
+--format=gnu-v3
+_Z4add3IidEDTclL_Z1gEfp_fp0_EET_T0_
+decltype (g(parm#1, parm#2)) add3<int, double>(int, double)
+# new (2008) built in types test
+--format=gnu-v3
+_Z1fDfDdDeDhDsDi
+f(decimal32, decimal64, decimal128, half, char16_t, char32_t)
+# pack expansion test
+--format=gnu-v3
+_Z1fIIPiPfPdEEvDpT_
+void f<int*, float*, double*>(int*, float*, double*)
+# '.' test
+--format=gnu-v3
+_Z1hI1AIiEdEDTcldtfp_1gIT0_EEET_S2_
+decltype ((parm#1.(g<double>))()) h<A<int>, double>(A<int>, double)
+# test for typed function in decltype
+--format=gnu-v3
+_ZN1AIiE1jIiEEDTplfp_clL_Z1xvEEET_
+decltype (parm#1+((x())())) A<int>::j<int>(int)
+# test for expansion of function parameter pack
+--format=gnu-v3
+_Z1gIIidEEDTclL_Z1fEspplfp_Li1EEEDpT_
+decltype (f((parm#1+(1))...)) g<int, double>(int, double)
+#
+# Used to crash the demangler.
+--format=gnu-v3
+DFA
+DFA

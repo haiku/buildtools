@@ -1,5 +1,5 @@
 /* Loop Vectorization
-   Copyright (C) 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Dorit Naishlos <dorit@il.ibm.com>
 
 This file is part of GCC.
@@ -21,19 +21,11 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_TREE_VECTORIZER_H
 #define GCC_TREE_VECTORIZER_H
 
-#ifdef USE_MAPPED_LOCATION
-  typedef source_location LOC;
-  #define UNKNOWN_LOC UNKNOWN_LOCATION
-  #define EXPR_LOC(e) EXPR_LOCATION(e)
-  #define LOC_FILE(l) LOCATION_FILE (l)
-  #define LOC_LINE(l) LOCATION_LINE (l)
-#else
-  typedef source_locus LOC;
-  #define UNKNOWN_LOC NULL
-  #define EXPR_LOC(e) EXPR_LOCUS(e)
-  #define LOC_FILE(l) (l)->file
-  #define LOC_LINE(l) (l)->line
-#endif
+typedef source_location LOC;
+#define UNKNOWN_LOC UNKNOWN_LOCATION
+#define EXPR_LOC(e) EXPR_LOCATION(e)
+#define LOC_FILE(l) LOCATION_FILE (l)
+#define LOC_LINE(l) LOCATION_LINE (l)
 
 /* Used for naming of new temporaries.  */
 enum vect_var_kind {
@@ -97,9 +89,9 @@ typedef struct _slp_tree {
   struct _slp_tree *left;
   struct _slp_tree *right;
   /* A group of scalar stmts to be vectorized together.  */
-  VEC (tree, heap) *stmts;
+  VEC (gimple, heap) *stmts;
   /* Vectorized stmt/s.  */
-  VEC (tree, heap) *vec_stmts;
+  VEC (gimple, heap) *vec_stmts;
   /* Number of vector stmts that are created to replace the group of scalar 
      stmts. It is calculated during the transformation phase as the number of 
      scalar elements in one scalar iteration (GROUP_SIZE) multiplied by VF 
@@ -113,6 +105,8 @@ typedef struct _slp_tree {
   } cost;
 } *slp_tree;
 
+DEF_VEC_P(slp_tree);
+DEF_VEC_ALLOC_P(slp_tree, heap);
 
 /* SLP instance is a sequence of stmts in a loop that can be packed into
    SIMD stmts.  */
@@ -132,6 +126,17 @@ typedef struct _slp_instance {
     int outside_of_loop;     /* Statements generated outside loop.  */
     int inside_of_loop;      /* Statements generated inside loop.  */
   } cost;
+
+  /* Loads permutation relatively to the stores, NULL if there is no 
+     permutation.  */
+  VEC (int, heap) *load_permutation;
+
+  /* The group of nodes that contain loads of this SLP instance.  */
+  VEC (slp_tree, heap) *loads;
+
+  /* The first scalar load of the instance. The created vector loads will be
+     inserted before this statement.  */
+  gimple first_load;
 } *slp_instance;
 
 DEF_VEC_P(slp_instance);
@@ -143,6 +148,9 @@ DEF_VEC_ALLOC_P(slp_instance, heap);
 #define SLP_INSTANCE_UNROLLING_FACTOR(S)         (S)->unrolling_factor
 #define SLP_INSTANCE_OUTSIDE_OF_LOOP_COST(S)     (S)->cost.outside_of_loop
 #define SLP_INSTANCE_INSIDE_OF_LOOP_COST(S)      (S)->cost.inside_of_loop
+#define SLP_INSTANCE_LOAD_PERMUTATION(S)         (S)->load_permutation
+#define SLP_INSTANCE_LOADS(S)                    (S)->loads
+#define SLP_INSTANCE_FIRST_LOAD_STMT(S)          (S)->first_load
 
 #define SLP_TREE_LEFT(S)                         (S)->left
 #define SLP_TREE_RIGHT(S)                        (S)->right
@@ -208,14 +216,14 @@ typedef struct _loop_vec_info {
 
   /* Statements in the loop that have data references that are candidates for a
      runtime (loop versioning) misalignment check.  */
-  VEC(tree,heap) *may_misalign_stmts;
+  VEC(gimple,heap) *may_misalign_stmts;
 
   /* The loop location in the source.  */
   LOC loop_line_number;
 
   /* All interleaving chains of stores in the loop, represented by the first
      stmt in the chain.  */
-  VEC(tree, heap) *strided_stores;
+  VEC(gimple, heap) *strided_stores;
 
   /* All SLP instances in the loop. This is a subset of the set of STRIDED_STORES
      of the loop.  */
@@ -263,10 +271,10 @@ loop_vec_info_for_loop (struct loop *loop)
 }
 
 static inline bool
-nested_in_vect_loop_p (struct loop *loop, tree stmt)
+nested_in_vect_loop_p (struct loop *loop, gimple stmt)
 {
   return (loop->inner 
-          && (loop->inner == (bb_for_stmt (stmt))->loop_father));
+          && (loop->inner == (gimple_bb (stmt))->loop_father));
 }
 
 /*-----------------------------------------------------------------*/
@@ -337,7 +345,7 @@ typedef struct _stmt_vec_info {
   enum stmt_vec_info_type type;
 
   /* The stmt to which this info struct refers to.  */
-  tree stmt;
+  gimple stmt;
 
   /* The loop_vec_info with respect to which STMT is vectorized.  */
   loop_vec_info loop_vinfo;
@@ -355,7 +363,7 @@ typedef struct _stmt_vec_info {
   tree vectype;
 
   /* The vectorized version of the stmt.  */
-  tree vectorized_stmt;
+  gimple vectorized_stmt;
 
 
   /** The following is relevant only for stmts that contain a non-scalar
@@ -386,7 +394,7 @@ typedef struct _stmt_vec_info {
         related_stmt of the "pattern stmt" points back to this stmt (which is 
         the last stmt in the original sequence of stmts that constitutes the 
         pattern).  */
-  tree related_stmt;
+  gimple related_stmt;
 
   /* List of datarefs that are known to have the same alignment as the dataref
      of this stmt.  */
@@ -397,9 +405,9 @@ typedef struct _stmt_vec_info {
 
   /* Interleaving info.  */
   /* First data-ref in the interleaving group.  */
-  tree first_dr;
+  gimple first_dr;
   /* Pointer to the next data-ref in the group.  */
-  tree next_dr;
+  gimple next_dr;
   /* The size of the interleaving group.  */
   unsigned int size;
   /* For stores, number of stores from this group seen. We vectorize the last
@@ -410,7 +418,7 @@ typedef struct _stmt_vec_info {
   unsigned int gap;
   /* In case that two or more stmts share data-ref, this is the pointer to the
      previously detected stmt with the same dr.  */
-  tree same_dr_stmt;
+  gimple same_dr_stmt;
   /* For loads only, if there is a store with the same location, this field is
      TRUE.  */
   bool read_write_dep;
@@ -530,27 +538,81 @@ typedef struct _stmt_vec_info {
 #define TARG_VEC_STORE_COST          1
 #endif
 
-static inline void set_stmt_info (stmt_ann_t ann, stmt_vec_info stmt_info);
-static inline stmt_vec_info vinfo_for_stmt (tree stmt);
+/* Cost of vector permutation.  */
+#ifndef TARG_VEC_PERMUTE_COST
+#define TARG_VEC_PERMUTE_COST          1
+#endif
 
-static inline void
-set_stmt_info (stmt_ann_t ann, stmt_vec_info stmt_info)
-{
-  if (ann)
-    ann->common.aux = (char *) stmt_info;
-}
+/* The maximum number of intermediate steps required in multi-step type
+   conversion.  */
+#define MAX_INTERM_CVT_STEPS         3
+
+/* Avoid GTY(()) on stmt_vec_info.  */
+typedef void *vec_void_p;
+DEF_VEC_P (vec_void_p);
+DEF_VEC_ALLOC_P (vec_void_p, heap);
+
+extern VEC(vec_void_p,heap) *stmt_vec_info_vec;
+
+void init_stmt_vec_info_vec (void);
+void free_stmt_vec_info_vec (void);
 
 static inline stmt_vec_info
-vinfo_for_stmt (tree stmt)
+vinfo_for_stmt (gimple stmt)
 {
-  stmt_ann_t ann = stmt_ann (stmt);
-  return ann ? (stmt_vec_info) ann->common.aux : NULL;
+  unsigned int uid = gimple_uid (stmt);
+  if (uid == 0)
+    return NULL;
+
+  gcc_assert (uid <= VEC_length (vec_void_p, stmt_vec_info_vec));
+  return (stmt_vec_info) VEC_index (vec_void_p, stmt_vec_info_vec, uid - 1);
+}
+
+static inline void
+set_vinfo_for_stmt (gimple stmt, stmt_vec_info info)
+{
+  unsigned int uid = gimple_uid (stmt);
+  if (uid == 0)
+    {
+      gcc_assert (info);
+      uid = VEC_length (vec_void_p, stmt_vec_info_vec) + 1;
+      gimple_set_uid (stmt, uid);
+      VEC_safe_push (vec_void_p, heap, stmt_vec_info_vec, (vec_void_p) info);
+    }
+  else
+    VEC_replace (vec_void_p, stmt_vec_info_vec, uid - 1, (vec_void_p) info);
+}
+
+static inline gimple
+get_earlier_stmt (gimple stmt1, gimple stmt2)
+{
+  unsigned int uid1, uid2;
+
+  if (stmt1 == NULL)
+    return stmt2;
+
+  if (stmt2 == NULL)
+    return stmt1;
+
+  uid1 = gimple_uid (stmt1);
+  uid2 = gimple_uid (stmt2);
+
+  if (uid1 == 0 || uid2 == 0)
+    return NULL;
+
+  gcc_assert (uid1 <= VEC_length (vec_void_p, stmt_vec_info_vec));
+  gcc_assert (uid2 <= VEC_length (vec_void_p, stmt_vec_info_vec));
+
+  if (uid1 < uid2)
+    return stmt1;
+  else
+    return stmt2;
 }
 
 static inline bool
 is_pattern_stmt_p (stmt_vec_info stmt_info)
 {
-  tree related_stmt;
+  gimple related_stmt;
   stmt_vec_info related_stmt_info;
 
   related_stmt = STMT_VINFO_RELATED_STMT (stmt_info);
@@ -591,6 +653,16 @@ stmt_vinfo_set_outside_of_loop_cost (stmt_vec_info stmt_info, slp_tree slp_node,
     STMT_VINFO_OUTSIDE_OF_LOOP_COST (stmt_info) = cost;
 }     
 
+static inline int
+vect_pow2 (int x)
+{
+  int i, res = 1;
+
+  for (i = 0; i < x; i++)
+    res *= 2;
+
+  return res;
+}
 
 /*-----------------------------------------------------------------*/
 /* Info on data references alignment.                              */
@@ -638,6 +710,7 @@ extern struct loop *slpeel_tree_peel_loop_to_edge
   (struct loop *, edge, tree, tree, bool, unsigned int, bool);
 extern void set_prologue_iterations (basic_block, tree,
 				     struct loop *, unsigned int);
+struct loop *tree_duplicate_loop_on_edge (struct loop *, edge);
 extern void slpeel_make_loop_iterate_ntimes (struct loop *, tree);
 extern bool slpeel_can_duplicate_loop_p (const struct loop *, const_edge);
 #ifdef ENABLE_CHECKING
@@ -650,63 +723,75 @@ extern void slpeel_verify_cfg_after_peeling (struct loop *, struct loop *);
  *************************************************************************/
 /** In tree-vectorizer.c **/
 extern tree get_vectype_for_scalar_type (tree);
-extern bool vect_is_simple_use (tree, loop_vec_info, tree *, tree *,
+extern bool vect_is_simple_use (tree, loop_vec_info, gimple *, tree *,
 				enum vect_def_type *);
 extern bool vect_is_simple_iv_evolution (unsigned, tree, tree *, tree *);
-extern tree vect_is_simple_reduction (loop_vec_info, tree);
+extern gimple vect_is_simple_reduction (loop_vec_info, gimple);
 extern bool vect_can_force_dr_alignment_p (const_tree, unsigned int);
 extern enum dr_alignment_support vect_supportable_dr_alignment
   (struct data_reference *);
 extern bool reduction_code_for_scalar_code (enum tree_code, enum tree_code *);
-extern bool supportable_widening_operation (enum tree_code, tree, tree,
-  tree *, tree *, enum tree_code *, enum tree_code *);
-extern bool supportable_narrowing_operation (enum tree_code, const_tree,
-					     const_tree, enum tree_code *);
+extern bool supportable_widening_operation (enum tree_code, gimple, tree,
+  tree *, tree *, enum tree_code *, enum tree_code *, 
+  int *, VEC (tree, heap) **);
+extern bool supportable_narrowing_operation (enum tree_code, const_gimple,
+	     tree, enum tree_code *, int *, VEC (tree, heap) **);
 
 /* Creation and deletion of loop and stmt info structs.  */
 extern loop_vec_info new_loop_vec_info (struct loop *loop);
 extern void destroy_loop_vec_info (loop_vec_info, bool);
-extern stmt_vec_info new_stmt_vec_info (tree stmt, loop_vec_info);
+extern stmt_vec_info new_stmt_vec_info (gimple stmt, loop_vec_info);
+extern void free_stmt_vec_info (gimple stmt);
 
 
 /** In tree-vect-analyze.c  **/
 /* Driver for analysis stage.  */
 extern loop_vec_info vect_analyze_loop (struct loop *);
-extern void vect_free_slp_tree (slp_tree);
+extern void vect_free_slp_instance (slp_instance);
 extern loop_vec_info vect_analyze_loop_form (struct loop *);
+extern tree vect_get_smallest_scalar_type (gimple, HOST_WIDE_INT *, 
+                                           HOST_WIDE_INT *);
 
 /** In tree-vect-patterns.c  **/
 /* Pattern recognition functions.
    Additional pattern recognition functions can (and will) be added
    in the future.  */
-typedef tree (* vect_recog_func_ptr) (tree, tree *, tree *);
+typedef gimple (* vect_recog_func_ptr) (gimple, tree *, tree *);
 #define NUM_PATTERNS 4
 void vect_pattern_recog (loop_vec_info);
 
 
 /** In tree-vect-transform.c  **/
-extern bool vectorizable_load (tree, block_stmt_iterator *, tree *, slp_tree);
-extern bool vectorizable_store (tree, block_stmt_iterator *, tree *, slp_tree);
-extern bool vectorizable_operation (tree, block_stmt_iterator *, tree *, 
+extern bool vectorizable_load (gimple, gimple_stmt_iterator *, gimple *,
+			       slp_tree, slp_instance);
+extern bool vectorizable_store (gimple, gimple_stmt_iterator *, gimple *,
+				slp_tree);
+extern bool vectorizable_operation (gimple, gimple_stmt_iterator *, gimple *,
 				    slp_tree);
-extern bool vectorizable_type_promotion (tree, block_stmt_iterator *, tree *);
-extern bool vectorizable_type_demotion (tree, block_stmt_iterator *, tree *);
-extern bool vectorizable_conversion (tree, block_stmt_iterator *, 
-				     tree *, slp_tree);
-extern bool vectorizable_assignment (tree, block_stmt_iterator *, tree *, 
+extern bool vectorizable_type_promotion (gimple, gimple_stmt_iterator *,
+					 gimple *, slp_tree);
+extern bool vectorizable_type_demotion (gimple, gimple_stmt_iterator *,
+					gimple *, slp_tree);
+extern bool vectorizable_conversion (gimple, gimple_stmt_iterator *, gimple *,
 				     slp_tree);
-extern tree vectorizable_function (tree, tree, tree);
-extern bool vectorizable_call (tree, block_stmt_iterator *, tree *);
-extern bool vectorizable_condition (tree, block_stmt_iterator *, tree *);
-extern bool vectorizable_live_operation (tree, block_stmt_iterator *, tree *);
-extern bool vectorizable_reduction (tree, block_stmt_iterator *, tree *);
-extern bool vectorizable_induction (tree, block_stmt_iterator *, tree *);
+extern bool vectorizable_assignment (gimple, gimple_stmt_iterator *, gimple *,
+				     slp_tree);
+extern tree vectorizable_function (gimple, tree, tree);
+extern bool vectorizable_call (gimple, gimple_stmt_iterator *, gimple *);
+extern bool vectorizable_condition (gimple, gimple_stmt_iterator *, gimple *);
+extern bool vectorizable_live_operation (gimple, gimple_stmt_iterator *,
+					 gimple *);
+extern bool vectorizable_reduction (gimple, gimple_stmt_iterator *, gimple *);
+extern bool vectorizable_induction (gimple, gimple_stmt_iterator *, gimple *);
 extern int  vect_estimate_min_profitable_iters (loop_vec_info);
 extern void vect_model_simple_cost (stmt_vec_info, int, enum vect_def_type *, 
 				    slp_tree);
 extern void vect_model_store_cost (stmt_vec_info, int, enum vect_def_type, 
 				   slp_tree);
 extern void vect_model_load_cost (stmt_vec_info, int, slp_tree);
+extern bool vect_transform_slp_perm_load (gimple, VEC (tree, heap) *, 
+                             gimple_stmt_iterator *, int, slp_instance, bool);
+
 /* Driver for transformation stage.  */
 extern void vect_transform_loop (loop_vec_info);
 

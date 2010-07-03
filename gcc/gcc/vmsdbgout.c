@@ -1,6 +1,6 @@
 /* Output VMS debug format symbol table information from GCC.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Contributed by Douglas B. Rupp (rupp@gnat.com).
    Updated by Bernard W. Giroud (bgiroud@users.sourceforge.net).
@@ -125,7 +125,7 @@ static unsigned int func_table_in_use;
 static vms_func_ref func_table;
 
 /* Local pointer to the name of the main input file.  Initialized in
-   avmdbgout_init.  */
+   vmsdbgout_init.  */
 static const char *primary_filename;
 
 static char *module_producer;
@@ -166,6 +166,7 @@ static int write_srccorrs (int);
 
 static void vmsdbgout_init (const char *);
 static void vmsdbgout_finish (const char *);
+static void vmsdbgout_assembly_start (void);
 static void vmsdbgout_define (unsigned int, const char *);
 static void vmsdbgout_undef (unsigned int, const char *);
 static void vmsdbgout_start_source_file (unsigned int, const char *);
@@ -188,6 +189,7 @@ static void vmsdbgout_abstract_function (tree);
 const struct gcc_debug_hooks vmsdbg_debug_hooks
 = {vmsdbgout_init,
    vmsdbgout_finish,
+   vmsdbgout_assembly_start,
    vmsdbgout_define,
    vmsdbgout_undef,
    vmsdbgout_start_source_file,
@@ -204,7 +206,7 @@ const struct gcc_debug_hooks vmsdbg_debug_hooks
    vmsdbgout_decl,
    vmsdbgout_global_decl,
    debug_nothing_tree_int,	  /* type_decl */
-   debug_nothing_tree_tree,       /* imported_module_or_decl */
+   debug_nothing_tree_tree_tree_bool, /* imported_module_or_decl */
    debug_nothing_tree,		  /* deferred_inline_function */
    vmsdbgout_abstract_function,
    debug_nothing_rtx,		  /* label */
@@ -715,7 +717,7 @@ write_modbeg (int dosizeonly)
   int totsize = 0;
 
   /* Assumes primary filename has Unix syntax file spec.  */
-  module_name = xstrdup (basename ((char *) primary_filename));
+  module_name = xstrdup (lbasename (primary_filename));
 
   m = strrchr (module_name, '.');
   if (m)
@@ -1510,9 +1512,8 @@ lookup_filename (const char *file_name)
     {
 
       file_info_table_allocated += FILE_TABLE_INCREMENT;
-      file_info_table = xrealloc (file_info_table,
-				  (file_info_table_allocated
-				   * sizeof (dst_file_info_entry)));
+      file_info_table = XRESIZEVEC (dst_file_info_entry, file_info_table,
+				    file_info_table_allocated);
     }
 
   /* Add the new entry to the end of the filename table.  */
@@ -1549,9 +1550,8 @@ vmsdbgout_source_line (register unsigned line, register const char *filename)
       if (line_info_table_in_use == line_info_table_allocated)
 	{
 	  line_info_table_allocated += LINE_INFO_TABLE_INCREMENT;
-	  line_info_table = xrealloc (line_info_table,
-				      (line_info_table_allocated
-				       * sizeof (dst_line_info_entry)));
+	  line_info_table = XRESIZEVEC (dst_line_info_entry, line_info_table,
+					line_info_table_allocated);
 	}
 
       /* Add the new entry at the end of the line_info_table.  */
@@ -1600,8 +1600,7 @@ vmsdbgout_init (const char *main_input_filename)
   primary_filename = main_input_filename;
 
   /* Allocate the initial hunk of the file_info_table.  */
-  file_info_table
-    = xcalloc (FILE_TABLE_INCREMENT, sizeof (dst_file_info_entry));
+  file_info_table = XCNEWVEC (dst_file_info_entry, FILE_TABLE_INCREMENT);
   file_info_table_allocated = FILE_TABLE_INCREMENT;
 
   /* Skip the first entry - file numbers begin at 1 */
@@ -1612,8 +1611,7 @@ vmsdbgout_init (const char *main_input_filename)
   func_table_in_use = 1;
 
   /* Allocate the initial hunk of the line_info_table.  */
-  line_info_table
-    = xcalloc (LINE_INFO_TABLE_INCREMENT, sizeof (dst_line_info_entry));
+  line_info_table = XCNEWVEC (dst_line_info_entry, LINE_INFO_TABLE_INCREMENT);
   line_info_table_allocated = LINE_INFO_TABLE_INCREMENT;
   /* zero-th entry is allocated, but unused */
   line_info_table_in_use = 1;
@@ -1635,6 +1633,15 @@ vmsdbgout_init (const char *main_input_filename)
 
   ASM_GENERATE_INTERNAL_LABEL (text_end_label, TEXT_END_LABEL, 0);
 
+}
+
+/* Not implemented in VMS Debug.  */
+
+static void
+vmsdbgout_assembly_start (void)
+{
+  if (write_symbols == VMS_AND_DWARF2_DEBUG)
+    (*dwarf2_debug_hooks.assembly_start) ();
 }
 
 /* Not implemented in VMS Debug.  */

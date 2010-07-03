@@ -1,6 +1,6 @@
 /* Subroutines for manipulating rtx's in semantically interesting ways.
    Copyright (C) 1987, 1991, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -29,6 +29,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tm_p.h"
 #include "flags.h"
+#include "except.h"
 #include "function.h"
 #include "expr.h"
 #include "optabs.h"
@@ -489,6 +490,7 @@ memory_address (enum machine_mode mode, rtx x)
 
  done:
 
+  gcc_assert (memory_address_p (mode, x));
   /* If we didn't change the address, we are done.  Otherwise, mark
      a reg as a pointer if we have REG or REG + CONST_INT.  */
   if (oldx == x)
@@ -871,10 +873,10 @@ round_push (rtx size)
 
   if (GET_CODE (size) == CONST_INT)
     {
-      HOST_WIDE_INT new = (INTVAL (size) + align - 1) / align * align;
+      HOST_WIDE_INT new_size = (INTVAL (size) + align - 1) / align * align;
 
-      if (INTVAL (size) != new)
-	size = GEN_INT (new);
+      if (INTVAL (size) != new_size)
+	size = GEN_INT (new_size);
     }
   else
     {
@@ -1013,11 +1015,8 @@ emit_stack_restore (enum save_level save_level, rtx sa, rtx after)
       /* These clobbers prevent the scheduler from moving
 	 references to variable arrays below the code
 	 that deletes (pops) the arrays.  */
-      emit_insn (gen_rtx_CLOBBER (VOIDmode,
-		    gen_rtx_MEM (BLKmode,
-			gen_rtx_SCRATCH (VOIDmode))));
-      emit_insn (gen_rtx_CLOBBER (VOIDmode,
-		    gen_rtx_MEM (BLKmode, stack_pointer_rtx)));
+      emit_clobber (gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode)));
+      emit_clobber (gen_rtx_MEM (BLKmode, stack_pointer_rtx));
     }
 
   discard_pending_stack_adjust ();
@@ -1078,7 +1077,7 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
     return virtual_stack_dynamic_rtx;
 
   /* Otherwise, show we're calling alloca or equivalent.  */
-  current_function_calls_alloca = 1;
+  cfun->calls_alloca = 1;
 
   /* Ensure the size is in the proper mode.  */
   if (GET_MODE (size) != VOIDmode && GET_MODE (size) != Pmode)
@@ -1087,7 +1086,7 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
   /* We can't attempt to minimize alignment necessary, because we don't
      know the final value of preferred_stack_boundary yet while executing
      this code.  */
-  cfun->preferred_stack_boundary = PREFERRED_STACK_BOUNDARY;
+  crtl->preferred_stack_boundary = PREFERRED_STACK_BOUNDARY;
 
   /* We will need to ensure that the address we return is aligned to
      BIGGEST_ALIGNMENT.  If STACK_DYNAMIC_OFFSET is defined, we don't
@@ -1126,7 +1125,7 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
      would use reg notes to store the "optimized" size and fix things
      up later.  These days we know this information before we ever
      start building RTL so the reg notes are unnecessary.  */
-  if (!current_function_calls_setjmp)
+  if (!cfun->calls_setjmp)
     {
       int align = PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT;
 
@@ -1136,10 +1135,10 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
 
       if (GET_CODE (size) == CONST_INT)
 	{
-	  HOST_WIDE_INT new = INTVAL (size) / align * align;
+	  HOST_WIDE_INT new_size = INTVAL (size) / align * align;
 
-	  if (INTVAL (size) != new)
-	    size = GEN_INT (new);
+	  if (INTVAL (size) != new_size)
+	    size = GEN_INT (new_size);
 	}
       else
 	{
@@ -1190,10 +1189,13 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
   gcc_assert (!(stack_pointer_delta
 		% (PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT)));
 
-  /* If needed, check that we have the required amount of stack.  Take into
-     account what has already been checked.  */
-  if (flag_stack_check && ! STACK_CHECK_BUILTIN)
-    probe_stack_range (STACK_CHECK_MAX_FRAME_SIZE + STACK_CHECK_PROTECT, size);
+  /* If needed, check that we have the required amount of stack.
+     Take into account what has already been checked.  */
+  if (flag_stack_check == GENERIC_STACK_CHECK)
+    probe_stack_range (STACK_OLD_CHECK_PROTECT + STACK_CHECK_MAX_FRAME_SIZE,
+		       size);
+  else if (flag_stack_check == STATIC_BUILTIN_STACK_CHECK)
+    probe_stack_range (STACK_CHECK_PROTECT, size);
 
   /* Don't use a TARGET that isn't a pseudo or is the wrong mode.  */
   if (target == 0 || !REG_P (target)
@@ -1233,7 +1235,7 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
 #endif
 
       /* Check stack bounds if necessary.  */
-      if (current_function_limit_stack)
+      if (crtl->limit_stack)
 	{
 	  rtx available;
 	  rtx space_available = gen_label_rtx ();

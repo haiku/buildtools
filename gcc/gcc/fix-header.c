@@ -1,6 +1,6 @@
 /* fix-header.c - Make C header file suitable for C++.
    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2006, 2007  Free Software Foundation, Inc.
+   2002, 2003, 2004, 2006, 2007, 2008  Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -78,7 +78,7 @@
 #include "obstack.h"
 #include "scan.h"
 #include "cpplib.h"
-#include "c-incpath.h"
+#include "incpath.h"
 #include "errors.h"
 
 #ifdef TARGET_EXTRA_INCLUDES
@@ -562,7 +562,10 @@ recognized_function (const cpp_token *fname, unsigned int line, int kind,
   /* We only have a partial function declaration,
      so remember that we have to add a complete prototype.  */
   partial_count++;
-  partial = obstack_alloc (&scan_file_obstack, sizeof (struct partial_proto));
+  partial
+    = (struct partial_proto *)
+      obstack_alloc (&scan_file_obstack,
+	 	     sizeof (struct partial_proto));
   partial->line_seen = line;
   partial->fn = fn;
   fn->partial = partial;

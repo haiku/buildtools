@@ -1,6 +1,6 @@
 /* Web construction code for GNU compiler.
    Contributed by Jan Hubicka.
-   Copyright (C) 2001, 2002, 2004, 2006, 2007
+   Copyright (C) 2001, 2002, 2004, 2006, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -60,8 +60,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 
 
-static rtx entry_register (struct web_entry *, struct df_ref *, char *);
-static void replace_ref (struct df_ref *, rtx);
+static rtx entry_register (struct web_entry *, df_ref, char *);
+static void replace_ref (df_ref, rtx);
 
 /* Find the root of unionfind tree (the representative of set).  */
 
@@ -101,26 +101,28 @@ unionfind_union (struct web_entry *first, struct web_entry *second)
    FUN is the function that does the union.  */
 
 void
-union_defs (struct df_ref *use, struct web_entry *def_entry,
+union_defs (df_ref use, struct web_entry *def_entry,
  	    struct web_entry *use_entry,
  	    bool (*fun) (struct web_entry *, struct web_entry *))
 {
-  rtx insn = DF_REF_INSN (use);
+  struct df_insn_info *insn_info = DF_REF_INSN_INFO (use);
   struct df_link *link = DF_REF_CHAIN (use);
-  struct df_ref **use_link;
-  struct df_ref **eq_use_link;
-  struct df_ref **def_link;
+  df_ref *use_link;
+  df_ref *eq_use_link;
+  df_ref *def_link;
   rtx set;
 
-  if (insn)
+  if (insn_info)
     {
-      use_link = DF_INSN_USES (insn);
-      eq_use_link = DF_INSN_EQ_USES (insn);
-      def_link = DF_INSN_DEFS (insn);
+      rtx insn = insn_info->insn;
+      use_link = DF_INSN_INFO_USES (insn_info);
+      eq_use_link = DF_INSN_INFO_EQ_USES (insn_info);
+      def_link = DF_INSN_INFO_DEFS (insn_info);
       set = single_set (insn);
     }
   else
     {
+      /* An artificial use.  It links up with nothing.  */
       use_link = NULL;
       eq_use_link = NULL;
       def_link = NULL;
@@ -152,9 +154,7 @@ union_defs (struct df_ref *use, struct web_entry *def_entry,
 	eq_use_link++;
     }
 
-  /* Recognize trivial noop moves and attempt to keep them as noop.
-     While most of noop moves should be removed, we still keep some
-     of them at libcall boundaries and such.  */
+  /* Recognize trivial noop moves and attempt to keep them as noop.  */
 
   if (set
       && SET_SRC (set) == DF_REF_REG (use)
@@ -178,12 +178,12 @@ union_defs (struct df_ref *use, struct web_entry *def_entry,
 
   /* A READ_WRITE use requires the corresponding def to be in the same
      register.  Find it and union.  */
-  if (use->flags & DF_REF_READ_WRITE)
+  if (DF_REF_FLAGS (use) & DF_REF_READ_WRITE)
     {
-      struct df_ref **link;
+      df_ref *link;
 
-      if (DF_REF_INSN (use))
-	link = DF_INSN_DEFS (DF_REF_INSN (use));
+      if (insn_info)
+	link = DF_INSN_INFO_DEFS (insn_info);
       else
 	link = NULL;
 
@@ -201,7 +201,7 @@ union_defs (struct df_ref *use, struct web_entry *def_entry,
 /* Find the corresponding register for the given entry.  */
 
 static rtx
-entry_register (struct web_entry *entry, struct df_ref *ref, char *used)
+entry_register (struct web_entry *entry, df_ref ref, char *used)
 {
   struct web_entry *root;
   rtx reg, newreg;
@@ -243,11 +243,11 @@ entry_register (struct web_entry *entry, struct df_ref *ref, char *used)
 /* Replace the reference by REG.  */
 
 static void
-replace_ref (struct df_ref *ref, rtx reg)
+replace_ref (df_ref ref, rtx reg)
 {
   rtx oldreg = DF_REF_REAL_REG (ref);
   rtx *loc = DF_REF_REAL_LOC (ref);
-  unsigned int uid = INSN_UID (DF_REF_INSN (ref));
+  unsigned int uid = DF_REF_INSN_UID (ref);
 
   if (oldreg == reg)
     return;
@@ -290,16 +290,16 @@ web_main (void)
       unsigned int uid = INSN_UID (insn);
       if (INSN_P (insn))
 	{
-	  struct df_ref **use_rec;
+	  df_ref *use_rec;
 	  for (use_rec = DF_INSN_UID_USES (uid); *use_rec; use_rec++)
 	    {
-	      struct df_ref *use = *use_rec;
+	      df_ref use = *use_rec;
 	      if (DF_REF_REGNO (use) >= FIRST_PSEUDO_REGISTER)
 		DF_REF_ID (use) = uses_num++;
 	    }
 	  for (use_rec = DF_INSN_UID_EQ_USES (uid); *use_rec; use_rec++)
 	    {
-	      struct df_ref *use = *use_rec;
+	      df_ref use = *use_rec;
 	      if (DF_REF_REGNO (use) >= FIRST_PSEUDO_REGISTER)
 		DF_REF_ID (use) = uses_num++;
 	    }
@@ -318,16 +318,16 @@ web_main (void)
       unsigned int uid = INSN_UID (insn);
       if (INSN_P (insn))
 	{
-	  struct df_ref **use_rec;
+	  df_ref *use_rec;
 	  for (use_rec = DF_INSN_UID_USES (uid); *use_rec; use_rec++)
 	    {
-	      struct df_ref *use = *use_rec;
+	      df_ref use = *use_rec;
 	      if (DF_REF_REGNO (use) >= FIRST_PSEUDO_REGISTER)
 		union_defs (use, def_entry, use_entry, unionfind_union);
 	    }
 	  for (use_rec = DF_INSN_UID_EQ_USES (uid); *use_rec; use_rec++)
 	    {
-	      struct df_ref *use = *use_rec;
+	      df_ref use = *use_rec;
 	      if (DF_REF_REGNO (use) >= FIRST_PSEUDO_REGISTER)
 		union_defs (use, def_entry, use_entry, unionfind_union);
 	    }
@@ -342,23 +342,23 @@ web_main (void)
       unsigned int uid = INSN_UID (insn);
       if (INSN_P (insn))
 	{
-	  struct df_ref **use_rec;
-	  struct df_ref **def_rec;
+	  df_ref *use_rec;
+	  df_ref *def_rec;
 	  for (use_rec = DF_INSN_UID_USES (uid); *use_rec; use_rec++)
 	    {
-	      struct df_ref *use = *use_rec;
+	      df_ref use = *use_rec;
 	      if (DF_REF_REGNO (use) >= FIRST_PSEUDO_REGISTER)
 		replace_ref (use, entry_register (use_entry + DF_REF_ID (use), use, used));
 	    }
 	  for (use_rec = DF_INSN_UID_EQ_USES (uid); *use_rec; use_rec++)
 	    {
-	      struct df_ref *use = *use_rec;
+	      df_ref use = *use_rec;
 	      if (DF_REF_REGNO (use) >= FIRST_PSEUDO_REGISTER)
 		replace_ref (use, entry_register (use_entry + DF_REF_ID (use), use, used));
 	    }
 	  for (def_rec = DF_INSN_UID_DEFS (uid); *def_rec; def_rec++)
 	    {
-	      struct df_ref *def = *def_rec;
+	      df_ref def = *def_rec;
 	      if (DF_REF_REGNO (def) >= FIRST_PSEUDO_REGISTER)
 		replace_ref (def, entry_register (def_entry + DF_REF_ID (def), def, used));
 	    }
@@ -371,8 +371,10 @@ web_main (void)
   return 0;
 }
 
-struct tree_opt_pass pass_web =
+struct rtl_opt_pass pass_web =
 {
+ {
+  RTL_PASS,
   "web",                                /* name */
   gate_handle_web,                      /* gate */
   web_main,		                /* execute */
@@ -385,7 +387,7 @@ struct tree_opt_pass pass_web =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing | 
-  TODO_dump_func,                       /* todo_flags_finish */
-  'Z'                                   /* letter */
+  TODO_dump_func                        /* todo_flags_finish */
+ }
 };
 

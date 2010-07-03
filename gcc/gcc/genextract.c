@@ -1,6 +1,6 @@
 /* Generate code from machine description to extract operands from insn as rtl.
    Copyright (C) 1987, 1991, 1992, 1993, 1997, 1998, 1999, 2000, 2003,
-   2004, 2005, 2007
+   2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -152,7 +152,7 @@ gen_insn (rtx insn, int insn_code_number)
   /* Otherwise, make a new extraction method.  We stash the arrays
      after the extraction structure in memory.  */
 
-  p = xmalloc (sizeof (struct extraction)
+  p = XNEWVAR (struct extraction, sizeof (struct extraction)
 	       + op_count*sizeof (char *)
 	       + dup_count*sizeof (char *)
 	       + dup_count*sizeof (int));
