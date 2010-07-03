@@ -10,7 +10,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -49,13 +47,13 @@ MA 02110-1301, USA. */
    The final w will retain its sign, unless an underflow occurs in a submul
    of absolute values, in which case it's flipped.
 
-   If x has more limbs than w, then mpn_submul_1 followed by mpn_com_n is
+   If x has more limbs than w, then mpn_submul_1 followed by mpn_com is
    used.  The alternative would be mpn_mul_1 into temporary space followed
    by mpn_sub_n.  Avoiding temporary space seem good, and submul+com stands
    a chance of being faster since it involves only one set of carry
    propagations, not two.  Note that doing an addmul_1 with a
    twos-complement negative y doesn't work, because it effectively adds an
-   extra x * 2^BITS_PER_MP_LIMB.  */
+   extra x * 2^GMP_LIMB_BITS.  */
 
 REGPARM_ATTR(1) void
 mpz_aorsmul_1 (mpz_ptr w, mpz_srcptr x, mp_limb_t y, mp_size_t sub)
@@ -146,7 +144,7 @@ mpz_aorsmul_1 (mpz_ptr w, mpz_srcptr x, mp_limb_t y, mp_size_t sub)
               /* Borrow out of w, take twos complement negative to get
                  absolute value, flip sign of w.  */
               wp[new_wsize] = ~-cy;  /* extra limb is 0-cy */
-              mpn_com_n (wp, wp, new_wsize);
+              mpn_com (wp, wp, new_wsize);
               new_wsize++;
               MPN_INCR_U (wp, new_wsize, CNST_LIMB(1));
               wsize_signed = -wsize_signed;
@@ -160,7 +158,7 @@ mpz_aorsmul_1 (mpz_ptr w, mpz_srcptr x, mp_limb_t y, mp_size_t sub)
           mp_limb_t  cy2;
 
           /* -(-cy*b^n + w-x*y) = (cy-1)*b^n + ~(w-x*y) + 1 */
-          mpn_com_n (wp, wp, wsize);
+          mpn_com (wp, wp, wsize);
           cy += mpn_add_1 (wp, wp, wsize, CNST_LIMB(1));
           cy -= 1;
 

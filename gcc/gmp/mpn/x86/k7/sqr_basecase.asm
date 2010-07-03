@@ -6,7 +6,7 @@ dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -14,10 +14,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
@@ -30,18 +28,18 @@ C     roughly the Karatsuba recursing range).
 dnl  These are the same as mpn/x86/k6/sqr_basecase.asm, see that code for
 dnl  some comments.
 
-deflit(SQR_KARATSUBA_THRESHOLD_MAX, 66)
+deflit(SQR_TOOM2_THRESHOLD_MAX, 66)
 
-ifdef(`SQR_KARATSUBA_THRESHOLD_OVERRIDE',
-`define(`SQR_KARATSUBA_THRESHOLD',SQR_KARATSUBA_THRESHOLD_OVERRIDE)')
+ifdef(`SQR_TOOM2_THRESHOLD_OVERRIDE',
+`define(`SQR_TOOM2_THRESHOLD',SQR_TOOM2_THRESHOLD_OVERRIDE)')
 
-m4_config_gmp_mparam(`SQR_KARATSUBA_THRESHOLD')
-deflit(UNROLL_COUNT, eval(SQR_KARATSUBA_THRESHOLD-3))
+m4_config_gmp_mparam(`SQR_TOOM2_THRESHOLD')
+deflit(UNROLL_COUNT, eval(SQR_TOOM2_THRESHOLD-3))
 
 
 C void mpn_sqr_basecase (mp_ptr dst, mp_srcptr src, mp_size_t size);
 C
-C With a SQR_KARATSUBA_THRESHOLD around 50 this code is about 1500 bytes,
+C With a SQR_TOOM2_THRESHOLD around 50 this code is about 1500 bytes,
 C which is quite a bit, but is considered good value since squares big
 C enough to use most of the code will be spending quite a few cycles in it.
 

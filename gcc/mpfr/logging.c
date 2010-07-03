@@ -1,24 +1,24 @@
 /* MPFR Logging functions.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
@@ -40,7 +40,7 @@ int   mpfr_log_level;
 int   mpfr_log_base;
 int   mpfr_log_current;
 int   mpfr_log_worstcase_limit;
-mp_prec_t mpfr_log_prec;
+mpfr_prec_t mpfr_log_prec;
 
 static int
 mpfr_printf_mpfr_print (FILE *stream, const struct printf_info *info,
@@ -51,15 +51,15 @@ mpfr_printf_mpfr_print (FILE *stream, const struct printf_info *info,
 
   /* TODO: Use much more flag from info  */
   mpfr_srcptr w = *((mpfr_srcptr *) (arg[0]));
-  mp_prec_t prec = mpfr_log_prec != 0 ? mpfr_log_prec
-    : info->width == -1 ? 0 : (mp_prec_t) info->width;
+  mpfr_prec_t prec = mpfr_log_prec != 0 ? mpfr_log_prec
+    : info->width == -1 ? 0 : (mpfr_prec_t) info->width;
 
   org_type_logging = mpfr_log_type;
   mpfr_log_type = 0; /* We disable the logging during this print! */
   if (info->alt)
     length = fprintf (stream, "%lu", (unsigned long) MPFR_PREC (w));
   else
-    length = mpfr_out_str (stream, mpfr_log_base, prec, w, GMP_RNDN);
+    length = mpfr_out_str (stream, mpfr_log_base, prec, w, MPFR_RNDN);
   mpfr_log_type = org_type_logging;
 
   return length;

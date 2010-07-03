@@ -1,24 +1,24 @@
 /* mpfr_atanh -- Inverse Hyperbolic Tangente
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -27,12 +27,12 @@ MA 02110-1301, USA. */
        atanh= 1/2*ln(x+1)-1/2*ln(1-x)   */
 
 int
-mpfr_atanh (mpfr_ptr y, mpfr_srcptr xt , mp_rnd_t rnd_mode)
+mpfr_atanh (mpfr_ptr y, mpfr_srcptr xt , mpfr_rnd_t rnd_mode)
 {
   int inexact;
   mpfr_t x, t, te;
-  mp_prec_t Nx, Ny, Nt;
-  mp_exp_t err;
+  mpfr_prec_t Nx, Ny, Nt;
+  mpfr_exp_t err;
   MPFR_ZIV_DECL (loop);
   MPFR_SAVE_EXPO_DECL (expo);
 
@@ -94,11 +94,11 @@ mpfr_atanh (mpfr_ptr y, mpfr_srcptr xt , mp_rnd_t rnd_mode)
   for (;;)
     {
       /* compute atanh */
-      mpfr_ui_sub (te, 1, x, GMP_RNDU);   /* (1-xt)*/
-      mpfr_add_ui (t,  x, 1, GMP_RNDD);   /* (xt+1)*/
-      mpfr_div (t, t, te, GMP_RNDN);      /* (1+xt)/(1-xt)*/
-      mpfr_log (t, t, GMP_RNDN);          /* ln((1+xt)/(1-xt))*/
-      mpfr_div_2ui (t, t, 1, GMP_RNDN);   /* (1/2)*ln((1+xt)/(1-xt))*/
+      mpfr_ui_sub (te, 1, x, MPFR_RNDU);   /* (1-xt)*/
+      mpfr_add_ui (t,  x, 1, MPFR_RNDD);   /* (xt+1)*/
+      mpfr_div (t, t, te, MPFR_RNDN);      /* (1+xt)/(1-xt)*/
+      mpfr_log (t, t, MPFR_RNDN);          /* ln((1+xt)/(1-xt))*/
+      mpfr_div_2ui (t, t, 1, MPFR_RNDN);   /* (1/2)*ln((1+xt)/(1-xt))*/
 
       /* error estimate: see algorithms.tex */
       /* FIXME: this does not correspond to the value in algorithms.tex!!! */

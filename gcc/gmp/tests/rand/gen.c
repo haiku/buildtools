@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 /* Examples:
 
@@ -158,7 +156,7 @@ int main (argc, argv)
 #else
 	ul_adder = (unsigned long int) atoi (str_adder);
 #endif
-	
+
 	if (mpz_init_set_str (z_a, str_a, 0))
 	  {
 	    fprintf (stderr, "gen: bad LC scheme parameter `a': %s\n", str_a);
@@ -279,7 +277,7 @@ int main (argc, argv)
     case RFUNC_mpf_urandomb:
 #if 0
       /* Don't init a too small generator.  */
-      size = PREC (f1) * BITS_PER_MP_LIMB;
+      size = PREC (f1) * GMP_LIMB_BITS;
       /* Fall through.  */
 #endif
     case RFUNC_mpz_urandomb:
@@ -471,7 +469,7 @@ int main (argc, argv)
       break;
     }
   mpf_clear (f1);
-  mpf_clear (f_xf); 
+  mpf_clear (f_xf);
   mpf_clear (f_xt);
   mpz_clear (z1);
   mpz_clear (z_seed);

@@ -1,24 +1,24 @@
 /* mpfr_log10 -- logarithm in base 10.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -29,7 +29,7 @@ MA 02110-1301, USA. */
  */
 
 int
-mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mp_rnd_t rnd_mode)
+mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mpfr_rnd_t rnd_mode)
 {
   int inexact;
   MPFR_SAVE_EXPO_DECL (expo);
@@ -90,9 +90,9 @@ mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mp_rnd_t rnd_mode)
     mpfr_t t, tt;
     MPFR_ZIV_DECL (loop);
     /* Declaration of the size variable */
-    mp_prec_t Ny = MPFR_PREC(r);   /* Precision of output variable */
-    mp_prec_t Nt;        /* Precision of the intermediary variable */
-    mp_exp_t  err;                           /* Precision of error */
+    mpfr_prec_t Ny = MPFR_PREC(r);   /* Precision of output variable */
+    mpfr_prec_t Nt;        /* Precision of the intermediary variable */
+    mpfr_exp_t  err;                           /* Precision of error */
 
     /* compute the precision of intermediary variable */
     /* the optimal number of bits : see algorithms.tex */
@@ -107,10 +107,10 @@ mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mp_rnd_t rnd_mode)
     for (;;)
       {
         /* compute log10 */
-        mpfr_set_ui (t, 10, GMP_RNDN);   /* 10 */
-        mpfr_log (t, t, GMP_RNDD);       /* log(10) */
-        mpfr_log (tt, a, GMP_RNDN);      /* log(a) */
-        mpfr_div (t, tt, t, GMP_RNDN);   /* log(a)/log(10) */
+        mpfr_set_ui (t, 10, MPFR_RNDN);   /* 10 */
+        mpfr_log (t, t, MPFR_RNDD);       /* log(10) */
+        mpfr_log (tt, a, MPFR_RNDN);      /* log(a) */
+        mpfr_div (t, tt, t, MPFR_RNDN);   /* log(a)/log(10) */
 
         /* estimation of the error */
         err = Nt - 4;
@@ -121,8 +121,8 @@ mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mp_rnd_t rnd_mode)
            FIXME: Can we have 10^n exactly representable as a mpfr_t
            but n can't fit an unsigned long? */
         if (MPFR_IS_POS (t)
-            && mpfr_integer_p (t) && mpfr_fits_ulong_p (t, GMP_RNDN)
-            && !mpfr_ui_pow_ui (tt, 10, mpfr_get_ui (t, GMP_RNDN), GMP_RNDN)
+            && mpfr_integer_p (t) && mpfr_fits_ulong_p (t, MPFR_RNDN)
+            && !mpfr_ui_pow_ui (tt, 10, mpfr_get_ui (t, MPFR_RNDN), MPFR_RNDN)
             && mpfr_cmp (a, tt) == 0)
           break;
 

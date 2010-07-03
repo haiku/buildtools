@@ -1,12 +1,12 @@
 dnl  AMD K6 mpn_divexact_1 -- mpn by limb exact division.
 
-dnl  Copyright 2000, 2001, 2002 Free Software Foundation, Inc.
+dnl  Copyright 2000, 2001, 2002, 2007 Free Software Foundation, Inc.
 dnl
 dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -14,10 +14,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
@@ -88,17 +86,10 @@ L(strip_twos):
 	andl	$127, %eax		C d/2, 7 bits
 
 ifdef(`PIC',`
-	call	L(movl_eip_ebp)
-
-	addl	$_GLOBAL_OFFSET_TABLE_, %ebp
-	C
-	movl	modlimb_invert_table@GOT(%ebp), %ebp
-	C
+	LEA(	binvert_limb_table, %ebp)
 Zdisp(	movzbl,	0,(%eax,%ebp), %eax)
 ',`
-
-dnl non-PIC
-	movzbl	modlimb_invert_table(%eax), %eax	C inv 8 bits
+	movzbl	binvert_limb_table(%eax), %eax	C inv 8 bits
 ')
 	pushl	%edi		FRAME_pushl()
 
@@ -126,7 +117,7 @@ dnl non-PIC
 	subl	%ebp, %eax		C inv = 2*inv - inv*inv*d
 	subl	$1, %edx		C shift amount, and clear carry
 
-	ASSERT(e,`	C expect d*inv == 1 mod 2^BITS_PER_MP_LIMB
+	ASSERT(e,`	C expect d*inv == 1 mod 2^GMP_LIMB_BITS
 	pushl	%eax	FRAME_pushl()
 	imull	PARAM_DIVISOR, %eax
 	cmpl	$1, %eax
@@ -182,18 +173,6 @@ L(odd_entry):
 
 	ret
 
-
-ifdef(`PIC',`
-L(movl_eip_ebp):
-	movl	(%esp), %ebp
-	ret_internal
-
-	ALIGN(8)
-	nop	C code alignment, necessary for claimed speed
-	nop
-',`
-C non-PIC code alignment already ok at 0x9a
-')
 
 L(even):
 	C eax

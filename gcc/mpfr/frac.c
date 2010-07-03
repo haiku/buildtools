@@ -1,24 +1,24 @@
 /* mpfr_frac -- Fractional part of a floating-point number.
 
-Copyright 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 
 #define MPFR_NEED_LONGLONG_H
@@ -28,15 +28,17 @@ MA 02110-1301, USA. */
    as some cases will take longer (the number may be parsed twice). */
 
 int
-mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mp_rnd_t rnd_mode)
+mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
 {
-  mp_exp_t re, ue;
-  mp_prec_t uq, fq;
+  mpfr_exp_t re, ue;
+  mpfr_prec_t uq;
   mp_size_t un, tn, t0;
   mp_limb_t *up, *tp, k;
   int sh;
   mpfr_t tmp;
   mpfr_ptr t;
+  int inex;
+  MPFR_SAVE_EXPO_DECL (expo);
 
   /* Special cases */
   if (MPFR_UNLIKELY(MPFR_IS_NAN(u)))
@@ -46,7 +48,6 @@ mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mp_rnd_t rnd_mode)
     }
   else if (MPFR_UNLIKELY(MPFR_IS_INF(u) || mpfr_integer_p (u)))
     {
-      MPFR_CLEAR_FLAGS(r);
       MPFR_SET_SAME_SIGN(r, u);
       MPFR_SET_ZERO(r);
       MPFR_RET(0);  /* zero is exact */
@@ -56,13 +57,15 @@ mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mp_rnd_t rnd_mode)
   if (ue <= 0)  /* |u| < 1 */
     return mpfr_set (r, u, rnd_mode);
 
+  /* Now |u| >= 1, meaning that an overflow is not possible. */
+
   uq = MPFR_PREC(u);
-  un = (uq - 1) / BITS_PER_MP_LIMB;  /* index of most significant limb */
-  un -= (mp_size_t) (ue / BITS_PER_MP_LIMB);
+  un = (uq - 1) / GMP_NUMB_BITS;  /* index of most significant limb */
+  un -= (mp_size_t) (ue / GMP_NUMB_BITS);
   /* now the index of the MSL containing bits of the fractional part */
 
   up = MPFR_MANT(u);
-  sh = ue % BITS_PER_MP_LIMB;
+  sh = ue % GMP_NUMB_BITS;
   k = up[un] << sh;
   /* the first bit of the fractional part is the MSB of k */
 
@@ -74,15 +77,15 @@ mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mp_rnd_t rnd_mode)
       /* first bit 1 of the fractional part -> MSB of the number */
       re = -cnt;
       sh += cnt;
-      MPFR_ASSERTN (sh < BITS_PER_MP_LIMB);
+      MPFR_ASSERTN (sh < GMP_NUMB_BITS);
       k <<= cnt;
     }
   else
     {
-      re = sh - BITS_PER_MP_LIMB;
+      re = sh - GMP_NUMB_BITS;
       /* searching for the first bit 1 (exists since u isn't an integer) */
       while (up[--un] == 0)
-        re -= BITS_PER_MP_LIMB;
+        re -= GMP_NUMB_BITS;
       MPFR_ASSERTN(un >= 0);
       k = up[un];
       count_leading_zeros(sh, k);
@@ -92,22 +95,15 @@ mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mp_rnd_t rnd_mode)
   /* The exponent of r will be re */
   /* un: index of the limb of u that contains the first bit 1 of the FP */
 
-  ue -= re;  /* number of bits of u to discard */
-  fq = uq - ue;  /* number of bits of the fractional part of u */
-
-  /* Temporary fix */
-  t = /* fq > MPFR_PREC(r) */
-    (mp_size_t) (MPFR_PREC(r) - 1) / BITS_PER_MP_LIMB < un ?
-    (mpfr_init2 (tmp, (un + 1) * BITS_PER_MP_LIMB), tmp) : r;
+  t = (mp_size_t) (MPFR_PREC(r) - 1) / GMP_NUMB_BITS < un ?
+    (mpfr_init2 (tmp, (un + 1) * GMP_NUMB_BITS), tmp) : r;
   /* t has enough precision to contain the fractional part of u */
   /* If we use a temporary variable, we take the non-significant bits
      of u into account, because of the mpn_lshift below. */
-  MPFR_CLEAR_FLAGS(t);
   MPFR_SET_SAME_SIGN(t, u);
-  MPFR_SET_EXP (t, re);
 
   /* Put the fractional part of u into t */
-  tn = (MPFR_PREC(t) - 1) / BITS_PER_MP_LIMB;
+  tn = (MPFR_PREC(t) - 1) / GMP_NUMB_BITS;
   MPFR_ASSERTN(tn >= un);
   t0 = tn - un;
   tp = MPFR_MANT(t);
@@ -118,14 +114,31 @@ mpfr_frac (mpfr_ptr r, mpfr_srcptr u, mp_rnd_t rnd_mode)
   if (t0 > 0)
     MPN_ZERO(tp, t0);
 
+  MPFR_SAVE_EXPO_MARK (expo);
+
   if (t != r)
     { /* t is tmp */
-      int inex;
-
-      inex = mpfr_set (r, t, rnd_mode);
+      MPFR_EXP (t) = 0;  /* should be re, but not necessarily in the range */
+      inex = mpfr_set (r, t, rnd_mode);  /* no underflow */
       mpfr_clear (t);
-      return inex;
+      MPFR_EXP (r) += re;
     }
   else
-    MPFR_RET(0);
+    { /* There may be remaining non-significant bits in t (= r). */
+      int carry;
+
+      MPFR_EXP (r) = re;
+      carry = mpfr_round_raw (tp, tp,
+                              (mpfr_prec_t) (tn + 1) * GMP_NUMB_BITS,
+                              MPFR_IS_NEG (r), MPFR_PREC (r), rnd_mode,
+                              &inex);
+      if (carry)
+        {
+          tp[tn] = MPFR_LIMB_HIGHBIT;
+          MPFR_EXP (r) ++;
+        }
+    }
+
+  MPFR_SAVE_EXPO_FREE (expo);
+  return mpfr_check_range (r, inex, rnd_mode);
 }

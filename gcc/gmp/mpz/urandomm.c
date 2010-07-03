@@ -8,7 +8,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -17,9 +17,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -36,6 +34,7 @@ mpz_urandomm (mpz_ptr rop, gmp_randstate_t rstate, mpz_srcptr n)
   int count;
   int pow2;
   int cmp;
+  TMP_DECL;
 
   size = ABSIZ (n);
   if (size == 0)
@@ -61,6 +60,16 @@ mpz_urandomm (mpz_ptr rop, gmp_randstate_t rstate, mpz_srcptr n)
       return;
     }
 
+  TMP_MARK;
+  np = PTR (n);
+  if (rop == n)
+    {
+      mp_ptr tp;
+      tp = TMP_ALLOC_LIMBS (size);
+      MPN_COPY (tp, np, size);
+      np = tp;
+    }
+
   /* Here the allocated size can be one too much if n is a power of
      (2^GMP_NUMB_BITS) but it's convenient for using mpn_cmp below.  */
   rp = MPZ_REALLOC (rop, size);
@@ -71,14 +80,15 @@ mpz_urandomm (mpz_ptr rop, gmp_randstate_t rstate, mpz_srcptr n)
   do
     {
       _gmp_rand (rp, rstate, nbits);
-      MPN_CMP (cmp, rp, PTR (n), size);
+      MPN_CMP (cmp, rp, np, size);
     }
   while (cmp >= 0 && --count != 0);
 
   if (count == 0)
     /* Too many iterations; return result mod n == result - n */
-    mpn_sub_n (rp, rp, PTR (n), size);
+    mpn_sub_n (rp, rp, np, size);
 
   MPN_NORMALIZE (rp, size);
   SIZ (rop) = size;
+  TMP_FREE;
 }

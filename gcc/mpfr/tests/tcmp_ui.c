@@ -1,24 +1,24 @@
 /* Test file for mpfr_cmp_ui and mpfr_cmp_si.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #ifdef TCMP_UI_CHECK_NAN
 
@@ -100,7 +100,7 @@ main (void)
   mpfr_init(x);
 
   /* tests for cmp_ui */
-  mpfr_set_ui (x, 3, GMP_RNDZ);
+  mpfr_set_ui (x, 3, MPFR_RNDZ);
   if ((mpfr_cmp_ui) (x, i = 3) != 0)
     {
       printf ("Error in mpfr_cmp_ui(3.0, 3)\n");
@@ -116,14 +116,14 @@ main (void)
       printf ("Error in mpfr_cmp_ui(3.0,4)\n");
       exit (1);
     }
-  mpfr_set_ui (x, 0, GMP_RNDZ);
-  mpfr_neg (x, x, GMP_RNDZ);
+  mpfr_set_ui (x, 0, MPFR_RNDZ);
+  mpfr_neg (x, x, MPFR_RNDZ);
   if (mpfr_cmp_ui (x, i = 0))
     {
       printf ("Error in mpfr_cmp_ui(0.0,0)\n");
       exit (1);
     }
-  mpfr_set_ui (x, 1, GMP_RNDZ);
+  mpfr_set_ui (x, 1, MPFR_RNDZ);
   if (mpfr_cmp_ui (x, i = 0) == 0)
     {
       printf ("Error in mpfr_cmp_ui(1.0,0)\n");
@@ -143,15 +143,15 @@ main (void)
       exit (1);
     }
 
-  mpfr_set_si (x, -1, GMP_RNDN);
+  mpfr_set_si (x, -1, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui (x, 1) < 0);
   MPFR_ASSERTN(mpfr_cmp_ui (x, 0) < 0);
 
-  mpfr_set_ui (x, 1, GMP_RNDN);
+  mpfr_set_ui (x, 1, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui (x, 0) > 0);
 
   /* tests for cmp_si */
-  (mpfr_set_si) (x, -3, GMP_RNDZ);
+  (mpfr_set_si) (x, -3, MPFR_RNDZ);
   if ((mpfr_cmp_si) (x, s = -3) != 0)
     {
       printf ("Error in mpfr_cmp_si(-3.0,-3)\n");
@@ -182,19 +182,19 @@ main (void)
     }
 
   /* case b=0 */
-  mpfr_set_ui (x, 0, GMP_RNDZ);
+  mpfr_set_ui (x, 0, MPFR_RNDZ);
   MPFR_ASSERTN(mpfr_cmp_si (x, 0) == 0);
   MPFR_ASSERTN(mpfr_cmp_si (x, 1) < 0);
   MPFR_ASSERTN(mpfr_cmp_si (x, -1) > 0);
 
   /* case i=0 */
-  mpfr_set_ui (x, 1, GMP_RNDZ);
+  mpfr_set_ui (x, 1, MPFR_RNDZ);
   MPFR_ASSERTN(mpfr_cmp_si (x, 0) > 0);
-  mpfr_set_ui (x, 0, GMP_RNDZ);
+  mpfr_set_ui (x, 0, MPFR_RNDZ);
   MPFR_ASSERTN(mpfr_cmp_si (x, 0) == 0);
-  mpfr_neg (x, x, GMP_RNDZ);
+  mpfr_neg (x, x, MPFR_RNDZ);
   MPFR_ASSERTN(mpfr_cmp_si (x, 0) == 0);
-  mpfr_set_si (x, -1, GMP_RNDZ);
+  mpfr_set_si (x, -1, MPFR_RNDZ);
   MPFR_ASSERTN(mpfr_cmp_si (x, 0) < 0);
 
   /* case large x */
@@ -208,9 +208,9 @@ main (void)
   MPFR_ASSERTN(mpfr_cmp_si (x, -1) < 0);
 
   /* corner case */
-  mpfr_set_ui (x, 1, GMP_RNDZ);
-  mpfr_mul_2exp (x, x, BITS_PER_MP_LIMB - 1, GMP_RNDZ);
-  /* now EXP(x)=BITS_PER_MP_LIMB */
+  mpfr_set_ui (x, 1, MPFR_RNDZ);
+  mpfr_mul_2exp (x, x, GMP_NUMB_BITS - 1, MPFR_RNDZ);
+  /* now EXP(x)=GMP_NUMB_BITS */
   MPFR_ASSERTN(mpfr_cmp_si (x, 1) > 0);
 
   mpfr_clear (x);

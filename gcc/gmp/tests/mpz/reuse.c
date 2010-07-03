@@ -6,13 +6,13 @@
 	mpz_mul_si
 	mpz_addmul_ui (should this really allow a+=a*c?)
 
-Copyright 1996, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+Copyright 1996, 1999, 2000, 2001, 2002, 2009 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -21,9 +21,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,14 +48,14 @@ main (void)
 
 #else /* ! DLL_EXPORT */
 
-void dump _PROTO ((char *, mpz_t, mpz_t, mpz_t));
+void dump __GMP_PROTO ((char *, mpz_t, mpz_t, mpz_t));
 
-typedef void (*dss_func) _PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr));
-typedef void (*dsi_func) _PROTO ((mpz_ptr, mpz_srcptr, unsigned long int));
-typedef unsigned long int (*dsi_div_func) _PROTO ((mpz_ptr, mpz_srcptr, unsigned long int));
-typedef unsigned long int (*ddsi_div_func) _PROTO ((mpz_ptr, mpz_ptr, mpz_srcptr, unsigned long int));
-typedef void (*ddss_div_func) _PROTO ((mpz_ptr, mpz_ptr, mpz_srcptr, mpz_srcptr));
-typedef void (*ds_func) _PROTO ((mpz_ptr, mpz_srcptr));
+typedef void (*dss_func) __GMP_PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr));
+typedef void (*dsi_func) __GMP_PROTO ((mpz_ptr, mpz_srcptr, unsigned long int));
+typedef unsigned long int (*dsi_div_func) __GMP_PROTO ((mpz_ptr, mpz_srcptr, unsigned long int));
+typedef unsigned long int (*ddsi_div_func) __GMP_PROTO ((mpz_ptr, mpz_ptr, mpz_srcptr, unsigned long int));
+typedef void (*ddss_div_func) __GMP_PROTO ((mpz_ptr, mpz_ptr, mpz_srcptr, mpz_srcptr));
+typedef void (*ds_func) __GMP_PROTO ((mpz_ptr, mpz_srcptr));
 
 
 void
@@ -182,6 +180,7 @@ char *ds_func_names[] =
 #endif
 
 
+
 int
 main (int argc, char **argv)
 {
@@ -200,12 +199,11 @@ main (int argc, char **argv)
   unsigned long bsi, size_range;
 
   tests_start ();
+  TESTS_REPS (reps, argv, argc);
+
   rands = RANDS;
 
   mpz_init (bs);
-
-  if (argc == 2)
-     reps = atoi (argv[1]);
 
   mpz_init (in1);
   mpz_init (in2);
@@ -221,7 +219,7 @@ main (int argc, char **argv)
   for (pass = 1; pass <= reps; pass++)
     {
       mpz_urandomb (bs, rands, 32);
-      size_range = mpz_get_ui (bs) % 12 + 2;
+      size_range = mpz_get_ui (bs) % 17 + 2;
 
       mpz_urandomb (bs, rands, size_range);
       size = mpz_get_ui (bs);
@@ -252,14 +250,17 @@ main (int argc, char **argv)
 	    continue;
 
 	  (dss_funcs[i]) (ref1, in1, in2);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  (dss_funcs[i]) (res1, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL (dss, i, in1, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  (dss_funcs[i]) (res1, in1, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL (dss, i, in1, in2, NULL);
 	}
@@ -272,24 +273,34 @@ main (int argc, char **argv)
 	    continue;
 
 	  (ddss_div_funcs[i]) (ref1, ref2, in1, in2);
+	  MPZ_CHECK_FORMAT (ref1);
+	  MPZ_CHECK_FORMAT (ref2);
 
 	  mpz_set (res1, in1);
 	  (ddss_div_funcs[i]) (res1, res2, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL (ddss_div, i, in1, in2, NULL);
 
 	  mpz_set (res2, in1);
 	  (ddss_div_funcs[i]) (res1, res2, res2, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL (ddss_div, i, in1, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  (ddss_div_funcs[i]) (res1, res2, in1, res1);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL (ddss_div, i, in1, in2, NULL);
 
 	  mpz_set (res2, in2);
 	  (ddss_div_funcs[i]) (res1, res2, in1, res2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL (ddss_div, i, in1, in2, NULL);
 	}
@@ -303,9 +314,11 @@ main (int argc, char **argv)
 	    continue;
 
 	  (ds_funcs[i]) (ref1, in1);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  (ds_funcs[i]) (res1, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL (ds, i, in1, in2, NULL);
 	}
@@ -329,9 +342,11 @@ main (int argc, char **argv)
 	    in2i %= 0x10;
 
 	  (dsi_funcs[i]) (ref1, in1, in2i);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  (dsi_funcs[i]) (res1, res1, in2i);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL (dsi, i, in1, in2, NULL);
 	}
@@ -341,9 +356,11 @@ main (int argc, char **argv)
 	  for (i = 0; i < sizeof (dsi_div_funcs) / sizeof (dsi_div_funcs); i++)
 	    {
 	      r1 = (dsi_div_funcs[i]) (ref1, in1, in2i);
+	      MPZ_CHECK_FORMAT (ref1);
 
 	      mpz_set (res1, in1);
 	      r2 = (dsi_div_funcs[i]) (res1, res1, in2i);
+	      MPZ_CHECK_FORMAT (res1);
 	      if (mpz_cmp (ref1, res1) != 0 || r1 != r2)
 		FAIL (dsi_div, i, in1, in2, NULL);
 	    }
@@ -351,14 +368,17 @@ main (int argc, char **argv)
 	  for (i = 0; i < sizeof (ddsi_div_funcs) / sizeof (ddsi_div_funcs); i++)
 	    {
 	      r1 = (ddsi_div_funcs[i]) (ref1, ref2, in1, in2i);
+	      MPZ_CHECK_FORMAT (ref1);
 
 	      mpz_set (res1, in1);
 	      r2 = (ddsi_div_funcs[i]) (res1, res2, res1, in2i);
+	      MPZ_CHECK_FORMAT (res1);
 	      if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0 || r1 != r2)
 		FAIL (ddsi_div, i, in1, in2, NULL);
 
 	      mpz_set (res2, in1);
 	      (ddsi_div_funcs[i]) (res1, res2, res2, in2i);
+	      MPZ_CHECK_FORMAT (res1);
 	      if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0 || r1 != r2)
 		FAIL (ddsi_div, i, in1, in2, NULL);
 	    }
@@ -367,14 +387,20 @@ main (int argc, char **argv)
       if (mpz_sgn (in1) >= 0)
 	{
 	  mpz_sqrtrem (ref1, ref2, in1);
+	  MPZ_CHECK_FORMAT (ref1);
+	  MPZ_CHECK_FORMAT (ref2);
 
 	  mpz_set (res1, in1);
 	  mpz_sqrtrem (res1, res2, res1);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL2 (mpz_sqrtrem, in1, NULL, NULL);
 
 	  mpz_set (res2, in1);
 	  mpz_sqrtrem (res1, res2, res2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL2 (mpz_sqrtrem, in1, NULL, NULL);
 	}
@@ -382,9 +408,11 @@ main (int argc, char **argv)
       if (mpz_sgn (in1) >= 0)
 	{
 	  mpz_root (ref1, in1, in2i % 0x1000 + 1);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  mpz_root (res1, res1, in2i % 0x1000 + 1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_root, in1, in2, NULL);
 	}
@@ -392,14 +420,20 @@ main (int argc, char **argv)
       if (mpz_sgn (in1) >= 0)
 	{
 	  mpz_rootrem (ref1, ref2, in1, in2i % 0x1000 + 1);
+	  MPZ_CHECK_FORMAT (ref1);
+	  MPZ_CHECK_FORMAT (ref2);
 
 	  mpz_set (res1, in1);
 	  mpz_rootrem (res1, res2, res1, in2i % 0x1000 + 1);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL2 (mpz_rootrem, in1, in2, NULL);
 
 	  mpz_set (res2, in1);
 	  mpz_rootrem (res1, res2, res2, in2i % 0x1000 + 1);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0)
 	    FAIL2 (mpz_rootrem, in1, in2, NULL);
 	}
@@ -407,63 +441,92 @@ main (int argc, char **argv)
       if (pass < reps / 2)	/* run fewer tests since gcdext lots of time */
 	{
 	  mpz_gcdext (ref1, ref2, ref3, in1, in2);
+	  MPZ_CHECK_FORMAT (ref1);
+	  MPZ_CHECK_FORMAT (ref2);
+	  MPZ_CHECK_FORMAT (ref3);
 
 	  mpz_set (res1, in1);
 	  mpz_gcdext (res1, res2, res3, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
+	  MPZ_CHECK_FORMAT (res3);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res2, in1);
 	  mpz_gcdext (res1, res2, res3, res2, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
+	  MPZ_CHECK_FORMAT (res3);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res3, in1);
 	  mpz_gcdext (res1, res2, res3, res3, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
+	  MPZ_CHECK_FORMAT (res3);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  mpz_gcdext (res1, res2, res3, in1, res1);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
+	  MPZ_CHECK_FORMAT (res3);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res2, in2);
 	  mpz_gcdext (res1, res2, res3, in1, res2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
+	  MPZ_CHECK_FORMAT (res3);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res3, in2);
 	  mpz_gcdext (res1, res2, res3, in1, res3);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
+	  MPZ_CHECK_FORMAT (res3);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res1, in1);
 	  mpz_gcdext (res1, res2, NULL, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res2, in1);
 	  mpz_gcdext (res1, res2, NULL, res2, in2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  mpz_gcdext (res1, res2, NULL, in1, res1);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
 
 	  mpz_set (res2, in2);
 	  mpz_gcdext (res1, res2, NULL, in1, res2);
+	  MPZ_CHECK_FORMAT (res1);
+	  MPZ_CHECK_FORMAT (res2);
 	  if (mpz_cmp (ref1, res1) != 0 || mpz_cmp (ref2, res2) != 0
 	      || mpz_cmp (ref3, res3) != 0)
 	    FAIL2 (mpz_gcdext, in1, in2, NULL);
@@ -474,19 +537,23 @@ main (int argc, char **argv)
 	  && (mpz_sgn (in2) >= 0 || mpz_invert (t, in1, in3)))
 	{
 	  mpz_powm (ref1, in1, in2, in3);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  mpz_powm (res1, res1, in2, in3);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_powm, in1, in2, in3);
 
 	  mpz_set (res1, in2);
 	  mpz_powm (res1, in1, res1, in3);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_powm, in1, in2, in3);
 
 	  mpz_set (res1, in3);
 	  mpz_powm (res1, in1, in2, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_powm, in1, in2, in3);
 	}
@@ -495,23 +562,28 @@ main (int argc, char **argv)
       if (mpz_sgn (in3) != 0)
 	{
 	  mpz_powm_ui (ref1, in1, in2i, in3);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  mpz_powm_ui (res1, res1, in2i, in3);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_powm_ui, in1, in2, in3);
 
 	  mpz_set (res1, in3);
 	  mpz_powm_ui (res1, in1, in2i, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_powm_ui, in1, in2, in3);
 	}
 
       {
 	r1 = mpz_gcd_ui (ref1, in1, in2i);
+	MPZ_CHECK_FORMAT (ref1);
 
 	mpz_set (res1, in1);
 	r2 = mpz_gcd_ui (res1, res1, in2i);
+	MPZ_CHECK_FORMAT (res1);
 	if (mpz_cmp (ref1, res1) != 0)
 	  FAIL2 (mpz_gcd_ui, in1, in2, NULL);
       }
@@ -520,14 +592,17 @@ main (int argc, char **argv)
 	{
 	  /* Test mpz_remove */
 	  mpz_remove (ref1, in1, in2);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, in1);
 	  mpz_remove (res1, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_remove, in1, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  mpz_remove (res1, in1, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_remove, in1, in2, NULL);
 	}
@@ -537,14 +612,17 @@ main (int argc, char **argv)
 	  /* Test mpz_divexact */
 	  mpz_mul (t, in1, in2);
 	  mpz_divexact (ref1, t, in2);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, t);
 	  mpz_divexact (res1, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_divexact, t, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  mpz_divexact (res1, t, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_divexact, t, in2, NULL);
 	}
@@ -554,14 +632,17 @@ main (int argc, char **argv)
 	  /* Test mpz_divexact_gcd, same as mpz_divexact */
 	  mpz_mul (t, in1, in2);
 	  mpz_divexact_gcd (ref1, t, in2);
+	  MPZ_CHECK_FORMAT (ref1);
 
 	  mpz_set (res1, t);
 	  mpz_divexact_gcd (res1, res1, in2);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_divexact_gcd, t, in2, NULL);
 
 	  mpz_set (res1, in2);
 	  mpz_divexact_gcd (res1, t, res1);
+	  MPZ_CHECK_FORMAT (res1);
 	  if (mpz_cmp (ref1, res1) != 0)
 	    FAIL2 (mpz_divexact_gcd, t, in2, NULL);
 	}

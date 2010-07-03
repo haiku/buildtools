@@ -1,33 +1,34 @@
 /* mpfr_acos -- arc-cosinus of a floating-point number
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library, and was contributed by Mathieu Dutour.
+This file is part of the GNU MPFR Library, and was contributed by Mathieu Dutour.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
+#define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 int
-mpfr_acos (mpfr_ptr acos, mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_acos (mpfr_ptr acos, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
   mpfr_t xp, arcc, tmp;
-  mp_exp_t supplement;
-  mp_prec_t prec;
+  mpfr_exp_t supplement;
+  mpfr_prec_t prec;
   int sign, compared, inexact;
   MPFR_SAVE_EXPO_DECL (expo);
   MPFR_ZIV_DECL (loop);
@@ -56,7 +57,7 @@ mpfr_acos (mpfr_ptr acos, mpfr_srcptr x, mp_rnd_t rnd_mode)
   /* Set x_p=|x| */
   sign = MPFR_SIGN (x);
   mpfr_init2 (xp, MPFR_PREC (x));
-  mpfr_abs (xp, x, GMP_RNDN); /* Exact */
+  mpfr_abs (xp, x, MPFR_RNDN); /* Exact */
 
   compared = mpfr_cmp_ui (xp, 1);
 
@@ -80,14 +81,15 @@ mpfr_acos (mpfr_ptr acos, mpfr_srcptr x, mp_rnd_t rnd_mode)
   MPFR_SAVE_EXPO_MARK (expo);
 
   /* Compute the supplement */
-  mpfr_ui_sub (xp, 1, xp, GMP_RNDD);
+  mpfr_ui_sub (xp, 1, xp, MPFR_RNDD);
   if (MPFR_IS_POS_SIGN (sign))
     supplement = 2 - 2 * MPFR_GET_EXP (xp);
   else
     supplement = 2 - MPFR_GET_EXP (xp);
   mpfr_clear (xp);
 
-  prec = MPFR_PREC (acos) + 10 + supplement;
+  prec = MPFR_PREC (acos);
+  prec += MPFR_INT_CEIL_LOG2(prec) + 10 + supplement;
 
   /* VL: The following change concerning prec comes from r3145
      "Optimize mpfr_acos by choosing a better initial precision."
@@ -113,16 +115,16 @@ mpfr_acos (mpfr_ptr acos, mpfr_srcptr x, mp_rnd_t rnd_mode)
   for (;;)
     {
       /* acos(x) = Pi/2 - asin(x) = Pi/2 - atan(x/sqrt(1-x^2)) */
-      mpfr_sqr (tmp, x, GMP_RNDN);
-      mpfr_ui_sub (tmp, 1, tmp, GMP_RNDN);
-      mpfr_sqrt (tmp, tmp, GMP_RNDN);
-      mpfr_div (tmp, x, tmp, GMP_RNDN);
-      mpfr_atan (arcc, tmp, GMP_RNDN);
-      mpfr_const_pi (tmp, GMP_RNDN);
-      mpfr_div_2ui (tmp, tmp, 1, GMP_RNDN);
-      mpfr_sub (arcc, tmp, arcc, GMP_RNDN);
+      mpfr_sqr (tmp, x, MPFR_RNDN);
+      mpfr_ui_sub (tmp, 1, tmp, MPFR_RNDN);
+      mpfr_sqrt (tmp, tmp, MPFR_RNDN);
+      mpfr_div (tmp, x, tmp, MPFR_RNDN);
+      mpfr_atan (arcc, tmp, MPFR_RNDN);
+      mpfr_const_pi (tmp, MPFR_RNDN);
+      mpfr_div_2ui (tmp, tmp, 1, MPFR_RNDN);
+      mpfr_sub (arcc, tmp, arcc, MPFR_RNDN);
 
-      if (MPFR_LIKELY (MPFR_CAN_ROUND (arcc, prec-supplement,
+      if (MPFR_LIKELY (MPFR_CAN_ROUND (arcc, prec - supplement,
                                        MPFR_PREC (acos), rnd_mode)))
         break;
       MPFR_ZIV_NEXT (loop, prec);

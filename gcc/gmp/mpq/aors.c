@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,20 +16,18 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
 
-static void __gmpq_aors _PROTO ((REGPARM_3_1 (mpq_ptr w, mpq_srcptr x, mpq_srcptr y, void (*fun) _PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr))))) REGPARM_ATTR (1);
+static void __gmpq_aors __GMP_PROTO ((REGPARM_3_1 (mpq_ptr, mpq_srcptr, mpq_srcptr, void (*) __GMP_PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr))))) REGPARM_ATTR (1);
 #define mpq_aors(w,x,y,fun)  __gmpq_aors (REGPARM_3_1 (w, x, y, fun))
 
 REGPARM_ATTR (1) static void
 mpq_aors (mpq_ptr rop, mpq_srcptr op1, mpq_srcptr op2,
-          void (*fun) _PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr)))
+          void (*fun) __GMP_PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr)))
 {
   mpz_t gcd;
   mpz_t tmp1, tmp2;

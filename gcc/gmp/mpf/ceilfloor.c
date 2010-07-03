@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -28,7 +26,7 @@ MA 02110-1301, USA. */
    Notice the use of prec+1 ensures mpf_ceil and mpf_floor are equivalent to
    mpf_set if u is already an integer.  */
 
-static void __gmpf_ceil_or_floor _PROTO ((REGPARM_2_1 (mpf_ptr r, mpf_srcptr u, int dir))) REGPARM_ATTR (1);
+static void __gmpf_ceil_or_floor __GMP_PROTO ((REGPARM_2_1 (mpf_ptr, mpf_srcptr, int))) REGPARM_ATTR (1);
 #define mpf_ceil_or_floor(r,u,dir)  __gmpf_ceil_or_floor (REGPARM_2_1 (r, u, dir))
 
 REGPARM_ATTR (1) static void

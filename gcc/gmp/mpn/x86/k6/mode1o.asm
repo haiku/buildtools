@@ -1,12 +1,12 @@
 dnl  AMD K6 mpn_modexact_1_odd -- exact division style remainder.
 
-dnl  Copyright 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+dnl  Copyright 2000, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
 dnl
 dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -14,10 +14,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
@@ -55,12 +53,6 @@ deflit(`FRAME',0)
 	movl	PARAM_CARRY, %edx
 	jmp	L(start_1c)
 
-ifdef(`PIC',`
-L(movl_eip_edi):
-	movl	(%esp), %edi
-	ret_internal
-')
-
 EPILOGUE()
 
 
@@ -82,17 +74,10 @@ L(start_1c):
 	pushl	%ebp		FRAME_pushl()
 
 ifdef(`PIC',`
-	call	L(movl_eip_edi)
-
-	addl	$_GLOBAL_OFFSET_TABLE_, %edi
-	C
-	movl	modlimb_invert_table@GOT(%edi), %edi
-	C
-Zdisp(	movzbl,	0,(%ecx,%edi), %edi)			C inv 8 bits
+	LEA(	binvert_limb_table, %edi)
+Zdisp(	movzbl,	0,(%ecx,%edi), %edi)		C inv 8 bits
 ',`
-
-dnl non-PIC
-	movzbl	modlimb_invert_table(%ecx), %edi	C inv 8 bits
+	movzbl	binvert_limb_table(%ecx), %edi	C inv 8 bits
 ')
 	leal	(%edi,%edi), %ecx	C 2*inv
 
@@ -118,7 +103,7 @@ dnl non-PIC
 
 	subl	%ecx, %edi		C inv = 2*inv - inv*inv*d
 
-	ASSERT(e,`	C d*inv == 1 mod 2^BITS_PER_MP_LIMB
+	ASSERT(e,`	C d*inv == 1 mod 2^GMP_LIMB_BITS
 	pushl	%eax
 	movl	%esi, %eax
 	imull	%edi, %eax

@@ -6,7 +6,7 @@
 #
 # The GNU MP Library is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
+# the Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 #
 # The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,16 +15,16 @@
 # License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-# MA 02110-1301, USA.
+# along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 INCLUDES = -I$(top_srcdir) -I$(top_srcdir)/tests
 LDADD = $(top_builddir)/tests/libtests.la $(top_builddir)/libgmp.la
 
+# add_n_sub_n add_n_sub_n_2 not yet built since mpn_add_n_sub_n doesn't yet exist
+#
 EXTRA_PROGRAMS = \
-  aors_n anymul_1 copy divmod_1 divrem shift logops_n mul_N addmul_N try
+  aors_n anymul_1 copy divmod_1 divrem shift logops_n tst-addsub try
 
 allprogs: $(EXTRA_PROGRAMS)
 

@@ -1,37 +1,36 @@
 /* mpfr_out_str -- output a floating-point number to a stream
 
-Copyright 1999, 2001, 2002, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
-
-#include <string.h>
-#include <locale.h>
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
 size_t
 mpfr_out_str (FILE *stream, int base, size_t n_digits, mpfr_srcptr op,
-              mp_rnd_t rnd_mode)
+              mpfr_rnd_t rnd_mode)
 {
   char *s, *s0;
   size_t l;
-  mp_exp_t e;
+  mpfr_exp_t e;
+
+  MPFR_ASSERTN (base >= 2 && base <= 62);
 
   /* when stream=NULL, output to stdout */
   if (stream == NULL)
@@ -83,7 +82,7 @@ mpfr_out_str (FILE *stream, int base, size_t n_digits, mpfr_srcptr op,
 
   /* outputs mantissa */
   fputc (*s++, stream); e--; /* leading digit */
-  fputc (MPFR_DECIMAL_POINT, stream);
+  fputc ((unsigned char) MPFR_DECIMAL_POINT, stream);
   fputs (s, stream);         /* rest of mantissa */
   (*__gmp_free_func) (s0, l);
 

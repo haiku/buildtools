@@ -1,31 +1,31 @@
 /* mpfr_round_near_x -- Round a floating point number nears another one.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library, and was contributed by Mathieu Dutour.
+This file is part of the GNU MPFR Library, and was contributed by Mathieu Dutour.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
 /* Use MPFR_FAST_COMPUTE_IF_SMALL_INPUT instead (a simple wrapper) */
 
 /* int mpfr_round_near_x (mpfr_ptr y, mpfr_srcptr v, mpfr_uexp_t err, int dir,
-                          mp_rnd_t rnd)
+                          mpfr_rnd_t rnd)
 
    TODO: fix this description.
    Assuming y = o(f(x)) = o(x + g(x)) with |g(x)| < 2^(EXP(v)-error)
@@ -38,7 +38,7 @@ MA 02110-1301, USA. */
    y is the destination (a mpfr_t), v the value to set (a mpfr_t),
    err the error term (a mpfr_uexp_t) such that |g(x)| < 2^(EXP(x)-err),
    dir (an int) is the direction of the error (if dir = 0,
-   it rounds towards 0, if dir=1, it rounds away from 0),
+   it rounds toward 0, if dir=1, it rounds away from 0),
    rnd the rounding mode.
 
    It returns 0 if it can't round.
@@ -154,7 +154,7 @@ MA 02110-1301, USA. */
 
 int
 mpfr_round_near_x (mpfr_ptr y, mpfr_srcptr v, mpfr_uexp_t err, int dir,
-                   mp_rnd_t rnd)
+                   mpfr_rnd_t rnd)
 {
   int inexact, sign;
   unsigned int old_flags = __gmpfr_flags;
@@ -163,15 +163,15 @@ mpfr_round_near_x (mpfr_ptr y, mpfr_srcptr v, mpfr_uexp_t err, int dir,
   MPFR_ASSERTD (dir == 0 || dir == 1);
 
   /* First check if we can round. The test is more restrictive than
-     necessary. Note that if err is not representable in an mp_exp_t,
-     then err > MPFR_PREC (v) and the conversion to mp_exp_t will not
+     necessary. Note that if err is not representable in an mpfr_exp_t,
+     then err > MPFR_PREC (v) and the conversion to mpfr_exp_t will not
      occur. */
   if (!(err > MPFR_PREC (y) + 1
         && (err > MPFR_PREC (v)
             || mpfr_round_p (MPFR_MANT (v), MPFR_LIMB_SIZE (v),
-                             (mp_exp_t) err,
-                             MPFR_PREC (y) + (rnd == GMP_RNDN)))))
-    /* If we assume we can not round, return 0 */
+                             (mpfr_exp_t) err,
+                             MPFR_PREC (y) + (rnd == MPFR_RNDN)))))
+    /* If we assume we can not round, return 0, and y is not modified */
     return 0;
 
   /* First round v in y */
@@ -201,7 +201,7 @@ mpfr_round_near_x (mpfr_ptr y, mpfr_srcptr v, mpfr_uexp_t err, int dir,
           inexact = sign;
           if (MPFR_IS_LIKE_RNDZ (rnd, MPFR_IS_NEG_SIGN (sign)))
             {
-            nexttozero:
+              /* case nexttozero */
               /* The underflow flag should be set if the result is zero */
               __gmpfr_flags = old_flags;
               inexact = -sign;
@@ -214,10 +214,9 @@ mpfr_round_near_x (mpfr_ptr y, mpfr_srcptr v, mpfr_uexp_t err, int dir,
         {
           inexact = -sign;
           /* Round Away */
-          if (rnd != GMP_RNDN && rnd != GMP_RNDZ
-              && MPFR_IS_RNDUTEST_OR_RNDDNOTTEST (rnd, MPFR_IS_POS_SIGN(sign)))
+            if (rnd != MPFR_RNDN && !MPFR_IS_LIKE_RNDZ (rnd, MPFR_IS_NEG_SIGN(sign)))
             {
-            nexttoinf:
+              /* case nexttoinf */
               /* The overflow flag should be set if the result is infinity */
               inexact = sign;
               mpfr_nexttoinf (y);
@@ -227,5 +226,8 @@ mpfr_round_near_x (mpfr_ptr y, mpfr_srcptr v, mpfr_uexp_t err, int dir,
         }
     }
 
+  /* the inexact flag cannot be 0, since this would mean an exact value,
+     and in this case we cannot round correctly */
+  MPFR_ASSERTD(inexact != 0);
   MPFR_RET (inexact);
 }

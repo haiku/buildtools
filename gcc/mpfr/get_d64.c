@@ -1,36 +1,36 @@
 /* mpfr_get_decimal64 -- convert a multiple precision floating-point number
                          to a IEEE 754r decimal64 float
 
-See http://gcc.gnu.org/ml/gcc/2006-06/msg00691.html
-and http://gcc.gnu.org/onlinedocs/gcc/Decimal-Float.html.
+See http://gcc.gnu.org/ml/gcc/2006-06/msg00691.html,
+http://gcc.gnu.org/onlinedocs/gcc/Decimal-Float.html,
+and TR 24732 <http://www.open-std.org/jtc1/sc22/wg14/www/projects#24732>.
 
-Copyright 2006, 2007 Free Software Foundation, Inc.
+Copyright 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdlib.h> /* for strtol */
-#include <string.h> /* for strlen */
 #include "mpfr-impl.h"
 
 #define ISDIGIT(c) ('0' <= c && c <= '9')
 
-#if MPFR_WANT_DECIMAL_FLOATS
+#ifdef MPFR_WANT_DECIMAL_FLOATS
 
 #ifdef DPD_FORMAT
 static int T[1000] = {
@@ -269,8 +269,8 @@ string_to_Decimal64 (char *s)
     rn = mpn_set_str (rp, (unsigned char *) m, 16, 10);
     if (rn == 1)
       rp[1] = 0;
-#if BITS_PER_MP_LIMB > 32
-    rp[1] = rp[1] << (BITS_PER_MP_LIMB - 32);
+#if GMP_NUMB_BITS > 32
+    rp[1] = rp[1] << (GMP_NUMB_BITS - 32);
     rp[1] |= rp[0] >> 32;
     rp[0] &= 4294967295UL;
 #endif
@@ -294,10 +294,10 @@ string_to_Decimal64 (char *s)
 }
 
 _Decimal64
-mpfr_get_decimal64 (mpfr_srcptr src, mp_rnd_t rnd_mode)
+mpfr_get_decimal64 (mpfr_srcptr src, mpfr_rnd_t rnd_mode)
 {
   int negative;
-  mp_exp_t e;
+  mpfr_exp_t e;
 
   /* the encoding of NaN, Inf, zero is the same under DPD or BID */
   if (MPFR_UNLIKELY (MPFR_IS_SINGULAR (src)))
@@ -317,13 +317,16 @@ mpfr_get_decimal64 (mpfr_srcptr src, mp_rnd_t rnd_mode)
   e = MPFR_GET_EXP (src);
   negative = MPFR_IS_NEG (src);
 
+  if (MPFR_UNLIKELY(rnd_mode == MPFR_RNDA))
+    rnd_mode = negative ? MPFR_RNDD : MPFR_RNDU;
+
   /* the smallest decimal64 number is 10^(-398),
      with 2^(-1323) < 10^(-398) < 2^(-1322) */
   if (MPFR_UNLIKELY (e < -1323)) /* src <= 2^(-1324) < 1/2*10^(-398) */
     {
-      if (rnd_mode == GMP_RNDZ || rnd_mode == GMP_RNDN
-          || (rnd_mode == GMP_RNDD && negative == 0)
-          || (rnd_mode == GMP_RNDU && negative != 0))
+      if (rnd_mode == MPFR_RNDZ || rnd_mode == MPFR_RNDN
+          || (rnd_mode == MPFR_RNDD && negative == 0)
+          || (rnd_mode == MPFR_RNDU && negative != 0))
         return get_decimal64_zero (negative);
       else /* return the smallest non-zero number */
         return get_decimal64_min (negative);
@@ -331,8 +334,8 @@ mpfr_get_decimal64 (mpfr_srcptr src, mp_rnd_t rnd_mode)
   /* the largest decimal64 number is just below 10^(385) < 2^1279 */
   else if (MPFR_UNLIKELY (e > 1279)) /* then src >= 2^1279 */
     {
-      if (GMP_RNDZ || (rnd_mode == GMP_RNDU && negative != 0)
-          || (rnd_mode == GMP_RNDD && negative == 0))
+      if (MPFR_RNDZ || (rnd_mode == MPFR_RNDU && negative != 0)
+          || (rnd_mode == MPFR_RNDD && negative == 0))
         return get_decimal64_max (negative);
       else
         return get_decimal64_inf (negative);
@@ -351,23 +354,24 @@ mpfr_get_decimal64 (mpfr_srcptr src, mp_rnd_t rnd_mode)
              which corresponds to s=[0.]1000...000 and e=-397 */
           if (e < -397)
             {
-              if (rnd_mode == GMP_RNDZ || rnd_mode == GMP_RNDN
-                  || (rnd_mode == GMP_RNDD && negative == 0)
-                  || (rnd_mode == GMP_RNDU && negative != 0))
+              if (rnd_mode == MPFR_RNDZ || rnd_mode == MPFR_RNDN
+                  || (rnd_mode == MPFR_RNDD && negative == 0)
+                  || (rnd_mode == MPFR_RNDU && negative != 0))
                 return get_decimal64_zero (negative);
               else /* return the smallest non-zero number */
                 return get_decimal64_min (negative);
             }
           else
             {
-              mp_exp_t e2;
+              mpfr_exp_t e2;
               long digits = 16 - (-382 - e);
               /* if e = -397 then 16 - (-382 - e) = 1 */
               mpfr_get_str (s, &e2, 10, digits, src, rnd_mode);
               /* Warning: we can have e2 = e + 1 here, when rounding to
                  nearest or away from zero. */
               s[negative + digits] = 'E';
-              sprintf (s + negative + digits + 1, "%d", e2 - digits);
+              sprintf (s + negative + digits + 1, "%ld",
+                       (long int)e2 - digits);
               return string_to_Decimal64 (s);
             }
         }
@@ -375,8 +379,8 @@ mpfr_get_decimal64 (mpfr_srcptr src, mp_rnd_t rnd_mode)
          which corresponds to s=[0.]9999...999 and e=385 */
       else if (e > 385)
         {
-          if (GMP_RNDZ || (rnd_mode == GMP_RNDU && negative != 0)
-              || (rnd_mode == GMP_RNDD && negative == 0))
+          if (MPFR_RNDZ || (rnd_mode == MPFR_RNDU && negative != 0)
+              || (rnd_mode == MPFR_RNDD && negative == 0))
             return get_decimal64_max (negative);
           else
             return get_decimal64_inf (negative);
@@ -384,7 +388,7 @@ mpfr_get_decimal64 (mpfr_srcptr src, mp_rnd_t rnd_mode)
       else /* -382 <= e <= 385 */
         {
           s[16 + negative] = 'E';
-          sprintf (s + 17 + negative, "%d", e - 16);
+          sprintf (s + 17 + negative, "%ld", (long int)e - 16);
           return string_to_Decimal64 (s);
         }
     }

@@ -1,27 +1,27 @@
 /* mpfr_gmp -- Limited gmp-impl emulator
    Modified version of the GMP files.
 
-Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <stdlib.h> /* For malloc, free, realloc and abort*/
+#include <stdlib.h> /* For malloc, free, realloc and abort */
 
 #include "mpfr-impl.h"
 
@@ -301,39 +301,22 @@ mpfr_assert_fail (const char *filename, int linenum,
       if (linenum != -1)
         fprintf (stderr, "%d: ", linenum);
     }
-  fprintf (stderr, " assertion failed: %s\n", expr);
+  fprintf (stderr, "MPFR assertion failed: %s\n", expr);
   abort();
-}
-
-void
-mpfr_rand_raw (mp_ptr mp, gmp_randstate_t rstate, unsigned long int nbits)
-{
-  mpz_t z;
-
-  /* To be sure to avoid the potential allocation of mpz_urandomb */
-  ALLOC(z) = SIZ(z) = (nbits / GMP_NUMB_BITS) + 1;
-  PTR(z)   = mp;
-  mpz_urandomb(z, rstate, nbits);
-}
-
-void
-mpfr_init_gmp_rand ()
-{
-  /* Since we don't use __gmp_rands, but mpfr_rands, we need to init
-     __gmp_rands before setting the memory functions so that the tests
-     don't report an error.
-     Only the tests which call mpn_random2 can do that:
-     trandom, tset_f and reuse.
-     So we just have to call mpn_random before. */
-  mp_limb_t dummy;
-  mpn_random (&dummy, 1);
 }
 
 #ifdef mp_get_memory_functions
 
-void * (*mpfr_allocate_func) (size_t);
-void * (*mpfr_reallocate_func) (void *,size_t, size_t);
-void   (*mpfr_free_func) (void *, size_t);
+/* putting 0 as initial values forces those symbols to be fully defined,
+   and always resolved, otherwise they are only tentatively defined, which
+   leads to problems on e.g. MacOS, cf
+   http://lists.gforge.inria.fr/pipermail/mpc-discuss/2008-November/000048.html
+   and http://software.intel.com/en-us/articles/intelr-fortran-compiler-for-mac-os-non_lazy_ptr-unresolved-references-from-linking
+   Note that using ranlib -c or libtool -c is another fix.
+*/
+void * (*mpfr_allocate_func) (size_t) = 0;
+void * (*mpfr_reallocate_func) (void *,size_t, size_t) = 0;
+void   (*mpfr_free_func) (void *, size_t) = 0;
 
 #endif
 
@@ -370,6 +353,34 @@ void
 mpfr_default_free (void *blk_ptr, size_t blk_size)
 {
   free (blk_ptr);
+}
+
+void *
+mpfr_tmp_allocate (struct tmp_marker **tmp_marker, size_t size)
+{
+  struct tmp_marker *head;
+
+  head = (struct tmp_marker *)
+    mpfr_default_allocate (sizeof (struct tmp_marker));
+  head->ptr = mpfr_default_allocate (size);
+  head->size = size;
+  head->next = *tmp_marker;
+  *tmp_marker = head;
+  return head->ptr;
+}
+
+void
+mpfr_tmp_free (struct tmp_marker *tmp_marker)
+{
+  struct tmp_marker *t;
+
+  while (tmp_marker != NULL)
+    {
+      t = tmp_marker;
+      mpfr_default_free (t->ptr, t->size);
+      tmp_marker = t->next;
+      mpfr_default_free (t, sizeof (struct tmp_marker));
+    }
 }
 
 #endif /* Have gmp-impl.h */

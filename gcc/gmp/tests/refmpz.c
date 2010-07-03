@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 /* always do assertion checking */
 #define WANT_ASSERT  1
@@ -31,7 +29,7 @@ MA 02110-1301, USA. */
 
 
 /* Change this to "#define TRACE(x) x" for some traces. */
-#define TRACE(x) 
+#define TRACE(x)
 
 
 /* FIXME: Shouldn't use plain mpz functions in a reference routine. */
@@ -69,10 +67,10 @@ refmpz_hamdist (mpz_srcptr x, mpz_srcptr y)
   refmpn_copy (yp, PTR(y), ysize);
 
   if (SIZ(x) < 0)
-    refmpn_neg_n (xp, xp, tsize);
+    refmpn_neg (xp, xp, tsize);
 
   if (SIZ(x) < 0)
-    refmpn_neg_n (yp, yp, tsize);
+    refmpn_neg (yp, yp, tsize);
 
   ret = refmpn_hamdist (xp, yp, tsize);
 
@@ -146,29 +144,29 @@ refmpz_kronecker (mpz_srcptr a_orig, mpz_srcptr b_orig)
       ASSERT (mpz_sgn (b) > 0);
 
       TRACE (printf ("top\n");
-             mpz_trace (" a", a);
-             mpz_trace (" b", b));
+	     mpz_trace (" a", a);
+	     mpz_trace (" b", b));
 
       if (mpz_cmp (a, b) < 0)
-        {
-          TRACE (printf ("swap\n"));
-          mpz_swap (a, b);
-          result_bit1 ^= JACOBI_RECIP_UU_BIT1 (PTR(a)[0], PTR(b)[0]);
-        }
+	{
+	  TRACE (printf ("swap\n"));
+	  mpz_swap (a, b);
+	  result_bit1 ^= JACOBI_RECIP_UU_BIT1 (PTR(a)[0], PTR(b)[0]);
+	}
 
       if (mpz_cmp_ui (b, 1) == 0)
-        break;
+	break;
 
       mpz_sub (a, a, b);
       TRACE (printf ("sub\n");
-             mpz_trace (" a", a));
+	     mpz_trace (" a", a));
       if (mpz_sgn (a) == 0)
-        goto zero;
+	goto zero;
 
       twos = mpz_scan1 (a, 0L);
       mpz_fdiv_q_2exp (a, a, twos);
       TRACE (printf ("twos %lu\n", twos);
-             mpz_trace (" a", a));
+	     mpz_trace (" a", a));
       result_bit1 ^= JACOBI_TWOS_U_BIT1 (twos, PTR(b)[0]);
     }
 

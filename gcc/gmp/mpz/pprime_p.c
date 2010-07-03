@@ -13,7 +13,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -22,15 +22,13 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-static int isprime _PROTO ((unsigned long int t));
+static int isprime __GMP_PROTO ((unsigned long int));
 
 
 /* MPN_MOD_OR_MODEXACT_1_ODD can be used instead of mpn_mod_1 for the trial
@@ -72,19 +70,19 @@ mpz_probab_prime_p (mpz_srcptr n, int reps)
   r = mpn_mod_1 (PTR(n), (mp_size_t) SIZ(n), (mp_limb_t) PP);
 #endif
   if (r % 3 == 0
-#if BITS_PER_MP_LIMB >= 4
+#if GMP_LIMB_BITS >= 4
       || r % 5 == 0
 #endif
-#if BITS_PER_MP_LIMB >= 8
+#if GMP_LIMB_BITS >= 8
       || r % 7 == 0
 #endif
-#if BITS_PER_MP_LIMB >= 16
+#if GMP_LIMB_BITS >= 16
       || r % 11 == 0 || r % 13 == 0
 #endif
-#if BITS_PER_MP_LIMB >= 32
+#if GMP_LIMB_BITS >= 32
       || r % 17 == 0 || r % 19 == 0 || r % 23 == 0 || r % 29 == 0
 #endif
-#if BITS_PER_MP_LIMB >= 64
+#if GMP_LIMB_BITS >= 64
       || r % 31 == 0 || r % 37 == 0 || r % 41 == 0 || r % 43 == 0
       || r % 47 == 0 || r % 53 == 0
 #endif

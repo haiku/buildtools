@@ -1,23 +1,23 @@
 /* Test file for hyperbolic function : mpfr_cosh, mpfr_sinh, mpfr_tanh, mpfr_acosh, mpfr_asinh, mpfr_atanh.
 
-Copyright 2001, 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published
 by
-the Free Software Foundation; either version 2.1 of the License, or (at youroption) any later version.
+the Free Software Foundation; either version 3 of the License, or (at youroption) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITYor FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -43,7 +43,7 @@ check_NAN (void)
 
   /******cosh********/
 
-  tester=mpfr_cosh(ch,t,GMP_RNDD);
+  tester=mpfr_cosh(ch,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(ch) || tester!=0)
     {
       printf("cosh NAN \n");
@@ -53,7 +53,7 @@ check_NAN (void)
 
   /******sinh********/
 
-  tester=mpfr_sinh(sh,t,GMP_RNDD);
+  tester=mpfr_sinh(sh,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(sh) || tester!=0)
     {
       printf("sinh NAN \n");
@@ -63,7 +63,7 @@ check_NAN (void)
 
   /******tanh********/
 
-  tester=mpfr_tanh(th,t,GMP_RNDD);
+  tester=mpfr_tanh(th,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(th) || tester!=0)
     {
       printf("tanh NAN \n");
@@ -73,7 +73,7 @@ check_NAN (void)
 
   /******acosh********/
 
-  tester=mpfr_acosh(ach,t,GMP_RNDD);
+  tester=mpfr_acosh(ach,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(ach) || tester!=0)
     {
       printf("acosh NAN \n");
@@ -83,7 +83,7 @@ check_NAN (void)
 
   /******asinh********/
 
-  tester=mpfr_asinh(ash,t,GMP_RNDD);
+  tester=mpfr_asinh(ash,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(ash) || tester!=0)
     {
       printf("asinh NAN \n");
@@ -93,7 +93,7 @@ check_NAN (void)
 
   /******atanh********/
 
-  tester=mpfr_atanh(ath,t,GMP_RNDD);
+  tester=mpfr_atanh(ath,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(ath) || tester!=0)
     {
       printf("atanh NAN \n");
@@ -128,11 +128,11 @@ check_zero (void)
   mpfr_init2(ash,200);
   mpfr_init2(ath,200);
 
-  mpfr_set_ui(t,0,GMP_RNDD);
+  mpfr_set_ui(t,0,MPFR_RNDD);
 
   /******cosh********/
 
-  tester = mpfr_cosh (ch, t, GMP_RNDD);
+  tester = mpfr_cosh (ch, t, MPFR_RNDD);
   if (mpfr_cmp_ui(ch, 1) || tester)
     {
       printf("cosh(0) \n");
@@ -142,7 +142,7 @@ check_zero (void)
 
   /******sinh********/
 
-  tester = mpfr_sinh (sh, t, GMP_RNDD);
+  tester = mpfr_sinh (sh, t, MPFR_RNDD);
   if (!MPFR_IS_ZERO(sh) || tester)
     {
       printf("sinh(0) \n");
@@ -152,7 +152,7 @@ check_zero (void)
 
   /******tanh********/
 
-  tester = mpfr_tanh (th, t, GMP_RNDD);
+  tester = mpfr_tanh (th, t, MPFR_RNDD);
   if (!MPFR_IS_ZERO(th) || tester)
     {
       printf("tanh(0) \n");
@@ -162,7 +162,7 @@ check_zero (void)
 
   /******acosh********/
 
-  tester=mpfr_acosh(ach,t,GMP_RNDD);
+  tester=mpfr_acosh(ach,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(ach) || tester)
     {
       printf("acosh(0) \n");
@@ -172,7 +172,7 @@ check_zero (void)
 
   /******asinh********/
 
-  tester=mpfr_asinh(ash,t,GMP_RNDD);
+  tester=mpfr_asinh(ash,t,MPFR_RNDD);
   if (!MPFR_IS_ZERO(ash) || tester)
     {
       printf("asinh(0) \n");
@@ -182,7 +182,7 @@ check_zero (void)
 
   /******atanh********/
 
-  tester=mpfr_atanh(ath,t,GMP_RNDD);
+  tester=mpfr_atanh(ath,t,MPFR_RNDD);
   if (!MPFR_IS_ZERO(ath) || tester)
     {
       printf("atanh(0) \n");
@@ -224,7 +224,7 @@ check_INF (void)
 
   /******cosh********/
 
-  tester = mpfr_cosh(ch,t,GMP_RNDD);
+  tester = mpfr_cosh(ch,t,MPFR_RNDD);
   if (!MPFR_IS_INF(ch) || MPFR_SIGN(ch) < 0 || tester!=0)
     {
       printf("cosh(INF) \n");
@@ -234,7 +234,7 @@ check_INF (void)
 
   /******sinh********/
 
-  tester=mpfr_sinh(sh,t,GMP_RNDD);
+  tester=mpfr_sinh(sh,t,MPFR_RNDD);
   if (!MPFR_IS_INF(sh) || MPFR_SIGN(sh) < 0  || tester!=0)
     {
       printf("sinh(INF) \n");
@@ -244,7 +244,7 @@ check_INF (void)
 
   /******tanh********/
 
-  tester=mpfr_tanh(th,t,GMP_RNDD);
+  tester=mpfr_tanh(th,t,MPFR_RNDD);
   if (mpfr_cmp_ui(th,1) != 0 || tester!=0)
     {
       printf("tanh(INF) \n");
@@ -254,7 +254,7 @@ check_INF (void)
 
   /******acosh********/
 
-  tester=mpfr_acosh(ach,t,GMP_RNDD);
+  tester=mpfr_acosh(ach,t,MPFR_RNDD);
   if (!MPFR_IS_INF(ach) || MPFR_SIGN(ach) < 0  || tester!=0)
     {
       printf("acosh(INF) \n");
@@ -264,7 +264,7 @@ check_INF (void)
 
   /******asinh********/
 
-  tester=mpfr_asinh(ash,t,GMP_RNDD);
+  tester=mpfr_asinh(ash,t,MPFR_RNDD);
   if (!MPFR_IS_INF(ash) || MPFR_SIGN(ash) < 0  || tester!=0)
     {
       printf("asinh(INF) \n");
@@ -274,7 +274,7 @@ check_INF (void)
 
   /******atanh********/
 
-  tester = mpfr_atanh (ath, t, GMP_RNDD);
+  tester = mpfr_atanh (ath, t, MPFR_RNDD);
   if (!MPFR_IS_NAN(ath) || tester != 0)
     {
       printf("atanh(INF) \n");
@@ -286,7 +286,7 @@ check_INF (void)
 
   /******cosh********/
 
-  tester=mpfr_cosh(ch,t,GMP_RNDD);
+  tester=mpfr_cosh(ch,t,MPFR_RNDD);
   if (!MPFR_IS_INF(ch) || MPFR_SIGN(ch) < 0  || tester!=0)
     {
       printf("cosh(-INF) \n");
@@ -296,7 +296,7 @@ check_INF (void)
 
   /******sinh********/
 
-  tester=mpfr_sinh(sh,t,GMP_RNDD);
+  tester=mpfr_sinh(sh,t,MPFR_RNDD);
   if (!MPFR_IS_INF(sh)  || MPFR_SIGN(sh) > 0 || tester!=0)
     {
       printf("sinh(-INF) \n");
@@ -306,7 +306,7 @@ check_INF (void)
 
   /******tanh********/
 
-  tester=mpfr_tanh(th,t,GMP_RNDD);
+  tester=mpfr_tanh(th,t,MPFR_RNDD);
   if (!mpfr_cmp_ui(th,-1) || tester!=0)
     {
       printf("tanh(-INF) \n");
@@ -316,7 +316,7 @@ check_INF (void)
 
   /******acosh********/
 
-  tester=mpfr_acosh(ach,t,GMP_RNDD);
+  tester=mpfr_acosh(ach,t,MPFR_RNDD);
   if (!MPFR_IS_NAN(ach) || tester!=0)
     {
       printf("acosh(-INF) \n");
@@ -326,7 +326,7 @@ check_INF (void)
 
   /******asinh********/
 
-  tester=mpfr_asinh(ash,t,GMP_RNDD);
+  tester=mpfr_asinh(ash,t,MPFR_RNDD);
   if (!MPFR_IS_INF(ash) || MPFR_SIGN(ash) > 0  || tester!=0)
     {
       printf("asinh(-INF) \n");
@@ -336,7 +336,7 @@ check_INF (void)
 
   /******atanh********/
 
-  tester = mpfr_atanh (ath, t, GMP_RNDD);
+  tester = mpfr_atanh (ath, t, MPFR_RNDD);
   if (!MPFR_IS_NAN(ath) || tester != 0)
     {
       printf("atanh(-INF) \n");

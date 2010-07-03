@@ -1,24 +1,24 @@
 /* Test file for mpfr_pow.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <limits.h>
@@ -32,13 +32,13 @@ main (int argc, char *argv[])
 {
   mpfr_t x, y, z;
 
-  mp_prec_t prec, yprec;
+  mpfr_prec_t prec, yprec;
   mpfr_t t, s;
-  mp_rnd_t rnd;
+  mpfr_rnd_t rnd;
   int inexact, compare, compare2;
   unsigned int n, err;
 
-  mp_prec_t p0=2, p1=100;
+  mpfr_prec_t p0=2, p1=100;
   unsigned int N=25;
 
   tests_start_mpfr ();
@@ -61,14 +61,14 @@ main (int argc, char *argv[])
 
       for (n=0; n<N; n++)
         {
-          mpfr_random (x);
-          mpfr_random (s);
+          mpfr_urandomb (x, RANDS);
+          mpfr_urandomb (s, RANDS);
           if (randlimb () % 2)
-            mpfr_neg (s, s, GMP_RNDN);
-          rnd = (mp_rnd_t) RND_RAND ();
+            mpfr_neg (s, s, MPFR_RNDN);
+          rnd = RND_RAND ();
           mpfr_set_prec (y, yprec);
           compare = mpfr_pow (y, x, s, rnd);
-          err = (rnd == GMP_RNDN) ? yprec + 1 : yprec;
+          err = (rnd == MPFR_RNDN) ? yprec + 1 : yprec;
           if (mpfr_can_round (y, err, rnd, rnd, prec))
             {
               mpfr_set (t, y, rnd);
@@ -76,16 +76,16 @@ main (int argc, char *argv[])
               if (mpfr_cmp (t, z))
                 {
                   printf ("results differ for x^y with x=");
-                  mpfr_out_str (stdout, 2, prec, x, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, x, MPFR_RNDN);
                   printf (" y=");
-                  mpfr_out_str (stdout, 2, 0, s, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, 0, s, MPFR_RNDN);
                   printf (" prec=%u rnd_mode=%s\n", (unsigned int) prec,
                           mpfr_print_rnd_mode (rnd));
                   printf ("got      ");
-                  mpfr_out_str (stdout, 2, prec, z, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, z, MPFR_RNDN);
                   puts ("");
                   printf ("expected ");
-                  mpfr_out_str (stdout, 2, prec, t, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, t, MPFR_RNDN);
                   puts ("");
                   printf ("approx  ");
                   mpfr_print_binary (y);
@@ -95,7 +95,7 @@ main (int argc, char *argv[])
               compare2 = mpfr_cmp (t, y);
               /* if rounding to nearest, cannot know the sign of t - f(x)
                  because of composed rounding: y = o(f(x)) and t = o(y) */
-              if ((rnd != GMP_RNDN) && (compare * compare2 >= 0))
+              if ((rnd != MPFR_RNDN) && (compare * compare2 >= 0))
                 compare = compare + compare2;
               else
                 compare = inexact; /* cannot determine sign(t-f(x)) */

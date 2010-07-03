@@ -7,7 +7,7 @@ dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -15,17 +15,19 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
-C		    cycles/limb
-C Hammer:		10
-C Prescott/Nocona:	33
+C	     cycles/limb
+C K8,K9:	10
+C K10:		10
+C P4:		33
+C P6 core2:	13
+C P6 corei7:	14.5
+C P6 Atom:	35
 
 
 C mp_limb_t mpn_modexact_1_odd (mp_srcptr src, mp_size_t size,
@@ -62,7 +64,7 @@ C used.
 C
 C Enhancements:
 C
-C For PIC, we shouldn't really need the GOT fetch for modlimb_invert_table,
+C For PIC, we shouldn't really need the GOT fetch for binvert_limb_table,
 C it'll be in rodata or text in libgmp.so and can be accessed directly %rip
 C relative.  This would be for small model only (something we don't
 C presently detect, but which is all that gcc 3.3.3 supports), since 8-byte
@@ -71,8 +73,8 @@ C experiments with binutils 2.13 looked worrylingly like it might come out
 C with an unwanted text segment relocation though, even with ".protected".
 
 
+ASM_START()
 	TEXT
-
 	ALIGN(32)
 PROLOGUE(mpn_modexact_1_odd)
 
@@ -88,9 +90,9 @@ PROLOGUE(mpn_modexact_1c_odd)
 	movq	%rdx, %r8		C d
 	shrl	%edx			C d/2
 ifdef(`PIC',`
-	movq	modlimb_invert_table@GOTPCREL(%rip), %r9
+	movq	binvert_limb_table@GOTPCREL(%rip), %r9
 ',`
-	movabsq	$modlimb_invert_table, %r9
+	movabsq	$binvert_limb_table, %r9
 ')
 
 	andl	$127, %edx

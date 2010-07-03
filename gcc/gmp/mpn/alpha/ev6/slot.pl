@@ -6,7 +6,7 @@
 #
 # The GNU MP Library is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published
-# by the Free Software Foundation; either version 2.1 of the License, or (at
+# by the Free Software Foundation; either version 3 of the License, or (at
 # your option) any later version.
 #
 # The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@
 # License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-# MA 02110-1301, USA.
+# along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 # Usage: slot.pl [filename.o]...
@@ -38,7 +36,7 @@ use strict;
 
 # The U or L which various instructions demand, or E if either.
 #
-my %optable = 
+my %optable =
   (
    'addq'   => 'E',
    'and'    => 'E',
@@ -93,7 +91,7 @@ my %optable =
 # Slottings used for a given pattern of U/L/E in an octaword.  This is as
 # per the "Ebox Slotting" section of the EV6 hardware reference manual.
 #
-my %slottable = 
+my %slottable =
   (
    'EEEE' => 'ULUL',
    'EEEL' => 'ULUL',
@@ -286,7 +284,7 @@ sub disassemble {
       }
     }
   }
-  
+
   close IN || die "Error from objdump (or objdump not available)\n";
 }
 

@@ -1,24 +1,24 @@
 /* mpfr_cmpabs -- compare the absolute values of two FP numbers
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
@@ -28,7 +28,7 @@ MA 02110-1301, USA. */
 int
 mpfr_cmpabs (mpfr_srcptr b, mpfr_srcptr c)
 {
-  mp_exp_t be, ce;
+  mpfr_exp_t be, ce;
   mp_size_t bn, cn;
   mp_limb_t *bp, *cp;
 
@@ -49,8 +49,18 @@ mpfr_cmpabs (mpfr_srcptr b, mpfr_srcptr c)
         return -1;
     }
 
-  be = MPFR_GET_EXP (b);
-  ce = MPFR_GET_EXP (c);
+  MPFR_ASSERTD (MPFR_IS_PURE_FP (b));
+  MPFR_ASSERTD (MPFR_IS_PURE_FP (c));
+
+  /* Now that we know that b and c are pure FP numbers (i.e. they have
+     a meaningful exponent), we use MPFR_EXP instead of MPFR_GET_EXP to
+     allow exponents outside the current exponent range. For instance,
+     this is useful for mpfr_pow, which compares values to __gmpfr_one.
+     This is for internal use only! For compatibility with other MPFR
+     versions, the user must still provide values that are representable
+     in the current exponent range. */
+  be = MPFR_EXP (b);
+  ce = MPFR_EXP (c);
   if (be > ce)
     return 1;
   if (be < ce)

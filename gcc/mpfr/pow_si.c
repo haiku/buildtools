@@ -1,37 +1,39 @@
 /* mpfr_pow_si -- power function x^y with y a signed int
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
-/* The computation of y=pow(x,z) is done by
- *    y=pow_ui(x,z) if z>0
- * else
- *    y=1/pow_ui(x,z) if z<0
+/* The computation of y = pow_si(x,n) is done by
+ *    y = pow_ui(x,n)       if n >= 0
+ *    y = 1 / pow_ui(x,-n)  if n < 0
  */
 
 int
-mpfr_pow_si (mpfr_ptr y, mpfr_srcptr x, long int n, mp_rnd_t rnd)
+mpfr_pow_si (mpfr_ptr y, mpfr_srcptr x, long int n, mpfr_rnd_t rnd)
 {
+  MPFR_LOG_FUNC (("x[%#R]=%R n=%ld rnd=%d", x, x, n, rnd),
+                 ("y[%#R]=%R", y, y));
+
   if (n >= 0)
     return mpfr_pow_ui (y, x, n, rnd);
   else
@@ -63,16 +65,18 @@ mpfr_pow_si (mpfr_ptr y, mpfr_srcptr x, long int n, mp_rnd_t rnd)
               MPFR_RET(0);
             }
         }
-      MPFR_CLEAR_FLAGS (y);
 
       /* detect exact powers: x^(-n) is exact iff x is a power of 2 */
       if (mpfr_cmp_si_2exp (x, MPFR_SIGN(x), MPFR_EXP(x) - 1) == 0)
         {
-          mp_exp_t expx = MPFR_EXP (x) - 1, expy;
+          mpfr_exp_t expx = MPFR_EXP (x) - 1, expy;
           MPFR_ASSERTD (n < 0);
           /* Warning: n * expx may overflow!
+           *
            * Some systems (apparently alpha-freebsd) abort with
            * LONG_MIN / 1, and LONG_MIN / -1 is undefined.
+           * http://www.freebsd.org/cgi/query-pr.cgi?pr=72024
+           *
            * Proof of the overflow checking. The expressions below are
            * assumed to be on the rational numbers, but the word "overflow"
            * still has its own meaning in the C context. / still denotes
@@ -116,7 +120,10 @@ mpfr_pow_si (mpfr_ptr y, mpfr_srcptr x, long int n, mp_rnd_t rnd)
            * MPFR_EXP_MAX instead of __gmpfr_emin and __gmpfr_emax. The
            * current bounds do not lead to noticeably slower code and
            * allow us to avoid a bug in Sun's compiler for Solaris/x86
-           * (when optimizations are enabled).
+           * (when optimizations are enabled); known affected versions:
+           *   cc: Sun C 5.8 2005/10/13
+           *   cc: Sun C 5.8 Patch 121016-02 2006/03/31
+           *   cc: Sun C 5.8 Patch 121016-04 2006/10/18
            */
           expy =
             n != -1 && expx > 0 && expx > (__gmpfr_emin - 1) / n ?
@@ -132,62 +139,110 @@ mpfr_pow_si (mpfr_ptr y, mpfr_srcptr x, long int n, mp_rnd_t rnd)
         /* Declaration of the intermediary variable */
         mpfr_t t;
         /* Declaration of the size variable */
-        mp_prec_t Ny = MPFR_PREC (y);               /* target precision */
-        mp_prec_t Nt;                              /* working precision */
-        mp_exp_t  err;                             /* error */
+        mpfr_prec_t Ny;                              /* target precision */
+        mpfr_prec_t Nt;                              /* working precision */
+        mpfr_rnd_t rnd1;
+        int size_n;
         int inexact;
         unsigned long abs_n;
         MPFR_SAVE_EXPO_DECL (expo);
         MPFR_ZIV_DECL (loop);
 
         abs_n = - (unsigned long) n;
+        count_leading_zeros (size_n, (mp_limb_t) abs_n);
+        size_n = GMP_NUMB_BITS - size_n;
 
-        /* compute the precision of intermediary variable */
-        /* the optimal number of bits : see algorithms.tex */
-        Nt = Ny + 3 + MPFR_INT_CEIL_LOG2 (Ny);
+        /* initial working precision */
+        Ny = MPFR_PREC (y);
+        Nt = Ny + size_n + 3 + MPFR_INT_CEIL_LOG2 (Ny);
 
         MPFR_SAVE_EXPO_MARK (expo);
 
         /* initialise of intermediary   variable */
         mpfr_init2 (t, Nt);
 
+        /* We will compute rnd(rnd1(1/x) ^ |n|), where rnd1 is the rounding
+           toward sign(x), to avoid spurious overflow or underflow, as in
+           mpfr_pow_z. */
+        rnd1 = MPFR_EXP (x) < 1 ? MPFR_RNDZ :
+          (MPFR_SIGN (x) > 0 ? MPFR_RNDU : MPFR_RNDD);
+
         MPFR_ZIV_INIT (loop, Nt);
         for (;;)
           {
-            /* compute 1/(x^n), with n > 0 */
-            mpfr_pow_ui (t, x, abs_n, GMP_RNDN);
-            mpfr_ui_div (t, 1, t, GMP_RNDN);
-            /* FIXME: old code improved, but I think this is still incorrect. */
-            if (MPFR_UNLIKELY (MPFR_IS_ZERO (t)))
+            MPFR_BLOCK_DECL (flags);
+
+            /* compute (1/x)^|n| */
+            MPFR_BLOCK (flags, mpfr_ui_div (t, 1, x, rnd1));
+            MPFR_ASSERTD (! MPFR_UNDERFLOW (flags));
+            /* t = (1/x)*(1+theta) where |theta| <= 2^(-Nt) */
+            if (MPFR_UNLIKELY (MPFR_OVERFLOW (flags)))
+              goto overflow;
+            MPFR_BLOCK (flags, mpfr_pow_ui (t, t, abs_n, rnd));
+            /* t = (1/x)^|n|*(1+theta')^(|n|+1) where |theta'| <= 2^(-Nt).
+               If (|n|+1)*2^(-Nt) <= 1/2, which is satisfied as soon as
+               Nt >= bits(n)+2, then we can use Lemma \ref{lemma_graillat}
+               from algorithms.tex, which yields x^n*(1+theta) with
+               |theta| <= 2(|n|+1)*2^(-Nt), thus the error is bounded by
+               2(|n|+1) ulps <= 2^(bits(n)+2) ulps. */
+            if (MPFR_UNLIKELY (MPFR_OVERFLOW (flags)))
               {
+              overflow:
                 MPFR_ZIV_FREE (loop);
                 mpfr_clear (t);
                 MPFR_SAVE_EXPO_FREE (expo);
-                return mpfr_underflow (y, rnd == GMP_RNDN ? GMP_RNDZ : rnd,
-                                       abs_n & 1 ? MPFR_SIGN (x) :
-                                       MPFR_SIGN_POS);
+                MPFR_LOG_MSG (("overflow\n", 0));
+                return mpfr_overflow (y, rnd, abs_n & 1 ?
+                                      MPFR_SIGN (x) : MPFR_SIGN_POS);
               }
-            if (MPFR_UNLIKELY (MPFR_IS_INF (t)))
+            if (MPFR_UNLIKELY (MPFR_UNDERFLOW (flags)))
               {
                 MPFR_ZIV_FREE (loop);
                 mpfr_clear (t);
-                MPFR_SAVE_EXPO_FREE (expo);
-                return mpfr_overflow (y, rnd, abs_n & 1 ? MPFR_SIGN (x) :
-                                      MPFR_SIGN_POS);
+                MPFR_LOG_MSG (("underflow\n", 0));
+                if (rnd == MPFR_RNDN)
+                  {
+                    mpfr_t y2, nn;
+
+                    /* We cannot decide now whether the result should be
+                       rounded toward zero or away from zero. So, like
+                       in mpfr_pow_pos_z, let's use the general case of
+                       mpfr_pow in precision 2. */
+                    MPFR_ASSERTD (mpfr_cmp_si_2exp (x, MPFR_SIGN (x),
+                                                    MPFR_EXP (x) - 1) != 0);
+                    mpfr_init2 (y2, 2);
+                    mpfr_init2 (nn, sizeof (long) * CHAR_BIT);
+                    inexact = mpfr_set_si (nn, n, MPFR_RNDN);
+                    MPFR_ASSERTN (inexact == 0);
+                    inexact = mpfr_pow_general (y2, x, nn, rnd, 1,
+                                                (mpfr_save_expo_t *) NULL);
+                    mpfr_clear (nn);
+                    mpfr_set (y, y2, MPFR_RNDN);
+                    mpfr_clear (y2);
+                    MPFR_SAVE_EXPO_UPDATE_FLAGS (expo, MPFR_FLAGS_UNDERFLOW);
+                    goto end;
+                  }
+                else
+                  {
+                    MPFR_SAVE_EXPO_FREE (expo);
+                    return mpfr_underflow (y, rnd, abs_n & 1 ?
+                                           MPFR_SIGN (x) : MPFR_SIGN_POS);
+                  }
               }
             /* error estimate -- see pow function in algorithms.ps */
-            err = Nt - 3;
-            if (MPFR_LIKELY (MPFR_CAN_ROUND (t, err, Ny, rnd)))
+            if (MPFR_LIKELY (MPFR_CAN_ROUND (t, Nt - size_n - 2, Ny, rnd)))
               break;
 
             /* actualisation of the precision */
-            Nt += BITS_PER_MP_LIMB;
+            MPFR_ZIV_NEXT (loop, Nt);
             mpfr_set_prec (t, Nt);
           }
         MPFR_ZIV_FREE (loop);
 
         inexact = mpfr_set (y, t, rnd);
         mpfr_clear (t);
+
+      end:
         MPFR_SAVE_EXPO_FREE (expo);
         return mpfr_check_range (y, inexact, rnd);
       }

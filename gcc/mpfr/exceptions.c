@@ -1,35 +1,35 @@
 /* Exception flags and utilities.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
 unsigned int MPFR_THREAD_ATTR __gmpfr_flags = 0;
 
-mp_exp_t MPFR_THREAD_ATTR __gmpfr_emin = MPFR_EMIN_DEFAULT;
-mp_exp_t MPFR_THREAD_ATTR __gmpfr_emax = MPFR_EMAX_DEFAULT;
+mpfr_exp_t MPFR_THREAD_ATTR __gmpfr_emin = MPFR_EMIN_DEFAULT;
+mpfr_exp_t MPFR_THREAD_ATTR __gmpfr_emax = MPFR_EMAX_DEFAULT;
 
 #undef mpfr_get_emin
 
-mp_exp_t
+mpfr_exp_t
 mpfr_get_emin (void)
 {
   return __gmpfr_emin;
@@ -38,7 +38,7 @@ mpfr_get_emin (void)
 #undef mpfr_set_emin
 
 int
-mpfr_set_emin (mp_exp_t exponent)
+mpfr_set_emin (mpfr_exp_t exponent)
 {
   if (exponent >= MPFR_EMIN_MIN && exponent <= MPFR_EMIN_MAX)
     {
@@ -51,13 +51,13 @@ mpfr_set_emin (mp_exp_t exponent)
     }
 }
 
-mp_exp_t
+mpfr_exp_t
 mpfr_get_emin_min (void)
 {
   return MPFR_EMIN_MIN;
 }
 
-mp_exp_t
+mpfr_exp_t
 mpfr_get_emin_max (void)
 {
   return MPFR_EMIN_MAX;
@@ -65,7 +65,7 @@ mpfr_get_emin_max (void)
 
 #undef mpfr_get_emax
 
-mp_exp_t
+mpfr_exp_t
 mpfr_get_emax (void)
 {
   return __gmpfr_emax;
@@ -74,7 +74,7 @@ mpfr_get_emax (void)
 #undef mpfr_set_emax
 
 int
-mpfr_set_emax (mp_exp_t exponent)
+mpfr_set_emax (mpfr_exp_t exponent)
 {
   if (exponent >= MPFR_EMAX_MIN && exponent <= MPFR_EMAX_MAX)
     {
@@ -87,13 +87,13 @@ mpfr_set_emax (mp_exp_t exponent)
     }
 }
 
-mp_exp_t
-mpfr_get_emax_min ()
+mpfr_exp_t
+mpfr_get_emax_min (void)
 {
   return MPFR_EMAX_MIN;
 }
-mp_exp_t
-mpfr_get_emax_max ()
+mpfr_exp_t
+mpfr_get_emax_max (void)
 {
   return MPFR_EMAX_MAX;
 }
@@ -191,11 +191,11 @@ mpfr_set_erangeflag (void)
 #undef mpfr_check_range
 
 int
-mpfr_check_range (mpfr_ptr x, int t, mp_rnd_t rnd_mode)
+mpfr_check_range (mpfr_ptr x, int t, mpfr_rnd_t rnd_mode)
 {
   if (MPFR_LIKELY( MPFR_IS_PURE_FP(x)) )
     { /* x is a non-zero FP */
-      mp_exp_t exp = MPFR_EXP (x);  /* Do not use MPFR_GET_EXP */
+      mpfr_exp_t exp = MPFR_EXP (x);  /* Do not use MPFR_GET_EXP */
       if (MPFR_UNLIKELY( exp < __gmpfr_emin) )
         {
           /* The following test is necessary because in the rounding to the
@@ -205,15 +205,40 @@ mpfr_check_range (mpfr_ptr x, int t, mp_rnd_t rnd_mode)
            *   _ |x| = 2^(emin-2) and the absolute value of the exact
            *     result is <= 2^(emin-2).
            */
-          if (rnd_mode == GMP_RNDN &&
+          if (rnd_mode == MPFR_RNDN &&
               (exp + 1 < __gmpfr_emin ||
                (mpfr_powerof2_raw(x) &&
                 (MPFR_IS_NEG(x) ? t <= 0 : t >= 0))))
-            rnd_mode = GMP_RNDZ;
+            rnd_mode = MPFR_RNDZ;
           return mpfr_underflow(x, rnd_mode, MPFR_SIGN(x));
         }
       if (MPFR_UNLIKELY( exp > __gmpfr_emax) )
-        return mpfr_overflow(x, rnd_mode, MPFR_SIGN(x));
+        return mpfr_overflow (x, rnd_mode, MPFR_SIGN(x));
+    }
+  else if (MPFR_UNLIKELY (t != 0 && MPFR_IS_INF (x)))
+    {
+      /* We need to do the following because most MPFR functions are
+       * implemented in the following way:
+       *   Ziv's loop:
+       *   | Compute an approximation to the result and an error bound.
+       *   | Possible underflow/overflow detection -> return.
+       *   | If can_round, break (exit the loop).
+       *   | Otherwise, increase the working precision and loop.
+       *   Round the approximation in the target precision.  <== See below
+       *   Restore the flags (that could have been set due to underflows
+       *   or overflows during the internal computations).
+       *   Execute: return mpfr_check_range (...).
+       * The problem is that an overflow could be generated when rounding the
+       * approximation (in general, such an overflow could not be detected
+       * earlier), and the overflow flag is lost when the flags are restored.
+       * This can occur only when the rounding yields an exponent change
+       * and the new exponent is larger than the maximum exponent, so that
+       * an infinity is necessarily obtained.
+       * So, the simplest solution is to detect this overflow case here in
+       * mpfr_check_range, which is easy to do since the rounded result is
+       * necessarily an inexact infinity.
+       */
+      __gmpfr_flags |= MPFR_FLAGS_OVERFLOW;
     }
   MPFR_RET (t);  /* propagate inexact ternary value, unlike most functions */
 }
@@ -262,26 +287,25 @@ mpfr_erangeflag_p (void)
 
 /* Note: In the rounding to the nearest mode, mpfr_underflow
    always rounds away from 0. In this rounding mode, you must call
-   mpfr_underflow with rnd_mode = GMP_RNDZ if the exact result
+   mpfr_underflow with rnd_mode = MPFR_RNDZ if the exact result
    is <= 2^(emin-2) in absolute value. */
 
 int
-mpfr_underflow (mpfr_ptr x, mp_rnd_t rnd_mode, int sign)
+mpfr_underflow (mpfr_ptr x, mpfr_rnd_t rnd_mode, int sign)
 {
   int inex;
 
   MPFR_ASSERT_SIGN (sign);
 
-  if (rnd_mode == GMP_RNDN
-      || MPFR_IS_RNDUTEST_OR_RNDDNOTTEST(rnd_mode, MPFR_IS_POS_SIGN (sign)))
-    {
-      mpfr_setmin (x, __gmpfr_emin);
-      inex = 1;
-    }
-  else
+  if (MPFR_IS_LIKE_RNDZ(rnd_mode, sign < 0))
     {
       MPFR_SET_ZERO(x);
       inex = -1;
+    }
+  else
+    {
+      mpfr_setmin (x, __gmpfr_emin);
+      inex = 1;
     }
   MPFR_SET_SIGN(x, sign);
   __gmpfr_flags |= MPFR_FLAGS_INEXACT | MPFR_FLAGS_UNDERFLOW;
@@ -291,22 +315,20 @@ mpfr_underflow (mpfr_ptr x, mp_rnd_t rnd_mode, int sign)
 /* #undef mpfr_overflow */
 
 int
-mpfr_overflow (mpfr_ptr x, mp_rnd_t rnd_mode, int sign)
+mpfr_overflow (mpfr_ptr x, mpfr_rnd_t rnd_mode, int sign)
 {
   int inex;
 
   MPFR_ASSERT_SIGN(sign);
-  MPFR_CLEAR_FLAGS(x);
-  if (rnd_mode == GMP_RNDN
-      || MPFR_IS_RNDUTEST_OR_RNDDNOTTEST(rnd_mode, sign > 0))
-    {
-      MPFR_SET_INF(x);
-      inex = 1;
-    }
-  else
+  if (MPFR_IS_LIKE_RNDZ(rnd_mode, sign < 0))
     {
       mpfr_setmax (x, __gmpfr_emax);
       inex = -1;
+    }
+  else
+    {
+      MPFR_SET_INF(x);
+      inex = 1;
     }
   MPFR_SET_SIGN(x,sign);
   __gmpfr_flags |= MPFR_FLAGS_INEXACT | MPFR_FLAGS_OVERFLOW;

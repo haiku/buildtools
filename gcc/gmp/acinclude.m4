@@ -1,14 +1,14 @@
 dnl  GMP specific autoconf macros
 
 
-dnl  Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006 Free Software
+dnl  Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2009 Free Software
 dnl  Foundation, Inc.
 dnl
 dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
 dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 2.1 of the License, or (at
+dnl  by the Free Software Foundation; either version 3 of the License, or (at
 dnl  your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
@@ -17,9 +17,7 @@ dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 dnl  License for more details.
 dnl
 dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-dnl  the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-dnl  MA 02110-1301, USA.
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 dnl  Some tests use, or must delete, the default compiler output.  The
@@ -46,8 +44,10 @@ define(POWERPC64_PATTERN,
 [[powerpc64-*-* | powerpc64le-*-* | powerpc620-*-* | powerpc630-*-* | powerpc970-*-* | power[3-9]-*-*]])
 
 define(X86_PATTERN,
-[[i?86*-*-* | k[5-8]*-*-* | pentium*-*-* | athlon-*-* | viac3*-*-*]])
+[[i?86*-*-* | k[5-8]*-*-* | pentium*-*-* | athlon-*-* | viac3*-*-* | geode*-*-* | atom-*-*]])
 
+define(X86_64_PATTERN,
+[[athlon64-*-* | pentium4-*-* | atom-*-* | core2-*-* | corei-*-* | x86_64-*-* | nano-*-*]])
 
 dnl  GMP_FAT_SUFFIX(DSTVAR, DIRECTORY)
 dnl  ---------------------------------
@@ -70,7 +70,7 @@ define(GMP_FAT_SUFFIX,
 
 dnl  GMP_REMOVE_FROM_LIST(listvar,item)
 dnl  ----------------------------------
-dnl  Emit code to remove any occurance of ITEM from $LISTVAR.  ITEM can be a
+dnl  Emit code to remove any occurrence of ITEM from $LISTVAR.  ITEM can be a
 dnl  shell expression like $foo if desired.
 
 define(GMP_REMOVE_FROM_LIST,
@@ -112,13 +112,12 @@ dnl  Expand to the right way to #include gmp-h.in.  This must be used
 dnl  instead of gmp.h, since that file isn't generated until the end of the
 dnl  configure.
 dnl
-dnl  Dummy values for __GMP_BITS_PER_MP_LIMB and GMP_LIMB_BITS are enough
+dnl  Dummy value for GMP_LIMB_BITS is enough
 dnl  for all current configure-time uses of gmp.h.
 
 define(GMP_INCLUDE_GMP_H,
 [[#define __GMP_WITHIN_CONFIGURE 1   /* ignore template stuff */
 #define GMP_NAIL_BITS $GMP_NAIL_BITS
-#define __GMP_BITS_PER_MP_LIMB 123 /* dummy for GMP_NUMB_BITS etc */
 #define GMP_LIMB_BITS 123
 $DEFN_LONG_LONG_LIMB
 #include "$srcdir/gmp-h.in"]
@@ -148,8 +147,7 @@ dnl  like 3.0.1 if patchlevel > 0.
 define(GMP_VERSION,
 [GMP_HEADER_GETVAL(__GNU_MP_VERSION,gmp-h.in)[]dnl
 .GMP_HEADER_GETVAL(__GNU_MP_VERSION_MINOR,gmp-h.in)[]dnl
-ifelse(m4_eval(GMP_HEADER_GETVAL(__GNU_MP_VERSION_PATCHLEVEL,gmp-h.in) > 0),1,
-[.GMP_HEADER_GETVAL(__GNU_MP_VERSION_PATCHLEVEL,gmp-h.in)])])
+.GMP_HEADER_GETVAL(__GNU_MP_VERSION_PATCHLEVEL,gmp-h.in)])
 
 
 dnl  GMP_SUBST_CHECK_FUNCS(func,...)
@@ -192,7 +190,7 @@ esac
 dnl  GMP_COMPARE_GE(A1,B1, A2,B2, ...)
 dnl  ---------------------------------
 dnl  Compare two version numbers A1.A2.etc and B1.B2.etc.  Set
-dnl  $gmp_compare_ge to yes or no accoring to the result.  The A parts
+dnl  $gmp_compare_ge to yes or no according to the result.  The A parts
 dnl  should be variables, the B parts fixed numbers.  As many parts as
 dnl  desired can be included.  An empty string in an A part is taken to be
 dnl  zero, the B parts should be non-empty and non-zero.
@@ -224,7 +222,7 @@ fi],
   fi
 fi])
 ])
-  
+
 
 dnl  GMP_PROG_AR
 dnl  -----------
@@ -255,7 +253,7 @@ dnl  For reference, $ARFLAGS is used by automake (1.8) for its ".a" archive
 dnl  file rules.  This doesn't get used by the piecewise linking, so we
 dnl  leave it at the default "cru".
 dnl
-dnl  FIXME: Libtool 1.5.2 has its own arrangments for "cq", but that version
+dnl  FIXME: Libtool 1.5.2 has its own arrangements for "cq", but that version
 dnl  is broken in other ways.  When we can upgrade, remove the forcible
 dnl  AR_FLAGS=cq.
 
@@ -288,7 +286,7 @@ dnl  and an AC_SUBST accordingly.  If $M4 is already set then it's a user
 dnl  choice and is accepted with no checks.  GMP_PROG_M4 is like
 dnl  AC_PATH_PROG or AC_CHECK_PROG, but tests each m4 found to see if it's
 dnl  good enough.
-dnl 
+dnl
 dnl  See mpn/asm-defs.m4 for details on the known bad m4s.
 
 AC_DEFUN([GMP_PROG_M4],
@@ -516,6 +514,7 @@ GMP_PROG_CC_WORKS_PART([$1], [gnupro alpha ev6 char spilling],
    values being spilled into floating point registers.  The problem doesn't
    show up all the time, but has occurred enough in GMP for us to reject
    this compiler+flags.  */
+#include <string.h>  /* for memcpy */
 struct try_t
 {
  char dst[2];
@@ -590,9 +589,9 @@ GMP_PROG_CC_WORKS_PART([$1], [long long reliability test 1],
    Extracted from tests/mpn/t-iord_u.c.  Causes Apple's gcc 3.3 build 1640 and
    1666 to segfault with e.g., -O2 -mpowerpc64.  */
 
-#ifdef __GNUC__
+#if defined (__GNUC__) && ! defined (__cplusplus)
 typedef unsigned long long t1;typedef t1*t2;
-__inline__ t1 e(t2 rp,t2 up,int n,t1 v0)
+static __inline__ t1 e(t2 rp,t2 up,int n,t1 v0)
 {t1 c,x,r;int i;if(v0){c=1;for(i=1;i<n;i++){x=up[i];r=x+1;rp[i]=r;}}return c;}
 f(){static const struct{t1 n;t1 src[9];t1 want[9];}d[]={{1,{0},{1}},};t1 got[9];int i;
 for(i=0;i<1;i++){if(e(got,got,9,d[i].n)==0)h();g(i,d[i].src,d[i].n,got,d[i].want,9);if(d[i].n)h();}}
@@ -607,7 +606,7 @@ GMP_PROG_CC_WORKS_PART([$1], [long long reliability test 2],
    Extracted from mpz/cfdiv_q_2exp.c.  Causes Apple's gcc 3.3 build 1640 and
    1666 to get an ICE with -O1 -mpowerpc64.  */
 
-#ifdef __GNUC__
+#if defined (__GNUC__) && ! defined (__cplusplus)
 f(int u){int i;long long x;x=u?~0:0;if(x)for(i=0;i<9;i++);x&=g();if(x)g();}
 g(){}
 #else
@@ -625,6 +624,7 @@ GMP_PROG_CC_WORKS_PART_MAIN([$1], [mpn_lshift_com optimization],
    but that's fine, the offending cc is a native-only compiler so we don't
    have to worry about cross compiling.  */
 
+#if ! defined (__cplusplus)
 unsigned long
 lshift_com (rp, up, n, cnt)
   unsigned long *rp;
@@ -658,6 +658,13 @@ main ()
     return 1;
   return 0;
 }
+#else
+int
+main ()
+{
+  return 0;
+}
+#endif
 ])
 
 GMP_PROG_CC_WORKS_PART_MAIN([$1], [mpn_lshift_com optimization 2],
@@ -667,6 +674,7 @@ GMP_PROG_CC_WORKS_PART_MAIN([$1], [mpn_lshift_com optimization 2],
     to be run to show the problem, but that's fine, the offending cc is a
     native-only compiler so we don't have to worry about cross compiling.  */
 
+#if ! defined (__cplusplus)
 #include <stdlib.h>
 void
 lshift_com (rp, up, n, cnt)
@@ -713,6 +721,13 @@ main ()
     abort ();
   return 0;
 }
+#else
+int
+main ()
+{
+  return 0;
+}
+#endif
 ])
 
 
@@ -1161,7 +1176,7 @@ if AC_TRY_EVAL(gmp_compile); then
   if grep "Unknown CPU identifier" conftest.out >/dev/null; then : ;
   else
     result=yes
-  fi    
+  fi
 fi
 cat conftest.out >&AC_FD_CC
 rm -f conftest*
@@ -1490,7 +1505,7 @@ case $srcdir in
 esac
 echo ["define(<CONFIG_TOP_SRCDIR>,<\`$tmp'>)"] >>$gmp_tmpconfigm4
 
-# All CPUs use asm-defs.m4 
+# All CPUs use asm-defs.m4
 echo ["include][(CONFIG_TOP_SRCDIR\`/mpn/asm-defs.m4')"] >>$gmp_tmpconfigm4i
 ])
 
@@ -1562,7 +1577,7 @@ dnl  variables will get expanded.  Don't forget to invoke GMP_FINISH to
 dnl  create file config.m4.  config.m4 uses `<' and '>' as quote characters
 dnl  for all defines.
 
-AC_DEFUN([GMP_DEFINE], 
+AC_DEFUN([GMP_DEFINE],
 [AC_REQUIRE([GMP_INIT])
 echo ['define(<$1>, <$2>)'] >>ifelse([$3], [POST],
                               $gmp_tmpconfigm4p, $gmp_tmpconfigm4)
@@ -1610,6 +1625,34 @@ else
   ifelse([$3],,:,[$3])
 fi
 rm -f conftest*
+])
+
+
+dnl Checks whether the stack can be marked nonexecutable by passing an option
+dnl to the C-compiler when acting on .s files. Appends that option to ASFLAGS.
+dnl This macro is adapted from one found in GLIBC-2.3.5.
+AC_DEFUN([CL_AS_NOEXECSTACK],[
+dnl AC_REQUIRE([AC_PROG_CC]) GMP uses something else
+AC_CACHE_CHECK([whether assembler supports --noexecstack option],
+cl_cv_as_noexecstack, [dnl
+  cat > conftest.c <<EOF
+void foo() {}
+EOF
+  if AC_TRY_COMMAND([${CC} $CFLAGS $CPPFLAGS
+                     -S -o conftest.s conftest.c >/dev/null]) \
+     && grep .note.GNU-stack conftest.s >/dev/null \
+     && AC_TRY_COMMAND([${CC} $CFLAGS $CPPFLAGS -Wa,--noexecstack
+                       -c -o conftest.o conftest.s >/dev/null])
+  then
+    cl_cv_as_noexecstack=yes
+  else
+    cl_cv_as_noexecstack=no
+  fi
+  rm -f conftest*])
+  if test "$cl_cv_as_noexecstack" = yes; then
+    ASMFLAGS="$ASMFLAGS -Wa,--noexecstack"
+  fi
+  AC_SUBST(ASMFLAGS)
 ])
 
 
@@ -1665,7 +1708,7 @@ dnl  good reason for nm to fail though.
 
 AC_DEFUN([GMP_ASM_UNDERSCORE],
 [AC_REQUIRE([GMP_PROG_NM])
-AC_CACHE_CHECK([if globals are prefixed by underscore], 
+AC_CACHE_CHECK([if globals are prefixed by underscore],
                gmp_cv_asm_underscore,
 [gmp_cv_asm_underscore="unknown"
 cat >conftest.c <<EOF
@@ -1769,7 +1812,7 @@ dnl  Note that both solaris "as"s only care about ",0x90" if they actually
 dnl  have to use it to fill something, hence the .byte in the test.  It's
 dnl  the second .align which provokes the error or warning.
 dnl
-dnl  The warning from solaris 2.8 is supressed to stop anyone worrying that
+dnl  The warning from solaris 2.8 is suppressed to stop anyone worrying that
 dnl  something might be wrong.
 
 AC_DEFUN([GMP_ASM_ALIGN_FILL_0x90],
@@ -1948,7 +1991,7 @@ dnl
 dnl  other - .globl is usual.
 dnl
 dnl  "gas" tends to accept .globl everywhere, in addition to .export or
-dnl  .global or whatever the system assembler demands.  
+dnl  .global or whatever the system assembler demands.
 
 AC_DEFUN([GMP_ASM_GLOBL],
 [AC_REQUIRE([GMP_ASM_TEXT])
@@ -2139,10 +2182,10 @@ AC_DEFUN([GMP_ASM_LSYM_PREFIX],
 [AC_REQUIRE([GMP_ASM_LABEL_SUFFIX])
 AC_REQUIRE([GMP_ASM_TEXT])
 AC_REQUIRE([GMP_PROG_NM])
-AC_CACHE_CHECK([for assembler local label prefix], 
+AC_CACHE_CHECK([for assembler local label prefix],
                gmp_cv_asm_lsym_prefix,
 [gmp_tmp_pre_appears=yes
-for gmp_tmp_pre in L .L $ L$; do
+for gmp_tmp_pre in L .L $L $ L$; do
   echo "Trying $gmp_tmp_pre" >&AC_FD_CC
   GMP_TRY_ASSEMBLE(
 [	$gmp_cv_asm_text
@@ -2202,7 +2245,7 @@ AC_REQUIRE([GMP_ASM_LABEL_SUFFIX])
 AC_REQUIRE([GMP_PROG_NM])
 AC_CACHE_CHECK([how to define a 32-bit word],
 	       gmp_cv_asm_w32,
-[case $host in 
+[case $host in
   *-*-hpux*)
     # FIXME: HPUX puts first symbol at 0x40000000, breaking our assumption
     # that it's at 0x0.  We'll have to declare another symbol before the
@@ -2285,7 +2328,7 @@ AC_REQUIRE([GMP_ASM_GLOBL_ATTR])
 AC_REQUIRE([GMP_ASM_LABEL_SUFFIX])
 AC_REQUIRE([GMP_ASM_UNDERSCORE])
 AC_REQUIRE([AC_LIBTOOL_PROG_COMPILER_PIC])
-AC_CACHE_CHECK([if _GLOBAL_OFFSET_TABLE_ is prefixed by underscore], 
+AC_CACHE_CHECK([if _GLOBAL_OFFSET_TABLE_ is prefixed by underscore],
                gmp_cv_asm_x86_got_underscore,
 [gmp_cv_asm_x86_got_underscore="not applicable"
 if test $gmp_cv_asm_underscore = yes; then
@@ -2316,7 +2359,7 @@ if test "$gmp_cv_asm_x86_got_underscore" = "yes"; then
   GMP_DEFINE(GOT_GSYM_PREFIX, [_])
 else
   GMP_DEFINE(GOT_GSYM_PREFIX, [])
-fi    
+fi
 ])
 
 
@@ -3587,7 +3630,7 @@ die die die
   [case $ac_cv_c_inline in
   yes) tmp_inline=inline ;;
   *)   tmp_inline=$ac_cv_c_inline ;;
-  esac    
+  esac
   AC_MSG_WARN([gmp.h doesnt recognise compiler "$tmp_inline", inlines will be unavailable])])
   ;;
 esac
@@ -3638,7 +3681,7 @@ else
     AC_MSG_ERROR([Cannot find a build system compiler])
   fi
 fi
-    
+
 AC_ARG_VAR(CC_FOR_BUILD,[build system C compiler])
 AC_SUBST(CC_FOR_BUILD)
 ])
@@ -3758,6 +3801,8 @@ dnl  GMP_C_FOR_BUILD_ANSI
 dnl  --------------------
 dnl  Determine whether CC_FOR_BUILD is ANSI, and establish U_FOR_BUILD
 dnl  accordingly.
+dnl
+dnl  FIXME: Use AC_PROG_CC sets ac_cv_prog_cc_c89 which could be used instead
 
 AC_DEFUN([GMP_C_FOR_BUILD_ANSI],
 [AC_REQUIRE([GMP_PROG_CC_FOR_BUILD])
@@ -3765,7 +3810,7 @@ AC_CACHE_CHECK([whether build system compiler is ANSI],
                gmp_cv_c_for_build_ansi,
 [cat >conftest.c <<EOF
 int
-main (int argc, char *argv[])
+main (int argc, char **argv)
 {
   exit(0);
 }

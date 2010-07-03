@@ -1,24 +1,24 @@
 /* Test file for mpfr_div_ui.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +27,7 @@ MA 02110-1301, USA. */
 #include "mpfr-test.h"
 
 static void
-check (const char *ds, unsigned long u, mp_rnd_t rnd, const char *es)
+check (const char *ds, unsigned long u, mpfr_rnd_t rnd, const char *es)
 {
   mpfr_t x, y;
 
@@ -40,7 +40,7 @@ check (const char *ds, unsigned long u, mp_rnd_t rnd, const char *es)
       printf ("mpfr_div_ui failed for x=%s, u=%lu, rnd=%s\n", ds, u,
               mpfr_print_rnd_mode (rnd));
       printf ("expected result is %s, got", es);
-      mpfr_out_str(stdout, 10, 0, y, GMP_RNDN);
+      mpfr_out_str(stdout, 10, 0, y, MPFR_RNDN);
       exit (1);
     }
   mpfr_clear (x);
@@ -58,15 +58,15 @@ special (void)
 
   mpfr_set_prec (x, 32);
   mpfr_set_prec (y, 32);
-  mpfr_set_ui (x, 1, GMP_RNDN);
-  mpfr_div_ui (y, x, 3, GMP_RNDN);
+  mpfr_set_ui (x, 1, MPFR_RNDN);
+  mpfr_div_ui (y, x, 3, MPFR_RNDN);
 
   mpfr_set_prec (x, 100);
   mpfr_set_prec (y, 100);
-  mpfr_random (x);
-  mpfr_div_ui (y, x, 123456, GMP_RNDN);
-  mpfr_set_ui (x, 0, GMP_RNDN);
-  mpfr_div_ui (y, x, 123456789, GMP_RNDN);
+  mpfr_urandomb (x, RANDS);
+  mpfr_div_ui (y, x, 123456, MPFR_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN);
+  mpfr_div_ui (y, x, 123456789, MPFR_RNDN);
   if (mpfr_cmp_ui (y, 0))
     {
       printf ("mpfr_div_ui gives non-zero for 0/ui\n");
@@ -77,15 +77,15 @@ special (void)
   mpfr_set_prec (x, 110);
   mpfr_set_prec (y, 60);
   mpfr_set_str_binary (x, "0.110101110011111110011111001110011001110111000000111110001000111011000011E-44");
-  mpfr_div_ui (y, x, 17, GMP_RNDN);
+  mpfr_div_ui (y, x, 17, MPFR_RNDN);
   mpfr_set_str_binary (x, "0.11001010100101100011101110000001100001010110101001010011011E-48");
   if (mpfr_cmp (x, y))
     {
       printf ("Error in x/17 for x=1/16!\n");
       printf ("Expected ");
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN);
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN);
       printf ("\nGot      ");
-      mpfr_out_str (stdout, 2, 0, y, GMP_RNDN);
+      mpfr_out_str (stdout, 2, 0, y, MPFR_RNDN);
       printf ("\n");
       exit (1);
     }
@@ -93,23 +93,23 @@ special (void)
   /* corner case */
   mpfr_set_prec (x, 2 * mp_bits_per_limb);
   mpfr_set_prec (y, 2);
-  mpfr_set_ui (x, 4, GMP_RNDN);
+  mpfr_set_ui (x, 4, MPFR_RNDN);
   mpfr_nextabove (x);
-  mpfr_div_ui (y, x, 2, GMP_RNDN); /* exactly in the middle */
+  mpfr_div_ui (y, x, 2, MPFR_RNDN); /* exactly in the middle */
   MPFR_ASSERTN(mpfr_cmp_ui (y, 2) == 0);
 
   mpfr_set_prec (x, 3 * mp_bits_per_limb);
   mpfr_set_prec (y, 2);
-  mpfr_set_ui (x, 2, GMP_RNDN);
+  mpfr_set_ui (x, 2, MPFR_RNDN);
   mpfr_nextabove (x);
-  mpfr_div_ui (y, x, 2, GMP_RNDN);
+  mpfr_div_ui (y, x, 2, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui (y, 1) == 0);
 
   mpfr_set_prec (x, 3 * mp_bits_per_limb);
   mpfr_set_prec (y, 2);
-  mpfr_set_si (x, -4, GMP_RNDN);
+  mpfr_set_si (x, -4, MPFR_RNDN);
   mpfr_nextbelow (x);
-  mpfr_div_ui (y, x, 2, GMP_RNDD);
+  mpfr_div_ui (y, x, 2, MPFR_RNDD);
   MPFR_ASSERTN(mpfr_cmp_si (y, -3) == 0);
 
   for (xprec = 53; xprec <= 128; xprec++)
@@ -119,7 +119,7 @@ special (void)
       for (yprec = 53; yprec <= 128; yprec++)
         {
           mpfr_set_prec (y, yprec);
-          mpfr_div_ui (y, x, 1, GMP_RNDN);
+          mpfr_div_ui (y, x, 1, MPFR_RNDN);
           if (mpfr_cmp(x,y))
             {
               printf ("division by 1.0 fails for xprec=%u, yprec=%u\n", xprec, yprec);
@@ -130,6 +130,12 @@ special (void)
         }
     }
 
+  /* Bug reported by Mark Dickinson, 6 Nov 2007 */
+  mpfr_set_si (x, 0, MPFR_RNDN);
+  mpfr_set_si (y, -1, MPFR_RNDN);
+  mpfr_div_ui (y, x, 4, MPFR_RNDN);
+  MPFR_ASSERTN(MPFR_IS_ZERO(y) && MPFR_IS_POS(y));
+
   mpfr_clear (x);
   mpfr_clear (y);
 }
@@ -138,7 +144,7 @@ static void
 check_inexact (void)
 {
   mpfr_t x, y, z;
-  mp_prec_t px, py;
+  mpfr_prec_t px, py;
   int inexact, cmp;
   unsigned long int u;
   int rnd;
@@ -150,7 +156,7 @@ check_inexact (void)
   for (px=2; px<300; px++)
     {
       mpfr_set_prec (x, px);
-      mpfr_random (x);
+      mpfr_urandomb (x, RANDS);
       do
         {
           u = randlimb ();
@@ -160,10 +166,10 @@ check_inexact (void)
         {
           mpfr_set_prec (y, py);
           mpfr_set_prec (z, py + mp_bits_per_limb);
-          for (rnd = 0; rnd < GMP_RND_MAX; rnd++)
+          for (rnd = 0; rnd < MPFR_RND_MAX; rnd++)
             {
-              inexact = mpfr_div_ui (y, x, u, (mp_rnd_t) rnd);
-              if (mpfr_mul_ui (z, y, u, (mp_rnd_t) rnd))
+              inexact = mpfr_div_ui (y, x, u, (mpfr_rnd_t) rnd);
+              if (mpfr_mul_ui (z, y, u, (mpfr_rnd_t) rnd))
                 {
                   printf ("z <- y * u should be exact for u=%lu\n", u);
                   printf ("y="); mpfr_print_binary (y); puts ("");
@@ -176,7 +182,7 @@ check_inexact (void)
                   ((inexact < 0) && (cmp >= 0)))
                 {
                   printf ("Wrong inexact flag for u=%lu, rnd=%s\n", u,
-                          mpfr_print_rnd_mode ((mp_rnd_t) rnd));
+                          mpfr_print_rnd_mode ((mpfr_rnd_t) rnd));
                   printf ("x="); mpfr_print_binary (x); puts ("");
                   printf ("y="); mpfr_print_binary (y); puts ("");
                   exit (1);
@@ -192,7 +198,7 @@ check_inexact (void)
 
 #define TEST_FUNCTION mpfr_div_ui
 #define INTEGER_TYPE  unsigned long
-#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1)
+#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1, RANDS)
 #include "tgeneric_ui.c"
 
 int
@@ -200,24 +206,23 @@ main (int argc, char **argv)
 {
   mpfr_t x;
 
-  MPFR_TEST_USE_RANDS ();
   tests_start_mpfr ();
 
   special ();
 
   check_inexact ();
 
-  check("1.0", 3, GMP_RNDN, "3.3333333333333331483e-1");
-  check("1.0", 3, GMP_RNDZ, "3.3333333333333331483e-1");
-  check("1.0", 3, GMP_RNDU, "3.3333333333333337034e-1");
-  check("1.0", 3, GMP_RNDD, "3.3333333333333331483e-1");
-  check("1.0", 2116118, GMP_RNDN, "4.7256343927890600483e-7");
-  check("1.098612288668109782", 5, GMP_RNDN, "0.21972245773362195087");
+  check("1.0", 3, MPFR_RNDN, "3.3333333333333331483e-1");
+  check("1.0", 3, MPFR_RNDZ, "3.3333333333333331483e-1");
+  check("1.0", 3, MPFR_RNDU, "3.3333333333333337034e-1");
+  check("1.0", 3, MPFR_RNDD, "3.3333333333333331483e-1");
+  check("1.0", 2116118, MPFR_RNDN, "4.7256343927890600483e-7");
+  check("1.098612288668109782", 5, MPFR_RNDN, "0.21972245773362195087");
 
   mpfr_init2 (x, 53);
-  mpfr_set_ui (x, 3, GMP_RNDD);
-  mpfr_log (x, x, GMP_RNDD);
-  mpfr_div_ui (x, x, 5, GMP_RNDD);
+  mpfr_set_ui (x, 3, MPFR_RNDD);
+  mpfr_log (x, x, MPFR_RNDD);
+  mpfr_div_ui (x, x, 5, MPFR_RNDD);
   if (mpfr_cmp_str1 (x, "0.21972245773362189536"))
     {
       printf ("Error in mpfr_div_ui for x=ln(3), u=5\n");

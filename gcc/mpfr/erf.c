@@ -1,34 +1,34 @@
 /* mpfr_erf -- error function of a floating-point number
 
-Copyright 2001, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by Ludovic Meunier and Paul Zimmermann.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 #define EXP1 2.71828182845904523536 /* exp(1) */
 
-static int mpfr_erf_0 (mpfr_ptr, mpfr_srcptr, double, mp_rnd_t);
+static int mpfr_erf_0 (mpfr_ptr, mpfr_srcptr, double, mpfr_rnd_t);
 
 int
-mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
   mpfr_t xf;
   int inex, large;
@@ -45,11 +45,11 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
           MPFR_RET_NAN;
         }
       else if (MPFR_IS_INF (x)) /* erf(+inf) = +1, erf(-inf) = -1 */
-        return mpfr_set_si (y, MPFR_INT_SIGN (x), GMP_RNDN);
+        return mpfr_set_si (y, MPFR_INT_SIGN (x), MPFR_RNDN);
       else /* erf(+0) = +0, erf(-0) = -0 */
         {
           MPFR_ASSERTD (MPFR_IS_ZERO (x));
-          return mpfr_set (y, x, GMP_RNDN); /* should keep the sign of x */
+          return mpfr_set (y, x, MPFR_RNDN); /* should keep the sign of x */
         }
     }
 
@@ -64,7 +64,7 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
      with 1 - x^2/3 <= sqrt(Pi)*erf(x)/2/x <= 1 for x >= 0. This means that
      if x^2/3 < 2^(-PREC(y)-1) we can decide of the correct rounding,
      unless we have a worst-case for 2x/sqrt(Pi). */
-  if (MPFR_EXP(x) < - (mp_exp_t) (MPFR_PREC(y) / 2))
+  if (MPFR_EXP(x) < - (mpfr_exp_t) (MPFR_PREC(y) / 2))
     {
       /* we use 2x/sqrt(Pi) (1 - x^2/3) <= erf(x) <= 2x/sqrt(Pi) for x > 0
          and 2x/sqrt(Pi) <= erf(x) <= 2x/sqrt(Pi) (1 - x^2/3) for x < 0.
@@ -78,21 +78,21 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
       mpfr_init2 (l, MPFR_PREC(y) + 17);
       mpfr_init2 (h, MPFR_PREC(y) + 17);
       /* first compute l */
-      mpfr_mul (l, x, x, GMP_RNDU);
-      mpfr_div_ui (l, l, 3, GMP_RNDU); /* upper bound on x^2/3 */
-      mpfr_ui_sub (l, 1, l, GMP_RNDZ); /* lower bound on 1 - x^2/3 */
-      mpfr_const_pi (h, GMP_RNDU); /* upper bound of Pi */
-      mpfr_sqrt (h, h, GMP_RNDU); /* upper bound on sqrt(Pi) */
-      mpfr_div (l, l, h, GMP_RNDZ); /* lower bound on 1/sqrt(Pi) (1 - x^2/3) */
-      mpfr_mul_2ui (l, l, 1, GMP_RNDZ); /* 2/sqrt(Pi) (1 - x^2/3) */
-      mpfr_mul (l, l, x, GMP_RNDZ); /* |l| is a lower bound on
+      mpfr_mul (l, x, x, MPFR_RNDU);
+      mpfr_div_ui (l, l, 3, MPFR_RNDU); /* upper bound on x^2/3 */
+      mpfr_ui_sub (l, 1, l, MPFR_RNDZ); /* lower bound on 1 - x^2/3 */
+      mpfr_const_pi (h, MPFR_RNDU); /* upper bound of Pi */
+      mpfr_sqrt (h, h, MPFR_RNDU); /* upper bound on sqrt(Pi) */
+      mpfr_div (l, l, h, MPFR_RNDZ); /* lower bound on 1/sqrt(Pi) (1 - x^2/3) */
+      mpfr_mul_2ui (l, l, 1, MPFR_RNDZ); /* 2/sqrt(Pi) (1 - x^2/3) */
+      mpfr_mul (l, l, x, MPFR_RNDZ); /* |l| is a lower bound on
                                        |2x/sqrt(Pi) (1 - x^2/3)| */
       /* now compute h */
-      mpfr_const_pi (h, GMP_RNDD); /* lower bound on Pi */
-      mpfr_sqrt (h, h, GMP_RNDD); /* lower bound on sqrt(Pi) */
-      mpfr_div_2ui (h, h, 1, GMP_RNDD); /* lower bound on sqrt(Pi)/2 */
+      mpfr_const_pi (h, MPFR_RNDD); /* lower bound on Pi */
+      mpfr_sqrt (h, h, MPFR_RNDD); /* lower bound on sqrt(Pi) */
+      mpfr_div_2ui (h, h, 1, MPFR_RNDD); /* lower bound on sqrt(Pi)/2 */
       /* since sqrt(Pi)/2 < 1, the following should not underflow */
-      mpfr_div (h, x, h, MPFR_IS_POS(x) ? GMP_RNDU : GMP_RNDD);
+      mpfr_div (h, x, h, MPFR_IS_POS(x) ? MPFR_RNDU : MPFR_RNDD);
       /* round l and h to precision PREC(y) */
       inex = mpfr_prec_round (l, MPFR_PREC(y), rnd_mode);
       inex2 = mpfr_prec_round (h, MPFR_PREC(y), rnd_mode);
@@ -110,10 +110,10 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
     }
 
   mpfr_init2 (xf, 53);
-  mpfr_const_log2 (xf, GMP_RNDU);
-  mpfr_div (xf, x, xf, GMP_RNDZ); /* round to zero ensures we get a lower
+  mpfr_const_log2 (xf, MPFR_RNDU);
+  mpfr_div (xf, x, xf, MPFR_RNDZ); /* round to zero ensures we get a lower
                                      bound of |x/log(2)| */
-  mpfr_mul (xf, xf, x, GMP_RNDZ);
+  mpfr_mul (xf, xf, x, MPFR_RNDZ);
   large = mpfr_cmp_ui (xf, MPFR_PREC (y) + 1) > 0;
   mpfr_clear (xf);
 
@@ -124,8 +124,8 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
   if (MPFR_UNLIKELY (large))
     /* |erf x| = 1 or 1- */
     {
-      mp_rnd_t rnd2 = MPFR_IS_POS (x) ? rnd_mode : MPFR_INVERT_RND(rnd_mode);
-      if (rnd2 == GMP_RNDN || rnd2 == GMP_RNDU)
+      mpfr_rnd_t rnd2 = MPFR_IS_POS (x) ? rnd_mode : MPFR_INVERT_RND(rnd_mode);
+      if (rnd2 == MPFR_RNDN || rnd2 == MPFR_RNDU || rnd2 == MPFR_RNDA)
         {
           inex = MPFR_INT_SIGN (x);
           mpfr_set_si (y, inex, rnd2);
@@ -142,7 +142,7 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
       double xf2;
 
       /* FIXME: get rid of doubles/mpfr_get_d here */
-      xf2 = mpfr_get_d (x, GMP_RNDN);
+      xf2 = mpfr_get_d (x, MPFR_RNDN);
       xf2 = xf2 * xf2; /* xf2 ~ x^2 */
       inex = mpfr_erf_0 (y, x, xf2, rnd_mode);
     }
@@ -154,7 +154,7 @@ mpfr_erf (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
 
 /* return x*2^e */
 static double
-mul_2exp (double x, mp_exp_t e)
+mul_2exp (double x, mpfr_exp_t e)
 {
   if (e > 0)
     {
@@ -178,10 +178,10 @@ mul_2exp (double x, mp_exp_t e)
    Assumes also that e*x^2 <= n (target precision).
  */
 static int
-mpfr_erf_0 (mpfr_ptr res, mpfr_srcptr x, double xf2, mp_rnd_t rnd_mode)
+mpfr_erf_0 (mpfr_ptr res, mpfr_srcptr x, double xf2, mpfr_rnd_t rnd_mode)
 {
-  mp_prec_t n, m;
-  mp_exp_t nuk, sigmak;
+  mpfr_prec_t n, m;
+  mpfr_exp_t nuk, sigmak;
   double tauk;
   mpfr_t y, s, t, u;
   unsigned int k;
@@ -192,7 +192,7 @@ mpfr_erf_0 (mpfr_ptr res, mpfr_srcptr x, double xf2, mp_rnd_t rnd_mode)
   n = MPFR_PREC (res); /* target precision */
 
   /* initial working precision */
-  m = n + (mp_prec_t) (xf2 / LOG2) + 8 + MPFR_INT_CEIL_LOG2 (n);
+  m = n + (mpfr_prec_t) (xf2 / LOG2) + 8 + MPFR_INT_CEIL_LOG2 (n);
 
   mpfr_init2 (y, m);
   mpfr_init2 (s, m);
@@ -202,25 +202,25 @@ mpfr_erf_0 (mpfr_ptr res, mpfr_srcptr x, double xf2, mp_rnd_t rnd_mode)
   MPFR_ZIV_INIT (loop, m);
   for (;;)
     {
-      mpfr_mul (y, x, x, GMP_RNDU); /* err <= 1 ulp */
-      mpfr_set_ui (s, 1, GMP_RNDN);
-      mpfr_set_ui (t, 1, GMP_RNDN);
+      mpfr_mul (y, x, x, MPFR_RNDU); /* err <= 1 ulp */
+      mpfr_set_ui (s, 1, MPFR_RNDN);
+      mpfr_set_ui (t, 1, MPFR_RNDN);
       tauk = 0.0;
 
       for (k = 1; ; k++)
         {
-          mpfr_mul (t, y, t, GMP_RNDU);
-          mpfr_div_ui (t, t, k, GMP_RNDU);
-          mpfr_div_ui (u, t, 2 * k + 1, GMP_RNDU);
+          mpfr_mul (t, y, t, MPFR_RNDU);
+          mpfr_div_ui (t, t, k, MPFR_RNDU);
+          mpfr_div_ui (u, t, 2 * k + 1, MPFR_RNDU);
           sigmak = MPFR_GET_EXP (s);
           if (k % 2)
-            mpfr_sub (s, s, u, GMP_RNDN);
+            mpfr_sub (s, s, u, MPFR_RNDN);
           else
-            mpfr_add (s, s, u, GMP_RNDN);
+            mpfr_add (s, s, u, MPFR_RNDN);
           sigmak -= MPFR_GET_EXP(s);
           nuk = MPFR_GET_EXP(u) - MPFR_GET_EXP(s);
 
-          if ((nuk < - (mp_exp_t) m) && ((double) k >= xf2))
+          if ((nuk < - (mpfr_exp_t) m) && ((double) k >= xf2))
             break;
 
           /* tauk <- 1/2 + tauk * 2^sigmak + (1+8k)*2^nuk */
@@ -228,12 +228,12 @@ mpfr_erf_0 (mpfr_ptr res, mpfr_srcptr x, double xf2, mp_rnd_t rnd_mode)
             + mul_2exp (1.0 + 8.0 * (double) k, nuk);
         }
 
-      mpfr_mul (s, x, s, GMP_RNDU);
+      mpfr_mul (s, x, s, MPFR_RNDU);
       MPFR_SET_EXP (s, MPFR_GET_EXP (s) + 1);
 
-      mpfr_const_pi (t, GMP_RNDZ);
-      mpfr_sqrt (t, t, GMP_RNDZ);
-      mpfr_div (s, s, t, GMP_RNDN);
+      mpfr_const_pi (t, MPFR_RNDZ);
+      mpfr_sqrt (t, t, MPFR_RNDZ);
+      mpfr_div (s, s, t, MPFR_RNDN);
       tauk = 4.0 * tauk + 11.0; /* final ulp-error on s */
       log2tauk = __gmpfr_ceil_log2 (tauk);
 

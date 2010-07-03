@@ -1,24 +1,24 @@
 /* mpfr_rint -- Round to an integer.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
@@ -29,7 +29,7 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
 {
   int sign;
   int rnd_away;
-  mp_exp_t exp;
+  mpfr_exp_t exp;
 
   if (MPFR_UNLIKELY( MPFR_IS_SINGULAR(u) ))
     {
@@ -57,9 +57,11 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
   exp = MPFR_GET_EXP (u);
 
   rnd_away =
-    rnd_mode == GMP_RNDD ? sign < 0 :
-    rnd_mode == GMP_RNDU ? sign > 0 :
-    rnd_mode == GMP_RNDZ ? 0 : -1;
+    rnd_mode == MPFR_RNDD ? sign < 0 :
+    rnd_mode == MPFR_RNDU ? sign > 0 :
+    rnd_mode == MPFR_RNDZ ? 0        :
+    rnd_mode == MPFR_RNDA ? 1        :
+    -1; /* round to nearest-even (RNDN) or nearest-away (RNDNA) */
 
   /* rnd_away:
      1 if round away from zero,
@@ -69,17 +71,17 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
 
   if (MPFR_UNLIKELY (exp <= 0))  /* 0 < |u| < 1 ==> round |u| to 0 or 1 */
     {
-      /* Note: in the GMP_RNDN mode, 0.5 must be rounded to 0. */
+      /* Note: in the MPFR_RNDN mode, 0.5 must be rounded to 0. */
       if (rnd_away != 0 &&
           (rnd_away > 0 ||
-           (exp == 0 && (rnd_mode == GMP_RNDNA ||
+           (exp == 0 && (rnd_mode == MPFR_RNDNA ||
                          !mpfr_powerof2_raw (u)))))
         {
           mp_limb_t *rp;
           mp_size_t rm;
 
           rp = MPFR_MANT(r);
-          rm = (MPFR_PREC(r) - 1) / BITS_PER_MP_LIMB;
+          rm = (MPFR_PREC(r) - 1) / GMP_NUMB_BITS;
           rp[rm] = MPFR_LIMB_HIGHBIT;
           MPN_ZERO(rp, rm);
           MPFR_SET_EXP (r, 1);  /* |r| = 1 */
@@ -114,7 +116,7 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
 
       MPFR_SET_EXP (r, exp); /* Does nothing if r==u */
 
-      if ((exp - 1) / BITS_PER_MP_LIMB >= un)
+      if ((exp - 1) / GMP_NUMB_BITS >= un)
         {
           ui = un;
           idiff = 0;
@@ -124,10 +126,10 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
         {
           mp_size_t uj;
 
-          ui = (exp - 1) / BITS_PER_MP_LIMB + 1;  /* #limbs of the int part */
+          ui = (exp - 1) / GMP_NUMB_BITS + 1;  /* #limbs of the int part */
           MPFR_ASSERTD (un >= ui);
           uj = un - ui;  /* lowest limb of the integer part */
-          idiff = exp % BITS_PER_MP_LIMB;  /* #int-part bits in up[uj] or 0 */
+          idiff = exp % GMP_NUMB_BITS;  /* #int-part bits in up[uj] or 0 */
 
           uflags = idiff == 0 || (up[uj] << idiff) == 0 ? 0 : 2;
           if (uflags == 0)
@@ -147,11 +149,11 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
           MPN_COPY (rp, up + (un - rn), rn); /* r != u */
           if (rnd_away < 0)
             {
-              /* This is a rounding to nearest mode (GMP_RNDN or GMP_RNDNA).
+              /* This is a rounding to nearest mode (MPFR_RNDN or MPFR_RNDNA).
                  Decide the rounding direction here. */
-              if (rnd_mode == GMP_RNDN &&
+              if (rnd_mode == MPFR_RNDN &&
                   (rp[0] & (MPFR_LIMB_ONE << sh)) == 0)
-                { /* halfway cases rounded towards zero */
+                { /* halfway cases rounded toward zero */
                   mp_limb_t a, b;
                   /* a: rounding bit and some of the following bits */
                   /* b: boundary for a (weight of the rounding bit in a) */
@@ -184,7 +186,7 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
             }
           if (uflags == 0)
             { /* u is an integer; determine if it is representable in r */
-              if (sh != 0 && rp[0] << (BITS_PER_MP_LIMB - sh) != 0)
+              if (sh != 0 && rp[0] << (GMP_NUMB_BITS - sh) != 0)
                 uflags = 1;  /* u is not representable in r */
               else
                 {
@@ -214,7 +216,7 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
           rn = ui;
 
           /* number of fractional bits in whole rp[0] */
-          ush = idiff == 0 ? 0 : BITS_PER_MP_LIMB - idiff;
+          ush = idiff == 0 ? 0 : GMP_NUMB_BITS - idiff;
 
           if (rj == 0 && ush < sh)
             {
@@ -234,9 +236,9 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
                  Decide the rounding direction here. */
               if (uj == 0 && sh == 0)
                 rnd_away = 0; /* rounding bit = 0 (not represented in u) */
-              else if (rnd_mode == GMP_RNDN &&
+              else if (rnd_mode == MPFR_RNDN &&
                        (rp[0] & (MPFR_LIMB_ONE << sh)) == 0)
-                { /* halfway cases rounded towards zero */
+                { /* halfway cases rounded toward zero */
                   mp_limb_t a, b;
                   /* a: rounding bit and some of the following bits */
                   /* b: boundary for a (weight of the rounding bit in a) */
@@ -302,7 +304,7 @@ mpfr_rint (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
 int
 mpfr_round (mpfr_ptr r, mpfr_srcptr u)
 {
-  return mpfr_rint(r, u, GMP_RNDNA);
+  return mpfr_rint (r, u, MPFR_RNDNA);
 }
 
 #undef mpfr_trunc
@@ -310,7 +312,7 @@ mpfr_round (mpfr_ptr r, mpfr_srcptr u)
 int
 mpfr_trunc (mpfr_ptr r, mpfr_srcptr u)
 {
-  return mpfr_rint(r, u, GMP_RNDZ);
+  return mpfr_rint (r, u, MPFR_RNDZ);
 }
 
 #undef mpfr_ceil
@@ -318,7 +320,7 @@ mpfr_trunc (mpfr_ptr r, mpfr_srcptr u)
 int
 mpfr_ceil (mpfr_ptr r, mpfr_srcptr u)
 {
-  return mpfr_rint(r, u, GMP_RNDU);
+  return mpfr_rint (r, u, MPFR_RNDU);
 }
 
 #undef mpfr_floor
@@ -326,7 +328,7 @@ mpfr_ceil (mpfr_ptr r, mpfr_srcptr u)
 int
 mpfr_floor (mpfr_ptr r, mpfr_srcptr u)
 {
-  return mpfr_rint(r, u, GMP_RNDD);
+  return mpfr_rint (r, u, MPFR_RNDD);
 }
 
 #undef mpfr_rint_round
@@ -341,13 +343,13 @@ mpfr_rint_round (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
       mpfr_t tmp;
       int inex;
       MPFR_SAVE_EXPO_DECL (expo);
+      MPFR_BLOCK_DECL (flags);
 
       MPFR_SAVE_EXPO_MARK (expo);
       mpfr_init2 (tmp, MPFR_PREC (u));
       /* round(u) is representable in tmp unless an overflow occurs */
-      mpfr_clear_overflow ();
-      mpfr_round (tmp, u);
-      inex = (mpfr_overflow_p ()
+      MPFR_BLOCK (flags, mpfr_round (tmp, u));
+      inex = (MPFR_OVERFLOW (flags)
               ? mpfr_overflow (r, rnd_mode, MPFR_SIGN (u))
               : mpfr_set (r, tmp, rnd_mode));
       mpfr_clear (tmp);
@@ -392,13 +394,13 @@ mpfr_rint_ceil (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
       mpfr_t tmp;
       int inex;
       MPFR_SAVE_EXPO_DECL (expo);
+      MPFR_BLOCK_DECL (flags);
 
       MPFR_SAVE_EXPO_MARK (expo);
       mpfr_init2 (tmp, MPFR_PREC (u));
       /* ceil(u) is representable in tmp unless an overflow occurs */
-      mpfr_clear_overflow ();
-      mpfr_ceil (tmp, u);
-      inex = (mpfr_overflow_p ()
+      MPFR_BLOCK (flags, mpfr_ceil (tmp, u));
+      inex = (MPFR_OVERFLOW (flags)
               ? mpfr_overflow (r, rnd_mode, MPFR_SIGN_POS)
               : mpfr_set (r, tmp, rnd_mode));
       mpfr_clear (tmp);
@@ -419,13 +421,13 @@ mpfr_rint_floor (mpfr_ptr r, mpfr_srcptr u, mpfr_rnd_t rnd_mode)
       mpfr_t tmp;
       int inex;
       MPFR_SAVE_EXPO_DECL (expo);
+      MPFR_BLOCK_DECL (flags);
 
       MPFR_SAVE_EXPO_MARK (expo);
       mpfr_init2 (tmp, MPFR_PREC (u));
       /* floor(u) is representable in tmp unless an overflow occurs */
-      mpfr_clear_overflow ();
-      mpfr_floor (tmp, u);
-      inex = (mpfr_overflow_p ()
+      MPFR_BLOCK (flags, mpfr_floor (tmp, u));
+      inex = (MPFR_OVERFLOW (flags)
               ? mpfr_overflow (r, rnd_mode, MPFR_SIGN_NEG)
               : mpfr_set (r, tmp, rnd_mode));
       mpfr_clear (tmp);

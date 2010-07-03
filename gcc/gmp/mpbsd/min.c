@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <ctype.h>
@@ -79,7 +77,7 @@ min (MINT *dest)
 
   ungetc (c, stdin);
 
-  dest_size = str_size / __mp_bases[10].chars_per_limb + 1;
+  dest_size = str_size / mp_bases[10].chars_per_limb + 1;
   if (dest->_mp_alloc < dest_size)
     _mp_realloc (dest, dest_size);
 

@@ -17066,6 +17066,7 @@ configure-mpfr:
 	esac; \
 	srcdiroption="--srcdir=$${topdir}/mpfr"; \
 	libsrcdir="$$s/mpfr"; \
+	cp $(srcdir)/gmp/gmp-impl.h $(srcdir)/gmp/longlong.h ../gmp/ ; \
 	$(SHELL) $${libsrcdir}/configure \
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=none-${host_vendor}-${host_os} \
 	  --target=none-${host_vendor}-${host_os} $${srcdiroption} --disable-shared @extra_mpfr_configure_flags@ \

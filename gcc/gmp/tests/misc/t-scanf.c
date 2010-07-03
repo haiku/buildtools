@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 
 /* Usage: t-scanf [-s]
@@ -65,7 +63,7 @@ MA 02110-1301, USA. */
 
 int   option_libc_scanf = 0;
 
-typedef int (*fun_t) _PROTO ((const char *, const char *, void *, void *));
+typedef int (*fun_t) __GMP_PROTO ((const char *, const char *, void *, void *));
 
 
 /* This problem was seen on powerpc7450-apple-darwin7.0.0, sscanf returns 0
@@ -1384,7 +1382,7 @@ check_n (void)
     mpq_t  x[2];
     mpq_init (x[0]);
     mpq_init (x[1]);
-    mpq_set_ui (x[0], -987L, 654L);
+    mpq_set_ui (x[0], 987L, 654L);
     mpq_set_ui (x[1], 4115L, 226L);
     ret = gmp_sscanf ("xyz   ", "xyz%Qn", x[0]);
     MPQ_CHECK_FORMAT (x[0]);
@@ -1409,8 +1407,8 @@ check_n (void)
     mpf_t  x[2];
     mpf_init (x[0]);
     mpf_init (x[1]);
-    mpf_set_ui (x[0], -987L);
-    mpf_set_ui (x[1],  654L);
+    mpf_set_ui (x[0], 987L);
+    mpf_set_ui (x[1], 654L);
     ret = gmp_sscanf ("xyz   ", "xyz%Fn", x[0]);
     MPF_CHECK_FORMAT (x[0]);
     MPF_CHECK_FORMAT (x[1]);

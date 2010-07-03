@@ -1,12 +1,13 @@
 /* mpn_gcdext -- Extended Greatest Common Divisor.
 
-Copyright 1996, 1998, 2000, 2001, 2002 Free Software Foundation, Inc.
+Copyright 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,763 +16,529 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write
-to the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
-Boston, MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-#ifndef GCDEXT_THRESHOLD
-#define GCDEXT_THRESHOLD 17
-#endif
-
-#ifndef EXTEND
-#define EXTEND 1
-#endif
-
-#if STAT
-int arr[GMP_LIMB_BITS + 1];
-#endif
-
-
-/* mpn_gcdext (GP, SP, SSIZE, UP, USIZE, VP, VSIZE)
-
-   Compute the extended GCD of {UP,USIZE} and {VP,VSIZE} and store the
-   greatest common divisor at GP (unless it is 0), and the first cofactor at
-   SP.  Write the size of the cofactor through the pointer SSIZE.  Return the
-   size of the value at GP.  Note that SP might be a negative number; this is
-   denoted by storing the negative of the size through SSIZE.
-
-   {UP,USIZE} and {VP,VSIZE} are both clobbered.
-
-   The space allocation for all four areas needs to be USIZE+1.
-
-   Preconditions: 1) U >= V.
-		  2) V > 0.  */
-
-/* We use Lehmer's algorithm.  The idea is to extract the most significant
-   bits of the operands, and compute the continued fraction for them.  We then
-   apply the gathered cofactors to the full operands.
-
-   Idea 1: After we have performed a full division, don't shift operands back,
-	   but instead account for the extra factors-of-2 thus introduced.
-   Idea 2: Simple generalization to use divide-and-conquer would give us an
-	   algorithm that runs faster than O(n^2).
-   Idea 3: The input numbers need less space as the computation progresses,
-	   while the s0 and s1 variables need more space.  To save memory, we
-	   could make them share space, and have the latter variables grow
-	   into the former.
-   Idea 4: We should not do double-limb arithmetic from the start.  Instead,
-	   do things in single-limb arithmetic until the quotients differ,
-	   and then switch to double-limb arithmetic.  */
-
-
-/* One-limb division optimized for small quotients.  */
-static mp_limb_t
-div1 (mp_limb_t n0, mp_limb_t d0)
+/* Computes (r;b) = (a; b) M. Result is of size n + M->n +/- 1, and
+   the size is returned (if inputs are non-normalized, result may be
+   non-normalized too). Temporary space needed is M->n + n.
+ */
+static size_t
+hgcd_mul_matrix_vector (struct hgcd_matrix *M,
+			mp_ptr rp, mp_srcptr ap, mp_ptr bp, mp_size_t n, mp_ptr tp)
 {
-  if ((mp_limb_signed_t) n0 < 0)
+  mp_limb_t ah, bh;
+
+  /* Compute (r,b) <-- (u00 a + u10 b, u01 a + u11 b) as
+
+     t  = u00 * a
+     r  = u10 * b
+     r += t;
+
+     t  = u11 * b
+     b  = u01 * a
+     b += t;
+  */
+
+  if (M->n >= n)
     {
-      mp_limb_t q;
-      int cnt;
-      for (cnt = 1; (mp_limb_signed_t) d0 >= 0; cnt++)
-	{
-	  d0 = d0 << 1;
-	}
-
-      q = 0;
-      while (cnt)
-	{
-	  q <<= 1;
-	  if (n0 >= d0)
-	    {
-	      n0 = n0 - d0;
-	      q |= 1;
-	    }
-	  d0 = d0 >> 1;
-	  cnt--;
-	}
-
-      return q;
+      mpn_mul (tp, M->p[0][0], M->n, ap, n);
+      mpn_mul (rp, M->p[1][0], M->n, bp, n);
     }
   else
     {
-      mp_limb_t q;
-      int cnt;
-      for (cnt = 0; n0 >= d0; cnt++)
-	{
-	  d0 = d0 << 1;
-	}
-
-      q = 0;
-      while (cnt)
-	{
-	  d0 = d0 >> 1;
-	  q <<= 1;
-	  if (n0 >= d0)
-	    {
-	      n0 = n0 - d0;
-	      q |= 1;
-	    }
-	  cnt--;
-	}
-
-      return q;
+      mpn_mul (tp, ap, n, M->p[0][0], M->n);
+      mpn_mul (rp, bp, n, M->p[1][0], M->n);
     }
-}
 
-/* Two-limb division optimized for small quotients.  */
-static mp_limb_t
-div2 (mp_limb_t n1, mp_limb_t n0, mp_limb_t d1, mp_limb_t d0)
-{
-  if ((mp_limb_signed_t) n1 < 0)
+  ah = mpn_add_n (rp, rp, tp, n + M->n);
+
+  if (M->n >= n)
     {
-      mp_limb_t q;
-      int cnt;
-      for (cnt = 1; (mp_limb_signed_t) d1 >= 0; cnt++)
-	{
-	  d1 = (d1 << 1) | (d0 >> (GMP_LIMB_BITS - 1));
-	  d0 = d0 << 1;
-	}
-
-      q = 0;
-      while (cnt)
-	{
-	  q <<= 1;
-	  if (n1 > d1 || (n1 == d1 && n0 >= d0))
-	    {
-	      sub_ddmmss (n1, n0, n1, n0, d1, d0);
-	      q |= 1;
-	    }
-	  d0 = (d1 << (GMP_LIMB_BITS - 1)) | (d0 >> 1);
-	  d1 = d1 >> 1;
-	  cnt--;
-	}
-
-      return q;
+      mpn_mul (tp, M->p[1][1], M->n, bp, n);
+      mpn_mul (bp, M->p[0][1], M->n, ap, n);
     }
   else
     {
-      mp_limb_t q;
-      int cnt;
-      for (cnt = 0; n1 > d1 || (n1 == d1 && n0 >= d0); cnt++)
-	{
-	  d1 = (d1 << 1) | (d0 >> (GMP_LIMB_BITS - 1));
-	  d0 = d0 << 1;
-	}
-
-      q = 0;
-      while (cnt)
-	{
-	  d0 = (d1 << (GMP_LIMB_BITS - 1)) | (d0 >> 1);
-	  d1 = d1 >> 1;
-	  q <<= 1;
-	  if (n1 > d1 || (n1 == d1 && n0 >= d0))
-	    {
-	      sub_ddmmss (n1, n0, n1, n0, d1, d0);
-	      q |= 1;
-	    }
-	  cnt--;
-	}
-
-      return q;
+      mpn_mul (tp, bp, n, M->p[1][1], M->n);
+      mpn_mul (bp, ap, n, M->p[0][1], M->n);
     }
+  bh = mpn_add_n (bp, bp, tp, n + M->n);
+
+  n += M->n;
+  if ( (ah | bh) > 0)
+    {
+      rp[n] = ah;
+      bp[n] = bh;
+      n++;
+    }
+  else
+    {
+      /* Normalize */
+      while ( (rp[n-1] | bp[n-1]) == 0)
+	n--;
+    }
+
+  return n;
 }
+
+#define COMPUTE_V_ITCH(n) (2*(n) + 1)
+
+/* Computes |v| = |(g - u a)| / b, where u may be positive or
+   negative, and v is of the opposite sign. a, b are of size n, u and
+   v at most size n, and v must have space for n+1 limbs. */
+static mp_size_t
+compute_v (mp_ptr vp,
+	   mp_srcptr ap, mp_srcptr bp, mp_size_t n,
+	   mp_srcptr gp, mp_size_t gn,
+	   mp_srcptr up, mp_size_t usize,
+	   mp_ptr tp)
+{
+  mp_size_t size;
+  mp_size_t an;
+  mp_size_t bn;
+  mp_size_t vn;
+
+  ASSERT (n > 0);
+  ASSERT (gn > 0);
+  ASSERT (usize != 0);
+
+  size = ABS (usize);
+  ASSERT (size <= n);
+
+  an = n;
+  MPN_NORMALIZE (ap, an);
+
+  if (an >= size)
+    mpn_mul (tp, ap, an, up, size);
+  else
+    mpn_mul (tp, up, size, ap, an);
+
+  size += an;
+  size -= tp[size - 1] == 0;
+
+  ASSERT (gn <= size);
+
+  if (usize > 0)
+    {
+      /* |v| = -v = (u a - g) / b */
+
+      ASSERT_NOCARRY (mpn_sub (tp, tp, size, gp, gn));
+      MPN_NORMALIZE (tp, size);
+      if (size == 0)
+	return 0;
+    }
+  else
+    { /* usize < 0 */
+      /* |v| = v = (c - u a) / b = (c + |u| a) / b */
+      mp_limb_t cy = mpn_add (tp, tp, size, gp, gn);
+      if (cy)
+	tp[size++] = cy;
+    }
+
+  /* Now divide t / b. There must be no remainder */
+  bn = n;
+  MPN_NORMALIZE (bp, bn);
+  ASSERT (size >= bn);
+
+  vn = size + 1 - bn;
+  ASSERT (vn <= n + 1);
+
+  mpn_divexact (vp, tp, size, bp, bn);
+  vn -= (vp[vn-1] == 0);
+
+  return vn;
+}
+
+/* Temporary storage:
+
+   Initial division: Quotient of at most an - n + 1 <= an limbs.
+
+   Storage for u0 and u1: 2(n+1).
+
+   Storage for hgcd matrix M, with input ceil(n/2): 5 * ceil(n/4)
+
+   Storage for hgcd, input (n + 1)/2: 9 n/4 plus some.
+
+   When hgcd succeeds: 1 + floor(3n/2) for adjusting a and b, and 2(n+1) for the cofactors.
+
+   When hgcd fails: 2n + 1 for mpn_gcdext_subdiv_step, which is less.
+
+   For the lehmer call after the loop, Let T denote
+   GCDEXT_DC_THRESHOLD. For the gcdext_lehmer call, we need T each for
+   u, a and b, and 4T+3 scratch space. Next, for compute_v, we need T
+   for u, T+1 for v and 2T + 1 scratch space. In all, 7T + 3 is
+   sufficient for both operations.
+
+*/
+
+/* Optimal choice of p seems difficult. In each iteration the division
+ * of work between hgcd and the updates of u0 and u1 depends on the
+ * current size of the u. It may be desirable to use a different
+ * choice of p in each iteration. Also the input size seems to matter;
+ * choosing p = n / 3 in the first iteration seems to improve
+ * performance slightly for input size just above the threshold, but
+ * degrade performance for larger inputs. */
+#define CHOOSE_P_1(n) ((n) / 2)
+#define CHOOSE_P_2(n) ((n) / 3)
 
 mp_size_t
-#if EXTEND
-mpn_gcdext (mp_ptr gp, mp_ptr s0p, mp_size_t *s0size,
-	    mp_ptr up, mp_size_t size, mp_ptr vp, mp_size_t vsize)
-#else
-mpn_gcd (mp_ptr gp,
-	 mp_ptr up, mp_size_t size, mp_ptr vp, mp_size_t vsize)
-#endif
+mpn_gcdext (mp_ptr gp, mp_ptr up, mp_size_t *usizep,
+	    mp_ptr ap, mp_size_t an, mp_ptr bp, mp_size_t n)
 {
-  mp_limb_t A, B, C, D;
-  int cnt;
-  mp_ptr tp, wp;
-#if RECORD
-  mp_limb_t max = 0;
-#endif
-#if EXTEND
-  mp_ptr s1p;
-  mp_ptr orig_s0p = s0p;
-  mp_size_t ssize;
-  int sign = 1;
-#endif
-  int use_double_flag;
+  mp_size_t talloc;
+  mp_size_t scratch;
+  mp_size_t matrix_scratch;
+  mp_size_t ualloc = n + 1;
+
+  mp_size_t un;
+  mp_ptr u0;
+  mp_ptr u1;
+
+  mp_ptr tp;
+
   TMP_DECL;
 
-  ASSERT (size >= vsize);
-  ASSERT (vsize >= 1);
-  ASSERT (up[size-1] != 0);
-  ASSERT (vp[vsize-1] != 0);
-  ASSERT (! MPN_OVERLAP_P (up, size+1, vp, vsize+1));
-#if EXTEND
-  ASSERT (! MPN_OVERLAP_P (s0p, size, up, size+1));
-  ASSERT (! MPN_OVERLAP_P (s0p, size, vp, vsize+1));
-#endif
-  ASSERT (MPN_SAME_OR_SEPARATE_P (gp, up, size));
-  ASSERT (MPN_SAME_OR_SEPARATE2_P (gp, size, vp, vsize));
+  ASSERT (an >= n);
+  ASSERT (n > 0);
 
   TMP_MARK;
 
-  tp = (mp_ptr) TMP_ALLOC ((size + 1) * BYTES_PER_MP_LIMB);
-  wp = (mp_ptr) TMP_ALLOC ((size + 1) * BYTES_PER_MP_LIMB);
-#if EXTEND
-  s1p = (mp_ptr) TMP_ALLOC ((size + 1) * BYTES_PER_MP_LIMB);
+  /* FIXME: Check for small sizes first, before setting up temporary
+     storage etc. */
+  talloc = MPN_GCDEXT_LEHMER_N_ITCH(n);
 
-#if ! WANT_GCDEXT_ONE_STEP
-  MPN_ZERO (s0p, size);
-  MPN_ZERO (s1p, size);
-#endif
+  /* For initial division */
+  scratch = an - n + 1;
+  if (scratch > talloc)
+    talloc = scratch;
 
-  s0p[0] = 1;
-  s1p[0] = 0;
-  ssize = 1;
-#endif
-
-  if (size > vsize)
+  if (ABOVE_THRESHOLD (n, GCDEXT_DC_THRESHOLD))
     {
-      mpn_tdiv_qr (tp, up, (mp_size_t) 0, up, size, vp, vsize);
+      /* For hgcd loop. */
+      mp_size_t hgcd_scratch;
+      mp_size_t update_scratch;
+      mp_size_t p1 = CHOOSE_P_1 (n);
+      mp_size_t p2 = CHOOSE_P_2 (n);
+      mp_size_t min_p = MIN(p1, p2);
+      mp_size_t max_p = MAX(p1, p2);
+      matrix_scratch = MPN_HGCD_MATRIX_INIT_ITCH (n - min_p);
+      hgcd_scratch = mpn_hgcd_itch (n - min_p);
+      update_scratch = max_p + n - 1;
 
-#if EXTEND
-      /* This is really what it boils down to in this case... */
-      s0p[0] = 0;
-      s1p[0] = 1;
-      sign = -sign;
-#endif
-      size = vsize;
-      MP_PTR_SWAP (up, vp);
+      scratch = matrix_scratch + MAX(hgcd_scratch, update_scratch);
+      if (scratch > talloc)
+	talloc = scratch;
+
+      /* Final mpn_gcdext_lehmer_n call. Need space for u and for
+	 copies of a and b. */
+      scratch = MPN_GCDEXT_LEHMER_N_ITCH (GCDEXT_DC_THRESHOLD)
+	+ 3*GCDEXT_DC_THRESHOLD;
+
+      if (scratch > talloc)
+	talloc = scratch;
+
+      /* Cofactors u0 and u1 */
+      talloc += 2*(n+1);
     }
 
-  use_double_flag = ABOVE_THRESHOLD (size, GCDEXT_THRESHOLD);
+  tp = TMP_ALLOC_LIMBS(talloc);
 
-  for (;;)
+  if (an > n)
     {
-      mp_limb_t asign;
-      /* Figure out exact size of V.  */
-      vsize = size;
-      MPN_NORMALIZE (vp, vsize);
-      if (vsize <= 1)
-	break;
+      mpn_tdiv_qr (tp, ap, 0, ap, an, bp, n);
 
-      if (use_double_flag)
+      if (mpn_zero_p (ap, n))
 	{
-	  mp_limb_t uh, vh, ul, vl;
-	  /* Let UH,UL be the most significant limbs of U, and let VH,VL be
-	     the corresponding bits from V.  */
-	  uh = up[size - 1];
-	  vh = vp[size - 1];
-	  ul = up[size - 2];
-	  vl = vp[size - 2];
-	  count_leading_zeros (cnt, uh);
-#if GMP_NAIL_BITS == 0
-	  if (cnt != 0)
-	    {
-	      uh = (uh << cnt) | (ul >> (GMP_LIMB_BITS - cnt));
-	      vh = (vh << cnt) | (vl >> (GMP_LIMB_BITS - cnt));
-	      vl <<= cnt;
-	      ul <<= cnt;
-	      if (size >= 3)
-		{
-		  ul |= (up[size - 3] >> (GMP_LIMB_BITS - cnt));
-		  vl |= (vp[size - 3] >> (GMP_LIMB_BITS - cnt));
-		}
-	    }
-#else
-	  uh = uh << cnt;
-	  vh = vh << cnt;
-	  if (cnt < GMP_NUMB_BITS)
-	    {			     /* GMP_NAIL_BITS <= cnt < GMP_NUMB_BITS */
-	      uh |= ul >> (GMP_NUMB_BITS - cnt);
-	      vh |= vl >> (GMP_NUMB_BITS - cnt);
-	      ul <<= cnt + GMP_NAIL_BITS;
-	      vl <<= cnt + GMP_NAIL_BITS;
-	      if (size >= 3)
-		{
-		  if (cnt + GMP_NAIL_BITS > GMP_NUMB_BITS)
-		    {
-		      ul |= up[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
-		      vl |= vp[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
-		      if (size >= 4)
-			{
-			  ul |= up[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
-			  vl |= vp[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
-			}
-		    }
-		  else
-		    {
-		      ul |= up[size - 3] >> (GMP_LIMB_BITS - cnt - 2 * GMP_NAIL_BITS);
-		      vl |= vp[size - 3] >> (GMP_LIMB_BITS - cnt - 2 * GMP_NAIL_BITS);
-		    }
-		}
-	    }
-	  else
-	    {			  /* GMP_NUMB_BITS <= cnt <= GMP_LIMB_BITS-1 */
-	      uh |= ul << cnt - GMP_NUMB_BITS;	/* 0 <= c <= GMP_NAIL_BITS-1 */
-	      vh |= vl << cnt - GMP_NUMB_BITS;
-	      if (size >= 3)
-		{
-		  if (cnt - GMP_NUMB_BITS != 0)
-		    {				/* uh/vh need yet more bits! */
-		      uh |= up[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
-		      vh |= vp[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
-		      ul = up[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
-		      vl = vp[size - 3] << cnt + GMP_NAIL_BITS - GMP_NUMB_BITS;
-		      if (size >= 4)
-			{
-			  ul |= up[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
-			  vl |= vp[size - 4] >> 2 * GMP_NUMB_BITS - GMP_NAIL_BITS - cnt;
-			}
-		    }
-		  else
-		    {
-		      ul = up[size - 3] << GMP_LIMB_BITS - cnt;
-		      vl = vp[size - 3] << GMP_LIMB_BITS - cnt;
-		      if (size >= 4)
-			{
-			  ul |= up[size - 4] >> GMP_NUMB_BITS - (GMP_LIMB_BITS - cnt);
-			  vl |= vp[size - 4] >> GMP_NUMB_BITS - (GMP_LIMB_BITS - cnt);
-			}
-		    }
-		}
-	      else
-		{
-		  ul = 0;
-		  vl = 0;
-		}
-	    }
-#endif
-
-	  A = 1;
-	  B = 0;
-	  C = 0;
-	  D = 1;
-
-	  asign = 0;
-	  for (;;)
-	    {
-	      mp_limb_t Tac, Tbd;
-	      mp_limb_t q1, q2;
-	      mp_limb_t nh, nl, dh, dl;
-	      mp_limb_t t1, t0;
-	      mp_limb_t Th, Tl;
-
-	      sub_ddmmss (dh, dl, vh, vl, 0, C);
-	      if (dh == 0)
-		break;
-	      add_ssaaaa (nh, nl, uh, ul, 0, A);
-	      q1 = div2 (nh, nl, dh, dl);
-
-	      add_ssaaaa (dh, dl, vh, vl, 0, D);
-	      if (dh == 0)
-		break;
-	      sub_ddmmss (nh, nl, uh, ul, 0, B);
-	      q2 = div2 (nh, nl, dh, dl);
-
-	      if (q1 != q2)
-		break;
-
-	      Tac = A + q1 * C;
-	      if (GMP_NAIL_BITS != 0 && Tac > GMP_NUMB_MAX)
-		break;
-	      Tbd = B + q1 * D;
-	      if (GMP_NAIL_BITS != 0 && Tbd > GMP_NUMB_MAX)
-		break;
-	      A = C;
-	      C = Tac;
-	      B = D;
-	      D = Tbd;
-	      umul_ppmm (t1, t0, q1, vl);
-	      t1 += q1 * vh;
-	      sub_ddmmss (Th, Tl, uh, ul, t1, t0);
-	      uh = vh, ul = vl;
-	      vh = Th, vl = Tl;
-
-	      asign = ~asign;
-
-	      add_ssaaaa (dh, dl, vh, vl, 0, C);
-/*	      if (dh == 0)	should never happen
-		break;	       */
-	      sub_ddmmss (nh, nl, uh, ul, 0, A);
-	      q1 = div2 (nh, nl, dh, dl);
-
-	      sub_ddmmss (dh, dl, vh, vl, 0, D);
-	      if (dh == 0)
-		break;
-	      add_ssaaaa (nh, nl, uh, ul, 0, B);
-	      q2 = div2 (nh, nl, dh, dl);
-
-	      if (q1 != q2)
-		break;
-
-	      Tac = A + q1 * C;
-	      if (GMP_NAIL_BITS != 0 && Tac > GMP_NUMB_MAX)
-		break;
-	      Tbd = B + q1 * D;
-	      if (GMP_NAIL_BITS != 0 && Tbd > GMP_NUMB_MAX)
-		break;
-	      A = C;
-	      C = Tac;
-	      B = D;
-	      D = Tbd;
-	      umul_ppmm (t1, t0, q1, vl);
-	      t1 += q1 * vh;
-	      sub_ddmmss (Th, Tl, uh, ul, t1, t0);
-	      uh = vh, ul = vl;
-	      vh = Th, vl = Tl;
-
-	      asign = ~asign;
-	    }
-#if EXTEND
-	  if (asign)
-	    sign = -sign;
-#endif
+	  MPN_COPY (gp, bp, n);
+	  *usizep = 0;
+	  TMP_FREE;
+	  return n;
 	}
-      else /* Same, but using single-limb calculations.  */
-	{
-	  mp_limb_t uh, vh;
-	  /* Make UH be the most significant limb of U, and make VH be
-	     corresponding bits from V.  */
-	  uh = up[size - 1];
-	  vh = vp[size - 1];
-	  count_leading_zeros (cnt, uh);
-#if GMP_NAIL_BITS == 0
-	  if (cnt != 0)
-	    {
-	      uh = (uh << cnt) | (up[size - 2] >> (GMP_LIMB_BITS - cnt));
-	      vh = (vh << cnt) | (vp[size - 2] >> (GMP_LIMB_BITS - cnt));
-	    }
-#else
-	  uh <<= cnt;
-	  vh <<= cnt;
-	  if (cnt < GMP_NUMB_BITS)
-	    {
-	      uh |= up[size - 2] >> (GMP_NUMB_BITS - cnt);
-	      vh |= vp[size - 2] >> (GMP_NUMB_BITS - cnt);
-	    }
-	  else
-	    {
-	      uh |= up[size - 2] << cnt - GMP_NUMB_BITS;
-	      vh |= vp[size - 2] << cnt - GMP_NUMB_BITS;
-	      if (size >= 3)
-		{
-		  uh |= up[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
-		  vh |= vp[size - 3] >> 2 * GMP_NUMB_BITS - cnt;
-		}
-	    }
-#endif
+    }
 
-	  A = 1;
-	  B = 0;
-	  C = 0;
-	  D = 1;
+  if (BELOW_THRESHOLD (n, GCDEXT_DC_THRESHOLD))
+    {
+      mp_size_t gn = mpn_gcdext_lehmer_n(gp, up, usizep, ap, bp, n, tp);
 
-	  asign = 0;
-	  for (;;)
-	    {
-	      mp_limb_t q, T;
-	      if (vh - C == 0 || vh + D == 0)
-		break;
+      TMP_FREE;
+      return gn;
+    }
 
-	      q = (uh + A) / (vh - C);
-	      if (q != (uh - B) / (vh + D))
-		break;
+  MPN_ZERO (tp, 2*ualloc);
+  u0 = tp; tp += ualloc;
+  u1 = tp; tp += ualloc;
 
-	      T = A + q * C;
-	      A = C;
-	      C = T;
-	      T = B + q * D;
-	      B = D;
-	      D = T;
-	      T = uh - q * vh;
-	      uh = vh;
-	      vh = T;
+  {
+    /* For the first hgcd call, there are no u updates, and it makes
+       some sense to use a different choice for p. */
 
-	      asign = ~asign;
+    /* FIXME: We could trim use of temporary storage, since u0 and u1
+       are not used yet. For the hgcd call, we could swap in the u0
+       and u1 pointers for the relevant matrix elements. */
 
-	      if (vh - D == 0)
-		break;
+    struct hgcd_matrix M;
+    mp_size_t p = CHOOSE_P_1 (n);
+    mp_size_t nn;
 
-	      q = (uh - A) / (vh + C);
-	      if (q != (uh + B) / (vh - D))
-		break;
+    mpn_hgcd_matrix_init (&M, n - p, tp);
+    nn = mpn_hgcd (ap + p, bp + p, n - p, &M, tp + matrix_scratch);
+    if (nn > 0)
+      {
+	ASSERT (M.n <= (n - p - 1)/2);
+	ASSERT (M.n + p <= (p + n - 1) / 2);
 
-	      T = A + q * C;
-	      A = C;
-	      C = T;
-	      T = B + q * D;
-	      B = D;
-	      D = T;
-	      T = uh - q * vh;
-	      uh = vh;
-	      vh = T;
+	/* Temporary storage 2 (p + M->n) <= p + n - 1 */
+	n = mpn_hgcd_matrix_adjust (&M, p + nn, ap, bp, p, tp + matrix_scratch);
 
-	      asign = ~asign;
-	    }
-#if EXTEND
-	  if (asign)
-	    sign = -sign;
-#endif
-	}
+	MPN_COPY (u0, M.p[1][0], M.n);
+	MPN_COPY (u1, M.p[1][1], M.n);
+	un = M.n;
+	while ( (u0[un-1] | u1[un-1] ) == 0)
+	  un--;
+      }
+    else
+      {
+	/* mpn_hgcd has failed. Then either one of a or b is very
+	   small, or the difference is very small. Perform one
+	   subtraction followed by one division. */
+	mp_size_t gn;
+	mp_size_t updated_un = 1;
 
-#if RECORD
-      max = MAX (A, max);  max = MAX (B, max);
-      max = MAX (C, max);  max = MAX (D, max);
-#endif
+	u1[0] = 1;
 
-      if (B == 0)
-	{
-	  /* This is quite rare.  I.e., optimize something else!  */
-
-	  mpn_tdiv_qr (wp, up, (mp_size_t) 0, up, size, vp, vsize);
-
-#if EXTEND
-	  MPN_COPY (tp, s0p, ssize);
+	/* Temporary storage 2n + 1 */
+	n = mpn_gcdext_subdiv_step (gp, &gn, up, usizep, ap, bp, n,
+				    u0, u1, &updated_un, tp, tp + n);
+	if (n == 0)
 	  {
-	    mp_size_t qsize;
-	    mp_size_t i;
-
-	    qsize = size - vsize + 1; /* size of stored quotient from division */
-	    MPN_ZERO (s1p + ssize, qsize); /* zero s1 too */
-
-	    for (i = 0; i < qsize; i++)
-	      {
-		mp_limb_t cy;
-		cy = mpn_addmul_1 (tp + i, s1p, ssize, wp[i]);
-		tp[ssize + i] = cy;
-	      }
-
-	    ssize += qsize;
-	    ssize -= tp[ssize - 1] == 0;
+	    TMP_FREE;
+	    return gn;
 	  }
 
-	  sign = -sign;
-	  MP_PTR_SWAP (s0p, s1p);
-	  MP_PTR_SWAP (s1p, tp);
-#endif
-	  size = vsize;
-	  MP_PTR_SWAP (up, vp);
+	un = updated_un;
+	ASSERT (un < ualloc);
+      }
+  }
+
+  while (ABOVE_THRESHOLD (n, GCDEXT_DC_THRESHOLD))
+    {
+      struct hgcd_matrix M;
+      mp_size_t p = CHOOSE_P_2 (n);
+      mp_size_t nn;
+
+      mpn_hgcd_matrix_init (&M, n - p, tp);
+      nn = mpn_hgcd (ap + p, bp + p, n - p, &M, tp + matrix_scratch);
+      if (nn > 0)
+	{
+	  mp_ptr t0;
+
+	  t0 = tp + matrix_scratch;
+	  ASSERT (M.n <= (n - p - 1)/2);
+	  ASSERT (M.n + p <= (p + n - 1) / 2);
+
+	  /* Temporary storage 2 (p + M->n) <= p + n - 1 */
+	  n = mpn_hgcd_matrix_adjust (&M, p + nn, ap, bp, p, t0);
+
+	  /* By the same analysis as for mpn_hgcd_matrix_mul */
+	  ASSERT (M.n + un <= ualloc);
+
+	  /* FIXME: This copying could be avoided by some swapping of
+	   * pointers. May need more temporary storage, though. */
+	  MPN_COPY (t0, u0, un);
+
+	  /* Temporary storage ualloc */
+	  un = hgcd_mul_matrix_vector (&M, u0, t0, u1, un, t0 + un);
+
+	  ASSERT (un < ualloc);
+	  ASSERT ( (u0[un-1] | u1[un-1]) > 0);
 	}
       else
 	{
-#if EXTEND
-	  mp_size_t tsize, wsize;
-#endif
-	  /* T = U*A + V*B
-	     W = U*C + V*D
-	     U = T
-	     V = W	   */
+	  /* mpn_hgcd has failed. Then either one of a or b is very
+	     small, or the difference is very small. Perform one
+	     subtraction followed by one division. */
+	  mp_size_t gn;
+	  mp_size_t updated_un = un;
 
-#if STAT
-	  { mp_limb_t x; x = A | B | C | D; count_leading_zeros (cnt, x);
-	  arr[GMP_LIMB_BITS - cnt]++; }
-#endif
-	  if (A == 0)
+	  /* Temporary storage 2n + 1 */
+	  n = mpn_gcdext_subdiv_step (gp, &gn, up, usizep, ap, bp, n,
+				      u0, u1, &updated_un, tp, tp + n);
+	  if (n == 0)
 	    {
-	      /* B == 1 and C == 1 (D is arbitrary) */
-	      mp_limb_t cy;
-	      MPN_COPY (tp, vp, size);
-	      MPN_COPY (wp, up, size);
-	      mpn_submul_1 (wp, vp, size, D);
-	      MP_PTR_SWAP (tp, up);
-	      MP_PTR_SWAP (wp, vp);
-#if EXTEND
-	      MPN_COPY (tp, s1p, ssize);
-	      tsize = ssize;
-	      tp[ssize] = 0;	/* must zero since wp might spill below */
-	      MPN_COPY (wp, s0p, ssize);
-	      cy = mpn_addmul_1 (wp, s1p, ssize, D);
-	      wp[ssize] = cy;
-	      wsize = ssize + (cy != 0);
-	      MP_PTR_SWAP (tp, s0p);
-	      MP_PTR_SWAP (wp, s1p);
-	      ssize = MAX (wsize, tsize);
-#endif
+	      TMP_FREE;
+	      return gn;
 	    }
-	  else
-	    {
-	      mp_limb_t cy, cy1, cy2;
 
-	      if (asign)
-		{
-		  mpn_mul_1 (tp, vp, size, B);
-		  mpn_submul_1 (tp, up, size, A);
-		  mpn_mul_1 (wp, up, size, C);
-		  mpn_submul_1 (wp, vp, size, D);
-		}
-	      else
-		{
-		  mpn_mul_1 (tp, up, size, A);
-		  mpn_submul_1 (tp, vp, size, B);
-		  mpn_mul_1 (wp, vp, size, D);
-		  mpn_submul_1 (wp, up, size, C);
-		}
-	      MP_PTR_SWAP (tp, up);
-	      MP_PTR_SWAP (wp, vp);
-#if EXTEND
-	      /* Compute new s0 */
-	      cy1 = mpn_mul_1 (tp, s0p, ssize, A);
-	      cy2 = mpn_addmul_1 (tp, s1p, ssize, B);
-	      cy = cy1 + cy2;
-	      tp[ssize] = cy & GMP_NUMB_MASK;
-	      tsize = ssize + (cy != 0);
-#if GMP_NAIL_BITS == 0
-	      if (cy < cy1)
-#else
-	      if (cy > GMP_NUMB_MAX)
-#endif
-		{
-		  tp[tsize] = 1;
-		  wp[tsize] = 0;
-		  tsize++;
-		  /* This happens just for nails, since we get more work done
-		     per numb there.  */
-		}
-
-	      /* Compute new s1 */
-	      cy1 = mpn_mul_1 (wp, s1p, ssize, D);
-	      cy2 = mpn_addmul_1 (wp, s0p, ssize, C);
-	      cy = cy1 + cy2;
-	      wp[ssize] = cy & GMP_NUMB_MASK;
-	      wsize = ssize + (cy != 0);
-#if GMP_NAIL_BITS == 0
-	      if (cy < cy1)
-#else
-	      if (cy > GMP_NUMB_MAX)
-#endif
-		{
-		  wp[wsize] = 1;
-		  if (wsize >= tsize)
-		    tp[wsize] = 0;
-		  wsize++;
-		}
-
-	      MP_PTR_SWAP (tp, s0p);
-	      MP_PTR_SWAP (wp, s1p);
-	      ssize = MAX (wsize, tsize);
-#endif
-	    }
-	  size -= up[size - 1] == 0;
-#if GMP_NAIL_BITS != 0
-	  size -= up[size - 1] == 0;
-#endif
+	  un = updated_un;
+	  ASSERT (un < ualloc);
 	}
-
-#if WANT_GCDEXT_ONE_STEP
-      TMP_FREE;
-      return 0;
-#endif
     }
 
-#if RECORD
-  printf ("max: %lx\n", max);
-#endif
-
-#if STAT
- {int i; for (i = 0; i <= GMP_LIMB_BITS; i++) printf ("%d:%d\n", i, arr[i]);}
-#endif
-
-  if (vsize == 0)
+  if (UNLIKELY (mpn_cmp (ap, bp, n) == 0))
     {
-      if (gp != up && gp != 0)
-	MPN_COPY (gp, up, size);
-#if EXTEND
-      MPN_NORMALIZE (s0p, ssize);
-      if (orig_s0p != s0p)
-	MPN_COPY (orig_s0p, s0p, ssize);
-      *s0size = sign >= 0 ? ssize : -ssize;
-#endif
+      /* Must return the smallest cofactor, +u1 or -u0 */
+      int c;
+
+      MPN_COPY (gp, ap, n);
+
+      MPN_CMP (c, u0, u1, un);
+      ASSERT (c != 0);
+      if (c < 0)
+	{
+	  MPN_NORMALIZE (u0, un);
+	  MPN_COPY (up, u0, un);
+	  *usizep = -un;
+	}
+      else
+	{
+	  MPN_NORMALIZE_NOT_ZERO (u1, un);
+	  MPN_COPY (up, u1, un);
+	  *usizep = un;
+	}
+
       TMP_FREE;
-      return size;
+      return n;
+    }
+  else if (mpn_zero_p (u0, un))
+    {
+      mp_size_t gn;
+      ASSERT (un == 1);
+      ASSERT (u1[0] == 1);
+
+      /* g = u a + v b = (u u1 - v u0) A + (...) B = u A + (...) B */
+      gn = mpn_gcdext_lehmer_n (gp, up, usizep, ap, bp, n, tp);
+
+      TMP_FREE;
+      return gn;
     }
   else
     {
-      mp_limb_t vl, ul, t;
-#if EXTEND
-      mp_size_t qsize, i;
-#endif
-      vl = vp[0];
-#if EXTEND
-      t = mpn_divmod_1 (wp, up, size, vl);
+      /* We have A = ... a + ... b
+		 B =  u0 a +  u1 b
 
-      MPN_COPY (tp, s0p, ssize);
+		 a = u1  A + ... B
+		 b = -u0 A + ... B
 
-      qsize = size - (wp[size - 1] == 0); /* size of quotient from division */
-      if (ssize < qsize)
+	 with bounds
+
+	   |u0|, |u1| <= B / min(a, b)
+
+	 Compute g = u a + v b = (u u1 - v u0) A + (...) B
+	 Here, u, v are bounded by
+
+	 |u| <= b,
+	 |v| <= a
+      */
+
+      mp_size_t u0n;
+      mp_size_t u1n;
+      mp_size_t lehmer_un;
+      mp_size_t lehmer_vn;
+      mp_size_t gn;
+
+      mp_ptr lehmer_up;
+      mp_ptr lehmer_vp;
+      int negate;
+
+      lehmer_up = tp; tp += n;
+
+      /* Call mpn_gcdext_lehmer_n with copies of a and b. */
+      MPN_COPY (tp, ap, n);
+      MPN_COPY (tp + n, bp, n);
+      gn = mpn_gcdext_lehmer_n (gp, lehmer_up, &lehmer_un, tp, tp + n, n, tp + 2*n);
+
+      u0n = un;
+      MPN_NORMALIZE (u0, u0n);
+      if (lehmer_un == 0)
 	{
-	  MPN_ZERO (tp + ssize, qsize - ssize);
-	  MPN_ZERO (s1p + ssize, qsize); /* zero s1 too */
-	  for (i = 0; i < ssize; i++)
-	    {
-	      mp_limb_t cy;
-	      cy = mpn_addmul_1 (tp + i, wp, qsize, s1p[i]);
-	      tp[qsize + i] = cy;
-	    }
+	  /* u == 0  ==>  v = g / b == 1  ==> g = - u0 A + (...) B */
+	  MPN_COPY (up, u0, u0n);
+	  *usizep = -u0n;
+
+	  TMP_FREE;
+	  return gn;
 	}
+
+      lehmer_vp = tp;
+      /* Compute v = (g - u a) / b */
+      lehmer_vn = compute_v (lehmer_vp,
+			     ap, bp, n, gp, gn, lehmer_up, lehmer_un, tp + n + 1);
+
+      if (lehmer_un > 0)
+	negate = 0;
       else
 	{
-	  MPN_ZERO (s1p + ssize, qsize); /* zero s1 too */
-	  for (i = 0; i < qsize; i++)
-	    {
-	      mp_limb_t cy;
-	      cy = mpn_addmul_1 (tp + i, s1p, ssize, wp[i]);
-	      tp[ssize + i] = cy;
-	    }
+	  lehmer_un = -lehmer_un;
+	  negate = 1;
 	}
-      ssize += qsize;
-      ssize -= tp[ssize - 1] == 0;
 
-      sign = -sign;
-      MP_PTR_SWAP (s0p, s1p);
-      MP_PTR_SWAP (s1p, tp);
-#else
-      t = mpn_mod_1 (up, size, vl);
-#endif
-      ul = vl;
-      vl = t;
-      while (vl != 0)
+      u1n = un;
+      MPN_NORMALIZE (u1, u1n);
+
+      /* It's possible that u0 = 1, u1 = 0 */
+      if (u1n == 0)
 	{
-	  mp_limb_t t;
-#if EXTEND
-	  mp_limb_t q;
-	  q = ul / vl;
-	  t = ul - q * vl;
+	  ASSERT (un == 1);
+	  ASSERT (u0[0] == 1);
 
-	  MPN_COPY (tp, s0p, ssize);
+	  /* u1 == 0 ==> u u1 + v u0 = v */
+	  MPN_COPY (up, lehmer_vp, lehmer_vn);
+	  *usizep = negate ? lehmer_vn : - lehmer_vn;
 
-	  MPN_ZERO (s1p + ssize, 1); /* zero s1 too */
-
-	  {
-	    mp_limb_t cy;
-	    cy = mpn_addmul_1 (tp, s1p, ssize, q);
-	    tp[ssize] = cy;
-	  }
-
-	  ssize += 1;
-	  ssize -= tp[ssize - 1] == 0;
-
-	  sign = -sign;
-	  MP_PTR_SWAP (s0p, s1p);
-	  MP_PTR_SWAP (s1p, tp);
-#else
-	  t = ul % vl;
-#endif
-	  ul = vl;
-	  vl = t;
+	  TMP_FREE;
+	  return gn;
 	}
-      if (gp != 0)
-	gp[0] = ul;
-#if EXTEND
-      MPN_NORMALIZE (s0p, ssize);
-      if (orig_s0p != s0p)
-	MPN_COPY (orig_s0p, s0p, ssize);
-      *s0size = sign >= 0 ? ssize : -ssize;
-#endif
+
+      ASSERT (lehmer_un + u1n <= ualloc);
+      ASSERT (lehmer_vn + u0n <= ualloc);
+
+      /* Now u0, u1, u are non-zero. We may still have v == 0 */
+
+      /* Compute u u0 */
+      if (lehmer_un <= u1n)
+	/* Should be the common case */
+	mpn_mul (up, u1, u1n, lehmer_up, lehmer_un);
+      else
+	mpn_mul (up, lehmer_up, lehmer_un, u1, u1n);
+
+      un = u1n + lehmer_un;
+      un -= (up[un - 1] == 0);
+
+      if (lehmer_vn > 0)
+	{
+	  mp_limb_t cy;
+
+	  /* Overwrites old u1 value */
+	  if (lehmer_vn <= u0n)
+	    /* Should be the common case */
+	    mpn_mul (u1, u0, u0n, lehmer_vp, lehmer_vn);
+	  else
+	    mpn_mul (u1, lehmer_vp, lehmer_vn, u0, u0n);
+
+	  u1n = u0n + lehmer_vn;
+	  u1n -= (u1[u1n - 1] == 0);
+
+	  if (u1n <= un)
+	    {
+	      cy = mpn_add (up, up, un, u1, u1n);
+	    }
+	  else
+	    {
+	      cy = mpn_add (up, u1, u1n, up, un);
+	      un = u1n;
+	    }
+	  up[un] = cy;
+	  un += (cy != 0);
+
+	  ASSERT (un < ualloc);
+	}
+      *usizep = negate ? -un : un;
+
       TMP_FREE;
-      return 1;
+      return gn;
     }
 }

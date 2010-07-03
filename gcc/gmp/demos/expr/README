@@ -4,7 +4,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -13,9 +13,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 
@@ -413,7 +411,7 @@ where.
         static const struct mpexpr_operator_t  table[] = {
 	  { "^",   (mpexpr_fun_t) mpz_pow_ui,
             MPEXPR_TYPE_BINARY_UI | MPEXPR_TYPE_RIGHTASSOC,           9 },
-  
+
           { "!",   (mpexpr_fun_t) mpz_fac_ui, MPEXPR_TYPE_UNARY_UI,   8 },
           { "-",   (mpexpr_fun_t) mpz_neg,
             MPEXPR_TYPE_UNARY | MPEXPR_TYPE_PREFIX,                   7 },
@@ -476,7 +474,7 @@ Assignment could be an operator attribute, making it expect an lvalue.
 There would want to be a standard table without assignments available
 though, so user input could be safely parsed.
 
-The closing parethesis table entry could specify the type of open paren it
+The closing parenthesis table entry could specify the type of open paren it
 expects, so that "(" and ")" could match and "[" and "]" match but not a
 mixture of the two.  Currently "[" and "]" can be added, but there's no
 error on writing a mixed expression like "2*(3+4]".  Maybe also there could

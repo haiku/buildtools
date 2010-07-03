@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
-Foundation; either version 2 of the License, or (at your option) any later
+Foundation; either version 3 of the License, or (at your option) any later
 version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -14,8 +14,7 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
-Street, Fifth Floor, Boston, MA 02110-1301, USA. */
+this program.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "calc-common.h"
 
@@ -31,7 +30,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 
 /* change this to "#define TRACE(x) x" for a few diagnostics */
-#define TRACE(x) 
+#define TRACE(x)
 
 
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
@@ -48,12 +47,12 @@ calc_completion_entry (const char *text, int state)
       len = strlen (text);
     }
   TRACE (printf ("calc_completion_entry %s %d, index=%d len=%d\n",
-                 text, state, index, len));
+		 text, state, index, len));
   while ((name = calc_keywords[index].name) != NULL)
     {
       index++;
       if (memcmp (name, text, len) == 0)
-        return (strdup (name));
+	return (strdup (name));
     }
   return NULL;
 }
@@ -96,24 +95,24 @@ calc_input (char *buf, size_t max_size)
       size_t         copy_size;
 
       if (upto >= line_size)
-        {
-          if (line != NULL)
-            free (line);
+	{
+	  if (line != NULL)
+	    free (line);
 
-          line = readline (calc_more_input ? "more> " : "> ");
-          calc_more_input = 1;
-          if (line == NULL)
-            return 0;
-          TRACE (printf ("readline: %s\n", line));
+	  line = readline (calc_more_input ? "more> " : "> ");
+	  calc_more_input = 1;
+	  if (line == NULL)
+	    return 0;
+	  TRACE (printf ("readline: %s\n", line));
 
-          if (line[0] != '\0')
-            add_history (line);
+	  if (line[0] != '\0')
+	    add_history (line);
 
-          line_size = strlen (line);
-          line[line_size] = '\n';
-          line_size++;
-          upto = 0;
-        }
+	  line_size = strlen (line);
+	  line[line_size] = '\n';
+	  line_size++;
+	  upto = 0;
+	}
 
       copy_size = MIN (line_size-upto, max_size);
       memcpy (buf, line+upto, copy_size);

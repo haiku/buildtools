@@ -1,12 +1,12 @@
 /*
-Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002 Free Software Foundation,
-Inc.
+Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2006, 2007, 2008
+Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,12 +15,10 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA.
-*/
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -115,7 +113,7 @@ main (int argc, char **argv)
   for (test = 1; test <= ntests; test++)
     {
 #if TIMES == 1 && ! defined (PRINT)
-      if (test % (SIZE > 10000 ? 1 : 10000 / SIZE) == 0)
+      if (test % (1 + 0x80000 / (SIZE + 20)) == 0)
 	{
 	  printf ("\r%u", test);
 	  fflush (stdout);
@@ -149,7 +147,7 @@ main (int argc, char **argv)
       cyc = ((double) t * CLOCK) / (TIMES * size * 1000.0);
       printf (funcname ":    %5ldms (%.3f cycles/limb) [%.2f Gb/s]\n",
 	      t, cyc,
-	      CLOCK/cyc*BITS_PER_MP_LIMB*BITS_PER_MP_LIMB/1e9);
+	      CLOCK/cyc*GMP_LIMB_BITS*GMP_LIMB_BITS/1e9);
 #endif
 
 #ifndef NOCHECK
@@ -239,7 +237,7 @@ mpn_print (mp_ptr p, mp_size_t size)
     {
 #ifdef _LONG_LONG_LIMB
       printf ("%0*lX%0*lX", (int) (sizeof(mp_limb_t)),
-	      (unsigned long) (p[i] >> (BITS_PER_MP_LIMB/2)),
+	      (unsigned long) (p[i] >> (GMP_LIMB_BITS/2)),
               (int) (sizeof(mp_limb_t)), (unsigned long) (p[i]));
 #else
       printf ("%0*lX", (int) (2 * sizeof(mp_limb_t)), p[i]);

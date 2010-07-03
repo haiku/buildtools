@@ -1,24 +1,24 @@
 /* auxiliary functions for MPFR tests.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #ifndef __MPFR_TEST_H__
 #define __MPFR_TEST_H__
@@ -35,13 +35,13 @@ MA 02110-1301, USA. */
 #define MAXNORM 1.7976931348623157081e308 /* 2^(1023)*(2-2^(-52)) */
 
 /* Generates a random rounding mode */
-#define RND_RAND() (randlimb() % GMP_RND_MAX)
+#define RND_RAND() ((mpfr_rnd_t) (randlimb() % MPFR_RND_MAX))
 
 /* Generates a random sign */
 #define SIGN_RAND() ( (randlimb()%2) ? MPFR_SIGN_POS : MPFR_SIGN_NEG)
 
 /* Loop for all rounding modes */
-#define RND_LOOP(_r) for((_r) = 0 ; (_r) < GMP_RND_MAX ; (_r)++)
+#define RND_LOOP(_r) for((_r) = 0 ; (_r) < MPFR_RND_MAX ; (_r)++)
 
 /* The MAX, MIN and ABS macros may already be defined if gmp-impl.h has
    been included. They have the same semantics as in gmp-impl.h, but the
@@ -54,9 +54,13 @@ MA 02110-1301, USA. */
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define ABS(x) (((x)>0) ? (x) : -(x))
 
+#define FLIST mpfr_ptr, mpfr_srcptr, mpfr_rnd_t
+
 #if defined (__cplusplus)
 extern "C" {
 #endif
+
+void test_version _MPFR_PROTO ((void));
 
 void tests_memory_start _MPFR_PROTO ((void));
 void tests_memory_end _MPFR_PROTO ((void));
@@ -64,10 +68,11 @@ void tests_memory_end _MPFR_PROTO ((void));
 void tests_start_mpfr _MPFR_PROTO ((void));
 void tests_end_mpfr _MPFR_PROTO ((void));
 
-int mpfr_set_machine_rnd_mode _MPFR_PROTO ((mp_rnd_t));
+int mpfr_set_machine_rnd_mode _MPFR_PROTO ((mpfr_rnd_t));
 void mpfr_test_init _MPFR_PROTO ((void));
 mp_limb_t randlimb _MPFR_PROTO ((void));
 void randseed _MPFR_PROTO ((unsigned int));
+void mpfr_random2 _MPFR_PROTO ((mpfr_ptr, mp_size_t, mpfr_exp_t, gmp_randstate_t));
 int ulp _MPFR_PROTO ((double, double));
 double dbl _MPFR_PROTO ((double, int));
 double Ulp _MPFR_PROTO ((double));
@@ -76,20 +81,20 @@ void d_trace _MPFR_PROTO ((const char *, double));
 void ld_trace _MPFR_PROTO ((const char *, long double));
 
 FILE *src_fopen _MPFR_PROTO ((const char *, const char *));
-void set_emin _MPFR_PROTO ((mp_exp_t));
-void set_emax _MPFR_PROTO ((mp_exp_t));
-void tests_default_random _MPFR_PROTO ((mpfr_ptr));
-void data_check (char *, int (*) (), char *);
+void set_emin _MPFR_PROTO ((mpfr_exp_t));
+void set_emax _MPFR_PROTO ((mpfr_exp_t));
+void tests_default_random _MPFR_PROTO ((mpfr_ptr, int, mpfr_exp_t, mpfr_exp_t));
+void data_check _MPFR_PROTO ((char *, int (*) (FLIST), char *));
+void bad_cases _MPFR_PROTO ((int (*)(FLIST), int (*)(FLIST),
+                             char *, int, mpfr_exp_t, mpfr_exp_t,
+                             mpfr_prec_t, mpfr_prec_t, mpfr_prec_t, int));
 
-int mpfr_cmp_str _MPFR_PROTO ((mpfr_srcptr x, const char *, int, mp_rnd_t));
-#define mpfr_cmp_str1(x,s) mpfr_cmp_str(x,s,10,GMP_RNDN)
-#define mpfr_set_str1(x,s) mpfr_set_str(x,s,10,GMP_RNDN)
+int mpfr_cmp_str _MPFR_PROTO ((mpfr_srcptr x, const char *, int, mpfr_rnd_t));
+#define mpfr_cmp_str1(x,s) mpfr_cmp_str(x,s,10,MPFR_RNDN)
+#define mpfr_set_str1(x,s) mpfr_set_str(x,s,10,MPFR_RNDN)
 
 #define mpfr_cmp0(x,y) (MPFR_ASSERTN (!MPFR_IS_NAN (x) && !MPFR_IS_NAN (y)), mpfr_cmp (x,y))
-
-#ifndef MPFR_TEST_USE_RANDS
-# define MPFR_TEST_USE_RANDS() ((void)0)
-#endif
+#define mpfr_cmp_ui0(x,i) (MPFR_ASSERTN (!MPFR_IS_NAN (x)), mpfr_cmp_ui (x,i))
 
 #if defined (__cplusplus)
 }
@@ -127,13 +132,13 @@ mpfr_print_raw (mpfr_srcptr x)
   else
     {
       mp_limb_t *mx;
-      mp_prec_t px;
+      mpfr_prec_t px;
       mp_size_t n;
 
       mx = MPFR_MANT (x);
       px = MPFR_PREC (x);
 
-      for (n = (px - 1) / BITS_PER_MP_LIMB; ; n--)
+      for (n = (px - 1) / GMP_NUMB_BITS; ; n--)
         {
           mp_limb_t wd, t;
 
@@ -144,7 +149,7 @@ mpfr_print_raw (mpfr_srcptr x)
               printf ((wd & t) == 0 ? "0" : "1");
               if (--px == 0)
                 {
-                  mp_exp_t ex;
+                  mpfr_exp_t ex;
 
                   ex = MPFR_GET_EXP (x);
                   MPFR_ASSERTN (ex >= LONG_MIN && ex <= LONG_MAX);

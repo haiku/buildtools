@@ -1,30 +1,30 @@
 /* mpfr_zeta_ui -- compute the Riemann Zeta function for integer argument.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 int
-mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
+mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mpfr_rnd_t r)
 {
   MPFR_ZIV_DECL (loop);
 
@@ -43,11 +43,14 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
     }
   else /* m >= 2 */
     {
-      mp_prec_t p = MPFR_PREC(z);
+      mpfr_prec_t p = MPFR_PREC(z);
       unsigned long n, k, err, kbits;
       mpz_t d, t, s, q;
       mpfr_t y;
       int inex;
+
+      if (r == MPFR_RNDA)
+        r = MPFR_RNDU; /* since the result is always positive */
 
       if (m >= p) /* 2^(-m) < ulp(1) = 2^(1-p). This means that
                      2^(-m) <= 1/2*ulp(1). We have 3^(-m)+4^(-m)+... < 2^(-m)
@@ -56,7 +59,7 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
         {
           if (m == 2) /* necessarily p=2 */
             return mpfr_set_ui_2exp (z, 13, -3, r);
-          else if (r == GMP_RNDZ || r == GMP_RNDD || (r == GMP_RNDN && m > p))
+          else if (r == MPFR_RNDZ || r == MPFR_RNDD || (r == MPFR_RNDN && m > p))
             {
               mpfr_set_ui (z, 1, r);
               return -1;
@@ -77,14 +80,14 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
         {
           /* the following is a lower bound for log(3)/log(2) */
           mpfr_set_str_binary (y, "1.100101011100000000011010001110");
-          mpfr_mul_ui (y, y, m, GMP_RNDZ); /* lower bound for log2(3^m) */
+          mpfr_mul_ui (y, y, m, MPFR_RNDZ); /* lower bound for log2(3^m) */
           if (mpfr_cmp_ui (y, p + 2) >= 0)
             {
               mpfr_clear (y);
-              mpfr_set_ui (z, 1, GMP_RNDZ);
-              mpfr_div_2ui (z, z, m, GMP_RNDZ);
-              mpfr_add_ui (z, z, 1, GMP_RNDZ);
-              if (r != GMP_RNDU)
+              mpfr_set_ui (z, 1, MPFR_RNDZ);
+              mpfr_div_2ui (z, z, m, MPFR_RNDZ);
+              mpfr_add_ui (z, z, 1, MPFR_RNDZ);
+              if (r != MPFR_RNDU)
                 return -1;
               mpfr_nextabove (z);
               return 1;
@@ -117,9 +120,9 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
           for (k = n; k > 0; k--)
             {
               count_leading_zeros (kbits, k);
-              kbits = BITS_PER_MP_LIMB - kbits;
+              kbits = GMP_NUMB_BITS - kbits;
               /* if k^m is too large, use mpz_tdiv_q */
-              if (m * kbits > 2 * BITS_PER_MP_LIMB)
+              if (m * kbits > 2 * GMP_NUMB_BITS)
                 {
                   /* if we know in advance that k^m > d, then floor(d/k^m) will
                      be zero below, so there is no need to compute k^m */
@@ -162,9 +165,9 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
               /* we have d[k] = sum(t[i], i=k+1..n)
                  with t[i] = n*(n+i-1)!*4^i/(n-i)!/(2i)!
                  t[k-1]/t[k] = k*(2k-1)/(n-k+1)/(n+k-1)/2 */
-#if (BITS_PER_MP_LIMB == 32)
+#if (GMP_NUMB_BITS == 32)
 #define KMAX 46341 /* max k such that k*(2k-1) < 2^32 */
-#elif (BITS_PER_MP_LIMB == 64)
+#elif (GMP_NUMB_BITS == 64)
 #define KMAX 3037000500
 #endif
 #ifdef KMAX
@@ -176,8 +179,10 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
                   mpz_mul_ui (t, t, k);
                   mpz_mul_ui (t, t, 2 * k - 1);
                 }
-              mpz_div_2exp (t, t, 1);
-              if (n < 1UL << (BITS_PER_MP_LIMB / 2))
+              mpz_fdiv_q_2exp (t, t, 1);
+              /* Warning: the test below assumes that an unsigned long
+                 has no padding bits. */
+              if (n < 1UL << ((sizeof(unsigned long) * CHAR_BIT) / 2))
                 /* (n - k + 1) * (n + k - 1) < n^2 */
                 mpz_divexact_ui (t, t, (n - k + 1) * (n + k - 1));
               else
@@ -189,20 +194,20 @@ mpfr_zeta_ui (mpfr_ptr z, unsigned long m, mp_rnd_t r)
             }
 
           /* multiply by 1/(1-2^(1-m)) = 1 + 2^(1-m) + 2^(2-m) + ... */
-          mpz_div_2exp (t, s, m - 1);
+          mpz_fdiv_q_2exp (t, s, m - 1);
           do
             {
               err ++;
               mpz_add (s, s, t);
-              mpz_div_2exp (t, t, m - 1);
+              mpz_fdiv_q_2exp (t, t, m - 1);
             }
           while (mpz_cmp_ui (t, 0) > 0);
 
           /* divide by d[n] */
           mpz_mul_2exp (s, s, p);
           mpz_tdiv_q (s, s, d);
-          mpfr_set_z (y, s, GMP_RNDN);
-          mpfr_div_2ui (y, y, p, GMP_RNDN);
+          mpfr_set_z (y, s, MPFR_RNDN);
+          mpfr_div_2ui (y, y, p, MPFR_RNDN);
 
           err = MPFR_INT_CEIL_LOG2 (err);
 

@@ -1,12 +1,12 @@
 /* Test mp*_class binary expressions.
 
-Copyright 2001, 2002, 2003 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2008 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -117,7 +115,7 @@ check_mpz (void)
     mpz_class a(5), b(-4);
     signed int c = 3;
     mpz_class d;
-    d = (a * b) >> c; ASSERT_ALWAYS(d == -2);
+    d = (a * b) >> c; ASSERT_ALWAYS(d == -3);
   }
 
   // template <class T, class U, class V, class Op>
@@ -149,6 +147,27 @@ check_mpz (void)
     mpz_class d;
     d = (a - b) * (-c); ASSERT_ALWAYS(d == 14);
   }
+
+  {
+    mpz_class a(0xcafe), b(0xbeef), c, want;
+    c = a & b; ASSERT_ALWAYS (c == 0x8aee);
+    c = a | b; ASSERT_ALWAYS (c == 0xfeff);
+    c = a ^ b; ASSERT_ALWAYS (c == 0x7411);
+    c = a & 0xbeef; ASSERT_ALWAYS (c == 0x8aee);
+    c = a | 0xbeef; ASSERT_ALWAYS (c == 0xfeff);
+    c = a ^ 0xbeef; ASSERT_ALWAYS (c == 0x7411);
+    c = a & -0xbeef; ASSERT_ALWAYS (c == 0x4010);
+    c = a | -0xbeef; ASSERT_ALWAYS (c == -0x3401);
+    c = a ^ -0xbeef; ASSERT_ALWAYS (c == -0x7411);
+    c = a & 48879.0; ASSERT_ALWAYS (c == 0x8aee);
+    c = a | 48879.0; ASSERT_ALWAYS (c == 0xfeff);
+    c = a ^ 48879.0; ASSERT_ALWAYS (c == 0x7411);
+
+    c = a | 1267650600228229401496703205376.0; // 2^100
+    want = "0x1000000000000000000000cafe";
+    ASSERT_ALWAYS (c == want);
+  }
+
 }
 
 void
@@ -412,7 +431,6 @@ check_mpf (void)
     d = (a + b) * (-c); ASSERT_ALWAYS(d == -9);
   }
 }
-
 
 
 int

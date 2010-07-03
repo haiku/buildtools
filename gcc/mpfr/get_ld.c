@@ -1,25 +1,25 @@
 /* mpfr_get_ld, mpfr_get_ld_2exp -- convert a multiple precision floating-point
                                     number to a machine long double
 
-Copyright 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <float.h>
 
@@ -28,7 +28,7 @@ MA 02110-1301, USA. */
 #ifndef HAVE_LDOUBLE_IEEE_EXT_LITTLE
 
 long double
-mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_get_ld (mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
 
   if (MPFR_UNLIKELY (MPFR_IS_SINGULAR (x)))
@@ -38,7 +38,7 @@ mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
       long double r; /* result */
       long double m;
       double s; /* part of result */
-      mp_exp_t sh; /* exponent shift, so that x/2^sh is in the double range */
+      mpfr_exp_t sh; /* exponent shift, so that x/2^sh is in the double range */
       mpfr_t y, z;
       int sign;
 
@@ -56,10 +56,10 @@ mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
 
       r = 0.0;
       do {
-        s = mpfr_get_d (y, GMP_RNDN); /* high part of y */
+        s = mpfr_get_d (y, MPFR_RNDN); /* high part of y */
         r += (long double) s;
-        mpfr_set_d (z, s, GMP_RNDN);  /* exact */
-        mpfr_sub (y, y, z, GMP_RNDN); /* exact */
+        mpfr_set_d (z, s, MPFR_RNDN);  /* exact */
+        mpfr_sub (y, y, z, MPFR_RNDN); /* exact */
       } while (!MPFR_IS_ZERO (y));
 
       mpfr_clear (z);
@@ -102,45 +102,40 @@ mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
 
 #else
 
-static const struct {
-  char         bytes[10];
-  long double  dummy;  /* for memory alignment */
-} ldbl_max_struct = {
-  { '\377','\377','\377','\377',
-    '\377','\377','\377','\377',
-    '\376','\177' }, 0.0
-};
-
-#define MPFR_LDBL_MAX   (* (const long double *) ldbl_max_struct.bytes)
-
 long double
-mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_get_ld (mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
   mpfr_long_double_t ld;
   mpfr_t tmp;
+  int inex;
   MPFR_SAVE_EXPO_DECL (expo);
 
   MPFR_SAVE_EXPO_MARK (expo);
-  mpfr_set_emin (-16382-63);
-  mpfr_set_emax (16383);
 
   mpfr_init2 (tmp, MPFR_LDBL_MANT_DIG);
-  mpfr_subnormalize(tmp, mpfr_set (tmp, x, rnd_mode), rnd_mode);
-  mpfr_prec_round (tmp, 64, GMP_RNDZ); /* exact */
+  inex = mpfr_set (tmp, x, rnd_mode);
+
+  mpfr_set_emin (-16382-63);
+  mpfr_set_emax (16384);
+  mpfr_subnormalize (tmp, mpfr_check_range (tmp, inex, rnd_mode), rnd_mode);
+  mpfr_prec_round (tmp, 64, MPFR_RNDZ); /* exact */
   if (MPFR_UNLIKELY (MPFR_IS_SINGULAR (tmp)))
     ld.ld = (long double) mpfr_get_d (tmp, rnd_mode);
   else
     {
       mp_limb_t *tmpmant;
-      mp_exp_t e, denorm;
+      mpfr_exp_t e, denorm;
 
       tmpmant = MPFR_MANT (tmp);
       e = MPFR_GET_EXP (tmp);
-      denorm = MPFR_UNLIKELY (e < -16382) ? - e - 16382 + 1 : 0;
-#if BITS_PER_MP_LIMB >= 64
+      /* the smallest normal number is 2^(-16382), which is 0.5*2^(-16381)
+         in MPFR, thus any exponent <= -16382 corresponds to a subnormal
+         number */
+      denorm = MPFR_UNLIKELY (e <= -16382) ? - e - 16382 + 1 : 0;
+#if GMP_NUMB_BITS >= 64
       ld.s.manl = (tmpmant[0] >> denorm);
       ld.s.manh = (tmpmant[0] >> denorm) >> 32;
-#elif BITS_PER_MP_LIMB == 32
+#elif GMP_NUMB_BITS == 32
       if (MPFR_LIKELY (denorm == 0))
         {
           ld.s.manl = tmpmant[0];
@@ -157,7 +152,7 @@ mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
           ld.s.manh = 0;
         }
 #else
-# error "BITS_PER_MP_LIMB must be 32 or >= 64"
+# error "GMP_NUMB_BITS must be 32 or >= 64"
       /* Other values have never been supported anyway. */
 #endif
       if (MPFR_LIKELY (denorm == 0))
@@ -179,10 +174,10 @@ mpfr_get_ld (mpfr_srcptr x, mp_rnd_t rnd_mode)
 
 /* contributed by Damien Stehle */
 long double
-mpfr_get_ld_2exp (long *expptr, mpfr_srcptr src, mp_rnd_t rnd_mode)
+mpfr_get_ld_2exp (long *expptr, mpfr_srcptr src, mpfr_rnd_t rnd_mode)
 {
   long double ret;
-  mp_exp_t exp;
+  mpfr_exp_t exp;
   mpfr_t tmp;
 
   if (MPFR_UNLIKELY (MPFR_IS_SINGULAR (src)))

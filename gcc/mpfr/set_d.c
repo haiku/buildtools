@@ -1,48 +1,47 @@
 /* mpfr_set_d -- convert a machine double precision float to
                  a multiple precision floating-point number
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <string.h> /* For memcmp if _GMP_IEEE_FLOAT == 0 */
 #include <float.h>  /* For DOUBLE_ISINF and DOUBLE_ISNAN */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
-/* extracts the bits of d in rp[0..n-1] where n=ceil(53/BITS_PER_MP_LIMB).
+/* extracts the bits of d in rp[0..n-1] where n=ceil(53/GMP_NUMB_BITS).
    Assumes d is neither 0 nor NaN nor Inf. */
 static long
 __gmpfr_extract_double (mp_ptr rp, double d)
-     /* e=0 iff BITS_PER_MP_LIMB=32 and rp has only one limb */
+     /* e=0 iff GMP_NUMB_BITS=32 and rp has only one limb */
 {
   long exp;
   mp_limb_t manl;
-#if BITS_PER_MP_LIMB == 32
+#if GMP_NUMB_BITS == 32
   mp_limb_t manh;
 #endif
 
   /* BUGS
      1. Should handle Inf and NaN in IEEE specific code.
      2. Handle Inf and NaN also in default code, to avoid hangs.
-     3. Generalize to handle all BITS_PER_MP_LIMB.
+     3. Generalize to handle all GMP_NUMB_BITS.
      4. This lits is incomplete and misspelled.
    */
 
@@ -59,7 +58,7 @@ __gmpfr_extract_double (mp_ptr rp, double d)
     exp = x.s.exp;
     if (exp)
       {
-#if BITS_PER_MP_LIMB >= 64
+#if GMP_NUMB_BITS >= 64
         manl = ((MPFR_LIMB_ONE << 63)
                 | ((mp_limb_t) x.s.manh << 43) | ((mp_limb_t) x.s.manl << 11));
 #else
@@ -69,7 +68,7 @@ __gmpfr_extract_double (mp_ptr rp, double d)
       }
     else /* denormalized number */
       {
-#if BITS_PER_MP_LIMB >= 64
+#if GMP_NUMB_BITS >= 64
         manl = ((mp_limb_t) x.s.manh << 43) | ((mp_limb_t) x.s.manl << 11);
 #else
         manh = (x.s.manh << 11) /* high 21 bits */
@@ -118,7 +117,7 @@ __gmpfr_extract_double (mp_ptr rp, double d)
       }
 
     d *= MP_BASE_AS_DOUBLE;
-#if BITS_PER_MP_LIMB >= 64
+#if GMP_NUMB_BITS >= 64
     manl = d;
 #else
     manh = (mp_limb_t) d;
@@ -128,7 +127,7 @@ __gmpfr_extract_double (mp_ptr rp, double d)
 
 #endif /* _GMP_IEEE_FLOATS */
 
-#if BITS_PER_MP_LIMB >= 64
+#if GMP_NUMB_BITS >= 64
   rp[0] = manl;
 #else
   rp[1] = manh;
@@ -141,7 +140,7 @@ __gmpfr_extract_double (mp_ptr rp, double d)
 /* End of part included from gmp-2.0.2 */
 
 int
-mpfr_set_d (mpfr_ptr r, double d, mp_rnd_t rnd_mode)
+mpfr_set_d (mpfr_ptr r, double d, mpfr_rnd_t rnd_mode)
 {
   int signd, inexact;
   unsigned int cnt;
@@ -149,8 +148,6 @@ mpfr_set_d (mpfr_ptr r, double d, mp_rnd_t rnd_mode)
   mpfr_t tmp;
   mp_limb_t tmpmant[MPFR_LIMBS_PER_DOUBLE];
   MPFR_SAVE_EXPO_DECL (expo);
-
-  MPFR_CLEAR_FLAGS(r);
 
   if (MPFR_UNLIKELY(DOUBLE_ISNAN(d)))
     {
@@ -245,7 +242,7 @@ mpfr_set_d (mpfr_ptr r, double d, mp_rnd_t rnd_mode)
     MPN_ZERO (tmpmant, k);
 
   /* don't use MPFR_SET_EXP here since the exponent may be out of range */
-  MPFR_EXP(tmp) -= (mp_exp_t) (cnt + k * BITS_PER_MP_LIMB);
+  MPFR_EXP(tmp) -= (mpfr_exp_t) (cnt + k * GMP_NUMB_BITS);
 
   /* tmp is exact since PREC(tmp)=53 */
   inexact = mpfr_set4 (r, tmp, rnd_mode, signd);

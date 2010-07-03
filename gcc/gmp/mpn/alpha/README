@@ -5,7 +5,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify it
 under the terms of the GNU Lesser General Public License as published by the
-Free Software Foundation; either version 2.1 of the License, or (at your
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -14,9 +14,7 @@ FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
 for more details.
 
 You should have received a copy of the GNU Lesser General Public License along
-with the GNU MP Library; see the file COPYING.LIB.  If not, write to the Free
-Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-USA.
+with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 
@@ -38,7 +36,7 @@ Cray T3 code is very very different...
 them to "$6" or "$f6" where necessary.
 
 "0x" introduces a hex constant in gas and DEC as, but on Unicos "^X" is
-required.  The X() macro accomodates this difference.
+required.  The X() macro accommodates this difference.
 
 "cvttqc" is required by DEC as, "cvttq/c" is required by Unicos, and gas will
 accept either.  We use cvttqc and have an m4 define expand to cvttq/c where
@@ -62,7 +60,7 @@ RELEVANT OPTIMIZATION ISSUES
 EV4
 
 1. This chip has very limited store bandwidth.  The on-chip L1 cache is write-
-   through, and a cache line is transfered from the store buffer to the off-
+   through, and a cache line is transferred from the store buffer to the off-
    chip L2 in as much 15 cycles on most systems.  This delay hurts mpn_add_n,
    mpn_sub_n, mpn_lshift, and mpn_rshift.
 

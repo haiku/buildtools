@@ -1,35 +1,35 @@
 /* mpfr_atan2 -- arc-tan 2 of a floating-point number
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library, and was contributed by Mathieu Dutour.
+This file is part of the GNU MPFR Library, and was contributed by Mathieu Dutour.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 int
-mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
   mpfr_t tmp, pi;
   int inexact;
-  mp_prec_t prec;
-  mp_exp_t e;
+  mpfr_prec_t prec;
+  mpfr_exp_t e;
   MPFR_SAVE_EXPO_DECL (expo);
   MPFR_ZIV_DECL (loop);
 
@@ -121,29 +121,29 @@ mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
             }
           else /* +/- 3*PI/4: Ugly since we have to round properly */
             {
-              mpfr_t tmp;
-              MPFR_ZIV_DECL (loop);
-              mp_prec_t prec = MPFR_PREC (dest) + BITS_PER_MP_LIMB;
+              mpfr_t tmp2;
+              MPFR_ZIV_DECL (loop2);
+              mpfr_prec_t prec2 = MPFR_PREC (dest) + 10;
 
-              mpfr_init2 (tmp, prec);
-              MPFR_ZIV_INIT (loop, prec);
+              mpfr_init2 (tmp2, prec2);
+              MPFR_ZIV_INIT (loop2, prec2);
               for (;;)
                 {
-                  mpfr_const_pi (tmp, GMP_RNDN);
-                  mpfr_mul_ui (tmp, tmp, 3, GMP_RNDN); /* Error <= 2  */
-                  mpfr_div_2ui (tmp, tmp, 2, GMP_RNDN);
-                  if (mpfr_round_p (MPFR_MANT (tmp), MPFR_LIMB_SIZE (tmp),
-                                    MPFR_PREC (tmp)-2,
-                                    MPFR_PREC (dest) + (rnd_mode == GMP_RNDN)))
+                  mpfr_const_pi (tmp2, MPFR_RNDN);
+                  mpfr_mul_ui (tmp2, tmp2, 3, MPFR_RNDN); /* Error <= 2  */
+                  mpfr_div_2ui (tmp2, tmp2, 2, MPFR_RNDN);
+                  if (mpfr_round_p (MPFR_MANT (tmp2), MPFR_LIMB_SIZE (tmp2),
+                                    MPFR_PREC (tmp2) - 2,
+                                    MPFR_PREC (dest) + (rnd_mode == MPFR_RNDN)))
                     break;
-                  MPFR_ZIV_NEXT (loop, prec);
-                  mpfr_set_prec (tmp, prec);
+                  MPFR_ZIV_NEXT (loop2, prec2);
+                  mpfr_set_prec (tmp2, prec2);
                 }
-              MPFR_ZIV_FREE (loop);
+              MPFR_ZIV_FREE (loop2);
               if (MPFR_IS_NEG (y))
-                MPFR_CHANGE_SIGN (tmp);
-              inexact = mpfr_set (dest, tmp, rnd_mode);
-              mpfr_clear (tmp);
+                MPFR_CHANGE_SIGN (tmp2);
+              inexact = mpfr_set (dest, tmp2, rnd_mode);
+              mpfr_clear (tmp2);
               return inexact;
             }
         }
@@ -170,7 +170,11 @@ mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
     /* use atan2(y,x) = atan(y/x) */
     for (;;)
       {
-        if (mpfr_div (tmp, y, x, GMP_RNDN) == 0)
+        int div_inex;
+        MPFR_BLOCK_DECL (flags);
+
+        MPFR_BLOCK (flags, div_inex = mpfr_div (tmp, y, x, MPFR_RNDN));
+        if (div_inex == 0)
           {
             /* Result is exact. */
             inexact = mpfr_atan (dest, tmp, rnd_mode);
@@ -181,11 +185,11 @@ mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
 
         /* If the division underflowed, since |atan(z)/z| < 1, we have
            an underflow. */
-        if (MPFR_UNLIKELY (mpfr_underflow_p ()))
+        if (MPFR_UNDERFLOW (flags))
           {
             int sign;
 
-            /* In the case GMP_RNDN with 2^(emin-2) < |y/x| < 2^(emin-1):
+            /* In the case MPFR_RNDN with 2^(emin-2) < |y/x| < 2^(emin-1):
                The smallest significand value S > 1 of |y/x| is:
                  * 1 / (1 - 2^(-px))                        if py <= px,
                  * (1 - 2^(-px) + 2^(-py)) / (1 - 2^(-px))  if py >= px.
@@ -194,20 +198,20 @@ mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
                            > z - z^3 / 3.
                            > 2^(emin-2) * (1 + 2^(-pz) - 2^(2 emin - 5))
                Assuming pz <= -2 emin + 5, we can round away from zero
-               (this is what mpfr_underflow always does on GMP_RNDN).
-               In the case GMP_RNDN with |y/x| <= 2^(emin-2), we round
-               towards zero, as |atan(z)/z| < 1. */
+               (this is what mpfr_underflow always does on MPFR_RNDN).
+               In the case MPFR_RNDN with |y/x| <= 2^(emin-2), we round
+               toward zero, as |atan(z)/z| < 1. */
             MPFR_ASSERTN (MPFR_PREC_MAX <=
                           2 * (mpfr_uexp_t) - MPFR_EMIN_MIN + 5);
-            if (rnd_mode == GMP_RNDN && MPFR_IS_ZERO (tmp))
-              rnd_mode = GMP_RNDZ;
+            if (rnd_mode == MPFR_RNDN && MPFR_IS_ZERO (tmp))
+              rnd_mode = MPFR_RNDZ;
             sign = MPFR_SIGN (tmp);
             mpfr_clear (tmp);
             MPFR_SAVE_EXPO_FREE (expo);
             return mpfr_underflow (dest, rnd_mode, sign);
           }
 
-        mpfr_atan (tmp, tmp, GMP_RNDN);   /* Error <= 2*ulp (tmp) since
+        mpfr_atan (tmp, tmp, MPFR_RNDN);   /* Error <= 2*ulp (tmp) since
                                              abs(D(arctan)) <= 1 */
         /* TODO: check that the error bound is correct in case of overflow. */
         /* FIXME: Error <= ulp(tmp) ? */
@@ -223,15 +227,15 @@ mpfr_atan2 (mpfr_ptr dest, mpfr_srcptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
       mpfr_init2 (pi, prec);
       for (;;)
         {
-          mpfr_div (tmp, y, x, GMP_RNDN);   /* Error <= ulp (tmp) */
+          mpfr_div (tmp, y, x, MPFR_RNDN);   /* Error <= ulp (tmp) */
           /* If tmp is 0, we have |y/x| <= 2^(-emin-2), thus
              atan|y/x| < 2^(-emin-2). */
           MPFR_SET_POS (tmp);               /* no error */
-          mpfr_atan (tmp, tmp, GMP_RNDN);   /* Error <= 2*ulp (tmp) since
+          mpfr_atan (tmp, tmp, MPFR_RNDN);   /* Error <= 2*ulp (tmp) since
                                                abs(D(arctan)) <= 1 */
-          mpfr_const_pi (pi, GMP_RNDN);     /* Error <= ulp(pi) /2 */
+          mpfr_const_pi (pi, MPFR_RNDN);     /* Error <= ulp(pi) /2 */
           e = MPFR_NOTZERO(tmp) ? MPFR_GET_EXP (tmp) : __gmpfr_emin - 1;
-          mpfr_sub (tmp, pi, tmp, GMP_RNDN);          /* see above */
+          mpfr_sub (tmp, pi, tmp, MPFR_RNDN);          /* see above */
           if (MPFR_IS_NEG (y))
             MPFR_CHANGE_SIGN (tmp);
           /* Error(tmp) <= (1/2+2^(EXP(pi)-EXP(tmp)-1)+2^(e-EXP(tmp)+1))*ulp

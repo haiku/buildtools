@@ -7,7 +7,7 @@ dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -15,10 +15,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 dnl  ia64 assembler comments are C++ style "//" to the end of line.  gas
@@ -77,7 +75,7 @@ dnl
 dnl  Emit a ".align" directive.  "bytes" is eval()ed, so can be an
 dnl  expression.
 dnl
-dnl  This version overrides the definition in mpn/asm-defs.m4.  We supress
+dnl  This version overrides the definition in mpn/asm-defs.m4.  We suppress
 dnl  any .align if the gas byte-swapped-nops bug was detected by configure
 dnl  GMP_ASM_IA64_ALIGN_OK.
 

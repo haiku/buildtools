@@ -1,24 +1,24 @@
 /* Test file for mpfr_cosh.
 
-Copyright 2001, 2002, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +26,8 @@ MA 02110-1301, USA. */
 #include "mpfr-test.h"
 
 #define TEST_FUNCTION mpfr_cosh
+#define TEST_RANDOM_EMIN -36
+#define TEST_RANDOM_EMAX 36
 #include "tgeneric.c"
 
 static void
@@ -38,7 +40,7 @@ special (void)
   mpfr_init (y);
 
   mpfr_set_nan (x);
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (!mpfr_nan_p (y))
     {
       printf ("Error: cosh(NaN) != NaN\n");
@@ -46,7 +48,7 @@ special (void)
     }
 
   mpfr_set_inf (x, 1);
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (!mpfr_inf_p (y) || mpfr_sgn (y) < 0)
     {
       printf ("Error: cosh(+Inf) != +Inf\n");
@@ -54,7 +56,7 @@ special (void)
     }
 
   mpfr_set_inf (x, -1);
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (!mpfr_inf_p (y) || mpfr_sgn (y) < 0)
     {
       printf ("Error: cosh(-Inf) != +Inf\n");
@@ -62,15 +64,15 @@ special (void)
     }
 
   /* cosh(+/-0) = 1 */
-  mpfr_set_ui (x, 0, GMP_RNDN);
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (mpfr_cmp_ui (y, 1))
     {
       printf ("Error: cosh(+0) != 1\n");
       exit (1);
     }
-  mpfr_neg (x, x, GMP_RNDN);
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_neg (x, x, MPFR_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (mpfr_cmp_ui (y, 1))
     {
       printf ("Error: cosh(-0) != 1\n");
@@ -82,7 +84,7 @@ special (void)
 
   mpfr_set_str_binary (x, "0.1101110111111111001011101000101");
   mpfr_set_str_binary (y, "1.0110011001110000101100011001001");
-  mpfr_cosh (x, x, GMP_RNDN);
+  mpfr_cosh (x, x, MPFR_RNDN);
   if (mpfr_cmp (x, y))
     {
       printf ("Error: mpfr_cosh for prec=32 (1)\n");
@@ -91,7 +93,7 @@ special (void)
 
   mpfr_set_str_binary (x, "-0.1110111000011101010111100000101E-1");
   mpfr_set_str_binary (y, "1.0001110000101111111111100110101");
-  mpfr_cosh (x, x, GMP_RNDN);
+  mpfr_cosh (x, x, MPFR_RNDN);
   if (mpfr_cmp (x, y))
     {
       printf ("Error: mpfr_cosh for prec=32 (2)\n");
@@ -101,28 +103,28 @@ special (void)
   mpfr_set_prec (x, 2);
   mpfr_clear_flags ();
   mpfr_set_str_binary (x, "1E1000000000");
-  i = mpfr_cosh (x, x, GMP_RNDN);
+  i = mpfr_cosh (x, x, MPFR_RNDN);
   MPFR_ASSERTN (MPFR_IS_INF (x) && MPFR_SIGN (x) > 0);
   MPFR_ASSERTN (mpfr_overflow_p ());
   MPFR_ASSERTN (i == 1);
 
   mpfr_clear_flags ();
   mpfr_set_str_binary (x, "-1E1000000000");
-  i = mpfr_cosh (x, x, GMP_RNDN);
+  i = mpfr_cosh (x, x, MPFR_RNDN);
   MPFR_ASSERTN (MPFR_IS_INF (x) && MPFR_SIGN (x) > 0);
   MPFR_ASSERTN (mpfr_overflow_p () && !mpfr_underflow_p ());
   MPFR_ASSERTN (i == 1);
 
   mpfr_clear_flags ();
   mpfr_set_str_binary (x, "-1E1000000000");
-  i = mpfr_cosh (x, x, GMP_RNDD);
+  i = mpfr_cosh (x, x, MPFR_RNDD);
   MPFR_ASSERTN (!MPFR_IS_INF (x) && MPFR_SIGN (x) > 0);
   MPFR_ASSERTN (mpfr_overflow_p () && !mpfr_underflow_p ());
   MPFR_ASSERTN (i == -1);
 
   mpfr_clear_flags ();
   mpfr_set_str_binary (x, "-1E1000000000");
-  i = mpfr_cosh (x, x, GMP_RNDU);
+  i = mpfr_cosh (x, x, MPFR_RNDU);
   MPFR_ASSERTN (MPFR_IS_INF (x) && MPFR_SIGN (x) > 0);
   MPFR_ASSERTN (mpfr_overflow_p () && !mpfr_underflow_p ());
   MPFR_ASSERTN (i == 1);
@@ -139,7 +141,7 @@ special_overflow (void)
      2. cosh(x) is not representable in the selected range of exp.
      3. cosh(x) exp overflow even with the largest range of exp */
   mpfr_t x, y;
-  mp_exp_t emin, emax;
+  mpfr_exp_t emin, emax;
 
   emin = mpfr_get_emin ();
   emax = mpfr_get_emax ();
@@ -151,8 +153,8 @@ special_overflow (void)
   mpfr_init2 (y, 24);
 
   mpfr_set_str_binary (x, "0.101100100000000000110100E7");
-  mpfr_cosh (y, x, GMP_RNDN);
-  if (mpfr_cmp_str (y, "0.101010001111001010001110E128", 2, GMP_RNDN))
+  mpfr_cosh (y, x, MPFR_RNDN);
+  if (mpfr_cmp_str (y, "0.101010001111001010001110E128", 2, MPFR_RNDN))
     {
       printf("Special overflow error 1.\n");
       mpfr_dump (y);
@@ -160,7 +162,7 @@ special_overflow (void)
     }
 
   mpfr_set_str_binary (x, "0.101100100000000000110100E8");
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (!mpfr_inf_p(y))
     {
       printf("Special overflow error 2.\n");
@@ -172,7 +174,7 @@ special_overflow (void)
   set_emax (emax);
 
   mpfr_set_str_binary (x, "0.101100100000000000110100E1000000");
-  mpfr_cosh (y, x, GMP_RNDN);
+  mpfr_cosh (y, x, MPFR_RNDN);
   if (!mpfr_inf_p(y))
     {
       printf("Special overflow error 3.\n");
@@ -195,6 +197,7 @@ main (int argc, char *argv[])
   test_generic (2, 100, 100);
 
   data_check ("data/cosh", mpfr_cosh, "mpfr_cosh");
+  bad_cases (mpfr_cosh, mpfr_acosh, "mpfr_cosh", 0, 1, 255, 4, 128, 800, 100);
 
   tests_end_mpfr ();
   return 0;

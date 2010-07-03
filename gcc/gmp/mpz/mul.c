@@ -1,13 +1,13 @@
 /* mpz_mul -- Multiply two integers.
 
-Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2005 Free Software Foundation,
-Inc.
+Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2005, 2009 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h> /* for NULL */
 #include "gmp.h"
@@ -35,8 +33,8 @@ mpz_mul (mpz_ptr w, mpz_srcptr u, mpz_srcptr v)
 mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
 #endif /* BERKELEY_MP */
 {
-  mp_size_t usize = u->_mp_size;
-  mp_size_t vsize = v->_mp_size;
+  mp_size_t usize = SIZ(u);
+  mp_size_t vsize = SIZ(v);
   mp_size_t wsize;
   mp_size_t sign_product;
   mp_ptr up, vp;
@@ -94,25 +92,25 @@ mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
 
   TMP_MARK;
   free_me = NULL;
-  up = u->_mp_d;
-  vp = v->_mp_d;
-  wp = w->_mp_d;
+  up = PTR(u);
+  vp = PTR(v);
+  wp = PTR(w);
 
   /* Ensure W has space enough to store the result.  */
   wsize = usize + vsize;
-  if (w->_mp_alloc < wsize)
+  if (ALLOC(w) < wsize)
     {
       if (wp == up || wp == vp)
 	{
 	  free_me = wp;
-	  free_me_size = w->_mp_alloc;
+	  free_me_size = ALLOC(w);
 	}
       else
-	(*__gmp_free_func) (wp, w->_mp_alloc * BYTES_PER_MP_LIMB);
+	(*__gmp_free_func) (wp, ALLOC(w) * BYTES_PER_MP_LIMB);
 
-      w->_mp_alloc = wsize;
+      ALLOC(w) = wsize;
       wp = (mp_ptr) (*__gmp_allocate_func) (wsize * BYTES_PER_MP_LIMB);
-      w->_mp_d = wp;
+      PTR(w) = wp;
     }
   else
     {
@@ -120,7 +118,7 @@ mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
       if (wp == up)
 	{
 	  /* W and U are identical.  Allocate temporary space for U.  */
-	  up = (mp_ptr) TMP_ALLOC (usize * BYTES_PER_MP_LIMB);
+	  up = TMP_ALLOC_LIMBS (usize);
 	  /* Is V identical too?  Keep it identical with U.  */
 	  if (wp == vp)
 	    vp = up;
@@ -130,17 +128,27 @@ mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
       else if (wp == vp)
 	{
 	  /* W and V are identical.  Allocate temporary space for V.  */
-	  vp = (mp_ptr) TMP_ALLOC (vsize * BYTES_PER_MP_LIMB);
+	  vp = TMP_ALLOC_LIMBS (vsize);
 	  /* Copy to the temporary space.  */
 	  MPN_COPY (vp, wp, vsize);
 	}
     }
 
-  cy_limb = mpn_mul (wp, up, usize, vp, vsize);
-  wsize = usize + vsize;
+  if (up == vp)
+    {
+      mpn_sqr (wp, up, usize);
+      wsize = usize + vsize;
+      cy_limb = wp[wsize - 1];
+    }
+  else
+    {
+      cy_limb = mpn_mul (wp, up, usize, vp, vsize);
+      wsize = usize + vsize;
+    }
+
   wsize -= cy_limb == 0;
 
-  w->_mp_size = sign_product < 0 ? -wsize : wsize;
+  SIZ(w) = sign_product < 0 ? -wsize : wsize;
   if (free_me != NULL)
     (*__gmp_free_func) (free_me, free_me_size * BYTES_PER_MP_LIMB);
   TMP_FREE;

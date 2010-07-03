@@ -1,29 +1,29 @@
 /* mpfr_sub -- subtract two floating-point numbers
 
-Copyright 2001, 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
 int
-mpfr_sub (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
+mpfr_sub (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode)
 {
   MPFR_LOG_FUNC (("b[%#R]=%R c[%#R]=%R rnd=%d", b, b, c, c, rnd_mode),
                  ("a[%#R]=%R", a, a));
@@ -59,7 +59,7 @@ mpfr_sub (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
         {
           if (MPFR_IS_ZERO (c))
             {
-              int sign = rnd_mode != GMP_RNDD
+              int sign = rnd_mode != MPFR_RNDD
                 ? ((MPFR_IS_NEG(b) && MPFR_IS_POS(c)) ? -1 : 1)
                 : ((MPFR_IS_POS(b) && MPFR_IS_NEG(c)) ? 1 : -1);
               MPFR_SET_SIGN (a, sign);
@@ -75,7 +75,6 @@ mpfr_sub (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           return mpfr_set (a, b, rnd_mode);
         }
     }
-  MPFR_CLEAR_FLAGS (a);
   MPFR_ASSERTD (MPFR_IS_PURE_FP (b) && MPFR_IS_PURE_FP (c));
 
   if (MPFR_LIKELY (MPFR_SIGN (b) == MPFR_SIGN (c)))
@@ -89,7 +88,7 @@ mpfr_sub (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
   else
     { /* signs differ, it's an addition */
       if (MPFR_GET_EXP (b) < MPFR_GET_EXP (c))
-         { /* exchange rounding modes towards +/- infinity */
+         { /* exchange rounding modes toward +/- infinity */
           int inexact;
           rnd_mode = MPFR_INVERT_RND (rnd_mode);
           if (MPFR_LIKELY (MPFR_PREC (a) == MPFR_PREC (b)

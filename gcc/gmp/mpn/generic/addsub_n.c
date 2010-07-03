@@ -1,12 +1,16 @@
-/* mpn_addsub_n -- Add and Subtract two limb vectors of equal, non-zero length.
+/* mpn_add_n_sub_n -- Add and Subtract two limb vectors of equal, non-zero length.
 
-Copyright 1999, 2000, 2001 Free Software Foundation, Inc.
+   THE FUNCTION IN THIS FILE IS INTERNAL WITH A MUTABLE INTERFACE.  IT IS ONLY
+   SAFE TO REACH IT THROUGH DOCUMENTED INTERFACES.  IN FACT, IT IS ALMOST
+   GUARANTEED THAT IT'LL CHANGE OR DISAPPEAR IN A FUTURE GNU MP RELEASE.
+
+Copyright 1999, 2000, 2001, 2006 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -29,13 +31,13 @@ MA 02110-1301, USA. */
 #define PART_SIZE (L1_CACHE_SIZE / BYTES_PER_MP_LIMB / 6)
 
 
-/* mpn_addsub_n.
+/* mpn_add_n_sub_n.
    r1[] = s1[] + s2[]
    r2[] = s1[] - s2[]
    All operands have n limbs.
    In-place operations allowed.  */
 mp_limb_t
-mpn_addsub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
+mpn_add_n_sub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
 {
   mp_limb_t acyn, acyo;		/* carry for add */
   mp_limb_t scyn, scyo;		/* carry for subtract */
@@ -58,13 +60,13 @@ mpn_addsub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
       for (off = 0; off < n; off += PART_SIZE)
 	{
 	  this_n = MIN (n - off, PART_SIZE);
-#if HAVE_NATIVE_mpn_add_nc || !HAVE_NATIVE_mpn_add_n
+#if HAVE_NATIVE_mpn_add_nc
 	  acyo = mpn_add_nc (r1p + off, s1p + off, s2p + off, this_n, acyo);
 #else
 	  acyn = mpn_add_n (r1p + off, s1p + off, s2p + off, this_n);
 	  acyo = acyn + mpn_add_1 (r1p + off, r1p + off, this_n, acyo);
 #endif
-#if HAVE_NATIVE_mpn_sub_nc || !HAVE_NATIVE_mpn_sub_n
+#if HAVE_NATIVE_mpn_sub_nc
 	  scyo = mpn_sub_nc (r2p + off, s1p + off, s2p + off, this_n, scyo);
 #else
 	  scyn = mpn_sub_n (r2p + off, s1p + off, s2p + off, this_n);
@@ -81,13 +83,13 @@ mpn_addsub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
       for (off = 0; off < n; off += PART_SIZE)
 	{
 	  this_n = MIN (n - off, PART_SIZE);
-#if HAVE_NATIVE_mpn_sub_nc || !HAVE_NATIVE_mpn_sub_n
+#if HAVE_NATIVE_mpn_sub_nc
 	  scyo = mpn_sub_nc (r2p + off, s1p + off, s2p + off, this_n, scyo);
 #else
 	  scyn = mpn_sub_n (r2p + off, s1p + off, s2p + off, this_n);
 	  scyo = scyn + mpn_sub_1 (r2p + off, r2p + off, this_n, scyo);
 #endif
-#if HAVE_NATIVE_mpn_add_nc || !HAVE_NATIVE_mpn_add_n
+#if HAVE_NATIVE_mpn_add_nc
 	  acyo = mpn_add_nc (r1p + off, s1p + off, s2p + off, this_n, acyo);
 #else
 	  acyn = mpn_add_n (r1p + off, s1p + off, s2p + off, this_n);
@@ -97,7 +99,7 @@ mpn_addsub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
     }
   else
     {
-      /* r1 and r2 are identical to s1 and s2 (r1==s1 and r2=s2 or vice versa)
+      /* r1 and r2 are identical to s1 and s2 (r1==s1 and r2==s2 or vice versa)
 	 Need temporary storage.  */
       mp_limb_t tp[PART_SIZE];
       acyo = 0;
@@ -105,13 +107,13 @@ mpn_addsub_n (mp_ptr r1p, mp_ptr r2p, mp_srcptr s1p, mp_srcptr s2p, mp_size_t n)
       for (off = 0; off < n; off += PART_SIZE)
 	{
 	  this_n = MIN (n - off, PART_SIZE);
-#if HAVE_NATIVE_mpn_add_nc || !HAVE_NATIVE_mpn_add_n
+#if HAVE_NATIVE_mpn_add_nc
 	  acyo = mpn_add_nc (tp, s1p + off, s2p + off, this_n, acyo);
 #else
 	  acyn = mpn_add_n (tp, s1p + off, s2p + off, this_n);
 	  acyo = acyn + mpn_add_1 (tp, tp, this_n, acyo);
 #endif
-#if HAVE_NATIVE_mpn_sub_nc || !HAVE_NATIVE_mpn_sub_n
+#if HAVE_NATIVE_mpn_sub_nc
 	  scyo = mpn_sub_nc (r2p + off, s1p + off, s2p + off, this_n, scyo);
 #else
 	  scyn = mpn_sub_n (r2p + off, s1p + off, s2p + off, this_n);
@@ -146,13 +148,13 @@ main (int argc, char **argv)
   s2p = malloc (n * BYTES_PER_MP_LIMB);
   TIME (t,(mpn_add_n(r1p,s1p,s2p,n),mpn_sub_n(r1p,s1p,s2p,n)));
   printf ("              separate add and sub: %.3f\n", t);
-  TIME (t,mpn_addsub_n(r1p,r2p,s1p,s2p,n));
+  TIME (t,mpn_add_n_sub_n(r1p,r2p,s1p,s2p,n));
   printf ("combined addsub separate variables: %.3f\n", t);
-  TIME (t,mpn_addsub_n(r1p,r2p,r1p,s2p,n));
+  TIME (t,mpn_add_n_sub_n(r1p,r2p,r1p,s2p,n));
   printf ("        combined addsub r1 overlap: %.3f\n", t);
-  TIME (t,mpn_addsub_n(r1p,r2p,r1p,s2p,n));
+  TIME (t,mpn_add_n_sub_n(r1p,r2p,r1p,s2p,n));
   printf ("        combined addsub r2 overlap: %.3f\n", t);
-  TIME (t,mpn_addsub_n(r1p,r2p,r1p,r2p,n));
+  TIME (t,mpn_add_n_sub_n(r1p,r2p,r1p,r2p,n));
   printf ("          combined addsub in-place: %.3f\n", t);
 
   return 0;

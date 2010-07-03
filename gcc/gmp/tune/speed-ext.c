@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 
 /* The extension here is three versions of an mpn arithmetic mean.  These
@@ -84,8 +82,8 @@ mean_calls (mp_ptr wp, mp_srcptr xp, mp_srcptr yp, mp_size_t size)
   ASSERT (size >= 1);
 
   c = mpn_add_n (wp, xp, yp, size);
-  ret = mpn_rshift (wp, wp, size, 1) >> (BITS_PER_MP_LIMB-1);
-  wp[size-1] |= (c << (BITS_PER_MP_LIMB-1));
+  ret = mpn_rshift (wp, wp, size, 1) >> (GMP_LIMB_BITS-1);
+  wp[size-1] |= (c << (GMP_LIMB_BITS-1));
   return ret;
 }
 
@@ -109,7 +107,7 @@ mean_open (mp_ptr wp, mp_srcptr xp, mp_srcptr yp, mp_size_t size)
   c = (wprev < x);
   ret = (wprev & 1);
 
-#define RSHIFT(hi,lo)   (((lo) >> 1) | ((hi) << (BITS_PER_MP_LIMB-1)))
+#define RSHIFT(hi,lo)   (((lo) >> 1) | ((hi) << (GMP_LIMB_BITS-1)))
 
   for (i = 1; i < size; i++)
     {

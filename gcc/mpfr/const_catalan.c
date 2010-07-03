@@ -1,24 +1,24 @@
 /* mpfr_const_catalan -- compute Catalan's constant.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -29,7 +29,7 @@ MPFR_DECL_INIT_CACHE(__gmpfr_cache_const_catalan, mpfr_const_catalan_internal);
 /* Set User Interface */
 #undef mpfr_const_catalan
 int
-mpfr_const_catalan (mpfr_ptr x, mp_rnd_t rnd_mode) {
+mpfr_const_catalan (mpfr_ptr x, mpfr_rnd_t rnd_mode) {
   return mpfr_cache (x, __gmpfr_cache_const_catalan, rnd_mode);
 }
 
@@ -82,11 +82,11 @@ S (mpz_t T, mpz_t P, mpz_t Q, unsigned long n1, unsigned long n2)
    G = Pi/8*log(2+sqrt(3)) + 3/8*sum(k!^2/(2k)!/(2k+1)^2,k=0..infinity)
 */
 int
-mpfr_const_catalan_internal (mpfr_ptr g, mp_rnd_t rnd_mode)
+mpfr_const_catalan_internal (mpfr_ptr g, mpfr_rnd_t rnd_mode)
 {
   mpfr_t x, y, z;
   mpz_t T, P, Q;
-  mp_prec_t pg, p;
+  mpfr_prec_t pg, p;
   int inex;
   MPFR_ZIV_DECL (loop);
   MPFR_GROUP_DECL (group);
@@ -112,8 +112,7 @@ mpfr_const_catalan_internal (mpfr_ptr g, mp_rnd_t rnd_mode)
      Found 27 '1' at 51752950
   */
   pg = MPFR_PREC (g);
-  p = pg + 9;
-  p += MPFR_INT_CEIL_LOG2 (p);
+  p = pg + MPFR_INT_CEIL_LOG2 (pg) + 7;
 
   MPFR_GROUP_INIT_3 (group, p, x, y, z);
   mpz_init (T);
@@ -122,22 +121,22 @@ mpfr_const_catalan_internal (mpfr_ptr g, mp_rnd_t rnd_mode)
 
   MPFR_ZIV_INIT (loop, p);
   for (;;) {
-    mpfr_sqrt_ui (x, 3, GMP_RNDU);
-    mpfr_add_ui (x, x, 2, GMP_RNDU);
-    mpfr_log (x, x, GMP_RNDU);
-    mpfr_const_pi (y, GMP_RNDU);
-    mpfr_mul (x, x, y, GMP_RNDN);
+    mpfr_sqrt_ui (x, 3, MPFR_RNDU);
+    mpfr_add_ui (x, x, 2, MPFR_RNDU);
+    mpfr_log (x, x, MPFR_RNDU);
+    mpfr_const_pi (y, MPFR_RNDU);
+    mpfr_mul (x, x, y, MPFR_RNDN);
     S (T, P, Q, 0, (p - 1) / 2);
     mpz_mul_ui (T, T, 3);
-    mpfr_set_z (y, T, GMP_RNDU);
-    mpfr_set_z (z, Q, GMP_RNDD);
-    mpfr_div (y, y, z, GMP_RNDN);
-    mpfr_add (x, x, y, GMP_RNDN);
-    mpfr_div_2ui (x, x, 3, GMP_RNDN);
+    mpfr_set_z (y, T, MPFR_RNDU);
+    mpfr_set_z (z, Q, MPFR_RNDD);
+    mpfr_div (y, y, z, MPFR_RNDN);
+    mpfr_add (x, x, y, MPFR_RNDN);
+    mpfr_div_2ui (x, x, 3, MPFR_RNDN);
 
     if (MPFR_LIKELY (MPFR_CAN_ROUND (x, p - 5, pg, rnd_mode)))
       break;
-    /* Fixme: Is it possible? */
+
     MPFR_ZIV_NEXT (loop, p);
     MPFR_GROUP_REPREC_3 (group, p, x, y, z);
   }

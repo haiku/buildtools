@@ -1,12 +1,12 @@
 /* Test mpf_get_str and mpf_set_str.
 
-Copyright 1996, 2000, 2001 Free Software Foundation, Inc.
+Copyright 1996, 2000, 2001, 2008 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,7 +45,7 @@ main (int argc, char **argv)
   mp_exp_t bexp;
   long size, exp;
   int base;
-  char buf[SIZE * BITS_PER_MP_LIMB + 5];
+  char buf[SIZE * GMP_LIMB_BITS + 5];
 
   tests_start ();
 
@@ -71,6 +69,22 @@ main (int argc, char **argv)
   mpf_init (x);
   mpf_init (y);
   mpf_init (d);
+
+  /* First test some specific values.  */
+
+  mpf_set_str (y, "1.23456e1000", 0);
+
+  mpf_set_str (x, "1.23456e1000", 10);
+  if (mpf_cmp (x, y) != 0)
+    abort ();
+  mpf_set_str (x, "1.23456e+1000", 0);
+  if (mpf_cmp (x, y) != 0)
+    abort ();
+  mpf_set_str (x, "1.23456e+1000", 10);
+  if (mpf_cmp (x, y) != 0)
+    abort ();
+
+  /* Now test random values.  */
 
   for (i = 0; i < reps; i++)
     {

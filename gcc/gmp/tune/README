@@ -4,7 +4,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -13,9 +13,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 
@@ -75,6 +73,27 @@ SCO OpenUNIX 8 /etc/hw
     running the speed program repeatedly then set a GMP_CPU_FREQUENCY
     environment variable (see TIME BASE section below).
 
+Timing on GNU/Linux
+
+    On Linux, timing currently uses the cycle counter. This is unreliable,
+    since the counter is not saved and restored at context switches (unlike
+    FreeBSD and Solaris where the cycle counter is "virtualized").
+
+    Using the clock_gettime method with CLOCK_PROCESS_CPUTIME_ID (posix) or
+    CLOCK_VIRTUAL (BSD) should be more reliable. To get clock_gettime
+    with glibc, one has to link with -lrt (which also drags in the pthreads
+    threading library). configure.in must be hacked to detect this and
+    arrange proper linking. Something like
+
+      old_LIBS="$LIBS"
+      AC_SEARCH_LIBS(clock_gettime, rt, [AC_DEFINE(HAVE_CLOCK_GETTIME)])
+      TUNE_LIBS="$LIBS"
+      LIBS="$old_LIBS"
+
+      AC_SUBST(TUNE_LIBS)
+    
+    might work.
+
 Low resolution timebase
 
     Parameter tuning can be very time consuming if the only timebase
@@ -87,7 +106,7 @@ Low resolution timebase
 PARAMETER TUNING
 
 The "tuneup" program runs some tests designed to find the best settings for
-various thresholds, like MUL_KARATSUBA_THRESHOLD.  Its output can be put
+various thresholds, like MUL_TOOM22_THRESHOLD.  Its output can be put
 into gmp-mparam.h.  The program is built and run with
 
         make tune
@@ -283,7 +302,7 @@ up to twice as fast as mul_basecase.  In practice loop overheads and the
 products on the diagonal mean it falls short of this.  Here's an example
 running the two and showing by what factor an NxN mul_basecase is slower
 than an NxN sqr_basecase.  (Some versions of sqr_basecase only allow sizes
-below SQR_KARATSUBA_THRESHOLD, so if it crashes at that point don't worry.)
+below SQR_TOOM2_THRESHOLD, so if it crashes at that point don't worry.)
 
         ./speed -s 1-20 -r mpn_sqr_basecase mpn_mul_basecase
 
@@ -429,12 +448,12 @@ normal libgmp.la.
 Note further that the various routines may recurse into themselves on sizes
 far enough above applicable thresholds.  For example, mpn_kara_mul_n will
 recurse into itself on sizes greater than twice the compiled-in
-MUL_KARATSUBA_THRESHOLD.
+MUL_TOOM22_THRESHOLD.
 
 When doing the above comparison between mul_basecase and kara_mul_n what's
 probably of interest is mul_basecase versus a kara_mul_n that does one level
 of Karatsuba then calls to mul_basecase, but this only happens on sizes less
-than twice the compiled MUL_KARATSUBA_THRESHOLD.  A larger value for that
+than twice the compiled MUL_TOOM22_THRESHOLD.  A larger value for that
 setting can be compiled-in to avoid the problem if necessary.  The same
 applies to toom3 and DC, though in a trickier fashion.
 

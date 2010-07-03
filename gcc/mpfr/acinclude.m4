@@ -1,31 +1,30 @@
 dnl  MPFR specific autoconf macros
 
-dnl  Copyright 2000, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
-dnl  Contributed by the Spaces project, INRIA Lorraine.
+dnl  Copyright 2000, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+dnl  Contributed by the Arenaire and Cacao projects, INRIA.
 dnl
-dnl  This file is part of the MPFR Library.
+dnl  This file is part of the GNU MPFR Library.
 dnl
-dnl  The MPFR Library is free software; you can redistribute it and/or modify
+dnl  The GNU MPFR Library is free software; you can redistribute it and/or modify
 dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 2.1 of the License, or (at
+dnl  by the Free Software Foundation; either version 3 of the License, or (at
 dnl  your option) any later version.
 dnl
-dnl  The MPFR Library is distributed in the hope that it will be useful, but
+dnl  The GNU MPFR Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 dnl  License for more details.
 dnl
 dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-dnl  the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-dnl  MA 02110-1301, USA.
+dnl  along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+dnl  http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+dnl  51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.
 
-dnl  autoconf 2.50 is necessary because of the use of AH_VERBATIM,
-dnl  but it would be better to make the config file compatible with
-dnl  both autoconf 2.13 and autoconf 2.50.
+dnl  autoconf 2.60 is necessary because of the use of AC_PROG_SED.
 dnl  The following line allows the autoconf wrapper (when installed)
 dnl  to work as expected.
-AC_PREREQ(2.50)
+dnl  If you change the required version, please update README.dev too!
+AC_PREREQ(2.60)
 
 dnl ------------------------------------------------------------
 dnl You must put in MPFR_CONFIGS everything which configure MPFR
@@ -44,6 +43,13 @@ AC_REQUIRE([AC_CANONICAL_HOST])
 
 AC_CHECK_HEADER([limits.h],, AC_MSG_ERROR([limits.h not found]))
 AC_CHECK_HEADER([float.h],,  AC_MSG_ERROR([float.h not found]))
+AC_CHECK_HEADER([string.h],, AC_MSG_ERROR([string.h not found]))
+
+dnl Check for locales
+AC_CHECK_HEADERS([locale.h])
+
+dnl Check for wide characters (wchar_t and wint_t)
+AC_CHECK_HEADERS([wchar.h])
 
 dnl Check for stdargs
 AC_CHECK_HEADER([stdarg.h],[AC_DEFINE([HAVE_STDARG],1,[Define if stdarg])],
@@ -53,9 +59,33 @@ AC_CHECK_HEADER([stdarg.h],[AC_DEFINE([HAVE_STDARG],1,[Define if stdarg])],
 dnl sys/fpu.h - MIPS specific
 AC_CHECK_HEADERS([sys/time.h sys/fpu.h])
 
-dnl FIXME: strtol is really needed. Maybe create another function?
+dnl SIZE_MAX macro
+gl_SIZE_MAX
+
+dnl va_copy macro
+AC_MSG_CHECKING([how to copy va_list])
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <stdarg.h>
+]], [[
+   va_list ap1, ap2;
+   va_copy(ap1, ap2);
+]])], [
+   AC_MSG_RESULT([va_copy])
+   AC_DEFINE(HAVE_VA_COPY)
+], [AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#include <stdarg.h>
+]], [[
+   va_list ap1, ap2;
+   __va_copy(ap1, ap2);
+]])], [AC_DEFINE([HAVE___VA_COPY]) AC_MSG_RESULT([__va_copy])],
+   [AC_MSG_RESULT([memcpy])])])
+
+dnl FIXME: The functions memmove, memset and strtol are really needed by
+dnl MPFR, but if they are implemented as macros, this is also OK (in our
+dnl case).  So, we do not return an error, but their tests are currently
+dnl useless.
 dnl gettimeofday is not defined for MinGW
-AC_CHECK_FUNCS([memset setlocale strtol gettimeofday])
+AC_CHECK_FUNCS([memmove memset setlocale strtol gettimeofday])
 
 dnl Check for IEEE-754 switches on Alpha
 case $host in
@@ -76,6 +106,22 @@ alpha*-*-*)
     CFLAGS="$saved_CFLAGS $mpfr_cv_ieee_switches"
   fi
 esac
+
+dnl check for long long
+AC_CHECK_TYPE([long long int],
+   AC_DEFINE(HAVE_LONG_LONG, 1, [Define if compiler supports long long]),,)
+
+dnl intmax_t is C99
+AC_CHECK_TYPES([intmax_t])
+if test "$ac_cv_type_intmax_t" = yes; then
+  AC_CACHE_CHECK([for working INTMAX_MAX], mpfr_cv_have_intmax_max, [
+    AC_TRY_COMPILE([#include <stdint.h>], [intmax_t x = INTMAX_MAX;],
+      mpfr_cv_have_intmax_max=yes, mpfr_cv_have_intmax_max=no)
+  ])
+  if test "$mpfr_cv_have_intmax_max" = "yes"; then
+    AC_DEFINE(MPFR_HAVE_INTMAX_MAX,1,[Define if you have a working INTMAX_MAX.])
+  fi
+fi
 
 AC_CHECK_TYPE( [union fpc_csr],
    AC_DEFINE(HAVE_FPC_CSR,1,[Define if union fpc_csr is available]), ,
@@ -114,6 +160,7 @@ if test -n "$GCC"; then
 static double get_max (void);
 int main() {
   double x = 0.5;
+  double y;
   int i;
   for (i = 1; i <= 11; i++)
     x *= x;
@@ -122,14 +169,14 @@ int main() {
 #ifdef MPFR_HAVE_FESETROUND
   /* Useful test for the G4 PowerPC */
   fesetround(FE_TOWARDZERO);
-  x = get_max ();
+  x = y = get_max ();
   x *= 2.0;
-  if (x != get_max ())
+  if (x != y)
     return 1;
 #endif
   return 0;
 }
-static double get_max (void) { return DBL_MAX; }
+static double get_max (void) { static volatile double d = DBL_MAX; return d; }
   ], [mpfr_cv_gcc_floatconv_bug="no"],
      [mpfr_cv_gcc_floatconv_bug="yes, use -ffloat-store"],
      [mpfr_cv_gcc_floatconv_bug="cannot test, use -ffloat-store"])
@@ -177,6 +224,16 @@ int main() {
 ])
 if test "$mpfr_cv_nanisnan" = "yes"; then
   AC_DEFINE(MPFR_NANISNAN,1,[Define if NAN == NAN.])
+  AC_MSG_WARN([The test NAN != NAN is false. The probable reason is that])
+  AC_MSG_WARN([your compiler optimizes floating-point expressions in an])
+  AC_MSG_WARN([unsafe way because some option, such as -ffast-math or])
+  AC_MSG_WARN([-fast (depending on the compiler), has been used.  You])
+  AC_MSG_WARN([should NOT use such an option, otherwise MPFR functions])
+  AC_MSG_WARN([such as mpfr_get_d and mpfr_set_d may return incorrect])
+  AC_MSG_WARN([results on special FP numbers (e.g. NaN or signed zeros).])
+  AC_MSG_WARN([If you did not use such an option, please send us a bug])
+  AC_MSG_WARN([report so that we can try to find a workaround for your])
+  AC_MSG_WARN([platform and/or document the behavior.])
 fi
 
 dnl Check if the chars '0' to '9' are consecutive values
@@ -275,6 +332,34 @@ LIBS="$saved_LIBS"
 
 dnl Now try to check the long double format
 MPFR_C_LONG_DOUBLE_FORMAT
+
+dnl Check if thread-local variables are supported.
+dnl At least two problems can occur in practice:
+dnl 1. The compilation fails, e.g. because the compiler doesn't know
+dnl    about the __thread keyword.
+dnl 2. The compilation succeeds, but the system doesn't support TLS or
+dnl    there is some ld configuration problem. One of the effects can
+dnl    be that thread-local variables always evaluate to 0. So, it is
+dnl    important to run the test below.
+if test "$enable_thread_safe" = yes; then
+AC_CACHE_CHECK([for TLS support], mpfr_cv_working_tls, [
+saved_CPPFLAGS="$CPPFLAGS"
+# The -I$srcdir is necessary when objdir is different from srcdir.
+CPPFLAGS="$CPPFLAGS -I$srcdir"
+AC_RUN_IFELSE([
+#define MPFR_USE_THREAD_SAFE 1
+#include "mpfr-thread.h"
+MPFR_THREAD_ATTR int x = 17;
+int main() {
+  return x != 17;
+}
+  ], [mpfr_cv_working_tls="yes"],
+     [AC_MSG_RESULT(no)
+      AC_MSG_ERROR([please configure with --disable-thread-safe])],
+     [mpfr_cv_working_tls="cannot test, assume yes"])
+CPPFLAGS="$saved_CPPFLAGS"
+])
+fi
 ])
 
 
@@ -364,6 +449,54 @@ BEGIN {
       if (got[2] != "124") continue
       if (got[1] != "062") continue
       if (got[0] != "020") continue
+
+      # start sequence, with 8-byte body
+      if (got[23] == "001" && \
+          got[22] == "043" && \
+          got[21] == "105" && \
+          got[20] == "147" && \
+          got[19] == "211" && \
+          got[18] == "253" && \
+          got[17] == "315" && \
+          got[16] == "357")
+        {
+          saw = " (" got[15] \
+                 " " got[14] \
+                 " " got[13] \
+                 " " got[12] \
+                 " " got[11] \
+                 " " got[10] \
+                 " " got[9]  \
+                 " " got[8] ")"
+
+          if (got[15] == "301" && \
+              got[14] == "235" && \
+              got[13] == "157" && \
+              got[12] == "064" && \
+              got[11] == "124" && \
+              got[10] == "000" && \
+              got[9] ==  "000" && \
+              got[8] ==  "000")
+            {
+              print "IEEE double, big endian"
+              found = 1
+              exit
+            }
+
+          if (got[15] == "000" && \
+              got[14] == "000" && \
+              got[13] == "000" && \
+              got[12] == "124" && \
+              got[11] == "064" && \
+              got[10] == "157" && \
+              got[9] ==  "235" && \
+              got[8] ==  "301")
+            {
+              print "IEEE double, little endian"
+              found = 1
+              exit
+            }
+        }
 
       # start sequence, with 12-byte body
       if (got[27] == "001" && \
@@ -469,6 +602,50 @@ BEGIN {
               found = 1
               exit
             }
+
+          if (got[23] == "000" && \
+              got[22] == "000" && \
+              got[21] == "000" && \
+              got[20] == "000" && \
+              got[19] == "000" && \
+              got[18] == "000" && \
+              got[17] == "000" && \
+              got[16] == "000" && \
+              got[15] == "000" && \
+              got[14] == "000" && \
+              got[13] == "100" && \
+              got[12] == "105" && \
+              got[11] == "363" && \
+              got[10] == "326" && \
+              got[9]  == "031" && \
+	      got[8]  == "300")
+            {
+              print "IEEE quad, little endian"
+              found = 1
+              exit
+            }
+
+          if (got[23] == "301" && \
+              got[22] == "235" && \
+              got[21] == "157" && \
+              got[20] == "064" && \
+              got[19] == "124" && \
+              got[18] == "000" && \
+              got[17] == "000" && \
+              got[16] == "000" && \
+              got[15] == "000" && \
+              got[14] == "000" && \
+              got[13] == "000" && \
+              got[12] == "000" && \
+              got[11] == "000" && \
+              got[10] == "000" && \
+              got[9]  == "000" && \
+              got[8]  == "000")
+            {
+              print "possibly double-double, big endian"
+              found = 1
+              exit
+            }
         }
     }
 }
@@ -510,6 +687,15 @@ case $mpfr_cv_c_long_double_format in
   "IEEE quad, big endian")
     AC_DEFINE(HAVE_LDOUBLE_IEEE_QUAD_BIG, 1)
     ;;
+  "IEEE quad, little endian")
+    AC_DEFINE(HAVE_LDOUBLE_IEEE_QUAD_LITTLE, 1)
+    ;;
+  "possibly double-double, big endian")
+    AC_MSG_WARN([This format is known on GCC/PowerPC platforms,])
+    AC_MSG_WARN([but due to GCC PR26374, we can't test further.])
+    AC_MSG_WARN([You can safely ignore this warning, though.])
+    # Since we are not sure, we do not want to define a macro.
+    ;;
   unknown* | "not available")
     ;;
   *)
@@ -529,11 +715,6 @@ AC_SUBST(MPFR_LIBM,'')
 case $host in
   *-*-beos* | *-*-cygwin* | *-*-pw32*)
     # According to libtool AC CHECK LIBM, these systems don't have libm
-    ;;
-  *-*-hpux*)
-    # -lM means something subtly different to -lm, SVID style error handling
-    # or something.  FIXME: Why exactly do we want this?
-    AC_CHECK_LIB(M, main, MPFR_LIBM="-lM")
     ;;
   *-*-solaris*)
     # On Solaris the math functions new in C99 are in -lm9x.
@@ -591,4 +772,77 @@ if test $gmp_cv_c_attribute_mode = yes; then
  AC_DEFINE(HAVE_ATTRIBUTE_MODE, 1,
  [Define to 1 if the compiler accepts gcc style __attribute__ ((mode (XX)))])
 fi
+])
+
+
+dnl  MPFR_FUNC_GMP_PRINTF_SPEC
+dnl  ------------------------------------
+dnl  MPFR_FUNC_GMP_PRINTF_SPEC(spec, type, [includes], [if-true], [if-false])
+dnl  Check if gmp_sprintf supports the conversion specification 'spec'
+dnl  with type 'type'.
+dnl  Expand 'if-true' if printf supports 'spec', 'if-false' otherwise.
+
+AC_DEFUN([MPFR_FUNC_GMP_PRINTF_SPEC],[
+AC_MSG_CHECKING(if gmp_printf supports "%$1")
+AC_RUN_IFELSE([AC_LANG_PROGRAM([[
+#include <stdio.h>
+$3
+#include <gmp.h>
+]], [[
+  char s[256];
+  $2 a = 17;
+
+  if (gmp_sprintf (s, "(%0.0$1)(%d)", a, 42) == -1) return 1;
+  return (strcmp (s, "(17)(42)") != 0);
+]])],
+  [AC_MSG_RESULT(yes)
+  $4],
+  [AC_MSG_RESULT(no)
+  $5])
+])
+
+
+dnl MPFR_CHECK_PRINTF_SPEC
+dnl ----------------------
+dnl Check if gmp_printf supports some optional length modifiers.
+dnl Defined symbols are negative to shorten the gcc command line.
+
+AC_DEFUN([MPFR_CHECK_PRINTF_SPEC], [
+AC_REQUIRE([MPFR_CONFIGS])dnl
+if test "$ac_cv_type_intmax_t" = yes; then
+ MPFR_FUNC_GMP_PRINTF_SPEC([jd], [intmax_t], [
+#ifdef HAVE_STDINT_H
+# include <stdint.h>
+#endif
+#ifdef HAVE_INTTYPES_H
+# include <inttypes.h>
+#endif
+         ],,
+         [AC_DEFINE([NPRINTF_J], 1, [gmp_printf cannot read intmax_t])])
+fi
+
+MPFR_FUNC_GMP_PRINTF_SPEC([hhd], [char], [
+#include <gmp.h>
+         ],,
+         [AC_DEFINE([NPRINTF_HH], 1, [gmp_printf cannot use 'hh' length modifier])])
+
+MPFR_FUNC_GMP_PRINTF_SPEC([lld], [long long int], [
+#include <gmp.h>
+         ],,
+         [AC_DEFINE([NPRINTF_LL], 1, [gmp_printf cannot read long long int])])
+
+MPFR_FUNC_GMP_PRINTF_SPEC([Lf], [long double], [
+#include <gmp.h>
+         ],,
+         [AC_DEFINE([NPRINTF_L], 1, [gmp_printf cannot read long double])])
+
+MPFR_FUNC_GMP_PRINTF_SPEC([td], [ptrdiff_t], [
+#if defined (__cplusplus)
+#include <cstddef>
+#else
+#include <stddef.h>
+#endif
+#include "gmp.h"
+    ],,
+    [AC_DEFINE([NPRINTF_T], 1, [gmp_printf cannot read ptrdiff_t])])
 ])

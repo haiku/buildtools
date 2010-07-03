@@ -1,25 +1,25 @@
 /* mpfr_nextabove, mpfr_nextbelow, mpfr_nexttoward -- next representable
 floating-point number
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
@@ -28,7 +28,6 @@ mpfr_nexttozero (mpfr_ptr x)
 {
   if (MPFR_UNLIKELY(MPFR_IS_INF(x)))
     {
-      MPFR_CLEAR_FLAGS(x);
       mpfr_setmax (x, __gmpfr_emax);
       return;
     }
@@ -49,7 +48,7 @@ mpfr_nexttozero (mpfr_ptr x)
       mpn_sub_1 (xp, xp, xn, MPFR_LIMB_ONE << sh);
       if (MPFR_UNLIKELY( MPFR_LIMB_MSB(xp[xn-1]) == 0) )
         { /* was an exact power of two: not normalized any more */
-          mp_exp_t exp = MPFR_EXP (x);
+          mpfr_exp_t exp = MPFR_EXP (x);
           if (MPFR_UNLIKELY(exp == __gmpfr_emin))
             MPFR_SET_ZERO(x);
           else
@@ -83,7 +82,7 @@ mpfr_nexttoinf (mpfr_ptr x)
       if (MPFR_UNLIKELY( mpn_add_1 (xp, xp, xn, MPFR_LIMB_ONE << sh)) )
         /* got 1.0000... */
         {
-          mp_exp_t exp = MPFR_EXP (x);
+          mpfr_exp_t exp = MPFR_EXP (x);
           if (MPFR_UNLIKELY(exp == __gmpfr_emax))
             MPFR_SET_INF(x);
           else

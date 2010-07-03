@@ -1,46 +1,45 @@
 /* mpf_inp_str(dest_float, stream, base) -- Input a number in base
    BASE from stdio stream STREAM and store the result in DEST_FLOAT.
 
-Copyright 1999, 2001, 2002, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 (Copied from GMP, file mpf/inp_str.c)
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <ctype.h>
 
 #include "mpfr-impl.h"
 
 size_t
-mpfr_inp_str (mpfr_ptr rop, FILE *stream, int base, mp_rnd_t rnd_mode)
+mpfr_inp_str (mpfr_ptr rop, FILE *stream, int base, mpfr_rnd_t rnd_mode)
 {
-  char *str;
+  unsigned char *str;
   size_t alloc_size, str_size;
   int c;
   int retval;
   size_t nread;
 
-  MPFR_CLEAR_FLAGS(rop);
   if (stream == NULL)
     stream = stdin;
 
   alloc_size = 100;
-  str = (char *) (*__gmp_allocate_func) (alloc_size);
+  str = (unsigned char *) (*__gmp_allocate_func) (alloc_size);
   str_size = 0;
   nread = 0;
 
@@ -60,11 +59,12 @@ mpfr_inp_str (mpfr_ptr rop, FILE *stream, int base, mp_rnd_t rnd_mode)
         {
           size_t old_alloc_size = alloc_size;
           alloc_size = alloc_size * 3 / 2;
-          str = (char *) (*__gmp_reallocate_func) (str, old_alloc_size, alloc_size);
+          str = (unsigned char *)
+            (*__gmp_reallocate_func) (str, old_alloc_size, alloc_size);
         }
       if (c == EOF || isspace (c))
         break;
-      str[str_size++] = c;
+      str[str_size++] = (unsigned char) c;
       c = getc (stream);
     }
   ungetc (c, stream);
@@ -77,7 +77,7 @@ mpfr_inp_str (mpfr_ptr rop, FILE *stream, int base, mp_rnd_t rnd_mode)
 
   str[str_size] = '\0';
 
-  retval = mpfr_set_str (rop, str, base, rnd_mode);
+  retval = mpfr_set_str (rop, (char *) str, base, rnd_mode);
   (*__gmp_free_func) (str, alloc_size);
 
   if (retval == -1)

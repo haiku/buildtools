@@ -10,7 +10,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include "gmp.h"
@@ -30,13 +28,13 @@ MA 02110-1301, USA. */
 
 /* SunOS 4 stdio.h doesn't provide prototypes for these */
 #if ! HAVE_DECL_FGETC
-int fgetc _PROTO ((FILE *fp));
+int fgetc __GMP_PROTO ((FILE *fp));
 #endif
 #if ! HAVE_DECL_FSCANF
-int fscanf _PROTO ((FILE *fp, const char *fmt, ...));
+int fscanf __GMP_PROTO ((FILE *fp, const char *fmt, ...));
 #endif
 #if ! HAVE_DECL_UNGETC
-int ungetc _PROTO ((int c, FILE *fp));
+int ungetc __GMP_PROTO ((int c, FILE *fp));
 #endif
 
 

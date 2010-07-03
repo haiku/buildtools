@@ -1,12 +1,13 @@
 /* mpz_bin_uiui - compute n over k.
 
-Copyright 1998, 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2006 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -87,48 +86,31 @@ mpz_bin_uiui (mpz_ptr r, unsigned long int n, unsigned long int k)
   nacc = 1;
   kacc = 1;
 
-  cnt = 0;
   for (i = 2; i <= k; i++)
     {
-      mp_limb_t n1, n0, k0;
+      mp_limb_t n1, n0;
 
-      j++;
-#if 0
-      /* Remove common multiples of 2.  This will allow us to accumulate
-         more in nacc and kacc before we need a bignum step.  It would make
-         sense to cancel factors of 3, 5, etc too, but this would be best
-         handled by sieving out factors.  Alternatively, we could perform a
-         gcd of the accumulators just as they have overflown, and keep
-         accumulating until the gcd doesn't remove a significant factor.  */
-      while (((nacc | kacc) & 1) == 0)
-        {
-          nacc >>= 1;
-          kacc >>= 1;
-        }
-#else
+      /* Remove common 2 factors.  */
       cnt = ((nacc | kacc) & 1) ^ 1;
       nacc >>= cnt;
       kacc >>= cnt;
-#endif
+
+      j++;
       /* Accumulate next multiples.  */
       umul_ppmm (n1, n0, nacc, (mp_limb_t) j << GMP_NAIL_BITS);
-      k0 = kacc * i;
       n0 >>= GMP_NAIL_BITS;
-      if (n1 != 0)
+      if (n1 == 0)
         {
-          /* Accumulator overflow.  Perform bignum step. */
-          MULDIV (32);
-          nacc = j;
-          kacc = i;
+          /* Save new products in accumulators to keep accumulating.  */
+          nacc = n0;
+          kacc = kacc * i;
         }
       else
         {
-          /* k<=n, so should have no overflow from k0 = kacc*i */
-          ASSERT (kacc <= GMP_NUMB_MAX / i);
-
-          /* Save new products in accumulators to keep accumulating.  */
-          nacc = n0;
-          kacc = k0;
+          /* Accumulator overflow.  Perform bignum step.  */
+          MULDIV (32);
+          nacc = j;
+          kacc = i;
         }
     }
 

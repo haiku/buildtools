@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h> /* for NULL */
 #include "gmp.h"
@@ -43,15 +41,15 @@ struct __gmp_rand_lc_scheme_struct
 
 static const struct __gmp_rand_lc_scheme_struct __gmp_rand_lc_scheme[] =
 {
-  {32, "29CF535", 	     1},
-  {33, "51F666D", 	     1},
-  {34, "A3D73AD", 	     1},
-  {35, "147E5B85", 	     1},
-  {36, "28F725C5", 	     1},
-  {37, "51EE3105", 	     1},
-  {38, "A3DD5CDD", 	     1},
-  {39, "147AF833D", 	     1},
-  {40, "28F5DA175", 	     1},
+  {32, "29CF535",	     1},
+  {33, "51F666D",	     1},
+  {34, "A3D73AD",	     1},
+  {35, "147E5B85",	     1},
+  {36, "28F725C5",	     1},
+  {37, "51EE3105",	     1},
+  {38, "A3DD5CDD",	     1},
+  {39, "147AF833D",	     1},
+  {40, "28F5DA175",	     1},
   {56, "AA7D735234C0DD",  1},
   {64, "BAECD515DAF0B49D", 1},
   {100, "292787EBD3329AD7E7575E2FD", 1},
@@ -64,7 +62,7 @@ static const struct __gmp_rand_lc_scheme_struct __gmp_rand_lc_scheme[] =
 };
 
 int
-gmp_randinit_lc_2exp_size (gmp_randstate_t rstate, unsigned long size)
+gmp_randinit_lc_2exp_size (gmp_randstate_t rstate, mp_bitcnt_t size)
 {
   const struct __gmp_rand_lc_scheme_struct *sp;
   mpz_t a;

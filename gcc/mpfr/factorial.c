@@ -1,24 +1,24 @@
 /* mpfr_fac_ui -- factorial of a non-negative integer
 
-Copyright 2001, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -28,18 +28,20 @@ MA 02110-1301, USA. */
     n!=prod^{n}_{i=1}i
  */
 
+/* FIXME: efficient problems with large arguments; see comments in gamma.c. */
+
 int
-mpfr_fac_ui (mpfr_ptr y, unsigned long int x, mp_rnd_t rnd_mode)
+mpfr_fac_ui (mpfr_ptr y, unsigned long int x, mpfr_rnd_t rnd_mode)
 {
   mpfr_t t;       /* Variable of Intermediary Calculation*/
   unsigned long i;
   int round, inexact;
 
-  mp_prec_t Ny;   /* Precision of output variable */
-  mp_prec_t Nt;   /* Precision of Intermediary Calculation variable */
-  mp_prec_t err;  /* Precision of error */
+  mpfr_prec_t Ny;   /* Precision of output variable */
+  mpfr_prec_t Nt;   /* Precision of Intermediary Calculation variable */
+  mpfr_prec_t err;  /* Precision of error */
 
-  mp_rnd_t rnd;
+  mpfr_rnd_t rnd;
   MPFR_SAVE_EXPO_DECL (expo);
   MPFR_ZIV_DECL (loop);
 
@@ -57,7 +59,7 @@ mpfr_fac_ui (mpfr_ptr y, unsigned long int x, mp_rnd_t rnd_mode)
 
   mpfr_init2 (t, Nt); /* initialise of intermediary variable */
 
-  rnd = GMP_RNDZ;
+  rnd = MPFR_RNDZ;
   MPFR_ZIV_INIT (loop, Nt);
   for (;;)
     {
@@ -74,8 +76,8 @@ mpfr_fac_ui (mpfr_ptr y, unsigned long int x, mp_rnd_t rnd_mode)
 
       err = Nt - 1 - MPFR_INT_CEIL_LOG2 (Nt);
 
-      round = !inexact || mpfr_can_round (t, err, rnd, GMP_RNDZ,
-                                          Ny + (rnd_mode == GMP_RNDN));
+      round = !inexact || mpfr_can_round (t, err, rnd, MPFR_RNDZ,
+                                          Ny + (rnd_mode == MPFR_RNDN));
 
       if (MPFR_LIKELY (round))
         {
@@ -94,7 +96,7 @@ mpfr_fac_ui (mpfr_ptr y, unsigned long int x, mp_rnd_t rnd_mode)
           else /* inexact and round have opposite signs: we cannot
                   compute the inexact flag. Restart using the
                   symmetric rounding. */
-            rnd = (rnd == GMP_RNDZ) ? GMP_RNDU : GMP_RNDZ;
+            rnd = (rnd == MPFR_RNDZ) ? MPFR_RNDU : MPFR_RNDZ;
         }
       MPFR_ZIV_NEXT (loop, Nt);
       mpfr_set_prec (t, Nt);

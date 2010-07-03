@@ -1,24 +1,24 @@
 /* mpfr_eint, mpfr_eint1 -- the exponential integral
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -32,14 +32,14 @@ MA 02110-1301, USA. */
 
 /* compute in y an approximation of sum(x^k/k/k!, k=1..infinity),
    and return e such that the absolute error is bound by 2^e ulp(y) */
-static mp_exp_t
+static mpfr_exp_t
 mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
 {
   mpfr_t eps; /* dynamic (absolute) error bound on t */
   mpfr_t erru, errs;
   mpz_t m, s, t, u;
-  mp_exp_t e, sizeinbase;
-  mp_prec_t w = MPFR_PREC(y);
+  mpfr_exp_t e, sizeinbase;
+  mpfr_prec_t w = MPFR_PREC(y);
   unsigned long k;
   MPFR_GROUP_DECL (group);
 
@@ -48,9 +48,9 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
      thus |R(x)/x| <= |x|/2
      thus if |x| <= 2^(-PREC(y)) we have |S - o(x)| <= ulp(y) */
 
-  if (MPFR_GET_EXP(x) <= - (mp_exp_t) w)
+  if (MPFR_GET_EXP(x) <= - (mpfr_exp_t) w)
     {
-      mpfr_set (y, x, GMP_RNDN);
+      mpfr_set (y, x, MPFR_RNDN);
       return 0;
     }
 
@@ -59,7 +59,7 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
   mpz_init (u);
   mpz_init (m);
   MPFR_GROUP_INIT_3 (group, 31, eps, erru, errs);
-  e = mpfr_get_z_exp (m, x); /* x = m * 2^e */
+  e = mpfr_get_z_2exp (m, x); /* x = m * 2^e */
   MPFR_ASSERTD (mpz_sizeinbase (m, 2) == MPFR_PREC (x));
   if (MPFR_PREC (x) > w)
     {
@@ -74,8 +74,8 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
   /* initialize t to 2^w */
   mpz_set_ui (t, 1);
   mpz_mul_2exp (t, t, w);
-  mpfr_set_ui (eps, 0, GMP_RNDN); /* eps[0] = 0 */
-  mpfr_set_ui (errs, 0, GMP_RNDN);
+  mpfr_set_ui (eps, 0, MPFR_RNDN); /* eps[0] = 0 */
+  mpfr_set_ui (errs, 0, MPFR_RNDN);
   for (k = 1;; k++)
     {
       /* let eps[k] be the absolute error on t[k]:
@@ -83,12 +83,12 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
          eps[k+1] <= 1 + eps[k-1]*m*2^e/k + t[k-1]*m*2^(1-w)*2^e/k
                   =  1 + (eps[k-1] + t[k-1]*2^(1-w))*m*2^e/k
                   = 1 + (eps[k-1]*2^(w-1) + t[k-1])*2^(1-w)*m*2^e/k */
-      mpfr_mul_2ui (eps, eps, w - 1, GMP_RNDU);
-      mpfr_add_z (eps, eps, t, GMP_RNDU);
+      mpfr_mul_2ui (eps, eps, w - 1, MPFR_RNDU);
+      mpfr_add_z (eps, eps, t, MPFR_RNDU);
       MPFR_MPZ_SIZEINBASE2 (sizeinbase, m);
-      mpfr_mul_2si (eps, eps, sizeinbase - (w - 1) + e, GMP_RNDU);
-      mpfr_div_ui (eps, eps, k, GMP_RNDU);
-      mpfr_add_ui (eps, eps, 1, GMP_RNDU);
+      mpfr_mul_2si (eps, eps, sizeinbase - (w - 1) + e, MPFR_RNDU);
+      mpfr_div_ui (eps, eps, k, MPFR_RNDU);
+      mpfr_add_ui (eps, eps, 1, MPFR_RNDU);
       mpz_mul (t, t, m);
       if (e < 0)
         mpz_tdiv_q_2exp (t, t, -e);
@@ -98,10 +98,10 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
       mpz_tdiv_q_ui (u, t, k);
       mpz_add (s, s, u);
       /* the absolute error on u is <= 1 + eps[k]/k */
-      mpfr_div_ui (erru, eps, k, GMP_RNDU);
-      mpfr_add_ui (erru, erru, 1, GMP_RNDU);
+      mpfr_div_ui (erru, eps, k, MPFR_RNDU);
+      mpfr_add_ui (erru, erru, 1, MPFR_RNDU);
       /* and that on s is the sum of all errors on u */
-      mpfr_add (errs, errs, erru, GMP_RNDU);
+      mpfr_add (errs, errs, erru, MPFR_RNDU);
       /* we are done when t is smaller than errs */
       if (mpz_sgn (t) == 0)
         sizeinbase = 0;
@@ -113,11 +113,11 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
   /* the truncation error is bounded by (|t|+eps)/k*(|x|/k + |x|^2/k^2 + ...)
      <= (|t|+eps)/k*|x|/(k-|x|) */
   mpz_abs (t, t);
-  mpfr_add_z (eps, eps, t, GMP_RNDU);
-  mpfr_div_ui (eps, eps, k, GMP_RNDU);
-  mpfr_abs (erru, x, GMP_RNDU); /* |x| */
-  mpfr_mul (eps, eps, erru, GMP_RNDU);
-  mpfr_ui_sub (erru, k, erru, GMP_RNDD);
+  mpfr_add_z (eps, eps, t, MPFR_RNDU);
+  mpfr_div_ui (eps, eps, k, MPFR_RNDU);
+  mpfr_abs (erru, x, MPFR_RNDU); /* |x| */
+  mpfr_mul (eps, eps, erru, MPFR_RNDU);
+  mpfr_ui_sub (erru, k, erru, MPFR_RNDD);
   if (MPFR_IS_NEG (erru))
     {
       /* the truncated series does not converge, return fail */
@@ -125,10 +125,10 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
     }
   else
     {
-      mpfr_div (eps, eps, erru, GMP_RNDU);
-      mpfr_add (errs, errs, eps, GMP_RNDU);
-      mpfr_set_z (y, s, GMP_RNDN);
-      mpfr_div_2ui (y, y, w, GMP_RNDN);
+      mpfr_div (eps, eps, erru, MPFR_RNDU);
+      mpfr_add (errs, errs, eps, MPFR_RNDU);
+      mpfr_set_z (y, s, MPFR_RNDN);
+      mpfr_div_2ui (y, y, w, MPFR_RNDN);
       /* errs was an absolute error bound on s. We must convert it to an error
          in terms of ulp(y). Since ulp(y) = 2^(EXP(y)-PREC(y)), we must
          divide the error by 2^(EXP(y)-PREC(y)), but since we divided also
@@ -148,41 +148,41 @@ mpfr_eint_aux (mpfr_t y, mpfr_srcptr x)
    Assumes x >= PREC(y) * log(2).
    Returns the error bound in terms of ulp(y).
 */
-static mp_exp_t
+static mpfr_exp_t
 mpfr_eint_asympt (mpfr_ptr y, mpfr_srcptr x)
 {
-  mp_prec_t p = MPFR_PREC(y);
+  mpfr_prec_t p = MPFR_PREC(y);
   mpfr_t invx, t, err;
   unsigned long k;
-  mp_exp_t err_exp;
+  mpfr_exp_t err_exp;
 
   mpfr_init2 (t, p);
   mpfr_init2 (invx, p);
   mpfr_init2 (err, 31); /* error in ulps on y */
-  mpfr_ui_div (invx, 1, x, GMP_RNDN); /* invx = 1/x*(1+u) with |u|<=2^(1-p) */
-  mpfr_set_ui (t, 1, GMP_RNDN); /* exact */
-  mpfr_set (y, t, GMP_RNDN);
-  mpfr_set_ui (err, 0, GMP_RNDN);
-  for (k = 1; MPFR_GET_EXP(t) + (mp_exp_t) p > MPFR_GET_EXP(y); k++)
+  mpfr_ui_div (invx, 1, x, MPFR_RNDN); /* invx = 1/x*(1+u) with |u|<=2^(1-p) */
+  mpfr_set_ui (t, 1, MPFR_RNDN); /* exact */
+  mpfr_set (y, t, MPFR_RNDN);
+  mpfr_set_ui (err, 0, MPFR_RNDN);
+  for (k = 1; MPFR_GET_EXP(t) + (mpfr_exp_t) p > MPFR_GET_EXP(y); k++)
     {
-      mpfr_mul (t, t, invx, GMP_RNDN); /* 2 more roundings */
-      mpfr_mul_ui (t, t, k, GMP_RNDN); /* 1 more rounding: t = k!/x^k*(1+u)^e
+      mpfr_mul (t, t, invx, MPFR_RNDN); /* 2 more roundings */
+      mpfr_mul_ui (t, t, k, MPFR_RNDN); /* 1 more rounding: t = k!/x^k*(1+u)^e
                                           with u=2^{-p} and |e| <= 3*k */
       /* we use the fact that |(1+u)^n-1| <= 2*|n*u| for |n*u| <= 1, thus
          the error on t is less than 6*k*2^{-p}*t <= 6*k*ulp(t) */
       /* err is in terms of ulp(y): transform it in terms of ulp(t) */
-      mpfr_mul_2si (err, err, MPFR_GET_EXP(y) - MPFR_GET_EXP(t), GMP_RNDU);
-      mpfr_add_ui (err, err, 6 * k, GMP_RNDU);
+      mpfr_mul_2si (err, err, MPFR_GET_EXP(y) - MPFR_GET_EXP(t), MPFR_RNDU);
+      mpfr_add_ui (err, err, 6 * k, MPFR_RNDU);
       /* transform back in terms of ulp(y) */
-      mpfr_div_2si (err, err, MPFR_GET_EXP(y) - MPFR_GET_EXP(t), GMP_RNDU);
-      mpfr_add (y, y, t, GMP_RNDN);
+      mpfr_div_2si (err, err, MPFR_GET_EXP(y) - MPFR_GET_EXP(t), MPFR_RNDU);
+      mpfr_add (y, y, t, MPFR_RNDN);
     }
   /* add the truncation error bounded by ulp(y): 1 ulp */
-  mpfr_mul (y, y, invx, GMP_RNDN); /* err <= 2*err + 3/2 */
-  mpfr_exp (t, x, GMP_RNDN); /* err(t) <= 1/2*ulp(t) */
-  mpfr_mul (y, y, t, GMP_RNDN); /* again: err <= 2*err + 3/2 */
-  mpfr_mul_2ui (err, err, 2, GMP_RNDU);
-  mpfr_add_ui (err, err, 8, GMP_RNDU);
+  mpfr_mul (y, y, invx, MPFR_RNDN); /* err <= 2*err + 3/2 */
+  mpfr_exp (t, x, MPFR_RNDN); /* err(t) <= 1/2*ulp(t) */
+  mpfr_mul (y, y, t, MPFR_RNDN); /* again: err <= 2*err + 3/2 */
+  mpfr_mul_2ui (err, err, 2, MPFR_RNDU);
+  mpfr_add_ui (err, err, 8, MPFR_RNDU);
   err_exp = MPFR_GET_EXP(err);
   mpfr_clear (t);
   mpfr_clear (invx);
@@ -191,12 +191,12 @@ mpfr_eint_asympt (mpfr_ptr y, mpfr_srcptr x)
 }
 
 int
-mpfr_eint (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd)
+mpfr_eint (mpfr_ptr y, mpfr_srcptr x, mpfr_rnd_t rnd)
 {
   int inex;
   mpfr_t tmp, ump;
-  mp_exp_t err, te;
-  mp_prec_t prec;
+  mpfr_exp_t err, te;
+  mpfr_prec_t prec;
   MPFR_SAVE_EXPO_DECL (expo);
   MPFR_ZIV_DECL (loop);
 
@@ -240,11 +240,11 @@ mpfr_eint (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd)
      then log2(eint(x)) >= emax, and eint(x) >= 2^emax, i.e. it overflows. */
   mpfr_init2 (tmp, 64);
   mpfr_init2 (ump, 64);
-  mpfr_log (tmp, x, GMP_RNDU);
-  mpfr_sub (ump, x, tmp, GMP_RNDD);
-  mpfr_const_log2 (tmp, GMP_RNDU);
-  mpfr_div (ump, ump, tmp, GMP_RNDD);
-  /* FIXME: We really need mpfr_set_exp_t and mpfr_cmp_exp_t functions. */
+  mpfr_log (tmp, x, MPFR_RNDU);
+  mpfr_sub (ump, x, tmp, MPFR_RNDD);
+  mpfr_const_log2 (tmp, MPFR_RNDU);
+  mpfr_div (ump, ump, tmp, MPFR_RNDD);
+  /* FIXME: We really need mpfr_set_exp_t and mpfr_cmpfr_exp_t functions. */
   MPFR_ASSERTN (MPFR_EMAX_MAX <= LONG_MAX);
   if (mpfr_cmp_ui (ump, __gmpfr_emax) >= 0)
     {
@@ -262,7 +262,7 @@ mpfr_eint (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd)
   if (MPFR_GET_EXP(x) == -1) /* 1/4 <= x < 1/2 */
     {
       double d;
-      d = mpfr_get_d (x, GMP_RNDN) - 0.37250741078136663;
+      d = mpfr_get_d (x, MPFR_RNDN) - 0.37250741078136663;
       d = (d == 0.0) ? -53 : __gmpfr_ceil_log2 (d);
       prec += -d;
     }
@@ -283,16 +283,16 @@ mpfr_eint (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd)
         {
           err = mpfr_eint_aux (tmp, x); /* error <= 2^err ulp(tmp) */
           te = MPFR_GET_EXP(tmp);
-          mpfr_const_euler (ump, GMP_RNDN); /* 0.577 -> EXP(ump)=0 */
-          mpfr_add (tmp, tmp, ump, GMP_RNDN);
+          mpfr_const_euler (ump, MPFR_RNDN); /* 0.577 -> EXP(ump)=0 */
+          mpfr_add (tmp, tmp, ump, MPFR_RNDN);
           /* error <= 1/2 + 1/2*2^(EXP(ump)-EXP(tmp)) + 2^(te-EXP(tmp)+err)
              <= 1/2 + 2^(MAX(EXP(ump), te+err+1) - EXP(tmp))
              <= 2^(MAX(0, 1 + MAX(EXP(ump), te+err+1) - EXP(tmp))) */
           err = MAX(1, te + err + 2) - MPFR_GET_EXP(tmp);
           err = MAX(0, err);
           te = MPFR_GET_EXP(tmp);
-          mpfr_log (ump, x, GMP_RNDN);
-          mpfr_add (tmp, tmp, ump, GMP_RNDN);
+          mpfr_log (ump, x, MPFR_RNDN);
+          mpfr_add (tmp, tmp, ump, MPFR_RNDN);
           /* same formula as above, except now EXP(ump) is not 0 */
           err += te + 1;
           if (MPFR_LIKELY (!MPFR_IS_ZERO (ump)))

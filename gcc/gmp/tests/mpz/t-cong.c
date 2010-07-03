@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -135,7 +133,7 @@ check_random (int argc, char *argv[])
   mpz_t   a, c, d, ra, rc;
   int     i;
   int     want;
-  int     reps = 2000;
+  int     reps = 50000;
 
   if (argc >= 2)
     reps = atoi (argv[1]);
@@ -148,11 +146,11 @@ check_random (int argc, char *argv[])
 
   for (i = 0; i < reps; i++)
     {
-      mpz_errandomb (a, rands, 8*BITS_PER_MP_LIMB);
+      mpz_errandomb (a, rands, 8*GMP_LIMB_BITS);
       MPZ_CHECK_FORMAT (a);
-      mpz_errandomb (c, rands, 8*BITS_PER_MP_LIMB);
+      mpz_errandomb (c, rands, 8*GMP_LIMB_BITS);
       MPZ_CHECK_FORMAT (c);
-      mpz_errandomb_nonzero (d, rands, 8*BITS_PER_MP_LIMB);
+      mpz_errandomb_nonzero (d, rands, 8*GMP_LIMB_BITS);
 
       mpz_negrandom (a, rands);
       MPZ_CHECK_FORMAT (a);
@@ -173,7 +171,7 @@ check_random (int argc, char *argv[])
 
       if (! mpz_pow2abs_p (d))
         {
-          refmpz_combit (a, urandom() % (8*BITS_PER_MP_LIMB));
+          refmpz_combit (a, urandom() % (8*GMP_LIMB_BITS));
           check_one (a, c, d, 0);
         }
     }

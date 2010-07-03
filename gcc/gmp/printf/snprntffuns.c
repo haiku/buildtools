@@ -10,7 +10,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -47,7 +45,7 @@ MA 02110-1301, USA. */
    no indication how big the output would have been.  It's necessary to
    re-run to determine that size.
 
-   "size-1" would mean sucess from a C99 vsnprintf, and the re-run is
+   "size-1" would mean success from a C99 vsnprintf, and the re-run is
    unnecessary in this case, but we don't bother to try to detect what sort
    of vsnprintf we've got.  size-1 should occur rarely in normal
    circumstances.

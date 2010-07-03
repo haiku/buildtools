@@ -7,7 +7,7 @@ dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -15,10 +15,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 define(`ASM_START',`')
 
@@ -38,7 +36,11 @@ $1:')
 define(`EPILOGUE_cpu',
 m4_assert_numargs(1))
 
-define(`LEA',
+dnl  LEAL -- Load Effective Address Local.  This is to be used for symbols
+dnl  defined in the same file.  It will not work for externally defined
+dnl  symbols.
+
+define(`LEAL',
 m4_assert_numargs(2)
 `ifdef(`PIC',
 `
@@ -53,7 +55,34 @@ m4_assert_numargs(2)
 	la	$1, lo16($2)($1)
 ')')
 
+dnl  LEA -- Load Effective Address.  This is to be used for symbols defined in
+dnl  another file.  It will not work for locally defined symbols.
+
+define(`LEA',
+m4_assert_numargs(2)
+`ifdef(`PIC',
+`define(`EPILOGUE_cpu',
+`	.non_lazy_symbol_pointer
+`L'$2`'$non_lazy_ptr:
+	.indirect_symbol $2
+	.quad	0
+')
+	mflr	r0			C save return address
+	bcl	20, 31, 1f
+1:	mflr	$1
+	addis	$1, $1, ha16(`L'$2`'$non_lazy_ptr-1b)
+	ld	$1, lo16(`L'$2`'$non_lazy_ptr-1b)($1)
+	mtlr	r0			C restore return address
+',`
+	lis	$1, ha16($2)
+	la	$1, lo16($2)($1)
+')')
+
 define(`EXTERN',
+m4_assert_numargs(1)
+`dnl')
+
+define(`EXTERN_FUNC',
 m4_assert_numargs(1)
 `dnl')
 

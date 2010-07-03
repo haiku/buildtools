@@ -1,24 +1,24 @@
 /* Test file for mpfr_get_d
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,28 +27,22 @@ MA 02110-1301, USA. */
 #include "mpfr-test.h"
 
 static int
-check_denorms ()
+check_denorms (void)
 {
-  mp_rnd_t rnd_mode;
+  mpfr_rnd_t rnd_mode;
   mpfr_t x;
-  double d, d2, dd, f, dbl_min;
+  double d, d2, dd, f;
   int fail = 0, k, n;
 
-  /* workaround for gcc bug on m68040-unknown-netbsd1.4.1,
-     where DBL_MIN gives (1-2^(-52))/2^1022 */
-  dbl_min = 1.0;
-  for (d = DBL_MIN; d < 0.9; d *= 2.0)
-    dbl_min /= 2.0;
+  mpfr_init2 (x, GMP_NUMB_BITS);
 
-  mpfr_init2 (x, BITS_PER_MP_LIMB);
-
-  rnd_mode = GMP_RNDN;
+  rnd_mode = MPFR_RNDN;
   for (k = -17; k <= 17; k += 2)
     {
-      d = (double) k * dbl_min; /* k * 2^(-1022) */
+      d = (double) k * DBL_MIN; /* k * 2^(-1022) */
       f = 1.0;
-      mpfr_set_si (x, k, GMP_RNDN);
-      mpfr_div_2exp (x, x, 1022, GMP_RNDN); /* k * 2^(-1022) */
+      mpfr_set_si (x, k, MPFR_RNDN);
+      mpfr_div_2exp (x, x, 1022, MPFR_RNDN); /* k * 2^(-1022) */
       for (n = 0; n <= 58; n++)
         {
           d2 = d * f;
@@ -61,8 +55,31 @@ check_denorms ()
               fail = 1;
             }
           f *= 0.5;
-          mpfr_div_2exp (x, x, 1, GMP_RNDN);
+          mpfr_div_2exp (x, x, 1, MPFR_RNDN);
         }
+    }
+
+  mpfr_set_str_binary (x, "1e-1074");
+  dd = mpfr_get_d (x, MPFR_RNDA);
+  d2 = DBL_MIN; /* 2^(-1022) */
+  for (k = 0; k < 52; k++)
+    d2 *= 0.5;  /* 2^(-1074) */
+  /* we first check that d2 is not zero (it could happen on a platform with
+     no subnormals) */
+  if (d2 != 0.0 && dd != d2)
+    {
+      printf ("Error for x=1e-1074, RNDA\n");
+      exit (1);
+    }
+
+  mpfr_set_str_binary (x, "1e-1075");
+  dd = mpfr_get_d (x, MPFR_RNDA);
+  if (d2 != 0.0 && dd != d2)
+    {
+      printf ("Error for x=1e-1075, RNDA\n");
+      printf ("expected %.16e\n", d2);
+      printf ("got      %.16e\n", dd);
+      exit (1);
     }
 
   mpfr_clear (x);
@@ -70,7 +87,7 @@ check_denorms ()
 }
 
 static void
-check_inf_nan ()
+check_inf_nan (void)
 {
   /* only if nans and infs are available */
 #if _GMP_IEEE_FLOATS
@@ -80,17 +97,17 @@ check_inf_nan ()
   mpfr_init2 (x, 123);
 
   mpfr_set_inf (x, 1);
-  d = mpfr_get_d (x, GMP_RNDZ);
+  d = mpfr_get_d (x, MPFR_RNDZ);
   ASSERT_ALWAYS (d > 0);
   ASSERT_ALWAYS (DOUBLE_ISINF (d));
 
   mpfr_set_inf (x, -1);
-  d = mpfr_get_d (x, GMP_RNDZ);
+  d = mpfr_get_d (x, MPFR_RNDZ);
   ASSERT_ALWAYS (d < 0);
   ASSERT_ALWAYS (DOUBLE_ISINF (d));
 
   mpfr_set_nan (x);
-  d = mpfr_get_d (x, GMP_RNDZ);
+  d = mpfr_get_d (x, MPFR_RNDZ);
   ASSERT_ALWAYS (DOUBLE_ISNAN (d));
 
   mpfr_clear (x);
@@ -107,7 +124,7 @@ check_max (void)
   while (d < (DBL_MAX / 2.0))
     d += d;
   mpfr_init (u);
-  if (mpfr_set_d (u, d, GMP_RNDN) == 0)
+  if (mpfr_set_d (u, d, MPFR_RNDN) == 0)
     {
       /* If setting is exact */
       e = (mpfr_get_d1) (u);
@@ -119,23 +136,23 @@ check_max (void)
     }
 
   mpfr_set_str_binary (u, "-1E1024");
-  d = mpfr_get_d (u, GMP_RNDZ);
+  d = mpfr_get_d (u, MPFR_RNDZ);
   MPFR_ASSERTN(d == -DBL_MAX);
-  d = mpfr_get_d (u, GMP_RNDU);
+  d = mpfr_get_d (u, MPFR_RNDU);
   MPFR_ASSERTN(d == -DBL_MAX);
-  d = mpfr_get_d (u, GMP_RNDN);
+  d = mpfr_get_d (u, MPFR_RNDN);
   MPFR_ASSERTN(DOUBLE_ISINF(d) && d < 0.0);
-  d = mpfr_get_d (u, GMP_RNDD);
+  d = mpfr_get_d (u, MPFR_RNDD);
   MPFR_ASSERTN(DOUBLE_ISINF(d) && d < 0.0);
 
   mpfr_set_str_binary (u, "1E1024");
-  d = mpfr_get_d (u, GMP_RNDZ);
+  d = mpfr_get_d (u, MPFR_RNDZ);
   MPFR_ASSERTN(d == DBL_MAX);
-  d = mpfr_get_d (u, GMP_RNDD);
+  d = mpfr_get_d (u, MPFR_RNDD);
   MPFR_ASSERTN(d == DBL_MAX);
-  d = mpfr_get_d (u, GMP_RNDN);
+  d = mpfr_get_d (u, MPFR_RNDN);
   MPFR_ASSERTN(DOUBLE_ISINF(d) && d > 0.0);
-  d = mpfr_get_d (u, GMP_RNDU);
+  d = mpfr_get_d (u, MPFR_RNDU);
   MPFR_ASSERTN(DOUBLE_ISINF(d) && d > 0.0);
 
   mpfr_clear (u);
@@ -149,7 +166,7 @@ check_min(void)
 
   d = 1.0; while (d > (DBL_MIN * 2.0)) d /= 2.0;
   mpfr_init(u);
-  if (mpfr_set_d(u, d, GMP_RNDN) == 0)
+  if (mpfr_set_d(u, d, MPFR_RNDN) == 0)
     {
       /* If setting is exact */
       e = mpfr_get_d1(u);

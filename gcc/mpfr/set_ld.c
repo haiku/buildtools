@@ -1,25 +1,25 @@
 /* mpfr_set_ld -- convert a machine long double to
                   a multiple precision floating-point number
 
-Copyright 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <float.h>
 
@@ -32,15 +32,15 @@ MA 02110-1301, USA. */
    has been seen with the problem, and gcc 2.95.4 on FreeBSD 4.7.  */
 
 #if HAVE_LDOUBLE_IEEE_EXT_LITTLE
-static const struct {
+static const union {
   char         bytes[10];
-  long double  dummy;  /* for memory alignment */
+  long double  d;
 } ldbl_max_struct = {
   { '\377','\377','\377','\377',
     '\377','\377','\377','\377',
-    '\376','\177' }, 0.0
+    '\376','\177' }
 };
-#define MPFR_LDBL_MAX   (* (const long double *) ldbl_max_struct.bytes)
+#define MPFR_LDBL_MAX   (ldbl_max_struct.d)
 #else
 #define MPFR_LDBL_MAX   LDBL_MAX
 #endif
@@ -49,7 +49,7 @@ static const struct {
 
 /* Generic code */
 int
-mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
+mpfr_set_ld (mpfr_ptr r, long double d, mpfr_rnd_t rnd_mode)
 {
   mpfr_t t, u;
   int inexact, shift_exp;
@@ -173,9 +173,9 @@ mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
             }
           else
             {
-              inexact = mpfr_set_d (u, (double) x, GMP_RNDZ);
+              inexact = mpfr_set_d (u, (double) x, MPFR_RNDZ);
               MPFR_ASSERTD (inexact == 0);
-              if (mpfr_add (t, t, u, GMP_RNDZ) != 0)
+              if (mpfr_add (t, t, u, MPFR_RNDZ) != 0)
                 {
                   if (!mpfr_number_p (t))
                     break;
@@ -198,11 +198,11 @@ mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
                       /* Since mpfr_add was inexact, the sticky bit is 1. */
                       tp = MPFR_MANT (t);
                       rb_mask = MPFR_LIMB_ONE <<
-                        (BITS_PER_MP_LIMB - 1 -
-                         (MPFR_PREC (r) & (BITS_PER_MP_LIMB - 1)));
-                      if (rnd_mode == GMP_RNDN)
+                        (GMP_NUMB_BITS - 1 -
+                         (MPFR_PREC (r) & (GMP_NUMB_BITS - 1)));
+                      if (rnd_mode == MPFR_RNDN)
                         rnd_mode = (*tp & rb_mask) ^ MPFR_IS_NEG (t) ?
-                          GMP_RNDU : GMP_RNDD;
+                          MPFR_RNDU : MPFR_RNDD;
                       *tp |= rb_mask;
                       break;
                     }
@@ -226,13 +226,13 @@ mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
 #else /* IEEE Extended Little Endian Code */
 
 int
-mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
+mpfr_set_ld (mpfr_ptr r, long double d, mpfr_rnd_t rnd_mode)
 {
   int inexact, i, k, cnt;
   mpfr_t tmp;
   mp_limb_t tmpmant[MPFR_LIMBS_PER_LONG_DOUBLE];
   mpfr_long_double_t x;
-  mp_exp_t exp;
+  mpfr_exp_t exp;
   int signd;
   MPFR_SAVE_EXPO_DECL (expo);
 
@@ -283,7 +283,7 @@ mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
     }
 
   /* Extract mantissa */
-#if BITS_PER_MP_LIMB >= 64
+#if GMP_NUMB_BITS >= 64
   tmpmant[0] = ((mp_limb_t) x.s.manh << 32) | ((mp_limb_t) x.s.manl);
 #else
   tmpmant[0] = (mp_limb_t) x.s.manl;
@@ -303,12 +303,13 @@ mpfr_set_ld (mpfr_ptr r, long double d, mp_rnd_t rnd_mode)
     MPN_ZERO (tmpmant, k);
 
   /* Set exponent */
-  if (x.s.exph == 0 && x.s.expl == 0)
-    exp = -0x3FFD;
+  exp = (mpfr_exp_t) ((x.s.exph << 8) + x.s.expl);  /* 15-bit unsigned int */
+  if (MPFR_UNLIKELY (exp == 0))
+    exp -= 0x3FFD;
   else
-    exp = (x.s.exph << 8) + x.s.expl - 0x3FFE;
+    exp -= 0x3FFE;
 
-  MPFR_SET_EXP (tmp, exp - cnt - k * BITS_PER_MP_LIMB);
+  MPFR_SET_EXP (tmp, exp - cnt - k * GMP_NUMB_BITS);
 
   /* tmp is exact */
   inexact = mpfr_set4 (r, tmp, rnd_mode, signd);

@@ -1,29 +1,40 @@
 /* Test file for mpfr_const_euler.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "mpfr-test.h"
+
+/* Wrapper for tgeneric */
+static int
+my_const_euler (mpfr_ptr x, mpfr_srcptr y, mpfr_rnd_t r)
+{
+  return mpfr_const_euler (x, r);
+}
+
+#define RAND_FUNCTION(x) mpfr_set_ui ((x), 0, MPFR_RNDN)
+#define TEST_FUNCTION my_const_euler
+#include "tgeneric.c"
 
 int
 main (int argc, char *argv[])
@@ -39,8 +50,8 @@ main (int argc, char *argv[])
   if (argc > 1)
     {
       mpfr_init2 (gamma, prec);
-      mpfr_const_euler (gamma, GMP_RNDN);
-      printf("gamma="); mpfr_out_str (stdout, 10, 0, gamma, GMP_RNDD);
+      mpfr_const_euler (gamma, MPFR_RNDN);
+      printf("gamma="); mpfr_out_str (stdout, 10, 0, gamma, MPFR_RNDD);
       puts ("");
       mpfr_clear (gamma);
       return 0;
@@ -52,7 +63,7 @@ main (int argc, char *argv[])
 
   mpfr_set_prec (y, 32);
   mpfr_set_prec (z, 32);
-  (mpfr_const_euler) (y, GMP_RNDN);
+  (mpfr_const_euler) (y, MPFR_RNDN);
   mpfr_set_str_binary (z, "0.10010011110001000110011111100011");
   if (mpfr_cmp (y, z))
     {
@@ -66,24 +77,24 @@ main (int argc, char *argv[])
       mpfr_set_prec (t, prec);
       yprec = prec + 10;
 
-      for (rnd = 0; rnd < GMP_RND_MAX; rnd++)
+      for (rnd = 0; rnd < MPFR_RND_MAX; rnd++)
         {
           mpfr_set_prec (y, yprec);
-          mpfr_const_euler (y, (mp_rnd_t) rnd);
-          err = (rnd == GMP_RNDN) ? yprec + 1 : yprec;
-          if (mpfr_can_round (y, err, (mp_rnd_t) rnd, (mp_rnd_t) rnd, prec))
+          mpfr_const_euler (y, (mpfr_rnd_t) rnd);
+          err = (rnd == MPFR_RNDN) ? yprec + 1 : yprec;
+          if (mpfr_can_round (y, err, (mpfr_rnd_t) rnd, (mpfr_rnd_t) rnd, prec))
             {
-              mpfr_set (t, y, (mp_rnd_t) rnd);
-              mpfr_const_euler (z, (mp_rnd_t) rnd);
+              mpfr_set (t, y, (mpfr_rnd_t) rnd);
+              mpfr_const_euler (z, (mpfr_rnd_t) rnd);
               if (mpfr_cmp (t, z))
                 {
                   printf ("results differ for prec=%u rnd_mode=%s\n", prec,
-                          mpfr_print_rnd_mode ((mp_rnd_t) rnd));
+                          mpfr_print_rnd_mode ((mpfr_rnd_t) rnd));
                   printf ("   got      ");
-                  mpfr_out_str (stdout, 2, prec, z, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, z, MPFR_RNDN);
                   puts ("");
                   printf ("   expected ");
-                  mpfr_out_str (stdout, 2, prec, t, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, t, MPFR_RNDN);
                   puts ("");
                   printf ("   approximation was ");
                   mpfr_print_binary (y);
@@ -97,6 +108,8 @@ main (int argc, char *argv[])
   mpfr_clear (y);
   mpfr_clear (z);
   mpfr_clear (t);
+
+  test_generic (2, 200, 1);
 
   tests_end_mpfr ();
   return 0;

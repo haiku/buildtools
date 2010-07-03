@@ -1,24 +1,24 @@
 /* Test file for mpfr_cmpabs.
 
-Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,25 +72,25 @@ main (void)
 
   mpfr_set_prec(xx, 53);
   mpfr_set_prec(yy, 200);
-  mpfr_set_ui (xx, 1, (mp_rnd_t) 0);
-  mpfr_set_ui (yy, 1, (mp_rnd_t) 0);
+  mpfr_set_ui (xx, 1, (mpfr_rnd_t) 0);
+  mpfr_set_ui (yy, 1, (mpfr_rnd_t) 0);
   if (mpfr_cmpabs(xx, yy) != 0)
     ERROR ("Error in mpfr_cmpabs: 1.0 != 1.0\n");
 
   mpfr_set_prec (yy, 31);
-  mpfr_set_str (xx, "-1.0000000002", 10, (mp_rnd_t) 0);
-  mpfr_set_ui (yy, 1, (mp_rnd_t) 0);
+  mpfr_set_str (xx, "-1.0000000002", 10, (mpfr_rnd_t) 0);
+  mpfr_set_ui (yy, 1, (mpfr_rnd_t) 0);
   if (!(mpfr_cmpabs(xx,yy)>0))
     ERROR ("Error in mpfr_cmpabs: not 1.0000000002 > 1.0\n");
   mpfr_set_prec(yy, 53);
 
-  mpfr_set_ui(xx, 0, GMP_RNDN);
-  mpfr_set_str (yy, "-0.1", 10, GMP_RNDN);
+  mpfr_set_ui(xx, 0, MPFR_RNDN);
+  mpfr_set_str (yy, "-0.1", 10, MPFR_RNDN);
   if (mpfr_cmpabs(xx, yy) >= 0)
     ERROR ("Error in mpfr_cmpabs(0.0, 0.1)\n");
 
   mpfr_set_inf (xx, -1);
-  mpfr_set_str (yy, "23489745.0329", 10, GMP_RNDN);
+  mpfr_set_str (yy, "23489745.0329", 10, MPFR_RNDN);
   if (mpfr_cmpabs(xx, yy) <= 0)
     ERROR ("Error in mpfr_cmp(-Inf, 23489745.0329)\n");
 
@@ -100,7 +100,7 @@ main (void)
     ERROR ("Error in mpfr_cmpabs(Inf, -Inf)\n");
 
   mpfr_set_inf (yy, -1);
-  mpfr_set_str (xx, "2346.09234", 10, GMP_RNDN);
+  mpfr_set_str (xx, "2346.09234", 10, MPFR_RNDN);
   if (mpfr_cmpabs (xx, yy) >= 0)
     ERROR ("Error in mpfr_cmpabs(-Inf, 2346.09234)\n");
 

@@ -4,7 +4,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -13,9 +13,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-02110-1301, USA.
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 
@@ -44,7 +42,7 @@ at the end of a bundle, but can be put between operations within some bundle
 types too.
 
 The Itanium 1 and Itanium 2 implementations can under ideal conditions
-execute two bundles per cycle.  The Itanium 2 allows 4 of these instructions
+execute two bundles per cycle.  The Itanium 1 allows 4 of these instructions
 to do integer operations, while the Itanium 2 allows all 6 to be integer
 operations.
 
@@ -110,6 +108,139 @@ Caller-saves: r8-r11 r14-r31 f6-f15 f32-f127
 Caller-saves but rotating: r32-
 
 
+================================================================
+mpn_add_n, mpn_sub_n:
+
+The current code runs at 1.25 c/l on Itanium 2.
+
+================================================================
+mpn_mul_1:
+
+The current code runs at 2 c/l on Itanium 2.
+
+Using a blocked approach, working off of 4 separate places in the operands,
+one could make use of the xma accumulation, and approach 1 c/l.
+
+	ldf8 [up]
+	xma.l
+	xma.hu
+	stf8  [wrp]
+
+================================================================
+mpn_addmul_1:
+
+The current code runs at 2 c/l on Itanium 2.
+
+It seems possible to use a blocked approach, as with mpn_mul_1.  We should
+read rp[] to integer registers, allowing for just one getf.sig per cycle.
+
+	ld8  [rp]
+	ldf8 [up]
+	xma.l
+	xma.hu
+	getf.sig
+	add+add+cmp+cmp
+	st8  [wrp]
+
+These 10 instructions can be scheduled to approach 1.667 cycles, and with
+the 4 cycle latency of xma, this means we need at least 3 blocks.  Using
+ldfp8 we could approach 1.583 c/l.
+
+================================================================
+mpn_submul_1:
+
+The current code runs at 2.25 c/l on Itanium 2.  Getting to 2 c/l requires
+ldfp8 with all alignment headache that implies.
+
+================================================================
+mpn_addmul_N
+
+For best speed, we need to give up using mpn_addmul_1 as the main multiply
+building block, and instead take multiple v limbs per loop.  For the Itanium
+1, we need to take about 8 limbs at a time for full speed.  For the Itanium
+2, something like mpn_addmul_4 should be enough.
+
+The add+cmp+cmp+add we use on the other codes is optimal for shortening
+recurrencies (1 cycle) but the sequence takes up 4 execution slots.  When
+recurrency depth is not critical, a more standard 3-cycle add+cmp+add is
+better.
+
+/* First load the 8 values from v */
+	ldfp8		v0, v1 = [r35], 16;;
+	ldfp8		v2, v3 = [r35], 16;;
+	ldfp8		v4, v5 = [r35], 16;;
+	ldfp8		v6, v7 = [r35], 16;;
+
+/* In the inner loop, get a new U limb and store a result limb. */
+	mov		lc = un
+Loop:	ldf8		u0 = [r33], 8
+	ld8		r0 = [r32]
+	xma.l		lp0 = v0, u0, hp0
+	xma.hu		hp0 = v0, u0, hp0
+	xma.l		lp1 = v1, u0, hp1
+	xma.hu		hp1 = v1, u0, hp1
+	xma.l		lp2 = v2, u0, hp2
+	xma.hu		hp2 = v2, u0, hp2
+	xma.l		lp3 = v3, u0, hp3
+	xma.hu		hp3 = v3, u0, hp3
+	xma.l		lp4 = v4, u0, hp4
+	xma.hu		hp4 = v4, u0, hp4
+	xma.l		lp5 = v5, u0, hp5
+	xma.hu		hp5 = v5, u0, hp5
+	xma.l		lp6 = v6, u0, hp6
+	xma.hu		hp6 = v6, u0, hp6
+	xma.l		lp7 = v7, u0, hp7
+	xma.hu		hp7 = v7, u0, hp7
+	getf.sig	l0 = lp0
+	getf.sig	l1 = lp1
+	getf.sig	l2 = lp2
+	getf.sig	l3 = lp3
+	getf.sig	l4 = lp4
+	getf.sig	l5 = lp5
+	getf.sig	l6 = lp6
+	add+cmp+add	xx, l0, r0
+	add+cmp+add	acc0, acc1, l1
+	add+cmp+add	acc1, acc2, l2
+	add+cmp+add	acc2, acc3, l3
+	add+cmp+add	acc3, acc4, l4
+	add+cmp+add	acc4, acc5, l5
+	add+cmp+add	acc5, acc6, l6
+	getf.sig	acc6 = lp7
+	st8		[r32] = xx, 8
+	br.cloop Loop
+
+	49 insn at max 6 insn/cycle:		8.167 cycles/limb8
+	11 memops at max 2 memops/cycle:	5.5 cycles/limb8
+	16 fpops at max 2 fpops/cycle:		8 cycles/limb8
+	21 intops at max 4 intops/cycle:	5.25 cycles/limb8
+	11+21 memops+intops at max 4/cycle	8 cycles/limb8
+
+================================================================
+mpn_lshift, mpn_rshift
+
+The current code runs at 1 cycle/limb on Itanium 2.
+
+Using 63 separate loops, we could use the double-word shrp instruction.
+That instruction has a plain single-cycle latency.  We need 63 loops since
+this instruction only accept immediate count.  That would lead to a somewhat
+silly code size, but the speed would be 0.75 c/l on Itanium 2 (by using shrp
+each cycle plus shl/shr going down I1 for a further limb every second
+cycle).
+
+================================================================
+mpn_copyi, mpn_copyd
+
+The current code runs at 0.5 c/l on Itanium 2.  But that is just for L1
+cache hit.  The 4-way unrolled loop takes just 2 cycles, and thus load-use
+scheduling isn't great.  It might be best to actually use modulo scheduled
+loops, since that will allow us to do better load-use scheduling without too
+much unrolling.
+
+Depending on size or operand alignment, we get 1 c/l or 0.5 c/l on Itanium
+2, according to tune/speed.  Cache bank conflicts?
+
+
+
 REFERENCES
 
 Intel Itanium Architecture Software Developer's Manual, volumes 1 to 3,
@@ -137,10 +268,3 @@ Optimization, Intel document 251110-003, May 2004.
 All the above documents can be found online at
 
     http://developer.intel.com/design/itanium/manuals.htm
-
-
-----------------
-Local variables:
-mode: text
-fill-column: 76
-End:

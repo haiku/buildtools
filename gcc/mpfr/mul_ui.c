@@ -1,34 +1,34 @@
 /* mpfr_mul_ui -- multiply a floating-point number by a machine integer
    mpfr_mul_si -- multiply a floating-point number by a machine integer
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 int
-mpfr_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
+mpfr_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mpfr_rnd_t rnd_mode)
 {
   mp_limb_t *yp;
-  mp_size_t xn, yn;
+  mp_size_t xn;
   int cnt, inexact;
   MPFR_TMP_DECL (marker);
 
@@ -76,7 +76,6 @@ mpfr_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
     return mpfr_mul_2si (y, x, MPFR_INT_CEIL_LOG2 (u), rnd_mode);
 
   yp = MPFR_MANT (y);
-  yn = MPFR_LIMB_SIZE (y);
   xn = MPFR_LIMB_SIZE (x);
 
   MPFR_ASSERTD (xn < MP_SIZE_T_MAX);
@@ -102,13 +101,13 @@ mpfr_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
     }
 
   /* now yp[xn], ..., yp[0] is msb-normalized too, and has at most
-     PREC(x) + (BITS_PER_MP_LIMB - cnt) non-zero bits */
-  MPFR_RNDRAW (inexact, y, yp, (mp_prec_t) (xn + 1) * BITS_PER_MP_LIMB,
+     PREC(x) + (GMP_NUMB_BITS - cnt) non-zero bits */
+  MPFR_RNDRAW (inexact, y, yp, (mpfr_prec_t) (xn + 1) * GMP_NUMB_BITS,
                rnd_mode, MPFR_SIGN (x), cnt -- );
 
   MPFR_TMP_FREE (marker);
 
-  cnt = BITS_PER_MP_LIMB - cnt;
+  cnt = GMP_NUMB_BITS - cnt;
   if (MPFR_UNLIKELY (__gmpfr_emax < MPFR_EMAX_MIN + cnt
                      || MPFR_GET_EXP (x) > __gmpfr_emax - cnt))
     return mpfr_overflow (y, rnd_mode, MPFR_SIGN(x));
@@ -119,7 +118,7 @@ mpfr_mul_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
   return inexact;
 }
 
-int mpfr_mul_si (mpfr_ptr y, mpfr_srcptr x, long int u, mp_rnd_t rnd_mode)
+int mpfr_mul_si (mpfr_ptr y, mpfr_srcptr x, long int u, mpfr_rnd_t rnd_mode)
 {
   int res;
 

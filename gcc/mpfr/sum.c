@@ -1,24 +1,28 @@
 /* Sum -- efficiently sum a list of floating-point numbers
 
-Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
+
+/* Reference: James Demmel and Yozo Hida, Fast and accurate floating-point
+   summation with application to computational geometry, Numerical Algorithms,
+   volume 37, number 1-4, pages 101--112, 2004. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -33,17 +37,19 @@ MA 02110-1301, USA. */
      const mpfr_s *const*     : no
      const mpfr_s **const     : no
      const mpfr_s *const*const: no
+   VL: this is not a bug, but a feature. See the reason here:
+     http://c-faq.com/ansi/constmismatch.html
 */
 static void heap_sort (mpfr_srcptr *const, unsigned long, mpfr_srcptr *);
 static void count_sort (mpfr_srcptr *const, unsigned long, mpfr_srcptr *,
-                        mp_exp_t, mpfr_uexp_t);
+                        mpfr_exp_t, mpfr_uexp_t);
 
 /* Either sort the tab in perm and returns 0
    Or returns 1 for +INF, -1 for -INF and 2 for NAN */
 int
 mpfr_sum_sort (mpfr_srcptr *const tab, unsigned long n, mpfr_srcptr *perm)
 {
-  mp_exp_t min, max;
+  mpfr_exp_t min, max;
   mpfr_uexp_t exp_num;
   unsigned long i;
   int sign_inf;
@@ -89,7 +95,7 @@ mpfr_sum_sort (mpfr_srcptr *const tab, unsigned long n, mpfr_srcptr *perm)
 /* Performs a count sort of the entries */
 static void
 count_sort (mpfr_srcptr *const tab, unsigned long n,
-            mpfr_srcptr *perm, mp_exp_t min, mpfr_uexp_t exp_num)
+            mpfr_srcptr *perm, mpfr_exp_t min, mpfr_uexp_t exp_num)
 {
   unsigned long *account;
   unsigned long target_rank, i;
@@ -210,7 +216,7 @@ heap_sort (mpfr_srcptr *const tab, unsigned long n, mpfr_srcptr *perm)
  * Internal use function.
  */
 static int
-sum_once (mpfr_ptr ret, mpfr_srcptr *const tab, unsigned long n, mp_prec_t F)
+sum_once (mpfr_ptr ret, mpfr_srcptr *const tab, unsigned long n, mpfr_prec_t F)
 {
   mpfr_t sum;
   unsigned long i;
@@ -219,27 +225,26 @@ sum_once (mpfr_ptr ret, mpfr_srcptr *const tab, unsigned long n, mp_prec_t F)
   MPFR_ASSERTD (n >= 2);
 
   mpfr_init2 (sum, F);
-  error_trap = mpfr_set (sum, tab[0], GMP_RNDN);
+  error_trap = mpfr_set (sum, tab[0], MPFR_RNDN);
   for (i = 1; i < n - 1; i++)
     {
       MPFR_ASSERTD (!MPFR_IS_NAN (sum) && !MPFR_IS_INF (sum));
-      error_trap |= mpfr_add (sum, sum, tab[i], GMP_RNDN);
+      error_trap |= mpfr_add (sum, sum, tab[i], MPFR_RNDN);
     }
-  error_trap |= mpfr_add (ret, sum, tab[n - 1], GMP_RNDN);
+  error_trap |= mpfr_add (ret, sum, tab[n - 1], MPFR_RNDN);
   mpfr_clear (sum);
   return error_trap;
 }
 
 /* Sum a list of floating-point numbers.
- * FIXME : add reference to Demmel-Hida's paper.
  */
 
 int
-mpfr_sum (mpfr_ptr ret, mpfr_ptr *const tab_p, unsigned long n, mp_rnd_t rnd)
+mpfr_sum (mpfr_ptr ret, mpfr_ptr *const tab_p, unsigned long n, mpfr_rnd_t rnd)
 {
   mpfr_t cur_sum;
-  mp_prec_t prec;
-  mpfr_srcptr *perm, *const tab = (mpfr_srcptr *const) tab_p;
+  mpfr_prec_t prec;
+  mpfr_srcptr *perm, *const tab = (mpfr_srcptr *) tab_p;
   int k, error_trap;
   MPFR_ZIV_DECL (loop);
   MPFR_SAVE_EXPO_DECL (expo);
@@ -291,7 +296,7 @@ mpfr_sum (mpfr_ptr ret, mpfr_ptr *const tab_p, unsigned long n, mp_rnd_t rnd)
                        (!MPFR_IS_ZERO (cur_sum) &&
                         mpfr_can_round (cur_sum,
                                         MPFR_GET_EXP (cur_sum) - prec + 2,
-                                        GMP_RNDN, rnd, MPFR_PREC (ret)))))
+                                        MPFR_RNDN, rnd, MPFR_PREC (ret)))))
         break;
       MPFR_ZIV_NEXT (loop, prec);
       mpfr_set_prec (cur_sum, prec);

@@ -1,24 +1,24 @@
 /* mpfr_mul -- multiply two floating-point numbers
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -31,16 +31,16 @@ MA 02110-1301, USA. */
 #ifdef WANT_ASSERT
 # if WANT_ASSERT >= 3
 
-int mpfr_mul2 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode);
+int mpfr_mul2 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode);
 static int
-mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
+mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode)
 {
   /* Old implementation */
   int sign_product, cc, inexact;
-  mp_exp_t  ax;
+  mpfr_exp_t ax;
   mp_limb_t *tmp;
   mp_limb_t b1;
-  mp_prec_t bq, cq;
+  mpfr_prec_t bq, cq;
   mp_size_t bn, cn, tn, k;
   MPFR_TMP_DECL(marker);
 
@@ -89,7 +89,6 @@ mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           MPFR_RET(0); /* 0 * 0 is exact */
         }
     }
-  MPFR_CLEAR_FLAGS(a);
   sign_product = MPFR_MULT_SIGN( MPFR_SIGN(b) , MPFR_SIGN(c) );
 
   ax = MPFR_GET_EXP (b) + MPFR_GET_EXP (c);
@@ -99,10 +98,10 @@ mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
   MPFR_ASSERTD(bq+cq > bq); /* PREC_MAX is /2 so no integer overflow */
 
-  bn = (bq+BITS_PER_MP_LIMB-1)/BITS_PER_MP_LIMB; /* number of limbs of b */
-  cn = (cq+BITS_PER_MP_LIMB-1)/BITS_PER_MP_LIMB; /* number of limbs of c */
+  bn = (bq+GMP_NUMB_BITS-1)/GMP_NUMB_BITS; /* number of limbs of b */
+  cn = (cq+GMP_NUMB_BITS-1)/GMP_NUMB_BITS; /* number of limbs of c */
   k = bn + cn; /* effective nb of limbs used by b*c (= tn or tn+1) below */
-  tn = (bq + cq + BITS_PER_MP_LIMB - 1) / BITS_PER_MP_LIMB;
+  tn = (bq + cq + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS;
   /* <= k, thus no int overflow */
   MPFR_ASSERTD(tn <= k);
 
@@ -117,8 +116,8 @@ mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
     : mpn_mul (tmp, MPFR_MANT(c), cn, MPFR_MANT(b), bn);
 
   /* now tmp[0]..tmp[k-1] contains the product of both mantissa,
-     with tmp[k-1]>=2^(BITS_PER_MP_LIMB-2) */
-  b1 >>= BITS_PER_MP_LIMB - 1; /* msb from the product */
+     with tmp[k-1]>=2^(GMP_NUMB_BITS-2) */
+  b1 >>= GMP_NUMB_BITS - 1; /* msb from the product */
 
   /* if the mantissas of b and c are uniformly distributed in ]1/2, 1],
      then their product is in ]1/4, 1/2] with probability 2*ln(2)-1 ~ 0.386
@@ -137,7 +136,7 @@ mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
   MPFR_TMP_FREE(marker);
 
   {
-    mp_exp_t ax2 = ax + (mp_exp_t) (b1 - 1 + cc);
+    mpfr_exp_t ax2 = ax + (mpfr_exp_t) (b1 - 1 + cc);
     if (MPFR_UNLIKELY( ax2 > __gmpfr_emax))
       return mpfr_overflow (a, rnd_mode, sign_product);
     if (MPFR_UNLIKELY( ax2 < __gmpfr_emin))
@@ -146,10 +145,10 @@ mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
            result (i.e. before rounding, i.e. without taking cc into account)
            is < __gmpfr_emin - 1 or the exact result is a power of 2 (i.e. if
            both arguments are powers of 2), then round to zero. */
-        if (rnd_mode == GMP_RNDN &&
-            (ax + (mp_exp_t) b1 < __gmpfr_emin ||
+        if (rnd_mode == MPFR_RNDN &&
+            (ax + (mpfr_exp_t) b1 < __gmpfr_emin ||
              (mpfr_powerof2_raw (b) && mpfr_powerof2_raw (c))))
-          rnd_mode = GMP_RNDZ;
+          rnd_mode = MPFR_RNDZ;
         return mpfr_underflow (a, rnd_mode, sign_product);
       }
     MPFR_SET_EXP (a, ax2);
@@ -159,7 +158,7 @@ mpfr_mul3 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 }
 
 int
-mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
+mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode)
 {
   mpfr_t ta, tb, tc;
   int inexact1, inexact2;
@@ -167,8 +166,8 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
   mpfr_init2 (ta, MPFR_PREC (a));
   mpfr_init2 (tb, MPFR_PREC (b));
   mpfr_init2 (tc, MPFR_PREC (c));
-  MPFR_ASSERTN (mpfr_set (tb, b, GMP_RNDN) == 0);
-  MPFR_ASSERTN (mpfr_set (tc, c, GMP_RNDN) == 0);
+  MPFR_ASSERTN (mpfr_set (tb, b, MPFR_RNDN) == 0);
+  MPFR_ASSERTN (mpfr_set (tc, c, MPFR_RNDN) == 0);
 
   inexact2 = mpfr_mul3 (ta, tb, tc, rnd_mode);
   inexact1  = mpfr_mul2 (a, b, c, rnd_mode);
@@ -179,19 +178,19 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
                "Prec_a = %lu, Prec_b = %lu, Prec_c = %lu\nB = ",
                mpfr_print_rnd_mode (rnd_mode),
                MPFR_PREC (a), MPFR_PREC (b), MPFR_PREC (c));
-      mpfr_out_str (stderr, 16, 0, tb, GMP_RNDN);
+      mpfr_out_str (stderr, 16, 0, tb, MPFR_RNDN);
       fprintf (stderr, "\nC = ");
-      mpfr_out_str (stderr, 16, 0, tc, GMP_RNDN);
+      mpfr_out_str (stderr, 16, 0, tc, MPFR_RNDN);
       fprintf (stderr, "\nOldMul: ");
-      mpfr_out_str (stderr, 16, 0, ta, GMP_RNDN);
+      mpfr_out_str (stderr, 16, 0, ta, MPFR_RNDN);
       fprintf (stderr, "\nNewMul: ");
-      mpfr_out_str (stderr, 16, 0, a, GMP_RNDN);
+      mpfr_out_str (stderr, 16, 0, a, MPFR_RNDN);
       fprintf (stderr, "\nNewInexact = %d | OldInexact = %d\n",
                inexact1, inexact2);
       MPFR_ASSERTN(0);
     }
 
-  mpfr_clears (ta, tb, tc, (void *) 0);
+  mpfr_clears (ta, tb, tc, (mpfr_ptr) 0);
   return inexact1;
 }
 
@@ -204,13 +203,13 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 /* Multiply 2 mpfr_t */
 
 int
-mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
+mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode)
 {
   int sign, inexact;
-  mp_exp_t  ax, ax2;
+  mpfr_exp_t ax, ax2;
   mp_limb_t *tmp;
   mp_limb_t b1;
-  mp_prec_t bq, cq;
+  mpfr_prec_t bq, cq;
   mp_size_t bn, cn, tn, k;
   MPFR_TMP_DECL (marker);
 
@@ -262,7 +261,6 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           MPFR_RET (0);
         }
     }
-  MPFR_CLEAR_FLAGS (a);
   sign = MPFR_MULT_SIGN (MPFR_SIGN (b), MPFR_SIGN (c));
 
   ax = MPFR_GET_EXP (b) + MPFR_GET_EXP (c);
@@ -276,7 +274,7 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
   if (MPFR_UNLIKELY (ax > __gmpfr_emax + 1))
     return mpfr_overflow (a, rnd_mode, sign);
   if (MPFR_UNLIKELY (ax < __gmpfr_emin - 2))
-    return mpfr_underflow (a, rnd_mode == GMP_RNDN ? GMP_RNDZ : rnd_mode,
+    return mpfr_underflow (a, rnd_mode == MPFR_RNDN ? MPFR_RNDZ : rnd_mode,
                            sign);
 #endif
 
@@ -285,10 +283,10 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
   MPFR_ASSERTD (bq+cq > bq); /* PREC_MAX is /2 so no integer overflow */
 
-  bn = (bq+BITS_PER_MP_LIMB-1)/BITS_PER_MP_LIMB; /* number of limbs of b */
-  cn = (cq+BITS_PER_MP_LIMB-1)/BITS_PER_MP_LIMB; /* number of limbs of c */
+  bn = (bq+GMP_NUMB_BITS-1)/GMP_NUMB_BITS; /* number of limbs of b */
+  cn = (cq+GMP_NUMB_BITS-1)/GMP_NUMB_BITS; /* number of limbs of c */
   k = bn + cn; /* effective nb of limbs used by b*c (= tn or tn+1) below */
-  tn = (bq + cq + BITS_PER_MP_LIMB - 1) / BITS_PER_MP_LIMB;
+  tn = (bq + cq + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS;
   MPFR_ASSERTD (tn <= k); /* tn <= k, thus no int overflow */
 
   /* Check for no size_t overflow*/
@@ -299,12 +297,12 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
   /* multiplies two mantissa in temporary allocated space */
   if (MPFR_UNLIKELY (bn < cn))
     {
-      mpfr_srcptr tmp = b;
-      mp_size_t tn  = bn;
+      mpfr_srcptr z = b;
+      mp_size_t zn  = bn;
       b = c;
       bn = cn;
-      c = tmp;
-      cn = tn;
+      c = z;
+      cn = zn;
     }
   MPFR_ASSERTD (bn >= cn);
   if (MPFR_LIKELY (bn <= 2))
@@ -341,19 +339,19 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           tmp[3] += (tmp[2] < t1);
           b1 = tmp[3];
         }
-      b1 >>= (BITS_PER_MP_LIMB - 1);
+      b1 >>= (GMP_NUMB_BITS - 1);
       tmp += k - tn;
       if (MPFR_UNLIKELY (b1 == 0))
         mpn_lshift (tmp, tmp, tn, 1); /* tn <= k, so no stack corruption */
     }
   else
-    /* Mulder mulhigh. Disable if squaring, since it is not tuned for
+    /* Mulders' mulhigh. Disable if squaring, since it is not tuned for
        such a case */
     if (MPFR_UNLIKELY (bn > MPFR_MUL_THRESHOLD && b != c))
       {
         mp_limb_t *bp, *cp;
         mp_size_t n;
-        mp_prec_t p;
+        mpfr_prec_t p;
 
         /* Fist check if we can reduce the precision of b or c:
            exact values are a nightmare for the short product trick */
@@ -385,12 +383,12 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
             /* It is not the faster way, but it is safer */
             MPFR_SET_SAME_SIGN (b_tmp, b);
             MPFR_SET_EXP (b_tmp, MPFR_GET_EXP (b));
-            MPFR_PREC (b_tmp) = bn * BITS_PER_MP_LIMB;
+            MPFR_PREC (b_tmp) = bn * GMP_NUMB_BITS;
             MPFR_MANT (b_tmp) = bp;
 
             MPFR_SET_SAME_SIGN (c_tmp, c);
             MPFR_SET_EXP (c_tmp, MPFR_GET_EXP (c));
-            MPFR_PREC (c_tmp) = cn * BITS_PER_MP_LIMB;
+            MPFR_PREC (c_tmp) = cn * GMP_NUMB_BITS;
             MPFR_MANT (c_tmp) = cp;
 
             /* Call again mpfr_mul with the fixed arguments */
@@ -403,7 +401,7 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
         n = MPFR_LIMB_SIZE (a) + 1;
         n = MIN (n, cn);
         MPFR_ASSERTD (n >= 1 && 2*n <= k && n <= cn && n <= bn);
-        p = n * BITS_PER_MP_LIMB - MPFR_INT_CEIL_LOG2 (n + 2);
+        p = n * GMP_NUMB_BITS - MPFR_INT_CEIL_LOG2 (n + 2);
         bp += bn - n;
         cp += cn - n;
 
@@ -411,7 +409,7 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
            We may lost 1 bit due to RNDN, 1 due to final shift. */
         if (MPFR_UNLIKELY (MPFR_PREC (a) > p - 5))
           {
-            if (MPFR_UNLIKELY (MPFR_PREC (a) > p - 5 + BITS_PER_MP_LIMB
+            if (MPFR_UNLIKELY (MPFR_PREC (a) > p - 5 + GMP_NUMB_BITS
                                || bn <= MPFR_MUL_THRESHOLD+1))
               {
                 /* MulHigh can't produce a roundable result. */
@@ -438,7 +436,7 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
               }
             /* We will compute with one extra limb */
             n++;
-            p = n * BITS_PER_MP_LIMB - MPFR_INT_CEIL_LOG2 (n + 2);
+            p = n * GMP_NUMB_BITS - MPFR_INT_CEIL_LOG2 (n + 2);
             /* Due to some nasty reasons we can have only 4 bits */
             MPFR_ASSERTD (MPFR_PREC (a) <= p - 4);
 
@@ -450,21 +448,23 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           }
         MPFR_LOG_MSG (("Use mpfr_mulhigh (%lu VS %lu)\n", MPFR_PREC (a), p));
         /* Compute an approximation of the product of b and c */
-        mpfr_mulhigh_n (tmp+k-2*n, bp, cp, n);
+        mpfr_mulhigh_n (tmp + k - 2 * n, bp, cp, n);
         /* now tmp[0]..tmp[k-1] contains the product of both mantissa,
-           with tmp[k-1]>=2^(BITS_PER_MP_LIMB-2) */
-        b1 = tmp[k-1] >> (BITS_PER_MP_LIMB - 1); /* msb from the product */
+           with tmp[k-1]>=2^(GMP_NUMB_BITS-2) */
+        b1 = tmp[k-1] >> (GMP_NUMB_BITS - 1); /* msb from the product */
 
         /* If the mantissas of b and c are uniformly distributed in (1/2, 1],
            then their product is in (1/4, 1/2] with probability 2*ln(2)-1
            ~ 0.386 and in [1/2, 1] with probability 2-2*ln(2) ~ 0.614 */
-        tmp += k - tn;
         if (MPFR_UNLIKELY (b1 == 0))
-          mpn_lshift (tmp, tmp, tn, 1);
+          /* Warning: the mpfr_mulhigh_n call above only surely affects
+             tmp[k-n-1..k-1], thus we shift only those limbs */
+          mpn_lshift (tmp + k - n - 1, tmp + k - n - 1, n + 1, 1);
+        tmp += k - tn;
         MPFR_ASSERTD (MPFR_LIMB_MSB (tmp[tn-1]) != 0);
 
         if (MPFR_UNLIKELY (!mpfr_round_p (tmp, tn, p+b1-1, MPFR_PREC(a)
-                                          + (rnd_mode == GMP_RNDN))))
+                                          + (rnd_mode == MPFR_RNDN))))
           {
             tmp -= k - tn; /* tmp may have changed, FIX IT!!!!! */
             goto full_multiply;
@@ -477,8 +477,8 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
         b1 = mpn_mul (tmp, MPFR_MANT (b), bn, MPFR_MANT (c), cn);
 
         /* now tmp[0]..tmp[k-1] contains the product of both mantissa,
-           with tmp[k-1]>=2^(BITS_PER_MP_LIMB-2) */
-        b1 >>= BITS_PER_MP_LIMB - 1; /* msb from the product */
+           with tmp[k-1]>=2^(GMP_NUMB_BITS-2) */
+        b1 >>= GMP_NUMB_BITS - 1; /* msb from the product */
 
         /* if the mantissas of b and c are uniformly distributed in (1/2, 1],
            then their product is in (1/4, 1/2] with probability 2*ln(2)-1
@@ -488,7 +488,7 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           mpn_lshift (tmp, tmp, tn, 1); /* tn <= k, so no stack corruption */
       }
 
-  ax2 = ax + (mp_exp_t) (b1 - 1);
+  ax2 = ax + (mpfr_exp_t) (b1 - 1);
   MPFR_RNDRAW (inexact, a, tmp, bq+cq, rnd_mode, sign, ax2++);
   MPFR_TMP_FREE (marker);
   MPFR_EXP  (a) = ax2; /* Can't use MPFR_SET_EXP: Expo may be out of range */
@@ -501,10 +501,10 @@ mpfr_mul (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
          result (i.e. before rounding, i.e. without taking cc into account)
          is < __gmpfr_emin - 1 or the exact result is a power of 2 (i.e. if
          both arguments are powers of 2), then round to zero. */
-      if (rnd_mode == GMP_RNDN
-          && (ax + (mp_exp_t) b1 < __gmpfr_emin
+      if (rnd_mode == MPFR_RNDN
+          && (ax + (mpfr_exp_t) b1 < __gmpfr_emin
               || (mpfr_powerof2_raw (b) && mpfr_powerof2_raw (c))))
-        rnd_mode = GMP_RNDZ;
+        rnd_mode = MPFR_RNDZ;
       return mpfr_underflow (a, rnd_mode, sign);
     }
   MPFR_RET (inexact);

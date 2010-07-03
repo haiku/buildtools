@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -92,7 +90,7 @@ gcd (mpz_srcptr u, mpz_srcptr v, mpz_ptr g)
   usize -= u_zero_limbs;
   count_trailing_zeros (u_zero_bits, *up);
   tp = up;
-  up = (mp_ptr) TMP_ALLOC (usize * BYTES_PER_MP_LIMB);
+  up = TMP_ALLOC_LIMBS (usize);
   if (u_zero_bits != 0)
     {
       mpn_rshift (up, tp, usize, u_zero_bits);
@@ -107,7 +105,7 @@ gcd (mpz_srcptr u, mpz_srcptr v, mpz_ptr g)
   vsize -= v_zero_limbs;
   count_trailing_zeros (v_zero_bits, *vp);
   tp = vp;
-  vp = (mp_ptr) TMP_ALLOC (vsize * BYTES_PER_MP_LIMB);
+  vp = TMP_ALLOC_LIMBS (vsize);
   if (v_zero_bits != 0)
     {
       mpn_rshift (vp, tp, vsize, v_zero_bits);
@@ -137,7 +135,7 @@ gcd (mpz_srcptr u, mpz_srcptr v, mpz_ptr g)
     ? mpn_gcd (vp, vp, vsize, up, usize)
     : mpn_gcd (vp, up, usize, vp, vsize);
 
-  /*  Here G <-- V << (g_zero_limbs*BITS_PER_MP_LIMB + g_zero_bits).  */
+  /*  Here G <-- V << (g_zero_limbs*GMP_LIMB_BITS + g_zero_bits).  */
   gsize = vsize + g_zero_limbs;
   if (g_zero_bits != 0)
     {

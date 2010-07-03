@@ -1,24 +1,24 @@
 /* Test file for l2b constants.
 
-Copyright 2007 Free Software Foundation, Inc.
+Copyright 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 /* Execute this program with an argument to generate code that initializes
    the l2b constants. */
@@ -48,7 +48,7 @@ print_mpfr (mpfr_srcptr x, const char *name)
     { fprintf (stderr, "Error in printf\n"); exit (1); }
   for (i = 0; i < size_of_bits2use; i++)
     {
-      if (printf ("#elif BITS_PER_MP_LIMB == %d\n"
+      if (printf ("#elif GMP_NUMB_BITS == %d\n"
                   "const mp_limb_t %s__tab[] = { 0x", bits2use[i], name) < 0)
         { fprintf (stderr, "Error in printf\n"); exit (1); }
       size = mpn_get_str (temp, 256, MPFR_MANT (x), MPFR_LIMB_SIZE (x));
@@ -96,16 +96,16 @@ compute_l2b (int output)
             {
               /* 23-bit upper approximation to log(b)/log(2) */
               mpfr_init2 (p, 23);
-              mpfr_set_ui (p, beta, GMP_RNDU);
-              mpfr_log2 (p, p, GMP_RNDU);
+              mpfr_set_ui (p, beta, MPFR_RNDU);
+              mpfr_log2 (p, p, MPFR_RNDU);
             }
           else
             {
               /* 76-bit upper approximation to log(2)/log(b) */
               mpfr_init2 (p, 77);
-              mpfr_set_ui (p, beta, GMP_RNDD);
-              mpfr_log2 (p, p, GMP_RNDD);
-              mpfr_ui_div (p, 1, p, GMP_RNDU);
+              mpfr_set_ui (p, beta, MPFR_RNDD);
+              mpfr_log2 (p, p, MPFR_RNDD);
+              mpfr_ui_div (p, 1, p, MPFR_RNDU);
             }
 
           sprintf (buffer, "mpfr_l2b_%d_%d", beta, i);

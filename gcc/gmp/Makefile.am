@@ -2,13 +2,13 @@
 
 
 # Copyright 1991, 1993, 1994, 1996, 1997, 1999, 2000, 2001, 2002, 2003, 2004,
-# 2006 Free Software Foundation, Inc.
+# 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 #
 # This file is part of the GNU MP Library.
 #
 # The GNU MP Library is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
+# the Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 #
 # The GNU MP Library is distributed in the hope that it will be useful, but
@@ -17,9 +17,7 @@
 # License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-# MA 02110-1301, USA.
+# along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 # The following options are the same as AM_INIT_AUTOMAKE in configure.in,
@@ -32,6 +30,8 @@ AUTOMAKE_OPTIONS = 1.8 gnu no-dependencies ansi2knr
 
 # Libtool -version-info for libgmp.la and libmp.la.  See "Versioning" in the
 # libtool manual.
+#
+#	CURRENT:REVISION:AGE
 #
 # 1. No interfaces changed, only implementations (good): Increment REVISION.
 #
@@ -58,7 +58,15 @@ AUTOMAKE_OPTIONS = 1.8 gnu no-dependencies ansi2knr
 #        4.1.3    6:3:3    3:5:0   4:7:1
 #        4.1.4    6:3:3    3:5:0   4:7:1	WRONG, same as 4.1.3!
 #        4.2      6:0:3    3:2:0   4:4:1	REALLY WRONG, same as 4.1!
-#        4.2.1    7:1:4    4:1:1   4:10:1
+#        4.2.1    7:1:4    4:1:1   4:10:1	WRONG for libgmpxx
+#        4.2.2    7:2:4    4:2:0   4:11:1
+#        4.2.3    7:3:4    4:3:0   4:12:1
+#        4.2.4    7:4:4    4:4:0   4:13:1
+#        4.3.0    8:0:5    5:0:1   4:14:1
+#        4.3.1    8:1:5    5:1:1   4:15:1	WRONG Really used same as 4.3.0
+#        4.3.2    8:2:5    5:2:1   4:16:1
+#        5.0.0    9:0:6    6:0:2   4:20:1	Should have been 10:0:0
+#        5.0.1   10:1:0    6:1:2   4:21:1
 #
 # Starting at 3:0:0 is a slight abuse of the versioning system, but it
 # ensures we're past soname libgmp.so.2, which was used on Debian GNU/Linux
@@ -71,22 +79,22 @@ AUTOMAKE_OPTIONS = 1.8 gnu no-dependencies ansi2knr
 # it's still good to get the shared library filename (like
 # libgmpxx.so.3.0.4) incrementing, to make it clear which GMP it's from.
 
-LIBGMP_LT_CURRENT =  7
+LIBGMP_LT_CURRENT =  10
 LIBGMP_LT_REVISION = 1
-LIBGMP_LT_AGE =      4
+LIBGMP_LT_AGE =      0
 
-LIBGMPXX_LT_CURRENT =  4
+LIBGMPXX_LT_CURRENT =  6
 LIBGMPXX_LT_REVISION = 1
-LIBGMPXX_LT_AGE =      1
+LIBGMPXX_LT_AGE =      2
 
 LIBMP_LT_CURRENT =  4
-LIBMP_LT_REVISION = 10
+LIBMP_LT_REVISION = 21
 LIBMP_LT_AGE =      1
 
 
 SUBDIRS = tests mpn mpz mpq mpf printf scanf cxx mpbsd demos tune doc
 
-EXTRA_DIST = macos configfsf.guess configfsf.sub .gdbinit INSTALL.autoconf
+EXTRA_DIST = configfsf.guess configfsf.sub .gdbinit INSTALL.autoconf
 
 if WANT_CXX
 GMPXX_HEADERS_OPTION = gmpxx.h
@@ -99,7 +107,7 @@ EXTRA_DIST += gmpxx.h
 #
 # $exec_prefix/include is not in the default include path for gcc built to
 # the same $prefix and $exec_prefix, which might mean gmp.h is not found,
-# but anyone knowledgable enough to be playing with exec_prefix will be able
+# but anyone knowledgeable enough to be playing with exec_prefix will be able
 # to address that.
 #
 includeexecdir = $(exec_prefix)/include
@@ -115,14 +123,14 @@ DISTCLEANFILES = $(BUILT_SOURCES) config.m4 @gmp_srclinks@
 INCLUDES=-D__GMP_WITHIN_GMP
 
 
-MPF_OBJECTS = mpf/init$U.lo mpf/init2$U.lo mpf/set$U.lo mpf/set_ui$U.lo	    \
-  mpf/set_si$U.lo mpf/set_str$U.lo mpf/set_d$U.lo mpf/set_z$U.lo	    \
-  mpf/iset$U.lo mpf/iset_ui$U.lo mpf/iset_si$U.lo mpf/iset_str$U.lo	    \
-  mpf/iset_d$U.lo mpf/clear$U.lo mpf/get_str$U.lo mpf/dump$U.lo		    \
-  mpf/size$U.lo mpf/eq$U.lo mpf/reldiff$U.lo mpf/sqrt$U.lo mpf/random2$U.lo \
-  mpf/inp_str$U.lo mpf/out_str$U.lo mpf/add$U.lo mpf/add_ui$U.lo	    \
-  mpf/sub$U.lo mpf/sub_ui$U.lo mpf/ui_sub$U.lo mpf/mul$U.lo mpf/mul_ui$U.lo \
-  mpf/div$U.lo mpf/div_ui$U.lo						    \
+MPF_OBJECTS = mpf/init$U.lo mpf/init2$U.lo mpf/inits$U.lo mpf/set$U.lo	    \
+  mpf/set_ui$U.lo mpf/set_si$U.lo mpf/set_str$U.lo mpf/set_d$U.lo	    \
+  mpf/set_z$U.lo mpf/iset$U.lo mpf/iset_ui$U.lo mpf/iset_si$U.lo	    \
+  mpf/iset_str$U.lo mpf/iset_d$U.lo mpf/clear$U.lo mpf/clears$U.lo	    \
+  mpf/get_str$U.lo mpf/dump$U.lo mpf/size$U.lo mpf/eq$U.lo mpf/reldiff$U.lo \
+  mpf/sqrt$U.lo mpf/random2$U.lo mpf/inp_str$U.lo mpf/out_str$U.lo	    \
+  mpf/add$U.lo mpf/add_ui$U.lo mpf/sub$U.lo mpf/sub_ui$U.lo mpf/ui_sub$U.lo \
+  mpf/mul$U.lo mpf/mul_ui$U.lo mpf/div$U.lo mpf/div_ui$U.lo		    \
   mpf/cmp$U.lo mpf/cmp_d$U.lo mpf/cmp_ui$U.lo mpf/cmp_si$U.lo		    \
   mpf/mul_2exp$U.lo mpf/div_2exp$U.lo mpf/abs$U.lo mpf/neg$U.lo		    \
   mpf/set_q$U.lo mpf/get_d$U.lo mpf/get_d_2exp$U.lo mpf/set_dfl_prec$U.lo   \
@@ -142,7 +150,7 @@ MPZ_OBJECTS = mpz/abs$U.lo mpz/add$U.lo mpz/add_ui$U.lo			\
   mpz/cdiv_qr$U.lo mpz/cdiv_qr_ui$U.lo					\
   mpz/cdiv_r$U.lo mpz/cdiv_r_ui$U.lo mpz/cdiv_ui$U.lo			\
   mpz/cfdiv_q_2exp$U.lo mpz/cfdiv_r_2exp$U.lo				\
-  mpz/clear$U.lo mpz/clrbit$U.lo					\
+  mpz/clear$U.lo mpz/clears$U.lo mpz/clrbit$U.lo			\
   mpz/cmp$U.lo mpz/cmp_d$U.lo mpz/cmp_si$U.lo mpz/cmp_ui$U.lo		\
   mpz/cmpabs$U.lo mpz/cmpabs_d$U.lo mpz/cmpabs_ui$U.lo			\
   mpz/com$U.lo mpz/combit$U.lo						\
@@ -158,8 +166,8 @@ MPZ_OBJECTS = mpz/abs$U.lo mpz/add$U.lo mpz/add_ui$U.lo			\
   mpz/gcd_ui$U.lo mpz/gcdext$U.lo mpz/get_d$U.lo mpz/get_d_2exp$U.lo	\
   mpz/get_si$U.lo mpz/get_str$U.lo mpz/get_ui$U.lo mpz/getlimbn$U.lo	\
   mpz/hamdist$U.lo							\
-  mpz/import$U.lo mpz/init$U.lo mpz/init2$U.lo mpz/inp_raw$U.lo		\
-  mpz/inp_str$U.lo mpz/invert$U.lo					\
+  mpz/import$U.lo mpz/init$U.lo mpz/init2$U.lo mpz/inits$U.lo 		\
+  mpz/inp_raw$U.lo mpz/inp_str$U.lo mpz/invert$U.lo			\
   mpz/ior$U.lo mpz/iset$U.lo mpz/iset_d$U.lo mpz/iset_si$U.lo		\
   mpz/iset_str$U.lo mpz/iset_ui$U.lo mpz/jacobi$U.lo mpz/kronsz$U.lo	\
   mpz/kronuz$U.lo mpz/kronzs$U.lo mpz/kronzu$U.lo			\
@@ -168,8 +176,8 @@ MPZ_OBJECTS = mpz/abs$U.lo mpz/add$U.lo mpz/add_ui$U.lo			\
   mpz/mul_si$U.lo mpz/mul_ui$U.lo					\
   mpz/n_pow_ui$U.lo mpz/neg$U.lo mpz/nextprime$U.lo			\
   mpz/out_raw$U.lo mpz/out_str$U.lo mpz/perfpow$U.lo mpz/perfsqr$U.lo	\
-  mpz/popcount$U.lo mpz/pow_ui$U.lo mpz/powm$U.lo mpz/powm_ui$U.lo	\
-  mpz/pprime_p$U.lo mpz/random$U.lo mpz/random2$U.lo			\
+  mpz/popcount$U.lo mpz/pow_ui$U.lo mpz/powm$U.lo mpz/powm_sec$U.lo	\
+  mpz/powm_ui$U.lo mpz/pprime_p$U.lo mpz/random$U.lo mpz/random2$U.lo	\
   mpz/realloc$U.lo mpz/realloc2$U.lo mpz/remove$U.lo			\
   mpz/root$U.lo mpz/rootrem$U.lo mpz/rrandomb$U.lo mpz/scan0$U.lo	\
   mpz/scan1$U.lo mpz/set$U.lo mpz/set_d$U.lo mpz/set_f$U.lo		\
@@ -184,10 +192,10 @@ MPZ_OBJECTS = mpz/abs$U.lo mpz/add$U.lo mpz/add_ui$U.lo			\
   mpz/urandomm$U.lo mpz/xor$U.lo
 
 MPQ_OBJECTS = mpq/abs$U.lo mpq/aors$U.lo				\
-  mpq/canonicalize$U.lo mpq/clear$U.lo					\
+  mpq/canonicalize$U.lo mpq/clear$U.lo mpq/clears$U.lo			\
   mpq/cmp$U.lo mpq/cmp_si$U.lo mpq/cmp_ui$U.lo mpq/div$U.lo		\
   mpq/get_d$U.lo mpq/get_den$U.lo mpq/get_num$U.lo mpq/get_str$U.lo	\
-  mpq/init$U.lo mpq/inp_str$U.lo mpq/inv$U.lo				\
+  mpq/init$U.lo mpq/inits$U.lo mpq/inp_str$U.lo mpq/inv$U.lo		\
   mpq/md_2exp$U.lo mpq/mul$U.lo mpq/neg$U.lo mpq/out_str$U.lo		\
   mpq/set$U.lo mpq/set_den$U.lo mpq/set_num$U.lo			\
   mpq/set_si$U.lo mpq/set_str$U.lo mpq/set_ui$U.lo			\
@@ -244,7 +252,8 @@ libgmp_la_SOURCES = gmp-impl.h longlong.h randmt.h			\
   assert.c compat.c errno.c extract-dbl.c invalid.c memory.c		\
   mp_bpl.c mp_clz_tab.c mp_dv_tab.c mp_minv_tab.c mp_get_fns.c mp_set_fns.c \
   rand.c randclr.c randdef.c randiset.c randlc2s.c randlc2x.c randmt.c	\
-  randmts.c rands.c randsd.c randsdui.c randbui.c randmui.c version.c
+  randmts.c rands.c randsd.c randsdui.c randbui.c randmui.c version.c	\
+  nextprime.c
 EXTRA_libgmp_la_SOURCES = tal-debug.c tal-notreent.c tal-reent.c
 libgmp_la_DEPENDENCIES = @TAL_OBJECT@		\
   $(MPF_OBJECTS) $(MPZ_OBJECTS) $(MPQ_OBJECTS)	\
@@ -279,7 +288,7 @@ MPBSD_LTLIBRARIES_OPTION = libmp.la
 endif
 BUILT_SOURCES += mp.h
 libmp_la_SOURCES = assert.c errno.c memory.c mp_bpl.c mp_clz_tab.c	\
-  mp_dv_tab.c mp_minv_tab.c mp_get_fns.c mp_set_fns.c
+  mp_dv_tab.c mp_minv_tab.c mp_get_fns.c mp_set_fns.c nextprime.c
 libmp_la_DEPENDENCIES = $(srcdir)/libmp.sym				\
   @TAL_OBJECT@ $(MPBSD_OBJECTS) $(MPN_OBJECTS) @mpn_objs_in_libmp@	\
   mpz/add$U.lo mpz/gcdext$U.lo mpz/invert$U.lo mpz/mul$U.lo		\
@@ -331,7 +340,7 @@ install-data-hook:
 EXTRA_DIST += dumbmp.c
 
 mpz/fac_ui.h: gen-fac_ui$(EXEEXT_FOR_BUILD)
-	./gen-fac_ui $(BITS_PER_MP_LIMB) $(GMP_NAIL_BITS) >mpz/fac_ui.h || (rm -f mpz/fac_ui.h; exit 1)
+	./gen-fac_ui $(GMP_LIMB_BITS) $(GMP_NAIL_BITS) >mpz/fac_ui.h || (rm -f mpz/fac_ui.h; exit 1)
 BUILT_SOURCES += mpz/fac_ui.h
 
 gen-fac_ui$(EXEEXT_FOR_BUILD): gen-fac_ui$(U_FOR_BUILD).c dumbmp.c
@@ -344,11 +353,11 @@ gen-fac_ui_.c: gen-fac_ui.c $(ANSI2KNR)
 
 
 fib_table.h: gen-fib$(EXEEXT_FOR_BUILD)
-	./gen-fib header $(BITS_PER_MP_LIMB) $(GMP_NAIL_BITS) >fib_table.h || (rm -f fib_table.h; exit 1)
+	./gen-fib header $(GMP_LIMB_BITS) $(GMP_NAIL_BITS) >fib_table.h || (rm -f fib_table.h; exit 1)
 BUILT_SOURCES += fib_table.h
 
 mpn/fib_table.c: gen-fib$(EXEEXT_FOR_BUILD)
-	./gen-fib table $(BITS_PER_MP_LIMB) $(GMP_NAIL_BITS) >mpn/fib_table.c || (rm -f mpn/fib_table.c; exit 1)
+	./gen-fib table $(GMP_LIMB_BITS) $(GMP_NAIL_BITS) >mpn/fib_table.c || (rm -f mpn/fib_table.c; exit 1)
 BUILT_SOURCES += mpn/fib_table.c
 
 gen-fib$(EXEEXT_FOR_BUILD): gen-fib$(U_FOR_BUILD).c dumbmp.c
@@ -361,11 +370,11 @@ gen-fib_.c: gen-fib.c $(ANSI2KNR)
 
 
 mp_bases.h: gen-bases$(EXEEXT_FOR_BUILD)
-	./gen-bases header $(BITS_PER_MP_LIMB) $(GMP_NAIL_BITS) >mp_bases.h || (rm -f mp_bases.h; exit 1)
+	./gen-bases header $(GMP_LIMB_BITS) $(GMP_NAIL_BITS) >mp_bases.h || (rm -f mp_bases.h; exit 1)
 BUILT_SOURCES += mp_bases.h
 
 mpn/mp_bases.c: gen-bases$(EXEEXT_FOR_BUILD)
-	./gen-bases table $(BITS_PER_MP_LIMB) $(GMP_NAIL_BITS) >mpn/mp_bases.c || (rm -f mpn/mp_bases.c; exit 1)
+	./gen-bases table $(GMP_LIMB_BITS) $(GMP_NAIL_BITS) >mpn/mp_bases.c || (rm -f mpn/mp_bases.c; exit 1)
 BUILT_SOURCES += mpn/mp_bases.c
 
 gen-bases$(EXEEXT_FOR_BUILD): gen-bases$(U_FOR_BUILD).c dumbmp.c
@@ -377,8 +386,24 @@ gen-bases_.c: gen-bases.c $(ANSI2KNR)
 	$(CPP_FOR_BUILD) `if test -f $(srcdir)/gen-bases.c; then echo $(srcdir)/gen-bases.c; else echo gen-bases.c; fi` | sed 's/^# \([0-9]\)/#line \1/' | $(ANSI2KNR) > gen-bases_.c || rm -f gen-bases_.c
 
 
+
+trialdivtab.h: gen-trialdivtab$(EXEEXT_FOR_BUILD)
+	./gen-trialdivtab $(GMP_LIMB_BITS) 8000 >trialdivtab.h || (rm -f trialdivtab.h; exit 1)
+BUILT_SOURCES += trialdivtab.h
+
+gen-trialdivtab$(EXEEXT_FOR_BUILD): gen-trialdivtab$(U_FOR_BUILD).c dumbmp.c
+	$(CC_FOR_BUILD) `test -f 'gen-trialdivtab$(U_FOR_BUILD).c' || echo '$(srcdir)/'`gen-trialdivtab$(U_FOR_BUILD).c -o gen-trialdivtab$(EXEEXT_FOR_BUILD) $(LIBM_FOR_BUILD)
+DISTCLEANFILES += gen-trialdivtab$(EXEEXT_FOR_BUILD)
+EXTRA_DIST += gen-trialdivtab.c
+
+gen-trialdivtab_.c: gen-trialdivtab.c $(ANSI2KNR)
+	$(CPP_FOR_BUILD) `if test -f $(srcdir)/gen-trialdivtab.c; then echo $(srcdir)/gen-trialdivtab.c; else echo gen-trialdivtab.c; fi` | sed 's/^# \([0-9]\)/#line \1/' | $(ANSI2KNR) > gen-trialdivtab_.c || rm -f gen-trialdivtab_.c
+
+
+
+
 mpn/perfsqr.h: gen-psqr$(EXEEXT_FOR_BUILD)
-	./gen-psqr $(BITS_PER_MP_LIMB) $(GMP_NAIL_BITS) >mpn/perfsqr.h || (rm -f mpn/perfsqr.h; exit 1)
+	./gen-psqr $(GMP_LIMB_BITS) $(GMP_NAIL_BITS) >mpn/perfsqr.h || (rm -f mpn/perfsqr.h; exit 1)
 BUILT_SOURCES += mpn/perfsqr.h
 
 gen-psqr$(EXEEXT_FOR_BUILD): gen-psqr$(U_FOR_BUILD).c dumbmp.c
@@ -400,3 +425,6 @@ gen-psqr_.c: gen-psqr.c $(ANSI2KNR)
 dist-hook:
 	-find $(distdir) \( -name CVS -type d \) -o -name "*~" -o -name ".#*" \
 		| xargs rm -rf
+#	grep -F $(VERSION) $(srcdir)/Makefile.am \
+#		| grep -q "^# *$(VERSION) *$(LIBGMP_LT_CURRENT):$(LIBGMP_LT_REVISION):$(LIBGMP_LT_AGE) *$(LIBGMPXX_LT_CURRENT):$(LIBGMPXX_LT_REVISION):$(LIBGMPXX_LT_AGE) *$(LIBMP_LT_CURRENT):$(LIBMP_LT_REVISION):$(LIBMP_LT_AGE)"
+#	test -z "`sed -n 's/^# *[0-9]*\.[0-9]*\.[0-9]* *\([0-9]*:[0-9]*:[0-9]*\) *\([0-9]*:[0-9]*:[0-9]*\) *\([0-9]*:[0-9]*:[0-9]*\).*/A\1\nB\2\nC\3/p' $(srcdir)/Makefile.am | grep -v 'A6:3:3\|B3:5:0\|C4:7:1' | sort | uniq -d`"

@@ -1,24 +1,24 @@
 /* Test file for mpfr_cot.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,7 +38,7 @@ check_specials (void)
   mpfr_init2 (y, 123L);
 
   mpfr_set_nan (x);
-  mpfr_cot (y, x, GMP_RNDN);
+  mpfr_cot (y, x, MPFR_RNDN);
   if (! mpfr_nan_p (y))
     {
       printf ("Error: cot(NaN) != NaN\n");
@@ -46,7 +46,7 @@ check_specials (void)
     }
 
   mpfr_set_inf (x, 1);
-  mpfr_cot (y, x, GMP_RNDN);
+  mpfr_cot (y, x, MPFR_RNDN);
   if (! mpfr_nan_p (y))
     {
       printf ("Error: cot(Inf) != NaN\n");
@@ -54,7 +54,7 @@ check_specials (void)
     }
 
   mpfr_set_inf (x, -1);
-  mpfr_cot (y, x, GMP_RNDN);
+  mpfr_cot (y, x, MPFR_RNDN);
   if (! mpfr_nan_p (y))
     {
       printf ("Error: cot(-Inf) != NaN\n");
@@ -62,15 +62,15 @@ check_specials (void)
     }
 
   /* cot(+/-0) = +/-Inf */
-  mpfr_set_ui (x, 0, GMP_RNDN);
-  mpfr_cot (y, x, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN);
+  mpfr_cot (y, x, MPFR_RNDN);
   if (! (mpfr_inf_p (y) && mpfr_sgn (y) > 0))
     {
       printf ("Error: cot(+0) != +Inf\n");
       exit (1);
     }
-  mpfr_neg (x, x, GMP_RNDN);
-  mpfr_cot (y, x, GMP_RNDN);
+  mpfr_neg (x, x, MPFR_RNDN);
+  mpfr_cot (y, x, MPFR_RNDN);
   if (! (mpfr_inf_p (y) && mpfr_sgn (y) < 0))
     {
       printf ("Error: cot(-0) != -Inf\n");
@@ -82,9 +82,9 @@ check_specials (void)
 }
 
 static void
-two2emin (mp_exp_t e)
+two2emin (mpfr_exp_t e)
 {
-  mp_exp_t old_emin, old_emax;
+  mpfr_exp_t old_emin, old_emax;
   mpfr_t x, y;
   int i, rnd;
 
@@ -97,23 +97,23 @@ two2emin (mp_exp_t e)
       exit (1);
     }
 
-  mpfr_inits2 (53, x, y, (void *) 0);
+  mpfr_inits2 (53, x, y, (mpfr_ptr) 0);
   for (i = -4; i <= 4; i++)
     RND_LOOP (rnd)
       {
-        mpfr_set_si (y, i, GMP_RNDN);
-        mpfr_ui_div (y, 1, y, rnd);  /* no overflow/underflow */
-        mpfr_set_si_2exp (x, i, -e, GMP_RNDN);
+        mpfr_set_si (y, i, MPFR_RNDN);
+        mpfr_ui_div (y, 1, y, (mpfr_rnd_t) rnd);  /* no overflow/underflow */
+        mpfr_set_si_2exp (x, i, -e, MPFR_RNDN);
         if (ABS (i) != 3)  /* not a power of 2 (not 0 either) */
-          mpfr_sub (y, y, x, rnd);  /* no overflow/underflow */
-        mpfr_set_ui_2exp (x, 1, -e, GMP_RNDN);
-        mpfr_div (y, y, x, rnd);  /* 1/x - SIGN(x).epsilon */
-        mpfr_set_si_2exp (x, i, -e, GMP_RNDN);
-        mpfr_cot (x, x, rnd);
+          mpfr_sub (y, y, x, (mpfr_rnd_t) rnd);  /* no overflow/underflow */
+        mpfr_set_ui_2exp (x, 1, -e, MPFR_RNDN);
+        mpfr_div (y, y, x, (mpfr_rnd_t) rnd);  /* 1/x - SIGN(x).epsilon */
+        mpfr_set_si_2exp (x, i, -e, MPFR_RNDN);
+        mpfr_cot (x, x, (mpfr_rnd_t) rnd);
         if (! mpfr_equal_p (x, y))
           {
             printf ("Error in two2emin for i = %d and rnd = %s\n",
-                    i, mpfr_print_rnd_mode (rnd));
+                    i, mpfr_print_rnd_mode ((mpfr_rnd_t) rnd));
             printf ("Got        ");
             mpfr_dump (x);
             printf ("instead of ");
@@ -121,7 +121,7 @@ two2emin (mp_exp_t e)
             exit (1);
           }
       }
-  mpfr_clears (x, y, (void *) 0);
+  mpfr_clears (x, y, (mpfr_ptr) 0);
 
   mpfr_set_emin (old_emin);
   mpfr_set_emax (old_emax);

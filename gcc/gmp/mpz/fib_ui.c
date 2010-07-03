@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include "gmp.h"
@@ -80,10 +78,10 @@ mpz_fib_ui (mpz_ptr fn, unsigned long n)
       /* F[2k+1] = (2F[k]+F[k-1])*(2F[k]-F[k-1]) + 2*(-1)^k  */
       mp_size_t  xsize, ysize;
 
-#if HAVE_NATIVE_mpn_addsub_n
+#if HAVE_NATIVE_mpn_add_n_sub_n
       xp[size] = mpn_lshift (xp, xp, size, 1);
       yp[size] = 0;
-      ASSERT_NOCARRY (mpn_addsub_n (xp, yp, xp, yp, size+1));
+      ASSERT_NOCARRY (mpn_add_n_sub_n (xp, yp, xp, yp, size+1));
       xsize = size + (xp[size] != 0);
       ysize = size + (yp[size] != 0);
 #else

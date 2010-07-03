@@ -10,7 +10,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>    /* for printf */
 #include <stdlib.h>   /* for getenv */
@@ -197,8 +195,8 @@ __gmpn_cpuvec_init (void)
       vendor_string[12] = 0;
 
       fms = __gmpn_cpuid (dummy_string, 1);
-      family = (fms >> 8) & 15;
-      model = (fms >> 4) & 15;
+      family = ((fms >> 8) & 0xf) + ((fms >> 20) & 0xff);
+      model = ((fms >> 4) & 0xf) + ((fms >> 12) & 0xf0);
 
       if (strcmp (vendor_string, "GenuineIntel") == 0)
         {
@@ -219,7 +217,7 @@ __gmpn_cpuvec_init (void)
               break;
 
             case 6:
-              TRACE (printf ("  pentiumpro\n"));
+              TRACE (printf ("  p6\n"));
               CPUVEC_SETUP_p6;
               if (model >= 2)
                 {
@@ -230,6 +228,11 @@ __gmpn_cpuvec_init (void)
                 {
                   TRACE (printf ("  pentium3\n"));
                   CPUVEC_SETUP_p6_p3mmx;
+                }
+              if (model >= 0xD || model == 9)
+                {
+                  TRACE (printf ("  p6 with sse2\n"));
+                  CPUVEC_SETUP_p6_sse2;
                 }
               break;
 

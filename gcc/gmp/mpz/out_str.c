@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include "gmp.h"
@@ -73,13 +71,13 @@ mpz_out_str (FILE *stream, int base, mpz_srcptr x)
     }
 
   TMP_MARK;
-  str_size = ((size_t) (x_size * BITS_PER_MP_LIMB
-			* __mp_bases[base].chars_per_bit_exactly)) + 3;
+  str_size = ((size_t) (x_size * GMP_LIMB_BITS
+			* mp_bases[base].chars_per_bit_exactly)) + 3;
   str = (unsigned char *) TMP_ALLOC (str_size);
 
   /* Move the number to convert into temporary space, since mpn_get_str
      clobbers its argument + needs one extra high limb....  */
-  xp = (mp_ptr) TMP_ALLOC ((x_size + 1) * BYTES_PER_MP_LIMB);
+  xp = TMP_ALLOC_LIMBS (x_size + 1);
   MPN_COPY (xp, x->_mp_d, x_size);
 
   str_size = mpn_get_str (str, base, xp, x_size);

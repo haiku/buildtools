@@ -1,24 +1,24 @@
 /* mpfr_eq -- Compare two floats up to a specified bit #.
 
-Copyright 1999, 2001, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 
 #include "mpfr-impl.h"
@@ -30,7 +30,7 @@ mpfr_eq (mpfr_srcptr u, mpfr_srcptr v, unsigned long int n_bits)
 {
   mp_srcptr up, vp;
   mp_size_t usize, vsize, size, i;
-  mp_exp_t uexp, vexp;
+  mpfr_exp_t uexp, vexp;
   int k;
 
   if (MPFR_ARE_SINGULAR(u, v))
@@ -56,8 +56,8 @@ mpfr_eq (mpfr_srcptr u, mpfr_srcptr v, unsigned long int n_bits)
   if (uexp != vexp)
     return 0; /* no bit agree */
 
-  usize = (MPFR_PREC(u) - 1) / BITS_PER_MP_LIMB + 1;
-  vsize = (MPFR_PREC(v) - 1) / BITS_PER_MP_LIMB + 1;
+  usize = (MPFR_PREC(u) - 1) / GMP_NUMB_BITS + 1;
+  vsize = (MPFR_PREC(v) - 1) / GMP_NUMB_BITS + 1;
 
   if (vsize > usize) /* exchange u and v */
     {
@@ -78,23 +78,23 @@ mpfr_eq (mpfr_srcptr u, mpfr_srcptr v, unsigned long int n_bits)
 
   if (usize > vsize)
     {
-      if ((unsigned long) vsize * BITS_PER_MP_LIMB < n_bits)
+      if ((unsigned long) vsize * GMP_NUMB_BITS < n_bits)
         {
-          /* check if low min(PREC(u), n_bits) - (vsize * BITS_PER_MP_LIMB)
+          /* check if low min(PREC(u), n_bits) - (vsize * GMP_NUMB_BITS)
              bits from u are non-zero */
-          unsigned long remains = n_bits - (vsize * BITS_PER_MP_LIMB);
+          unsigned long remains = n_bits - (vsize * GMP_NUMB_BITS);
           k = usize - vsize - 1;
-          while (k >= 0 && remains >= BITS_PER_MP_LIMB && !up[k])
+          while (k >= 0 && remains >= GMP_NUMB_BITS && !up[k])
             {
               k--;
-              remains -= BITS_PER_MP_LIMB;
+              remains -= GMP_NUMB_BITS;
             }
           /* now either k < 0: all low bits from u are zero
-                 or remains < BITS_PER_MP_LIMB: check high bits from up[k]
+                 or remains < GMP_NUMB_BITS: check high bits from up[k]
                  or up[k] <> 0: different */
-          if (k >= 0 && (((remains < BITS_PER_MP_LIMB) &&
-                          (up[k] >> (BITS_PER_MP_LIMB - remains))) ||
-                         (remains >= BITS_PER_MP_LIMB && up[k])))
+          if (k >= 0 && (((remains < GMP_NUMB_BITS) &&
+                          (up[k] >> (GMP_NUMB_BITS - remains))) ||
+                         (remains >= GMP_NUMB_BITS && up[k])))
             return 0;           /* surely too different */
         }
       size = vsize;
@@ -108,34 +108,34 @@ mpfr_eq (mpfr_srcptr u, mpfr_srcptr v, unsigned long int n_bits)
 
   /* If size is too large wrt n_bits, reduce it to look only at the
      high n_bits bits.
-     Otherwise, if n_bits > size * BITS_PER_MP_LIMB, reduce n_bits to
-     size * BITS_PER_MP_LIMB, since the extra low bits of one of the
+     Otherwise, if n_bits > size * GMP_NUMB_BITS, reduce n_bits to
+     size * GMP_NUMB_BITS, since the extra low bits of one of the
      operands have already been check above. */
-  if ((unsigned long) size > 1 + (n_bits - 1) / BITS_PER_MP_LIMB)
-    size = 1 + (n_bits - 1) / BITS_PER_MP_LIMB;
-  else if (n_bits > (unsigned long) size * BITS_PER_MP_LIMB)
-    n_bits = size * BITS_PER_MP_LIMB;
+  if ((unsigned long) size > 1 + (n_bits - 1) / GMP_NUMB_BITS)
+    size = 1 + (n_bits - 1) / GMP_NUMB_BITS;
+  else if (n_bits > (unsigned long) size * GMP_NUMB_BITS)
+    n_bits = size * GMP_NUMB_BITS;
 
   up += usize - size;
   vp += vsize - size;
 
-  for (i = size - 1; i > 0 && n_bits >= BITS_PER_MP_LIMB; i--)
+  for (i = size - 1; i > 0 && n_bits >= GMP_NUMB_BITS; i--)
     {
       if (up[i] != vp[i])
         return 0;
-      n_bits -= BITS_PER_MP_LIMB;
+      n_bits -= GMP_NUMB_BITS;
     }
 
-  /* now either i=0 or n_bits<BITS_PER_MP_LIMB */
+  /* now either i=0 or n_bits<GMP_NUMB_BITS */
 
-  /* since n_bits <= size * BITS_PER_MP_LIMB before the above for-loop,
-     we have the invariant n_bits <= (i+1) * BITS_PER_MP_LIMB, thus
-     we always have n_bits <= BITS_PER_MP_LIMB here */
-  MPFR_ASSERTD(n_bits <= BITS_PER_MP_LIMB);
+  /* since n_bits <= size * GMP_NUMB_BITS before the above for-loop,
+     we have the invariant n_bits <= (i+1) * GMP_NUMB_BITS, thus
+     we always have n_bits <= GMP_NUMB_BITS here */
+  MPFR_ASSERTD(n_bits <= GMP_NUMB_BITS);
 
-  if (n_bits & (BITS_PER_MP_LIMB - 1))
-    return (up[i] >> (BITS_PER_MP_LIMB - (n_bits & (BITS_PER_MP_LIMB - 1))) ==
-            vp[i] >> (BITS_PER_MP_LIMB - (n_bits & (BITS_PER_MP_LIMB - 1))));
+  if (n_bits & (GMP_NUMB_BITS - 1))
+    return (up[i] >> (GMP_NUMB_BITS - (n_bits & (GMP_NUMB_BITS - 1))) ==
+            vp[i] >> (GMP_NUMB_BITS - (n_bits & (GMP_NUMB_BITS - 1))));
   else
     return (up[i] == vp[i]);
 }

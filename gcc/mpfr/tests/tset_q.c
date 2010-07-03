@@ -1,33 +1,32 @@
 /* Test file for mpfr_set_q.
 
-Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 #include "mpfr-test.h"
 
 static void
-check (long int n, long int d, mp_rnd_t rnd, const char *ys)
+check (long int n, long int d, mpfr_rnd_t rnd, const char *ys)
 {
   mpq_t q;
   mpfr_t x, t;
@@ -45,7 +44,7 @@ check (long int n, long int d, mp_rnd_t rnd, const char *ys)
       printf ("Error for q=%ld/%ld and rnd=%s\n", n, d,
               mpfr_print_rnd_mode (rnd));
       printf ("correct result is %s, mpfr_set_q gives ", ys);
-      mpfr_out_str(stdout, 10, 0, x, GMP_RNDN);
+      mpfr_out_str(stdout, 10, 0, x, MPFR_RNDN);
       putchar('\n');
       exit (1);
     }
@@ -82,13 +81,13 @@ static void check0(void)
   mpfr_init (x);
   mpq_init (y);
   mpq_set_si (y, 0, 1);
-  for (r = 0; r < GMP_RND_MAX; r++)
+  for (r = 0; r < MPFR_RND_MAX; r++)
     {
-      inexact = mpfr_set_q(x, y, (mp_rnd_t) r);
+      inexact = mpfr_set_q(x, y, (mpfr_rnd_t) r);
       if (!MPFR_IS_ZERO(x) || !MPFR_IS_POS(x) || inexact)
         {
           printf("mpfr_set_q(x,0) failed for %s\n",
-                 mpfr_print_rnd_mode ((mp_rnd_t) r));
+                 mpfr_print_rnd_mode ((mpfr_rnd_t) r));
           exit(1);
         }
     }
@@ -101,15 +100,15 @@ main (void)
 {
   tests_start_mpfr ();
 
-  check(-1647229822, 40619231, GMP_RNDZ, "-4.055295438754120596e1");
-  check(-148939696, 1673285490, GMP_RNDZ, "-8.9010331404953485501e-2");
-  check(-441322590, 273662545, GMP_RNDZ, "-1.6126525096812205362");
-  check(-1631156895, 1677687197, GMP_RNDU, "-9.722652100563177191e-1");
-  check(2141332571, 3117601, GMP_RNDZ, "6.8685267004982347316e2");
-  check(75504803, 400207282, GMP_RNDU, "1.8866424074712365155e-1");
-  check(643562308, 23100894, GMP_RNDD, "2.7858762002890447462e1");
-  check(632549085, 1831935802, GMP_RNDN, "3.4528998467600230393e-1");
-  check (1, 1, GMP_RNDN, "1.0");
+  check(-1647229822, 40619231, MPFR_RNDZ, "-4.055295438754120596e1");
+  check(-148939696, 1673285490, MPFR_RNDZ, "-8.9010331404953485501e-2");
+  check(-441322590, 273662545, MPFR_RNDZ, "-1.6126525096812205362");
+  check(-1631156895, 1677687197, MPFR_RNDU, "-9.722652100563177191e-1");
+  check(2141332571, 3117601, MPFR_RNDZ, "6.8685267004982347316e2");
+  check(75504803, 400207282, MPFR_RNDU, "1.8866424074712365155e-1");
+  check(643562308, 23100894, MPFR_RNDD, "2.7858762002890447462e1");
+  check(632549085, 1831935802, MPFR_RNDN, "3.4528998467600230393e-1");
+  check (1, 1, MPFR_RNDN, "1.0");
 
   check0();
 

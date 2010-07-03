@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,10 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA.
-*/
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,7 +84,7 @@ main (void)
   EXPECT (mpz_fits_sshort_p, 1);
 
   mpz_set_ui (z, 1L);
-  mpz_mul_2exp (z, z, 5L*BITS_PER_MP_LIMB);
+  mpz_mul_2exp (z, z, 5L*GMP_LIMB_BITS);
   expr = "2^(5*BPML)";
   EXPECT (mpz_fits_ulong_p, 0);
   EXPECT (mpz_fits_uint_p, 0);

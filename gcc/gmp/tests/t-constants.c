@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -210,11 +208,10 @@ main (int argc, char *argv[])
 {
   int  error = 0;
 
-  CHECK_INT (BYTES_PER_MP_LIMB, sizeof(mp_limb_t));
-  CHECK_INT (mp_bits_per_limb, BITS_PER_MP_LIMB);
-  CHECK_INT (__GMP_BITS_PER_MP_LIMB, BITS_PER_MP_LIMB);
+  CHECK_INT (BYTES_PER_MP_LIMB, (int) sizeof(mp_limb_t));
+  CHECK_INT (mp_bits_per_limb, GMP_LIMB_BITS);
 
-  CHECK_BITS (BITS_PER_MP_LIMB, mp_limb_t);
+  CHECK_BITS (GMP_LIMB_BITS, mp_limb_t);
   CHECK_BITS (BITS_PER_ULONG, unsigned long);
 
   CHECK_HIGHBIT (GMP_LIMB_HIGHBIT, mp_limb_t,      LL("0x%lX","0x%llX"));
@@ -250,7 +247,7 @@ main (int argc, char *argv[])
   ASSERT_ALWAYS_LIMB (MODLIMB_INVERSE_3);
   {
     mp_limb_t  modlimb_inverse_3_calc;
-    modlimb_invert (modlimb_inverse_3_calc, CNST_LIMB(3));
+    binvert_limb (modlimb_inverse_3_calc, CNST_LIMB(3));
     ASSERT_ALWAYS_LIMB (modlimb_inverse_3_calc);
     CHECK_LIMB (MODLIMB_INVERSE_3, modlimb_inverse_3_calc);
   }

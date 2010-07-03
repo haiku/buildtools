@@ -1,24 +1,24 @@
 /* tzeta -- test file for the Riemann Zeta function
 
-Copyright 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by Jean-Luc Re'my and the Spaces project, INRIA Lorraine.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,12 +34,12 @@ test1 (void)
   mpfr_init2 (y, 42);
 
   mpfr_set_str_binary (x, "1.1111111101000111011010010010100e-1");
-  mpfr_zeta (y, x, GMP_RNDN); /* shouldn't crash */
+  mpfr_zeta (y, x, MPFR_RNDN); /* shouldn't crash */
 
   mpfr_set_prec (x, 40);
   mpfr_set_prec (y, 50);
   mpfr_set_str_binary (x, "1.001101001101000010011010110100110000101e-1");
-  mpfr_zeta (y, x, GMP_RNDU);
+  mpfr_zeta (y, x, MPFR_RNDU);
   mpfr_set_prec (x, 50);
   mpfr_set_str_binary (x, "-0.11111100011100111111101111100011110111001111111111E1");
   if (mpfr_cmp (x, y))
@@ -48,7 +48,7 @@ test1 (void)
       printf ("Expected "); mpfr_print_binary (x); puts ("");
       printf ("Got      "); mpfr_print_binary (y); puts ("");
       mpfr_set_str_binary (x, "1.001101001101000010011010110100110000101e-1");
-      mpfr_zeta (y, x, GMP_RNDU);
+      mpfr_zeta (y, x, MPFR_RNDU);
       mpfr_print_binary (x); puts ("");
       mpfr_print_binary (y); puts ("");
       exit (1);
@@ -57,7 +57,7 @@ test1 (void)
   mpfr_set_prec (x, 2);
   mpfr_set_prec (y, 55);
   mpfr_set_str_binary (x, "0.11e3");
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   mpfr_set_prec (x, 55);
   mpfr_set_str_binary (x, "0.1000001000111000010011000010011000000100100100100010010E1");
   if (mpfr_cmp (x, y))
@@ -71,7 +71,7 @@ test1 (void)
   mpfr_set_prec (x, 3);
   mpfr_set_prec (y, 47);
   mpfr_set_str_binary (x, "0.111e4");
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   mpfr_set_prec (x, 47);
   mpfr_set_str_binary (x, "1.0000000000000100000000111001001010111100101011");
   if (mpfr_cmp (x, y))
@@ -84,26 +84,26 @@ test1 (void)
   mpfr_set_prec (x, 7);
   mpfr_set_str_binary (x, "1.000001");
   mpfr_set_prec (y, 2);
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui (y, 64) == 0);
 
   /* another coverage test */
   mpfr_set_prec (x, 24);
-  mpfr_set_ui (x, 2, GMP_RNDN);
+  mpfr_set_ui (x, 2, MPFR_RNDN);
   mpfr_set_prec (y, 2);
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui_2exp (y, 3, -1) == 0);
 
   mpfr_set_nan (x);
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_nan_p (y));
 
   mpfr_set_inf (x, 1);
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui (y, 1) == 0);
 
   mpfr_set_inf (x, -1);
-  mpfr_zeta (y, x, GMP_RNDN);
+  mpfr_zeta (y, x, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_nan_p (y));
 
   mpfr_clear (x);
@@ -157,37 +157,39 @@ static const char *const val[] = {
 };
 
 static void
-test2(void)
+test2 (void)
 {
   mpfr_t x, y;
   int i, n = numberof(val);
 
-  mpfr_inits2 (55, x, y, (void *) 0);
+  mpfr_inits2 (55, x, y, (mpfr_ptr) 0);
 
   for(i = 0 ; i < n ; i+=2)
     {
       mpfr_set_str1 (x, val[i]);
-      mpfr_zeta(y, x, GMP_RNDZ);
-      if (mpfr_cmp_str (y, val[i+1] , 2, GMP_RNDZ))
+      mpfr_zeta(y, x, MPFR_RNDZ);
+      if (mpfr_cmp_str (y, val[i+1] , 2, MPFR_RNDZ))
         {
           printf("Wrong result for zeta(%s=", val[i]);
           mpfr_print_binary (x);
           printf (").\nGot     : ");
           mpfr_print_binary(y); putchar('\n');
           printf("Expected: ");
-          mpfr_set_str (y, val[i+1], 2, GMP_RNDZ);
+          mpfr_set_str (y, val[i+1], 2, MPFR_RNDZ);
           mpfr_print_binary(y); putchar('\n');
           mpfr_set_prec(y, 65);
-          mpfr_zeta(y, x, GMP_RNDZ);
+          mpfr_zeta(y, x, MPFR_RNDZ);
           printf("+ Prec  : ");
           mpfr_print_binary(y); putchar('\n');
           exit(1);
         }
     }
-  mpfr_clears (x, y, (void *) 0);
+  mpfr_clears (x, y, (mpfr_ptr) 0);
 }
 
 #define TEST_FUNCTION mpfr_zeta
+#define TEST_RANDOM_EMIN -48
+#define TEST_RANDOM_EMAX 31
 #include "tgeneric.c"
 
 /* Usage: tzeta - generic tests
@@ -197,8 +199,9 @@ int
 main (int argc, char *argv[])
 {
   mpfr_t s, y, z;
-  mp_prec_t prec;
-  mp_rnd_t rnd_mode;
+  mpfr_prec_t prec;
+  mpfr_rnd_t rnd_mode;
+  int inex;
 
   tests_start_mpfr ();
 
@@ -214,11 +217,11 @@ main (int argc, char *argv[])
       prec = atoi(argv[2]);
       mpfr_init2 (s, prec);
       mpfr_init2 (z, prec);
-      mpfr_set_str (s, argv[1], 10, GMP_RNDN);
-      rnd_mode = (mp_rnd_t) atoi(argv[3]);
+      mpfr_set_str (s, argv[1], 10, MPFR_RNDN);
+      rnd_mode = (mpfr_rnd_t) atoi(argv[3]);
 
       mpfr_zeta (z, s, rnd_mode);
-      mpfr_out_str (stdout, 10, 0, z, GMP_RNDN);
+      mpfr_out_str (stdout, 10, 0, z, MPFR_RNDN);
       printf ("\n");
 
       mpfr_clear (s);
@@ -238,15 +241,15 @@ main (int argc, char *argv[])
   mpfr_set_prec (s, 6);
   mpfr_set_prec (z, 6);
   mpfr_set_str_binary (s, "1.10010e4");
-  mpfr_zeta (z, s, GMP_RNDZ);
+  mpfr_zeta (z, s, MPFR_RNDZ);
 
 
   mpfr_set_prec (s, 53);
   mpfr_set_prec (y, 53);
   mpfr_set_prec (z, 53);
 
-  mpfr_set_ui (s, 1, GMP_RNDN);
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_set_ui (s, 1, MPFR_RNDN);
+  mpfr_zeta (z, s, MPFR_RNDN);
   if (!mpfr_inf_p (z) || MPFR_SIGN (z) < 0)
     {
       printf ("Error in mpfr_zeta for s = 1 (should be +inf)\n");
@@ -255,25 +258,25 @@ main (int argc, char *argv[])
 
   mpfr_set_str_binary (s, "0.1100011101110111111111111010000110010111001011001011");
   mpfr_set_str_binary (y, "-0.11111101111011001001001111111000101010000100000100100E2");
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_zeta (z, s, MPFR_RNDN);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (1,RNDN)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDZ);
+  mpfr_zeta (z, s, MPFR_RNDZ);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (1,RNDZ)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDU);
+  mpfr_zeta (z, s, MPFR_RNDU);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (1,RNDU)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDD);
+  mpfr_zeta (z, s, MPFR_RNDD);
   mpfr_nexttoinf (y);
   if (mpfr_cmp (z, y) != 0)
     {
@@ -283,25 +286,25 @@ main (int argc, char *argv[])
 
   mpfr_set_str_binary (s, "0.10001011010011100110010001100100001011000010011001011");
   mpfr_set_str_binary (y, "-0.11010011010010101101110111011010011101111101111010110E1");
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_zeta (z, s, MPFR_RNDN);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (2,RNDN)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDZ);
+  mpfr_zeta (z, s, MPFR_RNDZ);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (2,RNDZ)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDU);
+  mpfr_zeta (z, s, MPFR_RNDU);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (2,RNDU)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDD);
+  mpfr_zeta (z, s, MPFR_RNDD);
   mpfr_nexttoinf (y);
   if (mpfr_cmp (z, y) != 0)
     {
@@ -311,41 +314,41 @@ main (int argc, char *argv[])
 
   mpfr_set_str_binary (s, "0.1100111110100001111110111000110101111001011101000101");
   mpfr_set_str_binary (y, "-0.10010111010110000111011111001101100001111011000001010E3");
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_zeta (z, s, MPFR_RNDN);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (3,RNDN)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDD);
+  mpfr_zeta (z, s, MPFR_RNDD);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (3,RNDD)\n");
       exit (1);
     }
   mpfr_nexttozero (y);
-  mpfr_zeta (z, s, GMP_RNDZ);
+  mpfr_zeta (z, s, MPFR_RNDZ);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (3,RNDZ)\n");
       exit (1);
     }
-  mpfr_zeta (z, s, GMP_RNDU);
+  mpfr_zeta (z, s, MPFR_RNDU);
   if (mpfr_cmp (z, y) != 0)
     {
       printf ("Error in mpfr_zeta (3,RNDU)\n");
       exit (1);
     }
 
-  mpfr_set_str (s, "-400000001", 10, GMP_RNDZ);
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_set_str (s, "-400000001", 10, MPFR_RNDZ);
+  mpfr_zeta (z, s, MPFR_RNDN);
   if (!(mpfr_inf_p (z) && MPFR_SIGN(z) < 0))
     {
       printf ("Error in mpfr_zeta (-400000001)\n");
       exit (1);
     }
-  mpfr_set_str (s, "-400000003", 10, GMP_RNDZ);
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_set_str (s, "-400000003", 10, MPFR_RNDZ);
+  mpfr_zeta (z, s, MPFR_RNDN);
   if (!(mpfr_inf_p (z) && MPFR_SIGN(z) > 0))
     {
       printf ("Error in mpfr_zeta (-400000003)\n");
@@ -355,11 +358,11 @@ main (int argc, char *argv[])
   mpfr_set_prec (s, 34);
   mpfr_set_prec (z, 34);
   mpfr_set_str_binary (s, "-1.111111100001011110000010001010000e-35");
-  mpfr_zeta (z, s, GMP_RNDD);
+  mpfr_zeta (z, s, MPFR_RNDD);
   mpfr_set_str_binary (s, "-1.111111111111111111111111111111111e-2");
   if (mpfr_cmp (s, z))
     {
-      printf ("Error in mpfr_zeta, prec=34, GMP_RNDD\n");
+      printf ("Error in mpfr_zeta, prec=34, MPFR_RNDD\n");
       mpfr_dump (z);
       exit (1);
     }
@@ -368,23 +371,33 @@ main (int argc, char *argv[])
   mpfr_set_prec (s, 23);
   mpfr_set_prec (z, 25);
   mpfr_set_str_binary (s, "-1.0110110110001000000000e-27");
-  mpfr_zeta (z, s, GMP_RNDN);
+  mpfr_zeta (z, s, MPFR_RNDN);
   mpfr_set_prec (s, 25);
   mpfr_set_str_binary (s, "-1.111111111111111111111111e-2");
   if (mpfr_cmp (s, z))
     {
-      printf ("Error in mpfr_zeta, prec=25, GMP_RNDN\n");
+      printf ("Error in mpfr_zeta, prec=25, MPFR_RNDN\n");
       printf ("expected "); mpfr_dump (s);
       printf ("got      "); mpfr_dump (z);
       exit (1);
     }
 
+  /* bug reported by Kevin Rauch on 26 Oct 2007 */
+  mpfr_set_prec (s, 128);
+  mpfr_set_prec (z, 128);
+  mpfr_set_str_binary (s, "-0.1000000000000000000000000000000000000000000000000000000000000001E64");
+  inex = mpfr_zeta (z, s, MPFR_RNDN);
+  MPFR_ASSERTN (mpfr_inf_p (z) && MPFR_SIGN (z) < 0 && inex < 0);
+  inex = mpfr_zeta (z, s, MPFR_RNDU);
+  mpfr_set_inf (s, -1);
+  mpfr_nextabove (s);
+  MPFR_ASSERTN (mpfr_equal_p (z, s) && inex > 0);
 
   mpfr_clear (s);
   mpfr_clear (y);
   mpfr_clear (z);
 
-  test_generic (2, 70, 1);
+  test_generic (2, 70, 5);
   test2 ();
 
   tests_end_mpfr ();

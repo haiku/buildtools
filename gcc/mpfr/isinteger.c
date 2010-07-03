@@ -1,24 +1,24 @@
 /* mpfr_integer_p -- test if a mpfr variable is integer.
 
-Copyright 2001, 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 
 #include "mpfr-impl.h"
@@ -26,8 +26,8 @@ MA 02110-1301, USA. */
 int
 mpfr_integer_p (mpfr_srcptr x)
 {
-  mp_exp_t expo;
-  mp_prec_t prec;
+  mpfr_exp_t expo;
+  mpfr_prec_t prec;
   mp_size_t xn;
   mp_limb_t *xp;
 
@@ -44,13 +44,13 @@ mpfr_integer_p (mpfr_srcptr x)
 
   /* 0 < expo < prec */
 
-  xn =  (mp_size_t) ((prec - 1) / BITS_PER_MP_LIMB);  /* index of last limb */
-  xn -= (mp_size_t) (expo / BITS_PER_MP_LIMB);
+  xn =  (mp_size_t) ((prec - 1) / GMP_NUMB_BITS);  /* index of last limb */
+  xn -= (mp_size_t) (expo / GMP_NUMB_BITS);
   /* now the index of the last limb containing bits of the fractional part */
 
   xp = MPFR_MANT(x);
   MPFR_ASSERTN(xn >= 0);
-  if (xp[xn] << (expo % BITS_PER_MP_LIMB) != 0)
+  if (xp[xn] << (expo % GMP_NUMB_BITS) != 0)
     return 0;
   while (--xn >= 0)
     if (xp[xn] != 0)

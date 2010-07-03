@@ -1,11 +1,12 @@
 /*
-Copyright 1996, 1998, 1999, 2000, 2001, 2004 Free Software Foundation, Inc.
+Copyright 1996, 1998, 1999, 2000, 2001, 2004, 2007, 2009 Free Software
+Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -14,10 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA.
-*/
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -84,6 +82,7 @@ static void mpn_print (mp_ptr, mp_size_t);
 int CNT = 4;
 #endif
 
+int
 main (int argc, char **argv)
 {
   mp_ptr s1, dx, dy;
@@ -140,7 +139,7 @@ main (int argc, char **argv)
 #endif
 
 #ifndef NOCHECK
-      mpn_random2 (s1, size);
+      mpn_random (s1, size);
 
 #ifdef PRINT
       printf ("cnt=%-*d ", (int) (2 * sizeof(mp_limb_t)) - 4, cnt);
@@ -195,8 +194,8 @@ mpn_print (mp_ptr p, mp_size_t size)
     {
 #ifdef _LONG_LONG_LIMB
       printf ("%0*lX%0*lX", (int) (sizeof(mp_limb_t)),
-	      (unsigned long) (p[i] >> (BITS_PER_MP_LIMB/2)),
-              (int) (sizeof(mp_limb_t)), (unsigned long) (p[i]));
+	      (unsigned long) (p[i] >> (GMP_LIMB_BITS/2)),
+	      (int) (sizeof(mp_limb_t)), (unsigned long) (p[i]));
 #else
       printf ("%0*lX", (int) (2 * sizeof(mp_limb_t)), p[i]);
 #endif

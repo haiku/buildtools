@@ -12,7 +12,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -21,9 +21,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <ctype.h>
@@ -66,7 +64,7 @@ mpz_inp_str_nowhite (mpz_ptr x, FILE *stream, int base, int c, size_t nread)
   const unsigned char *digit_value;
 
   ASSERT_ALWAYS (EOF == -1);	/* FIXME: handle this by adding explicit */
-         			/* comparisons of c and EOF before each  */
+				/* comparisons of c and EOF before each  */
 				/* read of digit_value[].  */
 
   digit_value = digit_value_tab;
@@ -153,9 +151,8 @@ mpz_inp_str_nowhite (mpz_ptr x, FILE *stream, int base, int c, size_t nread)
     }
   else
     {
-      xsize = (((mp_size_t)
-                (str_size / __mp_bases[base].chars_per_bit_exactly))
-               / GMP_NUMB_BITS + 2);
+      xsize = 2 + (mp_size_t)
+	(str_size / (GMP_NUMB_BITS * mp_bases[base].chars_per_bit_exactly));
       MPZ_REALLOC (x, xsize);
 
       /* Convert the byte array in base BASE to our bignum format.  */

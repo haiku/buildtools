@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,9 +55,9 @@ check_one (mpf_srcptr src, mpf_srcptr trunc, mpf_srcptr ceil, mpf_srcptr floor)
   MPF_CHECK_FORMAT (got);                       \
   if (mpf_cmp (got, want) != 0)                 \
     {                                           \
-        printf ("%s wrong\n", name);            \
-        check_print (src, got, want);           \
-        abort ();                               \
+	printf ("%s wrong\n", name);            \
+	check_print (src, got, want);           \
+	abort ();                               \
     }
 
   CHECK_SEP ("mpf_trunc", mpf_trunc, trunc);
@@ -72,9 +70,9 @@ check_one (mpf_srcptr src, mpf_srcptr trunc, mpf_srcptr ceil, mpf_srcptr floor)
   MPF_CHECK_FORMAT (got);               \
   if (mpf_cmp (got, want) != 0)         \
     {                                   \
-        printf ("%s wrong\n", name);    \
-        check_print (src, got, want);   \
-        abort ();                       \
+	printf ("%s wrong\n", name);    \
+	check_print (src, got, want);   \
+	abort ();                       \
     }
 
   CHECK_INPLACE ("mpf_trunc", mpf_trunc, trunc);
@@ -140,7 +138,7 @@ check_various (void)
   mpf_set (ceil,  src);
   mpf_set (floor, src);
   check_all (src, trunc, ceil, floor);
-  
+
   /* 1/2^1024, fraction only */
   mpf_set_ui (src, 1L);
   mpf_div_2exp (src,  src, 1024L);
@@ -156,7 +154,7 @@ check_various (void)
   mpf_set_si (ceil, 1L);
   mpf_set_si (floor, 0L);
   check_all (src, trunc, ceil, floor);
-  
+
   /* 123+1/2^64 */
   mpf_set_ui (src, 1L);
   mpf_div_2exp (src,  src, 64L);

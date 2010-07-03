@@ -1,24 +1,24 @@
 /* mpfr_root -- kth root.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -39,11 +39,11 @@ MA 02110-1301, USA. */
  */
 
 int
-mpfr_root (mpfr_ptr y, mpfr_srcptr x, unsigned long k, mp_rnd_t rnd_mode)
+mpfr_root (mpfr_ptr y, mpfr_srcptr x, unsigned long k, mpfr_rnd_t rnd_mode)
 {
   mpz_t m;
-  mp_exp_t e, r, sh;
-  mp_prec_t n, size_m, tmp;
+  mpfr_exp_t e, r, sh;
+  mpfr_prec_t n, size_m, tmp;
   int inexact, negative;
   MPFR_SAVE_EXPO_DECL (expo);
 
@@ -124,25 +124,25 @@ mpfr_root (mpfr_ptr y, mpfr_srcptr x, unsigned long k, mp_rnd_t rnd_mode)
   MPFR_SAVE_EXPO_MARK (expo);
   mpz_init (m);
 
-  e = mpfr_get_z_exp (m, x);                /* x = m * 2^e */
+  e = mpfr_get_z_2exp (m, x);                /* x = m * 2^e */
   if ((negative = MPFR_IS_NEG(x)))
     mpz_neg (m, m);
-  r = e % (mp_exp_t) k;
+  r = e % (mpfr_exp_t) k;
   if (r < 0)
     r += k; /* now r = e (mod k) with 0 <= e < r */
   /* x = (m*2^r) * 2^(e-r) where e-r is a multiple of k */
 
   MPFR_MPZ_SIZEINBASE2 (size_m, m);
   /* for rounding to nearest, we want the round bit to be in the root */
-  n = MPFR_PREC (y) + (rnd_mode == GMP_RNDN);
+  n = MPFR_PREC (y) + (rnd_mode == MPFR_RNDN);
 
   /* we now multiply m by 2^(r+k*sh) so that root(m,k) will give
      exactly n bits: we want k*(n-1)+1 <= size_m + k*sh + r <= k*n
      i.e. sh = floor ((kn-size_m-r)/k) */
-  if ((mp_exp_t) size_m + r > k * (mp_exp_t) n)
+  if ((mpfr_exp_t) size_m + r > k * (mpfr_exp_t) n)
     sh = 0; /* we already have too many bits */
   else
-    sh = (k * (mp_exp_t) n - (mp_exp_t) size_m - r) / k;
+    sh = (k * (mpfr_exp_t) n - (mpfr_exp_t) size_m - r) / k;
   sh = k * sh + r;
   if (sh >= 0)
     {
@@ -165,8 +165,8 @@ mpfr_root (mpfr_ptr y, mpfr_srcptr x, unsigned long k, mp_rnd_t rnd_mode)
   sh = tmp - n;
   if (sh > 0) /* we have to flush to 0 the last sh bits from m */
     {
-      inexact = inexact || ((mp_exp_t) mpz_scan1 (m, 0) < sh);
-      mpz_div_2exp (m, m, sh);
+      inexact = inexact || ((mpfr_exp_t) mpz_scan1 (m, 0) < sh);
+      mpz_fdiv_q_2exp (m, m, sh);
       e += k * sh;
     }
 
@@ -174,8 +174,8 @@ mpfr_root (mpfr_ptr y, mpfr_srcptr x, unsigned long k, mp_rnd_t rnd_mode)
     {
       if (negative)
         rnd_mode = MPFR_INVERT_RND (rnd_mode);
-      if (rnd_mode == GMP_RNDU
-          || (rnd_mode == GMP_RNDN && mpz_tstbit (m, 0)))
+      if (rnd_mode == MPFR_RNDU || rnd_mode == MPFR_RNDA
+          || (rnd_mode == MPFR_RNDN && mpz_tstbit (m, 0)))
         inexact = 1, mpz_add_ui (m, m, 1);
       else
         inexact = -1;
@@ -183,9 +183,9 @@ mpfr_root (mpfr_ptr y, mpfr_srcptr x, unsigned long k, mp_rnd_t rnd_mode)
 
   /* either inexact is not zero, and the conversion is exact, i.e. inexact
      is not changed; or inexact=0, and inexact is set only when
-     rnd_mode=GMP_RNDN and bit (n+1) from m is 1 */
-  inexact += mpfr_set_z (y, m, GMP_RNDN);
-  MPFR_SET_EXP (y, MPFR_GET_EXP (y) + e / (mp_exp_t) k);
+     rnd_mode=MPFR_RNDN and bit (n+1) from m is 1 */
+  inexact += mpfr_set_z (y, m, MPFR_RNDN);
+  MPFR_SET_EXP (y, MPFR_GET_EXP (y) + e / (mpfr_exp_t) k);
 
   if (negative)
     {

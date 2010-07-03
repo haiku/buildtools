@@ -6,13 +6,13 @@
 
 
 Copyright 1991, 1992, 1993, 1994, 1996, 1997, 2000, 2001, 2002, 2003, 2004,
-2005 Free Software Foundation, Inc.
+2005, 2008 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -21,9 +21,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -56,12 +54,12 @@ void
 mpn_sqr_basecase (mp_ptr rp, mp_srcptr up, mp_size_t n)
 {
   mp_size_t i;
-  mp_limb_t tarr[2 * SQR_KARATSUBA_THRESHOLD];
+  mp_limb_t tarr[2 * SQR_TOOM2_THRESHOLD];
   mp_ptr tp = tarr;
   mp_limb_t cy;
 
   /* must fit 2*n limbs in tarr */
-  ASSERT (n <= SQR_KARATSUBA_THRESHOLD);
+  ASSERT (n <= SQR_TOOM2_THRESHOLD);
 
   if ((n & 1) != 0)
     {
@@ -110,8 +108,8 @@ mpn_sqr_basecase (mp_ptr rp, mp_srcptr up, mp_size_t n)
 #else
   cy = mpn_lshift (tp, tp, 2 * n - 2, 1);
   cy += mpn_add_n (rp + 1, rp + 1, tp, 2 * n - 2);
-  rp[2 * n - 1] += cy;
 #endif
+  rp[2 * n - 1] += cy;
 }
 #define READY_WITH_mpn_sqr_basecase
 #endif
@@ -138,12 +136,12 @@ void
 mpn_sqr_basecase (mp_ptr rp, mp_srcptr up, mp_size_t n)
 {
   mp_size_t i;
-  mp_limb_t tarr[2 * SQR_KARATSUBA_THRESHOLD];
+  mp_limb_t tarr[2 * SQR_TOOM2_THRESHOLD];
   mp_ptr tp = tarr;
   mp_limb_t cy;
 
   /* must fit 2*n limbs in tarr */
-  ASSERT (n <= SQR_KARATSUBA_THRESHOLD);
+  ASSERT (n <= SQR_TOOM2_THRESHOLD);
 
   if ((n & 1) != 0)
     {
@@ -270,12 +268,12 @@ mpn_sqr_basecase (mp_ptr rp, mp_srcptr up, mp_size_t n)
   }
   if (n > 1)
     {
-      mp_limb_t tarr[2 * SQR_KARATSUBA_THRESHOLD];
+      mp_limb_t tarr[2 * SQR_TOOM2_THRESHOLD];
       mp_ptr tp = tarr;
       mp_limb_t cy;
 
       /* must fit 2*n limbs in tarr */
-      ASSERT (n <= SQR_KARATSUBA_THRESHOLD);
+      ASSERT (n <= SQR_TOOM2_THRESHOLD);
 
       cy = mpn_mul_1 (tp, up + 1, n - 1, up[0]);
       tp[n - 1] = cy;

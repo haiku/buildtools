@@ -4,13 +4,13 @@
    CERTAIN TO BE SUBJECT TO INCOMPATIBLE CHANGES OR DISAPPEAR COMPLETELY IN
    FUTURE GNU MP RELEASES.
 
-Copyright 2002, 2003 Free Software Foundation, Inc.
+Copyright 2002, 2003, 2006 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA.  */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>   /* for NULL */
 
@@ -296,7 +294,7 @@ __gmp_randget_mt (gmp_randstate_t rstate, mp_ptr dest, unsigned long int nbits)
 	  {
 	    if (bits_in_pool < 32)	/* Need more bits.  */
 	      {
-		/* 64-bit right shift. */
+		/* 64-bit right shift.  */
 		NEXT_RANDOM;
 		bitpool_h = y;
 		bitpool_l |= (bitpool_h << bits_in_pool) & 0xFFFFFFFF;
@@ -307,7 +305,7 @@ __gmp_randget_mt (gmp_randstate_t rstate, mp_ptr dest, unsigned long int nbits)
 		bits_in_pool += 32;	/* We've got 32 more bits.  */
 	      }
 
-	    /* Fill a 32-bit chunk */
+	    /* Fill a 32-bit chunk.  */
 	    dest[i] |= ((mp_limb_t) bitpool_l) << bitidx;
 	    bitpool_l = bitpool_h;
 	    bits_in_pool -= 32;
@@ -349,7 +347,7 @@ void
 __gmp_randclear_mt (gmp_randstate_t rstate)
 {
   (*__gmp_free_func) ((void *) RNG_STATE (rstate),
-		      sizeof (gmp_rand_mt_struct));
+		      ALLOC (rstate->_mp_seed) * BYTES_PER_MP_LIMB);
 }
 
 void __gmp_randiset_mt __GMP_PROTO ((gmp_randstate_ptr dst, gmp_randstate_srcptr src));
@@ -364,40 +362,44 @@ static const gmp_randfnptr_t Mersenne_Twister_Generator_Noseed = {
 void
 __gmp_randiset_mt (gmp_randstate_ptr dst, gmp_randstate_srcptr src)
 {
+  const mp_size_t sz = ((sizeof (gmp_rand_mt_struct) - 1) / BYTES_PER_MP_LIMB) + 1;
   gmp_rand_mt_struct *dstp, *srcp;
-  int  i;
+  mp_size_t i;
 
-  srcp = (gmp_rand_mt_struct *) RNG_STATE (src);
-  dstp = (*__gmp_allocate_func) (sizeof (gmp_rand_mt_struct));
-
-  RNG_STATE (dst) = (void *) dstp;
+  /* Set the generator functions.  */
   RNG_FNPTR (dst) = (void *) &Mersenne_Twister_Generator_Noseed;
 
+  /* Allocate the MT-specific state.  */
+  dstp = (gmp_rand_mt_struct *) __GMP_ALLOCATE_FUNC_LIMBS (sz);
+  RNG_STATE (dst) = (mp_ptr) dstp;
+  ALLOC (dst->_mp_seed) = sz;     /* Initialize alloc field to placate Camm.  */
+
+  /* Copy state.  */
+  srcp = (gmp_rand_mt_struct *) RNG_STATE (src);
   for (i = 0; i < N; i++)
     dstp->mt[i] = srcp->mt[i];
 
   dstp->mti = srcp->mti;
 }
 
-
-/* Initialize MT-specific data.  */
 void
-__gmp_randinit_mt_noseed (gmp_randstate_t rstate)
+__gmp_randinit_mt_noseed (gmp_randstate_ptr dst)
 {
-  int i;
-  gmp_rand_mt_struct *p;
+  const mp_size_t sz = ((sizeof (gmp_rand_mt_struct) - 1) / BYTES_PER_MP_LIMB) + 1;
+  gmp_rand_mt_struct *dstp;
+  mp_size_t i;
 
   /* Set the generator functions.  */
-  RNG_FNPTR (rstate) = (void *) &Mersenne_Twister_Generator_Noseed;
+  RNG_FNPTR (dst) = (void *) &Mersenne_Twister_Generator_Noseed;
 
   /* Allocate the MT-specific state.  */
-  p = (gmp_rand_mt_struct *)
-    (*__gmp_allocate_func) (sizeof (gmp_rand_mt_struct));
-  RNG_STATE (rstate) = (mp_ptr) p;
+  dstp = (gmp_rand_mt_struct *) __GMP_ALLOCATE_FUNC_LIMBS (sz);
+  RNG_STATE (dst) = (mp_ptr) dstp;
+  ALLOC (dst->_mp_seed) = sz;     /* Initialize alloc field to placate Camm.  */
 
   /* Set state for default seed.  */
   for (i = 0; i < N; i++)
-    p->mt[i] = default_state[i];
+    dstp->mt[i] = default_state[i];
 
-  ((gmp_rand_mt_struct *) RNG_STATE (rstate))->mti = WARM_UP % N;
+  dstp->mti = WARM_UP % N;
 }

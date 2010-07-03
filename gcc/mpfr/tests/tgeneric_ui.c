@@ -1,43 +1,43 @@
 /* Generic test file for functions with one mpfr_t argument and an integer.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 /* define INTEGER_TYPE to what we want */
 #ifndef INTEGER_TYPE
 # define INTEGER_TYPE mp_limb_t
 #endif
 #ifndef RAND_FUNCTION
-# define RAND_FUNCTION mpfr_random
+# define RAND_FUNCTION(x) mpfr_urandomb ((x), RANDS)
 #endif
 #ifndef INT_RAND_FUNCTION
 # define INT_RAND_FUNCTION() (INTEGER_TYPE) randlimb ()
 #endif
 
 static void
-test_generic_ui (mp_prec_t p0, mp_prec_t p1, unsigned int N)
+test_generic_ui (mpfr_prec_t p0, mpfr_prec_t p1, unsigned int N)
 {
-  mp_prec_t prec, yprec;
+  mpfr_prec_t prec, yprec;
   mpfr_t x, y, z, t;
   INTEGER_TYPE u;
-  mp_rnd_t rnd;
+  mpfr_rnd_t rnd;
   int inexact, compare, compare2;
   unsigned int n;
 
@@ -61,11 +61,11 @@ test_generic_ui (mp_prec_t p0, mp_prec_t p1, unsigned int N)
           else
             {
               /* Special cases tested in precision p1 if n <= 1. */
-              mpfr_set_si (x, n == 0 ? 1 : -1, GMP_RNDN);
+              mpfr_set_si (x, n == 0 ? 1 : -1, MPFR_RNDN);
               mpfr_set_exp (x, mpfr_get_emin ());
             }
           u = INT_RAND_FUNCTION ();
-          rnd = (mp_rnd_t) RND_RAND ();
+          rnd = RND_RAND ();
           mpfr_set_prec (y, yprec);
           compare = TEST_FUNCTION (y, x, u, rnd);
           if (mpfr_can_round (y, yprec, rnd, rnd, prec))
@@ -75,7 +75,7 @@ test_generic_ui (mp_prec_t p0, mp_prec_t p1, unsigned int N)
               if (mpfr_cmp (t, z))
                 {
                   printf ("results differ for x=");
-                  mpfr_out_str (stdout, 2, prec, x, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, x, MPFR_RNDN);
                   printf ("\nu=%lu", (unsigned long) u);
                   printf (" prec=%lu rnd_mode=%s\n",
                           (unsigned long ) prec, mpfr_print_rnd_mode (rnd));
@@ -83,10 +83,10 @@ test_generic_ui (mp_prec_t p0, mp_prec_t p1, unsigned int N)
                   printf ("Function: %s\n", TEST_FUNCTION_NAME);
 #endif
                   printf ("got      ");
-                  mpfr_out_str (stdout, 2, prec, z, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, z, MPFR_RNDN);
                   puts ("");
                   printf ("expected ");
-                  mpfr_out_str (stdout, 2, prec, t, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, prec, t, MPFR_RNDN);
                   puts ("");
                   printf ("approx  ");
                   mpfr_print_binary (y);

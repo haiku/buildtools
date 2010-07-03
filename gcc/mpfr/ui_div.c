@@ -1,32 +1,32 @@
 /* mpfr_ui_div -- divide a machine integer by a floating-point number
    mpfr_si_div -- divide a machine number by a floating-point number
 
-Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 int
-mpfr_ui_div (mpfr_ptr y, unsigned long int u, mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_ui_div (mpfr_ptr y, unsigned long int u, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
   mpfr_t uu;
   mp_limb_t up[1];
@@ -65,11 +65,11 @@ mpfr_ui_div (mpfr_ptr y, unsigned long int u, mpfr_srcptr x, mp_rnd_t rnd_mode)
     }
   else if (MPFR_LIKELY(u != 0))
     {
-      MPFR_TMP_INIT1(up, uu, BITS_PER_MP_LIMB);
+      MPFR_TMP_INIT1(up, uu, GMP_NUMB_BITS);
       MPFR_ASSERTN(u == (mp_limb_t) u);
       count_leading_zeros(cnt, (mp_limb_t) u);
       up[0] = (mp_limb_t) u << cnt;
-      MPFR_SET_EXP (uu, BITS_PER_MP_LIMB - cnt);
+      MPFR_SET_EXP (uu, GMP_NUMB_BITS - cnt);
       return mpfr_div (y, uu, x, rnd_mode);
     }
   else /* u = 0, and x != 0 */
@@ -81,7 +81,7 @@ mpfr_ui_div (mpfr_ptr y, unsigned long int u, mpfr_srcptr x, mp_rnd_t rnd_mode)
 }
 
 
-int mpfr_si_div (mpfr_ptr y, long int u, mpfr_srcptr x,mp_rnd_t rnd_mode)
+int mpfr_si_div (mpfr_ptr y, long int u, mpfr_srcptr x,mpfr_rnd_t rnd_mode)
 {
   int res;
 

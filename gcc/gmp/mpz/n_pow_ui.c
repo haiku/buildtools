@@ -10,7 +10,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -57,11 +55,11 @@ MA 02110-1301, USA. */
    The initial powering for bsize==1 into blimb or blimb:blimb_low doesn't
    form the biggest possible power of b that fits, only the biggest power of
    2 power, ie. b^(2^n).  It'd be possible to choose a bigger power, perhaps
-   using __mp_bases[b].big_base for small b, and thereby get better value
+   using mp_bases[b].big_base for small b, and thereby get better value
    from mpn_mul_1 or mpn_mul_2 in the bignum powering.  It's felt that doing
    so would be more complicated than it's worth, and could well end up being
    a slowdown for small e.  For big e on the other hand the algorithm is
-   dominated by mpn_sqr_n so there wouldn't much of a saving.  The current
+   dominated by mpn_sqr so there wouldn't much of a saving.  The current
    code can be viewed as simply doing the first few steps of the powering in
    a single or double limb where possible.
 
@@ -81,10 +79,10 @@ MA 02110-1301, USA. */
 /* The following are for convenience, they update the size and check the
    alloc.  */
 
-#define MPN_SQR_N(dst, alloc, src, size)        \
+#define MPN_SQR(dst, alloc, src, size)          \
   do {                                          \
     ASSERT (2*(size) <= (alloc));               \
-    mpn_sqr_n (dst, src, size);                 \
+    mpn_sqr (dst, src, size);                   \
     (size) *= 2;                                \
     (size) -= ((dst)[(size)-1] == 0);           \
   } while (0)
@@ -156,7 +154,7 @@ mpz_n_pow_ui (mpz_ptr r, mp_srcptr bp, mp_size_t bsize, unsigned long int e)
   mp_size_t      rtwos_limbs, ralloc, rsize;
   int            rneg, i, cnt, btwos, r_bp_overlap;
   mp_limb_t      blimb, rl;
-  unsigned long  rtwos_bits;
+  mp_bitcnt_t    rtwos_bits;
 #if HAVE_NATIVE_mpn_mul_2
   mp_limb_t      blimb_low, rl_high;
 #else
@@ -437,7 +435,7 @@ mpz_n_pow_ui (mpz_ptr r, mp_srcptr bp, mp_size_t bsize, unsigned long int e)
                              i, e, rsize, ralloc, talloc);
                      mpn_trace ("r", rp, rsize));
 
-              MPN_SQR_N (tp, talloc, rp, rsize);
+              MPN_SQR (tp, talloc, rp, rsize);
               SWAP_RP_TP;
               if ((e & (1L << i)) != 0)
                 MPN_MUL_2 (rp, rsize, ralloc, mult);
@@ -469,7 +467,7 @@ mpz_n_pow_ui (mpz_ptr r, mp_srcptr bp, mp_size_t bsize, unsigned long int e)
                              i, e, rsize, ralloc, talloc);
                      mpn_trace ("r", rp, rsize));
 
-              MPN_SQR_N (tp, talloc, rp, rsize);
+              MPN_SQR (tp, talloc, rp, rsize);
               SWAP_RP_TP;
               if ((e & (1L << i)) != 0)
                 MPN_MUL_1 (rp, rsize, ralloc, blimb);
@@ -498,7 +496,7 @@ mpz_n_pow_ui (mpz_ptr r, mp_srcptr bp, mp_size_t bsize, unsigned long int e)
                              i, e, rsize, ralloc, talloc);
                      mpn_trace ("r", rp, rsize));
 
-              MPN_SQR_N (tp, talloc, rp, rsize);
+              MPN_SQR (tp, talloc, rp, rsize);
               SWAP_RP_TP;
               if ((e & (1L << i)) != 0)
                 {

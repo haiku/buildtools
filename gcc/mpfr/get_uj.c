@@ -1,26 +1,26 @@
 /* mpfr_get_uj -- convert a MPFR number to a huge machine unsigned integer
 
-Copyright 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#if HAVE_CONFIG_H
+#ifdef HAVE_CONFIG_H
 # include "config.h"       /* for a build within gmp */
 #endif
 
@@ -31,11 +31,12 @@ MA 02110-1301, USA. */
 # define __STDC_CONSTANT_MACROS
 #endif
 
-#ifdef HAVE_STDINT_H
-# include <stdint.h>
-#endif
-#ifdef HAVE_INTTYPES_H
-# include <inttypes.h>
+#if HAVE_INTTYPES_H
+# include <inttypes.h> /* for intmax_t */
+#else
+# if HAVE_STDINT_H
+#  include <stdint.h>
+# endif
 #endif
 
 #include "mpfr-impl.h"
@@ -46,20 +47,21 @@ uintmax_t
 mpfr_get_uj (mpfr_srcptr f, mpfr_rnd_t rnd)
 {
   uintmax_t r;
-  mp_prec_t prec;
+  mpfr_prec_t prec;
   mpfr_t x;
 
-  if (!mpfr_fits_uintmax_p (f, rnd))
+  if (MPFR_UNLIKELY (!mpfr_fits_uintmax_p (f, rnd)))
     {
       MPFR_SET_ERANGE ();
-      return MPFR_IS_NEG (f) ? (uintmax_t) 0 : UINTMAX_MAX;
+      return MPFR_IS_NAN (f) || MPFR_IS_NEG (f) ?
+        (uintmax_t) 0 : MPFR_UINTMAX_MAX;
     }
 
   if (MPFR_IS_ZERO (f))
     return (uintmax_t) 0;
 
   /* determine the precision of uintmax_t */
-  for (r = UINTMAX_MAX, prec = 0; r != 0; r /= 2, prec++)
+  for (r = MPFR_UINTMAX_MAX, prec = 0; r != 0; r /= 2, prec++)
     { }
 
   /* Now, r = 0. */
@@ -76,10 +78,10 @@ mpfr_get_uj (mpfr_srcptr f, mpfr_rnd_t rnd)
       MPFR_ASSERTN (MPFR_IS_POS (x));
       xp = MPFR_MANT (x);
       sh = MPFR_GET_EXP (x);
-      MPFR_ASSERTN ((mp_prec_t) sh <= prec);
+      MPFR_ASSERTN ((mpfr_prec_t) sh <= prec);
       for (n = MPFR_LIMB_SIZE(x) - 1; n >= 0; n--)
         {
-          sh -= BITS_PER_MP_LIMB;
+          sh -= GMP_NUMB_BITS;
           r += (sh >= 0
                 ? (uintmax_t) xp[n] << sh
                 : (uintmax_t) xp[n] >> (- sh));

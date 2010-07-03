@@ -8,7 +8,7 @@ This file is part of the GNU MP Library.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the Free
-Software Foundation; either version 2 of the License, or (at your option)
+Software Foundation; either version 3 of the License, or (at your option)
 any later version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT
@@ -17,8 +17,7 @@ FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
 more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
-Street, Fifth Floor, Boston, MA 02110-1301, USA. */
+this program.  If not, see http://www.gnu.org/licenses/.  */
 
 
 /* Usage: qcn [-p limit] <discriminant>...
@@ -72,14 +71,14 @@ prime_p (unsigned long n)
 
 /* The formula is as follows, with d < 0.
 
-               w * sqrt(-d)      inf      p
-        h(d) = ------------ *  product --------
-                  2 * pi         p=2   p - (d/p)
-                             
+	       w * sqrt(-d)      inf      p
+	h(d) = ------------ *  product --------
+		  2 * pi         p=2   p - (d/p)
+
 
    (d/p) is the Kronecker symbol and the product is over primes p.  w is 6
    when d=-3, 4 when d=-4, or 2 otherwise.
-  
+
    Calculating the product up to p=infinity would take a long time, so for
    the estimate primes up to 132,000 are used.  Shanks found this giving an
    accuracy of about 1 part in 1000, in normal cases.  */
@@ -143,20 +142,20 @@ main (int argc, char *argv[])
   for (i = 1; i < argc; i++)
     {
       if (strcmp (argv[i], "-p") == 0)
-        {
-          i++;
-          if (i >= argc)
-            {
-              fprintf (stderr, "Missing argument to -p\n");
-              exit (1);
-            }
-          p_limit = atoi (argv[i]);
-        }
+	{
+	  i++;
+	  if (i >= argc)
+	    {
+	      fprintf (stderr, "Missing argument to -p\n");
+	      exit (1);
+	    }
+	  p_limit = atoi (argv[i]);
+	}
       else
-        {
-          qcn_str (argv[i]);
-          saw_number = 1;
-        }
+	{
+	  qcn_str (argv[i]);
+	  saw_number = 1;
+	}
     }
 
   if (! saw_number)

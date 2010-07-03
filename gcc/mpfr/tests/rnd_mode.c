@@ -1,24 +1,24 @@
 /* mpfr_set_machine_rnd_mode -- set the rounding mode for machine floats
 
-Copyright 1999, 2001, 2002, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-test.h"
 
@@ -28,11 +28,11 @@ MA 02110-1301, USA. */
 
 /* sets the machine rounding mode to the value rnd_mode */
 int
-mpfr_set_machine_rnd_mode (mp_rnd_t rnd_mode)
+mpfr_set_machine_rnd_mode (mpfr_rnd_t rnd_mode)
 {
   switch (rnd_mode)
     {
-    case GMP_RNDN:
+    case MPFR_RNDN:
       return
 #if defined (MPFR_HAVE_FESETROUND) && defined (FE_TONEAREST)
         fesetround(FE_TONEAREST)
@@ -40,7 +40,7 @@ mpfr_set_machine_rnd_mode (mp_rnd_t rnd_mode)
         -1
 #endif
         ;
-    case GMP_RNDZ:
+    case MPFR_RNDZ:
       return
 #if defined (MPFR_HAVE_FESETROUND) && defined (FE_TOWARDZERO)
         fesetround(FE_TOWARDZERO)
@@ -48,7 +48,7 @@ mpfr_set_machine_rnd_mode (mp_rnd_t rnd_mode)
         -1
 #endif
         ;
-    case GMP_RNDU:
+    case MPFR_RNDU:
       return
 #if defined (MPFR_HAVE_FESETROUND) && defined (FE_UPWARD)
         fesetround(FE_UPWARD)
@@ -56,7 +56,7 @@ mpfr_set_machine_rnd_mode (mp_rnd_t rnd_mode)
         -1
 #endif
         ;
-    case GMP_RNDD:
+    case MPFR_RNDD:
       return
 #if defined (MPFR_HAVE_FESETROUND) && defined (FE_DOWNWARD)
         fesetround(FE_DOWNWARD)

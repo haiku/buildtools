@@ -9,7 +9,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -18,9 +18,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -72,8 +70,8 @@ _mpq_cmp_ui (const MP_RAT *op1, unsigned long int num2, unsigned long int den2)
     return -num1_size;
 
   TMP_MARK;
-  tmp1_ptr = (mp_ptr) TMP_ALLOC ((num1_size + 1) * BYTES_PER_MP_LIMB);
-  tmp2_ptr = (mp_ptr) TMP_ALLOC ((den1_size + 1) * BYTES_PER_MP_LIMB);
+  tmp1_ptr = TMP_ALLOC_LIMBS (num1_size + 1);
+  tmp2_ptr = TMP_ALLOC_LIMBS (den1_size + 1);
 
   cy_limb = mpn_mul_1 (tmp1_ptr, op1->_mp_num._mp_d, num1_size,
                        (mp_limb_t) den2);

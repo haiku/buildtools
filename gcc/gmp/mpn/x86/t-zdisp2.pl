@@ -6,7 +6,7 @@
 #
 # The GNU MP Library is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published
-# by the Free Software Foundation; either version 2.1 of the License, or (at
+# by the Free Software Foundation; either version 3 of the License, or (at
 # your option) any later version.
 #
 # The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@
 # License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-# MA 02110-1301, USA.
+# along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 # Usage: cd $(builddir)/mpn
@@ -73,7 +71,7 @@ sub process {
   }
 }
 
-# Ensure we're using the right SQR_KARATSUBA_THRESHOLD for the part of the
+# Ensure we're using the right SQR_TOOM2_THRESHOLD for the part of the
 # tree being processed.
 sub process_mparam {
   my $file = "$File::Find::dir/gmp-mparam.h";
@@ -81,10 +79,10 @@ sub process_mparam {
     print "$file\n" if $opt{'t'};
     open MPARAM, "<$file" or die;
     while (<MPARAM>) {
-      if (/^#define SQR_KARATSUBA_THRESHOLD[ \t]*([0-9][0-9]*)/) {
+      if (/^#define SQR_TOOM2_THRESHOLD[ \t]*([0-9][0-9]*)/) {
         open KARA, ">$tempfile" or die;
-        print KARA "define(\`SQR_KARATSUBA_THRESHOLD',$1)\n\n";
-        print "define(\`SQR_KARATSUBA_THRESHOLD',$1)\n" if $opt{'t'};
+        print KARA "define(\`SQR_TOOM2_THRESHOLD',$1)\n\n";
+        print "define(\`SQR_TOOM2_THRESHOLD',$1)\n" if $opt{'t'};
         close KARA or die;
         last;
       }

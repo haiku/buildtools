@@ -5,7 +5,7 @@ Copyright 1997, 1999, 2000, 2001, 2002, 2005 Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
-Foundation; either version 2 of the License, or (at your option) any later
+Foundation; either version 3 of the License, or (at your option) any later
 version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
@@ -13,8 +13,7 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
-Street, Fifth Floor, Boston, MA 02110-1301, USA. */
+this program.  If not, see http://www.gnu.org/licenses/.  */
 
 
 /* This expressions evaluator works by building an expression tree (using a
@@ -66,7 +65,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 
 #define TIME(t,func)							\
-  do { int __t0, __t, __tmp;						\
+  do { int __t0, __tmp;							\
     __t0 = cputime ();							\
     {func;}								\
     __tmp = cputime () - __t0;						\
@@ -94,7 +93,8 @@ jmp_buf errjmpbuf;
 
 enum op_t {NOP, LIT, NEG, NOT, PLUS, MINUS, MULT, DIV, MOD, REM, INVMOD, POW,
 	   AND, IOR, XOR, SLL, SRA, POPCNT, HAMDIST, GCD, LCM, SQRT, ROOT, FAC,
-	   LOG, LOG2, FERMAT, MERSENNE, FIBONACCI, RANDOM, NEXTPRIME, BINOM};
+	   LOG, LOG2, FERMAT, MERSENNE, FIBONACCI, RANDOM, NEXTPRIME, BINOM,
+	   TIMING};
 
 /* Type for the expression tree.  */
 struct expr
@@ -301,7 +301,7 @@ main (int argc, char **argv)
       else if (arg[1] == 'b' && arg[2] >= '0' && arg[2] <= '9')
 	{
 	  base = atoi (arg + 2);
-	  if (base < 2 || base > 36)
+	  if (base < 2 || base > 62)
 	    {
 	      fprintf (stderr, "error: invalid output base\n");
 	      exit (-1);
@@ -317,6 +317,10 @@ main (int argc, char **argv)
 	base = 8;
       else if (arg[1] == 'd' && arg[2] == 0)
 	base = 10;
+      else if (arg[1] == 'v' && arg[2] == 0)
+	{
+	  printf ("pexpr linked to gmp %s\n", __gmp_version);
+	}
       else if (strcmp (arg, "-html") == 0)
 	{
 	  flag_html = 1;
@@ -727,6 +731,7 @@ struct functions fns[] =
   {"fac", FAC, 1},
   {"fact", FAC, 1},
   {"factorial", FAC, 1},
+  {"time", TIMING, 1},
   {"", NOP, 0}
 };
 
@@ -1138,7 +1143,7 @@ mpz_eval_expr (mpz_ptr r, expr_t e)
       return;
     case HAMDIST:
       { long int cnt;
-        mpz_init (lhs); mpz_init (rhs);
+	mpz_init (lhs); mpz_init (rhs);
 	mpz_eval_expr (lhs, e->operands.ops.lhs);
 	mpz_eval_expr (rhs, e->operands.ops.rhs);
 	cnt = mpz_hamdist (lhs, rhs);
@@ -1285,6 +1290,14 @@ mpz_eval_expr (mpz_ptr r, expr_t e)
 	mpz_bin_ui (r, lhs, k);
       }
       mpz_clear (lhs); mpz_clear (rhs);
+      return;
+    case TIMING:
+      {
+	int t0;
+	t0 = cputime ();
+	mpz_eval_expr (r, e->operands.ops.lhs);
+	printf ("time: %d\n", cputime () - t0);
+      }
       return;
     default:
       abort ();

@@ -1,24 +1,24 @@
 /* Test file for mpfr_copysign, mpfr_setsign and mpfr_signbit.
 
-Copyright 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,28 +27,28 @@ MA 02110-1301, USA. */
 
 static void
 copysign_variant (mpfr_ptr z, mpfr_srcptr x, mpfr_srcptr y,
-                  mp_rnd_t rnd_mode, int k)
+                  mpfr_rnd_t rnd_mode, int k)
 {
   mpfr_clear_flags ();
   switch (k)
     {
     case 0:
-      mpfr_copysign (z, x, y, GMP_RNDN);
+      mpfr_copysign (z, x, y, MPFR_RNDN);
       return;
     case 1:
-      (mpfr_copysign) (z, x, y, GMP_RNDN);
+      (mpfr_copysign) (z, x, y, MPFR_RNDN);
       return;
     case 2:
-      mpfr_setsign (z, x, mpfr_signbit (y), GMP_RNDN);
+      mpfr_setsign (z, x, mpfr_signbit (y), MPFR_RNDN);
       return;
     case 3:
-      mpfr_setsign (z, x, (mpfr_signbit) (y), GMP_RNDN);
+      mpfr_setsign (z, x, (mpfr_signbit) (y), MPFR_RNDN);
       return;
     case 4:
-      (mpfr_setsign) (z, x, mpfr_signbit (y), GMP_RNDN);
+      (mpfr_setsign) (z, x, mpfr_signbit (y), MPFR_RNDN);
       return;
     case 5:
-      (mpfr_setsign) (z, x, (mpfr_signbit) (y), GMP_RNDN);
+      (mpfr_setsign) (z, x, (mpfr_signbit) (y), MPFR_RNDN);
       return;
     }
 }
@@ -73,7 +73,7 @@ main (void)
           i ? MPFR_SET_NEG (x) : MPFR_SET_POS (x);
           mpfr_set_nan (y);
           j ? MPFR_SET_NEG (y) : MPFR_SET_POS (y);
-          copysign_variant (z, x, y, GMP_RNDN, k);
+          copysign_variant (z, x, y, MPFR_RNDN, k);
           if (MPFR_SIGN (z) != MPFR_SIGN (y) || !mpfr_nanflag_p ())
             {
               printf ("Error in mpfr_copysign (%cNaN, %cNaN)\n",
@@ -81,12 +81,12 @@ main (void)
               exit (1);
             }
 
-          mpfr_set_si (x, i ? -1250 : 1250, GMP_RNDN);
+          mpfr_set_si (x, i ? -1250 : 1250, MPFR_RNDN);
           mpfr_set_nan (y);
           j ? MPFR_SET_NEG (y) : MPFR_SET_POS (y);
-          copysign_variant (z, x, y, GMP_RNDN, k);
+          copysign_variant (z, x, y, MPFR_RNDN, k);
           if (i != j)
-            mpfr_neg (x, x, GMP_RNDN);
+            mpfr_neg (x, x, MPFR_RNDN);
           if (! mpfr_equal_p (z, x) || mpfr_nanflag_p ())
             {
               printf ("Error in mpfr_copysign (%c1250, %cNaN)\n",
@@ -94,11 +94,11 @@ main (void)
               exit (1);
             }
 
-          mpfr_set_si (x, i ? -1250 : 1250, GMP_RNDN);
-          mpfr_set_si (y, j ? -1717 : 1717, GMP_RNDN);
-          copysign_variant (z, x, y, GMP_RNDN, k);
+          mpfr_set_si (x, i ? -1250 : 1250, MPFR_RNDN);
+          mpfr_set_si (y, j ? -1717 : 1717, MPFR_RNDN);
+          copysign_variant (z, x, y, MPFR_RNDN, k);
           if (i != j)
-            mpfr_neg (x, x, GMP_RNDN);
+            mpfr_neg (x, x, MPFR_RNDN);
           if (! mpfr_equal_p (z, x) || mpfr_nanflag_p ())
             {
               printf ("Error in mpfr_copysign (%c1250, %c1717)\n",

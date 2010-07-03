@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -94,11 +92,11 @@ lc (mp_ptr rp, gmp_randstate_t rstate)
     {
       mp_size_t tmp = an + seedn;
       ta = tn + 1;
-      tp = (mp_ptr) TMP_ALLOC (ta * BYTES_PER_MP_LIMB);
+      tp = TMP_ALLOC_LIMBS (ta);
       MPN_ZERO (&tp[tmp], ta - tmp); /* mpn_mul won't zero it out.  */
     }
   else
-    tp = (mp_ptr) TMP_ALLOC (ta * BYTES_PER_MP_LIMB);
+    tp = TMP_ALLOC_LIMBS (ta);
 
   /* t = a * seed.  NOTE: an is always > 0; see initialization.  */
   ASSERT (seedn >= an && an > 0);
@@ -157,7 +155,7 @@ randget_lc (gmp_randstate_t rstate, mp_ptr rp, unsigned long int nbits)
   chunk_nbits = p->_mp_m2exp / 2;
   tn = BITS_TO_LIMBS (chunk_nbits);
 
-  tp = (mp_ptr) TMP_ALLOC (tn * BYTES_PER_MP_LIMB);
+  tp = TMP_ALLOC_LIMBS (tn);
 
   rbitpos = 0;
   while (rbitpos + chunk_nbits <= nbits)
@@ -285,7 +283,7 @@ void
 gmp_randinit_lc_2exp (gmp_randstate_t rstate,
 		      mpz_srcptr a,
 		      unsigned long int c,
-		      unsigned long int m2exp)
+		      mp_bitcnt_t m2exp)
 {
   gmp_rand_lc_struct *p;
   mp_size_t seedn = BITS_TO_LIMBS (m2exp);

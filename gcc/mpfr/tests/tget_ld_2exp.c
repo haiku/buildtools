@@ -1,25 +1,25 @@
 /* Test mpfr_get_ld_2exp.
 
-Copyright 2006, 2007 Free Software Foundation, Inc.
+Copyright 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 Contributed by Damien Stehle.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,17 +40,17 @@ check_round (void)
 
   mpfr_init2 (f, 1024L);
 
-  for (rnd_mode = 0; rnd_mode < GMP_RND_MAX ; rnd_mode++)
+  for (rnd_mode = 0; rnd_mode < MPFR_RND_MAX ; rnd_mode++)
     {
       for (i = 0; i < (int) numberof (data); i++)
         {
-          mpfr_set_ui (f, 1L, GMP_RNDZ);
-          mpfr_mul_2exp (f, f, data[i], GMP_RNDZ);
-          mpfr_sub_ui (f, f, 1L, GMP_RNDZ);
+          mpfr_set_ui (f, 1L, MPFR_RNDZ);
+          mpfr_mul_2exp (f, f, data[i], MPFR_RNDZ);
+          mpfr_sub_ui (f, f, 1L, MPFR_RNDZ);
 
           for (neg = 0; neg <= 1; neg++)
             {
-              got = mpfr_get_ld_2exp (&got_exp, f, (mp_rnd_t) rnd_mode);
+              got = mpfr_get_ld_2exp (&got_exp, f, (mpfr_rnd_t) rnd_mode);
 
               if (neg == 0
                   ? (got < 0.5 || got >= 1.0)
@@ -61,14 +61,14 @@ check_round (void)
                   printf  ("   rnd_mode = %d\n", rnd_mode);
                   printf  ("   data[i]  = %lu\n", data[i]);
                   printf  ("   f    ");
-                  mpfr_out_str (stdout, 2, 0, f, GMP_RNDN);
+                  mpfr_out_str (stdout, 2, 0, f, MPFR_RNDN);
                   printf  ("\n");
                   d_trace ("   got  ", got);
                   printf  ("   got exp  %ld\n", got_exp);
                   exit(1);
                 }
 
-              mpfr_neg (f, f, GMP_RNDZ);
+              mpfr_neg (f, f, MPFR_RNDZ);
             }
         }
     }
@@ -78,7 +78,7 @@ check_round (void)
 
 
 static void
-check_inf_nan ()
+check_inf_nan (void)
 {
   /* only if nans and infs are available */
 #if _GMP_IEEE_FLOATS
@@ -89,29 +89,54 @@ check_inf_nan ()
   mpfr_init2 (x, 123);
 
   mpfr_set_inf (x, 1);
-  d = (double) mpfr_get_ld_2exp (&exp, x, GMP_RNDZ);
+  d = (double) mpfr_get_ld_2exp (&exp, x, MPFR_RNDZ);
   ASSERT_ALWAYS (d > 0);
   ASSERT_ALWAYS (DOUBLE_ISINF (d));
 
   mpfr_set_inf (x, -1);
-  d = (double) mpfr_get_ld_2exp (&exp, x, GMP_RNDZ);
+  d = (double) mpfr_get_ld_2exp (&exp, x, MPFR_RNDZ);
   ASSERT_ALWAYS (d < 0);
   ASSERT_ALWAYS (DOUBLE_ISINF (d));
 
   mpfr_set_nan (x);
-  d = (double) mpfr_get_ld_2exp (&exp, x, GMP_RNDZ);
+  d = (double) mpfr_get_ld_2exp (&exp, x, MPFR_RNDZ);
   ASSERT_ALWAYS (DOUBLE_ISNAN (d));
 
   mpfr_clear (x);
 #endif
 }
 
+static void
+bug20090520 (void)
+{
+  mpfr_t x;
+  long double d, e;
+  int i;
+
+  mpfr_init (x);
+  mpfr_set_ui (x, 1, MPFR_RNDN);
+  d = 1.0;
+  mpfr_div_2exp (x, x, 16383, MPFR_RNDN);
+  for (i = 0; i < 16383; i++)
+    d *= 0.5;
+  e = mpfr_get_ld (x, MPFR_RNDN);
+  if (e != d)
+    {
+      printf ("mpfr_get_ld(1e-16383) failed\n");
+      printf ("expected %.20Le\n", d);
+      printf ("got      %.20Le\n", e);
+      exit (1);
+    }
+  mpfr_clear (x);
+}
 
 int
 main (void)
 {
   tests_start_mpfr ();
   mpfr_test_init ();
+
+  bug20090520 ();
 
   check_round ();
   check_inf_nan ();

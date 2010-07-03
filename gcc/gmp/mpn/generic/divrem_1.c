@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -52,8 +50,8 @@ MA 02110-1301, USA. */
    threshold, and best results are obtained by having code for both present.
 
    The main reason for separating the norm and unnorm cases is that not all
-   CPUs give zero for "n0 >> BITS_PER_MP_LIMB" which would arise in the
-   unnorm code used on an already normalized divisor.
+   CPUs give zero for "n0 >> GMP_LIMB_BITS" which would arise in the unnorm
+   code used on an already normalized divisor.
 
    If UDIV_NEEDS_NORMALIZATION is false then plain division uses the same
    non-shifting code for both the norm and unnorm cases, though with
@@ -224,7 +222,7 @@ mpn_divrem_1 (mp_ptr qp, mp_size_t qxn,
 	      for (i = un - 2; i >= 0; i--)
 		{
 		  n0 = up[i] << GMP_NAIL_BITS;
-		  udiv_qrnnd_preinv (*qp, r, r, 
+		  udiv_qrnnd_preinv (*qp, r, r,
 				     ((n1 << norm) | (n0 >> (GMP_NUMB_BITS - norm))),
 				     d, dinv);
 		  r >>= GMP_NAIL_BITS;

@@ -1,14 +1,14 @@
 /* Reference mpn functions, designed to be simple, portable and independent
    of the normal gmp code.  Speed isn't a consideration.
 
-Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Free
-Software Foundation, Inc.
+Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -17,9 +17,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 
 /* Most routines have assertions representing what the mpn routines are
@@ -46,7 +44,7 @@ MA 02110-1301, USA. */
    in bytes. */
 int
 byte_overlap_p (const void *v_xp, mp_size_t xsize,
-                const void *v_yp, mp_size_t ysize)
+		const void *v_yp, mp_size_t ysize)
 {
   const char *xp = v_xp;
   const char *yp = v_yp;
@@ -72,7 +70,7 @@ int
 refmpn_overlap_p (mp_srcptr xp, mp_size_t xsize, mp_srcptr yp, mp_size_t ysize)
 {
   return byte_overlap_p (xp, xsize * BYTES_PER_MP_LIMB,
-                         yp, ysize * BYTES_PER_MP_LIMB);
+			 yp, ysize * BYTES_PER_MP_LIMB);
 }
 
 /* Check overlap for a routine defined to work low to high. */
@@ -97,10 +95,10 @@ refmpn_overlap_fullonly_p (mp_srcptr dst, mp_srcptr src, mp_size_t size)
 }
 int
 refmpn_overlap_fullonly_two_p (mp_srcptr dst, mp_srcptr src1, mp_srcptr src2,
-                               mp_size_t size)
+			       mp_size_t size)
 {
   return (refmpn_overlap_fullonly_p (dst, src1, size)
-          && refmpn_overlap_fullonly_p (dst, src2, size));
+	  && refmpn_overlap_fullonly_p (dst, src2, size));
 }
 
 
@@ -186,12 +184,12 @@ refmpn_normalize (mp_srcptr ptr, mp_size_t size)
 mp_limb_t
 refmpn_msbone (mp_limb_t x)
 {
-  mp_limb_t  n = (mp_limb_t) 1 << (BITS_PER_MP_LIMB-1);
+  mp_limb_t  n = (mp_limb_t) 1 << (GMP_LIMB_BITS-1);
 
   while (n != 0)
     {
       if (x & n)
-        break;
+	break;
       n >>= 1;
     }
   return n;
@@ -228,9 +226,9 @@ refmpn_chars_per_limb (int base)
   for (;;)
     {
       if (refmpn_mul_1 (b, b, (mp_size_t) 2, (mp_limb_t) base))
-        break;
+	break;
       if (refmpn_cmp (b, limit, (mp_size_t) 2) > 0)
-        break;
+	break;
       chars_per_limb++;
     }
   return chars_per_limb;
@@ -339,20 +337,6 @@ refmpn_copy_extend (mp_ptr wp, mp_size_t wsize, mp_srcptr xp, mp_size_t xsize)
   refmpn_zero (wp, wsize-xsize);
 }
 
-void
-refmpn_com_n (mp_ptr rp, mp_srcptr sp, mp_size_t size)
-{
-  mp_size_t i;
-
-  ASSERT (refmpn_overlap_fullonly_p (rp, sp, size));
-  ASSERT (size >= 1);
-  ASSERT_MPN (sp, size);
-
-  for (i = 0; i < size; i++)
-    rp[i] = sp[i] ^ GMP_NUMB_MASK;
-}
-
-
 int
 refmpn_cmp (mp_srcptr xp, mp_srcptr yp, mp_size_t size)
 {
@@ -381,7 +365,7 @@ refmpn_cmp_allowzero (mp_srcptr xp, mp_srcptr yp, mp_size_t size)
 
 int
 refmpn_cmp_twosizes (mp_srcptr xp, mp_size_t xsize,
-                     mp_srcptr yp, mp_size_t ysize)
+		     mp_srcptr yp, mp_size_t ysize)
 {
   int  opp, cmp;
 
@@ -408,7 +392,7 @@ refmpn_equal_anynail (mp_srcptr xp, mp_srcptr yp, mp_size_t size)
 
   for (i = 0; i < size; i++)
       if (xp[i] != yp[i])
-        return 0;
+	return 0;
   return 1;
 }
 
@@ -416,12 +400,12 @@ refmpn_equal_anynail (mp_srcptr xp, mp_srcptr yp, mp_size_t size)
 #define LOGOPS(operation)                                               \
   {                                                                     \
     mp_size_t  i;                                                       \
-                                                                        \
+									\
     ASSERT (refmpn_overlap_fullonly_two_p (rp, s1p, s2p, size));        \
     ASSERT (size >= 1);                                                 \
     ASSERT_MPN (s1p, size);                                             \
     ASSERT_MPN (s2p, size);                                             \
-                                                                        \
+									\
     for (i = 0; i < size; i++)                                          \
       rp[i] = operation;                                                \
   }
@@ -471,7 +455,7 @@ refmpn_xnor_n (mp_ptr rp, mp_srcptr s1p, mp_srcptr s2p, mp_size_t size)
 /* set *dh,*dl to mh:ml - sh:sl, in full limbs */
 void
 refmpn_sub_ddmmss (mp_limb_t *dh, mp_limb_t *dl,
-                   mp_limb_t mh, mp_limb_t ml, mp_limb_t sh, mp_limb_t sl)
+		   mp_limb_t mh, mp_limb_t ml, mp_limb_t sh, mp_limb_t sl)
 {
   *dl = ml - sl;
   *dh = mh - sh - (ml < sl);
@@ -550,12 +534,12 @@ sbb (mp_limb_t *w, mp_limb_t x, mp_limb_t y, mp_limb_t c)
 #define AORS_1(operation)                               \
   {                                                     \
     mp_limb_t  i;                                       \
-                                                        \
+							\
     ASSERT (refmpn_overlap_fullonly_p (rp, sp, size));  \
     ASSERT (size >= 1);                                 \
     ASSERT_MPN (sp, size);                              \
     ASSERT_LIMB (n);                                    \
-                                                        \
+							\
     for (i = 0; i < size; i++)                          \
       n = operation (&rp[i], sp[i], n);                 \
     return n;                                           \
@@ -575,13 +559,13 @@ refmpn_sub_1 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_limb_t n)
 #define AORS_NC(operation)                                              \
   {                                                                     \
     mp_size_t  i;                                                       \
-                                                                        \
+									\
     ASSERT (refmpn_overlap_fullonly_two_p (rp, s1p, s2p, size));        \
     ASSERT (carry == 0 || carry == 1);                                  \
     ASSERT (size >= 1);                                                 \
     ASSERT_MPN (s1p, size);                                             \
     ASSERT_MPN (s2p, size);                                             \
-                                                                        \
+									\
     for (i = 0; i < size; i++)                                          \
       carry = operation (&rp[i], s1p[i], s2p[i], carry);                \
     return carry;                                                       \
@@ -589,13 +573,13 @@ refmpn_sub_1 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_limb_t n)
 
 mp_limb_t
 refmpn_add_nc (mp_ptr rp, mp_srcptr s1p, mp_srcptr s2p, mp_size_t size,
-               mp_limb_t carry)
+	       mp_limb_t carry)
 {
   AORS_NC (adc);
 }
 mp_limb_t
 refmpn_sub_nc (mp_ptr rp, mp_srcptr s1p, mp_srcptr s2p, mp_size_t size,
-               mp_limb_t carry)
+	       mp_limb_t carry)
 {
   AORS_NC (sbb);
 }
@@ -613,39 +597,90 @@ refmpn_sub_n (mp_ptr rp, mp_srcptr s1p, mp_srcptr s2p, mp_size_t size)
 }
 
 mp_limb_t
-refmpn_addlsh1_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
+refmpn_addlsh_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp,
+		 mp_size_t n, unsigned int s)
 {
   mp_limb_t cy;
   mp_ptr tp;
 
   ASSERT (refmpn_overlap_fullonly_two_p (rp, up, vp, n));
   ASSERT (n >= 1);
+  ASSERT (0 < s && s < GMP_NUMB_BITS);
   ASSERT_MPN (up, n);
   ASSERT_MPN (vp, n);
 
   tp = refmpn_malloc_limbs (n);
-  cy  = refmpn_lshift (tp, vp, n, 1);
+  cy  = refmpn_lshift (tp, vp, n, s);
   cy += refmpn_add_n (rp, up, tp, n);
+  free (tp);
+  return cy;
+}
+mp_limb_t
+refmpn_addlsh1_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
+{
+  return refmpn_addlsh_n (rp, up, vp, n, 1);
+}
+mp_limb_t
+refmpn_addlsh2_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
+{
+  return refmpn_addlsh_n (rp, up, vp, n, 2);
+}
+
+mp_limb_t
+refmpn_sublsh_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp,
+		 mp_size_t n, unsigned int s)
+{
+  mp_limb_t cy;
+  mp_ptr tp;
+
+  ASSERT (refmpn_overlap_fullonly_two_p (rp, up, vp, n));
+  ASSERT (n >= 1);
+  ASSERT (0 < s && s < GMP_NUMB_BITS);
+  ASSERT_MPN (up, n);
+  ASSERT_MPN (vp, n);
+
+  tp = refmpn_malloc_limbs (n);
+  cy  = mpn_lshift (tp, vp, n, s);
+  cy += mpn_sub_n (rp, up, tp, n);
   free (tp);
   return cy;
 }
 mp_limb_t
 refmpn_sublsh1_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
 {
-  mp_limb_t cy;
+  return refmpn_sublsh_n (rp, up, vp, n, 1);
+}
+
+mp_limb_signed_t
+refmpn_rsblsh_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp,
+		 mp_size_t n, unsigned int s)
+{
+  mp_limb_signed_t cy;
   mp_ptr tp;
 
   ASSERT (refmpn_overlap_fullonly_two_p (rp, up, vp, n));
   ASSERT (n >= 1);
+  ASSERT (0 < s && s < GMP_NUMB_BITS);
   ASSERT_MPN (up, n);
   ASSERT_MPN (vp, n);
 
   tp = refmpn_malloc_limbs (n);
-  cy  = mpn_lshift (tp, vp, n, 1);
-  cy += mpn_sub_n (rp, up, tp, n);
+  cy  = mpn_lshift (tp, vp, n, s);
+  cy -= mpn_sub_n (rp, tp, up, n);
   free (tp);
   return cy;
 }
+mp_limb_signed_t
+refmpn_rsblsh1_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
+{
+  return refmpn_rsblsh_n (rp, up, vp, n, 1);
+}
+mp_limb_signed_t
+refmpn_rsblsh2_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
+{
+  return refmpn_rsblsh_n (rp, up, vp, n, 2);
+}
+
 mp_limb_t
 refmpn_rsh1add_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
 {
@@ -679,7 +714,7 @@ refmpn_rsh1sub_n (mp_ptr rp, mp_srcptr up, mp_srcptr vp, mp_size_t n)
 
 /* Twos complement, return borrow. */
 mp_limb_t
-refmpn_neg_n (mp_ptr dst, mp_srcptr src, mp_size_t size)
+refmpn_neg (mp_ptr dst, mp_srcptr src, mp_size_t size)
 {
   mp_ptr     zeros;
   mp_limb_t  ret;
@@ -706,24 +741,24 @@ refmpn_neg_n (mp_ptr dst, mp_srcptr src, mp_size_t size)
   }
 mp_limb_t
 refmpn_add (mp_ptr rp,
-            mp_srcptr s1p, mp_size_t s1size,
-            mp_srcptr s2p, mp_size_t s2size)
+	    mp_srcptr s1p, mp_size_t s1size,
+	    mp_srcptr s2p, mp_size_t s2size)
 {
   AORS (refmpn_add_n, refmpn_add_1);
 }
 mp_limb_t
 refmpn_sub (mp_ptr rp,
-            mp_srcptr s1p, mp_size_t s1size,
-            mp_srcptr s2p, mp_size_t s2size)
+	    mp_srcptr s1p, mp_size_t s1size,
+	    mp_srcptr s2p, mp_size_t s2size)
 {
   AORS (refmpn_sub_n, refmpn_sub_1);
 }
 
 
-#define SHIFTHIGH(x) ((x) << BITS_PER_MP_LIMB/2)
-#define SHIFTLOW(x)  ((x) >> BITS_PER_MP_LIMB/2)
+#define SHIFTHIGH(x) ((x) << GMP_LIMB_BITS/2)
+#define SHIFTLOW(x)  ((x) >> GMP_LIMB_BITS/2)
 
-#define LOWMASK   (((mp_limb_t) 1 << BITS_PER_MP_LIMB/2)-1)
+#define LOWMASK   (((mp_limb_t) 1 << GMP_LIMB_BITS/2)-1)
 #define HIGHMASK  SHIFTHIGH(LOWMASK)
 
 #define LOWPART(x)   ((x) & LOWMASK)
@@ -761,7 +796,7 @@ refmpn_umul_ppmm_r (mp_limb_t x, mp_limb_t y, mp_limb_t *lo)
 
 mp_limb_t
 refmpn_mul_1c (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_limb_t multiplier,
-               mp_limb_t carry)
+	       mp_limb_t carry)
 {
   mp_size_t  i;
   mp_limb_t  hi, lo;
@@ -792,15 +827,17 @@ refmpn_mul_1 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_limb_t multiplier)
 
 
 mp_limb_t
-refmpn_mul_2 (mp_ptr dst, mp_srcptr src, mp_size_t size, mp_srcptr mult)
+refmpn_mul_N (mp_ptr dst, mp_srcptr src, mp_size_t size,
+	      mp_srcptr mult, mp_size_t msize)
 {
   mp_ptr     src_copy;
-  mp_limb_t  c;
+  mp_limb_t  ret;
+  mp_size_t  i;
 
   ASSERT (refmpn_overlap_fullonly_p (dst, src, size));
-  ASSERT (! refmpn_overlap_p (dst, size+1, mult, (mp_size_t) 2));
-  ASSERT (size >= 1);
-  ASSERT_MPN (mult, 2);
+  ASSERT (! refmpn_overlap_p (dst, size+msize-1, mult, msize));
+  ASSERT (size >= msize);
+  ASSERT_MPN (mult, msize);
 
   /* in case dst==src */
   src_copy = refmpn_malloc_limbs (size);
@@ -808,36 +845,54 @@ refmpn_mul_2 (mp_ptr dst, mp_srcptr src, mp_size_t size, mp_srcptr mult)
   src = src_copy;
 
   dst[size] = refmpn_mul_1 (dst, src, size, mult[0]);
-  c = refmpn_addmul_1 (dst+1, src, size, mult[1]);
+  for (i = 1; i < msize-1; i++)
+    dst[size+i] = refmpn_addmul_1 (dst+i, src, size, mult[i]);
+  ret = refmpn_addmul_1 (dst+i, src, size, mult[i]);
+
   free (src_copy);
-  return c;
+  return ret;
 }
 
+mp_limb_t
+refmpn_mul_2 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_srcptr mult)
+{
+  return refmpn_mul_N (rp, sp, size, mult, (mp_size_t) 2);
+}
+mp_limb_t
+refmpn_mul_3 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_srcptr mult)
+{
+  return refmpn_mul_N (rp, sp, size, mult, (mp_size_t) 3);
+}
+mp_limb_t
+refmpn_mul_4 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_srcptr mult)
+{
+  return refmpn_mul_N (rp, sp, size, mult, (mp_size_t) 4);
+}
 
 #define AORSMUL_1C(operation_n)                                 \
   {                                                             \
     mp_ptr     p;                                               \
     mp_limb_t  ret;                                             \
-                                                                \
+								\
     ASSERT (refmpn_overlap_fullonly_p (rp, sp, size));          \
-                                                                \
+								\
     p = refmpn_malloc_limbs (size);                             \
     ret = refmpn_mul_1c (p, sp, size, multiplier, carry);       \
     ret += operation_n (rp, rp, p, size);                       \
-                                                                \
+								\
     free (p);                                                   \
     return ret;                                                 \
   }
 
 mp_limb_t
 refmpn_addmul_1c (mp_ptr rp, mp_srcptr sp, mp_size_t size,
-                  mp_limb_t multiplier, mp_limb_t carry)
+		  mp_limb_t multiplier, mp_limb_t carry)
 {
   AORSMUL_1C (refmpn_add_n);
 }
 mp_limb_t
 refmpn_submul_1c (mp_ptr rp, mp_srcptr sp, mp_size_t size,
-                  mp_limb_t multiplier, mp_limb_t carry)
+		  mp_limb_t multiplier, mp_limb_t carry)
 {
   AORSMUL_1C (refmpn_sub_n);
 }
@@ -857,7 +912,7 @@ refmpn_submul_1 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_limb_t multiplier)
 
 mp_limb_t
 refmpn_addmul_N (mp_ptr dst, mp_srcptr src, mp_size_t size,
-                 mp_srcptr mult, mp_size_t msize)
+		 mp_srcptr mult, mp_size_t msize)
 {
   mp_ptr     src_copy;
   mp_limb_t  ret;
@@ -918,9 +973,9 @@ refmpn_addmul_8 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_srcptr mult)
 }
 
 mp_limb_t
-refmpn_addsub_nc (mp_ptr r1p, mp_ptr r2p,
-                  mp_srcptr s1p, mp_srcptr s2p, mp_size_t size,
-                  mp_limb_t carry)
+refmpn_add_n_sub_nc (mp_ptr r1p, mp_ptr r2p,
+		  mp_srcptr s1p, mp_srcptr s2p, mp_size_t size,
+		  mp_limb_t carry)
 {
   mp_ptr p;
   mp_limb_t acy, scy;
@@ -943,15 +998,15 @@ refmpn_addsub_nc (mp_ptr r1p, mp_ptr r2p,
 }
 
 mp_limb_t
-refmpn_addsub_n (mp_ptr r1p, mp_ptr r2p,
+refmpn_add_n_sub_n (mp_ptr r1p, mp_ptr r2p,
 		 mp_srcptr s1p, mp_srcptr s2p, mp_size_t size)
 {
-  return refmpn_addsub_nc (r1p, r2p, s1p, s2p, size, CNST_LIMB(0));
+  return refmpn_add_n_sub_nc (r1p, r2p, s1p, s2p, size, CNST_LIMB(0));
 }
 
 
 /* Right shift hi,lo and return the low limb of the result.
-   Note a shift by BITS_PER_MP_LIMB isn't assumed to work (doesn't on x86). */
+   Note a shift by GMP_LIMB_BITS isn't assumed to work (doesn't on x86). */
 mp_limb_t
 rshift_make (mp_limb_t hi, mp_limb_t lo, unsigned shift)
 {
@@ -963,7 +1018,7 @@ rshift_make (mp_limb_t hi, mp_limb_t lo, unsigned shift)
 }
 
 /* Left shift hi,lo and return the high limb of the result.
-   Note a shift by BITS_PER_MP_LIMB isn't assumed to work (doesn't on x86). */
+   Note a shift by GMP_LIMB_BITS isn't assumed to work (doesn't on x86). */
 mp_limb_t
 lshift_make (mp_limb_t hi, mp_limb_t lo, unsigned shift)
 {
@@ -1015,6 +1070,29 @@ refmpn_lshift (mp_ptr rp, mp_srcptr sp, mp_size_t size, unsigned shift)
   return ret;
 }
 
+void
+refmpn_com (mp_ptr rp, mp_srcptr sp, mp_size_t size)
+{
+  mp_size_t i;
+
+  /* We work downwards since mpn_lshiftc needs that. */
+  ASSERT (refmpn_overlap_high_to_low_p (rp, sp, size));
+
+  for (i = size - 1; i >= 0; i--)
+    rp[i] = (~sp[i]) & GMP_NUMB_MASK;
+}
+
+mp_limb_t
+refmpn_lshiftc (mp_ptr rp, mp_srcptr sp, mp_size_t size, unsigned shift)
+{
+  mp_limb_t res;
+
+  /* No asserts here, refmpn_lshift will assert what we need. */
+
+  res = refmpn_lshift (rp, sp, size, shift);
+  refmpn_com (rp, rp, size);
+  return res;
+}
 
 /* accepting shift==0 and doing a plain copyi or copyd in that case */
 mp_limb_t
@@ -1047,13 +1125,13 @@ refmpn_lshift_or_copy (mp_ptr rp, mp_srcptr sp, mp_size_t size, unsigned shift)
 /* accepting size==0 too */
 mp_limb_t
 refmpn_rshift_or_copy_any (mp_ptr rp, mp_srcptr sp, mp_size_t size,
-                           unsigned shift)
+			   unsigned shift)
 {
   return (size == 0 ? 0 : refmpn_rshift_or_copy (rp, sp, size, shift));
 }
 mp_limb_t
 refmpn_lshift_or_copy_any (mp_ptr rp, mp_srcptr sp, mp_size_t size,
-                           unsigned shift)
+			   unsigned shift)
 {
   return (size == 0 ? 0 : refmpn_lshift_or_copy (rp, sp, size, shift));
 }
@@ -1102,15 +1180,15 @@ refmpn_udiv_qrnnd_r (mp_limb_t h, mp_limb_t l, mp_limb_t d, mp_limb_t *rp)
    -fPIC -O2 -fomit-frame-pointer (%ebp being used uninitialized).  */
 static mp_limb_t
 refmpn_divmod_1c_workaround (mp_ptr rp, mp_srcptr sp, mp_size_t size,
-                             mp_limb_t divisor, mp_limb_t carry)
+			     mp_limb_t divisor, mp_limb_t carry)
 {
   mp_size_t  i;
   mp_limb_t rem[1];
   for (i = size-1; i >= 0; i--)
     {
       rp[i] = refmpn_udiv_qrnnd (rem, carry,
-                                 sp[i] << GMP_NAIL_BITS,
-                                 divisor << GMP_NAIL_BITS);
+				 sp[i] << GMP_NAIL_BITS,
+				 divisor << GMP_NAIL_BITS);
       carry = *rem >> GMP_NAIL_BITS;
     }
   return carry;
@@ -1118,7 +1196,7 @@ refmpn_divmod_1c_workaround (mp_ptr rp, mp_srcptr sp, mp_size_t size,
 
 mp_limb_t
 refmpn_divmod_1c (mp_ptr rp, mp_srcptr sp, mp_size_t size,
-                  mp_limb_t divisor, mp_limb_t carry)
+		  mp_limb_t divisor, mp_limb_t carry)
 {
   mp_ptr     sp_orig;
   mp_ptr     prod;
@@ -1143,7 +1221,7 @@ refmpn_divmod_1c (mp_ptr rp, mp_srcptr sp, mp_size_t size,
   /* check by multiplying back */
 #if 0
   printf ("size=%ld divisor=0x%lX carry=0x%lX remainder=0x%lX\n",
-          size, divisor, carry_orig, carry);
+	  size, divisor, carry_orig, carry);
   mpn_trace("s",sp_copy,size);
   mpn_trace("r",rp,size);
   printf ("mul_1c %lX\n", refmpn_mul_1c (prod, rp, size, divisor, carry));
@@ -1166,7 +1244,7 @@ refmpn_divmod_1 (mp_ptr rp, mp_srcptr sp, mp_size_t size, mp_limb_t divisor)
 
 mp_limb_t
 refmpn_mod_1c (mp_srcptr sp, mp_size_t size, mp_limb_t divisor,
-               mp_limb_t carry)
+	       mp_limb_t carry)
 {
   mp_ptr  p = refmpn_malloc_limbs (size);
   carry = refmpn_divmod_1c (p, sp, size, divisor, carry);
@@ -1182,7 +1260,7 @@ refmpn_mod_1 (mp_srcptr sp, mp_size_t size, mp_limb_t divisor)
 
 mp_limb_t
 refmpn_preinv_mod_1 (mp_srcptr sp, mp_size_t size, mp_limb_t divisor,
-                     mp_limb_t inverse)
+		     mp_limb_t inverse)
 {
   ASSERT (divisor & GMP_NUMB_HIGHBIT);
   ASSERT (inverse == refmpn_invert_limb (divisor));
@@ -1201,8 +1279,8 @@ refmpn_mod_34lsub1 (mp_srcptr p, mp_size_t n)
 
 mp_limb_t
 refmpn_divrem_1c (mp_ptr rp, mp_size_t xsize,
-                  mp_srcptr sp, mp_size_t size, mp_limb_t divisor,
-                  mp_limb_t carry)
+		  mp_srcptr sp, mp_size_t size, mp_limb_t divisor,
+		  mp_limb_t carry)
 {
   mp_ptr  z;
 
@@ -1218,15 +1296,15 @@ refmpn_divrem_1c (mp_ptr rp, mp_size_t xsize,
 
 mp_limb_t
 refmpn_divrem_1 (mp_ptr rp, mp_size_t xsize,
-                 mp_srcptr sp, mp_size_t size, mp_limb_t divisor)
+		 mp_srcptr sp, mp_size_t size, mp_limb_t divisor)
 {
   return refmpn_divrem_1c (rp, xsize, sp, size, divisor, CNST_LIMB(0));
 }
 
 mp_limb_t
 refmpn_preinv_divrem_1 (mp_ptr rp, mp_size_t xsize,
-                        mp_srcptr sp, mp_size_t size,
-                        mp_limb_t divisor, mp_limb_t inverse, unsigned shift)
+			mp_srcptr sp, mp_size_t size,
+			mp_limb_t divisor, mp_limb_t inverse, unsigned shift)
 {
   ASSERT (size >= 0);
   ASSERT (shift == refmpn_count_leading_zeros (divisor));
@@ -1235,9 +1313,25 @@ refmpn_preinv_divrem_1 (mp_ptr rp, mp_size_t xsize,
   return refmpn_divrem_1 (rp, xsize, sp, size, divisor);
 }
 
+mp_limb_t
+refmpn_divrem_2 (mp_ptr qp, mp_size_t qxn,
+		 mp_ptr np, mp_size_t nn,
+		 mp_srcptr dp)
+{
+  mp_ptr tp;
+  mp_limb_t qh;
+
+  tp = refmpn_malloc_limbs (nn + qxn);
+  refmpn_zero (tp, qxn);
+  refmpn_copyi (tp + qxn, np, nn);
+  qh = refmpn_sb_div_qr (qp, tp, nn + qxn, dp, 2);
+  refmpn_copyi (np, tp, 2);
+  free (tp);
+  return qh;
+}
 
 /* Inverse is floor((b*(b-d)-1) / d), per division by invariant integers
-   paper, figure 8.1 m', where b=2^BITS_PER_MP_LIMB.  Note that -d-1 < d
+   paper, figure 8.1 m', where b=2^GMP_LIMB_BITS.  Note that -d-1 < d
    since d has the high bit set. */
 
 mp_limb_t
@@ -1248,6 +1342,48 @@ refmpn_invert_limb (mp_limb_t d)
   return refmpn_udiv_qrnnd (&r, -d-1, MP_LIMB_T_MAX, d);
 }
 
+void
+refmpn_invert (mp_ptr rp, mp_srcptr up, mp_size_t n, mp_ptr scratch)
+{
+  mp_ptr qp, tp;
+  TMP_DECL;
+  TMP_MARK;
+
+  tp = TMP_ALLOC_LIMBS (2 * n);
+  qp = TMP_ALLOC_LIMBS (n + 1);
+
+  MPN_ZERO (tp, 2 * n);  mpn_sub_1 (tp, tp, 2 * n, 1);
+
+  refmpn_tdiv_qr (qp, rp, 0, tp, 2 * n, up, n);
+  refmpn_copyi (rp, qp, n);
+
+  TMP_FREE;
+}
+
+void
+refmpn_binvert (mp_ptr rp, mp_srcptr up, mp_size_t n, mp_ptr scratch)
+{
+  mp_ptr tp;
+  mp_limb_t binv;
+  TMP_DECL;
+  TMP_MARK;
+
+  /* We use the library mpn_sbpi1_bdiv_q here, which isn't kosher in testing
+     code.  To make up for it, we check that the inverse is correct using a
+     multiply.  */
+
+  tp = TMP_ALLOC_LIMBS (2 * n);
+
+  MPN_ZERO (tp, n);
+  tp[0] = 1;
+  binvert_limb (binv, up[0]);
+  mpn_sbpi1_bdiv_q (rp, tp, n, up, n, -binv);
+
+  refmpn_mul_n (tp, rp, up, n);
+  ASSERT_ALWAYS (tp[0] == 1 && mpn_zero_p (tp + 1, n - 1));
+
+  TMP_FREE;
+}
 
 /* The aim is to produce a dst quotient and return a remainder c, satisfying
    c*b^n + src-i == 3*dst, where i is the incoming carry.
@@ -1306,8 +1442,8 @@ refmpn_divexact_by3 (mp_ptr rp, mp_srcptr sp, mp_size_t size)
 /* The same as mpn/generic/mul_basecase.c, but using refmpn functions. */
 void
 refmpn_mul_basecase (mp_ptr prodp,
-                     mp_srcptr up, mp_size_t usize,
-                     mp_srcptr vp, mp_size_t vsize)
+		     mp_srcptr up, mp_size_t usize,
+		     mp_srcptr vp, mp_size_t vsize)
 {
   mp_size_t i;
 
@@ -1323,23 +1459,98 @@ refmpn_mul_basecase (mp_ptr prodp,
     prodp[usize+i] = refmpn_addmul_1 (prodp+i, up, usize, vp[i]);
 }
 
+#define TOOM3_THRESHOLD (MAX (MUL_TOOM33_THRESHOLD, SQR_TOOM3_THRESHOLD))
+#define TOOM4_THRESHOLD (MAX (MUL_TOOM44_THRESHOLD, SQR_TOOM4_THRESHOLD))
+#if WANT_FFT
+#define FFT_THRESHOLD (MAX (MUL_FFT_THRESHOLD, SQR_FFT_THRESHOLD))
+#else
+#define FFT_THRESHOLD MP_SIZE_T_MAX /* don't use toom44 here */
+#endif
+
+void
+refmpn_mul (mp_ptr wp, mp_srcptr up, mp_size_t un, mp_srcptr vp, mp_size_t vn)
+{
+  mp_ptr tp;
+  mp_size_t tn;
+  mp_limb_t cy;
+
+  if (vn < TOOM3_THRESHOLD)
+    {
+      /* In the mpn_mul_basecase and mpn_kara_mul_n range, use our own
+	 mul_basecase.  */
+      if (vn != 0)
+	refmpn_mul_basecase (wp, up, un, vp, vn);
+      else
+	MPN_ZERO (wp, un);
+      return;
+    }
+
+  if (vn < TOOM4_THRESHOLD)
+    {
+      /* In the mpn_toom33_mul range, use mpn_toom22_mul.  */
+      tn = 2 * vn + mpn_toom22_mul_itch (vn, vn);
+      tp = refmpn_malloc_limbs (tn);
+      mpn_toom22_mul (tp, up, vn, vp, vn, tp + 2 * vn);
+    }
+  else if (vn < FFT_THRESHOLD)
+    {
+      /* In the mpn_toom44_mul range, use mpn_toom33_mul.  */
+      tn = 2 * vn + mpn_toom33_mul_itch (vn, vn);
+      tp = refmpn_malloc_limbs (tn);
+      mpn_toom33_mul (tp, up, vn, vp, vn, tp + 2 * vn);
+    }
+  else
+    {
+      /* Finally, for the largest operands, use mpn_toom44_mul.  */
+      tn = 2 * vn + mpn_toom44_mul_itch (vn, vn);
+      tp = refmpn_malloc_limbs (tn);
+      mpn_toom44_mul (tp, up, vn, vp, vn, tp + 2 * vn);
+    }
+
+  if (un != vn)
+    {
+      if (un - vn < vn)
+	refmpn_mul (wp + vn, vp, vn, up + vn, un - vn);
+      else
+	refmpn_mul (wp + vn, up + vn, un - vn, vp, vn);
+
+      MPN_COPY (wp, tp, vn);
+      cy = refmpn_add (wp + vn, wp + vn, un, tp + vn, vn);
+    }
+  else
+    {
+      MPN_COPY (wp, tp, 2 * vn);
+    }
+
+  free (tp);
+}
+
 void
 refmpn_mul_n (mp_ptr prodp, mp_srcptr up, mp_srcptr vp, mp_size_t size)
 {
-  refmpn_mul_basecase (prodp, up, size, vp, size);
+  refmpn_mul (prodp, up, size, vp, size);
+}
+
+void
+refmpn_mullo_n (mp_ptr prodp, mp_srcptr up, mp_srcptr vp, mp_size_t size)
+{
+  mp_ptr tp = refmpn_malloc_limbs (2*size);
+  refmpn_mul (tp, up, size, vp, size);
+  refmpn_copyi (prodp, tp, size);
+  free (tp);
 }
 
 void
 refmpn_sqr (mp_ptr dst, mp_srcptr src, mp_size_t size)
 {
-  refmpn_mul_basecase (dst, src, size, src, size);
+  refmpn_mul (dst, src, size, src, size);
 }
 
 /* Allowing usize<vsize, usize==0 or vsize==0. */
 void
 refmpn_mul_any (mp_ptr prodp,
-                     mp_srcptr up, mp_size_t usize,
-                     mp_srcptr vp, mp_size_t vsize)
+		     mp_srcptr up, mp_size_t usize,
+		     mp_srcptr vp, mp_size_t vsize)
 {
   ASSERT (! refmpn_overlap_p (prodp, usize+vsize, up, usize));
   ASSERT (! refmpn_overlap_p (prodp, usize+vsize, vp, vsize));
@@ -1361,9 +1572,9 @@ refmpn_mul_any (mp_ptr prodp,
     }
 
   if (usize >= vsize)
-    refmpn_mul_basecase (prodp, up, usize, vp, vsize);
+    refmpn_mul (prodp, up, usize, vp, vsize);
   else
-    refmpn_mul_basecase (prodp, vp, vsize, up, usize);
+    refmpn_mul (prodp, vp, vsize, up, usize);
 }
 
 
@@ -1396,11 +1607,11 @@ refmpn_gcd_1 (mp_srcptr xp, mp_size_t xsize, mp_limb_t y)
       while ((y & 1) == 0)  y >>= 1;
 
       if (x < y)
-        MP_LIMB_T_SWAP (x, y);
+	MP_LIMB_T_SWAP (x, y);
 
       x -= y;
       if (x == 0)
-        break;
+	break;
     }
 
   return y << twos;
@@ -1492,9 +1703,9 @@ refmpn_gcd (mp_ptr gp, mp_ptr xp, mp_size_t xsize, mp_ptr yp, mp_size_t ysize)
     {
       cmp = refmpn_cmp_twosizes (xp, xsize, yp, ysize);
       if (cmp == 0)
-        break;
+	break;
       if (cmp < 0)
-        MPN_PTR_SWAP (xp,xsize, yp,ysize);
+	MPN_PTR_SWAP (xp,xsize, yp,ysize);
 
       ASSERT_NOCARRY (refmpn_sub (xp, xp, xsize, yp, ysize));
 
@@ -1574,9 +1785,9 @@ refmpn_mod2 (mp_limb_t r[2], const mp_limb_t a[2], const mp_limb_t d[2])
   for (;;)
     {
       if (D[1] & GMP_NUMB_HIGHBIT)
-        break;
+	break;
       if (refmpn_cmp (r, D, (mp_size_t) 2) <= 0)
-        break;
+	break;
       refmpn_lshift (D, D, (mp_size_t) 2, 1);
       n++;
       ASSERT (n <= GMP_NUMB_BITS);
@@ -1585,7 +1796,7 @@ refmpn_mod2 (mp_limb_t r[2], const mp_limb_t a[2], const mp_limb_t d[2])
   while (n >= 0)
     {
       if (refmpn_cmp (r, D, (mp_size_t) 2) >= 0)
-        ASSERT_NOCARRY (refmpn_sub_n (r, r, D, (mp_size_t) 2));
+	ASSERT_NOCARRY (refmpn_sub_n (r, r, D, (mp_size_t) 2));
       refmpn_rshift (D, D, (mp_size_t) 2, 1);
       n--;
     }
@@ -1594,41 +1805,13 @@ refmpn_mod2 (mp_limb_t r[2], const mp_limb_t a[2], const mp_limb_t d[2])
 }
 
 
-/* Return n with 0 < n < 2^GMP_NUMB_BITS such that there exists 0 < |d| <
-   2^GMP_NUMB_BITS, and n == d * c mod 2^(2*GMP_NUMB_BITS).  */
-mp_limb_t
-refmpn_gcd_finda (const mp_limb_t c[2])
-{
-  mp_limb_t  n1[2], n2[2];
 
-  ASSERT (c[0] != 0);
-  ASSERT (c[1] != 0);
-  ASSERT_MPN (c, 2);
-
-  n1[0] = c[0];
-  n1[1] = c[1];
-
-  n2[0] = -n1[0];
-  n2[1] = ~n1[1];
-
-  while (n2[1] != 0)
-    {
-      refmpn_mod2 (n1, n1, n2);
-
-      MP_LIMB_T_SWAP (n1[0], n2[0]);
-      MP_LIMB_T_SWAP (n1[1], n2[1]);
-    }
-
-  return n2[0];
-}
-
-
-/* Similar to mpn/generic/sb_divrem_mn.c, but somewhat simplified, in
+/* Similar to the old mpn/generic/sb_divrem_mn.c, but somewhat simplified, in
    particular the trial quotient is allowed to be 2 too big. */
 mp_limb_t
-refmpn_sb_divrem_mn (mp_ptr qp,
-                     mp_ptr np, mp_size_t nsize,
-                     mp_srcptr dp, mp_size_t dsize)
+refmpn_sb_div_qr (mp_ptr qp,
+		  mp_ptr np, mp_size_t nsize,
+		  mp_srcptr dp, mp_size_t dsize)
 {
   mp_limb_t  retval = 0;
   mp_size_t  i;
@@ -1658,29 +1841,31 @@ refmpn_sb_divrem_mn (mp_ptr qp,
 
       ASSERT (n0 <= d1);
       if (n0 == d1)
-        q = GMP_NUMB_MAX;
+	q = GMP_NUMB_MAX;
       else
-        q = refmpn_udiv_qrnnd (&dummy_r, n0, n1 << GMP_NAIL_BITS,
-                               d1 << GMP_NAIL_BITS);
+	q = refmpn_udiv_qrnnd (&dummy_r, n0, n1 << GMP_NAIL_BITS,
+			       d1 << GMP_NAIL_BITS);
 
       n0 -= refmpn_submul_1 (np+i, dp, dsize, q);
       ASSERT (n0 == 0 || n0 == MP_LIMB_T_MAX);
       if (n0)
-        {
-          q--;
-          if (! refmpn_add_n (np+i, np+i, dp, dsize))
-            {
-              q--;
-              ASSERT (refmpn_add_n (np+i, np+i, dp, dsize) != 0);
-            }
-        }
+	{
+	  q--;
+	  if (! refmpn_add_n (np+i, np+i, dp, dsize))
+	    {
+	      q--;
+	      ASSERT_CARRY (refmpn_add_n (np+i, np+i, dp, dsize));
+	    }
+	}
       np[i+dsize] = 0;
 
       qp[i] = q;
     }
 
   /* remainder < divisor */
+#if 0		/* ASSERT triggers gcc 4.2.1 bug */
   ASSERT (refmpn_cmp (np, dp, dsize) < 0);
+#endif
 
   /* multiply back to original */
   {
@@ -1699,12 +1884,12 @@ refmpn_sb_divrem_mn (mp_ptr qp,
   return retval;
 }
 
-/* Similar to mpn/generic/sb_divrem_mn.c, but somewhat simplified, in
+/* Similar to the old mpn/generic/sb_divrem_mn.c, but somewhat simplified, in
    particular the trial quotient is allowed to be 2 too big. */
 void
 refmpn_tdiv_qr (mp_ptr qp, mp_ptr rp, mp_size_t qxn,
-                mp_ptr np, mp_size_t nsize,
-                mp_srcptr dp, mp_size_t dsize)
+		mp_ptr np, mp_size_t nsize,
+		mp_srcptr dp, mp_size_t dsize)
 {
   ASSERT (qxn == 0);
   ASSERT_MPN (np, nsize);
@@ -1726,7 +1911,7 @@ refmpn_tdiv_qr (mp_ptr qp, mp_ptr rp, mp_size_t qxn,
       n2p[nsize] = refmpn_lshift_or_copy (n2p, np, nsize, norm);
       ASSERT_NOCARRY (refmpn_lshift_or_copy (d2p, dp, dsize, norm));
 
-      refmpn_sb_divrem_mn (qp, n2p, nsize+1, d2p, dsize);
+      refmpn_sb_div_qr (qp, n2p, nsize+1, d2p, dsize);
       refmpn_rshift_or_copy (rp, n2p, dsize, norm);
 
       /* ASSERT (refmpn_zero_p (tp+dsize, nsize-dsize)); */
@@ -1735,6 +1920,26 @@ refmpn_tdiv_qr (mp_ptr qp, mp_ptr rp, mp_size_t qxn,
     }
 }
 
+void
+refmpn_redc_1 (mp_ptr rp, mp_ptr up, mp_srcptr mp, mp_size_t n, mp_limb_t invm)
+{
+  mp_size_t j;
+  mp_limb_t cy;
+
+  ASSERT_MPN (up, 2*n);
+  /* ASSERT about directed overlap rp, up */
+  /* ASSERT about overlap rp, mp */
+  /* ASSERT about overlap up, mp */
+
+  for (j = n - 1; j >= 0; j--)
+    {
+      up[0] = mpn_addmul_1 (up, mp, n, (up[0] * invm) & GMP_NUMB_MASK);
+      up++;
+    }
+  cy = mpn_add_n (rp, up, up - n, n);
+  if (cy != 0)
+    mpn_sub_n (rp, rp, mp, n);
+}
 
 size_t
 refmpn_get_str (unsigned char *dst, int base, mp_ptr src, mp_size_t size)
@@ -1744,7 +1949,7 @@ refmpn_get_str (unsigned char *dst, int base, mp_ptr src, mp_size_t size)
 
   ASSERT (size >= 0);
   ASSERT (base >= 2);
-  ASSERT (base < numberof (__mp_bases));
+  ASSERT (base < numberof (mp_bases));
   ASSERT (size == 0 || src[size-1] != 0);
   ASSERT_MPN (src, size);
 
@@ -1810,10 +2015,10 @@ ref_bswap_limb (mp_limb_t src)
    can probably be removed when those normal routines are reliable, though
    perhaps something independent would still be useful at times.  */
 
-#if BITS_PER_MP_LIMB == 32
+#if GMP_LIMB_BITS == 32
 #define RAND_A  CNST_LIMB(0x29CF535)
 #endif
-#if BITS_PER_MP_LIMB == 64
+#if GMP_LIMB_BITS == 64
 #define RAND_A  CNST_LIMB(0xBAECD515DAF0B49D)
 #endif
 
@@ -1823,14 +2028,14 @@ mp_limb_t
 refmpn_random_half (void)
 {
   refmpn_random_seed = refmpn_random_seed * RAND_A + 1;
-  return (refmpn_random_seed >> BITS_PER_MP_LIMB/2);
+  return (refmpn_random_seed >> GMP_LIMB_BITS/2);
 }
 
 mp_limb_t
 refmpn_random_limb (void)
 {
-  return ((refmpn_random_half () << (BITS_PER_MP_LIMB/2))
-           | refmpn_random_half ()) & GMP_NUMB_MASK;
+  return ((refmpn_random_half () << (GMP_LIMB_BITS/2))
+	   | refmpn_random_half ()) & GMP_NUMB_MASK;
 }
 
 void
@@ -1853,7 +2058,7 @@ refmpn_random2 (mp_ptr ptr, mp_size_t size)
   mp_size_t  i;
   mp_limb_t  bit, mask, limb;
   int        run;
-  
+
   if (GMP_NAIL_BITS == 0)
     {
       mpn_random2 (ptr, size);
@@ -1871,17 +2076,17 @@ refmpn_random2 (mp_ptr ptr, mp_size_t size)
     {
       limb = 0;
       do
-        {
-          if (run == 0)
-            {
-              run = (refmpn_random_half () % RUN_MODULUS) + 1;
-              mask = ~mask;
-            }
+	{
+	  if (run == 0)
+	    {
+	      run = (refmpn_random_half () % RUN_MODULUS) + 1;
+	      mask = ~mask;
+	    }
 
-          limb |= (bit & mask);
-          bit >>= 1;
-          run--;
-        }
+	  limb |= (bit & mask);
+	  bit >>= 1;
+	  run--;
+	}
       while (bit != 0);
 
       ptr[i] = limb;
@@ -1926,7 +2131,7 @@ refmpn_sqrtrem (mp_ptr sp, mp_ptr rp, mp_srcptr np, mp_size_t nsize)
   for (i = GMP_NUMB_BITS * ssize - 1; i >= 0; i--)
     {
       /* t = 2*s*2^i + 2^(2*i), being the amount s^2 will increase by if 2^i
-         is added to it */
+	 is added to it */
 
       ilimbs = (i+1) / GMP_NUMB_BITS;
       ibit = (i+1) % GMP_NUMB_BITS;
@@ -1939,24 +2144,24 @@ refmpn_sqrtrem (mp_ptr sp, mp_ptr rp, mp_srcptr np, mp_size_t nsize)
       ilimbs = (2*i) / GMP_NUMB_BITS;
       ibit = (2*i) % GMP_NUMB_BITS;
       if (ilimbs + 1 > tsize)
-        {
-          refmpn_zero_extend (tp, tsize, ilimbs + 1);
-          tsize = ilimbs + 1;
-        }
+	{
+	  refmpn_zero_extend (tp, tsize, ilimbs + 1);
+	  tsize = ilimbs + 1;
+	}
       c = refmpn_add_1 (tp+ilimbs, tp+ilimbs, tsize-ilimbs,
-                        CNST_LIMB(1) << ibit);
+			CNST_LIMB(1) << ibit);
       ASSERT (tsize < talloc);
       tp[tsize] = c;
       tsize += (c != 0);
 
       if (refmpn_cmp_twosizes (dp, dsize, tp, tsize) >= 0)
-        {
-          /* set this bit in s and subtract from the remainder */
-          refmpn_setbit (sp, i);
+	{
+	  /* set this bit in s and subtract from the remainder */
+	  refmpn_setbit (sp, i);
 
-          ASSERT_NOCARRY (refmpn_sub_n (dp, dp, tp, dsize));
-          dsize = refmpn_normalize (dp, dsize);
-        }
+	  ASSERT_NOCARRY (refmpn_sub_n (dp, dp, tp, dsize));
+	  dsize = refmpn_normalize (dp, dsize);
+	}
     }
 
   if (rp == NULL)

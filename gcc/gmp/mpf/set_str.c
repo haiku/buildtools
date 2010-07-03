@@ -2,14 +2,14 @@
    in base BASE to a float in dest.  If BASE is zero, the leading characters
    of STRING is used to figure out the base.
 
-Copyright 1993, 1994, 1995, 1996, 1997, 2000, 2001, 2002, 2003, 2005 Free
-Software Foundation, Inc.
+Copyright 1993, 1994, 1995, 1996, 1997, 2000, 2001, 2002, 2003, 2005, 2007,
+2008 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -18,9 +18,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 /*
   This still needs work, as suggested by some FIXME comments.
@@ -74,7 +72,7 @@ mpn_pow_1_highpart (mp_ptr rp, mp_size_t *ignp,
   count_leading_zeros (cnt, exp);
   for (i = GMP_LIMB_BITS - cnt - 2; i >= 0; i--)
     {
-      mpn_sqr_n (tp, rp + off, rn);
+      mpn_sqr (tp, rp + off, rn);
       rn = 2 * rn;
       rn -= tp[rn - 1] == 0;
       ign <<= 1;
@@ -139,7 +137,12 @@ mpf_set_str (mpf_ptr x, const char *str, int base)
       c = (unsigned char) *++str;
     }
 
+  /* Default base to decimal.  */
+  if (base == 0)
+    base = 10;
+
   exp_base = base;
+
   if (base < 0)
     {
       exp_base = 10;
@@ -166,10 +169,6 @@ mpf_set_str (mpf_ptr x, const char *str, int base)
       if (digit_value[(unsigned char) str[pointlen]] >= (base == 0 ? 10 : base))
 	return -1;
     }
-
-  /* Default base to decimal.  */
-  if (base == 0)
-    base = 10;
 
   /* Locate exponent part of the input.  Look from the right of the string,
      since the exponent is usually a lot shorter than the mantissa.  */
@@ -243,7 +242,7 @@ mpf_set_str (mpf_ptr x, const char *str, int base)
     size_t n_chars_needed;
 
     /* This breaks things like 0.000...0001.  To safely ignore superfluous
-       digits, we need to skip over leadng zeros.  */
+       digits, we need to skip over leading zeros.  */
     /* Just consider the relevant leading digits of the mantissa.  */
     n_chars_needed = 2 + (size_t)
       (((size_t) prec * GMP_NUMB_BITS) * mp_bases[base].chars_per_bit_exactly);
@@ -251,7 +250,8 @@ mpf_set_str (mpf_ptr x, const char *str, int base)
       str_size = n_chars_needed;
 #endif
 
-    ma = 2 * (prec + 1);
+    ma = 2 + (mp_size_t)
+      (str_size / (GMP_NUMB_BITS * mp_bases[base].chars_per_bit_exactly));
     mp = TMP_ALLOC_LIMBS (ma);
     mn = mpn_set_str (mp, (unsigned char *) begs, str_size, base);
 
@@ -273,8 +273,32 @@ mpf_set_str (mpf_ptr x, const char *str, int base)
       }
 
     if (expptr != 0)
-      /* FIXME: Should do some error checking here.  */
-      exp_in_base = strtol (expptr, (char **) 0, exp_base);
+      {
+	/* Scan and convert the exponent, in base exp_base.  */
+	long dig, minus, plusminus;
+	c = (unsigned char) *expptr;
+	minus = -(long) (c == '-');
+	plusminus = minus | -(long) (c == '+');
+	expptr -= plusminus;			/* conditional increment */
+	c = (unsigned char) *expptr++;
+	dig = digit_value[c];
+	if (dig >= exp_base)
+	  {
+	    TMP_FREE;
+	    return -1;
+	  }
+	exp_in_base = dig;
+	c = (unsigned char) *expptr++;
+	dig = digit_value[c];
+	while (dig < exp_base)
+	  {
+	    exp_in_base = exp_in_base * exp_base;
+	    exp_in_base += dig;
+	    c = (unsigned char) *expptr++;
+	    dig = digit_value[c];
+	  }
+	exp_in_base = (exp_in_base ^ minus) - minus; /* conditional negation */
+      }
     else
       exp_in_base = 0;
     if (dotpos != 0)

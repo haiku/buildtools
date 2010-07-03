@@ -1,12 +1,12 @@
 /* gmpxx.h -- C++ class wrapper for GMP types.  -*- C++ -*-
 
-Copyright 2001, 2002, 2003, 2006 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2006, 2008 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 /* the C++ compiler must implement the following features:
    - member templates
@@ -39,6 +37,7 @@ MA 02110-1301, USA. */
 #include <cstring>  /* for strlen */
 #include <string>
 #include <stdexcept>
+#include <cfloat>
 #include <gmp.h>
 
 
@@ -657,22 +656,82 @@ struct __gmp_binary_modulus
   }
 };
 
+// Max allocations for plain types when converted to mpz_t
+#define __GMP_DBL_LIMBS (2 + DBL_MAX_EXP / GMP_NUMB_BITS)
+#define __GMP_ULI_LIMBS (1 + (8 * sizeof (long) - 1) / GMP_NUMB_BITS)
+
+#define __GMPXX_TMP_UI							\
+  mpz_t temp;								\
+  mp_limb_t limbs[__GMP_ULI_LIMBS];					\
+  temp->_mp_d = limbs;							\
+  temp->_mp_alloc = __GMP_ULI_LIMBS;					\
+  mpz_set_ui (temp, l)
+#define __GMPXX_TMP_SI							\
+  mpz_t temp;								\
+  mp_limb_t limbs[__GMP_ULI_LIMBS];					\
+  temp->_mp_d = limbs;							\
+  temp->_mp_alloc = __GMP_ULI_LIMBS;					\
+  mpz_set_si (temp, l)
+#define __GMPXX_TMP_D							\
+  mpz_t temp;								\
+  mp_limb_t limbs[__GMP_DBL_LIMBS];					\
+  temp->_mp_d = limbs;							\
+  temp->_mp_alloc = __GMP_DBL_LIMBS;					\
+  mpz_set_d (temp, d)
+
 struct __gmp_binary_and
 {
   static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v)
   { mpz_and(z, w, v); }
+
+  static void eval(mpz_ptr z, mpz_srcptr w, unsigned long int l)
+  {  __GMPXX_TMP_UI;   mpz_and (z, w, temp);  }
+  static void eval(mpz_ptr z, unsigned long int l, mpz_srcptr w)
+  {  __GMPXX_TMP_UI;   mpz_and (z, w, temp);  }
+  static void eval(mpz_ptr z, mpz_srcptr w, signed long int l)
+  {  __GMPXX_TMP_SI;   mpz_and (z, w, temp);  }
+  static void eval(mpz_ptr z, signed long int l, mpz_srcptr w)
+  {  __GMPXX_TMP_SI;   mpz_and (z, w, temp);  }
+  static void eval(mpz_ptr z, mpz_srcptr w, double d)
+  {  __GMPXX_TMP_D;    mpz_and (z, w, temp); }
+  static void eval(mpz_ptr z, double d, mpz_srcptr w)
+  {  __GMPXX_TMP_D;    mpz_and (z, w, temp); }
 };
 
 struct __gmp_binary_ior
 {
   static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v)
   { mpz_ior(z, w, v); }
+  static void eval(mpz_ptr z, mpz_srcptr w, unsigned long int l)
+  {  __GMPXX_TMP_UI;   mpz_ior (z, w, temp);  }
+  static void eval(mpz_ptr z, unsigned long int l, mpz_srcptr w)
+  {  __GMPXX_TMP_UI;   mpz_ior (z, w, temp);  }
+  static void eval(mpz_ptr z, mpz_srcptr w, signed long int l)
+  {  __GMPXX_TMP_SI;   mpz_ior (z, w, temp);  }
+  static void eval(mpz_ptr z, signed long int l, mpz_srcptr w)
+  {  __GMPXX_TMP_SI;   mpz_ior (z, w, temp);  }
+  static void eval(mpz_ptr z, mpz_srcptr w, double d)
+  {  __GMPXX_TMP_D;    mpz_ior (z, w, temp); }
+  static void eval(mpz_ptr z, double d, mpz_srcptr w)
+  {  __GMPXX_TMP_D;    mpz_ior (z, w, temp); }
 };
 
 struct __gmp_binary_xor
 {
   static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v)
   { mpz_xor(z, w, v); }
+  static void eval(mpz_ptr z, mpz_srcptr w, unsigned long int l)
+  {  __GMPXX_TMP_UI;   mpz_xor (z, w, temp);  }
+  static void eval(mpz_ptr z, unsigned long int l, mpz_srcptr w)
+  {  __GMPXX_TMP_UI;   mpz_xor (z, w, temp);  }
+  static void eval(mpz_ptr z, mpz_srcptr w, signed long int l)
+  {  __GMPXX_TMP_SI;   mpz_xor (z, w, temp);  }
+  static void eval(mpz_ptr z, signed long int l, mpz_srcptr w)
+  {  __GMPXX_TMP_SI;   mpz_xor (z, w, temp);  }
+  static void eval(mpz_ptr z, mpz_srcptr w, double d)
+  {  __GMPXX_TMP_D;    mpz_xor (z, w, temp); }
+  static void eval(mpz_ptr z, double d, mpz_srcptr w)
+  {  __GMPXX_TMP_D;    mpz_xor (z, w, temp); }
 };
 
 struct __gmp_binary_lshift
@@ -688,7 +747,7 @@ struct __gmp_binary_lshift
 struct __gmp_binary_rshift
 {
   static void eval(mpz_ptr z, mpz_srcptr w, unsigned long int l)
-  { mpz_tdiv_q_2exp(z, w, l); }
+  { mpz_fdiv_q_2exp(z, w, l); }
   static void eval(mpq_ptr q, mpq_srcptr r, unsigned long int l)
   { mpq_div_2exp(q, r, l); }
   static void eval(mpf_ptr f, mpf_srcptr g, unsigned long int l)
@@ -1277,99 +1336,13 @@ struct __gmp_cmp_function
   { return -mpf_cmp_d(f, d); }
 };
 
-struct __gmp_ternary_addmul // z = w + v * u
-{
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, mpz_srcptr u)
-  { mpz_set(z, w); mpz_addmul(z, v, u); }
-
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, unsigned long int l)
-  { mpz_set(z, w); mpz_addmul_ui(z, v, l); }
-  static void eval(mpz_ptr z, mpz_srcptr w, unsigned long int l, mpz_srcptr v)
-  { mpz_set(z, w); mpz_addmul_ui(z, v, l); }
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, signed long int l)
-  {
-    mpz_set(z, w);
-    if (l >= 0)
-      mpz_addmul_ui(z, v, l);
-    else
-      mpz_submul_ui(z, v, -l);
-  }
-  static void eval(mpz_ptr z, mpz_srcptr w, signed long int l, mpz_srcptr v)
-  {
-    mpz_set(z, w);
-    if (l >= 0)
-      mpz_addmul_ui(z, v, l);
-    else
-      mpz_submul_ui(z, v, -l);
-  }
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, double d)
-  {
-    mpz_t temp;
-    mpz_init_set_d(temp, d);
-    mpz_set(z, w);
-    mpz_addmul(z, v, temp);
-    mpz_clear(temp);
-  }
-  static void eval(mpz_ptr z, mpz_srcptr w, double d, mpz_srcptr v)
-  {
-    mpz_t temp;
-    mpz_init_set_d(temp, d);
-    mpz_set(z, w);
-    mpz_addmul(z, temp, v);
-    mpz_clear(temp);
-  }
-};
-
-struct __gmp_ternary_submul // z = w - v * u
-{
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, mpz_srcptr u)
-  { mpz_set(z, w); mpz_submul(z, v, u); }
-
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, unsigned long int l)
-  { mpz_set(z, w); mpz_submul_ui(z, v, l); }
-  static void eval(mpz_ptr z, mpz_srcptr w, unsigned long int l, mpz_srcptr v)
-  { mpz_set(z, w); mpz_submul_ui(z, v, l); }
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, signed long int l)
-  {
-    mpz_set(z, w);
-    if (l >= 0)
-      mpz_submul_ui(z, v, l);
-    else
-      mpz_addmul_ui(z, v, -l);
-  }
-  static void eval(mpz_ptr z, mpz_srcptr w, signed long int l, mpz_srcptr v)
-  {
-    mpz_set(z, w);
-    if (l >= 0)
-      mpz_submul_ui(z, v, l);
-    else
-      mpz_addmul_ui(z, v, -l);
-  }
-  static void eval(mpz_ptr z, mpz_srcptr w, mpz_srcptr v, double d)
-  {
-    mpz_t temp;
-    mpz_init_set_d(temp, d);
-    mpz_set(z, w);
-    mpz_submul(z, v, temp);
-    mpz_clear(temp);
-  }
-  static void eval(mpz_ptr z, mpz_srcptr w, double d, mpz_srcptr v)
-  {
-    mpz_t temp;
-    mpz_init_set_d(temp, d);
-    mpz_set(z, w);
-    mpz_submul(z, temp, v);
-    mpz_clear(temp);
-  }
-};
-
 struct __gmp_rand_function
 {
   static void eval(mpz_ptr z, gmp_randstate_t s, unsigned long int l)
   { mpz_urandomb(z, s, l); }
   static void eval(mpz_ptr z, gmp_randstate_t s, mpz_srcptr w)
   { mpz_urandomm(z, s, w); }
-  static void eval(mpf_ptr f, gmp_randstate_t s, unsigned long int prec)
+  static void eval(mpf_ptr f, gmp_randstate_t s, mp_bitcnt_t prec)
   { mpf_urandomb(f, s, prec); }
 };
 
@@ -1379,13 +1352,17 @@ struct __gmp_rand_function
 /* this is much the same as gmp_allocated_string in gmp-impl.h
    since gmp-impl.h is not publicly available, I redefine it here
    I use a different name to avoid possible clashes */
+
+extern "C" {
+  typedef void (*__gmp_freefunc_t) (void *, size_t);
+}
 struct __gmp_alloc_cstring
 {
   char *str;
   __gmp_alloc_cstring(char *s) { str = s; }
   ~__gmp_alloc_cstring()
   {
-    void (*freefunc) (void *, size_t);
+    __gmp_freefunc_t freefunc;
     mp_get_memory_functions (NULL, NULL, &freefunc);
     (*freefunc) (str, std::strlen(str)+1);
   }
@@ -1560,7 +1537,7 @@ private:
   typedef mpz_t value_type;
   value_type mp;
 public:
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }
+  mp_bitcnt_t get_prec() const { return mpf_get_default_prec(); }
 
   // constructors and destructor
   __gmp_expr() { mpz_init(mp); }
@@ -1704,9 +1681,9 @@ public:
   __GMP_DECLARE_COMPOUND_OPERATOR(operator/=)
   __GMP_DECLARE_COMPOUND_OPERATOR(operator%=)
 
-  __GMPP_DECLARE_COMPOUND_OPERATOR(operator&=)
-  __GMPP_DECLARE_COMPOUND_OPERATOR(operator|=)
-  __GMPP_DECLARE_COMPOUND_OPERATOR(operator^=)
+  __GMP_DECLARE_COMPOUND_OPERATOR(operator&=)
+  __GMP_DECLARE_COMPOUND_OPERATOR(operator|=)
+  __GMP_DECLARE_COMPOUND_OPERATOR(operator^=)
 
   __GMP_DECLARE_COMPOUND_OPERATOR_UI(operator<<=)
   __GMP_DECLARE_COMPOUND_OPERATOR_UI(operator>>=)
@@ -1727,7 +1704,7 @@ private:
   typedef mpq_t value_type;
   value_type mp;
 public:
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }
+  mp_bitcnt_t get_prec() const { return mpf_get_default_prec(); }
   void canonicalize() { mpq_canonicalize(mp); }
 
   // constructors and destructor
@@ -1907,61 +1884,61 @@ private:
   typedef mpf_t value_type;
   value_type mp;
 public:
-  unsigned long int get_prec() const { return mpf_get_prec(mp); }
+  mp_bitcnt_t get_prec() const { return mpf_get_prec(mp); }
 
-  void set_prec(unsigned long int prec) { mpf_set_prec(mp, prec); }
-  void set_prec_raw(unsigned long int prec) { mpf_set_prec_raw(mp, prec); }
+  void set_prec(mp_bitcnt_t prec) { mpf_set_prec(mp, prec); }
+  void set_prec_raw(mp_bitcnt_t prec) { mpf_set_prec_raw(mp, prec); }
 
   // constructors and destructor
   __gmp_expr() { mpf_init(mp); }
 
   __gmp_expr(const __gmp_expr &f)
   { mpf_init2(mp, f.get_prec()); mpf_set(mp, f.mp); }
-  __gmp_expr(const __gmp_expr &f, unsigned long int prec)
+  __gmp_expr(const __gmp_expr &f, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set(mp, f.mp); }
   template <class T, class U>
   __gmp_expr(const __gmp_expr<T, U> &expr)
   { mpf_init2(mp, expr.get_prec()); __gmp_set_expr(mp, expr); }
   template <class T, class U>
-  __gmp_expr(const __gmp_expr<T, U> &expr, unsigned long int prec)
+  __gmp_expr(const __gmp_expr<T, U> &expr, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); __gmp_set_expr(mp, expr); }
 
   __gmp_expr(signed char c) { mpf_init_set_si(mp, c); }
-  __gmp_expr(signed char c, unsigned long int prec)
+  __gmp_expr(signed char c, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_si(mp, c); }
   __gmp_expr(unsigned char c) { mpf_init_set_ui(mp, c); }
-  __gmp_expr(unsigned char c, unsigned long int prec)
+  __gmp_expr(unsigned char c, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_ui(mp, c); }
 
   __gmp_expr(signed int i) { mpf_init_set_si(mp, i); }
-  __gmp_expr(signed int i, unsigned long int prec)
+  __gmp_expr(signed int i, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_si(mp, i); }
   __gmp_expr(unsigned int i) { mpf_init_set_ui(mp, i); }
-  __gmp_expr(unsigned int i, unsigned long int prec)
+  __gmp_expr(unsigned int i, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_ui(mp, i); }
 
   __gmp_expr(signed short int s) { mpf_init_set_si(mp, s); }
-  __gmp_expr(signed short int s, unsigned long int prec)
+  __gmp_expr(signed short int s, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_si(mp, s); }
   __gmp_expr(unsigned short int s) { mpf_init_set_ui(mp, s); }
-  __gmp_expr(unsigned short int s, unsigned long int prec)
+  __gmp_expr(unsigned short int s, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_ui(mp, s); }
 
   __gmp_expr(signed long int l) { mpf_init_set_si(mp, l); }
-  __gmp_expr(signed long int l, unsigned long int prec)
+  __gmp_expr(signed long int l, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_si(mp, l); }
   __gmp_expr(unsigned long int l) { mpf_init_set_ui(mp, l); }
-  __gmp_expr(unsigned long int l, unsigned long int prec)
+  __gmp_expr(unsigned long int l, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_ui(mp, l); }
 
   __gmp_expr(float f) { mpf_init_set_d(mp, f); }
-  __gmp_expr(float f, unsigned long int prec)
+  __gmp_expr(float f, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_d(mp, f); }
   __gmp_expr(double d) { mpf_init_set_d(mp, d); }
-  __gmp_expr(double d, unsigned long int prec)
+  __gmp_expr(double d, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set_d(mp, d); }
   // __gmp_expr(long double ld) { mpf_init_set_d(mp, ld); }
-  // __gmp_expr(long double ld, unsigned long int prec)
+  // __gmp_expr(long double ld, mp_bitcnt_t prec)
   // { mpf_init2(mp, prec); mpf_set_d(mp, ld); }
 
   explicit __gmp_expr(const char *s)
@@ -1972,7 +1949,7 @@ public:
         throw std::invalid_argument ("mpf_set_str");
       }
   }
-  __gmp_expr(const char *s, unsigned long int prec, int base = 0)
+  __gmp_expr(const char *s, mp_bitcnt_t prec, int base = 0)
   {
     mpf_init2(mp, prec);
     if (mpf_set_str(mp, s, base) != 0)
@@ -1989,7 +1966,7 @@ public:
         throw std::invalid_argument ("mpf_set_str");
       }
   }
-  __gmp_expr(const std::string &s, unsigned long int prec, int base = 0)
+  __gmp_expr(const std::string &s, mp_bitcnt_t prec, int base = 0)
   {
     mpf_init2(mp, prec);
     if (mpf_set_str(mp, s.c_str(), base) != 0)
@@ -2001,7 +1978,7 @@ public:
 
   explicit __gmp_expr(mpf_srcptr f)
   { mpf_init2(mp, mpf_get_prec(f)); mpf_set(mp, f); }
-  __gmp_expr(mpf_srcptr f, unsigned long int prec)
+  __gmp_expr(mpf_srcptr f, mp_bitcnt_t prec)
   { mpf_init2(mp, prec); mpf_set(mp, f); }
 
   ~__gmp_expr() { mpf_clear(mp); }
@@ -2298,7 +2275,7 @@ public:
   void eval(typename __gmp_resolve_expr<T>::ptr_type p) const
   { __gmp_expr<T, T> temp(expr.val); Op::eval(p, temp.__get_mp()); }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   { __gmp_expr<T, T> temp(expr.val, prec); Op::eval(p, temp.__get_mp()); }
   const val_type & get_val() const { return expr.val; }
   unsigned long int get_prec() const { return expr.val.get_prec(); }
@@ -2336,7 +2313,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2404,7 +2381,7 @@ public:
     Op::eval(p, expr.val1.__get_mp(), temp.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp(expr.val2, prec);
     Op::eval(p, expr.val1.__get_mp(), temp.__get_mp());
@@ -2413,7 +2390,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2437,7 +2414,7 @@ public:
     Op::eval(p, temp.__get_mp(), expr.val2.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp(expr.val1, prec);
     Op::eval(p, temp.__get_mp(), expr.val2.__get_mp());
@@ -2446,7 +2423,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2470,7 +2447,7 @@ public:
     Op::eval(p, expr.val1.__get_mp(), temp.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp(expr.val2, prec);
     Op::eval(p, expr.val1.__get_mp(), temp.__get_mp());
@@ -2479,7 +2456,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2503,7 +2480,7 @@ public:
     Op::eval(p, temp.__get_mp(), expr.val2.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp(expr.val1, prec);
     Op::eval(p, temp.__get_mp(), expr.val2.__get_mp());
@@ -2512,7 +2489,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2538,7 +2515,7 @@ public:
     Op::eval(p, temp.__get_mp(), expr.val2);
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp(expr.val1, prec);
     Op::eval(p, temp.__get_mp(), expr.val2);
@@ -2565,7 +2542,7 @@ public:
     Op::eval(p, expr.val1, temp.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp(expr.val2, prec);
     Op::eval(p, expr.val1, temp.__get_mp());
@@ -2596,7 +2573,7 @@ public:
     Op::eval(p, temp1.__get_mp(), temp2.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp1(expr.val1, prec), temp2(expr.val2, prec);
     Op::eval(p, temp1.__get_mp(), temp2.__get_mp());
@@ -2605,7 +2582,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2629,7 +2606,7 @@ public:
     Op::eval(p, temp1.__get_mp(), temp2.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp1(expr.val1, prec), temp2(expr.val2, prec);
     Op::eval(p, temp1.__get_mp(), temp2.__get_mp());
@@ -2638,7 +2615,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2662,7 +2639,7 @@ public:
     Op::eval(p, temp1.__get_mp(), temp2.__get_mp());
   }
   void eval(typename __gmp_resolve_expr<T>::ptr_type p,
-	    unsigned long int prec) const
+	    mp_bitcnt_t prec) const
   {
     __gmp_expr<T, T> temp1(expr.val1, prec), temp2(expr.val2, prec);
     Op::eval(p, temp1.__get_mp(), temp2.__get_mp());
@@ -2671,7 +2648,7 @@ public:
   const val2_type & get_val2() const { return expr.val2; }
   unsigned long int get_prec() const
   {
-    unsigned long int prec1 = expr.val1.get_prec(),
+    mp_bitcnt_t prec1 = expr.val1.get_prec(),
       prec2 = expr.val2.get_prec();
     return (prec1 > prec2) ? prec1 : prec2;
   }
@@ -2862,417 +2839,6 @@ __GMPZQ_DEFINE_EXPR(__gmp_binary_plus)
 __GMPZQ_DEFINE_EXPR(__gmp_binary_minus)
 
 
-/* Integer ternary expressions of the kind `a+b*c' or `a*b+c' can be
-   evaluated directly via mpz_addmul */
-
-// a + b * c
-#define __GMP_DEFINE_TERNARY_EXPR(eval_fun1, eval_fun2, eval_both)          \
-                                                                            \
-template <>                                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<mpz_class, mpz_class, eval_fun1> >, eval_fun2> >  \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr                                                        \
-    <mpz_t, __gmp_binary_expr<mpz_class, mpz_class, eval_fun1> > val2_type; \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  { eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), expr.val2.get_val1().get_mpz_t(),          \
-       expr.val2.get_val2().get_mpz_t()); }                                 \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T>                                                          \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<mpz_class, T, eval_fun1> >, eval_fun2> >          \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr                                                        \
-    <mpz_t, __gmp_binary_expr<mpz_class, T, eval_fun1> > val2_type;         \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  { eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), expr.val2.get_val1().get_mpz_t(),          \
-       expr.val2.get_val2()); }                                             \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T>                                                          \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<T, mpz_class, eval_fun1> >, eval_fun2> >          \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr                                                        \
-    <mpz_t, __gmp_binary_expr<T, mpz_class, eval_fun1> > val2_type;         \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  { eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), expr.val2.get_val1(),                      \
-       expr.val2.get_val2().get_mpz_t()); }                                 \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T>                                                          \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr<mpz_t, T>, eval_fun1> >,    \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <mpz_class, __gmp_expr<mpz_t, T>, eval_fun1> > val2_type;               \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val2.get_val2());                                   \
-    eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), expr.val2.get_val1().get_mpz_t(),          \
-       temp.get_mpz_t());                                                   \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T>                                                          \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>, mpz_class, eval_fun1> >,    \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <__gmp_expr<mpz_t, T>, mpz_class, eval_fun1> > val2_type;               \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val2.get_val1());                                   \
-    eval_both::eval(z, expr.val1.get_mpz_t(), temp.get_mpz_t(),             \
-		    expr.val2.get_val2().get_mpz_t());                      \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>, U, eval_fun1> >,            \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <__gmp_expr<mpz_t, T>, U, eval_fun1> > val2_type;                       \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val2.get_val1());                                   \
-    eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), temp.get_mpz_t(), expr.val2.get_val2());   \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<T, __gmp_expr<mpz_t, U>, eval_fun1> >,            \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <T, __gmp_expr<mpz_t, U>, eval_fun1> > val2_type;                       \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val2.get_val2());                                   \
-    eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), expr.val2.get_val1(), temp.get_mpz_t());   \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr             \
-<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>, __gmp_expr<mpz_t, U>,       \
-  eval_fun1> >, eval_fun2> >                                                \
-{                                                                           \
-private:                                                                    \
-  typedef mpz_class val1_type;                                              \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <__gmp_expr<mpz_t, T>, __gmp_expr<mpz_t, U>, eval_fun1> > val2_type;    \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp1(expr.val2.get_val1());                                  \
-    mpz_class temp2(expr.val2.get_val2());                                  \
-    eval_both::eval                                                         \
-      (z, expr.val1.get_mpz_t(), temp1.get_mpz_t(), temp2.get_mpz_t());     \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T>                                                          \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, mpz_class, eval_fun1> >,   \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr                                                        \
-    <mpz_t, __gmp_binary_expr<mpz_class, mpz_class, eval_fun1> > val2_type; \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val1);                                              \
-    eval_both::eval(z, temp.get_mpz_t(), expr.val2.get_val1().get_mpz_t(),  \
-		    expr.val2.get_val2().get_mpz_t());                      \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, U, eval_fun1> >,           \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr                                                        \
-    <mpz_t, __gmp_binary_expr<mpz_class, U, eval_fun1> > val2_type;         \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val1);                                              \
-    eval_both::eval(z, temp.get_mpz_t(), expr.val2.get_val1().get_mpz_t(),  \
-		    expr.val2.get_val2());                                  \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<U, mpz_class, eval_fun1> >,           \
-  eval_fun2> >                                                              \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr                                                        \
-    <mpz_t, __gmp_binary_expr<U, mpz_class, eval_fun1> > val2_type;         \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp(expr.val1);                                              \
-    eval_both::eval(z, temp.get_mpz_t(), expr.val2.get_val1(),              \
-		    expr.val2.get_val2().get_mpz_t());                      \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<mpz_class, __gmp_expr<mpz_t, U>,      \
-  eval_fun1> >, eval_fun2> >                                                \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <mpz_class, __gmp_expr<mpz_t, U>, eval_fun1> > val2_type;               \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp1(expr.val1);                                             \
-    mpz_class temp2(expr.val2.get_val2());                                  \
-    eval_both::eval                                                         \
-      (z, temp1.get_mpz_t(), expr.val2.get_val1().get_mpz_t(),              \
-       temp2.get_mpz_t());                                                  \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U>                                                 \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, U>, mpz_class,      \
-  eval_fun1> >, eval_fun2> >                                                \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <__gmp_expr<mpz_t, U>, mpz_class, eval_fun1> > val2_type;               \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp1(expr.val1);                                             \
-    mpz_class temp2(expr.val2.get_val1());                                  \
-    eval_both::eval(z, temp1.get_mpz_t(), temp2.get_mpz_t(),                \
-		    expr.val2.get_val2().get_mpz_t());                      \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U, class V>                                        \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, U>, V,              \
-  eval_fun1> >, eval_fun2> >                                                \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-  <__gmp_expr<mpz_t, U>, V, eval_fun1> > val2_type;                         \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp1(expr.val1);                                             \
-    mpz_class temp2(expr.val2.get_val1());                                  \
-    eval_both::eval                                                         \
-      (z, temp1.get_mpz_t(), temp2.get_mpz_t(), expr.val2.get_val2());      \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U, class V>                                        \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<U, __gmp_expr<mpz_t, V>,              \
-  eval_fun1> >, eval_fun2> >                                                \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-    <U, __gmp_expr<mpz_t, V>, eval_fun1> > val2_type;                       \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp1(expr.val1);                                             \
-    mpz_class temp2(expr.val2.get_val2());                                  \
-    eval_both::eval                                                         \
-      (z, temp1.get_mpz_t(), expr.val2.get_val1(), temp2.get_mpz_t());      \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};                                                                          \
-                                                                            \
-template <class T, class U, class V>                                        \
-class __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, T>,             \
-  __gmp_expr<mpz_t, __gmp_binary_expr<__gmp_expr<mpz_t, U>,                 \
-  __gmp_expr<mpz_t, V>, eval_fun1> >, eval_fun2> >                          \
-{                                                                           \
-private:                                                                    \
-  typedef __gmp_expr<mpz_t, T> val1_type;                                   \
-  typedef __gmp_expr<mpz_t, __gmp_binary_expr                               \
-  <__gmp_expr<mpz_t, U>, __gmp_expr<mpz_t, V>, eval_fun1> > val2_type;      \
-                                                                            \
-  __gmp_binary_expr<val1_type, val2_type, eval_fun2> expr;                  \
-public:                                                                     \
-  __gmp_expr(const val1_type &val1, const val2_type &val2)                  \
-    : expr(val1, val2) { }                                                  \
-  void eval(mpz_ptr z) const                                                \
-  {                                                                         \
-    mpz_class temp1(expr.val1);                                             \
-    mpz_class temp2(expr.val2.get_val1());                                  \
-    mpz_class temp3(expr.val2.get_val2());                                  \
-    eval_both::eval                                                         \
-      (z, temp1.get_mpz_t(), temp2.get_mpz_t(), temp3.get_mpz_t());         \
-  }                                                                         \
-  const val1_type & get_val1() const { return expr.val1; }                  \
-  const val2_type & get_val2() const { return expr.val2; }                  \
-  unsigned long int get_prec() const { return mpf_get_default_prec(); }     \
-};
-
-
-__GMP_DEFINE_TERNARY_EXPR(__gmp_binary_multiplies, __gmp_binary_plus,
-			  __gmp_ternary_addmul)
-__GMP_DEFINE_TERNARY_EXPR(__gmp_binary_multiplies, __gmp_binary_minus,
-			  __gmp_ternary_submul)
 
 /**************** Macros for defining functions ****************/
 /* Results of operators and functions are instances of __gmp_expr<T, U>.
@@ -3505,9 +3071,6 @@ __GMPN_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun)
 #define __GMPZ_DEFINE_COMPOUND_OPERATOR(fun, eval_fun) \
 __GMP_DEFINE_COMPOUND_OPERATOR(mpz, fun, eval_fun)
 
-#define __GMPZZ_DEFINE_COMPOUND_OPERATOR(fun, eval_fun) \
-__GMPP_DEFINE_COMPOUND_OPERATOR(mpz, fun, eval_fun)
-
 #define __GMPQ_DEFINE_COMPOUND_OPERATOR(fun, eval_fun) \
 __GMP_DEFINE_COMPOUND_OPERATOR(mpq, fun, eval_fun)
 
@@ -3608,9 +3171,9 @@ __GMPZ_DEFINE_COMPOUND_OPERATOR(operator*=, __gmp_binary_multiplies)
 __GMPZ_DEFINE_COMPOUND_OPERATOR(operator/=, __gmp_binary_divides)
 __GMPZ_DEFINE_COMPOUND_OPERATOR(operator%=, __gmp_binary_modulus)
 
-__GMPZZ_DEFINE_COMPOUND_OPERATOR(operator&=, __gmp_binary_and)
-__GMPZZ_DEFINE_COMPOUND_OPERATOR(operator|=, __gmp_binary_ior)
-__GMPZZ_DEFINE_COMPOUND_OPERATOR(operator^=, __gmp_binary_xor)
+__GMPZ_DEFINE_COMPOUND_OPERATOR(operator&=, __gmp_binary_and)
+__GMPZ_DEFINE_COMPOUND_OPERATOR(operator|=, __gmp_binary_ior)
+__GMPZ_DEFINE_COMPOUND_OPERATOR(operator^=, __gmp_binary_xor)
 
 __GMPZ_DEFINE_COMPOUND_OPERATOR_UI(operator<<=, __gmp_binary_lshift)
 __GMPZ_DEFINE_COMPOUND_OPERATOR_UI(operator>>=, __gmp_binary_rshift)
@@ -3684,7 +3247,7 @@ private:
   unsigned long int bits;
 public:
   __gmp_expr(gmp_randstate_t s, unsigned long int l) : state(s), bits(l) { }
-  void eval(mpf_ptr f, unsigned long int prec) const
+  void eval(mpf_ptr f, mp_bitcnt_t prec) const
   { __gmp_rand_function::eval(f, state, (bits>0) ? get_prec() : prec); }
   unsigned long int get_prec() const
   {
@@ -3754,7 +3317,7 @@ public:
   __gmp_expr<mpz_t, __gmp_urandomm_value> get_z_range(const mpz_class &z)
   { return __gmp_expr<mpz_t, __gmp_urandomm_value>(state, z); }
 
-  __gmp_expr<mpf_t, __gmp_urandomb_value> get_f(unsigned long int prec = 0)
+  __gmp_expr<mpf_t, __gmp_urandomb_value> get_f(mp_bitcnt_t prec = 0)
   { return __gmp_expr<mpf_t, __gmp_urandomb_value>(state, prec); }
 };
 
@@ -3768,7 +3331,6 @@ public:
 #undef __GMP_DECLARE_INCREMENT_OPERATOR
 
 #undef __GMPZQ_DEFINE_EXPR
-#undef __GMP_DEFINE_TERNARY_EXPR
 
 #undef __GMP_DEFINE_UNARY_FUNCTION
 #undef __GMP_DEFINE_UNARY_TYPE_FUNCTION
@@ -3793,15 +3355,7 @@ public:
 #undef __GMPN_DEFINE_BINARY_TYPE_FUNCTION
 #undef __GMP_DEFINE_BINARY_TYPE_FUNCTION
 
-#undef __GMPP_DECLARE_COMPOUND_OPERATOR
-#undef __GMPN_DECLARE_COMPOUND_OPERATOR
-#undef __GMP_DECLARE_COMPOUND_OPERATOR
-
-#undef __GMP_DECLARE_COMPOUND_OPERATOR_UI
-#undef __GMP_DECLARE_INCREMENT_OPERATOR
-
 #undef __GMPZ_DEFINE_COMPOUND_OPERATOR
-#undef __GMPZZ_DEFINE_COMPOUND_OPERATOR
 #undef __GMPZN_DEFINE_COMPOUND_OPERATOR
 #undef __GMPZNN_DEFINE_COMPOUND_OPERATOR
 #undef __GMPZNS_DEFINE_COMPOUND_OPERATOR
@@ -3818,8 +3372,6 @@ public:
 #undef __GMPN_DEFINE_COMPOUND_OPERATOR
 #undef __GMP_DEFINE_COMPOUND_OPERATOR
 
-#undef __GMPZ_DEFINE_COMPOUND_OPERATOR
-#undef __GMPZZ_DEFINE_COMPOUND_OPERATOR
 #undef __GMPQ_DEFINE_COMPOUND_OPERATOR
 #undef __GMPF_DEFINE_COMPOUND_OPERATOR
 

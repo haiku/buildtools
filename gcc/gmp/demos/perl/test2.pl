@@ -6,7 +6,7 @@
 #
 # The GNU MP Library is free software; you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published
-# by the Free Software Foundation; either version 2.1 of the License, or (at
+# by the Free Software Foundation; either version 3 of the License, or (at
 # your option) any later version.
 #
 # The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@
 # License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-# MA 02110-1301, USA.
+# along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 # The following uses of :constants seem to provoke segvs in perl 5.005_03,
@@ -30,14 +28,14 @@ use GMP::Mpz qw(:constants);
   ok (UNIVERSAL::isa ($a, "GMP::Mpz"));
 }
 use GMP::Mpz qw(:noconstants);
-  
+
 use GMP::Mpq qw(:constants);
 {
   my $a = 123;
   ok (UNIVERSAL::isa ($a, "GMP::Mpq"));
 }
 use GMP::Mpq qw(:noconstants);
-  
+
 use GMP::Mpf qw(:constants);
 {
   my $a = 123;

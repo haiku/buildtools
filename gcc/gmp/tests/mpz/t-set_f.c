@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +28,7 @@ void
 check_one (mpz_srcptr z)
 {
   static const int shift[] = {
-    0, 1, BITS_PER_MP_LIMB, 2*BITS_PER_MP_LIMB, 5*BITS_PER_MP_LIMB
+    0, 1, GMP_LIMB_BITS, 2*GMP_LIMB_BITS, 5*GMP_LIMB_BITS
   };
 
   int    sh, shneg, neg;
@@ -44,44 +42,44 @@ check_one (mpz_srcptr z)
   for (sh = 0; sh < numberof(shift); sh++)
     {
       for (shneg = 0; shneg <= 1; shneg++)
-        {
-          for (neg = 0; neg <= 1; neg++)
-            {
-              mpf_set_z (f, z);
-              mpz_set (want, z);
-            
-              if (neg)
-                {
-                  mpf_neg (f, f);
-                  mpz_neg (want, want);
-                }
+	{
+	  for (neg = 0; neg <= 1; neg++)
+	    {
+	      mpf_set_z (f, z);
+	      mpz_set (want, z);
 
-              if (shneg)
-                {
-                  mpz_tdiv_q_2exp (want, want, shift[sh]);
-                  mpf_div_2exp (f, f, shift[sh]);
-                }
-              else
-                {
-                  mpz_mul_2exp (want, want, shift[sh]);
-                  mpf_mul_2exp (f, f, shift[sh]);
-                }
+	      if (neg)
+		{
+		  mpf_neg (f, f);
+		  mpz_neg (want, want);
+		}
 
-              mpz_set_f (got, f);
-              MPZ_CHECK_FORMAT (got);
+	      if (shneg)
+		{
+		  mpz_tdiv_q_2exp (want, want, shift[sh]);
+		  mpf_div_2exp (f, f, shift[sh]);
+		}
+	      else
+		{
+		  mpz_mul_2exp (want, want, shift[sh]);
+		  mpf_mul_2exp (f, f, shift[sh]);
+		}
 
-              if (mpz_cmp (got, want) != 0)
-                {
-                  printf ("wrong result\n");
-                  printf ("  shift  %d\n", shneg ? -shift[sh] : shift[sh]);
-                  printf ("  neg    %d\n", neg);
-                  mpf_trace ("     f", f);
-                  mpz_trace ("   got", got);
-                  mpz_trace ("  want", want);
-                  abort ();
-                }
-            }
-        }
+	      mpz_set_f (got, f);
+	      MPZ_CHECK_FORMAT (got);
+
+	      if (mpz_cmp (got, want) != 0)
+		{
+		  printf ("wrong result\n");
+		  printf ("  shift  %d\n", shneg ? -shift[sh] : shift[sh]);
+		  printf ("  neg    %d\n", neg);
+		  mpf_trace ("     f", f);
+		  mpz_trace ("   got", got);
+		  mpz_trace ("  want", want);
+		  abort ();
+		}
+	    }
+	}
     }
 
   mpf_clear (f);
@@ -103,10 +101,10 @@ check_various (void)
   mpz_set_si (z, 123L);
   check_one (z);
 
-  mpz_rrandomb (z, RANDS, 2*BITS_PER_MP_LIMB);
+  mpz_rrandomb (z, RANDS, 2*GMP_LIMB_BITS);
   check_one (z);
 
-  mpz_rrandomb (z, RANDS, 5*BITS_PER_MP_LIMB);
+  mpz_rrandomb (z, RANDS, 5*GMP_LIMB_BITS);
   check_one (z);
 
   mpz_clear (z);

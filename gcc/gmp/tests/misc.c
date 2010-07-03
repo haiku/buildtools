@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -125,7 +123,7 @@ tests_rand_end (void)
 
 
 /* Only used if CPU calling conventions checking is available. */
-mp_limb_t (*calling_conventions_function) _PROTO ((ANYARGS));
+mp_limb_t (*calling_conventions_function) __GMP_PROTO ((ANYARGS));
 
 
 /* Return p advanced to the next multiple of "align" bytes.  "align" must be
@@ -134,8 +132,8 @@ mp_limb_t (*calling_conventions_function) _PROTO ((ANYARGS));
 void *
 align_pointer (void *p, size_t align)
 {
-  unsigned long  d;
-  d = ((unsigned long) p) & (align-1);
+  gmp_intptr_t d;
+  d = ((gmp_intptr_t) p) & (align-1);
   d = (d != 0 ? align-d : 0);
   return (void *) (((char *) p) + d);
 }
@@ -372,11 +370,11 @@ urandom (void)
 {
 #if GMP_NAIL_BITS == 0
   mp_limb_t  n;
-  _gmp_rand (&n, RANDS, BITS_PER_MP_LIMB);
+  _gmp_rand (&n, RANDS, GMP_LIMB_BITS);
   return n;
 #else
   mp_limb_t n[2];
-  _gmp_rand (n, RANDS, BITS_PER_MP_LIMB);
+  _gmp_rand (n, RANDS, GMP_LIMB_BITS);
   return n[0] + (n[1] << GMP_NUMB_BITS);
 #endif
 }
@@ -565,4 +563,3 @@ tests_sigfpe_done (void)
 {
   signal (SIGFPE, SIG_DFL);
 }
-

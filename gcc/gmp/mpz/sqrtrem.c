@@ -8,7 +8,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -17,9 +17,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h> /* for NULL */
 #include "gmp.h"
@@ -81,7 +79,7 @@ msqrt (mpz_srcptr op, mpz_ptr root, mpz_ptr rem)
       if (root_ptr == op_ptr)
 	{
 	  /* ROOT and OP are identical.  Allocate temporary space for OP.  */
-	  op_ptr = (mp_ptr) TMP_ALLOC (op_size * BYTES_PER_MP_LIMB);
+	  op_ptr = TMP_ALLOC_LIMBS (op_size);
 	  /* Copy to the temporary space.  Hack: Avoid temporary variable
 	     by using ROOT_PTR.  */
 	  MPN_COPY (op_ptr, root_ptr, op_size);

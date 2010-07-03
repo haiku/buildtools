@@ -1,24 +1,24 @@
 /* mpfr_const_pi -- compute Pi
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
@@ -28,16 +28,16 @@ MPFR_DECL_INIT_CACHE(__gmpfr_cache_const_pi, mpfr_const_pi_internal);
 /* Set User Interface */
 #undef mpfr_const_pi
 int
-mpfr_const_pi (mpfr_ptr x, mp_rnd_t rnd_mode) {
+mpfr_const_pi (mpfr_ptr x, mpfr_rnd_t rnd_mode) {
   return mpfr_cache (x, __gmpfr_cache_const_pi, rnd_mode);
 }
 
 /* Don't need to save/restore exponent range: the cache does it */
 int
-mpfr_const_pi_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
+mpfr_const_pi_internal (mpfr_ptr x, mpfr_rnd_t rnd_mode)
 {
   mpfr_t a, A, B, D, S;
-  mp_prec_t px, p, cancel, k, kmax;
+  mpfr_prec_t px, p, cancel, k, kmax;
   MPFR_ZIV_DECL (loop);
   int inex;
 
@@ -58,10 +58,10 @@ mpfr_const_pi_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
 
   MPFR_ZIV_INIT (loop, p);
   for (;;) {
-    mpfr_set_ui (a, 1, GMP_RNDN);          /* a = 1 */
-    mpfr_set_ui (A, 1, GMP_RNDN);          /* A = a^2 = 1 */
-    mpfr_set_ui_2exp (B, 1, -1, GMP_RNDN); /* B = b^2 = 1/2 */
-    mpfr_set_ui_2exp (D, 1, -2, GMP_RNDN); /* D = 1/4 */
+    mpfr_set_ui (a, 1, MPFR_RNDN);          /* a = 1 */
+    mpfr_set_ui (A, 1, MPFR_RNDN);          /* A = a^2 = 1 */
+    mpfr_set_ui_2exp (B, 1, -1, MPFR_RNDN); /* B = b^2 = 1/2 */
+    mpfr_set_ui_2exp (D, 1, -2, MPFR_RNDN); /* D = 1/4 */
 
 #define b B
 #define ap a
@@ -70,20 +70,20 @@ mpfr_const_pi_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
     for (k = 0, cancel = 0; ; k++)
       {
         /* invariant: 1/2 <= B <= A <= a < 1 */
-        mpfr_add (S, A, B, GMP_RNDN); /* 1 <= S <= 2 */
-        mpfr_div_2ui (S, S, 2, GMP_RNDN); /* exact, 1/4 <= S <= 1/2 */
-        mpfr_sqrt (b, B, GMP_RNDN); /* 1/2 <= b <= 1 */
-        mpfr_add (ap, a, b, GMP_RNDN); /* 1 <= ap <= 2 */
-        mpfr_div_2ui (ap, ap, 1, GMP_RNDN); /* exact, 1/2 <= ap <= 1 */
-        mpfr_mul (Ap, ap, ap, GMP_RNDN); /* 1/4 <= Ap <= 1 */
-        mpfr_sub (Bp, Ap, S, GMP_RNDN); /* -1/4 <= Bp <= 3/4 */
-        mpfr_mul_2ui (Bp, Bp, 1, GMP_RNDN); /* -1/2 <= Bp <= 3/2 */
-        mpfr_sub (S, Ap, Bp, GMP_RNDN);
+        mpfr_add (S, A, B, MPFR_RNDN); /* 1 <= S <= 2 */
+        mpfr_div_2ui (S, S, 2, MPFR_RNDN); /* exact, 1/4 <= S <= 1/2 */
+        mpfr_sqrt (b, B, MPFR_RNDN); /* 1/2 <= b <= 1 */
+        mpfr_add (ap, a, b, MPFR_RNDN); /* 1 <= ap <= 2 */
+        mpfr_div_2ui (ap, ap, 1, MPFR_RNDN); /* exact, 1/2 <= ap <= 1 */
+        mpfr_mul (Ap, ap, ap, MPFR_RNDN); /* 1/4 <= Ap <= 1 */
+        mpfr_sub (Bp, Ap, S, MPFR_RNDN); /* -1/4 <= Bp <= 3/4 */
+        mpfr_mul_2ui (Bp, Bp, 1, MPFR_RNDN); /* -1/2 <= Bp <= 3/2 */
+        mpfr_sub (S, Ap, Bp, MPFR_RNDN);
         MPFR_ASSERTN (mpfr_cmp_ui (S, 1) < 0);
         cancel = mpfr_cmp_ui (S, 0) ? (mpfr_uexp_t) -mpfr_get_exp(S) : p;
         /* MPFR_ASSERTN (cancel >= px || cancel >= 9 * (1 << k) - 4); */
-        mpfr_mul_2ui (S, S, k, GMP_RNDN);
-        mpfr_sub (D, D, S, GMP_RNDN);
+        mpfr_mul_2ui (S, S, k, MPFR_RNDN);
+        mpfr_sub (D, D, S, MPFR_RNDN);
         /* stop when |A_k - B_k| <= 2^(k-p) i.e. cancel >= p-k */
         if (cancel + k >= p)
           break;
@@ -93,7 +93,7 @@ mpfr_const_pi_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
 #undef Ap
 #undef Bp
 
-      mpfr_div (A, B, D, GMP_RNDN);
+      mpfr_div (A, B, D, MPFR_RNDN);
 
       /* MPFR_ASSERTN(p >= 2 * k + 8); */
       if (MPFR_LIKELY (MPFR_CAN_ROUND (A, p - 2 * k - 8, px, rnd_mode)))

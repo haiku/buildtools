@@ -1,31 +1,31 @@
 /* Test file for in-place operations.
 
-Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "mpfr-test.h"
 
-#define DISP(s, t) {printf(s); mpfr_out_str(stdout, 10, 0, t, GMP_RNDN); }
+#define DISP(s, t) {printf(s); mpfr_out_str(stdout, 2, 0, t, MPFR_RNDN); }
 #define DISP2(s,t) {DISP(s,t); putchar('\n');}
 
 #define SPECIAL_MAX 12
@@ -68,14 +68,14 @@ set_special (mpfr_ptr x, unsigned int select)
       mpfr_set_str_binary (x, "1e+1");
       break;
     case 9:
-      mpfr_const_pi (x, GMP_RNDN);
+      mpfr_const_pi (x, MPFR_RNDN);
       break;
     case 10:
-      mpfr_const_pi (x, GMP_RNDN);
+      mpfr_const_pi (x, MPFR_RNDN);
       MPFR_SET_EXP (x, MPFR_GET_EXP (x)-1);
       break;
     default:
-      mpfr_random (x);
+      mpfr_urandomb (x, RANDS);
       break;
     }
 }
@@ -88,8 +88,8 @@ mpfr_compare (mpfr_srcptr a, mpfr_srcptr b)
 }
 
 static void
-test3 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mpfr_srcptr, mp_rnd_t),
-       char *foo, mp_prec_t prec, mp_rnd_t rnd)
+test3 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mpfr_srcptr, mpfr_rnd_t),
+       char *foo, mpfr_prec_t prec, mpfr_rnd_t rnd)
 {
   mpfr_t ref1, ref2, ref3;
   mpfr_t res1;
@@ -159,8 +159,8 @@ test3 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mpfr_srcptr, mp_rnd_t),
 
 static void
 test4 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mpfr_srcptr, mpfr_srcptr,
-                       mp_rnd_t),
-       char *foo, mp_prec_t prec, mp_rnd_t rnd)
+                       mpfr_rnd_t),
+       char *foo, mpfr_prec_t prec, mpfr_rnd_t rnd)
 {
   mpfr_t ref, op1, op2, op3;
   mpfr_t res;
@@ -287,8 +287,8 @@ test4 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mpfr_srcptr, mpfr_srcptr,
 }
 
 static void
-test2ui (int (*testfunc)(mpfr_ptr, mpfr_srcptr, unsigned long int, mp_rnd_t),
-         char *foo, mp_prec_t prec, mp_rnd_t rnd)
+test2ui (int (*testfunc)(mpfr_ptr, mpfr_srcptr, unsigned long int, mpfr_rnd_t),
+         char *foo, mpfr_prec_t prec, mpfr_rnd_t rnd)
 {
   mpfr_t ref1, ref2;
   unsigned int ref3;
@@ -332,8 +332,8 @@ test2ui (int (*testfunc)(mpfr_ptr, mpfr_srcptr, unsigned long int, mp_rnd_t),
 }
 
 static void
-testui2 (int (*testfunc)(mpfr_ptr, unsigned long int, mpfr_srcptr, mp_rnd_t),
-         char *foo, mp_prec_t prec, mp_rnd_t rnd)
+testui2 (int (*testfunc)(mpfr_ptr, unsigned long int, mpfr_srcptr, mpfr_rnd_t),
+         char *foo, mpfr_prec_t prec, mpfr_rnd_t rnd)
 {
   mpfr_t ref1, ref3;
   unsigned int ref2;
@@ -373,8 +373,8 @@ testui2 (int (*testfunc)(mpfr_ptr, unsigned long int, mpfr_srcptr, mp_rnd_t),
 
 /* foo(mpfr_ptr, mpfr_srcptr, mp_rndt) */
 static void
-test2 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mp_rnd_t),
-       char *foo, mp_prec_t prec, mp_rnd_t rnd)
+test2 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mpfr_rnd_t),
+       char *foo, mpfr_prec_t prec, mpfr_rnd_t rnd)
 {
   mpfr_t ref1, ref2;
   mpfr_t res1;
@@ -414,7 +414,7 @@ test2 (int (*testfunc)(mpfr_ptr, mpfr_srcptr, mp_rnd_t),
 /* foo(mpfr_ptr, mpfr_srcptr) */
 static void
 test2a (int (*testfunc)(mpfr_ptr, mpfr_srcptr),
-        char *foo, mp_prec_t prec)
+        char *foo, mpfr_prec_t prec)
 {
   mpfr_t ref1, ref2;
   mpfr_t res1;
@@ -435,7 +435,7 @@ test2a (int (*testfunc)(mpfr_ptr, mpfr_srcptr),
       testfunc (ref1, ref2);
 
       /* foo(a, a) */
-      mpfr_set (res1, ref2, GMP_RNDN); /* exact operation */
+      mpfr_set (res1, ref2, MPFR_RNDN); /* exact operation */
       testfunc (res1, res1);
       if (mpfr_compare (res1, ref1))
         {
@@ -451,11 +451,10 @@ test2a (int (*testfunc)(mpfr_ptr, mpfr_srcptr),
   mpfr_clear (res1);
 }
 
-#if 0
-
 /* one operand, two results */
 static void
-test3a (char *foo, mp_prec_t prec, mp_rnd_t rnd)
+test3a (int (*testfunc)(mpfr_ptr, mpfr_ptr, mpfr_srcptr, mpfr_rnd_t),
+        char *foo, mpfr_prec_t prec, mpfr_rnd_t rnd)
 {
   mpfr_t ref1, ref2, ref3;
   mpfr_t res1, res2;
@@ -482,7 +481,8 @@ test3a (char *foo, mp_prec_t prec, mp_rnd_t rnd)
       testfunc (res1, res2, res1, rnd);
       if (mpfr_compare (res1, ref1) || mpfr_compare (res2, ref2))
         {
-          printf ("Error for %s(a, b, a) for ", foo);
+          printf ("Error for %s(a, b, a) for rnd=%s, ", foo,
+                  mpfr_print_rnd_mode (rnd));
           DISP2("a=",ref3);
           DISP("expected (", ref1); DISP(",",ref2);
           DISP("), got (", res1); DISP(",", res2); printf(")\n");
@@ -509,10 +509,8 @@ test3a (char *foo, mp_prec_t prec, mp_rnd_t rnd)
   mpfr_clear (res2);
 }
 
-#endif
-
 static int
-reldiff_wrapper (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
+reldiff_wrapper (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode)
 {
   mpfr_reldiff (a, b, c, rnd_mode);
   return 0;
@@ -521,90 +519,113 @@ reldiff_wrapper (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 int
 main (void)
 {
-  mp_rnd_t rnd;
-  mp_prec_t p;
-  MPFR_TEST_USE_RANDS ();
+  int rnd;
+  mpfr_prec_t p;
   tests_start_mpfr ();
 
   p = (randlimb () % 200)+ MPFR_PREC_MIN;
   RND_LOOP (rnd)
-    {
-      test3 (mpfr_add, "mpfr_add", p, rnd);
-      test3 (mpfr_sub, "mpfr_sub", p, rnd);
-      test3 (mpfr_mul, "mpfr_mul", p, rnd);
-      test3 (mpfr_div, "mpfr_div", p, rnd);
+  {
+    test2a (mpfr_round, "mpfr_round", p);
+    test2a (mpfr_ceil, "mpfr_ceil", p);
+    test2a (mpfr_floor, "mpfr_floor", p);
+    test2a (mpfr_trunc, "mpfr_trunc", p);
 
-      test3 (mpfr_agm, "mpfr_agm", p, rnd);
-      test3 (mpfr_min, "mpfr_min", p, rnd);
-      test3 (mpfr_max, "mpfr_max", p, rnd);
-      test3 (reldiff_wrapper, "mpfr_reldiff", p, rnd);
+    test2ui (mpfr_add_ui, "mpfr_add_ui", p, (mpfr_rnd_t) rnd);
+    test2ui (mpfr_div_2exp, "mpfr_div_2exp", p, (mpfr_rnd_t) rnd);
+    test2ui (mpfr_div_ui, "mpfr_div_ui", p, (mpfr_rnd_t) rnd);
+    test2ui (mpfr_mul_2exp, "mpfr_mul_2exp", p, (mpfr_rnd_t) rnd);
+    test2ui (mpfr_mul_ui, "mpfr_mul_ui", p, (mpfr_rnd_t) rnd);
+    test2ui (mpfr_pow_ui, "mpfr_pow_ui", p, (mpfr_rnd_t) rnd);
+    test2ui (mpfr_sub_ui, "mpfr_sub_ui", p, (mpfr_rnd_t) rnd);
 
-      test2a (mpfr_round, "mpfr_round", p);
-      test2a (mpfr_ceil, "mpfr_ceil", p);
-      test2a (mpfr_floor, "mpfr_floor", p);
-      test2a (mpfr_trunc, "mpfr_trunc", p);
+    testui2 (mpfr_ui_div, "mpfr_ui_div", p, (mpfr_rnd_t) rnd);
+    testui2 (mpfr_ui_sub, "mpfr_ui_sub", p, (mpfr_rnd_t) rnd);
+    testui2 (mpfr_ui_pow, "mpfr_ui_pow", p, (mpfr_rnd_t) rnd);
 
-      test2ui (mpfr_add_ui, "mpfr_add_ui", p, rnd);
-      test2ui (mpfr_mul_2exp, "mpfr_mul_2exp", p, rnd);
-      test2ui (mpfr_mul_ui, "mpfr_mul_ui", p, rnd);
-      test2ui (mpfr_pow_ui, "mpfr_pow_ui", p, rnd);
-      test2ui (mpfr_sub_ui, "mpfr_sub_ui", p, rnd);
-      test2ui (mpfr_div_2exp, "mpfr_div_2exp", p, rnd);
-      test2ui (mpfr_div_ui, "mpfr_div_ui", p, rnd);
+    test2 (mpfr_sqr, "mpfr_sqr", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_sqrt, "mpfr_sqrt", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_abs, "mpfr_abs", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_neg, "mpfr_neg", p, (mpfr_rnd_t) rnd);
 
-      testui2 (mpfr_ui_div, "mpfr_ui_div", p, rnd);
-      testui2 (mpfr_ui_sub, "mpfr_ui_sub", p, rnd);
-      testui2 (mpfr_ui_pow, "mpfr_ui_pow", p, rnd);
+    test2 (mpfr_log, "mpfr_log", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_log2, "mpfr_log2", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_log10, "mpfr_log10", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_log1p, "mpfr_log1p", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_sqr, "mpfr_sqr", p, rnd);
-      test2 (mpfr_sqrt, "mpfr_sqrt", p, rnd);
-      test2 (mpfr_abs, "mpfr_abs", p, rnd);
-      test2 (mpfr_neg, "mpfr_neg", p, rnd);
+    test2 (mpfr_exp, "mpfr_exp", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_exp2, "mpfr_exp2", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_exp10, "mpfr_exp10", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_expm1, "mpfr_expm1", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_eint, "mpfr_eint", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_log, "mpfr_log", p, rnd);
-      test2 (mpfr_log2, "mpfr_log2", p, rnd);
-      test2 (mpfr_log10, "mpfr_log10", p, rnd);
-      test2 (mpfr_log1p, "mpfr_log1p", p, rnd);
+    test2 (mpfr_sinh, "mpfr_sinh", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_cosh, "mpfr_cosh", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_tanh, "mpfr_tanh", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_asinh, "mpfr_asinh", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_acosh, "mpfr_acosh", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_atanh, "mpfr_atanh", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_sech, "mpfr_sech", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_csch, "mpfr_csch", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_coth, "mpfr_coth", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_exp, "mpfr_exp", p, rnd);
-      test2 (mpfr_exp2, "mpfr_exp2", p, rnd);
-      test2 (mpfr_exp10, "mpfr_exp10", p, rnd);
-      test2 (mpfr_expm1, "mpfr_expm1", p, rnd);
-      test2 (mpfr_eint, "mpfr_eint", p, rnd);
+    test2 (mpfr_asin, "mpfr_asin", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_acos, "mpfr_acos", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_atan, "mpfr_atan", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_cos, "mpfr_cos", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_sin, "mpfr_sin", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_tan, "mpfr_tan", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_sec, "mpfr_sec", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_csc, "mpfr_csc", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_cot, "mpfr_cot", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_sinh, "mpfr_sinh", p, rnd);
-      test2 (mpfr_cosh, "mpfr_cosh", p, rnd);
-      test2 (mpfr_tanh, "mpfr_tanh", p, rnd);
-      test2 (mpfr_asinh, "mpfr_asinh", p, rnd);
-      test2 (mpfr_acosh, "mpfr_acosh", p, rnd);
-      test2 (mpfr_atanh, "mpfr_atanh", p, rnd);
+    test2 (mpfr_erf,  "mpfr_erf",  p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_erfc, "mpfr_erfc", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_j0,   "mpfr_j0",   p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_j1,   "mpfr_j1",   p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_y0,   "mpfr_y0",   p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_y1,   "mpfr_y1",   p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_zeta, "mpfr_zeta", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_gamma, "mpfr_gamma", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_lngamma, "mpfr_lngamma", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_asin, "mpfr_asin", p, rnd);
-      test2 (mpfr_acos, "mpfr_acos", p, rnd);
-      test2 (mpfr_atan, "mpfr_atan", p, rnd);
-      test2 (mpfr_cos, "mpfr_cos", p, rnd);
-      test2 (mpfr_sin, "mpfr_sin", p, rnd);
-      test2 (mpfr_tan, "mpfr_tan", p, rnd);
+    test2 (mpfr_rint, "mpfr_rint", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_rint_ceil, "mpfr_rint_ceil", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_rint_floor, "mpfr_rint_floor", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_rint_round, "mpfr_rint_round", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_rint_trunc, "mpfr_rint_trunc", p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_frac, "mpfr_frac", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_sec, "mpfr_sec", p, rnd);
-      test2 (mpfr_csc, "mpfr_csc", p, rnd);
-      test2 (mpfr_cot, "mpfr_cot", p, rnd);
+    test3 (mpfr_add, "mpfr_add", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_sub, "mpfr_sub", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_mul, "mpfr_mul", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_div, "mpfr_div", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_erf,  "mpfr_erf",  p, rnd);
-      test2 (mpfr_erfc, "mpfr_erfc", p, rnd);
-      test2 (mpfr_j0,   "mpfr_j0",   p, rnd);
-      test2 (mpfr_j1,   "mpfr_j1",   p, rnd);
+    test3 (mpfr_agm, "mpfr_agm", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_min, "mpfr_min", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_max, "mpfr_max", p, (mpfr_rnd_t) rnd);
 
-      test2 (mpfr_zeta, "mpfr_zeta", p, rnd);
-      test2 (mpfr_gamma, "mpfr_gamma", p, rnd);
-      test2 (mpfr_rint, "mpfr_rint", p, rnd);
-      test2 (mpfr_frac, "mpfr_frac", p, rnd);
+    test3 (reldiff_wrapper, "mpfr_reldiff", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_dim, "mpfr_dim", p, (mpfr_rnd_t) rnd);
 
-      test3 (mpfr_pow, "mpfr_pow", p, rnd);
-      test3 (mpfr_atan2, "mpfr_atan2", p, rnd);
+    test3 (mpfr_remainder, "mpfr_remainder", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_pow, "mpfr_pow", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_atan2, "mpfr_atan2", p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_hypot, "mpfr_hypot", p, (mpfr_rnd_t) rnd);
 
-      test4 (mpfr_fma, "mpfr_fma", p, rnd);
-    }
+    test3a (mpfr_sin_cos, "mpfr_sin_cos", p, (mpfr_rnd_t) rnd);
+
+    test4 (mpfr_fma, "mpfr_fma", p, (mpfr_rnd_t) rnd);
+    test4 (mpfr_fms, "mpfr_fms", p, (mpfr_rnd_t) rnd);
+
+#if MPFR_VERSION >= MPFR_VERSION_NUM(2,4,0)
+    test2 (mpfr_li2, "mpfr_li2",  p, (mpfr_rnd_t) rnd);
+    test2 (mpfr_rec_sqrt, "mpfr_rec_sqrt",  p, (mpfr_rnd_t) rnd);
+    test3 (mpfr_fmod, "mpfr_fmod", p, (mpfr_rnd_t) rnd);
+    test3a (mpfr_modf, "mpfr_modf", p, (mpfr_rnd_t) rnd);
+    test3a (mpfr_sinh_cosh, "mpfr_sinh_cosh", p, (mpfr_rnd_t) rnd);
+#endif
+  }
 
   tests_end_mpfr ();
   return 0;

@@ -1,24 +1,24 @@
 /* Test file for mpfr_trunc, mpfr_ceil, mpfr_floor.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +35,7 @@ main (void)
 
   tests_start_mpfr ();
 
-  mpfr_inits2 (SIZEX, x, y, z, t, y2, z2, t2, (void *) 0);
+  mpfr_inits2 (SIZEX, x, y, z, t, y2, z2, t2, (mpfr_ptr) 0);
 
   mpfr_set_str1 (x, "0.5");
   mpfr_ceil(y, x);
@@ -47,7 +47,7 @@ main (void)
       exit (1);
     }
 
-  mpfr_set_ui (x, 0, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN);
   mpfr_ceil(y, x);
   if (mpfr_cmp_ui(y,0))
     {
@@ -57,7 +57,7 @@ main (void)
       exit (1);
     }
 
-  mpfr_set_ui (x, 1, GMP_RNDN);
+  mpfr_set_ui (x, 1, MPFR_RNDN);
   mpfr_ceil(y, x);
   if (mpfr_cmp_ui(y,1))
     {
@@ -69,7 +69,7 @@ main (void)
 
   for (j=0;j<1000;j++)
     {
-      mpfr_random (x);
+      mpfr_urandomb (x, RANDS);
       MPFR_EXP (x) = 2;
 
       for (k = 2; k <= SIZEX; k++)
@@ -82,13 +82,13 @@ main (void)
           mpfr_set_prec(t2, k);
 
           mpfr_floor(y, x);
-          mpfr_set(y2, x, GMP_RNDD);
+          mpfr_set(y2, x, MPFR_RNDD);
 
           mpfr_trunc(z, x);
-          mpfr_set(z2, x, GMP_RNDZ);
+          mpfr_set(z2, x, MPFR_RNDZ);
 
           mpfr_ceil(t, x);
-          mpfr_set(t2, x, GMP_RNDU);
+          mpfr_set(t2, x, MPFR_RNDU);
 
           if (!mpfr_eq(y, y2, k))
             {
@@ -98,7 +98,7 @@ main (void)
               printf("\n");
               printf("round(x, RNDD) = "); mpfr_print_binary(y2);
               printf("\n");
-              exit(-1);
+              exit(1);
             }
 
           if (!mpfr_eq(z, z2, k))
@@ -109,7 +109,7 @@ main (void)
               printf("\n");
               printf("round(x, RNDZ) = "); mpfr_print_binary(z2);
               printf("\n");
-              exit(-1);
+              exit(1);
             }
 
           if (!mpfr_eq(y, y2, k))
@@ -120,13 +120,13 @@ main (void)
               printf("\n");
               printf("round(x, RNDU) = "); mpfr_print_binary(t2);
               printf("\n");
-              exit(-1);
+              exit(1);
             }
           MPFR_EXP(x)++;
         }
     }
 
-  mpfr_clears (x, y, z, t, y2, z2, t2, (void *) 0);
+  mpfr_clears (x, y, z, t, y2, z2, t2, (mpfr_ptr) 0);
 
   tests_end_mpfr ();
   return 0;

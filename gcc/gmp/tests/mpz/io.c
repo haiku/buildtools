@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -64,7 +62,7 @@ main (int argc, char **argv)
   mpz_init (op1);
   mpz_init (op2);
 
-  fp = fopen (FILENAME, "w+"); 
+  fp = fopen (FILENAME, "w+");
 
   for (i = 0; i < reps; i++)
     {
@@ -85,33 +83,33 @@ main (int argc, char **argv)
       if (base == 1)
 	base = 0;
 
-      rewind (fp);  
+      rewind (fp);
       if (mpz_out_str (fp, base, op1) == 0
-          || putc (' ', fp) == EOF
-          || fflush (fp) != 0)
-        {
-          printf ("mpz_out_str write error\n");
-          abort ();
-        }
+	  || putc (' ', fp) == EOF
+	  || fflush (fp) != 0)
+	{
+	  printf ("mpz_out_str write error\n");
+	  abort ();
+	}
 
-      rewind (fp);  
+      rewind (fp);
       nread = mpz_inp_str (op2, fp, base);
       if (nread == 0)
-        {
-          if (ferror (fp))
-            printf ("mpz_inp_str stream read error\n");
-          else
-            printf ("mpz_inp_str data conversion error\n");
+	{
+	  if (ferror (fp))
+	    printf ("mpz_inp_str stream read error\n");
+	  else
+	    printf ("mpz_inp_str data conversion error\n");
 	  abort ();
 	}
 
       if (nread != ftell(fp))
-        {
-          printf ("mpz_inp_str nread doesn't match ftell\n");
-          printf ("  nread  %u\n", nread);
-          printf ("  ftell  %ld\n", ftell(fp));
-          abort ();
-        }
+	{
+	  printf ("mpz_inp_str nread doesn't match ftell\n");
+	  printf ("  nread  %lu\n", (unsigned long) nread);
+	  printf ("  ftell  %ld\n", ftell(fp));
+	  abort ();
+	}
 
       if (mpz_cmp (op1, op2))
 	{

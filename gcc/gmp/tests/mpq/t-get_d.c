@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +39,7 @@ MA 02110-1301, USA. */
 #define EPSIZE SIZE
 #endif
 
-void dump _PROTO ((mpq_t));
+void dump __GMP_PROTO ((mpq_t));
 
 void
 check_monotonic (int argc, char **argv)
@@ -138,7 +136,7 @@ my_ldexp (double d, int e)
 	}
       else if (e < 0)
 	{
-   
+
 	  if (e <= -16)
 	    {
 	      d /= 65536.0;
@@ -227,35 +225,35 @@ check_onebit (void)
 
       mpq_set_ui (q, 1L, 1L);
       if (exp >= 0)
-        mpq_mul_2exp (q, q, exp);
+	mpq_mul_2exp (q, q, exp);
       else
-        mpq_div_2exp (q, q, -exp);
+	mpq_div_2exp (q, q, -exp);
 
       want = 1.0;
       for (l = 0; l < exp; l++)
-        want *= 2.0;
+	want *= 2.0;
       for (l = 0; l > exp; l--)
-        want /= 2.0;
+	want /= 2.0;
 
       for (neg = 0; neg <= 1; neg++)
-        {
-          if (neg)
-            {
-              mpq_neg (q, q);
-              want = -want;
-            }
+	{
+	  if (neg)
+	    {
+	      mpq_neg (q, q);
+	      want = -want;
+	    }
 
-          got = mpq_get_d (q);
+	  got = mpq_get_d (q);
 
-          if (got != want)
-            {
-              printf    ("mpq_get_d wrong on %s2**%ld\n", neg ? "-" : "", exp);
-              mpq_trace ("   q    ", q);
-              d_trace   ("   want ", want);
-              d_trace   ("   got  ", got);
-              abort();
-            }
-        }
+	  if (got != want)
+	    {
+	      printf    ("mpq_get_d wrong on %s2**%ld\n", neg ? "-" : "", exp);
+	      mpq_trace ("   q    ", q);
+	      d_trace   ("   want ", want);
+	      d_trace   ("   got  ", got);
+	      abort();
+	    }
+	}
     }
   mpq_clear (q);
 }

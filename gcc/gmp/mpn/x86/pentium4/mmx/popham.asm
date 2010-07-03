@@ -1,13 +1,13 @@
 dnl  Intel Pentium 4 mpn_popcount, mpn_hamdist -- population count and
 dnl  hamming distance.
 
-dnl  Copyright 2000, 2001, 2002 Free Software Foundation, Inc.
+dnl  Copyright 2000, 2001, 2002, 2007 Free Software Foundation, Inc.
 dnl
 dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -15,17 +15,20 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
-C P4: popcount 8.5 cycles/limb
-C     hamdist  9.5 cycles/limb
-
+C			     popcount	     hamdist
+C P3 model 9  (Banias)		?		?
+C P3 model 13 (Dothan)		6		6
+C P4 model 0  (Willamette)
+C P4 model 1  (?)
+C P4 model 2  (Northwood)	8		9
+C P4 model 3  (Prescott)	8		9
+C P4 model 4  (Nocona)
 
 C unsigned long mpn_popcount (mp_srcptr src, mp_size_t size);
 C unsigned long mpn_hamdist (mp_srcptr src, mp_srcptr src2, mp_size_t size);
@@ -35,8 +38,8 @@ C Two movd's and a punpckldq seems to be the same speed as an aligned movq,
 C and using them saves fiddling about with alignment testing on entry.
 C
 C For popcount there's 13 mmx instructions in the loop, so perhaps 6.5 c/l
-C might be possible, but 8.5 c/l relying on out-of-order execution is
-C already quite reasonable.
+C might be possible, but 8 c/l relying on out-of-order execution is already
+C quite reasonable.
 
 ifdef(`OPERATION_popcount',,
 `ifdef(`OPERATION_hamdist',,

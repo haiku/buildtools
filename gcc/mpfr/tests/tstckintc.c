@@ -1,29 +1,26 @@
 /* Test file for mpfr_custom_*
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
-#include <string.h>
 
 #include "mpfr-test.h"
 
@@ -32,12 +29,12 @@ MA 02110-1301, USA. */
 
 long Buffer[BUFFER_SIZE];
 char *stack = (char *) Buffer;
-mp_prec_t p = PREC_TESTED;
+mpfr_prec_t p = PREC_TESTED;
 
 #define ALIGNED(s) (((s) + sizeof (long) - 1) / sizeof (long) * sizeof (long))
 
 static void *
-new (size_t s)
+new_st (size_t s)
 {
   void *p = (void *) stack;
   stack += ALIGNED (s);
@@ -51,10 +48,10 @@ new (size_t s)
 
  /* Alloc a new mpfr_t on the main stack */
 static mpfr_ptr
-new_mpfr (mp_prec_t p)
+new_mpfr (mpfr_prec_t p)
 {
-  mpfr_ptr x = (mpfr_ptr) new (sizeof (mpfr_t));
-  void *mantissa = new (mpfr_custom_get_size (p));
+  mpfr_ptr x = (mpfr_ptr) new_st (sizeof (mpfr_t));
+  void *mantissa = new_st (mpfr_custom_get_size (p));
   mpfr_custom_init (mantissa, p);
   mpfr_custom_init_set (x, 0, 0, p, mantissa);
   return x;
@@ -64,7 +61,7 @@ new_mpfr (mp_prec_t p)
 static mpfr_ptr
 return_mpfr (mpfr_ptr x, char *old_stack)
 {
-  void *mantissa       = mpfr_custom_get_mantissa (x);
+  void *mantissa       = mpfr_custom_get_significand (x);
   size_t size_mantissa = mpfr_custom_get_size (mpfr_get_prec (x));
   mpfr_ptr newx;
 
@@ -85,9 +82,9 @@ test1 (void)
   org = stack;
   x = new_mpfr (p);
   y = new_mpfr (p);
-  mpfr_set_ui (x, 42, GMP_RNDN);
-  mpfr_set_ui (y, 17, GMP_RNDN);
-  mpfr_add (y, x, y, GMP_RNDN);
+  mpfr_set_ui (x, 42, MPFR_RNDN);
+  mpfr_set_ui (y, 17, MPFR_RNDN);
+  mpfr_add (y, x, y, MPFR_RNDN);
   y = return_mpfr (y, org);
   if (y != x || mpfr_cmp_ui (y, 59) != 0)
     {
@@ -104,7 +101,8 @@ dummy_new (void)
 {
   long *r;
 
-  r = new (ALIGNED (2*sizeof (long)) + ALIGNED (mpfr_custom_get_size (p)));
+  r = (long *) new_st (ALIGNED (2 * sizeof (long)) +
+                       ALIGNED (mpfr_custom_get_size (p)));
   MPFR_ASSERTN (r != NULL);
   (mpfr_custom_init) (&r[2], p);
   r[0] = (int) MPFR_NAN_KIND;
@@ -118,7 +116,7 @@ dummy_set_si (long si)
   mpfr_t x;
   long * r = dummy_new ();
   (mpfr_custom_init_set) (x, 0, 0, p, &r[2]);
-  mpfr_set_si (x, si, GMP_RNDN);
+  mpfr_set_si (x, si, MPFR_RNDN);
   r[0] = mpfr_custom_get_kind (x);
   r[1] = mpfr_custom_get_exp (x);
   return r;
@@ -132,7 +130,7 @@ dummy_add (long *a, long *b)
   mpfr_custom_init_set (x, 0, 0, p, &r[2]);
   (mpfr_custom_init_set) (y, a[0], a[1], p, &a[2]);
   mpfr_custom_init_set (z, b[0], b[1], p, &b[2]);
-  mpfr_add (x, y, z, GMP_RNDN);
+  mpfr_add (x, y, z, MPFR_RNDN);
   r[0] = (mpfr_custom_get_kind) (x);
   r[1] = (mpfr_custom_get_exp) (x);
   return r;
@@ -160,7 +158,7 @@ test2 (void)
   (mpfr_custom_init_set) (x, c[0], c[1], p, &c[2]);
   if (c != a || mpfr_cmp_ui (x, 59) != 0)
     {
-      printf ("Compact (2) failed! c=%p a=%p\n", c, a);
+      printf ("Compact (2) failed! c=%p a=%p\n", (void *) c, (void *) a);
       mpfr_dump (x);
       exit (1);
     }

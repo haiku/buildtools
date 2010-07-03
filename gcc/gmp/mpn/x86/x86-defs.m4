@@ -4,13 +4,14 @@ divert(-1)
 dnl  m4 macros for x86 assembler.
 
 
-dnl  Copyright 1999, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+dnl  Copyright 1999, 2000, 2001, 2002, 2003, 2007 Free Software Foundation,
+dnl  Inc.
 dnl
 dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -18,10 +19,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 
 dnl  Notes:
@@ -737,6 +736,8 @@ Zdisp_match( sbbl, 0,(%edx), %esi,        `0x1b,0x72,0x00',           $@)`'dnl
 Zdisp_match( subl, %ecx, 0,(%edi),        `0x29,0x4f,0x00',           $@)`'dnl
 Zdisp_match( movzbl, 0,(%eax,%ebp), %eax, `0x0f,0xb6,0x44,0x28,0x00', $@)`'dnl
 Zdisp_match( movzbl, 0,(%ecx,%edi), %edi, `0x0f,0xb6,0x7c,0x39,0x00', $@)`'dnl
+Zdisp_match( adc, 0,(%ebx,%ecx,4), %eax,  `0x13,0x44,0x8b,0x00',      $@)`'dnl
+Zdisp_match( sbb, 0,(%ebx,%ecx,4), %eax,  `0x1b,0x44,0x8b,0x00',      $@)`'dnl
 ')
 define(Zdisp_2,`dnl
 Zdisp_match( movl, %eax, 0,(%edi),        `0x89,0x47,0x00',           $@)`'dnl
@@ -747,6 +748,8 @@ Zdisp_match( movl, 0,(%ebx), %esi,        `0x8b,0x73,0x00',           $@)`'dnl
 Zdisp_match( movl, 0,(%edx), %eax,        `0x8b,0x42,0x00',           $@)`'dnl
 Zdisp_match( movl, 0,(%esi), %eax,        `0x8b,0x46,0x00',           $@)`'dnl
 Zdisp_match( movl, 0,(%esi,%ecx,4), %eax, `0x8b,0x44,0x8e,0x00',      $@)`'dnl
+Zdisp_match( mov, 0,(%esi,%ecx,4), %eax,  `0x8b,0x44,0x8e,0x00',      $@)`'dnl
+Zdisp_match( mov, %eax, 0,(%edi,%ecx,4),  `0x89,0x44,0x8f,0x00',      $@)`'dnl
 ')
 define(Zdisp_3,`dnl
 Zdisp_match( movq, 0,(%eax,%ecx,8), %mm0, `0x0f,0x6f,0x44,0xc8,0x00', $@)`'dnl
@@ -892,7 +895,7 @@ dnl         movl_code_address(L(foo),%eax)
 dnl
 dnl  This macro is only meant for use in ASSERT()s or when testing, since
 dnl  the PIC sequence it generates will want to be done with a ret balancing
-dnl  the call on CPUs with return address branch predition.
+dnl  the call on CPUs with return address branch prediction.
 dnl
 dnl  The addl generated here has a backward reference to the label, and so
 dnl  won't suffer from the two forwards references bug in old gas (described
@@ -922,5 +925,32 @@ m4_assert_numargs(1)
 `notl	`$1'',
 `xorl	$GMP_NUMB_MASK, `$1'')')
 
+
+dnl  Usage LEA(symbol,reg)
+
+define(`LEA',`
+define(`EPILOGUE_cpu',
+`
+L(movl_eip_`'substr($2,1)):
+	movl	(%esp), $2
+	ret_internal
+	SIZE($'`1, .-$'`1)')
+
+        call    L(movl_eip_`'substr($2,1))
+        addl    $_GLOBAL_OFFSET_TABLE_, $2
+        movl    $1@GOT($2), $2
+')
+
+
+define(`DEF_OBJECT',
+m4_assert_numargs_range(1,2)
+	`RODATA
+	ALIGN(ifelse($#,1,2,$2))
+$1:
+')
+
+define(`END_OBJECT',
+m4_assert_numargs(1)
+`	SIZE(`$1',.-`$1')')
 
 divert`'dnl

@@ -1,24 +1,24 @@
 /* Tune various threshold of MPFR
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdlib.h>
 #include <time.h>
@@ -42,13 +42,13 @@ int verbose;
   double    t;                                       \
   mpfr_t    w, x;                                    \
   mp_size_t size;                                    \
-  MPFR_TMP_DECL (marker);                                 \
+  MPFR_TMP_DECL (marker);                            \
                                                      \
   SPEED_RESTRICT_COND (s->size >= MPFR_PREC_MIN);    \
   SPEED_RESTRICT_COND (s->size <= MPFR_PREC_MAX);    \
-  MPFR_TMP_MARK (marker);                                 \
+  MPFR_TMP_MARK (marker);                            \
                                                      \
-  size = (s->size-1)/BITS_PER_MP_LIMB+1;             \
+  size = (s->size-1)/GMP_NUMB_BITS+1;             \
   s->xp[size-1] |= MPFR_LIMB_HIGHBIT;                \
   MPFR_TMP_INIT1 (s->xp, x, s->size);                \
   MPFR_SET_EXP (x, 0);                               \
@@ -62,11 +62,48 @@ int verbose;
   speed_starttime ();                                \
   i = s->reps;                                       \
   do                                                 \
-    mean_fun (w, x, GMP_RNDN);                       \
+    mean_fun (w, x, MPFR_RNDN);                      \
   while (--i != 0);                                  \
   t = speed_endtime ();                              \
                                                      \
-  MPFR_TMP_FREE (marker);                                 \
+  MPFR_TMP_FREE (marker);                            \
+  return t;                                          \
+} while (0)
+
+/* same as SPEED_MPFR_FUNC, but for say mpfr_sin_cos (y, z, x, r) */
+#define SPEED_MPFR_FUNC2(mean_fun) do {              \
+  unsigned  i;                                       \
+  mp_ptr    vp, wp;                                  \
+  double    t;                                       \
+  mpfr_t    v, w, x;                                 \
+  mp_size_t size;                                    \
+  MPFR_TMP_DECL (marker);                            \
+                                                     \
+  SPEED_RESTRICT_COND (s->size >= MPFR_PREC_MIN);    \
+  SPEED_RESTRICT_COND (s->size <= MPFR_PREC_MAX);    \
+  MPFR_TMP_MARK (marker);                            \
+                                                     \
+  size = (s->size-1)/GMP_NUMB_BITS+1;             \
+  s->xp[size-1] |= MPFR_LIMB_HIGHBIT;                \
+  MPFR_TMP_INIT1 (s->xp, x, s->size);                \
+  MPFR_SET_EXP (x, 0);                               \
+                                                     \
+  MPFR_TMP_INIT (vp, v, s->size, size);              \
+  MPFR_TMP_INIT (wp, w, s->size, size);              \
+                                                     \
+  speed_operand_src (s, s->xp, size);                \
+  speed_operand_dst (s, vp, size);                   \
+  speed_operand_dst (s, wp, size);                   \
+  speed_cache_fill (s);                              \
+                                                     \
+  speed_starttime ();                                \
+  i = s->reps;                                       \
+  do                                                 \
+    mean_fun (v, w, x, MPFR_RNDN);                   \
+  while (--i != 0);                                  \
+  t = speed_endtime ();                              \
+                                                     \
+  MPFR_TMP_FREE (marker);                            \
   return t;                                          \
 } while (0)
 
@@ -76,13 +113,13 @@ int verbose;
   double    t;                                       \
   mpfr_t    w, x, y;                                 \
   mp_size_t size;                                    \
-  MPFR_TMP_DECL (marker);                                 \
+  MPFR_TMP_DECL (marker);                            \
                                                      \
   SPEED_RESTRICT_COND (s->size >= MPFR_PREC_MIN);    \
   SPEED_RESTRICT_COND (s->size <= MPFR_PREC_MAX);    \
-  MPFR_TMP_MARK (marker);                                 \
+  MPFR_TMP_MARK (marker);                            \
                                                      \
-  size = (s->size-1)/BITS_PER_MP_LIMB+1;             \
+  size = (s->size-1)/GMP_NUMB_BITS+1;             \
   s->xp[size-1] |= MPFR_LIMB_HIGHBIT;                \
   MPFR_TMP_INIT1 (s->xp, x, s->size);                \
   MPFR_SET_EXP (x, 0);                               \
@@ -100,20 +137,20 @@ int verbose;
   speed_starttime ();                                \
   i = s->reps;                                       \
   do                                                 \
-    mean_fun (w, x, y, GMP_RNDN);                    \
+    mean_fun (w, x, y, MPFR_RNDN);                    \
   while (--i != 0);                                  \
   t = speed_endtime ();                              \
                                                      \
-  MPFR_TMP_FREE (marker);                                 \
+  MPFR_TMP_FREE (marker);                            \
   return t;                                          \
 } while (0)
 
 
 /* First we include all the functions we want to tune inside this program.
-   We can't use MPFR library since the THRESHOLD can't vary */
+   We can't use the GNU MPFR library since the thresholds are fixed macros. */
 
 /* Setup mpfr_exp_2 */
-mp_prec_t mpfr_exp_2_threshold;
+mpfr_prec_t mpfr_exp_2_threshold;
 #undef  MPFR_EXP_2_THRESHOLD
 #define MPFR_EXP_2_THRESHOLD mpfr_exp_2_threshold
 #include "exp_2.c"
@@ -122,7 +159,7 @@ static double speed_mpfr_exp_2 (struct speed_params *s) {
 }
 
 /* Setup mpfr_exp */
-mp_prec_t mpfr_exp_threshold;
+mpfr_prec_t mpfr_exp_threshold;
 #undef  MPFR_EXP_THRESHOLD
 #define MPFR_EXP_THRESHOLD mpfr_exp_threshold
 #include "exp.c"
@@ -130,8 +167,18 @@ static double speed_mpfr_exp (struct speed_params *s) {
   SPEED_MPFR_FUNC (mpfr_exp);
 }
 
+/* Setup mpfr_sin_cos */
+mpfr_prec_t mpfr_sincos_threshold;
+#undef MPFR_SINCOS_THRESHOLD
+#define MPFR_SINCOS_THRESHOLD mpfr_sincos_threshold
+#include "sin_cos.c"
+#include "cos.c"
+static double speed_mpfr_sincos (struct speed_params *s) {
+  SPEED_MPFR_FUNC2 (mpfr_sin_cos);
+}
+
 /* Setup mpfr_mul */
-mp_prec_t mpfr_mul_threshold;
+mpfr_prec_t mpfr_mul_threshold;
 #undef  MPFR_MUL_THRESHOLD
 #define MPFR_MUL_THRESHOLD mpfr_mul_threshold
 #include "mul.c"
@@ -170,9 +217,9 @@ analyze_data (double *dat, int ndat) {
 
 #define THRESHOLD_WINDOW 16
 #define THRESHOLD_FINAL_WINDOW 128
-static double domeasure (mp_prec_t *threshold,
+static double domeasure (mpfr_prec_t *threshold,
                          double (*func) (struct speed_params *),
-                         mp_prec_t p)
+                         mpfr_prec_t p)
 {
   struct speed_params s;
   mp_size_t size;
@@ -180,7 +227,7 @@ static double domeasure (mp_prec_t *threshold,
 
   s.align_xp = s.align_yp = s.align_wp = 64;
   s.size = p;
-  size = (p - 1)/BITS_PER_MP_LIMB+1;
+  size = (p - 1)/GMP_NUMB_BITS+1;
   s.xp = malloc (2*size*sizeof (mp_limb_t));
   if (s.xp == NULL)
     {
@@ -205,7 +252,7 @@ static double domeasure (mp_prec_t *threshold,
       abort ();
     }
   free (s.xp);
-  /* t1 is the time of the first alog (used for low prec) */
+  /* t1 is the time of the first algo (used for low prec) */
   if (t2 >= t1)
     d = (t2 - t1) / t2;
   else
@@ -222,15 +269,15 @@ static double domeasure (mp_prec_t *threshold,
    if algo2 is better for low prec, and algo1 better for high prec,
    the behaviour of this function is undefined. */
 static void
-tune_simple_func (mp_prec_t *threshold,
+tune_simple_func (mpfr_prec_t *threshold,
                   double (*func) (struct speed_params *),
-                  mp_prec_t pstart)
+                  mpfr_prec_t pstart)
 {
   double measure[THRESHOLD_FINAL_WINDOW+1];
   double d;
-  mp_prec_t pstep;
+  mpfr_prec_t pstep;
   int i, numpos, numneg, try;
-  mp_prec_t pmin, pmax, p;
+  mpfr_prec_t pmin, pmax, p;
 
   /* first look for a lower bound within 10% */
   pmin = p = pstart;
@@ -255,10 +302,10 @@ tune_simple_func (mp_prec_t *threshold,
     d = domeasure (threshold, func, pmin);
     if (d < 0.10)
       break;
-    pmin += BITS_PER_MP_LIMB;
+    pmin += GMP_NUMB_BITS;
   }
 
-  /* then look for a upper bound within 20% */
+  /* then look for an upper bound within 20% */
   pmax = pmin * 2;
   for (;;) {
     d = domeasure (threshold, func, pmax);
@@ -271,7 +318,7 @@ tune_simple_func (mp_prec_t *threshold,
   try = 0;
   while ((pmax-pmin) >= THRESHOLD_FINAL_WINDOW)
     {
-      pstep = MAX(MIN(BITS_PER_MP_LIMB/2,(pmax-pmin)/(2*THRESHOLD_WINDOW)),1);
+      pstep = MAX(MIN(GMP_NUMB_BITS/2,(pmax-pmin)/(2*THRESHOLD_WINDOW)),1);
       if (verbose)
         printf ("Pmin = %8lu Pmax = %8lu Pstep=%lu\n", pmin, pmax, pstep);
       p = (pmin + pmax) / 2;
@@ -309,8 +356,6 @@ tune_simple_func (mp_prec_t *threshold,
     printf ("%lu\n", *threshold);
   return;
 }
-
-
 
 /************************************
  * Tune Mulders' mulhigh function   *
@@ -512,7 +557,12 @@ all (const char *filename)
 #ifdef __ICC
   fprintf (f, "icc %d.%d.%d */\n", __ICC / 100, __ICC / 10 % 10, __ICC % 10);
 #elif defined(__GNUC__)
+#ifdef __GNUC_PATCHLEVEL__
+  fprintf (f, "gcc %d.%d.%d */\n", __GNUC__, __GNUC_MINOR__,
+           __GNUC_PATCHLEVEL__);
+#else
   fprintf (f, "gcc %d.%d */\n", __GNUC__, __GNUC_MINOR__);
+#endif
 #elif defined (__SUNPRO_C)
   fprintf (f, "Sun C %d.%d */\n", __SUNPRO_C / 0x100, __SUNPRO_C % 0x100);
 #elif defined (__sgi) && defined (_COMPILER_VERSION)
@@ -537,16 +587,16 @@ all (const char *filename)
   if (verbose)
     printf ("Tuning mpfr_mul...\n");
   tune_simple_func (&mpfr_mul_threshold, speed_mpfr_mul,
-                    2*BITS_PER_MP_LIMB+1);
+                    2*GMP_NUMB_BITS+1);
   fprintf (f, "#define MPFR_MUL_THRESHOLD %lu /* limbs */\n",
-           (unsigned long) (mpfr_mul_threshold - 1) / BITS_PER_MP_LIMB + 1);
+           (unsigned long) (mpfr_mul_threshold - 1) / GMP_NUMB_BITS + 1);
 
   /* Tune mpfr_exp_2 */
   if (verbose)
     printf ("Tuning mpfr_exp_2...\n");
   tune_simple_func (&mpfr_exp_2_threshold, speed_mpfr_exp_2,
                     MPFR_PREC_MIN);
-  mpfr_exp_2_threshold = MAX (BITS_PER_MP_LIMB, mpfr_exp_2_threshold);
+  mpfr_exp_2_threshold = MAX (GMP_NUMB_BITS, mpfr_exp_2_threshold);
   fprintf (f, "#define MPFR_EXP_2_THRESHOLD %lu /* bits */\n",
            (unsigned long) mpfr_exp_2_threshold);
 
@@ -554,9 +604,17 @@ all (const char *filename)
   if (verbose)
     printf ("Tuning mpfr_exp...\n");
   tune_simple_func (&mpfr_exp_threshold, speed_mpfr_exp,
-                    MPFR_PREC_MIN+3*BITS_PER_MP_LIMB);
+                    MPFR_PREC_MIN+3*GMP_NUMB_BITS);
   fprintf (f, "#define MPFR_EXP_THRESHOLD %lu /* bits */\n",
            (unsigned long) mpfr_exp_threshold);
+
+  /* Tune mpfr_sin_cos */
+  if (verbose)
+    printf ("Tuning mpfr_sin_cos...\n");
+  tune_simple_func (&mpfr_sincos_threshold, speed_mpfr_sincos,
+                    MPFR_PREC_MIN+3*GMP_NUMB_BITS);
+  fprintf (f, "#define MPFR_SINCOS_THRESHOLD %lu /* bits */\n",
+           (unsigned long) mpfr_sincos_threshold);
 
   /* End of tuning */
   time (&end_time);

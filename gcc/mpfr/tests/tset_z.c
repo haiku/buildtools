@@ -1,29 +1,28 @@
 /* Test file for mpfr_set_z.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <time.h>
 
 #include "mpfr-test.h"
 
@@ -37,13 +36,13 @@ static void check0(void)
   mpfr_init (x);
   mpz_init (y);
   mpz_set_si (y, 0);
-  for(r = 0; r < GMP_RND_MAX; r++)
+  for(r = 0; r < MPFR_RND_MAX; r++)
     {
-      inexact = mpfr_set_z (x, y, (mp_rnd_t) r);
+      inexact = mpfr_set_z (x, y, (mpfr_rnd_t) r);
       if (!MPFR_IS_ZERO(x) || !MPFR_IS_POS(x) || inexact)
         {
           printf("mpfr_set_z(x,0) failed for %s\n",
-                 mpfr_print_rnd_mode ((mp_rnd_t) r));
+                 mpfr_print_rnd_mode ((mpfr_rnd_t) r));
           exit(1);
         }
     }
@@ -56,7 +55,7 @@ static void check0(void)
    mpfr_get_si is a rather indirect test of a low level routine.  */
 
 static void
-check (long i, mp_rnd_t rnd)
+check (long i, mpfr_rnd_t rnd)
 {
   mpfr_t f;
   mpz_t z;
@@ -65,7 +64,7 @@ check (long i, mp_rnd_t rnd)
   mpz_init (z);
   mpz_set_ui (z, i);
   mpfr_set_z (f, z, rnd);
-  if (mpfr_get_si (f, GMP_RNDZ) != i)
+  if (mpfr_get_si (f, MPFR_RNDZ) != i)
     {
       printf ("Error in mpfr_set_z for i=%ld rnd_mode=%d\n", i, rnd);
       exit (1);
@@ -79,14 +78,14 @@ check_large (void)
 {
   mpz_t z;
   mpfr_t x, y;
-  mp_exp_t emax, emin;
+  mpfr_exp_t emax, emin;
 
   mpz_init (z);
   mpfr_init2 (x, 160);
   mpfr_init2 (y, 160);
 
   mpz_set_str (z, "77031627725494291259359895954016675357279104942148788042", 10);
-  mpfr_set_z (x, z, GMP_RNDN);
+  mpfr_set_z (x, z, MPFR_RNDN);
   mpfr_set_str_binary (y, "0.1100100100001111110110101010001000100001011010001100001000110100110001001100011001100010100010111000000011011100000111001101000100101001000000100100111000001001E186");
   if (mpfr_cmp (x, y))
     {
@@ -98,12 +97,12 @@ check_large (void)
   emax = mpfr_get_emax ();
   set_emax (2);
   mpz_set_str (z, "7", 10);
-  mpfr_set_z (x, z, GMP_RNDU);
+  mpfr_set_z (x, z, MPFR_RNDU);
   MPFR_ASSERTN(mpfr_inf_p (x) && mpfr_sgn (x) > 0);
   set_emax (3);
   mpfr_set_prec (x, 2);
   mpz_set_str (z, "7", 10);
-  mpfr_set_z (x, z, GMP_RNDU);
+  mpfr_set_z (x, z, MPFR_RNDU);
   MPFR_ASSERTN(mpfr_inf_p (x) && mpfr_sgn (x) > 0);
   set_emax (emax);
 
@@ -111,10 +110,10 @@ check_large (void)
   emin = mpfr_get_emin ();
   set_emin (3);
   mpz_set_str (z, "1", 10);
-  mpfr_set_z (x, z, GMP_RNDZ);
+  mpfr_set_z (x, z, MPFR_RNDZ);
   MPFR_ASSERTN(mpfr_cmp_ui (x, 0) == 0 && MPFR_IS_POS(x));
   set_emin (2);
-  mpfr_set_z (x, z, GMP_RNDN);
+  mpfr_set_z (x, z, MPFR_RNDN);
   MPFR_ASSERTN(mpfr_cmp_ui (x, 0) == 0 && MPFR_IS_POS(x));
   set_emin (emin);
 
@@ -132,9 +131,9 @@ main (int argc, char *argv[])
   tests_start_mpfr ();
 
   check_large ();
-  check (0, GMP_RNDN);
+  check (0, MPFR_RNDN);
   for (j = 0; j < 200000; j++)
-    check (randlimb () & LONG_MAX, (mp_rnd_t) RND_RAND ());
+    check (randlimb () & LONG_MAX, RND_RAND ());
   check0 ();
 
   tests_end_mpfr ();

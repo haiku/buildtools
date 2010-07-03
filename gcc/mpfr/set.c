@@ -1,30 +1,30 @@
 /* mpfr_set -- copy of a floating-point number
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
 /* set a to abs(b) * signb: a=b when signb = SIGN(b), a=abs(b) when signb=1 */
 int
-mpfr_set4 (mpfr_ptr a, mpfr_srcptr b, mp_rnd_t rnd_mode, int signb)
+mpfr_set4 (mpfr_ptr a, mpfr_srcptr b, mpfr_rnd_t rnd_mode, int signb)
 {
   /* Sign is ALWAYS copied */
   MPFR_SET_SIGN (a, signb);
@@ -49,7 +49,7 @@ mpfr_set4 (mpfr_ptr a, mpfr_srcptr b, mp_rnd_t rnd_mode, int signb)
        * just copy the mantissa, and set the exponent and the sign
        * The result is exact. */
       MPN_COPY (MPFR_MANT (a), MPFR_MANT (b),
-                (MPFR_PREC (b) + BITS_PER_MP_LIMB-1)/BITS_PER_MP_LIMB);
+                (MPFR_PREC (b) + GMP_NUMB_BITS-1)/GMP_NUMB_BITS);
       MPFR_RET (0);
     }
   else
@@ -67,7 +67,7 @@ mpfr_set4 (mpfr_ptr a, mpfr_srcptr b, mp_rnd_t rnd_mode, int signb)
 /* Set a to b  */
 #undef mpfr_set
 int
-mpfr_set (mpfr_ptr a, mpfr_srcptr b, mp_rnd_t rnd_mode)
+mpfr_set (mpfr_ptr a, mpfr_srcptr b, mpfr_rnd_t rnd_mode)
 {
   return mpfr_set4 (a, b, rnd_mode, MPFR_SIGN (b));
 }
@@ -75,7 +75,7 @@ mpfr_set (mpfr_ptr a, mpfr_srcptr b, mp_rnd_t rnd_mode)
 /* Set a to |b| */
 #undef mpfr_abs
 int
-mpfr_abs (mpfr_ptr a, mpfr_srcptr b, mp_rnd_t rnd_mode)
+mpfr_abs (mpfr_ptr a, mpfr_srcptr b, mpfr_rnd_t rnd_mode)
 {
   return mpfr_set4 (a, b, rnd_mode, MPFR_SIGN_POS);
 }

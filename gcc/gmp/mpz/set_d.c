@@ -1,12 +1,13 @@
 /* mpz_set_d(integer, val) -- Assign INTEGER with a double value VAL.
 
-Copyright 1995, 1996, 2000, 2001, 2002, 2003 Free Software Foundation, Inc.
+Copyright 1995, 1996, 2000, 2001, 2002, 2003, 2006 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -55,6 +54,9 @@ mpz_set_d (mpz_ptr r, double d)
 
   if (ALLOC(r) < rn)
     _mpz_realloc (r, rn);
+
+  if (rn <= 0)
+    rn = 0;
 
   rp = PTR (r);
 

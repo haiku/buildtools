@@ -3,13 +3,14 @@
    Return the single-limb remainder.
    There are no constraints on the value of the divisor.
 
-Copyright 1991, 1993, 1994, 1999, 2000, 2002 Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 1999, 2000, 2002, 2007, 2008, 2009 Free
+Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -18,9 +19,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -38,8 +37,25 @@ MA 02110-1301, USA. */
 #ifndef MOD_1_NORM_THRESHOLD
 #define MOD_1_NORM_THRESHOLD  0
 #endif
+
 #ifndef MOD_1_UNNORM_THRESHOLD
 #define MOD_1_UNNORM_THRESHOLD  0
+#endif
+
+#ifndef MOD_1U_TO_MOD_1_1_THRESHOLD
+#define MOD_1U_TO_MOD_1_1_THRESHOLD  MP_SIZE_T_MAX /* default is not to use mpn_mod_1s */
+#endif
+
+#ifndef MOD_1N_TO_MOD_1_1_THRESHOLD
+#define MOD_1N_TO_MOD_1_1_THRESHOLD  MP_SIZE_T_MAX /* default is not to use mpn_mod_1s */
+#endif
+
+#ifndef MOD_1_1_TO_MOD_1_2_THRESHOLD
+#define MOD_1_1_TO_MOD_1_2_THRESHOLD  10
+#endif
+
+#ifndef MOD_1_2_TO_MOD_1_4_THRESHOLD
+#define MOD_1_2_TO_MOD_1_4_THRESHOLD  20
 #endif
 
 
@@ -53,122 +69,182 @@ MA 02110-1301, USA. */
    distributions of dividend and divisor.  In any case this idea is left to
    CPU specific implementations to consider.  */
 
-mp_limb_t
-mpn_mod_1 (mp_srcptr up, mp_size_t un, mp_limb_t d)
+static mp_limb_t
+mpn_mod_1_unnorm (mp_srcptr up, mp_size_t un, mp_limb_t d)
 {
   mp_size_t  i;
   mp_limb_t  n1, n0, r;
   mp_limb_t  dummy;
+  int cnt;
 
-  ASSERT (un >= 0);
+  ASSERT (un > 0);
   ASSERT (d != 0);
-
-  /* Botch: Should this be handled at all?  Rely on callers?
-     But note un==0 is currently required by mpz/fdiv_r_ui.c and possibly
-     other places.  */
-  if (un == 0)
-    return 0;
 
   d <<= GMP_NAIL_BITS;
 
-  if ((d & GMP_LIMB_HIGHBIT) != 0)
+  /* Skip a division if high < divisor.  Having the test here before
+     normalizing will still skip as often as possible.  */
+  r = up[un - 1] << GMP_NAIL_BITS;
+  if (r < d)
     {
-      /* High limb is initial remainder, possibly with one subtract of
-	 d to get r<d.  */
-      r = up[un - 1] << GMP_NAIL_BITS;
-      if (r >= d)
-	r -= d;
       r >>= GMP_NAIL_BITS;
       un--;
       if (un == 0)
 	return r;
+    }
+  else
+    r = 0;
 
-      if (BELOW_THRESHOLD (un, MOD_1_NORM_THRESHOLD))
+  /* If udiv_qrnnd doesn't need a normalized divisor, can use the simple
+     code above. */
+  if (! UDIV_NEEDS_NORMALIZATION
+      && BELOW_THRESHOLD (un, MOD_1_UNNORM_THRESHOLD))
+    {
+      for (i = un - 1; i >= 0; i--)
 	{
-	plain:
-	  for (i = un - 1; i >= 0; i--)
-	    {
-	      n0 = up[i] << GMP_NAIL_BITS;
-	      udiv_qrnnd (dummy, r, r, n0, d);
-	      r >>= GMP_NAIL_BITS;
-	    }
-	  return r;
+	  n0 = up[i] << GMP_NAIL_BITS;
+	  udiv_qrnnd (dummy, r, r, n0, d);
+	  r >>= GMP_NAIL_BITS;
+	}
+      return r;
+    }
+
+  count_leading_zeros (cnt, d);
+  d <<= cnt;
+
+  n1 = up[un - 1] << GMP_NAIL_BITS;
+  r = (r << cnt) | (n1 >> (GMP_LIMB_BITS - cnt));
+
+  if (UDIV_NEEDS_NORMALIZATION
+      && BELOW_THRESHOLD (un, MOD_1_UNNORM_THRESHOLD))
+    {
+      for (i = un - 2; i >= 0; i--)
+	{
+	  n0 = up[i] << GMP_NAIL_BITS;
+	  udiv_qrnnd (dummy, r, r,
+		      (n1 << cnt) | (n0 >> (GMP_NUMB_BITS - cnt)),
+		      d);
+	  r >>= GMP_NAIL_BITS;
+	  n1 = n0;
+	}
+      udiv_qrnnd (dummy, r, r, n1 << cnt, d);
+      r >>= GMP_NAIL_BITS;
+      return r >> cnt;
+    }
+  else
+    {
+      mp_limb_t inv;
+      invert_limb (inv, d);
+
+      for (i = un - 2; i >= 0; i--)
+	{
+	  n0 = up[i] << GMP_NAIL_BITS;
+	  udiv_qrnnd_preinv (dummy, r, r,
+			     (n1 << cnt) | (n0 >> (GMP_NUMB_BITS - cnt)),
+			     d, inv);
+	  r >>= GMP_NAIL_BITS;
+	  n1 = n0;
+	}
+      udiv_qrnnd_preinv (dummy, r, r, n1 << cnt, d, inv);
+      r >>= GMP_NAIL_BITS;
+      return r >> cnt;
+    }
+}
+
+static mp_limb_t
+mpn_mod_1_norm (mp_srcptr up, mp_size_t un, mp_limb_t d)
+{
+  mp_size_t  i;
+  mp_limb_t  n0, r;
+  mp_limb_t  dummy;
+
+  ASSERT (un > 0);
+
+  d <<= GMP_NAIL_BITS;
+
+  ASSERT (d & GMP_LIMB_HIGHBIT);
+
+  /* High limb is initial remainder, possibly with one subtract of
+     d to get r<d.  */
+  r = up[un - 1] << GMP_NAIL_BITS;
+  if (r >= d)
+    r -= d;
+  r >>= GMP_NAIL_BITS;
+  un--;
+  if (un == 0)
+    return r;
+
+  if (BELOW_THRESHOLD (un, MOD_1_NORM_THRESHOLD))
+    {
+      for (i = un - 1; i >= 0; i--)
+	{
+	  n0 = up[i] << GMP_NAIL_BITS;
+	  udiv_qrnnd (dummy, r, r, n0, d);
+	  r >>= GMP_NAIL_BITS;
+	}
+      return r;
+    }
+  else
+    {
+      mp_limb_t  inv;
+      invert_limb (inv, d);
+      for (i = un - 1; i >= 0; i--)
+	{
+	  n0 = up[i] << GMP_NAIL_BITS;
+	  udiv_qrnnd_preinv (dummy, r, r, n0, d, inv);
+	  r >>= GMP_NAIL_BITS;
+	}
+      return r;
+    }
+}
+
+mp_limb_t
+mpn_mod_1 (mp_srcptr ap, mp_size_t n, mp_limb_t b)
+{
+  ASSERT (n >= 0);
+  ASSERT (b != 0);
+
+  /* Should this be handled at all?  Rely on callers?  Note un==0 is currently
+     required by mpz/fdiv_r_ui.c and possibly other places.  */
+  if (n == 0)
+    return 0;
+
+  if (UNLIKELY ((b & GMP_NUMB_HIGHBIT) != 0))
+    {
+      if (BELOW_THRESHOLD (n, MOD_1N_TO_MOD_1_1_THRESHOLD))
+	{
+	  return mpn_mod_1_norm (ap, n, b);
 	}
       else
 	{
-	  mp_limb_t  inv;
-	  invert_limb (inv, d);
-	  for (i = un - 1; i >= 0; i--)
-	    {
-	      n0 = up[i] << GMP_NAIL_BITS;
-	      udiv_qrnnd_preinv (dummy, r, r, n0, d, inv);
-	      r >>= GMP_NAIL_BITS;
-	    }
-	  return r;
+	  mp_limb_t pre[4];
+	  mpn_mod_1_1p_cps (pre, b);
+	  return mpn_mod_1_1p (ap, n, b, pre);
 	}
     }
   else
     {
-      int norm;
-
-      /* Skip a division if high < divisor.  Having the test here before
-	 normalizing will still skip as often as possible.  */
-      r = up[un - 1] << GMP_NAIL_BITS;
-      if (r < d)
+      if (BELOW_THRESHOLD (n, MOD_1U_TO_MOD_1_1_THRESHOLD))
 	{
-	  r >>= GMP_NAIL_BITS;
-	  un--;
-	  if (un == 0)
-	    return r;
+	  return mpn_mod_1_unnorm (ap, n, b);
 	}
-      else
-	r = 0;
-
-      /* If udiv_qrnnd doesn't need a normalized divisor, can use the simple
-	 code above. */
-      if (! UDIV_NEEDS_NORMALIZATION
-	  && BELOW_THRESHOLD (un, MOD_1_UNNORM_THRESHOLD))
-	goto plain;
-
-      count_leading_zeros (norm, d);
-      d <<= norm;
-
-      n1 = up[un - 1] << GMP_NAIL_BITS;
-      r = (r << norm) | (n1 >> (GMP_LIMB_BITS - norm));
-
-      if (UDIV_NEEDS_NORMALIZATION
-	  && BELOW_THRESHOLD (un, MOD_1_UNNORM_THRESHOLD))
+      else if (BELOW_THRESHOLD (n, MOD_1_1_TO_MOD_1_2_THRESHOLD))
 	{
-	  for (i = un - 2; i >= 0; i--)
-	    {
-	      n0 = up[i] << GMP_NAIL_BITS;
-	      udiv_qrnnd (dummy, r, r,
-			  (n1 << norm) | (n0 >> (GMP_NUMB_BITS - norm)),
-			  d);
-	      r >>= GMP_NAIL_BITS;
-	      n1 = n0;
-	    }
-	  udiv_qrnnd (dummy, r, r, n1 << norm, d);
-	  r >>= GMP_NAIL_BITS;
-	  return r >> norm;
+	  mp_limb_t pre[4];
+	  mpn_mod_1_1p_cps (pre, b);
+	  return mpn_mod_1_1p (ap, n, b << pre[1], pre);
+	}
+      else if (BELOW_THRESHOLD (n, MOD_1_2_TO_MOD_1_4_THRESHOLD) || UNLIKELY (b > GMP_NUMB_MASK / 4))
+	{
+	  mp_limb_t pre[5];
+	  mpn_mod_1s_2p_cps (pre, b);
+	  return mpn_mod_1s_2p (ap, n, b << pre[1], pre);
 	}
       else
 	{
-	  mp_limb_t inv;
-	  invert_limb (inv, d);
-
-	  for (i = un - 2; i >= 0; i--)
-	    {
-	      n0 = up[i] << GMP_NAIL_BITS;
-	      udiv_qrnnd_preinv (dummy, r, r,
-				 (n1 << norm) | (n0 >> (GMP_NUMB_BITS - norm)),
-				 d, inv);
-	      r >>= GMP_NAIL_BITS;
-	      n1 = n0;
-	    }
-	  udiv_qrnnd_preinv (dummy, r, r, n1 << norm, d, inv);
-	  r >>= GMP_NAIL_BITS;
-	  return r >> norm;
+	  mp_limb_t pre[7];
+	  mpn_mod_1s_4p_cps (pre, b);
+	  return mpn_mod_1s_4p (ap, n, b << pre[1], pre);
 	}
     }
 }

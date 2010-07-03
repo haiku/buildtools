@@ -1,24 +1,24 @@
 /* Interface to replace gmp-impl.h
 
-Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #ifndef __GMPFR_GMP_H__
 #define __GMPFR_GMP_H__
@@ -45,7 +45,7 @@ MA 02110-1301, USA. */
 # elif defined (_AIX) || defined (_IBMR2)
 #  pragma alloca
 # else
-char *alloca ();
+void *alloca (size_t);
 # endif
 #endif
 
@@ -53,22 +53,24 @@ char *alloca ();
 extern "C" {
 #endif
 
-/* Define BITS_PER_MP_LIMB
+/* Define GMP_NUMB_BITS
    Can't use sizeof(mp_limb_t) since it should be a preprocessor constant */
 #if defined(GMP_NUMB_BITS) /* GMP 4.1.2 or above */
-# define BITS_PER_MP_LIMB  (GMP_NUMB_BITS+GMP_NAIL_BITS)
-#elif defined (__GMP_BITS_PER_MP_LIMB) /* Older versions 4.x.x */
-# define BITS_PER_MP_LIMB  __GMP_BITS_PER_MP_LIMB
-# define GMP_NUMB_BITS BITS_PER_MP_LIMB
+#ifndef GMP_NUMB_BITS
+# define GMP_NUMB_BITS  (GMP_NUMB_BITS+GMP_NAIL_BITS)
+#endif
+#elif defined (__GMP_GMP_NUMB_BITS) /* Older versions 4.x.x */
+# define GMP_NUMB_BITS  __GMP_GMP_NUMB_BITS
+# define GMP_NUMB_BITS GMP_NUMB_BITS
 # ifndef GMP_NAIL_BITS
 #  define GMP_NAIL_BITS 0
 # endif
 #else
-# error "Could not detect BITS_PER_MP_LIMB. Try with gmp internal files."
+# error "Could not detect GMP_NUMB_BITS. Try with gmp internal files."
 #endif
 
 /* Define some macros */
-#define BYTES_PER_MP_LIMB (BITS_PER_MP_LIMB/CHAR_BIT)
+#define BYTES_PER_MP_LIMB (GMP_NUMB_BITS/CHAR_BIT)
 
 #define MP_LIMB_T_MAX (~(mp_limb_t)0)
 
@@ -140,10 +142,7 @@ extern "C" {
 #define MPN_SAME_OR_DECR_P(dst, src, size)      \
   MPN_SAME_OR_DECR2_P(dst, size, src, size)
 
-/* If sqr_n or mul_basecase are not exported, used mpn_mul instead */
-#ifndef mpn_sqr_n
-# define mpn_sqr_n(dst,src,n) mpn_mul((dst),(src),(n),(src),(n))
-#endif
+/* If mul_basecase or mpn_sqr_basecase are not exported, used mpn_mul instead */
 #ifndef mpn_mul_basecase
 # define mpn_mul_basecase(dst,s1,n1,s2,n2) mpn_mul((dst),(s1),(n1),(s2),(n2))
 #endif
@@ -172,12 +171,6 @@ __MPFR_DECLSPEC void mpfr_assert_fail _MPFR_PROTO((const char *, int,
 #undef  XDEBUG
 #define XDEBUG
 
-/* Temp memory allocate */
-#define TMP_DECL(m)
-#define TMP_ALLOC(x) alloca(x)
-#define TMP_MARK(m)
-#define TMP_FREE(m)
-
 /* For longlong.h */
 #ifdef HAVE_ATTRIBUTE_MODE
 typedef unsigned int UQItype    __attribute__ ((mode (QI)));
@@ -199,7 +192,7 @@ typedef unsigned long int UDItype;
 #endif
 typedef mp_limb_t UWtype;
 typedef unsigned int UHWtype;
-#define W_TYPE_SIZE BITS_PER_MP_LIMB
+#define W_TYPE_SIZE GMP_NUMB_BITS
 
 /* Remap names of internal mpn functions (for longlong.h).  */
 #undef  __clz_tab
@@ -259,17 +252,6 @@ __MPFR_DECLSPEC extern gmp_randstate_t  mpfr_rands;
 
 typedef __gmp_randstate_struct *gmp_randstate_ptr;
 
-#undef _gmp_rand
-#define _gmp_rand mpfr_rand_raw
-__MPFR_DECLSPEC void mpfr_rand_raw _MPFR_PROTO((mp_ptr, gmp_randstate_t,
-                                                unsigned long));
-
-/* To be called BEFORE tests_start_mpfr () if the tests used
-   mpfr_random, mpfr_random2 or any functions which uses the macro RANDS */
-__MPFR_DECLSPEC void mpfr_init_gmp_rand _MPFR_PROTO((void));
-#define MPFR_TEST_USE_RANDS() mpfr_init_gmp_rand ();
-
-
 /* Allocate func are defined in gmp-impl.h */
 
 /* In newer GMP, there aren't anymore __gmp_allocate_func,
@@ -302,6 +284,26 @@ __MPFR_DECLSPEC void *__gmp_default_allocate _MPFR_PROTO ((size_t));
 __MPFR_DECLSPEC void *__gmp_default_reallocate _MPFR_PROTO ((void *, size_t,
                                                              size_t));
 __MPFR_DECLSPEC void __gmp_default_free _MPFR_PROTO ((void *, size_t));
+
+/* Temp memory allocate */
+
+struct tmp_marker
+{
+  void *ptr;
+  size_t size;
+  struct tmp_marker *next;
+};
+
+__MPFR_DECLSPEC void *mpfr_tmp_allocate _MPFR_PROTO ((struct tmp_marker **,
+                                                      size_t));
+__MPFR_DECLSPEC void mpfr_tmp_free _MPFR_PROTO ((struct tmp_marker *));
+
+/* Do not define TMP_SALLOC (see the test in mpfr-impl.h)! */
+#define TMP_ALLOC(n) (MPFR_LIKELY ((n) < 16384) ?       \
+                      alloca (n) : mpfr_tmp_allocate (&tmp_marker, (n)))
+#define TMP_DECL(m) struct tmp_marker *tmp_marker
+#define TMP_MARK(m) (tmp_marker = 0)
+#define TMP_FREE(m) mpfr_tmp_free (tmp_marker)
 
 #if defined (__cplusplus)
 }

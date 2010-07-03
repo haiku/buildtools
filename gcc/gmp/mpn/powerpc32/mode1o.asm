@@ -6,7 +6,7 @@ dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or
 dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 2.1 of the
+dnl  published by the Free Software Foundation; either version 3 of the
 dnl  License, or (at your option) any later version.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful,
@@ -14,10 +14,8 @@ dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
 dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 dnl  Lesser General Public License for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public
-dnl  License along with the GNU MP Library; see the file COPYING.LIB.  If
-dnl  not, write to the Free Software Foundation, Inc., 51 Franklin Street,
-dnl  Fifth Floor, Boston, MA 02110-1301, USA.
+dnl  You should have received a copy of the GNU Lesser General Public License
+dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
@@ -38,7 +36,7 @@ C mp_limb_t mpn_modexact_1c_odd (mp_srcptr src, mp_size_t size,
 C                                mp_limb_t divisor, mp_limb_t carry);
 C
 C For PIC, the inverse is established arithmetically since it measures about
-C 5 cycles faster than the nonsense needed to access modlimb_invert_table in
+C 5 cycles faster than the nonsense needed to access binvert_limb_table in
 C SVR4 or Darwin style PIC.  AIX might be better, since it avoids bl/mflr to
 C get at the GOT/TOC/whatever.
 C
@@ -54,7 +52,7 @@ C range above for 750 and 7400.
 
 ASM_START()
 
-EXTERN(modlimb_invert_table)
+EXTERN(binvert_limb_table)
 
 PROLOGUE(mpn_modexact_1_odd)
 	li	r6, 0
@@ -76,7 +74,7 @@ C Load from our table with PIC is so slow on Linux and Darwin that we avoid it
 	mullw	r7, r7, r8		C i*i*d
 	sub	r4, r4, r7		C inverse, 8 bits
 ',`
-	LEA(	r7, modlimb_invert_table)
+	LEA(	r7, binvert_limb_table)
 	rlwinm	r4, r5, 31,25,31	C (divisor/2) & 0x7F
 	lbzx	r4, r4,r7		C inverse, 8 bits
 ')

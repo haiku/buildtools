@@ -1,24 +1,24 @@
 /* mpfr_const_log2 -- compute natural logarithm of 2
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -29,7 +29,7 @@ MPFR_DECL_INIT_CACHE(__gmpfr_cache_const_log2, mpfr_const_log2_internal);
 /* Set User interface */
 #undef mpfr_const_log2
 int
-mpfr_const_log2 (mpfr_ptr x, mp_rnd_t rnd_mode) {
+mpfr_const_log2 (mpfr_ptr x, mpfr_rnd_t rnd_mode) {
   return mpfr_cache (x, __gmpfr_cache_const_log2, rnd_mode);
 }
 
@@ -92,10 +92,10 @@ S (mpz_t *T, mpz_t *P, mpz_t *Q, unsigned long n1, unsigned long n2, int need_P)
           /* now v = min(val(T), val(Q), val(P)) */
           if (v > 0)
             {
-              mpz_div_2exp (T[0], T[0], v);
-              mpz_div_2exp (Q[0], Q[0], v);
+              mpz_fdiv_q_2exp (T[0], T[0], v);
+              mpz_fdiv_q_2exp (Q[0], Q[0], v);
               if (need_P)
-                mpz_div_2exp (P[0], P[0], v);
+                mpz_fdiv_q_2exp (P[0], P[0], v);
             }
         }
     }
@@ -103,10 +103,10 @@ S (mpz_t *T, mpz_t *P, mpz_t *Q, unsigned long n1, unsigned long n2, int need_P)
 
 /* Don't need to save / restore exponent range: the cache does it */
 int
-mpfr_const_log2_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
+mpfr_const_log2_internal (mpfr_ptr x, mpfr_rnd_t rnd_mode)
 {
   unsigned long n = MPFR_PREC (x);
-  mp_prec_t w; /* working precision */
+  mpfr_prec_t w; /* working precision */
   unsigned long N;
   mpz_t *T, *P, *Q;
   mpfr_t t, q;
@@ -163,9 +163,9 @@ mpfr_const_log2_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
       mpfr_set_prec (t, w);
       mpfr_set_prec (q, w);
 
-      mpfr_set_z (t, T[0], GMP_RNDN);
-      mpfr_set_z (q, Q[0], GMP_RNDN);
-      mpfr_div (t, t, q, GMP_RNDN);
+      mpfr_set_z (t, T[0], MPFR_RNDN);
+      mpfr_set_z (q, Q[0], MPFR_RNDN);
+      mpfr_div (t, t, q, MPFR_RNDN);
 
       for (i = 0; i < lgN; i++)
         {
@@ -176,7 +176,7 @@ mpfr_const_log2_internal (mpfr_ptr x, mp_rnd_t rnd_mode)
       (*__gmp_free_func) (T, 3 * lgN * sizeof (mpz_t));
 
       if (MPFR_LIKELY (ok != 0
-                       || mpfr_can_round (t, w - 2, GMP_RNDN, rnd_mode, n)))
+                       || mpfr_can_round (t, w - 2, MPFR_RNDN, rnd_mode, n)))
         break;
 
       MPFR_ZIV_NEXT (loop, w);

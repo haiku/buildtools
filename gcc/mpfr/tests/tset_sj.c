@@ -1,27 +1,27 @@
 /* Test file for
    mpfr_set_sj, mpfr_set_uj, mpfr_set_sj_2exp and mpfr_set_uj_2exp.
 
-Copyright 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#if HAVE_CONFIG_H
+#ifdef HAVE_CONFIG_H
 # include "config.h"       /* for a build within gmp */
 #endif
 
@@ -36,17 +36,22 @@ MA 02110-1301, USA. */
 # define __STDC_CONSTANT_MACROS
 #endif
 
-#ifdef HAVE_STDINT_H
-# include <stdint.h>
-#endif
-#ifdef HAVE_INTTYPES_H
-# include <inttypes.h>
+#if HAVE_INTTYPES_H
+# include <inttypes.h> /* for intmax_t */
+#else
+# if HAVE_STDINT_H
+#  include <stdint.h>
+# endif
 #endif
 
 #include "mpfr-test.h"
 
 #ifndef _MPFR_H_HAVE_INTMAX_T
-int main() { return 0; }
+int
+main (void)
+{
+  return 0;
+}
 #else
 
 #define ERROR(str) {printf("Error for "str"\n"); exit(1);}
@@ -58,14 +63,14 @@ inexact_sign (int x)
 }
 
 static void
-check_set_uj (mp_prec_t pmin, mp_prec_t pmax, int N)
+check_set_uj (mpfr_prec_t pmin, mpfr_prec_t pmax, int N)
 {
   mpfr_t x, y;
-  mp_prec_t p;
+  mpfr_prec_t p;
   int inex1, inex2, n;
   mp_limb_t limb;
 
-  mpfr_inits2 (pmax, x, y, (void *) 0);
+  mpfr_inits2 (pmax, x, y, (mpfr_ptr) 0);
 
   for ( p = pmin ; p < pmax ; p++)
     {
@@ -75,8 +80,8 @@ check_set_uj (mp_prec_t pmin, mp_prec_t pmax, int N)
         {
           /* mp_limb_t may be unsigned long long */
           limb = (unsigned long) randlimb ();
-          inex1 = mpfr_set_uj (x, limb, GMP_RNDN);
-          inex2 = mpfr_set_ui (y, limb, GMP_RNDN);
+          inex1 = mpfr_set_uj (x, limb, MPFR_RNDN);
+          inex2 = mpfr_set_ui (y, limb, MPFR_RNDN);
           if (mpfr_cmp (x, y))
             {
               printf ("ERROR for mpfr_set_uj and j=%lu and p=%lu\n",
@@ -96,18 +101,18 @@ check_set_uj (mp_prec_t pmin, mp_prec_t pmax, int N)
     }
   /* Special case */
   mpfr_set_prec (x, sizeof(uintmax_t)*CHAR_BIT);
-  inex1 = mpfr_set_uj (x, UINTMAX_MAX, GMP_RNDN);
+  inex1 = mpfr_set_uj (x, MPFR_UINTMAX_MAX, MPFR_RNDN);
   if (inex1 != 0 || mpfr_sgn(x) <= 0)
     ERROR ("inexact / UINTMAX_MAX");
-  inex1 = mpfr_add_ui (x, x, 1, GMP_RNDN);
+  inex1 = mpfr_add_ui (x, x, 1, MPFR_RNDN);
   if (inex1 != 0 || !mpfr_powerof2_raw (x)
       || MPFR_EXP (x) != (sizeof(uintmax_t)*CHAR_BIT+1) )
     ERROR ("power of 2");
-  mpfr_set_uj (x, 0, GMP_RNDN);
+  mpfr_set_uj (x, 0, MPFR_RNDN);
   if (!MPFR_IS_ZERO (x))
     ERROR ("Setting 0");
 
-  mpfr_clears (x, y, (void *) 0);
+  mpfr_clears (x, y, (mpfr_ptr) 0);
 }
 
 static void
@@ -118,30 +123,30 @@ check_set_uj_2exp (void)
 
   mpfr_init2 (x, sizeof(uintmax_t)*CHAR_BIT);
 
-  inex = mpfr_set_uj_2exp (x, 1, 0, GMP_RNDN);
+  inex = mpfr_set_uj_2exp (x, 1, 0, MPFR_RNDN);
   if (inex || mpfr_cmp_ui(x, 1))
     ERROR("(1U,0)");
 
-  inex = mpfr_set_uj_2exp (x, 1024, -10, GMP_RNDN);
+  inex = mpfr_set_uj_2exp (x, 1024, -10, MPFR_RNDN);
   if (inex || mpfr_cmp_ui(x, 1))
     ERROR("(1024U,-10)");
 
-  inex = mpfr_set_uj_2exp (x, 1024, 10, GMP_RNDN);
-  if (inex || mpfr_cmp_ui(x, 1024*1024))
+  inex = mpfr_set_uj_2exp (x, 1024, 10, MPFR_RNDN);
+  if (inex || mpfr_cmp_ui(x, 1024L * 1024L))
     ERROR("(1024U,+10)");
 
-  inex = mpfr_set_uj_2exp (x, UINTMAX_MAX, 1000, GMP_RNDN);
-  inex |= mpfr_div_2ui (x, x, 1000, GMP_RNDN);
-  inex |= mpfr_add_ui (x, x, 1, GMP_RNDN);
+  inex = mpfr_set_uj_2exp (x, MPFR_UINTMAX_MAX, 1000, MPFR_RNDN);
+  inex |= mpfr_div_2ui (x, x, 1000, MPFR_RNDN);
+  inex |= mpfr_add_ui (x, x, 1, MPFR_RNDN);
   if (inex || !mpfr_powerof2_raw (x)
       || MPFR_EXP (x) != (sizeof(uintmax_t)*CHAR_BIT+1) )
     ERROR("(UINTMAX_MAX)");
 
-  inex = mpfr_set_uj_2exp (x, UINTMAX_MAX, MPFR_EMAX_MAX-10, GMP_RNDN);
+  inex = mpfr_set_uj_2exp (x, MPFR_UINTMAX_MAX, MPFR_EMAX_MAX-10, MPFR_RNDN);
   if (inex == 0 || !mpfr_inf_p (x))
     ERROR ("Overflow");
 
-  inex = mpfr_set_uj_2exp (x, UINTMAX_MAX, MPFR_EMIN_MIN-1000, GMP_RNDN);
+  inex = mpfr_set_uj_2exp (x, MPFR_UINTMAX_MAX, MPFR_EMIN_MIN-1000, MPFR_RNDN);
   if (inex == 0 || !MPFR_IS_ZERO (x))
     ERROR ("Underflow");
 
@@ -149,20 +154,20 @@ check_set_uj_2exp (void)
 }
 
 static void
-check_set_sj ()
+check_set_sj (void)
 {
   mpfr_t x;
   int inex;
 
   mpfr_init2 (x, sizeof(intmax_t)*CHAR_BIT-1);
 
-  inex = mpfr_set_sj (x, -INTMAX_MAX, GMP_RNDN);
-  inex |= mpfr_add_si (x, x, -1, GMP_RNDN);
+  inex = mpfr_set_sj (x, -MPFR_INTMAX_MAX, MPFR_RNDN);
+  inex |= mpfr_add_si (x, x, -1, MPFR_RNDN);
   if (inex || mpfr_sgn (x) >=0 || !mpfr_powerof2_raw (x)
       || MPFR_EXP (x) != (sizeof(intmax_t)*CHAR_BIT) )
     ERROR("set_sj (-INTMAX_MAX)");
 
-  inex = mpfr_set_sj (x, 1742, GMP_RNDN);
+  inex = mpfr_set_sj (x, 1742, MPFR_RNDN);
   if (inex || mpfr_cmp_ui (x, 1742))
     ERROR ("set_sj (1742)");
 
@@ -170,14 +175,14 @@ check_set_sj ()
 }
 
 static void
-check_set_sj_2exp ()
+check_set_sj_2exp (void)
 {
   mpfr_t x;
   int inex;
 
   mpfr_init2 (x, sizeof(intmax_t)*CHAR_BIT-1);
 
-  inex = mpfr_set_sj_2exp (x, INTMAX_MIN, 1000, GMP_RNDN);
+  inex = mpfr_set_sj_2exp (x, MPFR_INTMAX_MIN, 1000, MPFR_RNDN);
   if (inex || mpfr_sgn (x) >=0 || !mpfr_powerof2_raw (x)
       || MPFR_EXP (x) != (sizeof(intmax_t)*CHAR_BIT+1000) )
     ERROR("set_sj_2exp (INTMAX_MIN)");

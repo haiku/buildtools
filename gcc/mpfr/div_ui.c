@@ -1,38 +1,37 @@
-/* mpfr_div_ui -- divide a floating-point number by a machine integer
-   mpfr_div_si -- divide a floating-point number by a machine integer
+/* mpfr_div_{ui,si} -- divide a floating-point number by a machine integer
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
 /* returns 0 if result exact, non-zero otherwise */
 int
-mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
+mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mpfr_rnd_t rnd_mode)
 {
   long i;
   int sh;
   mp_size_t xn, yn, dif;
   mp_limb_t *xp, *yp, *tmp, c, d;
-  mp_exp_t exp;
+  mpfr_exp_t exp;
   int inexact, middle = 1, nexttoinf;
   MPFR_TMP_DECL(marker);
 
@@ -60,6 +59,7 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
           else
             {
               MPFR_SET_ZERO(y);
+              MPFR_SET_SAME_SIGN (y, x);
               MPFR_RET(0);
             }
         }
@@ -78,8 +78,6 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
     }
   else if (MPFR_UNLIKELY (IS_POW2 (u)))
     return mpfr_div_2si (y, x, MPFR_INT_CEIL_LOG2 (u), rnd_mode);
-
-  MPFR_CLEAR_FLAGS (y);
 
   MPFR_SET_SAME_SIGN (y, x);
 
@@ -112,7 +110,7 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
    * the divisor. The test must be performed with a subtraction, so as     *
    * to prevent carries.                                                   */
 
-  if (MPFR_LIKELY (rnd_mode == GMP_RNDN))
+  if (MPFR_LIKELY (rnd_mode == MPFR_RNDN))
     {
       if (c < (mp_limb_t) u - c) /* We have u > c */
         middle = -1;
@@ -140,7 +138,7 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
   if (tmp[yn] == 0)
     {
       MPN_COPY(yp, tmp, yn);
-      exp -= BITS_PER_MP_LIMB;
+      exp -= GMP_NUMB_BITS;
     }
   else
     {
@@ -154,11 +152,11 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
           mp_limb_t w = tmp[0] << shlz;
 
           mpn_lshift (yp, tmp + 1, yn, shlz);
-          yp[0] += tmp[0] >> (BITS_PER_MP_LIMB - shlz);
+          yp[0] += tmp[0] >> (GMP_NUMB_BITS - shlz);
 
-          if (w > (MPFR_LIMB_ONE << (BITS_PER_MP_LIMB - 1)))
+          if (w > (MPFR_LIMB_ONE << (GMP_NUMB_BITS - 1)))
             { middle = 1; }
-          else if (w < (MPFR_LIMB_ONE << (BITS_PER_MP_LIMB - 1)))
+          else if (w < (MPFR_LIMB_ONE << (GMP_NUMB_BITS - 1)))
             { middle = -1; }
           else
             { middle = (c != 0); }
@@ -168,7 +166,7 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
         }
       else
         { /* this happens only if u == 1 and xp[xn-1] >=
-             1<<(BITS_PER_MP_LIMB-1). It might be better to handle the
+             1<<(GMP_NUMB_BITS-1). It might be better to handle the
              u == 1 case seperately ?
           */
 
@@ -185,63 +183,61 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
   MPFR_TMP_FREE (marker);
 
   if (exp < __gmpfr_emin - 1)
-    return mpfr_underflow (y, rnd_mode == GMP_RNDN ? GMP_RNDZ : rnd_mode,
+    return mpfr_underflow (y, rnd_mode == MPFR_RNDN ? MPFR_RNDZ : rnd_mode,
                            MPFR_SIGN (y));
 
   if (MPFR_UNLIKELY (d == 0 && inexact == 0))
     nexttoinf = 0;  /* result is exact */
   else
-    switch (rnd_mode)
-      {
-      case GMP_RNDZ:
-        inexact = - MPFR_INT_SIGN (y);  /* result is inexact */
-        nexttoinf = 0;
-        break;
+    {
+      MPFR_UPDATE2_RND_MODE(rnd_mode, MPFR_SIGN (y));
+      switch (rnd_mode)
+        {
+        case MPFR_RNDZ:
+          inexact = - MPFR_INT_SIGN (y);  /* result is inexact */
+          nexttoinf = 0;
+          break;
 
-      case GMP_RNDU:
-        inexact = 1;
-        nexttoinf = MPFR_IS_POS (y);
-        break;
+        case MPFR_RNDA:
+          inexact = MPFR_INT_SIGN (y);
+          nexttoinf = 1;
+          break;
 
-      case GMP_RNDD:
-        inexact = -1;
-        nexttoinf = MPFR_IS_NEG (y);
-        break;
-
-      default:
-        MPFR_ASSERTD (rnd_mode == GMP_RNDN);
-        /* We have one more significant bit in yn. */
-        if (sh && d < (MPFR_LIMB_ONE << (sh - 1)))
-          {
-            inexact = - MPFR_INT_SIGN (y);
-            nexttoinf = 0;
-          }
-        else if (sh && d > (MPFR_LIMB_ONE << (sh - 1)))
-          {
-            inexact = MPFR_INT_SIGN (y);
-            nexttoinf = 1;
-          }
-        else /* sh = 0 or d = 1 << (sh-1) */
-          {
-            /* The first case is "false" even rounding (significant bits
-               indicate even rounding, but the result is inexact, so up) ;
-               The second case is the case where middle should be used to
-               decide the direction of rounding (no further bit computed) ;
-               The third is the true even rounding.
-            */
-            if ((sh && inexact) || (!sh && middle > 0) ||
-                (!inexact && *yp & (MPFR_LIMB_ONE << sh)))
-              {
-                inexact = MPFR_INT_SIGN (y);
-                nexttoinf = 1;
-              }
-            else
-              {
-                inexact = - MPFR_INT_SIGN (y);
-                nexttoinf = 0;
-              }
-          }
-      }
+        default: /* should be MPFR_RNDN */
+          MPFR_ASSERTD (rnd_mode == MPFR_RNDN);
+          /* We have one more significant bit in yn. */
+          if (sh && d < (MPFR_LIMB_ONE << (sh - 1)))
+            {
+              inexact = - MPFR_INT_SIGN (y);
+              nexttoinf = 0;
+            }
+          else if (sh && d > (MPFR_LIMB_ONE << (sh - 1)))
+            {
+              inexact = MPFR_INT_SIGN (y);
+              nexttoinf = 1;
+            }
+          else /* sh = 0 or d = 1 << (sh-1) */
+            {
+              /* The first case is "false" even rounding (significant bits
+                 indicate even rounding, but the result is inexact, so up) ;
+                 The second case is the case where middle should be used to
+                 decide the direction of rounding (no further bit computed) ;
+                 The third is the true even rounding.
+              */
+              if ((sh && inexact) || (!sh && middle > 0) ||
+                  (!inexact && *yp & (MPFR_LIMB_ONE << sh)))
+                {
+                  inexact = MPFR_INT_SIGN (y);
+                  nexttoinf = 1;
+                }
+              else
+                {
+                  inexact = - MPFR_INT_SIGN (y);
+                  nexttoinf = 0;
+                }
+            }
+        }
+    }
 
   if (nexttoinf &&
       MPFR_UNLIKELY (mpn_add_1 (yp, yp, yn, MPFR_LIMB_ONE << sh)))
@@ -256,7 +252,7 @@ mpfr_div_ui (mpfr_ptr y, mpfr_srcptr x, unsigned long int u, mp_rnd_t rnd_mode)
   return mpfr_check_range (y, inexact, rnd_mode);
 }
 
-int mpfr_div_si (mpfr_ptr y, mpfr_srcptr x, long int u, mp_rnd_t rnd_mode)
+int mpfr_div_si (mpfr_ptr y, mpfr_srcptr x, long int u, mpfr_rnd_t rnd_mode)
 {
   int res;
 

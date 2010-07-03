@@ -1,37 +1,38 @@
 /* mpfr_add1 -- internal function to perform a "real" addition
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include "mpfr-impl.h"
 
-/* compute sign(b) * (|b| + |c|) */
+/* compute sign(b) * (|b| + |c|), assuming b and c have same sign,
+   and are not NaN, Inf, nor zero. */
 int
-mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
+mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mpfr_rnd_t rnd_mode)
 {
   mp_limb_t *ap, *bp, *cp;
-  mp_prec_t aq, bq, cq, aq2;
+  mpfr_prec_t aq, bq, cq, aq2;
   mp_size_t an, bn, cn;
-  mp_exp_t difw, exp;
+  mpfr_exp_t difw, exp;
   int sh, rb, fb, inex;
-  mp_exp_unsigned_t diff_exp;
+  mpfr_uexp_t diff_exp;
   MPFR_TMP_DECL(marker);
 
   MPFR_ASSERTD(MPFR_IS_PURE_FP(b) && MPFR_IS_PURE_FP(c));
@@ -42,12 +43,12 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
   bq = MPFR_PREC(b);
   cq = MPFR_PREC(c);
 
-  an = (aq-1)/BITS_PER_MP_LIMB+1; /* number of limbs of a */
-  aq2 = (mp_prec_t) an * BITS_PER_MP_LIMB;
+  an = (aq-1)/GMP_NUMB_BITS+1; /* number of limbs of a */
+  aq2 = (mpfr_prec_t) an * GMP_NUMB_BITS;
   sh = aq2 - aq;                  /* non-significant bits in low limb */
 
-  bn = (bq-1)/BITS_PER_MP_LIMB+1; /* number of limbs of b */
-  cn = (cq-1)/BITS_PER_MP_LIMB+1; /* number of limbs of c */
+  bn = (bq-1)/GMP_NUMB_BITS+1; /* number of limbs of b */
+  cn = (cq-1)/GMP_NUMB_BITS+1; /* number of limbs of c */
 
   ap = MPFR_MANT(a);
   bp = MPFR_MANT(b);
@@ -68,7 +69,9 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
   exp = MPFR_GET_EXP (b);
   MPFR_SET_SAME_SIGN(a, b);
-  diff_exp = (mp_exp_unsigned_t) exp - MPFR_GET_EXP(c);
+  MPFR_UPDATE2_RND_MODE(rnd_mode, MPFR_SIGN(b));
+  /* now rnd_mode is either MPFR_RNDN, MPFR_RNDZ or MPFR_RNDA */
+  diff_exp = (mpfr_uexp_t) exp - MPFR_GET_EXP(c);
 
   /*
    * 1. Compute the significant part A', the non-significant bits of A
@@ -109,7 +112,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
     { /* c overlaps with a' */
       mp_limb_t *a2p;
       mp_limb_t cc;
-      mp_prec_t dif;
+      mpfr_prec_t dif;
       mp_size_t difn, k;
       int shift;
 
@@ -118,7 +121,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
       dif = aq2 - diff_exp;
       /* dif is the number of bits of c which overlap with a' */
 
-      difn = (dif-1)/BITS_PER_MP_LIMB + 1;
+      difn = (dif-1)/GMP_NUMB_BITS + 1;
       /* only the highest difn limbs from c have to be considered */
       if (MPFR_UNLIKELY(difn > cn))
         {
@@ -128,13 +131,13 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           MPN_ZERO(ap, difn - cn);
           difn = cn;
         }
-      k = diff_exp / BITS_PER_MP_LIMB;
+      k = diff_exp / GMP_NUMB_BITS;
 
       /* zero the most significant k limbs of a */
       a2p = ap + (an - k);
       MPN_ZERO(a2p, k);
 
-      shift = diff_exp % BITS_PER_MP_LIMB;
+      shift = diff_exp % GMP_NUMB_BITS;
 
       if (MPFR_LIKELY(shift))
         {
@@ -155,7 +158,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
         {
           if (MPFR_UNLIKELY(exp == __gmpfr_emax))
             {
-              inex = mpfr_overflow(a, rnd_mode, MPFR_SIGN(a));
+              inex = mpfr_overflow (a, rnd_mode, MPFR_SIGN(a));
               goto end_of_add;
             }
           exp++;
@@ -203,7 +206,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
   /* determine rounding and sticky bits (and possible carry) */
 
-  difw = (mp_exp_t) an - (mp_exp_t) (diff_exp / BITS_PER_MP_LIMB);
+  difw = (mpfr_exp_t) an - (mpfr_exp_t) (diff_exp / GMP_NUMB_BITS);
   /* difw is the number of limbs from b (regarded as having an infinite
      precision) that have already been combined with c; -n if the next
      n limbs from b won't be combined with c. */
@@ -239,7 +242,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
             {
               if (rb < 0) /* rb not initialized yet */
                 {
-                  rb = bb >> (BITS_PER_MP_LIMB - 1);
+                  rb = bb >> (GMP_NUMB_BITS - 1);
                   bb |= MPFR_LIMB_HIGHBIT;
                 }
               fb = 1;
@@ -265,7 +268,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           int difs;
 
           ck = cn - difw;
-          difs = diff_exp % BITS_PER_MP_LIMB;
+          difs = diff_exp % GMP_NUMB_BITS;
 
           if (difs == 0 && ck == 0)
             goto c_read;
@@ -278,7 +281,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
               if (difs)
                 {
-                  cc = cprev << (BITS_PER_MP_LIMB - difs);
+                  cc = cprev << (GMP_NUMB_BITS - difs);
                   if (--ck >= 0)
                     {
                       cprev = cp[ck];
@@ -296,7 +299,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
                 {
                   if (exp == __gmpfr_emax)
                     {
-                      inex = mpfr_overflow(a, rnd_mode, MPFR_SIGN(a));
+                      inex = mpfr_overflow (a, rnd_mode, MPFR_SIGN(a));
                       goto end_of_add;
                     }
                   exp++;
@@ -306,9 +309,9 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
               if (rb < 0) /* rb not initialized yet */
                 {
-                  rb = bb >> (BITS_PER_MP_LIMB - 1);
+                  rb = bb >> (GMP_NUMB_BITS - 1);
                   bb <<= 1;
-                  bb |= bb >> (BITS_PER_MP_LIMB - 1);
+                  bb |= bb >> (GMP_NUMB_BITS - 1);
                 }
 
               fb = bb != 0;
@@ -324,7 +327,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
                 {
                   if (ck < 0)
                     goto c_read;
-                  cc = cprev << (BITS_PER_MP_LIMB - difs);
+                  cc = cprev << (GMP_NUMB_BITS - difs);
                   if (--ck >= 0)
                     {
                       cprev = cp[ck];
@@ -349,7 +352,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
                     {
                       if (MPFR_UNLIKELY(exp == __gmpfr_emax))
                         {
-                          inex = mpfr_overflow(a, rnd_mode, MPFR_SIGN(a));
+                          inex = mpfr_overflow (a, rnd_mode, MPFR_SIGN(a));
                           goto end_of_add;
                         }
                       exp++;
@@ -370,7 +373,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
           if (fb || ck < 0)
             goto rounding;
-          if (difs && cprev << (BITS_PER_MP_LIMB - difs))
+          if (difs && cprev << (GMP_NUMB_BITS - difs))
             {
               fb = 1;
               goto rounding;
@@ -395,7 +398,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
               bb = bp[--bk];
               if (rb < 0) /* rb not initialized yet */
                 {
-                  rb = bb >> (BITS_PER_MP_LIMB - 1);
+                  rb = bb >> (GMP_NUMB_BITS - 1);
                   bb &= ~MPFR_LIMB_HIGHBIT;
                 }
               fb = bb != 0;
@@ -433,7 +436,7 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
 
           MPFR_ASSERTD(difw >= 0 && cn >= difw);
           ck = cn - difw;
-          difs = diff_exp % BITS_PER_MP_LIMB;
+          difs = diff_exp % GMP_NUMB_BITS;
 
           if (difs == 0 && ck == 0)
             { /* c has entirely been read */
@@ -446,10 +449,10 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
               mp_limb_t cc;
 
               cc = difs ? (MPFR_ASSERTD(ck < cn),
-                           cp[ck] << (BITS_PER_MP_LIMB - difs)) : cp[--ck];
+                           cp[ck] << (GMP_NUMB_BITS - difs)) : cp[--ck];
               if (rb < 0)
                 {
-                  rb = cc >> (BITS_PER_MP_LIMB - 1);
+                  rb = cc >> (GMP_NUMB_BITS - 1);
                   cc &= ~MPFR_LIMB_HIGHBIT;
                 }
               while (cc == 0)
@@ -467,9 +470,9 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
     } /* fb != 1 */
 
  rounding:
-  switch (rnd_mode)
+  /* rnd_mode should be one of MPFR_RNDN, MPFR_RNDZ or MPFR_RNDA */
+  if (MPFR_LIKELY(rnd_mode == MPFR_RNDN))
     {
-    case GMP_RNDN:
       if (fb == 0)
         {
           if (rb == 0)
@@ -495,37 +498,28 @@ mpfr_add1 (mpfr_ptr a, mpfr_srcptr b, mpfr_srcptr c, mp_rnd_t rnd_mode)
           inex = MPFR_IS_POS(a) ? 1 : -1;
           goto add_one_ulp;
         }
-
-    case GMP_RNDZ:
+    }
+  else if (rnd_mode == MPFR_RNDZ)
+    {
       inex = rb || fb ? (MPFR_IS_NEG(a) ? 1 : -1) : 0;
       goto set_exponent;
-
-    case GMP_RNDU:
-      inex = rb || fb;
-      if (inex && MPFR_IS_POS(a))
+    }
+  else
+    {
+      MPFR_ASSERTN (rnd_mode == MPFR_RNDA);
+      inex = rb || fb ? (MPFR_IS_POS(a) ? 1 : -1) : 0;
+      if (inex)
         goto add_one_ulp;
       else
         goto set_exponent;
-
-    case GMP_RNDD:
-      inex = - (rb || fb);
-      if (inex && MPFR_IS_NEG(a))
-        goto add_one_ulp;
-      else
-        goto set_exponent;
-
-    default:
-      MPFR_ASSERTN(0);
-      inex = 0;
-      goto set_exponent;
     }
 
  add_one_ulp: /* add one unit in last place to a */
-  if (MPFR_UNLIKELY(mpn_add_1(ap, ap, an, MPFR_LIMB_ONE << sh)))
+  if (MPFR_UNLIKELY(mpn_add_1 (ap, ap, an, MPFR_LIMB_ONE << sh)))
     {
       if (MPFR_UNLIKELY(exp == __gmpfr_emax))
         {
-          inex = mpfr_overflow(a, rnd_mode, MPFR_SIGN(a));
+          inex = mpfr_overflow (a, rnd_mode, MPFR_SIGN(a));
           goto end_of_add;
         }
       exp++;

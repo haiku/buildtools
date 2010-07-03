@@ -10,7 +10,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify it
 under the terms of the GNU Lesser General Public License as published by the
-Free Software Foundation; either version 2.1 of the License, or (at your
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,9 +19,7 @@ FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
 for more details.
 
 You should have received a copy of the GNU Lesser General Public License along
-with the GNU MP Library; see the file COPYING.LIB.  If not, write to the Free
-Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-USA.  */
+with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 
 #include "gmp.h"
@@ -35,6 +33,9 @@ mpn_pow_1 (mp_ptr rp, mp_srcptr bp, mp_size_t bn, mp_limb_t exp, mp_ptr tp)
   int cnt, i;
   mp_size_t rn;
   int par;
+
+  ASSERT (bn >= 1);
+  /* FIXME: Add operand overlap criteria */
 
   if (exp <= 1)
     {
@@ -70,7 +71,7 @@ mpn_pow_1 (mp_ptr rp, mp_srcptr bp, mp_size_t bn, mp_limb_t exp, mp_ptr tp)
       if ((cnt & 1) != 0)
 	MP_PTR_SWAP (rp, tp);
 
-      mpn_sqr_n (rp, bp, bn);
+      mpn_sqr (rp, bp, bn);
       rn = 2 * bn; rn -= rp[rn - 1] == 0;
 
       for (i = GMP_LIMB_BITS - cnt - 1;;)
@@ -85,7 +86,7 @@ mpn_pow_1 (mp_ptr rp, mp_srcptr bp, mp_size_t bn, mp_limb_t exp, mp_ptr tp)
 	  if (--i == 0)
 	    break;
 
-	  mpn_sqr_n (tp, rp, rn);
+	  mpn_sqr (tp, rp, rn);
 	  rn = 2 * rn; rn -= tp[rn - 1] == 0;
 	  MP_PTR_SWAP (rp, tp);
 	}
@@ -95,7 +96,7 @@ mpn_pow_1 (mp_ptr rp, mp_srcptr bp, mp_size_t bn, mp_limb_t exp, mp_ptr tp)
       if (((par ^ cnt) & 1) == 0)
 	MP_PTR_SWAP (rp, tp);
 
-      mpn_sqr_n (rp, bp, bn);
+      mpn_sqr (rp, bp, bn);
       rn = 2 * bn; rn -= rp[rn - 1] == 0;
 
       for (i = GMP_LIMB_BITS - cnt - 1;;)
@@ -110,7 +111,7 @@ mpn_pow_1 (mp_ptr rp, mp_srcptr bp, mp_size_t bn, mp_limb_t exp, mp_ptr tp)
 	  if (--i == 0)
 	    break;
 
-	  mpn_sqr_n (tp, rp, rn);
+	  mpn_sqr (tp, rp, rn);
 	  rn = 2 * rn; rn -= tp[rn - 1] == 0;
 	  MP_PTR_SWAP (rp, tp);
 	}

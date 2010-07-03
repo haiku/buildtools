@@ -1,24 +1,24 @@
 /* mpfr_asinh -- inverse hyperbolic sine
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
@@ -27,13 +27,13 @@ MA 02110-1301, USA. */
  *    asinh = ln(x + sqrt(x^2 + 1))     */
 
 int
-mpfr_asinh (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
+mpfr_asinh (mpfr_ptr y, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 {
   int inexact;
   int signx, neg;
-  mp_prec_t Ny, Nt;
+  mpfr_prec_t Ny, Nt;
   mpfr_t t; /* auxiliary variables */
-  mp_exp_t err;
+  mpfr_exp_t err;
   MPFR_SAVE_EXPO_DECL (expo);
   MPFR_ZIV_DECL (loop);
 
@@ -87,11 +87,11 @@ mpfr_asinh (mpfr_ptr y, mpfr_srcptr x, mp_rnd_t rnd_mode)
   for (;;)
     {
       /* compute asinh */
-      mpfr_mul (t, x, x, GMP_RNDD);                    /* x^2 */
-      mpfr_add_ui (t, t, 1, GMP_RNDD);                 /* x^2+1 */
-      mpfr_sqrt (t, t, GMP_RNDN);                      /* sqrt(x^2+1) */
-      (neg ? mpfr_sub : mpfr_add) (t, t, x, GMP_RNDN); /* sqrt(x^2+1)+x */
-      mpfr_log (t, t, GMP_RNDN);                       /* ln(sqrt(x^2+1)+x)*/
+      mpfr_mul (t, x, x, MPFR_RNDD);                    /* x^2 */
+      mpfr_add_ui (t, t, 1, MPFR_RNDD);                 /* x^2+1 */
+      mpfr_sqrt (t, t, MPFR_RNDN);                      /* sqrt(x^2+1) */
+      (neg ? mpfr_sub : mpfr_add) (t, t, x, MPFR_RNDN); /* sqrt(x^2+1)+x */
+      mpfr_log (t, t, MPFR_RNDN);                       /* ln(sqrt(x^2+1)+x)*/
 
       if (MPFR_LIKELY (MPFR_IS_PURE_FP (t)))
         {

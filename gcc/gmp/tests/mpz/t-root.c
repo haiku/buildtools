@@ -1,12 +1,12 @@
-/* Test mpz_add, mpz_add_ui, mpz_cmp, mpz_cmp, mpz_mul, mpz_sqrtrem.
+/* Test mpz_root, mpz_rootrem, and mpz_perfect_power_p.
 
-Copyright 1991, 1993, 1994, 1996, 2000, 2001 Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2009 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,41 +24,105 @@ MA 02110-1301, USA. */
 #include "gmp-impl.h"
 #include "tests.h"
 
-void debug_mp _PROTO ((mpz_t, int));
+void debug_mp __GMP_PROTO ((mpz_t, int));
+
+void
+check_one (mpz_t root1, mpz_t x2, unsigned long nth, int i)
+{
+  mpz_t temp, temp2;
+  mpz_t root2, rem2;
+
+  mpz_init (root2);
+  mpz_init (rem2);
+  mpz_init (temp);
+  mpz_init (temp2);
+
+  MPZ_CHECK_FORMAT (root1);
+
+  mpz_rootrem (root2, rem2, x2, nth);
+  MPZ_CHECK_FORMAT (root2);
+  MPZ_CHECK_FORMAT (rem2);
+
+  mpz_pow_ui (temp, root1, nth);
+  MPZ_CHECK_FORMAT (temp);
+
+  mpz_add (temp2, temp, rem2);
+
+  /* Is power of result > argument?  */
+  if (mpz_cmp (root1, root2) != 0 || mpz_cmp (x2, temp2) != 0 || mpz_cmp (temp, x2) > 0)
+    {
+      fprintf (stderr, "ERROR after test %d\n", i);
+      debug_mp (x2, 10);
+      debug_mp (root1, 10);
+      debug_mp (root2, 10);
+      fprintf (stderr, "nth: %lu\n", nth);
+      abort ();
+    }
+
+  if (nth > 1 && mpz_cmp_ui (temp, 1L) > 0 && ! mpz_perfect_power_p (temp))
+    {
+      fprintf (stderr, "ERROR in mpz_perfect_power_p after test %d\n", i);
+      debug_mp (temp, 10);
+      debug_mp (root1, 10);
+      fprintf (stderr, "nth: %lu\n", nth);
+      abort ();
+    }
+
+  if (nth <= 10000)		/* skip too expensive test */
+    {
+      mpz_add_ui (temp2, root1, 1L);
+      mpz_pow_ui (temp2, temp2, nth);
+      MPZ_CHECK_FORMAT (temp2);
+
+      /* Is square of (result + 1) <= argument?  */
+      if (mpz_cmp (temp2, x2) <= 0)
+	{
+	  fprintf (stderr, "ERROR after test %d\n", i);
+	  debug_mp (x2, 10);
+	  debug_mp (root1, 10);
+	  fprintf (stderr, "nth: %lu\n", nth);
+	  abort ();
+	}
+    }
+
+  mpz_clear (root2);
+  mpz_clear (rem2);
+  mpz_clear (temp);
+  mpz_clear (temp2);
+}
 
 int
 main (int argc, char **argv)
 {
   mpz_t x2;
-  mpz_t root1, root2, rem2;
-  mpz_t temp, temp2;
+  mpz_t root1;
   mp_size_t x2_size;
   int i;
-  int reps = 1000;
+  int reps = 500;
   unsigned long nth;
   gmp_randstate_ptr rands;
   mpz_t bs;
   unsigned long bsi, size_range;
 
   tests_start ();
+  TESTS_REPS (reps, argv, argc);
+
   rands = RANDS;
 
   mpz_init (bs);
 
-  if (argc == 2)
-     reps = atoi (argv[1]);
-
   mpz_init (x2);
   mpz_init (root1);
-  mpz_init (root2);
-  mpz_init (rem2);
-  mpz_init (temp);
-  mpz_init (temp2);
+
+  /* This triggers a gcc 4.3.2 bug */
+  mpz_set_str (x2, "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff80000000000000000000000000000000000000000000000000000000000000002", 16);
+  mpz_root (root1, x2, 2);
+  check_one (root1, x2, 2, -1);
 
   for (i = 0; i < reps; i++)
     {
       mpz_urandomb (bs, rands, 32);
-      size_range = mpz_get_ui (bs) % 12 + 2;
+      size_range = mpz_get_ui (bs) % 17 + 2;
 
       mpz_urandomb (bs, rands, size_range);
       x2_size = mpz_get_ui (bs) + 10;
@@ -87,56 +149,12 @@ main (int argc, char **argv)
 	  mpz_root (root1, x2, nth);
 	}
 
-      /* printf ("%ld %lu\n", SIZ (x2), nth); */
-
-      mpz_rootrem (root2, rem2, x2, nth);
-      mpz_pow_ui (temp, root1, nth);
-      mpz_add (temp2, temp, rem2);
-
-      /* Is power of result > argument?  */
-      if (mpz_cmp (root1, root2) != 0 || mpz_cmp (x2, temp2) != 0 || mpz_cmp (temp, x2) > 0)
-	{
-	  fprintf (stderr, "ERROR after test %d\n", i);
-	  debug_mp (x2, 10);
-	  debug_mp (root1, 10);
-	  debug_mp (root2, 10);
-	  fprintf (stderr, "nth: %lu\n", nth);
-	  abort ();
-	}
-
-      if (nth > 1 && mpz_cmp_ui (temp, 1L) > 0 && ! mpz_perfect_power_p (temp))
-	{
-	  fprintf (stderr, "ERROR in mpz_perfect_power_p after test %d\n", i);
-	  debug_mp (temp, 10);
-	  debug_mp (root1, 10);
-	  fprintf (stderr, "nth: %lu\n", nth);
-	  abort ();
-	}
-
-      if (nth > 10000)
-	continue;		/* skip too expensive test */
-
-      mpz_add_ui (temp2, root1, 1L);
-      mpz_pow_ui (temp2, temp2, nth);
-
-      /* Is square of (result + 1) <= argument?  */
-      if (mpz_cmp (temp2, x2) <= 0)
-	{
-	  fprintf (stderr, "ERROR after test %d\n", i);
-	  debug_mp (x2, 10);
-	  debug_mp (root1, 10);
-	  fprintf (stderr, "nth: %lu\n", nth);
-	  abort ();
-	}
+      check_one (root1, x2, nth, i);
     }
 
   mpz_clear (bs);
   mpz_clear (x2);
   mpz_clear (root1);
-  mpz_clear (root2);
-  mpz_clear (rem2);
-  mpz_clear (temp);
-  mpz_clear (temp2);
 
   tests_end ();
   exit (0);

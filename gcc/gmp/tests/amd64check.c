@@ -1,12 +1,12 @@
 /* AMD64 calling conventions checking.
 
-Copyright 2000, 2001, 2004 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2004, 2007 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include "gmp.h"
@@ -25,15 +23,31 @@ MA 02110-1301, USA. */
 #include "tests.h"
 
 
-/* temporaries */
-long  calling_conventions_save_rbx;
-long  calling_conventions_save_rbp;
-long  calling_conventions_save_r12;
-long  calling_conventions_save_r13;
-long  calling_conventions_save_r14;
-long  calling_conventions_save_r15;
-long  calling_conventions_retaddr;
-long  calling_conventions_retval;
+/* Vector if constants and register values.  We use one vector to allow access
+   via a base pointer, very beneficial for the PIC-enabled amd64call.asm.  */
+mp_limb_t calling_conventions_values[23] =
+{
+  CNST_LIMB(0x1234567887654321),	/* want_rbx */
+  CNST_LIMB(0x89ABCDEFFEDCBA98),	/* want_rbp */
+  CNST_LIMB(0xDEADBEEFBADECAFE),	/* want_r12 */
+  CNST_LIMB(0xFFEEDDCCBBAA9988),	/* want_r13 */
+  CNST_LIMB(0x0011223344556677),	/* want_r14 */
+  CNST_LIMB(0x1234432156788765),	/* want_r15 */
+
+  CNST_LIMB(0xFEEDABBACAAFBEED),	/* JUNK_RAX */
+  CNST_LIMB(0xAB78DE89FF5125BB),	/* JUNK_R10 */
+  CNST_LIMB(0x1238901890189031)		/* JUNK_R11 */
+
+  /* rest of array used for dynamic values.  */
+};
+
+/* Index starts for various regions in above vector.  */
+#define WANT	0
+#define JUNK	6
+#define SAVE	9
+#define RETADDR	15
+#define VAL	16
+#define RFLAGS	22
 
 /* values to check */
 struct {
@@ -42,21 +56,9 @@ struct {
   int  tag;
   int  other[4];
 } calling_conventions_fenv;
-long  calling_conventions_rbx;
-long  calling_conventions_rbp;
-long  calling_conventions_r12;
-long  calling_conventions_r13;
-long  calling_conventions_r14;
-long  calling_conventions_r15;
-long  calling_conventions_rflags;
 
-/* expected values, as per amd64call.asm */
-const long  calling_conventions_want_rbx = 0x1234567887654321L;
-const long  calling_conventions_want_rbp = 0x89ABCDEFFEDCBA98L;
-const long  calling_conventions_want_r12 = 0xDEADBEEFBADECAFEL;
-const long  calling_conventions_want_r13 = 0xFFEEDDCCBBAA9988L;
-const long  calling_conventions_want_r14 = 0x0011223344556677L;
-const long  calling_conventions_want_r15 = 0x1234432156788765L;
+
+char *regname[6] = {"rbx", "rbp", "r12", "r13", "r14", "r15"};
 
 #define DIR_BIT(rflags)   (((rflags) & (1<<10)) != 0)
 
@@ -68,35 +70,34 @@ calling_conventions_check (void)
 {
   const char  *header = "Violated calling conventions:\n";
   int  ret = 1;
+  int i;
 
-#define CHECK(callreg, regstr, value)                   \
-  if (callreg != value)                                 \
-    {                                                   \
-      printf ("%s   %s  got 0x%016lX want 0x%016lX\n",  \
-              header, regstr, callreg, value);          \
-      header = "";                                      \
-      ret = 0;                                          \
+#define CHECK(callreg, regstr, value)			\
+  if (callreg != value)					\
+    {							\
+      printf ("%s   %s	got 0x%016lX want 0x%016lX\n",	\
+	      header, regstr, callreg, value);		\
+      header = "";					\
+      ret = 0;						\
     }
 
-  CHECK (calling_conventions_rbx, "rbx", calling_conventions_want_rbx);
-  CHECK (calling_conventions_rbp, "rbp", calling_conventions_want_rbp);
-  CHECK (calling_conventions_r12, "r12", calling_conventions_want_r12);
-  CHECK (calling_conventions_r13, "r13", calling_conventions_want_r13);
-  CHECK (calling_conventions_r14, "r14", calling_conventions_want_r14);
-  CHECK (calling_conventions_r15, "r15", calling_conventions_want_r15);
+  for (i = 0; i < 6; i++)
+    {
+      CHECK (calling_conventions_values[VAL+i], regname[i], calling_conventions_values[WANT+i]);
+    }
 
-  if (DIR_BIT (calling_conventions_rflags) != 0)
+  if (DIR_BIT (calling_conventions_values[RFLAGS]) != 0)
     {
       printf ("%s   rflags dir bit  got %d want 0\n",
-              header, DIR_BIT (calling_conventions_rflags));
+	      header, DIR_BIT (calling_conventions_values[RFLAGS]));
       header = "";
       ret = 0;
     }
 
   if ((calling_conventions_fenv.tag & 0xFFFF) != 0xFFFF)
     {
-      printf ("%s   fpu tags  got 0x%lX want 0xFFFF\n",
-              header, calling_conventions_fenv.tag & 0xFFFF);
+      printf ("%s   fpu tags  got 0x%X want 0xFFFF\n",
+	      header, calling_conventions_fenv.tag & 0xFFFF);
       header = "";
       ret = 0;
     }

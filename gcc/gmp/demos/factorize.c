@@ -1,19 +1,20 @@
 /* Factoring with Pollard's rho method.
 
-Copyright 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005 Free Software
-Foundation, Inc.
+Copyright 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2009
+Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
-Foundation; either version 2, or (at your option) any later version.
+Foundation; either version 3 of the License, or (at your option) any later
+version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
-this program; see the file COPYING.  If not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.  */
+this program.  If not, see http://www.gnu.org/licenses/.  */
+
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -34,7 +35,7 @@ factor_using_division (mpz_t t, unsigned int limit)
   unsigned *addv = add;
   unsigned int failures;
 
-  if (flag_verbose)
+  if (flag_verbose > 0)
     {
       printf ("[trial division (%u)] ", limit);
       fflush (stdout);
@@ -97,8 +98,7 @@ factor_using_division (mpz_t t, unsigned int limit)
 	}
     }
 
-  mpz_clear (q);
-  mpz_clear (r);
+  mpz_clears (q, r, NULL);
 }
 
 void
@@ -108,7 +108,7 @@ factor_using_division_2kp (mpz_t t, unsigned int limit, unsigned long p)
   mpz_t f;
   unsigned int k;
 
-  if (flag_verbose)
+  if (flag_verbose > 0)
     {
       printf ("[trial division (%u)] ", limit);
       fflush (stdout);
@@ -131,129 +131,133 @@ factor_using_division_2kp (mpz_t t, unsigned int limit, unsigned long p)
       mpz_add_ui (f, f, 2 * p);
     }
 
-  mpz_clear (f);
-  mpz_clear (r);
+  mpz_clears (f, r, NULL);
 }
 
 void
-factor_using_pollard_rho (mpz_t n, int a_int, unsigned long p)
+factor_using_pollard_rho (mpz_t n, unsigned long a, unsigned long p)
 {
   mpz_t x, x1, y, P;
-  mpz_t a;
-  mpz_t g;
   mpz_t t1, t2;
-  int k, l, c, i;
+  unsigned long long k, l, i;
 
-  if (flag_verbose)
+  if (flag_verbose > 0)
     {
-      printf ("[pollard-rho (%d)] ", a_int);
+      printf ("[pollard-rho (%lu)] ", a);
       fflush (stdout);
     }
 
-  mpz_init (g);
-  mpz_init (t1);
-  mpz_init (t2);
-
-  mpz_init_set_si (a, a_int);
+  mpz_inits (t1, t2, NULL);
   mpz_init_set_si (y, 2);
   mpz_init_set_si (x, 2);
   mpz_init_set_si (x1, 2);
+  mpz_init_set_ui (P, 1);
   k = 1;
   l = 1;
-  mpz_init_set_ui (P, 1);
-  c = 0;
 
   while (mpz_cmp_ui (n, 1) != 0)
     {
-S2:
-      if (p != 0)
+      for (;;)
 	{
-	  mpz_powm_ui (x, x, p, n); mpz_add (x, x, a);
-	}
-      else
-	{
-	  mpz_mul (x, x, x); mpz_add (x, x, a); mpz_mod (x, x, n);
-	}
-      mpz_sub (t1, x1, x); mpz_mul (t2, P, t1); mpz_mod (P, t2, n);
-      c++;
-      if (c == 20)
-	{
-	  c = 0;
-	  mpz_gcd (g, P, n);
-	  if (mpz_cmp_ui (g, 1) != 0)
-	    goto S4;
+	  do
+	    {
+	      if (p != 0)
+		{
+		  mpz_powm_ui (x, x, p, n);
+		  mpz_add_ui (x, x, a);
+		}
+	      else
+		{
+		  mpz_mul (t1, x, x);
+		  mpz_mod (x, t1, n);
+		  mpz_add_ui (x, x, a);
+		}
+
+	      mpz_sub (t1, x1, x);
+	      mpz_mul (t2, P, t1);
+	      mpz_mod (P, t2, n);
+
+	      if (k % 32 == 1)
+		{
+		  mpz_gcd (t1, P, n);
+		  if (mpz_cmp_ui (t1, 1) != 0)
+		    goto factor_found;
+		  mpz_set (y, x);
+		}
+	    }
+	  while (--k != 0);
+
+	  mpz_gcd (t1, P, n);
+	  if (mpz_cmp_ui (t1, 1) != 0)
+	    goto factor_found;
+
+	  mpz_set (x1, x);
+	  k = l;
+	  l = 2 * l;
+	  for (i = 0; i < k; i++)
+	    {
+	      if (p != 0)
+		{
+		  mpz_powm_ui (x, x, p, n);
+		  mpz_add_ui (x, x, a);
+		}
+	      else
+		{
+		  mpz_mul (t1, x, x);
+		  mpz_mod (x, t1, n);
+		  mpz_add_ui (x, x, a);
+		}
+	    }
 	  mpz_set (y, x);
 	}
-S3:
-      k--;
-      if (k > 0)
-	goto S2;
 
-      mpz_gcd (g, P, n);
-      if (mpz_cmp_ui (g, 1) != 0)
-	goto S4;
-
-      mpz_set (x1, x);
-      k = l;
-      l = 2 * l;
-      for (i = 0; i < k; i++)
-	{
-	  if (p != 0)
-	    {
-	      mpz_powm_ui (x, x, p, n); mpz_add (x, x, a);
-	    }
-	  else
-	    {
-	      mpz_mul (x, x, x); mpz_add (x, x, a); mpz_mod (x, x, n);
-	    }
-	}
-      mpz_set (y, x);
-      c = 0;
-      goto S2;
-S4:
+    factor_found:
       do
 	{
 	  if (p != 0)
 	    {
-	      mpz_powm_ui (y, y, p, n); mpz_add (y, y, a); 
+	      mpz_powm_ui (y, y, p, n); mpz_add_ui (y, y, a);
 	    }
 	  else
 	    {
-	      mpz_mul (y, y, y); mpz_add (y, y, a); mpz_mod (y, y, n);
+	      mpz_mul (t1, y, y);
+	      mpz_mod (y, t1, n);
+	      mpz_add_ui (y, y, a);
 	    }
-	  mpz_sub (t1, x1, y); mpz_gcd (g, t1, n);
+	  mpz_sub (t1, x1, y);
+	  mpz_gcd (t1, t1, n);
 	}
-      while (mpz_cmp_ui (g, 1) == 0);
+      while (mpz_cmp_ui (t1, 1) == 0);
 
-      mpz_div (n, n, g);	/* divide by g, before g is overwritten */
+      mpz_divexact (n, n, t1);	/* divide by t1, before t1 is overwritten */
 
-      if (!mpz_probab_prime_p (g, 3))
+      if (!mpz_probab_prime_p (t1, 10))
 	{
 	  do
-            {
-              mp_limb_t a_limb;
-              mpn_random (&a_limb, (mp_size_t) 1);
-              a_int = (int) a_limb;
-            }
-	  while (a_int == -2 || a_int == 0);
+	    {
+	      mp_limb_t a_limb;
+	      mpn_random (&a_limb, (mp_size_t) 1);
+	      a = a_limb;
+	    }
+	  while (a == 0);
 
-	  if (flag_verbose)
+	  if (flag_verbose > 0)
 	    {
 	      printf ("[composite factor--restarting pollard-rho] ");
 	      fflush (stdout);
 	    }
-	  factor_using_pollard_rho (g, a_int, p);
+	  factor_using_pollard_rho (t1, a, p);
 	}
       else
 	{
-	  mpz_out_str (stdout, 10, g);
+	  mpz_out_str (stdout, 10, t1);
 	  fflush (stdout);
 	  fputc (' ', stdout);
 	}
       mpz_mod (x, x, n);
       mpz_mod (x1, x1, n);
       mpz_mod (y, y, n);
-      if (mpz_probab_prime_p (n, 3))
+      if (mpz_probab_prime_p (n, 10))
 	{
 	  mpz_out_str (stdout, 10, n);
 	  fflush (stdout);
@@ -262,14 +266,7 @@ S4:
 	}
     }
 
-  mpz_clear (g);
-  mpz_clear (P);
-  mpz_clear (t2);
-  mpz_clear (t1);
-  mpz_clear (a);
-  mpz_clear (x1);
-  mpz_clear (x);
-  mpz_clear (y);
+  mpz_clears (P, t2, t1, x1, x, y, NULL);
 }
 
 void
@@ -294,18 +291,19 @@ factor (mpz_t t, unsigned long p)
 
   if (mpz_cmp_ui (t, 1) != 0)
     {
-      if (flag_verbose)
+      if (flag_verbose > 0)
 	{
 	  printf ("[is number prime?] ");
 	  fflush (stdout);
 	}
-      if (mpz_probab_prime_p (t, 3))
+      if (mpz_probab_prime_p (t, 10))
 	mpz_out_str (stdout, 10, t);
       else
-	factor_using_pollard_rho (t, 1, p);
+	factor_using_pollard_rho (t, 1L, p);
     }
 }
 
+int
 main (int argc, char *argv[])
 {
   mpz_t t;
@@ -315,6 +313,12 @@ main (int argc, char *argv[])
   if (argc > 1 && !strcmp (argv[1], "-v"))
     {
       flag_verbose = 1;
+      argv++;
+      argc--;
+    }
+  if (argc > 1 && !strcmp (argv[1], "-q"))
+    {
+      flag_verbose = -1;
       argv++;
       argc--;
     }
@@ -358,7 +362,10 @@ main (int argc, char *argv[])
 	  mpz_inp_str (t, stdin, 0);
 	  if (feof (stdin))
 	    break;
-	  mpz_out_str (stdout, 10, t); printf (" = ");
+	  if (flag_verbose >= 0)
+	    {
+	      mpz_out_str (stdout, 10, t); printf (" = ");
+	    }
 	  factor (t, 0);
 	  puts ("");
 	}

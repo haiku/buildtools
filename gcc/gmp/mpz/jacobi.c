@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify it
 under the terms of the GNU Lesser General Public License as published by the
-Free Software Foundation; either version 2.1 of the License, or (at your
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License
 for more details.
 
 You should have received a copy of the GNU Lesser General Public License along
-with the GNU MP Library; see the file COPYING.LIB.  If not, write to the Free
-Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301,
-USA. */
+with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include "gmp.h"
@@ -66,10 +64,7 @@ USA. */
 
    Enhancements:
 
-   mpn_bdivmod could be used instead of mpn_tdiv_qr, like in mpn_gcd.
-   Currently tdiv_qr is preferred since it's sub-quadratic on big sizes,
-   although bdivmod might be a touch quicker on small sizes.  This can be
-   revised when bdivmod becomes sub-quadratic too.
+   mpn_bdiv_qr should be used instead of mpn_tdiv_qr.
 
    Some sort of multi-step algorithm should be used.  The current subtract
    and shift for every bit is very inefficient.  Lehmer (per current gcdext)

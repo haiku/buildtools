@@ -1,12 +1,12 @@
 /* mpn_divexact_by3c -- mpn exact division by 3.
 
-Copyright 2000, 2001, 2002, 2003, 2006 Free Software Foundation, Inc.
+Copyright 2000, 2001, 2002, 2003, 2008 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,14 +15,28 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 
-#if 1
+#if DIVEXACT_BY3_METHOD == 0
+
+mp_limb_t
+mpn_divexact_by3c (mp_ptr rp, mp_srcptr up, mp_size_t un, mp_limb_t c)
+{
+  mp_limb_t r;
+  r = mpn_bdiv_dbm1c (rp, up, un, GMP_NUMB_MASK / 3, GMP_NUMB_MASK / 3 * c);
+
+  /* Possible bdiv_dbm1 return values are C * (GMP_NUMB_MASK / 3), 0 <= C < 3.
+     We want to return C.  We compute the remainder mod 4 and notice that the
+     inverse of (2^(2k)-1)/3 mod 4 is 1.  */
+  return r & 3;
+}
+
+#endif
+
+#if DIVEXACT_BY3_METHOD == 1
 
 /* The algorithm here is basically the same as mpn_divexact_1, as described
    in the manual.  Namely at each step q = (src[i]-c)*inverse, and new c =
@@ -47,7 +61,7 @@ MA 02110-1301, USA. */
    "l=s-c".  See below for alternative code which avoids that.  */
 
 mp_limb_t
-mpn_divexact_by3c (mp_ptr rp, mp_srcptr up, mp_size_t un, mp_limb_t c)
+mpn_divexact_by3c (mp_ptr restrict rp, mp_srcptr restrict up, mp_size_t un, mp_limb_t c)
 {
   mp_limb_t  l, q, s;
   mp_size_t  i;
@@ -75,7 +89,9 @@ mpn_divexact_by3c (mp_ptr rp, mp_srcptr up, mp_size_t un, mp_limb_t c)
 }
 
 
-#else
+#endif
+
+#if DIVEXACT_BY3_METHOD == 2
 
 /* The following alternative code re-arranges the quotient calculation from
    (src[i]-c)*inverse to instead
@@ -114,7 +130,7 @@ mpn_divexact_by3c (mp_ptr rp, mp_srcptr up, mp_size_t un, mp_limb_t c)
    mpn/ia64/diveby3.asm.  */
 
 mp_limb_t
-mpn_divexact_by3c (mp_ptr rp, mp_srcptr up, mp_size_t un, mp_limb_t cy)
+mpn_divexact_by3c (mp_ptr restrict rp, mp_srcptr restrict up, mp_size_t un, mp_limb_t cy)
 {
   mp_limb_t  s, sm, cl, q, qx, c2, c3;
   mp_size_t  i;

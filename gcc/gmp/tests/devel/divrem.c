@@ -1,11 +1,12 @@
 /*
-Copyright 1996, 1997, 1998, 2000, 2001 Free Software Foundation, Inc.
+Copyright 1996, 1997, 1998, 2000, 2001, 2007, 2009 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -14,12 +15,10 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA.
-*/
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "gmp.h"
 #include "gmp-impl.h"
 
@@ -51,27 +50,7 @@ cputime ()
 #define M * 1000000
 
 #ifndef CLOCK
-#if defined (__m88k__)
-#define CLOCK 20 M
-#elif defined (__i386__)
-#define CLOCK (16666667)
-#elif defined (__m68k__)
-#define CLOCK (20 M)
-#elif defined (_IBMR2)
-#define CLOCK (25 M)
-#elif defined (__sparc__)
-#define CLOCK (20 M)
-#elif defined (__sun__)
-#define CLOCK (20 M)
-#elif defined (__mips)
-#define CLOCK (40 M)
-#elif defined (__hppa__)
-#define CLOCK (50 M)
-#elif defined (__alpha)
-#define CLOCK (133 M)
-#else
 #error "Don't know CLOCK of your machine"
-#endif
 #endif
 
 #ifndef OPS
@@ -81,12 +60,10 @@ cputime ()
 #define SIZE 100
 #endif
 #ifndef TIMES
-#define TIMES OPS/SIZE
-#else
-#undef OPS
-#define OPS (SIZE*TIMES)
+#define TIMES OPS/(SIZE+1)
 #endif
 
+int
 main ()
 {
   mp_limb_t nptr[2 * SIZE];
@@ -111,7 +88,7 @@ main ()
 
       mpn_random2 (nptr, nsize);
       mpn_random2 (dptr, dsize);
-      dptr[dsize - 1] |= (mp_limb_t) 1 << (BITS_PER_MP_LIMB - 1);
+      dptr[dsize - 1] |= (mp_limb_t) 1 << (GMP_LIMB_BITS - 1);
 
       MPN_COPY (rptr, nptr, nsize);
       qlimb = mpn_divrem (qptr, (mp_size_t) 0, rptr, nsize, dptr, dsize);

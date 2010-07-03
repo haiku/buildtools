@@ -1,55 +1,30 @@
 /* Test file for mpfr_set_str.
 
-Copyright 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <limits.h>
-#include <time.h>
 
 #include "mpfr-test.h"
 
-static void check_reftable (void);
-static void check_special  (void);
-static void check_retval   (void);
-static void check_overflow (void);
-static void check_parse    (void);
-
-int
-main (int argc, char *argv[])
-{
-  tests_start_mpfr ();
-
-  check_special();
-  check_reftable ();
-  check_parse ();
-  check_overflow ();
-  check_retval ();
-
-  tests_end_mpfr ();
-  return 0;
-}
-
-void
+static void
 check_special (void)
 {
   mpfr_t x, y;
@@ -60,8 +35,8 @@ check_special (void)
   mpfr_init (y);
 
   /* Check dummy case */
-  res = mpfr_strtofr (x, "1234567.89E1", NULL, 10, GMP_RNDN);
-  mpfr_set_str (y, "1234567.89E1", 10, GMP_RNDN);
+  res = mpfr_strtofr (x, "1234567.89E1", NULL, 10, MPFR_RNDN);
+  mpfr_set_str (y, "1234567.89E1", 10, MPFR_RNDN);
   if (mpfr_cmp (x, y))
     {
       printf ("Results differ between strtofr and set_str.\n"
@@ -73,59 +48,86 @@ check_special (void)
     }
 
   /* Check NAN  */
-  res = mpfr_strtofr (x, "NaN", &s, 10, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "NaN", &s, 10, MPFR_RNDN);
   if (res != 0 || !mpfr_nan_p (x) || *s != 0)
     {
       printf ("Error for setting NAN (1)\n");
       exit (1);
     }
-  res = mpfr_strtofr (x, "@nAn@xx", &s, 16, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "+NaN", &s, 10, MPFR_RNDN);
+  if (res != 0 || !mpfr_nan_p (x) || *s != 0)
+    {
+      printf ("Error for setting +NAN (1)\n");
+      exit (1);
+    }
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, " -NaN", &s, 10, MPFR_RNDN);
+  if (res != 0 || !mpfr_nan_p (x) || *s != 0)
+    {
+      printf ("Error for setting -NAN (1)\n");
+      exit (1);
+    }
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "@nAn@xx", &s, 16, MPFR_RNDN);
   if (res != 0 || !mpfr_nan_p (x) || strcmp(s, "xx") )
     {
       printf ("Error for setting NAN (2)\n");
       exit (1);
     }
-  res = mpfr_strtofr (x, "NAN(abcdEDF__1256)Hello", &s, 10, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "NAN(abcdEDF__1256)Hello", &s, 10, MPFR_RNDN);
   if (res != 0 || !mpfr_nan_p (x) || strcmp(s, "Hello") )
     {
       printf ("Error for setting NAN (3)\n");
       exit (1);
     }
-  res = mpfr_strtofr (x, "NAN(abcdEDF)__1256)Hello", &s, 10, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "NAN(abcdEDF)__1256)Hello", &s, 10, MPFR_RNDN);
   if (res != 0 || !mpfr_nan_p (x) || strcmp(s, "__1256)Hello") )
     {
       printf ("Error for setting NAN (4)\n");
       exit (1);
     }
-  res = mpfr_strtofr (x, "NAN(abc%dEDF)__1256)Hello", &s, 10, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "NAN(abc%dEDF)__1256)Hello", &s, 10, MPFR_RNDN);
   if (res != 0 || !mpfr_nan_p (x) || strcmp(s, "(abc%dEDF)__1256)Hello") )
     {
       printf ("Error for setting NAN (5)\n");
       exit (1);
     }
-  res = mpfr_strtofr (x, "NAN((abc))", &s, 10, GMP_RNDN);
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "NAN((abc))", &s, 10, MPFR_RNDN);
   if (res != 0 || !mpfr_nan_p (x) || strcmp(s, "((abc))") )
     {
       printf ("Error for setting NAN (6)\n");
       exit (1);
     }
+  mpfr_set_ui (x, 0, MPFR_RNDN); /* make sure that x is modified */
+  res = mpfr_strtofr (x, "NAN()foo", &s, 10, MPFR_RNDN);
+  if (res != 0 || !mpfr_nan_p (x) || strcmp(s, "foo") )
+    {
+      printf ("Error for setting NAN (7)\n");
+      exit (1);
+    }
 
   /* Check INF */
-  res = mpfr_strtofr (x, "INFINITY", &s, 8, GMP_RNDN);
+  res = mpfr_strtofr (x, "INFINITY", &s, 8, MPFR_RNDN);
   if (res != 0 || !mpfr_inf_p (x) || *s != 0)
     {
       printf ("Error for setting INFINITY (1)\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  res = mpfr_strtofr (x, "INFANITY", &s, 8, GMP_RNDN);
+  res = mpfr_strtofr (x, "INFANITY", &s, 8, MPFR_RNDN);
   if (res != 0 || !mpfr_inf_p (x) || strcmp(s, "ANITY"))
     {
       printf ("Error for setting INFINITY (2)\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  res = mpfr_strtofr (x, "@INF@*2", &s, 11, GMP_RNDN);
+  res = mpfr_strtofr (x, "@INF@*2", &s, 11, MPFR_RNDN);
   if (res != 0 || !mpfr_inf_p (x) || strcmp(s, "*2"))
     {
       printf ("Error for setting INFINITY (3)\n s=%s\n x=", s);
@@ -134,7 +136,7 @@ check_special (void)
     }
 
   /* Check Zero */
-  res = mpfr_strtofr (x, " 00000", &s, 11, GMP_RNDN);
+  res = mpfr_strtofr (x, " 00000", &s, 11, MPFR_RNDN);
   if (res != 0 || !mpfr_zero_p (x) || s[0] != 0)
     {
       printf ("Error for setting ZERO (1)\n s=%s\n x=", s);
@@ -143,40 +145,98 @@ check_special (void)
     }
 
   /* Check base 62 */
-#if 0
-  res = mpfr_strtofr (x, "A", NULL, 62, GMP_RNDN);
+  res = mpfr_strtofr (x, "A", NULL, 62, MPFR_RNDN);
   if (res != 0 || mpfr_cmp_ui (x, 10))
     {
       printf ("Error for setting 'A' in base 62\n x=");
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
       putchar ('\n');
       exit (1);
     }
-  res = mpfr_strtofr (x, "a", NULL, 62, GMP_RNDN);
+  res = mpfr_strtofr (x, "a", NULL, 62, MPFR_RNDN);
   if (res != 0 || mpfr_cmp_ui (x, 36))
     {
       printf ("Error for setting 'a' in base 62\n x=");
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
       putchar ('\n');
       exit (1);
     }
-  res = mpfr_strtofr (x, "Z", NULL, 62, GMP_RNDN);
+  res = mpfr_strtofr (x, "Z", NULL, 62, MPFR_RNDN);
   if (res != 0 || mpfr_cmp_ui (x, 35))
     {
       printf ("Error for setting 'Z' in base 62\n x=");
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
       putchar ('\n');
       exit (1);
     }
-  res = mpfr_strtofr (x, "z", NULL, 62, GMP_RNDN);
+  res = mpfr_strtofr (x, "z", NULL, 62, MPFR_RNDN);
   if (res != 0 || mpfr_cmp_ui (x, 61))
     {
       printf ("Error for setting 'z' in base 62\n x=");
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
       putchar ('\n');
       exit (1);
     }
-#endif
+  res = mpfr_strtofr (x, "ZA", NULL, 62, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 2180))
+    {
+      printf ("Error for setting 'ZA' in base 62\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
+  res = mpfr_strtofr (x, "za", NULL, 62, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 3818))
+    {
+      printf ("Error for setting 'za' in base 62\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
+  res = mpfr_strtofr (x, "aZ", NULL, 62, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 2267))
+    {
+      printf ("Error for setting 'aZ' in base 62\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
+  res = mpfr_strtofr (x, "Az", NULL, 62, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 681))
+    {
+      printf ("Error for setting 'Az' in base 62\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
+
+  /* Check base 60 */
+  res = mpfr_strtofr (x, "Aa", NULL, 60, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 636))
+    {
+      printf ("Error for setting 'Aa' in base 60\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
+  res = mpfr_strtofr (x, "Zz", &s, 60, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 35) || strcmp(s, "z") )
+    {
+      printf ("Error for setting 'Zz' in base 60\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
+
+  /* Check base 61 */
+  res = mpfr_strtofr (x, "z", &s, 61, MPFR_RNDN);
+  if (res != 0 || mpfr_cmp_ui (x, 0) || strcmp(s, "z") )
+    {
+      printf ("Error for setting 'z' in base 61\n x=");
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN);
+      putchar ('\n');
+      exit (1);
+    }
 
   mpfr_clear (x);
   mpfr_clear (y);
@@ -191,16 +251,17 @@ int randomab (int a, int b)
   return a + rand () % (b-a);
 }
 
-int main()
+int
+main (void)
 {
   int i, base;
   mpfr_t x;
-  mp_prec_t p;
-  mp_exp_t e;
+  mpfr_prec_t p;
+  mpfr_exp_t e;
 
   mpfr_init (x);
   printf ("struct dymmy_test { \n"
-          " mp_prec_t prec; \n"
+          " mpfr_prec_t prec; \n"
           " int base; \n"
           " const char *str; \n"
           " const char *binstr; \n"
@@ -211,12 +272,12 @@ int main()
       base = randomab (2, 30);
       e = randomab (-1<<15, 1<<15);
       mpfr_set_prec (x, p);
-      mpfr_random (x);
-      mpfr_mul_2si (x, x, e, GMP_RNDN);
+      mpfr_urandomb (x, RANDS);
+      mpfr_mul_2si (x, x, e, MPFR_RNDN);
       printf("{%lu, %d,\n\"", p, base);
-      mpfr_out_str (stdout, base, p, x, GMP_RNDN);
+      mpfr_out_str (stdout, base, p, x, MPFR_RNDN);
       printf ("\",\n\"");
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN);
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN);
       printf ("\"}%c\n", i == MAX_NUM-1 ? ' ' : ',' );
     }
   printf("};\n");
@@ -225,7 +286,7 @@ int main()
 #endif
 
 static struct dymmy_test {
- mp_prec_t prec;
+ mpfr_prec_t prec;
  int base;
  const char *str;
  const char *binstr;
@@ -532,13 +593,12 @@ static struct dymmy_test {
 "1.001000010110011011000101100000101111101001100011101101001111110111000010010110010001100e-16920"}
 };
 
-
-void
-check_reftable ()
+static void
+check_reftable (void)
 {
   int i, base;
   mpfr_t x, y;
-  mp_prec_t p;
+  mpfr_prec_t p;
   char *s;
 
   mpfr_init2 (x, 200);
@@ -550,7 +610,7 @@ check_reftable ()
       mpfr_set_prec (x, p);
       mpfr_set_prec (y, p);
       mpfr_set_str_binary (x, RefTable[i].binstr);
-      mpfr_strtofr (y, RefTable[i].str, &s, base, GMP_RNDN);
+      mpfr_strtofr (y, RefTable[i].str, &s, base, MPFR_RNDN);
       if (s == NULL || *s != 0)
         {
           printf ("strtofr didn't parse entire input for i=%d:\n"
@@ -565,10 +625,10 @@ check_reftable ()
           printf (" strtofr    gives: ");
           mpfr_dump (y);
           printf (" setstr     gives: ");
-          mpfr_set_str (x, RefTable[i].str, base, GMP_RNDN);
+          mpfr_set_str (x, RefTable[i].str, base, MPFR_RNDN);
           mpfr_dump (x);
           mpfr_set_prec (x, 2*p);
-          mpfr_set_str (x, RefTable[i].str, base, GMP_RNDN);
+          mpfr_set_str (x, RefTable[i].str, base, MPFR_RNDN);
           printf (" setstr ++  gives: ");
           mpfr_dump (x);
           exit (1);
@@ -578,16 +638,36 @@ check_reftable ()
   mpfr_clear (x);
 }
 
-void
+static void
 check_parse (void)
 {
   mpfr_t x;
   char *s;
+  int res;
 
   mpfr_init (x);
 
+  /* Invalid data */
+  mpfr_set_si (x, -1, MPFR_RNDN);
+  res = mpfr_strtofr (x, "  invalid", NULL, 10, MPFR_RNDN);
+  if (MPFR_NOTZERO (x) || MPFR_IS_NEG (x))
+    {
+      printf ("Failed parsing '  invalid' (1)\n X=");
+      mpfr_dump (x);
+      exit (1);
+    }
+  MPFR_ASSERTN (res == 0);
+  mpfr_set_si (x, -1, MPFR_RNDN);
+  res = mpfr_strtofr (x, "  invalid", &s, 0, MPFR_RNDN);
+  if (MPFR_NOTZERO (x) || MPFR_IS_NEG (x) || strcmp (s, "  invalid"))
+    {
+      printf ("Failed parsing '  invalid' (2)\n S=%s\n X=", s);
+      mpfr_dump (x);
+      exit (1);
+    }
+  MPFR_ASSERTN (res == 0);
   /* Check if it stops correctly */
-  mpfr_strtofr (x, "15*x", &s, 10, GMP_RNDN);
+  mpfr_strtofr (x, "15*x", &s, 10, MPFR_RNDN);
   if (mpfr_cmp_ui (x, 15) || strcmp (s, "*x"))
     {
       printf ("Failed parsing '15*x'\n S=%s\n X=", s);
@@ -595,7 +675,7 @@ check_parse (void)
       exit (1);
     }
   /* Check for leading spaces */
-  mpfr_strtofr (x, "  1.5E-10 *x^2", &s, 10, GMP_RNDN);
+  mpfr_strtofr (x, "  1.5E-10 *x^2", &s, 10, MPFR_RNDN);
   if (mpfr_cmp_str1 (x, "1.5E-10") || strcmp (s, " *x^2"))
     {
       printf ("Failed parsing '1.5E-10*x^2'\n S=%s\n X=", s);
@@ -603,132 +683,196 @@ check_parse (void)
       exit (1);
     }
   /* Check for leading sign */
-  mpfr_strtofr (x, "  +17.5E-42E ", &s, 10, GMP_RNDN);
+  mpfr_strtofr (x, "  +17.5E-42E ", &s, 10, MPFR_RNDN);
   if (mpfr_cmp_str1 (x, "17.5E-42") || strcmp (s, "E "))
     {
       printf ("Failed parsing '+17.5E-42E '\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "-17.5E+42E\n", &s, 10, GMP_RNDN);
+  mpfr_strtofr (x, "-17.5E+42E\n", &s, 10, MPFR_RNDN);
   if (mpfr_cmp_str1 (x, "-17.5E42") || strcmp (s, "E\n"))
     {
       printf ("Failed parsing '-17.5E+42\\n'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  /* P form */
+  mpfr_strtofr (x, "0x42P17", &s, 16, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "8650752", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '0x42P17' (base = 16)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "-0X42p17", &s, 16, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "-8650752", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '-0x42p17' (base = 16)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "42p17", &s, 16, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "8650752", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '42p17' (base = 16)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "-42P17", &s, 16, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "-8650752", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '-42P17' (base = 16)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "0b1001P17", &s, 2, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "1179648", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '0b1001P17' (base = 2)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "-0B1001p17", &s, 2, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "-1179648", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '-0B1001p17' (base = 2)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "1001p17", &s, 2, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "1179648", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '1001p17' (base = 2)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, "-1001P17", &s, 2, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "-1179648", 10, MPFR_RNDN) || *s != 0)
+    {
+      printf ("Failed parsing '-1001P17' (base = 2)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
   /* Check for auto-detection of the base */
-  mpfr_strtofr (x, "+0x42P17", &s, 0, GMP_RNDN);
-  if (mpfr_cmp_str (x, "42P17", 16, GMP_RNDN) || *s != 0)
+  mpfr_strtofr (x, "+0x42P17", &s, 0, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "42P17", 16, MPFR_RNDN) || *s != 0)
     {
       printf ("Failed parsing '+0x42P17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "-42E17", &s, 0, GMP_RNDN);
-  if (mpfr_cmp_str (x, "-42E17", 10, GMP_RNDN) || *s != 0)
+  mpfr_strtofr (x, "-42E17", &s, 0, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "-42E17", 10, MPFR_RNDN) || *s != 0)
     {
       printf ("Failed parsing '-42E17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, " 0b0101.011@42", &s, 0, GMP_RNDN);
-  if (mpfr_cmp_str (x, "0101.011@42", 2, GMP_RNDN) || *s != 0)
+  mpfr_strtofr (x, "-42P17", &s, 0, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "-42", 10, MPFR_RNDN) || strcmp (s, "P17"))
+    {
+      printf ("Failed parsing '-42P17' (base = 0)\n S='%s'\n X=", s);
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
+      exit (1);
+    }
+  mpfr_strtofr (x, " 0b0101.011@42", &s, 0, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "0101.011@42", 2, MPFR_RNDN) || *s != 0)
     {
       printf ("Failed parsing '0101.011@42'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, " 0b0101.011P42", &s, 0, GMP_RNDN);
-  if (mpfr_cmp_str (x, "0101.011@42", 2, GMP_RNDN) || *s != 0)
+  mpfr_strtofr (x, " 0b0101.011P42", &s, 0, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "0101.011@42", 2, MPFR_RNDN) || *s != 0)
     {
       printf ("Failed parsing '0101.011@42'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "+0x42@17", &s, 0, GMP_RNDN);
-  if (mpfr_cmp_str (x, "4.2@18", 16, GMP_RNDN) || *s != 0)
+  mpfr_strtofr (x, "+0x42@17", &s, 0, MPFR_RNDN);
+  if (mpfr_cmp_str (x, "4.2@18", 16, MPFR_RNDN) || *s != 0)
     {
       printf ("Failed parsing '+0x42P17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
 
 
   /* Check for space inside the mantissa */
-  mpfr_strtofr (x, "+0x4 2@17", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "+0x4 2@17", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_ui (x, 4) || strcmp(s," 2@17"))
     {
       printf ("Failed parsing '+0x4 2@17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "+0x42 P17", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "+0x42 P17", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_ui (x, 0x42) || strcmp(s," P17"))
     {
       printf ("Failed parsing '+0x42 P17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
   /* Space between mantissa and exponent */
-  mpfr_strtofr (x, " -0b0101P 17", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, " -0b0101P 17", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_si (x, -5) || strcmp(s,"P 17"))
     {
       printf ("Failed parsing '-0b0101P 17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
   /* Check for Invalid exponent. */
-  mpfr_strtofr (x, " -0b0101PF17", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, " -0b0101PF17", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_si (x, -5) || strcmp(s,"PF17"))
     {
       printf ("Failed parsing '-0b0101PF17'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
   /* At least one digit in the mantissa. */
-  mpfr_strtofr (x, " .E10", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, " .E10", &s, 0, MPFR_RNDN);
   if (strcmp(s," .E10"))
     {
       printf ("Failed parsing ' .E10'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
   /* Check 2 '.': 2.3.4   */
-  mpfr_strtofr (x, "-1.2.3E4", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "-1.2.3E4", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_str1 (x, "-1.2") || strcmp(s,".3E4"))
     {
       printf ("Failed parsing '-1.2.3E4'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 10, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 10, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  /* Check for 0x */
-  mpfr_strtofr (x, "  0xG", &s, 0, GMP_RNDN);
+  /* Check for 0x and 0b */
+  mpfr_strtofr (x, "  0xG", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_ui (x, 0) || strcmp(s,"xG"))
     {
       printf ("Failed parsing '  0xG'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "  0b2", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "  0b2", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_ui (x, 0) || strcmp(s,"b2"))
     {
       printf ("Failed parsing '  0b2'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 2, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 2, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "-0x.23@2Z33", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "-0x.23@2Z33", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_si (x, -0x23) || strcmp(s,"Z33"))
     {
       printf ("Failed parsing '-0x.23@2Z33'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
-  mpfr_strtofr (x, "  0x", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "  0x", &s, 0, MPFR_RNDN);
   if (mpfr_cmp_ui (x, 0) || strcmp(s,"x"))
     {
       printf ("Failed parsing '  0x'\n S=%s\n X=", s);
-      mpfr_out_str (stdout, 16, 0, x, GMP_RNDN); putchar ('\n');
+      mpfr_out_str (stdout, 16, 0, x, MPFR_RNDN); putchar ('\n');
       exit (1);
     }
 
@@ -744,14 +888,14 @@ check_overflow (void)
   mpfr_init (x);
 
   /* Huge overflow */
-  mpfr_strtofr (x, "123456789E2147483646", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "123456789E2147483646", &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x) )
     {
       printf ("Check overflow failed (1) with:\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  mpfr_strtofr (x, "123456789E9223372036854775807", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "123456789E9223372036854775807", &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x) )
     {
       printf ("Check overflow failed (2) with:\n s='%s'\n x=", s);
@@ -759,7 +903,7 @@ check_overflow (void)
       exit (1);
     }
   mpfr_strtofr (x, "123456789E170141183460469231731687303715884105728",
-                &s, 0, GMP_RNDN);
+                &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x) )
     {
       printf ("Check overflow failed (3) with:\n s=%s\n x=", s);
@@ -768,28 +912,28 @@ check_overflow (void)
     }
 
   /* Limit overflow */
-  mpfr_strtofr (x, "12E2147483646", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "12E2147483646", &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x) )
     {
       printf ("Check overflow failed (4) with:\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  mpfr_strtofr (x, "12E2147483645", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "12E2147483645", &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x))
     {
       printf ("Check overflow failed (5) with:\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  mpfr_strtofr (x, "0123456789ABCDEF@2147483640", &s, 16, GMP_RNDN);
+  mpfr_strtofr (x, "0123456789ABCDEF@2147483640", &s, 16, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x))
     {
       printf ("Check overflow failed (6) with:\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  mpfr_strtofr (x, "0123456789ABCDEF@540000000", &s, 16, GMP_RNDN);
+  mpfr_strtofr (x, "0123456789ABCDEF@540000000", &s, 16, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_INF (x) || !MPFR_IS_POS (x))
     {
       printf ("Check overflow failed (7) with:\n s=%s\n x=", s);
@@ -798,14 +942,14 @@ check_overflow (void)
     }
 
   /* Check underflow */
-  mpfr_strtofr (x, "123456789E-2147483646", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "123456789E-2147483646", &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_ZERO (x) || !MPFR_IS_POS (x) )
     {
       printf ("Check underflow failed (1) with:\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  mpfr_strtofr (x, "123456789E-9223372036854775807", &s, 0, GMP_RNDN);
+  mpfr_strtofr (x, "123456789E-9223372036854775807", &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_ZERO (x) || !MPFR_IS_POS (x) )
     {
       printf ("Check underflow failed (2) with:\n s='%s'\n x=", s);
@@ -813,14 +957,14 @@ check_overflow (void)
       exit (1);
     }
   mpfr_strtofr (x, "-123456789E-170141183460469231731687303715884105728",
-                &s, 0, GMP_RNDN);
+                &s, 0, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_ZERO (x) || !MPFR_IS_NEG (x) )
     {
       printf ("Check underflow failed (3) with:\n s=%s\n x=", s);
       mpfr_dump (x);
       exit (1);
     }
-  mpfr_strtofr (x, "0123456789ABCDEF@-540000000", &s, 16, GMP_RNDN);
+  mpfr_strtofr (x, "0123456789ABCDEF@-540000000", &s, 16, MPFR_RNDN);
   if (s[0] != 0 || !MPFR_IS_ZERO (x) || !MPFR_IS_POS (x))
     {
       printf ("Check overflow failed (7) with:\n s=%s\n x=", s);
@@ -839,12 +983,141 @@ check_retval (void)
 
   mpfr_init2 (x, 10);
 
-  res = mpfr_strtofr (x, "01011000111", NULL, 2, GMP_RNDN);
+  res = mpfr_strtofr (x, "01011000111", NULL, 2, MPFR_RNDN);
   MPFR_ASSERTN (res == 0);
-  res = mpfr_strtofr (x, "11011000111", NULL, 2, GMP_RNDN);
+  res = mpfr_strtofr (x, "11011000111", NULL, 2, MPFR_RNDN);
   MPFR_ASSERTN (res > 0);
-  res = mpfr_strtofr (x, "110110001101", NULL, 2, GMP_RNDN);
+  res = mpfr_strtofr (x, "110110001101", NULL, 2, MPFR_RNDN);
   MPFR_ASSERTN (res < 0);
 
   mpfr_clear (x);
+}
+
+/* Bug found by Christoph Lauter (in mpfr_set_str). */
+static struct bug20081025_test {
+  mpfr_rnd_t rnd;
+  int inexact;
+  const char *str;
+  const char *binstr;
+} Bug20081028Table[] = {
+  {MPFR_RNDN, -1, "1.00000000000000000006", "1"},
+  {MPFR_RNDZ, -1, "1.00000000000000000006", "1"},
+  {MPFR_RNDU, +1, "1.00000000000000000006",
+   "10000000000000000000000000000001e-31"},
+  {MPFR_RNDD, -1, "1.00000000000000000006", "1"},
+
+
+  {MPFR_RNDN, +1, "-1.00000000000000000006", "-1"},
+  {MPFR_RNDZ, +1, "-1.00000000000000000006", "-1"},
+  {MPFR_RNDU, +1, "-1.00000000000000000006", "-1"},
+  {MPFR_RNDD, -1, "-1.00000000000000000006",
+   "-10000000000000000000000000000001e-31"},
+
+  {MPFR_RNDN, +1, "0.999999999999999999999999999999999999999999999", "1"},
+  {MPFR_RNDZ, -1, "0.999999999999999999999999999999999999999999999",
+   "11111111111111111111111111111111e-32"},
+  {MPFR_RNDU, +1, "0.999999999999999999999999999999999999999999999", "1"},
+  {MPFR_RNDD, -1, "0.999999999999999999999999999999999999999999999",
+   "11111111111111111111111111111111e-32"},
+
+  {MPFR_RNDN, -1, "-0.999999999999999999999999999999999999999999999", "-1"},
+  {MPFR_RNDZ, +1, "-0.999999999999999999999999999999999999999999999",
+   "-11111111111111111111111111111111e-32"},
+  {MPFR_RNDU, +1, "-0.999999999999999999999999999999999999999999999",
+   "-11111111111111111111111111111111e-32"},
+  {MPFR_RNDD, -1, "-0.999999999999999999999999999999999999999999999", "-1"}
+};
+
+static void
+bug20081028 (void)
+{
+  int i;
+  int inexact, res;
+  mpfr_rnd_t rnd;
+  mpfr_t x, y;
+  char *s;
+
+  mpfr_init2 (x, 32);
+  mpfr_init2 (y, 32);
+  for (i = 0 ; i < numberof (Bug20081028Table) ; i++)
+    {
+      rnd     = Bug20081028Table[i].rnd;
+      inexact = Bug20081028Table[i].inexact;
+      mpfr_set_str_binary (x, Bug20081028Table[i].binstr);
+      res = mpfr_strtofr (y, Bug20081028Table[i].str, &s, 10, rnd);
+      if (s == NULL || *s != 0)
+        {
+          printf ("Error in Bug20081028: strtofr didn't parse entire input\n"
+                  "for (i=%d) Str=\"%s\"", i, Bug20081028Table[i].str);
+          exit (1);
+        }
+      if (! SAME_SIGN (res, inexact))
+        {
+          printf ("Error in Bug20081028: expected %s ternary value, "
+                  "got %d\nfor (i=%d) Rnd=%s Str=\"%s\"\n Set binary gives: ",
+                  inexact > 0 ? "positive" : "negative",
+                  res, i, mpfr_print_rnd_mode(rnd), Bug20081028Table[i].str);
+          mpfr_dump (x);
+          printf (" strtofr    gives: ");
+          mpfr_dump (y);
+          exit (1);
+        }
+      if (mpfr_cmp (x, y))
+        {
+          printf ("Error in Bug20081028: Results differ between strtofr and "
+                  "set_binary\nfor (i=%d) Rnd=%s Str=\"%s\"\n"
+                  " Set binary gives: ",
+                  i, mpfr_print_rnd_mode(rnd), Bug20081028Table[i].str);
+          mpfr_dump (x);
+          printf (" strtofr    gives: ");
+          mpfr_dump (y);
+          exit (1);
+        }
+    }
+  mpfr_clear (y);
+  mpfr_clear (x);
+}
+
+/* check that 1.23e is correctly parsed, cf
+   http://gmplib.org/list-archives/gmp-bugs/2010-March/001898.html */
+static void
+test20100310 (void)
+{
+  mpfr_t x, y;
+  char str[] = "1.23e", *endptr;
+
+  mpfr_init2 (x, 53);
+  mpfr_init2 (y, 53);
+  mpfr_strtofr (x, str, &endptr, 10, MPFR_RNDN);
+  mpfr_strtofr (y, "1.23", NULL, 10, MPFR_RNDN);
+  if (mpfr_cmp (x, y) != 0)
+    {
+      printf ("x <> y in test20100310\n");
+      exit (1);
+    }
+  if (endptr != str + 4) /* strtofr should take into account '1.23',
+                            not '1.23e' */
+    {
+      printf ("endptr <> str + 4 in test20100310\n");
+      exit (1);
+    }
+  mpfr_clear (x);
+  mpfr_clear (y);
+}
+
+int
+main (int argc, char *argv[])
+{
+  tests_start_mpfr ();
+
+  check_special();
+  check_reftable ();
+  check_parse ();
+  check_overflow ();
+  check_retval ();
+  bug20081028 ();
+  test20100310 ();
+
+  tests_end_mpfr ();
+  return 0;
 }

@@ -4,13 +4,13 @@
    CERTAIN TO BE SUBJECT TO INCOMPATIBLE CHANGES OR DISAPPEAR COMPLETELY IN
    FUTURE GNU MP RELEASES.
 
-Copyright 2001, 2002 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2003, 2009 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -19,27 +19,53 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include "gmp.h"
 #include "gmp-impl.h"
 
 
+#if 0
 static int
-scan (const char **sp, const char *fmt, void *p1, void *p2)
+scan (const char **sp, const char *fmt, ...)
 {
-  return sscanf (*sp, fmt, p1, p2);
+    va_list ap;
+    int ret;
+
+    va_start(ap, fmt);
+    ret = vsscanf(*sp, fmt, ap);
+    va_end(ap);
+
+    return ret;
 }
+#else
+static int
+scan (const char **sp, const char *fmt, ...)
+{
+  va_list ap;
+  void *p1, *p2;
+  int ret;
+
+  va_start (ap, fmt);
+  p1 = va_arg (ap, void *);
+  p2 = va_arg (ap, void *);
+
+  ret = sscanf (*sp, fmt, p1, p2);
+
+  va_end (ap);
+
+  return ret;
+}
+#endif
 
 static void
 step (const char **sp, int n)
 {
   ASSERT (n >= 0);
 
-  /* shouldn't push us past the the end of the string */
+  /* shouldn't push us past the end of the string */
 #if WANT_ASSERT
   {
     int  i;

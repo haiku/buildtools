@@ -1,24 +1,24 @@
 /* mpfr_csc - cosecant function.
 
-Copyright 2005, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 /* the cosecant is defined by csc(x) = 1/sin(x).
    csc (NaN) = NaN.
@@ -46,19 +46,21 @@ MA 02110-1301, USA. */
    If x < 2^E, then y > 2^(-E), thus ufp(y) > 2^(-E-1).
    A sufficient condition is thus EXP(x) <= -2 MAX(PREC(x),PREC(Y)). */
 #define ACTION_TINY(y,x,r) \
-  if (MPFR_EXP(x) <= -2 * (mp_exp_t) MAX(MPFR_PREC(x), MPFR_PREC(y)))   \
+  if (MPFR_EXP(x) <= -2 * (mpfr_exp_t) MAX(MPFR_PREC(x), MPFR_PREC(y))) \
     {                                                                   \
       int signx = MPFR_SIGN(x);                                         \
       inexact = mpfr_ui_div (y, 1, x, r);                               \
       if (inexact == 0) /* x is a power of two */                       \
         { /* result always 1/x, except when rounding away from zero */  \
-          if (rnd_mode == GMP_RNDU)                                     \
+          if (rnd_mode == MPFR_RNDA)                                    \
+            rnd_mode = (signx > 0) ? MPFR_RNDU : MPFR_RNDD;             \
+          if (rnd_mode == MPFR_RNDU)                                    \
             {                                                           \
               if (signx > 0)                                            \
                 mpfr_nextabove (y); /* 2^k + epsilon */                 \
               inexact = 1;                                              \
             }                                                           \
-          else if (rnd_mode == GMP_RNDD)                                \
+          else if (rnd_mode == MPFR_RNDD)                               \
             {                                                           \
               if (signx < 0)                                            \
                 mpfr_nextbelow (y); /* -2^k - epsilon */                \

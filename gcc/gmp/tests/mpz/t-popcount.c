@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,16 +32,16 @@ check_onebit (void)
   unsigned long  i, got;
 
   mpz_init (n);
-  for (i = 0; i < 5 * BITS_PER_MP_LIMB; i++)
+  for (i = 0; i < 5 * GMP_LIMB_BITS; i++)
     {
       mpz_setbit (n, i);
       got = mpz_popcount (n);
       if (got != 1)
-        {
-          printf ("mpz_popcount wrong on single bit at %lu\n", i); 
-          printf ("   got %lu, want 1\n", got);
-          abort();                                    
-        }
+	{
+	  printf ("mpz_popcount wrong on single bit at %lu\n", i);
+	  printf ("   got %lu, want 1\n", got);
+	  abort();
+	}
       mpz_clrbit (n, i);
     }
   mpz_clear (n);
@@ -79,15 +77,15 @@ check_data (void)
       mpz_set_str_or_abort (n, data[i].n, 0);
       got = mpz_popcount (n);
       if (got != data[i].want)
-        {
-          printf ("mpz_popcount wrong at data[%d]\n", i); 
-          printf ("   n     \"%s\"\n", data[i].n);
-          printf ("         ");   mpz_out_str (stdout, 10, n); printf ("\n");
-          printf ("         0x"); mpz_out_str (stdout, 16, n); printf ("\n");
-          printf ("   got   %lu\n", got);
-          printf ("   want  %lu\n", data[i].want);
-          abort();                                    
-        }
+	{
+	  printf ("mpz_popcount wrong at data[%d]\n", i);
+	  printf ("   n     \"%s\"\n", data[i].n);
+	  printf ("         ");   mpz_out_str (stdout, 10, n); printf ("\n");
+	  printf ("         0x"); mpz_out_str (stdout, 16, n); printf ("\n");
+	  printf ("   got   %lu\n", got);
+	  printf ("   want  %lu\n", data[i].want);
+	  abort();
+	}
     }
   mpz_clear (n);
 }
@@ -144,12 +142,12 @@ check_random (void)
       ref = refmpz_popcount (arg);
       if (got != ref)
 	{
-          printf ("mpz_popcount wrong on random\n"); 
-          printf ("         ");   mpz_out_str (stdout, 10, arg); printf ("\n");
-          printf ("         0x"); mpz_out_str (stdout, 16, arg); printf ("\n");
-          printf ("   got   %lu\n", got);
-          printf ("   want  %lu\n", ref);
-          abort();                                    
+	  printf ("mpz_popcount wrong on random\n");
+	  printf ("         ");   mpz_out_str (stdout, 10, arg); printf ("\n");
+	  printf ("         0x"); mpz_out_str (stdout, 16, arg); printf ("\n");
+	  printf ("   got   %lu\n", got);
+	  printf ("   want  %lu\n", ref);
+	  abort();
 	  abort ();
 	}
     }

@@ -9,7 +9,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -18,9 +18,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -49,7 +47,7 @@ mpn_divrem (mp_ptr qp, mp_size_t qxn,
       TMP_DECL;
 
       TMP_MARK;
-      q2p = (mp_ptr) TMP_ALLOC ((nn + qxn) * BYTES_PER_MP_LIMB);
+      q2p = TMP_ALLOC_LIMBS (nn + qxn);
 
       np[0] = mpn_divrem_1 (q2p, qxn, np, nn, dp[0]);
       qn = nn + qxn - 1;
@@ -74,11 +72,11 @@ mpn_divrem (mp_ptr qp, mp_size_t qxn,
       if (UNLIKELY (qxn != 0))
 	{
 	  mp_ptr n2p;
-	  n2p = (mp_ptr) TMP_ALLOC ((nn + qxn) * BYTES_PER_MP_LIMB);
+	  n2p = TMP_ALLOC_LIMBS (nn + qxn);
 	  MPN_ZERO (n2p, qxn);
 	  MPN_COPY (n2p + qxn, np, nn);
-	  q2p = (mp_ptr) TMP_ALLOC ((nn - dn + qxn + 1) * BYTES_PER_MP_LIMB);
-	  rp = (mp_ptr) TMP_ALLOC (dn * BYTES_PER_MP_LIMB);
+	  q2p = TMP_ALLOC_LIMBS (nn - dn + qxn + 1);
+	  rp = TMP_ALLOC_LIMBS (dn);
 	  mpn_tdiv_qr (q2p, rp, 0L, n2p, nn + qxn, dp, dn);
 	  MPN_COPY (np, rp, dn);
 	  qn = nn - dn + qxn;
@@ -87,8 +85,8 @@ mpn_divrem (mp_ptr qp, mp_size_t qxn,
 	}
       else
 	{
-	  q2p = (mp_ptr) TMP_ALLOC ((nn - dn + 1) * BYTES_PER_MP_LIMB);
-	  rp = (mp_ptr) TMP_ALLOC (dn * BYTES_PER_MP_LIMB);
+	  q2p = TMP_ALLOC_LIMBS (nn - dn + 1);
+	  rp = TMP_ALLOC_LIMBS (dn);
 	  mpn_tdiv_qr (q2p, rp, 0L, np, nn, dp, dn);
 	  MPN_COPY (np, rp, dn);	/* overwrite np area with remainder */
 	  qn = nn - dn;

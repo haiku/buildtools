@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +39,7 @@ try_mpz_bin_ui (mpz_srcptr want, mpz_srcptr n, unsigned long k)
       printf ("  k=%lu\n", k);
       printf ("  got="); mpz_out_str (stdout, 10, got); printf ("\n");
       printf ("  want="); mpz_out_str (stdout, 10, want); printf ("\n");
-      abort();                                    
+      abort();
     }
   mpz_clear (got);
 }
@@ -62,7 +60,7 @@ try_mpz_bin_uiui (mpz_srcptr want, unsigned long n, unsigned long k)
       printf ("  k=%lu\n", k);
       printf ("  got="); mpz_out_str (stdout, 10, got); printf ("\n");
       printf ("  want="); mpz_out_str (stdout, 10, want); printf ("\n");
-      abort();                                    
+      abort();
     }
   mpz_clear (got);
 }
@@ -171,7 +169,7 @@ samples (void)
       try_mpz_bin_ui (want, n, data[i].k);
 
       if (mpz_fits_ulong_p (n))
-        try_mpz_bin_uiui (want, mpz_get_ui (n), data[i].k);
+	try_mpz_bin_uiui (want, mpz_get_ui (n), data[i].k);
     }
 
   mpz_clear (n);

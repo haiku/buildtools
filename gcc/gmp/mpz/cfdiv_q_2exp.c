@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,9 +16,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -26,11 +24,11 @@ MA 02110-1301, USA. */
 
 /* dir==1 for ceil, dir==-1 for floor */
 
-static void __gmpz_cfdiv_q_2exp _PROTO ((REGPARM_3_1 (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir))) REGPARM_ATTR (1);
+static void __gmpz_cfdiv_q_2exp __GMP_PROTO ((REGPARM_3_1 (mpz_ptr, mpz_srcptr, mp_bitcnt_t, int))) REGPARM_ATTR (1);
 #define cfdiv_q_2exp(w,u,cnt,dir)  __gmpz_cfdiv_q_2exp (REGPARM_3_1 (w,u,cnt,dir))
 
 REGPARM_ATTR (1) static void
-cfdiv_q_2exp (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir)
+cfdiv_q_2exp (mpz_ptr w, mpz_srcptr u, mp_bitcnt_t cnt, int dir)
 {
   mp_size_t  wsize, usize, abs_usize, limb_cnt, i;
   mp_srcptr  up;
@@ -92,13 +90,13 @@ cfdiv_q_2exp (mpz_ptr w, mpz_srcptr u, unsigned long cnt, int dir)
 
 
 void
-mpz_cdiv_q_2exp (mpz_ptr w, mpz_srcptr u, unsigned long cnt)
+mpz_cdiv_q_2exp (mpz_ptr w, mpz_srcptr u, mp_bitcnt_t cnt)
 {
   cfdiv_q_2exp (w, u, cnt, 1);
 }
 
 void
-mpz_fdiv_q_2exp (mpz_ptr w, mpz_srcptr u, unsigned long cnt)
+mpz_fdiv_q_2exp (mpz_ptr w, mpz_srcptr u, mp_bitcnt_t cnt)
 {
   cfdiv_q_2exp (w, u, cnt, -1);
 }

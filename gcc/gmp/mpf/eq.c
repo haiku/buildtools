@@ -1,12 +1,13 @@
 /* mpf_eq -- Compare two floats up to a specified bit #.
 
-Copyright 1993, 1995, 1996, 2001, 2002 Free Software Foundation, Inc.
+Copyright 1993, 1995, 1996, 2001, 2002, 2008, 2009 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,19 +16,20 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
+#include "longlong.h"
 
 int
-mpf_eq (mpf_srcptr u, mpf_srcptr v, unsigned long int n_bits)
+mpf_eq (mpf_srcptr u, mpf_srcptr v, mp_bitcnt_t n_bits)
 {
-  mp_srcptr up, vp;
-  mp_size_t usize, vsize, size, i;
+  mp_srcptr up, vp, p;
+  mp_size_t usize, vsize, minsize, maxsize, n_limbs, i, size;
   mp_exp_t uexp, vexp;
+  mp_limb_t diff;
+  int cnt;
 
   uexp = u->_mp_exp;
   vexp = v->_mp_exp;
@@ -55,10 +57,8 @@ mpf_eq (mpf_srcptr u, mpf_srcptr v, unsigned long int n_bits)
   /* U and V have the same sign and are both non-zero.  */
 
   /* 2. Are the exponents different?  */
-  if (uexp > vexp)
-    return 0;			/* ??? handle (uexp = vexp + 1)   */
-  if (vexp > uexp)
-    return 0;			/* ??? handle (vexp = uexp + 1)   */
+  if (uexp != vexp)
+    return 0;
 
   usize = ABS (usize);
   vsize = ABS (vsize);
@@ -66,46 +66,74 @@ mpf_eq (mpf_srcptr u, mpf_srcptr v, unsigned long int n_bits)
   up = u->_mp_d;
   vp = v->_mp_d;
 
-  /* Ignore zeroes at the low end of U and V.  */
+  up += usize;			/* point just above most significant limb */
+  vp += vsize;			/* point just above most significant limb */
+
+  count_leading_zeros (cnt, up[-1]);
+  if ((vp[-1] >> (GMP_LIMB_BITS - 1 - cnt)) != 1)
+    return 0;			/* msb positions different */
+
+  n_bits += cnt - GMP_NAIL_BITS;
+  n_limbs = (n_bits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS;
+
+  usize = MIN (usize, n_limbs);
+  vsize = MIN (vsize, n_limbs);
+
+#if 0
+  /* Ignore zeros at the low end of U and V.  */
   while (up[0] == 0)
-    {
-      up++;
-      usize--;
-    }
+    up++, usize--;
   while (vp[0] == 0)
-    {
-      vp++;
-      vsize--;
-    }
+    vp++, vsize--;
+#endif
 
-  if (usize > vsize)
-    {
-      if (vsize * GMP_NUMB_BITS < n_bits)
-	return 0;		/* surely too different */
-      size = vsize;
-    }
-  else if (vsize > usize)
-    {
-      if (usize * GMP_NUMB_BITS < n_bits)
-	return 0;		/* surely too different */
-      size = usize;
-    }
-  else
-    {
-      size = usize;
-    }
+  minsize = MIN (usize, vsize);
+  maxsize = usize + vsize - minsize;
 
-  if (size > (n_bits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS)
-    size = (n_bits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS;
+  up -= minsize;		/* point at most significant common limb */
+  vp -= minsize;		/* point at most significant common limb */
 
-  up += usize - size;
-  vp += vsize - size;
-
-  for (i = size - 1; i >= 0; i--)
+  /* Compare the most significant part which has explicit limbs for U and V. */
+  for (i = minsize - 1; i > 0; i--)
     {
       if (up[i] != vp[i])
 	return 0;
     }
 
-  return 1;
+  n_bits -= (maxsize - 1) * GMP_NUMB_BITS;
+
+  size = maxsize - minsize;
+  if (size != 0)
+    {
+      if (up[0] != vp[0])
+	return 0;
+
+      /* Now either U or V has its limbs consumed, i.e, continues with an
+	 infinite number of implicit zero limbs.  Check that the other operand
+	 has just zeros in the corresponding, relevant part.  */
+
+      if (usize > vsize)
+	p = up - size;
+      else
+	p = vp - size;
+
+      for (i = size - 1; i > 0; i--)
+	{
+	  if (p[i] != 0)
+	    return 0;
+	}
+
+      diff = p[0];
+    }
+  else
+    {
+      /* Both U or V has its limbs consumed.  */
+
+      diff = up[0] ^ vp[0];
+    }
+
+  if (n_bits < GMP_NUMB_BITS)
+    diff >>= GMP_NUMB_BITS - n_bits;
+
+  return diff == 0;
 }

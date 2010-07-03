@@ -7,7 +7,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -16,11 +16,9 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
-#define BITS_PER_MP_LIMB 32
+#define GMP_LIMB_BITS 32
 #define BYTES_PER_MP_LIMB 4
 
 
@@ -37,14 +35,14 @@ MA 02110-1301, USA. */
 #define USE_PREINV_DIVREM_1   1
 
 /* mpn_sqr_basecase is faster than mpn_mul_basecase at all sizes, no need
-   for mpn_sqr_n to call the latter.  */
+   for mpn_sqr to call the latter.  */
 #define SQR_BASECASE_THRESHOLD 0
 
 /* Sensible fallbacks for these, when not taken from a cpu-specific
    gmp-mparam.h.  */
-#define MUL_KARATSUBA_THRESHOLD   20
-#define MUL_TOOM3_THRESHOLD      130
-#define SQR_KARATSUBA_THRESHOLD   30
+#define MUL_TOOM22_THRESHOLD      20
+#define MUL_TOOM33_THRESHOLD     130
+#define SQR_TOOM2_THRESHOLD       30
 #define SQR_TOOM3_THRESHOLD      200
 
 /* These are values more or less in the middle of what the typical x86 chips

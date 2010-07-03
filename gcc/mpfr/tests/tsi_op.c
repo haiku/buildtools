@@ -1,25 +1,25 @@
 /* Test file for mpfr_add_si, mpfr_sub_si, mpfr_si_sub, mpfr_mul_si,
    mpfr_div_si, mpfr_si_div
 
-Copyright 2004, 2006, 2007 Free Software Foundation, Inc.
+Copyright 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 Contributed by the Arenaire and Cacao projects, INRIA.
 
-This file is part of the MPFR Library.
+This file is part of the GNU MPFR Library.
 
-The MPFR Library is free software; you can redistribute it and/or modify
+The GNU MPFR Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+the Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPFR Library is distributed in the hope that it will be useful, but
+The GNU MPFR Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPFR Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
+http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
+51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +30,7 @@ MA 02110-1301, USA. */
 {\
   printf("Error for "s" and i=%d\n", i);\
   printf("Expected %s\n", exp);\
-  printf("Got      "); mpfr_out_str (stdout, 16, 0, z, GMP_RNDN);\
+  printf("Got      "); mpfr_out_str (stdout, 16, 0, z, MPFR_RNDN);\
   putchar ('\n');\
   exit(1);\
 }
@@ -50,13 +50,13 @@ const struct {
 };
 
 static void
-check_invert ()
+check_invert (void)
 {
   mpfr_t x;
   mpfr_init2 (x, MPFR_PREC_MIN);
 
-  mpfr_set_ui (x, 0xC, GMP_RNDN);
-  mpfr_si_sub (x, -1, x, GMP_RNDD); /* -0001 - 1100 = - 1101 --> -1 0000 */
+  mpfr_set_ui (x, 0xC, MPFR_RNDN);
+  mpfr_si_sub (x, -1, x, MPFR_RNDD); /* -0001 - 1100 = - 1101 --> -1 0000 */
   if (mpfr_cmp_si (x, -0x10) )
     {
       printf ("Special rounding error\n");
@@ -68,28 +68,28 @@ check_invert ()
 #define TEST_FUNCTION mpfr_add_si
 #define TEST_FUNCTION_NAME "mpfr_add_si"
 #define INTEGER_TYPE  long
-#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1)
+#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1, RANDS)
 #define test_generic_ui test_generic_add_si
 #include "tgeneric_ui.c"
 
 #define TEST_FUNCTION mpfr_sub_si
 #define TEST_FUNCTION_NAME "mpfr_sub_si"
 #define INTEGER_TYPE  long
-#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1)
+#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1, RANDS)
 #define test_generic_ui test_generic_sub_si
 #include "tgeneric_ui.c"
 
 #define TEST_FUNCTION mpfr_mul_si
 #define TEST_FUNCTION_NAME "mpfr_mul_si"
 #define INTEGER_TYPE  long
-#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1)
+#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1, RANDS)
 #define test_generic_ui test_generic_mul_si
 #include "tgeneric_ui.c"
 
 #define TEST_FUNCTION mpfr_div_si
 #define TEST_FUNCTION_NAME "mpfr_div_si"
 #define INTEGER_TYPE  long
-#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1)
+#define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), 1, RANDS)
 #define test_generic_ui test_generic_div_si
 #include "tgeneric_ui.c"
 
@@ -101,39 +101,38 @@ main (int argc, char *argv[])
   int y;
   int i;
 
-  MPFR_TEST_USE_RANDS ();
   tests_start_mpfr ();
-  mpfr_inits2 (53, x, z, (void *) 0);
+  mpfr_inits2 (53, x, z, (mpfr_ptr) 0);
   for(i = 0 ; i < numberof (tab) ; i++)
     {
-      mpfr_set_str (x, tab[i].op1, 16, GMP_RNDN);
+      mpfr_set_str (x, tab[i].op1, 16, MPFR_RNDN);
       y = tab[i].op2;
-      mpfr_add_si (z, x, y, GMP_RNDZ);
-      if (mpfr_cmp_str (z, tab[i].res_add, 16, GMP_RNDN))
+      mpfr_add_si (z, x, y, MPFR_RNDZ);
+      if (mpfr_cmp_str (z, tab[i].res_add, 16, MPFR_RNDN))
         ERROR1("add_si", i, z, tab[i].res_add);
-      mpfr_sub_si (z, x, y, GMP_RNDZ);
-      if (mpfr_cmp_str (z, tab[i].res_sub, 16, GMP_RNDN))
+      mpfr_sub_si (z, x, y, MPFR_RNDZ);
+      if (mpfr_cmp_str (z, tab[i].res_sub, 16, MPFR_RNDN))
         ERROR1("sub_si", i, z, tab[i].res_sub);
-      mpfr_si_sub (z, y, x, GMP_RNDZ);
-      mpfr_neg (z, z, GMP_RNDZ);
-      if (mpfr_cmp_str (z, tab[i].res_sub, 16, GMP_RNDN))
+      mpfr_si_sub (z, y, x, MPFR_RNDZ);
+      mpfr_neg (z, z, MPFR_RNDZ);
+      if (mpfr_cmp_str (z, tab[i].res_sub, 16, MPFR_RNDN))
         ERROR1("si_sub", i, z, tab[i].res_sub);
-      mpfr_mul_si (z, x, y, GMP_RNDZ);
-      if (mpfr_cmp_str (z, tab[i].res_mul, 16, GMP_RNDN))
+      mpfr_mul_si (z, x, y, MPFR_RNDZ);
+      if (mpfr_cmp_str (z, tab[i].res_mul, 16, MPFR_RNDN))
         ERROR1("mul_si", i, z, tab[i].res_mul);
-      mpfr_div_si (z, x, y, GMP_RNDZ);
-      if (mpfr_cmp_str (z, tab[i].res_div, 16, GMP_RNDN))
+      mpfr_div_si (z, x, y, MPFR_RNDZ);
+      if (mpfr_cmp_str (z, tab[i].res_div, 16, MPFR_RNDN))
         ERROR1("div_si", i, z, tab[i].res_div);
     }
   mpfr_set_str1 (x, "1");
-  mpfr_si_div (z, 1024, x, GMP_RNDN);
+  mpfr_si_div (z, 1024, x, MPFR_RNDN);
   if (mpfr_cmp_str1 (z, "1024"))
     ERROR1("si_div", i, z, "1024");
-  mpfr_si_div (z, -1024, x, GMP_RNDN);
+  mpfr_si_div (z, -1024, x, MPFR_RNDN);
   if (mpfr_cmp_str1 (z, "-1024"))
     ERROR1("si_div", i, z, "-1024");
 
-  mpfr_clears (x, z, (void *) 0);
+  mpfr_clears (x, z, (mpfr_ptr) 0);
 
   check_invert ();
 

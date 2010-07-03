@@ -6,7 +6,7 @@ This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published
-by the Free Software Foundation; either version 2.1 of the License, or (at
+by the Free Software Foundation; either version 3 of the License, or (at
 your option) any later version.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
@@ -15,9 +15,7 @@ or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
 License for more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
-MA 02110-1301, USA. */
+along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -75,14 +73,14 @@ mpn_invert_limb (mp_limb_t d)
   mp_limb_t xh, xl;
   mp_limb_t zh, zl;
 
-#if BITS_PER_MP_LIMB == 32
+#if GMP_LIMB_BITS == 32
   z = approx_tab[(d >> 23) - 0x100] << 6;	/* z < 2^16 */
 
   z2l = z * z;					/* z2l < 2^32 */
   umul_ppmm (th, tl, z2l, d);
   z = (z << 17) - (th << 1);
 #endif
-#if BITS_PER_MP_LIMB == 64
+#if GMP_LIMB_BITS == 64
   z = approx_tab[(d >> 55) - 0x100] << 6;	/* z < 2^16 */
 
   z2l = z * z;					/* z2l < 2^32 */
@@ -99,7 +97,7 @@ mpn_invert_limb (mp_limb_t d)
   umul_ppmm (xh, xl, z2l, d);
   tl += xh;
   th += tl < xh;
-  th = (th << 2) | (tl >> BITS_PER_MP_LIMB - 2);
+  th = (th << 2) | (tl >> GMP_LIMB_BITS - 2);
   tl = tl << 2;
   sub_ddmmss (zh, zl, z << 2, 0, th, tl);
 
