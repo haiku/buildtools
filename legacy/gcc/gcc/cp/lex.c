@@ -141,7 +141,7 @@ extern void feed_input (/* char *, int */);
    i.e., opname_tab[PLUS_EXPR] == "+".  */
 char **opname_tab;
 char **assignop_tab;
-
+
 extern int yychar;		/*  the lookahead symbol		*/
 extern YYSTYPE yylval;		/*  the semantic value of the		*/
 				/*  lookahead symbol			*/
@@ -170,7 +170,7 @@ static tree this_filename_time;
 
 /* Array for holding counts of the numbers of tokens seen.  */
 extern int *token_count;
-
+
 /* Return something to represent absolute declarators containing a *.
    TARGET is the absolute declarator that the * contains.
    CV_QUALIFIERS is a list of modifiers such as const or volatile
@@ -198,7 +198,7 @@ make_pointer_declarator (cv_qualifiers, target)
 
    We return an ADDR_EXPR whose "contents" are TARGET
    and whose type is the modifier list.  */
-   
+
 tree
 make_reference_declarator (cv_qualifiers, target)
      tree cv_qualifiers, target;
@@ -239,7 +239,7 @@ set_quals_and_spec (call_declarator, cv_qualifiers, exception_specification)
   TREE_OPERAND (call_declarator, 2) = cv_qualifiers;
   TREE_TYPE (call_declarator) = exception_specification;
 }
-
+
 /* Build names and nodes for overloaded operators.  */
 
 tree ansi_opname[LAST_CPLUS_TREE_CODE];
@@ -285,7 +285,7 @@ operator_name_string (name)
   else
     return opname_tab[i];
 }
-
+
 int interface_only;		/* whether or not current file is only for
 				   interface definitions.  */
 int interface_unknown;		/* whether or not we know this class
@@ -309,7 +309,7 @@ char *token_buffer;		/* Pointer to token buffer.
 				   Actual allocated length is maxtoken + 2.  */
 
 #include "hash.h"
-
+
 
 /* Nonzero tells yylex to ignore \ in string constants.  */
 static int ignore_escape_flag = 0;
@@ -330,7 +330,7 @@ get_time_identifier (name)
       push_obstacks_nochange ();
       end_temporary_allocation ();
       TIME_IDENTIFIER_TIME (time_identifier) = build_int_2 (0, 0);
-      TIME_IDENTIFIER_FILEINFO (time_identifier) 
+      TIME_IDENTIFIER_FILEINFO (time_identifier)
 	= build_int_2 (0, 1);
       SET_IDENTIFIER_GLOBAL_VALUE (time_identifier, filename_times);
       filename_times = time_identifier;
@@ -352,7 +352,7 @@ my_get_run_time ()
   quiet_flag = old_quiet_flag;
   return this_time;
 }
-
+
 /* Table indexed by tree code giving a string containing a character
    classifying the tree code.  Possibilities are
    t, d, s, c, r, <, 1 and 2.  See cp/cp-tree.def for details.  */
@@ -386,7 +386,7 @@ const char *cplus_tree_code_name[] = {
 #include "cp-tree.def"
 };
 #undef DEFTREECODE
-
+
 /* toplev.c needs to call these.  */
 
 void
@@ -439,7 +439,7 @@ init_filename_times ()
     {
       header_time = 0;
       body_time = my_get_run_time ();
-      TREE_INT_CST_LOW (TIME_IDENTIFIER_TIME (this_filename_time)) 
+      TREE_INT_CST_LOW (TIME_IDENTIFIER_TIME (this_filename_time))
 	= body_time;
     }
 }
@@ -894,7 +894,7 @@ reinit_parse_for_function ()
   current_base_init_list = NULL_TREE;
   current_member_init_list = NULL_TREE;
 }
-
+
 #ifdef __GNUC__
 __inline
 #endif
@@ -988,7 +988,7 @@ print_parse_statistics ()
   int i;
   int maxlen = REDUCE_LENGTH;
   unsigned *sorted;
-  
+
   if (reduce_count[-1] == 0)
     return;
 
@@ -1045,7 +1045,7 @@ set_yydebug (value)
 #endif
 }
 
-
+
 /* Functions and data structures for #pragma interface.
 
    `#pragma implementation' means that the main file being compiled
@@ -1084,7 +1084,7 @@ extract_interface_info ()
   if (flag_alt_external_templates)
     {
       struct tinst_level *til = tinst_for_decl ();
-  
+
       if (til)
 	fileinfo = get_time_identifier (til->file);
     }
@@ -1169,7 +1169,7 @@ set_vardecl_interface_info (t, data)
     }
   return 0;
 }
-
+
 /* Set up the state required to correctly handle the definition of the
    inline function whose preparsed state has been saved in PI.  */
 
@@ -1234,7 +1234,7 @@ do_pending_inlines ()
 
   if (t == 0)
     return;
-	    
+
   /* Now start processing the first inline function.  */
   begin_definition_of_inclass_inline (t);
 }
@@ -1251,7 +1251,7 @@ process_next_inline (t)
 {
   tree context;
   struct pending_inline *i = (struct pending_inline *) TREE_PURPOSE (t);
-  context = hack_decl_function_context (i->fndecl);  
+  context = hack_decl_function_context (i->fndecl);
   if (context)
     pop_cp_function_context (context);
   i = i->next;
@@ -1526,7 +1526,7 @@ reinit_parse_for_block (pyychar, obstackp)
     }
   else
     c = getch ();
-  
+
   while (c != EOF)
     {
       int this_lineno = lineno;
@@ -1661,7 +1661,7 @@ reinit_parse_for_expr (obstackp)
     }
   else
     c = getch ();
-  
+
   while (c != EOF)
     {
       int this_lineno = lineno;
@@ -1798,7 +1798,7 @@ add_defarg_fn (decl)
   else
     {
       push_obstacks (&inline_text_obstack, &inline_text_obstack);
-      defarg_fns = tree_cons (current_class_type, decl, defarg_fns);  
+      defarg_fns = tree_cons (current_class_type, decl, defarg_fns);
       pop_obstacks ();
     }
 }
@@ -1839,7 +1839,7 @@ finish_defarg ()
     }
   yychar = YYEMPTY;
   end_input ();
-}  
+}
 
 /* Main function for deferred parsing of default arguments.  Called from
    the parser.  */
@@ -1982,7 +1982,7 @@ cons_up_default_function (type, full_name, kind)
 
     fn = grokfield (declarator, declspecs, NULL_TREE, NULL_TREE, NULL_TREE);
   }
-  
+
   if (fn == void_type_node)
     return fn;
 
@@ -2033,14 +2033,14 @@ cons_up_default_function (type, full_name, kind)
 
   /* Show that this function was generated by the compiler.  */
   SET_DECL_ARTIFICIAL (fn);
-  
+
   /* [zooey] force functions of local classes into such a mode, that they
      will be output even after being inlined. This circumvents a bug that
      causes undefined symbols when linking against files using local classes. */
   if (DECL_CONTEXT (fn) != NULL_TREE && hack_decl_function_context (fn))
     // functions whose address is needed have to be put out even when inlined,
     // so we use this to get the desired effect:
-    TREE_ADDRESSABLE(fn) = 1;	
+    TREE_ADDRESSABLE(fn) = 1;
 
   return fn;
 }
@@ -2099,7 +2099,7 @@ note_list_got_semicolon (declspecs)
     }
   clear_anon_tags ();
 }
-
+
 /* If C is not whitespace, return C.
    Otherwise skip whitespace and return first nonwhite char read.  */
 
@@ -2159,7 +2159,7 @@ extend_token_buffer (p)
 
   return token_buffer + offset;
 }
-
+
 static int
 get_last_nonwhite_on_line ()
 {
@@ -2182,7 +2182,7 @@ static int
 pragma_getc ()
 {
   int c;
-      
+
   if (nextchar != EOF)
     {
       c = nextchar;
@@ -2233,7 +2233,7 @@ check_newline ()
 
   /* Don't read beyond this line.  */
   linemode = 1;
-  
+
   /* Read first nonwhite char after the `#'.  */
 
   do
@@ -2276,7 +2276,7 @@ check_newline ()
 				 IDENTIFIER_POINTER (yylval.ttype)))
 		goto skipline;
 #endif /* HANDLE_PRAGMA */
-	      
+
 #ifdef HANDLE_GENERIC_PRAGMAS
 	      if (handle_generic_pragma (token))
 		goto skipline;
@@ -2289,7 +2289,7 @@ check_newline ()
 		  || (warn_unknown_pragmas && ! in_system_header))
 		warning ("ignoring pragma: %s", token_buffer);
 	    }
-	  
+
 	  goto skipline;
 	}
       else if (c == 'd')
@@ -2460,7 +2460,7 @@ linenum:
       strcpy (input_filename, TREE_STRING_POINTER (yylval.ttype));
       lineno = l;
       GNU_xref_file (input_filename);
-      
+
       if (main_input_filename == 0)
 	{
 	  struct impl_files *ifiles = impl_file_chain;
@@ -2628,7 +2628,7 @@ do_pending_lang_change ()
   for (; pending_lang_change < 0; ++pending_lang_change)
     pop_lang_context ();
 }
-
+
 #define ENDFILE -1  /* token that represents end-of-file */
 
 /* Read an escape sequence, returning its equivalent as a character,
@@ -2770,7 +2770,7 @@ identifier_type (decl)
     {
       if (TREE_CODE (DECL_RESULT (decl)) == TYPE_DECL)
 	return PTYPENAME;
-      else if (looking_for_template) 
+      else if (looking_for_template)
 	return PFUNCNAME;
     }
   if (looking_for_template && really_overloaded_fn (decl))
@@ -2780,7 +2780,7 @@ identifier_type (decl)
 	decl = TREE_VALUE (decl);
 
       for (t = decl; t != NULL_TREE; t = OVL_CHAIN (t))
-	if (DECL_FUNCTION_TEMPLATE_P (OVL_FUNCTION (t))) 
+	if (DECL_FUNCTION_TEMPLATE_P (OVL_FUNCTION (t)))
 	  return PFUNCNAME;
     }
   if (TREE_CODE (decl) == NAMESPACE_DECL)
@@ -2923,7 +2923,7 @@ do_identifier (token, parsing, args)
       id = lookup_name (token, 0);
       return error_mark_node;
     }
-      
+
   if (!id)
     {
       if (current_template_parms)
@@ -3026,7 +3026,7 @@ do_identifier (token, parsing, args)
      like local variables, rather than creating TEMPLATE_DECLs for the
      local variables and then finding matching instantiations.  */
   if (current_template_parms
-      && (is_overloaded_fn (id) 
+      && (is_overloaded_fn (id)
 	  /* If it's not going to be around at instantiation time, we
 	     look it up then.  This is a hack, and should go when we
 	     really get dependent/independent name lookup right.  */
@@ -3034,14 +3034,14 @@ do_identifier (token, parsing, args)
 	  /* Some local VAR_DECLs (such as those for local variables
 	     in member functions of local classes) are built on the
 	     permanent obstack.  */
-	  || (TREE_CODE (id) == VAR_DECL 
+	  || (TREE_CODE (id) == VAR_DECL
 	      && CP_DECL_CONTEXT (id)
 	      && TREE_CODE (CP_DECL_CONTEXT (id)) == FUNCTION_DECL)
 	  || TREE_CODE (id) == PARM_DECL
 	  || TREE_CODE (id) == RESULT_DECL
 	  || TREE_CODE (id) == USING_DECL))
     id = build_min_nt (LOOKUP_EXPR, token);
-      
+
   return id;
 }
 
@@ -3060,7 +3060,7 @@ do_scoped_id (token, parsing)
 	id = NULL_TREE;
       else
 	id = BINDING_VALUE (id);
-    } 
+    }
   else
     id = IDENTIFIER_GLOBAL_VALUE (token);
   if (parsing && yychar == YYEMPTY)
@@ -3146,7 +3146,7 @@ identifier_typedecl_value (node)
   return NULL_TREE;
 }
 
-struct pf_args 
+struct pf_args
 {
   /* Input */
   /* I/O */
@@ -3169,11 +3169,11 @@ parse_float (data)
      REAL_VALUE_ATOF may not work any more.  */
   char *copy = (char *) alloca (args->p - token_buffer + 1);
   bcopy (token_buffer, copy, args->p - token_buffer + 1);
-  
+
   while (1)
     {
       int lose = 0;
-      
+
       /* Read the suffixes to choose a data type.  */
       switch (args->c)
 	{
@@ -3182,13 +3182,13 @@ parse_float (data)
 	    error ("more than one `f' in numeric constant");
 	  fflag = 1;
 	  break;
-	  
+
 	case 'l': case 'L':
 	  if (lflag)
 	    error ("more than one `l' in numeric constant");
 	  lflag = 1;
 	  break;
-	  
+
 	case 'i': case 'I':
 	  if (args->imag)
 	    error ("more than one `i' or `j' in numeric constant");
@@ -3196,30 +3196,30 @@ parse_float (data)
 	    pedwarn ("ANSI C++ forbids imaginary numeric constants");
 	  args->imag = 1;
 	  break;
-	  
+
 	default:
 	  lose = 1;
 	}
-      
+
       if (lose)
 	break;
-      
+
       if (args->p >= token_buffer + maxtoken - 3)
 	args->p = extend_token_buffer (args->p);
       *(args->p++) = args->c;
       *(args->p) = 0;
       args->c = getch ();
     }
-  
+
   /* The second argument, machine_mode, of REAL_VALUE_ATOF
      tells the desired precision of the binary result
      of decimal-to-binary conversion.  */
-  
+
   if (fflag)
     {
       if (lflag)
 	error ("both `f' and `l' in floating constant");
-      
+
       args->type = float_type_node;
       args->value = REAL_VALUE_ATOF (copy, TYPE_MODE (args->type));
       /* A diagnostic is required here by some ANSI C testsuites.
@@ -3436,7 +3436,7 @@ real_yylex ()
 		    {
 		      /* We are looking at a string.  Complain
 			 if the token before the string is no `extern'.
-			 
+
 			 Could cheat some memory by placing this string
 			 on the temporary_, instead of the saveable_
 			 obstack.  */
@@ -3812,7 +3812,7 @@ real_yylex ()
 	    args.c = c;
 	    args.imag = imag;
 	    args.type = type;
-	    
+
 	    /* Convert string to a double, checking for overflow.  */
 	    if (do_float_handler (parse_float, (PTR) &args))
 	      {
@@ -3831,7 +3831,7 @@ real_yylex ()
 	    c = args.c;
 	    imag = args.imag;
 	    type = args.type;
-	    
+
 #ifdef ERANGE
 	    if (errno == ERANGE && pedantic)
 	      {
@@ -3940,8 +3940,8 @@ real_yylex ()
 			 << (i * HOST_BITS_PER_CHAR));
 		low |= (HOST_WIDE_INT) parts[i] << (i * HOST_BITS_PER_CHAR);
 	      }
-	    
-	    
+
+
 	    yylval.ttype = build_int_2 (low, high);
 	    TREE_TYPE (yylval.ttype) = long_long_unsigned_type_node;
 
@@ -4095,6 +4095,44 @@ real_yylex ()
 #endif
 		  }
 #else /* ! MULTIBYTE_CHARS */
+		if (wide_flag && (c & 0x80) != 0)
+		  {
+		    unsigned int value;
+		    int len;
+		    switch (c & 0xF0)
+		      {
+			case 0xF0:
+			  len = 4;
+			  value = c ^ 0xF0;
+			  break;
+			case 0xE0:
+			  len = 3;
+			  value = c ^ 0xE0;
+			  break;
+			case 0xC0:
+			  len = 2;
+			  value = c ^ 0xC0;
+			  break;
+			default:
+			  warning ("Skipping invalid UTF-8 byte in wide char"
+			    "literal");
+			  continue;
+		      }
+		    int i;
+		    for (i = 1; i < len; ++i)
+		      {
+			c = getch ();
+			if ((c & 0xC0) != 0x80)
+			  {
+			    warning ("Encountered invalid UTF-8 sequence in "
+			      "wide char literal");
+			    put_back (c);
+			    break;
+			  }
+			value = (value << 6) | (c & 0x7F);
+		      }
+		    c = value;
+		  }
 #ifdef MAP_CHARACTER
 		c = MAP_CHARACTER (c);
 #endif
@@ -4228,6 +4266,45 @@ real_yylex ()
 			continue;
 		      }
 		    c = wc;
+		  }
+#else /* ! MULTIBYTE_CHARS */
+		if (wide_flag && (c & 0x80) != 0)
+		  {
+		    unsigned int value;
+		    int len;
+		    switch (c & 0xF0)
+		      {
+			case 0xF0:
+			  len = 4;
+			  value = c ^ 0xF0;
+			  break;
+			case 0xE0:
+			  len = 3;
+			  value = c ^ 0xE0;
+			  break;
+			case 0xC0:
+			  len = 2;
+			  value = c ^ 0xC0;
+			  break;
+			default:
+			  warning ("Skipping invalid UTF-8 byte in wide char "
+			    "string literal");
+			  continue;
+		      }
+		    int i;
+		    for (i = 1; i < len; ++i)
+		      {
+			c = getch ();
+			if ((c & 0xC0) != 0x80)
+			  {
+			    warning ("Encountered invalid UTF-8 sequence in "
+			      "wide char string literal");
+			    put_back (c);
+			    break;
+			  }
+			value = (value << 6) | (c & 0x7F);
+		      }
+		    c = value;
 		  }
 #endif /* MULTIBYTE_CHARS */
 	      }
@@ -4754,9 +4831,9 @@ compiler_error VPROTO ((const char *msg, ...))
 #endif
   char buf[1024];
   va_list ap;
-  
+
   VA_START (ap, msg);
-  
+
 #ifndef ANSI_PROTOTYPES
   msg = va_arg (ap, const char *);
 #endif
@@ -4764,7 +4841,7 @@ compiler_error VPROTO ((const char *msg, ...))
   vsprintf (buf, msg, ap);
   error_with_file_and_line (input_filename, lineno, "%s (compiler error)", buf);
 }
-
+
 void
 yyerror (string)
      const char *string;
@@ -4794,7 +4871,7 @@ yyerror (string)
 
   error (buf, token_buffer);
 }
-
+
 static int
 handle_cp_pragma (pname)
      const char *pname;
@@ -4843,14 +4920,14 @@ handle_cp_pragma (pname)
     }
   else if (! strcmp (pname, "interface"))
     {
-      tree fileinfo 
+      tree fileinfo
 	= TIME_IDENTIFIER_FILEINFO (get_time_identifier (input_filename));
       char *main_filename = input_filename;
 
       main_filename = file_name_nondirectory (main_filename);
 
       token = real_yylex ();
-      
+
       if (token != END_OF_LINE)
 	{
 	  if (token != STRING
@@ -4890,7 +4967,7 @@ handle_cp_pragma (pname)
 
       interface_only = interface_strcmp (main_filename);
 
-      if (!optimize || flag_multiple_symbol_spaces) 
+      if (!optimize || flag_multiple_symbol_spaces)
 	{  /* activate multiple symbol spaces */
 #ifdef WORK_AROUND_PRAGMA_INTERFACE_BUG
 	  interface_only = 0;
@@ -4909,7 +4986,7 @@ handle_cp_pragma (pname)
     }
   else if (! strcmp (pname, "implementation"))
     {
-      tree fileinfo 
+      tree fileinfo
 	= TIME_IDENTIFIER_FILEINFO (get_time_identifier (input_filename));
       char *main_filename = main_input_filename ? main_input_filename : input_filename;
 
@@ -4999,7 +5076,7 @@ cp_type_qual_from_rid (rid)
   return TYPE_UNQUALIFIED;
 }
 
-
+
 #ifdef HANDLE_GENERIC_PRAGMAS
 
 /* Handle a #pragma directive.  TOKEN is the type of the word following
@@ -5035,7 +5112,7 @@ handle_generic_pragma (token)
 	default:
 	  handle_pragma_token (token_buffer, NULL_TREE);
 	}
-      
+
       token = real_yylex ();
     }
 }

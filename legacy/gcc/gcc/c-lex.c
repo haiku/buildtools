@@ -126,12 +126,12 @@ static int skip_white_space_on_line	PROTO((void));
 static char *extend_token_buffer	PROTO((const char *));
 static int readescape			PROTO((int *));
 static void parse_float			PROTO((PTR));
-
+
 /* Do not insert generated code into the source, instead, include it.
    This allows us to build gcc automatically even for targets that
    need to add or modify the reserved keyword lists.  */
 #include "c-gperf.h"
-
+
 /* Return something to represent absolute declarators containing a *.
    TARGET is the absolute declarator that the * contains.
    TYPE_QUALS is a list of modifiers such as const or volatile
@@ -146,7 +146,7 @@ make_pointer_declarator (type_quals, target)
 {
   return build1 (INDIRECT_REF, type_quals, target);
 }
-
+
 void
 forget_protocol_qualifiers ()
 {
@@ -177,7 +177,7 @@ remember_protocol_qualifiers ()
     else if (wordlist[i].rid == RID_ONEWAY)
       wordlist[i].name = "oneway";
 }
-
+
 char *
 init_parse (filename)
      char *filename;
@@ -311,7 +311,7 @@ void
 reinit_parse_for_function ()
 {
 }
-
+
 /* Function used when yydebug is set, to print a token in more detail.  */
 
 void
@@ -356,7 +356,7 @@ yyprint (file, yychar, yylval)
       break;
     }
 }
-
+
 /* Iff C is a carriage return, warn about it - if appropriate -
    and return nonzero.  */
 static int
@@ -493,7 +493,7 @@ extend_token_buffer (p)
 
   return token_buffer + offset;
 }
-
+
 #if defined HANDLE_PRAGMA
 /* Local versions of these macros, that can be passed as function pointers.  */
 static int
@@ -858,7 +858,7 @@ linenum:
     c = GETC();
   return c;
 }
-
+
 #ifdef HANDLE_GENERIC_PRAGMAS
 
 /* Handle a #pragma directive.
@@ -906,7 +906,7 @@ handle_generic_pragma (token)
 }
 
 #endif /* HANDLE_GENERIC_PRAGMAS */
-
+
 #define ENDFILE -1  /* token that represents end-of-file */
 
 /* Read an escape sequence, returning its equivalent as a character,
@@ -1046,7 +1046,7 @@ readescape (ignore_ptr)
     pedwarn ("unknown escape sequence: `\\' followed by char code 0x%x", c);
   return c;
 }
-
+
 void
 yyerror (msgid)
      const char *msgid;
@@ -1089,7 +1089,7 @@ struct try_type type_sequence[] =
   { &long_long_unsigned_type_node, 1, 1, 1}
 };
 #endif /* 0 */
-
+
 struct pf_args
 {
   /* Input */
@@ -1103,7 +1103,7 @@ struct pf_args
   /* Output */
   REAL_VALUE_TYPE value;
 };
- 
+
 static void
 parse_float (data)
   PTR data;
@@ -1203,7 +1203,7 @@ parse_float (data)
 	warning ("floating point number exceeds range of `double'");
     }
 }
- 
+
 int
 yylex ()
 {
@@ -1662,7 +1662,7 @@ yylex ()
 	    imag = args.imag;
 	    type = args.type;
 	    conversion_errno = args.conversion_errno;
-	    
+
 #ifdef ERANGE
 	    /* ERANGE is also reported for underflow,
 	       so test the value to distinguish overflow from that.  */
@@ -1985,6 +1985,44 @@ yylex ()
 #endif
 		  }
 #else /* ! MULTIBYTE_CHARS */
+		if (wide_flag && (c & 0x80) != 0)
+		  {
+		    unsigned int value;
+		    int len;
+		    switch (c & 0xF0)
+		      {
+			case 0xF0:
+			  len = 4;
+			  value = c ^ 0xF0;
+			  break;
+			case 0xE0:
+			  len = 3;
+			  value = c ^ 0xE0;
+			  break;
+			case 0xC0:
+			  len = 2;
+			  value = c ^ 0xC0;
+			  break;
+			default:
+			  warning ("Skipping invalid UTF-8 byte in wide char "
+			    "literal");
+			  continue;
+		      }
+		    int i;
+		    for (i = 1; i < len; ++i)
+		      {
+			c = GETC ();
+			if ((c & 0xC0) != 0x80)
+			  {
+			    warning ("Encountered invalid UTF-8 sequence in "
+			      "wide char literal");
+			    UNGETC (c);
+			    break;
+			  }
+			value = (value << 6) | (c & 0x7F);
+		      }
+		    c = value;
+		  }
 #ifdef MAP_CHARACTER
 		c = MAP_CHARACTER (c);
 #endif
@@ -2112,6 +2150,45 @@ yylex ()
 			continue;
 		      }
 		    c = wc;
+		  }
+#else /* ! MULTIBYTE_CHARS */
+		if (wide_flag && (c & 0x80) != 0)
+		  {
+		    unsigned int value;
+		    int len;
+		    switch (c & 0xF0)
+		      {
+			case 0xF0:
+			  len = 4;
+			  value = c ^ 0xF0;
+			  break;
+			case 0xE0:
+			  len = 3;
+			  value = c ^ 0xE0;
+			  break;
+			case 0xC0:
+			  len = 2;
+			  value = c ^ 0xC0;
+			  break;
+			default:
+			  warning ("Skipping invalid UTF-8 byte in wide char "
+			    "string literal");
+			  continue;
+		      }
+		    int i;
+		    for (i = 1; i < len; ++i)
+		      {
+			c = GETC ();
+			if ((c & 0xC0) != 0x80)
+			  {
+			    warning ("Encountered invalid UTF-8 sequence in "
+			      "wide char string literal");
+			    UNGETC (c);
+			    break;
+			  }
+			value = (value << 6) | (c & 0x7F);
+		      }
+		    c = value;
 		  }
 #endif /* MULTIBYTE_CHARS */
 	      }
