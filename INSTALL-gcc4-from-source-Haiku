@@ -31,12 +31,12 @@ compile gcc:
 Ok, now everything is compiled and ready, waiting to be installed:
 
 	mkdir /boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE}
-	ln -sfn gcc-4.3.3-haiku-${GCCDATE} /boot/develop/abi/x86/gcc4/tools/current
 	cd binutils-obj
 	make install
 	cd ..
 	cd gcc-obj
 	make install
 	cd ..
+	ln -sfn gcc-4.3.3-haiku-${GCCDATE} /boot/develop/abi/x86/gcc4/tools/current
 	
 Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
