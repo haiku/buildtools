@@ -1989,6 +1989,7 @@ yylex ()
 		  {
 		    unsigned int value;
 		    int len;
+		    int i;
 		    switch (c & 0xF0)
 		      {
 			case 0xF0:
@@ -2008,7 +2009,6 @@ yylex ()
 			    "literal");
 			  continue;
 		      }
-		    int i;
 		    for (i = 1; i < len; ++i)
 		      {
 			c = GETC ();
@@ -2156,6 +2156,7 @@ yylex ()
 		  {
 		    unsigned int value;
 		    int len;
+		    int i;
 		    switch (c & 0xF0)
 		      {
 			case 0xF0:
@@ -2175,7 +2176,6 @@ yylex ()
 			    "string literal");
 			  continue;
 		      }
-		    int i;
 		    for (i = 1; i < len; ++i)
 		      {
 			c = GETC ();

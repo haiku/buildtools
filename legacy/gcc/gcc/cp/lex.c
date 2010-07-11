@@ -4099,6 +4099,7 @@ real_yylex ()
 		  {
 		    unsigned int value;
 		    int len;
+		    int i;
 		    switch (c & 0xF0)
 		      {
 			case 0xF0:
@@ -4118,7 +4119,6 @@ real_yylex ()
 			    "literal");
 			  continue;
 		      }
-		    int i;
 		    for (i = 1; i < len; ++i)
 		      {
 			c = getch ();
@@ -4272,6 +4272,7 @@ real_yylex ()
 		  {
 		    unsigned int value;
 		    int len;
+		    int i;
 		    switch (c & 0xF0)
 		      {
 			case 0xF0:
@@ -4291,7 +4292,6 @@ real_yylex ()
 			    "string literal");
 			  continue;
 		      }
-		    int i;
 		    for (i = 1; i < len; ++i)
 		      {
 			c = getch ();
