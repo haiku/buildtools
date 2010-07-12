@@ -2174,6 +2174,7 @@ yylex ()
 			default:
 			  warning ("Skipping invalid UTF-8 byte in wide char "
 			    "string literal");
+			  c = GETC ();
 			  continue;
 		      }
 		    for (i = 1; i < len; ++i)

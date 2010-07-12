@@ -4290,6 +4290,7 @@ real_yylex ()
 			default:
 			  warning ("Skipping invalid UTF-8 byte in wide char "
 			    "string literal");
+			  c = getch ();
 			  continue;
 		      }
 		    for (i = 1; i < len; ++i)
