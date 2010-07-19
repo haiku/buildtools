@@ -1,5 +1,5 @@
 /* Makeinfo -- convert Texinfo source files into Info files.
-   $Id: makeinfo.c,v 1.1 2004/10/28 18:14:10 zooey Exp $
+   $Id$
 
    Copyright (C) 1987, 92, 93, 94, 95, 96, 97, 98
    Free Software Foundation, Inc.
@@ -1683,7 +1683,7 @@ canon_white (string)
     {
       if (!cr_or_whitespace (string[x]))
         {
-          strcpy (string, string + x);
+          memmove(string, string + x, strlen(string + x) + 1);
           break;
         }
     }
