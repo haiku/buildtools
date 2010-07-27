@@ -44,7 +44,6 @@ Boston, MA 02111-1307, USA.  */
        instead of by pointer. */ \
     	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
 	builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0"); 		\
-    builtin_define ("__STDC_ISO_10646__"); \
     }									\
   while (0)
 

@@ -63,7 +63,6 @@
          instead of by pointer. */ \
       builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0"); \
       /*builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0"); done in bpabi: */\
-      builtin_define ("__STDC_ISO_10646__"); \
       TARGET_BPABI_CPP_BUILTINS();					\
     }									\
   while (0)
@@ -76,5 +75,5 @@
 
 #undef	LINK_SPEC
 #define LINK_SPEC "%{!o*:-o %b} -m armelf -shared -no-undefined -Bsymbolic %{nostart:-e 0} \
-  %{mbig-endian:-EB} %{mlittle-endian:-EL} -X"
+  %{mbig-endian:-EB} %{mlittle-endian:-EL} -X" 
 

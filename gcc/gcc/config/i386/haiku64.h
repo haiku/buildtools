@@ -27,9 +27,9 @@ Boston, MA 02111-1307, USA.  */
 #endif
 
 /* The SVR4 ABI for the i386 says that records and unions are returned
- *   in memory.
+ *   in memory.  
  *
- *   TODO: Linux64 doesn't use pcc_struct_return scheme. Does haiku?
+ *   TODO: Linux64 doesn't use pcc_struct_return scheme. Does haiku? 
  *         If not this could be removed.
  */
 #undef DEFAULT_PCC_STRUCT_RETURN
@@ -54,7 +54,6 @@ Boston, MA 02111-1307, USA.  */
        instead of by pointer. */ \
     	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
     	builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0");		\
-	    builtin_define ("__STDC_ISO_10646__"); \
     }									\
   while (0)
 #else
@@ -73,7 +72,6 @@ Boston, MA 02111-1307, USA.  */
        instead of by pointer. */ \
     	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
     	builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0");		\
-	    builtin_define ("__STDC_ISO_10646__"); \
     }									\
   while (0)
 #endif
