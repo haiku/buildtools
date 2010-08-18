@@ -1480,7 +1480,7 @@ main (argc, argv)
 	else if (! strcmp (argv[i], "-lang-c89"))
 	  cplusplus = 0, cplusplus_comments = 0, c89 = 1, c9x = 0, objc = 0;
 	else if (! strcmp (argv[i], "-lang-c++"))
-	  cplusplus = 1, cplusplus_comments = 1, c89 = 0, c9x = 0, objc = 0;
+	  cplusplus = 1, cplusplus_comments = 1, c89 = 0, c9x = 1, objc = 0;
 	else if (! strcmp (argv[i], "-lang-objc"))
 	  cplusplus = 0, cplusplus_comments = 1, c89 = 0, c9x = 0, objc = 1;
 	else if (! strcmp (argv[i], "-lang-objc++"))
