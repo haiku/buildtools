@@ -85,7 +85,7 @@ fi
 echo "Install C++ includes and library"
 
 rm -rf $base/include/g++
-ln -sf /boot/develop/headers/cpp $base/include/g++
+ln -snf /boot/develop/headers/cpp $base/include/g++
 ln -sf /system/lib/libstdc++.r4.so $base/lib/
 
 
@@ -103,6 +103,10 @@ zip_name="$current_dir/gcc-2.95.3-x86-$current_gcc-$version_year-$version_month-
 cd /boot
 rm -f $zip_name
 zip -yr $zip_name $base
+
+current_name=develop/abi/x86/gcc2/tools/current
+ln -snf gcc-2.95.3-haiku-$GCCDATE $current_name
+zip -yr $zip_name $current_name
 
 
 ### optional package description ##########################
