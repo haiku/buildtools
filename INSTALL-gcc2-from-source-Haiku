@@ -3,8 +3,10 @@ How to build gcc-2.95.3 for BeOS:
 cd into the buildtools/legacy folder
 
 declare the current gcc-version-date like this:
-	export GCCDATE=100420
-(just use the current date instead of '100420')
+	export GCCDATE=100818
+(just use the current date instead of '100818', ie. 'yymmdd')
+If your GCC version includes new features, make sure you also alter the
+version in gcc/gcc/version.c.
 
 compile binutils:
 
@@ -39,5 +41,12 @@ Ok, now everything is compiled and ready, waiting to be installed:
 	make install
 	cd ..
 	ln -sfn gcc-2.95.3-haiku-${GCCDATE} /boot/develop/abi/x86/gcc2/tools/current
+
+To build the binutils HTML documentation (needed by the GCC2 package build
+script):
+
+	cd binutils-obj
+	make install-html
+	cd ..
 
 Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
