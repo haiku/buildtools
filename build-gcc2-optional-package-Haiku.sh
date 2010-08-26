@@ -25,6 +25,7 @@ else
 	GCCDATE=$1
 fi
 
+current_dir=$(pwd)
 base=/boot/develop/abi/x86/gcc2/tools/gcc-2.95.3-haiku-$GCCDATE
 if [ ! -d "$base" ]; then
 	echo GCC directory \"$base\" does not exist!
@@ -46,10 +47,12 @@ if [ ! -d "$html_base" ]; then
 	cd $html_base
 
 	makeinfo --html $gcc_base/../gcc/gcc/cpp.texi
+	makeinfo --html $gcc_base/../gcc/gcc/gcc.texi
 	makeinfo --html $gcc_base/../binutils/libiberty/libiberty.texi
 	makeinfo --force --html $gcc_base/../gcc/libio/iostream.texi
 
 	ln -sf cpp/index.html $html_base/cpp.html
+	ln -sf gcc/index.html $html_base/gcc.html
 	ln -sf libiberty/index.html $html_base/libiberty.html
 	ln -sf iostream/index.html $html_base/iostream.html
 fi
@@ -73,27 +76,26 @@ if [ ! -e "$html_base/as.html" ]; then
 fi
 
 if [ -d $base/man -o -d $base/info -o -d $base/share ]; then
-	echo "Removing legacy documentation (man/info/share)..."
+	echo "Removing legacy files (man/info/share)..."
 	rm -rf $base/man
 	rm -rf $base/info
 	rm -rf $base/share
 fi
+rm -f $base/lib/gcc-lib/i586-pc-haiku/2.95.3-haiku-$GCCDATE/include/math.h
 
 
-### C++ includes/lib ######################################
+### C++ includes ######################################
 
-echo "Install C++ includes and library"
+echo "Install C++ includes"
 
 rm -rf $base/include/g++
 ln -snf /boot/develop/headers/cpp $base/include/g++
-ln -sf /system/lib/libstdc++.r4.so $base/lib/
 
 
 ### zip archive ###########################################
 
 echo "Building ZIP archive..."
 
-current_dir=$(pwd)
 current_gcc=$(setgcc | cut -d/ -f 2)
 version_year=20$(echo $GCCDATE | cut -c1-2)
 version_month=$(echo $GCCDATE | cut -c3-4)
@@ -101,8 +103,9 @@ version_day=$(echo $GCCDATE | cut -c5-6)
 zip_name="$current_dir/gcc-2.95.3-x86-$current_gcc-$version_year-$version_month-$version_day.zip"
 
 cd /boot
+zip_base=$(echo $base | cut -d/ -f3-)
 rm -f $zip_name
-zip -yr $zip_name $base
+zip -yr $zip_name $zip_base
 
 current_name=develop/abi/x86/gcc2/tools/current
 ln -snf gcc-2.95.3-haiku-$GCCDATE $current_name
