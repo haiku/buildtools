@@ -139,7 +139,9 @@ const int x86_deep_branch = m_PPRO| m_K6;
 #define AT_BP(mode) (gen_rtx_MEM ((mode), frame_pointer_rtx))
 
 extern FILE *asm_out_file;
+#ifndef __APPLE__
 extern char *strcat ();
+#endif
 
 static void ix86_epilogue PROTO((int));
 static void ix86_prologue PROTO((int));

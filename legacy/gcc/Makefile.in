@@ -141,9 +141,9 @@ M4 = `if [ -f $$r/m4/m4 ] ; \
 	then echo $$r/m4/m4 ; \
 	else echo ${DEFAULT_M4} ; fi`
 
-MAKEINFO = `if [ -f $$r/texinfo/makeinfo/Makefile ] ; \
-	then echo $$r/texinfo/makeinfo/makeinfo ; \
-	else echo makeinfo ; fi`
+MAKEINFO = `if [ -x /usr/bin/makeinfo ] ; \
+	then echo makeinfo ; \
+	else echo $$r/texinfo/makeinfo/makeinfo ; fi`
 
 # This just becomes part of the MAKEINFO definition passed down to
 # sub-makes.  It lets flags be given on the command line while still
