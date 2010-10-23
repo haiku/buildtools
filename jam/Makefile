@@ -1,7 +1,7 @@
 # Makefile for jam
 
 CC = cc
-CFLAGS =
+CFLAGS = -O3
 EXENAME = ./jam0
 TARGET = -o $(EXENAME)
 HOST_SYSTEM=$(shell uname)
