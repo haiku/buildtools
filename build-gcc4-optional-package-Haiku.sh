@@ -54,6 +54,8 @@ if [ -z "$gccVersion" ]; then
 	exit 1
 fi
 
+gccVersionedName=gcc-${gccVersion}-haiku-${gccDate}
+
 
 # get the architecture
 gccArch=`uname -m`
@@ -64,7 +66,7 @@ esac
 
 
 # check whether the installation dir does already exit
-installDir=/boot/develop/abi/$gccArch/gcc4/tools/gcc-${gccVersion}-haiku-${gccDate}
+installDir=/boot/develop/abi/$gccArch/gcc4/tools/$gccVersionedName
 if [ -e "$installDir" ]; then
 	echo "The installation directory '$installDir' does already exist." >&2
 	echo "Remove it first." >&2
@@ -117,6 +119,10 @@ rm -rf "$installDir/info" "$installDir/man" "$installDir/share" \
 	"$installDir/lib/libstdc++.so"
 
 
+# add C++ header symlink
+ln -s c++/$gccVersion $installDir/include/g++
+
+
 # zip everything up
 gccVersionYear=20$(echo $GCCDATE | cut -c1-2)
 gccVersionMonth=$(echo $GCCDATE | cut -c3-4)
@@ -125,6 +131,13 @@ packageFile="$currentDir/gcc-${gccVersion}-${gccArch}-gcc4-${gccVersionYear}-${g
 
 cd /boot
 zip -ry "$packageFile" `echo $installDir | cut -d/ -f3-`
+
+
+# add the "current" version symlink
+cd "$buildDir"
+mkdir -p develop/abi/x86/gcc4/tools/
+ln -s $gccVersionedName develop/abi/x86/gcc4/tools/current
+zip -y "$packageFile" develop/abi/x86/gcc4/tools/current
 
 
 # add the optional package description
