@@ -1,19 +1,22 @@
-How to build gcc-4.3 natively on Haiku:
+How to build gcc-4.4 natively on Haiku:
 
 checkout the buildtools from the haiku repository
 cd into the buildtools folder (where this file lives)
 
 declare the current gcc-version-date like this:
 	export GCCDATE=100421
-(just use the current date instead of '100421')
+	export GCCVERSION=gcc-4.4.4-haiku-${GCCDATE}
+(just use the current date instead of '100421' and the current gcc version
+instead of '4.4.4')
 
 compile binutils:
 
 	mkdir binutils-obj
 	cd binutils-obj
 	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure \
-		--prefix=/boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE} \
-		--disable-nls --enable-shared=yes
+		--prefix=/boot/develop/abi/x86/gcc4/tools/${GCCVERSION} \
+		--disable-nls --enable-shared=yes \
+		--with-htmldir=html-docs
 	make -j2
 	cd ..
 
@@ -22,21 +25,20 @@ compile gcc:
 	mkdir gcc-obj
 	cd gcc-obj
 	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
-		--prefix=/boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE} \
+		--prefix=/boot/develop/abi/x86/gcc4/tools/${GCCVERSION} \
 		--enable-shared --enable-languages=c,c++ \
-		--disable-nls --without-libiconv-prefix --disable-libstdcxx-pch
+		--disable-nls --without-libiconv-prefix --disable-libstdcxx-pch \
+		--with-htmldir=html-docs
 	make -j2 bootstrap
 	cd ..
 
 Ok, now everything is compiled and ready, waiting to be installed:
 
-	mkdir /boot/develop/abi/x86/gcc4/tools/gcc-4.3.3-haiku-${GCCDATE}
+	mkdir /boot/develop/abi/x86/gcc4/tools/${GCCVERSION}
 	cd binutils-obj
-	make install
-	cd ..
-	cd gcc-obj
-	make install
-	cd ..
-	ln -sfn gcc-4.3.3-haiku-${GCCDATE} /boot/develop/abi/x86/gcc4/tools/current
+	make install install-html
+	cd ../gcc-obj
+	make install install-html
+	cd ${GCCVERSION} /boot/develop/abi/x86/gcc4/tools/current
 	
 Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
