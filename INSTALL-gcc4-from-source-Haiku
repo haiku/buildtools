@@ -39,6 +39,6 @@ Ok, now everything is compiled and ready, waiting to be installed:
 	make install install-html
 	cd ../gcc-obj
 	make install install-html
-	cd ${GCCVERSION} /boot/develop/abi/x86/gcc4/tools/current
+	ln -sfn ${GCCVERSION} /boot/develop/abi/x86/gcc4/tools/current
 	
 Please send questions & bug-reports to: Oliver Tappe <gcc@hirschkaefer.de>
