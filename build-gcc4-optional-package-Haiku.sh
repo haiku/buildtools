@@ -119,6 +119,13 @@ rm -rf "$installDir/info" "$installDir/man" "$installDir/share" \
 	"$installDir/lib/libstdc++.so"
 
 
+# strip the executables of debug info (somewhat crude heuristics to identify
+# actual executables: files >= 20 kiB with execute permission and not in a "lib"
+# directory)
+strip --strip-debug \
+	`find "$installDir" -type f -a -perm -u=x -a -size +20k | grep -v /lib/`
+
+
 # add C++ header symlink
 ln -s c++/$gccVersion $installDir/include/g++
 
