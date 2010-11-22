@@ -38,15 +38,9 @@ Boston, MA 02111-1307, USA.  */
 	    builtin_define ("__PIC__");					\
 	    builtin_define ("__pic__");					\
 	  }								\
-    /* Haiku apparently doesn't support merging of symbols across shared \
-       object boundaries. Hence we need to explicitly specify that \
-       type_infos are not merged, so that they get compared by name \
-       instead of by pointer. */ \
-    	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
-	builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0"); 		\
     }									\
   while (0)
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf_mipsel_haiku -shared -Bsymbolic %{nostart:-e 0}"
+#define LINK_SPEC "%{!o*:-o %b} -m elf_mipsel_haiku -shared %{nostart:-e 0}"
 

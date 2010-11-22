@@ -74,6 +74,6 @@
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m armelf -shared -no-undefined -Bsymbolic %{nostart:-e 0} \
-  %{mbig-endian:-EB} %{mlittle-endian:-EL} -X" 
+#define LINK_SPEC "%{!o*:-o %b} -m armelf -shared -no-undefined %{nostart:-e 0} \
+  %{mbig-endian:-EB} %{mlittle-endian:-EL} -X"
 

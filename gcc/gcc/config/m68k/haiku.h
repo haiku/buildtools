@@ -75,12 +75,6 @@ Boston, MA 02110-1301, USA.  */
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
 	builtin_assert ("system=haiku");				\
-    /* Haiku apparently doesn't support merging of symbols across shared\
-       object boundaries. Hence we need to explicitly specify that 	\
-       type_infos are not merged, so that they get compared by name 	\
-       instead of by pointer. */ 					\
-    builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0"); 			\
-    builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0"); \
     }									\
   while (0)
 
@@ -115,8 +109,8 @@ Boston, MA 02110-1301, USA.  */
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-/*#define LINK_SPEC "%{!o*:-o %b} -m elf_m68k_haiku -shared -no-undefined -Bsymbolic %{nostart:-e 0}"*/
-#define LINK_SPEC "%{!o*:-o %b} -m m68kelf -shared -no-undefined -Bsymbolic %{nostart:-e 0}"
+/*#define LINK_SPEC "%{!o*:-o %b} -m elf_m68k_haiku -shared -no-undefined %{nostart:-e 0}"*/
+#define LINK_SPEC "%{!o*:-o %b} -m m68kelf -shared -no-undefined %{nostart:-e 0}"
 
 /* XXX: not sure for the rest there... */
 

@@ -27,9 +27,9 @@ Boston, MA 02111-1307, USA.  */
 #endif
 
 /* The SVR4 ABI for the i386 says that records and unions are returned
- *   in memory.  
+ *   in memory.
  *
- *   TODO: Linux64 doesn't use pcc_struct_return scheme. Does haiku? 
+ *   TODO: Linux64 doesn't use pcc_struct_return scheme. Does haiku?
  *         If not this could be removed.
  */
 #undef DEFAULT_PCC_STRUCT_RETURN
@@ -48,12 +48,6 @@ Boston, MA 02111-1307, USA.  */
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
 	builtin_assert ("system=haiku");				\
-    /* Haiku apparently doesn't support merging of symbols across shared \
-       object boundaries. Hence we need to explicitly specify that \
-       type_infos are not merged, so that they get compared by name \
-       instead of by pointer. */ \
-    	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
-    	builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0");		\
     }									\
   while (0)
 #else
@@ -66,12 +60,6 @@ Boston, MA 02111-1307, USA.  */
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
 	builtin_assert ("system=haiku");				\
-    /* Haiku apparently doesn't support merging of symbols across shared \
-       object boundaries. Hence we need to explicitly specify that \
-       type_infos are not merged, so that they get compared by name \
-       instead of by pointer. */ \
-    	builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0");		\
-    	builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0");		\
     }									\
   while (0)
 #endif
@@ -83,9 +71,9 @@ Boston, MA 02111-1307, USA.  */
 
 #undef	LINK_SPEC
 #if TARGET_64BIT
-#define LINK_SPEC "-m elf_x86_64 -z max-page-size=0x1000 -shared -Bsymbolic %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC "-m elf_x86_64 -z max-page-size=0x1000 -shared %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
 #else
-#define LINK_SPEC "-m elf_i386_haiku -shared -Bsymbolic %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC "-m elf_i386_haiku -shared %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
 #endif
 
 
