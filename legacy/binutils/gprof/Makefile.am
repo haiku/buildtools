@@ -39,6 +39,9 @@ EXTRA_DIST    = $(BUILT_SOURCES) bbconv.pl $(man_MANS)
 
 diststuff: $(BUILT_SOURCES) info $(man_MANS)
 
+# hack against problems with newer make (at least with 3.82):
+%.o:%.m
+
 .m.c:
 	awk -f $(srcdir)/gen-c-prog.awk > ./$*.c \
 	    FUNCTION=`(echo $*|sed -e 's,.*/,,g' -e 's/_bl//')`_blurb \
