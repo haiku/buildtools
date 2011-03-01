@@ -3,6 +3,8 @@
 # arguments).
 # Usage: build-gcc2-optional-package-Haiku.sh [gcc-base-dir] [version]
 
+packages_build=/boot/common/packages/build
+
 if [ -d "$1" ]; then
 	gcc_base=$1
 	shift
@@ -26,12 +28,11 @@ else
 fi
 
 current_dir=$(pwd)
-base=/boot/develop/abi/x86/gcc2/tools/gcc-2.95.3-haiku-$GCCDATE
+base=/boot/common/packages/contents/develop/tools/gcc-2.95.3-$GCCDATE
 if [ ! -d "$base" ]; then
 	echo GCC directory \"$base\" does not exist!
 	exit
 fi
-
 
 ### HTML documentation ####################################
 
@@ -75,52 +76,69 @@ if [ ! -e "$html_base/as.html" ]; then
 		"INSTALL-gcc2-from-source-Haiku."
 fi
 
+### Cleanup ###############################################
+
+echo "Cleanup"
+
+cd $base/bin
+for binary in ../i586-pc-haiku/bin/*; do 
+	ln -sfn $binary .
+done
+
 if [ -d $base/man -o -d $base/info -o -d $base/share ]; then
-	echo "Removing legacy files (man/info/share)..."
 	rm -rf $base/man
 	rm -rf $base/info
 	rm -rf $base/share
 fi
-rm -f $base/lib/gcc-lib/i586-pc-haiku/2.95.3-haiku-$GCCDATE/include/math.h
 
+rm -f $base/lib/gcc-lib/i586-pc-haiku/2.95.3-haiku-$GCCDATE/include/math.h
 
 ### C++ includes ######################################
 
-echo "Install C++ includes"
+echo "Install C++ includes & library"
 
 rm -rf $base/include/g++
-ln -snf /boot/develop/headers/cpp $base/include/g++
+ln -snf /boot/system/packages/contents/develop/headers/c++/2.95.3 $base/include/g++
 
+ln -snf /boot/system/packages/contents/lib/libstdc++.r4.so $base/lib/
 
-### zip archive ###########################################
+### package ###########################################
 
-echo "Building ZIP archive..."
+echo "Building package ..."
 
-current_gcc=$(setgcc | cut -d/ -f 2)
-version_year=20$(echo $GCCDATE | cut -c1-2)
-version_month=$(echo $GCCDATE | cut -c3-4)
-version_day=$(echo $GCCDATE | cut -c5-6)
-zip_name="$current_dir/gcc-2.95.3-x86-$current_gcc-$version_year-$version_month-$version_day.zip"
+cd ${packages_build}
+ver=2.95.3_${GCCDATE}
+rev=1
+while [ -e gcc-2.95.3_${GCCDATE}-$rev ]; do 
+	rev=$(expr $rev + 1); 
+done
+version=$ver-$rev
+echo "Version: $version"
 
-cd /boot
-zip_base=$(echo $base | cut -d/ -f3-)
-rm -f $zip_name
-zip -yr $zip_name $zip_base
+mkdir -p gcc-$version/develop/tools
+cp -r $base gcc-$version/develop/tools/
+cd gcc-$version
+cat >.PackageInfo <<ENDOFHERE
+	name = gcc
+	version = $version
+	architecture = x86_gcc2
+	summary = "c/c++ compiler"
+	description = "standard compiler for x86_gcc2 platform, ABI-compatible with BeOS R5"
+	packager = "Oliver Tappe <zooey@hirschkaefer.de>"
+	vendor = "Haiku Project"
+	copyrights = [ "1988-2000 Free Software Foundation, Inc." ]
+	licenses = [ "GNU GPL v2", "GNU LGPL v2" ]
+	provides = [
+		gcc = $ver,
+		binutils = 2.17_$GCCDATE
+	]
+	requires = [
+		haiku >= r40675,
+		package_management_branch,
+		cpp-headers == 2.95.3
+	]
+ENDOFHERE
 
-current_name=develop/abi/x86/gcc2/tools/current
-ln -snf gcc-2.95.3-haiku-$GCCDATE $current_name
-zip -yr $zip_name $current_name
-
-
-### optional package description ##########################
-
-echo "Package:		GCC
-Version:		2.95.3-haiku-$GCCDATE
-Copyright:		1988-2000 Free Software Foundation, Inc.
-License:		GNU GPL v2
-License:		GNU LGPL v2
-URL:			http://www.gnu.org/software/gcc/" > /tmp/.OptionalPackageDescription
-
-cd /tmp
-zip -yr $zip_name .OptionalPackageDescription
-rm .OptionalPackageDescription
+mimeset -F .
+package create ../gcc-$version.hpkg
+cd $current_dir
