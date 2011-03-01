@@ -756,7 +756,7 @@ if test x${gcc_gxx_include_dir} = x; then
     gcc_gxx_include_dir='${libsubdir}/include/g++'
   else
     topsrcdir=${srcdir}/.. . ${srcdir}/../config.if
-    gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/include/g++"-${libstdcxx_interface}
+    gcc_gxx_include_dir="\$(libsubdir)/\$(unlibsubdir)/..\`echo \$(exec_prefix) | sed -e 's|^\$(prefix)||' -e 's|/[^/]*|/..|g'\`/include/g++"
   fi
 fi
 
