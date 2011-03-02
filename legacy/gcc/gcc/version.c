@@ -1,1 +1,1 @@
-char *version_string = "2.95.3-haiku-110228";
+char *version_string = "2.95.3-110228";
