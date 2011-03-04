@@ -4,7 +4,7 @@ CROSS_LIBGCC1 =
 
 # There are system headers elsewhere, but these are the ones that
 # we are most likely to want to apply any fixes to.
-SYSTEM_HEADER_DIR = /boot/system/packages/contents/develop/headers/posix
+SYSTEM_HEADER_DIR = /boot/system/develop/headers/posix
 CROSS_SYSTEM_HEADER_DIR := $(CROSS_SYSTEM_HEADER_DIR)/posix
 
 # Use the system assert.h

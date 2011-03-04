@@ -350,9 +350,9 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 #undef SMALL_STACK
 
 /* For native compiler, use standard Haiku include file search paths
-   rooted in /boot/system/packages/contents/develop/headers.  For a cross 
-   compiler, don't expect the host to use the Haiku directory scheme, and 
-   instead look for the Haiku include files relative to TOOL_INCLUDE_DIR. */
+   rooted in /boot/system/develop/headers.  For a cross compiler, don't expect
+   the host to use the Haiku directory scheme, and instead look for the Haiku
+   include files relative to TOOL_INCLUDE_DIR. */
 
 #ifndef CROSS_COMPILE
 #undef INCLUDE_DEFAULTS
@@ -360,36 +360,36 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
-    { "/boot/common/packages/contents/include", 0, 0, 0 },\
-    { "/boot/system/packages/contents/develop/headers/os", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/app", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/device", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/drivers", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/game", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/interface", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/kernel", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/locale", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/mail", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/media", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/midi", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/midi2", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/net", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/opengl", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/storage", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/support", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/translation", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/add-ons/graphics", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/add-ons/input_server", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/add-ons/screen_saver", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/add-ons/tracker", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/be_apps/Deskbar", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/be_apps/NetPositive", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/os/be_apps/Tracker", 0, 0, 1 },\
-    { "/boot/system/packages/contents/develop/headers/3rdparty", 0, 0, 0 },\
-    { "/boot/system/packages/contents/develop/headers/bsd", 0, 0, 0 },\
-    { "/boot/system/packages/contents/develop/headers/glibc", 0, 0, 0 },\
-    { "/boot/system/packages/contents/develop/headers/posix", 0, 0, 0 },\
-    { "/boot/system/packages/contents/develop/headers", 0, 0, 0 }, \
+    { "/boot/common/develop/headers", 0, 0, 0 },\
+    { "/boot/system/develop/headers/os", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/device", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/drivers", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/game", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/interface", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/kernel", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/locale", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/mail", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/media", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi2", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/net", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/opengl", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/storage", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/support", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/translation", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/graphics", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/input_server", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/screen_saver", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Deskbar", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/3rdparty", 0, 0, 0 },\
+    { "/boot/system/develop/headers/bsd", 0, 0, 0 },\
+    { "/boot/system/develop/headers/glibc", 0, 0, 0 },\
+    { "/boot/system/develop/headers/posix", 0, 0, 0 },\
+    { "/boot/system/develop/headers", 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
     };
 #else /* CROSS_COMPILE */

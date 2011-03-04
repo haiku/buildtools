@@ -3,14 +3,14 @@
 if [ -z $GCCDATE ]; then
 	echo "need to set GCCDATE environment variable!"
 	exit 1
-fi 
+fi
 
-export BELIBRARIES=/boot/common/packages/contents/lib:/boot/system/packages/contents/develop/lib
+export BELIBRARIES=/boot/common/lib:/boot/system/develop/lib
 
 mkdir -p gcc-obj
 cd gcc-obj
 CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
-	--prefix=/boot/common/packages/contents/develop/tools/gcc-2.95.3-${GCCDATE} \
+	--prefix=/boot/common/develop/tools/gcc-2.95.3-${GCCDATE} \
 	--disable-nls --enable-shared=yes --enable-languages=c,c++
 make bootstrap
 cd ..

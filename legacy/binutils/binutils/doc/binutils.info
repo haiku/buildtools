@@ -1,7 +1,4 @@
-This is
-/home/bonefish/develop/haiku/buildtools/legacy/binutils/binutils/doc/binutils.info,
-produced by makeinfo version 4.9 from
-/home/bonefish/develop/haiku/buildtools/legacy/binutils/binutils/doc/binutils.texi.
+This is /home/zooey/Sources/haiku/buildtools.pm/legacy/binutils/binutils/doc/binutils.info, produced by makeinfo version 4.13 from /home/zooey/Sources/haiku/buildtools.pm/legacy/binutils/binutils/doc/binutils.texi.
 
 START-INFO-DIR-ENTRY
 * Binutils: (binutils).         The GNU binary utilities.
@@ -507,7 +504,7 @@ object files are listed as arguments, `nm' assumes the file `a.out'.
           same name.  If the symbol is defined anywhere, the common
           symbols are treated as undefined references.  For more
           details on common symbols, see the discussion of -warn-common
-          in *Note Linker options: (ld.info)Options.
+          in *note Linker options: (ld.info)Options.
 
     `D'
           The symbol is in the initialized data section.
@@ -561,7 +558,7 @@ object files are listed as arguments, `nm' assumes the file `a.out'.
           this case, the next values printed are the stabs other field,
           the stabs desc field, and the stab type.  Stabs symbols are
           used to hold debugging information.  For more information,
-          see *Note Stabs: (stabs.info)Top.
+          see *note Stabs: (stabs.info)Top.
 
     `?'
           The symbol type is unknown, or object file format specific.
@@ -1575,7 +1572,7 @@ equivalent.  At least one option from the list
      ELF section.  In most other file formats, debugging symbol-table
      entries are interleaved with linkage symbols, and are visible in
      the `--syms' output.  For more information on stabs symbols, see
-     *Note Stabs: (stabs.info)Top.
+     *note Stabs: (stabs.info)Top.
 
 `--start-address=ADDRESS'
      Start displaying data at the specified address.  This affects the
@@ -2244,7 +2241,7 @@ file language used in header files, see the `linkers' section,
 `NLMLINK' in particular, of the `NLM Development and Tools Overview',
 which is part of the NLM Software Developer's Kit ("NLM SDK"),
 available from Novell, Inc.  `nlmconv' uses the GNU Binary File
-Descriptor library to read INFILE; see *Note BFD: (ld.info)BFD, for
+Descriptor library to read INFILE; see *note BFD: (ld.info)BFD, for
 more information.
 
    `nlmconv' can perform a link step.  In other words, you can list
@@ -2379,7 +2376,7 @@ available to Windows.
      This is a BFD target name; you can use the `--help' option to see
      a list of supported targets.  Normally `windres' will use the
      default format, which is the first one listed by the `--help'
-     option.  *Note Target Selection::.
+     option.  *note Target Selection::.
 
 `--preprocessor PROGRAM'
      When `windres' reads an `rc' file, it runs it through the C
@@ -3473,20 +3470,19 @@ Appendix A GNU Free Documentation License
      H. Include an unaltered copy of this License.
      I. Preserve the section entitled "History", and its title, and add
      to    it an item stating at least the title, year, new authors, and
-       publisher of the Modified Version as given on the Title Page.
-     If    there is no section entitled "History" in the Document,
-     create one    stating the title, year, authors, and publisher of
-     the Document as    given on its Title Page, then add an item
+       publisher of the Modified Version as given on the Title Page.  If
+       there is no section entitled "History" in the Document, create
+     one    stating the title, year, authors, and publisher of the
+     Document as    given on its Title Page, then add an item
      describing the Modified    Version as stated in the previous
      sentence.
      J. Preserve the network location, if any, given in the Document for
-       public access to a Transparent copy of the Document, and
-     likewise    the network locations given in the Document for
-     previous versions    it was based on.  These may be placed in the
-     "History" section.     You may omit a network location for a work
-     that was published at    least four years before the Document
-     itself, or if the original    publisher of the version it refers
-     to gives permission.
+       public access to a Transparent copy of the Document, and likewise
+       the network locations given in the Document for previous versions
+       it was based on.  These may be placed in the "History" section.
+       You may omit a network location for a work that was published at
+       least four years before the Document itself, or if the original
+      publisher of the version it refers to gives permission.
      K. In any section entitled "Acknowledgements" or "Dedications",
      preserve the section's title, and preserve in the section all the
       substance and tone of each of the contributor acknowledgements
@@ -3805,33 +3801,33 @@ Index
 
 
 Tag Table:
-Node: Top1847
-Node: ar3400
-Node: ar cmdline5578
-Node: ar scripts13721
-Node: nm19409
-Node: objcopy27605
-Node: objdump50657
-Node: ranlib65570
-Node: size66325
-Node: strings69172
-Node: strip71522
-Node: c++filt77001
-Ref: c++filt-Footnote-181929
-Node: addr2line82035
-Node: nlmconv85306
-Node: windres87912
-Node: dlltool93645
-Node: def file format104483
-Node: readelf106221
-Node: Common Options110929
-Node: Selecting The Target System111969
-Node: Target Selection112901
-Node: Architecture Selection114883
-Node: Reporting Bugs115711
-Node: Bug Criteria116490
-Node: Bug Reporting117043
-Node: GNU Free Documentation License124137
-Node: Index143869
+Node: Top1848
+Node: ar3401
+Node: ar cmdline5579
+Node: ar scripts13722
+Node: nm19410
+Node: objcopy27606
+Node: objdump50658
+Node: ranlib65571
+Node: size66326
+Node: strings69173
+Node: strip71523
+Node: c++filt77002
+Ref: c++filt-Footnote-181930
+Node: addr2line82036
+Node: nlmconv85307
+Node: windres87913
+Node: dlltool93646
+Node: def file format104484
+Node: readelf106222
+Node: Common Options110930
+Node: Selecting The Target System111970
+Node: Target Selection112902
+Node: Architecture Selection114884
+Node: Reporting Bugs115712
+Node: Bug Criteria116491
+Node: Bug Reporting117044
+Node: GNU Free Documentation License124138
+Node: Index143858
 
 End Tag Table

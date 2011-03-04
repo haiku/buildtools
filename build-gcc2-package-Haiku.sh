@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds a GCC package from the installation specified by $GCCDATE (or via the
 # arguments).
-# Usage: build-gcc2-optional-package-Haiku.sh [gcc-base-dir] [version]
+# Usage: build-gcc2-package-Haiku.sh [gcc-base-dir] [version]
 
 packages_build=/boot/common/packages/build
 
@@ -28,7 +28,7 @@ else
 fi
 
 current_dir=$(pwd)
-base=/boot/common/packages/contents/develop/tools/gcc-2.95.3-$GCCDATE
+base=/boot/common/develop/tools/gcc-2.95.3-$GCCDATE
 if [ ! -d "$base" ]; then
 	echo GCC directory \"$base\" does not exist!
 	exit
@@ -81,7 +81,7 @@ fi
 echo "Cleanup"
 
 cd $base/bin
-for binary in ../i586-pc-haiku/bin/*; do 
+for binary in ../i586-pc-haiku/bin/*; do
 	ln -sfn $binary .
 done
 
@@ -98,9 +98,10 @@ rm -f $base/lib/gcc-lib/i586-pc-haiku/2.95.3-haiku-$GCCDATE/include/math.h
 echo "Install C++ includes & library"
 
 rm -rf $base/include/g++
-ln -snf /boot/system/packages/contents/develop/headers/c++/2.95.3 $base/include/g++
+ln -snf /boot/system/develop/headers/c++/2.95.3 $base/include/g++
 
-ln -snf /boot/system/packages/contents/lib/libstdc++.r4.so $base/lib/
+ln -snf /boot/system/lib/libstdc++.r4.so $base/lib/
+ln -snf /boot/system/lib/libstdc++.so $base/lib/
 
 ### package ###########################################
 
@@ -109,8 +110,8 @@ echo "Building package ..."
 cd ${packages_build}
 ver=2.95.3_${GCCDATE}
 rev=1
-while [ -e gcc-2.95.3_${GCCDATE}-$rev ]; do 
-	rev=$(expr $rev + 1); 
+while [ -e gcc-2.95.3_${GCCDATE}-$rev ]; do
+	rev=$(expr $rev + 1);
 done
 version=$ver-$rev
 echo "Version: $version"
