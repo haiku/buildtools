@@ -160,5 +160,5 @@ adjusted more or less to work with 2.5rc3.
   info in noise (why it failed). It should probably be a command line option
   as it might be interesting in some cases. Also added a "Build Failure" at
   the end if there were failed targets. (Fredrik Holmqvist)
-* Only write "...patience..." every 5000th target instead of 1000th.
+* Only write "...patience..." every 10000th target instead of 1000th.
   (Fredrik Holmqvist)

@@ -461,7 +461,7 @@ make0(
 	if( t->flags & T_FLAG_INTERNAL )
 	    return;
 
-	if( !( ++counts->targets % 5000 ) && DEBUG_MAKE )
+	if( !( counts->targets++ % 10000 ) && DEBUG_MAKE )
 	    printf( "...patience...\n" );
 
 	if( fate == T_FATE_ISTMP )
