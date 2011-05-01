@@ -154,3 +154,9 @@ adjusted more or less to work with 2.5rc3.
   the communication overhead with the server, and that the server consumes
   memory to store the cached data. The server's memory footprint is quite
   reasonable, though.
+
+* Disabled the "..skipped x for lack of y..." message
+  Disabled as it is not very useful information and hides the interesting
+  info in noise (why it failed). It should probably be a command line option
+  as it might be interesting in some cases. Also added a "Build Failure" at
+  the end if there were failed targets. (Fredrik Holmqvist)

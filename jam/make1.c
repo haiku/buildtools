@@ -104,9 +104,11 @@ make1( TARGET *t )
 
 	/* Talk about it */
 
-	if( DEBUG_MAKE && counts->failed )
-	    printf( "...failed updating %d target(s)...\n", counts->failed );
-
+	if( counts->failed ) {
+	    printf("\nBUILD FAILURE:\n");
+	    if( DEBUG_MAKE ) printf( "...failed updating %d target(s)...\n", counts->failed );
+	}
+	
 	if( DEBUG_MAKE && counts->skipped )
 	    printf( "...skipped %d target(s)...\n", counts->skipped );
 
@@ -201,7 +203,7 @@ make1b( TARGET *t )
 	if( t->status == EXEC_CMD_FAIL && t->actions )
 	{
 	    ++counts->skipped;
-	    printf( "...skipped %s for lack of %s...\n", t->name, failed );
+//	    printf( "...skipped %s for lack of %s...\n", t->name, failed );
 	}
 
 	if( t->status == EXEC_CMD_OK )
