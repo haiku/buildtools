@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for DEC Alpha on OSF/1.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003,
-   2004, 2007 Free Software Foundation, Inc.
+   2004, 2007, 2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
 This file is part of GCC.
@@ -162,14 +162,46 @@ __enable_execute_stack (void *addr)					\
 #define SIZE_TYPE	"long unsigned int"
 #define PTRDIFF_TYPE	"long int"
 
+#define SIG_ATOMIC_TYPE "int"
+
+#define INT8_TYPE "signed char"
+#define INT16_TYPE "short int"
+#define INT32_TYPE "int"
+#define INT64_TYPE "long int"
+#define UINT8_TYPE "unsigned char"
+#define UINT16_TYPE "short unsigned int"
+#define UINT32_TYPE "unsigned int"
+#define UINT64_TYPE "long unsigned int"
+
+#define INT_LEAST8_TYPE "signed char"
+#define INT_LEAST16_TYPE "short int"
+#define INT_LEAST32_TYPE "int"
+#define INT_LEAST64_TYPE "long int"
+#define UINT_LEAST8_TYPE "unsigned char"
+#define UINT_LEAST16_TYPE "short unsigned int"
+#define UINT_LEAST32_TYPE "unsigned int"
+#define UINT_LEAST64_TYPE "long unsigned int"
+
+#define INT_FAST8_TYPE "signed char"
+#define INT_FAST16_TYPE "int"
+#define INT_FAST32_TYPE "int"
+#define INT_FAST64_TYPE "long int"
+#define UINT_FAST8_TYPE "unsigned char"
+#define UINT_FAST16_TYPE "unsigned int"
+#define UINT_FAST32_TYPE "unsigned int"
+#define UINT_FAST64_TYPE "long unsigned int"
+
+#define INTPTR_TYPE "long int"
+#define UINTPTR_TYPE "long unsigned int"
+
 /* The linker will stick __main into the .init section.  */
 #define HAS_INIT_SECTION
 #define LD_INIT_SWITCH "-init"
 #define LD_FINI_SWITCH "-fini"
 
-/* The linker needs a space after "-o".  This allows -oldstyle_liblookup to
-   be passed to ld.  */
-#define SWITCHES_NEED_SPACES "o"
+/* From Tru64 UNIX Object File and Symbol Table Format Specification,
+   2.3.5 Alignment, p.19.  */
+#define MAX_OFILE_ALIGNMENT (64 * 1024 * BITS_PER_UNIT)
 
 /* Select a format to encode pointers in exception handling data.  CODE
    is 0 for data, 1 for code labels, 2 for function pointers.  GLOBAL is
@@ -184,6 +216,14 @@ __enable_execute_stack (void *addr)					\
   (TARGET_GAS								     \
    ? (((GLOBAL) ? DW_EH_PE_indirect : 0) | DW_EH_PE_pcrel | DW_EH_PE_sdata4) \
    : DW_EH_PE_aligned)
+
+/* The Tru64 UNIX assembler warns on .lcomm with SIZE 0, so use 1 in that
+   case.  */
+#undef ASM_OUTPUT_LOCAL
+#define ASM_OUTPUT_LOCAL(FILE, NAME, SIZE,ROUNDED)	\
+( fputs ("\t.lcomm ", (FILE)),				\
+  assemble_name ((FILE), (NAME)),			\
+  fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED"\n", (SIZE) ? (SIZE) : 1))
 
 /* This is how we tell the assembler that a symbol is weak.  */
 
@@ -210,3 +250,5 @@ __enable_execute_stack (void *addr)					\
 /* Handle #pragma extern_prefix.  Technically only needed for Tru64 5.x,
    but easier to manipulate preprocessor bits from here.  */
 #define TARGET_HANDLE_PRAGMA_EXTERN_PREFIX 1
+
+#define MD_UNWIND_SUPPORT "config/alpha/osf-unwind.h"

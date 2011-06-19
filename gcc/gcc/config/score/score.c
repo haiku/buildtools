@@ -1,5 +1,5 @@
 /* Output routines for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Sunnorth.
 
    This file is part of GCC.
@@ -68,6 +68,9 @@
 #undef TARGET_HANDLE_OPTION
 #define TARGET_HANDLE_OPTION            score_handle_option
 
+#undef TARGET_LEGITIMIZE_ADDRESS
+#define TARGET_LEGITIMIZE_ADDRESS	score_legitimize_address
+
 #undef  TARGET_SCHED_ISSUE_RATE
 #define TARGET_SCHED_ISSUE_RATE         score_issue_rate
 
@@ -86,11 +89,8 @@
 #undef TARGET_ASM_OUTPUT_MI_THUNK
 #define TARGET_ASM_OUTPUT_MI_THUNK      score_output_mi_thunk
 
-#undef TARGET_PROMOTE_FUNCTION_ARGS
-#define TARGET_PROMOTE_FUNCTION_ARGS    hook_bool_tree_true
-
-#undef TARGET_PROMOTE_FUNCTION_RETURN
-#define TARGET_PROMOTE_FUNCTION_RETURN  hook_bool_tree_true
+#undef TARGET_PROMOTE_FUNCTION_MODE
+#define TARGET_PROMOTE_FUNCTION_MODE    default_promote_function_mode_always_promote
 
 #undef TARGET_PROMOTE_PROTOTYPES
 #define TARGET_PROMOTE_PROTOTYPES       hook_bool_tree_true
@@ -113,8 +113,18 @@
 #undef TARGET_ADDRESS_COST
 #define TARGET_ADDRESS_COST             score_address_cost
 
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P	score_legitimate_address_p
+
+#undef TARGET_CAN_ELIMINATE
+#define TARGET_CAN_ELIMINATE            score_can_eliminate
+
+#undef TARGET_ASM_TRAMPOLINE_TEMPLATE
+#define TARGET_ASM_TRAMPOLINE_TEMPLATE	score_asm_trampoline_template
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT		score_trampoline_init
+
 struct extern_list *extern_head = 0;
-rtx cmp_op0, cmp_op1;
 
 /* default 0 = NO_REGS  */
 enum reg_class score_char_to_class[256];
@@ -424,6 +434,16 @@ score_hard_regno_mode_ok (unsigned int regno, enum machine_mode mode)
   gcc_unreachable ();
 }
 
+/* We can always eliminate to the hard frame pointer.  We can eliminate
+   to the stack pointer unless a frame pointer is needed.  */
+
+static bool
+score_can_eliminate (const int from ATTRIBUTE_UNUSED, const int to)
+{
+  return (to == HARD_FRAME_POINTER_REGNUM
+          || (to  == STACK_POINTER_REGNUM && !frame_pointer_needed));
+}
+
 /* Implement INITIAL_ELIMINATION_OFFSET.  FROM is either the frame
    pointer or argument pointer.  TO is either the stack pointer or
    hard frame pointer.  */
@@ -504,14 +524,27 @@ score_function_value (tree valtype, tree func ATTRIBUTE_UNUSED,
   gcc_unreachable ();
 }
 
-/* Implement INITIALIZE_TRAMPOLINE macro.  */
-void
-score_initialize_trampoline (rtx ADDR, rtx FUNC, rtx CHAIN)
+/* Implement TARGET_ASM_TRAMPOLINE_TEMPLATE.  */
+static void
+score_asm_trampoline_template (FILE *f)
 {
   if (TARGET_SCORE5 || TARGET_SCORE5U || TARGET_SCORE7 || TARGET_SCORE7D)
-    return score7_initialize_trampoline (ADDR, FUNC, CHAIN);
+    return score7_asm_trampoline_template (f);
   else if (TARGET_SCORE3)
-    return score3_initialize_trampoline (ADDR, FUNC, CHAIN);
+    return score3_asm_trampoline_template (f);
+
+  gcc_unreachable ();
+}
+
+/* Implement TARGET_TRAMPOLINE_INIT.  */
+static void
+score_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+{
+  /* ??? These two routines are identical.  */
+  if (TARGET_SCORE5 || TARGET_SCORE5U || TARGET_SCORE7 || TARGET_SCORE7D)
+    return score7_trampoline_init (m_tramp, fndecl, chain_value);
+  else if (TARGET_SCORE3)
+    return score3_trampoline_init (m_tramp, fndecl, chain_value);
 
   gcc_unreachable ();
 }
@@ -528,28 +561,29 @@ score_regno_mode_ok_for_base_p (int regno, int strict)
   gcc_unreachable ();
 }
 
-/* Implement GO_IF_LEGITIMATE_ADDRESS macro.  */
-int
-score_address_p (enum machine_mode mode, rtx x, int strict)
+/* Implement TARGET_LEGITIMIZE_ADDRESS_P.  */
+bool
+score_legitimate_address_p (enum machine_mode mode, rtx x, bool strict)
 {
   if (TARGET_SCORE5 || TARGET_SCORE5U || TARGET_SCORE7 || TARGET_SCORE7D)
-    return score7_address_p (mode, x, strict);
+    return score7_legitimate_address_p (mode, x, strict);
   else if (TARGET_SCORE3)
-    return score3_address_p (mode, x, strict);
+    return score3_legitimate_address_p (mode, x, strict);
 
   gcc_unreachable ();
 }
 
-/* This function is used to implement LEGITIMIZE_ADDRESS.  If *XLOC can
+/* This function is used to implement LEGITIMIZE_ADDRESS.  If X can
    be legitimized in a way that the generic machinery might not expect,
-   put the new address in *XLOC and return true.  */
-int
-score_legitimize_address (rtx *xloc)
+   return the new address, else return X.  */
+static rtx
+score_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
+			  enum machine_mode mode ATTRIBUTE_UNUSED)
 {
   if (TARGET_SCORE5 || TARGET_SCORE5U || TARGET_SCORE7 || TARGET_SCORE7D)
-    return score7_legitimize_address (xloc);
+    return score7_legitimize_address (x);
   else if (TARGET_SCORE3)
-    return score3_legitimize_address (xloc);
+    return score3_legitimize_address (x);
 
   gcc_unreachable ();
 }
@@ -690,17 +724,6 @@ score_epilogue (int sibcall_p)
     return score7_epilogue (sibcall_p);
   else if (TARGET_SCORE3)
     return score3_epilogue (sibcall_p);
-
-  gcc_unreachable ();
-}
-
-void
-score_gen_cmp (enum machine_mode mode)
-{
-  if (TARGET_SCORE5 || TARGET_SCORE5U || TARGET_SCORE7 || TARGET_SCORE7D)
-    return score7_gen_cmp (mode);
-  else if (TARGET_SCORE3)
-    return score3_gen_cmp (mode);
 
   gcc_unreachable ();
 }
@@ -1114,7 +1137,7 @@ score_block_move_loop (rtx dst, rtx src, HOST_WIDE_INT length)
   HOST_WIDE_INT loop_mov_bytes;
   HOST_WIDE_INT iteration = 0;
   HOST_WIDE_INT head_length = 0, leftover;
-  rtx label, src_reg, dst_reg, final_dst;
+  rtx label, src_reg, dst_reg, final_dst, test;
 
   bool gen_loop_head = (src_align < BITS_PER_WORD
                         || dst_align < BITS_PER_WORD);
@@ -1154,8 +1177,8 @@ score_block_move_loop (rtx dst, rtx src, HOST_WIDE_INT length)
   score_block_move_loop_body (dst_reg, dst_align,
                             src_reg, src_align, loop_mov_bytes);
 
-  emit_insn (gen_cmpsi (dst_reg, final_dst));
-  emit_jump_insn (gen_bne (label));
+  test = gen_rtx_NE (VOIDmode, dst_reg, final_dst);
+  emit_jump_insn (gen_cbranchsi4 (test, dst_reg, final_dst, label));
 
   score_block_move_loop_foot (dst_reg, dst_align,
                             src_reg, src_align, leftover);

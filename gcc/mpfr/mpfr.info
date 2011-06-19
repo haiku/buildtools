@@ -1,5 +1,5 @@
 This is /home/korli/svnhaiku/buildtools/gcc/mpfr/mpfr.info, produced by
-makeinfo version 4.11 from
+makeinfo version 4.13 from
 /home/korli/svnhaiku/buildtools/gcc/mpfr/mpfr.texi.
 
 This manual documents how to install and use the Multiple Precision
@@ -2111,8 +2111,7 @@ File: mpfr.info,  Node: Rounding Related Functions,  Next: Miscellaneous Functio
 
      Note: if one wants to also determine the correct ternary value
      when rounding B to precision PREC with rounding mode RND, a useful
-     trick is the following:
-     if (mpfr_can_round (b, err, MPFR_RNDN, MPFR_RNDZ, prec + (rnd == MPFR_RNDN)))
+     trick is the following: if (mpfr_can_round (b, err, MPFR_RNDN, MPFR_RNDZ, prec + (rnd == MPFR_RNDN)))
         ...
       Indeed, if RND is `MPFR_RNDN', this will check if one can round
      to PREC+1 bits with a directed rounding: if so, one can surely
@@ -2407,7 +2406,6 @@ File: mpfr.info,  Node: Compatibility with MPF,  Next: Custom Interface,  Prev: 
 A header file `mpf2mpfr.h' is included in the distribution of MPFR for
 compatibility with the GNU MP class MPF.  By inserting the following
 two lines after the `#include <gmp.h>' line,
-
 #include <mpfr.h>
 #include <mpf2mpfr.h>
  any program written for MPF can be compiled directly with MPFR without
@@ -2890,8 +2888,8 @@ File: mpfr.info,  Node: Contributors,  Next: References,  Prev: API Compatibilit
 Contributors
 ************
 
-The main developers of MPFR are Guillaume Hanrot, Vincent Lefe`vre,
-Patrick Pe'lissier, Philippe The'veny and Paul Zimmermann.
+The main developers of MPFR are Guillaume Hanrot, Vincent Lefèvre,
+Patrick Pélissier, Philippe Théveny and Paul Zimmermann.
 
    Sylvie Boldo from ENS-Lyon, France, contributed the functions
 `mpfr_agm' and `mpfr_log'.  Emmanuel Jeandel, from ENS-Lyon too,
@@ -2903,14 +2901,14 @@ and a previous version of `mpfr_gamma'; David Daney contributed the
 hyperbolic and inverse hyperbolic functions, the base-2 exponential,
 and the factorial function. Fabrice Rouillier contributed the
 `mpfr_xxx_z' and `mpfr_xxx_q' functions, and helped to the Microsoft
-Windows porting.  Jean-Luc Re'my contributed the `mpfr_zeta' code.
+Windows porting.  Jean-Luc Rémy contributed the `mpfr_zeta' code.
 Ludovic Meunier helped in the design of the `mpfr_erf' code.  Damien
-Stehle' contributed the `mpfr_get_ld_2exp' function.  Sylvain
-Chevillard contributed the `mpfr_ai' function.
+Stehlé contributed the `mpfr_get_ld_2exp' function.  Sylvain Chevillard
+contributed the `mpfr_ai' function.
 
    We would like to thank Jean-Michel Muller and Joris van der Hoeven
 for very fruitful discussions at the beginning of that project,
-Torbjo"rn Granlund and Kevin Ryde for their help about design issues,
+Torbjörn Granlund and Kevin Ryde for their help about design issues,
 and Nathalie Revol for her careful reading of a previous version of
 this documentation. In particular Kevin Ryde did a tremendous job for
 the portability of MPFR in 2002-2004.
@@ -2919,14 +2917,14 @@ the portability of MPFR in 2002-2004.
 without the continuous support of INRIA, and of the LORIA (Nancy,
 France) and LIP (Lyon, France) laboratories. In particular the main
 authors were or are members of the PolKA, Spaces, Cacao and Caramel
-project-teams at LORIA and of the Are'naire project-team at LIP.  This
+project-teams at LORIA and of the Arénaire project-team at LIP.  This
 project was started during the Fiable (reliable in French) action
 supported by INRIA, and continued during the AOC action.  The
 development of MPFR was also supported by a grant (202F0659 00 MPN 121)
-from the Conseil Re'gional de Lorraine in 2002, from INRIA by an
-"associate engineer" grant (2003-2005), an "ope'ration de
-de'veloppement logiciel" grant (2007-2009), and the post-doctoral grant
-of Sylvain Chevillard in 2009-2010.
+from the Conseil Régional de Lorraine in 2002, from INRIA by an
+"associate engineer" grant (2003-2005), an "opération de développement
+logiciel" grant (2007-2009), and the post-doctoral grant of Sylvain
+Chevillard in 2009-2010.
 
 
 File: mpfr.info,  Node: References,  Next: GNU Free Documentation License,  Prev: Contributors,  Up: Top
@@ -2938,13 +2936,13 @@ References
      Cambridge University Press (to appear), also available from the
      authors' web pages.
 
-   * Laurent Fousse, Guillaume Hanrot, Vincent Lefe`vre, Patrick
-     Pe'lissier and Paul Zimmermann, "MPFR: A Multiple-Precision Binary
+   * Laurent Fousse, Guillaume Hanrot, Vincent Lefèvre, Patrick
+     Pélissier and Paul Zimmermann, "MPFR: A Multiple-Precision Binary
      Floating-Point Library With Correct Rounding", ACM Transactions on
      Mathematical Software, volume 33, issue 2, article 13, 15 pages,
      2007, `http://doi.acm.org/10.1145/1236463.1236468'.
 
-   * Torbjo"rn Granlund, "GNU MP: The GNU Multiple Precision Arithmetic
+   * Torbjörn Granlund, "GNU MP: The GNU Multiple Precision Arithmetic
      Library",   version 5.0.1, 2010, `http://gmplib.org'.
 
    * IEEE standard for binary floating-point arithmetic, Technical
@@ -2960,19 +2958,19 @@ References
      "Seminumerical Algorithms", 2nd edition, Addison-Wesley, 1981.
 
    * Jean-Michel Muller, "Elementary Functions, Algorithms and
-     Implementation", Birkha"user, Boston, 2nd edition, 2006.
+     Implementation", Birkhäuser, Boston, 2nd edition, 2006.
 
    * Jean-Michel Muller, Nicolas Brisebarre, Florent de Dinechin,
-     Claude-Pierre Jeannerod, Vincent Lefe`vre, Guillaume Melquiond,
-     Nathalie Revol, Damien Stehle' and Serge Torre`s, "Handbook of
-     Floating-Point Arithmetic", Birkha"user, Boston, 2009.
+     Claude-Pierre Jeannerod, Vincent Lefèvre, Guillaume Melquiond,
+     Nathalie Revol, Damien Stehlé and Serge Torrès, "Handbook of
+     Floating-Point Arithmetic", Birkhäuser, Boston, 2009.
 
 
 
 File: mpfr.info,  Node: GNU Free Documentation License,  Next: Concept Index,  Prev: References,  Up: Top
 
-Annexe A GNU Free Documentation License
-***************************************
+Appendix A GNU Free Documentation License
+*****************************************
 
                       Version 1.2, November 2002
 
@@ -3591,7 +3589,7 @@ Function and Type Index
 * mpfr_div:                              Basic Arithmetic Functions.
                                                               (line  72)
 * mpfr_div_2exp:                         Compatibility with MPF.
-                                                              (line  52)
+                                                              (line  51)
 * mpfr_div_2si:                          Basic Arithmetic Functions.
                                                               (line 195)
 * mpfr_div_2ui:                          Basic Arithmetic Functions.
@@ -3608,7 +3606,7 @@ Function and Type Index
                                                               (line  86)
 * mpfr_eint:                             Special Functions.   (line 155)
 * mpfr_eq:                               Compatibility with MPF.
-                                                              (line  31)
+                                                              (line  30)
 * mpfr_equal_p:                          Comparison Functions.
                                                               (line  61)
 * mpfr_erangeflag_p:                     Exception Related Functions.
@@ -3762,13 +3760,13 @@ Function and Type Index
 * mpfr_min:                              Miscellaneous Functions.
                                                               (line  22)
 * mpfr_min_prec:                         Rounding Related Functions.
-                                                              (line  60)
+                                                              (line  59)
 * mpfr_modf:                             Integer Related Functions.
                                                               (line  69)
 * mpfr_mul:                              Basic Arithmetic Functions.
                                                               (line  51)
 * mpfr_mul_2exp:                         Compatibility with MPF.
-                                                              (line  50)
+                                                              (line  49)
 * mpfr_mul_2si:                          Basic Arithmetic Functions.
                                                               (line 188)
 * mpfr_mul_2ui:                          Basic Arithmetic Functions.
@@ -3813,7 +3811,7 @@ Function and Type Index
                                                               (line  15)
 * mpfr_prec_t:                           MPFR Basics.         (line  80)
 * mpfr_print_rnd_mode:                   Rounding Related Functions.
-                                                              (line  67)
+                                                              (line  66)
 * mpfr_printf:                           Formatted Output Functions.
                                                               (line 165)
 * mpfr_rec_sqrt:                         Basic Arithmetic Functions.
@@ -3821,7 +3819,7 @@ Function and Type Index
 * mpfr_regular_p:                        Comparison Functions.
                                                               (line  45)
 * mpfr_reldiff:                          Compatibility with MPF.
-                                                              (line  42)
+                                                              (line  41)
 * mpfr_remainder:                        Integer Related Functions.
                                                               (line  81)
 * mpfr_remquo:                           Integer Related Functions.
@@ -3880,7 +3878,7 @@ Function and Type Index
 * mpfr_set_prec:                         Initialization Functions.
                                                               (line 132)
 * mpfr_set_prec_raw:                     Compatibility with MPF.
-                                                              (line  24)
+                                                              (line  23)
 * mpfr_set_q:                            Assignment Functions.
                                                               (line  23)
 * mpfr_set_si:                           Assignment Functions.
@@ -4024,22 +4022,22 @@ Node: Input and Output Functions79971
 Node: Formatted Output Functions81889
 Node: Integer Related Functions90988
 Node: Rounding Related Functions96750
-Node: Miscellaneous Functions100361
-Node: Exception Related Functions106922
-Node: Compatibility with MPF113244
-Node: Custom Interface115933
-Node: Internals120178
-Node: API Compatibility121662
-Node: Type and Macro Changes123592
-Node: Added Functions126313
-Node: Changed Functions128834
-Node: Removed Functions132176
-Node: Other Changes132588
-Node: Contributors133762
-Node: References136082
-Node: GNU Free Documentation License137823
-Node: Concept Index160262
-Node: Function Index165200
+Node: Miscellaneous Functions100356
+Node: Exception Related Functions106917
+Node: Compatibility with MPF113239
+Node: Custom Interface115927
+Node: Internals120172
+Node: API Compatibility121656
+Node: Type and Macro Changes123586
+Node: Added Functions126307
+Node: Changed Functions128828
+Node: Removed Functions132170
+Node: Other Changes132582
+Node: Contributors133756
+Node: References136076
+Node: GNU Free Documentation License137817
+Node: Concept Index160260
+Node: Function Index165198
 
 End Tag Table
 

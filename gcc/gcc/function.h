@@ -24,23 +24,21 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "tree.h"
 #include "hashtab.h"
-#include "varray.h"
+#include "vecprim.h"
 
 /* Stack of pending (incomplete) sequences saved by `start_sequence'.
    Each element describes one pending sequence.
    The main insn-chain is saved in the last element of the chain,
    unless the chain is empty.  */
 
-struct sequence_stack GTY(())
-{
+struct GTY(()) sequence_stack {
   /* First and last insns in the chain of the saved sequence.  */
   rtx first;
   rtx last;
   struct sequence_stack *next;
 };
 
-struct emit_status GTY(())
-{
+struct GTY(()) emit_status {
   /* This is reset to LAST_VIRTUAL_REGISTER + 1 at the start of each function.
      After rtl generation, it is 1 plus the largest register number used.  */
   int x_reg_rtx_no;
@@ -66,6 +64,10 @@ struct emit_status GTY(())
      Reset to 1 for each function compiled.  */
   int x_cur_insn_uid;
 
+  /* INSN_UID for next debug insn emitted.  Only used if
+     --param min-nondebug-insn-uid=<value> is given with nonzero value.  */
+  int x_cur_debug_insn_uid;
+
   /* Location the last line-number NOTE emitted.
      This is used to avoid generating duplicates.  */
   location_t x_last_location;
@@ -84,7 +86,7 @@ struct emit_status GTY(())
 
 
 /* Indexed by pseudo register number, gives the rtx for that pseudo.
-   Allocated in parallel with regno_pointer_align.  
+   Allocated in parallel with regno_pointer_align.
    FIXME: We could put it into emit_status struct, but gengtype is not able to deal
    with length attribute nested in top level structures.  */
 
@@ -96,8 +98,7 @@ extern GTY ((length ("crtl->emit.x_reg_rtx_no"))) rtx * regno_reg_rtx;
 
 #define REGNO_POINTER_ALIGN(REGNO) (crtl->emit.regno_pointer_align[REGNO])
 
-struct expr_status GTY(())
-{
+struct GTY(()) expr_status {
   /* Number of units that we should eventually pop off the stack.
      These are the arguments to function calls that have already returned.  */
   int x_pending_stack_adjust;
@@ -137,18 +138,12 @@ struct expr_status GTY(())
   rtx x_forced_labels;
 };
 
-typedef struct call_site_record *call_site_record;
+typedef struct call_site_record_d *call_site_record;
 DEF_VEC_P(call_site_record);
 DEF_VEC_ALLOC_P(call_site_record, gc);
 
 /* RTL representation of exception handling.  */
-struct rtl_eh GTY(())
-{
-  rtx filter;
-  rtx exc_ptr;
-
-  int built_landing_pads;
-
+struct GTY(()) rtl_eh {
   rtx ehr_stackadj;
   rtx ehr_handler;
   rtx ehr_label;
@@ -156,13 +151,9 @@ struct rtl_eh GTY(())
   rtx sjlj_fc;
   rtx sjlj_exit_after;
 
-  htab_t GTY ((param_is (struct ehl_map_entry))) exception_handler_label_map;
+  VEC(uchar,gc) *action_record_data;
 
-  VEC(tree,gc) *ttype_data;
-  varray_type ehspec_data;
-  varray_type action_record_data;
-
-  VEC(call_site_record,gc) *call_site_record;
+  VEC(call_site_record,gc) *call_site_record[2];
 };
 
 #define pending_stack_adjust (crtl->expr.x_pending_stack_adjust)
@@ -175,12 +166,12 @@ struct rtl_eh GTY(())
 struct gimple_df;
 struct temp_slot;
 typedef struct temp_slot *temp_slot_p;
-struct call_site_record;
+struct call_site_record_d;
 
 DEF_VEC_P(temp_slot_p);
 DEF_VEC_ALLOC_P(temp_slot_p,gc);
-struct ipa_opt_pass;
-typedef struct ipa_opt_pass *ipa_opt_pass;
+struct ipa_opt_pass_d;
+typedef struct ipa_opt_pass_d *ipa_opt_pass;
 
 DEF_VEC_P(ipa_opt_pass);
 DEF_VEC_ALLOC_P(ipa_opt_pass,heap);
@@ -196,8 +187,7 @@ enum function_frequency {
   FUNCTION_FREQUENCY_HOT
 };
 
-struct varasm_status GTY(())
-{
+struct GTY(()) varasm_status {
   /* If we're using a per-function constant pool, this is it.  */
   struct rtx_constant_pool *pool;
 
@@ -207,8 +197,7 @@ struct varasm_status GTY(())
 };
 
 /* Information mainlined about RTL representation of incoming arguments.  */
-struct incoming_args GTY(())
-{
+struct GTY(()) incoming_args {
   /* Number of bytes of args popped by function being compiled on its return.
      Zero if no bytes are to be popped.
      May affect compilation of return insn or of function epilogue.  */
@@ -237,8 +226,7 @@ struct incoming_args GTY(())
 };
 
 /* Data for function partitioning.  */
-struct function_subsections GTY(())
-{
+struct GTY(()) function_subsections {
   /* Assembly labels for the hot and cold text sections, to
      be used by debugger functions for determining the size of text
      sections.  */
@@ -255,8 +243,7 @@ struct function_subsections GTY(())
 };
 
 /* Datastructures maintained for currently processed function in RTL form.  */
-struct rtl_data GTY(())
-{
+struct GTY(()) rtl_data {
   struct expr_status expr;
   struct emit_status emit;
   struct varasm_status varasm;
@@ -348,7 +335,7 @@ struct rtl_data GTY(())
   /* The stack alignment estimated before reload, with consideration of
      following factors:
      1. Alignment of local stack variables (max_used_stack_slot_alignment)
-     2. Alignment requirement to call other functions 
+     2. Alignment requirement to call other functions
         (preferred_stack_boundary)
      3. Alignment of non-local stack variables but might be spilled in
         local stack.  */
@@ -374,7 +361,7 @@ struct rtl_data GTY(())
   /* Nonzero if function being compiled has nonlocal gotos to parent
      function.  */
   bool has_nonlocal_goto;
-  
+
   /* Nonzero if function being compiled has an asm statement.  */
   bool has_asm_statement;
 
@@ -441,6 +428,11 @@ struct rtl_data GTY(())
 
   /* True if dbr_schedule has already been called for this function.  */
   bool dbr_scheduled_p;
+
+  /* True if current function can not throw.  Unlike
+     TREE_NOTHROW (current_function_decl) it is set even for overwritable
+     function where currently compiled version of it is nothrow.  */
+  bool nothrow;
 };
 
 #define return_label (crtl->x_return_label)
@@ -468,8 +460,7 @@ extern GTY(()) struct rtl_data x_rtl;
 /* This structure can save all the important global and static variables
    describing the status of the current function.  */
 
-struct function GTY(())
-{
+struct GTY(()) function {
   struct eh_status *eh;
 
   /* The control flow graph for this function.  */
@@ -497,7 +488,7 @@ struct function GTY(())
   tree static_chain_decl;
 
   /* An expression that contains the non-local goto save area.  The first
-     word is the saved frame pointer and the second is the saved stack 
+     word is the saved frame pointer and the second is the saved stack
      pointer.  */
   tree nonlocal_goto_save_area;
 
@@ -530,10 +521,11 @@ struct function GTY(())
   /* Properties used by the pass manager.  */
   unsigned int curr_properties;
   unsigned int last_verified;
-  /* Interprocedural passes scheduled to have their transform functions
-     applied next time we execute local pass on them.  We maintain it
-     per-function in order to allow IPA passes to introduce new functions.  */
-  VEC(ipa_opt_pass,heap) * GTY((skip)) ipa_transforms_to_apply;
+
+  /* Non-null if the function does something that would prevent it from
+     being copied; this applies to both versioning and inlining.  Set to
+     a string describing the reason for failure.  */
+  const char * GTY((skip)) cannot_be_copied_reason;
 
   /* Collected bit flags.  */
 
@@ -545,7 +537,6 @@ struct function GTY(())
   /* Number of units of floating point registers that need saving in stdarg
      function.  */
   unsigned int va_list_fpr_size : 8;
-
 
   /* How commonly executed the function is.  Initialized during branch
      probabilities pass.  */
@@ -561,6 +552,11 @@ struct function GTY(())
   /* Nonzero if function being compiled receives nonlocal gotos
      from nested functions.  */
   unsigned int has_nonlocal_label : 1;
+
+  /* Nonzero if we've set cannot_be_copied_reason.  I.e. if
+     (cannot_be_copied_set && !cannot_be_copied_reason), the function
+     can in fact be copied.  */
+  unsigned int cannot_be_copied_set : 1;
 
   /* Nonzero if current function uses stdarg.h or equivalent.  */
   unsigned int stdarg : 1;
@@ -621,7 +617,7 @@ extern int virtuals_instantiated;
 /* Nonzero if at least one trampoline has been created.  */
 extern int trampolines_created;
 
-struct types_used_by_vars_entry GTY(()) {
+struct GTY(()) types_used_by_vars_entry {
   tree type;
   tree var_decl;
 };
@@ -696,8 +692,6 @@ extern rtx get_arg_pointer_save_area (void);
 
 /* Returns the name of the current function.  */
 extern const char *current_function_name (void);
-/* Returns the assembler name (raw, mangled) of the current function.  */
-extern const char *current_function_assembler_name (void);
 
 extern void do_warn_unused_parameter (tree);
 

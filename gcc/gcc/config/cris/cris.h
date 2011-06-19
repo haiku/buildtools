@@ -1,6 +1,6 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
-   Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
+   2009 Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
 This file is part of GCC.
@@ -352,23 +352,9 @@ extern int target_flags;
 
 #define UNITS_PER_WORD 4
 
-/* A combination of defining PROMOTE_FUNCTION_MODE,
-   TARGET_PROMOTE_FUNCTION_ARGS that always returns true
-   and *not* defining TARGET_PROMOTE_PROTOTYPES or PROMOTE_MODE gives the
-   best code size and speed for gcc, ipps and products in gcc-2.7.2.  */
 #define CRIS_PROMOTED_MODE(MODE, UNSIGNEDP, TYPE) \
  (GET_MODE_CLASS (MODE) == MODE_INT && GET_MODE_SIZE (MODE) < 4) \
   ? SImode : MODE
-
-#define PROMOTE_FUNCTION_MODE(MODE, UNSIGNEDP, TYPE)  \
-  (MODE) = CRIS_PROMOTED_MODE (MODE, UNSIGNEDP, TYPE)
-
-/* Defining PROMOTE_FUNCTION_RETURN in gcc-2.7.2 uncovers bug 981110 (even
-   if defining FUNCTION_VALUE with MODE as PROMOTED_MODE ;-)
-
-   FIXME: Report this when cris.h is part of GCC, so others can easily
-   see the problem.  Maybe check other systems that define
-   TARGET_PROMOTE_FUNCTION_RETURN that always returns true.  */
 
 /* We will be using prototype promotion, so they will be 32 bit.  */
 #define PARM_BOUNDARY 32
@@ -855,19 +841,10 @@ enum reg_class
 
 /* Node: Elimination */
 
-/* Really only needed if the stack frame has variable length (alloca
-   or variable sized local arguments (GNU C extension).  See PR39499 and
-   PR38609 for the reason this isn't just 0.  */
-#define FRAME_POINTER_REQUIRED (!current_function_sp_is_unchanging)
-
 #define ELIMINABLE_REGS				\
  {{ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},	\
   {ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM},	\
   {FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}}
-
-/* We need not worry about when the frame-pointer is required for other
-   reasons.  */
-#define CAN_ELIMINATE(FROM, TO) 1
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
  (OFFSET) = cris_initial_elimination_offset (FROM, TO)
@@ -929,14 +906,8 @@ struct cum_args {int regs;};
 
 /* Node: Scalar Return */
 
-/* Let's assume all functions return in r[CRIS_FIRST_ARG_REG] for the
-   time being.  */
-#define FUNCTION_VALUE(VALTYPE, FUNC)  \
- gen_rtx_REG (TYPE_MODE (VALTYPE), CRIS_FIRST_ARG_REG)
+#define FUNCTION_VALUE_REGNO_P(N) cris_function_value_regno_p (N)
 
-#define LIBCALL_VALUE(MODE) gen_rtx_REG (MODE, CRIS_FIRST_ARG_REG)
-
-#define FUNCTION_VALUE_REGNO_P(N) ((N) == CRIS_FIRST_ARG_REG)
 
 
 /* Node: Aggregate Return */
@@ -963,107 +934,10 @@ struct cum_args {int regs;};
 
 /* Node: Trampolines */
 
-/* This looks too complicated, and it is.  I assigned r7 to be the
-   static chain register, but it is call-saved, so we have to save it,
-   and come back to restore it after the call, so we have to save srp...
-   Anyway, trampolines are rare enough that we can cope with this
-   somewhat lack of elegance.
-    (Do not be tempted to "straighten up" whitespace in the asms; the
-   assembler #NO_APP state mandates strict spacing).  */
-#define TRAMPOLINE_TEMPLATE(FILE)				       \
-  do								       \
-    {								       \
-      if (TARGET_V32)						       \
-       {							       \
-	 /* This normally-unused nop insn acts as an instruction to    \
-	    the simulator to flush its instruction cache.  None of     \
-	    the other instructions in the trampoline template suits    \
-	    as a trigger for V32.  The pc-relative addressing mode     \
-	    works nicely as a trigger for V10.			       \
-	    FIXME: Have specific V32 template (possibly avoiding the   \
-	    use of a special instruction).  */			       \
-	 fprintf (FILE, "\tclearf x\n");			       \
-	 /* We have to use a register as an intermediate, choosing     \
-	    semi-randomly R1 (which has to not be the		       \
-	    STATIC_CHAIN_REGNUM), so we can use it for address	       \
-	    indirection and jsr target.	 */			       \
-	 fprintf (FILE, "\tmove $r1,$mof\n");			       \
-	 /* +4 */						       \
-	 fprintf (FILE, "\tmove.d 0,$r1\n");			       \
-	 fprintf (FILE, "\tmove.d $%s,[$r1]\n",			       \
-		  reg_names[STATIC_CHAIN_REGNUM]);		       \
-	 fprintf (FILE, "\taddq 6,$r1\n");			       \
-	 fprintf (FILE, "\tmove $mof,[$r1]\n");			       \
-	 fprintf (FILE, "\taddq 6,$r1\n");			       \
-	 fprintf (FILE, "\tmove $srp,[$r1]\n");			       \
-	 /* +20 */						       \
-	 fprintf (FILE, "\tmove.d 0,$%s\n",			       \
-		  reg_names[STATIC_CHAIN_REGNUM]);		       \
-	 /* +26 */						       \
-	 fprintf (FILE, "\tmove.d 0,$r1\n");			       \
-	 fprintf (FILE, "\tjsr $r1\n");				       \
-	 fprintf (FILE, "\tsetf\n");				       \
-	 /* +36 */						       \
-	 fprintf (FILE, "\tmove.d 0,$%s\n",			       \
-		  reg_names[STATIC_CHAIN_REGNUM]);		       \
-	 /* +42 */						       \
-	 fprintf (FILE, "\tmove.d 0,$r1\n");			       \
-	 /* +48 */						       \
-	 fprintf (FILE, "\tmove.d 0,$r9\n");			       \
-	 fprintf (FILE, "\tjump $r9\n");			       \
-	 fprintf (FILE, "\tsetf\n");				       \
-       }							       \
-      else							       \
-       {							       \
-	 fprintf (FILE, "\tmove.d $%s,[$pc+20]\n",		       \
-		  reg_names[STATIC_CHAIN_REGNUM]);		       \
-	 fprintf (FILE, "\tmove $srp,[$pc+22]\n");		       \
-	 fprintf (FILE, "\tmove.d 0,$%s\n",			       \
-		  reg_names[STATIC_CHAIN_REGNUM]);		       \
-	 fprintf (FILE, "\tjsr 0\n");				       \
-	 fprintf (FILE, "\tmove.d 0,$%s\n",			       \
-		  reg_names[STATIC_CHAIN_REGNUM]);		       \
-	 fprintf (FILE, "\tjump 0\n");				       \
-       }							       \
-    }								       \
-  while (0)
-
 #define TRAMPOLINE_SIZE (TARGET_V32 ? 58 : 32)
 
-/* CRIS wants instructions on word-boundary.
-   Note that due to a bug (reported) in 2.7.2 and earlier, this is
-   actually treated as alignment in _bytes_, not _bits_.  (Obviously
-   this is not fatal, only a slight waste of stack space).  */
+/* CRIS wants instructions on word-boundary.  */
 #define TRAMPOLINE_ALIGNMENT 16
-
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT)			\
-  do									\
-    if (TARGET_V32)							\
-      {									\
-	emit_move_insn (gen_rtx_MEM (SImode,				\
-				     plus_constant (TRAMP, 6)),		\
-		 	plus_constant (TRAMP, 38));			\
-	emit_move_insn (gen_rtx_MEM (SImode,				\
-				     plus_constant (TRAMP, 22)),	\
-			CXT);						\
-	emit_move_insn (gen_rtx_MEM (SImode,				\
-				     plus_constant (TRAMP, 28)),	\
-		 	FNADDR);					\
-      }									\
-    else								\
-      {									\
-	emit_move_insn (gen_rtx_MEM (SImode,				\
-				     plus_constant (TRAMP, 10)),	\
-			CXT);						\
-	emit_move_insn (gen_rtx_MEM (SImode,				\
-				     plus_constant (TRAMP, 16)),	\
-		 	FNADDR);					\
-      }									\
-  while (0)
-
-/* Note that there is no need to do anything with the cache for sake of
-   a trampoline.  */
-
 
 /* Node: Library Calls */
 
@@ -1075,8 +949,6 @@ struct cum_args {int regs;};
 /* Node: Addressing Modes */
 
 #define HAVE_POST_INCREMENT 1
-
-#define CONSTANT_ADDRESS_P(X) CONSTANT_P (X)
 
 /* Must be a compile-time constant, so we go with the highest value
    among all CRIS variants.  */
@@ -1194,16 +1066,6 @@ struct cum_args {int regs;};
 # define REG_OK_FOR_INDEX_P(X) REGNO_OK_FOR_INDEX_P (REGNO (X))
 #endif
 
-/* For now, don't do anything.  GCC does a good job most often.
-
-    Maybe we could do something about gcc:s misbehavior when it
-   recalculates frame offsets for local variables, from fp+offs to
-   sp+offs.  The resulting address expression gets screwed up
-   sometimes, but I'm not sure that it may be fixed here, since it is
-   already split up in several instructions (Is this still true?).
-   FIXME: Check and adjust for gcc-2.9x.  */
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN) {}
-
 /* Fix reloads known to cause suboptimal spilling.  */
 #define LEGITIMIZE_RELOAD_ADDRESS(X, MODE, OPNUM, TYPE, INDL, WIN)	\
   do									\
@@ -1212,11 +1074,6 @@ struct cum_args {int regs;};
 	goto WIN;							\
     }									\
   while (0)
-
-/* In CRIS, only the postincrement address mode depends thus,
-   since the increment depends on the size of the operand.  This is now
-   treated generically within recog.c.  */
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
 
 #define LEGITIMATE_CONSTANT_P(X) 1
 

@@ -1,6 +1,6 @@
 // Debugging unordered_map/unordered_multimap implementation -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -30,20 +30,19 @@
 #ifndef _GLIBCXX_DEBUG_UNORDERED_MAP
 #define _GLIBCXX_DEBUG_UNORDERED_MAP 1
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-# include <unordered_map>
+#ifndef __GXX_EXPERIMENTAL_CXX0X__
+# include <bits/c++0x_warning.h>
 #else
-# include <c++0x_warning.h>
-#endif
+# include <unordered_map>
 
 #include <debug/safe_sequence.h>
 #include <debug/safe_iterator.h>
-#include <initializer_list>
 
 namespace std
 {
 namespace __debug
 {
+  /// Class std::unordered_map with safety/checking/debug instrumentation.
   template<typename _Key, typename _Tp,
 	   typename _Hash = std::hash<_Key>,
 	   typename _Pred = std::equal_to<_Key>,
@@ -114,7 +113,8 @@ namespace __debug
       unordered_map&
       operator=(unordered_map&& __x)
       {
-        // NB: DR 675.
+   	// NB: DR 1204.
+	// NB: DR 675.
 	clear();
 	swap(__x);
 	return *this;
@@ -129,7 +129,7 @@ namespace __debug
       }
 
       void
-      swap(unordered_map&& __x)
+      swap(unordered_map& __x)
       {
 	_Base::swap(__x);
 	_Safe_base::_M_swap(__x);
@@ -181,19 +181,11 @@ namespace __debug
       }
 
       iterator
-      insert(iterator, const value_type& __obj)
-      {
-	typedef std::pair<typename _Base::iterator, bool> __pair_type;
-	__pair_type __res = _Base::insert(__obj);
-	return iterator(__res.first, this);
-      }
-
-      const_iterator
       insert(const_iterator, const value_type& __obj)
       {
 	typedef std::pair<typename _Base::iterator, bool> __pair_type;
 	__pair_type __res = _Base::insert(__obj);
-	return const_iterator(__res.first, this);
+	return iterator(__res.first, this);
       }
 
       void
@@ -250,35 +242,14 @@ namespace __debug
       }
 
       iterator
-      erase(iterator __it)
+      erase(const_iterator __it)
       {
 	__glibcxx_check_erase(__it);
 	__it._M_invalidate();
 	return iterator(_Base::erase(__it.base()), this);
       }
 
-      const_iterator
-      erase(const_iterator __it)
-      {
-	__glibcxx_check_erase(__it);
-	__it._M_invalidate();
-	return const_iterator(_Base::erase(__it.base()), this);
-      }
-
       iterator
-      erase(iterator __first, iterator __last)
-      {
-	__glibcxx_check_erase_range(__first, __last);
-	for (iterator __tmp = __first; __tmp != __last;)
-	{
-	  iterator __victim = __tmp++;
-	  __victim._M_invalidate();
-	}
-	return iterator(_Base::erase(__first.base(),
-				     __last.base()), this);
-      }
-
-      const_iterator
       erase(const_iterator __first, const_iterator __last)
       {
 	__glibcxx_check_erase_range(__first, __last);
@@ -287,8 +258,8 @@ namespace __debug
 	  const_iterator __victim = __tmp++;
 	  __victim._M_invalidate();
 	}
-	return const_iterator(_Base::erase(__first.base(),
-					   __last.base()), this);
+	return iterator(_Base::erase(__first.base(),
+				     __last.base()), this);
       }
 
       _Base&
@@ -316,19 +287,20 @@ namespace __debug
 
   template<typename _Key, typename _Tp, typename _Hash,
 	   typename _Pred, typename _Alloc>
-    inline void
-    swap(unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>&& __x,
-	 unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __y)
-    { __x.swap(__y); }
+    inline bool
+    operator==(const unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
+	       const unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __y)
+    { return __x._M_equal(__y); }
 
   template<typename _Key, typename _Tp, typename _Hash,
 	   typename _Pred, typename _Alloc>
-    inline void
-    swap(unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
-	 unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>&& __y)
-    { __x.swap(__y); }
+    inline bool
+    operator!=(const unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
+	       const unordered_map<_Key, _Tp, _Hash, _Pred, _Alloc>& __y)
+    { return !(__x == __y); }
 
 
+  /// Class std::unordered_multimap with safety/checking/debug instrumentation.
   template<typename _Key, typename _Tp,
 	   typename _Hash = std::hash<_Key>,
 	   typename _Pred = std::equal_to<_Key>,
@@ -400,7 +372,8 @@ namespace __debug
       unordered_multimap&
       operator=(unordered_multimap&& __x)
       {
-        // NB: DR 675.
+	// NB: DR 1204.
+	// NB: DR 675.
 	clear();
 	swap(__x);
 	return *this;
@@ -415,7 +388,7 @@ namespace __debug
       }
 
       void
-      swap(unordered_multimap&& __x)
+      swap(unordered_multimap& __x)
       {
 	_Base::swap(__x);
 	_Safe_base::_M_swap(__x);
@@ -463,12 +436,8 @@ namespace __debug
       { return iterator(_Base::insert(__obj), this); }
 
       iterator
-      insert(iterator, const value_type& __obj)
-      { return iterator(_Base::insert(__obj), this); }
-
-      const_iterator
       insert(const_iterator, const value_type& __obj)
-      { return const_iterator(_Base::insert(__obj), this); }
+      { return iterator(_Base::insert(__obj), this); }
 
       void
       insert(std::initializer_list<value_type> __l)
@@ -524,35 +493,14 @@ namespace __debug
       }
 
       iterator
-      erase(iterator __it)
+      erase(const_iterator __it)
       {
 	__glibcxx_check_erase(__it);
 	__it._M_invalidate();
 	return iterator(_Base::erase(__it.base()), this);
       }
 
-      const_iterator
-      erase(const_iterator __it)
-      {
-	__glibcxx_check_erase(__it);
-	__it._M_invalidate();
-	return const_iterator(_Base::erase(__it.base()), this);
-      }
-
       iterator
-      erase(iterator __first, iterator __last)
-      {
-	__glibcxx_check_erase_range(__first, __last);
-	for (iterator __tmp = __first; __tmp != __last;)
-	{
-	  iterator __victim = __tmp++;
-	  __victim._M_invalidate();
-	}
-	return iterator(_Base::erase(__first.base(),
-				     __last.base()), this);
-      }
-
-      const_iterator
       erase(const_iterator __first, const_iterator __last)
       {
 	__glibcxx_check_erase_range(__first, __last);
@@ -561,8 +509,8 @@ namespace __debug
 	  const_iterator __victim = __tmp++;
 	  __victim._M_invalidate();
 	}
-	return const_iterator(_Base::erase(__first.base(),
-					   __last.base()), this);
+	return iterator(_Base::erase(__first.base(),
+				     __last.base()), this);
       }
 
       _Base&
@@ -590,19 +538,21 @@ namespace __debug
 
   template<typename _Key, typename _Tp, typename _Hash,
 	   typename _Pred, typename _Alloc>
-    inline void
-    swap(unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>&& __x,
-	 unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __y)
-    { __x.swap(__y); }
+    inline bool
+    operator==(const unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
+	       const unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __y)
+    { return __x._M_equal(__y); }
 
   template<typename _Key, typename _Tp, typename _Hash,
 	   typename _Pred, typename _Alloc>
-    inline void
-    swap(unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
-	 unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>&& __y)
-    { __x.swap(__y); }
+    inline bool
+    operator!=(const unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __x,
+	       const unordered_multimap<_Key, _Tp, _Hash, _Pred, _Alloc>& __y)
+    { return !(__x == __y); }
 
 } // namespace __debug
 } // namespace std
+
+#endif // __GXX_EXPERIMENTAL_CXX0X__
 
 #endif

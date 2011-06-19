@@ -3,13 +3,13 @@
 <title>Prerequisites for GCC</title>
 <meta http-equiv="Content-Type" content="text/html">
 <meta name="description" content="Prerequisites for GCC">
-<meta name="generator" content="makeinfo 4.13">
+<meta name="generator" content="makeinfo 4.12">
 <link title="Top" rel="top" href="#Top">
 <link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
 <!--
 Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
-1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-2008 Free Software Foundation, Inc.
+1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+2009, 2010, 2011 Free Software Foundation, Inc.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.2 or
@@ -103,7 +103,7 @@ Necessary (only on some platforms) to untar the source code.  Many
 systems' <samp><span class="command">tar</span></samp> programs will also work, only try GNU
 <samp><span class="command">tar</span></samp> if you have problems.
 
-     <br><dt>GNU Multiple Precision Library (GMP) version 4.1 (or later)<dd>
+     <br><dt>GNU Multiple Precision Library (GMP) version 4.3.2 (or later)<dd>
 Necessary to build GCC.  If you do not have it installed in your
 library search path, you will have to configure with the
 <samp><span class="option">--with-gmp</span></samp> configure option.  See also <samp><span class="option">--with-gmp-lib</span></samp>
@@ -111,20 +111,23 @@ and <samp><span class="option">--with-gmp-include</span></samp>.  Alternatively,
 distribution is found in a subdirectory of your GCC sources named
 <samp><span class="file">gmp</span></samp>, it will be built together with GCC.
 
-     <br><dt>MPFR Library version 2.3.2 (or later)<dd>
+     <br><dt>MPFR Library version 2.4.2 (or later)<dd>
 Necessary to build GCC.  It can be downloaded from
-<a href="http://www.mpfr.org/">http://www.mpfr.org/</a>.  The version of MPFR that is bundled with
-GMP 4.1.x contains numerous bugs.  Although GCC may appear to function
-with the buggy versions of MPFR, there are a few bugs that will not be
-fixed when using this version.  It is strongly recommended to upgrade
-to the recommended version of MPFR.
+<a href="http://www.mpfr.org/">http://www.mpfr.org/</a>.  The <samp><span class="option">--with-mpfr</span></samp> configure
+option should be used if your MPFR Library is not installed in your
+default library search path.  See also <samp><span class="option">--with-mpfr-lib</span></samp> and
+<samp><span class="option">--with-mpfr-include</span></samp>.  Alternatively, if a MPFR source
+distribution is found in a subdirectory of your GCC sources named
+<samp><span class="file">mpfr</span></samp>, it will be built together with GCC.
 
-     <p>The <samp><span class="option">--with-mpfr</span></samp> configure option should be used if your MPFR
-Library is not installed in your default library search path.  See also
-<samp><span class="option">--with-mpfr-lib</span></samp> and <samp><span class="option">--with-mpfr-include</span></samp>. 
-Alternatively, if a MPFR source distribution is found in a subdirectory
-of your GCC sources named <samp><span class="file">mpfr</span></samp>, it will be built together with
-GCC.
+     <br><dt>MPC Library version 0.8.1 (or later)<dd>
+Necessary to build GCC.  It can be downloaded from
+<a href="http://www.multiprecision.org/">http://www.multiprecision.org/</a>.  The <samp><span class="option">--with-mpc</span></samp>
+configure option should be used if your MPC Library is not installed
+in your default library search path.  See also <samp><span class="option">--with-mpc-lib</span></samp>
+and <samp><span class="option">--with-mpc-include</span></samp>.  Alternatively, if an MPC source
+distribution is found in a subdirectory of your GCC sources named
+<samp><span class="file">mpc</span></samp>, it will be built together with GCC.
 
      <br><dt>Parma Polyhedra Library (PPL) version 0.10<dd>
 Necessary to build GCC with the Graphite loop optimizations. 
@@ -146,16 +149,26 @@ not installed in your default library search path.
      <br><dt><samp><span class="command">jar</span></samp>, or InfoZIP (<samp><span class="command">zip</span></samp> and <samp><span class="command">unzip</span></samp>)<dd>
 Necessary to build libgcj, the GCJ runtime.
 
+     <br><dt>libelf version 0.8.12 (or later)<dd>
+Necessary to build link-time optimization (LTO) support.  It can be
+downloaded from <a href="http://www.mr511.de/software/libelf-0.8.12.tar.gz">http://www.mr511.de/software/libelf-0.8.12.tar.gz</a>,
+though it is commonly available in several systems.  The versions in
+IRIX 5 and 6 don't work since they lack <samp><span class="file">gelf.h</span></samp>.  The version in
+Solaris 2 does work.
+
+     <p>The <samp><span class="option">--with-libelf</span></samp> configure option should be used if libelf is
+not installed in your default library search patch.
+
 </dl>
 
 <h3 class="heading"><a name="TOC1"></a>Tools/packages necessary for modifying GCC</h3>
 
      <dl>
-<dt>autoconf version 2.59<dt>GNU m4 version 1.4 (or later)<dd>
+<dt>autoconf version 2.64<dt>GNU m4 version 1.4.6 (or later)<dd>
 Necessary when modifying <samp><span class="file">configure.ac</span></samp>, <samp><span class="file">aclocal.m4</span></samp>, etc. 
 to regenerate <samp><span class="file">configure</span></samp> and <samp><span class="file">config.in</span></samp> files.
 
-     <br><dt>automake version 1.9.6<dd>
+     <br><dt>automake version 1.11.1<dd>
 Necessary when modifying a <samp><span class="file">Makefile.am</span></samp> file to regenerate its
 associated <samp><span class="file">Makefile.in</span></samp>.
 
@@ -165,8 +178,8 @@ file.  Specifically this applies to the <samp><span class="file">gcc</span></sam
 as any of their subdirectories.
 
      <p>For directories that use automake, GCC requires the latest release in
-the 1.9.x series, which is currently 1.9.6.  When regenerating a directory
-to a newer version, please update all the directories using an older 1.9.x
+the 1.11 series, which is currently 1.11.1.  When regenerating a directory
+to a newer version, please update all the directories using an older 1.11
 to the latest released version.
 
      <br><dt>gettext version 0.14.5 (or later)<dd>
@@ -244,7 +257,7 @@ the GCC-specific entry point.  You can download a suitable jar from
 
      <br><dt>antlr.jar version 2.7.1 (or later)<dt>antlr binary<dd>
 If you wish to build the <samp><span class="command">gjdoc</span></samp> binary in libjava, you will
-need to have a <samp><span class="file">antlr.jar</span></samp> library available. The library is
+need to have an <samp><span class="file">antlr.jar</span></samp> library available. The library is
 searched in system locations but can be configured with
 <samp><span class="option">--with-antlr-jar=</span></samp> instead.  When configuring with
 <samp><span class="option">--enable-java-maintainer-mode</span></samp>, you will need to have one of

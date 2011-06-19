@@ -1,4 +1,4 @@
-/* Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
+/* Copyright (C) 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -51,7 +51,7 @@ extern GTY(()) int spu_tune;
 /* Default target_flags if no switches specified.  */
 #ifndef TARGET_DEFAULT
 #define TARGET_DEFAULT (MASK_ERROR_RELOC | MASK_SAFE_DMA | MASK_BRANCH_HINTS \
-			| MASK_SAFE_HINTS)
+			| MASK_SAFE_HINTS | MASK_ADDRESS_SPACE_CONVERSION)
 #endif
 
 
@@ -141,6 +141,8 @@ extern GTY(()) int spu_tune;
 #define LONG_DOUBLE_TYPE_SIZE 64
 
 #define DEFAULT_SIGNED_CHAR 0
+
+#define STDINT_LONG32 0
 
 
 /* Register Basics */
@@ -270,7 +272,8 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
 
 #define DWARF_FRAME_RETURN_COLUMN DWARF_FRAME_REGNUM (LINK_REGISTER_REGNUM)
 
-#define ARG_POINTER_CFA_OFFSET(FNDECL) (-STACK_POINTER_OFFSET)
+#define ARG_POINTER_CFA_OFFSET(FNDECL) \
+  (crtl->args.pretend_args_size - STACK_POINTER_OFFSET)
 
 
 /* Stack Checking */
@@ -312,15 +315,11 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
 
 /* Elimination */
 
-#define FRAME_POINTER_REQUIRED 0
-
 #define ELIMINABLE_REGS  \
   {{ARG_POINTER_REGNUM,	 STACK_POINTER_REGNUM},				\
   {ARG_POINTER_REGNUM,	 HARD_FRAME_POINTER_REGNUM},			\
   {FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},				\
   {FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM}}
-
-#define CAN_ELIMINATE(FROM,TO) 1 
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
   ((OFFSET) = spu_initial_elimination_offset((FROM),(TO)))
@@ -395,9 +394,12 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
 
 /* Profiling */
 
-/* Nothing, for now. */
 #define FUNCTION_PROFILER(FILE, LABELNO)  \
-   fprintf (FILE, "\t\n")
+  spu_function_profiler ((FILE), (LABELNO));
+
+#define NO_PROFILE_COUNTERS 1
+
+#define PROFILE_BEFORE_PROLOGUE 1
 
 
 /* Trampolines */
@@ -405,38 +407,12 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
 #define TRAMPOLINE_SIZE (TARGET_LARGE_MEM ? 20 : 16)
 
 #define TRAMPOLINE_ALIGNMENT 128
-
-#define INITIALIZE_TRAMPOLINE(TRAMP,FNADDR,CXT) \
-	  spu_initialize_trampoline(TRAMP,FNADDR,CXT)
-
 
 /* Addressing Modes */
 
 #define CONSTANT_ADDRESS_P(X)   spu_constant_address_p(X)
 
 #define MAX_REGS_PER_ADDRESS 2
-
-#ifdef REG_OK_STRICT
-# define REG_OK_STRICT_FLAG 1
-#else
-# define REG_OK_STRICT_FLAG 0
-#endif
-
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)			\
-    { if (spu_legitimate_address (MODE, X, REG_OK_STRICT_FLAG))	\
-	goto ADDR;						\
-    }
-
-#define LEGITIMIZE_ADDRESS(X,OLDX,MODE,WIN) \
-  {  rtx result = spu_legitimize_address (X, OLDX, MODE);	\
-     if (result != NULL_RTX)					\
-       {							\
-	 (X) = result;						\
-	 goto WIN;						\
-       }							\
-  }
-
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR,LABEL)
 
 #define LEGITIMATE_CONSTANT_P(X) spu_legitimate_constant_p(X)
 
@@ -496,6 +472,17 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
 
 #define ASM_OUTPUT_LABELREF(FILE, NAME) \
   asm_fprintf (FILE, "%U%s", default_strip_name_encoding (NAME))
+
+#define ASM_OUTPUT_SYMBOL_REF(FILE, X) \
+  do							\
+    {							\
+      tree decl;					\
+      assemble_name (FILE, XSTR ((X), 0));		\
+      if ((decl = SYMBOL_REF_DECL ((X))) != 0		\
+	  && TREE_CODE (decl) == VAR_DECL		\
+	  && TYPE_ADDR_SPACE (TREE_TYPE (decl)))	\
+	fputs ("@ppu", FILE);				\
+    } while (0)
 
 
 /* Instruction Output */
@@ -617,10 +604,12 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
       }                                                                   \
   } while (0)
 
-/* These are set by the cmp patterns and used while expanding
-   conditional branches. */
-extern GTY(()) rtx spu_compare_op0;
-extern GTY(()) rtx spu_compare_op1;
+
+/* Address spaces.  */
+#define ADDR_SPACE_EA	1
+
+/* Named address space keywords.  */
+#define TARGET_ADDR_SPACE_KEYWORDS ADDR_SPACE_KEYWORD ("__ea", ADDR_SPACE_EA)
 
 
 /* Builtins.  */
@@ -636,7 +625,7 @@ enum spu_builtin_type
   B_INTERNAL
 };
 
-struct spu_builtin_description GTY(())
+struct GTY(()) spu_builtin_description
 {
   int fcode;
   int icode;

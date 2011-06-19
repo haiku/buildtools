@@ -46,11 +46,11 @@ do {							\
 	builtin_define("__IA64__");			\
 	builtin_define("_LONGLONG");			\
 	builtin_define("_INCLUDE_LONGLONG");		\
+	builtin_define("__STDC_EXT__");			\
 	builtin_define("_UINT128_T");			\
 	if (c_dialect_cxx () || !flag_iso)		\
 	  {						\
 	    builtin_define("_HPUX_SOURCE");		\
-	    builtin_define("__STDC_EXT__");		\
 	    builtin_define("__STDCPP__");		\
 	    builtin_define("_INCLUDE__STDC_A1_SOURCE");	\
 	  }						\
@@ -86,7 +86,7 @@ do {							\
 #undef  LIB_SPEC
 #define LIB_SPEC \
   "%{!shared: \
-     %{mt|pthread:-lpthread} \
+     %{mt|pthread:%{fopenmp:-lrt} -lpthread} \
      %{p:%{!mlp64:-L/usr/lib/hpux32/libp} \
 	 %{mlp64:-L/usr/lib/hpux64/libp} -lprof} \
      %{pg:%{!mlp64:-L/usr/lib/hpux32/libp} \
@@ -106,7 +106,7 @@ do {							\
 
 #undef TARGET_DEFAULT
 #define TARGET_DEFAULT \
-  (MASK_DWARF2_ASM | MASK_BIG_ENDIAN | MASK_ILP32)
+  (MASK_DWARF2_ASM | MASK_BIG_ENDIAN | MASK_ILP32 | MASK_FUSED_MADD)
 
 /* ??? Might not be needed anymore.  */
 #define MEMBER_TYPE_FORCES_BLK(FIELD, MODE) ((MODE) == TFmode)

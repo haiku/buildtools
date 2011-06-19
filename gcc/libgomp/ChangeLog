@@ -1,6 +1,68 @@
-2010-04-29  Release Manager
+2011-04-28  Release Manager
 
-	* GCC 4.4.4 released.
+	* GCC 4.5.3 released.
+
+2011-02-27  Tobias Burnus  <burnus@net-b.de>
+
+	Backport from mainline
+	2011-02-27  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/47886
+	* testsuite/libgomp.fortran/task3.f90: New test.
+	
+
+2011-01-16  Jakub Jelinek  <jakub@redhat.com>
+
+	Backport from mainline
+	2010-12-14  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/46874
+	* libgomp.fortran/allocatable6.f90: New test.
+
+2010-12-17  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	Backport from mainline:
+	2010-12-01  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* configure.tgt (mips-sgi-irix6*): Add -lpthread to XLDFLAGS.
+
+2010-12-16  Release Manager
+
+	* GCC 4.5.2 released.
+
+2010-12-07  Jakub Jelinek  <jakub@redhat.com>
+
+	Backport from mainline
+	2010-12-02  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/46753
+	* libgomp.fortran/pr46753.f90: New test.
+
+	PR libgomp/45240
+	* parallel.c (GOMP_parallel_end): Unlock gomp_remaining_threads_lock
+	at the end if sync builtins aren't supported.
+
+2010-12-03  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	Backport from mainline:
+	2010-12-01  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* testsuite/libgomp.fortran/vla8.f90: Use dg-timeout-factor 2.0.
+
+2010-07-31  Release Manager
+
+	* GCC 4.5.1 released.
+
+2010-06-10  Iain Sandoe  <iains@gcc.gnu.org>
+
+	PR bootstrap/43170
+	* configure: Regenerate.
+
+2010-04-26  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/43893
+	* testsuite/libgomp.c/pr43893.c: New test.
+	* testsuite/libgomp.c++/pr43893.C: New test.
 
 2010-04-21  Jakub Jelinek  <jakub@redhat.com>
 
@@ -17,6 +79,16 @@
 	PR libgomp/43569
 	* sections.c (gomp_sections_init): Initialize ws->mode.
 
+2010-04-14  Release Manager
+
+	* GCC 4.5.0 released.
+
+2010-04-02  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
 2010-03-22  Jakub Jelinek  <jakub@redhat.com>
 
 	PR libgomp/42942
@@ -27,14 +99,81 @@
 
 	* testsuite/libgomp.c/pr42942.c: New test.
 
+2010-03-08  Tobias Grosser  <grosser@fim.uni-passau.de>
+
+	PR middle-end/42644
+	PR middle-end/42130
+	* testsuite/libgomp.graphite/force-parallel-1.c: Adjust.
+	* testsuite/libgomp.graphite/force-parallel-2.c: Adjust.
+
+2010-01-29  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* testsuite/libgomp.c++/task-1.C: Renamed err to e.
+	* testsuite/libgomp.c++/task-6.C: Likewise.
+
+2010-01-28  Steve Ellcey  <sje@cup.hp.com>
+
+	* configure.tgt (*-*-hpux*): Add -frandom-seed flag.
+
+2010-01-26  Paolo Bonzini  <bonzini@gnu.org>
+
+	* configure.ac: Test for executability of _the first word_ of GFORTRAN.
+	* configure: Regenerate.
+
 2010-01-26  Jakub Jelinek  <jakub@redhat.com>
 
 	PR fortran/42866
 	* testsuite/libgomp.fortran/allocatable5.f90: New test.
 
-2010-01-21  Release Manager
+2010-01-20  Paolo Bonzini  <bonzini@gnu.org>
 
-	* GCC 4.4.3 released.
+	* configure.ac: Test for executability of GFORTRAN.
+	* configure: Regenerate.
+
+2010-01-05  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* configure: Regenerate.
+
+2010-01-04  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR libgomp/42602
+	* libgomp.fortran/recursion1.f90 (sub): Make 's' atomic.
+
+2010-01-03  Richard Guenther  <rguenther@suse.de>
+
+	* testsuite/libgomp.fortran/recursion1.f90: New testcase.
+
+2009-12-23  Sebastian Pop  <sebpop@gmail.com>
+
+	* testsuite/libgomp.graphite/pr4118.c: New.
+
+2009-12-22  Iain Sandoe  <iain.sandoe@sandoe-acoustics.co.uk>
+
+	* testsuite/libgomp.fortran/crayptr2.f90: Remove forced static linkage
+	for darwin, protect the test with require-effective-target tls_runtime.
+	* testsuite/libgomp.fortran/pr32550.f90: Ditto.
+
+2009-12-22  Iain Sandoe  <iain.sandoe@sandoe-acoustics.co.uk>
+
+	PR target/41605
+	* testsuite/lib/libgomp.exp: Provide -B options to allow for
+	link spec %s substitutions for static libraries.
+
+2009-12-18  Jack Howarth <howarth@bromo.med.uc.edu>
+
+	PR testsuite/42135
+	* libgomp.graphite/force-parallel-2.c: Reduce array size.
+
+2009-12-05  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.in: Regenerate.
+	* configure: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
+2009-11-30  Dave Korn  <dave.korn.cygwin@gmail.com>
+
+	* testsuite/lib/libgomp.exp (libgomp_init): Add host-dependent
+	settings for LC_ALL and LANG.
 
 2009-11-25  Jakub Jelinek  <jakub@redhat.com>
 
@@ -46,18 +185,132 @@
 	PR middle-end/42029
 	* testsuite/libgomp.c/pr42029.c: New test.
 
-2009-10-15  Release Manager
+2009-10-26  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 4.4.2 released.
+	* acinclude.m4 (LIBGOMP_CHECK_LINKER_FEATURES): Avoid using too many
+	*s.  Accept ld version without text in ()s.
+	* configure: Regenerated.
+
+2009-10-22  Razya Ladelsky  <razya@il.ibm.com>
+
+	* testsuite/libgomp.graphite/force-parallel-2.c: Adjust scan.
+
+2009-10-17  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	PR libgomp/41418
+	* configure.ac: Set FC to "no" if $GFORTRAN starts with "no"
+	or a hyphen (happens with fortran language disabled).
+	* configure: Regenerate.
+
+2009-09-30  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* acinclude.m4 (LIBGOMP_CHECK_LINKER_FEATURES): Avoid 'head',
+	use sed script portable to Solaris /bin/sed for extracting ld
+	version.
+	* configure: Regenerate.
+
+2009-09-17  Alexander Monakov  <amonakov@ispras.ru>
+
+	* testsuite/libgomp.graphite/bounds.c: New test.
+
+2009-09-11  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.am (libgomp_la_LINK): New.
+	* Makefile.in: Regenerate.
+
+2009-08-24  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure.ac (AC_PREREQ): Bump to 2.64.
+
+2009-08-22  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.am (install-html, install-pdf): Remove.
+	* Makefile.in: Regenerate.
+
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* config.h.in: Regenerate.
+	* configure: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
+2009-08-22  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* Makefile.am (LINK): Add $(AM_LIBTOOLFLAGS) and $(LIBTOOLFLAGS).
+	* Makefile.in: Regenerate.
+
+2009-08-20  Dave Korn  <dave.korn.cygwin@gmail.com>
+
+	* Makefile.am (libgomp_la_LDFLAGS): Add -bindir flag.
+	* Makefile.in: Regenerate.
 
 2009-08-19  Tobias Burnus  <burnus@net-b.de>
 
 	PR fortran/41102
 	omp_lib.h.in: Fix -std=f95 errors.
 
-2009-07-22  Release Manager
 
-	* GCC 4.4.1 released.
+2009-08-14  David Edelsohn  <edelsohn@gnu.org>
+
+	* testsuite/libgomp.graphite: Move from gcc.dg/graphite.
+	* testsuite/libgomp.graphite/graphite_autopar.exp: Delete.
+	* testsuite/libgomp.graphite/graphite.exp: New.
+
+2009-08-05  Andreas Tobler  <a.tobler@schweiz.org>
+
+	* testsuite/libgomp.fortran/fortran.exp: Add flags in case of shared
+	only build.
+
+2009-08-04  David Daney  <ddaney@caviumnetworks.com>
+
+	* config/linux/mutex.h (gomp_mutex_unlock): Add comment about
+	needed memory barrier semantics.
+	* config/linux/mips/mutex.h: New file.
+
+2009-07-30  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure.ac (_AC_ARG_VAR_PRECIOUS): Use m4_rename_force.
+
+2009-07-16  Joseph Myers  <joseph@codesourcery.com>
+
+	* configure: Regenerate.
+
+2009-07-11  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	PR testsuite/40699
+	PR testsuite/40707
+	PR testsuite/40709
+	* testsuite/lib/libgomp.exp: Revert 2009-07-02 and 2009-06-30 commits.
+	* testsuite/libgomp.c/c.exp, testsuite/libgomp.c++/c++.exp,
+	testsuite/libgomp.fortran/fortran.exp: Revert 2009-06-30 commits.
+
+2009-07-02  Richard Sandiford  <r.sandiford@uk.ibm.com>
+
+	* testsuite/lib/libgomp.exp (libgomp_init): Use the ALWAYS_CFLAGS
+	options when choosing a multilib.
+
+2009-06-30  Richard Sandiford  <r.sandiford@uk.ibm.com>
+
+	* testsuite/lib/libgomp.exp (libgomp_init): Don't add "." to
+	ld_library_path.  Use add_path.  Add just find_libgcc_s to
+	ld_library_path, not every libgcc multilib directory.
+	* testsuite/libgomp.c/c.exp (ld_library_path): Don't call
+	gcc-set-multilib-library-path; rely on $always_ld_library_path instead.
+	* testsuite/libgomp.c++/c++.exp (ld_library_path): Likewise.
+	Use add_path.
+	* testsuite/libgomp.fortran/fortran.exp (ld_library_path): Likewise.
+
+2009-06-09  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* Makefile.am (LTLDFLAGS): Define.
+	(LINK): Define.
+	* Makefile.in: Regenerate.
+
+2009-05-27  Janne Blomqvist  <jb@gcc.gnu.org>
+
+	PR fortran/39718
+	* testsuite/libgomp.fortran/fortran.exp: Don't link with
+	libgfortranbegin, check existence of libgfortran.a instead of
+	libgfortranbegin.a.
 
 2009-05-20  Jakub Jelinek  <jakub@redhat.com>
 
@@ -65,9 +318,11 @@
 	* team.c (gomp_thread_start): Destroy thr->release semaphore.
 	(gomp_free_pool_helper): Likewise.
 
-2009-04-21  Release Manager
+2009-04-20  Vasilis Liaskovitis  <vliaskov@gmail.com>
+	    Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 4.4.0 released.
+	PR fortran/35423
+	* testsuite/libgomp.fortran/workshare2.f90: New test.
 
 2009-04-09  Nick Clifton  <nickc@redhat.com>
 

@@ -41,10 +41,10 @@ typedef struct allocation_object_def
 
       /* Because we want any type of data to be well aligned after the ID,
 	 the following elements are here.  They are never accessed so
-	 the allocated object may be even smaller than this structure.  */
+	 the allocated object may be even smaller than this structure.
+	 We do not care about alignment for floating-point types.  */
       char *align_p;
       HOST_WIDEST_INT align_i;
-      long double align_ld;
     } u;
 } allocation_object;
 
@@ -116,7 +116,7 @@ alloc_pool_descriptor (const char *name)
   slot = (struct alloc_pool_descriptor **)
     htab_find_slot_with_hash (alloc_pool_hash, name,
 			      htab_hash_pointer (name),
-			      1);
+			      INSERT);
   if (*slot)
     return *slot;
   *slot = XCNEW (struct alloc_pool_descriptor);
@@ -274,7 +274,7 @@ pool_alloc (alloc_pool pool)
 	  block = XNEWVEC (char, pool->block_size);
 	  block_header = (alloc_pool_list) block;
 	  block += align_eight (sizeof (struct alloc_pool_list_def));
-	  
+
 	  /* Throw it on the block list.  */
 	  block_header->next = pool->block_list;
 	  pool->block_list = block_header;
@@ -290,7 +290,7 @@ pool_alloc (alloc_pool pool)
 	  pool->blocks_allocated += 1;
 	}
 
-      
+
       /* We now know that we can take the first elt off the virgin list and
 	 put it on the returned list. */
       block = pool->virgin_free_list;
@@ -374,8 +374,8 @@ print_statistics (void **slot, void *b)
   if (d->allocated)
     {
       fprintf (stderr, "%-22s %6d %10lu %10lu(%10lu) %10lu(%10lu) %10lu(%10lu)\n", d->name,
-	       d->elt_size, d->created, d->allocated, d->allocated / d->elt_size, 
-	       d->peak, d->peak / d->elt_size, 
+	       d->elt_size, d->created, d->allocated, d->allocated / d->elt_size,
+	       d->peak, d->peak / d->elt_size,
 	       d->current, d->current / d->elt_size);
       i->total_allocated += d->allocated;
       i->total_created += d->created;

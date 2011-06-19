@@ -49,6 +49,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
   {
 #if defined __GTHREADS
     __mutex_type& __bfl_mutex = _M_get_mutex();
+    __bfl_mutex.lock();
 #endif
     const vector_type& __free_list = _M_get_free_list();
     using __gnu_cxx::__detail::__lower_bound;
@@ -76,7 +77,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 		__ret = reinterpret_cast<size_t*>
 		  (::operator new(__sz + sizeof(size_t)));
 	      }
-	    __catch(...)
+	    __catch(const std::bad_alloc&)
 	      {
 		this->_M_clear();
 	      }

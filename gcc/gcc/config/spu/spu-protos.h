@@ -1,4 +1,4 @@
-/* Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
+/* Copyright (C) 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -28,8 +28,7 @@ extern int valid_subreg (rtx op);
 extern void spu_expand_extv (rtx * ops, int unsignedp);
 extern void spu_expand_insv (rtx * ops);
 extern int spu_expand_block_move (rtx * ops);
-extern void spu_emit_branch_or_set (int is_set, enum rtx_code code,
-				    rtx * operands);
+extern void spu_emit_branch_or_set (int is_set, rtx cmp, rtx * operands);
 extern int spu_emit_vector_cond_expr (rtx, rtx, rtx, rtx, rtx, rtx);
 extern HOST_WIDE_INT const_double_to_hwint (rtx x);
 extern rtx hwint_to_const_double (enum machine_mode mode, HOST_WIDE_INT v);
@@ -55,9 +54,6 @@ extern bool exp2_immediate_p (rtx op, enum machine_mode mode, int low,
 			      int high);
 extern int spu_constant_address_p (rtx x);
 extern int spu_legitimate_constant_p (rtx x);
-extern int spu_legitimate_address (enum machine_mode mode, rtx x,
-				   int reg_ok_strict);
-extern rtx spu_legitimize_address (rtx x, rtx oldx, enum machine_mode mode);
 extern int spu_initial_elimination_offset (int from, int to);
 extern rtx spu_function_value (const_tree type, const_tree func);
 extern rtx spu_function_arg (int cum, enum machine_mode mode, tree type,
@@ -74,7 +70,7 @@ extern int cpat_const_p (rtx x, enum machine_mode mode);
 extern rtx gen_cpat_const (rtx * ops);
 extern void constant_to_array (enum machine_mode mode, rtx x,
 			       unsigned char *arr);
-extern rtx array_to_constant (enum machine_mode mode, unsigned char *arr);
+extern rtx array_to_constant (enum machine_mode mode, const unsigned char *arr);
 extern rtx spu_gen_exp2 (enum machine_mode mode, rtx x);
 extern void spu_allocate_stack (rtx op0, rtx op1);
 extern void spu_restore_stack_nonlocal (rtx op0, rtx op1);
@@ -85,14 +81,15 @@ extern void spu_builtin_splats (rtx ops[]);
 extern void spu_builtin_extract (rtx ops[]);
 extern void spu_builtin_insert (rtx ops[]);
 extern void spu_builtin_promote (rtx ops[]);
-extern void spu_initialize_trampoline (rtx tramp, rtx fnaddr, rtx cxt);
 extern void spu_expand_sign_extend (rtx ops[]);
 extern void spu_expand_vector_init (rtx target, rtx vals);
 extern void spu_init_expanders (void);
 extern void spu_split_convert (rtx *);
+extern void spu_function_profiler (FILE *, int);
 
 /* spu-c.c */
-extern tree spu_resolve_overloaded_builtin (tree fndecl, tree fnargs);
+extern tree spu_resolve_overloaded_builtin (location_t, tree fndecl,
+    					    void *fnargs);
 extern rtx spu_expand_builtin (tree exp, rtx target, rtx subtarget,
 			       enum machine_mode mode, int ignore);
 extern rtx spu_expand_builtin (tree, rtx, rtx, enum machine_mode, int);

@@ -1,6 +1,6 @@
 // new abi support -*- C++ -*-
   
-// Copyright (C) 2000, 2002, 2003, 2004, 2006, 2007, 2009
+// Copyright (C) 2000, 2002, 2003, 2004, 2006, 2007, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of GCC.
@@ -41,6 +41,8 @@
 
 #ifndef _CXXABI_H
 #define _CXXABI_H 1
+
+#pragma GCC system_header
 
 #pragma GCC visibility push(default)
 
@@ -100,7 +102,7 @@ namespace __cxxabiv1
   
   void 
   __cxa_vec_cleanup(void* __array_address, size_t __element_count,
-		    size_t __element_size, __cxa_cdtor_type destructor);
+		    size_t __s, __cxa_cdtor_type destructor) _GLIBCXX_NOTHROW;
   
   // Destruct and release array.
   void 
@@ -121,14 +123,14 @@ namespace __cxxabiv1
   __cxa_guard_acquire(__guard*);
 
   void 
-  __cxa_guard_release(__guard*);
+  __cxa_guard_release(__guard*) _GLIBCXX_NOTHROW;
 
   void 
-  __cxa_guard_abort(__guard*);
+  __cxa_guard_abort(__guard*) _GLIBCXX_NOTHROW;
 
   // Pure virtual functions.
   void
-  __cxa_pure_virtual(void);
+  __cxa_pure_virtual(void) __attribute__ ((__noreturn__));
 
   // Exception handling.
   void
@@ -164,7 +166,7 @@ namespace __cxxabiv1
    *
    *  @param __status @a *__status is set to one of the following values:
    *   0: The demangling operation succeeded.
-   *  -1: A memory allocation failiure occurred.
+   *  -1: A memory allocation failure occurred.
    *  -2: @a mangled_name is not a valid name under the C++ ABI mangling rules.
    *  -3: One of the arguments is invalid.
    *
@@ -567,13 +569,13 @@ namespace __cxxabiv1
   // Returns the type_info for the currently handled exception [15.3/8], or
   // null if there is none.
   extern "C" std::type_info*
-  __cxa_current_exception_type();
+  __cxa_current_exception_type() _GLIBCXX_NOTHROW __attribute__ ((__pure__));
 
   // A magic placeholder class that can be caught by reference
   // to recognize foreign exceptions.
   class __foreign_exception
   {
-    virtual ~__foreign_exception() throw();
+    virtual ~__foreign_exception() _GLIBCXX_NOTHROW;
     virtual void __pure_dummy() = 0; // prevent catch by value
   };
 
@@ -582,7 +584,7 @@ namespace __cxxabiv1
 /** @namespace abi
  *  @brief The cross-vendor C++ Application Binary Interface. A
  *  namespace alias to __cxxabiv1, but user programs should use the
- *  alias `abi'.
+ *  alias 'abi'.
  *
  *  A brief overview of an ABI is given in the libstdc++ FAQ, question
  *  5.8 (you may have a copy of the FAQ locally, or you can view the online
@@ -594,13 +596,34 @@ namespace __cxxabiv1
  *  along with the current specification.
  *
  *  For users of GCC greater than or equal to 3.x, entry points are
- *  available in <cxxabi.h>, which notes, <em>"It is not normally
+ *  available in <cxxabi.h>, which notes, <em>'It is not normally
  *  necessary for user programs to include this header, or use the
  *  entry points directly.  However, this header is available should
- *  that be needed."</em>
+ *  that be needed.'</em>
 */
 namespace abi = __cxxabiv1;
 
+namespace __gnu_cxx
+{
+  /**
+   *  @brief Exception thrown by __cxa_guard_acquire.
+   *  @ingroup exceptions
+   *
+   *  6.7[stmt.dcl]/4: If control re-enters the declaration (recursively)
+   *  while the object is being initialized, the behavior is undefined.
+   *
+   *  Since we already have a library function to handle locking, we might
+   *  as well check for this situation and throw an exception.
+   *  We use the second byte of the guard variable to remember that we're
+   *  in the middle of an initialization.
+   */
+  class recursive_init_error: public std::exception
+  {
+  public:
+    recursive_init_error() throw() { }
+    virtual ~recursive_init_error() throw ();
+  };
+}
 #endif // __cplusplus
 
 #pragma GCC visibility pop

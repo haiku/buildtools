@@ -1,11 +1,11 @@
 <?xml version='1.0'?>
-<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" 
- "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" 
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+ "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd"
 [ ]>
 
 <chapter id="manual.ext.debug_mode" xreflabel="Debug Mode">
 <?dbhtml filename="debug_mode.html"?>
- 
+
 <chapterinfo>
   <keywordset>
     <keyword>
@@ -36,7 +36,7 @@
     library facilities, and will report errors in the use of libstdc++
     as soon as they can be detected by emitting a description of the
     problem to standard error and aborting the program.  This debug
-    mode is available with GCC 3.4.0 and later versions. 
+    mode is available with GCC 3.4.0 and later versions.
   </para>
 
   <para>
@@ -51,7 +51,7 @@
     incrementing a past-the-end iterator or dereferencing an iterator
     that points to a container that has been destructed are diagnosed
     immediately.</para></listitem>
-    
+
     <listitem><para><emphasis>Algorithm preconditions</emphasis>: Algorithms attempt to
     validate their input parameters to detect errors as early as
     possible. For instance, the <code>set_intersection</code>
@@ -81,7 +81,7 @@
   instance, erasing an element in a <code>std::list</code> is a
   constant-time operation in normal library, but in debug mode it is
   linear in the number of iterators that reference that particular
-  list. So while your (correct) program won't change its results, it 
+  list. So while your (correct) program won't change its results, it
   is likely to execute more slowly.</para>
 
 <para>libstdc++ includes many extensions to the C++ standard library. In
@@ -185,7 +185,7 @@ which always works correctly.
 
 <table frame='all'>
 <title>Debugging Containers</title>
-<tgroup cols='6' align='left' colsep='1' rowsep='1'>
+<tgroup cols='4' align='left' colsep='1' rowsep='1'>
 <colspec colname='c1'></colspec>
 <colspec colname='c2'></colspec>
 <colspec colname='c3'></colspec>
@@ -204,67 +204,67 @@ which always works correctly.
     <entry><classname>std::bitset</classname></entry>
     <entry><filename class="headerfile">bitset</filename></entry>
     <entry><classname>__gnu_debug::bitset</classname></entry>
-    <entry><filename class="headerfile">bitset</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/bitset&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::deque</classname></entry>
     <entry><filename class="headerfile">deque</filename></entry>
     <entry><classname>__gnu_debug::deque</classname></entry>
-    <entry><filename class="headerfile">deque</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/deque&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::list</classname></entry>
     <entry><filename class="headerfile">list</filename></entry>
     <entry><classname>__gnu_debug::list</classname></entry>
-    <entry><filename class="headerfile">list</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/list&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::map</classname></entry>
     <entry><filename class="headerfile">map</filename></entry>
     <entry><classname>__gnu_debug::map</classname></entry>
-    <entry><filename class="headerfile">map</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/map&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::multimap</classname></entry>
     <entry><filename class="headerfile">map</filename></entry>
     <entry><classname>__gnu_debug::multimap</classname></entry>
-    <entry><filename class="headerfile">map</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/map&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::multiset</classname></entry>
     <entry><filename class="headerfile">set</filename></entry>
     <entry><classname>__gnu_debug::multiset</classname></entry>
-    <entry><filename class="headerfile">set</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/set&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::set</classname></entry>
     <entry><filename class="headerfile">set</filename></entry>
     <entry><classname>__gnu_debug::set</classname></entry>
-    <entry><filename class="headerfile">set</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/set&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::string</classname></entry>
     <entry><filename class="headerfile">string</filename></entry>
     <entry><classname>__gnu_debug::string</classname></entry>
-    <entry><filename class="headerfile">string</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/string&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::wstring</classname></entry>
     <entry><filename class="headerfile">string</filename></entry>
     <entry><classname>__gnu_debug::wstring</classname></entry>
-    <entry><filename class="headerfile">string</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/string&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::basic_string</classname></entry>
     <entry><filename class="headerfile">string</filename></entry>
     <entry><classname>__gnu_debug::basic_string</classname></entry>
-    <entry><filename class="headerfile">string</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/string&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::vector</classname></entry>
     <entry><filename class="headerfile">vector</filename></entry>
     <entry><classname>__gnu_debug::vector</classname></entry>
-    <entry><filename class="headerfile">vector</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/vector&gt;</filename></entry>
   </row>
 </tbody>
 </tgroup>
@@ -276,7 +276,7 @@ containers have additional debug capability.
 
 <table frame='all'>
 <title>Debugging Containers C++0x</title>
-<tgroup cols='6' align='left' colsep='1' rowsep='1'>
+<tgroup cols='4' align='left' colsep='1' rowsep='1'>
 <colspec colname='c1'></colspec>
 <colspec colname='c2'></colspec>
 <colspec colname='c3'></colspec>
@@ -295,25 +295,25 @@ containers have additional debug capability.
     <entry><classname>std::unordered_map</classname></entry>
     <entry><filename class="headerfile">unordered_map</filename></entry>
     <entry><classname>__gnu_debug::unordered_map</classname></entry>
-    <entry><filename class="headerfile">unordered_map</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/unordered_map&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::unordered_multimap</classname></entry>
     <entry><filename class="headerfile">unordered_map</filename></entry>
     <entry><classname>__gnu_debug::unordered_multimap</classname></entry>
-    <entry><filename class="headerfile">unordered_map</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/unordered_map&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::unordered_set</classname></entry>
     <entry><filename class="headerfile">unordered_set</filename></entry>
     <entry><classname>__gnu_debug::unordered_set</classname></entry>
-    <entry><filename class="headerfile">unordered_set</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/unordered_set&gt;</filename></entry>
   </row>
   <row>
     <entry><classname>std::unordered_multiset</classname></entry>
     <entry><filename class="headerfile">unordered_set</filename></entry>
     <entry><classname>__gnu_debug::unordered_multiset</classname></entry>
-    <entry><filename class="headerfile">unordered_set</filename></entry>
+    <entry><filename class="headerfile">&lt;debug/unordered_set&gt;</filename></entry>
   </row>
 </tbody>
 </tgroup>
@@ -325,7 +325,7 @@ containers have additional debug capability.
   <title>Design</title>
   <para>
   </para>
-  <sect2 id="manual.ext.debug_mode.design.goals" xreflabel="Goals">
+  <sect2 id="debug_mode.design.goals" xreflabel="Goals">
     <title>Goals</title>
     <para>
     </para>
@@ -375,7 +375,7 @@ containers have additional debug capability.
     own usability and implementation characteristics. In general, the
     higher-numbered conformance levels are more usable (i.e., require
     less recompilation) but are more complicated to implement than
-    the lower-numbered conformance levels. 
+    the lower-numbered conformance levels.
       <orderedlist>
 	<listitem><para><emphasis>Full recompilation</emphasis>: The user must recompile his or
 	her entire application and all C++ libraries it depends on,
@@ -440,7 +440,7 @@ containers have additional debug capability.
   </itemizedlist>
   </sect2>
 
-  <sect2 id="manual.ext.debug_mode.design.methods" xreflabel="Methods">
+  <sect2 id="debug_mode.design.methods" xreflabel="Methods">
     <title>Methods</title>
     <para>
     </para>
@@ -450,16 +450,18 @@ containers have additional debug capability.
 
   <sect3 id="debug_mode.design.methods.wrappers" xreflabel="Method Wrapper">
     <title>The Wrapper Model</title>
-<para>The libstdc++ debug mode uses a wrapper model where the debugging
-  versions of library components (e.g., iterators and containers) form
-  a layer on top of the release versions of the library
-  components. The debugging components first verify that the operation
-  is correct (aborting with a diagnostic if an error is found) and
-  will then forward to the underlying release-mode container that will
-  perform the actual work. This design decision ensures that we cannot
-  regress release-mode performance (because the release-mode
-  containers are left untouched) and partially enables <ulink url="#mixing">mixing debug and release code</ulink> at link time,
-  although that will not be discussed at this time.</para>
+<para>The libstdc++ debug mode uses a wrapper model where the
+  debugging versions of library components (e.g., iterators and
+  containers) form a layer on top of the release versions of the
+  library components. The debugging components first verify that the
+  operation is correct (aborting with a diagnostic if an error is
+  found) and will then forward to the underlying release-mode
+  container that will perform the actual work. This design decision
+  ensures that we cannot regress release-mode performance (because the
+  release-mode containers are left untouched) and partially
+  enables <link linkend="methods.coexistence.link">mixing debug and
+  release code</link> at link time, although that will not be
+  discussed at this time.</para>
 
 <para>Two types of wrappers are used in the implementation of the debug
   mode: container wrappers and iterator wrappers. The two types of
@@ -484,7 +486,7 @@ containers have additional debug capability.
   <listitem><para><code>Iterator</code>: The underlying iterator type, which must
     be either the <code>iterator</code> or <code>const_iterator</code>
     typedef from the sequence type this iterator can reference.</para></listitem>
-  
+
   <listitem><para><code>Sequence</code>: The type of sequence that this iterator
   references. This sequence must be a safe sequence (discussed below)
   whose <code>iterator</code> or <code>const_iterator</code> typedef
@@ -509,15 +511,15 @@ containers have additional debug capability.
   instantiated with the type of the safe container itself (an instance
   of the curiously recurring template pattern).</para>
 
-<para>The iterators of a container wrapper will be 
-  <ulink url="#safe_iterator">safe iterators</ulink> that reference sequences
-  of this type and wrap the iterators provided by the release-mode
-  base class. The debugging container will use only the safe
-  iterators within its own interface (therefore requiring the user to
-  use safe iterators, although this does not change correct user
-  code) and will communicate with the release-mode base class with
-  only the underlying, unsafe, release-mode iterators that the base
-  class exports.</para>
+<para>The iterators of a container wrapper will be
+  <link linkend="debug_mode.design.methods.safe_iter">safe
+  iterators</link> that reference sequences of this type and wrap the
+  iterators provided by the release-mode base class. The debugging
+  container will use only the safe iterators within its own interface
+  (therefore requiring the user to use safe iterators, although this
+  does not change correct user code) and will communicate with the
+  release-mode base class with only the underlying, unsafe,
+  release-mode iterators that the base class exports.</para>
 
 <para> The debugging version of <code>std::list</code> will have the
   following basic structure:</para>
@@ -588,9 +590,9 @@ template&lt;typename _Tp, typename _Allocator = allocator&lt;_Tp&gt;
 
 <para>Achieving link- and run-time coexistence is not a trivial
   implementation task. To achieve this goal we required a small
-  extension to the GNU C++ compiler (described in the GCC Manual for
-  C++ Extensions, see <ulink url="http://gcc.gnu.org/onlinedocs/gcc/Strong-Using.html">strong
-  using</ulink>), and a complex organization of debug- and
+  extension to the GNU C++ compiler (since incorporated into the C++0x language specification, described in the GCC Manual for the C++ language as
+  <ulink url="http://gcc.gnu.org/onlinedocs/gcc/Namespace-Association.html#Namespace-Association">namespace
+  association</ulink>), and a complex organization of debug- and
   release-modes. The end result is that we have achieved per-use
   recompilation but have had to give up some checking of the
   <code>std::basic_string</code> class template (namely, safe
@@ -625,12 +627,12 @@ namespace std
      };
 } // namespace std
 </programlisting>
-  
+
 <para>In debug mode we include the release-mode container (which is now
-defined in in the namespace <code>__norm</code>) and also the
+defined in the namespace <code>__norm</code>) and also the
 debug-mode container. The debug-mode container is defined within the
 namespace <code>__debug</code>, which is associated with namespace
-<code>std</code> via the GNU namespace association extension.  This
+<code>std</code> via the C++0x namespace association language feature.  This
 method allows the debug and release versions of the same component to
 coexist at compile-time and link-time without causing an unreasonable
 maintenance burden, while minimizing confusion. Again, this boils down
@@ -644,7 +646,7 @@ namespace std
     template&lt;typename _Tp, typename _Alloc = allocator&lt;_Tp&gt; &gt;
       class list
       {
-        // ...
+	// ...
       };
   } // namespace __gnu_norm
 
@@ -653,13 +655,14 @@ namespace std
     template&lt;typename _Tp, typename _Alloc = allocator&lt;_Tp&gt; &gt;
       class list
       : public __norm::list&lt;_Tp, _Alloc&gt;,
-        public __gnu_debug::_Safe_sequence&lt;list&lt;_Tp, _Alloc&gt; &gt;
+	public __gnu_debug::_Safe_sequence&lt;list&lt;_Tp, _Alloc&gt; &gt;
       {
-        // ...
+	// ...
       };
   } // namespace __norm
 
-  using namespace __debug __attribute__ ((strong));
+  // namespace __debug __attribute__ ((strong));
+  inline namespace __debug { }
 }
 </programlisting>
  </sect4>
@@ -669,7 +672,7 @@ namespace std
     debug-mode components</title>
 
 <para>Because each component has a distinct and separate release and
-debug implementation, there are are no issues with link-time
+debug implementation, there is no issue with link-time
 coexistence: the separate namespaces result in different mangled
 names, and thus unique linkage.</para>
 
@@ -691,12 +694,12 @@ runtime errors. A simplified example of this problem is as follows.
 #include &lt;string&gt;
 
 std::string test02();
- 
+
 std::string test01()
 {
   return test02();
 }
- 
+
 int main()
 {
   test01();
@@ -708,7 +711,7 @@ int main()
 
 <programlisting>
 #include &lt;string&gt;
- 
+
 std::string
 test02()
 {
@@ -796,7 +799,7 @@ test02()
       enticing option, because it would eliminate the need for
       the <code>link_name</code> extension by aliasing the
       templates. However, there is no true template aliasing mechanism
-      is C++, because both <code>using</code> directives and using
+      in C++, because both <code>using</code> directives and using
       declarations disallow specialization. This method fails
       the <emphasis>correctness</emphasis> criteria.</para></listitem>
 
@@ -828,7 +831,7 @@ test02()
     include ordering. Two, ODR issues remained with container member
     functions taking no arguments in mixed-mode settings resulting in
     equivalent link names, <code> vector::push_back() </code> being
-    one example. 
+    one example.
     See <ulink url="http://gcc.gnu.org/ml/libstdc++/2003-08/msg00177.html">link
     name</ulink> </para></listitem>
 </itemizedlist>
@@ -847,9 +850,9 @@ test02()
   mode implementations.</para>
  </sect4>
   </sect3>
-  </sect2>  
+  </sect2>
 
-  <sect2 id="manual.ext.debug_mode.design.other" xreflabel="Other">
+  <sect2 id="debug_mode.design.other" xreflabel="Other">
     <title>Other Implementations</title>
     <para>
     </para>
@@ -868,21 +871,21 @@ test02()
   <listitem><para><ulink url="http://www.stlport.org/">STLport</ulink>: STLport is a free
   implementation of the C++ standard library derived from the <ulink url="http://www.sgi.com/tech/stl/">SGI implementation</ulink>, and
   ported to many other platforms. It includes a debug mode that uses a
-  wrapper model (that in some way inspired the libstdc++ debug mode
+  wrapper model (that in some ways inspired the libstdc++ debug mode
   design), although at the time of this writing the debug mode is
   somewhat incomplete and meets only the "Full user recompilation" (2)
   recompilation guarantee by requiring the user to link against a
   different library in debug mode vs. release mode.</para></listitem>
 
-  <listitem><para><ulink url="http://www.metrowerks.com/mw/default.htm">Metrowerks
-  CodeWarrior</ulink>: The C++ standard library that ships with Metrowerks
-  CodeWarrior includes a debug mode. It is a full debug-mode
-  implementation (including debugging for CodeWarrior extensions) and
-  is easy to use, although it meets only the "Full recompilation" (1)
-  recompilation guarantee.</para></listitem>
+  <listitem><para>Metrowerks CodeWarrior: The C++ standard library
+  that ships with Metrowerks CodeWarrior includes a debug mode. It is
+  a full debug-mode implementation (including debugging for
+  CodeWarrior extensions) and is easy to use, although it meets only
+  the "Full recompilation" (1) recompilation
+  guarantee.</para></listitem>
 </itemizedlist>
 
-  </sect2>  
+  </sect2>
 </sect1>
 
 </chapter>

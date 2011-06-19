@@ -1,6 +1,6 @@
 // Functions used by iterators -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -61,6 +61,7 @@
 #define _STL_ITERATOR_BASE_FUNCS_H 1
 
 #pragma GCC system_header
+
 #include <bits/concept_check.h>
 
 _GLIBCXX_BEGIN_NAMESPACE(std)
@@ -154,7 +155,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   /**
    *  @brief A generalization of pointer arithmetic.
    *  @param  i  An input iterator.
-   *  @param  n  The "delta" by which to change @p i.
+   *  @param  n  The @a delta by which to change @p i.
    *  @return  Nothing.
    *
    *  This increments @p i by @p n.  For bidirectional and random access
@@ -172,26 +173,38 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       std::__advance(__i, __d, std::__iterator_category(__i));
     }
 
+_GLIBCXX_END_NAMESPACE
+
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
-  template<typename _InputIterator>
-    inline _InputIterator 
-    next(_InputIterator __x, typename
-	 iterator_traits<_InputIterator>::difference_type __n = 1)
+
+#include <ext/type_traits.h> // For __enable_if and __is_iterator
+
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
+  template<typename _ForwardIterator>
+    inline typename
+    __gnu_cxx::__enable_if<__is_iterator<_ForwardIterator>::__value,
+			   _ForwardIterator>::__type
+    next(_ForwardIterator __x, typename
+	 iterator_traits<_ForwardIterator>::difference_type __n = 1)
     {
       std::advance(__x, __n);
       return __x;
     }
 
   template<typename _BidirectionalIterator>
-    inline _BidirectionalIterator 
+    inline typename
+    __gnu_cxx::__enable_if<__is_iterator<_BidirectionalIterator>::__value,
+			   _BidirectionalIterator>::__type
     prev(_BidirectionalIterator __x, typename
 	 iterator_traits<_BidirectionalIterator>::difference_type __n = 1) 
     {
       std::advance(__x, -__n);
       return __x;
     }
-#endif
 
 _GLIBCXX_END_NAMESPACE
+
+#endif // __GXX_EXPERIMENTAL_CXX0X__
 
 #endif /* _STL_ITERATOR_BASE_FUNCS_H */

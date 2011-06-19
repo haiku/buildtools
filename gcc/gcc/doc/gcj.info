@@ -1,5 +1,5 @@
-This is doc/gcj.info, produced by makeinfo version 4.13 from
-/d/gcc-4.4.4/gcc-4.4.4/gcc/java/gcj.texi.
+This is doc/gcj.info, produced by makeinfo version 4.12 from
+/space/rguenther/gcc-4.5.3/gcc-4.5.3/gcc/java/gcj.texi.
 
 Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008 Free
 Software Foundation, Inc.
@@ -1699,6 +1699,14 @@ touch these options.
      accessing an object via a reference.  On other systems you won't
      need this because null pointer accesses are caught automatically
      by the processor.
+
+`-fuse-atomic-builtins'
+     On some systems, gcc can generate code for built-in atomic
+     operations.  Use this option to force gcj to use these builtins
+     when compiling Java code.  Where this capability is present it
+     should be automatically detected, so you won't usually need to use
+     this option.
+
 
 
 File: gcj.info,  Node: Compatibility,  Next: Invoking jcf-dump,  Prev: Invoking gcj,  Up: Top
@@ -3582,51 +3590,51 @@ Index
 
 
 Tag Table:
-Node: Top2789
-Node: Copying4208
-Node: GNU Free Documentation License41758
-Node: Invoking gcj64170
-Node: Input and output files64933
-Node: Input Options66459
-Node: Encodings69733
-Node: Warnings70939
-Node: Linking72052
-Node: Code Generation74991
-Node: Configure-time Options81771
-Node: Compatibility83194
-Node: Limitations83678
-Node: Extensions85260
-Node: Invoking jcf-dump88354
-Node: Invoking gij89299
-Node: Invoking gcj-dbtool92550
-Node: Invoking jv-convert95016
-Node: Invoking grmic96095
-Node: Invoking gc-analyze97481
-Node: Invoking aot-compile98922
-Node: Invoking rebuild-gcj-db99871
-Node: About CNI100181
-Node: Basic concepts101640
-Node: Packages104536
-Node: Primitive types106864
-Node: Reference types108542
-Node: Interfaces109631
-Node: Objects and Classes110542
-Node: Class Initialization112737
-Node: Object allocation115079
-Node: Memory allocation115869
-Node: Arrays116501
-Node: Methods119311
-Node: Strings122132
-Node: Mixing with C++123636
-Node: Exception Handling127107
-Node: Synchronization128741
-Node: Invocation130731
-Node: Reflection135667
-Node: System properties136128
-Node: Standard Properties137005
-Node: GNU Classpath Properties141437
-Node: libgcj Runtime Properties142484
-Node: Resources146986
-Node: Index147824
+Node: Top2803
+Node: Copying4222
+Node: GNU Free Documentation License41772
+Node: Invoking gcj64184
+Node: Input and output files64947
+Node: Input Options66473
+Node: Encodings69747
+Node: Warnings70953
+Node: Linking72066
+Node: Code Generation75005
+Node: Configure-time Options81785
+Node: Compatibility83525
+Node: Limitations84009
+Node: Extensions85591
+Node: Invoking jcf-dump88685
+Node: Invoking gij89630
+Node: Invoking gcj-dbtool92881
+Node: Invoking jv-convert95347
+Node: Invoking grmic96426
+Node: Invoking gc-analyze97812
+Node: Invoking aot-compile99253
+Node: Invoking rebuild-gcj-db100202
+Node: About CNI100512
+Node: Basic concepts101971
+Node: Packages104867
+Node: Primitive types107195
+Node: Reference types108873
+Node: Interfaces109962
+Node: Objects and Classes110873
+Node: Class Initialization113068
+Node: Object allocation115410
+Node: Memory allocation116200
+Node: Arrays116832
+Node: Methods119642
+Node: Strings122463
+Node: Mixing with C++123967
+Node: Exception Handling127438
+Node: Synchronization129072
+Node: Invocation131062
+Node: Reflection135998
+Node: System properties136459
+Node: Standard Properties137336
+Node: GNU Classpath Properties141768
+Node: libgcj Runtime Properties142815
+Node: Resources147317
+Node: Index148155
 
 End Tag Table

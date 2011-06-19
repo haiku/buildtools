@@ -95,8 +95,8 @@ extern struct cpp_reader* parse_in;
    visibility is not supported on the host OS platform the
    statements are ignored.  */
 #define HANDLE_PRAGMA_VISIBILITY 1
-extern void push_visibility (const char *);
-extern void pop_visibility (void);
+extern void push_visibility (const char *, int);
+extern bool pop_visibility (int);
 
 extern void init_pragma (void);
 
@@ -118,9 +118,9 @@ extern enum cpp_ttype pragma_lex (tree *);
    so that 0 means to translate and join strings.  */
 #define C_LEX_STRING_NO_TRANSLATE 1 /* Do not lex strings into
 				       execution character set.  */
-#define C_LEX_RAW_STRINGS         2 /* Return raw strings -- no
-				       concatenation, no
-				       translation.  */
+#define C_LEX_STRING_NO_JOIN	  2 /* Do not concatenate strings
+				       nor translate them into execution
+				       character set.  */
 
 /* This is not actually available to pragma parsers.  It's merely a
    convenient location to declare this function for c-lex, after

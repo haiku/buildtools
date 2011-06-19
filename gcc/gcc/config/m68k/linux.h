@@ -1,7 +1,7 @@
 /* Definitions for Motorola 68k running Linux-based GNU systems with
    ELF format.
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2004, 2006,
-   2007 Free Software Foundation, Inc.
+   2007, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -126,13 +126,6 @@ along with GCC; see the file COPYING3.  If not see
   if ((LOG) > 0)						\
     fprintf ((FILE), "%s%u\n", ALIGN_ASM_OP, 1 << (LOG));
 
-#ifdef HAVE_GAS_BALIGN_AND_P2ALIGN
-/* Use "move.l %a4,%a4" to advance within code.  */
-#define ASM_OUTPUT_ALIGN_WITH_NOP(FILE,LOG)			\
-  if ((LOG) > 0)						\
-    fprintf ((FILE), "\t.balignw %u,0x284c\n", 1 << (LOG));
-#endif
-
 /* If defined, a C expression whose value is a string containing the
    assembler operation to identify the following data as uninitialized global
    data.  */
@@ -149,11 +142,10 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Output assembler code to FILE to increment profiler label # LABELNO
    for profiling a function entry.  */
-
+#define NO_PROFILE_COUNTERS 1
 #undef FUNCTION_PROFILER
 #define FUNCTION_PROFILER(FILE, LABELNO) \
 {									\
-  asm_fprintf (FILE, "\tlea (%LLP%d,%Rpc),%Ra1\n", (LABELNO));		\
   if (flag_pic)								\
     fprintf (FILE, "\tbsr.l _mcount@PLTPC\n");				\
   else									\
@@ -209,7 +201,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef FINALIZE_TRAMPOLINE
 #define FINALIZE_TRAMPOLINE(TRAMP)					\
   emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__clear_cache"),	\
-		     0, VOIDmode, 2, TRAMP, Pmode,			\
+		     LCT_NORMAL, VOIDmode, 2, TRAMP, Pmode,		\
 		     plus_constant (TRAMP, TRAMPOLINE_SIZE), Pmode);
 
 /* Clear the instruction cache from `beg' to `end'.  This makes an

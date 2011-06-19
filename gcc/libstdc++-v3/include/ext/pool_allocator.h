@@ -96,11 +96,11 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       _M_round_up(size_t __bytes)
       { return ((__bytes + (size_t)_S_align - 1) & ~((size_t)_S_align - 1)); }
       
-      _Obj* volatile*
-      _M_get_free_list(size_t __bytes);
+      _GLIBCXX_CONST _Obj* volatile*
+      _M_get_free_list(size_t __bytes) throw ();
     
       __mutex&
-      _M_get_mutex();
+      _M_get_mutex() throw ();
 
       // Returns an object of size __n, and optionally adds to size __n
       // free list.
@@ -200,7 +200,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       pointer __ret = 0;
       if (__builtin_expect(__n != 0, true))
 	{
-	  if (__builtin_expect(__n > this->max_size(), false))
+	  if (__n > this->max_size())
 	    std::__throw_bad_alloc();
 
 	  // If there is a race through here, assume answer from getenv
@@ -230,7 +230,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 		  *__free_list = __result->_M_free_list_link;
 		  __ret = reinterpret_cast<_Tp*>(__result);
 		}
-	      if (__builtin_expect(__ret == 0, 0))
+	      if (__ret == 0)
 		std::__throw_bad_alloc();
 	    }
 	}

@@ -1,6 +1,6 @@
 /* C-compiler utilities for types and variables storage layout
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1996, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -37,6 +37,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "regs.h"
 #include "params.h"
+#include "cgraph.h"
+#include "tree-inline.h"
+#include "tree-dump.h"
+#include "gimple.h"
 
 /* Data type for the expressions representing sizes of data types.
    It is the first integer type laid out.  */
@@ -48,11 +52,12 @@ unsigned int maximum_field_alignment = TARGET_DEFAULT_PACK_STRUCT * BITS_PER_UNI
 /* ... and its original value in bytes, specified via -fpack-struct=<value>.  */
 unsigned int initial_max_fld_align = TARGET_DEFAULT_PACK_STRUCT;
 
-/* Nonzero if all REFERENCE_TYPEs are internal and hence should be
-   allocated in Pmode, not ptr_mode.   Set only by internal_reference_types
-   called only by a front end.  */
+/* Nonzero if all REFERENCE_TYPEs are internal and hence should be allocated
+   in the address spaces' address_mode, not pointer_mode.   Set only by
+   internal_reference_types called only by a front end.  */
 static int reference_types_internal = 0;
 
+static tree self_referential_size (tree);
 static void finalize_record_size (record_layout_info);
 static void finalize_type_size (tree);
 static void place_union_field (record_layout_info, tree);
@@ -66,8 +71,8 @@ extern void debug_rli (record_layout_info);
 
 static GTY(()) tree pending_sizes;
 
-/* Show that REFERENCE_TYPES are internal and should be Pmode.  Called only
-   by front end.  */
+/* Show that REFERENCE_TYPES are internal and should use address_mode.
+   Called only by front end.  */
 
 void
 internal_reference_types (void)
@@ -117,13 +122,19 @@ variable_size (tree size)
 {
   tree save;
 
+  /* Obviously.  */
+  if (TREE_CONSTANT (size))
+    return size;
+
+  /* If the size is self-referential, we can't make a SAVE_EXPR (see
+     save_expr for the rationale).  But we can do something else.  */
+  if (CONTAINS_PLACEHOLDER_P (size))
+    return self_referential_size (size);
+
   /* If the language-processor is to take responsibility for variable-sized
      items (e.g., languages which have elaboration procedures like Ada),
-     just return SIZE unchanged.  Likewise for self-referential sizes and
-     constant sizes.  */
-  if (TREE_CONSTANT (size)
-      || lang_hooks.decls.global_bindings_p () < 0
-      || CONTAINS_PLACEHOLDER_P (size))
+     just return SIZE unchanged.  */
+  if (lang_hooks.decls.global_bindings_p () < 0)
     return size;
 
   size = save_expr (size);
@@ -156,6 +167,232 @@ variable_size (tree size)
   put_pending_size (save);
 
   return size;
+}
+
+/* An array of functions used for self-referential size computation.  */
+static GTY(()) VEC (tree, gc) *size_functions;
+
+/* Look inside EXPR into simple arithmetic operations involving constants.
+   Return the outermost non-arithmetic or non-constant node.  */
+
+static tree
+skip_simple_constant_arithmetic (tree expr)
+{
+  while (true)
+    {
+      if (UNARY_CLASS_P (expr))
+	expr = TREE_OPERAND (expr, 0);
+      else if (BINARY_CLASS_P (expr))
+	{
+	  if (TREE_CONSTANT (TREE_OPERAND (expr, 1)))
+	    expr = TREE_OPERAND (expr, 0);
+	  else if (TREE_CONSTANT (TREE_OPERAND (expr, 0)))
+	    expr = TREE_OPERAND (expr, 1);
+	  else
+	    break;
+	}
+      else
+	break;
+    }
+
+  return expr;
+}
+
+/* Similar to copy_tree_r but do not copy component references involving
+   PLACEHOLDER_EXPRs.  These nodes are spotted in find_placeholder_in_expr
+   and substituted in substitute_in_expr.  */
+
+static tree
+copy_self_referential_tree_r (tree *tp, int *walk_subtrees, void *data)
+{
+  enum tree_code code = TREE_CODE (*tp);
+
+  /* Stop at types, decls, constants like copy_tree_r.  */
+  if (TREE_CODE_CLASS (code) == tcc_type
+      || TREE_CODE_CLASS (code) == tcc_declaration
+      || TREE_CODE_CLASS (code) == tcc_constant)
+    {
+      *walk_subtrees = 0;
+      return NULL_TREE;
+    }
+
+  /* This is the pattern built in ada/make_aligning_type.  */
+  else if (code == ADDR_EXPR
+	   && TREE_CODE (TREE_OPERAND (*tp, 0)) == PLACEHOLDER_EXPR)
+    {
+      *walk_subtrees = 0;
+      return NULL_TREE;
+    }
+
+  /* Default case: the component reference.  */
+  else if (code == COMPONENT_REF)
+    {
+      tree inner;
+      for (inner = TREE_OPERAND (*tp, 0);
+	   REFERENCE_CLASS_P (inner);
+	   inner = TREE_OPERAND (inner, 0))
+	;
+
+      if (TREE_CODE (inner) == PLACEHOLDER_EXPR)
+	{
+	  *walk_subtrees = 0;
+	  return NULL_TREE;
+	}
+    }
+
+  /* We're not supposed to have them in self-referential size trees
+     because we wouldn't properly control when they are evaluated.
+     However, not creating superfluous SAVE_EXPRs requires accurate
+     tracking of readonly-ness all the way down to here, which we
+     cannot always guarantee in practice.  So punt in this case.  */
+  else if (code == SAVE_EXPR)
+    return error_mark_node;
+
+  return copy_tree_r (tp, walk_subtrees, data);
+}
+
+/* Given a SIZE expression that is self-referential, return an equivalent
+   expression to serve as the actual size expression for a type.  */
+
+static tree
+self_referential_size (tree size)
+{
+  static unsigned HOST_WIDE_INT fnno = 0;
+  VEC (tree, heap) *self_refs = NULL;
+  tree param_type_list = NULL, param_decl_list = NULL, arg_list = NULL;
+  tree t, ref, return_type, fntype, fnname, fndecl;
+  unsigned int i;
+  char buf[128];
+
+  /* Do not factor out simple operations.  */
+  t = skip_simple_constant_arithmetic (size);
+  if (TREE_CODE (t) == CALL_EXPR)
+    return size;
+
+  /* Collect the list of self-references in the expression.  */
+  find_placeholder_in_expr (size, &self_refs);
+  gcc_assert (VEC_length (tree, self_refs) > 0);
+
+  /* Obtain a private copy of the expression.  */
+  t = size;
+  if (walk_tree (&t, copy_self_referential_tree_r, NULL, NULL) != NULL_TREE)
+    return size;
+  size = t;
+
+  /* Build the parameter and argument lists in parallel; also
+     substitute the former for the latter in the expression.  */
+  for (i = 0; VEC_iterate (tree, self_refs, i, ref); i++)
+    {
+      tree subst, param_name, param_type, param_decl;
+
+      if (DECL_P (ref))
+	{
+	  /* We shouldn't have true variables here.  */
+	  gcc_assert (TREE_READONLY (ref));
+	  subst = ref;
+	}
+      /* This is the pattern built in ada/make_aligning_type.  */
+      else if (TREE_CODE (ref) == ADDR_EXPR)
+        subst = ref;
+      /* Default case: the component reference.  */
+      else
+	subst = TREE_OPERAND (ref, 1);
+
+      sprintf (buf, "p%d", i);
+      param_name = get_identifier (buf);
+      param_type = TREE_TYPE (ref);
+      param_decl
+	= build_decl (input_location, PARM_DECL, param_name, param_type);
+      if (targetm.calls.promote_prototypes (NULL_TREE)
+	  && INTEGRAL_TYPE_P (param_type)
+	  && TYPE_PRECISION (param_type) < TYPE_PRECISION (integer_type_node))
+	DECL_ARG_TYPE (param_decl) = integer_type_node;
+      else
+	DECL_ARG_TYPE (param_decl) = param_type;
+      DECL_ARTIFICIAL (param_decl) = 1;
+      TREE_READONLY (param_decl) = 1;
+
+      size = substitute_in_expr (size, subst, param_decl);
+
+      param_type_list = tree_cons (NULL_TREE, param_type, param_type_list);
+      param_decl_list = chainon (param_decl, param_decl_list);
+      arg_list = tree_cons (NULL_TREE, ref, arg_list);
+    }
+
+  VEC_free (tree, heap, self_refs);
+
+  /* Append 'void' to indicate that the number of parameters is fixed.  */
+  param_type_list = tree_cons (NULL_TREE, void_type_node, param_type_list);
+
+  /* The 3 lists have been created in reverse order.  */
+  param_type_list = nreverse (param_type_list);
+  param_decl_list = nreverse (param_decl_list);
+  arg_list = nreverse (arg_list);
+
+  /* Build the function type.  */
+  return_type = TREE_TYPE (size);
+  fntype = build_function_type (return_type, param_type_list);
+
+  /* Build the function declaration.  */
+  sprintf (buf, "SZ"HOST_WIDE_INT_PRINT_UNSIGNED, fnno++);
+  fnname = get_file_function_name (buf);
+  fndecl = build_decl (input_location, FUNCTION_DECL, fnname, fntype);
+  for (t = param_decl_list; t; t = TREE_CHAIN (t))
+    DECL_CONTEXT (t) = fndecl;
+  DECL_ARGUMENTS (fndecl) = param_decl_list;
+  DECL_RESULT (fndecl)
+    = build_decl (input_location, RESULT_DECL, 0, return_type);
+  DECL_CONTEXT (DECL_RESULT (fndecl)) = fndecl;
+
+  /* The function has been created by the compiler and we don't
+     want to emit debug info for it.  */
+  DECL_ARTIFICIAL (fndecl) = 1;
+  DECL_IGNORED_P (fndecl) = 1;
+
+  /* It is supposed to be "const" and never throw.  */
+  TREE_READONLY (fndecl) = 1;
+  TREE_NOTHROW (fndecl) = 1;
+
+  /* We want it to be inlined when this is deemed profitable, as
+     well as discarded if every call has been integrated.  */
+  DECL_DECLARED_INLINE_P (fndecl) = 1;
+
+  /* It is made up of a unique return statement.  */
+  DECL_INITIAL (fndecl) = make_node (BLOCK);
+  BLOCK_SUPERCONTEXT (DECL_INITIAL (fndecl)) = fndecl;
+  t = build2 (MODIFY_EXPR, return_type, DECL_RESULT (fndecl), size);
+  DECL_SAVED_TREE (fndecl) = build1 (RETURN_EXPR, void_type_node, t);
+  TREE_STATIC (fndecl) = 1;
+
+  /* Put it onto the list of size functions.  */
+  VEC_safe_push (tree, gc, size_functions, fndecl);
+
+  /* Replace the original expression with a call to the size function.  */
+  return build_function_call_expr (input_location, fndecl, arg_list);
+}
+
+/* Take, queue and compile all the size functions.  It is essential that
+   the size functions be gimplified at the very end of the compilation
+   in order to guarantee transparent handling of self-referential sizes.
+   Otherwise the GENERIC inliner would not be able to inline them back
+   at each of their call sites, thus creating artificial non-constant
+   size expressions which would trigger nasty problems later on.  */
+
+void
+finalize_size_functions (void)
+{
+  unsigned int i;
+  tree fndecl;
+
+  for (i = 0; VEC_iterate(tree, size_functions, i, fndecl); i++)
+    {
+      dump_function (TDI_original, fndecl);
+      gimplify_function_tree (fndecl);
+      dump_function (TDI_generic, fndecl);
+      cgraph_finalize_function (fndecl, false);
+    }
+
+  VEC_free (tree, gc, size_functions);
 }
 
 #ifndef MAX_FIXED_MODE_SIZE
@@ -304,6 +541,7 @@ layout_decl (tree decl, unsigned int known_align)
   tree type = TREE_TYPE (decl);
   enum tree_code code = TREE_CODE (decl);
   rtx rtl = NULL_RTX;
+  location_t loc = DECL_SOURCE_LOCATION (decl);
 
   if (code == CONST_DECL)
     return;
@@ -337,8 +575,9 @@ layout_decl (tree decl, unsigned int known_align)
     }
   else if (DECL_SIZE_UNIT (decl) == 0)
     DECL_SIZE_UNIT (decl)
-      = fold_convert (sizetype, size_binop (CEIL_DIV_EXPR, DECL_SIZE (decl),
-					    bitsize_unit_node));
+      = fold_convert_loc (loc, sizetype,
+			  size_binop_loc (loc, CEIL_DIV_EXPR, DECL_SIZE (decl),
+					  bitsize_unit_node));
 
   if (code != FIELD_DECL)
     /* For non-fields, update the alignment from the type.  */
@@ -783,7 +1022,7 @@ place_union_field (record_layout_info rli, tree field)
   if (TREE_CODE (rli->t) == UNION_TYPE)
     rli->offset = size_binop (MAX_EXPR, rli->offset, DECL_SIZE_UNIT (field));
   else if (TREE_CODE (rli->t) == QUAL_UNION_TYPE)
-    rli->offset = fold_build3 (COND_EXPR, sizetype,
+    rli->offset = fold_build3_loc (input_location, COND_EXPR, sizetype,
 			       DECL_QUALIFIER (field),
 			       DECL_SIZE_UNIT (field), rli->offset);
 }
@@ -887,7 +1126,8 @@ place_field (record_layout_info rli, tree field)
 	      if (STRICT_ALIGNMENT)
 		warning (OPT_Wattributes, "packed attribute causes "
                          "inefficient alignment for %q+D", field);
-	      else
+	      /* Don't warn if DECL_PACKED was set by the type.  */
+	      else if (!TYPE_PACKED (rli->t))
 		warning (OPT_Wattributes, "packed attribute is "
 			 "unnecessary for %q+D", field);
 	    }
@@ -905,7 +1145,8 @@ place_field (record_layout_info rli, tree field)
       /* No, we need to skip space before this field.
 	 Bump the cumulative size to multiple of field alignment.  */
 
-      warning (OPT_Wpadded, "padding struct to align %q+D", field);
+      if (DECL_SOURCE_LOCATION (field) != BUILTINS_LOCATION)
+	warning (OPT_Wpadded, "padding struct to align %q+D", field);
 
       /* If the alignment is still within offset_align, just align
 	 the bit position.  */
@@ -970,7 +1211,7 @@ place_field (record_layout_info rli, tree field)
 		   field);
 	    }
 	  else
-	    rli->bitpos = round_up (rli->bitpos, type_align);
+	    rli->bitpos = round_up_loc (input_location, rli->bitpos, type_align);
 	}
 
       if (! DECL_PACKED (field))
@@ -1151,7 +1392,7 @@ place_field (record_layout_info rli, tree field)
 	  if (maximum_field_alignment != 0)
 	    type_align = MIN (type_align, maximum_field_alignment);
 
-	  rli->bitpos = round_up (rli->bitpos, type_align);
+	  rli->bitpos = round_up_loc (input_location, rli->bitpos, type_align);
 
           /* If we really aligned, don't allow subsequent bitfields
 	     to undo that.  */
@@ -1265,12 +1506,14 @@ finalize_record_size (record_layout_info rli)
       = size_binop (PLUS_EXPR, unpadded_size_unit, size_one_node);
 
   /* Round the size up to be a multiple of the required alignment.  */
-  TYPE_SIZE (rli->t) = round_up (unpadded_size, TYPE_ALIGN (rli->t));
+  TYPE_SIZE (rli->t) = round_up_loc (input_location, unpadded_size,
+				 TYPE_ALIGN (rli->t));
   TYPE_SIZE_UNIT (rli->t)
-    = round_up (unpadded_size_unit, TYPE_ALIGN_UNIT (rli->t));
+    = round_up_loc (input_location, unpadded_size_unit, TYPE_ALIGN_UNIT (rli->t));
 
   if (TREE_CONSTANT (unpadded_size)
-      && simple_cst_equal (unpadded_size, TYPE_SIZE (rli->t)) == 0)
+      && simple_cst_equal (unpadded_size, TYPE_SIZE (rli->t)) == 0
+      && input_location != BUILTINS_LOCATION)
     warning (OPT_Wpadded, "padding struct size to alignment boundary");
 
   if (warn_packed && TREE_CODE (rli->t) == RECORD_TYPE
@@ -1286,26 +1529,26 @@ finalize_record_size (record_layout_info rli)
       rli->unpacked_align = MAX (TYPE_ALIGN (rli->t), rli->unpacked_align);
 #endif
 
-      unpacked_size = round_up (TYPE_SIZE (rli->t), rli->unpacked_align);
+      unpacked_size = round_up_loc (input_location, TYPE_SIZE (rli->t), rli->unpacked_align);
       if (simple_cst_equal (unpacked_size, TYPE_SIZE (rli->t)))
 	{
 	  TYPE_PACKED (rli->t) = 0;
 
 	  if (TYPE_NAME (rli->t))
 	    {
-	      const char *name;
+	      tree name;
 
 	      if (TREE_CODE (TYPE_NAME (rli->t)) == IDENTIFIER_NODE)
-		name = IDENTIFIER_POINTER (TYPE_NAME (rli->t));
+		name = TYPE_NAME (rli->t);
 	      else
-		name = IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (rli->t)));
+		name = DECL_NAME (TYPE_NAME (rli->t));
 
 	      if (STRICT_ALIGNMENT)
 		warning (OPT_Wpacked, "packed attribute causes inefficient "
-			 "alignment for %qs", name);
+			 "alignment for %qE", name);
 	      else
 		warning (OPT_Wpacked,
-			 "packed attribute is unnecessary for %qs", name);
+			 "packed attribute is unnecessary for %qE", name);
 	    }
 	  else
 	    {
@@ -1440,8 +1683,9 @@ finalize_type_size (tree type)
 
   if (TYPE_SIZE (type) != 0)
     {
-      TYPE_SIZE (type) = round_up (TYPE_SIZE (type), TYPE_ALIGN (type));
-      TYPE_SIZE_UNIT (type) = round_up (TYPE_SIZE_UNIT (type),
+      TYPE_SIZE (type) = round_up_loc (input_location,
+				   TYPE_SIZE (type), TYPE_ALIGN (type));
+      TYPE_SIZE_UNIT (type) = round_up_loc (input_location, TYPE_SIZE_UNIT (type),
 					TYPE_ALIGN_UNIT (type));
     }
 
@@ -1548,7 +1792,8 @@ finish_builtin_struct (tree type, const char *name, tree fields,
 #if 0 /* not yet, should get fixed properly later */
   TYPE_NAME (type) = make_type_decl (get_identifier (name), type);
 #else
-  TYPE_NAME (type) = build_decl (TYPE_DECL, get_identifier (name), type);
+  TYPE_NAME (type) = build_decl (BUILTINS_LOCATION,
+				 TYPE_DECL, get_identifier (name), type);
 #endif
   TYPE_STUB_DECL (type) = TYPE_NAME (type);
   layout_decl (TYPE_NAME (type), 0);
@@ -1700,6 +1945,7 @@ layout_type (tree type)
       /* A pointer might be MODE_PARTIAL_INT,
 	 but ptrdiff_t must be integral.  */
       SET_TYPE_MODE (type, mode_for_size (POINTER_SIZE, MODE_INT, 0));
+      TYPE_PRECISION (type) = POINTER_SIZE;
       break;
 
     case FUNCTION_TYPE:
@@ -1715,16 +1961,17 @@ layout_type (tree type)
     case POINTER_TYPE:
     case REFERENCE_TYPE:
       {
-	enum machine_mode mode = ((TREE_CODE (type) == REFERENCE_TYPE
-				   && reference_types_internal)
-				  ? Pmode : TYPE_MODE (type));
+	enum machine_mode mode = TYPE_MODE (type);
+	if (TREE_CODE (type) == REFERENCE_TYPE && reference_types_internal)
+	  {
+	    addr_space_t as = TYPE_ADDR_SPACE (TREE_TYPE (type));
+	    mode = targetm.addr_space.address_mode (as);
+	  }
 
-	int nbits = GET_MODE_BITSIZE (mode);
-
-	TYPE_SIZE (type) = bitsize_int (nbits);
+	TYPE_SIZE (type) = bitsize_int (GET_MODE_BITSIZE (mode));
 	TYPE_SIZE_UNIT (type) = size_int (GET_MODE_SIZE (mode));
 	TYPE_UNSIGNED (type) = 1;
-	TYPE_PRECISION (type) = nbits;
+	TYPE_PRECISION (type) = GET_MODE_BITSIZE (mode);
       }
       break;
 
@@ -1741,56 +1988,34 @@ layout_type (tree type)
 	  {
 	    tree ub = TYPE_MAX_VALUE (index);
 	    tree lb = TYPE_MIN_VALUE (index);
+	    tree element_size = TYPE_SIZE (element);
 	    tree length;
-	    tree element_size;
+
+	    /* Make sure that an array of zero-sized element is zero-sized
+	       regardless of its extent.  */
+	    if (integer_zerop (element_size))
+	      length = size_zero_node;
 
 	    /* The initial subtraction should happen in the original type so
 	       that (possible) negative values are handled appropriately.  */
-	    length = size_binop (PLUS_EXPR, size_one_node,
-				 fold_convert (sizetype,
-					       fold_build2 (MINUS_EXPR,
-							    TREE_TYPE (lb),
-							    ub, lb)));
-
-	    /* Special handling for arrays of bits (for Chill).  */
-	    element_size = TYPE_SIZE (element);
-	    if (TYPE_PACKED (type) && INTEGRAL_TYPE_P (element)
-		&& (integer_zerop (TYPE_MAX_VALUE (element))
-		    || integer_onep (TYPE_MAX_VALUE (element)))
-		&& host_integerp (TYPE_MIN_VALUE (element), 1))
-	      {
-		HOST_WIDE_INT maxvalue
-		  = tree_low_cst (TYPE_MAX_VALUE (element), 1);
-		HOST_WIDE_INT minvalue
-		  = tree_low_cst (TYPE_MIN_VALUE (element), 1);
-
-		if (maxvalue - minvalue == 1
-		    && (maxvalue == 1 || maxvalue == 0))
-		  element_size = integer_one_node;
-	      }
-
-	    /* If neither bound is a constant and sizetype is signed, make
-	       sure the size is never negative.  We should really do this
-	       if *either* bound is non-constant, but this is the best
-	       compromise between C and Ada.  */
-	    if (!TYPE_UNSIGNED (sizetype)
-		&& TREE_CODE (TYPE_MIN_VALUE (index)) != INTEGER_CST
-		&& TREE_CODE (TYPE_MAX_VALUE (index)) != INTEGER_CST)
-	      length = size_binop (MAX_EXPR, length, size_zero_node);
+	    else
+	      length
+		= size_binop (PLUS_EXPR, size_one_node,
+			      fold_convert (sizetype,
+					    fold_build2_loc (input_location,
+							     MINUS_EXPR,
+							     TREE_TYPE (lb),
+							     ub, lb)));
 
 	    TYPE_SIZE (type) = size_binop (MULT_EXPR, element_size,
 					   fold_convert (bitsizetype,
 							 length));
 
-	    /* If we know the size of the element, calculate the total
-	       size directly, rather than do some division thing below.
-	       This optimization helps Fortran assumed-size arrays
-	       (where the size of the array is determined at runtime)
-	       substantially.
-	       Note that we can't do this in the case where the size of
-	       the elements is one bit since TYPE_SIZE_UNIT cannot be
-	       set correctly in that case.  */
-	    if (TYPE_SIZE_UNIT (element) != 0 && ! integer_onep (element_size))
+	    /* If we know the size of the element, calculate the total size
+	       directly, rather than do some division thing below.  This
+	       optimization helps Fortran assumed-size arrays (where the
+	       size of the array is determined at runtime) substantially.  */
+	    if (TYPE_SIZE_UNIT (element))
 	      TYPE_SIZE_UNIT (type)
 		= size_binop (MULT_EXPR, TYPE_SIZE_UNIT (element), length);
 	  }
@@ -1804,11 +2029,6 @@ layout_type (tree type)
 #else
 	TYPE_ALIGN (type) = MAX (TYPE_ALIGN (element), BITS_PER_UNIT);
 #endif
-	if (!TYPE_SIZE (element))
-	  /* We don't know the size of the underlying element type, so
-	     our alignment calculations will be wrong, forcing us to
-	     fall back on structural equality. */
-	  SET_TYPE_STRUCTURAL_EQUALITY (type);
 	TYPE_USER_ALIGN (type) = TYPE_USER_ALIGN (element);
 	SET_TYPE_MODE (type, BLKmode);
 	if (TYPE_SIZE (type) != 0
@@ -1901,7 +2121,7 @@ layout_type (tree type)
    change the result of vector_mode_supported_p and have_regs_of_mode
    on a per-function basis.  Thus the TYPE_MODE of a VECTOR_TYPE can
    change on a per-function basis.  */
-/* ??? Possibly a better solution is to run through all the types 
+/* ??? Possibly a better solution is to run through all the types
    referenced by a function and re-compute the TYPE_MODE once, rather
    than make the TYPE_MODE macro call a function.  */
 
@@ -2047,15 +2267,18 @@ initialize_sizetypes (bool signed_p)
 void
 set_sizetype (tree type)
 {
+  tree t;
   int oprecision = TYPE_PRECISION (type);
   /* The *bitsizetype types use a precision that avoids overflows when
      calculating signed sizes / offsets in bits.  However, when
      cross-compiling from a 32 bit to a 64 bit host, we are limited to 64 bit
      precision.  */
-  int precision = MIN (MIN (oprecision + BITS_PER_UNIT_LOG + 1,
-			    MAX_FIXED_MODE_SIZE),
-		       2 * HOST_BITS_PER_WIDE_INT);
-  tree t;
+  int precision
+    = MIN (oprecision + BITS_PER_UNIT_LOG + 1, MAX_FIXED_MODE_SIZE);
+  precision
+    = GET_MODE_PRECISION (smallest_mode_for_size (precision, MODE_INT));
+  if (precision > HOST_BITS_PER_WIDE_INT * 2)
+    precision = HOST_BITS_PER_WIDE_INT * 2;
 
   gcc_assert (TYPE_UNSIGNED (type) == TYPE_UNSIGNED (sizetype));
 
@@ -2071,6 +2294,7 @@ set_sizetype (tree type)
   /* Replace our original stub sizetype.  */
   memcpy (sizetype, t, tree_size (sizetype));
   TYPE_MAIN_VARIANT (sizetype) = sizetype;
+  TYPE_CANONICAL (sizetype) = sizetype;
 
   t = make_node (INTEGER_TYPE);
   TYPE_NAME (t) = get_identifier ("bit_size_type");
@@ -2085,13 +2309,14 @@ set_sizetype (tree type)
   /* Replace our original stub bitsizetype.  */
   memcpy (bitsizetype, t, tree_size (bitsizetype));
   TYPE_MAIN_VARIANT (bitsizetype) = bitsizetype;
+  TYPE_CANONICAL (bitsizetype) = bitsizetype;
 
   if (TYPE_UNSIGNED (type))
     {
       fixup_unsigned_type (bitsizetype);
-      ssizetype = build_distinct_type_copy (make_signed_type (oprecision));
+      ssizetype = make_signed_type (oprecision);
       TYPE_IS_SIZETYPE (ssizetype) = 1;
-      sbitsizetype = build_distinct_type_copy (make_signed_type (precision));
+      sbitsizetype = make_signed_type (precision);
       TYPE_IS_SIZETYPE (sbitsizetype) = 1;
     }
   else

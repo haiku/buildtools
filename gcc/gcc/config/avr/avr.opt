@@ -37,10 +37,6 @@ mno-interrupts
 Target Report RejectNegative Mask(NO_INTERRUPTS)
 Change the stack pointer without disabling interrupts
 
-mno-tablejump
-Target Report RejectNegative Mask(NO_TABLEJUMP)
-Do not generate tablejump insns
-
 morder1
 Target Report Undocumented Mask(ORDER_1)
 
@@ -50,10 +46,6 @@ Target Report Undocumented Mask(ORDER_2)
 mshort-calls
 Target Report Mask(SHORT_CALLS)
 Use rjmp/rcall (limited range) on >8K devices
-
-msize
-Target Report Mask(INSN_SIZE_DUMP)
-Output instruction sizes to the asm file
 
 mtiny-stack
 Target Report Mask(TINY_STACK)

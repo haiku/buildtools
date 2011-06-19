@@ -1,5 +1,5 @@
 /* Subroutines for insn-output.c for Tensilica's Xtensa architecture.
-   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
@@ -71,13 +71,6 @@ enum internal_test
   ITEST_MAX
 };
 
-/* Cached operands, and operator to compare for use in set/branch on
-   condition codes.  */
-rtx branch_cmp[2];
-
-/* what type of branch to use */
-enum cmp_type branch_type;
-
 /* Array giving truth value on whether or not a given hard register
    can support a given mode.  */
 char xtensa_hard_regno_mode_ok[(int) MAX_MACHINE_MODE][FIRST_PSEUDO_REGISTER];
@@ -89,7 +82,7 @@ unsigned xtensa_current_frame_size;
 #define LARGEST_MOVE_RATIO 15
 
 /* Define the structure for the machine field in struct function.  */
-struct machine_function GTY(())
+struct GTY(()) machine_function
 {
   int accesses_prev_frame;
   bool need_a7_copy;
@@ -128,14 +121,16 @@ const enum reg_class xtensa_regno_to_class[FIRST_PSEUDO_REGISTER] =
 static enum internal_test map_test_to_internal_test (enum rtx_code);
 static rtx gen_int_relational (enum rtx_code, rtx, rtx, int *);
 static rtx gen_float_relational (enum rtx_code, rtx, rtx);
-static rtx gen_conditional_move (rtx);
+static rtx gen_conditional_move (enum rtx_code, enum machine_mode, rtx, rtx);
 static rtx fixup_subreg_mem (rtx);
 static struct machine_function * xtensa_init_machine_status (void);
 static rtx xtensa_legitimize_tls_address (rtx);
+static rtx xtensa_legitimize_address (rtx, rtx, enum machine_mode);
 static bool xtensa_return_in_msb (const_tree);
 static void printx (FILE *, signed int);
 static void xtensa_function_epilogue (FILE *, HOST_WIDE_INT);
 static rtx xtensa_builtin_saveregs (void);
+static bool xtensa_legitimate_address_p (enum machine_mode, rtx, bool);
 static unsigned int xtensa_multibss_section_type_flags (tree, const char *,
 							int) ATTRIBUTE_UNUSED;
 static section *xtensa_select_rtx_section (enum machine_mode, rtx,
@@ -150,6 +145,10 @@ static void xtensa_init_builtins (void);
 static tree xtensa_fold_builtin (tree, tree, bool);
 static rtx xtensa_expand_builtin (tree, rtx, rtx, enum machine_mode, int);
 static void xtensa_va_start (tree, rtx);
+static bool xtensa_frame_pointer_required (void);
+static rtx xtensa_static_chain (const_tree, bool);
+static void xtensa_asm_trampoline_template (FILE *);
+static void xtensa_trampoline_init (rtx, tree, rtx);
 
 static const int reg_nonleaf_alloc_order[FIRST_PSEUDO_REGISTER] =
   REG_ALLOC_ORDER;
@@ -175,6 +174,9 @@ static const int reg_nonleaf_alloc_order[FIRST_PSEUDO_REGISTER] =
 #undef TARGET_DEFAULT_TARGET_FLAGS
 #define TARGET_DEFAULT_TARGET_FLAGS (TARGET_DEFAULT | MASK_FUSED_MADD)
 
+#undef TARGET_LEGITIMIZE_ADDRESS
+#define TARGET_LEGITIMIZE_ADDRESS xtensa_legitimize_address
+
 #undef TARGET_RTX_COSTS
 #define TARGET_RTX_COSTS xtensa_rtx_costs
 #undef TARGET_ADDRESS_COST
@@ -186,10 +188,8 @@ static const int reg_nonleaf_alloc_order[FIRST_PSEUDO_REGISTER] =
 #undef TARGET_EXPAND_BUILTIN_VA_START
 #define TARGET_EXPAND_BUILTIN_VA_START xtensa_va_start
 
-#undef TARGET_PROMOTE_FUNCTION_ARGS
-#define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_const_tree_true
-#undef TARGET_PROMOTE_FUNCTION_RETURN
-#define TARGET_PROMOTE_FUNCTION_RETURN hook_bool_const_tree_true
+#undef TARGET_PROMOTE_FUNCTION_MODE
+#define TARGET_PROMOTE_FUNCTION_MODE default_promote_function_mode_always_promote
 #undef TARGET_PROMOTE_PROTOTYPES
 #define TARGET_PROMOTE_PROTOTYPES hook_bool_const_tree_true
 
@@ -225,6 +225,19 @@ static const int reg_nonleaf_alloc_order[FIRST_PSEUDO_REGISTER] =
 
 #undef TARGET_CANNOT_FORCE_CONST_MEM
 #define TARGET_CANNOT_FORCE_CONST_MEM xtensa_tls_referenced_p
+
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P	xtensa_legitimate_address_p
+
+#undef TARGET_FRAME_POINTER_REQUIRED
+#define TARGET_FRAME_POINTER_REQUIRED xtensa_frame_pointer_required
+
+#undef TARGET_STATIC_CHAIN
+#define TARGET_STATIC_CHAIN xtensa_static_chain
+#undef TARGET_ASM_TRAMPOLINE_TEMPLATE
+#define TARGET_ASM_TRAMPOLINE_TEMPLATE xtensa_asm_trampoline_template
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT xtensa_trampoline_init
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -708,27 +721,27 @@ gen_float_relational (enum rtx_code test_code, /* relational test (EQ, etc) */
 
 
 void
-xtensa_expand_conditional_branch (rtx *operands, enum rtx_code test_code)
+xtensa_expand_conditional_branch (rtx *operands, enum machine_mode mode)
 {
-  enum cmp_type type = branch_type;
-  rtx cmp0 = branch_cmp[0];
-  rtx cmp1 = branch_cmp[1];
+  enum rtx_code test_code = GET_CODE (operands[0]);
+  rtx cmp0 = operands[1];
+  rtx cmp1 = operands[2];
   rtx cmp;
   int invert;
   rtx label1, label2;
 
-  switch (type)
+  switch (mode)
     {
-    case CMP_DF:
+    case DFmode:
     default:
       fatal_insn ("bad test", gen_rtx_fmt_ee (test_code, VOIDmode, cmp0, cmp1));
 
-    case CMP_SI:
+    case SImode:
       invert = FALSE;
       cmp = gen_int_relational (test_code, cmp0, cmp1, &invert);
       break;
 
-    case CMP_SF:
+    case SFmode:
       if (!TARGET_HARD_FLOAT)
 	fatal_insn ("bad test", gen_rtx_fmt_ee (test_code, VOIDmode,
 						cmp0, cmp1));
@@ -739,7 +752,7 @@ xtensa_expand_conditional_branch (rtx *operands, enum rtx_code test_code)
 
   /* Generate the branch.  */
 
-  label1 = gen_rtx_LABEL_REF (VOIDmode, operands[0]);
+  label1 = gen_rtx_LABEL_REF (VOIDmode, operands[3]);
   label2 = pc_rtx;
 
   if (invert)
@@ -756,14 +769,13 @@ xtensa_expand_conditional_branch (rtx *operands, enum rtx_code test_code)
 
 
 static rtx
-gen_conditional_move (rtx cmp)
+gen_conditional_move (enum rtx_code code, enum machine_mode mode,
+		      rtx op0, rtx op1)
 {
-  enum rtx_code code = GET_CODE (cmp);
-  rtx op0 = branch_cmp[0];
-  rtx op1 = branch_cmp[1];
-
-  if (branch_type == CMP_SI)
+  if (mode == SImode)
     {
+      rtx cmp;
+
       /* Jump optimization calls get_condition() which canonicalizes
 	 comparisons like (GE x <const>) to (GT x <const-1>).
 	 Transform those comparisons back to GE, since that is the
@@ -821,7 +833,7 @@ gen_conditional_move (rtx cmp)
       return gen_rtx_fmt_ee (code, VOIDmode, op0, op1);
     }
 
-  if (TARGET_HARD_FLOAT && (branch_type == CMP_SF))
+  if (TARGET_HARD_FLOAT && mode == SFmode)
     return gen_float_relational (code, op0, op1);
 
   return 0;
@@ -831,36 +843,39 @@ gen_conditional_move (rtx cmp)
 int
 xtensa_expand_conditional_move (rtx *operands, int isflt)
 {
-  rtx cmp;
+  rtx dest = operands[0];
+  rtx cmp = operands[1];
+  enum machine_mode cmp_mode = GET_MODE (XEXP (cmp, 0));
   rtx (*gen_fn) (rtx, rtx, rtx, rtx, rtx);
 
-  if (!(cmp = gen_conditional_move (operands[1])))
+  if (!(cmp = gen_conditional_move (GET_CODE (cmp), cmp_mode,
+				    XEXP (cmp, 0), XEXP (cmp, 1))))
     return 0;
 
   if (isflt)
-    gen_fn = (branch_type == CMP_SI
+    gen_fn = (cmp_mode == SImode
 	      ? gen_movsfcc_internal0
 	      : gen_movsfcc_internal1);
   else
-    gen_fn = (branch_type == CMP_SI
+    gen_fn = (cmp_mode == SImode
 	      ? gen_movsicc_internal0
 	      : gen_movsicc_internal1);
 
-  emit_insn (gen_fn (operands[0], XEXP (cmp, 0),
-		     operands[2], operands[3], cmp));
+  emit_insn (gen_fn (dest, XEXP (cmp, 0), operands[2], operands[3], cmp));
   return 1;
 }
 
 
 int
-xtensa_expand_scc (rtx *operands)
+xtensa_expand_scc (rtx operands[4], enum machine_mode cmp_mode)
 {
   rtx dest = operands[0];
-  rtx cmp = operands[1];
+  rtx cmp;
   rtx one_tmp, zero_tmp;
   rtx (*gen_fn) (rtx, rtx, rtx, rtx, rtx);
 
-  if (!(cmp = gen_conditional_move (cmp)))
+  if (!(cmp = gen_conditional_move (GET_CODE (operands[1]), cmp_mode,
+				    operands[2], operands[3])))
     return 0;
 
   one_tmp = gen_reg_rtx (SImode);
@@ -868,7 +883,7 @@ xtensa_expand_scc (rtx *operands)
   emit_insn (gen_movsi (one_tmp, const_true_rtx));
   emit_insn (gen_movsi (zero_tmp, const0_rtx));
 
-  gen_fn = (branch_type == CMP_SI
+  gen_fn = (cmp_mode == SImode
 	    ? gen_movsicc_internal0
 	    : gen_movsicc_internal1);
   emit_insn (gen_fn (dest, XEXP (cmp, 0), one_tmp, zero_tmp, cmp));
@@ -1531,7 +1546,7 @@ xtensa_expand_atomic (enum rtx_code code, rtx target, rtx mem, rtx val,
 void
 xtensa_setup_frame_addresses (void)
 {
-  /* Set flag to cause FRAME_POINTER_REQUIRED to be set.  */
+  /* Set flag to cause TARGET_FRAME_POINTER_REQUIRED to return true.  */
   cfun->machine->accesses_prev_frame = 1;
 
   emit_library_call
@@ -1873,7 +1888,7 @@ xtensa_legitimize_address (rtx x,
 	}
     }
 
-  return NULL_RTX;
+  return x;
 }
 
 
@@ -2492,7 +2507,7 @@ compute_frame_size (int size)
 }
 
 
-int
+bool
 xtensa_frame_pointer_required (void)
 {
   /* The code to expand builtin_frame_addr and builtin_return_addr
@@ -2501,9 +2516,9 @@ xtensa_frame_pointer_required (void)
      This function is derived from the i386 code.  */
 
   if (cfun->machine->accesses_prev_frame)
-    return 1;
+    return true;
 
-  return 0;
+  return false;
 }
 
 
@@ -2648,13 +2663,17 @@ xtensa_build_builtin_va_list (void)
   tree f_stk, f_reg, f_ndx, record, type_decl;
 
   record = (*lang_hooks.types.make_type) (RECORD_TYPE);
-  type_decl = build_decl (TYPE_DECL, get_identifier ("__va_list_tag"), record);
+  type_decl = build_decl (BUILTINS_LOCATION,
+			  TYPE_DECL, get_identifier ("__va_list_tag"), record);
 
-  f_stk = build_decl (FIELD_DECL, get_identifier ("__va_stk"),
+  f_stk = build_decl (BUILTINS_LOCATION,
+		      FIELD_DECL, get_identifier ("__va_stk"),
 		      ptr_type_node);
-  f_reg = build_decl (FIELD_DECL, get_identifier ("__va_reg"),
+  f_reg = build_decl (BUILTINS_LOCATION,
+		      FIELD_DECL, get_identifier ("__va_reg"),
 		      ptr_type_node);
-  f_ndx = build_decl (FIELD_DECL, get_identifier ("__va_ndx"),
+  f_ndx = build_decl (BUILTINS_LOCATION,
+		      FIELD_DECL, get_identifier ("__va_ndx"),
 		      integer_type_node);
 
   DECL_FIELD_CONTEXT (f_stk) = record;
@@ -2845,8 +2864,8 @@ xtensa_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
   lab_over = NULL;
   if (!targetm.calls.must_pass_in_stack (TYPE_MODE (type), type))
     {
-      lab_false = create_artificial_label ();
-      lab_over = create_artificial_label ();
+      lab_false = create_artificial_label (UNKNOWN_LOCATION);
+      lab_over = create_artificial_label (UNKNOWN_LOCATION);
 
       t = build2 (GT_EXPR, boolean_type_node, unshare_expr (ndx),
 		  build_int_cst (integer_type_node,
@@ -2876,7 +2895,7 @@ xtensa_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
 	 __array = (AP).__va_stk;
        } */
 
-  lab_false2 = create_artificial_label ();
+  lab_false2 = create_artificial_label (UNKNOWN_LOCATION);
 
   t = build2 (GT_EXPR, boolean_type_node, unshare_expr (orig_ndx),
 	      build_int_cst (integer_type_node,
@@ -3418,6 +3437,17 @@ xtensa_function_value (const_tree valtype, const_tree func ATTRIBUTE_UNUSED,
                      outgoing ? GP_OUTGOING_RETURN : GP_RETURN);
 }
 
+/* The static chain is passed in memory.  Provide rtx giving 'mem'
+   expressions that denote where they are stored.  */
+
+static rtx
+xtensa_static_chain (const_tree ARG_UNUSED (fndecl), bool incoming_p)
+{
+  rtx base = incoming_p ? arg_pointer_rtx : stack_pointer_rtx;
+  return gen_frame_mem (Pmode, plus_constant (base, -5 * UNITS_PER_WORD));
+}
+
+
 /* TRAMPOLINE_TEMPLATE: For Xtensa, the trampoline must perform an ENTRY
    instruction with a minimal stack frame in order to get some free
    registers.  Once the actual call target is known, the proper stack frame
@@ -3426,8 +3456,8 @@ xtensa_function_value (const_tree valtype, const_tree func ATTRIBUTE_UNUSED,
    control to the instruction following the ENTRY at the target.  Note:
    this assumes that the target begins with an ENTRY instruction.  */
 
-void
-xtensa_trampoline_template (FILE *stream)
+static void
+xtensa_asm_trampoline_template (FILE *stream)
 {
   bool use_call0 = (TARGET_CONST16 || TARGET_ABSOLUTE_LITERALS);
 
@@ -3494,17 +3524,21 @@ xtensa_trampoline_template (FILE *stream)
   fprintf (stream, "\t.end no-transform\n");
 }
 
-
-void
-xtensa_initialize_trampoline (rtx addr, rtx func, rtx chain)
+static void
+xtensa_trampoline_init (rtx m_tramp, tree fndecl, rtx chain)
 {
+  rtx func = XEXP (DECL_RTL (fndecl), 0);
   bool use_call0 = (TARGET_CONST16 || TARGET_ABSOLUTE_LITERALS);
   int chain_off = use_call0 ? 12 : 8;
   int func_off = use_call0 ? 16 : 12;
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant (addr, chain_off)), chain);
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant (addr, func_off)), func);
+
+  emit_block_move (m_tramp, assemble_trampoline_template (),
+		   GEN_INT (TRAMPOLINE_SIZE), BLOCK_OP_NORMAL);
+
+  emit_move_insn (adjust_address (m_tramp, SImode, chain_off), chain);
+  emit_move_insn (adjust_address (m_tramp, SImode, func_off), func);
   emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__xtensa_sync_caches"),
-		     0, VOIDmode, 1, addr, Pmode);
+		     0, VOIDmode, 1, XEXP (m_tramp, 0), Pmode);
 }
 
 

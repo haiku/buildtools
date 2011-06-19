@@ -48,6 +48,16 @@
 #if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
     && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 2) \
 	|| (__GLIBC__ == 2 && __GLIBC_MINOR__ == 2 && defined(DT_CONFIG)))
+# define USE_PT_GNU_EH_FRAME
+#endif
+
+#if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
+    && defined(__FreeBSD__) && __FreeBSD__ >= 7
+# define ElfW __ElfN
+# define USE_PT_GNU_EH_FRAME
+#endif
+
+#if defined(USE_PT_GNU_EH_FRAME)
 
 #ifndef __RELOC_POINTER
 # define __RELOC_POINTER(ptr, base) ((ptr) + (base))
@@ -135,7 +145,8 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
   const struct unw_eh_frame_hdr *hdr;
   _Unwind_Ptr eh_frame;
   struct object ob;
-  
+  _Unwind_Ptr pc_low = 0, pc_high = 0;
+
   struct ext_dl_phdr_info
     {
       ElfW(Addr) dlpi_addr;
@@ -193,13 +204,13 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 		    }
 		  goto found;
 		}
-		  
+
 	      last_cache_entry = cache_entry;
 	      /* Exit early if we found an unused entry.  */
 	      if ((cache_entry->pc_low | cache_entry->pc_high) == 0)
 		break;
 	      if (cache_entry->link != NULL)
-		prev_cache_entry = cache_entry;		  
+		prev_cache_entry = cache_entry;
 	    }
 	}
       else
@@ -225,8 +236,6 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
   if (size < offsetof (struct dl_phdr_info, dlpi_phnum)
 	     + sizeof (info->dlpi_phnum))
     return -1;
- 
-  _Unwind_Ptr pc_low = 0, pc_high = 0;
 
   /* See if PC falls into one of the loaded segments.  Find the eh_frame
      segment at the same time.  */
@@ -248,7 +257,7 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
       else if (phdr->p_type == PT_DYNAMIC)
 	p_dynamic = phdr;
     }
-  
+
   if (!match)
     return 0;
 
@@ -388,7 +397,7 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
     {
       _Unwind_Ptr func;
       unsigned int encoding = get_fde_encoding (data->ret);
-      
+
       read_encoded_value_with_base (encoding,
 				    base_from_cb_data (encoding, data),
 				    data->ret->pc_begin, &func);

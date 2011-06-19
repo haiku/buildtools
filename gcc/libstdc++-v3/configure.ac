@@ -1,6 +1,6 @@
 # Process this file with autoreconf to produce a configure script.
 
-AC_PREREQ(2.59)
+AC_PREREQ(2.64)
 AC_INIT(package-unused, version-unused,, libstdc++)
 AC_CONFIG_SRCDIR(src/ios.cc)
 AC_CONFIG_HEADER(config.h)
@@ -12,7 +12,7 @@ AC_CONFIG_HEADER(config.h)
 ### am handles this now?  ORIGINAL_LD_FOR_MULTILIBS=$LD
 
 # For libtool versioning info, format is CURRENT:REVISION:AGE
-libtool_VERSION=6:13:0
+libtool_VERSION=6:14:0
 AC_SUBST(libtool_VERSION)
 
 # Find the rest of the source tree framework.
@@ -78,7 +78,16 @@ AM_INIT_AUTOMAKE([1.9.3 no-define foreign no-dependencies -Wall -Wno-portability
 AH_TEMPLATE(PACKAGE, [Name of package])
 AH_TEMPLATE(VERSION, [Version number of package])
 
-# Runs configure.host, finds CC, CXX, and assorted other critical bits.  Sets
+# -fno-builtin must be present here so that a non-conflicting form of
+# std::exit can be guessed by AC_PROG_CXX, and used in later tests.
+
+save_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="$CXXFLAGS -fno-builtin"
+AC_PROG_CC
+AC_PROG_CXX
+CXXFLAGS="$save_CXXFLAGS"
+
+# Runs configure.host, and assorted other critical bits.  Sets
 # up critical shell variables.
 GLIBCXX_CONFIGURE
 
@@ -88,6 +97,9 @@ fi
 AM_PROG_LIBTOOL
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
+
+# Eliminate -lstdc++ addition to postdeps for cross compiles.
+postdeps_CXX=`echo " $postdeps_CXX " | sed 's, -lstdc++ ,,g'`
 
 # Possibly disable most of the library.
 ## TODO: Consider skipping unncessary tests altogether in this case, rather
@@ -99,6 +111,7 @@ GLIBCXX_ENABLE_SJLJ_EXCEPTIONS
 GLIBCXX_ENABLE_PCH($is_hosted)
 GLIBCXX_ENABLE_THREADS
 GLIBCXX_ENABLE_ATOMIC_BUILTINS
+GLIBCXX_ENABLE_DECIMAL_FLOAT
 
 # Checks for compiler support that doesn't require linking.
 GLIBCXX_CHECK_COMPILER_FEATURES
@@ -155,8 +168,8 @@ GLIBCXX_CHECK_GTHREADS
 AC_LC_MESSAGES
 
 # Check for available headers.
-AC_CHECK_HEADERS([endian.h float.h fp.h ieeefp.h inttypes.h locale.h \
-machine/endian.h machine/param.h nan.h stdint.h stdlib.h string.h \
+AC_CHECK_HEADERS([endian.h execinfo.h float.h fp.h ieeefp.h inttypes.h \
+locale.h machine/endian.h machine/param.h nan.h stdint.h stdlib.h string.h \
 strings.h sys/ipc.h sys/isa_defs.h sys/machine.h sys/param.h \
 sys/resource.h sys/sem.h sys/stat.h sys/time.h sys/types.h unistd.h \
 wchar.h wctype.h])
@@ -359,45 +372,32 @@ AC_SUBST(LIBSUPCXX_PICFLAGS)
 dnl In autoconf 2.5x, AC_OUTPUT is replaced by four AC_CONFIG_* macros,
 dnl which can all be called multiple times as needed, plus one (different)
 dnl AC_OUTPUT macro.  This one lists the files to be created:
-AC_CONFIG_FILES( \
-  Makefile \
-  AC_FOREACH([DIR], glibcxx_SUBDIRS, [DIR/Makefile ])
-  )
+AC_CONFIG_FILES(Makefile)
 AC_CONFIG_FILES([scripts/testsuite_flags],[chmod +x scripts/testsuite_flags])
 
-dnl These commands are run at the end of config.status:
-AC_CONFIG_COMMANDS([default],
-[if test -n "$CONFIG_FILES"; then
-   # Multilibs need MULTISUBDIR defined correctly in certain makefiles so
-   # that multilib installs will end up installed in the correct place.
-   # The testsuite needs it for multilib-aware ABI baseline files.
-   # To work around this not being passed down from config-ml.in ->
-   # srcdir/Makefile.am -> srcdir/{src,libsupc++,...}/Makefile.am, manually
-   # append it here.  Only modify Makefiles that have just been created.
-   #
-   # Also, get rid of this simulated-VPATH thing that automake does.
-   cat > vpsed << \_EOF
+# Multilibs need MULTISUBDIR defined correctly in certain makefiles so
+# that multilib installs will end up installed in the correct place.
+# The testsuite needs it for multilib-aware ABI baseline files.
+# To work around this not being passed down from config-ml.in ->
+# srcdir/Makefile.am -> srcdir/{src,libsupc++,...}/Makefile.am, manually
+# append it here.  Only modify Makefiles that have just been created.
+#
+# Also, get rid of this simulated-VPATH thing that automake does.
+AC_CONFIG_FILES(AC_FOREACH([DIR], glibcxx_SUBDIRS, [DIR/Makefile ]),
+  [cat > vpsed$$ << \_EOF
 s!`test -f '$<' || echo '$(srcdir)/'`!!
 _EOF
-   for i in $SUBDIRS; do
-    case $CONFIG_FILES in
-     *${i}/Makefile*)
-       #echo "Adding MULTISUBDIR to $i/Makefile"
-       sed -f vpsed $i/Makefile > tmp
-       grep '^MULTISUBDIR =' Makefile >> tmp
-       mv tmp $i/Makefile
-       ;;
-    esac
-   done
-   rm vpsed
- fi
- (cd include && ${MAKE-make})
-],
-[
-# Variables needed in config.status (file generation) which aren't already
-# passed by autoconf.
-SUBDIRS="$SUBDIRS"
+   sed -f vpsed$$ $ac_file > tmp$$
+   mv tmp$$ $ac_file
+   rm vpsed$$
+   echo 'MULTISUBDIR =' >> $ac_file
+   ml_norecursion=yes
+   . ${multi_basedir}/config-ml.in
+   AS_UNSET([ml_norecursion])
 ])
+
+AC_CONFIG_COMMANDS([generate-headers],
+  [(cd include && ${MAKE-make} pch_build= )])
 
 dnl And this actually makes things happen:
 AC_OUTPUT

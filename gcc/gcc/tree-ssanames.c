@@ -1,18 +1,19 @@
 /* Generic routines for manipulating SSA_NAME expressions
-   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
-                                                                               
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
+
 This file is part of GCC.
-                                                                               
+
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 3, or (at your option)
 any later version.
-                                                                               
+
 GCC is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
-                                                                               
+
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
@@ -29,7 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Rewriting a function into SSA form can create a huge number of SSA_NAMEs,
    many of which may be thrown away shortly after their creation if jumps
-   were threaded through PHI nodes.  
+   were threaded through PHI nodes.
 
    While our garbage collection mechanisms will handle this situation, it
    is extremely wasteful to create nodes and throw them away, especially
@@ -43,7 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 
    Right now we maintain our free list on a per-function basis.  It may
    or may not make sense to maintain the free list for the duration of
-   a compilation unit. 
+   a compilation unit.
 
    External code should rely solely upon HIGHEST_SSA_VERSION and the
    externally defined functions.  External code should not know about
@@ -87,6 +88,8 @@ init_ssanames (struct function *fn, int size)
      least 50 elements reserved in it.  */
   VEC_quick_push (tree, SSANAMES (fn), NULL_TREE);
   FREE_SSANAMES (fn) = NULL;
+
+  SYMS_TO_RENAME (fn) = BITMAP_GGC_ALLOC ();
 }
 
 /* Finalize management of SSA_NAMEs.  */
@@ -163,7 +166,7 @@ make_ssa_name_fn (struct function *fn, tree var, gimple stmt)
 
 
 /* We no longer need the SSA_NAME expression VAR, release it so that
-   it may be reused. 
+   it may be reused.
 
    Note it is assumed that no calls to make_ssa_name will be made
    until all uses of the ssa name are released and that the only
@@ -192,7 +195,7 @@ release_ssa_name (tree var)
   /* release_ssa_name can be called multiple times on a single SSA_NAME.
      However, it should only end up on our free list one time.   We
      keep a status bit in the SSA_NAME node itself to indicate it has
-     been put on the free list. 
+     been put on the free list.
 
      Note that once on the freelist you can not reference the SSA_NAME's
      defining statement.  */
@@ -201,6 +204,9 @@ release_ssa_name (tree var)
       tree saved_ssa_name_var = SSA_NAME_VAR (var);
       int saved_ssa_name_version = SSA_NAME_VERSION (var);
       use_operand_p imm = &(SSA_NAME_IMM_USE_NODE (var));
+
+      if (MAY_HAVE_DEBUG_STMTS)
+	insert_debug_temp_for_var_def (NULL, var);
 
 #ifdef ENABLE_CHECKING
       verify_imm_links (stderr, var);
@@ -267,12 +273,6 @@ duplicate_ssa_name_ptr_info (tree name, struct ptr_info_def *ptr_info)
 
   new_ptr_info = GGC_NEW (struct ptr_info_def);
   *new_ptr_info = *ptr_info;
-
-  if (ptr_info->pt_vars)
-    {
-      new_ptr_info->pt_vars = BITMAP_GGC_ALLOC ();
-      bitmap_copy (new_ptr_info->pt_vars, ptr_info->pt_vars);
-    }
 
   SSA_NAME_PTR_INFO (name) = new_ptr_info;
 }
@@ -353,7 +353,7 @@ struct gimple_opt_pass pass_release_ssa_names =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  0,					/* tv_id */
+  TV_NONE,				/* tv_id */
   PROP_ssa,				/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */

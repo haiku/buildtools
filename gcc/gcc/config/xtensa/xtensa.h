@@ -1,5 +1,5 @@
 /* Definitions of Tensilica's Xtensa target machine for GNU compiler.
-   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
@@ -27,17 +27,6 @@ extern int optimize;
 
 /* External variables defined in xtensa.c.  */
 
-/* comparison type */
-enum cmp_type {
-  CMP_SI,				/* four byte integers */
-  CMP_DI,				/* eight byte integers */
-  CMP_SF,				/* single precision floats */
-  CMP_DF,				/* double precision floats */
-  CMP_MAX				/* max comparison type */
-};
-
-extern struct rtx_def * branch_cmp[2];	/* operands for compare */
-extern enum cmp_type branch_type;	/* what type of branch to use */
 extern unsigned xtensa_current_frame_size;
 
 /* Macros used in the machine description to select various Xtensa
@@ -391,25 +380,8 @@ extern char xtensa_hard_regno_mode_ok[][FIRST_PSEUDO_REGISTER];
    either the stack pointer or the hard frame pointer.  */
 #define FRAME_POINTER_REGNUM (GP_REG_FIRST + 16)
 
-/* Value should be nonzero if functions must have frame pointers.
-   Zero means the frame pointer need not be set up (and parms
-   may be accessed via the stack pointer) in functions that seem suitable.
-   This is computed in 'reload', in reload1.c.  */
-#define FRAME_POINTER_REQUIRED xtensa_frame_pointer_required ()
-
 /* Base register for access to arguments of the function.  */
 #define ARG_POINTER_REGNUM (GP_REG_FIRST + 17)
-
-/* If the static chain is passed in memory, these macros provide rtx
-   giving 'mem' expressions that denote where they are stored.
-   'STATIC_CHAIN' and 'STATIC_CHAIN_INCOMING' give the locations as
-   seen by the calling and called functions, respectively.  */
-
-#define STATIC_CHAIN							\
-  gen_rtx_MEM (Pmode, plus_constant (stack_pointer_rtx, -5 * UNITS_PER_WORD))
-
-#define STATIC_CHAIN_INCOMING						\
-  gen_rtx_MEM (Pmode, plus_constant (arg_pointer_rtx, -5 * UNITS_PER_WORD))
 
 /* For now we don't try to use the full set of boolean registers.  Without
    software pipelining of FP operations, there's not much to gain and it's
@@ -541,8 +513,6 @@ extern const enum reg_class xtensa_regno_to_class[FIRST_PSEUDO_REGISTER];
  { FRAME_POINTER_REGNUM,	STACK_POINTER_REGNUM},			\
  { FRAME_POINTER_REGNUM,	HARD_FRAME_POINTER_REGNUM}}
 
-#define CAN_ELIMINATE(FROM, TO) 1
-
 /* Specify the initial difference between the specified pair of registers.  */
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
   do {									\
@@ -601,7 +571,7 @@ extern const enum reg_class xtensa_regno_to_class[FIRST_PSEUDO_REGISTER];
 
 /* Define how to find the value returned by a library function
    assuming the value has mode MODE.  Because we have defined
-   TARGET_PROMOTE_FUNCTION_RETURN that returns true, we have to
+   TARGET_PROMOTE_FUNCTION_MODE to promote everything, we have to
    perform the same promotions as PROMOTE_MODE.  */
 #define XTENSA_LIBCALL_VALUE(MODE, OUTGOINGP)				\
   gen_rtx_REG ((GET_MODE_CLASS (MODE) == MODE_INT			\
@@ -696,19 +666,12 @@ typedef struct xtensa_args
 /* Stack pointer value doesn't matter at exit.  */
 #define EXIT_IGNORE_STACK 1
 
-#define TRAMPOLINE_TEMPLATE(STREAM) xtensa_trampoline_template (STREAM)
-
 /* Size in bytes of the trampoline, as an integer.  Make sure this is
    a multiple of TRAMPOLINE_ALIGNMENT to avoid -Wpadded warnings.  */
 #define TRAMPOLINE_SIZE (TARGET_CONST16 || TARGET_ABSOLUTE_LITERALS ? 60 : 52)
 
 /* Alignment required for trampolines, in bits.  */
 #define TRAMPOLINE_ALIGNMENT 32
-
-/* A C statement to initialize the variable parts of a trampoline.  */
-#define INITIALIZE_TRAMPOLINE(ADDR, FUNC, CHAIN)			\
-  xtensa_initialize_trampoline (ADDR, FUNC, CHAIN)
-
 
 /* If defined, a C expression that produces the machine-specific code
    to setup the stack so that arbitrary frames can be accessed.
@@ -782,13 +745,6 @@ typedef struct xtensa_args
 /* Maximum number of registers that can appear in a valid memory address.  */
 #define MAX_REGS_PER_ADDRESS 1
 
-/* Identify valid Xtensa addresses.  */
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, ADDR, LABEL)			\
-  do {									\
-    if (xtensa_legitimate_address_p (MODE, ADDR, REG_OK_STRICT_FLAG))	\
-      goto LABEL;							\
-  } while (0)
-
 /* A C expression that is 1 if the RTX X is a constant which is a
    valid address.  This is defined to be the same as 'CONSTANT_P (X)',
    but rejecting CONST_DOUBLE.  */
@@ -809,17 +765,6 @@ typedef struct xtensa_args
     || (SYMBOL_REF_LOCAL_P (X) && !SYMBOL_REF_EXTERNAL_P (X)))		\
    && GET_CODE (X) != LABEL_REF						\
    && GET_CODE (X) != CONST)
-
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN)				\
-  do {									\
-    rtx new_x = xtensa_legitimize_address (X, OLDX, MODE);		\
-    if (new_x)								\
-      {									\
-	X = new_x;							\
-	goto WIN;							\
-      }									\
-  } while (0)
-
 
 /* Treat constant-pool references as "mode dependent" since they can
    only be accessed with SImode loads.  This works around a bug in the

@@ -1,6 +1,6 @@
 /* RTL utility routines.
    Copyright (C) 1987, 1988, 1991, 1994, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -164,6 +164,20 @@ rtvec_alloc (int n)
   return rt;
 }
 
+/* Create a bitwise copy of VEC.  */
+
+rtvec
+shallow_copy_rtvec (rtvec vec)
+{
+  rtvec newvec;
+  int n;
+
+  n = GET_NUM_ELEM (vec);
+  newvec = rtvec_alloc (n);
+  memcpy (&newvec->elem[0], &vec->elem[0], sizeof (rtx) * n);
+  return newvec;
+}
+
 /* Return the number of bytes occupied by rtx value X.  */
 
 unsigned int
@@ -206,12 +220,12 @@ bool
 shared_const_p (const_rtx orig)
 {
   gcc_assert (GET_CODE (orig) == CONST);
-  
+
   /* CONST can be shared if it contains a SYMBOL_REF.  If it contains
      a LABEL_REF, it isn't sharable.  */
   return (GET_CODE (XEXP (orig, 0)) == PLUS
 	  && GET_CODE (XEXP (XEXP (orig, 0), 0)) == SYMBOL_REF
-	  && GET_CODE (XEXP (XEXP (orig, 0), 1)) == CONST_INT);
+	  && CONST_INT_P(XEXP (XEXP (orig, 0), 1)));
 }
 
 
@@ -232,6 +246,8 @@ copy_rtx (rtx orig)
   switch (code)
     {
     case REG:
+    case DEBUG_EXPR:
+    case VALUE:
     case CONST_INT:
     case CONST_DOUBLE:
     case CONST_FIXED:
@@ -334,8 +350,10 @@ int currently_expanding_to_rtl;
 
 
 
-/* Same as rtx_equal_p, but call CB on each pair of rtx if CB is not NULL.  
-   When the callback returns true, we continue with the new pair.  */
+/* Same as rtx_equal_p, but call CB on each pair of rtx if CB is not NULL.
+   When the callback returns true, we continue with the new pair.
+   Whenever changing this function check if rtx_equal_p below doesn't need
+   changing as well.  */
 
 int
 rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
@@ -367,6 +385,10 @@ rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
   if (GET_MODE (x) != GET_MODE (y))
     return 0;
 
+  /* MEMs refering to different address space are not equivalent.  */
+  if (code == MEM && MEM_ADDR_SPACE (x) != MEM_ADDR_SPACE (y))
+    return 0;
+
   /* Some RTL can be compared nonrecursively.  */
   switch (code)
     {
@@ -379,6 +401,8 @@ rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
     case SYMBOL_REF:
       return XSTR (x, 0) == XSTR (y, 0);
 
+    case DEBUG_EXPR:
+    case VALUE:
     case SCRATCH:
     case CONST_DOUBLE:
     case CONST_INT:
@@ -405,7 +429,15 @@ rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
 	case 'n':
 	case 'i':
 	  if (XINT (x, i) != XINT (y, i))
-	    return 0;
+	    {
+#ifndef GENERATOR_FILE
+	      if (((code == ASM_OPERANDS && i == 6)
+		   || (code == ASM_INPUT && i == 1))
+		  && locator_eq (XINT (x, i), XINT (y, i)))
+		break;
+#endif
+	      return 0;
+	    }
 	  break;
 
 	case 'V':
@@ -416,7 +448,7 @@ rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
 
 	  /* And the corresponding elements must match.  */
 	  for (j = 0; j < XVECLEN (x, i); j++)
-	    if (rtx_equal_p_cb (XVECEXP (x, i, j), 
+	    if (rtx_equal_p_cb (XVECEXP (x, i, j),
                                 XVECEXP (y, i, j), cb) == 0)
 	      return 0;
 	  break;
@@ -453,12 +485,130 @@ rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
 }
 
 /* Return 1 if X and Y are identical-looking rtx's.
-   This is the Lisp function EQUAL for rtx arguments.  */
+   This is the Lisp function EQUAL for rtx arguments.
+   Whenever changing this function check if rtx_equal_p_cb above doesn't need
+   changing as well.  */
 
 int
 rtx_equal_p (const_rtx x, const_rtx y)
 {
-  return rtx_equal_p_cb (x, y, NULL);
+  int i;
+  int j;
+  enum rtx_code code;
+  const char *fmt;
+
+  if (x == y)
+    return 1;
+  if (x == 0 || y == 0)
+    return 0;
+
+  code = GET_CODE (x);
+  /* Rtx's of different codes cannot be equal.  */
+  if (code != GET_CODE (y))
+    return 0;
+
+  /* (MULT:SI x y) and (MULT:HI x y) are NOT equivalent.
+     (REG:SI x) and (REG:HI x) are NOT equivalent.  */
+
+  if (GET_MODE (x) != GET_MODE (y))
+    return 0;
+
+  /* MEMs refering to different address space are not equivalent.  */
+  if (code == MEM && MEM_ADDR_SPACE (x) != MEM_ADDR_SPACE (y))
+    return 0;
+
+  /* Some RTL can be compared nonrecursively.  */
+  switch (code)
+    {
+    case REG:
+      return (REGNO (x) == REGNO (y));
+
+    case LABEL_REF:
+      return XEXP (x, 0) == XEXP (y, 0);
+
+    case SYMBOL_REF:
+      return XSTR (x, 0) == XSTR (y, 0);
+
+    case DEBUG_EXPR:
+    case VALUE:
+    case SCRATCH:
+    case CONST_DOUBLE:
+    case CONST_INT:
+    case CONST_FIXED:
+      return 0;
+
+    default:
+      break;
+    }
+
+  /* Compare the elements.  If any pair of corresponding elements
+     fail to match, return 0 for the whole thing.  */
+
+  fmt = GET_RTX_FORMAT (code);
+  for (i = GET_RTX_LENGTH (code) - 1; i >= 0; i--)
+    {
+      switch (fmt[i])
+	{
+	case 'w':
+	  if (XWINT (x, i) != XWINT (y, i))
+	    return 0;
+	  break;
+
+	case 'n':
+	case 'i':
+	  if (XINT (x, i) != XINT (y, i))
+	    {
+#ifndef GENERATOR_FILE
+	      if (((code == ASM_OPERANDS && i == 6)
+		   || (code == ASM_INPUT && i == 1))
+		  && locator_eq (XINT (x, i), XINT (y, i)))
+		break;
+#endif
+	      return 0;
+	    }
+	  break;
+
+	case 'V':
+	case 'E':
+	  /* Two vectors must have the same length.  */
+	  if (XVECLEN (x, i) != XVECLEN (y, i))
+	    return 0;
+
+	  /* And the corresponding elements must match.  */
+	  for (j = 0; j < XVECLEN (x, i); j++)
+	    if (rtx_equal_p (XVECEXP (x, i, j),  XVECEXP (y, i, j)) == 0)
+	      return 0;
+	  break;
+
+	case 'e':
+	  if (rtx_equal_p (XEXP (x, i), XEXP (y, i)) == 0)
+	    return 0;
+	  break;
+
+	case 'S':
+	case 's':
+	  if ((XSTR (x, i) || XSTR (y, i))
+	      && (! XSTR (x, i) || ! XSTR (y, i)
+		  || strcmp (XSTR (x, i), XSTR (y, i))))
+	    return 0;
+	  break;
+
+	case 'u':
+	  /* These are just backpointers, so they don't matter.  */
+	  break;
+
+	case '0':
+	case 't':
+	  break;
+
+	  /* It is believed that rtx's at this level will never
+	     contain anything but integers and other rtx's,
+	     except for within LABEL_REFs and SYMBOL_REFs.  */
+	default:
+	  gcc_unreachable ();
+	}
+    }
+  return 1;
 }
 
 void
@@ -489,7 +639,7 @@ dump_rtx_statistics (void)
   fprintf (stderr, "%-20s %7d %10d\n",
            "Total", total_counts, total_sizes);
   fprintf (stderr, "---------------------------------------\n");
-#endif  
+#endif
 }
 
 #if defined ENABLE_RTL_CHECKING && (GCC_VERSION >= 2007)

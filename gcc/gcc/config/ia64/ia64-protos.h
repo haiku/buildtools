@@ -18,13 +18,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* Variables defined in ia64.c.  */
-
-#ifdef RTX_CODE
-extern GTY(()) rtx ia64_compare_op0;
-extern GTY(()) rtx ia64_compare_op1;
-#endif
-
 /* Functions defined in ia64.c */
 
 extern int bundling_p;
@@ -43,7 +36,7 @@ extern void ia64_emit_cond_move (rtx, rtx, rtx);
 extern int ia64_depz_field_mask (rtx, rtx);
 extern void ia64_split_tmode_move (rtx[]);
 extern bool ia64_expand_movxf_movrf (enum machine_mode, rtx[]);
-extern rtx ia64_expand_compare (enum rtx_code, enum machine_mode);
+extern void ia64_expand_compare (rtx *, rtx *, rtx *);
 extern void ia64_expand_vecint_cmov (rtx[]);
 extern bool ia64_expand_vecint_minmax (enum rtx_code, enum machine_mode, rtx[]);
 extern void ia64_expand_widen_sum (rtx[], bool);
@@ -61,7 +54,6 @@ extern int ia64_direct_return (void);
 extern bool ia64_expand_load_address (rtx, rtx);
 extern int ia64_hard_regno_rename_ok (int, int);
 
-extern void ia64_initialize_trampoline (rtx, rtx, rtx);
 extern void ia64_print_operand_address (FILE *, rtx);
 extern void ia64_print_operand (FILE *, rtx, int);
 extern enum reg_class ia64_preferred_reload_class (rtx, enum reg_class);
@@ -84,6 +76,10 @@ extern void ia64_function_arg_advance (CUMULATIVE_ARGS *, enum machine_mode,
 				       tree, int);
 extern int ia64_function_arg_boundary (enum machine_mode, tree);
 extern void ia64_asm_output_external (FILE *, tree, const char *);
+extern void ia64_vms_output_aligned_decl_common (FILE *, tree, const char *,
+						 unsigned HOST_WIDE_INT,
+						 unsigned int);
+extern void ia64_vms_elf_asm_named_section (const char *, unsigned int, tree);
 #endif /* TREE_CODE */
 
 extern int ia64_register_move_cost (enum machine_mode, enum reg_class,
@@ -109,3 +105,6 @@ extern void ia64_profile_hook (int);
 
 extern void ia64_optimization_options (int, int);
 extern void ia64_init_expanders (void);
+
+extern rtx ia64_dconst_0_5 (void);
+extern rtx ia64_dconst_0_375 (void);

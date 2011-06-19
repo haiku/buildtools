@@ -1,6 +1,7 @@
 /* Communication between reload.c, reload1.c and the rest of compiler.
    Copyright (C) 1987, 1991, 1992, 1993, 1994, 1995, 1997, 1998, 1999,
-   2000, 2001, 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
+   2000, 2001, 2003, 2004, 2007, 2008, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -289,7 +290,7 @@ extern int find_reloads (rtx, int, int, int, short *);
    address, namely: sum constant integers, surround the sum of two
    constants with a CONST, put the constant as the second operand, and
    group the constant on the outermost sum.  */
-extern rtx form_sum (rtx, rtx);
+extern rtx form_sum (enum machine_mode, rtx, rtx);
 
 /* Substitute into the current INSN the registers into which we have reloaded
    the things that need reloading.  */

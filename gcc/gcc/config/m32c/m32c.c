@@ -1,5 +1,5 @@
 /* Target Code for R8C/M16C/M32C
-   Copyright (C) 2005, 2006, 2007, 2008
+   Copyright (C) 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Red Hat.
 
@@ -60,14 +60,19 @@ typedef enum
   PP_justcount
 } Push_Pop_Type;
 
+static bool m32c_function_needs_enter (void);
 static tree interrupt_handler (tree *, tree, tree, int, bool *);
 static tree function_vector_handler (tree *, tree, tree, int, bool *);
+static int interrupt_p (tree node);
+static int bank_switch_p (tree node);
+static int fast_interrupt_p (tree node);
 static int interrupt_p (tree node);
 static bool m32c_asm_integer (rtx, unsigned int, int);
 static int m32c_comp_type_attributes (const_tree, const_tree);
 static bool m32c_fixed_condition_code_regs (unsigned int *, unsigned int *);
 static struct machine_function *m32c_init_machine_status (void);
 static void m32c_insert_attributes (tree, tree *);
+static bool m32c_legitimate_address_p (enum machine_mode, rtx, bool);
 static bool m32c_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
 				    const_tree, bool);
 static bool m32c_promote_prototypes (const_tree);
@@ -76,6 +81,9 @@ static bool m32c_strict_argument_naming (CUMULATIVE_ARGS *);
 static rtx m32c_struct_value_rtx (tree, int);
 static rtx m32c_subreg (enum machine_mode, rtx, enum machine_mode, int);
 static int need_to_save (int);
+static rtx m32c_function_value (const_tree, const_tree, bool);
+static rtx m32c_libcall_value (enum machine_mode, const_rtx);
+
 int current_function_special_page_vector (rtx);
 
 #define SYMBOL_FLAG_FUNCVEC_FUNCTION    (SYMBOL_FLAG_MACH_DEP << 0)
@@ -445,14 +453,6 @@ m32c_init_expanders (void)
 
 /* Storage Layout */
 
-#undef TARGET_PROMOTE_FUNCTION_RETURN
-#define TARGET_PROMOTE_FUNCTION_RETURN m32c_promote_function_return
-bool
-m32c_promote_function_return (const_tree fntype ATTRIBUTE_UNUSED)
-{
-  return false;
-}
-
 /* Register Basics */
 
 /* Basic Characteristics of Registers */
@@ -503,7 +503,7 @@ m32c_conditional_register_usage (void)
     {
       /* The command line option is bytes, but our "registers" are
 	 16-bit words.  */
-      for (i = target_memregs/2; i < 8; i++)
+      for (i = (target_memregs+1)/2; i < 8; i++)
 	{
 	  fixed_regs[MEM0_REGNO + i] = 1;
 	  CLEAR_HARD_REG_BIT (reg_class_contents[MEM_REGS], MEM0_REGNO + i);
@@ -644,6 +644,8 @@ m32c_reg_class_from_constraint (char c ATTRIBUTE_UNUSED, const char *s)
     return R3_REGS;
   if (memcmp (s, "R02", 3) == 0)
     return R02_REGS;
+  if (memcmp (s, "R13", 3) == 0)
+    return R13_REGS;
   if (memcmp (s, "R03", 3) == 0)
     return R03_REGS;
   if (memcmp (s, "Rdi", 3) == 0)
@@ -1265,7 +1267,10 @@ need_to_save (int regno)
   if (regno == FP_REGNO)
     return 0;
   if (cfun->machine->is_interrupt
-      && (!cfun->machine->is_leaf || regno == A0_REGNO))
+      && (!cfun->machine->is_leaf
+	  || (regno == A0_REGNO
+	      && m32c_function_needs_enter ())
+	  ))
     return 1;
   if (df_regs_ever_live_p (regno)
       && (!call_used_regs[regno] || cfun->machine->is_interrupt))
@@ -1443,14 +1448,6 @@ m32c_initial_elimination_offset (int from, int to)
 
 /* Passing Function Arguments on the Stack */
 
-#undef TARGET_PROMOTE_PROTOTYPES
-#define TARGET_PROMOTE_PROTOTYPES m32c_promote_prototypes
-static bool
-m32c_promote_prototypes (const_tree fntype ATTRIBUTE_UNUSED)
-{
-  return 0;
-}
-
 /* Implements PUSH_ROUNDING.  The R8C and M16C have byte stacks, the
    M32C has word stacks.  */
 int
@@ -1597,15 +1594,19 @@ m32c_valid_pointer_mode (enum machine_mode mode)
 
 /* How Scalar Function Values Are Returned */
 
-/* Implements LIBCALL_VALUE.  Most values are returned in $r0, or some
+/* Implements TARGET_LIBCALL_VALUE.  Most values are returned in $r0, or some
    combination of registers starting there (r2r0 for longs, r3r1r2r0
    for long long, r3r2r1r0 for doubles), except that that ABI
    currently doesn't work because it ends up using all available
    general registers and gcc often can't compile it.  So, instead, we
    return anything bigger than 16 bits in "mem0" (effectively, a
    memory location).  */
-rtx
-m32c_libcall_value (enum machine_mode mode)
+
+#undef TARGET_LIBCALL_VALUE
+#define TARGET_LIBCALL_VALUE m32c_libcall_value
+
+static rtx
+m32c_libcall_value (enum machine_mode mode, const_rtx fun ATTRIBUTE_UNUSED)
 {
   /* return reg or parallel */
 #if 0
@@ -1655,14 +1656,28 @@ m32c_libcall_value (enum machine_mode mode)
   return gen_rtx_REG (mode, R0_REGNO);
 }
 
-/* Implements FUNCTION_VALUE.  Functions and libcalls have the same
+/* Implements TARGET_FUNCTION_VALUE.  Functions and libcalls have the same
    conventions.  */
-rtx
-m32c_function_value (const_tree valtype, const_tree func ATTRIBUTE_UNUSED)
+
+#undef TARGET_FUNCTION_VALUE
+#define TARGET_FUNCTION_VALUE m32c_function_value
+
+static rtx
+m32c_function_value (const_tree valtype,
+		     const_tree fn_decl_or_type ATTRIBUTE_UNUSED,
+		     bool outgoing ATTRIBUTE_UNUSED)
 {
   /* return reg or parallel */
   const enum machine_mode mode = TYPE_MODE (valtype);
-  return m32c_libcall_value (mode);
+  return m32c_libcall_value (mode, NULL_RTX);
+}
+
+/* Implements FUNCTION_VALUE_REGNO_P.  */
+
+bool
+m32c_function_value_regno_p (const unsigned int regno)
+{
+  return (regno == R0_REGNO || regno == MEM0_REGNO);
 }
 
 /* How Large Values Are Returned */
@@ -1728,11 +1743,16 @@ m32c_trampoline_alignment (void)
   return 2;
 }
 
-/* Implements INITIALIZE_TRAMPOLINE.  */
-void
-m32c_initialize_trampoline (rtx tramp, rtx function, rtx chainval)
+/* Implements TARGET_TRAMPOLINE_INIT.  */
+
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT m32c_trampoline_init
+static void
+m32c_trampoline_init (rtx m_tramp, tree fndecl, rtx chainval)
 {
-#define A0(m,i) gen_rtx_MEM (m, plus_constant (tramp, i))
+  rtx function = XEXP (DECL_RTL (fndecl), 0);
+
+#define A0(m,i) adjust_address (m_tramp, m, i)
   if (TARGET_A16)
     {
       /* Note: we subtract a "word" because the moves want signed
@@ -1765,34 +1785,28 @@ m32c_initialize_trampoline (rtx tramp, rtx function, rtx chainval)
 static void
 m32c_init_libfuncs (void)
 {
+  /* We do this because the M32C has an HImode operand, but the
+     M16C has an 8-bit operand.  Since gcc looks at the match data
+     and not the expanded rtl, we have to reset the optab so that
+     the right modes are found. */
   if (TARGET_A24)
     {
-      /* We do this because the M32C has an HImode operand, but the
-	 M16C has an 8-bit operand.  Since gcc looks at the match data
-	 and not the expanded rtl, we have to reset the array so that
-	 the right modes are found. */
-      setcc_gen_code[EQ] = CODE_FOR_seq_24;
-      setcc_gen_code[NE] = CODE_FOR_sne_24;
-      setcc_gen_code[GT] = CODE_FOR_sgt_24;
-      setcc_gen_code[GE] = CODE_FOR_sge_24;
-      setcc_gen_code[LT] = CODE_FOR_slt_24;
-      setcc_gen_code[LE] = CODE_FOR_sle_24;
-      setcc_gen_code[GTU] = CODE_FOR_sgtu_24;
-      setcc_gen_code[GEU] = CODE_FOR_sgeu_24;
-      setcc_gen_code[LTU] = CODE_FOR_sltu_24;
-      setcc_gen_code[LEU] = CODE_FOR_sleu_24;
+      optab_handler (cstore_optab, QImode)->insn_code = CODE_FOR_cstoreqi4_24;
+      optab_handler (cstore_optab, HImode)->insn_code = CODE_FOR_cstorehi4_24;
+      optab_handler (cstore_optab, PSImode)->insn_code = CODE_FOR_cstorepsi4_24;
     }
 }
 
 /* Addressing Modes */
 
-/* Used by GO_IF_LEGITIMATE_ADDRESS.  The r8c/m32c family supports a
-   wide range of non-orthogonal addressing modes, including the
-   ability to double-indirect on *some* of them.  Not all insns
-   support all modes, either, but we rely on predicates and
-   constraints to deal with that.  */
-int
-m32c_legitimate_address_p (enum machine_mode mode, rtx x, int strict)
+/* The r8c/m32c family supports a wide range of non-orthogonal
+   addressing modes, including the ability to double-indirect on *some*
+   of them.  Not all insns support all modes, either, but we rely on
+   predicates and constraints to deal with that.  */
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P m32c_legitimate_address_p
+bool
+m32c_legitimate_address_p (enum machine_mode mode, rtx x, bool strict)
 {
   int mode_adjust;
   if (CONSTANT_P (x))
@@ -1957,33 +1971,33 @@ m32c_reg_ok_for_base_p (rtx x, int strict)
    displacement range.  We deal with this by attempting to reload $fb
    itself into an address register; that seems to result in the best
    code.  */
-int
-m32c_legitimize_address (rtx * x ATTRIBUTE_UNUSED,
-			 rtx oldx ATTRIBUTE_UNUSED,
-			 enum machine_mode mode ATTRIBUTE_UNUSED)
+#undef TARGET_LEGITIMIZE_ADDRESS
+#define TARGET_LEGITIMIZE_ADDRESS m32c_legitimize_address
+static rtx
+m32c_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
+			 enum machine_mode mode)
 {
 #if DEBUG0
   fprintf (stderr, "m32c_legitimize_address for mode %s\n", mode_name[mode]);
-  debug_rtx (*x);
+  debug_rtx (x);
   fprintf (stderr, "\n");
 #endif
 
-  if (GET_CODE (*x) == PLUS
-      && GET_CODE (XEXP (*x, 0)) == REG
-      && REGNO (XEXP (*x, 0)) == FB_REGNO
-      && GET_CODE (XEXP (*x, 1)) == CONST_INT
-      && (INTVAL (XEXP (*x, 1)) < -128
-	  || INTVAL (XEXP (*x, 1)) > (128 - GET_MODE_SIZE (mode))))
+  if (GET_CODE (x) == PLUS
+      && GET_CODE (XEXP (x, 0)) == REG
+      && REGNO (XEXP (x, 0)) == FB_REGNO
+      && GET_CODE (XEXP (x, 1)) == CONST_INT
+      && (INTVAL (XEXP (x, 1)) < -128
+	  || INTVAL (XEXP (x, 1)) > (128 - GET_MODE_SIZE (mode))))
     {
       /* reload FB to A_REGS */
       rtx temp = gen_reg_rtx (Pmode);
-      *x = copy_rtx (*x);
-      emit_insn (gen_rtx_SET (VOIDmode, temp, XEXP (*x, 0)));
-      XEXP (*x, 0) = temp;
-      return 1;
+      x = copy_rtx (x);
+      emit_insn (gen_rtx_SET (VOIDmode, temp, XEXP (x, 0)));
+      XEXP (x, 0) = temp;
     }
 
-  return 0;
+  return x;
 }
 
 /* Implements LEGITIMIZE_RELOAD_ADDRESS.  See comment above.  */
@@ -2041,31 +2055,6 @@ m32c_legitimize_reload_address (rtx * x,
       if (type == RELOAD_OTHER)
 	type = RELOAD_FOR_OTHER_ADDRESS;
       push_reload (XEXP (*x, 0), NULL_RTX, &XEXP (*x, 0), NULL,
-		   A_REGS, Pmode, VOIDmode, 0, 0, opnum,
-		   type);
-      return 1;
-    }
-
-  /* If we see an RTX like (subreg:PSI (reg:SI ...)) we need to reload
-     the subreg.  We need to check for PLUS and non-PLUS cases.  */
-
-  if (GET_CODE (*x) == SUBREG
-      && GET_MODE (XEXP (*x, 0)) == SImode)
-    {
-      if (type == RELOAD_OTHER)
-	type = RELOAD_FOR_OTHER_ADDRESS;
-      push_reload (*x, NULL_RTX, x, NULL,
-		   A_REGS, Pmode, VOIDmode, 0, 0, opnum,
-		   type);
-      return 1;
-    }
-  if (GET_CODE (*x) == PLUS
-      && GET_CODE (XEXP (*x, 0)) == SUBREG
-      && GET_MODE (XEXP (XEXP (*x, 0), 0)) == SImode)
-    {
-      if (type == RELOAD_OTHER)
-	type = RELOAD_FOR_OTHER_ADDRESS;
-      push_reload (XEXP (*x, 0), NULL_RTX, &(XEXP (*x, 0)), NULL,
 		   A_REGS, Pmode, VOIDmode, 0, 0, opnum,
 		   type);
       return 1;
@@ -2729,8 +2718,13 @@ m32c_print_operand_punct_valid_p (int c)
 void
 m32c_print_operand_address (FILE * stream, rtx address)
 {
-  gcc_assert (GET_CODE (address) == MEM);
-  m32c_print_operand (stream, XEXP (address, 0), 0);
+  if (GET_CODE (address) == MEM)
+    address = XEXP (address, 0);
+  else
+    /* cf: gcc.dg/asm-4.c.  */
+    gcc_assert (GET_CODE (address) == REG);
+
+  m32c_print_operand (stream, address, 0);
 }
 
 /* Implements ASM_OUTPUT_REG_PUSH.  Control registers are pushed
@@ -2777,6 +2771,34 @@ interrupt_p (tree node ATTRIBUTE_UNUSED)
 	return 1;
       list = TREE_CHAIN (list);
     }
+  return fast_interrupt_p (node);
+}
+
+/* Returns TRUE if the given tree has the "bank_switch" attribute.  */
+static int
+bank_switch_p (tree node ATTRIBUTE_UNUSED)
+{
+  tree list = M32C_ATTRIBUTES (node);
+  while (list)
+    {
+      if (is_attribute_p ("bank_switch", TREE_PURPOSE (list)))
+	return 1;
+      list = TREE_CHAIN (list);
+    }
+  return 0;
+}
+
+/* Returns TRUE if the given tree has the "fast_interrupt" attribute.  */
+static int
+fast_interrupt_p (tree node ATTRIBUTE_UNUSED)
+{
+  tree list = M32C_ATTRIBUTES (node);
+  while (list)
+    {
+      if (is_attribute_p ("fast_interrupt", TREE_PURPOSE (list)))
+	return 1;
+      list = TREE_CHAIN (list);
+    }
   return 0;
 }
 
@@ -2794,10 +2816,12 @@ interrupt_handler (tree * node ATTRIBUTE_UNUSED,
 int
 m32c_special_page_vector_p (tree func)
 {
+  tree list;
+
   if (TREE_CODE (func) != FUNCTION_DECL)
     return 0;
 
-  tree list = M32C_ATTRIBUTES (func);
+  list = M32C_ATTRIBUTES (func);
   while (list)
     {
       if (is_attribute_p ("function_vector", TREE_PURPOSE (list)))
@@ -2818,24 +2842,24 @@ function_vector_handler (tree * node ATTRIBUTE_UNUSED,
     {
       /* The attribute is not supported for R8C target.  */
       warning (OPT_Wattributes,
-                "`%s' attribute is not supported for R8C target",
-                IDENTIFIER_POINTER (name));
+                "%qE attribute is not supported for R8C target",
+                name);
       *no_add_attrs = true;
     }
   else if (TREE_CODE (*node) != FUNCTION_DECL)
     {
       /* The attribute must be applied to functions only.  */
       warning (OPT_Wattributes,
-                "`%s' attribute applies only to functions",
-                IDENTIFIER_POINTER (name));
+                "%qE attribute applies only to functions",
+                name);
       *no_add_attrs = true;
     }
   else if (TREE_CODE (TREE_VALUE (args)) != INTEGER_CST)
     {
       /* The argument must be a constant integer.  */
       warning (OPT_Wattributes,
-                "`%s' attribute argument not an integer constant",
-                IDENTIFIER_POINTER (name));
+                "%qE attribute argument not an integer constant",
+                name);
       *no_add_attrs = true;
     }
   else if (TREE_INT_CST_LOW (TREE_VALUE (args)) < 18
@@ -2843,8 +2867,8 @@ function_vector_handler (tree * node ATTRIBUTE_UNUSED,
     {
       /* The argument value must be between 18 to 255.  */
       warning (OPT_Wattributes,
-                "`%s' attribute argument should be between 18 to 255",
-                IDENTIFIER_POINTER (name));
+                "%qE attribute argument should be between 18 to 255",
+                name);
       *no_add_attrs = true;
     }
   return NULL_TREE;
@@ -2860,12 +2884,13 @@ current_function_special_page_vector (rtx x)
   if ((GET_CODE(x) == SYMBOL_REF)
       && (SYMBOL_REF_FLAGS (x) & SYMBOL_FLAG_FUNCVEC_FUNCTION))
     {
+      tree list;
       tree t = SYMBOL_REF_DECL (x);
 
       if (TREE_CODE (t) != FUNCTION_DECL)
         return 0;
 
-      tree list = M32C_ATTRIBUTES (t);
+      list = M32C_ATTRIBUTES (t);
       while (list)
         {
           if (is_attribute_p ("function_vector", TREE_PURPOSE (list)))
@@ -2887,6 +2912,8 @@ current_function_special_page_vector (rtx x)
 #define TARGET_ATTRIBUTE_TABLE m32c_attribute_table
 static const struct attribute_spec m32c_attribute_table[] = {
   {"interrupt", 0, 0, false, false, false, interrupt_handler},
+  {"bank_switch", 0, 0, false, false, false, interrupt_handler},
+  {"fast_interrupt", 0, 0, false, false, false, interrupt_handler},
   {"function_vector", 1, 1, true,  false, false, function_vector_handler},
   {0, 0, 0, 0, 0, 0, 0}
 };
@@ -3727,56 +3754,7 @@ m32c_expand_neg_mulpsi3 (rtx * operands)
   emit_insn (gen_truncsipsi2 (operands[0], temp2));
 }
 
-static rtx compare_op0, compare_op1;
-
-void
-m32c_pend_compare (rtx *operands)
-{
-  compare_op0 = operands[0];
-  compare_op1 = operands[1];
-}
-
-void
-m32c_unpend_compare (void)
-{
-  switch (GET_MODE (compare_op0))
-    {
-    case QImode:
-      emit_insn (gen_cmpqi_op (compare_op0, compare_op1));
-    case HImode:
-      emit_insn (gen_cmphi_op (compare_op0, compare_op1));
-    case PSImode:
-      emit_insn (gen_cmppsi_op (compare_op0, compare_op1));
-    default:
-      /* Just to silence the "missing case" warnings.  */ ;
-    }
-}
-
-void
-m32c_expand_scc (int code, rtx *operands)
-{
-  enum machine_mode mode = TARGET_A16 ? QImode : HImode;
-
-  emit_insn (gen_rtx_SET (mode,
-			  operands[0],
-			  gen_rtx_fmt_ee (code,
-					  mode,
-					  compare_op0,
-					  compare_op1)));
-}
-
 /* Pattern Output Functions */
-
-/* Returns a (OP (reg:CC FLG_REGNO) (const_int 0)) from some other
-   match_operand rtx's OP.  */
-rtx
-m32c_cmp_flg_0 (rtx cmp)
-{
-  return gen_rtx_fmt_ee (GET_CODE (cmp),
-			 GET_MODE (cmp),
-			 gen_rtx_REG (CCmode, FLG_REGNO),
-			 GEN_INT (0));
-}
 
 int
 m32c_expand_movcc (rtx *operands)
@@ -3789,22 +3767,17 @@ m32c_expand_movcc (rtx *operands)
   if (GET_CODE (operands[2]) != CONST_INT
       || GET_CODE (operands[3]) != CONST_INT)
     return 1;
-  emit_insn (gen_cmpqi(XEXP (rel, 0), XEXP (rel, 1)));
   if (GET_CODE (rel) == NE)
     {
       rtx tmp = operands[2];
       operands[2] = operands[3];
       operands[3] = tmp;
+      rel = gen_rtx_EQ (GET_MODE (rel), XEXP (rel, 0), XEXP (rel, 1));
     }
-
-  cmp = gen_rtx_fmt_ee (GET_CODE (rel),
-			GET_MODE (rel),
-			compare_op0,
-			compare_op1);
 
   emit_move_insn (operands[0],
 		  gen_rtx_IF_THEN_ELSE (GET_MODE (operands[0]),
-					cmp,
+					rel,
 					operands[2],
 					operands[3]));
   return 0;
@@ -3893,6 +3866,7 @@ m32c_expand_insv (rtx *operands)
     case 5: p = gen_iorqi3_24 (op0, src0, GEN_INT (mask)); break;
     case 6: p = gen_iorhi3_16 (op0, src0, GEN_INT (mask)); break;
     case 7: p = gen_iorhi3_24 (op0, src0, GEN_INT (mask)); break;
+    default: p = NULL_RTX; break; /* Not reached, but silences a warning.  */
     }
 
   emit_insn (p);
@@ -4022,16 +3996,23 @@ m32c_emit_prologue (void)
       cfun->machine->is_interrupt = 1;
       complex_prologue = 1;
     }
+  else if (bank_switch_p (cfun->decl))
+    warning (OPT_Wattributes,
+	     "%<bank_switch%> has no effect on non-interrupt functions");
 
   reg_save_size = m32c_pushm_popm (PP_justcount);
 
   if (interrupt_p (cfun->decl))
-    emit_insn (gen_pushm (GEN_INT (cfun->machine->intr_pushm)));
+    {
+      if (bank_switch_p (cfun->decl))
+	emit_insn (gen_fset_b ());
+      else if (cfun->machine->intr_pushm)
+	emit_insn (gen_pushm (GEN_INT (cfun->machine->intr_pushm)));
+    }
 
   frame_size =
     m32c_initial_elimination_offset (FB_REGNO, SP_REGNO) - reg_save_size;
   if (frame_size == 0
-      && !cfun->machine->is_interrupt
       && !m32c_function_needs_enter ())
     cfun->machine->use_rts = 1;
 
@@ -4082,16 +4063,47 @@ m32c_emit_epilogue (void)
     {
       enum machine_mode spmode = TARGET_A16 ? HImode : PSImode;
 
-      emit_move_insn (gen_rtx_REG (spmode, A0_REGNO),
-		      gen_rtx_REG (spmode, FP_REGNO));
-      emit_move_insn (gen_rtx_REG (spmode, SP_REGNO),
-		      gen_rtx_REG (spmode, A0_REGNO));
-      if (TARGET_A16)
-	emit_insn (gen_pophi_16 (gen_rtx_REG (HImode, FP_REGNO)));
-      else
-	emit_insn (gen_poppsi (gen_rtx_REG (PSImode, FP_REGNO)));
-      emit_insn (gen_popm (GEN_INT (cfun->machine->intr_pushm)));
-      if (TARGET_A16)
+      /* REIT clears B flag and restores $fp for us, but we still
+	 have to fix up the stack.  USE_RTS just means we didn't
+	 emit ENTER.  */
+      if (!cfun->machine->use_rts)
+	{
+	  emit_move_insn (gen_rtx_REG (spmode, A0_REGNO),
+			  gen_rtx_REG (spmode, FP_REGNO));
+	  emit_move_insn (gen_rtx_REG (spmode, SP_REGNO),
+			  gen_rtx_REG (spmode, A0_REGNO));
+	  /* We can't just add this to the POPM because it would be in
+	     the wrong order, and wouldn't fix the stack if we're bank
+	     switching.  */
+	  if (TARGET_A16)
+	    emit_insn (gen_pophi_16 (gen_rtx_REG (HImode, FP_REGNO)));
+	  else
+	    emit_insn (gen_poppsi (gen_rtx_REG (PSImode, FP_REGNO)));
+	}
+      if (!bank_switch_p (cfun->decl) && cfun->machine->intr_pushm)
+	emit_insn (gen_popm (GEN_INT (cfun->machine->intr_pushm)));
+
+      /* The FREIT (Fast REturn from InTerrupt) instruction should be
+         generated only for M32C/M32CM targets (generate the REIT
+         instruction otherwise).  */
+      if (fast_interrupt_p (cfun->decl))
+        {
+          /* Check if fast_attribute is set for M32C or M32CM.  */
+          if (TARGET_A24)
+            {
+              emit_jump_insn (gen_epilogue_freit ());
+            }
+          /* If fast_interrupt attribute is set for an R8C or M16C
+             target ignore this attribute and generated REIT
+             instruction.  */
+          else
+	    {
+	      warning (OPT_Wattributes,
+		       "%<fast_interrupt%> attribute directive ignored");
+	      emit_jump_insn (gen_epilogue_reit_16 ());
+	    }
+        }
+      else if (TARGET_A16)
 	emit_jump_insn (gen_epilogue_reit_16 ());
       else
 	emit_jump_insn (gen_epilogue_reit_24 ());
@@ -4261,6 +4273,40 @@ m32c_compare_redundant (rtx cmp, rtx *operands)
 #endif
 	return false;
       }
+
+    /* Check for comparisons against memory - between volatiles and
+       aliases, we just can't risk this one.  */
+    if (GET_CODE (operands[0]) == MEM
+	|| GET_CODE (operands[0]) == MEM)
+      {
+#if DEBUG_CMP
+	fprintf(stderr, "comparisons with memory:\n");
+	debug_rtx(prev);
+#endif
+	return false;
+      }
+
+    /* Check for PREV changing a register that's used to compute a
+       value in CMP, even if it doesn't otherwise change flags.  */
+    if (GET_CODE (operands[0]) == REG
+	&& rtx_referenced_p (SET_DEST (PATTERN (prev)), operands[0]))
+      {
+#if DEBUG_CMP
+	fprintf(stderr, "sub-value affected, op0:\n");
+	debug_rtx(prev);
+#endif
+	return false;
+      }
+    if (GET_CODE (operands[1]) == REG
+	&& rtx_referenced_p (SET_DEST (PATTERN (prev)), operands[1]))
+      {
+#if DEBUG_CMP
+	fprintf(stderr, "sub-value affected, op1:\n");
+	debug_rtx(prev);
+#endif
+	return false;
+      }
+
   } while (pflags == FLAGS_N);
 #if DEBUG_CMP
   fprintf(stderr, "previous flag-setting insn:\n");
@@ -4345,13 +4391,20 @@ m32c_output_compare (rtx insn, rtx *operands)
     }
 
 #if DEBUG_CMP
-  fprintf(stderr, "cbranch: cmp needed: `%s'\n", templ);
+  fprintf(stderr, "cbranch: cmp needed: `%s'\n", templ + 1);
 #endif
   return templ + 1;
 }
 
 #undef TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO m32c_encode_section_info
+
+/* If the frame pointer isn't used, we detect it manually.  But the
+   stack pointer doesn't have as flexible addressing as the frame
+   pointer, so we always assume we have it.  */
+
+#undef TARGET_FRAME_POINTER_REQUIRED
+#define TARGET_FRAME_POINTER_REQUIRED hook_bool_void_true
 
 /* The Global `targetm' Variable. */
 

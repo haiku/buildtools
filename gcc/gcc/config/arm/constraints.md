@@ -25,15 +25,16 @@
 ;; In ARM state, 'l' is an alias for 'r'
 
 ;; The following normal constraints have been used:
-;; in ARM/Thumb-2 state: G, H, I, J, K, L, M
+;; in ARM/Thumb-2 state: G, H, I, j, J, K, L, M
 ;; in Thumb-1 state: I, J, K, L, M, N, O
 
 ;; The following multi-letter normal constraints have been used:
-;; in ARM/Thumb-2 state: Da, Db, Dc, Dn, Dl, DL, Dv
+;; in ARM/Thumb-2 state: Da, Db, Dc, Dn, Dl, DL, Dv, Dy
+;; in Thumb-1 state: Pa, Pb
 ;; in Thumb-2 state: Ps, Pt
 
 ;; The following memory constraints have been used:
-;; in ARM/Thumb-2 state: Q, Ut, Uv, Uy, Un, Us
+;; in ARM/Thumb-2 state: Q, Ut, Uv, Uy, Un, Um, Us
 ;; in ARM state: Uq
 
 
@@ -65,6 +66,13 @@
 
 (define_register_constraint "h" "TARGET_THUMB ? HI_REGS : NO_REGS"
  "In Thumb state the core registers @code{r8}-@code{r15}.")
+
+(define_constraint "j"
+ "A constant suitable for a MOVW instruction. (ARM/Thumb-2)"
+ (and (match_test "TARGET_32BIT && arm_arch_thumb2")
+      (ior (match_code "high")
+	   (and (match_code "const_int")
+                (match_test "(ival & 0xffff0000) == 0")))))
 
 (define_register_constraint "k" "STACK_REG"
  "@internal The stack register.")
@@ -117,11 +125,9 @@
 		   : ((ival >= 0 && ival <= 1020) && ((ival & 3) == 0))")))
 
 (define_constraint "N"
- "In ARM/Thumb-2 state a constant suitable for a MOVW instruction.
-  In Thumb-1 state a constant in the range 0-31."
+ "Thumb-1 state a constant in the range 0-31."
  (and (match_code "const_int")
-      (match_test "TARGET_32BIT ? arm_arch_thumb2 && ((ival & 0xffff0000) == 0)
-				: (ival >= 0 && ival <= 31)")))
+      (match_test "!TARGET_32BIT && (ival >= 0 && ival <= 31)")))
 
 (define_constraint "O"
  "In Thumb-1 state a constant that is a multiple of 4 in the range
@@ -129,6 +135,18 @@
  (and (match_code "const_int")
       (match_test "TARGET_THUMB1 && ival >= -508 && ival <= 508
 		   && ((ival & 3) == 0)")))
+
+(define_constraint "Pa"
+  "@internal In Thumb-1 state a constant in the range -510 to +510"
+  (and (match_code "const_int")
+       (match_test "TARGET_THUMB1 && ival >= -510 && ival <= 510
+		    && (ival > 255 || ival < -255)")))
+
+(define_constraint "Pb"
+  "@internal In Thumb-1 state a constant in the range -262 to +262"
+  (and (match_code "const_int")
+       (match_test "TARGET_THUMB1 && ival >= -262 && ival <= 262
+		    && (ival > 255 || ival < -255)")))
 
 (define_constraint "Ps"
   "@internal In Thumb-2 state a constant in the range -255 to +255"
@@ -200,9 +218,16 @@
 (define_constraint "Dv"
  "@internal
   In ARM/Thumb-2 state a const_double which can be used with a VFP fconsts
-  or fconstd instruction."
+  instruction."
  (and (match_code "const_double")
       (match_test "TARGET_32BIT && vfp3_const_double_rtx (op)")))
+
+(define_constraint "Dy"
+ "@internal
+  In ARM/Thumb-2 state a const_double which can be used with a VFP fconstd
+  instruction."
+ (and (match_code "const_double")
+      (match_test "TARGET_32BIT && TARGET_VFP_DOUBLE && vfp3_const_double_rtx (op)")))
 
 (define_memory_constraint "Ut"
  "@internal
@@ -225,25 +250,32 @@
 
 (define_memory_constraint "Un"
  "@internal
+  In ARM/Thumb-2 state a valid address for Neon doubleword vector
+  load/store instructions."
+ (and (match_code "mem")
+      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 0)")))
+
+(define_memory_constraint "Um"
+ "@internal
   In ARM/Thumb-2 state a valid address for Neon element and structure
   load/store instructions."
  (and (match_code "mem")
-      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, FALSE)")))
+      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 2)")))
 
 (define_memory_constraint "Us"
  "@internal
   In ARM/Thumb-2 state a valid address for non-offset loads/stores of
   quad-word values in four ARM registers."
  (and (match_code "mem")
-      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, TRUE)")))
+      (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 1)")))
 
 (define_memory_constraint "Uq"
  "@internal
   In ARM state an address valid in ldrsb instructions."
  (and (match_code "mem")
       (match_test "TARGET_ARM
-		   && arm_legitimate_address_p (GET_MODE (op), XEXP (op, 0),
-						SIGN_EXTEND, 0)")))
+		   && arm_legitimate_address_outer_p (GET_MODE (op), XEXP (op, 0),
+						      SIGN_EXTEND, 0)")))
 
 (define_memory_constraint "Q"
  "@internal

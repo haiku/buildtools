@@ -675,8 +675,6 @@ main (void)
 
 #include "gstab.h"
 
-#define STAB_CODE_TYPE enum __stab_debug_code
-
 #ifndef MALLOC_CHECK
 #ifdef	__SABER__
 #define MALLOC_CHECK
@@ -1939,8 +1937,8 @@ add_ext_symbol (EXTR *esym, int ifd)
   if (debug > 1)
     {
       long value = esym->asym.value;
-      const char *sc_str = sc_to_string (esym->asym.sc);
-      const char *st_str = st_to_string (esym->asym.st);
+      const char *sc_str = sc_to_string ((sc_t) esym->asym.sc);
+      const char *st_str = st_to_string ((st_t) esym->asym.st);
 
       fprintf (stderr,
 	       "\tesym\tv= %10ld, ifd= %2d, sc= %-12s",
@@ -3475,7 +3473,8 @@ mark_stabs (const char *start ATTRIBUTE_UNUSED)
       stabs_seen = 1;
       (void) add_local_symbol (stabs_symbol,
 			       stabs_symbol + sizeof (stabs_symbol),
-			       stNil, scInfo, -1, MIPS_MARK_STAB (0));
+			       (st_t) stNil, (sc_t) scInfo, -1,
+			       MIPS_MARK_STAB (0));
 
     }
 }
@@ -3668,8 +3667,8 @@ parse_stabs_common (const char *string_start,	/* start of string or NULL */
 	  /* Traditionally, N_LBRAC and N_RBRAC are *not* relocated.  */
 	  if (code == (int) N_LBRAC || code == (int) N_RBRAC)
 	    {
-	      sc = scNil;
-	      st = stNil;
+	      sc = (sc_t) scNil;
+	      st = (st_t) stNil;
 	    }
 	  else
 	    {
@@ -3994,7 +3993,8 @@ write_varray (varray_t *vp,    /* virtual array */
     return;
 
   if (debug)
-    fprintf (stderr, "\twarray\tvp = %p, offset = %7lu, size = %7lu, %s\n",
+    fprintf (stderr, "\twarray\tvp = " HOST_PTR_PRINTF
+	    ", offset = %7lu, size = %7lu, %s\n",
 	     (void *) vp, (unsigned long) offset,
 	     vp->num_allocated * vp->object_size, str);
 
@@ -4033,7 +4033,8 @@ write_object (void)
   off_t offset;
 
   if (debug)
-    fprintf (stderr, "\n\twrite\tvp = %p, offset = %7u, size = %7lu, %s\n",
+    fprintf (stderr, "\n\twrite\tvp = " HOST_PTR_PRINTF
+	    ", offset = %7u, size = %7lu, %s\n",
 	     (void *) &symbolic_header, 0,
 	     (unsigned long) sizeof (symbolic_header), "symbolic header");
 
@@ -4063,7 +4064,8 @@ write_object (void)
 	pfatal_with_name (object_name);
 
       if (debug)
-	fprintf (stderr, "\twrite\tvp = %p, offset = %7lu, size = %7lu, %s\n",
+	fprintf (stderr, "\twrite\tvp = " HOST_PTR_PRINTF
+		", offset = %7lu, size = %7lu, %s\n",
 		 (void *) &orig_linenum, (long) symbolic_header.cbLineOffset,
 		 (long) symbolic_header.cbLine, "Line numbers");
 
@@ -4094,7 +4096,8 @@ write_object (void)
 	pfatal_with_name (object_name);
 
       if (debug)
-	fprintf (stderr, "\twrite\tvp = %p, offset = %7lu, size = %7lu, %s\n",
+	fprintf (stderr, "\twrite\tvp = " HOST_PTR_PRINTF
+		", offset = %7lu, size = %7lu, %s\n",
 		 (void *) &orig_opt_syms, (long) symbolic_header.cbOptOffset,
 		 num_write, "Optimizer symbols");
 
@@ -4182,7 +4185,8 @@ write_object (void)
 	   file_ptr = file_ptr->next_file)
 	{
 	  if (debug)
-	    fprintf (stderr, "\twrite\tvp = %p, offset = %7lu, size = %7lu, %s\n",
+	    fprintf (stderr, "\twrite\tvp = " HOST_PTR_PRINTF
+		    ", offset = %7lu, size = %7lu, %s\n",
 		     (void *) &file_ptr->fdr, file_offset,
 		     (unsigned long) sizeof (FDR), "File header");
 
@@ -4214,7 +4218,8 @@ write_object (void)
 	pfatal_with_name (object_name);
 
       if (debug)
-	fprintf (stderr, "\twrite\tvp = %p, offset = %7lu, size = %7lu, %s\n",
+	fprintf (stderr, "\twrite\tvp = " HOST_PTR_PRINTF
+		", offset = %7lu, size = %7lu, %s\n",
 		 (void *) &orig_rfds, (long) symbolic_header.cbRfdOffset,
 		 num_write, "Relative file descriptors");
 
@@ -5007,7 +5012,7 @@ allocate_cluster (Size_t npages)
     pfatal_with_name ("allocate_cluster");
 
   if (debug > 3)
-    fprintf (stderr, "\talloc\tnpages = %lu, value = %p\n",
+    fprintf (stderr, "\talloc\tnpages = %lu, value = " HOST_PTR_PRINTF "\n",
 	     (unsigned long) npages, (void *) ptr);
 
   return ptr;

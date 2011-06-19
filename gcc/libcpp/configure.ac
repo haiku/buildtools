@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.59)
+AC_PREREQ(2.64)
 AC_INIT(cpplib, [ ], gcc-bugs@gcc.gnu.org, cpplib)
 AC_CONFIG_SRCDIR(ucnid.h)
 AC_CONFIG_MACRO_DIR(../config)
@@ -11,7 +11,16 @@ AC_CANONICAL_SYSTEM
 AC_PROG_MAKE_SET
 AC_PROG_INSTALL
 AC_PROG_CC
+AC_PROG_CXX
 AC_PROG_RANLIB
+
+# See if we are building gcc with C++.
+# Do this early so setting lang to C++ affects following tests
+AC_ARG_ENABLE(build-with-cxx,
+[  --enable-build-with-cxx build with C++ compiler instead of C compiler],
+ENABLE_BUILD_WITH_CXX=$enableval,
+ENABLE_BUILD_WITH_CXX=no)
+AC_SUBST(ENABLE_BUILD_WITH_CXX)
 
 MISSING=`cd $ac_aux_dir && ${PWDCMD-pwd}`/missing
 AC_CHECK_PROGS([ACLOCAL], [aclocal], [$MISSING aclocal])
@@ -21,9 +30,10 @@ AC_CHECK_PROGS([AUTOHEADER], [autoheader], [$MISSING autoheader])
 # Figure out what compiler warnings we can enable.
 # See config/warnings.m4 for details.
 
-ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
-			  -Wmissing-prototypes -Wold-style-definition \
-			  -Wmissing-format-attribute])
+ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings \
+			  -Wmissing-format-attribute], [warn])
+ACX_PROG_CC_WARNING_OPTS([-Wstrict-prototypes -Wmissing-prototypes \
+			  -Wold-style-definition -Wc++-compat], [c_warn])
 ACX_PROG_CC_WARNING_ALMOST_PEDANTIC([-Wno-long-long])
 
 # Only enable with --enable-werror-always until existing warnings are
@@ -32,13 +42,28 @@ ACX_PROG_CC_WARNINGS_ARE_ERRORS([manual])
 
 # Dependency checking.
 ZW_CREATE_DEPDIR
+if test "$ENABLE_BUILD_WITH_CXX" = "no"; then
 ZW_PROG_COMPILER_DEPENDENCIES([CC])
+else
+ZW_PROG_COMPILER_DEPENDENCIES([CXX])
+fi
 
 # Checks for header files.
 AC_HEADER_TIME
 ACX_HEADER_STRING
-AC_CHECK_HEADERS(iconv.h locale.h fcntl.h limits.h stddef.h \
+
+# AC_CHECK_HEADERS is repeated to work around apparent autoconf 2.59 bug.  If
+# AC_CHECK_HEADERS comes after the if clause, the last AC_LANG call gets used,
+# no matter which branch is taken.
+if test "$ENABLE_BUILD_WITH_CXX" = "no"; then
+   AC_LANG(C)
+   AC_CHECK_HEADERS(locale.h fcntl.h limits.h stddef.h \
 	stdlib.h strings.h string.h sys/file.h unistd.h)
+else
+   AC_LANG(C++)
+   AC_CHECK_HEADERS(locale.h fcntl.h limits.h stddef.h \
+	stdlib.h strings.h string.h sys/stat.h sys/file.h unistd.h)
+fi
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -122,6 +147,7 @@ case $target in
 	hppa*64*-*-* | \
 	i[34567]86-*-darwin* | \
 	i[34567]86-*-solaris2.1[0-9]* | \
+	i[34567]86-w64-mingw* | \
 	mips*-*-* | \
 	mmix-*-* | \
 	powerpc*-*-* | \

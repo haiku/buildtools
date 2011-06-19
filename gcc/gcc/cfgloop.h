@@ -38,16 +38,14 @@ enum lpt_dec
   LPT_UNROLL_STUPID
 };
 
-struct lpt_decision GTY (())
-{
+struct GTY (()) lpt_decision {
   enum lpt_dec decision;
   unsigned times;
 };
 
 /* The structure describing a bound on number of iterations of a loop.  */
 
-struct nb_iter_bound GTY ((chain_next ("%h.next")))
-{
+struct GTY ((chain_next ("%h.next"))) nb_iter_bound {
   /* The statement STMT is executed at most ...  */
   gimple stmt;
 
@@ -60,7 +58,7 @@ struct nb_iter_bound GTY ((chain_next ("%h.next")))
      b) it is consistent with the result of number_of_iterations_exit.  */
   double_int bound;
 
-  /* True if the statement will cause the loop to be leaved the (at most) 
+  /* True if the statement will cause the loop to be leaved the (at most)
      BOUND + 1-st time it is executed, that is, all the statements after it
      are executed at most BOUND times.  */
   bool is_exit;
@@ -71,8 +69,7 @@ struct nb_iter_bound GTY ((chain_next ("%h.next")))
 
 /* Description of the loop exit.  */
 
-struct loop_exit GTY (())
-{
+struct GTY (()) loop_exit {
   /* The exit edge.  */
   struct edge_def *e;
 
@@ -100,8 +97,7 @@ enum loop_estimation
 };
 
 /* Structure to hold information for each natural loop.  */
-struct loop GTY ((chain_next ("%h.next")))
-{
+struct GTY ((chain_next ("%h.next"))) loop {
   /* Index into loops array.  */
   int num;
 
@@ -161,6 +157,13 @@ struct loop GTY ((chain_next ("%h.next")))
 
   /* Head of the cyclic list of the exits of the loop.  */
   struct loop_exit *exits;
+
+  /* True if the loop can be parallel.  */
+  bool can_be_parallel;
+
+  /* The single induction variable of the loop when the loop is in
+     normal form.  */
+  tree single_iv;
 };
 
 /* Flags for state of loop structure.  */
@@ -181,8 +184,7 @@ enum
 #define AVOID_CFG_MODIFICATIONS (LOOPS_MAY_HAVE_MULTIPLE_LATCHES)
 
 /* Structure to hold CFG information about natural loops within a function.  */
-struct loops GTY (())
-{
+struct GTY (()) loops {
   /* State of loops.  */
   int state;
 
@@ -210,7 +212,7 @@ struct loop *alloc_loop (void);
 extern void flow_loop_free (struct loop *);
 int flow_loop_nodes_find (basic_block, struct loop *);
 void fix_loop_structure (bitmap changed_bbs);
-void mark_irreducible_loops (void);
+bool mark_irreducible_loops (void);
 void release_recorded_exits (void);
 void record_loop_exits (void);
 void rescan_loop_exit (edge, bool, bool);
@@ -238,7 +240,7 @@ extern unsigned get_loop_body_with_size (const struct loop *, basic_block *,
 					 unsigned);
 extern basic_block *get_loop_body_in_dom_order (const struct loop *);
 extern basic_block *get_loop_body_in_bfs_order (const struct loop *);
-extern basic_block *get_loop_body_in_custom_order (const struct loop *, 
+extern basic_block *get_loop_body_in_custom_order (const struct loop *,
 			       int (*) (const void *, const void *));
 
 extern VEC (edge, heap) *get_loop_exit_edges (const struct loop *);
@@ -288,9 +290,10 @@ extern bool can_duplicate_loop_p (const struct loop *loop);
 
 extern edge create_empty_if_region_on_edge (edge, tree);
 extern struct loop *create_empty_loop_on_edge (edge, tree, tree, tree, tree,
-					       tree *, struct loop *);
+					       tree *, tree *, struct loop *);
 extern struct loop * duplicate_loop (struct loop *, struct loop *);
-extern bool duplicate_loop_to_header_edge (struct loop *, edge, 
+extern void duplicate_subloops (struct loop *, struct loop *);
+extern bool duplicate_loop_to_header_edge (struct loop *, edge,
 					   unsigned, sbitmap, edge,
  					   VEC (edge, heap) **, int);
 extern struct loop *loopify (edge, edge,
@@ -645,5 +648,6 @@ enum
 extern void unroll_and_peel_loops (int);
 extern void doloop_optimize_loops (void);
 extern void move_loop_invariants (void);
+extern bool finite_loop_p (struct loop *);
 
 #endif /* GCC_CFGLOOP_H */

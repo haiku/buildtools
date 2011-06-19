@@ -208,6 +208,10 @@ mlong64
 Target Report RejectNegative Mask(LONG64)
 Use a 64-bit long type
 
+mmcount-ra-address
+Target Report Var(TARGET_MCOUNT_RA_ADDRESS)
+Pass the address of the ra save location to _mcount in $12
+
 mmemcpy
 Target Report Mask(MEMCPY)
 Don't optimize block moves
@@ -244,6 +248,10 @@ mr10k-cache-barrier=
 Target Joined RejectNegative
 -mr10k-cache-barrier=SETTING	Specify when r10k cache barriers should be inserted
 
+mrelax-pic-calls
+Target Report Mask(RELAX_PIC_CALLS)
+Try to allow the linker to turn PIC calls into direct calls
+
 mshared
 Target Report Var(TARGET_SHARED) Init(1)
 When generating -mabicalls code, make the code suitable for use in shared libraries
@@ -267,6 +275,10 @@ Optimize lui/addiu address loads
 msym32
 Target Report Var(TARGET_SYM32)
 Assume all symbols have 32-bit values
+
+msynci
+Target Report Mask(SYNCI)
+Use synci instruction to invalidate i-cache
 
 mtune=
 Target RejectNegative Joined Var(mips_tune_string)

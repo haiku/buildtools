@@ -1,6 +1,6 @@
 /* Calculate branch probabilities, and basic block execution counts.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
@@ -100,7 +100,6 @@ static int total_num_blocks_created;
 static int total_num_passes;
 static int total_num_times_called;
 static int total_hist_br_prob[20];
-static int total_num_never_executed;
 static int total_num_branches;
 
 /* Forward declarations.  */
@@ -344,7 +343,7 @@ is_inconsistent (void)
         {
 	  if (dump_file)
 	    {
-	      fprintf (dump_file, "BB %i count does not match sum of incomming edges "
+	      fprintf (dump_file, "BB %i count does not match sum of incoming edges "
 		       HOST_WIDEST_INT_PRINT_DEC" should be " HOST_WIDEST_INT_PRINT_DEC,
 		       bb->index,
 		       bb->count,
@@ -447,7 +446,6 @@ compute_branch_probabilities (void)
   int changes;
   int passes;
   int hist_br_prob[20];
-  int num_never_executed;
   int num_branches;
   gcov_type *exec_counts = get_exec_counts ();
   int inconsistent = 0;
@@ -647,7 +645,6 @@ compute_branch_probabilities (void)
 
   for (i = 0; i < 20; i++)
     hist_br_prob[i] = 0;
-  num_never_executed = 0;
   num_branches = 0;
 
   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
@@ -741,7 +738,7 @@ compute_branch_probabilities (void)
 	  if (bb->index >= NUM_FIXED_BLOCKS
 	      && block_ends_with_condjump_p (bb)
 	      && EDGE_COUNT (bb->succs) >= 2)
-	    num_branches++, num_never_executed;
+	    num_branches++;
 	}
     }
   counts_to_freqs ();
@@ -750,8 +747,6 @@ compute_branch_probabilities (void)
   if (dump_file)
     {
       fprintf (dump_file, "%d branches\n", num_branches);
-      fprintf (dump_file, "%d branches never executed\n",
-	       num_never_executed);
       if (num_branches)
 	for (i = 0; i < 10; i++)
 	  fprintf (dump_file, "%d%% branches in range %d-%d%%\n",
@@ -759,7 +754,6 @@ compute_branch_probabilities (void)
 		   5 * i, 5 * i + 5);
 
       total_num_branches += num_branches;
-      total_num_never_executed += num_never_executed;
       for (i = 0; i < 20; i++)
 	total_hist_br_prob[i] += hist_br_prob[i];
 
@@ -781,7 +775,7 @@ compute_value_histograms (histogram_values values)
   gcov_type *histogram_counts[GCOV_N_VALUE_COUNTERS];
   gcov_type *act_count[GCOV_N_VALUE_COUNTERS];
   gcov_type *aact_count;
- 
+
   for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
     n_histogram_counters[t] = 0;
 
@@ -949,8 +943,8 @@ branch_prob (void)
 	    }
 
 	  /* Edge with goto locus might get wrong coverage info unless
-	     it is the only edge out of BB.   
-	     Don't do that when the locuses match, so 
+	     it is the only edge out of BB.
+	     Don't do that when the locuses match, so
 	     if (blah) goto something;
 	     is not computed twice.  */
 	  if (last
@@ -1133,7 +1127,7 @@ branch_prob (void)
 
 	  if (bb == ENTRY_BLOCK_PTR->next_bb)
 	    {
-	      expanded_location curr_location = 
+	      expanded_location curr_location =
 		expand_location (DECL_SOURCE_LOCATION (current_function_decl));
 	      output_location (curr_location.file, curr_location.line,
 			       &offset, bb);
@@ -1333,7 +1327,6 @@ init_branch_prob (void)
   total_num_passes = 0;
   total_num_times_called = 0;
   total_num_branches = 0;
-  total_num_never_executed = 0;
   for (i = 0; i < 20; i++)
     total_hist_br_prob[i] = 0;
 }
@@ -1364,8 +1357,6 @@ end_branch_prob (void)
 		 / total_num_times_called);
       fprintf (dump_file, "Total number of branches: %d\n",
 	       total_num_branches);
-      fprintf (dump_file, "Total number of branches never executed: %d\n",
-	       total_num_never_executed);
       if (total_num_branches)
 	{
 	  int i;

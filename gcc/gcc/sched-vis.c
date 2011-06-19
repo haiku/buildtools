@@ -81,7 +81,7 @@ print_exp (char *buf, const_rtx x, int verbose)
     {
     case PLUS:
       op[0] = XEXP (x, 0);
-      if (GET_CODE (XEXP (x, 1)) == CONST_INT
+      if (CONST_INT_P (XEXP (x, 1))
 	  && INTVAL (XEXP (x, 1)) < 0)
 	{
 	  st[1] = "-";
@@ -521,6 +521,10 @@ print_value (char *buf, const_rtx x, int verbose)
       cur = safe_concat (buf, cur, t);
       cur = safe_concat (buf, cur, "]");
       break;
+    case DEBUG_EXPR:
+      sprintf (t, "D#%i", DEBUG_TEMP_UID (DEBUG_EXPR_TREE_DECL (x)));
+      cur = safe_concat (buf, cur, t);
+      break;
     default:
       print_exp (t, x, verbose);
       cur = safe_concat (buf, cur, t);
@@ -555,6 +559,10 @@ print_pattern (char *buf, const_rtx x, int verbose)
     case USE:
       print_value (t1, XEXP (x, 0), verbose);
       sprintf (buf, "use %s", t1);
+      break;
+    case VAR_LOCATION:
+      print_value (t1, PAT_VAR_LOCATION_LOC (x), verbose);
+      sprintf (buf, "loc %s", t1);
       break;
     case COND_EXEC:
       if (GET_CODE (COND_EXEC_TEST (x)) == NE
@@ -592,7 +600,7 @@ print_pattern (char *buf, const_rtx x, int verbose)
       sprintf (buf, "asm {%s}", XSTR (x, 0));
       break;
     case ADDR_VEC:
-      break;
+      /* Fall through.  */
     case ADDR_DIFF_VEC:
       print_value (buf, XEXP (x, 0), verbose);
       break;
@@ -658,6 +666,41 @@ print_insn (char *buf, const_rtx x, int verbose)
 #endif
 	sprintf (buf, " %4d %s", INSN_UID (x), t);
       break;
+
+    case DEBUG_INSN:
+      {
+	const char *name = "?";
+
+	if (DECL_P (INSN_VAR_LOCATION_DECL (insn)))
+	  {
+	    tree id = DECL_NAME (INSN_VAR_LOCATION_DECL (insn));
+	    char idbuf[32];
+	    if (id)
+	      name = IDENTIFIER_POINTER (id);
+	    else if (TREE_CODE (INSN_VAR_LOCATION_DECL (insn))
+		     == DEBUG_EXPR_DECL)
+	      {
+		sprintf (idbuf, "D#%i",
+			 DEBUG_TEMP_UID (INSN_VAR_LOCATION_DECL (insn)));
+		name = idbuf;
+	      }
+	    else
+	      {
+		sprintf (idbuf, "D.%i",
+			 DECL_UID (INSN_VAR_LOCATION_DECL (insn)));
+		name = idbuf;
+	      }
+	  }
+	if (VAR_LOC_UNKNOWN_P (INSN_VAR_LOCATION_LOC (insn)))
+	  sprintf (buf, " %4d: debug %s optimized away", INSN_UID (insn), name);
+	else
+	  {
+	    print_pattern (t, INSN_VAR_LOCATION_LOC (insn), verbose);
+	    sprintf (buf, " %4d: debug %s => %s", INSN_UID (insn), name, t);
+	  }
+      }
+      break;
+
     case JUMP_INSN:
       print_pattern (t, PATTERN (x), verbose);
 #ifdef INSN_SCHEDULING
@@ -736,7 +779,7 @@ print_rtl_slim_with_bb (FILE *f, rtx first, int flags)
   print_rtl_slim (f, first, NULL, -1, flags);
 }
 
-/* Same as above, but stop at LAST or when COUNT == 0.  
+/* Same as above, but stop at LAST or when COUNT == 0.
    If COUNT < 0 it will stop only at LAST or NULL rtx.  */
 void
 print_rtl_slim (FILE *f, rtx first, rtx last, int count, int flags)
@@ -745,12 +788,12 @@ print_rtl_slim (FILE *f, rtx first, rtx last, int count, int flags)
   rtx insn, tail;
 
   tail = last ? NEXT_INSN (last) : NULL_RTX;
-  for (insn = first; 
-       (insn != NULL) && (insn != tail) && (count != 0); 
+  for (insn = first;
+       (insn != NULL) && (insn != tail) && (count != 0);
        insn = NEXT_INSN (insn))
     {
       if ((flags & TDF_BLOCKS)
-	  && (INSN_P (insn) || GET_CODE (insn) == NOTE)
+	  && (INSN_P (insn) || NOTE_P (insn))
 	  && BLOCK_FOR_INSN (insn)
 	  && !current_bb)
 	{
@@ -772,7 +815,7 @@ print_rtl_slim (FILE *f, rtx first, rtx last, int count, int flags)
     }
 }
 
-void 
+void
 debug_bb_slim (struct basic_block_def *bb)
 {
   print_rtl_slim (stderr, BB_HEAD (bb), BB_END (bb), -1, 32);

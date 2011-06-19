@@ -1,6 +1,6 @@
 # libstdc++ "tool init file" for DejaGNU
 
-# Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+# Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 # Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -91,14 +91,24 @@ proc libstdc++_init { testfile } {
     global target_triplet
     global flags_file
     global tool_timeout
+    global DEFAULT_CXXFLAGS
+    global STATIC_LIBCXXFLAGS
 
     # We set LC_ALL and LANG to C so that we get the same error
     # messages as expected.
     setenv LC_ALL C
     setenv LANG C
 
+    # Many hosts now default to a non-ASCII C locale, however, so
+    # they can set a charset encoding here if they need.
+    if { [ishost "*-*-cygwin*"] } {
+      setenv LC_ALL C.ASCII
+      setenv LANG C.ASCII
+    }
+
     set blddir [lookfor_file [get_multilibs] libstdc++-v3]
     set flags_file "${blddir}/scripts/testsuite_flags"
+    set shlib_ext [get_shlib_extension]
     v3track flags_file 2
 
     # If a test doesn't have special options, use DEFAULT_CXXFLAGS.
@@ -107,7 +117,7 @@ proc libstdc++_init { testfile } {
     #   2) might need to be negated 
     # In particular, some tests have to be run without precompiled
     # headers, or without assertions.
-    global DEFAULT_CXXFLAGS
+
     if ![info exists DEFAULT_CXXFLAGS] then {
 	set DEFAULT_CXXFLAGS ""
 	# Host specific goo here.
@@ -138,7 +148,7 @@ proc libstdc++_init { testfile } {
 
     # Locate libgomp. This is only required for parallel mode.
     set v3-libgomp 0
-    set libgompdir [lookfor_file $blddir/../libgomp .libs/libgomp.so]
+    set libgompdir [lookfor_file $blddir/../libgomp .libs/libgomp.$shlib_ext]
     if {$libgompdir != ""} {
 	set v3-libgomp 1
         set libgompdir [file dirname $libgompdir]
@@ -149,7 +159,7 @@ proc libstdc++_init { testfile } {
 
     # Locate libstdc++ shared library. (ie libstdc++.so.)
     set v3-sharedlib 0
-    set sharedlibdir [lookfor_file $blddir src/.libs/libstdc++.so]
+    set sharedlibdir [lookfor_file $blddir src/.libs/libstdc++.$shlib_ext]
     if {$sharedlibdir != ""} {
 	if { [string match "*-*-linux*" $target_triplet] && [isnative] } {
 	    set v3-sharedlib 1
@@ -157,6 +167,15 @@ proc libstdc++_init { testfile } {
 	} 
     }
     v3track v3-sharedlib 3
+
+    set STATIC_LIBCXXFLAGS ""
+    set staticlibdir [lookfor_file $blddir src/.libs/libstdc++.a]
+    if {$staticlibdir != ""} {
+	set staticlibdir [file dirname $staticlibdir]
+	# Some targets use libstdc++.a%s in their specs, so they need a
+	# -B option for uninstalled testing.
+	set STATIC_LIBCXXFLAGS " -B${staticlibdir} "
+    }
 
     # Compute what needs to be added to the existing LD_LIBRARY_PATH.
     if {$gccdir != ""} {
@@ -204,14 +223,23 @@ proc libstdc++_init { testfile } {
 	# directory, and then add that to the search path.
 	foreach src [glob "${srcdir}/util/*.h" \
 		          "${srcdir}/util/*.cc" \
- 		          "${srcdir}/util/*/*.hpp" \
+		          "${srcdir}/util/*.tcc" \
+		          "${srcdir}/util/*.hpp" \
+ 		          "${srcdir}/util/*/*.h" \
 		          "${srcdir}/util/*/*.cc" \
+		          "${srcdir}/util/*/*.tcc" \
 			  "${srcdir}/util/*/*.hpp" \
+		          "${srcdir}/util/*/*/*.h" \
 		          "${srcdir}/util/*/*/*.cc" \
+		          "${srcdir}/util/*/*/*.tcc" \
 			  "${srcdir}/util/*/*/*.hpp" \
+		          "${srcdir}/util/*/*/*/*.h" \
 		          "${srcdir}/util/*/*/*/*.cc" \
+		          "${srcdir}/util/*/*/*/*.tcc" \
   			  "${srcdir}/util/*/*/*/*.hpp" \
+		          "${srcdir}/util/*/*/*/*/*.h" \
 		          "${srcdir}/util/*/*/*/*/*.cc" \
+		          "${srcdir}/util/*/*/*/*/*.tcc" \
   			  "${srcdir}/util/*/*/*/*/*.hpp" ] {
 	    # Remove everything up to "util/..."
 	    set dst [string range $src [string length "${srcdir}/"] end]
@@ -387,6 +415,7 @@ proc v3_target_compile { source dest type options } {
     global cxxflags
     global cxxldflags
     global includes
+    global STATIC_LIBCXXFLAGS
 
     if { [target_info needs_status_wrapper] != "" && [info exists gluefile] } {
         lappend options "libs=${gluefile}"
@@ -396,6 +425,7 @@ proc v3_target_compile { source dest type options } {
     set cxx_final $cxx
     set cxxlibglossflags  [libgloss_link_flags]
     set cxx_final [concat $cxx_final $cxxlibglossflags]
+    set cxx_final [concat $cxx_final $STATIC_LIBCXXFLAGS]
     set cxx_final [concat $cxx_final $cxxflags]
     set cxx_final [concat $cxx_final $includes]
 
@@ -427,6 +457,7 @@ proc v3_target_compile_as_c { source dest type options } {
     global blddir
     global cc
     global cxxflags
+    global STATIC_LIBCXXFLAGS
 
     if { [target_info needs_status_wrapper] != "" && [info exists gluefile] } {
         lappend options "libs=${gluefile}"
@@ -437,6 +468,7 @@ proc v3_target_compile_as_c { source dest type options } {
     set cc_final $cc
     set cxxlibglossflags [libgloss_link_flags]
     set cc_final [concat $cc_final $cxxlibglossflags]
+    set cc_final [concat $cc_final $STATIC_LIBCXXFLAGS]
     set cc_final [concat $cc_final $cxxflags]
     set cc_final [concat $cc_final $includes]
     regsub -all {\s[-]nostdinc[+][+]} $cc_final "" cc_final
@@ -554,6 +586,15 @@ proc v3-build_support { } {
     }
 
     # Collect into libtestc++.a
+    # Delete libtestc++.a first.  Mixed 32 and 64-bit archives cannot be
+    # linked on IRIX 6.
+    # Use same procedure as gcc-dg.exp (remove-build-file).
+    if [is_remote host] {
+	# Ensure the host knows the file is gone by deleting there
+	# first.
+	remote_file host delete "./libtestc++.a"
+	}
+    remote_file build delete "./libtestc++.a"
     if  [info exists env(AR)] {
 	set ar $env(AR)
     } else {
@@ -796,61 +837,6 @@ proc check_v3_target_time { } {
     return $et_time_saved
 }
 
-proc check_v3_target_rvalref { } {
-    global et_rvalref_saved
-    global et_rvalref_target_name
-    global tool	
-
-    if { ![info exists et_rvalref_target_name] } {
-	set et_rvalref_target_name ""
-    }
-
-    # If the target has changed since we set the cached value, clear it.
-    set current_target [current_target_name]
-    if { $current_target != $et_rvalref_target_name } {
-	verbose "check_v3_target_rvalref: `$et_rvalref_target_name'" 2
-	set et_rvalref_target_name $current_target
-	if [info exists et_rvalref_saved] {
-	    verbose "check_v3_target_rvalref: removing cached result" 2
-	    unset et_rvalref_saved
-	}
-    }
-
-    if [info exists et_rvalref_saved] {
-	verbose "check_v3_target_rvalref: using cached result" 2
-    } else {
-	set et_rvalref_saved 0
-
-	# Set up and compile a C++ test program that tries to use
-	# the library components of rval references
-	set src rvalref[pid].cc
-	set exe rvalref[pid].x
-
-	set f [open $src "w"]
-	puts $f "#include <iterator>"
-	puts $f "#include <utility>"
-	puts $f "using std::move;"
-	puts $f "using std::identity;"
-	puts $f "using std::forward;"
-	puts $f "using std::move_iterator;"
-	puts $f "using std::make_move_iterator;"
-	close $f
-
-	set lines [v3_target_compile $src $exe executable ""]
-	file delete $src
-
-	if [string match "" $lines] {
-	    # No error message, compilation succeeded.
-	    verbose "check_v3_target_rvalref: compilation succeeded" 2
-	    remote_file build delete $exe
-	    set et_rvalref_saved 1
-	} else {
-	    verbose "check_v3_target_rvalref: compilation failed" 2
-	}
-    }
-    return $et_rvalref_saved
-}
-
 proc check_v3_target_namedlocale { } {
     global et_namedlocale_saved
     global et_namedlocale_target_name
@@ -892,6 +878,7 @@ proc check_v3_target_namedlocale { } {
 	puts $f "     locale(\"de_DE\");"
 	puts $f "     locale(\"de_DE.ISO-8859-15@euro\");"
 	puts $f "     locale(\"de_DE@euro\");"
+	puts $f "     locale(\"en_GB\");"
 	puts $f "     locale(\"en_HK\");"
 	puts $f "     locale(\"en_PH\");"
 	puts $f "     locale(\"en_US\");"
@@ -906,6 +893,8 @@ proc check_v3_target_namedlocale { } {
 	puts $f "     locale(\"is_IS.UTF-8\");"
 	puts $f "     locale(\"it_IT\");"
 	puts $f "     locale(\"ja_JP.eucjp\");"
+	puts $f "     locale(\"ru_RU.ISO-8859-5\");"
+	puts $f "     locale(\"ru_RU.UTF-8\");"
 	puts $f "     locale(\"se_NO.UTF-8\");"
 	puts $f "     locale(\"ta_IN\");"
 	puts $f "     locale(\"zh_TW\");"
@@ -1373,4 +1362,120 @@ proc check_v3_target_string_conversions { } {
     }
     verbose "check_v3_target_string_conversions: $et_string_conversions" 2
     return $et_string_conversions
+}
+
+proc check_v3_target_swprintf { } {
+    global cxxflags
+    global DEFAULT_CXXFLAGS
+    global et_swprintf
+
+    global tool
+
+    if { ![info exists et_swprintf_target_name] } {
+        set et_swprintf_target_name ""
+    }
+
+    # If the target has changed since we set the cached value, clear it.
+    set current_target [current_target_name]
+    if { $current_target != $et_swprintf_target_name } {
+        verbose "check_v3_target_swprintf: `$et_swprintf_target_name'" 2
+        set et_swprintf_target_name $current_target
+        if [info exists et_swprintf] {
+            verbose "check_v3_target_swprintf: removing cached result" 2
+            unset et_swprintf
+        }
+    }
+
+    if [info exists et_swprintf] {
+        verbose "check_v3_target_swprintf: using cached result" 2
+    } else {
+        set et_swprintf 0
+	
+	# Set up and compile a C++0x test program that depends
+        # on a standard swprintf function to be available.
+        set src swprintf[pid].cc
+        set exe swprintf[pid].exe
+
+        set f [open $src "w"]
+        puts $f "#include <bits/c++config.h>"
+        puts $f "int main()"
+        puts $f "#if !defined(_GLIBCXX_HAVE_BROKEN_VSWPRINTF)"
+        puts $f "{ return 0; }"
+        puts $f "#endif"
+        close $f
+
+        set cxxflags_saved $cxxflags
+        set cxxflags "$cxxflags $DEFAULT_CXXFLAGS -Werror"
+
+        set lines [v3_target_compile $src $exe executable ""]
+        set cxxflags $cxxflags_saved
+        file delete $src
+
+        if [string match "" $lines] {
+            # No error message, compilation succeeded.
+            set et_swprintf 1
+        } else {
+            verbose "check_v3_target_swprintf: compilation failed" 2
+        }
+    }
+    verbose "check_v3_target_swprintf: $et_swprintf" 2
+    return $et_swprintf
+}
+
+proc check_v3_target_binary_io { } {
+    global cxxflags
+    global DEFAULT_CXXFLAGS
+    global et_binary_io
+
+    global tool
+
+    if { ![info exists et_binary_io_target_name] } {
+        set et_binary_io_target_name ""
+    }
+
+    # If the target has changed since we set the cached value, clear it.
+    set current_target [current_target_name]
+    if { $current_target != $et_binary_io_target_name } {
+        verbose "check_v3_target_binary_io: `$et_binary_io_target_name'" 2
+        set et_binary_io_target_name $current_target
+        if [info exists et_binary_io] {
+            verbose "check_v3_target_binary_io: removing cached result" 2
+            unset et_binary_io
+        }
+    }
+
+    if [info exists et_binary_io] {
+        verbose "check_v3_target_binary_io: using cached result" 2
+    } else {
+        set et_binary_io 0
+	
+	# Set up and compile a C++0x test program that depends
+        # on text and binary I/O being the same.
+        set src binary_io[pid].cc
+        set exe binary_io[pid].exe
+
+        set f [open $src "w"]
+        puts $f "#include <bits/c++config.h>"
+        puts $f "int main()"
+        puts $f "#if !defined(_GLIBCXX_HAVE_DOS_BASED_FILESYSTEM)"
+        puts $f "{ return 0; }"
+        puts $f "#endif"
+        close $f
+
+        set cxxflags_saved $cxxflags
+        set cxxflags "$cxxflags $DEFAULT_CXXFLAGS -Werror"
+
+        set lines [v3_target_compile $src $exe executable ""]
+        set cxxflags $cxxflags_saved
+        file delete $src
+
+        if [string match "" $lines] {
+            # No error message, compilation succeeded.
+            set et_binary_io 1
+        } else {
+            verbose "check_v3_target_binary_io: compilation failed" 2
+        }
+    }
+    verbose "check_v3_target_binary_io: $et_binary_io" 2
+    return $et_binary_io
 }

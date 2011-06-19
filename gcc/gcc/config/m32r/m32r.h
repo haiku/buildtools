@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, Renesas M32R cpu.
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007, 2008  Free Software Foundation, Inc.
+   2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -770,11 +770,6 @@ extern enum reg_class m32r_regno_reg_class[FIRST_PSEUDO_REGISTER];
 
 /* Eliminating the frame and arg pointers.  */
 
-/* A C expression which is nonzero if a function must have and use a
-   frame pointer.  This expression is evaluated in the reload pass.
-   If its value is nonzero the function will have a frame pointer.  */
-#define FRAME_POINTER_REQUIRED cfun->calls_alloca
-
 #if 0
 /* C statement to store the difference between the frame pointer
    and the stack pointer values immediately after the function prologue.
@@ -797,18 +792,6 @@ extern enum reg_class m32r_regno_reg_class[FIRST_PSEUDO_REGISTER];
 {{ FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM },	\
  { ARG_POINTER_REGNUM,	 STACK_POINTER_REGNUM },	\
  { ARG_POINTER_REGNUM,   FRAME_POINTER_REGNUM }}
-
-/* A C expression that returns nonzero if the compiler is allowed to
-   try to replace register number FROM-REG with register number
-   TO-REG.  This macro need only be defined if `ELIMINABLE_REGS' is
-   defined, and will usually be the constant 1, since most of the
-   cases preventing register elimination are things that the compiler
-   already knows about.  */
-
-#define CAN_ELIMINATE(FROM, TO)						\
-  ((FROM) == ARG_POINTER_REGNUM && (TO) == STACK_POINTER_REGNUM		\
-   ? ! frame_pointer_needed						\
-   : 1)
 
 /* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It
    specifies the initial difference between the specified pair of
@@ -1007,38 +990,6 @@ L2:     .word STATIC
 /* Length in bytes of the trampoline for entering a nested function.  */
 #define TRAMPOLINE_SIZE 24
 
-/* Emit RTL insns to initialize the variable parts of a trampoline.
-   FNADDR is an RTX for the address of the function's pure code.
-   CXT is an RTX for the static chain value for the function.  */
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT)				\
-  do										\
-    {										\
-      emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 0)),		\
-		      gen_int_mode (TARGET_LITTLE_ENDIAN ?			\
-				    0x017e8e17 : 0x178e7e01, SImode));		\
-      emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 4)),		\
-		      gen_int_mode (TARGET_LITTLE_ENDIAN ?			\
-				    0x0c00ae86 : 0x86ae000c, SImode));		\
-      emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 8)),		\
-		      gen_int_mode (TARGET_LITTLE_ENDIAN ?			\
-				    0xe627871e : 0x1e8727e6, SImode));		\
-      emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 12)),		\
-		      gen_int_mode (TARGET_LITTLE_ENDIAN ?			\
-				    0xc616c626 : 0x26c61fc6, SImode));		\
-      emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 16)),		\
-		      (CXT));							\
-      emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 20)),		\
-		      (FNADDR));						\
-      if (m32r_cache_flush_trap >= 0)						\
-	emit_insn (gen_flush_icache (validize_mem (gen_rtx_MEM (SImode, TRAMP)),\
-				     gen_int_mode (m32r_cache_flush_trap, SImode))); \
-      else if (m32r_cache_flush_func && m32r_cache_flush_func[0])		\
-	emit_library_call (m32r_function_symbol (m32r_cache_flush_func),	\
-			   0, VOIDmode, 3, TRAMP, Pmode,			\
-			   gen_int_mode (TRAMPOLINE_SIZE, SImode), SImode,	\
-			   GEN_INT (3), SImode);				\
-    }										\
-  while (0)
 
 #define RETURN_ADDR_RTX(COUNT, FRAME) m32r_return_addr (COUNT)
 
@@ -1059,7 +1010,7 @@ L2:     .word STATIC
 #define CONSTANT_ADDRESS_P(X)   \
   (    GET_CODE (X) == LABEL_REF  \
    ||  GET_CODE (X) == SYMBOL_REF \
-   ||  GET_CODE (X) == CONST_INT  \
+   ||  CONST_INT_P (X)  \
    || (GET_CODE (X) == CONST      \
        && ! (flag_pic && ! m32r_legitimate_pic_operand_p (X))))
 
@@ -1073,7 +1024,7 @@ L2:     .word STATIC
   (! (GET_CODE (X) == CONST						\
       && GET_CODE (XEXP (X, 0)) == PLUS					\
       && (GET_CODE (XEXP (XEXP (X, 0), 0)) == SYMBOL_REF || GET_CODE (XEXP (XEXP (X, 0), 0)) == LABEL_REF) \
-      && GET_CODE (XEXP (XEXP (X, 0), 1)) == CONST_INT			\
+      && CONST_INT_P (XEXP (XEXP (X, 0), 1))			\
       && (unsigned HOST_WIDE_INT) INTVAL (XEXP (XEXP (X, 0), 1)) > 32767))
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
@@ -1120,7 +1071,7 @@ L2:     .word STATIC
 
 /* Local to this file.  */
 #define RTX_OK_FOR_OFFSET_P(X) \
-  (GET_CODE (X) == CONST_INT && INT16_P (INTVAL (X)))
+  (CONST_INT_P (X) && INT16_P (INTVAL (X)))
 
 /* Local to this file.  */
 #define LEGITIMATE_OFFSET_ADDRESS_P(MODE, X)			\
@@ -1142,7 +1093,7 @@ L2:     .word STATIC
 #define LOAD_POSTINC_P(MODE, X)					\
   (((MODE) == SImode || (MODE) == SFmode)			\
    && GET_CODE (X) == POST_INC					\
-   && GET_CODE (XEXP (X, 0)) == REG				\
+   && REG_P (XEXP (X, 0))				\
    && RTX_OK_FOR_BASE_P (XEXP (X, 0)))
 
 /* Local to this file.  */
@@ -1150,7 +1101,7 @@ L2:     .word STATIC
 #define STORE_PREINC_PREDEC_P(MODE, X)				\
   (((MODE) == SImode || (MODE) == SFmode)			\
    && (GET_CODE (X) == PRE_INC || GET_CODE (X) == PRE_DEC)	\
-   && GET_CODE (XEXP (X, 0)) == REG				\
+   && REG_P (XEXP (X, 0))				\
    && RTX_OK_FOR_BASE_P (XEXP (X, 0)))
 
 #define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)			\
@@ -1167,29 +1118,6 @@ L2:     .word STATIC
       if (STORE_PREINC_PREDEC_P ((MODE), (X)))			\
 	goto ADDR;						\
     }								\
-  while (0)
-
-/* Try machine-dependent ways of modifying an illegitimate address
-   to be legitimate.  If we find one, return the new, valid address.
-   This macro is used in only one place: `memory_address' in explow.c.
-
-   OLDX is the address as it was before break_out_memory_refs was called.
-   In some cases it is useful to look at this to decide what needs to be done.
-
-   MODE and WIN are passed so that this macro can use
-   GO_IF_LEGITIMATE_ADDRESS.
-
-   It is always safe for this macro to do nothing.  It exists to recognize
-   opportunities to optimize the output.  */
-
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN)			 \
-  do								 \
-    {								 \
-      if (flag_pic)						 \
-	(X) = m32r_legitimize_pic_address (X, NULL_RTX);	 \
-      if (memory_address_p (MODE, X))				 \
-	goto WIN;						 \
-    }								 \
   while (0)
 
 /* Go to LABEL if ADDR (a legitimate address expression)
@@ -1518,12 +1446,6 @@ extern char m32r_punct_chars[256];
 /* A function address in a call instruction.  */
 #define FUNCTION_MODE SImode
 
-/* Define the information needed to generate branch and scc insns.  This is
-   stored from the compare operation.  Note that we can't use "rtx" here
-   since it hasn't been defined!  */
-extern struct rtx_def * m32r_compare_op0;
-extern struct rtx_def * m32r_compare_op1;
-
 /* M32R function types.  */
 enum m32r_function_type
 {

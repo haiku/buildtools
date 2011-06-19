@@ -3885,11 +3885,11 @@ java resource java/util/iso4217.properties
 # decltype/param placeholder test
 --format=gnu-v3
 _Z3addIidEDTplfp_fp0_ET_T0_
-decltype (parm#1+parm#2) add<int, double>(int, double)
+decltype ({parm#1}+{parm#2}) add<int, double>(int, double)
 # decltype/fn call test
 --format=gnu-v3
 _Z4add3IidEDTclL_Z1gEfp_fp0_EET_T0_
-decltype (g(parm#1, parm#2)) add3<int, double>(int, double)
+decltype (g({parm#1}, {parm#2})) add3<int, double>(int, double)
 # new (2008) built in types test
 --format=gnu-v3
 _Z1fDfDdDeDhDsDi
@@ -3901,15 +3901,139 @@ void f<int*, float*, double*>(int*, float*, double*)
 # '.' test
 --format=gnu-v3
 _Z1hI1AIiEdEDTcldtfp_1gIT0_EEET_S2_
-decltype ((parm#1.(g<double>))()) h<A<int>, double>(A<int>, double)
+decltype (({parm#1}.(g<double>))()) h<A<int>, double>(A<int>, double)
 # test for typed function in decltype
 --format=gnu-v3
 _ZN1AIiE1jIiEEDTplfp_clL_Z1xvEEET_
-decltype (parm#1+((x())())) A<int>::j<int>(int)
+decltype ({parm#1}+((x())())) A<int>::j<int>(int)
 # test for expansion of function parameter pack
 --format=gnu-v3
 _Z1gIIidEEDTclL_Z1fEspplfp_Li1EEEDpT_
-decltype (f((parm#1+(1))...)) g<int, double>(int, double)
+decltype (f(({parm#1}+(1))...)) g<int, double>(int, double)
+# lambda tests
+--format=gnu-v3
+_ZZ1giENKUlvE_clEv
+g(int)::{lambda()#1}::operator()() const
+--format=gnu-v3
+_Z4algoIZ1giEUlvE0_EiT_
+int algo<g(int)::{lambda()#2}>(g(int)::{lambda()#2})
+--format=gnu-v3
+_ZZN1S1fEiiEd0_NKUlvE0_clEv
+S::f(int, int)::{default arg#2}::{lambda()#2}::operator()() const
+--format=gnu-v3
+_ZNK1SIiE1xMUlvE1_clEv
+S<int>::x::{lambda()#3}::operator()() const
+--format=gnu-v3
+_Z1fN1SUt_E
+f(S::{unnamed type#1})
+--format=gnu-v3
+_Z1fDv32_f
+f(float __vector(32))
+--format=gnu-v3
+_Z1fIfLi4EEvDv_T0__T_
+void f<float, 4>(float __vector(4))
+--format=gnu-v3
+_Z1fI1AEDTclonplfp_fp_EET_
+decltype ((operator+)({parm#1}, {parm#1})) f<A>(A)
+--format=gnu-v3
+_Z1hI1AEDTcldtfp_miEET_
+decltype (({parm#1}.(operator-))()) h<A>(A)
+--format=gnu-v3
+_ZN5aaaaa6bbbbbb5cccccIN23ddddddddddddddddddddddd3eeeENS2_4ffff16ggggggggggggggggENS0_9hhhhhhhhhES6_S6_S6_S6_S6_S6_S6_EE
+aaaaa::bbbbbb::ccccc<ddddddddddddddddddddddd::eee, ddddddddddddddddddddddd::ffff::gggggggggggggggg, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh, aaaaa::bbbbbb::hhhhhhhhh>
+#
+# Ada (GNAT) tests.
+#
+# Simple test.
+--format=gnat
+yz__qrs
+yz.qrs
+# Operator
+--format=gnat
+oper__Oadd
+oper."+"
+# Overloaded subprogram.
+--format=gnat
+yz__qrs__2
+yz.qrs
+# Nested subprogram.
+--format=gnat
+yz__qrs__tuv.1661
+yz.qrs.tuv
+# Nested and overloaded subprograms.
+--format=gnat
+yz__qrs__tuv__2_1.1667
+yz.qrs.tuv
+--format=gnat
+yz__qrs__tuv__2_2.1670
+yz.qrs.tuv
+--format=gnat
+yz__qrs__tuv__2_3.1674
+yz.qrs.tuv
+# Elaborated flag (not demangled)
+--format=gnat
+x_E
+<x_E>
+# Nested package
+--format=gnat
+x__m1
+x.m1
+--format=gnat
+x__m3
+x.m3
+--format=gnat
+x__y__m2X
+x.y.m2
+--format=gnat
+x__y__z__rXb
+x.y.z.r
+# Child package
+--format=gnat
+x__y__j
+x.y.j
+# Library level
+--format=gnat
+_ada_x__m3
+x.m3
+# Package body elaborator
+--format=gnat
+p___elabb
+p'Elab_Body
+# Package spec elaborator
+--format=gnat
+p___elabs
+p'Elab_Spec
+# Task body
+--format=gnat
+p__taskobjTKB
+p.taskobj
+# Task subprogram
+--format=gnat
+p__taskobjTK__f1.2330
+p.taskobj.f1
+# Protected types subprograms
+--format=gnat
+prot__lock__getN
+prot.lock.get
+--format=gnat
+prot__lock__getP
+prot.lock.get
+--format=gnat
+prot__lock__get__sub.2590
+prot.lock.get.sub
+--format=gnat
+prot__lock__setN
+prot.lock.set
+--format=gnat
+prot__lock__setP
+prot.lock.set
+# Protected type entries
+--format=gnat
+prot__lock__update_B7s
+prot.lock.update
+--format=gnat
+prot__lock__update_E6s
+prot.lock.update
 #
 # Used to crash the demangler.
 --format=gnu-v3

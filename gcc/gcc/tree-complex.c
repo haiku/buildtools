@@ -1,18 +1,19 @@
 /* Lower complex number operations to scalar operations.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
-   
+
 GCC is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
 Free Software Foundation; either version 3, or (at your option) any
 later version.
-   
+
 GCC is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
-   
+
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
@@ -37,13 +38,17 @@ along with GCC; see the file COPYING3.  If not see
    out whether a complex number is degenerate in some way, having only real
    or only complex parts.  */
 
-typedef enum
+enum
 {
   UNINITIALIZED = 0,
   ONLY_REAL = 1,
   ONLY_IMAG = 2,
   VARYING = 3
-} complex_lattice_t;
+};
+
+/* The type complex_lattice_t holds combinations of the above
+   constants.  */
+typedef int complex_lattice_t;
 
 #define PAIR(a, b)  ((a) << 2 | (b))
 
@@ -61,7 +66,7 @@ static VEC(tree, heap) *complex_ssa_name_components;
 
 /* Lookup UID in the complex_variable_components hashtable and return the
    associated tree.  */
-static tree 
+static tree
 cvc_lookup (unsigned int uid)
 {
   struct int_tree_map *h, in;
@@ -69,12 +74,12 @@ cvc_lookup (unsigned int uid)
   h = (struct int_tree_map *) htab_find_with_hash (complex_variable_components, &in, uid);
   return h ? h->to : NULL;
 }
- 
+
 /* Insert the pair UID, TO into the complex_variable_components hashtable.  */
 
-static void 
+static void
 cvc_insert (unsigned int uid, tree to)
-{ 
+{
   struct int_tree_map *h;
   void **loc;
 
@@ -94,7 +99,10 @@ some_nonzerop (tree t)
 {
   int zerop = false;
 
-  if (TREE_CODE (t) == REAL_CST)
+  /* Operations with real or imaginary part of a complex number zero
+     cannot be treated the same as operations with a real or imaginary
+     operand if we care about the signs of zeros in the result.  */
+  if (TREE_CODE (t) == REAL_CST && !flag_signed_zeros)
     zerop = REAL_VALUES_IDENTICAL (TREE_REAL_CST (t), dconst0);
   else if (TREE_CODE (t) == FIXED_CST)
     zerop = fixed_zerop (t);
@@ -207,7 +215,7 @@ init_dont_simulate_again (void)
 	  stmt = gsi_stmt (gsi);
 	  op0 = op1 = NULL_TREE;
 
-	  /* Most control-altering statements must be initially 
+	  /* Most control-altering statements must be initially
 	     simulated, else we won't cover the entire cfg.  */
 	  sim_again_p = stmt_ends_bb_p (stmt);
 
@@ -426,11 +434,9 @@ create_one_component_var (tree type, tree orig, const char *prefix,
   if (DECL_NAME (orig) && !DECL_IGNORED_P (orig))
     {
       const char *name = IDENTIFIER_POINTER (DECL_NAME (orig));
-      tree inner_type;
 
       DECL_NAME (r) = get_identifier (ACONCAT ((name, suffix, NULL)));
 
-      inner_type = TREE_TYPE (TREE_TYPE (orig));
       SET_DECL_DEBUG_EXPR (r, build1 (code, type, orig));
       DECL_DEBUG_EXPR_IS_FROM (r) = 1;
       DECL_IGNORED_P (r) = 0;
@@ -563,7 +569,7 @@ set_component_ssa_name (tree ssa_name, bool imag_p, tree value)
      a new ssa name.  */
   else
     comp = get_component_ssa_name (ssa_name, imag_p);
-  
+
   /* Do all the work to assign VALUE to COMP.  */
   list = NULL;
   value = force_gimple_operand (value, &list, false, NULL);
@@ -596,6 +602,7 @@ extract_component (gimple_stmt_iterator *gsi, tree t, bool imagpart_p,
     case INDIRECT_REF:
     case COMPONENT_REF:
     case ARRAY_REF:
+    case VIEW_CONVERT_EXPR:
       {
 	tree inner_type = TREE_TYPE (TREE_TYPE (t));
 
@@ -658,12 +665,16 @@ static void
 update_complex_assignment (gimple_stmt_iterator *gsi, tree r, tree i)
 {
   gimple_stmt_iterator orig_si = *gsi;
+  gimple stmt;
 
   if (gimple_in_ssa_p (cfun))
     update_complex_components (gsi, gsi_stmt (*gsi), r, i);
 
   gimple_assign_set_rhs_with_ops (&orig_si, COMPLEX_EXPR, r, i);
-  update_stmt (gsi_stmt (orig_si));
+  stmt = gsi_stmt (orig_si);
+  update_stmt (stmt);
+  if (maybe_clean_eh_stmt (stmt))
+    gimple_purge_dead_eh_edges (gimple_bb (stmt));
 }
 
 
@@ -745,23 +756,6 @@ update_phi_components (basic_block bb)
     }
 }
 
-/* Mark each virtual op in STMT for ssa update.  */
-
-static void
-update_all_vops (gimple stmt)
-{
-  ssa_op_iter iter;
-  tree sym;
-
-  FOR_EACH_SSA_TREE_OPERAND (sym, stmt, iter, SSA_OP_ALL_VIRTUALS)
-    {
-      if (TREE_CODE (sym) == SSA_NAME)
-	sym = SSA_NAME_VAR (sym);
-      mark_sym_for_renaming (sym);
-    }
-}
-
-
 /* Expand a complex move to scalars.  */
 
 static void
@@ -817,7 +811,6 @@ expand_complex_move (gimple_stmt_iterator *gsi, tree type)
 	}
       else
 	{
-	  update_all_vops (stmt);
 	  if (gimple_assign_rhs_code (stmt) != COMPLEX_EXPR)
 	    {
 	      r = extract_component (gsi, rhs, 0, true);
@@ -860,7 +853,6 @@ expand_complex_move (gimple_stmt_iterator *gsi, tree type)
 	  gimple_return_set_retval (stmt, lhs);
 	}
 
-      update_all_vops (stmt);
       update_stmt (stmt);
     }
 }
@@ -963,9 +955,11 @@ expand_complex_libcall (gimple_stmt_iterator *gsi, tree ar, tree ai,
   gcc_assert (GET_MODE_CLASS (mode) == MODE_COMPLEX_FLOAT);
 
   if (code == MULT_EXPR)
-    bcode = BUILT_IN_COMPLEX_MUL_MIN + mode - MIN_MODE_COMPLEX_FLOAT;
+    bcode = ((enum built_in_function)
+	     (BUILT_IN_COMPLEX_MUL_MIN + mode - MIN_MODE_COMPLEX_FLOAT));
   else if (code == RDIV_EXPR)
-    bcode = BUILT_IN_COMPLEX_DIV_MIN + mode - MIN_MODE_COMPLEX_FLOAT;
+    bcode = ((enum built_in_function)
+	     (BUILT_IN_COMPLEX_DIV_MIN + mode - MIN_MODE_COMPLEX_FLOAT));
   else
     gcc_unreachable ();
   fn = built_in_decls[bcode];
@@ -1073,7 +1067,9 @@ expand_complex_multiplication (gimple_stmt_iterator *gsi, tree inner_type,
   update_complex_assignment (gsi, rr, ri);
 }
 
-/* Expand complex division to scalars, straightforward algorithm.
+/* Keep this algorithm in sync with fold-const.c:const_binop().
+
+   Expand complex division to scalars, straightforward algorithm.
 	a / b = ((ar*br + ai*bi)/t) + i((ai*br - ar*bi)/t)
 	    t = br*br + bi*bi
 */
@@ -1102,7 +1098,9 @@ expand_complex_div_straight (gimple_stmt_iterator *gsi, tree inner_type,
   update_complex_assignment (gsi, rr, ri);
 }
 
-/* Expand complex division to scalars, modified algorithm to minimize
+/* Keep this algorithm in sync with fold-const.c:const_binop().
+
+   Expand complex division to scalars, modified algorithm to minimize
    overflow with wide input ranges.  */
 
 static void
@@ -1117,12 +1115,13 @@ expand_complex_div_wide (gimple_stmt_iterator *gsi, tree inner_type,
   /* Examine |br| < |bi|, and branch.  */
   t1 = gimplify_build1 (gsi, ABS_EXPR, inner_type, br);
   t2 = gimplify_build1 (gsi, ABS_EXPR, inner_type, bi);
-  compare = fold_build2 (LT_EXPR, boolean_type_node, t1, t2);
+  compare = fold_build2_loc (gimple_location (gsi_stmt (*gsi)),
+			     LT_EXPR, boolean_type_node, t1, t2);
   STRIP_NOPS (compare);
 
   bb_cond = bb_true = bb_false = bb_join = NULL;
   rr = ri = tr = ti = NULL;
-  if (!TREE_CONSTANT (compare))
+  if (TREE_CODE (compare) != INTEGER_CST)
     {
       edge e;
       gimple stmt;
@@ -1138,7 +1137,8 @@ expand_complex_div_wide (gimple_stmt_iterator *gsi, tree inner_type,
 
       gsi_insert_before (gsi, stmt, GSI_SAME_STMT);
 
-      cond = fold_build2 (EQ_EXPR, boolean_type_node, tmp, boolean_true_node);
+      cond = fold_build2_loc (gimple_location (stmt),
+			  EQ_EXPR, boolean_type_node, tmp, boolean_true_node);
       stmt = gimple_build_cond_from_tree (cond, NULL_TREE, NULL_TREE);
       gsi_insert_before (gsi, stmt, GSI_SAME_STMT);
 
@@ -1546,7 +1546,7 @@ expand_complex_operations_1 (gimple_stmt_iterator *gsi)
     case RDIV_EXPR:
       expand_complex_division (gsi, inner_type, ar, ai, br, bi, code, al, bl);
       break;
-      
+
     case NEGATE_EXPR:
       expand_complex_negation (gsi, inner_type, ar, ai);
       break;
@@ -1614,7 +1614,7 @@ tree_lower_complex (void)
   return 0;
 }
 
-struct gimple_opt_pass pass_lower_complex = 
+struct gimple_opt_pass pass_lower_complex =
 {
  {
   GIMPLE_PASS,
@@ -1624,9 +1624,9 @@ struct gimple_opt_pass pass_lower_complex =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  0,					/* tv_id */
+  TV_NONE,				/* tv_id */
   PROP_ssa,				/* properties_required */
-  0,					/* properties_provided */
+  PROP_gimple_lcx,			/* properties_provided */
   0,                       		/* properties_destroyed */
   0,					/* todo_flags_start */
   TODO_dump_func
@@ -1637,50 +1637,32 @@ struct gimple_opt_pass pass_lower_complex =
 };
 
 
-/* Entry point for complex operation lowering without optimization.  */
-
-static unsigned int
-tree_lower_complex_O0 (void)
-{
-  int old_last_basic_block = last_basic_block;
-  gimple_stmt_iterator gsi;
-  basic_block bb;
-
-  FOR_EACH_BB (bb)
-    {
-      if (bb->index >= old_last_basic_block)
-	continue;
-
-      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
-	expand_complex_operations_1 (&gsi);
-    }
-  return 0;
-}
-
 static bool
 gate_no_optimization (void)
 {
   /* With errors, normal optimization passes are not run.  If we don't
      lower complex operations at all, rtl expansion will abort.  */
-  return optimize == 0 || sorrycount || errorcount;
+  return !(cfun->curr_properties & PROP_gimple_lcx);
 }
 
-struct gimple_opt_pass pass_lower_complex_O0 = 
+struct gimple_opt_pass pass_lower_complex_O0 =
 {
  {
   GIMPLE_PASS,
   "cplxlower0",				/* name */
   gate_no_optimization,			/* gate */
-  tree_lower_complex_O0,		/* execute */
+  tree_lower_complex,			/* execute */
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  0,					/* tv_id */
+  TV_NONE,				/* tv_id */
   PROP_cfg,				/* properties_required */
-  0,					/* properties_provided */
+  PROP_gimple_lcx,			/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_ggc_collect
-    | TODO_verify_stmts,		/* todo_flags_finish */
+  TODO_dump_func
+    | TODO_ggc_collect
+    | TODO_update_ssa
+    | TODO_verify_stmts	 		/* todo_flags_finish */
  }
 };

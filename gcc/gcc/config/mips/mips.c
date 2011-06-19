@@ -97,7 +97,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* True if INSN is a mips.md pattern or asm statement.  */
 #define USEFUL_INSN_P(INSN)						\
-  (INSN_P (INSN)							\
+  (NONDEBUG_INSN_P (INSN)						\
    && GET_CODE (PATTERN (INSN)) != USE					\
    && GET_CODE (PATTERN (INSN)) != CLOBBER				\
    && GET_CODE (PATTERN (INSN)) != ADDR_VEC				\
@@ -125,6 +125,40 @@ along with GCC; see the file COPYING3.  If not see
 
 /* True if bit BIT is set in VALUE.  */
 #define BITSET_P(VALUE, BIT) (((VALUE) & (1 << (BIT))) != 0)
+
+/* Return the opcode for a ptr_mode load of the form:
+
+       l[wd]    DEST, OFFSET(BASE).  */
+#define MIPS_LOAD_PTR(DEST, OFFSET, BASE)	\
+  (((ptr_mode == DImode ? 0x37 : 0x23) << 26)	\
+   | ((BASE) << 21)				\
+   | ((DEST) << 16)				\
+   | (OFFSET))
+
+/* Return the opcode to move register SRC into register DEST.  */
+#define MIPS_MOVE(DEST, SRC)		\
+  ((TARGET_64BIT ? 0x2d : 0x21)		\
+   | ((DEST) << 11)			\
+   | ((SRC) << 21))
+
+/* Return the opcode for:
+
+       lui      DEST, VALUE.  */
+#define MIPS_LUI(DEST, VALUE) \
+  ((0xf << 26) | ((DEST) << 16) | (VALUE))
+
+/* Return the opcode to jump to register DEST.  */
+#define MIPS_JR(DEST) \
+  (((DEST) << 21) | 0x8)
+
+/* Return the opcode for:
+
+       bal     . + (1 + OFFSET) * 4.  */
+#define MIPS_BAL(OFFSET) \
+  ((0x1 << 26) | (0x11 << 16) | (OFFSET))
+
+/* Return the usual opcode for a nop.  */
+#define MIPS_NOP 0
 
 /* Classifies an address.
 
@@ -241,7 +275,7 @@ static const char *const mips_fp_conditions[] = {
 };
 
 /* Information about a function's frame layout.  */
-struct mips_frame_info GTY(()) {
+struct GTY(())  mips_frame_info {
   /* The size of the frame in bytes.  */
   HOST_WIDE_INT total_size;
 
@@ -261,27 +295,41 @@ struct mips_frame_info GTY(()) {
   /* Likewise FPR X.  */
   unsigned int fmask;
 
-  /* The number of GPRs and FPRs saved.  */
+  /* Likewise doubleword accumulator X ($acX).  */
+  unsigned int acc_mask;
+
+  /* The number of GPRs, FPRs, doubleword accumulators and COP0
+     registers saved.  */
   unsigned int num_gp;
   unsigned int num_fp;
+  unsigned int num_acc;
+  unsigned int num_cop0_regs;
 
-  /* The offset of the topmost GPR and FPR save slots from the top of
-     the frame, or zero if no such slots are needed.  */
+  /* The offset of the topmost GPR, FPR, accumulator and COP0-register
+     save slots from the top of the frame, or zero if no such slots are
+     needed.  */
   HOST_WIDE_INT gp_save_offset;
   HOST_WIDE_INT fp_save_offset;
+  HOST_WIDE_INT acc_save_offset;
+  HOST_WIDE_INT cop0_save_offset;
 
   /* Likewise, but giving offsets from the bottom of the frame.  */
   HOST_WIDE_INT gp_sp_offset;
   HOST_WIDE_INT fp_sp_offset;
+  HOST_WIDE_INT acc_sp_offset;
+  HOST_WIDE_INT cop0_sp_offset;
 
-  /* The offset of arg_pointer_rtx from frame_pointer_rtx.  */
+  /* Similar, but the value passed to _mcount.  */
+  HOST_WIDE_INT ra_fp_offset;
+
+  /* The offset of arg_pointer_rtx from the bottom of the frame.  */
   HOST_WIDE_INT arg_pointer_offset;
 
-  /* The offset of hard_frame_pointer_rtx from frame_pointer_rtx.  */
+  /* The offset of hard_frame_pointer_rtx from the bottom of the frame.  */
   HOST_WIDE_INT hard_frame_pointer_offset;
 };
 
-struct machine_function GTY(()) {
+struct GTY(())  machine_function {
   /* The register returned by mips16_gp_pseudo_reg; see there for details.  */
   rtx mips16_gp_pseudo_rtx;
 
@@ -296,6 +344,10 @@ struct machine_function GTY(()) {
      if the function doesn't need one.  */
   unsigned int global_pointer;
 
+  /* How many instructions it takes to load a label into $AT, or 0 if
+     this property hasn't yet been calculated.  */
+  unsigned int load_label_num_insns;
+
   /* True if mips_adjust_insn_length should ignore an instruction's
      hazard attribute.  */
   bool ignore_hazard_length_p;
@@ -304,12 +356,41 @@ struct machine_function GTY(()) {
      .set nomacro.  */
   bool all_noreorder_p;
 
-  /* True if the function is known to have an instruction that needs $gp.  */
-  bool has_gp_insn_p;
+  /* True if the function has "inflexible" and "flexible" references
+     to the global pointer.  See mips_cfun_has_inflexible_gp_ref_p
+     and mips_cfun_has_flexible_gp_ref_p for details.  */
+  bool has_inflexible_gp_insn_p;
+  bool has_flexible_gp_insn_p;
+
+  /* True if the function's prologue must load the global pointer
+     value into pic_offset_table_rtx and store the same value in
+     the function's cprestore slot (if any).  Even if this value
+     is currently false, we may decide to set it to true later;
+     see mips_must_initialize_gp_p () for details.  */
+  bool must_initialize_gp_p;
+
+  /* True if the current function must restore $gp after any potential
+     clobber.  This value is only meaningful during the first post-epilogue
+     split_insns pass; see mips_must_initialize_gp_p () for details.  */
+  bool must_restore_gp_when_clobbered_p;
 
   /* True if we have emitted an instruction to initialize
      mips16_gp_pseudo_rtx.  */
   bool initialized_mips16_gp_pseudo_p;
+
+  /* True if this is an interrupt handler.  */
+  bool interrupt_handler_p;
+
+  /* True if this is an interrupt handler that uses shadow registers.  */
+  bool use_shadow_register_set_p;
+
+  /* True if this is an interrupt handler that should keep interrupts
+     masked.  */
+  bool keep_interrupts_masked_p;
+
+  /* True if this is an interrupt handler that should use DERET
+     instead of ERET.  */
+  bool use_debug_exception_return_p;
 };
 
 /* Information about a single argument.  */
@@ -415,16 +496,13 @@ int mips_dbx_regno[FIRST_PSEUDO_REGISTER];
 int mips_dwarf_regno[FIRST_PSEUDO_REGISTER];
 
 /* The nesting depth of the PRINT_OPERAND '%(', '%<' and '%[' constructs.  */
-int set_noreorder;
-int set_nomacro;
-static int set_noat;
+struct mips_asm_switch mips_noreorder = { "reorder", 0 };
+struct mips_asm_switch mips_nomacro = { "macro", 0 };
+struct mips_asm_switch mips_noat = { "at", 0 };
 
 /* True if we're writing out a branch-likely instruction rather than a
    normal branch.  */
 static bool mips_branch_likely;
-
-/* The operands passed to the last cmpMM expander.  */
-rtx cmp_operands[2];
 
 /* The current instruction-set architecture.  */
 enum processor_type mips_arch;
@@ -543,7 +621,7 @@ const enum reg_class mips_regno_to_class[FIRST_PSEUDO_REGISTER] = {
 };
 
 /* The value of TARGET_ATTRIBUTE_TABLE.  */
-const struct attribute_spec mips_attribute_table[] = {
+static const struct attribute_spec mips_attribute_table[] = {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler } */
   { "long_call",   0, 0, false, true,  true,  NULL },
   { "far",     	   0, 0, false, true,  true,  NULL },
@@ -554,6 +632,11 @@ const struct attribute_spec mips_attribute_table[] = {
      code generation but don't carry other semantics.  */
   { "mips16", 	   0, 0, true,  false, false, NULL },
   { "nomips16",    0, 0, true,  false, false, NULL },
+  /* Allow functions to be specified as interrupt handlers */
+  { "interrupt",   0, 0, false, true,  true, NULL },
+  { "use_shadow_register_set",	0, 0, false, true,  true, NULL },
+  { "keep_interrupts_masked",	0, 0, false, true,  true, NULL },
+  { "use_debug_exception_return", 0, 0, false, true,  true, NULL },
   { NULL,	   0, 0, false, false, false, NULL }
 };
 
@@ -658,6 +741,11 @@ static const struct mips_cpu_info mips_cpu_info_table[] = {
   { "74kfx", PROCESSOR_74KF1_1, 33, 0 },
   { "74kx", PROCESSOR_74KF1_1, 33, 0 },
   { "74kf3_2", PROCESSOR_74KF3_2, 33, 0 },
+
+  { "1004kc", PROCESSOR_24KC, 33, 0 }, /* 1004K with MT/DSP.  */
+  { "1004kf2_1", PROCESSOR_24KF2_1, 33, 0 },
+  { "1004kf", PROCESSOR_24KF2_1, 33, 0 },
+  { "1004kf1_1", PROCESSOR_24KF1_1, 33, 0 },
 
   /* MIPS64 processors.  */
   { "5kc", PROCESSOR_5KC, 64, 0 },
@@ -1064,13 +1152,7 @@ static const struct mips_rtx_cost_data mips_rtx_cost_data[PROCESSOR_MAX] = {
     DEFAULT_COSTS
   },
   { /* XLR */
-    /* Need to replace first five with the costs of calling the appropriate 
-       libgcc routine.  */
-    COSTS_N_INSNS (256),          /* fp_add */
-    COSTS_N_INSNS (256),          /* fp_mult_sf */
-    COSTS_N_INSNS (256),          /* fp_mult_df */
-    COSTS_N_INSNS (256),          /* fp_div_sf */
-    COSTS_N_INSNS (256),          /* fp_div_df */
+    SOFT_FP_COSTS,
     COSTS_N_INSNS (8),            /* int_mult_si */
     COSTS_N_INSNS (8),            /* int_mult_di */
     COSTS_N_INSNS (72),           /* int_div_si */
@@ -1080,9 +1162,11 @@ static const struct mips_rtx_cost_data mips_rtx_cost_data[PROCESSOR_MAX] = {
   }
 };
 
+static rtx mips_find_pic_call_symbol (rtx, rtx);
+
 /* This hash table keeps track of implicit "mips16" and "nomips16" attributes
    for -mflip_mips16.  It maps decl names onto a boolean mode setting.  */
-struct mflip_mips16_entry GTY (()) {
+struct GTY (())  mflip_mips16_entry {
   const char *name;
   bool mips16_p;
 };
@@ -1172,6 +1256,42 @@ mips_nomips16_decl_p (const_tree decl)
   return lookup_attribute ("nomips16", DECL_ATTRIBUTES (decl)) != NULL;
 }
 
+/* Check if the interrupt attribute is set for a function.  */
+
+static bool
+mips_interrupt_type_p (tree type)
+{
+  return lookup_attribute ("interrupt", TYPE_ATTRIBUTES (type)) != NULL;
+}
+
+/* Check if the attribute to use shadow register set is set for a function.  */
+
+static bool
+mips_use_shadow_register_set_p (tree type)
+{
+  return lookup_attribute ("use_shadow_register_set",
+			   TYPE_ATTRIBUTES (type)) != NULL;
+}
+
+/* Check if the attribute to keep interrupts masked is set for a function.  */
+
+static bool
+mips_keep_interrupts_masked_p (tree type)
+{
+  return lookup_attribute ("keep_interrupts_masked",
+			   TYPE_ATTRIBUTES (type)) != NULL;
+}
+
+/* Check if the attribute to use debug exception return is set for
+   a function.  */
+
+static bool
+mips_use_debug_exception_return_p (tree type)
+{
+  return lookup_attribute ("use_debug_exception_return",
+			   TYPE_ATTRIBUTES (type)) != NULL;
+}
+
 /* Return true if function DECL is a MIPS16 function.  Return the ambient
    setting if DECL is null.  */
 
@@ -1232,9 +1352,9 @@ mips_insert_attributes (tree decl, tree *attributes)
 	{
 	  /* DECL cannot be simultaneously "mips16" and "nomips16".  */
 	  if (mips16_p && nomips16_p)
-	    error ("%qs cannot have both %<mips16%> and "
+	    error ("%qE cannot have both %<mips16%> and "
 		   "%<nomips16%> attributes",
-		   IDENTIFIER_POINTER (DECL_NAME (decl)));
+		   DECL_NAME (decl));
 	}
       else if (TARGET_FLIP_MIPS16 && !DECL_ARTIFICIAL (decl))
 	{
@@ -1254,11 +1374,11 @@ mips_merge_decl_attributes (tree olddecl, tree newdecl)
 {
   /* The decls' "mips16" and "nomips16" attributes must match exactly.  */
   if (mips_mips16_decl_p (olddecl) != mips_mips16_decl_p (newdecl))
-    error ("%qs redeclared with conflicting %qs attributes",
-	   IDENTIFIER_POINTER (DECL_NAME (newdecl)), "mips16");
+    error ("%qE redeclared with conflicting %qs attributes",
+	   DECL_NAME (newdecl), "mips16");
   if (mips_nomips16_decl_p (olddecl) != mips_nomips16_decl_p (newdecl))
-    error ("%qs redeclared with conflicting %qs attributes",
-	   IDENTIFIER_POINTER (DECL_NAME (newdecl)), "nomips16");
+    error ("%qE redeclared with conflicting %qs attributes",
+	   DECL_NAME (newdecl), "nomips16");
 
   return merge_attributes (DECL_ATTRIBUTES (olddecl),
 			   DECL_ATTRIBUTES (newdecl));
@@ -1270,7 +1390,7 @@ mips_merge_decl_attributes (tree olddecl, tree newdecl)
 static void
 mips_split_plus (rtx x, rtx *base_ptr, HOST_WIDE_INT *offset_ptr)
 {
-  if (GET_CODE (x) == PLUS && GET_CODE (XEXP (x, 1)) == CONST_INT)
+  if (GET_CODE (x) == PLUS && CONST_INT_P (XEXP (x, 1)))
     {
       *base_ptr = XEXP (x, 0);
       *offset_ptr = INTVAL (XEXP (x, 1));
@@ -1864,7 +1984,7 @@ mips_cannot_force_const_mem (rtx x)
      references, reload will consider forcing C into memory and using
      one of the instruction's memory alternatives.  Returning false
      here will force it to use an input reload instead.  */
-  if (GET_CODE (x) == CONST_INT && LEGITIMATE_CONSTANT_P (x))
+  if (CONST_INT_P (x) && LEGITIMATE_CONSTANT_P (x))
     return true;
 
   split_const (x, &base, &offset);
@@ -2059,10 +2179,9 @@ mips_classify_address (struct mips_address_info *info, rtx x,
     }
 }
 
-/* Return true if X is a legitimate address for a memory operand of mode
-   MODE.  STRICT_P is true if REG_OK_STRICT is in effect.  */
+/* Implement TARGET_LEGITIMATE_ADDRESS_P.  */
 
-bool
+static bool
 mips_legitimate_address_p (enum machine_mode mode, rtx x, bool strict_p)
 {
   struct mips_address_info addr;
@@ -2084,7 +2203,7 @@ mips_stack_address_p (rtx x, enum machine_mode mode)
 
 /* Return true if ADDR matches the pattern for the LWXS load scaled indexed
    address instruction.  Note that such addresses are not considered
-   legitimate in the GO_IF_LEGITIMATE_ADDRESS sense, because their use
+   legitimate in the TARGET_LEGITIMATE_ADDRESS_P sense, because their use
    is so restricted.  */
 
 static bool
@@ -2097,7 +2216,7 @@ mips_lwxs_address_p (rtx addr)
       rtx offset = XEXP (addr, 0);
       if (GET_CODE (offset) == MULT
 	  && REG_P (XEXP (offset, 0))
-	  && GET_CODE (XEXP (offset, 1)) == CONST_INT
+	  && CONST_INT_P (XEXP (offset, 1))
 	  && INTVAL (XEXP (offset, 1)) == 4)
 	return true;
     }
@@ -2451,6 +2570,20 @@ mips_unspec_address (rtx address, enum mips_symbol_type symbol_type)
   return mips_unspec_address_offset (base, offset, symbol_type);
 }
 
+/* If OP is an UNSPEC address, return the address to which it refers,
+   otherwise return OP itself.  */
+
+static rtx
+mips_strip_unspec_address (rtx op)
+{
+  rtx base, offset;
+
+  split_const (op, &base, &offset);
+  if (UNSPEC_ADDRESS_P (base))
+    op = plus_constant (UNSPEC_ADDRESS (base), INTVAL (offset));
+  return op;
+}
+
 /* If mips_unspec_address (ADDR, SYMBOL_TYPE) is a 32-bit value, add the
    high part to BASE and return the result.  Just return BASE otherwise.
    TEMP is as for mips_force_temporary.
@@ -2542,6 +2675,28 @@ mips_pic_base_register (rtx temp)
   return temp;
 }
 
+/* Return the RHS of a load_call<mode> insn.  */
+
+static rtx
+mips_unspec_call (rtx reg, rtx symbol)
+{
+  rtvec vec;
+
+  vec = gen_rtvec (3, reg, symbol, gen_rtx_REG (SImode, GOT_VERSION_REGNUM));
+  return gen_rtx_UNSPEC (Pmode, vec, UNSPEC_LOAD_CALL);
+}
+
+/* If SRC is the RHS of a load_call<mode> insn, return the underlying symbol
+   reference.  Return NULL_RTX otherwise.  */
+
+static rtx
+mips_strip_unspec_call (rtx src)
+{
+  if (GET_CODE (src) == UNSPEC && XINT (src, 1) == UNSPEC_LOAD_CALL)
+    return mips_strip_unspec_address (XVECEXP (src, 0, 1));
+  return NULL_RTX;
+}
+
 /* Create and return a GOT reference of type TYPE for address ADDR.
    TEMP, if nonnull, is a scratch Pmode base register.  */
 
@@ -2561,9 +2716,7 @@ mips_got_load (rtx temp, rtx addr, enum mips_symbol_type type)
   lo_sum_symbol = mips_unspec_address (addr, type);
 
   if (type == SYMBOL_GOTOFF_CALL)
-    return (Pmode == SImode
-	    ? gen_unspec_callsi (high, lo_sum_symbol)
-	    : gen_unspec_calldi (high, lo_sum_symbol));
+    return mips_unspec_call (high, lo_sum_symbol);
   else
     return (Pmode == SImode
 	    ? gen_unspec_gotsi (high, lo_sum_symbol)
@@ -2665,8 +2818,10 @@ mips_add_offset (rtx temp, rtx reg, HOST_WIDE_INT offset)
 	}
       else
 	{
-	  /* Leave OFFSET as a 16-bit offset and put the excess in HIGH.  */
-	  high = GEN_INT (CONST_HIGH_PART (offset));
+	  /* Leave OFFSET as a 16-bit offset and put the excess in HIGH.
+	     The addition inside the macro CONST_HIGH_PART may cause an
+	     overflow, so we need to force a sign-extension check.  */
+	  high = gen_int_mode (CONST_HIGH_PART (offset), Pmode);
 	  offset = CONST_LOW_PART (offset);
 	}
       high = mips_force_temporary (temp, high);
@@ -2808,41 +2963,36 @@ mips_force_address (rtx x, enum machine_mode mode)
   return x;
 }
 
-/* This function is used to implement LEGITIMIZE_ADDRESS.  If *XLOC can
+/* This function is used to implement LEGITIMIZE_ADDRESS.  If X can
    be legitimized in a way that the generic machinery might not expect,
-   put the new address in *XLOC and return true.  MODE is the mode of
+   return a new address, otherwise return NULL.  MODE is the mode of
    the memory being accessed.  */
 
-bool
-mips_legitimize_address (rtx *xloc, enum machine_mode mode)
+static rtx
+mips_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
+			 enum machine_mode mode)
 {
   rtx base, addr;
   HOST_WIDE_INT offset;
 
-  if (mips_tls_symbol_p (*xloc))
-    {
-      *xloc = mips_legitimize_tls_address (*xloc);
-      return true;
-    }
+  if (mips_tls_symbol_p (x))
+    return mips_legitimize_tls_address (x);
 
   /* See if the address can split into a high part and a LO_SUM.  */
-  if (mips_split_symbol (NULL, *xloc, mode, &addr))
-    {
-      *xloc = mips_force_address (addr, mode);
-      return true;
-    }
+  if (mips_split_symbol (NULL, x, mode, &addr))
+    return mips_force_address (addr, mode);
 
   /* Handle BASE + OFFSET using mips_add_offset.  */
-  mips_split_plus (*xloc, &base, &offset);
+  mips_split_plus (x, &base, &offset);
   if (offset != 0)
     {
       if (!mips_valid_base_register_p (base, mode, false))
 	base = copy_to_mode_reg (Pmode, base);
       addr = mips_add_offset (NULL, base, offset);
-      *xloc = mips_force_address (addr, mode);
-      return true;
+      return mips_force_address (addr, mode);
     }
-  return false;
+
+  return x;
 }
 
 /* Load VALUE into DEST.  TEMP is as for mips_force_temporary.  */
@@ -3037,7 +3187,7 @@ mips_rewrite_small_data (rtx pattern)
 static int
 m16_check_op (rtx op, int low, int high, int mask)
 {
-  return (GET_CODE (op) == CONST_INT
+  return (CONST_INT_P (op)
 	  && IN_RANGE (INTVAL (op), low, high)
 	  && (INTVAL (op) & mask) == 0);
 }
@@ -3262,10 +3412,11 @@ mips_immediate_operand_p (int code, HOST_WIDE_INT x)
 
 /* Return the cost of binary operation X, given that the instruction
    sequence for a word-sized or smaller operation has cost SINGLE_COST
-   and that the sequence of a double-word operation has cost DOUBLE_COST.  */
+   and that the sequence of a double-word operation has cost DOUBLE_COST.
+   If SPEED is true, optimize for speed otherwise optimize for size.  */
 
 static int
-mips_binary_cost (rtx x, int single_cost, int double_cost)
+mips_binary_cost (rtx x, int single_cost, int double_cost, bool speed)
 {
   int cost;
 
@@ -3274,8 +3425,8 @@ mips_binary_cost (rtx x, int single_cost, int double_cost)
   else
     cost = single_cost;
   return (cost
-	  + rtx_cost (XEXP (x, 0), 0, !optimize_size)
-	  + rtx_cost (XEXP (x, 1), GET_CODE (x), !optimize_size));
+	  + rtx_cost (XEXP (x, 0), SET, speed)
+	  + rtx_cost (XEXP (x, 1), GET_CODE (x), speed));
 }
 
 /* Return the cost of floating-point multiplications of mode MODE.  */
@@ -3345,8 +3496,7 @@ mips_zero_extend_cost (enum machine_mode mode, rtx op)
 /* Implement TARGET_RTX_COSTS.  */
 
 static bool
-mips_rtx_costs (rtx x, int code, int outer_code, int *total,
-		bool speed)
+mips_rtx_costs (rtx x, int code, int outer_code, int *total, bool speed)
 {
   enum machine_mode mode = GET_MODE (x);
   bool float_mode_p = FLOAT_MODE_P (mode);
@@ -3402,8 +3552,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	     operand needs to be forced into a register, we will often be
 	     able to hoist the constant load out of the loop, so the load
 	     should not contribute to the cost.  */
-	  if (!optimize_size
-	      || mips_immediate_operand_p (outer_code, INTVAL (x)))
+	  if (speed || mips_immediate_operand_p (outer_code, INTVAL (x)))
 	    {
 	      *total = 0;
 	      return true;
@@ -3493,7 +3642,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	  && UINTVAL (XEXP (x, 1)) == 0xffffffff)
 	{
 	  *total = (mips_zero_extend_cost (mode, XEXP (x, 0))
-		    + rtx_cost (XEXP (x, 0), 0, speed));
+		    + rtx_cost (XEXP (x, 0), SET, speed));
 	  return true;
 	}
       /* Fall through.  */
@@ -3501,7 +3650,8 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
     case IOR:
     case XOR:
       /* Double-word operations use two single-word operations.  */
-      *total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (2));
+      *total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (2),
+				 speed);
       return true;
 
     case ASHIFT:
@@ -3510,9 +3660,11 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
     case ROTATE:
     case ROTATERT:
       if (CONSTANT_P (XEXP (x, 1)))
-	*total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (4));
+	*total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (4),
+				   speed);
       else
-	*total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (12));
+	*total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (12),
+				   speed);
       return true;
 
     case ABS:
@@ -3525,7 +3677,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
     case LO_SUM:
       /* Low-part immediates need an extended MIPS16 instruction.  */
       *total = (COSTS_N_INSNS (TARGET_MIPS16 ? 2 : 1)
-		+ rtx_cost (XEXP (x, 0), 0, speed));
+		+ rtx_cost (XEXP (x, 0), SET, speed));
       return true;
 
     case LT:
@@ -3548,7 +3700,8 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	  *total = mips_cost->fp_add;
 	  return false;
 	}
-      *total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (4));
+      *total = mips_binary_cost (x, COSTS_N_INSNS (1), COSTS_N_INSNS (4),
+				 speed);
       return true;
 
     case MINUS:
@@ -3565,17 +3718,17 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	  if (GET_CODE (op0) == MULT && GET_CODE (XEXP (op0, 0)) == NEG)
 	    {
 	      *total = (mips_fp_mult_cost (mode)
-			+ rtx_cost (XEXP (XEXP (op0, 0), 0), 0, speed)
-			+ rtx_cost (XEXP (op0, 1), 0, speed)
-			+ rtx_cost (op1, 0, speed));
+			+ rtx_cost (XEXP (XEXP (op0, 0), 0), SET, speed)
+			+ rtx_cost (XEXP (op0, 1), SET, speed)
+			+ rtx_cost (op1, SET, speed));
 	      return true;
 	    }
 	  if (GET_CODE (op1) == MULT)
 	    {
 	      *total = (mips_fp_mult_cost (mode)
-			+ rtx_cost (op0, 0, speed)
-			+ rtx_cost (XEXP (op1, 0), 0, speed)
-			+ rtx_cost (XEXP (op1, 1), 0, speed));
+			+ rtx_cost (op0, SET, speed)
+			+ rtx_cost (XEXP (op1, 0), SET, speed)
+			+ rtx_cost (XEXP (op1, 1), SET, speed));
 	      return true;
 	    }
 	}
@@ -3599,7 +3752,8 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	 an SLTU.  The MIPS16 version then needs to move the result of
 	 the SLTU from $24 to a MIPS16 register.  */
       *total = mips_binary_cost (x, COSTS_N_INSNS (1),
-				 COSTS_N_INSNS (TARGET_MIPS16 ? 5 : 4));
+				 COSTS_N_INSNS (TARGET_MIPS16 ? 5 : 4),
+				 speed);
       return true;
 
     case NEG:
@@ -3616,9 +3770,9 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	      && GET_CODE (XEXP (op, 0)) == MULT)
 	    {
 	      *total = (mips_fp_mult_cost (mode)
-			+ rtx_cost (XEXP (XEXP (op, 0), 0), 0, speed)
-			+ rtx_cost (XEXP (XEXP (op, 0), 1), 0, speed)
-			+ rtx_cost (XEXP (op, 1), 0, speed));
+			+ rtx_cost (XEXP (XEXP (op, 0), 0), SET, speed)
+			+ rtx_cost (XEXP (XEXP (op, 0), 1), SET, speed)
+			+ rtx_cost (XEXP (op, 1), SET, speed));
 	      return true;
 	    }
 	}
@@ -3635,10 +3789,10 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
       else if (mode == DImode && !TARGET_64BIT)
 	/* Synthesized from 2 mulsi3s, 1 mulsidi3 and two additions,
 	   where the mulsidi3 always includes an MFHI and an MFLO.  */
-	*total = (optimize_size
-		  ? COSTS_N_INSNS (ISA_HAS_MUL3 ? 7 : 9)
-		  : mips_cost->int_mult_si * 3 + 6);
-      else if (optimize_size)
+	*total = (speed
+		  ? mips_cost->int_mult_si * 3 + 6
+		  : COSTS_N_INSNS (ISA_HAS_MUL3 ? 7 : 9));
+      else if (!speed)
 	*total = (ISA_HAS_MUL3 ? 1 : 2);
       else if (mode == DImode)
 	*total = mips_cost->int_mult_di;
@@ -3656,9 +3810,10 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	  if (outer_code == SQRT || GET_CODE (XEXP (x, 1)) == SQRT)
 	    /* An rsqrt<mode>a or rsqrt<mode>b pattern.  Count the
 	       division as being free.  */
-	    *total = rtx_cost (XEXP (x, 1), 0, speed);
+	    *total = rtx_cost (XEXP (x, 1), SET, speed);
 	  else
-	    *total = mips_fp_div_cost (mode) + rtx_cost (XEXP (x, 1), 0, speed);
+	    *total = (mips_fp_div_cost (mode)
+		      + rtx_cost (XEXP (x, 1), SET, speed));
 	  return true;
 	}
       /* Fall through.  */
@@ -3674,7 +3829,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 
     case UDIV:
     case UMOD:
-      if (optimize_size)
+      if (!speed)
 	{
 	  /* It is our responsibility to make division by a power of 2
 	     as cheap as 2 register additions if we want the division
@@ -3686,7 +3841,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int *total,
 	      && CONST_INT_P (XEXP (x, 1))
 	      && exact_log2 (INTVAL (XEXP (x, 1))) >= 0)
 	    {
-	      *total = COSTS_N_INSNS (2) + rtx_cost (XEXP (x, 0), 0, speed);
+	      *total = COSTS_N_INSNS (2) + rtx_cost (XEXP (x, 0), SET, speed);
 	      return true;
 	    }
 	  *total = COSTS_N_INSNS (mips_idiv_insns ());
@@ -3724,6 +3879,132 @@ static int
 mips_address_cost (rtx addr, bool speed ATTRIBUTE_UNUSED)
 {
   return mips_address_insns (addr, SImode, false);
+}
+
+/* Information about a single instruction in a multi-instruction
+   asm sequence.  */
+struct mips_multi_member {
+  /* True if this is a label, false if it is code.  */
+  bool is_label_p;
+
+  /* The output_asm_insn format of the instruction.  */
+  const char *format;
+
+  /* The operands to the instruction.  */
+  rtx operands[MAX_RECOG_OPERANDS];
+};
+typedef struct mips_multi_member mips_multi_member;
+
+/* Vector definitions for the above.  */
+DEF_VEC_O(mips_multi_member);
+DEF_VEC_ALLOC_O(mips_multi_member, heap);
+
+/* The instructions that make up the current multi-insn sequence.  */
+static VEC (mips_multi_member, heap) *mips_multi_members;
+
+/* How many instructions (as opposed to labels) are in the current
+   multi-insn sequence.  */
+static unsigned int mips_multi_num_insns;
+
+/* Start a new multi-insn sequence.  */
+
+static void
+mips_multi_start (void)
+{
+  VEC_truncate (mips_multi_member, mips_multi_members, 0);
+  mips_multi_num_insns = 0;
+}
+
+/* Add a new, uninitialized member to the current multi-insn sequence.  */
+
+static struct mips_multi_member *
+mips_multi_add (void)
+{
+  return VEC_safe_push (mips_multi_member, heap, mips_multi_members, 0);
+}
+
+/* Add a normal insn with the given asm format to the current multi-insn
+   sequence.  The other arguments are a null-terminated list of operands.  */
+
+static void
+mips_multi_add_insn (const char *format, ...)
+{
+  struct mips_multi_member *member;
+  va_list ap;
+  unsigned int i;
+  rtx op;
+
+  member = mips_multi_add ();
+  member->is_label_p = false;
+  member->format = format;
+  va_start (ap, format);
+  i = 0;
+  while ((op = va_arg (ap, rtx)))
+    member->operands[i++] = op;
+  va_end (ap);
+  mips_multi_num_insns++;
+}
+
+/* Add the given label definition to the current multi-insn sequence.
+   The definition should include the colon.  */
+
+static void
+mips_multi_add_label (const char *label)
+{
+  struct mips_multi_member *member;
+
+  member = mips_multi_add ();
+  member->is_label_p = true;
+  member->format = label;
+}
+
+/* Return the index of the last member of the current multi-insn sequence.  */
+
+static unsigned int
+mips_multi_last_index (void)
+{
+  return VEC_length (mips_multi_member, mips_multi_members) - 1;
+}
+
+/* Add a copy of an existing instruction to the current multi-insn
+   sequence.  I is the index of the instruction that should be copied.  */
+
+static void
+mips_multi_copy_insn (unsigned int i)
+{
+  struct mips_multi_member *member;
+
+  member = mips_multi_add ();
+  memcpy (member, VEC_index (mips_multi_member, mips_multi_members, i),
+	  sizeof (*member));
+  gcc_assert (!member->is_label_p);
+}
+
+/* Change the operand of an existing instruction in the current
+   multi-insn sequence.  I is the index of the instruction,
+   OP is the index of the operand, and X is the new value.  */
+
+static void
+mips_multi_set_operand (unsigned int i, unsigned int op, rtx x)
+{
+  VEC_index (mips_multi_member, mips_multi_members, i)->operands[op] = x;
+}
+
+/* Write out the asm code for the current multi-insn sequence.  */
+
+static void
+mips_multi_write (void)
+{
+  struct mips_multi_member *member;
+  unsigned int i;
+
+  for (i = 0;
+       VEC_iterate (mips_multi_member, mips_multi_members, i, member);
+       i++)
+    if (member->is_label_p)
+      fprintf (asm_out_file, "%s\n", member->format);
+    else
+      output_asm_insn (member->format, member->operands);
 }
 
 /* Return one word of double-word value OP, taking into account the fixed
@@ -4076,7 +4357,7 @@ mips_canonicalize_int_order_test (enum rtx_code *code, rtx *cmp1,
   if (mips_int_order_operand_ok_p (*code, *cmp1))
     return true;
 
-  if (GET_CODE (*cmp1) == CONST_INT)
+  if (CONST_INT_P (*cmp1))
     switch (*code)
       {
       case LE:
@@ -4185,8 +4466,8 @@ mips_reversed_fp_cond (enum rtx_code *code)
 }
 
 /* Convert a comparison into something that can be used in a branch or
-   conditional move.  cmp_operands[0] and cmp_operands[1] are the values
-   being compared and *CODE is the code used to compare them.
+   conditional move.  On entry, *OP0 and *OP1 are the values being
+   compared and *CODE is the code used to compare them.
 
    Update *CODE, *OP0 and *OP1 so that they describe the final comparison.
    If NEED_EQ_NE_P, then only EQ or NE comparisons against zero are possible,
@@ -4199,42 +4480,38 @@ mips_reversed_fp_cond (enum rtx_code *code)
 static void
 mips_emit_compare (enum rtx_code *code, rtx *op0, rtx *op1, bool need_eq_ne_p)
 {
-  if (GET_MODE_CLASS (GET_MODE (cmp_operands[0])) == MODE_INT)
+  rtx cmp_op0 = *op0;
+  rtx cmp_op1 = *op1;
+
+  if (GET_MODE_CLASS (GET_MODE (*op0)) == MODE_INT)
     {
-      if (!need_eq_ne_p && cmp_operands[1] == const0_rtx)
-	{
-	  *op0 = cmp_operands[0];
-	  *op1 = cmp_operands[1];
-	}
+      if (!need_eq_ne_p && *op1 == const0_rtx)
+	;
       else if (*code == EQ || *code == NE)
 	{
 	  if (need_eq_ne_p)
 	    {
-	      *op0 = mips_zero_if_equal (cmp_operands[0], cmp_operands[1]);
+	      *op0 = mips_zero_if_equal (cmp_op0, cmp_op1);
 	      *op1 = const0_rtx;
 	    }
 	  else
-	    {
-	      *op0 = cmp_operands[0];
-	      *op1 = force_reg (GET_MODE (*op0), cmp_operands[1]);
-	    }
+	    *op1 = force_reg (GET_MODE (cmp_op0), cmp_op1);
 	}
       else
 	{
 	  /* The comparison needs a separate scc instruction.  Store the
 	     result of the scc in *OP0 and compare it against zero.  */
 	  bool invert = false;
-	  *op0 = gen_reg_rtx (GET_MODE (cmp_operands[0]));
-	  mips_emit_int_order_test (*code, &invert, *op0,
-				    cmp_operands[0], cmp_operands[1]);
+	  *op0 = gen_reg_rtx (GET_MODE (cmp_op0));
+	  mips_emit_int_order_test (*code, &invert, *op0, cmp_op0, cmp_op1);
 	  *code = (invert ? EQ : NE);
 	  *op1 = const0_rtx;
 	}
     }
-  else if (ALL_FIXED_POINT_MODE_P (GET_MODE (cmp_operands[0])))
+  else if (ALL_FIXED_POINT_MODE_P (GET_MODE (cmp_op0)))
     {
       *op0 = gen_rtx_REG (CCDSPmode, CCDSP_CC_REGNUM);
-      mips_emit_binary (*code, *op0, cmp_operands[0], cmp_operands[1]);
+      mips_emit_binary (*code, *op0, cmp_op0, cmp_op1);
       *code = NE;
       *op1 = const0_rtx;
     }
@@ -4254,49 +4531,55 @@ mips_emit_compare (enum rtx_code *code, rtx *op0, rtx *op1, bool need_eq_ne_p)
 	      ? gen_reg_rtx (CCmode)
 	      : gen_rtx_REG (CCmode, FPSW_REGNUM));
       *op1 = const0_rtx;
-      mips_emit_binary (cmp_code, *op0, cmp_operands[0], cmp_operands[1]);
+      mips_emit_binary (cmp_code, *op0, cmp_op0, cmp_op1);
     }
 }
 
-/* Try comparing cmp_operands[0] and cmp_operands[1] using rtl code CODE.
-   Store the result in TARGET and return true if successful.
+/* Try performing the comparison in OPERANDS[1], whose arms are OPERANDS[2]
+   and OPERAND[3].  Store the result in OPERANDS[0].
 
-   On 64-bit targets, TARGET may be narrower than cmp_operands[0].  */
+   On 64-bit targets, the mode of the comparison and target will always be
+   SImode, thus possibly narrower than that of the comparison's operands.  */
 
-bool
-mips_expand_scc (enum rtx_code code, rtx target)
+void
+mips_expand_scc (rtx operands[])
 {
-  if (GET_MODE_CLASS (GET_MODE (cmp_operands[0])) != MODE_INT)
-    return false;
+  rtx target = operands[0];
+  enum rtx_code code = GET_CODE (operands[1]);
+  rtx op0 = operands[2];
+  rtx op1 = operands[3];
+
+  gcc_assert (GET_MODE_CLASS (GET_MODE (op0)) == MODE_INT);
 
   if (code == EQ || code == NE)
     {
       if (ISA_HAS_SEQ_SNE
-	  && reg_imm10_operand (cmp_operands[1], GET_MODE (cmp_operands[1])))
-	mips_emit_binary (code, target, cmp_operands[0], cmp_operands[1]);
+	  && reg_imm10_operand (op1, GET_MODE (op1)))
+	mips_emit_binary (code, target, op0, op1);
       else
 	{
-	  rtx zie = mips_zero_if_equal (cmp_operands[0], cmp_operands[1]);
+	  rtx zie = mips_zero_if_equal (op0, op1);
 	  mips_emit_binary (code, target, zie, const0_rtx);
 	}
     }
   else
-    mips_emit_int_order_test (code, 0, target,
-			      cmp_operands[0], cmp_operands[1]);
-  return true;
+    mips_emit_int_order_test (code, 0, target, op0, op1);
 }
 
-/* Compare cmp_operands[0] with cmp_operands[1] using comparison code
-   CODE and jump to OPERANDS[0] if the condition holds.  */
+/* Compare OPERANDS[1] with OPERANDS[2] using comparison code
+   CODE and jump to OPERANDS[3] if the condition holds.  */
 
 void
-mips_expand_conditional_branch (rtx *operands, enum rtx_code code)
+mips_expand_conditional_branch (rtx *operands)
 {
-  rtx op0, op1, condition;
+  enum rtx_code code = GET_CODE (operands[0]);
+  rtx op0 = operands[1];
+  rtx op1 = operands[2];
+  rtx condition;
 
   mips_emit_compare (&code, &op0, &op1, TARGET_MIPS16);
   condition = gen_rtx_fmt_ee (code, VOIDmode, op0, op1);
-  emit_jump_insn (gen_condjump (condition, operands[0]));
+  emit_jump_insn (gen_condjump (condition, operands[3]));
 }
 
 /* Implement:
@@ -4323,35 +4606,36 @@ mips_expand_vcondv2sf (rtx dest, rtx true_src, rtx false_src,
 					 cmp_result));
 }
 
-/* Compare cmp_operands[0] with cmp_operands[1] using the code of
-   OPERANDS[1].  Move OPERANDS[2] into OPERANDS[0] if the condition
-   holds, otherwise move OPERANDS[3] into OPERANDS[0].  */
+/* Perform the comparison in OPERANDS[1].  Move OPERANDS[2] into OPERANDS[0]
+   if the condition holds, otherwise move OPERANDS[3] into OPERANDS[0].  */
 
 void
 mips_expand_conditional_move (rtx *operands)
 {
-  enum rtx_code code;
-  rtx cond, op0, op1;
+  rtx cond;
+  enum rtx_code code = GET_CODE (operands[1]);
+  rtx op0 = XEXP (operands[1], 0);
+  rtx op1 = XEXP (operands[1], 1);
 
-  code = GET_CODE (operands[1]);
   mips_emit_compare (&code, &op0, &op1, true);
-  cond = gen_rtx_fmt_ee (code, GET_MODE (op0), op0, op1),
+  cond = gen_rtx_fmt_ee (code, GET_MODE (op0), op0, op1);
   emit_insn (gen_rtx_SET (VOIDmode, operands[0],
 			  gen_rtx_IF_THEN_ELSE (GET_MODE (operands[0]), cond,
 						operands[2], operands[3])));
 }
 
-/* Compare cmp_operands[0] with cmp_operands[1] using rtl code CODE,
-   then trap if the condition holds.  */
+/* Perform the comparison in COMPARISON, then trap if the condition holds.  */
 
 void
-mips_expand_conditional_trap (enum rtx_code code)
+mips_expand_conditional_trap (rtx comparison)
 {
   rtx op0, op1;
   enum machine_mode mode;
+  enum rtx_code code;
 
   /* MIPS conditional trap instructions don't have GT or LE flavors,
      so we must swap the operands and convert to LT and GE respectively.  */
+  code = GET_CODE (comparison);
   switch (code)
     {
     case GT:
@@ -4359,17 +4643,17 @@ mips_expand_conditional_trap (enum rtx_code code)
     case GTU:
     case LEU:
       code = swap_condition (code);
-      op0 = cmp_operands[1];
-      op1 = cmp_operands[0];
+      op0 = XEXP (comparison, 1);
+      op1 = XEXP (comparison, 0);
       break;
 
     default:
-      op0 = cmp_operands[0];
-      op1 = cmp_operands[1];
+      op0 = XEXP (comparison, 0);
+      op1 = XEXP (comparison, 1);
       break;
     }
 
-  mode = GET_MODE (cmp_operands[0]);
+  mode = GET_MODE (XEXP (comparison, 0));
   op0 = force_reg (mode, op0);
   if (!arith_operand (op1, mode))
     op1 = force_reg (mode, op1);
@@ -4941,7 +5225,7 @@ mips_return_fpr_pair (enum machine_mode mode,
    VALTYPE is null and MODE is the mode of the return value.  */
 
 rtx
-mips_function_value (const_tree valtype, enum machine_mode mode)
+mips_function_value (const_tree valtype, const_tree func, enum machine_mode mode)
 {
   if (valtype)
     {
@@ -4951,9 +5235,9 @@ mips_function_value (const_tree valtype, enum machine_mode mode)
       mode = TYPE_MODE (valtype);
       unsigned_p = TYPE_UNSIGNED (valtype);
 
-      /* Since TARGET_PROMOTE_FUNCTION_RETURN unconditionally returns true,
-	 we must promote the mode just as PROMOTE_MODE does.  */
-      mode = promote_mode (valtype, mode, &unsigned_p, 1);
+      /* Since TARGET_PROMOTE_FUNCTION_MODE unconditionally promotes,
+	 return values, promote the mode here too.  */
+      mode = promote_function_mode (valtype, mode, &unsigned_p, func, 1);
 
       /* Handle structures whose fields are returned in $f0/$f2.  */
       switch (mips_fpr_return_fields (valtype, fields))
@@ -5125,22 +5409,28 @@ mips_build_builtin_va_list (void)
 
       record = lang_hooks.types.make_type (RECORD_TYPE);
 
-      f_ovfl = build_decl (FIELD_DECL, get_identifier ("__overflow_argptr"),
+      f_ovfl = build_decl (BUILTINS_LOCATION,
+			   FIELD_DECL, get_identifier ("__overflow_argptr"),
 			   ptr_type_node);
-      f_gtop = build_decl (FIELD_DECL, get_identifier ("__gpr_top"),
+      f_gtop = build_decl (BUILTINS_LOCATION,
+			   FIELD_DECL, get_identifier ("__gpr_top"),
 			   ptr_type_node);
-      f_ftop = build_decl (FIELD_DECL, get_identifier ("__fpr_top"),
+      f_ftop = build_decl (BUILTINS_LOCATION,
+			   FIELD_DECL, get_identifier ("__fpr_top"),
 			   ptr_type_node);
-      f_goff = build_decl (FIELD_DECL, get_identifier ("__gpr_offset"),
+      f_goff = build_decl (BUILTINS_LOCATION,
+			   FIELD_DECL, get_identifier ("__gpr_offset"),
 			   unsigned_char_type_node);
-      f_foff = build_decl (FIELD_DECL, get_identifier ("__fpr_offset"),
+      f_foff = build_decl (BUILTINS_LOCATION,
+			   FIELD_DECL, get_identifier ("__fpr_offset"),
 			   unsigned_char_type_node);
       /* Explicitly pad to the size of a pointer, so that -Wpadded won't
 	 warn on every user file.  */
       index = build_int_cst (NULL_TREE, GET_MODE_SIZE (ptr_mode) - 2 - 1);
       array = build_array_type (unsigned_char_type_node,
 			        build_index_type (index));
-      f_res = build_decl (FIELD_DECL, get_identifier ("__reserved"), array);
+      f_res = build_decl (BUILTINS_LOCATION,
+			  FIELD_DECL, get_identifier ("__reserved"), array);
 
       DECL_FIELD_CONTEXT (f_ovfl) = record;
       DECL_FIELD_CONTEXT (f_gtop) = record;
@@ -5501,7 +5791,7 @@ mips_load_call_address (enum mips_call_type type, rtx dest, rtx addr)
 /* Each locally-defined hard-float MIPS16 function has a local symbol
    associated with it.  This hash table maps the function symbol (FUNC)
    to the local symbol (LOCAL). */
-struct mips16_local_alias GTY(()) {
+struct GTY(()) mips16_local_alias {
   rtx func;
   rtx local;
 };
@@ -5714,10 +6004,12 @@ mips16_build_function_stub (void)
   stubname = ACONCAT (("__fn_stub_", fnname, NULL));
 
   /* Build a decl for the stub.  */
-  stubdecl = build_decl (FUNCTION_DECL, get_identifier (stubname),
+  stubdecl = build_decl (BUILTINS_LOCATION,
+			 FUNCTION_DECL, get_identifier (stubname),
 			 build_function_type (void_type_node, NULL_TREE));
   DECL_SECTION_NAME (stubdecl) = build_string (strlen (secname), secname);
-  DECL_RESULT (stubdecl) = build_decl (RESULT_DECL, NULL_TREE, void_type_node);
+  DECL_RESULT (stubdecl) = build_decl (BUILTINS_LOCATION,
+				       RESULT_DECL, NULL_TREE, void_type_node);
 
   /* Output a comment.  */
   fprintf (asm_out_file, "\t# Stub function for %s (",
@@ -5817,7 +6109,7 @@ mips16_copy_fpr_return_value (void)
    RETVAL is the location of the return value, or null if this is
    a "call" rather than a "call_value".  ARGS_SIZE is the size of the
    arguments and FP_CODE is the code built by mips_function_arg;
-   see the comment above CUMULATIVE_ARGS for details.
+   see the comment before the fp_code field in CUMULATIVE_ARGS for details.
 
    There are three alternatives:
 
@@ -5958,10 +6250,12 @@ mips16_build_call_stub (rtx retval, rtx *fn_ptr, rtx args_size, int fp_code)
       stubname = ACONCAT (("__call_stub_", fp_ret_p ? "fp_" : "",
 			   fnname, NULL));
       stubid = get_identifier (stubname);
-      stubdecl = build_decl (FUNCTION_DECL, stubid,
+      stubdecl = build_decl (BUILTINS_LOCATION,
+			     FUNCTION_DECL, stubid,
 			     build_function_type (void_type_node, NULL_TREE));
       DECL_SECTION_NAME (stubdecl) = build_string (strlen (secname), secname);
-      DECL_RESULT (stubdecl) = build_decl (RESULT_DECL, NULL_TREE,
+      DECL_RESULT (stubdecl) = build_decl (BUILTINS_LOCATION,
+					   RESULT_DECL, NULL_TREE,
 					   void_type_node);
 
       /* Output a comment.  */
@@ -6012,8 +6306,8 @@ mips16_build_call_stub (rtx retval, rtx *fn_ptr, rtx args_size, int fp_code)
 	     The stub's caller knows that $18 might be clobbered, even though
 	     $18 is usually a call-saved register.  */
 	  fprintf (asm_out_file, "\tmove\t%s,%s\n",
-		   reg_names[GP_REG_FIRST + 18], reg_names[GP_REG_FIRST + 31]);
-	  output_asm_insn (MIPS_CALL ("jal", &fn, 0), &fn);
+		   reg_names[GP_REG_FIRST + 18], reg_names[RETURN_ADDR_REGNUM]);
+	  output_asm_insn (MIPS_CALL ("jal", &fn, 0, -1), &fn);
 
 	  /* Move the result from floating-point registers to
 	     general registers.  */
@@ -6137,9 +6431,7 @@ mips_expand_call (enum mips_call_type type, rtx result, rtx addr,
     {
       rtx (*fn) (rtx, rtx);
 
-      if (type == MIPS_CALL_EPILOGUE && TARGET_SPLIT_CALLS)
-	fn = gen_call_split;
-      else if (type == MIPS_CALL_SIBCALL)
+      if (type == MIPS_CALL_SIBCALL)
 	fn = gen_sibcall_internal;
       else
 	fn = gen_call_internal;
@@ -6152,9 +6444,7 @@ mips_expand_call (enum mips_call_type type, rtx result, rtx addr,
       rtx (*fn) (rtx, rtx, rtx, rtx);
       rtx reg1, reg2;
 
-      if (type == MIPS_CALL_EPILOGUE && TARGET_SPLIT_CALLS)
-	fn = gen_call_value_multiple_split;
-      else if (type == MIPS_CALL_SIBCALL)
+      if (type == MIPS_CALL_SIBCALL)
 	fn = gen_sibcall_value_multiple_internal;
       else
 	fn = gen_call_value_multiple_internal;
@@ -6167,9 +6457,7 @@ mips_expand_call (enum mips_call_type type, rtx result, rtx addr,
     {
       rtx (*fn) (rtx, rtx, rtx);
 
-      if (type == MIPS_CALL_EPILOGUE && TARGET_SPLIT_CALLS)
-	fn = gen_call_value_split;
-      else if (type == MIPS_CALL_SIBCALL)
+      if (type == MIPS_CALL_SIBCALL)
 	fn = gen_sibcall_value_internal;
       else
 	fn = gen_call_value_internal;
@@ -6199,7 +6487,7 @@ mips_split_call (rtx insn, rtx call_pattern)
     /* Pick a temporary register that is suitable for both MIPS16 and
        non-MIPS16 code.  $4 and $5 are used for returning complex double
        values in soft-float code, so $6 is the first suitable candidate.  */
-    mips_restore_gp (gen_rtx_REG (Pmode, GP_ARG_FIRST + 2));
+    mips_restore_gp_from_cprestore_slot (gen_rtx_REG (Pmode, GP_ARG_FIRST + 2));
 }
 
 /* Implement TARGET_FUNCTION_OK_FOR_SIBCALL.  */
@@ -6208,6 +6496,11 @@ static bool
 mips_function_ok_for_sibcall (tree decl, tree exp ATTRIBUTE_UNUSED)
 {
   if (!TARGET_SIBCALLS)
+    return false;
+
+  /* Interrupt handlers need special epilogue code and therefore can't
+     use sibcalls.  */
+  if (mips_interrupt_type_p (TREE_TYPE (current_function_decl)))
     return false;
 
   /* We can't do a sibcall if the called function is a MIPS16 function
@@ -6355,7 +6648,7 @@ static void
 mips_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length,
 		      HOST_WIDE_INT bytes_per_iter)
 {
-  rtx label, src_reg, dest_reg, final_src;
+  rtx label, src_reg, dest_reg, final_src, test;
   HOST_WIDE_INT leftover;
 
   leftover = length % bytes_per_iter;
@@ -6382,11 +6675,11 @@ mips_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length,
   mips_emit_move (dest_reg, plus_constant (dest_reg, bytes_per_iter));
 
   /* Emit the loop condition.  */
+  test = gen_rtx_NE (VOIDmode, src_reg, final_src);
   if (Pmode == DImode)
-    emit_insn (gen_cmpdi (src_reg, final_src));
+    emit_jump_insn (gen_cbranchdi4 (test, src_reg, final_src, label));
   else
-    emit_insn (gen_cmpsi (src_reg, final_src));
-  emit_jump_insn (gen_bne (label));
+    emit_jump_insn (gen_cbranchsi4 (test, src_reg, final_src, label));
 
   /* Mop up any left-over bytes.  */
   if (leftover)
@@ -6399,7 +6692,7 @@ mips_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length,
 bool
 mips_expand_block_move (rtx dest, rtx src, rtx length)
 {
-  if (GET_CODE (length) == CONST_INT)
+  if (CONST_INT_P (length))
     {
       if (INTVAL (length) <= MIPS_MAX_MOVE_BYTES_STRAIGHT)
 	{
@@ -6756,6 +7049,18 @@ mask_low_and_shift_p (enum machine_mode mode, rtx mask, rtx shift, int maxlen)
   return IN_RANGE (mask_low_and_shift_len (mode, mask, shift), 1, maxlen);
 }
 
+/* Return true iff OP1 and OP2 are valid operands together for the
+   *and<MODE>3 and *and<MODE>3_mips16 patterns.  For the cases to consider,
+   see the table in the comment before the pattern.  */
+
+bool
+and_operands_ok (enum machine_mode mode, rtx op1, rtx op2)
+{
+  return (memory_operand (op1, mode)
+	  ? and_load_operand (op2, mode)
+	  : and_reg_operand (op2, mode));
+}
+
 /* The canonical form of a mask-low-and-shift-left operation is
    (and (ashift X SHIFT) MASK) where MASK has the lower SHIFT number of bits
    cleared.  Thus we need to shift MASK to the right before checking if it
@@ -6913,20 +7218,6 @@ mips_init_relocs (void)
   mips_lo_relocs[SYMBOL_HALF] = "%half(";
 }
 
-/* If OP is an UNSPEC address, return the address to which it refers,
-   otherwise return OP itself.  */
-
-static rtx
-mips_strip_unspec_address (rtx op)
-{
-  rtx base, offset;
-
-  split_const (op, &base, &offset);
-  if (UNSPEC_ADDRESS_P (base))
-    op = plus_constant (UNSPEC_ADDRESS (base), INTVAL (offset));
-  return op;
-}
-
 /* Print symbolic operand OP, which is part of a HIGH or LO_SUM
    in context CONTEXT.  RELOCS is the array of relocations to use.  */
 
@@ -6945,6 +7236,45 @@ mips_print_operand_reloc (FILE *file, rtx op, enum mips_symbol_context context,
   for (p = relocs[symbol_type]; *p != 0; p++)
     if (*p == '(')
       fputc (')', file);
+}
+
+/* Start a new block with the given asm switch enabled.  If we need
+   to print a directive, emit PREFIX before it and SUFFIX after it.  */
+
+static void
+mips_push_asm_switch_1 (struct mips_asm_switch *asm_switch,
+			const char *prefix, const char *suffix)
+{
+  if (asm_switch->nesting_level == 0)
+    fprintf (asm_out_file, "%s.set\tno%s%s", prefix, asm_switch->name, suffix);
+  asm_switch->nesting_level++;
+}
+
+/* Likewise, but end a block.  */
+
+static void
+mips_pop_asm_switch_1 (struct mips_asm_switch *asm_switch,
+		       const char *prefix, const char *suffix)
+{
+  gcc_assert (asm_switch->nesting_level);
+  asm_switch->nesting_level--;
+  if (asm_switch->nesting_level == 0)
+    fprintf (asm_out_file, "%s.set\t%s%s", prefix, asm_switch->name, suffix);
+}
+
+/* Wrappers around mips_push_asm_switch_1 and mips_pop_asm_switch_1
+   that either print a complete line or print nothing.  */
+
+void
+mips_push_asm_switch (struct mips_asm_switch *asm_switch)
+{
+  mips_push_asm_switch_1 (asm_switch, "\t", "\n");
+}
+
+void
+mips_pop_asm_switch (struct mips_asm_switch *asm_switch)
+{
+  mips_pop_asm_switch_1 (asm_switch, "\t", "\n");
 }
 
 /* Print the text for PRINT_OPERAND punctation character CH to FILE.
@@ -6966,8 +7296,6 @@ mips_print_operand_reloc (FILE *file, rtx op, enum mips_symbol_context context,
    '^'	Print the name of the pic call-through register (t9 or $25).
    '+'	Print the name of the gp register (usually gp or $28).
    '$'	Print the name of the stack pointer register (sp or $29).
-   '|'	Print ".set push; .set mips2" if !ISA_HAS_LL_SC.
-   '-'	Print ".set pop" under the same conditions for '|'.
 
    See also mips_init_print_operand_pucnt.  */
 
@@ -6977,36 +7305,27 @@ mips_print_operand_punctuation (FILE *file, int ch)
   switch (ch)
     {
     case '(':
-      if (set_noreorder++ == 0)
-	fputs (".set\tnoreorder\n\t", file);
+      mips_push_asm_switch_1 (&mips_noreorder, "", "\n\t");
       break;
 
     case ')':
-      gcc_assert (set_noreorder > 0);
-      if (--set_noreorder == 0)
-	fputs ("\n\t.set\treorder", file);
+      mips_pop_asm_switch_1 (&mips_noreorder, "\n\t", "");
       break;
 
     case '[':
-      if (set_noat++ == 0)
-	fputs (".set\tnoat\n\t", file);
+      mips_push_asm_switch_1 (&mips_noat, "", "\n\t");
       break;
 
     case ']':
-      gcc_assert (set_noat > 0);
-      if (--set_noat == 0)
-	fputs ("\n\t.set\tat", file);
+      mips_pop_asm_switch_1 (&mips_noat, "\n\t", "");
       break;
 
     case '<':
-      if (set_nomacro++ == 0)
-	fputs (".set\tnomacro\n\t", file);
+      mips_push_asm_switch_1 (&mips_nomacro, "", "\n\t");
       break;
 
     case '>':
-      gcc_assert (set_nomacro > 0);
-      if (--set_nomacro == 0)
-	fputs ("\n\t.set\tmacro", file);
+      mips_pop_asm_switch_1 (&mips_nomacro, "\n\t", "");
       break;
 
     case '*':
@@ -7018,7 +7337,7 @@ mips_print_operand_punctuation (FILE *file, int ch)
       break;
 
     case '#':
-      if (set_noreorder != 0)
+      if (mips_noreorder.nesting_level > 0)
 	fputs ("\n\tnop", file);
       break;
 
@@ -7026,7 +7345,7 @@ mips_print_operand_punctuation (FILE *file, int ch)
       /* Print an extra newline so that the delayed insn is separated
 	 from the following ones.  This looks neater and is consistent
 	 with non-nop delayed sequences.  */
-      if (set_noreorder != 0 && final_sequence == 0)
+      if (mips_noreorder.nesting_level > 0 && final_sequence == 0)
 	fputs ("\n\tnop\n", file);
       break;
 
@@ -7045,7 +7364,7 @@ mips_print_operand_punctuation (FILE *file, int ch)
       break;
 
     case '@':
-      fputs (reg_names[GP_REG_FIRST + 1], file);
+      fputs (reg_names[AT_REGNUM], file);
       break;
 
     case '^':
@@ -7058,16 +7377,6 @@ mips_print_operand_punctuation (FILE *file, int ch)
 
     case '$':
       fputs (reg_names[STACK_POINTER_REGNUM], file);
-      break;
-
-    case '|':
-      if (!ISA_HAS_LL_SC)
-	fputs (".set\tpush\n\t.set\tmips2\n\t", file);
-      break;
-
-    case '-':
-      if (!ISA_HAS_LL_SC)
-	fputs ("\n\t.set\tpop", file);
       break;
 
     default:
@@ -7083,7 +7392,7 @@ mips_init_print_operand_punct (void)
 {
   const char *p;
 
-  for (p = "()[]<>*#/?~.@^+$|-"; *p; p++)
+  for (p = "()[]<>*#/?~.@^+$"; *p; p++)
     mips_print_operand_punct[(unsigned char) *p] = true;
 }
 
@@ -7179,28 +7488,28 @@ mips_print_operand (FILE *file, rtx op, int letter)
   switch (letter)
     {
     case 'X':
-      if (GET_CODE (op) == CONST_INT)
+      if (CONST_INT_P (op))
 	fprintf (file, HOST_WIDE_INT_PRINT_HEX, INTVAL (op));
       else
 	output_operand_lossage ("invalid use of '%%%c'", letter);
       break;
 
     case 'x':
-      if (GET_CODE (op) == CONST_INT)
+      if (CONST_INT_P (op))
 	fprintf (file, HOST_WIDE_INT_PRINT_HEX, INTVAL (op) & 0xffff);
       else
 	output_operand_lossage ("invalid use of '%%%c'", letter);
       break;
 
     case 'd':
-      if (GET_CODE (op) == CONST_INT)
+      if (CONST_INT_P (op))
 	fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (op));
       else
 	output_operand_lossage ("invalid use of '%%%c'", letter);
       break;
 
     case 'm':
-      if (GET_CODE (op) == CONST_INT)
+      if (CONST_INT_P (op))
 	fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (op) - 1);
       else
 	output_operand_lossage ("invalid use of '%%%c'", letter);
@@ -7276,13 +7585,21 @@ mips_print_operand (FILE *file, rtx op, int letter)
 		|| (letter == 'L' && TARGET_BIG_ENDIAN)
 		|| letter == 'D')
 	      regno++;
-	    fprintf (file, "%s", reg_names[regno]);
+	    else if (letter && letter != 'z' && letter != 'M' && letter != 'L')
+	      output_operand_lossage ("invalid use of '%%%c'", letter);
+	    /* We need to print $0 .. $31 for COP0 registers.  */
+	    if (COP0_REG_P (regno))
+	      fprintf (file, "$%s", &reg_names[regno][4]);
+	    else
+	      fprintf (file, "%s", reg_names[regno]);
 	  }
 	  break;
 
 	case MEM:
 	  if (letter == 'D')
 	    output_address (plus_constant (XEXP (op, 0), 4));
+	  else if (letter && letter != 'z')
+	    output_operand_lossage ("invalid use of '%%%c'", letter);
 	  else
 	    output_address (XEXP (op, 0));
 	  break;
@@ -7290,6 +7607,8 @@ mips_print_operand (FILE *file, rtx op, int letter)
 	default:
 	  if (letter == 'z' && op == CONST0_RTX (GET_MODE (op)))
 	    fputs (reg_names[GP_REG_FIRST], file);
+	  else if (letter && letter != 'z')
+	    output_operand_lossage ("invalid use of '%%%c'", letter);
 	  else if (CONST_GP_P (op))
 	    fputs (reg_names[GLOBAL_POINTER_REGNUM], file);
 	  else
@@ -7913,8 +8232,8 @@ mips_frame_set (rtx mem, rtx reg)
   /* If we're saving the return address register and the DWARF return
      address column differs from the hard register number, adjust the
      note reg to refer to the former.  */
-  if (REGNO (reg) == GP_REG_FIRST + 31
-      && DWARF_FRAME_RETURN_COLUMN != GP_REG_FIRST + 31)
+  if (REGNO (reg) == RETURN_ADDR_REGNUM
+      && DWARF_FRAME_RETURN_COLUMN != RETURN_ADDR_REGNUM)
     reg = gen_rtx_REG (GET_MODE (reg), DWARF_FRAME_RETURN_COLUMN);
 
   set = gen_rtx_SET (VOIDmode, mem, reg);
@@ -8068,7 +8387,7 @@ mips16e_collect_argument_saves (void)
   for (insn = get_insns (); insn; insn = next)
     {
       next = NEXT_INSN (insn);
-      if (NOTE_P (insn))
+      if (NOTE_P (insn) || DEBUG_INSN_P (insn))
 	continue;
 
       if (!INSN_P (insn))
@@ -8364,37 +8683,12 @@ mips16e_output_save_restore (rtx pattern, HOST_WIDE_INT adjust)
 				    mips16e_a0_a3_regs[end - 1]);
 
   /* Save or restore $31.  */
-  if (BITSET_P (info.mask, 31))
-    s += sprintf (s, ",%s", reg_names[GP_REG_FIRST + 31]);
+  if (BITSET_P (info.mask, RETURN_ADDR_REGNUM))
+    s += sprintf (s, ",%s", reg_names[RETURN_ADDR_REGNUM]);
 
   return buffer;
 }
 
-/* Return true if the current function has an insn that implicitly
-   refers to $gp.  */
-
-static bool
-mips_function_has_gp_insn (void)
-{
-  /* Don't bother rechecking if we found one last time.  */
-  if (!cfun->machine->has_gp_insn_p)
-    {
-      rtx insn;
-
-      push_topmost_sequence ();
-      for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
-	if (USEFUL_INSN_P (insn)
-	    && (get_attr_got (insn) != GOT_UNSET
-		|| mips_small_data_pattern_p (PATTERN (insn))))
-	  {
-	    cfun->machine->has_gp_insn_p = true;
-	    break;
-	  }
-      pop_topmost_sequence ();
-    }
-  return cfun->machine->has_gp_insn_p;
-}
-
 /* Return true if the current function returns its value in a floating-point
    register in MIPS16 mode.  */
 
@@ -8406,6 +8700,120 @@ mips16_cfun_returns_in_fpr_p (void)
 	  && TARGET_HARD_FLOAT_ABI
 	  && !aggregate_value_p (return_type, current_function_decl)
  	  && mips_return_mode_in_fpr_p (DECL_MODE (return_type)));
+}
+
+/* Return true if predicate PRED is true for at least one instruction.
+   Cache the result in *CACHE, and assume that the result is true
+   if *CACHE is already true.  */
+
+static bool
+mips_find_gp_ref (bool *cache, bool (*pred) (rtx))
+{
+  rtx insn;
+
+  if (!*cache)
+    {
+      push_topmost_sequence ();
+      for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
+	if (USEFUL_INSN_P (insn) && pred (insn))
+	  {
+	    *cache = true;
+	    break;
+	  }
+      pop_topmost_sequence ();
+    }
+  return *cache;
+}
+
+/* Return true if INSN refers to the global pointer in an "inflexible" way.
+   See mips_cfun_has_inflexible_gp_ref_p for details.  */
+
+static bool
+mips_insn_has_inflexible_gp_ref_p (rtx insn)
+{
+  /* Uses of pic_offset_table_rtx in CALL_INSN_FUNCTION_USAGE
+     indicate that the target could be a traditional MIPS
+     lazily-binding stub.  */
+  return find_reg_fusage (insn, USE, pic_offset_table_rtx);
+}
+
+/* Return true if the current function refers to the global pointer
+   in a way that forces $28 to be valid.  This means that we can't
+   change the choice of global pointer, even for NewABI code.
+
+   One example of this (and one which needs several checks) is that
+   $28 must be valid when calling traditional MIPS lazy-binding stubs.
+   (This restriction does not apply to PLTs.)  */
+
+static bool
+mips_cfun_has_inflexible_gp_ref_p (void)
+{
+  /* If the function has a nonlocal goto, $28 must hold the correct
+     global pointer for the target function.  That is, the target
+     of the goto implicitly uses $28.  */
+  if (crtl->has_nonlocal_goto)
+    return true;
+
+  if (TARGET_ABICALLS_PIC2)
+    {
+      /* Symbolic accesses implicitly use the global pointer unless
+	 -mexplicit-relocs is in effect.  JAL macros to symbolic addresses
+	 might go to traditional MIPS lazy-binding stubs.  */
+      if (!TARGET_EXPLICIT_RELOCS)
+	return true;
+
+      /* FUNCTION_PROFILER includes a JAL to _mcount, which again
+	 can be lazily-bound.  */
+      if (crtl->profile)
+	return true;
+
+      /* MIPS16 functions that return in FPRs need to call an
+	 external libgcc routine.  This call is only made explict
+	 during mips_expand_epilogue, and it too might be lazily bound.  */
+      if (mips16_cfun_returns_in_fpr_p ())
+	return true;
+    }
+
+  return mips_find_gp_ref (&cfun->machine->has_inflexible_gp_insn_p,
+			   mips_insn_has_inflexible_gp_ref_p);
+}
+
+/* Return true if INSN refers to the global pointer in a "flexible" way.
+   See mips_cfun_has_flexible_gp_ref_p for details.  */
+
+static bool
+mips_insn_has_flexible_gp_ref_p (rtx insn)
+{
+  return (get_attr_got (insn) != GOT_UNSET
+	  || mips_small_data_pattern_p (PATTERN (insn))
+	  || reg_overlap_mentioned_p (pic_offset_table_rtx, PATTERN (insn)));
+}
+
+/* Return true if the current function references the global pointer,
+   but if those references do not inherently require the global pointer
+   to be $28.  Assume !mips_cfun_has_inflexible_gp_ref_p ().  */
+
+static bool
+mips_cfun_has_flexible_gp_ref_p (void)
+{
+  /* Reload can sometimes introduce constant pool references
+     into a function that otherwise didn't need them.  For example,
+     suppose we have an instruction like:
+
+	(set (reg:DF R1) (float:DF (reg:SI R2)))
+
+     If R2 turns out to be a constant such as 1, the instruction may
+     have a REG_EQUAL note saying that R1 == 1.0.  Reload then has
+     the option of using this constant if R2 doesn't get allocated
+     to a register.
+
+     In cases like these, reload will have added the constant to the
+     pool but no instruction will yet refer to it.  */
+  if (TARGET_ABICALLS_PIC2 && !reload_completed && crtl->uses_const_pool)
+    return true;
+
+  return mips_find_gp_ref (&cfun->machine->has_flexible_gp_insn_p,
+			   mips_insn_has_flexible_gp_ref_p);
 }
 
 /* Return the register that should be used as the global pointer
@@ -8421,57 +8829,18 @@ mips_global_pointer (void)
   if (!TARGET_USE_GOT)
     return GLOBAL_POINTER_REGNUM;
 
-  /* We must always provide $gp when it is used implicitly.  */
-  if (!TARGET_EXPLICIT_RELOCS)
+  /* If there are inflexible references to $gp, we must use the
+     standard register.  */
+  if (mips_cfun_has_inflexible_gp_ref_p ())
     return GLOBAL_POINTER_REGNUM;
 
-  /* FUNCTION_PROFILER includes a jal macro, so we need to give it
-     a valid gp.  */
-  if (crtl->profile)
-    return GLOBAL_POINTER_REGNUM;
+  /* If there are no current references to $gp, then the only uses
+     we can introduce later are those involved in long branches.  */
+  if (TARGET_ABSOLUTE_JUMPS && !mips_cfun_has_flexible_gp_ref_p ())
+    return INVALID_REGNUM;
 
-  /* If the function has a nonlocal goto, $gp must hold the correct
-     global pointer for the target function.  */
-  if (crtl->has_nonlocal_goto)
-    return GLOBAL_POINTER_REGNUM;
-
-  /* There's no need to initialize $gp if it isn't referenced now,
-     and if we can be sure that no new references will be added during
-     or after reload.  */
-  if (!df_regs_ever_live_p (GLOBAL_POINTER_REGNUM)
-      && !mips_function_has_gp_insn ())
-    {
-      /* The function doesn't use $gp at the moment.  If we're generating
-	 -call_nonpic code, no new uses will be introduced during or after
-	 reload.  */
-      if (TARGET_ABICALLS_PIC0)
-	return INVALID_REGNUM;
-
-      /* We need to handle the following implicit gp references:
-
-	 - Reload can sometimes introduce constant pool references
-	   into a function that otherwise didn't need them.  For example,
-	   suppose we have an instruction like:
-
-	       (set (reg:DF R1) (float:DF (reg:SI R2)))
-
-	   If R2 turns out to be constant such as 1, the instruction may
-	   have a REG_EQUAL note saying that R1 == 1.0.  Reload then has
-	   the option of using this constant if R2 doesn't get allocated
-	   to a register.
-
-	   In cases like these, reload will have added the constant to the
-	   pool but no instruction will yet refer to it.
-
-	 - MIPS16 functions that return in FPRs need to call an
-	   external libgcc routine.  */
-      if (!crtl->uses_const_pool
-	  && !mips16_cfun_returns_in_fpr_p ())
-	return INVALID_REGNUM;
-    }
-
-  /* We need a global pointer, but perhaps we can use a call-clobbered
-     register instead of $gp.  */
+  /* If the global pointer is call-saved, try to use a call-clobbered
+     alternative.  */
   if (TARGET_CALL_SAVED_GP && current_function_is_leaf)
     for (regno = GP_REG_FIRST; regno <= GP_REG_LAST; regno++)
       if (!df_regs_ever_live_p (regno)
@@ -8483,12 +8852,166 @@ mips_global_pointer (void)
   return GLOBAL_POINTER_REGNUM;
 }
 
+/* Return true if the current function's prologue must load the global
+   pointer value into pic_offset_table_rtx and store the same value in
+   the function's cprestore slot (if any).
+
+   One problem we have to deal with is that, when emitting GOT-based
+   position independent code, long-branch sequences will need to load
+   the address of the branch target from the GOT.  We don't know until
+   the very end of compilation whether (and where) the function needs
+   long branches, so we must ensure that _any_ branch can access the
+   global pointer in some form.  However, we do not want to pessimize
+   the usual case in which all branches are short.
+
+   We handle this as follows:
+
+   (1) During reload, we set cfun->machine->global_pointer to
+       INVALID_REGNUM if we _know_ that the current function
+       doesn't need a global pointer.  This is only valid if
+       long branches don't need the GOT.
+
+       Otherwise, we assume that we might need a global pointer
+       and pick an appropriate register.
+
+   (2) If cfun->machine->global_pointer != INVALID_REGNUM,
+       we ensure that the global pointer is available at every
+       block boundary bar entry and exit.  We do this in one of two ways:
+
+       - If the function has a cprestore slot, we ensure that this
+	 slot is valid at every branch.  However, as explained in
+	 point (6) below, there is no guarantee that pic_offset_table_rtx
+	 itself is valid if new uses of the global pointer are introduced
+	 after the first post-epilogue split.
+
+	 We guarantee that the cprestore slot is valid by loading it
+	 into a fake register, CPRESTORE_SLOT_REGNUM.  We then make
+	 this register live at every block boundary bar function entry
+	 and exit.  It is then invalid to move the load (and thus the
+	 preceding store) across a block boundary.
+
+       - If the function has no cprestore slot, we guarantee that
+	 pic_offset_table_rtx itself is valid at every branch.
+
+       See mips_eh_uses for the handling of the register liveness.
+
+   (3) During prologue and epilogue generation, we emit "ghost"
+       placeholder instructions to manipulate the global pointer.
+
+   (4) During prologue generation, we set cfun->machine->must_initialize_gp_p
+       and cfun->machine->must_restore_gp_when_clobbered_p if we already know
+       that the function needs a global pointer.  (There is no need to set
+       them earlier than this, and doing it as late as possible leads to
+       fewer false positives.)
+
+   (5) If cfun->machine->must_initialize_gp_p is true during a
+       split_insns pass, we split the ghost instructions into real
+       instructions.  These split instructions can then be optimized in
+       the usual way.  Otherwise, we keep the ghost instructions intact,
+       and optimize for the case where they aren't needed.  We still
+       have the option of splitting them later, if we need to introduce
+       new uses of the global pointer.
+
+       For example, the scheduler ignores a ghost instruction that
+       stores $28 to the stack, but it handles the split form of
+       the ghost instruction as an ordinary store.
+
+   (6) [OldABI only.]  If cfun->machine->must_restore_gp_when_clobbered_p
+       is true during the first post-epilogue split_insns pass, we split
+       calls and restore_gp patterns into instructions that explicitly
+       load pic_offset_table_rtx from the cprestore slot.  Otherwise,
+       we split these patterns into instructions that _don't_ load from
+       the cprestore slot.
+
+       If cfun->machine->must_restore_gp_when_clobbered_p is true at the
+       time of the split, then any instructions that exist at that time
+       can make free use of pic_offset_table_rtx.  However, if we want
+       to introduce new uses of the global pointer after the split,
+       we must explicitly load the value from the cprestore slot, since
+       pic_offset_table_rtx itself might not be valid at a given point
+       in the function.
+
+       The idea is that we want to be able to delete redundant
+       loads from the cprestore slot in the usual case where no
+       long branches are needed.
+
+   (7) If cfun->machine->must_initialize_gp_p is still false at the end
+       of md_reorg, we decide whether the global pointer is needed for
+       long branches.  If so, we set cfun->machine->must_initialize_gp_p
+       to true and split the ghost instructions into real instructions
+       at that stage.
+
+   Note that the ghost instructions must have a zero length for three reasons:
+
+   - Giving the length of the underlying $gp sequence might cause
+     us to use long branches in cases where they aren't really needed.
+
+   - They would perturb things like alignment calculations.
+
+   - More importantly, the hazard detection in md_reorg relies on
+     empty instructions having a zero length.
+
+   If we find a long branch and split the ghost instructions at the
+   end of md_reorg, the split could introduce more long branches.
+   That isn't a problem though, because we still do the split before
+   the final shorten_branches pass.
+
+   This is extremely ugly, but it seems like the best compromise between
+   correctness and efficiency.  */
+
+bool
+mips_must_initialize_gp_p (void)
+{
+  return cfun->machine->must_initialize_gp_p;
+}
+
+/* Return true if REGNO is a register that is ordinarily call-clobbered
+   but must nevertheless be preserved by an interrupt handler.  */
+
+static bool
+mips_interrupt_extra_call_saved_reg_p (unsigned int regno)
+{
+  if (MD_REG_P (regno))
+    return true;
+
+  if (TARGET_DSP && DSP_ACC_REG_P (regno))
+    return true;
+
+  if (GP_REG_P (regno) && !cfun->machine->use_shadow_register_set_p)
+    {
+      /* $0 is hard-wired.  */
+      if (regno == GP_REG_FIRST)
+	return false;
+
+      /* The interrupt handler can treat kernel registers as
+	 scratch registers.  */
+      if (KERNEL_REG_P (regno))
+	return false;
+
+      /* The function will return the stack pointer to its original value
+	 anyway.  */
+      if (regno == STACK_POINTER_REGNUM)
+	return false;
+
+      /* Otherwise, return true for registers that aren't ordinarily
+	 call-clobbered.  */
+      return call_really_used_regs[regno];
+    }
+
+  return false;
+}
+
 /* Return true if the current function should treat register REGNO
    as call-saved.  */
 
 static bool
 mips_cfun_call_saved_reg_p (unsigned int regno)
 {
+  /* Interrupt handlers need to save extra registers.  */
+  if (cfun->machine->interrupt_handler_p
+      && mips_interrupt_extra_call_saved_reg_p (regno))
+    return true;
+
   /* call_insns preserve $28 unless they explicitly say otherwise,
      so call_really_used_regs[] treats $28 as call-saved.  However,
      we want the ABI property rather than the default call_insn
@@ -8534,7 +9057,14 @@ mips_cfun_might_clobber_call_saved_reg_p (unsigned int regno)
   /* If a MIPS16 function returns a value in FPRs, its epilogue
      will need to call an external libgcc routine.  This yet-to-be
      generated call_insn will clobber $31.  */
-  if (regno == GP_REG_FIRST + 31 && mips16_cfun_returns_in_fpr_p ())
+  if (regno == RETURN_ADDR_REGNUM && mips16_cfun_returns_in_fpr_p ())
+    return true;
+
+  /* If REGNO is ordinarily call-clobbered, we must assume that any
+     called function could modify it.  */
+  if (cfun->machine->interrupt_handler_p
+      && !current_function_is_leaf
+      && mips_interrupt_extra_call_saved_reg_p (regno))
     return true;
 
   return false;
@@ -8561,7 +9091,7 @@ mips_save_reg_p (unsigned int regno)
 
   /* We need to save the incoming return address if __builtin_eh_return
      is being used to set a different return address.  */
-  if (regno == GP_REG_FIRST + 31 && crtl->calls_eh_return)
+  if (regno == RETURN_ADDR_REGNUM && crtl->calls_eh_return)
     return true;
 
   return false;
@@ -8592,16 +9122,24 @@ mips_save_reg_p (unsigned int regno)
       C |  callee-allocated save area   |
 	|  for register varargs         |
 	|                               |
-	+-------------------------------+ <-- frame_pointer_rtx + fp_sp_offset
+	+-------------------------------+ <-- frame_pointer_rtx
+	|                               |       + cop0_sp_offset
+	|  COP0 reg save area           |	+ UNITS_PER_WORD
+	|                               |
+	+-------------------------------+ <-- frame_pointer_rtx + acc_sp_offset
+	|                               |       + UNITS_PER_WORD
+	|  accumulator save area        |
+	|                               |
+	+-------------------------------+ <-- stack_pointer_rtx + fp_sp_offset
 	|                               |       + UNITS_PER_HWFPVALUE
 	|  FPR save area                |
 	|                               |
-	+-------------------------------+ <-- frame_pointer_rtx + gp_sp_offset
+	+-------------------------------+ <-- stack_pointer_rtx + gp_sp_offset
 	|                               |       + UNITS_PER_WORD
 	|  GPR save area                |
 	|                               |
-	+-------------------------------+
-	|                               | \
+	+-------------------------------+ <-- frame_pointer_rtx with
+	|                               | \     -fstack-protector
 	|  local variables              |  | var_size
 	|                               | /
 	+-------------------------------+
@@ -8609,16 +9147,17 @@ mips_save_reg_p (unsigned int regno)
 	|  $gp save area                |  | cprestore_size
 	|                               | /
       P +-------------------------------+ <-- hard_frame_pointer_rtx for
-	|                               |       MIPS16 code
-	|  outgoing stack arguments     |
-	|                               |
-	+-------------------------------+
-	|                               |
-	|  caller-allocated save area   |
-	|  for register arguments       |
-	|                               |
+	|                               | \     MIPS16 code
+	|  outgoing stack arguments     |  |
+	|                               |  |
+	+-------------------------------+  | args_size
+	|                               |  |
+	|  caller-allocated save area   |  |
+	|  for register arguments       |  |
+	|                               | /
 	+-------------------------------+ <-- stack_pointer_rtx
-					      frame_pointer_rtx
+					      frame_pointer_rtx without
+					        -fstack-protector
 					      hard_frame_pointer_rtx for
 						non-MIPS16 code.
 
@@ -8635,17 +9174,39 @@ mips_compute_frame_info (void)
   HOST_WIDE_INT offset, size;
   unsigned int regno, i;
 
+  /* Set this function's interrupt properties.  */
+  if (mips_interrupt_type_p (TREE_TYPE (current_function_decl)))
+    {
+      if (!ISA_MIPS32R2)
+	error ("the %<interrupt%> attribute requires a MIPS32r2 processor");
+      else if (TARGET_HARD_FLOAT)
+	error ("the %<interrupt%> attribute requires %<-msoft-float%>");
+      else if (TARGET_MIPS16)
+	error ("interrupt handlers cannot be MIPS16 functions");
+      else
+	{
+	  cfun->machine->interrupt_handler_p = true;
+	  cfun->machine->use_shadow_register_set_p =
+	    mips_use_shadow_register_set_p (TREE_TYPE (current_function_decl));
+	  cfun->machine->keep_interrupts_masked_p =
+	    mips_keep_interrupts_masked_p (TREE_TYPE (current_function_decl));
+	  cfun->machine->use_debug_exception_return_p =
+	    mips_use_debug_exception_return_p (TREE_TYPE
+					       (current_function_decl));
+	}
+    }
+
   frame = &cfun->machine->frame;
   memset (frame, 0, sizeof (*frame));
   size = get_frame_size ();
 
   cfun->machine->global_pointer = mips_global_pointer ();
 
-  /* The first STARTING_FRAME_OFFSET bytes contain the outgoing argument
-     area and the $gp save slot.  This area isn't needed in leaf functions,
-     but if the target-independent frame size is nonzero, we're committed
-     to allocating it anyway.  */
-  if (size == 0 && current_function_is_leaf)
+  /* The first two blocks contain the outgoing argument area and the $gp save
+     slot.  This area isn't needed in leaf functions, but if the
+     target-independent frame size is nonzero, we have already committed to
+     allocating these in STARTING_FRAME_OFFSET for !FRAME_GROWS_DOWNWARD.  */
+  if ((size == 0 || FRAME_GROWS_DOWNWARD) && current_function_is_leaf)
     {
       /* The MIPS 3.0 linker does not like functions that dynamically
 	 allocate the stack and have 0 for STACK_DYNAMIC_OFFSET, since it
@@ -8660,7 +9221,7 @@ mips_compute_frame_info (void)
   else
     {
       frame->args_size = crtl->outgoing_args_size;
-      frame->cprestore_size = STARTING_FRAME_OFFSET - frame->args_size;
+      frame->cprestore_size = MIPS_GP_SAVE_AREA_SIZE;
     }
   offset = frame->args_size + frame->cprestore_size;
 
@@ -8704,7 +9265,7 @@ mips_compute_frame_info (void)
     }
 
   /* Find out which FPRs we need to save.  This loop must iterate over
-     the same space as its companion in mips_for_each_saved_reg.  */
+     the same space as its companion in mips_for_each_saved_gpr_and_fpr.  */
   if (TARGET_HARD_FLOAT)
     for (regno = FP_REG_FIRST; regno <= FP_REG_LAST; regno += MAX_FPRS_PER_FMT)
       if (mips_save_reg_p (regno))
@@ -8720,6 +9281,47 @@ mips_compute_frame_info (void)
       frame->fp_sp_offset = offset - UNITS_PER_HWFPVALUE;
     }
 
+  /* Add in space for the interrupt context information.  */
+  if (cfun->machine->interrupt_handler_p)
+    {
+      /* Check HI/LO.  */
+      if (mips_save_reg_p (LO_REGNUM) || mips_save_reg_p (HI_REGNUM))
+	{
+	  frame->num_acc++;
+	  frame->acc_mask |= (1 << 0);
+	}
+
+      /* Check accumulators 1, 2, 3.  */
+      for (i = DSP_ACC_REG_FIRST; i <= DSP_ACC_REG_LAST; i += 2)
+	if (mips_save_reg_p (i) || mips_save_reg_p (i + 1))
+	  {
+	    frame->num_acc++;
+	    frame->acc_mask |= 1 << (((i - DSP_ACC_REG_FIRST) / 2) + 1);
+	  }
+
+      /* All interrupt context functions need space to preserve STATUS.  */
+      frame->num_cop0_regs++;
+
+      /* If we don't keep interrupts masked, we need to save EPC.  */
+      if (!cfun->machine->keep_interrupts_masked_p)
+	frame->num_cop0_regs++;
+    }
+
+  /* Move above the accumulator save area.  */
+  if (frame->num_acc > 0)
+    {
+      /* Each accumulator needs 2 words.  */
+      offset += frame->num_acc * 2 * UNITS_PER_WORD;
+      frame->acc_sp_offset = offset - UNITS_PER_WORD;
+    }
+
+  /* Move above the COP0 register save area.  */
+  if (frame->num_cop0_regs > 0)
+    {
+      offset += frame->num_cop0_regs * UNITS_PER_WORD;
+      frame->cop0_sp_offset = offset - UNITS_PER_WORD;
+    }
+
   /* Move above the callee-allocated varargs save area.  */
   offset += MIPS_STACK_ALIGN (cfun->machine->varargs_size);
   frame->arg_pointer_offset = offset;
@@ -8733,6 +9335,10 @@ mips_compute_frame_info (void)
     frame->gp_save_offset = frame->gp_sp_offset - offset;
   if (frame->fp_sp_offset > 0)
     frame->fp_save_offset = frame->fp_sp_offset - offset;
+  if (frame->acc_sp_offset > 0)
+    frame->acc_save_offset = frame->acc_sp_offset - offset;
+  if (frame->num_cop0_regs > 0)
+    frame->cop0_save_offset = frame->cop0_sp_offset - offset;
 
   /* MIPS16 code offsets the frame pointer by the size of the outgoing
      arguments.  This tends to increase the chances of using unextended
@@ -8759,9 +9365,9 @@ mips_current_loadgp_style (void)
   return TARGET_NEWABI ? LOADGP_NEWABI : LOADGP_OLDABI;
 }
 
-/* Implement FRAME_POINTER_REQUIRED.  */
+/* Implement TARGET_FRAME_POINTER_REQUIRED.  */
 
-bool
+static bool
 mips_frame_pointer_required (void)
 {
   /* If the function contains dynamic stack allocations, we need to
@@ -8783,6 +9389,15 @@ mips_frame_pointer_required (void)
   return false;
 }
 
+/* Make sure that we're not trying to eliminate to the wrong hard frame
+   pointer.  */
+
+static bool
+mips_can_eliminate (const int from ATTRIBUTE_UNUSED, const int to)
+{
+  return (to == HARD_FRAME_POINTER_REGNUM || to == STACK_POINTER_REGNUM);
+}
+
 /* Implement INITIAL_ELIMINATION_OFFSET.  FROM is either the frame pointer
    or argument pointer.  TO is either the stack pointer or hard frame
    pointer.  */
@@ -8794,12 +9409,16 @@ mips_initial_elimination_offset (int from, int to)
 
   mips_compute_frame_info ();
 
-  /* Set OFFSET to the offset from the soft frame pointer, which is also
-     the offset from the end-of-prologue stack pointer.  */
+  /* Set OFFSET to the offset from the end-of-prologue stack pointer.  */
   switch (from)
     {
     case FRAME_POINTER_REGNUM:
-      offset = 0;
+      if (FRAME_GROWS_DOWNWARD)
+	offset = (cfun->machine->frame.args_size
+		  + cfun->machine->frame.cprestore_size
+		  + cfun->machine->frame.var_size);
+      else
+	offset = 0;
       break;
 
     case ARG_POINTER_REGNUM:
@@ -8847,7 +9466,7 @@ mips_return_addr (int count, rtx frame ATTRIBUTE_UNUSED)
   if (count != 0)
     return const0_rtx;
 
-  return get_hard_reg_initial_val (Pmode, GP_REG_FIRST + 31);
+  return get_hard_reg_initial_val (Pmode, RETURN_ADDR_REGNUM);
 }
 
 /* Emit code to change the current function's return address to
@@ -8859,54 +9478,127 @@ mips_set_return_address (rtx address, rtx scratch)
 {
   rtx slot_address;
 
-  gcc_assert (BITSET_P (cfun->machine->frame.mask, 31));
+  gcc_assert (BITSET_P (cfun->machine->frame.mask, RETURN_ADDR_REGNUM));
   slot_address = mips_add_offset (scratch, stack_pointer_rtx,
 				  cfun->machine->frame.gp_sp_offset);
   mips_emit_move (gen_frame_mem (GET_MODE (address), slot_address), address);
 }
 
-/* Return a MEM rtx for the cprestore slot, using TEMP as a temporary base
-   register if need be.  */
+/* Return true if the current function has a cprestore slot.  */
 
-static rtx
-mips_cprestore_slot (rtx temp)
+bool
+mips_cfun_has_cprestore_slot_p (void)
+{
+  return (cfun->machine->global_pointer != INVALID_REGNUM
+	  && cfun->machine->frame.cprestore_size > 0);
+}
+
+/* Fill *BASE and *OFFSET such that *BASE + *OFFSET refers to the
+   cprestore slot.  LOAD_P is true if the caller wants to load from
+   the cprestore slot; it is false if the caller wants to store to
+   the slot.  */
+
+static void
+mips_get_cprestore_base_and_offset (rtx *base, HOST_WIDE_INT *offset,
+				    bool load_p)
 {
   const struct mips_frame_info *frame;
+
+  frame = &cfun->machine->frame;
+  /* .cprestore always uses the stack pointer instead of the frame pointer.
+     We have a free choice for direct stores for non-MIPS16 functions,
+     and for MIPS16 functions whose cprestore slot is in range of the
+     stack pointer.  Using the stack pointer would sometimes give more
+     (early) scheduling freedom, but using the frame pointer would
+     sometimes give more (late) scheduling freedom.  It's hard to
+     predict which applies to a given function, so let's keep things
+     simple.
+
+     Loads must always use the frame pointer in functions that call
+     alloca, and there's little benefit to using the stack pointer
+     otherwise.  */
+  if (frame_pointer_needed && !(TARGET_CPRESTORE_DIRECTIVE && !load_p))
+    {
+      *base = hard_frame_pointer_rtx;
+      *offset = frame->args_size - frame->hard_frame_pointer_offset;
+    }
+  else
+    {
+      *base = stack_pointer_rtx;
+      *offset = frame->args_size;
+    }
+}
+
+/* Return true if X is the load or store address of the cprestore slot;
+   LOAD_P says which.  */
+
+bool
+mips_cprestore_address_p (rtx x, bool load_p)
+{
+  rtx given_base, required_base;
+  HOST_WIDE_INT given_offset, required_offset;
+
+  mips_split_plus (x, &given_base, &given_offset);
+  mips_get_cprestore_base_and_offset (&required_base, &required_offset, load_p);
+  return given_base == required_base && given_offset == required_offset;
+}
+
+/* Return a MEM rtx for the cprestore slot.  LOAD_P is true if we are
+   going to load from it, false if we are going to store to it.
+   Use TEMP as a temporary register if need be.  */
+
+static rtx
+mips_cprestore_slot (rtx temp, bool load_p)
+{
   rtx base;
   HOST_WIDE_INT offset;
 
-  frame = &cfun->machine->frame;
-  if (frame_pointer_needed)
-    {
-      base = hard_frame_pointer_rtx;
-      offset = frame->args_size - frame->hard_frame_pointer_offset;
-    }
-  else
-    {
-      base = stack_pointer_rtx;
-      offset = frame->args_size;
-    }
+  mips_get_cprestore_base_and_offset (&base, &offset, load_p);
   return gen_frame_mem (Pmode, mips_add_offset (temp, base, offset));
 }
 
-/* Restore $gp from its save slot, using TEMP as a temporary base register
-   if need be.  This function is for o32 and o64 abicalls only.  */
+/* Emit instructions to save global pointer value GP into cprestore
+   slot MEM.  OFFSET is the offset that MEM applies to the base register.
+
+   MEM may not be a legitimate address.  If it isn't, TEMP is a
+   temporary register that can be used, otherwise it is a SCRATCH.  */
 
 void
-mips_restore_gp (rtx temp)
+mips_save_gp_to_cprestore_slot (rtx mem, rtx offset, rtx gp, rtx temp)
 {
-  gcc_assert (TARGET_ABICALLS && TARGET_OLDABI);
+  if (TARGET_CPRESTORE_DIRECTIVE)
+    {
+      gcc_assert (gp == pic_offset_table_rtx);
+      emit_insn (gen_cprestore (mem, offset));
+    }
+  else
+    mips_emit_move (mips_cprestore_slot (temp, false), gp);
+}
 
-  if (cfun->machine->global_pointer == INVALID_REGNUM)
-    return;
+/* Restore $gp from its save slot, using TEMP as a temporary base register
+   if need be.  This function is for o32 and o64 abicalls only.
+
+   See mips_must_initialize_gp_p for details about how we manage the
+   global pointer.  */
+
+void
+mips_restore_gp_from_cprestore_slot (rtx temp)
+{
+  gcc_assert (TARGET_ABICALLS && TARGET_OLDABI && epilogue_completed);
+
+  if (!cfun->machine->must_restore_gp_when_clobbered_p)
+    {
+      emit_note (NOTE_INSN_DELETED);
+      return;
+    }
 
   if (TARGET_MIPS16)
     {
-      mips_emit_move (temp, mips_cprestore_slot (temp));
+      mips_emit_move (temp, mips_cprestore_slot (temp, true));
       mips_emit_move (pic_offset_table_rtx, temp);
     }
   else
-    mips_emit_move (pic_offset_table_rtx, mips_cprestore_slot (temp));
+    mips_emit_move (pic_offset_table_rtx, mips_cprestore_slot (temp, true));
   if (!TARGET_EXPLICIT_RELOCS)
     emit_insn (gen_blockage ());
 }
@@ -8929,12 +9621,41 @@ mips_save_restore_reg (enum machine_mode mode, int regno,
   fn (gen_rtx_REG (mode, regno), mem);
 }
 
+/* Call FN for each accumlator that is saved by the current function.
+   SP_OFFSET is the offset of the current stack pointer from the start
+   of the frame.  */
+
+static void
+mips_for_each_saved_acc (HOST_WIDE_INT sp_offset, mips_save_restore_fn fn)
+{
+  HOST_WIDE_INT offset;
+  int regno;
+
+  offset = cfun->machine->frame.acc_sp_offset - sp_offset;
+  if (BITSET_P (cfun->machine->frame.acc_mask, 0))
+    {
+      mips_save_restore_reg (word_mode, LO_REGNUM, offset, fn);
+      offset -= UNITS_PER_WORD;
+      mips_save_restore_reg (word_mode, HI_REGNUM, offset, fn);
+      offset -= UNITS_PER_WORD;
+    }
+
+  for (regno = DSP_ACC_REG_FIRST; regno <= DSP_ACC_REG_LAST; regno++)
+    if (BITSET_P (cfun->machine->frame.acc_mask,
+		  ((regno - DSP_ACC_REG_FIRST) / 2) + 1))
+      {
+	mips_save_restore_reg (word_mode, regno, offset, fn);
+	offset -= UNITS_PER_WORD;
+      }
+}
+
 /* Call FN for each register that is saved by the current function.
    SP_OFFSET is the offset of the current stack pointer from the start
    of the frame.  */
 
 static void
-mips_for_each_saved_reg (HOST_WIDE_INT sp_offset, mips_save_restore_fn fn)
+mips_for_each_saved_gpr_and_fpr (HOST_WIDE_INT sp_offset,
+				 mips_save_restore_fn fn)
 {
   enum machine_mode fpr_mode;
   HOST_WIDE_INT offset;
@@ -8948,6 +9669,9 @@ mips_for_each_saved_reg (HOST_WIDE_INT sp_offset, mips_save_restore_fn fn)
   for (regno = GP_REG_LAST; regno >= GP_REG_FIRST; regno--)
     if (BITSET_P (cfun->machine->frame.mask, regno - GP_REG_FIRST))
       {
+	/* Record the ra offset for use by mips_function_profiler.  */
+	if (regno == RETURN_ADDR_REGNUM)
+	  cfun->machine->frame.ra_fp_offset = offset + sp_offset;
 	mips_save_restore_reg (word_mode, regno, offset, fn);
 	offset -= UNITS_PER_WORD;
       }
@@ -8965,6 +9689,89 @@ mips_for_each_saved_reg (HOST_WIDE_INT sp_offset, mips_save_restore_fn fn)
 	offset -= GET_MODE_SIZE (fpr_mode);
       }
 }
+
+/* Return true if a move between register REGNO and its save slot (MEM)
+   can be done in a single move.  LOAD_P is true if we are loading
+   from the slot, false if we are storing to it.  */
+
+static bool
+mips_direct_save_slot_move_p (unsigned int regno, rtx mem, bool load_p)
+{
+  /* There is a specific MIPS16 instruction for saving $31 to the stack.  */
+  if (TARGET_MIPS16 && !load_p && regno == RETURN_ADDR_REGNUM)
+    return false;
+
+  return mips_secondary_reload_class (REGNO_REG_CLASS (regno),
+				      GET_MODE (mem), mem, load_p) == NO_REGS;
+}
+
+/* Emit a move from SRC to DEST, given that one of them is a register
+   save slot and that the other is a register.  TEMP is a temporary
+   GPR of the same mode that is available if need be.  */
+
+void
+mips_emit_save_slot_move (rtx dest, rtx src, rtx temp)
+{
+  unsigned int regno;
+  rtx mem;
+
+  if (REG_P (src))
+    {
+      regno = REGNO (src);
+      mem = dest;
+    }
+  else
+    {
+      regno = REGNO (dest);
+      mem = src;
+    }
+
+  if (regno == cfun->machine->global_pointer && !mips_must_initialize_gp_p ())
+    {
+      /* We don't yet know whether we'll need this instruction or not.
+	 Postpone the decision by emitting a ghost move.  This move
+	 is specifically not frame-related; only the split version is.  */
+      if (TARGET_64BIT)
+	emit_insn (gen_move_gpdi (dest, src));
+      else
+	emit_insn (gen_move_gpsi (dest, src));
+      return;
+    }
+
+  if (regno == HI_REGNUM)
+    {
+      if (REG_P (dest))
+	{
+	  mips_emit_move (temp, src);
+	  if (TARGET_64BIT)
+	    emit_insn (gen_mthisi_di (gen_rtx_REG (TImode, MD_REG_FIRST),
+				      temp, gen_rtx_REG (DImode, LO_REGNUM)));
+	  else
+	    emit_insn (gen_mthisi_di (gen_rtx_REG (DImode, MD_REG_FIRST),
+				      temp, gen_rtx_REG (SImode, LO_REGNUM)));
+	}
+      else
+	{
+	  if (TARGET_64BIT)
+	    emit_insn (gen_mfhidi_ti (temp,
+				      gen_rtx_REG (TImode, MD_REG_FIRST)));
+	  else
+	    emit_insn (gen_mfhisi_di (temp,
+				      gen_rtx_REG (DImode, MD_REG_FIRST)));
+	  mips_emit_move (dest, temp);
+	}
+    }
+  else if (mips_direct_save_slot_move_p (regno, mem, mem == src))
+    mips_emit_move (dest, src);
+  else
+    {
+      gcc_assert (!reg_overlap_mentioned_p (dest, temp));
+      mips_emit_move (temp, src);
+      mips_emit_move (dest, temp);
+    }
+  if (MEM_P (dest))
+    mips_set_frame_expr (mips_frame_set (dest, src));
+}
 
 /* If we're generating n32 or n64 abicalls, and the current function
    does not use $28 as its global pointer, emit a cplocal directive.
@@ -8974,7 +9781,7 @@ static void
 mips_output_cplocal (void)
 {
   if (!TARGET_EXPLICIT_RELOCS
-      && cfun->machine->global_pointer != INVALID_REGNUM
+      && mips_must_initialize_gp_p ()
       && cfun->machine->global_pointer != GLOBAL_POINTER_REGNUM)
     output_asm_insn (".cplocal %+", 0);
 }
@@ -9028,7 +9835,7 @@ mips_output_function_prologue (FILE *file, HOST_WIDE_INT size ATTRIBUTE_UNUSED)
 	       (frame_pointer_needed
 		? frame->total_size - frame->hard_frame_pointer_offset
 		: frame->total_size),
-	       reg_names[GP_REG_FIRST + 31],
+	       reg_names[RETURN_ADDR_REGNUM],
 	       frame->var_size,
 	       frame->num_gp, frame->num_fp,
 	       frame->args_size,
@@ -9046,7 +9853,8 @@ mips_output_function_prologue (FILE *file, HOST_WIDE_INT size ATTRIBUTE_UNUSED)
   /* Handle the initialization of $gp for SVR4 PIC, if applicable.
      Also emit the ".set noreorder; .set nomacro" sequence for functions
      that need it.  */
-  if (mips_current_loadgp_style () == LOADGP_OLDABI)
+  if (mips_must_initialize_gp_p ()
+      && mips_current_loadgp_style () == LOADGP_OLDABI)
     {
       if (TARGET_MIPS16)
 	{
@@ -9058,14 +9866,23 @@ mips_output_function_prologue (FILE *file, HOST_WIDE_INT size ATTRIBUTE_UNUSED)
 	  output_asm_insn ("sll\t$2,16", 0);
 	  output_asm_insn ("addu\t$2,$3", 0);
 	}
-      /* .cpload must be in a .set noreorder but not a .set nomacro block.  */
-      else if (!cfun->machine->all_noreorder_p)
-	output_asm_insn ("%(.cpload\t%^%)", 0);
       else
-	output_asm_insn ("%(.cpload\t%^\n\t%<", 0);
+	{
+	  /* .cpload must be in a .set noreorder but not a
+	     .set nomacro block.  */
+	  mips_push_asm_switch (&mips_noreorder);
+	  output_asm_insn (".cpload\t%^", 0);
+	  if (!cfun->machine->all_noreorder_p)
+	    mips_pop_asm_switch (&mips_noreorder);
+	  else
+	    mips_push_asm_switch (&mips_nomacro);
+	}
     }
   else if (cfun->machine->all_noreorder_p)
-    output_asm_insn ("%(%<", 0);
+    {
+      mips_push_asm_switch (&mips_noreorder);
+      mips_push_asm_switch (&mips_nomacro);
+    }
 
   /* Tell the assembler which register we're using as the global
      pointer.  This is needed for thunks, since they can use either
@@ -9087,10 +9904,8 @@ mips_output_function_epilogue (FILE *file ATTRIBUTE_UNUSED,
 
   if (cfun->machine->all_noreorder_p)
     {
-      /* Avoid using %>%) since it adds excess whitespace.  */
-      output_asm_insn (".set\tmacro", 0);
-      output_asm_insn (".set\treorder", 0);
-      set_noreorder = set_nomacro = 0;
+      mips_pop_asm_switch (&mips_nomacro);
+      mips_pop_asm_switch (&mips_noreorder);
     }
 
   /* Get the function name the same way that toplev.c does before calling
@@ -9121,22 +9936,7 @@ mips_save_reg (rtx reg, rtx mem)
       mips_set_frame_expr (gen_rtx_PARALLEL (VOIDmode, gen_rtvec (2, x1, x2)));
     }
   else
-    {
-      if (TARGET_MIPS16
-	  && REGNO (reg) != GP_REG_FIRST + 31
-	  && !M16_REG_P (REGNO (reg)))
-	{
-	  /* Save a non-MIPS16 register by moving it through a temporary.
-	     We don't need to do this for $31 since there's a special
-	     instruction for it.  */
-	  mips_emit_move (MIPS_PROLOGUE_TEMP (GET_MODE (reg)), reg);
-	  mips_emit_move (mem, MIPS_PROLOGUE_TEMP (GET_MODE (reg)));
-	}
-      else
-	mips_emit_move (mem, reg);
-
-      mips_set_frame_expr (mips_frame_set (mem, reg));
-    }
+    mips_emit_save_slot_move (mem, reg, MIPS_PROLOGUE_TEMP (GET_MODE (reg)));
 }
 
 /* The __gnu_local_gp symbol.  */
@@ -9200,6 +10000,14 @@ mips_emit_loadgp (void)
     emit_insn (gen_loadgp_blockage ());
 }
 
+/* A for_each_rtx callback.  Stop the search if *X is a kernel register.  */
+
+static int
+mips_kernel_reg_p (rtx *x, void *data ATTRIBUTE_UNUSED)
+{
+  return REG_P (*x) && KERNEL_REG_P (REGNO (*x));
+}
+
 /* Expand the "prologue" pattern.  */
 
 void
@@ -9211,7 +10019,19 @@ mips_expand_prologue (void)
   rtx insn;
 
   if (cfun->machine->global_pointer != INVALID_REGNUM)
-    SET_REGNO (pic_offset_table_rtx, cfun->machine->global_pointer);
+    {
+      /* Check whether an insn uses pic_offset_table_rtx, either explicitly
+	 or implicitly.  If so, we can commit to using a global pointer
+	 straight away, otherwise we need to defer the decision.  */
+      if (mips_cfun_has_inflexible_gp_ref_p ()
+	  || mips_cfun_has_flexible_gp_ref_p ())
+	{
+	  cfun->machine->must_initialize_gp_p = true;
+	  cfun->machine->must_restore_gp_when_clobbered_p = true;
+	}
+
+      SET_REGNO (pic_offset_table_rtx, cfun->machine->global_pointer);
+    }
 
   frame = &cfun->machine->frame;
   size = frame->total_size;
@@ -9219,7 +10039,8 @@ mips_expand_prologue (void)
   /* Save the registers.  Allocate up to MIPS_MAX_FIRST_STACK_STEP
      bytes beforehand; this is enough to cover the register save area
      without going out of range.  */
-  if ((frame->mask | frame->fmask) != 0)
+  if (((frame->mask | frame->fmask | frame->acc_mask) != 0)
+      || frame->num_cop0_regs > 0)
     {
       HOST_WIDE_INT step1;
 
@@ -9250,12 +10071,97 @@ mips_expand_prologue (void)
  	}
       else
  	{
-	  insn = gen_add3_insn (stack_pointer_rtx,
-				stack_pointer_rtx,
-				GEN_INT (-step1));
-	  RTX_FRAME_RELATED_P (emit_insn (insn)) = 1;
-	  size -= step1;
-	  mips_for_each_saved_reg (size, mips_save_reg);
+	  if (cfun->machine->interrupt_handler_p)
+	    {
+	      HOST_WIDE_INT offset;
+	      rtx mem;
+
+	      /* If this interrupt is using a shadow register set, we need to
+		 get the stack pointer from the previous register set.  */
+	      if (cfun->machine->use_shadow_register_set_p)
+		emit_insn (gen_mips_rdpgpr (stack_pointer_rtx,
+					    stack_pointer_rtx));
+
+	      if (!cfun->machine->keep_interrupts_masked_p)
+		{
+		  /* Move from COP0 Cause to K0.  */
+		  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K0_REG_NUM),
+					    gen_rtx_REG (SImode,
+							 COP0_CAUSE_REG_NUM)));
+		  /* Move from COP0 EPC to K1.  */
+		  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K1_REG_NUM),
+					    gen_rtx_REG (SImode,
+							 COP0_EPC_REG_NUM)));
+		}
+
+	      /* Allocate the first part of the frame.  */
+	      insn = gen_add3_insn (stack_pointer_rtx, stack_pointer_rtx,
+				    GEN_INT (-step1));
+	      RTX_FRAME_RELATED_P (emit_insn (insn)) = 1;
+	      size -= step1;
+
+	      /* Start at the uppermost location for saving.  */
+	      offset = frame->cop0_sp_offset - size;
+	      if (!cfun->machine->keep_interrupts_masked_p)
+		{
+		  /* Push EPC into its stack slot.  */
+		  mem = gen_frame_mem (word_mode,
+				       plus_constant (stack_pointer_rtx,
+						      offset));
+		  mips_emit_move (mem, gen_rtx_REG (word_mode, K1_REG_NUM));
+		  offset -= UNITS_PER_WORD;
+		}
+
+	      /* Move from COP0 Status to K1.  */
+	      emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K1_REG_NUM),
+					gen_rtx_REG (SImode,
+						     COP0_STATUS_REG_NUM)));
+
+	      /* Right justify the RIPL in k0.  */
+	      if (!cfun->machine->keep_interrupts_masked_p)
+		emit_insn (gen_lshrsi3 (gen_rtx_REG (SImode, K0_REG_NUM),
+					gen_rtx_REG (SImode, K0_REG_NUM),
+					GEN_INT (CAUSE_IPL)));
+
+	      /* Push Status into its stack slot.  */
+	      mem = gen_frame_mem (word_mode,
+				   plus_constant (stack_pointer_rtx, offset));
+	      mips_emit_move (mem, gen_rtx_REG (word_mode, K1_REG_NUM));
+	      offset -= UNITS_PER_WORD;
+
+	      /* Insert the RIPL into our copy of SR (k1) as the new IPL.  */
+	      if (!cfun->machine->keep_interrupts_masked_p)
+		emit_insn (gen_insvsi (gen_rtx_REG (SImode, K1_REG_NUM),
+				       GEN_INT (6),
+				       GEN_INT (SR_IPL),
+				       gen_rtx_REG (SImode, K0_REG_NUM)));
+
+	      if (!cfun->machine->keep_interrupts_masked_p)
+		/* Enable interrupts by clearing the KSU ERL and EXL bits.
+		   IE is already the correct value, so we don't have to do
+		   anything explicit.  */
+		emit_insn (gen_insvsi (gen_rtx_REG (SImode, K1_REG_NUM),
+				       GEN_INT (4),
+				       GEN_INT (SR_EXL),
+				       gen_rtx_REG (SImode, GP_REG_FIRST)));
+	      else
+		/* Disable interrupts by clearing the KSU, ERL, EXL,
+		   and IE bits.  */
+		emit_insn (gen_insvsi (gen_rtx_REG (SImode, K1_REG_NUM),
+				       GEN_INT (5),
+				       GEN_INT (SR_IE),
+				       gen_rtx_REG (SImode, GP_REG_FIRST)));
+	    }
+	  else
+	    {
+	      insn = gen_add3_insn (stack_pointer_rtx,
+				    stack_pointer_rtx,
+				    GEN_INT (-step1));
+	      RTX_FRAME_RELATED_P (emit_insn (insn)) = 1;
+	      size -= step1;
+	    }
+	  mips_for_each_saved_acc (size, mips_save_reg);
+	  mips_for_each_saved_gpr_and_fpr (size, mips_save_reg);
 	}
     }
 
@@ -9327,17 +10233,36 @@ mips_expand_prologue (void)
   mips_emit_loadgp ();
 
   /* Initialize the $gp save slot.  */
-  if (frame->cprestore_size > 0
-      && cfun->machine->global_pointer != INVALID_REGNUM)
+  if (mips_cfun_has_cprestore_slot_p ())
     {
-      if (TARGET_MIPS16)
-	mips_emit_move (mips_cprestore_slot (MIPS_PROLOGUE_TEMP (Pmode)),
-			MIPS16_PIC_TEMP);
-      else if (TARGET_ABICALLS_PIC2)
-	emit_insn (gen_cprestore (GEN_INT (frame->args_size)));
-      else
-	emit_move_insn (mips_cprestore_slot (MIPS_PROLOGUE_TEMP (Pmode)),
-			pic_offset_table_rtx);
+      rtx base, mem, gp, temp;
+      HOST_WIDE_INT offset;
+
+      mips_get_cprestore_base_and_offset (&base, &offset, false);
+      mem = gen_frame_mem (Pmode, plus_constant (base, offset));
+      gp = TARGET_MIPS16 ? MIPS16_PIC_TEMP : pic_offset_table_rtx;
+      temp = (SMALL_OPERAND (offset)
+	      ? gen_rtx_SCRATCH (Pmode)
+	      : MIPS_PROLOGUE_TEMP (Pmode));
+      emit_insn (gen_potential_cprestore (mem, GEN_INT (offset), gp, temp));
+
+      mips_get_cprestore_base_and_offset (&base, &offset, true);
+      mem = gen_frame_mem (Pmode, plus_constant (base, offset));
+      emit_insn (gen_use_cprestore (mem));
+    }
+
+  /* We need to search back to the last use of K0 or K1.  */
+  if (cfun->machine->interrupt_handler_p)
+    {
+      for (insn = get_last_insn (); insn != NULL_RTX; insn = PREV_INSN (insn))
+	if (INSN_P (insn)
+	    && for_each_rtx (&PATTERN (insn), mips_kernel_reg_p, NULL))
+	  break;
+      /* Emit a move from K1 to COP0 Status after insn.  */
+      gcc_assert (insn != NULL_RTX);
+      emit_insn_after (gen_cop0_move (gen_rtx_REG (SImode, COP0_STATUS_REG_NUM),
+				      gen_rtx_REG (SImode, K1_REG_NUM)),
+		       insn);
     }
 
   /* If we are profiling, make sure no instructions are scheduled before
@@ -9353,17 +10278,10 @@ mips_restore_reg (rtx reg, rtx mem)
 {
   /* There's no MIPS16 instruction to load $31 directly.  Load into
      $7 instead and adjust the return insn appropriately.  */
-  if (TARGET_MIPS16 && REGNO (reg) == GP_REG_FIRST + 31)
+  if (TARGET_MIPS16 && REGNO (reg) == RETURN_ADDR_REGNUM)
     reg = gen_rtx_REG (GET_MODE (reg), GP_REG_FIRST + 7);
 
-  if (TARGET_MIPS16 && !M16_REG_P (REGNO (reg)))
-    {
-      /* Can't restore directly; move through a temporary.  */
-      mips_emit_move (MIPS_EPILOGUE_TEMP (GET_MODE (reg)), mem);
-      mips_emit_move (reg, MIPS_EPILOGUE_TEMP (GET_MODE (reg)));
-    }
-  else
-    mips_emit_move (reg, mem);
+  mips_emit_save_slot_move (reg, mem, MIPS_EPILOGUE_TEMP (GET_MODE (reg)));
 }
 
 /* Emit any instructions needed before a return.  */
@@ -9392,7 +10310,7 @@ mips_expand_epilogue (bool sibcall_p)
 {
   const struct mips_frame_info *frame;
   HOST_WIDE_INT step1, step2;
-  rtx base, target;
+  rtx base, target, insn;
 
   if (!sibcall_p && mips_can_use_return_insn ())
     {
@@ -9425,7 +10343,8 @@ mips_expand_epilogue (bool sibcall_p)
 
   /* If we need to restore registers, deallocate as much stack as
      possible in the second step without going out of range.  */
-  if ((frame->mask | frame->fmask) != 0)
+  if ((frame->mask | frame->fmask | frame->acc_mask) != 0
+      || frame->num_cop0_regs > 0)
     {
       step2 = MIN (step1, MIPS_MAX_FIRST_STACK_STEP);
       step1 -= step2;
@@ -9487,13 +10406,53 @@ mips_expand_epilogue (bool sibcall_p)
   else
     {
       /* Restore the registers.  */
-      mips_for_each_saved_reg (frame->total_size - step2, mips_restore_reg);
+      mips_for_each_saved_acc (frame->total_size - step2, mips_restore_reg);
+      mips_for_each_saved_gpr_and_fpr (frame->total_size - step2,
+				       mips_restore_reg);
 
-      /* Deallocate the final bit of the frame.  */
-      if (step2 > 0)
-	emit_insn (gen_add3_insn (stack_pointer_rtx,
-				  stack_pointer_rtx,
-				  GEN_INT (step2)));
+      if (cfun->machine->interrupt_handler_p)
+	{
+	  HOST_WIDE_INT offset;
+	  rtx mem;
+
+	  offset = frame->cop0_sp_offset - (frame->total_size - step2);
+	  if (!cfun->machine->keep_interrupts_masked_p)
+	    {
+	      /* Restore the original EPC.  */
+	      mem = gen_frame_mem (word_mode,
+				   plus_constant (stack_pointer_rtx, offset));
+	      mips_emit_move (gen_rtx_REG (word_mode, K0_REG_NUM), mem);
+	      offset -= UNITS_PER_WORD;
+
+	      /* Move to COP0 EPC.  */
+	      emit_insn (gen_cop0_move (gen_rtx_REG (SImode, COP0_EPC_REG_NUM),
+					gen_rtx_REG (SImode, K0_REG_NUM)));
+	    }
+
+	  /* Restore the original Status.  */
+	  mem = gen_frame_mem (word_mode,
+			       plus_constant (stack_pointer_rtx, offset));
+	  mips_emit_move (gen_rtx_REG (word_mode, K0_REG_NUM), mem);
+	  offset -= UNITS_PER_WORD;
+
+	  /* If we don't use shoadow register set, we need to update SP.  */
+	  if (!cfun->machine->use_shadow_register_set_p && step2 > 0)
+	    emit_insn (gen_add3_insn (stack_pointer_rtx,
+				      stack_pointer_rtx,
+				      GEN_INT (step2)));
+
+	  /* Move to COP0 Status.  */
+	  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, COP0_STATUS_REG_NUM),
+				    gen_rtx_REG (SImode, K0_REG_NUM)));
+	}
+      else
+	{
+	  /* Deallocate the final bit of the frame.  */
+	  if (step2 > 0)
+	    emit_insn (gen_add3_insn (stack_pointer_rtx,
+				      stack_pointer_rtx,
+				      GEN_INT (step2)));
+	}
     }
 
   /* Add in the __builtin_eh_return stack adjustment.  We need to
@@ -9516,18 +10475,44 @@ mips_expand_epilogue (bool sibcall_p)
 
   if (!sibcall_p)
     {
-      unsigned int regno;
-
-      /* When generating MIPS16 code, the normal mips_for_each_saved_reg
-	 path will restore the return address into $7 rather than $31.  */
-      if (TARGET_MIPS16
-	  && !GENERATE_MIPS16E_SAVE_RESTORE
-	  && BITSET_P (frame->mask, 31))
-	regno = GP_REG_FIRST + 7;
-      else
-	regno = GP_REG_FIRST + 31;
       mips_expand_before_return ();
-      emit_jump_insn (gen_return_internal (gen_rtx_REG (Pmode, regno)));
+      if (cfun->machine->interrupt_handler_p)
+	{
+	  /* Interrupt handlers generate eret or deret.  */
+	  if (cfun->machine->use_debug_exception_return_p)
+	    emit_jump_insn (gen_mips_deret ());
+	  else
+	    emit_jump_insn (gen_mips_eret ());
+	}
+      else
+	{
+	  unsigned int regno;
+
+	  /* When generating MIPS16 code, the normal
+	     mips_for_each_saved_gpr_and_fpr path will restore the return
+	     address into $7 rather than $31.  */
+	  if (TARGET_MIPS16
+	      && !GENERATE_MIPS16E_SAVE_RESTORE
+	      && BITSET_P (frame->mask, RETURN_ADDR_REGNUM))
+	    regno = GP_REG_FIRST + 7;
+	  else
+	    regno = RETURN_ADDR_REGNUM;
+	  emit_jump_insn (gen_return_internal (gen_rtx_REG (Pmode, regno)));
+	}
+    }
+
+  /* Search from the beginning to the first use of K0 or K1.  */
+  if (cfun->machine->interrupt_handler_p
+      && !cfun->machine->keep_interrupts_masked_p)
+    {
+      for (insn = get_insns (); insn != NULL_RTX; insn = NEXT_INSN (insn))
+	if (INSN_P (insn)
+	    && for_each_rtx (&PATTERN(insn), mips_kernel_reg_p, NULL))
+	  break;
+      gcc_assert (insn != NULL_RTX);
+      /* Insert disable interrupts before the first use of K0 or K1.  */
+      emit_insn_before (gen_mips_di (), insn);
+      emit_insn_before (gen_mips_ehb (), insn);
     }
 }
 
@@ -9538,6 +10523,10 @@ mips_expand_epilogue (bool sibcall_p)
 bool
 mips_can_use_return_insn (void)
 {
+  /* Interrupt handlers need to go through the epilogue.  */
+  if (cfun->machine->interrupt_handler_p)
+    return false;
+
   if (!reload_completed)
     return false;
 
@@ -10160,12 +11149,112 @@ mips_init_libfuncs (void)
     synchronize_libfunc = init_one_libfunc ("__sync_synchronize");
 }
 
+/* Build up a multi-insn sequence that loads label TARGET into $AT.  */
+
+static void
+mips_process_load_label (rtx target)
+{
+  rtx base, gp, intop;
+  HOST_WIDE_INT offset;
+
+  mips_multi_start ();
+  switch (mips_abi)
+    {
+    case ABI_N32:
+      mips_multi_add_insn ("lw\t%@,%%got_page(%0)(%+)", target, 0);
+      mips_multi_add_insn ("addiu\t%@,%@,%%got_ofst(%0)", target, 0);
+      break;
+
+    case ABI_64:
+      mips_multi_add_insn ("ld\t%@,%%got_page(%0)(%+)", target, 0);
+      mips_multi_add_insn ("daddiu\t%@,%@,%%got_ofst(%0)", target, 0);
+      break;
+
+    default:
+      gp = pic_offset_table_rtx;
+      if (mips_cfun_has_cprestore_slot_p ())
+	{
+	  gp = gen_rtx_REG (Pmode, AT_REGNUM);
+	  mips_get_cprestore_base_and_offset (&base, &offset, true);
+	  if (!SMALL_OPERAND (offset))
+	    {
+	      intop = GEN_INT (CONST_HIGH_PART (offset));
+	      mips_multi_add_insn ("lui\t%0,%1", gp, intop, 0);
+	      mips_multi_add_insn ("addu\t%0,%0,%1", gp, base, 0);
+
+	      base = gp;
+	      offset = CONST_LOW_PART (offset);
+	    }
+	  intop = GEN_INT (offset);
+	  if (ISA_HAS_LOAD_DELAY)
+	    mips_multi_add_insn ("lw\t%0,%1(%2)%#", gp, intop, base, 0);
+	  else
+	    mips_multi_add_insn ("lw\t%0,%1(%2)", gp, intop, base, 0);
+	}
+      if (ISA_HAS_LOAD_DELAY)
+	mips_multi_add_insn ("lw\t%@,%%got(%0)(%1)%#", target, gp, 0);
+      else
+	mips_multi_add_insn ("lw\t%@,%%got(%0)(%1)", target, gp, 0);
+      mips_multi_add_insn ("addiu\t%@,%@,%%lo(%0)", target, 0);
+      break;
+    }
+}
+
+/* Return the number of instructions needed to load a label into $AT.  */
+
+static unsigned int
+mips_load_label_num_insns (void)
+{
+  if (cfun->machine->load_label_num_insns == 0)
+    {
+      mips_process_load_label (pc_rtx);
+      cfun->machine->load_label_num_insns = mips_multi_num_insns;
+    }
+  return cfun->machine->load_label_num_insns;
+}
+
+/* Emit an asm sequence to start a noat block and load the address
+   of a label into $1.  */
+
+void
+mips_output_load_label (rtx target)
+{
+  mips_push_asm_switch (&mips_noat);
+  if (TARGET_EXPLICIT_RELOCS)
+    {
+      mips_process_load_label (target);
+      mips_multi_write ();
+    }
+  else
+    {
+      if (Pmode == DImode)
+	output_asm_insn ("dla\t%@,%0", &target);
+      else
+	output_asm_insn ("la\t%@,%0", &target);
+    }
+}
+
 /* Return the length of INSN.  LENGTH is the initial length computed by
    attributes in the machine-description file.  */
 
 int
 mips_adjust_insn_length (rtx insn, int length)
 {
+  /* mips.md uses MAX_PIC_BRANCH_LENGTH as a placeholder for the length
+     of a PIC long-branch sequence.  Substitute the correct value.  */
+  if (length == MAX_PIC_BRANCH_LENGTH
+      && INSN_CODE (insn) >= 0
+      && get_attr_type (insn) == TYPE_BRANCH)
+    {
+      /* Add the branch-over instruction and its delay slot, if this
+	 is a conditional branch.  */
+      length = simplejump_p (insn) ? 0 : 8;
+
+      /* Load the label into $AT and jump to it.  Ignore the delay
+	 slot of the jump.  */
+      length += 4 * mips_load_label_num_insns() + 4;
+    }
+
   /* A unconditional jump has an unfilled delay slot if it is not part
      of a sequence.  A conditional jump normally has a delay slot, but
      does not on MIPS16.  */
@@ -10197,38 +11286,9 @@ mips_adjust_insn_length (rtx insn, int length)
   return length;
 }
 
-/* Return an asm sequence to start a noat block and load the address
-   of a label into $1.  */
-
-const char *
-mips_output_load_label (void)
-{
-  if (TARGET_EXPLICIT_RELOCS)
-    switch (mips_abi)
-      {
-      case ABI_N32:
-	return "%[lw\t%@,%%got_page(%0)(%+)\n\taddiu\t%@,%@,%%got_ofst(%0)";
-
-      case ABI_64:
-	return "%[ld\t%@,%%got_page(%0)(%+)\n\tdaddiu\t%@,%@,%%got_ofst(%0)";
-
-      default:
-	if (ISA_HAS_LOAD_DELAY)
-	  return "%[lw\t%@,%%got(%0)(%+)%#\n\taddiu\t%@,%@,%%lo(%0)";
-	return "%[lw\t%@,%%got(%0)(%+)\n\taddiu\t%@,%@,%%lo(%0)";
-      }
-  else
-    {
-      if (Pmode == DImode)
-	return "%[dla\t%@,%0";
-      else
-	return "%[la\t%@,%0";
-    }
-}
-
 /* Return the assembly code for INSN, which has the operands given by
-   OPERANDS, and which branches to OPERANDS[1] if some condition is true.
-   BRANCH_IF_TRUE is the asm template that should be used if OPERANDS[1]
+   OPERANDS, and which branches to OPERANDS[0] if some condition is true.
+   BRANCH_IF_TRUE is the asm template that should be used if OPERANDS[0]
    is in range of a direct branch.  BRANCH_IF_FALSE is an inverted
    version of BRANCH_IF_TRUE.  */
 
@@ -10240,7 +11300,7 @@ mips_output_conditional_branch (rtx insn, rtx *operands,
   unsigned int length;
   rtx taken, not_taken;
 
-  gcc_assert (LABEL_P (operands[1]));  
+  gcc_assert (LABEL_P (operands[0]));
 
   length = get_attr_length (insn);
   if (length <= 8)
@@ -10254,10 +11314,10 @@ mips_output_conditional_branch (rtx insn, rtx *operands,
      not use branch-likely instructions.  */
   mips_branch_likely = false;
   not_taken = gen_label_rtx ();
-  taken = operands[1];
+  taken = operands[0];
 
   /* Generate the reversed branch to NOT_TAKEN.  */
-  operands[1] = not_taken;
+  operands[0] = not_taken;
   output_asm_insn (branch_if_false, operands);
 
   /* If INSN has a delay slot, we must provide delay slots for both the
@@ -10279,11 +11339,11 @@ mips_output_conditional_branch (rtx insn, rtx *operands,
     }
 
   /* Output the unconditional branch to TAKEN.  */
-  if (length <= 16)
-    output_asm_insn ("j\t%0%/", &taken);
+  if (TARGET_ABSOLUTE_JUMPS)
+    output_asm_insn (MIPS_ABSOLUTE_JUMP ("j\t%0%/"), &taken);
   else
     {
-      output_asm_insn (mips_output_load_label (), &taken);
+      mips_output_load_label (taken);
       output_asm_insn ("jr\t%@%]%/", 0);
     }
 
@@ -10309,10 +11369,10 @@ mips_output_conditional_branch (rtx insn, rtx *operands,
   return "";
 }
 
-/* Return the assembly code for INSN, which branches to OPERANDS[1]
+/* Return the assembly code for INSN, which branches to OPERANDS[0]
    if some ordering condition is true.  The condition is given by
-   OPERANDS[0] if !INVERTED_P, otherwise it is the inverse of
-   OPERANDS[0].  OPERANDS[2] is the comparison's first operand;
+   OPERANDS[1] if !INVERTED_P, otherwise it is the inverse of
+   OPERANDS[1].  OPERANDS[2] is the comparison's first operand;
    its second is always zero.  */
 
 const char *
@@ -10320,17 +11380,17 @@ mips_output_order_conditional_branch (rtx insn, rtx *operands, bool inverted_p)
 {
   const char *branch[2];
 
-  /* Make BRANCH[1] branch to OPERANDS[1] when the condition is true.
+  /* Make BRANCH[1] branch to OPERANDS[0] when the condition is true.
      Make BRANCH[0] branch on the inverse condition.  */
-  switch (GET_CODE (operands[0]))
+  switch (GET_CODE (operands[1]))
     {
       /* These cases are equivalent to comparisons against zero.  */
     case LEU:
       inverted_p = !inverted_p;
       /* Fall through.  */
     case GTU:
-      branch[!inverted_p] = MIPS_BRANCH ("bne", "%2,%.,%1");
-      branch[inverted_p] = MIPS_BRANCH ("beq", "%2,%.,%1");
+      branch[!inverted_p] = MIPS_BRANCH ("bne", "%2,%.,%0");
+      branch[inverted_p] = MIPS_BRANCH ("beq", "%2,%.,%0");
       break;
 
       /* These cases are always true or always false.  */
@@ -10338,27 +11398,306 @@ mips_output_order_conditional_branch (rtx insn, rtx *operands, bool inverted_p)
       inverted_p = !inverted_p;
       /* Fall through.  */
     case GEU:
-      branch[!inverted_p] = MIPS_BRANCH ("beq", "%.,%.,%1");
-      branch[inverted_p] = MIPS_BRANCH ("bne", "%.,%.,%1");
+      branch[!inverted_p] = MIPS_BRANCH ("beq", "%.,%.,%0");
+      branch[inverted_p] = MIPS_BRANCH ("bne", "%.,%.,%0");
       break;
 
     default:
-      branch[!inverted_p] = MIPS_BRANCH ("b%C0z", "%2,%1");
-      branch[inverted_p] = MIPS_BRANCH ("b%N0z", "%2,%1");
+      branch[!inverted_p] = MIPS_BRANCH ("b%C1z", "%2,%0");
+      branch[inverted_p] = MIPS_BRANCH ("b%N1z", "%2,%0");
       break;
     }
   return mips_output_conditional_branch (insn, operands, branch[1], branch[0]);
 }
 
-/* Return the assembly code for __sync_*() loop LOOP.  The loop should support
-   both normal and likely branches, using %? and %~ where appropriate.  */
+/* Start a block of code that needs access to the LL, SC and SYNC
+   instructions.  */
+
+static void
+mips_start_ll_sc_sync_block (void)
+{
+  if (!ISA_HAS_LL_SC)
+    {
+      output_asm_insn (".set\tpush", 0);
+      output_asm_insn (".set\tmips2", 0);
+    }
+}
+
+/* End a block started by mips_start_ll_sc_sync_block.  */
+
+static void
+mips_end_ll_sc_sync_block (void)
+{
+  if (!ISA_HAS_LL_SC)
+    output_asm_insn (".set\tpop", 0);
+}
+
+/* Output and/or return the asm template for a sync instruction.  */
 
 const char *
-mips_output_sync_loop (const char *loop)
+mips_output_sync (void)
 {
-  /* Use branch-likely instructions to work around the LL/SC R10000 errata.  */
+  mips_start_ll_sc_sync_block ();
+  output_asm_insn ("sync", 0);
+  mips_end_ll_sc_sync_block ();
+  return "";
+}
+
+/* Return the asm template associated with sync_insn1 value TYPE.
+   IS_64BIT_P is true if we want a 64-bit rather than 32-bit operation.  */
+
+static const char *
+mips_sync_insn1_template (enum attr_sync_insn1 type, bool is_64bit_p)
+{
+  switch (type)
+    {
+    case SYNC_INSN1_MOVE:
+      return "move\t%0,%z2";
+    case SYNC_INSN1_LI:
+      return "li\t%0,%2";
+    case SYNC_INSN1_ADDU:
+      return is_64bit_p ? "daddu\t%0,%1,%z2" : "addu\t%0,%1,%z2";
+    case SYNC_INSN1_ADDIU:
+      return is_64bit_p ? "daddiu\t%0,%1,%2" : "addiu\t%0,%1,%2";
+    case SYNC_INSN1_SUBU:
+      return is_64bit_p ? "dsubu\t%0,%1,%z2" : "subu\t%0,%1,%z2";
+    case SYNC_INSN1_AND:
+      return "and\t%0,%1,%z2";
+    case SYNC_INSN1_ANDI:
+      return "andi\t%0,%1,%2";
+    case SYNC_INSN1_OR:
+      return "or\t%0,%1,%z2";
+    case SYNC_INSN1_ORI:
+      return "ori\t%0,%1,%2";
+    case SYNC_INSN1_XOR:
+      return "xor\t%0,%1,%z2";
+    case SYNC_INSN1_XORI:
+      return "xori\t%0,%1,%2";
+    }
+  gcc_unreachable ();
+}
+
+/* Return the asm template associated with sync_insn2 value TYPE.  */
+
+static const char *
+mips_sync_insn2_template (enum attr_sync_insn2 type)
+{
+  switch (type)
+    {
+    case SYNC_INSN2_NOP:
+      gcc_unreachable ();
+    case SYNC_INSN2_AND:
+      return "and\t%0,%1,%z2";
+    case SYNC_INSN2_XOR:
+      return "xor\t%0,%1,%z2";
+    case SYNC_INSN2_NOT:
+      return "nor\t%0,%1,%.";
+    }
+  gcc_unreachable ();
+}
+
+/* OPERANDS are the operands to a sync loop instruction and INDEX is
+   the value of the one of the sync_* attributes.  Return the operand
+   referred to by the attribute, or DEFAULT_VALUE if the insn doesn't
+   have the associated attribute.  */
+
+static rtx
+mips_get_sync_operand (rtx *operands, int index, rtx default_value)
+{
+  if (index > 0)
+    default_value = operands[index - 1];
+  return default_value;
+}
+
+/* INSN is a sync loop with operands OPERANDS.  Build up a multi-insn
+   sequence for it.  */
+
+static void
+mips_process_sync_loop (rtx insn, rtx *operands)
+{
+  rtx at, mem, oldval, newval, inclusive_mask, exclusive_mask;
+  rtx required_oldval, insn1_op2, tmp1, tmp2, tmp3;
+  unsigned int tmp3_insn;
+  enum attr_sync_insn1 insn1;
+  enum attr_sync_insn2 insn2;
+  bool is_64bit_p;
+
+  /* Read an operand from the sync_WHAT attribute and store it in
+     variable WHAT.  DEFAULT is the default value if no attribute
+     is specified.  */
+#define READ_OPERAND(WHAT, DEFAULT) \
+  WHAT = mips_get_sync_operand (operands, (int) get_attr_sync_##WHAT (insn), \
+  				DEFAULT)
+
+  /* Read the memory.  */
+  READ_OPERAND (mem, 0);
+  gcc_assert (mem);
+  is_64bit_p = (GET_MODE_BITSIZE (GET_MODE (mem)) == 64);
+
+  /* Read the other attributes.  */
+  at = gen_rtx_REG (GET_MODE (mem), AT_REGNUM);
+  READ_OPERAND (oldval, at);
+  READ_OPERAND (newval, at);
+  READ_OPERAND (inclusive_mask, 0);
+  READ_OPERAND (exclusive_mask, 0);
+  READ_OPERAND (required_oldval, 0);
+  READ_OPERAND (insn1_op2, 0);
+  insn1 = get_attr_sync_insn1 (insn);
+  insn2 = get_attr_sync_insn2 (insn);
+
+  mips_multi_start ();
+
+  /* Output the release side of the memory barrier.  */
+  if (get_attr_sync_release_barrier (insn) == SYNC_RELEASE_BARRIER_YES)
+    {
+      if (required_oldval == 0 && TARGET_OCTEON)
+	{
+	  /* Octeon doesn't reorder reads, so a full barrier can be
+	     created by using SYNCW to order writes combined with the
+	     write from the following SC.  When the SC successfully
+	     completes, we know that all preceding writes are also
+	     committed to the coherent memory system.  It is possible
+	     for a single SYNCW to fail, but a pair of them will never
+	     fail, so we use two.  */
+	  mips_multi_add_insn ("syncw", NULL);
+	  mips_multi_add_insn ("syncw", NULL);
+	}
+      else
+	mips_multi_add_insn ("sync", NULL);
+    }
+
+  /* Output the branch-back label.  */
+  mips_multi_add_label ("1:");
+
+  /* OLDVAL = *MEM.  */
+  mips_multi_add_insn (is_64bit_p ? "lld\t%0,%1" : "ll\t%0,%1",
+		       oldval, mem, NULL);
+
+  /* if ((OLDVAL & INCLUSIVE_MASK) != REQUIRED_OLDVAL) goto 2.  */
+  if (required_oldval)
+    {
+      if (inclusive_mask == 0)
+	tmp1 = oldval;
+      else
+	{
+	  gcc_assert (oldval != at);
+	  mips_multi_add_insn ("and\t%0,%1,%2",
+			       at, oldval, inclusive_mask, NULL);
+	  tmp1 = at;
+	}
+      mips_multi_add_insn ("bne\t%0,%z1,2f", tmp1, required_oldval, NULL);
+    }
+
+  /* $TMP1 = OLDVAL & EXCLUSIVE_MASK.  */
+  if (exclusive_mask == 0)
+    tmp1 = const0_rtx;
+  else
+    {
+      gcc_assert (oldval != at);
+      mips_multi_add_insn ("and\t%0,%1,%z2",
+			   at, oldval, exclusive_mask, NULL);
+      tmp1 = at;
+    }
+
+  /* $TMP2 = INSN1 (OLDVAL, INSN1_OP2).
+
+     We can ignore moves if $TMP4 != INSN1_OP2, since we'll still emit
+     at least one instruction in that case.  */
+  if (insn1 == SYNC_INSN1_MOVE
+      && (tmp1 != const0_rtx || insn2 != SYNC_INSN2_NOP))
+    tmp2 = insn1_op2;
+  else
+    {
+      mips_multi_add_insn (mips_sync_insn1_template (insn1, is_64bit_p),
+			   newval, oldval, insn1_op2, NULL);
+      tmp2 = newval;
+    }
+
+  /* $TMP3 = INSN2 ($TMP2, INCLUSIVE_MASK).  */
+  if (insn2 == SYNC_INSN2_NOP)
+    tmp3 = tmp2;
+  else
+    {
+      mips_multi_add_insn (mips_sync_insn2_template (insn2),
+			   newval, tmp2, inclusive_mask, NULL);
+      tmp3 = newval;
+    }
+  tmp3_insn = mips_multi_last_index ();
+
+  /* $AT = $TMP1 | $TMP3.  */
+  if (tmp1 == const0_rtx || tmp3 == const0_rtx)
+    {
+      mips_multi_set_operand (tmp3_insn, 0, at);
+      tmp3 = at;
+    }
+  else
+    {
+      gcc_assert (tmp1 != tmp3);
+      mips_multi_add_insn ("or\t%0,%1,%2", at, tmp1, tmp3, NULL);
+    }
+
+  /* if (!commit (*MEM = $AT)) goto 1.
+
+     This will sometimes be a delayed branch; see the write code below
+     for details.  */
+  mips_multi_add_insn (is_64bit_p ? "scd\t%0,%1" : "sc\t%0,%1", at, mem, NULL);
+  mips_multi_add_insn ("beq%?\t%0,%.,1b", at, NULL);
+
+  /* if (INSN1 != MOVE && INSN1 != LI) NEWVAL = $TMP3 [delay slot].  */
+  if (insn1 != SYNC_INSN1_MOVE && insn1 != SYNC_INSN1_LI && tmp3 != newval)
+    {
+      mips_multi_copy_insn (tmp3_insn);
+      mips_multi_set_operand (mips_multi_last_index (), 0, newval);
+    }
+  else
+    mips_multi_add_insn ("nop", NULL);
+
+  /* Output the acquire side of the memory barrier.  */
+  if (TARGET_SYNC_AFTER_SC)
+    mips_multi_add_insn ("sync", NULL);
+
+  /* Output the exit label, if needed.  */
+  if (required_oldval)
+    mips_multi_add_label ("2:");
+
+#undef READ_OPERAND
+}
+
+/* Output and/or return the asm template for sync loop INSN, which has
+   the operands given by OPERANDS.  */
+
+const char *
+mips_output_sync_loop (rtx insn, rtx *operands)
+{
+  mips_process_sync_loop (insn, operands);
+
+  /* Use branch-likely instructions to work around the LL/SC R10000
+     errata.  */
   mips_branch_likely = TARGET_FIX_R10000;
-  return loop;
+
+  mips_push_asm_switch (&mips_noreorder);
+  mips_push_asm_switch (&mips_nomacro);
+  mips_push_asm_switch (&mips_noat);
+  mips_start_ll_sc_sync_block ();
+
+  mips_multi_write ();
+
+  mips_end_ll_sc_sync_block ();
+  mips_pop_asm_switch (&mips_noat);
+  mips_pop_asm_switch (&mips_nomacro);
+  mips_pop_asm_switch (&mips_noreorder);
+
+  return "";
+}
+
+/* Return the number of individual instructions in sync loop INSN,
+   which has the operands given by OPERANDS.  */
+
+unsigned int
+mips_sync_loop_insns (rtx insn, rtx *operands)
+{
+  mips_process_sync_loop (insn, operands);
+  return mips_multi_num_insns;
 }
 
 /* Return the assembly code for DIV or DDIV instruction DIVISION, which has
@@ -10935,7 +12274,7 @@ static enum attr_type mips_last_74k_agen_insn = TYPE_UNKNOWN;
 static void
 mips_74k_agen_init (rtx insn)
 {
-  if (!insn || !NONJUMP_INSN_P (insn))
+  if (!insn || CALL_P (insn) || JUMP_P (insn))
     mips_last_74k_agen_insn = TYPE_UNKNOWN;
   else
     {
@@ -11079,7 +12418,8 @@ mips_variable_issue (FILE *file ATTRIBUTE_UNUSED, int verbose ATTRIBUTE_UNUSED,
   /* Ignore USEs and CLOBBERs; don't count them against the issue rate.  */
   if (USEFUL_INSN_P (insn))
     {
-      more--;
+      if (get_attr_type (insn) != TYPE_GHOST)
+	more--;
       if (!reload_completed && TUNE_MACC_CHAINS)
 	mips_macc_chains_record (insn);
       vr4130_last_insn = insn;
@@ -11264,8 +12604,9 @@ AVAIL_NON_MIPS16 (cache, TARGET_CACHE_BUILTIN)
    for instruction CODE_FOR_loongson_<INSN>.  FUNCTION_TYPE is a
    builtin_description field.  */
 #define LOONGSON_BUILTIN_ALIAS(INSN, FN_NAME, FUNCTION_TYPE)		\
-  { CODE_FOR_loongson_ ## INSN, 0, "__builtin_loongson_" #FN_NAME,	\
-    MIPS_BUILTIN_DIRECT, FUNCTION_TYPE, mips_builtin_avail_loongson }
+  { CODE_FOR_loongson_ ## INSN, MIPS_FP_COND_f,				\
+    "__builtin_loongson_" #FN_NAME, MIPS_BUILTIN_DIRECT,		\
+    FUNCTION_TYPE, mips_builtin_avail_loongson }
 
 /* Define a Loongson MIPS_BUILTIN_DIRECT function __builtin_loongson_<INSN>
    for instruction CODE_FOR_loongson_<INSN>.  FUNCTION_TYPE is a
@@ -11991,8 +13332,8 @@ mips_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
   gcc_assert (avail != 0);
   if (TARGET_MIPS16)
     {
-      error ("built-in function %qs not supported for MIPS16",
-	     IDENTIFIER_POINTER (DECL_NAME (fndecl)));
+      error ("built-in function %qE not supported for MIPS16",
+	     DECL_NAME (fndecl));
       return ignore ? const0_rtx : CONST0_RTX (mode);
     }
   switch (d->builtin_type)
@@ -12225,6 +13566,15 @@ mips16_rewrite_pool_refs (rtx *x, void *data)
   return GET_CODE (*x) == CONST ? -1 : 0;
 }
 
+/* Return whether CFG is used in mips_reorg.  */
+
+static bool
+mips_cfg_in_reorg (void)
+{
+  return (mips_r10k_cache_barrier != R10K_CACHE_BARRIER_NONE
+	  || TARGET_RELAX_PIC_CALLS);
+}
+
 /* Build MIPS16 constant pools.  */
 
 static void
@@ -12237,13 +13587,16 @@ mips16_lay_out_constants (void)
   if (!TARGET_MIPS16_PCREL_LOADS)
     return;
 
-  split_all_insns_noflow ();
+  if (mips_cfg_in_reorg ())
+    split_all_insns ();
+  else
+    split_all_insns_noflow ();
   barrier = 0;
   memset (&pool, 0, sizeof (pool));
   for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
     {
       /* Rewrite constant pool references in INSN.  */
-      if (INSN_P (insn))
+      if (USEFUL_INSN_P (insn))
 	{
 	  info.insn = insn;
 	  info.pool = &pool;
@@ -12573,14 +13926,6 @@ r10k_insert_cache_barriers (void)
       return;
     }
 
-  /* Restore the BLOCK_FOR_INSN pointers, which are needed by DF.  */
-  compute_bb_for_insn ();
-
-  /* Create def-use chains.  */
-  df_set_flags (DF_EQ_NOTES);
-  df_chain_add_problem (DF_UD_CHAIN);
-  df_analyze ();
-
   /* Calculate dominators.  */
   calculate_dominance_info (CDI_DOMINATORS);
 
@@ -12613,7 +13958,7 @@ r10k_insert_cache_barriers (void)
 	 - the first instruction in an unprotected region otherwise.  */
       for (insn = BB_HEAD (bb); insn != end; insn = NEXT_INSN (insn))
 	{
-	  if (unprotected_region && INSN_P (insn))
+	  if (unprotected_region && USEFUL_INSN_P (insn))
 	    {
 	      if (recog_memoized (insn) == CODE_FOR_mips_cache)
 		/* This CACHE instruction protects the following code.  */
@@ -12659,10 +14004,188 @@ r10k_insert_cache_barriers (void)
   sbitmap_free (protected_bbs);
 
   free_dominance_info (CDI_DOMINATORS);
+}
+
+/* If INSN is a call, return the underlying CALL expr.  Return NULL_RTX
+   otherwise.  If INSN has two call rtx, then store the second one in
+   SECOND_CALL.  */
 
-  df_finish_pass (false);
+static rtx
+mips_call_expr_from_insn (rtx insn, rtx *second_call)
+{
+  rtx x;
+  rtx x2;
 
-  free_bb_for_insn ();
+  if (!CALL_P (insn))
+    return NULL_RTX;
+
+  x = PATTERN (insn);
+  if (GET_CODE (x) == PARALLEL)
+    {
+      /* Calls returning complex values have two CALL rtx.  Look for the second
+	 one here, and return it via the SECOND_CALL arg.  */
+      x2 = XVECEXP (x, 0, 1);
+      if (GET_CODE (x2) == SET)
+	x2 = XEXP (x2, 1);
+      if (GET_CODE (x2) == CALL)
+	*second_call = x2;
+
+      x = XVECEXP (x, 0, 0);
+    }
+  if (GET_CODE (x) == SET)
+    x = XEXP (x, 1);
+  gcc_assert (GET_CODE (x) == CALL);
+
+  return x;
+}
+
+/* REG is set in DEF.  See if the definition is one of the ways we load a
+   register with a symbol address for a mips_use_pic_fn_addr_reg_p call.  If
+   it is return the symbol reference of the function, otherwise return
+   NULL_RTX.  */
+
+static rtx
+mips_pic_call_symbol_from_set (df_ref def, rtx reg)
+{
+  rtx def_insn, set;
+
+  if (DF_REF_IS_ARTIFICIAL (def))
+    return NULL_RTX;
+
+  def_insn = DF_REF_INSN (def);
+  set = single_set (def_insn);
+  if (set && rtx_equal_p (SET_DEST (set), reg))
+    {
+      rtx note, src, symbol;
+
+      /* First, look at REG_EQUAL/EQUIV notes.  */
+      note = find_reg_equal_equiv_note (def_insn);
+      if (note && GET_CODE (XEXP (note, 0)) == SYMBOL_REF)
+	return XEXP (note, 0);
+
+      /* For %call16 references we don't have REG_EQUAL.  */
+      src = SET_SRC (set);
+      symbol = mips_strip_unspec_call (src);
+      if (symbol)
+	{
+	  gcc_assert (GET_CODE (symbol) == SYMBOL_REF);
+	  return symbol;
+	}
+
+      /* Follow simple register copies.  */
+      if (REG_P (src))
+	return mips_find_pic_call_symbol (def_insn, src);
+    }
+
+  return NULL_RTX;
+}
+
+/* Find the definition of the use of REG in INSN.  See if the definition is
+   one of the ways we load a register with a symbol address for a
+   mips_use_pic_fn_addr_reg_p call.  If it is return the symbol reference of
+   the function, otherwise return NULL_RTX.  */
+
+static rtx
+mips_find_pic_call_symbol (rtx insn, rtx reg)
+{
+  df_ref use;
+  struct df_link *defs;
+  rtx symbol;
+
+  use = df_find_use (insn, regno_reg_rtx[REGNO (reg)]);
+  if (!use)
+    return NULL_RTX;
+  defs = DF_REF_CHAIN (use);
+  if (!defs)
+    return NULL_RTX;
+  symbol = mips_pic_call_symbol_from_set (defs->ref, reg);
+  if (!symbol)
+    return NULL_RTX;
+
+  /* If we have more than one definition, they need to be identical.  */
+  for (defs = defs->next; defs; defs = defs->next)
+    {
+      rtx other;
+
+      other = mips_pic_call_symbol_from_set (defs->ref, reg);
+      if (!rtx_equal_p (symbol, other))
+	return NULL_RTX;
+    }
+
+  return symbol;
+}
+
+/* Replace the args_size operand of the call expression CALL with the
+   call-attribute UNSPEC and fill in SYMBOL as the function symbol.  */
+
+static void
+mips_annotate_pic_call_expr (rtx call, rtx symbol)
+{
+  rtx args_size;
+
+  args_size = XEXP (call, 1);
+  XEXP (call, 1) = gen_rtx_UNSPEC (GET_MODE (args_size),
+				   gen_rtvec (2, args_size, symbol),
+				   UNSPEC_CALL_ATTR);
+}
+
+/* OPERANDS[ARGS_SIZE_OPNO] is the arg_size operand of a CALL expression.  See
+   if instead of the arg_size argument it contains the call attributes.  If
+   yes return true along with setting OPERANDS[ARGS_SIZE_OPNO] to the function
+   symbol from the call attributes.  Also return false if ARGS_SIZE_OPNO is
+   -1.  */
+
+bool
+mips_get_pic_call_symbol (rtx *operands, int args_size_opno)
+{
+  rtx args_size, symbol;
+
+  if (!TARGET_RELAX_PIC_CALLS || args_size_opno == -1)
+    return false;
+
+  args_size = operands[args_size_opno];
+  if (GET_CODE (args_size) != UNSPEC)
+    return false;
+  gcc_assert (XINT (args_size, 1) == UNSPEC_CALL_ATTR);
+
+  symbol = XVECEXP (args_size, 0, 1);
+  gcc_assert (GET_CODE (symbol) == SYMBOL_REF);
+
+  operands[args_size_opno] = symbol;
+  return true;
+}
+
+/* Use DF to annotate PIC indirect calls with the function symbol they
+   dispatch to.  */
+
+static void
+mips_annotate_pic_calls (void)
+{
+  basic_block bb;
+  rtx insn;
+
+  FOR_EACH_BB (bb)
+    FOR_BB_INSNS (bb, insn)
+    {
+      rtx call, reg, symbol, second_call;
+
+      second_call = 0;
+      call = mips_call_expr_from_insn (insn, &second_call);
+      if (!call)
+	continue;
+      gcc_assert (MEM_P (XEXP (call, 0)));
+      reg = XEXP (XEXP (call, 0), 0);
+      if (!REG_P (reg))
+	continue;
+
+      symbol = mips_find_pic_call_symbol (insn, reg);
+      if (symbol)
+	{
+	  mips_annotate_pic_call_expr (call, symbol);
+	  if (second_call)
+	    mips_annotate_pic_call_expr (second_call, symbol);
+	}
+    }
 }
 
 /* A temporary variable used by for_each_rtx callbacks, etc.  */
@@ -13276,7 +14799,7 @@ mips_reorg_process_insns (void)
   /* Make a first pass over the instructions, recording all the LO_SUMs.  */
   for (insn = get_insns (); insn != 0; insn = NEXT_INSN (insn))
     FOR_EACH_SUBINSN (subinsn, insn)
-      if (INSN_P (subinsn))
+      if (USEFUL_INSN_P (subinsn))
 	for_each_rtx (&PATTERN (subinsn), mips_record_lo_sum, htab);
 
   last_insn = 0;
@@ -13290,7 +14813,7 @@ mips_reorg_process_insns (void)
   for (insn = get_insns (); insn != 0; insn = next_insn)
     {
       next_insn = NEXT_INSN (insn);
-      if (INSN_P (insn))
+      if (USEFUL_INSN_P (insn))
 	{
 	  if (GET_CODE (PATTERN (insn)) == SEQUENCE)
 	    {
@@ -13336,14 +14859,82 @@ mips_reorg_process_insns (void)
   htab_delete (htab);
 }
 
+/* If we are using a GOT, but have not decided to use a global pointer yet,
+   see whether we need one to implement long branches.  Convert the ghost
+   global-pointer instructions into real ones if so.  */
+
+static bool
+mips_expand_ghost_gp_insns (void)
+{
+  rtx insn;
+  int normal_length;
+
+  /* Quick exit if we already know that we will or won't need a
+     global pointer.  */
+  if (!TARGET_USE_GOT
+      || cfun->machine->global_pointer == INVALID_REGNUM
+      || mips_must_initialize_gp_p ())
+    return false;
+
+  shorten_branches (get_insns ());
+
+  /* Look for a branch that is longer than normal.  The normal length for
+     non-MIPS16 branches is 8, because the length includes the delay slot.
+     It is 4 for MIPS16, because MIPS16 branches are extended instructions,
+     but they have no delay slot.  */
+  normal_length = (TARGET_MIPS16 ? 4 : 8);
+  for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    if (JUMP_P (insn)
+	&& USEFUL_INSN_P (insn)
+	&& get_attr_length (insn) > normal_length)
+      break;
+
+  if (insn == NULL_RTX)
+    return false;
+
+  /* We've now established that we need $gp.  */
+  cfun->machine->must_initialize_gp_p = true;
+  split_all_insns_noflow ();
+
+  return true;
+}
+
+/* Subroutine of mips_reorg to manage passes that require DF.  */
+
+static void
+mips_df_reorg (void)
+{
+  /* Create def-use chains.  */
+  df_set_flags (DF_EQ_NOTES);
+  df_chain_add_problem (DF_UD_CHAIN);
+  df_analyze ();
+
+  if (TARGET_RELAX_PIC_CALLS)
+    mips_annotate_pic_calls ();
+
+  if (mips_r10k_cache_barrier != R10K_CACHE_BARRIER_NONE)
+    r10k_insert_cache_barriers ();
+
+  df_finish_pass (false);
+}
+
 /* Implement TARGET_MACHINE_DEPENDENT_REORG.  */
 
 static void
 mips_reorg (void)
 {
+  /* Restore the BLOCK_FOR_INSN pointers, which are needed by DF.  Also during
+     insn splitting in mips16_lay_out_constants, DF insn info is only kept up
+     to date if the CFG is available.  */
+  if (mips_cfg_in_reorg ())
+    compute_bb_for_insn ();
   mips16_lay_out_constants ();
-  if (mips_r10k_cache_barrier != R10K_CACHE_BARRIER_NONE)
-    r10k_insert_cache_barriers ();
+  if (mips_cfg_in_reorg ())
+    {
+      mips_df_reorg ();
+      free_bb_for_insn ();
+    }
+
   if (optimize > 0 && flag_delayed_branch)
     dbr_schedule (get_insns ());
   mips_reorg_process_insns ();
@@ -13352,6 +14943,10 @@ mips_reorg (void)
       && TUNE_MIPS4130
       && TARGET_VR4130_ALIGN)
     vr4130_align_insns ();
+  if (mips_expand_ghost_gp_insns ())
+    /* The expansion could invalidate some of the VR4130 alignment
+       optimizations, but this should be an extremely rare case anyhow.  */
+    mips_reorg_process_insns ();
 }
 
 /* Implement TARGET_ASM_OUTPUT_MI_THUNK.  Generate rtl rather than asm text
@@ -13385,6 +14980,7 @@ mips_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 	 TARGET_CALL_SAVED_GP.  */
       cfun->machine->global_pointer
 	= TARGET_CALL_SAVED_GP ? 15 : GLOBAL_POINTER_REGNUM;
+      cfun->machine->must_initialize_gp_p = true;
       SET_REGNO (pic_offset_table_rtx, cfun->machine->global_pointer);
 
       /* Set up the global pointer for n32 or n64 abicalls.  */
@@ -13476,7 +15072,6 @@ mips_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
-  free_after_compilation (cfun);
 
   /* Clean up the vars set above.  Note that final_end_function resets
      the global pointer for us.  */
@@ -13542,6 +15137,11 @@ mips_set_mips16_mode (int mips16_p)
       targetm.min_anchor_offset = 0;
       targetm.max_anchor_offset = 127;
 
+      targetm.const_anchor = 0;
+
+      /* MIPS16 has no BAL instruction.  */
+      target_flags &= ~MASK_RELAX_PIC_CALLS;
+
       if (flag_pic && !TARGET_OLDABI)
 	sorry ("MIPS16 PIC for ABIs other than o32 and o64");
 
@@ -13569,6 +15169,8 @@ mips_set_mips16_mode (int mips16_p)
 
       targetm.min_anchor_offset = -32768;
       targetm.max_anchor_offset = 32767;
+
+      targetm.const_anchor = 0x8000;
     }
 
   /* (Re)initialize MIPS target internals for new ISA.  */
@@ -14031,46 +15633,31 @@ mips_override_options (void)
   if (TARGET_DSPR2)
     target_flags |= MASK_DSP;
 
-  /* Use the traditional method of generating .eh_frames.
-     We need this for two reasons:
+  /* .eh_frame addresses should be the same width as a C pointer.
+     Most MIPS ABIs support only one pointer size, so the assembler
+     will usually know exactly how big an .eh_frame address is.
 
-     - .eh_frame addresses should be the same width as a C pointer.
-       Most MIPS ABIs support only one pointer size, so the assembler
-       will usually know exactly how big an .eh_frame address is.
+     Unfortunately, this is not true of the 64-bit EABI.  The ABI was
+     originally defined to use 64-bit pointers (i.e. it is LP64), and
+     this is still the default mode.  However, we also support an n32-like
+     ILP32 mode, which is selected by -mlong32.  The problem is that the
+     assembler has traditionally not had an -mlong option, so it has
+     traditionally not known whether we're using the ILP32 or LP64 form.
 
-       Unfortunately, this is not true of the 64-bit EABI.  The ABI was
-       originally defined to use 64-bit pointers (i.e. it is LP64), and
-       this is still the default mode.  However, we also support an n32-like
-       ILP32 mode, which is selected by -mlong32.  The problem is that the
-       assembler has traditionally not had an -mlong option, so it has
-       traditionally not known whether we're using the ILP32 or LP64 form.
+     As it happens, gas versions up to and including 2.19 use _32-bit_
+     addresses for EABI64 .cfi_* directives.  This is wrong for the
+     default LP64 mode, so we can't use the directives by default.
+     Moreover, since gas's current behavior is at odds with gcc's
+     default behavior, it seems unwise to rely on future versions
+     of gas behaving the same way.  We therefore avoid using .cfi
+     directives for -mlong32 as well.  */
+  if (mips_abi == ABI_EABI && TARGET_64BIT)
+    flag_dwarf2_cfi_asm = 0;
 
-       As it happens, gas versions up to and including 2.19 use _32-bit_
-       addresses for EABI64 .cfi_* directives.  This is wrong for the
-       default LP64 mode, so we can't use the directives by default.
-       Moreover, since gas's current behavior is at odds with gcc's
-       default behavior, it seems unwise to rely on future versions
-       of gas behaving the same way.  We therefore avoid using .cfi
-       directives for -mlong32 as well.
-
-     - .cfi* directives generate read-only .eh_frame sections.
-       However, MIPS has traditionally not allowed directives like:
-
-	    .long   x-.
-
-       in cases where "x" is in a different section, or is not defined
-       in the same assembly file.  We have therefore traditionally
-       used absolute addresses and a writable .eh_frame instead.
-
-       The linker is able to convert most of these absolute addresses
-       into PC-relative form where doing so is necessary to avoid
-       relocations.  However, until 2.21, it wasn't able to do this
-       for indirect encodings or personality routines.
-
-       GNU ld 2.21 and GCC 4.5 have support for read-only .eh_frames,
-       but for the time being, we should stick to the approach used
-       in 4.3 and earlier.  */
-  flag_dwarf2_cfi_asm = 0;
+  /* .cfi_* directives generate a read-only section, so fall back on
+     manual .eh_frame creation if we need the section to be writable.  */
+  if (TARGET_WRITABLE_EH_FRAME)
+    flag_dwarf2_cfi_asm = 0;
 
   mips_init_print_operand_punct ();
 
@@ -14108,8 +15695,8 @@ mips_override_options (void)
   /* Set up mips_hard_regno_mode_ok.  */
   for (mode = 0; mode < MAX_MACHINE_MODE; mode++)
     for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
-      mips_hard_regno_mode_ok[(int)mode][regno]
-	= mips_hard_regno_mode_ok_p (regno, mode);
+      mips_hard_regno_mode_ok[mode][regno]
+	= mips_hard_regno_mode_ok_p (regno, (enum machine_mode) mode);
 
   /* Function to allocate machine-dependent function status.  */
   init_machine_status = &mips_init_machine_status;
@@ -14143,6 +15730,17 @@ mips_override_options (void)
           ? !ISA_HAS_BRANCHLIKELY
           : !TARGET_BRANCHLIKELY))
     sorry ("%qs requires branch-likely instructions", "-mfix-r10000");
+
+  if (TARGET_SYNCI && !ISA_HAS_SYNCI)
+    {
+      warning (0, "the %qs architecture does not support the synci "
+	       "instruction", mips_arch_info->name);
+      target_flags &= ~MASK_SYNCI;
+    }
+
+  /* Only optimize PIC indirect calls if they are actually required.  */
+  if (!TARGET_USE_GOT || !TARGET_EXPLICIT_RELOCS)
+    target_flags &= ~MASK_RELAX_PIC_CALLS;
 
   /* Save base state of options.  */
   mips_base_target_flags = target_flags;
@@ -14309,6 +15907,346 @@ mips_order_regs_for_local_alloc (void)
       reg_alloc_order[24] = 0;
     }
 }
+
+/* Implement EH_USES.  */
+
+bool
+mips_eh_uses (unsigned int regno)
+{
+  if (reload_completed && !TARGET_ABSOLUTE_JUMPS)
+    {
+      /* We need to force certain registers to be live in order to handle
+	 PIC long branches correctly.  See mips_must_initialize_gp_p for
+	 details.  */
+      if (mips_cfun_has_cprestore_slot_p ())
+	{
+	  if (regno == CPRESTORE_SLOT_REGNUM)
+	    return true;
+	}
+      else
+	{
+	  if (cfun->machine->global_pointer == regno)
+	    return true;
+	}
+    }
+
+  return false;
+}
+
+/* Implement EPILOGUE_USES.  */
+
+bool
+mips_epilogue_uses (unsigned int regno)
+{
+  /* Say that the epilogue uses the return address register.  Note that
+     in the case of sibcalls, the values "used by the epilogue" are
+     considered live at the start of the called function.  */
+  if (regno == RETURN_ADDR_REGNUM)
+    return true;
+
+  /* If using a GOT, say that the epilogue also uses GOT_VERSION_REGNUM.
+     See the comment above load_call<mode> for details.  */
+  if (TARGET_USE_GOT && (regno) == GOT_VERSION_REGNUM)
+    return true;
+
+  /* An interrupt handler must preserve some registers that are
+     ordinarily call-clobbered.  */
+  if (cfun->machine->interrupt_handler_p
+      && mips_interrupt_extra_call_saved_reg_p (regno))
+    return true;
+
+  return false;
+}
+
+/* A for_each_rtx callback.  Stop the search if *X is an AT register.  */
+
+static int
+mips_at_reg_p (rtx *x, void *data ATTRIBUTE_UNUSED)
+{
+  return REG_P (*x) && REGNO (*x) == AT_REGNUM;
+}
+
+/* Return true if INSN needs to be wrapped in ".set noat".
+   INSN has NOPERANDS operands, stored in OPVEC.  */
+
+static bool
+mips_need_noat_wrapper_p (rtx insn, rtx *opvec, int noperands)
+{
+  int i;
+
+  if (recog_memoized (insn) >= 0)
+    for (i = 0; i < noperands; i++)
+      if (for_each_rtx (&opvec[i], mips_at_reg_p, NULL))
+	return true;
+  return false;
+}
+
+/* Implement FINAL_PRESCAN_INSN.  */
+
+void
+mips_final_prescan_insn (rtx insn, rtx *opvec, int noperands)
+{
+  if (mips_need_noat_wrapper_p (insn, opvec, noperands))
+    mips_push_asm_switch (&mips_noat);
+}
+
+/* Implement TARGET_ASM_FINAL_POSTSCAN_INSN.  */
+
+static void
+mips_final_postscan_insn (FILE *file ATTRIBUTE_UNUSED, rtx insn,
+			  rtx *opvec, int noperands)
+{
+  if (mips_need_noat_wrapper_p (insn, opvec, noperands))
+    mips_pop_asm_switch (&mips_noat);
+}
+
+/* Return the function that is used to expand the <u>mulsidi3 pattern.
+   EXT_CODE is the code of the extension used.  Return NULL if widening
+   multiplication shouldn't be used.  */
+
+mulsidi3_gen_fn
+mips_mulsidi3_gen_fn (enum rtx_code ext_code)
+{
+  bool signed_p;
+
+  signed_p = ext_code == SIGN_EXTEND;
+  if (TARGET_64BIT)
+    {
+      /* Don't use widening multiplication with MULT when we have DMUL.  Even
+	 with the extension of its input operands DMUL is faster.  Note that
+	 the extension is not needed for signed multiplication.  In order to
+	 ensure that we always remove the redundant sign-extension in this
+	 case we still expand mulsidi3 for DMUL.  */
+      if (ISA_HAS_DMUL3)
+	return signed_p ? gen_mulsidi3_64bit_dmul : NULL;
+      if (TARGET_FIX_R4000)
+	return NULL;
+      return signed_p ? gen_mulsidi3_64bit : gen_umulsidi3_64bit;
+    }
+  else
+    {
+      if (TARGET_FIX_R4000)
+	return signed_p ? gen_mulsidi3_32bit_r4000 : gen_umulsidi3_32bit_r4000;
+      if (ISA_HAS_DSPR2)
+	return signed_p ? gen_mips_mult : gen_mips_multu;
+      return signed_p ? gen_mulsidi3_32bit : gen_umulsidi3_32bit;
+    }
+}
+
+/* Return the size in bytes of the trampoline code, padded to
+   TRAMPOLINE_ALIGNMENT bits.  The static chain pointer and target
+   function address immediately follow.  */
+
+int
+mips_trampoline_code_size (void)
+{
+  if (TARGET_USE_PIC_FN_ADDR_REG)
+    return 4 * 4;
+  else if (ptr_mode == DImode)
+    return 8 * 4;
+  else if (ISA_HAS_LOAD_DELAY)
+    return 6 * 4;
+  else
+    return 4 * 4;
+}
+
+/* Implement TARGET_TRAMPOLINE_INIT.  */
+
+static void
+mips_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+{
+  rtx addr, end_addr, high, low, opcode, mem;
+  rtx trampoline[8];
+  unsigned int i, j;
+  HOST_WIDE_INT end_addr_offset, static_chain_offset, target_function_offset;
+
+  /* Work out the offsets of the pointers from the start of the
+     trampoline code.  */
+  end_addr_offset = mips_trampoline_code_size ();
+  static_chain_offset = end_addr_offset;
+  target_function_offset = static_chain_offset + GET_MODE_SIZE (ptr_mode);
+
+  /* Get pointers to the beginning and end of the code block.  */
+  addr = force_reg (Pmode, XEXP (m_tramp, 0));
+  end_addr = mips_force_binary (Pmode, PLUS, addr, GEN_INT (end_addr_offset));
+
+#define OP(X) gen_int_mode (X, SImode)
+
+  /* Build up the code in TRAMPOLINE.  */
+  i = 0;
+  if (TARGET_USE_PIC_FN_ADDR_REG)
+    {
+      /* $25 contains the address of the trampoline.  Emit code of the form:
+
+	     l[wd]    $1, target_function_offset($25)
+	     l[wd]    $static_chain, static_chain_offset($25)
+	     jr       $1
+	     move     $25,$1.  */
+      trampoline[i++] = OP (MIPS_LOAD_PTR (AT_REGNUM,
+					   target_function_offset,
+					   PIC_FUNCTION_ADDR_REGNUM));
+      trampoline[i++] = OP (MIPS_LOAD_PTR (STATIC_CHAIN_REGNUM,
+					   static_chain_offset,
+					   PIC_FUNCTION_ADDR_REGNUM));
+      trampoline[i++] = OP (MIPS_JR (AT_REGNUM));
+      trampoline[i++] = OP (MIPS_MOVE (PIC_FUNCTION_ADDR_REGNUM, AT_REGNUM));
+    }
+  else if (ptr_mode == DImode)
+    {
+      /* It's too cumbersome to create the full 64-bit address, so let's
+	 instead use:
+
+	     move    $1, $31
+	     bal     1f
+	     nop
+	 1:  l[wd]   $25, target_function_offset - 12($31)
+	     l[wd]   $static_chain, static_chain_offset - 12($31)
+	     jr      $25
+	     move    $31, $1
+
+	where 12 is the offset of "1:" from the start of the code block.  */
+      trampoline[i++] = OP (MIPS_MOVE (AT_REGNUM, RETURN_ADDR_REGNUM));
+      trampoline[i++] = OP (MIPS_BAL (1));
+      trampoline[i++] = OP (MIPS_NOP);
+      trampoline[i++] = OP (MIPS_LOAD_PTR (PIC_FUNCTION_ADDR_REGNUM,
+					   target_function_offset - 12,
+					   RETURN_ADDR_REGNUM));
+      trampoline[i++] = OP (MIPS_LOAD_PTR (STATIC_CHAIN_REGNUM,
+					   static_chain_offset - 12,
+					   RETURN_ADDR_REGNUM));
+      trampoline[i++] = OP (MIPS_JR (PIC_FUNCTION_ADDR_REGNUM));
+      trampoline[i++] = OP (MIPS_MOVE (RETURN_ADDR_REGNUM, AT_REGNUM));
+    }
+  else
+    {
+      /* If the target has load delays, emit:
+
+	     lui     $1, %hi(end_addr)
+	     lw      $25, %lo(end_addr + ...)($1)
+	     lw      $static_chain, %lo(end_addr + ...)($1)
+	     jr      $25
+	     nop
+
+	 Otherwise emit:
+
+	     lui     $1, %hi(end_addr)
+	     lw      $25, %lo(end_addr + ...)($1)
+	     jr      $25
+	     lw      $static_chain, %lo(end_addr + ...)($1).  */
+
+      /* Split END_ADDR into %hi and %lo values.  Trampolines are aligned
+	 to 64 bits, so the %lo value will have the bottom 3 bits clear.  */
+      high = expand_simple_binop (SImode, PLUS, end_addr, GEN_INT (0x8000),
+				  NULL, false, OPTAB_WIDEN);
+      high = expand_simple_binop (SImode, LSHIFTRT, high, GEN_INT (16),
+				  NULL, false, OPTAB_WIDEN);
+      low = convert_to_mode (SImode, gen_lowpart (HImode, end_addr), true);
+
+      /* Emit the LUI.  */
+      opcode = OP (MIPS_LUI (AT_REGNUM, 0));
+      trampoline[i++] = expand_simple_binop (SImode, IOR, opcode, high,
+					     NULL, false, OPTAB_WIDEN);
+
+      /* Emit the load of the target function.  */
+      opcode = OP (MIPS_LOAD_PTR (PIC_FUNCTION_ADDR_REGNUM,
+				  target_function_offset - end_addr_offset,
+				  AT_REGNUM));
+      trampoline[i++] = expand_simple_binop (SImode, IOR, opcode, low,
+					     NULL, false, OPTAB_WIDEN);
+
+      /* Emit the JR here, if we can.  */
+      if (!ISA_HAS_LOAD_DELAY)
+	trampoline[i++] = OP (MIPS_JR (PIC_FUNCTION_ADDR_REGNUM));
+
+      /* Emit the load of the static chain register.  */
+      opcode = OP (MIPS_LOAD_PTR (STATIC_CHAIN_REGNUM,
+				  static_chain_offset - end_addr_offset,
+				  AT_REGNUM));
+      trampoline[i++] = expand_simple_binop (SImode, IOR, opcode, low,
+					     NULL, false, OPTAB_WIDEN);
+
+      /* Emit the JR, if we couldn't above.  */
+      if (ISA_HAS_LOAD_DELAY)
+	{
+	  trampoline[i++] = OP (MIPS_JR (PIC_FUNCTION_ADDR_REGNUM));
+	  trampoline[i++] = OP (MIPS_NOP);
+	}
+    }
+
+#undef OP
+
+  /* Copy the trampoline code.  Leave any padding uninitialized.  */
+  for (j = 0; j < i; j++)
+    {
+      mem = adjust_address (m_tramp, SImode, j * GET_MODE_SIZE (SImode));
+      mips_emit_move (mem, trampoline[j]);
+    }
+
+  /* Set up the static chain pointer field.  */
+  mem = adjust_address (m_tramp, ptr_mode, static_chain_offset);
+  mips_emit_move (mem, chain_value);
+
+  /* Set up the target function field.  */
+  mem = adjust_address (m_tramp, ptr_mode, target_function_offset);
+  mips_emit_move (mem, XEXP (DECL_RTL (fndecl), 0));
+
+  /* Flush the code part of the trampoline.  */
+  emit_insn (gen_add3_insn (end_addr, addr, GEN_INT (TRAMPOLINE_SIZE)));
+  emit_insn (gen_clear_cache (addr, end_addr));
+}
+
+/* Implement FUNCTION_PROFILER.  */
+
+void mips_function_profiler (FILE *file)
+{
+  if (TARGET_MIPS16)
+    sorry ("mips16 function profiling");
+  if (TARGET_LONG_CALLS)
+    {
+      /* For TARGET_LONG_CALLS use $3 for the address of _mcount.  */
+      if (Pmode == DImode)
+	fprintf (file, "\tdla\t%s,_mcount\n", reg_names[3]);
+      else
+	fprintf (file, "\tla\t%s,_mcount\n", reg_names[3]);
+    }
+  mips_push_asm_switch (&mips_noat);
+  fprintf (file, "\tmove\t%s,%s\t\t# save current return address\n",
+	   reg_names[AT_REGNUM], reg_names[RETURN_ADDR_REGNUM]);
+  /* _mcount treats $2 as the static chain register.  */
+  if (cfun->static_chain_decl != NULL)
+    fprintf (file, "\tmove\t%s,%s\n", reg_names[2],
+	     reg_names[STATIC_CHAIN_REGNUM]);
+  if (TARGET_MCOUNT_RA_ADDRESS)
+    {
+      /* If TARGET_MCOUNT_RA_ADDRESS load $12 with the address of the
+	 ra save location.  */
+      if (cfun->machine->frame.ra_fp_offset == 0)
+	/* ra not saved, pass zero.  */
+	fprintf (file, "\tmove\t%s,%s\n", reg_names[12], reg_names[0]);
+      else
+	fprintf (file, "\t%s\t%s," HOST_WIDE_INT_PRINT_DEC "(%s)\n",
+		 Pmode == DImode ? "dla" : "la", reg_names[12],
+		 cfun->machine->frame.ra_fp_offset,
+		 reg_names[STACK_POINTER_REGNUM]);
+    }
+  if (!TARGET_NEWABI)
+    fprintf (file,
+	     "\t%s\t%s,%s,%d\t\t# _mcount pops 2 words from  stack\n",
+	     TARGET_64BIT ? "dsubu" : "subu",
+	     reg_names[STACK_POINTER_REGNUM],
+	     reg_names[STACK_POINTER_REGNUM],
+	     Pmode == DImode ? 16 : 8);
+
+  if (TARGET_LONG_CALLS)
+    fprintf (file, "\tjalr\t%s\n", reg_names[3]);
+  else
+    fprintf (file, "\tjal\t_mcount\n");
+  mips_pop_asm_switch (&mips_noat);
+  /* _mcount treats $2 as the static chain register.  */
+  if (cfun->static_chain_decl != NULL)
+    fprintf (file, "\tmove\t%s,%s\n", reg_names[STATIC_CHAIN_REGNUM],
+	     reg_names[2]);
+}
 
 /* Initialize the GCC target structure.  */
 #undef TARGET_ASM_ALIGNED_HI_OP
@@ -14317,6 +16255,9 @@ mips_order_regs_for_local_alloc (void)
 #define TARGET_ASM_ALIGNED_SI_OP "\t.word\t"
 #undef TARGET_ASM_ALIGNED_DI_OP
 #define TARGET_ASM_ALIGNED_DI_OP "\t.dword\t"
+
+#undef TARGET_LEGITIMIZE_ADDRESS
+#define TARGET_LEGITIMIZE_ADDRESS mips_legitimize_address
 
 #undef TARGET_ASM_FUNCTION_PROLOGUE
 #define TARGET_ASM_FUNCTION_PROLOGUE mips_output_function_prologue
@@ -14396,10 +16337,8 @@ mips_order_regs_for_local_alloc (void)
 #undef TARGET_GIMPLIFY_VA_ARG_EXPR
 #define TARGET_GIMPLIFY_VA_ARG_EXPR mips_gimplify_va_arg_expr
 
-#undef TARGET_PROMOTE_FUNCTION_ARGS
-#define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_const_tree_true
-#undef TARGET_PROMOTE_FUNCTION_RETURN
-#define TARGET_PROMOTE_FUNCTION_RETURN hook_bool_const_tree_true
+#undef  TARGET_PROMOTE_FUNCTION_MODE
+#define TARGET_PROMOTE_FUNCTION_MODE default_promote_function_mode_always_promote
 #undef TARGET_PROMOTE_PROTOTYPES
 #define TARGET_PROMOTE_PROTOTYPES hook_bool_const_tree_true
 
@@ -14476,6 +16415,21 @@ mips_order_regs_for_local_alloc (void)
 
 #undef TARGET_IRA_COVER_CLASSES
 #define TARGET_IRA_COVER_CLASSES mips_ira_cover_classes
+
+#undef TARGET_ASM_FINAL_POSTSCAN_INSN
+#define TARGET_ASM_FINAL_POSTSCAN_INSN mips_final_postscan_insn
+
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P	mips_legitimate_address_p
+
+#undef TARGET_FRAME_POINTER_REQUIRED
+#define TARGET_FRAME_POINTER_REQUIRED mips_frame_pointer_required
+
+#undef TARGET_CAN_ELIMINATE
+#define TARGET_CAN_ELIMINATE mips_can_eliminate
+
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT mips_trampoline_init
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

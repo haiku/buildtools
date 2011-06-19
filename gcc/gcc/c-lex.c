@@ -264,8 +264,8 @@ cb_def_pragma (cpp_reader *pfile, source_location loc)
 	    name = cpp_token_as_text (pfile, s);
 	}
 
-      warning (OPT_Wunknown_pragmas, "%Hignoring #pragma %s %s",
-	       &fe_loc, space, name);
+      warning_at (fe_loc, OPT_Wunknown_pragmas, "ignoring #pragma %s %s",
+		  space, name);
     }
 }
 
@@ -313,7 +313,7 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,
       goto retry;
 
     case CPP_NAME:
-      *value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok->val.node));
+      *value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok->val.node.node));
       break;
 
     case CPP_NUMBER:
@@ -365,11 +365,12 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,
 	    case CPP_WSTRING:
 	    case CPP_STRING16:
 	    case CPP_STRING32:
+	    case CPP_UTF8STRING:
 	      type = lex_string (tok, value, true, true);
 	      break;
 
 	    case CPP_NAME:
-	      *value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok->val.node));
+	      *value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok->val.node.node));
 	      if (objc_is_reserved_word (*value))
 		{
 		  type = CPP_AT_NAME;
@@ -379,7 +380,7 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,
 
 	    default:
 	      /* ... or not.  */
-	      error ("%Hstray %<@%> in program", &atloc);
+	      error_at (atloc, "stray %<@%> in program");
 	      *loc = newloc;
 	      goto retry_after_at;
 	    }
@@ -390,7 +391,7 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,
     case CPP_HASH:
     case CPP_PASTE:
       {
-	unsigned char name[4];
+	unsigned char name[8];
 
 	*cpp_spell_token (parse_in, tok, name, true) = 0;
 
@@ -423,7 +424,8 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,
     case CPP_WSTRING:
     case CPP_STRING16:
     case CPP_STRING32:
-      if ((lex_flags & C_LEX_RAW_STRINGS) == 0)
+    case CPP_UTF8STRING:
+      if ((lex_flags & C_LEX_STRING_NO_JOIN) == 0)
 	{
 	  type = lex_string (tok, value, false,
 			     (lex_flags & C_LEX_STRING_NO_TRANSLATE) == 0);
@@ -431,7 +433,7 @@ c_lex_with_flags (tree *value, location_t *loc, unsigned char *cpp_flags,
 	}
       *value = build_string (tok->val.str.len, (const char *) tok->val.str.text);
       break;
-      
+
     case CPP_PRAGMA:
       *value = build_int_cst (NULL, tok->val.pragma);
       break;
@@ -582,13 +584,18 @@ interpret_integer (const cpp_token *token, unsigned int flags)
 	    ? widest_unsigned_literal_type_node
 	    : widest_integer_literal_type_node);
   else
-    type = integer_types[itk];
-
-  if (itk > itk_unsigned_long
-      && (flags & CPP_N_WIDTH) != CPP_N_LARGE
-      && !in_system_header && !flag_isoc99)
-    pedwarn (input_location, 0, "integer constant is too large for %qs type",
-	     (flags & CPP_N_UNSIGNED) ? "unsigned long" : "long");
+    {
+      type = integer_types[itk];
+      if (itk > itk_unsigned_long
+	  && (flags & CPP_N_WIDTH) != CPP_N_LARGE)
+	emit_diagnostic
+	  ((c_dialect_cxx () ? cxx_dialect == cxx98 : !flag_isoc99)
+	   ? DK_PEDWARN : DK_WARNING,
+	   input_location, OPT_Wlong_long,
+	   (flags & CPP_N_UNSIGNED)
+	   ? "integer constant is too large for %<unsigned long%> type"
+	   : "integer constant is too large for %<long%> type");
+    }
 
   value = build_int_cst_wide (type, integer.low, integer.high);
 
@@ -605,10 +612,29 @@ static tree
 interpret_float (const cpp_token *token, unsigned int flags)
 {
   tree type;
+  tree const_type;
   tree value;
   REAL_VALUE_TYPE real;
+  REAL_VALUE_TYPE real_trunc;
   char *copy;
   size_t copylen;
+
+  /* Default (no suffix) depends on whether the FLOAT_CONST_DECIMAL64
+     pragma has been used and is either double or _Decimal64.  Types
+     that are not allowed with decimal float default to double.  */
+  if (flags & CPP_N_DEFAULT)
+    {
+      flags ^= CPP_N_DEFAULT;
+      flags |= CPP_N_MEDIUM;
+
+      if (((flags & CPP_N_HEX) == 0) && ((flags & CPP_N_IMAGINARY) == 0))
+	{
+	  warning (OPT_Wunsuffixed_float_constants,
+		   "unsuffixed float constant");
+	  if (float_const_decimal64_p ())
+	    flags |= CPP_N_DFLOAT;
+	}
+    }
 
   /* Decode _Fract and _Accum.  */
   if (flags & CPP_N_FRACT || flags & CPP_N_ACCUM)
@@ -655,13 +681,17 @@ interpret_float (const cpp_token *token, unsigned int flags)
     else
       type = double_type_node;
 
+  const_type = excess_precision_type (type);
+  if (!const_type)
+    const_type = type;
+
   /* Copy the constant to a nul-terminated buffer.  If the constant
      has any suffixes, cut them off; REAL_VALUE_ATOF/ REAL_VALUE_HTOF
      can't handle them.  */
   copylen = token->val.str.len;
-  if (flags & CPP_N_DFLOAT) 
+  if (flags & CPP_N_DFLOAT)
     copylen -= 2;
-  else 
+  else
     {
       if ((flags & CPP_N_WIDTH) != CPP_N_MEDIUM)
 	/* Must be an F or L or machine defined suffix.  */
@@ -675,13 +705,21 @@ interpret_float (const cpp_token *token, unsigned int flags)
   memcpy (copy, token->val.str.text, copylen);
   copy[copylen] = '\0';
 
-  real_from_string3 (&real, copy, TYPE_MODE (type));
+  real_from_string3 (&real, copy, TYPE_MODE (const_type));
+  if (const_type != type)
+    /* Diagnosing if the result of converting the value with excess
+       precision to the semantic type would overflow (with associated
+       double rounding) is more appropriate than diagnosing if the
+       result of converting the string directly to the semantic type
+       would overflow.  */
+    real_convert (&real_trunc, TYPE_MODE (type), &real);
 
   /* Both C and C++ require a diagnostic for a floating constant
      outside the range of representable values of its type.  Since we
      have __builtin_inf* to produce an infinity, this is now a
      mandatory pedwarn if the target does not support infinities.  */
-  if (REAL_VALUE_ISINF (real)) 
+  if (REAL_VALUE_ISINF (real)
+      || (const_type != type && REAL_VALUE_ISINF (real_trunc)))
     {
       if (!MODE_HAS_INFINITIES (TYPE_MODE (type)))
 	pedwarn (input_location, 0, "floating constant exceeds range of %qT", type);
@@ -689,18 +727,30 @@ interpret_float (const cpp_token *token, unsigned int flags)
 	warning (OPT_Woverflow, "floating constant exceeds range of %qT", type);
     }
   /* We also give a warning if the value underflows.  */
-  else if (REAL_VALUES_EQUAL (real, dconst0))
+  else if (REAL_VALUES_EQUAL (real, dconst0)
+	   || (const_type != type && REAL_VALUES_EQUAL (real_trunc, dconst0)))
     {
       REAL_VALUE_TYPE realvoidmode;
       int overflow = real_from_string (&realvoidmode, copy);
-      if (overflow < 0 || !REAL_VALUES_EQUAL (realvoidmode, dconst0)) 
+      if (overflow < 0 || !REAL_VALUES_EQUAL (realvoidmode, dconst0))
 	warning (OPT_Woverflow, "floating constant truncated to zero");
     }
 
   /* Create a node with determined type and value.  */
-  value = build_real (type, real);
+  value = build_real (const_type, real);
   if (flags & CPP_N_IMAGINARY)
-    value = build_complex (NULL_TREE, convert (type, integer_zero_node), value);
+    {
+      value = build_complex (NULL_TREE, convert (const_type,
+						 integer_zero_node), value);
+      if (type != const_type)
+	{
+	  const_type = TREE_TYPE (value);
+	  type = build_complex_type (type);
+	}
+    }
+
+  if (type != const_type)
+    value = build1 (EXCESS_PRECISION_EXPR, type, value);
 
   return value;
 }
@@ -830,12 +880,13 @@ interpret_fixed (const cpp_token *token, unsigned int flags)
   return value;
 }
 
-/* Convert a series of STRING, WSTRING, STRING16 and/or STRING32 tokens
-   into a tree, performing string constant concatenation.  TOK is the
-   first of these.  VALP is the location to write the string into.
-   OBJC_STRING indicates whether an '@' token preceded the incoming token.
+/* Convert a series of STRING, WSTRING, STRING16, STRING32 and/or
+   UTF8STRING tokens into a tree, performing string constant
+   concatenation.  TOK is the first of these.  VALP is the location
+   to write the string into. OBJC_STRING indicates whether an '@' token
+   preceded the incoming token.
    Returns the CPP token type of the result (CPP_STRING, CPP_WSTRING,
-   CPP_STRING32, CPP_STRING16, or CPP_OBJC_STRING).
+   CPP_STRING32, CPP_STRING16, CPP_UTF8STRING, or CPP_OBJC_STRING).
 
    This is unfortunately more work than it should be.  If any of the
    strings in the series has an L prefix, the result is a wide string
@@ -880,6 +931,7 @@ lex_string (const cpp_token *tok, tree *valp, bool objc_string, bool translate)
     case CPP_WSTRING:
     case CPP_STRING16:
     case CPP_STRING32:
+    case CPP_UTF8STRING:
       if (type != tok->type)
 	{
 	  if (type == CPP_STRING)
@@ -925,6 +977,7 @@ lex_string (const cpp_token *tok, tree *valp, bool objc_string, bool translate)
 	{
 	default:
 	case CPP_STRING:
+	case CPP_UTF8STRING:
 	  value = build_string (1, "");
 	  break;
 	case CPP_STRING16:
@@ -950,6 +1003,7 @@ lex_string (const cpp_token *tok, tree *valp, bool objc_string, bool translate)
     {
     default:
     case CPP_STRING:
+    case CPP_UTF8STRING:
       TREE_TYPE (value) = char_array_type_node;
       break;
     case CPP_STRING16:

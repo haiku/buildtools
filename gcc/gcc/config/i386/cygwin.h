@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using a Unix style C library and tools.
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2007, 2008, 2009 Free Software Foundation, Inc.
+   2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -85,13 +85,45 @@ along with GCC; see the file COPYING3.  If not see
   %{mwindows:-lgdi32 -lcomdlg32} \
   -luser32 -lkernel32 -ladvapi32 -lshell32"
 
+/* To implement C++ function replacement we always wrap the cxx
+   malloc-like operators.  See N2800 #17.6.4.6 [replacement.functions] */
+#define CXX_WRAP_SPEC_LIST " \
+  --wrap _Znwj \
+  --wrap _Znaj \
+  --wrap _ZdlPv \
+  --wrap _ZdaPv \
+  --wrap _ZnwjRKSt9nothrow_t \
+  --wrap _ZnajRKSt9nothrow_t \
+  --wrap _ZdlPvRKSt9nothrow_t \
+  --wrap _ZdaPvRKSt9nothrow_t \
+"
+
+#if defined (USE_CYGWIN_LIBSTDCXX_WRAPPERS)
+
+#if USE_CYGWIN_LIBSTDCXX_WRAPPERS
+/* Default on, only explict -mno disables.  */
+#define CXX_WRAP_SPEC_OPT "!mno-use-libstdc-wrappers"
+#else
+/* Default off, only explict -m enables.  */
+#define CXX_WRAP_SPEC_OPT "muse-libstdc-wrappers"
+#endif
+
+#define CXX_WRAP_SPEC "%{!mno-cygwin:%{" CXX_WRAP_SPEC_OPT ":" CXX_WRAP_SPEC_LIST "}}"
+
+#else /* !defined (USE_CYGWIN_LIBSTDCXX_WRAPPERS)  */
+
+#define CXX_WRAP_SPEC ""
+
+#endif /* ?defined (USE_CYGWIN_LIBSTDCXX_WRAPPERS) */
+
 #define LINK_SPEC "\
   %{mwindows:--subsystem windows} \
   %{mconsole:--subsystem console} \
+  " CXX_WRAP_SPEC " \
   %{shared: %{mdll: %eshared and mdll are not compatible}} \
   %{shared: --shared} %{mdll:--dll} \
   %{static:-Bstatic} %{!static:-Bdynamic} \
-  %{shared|mdll: -e \
+  %{shared|mdll: --enable-auto-image-base -e \
     %{mno-cygwin:_DllMainCRTStartup@12} \
     %{!mno-cygwin:__cygwin_dll_entry@12}}\
   %{!mno-cygwin:--dll-search-prefix=cyg -tsaware}"
@@ -267,3 +299,7 @@ while (0)
 #define LIBGCC_EH_EXTN "-sjlj"
 #endif
 #define LIBGCC_SONAME "cyggcc_s" LIBGCC_EH_EXTN "-1.dll"
+
+/* We should find a way to not have to update this manually.  */
+#define LIBGCJ_SONAME "cyggcj" /*LIBGCC_EH_EXTN*/ "-11.dll"
+

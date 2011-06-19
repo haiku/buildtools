@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using GNU tools and the Windows32 API Library.
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008,
-   2009 Free Software Foundation, Inc.
+   2009, 2010 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -38,7 +38,7 @@ along with GCC; see the file COPYING3.  If not see
       builtin_define_std ("WINNT");				\
       builtin_define_with_int_value ("_INTEGRAL_MAX_BITS",	\
 				     TYPE_PRECISION (intmax_type_node));\
-      if (TARGET_64BIT && DEFAULT_ABI == MS_ABI)			\
+      if (TARGET_64BIT && ix86_abi == MS_ABI)			\
 	{							\
 	  builtin_define ("__MINGW64__");			\
 	  builtin_define_std ("WIN64");				\
@@ -47,14 +47,26 @@ along with GCC; see the file COPYING3.  If not see
     }								\
   while (0)
 
+#undef SUB_LINK_ENTRY32
+#undef SUB_LINK_ENTRY64
+#define SUB_LINK_ENTRY32 "-e _DllMainCRTStartup@12"
+#if defined(USE_MINGW64_LEADING_UNDERSCORES)
+#define SUB_LINK_ENTRY64 "-e _DllMainCRTStartup"
+#else
+#define SUB_LINK_ENTRY64 "-e DllMainCRTStartup"
+#endif
+
+#undef SUB_LINK_ENTRY
+#if TARGET_64BIT_DEFAULT
+#define SUB_LINK_ENTRY SUB_LINK_ENTRY64
+#else
+#define SUB_LINK_ENTRY SUB_LINK_ENTRY32
+#endif
+
 /* Override the standard choice of /usr/include as the default prefix
    to try when searching for header files.  */
 #undef STANDARD_INCLUDE_DIR
-#if TARGET_64BIT_DEFAULT
-#define STANDARD_INCLUDE_DIR "/mingw/include64"
-#else
 #define STANDARD_INCLUDE_DIR "/mingw/include"
-#endif
 #undef STANDARD_INCLUDE_COMPONENT
 #define STANDARD_INCLUDE_COMPONENT "MINGW"
 
@@ -70,6 +82,10 @@ along with GCC; see the file COPYING3.  If not see
 /* Weak symbols do not get resolved if using a Windows dll import lib.
    Make the unwind registration references strong undefs.  */
 #if DWARF2_UNWIND_INFO
+/* DW2-unwind is just available for 32-bit mode.  */
+#if TARGET_64BIT_DEFAULT
+#error DW2 unwind is not available for 64-bit.
+#endif
 #define SHARED_LIBGCC_UNDEFS_SPEC \
  "%{shared-libgcc: -u ___register_frame_info -u ___deregister_frame_info}"
 #else
@@ -85,7 +101,7 @@ along with GCC; see the file COPYING3.  If not see
   %{shared: %{mdll: %eshared and mdll are not compatible}} \
   %{shared: --shared} %{mdll:--dll} \
   %{static:-Bstatic} %{!static:-Bdynamic} \
-  %{shared|mdll: -e _DllMainCRTStartup@12 --enable-auto-image-base} \
+  %{shared|mdll: " SUB_LINK_ENTRY " --enable-auto-image-base} \
   %(shared_libgcc_undefs)"
 
 /* Include in the mingw32 libraries with libgcc */
@@ -113,15 +129,19 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Override startfile prefix defaults.  */
 #ifndef STANDARD_STARTFILE_PREFIX_1
-#if TARGET_64BIT_DEFAULT
-#define STANDARD_STARTFILE_PREFIX_1 "/mingw/lib64/"
-#else
 #define STANDARD_STARTFILE_PREFIX_1 "/mingw/lib/"
-#endif
 #endif
 #ifndef STANDARD_STARTFILE_PREFIX_2
 #define STANDARD_STARTFILE_PREFIX_2 ""
 #endif
+
+/* Put all *tf routines in libgcc.  */
+#undef LIBGCC2_HAS_TF_MODE
+#define LIBGCC2_HAS_TF_MODE 1
+#undef LIBGCC2_TF_CEXT
+#define LIBGCC2_TF_CEXT q
+#undef TF_SIZE
+#define TF_SIZE 113
 
 /* Output STRING, a string representing a filename, to FILE.
    We canonicalize it to be in Unix format (backslashes are replaced
@@ -202,12 +222,16 @@ __enable_execute_stack (void *addr)					\
 
 #undef ENABLE_EXECUTE_STACK
 #define ENABLE_EXECUTE_STACK MINGW_ENABLE_EXECUTE_STACK
+#undef  CHECK_EXECUTE_STACK_ENABLED
+#define CHECK_EXECUTE_STACK_ENABLED flag_setstackexecutable
 
 #ifdef IN_LIBGCC2
 #include <windows.h>
 #endif
 
-#if !TARGET_64BIT
+/* For 64-bit Windows we can't use DW2 unwind info. Also for multilib
+   builds we can't use it, too.  */
+#if !TARGET_64BIT_DEFAULT && !defined (TARGET_BI_ARCH)
 #define MD_UNWIND_SUPPORT "config/i386/w32-unwind.h"
 #endif
 
@@ -219,3 +243,7 @@ __enable_execute_stack (void *addr)					\
 #define LIBGCC_EH_EXTN "_sjlj"
 #endif
 #define LIBGCC_SONAME "libgcc_s" LIBGCC_EH_EXTN "-1.dll"
+
+/* We should find a way to not have to update this manually.  */
+#define LIBGCJ_SONAME "libgcj" /*LIBGCC_EH_EXTN*/ "-11.dll"
+

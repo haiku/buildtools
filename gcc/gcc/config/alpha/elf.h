@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for DEC Alpha w/ELF.
-   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008
-   Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2007, 2008,
+   2009, 2010 Free Software Foundation, Inc.
    Contributed by Richard Henderson (rth@tamu.edu).
 
 This file is part of GCC.
@@ -142,18 +142,20 @@ do {									\
   ASM_OUTPUT_ALIGNED_LOCAL (FILE, NAME, SIZE, ALIGN);			\
 } while (0)
 
-/* Biggest alignment supported by the object file format of this
-   machine.  Use this macro to limit the alignment which can be
-   specified using the `__attribute__ ((aligned (N)))' construct.  If
-   not defined, the default value is `BIGGEST_ALIGNMENT'. 
+/* The biggest alignment supported by ELF in bits. 32-bit ELF 
+   supports section alignment up to (0x80000000 * 8), while 
+   64-bit ELF supports (0x8000000000000000 * 8). If this macro 
+   is not defined, the default is the largest alignment supported 
+   by 32-bit ELF and representable on a 32-bit host. Use this
+   macro to limit the alignment which can be specified using
+   the `__attribute__ ((aligned (N)))' construct.
 
    This value is really 2^63.  Since gcc figures the alignment in bits,
    we could only potentially get to 2^60 on suitable hosts.  Due to other
    considerations in varasm, we must restrict this to what fits in an int.  */
 
 #undef  MAX_OFILE_ALIGNMENT
-#define MAX_OFILE_ALIGNMENT \
-  (1 << (HOST_BITS_PER_INT < 64 ? HOST_BITS_PER_INT - 2 : 62))
+#define MAX_OFILE_ALIGNMENT (((unsigned int) 1 << 28) * 8)
 
 /* This is the pseudo-op used to generate a contiguous sequence of byte
    values from a double-quoted string WITHOUT HAVING A TERMINATING NUL
@@ -270,20 +272,38 @@ do {									\
 
 /* Write the extra assembler code needed to declare an object properly.  */
 
+#ifdef HAVE_GAS_GNU_UNIQUE_OBJECT
+#define USE_GNU_UNIQUE_OBJECT 1
+#else
+#define USE_GNU_UNIQUE_OBJECT 0
+#endif
+
 #undef  ASM_DECLARE_OBJECT_NAME
-#define ASM_DECLARE_OBJECT_NAME(FILE, NAME, DECL)		\
-  do {								\
-    HOST_WIDE_INT size;						\
-    ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "object");		\
-    size_directive_output = 0;					\
-    if (!flag_inhibit_size_directive				\
-	&& DECL_SIZE (DECL)					\
-	&& (size = int_size_in_bytes (TREE_TYPE (DECL))) > 0)	\
-      {								\
-	size_directive_output = 1;				\
-        ASM_OUTPUT_SIZE_DIRECTIVE (FILE, NAME, size);		\
-      }								\
-    ASM_OUTPUT_LABEL(FILE, NAME);				\
+#define ASM_DECLARE_OBJECT_NAME(FILE, NAME, DECL)			\
+  do {									\
+    HOST_WIDE_INT size;							\
+    									\
+    /* For template static data member instantiations or		\
+       inline fn local statics and their guard variables, use		\
+       gnu_unique_object so that they will be combined even under	\
+       RTLD_LOCAL.  Don't use gnu_unique_object for typeinfo,		\
+       vtables and other read-only artificial decls.  */		\
+    if (USE_GNU_UNIQUE_OBJECT	&& DECL_ONE_ONLY (DECL)			\
+	&& (!DECL_ARTIFICIAL (DECL) || !TREE_READONLY (DECL)))		\
+      ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "gnu_unique_object");	\
+    else								\
+      ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "object");			\
+    									\
+    size_directive_output = 0;						\
+    if (!flag_inhibit_size_directive					\
+	&& (DECL) && DECL_SIZE (DECL))					\
+      {									\
+	size_directive_output = 1;					\
+	size = int_size_in_bytes (TREE_TYPE (DECL));			\
+	ASM_OUTPUT_SIZE_DIRECTIVE (FILE, NAME, size);			\
+      }									\
+    									\
+    ASM_OUTPUT_LABEL (FILE, NAME);					\
   } while (0)
 
 /* Output the size directive for a decl in rest_of_decl_compilation

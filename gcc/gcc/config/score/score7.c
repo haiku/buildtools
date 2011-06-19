@@ -54,9 +54,6 @@
 #define BITSET_P(VALUE, BIT)      (((VALUE) & (1L << (BIT))) != 0)
 #define INS_BUF_SZ                128
 
-/* Define the information needed to generate branch insns.  This is
-   stored from the compare operation.  */
-extern rtx cmp_op0, cmp_op1;
 extern enum reg_class score_char_to_class[256];
 
 static int score7_sdata_max;
@@ -382,7 +379,6 @@ score7_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
-  free_after_compilation (cfun);
 
   /* Clean up the vars set above.  Note that final_end_function resets
      the global pointer for us.  */
@@ -413,31 +409,28 @@ score7_split_symbol (rtx temp, rtx addr)
   return gen_rtx_LO_SUM (Pmode, high, addr);
 }
 
-/* This function is used to implement LEGITIMIZE_ADDRESS.  If *XLOC can
+/* This function is used to implement LEGITIMIZE_ADDRESS.  If X can
    be legitimized in a way that the generic machinery might not expect,
-   put the new address in *XLOC and return true.  */
-int
-score7_legitimize_address (rtx *xloc)
+   return the new address.  */
+rtx
+score7_legitimize_address (rtx x)
 {
   enum score_symbol_type symbol_type;
 
-  if (score7_symbolic_constant_p (*xloc, &symbol_type)
+  if (score7_symbolic_constant_p (x, &symbol_type)
       && symbol_type == SYMBOL_GENERAL)
-    {
-      *xloc = score7_split_symbol (0, *xloc);
-      return 1;
-    }
+    return score7_split_symbol (0, x);
 
-  if (GET_CODE (*xloc) == PLUS
-      && GET_CODE (XEXP (*xloc, 1)) == CONST_INT)
+  if (GET_CODE (x) == PLUS
+      && GET_CODE (XEXP (x, 1)) == CONST_INT)
     {
-      rtx reg = XEXP (*xloc, 0);
+      rtx reg = XEXP (x, 0);
       if (!score7_valid_base_register_p (reg, 0))
         reg = copy_to_mode_reg (Pmode, reg);
-      *xloc = score7_add_offset (reg, INTVAL (XEXP (*xloc, 1)));
-      return 1;
+      return score7_add_offset (reg, INTVAL (XEXP (x, 1)));
     }
-  return 0;
+
+  return x;
 }
 
 /* Fill INFO with information about a single argument.  CUM is the
@@ -856,36 +849,57 @@ score7_function_arg (const CUMULATIVE_ARGS *cum, enum machine_mode mode,
    VALTYPE is the return type and MODE is VOIDmode.  For libcalls,
    VALTYPE is null and MODE is the mode of the return value.  */
 rtx
-score7_function_value (tree valtype, tree func ATTRIBUTE_UNUSED,
-                       enum machine_mode mode)
+score7_function_value (tree valtype, tree func, enum machine_mode mode)
 {
   if (valtype)
     {
       int unsignedp;
       mode = TYPE_MODE (valtype);
       unsignedp = TYPE_UNSIGNED (valtype);
-      mode = promote_mode (valtype, mode, &unsignedp, 1);
+      mode = promote_function_mode (valtype, mode, &unsignedp, func, 1);
     }
   return gen_rtx_REG (mode, RT_REGNUM);
 }
 
-/* Implement INITIALIZE_TRAMPOLINE macro.  */
+/* Implement TARGET_ASM_TRAMPOLINE_TEMPLATE.  */
+
 void
-score7_initialize_trampoline (rtx ADDR, rtx FUNC, rtx CHAIN)
+score7_asm_trampoline_template (FILE *f)
+{
+  fprintf (f, "\t.set r1\n");
+  fprintf (f, "\tmv r31, r3\n");
+  fprintf (f, "\tbl nextinsn\n");
+  fprintf (f, "nextinsn:\n");
+  fprintf (f, "\tlw r1, [r3, 6*4-8]\n");
+  fprintf (f, "\tlw r23, [r3, 6*4-4]\n");
+  fprintf (f, "\tmv r3, r31\n");
+  fprintf (f, "\tbr! r1\n");
+  fprintf (f, "\tnop!\n");
+  fprintf (f, "\t.set nor1\n");
+}
+
+/* Implement TARGET_TRAMPOLINE_INIT.  */
+void
+score7_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
 {
 #define FFCACHE          "_flush_cache"
 #define CODE_SIZE        (TRAMPOLINE_INSNS * UNITS_PER_WORD)
 
-  rtx pfunc, pchain;
+  rtx fnaddr = XEXP (DECL_RTL (fndecl), 0);
+  rtx addr = XEXP (m_tramp, 0);
+  rtx mem;
 
-  pfunc = plus_constant (ADDR, CODE_SIZE);
-  pchain = plus_constant (ADDR, CODE_SIZE + GET_MODE_SIZE (SImode));
+  emit_block_move (m_tramp, assemble_trampoline_template (),
+		   GEN_INT (TRAMPOLINE_SIZE), BLOCK_OP_NORMAL);
 
-  emit_move_insn (gen_rtx_MEM (SImode, pfunc), FUNC);
-  emit_move_insn (gen_rtx_MEM (SImode, pchain), CHAIN);
+  mem = adjust_address (m_tramp, SImode, CODE_SIZE);
+  emit_move_insn (mem, fnaddr);
+  mem = adjust_address (m_tramp, SImode, CODE_SIZE + GET_MODE_SIZE (SImode));
+  emit_move_insn (mem, chain_value);
+
   emit_library_call (gen_rtx_SYMBOL_REF (Pmode, FFCACHE),
                      0, VOIDmode, 2,
-                     ADDR, Pmode,
+                     addr, Pmode,
                      GEN_INT (TRAMPOLINE_SIZE), SImode);
 #undef FFCACHE
 #undef CODE_SIZE
@@ -907,9 +921,9 @@ score7_regno_mode_ok_for_base_p (int regno, int strict)
   return GP_REG_P (regno);
 }
 
-/* Implement GO_IF_LEGITIMATE_ADDRESS macro.  */
-int
-score7_address_p (enum machine_mode mode, rtx x, int strict)
+/* Implement TARGET_LEGITIMATE_ADDRESS_P macro.  */
+bool
+score7_legitimate_address_p (enum machine_mode mode, rtx x, bool strict)
 {
   struct score7_address_info addr;
 
@@ -1534,13 +1548,6 @@ score7_epilogue (int sibcall_p)
     emit_jump_insn (gen_return_internal_score7 (gen_rtx_REG (Pmode, RA_REGNUM)));
 }
 
-void
-score7_gen_cmp (enum machine_mode mode)
-{
-  emit_insn (gen_rtx_SET (VOIDmode, gen_rtx_REG (mode, CC_REGNUM),
-                          gen_rtx_COMPARE (mode, cmp_op0, cmp_op1)));
-}
-
 /* Return true if X is a symbolic constant that can be calculated in
    the same way as a bare symbol.  If it is, store the type of the
    symbol in *SYMBOL_TYPE.  */
@@ -1579,7 +1586,8 @@ score7_movsicc (rtx *ops)
 
   mode = score7_select_cc_mode (GET_CODE (ops[1]), ops[2], ops[3]);
   emit_insn (gen_rtx_SET (VOIDmode, gen_rtx_REG (mode, CC_REGNUM),
-                          gen_rtx_COMPARE (mode, cmp_op0, cmp_op1)));
+                          gen_rtx_COMPARE (mode, XEXP (ops[1], 0),
+					   XEXP (ops[1], 1))));
 }
 
 /* Call and sibcall pattern all need call this function.  */

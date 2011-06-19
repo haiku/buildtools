@@ -1,6 +1,6 @@
 <sect2 id="status.iso.200x" xreflabel="Status C++ 200x">
 <?dbhtml filename="status_iso_cxx200x.html"?>
- 
+
 <sect2info>
   <keywordset>
     <keyword>
@@ -15,15 +15,17 @@
 <title>C++ 200x</title>
 
 <para>
-This table is based on the table of contents of ISO/IEC 
-Doc No: N2857=09-0047 Date: 2009-03-23
+This table is based on the table of contents of ISO/IEC
+Doc No: N3000=09-0190 Date: 2009-11-09
 Working Draft, Standard for Programming Language C++
 </para>
 
 <para>
 In this implementation <literal>-std=gnu++0x</literal> or
-<literal>-std=c++0x</literal> flags must be used to enable language and
-library features. The pre-defined symbol
+<literal>-std=c++0x</literal> flags must be used to enable language
+and library
+features. See <link linkend="manual.intro.using.flags">dialect</link>
+options. The pre-defined symbol
 <constant>__GXX_EXPERIMENTAL_CXX0X__</constant> is used to check for the
 presence of the required flag.
 </para>
@@ -34,13 +36,13 @@ particular release.
 </para>
 
 <!-- Status is Yes or No, Broken/Partial-->
-<!-- 
+<!--
    Yes
 
-   No 
-      <?dbhtml bgcolor="#C8B0B0" ?> 
-   Broken/Partial 
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+   No
+      <?dbhtml bgcolor="#C8B0B0" ?>
+   Broken/Partial
+      <?dbhtml bgcolor="#B0B0B0" ?>
 -->
 <table frame='all'>
 <title>C++ 200x Implementation Status</title>
@@ -75,7 +77,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.2</entry>
       <entry>Types</entry>
       <entry>Partial</entry>
@@ -101,21 +103,21 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.3.1.2</entry>
       <entry><code>numeric_limits</code> members</entry>
       <entry>Partial</entry>
       <entry>Missing constexpr</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>18.3.1.3</entry>
       <entry><code>float_round_style</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>18.3.1.4</entry>
       <entry><code>float_denorm_style</code></entry>
       <entry>N</entry>
@@ -148,14 +150,14 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.4.2</entry>
       <entry>The header <code>&lt;stdint.h&gt;</code></entry>
       <entry>Partial</entry>
       <entry>May use configure-generated stdint.h via GCC_HEADER_STDINT</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.5</entry>
       <entry>Start and termination</entry>
       <entry>Partial</entry>
@@ -180,7 +182,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>18.7.2</entry>
       <entry>Class type_index</entry>
       <entry>N</entry>
@@ -235,10 +237,9 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>18.8.6</entry>
       <entry>Class <code>nested_exception</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -260,7 +261,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>18.9.3</entry>
       <entry>Initializer list concept maps</entry>
       <entry>N</entry>
@@ -317,14 +318,14 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>19.5.2</entry>
       <entry>Class <code>error_code</code></entry>
       <entry>Partial</entry>
       <entry>Missing concept ErrorCodeEnum</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>19.5.3</entry>
       <entry>Class <code>error_condition</code></entry>
       <entry>Partial</entry>
@@ -351,14 +352,14 @@ particular release.
       </entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.1</entry>
       <entry>General</entry>
       <entry>Partial</entry>
       <entry>Missing all concepts</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.2</entry>
       <entry>Concepts</entry>
       <entry>N</entry>
@@ -395,7 +396,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.3.5</entry>
       <entry>Range concept maps for <code>pair</code></entry>
       <entry>N</entry>
@@ -404,8 +405,8 @@ particular release.
     <row>
       <entry>20.3.6</entry>
       <entry>Class template <code>bitset</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>20.4</entry>
@@ -450,7 +451,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.5.2</entry>
       <entry>Class template <code>tuple</code></entry>
       <entry>Partial</entry>
@@ -469,7 +470,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.6.2</entry>
       <entry>Header <code>&lt;type_traits&gt;</code> synopsis</entry>
       <entry></entry>
@@ -500,7 +501,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.6.4.3</entry>
       <entry>Type properties</entry>
       <entry>Partial</entry>
@@ -549,7 +550,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.6.7</entry>
       <entry>Other transformations</entry>
       <entry>Partial</entry>
@@ -586,7 +587,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.7.6</entry>
       <entry>Identity operation</entry>
       <entry>N</entry>
@@ -671,7 +672,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.7.18</entry>
       <entry>Class template <code>reference_closure</code></entry>
       <entry>N</entry>
@@ -684,7 +685,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.01</entry>
       <entry>Allocator argument tag</entry>
       <entry>N</entry>
@@ -703,42 +704,42 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.02.2</entry>
       <entry>Allocator concept</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.02.3</entry>
       <entry>Support for legacy allocators</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.02.4</entry>
       <entry>Allocator and Legacy Allocator members</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.03</entry>
       <entry>Allocator-related element concepts</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.04</entry>
       <entry>Allocator propagation traits</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.05</entry>
       <entry>Allocator propagation map</entry>
       <entry>N</entry>
@@ -757,35 +758,35 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.07.1</entry>
       <entry><code>scoped_allocator_adaptor_base</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.07.2</entry>
       <entry><code>scoped_allocator_adaptor constructors</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.07.3</entry>
       <entry><code>scoped_allocator_adaptor2</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.07.3</entry>
       <entry>scoped_allocator_adaptor members</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.07.4</entry>
       <entry><code>scoped_allocator_adaptor globals</code></entry>
       <entry>N</entry>
@@ -804,7 +805,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.10</entry>
       <entry><code>construct_element</code></entry>
       <entry>N</entry>
@@ -817,7 +818,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.11.1</entry>
       <entry><code>addressof</code></entry>
       <entry>N</entry>
@@ -867,7 +868,7 @@ particular release.
 	<para>
 	  Uses code from
 	  <ulink url="http://www.boost.org/libs/smart_ptr/shared_ptr.htm">boost::shared_ptr</ulink>.
-	</para>  
+	</para>
       </entry>
     </row>
     <row>
@@ -889,21 +890,21 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.8.13.6</entry>
       <entry><code>shared_ptr</code> atomic access</entry>
       <entry>Partial</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.8.13.7</entry>
       <entry>Pointer safety</entry>
       <entry>Partial</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.8.14</entry>
       <entry>Align</entry>
       <entry>N</entry>
@@ -942,8 +943,8 @@ particular release.
     <row>
       <entry>20.9.2.2</entry>
       <entry><code>duration_values</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>20.9.2.3</entry>
@@ -954,14 +955,14 @@ particular release.
     <row>
       <entry>20.9.3</entry>
       <entry>Class template <code>duration</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>20.9.4</entry>
       <entry>Class template <code>time_point</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>20.9.5</entry>
@@ -1034,26 +1035,26 @@ particular release.
     <row>
       <entry>21.2.3.1</entry>
       <entry>struct <code>char_traits&lt;char&gt;</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>21.2.3.2</entry>
       <entry>struct <code>char_traits&lt;char16_t&gt;</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>21.2.3.3</entry>
       <entry>struct <code>char_traits&lt;char32_t&gt;</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>21.2.3.4</entry>
       <entry>struct <code>char_traits&lt;wchar_t&gt;</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>21.3</entry>
@@ -1142,14 +1143,14 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>22.3.3.2.2</entry>
       <entry>String</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>22.3.3.2.3</entry>
       <entry>Buffer</entry>
       <entry>N</entry>
@@ -1270,7 +1271,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>22.5</entry>
       <entry>Standard code conversion facets</entry>
       <entry>N</entry>
@@ -1291,7 +1292,7 @@ particular release.
       </entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.1</entry>
       <entry>General</entry>
       <entry>Partial</entry>
@@ -1304,7 +1305,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.2.1</entry>
       <entry>General requirements</entry>
       <entry>Partial</entry>
@@ -1325,8 +1326,8 @@ particular release.
     <row>
       <entry>23.3.1</entry>
       <entry>Class template <code>array</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>23.3.2</entry>
@@ -1451,21 +1452,21 @@ particular release.
       </entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>24.1</entry>
       <entry>General</entry>
       <entry>Partial</entry>
       <entry>Missing concepts</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>24.2</entry>
       <entry>Iterator concepts</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>24.3</entry>
       <entry>Header <code>&lt;iterator&gt;</code> synopsis</entry>
       <entry>Partial</entry>
@@ -1564,7 +1565,7 @@ particular release.
       </entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>25.1</entry>
       <entry>General</entry>
       <entry>Partial</entry>
@@ -1629,8 +1630,8 @@ particular release.
     <row>
       <entry>26.4</entry>
       <entry>Complex numbers</entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5</entry>
@@ -1639,14 +1640,14 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>26.5.1</entry>
       <entry>Header <code>&lt;random&gt;</code> synopsis</entry>
       <entry>Partial</entry>
-      <entry>Missing concepts, based on TR1</entry>
+      <entry>Missing concepts</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>26.5.2</entry>
       <entry>Concepts and related requirements</entry>
       <entry>N</entry>
@@ -1659,25 +1660,22 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.3.1</entry>
       <entry>Class template <code>linear_congruential_engine</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.3.2</entry>
       <entry>Class template <code>mersenne_twister_engine</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.3.3</entry>
       <entry>Class template <code>subtract_with_carry_engine</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.4</entry>
@@ -1686,39 +1684,34 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.4.1</entry>
       <entry>Class template <code>discard_block_engine</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.4.2</entry>
       <entry>Class template <code>independent_bits_engine</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.4.3</entry>
       <entry>Class template <code>shuffle_order_engine</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.5</entry>
       <entry>Engines and engine adaptors with predefined parameters</entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.6</entry>
       <entry>Class <code>random_device</code></entry>
-      <entry>N</entry>
-      <entry></entry>
+      <entry>Y</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.7</entry>
@@ -1727,17 +1720,15 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.7.1</entry>
       <entry>Class <code>seed_seq</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.7.2</entry>
       <entry>Function template generate_canonical</entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -1753,17 +1744,15 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.1.1</entry>
       <entry>Class template <code>uniform_int_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.1.2</entry>
       <entry>Class template <code>uniform_real_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -1773,31 +1762,27 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.2.1</entry>
       <entry>Class <code>bernoulli_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.2.2</entry>
       <entry>Class template <code>binomial_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.2.3</entry>
       <entry>Class template <code>geometric_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.2.4</entry>
       <entry>Class template <code>negative_binomial_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -1807,38 +1792,33 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.3.1</entry>
       <entry>Class template <code>poisson_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.3.2</entry>
       <entry>Class template <code>exponential_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.3.3</entry>
       <entry>Class template <code>gamma_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.3.4</entry>
       <entry>Class template <code>weibull_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.3.5</entry>
       <entry>Class template <code>extreme_value_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -1848,45 +1828,39 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.4.1</entry>
       <entry>Class template <code>normal_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.4.2</entry>
       <entry>Class template <code>lognormal_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.4.3</entry>
       <entry>Class template <code>chi_squared_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.4.4</entry>
       <entry>Class template <code>cauchy_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.4.5</entry>
       <entry>Class template <code>fisher_f_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.4.6</entry>
       <entry>Class template <code>student_t_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -1896,24 +1870,21 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.5.1</entry>
       <entry>Class template <code>discrete_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.5.2</entry>
       <entry>Class template <code>piecewise_constant_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
       <entry>26.5.8.5.3</entry>
       <entry>Class template <code>piecewise_linear_distribution</code></entry>
-      <entry>N</entry>
+      <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
@@ -2051,7 +2022,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>27.2.3</entry>
       <entry>Thread safety</entry>
       <entry>Partial</entry>
@@ -2120,35 +2091,35 @@ particular release.
       </entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.01</entry>
       <entry>General</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.02</entry>
       <entry>Definitions</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.03</entry>
       <entry>Requirements</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.04</entry>
       <entry>Regular expressions summary</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.05</entry>
       <entry>Header <code>&lt;regex&gt;</code> synopsis</entry>
       <entry>N</entry>
@@ -2167,49 +2138,49 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.08</entry>
       <entry>Class template <code>regex_traits</code></entry>
       <entry>Partial</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.09</entry>
       <entry>Class template <code>basic_regex</code></entry>
       <entry>Partial</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.10</entry>
       <entry>Class template <code>sub_match</code></entry>
       <entry>Partial</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.11</entry>
       <entry>Class template <code>match_results</code></entry>
       <entry>Partial</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.12</entry>
       <entry>Regular expression algorithms</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.13</entry>
       <entry>Regular expression Iterators</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.14</entry>
       <entry>Modified ECMAScript regular expression grammar</entry>
       <entry>N</entry>
@@ -2231,12 +2202,12 @@ particular release.
     </row>
     <row>
       <entry>29.2</entry>
-      <entry>Header <code>&lt;cstdatomic&gt;</code> synopsis</entry>
+      <entry>Header <code>&lt;atomic&gt;</code> synopsis</entry>
       <entry>Y</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>29.3</entry>
       <entry>Order and consistency</entry>
       <entry>N</entry>
@@ -2285,7 +2256,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>29.8</entry>
       <entry>Fences</entry>
       <entry>N</entry>
@@ -2318,7 +2289,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.3.1</entry>
       <entry>Class <code>thread</code></entry>
       <entry>Partial</entry>
@@ -2405,8 +2376,8 @@ particular release.
     <row>
       <entry>30.4.5.1</entry>
       <entry><code>once_flag</code></entry>
-      <entry>Y</entry>
-      <entry></entry>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>30.4.5.2</entry>
@@ -2427,7 +2398,7 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>  
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.5.2</entry>
       <entry>Class <code>condition_variable_any</code></entry>
       <entry>Partial</entry>
@@ -2440,56 +2411,56 @@ particular release.
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.1</entry>
       <entry>Overview</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.2</entry>
       <entry>Error handling</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.3</entry>
       <entry>Class <code>future_error</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.4</entry>
       <entry>Class template <code>unique_future</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.5</entry>
       <entry>Class template <code>shared_future</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.6</entry>
       <entry>Class template <code>promise</code></entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.7</entry>
       <entry>Allocator templates</entry>
       <entry>N</entry>
       <entry></entry>
     </row>
     <row>
-      <?dbhtml bgcolor="#C8B0B0" ?> 
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>30.6.8</entry>
       <entry>Class template <code>packaged_task</code></entry>
       <entry>N</entry>

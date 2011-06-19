@@ -1,6 +1,6 @@
 /* Definitions of target machine for GCC for IA-32.
    Copyright (C) 1988, 1992, 1994, 1995, 1996, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -25,11 +25,8 @@ extern void optimization_options (int, int);
 extern void ix86_conditional_register_usage (void);
 
 extern int ix86_can_use_return_insn_p (void);
-extern int ix86_frame_pointer_required (void);
 extern void ix86_setup_frame_addresses (void);
 
-extern void ix86_file_end (void);
-extern int ix86_can_eliminate (int, int);
 extern HOST_WIDE_INT ix86_initial_elimination_offset (int, int);
 extern void ix86_expand_prologue (void);
 extern void ix86_expand_epilogue (int);
@@ -49,6 +46,9 @@ extern bool x86_extended_QIreg_mentioned_p (rtx);
 extern bool x86_extended_reg_mentioned_p (rtx);
 extern enum machine_mode ix86_cc_mode (enum rtx_code, rtx, rtx);
 
+extern int avx_vpermilp_parallel (rtx par, enum machine_mode mode);
+extern int avx_vperm2f128_parallel (rtx par, enum machine_mode mode);
+
 extern int ix86_expand_movmem (rtx, rtx, rtx, rtx, rtx, rtx);
 extern int ix86_expand_setmem (rtx, rtx, rtx, rtx, rtx, rtx);
 extern int ix86_expand_strlen (rtx, rtx, rtx, rtx);
@@ -57,8 +57,6 @@ extern bool legitimate_constant_p (rtx);
 extern bool constant_address_p (rtx);
 extern bool legitimate_pic_operand_p (rtx);
 extern int legitimate_pic_address_disp_p (rtx);
-extern int legitimate_address_p (enum machine_mode, rtx, int);
-extern rtx legitimize_address (rtx, rtx, enum machine_mode);
 
 extern void print_reg (rtx, int, FILE*);
 extern void print_operand (FILE*, rtx, int);
@@ -86,16 +84,21 @@ extern void ix86_fixup_binary_operands_no_copy (enum rtx_code,
 extern void ix86_expand_binary_operator (enum rtx_code,
 					 enum machine_mode, rtx[]);
 extern int ix86_binary_operator_ok (enum rtx_code, enum machine_mode, rtx[]);
+extern bool ix86_lea_for_add_ok (enum rtx_code, rtx, rtx[]);
+extern bool ix86_vec_interleave_v2df_operator_ok (rtx operands[3], bool high);
+extern bool ix86_dep_by_shift_count (const_rtx set_insn, const_rtx use_insn);
+extern bool ix86_agi_dependent (rtx set_insn, rtx use_insn);
 extern void ix86_expand_unary_operator (enum rtx_code, enum machine_mode,
 					rtx[]);
 extern rtx ix86_build_const_vector (enum machine_mode, bool, rtx);
+extern rtx ix86_build_signbit_mask (enum machine_mode, bool, bool);
 extern void ix86_split_convert_uns_si_sse (rtx[]);
 extern void ix86_expand_convert_uns_didf_sse (rtx, rtx);
 extern void ix86_expand_convert_uns_sixf_sse (rtx, rtx);
 extern void ix86_expand_convert_uns_sidf_sse (rtx, rtx);
 extern void ix86_expand_convert_uns_sisf_sse (rtx, rtx);
 extern void ix86_expand_convert_sign_didf_sse (rtx, rtx);
-extern rtx ix86_build_signbit_mask (enum machine_mode, bool, bool);
+extern enum ix86_fpcmp_strategy ix86_fp_comparison_strategy (enum rtx_code);
 extern void ix86_expand_fp_absneg_operator (enum rtx_code, enum machine_mode,
 					    rtx[]);
 extern void ix86_expand_copysign (rtx []);
@@ -103,18 +106,16 @@ extern void ix86_split_copysign_const (rtx []);
 extern void ix86_split_copysign_var (rtx []);
 extern int ix86_unary_operator_ok (enum rtx_code, enum machine_mode, rtx[]);
 extern int ix86_match_ccmode (rtx, enum machine_mode);
-extern rtx ix86_expand_compare (enum rtx_code, rtx *, rtx *);
+extern rtx ix86_expand_compare (enum rtx_code);
 extern int ix86_use_fcomi_compare (enum rtx_code);
 extern void ix86_expand_branch (enum rtx_code, rtx);
-extern int ix86_expand_setcc (enum rtx_code, rtx);
+extern void ix86_expand_setcc (enum rtx_code, rtx);
 extern int ix86_expand_int_movcc (rtx[]);
 extern int ix86_expand_fp_movcc (rtx[]);
 extern bool ix86_expand_fp_vcond (rtx[]);
 extern bool ix86_expand_int_vcond (rtx[]);
 extern void ix86_expand_sse_unpack (rtx[], bool, bool);
 extern void ix86_expand_sse4_unpack (rtx[], bool, bool);
-extern void ix86_expand_sse5_unpack (rtx[], bool, bool);
-extern void ix86_expand_sse5_pack (rtx[]);
 extern int ix86_expand_int_addcc (rtx[]);
 extern void ix86_expand_call (rtx, rtx, rtx, rtx, rtx, int);
 extern void x86_initialize_trampoline (rtx, rtx, rtx);
@@ -136,13 +137,12 @@ extern enum machine_mode ix86_fp_compare_mode (enum rtx_code);
 extern rtx ix86_libcall_value (enum machine_mode);
 extern bool ix86_function_value_regno_p (int);
 extern bool ix86_function_arg_regno_p (int);
-extern int ix86_function_arg_boundary (enum machine_mode, tree);
-extern bool ix86_sol10_return_in_memory (const_tree,const_tree);
+extern int ix86_function_arg_boundary (enum machine_mode, const_tree);
+extern bool ix86_solaris_return_in_memory (const_tree, const_tree);
 extern rtx ix86_force_to_memory (enum machine_mode, rtx);
 extern void ix86_free_from_memory (enum machine_mode);
-extern int ix86_cfun_abi (void);
-extern int ix86_function_abi (const_tree);
-extern int ix86_function_type_abi (const_tree);
+extern enum calling_abi ix86_cfun_abi (void);
+extern enum calling_abi ix86_function_type_abi (const_tree);
 extern void ix86_call_abi_override (const_tree);
 extern tree ix86_fn_abi_va_list (tree);
 extern tree ix86_canonical_va_list_type (tree);
@@ -164,7 +164,6 @@ extern enum reg_class ix86_preferred_output_reload_class (rtx, enum reg_class);
 extern int ix86_memory_move_cost (enum machine_mode, enum reg_class, int);
 extern int ix86_mode_needed (int, rtx);
 extern void emit_i387_cw_initialization (int);
-extern bool ix86_fp_jump_nontrivial_p (enum rtx_code);
 extern void x86_order_regs_for_local_alloc (void);
 extern void x86_function_profiler (FILE *, int);
 extern void x86_emit_floatuns (rtx [2]);
@@ -218,8 +217,7 @@ extern void ix86_expand_vector_set (bool, rtx, rtx, int);
 extern void ix86_expand_vector_extract (bool, rtx, rtx, int);
 extern void ix86_expand_reduc_v4sf (rtx (*)(rtx, rtx, rtx), rtx, rtx);
 
-extern bool ix86_sse5_valid_op_p (rtx [], rtx, int, bool, int, bool);
-extern void ix86_expand_sse5_multiple_memory (rtx [], int, enum machine_mode);
+extern void ix86_expand_vec_extract_even_odd (rtx, rtx, rtx, unsigned);
 
 /* In i386-c.c  */
 extern void ix86_target_macros (void);

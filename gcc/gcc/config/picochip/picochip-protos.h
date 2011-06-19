@@ -26,7 +26,6 @@ extern void picochip_function_prologue (FILE *, HOST_WIDE_INT);
 extern void picochip_function_epilogue (FILE *, HOST_WIDE_INT);
 
 extern enum reg_class picochip_reg_class_from_letter (unsigned);
-extern int picochip_legitimate_address_p (int, struct rtx_def *, unsigned);
 extern int picochip_const_ok_for_letter_p (unsigned HOST_WIDE_INT value, unsigned c);
 
 #ifdef RTX_CODE			/* inside TREE_CODE */
@@ -61,7 +60,7 @@ extern CUMULATIVE_ARGS picochip_arg_advance (CUMULATIVE_ARGS cum, int mode,
 				      tree type, int named);
 
 extern int picochip_regno_nregs (int regno, int mode);
-extern int picochip_class_max_nregs (int class, int mode);
+extern int picochip_class_max_nregs (int klass, int mode);
 
 extern void picochip_order_regs_for_local_alloc (void);
 

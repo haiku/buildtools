@@ -38,6 +38,16 @@
   "TARGET_NEON
    || (TARGET_REALLY_IWMMXT && VALID_IWMMXT_REG_MODE (<MODE>mode))"
 {
+  if (can_create_pseudo_p ())
+    {
+      if (GET_CODE (operands[0]) != REG)
+	operands[1] = force_reg (<MODE>mode, operands[1]);
+      else if (TARGET_NEON && CONSTANT_P (operands[1]))
+	{
+	  operands[1] = neon_make_constant (operands[1]);
+	  gcc_assert (operands[1] != NULL_RTX);
+	}
+    }
 })
 
 ;; Vector arithmetic. Expanders are blank, then unnamed insns implement

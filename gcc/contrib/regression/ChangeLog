@@ -1,22 +1,22 @@
-2010-04-29  Release Manager
+2011-04-28  Release Manager
 
-	* GCC 4.4.4 released.
+	* GCC 4.5.3 released.
 
-2010-01-21  Release Manager
+2010-12-16  Release Manager
 
-	* GCC 4.4.3 released.
+	* GCC 4.5.2 released.
 
-2009-10-15  Release Manager
+2010-07-31  Release Manager
 
-	* GCC 4.4.2 released.
+	* GCC 4.5.1 released.
 
-2009-07-22  Release Manager
+2010-04-14  Release Manager
 
-	* GCC 4.4.1 released.
+	* GCC 4.5.0 released.
 
-2009-04-21  Release Manager
+2009-09-02  Geoff Keating  <geoffk@apple.com>
 
-	* GCC 4.4.0 released.
+	* btest-gcc.sh: Continue after bootstrap comparison failure.
 
 2008-11-27  Geoff Keating  <geoffk@geoffk.org>
 

@@ -30,7 +30,9 @@
 // 17.4.1.2 Headers
 
 // C
+#ifndef _GLIBCXX_NO_ASSERT
 #include <cassert>
+#endif
 #include <cctype>
 #include <cerrno>
 #include <cfloat>
@@ -51,7 +53,6 @@
 #include <ccomplex>
 #include <cfenv>
 #include <cinttypes>
-#include <cstdatomic>
 #include <cstdbool>
 #include <cstdint>
 #include <ctgmath>
@@ -95,9 +96,12 @@
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <forward_list>
+#include <future>
+#include <initializer_list>
 #include <mutex>
 #include <random>
 #include <ratio>

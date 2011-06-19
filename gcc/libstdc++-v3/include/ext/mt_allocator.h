@@ -1,6 +1,6 @@
 // MT-optimized allocator -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -221,7 +221,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       _M_reserve_block(size_t __bytes, const size_t __thread_id);
     
       void
-      _M_reclaim_block(char* __p, size_t __bytes);
+      _M_reclaim_block(char* __p, size_t __bytes) throw ();
     
       size_t 
       _M_get_thread_id() { return 0; }
@@ -332,7 +332,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       _M_reserve_block(size_t __bytes, const size_t __thread_id);
     
       void
-      _M_reclaim_block(char* __p, size_t __bytes);
+      _M_reclaim_block(char* __p, size_t __bytes) throw ();
     
       const _Bin_record&
       _M_get_bin(size_t __which)
@@ -351,8 +351,8 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       }
 
       // XXX GLIBCXX_ABI Deprecated
-      void 
-      _M_destroy_thread_key(void*);
+      _GLIBCXX_CONST void 
+      _M_destroy_thread_key(void*) throw ();
 
       size_t 
       _M_get_thread_id();
@@ -612,9 +612,9 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
   /**
    *  @brief  This is a fixed size (power of 2) allocator which - when
    *  compiled with thread support - will maintain one freelist per
-   *  size per thread plus a "global" one. Steps are taken to limit
+   *  size per thread plus a @a global one. Steps are taken to limit
    *  the per thread freelist sizes (by returning excess back to
-   *  the "global" list).
+   *  the @a global list).
    *  @ingroup allocators
    *
    *  Further details:
@@ -674,7 +674,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
     __mt_alloc<_Tp, _Poolp>::
     allocate(size_type __n, const void*)
     {
-      if (__builtin_expect(__n > this->max_size(), false))
+      if (__n > this->max_size())
 	std::__throw_bad_alloc();
 
       __policy_type::_S_initialize_once();

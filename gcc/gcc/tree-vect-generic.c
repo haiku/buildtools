@@ -1,18 +1,19 @@
 /* Lower vector operations to scalar operations.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
-   
+
 GCC is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
 Free Software Foundation; either version 3, or (at your option) any
 later version.
-   
+
 GCC is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
-   
+
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
@@ -416,12 +417,12 @@ expand_vector_operations_1 (gimple_stmt_iterator *gsi)
   if (TREE_CODE (type) != VECTOR_TYPE)
     return;
 
-  if (code == NOP_EXPR 
+  if (code == NOP_EXPR
       || code == FLOAT_EXPR
       || code == FIX_TRUNC_EXPR
       || code == VIEW_CONVERT_EXPR)
     return;
-  
+
   gcc_assert (code != CONVERT_EXPR);
 
   /* The signedness is determined from input argument.  */
@@ -431,8 +432,8 @@ expand_vector_operations_1 (gimple_stmt_iterator *gsi)
 
   /* Choose between vector shift/rotate by vector and vector shift/rotate by
      scalar */
-  if (code == LSHIFT_EXPR 
-      || code == RSHIFT_EXPR 
+  if (code == LSHIFT_EXPR
+      || code == RSHIFT_EXPR
       || code == LROTATE_EXPR
       || code == RROTATE_EXPR)
     {
@@ -453,7 +454,7 @@ expand_vector_operations_1 (gimple_stmt_iterator *gsi)
   else
     op = optab_for_tree_code (code, type, optab_default);
 
-  /* For widening/narrowing vector operations, the relevant type is of the 
+  /* For widening/narrowing vector operations, the relevant type is of the
      arguments, not the widened result.  VEC_UNPACK_FLOAT_*_EXPR is
      calculated in the same way above.  */
   if (code == WIDEN_SUM_EXPR
@@ -517,8 +518,7 @@ expand_vector_operations_1 (gimple_stmt_iterator *gsi)
      way to do it is change expand_vector_operation and its callees to
      return a tree_code, RHS1 and RHS2 instead of a tree. */
   gimple_assign_set_rhs_from_tree (gsi, new_rhs);
-
-  gimple_set_modified (gsi_stmt (*gsi), true);
+  update_stmt (gsi_stmt (*gsi));
 }
 
 /* Use this to lower vector operations introduced by the vectorizer,
@@ -535,19 +535,27 @@ expand_vector_operations (void)
 {
   gimple_stmt_iterator gsi;
   basic_block bb;
+  bool cfg_changed = false;
 
   FOR_EACH_BB (bb)
     {
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  expand_vector_operations_1 (&gsi);
-	  update_stmt_if_modified (gsi_stmt (gsi));
+	  /* ???  If we do not cleanup EH then we will ICE in
+	     verification.  But in reality we have created wrong-code
+	     as we did not properly transition EH info and edges to
+	     the piecewise computations.  */
+	  if (maybe_clean_eh_stmt (gsi_stmt (gsi))
+	      && gimple_purge_dead_eh_edges (bb))
+	    cfg_changed = true;
 	}
     }
-  return 0;
+
+  return cfg_changed ? TODO_cleanup_cfg : 0;
 }
 
-struct gimple_opt_pass pass_lower_vector = 
+struct gimple_opt_pass pass_lower_vector =
 {
  {
   GIMPLE_PASS,
@@ -557,7 +565,7 @@ struct gimple_opt_pass pass_lower_vector =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  0,					/* tv_id */
+  TV_NONE,				/* tv_id */
   PROP_cfg,				/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
@@ -567,7 +575,7 @@ struct gimple_opt_pass pass_lower_vector =
  }
 };
 
-struct gimple_opt_pass pass_lower_vector_ssa = 
+struct gimple_opt_pass pass_lower_vector_ssa =
 {
  {
   GIMPLE_PASS,
@@ -577,7 +585,7 @@ struct gimple_opt_pass pass_lower_vector_ssa =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  0,					/* tv_id */
+  TV_NONE,				/* tv_id */
   PROP_cfg,				/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */

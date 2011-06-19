@@ -1,5 +1,5 @@
 /* Callgraph handling code.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2010
    Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
@@ -30,11 +30,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "hashtab.h"
 #include "ggc.h"
 #include "timevar.h"
-#include "debug.h" 
+#include "debug.h"
 #include "target.h"
 #include "output.h"
 #include "gimple.h"
 #include "tree-flow.h"
+#include "flags.h"
 
 /*  This file contains basic routines manipulating variable pool.
 
@@ -56,21 +57,21 @@ struct varpool_node *varpool_nodes;
 
 /* Queue of cgraph nodes scheduled to be lowered and output.
    The queue is maintained via mark_needed_node, linked via node->next_needed
-   pointer. 
+   pointer.
 
    LAST_NEEDED_NODE points to the end of queue, so it can be
    maintained in forward order.  GTY is needed to make it friendly to
    PCH.
- 
+
    During compilation we construct the queue of needed variables
    twice: first time it is during cgraph construction, second time it is at the
    end of compilation in VARPOOL_REMOVE_UNREFERENCED_DECLS so we can avoid
    optimized out variables being output.
-   
-   Each variable is thus first analyzed and then later possibly output.  
+
+   Each variable is thus first analyzed and then later possibly output.
    FIRST_UNANALYZED_NODE points to first node in queue that was not analyzed
    yet and is moved via VARPOOL_ANALYZE_PENDING_DECLS.  */
-   
+
 struct varpool_node *varpool_nodes_queue;
 static GTY(()) struct varpool_node *varpool_last_needed_node;
 static GTY(()) struct varpool_node *varpool_first_unanalyzed_node;
@@ -79,7 +80,7 @@ static GTY(()) struct varpool_node *varpool_first_unanalyzed_node;
 static GTY(()) struct varpool_node *varpool_assembled_nodes_queue;
 
 /* Return name of the node used in debug output.  */
-static const char *
+const char *
 varpool_node_name (struct varpool_node *node)
 {
   return lang_hooks.decl_printable_name (node->decl, 2);
@@ -164,6 +165,14 @@ dump_varpool (FILE *f)
     dump_varpool_node (f, node);
 }
 
+/* Dump the variable pool to stderr.  */
+
+void
+debug_varpool (void)
+{
+  dump_varpool (stderr);
+}
+
 /* Given an assembler name, lookup node.  */
 struct varpool_node *
 varpool_node_for_asm (tree asmname)
@@ -198,6 +207,8 @@ varpool_enqueue_needed_node (struct varpool_node *node)
 void
 varpool_mark_needed_node (struct varpool_node *node)
 {
+  if (node->alias && node->extra_name)
+    node = node->extra_name;
   if (!node->needed && node->finalized
       && !TREE_ASM_WRITTEN (node->decl))
     varpool_enqueue_needed_node (node);
@@ -220,7 +231,8 @@ bool
 decide_is_variable_needed (struct varpool_node *node, tree decl)
 {
   /* If the user told us it is used, then it must be so.  */
-  if (node->externally_visible || node->force_output)
+  if ((node->externally_visible && !DECL_COMDAT (decl))
+      || node->force_output)
     return true;
 
   /* ??? If the assembler name is set by hand, it is possible to assemble
@@ -230,14 +242,13 @@ decide_is_variable_needed (struct varpool_node *node, tree decl)
       && TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (decl)))
     return true;
 
-  /* If we decided it was needed before, but at the time we didn't have
-     the definition available, then it's still needed.  */
-  if (node->needed)
-    return true;
-
   /* Externally visible variables must be output.  The exception is
      COMDAT variables that must be output only when they are needed.  */
-  if (TREE_PUBLIC (decl) && !flag_whole_program && !DECL_COMDAT (decl)
+  if (TREE_PUBLIC (decl)
+      && !flag_whole_program
+      && !flag_lto
+      && !flag_whopr
+      && !DECL_COMDAT (decl)
       && !DECL_EXTERNAL (decl))
     return true;
 
@@ -270,6 +281,17 @@ void
 varpool_finalize_decl (tree decl)
 {
   struct varpool_node *node = varpool_node (decl);
+
+  /* FIXME: We don't really stream varpool datastructure and instead rebuild it
+     by varpool_finalize_decl.  This is not quite correct since this way we can't
+     attach any info to varpool.  Eventually we will want to stream varpool nodes
+     and the flags.
+
+     For the moment just prevent analysis of varpool nodes to happen again, so
+     we will re-try to compute "address_taken" flag of varpool that breaks
+     in presence of clones.  */
+  if (in_lto_p)
+    node->analyzed = true;
 
   /* The first declaration of a variable that comes through this function
      decides whether it is global (in C, has external linkage)
@@ -325,17 +347,24 @@ varpool_analyze_pending_decls (void)
   while (varpool_first_unanalyzed_node)
     {
       tree decl = varpool_first_unanalyzed_node->decl;
+      bool analyzed = varpool_first_unanalyzed_node->analyzed;
 
       varpool_first_unanalyzed_node->analyzed = true;
 
       varpool_first_unanalyzed_node = varpool_first_unanalyzed_node->next_needed;
 
-      /* Compute the alignment early so function body expanders are
-	 already informed about increased alignment.  */
-      align_variable (decl, 0);
-
+      /* When reading back varpool at LTO time, we re-construct the queue in order
+         to have "needed" list right by inserting all needed nodes into varpool.
+	 We however don't want to re-analyze already analyzed nodes.  */
+      if (!analyzed)
+	{
+	  gcc_assert (!in_lto_p);
+          /* Compute the alignment early so function body expanders are
+	     already informed about increased alignment.  */
+          align_variable (decl, 0);
+	}
       if (DECL_INITIAL (decl))
-	record_references_in_initializer (decl);
+	record_references_in_initializer (decl, analyzed);
       changed = true;
     }
   timevar_pop (TV_CGRAPH);
@@ -356,9 +385,22 @@ varpool_assemble_decl (struct varpool_node *node)
       assemble_variable (decl, 0, 1, 0);
       if (TREE_ASM_WRITTEN (decl))
 	{
+	  struct varpool_node *alias;
+
 	  node->next_needed = varpool_assembled_nodes_queue;
 	  varpool_assembled_nodes_queue = node;
 	  node->finalized = 1;
+
+	  /* Also emit any extra name aliases.  */
+	  for (alias = node->extra_name; alias; alias = alias->next)
+	    {
+	      /* Update linkage fields in case they've changed.  */
+	      DECL_WEAK (alias->decl) = DECL_WEAK (decl);
+	      TREE_PUBLIC (alias->decl) = TREE_PUBLIC (decl);
+	      DECL_VISIBILITY (alias->decl) = DECL_VISIBILITY (decl);
+	      assemble_alias (alias->decl, DECL_ASSEMBLER_NAME (decl));
+	    }
+
 	  return true;
 	}
     }
@@ -478,6 +520,42 @@ add_new_static_var (tree type)
   varpool_finalize_decl (new_decl);
 
   return new_node->decl;
+}
+
+/* Attempt to mark ALIAS as an alias to DECL.  Return TRUE if successful.
+   Extra name aliases are output whenever DECL is output.  */
+
+bool
+varpool_extra_name_alias (tree alias, tree decl)
+{
+  struct varpool_node key, *alias_node, *decl_node, **slot;
+
+#ifndef ASM_OUTPUT_DEF
+  /* If aliases aren't supported by the assembler, fail.  */
+  return false;
+#endif
+
+  gcc_assert (TREE_CODE (decl) == VAR_DECL);
+  gcc_assert (TREE_CODE (alias) == VAR_DECL);
+  /* Make sure the hash table has been created.  */
+  decl_node = varpool_node (decl);
+
+  key.decl = alias;
+
+  slot = (struct varpool_node **) htab_find_slot (varpool_hash, &key, INSERT);
+
+  /* If the varpool_node has been already created, fail.  */
+  if (*slot)
+    return false;
+
+  alias_node = GGC_CNEW (struct varpool_node);
+  alias_node->decl = alias;
+  alias_node->alias = 1;
+  alias_node->extra_name = decl_node;
+  alias_node->next = decl_node->extra_name;
+  decl_node->extra_name = alias_node;
+  *slot = alias_node;
+  return true;
 }
 
 #include "gt-varpool.h"

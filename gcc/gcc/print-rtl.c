@@ -1,6 +1,6 @@
 /* Print RTL for GCC.
    Copyright (C) 1987, 1988, 1992, 1997, 1998, 1999, 2000, 2002, 2003,
-   2004, 2005, 2007, 2008
+   2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -40,6 +40,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "flags.h"
 #include "hard-reg-set.h"
 #include "basic-block.h"
+#include "diagnostic.h"
+#include "cselib.h"
+#include "tree-pass.h"
 #endif
 
 static FILE *outfile;
@@ -60,6 +63,11 @@ const char *print_rtx_head = "";
    This must be defined here so that programs like gencodes can be linked.  */
 int flag_dump_unnumbered = 0;
 
+/* Nonzero means suppress output of instruction numbers for previous
+   and next insns in debugging dumps.
+   This must be defined here so that programs like gencodes can be linked.  */
+int flag_dump_unnumbered_links = 0;
+
 /* Nonzero means use simplified format without flags, modes, etc.  */
 int flag_simple = 0;
 
@@ -67,60 +75,11 @@ int flag_simple = 0;
 int dump_for_graph;
 
 #ifndef GENERATOR_FILE
-static void
-print_decl_name (FILE *outfile, const_tree node)
-{
-  if (DECL_NAME (node))
-    fputs (IDENTIFIER_POINTER (DECL_NAME (node)), outfile);
-  else
-    {
-      if (TREE_CODE (node) == LABEL_DECL && LABEL_DECL_UID (node) != -1)
-	fprintf (outfile, "L.%d", (int) LABEL_DECL_UID (node));
-      else
-        {
-          char c = TREE_CODE (node) == CONST_DECL ? 'C' : 'D';
-	  fprintf (outfile, "%c.%u", c, DECL_UID (node));
-        }
-    }
-}
-
 void
 print_mem_expr (FILE *outfile, const_tree expr)
 {
-  if (TREE_CODE (expr) == COMPONENT_REF)
-    {
-      if (TREE_OPERAND (expr, 0))
-	print_mem_expr (outfile, TREE_OPERAND (expr, 0));
-      else
-	fputs (" <variable>", outfile);
-      fputc ('.', outfile);
-      print_decl_name (outfile, TREE_OPERAND (expr, 1));
-    }
-  else if (TREE_CODE (expr) == INDIRECT_REF)
-    {
-      fputs (" (*", outfile);
-      print_mem_expr (outfile, TREE_OPERAND (expr, 0));
-      fputs (")", outfile);
-    }
-  else if (TREE_CODE (expr) == ALIGN_INDIRECT_REF)
-    {
-      fputs (" (A*", outfile);
-      print_mem_expr (outfile, TREE_OPERAND (expr, 0));
-      fputs (")", outfile);
-    }
-  else if (TREE_CODE (expr) == MISALIGNED_INDIRECT_REF)
-    {
-      fputs (" (M*", outfile);
-      print_mem_expr (outfile, TREE_OPERAND (expr, 0));
-      fputs (")", outfile);
-    }
-  else if (TREE_CODE (expr) == RESULT_DECL)
-    fputs (" <result>", outfile);
-  else
-    {
-      fputc (' ', outfile);
-      print_decl_name (outfile, expr);
-    }
+  fputc (' ', outfile);
+  print_generic_expr (outfile, CONST_CAST_TREE (expr), dump_flags);
 }
 #endif
 
@@ -151,7 +110,8 @@ print_rtx (const_rtx in_rtx)
     }
   else if (GET_CODE (in_rtx) > NUM_RTX_CODE)
     {
-       fprintf (outfile, "(??? bad code %d\n)", GET_CODE (in_rtx));
+       fprintf (outfile, "(??? bad code %d\n%s%*s)", GET_CODE (in_rtx),
+		print_rtx_head, indent * 2, "");
        sawclose = 1;
        return;
     }
@@ -170,7 +130,7 @@ print_rtx (const_rtx in_rtx)
   else
     {
       /* Print name of expression code.  */
-      if (flag_simple && GET_CODE (in_rtx) == CONST_INT)
+      if (flag_simple && CONST_INT_P (in_rtx))
 	fputc ('(', outfile);
       else
 	fprintf (outfile, "(%s", GET_RTX_NAME (GET_CODE (in_rtx)));
@@ -199,14 +159,32 @@ print_rtx (const_rtx in_rtx)
 	    fputs ("/i", outfile);
 
 	  /* Print REG_NOTE names for EXPR_LIST and INSN_LIST.  */
-	  if (GET_CODE (in_rtx) == EXPR_LIST
-	      || GET_CODE (in_rtx) == INSN_LIST)
+	  if ((GET_CODE (in_rtx) == EXPR_LIST
+	       || GET_CODE (in_rtx) == INSN_LIST)
+	      && (int)GET_MODE (in_rtx) < REG_NOTE_MAX)
 	    fprintf (outfile, ":%s",
 		     GET_REG_NOTE_NAME (GET_MODE (in_rtx)));
 
 	  /* For other rtl, print the mode if it's not VOID.  */
 	  else if (GET_MODE (in_rtx) != VOIDmode)
 	    fprintf (outfile, ":%s", GET_MODE_NAME (GET_MODE (in_rtx)));
+
+#ifndef GENERATOR_FILE
+	  if (GET_CODE (in_rtx) == VAR_LOCATION)
+	    {
+	      if (TREE_CODE (PAT_VAR_LOCATION_DECL (in_rtx)) == STRING_CST)
+		fputs (" <debug string placeholder>", outfile);
+	      else
+		print_mem_expr (outfile, PAT_VAR_LOCATION_DECL (in_rtx));
+	      fputc (' ', outfile);
+	      print_rtx (PAT_VAR_LOCATION_LOC (in_rtx));
+	      if (PAT_VAR_LOCATION_STATUS (in_rtx)
+		  == VAR_INIT_STATUS_UNINITIALIZED)
+		fprintf (outfile, " [uninit]");
+	      sawclose = 1;
+	      i = GET_RTX_LENGTH (VAR_LOCATION);
+	    }
+#endif
 	}
     }
 
@@ -264,7 +242,7 @@ print_rtx (const_rtx in_rtx)
 	  {
 	    tree decl = SYMBOL_REF_DECL (in_rtx);
 	    if (decl)
-	      print_node_brief (outfile, "", decl, 0);
+	      print_node_brief (outfile, "", decl, dump_flags);
 	  }
 #endif
 	else if (i == 4 && NOTE_P (in_rtx))
@@ -317,17 +295,11 @@ print_rtx (const_rtx in_rtx)
 #endif
 		  break;
 		}
-		
+
 	      case NOTE_INSN_VAR_LOCATION:
 #ifndef GENERATOR_FILE
-		fprintf (outfile, " (");
-		print_mem_expr (outfile, NOTE_VAR_LOCATION_DECL (in_rtx));
-		fprintf (outfile, " ");
-		print_rtx (NOTE_VAR_LOCATION_LOC (in_rtx));
-		if (NOTE_VAR_LOCATION_STATUS (in_rtx) == 
-		                                 VAR_INIT_STATUS_UNINITIALIZED)
-		  fprintf (outfile, " [uninit]");
-		fprintf (outfile, ")");
+		fputc (' ', outfile);
+		print_rtx (NOTE_VAR_LOCATION (in_rtx));
 #endif
 		break;
 
@@ -335,9 +307,27 @@ print_rtx (const_rtx in_rtx)
 		break;
 	      }
 	  }
-	else if (i == 9 && JUMP_P (in_rtx) && XEXP (in_rtx, i) != NULL)
+	else if (i == 8 && JUMP_P (in_rtx) && JUMP_LABEL (in_rtx) != NULL)
 	  /* Output the JUMP_LABEL reference.  */
-	  fprintf (outfile, "\n -> %d", INSN_UID (XEXP (in_rtx, i)));
+	  fprintf (outfile, "\n%s%*s -> %d", print_rtx_head, indent * 2, "",
+		   INSN_UID (JUMP_LABEL (in_rtx)));
+	else if (i == 0 && GET_CODE (in_rtx) == VALUE)
+	  {
+#ifndef GENERATOR_FILE
+	    cselib_val *val = CSELIB_VAL_PTR (in_rtx);
+
+	    fprintf (outfile, " %u:%u", val->uid, val->hash);
+	    dump_addr (outfile, " @", in_rtx);
+	    dump_addr (outfile, "/", (void*)val);
+#endif
+	  }
+	else if (i == 0 && GET_CODE (in_rtx) == DEBUG_EXPR)
+	  {
+#ifndef GENERATOR_FILE
+	    fprintf (outfile, " D#%i",
+		     DEBUG_TEMP_UID (DEBUG_EXPR_TREE_DECL (in_rtx)));
+#endif
+	  }
 	break;
 
       case 'e':
@@ -396,6 +386,22 @@ print_rtx (const_rtx in_rtx)
 		when there is no location information available.  */
 	    if (INSN_LOCATOR (in_rtx) && insn_file (in_rtx))
 	      fprintf(outfile, " %s:%i", insn_file (in_rtx), insn_line (in_rtx));
+#endif
+	  }
+	else if (i == 6 && GET_CODE (in_rtx) == ASM_OPERANDS)
+	  {
+#ifndef GENERATOR_FILE
+	    fprintf (outfile, " %s:%i",
+		     locator_file (ASM_OPERANDS_SOURCE_LOCATION (in_rtx)),
+		     locator_line (ASM_OPERANDS_SOURCE_LOCATION (in_rtx)));
+#endif
+	  }
+	else if (i == 1 && GET_CODE (in_rtx) == ASM_INPUT)
+	  {
+#ifndef GENERATOR_FILE
+	    fprintf (outfile, " %s:%i",
+		     locator_file (ASM_INPUT_SOURCE_LOCATION (in_rtx)),
+		     locator_line (ASM_INPUT_SOURCE_LOCATION (in_rtx)));
 #endif
 	  }
 	else if (i == 6 && NOTE_P (in_rtx))
@@ -493,7 +499,10 @@ print_rtx (const_rtx in_rtx)
 		  goto do_e;
 	      }
 
-	    if (flag_dump_unnumbered)
+	    if (flag_dump_unnumbered
+		|| (flag_dump_unnumbered_links && (i == 1 || i == 2)
+		    && (INSN_P (in_rtx) || NOTE_P (in_rtx)
+			|| LABEL_P (in_rtx) || BARRIER_P (in_rtx))))
 	      fputs (" #", outfile);
 	    else
 	      fprintf (outfile, " %d", INSN_UID (sub));
@@ -539,8 +548,11 @@ print_rtx (const_rtx in_rtx)
     {
 #ifndef GENERATOR_FILE
     case MEM:
-      fprintf (outfile, " [" HOST_WIDE_INT_PRINT_DEC,
-	       (HOST_WIDE_INT) MEM_ALIAS_SET (in_rtx));
+      if (__builtin_expect (final_insns_dump_p, false))
+	fprintf (outfile, " [");
+      else
+	fprintf (outfile, " [" HOST_WIDE_INT_PRINT_DEC,
+		 (HOST_WIDE_INT) MEM_ALIAS_SET (in_rtx));
 
       if (MEM_EXPR (in_rtx))
 	print_mem_expr (outfile, MEM_EXPR (in_rtx));
@@ -555,6 +567,9 @@ print_rtx (const_rtx in_rtx)
 
       if (MEM_ALIGN (in_rtx) != 1)
 	fprintf (outfile, " A%u", MEM_ALIGN (in_rtx));
+
+      if (!ADDR_SPACE_GENERIC_P (MEM_ADDR_SPACE (in_rtx)))
+	fprintf (outfile, " AS%u", MEM_ADDR_SPACE (in_rtx));
 
       fputc (']', outfile);
       break;

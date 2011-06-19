@@ -40,18 +40,17 @@ extern void lhd_do_nothing (void);
 extern void lhd_do_nothing_t (tree);
 extern void lhd_do_nothing_i (int);
 extern void lhd_do_nothing_f (struct function *);
+extern tree lhd_pass_through_t (tree);
 extern bool lhd_post_options (const char **);
 extern alias_set_type lhd_get_alias_set (tree);
 extern tree lhd_return_null_tree_v (void);
 extern tree lhd_return_null_tree (tree);
 extern tree lhd_return_null_const_tree (const_tree);
 extern tree lhd_do_nothing_iii_return_null_tree (int, int, int);
-extern tree lhd_staticp (tree);
 extern void lhd_print_tree_nothing (FILE *, tree, int);
 extern const char *lhd_decl_printable_name (tree, int);
 extern const char *lhd_dwarf_name (tree, int);
 extern int lhd_types_compatible_p (tree, tree);
-extern rtx lhd_expand_expr (tree, rtx, enum machine_mode, int, rtx *);
 extern void lhd_print_error_function (struct diagnostic_context *,
 				      const char *, struct diagnostic_info *);
 extern void lhd_set_decl_assembler_name (tree);
@@ -60,12 +59,10 @@ extern void lhd_incomplete_type_error (const_tree, const_tree);
 extern tree lhd_type_promotes_to (tree);
 extern void lhd_register_builtin_type (tree, const char *);
 extern bool lhd_decl_ok_for_sibcall (const_tree);
-extern const char *lhd_comdat_group (tree);
-extern tree lhd_expr_size (const_tree);
 extern size_t lhd_tree_size (enum tree_code);
 extern HOST_WIDE_INT lhd_to_target_charset (HOST_WIDE_INT);
 extern tree lhd_expr_to_decl (tree, bool *, bool *);
-extern tree lhd_builtin_function (tree decl);
+extern tree lhd_builtin_function (tree);
 
 /* Declarations of default tree inlining hooks.  */
 extern void lhd_initialize_diagnostics (struct diagnostic_context *);
@@ -92,9 +89,7 @@ extern void lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *,
 #define LANG_HOOKS_POST_OPTIONS		lhd_post_options
 #define LANG_HOOKS_MISSING_NORETURN_OK_P hook_bool_tree_true
 #define LANG_HOOKS_GET_ALIAS_SET	lhd_get_alias_set
-#define LANG_HOOKS_EXPAND_EXPR		lhd_expand_expr
 #define LANG_HOOKS_FINISH_INCOMPLETE_DECL lhd_do_nothing_t
-#define LANG_HOOKS_STATICP		lhd_staticp
 #define LANG_HOOKS_DUP_LANG_SPECIFIC_DECL lhd_do_nothing_t
 #define LANG_HOOKS_SET_DECL_ASSEMBLER_NAME lhd_set_decl_assembler_name
 #define LANG_HOOKS_PRINT_STATISTICS	lhd_do_nothing
@@ -105,7 +100,7 @@ extern void lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *,
 #define LANG_HOOKS_PRINT_ERROR_FUNCTION lhd_print_error_function
 #define LANG_HOOKS_DECL_PRINTABLE_NAME	lhd_decl_printable_name
 #define LANG_HOOKS_DWARF_NAME		lhd_dwarf_name
-#define LANG_HOOKS_EXPR_SIZE		lhd_expr_size
+#define LANG_HOOKS_FREE_LANG_DATA	lhd_do_nothing_t
 #define LANG_HOOKS_TREE_SIZE		lhd_tree_size
 #define LANG_HOOKS_TYPES_COMPATIBLE_P	lhd_types_compatible_p
 #define LANG_HOOKS_BUILTIN_FUNCTION	lhd_builtin_function
@@ -113,6 +108,9 @@ extern void lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *,
 #define LANG_HOOKS_EXPR_TO_DECL		lhd_expr_to_decl
 #define LANG_HOOKS_TO_TARGET_CHARSET	lhd_to_target_charset
 #define LANG_HOOKS_INIT_TS		lhd_do_nothing
+#define LANG_HOOKS_EH_PERSONALITY	lhd_gcc_personality
+#define LANG_HOOKS_EH_RUNTIME_TYPE	lhd_pass_through_t
+#define LANG_HOOKS_EH_USE_CXA_END_CLEANUP	false
 
 /* Attribute hooks.  */
 #define LANG_HOOKS_ATTRIBUTE_TABLE		NULL
@@ -128,11 +126,9 @@ extern void lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *,
 }
 
 #define LANG_HOOKS_CALLGRAPH_ANALYZE_EXPR lhd_callgraph_analyze_expr
-#define LANG_HOOKS_CALLGRAPH_EMIT_ASSOCIATED_THUNKS NULL
 
 #define LANG_HOOKS_CALLGRAPH_INITIALIZER { \
-  LANG_HOOKS_CALLGRAPH_ANALYZE_EXPR, \
-  LANG_HOOKS_CALLGRAPH_EMIT_ASSOCIATED_THUNKS, \
+  LANG_HOOKS_CALLGRAPH_ANALYZE_EXPR \
 }
 
 /* Hooks for tree gimplification.  */
@@ -158,6 +154,14 @@ extern tree lhd_make_node (enum tree_code);
 #define LANG_HOOKS_CLASSIFY_RECORD	NULL
 #define LANG_HOOKS_INCOMPLETE_TYPE_ERROR lhd_incomplete_type_error
 #define LANG_HOOKS_GENERIC_TYPE_P	hook_bool_const_tree_false
+#define LANG_HOOKS_GET_INNERMOST_GENERIC_PARMS hook_tree_const_tree_null
+#define LANG_HOOKS_GET_INNERMOST_GENERIC_ARGS hook_tree_const_tree_null
+#define LANG_HOOKS_FUNCTION_PARAMETER_PACK_P hook_bool_const_tree_false
+#define LANG_HOOKS_GET_ARGUMENT_PACK_ELEMS hook_tree_const_tree_null
+#define LANG_HOOKS_GENERIC_GENERIC_PARAMETER_DECL_P hook_bool_const_tree_false
+#define LANG_HOOKS_FUNCTION_PARM_EXPANDED_FROM_PACK_P \
+					hook_bool_tree_tree_false
+#define LANG_HOOKS_GET_GENERIC_FUNCTION_DECL hook_tree_const_tree_null
 #define LANG_HOOKS_TYPE_PROMOTES_TO lhd_type_promotes_to
 #define LANG_HOOKS_REGISTER_BUILTIN_TYPE lhd_register_builtin_type
 #define LANG_HOOKS_TYPE_MAX_SIZE	lhd_return_null_const_tree
@@ -165,6 +169,7 @@ extern tree lhd_make_node (enum tree_code);
   lhd_omp_firstprivatize_type_sizes
 #define LANG_HOOKS_TYPE_HASH_EQ		NULL
 #define LANG_HOOKS_GET_ARRAY_DESCR_INFO	NULL
+#define LANG_HOOKS_GET_SUBRANGE_BOUNDS	NULL
 #define LANG_HOOKS_RECONSTRUCT_COMPLEX_TYPE reconstruct_complex_type
 #define LANG_HOOKS_HASH_TYPES		true
 
@@ -174,6 +179,7 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_TYPE_FOR_MODE, \
   LANG_HOOKS_TYPE_FOR_SIZE, \
   LANG_HOOKS_GENERIC_TYPE_P, \
+  LANG_HOOKS_GET_ARGUMENT_PACK_ELEMS, \
   LANG_HOOKS_TYPE_PROMOTES_TO, \
   LANG_HOOKS_REGISTER_BUILTIN_TYPE, \
   LANG_HOOKS_INCOMPLETE_TYPE_ERROR, \
@@ -181,6 +187,7 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_OMP_FIRSTPRIVATIZE_TYPE_SIZES, \
   LANG_HOOKS_TYPE_HASH_EQ, \
   LANG_HOOKS_GET_ARRAY_DESCR_INFO, \
+  LANG_HOOKS_GET_SUBRANGE_BOUNDS, \
   LANG_HOOKS_RECONSTRUCT_COMPLEX_TYPE, \
   LANG_HOOKS_HASH_TYPES \
 }
@@ -189,12 +196,13 @@ extern tree lhd_make_node (enum tree_code);
 #define LANG_HOOKS_GLOBAL_BINDINGS_P global_bindings_p
 #define LANG_HOOKS_PUSHDECL	pushdecl
 #define LANG_HOOKS_GETDECLS	getdecls
+#define LANG_HOOKS_FUNCTION_DECL_EXPLICIT_P hook_bool_tree_false
 #define LANG_HOOKS_WARN_UNUSED_GLOBAL_DECL lhd_warn_unused_global_decl
 #define LANG_HOOKS_WRITE_GLOBALS write_global_declarations
 #define LANG_HOOKS_DECL_OK_FOR_SIBCALL	lhd_decl_ok_for_sibcall
-#define LANG_HOOKS_COMDAT_GROUP lhd_comdat_group
 #define LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE hook_bool_const_tree_false
 #define LANG_HOOKS_OMP_PREDETERMINED_SHARING lhd_omp_predetermined_sharing
+#define LANG_HOOKS_OMP_REPORT_DECL lhd_pass_through_t
 #define LANG_HOOKS_OMP_DISREGARD_VALUE_EXPR hook_bool_tree_bool_false
 #define LANG_HOOKS_OMP_PRIVATE_DEBUG_CLAUSE hook_bool_tree_bool_false
 #define LANG_HOOKS_OMP_PRIVATE_OUTER_REF hook_bool_tree_false
@@ -208,12 +216,16 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_GLOBAL_BINDINGS_P, \
   LANG_HOOKS_PUSHDECL, \
   LANG_HOOKS_GETDECLS, \
+  LANG_HOOKS_FUNCTION_DECL_EXPLICIT_P, \
+  LANG_HOOKS_GENERIC_GENERIC_PARAMETER_DECL_P, \
+  LANG_HOOKS_FUNCTION_PARM_EXPANDED_FROM_PACK_P, \
+  LANG_HOOKS_GET_GENERIC_FUNCTION_DECL, \
   LANG_HOOKS_WARN_UNUSED_GLOBAL_DECL, \
   LANG_HOOKS_WRITE_GLOBALS, \
   LANG_HOOKS_DECL_OK_FOR_SIBCALL, \
-  LANG_HOOKS_COMDAT_GROUP, \
   LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE, \
   LANG_HOOKS_OMP_PREDETERMINED_SHARING, \
+  LANG_HOOKS_OMP_REPORT_DECL, \
   LANG_HOOKS_OMP_DISREGARD_VALUE_EXPR, \
   LANG_HOOKS_OMP_PRIVATE_DEBUG_CLAUSE, \
   LANG_HOOKS_OMP_PRIVATE_OUTER_REF, \
@@ -224,10 +236,26 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_OMP_FINISH_CLAUSE \
 }
 
+/* LTO hooks.  */
+extern void lhd_begin_section (const char *);
+extern void lhd_append_data (const void *, size_t, void *);
+extern void lhd_end_section (void);
+
+#define LANG_HOOKS_BEGIN_SECTION lhd_begin_section
+#define LANG_HOOKS_APPEND_DATA lhd_append_data
+#define LANG_HOOKS_END_SECTION lhd_end_section
+
+#define LANG_HOOKS_LTO { \
+  LANG_HOOKS_BEGIN_SECTION, \
+  LANG_HOOKS_APPEND_DATA, \
+  LANG_HOOKS_END_SECTION \
+}
+
 /* The whole thing.  The structure is defined in langhooks.h.  */
 #define LANG_HOOKS_INITIALIZER { \
   LANG_HOOKS_NAME, \
   LANG_HOOKS_IDENTIFIER_SIZE, \
+  LANG_HOOKS_FREE_LANG_DATA, \
   LANG_HOOKS_TREE_SIZE, \
   LANG_HOOKS_INIT_OPTIONS, \
   LANG_HOOKS_INITIALIZE_DIAGNOSTICS, \
@@ -239,10 +267,7 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_PARSE_FILE, \
   LANG_HOOKS_MISSING_NORETURN_OK_P, \
   LANG_HOOKS_GET_ALIAS_SET, \
-  LANG_HOOKS_EXPAND_EXPR, \
   LANG_HOOKS_FINISH_INCOMPLETE_DECL, \
-  LANG_HOOKS_MARK_ADDRESSABLE, \
-  LANG_HOOKS_STATICP, \
   LANG_HOOKS_DUP_LANG_SPECIFIC_DECL, \
   LANG_HOOKS_SET_DECL_ASSEMBLER_NAME, \
   LANG_HOOKS_PRINT_STATISTICS, \
@@ -254,7 +279,6 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_DWARF_NAME, \
   LANG_HOOKS_TYPES_COMPATIBLE_P, \
   LANG_HOOKS_PRINT_ERROR_FUNCTION, \
-  LANG_HOOKS_EXPR_SIZE, \
   LANG_HOOKS_TO_TARGET_CHARSET, \
   LANG_HOOKS_ATTRIBUTE_TABLE, \
   LANG_HOOKS_COMMON_ATTRIBUTE_TABLE, \
@@ -264,12 +288,19 @@ extern tree lhd_make_node (enum tree_code);
   LANG_HOOKS_TREE_DUMP_INITIALIZER, \
   LANG_HOOKS_DECLS, \
   LANG_HOOKS_FOR_TYPES_INITIALIZER, \
+  LANG_HOOKS_LTO, \
+  LANG_HOOKS_GET_INNERMOST_GENERIC_PARMS, \
+  LANG_HOOKS_GET_INNERMOST_GENERIC_ARGS, \
+  LANG_HOOKS_FUNCTION_PARAMETER_PACK_P, \
   LANG_HOOKS_GIMPLIFY_EXPR, \
   LANG_HOOKS_FOLD_OBJ_TYPE_REF, \
   LANG_HOOKS_BUILTIN_FUNCTION, \
   LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE, \
   LANG_HOOKS_INIT_TS,          \
   LANG_HOOKS_EXPR_TO_DECL, \
+  LANG_HOOKS_EH_PERSONALITY, \
+  LANG_HOOKS_EH_RUNTIME_TYPE, \
+  LANG_HOOKS_EH_USE_CXA_END_CLEANUP, \
 }
 
 #endif /* GCC_LANG_HOOKS_DEF_H */

@@ -1,7 +1,7 @@
 /* Specialized bits of code needed to support construction and
    destruction of file-scope objects in C++ code.
-   Copyright (C) 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2009 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001
+   2002, 2003, 2004, 2005, 2006, 2007, 2009 Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@monkeys.com).
 
 This file is part of GCC.
@@ -53,11 +53,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    identified the set of defines that need to go into auto-target.h,
    this will have to do.  */
 #include "auto-host.h"
-#undef gid_t
 #undef pid_t
 #undef rlim_t
 #undef ssize_t
-#undef uid_t
 #undef vfork
 #include "tconfig.h"
 #include "tsystem.h"
@@ -79,6 +77,15 @@ call_ ## FUNC (void)					\
   FORCE_CODE_SECTION_ALIGN				\
   asm (TEXT_SECTION_ASM_OP);				\
 }
+#endif
+
+#if defined(OBJECT_FORMAT_ELF) \
+    && !defined(OBJECT_FORMAT_FLAT) \
+    && defined(HAVE_LD_EH_FRAME_HDR) \
+    && !defined(inhibit_libc) && !defined(CRTSTUFFT_O) \
+    && defined(__FreeBSD__) && __FreeBSD__ >= 7
+#include <link.h>
+# define USE_PT_GNU_EH_FRAME
 #endif
 
 #if defined(OBJECT_FORMAT_ELF) \
@@ -130,7 +137,7 @@ call_ ## FUNC (void)					\
    declaration for functions that we want to have weak references.
 
    Neither way is particularly good.  */
-   
+
 /* References to __register_frame_info and __deregister_frame_info should
    be weak in this file if at all possible.  */
 extern void __register_frame_info (const void *, struct object *)
@@ -251,7 +258,7 @@ void *__dso_handle = 0;
 extern void __cxa_finalize (void *) TARGET_ATTRIBUTE_WEAK;
 
 /* Run all the global destructors on exit from the program.  */
- 
+
 /* Some systems place the number of pointers in the first word of the
    table.  On SVR4 however, that word is -1.  In all cases, the table is
    null-terminated.  On SVR4, we start from the beginning of the list and
@@ -331,11 +338,18 @@ __do_global_dtors_aux (void)
 /* Stick a call to __do_global_dtors_aux into the .fini section.  */
 #ifdef FINI_SECTION_ASM_OP
 CRT_CALL_STATIC_FUNCTION (FINI_SECTION_ASM_OP, __do_global_dtors_aux)
-#else /* !defined(FINI_SECTION_ASM_OP) */
+#elif defined (FINI_ARRAY_SECTION_ASM_OP)
 static func_ptr __do_global_dtors_aux_fini_array_entry[]
   __attribute__ ((__unused__, section(".fini_array")))
   = { __do_global_dtors_aux };
-#endif /* !defined(FINI_SECTION_ASM_OP) */
+#else /* !FINI_SECTION_ASM_OP && !FINI_ARRAY_SECTION_ASM_OP */
+static void __attribute__((used))
+__do_global_dtors_aux_1 (void)
+{
+  atexit (__do_global_dtors_aux);
+}
+CRT_CALL_STATIC_FUNCTION (INIT_SECTION_ASM_OP, __do_global_dtors_aux_1)
+#endif
 
 #if defined(USE_EH_FRAME_REGISTRY) || defined(JCR_SECTION_NAME)
 /* Stick a call to __register_frame_info into the .init section.  For some
@@ -536,7 +550,7 @@ STATIC EH_FRAME_SECTION_CONST int32 __FRAME_END__[]
 
 #ifdef JCR_SECTION_NAME
 /* Null terminate the .jcr section array.  */
-STATIC void *__JCR_END__[1] 
+STATIC void *__JCR_END__[1]
    __attribute__ ((unused, section(JCR_SECTION_NAME),
 		   aligned(sizeof(void *))))
    = { 0 };

@@ -1,22 +1,153 @@
-2010-04-29  Release Manager
+2011-04-28  Release Manager
 
-	* GCC 4.4.4 released.
+	* GCC 4.5.3 released.
 
-2010-01-21  Release Manager
+2010-12-16  Release Manager
 
-	* GCC 4.4.3 released.
+	* GCC 4.5.2 released.
 
-2009-10-15  Release Manager
+2010-10-02  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 
-	* GCC 4.4.2 released.
+	* po.m4 (AM_PO_SUBDIRS): Fix unportable shell quoting.
 
-2009-07-22  Release Manager
+2010-07-31  Release Manager
 
-	* GCC 4.4.1 released.
+	* GCC 4.5.1 released.
 
-2009-04-21  Release Manager
+2010-06-10  Iain Sandoe  <iains@gcc.gnu.org>
 
-	* GCC 4.4.0 released.
+	PR bootstrap/43170
+	* tls.m4 (GCC_CHECK_TLS): Add volatile qualifier to the test 
+	references.  Move the main () test reference ahead of 
+	pthread_create().  Add a comment to explain the requirements
+	of the test.
+
+2010-04-14  Release Manager
+
+	* GCC 4.5.0 released.
+
+2010-03-23  Kai Tietz  <kai.tietz@onevision.com>
+
+	* mh-mingw: Revert accidentally checking r156315.
+
+2010-01-05  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* stdint.m4 (GCC_HEADER_STDINT): Don't typedef uint8_t etc. if
+	corresponding macros already exist.
+
+2010-01-02  Richard Guenther  <rguenther@suse.de>
+
+	PR lto/41529
+	* elf.m4: New file.
+
+2009-11-30  Joseph Myers  <joseph@codesourcery.com>
+
+	* largefile.m4 (ACX_LARGEFILE): Require AC_CANONICAL_HOST and
+	AC_CANONICAL_TARGET.
+
+2009-11-24  Joel Brobecker  <brobecker@adacore.com>
+
+	* zlib.m4: New file.
+
+2009-11-09  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* largefile.m4 (ACX_LARGEFILE): Call AC_PLUGINS.
+
+2009-11-06  Jan Kratochvil  <jan.kratochvil@redhat.com>
+	    Joel Brobecker  <brobecker@adacore.com>
+	    Paolo Bonzini  <bonzini@gnu.org>
+
+	* largefile.m4: New file.
+
+2009-10-23  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* acx.m4 (ACX_CHECK_CYGWIN_CAT_WORKS): Use = with test.
+
+2009-09-09  Paolo Bonzini  <bonzini@gnu.org>
+
+	* stdint.m4 (GCC_HEADER_STDINT): Revert changes to this macro in
+	the previous two patches.
+
+2009-09-09  Paolo Bonzini  <bonzini@gnu.org>
+
+	* stdint.m4: Store temporary file in $tmp/_GCC_STDINT_H.
+
+2009-09-08  Paolo Bonzini  <bonzini@gnu.org>
+
+	* stdint.m4: Rewrite by using autoconf 2.64 features.
+
+2009-09-03  Alexandre Oliva  <aoliva@redhat.com>
+
+	* bootstrap-debug-big.mk (STAGE2_CFLAGS): Drop -gtoggle.
+	* bootstrap-debug-lean.mk: Update comments.
+	(STAGE2_CFLAGS): Likewise.
+	(do-compare): Don't override.
+
+2009-09-01  Alexandre Oliva  <aoliva@redhat.com>
+
+	* bootstrap-debug.mk: Add comments.
+	* bootstrap-debug-big.mk: New.
+	* bootstrap-debug-lean.mk: New.
+	* bootstrap-debug-ckovw.mk: Add comments.
+	* bootstrap-debug-lib.mk: Drop CFLAGS for stages.  Use -g0
+	for TFLAGS in stage1.  Drop -fvar-tracking-assignments-toggle.
+
+2009-08-22  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* override.m4 (_GCC_AUTOCONF_VERSION): Bump to 2.64.
+
+2009-08-19  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* override.m4 (AC_DISABLE_OPTION_CHECKING): Define to be
+	empty if not defined, to avoid error with 2.59.
+	(_AC_LANG_IO_PROGRAM): When the Autoconf version is exactly
+	2.64, avoid per-language instances to drop fopen from test
+	program.
+
+2009-07-30  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* extensions.m4 (AC_USE_SYSTEM_EXTENSIONS): Do not expand
+	for Autoconf 2.62 or newer.
+	* tls.m4 (GCC_CHECK_TLS): Fix m4 quotation.
+	* no-executables.m4 (_AC_COMPILER_EXEEXT): Fix m4 quotation.
+	* override.m4 (m4_copy_force, m4_rename_force): Provide
+	macros if not defined.
+	(AC_PREREQ): Use m4_copy_force.
+
+2009-07-17  Joseph Myers  <joseph@codesourcery.com>
+
+	PR other/40784
+	* tls.m4 (GCC_CHECK_TLS): Add extra quoting around argument to
+	AC_LINK_IFELSE.
+
+2009-07-16  Joseph Myers  <joseph@codesourcery.com>
+
+	* tls.m4 (GCC_CHECK_TLS): Also test TLS in a shared library when
+	cross-compiling.
+
+2009-06-25  Olivier Hainque  <hainque@adacore.com>
+
+	* config/mh-ppc-aix (BOOT_ADAFLAGS): Remove -mminimal-toc.
+
+2009-05-26  Rafael Avila de Espindola  <espindola@google.com>
+
+	* plugins.m4: New.
+
+2009-05-12  Alexandre Oliva  <aoliva@redhat.com>
+
+	* multi.m4: Save CXX, GFORTRAN and GCJ in config.status.
+	* mt-gnu (CXXFLAGS_FOR_TARGET): Adjust.
+	* bootstrap-O1.mk: New.
+	* bootstrap-O3.mk: New.
+	* bootstrap-debug.mk: New.
+
+2009-02-02  Doug Evans  <dje@google.com>
+
+	* tcl.m4 (SC_PATH_TCLCONFIG): Don't exit 0 if tclconfig fails.
+	(SC_PATH_TKCONFIG): Don't exit 0 if tkconfig fails.
+	(SC_LOAD_TCLCONFIG): Quote all uses of TCL_BIN_DIR, it may contain
+	"# no Tcl configs found".
+	(SC_LOAD_TKCONFIG): Similarily for TK_BIN_DIR.
 
 2009-04-09  Jakub Jelinek  <jakub@redhat.com>
 

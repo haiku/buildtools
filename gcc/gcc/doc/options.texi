@@ -84,7 +84,16 @@ configurations and yet the masks always need to be defined.
 @node Option properties
 @section Option properties
 
-The second field of an option record can specify the following properties:
+The second field of an option record can specify any of the following
+properties.  When an option takes an argument, it is enclosed in parentheses
+following the option property name.  The parser that handles option files
+is quite simplistic, and will be tricked by any nested parentheses within
+the argument text itself; in this case, the entire option argument can
+be wrapped in curly braces within the parentheses to demarcate it, e.g.:
+
+@smallexample
+Condition(@{defined (USE_CYGWIN_LIBSTDCXX_WRAPPERS)@})
+@end smallexample
 
 @table @code
 @item Common
@@ -106,7 +115,7 @@ The option does not have a ``no-'' form.  All options beginning with
 property is used.
 
 @item Negative(@var{othername})
-The option will turn off another option @var{othername}, which is the
+The option will turn off another option @var{othername}, which is
 the option name with the leading ``-'' removed.  This chain action will
 propagate through the @code{Negative} property of the option to be
 turned off.

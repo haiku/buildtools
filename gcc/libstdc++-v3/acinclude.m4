@@ -49,7 +49,7 @@ AC_DEFUN([GLIBCXX_CONFIGURE], [
   # Keep these sync'd with the list in Makefile.am.  The first provides an
   # expandable list at autoconf time; the second provides an expandable list
   # (i.e., shell variable) at configure time.
-  m4_define([glibcxx_SUBDIRS],[include libsupc++ src doc po testsuite])
+  m4_define([glibcxx_SUBDIRS],[include libsupc++ python src doc po testsuite])
   SUBDIRS='glibcxx_SUBDIRS'
 
   # These need to be absolute paths, yet at the same time need to
@@ -78,35 +78,6 @@ AC_DEFUN([GLIBCXX_CONFIGURE], [
   AC_ARG_WITH([newlib],
     AC_HELP_STRING([--with-newlib],
                    [assume newlib as a system C library]))
-
-  # We're almost certainly being configured before anything else which uses
-  # C++, so all of our AC_PROG_* discoveries will be cached.  It's vital that
-  # we not cache the value of CXX that we "discover" here, because it's set
-  # to something unique for us and libjava.  Other target libraries need to
-  # find CXX for themselves.  We yank the rug out from under the normal AC_*
-  # process by sneakily renaming the cache variable.  This also lets us debug
-  # the value of "our" CXX in postmortems.
-  #
-  # We must also force CXX to /not/ be a precious variable, otherwise the
-  # wrong (non-multilib-adjusted) value will be used in multilibs.  This
-  # little trick also affects CPPFLAGS, CXXFLAGS, and LDFLAGS.  And as a side
-  # effect, CXXFLAGS is no longer automagically subst'd, so we have to do
-  # that ourselves.  Un-preciousing AC_PROG_CC also affects CC and CFLAGS.
-  #
-  # -fno-builtin must be present here so that a non-conflicting form of
-  # std::exit can be guessed by AC_PROG_CXX, and used in later tests.
-
-  m4_define([ac_cv_prog_CXX],[glibcxx_cv_prog_CXX])
-  m4_rename([_AC_ARG_VAR_PRECIOUS],[glibcxx_PRECIOUS])
-  m4_define([_AC_ARG_VAR_PRECIOUS],[])
-  save_CXXFLAGS="$CXXFLAGS"
-  CXXFLAGS="$CXXFLAGS -fno-builtin"
-  AC_PROG_CC
-  AC_PROG_CXX
-  CXXFLAGS="$save_CXXFLAGS"
-  m4_rename([glibcxx_PRECIOUS],[_AC_ARG_VAR_PRECIOUS])
-  AC_SUBST(CFLAGS)
-  AC_SUBST(CXXFLAGS)
 
   # Will set LN_S to either 'ln -s', 'ln', or 'cp -p' (if linking isn't
   # available).  Uncomment the next line to force a particular method.
@@ -238,8 +209,8 @@ AC_DEFUN([GLIBCXX_CHECK_LINKER_FEATURES], [
     if $LD --version 2>/dev/null | grep 'GNU gold' >/dev/null 2>&1; then
       glibcxx_ld_is_gold=yes
     fi
-    ldver=`$LD --version 2>/dev/null | head -1 | \
-           sed -e 's/GNU \(go\)\{0,1\}ld \(version \)\{0,1\}\(([^)]*) \)\{0,1\}\([0-9.][0-9.]*\).*/\4/'`
+    ldver=`$LD --version 2>/dev/null |
+	   sed -e 's/GNU gold /GNU ld /;s/GNU ld version /GNU ld /;s/GNU ld ([^)]*) /GNU ld /;s/GNU ld \([0-9.][0-9.]*\).*/\1/; q'`
     changequote([,])
     glibcxx_gnu_ld_version=`echo $ldver | \
            $AWK -F. '{ if (NF<3) [$]3=0; print ([$]1*100+[$]2)*100+[$]3 }'`
@@ -1104,8 +1075,9 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   CXXFLAGS="$CXXFLAGS -fno-exceptions"
   ac_save_LIBS="$LIBS"
 
-  ac_has_clock_monotonic=no;
-  ac_has_clock_realtime=no;
+  ac_has_clock_monotonic=no
+  ac_has_clock_realtime=no
+  AC_MSG_RESULT($enable_libstdcxx_time)
 
   if test x"$enable_libstdcxx_time" != x"no"; then
 
@@ -2052,10 +2024,10 @@ AC_DEFUN([GLIBCXX_ENABLE_PARALLEL], [
 
   # See if configured libgomp/omp.h exists. (libgomp may be in
   # noconfigdirs but not explicitly disabled.)
-  if test -f $glibcxx_builddir/../libgomp/omp.h; then
+  if echo " ${TARGET_CONFIGDIRS} " | grep " libgomp " > /dev/null 2>&1 ; then
     enable_parallel=yes;
   else
-    AC_MSG_NOTICE([$glibcxx_builddir/../libgomp/omp.h not found])
+    AC_MSG_NOTICE([target-libgomp not built])
   fi
 
   AC_MSG_CHECKING([for parallel mode support])
@@ -2251,6 +2223,44 @@ AC_DEFUN([GLIBCXX_ENABLE_LONG_LONG], [
 
 
 dnl
+dnl Check for decimal floating point.
+dnl See:
+dnl http://gcc.gnu.org/onlinedocs/gcc/Decimal-Float.html#Decimal-Float
+dnl
+dnl This checks to see if the host supports decimal floating point types.
+dnl
+dnl Defines:
+dnl  _GLIBCXX_USE_DECIMAL_FLOAT
+dnl
+AC_DEFUN([GLIBCXX_ENABLE_DECIMAL_FLOAT], [
+
+  # Fake what AC_TRY_COMPILE does, without linking as this is
+  # unnecessary for this test.
+
+    cat > conftest.$ac_ext << EOF
+[#]line __oline__ "configure"
+int main()
+{
+  _Decimal32 d1;
+  _Decimal64 d2;
+  _Decimal128 d3;
+  return 0;
+}
+EOF
+
+    AC_MSG_CHECKING([for ISO/IEC TR 24733 ])
+    if AC_TRY_EVAL(ac_compile); then
+      AC_DEFINE(_GLIBCXX_USE_DECIMAL_FLOAT, 1,
+      [Define if ISO/IEC TR 24733 decimal floating point types are supported on this host.])
+      enable_dfp=yes
+    else
+      enable_dfp=no
+    fi
+    AC_MSG_RESULT($enable_dfp)
+    rm -f conftest*
+])
+
+dnl
 dnl Check for template specializations for the 'wchar_t' type.
 dnl
 dnl --enable-wchar_t defines _GLIBCXX_USE_WCHAR_T
@@ -2429,8 +2439,7 @@ dnl is intended to be an all-or-nothing switch, so all the atomic operations
 dnl that are used should be checked.
 dnl
 dnl Note:
-dnl libgomp and libgfortran do this with a link test, instead of an asm test.
-dnl see: CHECK_SYNC_FETCH_AND_ADD
+dnl libgomp and libgfortran use a link test, see CHECK_SYNC_FETCH_AND_ADD.
 dnl
 dnl Defines:
 dnl  _GLIBCXX_ATOMIC_BUILTINS_1 
@@ -2442,12 +2451,122 @@ AC_DEFUN([GLIBCXX_ENABLE_ATOMIC_BUILTINS], [
   AC_LANG_SAVE
   AC_LANG_CPLUSPLUS
   old_CXXFLAGS="$CXXFLAGS"
-  
+
+  # Do link tests if possible, instead asm tests, limited to some platforms
+  # see discussion in PR target/40134, PR libstdc++/40133 and the thread
+  # starting at http://gcc.gnu.org/ml/gcc-patches/2009-07/msg00322.html
+  atomic_builtins_link_tests=no
+  if test x$gcc_no_link != xyes; then
+    # Can do link tests. Limit to some tested platforms
+    case "$host" in
+      *-*-linux* | *-*-uclinux* | *-*-kfreebsd*-gnu | *-*-gnu*)
+	atomic_builtins_link_tests=yes
+        ;;
+    esac
+  fi
+
+  if test x$atomic_builtins_link_tests = xyes; then
+
+  # Do link tests.
+
+  CXXFLAGS="$CXXFLAGS -fno-exceptions"
+
+  AC_MSG_CHECKING([for atomic builtins for bool])
+  AC_CACHE_VAL(glibcxx_cv_atomic_bool, [
+    AC_TRY_LINK(
+      [ ],
+      [typedef bool atomic_type;
+       atomic_type c1;
+       atomic_type c2;
+       const atomic_type c3(0);
+       __sync_fetch_and_add(&c1, c2);
+       __sync_val_compare_and_swap(&c1, c3, c2);
+       __sync_lock_test_and_set(&c1, c3);
+       __sync_lock_release(&c1);
+       __sync_synchronize();],
+      [glibcxx_cv_atomic_bool=yes],
+      [glibcxx_cv_atomic_bool=no])
+  ])    
+  if test $glibcxx_cv_atomic_bool = yes; then
+    AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_1, 1,
+      [Define if builtin atomic operations for bool are supported on this host.])
+  fi
+  AC_MSG_RESULT($glibcxx_cv_atomic_bool)
+
+  AC_MSG_CHECKING([for atomic builtins for short])
+  AC_CACHE_VAL(glibcxx_cv_atomic_short, [
+    AC_TRY_LINK(
+      [ ],
+      [typedef short atomic_type;
+       atomic_type c1;
+       atomic_type c2;
+       const atomic_type c3(0);
+       __sync_fetch_and_add(&c1, c2);
+       __sync_val_compare_and_swap(&c1, c3, c2);
+       __sync_lock_test_and_set(&c1, c3);
+       __sync_lock_release(&c1);
+       __sync_synchronize();],
+      [glibcxx_cv_atomic_short=yes],
+      [glibcxx_cv_atomic_short=no])
+  ])    
+  if test $glibcxx_cv_atomic_short = yes; then
+    AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_2, 1,
+      [Define if builtin atomic operations for short are supported on this host.])
+  fi
+  AC_MSG_RESULT($glibcxx_cv_atomic_short)
+
+  AC_MSG_CHECKING([for atomic builtins for int])
+  AC_CACHE_VAL(glibcxx_cv_atomic_int, [
+    AC_TRY_LINK(
+      [ ],
+      [typedef int atomic_type;
+       atomic_type c1;
+       atomic_type c2;
+       const atomic_type c3(0);
+       __sync_fetch_and_add(&c1, c2);
+       __sync_val_compare_and_swap(&c1, c3, c2);
+       __sync_lock_test_and_set(&c1, c3);
+       __sync_lock_release(&c1);
+       __sync_synchronize();],
+      [glibcxx_cv_atomic_int=yes],
+      [glibcxx_cv_atomic_int=no])
+  ])    
+  if test $glibcxx_cv_atomic_int = yes; then
+    AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_4, 1,
+      [Define if builtin atomic operations for int are supported on this host.])
+  fi
+  AC_MSG_RESULT($glibcxx_cv_atomic_int)
+
+  AC_MSG_CHECKING([for atomic builtins for long long])
+  AC_CACHE_VAL(glibcxx_cv_atomic_long_long, [
+    AC_TRY_LINK(
+      [ ],
+      [typedef long long atomic_type;
+       atomic_type c1;
+       atomic_type c2;
+       const atomic_type c3(0);
+       __sync_fetch_and_add(&c1, c2);
+       __sync_val_compare_and_swap(&c1, c3, c2);
+       __sync_lock_test_and_set(&c1, c3);
+       __sync_lock_release(&c1);
+       __sync_synchronize();],
+      [glibcxx_cv_atomic_long_long=yes],
+      [glibcxx_cv_atomic_long_long=no])
+  ])    
+  if test $glibcxx_cv_atomic_long_long = yes; then
+    AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_8, 1,
+      [Define if builtin atomic operations for long long are supported on this host.])
+  fi
+  AC_MSG_RESULT($glibcxx_cv_atomic_long_long)
+
+  else
+
+  # Do asm tests.
+
   # Compile unoptimized.
   CXXFLAGS='-O0 -S'
 
-  # Fake what AC_TRY_COMPILE does, without linking as this is
-  # unnecessary for a builtins test.
+  # Fake what AC_TRY_COMPILE does.
 
     cat > conftest.$ac_ext << EOF
 [#]line __oline__ "configure"
@@ -2469,14 +2588,14 @@ EOF
     AC_MSG_CHECKING([for atomic builtins for bool])
     if AC_TRY_EVAL(ac_compile); then
       if grep __sync_ conftest.s >/dev/null 2>&1 ; then
-        enable_atomic_builtinsb=no
+        glibcxx_cv_atomic_bool=no
       else
       AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_1, 1,
       [Define if builtin atomic operations for bool are supported on this host.])
-        enable_atomic_builtinsb=yes
+        glibcxx_cv_atomic_bool=yes
       fi
     fi
-    AC_MSG_RESULT($enable_atomic_builtinsb)
+    AC_MSG_RESULT($glibcxx_cv_atomic_bool)
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
@@ -2499,14 +2618,14 @@ EOF
     AC_MSG_CHECKING([for atomic builtins for short])
     if AC_TRY_EVAL(ac_compile); then
       if grep __sync_ conftest.s >/dev/null 2>&1 ; then
-        enable_atomic_builtinss=no
+        glibcxx_cv_atomic_short=no
       else
       AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_2, 1,
       [Define if builtin atomic operations for short are supported on this host.])
-        enable_atomic_builtinss=yes
+        glibcxx_cv_atomic_short=yes
       fi
     fi
-    AC_MSG_RESULT($enable_atomic_builtinss)
+    AC_MSG_RESULT($glibcxx_cv_atomic_short)
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
@@ -2530,14 +2649,14 @@ EOF
     AC_MSG_CHECKING([for atomic builtins for int])
     if AC_TRY_EVAL(ac_compile); then
       if grep __sync_ conftest.s >/dev/null 2>&1 ; then
-        enable_atomic_builtinsi=no
+        glibcxx_cv_atomic_int=no
       else
       AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_4, 1,
         [Define if builtin atomic operations for int are supported on this host.])
-        enable_atomic_builtinsi=yes
+        glibcxx_cv_atomic_int=yes
       fi
     fi
-    AC_MSG_RESULT($enable_atomic_builtinsi)
+    AC_MSG_RESULT($glibcxx_cv_atomic_int)
     rm -f conftest*
 
     cat > conftest.$ac_ext << EOF
@@ -2560,22 +2679,23 @@ EOF
     AC_MSG_CHECKING([for atomic builtins for long long])
     if AC_TRY_EVAL(ac_compile); then
       if grep __sync_ conftest.s >/dev/null 2>&1 ; then
-        enable_atomic_builtinsll=no
+        glibcxx_cv_atomic_long_long=no
       else
       AC_DEFINE(_GLIBCXX_ATOMIC_BUILTINS_8, 1,
       [Define if builtin atomic operations for long long are supported on this host.])
-        enable_atomic_builtinsll=yes
+        glibcxx_cv_atomic_long_long=yes
       fi
     fi
-    AC_MSG_RESULT($enable_atomic_builtinsll)
+    AC_MSG_RESULT($glibcxx_cv_atomic_long_long)
     rm -f conftest*
 
+  fi
 
   CXXFLAGS="$old_CXXFLAGS"
   AC_LANG_RESTORE
 
   # Set atomicity_dir to builtins if either of above tests pass.
-  if test $enable_atomic_builtinsi = yes || test $enable_atomic_builtinsb = yes ; then
+  if test $glibcxx_cv_atomic_int = yes || test $glibcxx_cv_atomic_bool = yes ; then
     atomicity_dir=cpu/generic/atomicity_builtins
   fi
 
@@ -2728,7 +2848,7 @@ if test x$enable_symvers = xyes ; then
   else
     if test $with_gnu_ld = yes ; then
       case ${target_os} in
-        cygwin* | pe | mingw32* | hpux*)
+        hpux*)
           enable_symvers=no ;;
         *)
           enable_symvers=gnu ;;

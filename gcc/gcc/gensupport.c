@@ -1,6 +1,6 @@
 /* Support routines for the various generation passes.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010, Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -336,7 +336,7 @@ process_rtx (rtx desc, int lineno)
 
 	/* Queue them.  */
 	insn_elem
-	  = queue_pattern (desc, &define_insn_tail, read_rtx_filename, 
+	  = queue_pattern (desc, &define_insn_tail, read_rtx_filename,
 			   lineno);
 	split_elem
 	  = queue_pattern (split, &other_tail, read_rtx_filename, lineno);
@@ -780,6 +780,7 @@ process_one_cond_exec (struct queue_elem *ce_elem)
     {
       int alternatives, max_operand;
       rtx pred, insn, pattern, split;
+      char *new_name;
       int i;
 
       if (! is_predicable (insn_elem))
@@ -806,7 +807,9 @@ process_one_cond_exec (struct queue_elem *ce_elem)
 
       /* Construct a new pattern for the new insn.  */
       insn = copy_rtx (insn_elem->data);
-      XSTR (insn, 0) = "";
+      new_name = XNEWVAR (char, strlen XSTR (insn_elem->data, 0) + 4);
+      sprintf (new_name, "*p %s", XSTR (insn_elem->data, 0));
+      XSTR (insn, 0) = new_name;
       pattern = rtx_alloc (COND_EXEC);
       XEXP (pattern, 0) = pred;
       if (XVECLEN (insn, 1) == 1)
@@ -875,7 +878,7 @@ process_one_cond_exec (struct queue_elem *ce_elem)
 	  XVECEXP (split, 2, i) = pattern;
 	}
       /* Add the new split to the queue.  */
-      queue_pattern (split, &other_tail, read_rtx_filename, 
+      queue_pattern (split, &other_tail, read_rtx_filename,
 		     insn_elem->split->lineno);
     }
 }
@@ -927,7 +930,7 @@ init_md_reader_args_cb (int argc, char **argv, bool (*parse_opt)(const char *))
     {
       if (argv[i][0] != '-')
 	continue;
-      
+
       c = argv[i][1];
       switch (c)
 	{
@@ -996,7 +999,7 @@ init_md_reader_args_cb (int argc, char **argv, bool (*parse_opt)(const char *))
 	      /* Read stdin.  */
 	      if (already_read_stdin)
 		fatal ("cannot read standard input twice");
-	      
+
 	      base_dir = NULL;
 	      read_rtx_filename = in_fname = "<stdin>";
 	      read_rtx_lineno = 1;
@@ -1358,7 +1361,7 @@ static const struct std_pred_table std_preds[] = {
   {"register_operand", false, false, {SUBREG, REG}},
   {"pmode_register_operand", true, false, {SUBREG, REG}},
   {"scratch_operand", false, false, {SCRATCH, REG}},
-  {"immediate_operand", false, true, {0}},
+  {"immediate_operand", false, true, {UNKNOWN}},
   {"const_int_operand", false, false, {CONST_INT}},
   {"const_double_operand", false, false, {CONST_INT, CONST_DOUBLE}},
   {"nonimmediate_operand", false, false, {SUBREG, REG, MEM}},
@@ -1367,6 +1370,9 @@ static const struct std_pred_table std_preds[] = {
   {"pop_operand", false, false, {MEM}},
   {"memory_operand", false, false, {SUBREG, MEM}},
   {"indirect_operand", false, false, {SUBREG, MEM}},
+  {"ordered_comparison_operator", false, false, {EQ, NE,
+						 LE, LT, GE, GT,
+						 LEU, LTU, GEU, GTU}},
   {"comparison_operator", false, false, {EQ, NE,
 					 LE, LT, GE, GT,
 					 LEU, LTU, GEU, GTU,
@@ -1401,8 +1407,8 @@ init_predicate_table (void)
       if (std_preds[i].allows_const_p)
 	for (j = 0; j < NUM_RTX_CODE; j++)
 	  if (GET_RTX_CLASS (j) == RTX_CONST_OBJ)
-	    add_predicate_code (pred, j);
-      
+	    add_predicate_code (pred, (enum rtx_code) j);
+
       add_predicate (pred);
     }
 }

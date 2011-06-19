@@ -55,10 +55,12 @@ static void builtin_define_with_hex_fp_value (const char *, tree,
 					      const char *,
 					      const char *);
 static void builtin_define_stdint_macros (void);
-static void builtin_define_type_max (const char *, tree, int);
+static void builtin_define_constants (const char *, tree);
+static void builtin_define_type_max (const char *, tree);
+static void builtin_define_type_minmax (const char *, const char *, tree);
 static void builtin_define_type_precision (const char *, tree);
 static void builtin_define_type_sizeof (const char *, tree);
-static void builtin_define_float_constants (const char *, 
+static void builtin_define_float_constants (const char *,
 					    const char *,
 					    const char *,
 					    tree);
@@ -82,9 +84,9 @@ builtin_define_type_sizeof (const char *name, tree type)
 /* Define the float.h constants for TYPE using NAME_PREFIX, FP_SUFFIX,
    and FP_CAST. */
 static void
-builtin_define_float_constants (const char *name_prefix, 
-		                const char *fp_suffix, 
-				const char *fp_cast, 
+builtin_define_float_constants (const char *name_prefix,
+		                const char *fp_suffix,
+				const char *fp_cast,
 				tree type)
 {
   /* Used to convert radix-based values to base 10 values in several cases.
@@ -98,6 +100,7 @@ builtin_define_float_constants (const char *name_prefix,
   const double log10_2 = .30102999566398119521;
   double log10_b;
   const struct real_format *fmt;
+  const struct real_format *ldfmt;
 
   char name[64], buf[128];
   int dig, min_10_exp, max_10_exp;
@@ -105,6 +108,8 @@ builtin_define_float_constants (const char *name_prefix,
 
   fmt = REAL_MODE_FORMAT (TYPE_MODE (type));
   gcc_assert (fmt->b != 10);
+  ldfmt = REAL_MODE_FORMAT (TYPE_MODE (long_double_type_node));
+  gcc_assert (ldfmt->b != 10);
 
   /* The radix of the exponent representation.  */
   if (type == float_type_node)
@@ -187,7 +192,8 @@ builtin_define_float_constants (const char *name_prefix,
      The only macro we care about is this number for the widest supported
      floating type, but we want this value for rendering constants below.  */
   {
-    double d_decimal_dig = 1 + fmt->p * log10_b;
+    double d_decimal_dig
+      = 1 + (fmt->p < ldfmt->p ? ldfmt->p : fmt->p) * log10_b;
     decimal_dig = d_decimal_dig;
     if (decimal_dig < d_decimal_dig)
       decimal_dig++;
@@ -199,7 +205,7 @@ builtin_define_float_constants (const char *name_prefix,
      construct the following numbers directly as a hexadecimal
      constants.  */
   get_max_float (fmt, buf, sizeof (buf));
-  
+
   sprintf (name, "__%s_MAX__", name_prefix);
   builtin_define_with_hex_fp_value (name, type, decimal_dig, buf, fp_suffix, fp_cast);
 
@@ -254,8 +260,8 @@ builtin_define_float_constants (const char *name_prefix,
 
 /* Define __DECx__ constants for TYPE using NAME_PREFIX and SUFFIX. */
 static void
-builtin_define_decimal_float_constants (const char *name_prefix, 
-					const char *suffix, 
+builtin_define_decimal_float_constants (const char *name_prefix,
+					const char *suffix,
 					tree type)
 {
   const struct real_format *fmt;
@@ -280,7 +286,7 @@ builtin_define_decimal_float_constants (const char *name_prefix,
   /* Compute the minimum representable value.  */
   sprintf (name, "__%s_MIN__", name_prefix);
   sprintf (buf, "1E%d%s", fmt->emin - 1, suffix);
-  builtin_define_with_value (name, buf, 0); 
+  builtin_define_with_value (name, buf, 0);
 
   /* Compute the maximum representable value.  */
   sprintf (name, "__%s_MAX__", name_prefix);
@@ -294,7 +300,7 @@ builtin_define_decimal_float_constants (const char *name_prefix,
   *p = 0;
   /* fmt->p plus 1, to account for the decimal point and fmt->emax
      minus 1 because the digits are nines, not 1.0.  */
-  sprintf (&buf[fmt->p + 1], "E%d%s", fmt->emax - 1, suffix); 
+  sprintf (&buf[fmt->p + 1], "E%d%s", fmt->emax - 1, suffix);
   builtin_define_with_value (name, buf, 0);
 
   /* Compute epsilon (the difference between 1 and least value greater
@@ -313,7 +319,7 @@ builtin_define_decimal_float_constants (const char *name_prefix,
 	*p++ = '.';
     }
   *p = 0;
-  sprintf (&buf[fmt->p], "1E%d%s", fmt->emin - 1, suffix); 
+  sprintf (&buf[fmt->p], "1E%d%s", fmt->emin - 1, suffix);
   builtin_define_with_value (name, buf, 0);
 }
 
@@ -390,21 +396,93 @@ define__GNUC__ (void)
     cpp_define_formatted (parse_in, "__GNUG__=%d", major);
 }
 
-/* Define macros used by <stdint.h>.  Currently only defines limits
-   for intmax_t, used by the testsuite.  */
+/* Define macros used by <stdint.h>.  */
 static void
 builtin_define_stdint_macros (void)
 {
-  int intmax_long;
-  if (intmax_type_node == long_long_integer_type_node)
-    intmax_long = 2;
-  else if (intmax_type_node == long_integer_type_node)
-    intmax_long = 1;
-  else if (intmax_type_node == integer_type_node)
-    intmax_long = 0;
-  else
-    gcc_unreachable ();
-  builtin_define_type_max ("__INTMAX_MAX__", intmax_type_node, intmax_long);
+  builtin_define_type_max ("__INTMAX_MAX__", intmax_type_node);
+  builtin_define_constants ("__INTMAX_C", intmax_type_node);
+  builtin_define_type_max ("__UINTMAX_MAX__", uintmax_type_node);
+  builtin_define_constants ("__UINTMAX_C", uintmax_type_node);
+  if (sig_atomic_type_node)
+    builtin_define_type_minmax ("__SIG_ATOMIC_MIN__", "__SIG_ATOMIC_MAX__",
+				sig_atomic_type_node);
+  if (int8_type_node)
+    builtin_define_type_max ("__INT8_MAX__", int8_type_node);
+  if (int16_type_node)
+    builtin_define_type_max ("__INT16_MAX__", int16_type_node);
+  if (int32_type_node)
+    builtin_define_type_max ("__INT32_MAX__", int32_type_node);
+  if (int64_type_node)
+    builtin_define_type_max ("__INT64_MAX__", int64_type_node);
+  if (uint8_type_node)
+    builtin_define_type_max ("__UINT8_MAX__", uint8_type_node);
+  if (uint16_type_node)
+    builtin_define_type_max ("__UINT16_MAX__", uint16_type_node);
+  if (c_uint32_type_node)
+    builtin_define_type_max ("__UINT32_MAX__", c_uint32_type_node);
+  if (c_uint64_type_node)
+    builtin_define_type_max ("__UINT64_MAX__", c_uint64_type_node);
+  if (int_least8_type_node)
+    {
+      builtin_define_type_max ("__INT_LEAST8_MAX__", int_least8_type_node);
+      builtin_define_constants ("__INT8_C", int_least8_type_node);
+    }
+  if (int_least16_type_node)
+    {
+      builtin_define_type_max ("__INT_LEAST16_MAX__", int_least16_type_node);
+      builtin_define_constants ("__INT16_C", int_least16_type_node);
+    }
+  if (int_least32_type_node)
+    {
+      builtin_define_type_max ("__INT_LEAST32_MAX__", int_least32_type_node);
+      builtin_define_constants ("__INT32_C", int_least32_type_node);
+    }
+  if (int_least64_type_node)
+    {
+      builtin_define_type_max ("__INT_LEAST64_MAX__", int_least64_type_node);
+      builtin_define_constants ("__INT64_C", int_least64_type_node);
+    }
+  if (uint_least8_type_node)
+    {
+      builtin_define_type_max ("__UINT_LEAST8_MAX__", uint_least8_type_node);
+      builtin_define_constants ("__UINT8_C", uint_least8_type_node);
+    }
+  if (uint_least16_type_node)
+    {
+      builtin_define_type_max ("__UINT_LEAST16_MAX__", uint_least16_type_node);
+      builtin_define_constants ("__UINT16_C", uint_least16_type_node);
+    }
+  if (uint_least32_type_node)
+    {
+      builtin_define_type_max ("__UINT_LEAST32_MAX__", uint_least32_type_node);
+      builtin_define_constants ("__UINT32_C", uint_least32_type_node);
+    }
+  if (uint_least64_type_node)
+    {
+      builtin_define_type_max ("__UINT_LEAST64_MAX__", uint_least64_type_node);
+      builtin_define_constants ("__UINT64_C", uint_least64_type_node);
+    }
+  if (int_fast8_type_node)
+    builtin_define_type_max ("__INT_FAST8_MAX__", int_fast8_type_node);
+  if (int_fast16_type_node)
+    builtin_define_type_max ("__INT_FAST16_MAX__", int_fast16_type_node);
+  if (int_fast32_type_node)
+    builtin_define_type_max ("__INT_FAST32_MAX__", int_fast32_type_node);
+  if (int_fast64_type_node)
+    builtin_define_type_max ("__INT_FAST64_MAX__", int_fast64_type_node);
+  if (uint_fast8_type_node)
+    builtin_define_type_max ("__UINT_FAST8_MAX__", uint_fast8_type_node);
+  if (uint_fast16_type_node)
+    builtin_define_type_max ("__UINT_FAST16_MAX__", uint_fast16_type_node);
+  if (uint_fast32_type_node)
+    builtin_define_type_max ("__UINT_FAST32_MAX__", uint_fast32_type_node);
+  if (uint_fast64_type_node)
+    builtin_define_type_max ("__UINT_FAST64_MAX__", uint_fast64_type_node);
+  if (intptr_type_node)
+    builtin_define_type_max ("__INTPTR_MAX__", intptr_type_node);
+  if (uintptr_type_node)
+    builtin_define_type_max ("__UINTPTR_MAX__", uintptr_type_node);
 }
 
 /* Adjust the optimization macros when a #pragma GCC optimization is done to
@@ -514,17 +592,21 @@ c_cpp_builtins (cpp_reader *pfile)
   if (USING_SJLJ_EXCEPTIONS)
     cpp_define (pfile, "__USING_SJLJ_EXCEPTIONS__");
 
-  /* limits.h needs to know these.  */
-  builtin_define_type_max ("__SCHAR_MAX__", signed_char_type_node, 0);
-  builtin_define_type_max ("__SHRT_MAX__", short_integer_type_node, 0);
-  builtin_define_type_max ("__INT_MAX__", integer_type_node, 0);
-  builtin_define_type_max ("__LONG_MAX__", long_integer_type_node, 1);
-  builtin_define_type_max ("__LONG_LONG_MAX__", long_long_integer_type_node, 2);
-  builtin_define_type_max ("__WCHAR_MAX__", wchar_type_node, 0);
+  /* limits.h and stdint.h need to know these.  */
+  builtin_define_type_max ("__SCHAR_MAX__", signed_char_type_node);
+  builtin_define_type_max ("__SHRT_MAX__", short_integer_type_node);
+  builtin_define_type_max ("__INT_MAX__", integer_type_node);
+  builtin_define_type_max ("__LONG_MAX__", long_integer_type_node);
+  builtin_define_type_max ("__LONG_LONG_MAX__", long_long_integer_type_node);
+  builtin_define_type_minmax ("__WCHAR_MIN__", "__WCHAR_MAX__",
+			      underlying_wchar_type_node);
+  builtin_define_type_minmax ("__WINT_MIN__", "__WINT_MAX__", wint_type_node);
+  builtin_define_type_max ("__PTRDIFF_MAX__", ptrdiff_type_node);
+  builtin_define_type_max ("__SIZE_MAX__", size_type_node);
 
   builtin_define_type_precision ("__CHAR_BIT__", char_type_node);
 
-  /* stdint.h (eventually) and the testsuite need to know these.  */
+  /* stdint.h and the testsuite need to know these.  */
   builtin_define_stdint_macros ();
 
   /* float.h needs to know these.  */
@@ -537,14 +619,11 @@ c_cpp_builtins (cpp_reader *pfile)
                                  TARGET_DEC_EVAL_METHOD);
 
   builtin_define_float_constants ("FLT", "F", "%s", float_type_node);
-  /* Cast the double precision constants when single precision constants are
-     specified. The correct result is computed by the compiler when using 
-     macros that include a cast. This has the side-effect of making the value 
-     unusable in const expressions. */
-  if (flag_single_precision_constant)
-    builtin_define_float_constants ("DBL", "L", "((double)%s)", double_type_node);
-  else
-    builtin_define_float_constants ("DBL", "", "%s", double_type_node);
+  /* Cast the double precision constants.  This is needed when single
+     precision constants are specified or when pragma FLOAT_CONST_DECIMAL64
+     is used.  The correct result is computed by the compiler when using
+     macros that include a cast.  */
+  builtin_define_float_constants ("DBL", "L", "((double)%s)", double_type_node);
   builtin_define_float_constants ("LDBL", "L", "%s", long_double_type_node);
 
   /* For decfloat.h.  */
@@ -703,8 +782,7 @@ c_cpp_builtins (cpp_reader *pfile)
     cpp_define (pfile, "__NEXT_RUNTIME__");
 
   /* Show the availability of some target pragmas.  */
-  if (flag_mudflap || targetm.handle_pragma_redefine_extname)
-    cpp_define (pfile, "__PRAGMA_REDEFINE_EXTNAME");
+  cpp_define (pfile, "__PRAGMA_REDEFINE_EXTNAME");
 
   if (targetm.handle_pragma_extern_prefix)
     cpp_define (pfile, "__PRAGMA_EXTERN_PREFIX");
@@ -857,7 +935,7 @@ builtin_define_with_int_value (const char *macro, HOST_WIDE_INT value)
 static void
 builtin_define_with_hex_fp_value (const char *macro,
 				  tree type, int digits,
-				  const char *hex_str, 
+				  const char *hex_str,
 				  const char *fp_suffix,
 				  const char *fp_cast)
 {
@@ -883,16 +961,84 @@ builtin_define_with_hex_fp_value (const char *macro,
   sprintf (buf1, "%s%s", dec_str, fp_suffix);
   sprintf (buf2, fp_cast, buf1);
   sprintf (buf1, "%s=%s", macro, buf2);
-  
+
   cpp_define (parse_in, buf1);
 }
 
-/* Define MAX for TYPE based on the precision of the type.  IS_LONG is
-   1 for type "long" and 2 for "long long".  We have to handle
-   unsigned types, since wchar_t might be unsigned.  */
+/* Return a string constant for the suffix for a value of type TYPE
+   promoted according to the integer promotions.  The type must be one
+   of the standard integer type nodes.  */
+
+static const char *
+type_suffix (tree type)
+{
+  static const char *const suffixes[] = { "", "U", "L", "UL", "LL", "ULL" };
+  int unsigned_suffix;
+  int is_long;
+
+  if (type == long_long_integer_type_node
+      || type == long_long_unsigned_type_node)
+    is_long = 2;
+  else if (type == long_integer_type_node
+	   || type == long_unsigned_type_node)
+    is_long = 1;
+  else if (type == integer_type_node
+	   || type == unsigned_type_node
+	   || type == short_integer_type_node
+	   || type == short_unsigned_type_node
+	   || type == signed_char_type_node
+	   || type == unsigned_char_type_node
+	   /* ??? "char" is not a signed or unsigned integer type and
+	      so is not permitted for the standard typedefs, but some
+	      systems use it anyway.  */
+	   || type == char_type_node)
+    is_long = 0;
+  else
+    gcc_unreachable ();
+
+  unsigned_suffix = TYPE_UNSIGNED (type);
+  if (TYPE_PRECISION (type) < TYPE_PRECISION (integer_type_node))
+    unsigned_suffix = 0;
+  return suffixes[is_long * 2 + unsigned_suffix];
+}
+
+/* Define MACRO as a <stdint.h> constant-suffix macro for TYPE.  */
+static void
+builtin_define_constants (const char *macro, tree type)
+{
+  const char *suffix;
+  char *buf;
+
+  suffix = type_suffix (type);
+
+  if (suffix[0] == 0)
+    {
+      buf = (char *) alloca (strlen (macro) + 6);
+      sprintf (buf, "%s(c)=c", macro);
+    }
+  else
+    {
+      buf = (char *) alloca (strlen (macro) + 9 + strlen (suffix) + 1);
+      sprintf (buf, "%s(c)=c ## %s", macro, suffix);
+    }
+
+  cpp_define (parse_in, buf);
+}
+
+/* Define MAX for TYPE based on the precision of the type.  */
 
 static void
-builtin_define_type_max (const char *macro, tree type, int is_long)
+builtin_define_type_max (const char *macro, tree type)
+{
+  builtin_define_type_minmax (NULL, macro, type);
+}
+
+/* Define MIN_MACRO (if not NULL) and MAX_MACRO for TYPE based on the
+   precision of the type.  */
+
+static void
+builtin_define_type_minmax (const char *min_macro, const char *max_macro,
+			    tree type)
 {
   static const char *const values[]
     = { "127", "255",
@@ -901,7 +1047,6 @@ builtin_define_type_max (const char *macro, tree type, int is_long)
 	"9223372036854775807", "18446744073709551615",
 	"170141183460469231731687303715884105727",
 	"340282366920938463463374607431768211455" };
-  static const char *const suffixes[] = { "", "U", "L", "UL", "LL", "ULL" };
 
   const char *value, *suffix;
   char *buf;
@@ -921,11 +1066,27 @@ builtin_define_type_max (const char *macro, tree type, int is_long)
     }
 
   value = values[idx + TYPE_UNSIGNED (type)];
-  suffix = suffixes[is_long * 2 + TYPE_UNSIGNED (type)];
+  suffix = type_suffix (type);
 
-  buf = (char *) alloca (strlen (macro) + 1 + strlen (value)
+  buf = (char *) alloca (strlen (max_macro) + 1 + strlen (value)
                          + strlen (suffix) + 1);
-  sprintf (buf, "%s=%s%s", macro, value, suffix);
+  sprintf (buf, "%s=%s%s", max_macro, value, suffix);
 
   cpp_define (parse_in, buf);
+
+  if (min_macro)
+    {
+      if (TYPE_UNSIGNED (type))
+	{
+	  buf = (char *) alloca (strlen (min_macro) + 2 + strlen (suffix) + 1);
+	  sprintf (buf, "%s=0%s", min_macro, suffix);
+	}
+      else
+	{
+	  buf = (char *) alloca (strlen (min_macro) + 3
+				 + strlen (max_macro) + 6);
+	  sprintf (buf, "%s=(-%s - 1)", min_macro, max_macro);
+	}
+      cpp_define (parse_in, buf);
+    }
 }

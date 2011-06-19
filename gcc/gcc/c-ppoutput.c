@@ -1,6 +1,6 @@
 /* Preprocess only, using cpplib.
    Copyright (C) 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007,
-   2008 Free Software Foundation, Inc.
+   2008, 2009 Free Software Foundation, Inc.
    Written by Per Bothner, 1994-95.
 
    This program is free software; you can redistribute it and/or modify it
@@ -37,6 +37,7 @@ static struct
   int src_line;			/* Line number currently being written.  */
   unsigned char printed;	/* Nonzero if something output at line.  */
   bool first_time;		/* pp_file_change hasn't been called yet.  */
+  const char *src_file;		/* Current source file.  */
 } print;
 
 /* Defined and undefined macros being queued for output with -dU at
@@ -61,6 +62,8 @@ static void dump_queued_macros (cpp_reader *);
 
 static void print_line (source_location, const char *);
 static void maybe_print_line (source_location);
+static void do_line_change (cpp_reader *, const cpp_token *,
+			    source_location, int);
 
 /* Callback routines for the parser.   Most of these are active only
    in specific modes.  */
@@ -152,6 +155,7 @@ init_pp_output (FILE *out_stream)
   print.prev = 0;
   print.outf = out_stream;
   print.first_time = 1;
+  print.src_file = "";
 }
 
 /* Writes out the preprocessed file, handling spacing and paste
@@ -160,11 +164,16 @@ static void
 scan_translation_unit (cpp_reader *pfile)
 {
   bool avoid_paste = false;
+  bool do_line_adjustments
+    = cpp_get_options (parse_in)->lang != CLK_ASM
+      && !flag_no_line_commands;
+  bool in_pragma = false;
 
   print.source = NULL;
   for (;;)
     {
-      const cpp_token *token = cpp_get_token (pfile);
+      source_location loc;
+      const cpp_token *token = cpp_get_token_with_location (pfile, &loc);
 
       if (token->type == CPP_PADDING)
 	{
@@ -182,16 +191,38 @@ scan_translation_unit (cpp_reader *pfile)
       /* Subtle logic to output a space if and only if necessary.  */
       if (avoid_paste)
 	{
+	  const struct line_map *map
+	    = linemap_lookup (line_table, loc);
+	  int src_line = SOURCE_LINE (map, loc);
+
 	  if (print.source == NULL)
 	    print.source = token;
-	  if (print.source->flags & PREV_WHITE
-	      || (print.prev
-		  && cpp_avoid_paste (pfile, print.prev, token))
-	      || (print.prev == NULL && token->type == CPP_HASH))
+
+	  if (src_line != print.src_line
+	      && do_line_adjustments
+	      && !in_pragma)
+	    {
+	      do_line_change (pfile, token, loc, false);
+	      putc (' ', print.outf);
+	    }
+	  else if (print.source->flags & PREV_WHITE
+		   || (print.prev
+		       && cpp_avoid_paste (pfile, print.prev, token))
+		   || (print.prev == NULL && token->type == CPP_HASH))
 	    putc (' ', print.outf);
 	}
       else if (token->flags & PREV_WHITE)
-	putc (' ', print.outf);
+	{
+	  const struct line_map *map
+	    = linemap_lookup (line_table, loc);
+	  int src_line = SOURCE_LINE (map, loc);
+
+	  if (src_line != print.src_line
+	      && do_line_adjustments
+	      && !in_pragma)
+	    do_line_change (pfile, token, loc, false);
+	  putc (' ', print.outf);
+	}
 
       avoid_paste = false;
       print.source = NULL;
@@ -209,9 +240,13 @@ scan_translation_unit (cpp_reader *pfile)
 	  else
 	    fprintf (print.outf, "%s", name);
 	  print.printed = 1;
+	  in_pragma = true;
 	}
       else if (token->type == CPP_PRAGMA_EOL)
-	maybe_print_line (token->src_loc);
+	{
+	  maybe_print_line (token->src_loc);
+	  in_pragma = false;
+	}
       else
 	cpp_output_token (token, print.outf);
 
@@ -280,7 +315,9 @@ maybe_print_line (source_location src_loc)
       print.printed = 0;
     }
 
-  if (src_line >= print.src_line && src_line < print.src_line + 8)
+  if (src_line >= print.src_line
+      && src_line < print.src_line + 8
+      && (flag_no_line_commands || strcmp (map->to_file, print.src_file) == 0))
     {
       while (src_line > print.src_line)
 	{
@@ -312,6 +349,7 @@ print_line (source_location src_loc, const char *special_flags)
       unsigned char *p;
 
       print.src_line = SOURCE_LINE (map, src_loc);
+      print.src_file = map->to_file;
 
       /* cpp_quote_string does not nul-terminate, so we have to do it
 	 ourselves.  */
@@ -331,14 +369,11 @@ print_line (source_location src_loc, const char *special_flags)
     }
 }
 
-/* Called when a line of output is started.  TOKEN is the first token
-   of the line, and at end of file will be CPP_EOF.  */
+/* Helper function for cb_line_change and scan_translation_unit.  */
 static void
-cb_line_change (cpp_reader *pfile, const cpp_token *token,
-		int parsing_args)
+do_line_change (cpp_reader *pfile, const cpp_token *token,
+		source_location src_loc, int parsing_args)
 {
-  source_location src_loc = token->src_loc;
-
   if (define_queue || undef_queue)
     dump_queued_macros (pfile);
 
@@ -363,6 +398,15 @@ cb_line_change (cpp_reader *pfile, const cpp_token *token,
       while (-- spaces >= 0)
 	putc (' ', print.outf);
     }
+}
+
+/* Called when a line of output is started.  TOKEN is the first token
+   of the line, and at end of file will be CPP_EOF.  */
+static void
+cb_line_change (cpp_reader *pfile, const cpp_token *token,
+		int parsing_args)
+{
+  do_line_change (pfile, token, token->src_loc, parsing_args);
 }
 
 static void
@@ -521,6 +565,7 @@ pp_file_change (const struct line_map *map)
 
   if (map != NULL)
     {
+      input_location = map->start_location;
       if (print.first_time)
 	{
 	  /* Avoid printing foo.i when the main file is foo.c.  */

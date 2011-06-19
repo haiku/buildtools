@@ -1,3 +1,37 @@
+# Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+# 2009 Free Software Foundation, Inc.
+#
+# This file is part of GCC.
+#
+# GCC is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3, or (at your option)
+# any later version.
+#
+# GCC is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GCC; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+
+driver-avr.o: $(srcdir)/config/avr/driver-avr.c \
+  $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H)
+	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $<
+
+avr-devices.o: $(srcdir)/config/avr/avr-devices.c \
+  $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H)
+	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $<
+	
+
+avr-c.o: $(srcdir)/config/avr/avr-c.c \
+  $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H)
+	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $<
+	
+
+
 LIB1ASMSRC = avr/libgcc.S
 LIB1ASMFUNCS = \
 	_mulqi3 \
@@ -67,6 +101,9 @@ MULTILIB_MATCHES = \
 	mmcu?avr31=mmcu?at43usb320 \
 	mmcu?avr35=mmcu?at90usb82 \
 	mmcu?avr35=mmcu?at90usb162 \
+	mmcu?avr35=mmcu?atmega8u2 \
+	mmcu?avr35=mmcu?atmega16u2 \
+	mmcu?avr35=mmcu?atmega32u2 \
 	mmcu?avr35=mmcu?attiny167 \
 	mmcu?avr35=mmcu?attiny327 \
 	mmcu?avr4=mmcu?atmega48 \

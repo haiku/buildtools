@@ -40,7 +40,7 @@
   [(set (match_operand:BLK 0 "" "")
 	(unspec:BLK [(match_dup 0)] UNSPEC_MEMORY_BARRIER))]
   "GENERATE_SYNC"
-  "%|sync%-")
+  { return mips_output_sync (); })
 
 (define_insn "sync_compare_and_swap<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -50,13 +50,12 @@
 			      (match_operand:GPR 3 "arith_operand" "I,d")]
 	 UNSPEC_COMPARE_AND_SWAP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_COMPARE_AND_SWAP ("<d>", "li"));
-  else
-    return mips_output_sync_loop (MIPS_COMPARE_AND_SWAP ("<d>", "move"));
-}
-  [(set_attr "length" "32")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "li,move")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_required_oldval" "2")
+   (set_attr "sync_insn1_op2" "3")])
 
 (define_expand "sync_compare_and_swap<mode>"
   [(match_operand:SHORT 0 "register_operand")
@@ -83,15 +82,13 @@
 			     (match_operand:SI 5 "reg_or_0_operand" "d,J")]
 			    UNSPEC_COMPARE_AND_SWAP_12))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return (mips_output_sync_loop
-	    (MIPS_COMPARE_AND_SWAP_12 (MIPS_COMPARE_AND_SWAP_12_NONZERO_OP)));
-  else
-    return (mips_output_sync_loop
-	    (MIPS_COMPARE_AND_SWAP_12 (MIPS_COMPARE_AND_SWAP_12_ZERO_OP)));
-}
-  [(set_attr "length" "40,36")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_inclusive_mask" "2")
+   (set_attr "sync_exclusive_mask" "3")
+   (set_attr "sync_required_oldval" "4")
+   (set_attr "sync_insn1_op2" "5")])
 
 (define_insn "sync_add<mode>"
   [(set (match_operand:GPR 0 "memory_operand" "+R,R")
@@ -100,13 +97,10 @@
 		     (match_operand:GPR 1 "arith_operand" "I,d"))]
 	  UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_OP ("<d>", "<d>addiu"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_OP ("<d>", "<d>addu"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "addiu,addu")
+   (set_attr "sync_mem" "0")
+   (set_attr "sync_insn1_op2" "1")])
 
 (define_expand "sync_<optab><mode>"
   [(set (match_operand:SHORT 0 "memory_operand")
@@ -134,11 +128,15 @@
 	  UNSPEC_SYNC_OLD_OP_12))
    (clobber (match_scratch:SI 4 "=&d"))]
   "GENERATE_LL_SC"
-{
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_OP_12 ("<insn>", MIPS_SYNC_OP_12_AND)));
-}
-  [(set_attr "length" "40")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "<insn>")
+   (set_attr "sync_insn2" "and")
+   (set_attr "sync_mem" "0")
+   (set_attr "sync_inclusive_mask" "1")
+   (set_attr "sync_exclusive_mask" "2")
+   (set_attr "sync_insn1_op2" "3")
+   (set_attr "sync_oldval" "4")
+   (set_attr "sync_newval" "4")])
 
 (define_expand "sync_old_<optab><mode>"
   [(parallel [
@@ -171,11 +169,15 @@
 	  UNSPEC_SYNC_OLD_OP_12))
    (clobber (match_scratch:SI 5 "=&d"))]
   "GENERATE_LL_SC"
-{
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_OLD_OP_12 ("<insn>", MIPS_SYNC_OLD_OP_12_AND)));
-}
-  [(set_attr "length" "40")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "<insn>")
+   (set_attr "sync_insn2" "and")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_inclusive_mask" "2")
+   (set_attr "sync_exclusive_mask" "3")
+   (set_attr "sync_insn1_op2" "4")
+   (set_attr "sync_newval" "5")])
 
 (define_expand "sync_new_<optab><mode>"
   [(parallel [
@@ -213,11 +215,15 @@
 	   (match_dup 3)
 	   (match_dup 4)] UNSPEC_SYNC_NEW_OP_12))]
   "GENERATE_LL_SC"
-{
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_NEW_OP_12 ("<insn>", MIPS_SYNC_NEW_OP_12_AND)));
-}
-  [(set_attr "length" "40")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "<insn>")
+   (set_attr "sync_insn2" "and")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_newval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_inclusive_mask" "2")
+   (set_attr "sync_exclusive_mask" "3")
+   (set_attr "sync_insn1_op2" "4")])
 
 (define_expand "sync_nand<mode>"
   [(set (match_operand:SHORT 0 "memory_operand")
@@ -245,11 +251,15 @@
 	  UNSPEC_SYNC_OLD_OP_12))
    (clobber (match_scratch:SI 4 "=&d"))]
   "GENERATE_LL_SC"
-{
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_OP_12 ("and", MIPS_SYNC_OP_12_XOR)));
-}
-  [(set_attr "length" "40")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "and")
+   (set_attr "sync_insn2" "xor")
+   (set_attr "sync_mem" "0")
+   (set_attr "sync_inclusive_mask" "1")
+   (set_attr "sync_exclusive_mask" "2")
+   (set_attr "sync_insn1_op2" "3")
+   (set_attr "sync_oldval" "4")
+   (set_attr "sync_newval" "4")])
 
 (define_expand "sync_old_nand<mode>"
   [(parallel [
@@ -280,11 +290,15 @@
 	  UNSPEC_SYNC_OLD_OP_12))
    (clobber (match_scratch:SI 5 "=&d"))]
   "GENERATE_LL_SC"
-{
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_OLD_OP_12 ("and", MIPS_SYNC_OLD_OP_12_XOR)));
-}
-  [(set_attr "length" "40")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "and")
+   (set_attr "sync_insn2" "xor")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_inclusive_mask" "2")
+   (set_attr "sync_exclusive_mask" "3")
+   (set_attr "sync_insn1_op2" "4")
+   (set_attr "sync_newval" "5")])
 
 (define_expand "sync_new_nand<mode>"
   [(parallel [
@@ -320,23 +334,27 @@
 	   (match_dup 3)
 	   (match_dup 4)] UNSPEC_SYNC_NEW_OP_12))]
   "GENERATE_LL_SC"
-{
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_NEW_OP_12 ("and", MIPS_SYNC_NEW_OP_12_XOR)));
-}
-  [(set_attr "length" "40")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "and")
+   (set_attr "sync_insn2" "xor")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_newval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_inclusive_mask" "2")
+   (set_attr "sync_exclusive_mask" "3")
+   (set_attr "sync_insn1_op2" "4")])
 
 (define_insn "sync_sub<mode>"
   [(set (match_operand:GPR 0 "memory_operand" "+R")
 	(unspec_volatile:GPR
           [(minus:GPR (match_dup 0)
-			      (match_operand:GPR 1 "register_operand" "d"))]
+		      (match_operand:GPR 1 "register_operand" "d"))]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  return mips_output_sync_loop (MIPS_SYNC_OP ("<d>", "<d>subu"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "subu")
+   (set_attr "sync_mem" "0")
+   (set_attr "sync_insn1_op2" "1")])
 
 (define_insn "sync_old_add<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -347,13 +365,11 @@
 		     (match_operand:GPR 2 "arith_operand" "I,d"))]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_OLD_OP ("<d>", "<d>addiu"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_OLD_OP ("<d>", "<d>addu"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "addiu,addu")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_old_sub<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d")
@@ -364,10 +380,11 @@
 		      (match_operand:GPR 2 "register_operand" "d"))]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  return mips_output_sync_loop (MIPS_SYNC_OLD_OP ("<d>", "<d>subu"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "subu")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_new_add<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -378,13 +395,12 @@
 	  [(plus:GPR (match_dup 1) (match_dup 2))]
 	 UNSPEC_SYNC_NEW_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_NEW_OP ("<d>", "<d>addiu"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_NEW_OP ("<d>", "<d>addu"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "addiu,addu")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_newval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_new_sub<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d")
@@ -395,10 +411,12 @@
 	  [(minus:GPR (match_dup 1) (match_dup 2))]
 	 UNSPEC_SYNC_NEW_OP))]
   "GENERATE_LL_SC"
-{
-  return mips_output_sync_loop (MIPS_SYNC_NEW_OP ("<d>", "<d>subu"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "subu")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_newval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_<optab><mode>"
   [(set (match_operand:GPR 0 "memory_operand" "+R,R")
@@ -407,13 +425,10 @@
 			      (match_dup 0))]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_OP ("<d>", "<immediate_insn>"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_OP ("<d>", "<insn>"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "<immediate_insn>,<insn>")
+   (set_attr "sync_mem" "0")
+   (set_attr "sync_insn1_op2" "1")])
 
 (define_insn "sync_old_<optab><mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -424,14 +439,11 @@
 			    (match_dup 1))]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_OLD_OP ("<d>", "<immediate_insn>")));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_OLD_OP ("<d>", "<insn>"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "<immediate_insn>,<insn>")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_new_<optab><mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -442,27 +454,23 @@
 			    (match_dup 1))]
 	 UNSPEC_SYNC_NEW_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_NEW_OP ("<d>", "<immediate_insn>")));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_NEW_OP ("<d>", "<insn>"));
-}
-  [(set_attr "length" "28")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "<immediate_insn>,<insn>")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_newval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_nand<mode>"
   [(set (match_operand:GPR 0 "memory_operand" "+R,R")
 	(unspec_volatile:GPR [(match_operand:GPR 1 "uns_arith_operand" "K,d")]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_NAND ("<d>", "andi"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_NAND ("<d>", "and"));
-}
-  [(set_attr "length" "32")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "andi,and")
+   (set_attr "sync_insn2" "not")
+   (set_attr "sync_mem" "0")
+   (set_attr "sync_insn1_op2" "1")])
 
 (define_insn "sync_old_nand<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -471,13 +479,12 @@
         (unspec_volatile:GPR [(match_operand:GPR 2 "uns_arith_operand" "K,d")]
 	 UNSPEC_SYNC_OLD_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_OLD_NAND ("<d>", "andi"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_OLD_NAND ("<d>", "and"));
-}
-  [(set_attr "length" "32")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "andi,and")
+   (set_attr "sync_insn2" "not")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_new_nand<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -486,13 +493,13 @@
 	(unspec_volatile:GPR [(match_operand:GPR 2 "uns_arith_operand" "K,d")]
 	 UNSPEC_SYNC_NEW_OP))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_NEW_NAND ("<d>", "andi"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_NEW_NAND ("<d>", "and"));
-}
-  [(set_attr "length" "32")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_insn1" "andi,and")
+   (set_attr "sync_insn2" "not")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_newval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_insn "sync_lock_test_and_set<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&d,&d")
@@ -501,13 +508,12 @@
 	(unspec_volatile:GPR [(match_operand:GPR 2 "arith_operand" "I,d")]
 	 UNSPEC_SYNC_EXCHANGE))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return mips_output_sync_loop (MIPS_SYNC_EXCHANGE ("<d>", "li"));
-  else
-    return mips_output_sync_loop (MIPS_SYNC_EXCHANGE ("<d>", "move"));
-}
-  [(set_attr "length" "24")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_release_barrier" "no")
+   (set_attr "sync_insn1" "li,move")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   (set_attr "sync_insn1_op2" "2")])
 
 (define_expand "sync_lock_test_and_set<mode>"
   [(match_operand:SHORT 0 "register_operand")
@@ -523,20 +529,20 @@
 })
 
 (define_insn "test_and_set_12"
-  [(set (match_operand:SI 0 "register_operand" "=&d,&d")
-	(match_operand:SI 1 "memory_operand" "+R,R"))
+  [(set (match_operand:SI 0 "register_operand" "=&d")
+	(match_operand:SI 1 "memory_operand" "+R"))
    (set (match_dup 1)
-	(unspec_volatile:SI [(match_operand:SI 2 "register_operand" "d,d")
-			     (match_operand:SI 3 "register_operand" "d,d")
-			     (match_operand:SI 4 "arith_operand" "d,J")]
+	(unspec_volatile:SI [(match_operand:SI 2 "register_operand" "d")
+			     (match_operand:SI 3 "register_operand" "d")
+			     (match_operand:SI 4 "arith_operand" "dJ")]
 	  UNSPEC_SYNC_EXCHANGE_12))]
   "GENERATE_LL_SC"
-{
-  if (which_alternative == 0)
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_EXCHANGE_12 (MIPS_SYNC_EXCHANGE_12_NONZERO_OP)));
-  else
-    return (mips_output_sync_loop
-	    (MIPS_SYNC_EXCHANGE_12 (MIPS_SYNC_EXCHANGE_12_ZERO_OP)));
-}
-  [(set_attr "length" "28,24")])
+  { return mips_output_sync_loop (insn, operands); }
+  [(set_attr "sync_release_barrier" "no")
+   (set_attr "sync_oldval" "0")
+   (set_attr "sync_mem" "1")
+   ;; Unused, but needed to give the number of operands expected by
+   ;; the expander.
+   (set_attr "sync_inclusive_mask" "2")
+   (set_attr "sync_exclusive_mask" "3")
+   (set_attr "sync_insn1_op2" "4")])

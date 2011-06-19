@@ -1,5 +1,6 @@
 /* Default target hook functions.
-   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -67,6 +68,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 
 
+bool
+default_legitimate_address_p (enum machine_mode mode ATTRIBUTE_UNUSED,
+			      rtx addr ATTRIBUTE_UNUSED,
+			      bool strict ATTRIBUTE_UNUSED)
+{
+#ifdef GO_IF_LEGITIMATE_ADDRESS
+  /* Defer to the old implementation using a goto.  */
+  if (strict)
+    return strict_memory_address_p (mode, addr);
+  else
+    return memory_address_p (mode, addr);
+#else
+  gcc_unreachable ();
+#endif
+}
+
 void
 default_external_libcall (rtx fun ATTRIBUTE_UNUSED)
 {
@@ -96,6 +113,29 @@ default_unspec_may_trap_p (const_rtx x, unsigned flags)
 }
 
 enum machine_mode
+default_promote_function_mode (const_tree type ATTRIBUTE_UNUSED,
+			       enum machine_mode mode,
+			       int *punsignedp ATTRIBUTE_UNUSED,
+			       const_tree funtype ATTRIBUTE_UNUSED,
+			       int for_return ATTRIBUTE_UNUSED)
+{
+  if (for_return == 2)
+    return promote_mode (type, mode, punsignedp);
+  return mode;
+}
+
+enum machine_mode
+default_promote_function_mode_always_promote (const_tree type,
+					      enum machine_mode mode,
+					      int *punsignedp,
+					      const_tree funtype ATTRIBUTE_UNUSED,
+					      int for_return ATTRIBUTE_UNUSED)
+{
+  return promote_mode (type, mode, punsignedp);
+}
+
+
+enum machine_mode
 default_cc_modes_compatible (enum machine_mode m1, enum machine_mode m2)
 {
   if (m1 == m2)
@@ -108,6 +148,13 @@ default_return_in_memory (const_tree type,
 			  const_tree fntype ATTRIBUTE_UNUSED)
 {
   return (TYPE_MODE (type) == BLKmode);
+}
+
+rtx
+default_legitimize_address (rtx x, rtx orig_x ATTRIBUTE_UNUSED,
+			    enum machine_mode mode ATTRIBUTE_UNUSED)
+{
+  return x;
 }
 
 rtx
@@ -349,7 +396,7 @@ default_fixed_point_supported_p (void)
 
 /* NULL if INSN insn is valid within a low-overhead loop, otherwise returns
    an error message.
-  
+
    This function checks whether a given INSN is valid within a low-overhead
    loop.  If INSN is invalid it returns the reason for that, otherwise it
    returns NULL. A called function may clobber any special registers required
@@ -362,19 +409,17 @@ default_invalid_within_doloop (const_rtx insn)
 {
   if (CALL_P (insn))
     return "Function call in loop.";
-  
-  if (JUMP_P (insn)
-      && (GET_CODE (PATTERN (insn)) == ADDR_DIFF_VEC
-	  || GET_CODE (PATTERN (insn)) == ADDR_VEC))
+
+  if (JUMP_TABLE_DATA_P (insn))
     return "Computed branch in the loop.";
-  
+
   return NULL;
 }
 
 /* Mapping of builtin functions to vectorized variants.  */
 
 tree
-default_builtin_vectorized_function (enum built_in_function fn ATTRIBUTE_UNUSED,
+default_builtin_vectorized_function (tree fndecl ATTRIBUTE_UNUSED,
 				     tree type_out ATTRIBUTE_UNUSED,
 				     tree type_in ATTRIBUTE_UNUSED)
 {
@@ -384,7 +429,7 @@ default_builtin_vectorized_function (enum built_in_function fn ATTRIBUTE_UNUSED,
 /* Vectorized conversion.  */
 
 tree
-default_builtin_vectorized_conversion (enum tree_code code ATTRIBUTE_UNUSED,
+default_builtin_vectorized_conversion (unsigned int code ATTRIBUTE_UNUSED,
 				       tree type ATTRIBUTE_UNUSED)
 {
   return NULL_TREE;
@@ -393,7 +438,7 @@ default_builtin_vectorized_conversion (enum tree_code code ATTRIBUTE_UNUSED,
 /* Reciprocal.  */
 
 tree
-default_builtin_reciprocal (enum built_in_function fn ATTRIBUTE_UNUSED,
+default_builtin_reciprocal (unsigned int fn ATTRIBUTE_UNUSED,
 			    bool md_fn ATTRIBUTE_UNUSED,
 			    bool sqrt ATTRIBUTE_UNUSED)
 {
@@ -427,7 +472,7 @@ hook_int_CUMULATIVE_ARGS_mode_tree_bool_0 (
   return 0;
 }
 
-void 
+void
 hook_void_bitmap (bitmap regs ATTRIBUTE_UNUSED)
 {
 }
@@ -453,7 +498,8 @@ default_stack_protect_guard (void)
 
   if (t == NULL)
     {
-      t = build_decl (VAR_DECL, get_identifier ("__stack_chk_guard"),
+      t = build_decl (UNKNOWN_LOCATION,
+		      VAR_DECL, get_identifier ("__stack_chk_guard"),
 		      ptr_type_node);
       TREE_STATIC (t) = 1;
       TREE_PUBLIC (t) = 1;
@@ -471,7 +517,7 @@ default_stack_protect_guard (void)
 
 static GTY(()) tree stack_chk_fail_decl;
 
-tree 
+tree
 default_external_stack_protect_fail (void)
 {
   tree t = stack_chk_fail_decl;
@@ -479,7 +525,8 @@ default_external_stack_protect_fail (void)
   if (t == NULL_TREE)
     {
       t = build_function_type_list (void_type_node, NULL_TREE);
-      t = build_decl (FUNCTION_DECL, get_identifier ("__stack_chk_fail"), t);
+      t = build_decl (UNKNOWN_LOCATION,
+		      FUNCTION_DECL, get_identifier ("__stack_chk_fail"), t);
       TREE_STATIC (t) = 1;
       TREE_PUBLIC (t) = 1;
       DECL_EXTERNAL (t) = 1;
@@ -511,7 +558,7 @@ default_hidden_stack_protect_fail (void)
   if (t == NULL_TREE)
     {
       t = build_function_type_list (void_type_node, NULL_TREE);
-      t = build_decl (FUNCTION_DECL,
+      t = build_decl (UNKNOWN_LOCATION, FUNCTION_DECL,
 		      get_identifier ("__stack_chk_fail_local"), t);
       TREE_STATIC (t) = 1;
       TREE_PUBLIC (t) = 1;
@@ -556,7 +603,18 @@ default_function_value (const_tree ret_type ATTRIBUTE_UNUSED,
 #ifdef FUNCTION_VALUE
   return FUNCTION_VALUE (ret_type, fn_decl_or_type);
 #else
-  return NULL_RTX;
+  gcc_unreachable ();
+#endif
+}
+
+rtx
+default_libcall_value (enum machine_mode mode ATTRIBUTE_UNUSED,
+		       const_rtx fun ATTRIBUTE_UNUSED)
+{
+#ifdef LIBCALL_VALUE
+  return LIBCALL_VALUE (mode);
+#else
+  gcc_unreachable ();
 #endif
 }
 
@@ -573,6 +631,50 @@ default_internal_arg_pointer (void)
     return copy_to_reg (virtual_incoming_args_rtx);
   else
     return virtual_incoming_args_rtx;
+}
+
+rtx
+default_static_chain (const_tree fndecl, bool incoming_p)
+{
+  if (!DECL_STATIC_CHAIN (fndecl))
+    return NULL;
+
+  if (incoming_p)
+    {
+#ifdef STATIC_CHAIN_INCOMING_REGNUM
+      return gen_rtx_REG (Pmode, STATIC_CHAIN_INCOMING_REGNUM);
+#endif
+    }
+
+#ifdef STATIC_CHAIN_REGNUM
+  return gen_rtx_REG (Pmode, STATIC_CHAIN_REGNUM);
+#endif
+
+  {
+    static bool issued_error;
+    if (!issued_error)
+      {
+	issued_error = true;
+	sorry ("nested functions not supported on this target");
+      }
+
+    /* It really doesn't matter what we return here, so long at it
+       doesn't cause the rest of the compiler to crash.  */
+    return gen_rtx_MEM (Pmode, stack_pointer_rtx);
+  }
+}
+
+void
+default_trampoline_init (rtx ARG_UNUSED (m_tramp), tree ARG_UNUSED (t_func),
+			 rtx ARG_UNUSED (r_chain))
+{
+  sorry ("nested function trampolines not supported on this target");
+}
+
+enum reg_class
+default_branch_target_register_class (void)
+{
+  return NO_REGS;
 }
 
 #ifdef IRA_COVER_CLASSES
@@ -712,6 +814,124 @@ default_builtin_vector_alignment_reachable (const_tree type, bool is_packed)
   return true;
 }
 
+/* By default, assume that a target supports any factor of misalignment
+   memory access if it supports movmisalign patten.
+   is_packed is true if the memory access is defined in a packed struct.  */
+bool
+default_builtin_support_vector_misalignment (enum machine_mode mode,
+					     const_tree type
+					     ATTRIBUTE_UNUSED,
+					     int misalignment
+					     ATTRIBUTE_UNUSED,
+					     bool is_packed
+					     ATTRIBUTE_UNUSED)
+{
+  if (optab_handler (movmisalign_optab, mode)->insn_code != CODE_FOR_nothing)
+    return true;
+  return false;
+}
+
+/* Determine whether or not a pointer mode is valid. Assume defaults
+   of ptr_mode or Pmode - can be overridden.  */
+bool
+default_valid_pointer_mode (enum machine_mode mode)
+{
+  return (mode == ptr_mode || mode == Pmode);
+}
+
+/* Return the mode for a pointer to a given ADDRSPACE, defaulting to ptr_mode
+   for the generic address space only.  */
+
+enum machine_mode
+default_addr_space_pointer_mode (addr_space_t addrspace ATTRIBUTE_UNUSED)
+{
+  gcc_assert (ADDR_SPACE_GENERIC_P (addrspace));
+  return ptr_mode;
+}
+
+/* Return the mode for an address in a given ADDRSPACE, defaulting to Pmode
+   for the generic address space only.  */
+
+enum machine_mode
+default_addr_space_address_mode (addr_space_t addrspace ATTRIBUTE_UNUSED)
+{
+  gcc_assert (ADDR_SPACE_GENERIC_P (addrspace));
+  return Pmode;
+}
+
+/* Named address space version of valid_pointer_mode.  */
+
+bool
+default_addr_space_valid_pointer_mode (enum machine_mode mode, addr_space_t as)
+{
+  if (!ADDR_SPACE_GENERIC_P (as))
+    return (mode == targetm.addr_space.pointer_mode (as)
+	    || mode == targetm.addr_space.address_mode (as));
+
+  return targetm.valid_pointer_mode (mode);
+}
+
+/* Some places still assume that all pointer or address modes are the
+   standard Pmode and ptr_mode.  These optimizations become invalid if
+   the target actually supports multiple different modes.  For now,
+   we disable such optimizations on such targets, using this function.  */
+
+bool
+target_default_pointer_address_modes_p (void)
+{
+  if (targetm.addr_space.address_mode != default_addr_space_address_mode)
+    return false;
+  if (targetm.addr_space.pointer_mode != default_addr_space_pointer_mode)
+    return false;
+
+  return true;
+}
+
+/* Named address space version of legitimate_address_p.  */
+
+bool
+default_addr_space_legitimate_address_p (enum machine_mode mode, rtx mem,
+					 bool strict, addr_space_t as)
+{
+  if (!ADDR_SPACE_GENERIC_P (as))
+    gcc_unreachable ();
+
+  return targetm.legitimate_address_p (mode, mem, strict);
+}
+
+/* Named address space version of LEGITIMIZE_ADDRESS.  */
+
+rtx
+default_addr_space_legitimize_address (rtx x, rtx oldx,
+				       enum machine_mode mode, addr_space_t as)
+{
+  if (!ADDR_SPACE_GENERIC_P (as))
+    return x;
+
+  return targetm.legitimize_address (x, oldx, mode);
+}
+
+/* The default hook for determining if one named address space is a subset of
+   another and to return which address space to use as the common address
+   space.  */
+
+bool
+default_addr_space_subset_p (addr_space_t subset, addr_space_t superset)
+{
+  return (subset == superset);
+}
+
+/* The default hook for TARGET_ADDR_SPACE_CONVERT. This hook should never be
+   called for targets with only a generic address space.  */
+
+rtx
+default_addr_space_convert (rtx op ATTRIBUTE_UNUSED,
+			    tree from_type ATTRIBUTE_UNUSED,
+			    tree to_type ATTRIBUTE_UNUSED)
+{
+  gcc_unreachable ();
+}
+
 bool
 default_hard_regno_scratch_ok (unsigned int regno ATTRIBUTE_UNUSED)
 {
@@ -741,7 +961,7 @@ default_target_option_pragma_parse (tree ARG_UNUSED (args),
 }
 
 bool
-default_target_option_can_inline_p (tree caller, tree callee)
+default_target_can_inline_p (tree caller, tree callee)
 {
   bool ret = false;
   tree callee_opts = DECL_FUNCTION_SPECIFIC_TARGET (callee);
@@ -763,6 +983,29 @@ default_target_option_can_inline_p (tree caller, tree callee)
     ret = (callee_opts == caller_opts);
 
   return ret;
+}
+
+#ifndef HAVE_casesi
+# define HAVE_casesi 0
+#endif
+
+/* If the machine does not have a case insn that compares the bounds,
+   this means extra overhead for dispatch tables, which raises the
+   threshold for using them.  */
+
+unsigned int default_case_values_threshold (void)
+{
+  return (HAVE_casesi ? 4 : 5);
+}
+
+bool
+default_have_conditional_execution (void)
+{
+#ifdef HAVE_conditional_execution
+  return HAVE_conditional_execution;
+#else
+  return false;
+#endif
 }
 
 #include "gt-targhooks.h"

@@ -1,6 +1,6 @@
 <sect1 id="manual.intro.using.debug" xreflabel="Debugging Support">
 <?dbhtml filename="debug.html"?>
- 
+
 <sect1info>
   <keywordset>
     <keyword>
@@ -20,13 +20,13 @@
   are some of them.
 </para>
 
-<sect2 id="debug.compiler" xreflabel="debug.compiler">
+<sect2 id="debug.compiler">
 <title>Using <command>g++</command></title>
-  <para> 
+  <para>
     Compiler flags determine how debug information is transmitted
     between compilation and debug or analysis tools.
   </para>
-  
+
   <para>
     The default optimizations and debug flags for a libstdc++ build
     are <code>-g -O2</code>. However, both debug and optimization
@@ -45,7 +45,7 @@
   communicate information about source constructs can be changed via
   <code>-gdwarf-2</code> or <code>-gstabs</code> flags: some debugging
   formats permit more expressive type and scope information to be
-  shown in gdb. Expressiveness can be enhanced by flags like
+  shown in GDB. Expressiveness can be enhanced by flags like
   <code>-g3</code>. The default debug information for a particular
   platform can be identified via the value set by the
   PREFERRED_DEBUGGING_TYPE macro in the gcc sources.
@@ -59,7 +59,7 @@
 </para>
 </sect2>
 
-<sect2 id="debug.req" xreflabel="debug.req">
+<sect2 id="debug.req">
 <title>Debug Versions of Library Binary Files</title>
 
 <para>
@@ -84,7 +84,7 @@
 </para>
 
 <para>
-  A second approach is to use the configuration flags 
+  A second approach is to use the configuration flags
 </para>
 <programlisting>
      make CXXFLAGS='-g3 -fno-inline -O0' all
@@ -95,8 +95,8 @@
   debugging tasks, when you cannot or don't want to recompile your
   application to use the <link linkend="manual.ext.debug_mode">debug mode</link>.</para>
 </sect2>
- 
-<sect2 id="debug.memory" xreflabel="debug.memory">
+
+<sect2 id="debug.memory">
 <title>Memory Leak Hunting</title>
 
 <para>
@@ -174,8 +174,8 @@
    int main()
    {
       extern void* __dso_handle __attribute__ ((__weak__));
-      __cxa_atexit((void (*) (void *)) __libc_freeres, NULL, 
-                   &amp;__dso_handle ? __dso_handle : NULL);
+      __cxa_atexit((void (*) (void *)) __libc_freeres, NULL,
+		   &amp;__dso_handle ? __dso_handle : NULL);
       do_test();
       return 0;
    }
@@ -185,26 +185,26 @@
   Suggested valgrind flags, given the suggestions above about setting
   up the runtime environment, library, and test file, might be:
 </para>
-<programlisting> 
+<programlisting>
    valgrind -v --num-callers=20 --leak-check=yes --leak-resolution=high --show-reachable=yes a.out
 </programlisting>
 
 </sect2>
 
-<sect2 id="debug.gdb" xreflabel="debug.gdb">
+<sect2 id="debug.gdb">
 <title>Using <command>gdb</command></title>
-  <para> 
+  <para>
   </para>
 
 <para>
-  Many options are available for gdb itself: please see <ulink
-  url="http://sources.redhat.com/gdb/current/onlinedocs/gdb_13.html#SEC125">
-  "GDB features for C++" </ulink> in the gdb documentation. Also
+  Many options are available for GDB itself: please see <ulink
+  url="http://sources.redhat.com/gdb/current/onlinedocs/gdb/">
+  "GDB features for C++" </ulink> in the GDB documentation. Also
   recommended: the other parts of this manual.
 </para>
 
 <para>
-  These settings can either be switched on in at the gdb command line,
+  These settings can either be switched on in at the GDB command line,
   or put into a .gdbint file to establish default debugging
   characteristics, like so:
 </para>
@@ -217,9 +217,59 @@
    set print demangle on
    set demangle-style gnu-v3
 </programlisting>
+
+<para>
+  Starting with version 7.0, GDB includes support for writing
+  pretty-printers in Python.  Pretty printers for STL classes are
+  distributed with GCC from version 4.5.0.  The most recent version of
+  these printers are always found in libstdc++ svn repository.
+  To enable these printers, check-out the latest printers to a local
+  directory:
+</para>
+
+<programlisting>
+  svn co svn://gcc.gnu.org/svn/gcc/trunk/libstdc++-v3/python
+</programlisting>
+
+<para>
+  Next, add the following section to your ~/.gdbinit  The path must
+  match the location where the Python module above was checked-out.
+  So if checked out to: /home/maude/gdb_printers/, the path would be as
+  written in the example below.
+</para>
+
+<programlisting>
+  python
+  import sys
+  sys.path.insert(0, '/home/maude/gdb_printers/python')
+  from libstdcxx.v6.printers import register_libstdcxx_printers
+  register_libstdcxx_printers (None)
+  end
+</programlisting>
+
+<para>
+  The path should be the only element that needs to be adjusted in the
+  example.  Once loaded, STL classes that the printers support
+  should print in a more human-readable format.  To print the classes
+  in the old style, use the /r (raw) switch in the print command
+  (i.e., print /r foo).  This will print the classes as if the Python
+  pretty-printers were not loaded.
+</para>
+
+<para>
+  For additional information on STL support and GDB please visit:
+  <ulink url="http://sourceware.org/gdb/wiki/STLSupport"> "GDB Support
+  for STL" </ulink> in the GDB wiki.  Additionally, in-depth
+  documentation and discussion of the pretty printing feature can be
+  found in "Pretty Printing" node in the GDB manual.  You can find
+  on-line versions of the GDB user manual in GDB's homepage, at
+  <ulink url="http://sourceware.org/gdb/"> "GDB: The GNU Project
+  Debugger" </ulink>.
+</para>
+
 </sect2>
 
-<sect2 id="debug.exceptions" xreflabel="debug.exceptions">
+<sect2 id="debug.exceptions">
 <title>Tracking uncaught exceptions</title>
 <para>
   The <link linkend="support.termination.verbose">verbose
@@ -229,17 +279,25 @@
 </para>
 </sect2>
 
-<sect2 id="debug.debug_mode" xreflabel="debug.debug_mode">
+<sect2 id="debug.debug_mode">
 <title>Debug Mode</title>
   <para> The <link linkend="manual.ext.debug_mode">Debug Mode</link>
   has compile and run-time checks for many containers.
   </para>
 </sect2>
 
-<sect2 id="debug.compile_time_checks" xreflabel="debug.compile_time_checks">
+<sect2 id="debug.compile_time_checks">
 <title>Compile Time Checking</title>
   <para> The <link linkend="manual.ext.compile_checks">Compile-Time
   Checks</link> Extension has compile-time checks for many algorithms.
+  </para>
+</sect2>
+
+<sect2 id="debug.profile_mode" xreflabel="debug.profile_mode">
+<title>Profile-based Performance Analysis</title>
+  <para> The <link linkend="manual.ext.profile_mode">Profile-based
+  Performance Analysis</link> Extension has performance checks for many
+  algorithms.
   </para>
 </sect2>
 

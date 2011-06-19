@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler.
    Matsushita MN10300 series
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007, 2008 Free Software Foundation, Inc.
+   2007, 2008, 2009, 2010 Free Software Foundation, Inc.
    Contributed by Jeff Law (law@cygnus.com).
 
 This file is part of GCC.
@@ -130,6 +130,7 @@ extern enum processor_type mn10300_processor;
 #define LAST_EXTENDED_REGNUM 17
 #define FIRST_FP_REGNUM 18
 #define LAST_FP_REGNUM 49
+#define FIRST_ARGUMENT_REGNUM 0
 
 /* Specify the registers used for certain standard purposes.
    The values of these macros are register numbers.  */
@@ -484,14 +485,11 @@ enum reg_class {
  { ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM},	\
  { FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}}
 
-#define CAN_ELIMINATE(FROM, TO) 1
-
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
   OFFSET = initial_offset (FROM, TO)
 
 /* We can debug without frame pointers on the mn10300, so eliminate
    them whenever possible.  */
-#define FRAME_POINTER_REQUIRED 0
 #define CAN_DEBUG_WITHOUT_FP
 
 /* Value is the number of bytes of arguments automatically
@@ -514,7 +512,7 @@ enum reg_class {
 #define STACK_POINTER_OFFSET 4
 
 /* 1 if N is a possible register number for function argument passing.
-   On the MN10300, no registers are used in this way.  */
+   On the MN10300, d0 and d1 are used in this way.  */
 
 #define FUNCTION_ARG_REGNO_P(N) ((N) <= 1)
 
@@ -562,30 +560,10 @@ struct cum_arg {int nbytes; };
    NAMED is nonzero if this argument is a named parameter
     (otherwise it is an extra parameter matching an ellipsis).  */
 
-/* On the MN10300 all args are pushed.  */
-
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
   function_arg (&CUM, MODE, TYPE, NAMED)
 
-/* Define how to find the value returned by a function.
-   VALTYPE is the data type of the value (as a tree).
-   If the precise function being called is known, FUNC is its FUNCTION_DECL;
-   otherwise, FUNC is 0.  */
-
-#define FUNCTION_VALUE(VALTYPE, FUNC) \
-  mn10300_function_value (VALTYPE, FUNC, 0)
-#define FUNCTION_OUTGOING_VALUE(VALTYPE, FUNC) \
-  mn10300_function_value (VALTYPE, FUNC, 1)
-
-/* Define how to find the value returned by a library function
-   assuming the value has mode MODE.  */
-
-#define LIBCALL_VALUE(MODE) gen_rtx_REG (MODE, FIRST_DATA_REGNUM)
-
-/* 1 if N is a possible register number for a function value.  */
-
-#define FUNCTION_VALUE_REGNO_P(N) \
-  ((N) == FIRST_DATA_REGNUM || (N) == FIRST_ADDRESS_REGNUM)
+#define FUNCTION_VALUE_REGNO_P(N)  mn10300_function_value_regno_p (N)
 
 #define DEFAULT_PCC_STRUCT_RETURN 0
 
@@ -601,36 +579,12 @@ struct cum_arg {int nbytes; };
 
 #define FUNCTION_PROFILER(FILE, LABELNO) ;
 
-#define TRAMPOLINE_TEMPLATE(FILE)			\
-  do {							\
-    fprintf (FILE, "\tadd -4,sp\n");			\
-    fprintf (FILE, "\t.long 0x0004fffa\n");		\
-    fprintf (FILE, "\tmov (0,sp),a0\n");		\
-    fprintf (FILE, "\tadd 4,sp\n");			\
-    fprintf (FILE, "\tmov (13,a0),a1\n");		\
-    fprintf (FILE, "\tmov (17,a0),a0\n");		\
-    fprintf (FILE, "\tjmp (a0)\n");			\
-    fprintf (FILE, "\t.long 0\n");			\
-    fprintf (FILE, "\t.long 0\n");			\
-  } while (0)
-
 /* Length in units of the trampoline for entering a nested function.  */
 
 #define TRAMPOLINE_SIZE 0x1b
 
 #define TRAMPOLINE_ALIGNMENT 32
 
-/* Emit RTL insns to initialize the variable parts of a trampoline.
-   FNADDR is an RTX for the address of the function's pure code.
-   CXT is an RTX for the static chain value for the function.  */
-
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT)			\
-{									\
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant ((TRAMP), 0x14)),	\
- 		 (CXT));						\
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant ((TRAMP), 0x18)),	\
-		 (FNADDR));						\
-}
 /* A C expression whose value is RTL representing the value of the return
    address for the frame COUNT steps up from the current frame.
 
@@ -645,36 +599,12 @@ struct cum_arg {int nbytes; };
    ? gen_rtx_MEM (Pmode, arg_pointer_rtx) \
    : (rtx) 0)
 
-/* 1 if X is an rtx for a constant that is a valid address.  */
-
-#define CONSTANT_ADDRESS_P(X)   CONSTANT_P (X)
-
 /* Maximum number of registers that can appear in a valid memory address.  */
 
 #define MAX_REGS_PER_ADDRESS 2
 
 
 #define HAVE_POST_INCREMENT (TARGET_AM33)
-
-/* GO_IF_LEGITIMATE_ADDRESS recognizes an RTL expression
-   that is a valid memory address for an instruction.
-   The MODE argument is the machine mode for the MEM expression
-   that wants to use this address.
-
-   The other macros defined here are used only in GO_IF_LEGITIMATE_ADDRESS,
-   except for CONSTANT_ADDRESS_P which is actually
-   machine-independent.
-
-   On the mn10300, the value in the address register must be
-   in the same memory space/segment as the effective address.
-
-   This is problematical for reload since it does not understand
-   that base+index != index+base in a memory reference.
-
-   Note it is still possible to use reg+reg addressing modes,
-   it's just much more difficult.  For a discussion of a possible
-   workaround and solution, see the comments in pa.c before the
-   function record_unscaled_index_insn_codes.  */
 
 /* Accept either REG or SUBREG where a register is valid.  */
 
@@ -685,38 +615,7 @@ struct cum_arg {int nbytes; };
        && REGNO_STRICT_OK_FOR_BASE_P (REGNO (SUBREG_REG (X)),	\
  				      (strict))))
 
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)    	\
-do							\
-  {							\
-    if (legitimate_address_p ((MODE), (X), REG_STRICT))	\
-      goto ADDR;					\
-  }							\
-while (0)
-
 
-/* Try machine-dependent ways of modifying an illegitimate address
-   to be legitimate.  If we find one, return the new, valid address.
-   This macro is used in only one place: `memory_address' in explow.c.
-
-   OLDX is the address as it was before break_out_memory_refs was called.
-   In some cases it is useful to look at this to decide what needs to be done.
-
-   MODE and WIN are passed so that this macro can use
-   GO_IF_LEGITIMATE_ADDRESS.
-
-   It is always safe for this macro to do nothing.  It exists to recognize
-   opportunities to optimize the output.  */
-
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN)  \
-{ rtx orig_x = (X);				\
-  (X) = legitimize_address (X, OLDX, MODE);	\
-  if ((X) != orig_x && memory_address_p (MODE, X)) \
-    goto WIN; }
-
-/* Go to LABEL if ADDR (a legitimate address expression)
-   has an effect that depends on the machine mode it is used for.  */
-
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR,LABEL)
 
 /* Nonzero if the constant value X is a legitimate general operand.
    It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
@@ -815,14 +714,6 @@ while (0)
    than accessing full words.  */
 #define SLOW_BYTE_ACCESS 1
 
-/* Dispatch tables on the mn10300 are extremely expensive in terms of code
-   and readonly data size.  So we crank up the case threshold value to
-   encourage a series of if/else comparisons to implement many small switch
-   statements.  In theory, this value could be increased much more if we
-   were solely optimizing for space, but we keep it "reasonable" to avoid
-   serious code efficiency lossage.  */
-#define CASE_VALUES_THRESHOLD 6
-
 #define NO_FUNCTION_CSE
 
 /* According expr.c, a value of around 6 should minimize code size, and
@@ -845,6 +736,9 @@ while (0)
 
 #define ASM_APP_OFF "#NO_APP\n"
 
+#undef  USER_LABEL_PREFIX
+#define USER_LABEL_PREFIX "_"
+
 /* This says how to output the assembler to define a global
    uninitialized but not common symbol.
    Try to use asm_output_bss to implement this macro.  */
@@ -860,7 +754,7 @@ while (0)
 
 #undef ASM_OUTPUT_LABELREF
 #define ASM_OUTPUT_LABELREF(FILE, NAME) \
-  fprintf (FILE, "_%s", (*targetm.strip_name_encoding) (NAME))
+  asm_fprintf (FILE, "%U%s", (*targetm.strip_name_encoding) (NAME))
 
 #define ASM_PN_FORMAT "%s___%lu"
 

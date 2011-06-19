@@ -42,7 +42,9 @@
 #if _GLIBCXX_HAVE_ATTRIBUTE_VISIBILITY
 # define _GLIBCXX_VISIBILITY_ATTR(V) __attribute__ ((__visibility__ (#V)))
 #else
-# define _GLIBCXX_VISIBILITY_ATTR(V) 
+// If this is not supplied by the OS-specific or CPU-specific
+// headers included below, it will be defined to an empty default.
+# define _GLIBCXX_VISIBILITY_ATTR(V) _GLIBCXX_PSEUDO_VISIBILITY(V)
 #endif
 
 // Macros for deprecated.
@@ -85,11 +87,17 @@
 # define _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL 1
 #endif
 
+// Namespace association for profile
+#ifdef _GLIBCXX_PROFILE
+# define _GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE 1
+#endif
+
 #define _GLIBCXX_NAMESPACE_ASSOCIATION_VERSION 
 
 // Defined if any namespace association modes are active.
 #if _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG \
   || _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL \
+  || _GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE \
   || _GLIBCXX_NAMESPACE_ASSOCIATION_VERSION
 # define _GLIBCXX_USE_NAMESPACE_ASSOCIATION 1
 #endif
@@ -108,6 +116,7 @@
 #ifndef _GLIBCXX_USE_NAMESPACE_ASSOCIATION
 # define _GLIBCXX_STD_D _GLIBCXX_STD
 # define _GLIBCXX_STD_P _GLIBCXX_STD
+# define _GLIBCXX_STD_PR _GLIBCXX_STD
 # define _GLIBCXX_STD std
 # define _GLIBCXX_BEGIN_NESTED_NAMESPACE(X, Y) _GLIBCXX_BEGIN_NAMESPACE(X)
 # define _GLIBCXX_END_NESTED_NAMESPACE _GLIBCXX_END_NAMESPACE
@@ -124,7 +133,7 @@
 # endif
 
 //  debug
-# if _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG && !_GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL
+# if _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG && !_GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL && !_GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE
 #  define _GLIBCXX_STD_D __norm
 #  define _GLIBCXX_STD_P _GLIBCXX_STD
 #  define _GLIBCXX_STD __cxx1998
@@ -134,8 +143,17 @@
 # endif
 
 // parallel
-# if _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL && !_GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG 
+# if _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL && !_GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG && !_GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE
 #  define _GLIBCXX_STD_D _GLIBCXX_STD
+#  define _GLIBCXX_STD_P __norm
+#  define _GLIBCXX_STD __cxx1998
+#  define _GLIBCXX_BEGIN_NAMESPACE(X) namespace X _GLIBCXX_VISIBILITY_ATTR(default) { 
+#  define _GLIBCXX_END_NAMESPACE }
+# endif
+
+// debug + parallel
+# if _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL && _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG  && !_GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE
+#  define _GLIBCXX_STD_D __norm
 #  define _GLIBCXX_STD_P __norm
 #  define _GLIBCXX_STD __cxx1998
 #  define _GLIBCXX_BEGIN_NAMESPACE(X) namespace X _GLIBCXX_VISIBILITY_ATTR(default) { 
@@ -143,14 +161,18 @@
 #  define _GLIBCXX_EXTERN_TEMPLATE -1
 # endif
 
-// debug + parallel
-# if _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL && _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG 
+// profile
+# if _GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE
+#  if _GLIBCXX_NAMESPACE_ASSOCIATION_PARALLEL || _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG
+#   error Cannot use -D_GLIBCXX_PROFILE with -D_GLIBCXX_DEBUG or \
+    -D_GLIBCXX_PARALLEL
+#  endif
 #  define _GLIBCXX_STD_D __norm
-#  define _GLIBCXX_STD_P __norm
+#  define _GLIBCXX_STD_P _GLIBCXX_STD
+#  define _GLIBCXX_STD_PR __norm
 #  define _GLIBCXX_STD __cxx1998
 #  define _GLIBCXX_BEGIN_NAMESPACE(X) namespace X _GLIBCXX_VISIBILITY_ATTR(default) { 
 #  define _GLIBCXX_END_NAMESPACE }
-#  define _GLIBCXX_EXTERN_TEMPLATE -1
 # endif
 
 # if __NO_INLINE__ && !__GXX_WEAK__
@@ -163,7 +185,7 @@
 #endif
 
 // Namespace associations for debug mode.
-#if _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG
+#if _GLIBCXX_NAMESPACE_ASSOCIATION_DEBUG && !_GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE
 namespace std
 { 
   namespace __norm { } 
@@ -178,6 +200,16 @@ namespace std
 { 
   namespace __norm { } 
   inline namespace __parallel { }
+  inline namespace __cxx1998 { }
+}
+#endif
+
+// Namespace associations for profile mode
+#if _GLIBCXX_NAMESPACE_ASSOCIATION_PROFILE
+namespace std
+{ 
+  namespace __norm { } 
+  inline namespace __profile { }
   inline namespace __cxx1998 { }
 }
 #endif
@@ -245,6 +277,12 @@ namespace std
 // Pick up any CPU-specific definitions.
 #include <bits/cpu_defines.h>
 
+// If platform uses neither visibility nor psuedo-visibility,
+// specify empty default for namespace annotation macros.
+#ifndef _GLIBCXX_PSEUDO_VISIBILITY
+#define _GLIBCXX_PSEUDO_VISIBILITY(V)
+#endif
+
 // Allow use of "export template." This is currently not a feature
 // that g++ supports.
 // #define _GLIBCXX_EXPORT_TEMPLATE 1
@@ -255,6 +293,10 @@ namespace std
 // library to avoid multiple weak definitions for required types that
 // are already explicitly instantiated in the library binary. This
 // substantially reduces the binary size of resulting executables.
+
+// Special case: _GLIBCXX_EXTERN_TEMPLATE == -1 disallows extern
+// templates only in basic_string, thus activating its debug-mode
+// checks even at -O0.
 #ifndef _GLIBCXX_EXTERN_TEMPLATE
 # define _GLIBCXX_EXTERN_TEMPLATE 1
 #endif
@@ -313,5 +355,25 @@ _GLIBCXX_END_NAMESPACE
 // For example, <windows.h> is known to #define min and max as macros...
 #undef min
 #undef max
+
+#ifndef _GLIBCXX_PURE
+# define _GLIBCXX_PURE __attribute__ ((__pure__))
+#endif
+
+#ifndef _GLIBCXX_CONST
+# define _GLIBCXX_CONST __attribute__ ((__const__))
+#endif
+
+#ifndef _GLIBCXX_NORETURN
+# define _GLIBCXX_NORETURN __attribute__ ((__noreturn__))
+#endif
+
+#ifndef _GLIBCXX_NOTHROW
+# ifdef __cplusplus
+#  define _GLIBCXX_NOTHROW throw() 
+# else
+#  define _GLIBCXX_NOTHROW __attribute__((__nothrow__))
+# endif
+#endif
 
 // End of prewritten config; the discovered settings follow.

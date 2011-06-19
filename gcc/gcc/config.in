@@ -1,5 +1,11 @@
 /* config.in.  Generated from configure.ac by autoheader.  */
 
+/* Define if building universal (internal helper macro) */
+#ifndef USED_FOR_TARGET
+#undef AC_APPLE_UNIVERSAL_BUILD
+#endif
+
+
 /* Define as the number of bits in a byte, if `limits.h' doesn't. */
 #ifndef USED_FOR_TARGET
 #undef CHAR_BIT
@@ -101,10 +107,28 @@
 #endif
 
 
+/* Define if gcc should always pass --build-id to linker. */
+#ifndef USED_FOR_TARGET
+#undef ENABLE_LD_BUILDID
+#endif
+
+
+/* Define to enable LTO support. */
+#ifndef USED_FOR_TARGET
+#undef ENABLE_LTO
+#endif
+
+
 /* Define to 1 if translation of program messages to the user's native
    language is requested. */
 #ifndef USED_FOR_TARGET
 #undef ENABLE_NLS
+#endif
+
+
+/* Define to enable plugin support. */
+#ifndef USED_FOR_TARGET
+#undef ENABLE_PLUGIN
 #endif
 
 
@@ -169,13 +193,6 @@
 #endif
 
 
-/* Define to the type of elements in the array set by `getgroups'. Usually
-   this is either `int' or `gid_t'. */
-#ifndef USED_FOR_TARGET
-#undef GETGROUPS_T
-#endif
-
-
 /* Define if the zone collector is in use */
 #ifndef USED_FOR_TARGET
 #undef GGC_ZONE
@@ -191,6 +208,12 @@
 /* Define if your assembler supports cmpb. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_CMPB
+#endif
+
+
+/* Define if your assembler supports the DCI/ICI instructions. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_DCI
 #endif
 
 
@@ -274,9 +297,39 @@
 #endif
 
 
-/* Define if your assembler supports the sahf mnemonic. */
+/* Define if your assembler uses fildq and fistq mnemonics. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_IX86_FILDQ
+#endif
+
+
+/* Define if your assembler uses filds and fists mnemonics. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_IX86_FILDS
+#endif
+
+
+/* Define if your assembler supports the .quad directive. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_IX86_QUAD
+#endif
+
+
+/* Define true if the assembler supports 'rep <insn>, lock <insn>'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_IX86_REP_LOCK_PREFIX
+#endif
+
+
+/* Define if your assembler supports the sahf mnemonic in 64bit mode. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_IX86_SAHF
+#endif
+
+
+/* Define if your assembler supports the swap suffix. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_IX86_SWAP
 #endif
 
 
@@ -301,6 +354,12 @@
 /* Define if your assembler supports ltoffx and ldxmov relocations. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_LTOFFX_LDXMOV_RELOCS
+#endif
+
+
+/* Define if your assembler supports LWSYNC instructions. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_LWSYNC
 #endif
 
 
@@ -340,6 +399,18 @@
 #endif
 
 
+/* Define if your assembler supports POPCNTD instructions. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_POPCNTD
+#endif
+
+
+/* Define if your assembler supports .ref */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_REF
+#endif
+
+
 /* Define if your assembler supports .register. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_REGISTER_PSEUDO_OP
@@ -355,6 +426,12 @@
 /* Define if your assembler supports -relax option. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_RELAX_OPTION
+#endif
+
+
+/* Define if your assembler and linker support GOTDATA_OP relocs. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_SPARC_GOTDATA_OP
 #endif
 
 
@@ -375,6 +452,12 @@
 /* Define if your assembler supports thread-local storage. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_AS_TLS
+#endif
+
+
+/* Define if your assembler supports arg info for __tls_get_addr. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_AS_TLS_MARKERS
 #endif
 
 
@@ -743,6 +826,24 @@
 #endif
 
 
+/* Define to 1 if you have the `elf_getshdrstrndx' function. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_ELF_GETSHDRSTRNDX
+#endif
+
+
+/* Define to 1 if you have the `elf_getshstrndx' function. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_ELF_GETSHSTRNDX
+#endif
+
+
+/* Define if elf_getshstrndx has gABI conformant return values. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_ELF_GETSHSTRNDX_GABI
+#endif
+
+
 /* Define to 1 if you have the <fcntl.h> header file. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_FCNTL_H
@@ -821,6 +922,13 @@
 #endif
 
 
+/* Define if your assembler supports specifying the alignment of objects
+   allocated using the GAS .comm command. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_GAS_ALIGNED_COMM
+#endif
+
+
 /* Define if your assembler supports .balign and .p2align. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_GAS_BALIGN_AND_P2ALIGN
@@ -845,9 +953,15 @@
 #endif
 
 
-/* Define if your assembler uses the new HImode fild and fist notation. */
+/* Define if your assembler supports the .loc discriminator sub-directive. */
 #ifndef USED_FOR_TARGET
-#undef HAVE_GAS_FILDS_FISTS
+#undef HAVE_GAS_DISCRIMINATOR
+#endif
+
+
+/* Define if your assembler supports @gnu_unique_object. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_GAS_GNU_UNIQUE_OBJECT
 #endif
 
 
@@ -978,6 +1092,18 @@
 #endif
 
 
+/* Define to 1 if the system has the type `intmax_t'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_INTMAX_T
+#endif
+
+
+/* Define to 1 if the system has the type `intptr_t'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_INTPTR_T
+#endif
+
+
 /* Define if you have a working <inttypes.h> header file. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_INTTYPES_H
@@ -1020,6 +1146,12 @@
 #endif
 
 
+/* Define if your linker supports --build-id. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_LD_BUILDID
+#endif
+
+
 /* Define if your linker supports --demangle option. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_LD_DEMANGLE
@@ -1042,6 +1174,13 @@
 #endif
 
 
+/* Define if your linker can relax absolute .eh_frame personality pointers
+   into PC-relative form. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_LD_PERSONALITY_RELAXATION
+#endif
+
+
 /* Define if your linker supports -pie option. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_LD_PIE
@@ -1052,6 +1191,12 @@
    a read-write section. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_LD_RO_RW_SECTION_MIXING
+#endif
+
+
+/* Define if your linker supports the *_sol2 emulations. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_LD_SOL2_EMULATION
 #endif
 
 
@@ -1082,6 +1227,12 @@
 /* Define to 1 if the system has the type `long long'. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_LONG_LONG
+#endif
+
+
+/* Define to 1 if the system has the type `long long int'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_LONG_LONG_INT
 #endif
 
 
@@ -1283,9 +1434,27 @@
 #endif
 
 
+/* Define to 1 if the system has the type `uintmax_t'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_UINTMAX_T
+#endif
+
+
+/* Define to 1 if the system has the type `uintptr_t'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_UINTPTR_T
+#endif
+
+
 /* Define to 1 if you have the <unistd.h> header file. */
 #ifndef USED_FOR_TARGET
 #undef HAVE_UNISTD_H
+#endif
+
+
+/* Define to 1 if the system has the type `unsigned long long int'. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_UNSIGNED_LONG_LONG_INT
 #endif
 
 
@@ -1350,6 +1519,12 @@
 #endif
 
 
+/* Define if libelf is in use. */
+#ifndef USED_FOR_TARGET
+#undef HAVE_libelf
+#endif
+
+
 /* Define as const if the declaration of iconv() needs const. */
 #ifndef USED_FOR_TARGET
 #undef ICONV_CONST
@@ -1405,9 +1580,21 @@
 #endif
 
 
+/* Define to the home page for this package. */
+#ifndef USED_FOR_TARGET
+#undef PACKAGE_URL
+#endif
+
+
 /* Define to the version of this package. */
 #ifndef USED_FOR_TARGET
 #undef PACKAGE_VERSION
+#endif
+
+
+/* Specify plugin linker */
+#ifndef USED_FOR_TARGET
+#undef PLUGIN_LD
 #endif
 
 
@@ -1417,37 +1604,37 @@
 #endif
 
 
-/* The size of a `int', as computed by sizeof. */
+/* The size of `int', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_INT
 #endif
 
 
-/* The size of a `long', as computed by sizeof. */
+/* The size of `long', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_LONG
 #endif
 
 
-/* The size of a `long long', as computed by sizeof. */
+/* The size of `long long', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_LONG_LONG
 #endif
 
 
-/* The size of a `short', as computed by sizeof. */
+/* The size of `short', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_SHORT
 #endif
 
 
-/* The size of a `void *', as computed by sizeof. */
+/* The size of `void *', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF_VOID_P
 #endif
 
 
-/* The size of a `__int64', as computed by sizeof. */
+/* The size of `__int64', as computed by sizeof. */
 #ifndef USED_FOR_TARGET
 #undef SIZEOF___INT64
 #endif
@@ -1483,9 +1670,23 @@
 #endif
 
 
+/* Define to the flag used to mark TLS sections if the default (`T') doesn't
+   work. */
+#ifndef USED_FOR_TARGET
+#undef TLS_SECTION_ASM_FLAG
+#endif
+
+
 /* Define if your assembler mis-optimizes .eh_frame data. */
 #ifndef USED_FOR_TARGET
 #undef USE_AS_TRADITIONAL_FORMAT
+#endif
+
+
+/* Define if you want to generate code by default that assumes that the Cygwin
+   DLL exports wrappers to support libstdc++ function replacement. */
+#ifndef USED_FOR_TARGET
+#undef USE_CYGWIN_LIBSTDCXX_WRAPPERS
 #endif
 
 
@@ -1496,38 +1697,9 @@
 #endif
 
 
-/* Define to be the last component of the Windows registry key under which to
-   look for installation paths. The full key used will be
-   HKEY_LOCAL_MACHINE/SOFTWARE/Free Software Foundation/{WIN32_REGISTRY_KEY}.
-   The default is the GCC version number. */
+/* Define if we should use leading underscore on 64 bit mingw targets */
 #ifndef USED_FOR_TARGET
-#undef WIN32_REGISTRY_KEY
-#endif
-
-
-/* Define to 1 if your processor stores words with the most significant byte
-   first (like Motorola and SPARC, unlike Intel and VAX). */
-#ifndef USED_FOR_TARGET
-#undef WORDS_BIGENDIAN
-#endif
-
-
-/* Define to 1 if on MINIX. */
-#ifndef USED_FOR_TARGET
-#undef _MINIX
-#endif
-
-
-/* Define to 2 if the system does not provide POSIX.1 features except with
-   this defined. */
-#ifndef USED_FOR_TARGET
-#undef _POSIX_1_SOURCE
-#endif
-
-
-/* Define to 1 if you need to in order for `stat' and other things to work. */
-#ifndef USED_FOR_TARGET
-#undef _POSIX_SOURCE
+#undef USE_MINGW64_LEADING_UNDERSCORES
 #endif
 
 
@@ -1553,15 +1725,73 @@
 #endif
 
 
-/* Define to `char *' if <sys/types.h> does not define. */
+/* Define to be the last component of the Windows registry key under which to
+   look for installation paths. The full key used will be
+   HKEY_LOCAL_MACHINE/SOFTWARE/Free Software Foundation/{WIN32_REGISTRY_KEY}.
+   The default is the GCC version number. */
 #ifndef USED_FOR_TARGET
-#undef caddr_t
+#undef WIN32_REGISTRY_KEY
 #endif
 
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
+   significant byte first (like Motorola and SPARC, unlike Intel). */
+#if defined AC_APPLE_UNIVERSAL_BUILD
+# if defined __BIG_ENDIAN__
+#  define WORDS_BIGENDIAN 1
+# endif
+#else
+# ifndef WORDS_BIGENDIAN
+#  undef WORDS_BIGENDIAN
+# endif
+#endif
+
+/* Define to 1 if on MINIX. */
 #ifndef USED_FOR_TARGET
-#undef gid_t
+#undef _MINIX
+#endif
+
+
+/* Define to 2 if the system does not provide POSIX.1 features except with
+   this defined. */
+#ifndef USED_FOR_TARGET
+#undef _POSIX_1_SOURCE
+#endif
+
+
+/* Define to 1 if you need to in order for `stat' and other things to work. */
+#ifndef USED_FOR_TARGET
+#undef _POSIX_SOURCE
+#endif
+
+
+/* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
+   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
+   #define below would cause a syntax error. */
+#ifndef USED_FOR_TARGET
+#undef _UINT32_T
+#endif
+
+
+/* Define for Solaris 2.5.1 so the uint64_t typedef from <sys/synch.h>,
+   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
+   #define below would cause a syntax error. */
+#ifndef USED_FOR_TARGET
+#undef _UINT64_T
+#endif
+
+
+/* Define for Solaris 2.5.1 so the uint8_t typedef from <sys/synch.h>,
+   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
+   #define below would cause a syntax error. */
+#ifndef USED_FOR_TARGET
+#undef _UINT8_T
+#endif
+
+
+/* Define to `char *' if <sys/types.h> does not define. */
+#ifndef USED_FOR_TARGET
+#undef caddr_t
 #endif
 
 
@@ -1570,6 +1800,48 @@
 #ifndef __cplusplus
 #undef inline
 #endif
+
+/* Define to the type of a signed integer type of width exactly 16 bits if
+   such a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef int16_t
+#endif
+
+
+/* Define to the type of a signed integer type of width exactly 32 bits if
+   such a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef int32_t
+#endif
+
+
+/* Define to the type of a signed integer type of width exactly 64 bits if
+   such a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef int64_t
+#endif
+
+
+/* Define to the type of a signed integer type of width exactly 8 bits if such
+   a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef int8_t
+#endif
+
+
+/* Define to the widest signed integer type if <stdint.h> and <inttypes.h> do
+   not define. */
+#ifndef USED_FOR_TARGET
+#undef intmax_t
+#endif
+
+
+/* Define to the type of a signed integer type wide enough to hold a pointer,
+   if such a type exists, and if the system does not define it. */
+#ifndef USED_FOR_TARGET
+#undef intptr_t
+#endif
+
 
 /* Define to `int' if <sys/types.h> does not define. */
 #ifndef USED_FOR_TARGET
@@ -1589,9 +1861,45 @@
 #endif
 
 
-/* Define to `int' if <sys/types.h> doesn't define. */
+/* Define to the type of an unsigned integer type of width exactly 16 bits if
+   such a type exists and the standard includes do not define it. */
 #ifndef USED_FOR_TARGET
-#undef uid_t
+#undef uint16_t
+#endif
+
+
+/* Define to the type of an unsigned integer type of width exactly 32 bits if
+   such a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef uint32_t
+#endif
+
+
+/* Define to the type of an unsigned integer type of width exactly 64 bits if
+   such a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef uint64_t
+#endif
+
+
+/* Define to the type of an unsigned integer type of width exactly 8 bits if
+   such a type exists and the standard includes do not define it. */
+#ifndef USED_FOR_TARGET
+#undef uint8_t
+#endif
+
+
+/* Define to the widest unsigned integer type if <stdint.h> and <inttypes.h>
+   do not define. */
+#ifndef USED_FOR_TARGET
+#undef uintmax_t
+#endif
+
+
+/* Define to the type of an unsigned integer type wide enough to hold a
+   pointer, if such a type exists, and if the system does not define it. */
+#ifndef USED_FOR_TARGET
+#undef uintptr_t
 #endif
 
 

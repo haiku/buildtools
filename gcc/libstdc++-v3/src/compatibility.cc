@@ -1,6 +1,6 @@
 // Compatibility symbols for previous versions -*- C++ -*-
 
-// Copyright (C) 2005, 2006, 2007, 2008, 2009
+// Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -62,9 +62,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       
       _M_gcount = 0;
       sentry __cerb(*this, true);
-      if (__cerb && __n > 0)
+      if ( __n > 0 && __cerb)
 	{
-	  ios_base::iostate __err = ios_base::iostate(ios_base::goodbit);
+	  ios_base::iostate __err = ios_base::goodbit;
 	  __try
 	    {
 	      const int_type __eof = traits_type::eof();
@@ -134,9 +134,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       
       _M_gcount = 0;
       sentry __cerb(*this, true);
-      if (__cerb && __n > 0)
+      if (__n > 0 && __cerb)
 	{
-	  ios_base::iostate __err = ios_base::iostate(ios_base::goodbit);
+	  ios_base::iostate __err = ios_base::goodbit;
 	  __try
 	    {
 	      const int_type __eof = traits_type::eof();
@@ -386,7 +386,7 @@ _ZN10__gnu_norm15_List_node_base7reverseEv;
 _ZN10__gnu_norm15_List_node_base8transferEPS0_S1_;
 */
 #include "list.cc"
-_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX4hookEPS_, \
+_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX7_M_hookEPS_, \
 _ZN10__gnu_norm15_List_node_base4hookEPS0_, \
 GLIBCXX_3.4)
 
@@ -394,15 +394,15 @@ _GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX4swapERS_S0_, \
 _ZN10__gnu_norm15_List_node_base4swapERS0_S1_, \
 GLIBCXX_3.4)
 
-_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX6unhookEv, \
+_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX9_M_unhookEv, \
 _ZN10__gnu_norm15_List_node_base6unhookEv, \
 GLIBCXX_3.4)
 
-_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX7reverseEv, \
+_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX10_M_reverseEv, \
 _ZN10__gnu_norm15_List_node_base7reverseEv, \
 GLIBCXX_3.4)
 
-_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX8transferEPS_S0_, \
+_GLIBCXX_ASM_SYMVER(_ZNSt17_List_node_baseXX11_M_transferEPS_S0_, \
 _ZN10__gnu_norm15_List_node_base8transferEPS0_S1_, \
 GLIBCXX_3.4)
 #undef _List_node_base
@@ -410,7 +410,11 @@ GLIBCXX_3.4)
 // gcc-4.1.0
 // Long double versions of "C" math functions. 
 #if defined (_GLIBCXX_LONG_DOUBLE_COMPAT) \
-    || (defined (__hppa__) && defined (__linux__))
+    || (defined (__arm__) && defined (__linux__) && defined (__ARM_EABI__)) \
+    || (defined (__hppa__) && defined (__linux__)) \
+    || (defined (__m68k__) && defined (__mcoldfire__) && defined (__linux__)) \
+    || (defined (__mips__) && defined (_ABIO32) && defined (__linux__)) \
+    || (defined (__sh__) && defined (__linux__) && __SIZEOF_SIZE_T__ == 4) \
 
 #define _GLIBCXX_MATHL_WRAPPER(name, argdecl, args, ver) \
 extern "C" double						\
@@ -502,18 +506,16 @@ extern void *_ZTVN10__cxxabiv119__pointer_type_infoE[];
 extern __attribute__((used, weak)) const char _ZTSe[2] = "e";
 extern __attribute__((used, weak)) const char _ZTSPe[3] = "Pe";
 extern __attribute__((used, weak)) const char _ZTSPKe[4] = "PKe";
-extern __attribute__((used, weak)) const void *_ZTIe[2]
+extern __attribute__((used, weak)) const void * const _ZTIe[2]
   = { (void *) &_ZTVN10__cxxabiv123__fundamental_type_infoE[2],
       (void *) _ZTSe };
-extern __attribute__((used, weak)) const void *_ZTIPe[4]
+extern __attribute__((used, weak)) const void * const _ZTIPe[4]
   = { (void *) &_ZTVN10__cxxabiv119__pointer_type_infoE[2],
       (void *) _ZTSPe, (void *) 0L, (void *) _ZTIe };
-extern __attribute__((used, weak)) const void *_ZTIPKe[4]
+extern __attribute__((used, weak)) const void * const _ZTIPKe[4]
   = { (void *) &_ZTVN10__cxxabiv119__pointer_type_infoE[2],
       (void *) _ZTSPKe, (void *) 1L, (void *) _ZTIe };
 #endif // _GLIBCXX_LONG_DOUBLE_COMPAT
-
-
 
 #ifdef _GLIBCXX_SYMVER_DARWIN
 #if (defined(__ppc__) || defined(__ppc64__)) && defined(PIC)

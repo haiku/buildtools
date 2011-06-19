@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
+ * Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
  *
  * This file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -29,6 +29,7 @@
 #define bit_CMPXCHG16B	(1 << 13)
 #define bit_SSE4_1	(1 << 19)
 #define bit_SSE4_2	(1 << 20)
+#define bit_MOVBE	(1 << 22)
 #define bit_POPCNT	(1 << 23)
 #define bit_AES		(1 << 25)
 #define bit_XSAVE	(1 << 26)
@@ -46,8 +47,11 @@
 /* Extended Features */
 /* %ecx */
 #define bit_LAHF_LM	(1 << 0)
+#define bit_ABM		(1 << 5)
 #define bit_SSE4a	(1 << 6)
-#define bit_SSE5	(1 << 11)
+#define bit_XOP         (1 << 11)
+#define bit_LWP 	(1 << 15)
+#define bit_FMA4        (1 << 16)
 
 /* %edx */
 #define bit_LM		(1 << 29)
@@ -113,8 +117,8 @@ __get_cpuid_max (unsigned int __ext, unsigned int *__sig)
   unsigned int __eax, __ebx, __ecx, __edx;
 
 #ifndef __x86_64__
-#if __GNUC__ >= 3
   /* See if we can use cpuid.  On AMD64 we always can.  */
+#if __GNUC__ >= 3
   __asm__ ("pushf{l|d}\n\t"
 	   "pushf{l|d}\n\t"
 	   "pop{l}\t%0\n\t"

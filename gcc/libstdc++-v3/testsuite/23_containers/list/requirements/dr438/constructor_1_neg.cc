@@ -18,12 +18,13 @@
 // <http://www.gnu.org/licenses/>.
 
 // { dg-do compile }
-// { dg-error "no matching" "" { target *-*-* } 1352 }
+// { dg-error "no matching" "" { target *-*-* } 1379 }
 // { dg-excess-errors "" }
 
 #include <list>
 
 void f()
 {
-  std::list<std::list<int> > l(10, 1);
+  typedef std::list<std::list<int> > list_type;
+  list_type l(10, 1);
 }

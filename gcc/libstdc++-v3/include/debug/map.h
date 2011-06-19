@@ -1,6 +1,6 @@
 // Debugging map implementation -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2009
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -38,6 +38,7 @@ namespace std
 {
 namespace __debug
 {
+  /// Class std::map with safety/checking/debug instrumentation.
   template<typename _Key, typename _Tp, typename _Compare = std::less<_Key>,
 	   typename _Allocator = std::allocator<std::pair<const _Key, _Tp> > >
     class map
@@ -114,7 +115,8 @@ namespace __debug
       map&
       operator=(map&& __x)
       {
-        // NB: DR 675.
+	// NB: DR 1204.
+	// NB: DR 675.
 	clear();
 	swap(__x);
 	return *this;
@@ -227,6 +229,15 @@ namespace __debug
 	  _Base::insert(__first, __last);
 	}
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      iterator
+      erase(iterator __position)
+      {
+	__glibcxx_check_erase(__position);
+	__position._M_invalidate();
+	return iterator(_Base::erase(__position.base()), this);
+      }
+#else
       void
       erase(iterator __position)
       {
@@ -234,6 +245,7 @@ namespace __debug
 	__position._M_invalidate();
 	_Base::erase(__position.base());
       }
+#endif
 
       size_type
       erase(const key_type& __x)
@@ -249,6 +261,18 @@ namespace __debug
 	}
       }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      iterator
+      erase(iterator __first, iterator __last)
+      {
+	// _GLIBCXX_RESOLVE_LIB_DEFECTS
+	// 151. can't currently clear() empty container
+	__glibcxx_check_erase_range(__first, __last);
+	while (__first != __last)
+	  this->erase(__first++);
+	return __last;
+      }
+#else
       void
       erase(iterator __first, iterator __last)
       {
@@ -258,13 +282,10 @@ namespace __debug
 	while (__first != __last)
 	  this->erase(__first++);
       }
+#endif
 
       void
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-      swap(map&& __x)
-#else
       swap(map& __x)
-#endif
       {
 	_Base::swap(__x);
 	this->_M_swap(__x);
@@ -389,22 +410,6 @@ namespace __debug
     swap(map<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	 map<_Key, _Tp, _Compare, _Allocator>& __rhs)
     { __lhs.swap(__rhs); }
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-  template<typename _Key, typename _Tp,
-	   typename _Compare, typename _Allocator>
-    inline void
-    swap(map<_Key, _Tp, _Compare, _Allocator>&& __lhs,
-	 map<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    { __lhs.swap(__rhs); }
-
-  template<typename _Key, typename _Tp,
-	   typename _Compare, typename _Allocator>
-    inline void
-    swap(map<_Key, _Tp, _Compare, _Allocator>& __lhs,
-	 map<_Key, _Tp, _Compare, _Allocator>&& __rhs)
-    { __lhs.swap(__rhs); }
-#endif
 
 } // namespace __debug
 } // namespace std

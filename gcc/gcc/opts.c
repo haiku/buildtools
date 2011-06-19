@@ -1,5 +1,5 @@
 /* Command line option handling.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Neil Booth.
 
@@ -42,6 +42,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "dbgcnt.h"
 #include "debug.h"
+#include "plugin.h"
+#include "except.h"
+#include "lto-streamer.h"
 
 /* Value of the -G xx switch, and whether it was passed or not.  */
 unsigned HOST_WIDE_INT g_switch_value;
@@ -52,9 +55,6 @@ bool sel_sched_switch_set;
 
 /* True if we should exit after parsing options.  */
 bool exit_after_options;
-
-/* Print various extra warnings.  -W/-Wextra.  */
-bool extra_warnings;
 
 /* True to warn about any objects definitions whose size is larger
    than N bytes.  Also want about function definitions whose returned
@@ -338,11 +338,7 @@ enum symbol_visibility default_visibility = VISIBILITY_DEFAULT;
 struct visibility_flags visibility_options;
 
 /* What to print when a switch has no documentation.  */
-#ifdef ENABLE_CHECKING
 static const char undocumented_msg[] = N_("This switch lacks documentation");
-#else
-static const char undocumented_msg[] = "";
-#endif
 
 /* Used for bookkeeping on whether user set these flags so
    -fprofile-use/-fprofile-generate does not use them.  */
@@ -368,6 +364,9 @@ DEF_VEC_ALLOC_P(const_char_p,heap);
 
 static VEC(const_char_p,heap) *ignored_options;
 
+/* Language specific warning pass for unused results.  */
+bool flag_warn_unused_result = false;
+
 /* Input file names.  */
 const char **in_fnames;
 unsigned num_in_fnames;
@@ -375,7 +374,6 @@ unsigned num_in_fnames;
 static int common_handle_option (size_t scode, const char *arg, int value,
 				 unsigned int lang_mask);
 static void handle_param (const char *);
-static void set_Wextra (int);
 static unsigned int handle_option (const char **argv, unsigned int lang_mask);
 static char *write_langs (unsigned int lang_mask);
 static void complain_wrong_lang (const char *, const struct cl_option *,
@@ -434,6 +432,17 @@ complain_wrong_lang (const char *text, const struct cl_option *option,
 		     unsigned int lang_mask)
 {
   char *ok_langs, *bad_lang;
+
+  /* The LTO front end inherits all the options from the first front
+     end that was used.  However, not all the original front end
+     options make sense in LTO.
+
+     A real solution would be to filter this in collect2, but collect2
+     does not have access to all the option attributes to know what to
+     filter.  So, in lto1 we silently accept inherited flags and do
+     nothing about it.  */
+  if (lang_mask & CL_LTO)
+    return;
 
   ok_langs = write_langs (option->flags);
   bad_lang = write_langs (lang_mask);
@@ -601,44 +610,37 @@ handle_option (const char **argv, unsigned int lang_mask)
     }
 
   if (option->flag_var)
-    switch (option->var_type)
-      {
-      case CLVC_BOOLEAN:
-	*(int *) option->flag_var = value;
-	break;
-
-      case CLVC_EQUAL:
-	*(int *) option->flag_var = (value
-				     ? option->var_value
-				     : !option->var_value);
-	break;
-
-      case CLVC_BIT_CLEAR:
-      case CLVC_BIT_SET:
-	if ((value != 0) == (option->var_type == CLVC_BIT_SET))
-	  *(int *) option->flag_var |= option->var_value;
-	else
-	  *(int *) option->flag_var &= ~option->var_value;
-	if (option->flag_var == &target_flags)
-	  target_flags_explicit |= option->var_value;
-	break;
-
-      case CLVC_STRING:
-	*(const char **) option->flag_var = arg;
-	break;
-      }
+    set_option (option, value, arg);
 
   if (option->flags & lang_mask)
-    if (lang_hooks.handle_option (opt_index, arg, value) == 0)
-      result = 0;
+    {
+      if (lang_hooks.handle_option (opt_index, arg, value) == 0)
+	result = 0;
+#ifdef ENABLE_LTO
+      else
+	lto_register_user_option (opt_index, arg, value, lang_mask);
+#endif
+    }
 
   if (result && (option->flags & CL_COMMON))
-    if (common_handle_option (opt_index, arg, value, lang_mask) == 0)
-      result = 0;
+    {
+      if (common_handle_option (opt_index, arg, value, lang_mask) == 0)
+	result = 0;
+#ifdef ENABLE_LTO
+      else
+	lto_register_user_option (opt_index, arg, value, CL_COMMON);
+#endif
+    }
 
   if (result && (option->flags & CL_TARGET))
-    if (!targetm.handle_option (opt_index, arg, value))
-      result = 0;
+    {
+      if (!targetm.handle_option (opt_index, arg, value))
+	result = 0;
+#ifdef ENABLE_LTO
+      else
+	lto_register_user_option (opt_index, arg, value, CL_TARGET);
+#endif
+    }
 
  done:
   if (dup)
@@ -777,8 +779,6 @@ void
 decode_options (unsigned int argc, const char **argv)
 {
   static bool first_time_p = true;
-  static int initial_max_aliased_vops;
-  static int initial_avg_aliased_vops;
   static int initial_min_crossjump_insns;
   static int initial_max_fields_for_field_sensitive;
   static int initial_loop_invariant_max_bbs_in_loop;
@@ -798,8 +798,6 @@ decode_options (unsigned int argc, const char **argv)
       lang_hooks.initialize_diagnostics (global_dc);
 
       /* Save initial values of parameters we reset.  */
-      initial_max_aliased_vops = MAX_ALIASED_VOPS;
-      initial_avg_aliased_vops = AVG_ALIASED_VOPS;
       initial_min_crossjump_insns
 	= compiler_params[PARAM_MIN_CROSSJUMP_INSNS].value;
       initial_max_fields_for_field_sensitive
@@ -844,7 +842,7 @@ decode_options (unsigned int argc, const char **argv)
 	    }
 	}
     }
-  
+
   /* Use priority coloring if cover classes is not defined for the
      target.  */
   if (targetm.ira_cover_classes == NULL)
@@ -861,6 +859,7 @@ decode_options (unsigned int argc, const char **argv)
 #endif
   flag_guess_branch_prob = opt1;
   flag_cprop_registers = opt1;
+  flag_forward_propagate = opt1;
   flag_if_conversion = opt1;
   flag_if_conversion2 = opt1;
   flag_ipa_pure_const = opt1;
@@ -886,7 +885,6 @@ decode_options (unsigned int argc, const char **argv)
   flag_thread_jumps = opt2;
   flag_crossjumping = opt2;
   flag_optimize_sibling_calls = opt2;
-  flag_forward_propagate = opt2;
   flag_cse_follow_jumps = opt2;
   flag_gcse = opt2;
   flag_expensive_optimizations = opt2;
@@ -894,25 +892,21 @@ decode_options (unsigned int argc, const char **argv)
   flag_caller_saves = opt2;
   flag_peephole2 = opt2;
 #ifdef INSN_SCHEDULING
-  flag_schedule_insns = opt2;
+  /* Only run the pre-regalloc scheduling pass if optimizing for speed.  */
+  flag_schedule_insns = opt2 && ! optimize_size;
   flag_schedule_insns_after_reload = opt2;
 #endif
   flag_regmove = opt2;
   flag_strict_aliasing = opt2;
   flag_strict_overflow = opt2;
-  flag_delete_null_pointer_checks = opt2;
   flag_reorder_blocks = opt2;
   flag_reorder_functions = opt2;
   flag_tree_vrp = opt2;
   flag_tree_builtin_call_dce = opt2;
   flag_tree_pre = opt2;
-  flag_tree_switch_conversion = 1;
+  flag_tree_switch_conversion = opt2;
   flag_ipa_cp = opt2;
-
-  /* Allow more virtual operators to increase alias precision.  */
-
-  set_param_value ("max-aliased-vops",
-		   (opt2) ? 500 : initial_max_aliased_vops);
+  flag_ipa_sra = opt2;
 
   /* Track fields in field-sensitive alias analysis.  */
   set_param_value ("max-fields-for-field-sensitive",
@@ -932,13 +926,6 @@ decode_options (unsigned int argc, const char **argv)
   flag_ipa_cp_clone = opt3;
   if (flag_ipa_cp_clone)
     flag_ipa_cp = 1;
-
-  /* Allow even more virtual operators.  Max-aliased-vops was set above for
-     -O2, so don't reset it unless we are at -O3.  */
-  if (opt3)
-    set_param_value ("max-aliased-vops", 1000);
-
-  set_param_value ("avg-aliased-vops", (opt3) ? 3 : initial_avg_aliased_vops);
 
   /* Just -O1/-O0 optimizations.  */
   opt1_max = (optimize <= 1);
@@ -980,12 +967,45 @@ decode_options (unsigned int argc, const char **argv)
       flag_unwind_tables = targetm.unwind_tables_default;
     }
 
+#ifdef ENABLE_LTO
+  /* Clear any options currently held for LTO.  */
+  lto_clear_user_options ();
+#endif
+
 #ifdef OPTIMIZATION_OPTIONS
   /* Allow default optimizations to be specified on a per-machine basis.  */
   OPTIMIZATION_OPTIONS (optimize, optimize_size);
 #endif
 
   handle_options (argc, argv, lang_mask);
+
+  if (dump_base_name && ! IS_ABSOLUTE_PATH (dump_base_name))
+    {
+      /* First try to make DUMP_BASE_NAME relative to the DUMP_DIR_NAME
+	 directory.  Then try to make DUMP_BASE_NAME relative to the
+	 AUX_BASE_NAME directory, typically the directory to contain
+	 the object file.  */
+      if (dump_dir_name)
+	dump_base_name = concat (dump_dir_name, dump_base_name, NULL);
+      else if (aux_base_name)
+	{
+	  const char *aux_base;
+
+	  base_of_path (aux_base_name, &aux_base);
+	  if (aux_base_name != aux_base)
+	    {
+	      int dir_len = aux_base - aux_base_name;
+	      char *new_dump_base_name =
+		XNEWVEC (char, strlen(dump_base_name) + dir_len + 1);
+
+	      /* Copy directory component from AUX_BASE_NAME.  */
+	      memcpy (new_dump_base_name, aux_base_name, dir_len);
+	      /* Append existing DUMP_BASE_NAME.  */
+	      strcpy (new_dump_base_name + dir_len, dump_base_name);
+	      dump_base_name = new_dump_base_name;
+	    }
+	}
+    }
 
   /* Handle related options for unit-at-a-time, toplevel-reorder, and
      section-anchors.  */
@@ -1022,6 +1042,7 @@ decode_options (unsigned int argc, const char **argv)
 	flag_pic = flag_pie;
       if (flag_pic && !flag_pie)
 	flag_shlib = 1;
+      first_time_p = false;
     }
 
   if (optimize == 0)
@@ -1038,10 +1059,15 @@ decode_options (unsigned int argc, const char **argv)
      generating unwind info.  If flag_exceptions is turned on we need to
      turn off the partitioning optimization.  */
 
-  if (flag_exceptions && flag_reorder_blocks_and_partition)
+  if (flag_exceptions && flag_reorder_blocks_and_partition
+      && (USING_SJLJ_EXCEPTIONS
+#ifdef TARGET_UNWIND_INFO
+	  || 1
+#endif
+	 ))
     {
-      inform (input_location, 
-	      "-freorder-blocks-and-partition does not work with exceptions");
+      inform (input_location,
+	      "-freorder-blocks-and-partition does not work with exceptions on this architecture");
       flag_reorder_blocks_and_partition = 0;
       flag_reorder_blocks = 1;
     }
@@ -1050,9 +1076,15 @@ decode_options (unsigned int argc, const char **argv)
      optimization.  */
 
   if (flag_unwind_tables && ! targetm.unwind_tables_default
-      && flag_reorder_blocks_and_partition)
+      && flag_reorder_blocks_and_partition
+      && (USING_SJLJ_EXCEPTIONS
+#ifdef TARGET_UNWIND_INFO
+	  || 1
+#endif
+	 ))
     {
-      inform (input_location, "-freorder-blocks-and-partition does not support unwind info");
+      inform (input_location,
+	      "-freorder-blocks-and-partition does not support unwind info on this architecture");
       flag_reorder_blocks_and_partition = 0;
       flag_reorder_blocks = 1;
     }
@@ -1063,7 +1095,12 @@ decode_options (unsigned int argc, const char **argv)
 
   if (flag_reorder_blocks_and_partition
       && (!targetm.have_named_sections
-	  || (flag_unwind_tables && targetm.unwind_tables_default)))
+	  || (flag_unwind_tables && targetm.unwind_tables_default
+	      && (USING_SJLJ_EXCEPTIONS
+#ifdef TARGET_UNWIND_INFO
+		  || 1
+#endif
+		 ))))
     {
       inform (input_location,
 	      "-freorder-blocks-and-partition does not work on this architecture");
@@ -1084,13 +1121,6 @@ decode_options (unsigned int argc, const char **argv)
       flag_ira_algorithm = IRA_ALGORITHM_PRIORITY;
     }
 
-  /* Save the current optimization options if this is the first call.  */
-  if (first_time_p)
-    {
-      optimization_default_node = build_optimization_node ();
-      optimization_current_node = optimization_default_node;
-      first_time_p = false;
-    }
   if (flag_conserve_stack)
     {
       if (!PARAM_SET_P (PARAM_LARGE_STACK_FRAME))
@@ -1099,6 +1129,24 @@ decode_options (unsigned int argc, const char **argv)
         PARAM_VALUE (PARAM_STACK_FRAME_GROWTH) = 40;
     }
 
+  if (flag_lto || flag_whopr)
+    {
+#ifdef ENABLE_LTO
+      flag_generate_lto = 1;
+
+      /* When generating IL, do not operate in whole-program mode.
+	 Otherwise, symbols will be privatized too early, causing link
+	 errors later.  */
+      flag_whole_program = 0;
+#else
+      error ("LTO support has not been enabled in this configuration");
+#endif
+    }
+
+  /* Reconcile -flto and -fwhopr.  Set additional flags as appropriate and
+     check option consistency.  */
+  if (flag_lto && flag_whopr)
+    error ("-flto and -fwhopr are mutually exclusive");
 }
 
 #define LEFT_COLUMN	27
@@ -1294,7 +1342,7 @@ print_filtered_help (unsigned int include_flags,
 	      printf (_(" None found.  Use --help=%s to show *all* the options supported by the %s front-end\n"),
 		      lang_names[i], lang_names[i]);
 	}
-	
+
     }
   else if (! displayed)
     printf (_(" All options with the desired characteristics have already been displayed\n"));
@@ -1497,7 +1545,7 @@ common_handle_option (size_t scode, const char *arg, int value,
 	      { NULL, 0 }
 	    };
 	    unsigned int * pflags;
-	    char * comma;
+	    const char * comma;
 	    unsigned int lang_flag, specific_flag;
 	    unsigned int len;
 	    unsigned int i;
@@ -1579,8 +1627,8 @@ common_handle_option (size_t scode, const char *arg, int value,
 	break;
       }
 
+    case OPT_fversion:
     case OPT__version:
-      print_version (stderr, "");
       exit_after_options = true;
       break;
 
@@ -1594,22 +1642,13 @@ common_handle_option (size_t scode, const char *arg, int value,
       /* Currently handled in a prescan.  */
       break;
 
-    case OPT_W:
-      /* For backward compatibility, -W is the same as -Wextra.  */
-      set_Wextra (value);
-      break;
-
     case OPT_Werror_:
       enable_warning_as_error (arg, value, lang_mask);
       break;
 
-    case OPT_Wextra:
-      set_Wextra (value);
-      break;
-
     case OPT_Wlarger_than_:
-      /* This form corresponds to -Wlarger-than-.  
-	 Kept for backward compatibility. 
+      /* This form corresponds to -Wlarger-than-.
+	 Kept for backward compatibility.
 	 Don't use it as the first argument of warning().  */
 
     case OPT_Wlarger_than_eq:
@@ -1671,6 +1710,10 @@ common_handle_option (size_t scode, const char *arg, int value,
       dump_base_name = arg;
       break;
 
+    case OPT_dumpdir:
+      dump_dir_name = arg;
+      break;
+
     case OPT_falign_functions_:
       align_functions = value;
       break;
@@ -1730,6 +1773,15 @@ common_handle_option (size_t scode, const char *arg, int value,
 	return 0;
       break;
 
+    case OPT_fexcess_precision_:
+      if (!strcmp (arg, "fast"))
+	flag_excess_precision_cmdline = EXCESS_PRECISION_FAST;
+      else if (!strcmp (arg, "standard"))
+	flag_excess_precision_cmdline = EXCESS_PRECISION_STANDARD;
+      else
+	error ("unknown excess precision style \"%s\"", arg);
+      break;
+
     case OPT_ffast_math:
       set_fast_math_flags (value);
       break;
@@ -1774,6 +1826,22 @@ common_handle_option (size_t scode, const char *arg, int value,
 
     case OPT_fpeel_loops:
       flag_peel_loops_set = true;
+      break;
+
+    case OPT_fplugin_:
+#ifdef ENABLE_PLUGIN
+      add_new_plugin (arg);
+#else
+      error ("Plugin support is disabled.  Configure with --enable-plugin.");
+#endif
+      break;
+
+    case OPT_fplugin_arg_:
+#ifdef ENABLE_PLUGIN
+      parse_plugin_arg_opt (arg);
+#else
+      error ("Plugin support is disabled.  Configure with --enable-plugin.");
+#endif
       break;
 
     case OPT_fprofile_arcs:
@@ -2022,8 +2090,12 @@ common_handle_option (size_t scode, const char *arg, int value,
       set_debug_level (SDB_DEBUG, false, arg);
       break;
 
-    case OPT_gdwarf_2:
-      set_debug_level (DWARF2_DEBUG, false, arg);
+    case OPT_gdwarf_:
+      if (value < 2 || value > 4)
+	error ("dwarf version %d is not supported", value);
+      else
+	dwarf_version = value;
+      set_debug_level (DWARF2_DEBUG, false, "");
       break;
 
     case OPT_ggdb:
@@ -2052,14 +2124,22 @@ common_handle_option (size_t scode, const char *arg, int value,
       flag_pedantic_errors = pedantic = 1;
       break;
 
+    case OPT_fsee:
+    case OPT_fcse_skip_blocks:
     case OPT_floop_optimize:
     case OPT_frerun_loop_opt:
+    case OPT_fsched2_use_traces:
     case OPT_fstrength_reduce:
     case OPT_ftree_store_copy_prop:
     case OPT_fforce_addr:
     case OPT_ftree_salias:
     case OPT_ftree_store_ccp:
+    case OPT_Wunreachable_code:
       /* These are no-ops, preserved for backward compatibility.  */
+      break;
+
+    case OPT_fuse_linker_plugin:
+      /* No-op. Used by the driver and passed to us because it starts with f.*/
       break;
 
     default:
@@ -2098,22 +2178,7 @@ handle_param (const char *carg)
   free (arg);
 }
 
-/* Handle -W and -Wextra.  */
-static void
-set_Wextra (int setting)
-{
-  extra_warnings = setting;
-
-  /* We save the value of warn_uninitialized, since if they put
-     -Wuninitialized on the command line, we need to generate a
-     warning about not using it without also specifying -O.  */
-  if (setting == 0)
-    warn_uninitialized = 0;
-  else if (warn_uninitialized != 1)
-    warn_uninitialized = 2;
-}
-
-/* Used to set the level of strict aliasing warnings, 
+/* Used to set the level of strict aliasing warnings,
    when no level is specified (i.e., when -Wstrict-aliasing, and not
    -Wstrict-aliasing=level was given).
    ONOFF is assumed to take value 1 when -Wstrict-aliasing is specified,
@@ -2146,8 +2211,8 @@ set_fast_math_flags (int set)
     }
 }
 
-/* When -funsafe-math-optimizations is set the following 
-   flags are set as well.  */ 
+/* When -funsafe-math-optimizations is set the following
+   flags are set as well.  */
 void
 set_unsafe_math_optimizations_flags (int set)
 {
@@ -2222,15 +2287,17 @@ set_debug_level (enum debug_info_type type, int extended, const char *arg)
   if (*arg == '\0')
     {
       if (!debug_info_level)
-	debug_info_level = 2;
+	debug_info_level = DINFO_LEVEL_NORMAL;
     }
   else
     {
-      debug_info_level = integral_argument (arg);
-      if (debug_info_level == (unsigned int) -1)
+      int argval = integral_argument (arg);
+      if (argval == -1)
 	error ("unrecognised debug output level \"%s\"", arg);
-      else if (debug_info_level > 3)
+      else if (argval > 3)
 	error ("debug output level %s is too high", arg);
+      else
+	debug_info_level = (enum debug_info_level) argval;
     }
 }
 
@@ -2297,6 +2364,42 @@ get_option_state (int option, struct cl_option_state *state)
   return true;
 }
 
+/* Set *OPTION according to VALUE and ARG.  */
+
+void
+set_option (const struct cl_option *option, int value, const char *arg)
+{
+  if (!option->flag_var)
+    return;
+
+  switch (option->var_type)
+    {
+    case CLVC_BOOLEAN:
+	*(int *) option->flag_var = value;
+	break;
+
+    case CLVC_EQUAL:
+	*(int *) option->flag_var = (value
+				     ? option->var_value
+				     : !option->var_value);
+	break;
+
+    case CLVC_BIT_CLEAR:
+    case CLVC_BIT_SET:
+	if ((value != 0) == (option->var_type == CLVC_BIT_SET))
+	  *(int *) option->flag_var |= option->var_value;
+	else
+	  *(int *) option->flag_var &= ~option->var_value;
+	if (option->flag_var == &target_flags)
+	  target_flags_explicit |= option->var_value;
+	break;
+
+    case CLVC_STRING:
+	*(const char **) option->flag_var = arg;
+	break;
+    }
+}
+
 /* Enable a warning option as an error.  This is used by -Werror= and
    also by legacy Werror-implicit-function-declaration.  */
 
@@ -2316,9 +2419,9 @@ enable_warning_as_error (const char *arg, int value, unsigned int lang_mask)
     }
   else
     {
-      int kind = value ? DK_ERROR : DK_WARNING;
+      diagnostic_t kind = value ? DK_ERROR : DK_WARNING;
       diagnostic_classify_diagnostic (global_dc, option_index, kind);
-      
+
       /* -Werror=foo implies -Wfoo.  */
       if (cl_options[option_index].var_type == CLVC_BOOLEAN
 	  && cl_options[option_index].flag_var

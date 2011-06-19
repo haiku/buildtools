@@ -1,18 +1,18 @@
 /* Loop header copying on trees.
    Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
-   
+
 This file is part of GCC.
-   
+
 GCC is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
 Free Software Foundation; either version 3, or (at your option) any
 later version.
-   
+
 GCC is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
-   
+
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
@@ -88,6 +88,9 @@ should_duplicate_loop_header_p (basic_block header, struct loop *loop,
       last = gsi_stmt (bsi);
 
       if (gimple_code (last) == GIMPLE_LABEL)
+	continue;
+
+      if (is_gimple_debug (last))
 	continue;
 
       if (is_gimple_call (last))
@@ -260,7 +263,7 @@ gate_ch (void)
   return flag_tree_ch != 0;
 }
 
-struct gimple_opt_pass pass_ch = 
+struct gimple_opt_pass pass_ch =
 {
  {
   GIMPLE_PASS,
@@ -275,7 +278,7 @@ struct gimple_opt_pass pass_ch =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_cleanup_cfg | TODO_dump_func 
+  TODO_cleanup_cfg | TODO_dump_func
   | TODO_verify_ssa			/* todo_flags_finish */
  }
 };

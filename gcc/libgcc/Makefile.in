@@ -140,6 +140,17 @@ stamp-h: $(srcdir)/config.in config.status Makefile
 config.status: $(srcdir)/configure $(srcdir)/config.host
 	$(SHELL) ./config.status --recheck
 
+AUTOCONF = autoconf
+configure_deps = \
+	$(srcdir)/../config/enable.m4 \
+	$(srcdir)/../config/tls.m4 \
+	$(srcdir)/../config/acx.m4 \
+	$(srcdir)/../config/no-executables.m4 \
+	$(srcdir)/../config/override.m4 \
+
+$(srcdir)/configure: @MAINT@ $(srcdir)/configure.ac $(configure_deps)
+	cd $(srcdir) && $(AUTOCONF)
+
 include $(gcc_objdir)/libgcc.mvars
 
 # Flags to pass to recursive makes.
@@ -215,7 +226,7 @@ override CFLAGS := $(filter-out -fprofile-generate -fprofile-use,$(CFLAGS))
 # will usually contain -g, so for the moment CFLAGS goes first.  We must
 # include CFLAGS - that's where multilib options live.
 INTERNAL_CFLAGS = $(CFLAGS) $(LIBGCC2_CFLAGS) $(HOST_LIBGCC2_CFLAGS) \
-		  $(INCLUDES) @set_have_cc_tls@
+		  $(INCLUDES) @set_have_cc_tls@ @set_use_emutls@
 
 MULTIDIR := $(shell $(CC) $(CFLAGS) -print-multi-directory)
 MULTIOSDIR := $(shell $(CC) $(CFLAGS) -print-multi-os-directory)
@@ -949,7 +960,7 @@ install-leaf: $(install-shared) $(install-libunwind)
 	done
 
 install: install-leaf
-	@$(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
+	@: $(MAKE) ; $(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
 
 .PHONY: install install-shared install-libunwind
 

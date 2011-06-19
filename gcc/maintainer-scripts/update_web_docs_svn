@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 
 # Generate HTML documentation from GCC Texinfo docs.
 # This version is for GCC 3.1 and later versions.
@@ -146,7 +146,7 @@ fi
    fi
    echo "@set srcdir $WORKDIR/gcc/gcc"
    echo "@set VERSION_PACKAGE (GCC)"
-   echo "@set BUGURL @uref{http://gcc.gnu.org/bugs.html}"
+   echo "@set BUGURL @uref{http://gcc.gnu.org/bugs/}"
 ) > $includedir/gcc-vers.texi
 
 # Now convert the relevant files from texi to HTML, PDF and PostScript.
@@ -155,7 +155,7 @@ for file in $MANUALS; do
   if [ "${filename}" ]; then
     makeinfo --html -I ${includedir} -I `dirname ${filename}` -o ${file} ${filename}
     tar cf ${file}-html.tar ${file}/*.html
-    texi2dvi -I ${includedir} -o ${file}.dvi ${filename} </dev/null && dvips -o ${file}.ps ${file}.dvi
+    texi2dvi -I ${includedir} -o ${file}.dvi ${filename} </dev/null >/dev/null && dvips -o ${file}.ps ${file}.dvi
     texi2pdf -I ${includedir} -o ${file}.pdf ${filename} </dev/null
     mkdir -p $DOCSDIR/$file
   fi

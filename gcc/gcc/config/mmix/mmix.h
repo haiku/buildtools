@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for MMIX.
-   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Copyright (C) 2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson (hp@bitrange.com)
 
@@ -81,15 +81,10 @@ along with GCC; see the file COPYING3.  If not see
 #define MMIX_FUNCTION_ARG_SIZE(MODE, TYPE) \
  ((MODE) != BLKmode ? GET_MODE_SIZE (MODE) : int_size_in_bytes (TYPE))
 
-/* Declarations for helper variables that are not tied to a particular
-   target macro.  */
-extern GTY(()) rtx mmix_compare_op0;
-extern GTY(()) rtx mmix_compare_op1;
-
 /* Per-function machine data.  This is normally an opaque type just
    defined and used in the tm.c file, but we need to see the definition in
    mmix.md too.  */
-struct machine_function GTY(())
+struct GTY(()) machine_function
  {
    int has_landing_pad;
    int highest_saved_stack_register;
@@ -186,23 +181,6 @@ extern int target_flags;
 #define WORDS_BIG_ENDIAN 1
 #define FLOAT_WORDS_BIG_ENDIAN 1
 #define UNITS_PER_WORD 8
-
-/* FIXME: Promotion of modes currently generates slow code, extending
-   before every operation.  */
-/* I'm a little bit undecided about this one.  It might be beneficial to
-   promote all operations.  */
-
-#define PROMOTE_FUNCTION_MODE(MODE, UNSIGNEDP, TYPE)	\
- do {						\
-  if (GET_MODE_CLASS (MODE) == MODE_INT		\
-      && GET_MODE_SIZE (MODE) < 8)		\
-   {						\
-     (MODE) = DImode;				\
-     /* Do the following some time later,	\
-	scrutinizing differences.  */		\
-     if (0) (UNSIGNEDP) = 0;			\
-   }						\
- } while (0)
 
 /* We need to align everything to 64 bits that can affect the alignment
    of other types.  Since address N is interpreted in MMIX as (N modulo
@@ -590,9 +568,6 @@ enum reg_class
 
 
 /* Node: Elimination */
-/* FIXME: Is this requirement built-in?  Anyway, we should try to get rid
-   of it; we can deduce the value.  */
-#define FRAME_POINTER_REQUIRED  cfun->has_nonlocal_label
 
 /* The frame-pointer is stored in a location that either counts to the
    offset of incoming parameters, or that counts to the offset of the
@@ -602,10 +577,6 @@ enum reg_class
  {{ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},	\
   {ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM},	\
   {FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}}
-
-/* We need not worry about when the frame-pointer is required for other
-   reasons; GCC takes care of those cases.  */
-#define CAN_ELIMINATE(FROM, TO) 1
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
  (OFFSET) = mmix_initial_elimination_offset (FROM, TO)
@@ -680,13 +651,8 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 
 /* Node: Trampolines */
 
-#define TRAMPOLINE_TEMPLATE(FILE) \
- mmix_trampoline_template (FILE)
-
-#define TRAMPOLINE_SIZE mmix_trampoline_size
-#define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, STATIC_CHAIN) \
- mmix_initialize_trampoline (ADDR, FNADDR, STATIC_CHAIN)
-
+#define TRAMPOLINE_SIZE		(4*UNITS_PER_WORD)
+#define TRAMPOLINE_ALIGNMENT	BITS_PER_WORD
 
 /* Node: Addressing Modes */
 
@@ -694,10 +660,6 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
  mmix_constant_address_p (X)
 
 #define MAX_REGS_PER_ADDRESS 2
-
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, LABEL)		\
- if (mmix_legitimate_address (MODE, X, MMIX_REG_OK_STRICT))	\
-   goto LABEL
 
 #ifndef REG_OK_STRICT
 # define REG_OK_FOR_BASE_P(X)			\
@@ -709,8 +671,6 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 #endif /* REG_OK_STRICT */
 
 #define REG_OK_FOR_INDEX_P(X) REG_OK_FOR_BASE_P (X)
-
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
 
 #define LEGITIMATE_CONSTANT_P(X) \
  mmix_legitimate_constant_p (X)

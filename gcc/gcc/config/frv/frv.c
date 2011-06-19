@@ -1,5 +1,5 @@
 /* Copyright (C) 1997, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007,
-   2008  Free Software Foundation, Inc.
+   2008, 2009  Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
 This file is part of GCC.
@@ -139,7 +139,7 @@ struct frv_io {
        REG++)
 
 /* This structure contains machine specific function data.  */
-struct machine_function GTY(())
+struct GTY(()) machine_function
 {
   /* True if we have created an rtx that relies on the stack frame.  */
   int frame_needed;
@@ -192,11 +192,6 @@ typedef struct
   /* The offset of BASE from the bottom of the current frame, in bytes.  */
   int base_offset;
 } frv_frame_accessor_t;
-
-/* Define the information needed to generate branch and scc insns.  This is
-   stored from the compare operation.  */
-rtx frv_compare_op0;
-rtx frv_compare_op1;
 
 /* Conditional execution support gathered together in one structure.  */
 typedef struct
@@ -269,6 +264,7 @@ frv_cpu_t frv_cpu_type = CPU_TYPE;	/* value of -mcpu= */
 /* Forward references */
 
 static bool frv_handle_option			(size_t, const char *, int);
+static bool frv_legitimate_address_p		(enum machine_mode, rtx, bool);
 static int frv_default_flags_for_cpu		(void);
 static int frv_string_begins_with		(const_tree, const char *);
 static FRV_INLINE bool frv_small_data_reloc_p	(rtx, int);
@@ -277,6 +273,10 @@ static void frv_print_operand_memory_reference_reg
 static void frv_print_operand_memory_reference	(FILE *, rtx, int);
 static int frv_print_operand_jump_hint		(rtx);
 static const char *comparison_string		(enum rtx_code, rtx);
+static rtx frv_function_value			(const_tree, const_tree,
+						 bool);
+static rtx frv_libcall_value			(enum machine_mode,
+						 const_rtx);
 static FRV_INLINE int frv_regno_ok_for_base_p	(int, int);
 static rtx single_set_pattern			(rtx);
 static int frv_function_contains_far_jump	(void);
@@ -303,6 +303,7 @@ static int frv_check_constant_argument		(enum insn_code, int, rtx);
 static rtx frv_legitimize_target		(enum insn_code, rtx);
 static rtx frv_legitimize_argument		(enum insn_code, int, rtx);
 static rtx frv_legitimize_tls_address		(rtx, enum tls_model);
+static rtx frv_legitimize_address		(rtx, rtx, enum machine_mode);
 static rtx frv_expand_set_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_unop_builtin		(enum insn_code, tree, rtx);
 static rtx frv_expand_binop_builtin		(enum insn_code, tree, rtx);
@@ -384,6 +385,9 @@ static void frv_output_dwarf_dtprel		(FILE *, int, rtx)
 static bool frv_secondary_reload                (bool, rtx, enum reg_class,
 						 enum machine_mode,
 						 secondary_reload_info *);
+static bool frv_frame_pointer_required		(void);
+static bool frv_can_eliminate			(const int, const int);
+static void frv_trampoline_init			(rtx, tree, rtx);
 
 /* Allow us to easily change the default for -malloc-cc.  */
 #ifndef DEFAULT_NO_ALLOC_CC
@@ -433,6 +437,9 @@ static bool frv_secondary_reload                (bool, rtx, enum reg_class,
 #undef  TARGET_SCHED_ISSUE_RATE
 #define TARGET_SCHED_ISSUE_RATE frv_issue_rate
 
+#undef TARGET_LEGITIMIZE_ADDRESS
+#define TARGET_LEGITIMIZE_ADDRESS frv_legitimize_address
+
 #undef TARGET_FUNCTION_OK_FOR_SIBCALL
 #define TARGET_FUNCTION_OK_FOR_SIBCALL frv_function_ok_for_sibcall
 #undef TARGET_CANNOT_FORCE_CONST_MEM
@@ -467,6 +474,23 @@ static bool frv_secondary_reload                (bool, rtx, enum reg_class,
 
 #undef  TARGET_SECONDARY_RELOAD
 #define TARGET_SECONDARY_RELOAD frv_secondary_reload
+
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P frv_legitimate_address_p
+
+#undef TARGET_FRAME_POINTER_REQUIRED
+#define TARGET_FRAME_POINTER_REQUIRED frv_frame_pointer_required
+
+#undef TARGET_CAN_ELIMINATE
+#define TARGET_CAN_ELIMINATE frv_can_eliminate
+
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT frv_trampoline_init
+
+#undef TARGET_FUNCTION_VALUE
+#define TARGET_FUNCTION_VALUE frv_function_value
+#undef TARGET_LIBCALL_VALUE
+#define TARGET_LIBCALL_VALUE frv_libcall_value
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -1687,7 +1711,21 @@ frv_frame_access (frv_frame_accessor_t *accessor, rtx reg, int stack_offset)
 	  emit_insn (gen_rtx_SET (VOIDmode, reg, temp));
 	}
       else
-	emit_insn (gen_rtx_SET (VOIDmode, reg, mem));
+	{
+	  /* We cannot use reg+reg addressing for DImode access.  */
+	  if (mode == DImode
+	      && GET_CODE (XEXP (mem, 0)) == PLUS
+	      && GET_CODE (XEXP (XEXP (mem, 0), 0)) == REG
+	      && GET_CODE (XEXP (XEXP (mem, 0), 1)) == REG)
+	    {
+	      rtx temp = gen_rtx_REG (SImode, TEMP_REGNO);
+	      rtx insn = emit_move_insn (temp,
+					 gen_rtx_PLUS (SImode, XEXP (XEXP (mem, 0), 0),
+						       XEXP (XEXP (mem, 0), 1)));
+	      mem = gen_rtx_MEM (DImode, temp);
+	    }
+	  emit_insn (gen_rtx_SET (VOIDmode, reg, mem));
+	}
       emit_use (reg);
     }
   else
@@ -1699,7 +1737,7 @@ frv_frame_access (frv_frame_accessor_t *accessor, rtx reg, int stack_offset)
 	  frv_frame_insn (gen_rtx_SET (Pmode, mem, temp),
 			  frv_dwarf_store (reg, stack_offset));
 	}
-      else if (GET_MODE (reg) == DImode)
+      else if (mode == DImode)
 	{
 	  /* For DImode saves, the dwarf2 version needs to be a SEQUENCE
 	     with a separate save for each register.  */
@@ -1707,6 +1745,19 @@ frv_frame_access (frv_frame_accessor_t *accessor, rtx reg, int stack_offset)
 	  rtx reg2 = gen_rtx_REG (SImode, REGNO (reg) + 1);
 	  rtx set1 = frv_dwarf_store (reg1, stack_offset);
 	  rtx set2 = frv_dwarf_store (reg2, stack_offset + 4);
+
+	  /* Also we cannot use reg+reg addressing.  */
+	  if (GET_CODE (XEXP (mem, 0)) == PLUS
+	      && GET_CODE (XEXP (XEXP (mem, 0), 0)) == REG
+	      && GET_CODE (XEXP (XEXP (mem, 0), 1)) == REG)
+	    {
+	      rtx temp = gen_rtx_REG (SImode, TEMP_REGNO);
+	      rtx insn = emit_move_insn (temp,
+					 gen_rtx_PLUS (SImode, XEXP (XEXP (mem, 0), 0),
+						       XEXP (XEXP (mem, 0), 1)));
+	      mem = gen_rtx_MEM (DImode, temp);
+	    }
+
 	  frv_frame_insn (gen_rtx_SET (Pmode, mem, reg),
 			  gen_rtx_PARALLEL (VOIDmode,
 					    gen_rtvec (2, set1, set2)));
@@ -2075,28 +2126,10 @@ frv_asm_output_mi_thunk (FILE *file,
 }
 
 
-/* A C expression which is nonzero if a function must have and use a frame
-   pointer.  This expression is evaluated in the reload pass.  If its value is
-   nonzero the function will have a frame pointer.
-
-   The expression can in principle examine the current function and decide
-   according to the facts, but on most machines the constant 0 or the constant
-   1 suffices.  Use 0 when the machine allows code to be generated with no
-   frame pointer, and doing so saves some time or space.  Use 1 when there is
-   no possible advantage to avoiding a frame pointer.
-
-   In certain cases, the compiler does not know how to produce valid code
-   without a frame pointer.  The compiler recognizes those cases and
-   automatically gives the function a frame pointer regardless of what
-   `FRAME_POINTER_REQUIRED' says.  You don't need to worry about them.
-
-   In a function that does not require a frame pointer, the frame pointer
-   register can be allocated for ordinary usage, unless you mark it as a fixed
-   register.  See `FIXED_REGISTERS' for more information.  */
 
 /* On frv, create a frame whenever we need to create stack.  */
 
-int
+static bool
 frv_frame_pointer_required (void)
 {
   /* If we forgoing the usual linkage requirements, we only need
@@ -2105,30 +2138,40 @@ frv_frame_pointer_required (void)
     return !current_function_sp_is_unchanging;
 
   if (! current_function_is_leaf)
-    return TRUE;
+    return true;
 
   if (get_frame_size () != 0)
-    return TRUE;
+    return true;
 
   if (cfun->stdarg)
-    return TRUE;
+    return true;
 
   if (!current_function_sp_is_unchanging)
-    return TRUE;
+    return true;
 
   if (!TARGET_FDPIC && flag_pic && crtl->uses_pic_offset_table)
-    return TRUE;
+    return true;
 
   if (profile_flag)
-    return TRUE;
+    return true;
 
   if (cfun->machine->frame_needed)
-    return TRUE;
+    return true;
 
-  return FALSE;
+  return false;
 }
 
 
+/* Worker function for TARGET_CAN_ELIMINATE.  */
+
+bool
+frv_can_eliminate (const int from, const int to)
+{
+  return (from == ARG_POINTER_REGNUM && to == STACK_POINTER_REGNUM
+          ? ! frame_pointer_needed
+          : true);
+}
+
 /* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It specifies the
    initial difference between the specified pair of registers.  This macro must
    be defined if `ELIMINABLE_REGS' is defined.  */
@@ -2506,7 +2549,7 @@ frv_return_addr_rtx (int count, rtx frame)
    MEMREF has already happened.
 
    MEMREF must be a legitimate operand for modes larger than SImode.
-   GO_IF_LEGITIMATE_ADDRESS forbids register+register addresses, which
+   frv_legitimate_address_p forbids register+register addresses, which
    this function cannot handle.  */
 rtx
 frv_index_memory (rtx memref, enum machine_mode mode, int index)
@@ -2545,6 +2588,12 @@ frv_print_operand_address (FILE * stream, rtx x)
       output_addr_const (stream, x);
       return;
 
+    case PLUS:
+      /* Poorly constructed asm statements can trigger this alternative.
+	 See gcc/testsuite/gcc.dg/asm-4.c for an example.  */
+      frv_print_operand_memory_reference (stream, x, 0);
+      return;
+      
     default:
       break;
     }
@@ -3251,6 +3300,35 @@ frv_arg_partial_bytes (CUMULATIVE_ARGS *cum, enum machine_mode mode,
 }
 
 
+/* Implements TARGET_FUNCTION_VALUE.  */
+
+static rtx
+frv_function_value (const_tree valtype,
+		    const_tree fn_decl_or_type ATTRIBUTE_UNUSED,
+		    bool outgoing ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (TYPE_MODE (valtype), RETURN_VALUE_REGNUM);
+}
+
+
+/* Implements TARGET_LIBCALL_VALUE.  */
+
+static rtx
+frv_libcall_value (enum machine_mode mode,
+		   const_rtx fun ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (mode, RETURN_VALUE_REGNUM);
+}
+
+
+/* Implements FUNCTION_VALUE_REGNO_P.  */
+
+bool
+frv_function_value_regno_p (const unsigned int regno)
+{
+  return (regno == RETURN_VALUE_REGNUM);
+}
+
 /* Return true if a register is ok to use as a base or index register.  */
 
 static FRV_INLINE int
@@ -3291,12 +3369,6 @@ frv_regno_ok_for_base_p (int regno, int strict_p)
    conditional to define the strict variant in that case and the non-strict
    variant otherwise.
 
-   Subroutines to check for acceptable registers for various purposes (one for
-   base registers, one for index registers, and so on) are typically among the
-   subroutines used to define `GO_IF_LEGITIMATE_ADDRESS'.  Then only these
-   subroutine macros need have two variants; the higher levels of macros may be
-   the same whether strict or not.
-
    Normally, constant addresses which are the sum of a `symbol_ref' and an
    integer are stored inside a `const' RTX to mark them as constant.
    Therefore, there is no need to recognize such sums specifically as
@@ -3307,30 +3379,14 @@ frv_regno_ok_for_base_p (int regno, int strict_p)
    are not marked with `const'.  It assumes that a naked `plus' indicates
    indexing.  If so, then you *must* reject such naked constant sums as
    illegitimate addresses, so that none of them will be given to
-   `PRINT_OPERAND_ADDRESS'.
-
-   On some machines, whether a symbolic address is legitimate depends on the
-   section that the address refers to.  On these machines, define the macro
-   `ENCODE_SECTION_INFO' to store the information into the `symbol_ref', and
-   then check for it here.  When you see a `const', you will have to look
-   inside it to find the `symbol_ref' in order to determine the section.
-
-   The best way to modify the name string is by adding text to the beginning,
-   with suitable punctuation to prevent any ambiguity.  Allocate the new name
-   in `saveable_obstack'.  You will have to modify `ASM_OUTPUT_LABELREF' to
-   remove and decode the added text and output the name accordingly, and define
-   `(* targetm.strip_name_encoding)' to access the original name string.
-
-   You can check the information stored here into the `symbol_ref' in the
-   definitions of the macros `GO_IF_LEGITIMATE_ADDRESS' and
    `PRINT_OPERAND_ADDRESS'.  */
 
 int
-frv_legitimate_address_p (enum machine_mode mode,
-                          rtx x,
-                          int strict_p,
-                          int condexec_p,
-			  int allow_double_reg_p)
+frv_legitimate_address_p_1 (enum machine_mode mode,
+                            rtx x,
+                            int strict_p,
+                            int condexec_p,
+			    int allow_double_reg_p)
 {
   rtx x0, x1;
   int ret = 0;
@@ -3448,13 +3504,19 @@ frv_legitimate_address_p (enum machine_mode mode,
 
   if (TARGET_DEBUG_ADDR)
     {
-      fprintf (stderr, "\n========== GO_IF_LEGITIMATE_ADDRESS, mode = %s, result = %d, addresses are %sstrict%s\n",
+      fprintf (stderr, "\n========== legitimate_address_p, mode = %s, result = %d, addresses are %sstrict%s\n",
 	       GET_MODE_NAME (mode), ret, (strict_p) ? "" : "not ",
 	       (condexec_p) ? ", inside conditional code" : "");
       debug_rtx (x);
     }
 
   return ret;
+}
+
+bool
+frv_legitimate_address_p (enum machine_mode mode, rtx x, bool strict_p)
+{
+  return frv_legitimate_address_p_1 (mode, x, strict_p, FALSE, FALSE);
 }
 
 /* Given an ADDR, generate code to inline the PLT.  */
@@ -3628,7 +3690,7 @@ frv_legitimize_address (rtx x,
         return frv_legitimize_tls_address (x, model);
     }
 
-  return NULL_RTX;
+  return x;
 }
 
 /* Test whether a local function descriptor is canonical, i.e.,
@@ -3751,8 +3813,8 @@ frv_legitimate_memory_operand (rtx op, enum machine_mode mode, int condexec_p)
 {
   return ((GET_MODE (op) == mode || mode == VOIDmode)
 	  && GET_CODE (op) == MEM
-	  && frv_legitimate_address_p (mode, XEXP (op, 0),
-				       reload_completed, condexec_p, FALSE));
+	  && frv_legitimate_address_p_1 (mode, XEXP (op, 0),
+				         reload_completed, condexec_p, FALSE));
 }
 
 void
@@ -3912,7 +3974,7 @@ condexec_memory_operand (rtx op, enum machine_mode mode)
     return FALSE;
 
   addr = XEXP (op, 0);
-  return frv_legitimate_address_p (mode, addr, reload_completed, TRUE, FALSE);
+  return frv_legitimate_address_p_1 (mode, addr, reload_completed, TRUE, FALSE);
 }
 
 /* Return true if the bare return instruction can be used outside of the
@@ -4731,19 +4793,18 @@ frv_emit_comparison (enum rtx_code test, rtx op0, rtx op1)
 }
 
 
-/* Emit code for a conditional branch.  The comparison operands were previously
-   stored in frv_compare_op0 and frv_compare_op1.
-
+/* Emit code for a conditional branch.
    XXX: I originally wanted to add a clobber of a CCR register to use in
    conditional execution, but that confuses the rest of the compiler.  */
 
 int
-frv_emit_cond_branch (enum rtx_code test, rtx label)
+frv_emit_cond_branch (rtx operands[])
 {
   rtx test_rtx;
   rtx label_ref;
   rtx if_else;
-  rtx cc_reg = frv_emit_comparison (test, frv_compare_op0, frv_compare_op1);
+  enum rtx_code test = GET_CODE (operands[0]);
+  rtx cc_reg = frv_emit_comparison (test, operands[1], operands[2]);
   enum machine_mode cc_mode = GET_MODE (cc_reg);
 
   /* Branches generate:
@@ -4751,7 +4812,7 @@ frv_emit_cond_branch (enum rtx_code test, rtx label)
 	     (if_then_else (<test>, <cc_reg>, (const_int 0))
 			    (label_ref <branch_label>)
 			    (pc))) */
-  label_ref = gen_rtx_LABEL_REF (VOIDmode, label);
+  label_ref = gen_rtx_LABEL_REF (VOIDmode, operands[3]);
   test_rtx = gen_rtx_fmt_ee (test, cc_mode, cc_reg, const0_rtx);
   if_else = gen_rtx_IF_THEN_ELSE (cc_mode, test_rtx, label_ref, pc_rtx);
   emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx, if_else));
@@ -4759,23 +4820,23 @@ frv_emit_cond_branch (enum rtx_code test, rtx label)
 }
 
 
-/* Emit code to set a gpr to 1/0 based on a comparison.  The comparison
-   operands were previously stored in frv_compare_op0 and frv_compare_op1.  */
+/* Emit code to set a gpr to 1/0 based on a comparison.  */
 
 int
-frv_emit_scc (enum rtx_code test, rtx target)
+frv_emit_scc (rtx operands[])
 {
   rtx set;
   rtx test_rtx;
   rtx clobber;
   rtx cr_reg;
-  rtx cc_reg = frv_emit_comparison (test, frv_compare_op0, frv_compare_op1);
+  enum rtx_code test = GET_CODE (operands[1]);
+  rtx cc_reg = frv_emit_comparison (test, operands[2], operands[3]);
 
   /* SCC instructions generate:
 	(parallel [(set <target> (<test>, <cc_reg>, (const_int 0))
 		   (clobber (<ccr_reg>))])  */
   test_rtx = gen_rtx_fmt_ee (test, SImode, cc_reg, const0_rtx);
-  set = gen_rtx_SET (VOIDmode, target, test_rtx);
+  set = gen_rtx_SET (VOIDmode, operands[0], test_rtx);
 
   cr_reg = ((TARGET_ALLOC_CC)
 	    ? gen_reg_rtx (CC_CCRmode)
@@ -4837,7 +4898,8 @@ frv_emit_cond_move (rtx dest, rtx test_rtx, rtx src1, rtx src2)
   rtx cr_reg;
   rtx if_rtx;
   enum rtx_code test = GET_CODE (test_rtx);
-  rtx cc_reg = frv_emit_comparison (test, frv_compare_op0, frv_compare_op1);
+  rtx cc_reg = frv_emit_comparison (test,
+				    XEXP (test_rtx, 0), XEXP (test_rtx, 1));
   enum machine_mode cc_mode = GET_MODE (cc_reg);
 
   /* Conditional move instructions generate:
@@ -5814,7 +5876,7 @@ frv_ifcvt_rewrite_mem (rtx mem, enum machine_mode mode, rtx insn)
 {
   rtx addr = XEXP (mem, 0);
 
-  if (!frv_legitimate_address_p (mode, addr, reload_completed, TRUE, FALSE))
+  if (!frv_legitimate_address_p_1 (mode, addr, reload_completed, TRUE, FALSE))
     {
       if (GET_CODE (addr) == PLUS)
 	{
@@ -6280,9 +6342,11 @@ frv_trampoline_size (void)
 	sethi #0, <static_chain>
 	jmpl @(gr0,<jmp_reg>) */
 
-void
-frv_initialize_trampoline (rtx addr, rtx fnaddr, rtx static_chain)
+static void
+frv_trampoline_init (rtx m_tramp, tree fndecl, rtx static_chain)
 {
+  rtx addr = XEXP (m_tramp, 0);
+  rtx fnaddr = XEXP (DECL_RTL (fndecl), 0);
   rtx sc_reg = force_reg (Pmode, static_chain);
 
   emit_library_call (gen_rtx_SYMBOL_REF (SImode, "__trampoline_setup"),

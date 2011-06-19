@@ -50,7 +50,7 @@ static tree bc_label[2];
 static tree
 begin_bc_block (enum bc_t bc)
 {
-  tree label = create_artificial_label ();
+  tree label = create_artificial_label (input_location);
   TREE_CHAIN (label) = bc_label[bc];
   bc_label[bc] = label;
   return label;
@@ -153,6 +153,8 @@ genericize_eh_spec_block (tree *stmt_p)
   tree failure = build_call_n (call_unexpected_node, 1, build_exc_ptr ());
 
   *stmt_p = build_gimple_eh_filter_tree (body, allowed, failure);
+  TREE_NO_WARNING (*stmt_p) = true;
+  TREE_NO_WARNING (TREE_OPERAND (*stmt_p, 1)) = true;
 }
 
 /* Genericize an IF_STMT by turning it into a COND_EXPR.  */
@@ -169,9 +171,9 @@ genericize_if_stmt (tree *stmt_p)
   else_ = ELSE_CLAUSE (stmt);
 
   if (!then_)
-    then_ = build_empty_stmt ();
+    then_ = build_empty_stmt (locus);
   if (!else_)
-    else_ = build_empty_stmt ();
+    else_ = build_empty_stmt (locus);
 
   if (integer_nonzerop (cond) && !TREE_SIDE_EFFECTS (else_))
     stmt = then_;
@@ -226,7 +228,7 @@ gimplify_cp_loop (tree cond, tree body, tree incr, bool cond_is_first)
 	 back through the main gimplifier to lower it.  Given that we
 	 have to gimplify the loop body NOW so that we can resolve
 	 break/continue stmts, seems easier to just expand to gotos.  */
-      top = gimple_build_label (create_artificial_label ());
+      top = gimple_build_label (create_artificial_label (stmt_locus));
 
       /* If we have an exit condition, then we build an IF with gotos either
 	 out of the loop, or to the top of it.  If there's no exit condition,
@@ -247,7 +249,8 @@ gimplify_cp_loop (tree cond, tree body, tree incr, bool cond_is_first)
 	    {
 	      if (incr)
 		{
-		  entry = gimple_build_label (create_artificial_label ());
+		  entry = gimple_build_label 
+		    (create_artificial_label (stmt_locus));
 		  stmt = gimple_build_goto (gimple_label_label (entry));
 		}
 	      else
@@ -334,7 +337,7 @@ gimplify_switch_stmt (tree *stmt_p, gimple_seq *pre_p)
 
   body = SWITCH_STMT_BODY (stmt);
   if (!body)
-    body = build_empty_stmt ();
+    body = build_empty_stmt (stmt_locus);
 
   t = build3 (SWITCH_EXPR, SWITCH_STMT_TYPE (stmt),
 	      SWITCH_STMT_COND (stmt), body, NULL_TREE);
@@ -426,17 +429,13 @@ cp_gimplify_init_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
   tree from = TREE_OPERAND (*expr_p, 1);
   tree to = TREE_OPERAND (*expr_p, 0);
   tree t;
-  tree slot = NULL_TREE;
 
   /* What about code that pulls out the temp and uses it elsewhere?  I
      think that such code never uses the TARGET_EXPR as an initializer.  If
      I'm wrong, we'll abort because the temp won't have any RTL.  In that
      case, I guess we'll need to replace references somehow.  */
   if (TREE_CODE (from) == TARGET_EXPR)
-    {
-      slot = TARGET_EXPR_SLOT (from);
-      from = TARGET_EXPR_INITIAL (from);
-    }
+    from = TARGET_EXPR_INITIAL (from);
 
   /* Look through any COMPOUND_EXPRs, since build_compound_expr pushes them
      inside the TARGET_EXPR.  */
@@ -449,10 +448,14 @@ cp_gimplify_init_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 
 	 Should we add a target parm to gimplify_expr instead?  No, as in this
 	 case we want to replace the INIT_EXPR.  */
-      if (TREE_CODE (sub) == AGGR_INIT_EXPR)
+      if (TREE_CODE (sub) == AGGR_INIT_EXPR
+	  || TREE_CODE (sub) == VEC_INIT_EXPR)
 	{
 	  gimplify_expr (&to, pre_p, post_p, is_gimple_lvalue, fb_lvalue);
-	  AGGR_INIT_EXPR_SLOT (sub) = to;
+	  if (TREE_CODE (sub) == AGGR_INIT_EXPR)
+	    AGGR_INIT_EXPR_SLOT (sub) = to;
+	  else
+	    VEC_INIT_EXPR_SLOT (sub) = to;
 	  *expr_p = from;
 
 	  /* The initialization is now a side-effect, so the container can
@@ -477,11 +480,16 @@ gimplify_must_not_throw_expr (tree *expr_p, gimple_seq *pre_p)
   tree stmt = *expr_p;
   tree temp = voidify_wrapper_expr (stmt, NULL);
   tree body = TREE_OPERAND (stmt, 0);
+  gimple_seq try_ = NULL;
+  gimple_seq catch_ = NULL;
+  gimple mnt;
 
-  stmt = build_gimple_eh_filter_tree (body, NULL_TREE,
-				      build_call_n (terminate_node, 0));
+  gimplify_and_add (body, &try_);
+  mnt = gimple_build_eh_must_not_throw (terminate_node);
+  gimplify_seq_add_stmt (&catch_, mnt);
+  mnt = gimple_build_try (try_, catch_, GIMPLE_TRY_CATCH);
 
-  gimplify_and_add (stmt, pre_p);
+  gimplify_seq_add_stmt (pre_p, mnt);
   if (temp)
     {
       *expr_p = temp;
@@ -500,8 +508,6 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
   int saved_stmts_are_full_exprs_p = 0;
   enum tree_code code = TREE_CODE (*expr_p);
   enum gimplify_status ret;
-  tree block = NULL;
-  VEC(gimple, heap) *bind_expr_stack = NULL;
 
   if (STATEMENT_CODE_P (code))
     {
@@ -522,6 +528,19 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       ret = GS_OK;
       break;
 
+    case VEC_INIT_EXPR:
+      {
+	location_t loc = input_location;
+	gcc_assert (EXPR_HAS_LOCATION (*expr_p));
+	input_location = EXPR_LOCATION (*expr_p);
+	*expr_p = build_vec_init (VEC_INIT_EXPR_SLOT (*expr_p), NULL_TREE,
+				  VEC_INIT_EXPR_INIT (*expr_p), false, 1,
+				  tf_warning_or_error);
+	ret = GS_OK;
+	input_location = loc;
+      }
+      break;
+
     case THROW_EXPR:
       /* FIXME communicate throw type to back end, probably by moving
 	 THROW_EXPR into ../tree.def.  */
@@ -538,6 +557,54 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 	 25979.  */
     case INIT_EXPR:
       cp_gimplify_init_expr (expr_p, pre_p, post_p);
+      if (TREE_CODE (*expr_p) != INIT_EXPR)
+	return GS_OK;
+      /* Otherwise fall through.  */
+    case MODIFY_EXPR:
+      {
+	/* If the back end isn't clever enough to know that the lhs and rhs
+	   types are the same, add an explicit conversion.  */
+	tree op0 = TREE_OPERAND (*expr_p, 0);
+	tree op1 = TREE_OPERAND (*expr_p, 1);
+
+	if (!error_operand_p (op0)
+	    && !error_operand_p (op1)
+	    && (TYPE_STRUCTURAL_EQUALITY_P (TREE_TYPE (op0))
+		|| TYPE_STRUCTURAL_EQUALITY_P (TREE_TYPE (op1)))
+	    && !useless_type_conversion_p (TREE_TYPE (op1), TREE_TYPE (op0)))
+	  TREE_OPERAND (*expr_p, 1) = build1 (VIEW_CONVERT_EXPR,
+					      TREE_TYPE (op0), op1);
+
+	else if ((rhs_predicate_for (op0)) (op1)
+		 && !(TREE_CODE (op1) == CALL_EXPR
+		      && CALL_EXPR_RETURN_SLOT_OPT (op1))
+		 && is_really_empty_class (TREE_TYPE (op0)))
+	  {
+	    /* Remove any copies of empty classes.  We check that the RHS
+	       has a simple form so that TARGET_EXPRs and CONSTRUCTORs get
+	       reduced properly, and we leave the return slot optimization
+	       alone because it isn't a copy.
+
+	       Also drop volatile variables on the RHS to avoid infinite
+	       recursion from gimplify_expr trying to load the value.  */
+	    if (!TREE_SIDE_EFFECTS (op1)
+		|| (DECL_P (op1) && TREE_THIS_VOLATILE (op1)))
+	      *expr_p = op0;
+	    else if (TREE_CODE (op1) == INDIRECT_REF
+		     && TREE_THIS_VOLATILE (op1))
+	      {
+		/* Similarly for volatile INDIRECT_REFs on the RHS.  */
+		if (!TREE_SIDE_EFFECTS (TREE_OPERAND (op1, 0)))
+		  *expr_p = op0;
+		else
+		  *expr_p = build2 (COMPOUND_EXPR, TREE_TYPE (*expr_p),
+				    TREE_OPERAND (op1, 0), op0);
+	      }
+	    else
+	      *expr_p = build2 (COMPOUND_EXPR, TREE_TYPE (*expr_p),
+				op0, op1);
+	  }
+      }
       ret = GS_OK;
       break;
 
@@ -568,37 +635,7 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       break;
 
     case USING_STMT:
-      /* Get the innermost inclosing GIMPLE_BIND that has a non NULL
-         BLOCK, and append an IMPORTED_DECL to its
-	 BLOCK_VARS chained list.  */
-
-      bind_expr_stack = gimple_bind_expr_stack ();
-      if (bind_expr_stack)
-	{
-	  int i;
-	  for (i = VEC_length (gimple, bind_expr_stack) - 1; i >= 0; i--)
-	    if ((block = gimple_bind_block (VEC_index (gimple,
-						       bind_expr_stack,
-						       i))))
-	      break;
-	}
-      if (block)
-	{
-	  tree using_directive;
-	  gcc_assert (TREE_OPERAND (*expr_p, 0));
-
-	  using_directive = make_node (IMPORTED_DECL);
-	  TREE_TYPE (using_directive) = void_type_node;
-
-	  IMPORTED_DECL_ASSOCIATED_DECL (using_directive)
-	    = TREE_OPERAND (*expr_p, 0);
-	  TREE_CHAIN (using_directive) = BLOCK_VARS (block);
-	  BLOCK_VARS (block) = using_directive;
-	}
-      /* The USING_STMT won't appear in GIMPLE.  */
-      *expr_p = NULL;
-      ret = GS_ALL_DONE;
-      break;
+      gcc_unreachable ();
 
     case FOR_STMT:
       gimplify_for_stmt (expr_p, pre_p);
@@ -653,7 +690,7 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
       break;
 
     default:
-      ret = c_gimplify_expr (expr_p, pre_p, post_p);
+      ret = (enum gimplify_status) c_gimplify_expr (expr_p, pre_p, post_p);
       break;
     }
 
@@ -690,6 +727,12 @@ cxx_int_tree_map_hash (const void *item)
   return ((const struct cxx_int_tree_map *)item)->uid;
 }
 
+struct cp_genericize_data
+{
+  struct pointer_set_t *p_set;
+  VEC (tree, heap) *bind_expr_stack;
+};
+
 /* Perform any pre-gimplification lowering of C++ front end trees to
    GENERIC.  */
 
@@ -697,7 +740,8 @@ static tree
 cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 {
   tree stmt = *stmt_p;
-  struct pointer_set_t *p_set = (struct pointer_set_t*) data;
+  struct cp_genericize_data *wtd = (struct cp_genericize_data *) data;
+  struct pointer_set_t *p_set = wtd->p_set;
 
   if (is_invisiref_parm (stmt)
       /* Don't dereference parms in a thunk, pass the references through. */
@@ -756,7 +800,7 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 	    *walk_subtrees = 0;
 	    if (OMP_CLAUSE_LASTPRIVATE_STMT (stmt))
 	      cp_walk_tree (&OMP_CLAUSE_LASTPRIVATE_STMT (stmt),
-			    cp_genericize_r, p_set, NULL);
+			    cp_genericize_r, data, NULL);
 	  }
 	break;
       case OMP_CLAUSE_PRIVATE:
@@ -826,6 +870,55 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
 	}
     }
 
+  else if (TREE_CODE (stmt) == BIND_EXPR)
+    {
+      VEC_safe_push (tree, heap, wtd->bind_expr_stack, stmt);
+      cp_walk_tree (&BIND_EXPR_BODY (stmt),
+		    cp_genericize_r, data, NULL);
+      VEC_pop (tree, wtd->bind_expr_stack);
+    }
+
+  else if (TREE_CODE (stmt) == USING_STMT)
+    {
+      tree block = NULL_TREE;
+
+      /* Get the innermost inclosing GIMPLE_BIND that has a non NULL
+         BLOCK, and append an IMPORTED_DECL to its
+	 BLOCK_VARS chained list.  */
+      if (wtd->bind_expr_stack)
+	{
+	  int i;
+	  for (i = VEC_length (tree, wtd->bind_expr_stack) - 1; i >= 0; i--)
+	    if ((block = BIND_EXPR_BLOCK (VEC_index (tree,
+						     wtd->bind_expr_stack, i))))
+	      break;
+	}
+      if (block)
+	{
+	  tree using_directive;
+	  gcc_assert (TREE_OPERAND (stmt, 0));
+
+	  using_directive = make_node (IMPORTED_DECL);
+	  TREE_TYPE (using_directive) = void_type_node;
+
+	  IMPORTED_DECL_ASSOCIATED_DECL (using_directive)
+	    = TREE_OPERAND (stmt, 0);
+	  TREE_CHAIN (using_directive) = BLOCK_VARS (block);
+	  BLOCK_VARS (block) = using_directive;
+	}
+      /* The USING_STMT won't appear in GENERIC.  */
+      *stmt_p = build1 (NOP_EXPR, void_type_node, integer_zero_node);
+      *walk_subtrees = 0;
+    }
+
+  else if (TREE_CODE (stmt) == DECL_EXPR
+	   && TREE_CODE (DECL_EXPR_DECL (stmt)) == USING_DECL)
+    {
+      /* Using decls inside DECL_EXPRs are just dropped on the floor.  */
+      *stmt_p = build1 (NOP_EXPR, void_type_node, integer_zero_node);
+      *walk_subtrees = 0;
+    }
+
   pointer_set_insert (p_set, *stmt_p);
 
   return NULL;
@@ -835,7 +928,7 @@ void
 cp_genericize (tree fndecl)
 {
   tree t;
-  struct pointer_set_t *p_set;
+  struct cp_genericize_data wtd;
 
   /* Fix up the types of parms passed by invisible reference.  */
   for (t = DECL_ARGUMENTS (fndecl); t; t = TREE_CHAIN (t))
@@ -869,9 +962,11 @@ cp_genericize (tree fndecl)
 
   /* We do want to see every occurrence of the parms, so we can't just use
      walk_tree's hash functionality.  */
-  p_set = pointer_set_create ();
-  cp_walk_tree (&DECL_SAVED_TREE (fndecl), cp_genericize_r, p_set, NULL);
-  pointer_set_destroy (p_set);
+  wtd.p_set = pointer_set_create ();
+  wtd.bind_expr_stack = NULL;
+  cp_walk_tree (&DECL_SAVED_TREE (fndecl), cp_genericize_r, &wtd, NULL);
+  pointer_set_destroy (wtd.p_set);
+  VEC_free (tree, heap, wtd.bind_expr_stack);
 
   /* Do everything else.  */
   c_genericize (fndecl);
@@ -921,9 +1016,9 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
 			     size_zero_node, NULL, NULL);
 	}
       while (TREE_CODE (inner_type) == ARRAY_TYPE);
-      start1 = build_fold_addr_expr (start1);
+      start1 = build_fold_addr_expr_loc (input_location, start1);
       if (arg2)
-	start2 = build_fold_addr_expr (start2);
+	start2 = build_fold_addr_expr_loc (input_location, start2);
 
       end1 = TYPE_SIZE_UNIT (TREE_TYPE (arg1));
       end1 = build2 (POINTER_PLUS_EXPR, TREE_TYPE (start1), start1, end1);
@@ -939,7 +1034,7 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
 	  append_to_statement_list (t, &ret);
 	}
 
-      lab = create_artificial_label ();
+      lab = create_artificial_label (input_location);
       t = build1 (LABEL_EXPR, void_type_node, lab);
       append_to_statement_list (t, &ret);
 
@@ -977,9 +1072,9 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
     }
   else
     {
-      argarray[i++] = build_fold_addr_expr (arg1);
+      argarray[i++] = build_fold_addr_expr_loc (input_location, arg1);
       if (arg2)
-	argarray[i++] = build_fold_addr_expr (arg2);
+	argarray[i++] = build_fold_addr_expr_loc (input_location, arg2);
       /* Handle default arguments.  */
       for (parm = defparm; parm && parm != void_list_node;
 	   parm = TREE_CHAIN (parm), i++)

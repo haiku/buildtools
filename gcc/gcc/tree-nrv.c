@@ -1,5 +1,5 @@
 /* Language independent return value optimizations
-   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -44,7 +44,7 @@ along with GCC; see the file COPYING3.  If not see
    That copy can often be avoided by directly constructing the return value
    into the final destination mandated by the target's ABI.
 
-   This is basically a generic equivalent to the C++ front-end's 
+   This is basically a generic equivalent to the C++ front-end's
    Named Return Value optimization.  */
 
 struct nrv_data
@@ -56,6 +56,7 @@ struct nrv_data
   /* This is the function's RESULT_DECL.  We will replace all occurrences
      of VAR with RESULT_DECL when we apply this optimization.  */
   tree result;
+  int modified;
 };
 
 static tree finalize_nrv_r (tree *, int *, void *);
@@ -83,7 +84,10 @@ finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)
 
   /* Otherwise replace all occurrences of VAR with RESULT.  */
   else if (*tp == dp->var)
-    *tp = dp->result;
+    {
+      *tp = dp->result;
+      dp->modified = 1;
+    }
 
   /* Keep iterating.  */
   return NULL_TREE;
@@ -100,7 +104,7 @@ finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)
    ever encounter languages which prevent this kind of optimization,
    then we could either have the languages register the optimization or
    we could change the gating function to check the current language.  */
-   
+
 static unsigned int
 tree_nrv (void)
 {
@@ -123,6 +127,12 @@ tree_nrv (void)
 
   /* If the front end already did something like this, don't do it here.  */
   if (DECL_NAME (result))
+    return 0;
+
+  /* If the result has its address taken then it might be modified
+     by means not detected in the following loop.  Bail out in this
+     case.  */
+  if (TREE_ADDRESSABLE (result))
     return 0;
 
   /* Look through each block for assignments to the RESULT_DECL.  */
@@ -174,13 +184,13 @@ tree_nrv (void)
 		  || TREE_ADDRESSABLE (found)
 		  || DECL_ALIGN (found) > DECL_ALIGN (result)
 		  || !useless_type_conversion_p (result_type,
-					        TREE_TYPE (found)))
+						 TREE_TYPE (found)))
 		return 0;
 	    }
 	  else if (gimple_has_lhs (stmt))
 	    {
 	      tree addr = get_base_address (gimple_get_lhs (stmt));
-	       /* If there's any MODIFY of component of RESULT, 
+	       /* If there's any MODIFY of component of RESULT,
 		  then bail out.  */
 	      if (addr && addr == result)
 		return 0;
@@ -214,7 +224,7 @@ tree_nrv (void)
       DECL_ABSTRACT_ORIGIN (result) = DECL_ABSTRACT_ORIGIN (found);
     }
 
-  TREE_ADDRESSABLE (result) = TREE_ADDRESSABLE (found);
+  TREE_ADDRESSABLE (result) |= TREE_ADDRESSABLE (found);
 
   /* Now walk through the function changing all references to VAR to be
      RESULT.  */
@@ -229,13 +239,19 @@ tree_nrv (void)
 	  if (gimple_assign_copy_p (stmt)
 	      && gimple_assign_lhs (stmt) == result
 	      && gimple_assign_rhs1 (stmt) == found)
-	    gsi_remove (&gsi, true);
+	    {
+	      unlink_stmt_vdef (stmt);
+	      gsi_remove (&gsi, true);
+	    }
 	  else
 	    {
 	      struct walk_stmt_info wi;
 	      memset (&wi, 0, sizeof (wi));
 	      wi.info = &data;
+	      data.modified = 0;
 	      walk_gimple_op (stmt, finalize_nrv_r, &wi);
+	      if (data.modified)
+		update_stmt (stmt);
 	      gsi_next (&gsi);
 	    }
 	}
@@ -252,7 +268,7 @@ gate_pass_return_slot (void)
   return optimize > 0;
 }
 
-struct gimple_opt_pass pass_nrv = 
+struct gimple_opt_pass pass_nrv =
 {
  {
   GIMPLE_PASS,
@@ -263,7 +279,7 @@ struct gimple_opt_pass pass_nrv =
   NULL,					/* next */
   0,					/* static_pass_number */
   TV_TREE_NRV,				/* tv_id */
-  PROP_cfg,				/* properties_required */
+  PROP_ssa | PROP_cfg,				/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
@@ -339,7 +355,7 @@ execute_return_slot_opt (void)
   return 0;
 }
 
-struct gimple_opt_pass pass_return_slot = 
+struct gimple_opt_pass pass_return_slot =
 {
  {
   GIMPLE_PASS,
@@ -349,8 +365,8 @@ struct gimple_opt_pass pass_return_slot =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  0,					/* tv_id */
-  PROP_ssa | PROP_alias,		/* properties_required */
+  TV_NONE,				/* tv_id */
+  PROP_ssa,				/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */

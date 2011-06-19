@@ -27,7 +27,8 @@ if GLIBCXX_HOSTED
   hosted_source = doc src po testsuite
 endif
 ## Keep this list sync'd with acinclude.m4:GLIBCXX_CONFIGURE.
-SUBDIRS = include libsupc++ $(hosted_source)
+## Note that python must come after src.
+SUBDIRS = include libsupc++ $(hosted_source) python
 
 ACLOCAL_AMFLAGS = -I . -I .. -I ../config
 
@@ -88,7 +89,3 @@ AM_MAKEFLAGS = \
 
 # Subdir rules rely on $(FLAGS_TO_PASS)
 FLAGS_TO_PASS = $(AM_MAKEFLAGS)
-
-.PHONY: install-html install-pdf
-install-html:
-install-pdf:

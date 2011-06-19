@@ -1,6 +1,6 @@
 /* Utility routines for data type conversion for GCC.
    Copyright (C) 1987, 1988, 1991, 1992, 1993, 1994, 1995, 1997, 1998,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -42,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 tree
 convert_to_pointer (tree type, tree expr)
 {
+  location_t loc = EXPR_LOCATION (expr);
   if (TREE_TYPE (expr) == type)
     return expr;
 
@@ -53,17 +54,36 @@ convert_to_pointer (tree type, tree expr)
     {
     case POINTER_TYPE:
     case REFERENCE_TYPE:
-      return fold_build1 (NOP_EXPR, type, expr);
+      {
+        /* If the pointers point to different address spaces, conversion needs
+	   to be done via a ADDR_SPACE_CONVERT_EXPR instead of a NOP_EXPR.  */
+	addr_space_t to_as = TYPE_ADDR_SPACE (TREE_TYPE (type));
+	addr_space_t from_as = TYPE_ADDR_SPACE (TREE_TYPE (TREE_TYPE (expr)));
+
+	if (to_as == from_as)
+	  return fold_build1_loc (loc, NOP_EXPR, type, expr);
+	else
+	  return fold_build1_loc (loc, ADDR_SPACE_CONVERT_EXPR, type, expr);
+      }
 
     case INTEGER_TYPE:
     case ENUMERAL_TYPE:
     case BOOLEAN_TYPE:
-      if (TYPE_PRECISION (TREE_TYPE (expr)) != POINTER_SIZE)
-	expr = fold_build1 (NOP_EXPR,
-                            lang_hooks.types.type_for_size (POINTER_SIZE, 0),
-			    expr);
-      return fold_build1 (CONVERT_EXPR, type, expr);
+      {
+	/* If the input precision differs from the target pointer type
+	   precision, first convert the input expression to an integer type of
+	   the target precision.  Some targets, e.g. VMS, need several pointer
+	   sizes to coexist so the latter isn't necessarily POINTER_SIZE.  */
+	unsigned int pprec = TYPE_PRECISION (type);
+	unsigned int eprec = TYPE_PRECISION (TREE_TYPE (expr));
 
+ 	if (eprec != pprec)
+	  expr = fold_build1_loc (loc, NOP_EXPR,
+			      lang_hooks.types.type_for_size (pprec, 0),
+			      expr);
+      }
+
+      return fold_build1_loc (loc, CONVERT_EXPR, type, expr);
 
     default:
       error ("cannot convert to a pointer type");
@@ -326,7 +346,8 @@ convert_to_real (tree type, tree expr)
 		      && (flag_unsafe_math_optimizations
 			  || (TYPE_PRECISION (newtype) == TYPE_PRECISION (type)
 			      && real_can_shorten_arithmetic (TYPE_MODE (itype),
-							      TYPE_MODE (type)))))
+							      TYPE_MODE (type))
+			      && !excess_precision_type (newtype))))
 		    {
 		      expr = build2 (TREE_CODE (expr), newtype,
 				     fold (convert_to_real (newtype, arg0)),
@@ -413,7 +434,7 @@ convert_to_integer (tree type, tree expr)
       tree s_intype = TREE_TYPE (s_expr);
       const enum built_in_function fcode = builtin_mathfn_code (s_expr);
       tree fn = 0;
-      
+
       switch (fcode)
         {
 	CASE_FLT_FN (BUILT_IN_CEIL):
@@ -473,7 +494,38 @@ convert_to_integer (tree type, tree expr)
 	default:
 	  break;
 	}
-      
+
+      if (fn)
+        {
+	  tree newexpr = build_call_expr (fn, 1, CALL_EXPR_ARG (s_expr, 0));
+	  return convert_to_integer (type, newexpr);
+	}
+    }
+
+  /* Convert (int)logb(d) -> ilogb(d).  */
+  if (optimize
+      && flag_unsafe_math_optimizations
+      && !flag_trapping_math && !flag_errno_math && flag_finite_math_only
+      && integer_type_node
+      && (outprec > TYPE_PRECISION (integer_type_node)
+	  || (outprec == TYPE_PRECISION (integer_type_node)
+	      && !TYPE_UNSIGNED (type))))
+    {
+      tree s_expr = strip_float_extensions (expr);
+      tree s_intype = TREE_TYPE (s_expr);
+      const enum built_in_function fcode = builtin_mathfn_code (s_expr);
+      tree fn = 0;
+
+      switch (fcode)
+	{
+	CASE_FLT_FN (BUILT_IN_LOGB):
+	  fn = mathfn_built_in (s_intype, BUILT_IN_ILOGB);
+	  break;
+
+	default:
+	  break;
+	}
+
       if (fn)
         {
 	  tree newexpr = build_call_expr (fn, 1, CALL_EXPR_ARG (s_expr, 0));
@@ -488,10 +540,13 @@ convert_to_integer (tree type, tree expr)
       if (integer_zerop (expr))
 	return build_int_cst (type, 0);
 
-      /* Convert to an unsigned integer of the correct width first,
-	 and from there widen/truncate to the required type.  */
+      /* Convert to an unsigned integer of the correct width first, and from
+	 there widen/truncate to the required type.  Some targets support the
+	 coexistence of multiple valid pointer sizes, so fetch the one we need
+	 from the type.  */
       expr = fold_build1 (CONVERT_EXPR,
-			  lang_hooks.types.type_for_size (POINTER_SIZE, 0),
+			  lang_hooks.types.type_for_size
+			    (TYPE_PRECISION (intype), 0),
 			  expr);
       return fold_convert (type, expr);
 
@@ -618,6 +673,31 @@ convert_to_integer (tree type, tree expr)
 	    }
 	  break;
 
+	case TRUNC_DIV_EXPR:
+	  {
+	    tree arg0 = get_unwidened (TREE_OPERAND (expr, 0), type);
+	    tree arg1 = get_unwidened (TREE_OPERAND (expr, 1), type);
+
+	    /* Don't distribute unless the output precision is at least as big
+	       as the actual inputs and it has the same signedness.  */
+	    if (outprec >= TYPE_PRECISION (TREE_TYPE (arg0))
+		&& outprec >= TYPE_PRECISION (TREE_TYPE (arg1))
+		/* If signedness of arg0 and arg1 don't match,
+		   we can't necessarily find a type to compare them in.  */
+		&& (TYPE_UNSIGNED (TREE_TYPE (arg0))
+		    == TYPE_UNSIGNED (TREE_TYPE (arg1)))
+		/* Do not change the sign of the division.  */
+		&& (TYPE_UNSIGNED (TREE_TYPE (expr))
+		    == TYPE_UNSIGNED (TREE_TYPE (arg0)))
+		/* Either require unsigned division or a division by
+		   a constant that is not -1.  */
+		&& (TYPE_UNSIGNED (TREE_TYPE (arg0))
+		    || (TREE_CODE (arg1) == INTEGER_CST
+			&& !integer_all_onesp (arg1))))
+	      goto trunc1;
+	    break;
+	  }
+
 	case MAX_EXPR:
 	case MIN_EXPR:
 	case MULT_EXPR:
@@ -689,13 +769,19 @@ convert_to_integer (tree type, tree expr)
 			|| ex_form == LSHIFT_EXPR
 			/* If we have !flag_wrapv, and either ARG0 or
 			   ARG1 is of a signed type, we have to do
-			   PLUS_EXPR or MINUS_EXPR in an unsigned
-			   type.  Otherwise, we would introduce
+			   PLUS_EXPR, MINUS_EXPR or MULT_EXPR in an unsigned
+			   type in case the operation in outprec precision
+			   could overflow.  Otherwise, we would introduce
 			   signed-overflow undefinedness.  */
 			|| ((!TYPE_OVERFLOW_WRAPS (TREE_TYPE (arg0))
 			     || !TYPE_OVERFLOW_WRAPS (TREE_TYPE (arg1)))
+			    && ((TYPE_PRECISION (TREE_TYPE (arg0)) * 2u
+				 > outprec)
+				|| (TYPE_PRECISION (TREE_TYPE (arg1)) * 2u
+				    > outprec))
 			    && (ex_form == PLUS_EXPR
-				|| ex_form == MINUS_EXPR)))
+				|| ex_form == MINUS_EXPR
+				|| ex_form == MULT_EXPR)))
 		      typex = unsigned_type_for (typex);
 		    else
 		      typex = signed_type_for (typex);
@@ -713,14 +799,7 @@ convert_to_integer (tree type, tree expr)
 	  /* This is not correct for ABS_EXPR,
 	     since we must test the sign before truncation.  */
 	  {
-	    tree typex;
-
-	    /* Don't do unsigned arithmetic where signed was wanted,
-	       or vice versa.  */
-	    if (TYPE_UNSIGNED (TREE_TYPE (expr)))
-	      typex = unsigned_type_for (type);
-	    else
-	      typex = signed_type_for (type);
+	    tree typex = unsigned_type_for (type);
 	    return convert (type,
 			    fold_build1 (ex_form, typex,
 					 convert (typex,

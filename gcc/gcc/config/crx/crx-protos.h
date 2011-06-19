@@ -53,7 +53,6 @@ enum crx_addrtype
 };
 
 extern enum crx_addrtype crx_decompose_address (rtx addr, struct crx_address *out);
-extern int crx_legitimate_address_p (enum machine_mode, rtx, int);
 
 extern int crx_const_double_ok (rtx op);
 
@@ -62,10 +61,6 @@ extern void crx_print_operand (FILE *, rtx, int);
 extern void crx_print_operand_address (FILE *, rtx);
 
 /* Misc functions called from crx.md.  */
-extern rtx crx_expand_compare (enum rtx_code, enum machine_mode);
-extern void crx_expand_branch (enum rtx_code, rtx);
-extern void crx_expand_scond (enum rtx_code, rtx);
-
 extern void crx_expand_movmem_single (rtx, rtx, rtx, rtx, rtx, unsigned HOST_WIDE_INT *);
 extern int crx_expand_movmem (rtx, rtx, rtx, rtx);
 #endif /* RTX_CODE */

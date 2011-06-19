@@ -60,13 +60,13 @@ default_constructor()
 {
   PB_DS_TRACE("default_constructor");
   bool done = true;
-  m_alloc.set_throw_prob(m_tp);
+  m_alloc.set_probability(m_tp);
 
   try
     {
       m_p_c = new Cntnr;
     }
-  catch(__gnu_cxx::forced_exception_error&)
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -82,9 +82,9 @@ PB_DS_CLASS_C_DEC::
 swap()
 {
   PB_DS_TRACE("swap");
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   Cntnr* p_c = new Cntnr;
-  m_alloc.set_throw_prob(1);
+  m_alloc.set_probability(1);
   p_c->swap(*m_p_c);
   std::swap(p_c, m_p_c);
   delete p_c;
@@ -99,15 +99,15 @@ copy_constructor()
   PB_DS_TRACE("copy_constructor");
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
       p_c = new Cntnr(*m_p_c);
       std::swap(p_c, m_p_c);
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -125,8 +125,8 @@ assignment_operator()
   PB_DS_TRACE("assignment operator");
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
@@ -134,7 +134,7 @@ assignment_operator()
       * p_c =* m_p_c;
       std::swap(p_c, m_p_c);
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -160,8 +160,8 @@ it_constructor_imp(__gnu_pbds::cc_hash_tag)
 {
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
@@ -210,7 +210,7 @@ it_constructor_imp(__gnu_pbds::cc_hash_tag)
         };
       std::swap(p_c, m_p_c);
     }
-  catch (__gnu_cxx::forced_exception_error&)
+  catch (__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -227,8 +227,8 @@ it_constructor_imp(__gnu_pbds::gp_hash_tag)
 {
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
@@ -293,7 +293,7 @@ it_constructor_imp(__gnu_pbds::gp_hash_tag)
         };
       std::swap(p_c, m_p_c);
     }
-  catch (__gnu_cxx::forced_exception_error&)
+  catch (__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -310,8 +310,8 @@ it_constructor_imp(__gnu_pbds::tree_tag)
 {
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
@@ -329,7 +329,7 @@ it_constructor_imp(__gnu_pbds::tree_tag)
         };
       std::swap(p_c, m_p_c);
     }
-  catch (__gnu_cxx::forced_exception_error&)
+  catch (__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -346,15 +346,15 @@ it_constructor_imp(__gnu_pbds::list_update_tag)
 {
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
       p_c = new Cntnr(m_p_c->begin(), m_p_c->end());
       std::swap(p_c, m_p_c);
     }
-  catch (__gnu_cxx::forced_exception_error&)
+  catch (__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -371,8 +371,8 @@ it_constructor_imp(__gnu_pbds::pat_trie_tag)
 {
   bool done = true;
   Cntnr* p_c = NULL;
-  m_alloc.set_throw_prob(m_tp);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(m_tp);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
 
   try
     {
@@ -392,7 +392,7 @@ it_constructor_imp(__gnu_pbds::pat_trie_tag)
 
       std::swap(p_c, m_p_c);
     }
-  catch (__gnu_cxx::forced_exception_error&)
+  catch (__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -409,7 +409,7 @@ PB_DS_CLASS_C_DEC::
 cmp(const Cntnr& r_c, const native_type& r_native_c, 
     const std::string& r_call_fn)
 {
-  m_alloc.set_throw_prob(1);
+  m_alloc.set_probability(1);
   const size_t size = r_c.size();
   const size_t native_size = r_native_c.size();
   PB_DS_THROW_IF_FAILED(size == native_size,
@@ -447,9 +447,9 @@ basic_cmp_(const Cntnr& r_c, const native_type& r_native_c)
     {
       typename native_type::key_type native_key = test_traits::extract_native_key(*it);
 
-      m_alloc.set_throw_prob(0);
+      m_alloc.set_probability(0);
       const key_type k = native_key;
-      m_alloc.set_throw_prob(1);
+      m_alloc.set_probability(1);
       typename cntnr::const_point_iterator found_it = r_c.find(k);
       PB_DS_THROW_IF_FAILED(found_it != r_c.end(),
 			    test_traits::native_val_to_string(*it),
@@ -622,9 +622,9 @@ PB_DS_CLASS_C_DEC::
 order_statistics_cmp_imp(const Cntnr& r_c, const native_type& r_native_c, __gnu_pbds::detail::true_type)
 {
   {
-    m_alloc.set_throw_prob(0);
+    m_alloc.set_probability(0);
     const key_type k = test_traits::generate_key(m_g, m_m);
-    m_alloc.set_throw_prob(1);
+    m_alloc.set_probability(1);
     const size_type order = r_c.order_of_key(k);
     const size_type native_order = std::distance(r_native_c.begin(),
 						 r_native_c.lower_bound(test_traits::native_key(k)));
@@ -675,9 +675,9 @@ PB_DS_CLASS_C_DEC::
 prefix_search_cmp_imp(const Cntnr& r_c, const native_type& r_native_c, __gnu_pbds::detail::true_type)
 {
   PB_DS_SET_DESTRUCT_PRINT
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   const key_type k = test_traits::generate_key(m_g, m_m);
-  m_alloc.set_throw_prob(1);
+  m_alloc.set_probability(1);
   try
     {
       typedef
@@ -794,9 +794,9 @@ PB_DS_CLASS_C_DEC::
 lower_bound_cmp_imp(const Cntnr& r_c, const native_type& r_native_c, __gnu_pbds::detail::true_type)
 {
   PB_DS_SET_DESTRUCT_PRINT
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   const key_type k = test_traits::generate_key(m_g, m_m);
-  m_alloc.set_throw_prob(1);
+  m_alloc.set_probability(1);
   typename cntnr::const_iterator it = r_c.lower_bound(k);
   typename native_type::key_type native_k = test_traits::native_key(k);
   typename native_type::const_iterator native_it = r_native_c.lower_bound(native_k);
@@ -833,9 +833,9 @@ PB_DS_CLASS_C_DEC::
 upper_bound_cmp_imp(const Cntnr& r_c, const native_type& r_native_c, __gnu_pbds::detail::true_type)
 {
   PB_DS_SET_DESTRUCT_PRINT
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   const key_type k = test_traits::generate_key(m_g, m_m);
-  m_alloc.set_throw_prob(1);
+  m_alloc.set_probability(1);
   typename cntnr::const_iterator it =  r_c.upper_bound(k);
   typename native_type::key_type native_k = test_traits::native_key(k);
   typename native_type::const_iterator native_it = r_native_c.upper_bound(native_k);
@@ -879,7 +879,7 @@ operator()()
 
   // Track allocation from this point only.
   const size_t memory_label = 775;
-  m_alloc.init(m_seed);
+  m_alloc.seed(m_seed);
   m_alloc.set_label(memory_label);  
 
   prog_bar pb(m_n, std::cout, m_disp);
@@ -1012,7 +1012,7 @@ operator()()
     }
 
   // Reset throw probability.
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
 
   if (m_disp)
     {
@@ -1069,9 +1069,9 @@ insert()
   PB_DS_SET_DESTRUCT_PRINT
   try
     {
-      m_alloc.set_throw_prob(0);
+      m_alloc.set_probability(0);
       value_type v = test_traits::generate_value(m_g, m_m);
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       const_key_reference r_k = test_traits::extract_key(v);
       typename cntnr::const_point_iterator found_it = m_p_c->find(r_k);
       const bool existed = (found_it != m_p_c->end());
@@ -1088,7 +1088,7 @@ insert()
 	}
       m_native_c.insert(test_traits::native_value(v));
     }
-  catch(__gnu_cxx::forced_exception_error&)
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -1130,16 +1130,16 @@ subscript_imp(__gnu_pbds::detail::false_type)
 
   try
     {
-      m_alloc.set_throw_prob(0);
+      m_alloc.set_probability(0);
       value_type v = test_traits::generate_value(m_g, m_m);
 
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       (*m_p_c)[v.first] = v.second;
 
       m_native_c[test_traits::native_value(v).first] =
 	test_traits::native_value(v).second;
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -1158,13 +1158,13 @@ subscript_imp(__gnu_pbds::detail::true_type)
   PB_DS_SET_DESTRUCT_PRINT
   try
     {
-      m_alloc.set_throw_prob(0);
+      m_alloc.set_probability(0);
       value_type v = test_traits::generate_value(m_g, m_m);
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       (*m_p_c)[v] = __gnu_pbds::null_mapped_type();
       m_native_c.insert(test_traits::native_value(v));
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
     }
@@ -1195,9 +1195,9 @@ erase()
   PB_DS_TRACE("erase");
   bool done = true;
   PB_DS_SET_DESTRUCT_PRINT
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   const key_type k = test_traits::generate_key(m_g, m_m);
-  m_alloc.set_throw_prob(m_tp);
+  m_alloc.set_probability(m_tp);
 
   try
     {
@@ -1213,7 +1213,7 @@ erase()
       PB_DS_THROW_IF_FAILED(m_p_c->find(k) == m_p_c->end(), "", 
 			    m_p_c, &m_native_c);
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
 
@@ -1244,14 +1244,14 @@ erase_if()
 	typename test_traits::template erase_if_fn<value_type>
 	erase_if_fn_t;
       
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       
       const size_t ersd = m_p_c->erase_if(erase_if_fn_t());      
       const size_t native_ersd = test_traits::erase_if(m_native_c);      
       PB_DS_THROW_IF_FAILED(ersd == native_ersd,
 			    ersd << " " << native_ersd, m_p_c, &m_native_c);
     }
-  catch(__gnu_cxx::forced_exception_error&)
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
       PB_DS_THROW_IF_FAILED(container_traits::erase_can_throw, 
@@ -1296,9 +1296,9 @@ erase_it_imp(__gnu_pbds::detail::true_type)
 
   try
     {
-      m_alloc.set_throw_prob(0);
+      m_alloc.set_probability(0);
       const key_type k = test_traits::generate_key(m_g, m_m);
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
 
       typename cntnr::iterator found_it = m_p_c->find(k);
 
@@ -1329,7 +1329,7 @@ erase_it_imp(__gnu_pbds::detail::true_type)
       if (range_guarantee)
 	PB_DS_THROW_IF_FAILED(next_ers_it == next_it, "", m_p_c, &m_native_c);
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
       PB_DS_THROW_IF_FAILED(container_traits::erase_can_throw, container_traits::erase_can_throw, m_p_c, &m_native_c);
@@ -1373,9 +1373,9 @@ erase_rev_it_imp(__gnu_pbds::detail::true_type)
 
   try
     {
-      m_alloc.set_throw_prob(0);      
+      m_alloc.set_probability(0);      
       const key_type k = test_traits::generate_key(m_g, m_m);      
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       
       typename cntnr::iterator found_it = m_p_c->find(k);
       typename native_type::iterator native_it = m_native_c.find(test_traits::native_key(k));
@@ -1392,7 +1392,7 @@ erase_rev_it_imp(__gnu_pbds::detail::true_type)
       if (native_it != m_native_c.end())
 	m_native_c.erase(native_it);
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;      
       PB_DS_THROW_IF_FAILED(container_traits::erase_can_throw, 
@@ -1728,14 +1728,14 @@ split_join_imp(__gnu_pbds::detail::true_type)
 
   try
     {
-      m_alloc.set_throw_prob(0);
+      m_alloc.set_probability(0);
       Cntnr lhs(*m_p_c);
       Cntnr rhs;
       native_type native_lhs(m_native_c);
       native_type native_rhs;
       const key_type k = test_traits::generate_key(m_g, m_m);
       
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       lhs.split(k, rhs);
       
       typename native_type::const_iterator it =
@@ -1753,7 +1753,7 @@ split_join_imp(__gnu_pbds::detail::true_type)
       PB_DS_COND_COMPARE(lhs, native_lhs);
       PB_DS_COND_COMPARE(rhs, native_rhs);
       
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
       
       if (m_g.get_prob() < 0.5)
 	lhs.swap(rhs);
@@ -1763,7 +1763,7 @@ split_join_imp(__gnu_pbds::detail::true_type)
       PB_DS_THROW_IF_FAILED(rhs.empty(), rhs.size(), m_p_c, &m_native_c);
       m_p_c->swap(lhs);
     }
-  catch(__gnu_cxx::forced_exception_error& )
+  catch(__gnu_cxx::forced_error&)
     {
       done = false;
       PB_DS_THROW_IF_FAILED(container_traits::split_join_can_throw, 
@@ -1972,8 +1972,8 @@ resize_imp(__gnu_pbds::detail::true_type)
 	  max_new_size = 2000
         };
 
-      m_alloc.set_throw_prob(m_tp);
-      typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+      m_alloc.set_probability(m_tp);
+      typename alloc_t::group_adjustor adjust(m_p_c->size());
       const size_t new_size = m_g.get_unsigned_long(min_new_size, max_new_size);
       m_p_c->resize(new_size);
       const size_t actual_new_size = m_p_c->get_actual_size();
@@ -2023,8 +2023,8 @@ get_set_load_imp(__gnu_pbds::detail::true_type)
   PB_DS_TRACE("get_set_load");
   PB_DS_SET_DESTRUCT_PRINT
   m_p_c->get_load();
-  m_alloc.set_throw_prob(1);
-  typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+  m_alloc.set_probability(1);
+  typename alloc_t::group_adjustor adjust(m_p_c->size());
   const float min_load = static_cast<float>(0.05);
   const float max_load = static_cast<float>(0.9);
 
@@ -2070,9 +2070,9 @@ get_set_loads_imp(__gnu_pbds::detail::true_type)
 
   try
     {
-      m_alloc.set_throw_prob(m_tp);
+      m_alloc.set_probability(m_tp);
 
-      typename alloc_t::group_throw_prob_adjustor adjust(m_p_c->size());
+      typename alloc_t::group_adjustor adjust(m_p_c->size());
 
       const float min_min_load = static_cast<float>(0.05);
       const float max_min_load = static_cast<float>(0.2);
@@ -2107,7 +2107,7 @@ void
 PB_DS_CLASS_C_DEC::
 print_container(const native_type& r_cnt, std::ostream& r_os) const
 {
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   typename native_type::const_iterator it = r_cnt.begin();
   while (it != r_cnt.end())
     {
@@ -2121,7 +2121,7 @@ void
 PB_DS_CLASS_C_DEC::
 print_container(const cntnr& r_cnt, std::ostream& r_os) const
 {
-  m_alloc.set_throw_prob(0);
+  m_alloc.set_probability(0);
   typename cntnr::const_iterator it = r_cnt.begin();
   while (it != r_cnt.end())
     {

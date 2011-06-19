@@ -1,6 +1,6 @@
 // unique_ptr implementation -*- C++ -*-
 
-// Copyright (C) 2008, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,10 +29,6 @@
 
 #ifndef _UNIQUE_PTR_H
 #define _UNIQUE_PTR_H 1
-
-#ifndef __GXX_EXPERIMENTAL_CXX0X__
-# include <c++0x_warning.h>
-#endif
 
 #include <bits/c++config.h>
 #include <debug/debug.h>
@@ -85,7 +81,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     class unique_ptr
     {
       typedef std::tuple<_Tp*, _Tp_Deleter>  __tuple_type;
-      typedef __tuple_type unique_ptr::*     __unspecified_bool_type;
       typedef _Tp* unique_ptr::*             __unspecified_pointer_type;
 
     public:
@@ -154,16 +149,17 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       }
 
       // Observers.
-      typename std::add_lvalue_reference<element_type>::type operator*() const
+      typename std::add_lvalue_reference<element_type>::type
+      operator*() const
       {
-	_GLIBCXX_DEBUG_ASSERT(get() != 0);
+	_GLIBCXX_DEBUG_ASSERT(get() != pointer());
 	return *get();
       }
 
       pointer
       operator->() const
       {
-	_GLIBCXX_DEBUG_ASSERT(get() != 0);
+	_GLIBCXX_DEBUG_ASSERT(get() != pointer());
 	return get();
       }
 
@@ -171,40 +167,37 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       get() const
       { return std::get<0>(_M_t); }
 
-      typename std::add_lvalue_reference<deleter_type>::type
+      deleter_type&
       get_deleter()
       { return std::get<1>(_M_t); }
 
-      typename std::add_lvalue_reference<
-          typename std::add_const<deleter_type>::type
-              >::type
+      const deleter_type&
       get_deleter() const
       { return std::get<1>(_M_t); }
 
-      operator __unspecified_bool_type () const
-      { return get() == 0 ? 0 : &unique_ptr::_M_t; }
+      explicit operator bool() const
+      { return get() == pointer() ? false : true; }
 
       // Modifiers.
       pointer
       release() 
       {
 	pointer __p = get();
-	std::get<0>(_M_t) = 0;
+	std::get<0>(_M_t) = pointer();
 	return __p;
       }
 
       void
       reset(pointer __p = pointer())
       {
-	if (__p != get())
-	  {
-	    get_deleter()(get());
-	    std::get<0>(_M_t) = __p;
-	  }
+	using std::swap;
+	swap(std::get<0>(_M_t), __p);
+	if (__p != pointer())
+	  get_deleter()(__p);
       }
 
       void
-      swap(unique_ptr&& __u)
+      swap(unique_ptr& __u)
       {
 	using std::swap;
 	swap(_M_t, __u._M_t);
@@ -212,14 +205,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       // Disable copy from lvalue.
       unique_ptr(const unique_ptr&) = delete;
-
-      template<typename _Up, typename _Up_Deleter> 
-        unique_ptr(const unique_ptr<_Up, _Up_Deleter>&) = delete;
-
       unique_ptr& operator=(const unique_ptr&) = delete;
-
-      template<typename _Up, typename _Up_Deleter> 
-        unique_ptr& operator=(const unique_ptr<_Up, _Up_Deleter>&) = delete;
 
     private:
       __tuple_type _M_t;
@@ -233,7 +219,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     class unique_ptr<_Tp[], _Tp_Deleter>
     {
       typedef std::tuple<_Tp*, _Tp_Deleter>  __tuple_type;
-      typedef __tuple_type unique_ptr::*     __unspecified_bool_type;
       typedef _Tp* unique_ptr::*             __unspecified_pointer_type;
 
     public:
@@ -305,7 +290,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       typename std::add_lvalue_reference<element_type>::type 
       operator[](size_t __i) const 
       {
-	_GLIBCXX_DEBUG_ASSERT(get() != 0);
+	_GLIBCXX_DEBUG_ASSERT(get() != pointer());
 	return get()[__i];
       }
 
@@ -313,36 +298,33 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       get() const
       { return std::get<0>(_M_t); }
 
-      typename std::add_lvalue_reference<deleter_type>::type 
+      deleter_type& 
       get_deleter()
       { return std::get<1>(_M_t); }
 
-      typename std::add_lvalue_reference<
-          typename std::add_const<deleter_type>::type
-              >::type 
+      const deleter_type&
       get_deleter() const
       { return std::get<1>(_M_t); }    
 
-      operator __unspecified_bool_type () const 
-      { return get() == 0 ? 0 : &unique_ptr::_M_t; }
+      explicit operator bool() const 
+      { return get() == pointer() ? false : true; }
     
       // Modifiers.
       pointer
       release() 
       {
 	pointer __p = get();
-	std::get<0>(_M_t) = 0;
+	std::get<0>(_M_t) = pointer();
 	return __p;
       }
 
       void
       reset(pointer __p = pointer()) 
       {
-	if (__p != get())
-	{
-	  get_deleter()(get());
-	  std::get<0>(_M_t) = __p;
-	}
+	using std::swap;
+	swap(std::get<0>(_M_t), __p);
+	if (__p != pointer())
+	  get_deleter()(__p);
       }
 
       // DR 821.
@@ -350,7 +332,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
         void reset(_Up) = delete;
 
       void
-      swap(unique_ptr&& __u)
+      swap(unique_ptr& __u)
       {
 	using std::swap;
 	swap(_M_t, __u._M_t);
@@ -389,18 +371,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	 unique_ptr<_Tp, _Tp_Deleter>& __y)
     { __x.swap(__y); }
 
-  template<typename _Tp, typename _Tp_Deleter> 
-    inline void
-    swap(unique_ptr<_Tp, _Tp_Deleter>&& __x,
-	 unique_ptr<_Tp, _Tp_Deleter>& __y)
-    { __x.swap(__y); }
-
-  template<typename _Tp, typename _Tp_Deleter> 
-    inline void
-    swap(unique_ptr<_Tp, _Tp_Deleter>& __x,
-	 unique_ptr<_Tp, _Tp_Deleter>&& __y)
-    { __x.swap(__y); }
-  
   template<typename _Tp, typename _Tp_Deleter,
 	   typename _Up, typename _Up_Deleter>
     inline bool

@@ -1,5 +1,5 @@
 /* Branch prediction routines for the GNU compiler.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -66,7 +66,7 @@ along with GCC; see the file COPYING3.  If not see
 static sreal real_zero, real_one, real_almost_one, real_br_prob_base,
 	     real_inv_br_prob_base, real_one_half, real_bb_freq_max;
 
-/* Random guesstimation given names.  
+/* Random guesstimation given names.
    PROV_VERY_UNLIKELY should be small enough so basic block predicted
    by it gets bellow HOT_BB_FREQUENCY_FRANCTION.  */
 #define PROB_VERY_UNLIKELY	(REG_BR_PROB_BASE / 2000 - 1)
@@ -77,7 +77,6 @@ static sreal real_zero, real_one, real_almost_one, real_br_prob_base,
 static void combine_predictions_for_insn (rtx, basic_block);
 static void dump_prediction (FILE *, enum br_predictor, int, basic_block, int);
 static void predict_paths_leading_to (basic_block, enum br_predictor, enum prediction);
-static void compute_function_frequency (void);
 static void choose_function_section (void);
 static bool can_predict_insn_p (const_rtx);
 
@@ -168,8 +167,8 @@ cgraph_maybe_hot_edge_p (struct cgraph_edge *edge)
   if (lookup_attribute ("hot", DECL_ATTRIBUTES (edge->caller->decl)))
     return true;
   if (flag_guess_branch_prob
-      && edge->frequency < (CGRAPH_FREQ_MAX
-      			    / PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION)))
+      && edge->frequency <= (CGRAPH_FREQ_BASE
+      			     / PARAM_VALUE (HOT_BB_FREQUENCY_FRACTION)))
     return false;
   return true;
 }
@@ -387,7 +386,7 @@ gimple_predicted_by_p (const_basic_block bb, enum br_predictor predictor)
 
   if (!preds)
     return false;
-  
+
   for (i = (struct edge_prediction *) *preds; i; i = i->ep_next)
     if (i->ep_predictor == predictor)
       return true;
@@ -395,7 +394,7 @@ gimple_predicted_by_p (const_basic_block bb, enum br_predictor predictor)
 }
 
 /* Return true when the probability of edge is reliable.
-  
+
    The profile guessing code is good at predicting branch outcome (ie.
    taken/not taken), that is predicted right slightly over 75% of time.
    It is however notoriously poor on predicting the probability itself.
@@ -505,7 +504,7 @@ void
 remove_predictions_associated_with_edge (edge e)
 {
   void **preds;
-  
+
   if (!bb_predictions)
     return;
 
@@ -654,7 +653,7 @@ combine_predictions_for_insn (rtx insn, basic_block bb)
   rtx *pnote;
   rtx note;
   int best_probability = PROB_EVEN;
-  int best_predictor = END_PREDICTORS;
+  enum br_predictor best_predictor = END_PREDICTORS;
   int combined_probability = REG_BR_PROB_BASE / 2;
   int d;
   bool first_match = false;
@@ -677,7 +676,8 @@ combine_predictions_for_insn (rtx insn, basic_block bb)
   for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
     if (REG_NOTE_KIND (note) == REG_BR_PRED)
       {
-	int predictor = INTVAL (XEXP (XEXP (note, 0), 0));
+	enum br_predictor predictor = ((enum br_predictor)
+				       INTVAL (XEXP (XEXP (note, 0), 0)));
 	int probability = INTVAL (XEXP (XEXP (note, 0), 1));
 
 	found = true;
@@ -723,7 +723,8 @@ combine_predictions_for_insn (rtx insn, basic_block bb)
     {
       if (REG_NOTE_KIND (*pnote) == REG_BR_PRED)
 	{
-	  int predictor = INTVAL (XEXP (XEXP (*pnote, 0), 0));
+	  enum br_predictor predictor = ((enum br_predictor)
+					 INTVAL (XEXP (XEXP (*pnote, 0), 0)));
 	  int probability = INTVAL (XEXP (XEXP (*pnote, 0), 1));
 
 	  dump_prediction (dump_file, predictor, probability, bb,
@@ -765,7 +766,7 @@ static void
 combine_predictions_for_bb (basic_block bb)
 {
   int best_probability = PROB_EVEN;
-  int best_predictor = END_PREDICTORS;
+  enum br_predictor best_predictor = END_PREDICTORS;
   int combined_probability = REG_BR_PROB_BASE / 2;
   int d;
   bool first_match = false;
@@ -786,7 +787,7 @@ combine_predictions_for_bb (basic_block bb)
 	  first = e;
       }
 
-  /* When there is no successor or only one choice, prediction is easy. 
+  /* When there is no successor or only one choice, prediction is easy.
 
      We are lazy for now and predict only basic blocks with two outgoing
      edges.  It is possible to predict generic case too, but we have to
@@ -813,7 +814,7 @@ combine_predictions_for_bb (basic_block bb)
 	 by predictor with smallest index.  */
       for (pred = (struct edge_prediction *) *preds; pred; pred = pred->ep_next)
 	{
-	  int predictor = pred->ep_predictor;
+	  enum br_predictor predictor = pred->ep_predictor;
 	  int probability = pred->ep_probability;
 
 	  if (pred->ep_edge != first)
@@ -835,7 +836,7 @@ combine_predictions_for_bb (basic_block bb)
 		   if (pred2->ep_edge != first)
 		     probability2 = REG_BR_PROB_BASE - probability2;
 
-		   if ((probability < REG_BR_PROB_BASE / 2) != 
+		   if ((probability < REG_BR_PROB_BASE / 2) !=
 		       (probability2 < REG_BR_PROB_BASE / 2))
 		     break;
 
@@ -888,7 +889,7 @@ combine_predictions_for_bb (basic_block bb)
     {
       for (pred = (struct edge_prediction *) *preds; pred; pred = pred->ep_next)
 	{
-	  int predictor = pred->ep_predictor;
+	  enum br_predictor predictor = pred->ep_predictor;
 	  int probability = pred->ep_probability;
 
 	  if (pred->ep_edge != EDGE_SUCC (bb, 0))
@@ -913,8 +914,6 @@ predict_loops (void)
 {
   loop_iterator li;
   struct loop *loop;
-
-  scev_initialize ();
 
   /* Try to predict out blocks in a loop that are not part of a
      natural loop.  */
@@ -1022,7 +1021,7 @@ predict_loops (void)
 		 EDGE_PROBABILITY_RELIABLE from trusting the branch prediction
 		 as this was causing regression in perl benchmark containing such
 		 a wide loop.  */
-	        
+
 	      int probability = ((REG_BR_PROB_BASE
 		                  - predictor_info [(int) PRED_LOOP_EXIT].hitrate)
 				 / n_exits);
@@ -1034,12 +1033,10 @@ predict_loops (void)
 		  predict_edge (e, PRED_LOOP_EXIT, probability);
 	    }
 	}
-      
+
       /* Free basic blocks from get_loop_body.  */
       free (bbs);
     }
-
-  scev_finalize ();
 }
 
 /* Attempt to predict probabilities of BB outgoing edges using local
@@ -1265,10 +1262,10 @@ expr_expected_value_1 (tree type, tree op0, enum tree_code code, tree op1, bitma
   return NULL;
 }
 
-/* Return constant EXPR will likely have at execution time, NULL if unknown. 
+/* Return constant EXPR will likely have at execution time, NULL if unknown.
    The function is used by builtin_expect branch predictor so the evidence
    must come from this construct and additional possible constant folding.
-  
+
    We may want to implement more involved value guess (such as value range
    propagation based prediction), but such tricks shall go to new
    implementation.  */
@@ -1606,15 +1603,95 @@ assert_is_empty (const void *key ATTRIBUTE_UNUSED, void **value,
 }
 #endif
 
-/* Predict branch probabilities and estimate profile of the tree CFG.  */
-static unsigned int
+/* Predict branch probabilities and estimate profile for basic block BB.  */
+
+static void
+tree_estimate_probability_bb (basic_block bb)
+{
+  edge e;
+  edge_iterator ei;
+  gimple last;
+
+  FOR_EACH_EDGE (e, ei, bb->succs)
+    {
+      /* Predict early returns to be probable, as we've already taken
+	 care for error returns and other cases are often used for
+	 fast paths through function.
+
+	 Since we've already removed the return statements, we are
+	 looking for CFG like:
+
+	 if (conditional)
+	 {
+	 ..
+	 goto return_block
+	 }
+	 some other blocks
+	 return_block:
+	 return_stmt.  */
+      if (e->dest != bb->next_bb
+	  && e->dest != EXIT_BLOCK_PTR
+	  && single_succ_p (e->dest)
+	  && single_succ_edge (e->dest)->dest == EXIT_BLOCK_PTR
+	  && (last = last_stmt (e->dest)) != NULL
+	  && gimple_code (last) == GIMPLE_RETURN)
+	{
+	  edge e1;
+	  edge_iterator ei1;
+
+	  if (single_succ_p (bb))
+	    {
+	      FOR_EACH_EDGE (e1, ei1, bb->preds)
+		if (!predicted_by_p (e1->src, PRED_NULL_RETURN)
+		    && !predicted_by_p (e1->src, PRED_CONST_RETURN)
+		    && !predicted_by_p (e1->src, PRED_NEGATIVE_RETURN))
+		  predict_edge_def (e1, PRED_TREE_EARLY_RETURN, NOT_TAKEN);
+	    }
+	  else
+	    if (!predicted_by_p (e->src, PRED_NULL_RETURN)
+		&& !predicted_by_p (e->src, PRED_CONST_RETURN)
+		&& !predicted_by_p (e->src, PRED_NEGATIVE_RETURN))
+	      predict_edge_def (e, PRED_TREE_EARLY_RETURN, NOT_TAKEN);
+	}
+
+      /* Look for block we are guarding (ie we dominate it,
+	 but it doesn't postdominate us).  */
+      if (e->dest != EXIT_BLOCK_PTR && e->dest != bb
+	  && dominated_by_p (CDI_DOMINATORS, e->dest, e->src)
+	  && !dominated_by_p (CDI_POST_DOMINATORS, e->src, e->dest))
+	{
+	  gimple_stmt_iterator bi;
+
+	  /* The call heuristic claims that a guarded function call
+	     is improbable.  This is because such calls are often used
+	     to signal exceptional situations such as printing error
+	     messages.  */
+	  for (bi = gsi_start_bb (e->dest); !gsi_end_p (bi);
+	       gsi_next (&bi))
+	    {
+	      gimple stmt = gsi_stmt (bi);
+	      if (is_gimple_call (stmt)
+		  /* Constant and pure calls are hardly used to signalize
+		     something exceptional.  */
+		  && gimple_has_side_effects (stmt))
+		{
+		  predict_edge_def (e, PRED_CALL, NOT_TAKEN);
+		  break;
+		}
+	    }
+	}
+    }
+  tree_predict_by_opcode (bb);
+}
+
+/* Predict branch probabilities and estimate profile of the tree CFG.
+   This function can be called from the loop optimizers to recompute
+   the profile information.  */
+
+void
 tree_estimate_probability (void)
 {
   basic_block bb;
-
-  loop_optimizer_init (0);
-  if (dump_file && (dump_flags & TDF_DETAILS))
-    flow_loops_dump (dump_file, NULL, 0);
 
   add_noreturn_fake_exit_edges ();
   connect_infinite_loops_to_exit ();
@@ -1625,89 +1702,14 @@ tree_estimate_probability (void)
 
   bb_predictions = pointer_map_create ();
   tree_bb_level_predictions ();
-
-  mark_irreducible_loops ();
   record_loop_exits ();
+
   if (number_of_loops () > 1)
     predict_loops ();
 
   FOR_EACH_BB (bb)
-    {
-      edge e;
-      edge_iterator ei;
-      gimple last;
+    tree_estimate_probability_bb (bb);
 
-      FOR_EACH_EDGE (e, ei, bb->succs)
-	{
-	  /* Predict early returns to be probable, as we've already taken
-	     care for error returns and other cases are often used for
-	     fast paths through function. 
-
-	     Since we've already removed the return statements, we are
-	     looking for CFG like:
-
-	       if (conditional)
-	         {
-		   ..
-		   goto return_block
-	         }
-	       some other blocks
-	     return_block:
-	       return_stmt.  */
-	  if (e->dest != bb->next_bb
-	      && e->dest != EXIT_BLOCK_PTR
-	      && single_succ_p (e->dest)
-	      && single_succ_edge (e->dest)->dest == EXIT_BLOCK_PTR
-	      && (last = last_stmt (e->dest)) != NULL
-	      && gimple_code (last) == GIMPLE_RETURN)
-	    {
-	      edge e1;
-	      edge_iterator ei1;
-
-	      if (single_succ_p (bb))
-		{
-		  FOR_EACH_EDGE (e1, ei1, bb->preds)
-		    if (!predicted_by_p (e1->src, PRED_NULL_RETURN)
-			&& !predicted_by_p (e1->src, PRED_CONST_RETURN)
-			&& !predicted_by_p (e1->src, PRED_NEGATIVE_RETURN))
-		      predict_edge_def (e1, PRED_TREE_EARLY_RETURN, NOT_TAKEN);
-		}
-	       else
-		if (!predicted_by_p (e->src, PRED_NULL_RETURN)
-		    && !predicted_by_p (e->src, PRED_CONST_RETURN)
-		    && !predicted_by_p (e->src, PRED_NEGATIVE_RETURN))
-		  predict_edge_def (e, PRED_TREE_EARLY_RETURN, NOT_TAKEN);
-	    }
-
-	  /* Look for block we are guarding (ie we dominate it,
-	     but it doesn't postdominate us).  */
-	  if (e->dest != EXIT_BLOCK_PTR && e->dest != bb
-	      && dominated_by_p (CDI_DOMINATORS, e->dest, e->src)
-	      && !dominated_by_p (CDI_POST_DOMINATORS, e->src, e->dest))
-	    {
-	      gimple_stmt_iterator bi;
-
-	      /* The call heuristic claims that a guarded function call
-		 is improbable.  This is because such calls are often used
-		 to signal exceptional situations such as printing error
-		 messages.  */
-	      for (bi = gsi_start_bb (e->dest); !gsi_end_p (bi);
-		   gsi_next (&bi))
-		{
-		  gimple stmt = gsi_stmt (bi);
-		  if (is_gimple_call (stmt)
-		      /* Constant and pure calls are hardly used to signalize
-			 something exceptional.  */
-		      && gimple_has_side_effects (stmt))
-		    {
-		      predict_edge_def (e, PRED_CALL, NOT_TAKEN);
-		      break;
-		    }
-		}
-	    }
-	}
-      tree_predict_by_opcode (bb);
-    }
   FOR_EACH_BB (bb)
     combine_predictions_for_bb (bb);
 
@@ -1720,6 +1722,31 @@ tree_estimate_probability (void)
   estimate_bb_frequencies ();
   free_dominance_info (CDI_POST_DOMINATORS);
   remove_fake_exit_edges ();
+}
+
+/* Predict branch probabilities and estimate profile of the tree CFG.
+   This is the driver function for PASS_PROFILE.  */
+
+static unsigned int
+tree_estimate_probability_driver (void)
+{
+  unsigned nb_loops;
+
+  loop_optimizer_init (0);
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    flow_loops_dump (dump_file, NULL, 0);
+
+  mark_irreducible_loops ();
+
+  nb_loops = number_of_loops ();
+  if (nb_loops > 1)
+    scev_initialize ();
+
+  tree_estimate_probability ();
+
+  if (nb_loops > 1)
+    scev_finalize ();
+
   loop_optimizer_finalize ();
   if (dump_file && (dump_flags & TDF_DETAILS))
     gimple_dump_cfg (dump_file, dump_flags);
@@ -1904,11 +1931,11 @@ propagate_freq (basic_block head, bitmap tovisit)
       if (e)
 	{
 	  sreal tmp;
-	    
+
 	  /* EDGE_INFO (e)->back_edge_prob
 	     = ((e->probability * BLOCK_INFO (bb)->frequency)
 	     / REG_BR_PROB_BASE); */
-	    
+
 	  sreal_init (&tmp, e->probability, 0);
 	  sreal_mul (&tmp, &tmp, &BLOCK_INFO (bb)->frequency);
 	  sreal_mul (&EDGE_INFO (e)->back_edge_prob,
@@ -1927,7 +1954,7 @@ propagate_freq (basic_block head, bitmap tovisit)
 		  nextbb = e->dest;
 		else
 		  BLOCK_INFO (last)->next = e->dest;
-		
+
 		last = e->dest;
 	      }
 	  }
@@ -1993,7 +2020,7 @@ counts_to_freqs (void)
   gcov_type count_max, true_count_max = 0;
   basic_block bb;
 
-  FOR_EACH_BB (bb)
+  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
     true_count_max = MAX (bb->count, true_count_max);
 
   count_max = MAX (true_count_max, 1);
@@ -2117,7 +2144,7 @@ estimate_bb_frequencies (void)
 }
 
 /* Decide whether function is hot, cold or unlikely executed.  */
-static void
+void
 compute_function_frequency (void)
 {
   basic_block bb;
@@ -2185,7 +2212,7 @@ build_predict_expr (enum br_predictor predictor, enum prediction taken)
 {
   tree t = build1 (PREDICT_EXPR, void_type_node,
 		   build_int_cst (NULL, predictor));
-  PREDICT_EXPR_OUTCOME (t) = taken;
+  SET_PREDICT_EXPR_OUTCOME (t, taken);
   return t;
 }
 
@@ -2195,13 +2222,13 @@ predictor_name (enum br_predictor predictor)
   return predictor_info[predictor].name;
 }
 
-struct gimple_opt_pass pass_profile = 
+struct gimple_opt_pass pass_profile =
 {
  {
   GIMPLE_PASS,
   "profile",				/* name */
   gate_estimate_probability,		/* gate */
-  tree_estimate_probability,		/* execute */
+  tree_estimate_probability_driver,	/* execute */
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
@@ -2214,11 +2241,11 @@ struct gimple_opt_pass pass_profile =
  }
 };
 
-struct gimple_opt_pass pass_strip_predict_hints = 
+struct gimple_opt_pass pass_strip_predict_hints =
 {
  {
   GIMPLE_PASS,
-  NULL,					/* name */
+  "*strip_predict_hints",		/* name */
   NULL,					/* gate */
   strip_predict_hints,			/* execute */
   NULL,					/* sub */

@@ -2,7 +2,7 @@
    that are called from within the C and C++ front-ends,
    respectively.
    Copyright (C) 1991, 1995, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2004, 2005, 2007  Free Software Foundation, Inc.
+   2004, 2005, 2007, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -55,7 +55,7 @@ void
 objc_check_decl (tree ARG_UNUSED (decl))
 {
 }
-   
+
 int
 objc_is_reserved_word (tree ARG_UNUSED (ident))
 {
@@ -81,14 +81,14 @@ objc_type_quals_match (tree ARG_UNUSED (ltyp), tree ARG_UNUSED (rtyp))
 }
 
 tree
-objc_rewrite_function_call (tree function, tree ARG_UNUSED (params))
+objc_rewrite_function_call (tree function, tree ARG_UNUSED (first_param))
 {
   return function;
 }
 
 tree
 objc_message_selector (void)
-{ 
+{
   return 0;
 }
 
@@ -224,7 +224,7 @@ objc_build_protocol_expr (tree ARG_UNUSED (expr))
 }
 
 tree
-objc_build_selector_expr (tree ARG_UNUSED (expr))
+objc_build_selector_expr (location_t ARG_UNUSED (loc), tree ARG_UNUSED (expr))
 {
   return 0;
 }
@@ -279,7 +279,7 @@ objc_get_class_ivars (tree ARG_UNUSED (name))
 }
 
 tree
-objc_build_throw_stmt (tree ARG_UNUSED (expr))
+objc_build_throw_stmt (location_t ARG_UNUSED (loc), tree ARG_UNUSED (expr))
 {
   return 0;
 }
@@ -295,7 +295,7 @@ void
 objc_begin_try_stmt (location_t ARG_UNUSED (try_locus), tree ARG_UNUSED (body))
 {
 }
-   
+
 void
 objc_begin_catch_clause (tree ARG_UNUSED (decl))
 {
@@ -324,4 +324,4 @@ objc_generate_write_barrier (tree ARG_UNUSED (lhs),
 			     tree ARG_UNUSED (rhs))
 {
   return 0;
-}  
+}

@@ -684,7 +684,7 @@ create_file_names (const char *file_name)
     *cptr = 0;
 
   length = strlen (name);
-  
+
   bbg_file_name = XNEWVEC (char, length + strlen (GCOV_NOTE_SUFFIX) + 1);
   strcpy (bbg_file_name, name);
   strcpy (bbg_file_name + length, GCOV_NOTE_SUFFIX);
@@ -721,7 +721,7 @@ find_source (const char *file_name)
       src->index = source_index++;
       src->next = sources;
       sources = src;
-      
+
       if (!stat (file_name, &status))
 	src->file_time = status.st_mtime;
     }
@@ -1043,7 +1043,7 @@ read_count_file (void)
 
       GCOV_UNSIGNED2STRING (v, version);
       GCOV_UNSIGNED2STRING (e, GCOV_VERSION);
-      
+
       fnotice (stderr, "%s:version '%.4s', prefer version '%.4s'\n",
 	       da_file_name, v, e);
     }
@@ -1065,27 +1065,29 @@ read_count_file (void)
 	program_count++;
       else if (tag == GCOV_TAG_FUNCTION)
 	{
-	  unsigned ident = gcov_read_unsigned ();
-	  struct function_info *fn_n = functions;
+	  {
+	    unsigned ident = gcov_read_unsigned ();
+	    struct function_info *fn_n = functions;
 
-	  /* Try to find the function in the list.
-	     To speed up the search, first start from the last function
-	     found.   */
-	  for (fn = fn ? fn->next : NULL; ; fn = fn->next)
-	    {
-	      if (fn)
-		;
-	      else if ((fn = fn_n))
-		fn_n = NULL;
-	      else
-		{
-		  fnotice (stderr, "%s:unknown function '%u'\n",
-			   da_file_name, ident);
+	    /* Try to find the function in the list.
+	       To speed up the search, first start from the last function
+	       found.   */
+	    for (fn = fn ? fn->next : NULL; ; fn = fn->next)
+	      {
+		if (fn)
+		  ;
+		else if ((fn = fn_n))
+		  fn_n = NULL;
+		else
+		  {
+		    fnotice (stderr, "%s:unknown function '%u'\n",
+			     da_file_name, ident);
+		    break;
+		  }
+		if (fn->ident == ident)
 		  break;
-		}
-	      if (fn->ident == ident)
-		break;
-	    }
+	      }
+	  }
 
 	  if (!fn)
 	    ;
@@ -1894,11 +1896,11 @@ output_lines (FILE *gcov_file, const source_t *src)
 	{
 	  arc_t *arc = fn->blocks[fn->num_blocks - 1].pred;
 	  gcov_type return_count = fn->blocks[fn->num_blocks - 1].count;
-	  
+
 	  for (; arc; arc = arc->pred_next)
 	    if (arc->fake)
 	      return_count -= arc->count;
-	  
+
 	  fprintf (gcov_file, "function %s", fn->name);
 	  fprintf (gcov_file, " called %s",
 		   format_gcov (fn->blocks[0].count, 0, -1));

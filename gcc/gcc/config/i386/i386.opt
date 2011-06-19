@@ -228,6 +228,10 @@ mtune=
 Target RejectNegative Joined Var(ix86_tune_string)
 Schedule code for given CPU
 
+mabi=
+Target RejectNegative Joined Var(ix86_abi_string)
+Generate code that conforms to the given ABI
+
 mveclibabi=
 Target RejectNegative Joined Var(ix86_veclibabi_string)
 Vector library ABI to use
@@ -240,11 +244,8 @@ mcld
 Target Report Mask(CLD) Save
 Generate cld instruction in the function prologue.
 
-mno-fused-madd
-Target RejectNegative Report Mask(NO_FUSED_MADD) Undocumented Save
-
 mfused-madd
-Target Report InverseMask(NO_FUSED_MADD, FUSED_MADD) Save
+Target Report Mask(FUSED_MADD) Save
 Enable automatic generation of fused floating point multiply-add instructions
 if the ISA supports such instructions.  The -mfused-madd option is on by
 default.
@@ -304,20 +305,28 @@ Target RejectNegative Report InverseMask(ISA_SSE4_1) MaskExists Var(ix86_isa_fla
 Do not support SSE4.1 and SSE4.2 built-in functions and code generation
 
 mavx
-Target Report Mask(ISA_AVX) Var(ix86_isa_flags) VarExists
+Target Report Mask(ISA_AVX) Var(ix86_isa_flags) VarExists Save
 Support MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2 and AVX built-in functions and code generation
 
 mfma
-Target Report Mask(ISA_FMA) Var(ix86_isa_flags) VarExists
+Target Report Mask(ISA_FMA) Var(ix86_isa_flags) VarExists Save
 Support MMX, SSE, SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AVX and FMA built-in functions and code generation
 
 msse4a
 Target Report Mask(ISA_SSE4A) Var(ix86_isa_flags) VarExists Save
 Support MMX, SSE, SSE2, SSE3 and SSE4A built-in functions and code generation
 
-msse5
-Target Report Mask(ISA_SSE5) Var(ix86_isa_flags) VarExists Save
-Support SSE5 built-in functions and code generation
+mfma4
+Target Report Mask(ISA_FMA4) Var(ix86_isa_flags) VarExists Save
+Support FMA4 built-in functions and code generation 
+
+mxop
+Target Report Mask(ISA_XOP) Var(ix86_isa_flags) VarExists Save
+Support XOP built-in functions and code generation 
+
+mlwp
+Target Report Mask(ISA_LWP) Var(ix86_isa_flags) VarExists Save
+Support LWP built-in functions and code generation 
 
 mabm
 Target Report Mask(ISA_ABM) Var(ix86_isa_flags) VarExists Save
@@ -334,6 +343,14 @@ Support code generation of cmpxchg16b instruction.
 msahf
 Target Report Mask(ISA_SAHF) Var(ix86_isa_flags) VarExists Save
 Support code generation of sahf instruction in 64bit x86-64 code.
+
+mmovbe
+Target Report Mask(ISA_MOVBE) Var(ix86_isa_flags) VarExists Save
+Support code generation of movbe instruction.
+
+mcrc32
+Target Report Mask(ISA_CRC32) Var(ix86_isa_flags) VarExists Save
+Support code generation of crc32 instruction.
 
 maes
 Target Report Mask(ISA_AES) Var(ix86_isa_flags) VarExists Save

@@ -1,6 +1,7 @@
 // Debug-mode error formatting implementation -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,6 +30,7 @@
 #ifndef _GLIBCXX_DEBUG_FORMATTER_H
 #define _GLIBCXX_DEBUG_FORMATTER_H 1
 
+#include <bits/c++config.h>
 #include <typeinfo>
 #include <debug/debug.h>
 
@@ -210,13 +212,21 @@ namespace __gnu_debug
         {
 	  _M_variant._M_iterator._M_name = __name;
 	  _M_variant._M_iterator._M_address = &__it;
+#ifdef __GXX_RTTI
 	  _M_variant._M_iterator._M_type = &typeid(__it);
+#else
+	  _M_variant._M_iterator._M_type = 0;
+#endif
 	  _M_variant._M_iterator._M_constness =
 	    __is_same<_Safe_iterator<_Iterator, _Sequence>,
 	                         typename _Sequence::iterator>::
 	      value? __mutable_iterator : __const_iterator;
 	  _M_variant._M_iterator._M_sequence = __it._M_get_sequence();
+#ifdef __GXX_RTTI
 	  _M_variant._M_iterator._M_seq_type = &typeid(_Sequence);
+#else
+	  _M_variant._M_iterator._M_seq_type = 0;
+#endif
 
 	  if (__it._M_singular())
 	    _M_variant._M_iterator._M_state = __singular;
@@ -239,7 +249,11 @@ namespace __gnu_debug
         {
 	  _M_variant._M_iterator._M_name = __name;
 	  _M_variant._M_iterator._M_address = &__it;
+#ifdef __GXX_RTTI
 	  _M_variant._M_iterator._M_type = &typeid(__it);
+#else
+	  _M_variant._M_iterator._M_type = 0;
+#endif
 	  _M_variant._M_iterator._M_constness = __mutable_iterator;
 	  _M_variant._M_iterator._M_state = __it? __unknown_state : __singular;
 	  _M_variant._M_iterator._M_sequence = 0;
@@ -252,7 +266,11 @@ namespace __gnu_debug
         {
 	  _M_variant._M_iterator._M_name = __name;
 	  _M_variant._M_iterator._M_address = &__it;
+#ifdef __GXX_RTTI
 	  _M_variant._M_iterator._M_type = &typeid(__it);
+#else
+	  _M_variant._M_iterator._M_type = 0;
+#endif
 	  _M_variant._M_iterator._M_constness = __const_iterator;
 	  _M_variant._M_iterator._M_state = __it? __unknown_state : __singular;
 	  _M_variant._M_iterator._M_sequence = 0;
@@ -265,7 +283,11 @@ namespace __gnu_debug
         {
 	  _M_variant._M_iterator._M_name = __name;
 	  _M_variant._M_iterator._M_address = &__it;
+#ifdef __GXX_RTTI
 	  _M_variant._M_iterator._M_type = &typeid(__it);
+#else
+	  _M_variant._M_iterator._M_type = 0;
+#endif
 	  _M_variant._M_iterator._M_constness = __unknown_constness;
 	  _M_variant._M_iterator._M_state =
 	    __gnu_debug::__check_singular(__it)? __singular : __unknown_state;
@@ -281,7 +303,11 @@ namespace __gnu_debug
 	  _M_variant._M_sequence._M_name = __name;
 	  _M_variant._M_sequence._M_address =
 	    static_cast<const _Sequence*>(&__seq);
+#ifdef __GXX_RTTI
 	  _M_variant._M_sequence._M_type = &typeid(_Sequence);
+#else
+	  _M_variant._M_sequence._M_type = 0;
+#endif
 	}
 
       template<typename _Sequence>
@@ -290,7 +316,11 @@ namespace __gnu_debug
         {
 	  _M_variant._M_sequence._M_name = __name;
 	  _M_variant._M_sequence._M_address = &__seq;
+#ifdef __GXX_RTTI
 	  _M_variant._M_sequence._M_type = &typeid(_Sequence);
+#else
+	  _M_variant._M_sequence._M_type = 0;
+#endif
 	}
 
       void
@@ -345,9 +375,9 @@ namespace __gnu_debug
     { _M_text = __text; return *this; }
 
     const _Error_formatter&
-    _M_message(_Debug_msg_id __id) const;
+    _M_message(_Debug_msg_id __id) const throw ();
 
-    void
+    _GLIBCXX_NORETURN void
     _M_error() const;
 
   private:
@@ -358,7 +388,7 @@ namespace __gnu_debug
 
     template<typename _Tp>
       void
-      _M_format_word(char*, int, const char*, _Tp) const;
+      _M_format_word(char*, int, const char*, _Tp) const throw ();
 
     void
     _M_print_word(const char* __word) const;
@@ -367,7 +397,7 @@ namespace __gnu_debug
     _M_print_string(const char* __string) const;
 
     void
-    _M_get_max_length() const;
+    _M_get_max_length() const throw ();
 
     enum { __max_parameters = 9 };
 

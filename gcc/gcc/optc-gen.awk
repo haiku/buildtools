@@ -1,4 +1,5 @@
-#  Copyright (C) 2003, 2004, 2007, 2008, 2009 Free Software Foundation, Inc.
+#  Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010
+#  Free Software Foundation, Inc.
 #  Contributed by Kelley Cook, June 2004.
 #  Original code from Neil Booth, May 2003.
 #
@@ -149,6 +150,10 @@ for (i = 0; i < n_opts; i++) {
 		flags[i + 1] = flags[i] " " flags[i + 1];
 		if (help[i + 1] == "")
 			help[i + 1] = help[i]
+		else if (help[i] != "" && help[i + 1] != help[i])
+			print "warning: multiple different help strings for " \
+				opts[i] ":\n\t" help[i] "\n\t" help[i + 1] \
+				| "cat 1>&2"
 		i++;
 		back_chain[i] = "N_OPTS";
 		indices[opts[i]] = j;
@@ -166,7 +171,8 @@ for (i = 0; i < n_opts; i++) {
 
 	len = length (opts[i]);
 	enum = "OPT_" opts[i]
-	if (opts[i] == "finline-limit=" || opts[i] == "Wlarger-than=")
+	if (opts[i] == "finline-limit=" || opts[i] == "Wlarger-than=" \
+	    || opts[i] == "ftemplate-depth=")
 		enum = enum "eq"
 	gsub ("[^A-Za-z0-9]", "_", enum)
 
@@ -323,6 +329,7 @@ for (i = 0; i < n_opt_char; i++) {
 	print "  " var_opt_char[i] " = ptr->" var_opt_char[i] ";";
 }
 
+print "  targetm.override_options_after_change ();";
 print "}";
 
 print "";

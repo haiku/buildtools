@@ -32,18 +32,19 @@
 using namespace __cxxabiv1;
 
 void
-__cxxabiv1::__terminate (std::terminate_handler handler)
+__cxxabiv1::__terminate (std::terminate_handler handler) throw ()
 {
-  try {
-    handler ();
-    std::abort ();
-  } catch (...) {
-    std::abort ();
-  }
+  __try 
+    {
+      handler ();
+      std::abort ();
+    } 
+  __catch(...) 
+    { std::abort (); }
 }
 
 void
-std::terminate ()
+std::terminate () throw()
 {
   __terminate (__terminate_handler);
 }

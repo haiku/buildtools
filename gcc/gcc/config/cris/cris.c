@@ -1,6 +1,6 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
    Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-   2008  Free Software Foundation, Inc.
+   2008, 2009  Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
 This file is part of GCC.
@@ -63,7 +63,7 @@ enum cris_retinsn_type
  { CRIS_RETINSN_UNKNOWN = 0, CRIS_RETINSN_RET, CRIS_RETINSN_JUMP };
 
 /* Per-function machine data.  */
-struct machine_function GTY(())
+struct GTY(()) machine_function
  {
    int needs_return_address_on_stack;
 
@@ -84,6 +84,9 @@ static int in_code = 0;
 
 /* Fix for reg_overlap_mentioned_p.  */
 static int cris_reg_overlap_mentioned_p (rtx, rtx);
+
+static enum machine_mode cris_promote_function_mode (const_tree, enum machine_mode,
+						     int *, const_tree, int);
 
 static void cris_print_base (rtx, FILE *);
 
@@ -121,6 +124,14 @@ static int cris_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
 static tree cris_md_asm_clobbers (tree, tree, tree);
 
 static bool cris_handle_option (size_t, const char *, int);
+
+static bool cris_frame_pointer_required (void);
+
+static void cris_asm_trampoline_template (FILE *);
+static void cris_trampoline_init (rtx, tree, rtx);
+
+static rtx cris_function_value(const_tree, const_tree, bool);
+static rtx cris_libcall_value (enum machine_mode, const_rtx);
 
 /* This is the parsed result of the "-max-stack-stackframe=" option.  If
    it (still) is zero, then there was no such option given.  */
@@ -164,8 +175,9 @@ int cris_cpu_version = CRIS_DEFAULT_CPU_VERSION;
 #undef TARGET_ADDRESS_COST
 #define TARGET_ADDRESS_COST cris_address_cost
 
-#undef TARGET_PROMOTE_FUNCTION_ARGS
-#define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_const_tree_true
+#undef TARGET_PROMOTE_FUNCTION_MODE
+#define TARGET_PROMOTE_FUNCTION_MODE cris_promote_function_mode
+
 #undef TARGET_STRUCT_VALUE_RTX
 #define TARGET_STRUCT_VALUE_RTX cris_struct_value_rtx
 #undef TARGET_SETUP_INCOMING_VARARGS
@@ -180,6 +192,18 @@ int cris_cpu_version = CRIS_DEFAULT_CPU_VERSION;
 #define TARGET_DEFAULT_TARGET_FLAGS (TARGET_DEFAULT | CRIS_SUBTARGET_DEFAULT)
 #undef TARGET_HANDLE_OPTION
 #define TARGET_HANDLE_OPTION cris_handle_option
+#undef TARGET_FRAME_POINTER_REQUIRED
+#define TARGET_FRAME_POINTER_REQUIRED cris_frame_pointer_required
+
+#undef TARGET_ASM_TRAMPOLINE_TEMPLATE
+#define TARGET_ASM_TRAMPOLINE_TEMPLATE cris_asm_trampoline_template
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT cris_trampoline_init
+
+#undef TARGET_FUNCTION_VALUE
+#define TARGET_FUNCTION_VALUE cris_function_value
+#undef TARGET_LIBCALL_VALUE
+#define TARGET_LIBCALL_VALUE cris_libcall_value
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -1431,13 +1455,18 @@ cris_normal_notice_update_cc (rtx exp, rtx insn)
       if (SET_DEST (exp) == cc0_rtx)
 	{
 	  CC_STATUS_INIT;
-	  cc_status.value1 = SET_SRC (exp);
 
-	  /* Handle flags for the special btstq on one bit.  */
-	  if (GET_CODE (SET_SRC (exp)) == ZERO_EXTRACT
-	      && XEXP (SET_SRC (exp), 1) == const1_rtx)
+	  if (GET_CODE (SET_SRC (exp)) == COMPARE
+	      && XEXP (SET_SRC (exp), 1) == const0_rtx)
+	    cc_status.value1 = XEXP (SET_SRC (exp), 0);
+	  else
+	    cc_status.value1 = SET_SRC (exp);
+
+          /* Handle flags for the special btstq on one bit.  */
+	  if (GET_CODE (cc_status.value1) == ZERO_EXTRACT
+	      && XEXP (cc_status.value1, 1) == const1_rtx)
 	    {
-	      if (CONST_INT_P (XEXP (SET_SRC (exp), 0)))
+	      if (CONST_INT_P (XEXP (cc_status.value1, 0)))
 		/* Using cmpq.  */
 		cc_status.flags = CC_INVERTED;
 	      else
@@ -1445,7 +1474,7 @@ cris_normal_notice_update_cc (rtx exp, rtx insn)
 		cc_status.flags = CC_Z_IN_NOT_N;
 	    }
 
-	  if (GET_CODE (SET_SRC (exp)) == COMPARE)
+	  else if (GET_CODE (SET_SRC (exp)) == COMPARE)
 	    {
 	      if (!REG_P (XEXP (SET_SRC (exp), 0))
 		  && XEXP (SET_SRC (exp), 1) != const0_rtx)
@@ -1854,6 +1883,11 @@ cris_rtx_costs (rtx x, int code, int outer_code, int *total,
 	  return true;
 	}
       return false;
+
+    case ZERO_EXTRACT:
+      if (outer_code != COMPARE)
+        return false;
+      /* fall through */
 
     case ZERO_EXTEND: case SIGN_EXTEND:
       *total = rtx_cost (XEXP (x, 0), outer_code, speed);
@@ -3739,6 +3773,54 @@ cris_pass_by_reference (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
 	  || CRIS_FUNCTION_ARG_SIZE (mode, type) > 8);
 }
 
+/* A combination of defining TARGET_PROMOTE_FUNCTION_MODE, promoting arguments
+   and *not* defining TARGET_PROMOTE_PROTOTYPES or PROMOTE_MODE gives the
+   best code size and speed for gcc, ipps and products in gcc-2.7.2.  */
+
+enum machine_mode
+cris_promote_function_mode (const_tree type ATTRIBUTE_UNUSED,
+                            enum machine_mode mode,
+                            int *punsignedp ATTRIBUTE_UNUSED,
+			    const_tree fntype ATTRIBUTE_UNUSED,
+                            int for_return)
+{
+  /* Defining PROMOTE_FUNCTION_RETURN in gcc-2.7.2 uncovered bug 981110 (even
+     when modifying TARGET_FUNCTION_VALUE to return the promoted mode).
+     Maybe pointless as of now, but let's keep the old behavior.  */
+  if (for_return == 1)
+    return mode;
+  return CRIS_PROMOTED_MODE (mode, *punsignedp, type);
+} 
+
+/* Let's assume all functions return in r[CRIS_FIRST_ARG_REG] for the
+   time being.  */
+
+static rtx
+cris_function_value(const_tree type,
+		    const_tree func ATTRIBUTE_UNUSED,
+		    bool outgoing ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (TYPE_MODE (type), CRIS_FIRST_ARG_REG);
+}
+
+/* Let's assume all functions return in r[CRIS_FIRST_ARG_REG] for the
+   time being.  */
+
+static rtx
+cris_libcall_value (enum machine_mode mode,
+		    const_rtx fun ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (mode, CRIS_FIRST_ARG_REG);
+}
+
+/* Let's assume all functions return in r[CRIS_FIRST_ARG_REG] for the
+   time being.  */
+
+bool
+cris_function_value_regno_p (const unsigned int regno)
+{
+  return (regno == CRIS_FIRST_ARG_REG);
+}
 
 static int
 cris_arg_partial_bytes (CUMULATIVE_ARGS *ca, enum machine_mode mode,
@@ -3803,6 +3885,115 @@ cris_md_asm_clobbers (tree outputs, tree inputs, tree in_clobbers)
 				  reg_names[CRIS_MOF_REGNUM]),
 		    clobbers);
 }
+
+/* Implement TARGET_FRAME_POINTER_REQUIRED.
+
+   Really only needed if the stack frame has variable length (alloca
+   or variable sized local arguments (GNU C extension).  See PR39499 and
+   PR38609 for the reason this isn't just 0.  */
+
+bool
+cris_frame_pointer_required (void)
+{
+  return !current_function_sp_is_unchanging;
+}
+
+/* Implement TARGET_ASM_TRAMPOLINE_TEMPLATE.
+
+   This looks too complicated, and it is.  I assigned r7 to be the
+   static chain register, but it is call-saved, so we have to save it,
+   and come back to restore it after the call, so we have to save srp...
+   Anyway, trampolines are rare enough that we can cope with this
+   somewhat lack of elegance.
+    (Do not be tempted to "straighten up" whitespace in the asms; the
+   assembler #NO_APP state mandates strict spacing).  */
+/* ??? See the i386 regparm=3 implementation that pushes the static
+   chain value to the stack in the trampoline, and uses a call-saved
+   register when called directly.  */
+
+static void
+cris_asm_trampoline_template (FILE *f)
+{
+  if (TARGET_V32)
+    {
+      /* This normally-unused nop insn acts as an instruction to
+	 the simulator to flush its instruction cache.  None of
+	 the other instructions in the trampoline template suits
+	 as a trigger for V32.  The pc-relative addressing mode
+	 works nicely as a trigger for V10.
+	 FIXME: Have specific V32 template (possibly avoiding the
+	 use of a special instruction).  */
+      fprintf (f, "\tclearf x\n");
+      /* We have to use a register as an intermediate, choosing
+	 semi-randomly R1 (which has to not be the STATIC_CHAIN_REGNUM),
+	 so we can use it for address indirection and jsr target.  */
+      fprintf (f, "\tmove $r1,$mof\n");
+      /* +4 */
+      fprintf (f, "\tmove.d 0,$r1\n");
+      fprintf (f, "\tmove.d $%s,[$r1]\n", reg_names[STATIC_CHAIN_REGNUM]);
+      fprintf (f, "\taddq 6,$r1\n");
+      fprintf (f, "\tmove $mof,[$r1]\n");
+      fprintf (f, "\taddq 6,$r1\n");
+      fprintf (f, "\tmove $srp,[$r1]\n");
+      /* +20 */
+      fprintf (f, "\tmove.d 0,$%s\n", reg_names[STATIC_CHAIN_REGNUM]);
+      /* +26 */
+      fprintf (f, "\tmove.d 0,$r1\n");
+      fprintf (f, "\tjsr $r1\n");
+      fprintf (f, "\tsetf\n");
+      /* +36 */
+      fprintf (f, "\tmove.d 0,$%s\n", reg_names[STATIC_CHAIN_REGNUM]);
+      /* +42 */
+      fprintf (f, "\tmove.d 0,$r1\n");
+      /* +48 */
+      fprintf (f, "\tmove.d 0,$r9\n");
+      fprintf (f, "\tjump $r9\n");
+      fprintf (f, "\tsetf\n");
+    }
+  else
+    {
+      fprintf (f, "\tmove.d $%s,[$pc+20]\n", reg_names[STATIC_CHAIN_REGNUM]);
+      fprintf (f, "\tmove $srp,[$pc+22]\n");
+      fprintf (f, "\tmove.d 0,$%s\n", reg_names[STATIC_CHAIN_REGNUM]);
+      fprintf (f, "\tjsr 0\n");
+      fprintf (f, "\tmove.d 0,$%s\n", reg_names[STATIC_CHAIN_REGNUM]);
+      fprintf (f, "\tjump 0\n");
+    }
+}
+
+/* Implement TARGET_TRAMPOLINE_INIT.  */
+
+static void
+cris_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+{
+  rtx fnaddr = XEXP (DECL_RTL (fndecl), 0);
+  rtx tramp = XEXP (m_tramp, 0);
+  rtx mem;
+
+  emit_block_move (m_tramp, assemble_trampoline_template (),
+		   GEN_INT (TRAMPOLINE_SIZE), BLOCK_OP_NORMAL);
+
+  if (TARGET_V32)
+    {
+      mem = adjust_address (m_tramp, SImode, 6);
+      emit_move_insn (mem, plus_constant (tramp, 38));
+      mem = adjust_address (m_tramp, SImode, 22);
+      emit_move_insn (mem, chain_value);
+      mem = adjust_address (m_tramp, SImode, 28);
+      emit_move_insn (mem, fnaddr);
+    }
+  else
+    {
+      mem = adjust_address (m_tramp, SImode, 10);
+      emit_move_insn (mem, chain_value);
+      mem = adjust_address (m_tramp, SImode, 16);
+      emit_move_insn (mem, fnaddr);
+    }
+
+  /* Note that there is no need to do anything with the cache for
+     sake of a trampoline.  */
+}
+
 
 #if 0
 /* Various small functions to replace macros.  Only called from a

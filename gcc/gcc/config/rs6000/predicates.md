@@ -1,5 +1,5 @@
 ;; Predicate definitions for POWER and PowerPC.
-;; Copyright (C) 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -36,6 +36,37 @@
    (and (match_operand 0 "register_operand")
 	(match_test "GET_CODE (op) != REG
 		     || ALTIVEC_REGNO_P (REGNO (op))
+		     || REGNO (op) > LAST_VIRTUAL_REGISTER")))
+
+;; Return 1 if op is a VSX register.
+(define_predicate "vsx_register_operand"
+   (and (match_operand 0 "register_operand")
+	(match_test "GET_CODE (op) != REG
+		     || VSX_REGNO_P (REGNO (op))
+		     || REGNO (op) > LAST_VIRTUAL_REGISTER")))
+
+;; Return 1 if op is a vector register that operates on floating point vectors
+;; (either altivec or VSX).
+(define_predicate "vfloat_operand"
+   (and (match_operand 0 "register_operand")
+	(match_test "GET_CODE (op) != REG
+		     || VFLOAT_REGNO_P (REGNO (op))
+		     || REGNO (op) > LAST_VIRTUAL_REGISTER")))
+
+;; Return 1 if op is a vector register that operates on integer vectors
+;; (only altivec, VSX doesn't support integer vectors)
+(define_predicate "vint_operand"
+   (and (match_operand 0 "register_operand")
+	(match_test "GET_CODE (op) != REG
+		     || VINT_REGNO_P (REGNO (op))
+		     || REGNO (op) > LAST_VIRTUAL_REGISTER")))
+
+;; Return 1 if op is a vector register to do logical operations on (and, or,
+;; xor, etc.)
+(define_predicate "vlogical_operand"
+   (and (match_operand 0 "register_operand")
+	(match_test "GET_CODE (op) != REG
+		     || VLOGICAL_REGNO_P (REGNO (op))
 		     || REGNO (op) > LAST_VIRTUAL_REGISTER")))
 
 ;; Return 1 if op is XER register.
@@ -234,6 +265,10 @@
 	      && num_insns_constant_wide ((HOST_WIDE_INT) k[3]) == 1);
 
     case DFmode:
+      /* The constant 0.f is easy under VSX.  */
+      if (op == CONST0_RTX (DFmode) && VECTOR_UNIT_VSX_P (DFmode))
+	return 1;
+
       /* Force constants to memory before reload to utilize
 	 compress_float_constant.
 	 Avoid this when flag_unsafe_math_optimizations is enabled
@@ -292,6 +327,9 @@
   if (TARGET_PAIRED_FLOAT)
     return false;
 
+  if ((VSX_VECTOR_MODE (mode) || mode == TImode) && zero_constant (op, mode))
+    return true;
+
   if (ALTIVEC_VECTOR_MODE (mode))
     {
       if (zero_constant (op, mode))
@@ -339,6 +377,16 @@
   return EASY_VECTOR_15_ADD_SELF (val);
 })
 
+;; Same as easy_vector_constant but only for EASY_VECTOR_MSB.
+(define_predicate "easy_vector_constant_msb"
+  (and (match_code "const_vector")
+       (and (match_test "TARGET_ALTIVEC")
+	    (match_test "easy_altivec_constant (op, mode)")))
+{
+  HOST_WIDE_INT val = const_vector_elt_as_int (op, GET_MODE_NUNITS (mode) - 1);
+  return EASY_VECTOR_MSB (val, GET_MODE_INNER (mode));
+})
+
 ;; Return 1 if operand is constant zero (scalars and vectors).
 (define_predicate "zero_constant"
   (and (match_code "const_int,const_double,const_vector")
@@ -367,9 +415,7 @@
 ;; Return 1 if the operand is an offsettable memory operand.
 (define_predicate "offsettable_mem_operand"
   (and (match_operand 0 "memory_operand")
-       (match_test "GET_CODE (XEXP (op, 0)) != PRE_INC
-		    && GET_CODE (XEXP (op, 0)) != PRE_DEC
-		    && GET_CODE (XEXP (op, 0)) != PRE_MODIFY")))
+       (match_test "offsettable_nonstrict_memref_p (op)")))
 
 ;; Return 1 if the operand is a memory operand with an address divisible by 4
 (define_predicate "word_offset_memref_operand"
@@ -396,14 +442,30 @@
   (match_code "mem")
 {
   op = XEXP (op, 0);
-  if (TARGET_ALTIVEC
-      && ALTIVEC_VECTOR_MODE (mode)
+  if (VECTOR_MEM_ALTIVEC_P (mode)
       && GET_CODE (op) == AND
       && GET_CODE (XEXP (op, 1)) == CONST_INT
       && INTVAL (XEXP (op, 1)) == -16)
     op = XEXP (op, 0);
 
   return indexed_or_indirect_address (op, mode);
+})
+
+;; Return 1 if the operand is an indexed or indirect memory operand with an
+;; AND -16 in it, used to recognize when we need to switch to Altivec loads
+;; to realign loops instead of VSX (altivec silently ignores the bottom bits,
+;; while VSX uses the full address and traps)
+(define_predicate "altivec_indexed_or_indirect_operand"
+  (match_code "mem")
+{
+  op = XEXP (op, 0);
+  if (VECTOR_MEM_ALTIVEC_OR_VSX_P (mode)
+      && GET_CODE (op) == AND
+      && GET_CODE (XEXP (op, 1)) == CONST_INT
+      && INTVAL (XEXP (op, 1)) == -16)
+    return indexed_or_indirect_address (XEXP (op, 0), mode);
+
+  return 0;
 })
 
 ;; Return 1 if the operand is an indexed or indirect address.
@@ -830,6 +892,11 @@
 						   GET_MODE (XEXP (op, 0))),
 			  1"))))
 
+(define_predicate "rs6000_cbranch_operator"
+  (if_then_else (match_test "TARGET_HARD_FLOAT && !TARGET_FPRS")
+		(match_operand 0 "ordered_comparison_operator")
+		(match_operand 0 "comparison_operator")))
+
 ;; Return 1 if OP is a comparison operation that is valid for an SCC insn --
 ;; it must be a positive comparison.
 (define_predicate "scc_comparison_operator"
@@ -841,11 +908,6 @@
 (define_predicate "branch_positive_comparison_operator"
   (and (match_operand 0 "branch_comparison_operator")
        (match_code "eq,lt,gt,ltu,gtu,unordered")))
-
-;; Return 1 is OP is a comparison operation that is valid for a trap insn.
-(define_predicate "trap_comparison_operator"
-   (and (match_operand 0 "comparison_operator")
-	(match_code "eq,ne,le,lt,ge,gt,leu,ltu,geu,gtu")))
 
 ;; Return 1 if OP is a load multiple operation, known to be a PARALLEL.
 (define_predicate "load_multiple_operation"

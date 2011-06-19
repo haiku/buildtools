@@ -325,9 +325,11 @@ create_edge_and_update_destination_phis (struct redirection_data *rd)
   for (gsi = gsi_start_phis (e->dest); !gsi_end_p (gsi); gsi_next (&gsi))
     {
       gimple phi = gsi_stmt (gsi);
-
+      source_location locus;
       int indx = rd->outgoing_edge->dest_idx;
-      add_phi_arg (phi, gimple_phi_arg_def (phi, indx), e);
+
+      locus = gimple_phi_arg_location (phi, indx);
+      add_phi_arg (phi, gimple_phi_arg_def (phi, indx), e, locus);
     }
 }
 
@@ -476,9 +478,10 @@ redirection_block_p (basic_block bb)
   gsi = gsi_start_bb (bb);
   while (!gsi_end_p (gsi)
          && (gimple_code (gsi_stmt (gsi)) == GIMPLE_LABEL
+	     || is_gimple_debug (gsi_stmt (gsi))
              || gimple_nop_p (gsi_stmt (gsi))))
     gsi_next (&gsi);
-  
+
   /* Check if this is an empty block.  */
   if (gsi_end_p (gsi))
     return true;
@@ -632,7 +635,6 @@ thread_single_edge (edge e)
   basic_block bb = e->dest;
   edge eto = (edge) e->aux;
   struct redirection_data rd;
-  struct local_info local_info;
 
   e->aux = NULL;
 
@@ -654,7 +656,6 @@ thread_single_edge (edge e)
   /* Otherwise, we need to create a copy.  */
   update_bb_profile_for_threading (bb, EDGE_FREQUENCY (e), e->count, eto);
 
-  local_info.bb = bb;
   rd.outgoing_edge = eto;
 
   create_block_for_threading (bb, &rd);
@@ -906,7 +907,7 @@ thread_through_loop_header (struct loop *loop, bool may_peel_loop_headers)
       else
 	tgt_bb = split_edge (tgt_edge);
     }
-      
+
   if (latch->aux)
     {
       /* First handle the case latch edge is redirected.  */
@@ -948,7 +949,7 @@ thread_through_loop_header (struct loop *loop, bool may_peel_loop_headers)
       loop->header = latch->dest;
       loop->latch = latch->src;
     }
-  
+
   return true;
 
 fail:

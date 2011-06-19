@@ -57,11 +57,21 @@ done
 
 trap 'rm -f "$1.$suf1" "$2.$suf2"' 0 1 2 15
 
-cp "$1" "$1.$suf1"
-strip "$1.$suf1"
+case `uname -s` in
+Darwin)
+  # The strip command on darwin does not remove all debug info.
+  # Fortunately, we can use ld to do it instead.
+  ld -S -r -no_uuid "$1" -o "$1.$suf1"
+  ld -S -r -no_uuid "$2" -o "$2.$suf2"
+  ;;
+*)
+  cp "$1" "$1.$suf1"
+  strip "$1.$suf1"
 
-cp "$2" "$2.$suf2"
-strip "$2.$suf2"
+  cp "$2" "$2.$suf2"
+  strip "$2.$suf2"
+  ;;
+esac
 
 if cmp "$1.$suf1" "$2.$suf2"; then
   status=0
@@ -78,7 +88,7 @@ else
   cmp2=
 
   for t in objdump readelf eu-readelf; do
-    if ($t --help) 2>&1 | grep -e '--\[*section-\]*headers' > /dev/null; then
+    if ($t --help) 2>&1 | grep ' --\[*section-\]*headers' > /dev/null; then
       cmd=$t
 
       $cmd --section-headers "$1.$suf1" | grep '\.eh_frame' > /dev/null
@@ -109,13 +119,13 @@ else
 
     echo stripping off .eh_frame, then retrying >&2
 
-    if (objcopy -v) 2>&1 | grep -e "--remove-section" > /dev/null; then
+    if (objcopy -v) 2>&1 | grep ' --remove-section' > /dev/null; then
       objcopy --remove-section .eh_frame --remove-section .rel.eh_frame --remove-section .rela.eh_frame "$1.$suf1" "$1.$suf3"
       mv "$1.$suf3" "$1.$suf1"
 
       objcopy --remove-section .eh_frame --remove-section .rel.eh_frame --remove-section .rela.eh_frame "$2.$suf2" "$2.$suf4"
       mv "$2.$suf4" "$2.$suf2"
-    elif (strip --help) 2>&1 | grep -e --remove-section > /dev/null; then
+    elif (strip --help) 2>&1 | grep ' --remove-section' > /dev/null; then
       cp "$1.$suf1" "$1.$suf3"
       strip --remove-section .eh_frame --remove-section .rel.eh_frame --remove-section .rela.eh_frame "$1.$suf3"
       mv "$1.$suf3" "$1.$suf1"
@@ -140,5 +150,13 @@ fi
 $rm "$1.$suf1" "$2.$suf2"
 
 trap "exit $status; exit" 0 1 2 15
+
+if test -f "$1".gkd || test -f "$2".gkd; then
+  if cmp "$1".gkd "$2".gkd; then
+    :
+  else
+    status=$?
+  fi
+fi
 
 exit $status

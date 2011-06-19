@@ -1,6 +1,6 @@
 // The  -*- C++ -*- type traits classes for internal use in libstdc++
 
-// Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
+// Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -136,8 +136,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     };
 
   // Thirteen specializations (yes there are eleven standard integer
-  // types; 'long long' and 'unsigned long long' are supported as
-  // extensions)
+  // types; <em>long long</em> and <em>unsigned long long</em> are
+  // supported as extensions)
   template<>
     struct __is_integer<bool>
     {
@@ -413,6 +413,34 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       typedef __true_type __type;
     };
 #endif
+
+  template<typename _Tp>
+    class __is_iterator_helper
+    {
+      typedef char __one;
+      typedef struct { char __arr[2]; } __two;
+
+      template<typename _Up>
+        struct _Wrap_type
+	{ };
+
+      template<typename _Up>
+        static __one __test(_Wrap_type<typename _Up::iterator_category>*);
+
+      template<typename _Up>
+        static __two __test(...);
+
+    public:
+      static const bool __value = (sizeof(__test<_Tp>(0)) == 1
+				   || __is_pointer<_Tp>::__value);
+    };
+
+  template<typename _Tp>
+    struct __is_iterator
+    {
+      enum { __value = __is_iterator_helper<_Tp>::__value };
+      typedef typename __truth_type<__value>::__type __type;
+    };
 
 _GLIBCXX_END_NAMESPACE
 

@@ -1,5 +1,5 @@
 /* score.h for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Sunnorth.
 
    This file is part of GCC.
@@ -215,6 +215,8 @@
 
 /* Default definitions for size_t and ptrdiff_t.  */
 #define SIZE_TYPE                       "unsigned int"
+
+#define UINTPTR_TYPE			"long unsigned int"
 
 /* Register Usage
 
@@ -555,24 +557,12 @@ extern enum reg_class score_char_to_class[256];
 #define STATIC_CHAIN_REGNUM             23
 
 /* Elimination Frame Pointer and Arg Pointer  */
-/* Value should be nonzero if functions must have frame pointers.
-   Zero means the frame pointer need not be set up (and parms
-   may be accessed via the stack pointer) in functions that seem suitable.
-   This is computed in `reload', in reload1.c.  */
-#define FRAME_POINTER_REQUIRED          cfun->calls_alloca
 
 #define ELIMINABLE_REGS                                \
   {{ ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},        \
    { ARG_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM},   \
    { FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},      \
    { FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM}}
-
-/* We can always eliminate to the hard frame pointer.  We can eliminate
-   to the stack pointer unless a frame pointer is needed.  */
-#define CAN_ELIMINATE(FROM, TO)        \
-  (((TO) == HARD_FRAME_POINTER_REGNUM) \
-   || ((TO) == STACK_POINTER_REGNUM    \
-       && !frame_pointer_needed))
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
   (OFFSET) = score_initial_elimination_offset ((FROM), (TO))
@@ -683,53 +673,11 @@ typedef struct score_args
       }                                                               \
   } while (0)
 
-#define TRAMPOLINE_TEMPLATE(STREAM)                                   \
-  do {                                                                \
-    if (TARGET_SCORE7)                                                \
-      {                                                               \
-        fprintf (STREAM, "\t.set r1\n");                              \
-        fprintf (STREAM, "\tmv r31, r3\n");                           \
-        fprintf (STREAM, "\tbl nextinsn\n");                          \
-        fprintf (STREAM, "nextinsn:\n");                              \
-        fprintf (STREAM, "\tlw r1, [r3, 6*4-8]\n");                   \
-        fprintf (STREAM, "\tlw r23, [r3, 6*4-4]\n");                  \
-        fprintf (STREAM, "\tmv r3, r31\n");                           \
-        fprintf (STREAM, "\tbr! r1\n");                               \
-        fprintf (STREAM, "\tnop!\n");                                 \
-        fprintf (STREAM, "\t.set nor1\n");                            \
-      }                                                               \
-    else if (TARGET_SCORE3)                                           \
-      {                                                               \
-        fprintf (STREAM, "\t.set r1\n");                              \
-        fprintf (STREAM, "\tmv! r31, r3\n");                          \
-        fprintf (STREAM, "\tnop!\n");                                 \
-        fprintf (STREAM, "\tbl nextinsn\n");                          \
-        fprintf (STREAM, "nextinsn:\n");                              \
-        fprintf (STREAM, "\tlw! r1, [r3, 6*4-8]\n");                  \
-        fprintf (STREAM, "\tnop!\n");                                 \
-        fprintf (STREAM, "\tlw r23, [r3, 6*4-4]\n");                  \
-        fprintf (STREAM, "\tmv! r3, r31\n");                          \
-        fprintf (STREAM, "\tnop!\n");                                 \
-        fprintf (STREAM, "\tbr! r1\n");                               \
-        fprintf (STREAM, "\tnop!\n");                                 \
-        fprintf (STREAM, "\t.set nor1\n");                            \
-      }                                                               \
-  } while (0)
-
 /* Trampolines for Nested Functions.  */
 #define TRAMPOLINE_INSNS                6
 
 /* A C expression for the size in bytes of the trampoline, as an integer.  */
 #define TRAMPOLINE_SIZE                (24 + GET_MODE_SIZE (ptr_mode) * 2)
-
-/* A C statement to initialize the variable parts of a trampoline.
-   ADDR is an RTX for the address of the trampoline; FNADDR is an
-   RTX for the address of the nested function; STATIC_CHAIN is an
-   RTX for the static chain value that should be passed to the
-   function when it is called.  */
-
-#define INITIALIZE_TRAMPOLINE(ADDR, FUNC, CHAIN) \
-  score_initialize_trampoline (ADDR, FUNC, CHAIN)
 
 #define HAVE_PRE_INCREMENT              1
 #define HAVE_PRE_DECREMENT              1
@@ -740,21 +688,8 @@ typedef struct score_args
 #define HAVE_PRE_MODIFY_REG             0
 #define HAVE_POST_MODIFY_REG            0
 
-/* Recognize any constant value that is a valid address.  */
-#define CONSTANT_ADDRESS_P(X)           CONSTANT_P (X)
-
 /* Maximum number of registers that can appear in a valid memory address.  */
 #define MAX_REGS_PER_ADDRESS            1
-
-#ifdef REG_OK_STRICT
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, LABEL)   \
-  if (score_address_p (MODE, X, 1))                \
-    goto LABEL;
-#else
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, LABEL)   \
-  if (score_address_p (MODE, X, 0))                \
-    goto LABEL;
-#endif
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
@@ -775,16 +710,6 @@ typedef struct score_args
 #endif
 
 #define REG_OK_FOR_INDEX_P(X) 0
-
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN)   \
-  do {                                           \
-    if (score_legitimize_address (&(X)))         \
-      goto WIN;                                  \
-  } while (0)
-
-/* Go to LABEL if ADDR (a legitimate address expression)
-   has an effect that depends on the machine mode it is used for.  */
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)       {}
 
 #define LEGITIMATE_CONSTANT_P(X)        1
 
@@ -1097,7 +1022,7 @@ typedef struct score_args
    for 32-bit targets.  */
 #define FUNCTION_MODE                   Pmode
 
-struct extern_list GTY ((chain_next ("%h.next")))
+struct GTY ((chain_next ("%h.next"))) extern_list
 {
   struct extern_list *next;             /* next external  */
   const char *name;                     /* name of the external  */

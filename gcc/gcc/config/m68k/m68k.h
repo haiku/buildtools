@@ -1,6 +1,7 @@
 /* Definitions of target machine for GCC for Motorola 680x0/ColdFire.
    Copyright (C) 1987, 1988, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -232,6 +233,7 @@ along with GCC; see the file COPYING3.  If not see
 #define FL_ISA_C     (1 << 16)
 #define FL_FIDOA     (1 << 17)
 #define FL_MMU 	     0   /* Used by multilib machinery.  */
+#define FL_UCLINUX   0   /* Used by multilib machinery.  */
 
 #define TARGET_68010		((m68k_cpu_flags & FL_ISA_68010) != 0)
 #define TARGET_68020		((m68k_cpu_flags & FL_ISA_68020) != 0)
@@ -453,8 +455,6 @@ along with GCC; see the file COPYING3.  If not see
    pointer is shifted to %a5 on this target.  */
 #define FRAME_POINTER_REGNUM A6_REG
 
-#define FRAME_POINTER_REQUIRED 0
-
 /* Base register for access to arguments of the function.
  * This isn't a hardware register. It will be eliminated to the
  * stack pointer or frame pointer.
@@ -617,20 +617,6 @@ extern enum reg_class regno_reg_class[];
 #define FINALIZE_TRAMPOLINE(TRAMP)
 #endif
 
-/* We generate a two-instructions program at address TRAMP :
-	movea.l &CXT,%a0
-	jmp FNADDR  */
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT)			\
-{									\
-  emit_move_insn (gen_rtx_MEM (HImode, TRAMP),				\
-		  GEN_INT(0x207C + ((STATIC_CHAIN_REGNUM-8) << 9)));	\
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 2)), CXT); \
-  emit_move_insn (gen_rtx_MEM (HImode, plus_constant (TRAMP, 6)),	\
-		  GEN_INT(0x4EF9));					\
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant (TRAMP, 8)), FNADDR); \
-  FINALIZE_TRAMPOLINE(TRAMP);						\
-}
-
 /* This is the library routine that is used to transfer control from the
    trampoline to the actual nested function.  It is defined for backward
    compatibility, for linking with object code that used the old trampoline
@@ -663,9 +649,6 @@ __transfer_from_trampoline ()					\
 {{ ARG_POINTER_REGNUM, STACK_POINTER_REGNUM },		\
  { ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM },		\
  { FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM }}
-
-#define CAN_ELIMINATE(FROM, TO) \
-  ((TO) == STACK_POINTER_REGNUM ? ! frame_pointer_needed : 1)
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
   (OFFSET) = m68k_initial_elimination_offset(FROM, TO)
@@ -751,7 +734,8 @@ __transfer_from_trampoline ()					\
 
 #define LEGITIMATE_PIC_OPERAND_P(X)				\
   (!symbolic_operand (X, VOIDmode)				\
-   || (TARGET_PCREL && REG_STRICT_P))
+   || (TARGET_PCREL && REG_STRICT_P)				\
+   || m68k_tls_reference_p (X, true))
 
 #define REG_OK_FOR_BASE_P(X) \
   m68k_legitimate_base_reg_p (X, REG_STRICT_P)
@@ -759,69 +743,9 @@ __transfer_from_trampoline ()					\
 #define REG_OK_FOR_INDEX_P(X) \
   m68k_legitimate_index_reg_p (X, REG_STRICT_P)
 
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)				\
-  do									\
-    {									\
-      if (m68k_legitimate_address_p (MODE, X, REG_STRICT_P))		\
-        goto ADDR;							\
-    }									\
-  while (0)
-
+
 /* This address is OK as it stands.  */
 #define PIC_CASE_VECTOR_ADDRESS(index) index
-
-/* For the 68000, we handle X+REG by loading X into a register R and
-   using R+REG.  R will go in an address reg and indexing will be used.
-   However, if REG is a broken-out memory address or multiplication,
-   nothing needs to be done because REG can certainly go in an address reg.  */
-#define COPY_ONCE(Y) if (!copied) { Y = copy_rtx (Y); copied = ch = 1; }
-#define LEGITIMIZE_ADDRESS(X,OLDX,MODE,WIN)   \
-{ register int ch = (X) != (OLDX);					\
-  if (GET_CODE (X) == PLUS)						\
-    { int copied = 0;							\
-      if (GET_CODE (XEXP (X, 0)) == MULT)				\
-	{ COPY_ONCE (X); XEXP (X, 0) = force_operand (XEXP (X, 0), 0);}	\
-      if (GET_CODE (XEXP (X, 1)) == MULT)				\
-	{ COPY_ONCE (X); XEXP (X, 1) = force_operand (XEXP (X, 1), 0);}	\
-      if (ch && GET_CODE (XEXP (X, 1)) == REG				\
-	  && GET_CODE (XEXP (X, 0)) == REG)				\
-	{ if (TARGET_COLDFIRE_FPU					\
-	      && GET_MODE_CLASS (MODE) == MODE_FLOAT)			\
-	    { COPY_ONCE (X); X = force_operand (X, 0);}			\
-	  goto WIN; }							\
-      if (ch) { GO_IF_LEGITIMATE_ADDRESS (MODE, X, WIN); }		\
-      if (GET_CODE (XEXP (X, 0)) == REG					\
-	       || (GET_CODE (XEXP (X, 0)) == SIGN_EXTEND		\
-		   && GET_CODE (XEXP (XEXP (X, 0), 0)) == REG		\
-		   && GET_MODE (XEXP (XEXP (X, 0), 0)) == HImode))	\
-	{ register rtx temp = gen_reg_rtx (Pmode);			\
-	  register rtx val = force_operand (XEXP (X, 1), 0);		\
-	  emit_move_insn (temp, val);					\
-	  COPY_ONCE (X);						\
-	  XEXP (X, 1) = temp;						\
-	  if (TARGET_COLDFIRE_FPU && GET_MODE_CLASS (MODE) == MODE_FLOAT \
-	      && GET_CODE (XEXP (X, 0)) == REG)				\
-	    X = force_operand (X, 0);					\
-	  goto WIN; }							\
-      else if (GET_CODE (XEXP (X, 1)) == REG				\
-	       || (GET_CODE (XEXP (X, 1)) == SIGN_EXTEND		\
-		   && GET_CODE (XEXP (XEXP (X, 1), 0)) == REG		\
-		   && GET_MODE (XEXP (XEXP (X, 1), 0)) == HImode))	\
-	{ register rtx temp = gen_reg_rtx (Pmode);			\
-	  register rtx val = force_operand (XEXP (X, 0), 0);		\
-	  emit_move_insn (temp, val);					\
-	  COPY_ONCE (X);						\
-	  XEXP (X, 0) = temp;						\
-	  if (TARGET_COLDFIRE_FPU && GET_MODE_CLASS (MODE) == MODE_FLOAT \
-	      && GET_CODE (XEXP (X, 1)) == REG)				\
-	    X = force_operand (X, 0);					\
-	  goto WIN; }}}
-
-/* On the 68000, only predecrement and postincrement address depend thus
-   (the amount of decrement or increment being the length of the operand).
-   These are now treated generically in recog.c.  */
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR,LABEL)
-
 #define CASE_VECTOR_MODE HImode
 #define CASE_VECTOR_PC_RELATIVE 1
 
@@ -1015,6 +939,13 @@ do { if (cc_prev_status.flags & CC_IN_68881)			\
   if ((LOG) >= 1)			\
     fprintf (FILE, "\t.even\n");
 
+#ifdef HAVE_GAS_BALIGN_AND_P2ALIGN
+/* Use "move.l %a4,%a4" to advance within code.  */
+#define ASM_OUTPUT_ALIGN_WITH_NOP(FILE,LOG)			\
+  if ((LOG) > 0)						\
+    fprintf ((FILE), "\t.balignw %u,0x284c\n", 1 << (LOG));
+#endif
+
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
   fprintf (FILE, "\t.skip %u\n", (int)(SIZE))
 
@@ -1027,6 +958,9 @@ do { if (cc_prev_status.flags & CC_IN_68881)			\
 ( fputs (".lcomm ", (FILE)),			\
   assemble_name ((FILE), (NAME)),		\
   fprintf ((FILE), ",%u\n", (int)(ROUNDED)))
+
+#define FINAL_PRESCAN_INSN(INSN, OPVEC, NOPERANDS) \
+  m68k_final_prescan_insn (INSN, OPVEC, NOPERANDS)
 
 /* On the 68000, we use several CODE characters:
    '.' for dot needed in Motorola-style opcode names.
@@ -1114,7 +1048,6 @@ enum m68k_function_kind
 
 /* Variables in m68k.c; see there for details.  */
 extern const char *m68k_library_id_string;
-extern int m68k_last_compare_had_fp_operands;
 extern enum target_device m68k_cpu;
 extern enum uarch_type m68k_tune;
 extern enum fpu_type m68k_fpu;

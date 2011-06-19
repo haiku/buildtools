@@ -1,6 +1,6 @@
 /* Definitions of target machine GNU compiler.  IA-64 version.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
-   Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+   2009 Free Software Foundation, Inc.
    Contributed by James E. Wilson <wilson@cygnus.com> and
    		  David Mosberger <davidm@hpl.hp.com>.
 
@@ -73,6 +73,8 @@ extern unsigned int ia64_section_threshold;
 #define TARGET_HPUX		0
 #define TARGET_HPUX_LD		0
 
+#define TARGET_ABI_OPEN_VMS 0
+
 #ifndef TARGET_ILP32
 #define TARGET_ILP32 0
 #endif
@@ -94,7 +96,7 @@ enum ia64_inline_type
 /* Default target_flags if no switches are specified  */
 
 #ifndef TARGET_DEFAULT
-#define TARGET_DEFAULT (MASK_DWARF2_ASM)
+#define TARGET_DEFAULT (MASK_DWARF2_ASM | MASK_FUSED_MADD)
 #endif
 
 #ifndef TARGET_CPU_DEFAULT
@@ -279,11 +281,17 @@ while (0)
 
 #define DOUBLE_TYPE_SIZE 64
 
-/* long double is XFmode normally, TFmode for HPUX.  */
-#define LONG_DOUBLE_TYPE_SIZE (TARGET_HPUX ? 128 : 80)
+/* long double is XFmode normally, and TFmode for HPUX.  It should be
+   TFmode for VMS as well but we only support up to DFmode now.  */
+#define LONG_DOUBLE_TYPE_SIZE \
+  (TARGET_HPUX ? 128 \
+   : TARGET_ABI_OPEN_VMS ? 64 \
+   : 80)
 
-/* We always want the XFmode operations from libgcc2.c.  */
-#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE 80
+/* We always want the XFmode operations from libgcc2.c, except on VMS
+   where this yields references to unimplemented "insns".  */
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE  (TARGET_ABI_OPEN_VMS ? 64 : 80)
+
 
 /* On HP-UX, we use the l suffix for TFmode in libgcc2.c.  */
 #define LIBGCC2_TF_CEXT l
@@ -1005,11 +1013,6 @@ enum reg_class
 
 /* Eliminating the Frame Pointer and the Arg Pointer */
 
-/* A C expression which is nonzero if a function must have and use a frame
-   pointer.  This expression is evaluated in the reload pass.  If its value is
-   nonzero the function will have a frame pointer.  */
-#define FRAME_POINTER_REQUIRED 0
-
 /* Show we can debug even without a frame pointer.  */
 #define CAN_DEBUG_WITHOUT_FP
 
@@ -1023,13 +1026,6 @@ enum reg_class
   {FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},				\
   {FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM},			\
 }
-
-/* A C expression that returns nonzero if the compiler is allowed to try to
-   replace register number FROM with register number TO.  The frame pointer
-   is automatically handled.  */
-
-#define CAN_ELIMINATE(FROM, TO) \
-  (TO == BR_REG (0) ? current_function_is_leaf : 1)
 
 /* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It
    specifies the initial difference between the specified pair of
@@ -1082,12 +1078,16 @@ enum reg_class
    `FUNCTION_ARG' and other related values.  For some target machines, the type
    `int' suffices and can hold the number of bytes of argument so far.  */
 
+enum ivms_arg_type {I64, FF, FD, FG, FS, FT};
+/* VMS floating point formats VAX F, VAX D, VAX G, IEEE S, IEEE T.  */
+
 typedef struct ia64_args
 {
   int words;			/* # words of arguments so far  */
   int int_regs;			/* # GR registers used so far  */
   int fp_regs;			/* # FR registers used so far  */
   int prototype;		/* whether function prototyped  */
+  enum ivms_arg_type atypes[8]; /* which VMS float type or if not float */
 } CUMULATIVE_ARGS;
 
 /* A C statement (sans semicolon) for initializing the variable CUM for the
@@ -1099,6 +1099,9 @@ do {									\
   (CUM).int_regs = 0;							\
   (CUM).fp_regs = 0;							\
   (CUM).prototype = ((FNTYPE) && TYPE_ARG_TYPES (FNTYPE)) || (LIBNAME);	\
+  (CUM).atypes[0] = (CUM).atypes[1] = (CUM).atypes[2] = I64;	        \
+  (CUM).atypes[3] = (CUM).atypes[4] = (CUM).atypes[5] = I64;            \
+  (CUM).atypes[6] = (CUM).atypes[7] = I64;                              \
 } while (0)
 
 /* Like `INIT_CUMULATIVE_ARGS' but overrides it for the purposes of finding the
@@ -1113,6 +1116,9 @@ do {									\
   (CUM).int_regs = 0;							\
   (CUM).fp_regs = 0;							\
   (CUM).prototype = 1;							\
+  (CUM).atypes[0] = (CUM).atypes[1] = (CUM).atypes[2] = I64;	        \
+  (CUM).atypes[3] = (CUM).atypes[4] = (CUM).atypes[5] = I64;            \
+  (CUM).atypes[6] = (CUM).atypes[7] = I64;                              \
 } while (0)
 
 /* A C statement (sans semicolon) to update the summarizer variable CUM to
@@ -1241,31 +1247,6 @@ do {									\
 #define STACK_SAVEAREA_MODE(LEVEL) \
   ((LEVEL) == SAVE_NONLOCAL ? OImode : Pmode)
 
-/* Output assembler code for a block containing the constant parts of
-   a trampoline, leaving space for the variable parts.
-
-   The trampoline should set the static chain pointer to value placed
-   into the trampoline and should branch to the specified routine.
-   To make the normal indirect-subroutine calling convention work,
-   the trampoline must look like a function descriptor; the first
-   word being the target address and the second being the target's
-   global pointer.
-
-   We abuse the concept of a global pointer by arranging for it
-   to point to the data we need to load.  The complete trampoline
-   has the following form:
-
-		+-------------------+ \
-	TRAMP:	| __ia64_trampoline | |
-		+-------------------+  > fake function descriptor
-		| TRAMP+16          | |
-		+-------------------+ /
-		| target descriptor |
-		+-------------------+
-		| static link	    |
-		+-------------------+
-*/
-
 /* A C expression for the size in bytes of the trampoline, as an integer.  */
 
 #define TRAMPOLINE_SIZE		32
@@ -1273,11 +1254,6 @@ do {									\
 /* Alignment required for trampolines, in bits.  */
 
 #define TRAMPOLINE_ALIGNMENT	64
-
-/* A C statement to initialize the variable parts of a trampoline.  */
-
-#define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, STATIC_CHAIN) \
-  ia64_initialize_trampoline((ADDR), (FNADDR), (STATIC_CHAIN))
 
 /* Addressing Modes */
 
@@ -1343,13 +1319,6 @@ do {									\
    use as an index register.  This is needed for POST_MODIFY.  */
 
 #define REG_OK_FOR_INDEX_P(X) REG_OK_FOR_BASE_P (X)
-
-/* A C statement or compound statement with a conditional `goto LABEL;'
-   executed if memory address X (an RTX) can have different meanings depending
-   on the machine mode of the memory reference it is used for or if the address
-   is valid for some modes but not others.  */
-
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
 
 /* A C expression that is nonzero if X is a legitimate constant for an
    immediate operand on the target machine.  */
@@ -1508,8 +1477,11 @@ do {									\
 do {									\
   assemble_name (STREAM, NAME);						\
   fputs (" = ", STREAM);						\
+  if (ISDIGIT (*VALUE))							\
+    ia64_asm_output_label = 1;						\
   assemble_name (STREAM, VALUE);					\
   fputc ('\n', STREAM);							\
+  ia64_asm_output_label = 0;						\
 } while (0)
 
 
@@ -1938,7 +1910,7 @@ extern int ia64_final_schedule;
 #define EH_RETURN_DATA_REGNO(N) ((N) < 4 ? (N) + 15 : INVALID_REGNUM)
 
 /* This function contains machine specific function data.  */
-struct machine_function GTY(())
+struct GTY(()) machine_function
 {
   /* The new stack pointer when unwinding from EH.  */
   rtx ia64_eh_epilogue_sp;

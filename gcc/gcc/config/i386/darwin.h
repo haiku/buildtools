@@ -1,5 +1,5 @@
 /* Target definitions for x86 running Darwin.
-   Copyright (C) 2001, 2002, 2004, 2005, 2006, 2007, 2008
+   Copyright (C) 2001, 2002, 2004, 2005, 2006, 2007, 2008, 2010
    Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
@@ -73,7 +73,9 @@ along with GCC; see the file COPYING3.  If not see
    Failure to ensure this will lead to a crash in the system libraries
    or dynamic loader.  */
 #undef STACK_BOUNDARY
-#define STACK_BOUNDARY 128
+#define STACK_BOUNDARY \
+ ((profile_flag || (TARGET_64BIT && ix86_abi == MS_ABI)) \
+  ? 128 : BITS_PER_WORD)
 
 #undef MAIN_STACK_BOUNDARY
 #define MAIN_STACK_BOUNDARY 128
@@ -85,13 +87,14 @@ along with GCC; see the file COPYING3.  If not see
    it's below the minimum.  */
 #undef PREFERRED_STACK_BOUNDARY
 #define PREFERRED_STACK_BOUNDARY			\
-  MAX (STACK_BOUNDARY, ix86_preferred_stack_boundary)
+  MAX (128, ix86_preferred_stack_boundary)
 
 /* We want -fPIC by default, unless we're using -static to compile for
    the kernel or some such.  */
 
 #undef CC1_SPEC
 #define CC1_SPEC "%(cc1_cpu) \
+  %<mdynamic-no-pic " /* For now, we just ignore this flag */ " \
   %{!mkernel:%{!static:%{!mdynamic-no-pic:-fPIC}}} \
   %{!mmacosx-version-min=*:-mmacosx-version-min=%(darwin_minversion)} \
   %{g: %{!fno-eliminate-unused-debug-symbols: -feliminate-unused-debug-symbols }}"
@@ -141,9 +144,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #define SHIFT_DOUBLE_OMITS_COUNT 0
 
-extern void darwin_x86_file_end (void);
 #undef TARGET_ASM_FILE_END
-#define TARGET_ASM_FILE_END darwin_x86_file_end
+#define TARGET_ASM_FILE_END darwin_file_end
 
 /* Define the syntax of pseudo-ops, labels and comments.  */
 
@@ -162,13 +164,11 @@ extern void darwin_x86_file_end (void);
 #undef TARGET_SUBTARGET32_ISA_DEFAULT
 #define TARGET_SUBTARGET32_ISA_DEFAULT (OPTION_MASK_ISA_MMX		\
 					| OPTION_MASK_ISA_SSE		\
-					| OPTION_MASK_ISA_SSE2)
-
-#undef TARGET_SUBTARGET64_ISA_DEFAULT
-#define TARGET_SUBTARGET64_ISA_DEFAULT (OPTION_MASK_ISA_MMX		\
-					| OPTION_MASK_ISA_SSE		\
 					| OPTION_MASK_ISA_SSE2		\
 					| OPTION_MASK_ISA_SSE3)
+
+#undef TARGET_SUBTARGET64_ISA_DEFAULT
+#define TARGET_SUBTARGET64_ISA_DEFAULT TARGET_SUBTARGET32_ISA_DEFAULT
 
 /* For now, disable dynamic-no-pic.  We'll need to go through i386.c
    with a fine-tooth comb looking for refs to flag_pic!  */
@@ -189,7 +189,7 @@ extern void darwin_x86_file_end (void);
 
 /* Assembler pseudos to introduce constants of various size.  */
 
-#define ASM_BYTE_OP "\t.byte\t"
+#define ASM_BYTE "\t.byte\t"
 #define ASM_SHORT "\t.word\t"
 #define ASM_LONG "\t.long\t"
 #define ASM_QUAD "\t.quad\t"
@@ -300,3 +300,5 @@ extern void darwin_x86_file_end (void);
    used in Mach-O.  */
 #undef MACHO_SYMBOL_FLAG_VARIABLE
 #define MACHO_SYMBOL_FLAG_VARIABLE ((SYMBOL_FLAG_MACH_DEP) << 3)
+
+#define SUBTARGET32_DEFAULT_CPU "i686"

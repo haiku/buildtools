@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler.
    Renesas H8/300 (generic)
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com),
    Jim Wilson (wilson@cygnus.com), and Doug Evans (dje@cygnus.com).
@@ -146,6 +146,17 @@ extern const char * const *h8_reg_names;
 
 /* Show we can debug even without a frame pointer.  */
 /* #define CAN_DEBUG_WITHOUT_FP */
+
+/* We want dwarf2 info available to gdb...  */
+#define DWARF2_DEBUGGING_INFO        1
+/* ... but we don't actually support full dwarf2 EH.  */
+#define MUST_USE_SJLJ_EXCEPTIONS 1
+
+/* The return address is pushed on the stack.  */
+#define INCOMING_RETURN_ADDR_RTX   gen_rtx_MEM (Pmode, gen_rtx_REG (Pmode, STACK_POINTER_REGNUM))
+#define INCOMING_FRAME_SP_OFFSET   (POINTER_SIZE / 8)
+
+#define DWARF_CIE_DATA_ALIGNMENT	2
 
 /* Define this if addresses of constant functions
    shouldn't be put through pseudo regs where they can be cse'd.
@@ -299,12 +310,6 @@ extern const char * const *h8_reg_names;
 
 /* Base register for access to local variables of the function.  */
 #define FRAME_POINTER_REGNUM FP_REG
-
-/* Value should be nonzero if functions must have frame pointers.
-   Zero means the frame pointer need not be set up (and parms
-   may be accessed via the stack pointer) in functions that seem suitable.
-   This is computed in `reload', in reload1.c.  */
-#define FRAME_POINTER_REQUIRED 0
 
 /* Base register for access to arguments of the function.  */
 #define ARG_POINTER_REGNUM AP_REG
@@ -564,17 +569,6 @@ enum reg_class {
  { FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},			\
  { FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM}}
 
-/* Given FROM and TO register numbers, say whether this elimination is allowed.
-   Frame pointer elimination is automatically handled.
-
-   For the h8300, if frame pointer elimination is being done, we would like to
-   convert ap and rp into sp, not fp.
-
-   All other eliminations are valid.  */
-
-#define CAN_ELIMINATE(FROM, TO)					\
-  ((TO) == STACK_POINTER_REGNUM ? ! frame_pointer_needed : 1)
-
 /* Define the offset between two registers, one to be eliminated, and the other
    its replacement, at the start of a routine.  */
 
@@ -689,58 +683,9 @@ struct cum_arg
 
 #define EXIT_IGNORE_STACK 0
 
-/* We emit the entire trampoline with INITIALIZE_TRAMPOLINE.
-   Depending on the pointer size, we use a different trampoline.
-
-   Pmode == HImode
-	      vvvv context
-   1 0000 7903xxxx		mov.w	#0x1234,r3
-   2 0004 5A00xxxx		jmp	@0x1234
-	      ^^^^ function
-
-   Pmode == SImode
-	      vvvvvvvv context
-   2 0000 7A03xxxxxxxx		mov.l	#0x12345678,er3
-   3 0006 5Axxxxxx		jmp	@0x123456
-	    ^^^^^^ function
-*/
-
 /* Length in units of the trampoline for entering a nested function.  */
 
 #define TRAMPOLINE_SIZE ((Pmode == HImode) ? 8 : 12)
-
-/* Emit RTL insns to build a trampoline.
-   FNADDR is an RTX for the address of the function's pure code.
-   CXT is an RTX for the static chain value for the function.  */
-
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT)			    \
-  do									    \
-    {									    \
-      if (Pmode == HImode)						    \
-	{								    \
-	  emit_move_insn (gen_rtx_MEM (HImode, (TRAMP)), GEN_INT (0x7903)); \
-	  emit_move_insn (gen_rtx_MEM (Pmode, plus_constant ((TRAMP), 2)),  \
-			  (CXT));					    \
-	  emit_move_insn (gen_rtx_MEM (Pmode, plus_constant ((TRAMP), 4)),  \
-			  GEN_INT (0x5a00));				    \
-	  emit_move_insn (gen_rtx_MEM (Pmode, plus_constant ((TRAMP), 6)),  \
-			  (FNADDR));					    \
-	}								    \
-      else								    \
-	{								    \
-	  rtx tem = gen_reg_rtx (Pmode);				    \
-									    \
-	  emit_move_insn (gen_rtx_MEM (HImode, (TRAMP)), GEN_INT (0x7a03)); \
-	  emit_move_insn (gen_rtx_MEM (Pmode, plus_constant ((TRAMP), 2)),  \
-			  (CXT));					    \
-	  emit_move_insn (tem, (FNADDR));				    \
-	  emit_insn (gen_andsi3 (tem, tem, GEN_INT (0x00ffffff)));	    \
-	  emit_insn (gen_iorsi3 (tem, tem, GEN_INT (0x5a000000)));	    \
-	  emit_move_insn (gen_rtx_MEM (Pmode, plus_constant ((TRAMP), 6)),  \
-			  tem);						    \
-	}								    \
-    }									    \
-  while (0)
 
 /* Addressing modes, and classification of registers for them.  */
 
@@ -926,24 +871,6 @@ struct cum_arg
 #define EXTRA_MEMORY_CONSTRAINT(C, STR) \
   ((C) == 'W')
 
-
-#ifndef REG_OK_STRICT
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)	\
-  do						\
-    {						\
-      if (h8300_legitimate_address_p ((MODE), (X), 0))	\
-	goto ADDR;				\
-    }						\
-  while (0)
-#else
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, ADDR)	\
-  do						\
-    {						\
-      if (h8300_legitimate_address_p ((MODE), (X), 1))	\
-	goto ADDR;				\
-    }						\
-  while (0)
-#endif
 
 /* Go to LABEL if ADDR (a legitimate address expression)
    has an effect that depends on the machine mode it is used for.

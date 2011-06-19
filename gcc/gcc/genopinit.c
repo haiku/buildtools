@@ -178,12 +178,13 @@ static const char * const optabs[] =
   "optab_handler (expm1_optab, $A)->insn_code = CODE_FOR_$(expm1$a2$)",
   "optab_handler (ldexp_optab, $A)->insn_code = CODE_FOR_$(ldexp$a3$)",
   "optab_handler (scalb_optab, $A)->insn_code = CODE_FOR_$(scalb$a3$)",
+  "optab_handler (significand_optab, $A)->insn_code = CODE_FOR_$(significand$a2$)",
   "optab_handler (logb_optab, $A)->insn_code = CODE_FOR_$(logb$a2$)",
   "optab_handler (ilogb_optab, $A)->insn_code = CODE_FOR_$(ilogb$a2$)",
   "optab_handler (log_optab, $A)->insn_code = CODE_FOR_$(log$a2$)",
-  "optab_handler (log10_optab, $A)->insn_code = CODE_FOR_$(log10$a2$)",  
-  "optab_handler (log2_optab, $A)->insn_code = CODE_FOR_$(log2$a2$)",  
-  "optab_handler (log1p_optab, $A)->insn_code = CODE_FOR_$(log1p$a2$)",  
+  "optab_handler (log10_optab, $A)->insn_code = CODE_FOR_$(log10$a2$)",
+  "optab_handler (log2_optab, $A)->insn_code = CODE_FOR_$(log2$a2$)",
+  "optab_handler (log1p_optab, $A)->insn_code = CODE_FOR_$(log1p$a2$)",
   "optab_handler (tan_optab, $A)->insn_code = CODE_FOR_$(tan$a2$)",
   "optab_handler (atan_optab, $A)->insn_code = CODE_FOR_$(atan$a2$)",
   "optab_handler (strlen_optab, $A)->insn_code = CODE_FOR_$(strlen$a$)",
@@ -198,15 +199,12 @@ static const char * const optabs[] =
   "optab_handler (movstrict_optab, $A)->insn_code = CODE_FOR_$(movstrict$a$)",
   "optab_handler (movmisalign_optab, $A)->insn_code = CODE_FOR_$(movmisalign$a$)",
   "optab_handler (storent_optab, $A)->insn_code = CODE_FOR_$(storent$a$)",
-  "optab_handler (cmp_optab, $A)->insn_code = CODE_FOR_$(cmp$a$)",
-  "optab_handler (tst_optab, $A)->insn_code = CODE_FOR_$(tst$a$)",
   "optab_handler (addcc_optab, $A)->insn_code = CODE_FOR_$(add$acc$)",
-  "bcc_gen_fctn[$C] = gen_$(b$c$)",
-  "setcc_gen_code[$C] = CODE_FOR_$(s$c$)",
   "movcc_gen_code[$A] = CODE_FOR_$(mov$acc$)",
   "optab_handler (cbranch_optab, $A)->insn_code = CODE_FOR_$(cbranch$a4$)",
   "optab_handler (cmov_optab, $A)->insn_code = CODE_FOR_$(cmov$a6$)",
   "optab_handler (cstore_optab, $A)->insn_code = CODE_FOR_$(cstore$a4$)",
+  "optab_handler (ctrap_optab, $A)->insn_code = CODE_FOR_$(ctrap$a4$)",
   "optab_handler (push_optab, $A)->insn_code = CODE_FOR_$(push$a1$)",
   "reload_in_optab[$A] = CODE_FOR_$(reload_in$a$)",
   "reload_out_optab[$A] = CODE_FOR_$(reload_out$a$)",
@@ -234,7 +232,6 @@ static const char * const optabs[] =
   "sync_new_xor_optab[$A] = CODE_FOR_$(sync_new_xor$I$a$)",
   "sync_new_nand_optab[$A] = CODE_FOR_$(sync_new_nand$I$a$)",
   "sync_compare_and_swap[$A] = CODE_FOR_$(sync_compare_and_swap$I$a$)",
-  "sync_compare_and_swap_cc[$A] = CODE_FOR_$(sync_compare_and_swap_cc$I$a$)",
   "sync_lock_test_and_set[$A] = CODE_FOR_$(sync_lock_test_and_set$I$a$)",
   "sync_lock_release[$A] = CODE_FOR_$(sync_lock_release$I$a$)",
   "optab_handler (vec_set_optab, $A)->insn_code = CODE_FOR_$(vec_set$a$)",
@@ -369,14 +366,14 @@ gen_insn (rtx insn)
 			break;
 
 		    if (*p == 0
-			&& (! force_int || mode_class[i] == MODE_INT 
+			&& (! force_int || mode_class[i] == MODE_INT
 			    || mode_class[i] == MODE_VECTOR_INT)
 		        && (! force_partial_int
                             || mode_class[i] == MODE_INT
                             || mode_class[i] == MODE_PARTIAL_INT
 			    || mode_class[i] == MODE_VECTOR_INT)
 			&& (! force_float
-			    || mode_class[i] == MODE_FLOAT 
+			    || mode_class[i] == MODE_FLOAT
 			    || mode_class[i] == MODE_DECIMAL_FLOAT
 			    || mode_class[i] == MODE_COMPLEX_FLOAT
 			    || mode_class[i] == MODE_VECTOR_FLOAT)

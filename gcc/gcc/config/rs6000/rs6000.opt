@@ -111,6 +111,50 @@ mhard-float
 Target Report RejectNegative InverseMask(SOFT_FLOAT, HARD_FLOAT)
 Use hardware floating point
 
+mpopcntd
+Target Report Mask(POPCNTD)
+Use PowerPC V2.06 popcntd instruction
+
+mvsx
+Target Report Mask(VSX)
+Use vector/scalar (VSX) instructions
+
+mvsx-scalar-double
+Target Undocumented Report Var(TARGET_VSX_SCALAR_DOUBLE) Init(-1)
+; If -mvsx, use VSX arithmetic instructions for scalar double (on by default)
+
+mvsx-scalar-memory
+Target Undocumented Report Var(TARGET_VSX_SCALAR_MEMORY)
+; If -mvsx, use VSX scalar memory reference instructions for scalar double (off by default)
+
+mvsx-align-128
+Target Undocumented Report Var(TARGET_VSX_ALIGN_128)
+; If -mvsx, set alignment to 128 bits instead of 32/64
+
+mallow-movmisalign
+Target Undocumented Var(TARGET_ALLOW_MOVMISALIGN) Init(-1)
+; Allow/disallow the movmisalign in DF/DI vectors
+
+mallow-df-permute
+Target Undocumented Var(TARGET_ALLOW_DF_PERMUTE)
+; Allow/disallow permutation of DF/DI vectors
+
+msched-groups
+Target Undocumented Report Var(TARGET_SCHED_GROUPS) Init(-1)
+; Explicitly set/unset whether rs6000_sched_groups is set
+
+malways-hint
+Target Undocumented Report Var(TARGET_ALWAYS_HINT) Init(-1)
+; Explicitly set/unset whether rs6000_always_hint is set
+
+malign-branch-targets
+Target Undocumented Report Var(TARGET_ALIGN_BRANCH_TARGETS) Init(-1)
+; Explicitly set/unset whether rs6000_align_branch_targets is set
+
+mvectorize-builtins
+Target Undocumented Report Var(TARGET_VECTORIZE_BUILTINS) Init(-1)
+; Explicitly control whether we vectorize the builtins or not.
+
 mno-update
 Target Report RejectNegative Mask(NO_UPDATE)
 Do not generate load/store with update instructions
@@ -123,20 +167,20 @@ mavoid-indexed-addresses
 Target Report Var(TARGET_AVOID_XFORM) Init(-1)
 Avoid generation of indexed load/store instructions when possible
 
-mno-fused-madd
-Target Report RejectNegative Mask(NO_FUSED_MADD)
-Do not generate fused multiply/add instructions
-
 mfused-madd
-Target Report RejectNegative InverseMask(NO_FUSED_MADD, FUSED_MADD)
+Target Report Var(TARGET_FUSED_MADD) Init(1)
 Generate fused multiply/add instructions
 
-msched-prolog
-Target Report Var(TARGET_SCHED_PROLOG) Init(1)
-Schedule the start and end of the procedure
+mtls-markers
+Target Report Var(tls_markers) Init(1)
+Mark __tls_get_addr calls with argument info
 
 msched-epilog
-Target Undocumented Var(TARGET_SCHED_PROLOG) VarExists
+Target Undocumented Var(TARGET_SCHED_PROLOG) Init(1)
+
+msched-prolog
+Target Report Var(TARGET_SCHED_PROLOG) VarExists
+Schedule the start and end of the procedure
 
 maix-struct-return
 Target Report RejectNegative Var(aix_struct_return)
@@ -194,7 +238,7 @@ Target RejectNegative Joined
 -mvrsave=yes/no	Deprecated option.  Use -mvrsave/-mno-vrsave instead
 
 misel
-Target
+Target Report Mask(ISEL)
 Generate isel instructions
 
 misel=

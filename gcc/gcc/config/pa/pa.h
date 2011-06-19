@@ -1,6 +1,7 @@
 /* Definitions of target machine for GNU compiler, for the HP Spectrum.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) of Cygnus Support
    and Tim Moore (moore@defmacro.cs.utah.edu) of the Center for
    Software Science at the University of Utah.
@@ -20,14 +21,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
-
-enum cmp_type				/* comparison type */
-{
-  CMP_SI,				/* compare integers */
-  CMP_SF,				/* compare single precision floats */
-  CMP_DF,				/* compare double precision floats */
-  CMP_MAX				/* max comparison type */
-};
 
 /* For long call handling.  */
 extern unsigned long total_code_bytes;
@@ -249,7 +242,7 @@ do {								\
 #define CAN_DEBUG_WITHOUT_FP
 
 /* target machine storage layout */
-typedef struct machine_function GTY(())
+typedef struct GTY(()) machine_function
 {
   /* Flag indicating that a .NSUBSPA directive has been output for
      this function.  */
@@ -332,8 +325,9 @@ typedef struct machine_function GTY(())
 #define BIGGEST_ALIGNMENT (2 * BITS_PER_WORD)
 
 /* Get around hp-ux assembler bug, and make strcpy of constants fast.  */
-#define CONSTANT_ALIGNMENT(CODE, TYPEALIGN) \
-  ((TYPEALIGN) < 32 ? 32 : (TYPEALIGN))
+#define CONSTANT_ALIGNMENT(EXP, ALIGN)		\
+  (TREE_CODE (EXP) == STRING_CST		\
+   && (ALIGN) < BITS_PER_WORD ? BITS_PER_WORD : (ALIGN))
 
 /* Make arrays of chars word-aligned for the same reasons.  */
 #define DATA_ALIGNMENT(TYPE, ALIGN)		\
@@ -363,10 +357,6 @@ typedef struct machine_function GTY(())
 
 /* Base register for access to local variables of the function.  */
 #define FRAME_POINTER_REGNUM 3
-
-/* Value should be nonzero if functions must have frame pointers.  */
-#define FRAME_POINTER_REQUIRED \
-  (cfun->calls_alloca)
 
 /* Don't allow hard registers to be renamed into r2 unless r2
    is already live or already being saved (due to eh).  */
@@ -581,13 +571,6 @@ extern struct rtx_def *hppa_pic_save_rtx (void);
 
 #define RETURN_POPS_ARGS(FUNDECL,FUNTYPE,SIZE) 0
 
-/* Define how to find the value returned by a function.
-   VALTYPE is the data type of the value (as a tree).
-   If the precise function being called is known, FUNC is its FUNCTION_DECL;
-   otherwise, FUNC is 0.  */
-
-#define FUNCTION_VALUE(VALTYPE, FUNC) function_value (VALTYPE, FUNC)
-
 /* Define how to find the value returned by a library function
    assuming the value has mode MODE.  */
 
@@ -755,10 +738,6 @@ struct hppa_args {int words, nargs_prototype, incoming, indirect; };
    ? PARM_BOUNDARY : MAX_PARM_BOUNDARY)
 
 
-extern GTY(()) rtx hppa_compare_op0;
-extern GTY(()) rtx hppa_compare_op1;
-extern enum cmp_type hppa_branch_type;
-
 /* On HPPA, we emit profiling code as rtl via PROFILE_HOOK rather than
    as assembly via FUNCTION_PROFILER.  Just output a local label.
    We can't use the function label because the GAS SOM target can't
@@ -793,74 +772,13 @@ extern int may_call_alloca;
  (get_frame_size () != 0	\
   || cfun->calls_alloca || crtl->outgoing_args_size)
 
-/* Output assembler code for a block containing the constant parts
-   of a trampoline, leaving space for the variable parts.\
-
-   The trampoline sets the static chain pointer to STATIC_CHAIN_REGNUM
-   and then branches to the specified routine.
-
-   This code template is copied from text segment to stack location
-   and then patched with INITIALIZE_TRAMPOLINE to contain
-   valid values, and then entered as a subroutine.
-
-   It is best to keep this as small as possible to avoid having to
-   flush multiple lines in the cache.  */
-
-#define TRAMPOLINE_TEMPLATE(FILE) 					\
-  {									\
-    if (!TARGET_64BIT)							\
-      {									\
-	fputs ("\tldw	36(%r22),%r21\n", FILE);			\
-	fputs ("\tbb,>=,n	%r21,30,.+16\n", FILE);			\
-	if (ASSEMBLER_DIALECT == 0)					\
-	  fputs ("\tdepi	0,31,2,%r21\n", FILE);			\
-	else								\
-	  fputs ("\tdepwi	0,31,2,%r21\n", FILE);			\
-	fputs ("\tldw	4(%r21),%r19\n", FILE);				\
-	fputs ("\tldw	0(%r21),%r21\n", FILE);				\
-	if (TARGET_PA_20)						\
-	  {								\
-	    fputs ("\tbve	(%r21)\n", FILE);			\
-	    fputs ("\tldw	40(%r22),%r29\n", FILE);		\
-	    fputs ("\t.word	0\n", FILE);				\
-	    fputs ("\t.word	0\n", FILE);				\
-	  }								\
-	else								\
-	  {								\
-	    fputs ("\tldsid	(%r21),%r1\n", FILE);			\
-	    fputs ("\tmtsp	%r1,%sr0\n", FILE);			\
-	    fputs ("\tbe	0(%sr0,%r21)\n", FILE);			\
-	    fputs ("\tldw	40(%r22),%r29\n", FILE);		\
-	  }								\
-	fputs ("\t.word	0\n", FILE);					\
-	fputs ("\t.word	0\n", FILE);					\
-	fputs ("\t.word	0\n", FILE);					\
-	fputs ("\t.word	0\n", FILE);					\
-      }									\
-    else								\
-      {									\
-	fputs ("\t.dword 0\n", FILE);					\
-	fputs ("\t.dword 0\n", FILE);					\
-	fputs ("\t.dword 0\n", FILE);					\
-	fputs ("\t.dword 0\n", FILE);					\
-	fputs ("\tmfia	%r31\n", FILE);					\
-	fputs ("\tldd	24(%r31),%r1\n", FILE);				\
-	fputs ("\tldd	24(%r1),%r27\n", FILE);				\
-	fputs ("\tldd	16(%r1),%r1\n", FILE);				\
-	fputs ("\tbve	(%r1)\n", FILE);				\
-	fputs ("\tldd	32(%r31),%r31\n", FILE);			\
-	fputs ("\t.dword 0  ; fptr\n", FILE);				\
-	fputs ("\t.dword 0  ; static link\n", FILE);			\
-      }									\
-  }
-
 /* Length in units of the trampoline for entering a nested function.  */
 
 #define TRAMPOLINE_SIZE (TARGET_64BIT ? 72 : 52)
 
-/* Length in units of the trampoline instruction code.  */
+/* Alignment required by the trampoline.  */
 
-#define TRAMPOLINE_CODE_SIZE (TARGET_64BIT ? 24 : (TARGET_PA_20 ? 32 : 40))
+#define TRAMPOLINE_ALIGNMENT BITS_PER_WORD
 
 /* Minimum length of a cache line.  A length of 16 will work on all
    PA-RISC processors.  All PA 1.1 processors have a cache line of
@@ -870,102 +788,6 @@ extern int may_call_alloca;
 
 #define MIN_CACHELINE_SIZE 32
 
-/* Emit RTL insns to initialize the variable parts of a trampoline.
-   FNADDR is an RTX for the address of the function's pure code.
-   CXT is an RTX for the static chain value for the function.
-
-   Move the function address to the trampoline template at offset 36.
-   Move the static chain value to trampoline template at offset 40.
-   Move the trampoline address to trampoline template at offset 44.
-   Move r19 to trampoline template at offset 48.  The latter two
-   words create a plabel for the indirect call to the trampoline.
-
-   A similar sequence is used for the 64-bit port but the plabel is
-   at the beginning of the trampoline.
-
-   Finally, the cache entries for the trampoline code are flushed.
-   This is necessary to ensure that the trampoline instruction sequence
-   is written to memory prior to any attempts at prefetching the code
-   sequence.  */
-
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT) 			\
-{									\
-  rtx start_addr = gen_reg_rtx (Pmode);					\
-  rtx end_addr = gen_reg_rtx (Pmode);					\
-  rtx line_length = gen_reg_rtx (Pmode);				\
-  rtx tmp;								\
-									\
-  if (!TARGET_64BIT)							\
-    {									\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 36));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp), (FNADDR));		\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 40));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp), (CXT));			\
-									\
-      /* Create a fat pointer for the trampoline.  */			\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 44));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp), (TRAMP));		\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 48));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp),				\
-		      gen_rtx_REG (Pmode, 19));				\
-									\
-      /* fdc and fic only use registers for the address to flush,	\
-	 they do not accept integer displacements.  We align the	\
-	 start and end addresses to the beginning of their respective	\
-	 cache lines to minimize the number of lines flushed.  */	\
-      tmp = force_reg (Pmode, (TRAMP));					\
-      emit_insn (gen_andsi3 (start_addr, tmp,				\
-			     GEN_INT (-MIN_CACHELINE_SIZE)));		\
-      tmp = force_reg (Pmode,						\
-		       plus_constant (tmp, TRAMPOLINE_CODE_SIZE - 1));	\
-      emit_insn (gen_andsi3 (end_addr, tmp,				\
-			     GEN_INT (-MIN_CACHELINE_SIZE)));		\
-      emit_move_insn (line_length, GEN_INT (MIN_CACHELINE_SIZE));	\
-      emit_insn (gen_dcacheflushsi (start_addr, end_addr, line_length));\
-      emit_insn (gen_icacheflushsi (start_addr, end_addr, line_length,	\
-				  gen_reg_rtx (Pmode),			\
-				  gen_reg_rtx (Pmode)));		\
-    }									\
-  else									\
-    {									\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 56));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp), (FNADDR));		\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 64));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp), (CXT));			\
-									\
-      /* Create a fat pointer for the trampoline.  */			\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 16));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp),				\
-		      force_reg (Pmode, plus_constant ((TRAMP), 32)));	\
-      tmp = memory_address (Pmode, plus_constant ((TRAMP), 24));	\
-      emit_move_insn (gen_rtx_MEM (Pmode, tmp),				\
-		      gen_rtx_REG (Pmode, 27));				\
-									\
-      /* fdc and fic only use registers for the address to flush,	\
-	 they do not accept integer displacements.  We align the	\
-	 start and end addresses to the beginning of their respective	\
-	 cache lines to minimize the number of lines flushed.  */	\
-      tmp = force_reg (Pmode, plus_constant ((TRAMP), 32));		\
-      emit_insn (gen_anddi3 (start_addr, tmp,				\
-			     GEN_INT (-MIN_CACHELINE_SIZE)));		\
-      tmp = force_reg (Pmode,						\
-		       plus_constant (tmp, TRAMPOLINE_CODE_SIZE - 1));	\
-      emit_insn (gen_anddi3 (end_addr, tmp,				\
-			     GEN_INT (-MIN_CACHELINE_SIZE)));		\
-      emit_move_insn (line_length, GEN_INT (MIN_CACHELINE_SIZE));	\
-      emit_insn (gen_dcacheflushdi (start_addr, end_addr, line_length));\
-      emit_insn (gen_icacheflushdi (start_addr, end_addr, line_length,	\
-				  gen_reg_rtx (Pmode),			\
-				  gen_reg_rtx (Pmode)));		\
-    }									\
-}
-
-/* Perform any machine-specific adjustment in the address of the trampoline.
-   ADDR contains the address that was passed to INITIALIZE_TRAMPOLINE.
-   Adjust the trampoline address to point to the plabel at offset 44.  */
-   
-#define TRAMPOLINE_ADJUST_ADDRESS(ADDR) \
-  if (!TARGET_64BIT) (ADDR) = memory_address (Pmode, plus_constant ((ADDR), 46))
 
 /* Addressing modes, and classification of registers for them. 
 
@@ -1338,9 +1160,7 @@ extern int may_call_alloca;
 	       || ((MODE) != SFmode					\
 		   && (MODE) != DFmode)))				\
     goto ADDR;								\
-  else if (GET_CODE (X) == LABEL_REF					\
-	   || (GET_CODE (X) == CONST_INT				\
-	       && INT_5_BITS (X)))					\
+  else if (GET_CODE (X) == CONST_INT && INT_5_BITS (X))			\
     goto ADDR;								\
   /* Needed for -fPIC */						\
   else if (GET_CODE (X) == LO_SUM					\
@@ -1421,31 +1241,6 @@ do { 									\
 } while (0)
 
 
-
-
-/* Try machine-dependent ways of modifying an illegitimate address
-   to be legitimate.  If we find one, return the new, valid address.
-   This macro is used in only one place: `memory_address' in explow.c.
-
-   OLDX is the address as it was before break_out_memory_refs was called.
-   In some cases it is useful to look at this to decide what needs to be done.
-
-   MODE and WIN are passed so that this macro can use
-   GO_IF_LEGITIMATE_ADDRESS.
-
-   It is always safe for this macro to do nothing.  It exists to recognize
-   opportunities to optimize the output.  */
-
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN)	\
-{ rtx orig_x = (X);				\
-  (X) = hppa_legitimize_address (X, OLDX, MODE);	\
-  if ((X) != orig_x && memory_address_p (MODE, X)) \
-    goto WIN; }
-
-/* Go to LABEL if ADDR (a legitimate address expression)
-   has an effect that depends on the machine mode it is used for.  */
-
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR,LABEL)
 
 #define TARGET_ASM_SELECT_SECTION  pa_select_section
 
@@ -1565,6 +1360,7 @@ do { 									\
    Other copies are reasonably cheap.  */
 #define REGISTER_MOVE_COST(MODE, CLASS1, CLASS2) \
  (CLASS1 == SHIFT_REGS ? 0x100					\
+  : CLASS2 == SHIFT_REGS && FP_REG_CLASS_P (CLASS1) ? 18	\
   : FP_REG_CLASS_P (CLASS1) && ! FP_REG_CLASS_P (CLASS2) ? 16	\
   : FP_REG_CLASS_P (CLASS2) && ! FP_REG_CLASS_P (CLASS1) ? 16	\
   : 2)

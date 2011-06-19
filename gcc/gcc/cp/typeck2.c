@@ -32,6 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
+#include "intl.h"
 #include "cp-tree.h"
 #include "flags.h"
 #include "toplev.h"
@@ -71,49 +72,143 @@ binfo_or_else (tree base, tree type)
    value may not be changed thereafter.  */
 
 void
-readonly_error (tree arg, const char* string)
+readonly_error (tree arg, readonly_error_kind errstring)
 {
-  const char *fmt;
+ 
+/* This macro is used to emit diagnostics to ensure that all format
+   strings are complete sentences, visible to gettext and checked at
+   compile time.  */
+ 
+#define ERROR_FOR_ASSIGNMENT(AS, ASM, IN, DE, ARG)                      \
+  do {                                                                  \
+    switch (errstring)                                                  \
+      {                                                                 \
+      case REK_ASSIGNMENT:                                              \
+        error(AS, ARG);                                                 \
+        break;                                                          \
+      case REK_ASSIGNMENT_ASM:                                          \
+        error(ASM, ARG);                                                \
+        break;                                                          \
+      case REK_INCREMENT:                                               \
+        error (IN, ARG);                                                \
+        break;                                                          \
+      case REK_DECREMENT:                                               \
+        error (DE, ARG);                                                \
+        break;                                                          \
+      default:                                                          \
+        gcc_unreachable ();                                             \
+      }                                                                 \
+  } while (0)
 
   if (TREE_CODE (arg) == COMPONENT_REF)
     {
       if (TYPE_READONLY (TREE_TYPE (TREE_OPERAND (arg, 0))))
-	fmt = "%s of data-member %qD in read-only structure";
+        ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                                 "data-member %qD in read-only structure"),
+                              G_("assignment (via 'asm' output) of "
+                                 "data-member %qD in read-only structure"),
+                              G_("increment of "
+                                 "data-member %qD in read-only structure"),
+                              G_("decrement of "
+                                 "data-member %qD in read-only structure"),
+                              TREE_OPERAND (arg, 1));
       else
-	fmt = "%s of read-only data-member %qD";
-      error (fmt, string, TREE_OPERAND (arg, 1));
+        ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                                 "read-only data-member %qD"),
+                              G_("assignment (via 'asm' output) of "
+                                 "read-only data-member %qD"),
+                              G_("increment of "
+                                 "read-only data-member %qD"),
+                              G_("decrement of "
+                                 "read-only data-member %qD"),
+                              TREE_OPERAND (arg, 1));
     }
   else if (TREE_CODE (arg) == VAR_DECL)
     {
       if (DECL_LANG_SPECIFIC (arg)
 	  && DECL_IN_AGGR_P (arg)
 	  && !TREE_STATIC (arg))
-	fmt = "%s of constant field %qD";
+        ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                              "constant field %qD"),
+                              G_("assignment (via 'asm' output) of "
+                              "constant field %qD"),
+                              G_("increment of "
+                              "constant field %qD"),
+                              G_("decrement of "
+                              "constant field %qD"),
+                              arg);
       else
-	fmt = "%s of read-only variable %qD";
-      error (fmt, string, arg);
+        ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                              "read-only variable %qD"),
+                              G_("assignment (via 'asm' output) of "
+                              "read-only variable %qD"),
+                              G_("increment of "
+                              "read-only variable %qD"),
+                              G_("decrement of "
+                              "read-only variable %qD"),
+                              arg);
+
     }
   else if (TREE_CODE (arg) == PARM_DECL)
-    error ("%s of read-only parameter %qD", string, arg);
+    ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                             "read-only parameter %qD"),
+                          G_("assignment (via 'asm' output) of "
+                             "read-only parameter %qD"),
+                          G_("increment of "
+                             "read-only parameter %qD"),
+                          G_("decrement of "
+                             "read-only parameter %qD"),
+                          arg);  
   else if (TREE_CODE (arg) == INDIRECT_REF
 	   && TREE_CODE (TREE_TYPE (TREE_OPERAND (arg, 0))) == REFERENCE_TYPE
 	   && (TREE_CODE (TREE_OPERAND (arg, 0)) == VAR_DECL
 	       || TREE_CODE (TREE_OPERAND (arg, 0)) == PARM_DECL))
-    error ("%s of read-only reference %qD", string, TREE_OPERAND (arg, 0));
+    ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                             "read-only reference %qD"),
+                          G_("assignment (via 'asm' output) of "
+                             "read-only reference %qD"), 
+                          G_("increment of "
+                             "read-only reference %qD"),
+                          G_("decrement of "
+                             "read-only reference %qD"),
+                          TREE_OPERAND (arg, 0));
   else if (TREE_CODE (arg) == RESULT_DECL)
-    error ("%s of read-only named return value %qD", string, arg);
+    ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                             "read-only named return value %qD"),
+                          G_("assignment (via 'asm' output) of "
+                             "read-only named return value %qD"),
+                          G_("increment of "
+                             "read-only named return value %qD"),
+                          G_("decrement of "
+                             "read-only named return value %qD"),
+                          arg);
   else if (TREE_CODE (arg) == FUNCTION_DECL)
-    error ("%s of function %qD", string, arg);
+    ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                             "function %qD"),
+                          G_("assignment (via 'asm' output) of "
+                             "function %qD"),
+                          G_("increment of "
+                             "function %qD"),
+                          G_("decrement of "
+                             "function %qD"),
+                          arg);
   else
-    error ("%s of read-only location %qE", string, arg);
+    ERROR_FOR_ASSIGNMENT (G_("assignment of "
+                             "read-only location %qE"),
+                          G_("assignment (via 'asm' output) of "
+                             "read-only location %qE"),
+                          G_("increment of "
+                             "read-only location %qE"),
+                          G_("decrement of "
+                             "read-only location %qE"),
+                          arg);
 }
 
 
 /* Structure that holds information about declarations whose type was
    incomplete and we could not check whether it was abstract or not.  */
 
-struct pending_abstract_type GTY((chain_next ("%h.next")))
-{
+struct GTY((chain_next ("%h.next"))) pending_abstract_type {
   /* Declaration which we are checking for abstractness. It is either
      a DECL node, or an IDENTIFIER_NODE if we do not have a full
      declaration available.  */
@@ -237,6 +332,7 @@ abstract_virtuals_error (tree decl, tree type)
      be abstract.  */
   if (!CLASS_TYPE_P (type))
     return 0;
+  type = TYPE_MAIN_VARIANT (type);
 
   /* If the type is incomplete, we register it within a hash table,
      so that we can check again once it is completed. This makes sense
@@ -313,8 +409,9 @@ abstract_virtuals_error (tree decl, tree type)
       unsigned ix;
       tree fn;
 
-      inform (input_location, "%J  because the following virtual functions are pure "
-	      "within %qT:", TYPE_MAIN_DECL (type), type);
+      inform (DECL_SOURCE_LOCATION (TYPE_MAIN_DECL (type)),
+	      "  because the following virtual functions are pure within %qT:",
+	      type);
 
       for (ix = 0; VEC_iterate (tree, pure, ix, fn); ix++)
 	inform (input_location, "\t%+#D", fn);
@@ -324,8 +421,9 @@ abstract_virtuals_error (tree decl, tree type)
       VEC_truncate (tree, pure, 0);
     }
   else
-    inform (input_location, "%J  since type %qT has pure virtual functions",
-	    TYPE_MAIN_DECL (type), type);
+    inform (DECL_SOURCE_LOCATION (TYPE_MAIN_DECL (type)),
+	    "  since type %qT has pure virtual functions",
+	    type);
 
   return 1;
 }
@@ -517,7 +615,7 @@ split_nonconstant_init_1 (tree dest, tree init)
 			      NULL_TREE);
 
 	      code = build2 (INIT_EXPR, inner_type, sub, value);
-	      code = build_stmt (EXPR_STMT, code);
+	      code = build_stmt (input_location, EXPR_STMT, code);
 	      add_stmt (code);
 	      continue;
 	    }
@@ -531,7 +629,7 @@ split_nonconstant_init_1 (tree dest, tree init)
 	  tree cons = copy_node (init);
 	  CONSTRUCTOR_ELTS (init) = NULL;
 	  code = build2 (MODIFY_EXPR, type, dest, cons);
-	  code = build_stmt (EXPR_STMT, code);
+	  code = build_stmt (input_location, EXPR_STMT, code);
 	  add_stmt (code);
 	}
       break;
@@ -587,7 +685,7 @@ split_nonconstant_init (tree dest, tree init)
    for static variable.  In that case, caller must emit the code.  */
 
 tree
-store_init_value (tree decl, tree init)
+store_init_value (tree decl, tree init, int flags)
 {
   tree value, type;
 
@@ -629,7 +727,7 @@ store_init_value (tree decl, tree init)
   /* End of special C++ code.  */
 
   /* Digest the specified initializer into an expression.  */
-  value = digest_init (type, init);
+  value = digest_init_flags (type, init, flags);
   /* If the initializer is not a constant, fill in DECL_INITIAL with
      the bits that are constant, and then return an expression that
      will perform the dynamic initialization.  */
@@ -653,13 +751,9 @@ check_narrowing (tree type, tree init)
   tree ftype = unlowered_expr_type (init);
   bool ok = true;
   REAL_VALUE_TYPE d;
-  bool was_decl = false;
 
   if (DECL_P (init))
-    {
-      was_decl = true;
-      init = decl_constant_value (init);
-    }
+    init = decl_constant_value (init);
 
   if (TREE_CODE (type) == INTEGER_TYPE
       && TREE_CODE (ftype) == REAL_TYPE)
@@ -718,11 +812,11 @@ check_narrowing (tree type, tree init)
    NESTED is true iff we are being called for an element of a CONSTRUCTOR.  */
 
 static tree
-digest_init_r (tree type, tree init, bool nested)
+digest_init_r (tree type, tree init, bool nested, int flags)
 {
   enum tree_code code = TREE_CODE (type);
 
-  if (init == error_mark_node)
+  if (error_operand_p (init))
     return error_mark_node;
 
   gcc_assert (init);
@@ -797,9 +891,9 @@ digest_init_r (tree type, tree init, bool nested)
 
       if (cxx_dialect != cxx98 && nested)
 	check_narrowing (type, init);
-      init = convert_for_initialization (0, type, init, LOOKUP_NORMAL,
+      init = convert_for_initialization (0, type, init, flags,
 					 "initialization", NULL_TREE, 0,
-                                         tf_warning_or_error);
+					 tf_warning_or_error);
       exp = &init;
 
       /* Skip any conversions since we'll be outputting the underlying
@@ -835,15 +929,23 @@ digest_init_r (tree type, tree init, bool nested)
 	}
 
       if (TREE_CODE (type) == ARRAY_TYPE
-	  && TREE_CODE (init) != CONSTRUCTOR)
+	  && !BRACE_ENCLOSED_INITIALIZER_P (init))
 	{
+	  /* Allow the result of build_array_copy and of
+	     build_value_init_noctor.  */
+	  if ((TREE_CODE (init) == TARGET_EXPR
+	       || TREE_CODE (init) == CONSTRUCTOR)
+	      && (same_type_ignoring_top_level_qualifiers_p
+		  (type, TREE_TYPE (init))))
+	    return init;
+
 	  error ("array must be initialized with a brace-enclosed"
 		 " initializer");
 	  return error_mark_node;
 	}
 
       return convert_for_initialization (NULL_TREE, type, init,
-					 LOOKUP_NORMAL | LOOKUP_ONLYCONVERTING,
+					 flags,
 					 "initialization", NULL_TREE, 0,
                                          tf_warning_or_error);
     }
@@ -852,7 +954,13 @@ digest_init_r (tree type, tree init, bool nested)
 tree
 digest_init (tree type, tree init)
 {
-  return digest_init_r (type, init, false);
+  return digest_init_r (type, init, false, LOOKUP_IMPLICIT);
+}
+
+tree
+digest_init_flags (tree type, tree init, int flags)
+{
+  return digest_init_r (type, init, false, flags);
 }
 
 /* Set of flags used within process_init_constructor to describe the
@@ -924,7 +1032,7 @@ process_init_constructor_array (tree type, tree init)
       else
 	ce->index = size_int (i);
       gcc_assert (ce->value);
-      ce->value = digest_init_r (TREE_TYPE (type), ce->value, true);
+      ce->value = digest_init_r (TREE_TYPE (type), ce->value, true, LOOKUP_IMPLICIT);
 
       if (ce->value != error_mark_node)
 	gcc_assert (same_type_ignoring_top_level_qualifiers_p
@@ -1031,7 +1139,7 @@ process_init_constructor_record (tree type, tree init)
 	    }
 
 	  gcc_assert (ce->value);
-	  next = digest_init_r (type, ce->value, true);
+	  next = digest_init_r (type, ce->value, true, LOOKUP_IMPLICIT);
 	  ++idx;
 	}
       else if (TYPE_NEEDS_CONSTRUCTING (TREE_TYPE (field)))
@@ -1046,7 +1154,7 @@ process_init_constructor_record (tree type, tree init)
 	  else
 	    next = build_constructor (init_list_type_node, NULL);
 
-	  next = digest_init_r (TREE_TYPE (field), next, true);
+	  next = digest_init_r (TREE_TYPE (field), next, true, LOOKUP_IMPLICIT);
 
 	  /* Warn when some struct elements are implicitly initialized.  */
 	  warning (OPT_Wmissing_field_initializers,
@@ -1156,7 +1264,7 @@ process_init_constructor_union (tree type, tree init)
     }
 
   if (ce->value && ce->value != error_mark_node)
-    ce->value = digest_init_r (TREE_TYPE (ce->index), ce->value, true);
+    ce->value = digest_init_r (TREE_TYPE (ce->index), ce->value, true, LOOKUP_IMPLICIT);
 
   return picflag_from_initializer (ce->value);
 }
@@ -1328,7 +1436,7 @@ build_x_arrow (tree expr)
 	  return expr;
 	}
 
-      return cp_build_indirect_ref (last_rval, NULL, tf_warning_or_error);
+      return cp_build_indirect_ref (last_rval, RO_NULL, tf_warning_or_error);
     }
 
   if (types_memoized)
@@ -1420,7 +1528,7 @@ build_m_component_ref (tree datum, tree component)
       datum = build2 (POINTER_PLUS_EXPR, ptype,
 		      fold_convert (ptype, datum),
 		      build_nop (sizetype, component));
-      return cp_build_indirect_ref (datum, 0, tf_warning_or_error);
+      return cp_build_indirect_ref (datum, RO_NULL, tf_warning_or_error);
     }
   else
     return build2 (OFFSET_REF, type, datum, component);
@@ -1436,6 +1544,7 @@ build_functional_cast (tree exp, tree parms, tsubst_flags_t complain)
 
   /* The type to which we are casting.  */
   tree type;
+  VEC(tree,gc) *parmvec;
 
   if (exp == error_mark_node || parms == error_mark_node)
     return error_mark_node;
@@ -1506,8 +1615,12 @@ build_functional_cast (tree exp, tree parms, tsubst_flags_t complain)
     }
 
   /* Call the constructor.  */
-  exp = build_special_member_call (NULL_TREE, complete_ctor_identifier, parms,
-				   type, LOOKUP_NORMAL, complain);
+  parmvec = make_tree_vector ();
+  for (; parms != NULL_TREE; parms = TREE_CHAIN (parms))
+    VEC_safe_push (tree, gc, parmvec, TREE_VALUE (parms));
+  exp = build_special_member_call (NULL_TREE, complete_ctor_identifier,
+				   &parmvec, type, LOOKUP_NORMAL, complain);
+  release_tree_vector (parmvec);
 
   if (exp == error_mark_node)
     return error_mark_node;

@@ -1,6 +1,6 @@
-## Makefile for the include subdirectory of the GNU C++ Standard library.
+#o# Makefile for the include subdirectory of the GNU C++ Standard library.
 ##
-## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 ## Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
@@ -29,8 +29,8 @@ std_builddir = .
 std_headers = \
 	${std_srcdir}/algorithm \
 	${std_srcdir}/array \
+	${std_srcdir}/atomic \
 	${std_srcdir}/bitset \
-	${std_srcdir}/c++0x_warning.h \
 	${std_srcdir}/chrono \
 	${std_srcdir}/complex \
 	${std_srcdir}/condition_variable \
@@ -38,6 +38,7 @@ std_headers = \
 	${std_srcdir}/forward_list \
 	${std_srcdir}/fstream \
 	${std_srcdir}/functional \
+	${std_srcdir}/future \
 	${std_srcdir}/iomanip \
 	${std_srcdir}/ios \
 	${std_srcdir}/iosfwd \
@@ -77,6 +78,7 @@ bits_builddir = ./bits
 bits_headers = \
         ${bits_srcdir}/algorithmfwd.h \
 	${bits_srcdir}/allocator.h \
+	${bits_srcdir}/atomic_base.h \
 	${bits_srcdir}/atomicfwd_c.h \
 	${bits_srcdir}/atomicfwd_cxx.h \
 	${bits_srcdir}/atomic_0.h \
@@ -86,6 +88,7 @@ bits_headers = \
 	${bits_srcdir}/basic_string.h \
 	${bits_srcdir}/basic_string.tcc \
 	${bits_srcdir}/boost_concept_check.h \
+	${bits_srcdir}/c++0x_warning.h \
 	${bits_srcdir}/char_traits.h \
 	${bits_srcdir}/codecvt.h \
 	${bits_srcdir}/concept_check.h \
@@ -99,6 +102,7 @@ bits_headers = \
 	${bits_srcdir}/gslice.h \
 	${bits_srcdir}/gslice_array.h \
 	${bits_srcdir}/hashtable.h \
+	${bits_srcdir}/hashtable_policy.h \
 	${bits_srcdir}/indirect_array.h \
 	${bits_srcdir}/ios_base.h \
 	${bits_srcdir}/istream.tcc \
@@ -115,9 +119,12 @@ bits_headers = \
 	${bits_srcdir}/ostream.tcc \
 	${bits_srcdir}/ostream_insert.h \
 	${bits_srcdir}/postypes.h \
+	${bits_srcdir}/random.h \
+	${bits_srcdir}/random.tcc \
 	${bits_srcdir}/stream_iterator.h \
 	${bits_srcdir}/streambuf_iterator.h \
 	${bits_srcdir}/shared_ptr.h \
+	${bits_srcdir}/shared_ptr_base.h \
 	${bits_srcdir}/slice_array.h \
 	${bits_srcdir}/sstream.tcc \
 	${bits_srcdir}/stl_algo.h \
@@ -148,6 +155,8 @@ bits_headers = \
 	${bits_srcdir}/streambuf.tcc \
 	${bits_srcdir}/stringfwd.h \
 	${bits_srcdir}/unique_ptr.h \
+	${bits_srcdir}/unordered_map.h \
+	${bits_srcdir}/unordered_set.h \
 	${bits_srcdir}/valarray_array.h \
 	${bits_srcdir}/valarray_array.tcc \
 	${bits_srcdir}/valarray_before.h \
@@ -560,6 +569,7 @@ tr1_headers = \
 	${tr1_srcdir}/gamma.tcc \
 	${tr1_srcdir}/hypergeometric.tcc \
 	${tr1_srcdir}/hashtable.h \
+	${tr1_srcdir}/hashtable_policy.h \
 	${tr1_srcdir}/inttypes.h \
 	${tr1_srcdir}/limits.h \
 	${tr1_srcdir}/math.h \
@@ -569,6 +579,8 @@ tr1_headers = \
 	${tr1_srcdir}/poly_laguerre.tcc \
 	${tr1_srcdir}/legendre_function.tcc \
 	${tr1_srcdir}/random \
+	${tr1_srcdir}/random.h \
+	${tr1_srcdir}/random.tcc \
 	${tr1_srcdir}/regex \
 	${tr1_srcdir}/riemann_zeta.tcc \
 	${tr1_srcdir}/shared_ptr.h \
@@ -581,8 +593,10 @@ tr1_headers = \
 	${tr1_srcdir}/tgmath.h \
 	${tr1_srcdir}/tuple \
 	${tr1_srcdir}/type_traits \
-	${tr1_srcdir}/unordered_set \
 	${tr1_srcdir}/unordered_map \
+	${tr1_srcdir}/unordered_map.h \
+	${tr1_srcdir}/unordered_set \
+	${tr1_srcdir}/unordered_set.h \
 	${tr1_srcdir}/utility \
 	${tr1_srcdir}/wchar.h \
 	${tr1_srcdir}/wctype.h
@@ -603,18 +617,15 @@ tr1_impl_headers = \
 	${tr1_impl_srcdir}/cstdlib \
 	${tr1_impl_srcdir}/cwchar \
 	${tr1_impl_srcdir}/cwctype \
-	${tr1_impl_srcdir}/functional \
-	${tr1_impl_srcdir}/functional_hash.h \
-	${tr1_impl_srcdir}/hashtable \
-	${tr1_impl_srcdir}/hashtable_policy.h \
-	${tr1_impl_srcdir}/random \
-	${tr1_impl_srcdir}/random.tcc \
 	${tr1_impl_srcdir}/regex \
 	${tr1_impl_srcdir}/type_traits \
-	${tr1_impl_srcdir}/unordered_map \
-	${tr1_impl_srcdir}/unordered_set \
 	${tr1_impl_srcdir}/utility
 
+decimal_srcdir = ${glibcxx_srcdir}/include/decimal
+decimal_builddir = ./decimal
+decimal_headers = \
+	${decimal_srcdir}/decimal \
+	${decimal_srcdir}/decimal.h
 
 # This is the common subset of C++ files that all three "C" header models use.
 c_base_srcdir = $(C_INCLUDE_DIR)
@@ -634,7 +645,6 @@ c_base_headers = \
 	${c_base_srcdir}/csetjmp \
 	${c_base_srcdir}/csignal \
 	${c_base_srcdir}/cstdarg \
-	${c_base_srcdir}/cstdatomic \
 	${c_base_srcdir}/cstdbool \
 	${c_base_srcdir}/cstddef \
 	${c_base_srcdir}/cstdint \
@@ -768,6 +778,39 @@ else
 parallel_headers =
 endif
 
+# Profile mode headers
+profile_srcdir = ${glibcxx_srcdir}/include/profile
+profile_builddir = ./profile
+profile_headers = \
+	${profile_srcdir}/base.h \
+	${profile_srcdir}/unordered_map \
+	${profile_srcdir}/unordered_set \
+	${profile_srcdir}/vector \
+	${profile_srcdir}/bitset \
+	${profile_srcdir}/deque \
+	${profile_srcdir}/list \
+	${profile_srcdir}/map \
+	${profile_srcdir}/map.h \
+	${profile_srcdir}/multimap.h \
+	${profile_srcdir}/multiset.h \
+	${profile_srcdir}/set \
+	${profile_srcdir}/set.h \
+	${profile_srcdir}/iterator_tracker.h
+profile_impl_srcdir = ${glibcxx_srcdir}/include/profile/impl
+profile_impl_builddir = ./profile/impl
+profile_impl_headers = \
+	${profile_impl_srcdir}/profiler.h \
+	${profile_impl_srcdir}/profiler_container_size.h \
+	${profile_impl_srcdir}/profiler_hash_func.h \
+	${profile_impl_srcdir}/profiler_hashtable_size.h \
+	${profile_impl_srcdir}/profiler_map_to_unordered_map.h \
+	${profile_impl_srcdir}/profiler_node.h \
+	${profile_impl_srcdir}/profiler_state.h \
+	${profile_impl_srcdir}/profiler_trace.h \
+	${profile_impl_srcdir}/profiler_vector_size.h \
+	${profile_impl_srcdir}/profiler_vector_to_list.h \
+	${profile_impl_srcdir}/profiler_list_to_vector.h \
+	${profile_impl_srcdir}/profiler_list_to_slist.h
 
 # Some of the different "C" header models need extra files.
 # Some "C" header schemes require the "C" compatibility headers.
@@ -828,7 +871,7 @@ pch1_source = ${glibcxx_srcdir}/include/precompiled/stdc++.h
 pch1_output_builddir = ${host_builddir}/stdc++.h.gch
 pch1_output_anchor = ${host_builddir}/stdc++.h
 pch1_output_installdir = ${host_installdir}/stdc++.h.gch
-pch1a_output = ${pch1_output_builddir}/O0g.gch
+pch1a_output = ${pch1_output_builddir}/O2ggnu++0x.gch
 pch1b_output = ${pch1_output_builddir}/O2g.gch
 pch1_output = ${pch1a_output} ${pch1b_output}
 
@@ -862,7 +905,8 @@ endif
 allstamped = \
 	stamp-std stamp-bits stamp-c_base stamp-c_base_extra \
 	stamp-c_compatibility  stamp-backward stamp-ext stamp-pb \
-	stamp-tr1 stamp-tr1-impl stamp-debug stamp-parallel stamp-host
+	stamp-tr1 stamp-tr1-impl stamp-decimal stamp-debug \
+	stamp-parallel stamp-profile stamp-profile-impl stamp-host 
 
 # List of all files that are created by explicit building, editing, or
 # catenation.
@@ -976,6 +1020,11 @@ stamp-tr1-impl: ${tr1_impl_headers}
 	@-cd ${tr1_impl_builddir} && $(LN_S) $? . 2>/dev/null
 	@$(STAMP) stamp-tr1-impl
 
+stamp-decimal: ${decimal_headers}
+	@-mkdir -p ${decimal_builddir}
+	@-cd ${decimal_builddir} && $(LN_S) $? . 2>/dev/null
+	@$(STAMP) stamp-decimal
+
 stamp-debug: ${debug_headers}
 	@-mkdir -p ${debug_builddir}
 	@-cd ${debug_builddir} && $(LN_S) $? . 2>/dev/null
@@ -985,6 +1034,16 @@ stamp-parallel: ${parallel_headers}
 	@-mkdir -p ${parallel_builddir}
 	@-cd ${parallel_builddir} && $(LN_S) $? . 2>/dev/null
 	@$(STAMP) stamp-parallel
+
+stamp-profile: ${profile_headers}
+	@-mkdir -p ${profile_builddir}
+	@-cd ${profile_builddir} && $(LN_S) $? . 2>/dev/null
+	@$(STAMP) stamp-profile
+
+stamp-profile-impl: ${profile_impl_headers}
+	@-mkdir -p ${profile_impl_builddir}
+	@-cd ${profile_impl_builddir} && $(LN_S) $? . 2>/dev/null
+	@$(STAMP) stamp-profile-impl
 
 stamp-${host_alias}:
 	@-mkdir -p ${host_builddir}
@@ -1097,7 +1156,8 @@ ${host_builddir}/gthr-default.h: ${toplevel_srcdir}/gcc/${glibcxx_thread_h} \
 # Build two precompiled C++ includes, stdc++.h.gch/*.gch
 ${pch1a_output}: ${allstamped} ${host_builddir}/c++config.h ${pch1_source}
 	-mkdir -p ${pch1_output_builddir}
-	$(CXX) $(PCHFLAGS) $(AM_CPPFLAGS) -O0 -g ${pch1_source} -o $@
+	$(CXX) $(PCHFLAGS) $(AM_CPPFLAGS) -O2 -g -std=gnu++0x ${pch1_source} \
+	-o $@
 
 ${pch1b_output}: ${allstamped} ${host_builddir}/c++config.h ${pch1_source}
 	-mkdir -p ${pch1_output_builddir}
@@ -1193,6 +1253,9 @@ install-headers:
 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${tr1_impl_builddir}
 	for file in ${tr1_impl_headers}; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${tr1_impl_builddir}; done
+	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${decimal_builddir}
+	for file in ${decimal_headers}; do \
+	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${decimal_builddir}; done
 	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${c_base_builddir}
 	for file in ${c_base_headers}; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${c_base_builddir}; done
@@ -1213,13 +1276,19 @@ install-headers:
 	  $(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${parallel_builddir};\
 	for file in $$parallel_headers_install; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${parallel_builddir}; done
+	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${profile_builddir}
+	for file in ${profile_headers}; do \
+	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${profile_builddir}; done
+	$(mkinstalldirs) $(DESTDIR)${gxx_include_dir}/${profile_impl_builddir}
+	for file in ${profile_impl_headers}; do \
+	  $(INSTALL_DATA) $${file} $(DESTDIR)${gxx_include_dir}/${profile_impl_builddir}; done
 	$(mkinstalldirs) $(DESTDIR)${host_installdir}
 	for file in ${host_headers} ${host_headers_extra} \
 	 ${thread_host_headers}; do \
 	  $(INSTALL_DATA) $${file} $(DESTDIR)${host_installdir}; done
 
 # By adding these files here, automake will remove them for 'make clean'
-CLEANFILES = ${pch_output} ${pch_output_anchors}
+CLEANFILES = ${pch_output} ${pch_output_anchors} stamp-host
 
 # To remove directories.
 clean-local:
@@ -1231,9 +1300,10 @@ clean-local:
 # directory. (This is more of an example of how this kind of rule can
 # be made.)
 .PRECIOUS: $(std_headers) $(c_base_headers) $(tr1_headers) $(tr1_impl_headers)
-	   $(ext_headers)
+	   $(decimal_headers) $(ext_headers)
 $(std_headers): ; @:
 $(c_base_headers): ; @:
 $(tr1_headers): ; @:
 $(tr1_impl_headers): ; @:
+$(decimal_headers): ; @:
 $(ext_headers): ; @:

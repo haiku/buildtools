@@ -579,7 +579,7 @@
       emit_insn (gen_mulv4sf3 (mul, operands[1], exp2));
       emit_insn (gen_fix_truncv4sfv4si2 (operands[0], mul));
     }
-  else
+  else 
     emit_insn (gen_fix_truncv4sfv4si2_mul (operands[0], operands[1], exp2));
   DONE;
 })
@@ -636,7 +636,7 @@
       emit_insn (gen_mulv4sf3 (mul, operands[1], exp2));
       emit_insn (gen_fixuns_truncv4sfv4si2 (operands[0], mul));
     }
-  else
+  else 
     emit_insn (gen_fixuns_truncv4sfv4si2_mul (operands[0], operands[1], exp2));
   DONE;
 })

@@ -1,6 +1,6 @@
 /* Definitions for c-common.c.
    Copyright (C) 1987, 1993, 1994, 1995, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -30,8 +30,10 @@ along with GCC; see the file COPYING3.  If not see
    0: TREE_NEGATED_INT (in INTEGER_CST).
       IDENTIFIER_MARKED (used by search routines).
       DECL_PRETTY_FUNCTION_P (in VAR_DECL)
+      C_MAYBE_CONST_EXPR_INT_OPERANDS (in C_MAYBE_CONST_EXPR, for C)
    1: C_DECLARED_LABEL_FLAG (in LABEL_DECL)
       STATEMENT_LIST_STMT_EXPR (in STATEMENT_LIST)
+      C_MAYBE_CONST_EXPR_NON_CONST (in C_MAYBE_CONST_EXPR, for C)
    2: unused
    3: STATEMENT_LIST_HAS_LABEL (in STATEMENT_LIST)
    4: unused
@@ -60,6 +62,10 @@ enum rid
 
   /* ObjC */
   RID_IN, RID_OUT, RID_INOUT, RID_BYCOPY, RID_BYREF, RID_ONEWAY,
+
+  /* C (reserved and imaginary types not implemented, so any use is a
+     syntax error) */
+  RID_IMAGINARY,
 
   /* C */
   RID_INT,     RID_CHAR,   RID_FLOAT,    RID_DOUBLE, RID_VOID,
@@ -104,10 +110,11 @@ enum rid
   RID_IS_CONVERTIBLE_TO,       RID_IS_CLASS,
   RID_IS_EMPTY,                RID_IS_ENUM,
   RID_IS_POD,                  RID_IS_POLYMORPHIC,
+  RID_IS_STD_LAYOUT,           RID_IS_TRIVIAL,
   RID_IS_UNION,
 
   /* C++0x */
-  RID_STATIC_ASSERT, RID_DECLTYPE,
+  RID_STATIC_ASSERT, RID_CONSTEXPR, RID_DECLTYPE,
 
   /* Objective-C */
   RID_AT_ENCODE,   RID_AT_END,
@@ -118,6 +125,30 @@ enum rid
   RID_AT_FINALLY,  RID_AT_SYNCHRONIZED,
   RID_AT_INTERFACE,
   RID_AT_IMPLEMENTATION,
+
+  /* Named address support, mapping the keyword to a particular named address
+     number.  Named address space 0 is reserved for the generic address.  If
+     there are more than 254 named addresses, the addr_space_t type will need
+     to be grown from an unsigned char to unsigned short.  */
+  RID_ADDR_SPACE_0,		/* generic address */
+  RID_ADDR_SPACE_1,
+  RID_ADDR_SPACE_2,
+  RID_ADDR_SPACE_3,
+  RID_ADDR_SPACE_4,
+  RID_ADDR_SPACE_5,
+  RID_ADDR_SPACE_6,
+  RID_ADDR_SPACE_7,
+  RID_ADDR_SPACE_8,
+  RID_ADDR_SPACE_9,
+  RID_ADDR_SPACE_10,
+  RID_ADDR_SPACE_11,
+  RID_ADDR_SPACE_12,
+  RID_ADDR_SPACE_13,
+  RID_ADDR_SPACE_14,
+  RID_ADDR_SPACE_15,
+
+  RID_FIRST_ADDR_SPACE = RID_ADDR_SPACE_0,
+  RID_LAST_ADDR_SPACE = RID_ADDR_SPACE_15,
 
   RID_MAX,
 
@@ -151,8 +182,7 @@ enum c_tree_index
     CTI_CHAR16_TYPE,
     CTI_CHAR32_TYPE,
     CTI_WCHAR_TYPE,
-    CTI_SIGNED_WCHAR_TYPE,
-    CTI_UNSIGNED_WCHAR_TYPE,
+    CTI_UNDERLYING_WCHAR_TYPE,
     CTI_WINT_TYPE,
     CTI_SIGNED_SIZE_TYPE, /* For format checking only.  */
     CTI_UNSIGNED_PTRDIFF_TYPE, /* For format checking only.  */
@@ -160,6 +190,36 @@ enum c_tree_index
     CTI_UINTMAX_TYPE,
     CTI_WIDEST_INT_LIT_TYPE,
     CTI_WIDEST_UINT_LIT_TYPE,
+
+    /* Types for <stdint.h>, that may not be defined on all
+       targets.  */
+    CTI_SIG_ATOMIC_TYPE,
+    CTI_INT8_TYPE,
+    CTI_INT16_TYPE,
+    CTI_INT32_TYPE,
+    CTI_INT64_TYPE,
+    CTI_UINT8_TYPE,
+    CTI_UINT16_TYPE,
+    CTI_UINT32_TYPE,
+    CTI_UINT64_TYPE,
+    CTI_INT_LEAST8_TYPE,
+    CTI_INT_LEAST16_TYPE,
+    CTI_INT_LEAST32_TYPE,
+    CTI_INT_LEAST64_TYPE,
+    CTI_UINT_LEAST8_TYPE,
+    CTI_UINT_LEAST16_TYPE,
+    CTI_UINT_LEAST32_TYPE,
+    CTI_UINT_LEAST64_TYPE,
+    CTI_INT_FAST8_TYPE,
+    CTI_INT_FAST16_TYPE,
+    CTI_INT_FAST32_TYPE,
+    CTI_INT_FAST64_TYPE,
+    CTI_UINT_FAST8_TYPE,
+    CTI_UINT_FAST16_TYPE,
+    CTI_UINT_FAST32_TYPE,
+    CTI_UINT_FAST64_TYPE,
+    CTI_INTPTR_TYPE,
+    CTI_UINTPTR_TYPE,
 
     CTI_CHAR_ARRAY_TYPE,
     CTI_CHAR16_ARRAY_TYPE,
@@ -198,8 +258,7 @@ enum c_tree_index
 
 /* Identifier part common to the C front ends.  Inherits from
    tree_identifier, despite appearances.  */
-struct c_common_identifier GTY(())
-{
+struct GTY(()) c_common_identifier {
   struct tree_common common;
   struct cpp_hashnode node;
 };
@@ -228,6 +287,10 @@ struct c_common_resword
 #define D_CXX_OBJC	0x100	/* In Objective C, and C++, but not C.  */
 #define D_CXXWARN	0x200	/* In C warn with -Wcxx-compat.  */
 
+/* Macro for backends to define named address keywords.  */
+#define ADDR_SPACE_KEYWORD(STRING, VALUE) \
+  { STRING, RID_FIRST_ADDR_SPACE + (VALUE), D_CONLY | D_EXT }
+
 /* The reserved keyword table.  */
 extern const struct c_common_resword c_common_reswords[];
 
@@ -237,8 +300,7 @@ extern const unsigned int num_c_common_reswords;
 #define char16_type_node		c_global_trees[CTI_CHAR16_TYPE]
 #define char32_type_node		c_global_trees[CTI_CHAR32_TYPE]
 #define wchar_type_node			c_global_trees[CTI_WCHAR_TYPE]
-#define signed_wchar_type_node		c_global_trees[CTI_SIGNED_WCHAR_TYPE]
-#define unsigned_wchar_type_node	c_global_trees[CTI_UNSIGNED_WCHAR_TYPE]
+#define underlying_wchar_type_node	c_global_trees[CTI_UNDERLYING_WCHAR_TYPE]
 #define wint_type_node			c_global_trees[CTI_WINT_TYPE]
 #define signed_size_type_node		c_global_trees[CTI_SIGNED_SIZE_TYPE]
 #define unsigned_ptrdiff_type_node	c_global_trees[CTI_UNSIGNED_PTRDIFF_TYPE]
@@ -246,6 +308,34 @@ extern const unsigned int num_c_common_reswords;
 #define uintmax_type_node		c_global_trees[CTI_UINTMAX_TYPE]
 #define widest_integer_literal_type_node c_global_trees[CTI_WIDEST_INT_LIT_TYPE]
 #define widest_unsigned_literal_type_node c_global_trees[CTI_WIDEST_UINT_LIT_TYPE]
+
+#define sig_atomic_type_node		c_global_trees[CTI_SIG_ATOMIC_TYPE]
+#define int8_type_node			c_global_trees[CTI_INT8_TYPE]
+#define int16_type_node			c_global_trees[CTI_INT16_TYPE]
+#define int32_type_node			c_global_trees[CTI_INT32_TYPE]
+#define int64_type_node			c_global_trees[CTI_INT64_TYPE]
+#define uint8_type_node			c_global_trees[CTI_UINT8_TYPE]
+#define uint16_type_node		c_global_trees[CTI_UINT16_TYPE]
+#define c_uint32_type_node		c_global_trees[CTI_UINT32_TYPE]
+#define c_uint64_type_node		c_global_trees[CTI_UINT64_TYPE]
+#define int_least8_type_node		c_global_trees[CTI_INT_LEAST8_TYPE]
+#define int_least16_type_node		c_global_trees[CTI_INT_LEAST16_TYPE]
+#define int_least32_type_node		c_global_trees[CTI_INT_LEAST32_TYPE]
+#define int_least64_type_node		c_global_trees[CTI_INT_LEAST64_TYPE]
+#define uint_least8_type_node		c_global_trees[CTI_UINT_LEAST8_TYPE]
+#define uint_least16_type_node		c_global_trees[CTI_UINT_LEAST16_TYPE]
+#define uint_least32_type_node		c_global_trees[CTI_UINT_LEAST32_TYPE]
+#define uint_least64_type_node		c_global_trees[CTI_UINT_LEAST64_TYPE]
+#define int_fast8_type_node		c_global_trees[CTI_INT_FAST8_TYPE]
+#define int_fast16_type_node		c_global_trees[CTI_INT_FAST16_TYPE]
+#define int_fast32_type_node		c_global_trees[CTI_INT_FAST32_TYPE]
+#define int_fast64_type_node		c_global_trees[CTI_INT_FAST64_TYPE]
+#define uint_fast8_type_node		c_global_trees[CTI_UINT_FAST8_TYPE]
+#define uint_fast16_type_node		c_global_trees[CTI_UINT_FAST16_TYPE]
+#define uint_fast32_type_node		c_global_trees[CTI_UINT_FAST32_TYPE]
+#define uint_fast64_type_node		c_global_trees[CTI_UINT_FAST64_TYPE]
+#define intptr_type_node		c_global_trees[CTI_INTPTR_TYPE]
+#define uintptr_type_node		c_global_trees[CTI_UINTPTR_TYPE]
 
 #define truthvalue_type_node		c_global_trees[CTI_TRUTHVALUE_TYPE]
 #define truthvalue_true_node		c_global_trees[CTI_TRUTHVALUE_TRUE]
@@ -276,8 +366,7 @@ extern GTY(()) tree c_global_trees[CTI_MAX];
 
 /* In a RECORD_TYPE, a sorted array of the fields of the type, not a
    tree for size reasons.  */
-struct sorted_fields_type GTY(())
-{
+struct GTY(()) sorted_fields_type {
   int len;
   tree GTY((length ("%h.len"))) elts[1];
 };
@@ -299,12 +388,26 @@ c_language_kind;
    front end.  For "ObjC features" or "not C++" use the macros.  */
 extern c_language_kind c_language;
 
-#define c_dialect_cxx()		(c_language & clk_cxx)
-#define c_dialect_objc()	(c_language & clk_objc)
+#define c_dialect_cxx()		((c_language & clk_cxx) != 0)
+#define c_dialect_objc()	((c_language & clk_objc) != 0)
+
+/* The various name of operator that appears in error messages. */
+typedef enum ref_operator {
+  /* NULL */
+  RO_NULL,
+  /* array indexing */
+  RO_ARRAY_INDEXING,
+  /* unary * */
+  RO_UNARY_STAR,
+  /* -> */
+  RO_ARROW,
+  /* implicit conversion */
+  RO_IMPLICIT_CONVERSION
+} ref_operator;
 
 /* Information about a statement tree.  */
 
-struct stmt_tree_s GTY(()) {
+struct GTY(()) stmt_tree_s {
   /* The current statement list being collected.  */
   tree x_cur_stmt_list;
 
@@ -330,7 +433,7 @@ typedef struct stmt_tree_s *stmt_tree;
 /* Global state pertinent to the current function.  Some C dialects
    extend this structure with additional fields.  */
 
-struct c_language_function GTY(()) {
+struct GTY(()) c_language_function {
   /* While we are parsing the function, this contains information
      about the statement-tree that we are building.  */
   struct stmt_tree_s x_stmt_tree;
@@ -357,8 +460,9 @@ extern tree add_stmt (tree);
 extern void push_cleanup (tree, tree, bool);
 extern tree pushdecl_top_level (tree);
 extern tree pushdecl (tree);
-extern tree build_modify_expr (location_t, tree, enum tree_code, tree);
-extern tree build_indirect_ref (location_t, tree, const char *);
+extern tree build_modify_expr (location_t, tree, tree, enum tree_code,
+			       location_t, tree, tree);
+extern tree build_indirect_ref (location_t, tree, ref_operator);
 
 extern int c_expand_decl (tree);
 
@@ -637,6 +741,11 @@ extern int flag_enforce_eh_specs;
 
 extern int flag_threadsafe_statics;
 
+/* Nonzero if we want to pretty-print template specializations as the
+   template signature followed by the arguments.  */
+
+extern int flag_pretty_templates;
+
 /* Nonzero means warn about implicit declarations.  */
 
 extern int warn_implicit;
@@ -653,10 +762,18 @@ extern int warn_strict_null_sentinel;
 
 extern int max_tinst_depth;
 
-/* Nonzero means the expression being parsed will never be evaluated.
-   This is a count, since unevaluated expressions can nest.  */
+/* Nonzero means that we should not issue warnings about problems that
+   occur when the code is executed, because the code being processed
+   is not expected to be executed.  This is set during parsing.  This
+   is used for cases like sizeof() and "0 ? a : b".  This is a count,
+   not a bool, because unexecuted expressions can nest.  */
 
-extern int skip_evaluation;
+extern int c_inhibit_evaluation_warnings;
+
+/* Whether lexing has been completed, so subsequent preprocessor
+   errors should use the compiler's input_location.  */
+
+extern bool done_lexing;
 
 /* C types are partitioned into three subsets: object, function, and
    incomplete types.  */
@@ -683,8 +800,10 @@ extern const struct attribute_spec c_common_format_attribute_table[];
    TYPE_DEP indicates whether it depends on type of the function or not
    (i.e. __PRETTY_FUNCTION__).  */
 
-extern tree (*make_fname_decl) (tree, int);
+extern tree (*make_fname_decl) (location_t, tree, int);
 
+extern bool in_late_binary_op;
+extern const char *c_addr_space_name (addr_space_t as);
 extern tree identifier_global_value (tree);
 extern void record_builtin_type (enum rid, const char *, tree);
 extern tree build_void_list_node (void);
@@ -715,10 +834,14 @@ extern tree c_common_signed_type (tree);
 extern tree c_common_signed_or_unsigned_type (int, tree);
 extern tree c_build_bitfield_integer_type (unsigned HOST_WIDE_INT, int);
 extern bool decl_with_nonnull_addr_p (const_tree);
+extern tree c_fully_fold (tree, bool, bool *);
+extern tree decl_constant_value_for_optimization (tree);
+extern tree c_wrap_maybe_const (tree, bool);
+extern tree c_save_expr (tree);
 extern tree c_common_truthvalue_conversion (location_t, tree);
 extern void c_apply_type_quals_to_decl (int, tree);
-extern tree c_sizeof_or_alignof_type (tree, bool, int);
-extern tree c_alignof_expr (tree);
+extern tree c_sizeof_or_alignof_type (location_t, tree, bool, int);
+extern tree c_alignof_expr (location_t, tree);
 /* Print an error message for invalid operands to arith operation CODE.
    NOP_EXPR is used as a special case (see truthvalue_conversion).  */
 extern void binary_op_error (location_t, enum tree_code, tree, tree);
@@ -729,14 +852,20 @@ extern void constant_expression_error (tree);
 extern bool strict_aliasing_warning (tree, tree, tree);
 extern void warnings_for_convert_and_check (tree, tree, tree);
 extern tree convert_and_check (tree, tree);
-extern void overflow_warning (tree);
-extern void warn_logical_operator (enum tree_code, tree, tree);
+extern void overflow_warning (location_t, tree);
+extern void warn_logical_operator (location_t, enum tree_code, tree,
+				   enum tree_code, tree, enum tree_code, tree);
 extern void check_main_parameter_types (tree decl);
 extern bool c_determine_visibility (tree);
 extern bool same_scalar_type_ignoring_signedness (tree, tree);
+extern void mark_valid_location_for_stdc_pragma (bool);
+extern bool valid_location_for_stdc_pragma_p (void);
+extern void set_float_const_decimal64 (void);
+extern void clear_float_const_decimal64 (void);
+extern bool float_const_decimal64_p (void);
 
-#define c_sizeof(T)  c_sizeof_or_alignof_type (T, true, 1)
-#define c_alignof(T) c_sizeof_or_alignof_type (T, false, 1)
+#define c_sizeof(LOC, T)  c_sizeof_or_alignof_type (LOC, T, true, 1)
+#define c_alignof(LOC, T) c_sizeof_or_alignof_type (LOC, T, false, 1)
 
 /* Subroutine of build_binary_op, used for certain operations.  */
 extern tree shorten_binary_op (tree result_type, tree op0, tree op1, bool bitwise);
@@ -746,7 +875,7 @@ extern tree shorten_binary_op (tree result_type, tree op0, tree op1, bool bitwis
    and, if so, perhaps change them both back to their original type.  */
 extern tree shorten_compare (tree *, tree *, tree *, enum tree_code *);
 
-extern tree pointer_int_sum (enum tree_code, tree, tree);
+extern tree pointer_int_sum (location_t, enum tree_code, tree, tree);
 
 /* Add qualifiers to a type, in the fashion for C.  */
 extern tree c_build_qualified_type (tree, int);
@@ -755,13 +884,11 @@ extern tree c_build_qualified_type (tree, int);
    frontends.  */
 extern void c_common_nodes_and_builtins (void);
 
-extern void set_builtin_user_assembler_name (tree decl, const char *asmspec);
-
 extern void disable_builtin_function (const char *);
 
 extern void set_compound_literal_name (tree decl);
 
-extern tree build_va_arg (tree, tree);
+extern tree build_va_arg (location_t, tree, tree);
 
 extern unsigned int c_common_init_options (unsigned int, const char **);
 extern bool c_common_post_options (const char **);
@@ -793,11 +920,20 @@ extern void finish_file	(void);
 #define STATEMENT_LIST_HAS_LABEL(NODE) \
   TREE_LANG_FLAG_3 (STATEMENT_LIST_CHECK (NODE))
 
-/* COMPOUND_LITERAL_EXPR accessors.  */
-#define COMPOUND_LITERAL_EXPR_DECL_STMT(NODE)		\
-  TREE_OPERAND (COMPOUND_LITERAL_EXPR_CHECK (NODE), 0)
-#define COMPOUND_LITERAL_EXPR_DECL(NODE)			\
-  DECL_EXPR_DECL (COMPOUND_LITERAL_EXPR_DECL_STMT (NODE))
+/* C_MAYBE_CONST_EXPR accessors.  */
+#define C_MAYBE_CONST_EXPR_PRE(NODE)			\
+  TREE_OPERAND (C_MAYBE_CONST_EXPR_CHECK (NODE), 0)
+#define C_MAYBE_CONST_EXPR_EXPR(NODE)			\
+  TREE_OPERAND (C_MAYBE_CONST_EXPR_CHECK (NODE), 1)
+#define C_MAYBE_CONST_EXPR_INT_OPERANDS(NODE)		\
+  TREE_LANG_FLAG_0 (C_MAYBE_CONST_EXPR_CHECK (NODE))
+#define C_MAYBE_CONST_EXPR_NON_CONST(NODE)		\
+  TREE_LANG_FLAG_1 (C_MAYBE_CONST_EXPR_CHECK (NODE))
+#define EXPR_INT_CONST_OPERANDS(EXPR)			\
+  (INTEGRAL_TYPE_P (TREE_TYPE (EXPR))			\
+   && (TREE_CODE (EXPR) == INTEGER_CST			\
+       || (TREE_CODE (EXPR) == C_MAYBE_CONST_EXPR	\
+	   && C_MAYBE_CONST_EXPR_INT_OPERANDS (EXPR))))
 
 /* In a FIELD_DECL, nonzero if the decl was originally a bitfield.  */
 #define DECL_C_BIT_FIELD(NODE) \
@@ -807,10 +943,9 @@ extern void finish_file	(void);
 #define CLEAR_DECL_C_BIT_FIELD(NODE) \
   (DECL_LANG_FLAG_4 (FIELD_DECL_CHECK (NODE)) = 0)
 
-extern void emit_local_var (tree);
-extern tree do_case (tree, tree);
-extern tree build_stmt (enum tree_code, ...);
-extern tree build_case_label (tree, tree, tree);
+extern tree do_case (location_t, tree, tree);
+extern tree build_stmt (location_t, enum tree_code, ...);
+extern tree build_case_label (location_t, tree, tree, tree);
 
 /* These functions must be defined by each front-end which implements
    a variant of the C language.  They are used in c-common.c.  */
@@ -836,13 +971,16 @@ extern tree boolean_increment (enum tree_code, tree);
 
 extern int case_compare (splay_tree_key, splay_tree_key);
 
-extern tree c_add_case_label (splay_tree, tree, tree, tree, tree);
+extern tree c_add_case_label (location_t, splay_tree, tree, tree, tree, tree);
 
 extern void c_do_switch_warnings (splay_tree, location_t, tree, tree);
 
-extern tree build_function_call (tree, tree);
+extern tree build_function_call (location_t, tree, tree);
 
-extern tree resolve_overloaded_builtin (tree, tree);
+extern tree build_function_call_vec (location_t, tree,
+    				     VEC(tree,gc) *, VEC(tree,gc) *);
+
+extern tree resolve_overloaded_builtin (location_t, tree, VEC(tree,gc) *);
 
 extern tree finish_label_address_expr (tree, location_t);
 
@@ -850,13 +988,12 @@ extern tree finish_label_address_expr (tree, location_t);
    different implementations.  Used in c-common.c.  */
 extern tree lookup_label (tree);
 extern tree lookup_name (tree);
+extern bool lvalue_p (const_tree);
 
 extern bool vector_targets_convertible_p (const_tree t1, const_tree t2);
 extern bool vector_types_convertible_p (const_tree t1, const_tree t2, bool emit_lax_note);
 
 extern rtx c_expand_expr (tree, rtx, enum machine_mode, int, rtx *);
-
-extern tree c_staticp (tree);
 
 extern void init_c_lex (void);
 
@@ -888,8 +1025,6 @@ extern void dump_time_statistics (void);
 
 extern bool c_dump_tree (void *, tree);
 
-extern void c_warn_unused_result (gimple_seq);
-
 extern void verify_sequence_points (tree);
 
 extern tree fold_offsetof (tree, tree);
@@ -918,15 +1053,21 @@ extern void warn_about_parentheses (enum tree_code,
 extern void warn_for_unused_label (tree label);
 extern void warn_for_div_by_zero (location_t, tree divisor);
 extern void warn_for_sign_compare (location_t,
-				   tree orig_op0, tree orig_op1, 
-				   tree op0, tree op1, 
-				   tree result_type, 
+				   tree orig_op0, tree orig_op1,
+				   tree op0, tree op1,
+				   tree result_type,
 				   enum tree_code resultcode);
+extern void set_underlying_type (tree x);
+extern bool is_typedef_decl (tree x);
+extern VEC(tree,gc) *make_tree_vector (void);
+extern void release_tree_vector (VEC(tree,gc) *);
+extern VEC(tree,gc) *make_tree_vector_single (tree);
+extern VEC(tree,gc) *make_tree_vector_copy (const VEC(tree,gc) *);
 
 /* In c-gimplify.c  */
 extern void c_genericize (tree);
 extern int c_gimplify_expr (tree *, gimple_seq *, gimple_seq *);
-extern tree c_build_bind_expr (tree, tree);
+extern tree c_build_bind_expr (location_t, tree, tree);
 
 /* In c-pch.c  */
 extern void pch_init (void);
@@ -946,7 +1087,7 @@ extern void builtin_define_std (const char *macro);
 extern void builtin_define_with_value (const char *, const char *, int);
 extern void c_stddef_cpp_builtins (void);
 extern void fe_file_change (const struct line_map *);
-extern void c_parse_error (const char *, enum cpp_ttype, tree);
+extern void c_parse_error (const char *, enum cpp_ttype, tree, unsigned char);
 
 /* Objective-C / Objective-C++ entry points.  */
 
@@ -970,7 +1111,7 @@ extern void objc_declare_class (tree);
 extern void objc_declare_protocols (tree);
 extern tree objc_build_message_expr (tree);
 extern tree objc_finish_message_expr (tree, tree, tree);
-extern tree objc_build_selector_expr (tree);
+extern tree objc_build_selector_expr (location_t, tree);
 extern tree objc_build_protocol_expr (tree);
 extern tree objc_build_encode_expr (tree);
 extern tree objc_build_string_object (tree);
@@ -994,7 +1135,7 @@ extern void objc_start_method_definition (tree);
 extern void objc_finish_method_definition (tree);
 extern void objc_add_instance_variable (tree);
 extern tree objc_build_keyword_decl (tree, tree, tree);
-extern tree objc_build_throw_stmt (tree);
+extern tree objc_build_throw_stmt (location_t, tree);
 extern void objc_begin_try_stmt (location_t, tree);
 extern tree objc_finish_try_stmt (void);
 extern void objc_begin_catch_clause (tree);
@@ -1018,15 +1159,15 @@ extern void pp_dir_change (cpp_reader *, const char *);
 extern bool check_missing_format_attribute (tree, tree);
 
 /* In c-omp.c  */
-extern tree c_finish_omp_master (tree);
-extern tree c_finish_omp_critical (tree, tree);
-extern tree c_finish_omp_ordered (tree);
-extern void c_finish_omp_barrier (void);
-extern tree c_finish_omp_atomic (enum tree_code, tree, tree);
-extern void c_finish_omp_flush (void);
-extern void c_finish_omp_taskwait (void);
+extern tree c_finish_omp_master (location_t, tree);
+extern tree c_finish_omp_critical (location_t, tree, tree);
+extern tree c_finish_omp_ordered (location_t, tree);
+extern void c_finish_omp_barrier (location_t);
+extern tree c_finish_omp_atomic (location_t, enum tree_code, tree, tree);
+extern void c_finish_omp_flush (location_t);
+extern void c_finish_omp_taskwait (location_t);
 extern tree c_finish_omp_for (location_t, tree, tree, tree, tree, tree, tree);
-extern void c_split_parallel_clauses (tree, tree *, tree *);
+extern void c_split_parallel_clauses (location_t, tree, tree *, tree *);
 extern enum omp_clause_default_kind c_omp_predetermined_sharing (tree);
 
 /* Not in c-omp.c; provided by the front end.  */

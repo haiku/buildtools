@@ -231,6 +231,8 @@ make_phi_node (tree var, int len)
   for (i = 0; i < capacity; i++)
     {
       use_operand_p  imm;
+
+      gimple_phi_arg_set_location (phi, i, UNKNOWN_LOCATION);
       imm = gimple_phi_arg_imm_use_ptr (phi, i);
       imm->use = gimple_phi_arg_def_ptr (phi, i);
       imm->prev = NULL;
@@ -299,6 +301,8 @@ resize_phi_node (gimple *phi, size_t len)
   for (i = gimple_phi_num_args (new_phi); i < len; i++)
     {
       use_operand_p imm;
+
+      gimple_phi_arg_set_location (new_phi, i, UNKNOWN_LOCATION);
       imm = gimple_phi_arg_imm_use_ptr (new_phi, i);
       imm->use = gimple_phi_arg_def_ptr (new_phi, i);
       imm->prev = NULL;
@@ -349,7 +353,7 @@ reserve_phi_args_for_new_edge (basic_block bb)
 
 /* Adds PHI to BB.  */
 
-void 
+void
 add_phi_node_to_bb (gimple phi, basic_block bb)
 {
   gimple_stmt_iterator gsi;
@@ -384,7 +388,7 @@ create_phi_node (tree var, basic_block bb)
    PHI points to the reallocated phi node when we return.  */
 
 void
-add_phi_arg (gimple phi, tree def, edge e)
+add_phi_arg (gimple phi, tree def, edge e, source_location locus)
 {
   basic_block bb = e->dest;
 
@@ -407,6 +411,7 @@ add_phi_arg (gimple phi, tree def, edge e)
     }
 
   SET_PHI_ARG_DEF (phi, e->dest_idx, def);
+  gimple_phi_arg_set_location (phi, e->dest_idx, locus);
 }
 
 
@@ -435,6 +440,9 @@ remove_phi_arg_num (gimple phi, int i)
       /* Set use on new node, and link into last element's place.  */
       *(new_p->use) = *(old_p->use);
       relink_imm_use (new_p, old_p);
+      /* Move the location as well.  */
+      gimple_phi_arg_set_location (phi, i,
+				   gimple_phi_arg_location (phi, num_elem - 1));
     }
 
   /* Shrink the vector and return.  Note that we do not have to clear
@@ -465,6 +473,10 @@ void
 remove_phi_node (gimple_stmt_iterator *gsi, bool release_lhs_p)
 {
   gimple phi = gsi_stmt (*gsi);
+
+  if (release_lhs_p)
+    insert_debug_temps_for_defs (gsi);
+
   gsi_remove (gsi, false);
 
   /* If we are deleting the PHI node, then we should release the

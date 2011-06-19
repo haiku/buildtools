@@ -12,6 +12,16 @@ dnl
 dnl The _GCC_AUTOCONF_VERSION_TEST ensures that exactly the desired
 dnl Autoconf version is used.  It should be kept for consistency.
 
+dnl Provide m4_copy_force and m4_rename_force for old Autoconf versions.
+
+m4_ifndef([m4_copy_force],
+[m4_define([m4_copy_force],
+[m4_ifdef([$2], [m4_undefine([$2])])m4_copy($@)])])
+
+m4_ifndef([m4_rename_force],
+[m4_define([m4_rename_force],
+[m4_ifdef([$2], [m4_undefine([$2])])m4_rename($@)])])
+
 dnl m4_PACKAGE_VERSION is an undocumented Autoconf macro.
 dnl We use it because this fix is intended for 2.59 only.
 dnl A feature test for the broken AC_CONFIG_SUBDIRS instead
@@ -25,12 +35,12 @@ ifdef([m4_PACKAGE_VERSION],
 [dnl AC_DEFUN a commonly used macro so this file is picked up.
 m4_copy([AC_PREREQ], [_AC_PREREQ])
 AC_DEFUN([AC_PREREQ], [frob])
-m4_copy([_AC_PREREQ], [AC_PREREQ])
+m4_copy_force([_AC_PREREQ], [AC_PREREQ])
 
 
 dnl Ensure exactly this Autoconf version is used
 m4_ifndef([_GCC_AUTOCONF_VERSION],
-  [m4_define([_GCC_AUTOCONF_VERSION], [2.59])])
+  [m4_define([_GCC_AUTOCONF_VERSION], [2.64])])
 
 dnl Test for the exact version when AC_INIT is expanded.
 dnl This allows to update the tree in steps (for testing)
@@ -47,6 +57,19 @@ AC_DEFUN([_GCC_AUTOCONF_VERSION_CHECK],
 m4_define([AC_INIT], m4_defn([AC_INIT])[
 _GCC_AUTOCONF_VERSION_CHECK
 ])
+
+
+dnl Turn AC_DISABLE_OPTION_CHECKING into a no-op if not defined.
+m4_ifndef([AC_DISABLE_OPTION_CHECKING],
+  [m4_define([AC_DISABLE_OPTION_CHECKING])])
+
+
+dnl Fix 2.64 cross compile detection for AVR and RTEMS
+dnl by not trying to compile fopen.
+m4_if(m4_defn([m4_PACKAGE_VERSION]), [2.64],
+  [m4_foreach([_GCC_LANG], [C, C++, Fortran, Fortran 77],
+     [m4_define([_AC_LANG_IO_PROGRAM(]_GCC_LANG[)], m4_defn([AC_LANG_PROGRAM(]_GCC_LANG[)]))])])
+
 
 m4_version_prereq([2.60],, [
 dnl We use $ac_pwd in some of the overrides below; ensure its definition

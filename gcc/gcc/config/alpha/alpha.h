@@ -1,6 +1,7 @@
 /* Definitions of target machine for GNU compiler, for DEC Alpha.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
+   2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
 This file is part of GCC.
@@ -447,7 +448,7 @@ extern enum alpha_fp_trap_mode alpha_fptm;
    registers can hold 64-bit integers as well, but not smaller values.  */
 
 #define HARD_REGNO_MODE_OK(REGNO, MODE) 				\
-  ((REGNO) >= 32 && (REGNO) <= 62 					\
+  (IN_RANGE ((REGNO), 32, 62)						\
    ? (MODE) == SFmode || (MODE) == DFmode || (MODE) == DImode		\
      || (MODE) == SCmode || (MODE) == DCmode				\
    : 1)
@@ -474,12 +475,6 @@ extern enum alpha_fp_trap_mode alpha_fptm;
 
 /* Base register for access to local variables of the function.  */
 #define HARD_FRAME_POINTER_REGNUM 15
-
-/* Value should be nonzero if functions must have frame pointers.
-   Zero means the frame pointer need not be set up (and parms
-   may be accessed via the stack pointer) in functions that seem suitable.
-   This is computed in `reload', in reload1.c.  */
-#define FRAME_POINTER_REQUIRED 0
 
 /* Base register for access to arguments of the function.  */
 #define ARG_POINTER_REGNUM 31
@@ -576,7 +571,7 @@ enum reg_class {
   : (REGNO) == 24 ? R24_REG			\
   : (REGNO) == 25 ? R25_REG			\
   : (REGNO) == 27 ? R27_REG			\
-  : (REGNO) >= 32 && (REGNO) <= 62 ? FLOAT_REGS	\
+  : IN_RANGE ((REGNO), 32, 62) ? FLOAT_REGS	\
   : GENERAL_REGS)
 
 /* The class value for index registers, and the one for base regs.  */
@@ -696,14 +691,6 @@ extern int alpha_memory_latency;
  { FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM},	     \
  { FRAME_POINTER_REGNUM, HARD_FRAME_POINTER_REGNUM}}
 
-/* Given FROM and TO register numbers, say whether this elimination is allowed.
-   Frame pointer elimination is automatically handled.
-
-   All eliminations are valid since the cases where FP can't be
-   eliminated are already handled.  */
-
-#define CAN_ELIMINATE(FROM, TO) 1
-
 /* Round up to a multiple of 16 bytes.  */
 #define ALPHA_ROUND(X) (((X) + 15) & ~ 15)
 
@@ -752,7 +739,7 @@ extern int alpha_memory_latency;
    On Alpha, these are $16-$21 and $f16-$f21.  */
 
 #define FUNCTION_ARG_REGNO_P(N) \
-  (((N) >= 16 && (N) <= 21) || ((N) >= 16 + 32 && (N) <= 21 + 32))
+  (IN_RANGE ((N), 16, 21) || ((N) >= 16 + 32 && (N) <= 21 + 32))
 
 /* Define a data type for recording info about an argument list
    during the scan of that argument list.  This data type should
@@ -809,24 +796,6 @@ extern int alpha_memory_latency;
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED)	\
   function_arg((CUM), (MODE), (TYPE), (NAMED))
 
-/* Try to output insns to set TARGET equal to the constant C if it can be
-   done in less than N insns.  Do all computations in MODE.  Returns the place
-   where the output has been placed if it can be done and the insns have been
-   emitted.  If it would take more than N insns, zero is returned and no
-   insns and emitted.  */
-
-/* Define the information needed to generate branch and scc insns.  This is
-   stored from the compare operation.  Note that we can't use "rtx" here
-   since it hasn't been defined!  */
-
-struct alpha_compare
-{
-  struct rtx_def *op0, *op1;
-  int fp_p;
-};
-
-extern struct alpha_compare alpha_compare;
-
 /* Make (or fake) .linkage entry for function call.
    IS_LOCAL is 0 if name is used in call, 1 if name is used in definition.  */
 
@@ -869,28 +838,6 @@ extern struct alpha_compare alpha_compare;
 
 #define EPILOGUE_USES(REGNO)	((REGNO) == 26)
 
-/* Output assembler code for a block containing the constant parts
-   of a trampoline, leaving space for the variable parts.
-
-   The trampoline should set the static chain pointer to value placed
-   into the trampoline and should branch to the specified routine.
-   Note that $27 has been set to the address of the trampoline, so we can
-   use it for addressability of the two data items.  */
-
-#define TRAMPOLINE_TEMPLATE(FILE)		\
-do {						\
-  fprintf (FILE, "\tldq $1,24($27)\n");		\
-  fprintf (FILE, "\tldq $27,16($27)\n");	\
-  fprintf (FILE, "\tjmp $31,($27),0\n");	\
-  fprintf (FILE, "\tnop\n");			\
-  fprintf (FILE, "\t.quad 0,0\n");		\
-} while (0)
-
-/* Section in which to place the trampoline.  On Alpha, instructions
-   may only be placed in a text segment.  */
-
-#define TRAMPOLINE_SECTION text_section
-
 /* Length in units of the trampoline for entering a nested function.  */
 
 #define TRAMPOLINE_SIZE    32
@@ -899,19 +846,18 @@ do {						\
 
 #define TRAMPOLINE_ALIGNMENT  64
 
-/* Emit RTL insns to initialize the variable parts of a trampoline.
-   FNADDR is an RTX for the address of the function's pure code.
-   CXT is an RTX for the static chain value for the function.  */
-
-#define INITIALIZE_TRAMPOLINE(TRAMP, FNADDR, CXT) \
-  alpha_initialize_trampoline (TRAMP, FNADDR, CXT, 16, 24, 8)
-
 /* A C expression whose value is RTL representing the value of the return
    address for the frame COUNT steps up from the current frame.
    FRAMEADDR is the frame pointer of the COUNT frame, or the frame pointer of
    the COUNT-1 frame if RETURN_ADDR_IN_PREVIOUS_FRAME is defined.  */
 
 #define RETURN_ADDR_RTX  alpha_return_addr
+
+/* Provide a definition of DWARF_FRAME_REGNUM here so that fallback unwinders
+   can use DWARF_ALT_FRAME_RETURN_COLUMN defined below.  This is just the same
+   as the default definition in dwarf2out.c.  */
+#undef DWARF_FRAME_REGNUM
+#define DWARF_FRAME_REGNUM(REG) DBX_REGISTER_NUMBER (REG)
 
 /* Before the prologue, RA lives in $26.  */
 #define INCOMING_RETURN_ADDR_RTX  gen_rtx_REG (Pmode, 26)
@@ -949,7 +895,7 @@ do {						\
    symbolic addresses into registers.  */
 
 #define CONSTANT_ADDRESS_P(X)   \
-  (GET_CODE (X) == CONST_INT	\
+  (CONST_INT_P (X)		\
    && (unsigned HOST_WIDE_INT) (INTVAL (X) + 0x8000) < 0x10000)
 
 /* Include all constant integers and constant doubles, but not
@@ -998,37 +944,6 @@ do {						\
 #define REG_OK_FOR_BASE_P(X)	NONSTRICT_REG_OK_FOR_BASE_P (X)
 #endif
 
-/* GO_IF_LEGITIMATE_ADDRESS recognizes an RTL expression that is a
-   valid memory address for an instruction.  */
-
-#ifdef REG_OK_STRICT
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, WIN)	\
-do {						\
-  if (alpha_legitimate_address_p (MODE, X, 1))	\
-    goto WIN;					\
-} while (0)
-#else
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, WIN)	\
-do {						\
-  if (alpha_legitimate_address_p (MODE, X, 0))	\
-    goto WIN;					\
-} while (0)
-#endif
-
-/* Try machine-dependent ways of modifying an illegitimate address
-   to be legitimate.  If we find one, return the new, valid address.
-   This macro is used in only one place: `memory_address' in explow.c.  */
-
-#define LEGITIMIZE_ADDRESS(X,OLDX,MODE,WIN)			\
-do {								\
-  rtx new_x = alpha_legitimize_address (X, NULL_RTX, MODE);	\
-  if (new_x)							\
-    {								\
-      X = new_x;						\
-      goto WIN;							\
-    }								\
-} while (0)
-
 /* Try a machine-dependent way of reloading an illegitimate address
    operand.  If we find one, push the reload and jump to WIN.  This
    macro is used in only one place: `find_reloads_address' in reload.c.  */
@@ -1125,7 +1040,7 @@ do {									     \
 #define CANONICALIZE_COMPARISON(CODE,OP0,OP1) \
   do {									\
     if (((CODE) == GE || (CODE) == GT || (CODE) == GEU || (CODE) == GTU) \
-	&& (GET_CODE (OP1) == REG || (OP1) == const0_rtx))		\
+	&& (REG_P (OP1) || (OP1) == const0_rtx))		\
       {									\
 	rtx tem = (OP0);						\
 	(OP0) = (OP1);							\
@@ -1133,7 +1048,7 @@ do {									     \
 	(CODE) = swap_condition (CODE);					\
       }									\
     if (((CODE) == LT || (CODE) == LTU)					\
-	&& GET_CODE (OP1) == CONST_INT && INTVAL (OP1) == 256)		\
+	&& CONST_INT_P (OP1) && INTVAL (OP1) == 256)			\
       {									\
 	(CODE) = (CODE) == LT ? LE : LEU;				\
 	(OP1) = GEN_INT (255);						\

@@ -1,6 +1,6 @@
 // <thread> -*- C++ -*-
 
-// Copyright (C) 2008, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -32,7 +32,7 @@
 #pragma GCC system_header
 
 #ifndef __GXX_EXPERIMENTAL_CXX0X__
-# include <c++0x_warning.h>
+# include <bits/c++0x_warning.h>
 #else
 
 #include <chrono>
@@ -42,6 +42,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <bits/functexcept.h>
+#include <bits/functional_hash.h>
 #include <bits/gthr.h>
 
 #if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1)
@@ -55,6 +56,9 @@ namespace std
    * Classes for thread support.
    * @{
    */
+
+  template<typename _Tp>
+    struct hash;
 
   /// thread
   class thread
@@ -77,6 +81,7 @@ namespace std
 
     private:
       friend class thread;
+      friend class hash<thread::id>;
 
       friend bool
       operator==(thread::id __x, thread::id __y)
@@ -88,7 +93,7 @@ namespace std
 
       template<class _CharT, class _Traits>
 	friend basic_ostream<_CharT, _Traits>&
-	operator<<(basic_ostream<_CharT, _Traits>&& __out, thread::id __id);
+	operator<<(basic_ostream<_CharT, _Traits>& __out, thread::id __id);
     };
 
     // Simple base type that the templatized, derived class containing
@@ -97,7 +102,7 @@ namespace std
     {
       __shared_base_type	_M_this_ptr;
 
-      virtual ~_Impl_base() = default;
+      inline virtual ~_Impl_base();
 
       virtual void _M_run() = 0;
     };
@@ -126,7 +131,10 @@ namespace std
 
     template<typename _Callable>
       explicit thread(_Callable __f)
-      { _M_start_thread(_M_make_routine<_Callable>(__f)); }
+      {
+	_M_start_thread(_M_make_routine<_Callable>
+			(std::forward<_Callable>(__f)));
+      }
 
     template<typename _Callable, typename... _Args>
       thread(_Callable&& __f, _Args&&... __args)
@@ -149,7 +157,7 @@ namespace std
     }
 
     void
-    swap(thread&& __t)
+    swap(thread& __t)
     { std::swap(_M_id, __t._M_id); }
 
     bool
@@ -190,16 +198,10 @@ namespace std
       }
   };
 
+  inline thread::_Impl_base::~_Impl_base() = default;
+
   inline void
   swap(thread& __x, thread& __y)
-  { __x.swap(__y); }
-
-  inline void
-  swap(thread&& __x, thread& __y)
-  { __x.swap(__y); }
-
-  inline void
-  swap(thread& __x, thread&& __y)
   { __x.swap(__y); }
 
   inline bool
@@ -218,9 +220,20 @@ namespace std
   operator>=(thread::id __x, thread::id __y)
   { return !(__x < __y); }
 
+  // DR 889.
+  /// std::hash specialization for thread::id.
+  template<>
+    struct hash<thread::id>
+    : public std::unary_function<thread::id, size_t>
+    {
+      size_t
+      operator()(const thread::id& __id) const
+      { return std::_Fnv_hash::hash(__id._M_thread); }
+    };
+
   template<class _CharT, class _Traits>
     inline basic_ostream<_CharT, _Traits>&
-    operator<<(basic_ostream<_CharT, _Traits>&& __out, thread::id __id)
+    operator<<(basic_ostream<_CharT, _Traits>& __out, thread::id __id)
     {
       if (__id == thread::id())
 	return __out << "thread::id of a non-executing thread";

@@ -1,5 +1,5 @@
 /* Subroutines used for macro/preprocessor support on the ia-32.
-   Copyright (C) 2008
+   Copyright (C) 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -119,6 +119,10 @@ ix86_target_macros_internal (int isa_flag,
       def_or_undef (parse_in, "__core2");
       def_or_undef (parse_in, "__core2__");
       break;
+    case PROCESSOR_ATOM:
+      def_or_undef (parse_in, "__atom");
+      def_or_undef (parse_in, "__atom__");
+      break;
     /* use PROCESSOR_max to not set/unset the arch macro.  */
     case PROCESSOR_max:
       break;
@@ -187,6 +191,9 @@ ix86_target_macros_internal (int isa_flag,
     case PROCESSOR_CORE2:
       def_or_undef (parse_in, "__tune_core2__");
       break;
+    case PROCESSOR_ATOM:
+      def_or_undef (parse_in, "__tune_atom__");
+      break;
     case PROCESSOR_GENERIC32:
     case PROCESSOR_GENERIC64:
       break;
@@ -223,8 +230,16 @@ ix86_target_macros_internal (int isa_flag,
     def_or_undef (parse_in, "__FMA__");
   if (isa_flag & OPTION_MASK_ISA_SSE4A)
     def_or_undef (parse_in, "__SSE4A__");
-  if (isa_flag & OPTION_MASK_ISA_SSE5)
-    def_or_undef (parse_in, "__SSE5__");
+  if (isa_flag & OPTION_MASK_ISA_FMA4)
+    def_or_undef (parse_in, "__FMA4__");
+  if (isa_flag & OPTION_MASK_ISA_XOP)
+    def_or_undef (parse_in, "__XOP__");
+  if (isa_flag & OPTION_MASK_ISA_LWP)
+    def_or_undef (parse_in, "__LWP__");
+  if (isa_flag & OPTION_MASK_ISA_ABM)
+    def_or_undef (parse_in, "__ABM__");
+  if (isa_flag & OPTION_MASK_ISA_POPCNT)
+    def_or_undef (parse_in, "__POPCNT__");
   if ((fpmath & FPMATH_SSE) && (isa_flag & OPTION_MASK_ISA_SSE))
     def_or_undef (parse_in, "__SSE_MATH__");
   if ((fpmath & FPMATH_SSE) && (isa_flag & OPTION_MASK_ISA_SSE2))
@@ -273,10 +288,10 @@ ix86_pragma_target_parse (tree args, tree pop_target)
   prev_isa  = prev_opt->ix86_isa_flags;
   cur_isa   = cur_opt->ix86_isa_flags;
   diff_isa  = (prev_isa ^ cur_isa);
-  prev_arch = prev_opt->arch;
-  prev_tune = prev_opt->tune;
-  cur_arch  = cur_opt->arch;
-  cur_tune  = cur_opt->tune;
+  prev_arch = (enum processor_type) prev_opt->arch;
+  prev_tune = (enum processor_type) prev_opt->tune;
+  cur_arch  = (enum processor_type) cur_opt->arch;
+  cur_tune  = (enum processor_type) cur_opt->tune;
 
   /* If the same processor is used for both previous and current options, don't
      change the macros.  */
@@ -290,14 +305,14 @@ ix86_pragma_target_parse (tree args, tree pop_target)
   ix86_target_macros_internal (prev_isa & diff_isa,
 			       prev_arch,
 			       prev_tune,
-			       prev_opt->fpmath,
+			       (enum fpmath_unit) prev_opt->fpmath,
 			       cpp_undef);
 
   /* Define all of the macros for new options that were just turned on.  */
   ix86_target_macros_internal (cur_isa & diff_isa,
 			       cur_arch,
 			       cur_tune,
-			       cur_opt->fpmath,
+			       (enum fpmath_unit) cur_opt->fpmath,
 			       cpp_define);
 
   return true;

@@ -1,6 +1,4 @@
-/* This file contains the definitions and documentation for the common
-   tree codes used in the GNU C and C++ compilers (see c-common.def
-   for the standard codes).
+/* This file contains subroutine used by the C front-end to construct GENERIC.
    Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
    Free Software Foundation, Inc.
    Written by Benjamin Chelf (chelf@codesourcery.com).
@@ -72,6 +70,8 @@ pop_stmt_list (tree t)
     {
       chain = TREE_CHAIN (u);
       TREE_CHAIN (u) = NULL_TREE;
+      if (chain)
+	STATEMENT_LIST_HAS_LABEL (chain) |= STATEMENT_LIST_HAS_LABEL (u);
       if (t == u)
 	break;
       u = chain;
@@ -103,12 +103,12 @@ pop_stmt_list (tree t)
 
 /* Build a generic statement based on the given type of node and
    arguments. Similar to `build_nt', except that we set
-   EXPR_LOCATION to be the current source location.  */
+   EXPR_LOCATION to LOC. */
 /* ??? This should be obsolete with the lineno_stmt productions
    in the grammar.  */
 
 tree
-build_stmt (enum tree_code code, ...)
+build_stmt (location_t loc, enum tree_code code, ...)
 {
   tree ret;
   int length, i;
@@ -123,7 +123,7 @@ build_stmt (enum tree_code code, ...)
   ret = make_node (code);
   TREE_TYPE (ret) = void_type_node;
   length = TREE_CODE_LENGTH (code);
-  SET_EXPR_LOCATION (ret, input_location);
+  SET_EXPR_LOCATION (ret, loc);
 
   /* TREE_SIDE_EFFECTS will already be set for statements with
      implicit side effects.  Here we make sure it is set for other
@@ -145,27 +145,11 @@ build_stmt (enum tree_code code, ...)
   return ret;
 }
 
-/* Let the back-end know about DECL.  */
-
-void
-emit_local_var (tree decl)
-{
-  /* Create RTL for this variable.  */
-  if (!DECL_RTL_SET_P (decl))
-    {
-      if (DECL_HARD_REGISTER (decl))
-	/* The user specified an assembler name for this variable.
-	   Set that up now.  */
-	rest_of_decl_compilation (decl, 0, 0);
-      else
-	expand_decl (decl);
-    }
-}
-
 /* Create a CASE_LABEL_EXPR tree node and return it.  */
 
 tree
-build_case_label (tree low_value, tree high_value, tree label_decl)
+build_case_label (location_t loc,
+		  tree low_value, tree high_value, tree label_decl)
 {
-  return build_stmt (CASE_LABEL_EXPR, low_value, high_value, label_decl);
+  return build_stmt (loc, CASE_LABEL_EXPR, low_value, high_value, label_decl);
 }

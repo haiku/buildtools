@@ -1,5 +1,5 @@
 /* IRA conflict builder.
-   Copyright (C) 2006, 2007, 2008, 2009
+   Copyright (C) 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Vladimir Makarov <vmakarov@redhat.com>.
 
@@ -152,7 +152,7 @@ build_conflict_bit_table (void)
 		}
 	    }
 	}
-	  
+
       for (r = ira_finish_point_ranges[i]; r != NULL; r = r->finish_next)
 	sparseset_clear_bit (allocnos_live, ALLOCNO_NUM (r->allocno));
     }
@@ -235,7 +235,7 @@ get_dup_num (int op_num, bool use_commut_op_p)
 	  {
 	  case 'X':
 	    return -1;
-	    
+
 	  case 'm':
 	  case 'o':
 	    /* Accept a register which might be placed in memory.  */
@@ -248,15 +248,13 @@ get_dup_num (int op_num, bool use_commut_op_p)
 	    break;
 
 	  case 'p':
-	    GO_IF_LEGITIMATE_ADDRESS (VOIDmode, op, win_p);
+	    if (address_operand (op, VOIDmode))
+	      return -1;
 	    break;
-	    
-	  win_p:
-	    return -1;
-	  
+
 	  case 'g':
 	    return -1;
-	    
+
 	  case 'r':
 	  case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
 	  case 'h': case 'j': case 'k': case 'l':
@@ -278,7 +276,7 @@ get_dup_num (int op_num, bool use_commut_op_p)
 #endif
 	      break;
 	    }
-	    
+
 	  case '0': case '1': case '2': case '3': case '4':
 	  case '5': case '6': case '7': case '8': case '9':
 	    if (original != -1 && original != c)
@@ -302,21 +300,6 @@ get_dup_num (int op_num, bool use_commut_op_p)
 	return -1;
     }
   return dup;
-}
-
-/* Return the operand which should be, in any case, the same as
-   operand with number OP_NUM.  If USE_COMMUT_OP_P is TRUE, the
-   function makes temporarily commutative operand exchange before
-   this.  */
-static rtx
-get_dup (int op_num, bool use_commut_op_p)
-{
-  int n = get_dup_num (op_num, use_commut_op_p);
-
-  if (n < 0)
-    return NULL_RTX;
-  else
-    return recog_data.operand[n];
 }
 
 /* Check that X is REG or SUBREG of REG.  */
@@ -391,7 +374,7 @@ process_regs_for_copy (rtx reg1, rtx reg2, bool constraint_p,
 				 ira_curr_regno_allocno_map[REGNO (reg2)],
 				 freq, constraint_p, insn,
 				 ira_curr_loop_tree_node);
-      bitmap_set_bit (ira_curr_loop_tree_node->local_copies, cp->num); 
+      bitmap_set_bit (ira_curr_loop_tree_node->local_copies, cp->num);
       return true;
     }
   else
@@ -434,12 +417,12 @@ process_regs_for_copy (rtx reg1, rtx reg2, bool constraint_p,
   return true;
 }
 
-/* Process all of the output registers of the current insn and
-   the input register REG (its operand number OP_NUM) which dies in the
-   insn as if there were a move insn between them with frequency
-   FREQ.  */
+/* Process all of the output registers of the current insn which are
+   not bound (BOUND_P) and the input register REG (its operand number
+   OP_NUM) which dies in the insn as if there were a move insn between
+   them with frequency FREQ.  */
 static void
-process_reg_shuffles (rtx reg, int op_num, int freq)
+process_reg_shuffles (rtx reg, int op_num, int freq, bool *bound_p)
 {
   int i;
   rtx another_reg;
@@ -448,11 +431,12 @@ process_reg_shuffles (rtx reg, int op_num, int freq)
   for (i = 0; i < recog_data.n_operands; i++)
     {
       another_reg = recog_data.operand[i];
-      
+
       if (!REG_SUBREG_P (another_reg) || op_num == i
-	  || recog_data.operand_type[i] != OP_OUT)
+	  || recog_data.operand_type[i] != OP_OUT
+	  || bound_p[i])
 	continue;
-      
+
       process_regs_for_copy (reg, another_reg, false, NULL_RTX, freq);
     }
 }
@@ -465,8 +449,8 @@ add_insn_allocno_copies (rtx insn)
 {
   rtx set, operand, dup;
   const char *str;
-  bool commut_p, bound_p;
-  int i, j, freq;
+  bool commut_p, bound_p[MAX_RECOG_OPERANDS];
+  int i, j, n, freq;
   
   freq = REG_FREQ_FROM_BB (BLOCK_FOR_INSN (insn));
   if (freq == 0)
@@ -478,38 +462,51 @@ add_insn_allocno_copies (rtx insn)
 			REG_P (SET_SRC (set))
 			? SET_SRC (set)
 			: SUBREG_REG (SET_SRC (set))) != NULL_RTX)
-    process_regs_for_copy (SET_DEST (set), SET_SRC (set), false, insn, freq);
-  else
     {
-      extract_insn (insn);
-      for (i = 0; i < recog_data.n_operands; i++)
-	{
-	  operand = recog_data.operand[i];
-	  if (REG_SUBREG_P (operand)
-	      && find_reg_note (insn, REG_DEAD,
-				REG_P (operand)
-				? operand : SUBREG_REG (operand)) != NULL_RTX)
-	    {
-	      str = recog_data.constraints[i];
-	      while (*str == ' ' && *str == '\t')
-		str++;
-	      bound_p = false;
-	      for (j = 0, commut_p = false; j < 2; j++, commut_p = true)
-		if ((dup = get_dup (i, commut_p)) != NULL_RTX
-		    && REG_SUBREG_P (dup)
-		    && process_regs_for_copy (operand, dup, true,
-					      NULL_RTX, freq))
-		  bound_p = true;
-	      if (bound_p)
-		continue;
-	      /* If an operand dies, prefer its hard register for the
-		 output operands by decreasing the hard register cost
-		 or creating the corresponding allocno copies.  The
-		 cost will not correspond to a real move insn cost, so
-		 make the frequency smaller.  */
-	      process_reg_shuffles (operand, i, freq < 8 ? 1 : freq / 8);
-	    }
-	}
+      process_regs_for_copy (SET_DEST (set), SET_SRC (set), false, insn, freq);
+      return;
+    }
+  /* Fast check of possibility of constraint or shuffle copies.  If
+     there are no dead registers, there will be no such copies.  */
+  if (! find_reg_note (insn, REG_DEAD, NULL_RTX))
+    return;
+  extract_insn (insn);
+  for (i = 0; i < recog_data.n_operands; i++)
+    bound_p[i] = false;
+  for (i = 0; i < recog_data.n_operands; i++)
+    {
+      operand = recog_data.operand[i];
+      if (! REG_SUBREG_P (operand))
+	continue;
+      str = recog_data.constraints[i];
+      while (*str == ' ' || *str == '\t')
+	str++;
+      for (j = 0, commut_p = false; j < 2; j++, commut_p = true)
+	if ((n = get_dup_num (i, commut_p)) >= 0)
+	  {
+	    bound_p[n] = true;
+	    dup = recog_data.operand[n];
+	    if (REG_SUBREG_P (dup)
+		&& find_reg_note (insn, REG_DEAD,
+				  REG_P (operand)
+				  ? operand
+				  : SUBREG_REG (operand)) != NULL_RTX)
+	      process_regs_for_copy (operand, dup, true, NULL_RTX, freq);
+	  }
+    }
+  for (i = 0; i < recog_data.n_operands; i++)
+    {
+      operand = recog_data.operand[i];
+      if (REG_SUBREG_P (operand)
+	  && find_reg_note (insn, REG_DEAD,
+			    REG_P (operand)
+			    ? operand : SUBREG_REG (operand)) != NULL_RTX)
+	/* If an operand dies, prefer its hard register for the output
+	   operands by decreasing the hard register cost or creating
+	   the corresponding allocno copies.  The cost will not
+	   correspond to a real move insn cost, so make the frequency
+	   smaller.  */
+	process_reg_shuffles (operand, i, freq < 8 ? 1 : freq / 8, bound_p);
     }
 }
 
@@ -524,7 +521,7 @@ add_copies (ira_loop_tree_node_t loop_tree_node)
   if (bb == NULL)
     return;
   FOR_BB_INSNS (bb, insn)
-    if (INSN_P (insn))
+    if (NONDEBUG_INSN_P (insn))
       add_insn_allocno_copies (insn);
 }
 
@@ -664,7 +661,7 @@ print_hard_reg_set (FILE *file, const char *title, HARD_REG_SET set)
 {
   int i, start;
 
-  fprintf (file, title);
+  fputs (title, file);
   for (start = -1, i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     {
       if (TEST_HARD_REG_BIT (set, i))
@@ -684,7 +681,7 @@ print_hard_reg_set (FILE *file, const char *title, HARD_REG_SET set)
 	  start = -1;
 	}
     }
-  fprintf (file, "\n");
+  putc ('\n', file);
 }
 
 /* Print information about allocno or only regno (if REG_P) conflicts
@@ -711,9 +708,9 @@ print_conflicts (FILE *file, bool reg_p)
 	    fprintf (file, "b%d", bb->index);
 	  else
 	    fprintf (file, "l%d", ALLOCNO_LOOP_TREE_NODE (a)->loop->num);
-	  fprintf (file, ")");
+	  putc (')', file);
 	}
-      fprintf (file, " conflicts:");
+      fputs (" conflicts:", file);
       if (ALLOCNO_CONFLICT_ALLOCNO_ARRAY (a) != NULL)
 	FOR_EACH_ALLOCNO_CONFLICT (a, conflict_a, aci)
 	  {
@@ -745,7 +742,7 @@ print_conflicts (FILE *file, bool reg_p)
       print_hard_reg_set (file, ";;     conflict hard regs:",
 			  conflicting_hard_regs);
     }
-  fprintf (file, "\n");
+  putc ('\n', file);
 }
 
 /* Print information about allocno or only regno (if REG_P) conflicts
@@ -827,6 +824,21 @@ ira_build_conflicts (void)
 			    no_caller_save_reg_set);
 	  IOR_HARD_REG_SET (ALLOCNO_CONFLICT_HARD_REGS (a),
 			    temp_hard_reg_set);
+	}
+
+      if (ALLOCNO_CALLS_CROSSED_NUM (a) != 0)
+	{
+	  int regno;
+
+	  /* Allocnos bigger than the saved part of call saved
+	     regs must conflict with them.  */
+	  for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
+	    if (!TEST_HARD_REG_BIT (call_used_reg_set, regno)
+		&& HARD_REGNO_CALL_PART_CLOBBERED (regno, a->mode))
+	      {
+		SET_HARD_REG_BIT (ALLOCNO_CONFLICT_HARD_REGS (a), regno);
+		SET_HARD_REG_BIT (ALLOCNO_TOTAL_CONFLICT_HARD_REGS (a), regno);
+	      }
 	}
     }
   if (optimize && ira_conflicts_p

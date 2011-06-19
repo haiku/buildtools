@@ -37,10 +37,10 @@ struct bitmap_descriptor
   const char *function;
   const char *file;
   int line;
-  int allocated;
   int created;
-  int peak;
-  int current;
+  HOST_WIDEST_INT allocated;
+  HOST_WIDEST_INT peak;
+  HOST_WIDEST_INT current;
   int nsearches;
 };
 
@@ -87,7 +87,7 @@ bitmap_descriptor (const char *file, const char *function, int line)
   slot = (struct bitmap_descriptor **)
     htab_find_slot_with_hash (bitmap_desc_hash, &loc,
 			      htab_hash_pointer (file) + line,
-			      1);
+			      INSERT);
   if (*slot)
     return *slot;
   *slot = XCNEW (struct bitmap_descriptor);
@@ -291,7 +291,7 @@ bitmap_elt_clear_from (bitmap head, bitmap_element *elt)
 
 /* Clear a bitmap by freeing the linked list.  */
 
-inline void
+void
 bitmap_clear (bitmap head)
 {
   if (head->first)
@@ -804,6 +804,59 @@ bitmap_first_set_bit (const_bitmap a)
 
  gcc_assert (word & 1);
 #endif
+ return bit_no;
+}
+
+/* Return the bit number of the first set bit in the bitmap.  The
+   bitmap must be non-empty.  */
+
+unsigned
+bitmap_last_set_bit (const_bitmap a)
+{
+  const bitmap_element *elt = a->current ? a->current : a->first;
+  unsigned bit_no;
+  BITMAP_WORD word;
+  int ix;
+
+  gcc_assert (elt);
+  while (elt->next)
+    elt = elt->next;
+  bit_no = elt->indx * BITMAP_ELEMENT_ALL_BITS;
+  for (ix = BITMAP_ELEMENT_WORDS - 1; ix >= 0; ix--)
+    {
+      word = elt->bits[ix];
+      if (word)
+	goto found_bit;
+    }
+  gcc_unreachable ();
+ found_bit:
+  bit_no += ix * BITMAP_WORD_BITS;
+
+  /* Binary search for the last set bit.  */
+#if GCC_VERSION >= 3004
+  gcc_assert (sizeof(long) == sizeof (word));
+  bit_no += sizeof (long) * 8 - __builtin_ctzl (word);
+#else
+#if BITMAP_WORD_BITS > 64
+#error "Fill out the table."
+#endif
+#if BITMAP_WORD_BITS > 32
+  if ((word & 0xffffffff00000000))
+    word >>= 32, bit_no += 32;
+#endif
+  if (word & 0xffff0000)
+    word >>= 16, bit_no += 16;
+  if (!(word & 0xff00))
+    word >>= 8, bit_no += 8;
+  if (!(word & 0xf0))
+    word >>= 4, bit_no += 4;
+  if (!(word & 12))
+    word >>= 2, bit_no += 2;
+  if (!(word & 2))
+    word >>= 1, bit_no += 1;
+#endif
+
+ gcc_assert (word & 1);
  return bit_no;
 }
 
@@ -1889,6 +1942,84 @@ bitmap_ior_and_compl_into (bitmap a, const_bitmap from1, const_bitmap from2)
   return changed;
 }
 
+/* A |= (B & C).  Return true if A changes.  */
+
+bool
+bitmap_ior_and_into (bitmap a, const_bitmap b, const_bitmap c)
+{
+  bitmap_element *a_elt = a->first;
+  const bitmap_element *b_elt = b->first;
+  const bitmap_element *c_elt = c->first;
+  bitmap_element and_elt;
+  bitmap_element *a_prev = NULL;
+  bitmap_element **a_prev_pnext = &a->first;
+  bool changed = false;
+  unsigned ix;
+
+  if (b == c)
+    return bitmap_ior_into (a, b);
+  if (bitmap_empty_p (b) || bitmap_empty_p (c))
+    return false;
+
+  and_elt.indx = -1;
+  while (b_elt && c_elt)
+    {
+      BITMAP_WORD overall;
+
+      /* Find a common item of B and C.  */
+      while (b_elt->indx != c_elt->indx)
+	{
+          if (b_elt->indx < c_elt->indx)
+	    {
+	      b_elt = b_elt->next;
+	      if (!b_elt)
+		goto done;
+	    }
+          else
+	    {
+	      c_elt = c_elt->next;
+	      if (!c_elt)
+		goto done;
+	    }
+	}
+
+      overall = 0;
+      and_elt.indx = b_elt->indx;
+      for (ix = BITMAP_ELEMENT_WORDS; ix--;)
+	{
+	  and_elt.bits[ix] = b_elt->bits[ix] & c_elt->bits[ix];
+	  overall |= and_elt.bits[ix];
+	}
+
+      b_elt = b_elt->next;
+      c_elt = c_elt->next;
+      if (!overall)
+	continue;
+
+      /* Now find a place to insert AND_ELT.  */
+      do
+	{
+	  ix = a_elt ? a_elt->indx : and_elt.indx;
+          if (ix == and_elt.indx)
+	    changed = bitmap_elt_ior (a, a_elt, a_prev, a_elt, &and_elt, changed);
+          else if (ix > and_elt.indx)
+	    changed = bitmap_elt_copy (a, NULL, a_prev, &and_elt, changed);
+
+          a_prev = *a_prev_pnext;
+          a_prev_pnext = &a_prev->next;
+          a_elt = *a_prev_pnext;
+
+          /* If A lagged behind B/C, we advanced it so loop once more.  */
+	}
+      while (ix < and_elt.indx);
+    }
+
+ done:
+  gcc_assert (!a->current == !a->first);
+  if (a->current)
+    a->indx = a->current->indx;
+  return changed;
+}
 
 /* Debugging function to print out the contents of a bitmap.  */
 
@@ -1897,14 +2028,16 @@ debug_bitmap_file (FILE *file, const_bitmap head)
 {
   const bitmap_element *ptr;
 
-  fprintf (file, "\nfirst = %p current = %p indx = %u\n",
+  fprintf (file, "\nfirst = " HOST_PTR_PRINTF
+	   " current = " HOST_PTR_PRINTF " indx = %u\n",
 	   (void *) head->first, (void *) head->current, head->indx);
 
   for (ptr = head->first; ptr; ptr = ptr->next)
     {
       unsigned int i, j, col = 26;
 
-      fprintf (file, "\t%p next = %p prev = %p indx = %u\n\t\tbits = {",
+      fprintf (file, "\t" HOST_PTR_PRINTF " next = " HOST_PTR_PRINTF
+	       " prev = " HOST_PTR_PRINTF " indx = %u\n\t\tbits = {",
 	       (const void*) ptr, (const void*) ptr->next,
 	       (const void*) ptr->prev, ptr->indx);
 
@@ -1960,8 +2093,8 @@ bitmap_print (FILE *file, const_bitmap head, const char *prefix, const char *suf
 /* Used to accumulate statistics about bitmap sizes.  */
 struct output_info
 {
+  HOST_WIDEST_INT size;
   int count;
-  int size;
 };
 
 /* Called via htab_traverse.  Output bitmap descriptor pointed out by SLOT
@@ -1981,8 +2114,9 @@ print_statistics (void **slot, void *b)
 	s1 = s2 + 4;
       sprintf (s, "%s:%i (%s)", s1, d->line, d->function);
       s[41] = 0;
-      fprintf (stderr, "%-41s %6d %10d %10d %10d %10d\n", s,
-	       d->created, d->allocated, d->peak, d->current, d->nsearches);
+      fprintf (stderr, "%-41s %8d %15"HOST_WIDEST_INT_PRINT"d %15"
+	       HOST_WIDEST_INT_PRINT"d %15"HOST_WIDEST_INT_PRINT"d %10d\n",
+	       s, d->created, d->allocated, d->peak, d->current, d->nsearches);
       i->size += d->allocated;
       i->count += d->created;
     }
@@ -2000,14 +2134,14 @@ dump_bitmap_statistics (void)
     return;
 
   fprintf (stderr, "\nBitmap                                     Overall "
-		   "Allocated     Peak        Leak   searched "
+		   "   Allocated        Peak           Leak   searched "
 		   "  per search\n");
   fprintf (stderr, "---------------------------------------------------------------------------------\n");
   info.count = 0;
   info.size = 0;
   htab_traverse (bitmap_desc_hash, print_statistics, &info);
   fprintf (stderr, "---------------------------------------------------------------------------------\n");
-  fprintf (stderr, "%-40s %7d %10d\n",
+  fprintf (stderr, "%-40s %9d %15"HOST_WIDEST_INT_PRINT"d\n",
 	   "Total", info.count, info.size);
   fprintf (stderr, "---------------------------------------------------------------------------------\n");
 #endif

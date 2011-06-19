@@ -218,14 +218,14 @@ do {								\
 #define STACK_CHECK_STATIC_BUILTIN 0
 #endif
 
-/* The default interval is one page.  */
-#ifndef STACK_CHECK_PROBE_INTERVAL
-#define STACK_CHECK_PROBE_INTERVAL 4096
+/* The default interval is one page (4096 bytes).  */
+#ifndef STACK_CHECK_PROBE_INTERVAL_EXP
+#define STACK_CHECK_PROBE_INTERVAL_EXP 12
 #endif
 
-/* The default is to do a store into the stack.  */
-#ifndef STACK_CHECK_PROBE_LOAD
-#define STACK_CHECK_PROBE_LOAD 0
+/* The default is not to move the stack pointer.  */
+#ifndef STACK_CHECK_MOVING_SP
+#define STACK_CHECK_MOVING_SP 0
 #endif
 
 /* This is a kludge to try to capture the discrepancy between the old
@@ -252,7 +252,7 @@ do {								\
    one probe per function.  */
 #ifndef STACK_CHECK_MAX_FRAME_SIZE
 #define STACK_CHECK_MAX_FRAME_SIZE \
-  (STACK_CHECK_PROBE_INTERVAL - UNITS_PER_WORD)
+  ((1 << STACK_CHECK_PROBE_INTERVAL_EXP) - UNITS_PER_WORD)
 #endif
 
 /* This is arbitrary, but should be large enough everywhere.  */
@@ -266,6 +266,17 @@ do {								\
 #ifndef STACK_CHECK_MAX_VAR_SIZE
 #define STACK_CHECK_MAX_VAR_SIZE (STACK_CHECK_MAX_FRAME_SIZE / 100)
 #endif
+
+/* This structure is used to pass around information about exploded
+   unary, binary and trinary expressions between expand_expr_real_1 and
+   friends.  */
+typedef struct separate_ops
+{
+  enum tree_code code;
+  tree type;
+  tree op0, op1, op2;
+  location_t location;
+} *sepops;
 
 /* Functions from optabs.c, commonly used, and without need for the optabs
    tables:  */
@@ -297,6 +308,9 @@ extern rtx expand_simple_unop (enum machine_mode, enum rtx_code, rtx, rtx,
 /* Report whether the machine description contains an insn which can
    perform the operation described by CODE and MODE.  */
 extern int have_insn_for (enum rtx_code, enum machine_mode);
+
+extern rtx prepare_operand (int, rtx, int, enum machine_mode, enum machine_mode,
+			    int);
 
 /* Emit code to make a call to a constant function or a library call.  */
 extern void emit_libcall_block (rtx, rtx, rtx, rtx);
@@ -376,7 +390,7 @@ extern rtx builtin_strncpy_read_str (void *, HOST_WIDE_INT, enum machine_mode);
 
 /* Functions from expr.c:  */
 
-/* This is run during target initialization to set up which modes can be 
+/* This is run during target initialization to set up which modes can be
    used directly in memory and to initialize the block move optab.  */
 extern void init_expr_target (void);
 
@@ -412,6 +426,7 @@ extern rtx emit_block_move (rtx, rtx, rtx, enum block_op_methods);
 extern rtx emit_block_move_via_libcall (rtx, rtx, rtx, bool);
 extern rtx emit_block_move_hints (rtx, rtx, rtx, enum block_op_methods,
 			          unsigned int, HOST_WIDE_INT);
+extern bool emit_storent_insn (rtx to, rtx from);
 
 /* Copy all or part of a value X into registers starting at REGNO.
    The number of registers to be filled is NREGS.  */
@@ -464,7 +479,7 @@ extern rtx clear_storage_hints (rtx, rtx, enum block_op_methods,
 rtx set_storage_via_libcall (rtx, rtx, rtx, bool);
 
 /* Expand a setmem pattern; return true if successful.  */
-extern bool set_storage_via_setmem (rtx, rtx, rtx, unsigned int, 
+extern bool set_storage_via_setmem (rtx, rtx, rtx, unsigned int,
 				    unsigned int, HOST_WIDE_INT);
 
 /* Determine whether the LEN bytes can be moved by using several move
@@ -525,9 +540,13 @@ extern rtx store_expr (tree, rtx, int, bool);
    Useful after calling expand_expr with 1 as sum_ok.  */
 extern rtx force_operand (rtx, rtx);
 
-/* Work horse for expand_expr.  */
-extern rtx expand_expr_real (tree, rtx, enum machine_mode, 
+/* Work horses for expand_expr.  */
+extern rtx expand_expr_real (tree, rtx, enum machine_mode,
 			     enum expand_modifier, rtx *);
+extern rtx expand_expr_real_1 (tree, rtx, enum machine_mode,
+			       enum expand_modifier, rtx *);
+extern rtx expand_expr_real_2 (sepops, rtx, enum machine_mode,
+			       enum expand_modifier);
 
 /* Generate code for computing expression EXP.
    An rtx for the computed value is returned.  The value is never null.
@@ -565,27 +584,23 @@ extern tree string_constant (tree, tree *);
 
 /* Generate code to evaluate EXP and jump to LABEL if the value is zero.  */
 extern void jumpifnot (tree, rtx, int);
+extern void jumpifnot_1 (enum tree_code, tree, tree, rtx, int);
 
 /* Generate code to evaluate EXP and jump to LABEL if the value is nonzero.  */
 extern void jumpif (tree, rtx, int);
+extern void jumpif_1 (enum tree_code, tree, tree, rtx, int);
 
 /* Generate code to evaluate EXP and jump to IF_FALSE_LABEL if
    the result is zero, or IF_TRUE_LABEL if the result is one.  */
 extern void do_jump (tree, rtx, rtx, int);
+extern void do_jump_1 (enum tree_code, tree, tree, rtx, rtx, int);
 
-/* Generate rtl to compare two rtx's, will call emit_cmp_insn.  */
-extern rtx compare_from_rtx (rtx, rtx, enum rtx_code, int, enum machine_mode,
-			     rtx);
 extern void do_compare_rtx_and_jump (rtx, rtx, enum rtx_code, int,
 				     enum machine_mode, rtx, rtx, rtx, int);
 
 /* Two different ways of generating switch statements.  */
 extern int try_casesi (tree, tree, tree, tree, rtx, rtx, rtx);
 extern int try_tablejump (tree, tree, tree, tree, rtx, rtx);
-
-/* Smallest number of adjacent cases before we use a jump table.
-   XXX Should be a target hook.  */
-extern unsigned int case_values_threshold (void);
 
 /* Functions from alias.c */
 #include "alias.h"
@@ -603,7 +618,7 @@ extern HOST_WIDE_INT int_expr_size (tree);
    in its original home.  This becomes invalid if any more code is emitted.  */
 extern rtx hard_function_value (const_tree, const_tree, const_tree, int);
 
-extern rtx prepare_call_address (rtx, rtx, rtx *, int, int);
+extern rtx prepare_call_address (tree, rtx, rtx, rtx *, int, int);
 
 extern bool shift_return_value (enum machine_mode, bool, rtx);
 
@@ -635,9 +650,15 @@ extern rtx force_label_rtx (tree);
    The constant terms are added and stored via a second arg.  */
 extern rtx eliminate_constant_term (rtx, rtx *);
 
-/* Convert arg to a valid memory address for specified machine mode,
-   by emitting insns to perform arithmetic if nec.  */
-extern rtx memory_address (enum machine_mode, rtx);
+/* Convert arg to a valid memory address for specified machine mode that points
+   to a specific named address space, by emitting insns to perform arithmetic
+   if necessary.  */
+extern rtx memory_address_addr_space (enum machine_mode, rtx, addr_space_t);
+
+/* Like memory_address_addr_space, except assume the memory address points to
+   the generic named address space.  */
+#define memory_address(MODE,RTX) \
+	memory_address_addr_space ((MODE), (RTX), ADDR_SPACE_GENERIC)
 
 /* Return a memory reference like MEMREF, but with its mode changed
    to MODE and its address changed to ADDR.
@@ -699,7 +720,7 @@ extern void set_mem_attributes_minus_bitpos (rtx, tree, int, HOST_WIDE_INT);
 /* Return OFFSET if XEXP (MEM, 0) - OFFSET is known to be ALIGN
    bits aligned for 0 <= OFFSET < ALIGN / BITS_PER_UNIT, or
    -1 if not known.  */
-extern int get_mem_align_offset (rtx, int);
+extern int get_mem_align_offset (rtx, unsigned int);
 
 /* Assemble the static constant template for function entry trampolines.  */
 extern rtx assemble_trampoline_template (void);
@@ -723,14 +744,26 @@ extern rtx force_reg (enum machine_mode, rtx);
 /* Return given rtx, copied into a new temp reg if it was in memory.  */
 extern rtx force_not_mem (rtx);
 
+/* Return mode and signedness to use when an argument or result in the
+   given mode is promoted.  */
+extern enum machine_mode promote_function_mode (const_tree, enum machine_mode, int *,
+					        const_tree, int);
+
+/* Return mode and signedness to use when an object in the given mode
+   is promoted.  */
+extern enum machine_mode promote_mode (const_tree, enum machine_mode, int *);
+
 /* Return mode and signedness to use when object is promoted.  */
-extern enum machine_mode promote_mode (const_tree, enum machine_mode, int *, int);
+enum machine_mode promote_decl_mode (const_tree, int *);
 
 /* Remove some bytes from the stack.  An rtx says how many.  */
 extern void adjust_stack (rtx);
 
 /* Add some bytes to the stack.  An rtx says how many.  */
 extern void anti_adjust_stack (rtx);
+
+/* Add some bytes to the stack while probing it.  An rtx says how many. */
+extern void anti_adjust_stack_and_probe (rtx, bool);
 
 /* This enum is used for the following two functions.  */
 enum save_level {SAVE_BLOCK, SAVE_FUNCTION, SAVE_NONLOCAL};
@@ -749,15 +782,14 @@ extern void update_nonlocal_goto_save_area (void);
 extern rtx allocate_dynamic_stack_space (rtx, rtx, int);
 
 /* Probe a range of stack addresses from FIRST to FIRST+SIZE, inclusive.
-   FIRST is a constant and size is a Pmode RTX.  These are offsets from the
-   current stack pointer.  STACK_GROWS_DOWNWARD says whether to add or
-   subtract from the stack.  If SIZE is constant, this is done
-   with a fixed number of probes.  Otherwise, we must make a loop.  */
+   FIRST is a constant and size is a Pmode RTX.  These are offsets from
+   the current stack pointer.  STACK_GROWS_DOWNWARD says whether to add
+   or subtract them from the stack pointer.  */
 extern void probe_stack_range (HOST_WIDE_INT, rtx);
 
 /* Return an rtx that refers to the value returned by a library call
    in its original home.  This becomes invalid if any more code is emitted.  */
-extern rtx hard_libcall_value (enum machine_mode);
+extern rtx hard_libcall_value (enum machine_mode, rtx);
 
 /* Return the mode desired by operand N of a particular bitfield
    insert/extract insn, or MAX_MACHINE_MODE if no such insn is
@@ -778,6 +810,8 @@ extern rtx expand_mult_highpart_adjust (enum machine_mode, rtx, rtx, rtx, rtx, i
 
 extern rtx assemble_static_space (unsigned HOST_WIDE_INT);
 extern int safe_from_p (const_rtx, tree, int);
+extern bool split_comparison (enum rtx_code, enum machine_mode,
+			      enum rtx_code *, enum rtx_code *);
 
 /* Call this once to initialize the contents of the optabs
    appropriately for the current target machine.  */
@@ -787,6 +821,12 @@ extern void init_all_optabs (void);
 /* Call this to initialize an optab function entry.  */
 extern rtx init_one_libfunc (const char *);
 extern rtx set_user_assembler_libfunc (const char *, const char *);
+
+/* Build a decl for a libfunc named NAME. */
+extern tree build_libfunc_function (const char *);
+
+/* Get the personality libfunc for a function decl.  */
+rtx get_personality_function (tree);
 
 extern int vector_mode_valid_p (enum machine_mode);
 

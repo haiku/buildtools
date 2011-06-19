@@ -1,6 +1,6 @@
 /* Various declarations for language-independent diagnostics subroutines.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   2010, Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@codesourcery.com>
 
 This file is part of GCC.
@@ -28,7 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 /* Constants used to discriminate diagnostics.  */
 typedef enum
 {
-#define DEFINE_DIAGNOSTIC_KIND(K, msgid) K,  
+#define DEFINE_DIAGNOSTIC_KIND(K, msgid) K,
 #include "diagnostic.def"
 #undef DEFINE_DIAGNOSTIC_KIND
   DK_LAST_DIAGNOSTIC_KIND
@@ -41,6 +41,7 @@ typedef struct diagnostic_info
 {
   text_info message;
   location_t location;
+  unsigned int override_column;
   /* TREE_BLOCK if the diagnostic is to be reported in some inline
      function inlined into other function, otherwise NULL.  */
   tree abstract_origin;
@@ -69,7 +70,7 @@ struct diagnostic_context
   /* True if we should display the "warnings are being tread as error"
      message, usually displayed once per compiler run.  */
   bool issue_warnings_are_errors_message;
-  
+
   /* True if it has been requested that warnings be treated as errors.  */
   bool warning_as_error_requested;
 
@@ -112,7 +113,16 @@ struct diagnostic_context
   const struct line_map *last_module;
 
   int lock;
+
+  bool inhibit_notes_p;
 };
+
+static inline void
+diagnostic_inhibit_notes (diagnostic_context * context)
+{
+  context->inhibit_notes_p = true;
+}
+
 
 /* Client supplied function to announce a diagnostic.  */
 #define diagnostic_starter(DC) (DC)->begin_diagnostic
@@ -185,6 +195,10 @@ extern diagnostic_context *global_dc;
 
 #define report_diagnostic(D) diagnostic_report_diagnostic (global_dc, D)
 
+/* Override the column number to be used for reporting a
+   diagnostic.  */
+#define diagnostic_override_column(DI, COL) (DI)->override_column = (COL)
+
 /* Diagnostic related functions.  */
 extern void diagnostic_initialize (diagnostic_context *);
 extern void diagnostic_report_current_module (diagnostic_context *);
@@ -208,6 +222,8 @@ extern bool emit_diagnostic (diagnostic_t, location_t, int,
 			     const char *, ...) ATTRIBUTE_GCC_DIAG(4,5);
 #endif
 extern char *diagnostic_build_prefix (diagnostic_info *);
+void default_diagnostic_starter (diagnostic_context *, diagnostic_info *);
+void default_diagnostic_finalizer (diagnostic_context *, diagnostic_info *);
 
 /* Pure text formatting support functions.  */
 extern char *file_name_as_prefix (const char *);
@@ -221,6 +237,7 @@ extern void print_generic_expr (FILE *, tree, int);
 extern void print_generic_decl (FILE *, tree, int);
 extern void debug_c_tree (tree);
 extern void dump_omp_clauses (pretty_printer *, tree, int, int);
+extern void print_call_name (pretty_printer *, tree, int);
 
 /* In gimple-pretty-print.c  */
 extern void debug_generic_expr (tree);
@@ -232,5 +249,9 @@ extern void print_gimple_seq (FILE *, gimple_seq, int, int);
 extern void print_gimple_stmt (FILE *, gimple, int, int);
 extern void print_gimple_expr (FILE *, gimple, int, int);
 extern void dump_gimple_stmt (pretty_printer *, gimple, int, int);
+
+/* In toplev.c  */
+extern bool default_tree_printer (pretty_printer *, text_info *, const char *,
+				  int, bool, bool, bool);
 
 #endif /* ! GCC_DIAGNOSTIC_H */

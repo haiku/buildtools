@@ -1,5 +1,5 @@
 /* HOST_WIDE_INT definitions for the GNU compiler.
-   Copyright (C) 1998, 2002, 2004, 2008 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2002, 2004, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -16,8 +16,14 @@
 #define HOST_BITS_PER_LONG  (CHAR_BIT * SIZEOF_LONG)
 
 /* The string that should be inserted into a printf style format to
+   indicate a "long" operand.  */
+#ifndef HOST_LONG_FORMAT
+#define HOST_LONG_FORMAT "l"
+#endif
+
+/* The string that should be inserted into a printf style format to
    indicate a "long long" operand.  */
-#ifndef HOST_LONG_LONG_FORMAT 
+#ifndef HOST_LONG_LONG_FORMAT
 #define HOST_LONG_LONG_FORMAT "ll"
 #endif
 
@@ -70,14 +76,16 @@ extern char sizeof_long_long_must_be_8[sizeof(long long) == 8 ? 1 : -1];
 /* Various printf format strings for HOST_WIDE_INT.  */
 
 #if HOST_BITS_PER_WIDE_INT == HOST_BITS_PER_LONG
-# define HOST_WIDE_INT_PRINT "l"
+# define HOST_WIDE_INT_PRINT HOST_LONG_FORMAT
 # define HOST_WIDE_INT_PRINT_C "L"
   /* 'long' might be 32 or 64 bits, and the number of leading zeroes
      must be tweaked accordingly.  */
 # if HOST_BITS_PER_WIDE_INT == 64
-#  define HOST_WIDE_INT_PRINT_DOUBLE_HEX "0x%lx%016lx"
+#  define HOST_WIDE_INT_PRINT_DOUBLE_HEX \
+     "0x%" HOST_LONG_FORMAT "x%016" HOST_LONG_FORMAT "x"
 # else
-#  define HOST_WIDE_INT_PRINT_DOUBLE_HEX "0x%lx%08lx"
+#  define HOST_WIDE_INT_PRINT_DOUBLE_HEX \
+     "0x%" HOST_LONG_FORMAT "x%08" HOST_LONG_FORMAT "x"
 # endif
 #else
 # define HOST_WIDE_INT_PRINT HOST_LONG_LONG_FORMAT
@@ -99,6 +107,7 @@ extern char sizeof_long_long_must_be_8[sizeof(long long) == 8 ? 1 : -1];
     || (HOST_BITS_PER_LONGLONG < 64 && HOST_BITS_PER___INT64 < 64)
 # define HOST_WIDEST_INT		      HOST_WIDE_INT
 # define HOST_BITS_PER_WIDEST_INT	      HOST_BITS_PER_WIDE_INT
+# define HOST_WIDEST_INT_PRINT                HOST_WIDE_INT_PRINT
 # define HOST_WIDEST_INT_PRINT_DEC	      HOST_WIDE_INT_PRINT_DEC
 # define HOST_WIDEST_INT_PRINT_DEC_C	      HOST_WIDE_INT_PRINT_DEC_C
 # define HOST_WIDEST_INT_PRINT_UNSIGNED	      HOST_WIDE_INT_PRINT_UNSIGNED
@@ -116,6 +125,7 @@ extern char sizeof_long_long_must_be_8[sizeof(long long) == 8 ? 1 : -1];
     #error "This line should be impossible to reach"
 #  endif
 # endif
+# define HOST_WIDEST_INT_PRINT                HOST_LONG_LONG_FORMAT
 # define HOST_WIDEST_INT_PRINT_DEC	      "%" HOST_LONG_LONG_FORMAT "d"
 # define HOST_WIDEST_INT_PRINT_DEC_C	      "%" HOST_LONG_LONG_FORMAT "dLL"
 # define HOST_WIDEST_INT_PRINT_UNSIGNED	      "%" HOST_LONG_LONG_FORMAT "u"

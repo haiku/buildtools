@@ -1,7 +1,7 @@
 /*{{{  Comment.  */ 
 
 /* Definitions of FR30 target. 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007, 2008
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
@@ -519,28 +519,6 @@ enum reg_class
 /*}}}*/ 
 /*{{{  Eliminating the Frame Pointer and the Arg Pointer.  */ 
 
-/* A C expression which is nonzero if a function must have and use a frame
-   pointer.  This expression is evaluated in the reload pass.  If its value is
-   nonzero the function will have a frame pointer.
-
-   The expression can in principle examine the current function and decide
-   according to the facts, but on most machines the constant 0 or the constant
-   1 suffices.  Use 0 when the machine allows code to be generated with no
-   frame pointer, and doing so saves some time or space.  Use 1 when there is
-   no possible advantage to avoiding a frame pointer.
-
-   In certain cases, the compiler does not know how to produce valid code
-   without a frame pointer.  The compiler recognizes those cases and
-   automatically gives the function a frame pointer regardless of what
-   `FRAME_POINTER_REQUIRED' says.  You don't need to worry about them.
-
-   In a function that does not require a frame pointer, the frame pointer
-   register can be allocated for ordinary usage, unless you mark it as a fixed
-   register.  See `FIXED_REGISTERS' for more information.  */
-/* #define FRAME_POINTER_REQUIRED 0 */
-#define FRAME_POINTER_REQUIRED \
-     (flag_omit_frame_pointer == 0 || crtl->args.pretend_args_size > 0)
-
 /* If defined, this macro specifies a table of register pairs used to eliminate
    unneeded registers that point into the stack frame.  If it is not defined,
    the only elimination attempted by the compiler is to replace references to
@@ -570,15 +548,6 @@ enum reg_class
   {ARG_POINTER_REGNUM,	 FRAME_POINTER_REGNUM},	\
   {FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}	\
 }
-
-/* A C expression that returns nonzero if the compiler is allowed to try to
-   replace register number FROM with register number TO.  This macro
-   need only be defined if `ELIMINABLE_REGS' is defined, and will usually be
-   the constant 1, since most of the cases preventing register elimination are
-   things that the compiler already knows about.  */
-
-#define CAN_ELIMINATE(FROM, TO)						\
- ((TO) == FRAME_POINTER_REGNUM || ! frame_pointer_needed)
 
 /* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It specifies the
    initial difference between the specified pair of registers.  This macro must
@@ -761,31 +730,6 @@ enum reg_class
 /*}}}*/ 
 /*{{{  Trampolines for Nested Functions.  */ 
 
-/* On the FR30, the trampoline is:
-
-   nop
-   ldi:32 STATIC, r12
-   nop
-   ldi:32 FUNCTION, r0
-   jmp    @r0
-
-   The no-ops are to guarantee that the static chain and final
-   target are 32 bit aligned within the trampoline.  That allows us to
-   initialize those locations with simple SImode stores.   The alternative
-   would be to use HImode stores.  */
-   
-/* A C statement to output, on the stream FILE, assembler code for a block of
-   data that contains the constant parts of a trampoline.  This code should not
-   include a label--the label is taken care of automatically.  */
-#define TRAMPOLINE_TEMPLATE(FILE)						\
-{										\
-  fprintf (FILE, "\tnop\n");							\
-  fprintf (FILE, "\tldi:32\t#0, %s\n", reg_names [STATIC_CHAIN_REGNUM]);	\
-  fprintf (FILE, "\tnop\n");							\
-  fprintf (FILE, "\tldi:32\t#0, %s\n", reg_names [COMPILER_SCRATCH_REGISTER]);	\
-  fprintf (FILE, "\tjmp\t@%s\n", reg_names [COMPILER_SCRATCH_REGISTER]);	\
-}
-
 /* A C expression for the size in bytes of the trampoline, as an integer.  */
 #define TRAMPOLINE_SIZE 18
 
@@ -794,29 +738,8 @@ enum reg_class
    the trampoline is also aligned on a 32bit boundary.  */
 #define TRAMPOLINE_ALIGNMENT 32
 
-/* A C statement to initialize the variable parts of a trampoline.  ADDR is an
-   RTX for the address of the trampoline; FNADDR is an RTX for the address of
-   the nested function; STATIC_CHAIN is an RTX for the static chain value that
-   should be passed to the function when it is called.  */
-#define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, STATIC_CHAIN)			\
-do										\
-{										\
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant (ADDR, 4)), STATIC_CHAIN);\
-  emit_move_insn (gen_rtx_MEM (SImode, plus_constant (ADDR, 12)), FNADDR);	\
-} while (0);
-
 /*}}}*/ 
 /*{{{  Addressing Modes.  */ 
-
-/* A C expression that is 1 if the RTX X is a constant which is a valid
-   address.  On most machines, this can be defined as `CONSTANT_P (X)', but a
-   few machines are more restrictive in which constant addresses are supported.
-
-   `CONSTANT_P' accepts integer-values expressions whose values are not
-   explicitly known, such as `symbol_ref', `label_ref', and `high' expressions
-   and `const' arithmetic expressions, in addition to `const_int' and
-   `const_double' expressions.  */
-#define CONSTANT_ADDRESS_P(X) CONSTANT_P (X)
 
 /* A number, the maximum number of registers that can appear in a valid memory
    address.  Note that it is up to you to specify a value equal to the maximum
@@ -908,19 +831,6 @@ do										\
    The compiler will try both labelings, looking for one that is valid, and
    will reload one or both registers only if neither labeling works.  */
 #define REG_OK_FOR_INDEX_P(X) REG_OK_FOR_BASE_P (X)
-
-/* A C statement or compound statement with a conditional `goto LABEL;'
-   executed if memory address X (an RTX) can have different meanings depending
-   on the machine mode of the memory reference it is used for or if the address
-   is valid for some modes but not others.
-
-   Autoincrement and autodecrement addresses typically have mode-dependent
-   effects because the amount of the increment or decrement is the size of the
-   operand being addressed.  Some machines have other mode-dependent addresses.
-   Many RISC machines have no mode-dependent addresses.
-
-   You may assume that ADDR is a valid address for the machine.  */
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
 
 /* A C expression that is nonzero if X is a legitimate constant for an
    immediate operand on the target machine.  You can assume that X satisfies
@@ -1117,16 +1027,6 @@ fprintf (STREAM, "\t.word .L%d\n", VALUE)
 #if defined CROSS_DIRECTORY_STRUCTURE && ! defined inhibit_libc
 #define inhibit_libc
 #endif
-
-/*}}}*/ 
-/*{{{  Exported variables */ 
-
-/* Define the information needed to generate branch and scc insns.  This is
-   stored from the compare operation.  Note that we can't use "rtx" here
-   since it hasn't been defined!  */
-
-extern struct rtx_def * fr30_compare_op0;
-extern struct rtx_def * fr30_compare_op1;
 
 /*}}}*/ 
 

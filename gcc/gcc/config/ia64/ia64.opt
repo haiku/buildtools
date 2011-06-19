@@ -1,3 +1,21 @@
+; Copyright (C) 2005, 2006, 2008 Free Software Foundation, Inc.
+;
+; This file is part of GCC.
+;
+; GCC is free software; you can redistribute it and/or modify it under
+; the terms of the GNU General Public License as published by the Free
+; Software Foundation; either version 3, or (at your option) any later
+; version.
+;
+; GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+; WARRANTY; without even the implied warranty of MERCHANTABILITY or
+; FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+; for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with GCC; see the file COPYING3.  If not see
+; <http://www.gnu.org/licenses/>.
+
 mbig-endian
 Target Report RejectNegative Mask(BIG_ENDIAN)
 Generate big endian code
@@ -159,5 +177,9 @@ Disallow more than `msched-max-memory-insns' in instruction group. Otherwise, li
 msel-sched-dont-check-control-spec
 Target Report Var(mflag_sel_sched_dont_check_control_spec) Init(0)
 Don't generate checks for control speculation in selective scheduling
+
+mfused-madd
+Target Report Mask(FUSED_MADD)
+Enable fused multiply/add and multiply/subtract instructions
 
 ; This comment is to ensure we retain the blank line above.

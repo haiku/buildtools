@@ -1,5 +1,5 @@
 /* FR30 specific functions.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
@@ -47,12 +47,6 @@
 
 /*}}}*/
 /*{{{  Function Prologues & Epilogues */ 
-
-/* Define the information needed to generate branch and scc insns.  This is
-   stored from the compare operation.  */
-
-struct rtx_def * fr30_compare_op0;
-struct rtx_def * fr30_compare_op1;
 
 /* The FR30 stack looks like this:
 
@@ -125,7 +119,10 @@ static void fr30_setup_incoming_varargs (CUMULATIVE_ARGS *, enum machine_mode,
 static bool fr30_must_pass_in_stack (enum machine_mode, const_tree);
 static int fr30_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
 				   tree, bool);
-
+static bool fr30_frame_pointer_required (void);
+static bool fr30_can_eliminate (const int, const int);
+static void fr30_asm_trampoline_template (FILE *);
+static void fr30_trampoline_init (rtx, tree, rtx);
 
 #define FRAME_POINTER_MASK 	(1 << (FRAME_POINTER_REGNUM))
 #define RETURN_POINTER_MASK 	(1 << (RETURN_POINTER_REGNUM))
@@ -164,8 +161,28 @@ static int fr30_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
 #undef  TARGET_MUST_PASS_IN_STACK
 #define TARGET_MUST_PASS_IN_STACK fr30_must_pass_in_stack
 
+#undef TARGET_FRAME_POINTER_REQUIRED
+#define TARGET_FRAME_POINTER_REQUIRED fr30_frame_pointer_required
+
+#undef TARGET_CAN_ELIMINATE
+#define TARGET_CAN_ELIMINATE fr30_can_eliminate
+
+#undef TARGET_ASM_TRAMPOLINE_TEMPLATE
+#define TARGET_ASM_TRAMPOLINE_TEMPLATE fr30_asm_trampoline_template
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT fr30_trampoline_init
+
 struct gcc_target targetm = TARGET_INITIALIZER;
 
+
+/* Worker function for TARGET_CAN_ELIMINATE.  */
+
+bool
+fr30_can_eliminate (const int from ATTRIBUTE_UNUSED, const int to)
+{
+  return (to == FRAME_POINTER_REGNUM || ! frame_pointer_needed);
+}
+
 /* Returns the number of bytes offset between FROM_REG and TO_REG
    for the current function.  As a side effect it fills in the 
    current_frame_info structure, if the data is available.  */
@@ -903,6 +920,58 @@ fr30_move_double (rtx * operands)
   end_sequence ();
 
   return val;
+}
+
+/* Implement TARGET_FRAME_POINTER_REQUIRED.  */
+
+bool
+fr30_frame_pointer_required (void)
+{
+  return (flag_omit_frame_pointer == 0 || crtl->args.pretend_args_size > 0);
+}
+
+/*}}}*/
+/*{{{  Trampoline Output Routines  */
+
+/* Implement TARGET_ASM_TRAMPOLINE_TEMPLATE.
+   On the FR30, the trampoline is:
+
+   nop
+   ldi:32 STATIC, r12
+   nop
+   ldi:32 FUNCTION, r0
+   jmp    @r0
+
+   The no-ops are to guarantee that the static chain and final
+   target are 32 bit aligned within the trampoline.  That allows us to
+   initialize those locations with simple SImode stores.   The alternative
+   would be to use HImode stores.  */
+   
+static void
+fr30_asm_trampoline_template (FILE *f)
+{
+  fprintf (f, "\tnop\n");
+  fprintf (f, "\tldi:32\t#0, %s\n", reg_names [STATIC_CHAIN_REGNUM]);
+  fprintf (f, "\tnop\n");
+  fprintf (f, "\tldi:32\t#0, %s\n", reg_names [COMPILER_SCRATCH_REGISTER]);
+  fprintf (f, "\tjmp\t@%s\n", reg_names [COMPILER_SCRATCH_REGISTER]);
+}
+
+/* Implement TARGET_TRAMPOLINE_INIT.  */
+
+static void
+fr30_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+{
+  rtx fnaddr = XEXP (DECL_RTL (fndecl), 0);
+  rtx mem;
+
+  emit_block_move (m_tramp, assemble_trampoline_template (),
+		   GEN_INT (TRAMPOLINE_SIZE), BLOCK_OP_NORMAL);
+
+  mem = adjust_address (m_tramp, SImode, 4);
+  emit_move_insn (mem, chain_value);
+  mem = adjust_address (m_tramp, SImode, 12);
+  emit_move_insn (mem, fnaddr);
 }
 
 /*}}}*/

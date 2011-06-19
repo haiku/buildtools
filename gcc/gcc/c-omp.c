@@ -1,7 +1,7 @@
-/* This file contains routines to construct GNU OpenMP constructs, 
+/* This file contains routines to construct GNU OpenMP constructs,
    called from parsing in the C and C++ front ends.
 
-   Copyright (C) 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>,
 		  Diego Novillo <dnovillo@redhat.com>.
 
@@ -35,72 +35,79 @@ along with GCC; see the file COPYING3.  If not see
 
 
 /* Complete a #pragma omp master construct.  STMT is the structured-block
-   that follows the pragma.  */
+   that follows the pragma.  LOC is the l*/
 
 tree
-c_finish_omp_master (tree stmt)
+c_finish_omp_master (location_t loc, tree stmt)
 {
-  return add_stmt (build1 (OMP_MASTER, void_type_node, stmt));
+  tree t = add_stmt (build1 (OMP_MASTER, void_type_node, stmt));
+  SET_EXPR_LOCATION (t, loc);
+  return t;
 }
 
 /* Complete a #pragma omp critical construct.  STMT is the structured-block
    that follows the pragma, NAME is the identifier in the pragma, or null
-   if it was omitted.  */
+   if it was omitted.  LOC is the location of the #pragma.  */
 
 tree
-c_finish_omp_critical (tree body, tree name)
+c_finish_omp_critical (location_t loc, tree body, tree name)
 {
   tree stmt = make_node (OMP_CRITICAL);
   TREE_TYPE (stmt) = void_type_node;
   OMP_CRITICAL_BODY (stmt) = body;
   OMP_CRITICAL_NAME (stmt) = name;
+  SET_EXPR_LOCATION (stmt, loc);
   return add_stmt (stmt);
 }
 
 /* Complete a #pragma omp ordered construct.  STMT is the structured-block
-   that follows the pragma.  */
+   that follows the pragma.  LOC is the location of the #pragma.  */
 
 tree
-c_finish_omp_ordered (tree stmt)
+c_finish_omp_ordered (location_t loc, tree stmt)
 {
-  return add_stmt (build1 (OMP_ORDERED, void_type_node, stmt));
+  tree t = build1 (OMP_ORDERED, void_type_node, stmt);
+  SET_EXPR_LOCATION (t, loc);
+  return add_stmt (t);
 }
 
 
-/* Complete a #pragma omp barrier construct.  */
+/* Complete a #pragma omp barrier construct.  LOC is the location of
+   the #pragma.  */
 
 void
-c_finish_omp_barrier (void)
+c_finish_omp_barrier (location_t loc)
 {
   tree x;
 
   x = built_in_decls[BUILT_IN_GOMP_BARRIER];
-  x = build_call_expr (x, 0);
+  x = build_call_expr_loc (loc, x, 0);
   add_stmt (x);
 }
 
 
-/* Complete a #pragma omp taskwait construct.  */
+/* Complete a #pragma omp taskwait construct.  LOC is the location of the
+   pragma.  */
 
 void
-c_finish_omp_taskwait (void)
+c_finish_omp_taskwait (location_t loc)
 {
   tree x;
 
   x = built_in_decls[BUILT_IN_GOMP_TASKWAIT];
-  x = build_call_expr (x, 0);
+  x = build_call_expr_loc (loc, x, 0);
   add_stmt (x);
 }
 
 
-/* Complete a #pragma omp atomic construct.  The expression to be 
-   implemented atomically is LHS code= RHS.  The value returned is
-   either error_mark_node (if the construct was erroneous) or an
-   OMP_ATOMIC node which should be added to the current statement tree
-   with add_stmt.  */
+/* Complete a #pragma omp atomic construct.  The expression to be
+   implemented atomically is LHS code= RHS.  LOC is the location of
+   the atomic statement.  The value returned is either error_mark_node
+   (if the construct was erroneous) or an OMP_ATOMIC node which should
+   be added to the current statement tree with add_stmt.*/
 
 tree
-c_finish_omp_atomic (enum tree_code code, tree lhs, tree rhs)
+c_finish_omp_atomic (location_t loc, enum tree_code code, tree lhs, tree rhs)
 {
   tree x, type, addr;
 
@@ -116,7 +123,7 @@ c_finish_omp_atomic (enum tree_code code, tree lhs, tree rhs)
       && !POINTER_TYPE_P (type)
       && !SCALAR_FLOAT_TYPE_P (type))
     {
-      error ("invalid expression type for %<#pragma omp atomic%>");
+      error_at (loc, "invalid expression type for %<#pragma omp atomic%>");
       return error_mark_node;
     }
 
@@ -124,7 +131,7 @@ c_finish_omp_atomic (enum tree_code code, tree lhs, tree rhs)
 
   /* Take and save the address of the lhs.  From then on we'll reference it
      via indirection.  */
-  addr = build_unary_op (input_location, ADDR_EXPR, lhs, 0);
+  addr = build_unary_op (loc, ADDR_EXPR, lhs, 0);
   if (addr == error_mark_node)
     return error_mark_node;
   addr = save_expr (addr);
@@ -135,34 +142,39 @@ c_finish_omp_atomic (enum tree_code code, tree lhs, tree rhs)
       /* Make sure LHS is simple enough so that goa_lhs_expr_p can recognize
 	 it even after unsharing function body.  */
       tree var = create_tmp_var_raw (TREE_TYPE (addr), NULL);
+      DECL_CONTEXT (var) = current_function_decl;
       addr = build4 (TARGET_EXPR, TREE_TYPE (addr), var, addr, NULL, NULL);
     }
-  lhs = build_indirect_ref (input_location, addr, NULL);
+  lhs = build_indirect_ref (loc, addr, RO_NULL);
 
   /* There are lots of warnings, errors, and conversions that need to happen
      in the course of interpreting a statement.  Use the normal mechanisms
      to do this, and then take it apart again.  */
-  x = build_modify_expr (input_location, lhs, code, rhs);
+  x = build_modify_expr (input_location, lhs, NULL_TREE, code,
+      			 input_location, rhs, NULL_TREE);
   if (x == error_mark_node)
     return error_mark_node;
-  gcc_assert (TREE_CODE (x) == MODIFY_EXPR);  
+  gcc_assert (TREE_CODE (x) == MODIFY_EXPR);
   rhs = TREE_OPERAND (x, 1);
 
   /* Punt the actual generation of atomic operations to common code.  */
-  return build2 (OMP_ATOMIC, void_type_node, addr, rhs);
+  x = build2 (OMP_ATOMIC, void_type_node, addr, rhs);
+  SET_EXPR_LOCATION (x, loc);
+  return x;
 }
 
 
-/* Complete a #pragma omp flush construct.  We don't do anything with the
-   variable list that the syntax allows.  */
+/* Complete a #pragma omp flush construct.  We don't do anything with
+   the variable list that the syntax allows.  LOC is the location of
+   the #pragma.  */
 
 void
-c_finish_omp_flush (void)
+c_finish_omp_flush (location_t loc)
 {
   tree x;
 
   x = built_in_decls[BUILT_IN_SYNCHRONIZE];
-  x = build_call_expr (x, 0);
+  x = build_call_expr_loc (loc, x, 0);
   add_stmt (x);
 }
 
@@ -171,7 +183,7 @@ c_finish_omp_flush (void)
    Helper function for c_finish_omp_for.  */
 
 static tree
-check_omp_for_incr_expr (tree exp, tree decl)
+check_omp_for_incr_expr (location_t loc, tree exp, tree decl)
 {
   tree t;
 
@@ -185,22 +197,25 @@ check_omp_for_incr_expr (tree exp, tree decl)
   switch (TREE_CODE (exp))
     {
     CASE_CONVERT:
-      t = check_omp_for_incr_expr (TREE_OPERAND (exp, 0), decl);
+      t = check_omp_for_incr_expr (loc, TREE_OPERAND (exp, 0), decl);
       if (t != error_mark_node)
-        return fold_convert (TREE_TYPE (exp), t);
+        return fold_convert_loc (loc, TREE_TYPE (exp), t);
       break;
     case MINUS_EXPR:
-      t = check_omp_for_incr_expr (TREE_OPERAND (exp, 0), decl);
+      t = check_omp_for_incr_expr (loc, TREE_OPERAND (exp, 0), decl);
       if (t != error_mark_node)
-        return fold_build2 (MINUS_EXPR, TREE_TYPE (exp), t, TREE_OPERAND (exp, 1));
+        return fold_build2_loc (loc, MINUS_EXPR,
+			    TREE_TYPE (exp), t, TREE_OPERAND (exp, 1));
       break;
     case PLUS_EXPR:
-      t = check_omp_for_incr_expr (TREE_OPERAND (exp, 0), decl);
+      t = check_omp_for_incr_expr (loc, TREE_OPERAND (exp, 0), decl);
       if (t != error_mark_node)
-        return fold_build2 (PLUS_EXPR, TREE_TYPE (exp), t, TREE_OPERAND (exp, 1));
-      t = check_omp_for_incr_expr (TREE_OPERAND (exp, 1), decl);
+        return fold_build2_loc (loc, PLUS_EXPR,
+			    TREE_TYPE (exp), t, TREE_OPERAND (exp, 1));
+      t = check_omp_for_incr_expr (loc, TREE_OPERAND (exp, 1), decl);
       if (t != error_mark_node)
-        return fold_build2 (PLUS_EXPR, TREE_TYPE (exp), TREE_OPERAND (exp, 0), t);
+        return fold_build2_loc (loc, PLUS_EXPR,
+			    TREE_TYPE (exp), TREE_OPERAND (exp, 0), t);
       break;
     default:
       break;
@@ -260,7 +275,12 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 	      fail = true;
 	    }
 
-	  init = build_modify_expr (elocus, decl, NOP_EXPR, init);
+	  init = build_modify_expr (elocus, decl, NULL_TREE, NOP_EXPR,
+	      			    /* FIXME diagnostics: This should
+				       be the location of the INIT.  */
+	      			    elocus,
+				    init,
+				    NULL_TREE);
 	}
       gcc_assert (TREE_CODE (init) == MODIFY_EXPR);
       gcc_assert (TREE_OPERAND (init, 0) == decl);
@@ -281,7 +301,8 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 	      || TREE_CODE (cond) == LE_EXPR
 	      || TREE_CODE (cond) == GT_EXPR
 	      || TREE_CODE (cond) == GE_EXPR
-	      || TREE_CODE (cond) == NE_EXPR)
+	      || TREE_CODE (cond) == NE_EXPR
+	      || TREE_CODE (cond) == EQ_EXPR)
 	    {
 	      tree op0 = TREE_OPERAND (cond, 0);
 	      tree op1 = TREE_OPERAND (cond, 1);
@@ -303,7 +324,7 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 		{
 		  TREE_OPERAND (cond, 0) = TREE_OPERAND (op0, 0);
 		  TREE_OPERAND (cond, 1)
-		    = fold_build1 (NOP_EXPR, TREE_TYPE (decl),
+		    = fold_build1_loc (elocus, NOP_EXPR, TREE_TYPE (decl),
 				   TREE_OPERAND (cond, 1));
 		}
 	      else if (TREE_CODE (op1) == NOP_EXPR
@@ -311,7 +332,7 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 		{
 		  TREE_OPERAND (cond, 1) = TREE_OPERAND (op1, 0);
 		  TREE_OPERAND (cond, 0)
-		    = fold_build1 (NOP_EXPR, TREE_TYPE (decl),
+		    = fold_build1_loc (elocus, NOP_EXPR, TREE_TYPE (decl),
 				   TREE_OPERAND (cond, 0));
 		}
 
@@ -326,18 +347,21 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 		  cond_ok = true;
 		}
 
-	      if (TREE_CODE (cond) == NE_EXPR)
+	      if (TREE_CODE (cond) == NE_EXPR
+		  || TREE_CODE (cond) == EQ_EXPR)
 		{
 		  if (!INTEGRAL_TYPE_P (TREE_TYPE (decl)))
 		    cond_ok = false;
 		  else if (operand_equal_p (TREE_OPERAND (cond, 1),
 					    TYPE_MIN_VALUE (TREE_TYPE (decl)),
 					    0))
-		    TREE_SET_CODE (cond, GT_EXPR);
+		    TREE_SET_CODE (cond, TREE_CODE (cond) == NE_EXPR
+					 ? GT_EXPR : LE_EXPR);
 		  else if (operand_equal_p (TREE_OPERAND (cond, 1),
 					    TYPE_MAX_VALUE (TREE_TYPE (decl)),
 					    0))
-		    TREE_SET_CODE (cond, LT_EXPR);
+		    TREE_SET_CODE (cond, TREE_CODE (cond) == NE_EXPR
+					 ? LT_EXPR : GE_EXPR);
 		  else
 		    cond_ok = false;
 		}
@@ -377,11 +401,12 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 	      if (POINTER_TYPE_P (TREE_TYPE (decl))
 		  && TREE_OPERAND (incr, 1))
 		{
-		  tree t = fold_convert (sizetype, TREE_OPERAND (incr, 1));
+		  tree t = fold_convert_loc (elocus,
+					     sizetype, TREE_OPERAND (incr, 1));
 
 		  if (TREE_CODE (incr) == POSTDECREMENT_EXPR
 		      || TREE_CODE (incr) == PREDECREMENT_EXPR)
-		    t = fold_build1 (NEGATE_EXPR, sizetype, t);
+		    t = fold_build1_loc (elocus, NEGATE_EXPR, sizetype, t);
 		  t = build2 (POINTER_PLUS_EXPR, TREE_TYPE (decl), decl, t);
 		  incr = build2 (MODIFY_EXPR, void_type_node, decl, t);
 		}
@@ -403,7 +428,8 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 		incr_ok = true;
 	      else
 		{
-		  tree t = check_omp_for_incr_expr (TREE_OPERAND (incr, 1),
+		  tree t = check_omp_for_incr_expr (elocus,
+						    TREE_OPERAND (incr, 1),
 						    decl);
 		  if (t != error_mark_node)
 		    {
@@ -447,18 +473,20 @@ c_finish_omp_for (location_t locus, tree declv, tree initv, tree condv,
 }
 
 
-/* Divide CLAUSES into two lists: those that apply to a parallel construct,
-   and those that apply to a work-sharing construct.  Place the results in
-   *PAR_CLAUSES and *WS_CLAUSES respectively.  In addition, add a nowait
-   clause to the work-sharing list.  */
+/* Divide CLAUSES into two lists: those that apply to a parallel
+   construct, and those that apply to a work-sharing construct.  Place
+   the results in *PAR_CLAUSES and *WS_CLAUSES respectively.  In
+   addition, add a nowait clause to the work-sharing list.  LOC is the
+   location of the OMP_PARALLEL*.  */
 
 void
-c_split_parallel_clauses (tree clauses, tree *par_clauses, tree *ws_clauses)
+c_split_parallel_clauses (location_t loc, tree clauses,
+			  tree *par_clauses, tree *ws_clauses)
 {
   tree next;
 
   *par_clauses = NULL;
-  *ws_clauses = build_omp_clause (OMP_CLAUSE_NOWAIT);
+  *ws_clauses = build_omp_clause (loc, OMP_CLAUSE_NOWAIT);
 
   for (; clauses ; clauses = next)
     {

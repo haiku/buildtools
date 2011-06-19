@@ -531,28 +531,32 @@ resolve_subreg_use (rtx *px, void *data)
   return 0;
 }
 
-/* We are deleting INSN.  Move any EH_REGION notes to INSNS.  */
+/* This is called via for_each_rtx.  Look for SUBREGs which can be
+   decomposed and decomposed REGs that need copying.  */
 
-static void
-move_eh_region_note (rtx insn, rtx insns)
+static int
+adjust_decomposed_uses (rtx *px, void *data ATTRIBUTE_UNUSED)
 {
-  rtx note, p;
+  rtx x = *px;
 
-  note = find_reg_note (insn, REG_EH_REGION, NULL_RTX);
-  if (note == NULL_RTX)
-    return;
+  if (x == NULL_RTX)
+    return 0;
 
-  gcc_assert (CALL_P (insn)
-	      || (flag_non_call_exceptions && may_trap_p (PATTERN (insn))));
-
-  for (p = insns; p != NULL_RTX; p = NEXT_INSN (p))
+  if (resolve_subreg_p (x))
     {
-      if (CALL_P (p)
-	  || (flag_non_call_exceptions
-	      && INSN_P (p)
-	      && may_trap_p (PATTERN (p))))
-	add_reg_note (p, REG_EH_REGION, XEXP (note, 0));
+      x = simplify_subreg_concatn (GET_MODE (x), SUBREG_REG (x),
+				   SUBREG_BYTE (x));
+
+      if (x)
+	*px = x;
+      else
+	x = copy_rtx (*px);
     }
+
+  if (resolve_reg_p (x))
+    *px = copy_rtx (x);
+
+  return 0;
 }
 
 /* Resolve any decomposed registers which appear in register notes on
@@ -819,7 +823,7 @@ resolve_simple_move (rtx set, rtx insn)
   insns = get_insns ();
   end_sequence ();
 
-  move_eh_region_note (insn, insns);
+  copy_reg_eh_region_note_forward (insn, insns, NULL_RTX);
 
   emit_insn_before (insns, insn);
 
@@ -886,6 +890,18 @@ resolve_use (rtx pat, rtx insn)
   return false;
 }
 
+/* A VAR_LOCATION can be simplified.  */
+
+static void
+resolve_debug (rtx insn)
+{
+  for_each_rtx (&PATTERN (insn), adjust_decomposed_uses, NULL_RTX);
+
+  df_insn_rescan (insn);
+
+  resolve_reg_notes (insn);
+}
+
 /* Checks if INSN is a decomposable multiword-shift or zero-extend and
    sets the decomposable_context bitmap accordingly.  A non-zero value
    is returned if a decomposable insn has been found.  */
@@ -922,7 +938,7 @@ find_decomposable_shift_zext (rtx insn)
     }
   else /* left or right shift */
     {
-      if (GET_CODE (XEXP (op, 1)) != CONST_INT
+      if (!CONST_INT_P (XEXP (op, 1))
 	  || INTVAL (XEXP (op, 1)) < BITS_PER_WORD
 	  || GET_MODE_BITSIZE (GET_MODE (op_operand)) != 2 * BITS_PER_WORD)
 	return 0;
@@ -1158,18 +1174,18 @@ decompose_multiword_subregs (void)
 
 	  FOR_BB_INSNS (bb, insn)
 	    {
-	      rtx next, pat;
+	      rtx pat;
 
 	      if (!INSN_P (insn))
 		continue;
-
-	      next = NEXT_INSN (insn);
 
 	      pat = PATTERN (insn);
 	      if (GET_CODE (pat) == CLOBBER)
 		resolve_clobber (pat, insn);
 	      else if (GET_CODE (pat) == USE)
 		resolve_use (pat, insn);
+	      else if (DEBUG_INSN_P (insn))
+		resolve_debug (insn);
 	      else
 		{
 		  rtx set;
@@ -1289,7 +1305,7 @@ decompose_multiword_subregs (void)
 	BITMAP_FREE (b);
   }
 
-  VEC_free (bitmap, heap, reg_copy_graph);  
+  VEC_free (bitmap, heap, reg_copy_graph);
 
   BITMAP_FREE (decomposable_context);
   BITMAP_FREE (non_decomposable_context);

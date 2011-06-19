@@ -103,6 +103,10 @@ case "${host_cpu}" in
   hppa*)
     try_cpu=hppa
     ;;
+  mep*)
+    EXTRA_CXX_FLAGS=-mm
+    try_cpu=generic
+    ;;
   mips*)
     try_cpu=mips
     ;;
@@ -205,6 +209,7 @@ case "${host_os}" in
     ;;
   cygwin*)
     os_include_dir="os/newlib"
+    OPT_LDFLAGS="${OPT_LDFLAGS} -no-undefined -bindir \$(bindir)"
     ;;
   darwin | darwin[1-7] | darwin[1-7].*)
     # On Darwin, performance is improved if libstdc++ is single-module.
@@ -254,9 +259,17 @@ case "${host_os}" in
   mingw32*)
     os_include_dir="os/mingw32"
     error_constants_dir="os/mingw32"
+    OPT_LDFLAGS="${OPT_LDFLAGS} -no-undefined -bindir \$(bindir)"
     ;;
   netbsd*)
     os_include_dir="os/bsd/netbsd"
+    ;;
+  osf*)
+    os_include_dir="os/generic"
+    # libstdc++.so relies on emutls on Tru64 UNIX, which only works with the
+    # real functions implemented in libpthread.so, not with the dummies in
+    # libgcc, so always pass -lpthread.
+    OPT_LDFLAGS="${OPT_LDFLAGS} -lpthread"
     ;;
   qnx6.[12]*)
     os_include_dir="os/qnx/qnx6.1"

@@ -153,7 +153,7 @@ plus_constant (rtx x, HOST_WIDE_INT c)
 	 We may not immediately return from the recursive call here, lest
 	 all_constant gets lost.  */
 
-      if (GET_CODE (XEXP (x, 1)) == CONST_INT)
+      if (CONST_INT_P (XEXP (x, 1)))
 	{
 	  c += INTVAL (XEXP (x, 1));
 
@@ -211,10 +211,10 @@ eliminate_constant_term (rtx x, rtx *constptr)
     return x;
 
   /* First handle constants appearing at this level explicitly.  */
-  if (GET_CODE (XEXP (x, 1)) == CONST_INT
+  if (CONST_INT_P (XEXP (x, 1))
       && 0 != (tem = simplify_binary_operation (PLUS, GET_MODE (x), *constptr,
 						XEXP (x, 1)))
-      && GET_CODE (tem) == CONST_INT)
+      && CONST_INT_P (tem))
     {
       *constptr = tem;
       return eliminate_constant_term (XEXP (x, 0), constptr);
@@ -226,7 +226,7 @@ eliminate_constant_term (rtx x, rtx *constptr)
   if ((x1 != XEXP (x, 1) || x0 != XEXP (x, 0))
       && 0 != (tem = simplify_binary_operation (PLUS, GET_MODE (x),
 						*constptr, tem))
-      && GET_CODE (tem) == CONST_INT)
+      && CONST_INT_P (tem))
     {
       *constptr = tem;
       return gen_rtx_PLUS (GET_MODE (x), x0, x1);
@@ -246,9 +246,9 @@ expr_size (tree exp)
     size = TREE_OPERAND (exp, 1);
   else
     {
-      size = lang_hooks.expr_size (exp);
+      size = tree_expr_size (exp);
       gcc_assert (size);
-      size = SUBSTITUTE_PLACEHOLDER_IN_EXPR (size, exp);
+      gcc_assert (size == SUBSTITUTE_PLACEHOLDER_IN_EXPR (size, exp));
     }
 
   return expand_expr (size, NULL_RTX, TYPE_MODE (sizetype), EXPAND_NORMAL);
@@ -266,7 +266,7 @@ int_expr_size (tree exp)
     size = TREE_OPERAND (exp, 1);
   else
     {
-      size = lang_hooks.expr_size (exp);
+      size = tree_expr_size (exp);
       gcc_assert (size);
     }
 
@@ -306,27 +306,27 @@ break_out_memory_refs (rtx x)
       rtx op1 = break_out_memory_refs (XEXP (x, 1));
 
       if (op0 != XEXP (x, 0) || op1 != XEXP (x, 1))
-	x = simplify_gen_binary (GET_CODE (x), Pmode, op0, op1);
+	x = simplify_gen_binary (GET_CODE (x), GET_MODE (x), op0, op1);
     }
 
   return x;
 }
 
-/* Given X, a memory address in ptr_mode, convert it to an address
-   in Pmode, or vice versa (TO_MODE says which way).  We take advantage of
-   the fact that pointers are not allowed to overflow by commuting arithmetic
-   operations over conversions so that address arithmetic insns can be
-   used.  */
+/* Given X, a memory address in address space AS' pointer mode, convert it to
+   an address in the address space's address mode, or vice versa (TO_MODE says
+   which way).  We take advantage of the fact that pointers are not allowed to
+   overflow by commuting arithmetic operations over conversions so that address
+   arithmetic insns can be used.  */
 
 rtx
-convert_memory_address (enum machine_mode to_mode ATTRIBUTE_UNUSED, 
-			rtx x)
+convert_memory_address_addr_space (enum machine_mode to_mode ATTRIBUTE_UNUSED,
+				   rtx x, addr_space_t as ATTRIBUTE_UNUSED)
 {
 #ifndef POINTERS_EXTEND_UNSIGNED
   gcc_assert (GET_MODE (x) == to_mode || GET_MODE (x) == VOIDmode);
   return x;
 #else /* defined(POINTERS_EXTEND_UNSIGNED) */
-  enum machine_mode from_mode;
+  enum machine_mode pointer_mode, address_mode, from_mode;
   rtx temp;
   enum rtx_code code;
 
@@ -334,7 +334,9 @@ convert_memory_address (enum machine_mode to_mode ATTRIBUTE_UNUSED,
   if (GET_MODE (x) == to_mode)
     return x;
 
-  from_mode = to_mode == ptr_mode ? Pmode : ptr_mode;
+  pointer_mode = targetm.addr_space.pointer_mode (as);
+  address_mode = targetm.addr_space.address_mode (as);
+  from_mode = to_mode == pointer_mode ? address_mode : pointer_mode;
 
   /* Here we handle some special cases.  If none of them apply, fall through
      to the default case.  */
@@ -375,7 +377,8 @@ convert_memory_address (enum machine_mode to_mode ATTRIBUTE_UNUSED,
 
     case CONST:
       return gen_rtx_CONST (to_mode,
-			    convert_memory_address (to_mode, XEXP (x, 0)));
+			    convert_memory_address_addr_space
+			      (to_mode, XEXP (x, 0), as));
       break;
 
     case PLUS:
@@ -388,11 +391,13 @@ convert_memory_address (enum machine_mode to_mode ATTRIBUTE_UNUSED,
 	 narrower.  */
       if (GET_MODE_SIZE (to_mode) < GET_MODE_SIZE (from_mode)
 	  || (GET_CODE (x) == PLUS
-	      && GET_CODE (XEXP (x, 1)) == CONST_INT
-	      && (XEXP (x, 1) == convert_memory_address (to_mode, XEXP (x, 1))
+	      && CONST_INT_P (XEXP (x, 1))
+	      && (XEXP (x, 1) == convert_memory_address_addr_space
+				   (to_mode, XEXP (x, 1), as)
                  || POINTERS_EXTEND_UNSIGNED < 0)))
 	return gen_rtx_fmt_ee (GET_CODE (x), to_mode,
-			       convert_memory_address (to_mode, XEXP (x, 0)),
+			       convert_memory_address_addr_space
+				 (to_mode, XEXP (x, 0), as),
 			       XEXP (x, 1));
       break;
 
@@ -405,21 +410,22 @@ convert_memory_address (enum machine_mode to_mode ATTRIBUTE_UNUSED,
 #endif /* defined(POINTERS_EXTEND_UNSIGNED) */
 }
 
-/* Return something equivalent to X but valid as a memory address
-   for something of mode MODE.  When X is not itself valid, this
-   works by copying X or subexpressions of it into registers.  */
+/* Return something equivalent to X but valid as a memory address for something
+   of mode MODE in the named address space AS.  When X is not itself valid,
+   this works by copying X or subexpressions of it into registers.  */
 
 rtx
-memory_address (enum machine_mode mode, rtx x)
+memory_address_addr_space (enum machine_mode mode, rtx x, addr_space_t as)
 {
   rtx oldx = x;
+  enum machine_mode address_mode = targetm.addr_space.address_mode (as);
 
-  x = convert_memory_address (Pmode, x);
+  x = convert_memory_address_addr_space (address_mode, x, as);
 
   /* By passing constant addresses through registers
      we get a chance to cse them.  */
   if (! cse_not_expected && CONSTANT_P (x) && CONSTANT_ADDRESS_P (x))
-    x = force_reg (Pmode, x);
+    x = force_reg (address_mode, x);
 
   /* We get better cse by rejecting indirect addressing at this stage.
      Let the combiner create indirect addresses where appropriate.
@@ -431,12 +437,12 @@ memory_address (enum machine_mode mode, rtx x)
 	x = break_out_memory_refs (x);
 
       /* At this point, any valid address is accepted.  */
-      if (memory_address_p (mode, x))
+      if (memory_address_addr_space_p (mode, x, as))
 	goto done;
 
       /* If it was valid before but breaking out memory refs invalidated it,
 	 use it the old way.  */
-      if (memory_address_p (mode, oldx))
+      if (memory_address_addr_space_p (mode, oldx, as))
 	{
 	  x = oldx;
 	  goto done;
@@ -446,7 +452,12 @@ memory_address (enum machine_mode mode, rtx x)
 	 in certain cases.  This is not necessary since the code
 	 below can handle all possible cases, but machine-dependent
 	 transformations can make better code.  */
-      LEGITIMIZE_ADDRESS (x, oldx, mode, done);
+      {
+	rtx orig_x = x;
+	x = targetm.addr_space.legitimize_address (x, oldx, mode, as);
+	if (orig_x != x && memory_address_addr_space_p (mode, x, as))
+	  goto done;
+      }
 
       /* PLUS and MULT can appear in special ways
 	 as the result of attempts to make an address usable for indexing.
@@ -462,12 +473,12 @@ memory_address (enum machine_mode mode, rtx x)
 	  rtx constant_term = const0_rtx;
 	  rtx y = eliminate_constant_term (x, &constant_term);
 	  if (constant_term == const0_rtx
-	      || ! memory_address_p (mode, y))
+	      || ! memory_address_addr_space_p (mode, y, as))
 	    x = force_operand (x, NULL_RTX);
 	  else
 	    {
 	      y = gen_rtx_PLUS (GET_MODE (x), copy_to_reg (y), constant_term);
-	      if (! memory_address_p (mode, y))
+	      if (! memory_address_addr_space_p (mode, y, as))
 		x = force_operand (x, NULL_RTX);
 	      else
 		x = y;
@@ -485,12 +496,12 @@ memory_address (enum machine_mode mode, rtx x)
       /* Last resort: copy the value to a register, since
 	 the register is a valid address.  */
       else
-	x = force_reg (Pmode, x);
+	x = force_reg (address_mode, x);
     }
 
  done:
 
-  gcc_assert (memory_address_p (mode, x));
+  gcc_assert (memory_address_addr_space_p (mode, x, as));
   /* If we didn't change the address, we are done.  Otherwise, mark
      a reg as a pointer if we have REG or REG + CONST_INT.  */
   if (oldx == x)
@@ -499,7 +510,7 @@ memory_address (enum machine_mode mode, rtx x)
     mark_reg_pointer (x, BITS_PER_UNIT);
   else if (GET_CODE (x) == PLUS
 	   && REG_P (XEXP (x, 0))
-	   && GET_CODE (XEXP (x, 1)) == CONST_INT)
+	   && CONST_INT_P (XEXP (x, 1)))
     mark_reg_pointer (XEXP (x, 0), BITS_PER_UNIT);
 
   /* OLDX may have been the address on a temporary.  Update the address
@@ -518,7 +529,8 @@ validize_mem (rtx ref)
   if (!MEM_P (ref))
     return ref;
   ref = use_anchored_address (ref);
-  if (memory_address_p (GET_MODE (ref), XEXP (ref, 0)))
+  if (memory_address_addr_space_p (GET_MODE (ref), XEXP (ref, 0),
+				   MEM_ADDR_SPACE (ref)))
     return ref;
 
   /* Don't alter REF itself, since that is probably a stack slot.  */
@@ -546,7 +558,7 @@ use_anchored_address (rtx x)
   offset = 0;
   if (GET_CODE (base) == CONST
       && GET_CODE (XEXP (base, 0)) == PLUS
-      && GET_CODE (XEXP (XEXP (base, 0), 1)) == CONST_INT)
+      && CONST_INT_P (XEXP (XEXP (base, 0), 1)))
     {
       offset += INTVAL (XEXP (XEXP (base, 0), 1));
       base = XEXP (XEXP (base, 0), 0);
@@ -684,7 +696,7 @@ force_reg (enum machine_mode mode, rtx x)
     else if (GET_CODE (x) == CONST
 	     && GET_CODE (XEXP (x, 0)) == PLUS
 	     && GET_CODE (XEXP (XEXP (x, 0), 0)) == SYMBOL_REF
-	     && GET_CODE (XEXP (XEXP (x, 0), 1)) == CONST_INT)
+	     && CONST_INT_P (XEXP (XEXP (x, 0), 1)))
       {
 	rtx s = XEXP (XEXP (x, 0), 0);
 	rtx c = XEXP (XEXP (x, 0), 1);
@@ -744,63 +756,95 @@ copy_to_suggested_reg (rtx x, rtx target, enum machine_mode mode)
   return temp;
 }
 
-/* Return the mode to use to store a scalar of TYPE and MODE.
+/* Return the mode to use to pass or return a scalar of TYPE and MODE.
    PUNSIGNEDP points to the signedness of the type and may be adjusted
    to show what signedness to use on extension operations.
 
-   FOR_CALL is nonzero if this call is promoting args for a call.  */
-
-#if defined(PROMOTE_MODE) && !defined(PROMOTE_FUNCTION_MODE)
-#define PROMOTE_FUNCTION_MODE PROMOTE_MODE
-#endif
+   FOR_RETURN is nonzero if the caller is promoting the return value
+   of FNDECL, else it is for promoting args.  */
 
 enum machine_mode
-promote_mode (const_tree type, enum machine_mode mode, int *punsignedp,
-	      int for_call ATTRIBUTE_UNUSED)
+promote_function_mode (const_tree type, enum machine_mode mode, int *punsignedp,
+		       const_tree funtype, int for_return)
 {
+  switch (TREE_CODE (type))
+    {
+    case INTEGER_TYPE:   case ENUMERAL_TYPE:   case BOOLEAN_TYPE:
+    case REAL_TYPE:      case OFFSET_TYPE:     case FIXED_POINT_TYPE:
+    case POINTER_TYPE:   case REFERENCE_TYPE:
+      return targetm.calls.promote_function_mode (type, mode, punsignedp, funtype,
+						  for_return);
+
+    default:
+      return mode;
+    }
+}
+/* Return the mode to use to store a scalar of TYPE and MODE.
+   PUNSIGNEDP points to the signedness of the type and may be adjusted
+   to show what signedness to use on extension operations.  */
+
+enum machine_mode
+promote_mode (const_tree type ATTRIBUTE_UNUSED, enum machine_mode mode,
+	      int *punsignedp ATTRIBUTE_UNUSED)
+{
+  /* FIXME: this is the same logic that was there until GCC 4.4, but we
+     probably want to test POINTERS_EXTEND_UNSIGNED even if PROMOTE_MODE
+     is not defined.  The affected targets are M32C, S390, SPARC.  */
+#ifdef PROMOTE_MODE
   const enum tree_code code = TREE_CODE (type);
   int unsignedp = *punsignedp;
 
-#ifndef PROMOTE_MODE
-  if (! for_call)
-    return mode;
-#endif
-
   switch (code)
     {
-#ifdef PROMOTE_FUNCTION_MODE
     case INTEGER_TYPE:   case ENUMERAL_TYPE:   case BOOLEAN_TYPE:
     case REAL_TYPE:      case OFFSET_TYPE:     case FIXED_POINT_TYPE:
-#ifdef PROMOTE_MODE
-      if (for_call)
-	{
-#endif
-	  PROMOTE_FUNCTION_MODE (mode, unsignedp, type);
-#ifdef PROMOTE_MODE
-	}
-      else
-	{
-	  PROMOTE_MODE (mode, unsignedp, type);
-	}
-#endif
+      PROMOTE_MODE (mode, unsignedp, type);
+      *punsignedp = unsignedp;
+      return mode;
       break;
-#endif
 
 #ifdef POINTERS_EXTEND_UNSIGNED
     case REFERENCE_TYPE:
     case POINTER_TYPE:
-      mode = Pmode;
-      unsignedp = POINTERS_EXTEND_UNSIGNED;
+      *punsignedp = POINTERS_EXTEND_UNSIGNED;
+      return targetm.addr_space.address_mode
+	       (TYPE_ADDR_SPACE (TREE_TYPE (type)));
       break;
 #endif
 
     default:
-      break;
+      return mode;
     }
-
-  *punsignedp = unsignedp;
+#else
   return mode;
+#endif
 }
+
+
+/* Use one of promote_mode or promote_function_mode to find the promoted
+   mode of DECL.  If PUNSIGNEDP is not NULL, store there the unsignedness
+   of DECL after promotion.  */
+
+enum machine_mode
+promote_decl_mode (const_tree decl, int *punsignedp)
+{
+  tree type = TREE_TYPE (decl);
+  int unsignedp = TYPE_UNSIGNED (type);
+  enum machine_mode mode = DECL_MODE (decl);
+  enum machine_mode pmode;
+
+  if (TREE_CODE (decl) == RESULT_DECL
+      || TREE_CODE (decl) == PARM_DECL)
+    pmode = promote_function_mode (type, mode, &unsignedp,
+                                   TREE_TYPE (current_function_decl), 2);
+  else
+    pmode = promote_mode (type, mode, &unsignedp);
+
+  if (punsignedp)
+    *punsignedp = unsignedp;
+  return pmode;
+}
+
 
 /* Adjust the stack pointer by ADJUST (an rtx for a number of bytes).
    This pops when ADJUST is positive.  ADJUST need not be constant.  */
@@ -815,7 +859,7 @@ adjust_stack (rtx adjust)
 
   /* We expect all variable sized adjustments to be multiple of
      PREFERRED_STACK_BOUNDARY.  */
-  if (GET_CODE (adjust) == CONST_INT)
+  if (CONST_INT_P (adjust))
     stack_pointer_delta -= INTVAL (adjust);
 
   temp = expand_binop (Pmode,
@@ -844,7 +888,7 @@ anti_adjust_stack (rtx adjust)
 
   /* We expect all variable sized adjustments to be multiple of
      PREFERRED_STACK_BOUNDARY.  */
-  if (GET_CODE (adjust) == CONST_INT)
+  if (CONST_INT_P (adjust))
     stack_pointer_delta += INTVAL (adjust);
 
   temp = expand_binop (Pmode,
@@ -871,7 +915,7 @@ round_push (rtx size)
   if (align == 1)
     return size;
 
-  if (GET_CODE (size) == CONST_INT)
+  if (CONST_INT_P (size))
     {
       HOST_WIDE_INT new_size = (INTVAL (size) + align - 1) / align * align;
 
@@ -1133,7 +1177,7 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
 	 alignment.  This constraint may be too strong.  */
       gcc_assert (PREFERRED_STACK_BOUNDARY == BIGGEST_ALIGNMENT);
 
-      if (GET_CODE (size) == CONST_INT)
+      if (CONST_INT_P (size))
 	{
 	  HOST_WIDE_INT new_size = INTVAL (size) / align * align;
 
@@ -1189,9 +1233,11 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
   gcc_assert (!(stack_pointer_delta
 		% (PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT)));
 
-  /* If needed, check that we have the required amount of stack.
-     Take into account what has already been checked.  */
-  if (flag_stack_check == GENERIC_STACK_CHECK)
+  /* If needed, check that we have the required amount of stack.  Take into
+     account what has already been checked.  */
+  if (STACK_CHECK_MOVING_SP)
+    ;
+  else if (flag_stack_check == GENERIC_STACK_CHECK)
     probe_stack_range (STACK_OLD_CHECK_PROTECT + STACK_CHECK_MAX_FRAME_SIZE,
 		       size);
   else if (flag_stack_check == STATIC_BUILTIN_STACK_CHECK)
@@ -1260,7 +1306,10 @@ allocate_dynamic_stack_space (rtx size, rtx target, int known_align)
 	  emit_label (space_available);
 	}
 
-      anti_adjust_stack (size);
+      if (flag_stack_check && STACK_CHECK_MOVING_SP)
+	anti_adjust_stack_and_probe (size, false);
+      else
+	anti_adjust_stack (size);
 
 #ifdef STACK_GROWS_DOWNWARD
       emit_move_insn (target, virtual_stack_dynamic_rtx);
@@ -1311,22 +1360,30 @@ emit_stack_probe (rtx address)
 
   MEM_VOLATILE_P (memref) = 1;
 
-  if (STACK_CHECK_PROBE_LOAD)
-    emit_move_insn (gen_reg_rtx (word_mode), memref);
+  /* See if we have an insn to probe the stack.  */
+#ifdef HAVE_probe_stack
+  if (HAVE_probe_stack)
+    emit_insn (gen_probe_stack (memref));
   else
+#endif
     emit_move_insn (memref, const0_rtx);
 }
 
 /* Probe a range of stack addresses from FIRST to FIRST+SIZE, inclusive.
-   FIRST is a constant and size is a Pmode RTX.  These are offsets from the
-   current stack pointer.  STACK_GROWS_DOWNWARD says whether to add or
-   subtract from the stack.  If SIZE is constant, this is done
-   with a fixed number of probes.  Otherwise, we must make a loop.  */
+   FIRST is a constant and size is a Pmode RTX.  These are offsets from
+   the current stack pointer.  STACK_GROWS_DOWNWARD says whether to add
+   or subtract them from the stack pointer.  */
+
+#define PROBE_INTERVAL (1 << STACK_CHECK_PROBE_INTERVAL_EXP)
 
 #ifdef STACK_GROWS_DOWNWARD
 #define STACK_GROW_OP MINUS
+#define STACK_GROW_OPTAB sub_optab
+#define STACK_GROW_OFF(off) -(off)
 #else
 #define STACK_GROW_OP PLUS
+#define STACK_GROW_OPTAB add_optab
+#define STACK_GROW_OFF(off) (off)
 #endif
 
 void
@@ -1336,113 +1393,280 @@ probe_stack_range (HOST_WIDE_INT first, rtx size)
   if (GET_MODE (size) != VOIDmode && GET_MODE (size) != Pmode)
     size = convert_to_mode (Pmode, size, 1);
 
-  /* Next see if the front end has set up a function for us to call to
-     check the stack.  */
-  if (stack_check_libfunc != 0)
+  /* Next see if we have a function to check the stack.  */
+  if (stack_check_libfunc)
     {
-      rtx addr = memory_address (QImode,
+      rtx addr = memory_address (Pmode,
 				 gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
 					         stack_pointer_rtx,
 					         plus_constant (size, first)));
-
-      addr = convert_memory_address (ptr_mode, addr);
       emit_library_call (stack_check_libfunc, LCT_NORMAL, VOIDmode, 1, addr,
-			 ptr_mode);
+			 Pmode);
     }
 
-  /* Next see if we have an insn to check the stack.  Use it if so.  */
+  /* Next see if we have an insn to check the stack.  */
 #ifdef HAVE_check_stack
   else if (HAVE_check_stack)
     {
-      insn_operand_predicate_fn pred;
-      rtx last_addr
-	= force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
-					 stack_pointer_rtx,
-					 plus_constant (size, first)),
-			 NULL_RTX);
+      rtx addr = memory_address (Pmode,
+				 gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
+					         stack_pointer_rtx,
+					         plus_constant (size, first)));
+      insn_operand_predicate_fn pred
+	= insn_data[(int) CODE_FOR_check_stack].operand[0].predicate;
+      if (pred && !((*pred) (addr, Pmode)))
+	addr = copy_to_mode_reg (Pmode, addr);
 
-      pred = insn_data[(int) CODE_FOR_check_stack].operand[0].predicate;
-      if (pred && ! ((*pred) (last_addr, Pmode)))
-	last_addr = copy_to_mode_reg (Pmode, last_addr);
-
-      emit_insn (gen_check_stack (last_addr));
+      emit_insn (gen_check_stack (addr));
     }
 #endif
 
-  /* If we have to generate explicit probes, see if we have a constant
-     small number of them to generate.  If so, that's the easy case.  */
-  else if (GET_CODE (size) == CONST_INT
-	   && INTVAL (size) < 10 * STACK_CHECK_PROBE_INTERVAL)
+  /* Otherwise we have to generate explicit probes.  If we have a constant
+     small number of them to generate, that's the easy case.  */
+  else if (CONST_INT_P (size) && INTVAL (size) < 7 * PROBE_INTERVAL)
     {
-      HOST_WIDE_INT offset;
+      HOST_WIDE_INT isize = INTVAL (size), i;
+      rtx addr;
 
-      /* Start probing at FIRST + N * STACK_CHECK_PROBE_INTERVAL
-	 for values of N from 1 until it exceeds LAST.  If only one
-	 probe is needed, this will not generate any code.  Then probe
-	 at LAST.  */
-      for (offset = first + STACK_CHECK_PROBE_INTERVAL;
-	   offset < INTVAL (size);
-	   offset = offset + STACK_CHECK_PROBE_INTERVAL)
-	emit_stack_probe (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
-					  stack_pointer_rtx,
-					  GEN_INT (offset)));
+      /* Probe at FIRST + N * PROBE_INTERVAL for values of N from 1 until
+	 it exceeds SIZE.  If only one probe is needed, this will not
+	 generate any code.  Then probe at FIRST + SIZE.  */
+      for (i = PROBE_INTERVAL; i < isize; i += PROBE_INTERVAL)
+	{
+	  addr = memory_address (Pmode,
+				 plus_constant (stack_pointer_rtx,
+				 		STACK_GROW_OFF (first + i)));
+	  emit_stack_probe (addr);
+	}
 
-      emit_stack_probe (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
-					stack_pointer_rtx,
-					plus_constant (size, first)));
+      addr = memory_address (Pmode,
+			     plus_constant (stack_pointer_rtx,
+					    STACK_GROW_OFF (first + isize)));
+      emit_stack_probe (addr);
     }
 
-  /* In the variable case, do the same as above, but in a loop.  We emit loop
-     notes so that loop optimization can be done.  */
+  /* In the variable case, do the same as above, but in a loop.  Note that we
+     must be extra careful with variables wrapping around because we might be
+     at the very top (or the very bottom) of the address space and we have to
+     be able to handle this case properly; in particular, we use an equality
+     test for the loop condition.  */
   else
     {
-      rtx test_addr
-	= force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
-					 stack_pointer_rtx,
-					 GEN_INT (first + STACK_CHECK_PROBE_INTERVAL)),
-			 NULL_RTX);
-      rtx last_addr
-	= force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
-					 stack_pointer_rtx,
-					 plus_constant (size, first)),
-			 NULL_RTX);
-      rtx incr = GEN_INT (STACK_CHECK_PROBE_INTERVAL);
+      rtx rounded_size, rounded_size_op, test_addr, last_addr, temp;
       rtx loop_lab = gen_label_rtx ();
-      rtx test_lab = gen_label_rtx ();
       rtx end_lab = gen_label_rtx ();
-      rtx temp;
 
-      if (!REG_P (test_addr)
-	  || REGNO (test_addr) < FIRST_PSEUDO_REGISTER)
-	test_addr = force_reg (Pmode, test_addr);
 
-      emit_jump (test_lab);
+      /* Step 1: round SIZE to the previous multiple of the interval.  */
+
+      /* ROUNDED_SIZE = SIZE & -PROBE_INTERVAL  */
+      rounded_size
+	= simplify_gen_binary (AND, Pmode, size, GEN_INT (-PROBE_INTERVAL));
+      rounded_size_op = force_operand (rounded_size, NULL_RTX);
+
+
+      /* Step 2: compute initial and final value of the loop counter.  */
+
+      /* TEST_ADDR = SP + FIRST.  */
+      test_addr = force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
+					 	 stack_pointer_rtx,
+					 	 GEN_INT (first)), NULL_RTX);
+
+      /* LAST_ADDR = SP + FIRST + ROUNDED_SIZE.  */
+      last_addr = force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
+						 test_addr,
+						 rounded_size_op), NULL_RTX);
+
+
+      /* Step 3: the loop
+
+	 while (TEST_ADDR != LAST_ADDR)
+	   {
+	     TEST_ADDR = TEST_ADDR + PROBE_INTERVAL
+	     probe at TEST_ADDR
+	   }
+
+	 probes at FIRST + N * PROBE_INTERVAL for values of N from 1
+	 until it is equal to ROUNDED_SIZE.  */
 
       emit_label (loop_lab);
-      emit_stack_probe (test_addr);
 
-#ifdef STACK_GROWS_DOWNWARD
-#define CMP_OPCODE GTU
-      temp = expand_binop (Pmode, sub_optab, test_addr, incr, test_addr,
+      /* Jump to END_LAB if TEST_ADDR == LAST_ADDR.  */
+      emit_cmp_and_jump_insns (test_addr, last_addr, EQ, NULL_RTX, Pmode, 1,
+			       end_lab);
+
+      /* TEST_ADDR = TEST_ADDR + PROBE_INTERVAL.  */
+      temp = expand_binop (Pmode, STACK_GROW_OPTAB, test_addr,
+			   GEN_INT (PROBE_INTERVAL), test_addr,
 			   1, OPTAB_WIDEN);
-#else
-#define CMP_OPCODE LTU
-      temp = expand_binop (Pmode, add_optab, test_addr, incr, test_addr,
-			   1, OPTAB_WIDEN);
-#endif
 
       gcc_assert (temp == test_addr);
 
-      emit_label (test_lab);
-      emit_cmp_and_jump_insns (test_addr, last_addr, CMP_OPCODE,
-			       NULL_RTX, Pmode, 1, loop_lab);
-      emit_jump (end_lab);
+      /* Probe at TEST_ADDR.  */
+      emit_stack_probe (test_addr);
+
+      emit_jump (loop_lab);
+
       emit_label (end_lab);
 
-      emit_stack_probe (last_addr);
+
+      /* Step 4: probe at FIRST + SIZE if we cannot assert at compile-time
+	 that SIZE is equal to ROUNDED_SIZE.  */
+
+      /* TEMP = SIZE - ROUNDED_SIZE.  */
+      temp = simplify_gen_binary (MINUS, Pmode, size, rounded_size);
+      if (temp != const0_rtx)
+	{
+	  rtx addr;
+
+	  if (GET_CODE (temp) == CONST_INT)
+	    {
+	      /* Use [base + disp} addressing mode if supported.  */
+	      HOST_WIDE_INT offset = INTVAL (temp);
+	      addr = memory_address (Pmode,
+				     plus_constant (last_addr,
+						    STACK_GROW_OFF (offset)));
+	    }
+	  else
+	    {
+	      /* Manual CSE if the difference is not known at compile-time.  */
+	      temp = gen_rtx_MINUS (Pmode, size, rounded_size_op);
+	      addr = memory_address (Pmode,
+				     gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
+						     last_addr, temp));
+	    }
+
+	  emit_stack_probe (addr);
+	}
     }
 }
-
+
+/* Adjust the stack pointer by minus SIZE (an rtx for a number of bytes)
+   while probing it.  This pushes when SIZE is positive.  SIZE need not
+   be constant.  If ADJUST_BACK is true, adjust back the stack pointer
+   by plus SIZE at the end.  */
+
+void
+anti_adjust_stack_and_probe (rtx size, bool adjust_back)
+{
+  /* We skip the probe for the first interval + a small dope of 4 words and
+     probe that many bytes past the specified size to maintain a protection
+     area at the botton of the stack.  */
+  const int dope = 4 * UNITS_PER_WORD;
+
+  /* First ensure SIZE is Pmode.  */
+  if (GET_MODE (size) != VOIDmode && GET_MODE (size) != Pmode)
+    size = convert_to_mode (Pmode, size, 1);
+
+  /* If we have a constant small number of probes to generate, that's the
+     easy case.  */
+  if (GET_CODE (size) == CONST_INT && INTVAL (size) < 7 * PROBE_INTERVAL)
+    {
+      HOST_WIDE_INT isize = INTVAL (size), i;
+      bool first_probe = true;
+
+      /* Adjust SP and probe to PROBE_INTERVAL + N * PROBE_INTERVAL for
+	 values of N from 1 until it exceeds SIZE.  If only one probe is
+	 needed, this will not generate any code.  Then adjust and probe
+	 to PROBE_INTERVAL + SIZE.  */
+      for (i = PROBE_INTERVAL; i < isize; i += PROBE_INTERVAL)
+	{
+	  if (first_probe)
+	    {
+	      anti_adjust_stack (GEN_INT (2 * PROBE_INTERVAL + dope));
+	      first_probe = false;
+	    }
+	  else
+	    anti_adjust_stack (GEN_INT (PROBE_INTERVAL));
+	  emit_stack_probe (stack_pointer_rtx);
+	}
+
+      if (first_probe)
+	anti_adjust_stack (plus_constant (size, PROBE_INTERVAL + dope));
+      else
+	anti_adjust_stack (plus_constant (size, PROBE_INTERVAL - i));
+      emit_stack_probe (stack_pointer_rtx);
+    }
+
+  /* In the variable case, do the same as above, but in a loop.  Note that we
+     must be extra careful with variables wrapping around because we might be
+     at the very top (or the very bottom) of the address space and we have to
+     be able to handle this case properly; in particular, we use an equality
+     test for the loop condition.  */
+  else
+    {
+      rtx rounded_size, rounded_size_op, last_addr, temp;
+      rtx loop_lab = gen_label_rtx ();
+      rtx end_lab = gen_label_rtx ();
+
+
+      /* Step 1: round SIZE to the previous multiple of the interval.  */
+
+      /* ROUNDED_SIZE = SIZE & -PROBE_INTERVAL  */
+      rounded_size
+	= simplify_gen_binary (AND, Pmode, size, GEN_INT (-PROBE_INTERVAL));
+      rounded_size_op = force_operand (rounded_size, NULL_RTX);
+
+
+      /* Step 2: compute initial and final value of the loop counter.  */
+
+      /* SP = SP_0 + PROBE_INTERVAL.  */
+      anti_adjust_stack (GEN_INT (PROBE_INTERVAL + dope));
+
+      /* LAST_ADDR = SP_0 + PROBE_INTERVAL + ROUNDED_SIZE.  */
+      last_addr = force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
+						 stack_pointer_rtx,
+						 rounded_size_op), NULL_RTX);
+
+
+      /* Step 3: the loop
+
+	  while (SP != LAST_ADDR)
+	    {
+	      SP = SP + PROBE_INTERVAL
+	      probe at SP
+	    }
+
+	 adjusts SP and probes to PROBE_INTERVAL + N * PROBE_INTERVAL for
+	 values of N from 1 until it is equal to ROUNDED_SIZE.  */
+
+      emit_label (loop_lab);
+
+      /* Jump to END_LAB if SP == LAST_ADDR.  */
+      emit_cmp_and_jump_insns (stack_pointer_rtx, last_addr, EQ, NULL_RTX,
+			       Pmode, 1, end_lab);
+
+      /* SP = SP + PROBE_INTERVAL and probe at SP.  */
+      anti_adjust_stack (GEN_INT (PROBE_INTERVAL));
+      emit_stack_probe (stack_pointer_rtx);
+
+      emit_jump (loop_lab);
+
+      emit_label (end_lab);
+
+
+      /* Step 4: adjust SP and probe to PROBE_INTERVAL + SIZE if we cannot
+	 assert at compile-time that SIZE is equal to ROUNDED_SIZE.  */
+
+      /* TEMP = SIZE - ROUNDED_SIZE.  */
+      temp = simplify_gen_binary (MINUS, Pmode, size, rounded_size);
+      if (temp != const0_rtx)
+	{
+	  /* Manual CSE if the difference is not known at compile-time.  */
+	  if (GET_CODE (temp) != CONST_INT)
+	    temp = gen_rtx_MINUS (Pmode, size, rounded_size_op);
+	  anti_adjust_stack (temp);
+	  emit_stack_probe (stack_pointer_rtx);
+	}
+    }
+
+  /* Adjust back and account for the additional first interval.  */
+  if (adjust_back)
+    adjust_stack (plus_constant (size, PROBE_INTERVAL + dope));
+  else
+    adjust_stack (GEN_INT (PROBE_INTERVAL + dope));
+}
+
 /* Return an rtx representing the register or memory location
    in which a scalar value of data type VALTYPE
    was returned by a function call to function FUNC.
@@ -1491,9 +1715,9 @@ hard_function_value (const_tree valtype, const_tree func, const_tree fntype,
    in which a scalar value of mode MODE was returned by a library call.  */
 
 rtx
-hard_libcall_value (enum machine_mode mode)
+hard_libcall_value (enum machine_mode mode, rtx fun)
 {
-  return LIBCALL_VALUE (mode);
+  return targetm.calls.libcall_value (mode, fun);
 }
 
 /* Look up the tree code for a given rtx code

@@ -36,6 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "timevar.h"
 #include "params.h"
 #include "bitmap.h"
+#include "plugin.h"
 
 /* Prefer MAP_ANON(YMOUS) to /dev/zero, since we don't need to keep a
    file open.  Prefer either to valloc.  */
@@ -425,13 +426,13 @@ struct alloc_zone
     /* Total allocations and overhead for sizes less than 32, 64 and 128.
        These sizes are interesting because they are typical cache line
        sizes.  */
-   
+
     unsigned long long total_allocated_under32;
     unsigned long long total_overhead_under32;
-  
+
     unsigned long long total_allocated_under64;
     unsigned long long total_overhead_under64;
-  
+
     unsigned long long total_allocated_under128;
     unsigned long long total_overhead_under128;
   } stats;
@@ -1314,7 +1315,7 @@ ggc_alloc_zone_stat (size_t orig_size, struct alloc_zone *zone
   /* Keep track of how many bytes are being allocated.  This
      information is used in deciding when to collect.  */
   zone->allocated += size;
-  
+
   timevar_ggc_mem_total += size;
 
 #ifdef GATHER_STATISTICS
@@ -1520,7 +1521,7 @@ ggc_set_mark (const void *p)
       offset = (ptr - pch_zone.page) / BYTES_PER_MARK_BIT;
       mark_word = offset / (8 * sizeof (mark_type));
       mark_bit = offset % (8 * sizeof (mark_type));
-      
+
       if (pch_zone.mark_bits[mark_word] & (1 << mark_bit))
 	return 1;
       pch_zone.mark_bits[mark_word] |= (1 << mark_bit);
@@ -1570,7 +1571,7 @@ ggc_marked_p (const void *p)
       offset = (ptr - pch_zone.page) / BYTES_PER_MARK_BIT;
       mark_word = offset / (8 * sizeof (mark_type));
       mark_bit = offset % (8 * sizeof (mark_type));
-      
+
       return (pch_zone.mark_bits[mark_word] & (1 << mark_bit)) != 0;
     }
 
@@ -1962,7 +1963,7 @@ ggc_collect_1 (struct alloc_zone *zone, bool need_marking)
       ggc_prune_overhead_list ();
 #endif
     }
-  
+
   sweep_pages (zone);
   zone->was_collected = true;
   zone->allocated_last_gc = zone->allocated;
@@ -2029,6 +2030,8 @@ ggc_collect (void)
 	}
     }
 
+  invoke_plugin_callbacks (PLUGIN_GGC_START, NULL);
+
   /* Start by possibly collecting the main zone.  */
   main_zone.was_collected = false;
   marked |= ggc_collect_1 (&main_zone, true);
@@ -2092,6 +2095,8 @@ ggc_collect (void)
 	  free (dead_zone);
 	}
     }
+
+  invoke_plugin_callbacks (PLUGIN_GGC_END, NULL);
 
   timevar_pop (TV_GC);
 }
@@ -2173,7 +2178,7 @@ ggc_print_statistics (void)
 	      chunk = chunk->next_free;
 	    }
 	}
-      
+
       fprintf (stderr, "%20s %10lu%c %10lu%c %10lu%c\n",
 	       zone->name,
 	       SCALE (allocated), LABEL (allocated),
@@ -2216,7 +2221,7 @@ ggc_print_statistics (void)
 	   SCALE (total_allocated), LABEL(total_allocated),
 	   SCALE (total_overhead), LABEL (total_overhead));
 
-#ifdef GATHER_STATISTICS  
+#ifdef GATHER_STATISTICS
   {
     unsigned long long all_overhead = 0, all_allocated = 0;
     unsigned long long all_overhead_under32 = 0, all_allocated_under32 = 0;
@@ -2235,7 +2240,7 @@ ggc_print_statistics (void)
 
 	all_allocated_under64 += zone->stats.total_allocated_under64;
 	all_overhead_under64 += zone->stats.total_overhead_under64;
-	
+
 	all_allocated_under128 += zone->stats.total_allocated_under128;
 	all_overhead_under128 += zone->stats.total_overhead_under128;
 

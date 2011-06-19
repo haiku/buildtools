@@ -28,7 +28,7 @@
 
 namespace std
 {
-  condition_variable::condition_variable()
+  condition_variable::condition_variable() throw ()
   {
 #ifdef __GTHREAD_COND_INIT
     __native_type __tmp = __GTHREAD_COND_INIT;
@@ -41,7 +41,7 @@ namespace std
 #endif
   }
 
-  condition_variable::~condition_variable()
+  condition_variable::~condition_variable() throw ()
   {
     // XXX no thread blocked
     /* int __e = */ __gthread_cond_destroy(&_M_cond);
@@ -79,23 +79,11 @@ namespace std
       __throw_system_error(__e);
   }
 
-  condition_variable_any::condition_variable_any()
-  {
-#ifdef __GTHREAD_COND_INIT
-    __native_type __tmp = __GTHREAD_COND_INIT;
-    _M_cond = __tmp;
-#else
-    int __e = __gthread_cond_init(&_M_cond, NULL);
+  condition_variable_any::condition_variable_any() throw ()
+  { }
 
-    if (__e)
-      __throw_system_error(__e);
-#endif
-  }
-
-  condition_variable_any::~condition_variable_any()
-  {
-    __gthread_cond_destroy(&_M_cond);
-  }
+  condition_variable_any::~condition_variable_any() throw ()
+  { }
 }
 
 #endif // _GLIBCXX_HAS_GTHREADS && _GLIBCXX_USE_C99_STDINT_TR1

@@ -1,5 +1,5 @@
 /* Target macros for the FRV port of GCC.
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
    Free Software Foundation, Inc.
    Contributed by Red Hat Inc.
 
@@ -799,7 +799,7 @@
 	1, 1, 1, 1,			/* 164-167, accg8 - accg11 */	\
 	/* Other registers */						\
 	1,				/* 168, AP   - fake arg ptr */	\
-	0,				/* 169, LR   - Link register*/	\
+	1,				/* 169, LR   - Link register*/	\
 	0,				/* 170, LCR  - Loop count reg*/	\
 	1, 1				/* 171-172, iacc0 */		\
 }
@@ -1564,26 +1564,6 @@ typedef struct frv_stack {
 
 /* Eliminating the Frame Pointer and the Arg Pointer.  */
 
-/* A C expression which is nonzero if a function must have and use a frame
-   pointer.  This expression is evaluated in the reload pass.  If its value is
-   nonzero the function will have a frame pointer.
-
-   The expression can in principle examine the current function and decide
-   according to the facts, but on most machines the constant 0 or the constant
-   1 suffices.  Use 0 when the machine allows code to be generated with no
-   frame pointer, and doing so saves some time or space.  Use 1 when there is
-   no possible advantage to avoiding a frame pointer.
-
-   In certain cases, the compiler does not know how to produce valid code
-   without a frame pointer.  The compiler recognizes those cases and
-   automatically gives the function a frame pointer regardless of what
-   `FRAME_POINTER_REQUIRED' says.  You don't need to worry about them.
-
-   In a function that does not require a frame pointer, the frame pointer
-   register can be allocated for ordinary usage, unless you mark it as a fixed
-   register.  See `FIXED_REGISTERS' for more information.  */
-#define FRAME_POINTER_REQUIRED frv_frame_pointer_required ()
-
 /* If defined, this macro specifies a table of register pairs used to eliminate
    unneeded registers that point into the stack frame.  If it is not defined,
    the only elimination attempted by the compiler is to replace references to
@@ -1613,17 +1593,6 @@ typedef struct frv_stack {
   {ARG_POINTER_REGNUM,	 FRAME_POINTER_REGNUM},				\
   {FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}				\
 }
-
-/* A C expression that returns nonzero if the compiler is allowed to try to
-   replace register number FROM with register number TO.  This macro need only
-   be defined if `ELIMINABLE_REGS' is defined, and will usually be the constant
-   1, since most of the cases preventing register elimination are things that
-   the compiler already knows about.  */
-
-#define CAN_ELIMINATE(FROM, TO)						\
-  ((FROM) == ARG_POINTER_REGNUM && (TO) == STACK_POINTER_REGNUM		\
-   ? ! frame_pointer_needed						\
-   : 1)
 
 /* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It specifies the
    initial difference between the specified pair of registers.  This macro must
@@ -1777,52 +1746,7 @@ typedef struct frv_stack {
    function call.  */
 #define RETURN_VALUE_REGNUM	(GPR_FIRST + 8)
 
-/* A C expression to create an RTX representing the place where a function
-   returns a value of data type VALTYPE.  VALTYPE is a tree node representing a
-   data type.  Write `TYPE_MODE (VALTYPE)' to get the machine mode used to
-   represent that type.  On many machines, only the mode is relevant.
-   (Actually, on most machines, scalar values are returned in the same place
-   regardless of mode).
-
-   If `TARGET_PROMOTE_FUNCTION_RETURN' is defined to return true, you
-   must apply the same promotion rules specified in `PROMOTE_MODE' if
-   VALTYPE is a scalar type.
-
-   If the precise function being called is known, FUNC is a tree node
-   (`FUNCTION_DECL') for it; otherwise, FUNC is a null pointer.  This makes it
-   possible to use a different value-returning convention for specific
-   functions when all their calls are known.
-
-   `FUNCTION_VALUE' is not used for return vales with aggregate data types,
-   because these are returned in another way.  See
-   `TARGET_STRUCT_VALUE_RTX' and related macros, below.  */
-#define FUNCTION_VALUE(VALTYPE, FUNC) \
-  gen_rtx_REG (TYPE_MODE (VALTYPE), RETURN_VALUE_REGNUM)
-
-/* A C expression to create an RTX representing the place where a library
-   function returns a value of mode MODE.
-
-   Note that "library function" in this context means a compiler support
-   routine, used to perform arithmetic, whose name is known specially by the
-   compiler and was not mentioned in the C code being compiled.
-
-   The definition of `LIBRARY_VALUE' need not be concerned aggregate data
-   types, because none of the library functions returns such types.  */
-#define LIBCALL_VALUE(MODE) gen_rtx_REG (MODE, RETURN_VALUE_REGNUM)
-
-/* A C expression that is nonzero if REGNO is the number of a hard register in
-   which the values of called function may come back.
-
-   A register whose use for returning values is limited to serving as the
-   second of a pair (for a value of type `double', say) need not be recognized
-   by this macro.  So for most machines, this definition suffices:
-
-        #define FUNCTION_VALUE_REGNO_P(N) ((N) == RETURN)
-
-   If the machine has register windows, so that the caller and the called
-   function use different registers for the return value, this macro should
-   recognize only the caller's register numbers.  */
-#define FUNCTION_VALUE_REGNO_P(REGNO) ((REGNO) == RETURN_VALUE_REGNUM)
+#define FUNCTION_VALUE_REGNO_P(REGNO) frv_function_value_regno_p (REGNO)
 
 
 /* How Large Values are Returned.  */
@@ -1874,13 +1798,6 @@ typedef struct frv_stack {
    If you don't define this macro, the value of `BIGGEST_ALIGNMENT' is used for
    aligning trampolines.  */
 #define TRAMPOLINE_ALIGNMENT (TARGET_FDPIC ? 64 : 32)
-
-/* A C statement to initialize the variable parts of a trampoline.  ADDR is an
-   RTX for the address of the trampoline; FNADDR is an RTX for the address of
-   the nested function; STATIC_CHAIN is an RTX for the static chain value that
-   should be passed to the function when it is called.  */
-#define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, STATIC_CHAIN) \
-  frv_initialize_trampoline (ADDR, FNADDR, STATIC_CHAIN)
 
 /* Define this macro if trampolines need a special subroutine to do their work.
    The macro should expand to a series of `asm' statements which will be
@@ -2010,91 +1927,10 @@ __asm__("\n"								\
 
 /* Addressing Modes.  */
 
-/* A C expression that is 1 if the RTX X is a constant which is a valid
-   address.  On most machines, this can be defined as `CONSTANT_P (X)', but a
-   few machines are more restrictive in which constant addresses are supported.
-
-   `CONSTANT_P' accepts integer-values expressions whose values are not
-   explicitly known, such as `symbol_ref', `label_ref', and `high' expressions
-   and `const' arithmetic expressions, in addition to `const_int' and
-   `const_double' expressions.  */
-#define CONSTANT_ADDRESS_P(X) CONSTANT_P (X)
-
 /* A number, the maximum number of registers that can appear in a valid memory
    address.  Note that it is up to you to specify a value equal to the maximum
-   number that `GO_IF_LEGITIMATE_ADDRESS' would ever accept.  */
+   number that `TARGET_LEGITIMATE_ADDRESS_P' would ever accept.  */
 #define MAX_REGS_PER_ADDRESS 2
-
-/* A C compound statement with a conditional `goto LABEL;' executed if X (an
-   RTX) is a legitimate memory address on the target machine for a memory
-   operand of mode MODE.
-
-   It usually pays to define several simpler macros to serve as subroutines for
-   this one.  Otherwise it may be too complicated to understand.
-
-   This macro must exist in two variants: a strict variant and a non-strict
-   one.  The strict variant is used in the reload pass.  It must be defined so
-   that any pseudo-register that has not been allocated a hard register is
-   considered a memory reference.  In contexts where some kind of register is
-   required, a pseudo-register with no hard register must be rejected.
-
-   The non-strict variant is used in other passes.  It must be defined to
-   accept all pseudo-registers in every context where some kind of register is
-   required.
-
-   Compiler source files that want to use the strict variant of this macro
-   define the macro `REG_OK_STRICT'.  You should use an `#ifdef REG_OK_STRICT'
-   conditional to define the strict variant in that case and the non-strict
-   variant otherwise.
-
-   Subroutines to check for acceptable registers for various purposes (one for
-   base registers, one for index registers, and so on) are typically among the
-   subroutines used to define `GO_IF_LEGITIMATE_ADDRESS'.  Then only these
-   subroutine macros need have two variants; the higher levels of macros may be
-   the same whether strict or not.
-
-   Normally, constant addresses which are the sum of a `symbol_ref' and an
-   integer are stored inside a `const' RTX to mark them as constant.
-   Therefore, there is no need to recognize such sums specifically as
-   legitimate addresses.  Normally you would simply recognize any `const' as
-   legitimate.
-
-   Usually `PRINT_OPERAND_ADDRESS' is not prepared to handle constant sums that
-   are not marked with `const'.  It assumes that a naked `plus' indicates
-   indexing.  If so, then you *must* reject such naked constant sums as
-   illegitimate addresses, so that none of them will be given to
-   `PRINT_OPERAND_ADDRESS'.
-
-   On some machines, whether a symbolic address is legitimate depends on the
-   section that the address refers to.  On these machines, define the macro
-   `ENCODE_SECTION_INFO' to store the information into the `symbol_ref', and
-   then check for it here.  When you see a `const', you will have to look
-   inside it to find the `symbol_ref' in order to determine the section.
-
-   The best way to modify the name string is by adding text to the beginning,
-   with suitable punctuation to prevent any ambiguity.  Allocate the new name
-   in `saveable_obstack'.  You will have to modify `ASM_OUTPUT_LABELREF' to
-   remove and decode the added text and output the name accordingly, and define
-   `(* targetm.strip_name_encoding)' to access the original name string.
-
-   You can check the information stored here into the `symbol_ref' in the
-   definitions of the macros `GO_IF_LEGITIMATE_ADDRESS' and
-   `PRINT_OPERAND_ADDRESS'.  */
-
-#ifdef REG_OK_STRICT
-#define REG_OK_STRICT_P 1
-#else
-#define REG_OK_STRICT_P 0
-#endif
-
-#define GO_IF_LEGITIMATE_ADDRESS(MODE, X, LABEL)			\
-  do									\
-    {									\
-      if (frv_legitimate_address_p (MODE, X, REG_OK_STRICT_P,		\
- 				    FALSE, FALSE))			\
-	goto LABEL;							\
-    }									\
-  while (0)
 
 /* A C expression that is nonzero if X (assumed to be a `reg' RTX) is valid for
    use as a base register.  For hard registers, it should always accept those
@@ -2120,30 +1956,7 @@ __asm__("\n"								\
    will reload one or both registers only if neither labeling works.  */
 #define REG_OK_FOR_INDEX_P(X) REG_OK_FOR_BASE_P (X)
 
-#define LEGITIMIZE_ADDRESS(X, OLDX, MODE, WIN)		\
-do {							\
-  rtx new_x = frv_legitimize_address (X, OLDX, MODE);	\
-  if (new_x)						\
-    { 							\
-      (X) = new_x; 					\
-      goto WIN; 					\
-    } 							\
-} while (0)
-
 #define FIND_BASE_TERM frv_find_base_term
-
-/* A C statement or compound statement with a conditional `goto LABEL;'
-   executed if memory address X (an RTX) can have different meanings depending
-   on the machine mode of the memory reference it is used for or if the address
-   is valid for some modes but not others.
-
-   Autoincrement and autodecrement addresses typically have mode-dependent
-   effects because the amount of the increment or decrement is the size of the
-   operand being addressed.  Some machines have other mode-dependent addresses.
-   Many RISC machines have no mode-dependent addresses.
-
-   You may assume that ADDR is a valid address for the machine.  */
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
 
 /* A C expression that is nonzero if X is a legitimate constant for an
    immediate operand on the target machine.  You can assume that X satisfies
@@ -2935,9 +2748,6 @@ enum frv_builtins
 
 /* Enable prototypes on the call rtl functions.  */
 #define MD_CALL_PROTOTYPES 1
-
-extern GTY(()) rtx frv_compare_op0;			/* operand save for */
-extern GTY(()) rtx frv_compare_op1;			/* comparison generation */
 
 #define CPU_UNITS_QUERY 1
 

@@ -76,16 +76,30 @@
   (and (match_code "reg")
        (match_test "REGNO (op) == FLAGS_REG")))
 
+;; Return true if op is a QImode register operand other than
+;; %[abcd][hl].
+(define_predicate "ext_QIreg_operand"
+  (and (match_code "reg")
+       (match_test "TARGET_64BIT
+		    && GET_MODE (op) == QImode
+		    && REGNO (op) > BX_REG")))
+
+;; Similarly, but don't check mode of the operand.
+(define_predicate "ext_QIreg_nomode_operand"
+  (and (match_code "reg")
+       (match_test "TARGET_64BIT
+		    && REGNO (op) > BX_REG")))
+
 ;; Return true if op is not xmm0 register.
 (define_predicate "reg_not_xmm0_operand"
    (and (match_operand 0 "register_operand")
-	(match_test "GET_CODE (op) != REG
+	(match_test "!REG_P (op) 
 		     || REGNO (op) != FIRST_SSE_REG")))
 
 ;; As above, but allow nonimmediate operands.
 (define_predicate "nonimm_not_xmm0_operand"
    (and (match_operand 0 "nonimmediate_operand")
-	(match_test "GET_CODE (op) != REG
+	(match_test "!REG_P (op) 
 		     || REGNO (op) != FIRST_SSE_REG")))
 
 ;; Return 1 if VALUE can be stored in a sign extended immediate field.
@@ -313,8 +327,8 @@
 (define_predicate "x86_64_szext_general_operand"
   (if_then_else (match_test "TARGET_64BIT")
     (ior (match_operand 0 "nonimmediate_operand")
-	 (ior (match_operand 0 "x86_64_immediate_operand")
-	      (match_operand 0 "x86_64_zext_immediate_operand")))
+	 (match_operand 0 "x86_64_immediate_operand")
+	 (match_operand 0 "x86_64_zext_immediate_operand"))
     (match_operand 0 "general_operand")))
 
 ;; Return nonzero if OP is nonmemory operand representable on x86_64.
@@ -328,8 +342,8 @@
 (define_predicate "x86_64_szext_nonmemory_operand"
   (if_then_else (match_test "TARGET_64BIT")
     (ior (match_operand 0 "register_operand")
-	 (ior (match_operand 0 "x86_64_immediate_operand")
-	      (match_operand 0 "x86_64_zext_immediate_operand")))
+	 (match_operand 0 "x86_64_immediate_operand")
+	 (match_operand 0 "x86_64_zext_immediate_operand"))
     (match_operand 0 "nonmemory_operand")))
 
 ;; Return true when operand is PIC expression that can be computed by lea
@@ -563,8 +577,8 @@
 ;; Test for a valid operand for a call instruction.
 (define_predicate "call_insn_operand"
   (ior (match_operand 0 "constant_call_address_operand")
-       (ior (match_operand 0 "call_register_no_elim_operand")
-	    (match_operand 0 "memory_operand"))))
+       (match_operand 0 "call_register_no_elim_operand")
+       (match_operand 0 "memory_operand")))
 
 ;; Similarly, but for tail calls, in which we cannot allow memory references.
 (define_predicate "sibcall_insn_operand"
@@ -589,6 +603,11 @@
 (define_predicate "const8_operand"
   (and (match_code "const_int")
        (match_test "INTVAL (op) == 8")))
+
+;; Match exactly 128.
+(define_predicate "const128_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 128")))
 
 ;; Match 2, 4, or 8.  Used for leal multiplicands.
 (define_predicate "const248_operand"
@@ -718,7 +737,7 @@
 {
   /* On Pentium4, the inc and dec operations causes extra dependency on flag
      registers, since carry flag is not set.  */
-  if (!TARGET_USE_INCDEC && !optimize_size)
+  if (!TARGET_USE_INCDEC && !optimize_insn_for_size_p ())
     return 0;
   return op == const1_rtx || op == constm1_rtx;
 })
@@ -747,13 +766,12 @@
 {
   unsigned n_elts;
   op = maybe_get_pool_constant (op);
-  if (!op)
+
+  if (!(op && GET_CODE (op) == CONST_VECTOR))
     return 0;
-  if (GET_CODE (op) != CONST_VECTOR)
-    return 0;
-  n_elts =
-    (GET_MODE_SIZE (GET_MODE (op)) /
-     GET_MODE_SIZE (GET_MODE_INNER (GET_MODE (op))));
+
+  n_elts = CONST_VECTOR_NUNITS (op);
+
   for (n_elts--; n_elts > 0; n_elts--)
     {
       rtx elt = CONST_VECTOR_ELT (op, n_elts);
@@ -827,12 +845,12 @@
   int ok;
 
   /* Registers and immediate operands are always "aligned".  */
-  if (GET_CODE (op) != MEM)
+  if (!MEM_P (op))
     return 1;
 
   /* All patterns using aligned_operand on memory operands ends up
      in promoting memory operand to 64bit and thus causing memory mismatch.  */
-  if (TARGET_MEMORY_MISMATCH_STALL && !optimize_size)
+  if (TARGET_MEMORY_MISMATCH_STALL && !optimize_insn_for_size_p ())
     return 0;
 
   /* Don't even try to do any aligned optimizations with volatiles.  */
@@ -894,6 +912,9 @@
   struct ix86_address parts;
   int ok;
 
+  if (TARGET_64BIT)
+    return 0;
+
   ok = ix86_decompose_address (XEXP (op, 0), &parts);
   gcc_assert (ok);
 
@@ -946,9 +967,7 @@
 
   if (inmode == CCFPmode || inmode == CCFPUmode)
     {
-      enum rtx_code second_code, bypass_code;
-      ix86_fp_comparison_codes (code, &bypass_code, &code, &second_code);
-      if (bypass_code != UNKNOWN || second_code != UNKNOWN)
+      if (!ix86_trivial_fp_comparison_operator (op, mode))
 	return 0;
       code = ix86_fp_compare_code_to_integer (code);
     }
@@ -971,25 +990,14 @@
 ;; Return 1 if OP is a comparison that can be used in the CMPSS/CMPPS insns.
 ;; The first set are supported directly; the second set can't be done with
 ;; full IEEE support, i.e. NaNs.
-;;
-;; ??? It would seem that we have a lot of uses of this predicate that pass
-;; it the wrong mode.  We got away with this because the old function didn't
-;; check the mode at all.  Mirror that for now by calling this a special
-;; predicate.
 
-(define_special_predicate "sse_comparison_operator"
+(define_predicate "sse_comparison_operator"
   (match_code "eq,lt,le,unordered,ne,unge,ungt,ordered"))
 
 ;; Return 1 if OP is a comparison operator that can be issued by
 ;; avx predicate generation instructions
 (define_predicate "avx_comparison_float_operator"
   (match_code "ne,eq,ge,gt,le,lt,unordered,ordered,uneq,unge,ungt,unle,unlt,ltgt"))
-
-;; Return 1 if OP is a comparison operator that can be issued by sse predicate
-;; generation instructions
-(define_predicate "sse5_comparison_float_operator"
-  (and (match_test "TARGET_SSE5")
-       (match_code "ne,eq,ge,gt,le,lt,unordered,ordered,uneq,unge,ungt,unle,unlt,ltgt")))
 
 (define_predicate "ix86_comparison_int_operator"
   (match_code "ne,eq,ge,gt,le,lt"))
@@ -1008,11 +1016,8 @@
   enum rtx_code code = GET_CODE (op);
 
   if (inmode == CCFPmode || inmode == CCFPUmode)
-    {
-      enum rtx_code second_code, bypass_code;
-      ix86_fp_comparison_codes (code, &bypass_code, &code, &second_code);
-      return (bypass_code == UNKNOWN && second_code == UNKNOWN);
-    }
+    return ix86_trivial_fp_comparison_operator (op, mode);
+
   switch (code)
     {
     case EQ: case NE:
@@ -1046,16 +1051,9 @@
   enum machine_mode inmode = GET_MODE (XEXP (op, 0));
   enum rtx_code code = GET_CODE (op);
 
-  if (!REG_P (XEXP (op, 0))
-      || REGNO (XEXP (op, 0)) != FLAGS_REG
-      || XEXP (op, 1) != const0_rtx)
-    return 0;
-
   if (inmode == CCFPmode || inmode == CCFPUmode)
     {
-      enum rtx_code second_code, bypass_code;
-      ix86_fp_comparison_codes (code, &bypass_code, &code, &second_code);
-      if (bypass_code != UNKNOWN || second_code != UNKNOWN)
+      if (!ix86_trivial_fp_comparison_operator (op, mode))
 	return 0;
       code = ix86_fp_compare_code_to_integer (code);
     }
@@ -1065,6 +1063,32 @@
     return 0;
 
   return code == LTU;
+})
+
+;; Return 1 if this comparison only requires testing one flag bit.
+(define_predicate "ix86_trivial_fp_comparison_operator"
+  (match_code "gt,ge,unlt,unle,uneq,ltgt,ordered,unordered"))
+
+;; Return 1 if we know how to do this comparison.  Others require
+;; testing more than one flag bit, and we let the generic middle-end
+;; code do that.
+(define_predicate "ix86_fp_comparison_operator"
+  (if_then_else (match_test "ix86_fp_comparison_strategy (GET_CODE (op))
+                             == IX86_FPCMP_ARITH")
+               (match_operand 0 "comparison_operator")
+               (match_operand 0 "ix86_trivial_fp_comparison_operator")))
+
+;; Same as above, but for swapped comparison used in fp_jcc_4_387.
+(define_predicate "ix86_swapped_fp_comparison_operator"
+  (match_operand 0 "comparison_operator")
+{
+  enum rtx_code code = GET_CODE (op);
+  int ret;
+
+  PUT_CODE (op, swap_condition (code));
+  ret = ix86_fp_comparison_operator (op, mode);
+  PUT_CODE (op, code);
+  return ret;
 })
 
 ;; Nearly general operand, but accept any const_double, since we wish
@@ -1105,23 +1129,6 @@
        (and (match_code "mult")
 	    (match_test "TARGET_TUNE_PROMOTE_HIMODE_IMUL"))))
 
-;; To avoid problems when jump re-emits comparisons like testqi_ext_ccno_0,
-;; re-recognize the operand to avoid a copy_to_mode_reg that will fail.
-;;
-;; ??? It seems likely that this will only work because cmpsi is an
-;; expander, and no actual insns use this.
-
-(define_predicate "cmpsi_operand"
-  (ior (match_operand 0 "nonimmediate_operand")
-       (and (match_code "and")
-	    (match_code "zero_extract" "0")
-	    (match_code "const_int"    "1")
-	    (match_code "const_int"    "01")
-	    (match_code "const_int"    "02")
-	    (match_test "INTVAL (XEXP (XEXP (op, 0), 1)) == 8")
-	    (match_test "INTVAL (XEXP (XEXP (op, 0), 2)) == 8")
-       )))
-
 (define_predicate "compare_operator"
   (match_code "compare"))
 
@@ -1133,14 +1140,129 @@
   (and (match_code "mem")
        (match_test "MEM_ALIGN (op) < GET_MODE_ALIGNMENT (mode)")))
 
+;; Return 1 if OP is a emms operation, known to be a PARALLEL.
+(define_predicate "emms_operation"
+  (match_code "parallel")
+{
+  unsigned i;
+
+  if (XVECLEN (op, 0) != 17)
+    return 0;
+
+  for (i = 0; i < 8; i++)
+    {
+      rtx elt = XVECEXP (op, 0, i+1);
+
+      if (GET_CODE (elt) != CLOBBER
+	  || GET_CODE (SET_DEST (elt)) != REG
+	  || GET_MODE (SET_DEST (elt)) != XFmode
+	  || REGNO (SET_DEST (elt)) != FIRST_STACK_REG + i)
+        return 0;
+
+      elt = XVECEXP (op, 0, i+9);
+
+      if (GET_CODE (elt) != CLOBBER
+	  || GET_CODE (SET_DEST (elt)) != REG
+	  || GET_MODE (SET_DEST (elt)) != DImode
+	  || REGNO (SET_DEST (elt)) != FIRST_MMX_REG + i)
+	return 0;
+    }
+  return 1;
+})
+
 ;; Return 1 if OP is a vzeroall operation, known to be a PARALLEL.
 (define_predicate "vzeroall_operation"
   (match_code "parallel")
 {
-  int nregs = TARGET_64BIT ? 16 : 8;
+  unsigned i, nregs = TARGET_64BIT ? 16 : 8;
 
-  if (XVECLEN (op, 0) != nregs + 1)
+  if ((unsigned) XVECLEN (op, 0) != 1 + nregs)
     return 0;
 
+  for (i = 0; i < nregs; i++)
+    {
+      rtx elt = XVECEXP (op, 0, i+1);
+
+      if (GET_CODE (elt) != SET
+	  || GET_CODE (SET_DEST (elt)) != REG
+	  || GET_MODE (SET_DEST (elt)) != V8SImode
+	  || REGNO (SET_DEST (elt)) != SSE_REGNO (i)
+	  || SET_SRC (elt) != CONST0_RTX (V8SImode))
+	return 0;
+    }
   return 1;
+})
+
+;; Return 1 if OP is a vzeroupper operation, known to be a PARALLEL.
+(define_predicate "vzeroupper_operation"
+  (match_code "parallel")
+{
+  unsigned i, nregs = TARGET_64BIT ? 16 : 8;
+ 
+  if ((unsigned) XVECLEN (op, 0) != 1 + nregs)
+    return 0;
+
+  for (i = 0; i < nregs; i++)
+    {
+      rtx elt = XVECEXP (op, 0, i+1);
+
+      if (GET_CODE (elt) != CLOBBER
+	  || GET_CODE (SET_DEST (elt)) != REG
+	  || GET_MODE (SET_DEST (elt)) != V8SImode
+	  || REGNO (SET_DEST (elt)) != SSE_REGNO (i))
+	return 0;
+    }
+  return 1;
+})
+
+;; Return 1 if OP is a parallel for a vpermilp[ds] permute.
+;; ??? It would be much easier if the PARALLEL for a VEC_SELECT
+;; had a mode, but it doesn't.  So we have 4 copies and install
+;; the mode by hand.
+
+(define_predicate "avx_vpermilp_v8sf_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vpermilp_parallel (op, V8SFmode)")))
+
+(define_predicate "avx_vpermilp_v4df_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vpermilp_parallel (op, V4DFmode)")))
+
+(define_predicate "avx_vpermilp_v4sf_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vpermilp_parallel (op, V4SFmode)")))
+
+(define_predicate "avx_vpermilp_v2df_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vpermilp_parallel (op, V2DFmode)")))
+
+;; Return 1 if OP is a parallel for a vperm2f128 permute.
+
+(define_predicate "avx_vperm2f128_v8sf_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vperm2f128_parallel (op, V8SFmode)")))
+
+(define_predicate "avx_vperm2f128_v8si_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vperm2f128_parallel (op, V8SImode)")))
+
+(define_predicate "avx_vperm2f128_v4df_operand"
+  (and (match_code "parallel")
+       (match_test "avx_vperm2f128_parallel (op, V4DFmode)")))
+
+;; Return 1 if OP is a parallel for a vbroadcast permute.
+
+(define_predicate "avx_vbroadcast_operand"
+  (and (match_code "parallel")
+       (match_code "const_int" "a"))
+{
+  rtx elt = XVECEXP (op, 0, 0);
+  int i, nelt = XVECLEN (op, 0);
+
+  /* Don't bother checking there are the right number of operands,
+     merely that they're all identical.  */
+  for (i = 1; i < nelt; ++i)
+    if (XVECEXP (op, 0, i) != elt)
+      return false;
+  return true;
 })

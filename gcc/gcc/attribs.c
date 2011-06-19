@@ -1,6 +1,7 @@
 /* Functions dealing with attribute handling, used by most front ends.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2007, 2008, 2010 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -33,7 +34,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "target.h"
 #include "langhooks.h"
 #include "hashtab.h"
-#include "c-common.h"
+#include "plugin.h"
 
 static void init_attributes (void);
 
@@ -183,18 +184,27 @@ init_attributes (void)
   for (i = 0; i < ARRAY_SIZE (attribute_tables); i++)
     for (k = 0; attribute_tables[i][k].name != NULL; k++)
       {
-	struct substring str;
-	const void **slot;
-
-	str.str = attribute_tables[i][k].name;
-	str.length = strlen (attribute_tables[i][k].name);
-	slot = (const void **)htab_find_slot_with_hash (attribute_hash, &str,
-					 substring_hash (str.str, str.length),
-					 INSERT);
-	gcc_assert (!*slot);
-	*slot = &attribute_tables[i][k];
+        register_attribute (&attribute_tables[i][k]);
       }
+  invoke_plugin_callbacks (PLUGIN_ATTRIBUTES, NULL);
   attributes_initialized = true;
+}
+
+/* Insert a single ATTR into the attribute table.  */
+
+void
+register_attribute (const struct attribute_spec *attr)
+{
+  struct substring str;
+  void **slot;
+
+  str.str = attr->name;
+  str.length = strlen (str.str);
+  slot = htab_find_slot_with_hash (attribute_hash, &str,
+				   substring_hash (str.str, str.length),
+				   INSERT);
+  gcc_assert (!*slot);
+  *slot = (void *) CONST_CAST (struct attribute_spec *, attr);
 }
 
 /* Return the spec for the attribute named NAME.  */
@@ -282,16 +292,16 @@ decl_attributes (tree *node, tree attributes, int flags)
 
       if (spec == NULL)
 	{
-	  warning (OPT_Wattributes, "%qs attribute directive ignored",
-		   IDENTIFIER_POINTER (name));
+	  warning (OPT_Wattributes, "%qE attribute directive ignored",
+		   name);
 	  continue;
 	}
       else if (list_length (args) < spec->min_length
 	       || (spec->max_length >= 0
 		   && list_length (args) > spec->max_length))
 	{
-	  error ("wrong number of arguments specified for %qs attribute",
-		 IDENTIFIER_POINTER (name));
+	  error ("wrong number of arguments specified for %qE attribute",
+		 name);
 	  continue;
 	}
       gcc_assert (is_attribute_p (spec->name, name));
@@ -308,8 +318,8 @@ decl_attributes (tree *node, tree attributes, int flags)
 	    }
 	  else
 	    {
-	      warning (OPT_Wattributes, "%qs attribute does not apply to types",
-		       IDENTIFIER_POINTER (name));
+	      warning (OPT_Wattributes, "%qE attribute does not apply to types",
+		       name);
 	      continue;
 	    }
 	}
@@ -360,8 +370,8 @@ decl_attributes (tree *node, tree attributes, int flags)
 	      && TREE_CODE (*anode) != METHOD_TYPE)
 	    {
 	      warning (OPT_Wattributes,
-		       "%qs attribute only applies to function types",
-		       IDENTIFIER_POINTER (name));
+		       "%qE attribute only applies to function types",
+		       name);
 	      continue;
 	    }
 	}

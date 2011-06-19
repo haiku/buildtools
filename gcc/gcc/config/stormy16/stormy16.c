@@ -1,6 +1,6 @@
 /* Xstormy16 target functions.
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007, 2008 Free Software Foundation, Inc.
+   2006, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GCC.
@@ -60,11 +60,6 @@ static rtx xstormy16_expand_builtin (tree, rtx, rtx, enum machine_mode, int);
 static bool xstormy16_rtx_costs (rtx, int, int, int *, bool);
 static int xstormy16_address_cost (rtx, bool);
 static bool xstormy16_return_in_memory (const_tree, const_tree);
-
-/* Define the information needed to generate branch and scc insns.  This is
-   stored from the compare operation.  */
-struct rtx_def * xstormy16_compare_op0;
-struct rtx_def * xstormy16_compare_op1;
 
 static GTY(()) section *bss100_section;
 
@@ -139,10 +134,8 @@ xstormy16_address_cost (rtx x, bool speed ATTRIBUTE_UNUSED)
 /* Emit a branch of kind CODE to location LOC.  */
 
 void
-xstormy16_emit_cbranch (enum rtx_code code, rtx loc)
+xstormy16_emit_cbranch (enum rtx_code code, rtx op0, rtx op1, rtx loc)
 {
-  rtx op0 = xstormy16_compare_op0;
-  rtx op1 = xstormy16_compare_op1;
   rtx condition_rtx, loc_ref, branch, cy_clobber;
   rtvec vec;
   enum machine_mode mode;
@@ -159,10 +152,10 @@ xstormy16_emit_cbranch (enum rtx_code code, rtx loc)
 
       if (gt_p)
 	lab = gen_label_rtx ();
-      xstormy16_emit_cbranch (unsigned_p ? LTU : LT, gt_p ? lab : loc);
+      xstormy16_emit_cbranch (unsigned_p ? LTU : LT, op0, op1, gt_p ? lab : loc);
       /* This should be generated as a comparison against the temporary
 	 created by the previous insn, but reload can't handle that.  */
-      xstormy16_emit_cbranch (gt_p ? NE : EQ, loc);
+      xstormy16_emit_cbranch (gt_p ? NE : EQ, op0, op1, loc);
       if (gt_p)
 	emit_label (lab);
       return;
@@ -171,6 +164,7 @@ xstormy16_emit_cbranch (enum rtx_code code, rtx loc)
 	   && (code == NE || code == EQ)
 	   && op1 != const0_rtx)
     {
+      rtx op0_word, op1_word;
       rtx lab = NULL_RTX;
       int num_words = GET_MODE_BITSIZE (mode) / BITS_PER_WORD;
       int i;
@@ -180,17 +174,17 @@ xstormy16_emit_cbranch (enum rtx_code code, rtx loc)
 
       for (i = 0; i < num_words - 1; i++)
 	{
-	  xstormy16_compare_op0 = simplify_gen_subreg (word_mode, op0, mode,
-						      i * UNITS_PER_WORD);
-	  xstormy16_compare_op1 = simplify_gen_subreg (word_mode, op1, mode,
-						      i * UNITS_PER_WORD);
-	  xstormy16_emit_cbranch (NE, code == EQ ? lab : loc);
+	  op0_word = simplify_gen_subreg (word_mode, op0, mode,
+					  i * UNITS_PER_WORD);
+	  op1_word = simplify_gen_subreg (word_mode, op1, mode,
+					  i * UNITS_PER_WORD);
+	  xstormy16_emit_cbranch (NE, op0_word, op1_word, code == EQ ? lab : loc);
 	}
-      xstormy16_compare_op0 = simplify_gen_subreg (word_mode, op0, mode,
-						  i * UNITS_PER_WORD);
-      xstormy16_compare_op1 = simplify_gen_subreg (word_mode, op1, mode,
-						  i * UNITS_PER_WORD);
-      xstormy16_emit_cbranch (code, loc);
+      op0_word = simplify_gen_subreg (word_mode, op0, mode,
+				      i * UNITS_PER_WORD);
+      op1_word = simplify_gen_subreg (word_mode, op1, mode,
+				      i * UNITS_PER_WORD);
+      xstormy16_emit_cbranch (code, op0_word, op1_word, loc);
 
       if (code == EQ)
 	emit_label (lab);
@@ -619,9 +613,9 @@ xstormy16_expand_andqi3 (rtx *operands)
   && INTVAL (X) + (OFFSET) < 0x8000					 \
   && (INTVAL (X) + (OFFSET) < 0x100 || INTVAL (X) + (OFFSET) >= 0x7F00))
 
-int
+static bool
 xstormy16_legitimate_address_p (enum machine_mode mode ATTRIBUTE_UNUSED,
-				rtx x, int strict)
+				rtx x, bool strict)
 {
   if (LEGITIMATE_ADDRESS_CONST_INT_P (x, 0))
     return 1;
@@ -1022,6 +1016,16 @@ xstormy16_compute_stack_layout (void)
   return layout;
 }
 
+/* Worker function for TARGET_CAN_ELIMINATE.  */
+
+static bool
+xstormy16_can_eliminate (const int from, const int to)
+{
+  return (from == ARG_POINTER_REGNUM && to == STACK_POINTER_REGNUM
+          ? ! frame_pointer_needed
+          : true);
+}
+
 /* Determine how all the special registers get eliminated.  */
 
 int
@@ -1297,11 +1301,14 @@ xstormy16_build_builtin_va_list (void)
   tree f_1, f_2, record, type_decl;
 
   record = (*lang_hooks.types.make_type) (RECORD_TYPE);
-  type_decl = build_decl (TYPE_DECL, get_identifier ("__va_list_tag"), record);
+  type_decl = build_decl (BUILTINS_LOCATION,
+			  TYPE_DECL, get_identifier ("__va_list_tag"), record);
 
-  f_1 = build_decl (FIELD_DECL, get_identifier ("base"),
+  f_1 = build_decl (BUILTINS_LOCATION,
+		    FIELD_DECL, get_identifier ("base"),
 		      ptr_type_node);
-  f_2 = build_decl (FIELD_DECL, get_identifier ("count"),
+  f_2 = build_decl (BUILTINS_LOCATION,
+		    FIELD_DECL, get_identifier ("count"),
 		      unsigned_type_node);
 
   DECL_FIELD_CONTEXT (f_1) = record;
@@ -1383,8 +1390,8 @@ xstormy16_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
   size_of_reg_args = NUM_ARGUMENT_REGISTERS * UNITS_PER_WORD;
 
   count_tmp = get_initialized_tmp_var (count, pre_p, NULL);
-  lab_gotaddr = create_artificial_label ();
-  lab_fromstack = create_artificial_label ();
+  lab_gotaddr = create_artificial_label (UNKNOWN_LOCATION);
+  lab_fromstack = create_artificial_label (UNKNOWN_LOCATION);
   addr = create_tmp_var (ptr_type_node, NULL);
 
   if (!must_stack)
@@ -1449,34 +1456,36 @@ xstormy16_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
   return build_va_arg_indirect_ref (addr);
 }
 
-/* Initialize the variable parts of a trampoline.  ADDR is an RTX for
-   the address of the trampoline; FNADDR is an RTX for the address of
-   the nested function; STATIC_CHAIN is an RTX for the static chain
-   value that should be passed to the function when it is called.  */
+/* Worker function for TARGET_TRAMPOLINE_INIT.  */
 
-void
-xstormy16_initialize_trampoline (rtx addr, rtx fnaddr, rtx static_chain)
+static void
+xstormy16_trampoline_init (rtx m_tramp, tree fndecl, rtx static_chain)
 {
-  rtx reg_addr = gen_reg_rtx (Pmode);
   rtx temp = gen_reg_rtx (HImode);
   rtx reg_fnaddr = gen_reg_rtx (HImode);
-  rtx reg_addr_mem;
+  rtx reg_addr, reg_addr_mem;
 
-  reg_addr_mem = gen_rtx_MEM (HImode, reg_addr);
+  reg_addr = copy_to_reg (XEXP (m_tramp, 0));
+  reg_addr_mem = adjust_automodify_address (m_tramp, HImode, reg_addr, 0);
 
-  emit_move_insn (reg_addr, addr);
   emit_move_insn (temp, GEN_INT (0x3130 | STATIC_CHAIN_REGNUM));
   emit_move_insn (reg_addr_mem, temp);
   emit_insn (gen_addhi3 (reg_addr, reg_addr, const2_rtx));
+  reg_addr_mem = adjust_automodify_address (reg_addr_mem, VOIDmode, NULL, 2);
+
   emit_move_insn (temp, static_chain);
   emit_move_insn (reg_addr_mem, temp);
   emit_insn (gen_addhi3 (reg_addr, reg_addr, const2_rtx));
-  emit_move_insn (reg_fnaddr, fnaddr);
+  reg_addr_mem = adjust_automodify_address (reg_addr_mem, VOIDmode, NULL, 2);
+
+  emit_move_insn (reg_fnaddr, XEXP (DECL_RTL (fndecl), 0));
   emit_move_insn (temp, reg_fnaddr);
   emit_insn (gen_andhi3 (temp, temp, GEN_INT (0xFF)));
   emit_insn (gen_iorhi3 (temp, temp, GEN_INT (0x0200)));
   emit_move_insn (reg_addr_mem, temp);
   emit_insn (gen_addhi3 (reg_addr, reg_addr, const2_rtx));
+  reg_addr_mem = adjust_automodify_address (reg_addr_mem, VOIDmode, NULL, 2);
+
   emit_insn (gen_lshrhi3 (reg_fnaddr, reg_fnaddr, GEN_INT (8)));
   emit_move_insn (reg_addr_mem, reg_fnaddr);
 }
@@ -2218,8 +2227,8 @@ xstormy16_handle_interrupt_attribute (tree *node, tree name,
 {
   if (TREE_CODE (*node) != FUNCTION_TYPE)
     {
-      warning (OPT_Wattributes, "%qs attribute only applies to functions",
-	       IDENTIFIER_POINTER (name));
+      warning (OPT_Wattributes, "%qE attribute only applies to functions",
+	       name);
       *no_add_attrs = true;
     }
 
@@ -2643,10 +2652,8 @@ xstormy16_return_in_memory (const_tree type, const_tree fntype ATTRIBUTE_UNUSED)
 #undef  TARGET_GIMPLIFY_VA_ARG_EXPR
 #define TARGET_GIMPLIFY_VA_ARG_EXPR xstormy16_gimplify_va_arg_expr
 
-#undef  TARGET_PROMOTE_FUNCTION_ARGS
-#define TARGET_PROMOTE_FUNCTION_ARGS hook_bool_const_tree_true
-#undef  TARGET_PROMOTE_FUNCTION_RETURN
-#define TARGET_PROMOTE_FUNCTION_RETURN hook_bool_const_tree_true
+#undef  TARGET_PROMOTE_FUNCTION_MODE
+#define TARGET_PROMOTE_FUNCTION_MODE default_promote_function_mode_always_promote
 #undef  TARGET_PROMOTE_PROTOTYPES
 #define TARGET_PROMOTE_PROTOTYPES hook_bool_const_tree_true
 
@@ -2655,6 +2662,15 @@ xstormy16_return_in_memory (const_tree type, const_tree fntype ATTRIBUTE_UNUSED)
 
 #undef  TARGET_MACHINE_DEPENDENT_REORG
 #define TARGET_MACHINE_DEPENDENT_REORG xstormy16_reorg
+
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P	xstormy16_legitimate_address_p
+
+#undef TARGET_CAN_ELIMINATE
+#define TARGET_CAN_ELIMINATE xstormy16_can_eliminate
+
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT xstormy16_trampoline_init
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

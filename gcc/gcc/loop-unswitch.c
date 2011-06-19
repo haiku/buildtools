@@ -1,5 +1,5 @@
 /* Loop unswitching for GNU compiler.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2010
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -392,7 +392,6 @@ unswitch_loop (struct loop *loop, basic_block unswitch_on, rtx cond, rtx cinsn)
   edge entry, latch_edge, true_edge, false_edge, e;
   basic_block switch_bb, unswitch_on_alt;
   struct loop *nloop;
-  sbitmap zero_bitmap;
   int irred_flag, prob;
   rtx seq;
 
@@ -409,7 +408,6 @@ unswitch_loop (struct loop *loop, basic_block unswitch_on, rtx cond, rtx cinsn)
   /* Make a copy.  */
   irred_flag = entry->flags & EDGE_IRREDUCIBLE_LOOP;
   entry->flags &= ~EDGE_IRREDUCIBLE_LOOP;
-  zero_bitmap = sbitmap_alloc (2);
   if (!duplicate_loop_to_header_edge (loop, entry, 1,
 			      	      NULL, NULL, NULL, 0))
     return NULL;

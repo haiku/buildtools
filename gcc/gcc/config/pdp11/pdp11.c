@@ -1,6 +1,6 @@
 /* Subroutines for gcc2 for pdp11.
    Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2004, 2005,
-   2006, 2007, 2008 Free Software Foundation, Inc.
+   2006, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Michael K. Gschwind (mike@vlsivie.tuwien.ac.at).
 
 This file is part of GCC.
@@ -152,6 +152,7 @@ static void pdp11_output_function_prologue (FILE *, HOST_WIDE_INT);
 static void pdp11_output_function_epilogue (FILE *, HOST_WIDE_INT);
 static bool pdp11_rtx_costs (rtx, int, int, int *, bool);
 static bool pdp11_return_in_memory (const_tree, const_tree);
+static void pdp11_trampoline_init (rtx, tree, rtx);
 
 /* Initialize the GCC target structure.  */
 #undef TARGET_ASM_BYTE_OP
@@ -184,6 +185,9 @@ static bool pdp11_return_in_memory (const_tree, const_tree);
 
 #undef TARGET_RETURN_IN_MEMORY
 #define TARGET_RETURN_IN_MEMORY pdp11_return_in_memory
+
+#undef TARGET_TRAMPOLINE_INIT
+#define TARGET_TRAMPOLINE_INIT pdp11_trampoline_init
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -240,23 +244,6 @@ expand_shift_operand (rtx op, enum machine_mode mode ATTRIBUTE_UNUSED)
    is ever used in the function.  This macro is responsible for
    knowing which registers should not be saved even if used.  
 */
-
-#ifdef TWO_BSD
-
-static void
-pdp11_output_function_prologue (FILE *stream, HOST_WIDE_INT size)
-{							       
-  fprintf (stream, "\tjsr	r5, csv\n");
-  if (size)
-    {
-      fprintf (stream, "\t/*abuse empty parameter slot for locals!*/\n");
-      if (size > 2)
-	asm_fprintf (stream, "\tsub $%#wo, sp\n", size - 2);
-
-    }
-}
-
-#else  /* !TWO_BSD */
 
 static void
 pdp11_output_function_prologue (FILE *stream, HOST_WIDE_INT size)
@@ -331,8 +318,6 @@ pdp11_output_function_prologue (FILE *stream, HOST_WIDE_INT size)
     fprintf (stream, "\t;/* end of prologue */\n\n");		
 }
 
-#endif /* !TWO_BSD */
-
 /*
    The function epilogue should not depend on the current stack pointer!
    It should use the frame pointer only.  This is mandatory because
@@ -351,18 +336,6 @@ pdp11_output_function_prologue (FILE *stream, HOST_WIDE_INT size)
    like this and not use the second set of registers... 
 
    maybe as option if you want to generate code for kernel mode? */
-
-#ifdef TWO_BSD
-
-static void
-pdp11_output_function_epilogue (FILE *stream,
-				HOST_WIDE_INT size ATTRIBUTE_UNUSED)
-{								
-  fprintf (stream, "\t/* SP ignored by cret? */\n");
-  fprintf (stream, "\tjmp cret\n");
-}
-
-#else  /* !TWO_BSD */
 
 static void
 pdp11_output_function_epilogue (FILE *stream, HOST_WIDE_INT size)
@@ -469,8 +442,6 @@ pdp11_output_function_epilogue (FILE *stream, HOST_WIDE_INT size)
     fprintf (stream, "\t;/* end of epilogue*/\n\n\n");		
 }
 
-#endif /* !TWO_BSD */
-	
 /* Return the best assembler insn template
    for moving operands[1] into operands[0] as a fullword.  */
 static const char *
@@ -1203,11 +1174,27 @@ pdp11_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total,
 }
 
 const char *
-output_jump (const char *pos, const char *neg, int length)
+output_jump (enum rtx_code code, int inv, int length)
 {
     static int x = 0;
     
     static char buf[1000];
+    const char *pos, *neg;
+
+    switch (code)
+      {
+      case EQ: pos = "beq", neg = "bne"; break;
+      case NE: pos = "bne", neg = "beq"; break;
+      case GT: pos = "bgt", neg = "ble"; break;
+      case GTU: pos = "bhi", neg = "blos"; break;
+      case LT: pos = "blt", neg = "bge"; break;
+      case LTU: pos = "blo", neg = "bhis"; break;
+      case GE: pos = "bge", neg = "blt"; break;
+      case GEU: pos = "bhis", neg = "blo"; break;
+      case LE: pos = "ble", neg = "bgt"; break;
+      case LEU: pos = "blos", neg = "bhi"; break;
+      default: gcc_unreachable ();
+      }
 
 #if 0
 /* currently we don't need this, because the tstdf and cmpdf 
@@ -1223,14 +1210,13 @@ output_jump (const char *pos, const char *neg, int length)
     {
       case 1:
 	
-	strcpy(buf, pos);
-	strcat(buf, " %l0");
+	sprintf(buf, "%s %%l1", inv ? neg : pos);
 	
 	return buf;
 	
       case 3:
 	
-	sprintf(buf, "%s JMP_%d\n\tjmp %%l0\nJMP_%d:", neg, x, x);
+	sprintf(buf, "%s JMP_%d\n\tjmp %%l1\nJMP_%d:", inv ? pos : neg, x, x);
 	
 	x++;
 	
@@ -1624,20 +1610,6 @@ output_block_move(rtx *operands)
     return "";
 }
 
-int
-legitimate_address_p (enum machine_mode mode, rtx address)
-{
-/* #define REG_OK_STRICT */
-    GO_IF_LEGITIMATE_ADDRESS(mode, address, win);
-    
-    return 0;
-    
-  win:
-    return 1;
-
-/* #undef REG_OK_STRICT */
-}
-
 /* This function checks whether a real value can be encoded as
    a literal, i.e., addressing mode 27.  In that mode, real values
    are one word values, so the remaining 48 bits have to be zero.  */
@@ -1771,4 +1743,32 @@ pdp11_return_in_memory (const_tree type, const_tree fntype ATTRIBUTE_UNUSED)
      libraries for non-floating point....  */
   return (TYPE_MODE (type) == DImode
 	  || (TYPE_MODE (type) == DFmode && ! TARGET_AC0));
+}
+
+/* Worker function for TARGET_TRAMPOLINE_INIT.
+
+   trampoline - how should i do it in separate i+d ? 
+   have some allocate_trampoline magic??? 
+
+   the following should work for shared I/D:
+
+   MV	#STATIC, $4	0x940Y	0x0000 <- STATIC; Y = STATIC_CHAIN_REGNUM
+   JMP	FUNCTION	0x0058  0x0000 <- FUNCTION
+*/
+
+static void
+pdp11_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
+{
+  rtx fnaddr = XEXP (DECL_RTL (fndecl), 0);
+  rtx mem;
+
+  gcc_assert (!TARGET_SPLIT);
+
+  mem = adjust_address (m_tramp, HImode, 0);
+  emit_move_insn (mem, GEN_INT (0x9400+STATIC_CHAIN_REGNUM));
+  mem = adjust_address (m_tramp, HImode, 2);
+  emit_move_insn (mem, chain_value);
+  mem = adjust_address (m_tramp, HImode, 4);
+  emit_move_insn (mem, GEN_INT (0x0058));
+  emit_move_insn (mem, fnaddr);
 }

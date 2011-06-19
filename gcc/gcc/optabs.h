@@ -1,5 +1,5 @@
 /* Definitions for code generation pass of GNU compiler.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -36,37 +36,37 @@ along with GCC; see the file COPYING3.  If not see
    The `lib_call' slot is the name of the library function that
    can be used to perform the operation.
 
-   A few optabs, such as move_optab and cmp_optab, are used
-   by special code.  */
+   A few optabs, such as move_optab, are used by special code.  */
 
 struct optab_handlers
 {
   enum insn_code insn_code;
 };
 
-struct optab
+struct optab_d
 {
   enum rtx_code code;
   const char *libcall_basename;
   char libcall_suffix;
-  void (*libcall_gen)(struct optab *, const char *name, char suffix, enum machine_mode);
+  void (*libcall_gen)(struct optab_d *, const char *name, char suffix,
+		      enum machine_mode);
   struct optab_handlers handlers[NUM_MACHINE_MODES];
 };
-typedef struct optab * optab;
+typedef struct optab_d * optab;
 
 /* A convert_optab is for some sort of conversion operation between
    modes.  The first array index is the destination mode, the second
    is the source mode.  */
-struct convert_optab
+struct convert_optab_d
 {
   enum rtx_code code;
   const char *libcall_basename;
-  void (*libcall_gen)(struct convert_optab *, const char *name,
+  void (*libcall_gen)(struct convert_optab_d *, const char *name,
 		      enum machine_mode,
 		      enum machine_mode);
   struct optab_handlers handlers[NUM_MACHINE_MODES][NUM_MACHINE_MODES];
 };
-typedef struct convert_optab *convert_optab;
+typedef struct convert_optab_d *convert_optab;
 
 /* Given an enum insn_code, access the function to construct
    the body of that kind of insn.  */
@@ -242,6 +242,8 @@ enum optab_index
   OTI_ldexp,
   /* Multiply floating-point number by integral power of radix */
   OTI_scalb,
+  /* Mantissa of a floating-point number */
+  OTI_significand,
   /* Radix-independent exponent */
   OTI_logb,
   OTI_ilogb,
@@ -271,12 +273,9 @@ enum optab_index
   /* Test for infinite value */
   OTI_isinf,
 
-  /* Compare insn; two operands.  */
+  /* Compare insn; two operands.  Used only for libcalls.  */
   OTI_cmp,
-  /* Used only for libcalls for unsigned comparisons.  */
   OTI_ucmp,
-  /* tst insn; compare one operand against 0 */
-  OTI_tst,
 
   /* Floating point comparison optabs - used primarily for libfuncs */
   OTI_eq,
@@ -290,10 +289,11 @@ enum optab_index
   /* String length */
   OTI_strlen,
 
-  /* Combined compare & jump/store flags/move operations.  */
+  /* Combined compare & jump/move/store flags/trap operations.  */
   OTI_cbranch,
   OTI_cmov,
   OTI_cstore,
+  OTI_ctrap,
 
   /* Push instruction.  */
   OTI_push,
@@ -334,7 +334,7 @@ enum optab_index
   OTI_vec_shr,
   /* Extract specified elements from vectors, for vector load.  */
   OTI_vec_realign_load,
-  /* Widening multiplication.  
+  /* Widening multiplication.
      The high/low part of the resulting vector of products is returned.  */
   OTI_vec_widen_umult_hi,
   OTI_vec_widen_umult_lo,
@@ -372,7 +372,7 @@ enum optab_index
   OTI_MAX
 };
 
-extern struct optab optab_table[OTI_MAX];
+extern struct optab_d optab_table[OTI_MAX];
 
 #define ssadd_optab (&optab_table[OTI_ssadd])
 #define usadd_optab (&optab_table[OTI_usadd])
@@ -464,6 +464,7 @@ extern struct optab optab_table[OTI_MAX];
 #define expm1_optab (&optab_table[OTI_expm1])
 #define ldexp_optab (&optab_table[OTI_ldexp])
 #define scalb_optab (&optab_table[OTI_scalb])
+#define significand_optab (&optab_table[OTI_significand])
 #define logb_optab (&optab_table[OTI_logb])
 #define ilogb_optab (&optab_table[OTI_ilogb])
 #define log_optab (&optab_table[OTI_log])
@@ -484,7 +485,6 @@ extern struct optab optab_table[OTI_MAX];
 
 #define cmp_optab (&optab_table[OTI_cmp])
 #define ucmp_optab (&optab_table[OTI_ucmp])
-#define tst_optab (&optab_table[OTI_tst])
 
 #define eq_optab (&optab_table[OTI_eq])
 #define ne_optab (&optab_table[OTI_ne])
@@ -499,6 +499,8 @@ extern struct optab optab_table[OTI_MAX];
 #define cbranch_optab (&optab_table[OTI_cbranch])
 #define cmov_optab (&optab_table[OTI_cmov])
 #define cstore_optab (&optab_table[OTI_cstore])
+#define ctrap_optab (&optab_table[OTI_ctrap])
+
 #define push_optab (&optab_table[OTI_push])
 #define addcc_optab (&optab_table[OTI_addcc])
 
@@ -573,7 +575,7 @@ enum convert_optab_index
   COI_MAX
 };
 
-extern struct convert_optab convert_optab_table[COI_MAX];
+extern struct convert_optab_d convert_optab_table[COI_MAX];
 
 #define sext_optab (&convert_optab_table[COI_sext])
 #define zext_optab (&convert_optab_table[COI_zext])
@@ -604,17 +606,6 @@ extern optab code_to_optab[NUM_RTX_CODE + 1];
 
 
 typedef rtx (*rtxfun) (rtx);
-
-/* Indexed by the rtx-code for a conditional (e.g. EQ, LT,...)
-   gives the gen_function to make a branch to test that condition.  */
-
-extern rtxfun bcc_gen_fctn[NUM_RTX_CODE];
-
-/* Indexed by the rtx-code for a conditional (e.g. EQ, LT,...)
-   gives the insn code to make a store-condition insn
-   to test that condition.  */
-
-extern enum insn_code setcc_gen_code[NUM_RTX_CODE];
 
 #ifdef HAVE_conditional_move
 /* Indexed by the machine mode, gives the insn code to make a conditional
@@ -670,7 +661,6 @@ extern enum insn_code sync_new_nand_optab[NUM_MACHINE_MODES];
 
 /* Atomic compare and swap.  */
 extern enum insn_code sync_compare_and_swap[NUM_MACHINE_MODES];
-extern enum insn_code sync_compare_and_swap_cc[NUM_MACHINE_MODES];
 
 /* Atomic exchange with acquire semantics.  */
 extern enum insn_code sync_lock_test_and_set[NUM_MACHINE_MODES];
@@ -680,7 +670,7 @@ extern enum insn_code sync_lock_release[NUM_MACHINE_MODES];
 
 /* Define functions given in optabs.c.  */
 
-extern rtx expand_widen_pattern_expr (tree exp, rtx op0, rtx op1, rtx wide_op,
+extern rtx expand_widen_pattern_expr (sepops ops, rtx op0, rtx op1, rtx wide_op,
                                       rtx target, int unsignedp);
 
 extern rtx expand_ternary_op (enum machine_mode mode, optab ternary_optab,
@@ -716,6 +706,9 @@ extern rtx expand_unop (enum machine_mode, optab, rtx, rtx, int);
 extern rtx expand_abs_nojump (enum machine_mode, rtx, rtx, int);
 extern rtx expand_abs (enum machine_mode, rtx, rtx, int, int);
 
+/* Expand the one's complement absolute value operation.  */
+extern rtx expand_one_cmpl_abs_nojump (enum machine_mode, rtx, rtx);
+
 /* Expand the copysign operation.  */
 extern rtx expand_copysign (rtx, rtx, rtx);
 
@@ -723,10 +716,6 @@ extern rtx expand_copysign (rtx, rtx, rtx);
    an input.  */
 extern void emit_unop_insn (int, rtx, rtx, enum rtx_code);
 extern bool maybe_emit_unop_insn (int, rtx, rtx, enum rtx_code);
-
-/* Emit one rtl insn to compare two rtx's.  */
-extern void emit_cmp_insn (rtx, rtx, enum rtx_code, rtx, enum machine_mode,
-			   int);
 
 /* An extra flag to control optab_for_tree_code's behavior.  This is needed to
    distinguish between machines with a vector shift that takes a scalar for the
@@ -786,16 +775,14 @@ extern bool expand_sfix_optab (rtx, rtx, convert_optab);
 bool expand_vec_cond_expr_p (tree, enum machine_mode);
 
 /* Generate code for VEC_COND_EXPR.  */
-extern rtx expand_vec_cond_expr (tree, rtx);
-
+extern rtx expand_vec_cond_expr (tree, tree, tree, tree, rtx);
 /* Generate code for VEC_LSHIFT_EXPR and VEC_RSHIFT_EXPR.  */
-extern rtx expand_vec_shift_expr (tree, rtx);
+extern rtx expand_vec_shift_expr (sepops, rtx);
 
 #define optab_handler(optab,mode) (&(optab)->handlers[(int) (mode)])
 #define convert_optab_handler(optab,mode,mode2) \
 	(&(optab)->handlers[(int) (mode)][(int) (mode2)])
 
-extern rtx optab_libfunc (optab optab, enum machine_mode mode);
 extern rtx optab_libfunc (optab optab, enum machine_mode mode);
 extern rtx convert_optab_libfunc (convert_optab optab, enum machine_mode mode1,
 			          enum machine_mode mode2);

@@ -6,7 +6,7 @@ sinclude(../config/acx.m4)
 sinclude(../config/no-executables.m4)
 sinclude(../config/override.m4)
 
-AC_PREREQ(2.59)
+AC_PREREQ(2.64)
 AC_INIT([GNU C Runtime Library], 1.0,,[libgcc])
 AC_CONFIG_SRCDIR([static-object.mk])
 
@@ -77,6 +77,21 @@ else
   slibdir='$(libdir)'
 fi)
 AC_SUBST(slibdir)
+
+# Command-line options.
+# Very limited version of AC_MAINTAINER_MODE.
+AC_ARG_ENABLE([maintainer-mode],
+  [AC_HELP_STRING([--enable-maintainer-mode],
+                 [enable make rules and dependencies not useful (and
+                  sometimes confusing) to the casual installer])],
+  [case ${enable_maintainer_mode} in
+     yes) MAINT='' ;;
+     no) MAINT='#' ;;
+     *) AC_MSG_ERROR([--enable-maintainer-mode must be yes or no]) ;;
+   esac
+   maintainer_mode=${enableval}],
+  [MAINT='#'])
+AC_SUBST([MAINT])dnl
 
 AC_PROG_INSTALL
 
@@ -222,6 +237,14 @@ if test "$enable_tls $gcc_cv_have_cc_tls" = "yes yes"; then
   set_have_cc_tls="-DHAVE_CC_TLS"
 fi
 AC_SUBST(set_have_cc_tls)
+
+# See if we have emulated thread-local storage.
+GCC_CHECK_EMUTLS
+set_use_emutls=
+if test "$enable_tls $gcc_cv_use_emutls" = "yes yes"; then
+  set_use_emutls="-DUSE_EMUTLS"
+fi
+AC_SUBST(set_use_emutls)
 
 # Conditionalize the makefile for this target machine.
 tmake_file_=

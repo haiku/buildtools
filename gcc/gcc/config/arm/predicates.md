@@ -73,6 +73,25 @@
 	      || REGNO_REG_CLASS (REGNO (op)) == FPA_REGS));
 })
 
+(define_predicate "vfp_register_operand"
+  (match_code "reg,subreg")
+{
+  if (GET_CODE (op) == SUBREG)
+    op = SUBREG_REG (op);
+
+  /* We don't consider registers whose class is NO_REGS
+     to be a register operand.  */
+  return (GET_CODE (op) == REG
+	  && (REGNO (op) >= FIRST_PSEUDO_REGISTER
+	      || REGNO_REG_CLASS (REGNO (op)) == VFP_LO_REGS
+	      || (TARGET_VFPD32
+		  && REGNO_REG_CLASS (REGNO (op)) == VFP_REGS)));
+})
+
+(define_special_predicate "subreg_lowpart_operator"
+  (and (match_code "subreg")
+       (match_test "subreg_lowpart_p (op)")))
+
 ;; Reg, subreg(reg) or const_int.
 (define_predicate "reg_or_int_operand"
   (ior (match_code "const_int")
@@ -191,9 +210,13 @@
 (define_special_predicate "equality_operator"
   (match_code "eq,ne"))
 
-;; True for comparisons other than LTGT or UNEQ.
+;; True for integer comparisons and, if FP is active, for comparisons
+;; other than LTGT or UNEQ.
 (define_special_predicate "arm_comparison_operator"
-  (match_code "eq,ne,le,lt,ge,gt,geu,gtu,leu,ltu,unordered,ordered,unlt,unle,unge,ungt"))
+  (ior (match_code "eq,ne,le,lt,ge,gt,geu,gtu,leu,ltu")
+       (and (match_test "TARGET_32BIT && TARGET_HARD_FLOAT
+			 && (TARGET_FPA || TARGET_VFP)")
+            (match_code "unordered,ordered,unlt,unle,unge,ungt"))))
 
 (define_special_predicate "minmax_operator"
   (and (match_code "smin,smax,umin,umax")
@@ -231,8 +254,8 @@
 
 (define_special_predicate "arm_extendqisi_mem_op"
   (and (match_operand 0 "memory_operand")
-       (match_test "arm_legitimate_address_p (mode, XEXP (op, 0), SIGN_EXTEND,
-					      0)")))
+       (match_test "arm_legitimate_address_outer_p (mode, XEXP (op, 0),
+						    SIGN_EXTEND, 0)")))
 
 (define_special_predicate "arm_reg_or_extendqisi_mem_op"
   (ior (match_operand 0 "arm_extendqisi_mem_op")
@@ -511,5 +534,5 @@
 ;; TODO: We could check lane numbers more precisely based on the mode.
 (define_predicate "neon_lane_number"
   (and (match_code "const_int")
-       (match_test "INTVAL (op) >= 0 && INTVAL (op) <= 7")))
+       (match_test "INTVAL (op) >= 0 && INTVAL (op) <= 15")))
 

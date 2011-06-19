@@ -1,18 +1,18 @@
 /* Loop optimizations over tree-ssa.
    Copyright (C) 2003, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
-   
+
 This file is part of GCC.
-   
+
 GCC is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
 Free Software Foundation; either version 3, or (at your option) any
 later version.
-   
+
 GCC is distributed in the hope that it will be useful, but WITHOUT
 ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 for more details.
-   
+
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
@@ -36,6 +36,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "flags.h"
 #include "tree-inline.h"
 #include "tree-scalar-evolution.h"
+#include "toplev.h"
+#include "tree-vectorizer.h"
 
 /* The loop superpass.  */
 
@@ -45,7 +47,7 @@ gate_tree_loop (void)
   return flag_tree_loop_optimize != 0;
 }
 
-struct gimple_opt_pass pass_tree_loop = 
+struct gimple_opt_pass pass_tree_loop =
 {
  {
   GIMPLE_PASS,
@@ -79,8 +81,8 @@ tree_ssa_loop_init (void)
   scev_initialize ();
   return 0;
 }
-  
-struct gimple_opt_pass pass_tree_loop_init = 
+
+struct gimple_opt_pass pass_tree_loop_init =
 {
  {
   GIMPLE_PASS,
@@ -117,7 +119,7 @@ gate_tree_ssa_loop_im (void)
   return flag_tree_loop_im != 0;
 }
 
-struct gimple_opt_pass pass_lim = 
+struct gimple_opt_pass pass_lim =
 {
  {
   GIMPLE_PASS,
@@ -153,7 +155,7 @@ gate_tree_ssa_loop_unswitch (void)
   return flag_unswitch_loops != 0;
 }
 
-struct gimple_opt_pass pass_tree_unswitch = 
+struct gimple_opt_pass pass_tree_unswitch =
 {
  {
   GIMPLE_PASS,
@@ -191,7 +193,7 @@ gate_tree_predictive_commoning (void)
   return flag_predictive_commoning != 0;
 }
 
-struct gimple_opt_pass pass_predcom = 
+struct gimple_opt_pass pass_predcom =
 {
  {
   GIMPLE_PASS,
@@ -303,10 +305,10 @@ graphite_transforms (void)
 static bool
 gate_graphite_transforms (void)
 {
-  /* Enable -fgraphite pass if any one of the graphite optimization flags 
+  /* Enable -fgraphite pass if any one of the graphite optimization flags
      is turned on.  */
   if (flag_loop_block || flag_loop_interchange || flag_loop_strip_mine
-      || flag_graphite_identity)
+      || flag_graphite_identity || flag_loop_parallelize_all)
     flag_graphite = 1;
 
   return flag_graphite != 0;
@@ -433,37 +435,6 @@ struct gimple_opt_pass pass_scev_cprop =
  }
 };
 
-/* Remove empty loops.  */
-
-static unsigned int
-tree_ssa_empty_loop (void)
-{
-  if (number_of_loops () <= 1)
-    return 0;
-
-  return remove_empty_loops ();
-}
-
-struct gimple_opt_pass pass_empty_loop =
-{
- {
-  GIMPLE_PASS,
-  "empty",				/* name */
-  NULL,					/* gate */
-  tree_ssa_empty_loop,		       	/* execute */
-  NULL,					/* sub */
-  NULL,					/* next */
-  0,					/* static_pass_number */
-  TV_COMPLETE_UNROLL,	  		/* tv_id */
-  PROP_cfg | PROP_ssa,			/* properties_required */
-  0,					/* properties_provided */
-  0,					/* properties_destroyed */
-  0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_loops 
-    | TODO_ggc_collect			/* todo_flags_finish */
- }
-};
-
 /* Record bounds on numbers of iterations of loops.  */
 
 static unsigned int
@@ -481,7 +452,7 @@ struct gimple_opt_pass pass_record_bounds =
 {
  {
   GIMPLE_PASS,
-  NULL,					/* name */
+  "*record_bounds",			/* name */
   NULL,					/* gate */
   tree_ssa_loop_bounds,		       	/* execute */
   NULL,					/* sub */
@@ -704,8 +675,8 @@ tree_ssa_loop_done (void)
   loop_optimizer_finalize ();
   return 0;
 }
-  
-struct gimple_opt_pass pass_tree_loop_done = 
+
+struct gimple_opt_pass pass_tree_loop_done =
 {
  {
   GIMPLE_PASS,
