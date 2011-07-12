@@ -1,56 +1,122 @@
 #!/bin/sh
-# Builds a GCC package from the installation specified by $GCCDATE (or via the
-# arguments).
-# Usage: build-gcc2-package-Haiku.sh [gcc-base-dir] [version]
 
-packages_build=/boot/common/packages/build
+# Builds a GCC package from the sources.
+#
+# Usage: build-gcc2-package-Haiku.sh <version date> <release>
+#   <version date> must be version date string formatted YYMMDD.
+#   <release> must be a number between 1 and 99.
 
-if [ -d "$1" ]; then
-	gcc_base=$1
-	shift
-fi
-if [ "$(basename $(pwd))" = "buildtools" ]; then
-	gcc_base=$(pwd)/legacy/gcc-obj
-	echo "No exact GCC build directory given, assuming \"$gcc_base\""
-	echo "  (only needed for the HTML documentation)."
+# get version date and release parameters
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 <version date YYMMDD> <release>" >&2
+	exit 1
 fi
 
-if [ "$1" == "" ]; then
-	if [ "$GCCDATE" = "" ]; then
-		echo "No GCC date version given!"
-		echo "Either export GCCDATE, or pass the date as argument to this" \
-			"script."
-		echo "The date is given in the format 'yymmdd', ie. '100818'."
-		exit
-	fi
-else
-	GCCDATE=$1
+export GCCDATE=$1
+release=$2
+
+# get current dir and buildtools dir
+currentDir="$(pwd)/build-gcc-package"
+rm -rf "$currentDir"
+mkdir "$currentDir"
+cd "$(dirname $0)"
+buildtoolsDir="$(pwd)/legacy"
+cd "$currentDir"
+
+# prepare an install dir with a .PackageInfo
+installDir="$currentDir/install"
+rm -rf "$installDir"
+mkdir "$installDir"
+
+version=2.95.3_${GCCDATE}
+
+packageInfoFile="package-info"
+
+cat > "$packageInfoFile" << ENDOFHERE
+	name			gcc
+	version			$version-$release
+	architecture	x86_gcc2
+	summary			"c/c++ compiler"
+	description		"standard compiler for x86_gcc2 platform, ABI-compatible with BeOS R5"
+	packager		"Oliver Tappe <zooey@hirschkaefer.de>"
+	vendor			"Haiku Project"
+	copyrights		"1988-2000 Free Software Foundation, Inc."
+	licenses {
+		"GNU GPL v2"
+		"GNU LGPL v2"
+	}
+	provides {
+		gcc = $version compat >= 2.95.3
+		binutils = 2.17_$GCCDATE compat >= 2.17
+	}
+	requires {
+		haiku >= r1-alpha3
+		haiku-devel >= r1-alpha3
+	}
+ENDOFHERE
+
+# create a build package
+versionedPackageName=gcc-$version-$release
+packageFileName="$versionedPackageName-x86_gcc2.hpkg"
+packageFile="$currentDir/$packageFileName"
+
+echo "Creating build package..."
+package create -b -I "$installDir" -i "$packageInfoFile" $packageFile ||
+	exit 1
+
+# activate the package
+rm -f /boot/common/packages/$packageFileName
+ln -s "$packageFile" /boot/common/packages
+
+finalInstallDir="/packages/$versionedPackageName/.self"
+
+sleep 1
+
+if [ ! -e "$finalInstallDir" ]; then
+	echo "Activating the build package failed!"
+	exit 1
 fi
 
-current_dir=$(pwd)
-base=/boot/common/develop/tools/gcc-2.95.3-$GCCDATE
-if [ ! -d "$base" ]; then
-	echo GCC directory \"$base\" does not exist!
-	exit
-fi
+gccInstallDir="$finalInstallDir/develop/tools/gcc-2.95.3-${GCCDATE}"
+mkdir -p "$gccInstallDir"
+
+# build binutils
+mkdir binutils-obj
+cd binutils-obj
+CFLAGS="-O2" CXXFLAGS="-O2" "$buildtoolsDir/binutils/configure" \
+	--prefix=$gccInstallDir \
+	--disable-nls --enable-shared=yes || exit 1
+make || exit 1
+make install || exit 1
+cd ..
+
+# build gcc
+mkdir gcc-obj
+cd gcc-obj
+CFLAGS="-O2" CXXFLAGS="-O2" "$buildtoolsDir/gcc/configure" \
+	--prefix=$gccInstallDir \
+	--disable-nls --enable-shared=yes --enable-languages=c,c++ || exit 1
+make bootstrap
+	# the above will fail when compiling builtinbuf.cc, but we can ignore that
+	# since it's trying to build libstdc++.so, which haiku provides anyway
+make install || exit 1
+cd ..
+
+
+base=$gccInstallDir
 
 ### HTML documentation ####################################
 
 html_base=$base/html-docs
 if [ ! -d "$html_base" ]; then
-	if [ "$gcc_base" = "" ]; then
-		echo "No GCC build directory given, cannot build HTML documenation."
-		exit
-	fi
-
 	echo "Building HTML documentation..."
 	mkdir $html_base
 	cd $html_base
 
-	makeinfo --html $gcc_base/../gcc/gcc/cpp.texi
-	makeinfo --html $gcc_base/../gcc/gcc/gcc.texi
-	makeinfo --html $gcc_base/../binutils/libiberty/libiberty.texi
-	makeinfo --force --html $gcc_base/../gcc/libio/iostream.texi
+	makeinfo --html "$buildtoolsDir/gcc/gcc/cpp.texi"
+	makeinfo --html "$buildtoolsDir/gcc/gcc/gcc.texi"
+	makeinfo --html "$buildtoolsDir/binutils/libiberty/libiberty.texi"
+	makeinfo --force --html "$buildtoolsDir/gcc/libio/iostream.texi"
 
 	ln -sf cpp/index.html $html_base/cpp.html
 	ln -sf gcc/index.html $html_base/gcc.html
@@ -107,39 +173,8 @@ ln -snf /boot/system/lib/libstdc++.so $base/lib/
 
 echo "Building package ..."
 
-cd ${packages_build}
-ver=2.95.3_${GCCDATE}
-rev=1
-while [ -e gcc-2.95.3_${GCCDATE}-$rev ]; do
-	rev=$(expr $rev + 1);
-done
-version=$ver-$rev
-echo "Version: $version"
+cd "$currentDir"
+mimeset -F "$installDir"
+package create -C "$installDir" -i "$packageInfoFile" $packageFile || exit 1
 
-mkdir -p gcc-$version/develop/tools
-cp -r $base gcc-$version/develop/tools/
-cd gcc-$version
-cat >.PackageInfo <<ENDOFHERE
-	name = gcc
-	version = $version
-	architecture = x86_gcc2
-	summary = "c/c++ compiler"
-	description = "standard compiler for x86_gcc2 platform, ABI-compatible with BeOS R5"
-	packager = "Oliver Tappe <zooey@hirschkaefer.de>"
-	vendor = "Haiku Project"
-	copyrights = [ "1988-2000 Free Software Foundation, Inc." ]
-	licenses = [ "GNU GPL v2", "GNU LGPL v2" ]
-	provides = [
-		gcc = $ver,
-		binutils = 2.17_$GCCDATE
-	]
-	requires = [
-		haiku >= r40675,
-		package_management_branch,
-		cpp-headers == 2.95.3
-	]
-ENDOFHERE
-
-mimeset -F .
-package create ../gcc-$version.hpkg
-cd $current_dir
+echo "Built package $packageInfoFile successfully."
