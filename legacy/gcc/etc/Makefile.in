@@ -40,7 +40,7 @@ TEXIDIR = $(srcdir)/../texinfo
 #### Host, target, and site specific Makefile fragments come in here.
 ###
 
-INFOFILES = standards.info
+INFOFILES = # standards.info
 DVIFILES = standards.dvi
 
 all:

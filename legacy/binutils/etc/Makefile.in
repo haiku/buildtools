@@ -54,7 +54,7 @@ TEXIDIR = $(srcdir)/../texinfo
 #### Host, target, and site specific Makefile fragments come in here.
 ###
 
-INFOFILES = standards.info configure.info
+INFOFILES = # standards.info configure.info
 DVIFILES = standards.dvi configure.dvi
 HTMLFILES = standards.html configure.html
 
