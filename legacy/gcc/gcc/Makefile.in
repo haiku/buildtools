@@ -2267,7 +2267,7 @@ stmp-fixproto: fixhdr.ready fixproto stmp-headers
 # Remake the info files.
 
 doc: info
-info: cpp.info gcc.info lang.info
+info: # cpp.info gcc.info lang.info
 
 cpp.info: $(srcdir)/cpp.texi
 	$(MAKEINFO) $(MAKEINFOFLAGS) -I$(srcdir) -o cpp.info $(srcdir)/cpp.texi
@@ -2578,17 +2578,17 @@ install-driver: xgcc$(exeext)
 # to do the install.
 install-info: doc installdirs lang.install-info
 	-rm -f $(infodir)/cpp.info* $(infodir)/gcc.info*
-	for f in cpp.info* gcc.info*; do \
-	    $(INSTALL_DATA) $$f $(infodir)/$$f; \
-	done
-	-if $(SHELL) -c 'install-info --version' >/dev/null 2>&1; then \
-	  if [ -f $(infodir)/dir ] ; then \
-	    for f in cpp.info gcc.info; do \
-		install-info --dir-file=$(infodir)/dir $(infodir)/$$f; \
-	    done; \
-	  else true; fi; \
-	else true; fi;
-	-chmod a-x $(infodir)/cpp.info* $(infodir)/gcc.info*
+#	for f in cpp.info* gcc.info*; do \
+#	    $(INSTALL_DATA) $$f $(infodir)/$$f; \
+#	done
+#	-if $(SHELL) -c 'install-info --version' >/dev/null 2>&1; then \
+#	  if [ -f $(infodir)/dir ] ; then \
+#	    for f in cpp.info gcc.info; do \
+#		install-info --dir-file=$(infodir)/dir $(infodir)/$$f; \
+#	    done; \
+#	  else true; fi; \
+#	else true; fi;
+#	-chmod a-x $(infodir)/cpp.info* $(infodir)/gcc.info*
 
 # Install the man pages.
 install-man: installdirs $(srcdir)/gcc.1 $(srcdir)/cccp.1 lang.install-man

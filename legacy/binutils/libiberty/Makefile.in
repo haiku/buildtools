@@ -241,7 +241,7 @@ $(TESTLIB): $(REQUIRED_OFILES) $(CONFIGURED_OFILES)
 	  $(REQUIRED_OFILES) $(CONFIGURED_OFILES)
 	$(RANLIB) $(TESTLIB)
 
-info: libiberty.info info-subdir
+info: # libiberty.info info-subdir
 install-info: install-info-subdir
 clean-info: clean-info-subdir
 dvi: libiberty.dvi dvi-subdir
