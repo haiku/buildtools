@@ -87,7 +87,7 @@ LTYACCCOMPILE = $(LIBTOOL) --mode=compile $(YACC) $(YFLAGS) \
 	$(AM_YFLAGS)
 YLWRAP = $(top_srcdir)/../ylwrap
 SOURCES = $(ld_new_SOURCES) $(EXTRA_ld_new_SOURCES)
-INFO_DEPS = $(srcdir)/ld.info
+INFO_DEPS = # $(srcdir)/ld.info
 TEXINFO_TEX = $(top_srcdir)/../texinfo/texinfo.tex
 am__TEXINFO_TEX_DIR = $(top_srcdir)/../texinfo
 DVIS = ld.dvi
