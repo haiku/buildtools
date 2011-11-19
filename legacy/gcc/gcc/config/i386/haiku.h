@@ -159,6 +159,7 @@ Boston, MA 02111-1307, USA.  */
 -D__stdcall=__attribute__((__stdcall__)) \
 -D__cdecl=__attribute__((__cdecl__)) \
 -D__declspec(x)=__attribute__((x)) \
+-D__STDC_ISO_10646__=201103L \
 -Asystem(haiku)"
 
 #undef CPP_SPEC

@@ -74,6 +74,7 @@ Boston, MA 02110-1301, USA.  */
 	builtin_define_std ("mc68020");					\
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
+    builtin_define ("__STDC_ISO_10646__=201103L"); \
 	builtin_assert ("system=haiku");				\
     }									\
   while (0)
