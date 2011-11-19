@@ -56,6 +56,7 @@
       builtin_define ("__arm__");					\
       builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
       builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
+      builtin_define ("__STDC_ISO_10646__=201103L"); \
       builtin_assert ("system=haiku");					\
       /* Haiku apparently doesn't support merging of symbols across shared \
 		 object boundaries. Hence we need to explicitly specify that \

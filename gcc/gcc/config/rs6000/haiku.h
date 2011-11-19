@@ -40,6 +40,7 @@ Boston, MA 02111-1307, USA.  */
 	builtin_define ("__powerpc__");					\
 	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
 	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
+    builtin_define ("__STDC_ISO_10646__=201103L"); \
 	builtin_assert ("system=haiku");					\
 	builtin_assert ("cpu=powerpc");					\
 	builtin_assert ("machine=powerpc");					\
