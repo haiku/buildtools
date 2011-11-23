@@ -28,10 +28,54 @@ fi
 current_dir=$(pwd)
 base=/boot/develop/abi/x86/gcc2/tools/gcc-2.95.3-haiku-$GCCDATE
 if [ ! -d "$base" ]; then
-	echo GCC directory \"$base\" does not exist!
-	exit
-fi
+	echo GCC directory \"$base\" does not exist, so we start a build ...
+	echo "This is going to take a while ..."
+	sleep 3
 
+	# From now on fail, if anything goes wrong.
+	set -o errexit
+
+	cd $gcc_base/..
+
+	rm -rf binutils-obj
+	mkdir binutils-obj
+	cd binutils-obj
+	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure \
+		--prefix=/boot/develop/abi/x86/gcc2/tools/gcc-2.95.3-haiku-${GCCDATE} \
+		--disable-nls --enable-shared=yes
+	make
+	cd ..
+
+	(cd gcc/gcc; touch c-parse.{h,c} cexp.c cp/parse.{c,h} c-gperf.h)
+
+	rm -rf gcc-obj
+	mkdir gcc-obj
+	cd gcc-obj
+	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
+		--prefix=/boot/develop/abi/x86/gcc2/tools/gcc-2.95.3-haiku-${GCCDATE} \
+		--disable-nls --enable-shared=yes --enable-languages=c,c++
+	# hack the Makefile to avoid trouble with stuff we don't need anyway
+	sedExpr=
+	for toRemove in libio libjava libobjc libstdc++; do
+		sedExpr="$sedExpr -e 's@^\(TARGET_CONFIGDIRS =.*\)$toRemove\(.*\)@\1\2@'"
+	done
+	echo sedExpr: $sedExpr
+	mv Makefile Makefile.bak || exit 1
+	eval "sed $sedExpr Makefile.bak > Makefile" || exit 1
+	rm Makefile.bak
+	# build gcc
+	make bootstrap
+	cd ..
+
+	mkdir /boot/develop/abi/x86/gcc2/tools/gcc-2.95.3-haiku-${GCCDATE}
+	cd binutils-obj
+	make install
+	cd ..
+	cd gcc-obj
+	make install
+	cd ..
+	ln -sfn gcc-2.95.3-haiku-${GCCDATE} /boot/develop/abi/x86/gcc2/tools/current
+fi
 
 ### HTML documentation ####################################
 
@@ -49,12 +93,10 @@ if [ ! -d "$html_base" ]; then
 	makeinfo --html $gcc_base/../gcc/gcc/cpp.texi
 	makeinfo --html $gcc_base/../gcc/gcc/gcc.texi
 	makeinfo --html $gcc_base/../binutils/libiberty/libiberty.texi
-	makeinfo --force --html $gcc_base/../gcc/libio/iostream.texi
 
 	ln -sf cpp/index.html $html_base/cpp.html
 	ln -sf gcc/index.html $html_base/gcc.html
 	ln -sf libiberty/index.html $html_base/libiberty.html
-	ln -sf iostream/index.html $html_base/iostream.html
 fi
 if [ -d "$base/share/doc" ]; then
 	echo "Adding binutils HTML documentation..."
