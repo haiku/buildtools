@@ -131,9 +131,9 @@ ln -s c++/$gccVersion $installDir/include/g++
 
 
 # zip everything up
-gccVersionYear=20$(echo $GCCDATE | cut -c1-2)
-gccVersionMonth=$(echo $GCCDATE | cut -c3-4)
-gccVersionDay=$(echo $GCCDATE | cut -c5-6)
+gccVersionYear=20$(echo $gccDate | cut -c1-2)
+gccVersionMonth=$(echo $gccDate | cut -c3-4)
+gccVersionDay=$(echo $gccDate | cut -c5-6)
 packageFile="$currentDir/gcc-${gccVersion}-${gccArch}-gcc4-${gccVersionYear}-${gccVersionMonth}-${gccVersionDay}.zip"
 
 cd /boot
