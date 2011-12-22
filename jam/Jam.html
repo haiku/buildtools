@@ -18,12 +18,12 @@
 
 <PRE>
 jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
-    [ -d <I>debug</I> ] 
-    [ -f <I>jambase</I> ] 
-    [ -j <I>jobs</I> ] 
-    [ -o <I>actionsfile</I> ] 
-    [ -s <I>var</I>=<I>value</I> ] 
-    [ -t <I>target</I> ] 
+    [ -d <I>debug</I> ]
+    [ -f <I>jambase</I> ]
+    [ -j <I>jobs</I> ]
+    [ -o <I>actionsfile</I> ]
+    [ -s <I>var</I>=<I>value</I> ]
+    [ -t <I>target</I> ]
     [ <I>target</I> ... ]
 </PRE>
 
@@ -66,7 +66,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    <TD> Build all targets anyway, even if they are up-to-date.
 
 	    <TR><TD VALIGN=TOP><CODE> -d <I>c</I>  </CODE>
-	    <TD> Turn on display option <I>c</I> and off the default 
+	    <TD> Turn on display option <I>c</I> and off the default
 	    display (summary info and actions):
 
 	    <DL COMPACT>
@@ -81,17 +81,17 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    </DL>
 
 	    <TR><TD VALIGN=TOP><CODE> -d <I>n</I>  </CODE>
-	    <TD> Enable cummulative debugging levels from 1 to <I>n</I>.  
+	    <TD> Enable cummulative debugging levels from 1 to <I>n</I>.
 	    Interesting values are:
 
 	    <DL COMPACT>
-	    <DT> 1 <DD> Show actions and summary info (the default) 
+	    <DT> 1 <DD> Show actions and summary info (the default)
 	    <DT> 3 <DD> Old name for -dm (described above)
-	    <DT> 5 <DD> Show rule invocations and variable expansions 
-	    <DT> 6 <DD> Show directory/header file/archive scans 
-	    <DT> 7 <DD> Show variable settings 
-	    <DT> 8 <DD> Show variable fetches 
-	    <DT> 9 <DD> Show variable manipulation, scanner tokens 
+	    <DT> 5 <DD> Show rule invocations and variable expansions
+	    <DT> 6 <DD> Show directory/header file/archive scans
+	    <DT> 7 <DD> Show variable settings
+	    <DT> 8 <DD> Show variable fetches
+	    <DT> 9 <DD> Show variable manipulation, scanner tokens
 	    </DL>
 
 	    <TR><TD VALIGN=TOP><CODE> -d +<I>n</I> </CODE>
@@ -109,7 +109,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    in the order of appearance in the Jambase/Jamfiles.
 
 	    <TR><TD VALIGN=TOP><CODE> -j <I>n</I></CODE>
-	    <TD> Run up to <I>n</I> shell commands concurrently (UNIX 
+	    <TD> Run up to <I>n</I> shell commands concurrently (UNIX
 	    and NT only).  The default is 1.
 
 	    <TR><TD VALIGN=TOP><CODE> -n</CODE>
@@ -130,7 +130,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    environment.
 
 	    <TR><TD VALIGN=TOP><CODE> -t <I>target</I></CODE>
-	    <TD> Rebuild <I>target</I> and everything that depends on it, 
+	    <TD> Rebuild <I>target</I> and everything that depends on it,
 	     even if it is up-to-date.
 
 	    <TR><TD VALIGN=TOP><CODE> -v</CODE>
@@ -142,7 +142,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	<P>
 
-	<b>Jam</b> has four phases of operation: start-up, parsing, 
+	<b>Jam</b> has four phases of operation: start-up, parsing,
 	binding, and updating.
 
 <DT> <P> <H3> Start-up </H3> <DD>
@@ -191,7 +191,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	After parsing, <B>jam</B> recursively descends the dependency
 	graph and binds every file target with a location in the
-	filesystem.  
+	filesystem.
 
 	<P> <H5> Targets </H5> <DD>
 
@@ -356,8 +356,8 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	<P><TABLE WIDTH=75% ALIGN=CENTER><TR><TD><DL>
 
 	    <P> <DT> <CODE>
-	    
-		<I>rulename field1</I> : <I>field2</I> : <I>...</I> 
+
+		<I>rulename field1</I> : <I>field2</I> : <I>...</I>
 	    	: <I>fieldN</I> ;
 
 	    </CODE>
@@ -425,25 +425,25 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	    </TABLE>
 
-	    <P><DT><CODE> 
+	    <P><DT><CODE>
 
-		break 
+		break
 
 	    </CODE>
 
 	    <P><DD> Breaks out of the closest enclosing <I>for</I>
 	    or <I>while</I> loop.
 
-	    <P><DT><CODE> 
+	    <P><DT><CODE>
 
-		continue 
+		continue
 
 	    </CODE>
 
 	    <P><DD> Jumps to the end of the closest enclosing <I>for</I>
 	    or <I>while</I> loop.
 
-	    <P><DT><CODE> 
+	    <P><DT><CODE>
 
 		for <I>var</I> in <I>list</I> { <I>statements</I> }
 
@@ -464,13 +464,13 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    <P><DD> Does the obvious;  the else clause is optional.
 	    <i>cond</i> is built of:
 
-	    <TABLE BORDER=1> 
+	    <TABLE BORDER=1>
 
 		<TR><TD WIDTH=25%> <CODE><I>a</I></CODE></TD>
-		<TD> true if any <I>a</I> element is a non-zero-length 
+		<TD> true if any <I>a</I> element is a non-zero-length
 		string</TD>
 		<TR><TD> <CODE><I>a</I> = <I>b</I></CODE> </TD>
-		<TD> list <I>a</I> matches list <I>b</I> 
+		<TD> list <I>a</I> matches list <I>b</I>
 		string-for-string</TD>
 		<TR><TD> <CODE><I>a</I> != <I>b</I> </CODE></TD>
 		<TD> list <I>a</I> does not match list <I>b</I></TD>
@@ -539,7 +539,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    otherwise.
 
 	    <P> <DT> <CODE>
-	    
+
 		on <I>target</I> <I>statement</I> ;
 
 	    </CODE>
@@ -553,7 +553,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	    <P><DT> <CODE>
 
-		return <I>values</I> ; 
+		return <I>values</I> ;
 
 	    </CODE>
 
@@ -562,7 +562,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	    execution.
 
 	    <P> <DT> <CODE>
-	    
+
 		rule <I>rulename</I> [ : <I>vars</I> ] { <I>statements</I> }
 
 	    </CODE>
@@ -577,10 +577,10 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 		<A NAME="switch">
 		switch <I>value</I>
 		</A>
-		<BR> { 
-		<BR> case <I>pattern1</I> : <I>statements</I> ; 
-		<BR> case <I>pattern2</I> : <I>statements</I> ; 
-		<BR> ... 
+		<BR> {
+		<BR> case <I>pattern1</I> : <I>statements</I> ;
+		<BR> case <I>pattern2</I> : <I>statements</I> ;
+		<BR> ...
 		<BR> }
 
 	    </CODE>
@@ -641,17 +641,17 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	<P> <TABLE WIDTH=75% ALIGN=CENTER> <TR><TD> <DL>
 
-	    <DT><CODE> 
+	    <DT><CODE>
 	    <I>variable</I> = <I>elements</I> ; </CODE>
-	    <DT><CODE> 
+	    <DT><CODE>
 	    <I>variable</I> += <I>elements</I> ; </CODE>
-	    <DT><CODE> 
+	    <DT><CODE>
 	    <I>variable</I> ?= <I>elements</I> ; </CODE>
-	    <DT><CODE> 
+	    <DT><CODE>
 	    <I>variable</I> on <I>targets</I> = <I>elements</I> ; </CODE>
-	    <DT><CODE> 
+	    <DT><CODE>
 	    <I>variable</I> on <I>targets</I> += <I>elements</I> ; </CODE>
-	    <DT><CODE> 
+	    <DT><CODE>
 	    <I>variable</I> on <I>targets</I> ?= <I>elements</I> ; </CODE>
 
 	</DL></TABLE>
@@ -666,7 +666,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	<I>variable</I> only if it was previously unset.  The last form
 	"<I>variable</I> on <I>targets</I> ?= <I>elements</I>" checks
 	to see if the target-specific, not the global, variable is set.
-	(The ?= operator also has an old form "default =".)  
+	(The ?= operator also has an old form "default =".)
 
 	<P>
 
@@ -745,7 +745,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	    <BR>$(X)        -> a ""
 	    <BR>$(Y)        -> "" 1
-	    <BR>$(Z)	  -> 
+	    <BR>$(Z)	  ->
 	    <BR>*$(X)$(Y)*  -> *a* *a1* ** *1*
 	    <BR>*$(X)$(Z)*  ->
 
@@ -841,12 +841,12 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	the second modifies it; and the third are just utility
 	rules.
 
-	<P> <H5> Dependency Building </H5> 
+	<P> <H5> Dependency Building </H5>
 
 	<P><TABLE WIDTH=75% ALIGN=CENTER><TR><TD><DL>
 
-	<P><DT><CODE> 
-	DEPENDS <I>targets1</I> : <I>targets2</I> ; 
+	<P><DT><CODE>
+	DEPENDS <I>targets1</I> : <I>targets2</I> ;
 	</CODE>
 
 	<DD> Builds a direct dependency: makes each of <I>targets1</I>
@@ -877,7 +877,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	</DL></TABLE>
 
 	<A NAME="bindingmods">
-	<P> <H5> Modifying Binding </H5> 
+	<P> <H5> Modifying Binding </H5>
 	</A>
 
 	<P>
@@ -965,7 +965,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	</DL></TABLE>
 
-	<P> <H5> Utility Rules </H5> 
+	<P> <H5> Utility Rules </H5>
 
 	The remaining rules are utility rules.
 
@@ -1117,7 +1117,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 
 	<TABLE WIDTH=75% ALIGN=CENTER>
 
-	    <TR><TD>OS<TD>OS identifier string 
+	    <TR><TD>OS<TD>OS identifier string
 	    <TR><TD>OSPLAT<TD>Underlying architecture, when applicable
 	    <TR><TD>MAC<TD>true on MAC platform
 	    <TR><TD>NT<TD>true on NT platform
@@ -1278,7 +1278,7 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	<P>
 
 	With the -j flag, errors from failed commands can get staggeringly
-	mixed up.  
+	mixed up.
 
 	<P>
 
@@ -1305,14 +1305,14 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 <DT> <P> <H2> AUTHOR </H2>   <DD>
 
 	<P>
-	Jam's author is Christopher Seiwald (<a 
+	Jam's author is Christopher Seiwald (<a
 	href="mailto:seiwald@perforce.com">seiwald@perforce.com</A>).
-	Documentation is provided by 
+	Documentation is provided by
 	<A HREF="http://www.perforce.com">Perforce Software, Inc.</A>
 
 </DL>
 
-<P> <HR>   
+<P> <HR>
 
 	<P>
 
@@ -1324,6 +1324,6 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	<BR>
 	$Id: //public/jam/src/Jam.html#19 $
 
-</BODY> 
+</BODY>
 </HTML>
 
