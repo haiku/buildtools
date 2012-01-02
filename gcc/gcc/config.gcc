@@ -1130,12 +1130,12 @@ x86_64-*-freebsd*)
 	;;
 i[34567]86-*-haiku*)
 	tmake_file='t-haiku i386/t-crtpic'
-	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h haiku.h i386/haiku.h"
+	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku.h"
 	extra_parts='crtbegin.o crtend.o'
 	;;
 x86_64-*-haiku*)
 	tmake_file='t-haiku i386/t-haiku64 i386/t-crtpic'
-	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h svr4.h haiku.h i386/haiku64.h"
+	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku64.h"
 	extra_parts='crtbegin.o crtend.o'
 	;;
 i[34567]86-*-netbsdelf*)
