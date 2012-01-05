@@ -304,7 +304,7 @@ if test "${ENABLE_GOLD}" = "yes"; then
   is_elf=no
   case "${target}" in
     *-*-elf* | *-*-sysv4* | *-*-unixware* | *-*-eabi* | hppa*64*-*-hpux* \
-    | *-*-linux* | frv-*-uclinux* | *-*-irix5* | *-*-irix6* | *-*-haiku* \
+    | *-*-linux* | frv-*-uclinux* | *-*-irix5* | *-*-irix6* \
     | *-*-netbsd* | *-*-openbsd* | *-*-freebsd* | *-*-solaris2*)
       case "${target}" in
         *-*-linux*aout* | *-*-linux*oldld*)
