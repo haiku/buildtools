@@ -1,6 +1,7 @@
 /* Miscellaneous BPABI functions.
 
-   Copyright (C) 2003, 2004, 2007, 2008, 2009  Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by CodeSourcery, LLC.
 
    This file is free software; you can redistribute it and/or modify it
@@ -21,6 +22,16 @@
    a copy of the GCC Runtime Library Exception along with this program;
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
+
+#ifdef __ARM_EABI__
+/* Some attributes that are common to all routines in this file.  */
+	/* Tag_ABI_align_needed: This code does not require 8-byte
+	   alignment from the caller.  */
+	/* .eabi_attribute 24, 0  -- default setting.  */
+	/* Tag_ABI_align_preserved: This code preserves 8-byte
+	   alignment in any callee.  */
+	.eabi_attribute 25, 1
+#endif /* __ARM_EABI__ */
 
 #ifdef L_aeabi_lcmp
 

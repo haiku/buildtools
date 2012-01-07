@@ -1,7 +1,7 @@
 /* Interchange heuristics and transform for loop interchange on
    polyhedral representation.
 
-   Copyright (C) 2009 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@amd.com> and
    Harsha Jagasia <harsha.jagasia@amd.com>.
 
@@ -23,34 +23,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "ggc.h"
-#include "tree.h"
-#include "rtl.h"
-#include "output.h"
-#include "basic-block.h"
-#include "diagnostic.h"
 #include "tree-flow.h"
-#include "toplev.h"
 #include "tree-dump.h"
-#include "timevar.h"
 #include "cfgloop.h"
 #include "tree-chrec.h"
 #include "tree-data-ref.h"
 #include "tree-scalar-evolution.h"
-#include "tree-pass.h"
-#include "domwalk.h"
-#include "value-prof.h"
-#include "pointer-set.h"
-#include "gimple.h"
-#include "params.h"
+#include "sese.h"
 
 #ifdef HAVE_cloog
-#include "cloog/cloog.h"
 #include "ppl_c.h"
-#include "sese.h"
 #include "graphite-ppl.h"
-#include "graphite.h"
 #include "graphite-poly.h"
 
 /* Builds a linear expression, of dimension DIM, representing PDR's
@@ -78,15 +61,15 @@ build_linearized_memory_access (ppl_dimension_type offset, poly_dr_p pdr)
   ppl_dimension_type i;
   ppl_dimension_type first = pdr_subscript_dim (pdr, 0);
   ppl_dimension_type last = pdr_subscript_dim (pdr, PDR_NB_SUBSCRIPTS (pdr));
-  Value size, sub_size;
+  mpz_t size, sub_size;
   graphite_dim_t dim = offset + pdr_dim (pdr);
 
   ppl_new_Linear_Expression_with_dimension (&res, dim);
 
-  value_init (size);
-  value_set_si (size, 1);
-  value_init (sub_size);
-  value_set_si (sub_size, 1);
+  mpz_init (size);
+  mpz_set_si (size, 1);
+  mpz_init (sub_size);
+  mpz_set_si (sub_size, 1);
 
   for (i = last - 1; i >= first; i--)
     {
@@ -95,12 +78,12 @@ build_linearized_memory_access (ppl_dimension_type offset, poly_dr_p pdr)
       ppl_new_Linear_Expression_with_dimension (&le, dim - offset);
       ppl_set_coef (le, i, 1);
       ppl_max_for_le_pointset (PDR_ACCESSES (pdr), le, sub_size);
-      value_multiply (size, size, sub_size);
+      mpz_mul (size, size, sub_size);
       ppl_delete_Linear_Expression (le);
     }
 
-  value_clear (sub_size);
-  value_clear (size);
+  mpz_clear (sub_size);
+  mpz_clear (size);
   return res;
 }
 
@@ -196,7 +179,7 @@ build_partial_difference (ppl_Pointset_Powerset_C_Polyhedron_t *p,
    the loop at DEPTH.  */
 
 static void
-pdr_stride_in_loop (Value stride, graphite_dim_t depth, poly_dr_p pdr)
+pdr_stride_in_loop (mpz_t stride, graphite_dim_t depth, poly_dr_p pdr)
 {
   ppl_dimension_type time_depth;
   ppl_Linear_Expression_t le, lma;
@@ -319,9 +302,15 @@ pdr_stride_in_loop (Value stride, graphite_dim_t depth, poly_dr_p pdr)
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
+      char *str;
+      void (*gmp_free) (void *, size_t);
+
       fprintf (dump_file, "\nStride in BB_%d, DR_%d, depth %d:",
 	       pbb_index (pbb), PDR_ID (pdr), (int) depth);
-      value_print (dump_file, "  %s ", stride);
+      str = mpz_get_str (0, 10, stride);
+      fprintf (dump_file, "  %s ", str);
+      mp_get_memory_functions (NULL, NULL, &gmp_free);
+      (*gmp_free) (str, strlen (str) + 1);
     }
 
   ppl_delete_Pointset_Powerset_C_Polyhedron (p1);
@@ -334,45 +323,45 @@ pdr_stride_in_loop (Value stride, graphite_dim_t depth, poly_dr_p pdr)
    accessed in LOOP at DEPTH.  */
 
 static void
-memory_strides_in_loop_1 (lst_p loop, graphite_dim_t depth, Value strides)
+memory_strides_in_loop_1 (lst_p loop, graphite_dim_t depth, mpz_t strides)
 {
   int i, j;
   lst_p l;
   poly_dr_p pdr;
-  Value s, n;
+  mpz_t s, n;
 
-  value_init (s);
-  value_init (n);
+  mpz_init (s);
+  mpz_init (n);
 
-  for (j = 0; VEC_iterate (lst_p, LST_SEQ (loop), j, l); j++)
+  FOR_EACH_VEC_ELT (lst_p, LST_SEQ (loop), j, l)
     if (LST_LOOP_P (l))
       memory_strides_in_loop_1 (l, depth, strides);
     else
-      for (i = 0; VEC_iterate (poly_dr_p, PBB_DRS (LST_PBB (l)), i, pdr); i++)
+      FOR_EACH_VEC_ELT (poly_dr_p, PBB_DRS (LST_PBB (l)), i, pdr)
 	{
 	  pdr_stride_in_loop (s, depth, pdr);
-	  value_set_si (n, PDR_NB_REFS (pdr));
-	  value_multiply (s, s, n);
-	  value_addto (strides, strides, s);
+	  mpz_set_si (n, PDR_NB_REFS (pdr));
+	  mpz_mul (s, s, n);
+	  mpz_add (strides, strides, s);
 	}
 
-  value_clear (s);
-  value_clear (n);
+  mpz_clear (s);
+  mpz_clear (n);
 }
 
 /* Sets STRIDES to the sum of all the strides of the data references
    accessed in LOOP at DEPTH.  */
 
 static void
-memory_strides_in_loop (lst_p loop, graphite_dim_t depth, Value strides)
+memory_strides_in_loop (lst_p loop, graphite_dim_t depth, mpz_t strides)
 {
-  if (value_mone_p (loop->memory_strides))
+  if (mpz_cmp_si (loop->memory_strides, -1) == 0)
     {
-      value_set_si (strides, 0);
+      mpz_set_si (strides, 0);
       memory_strides_in_loop_1 (loop, depth, strides);
     }
   else
-    value_assign (strides, loop->memory_strides);
+    mpz_set (strides, loop->memory_strides);
 }
 
 /* Return true when the interchange of loops LOOP1 and LOOP2 is
@@ -457,25 +446,23 @@ memory_strides_in_loop (lst_p loop, graphite_dim_t depth, Value strides)
    profitable to interchange the loops at DEPTH1 and DEPTH2.  */
 
 static bool
-lst_interchange_profitable_p (lst_p loop1, lst_p loop2)
+lst_interchange_profitable_p (lst_p nest, int depth1, int depth2)
 {
-  Value d1, d2;
+  mpz_t d1, d2;
   bool res;
 
-  gcc_assert (loop1 && loop2
-	      && LST_LOOP_P (loop1) && LST_LOOP_P (loop2)
-	      && lst_depth (loop1) < lst_depth (loop2));
+  gcc_assert (depth1 < depth2);
 
-  value_init (d1);
-  value_init (d2);
+  mpz_init (d1);
+  mpz_init (d2);
 
-  memory_strides_in_loop (loop1, lst_depth (loop1), d1);
-  memory_strides_in_loop (loop2, lst_depth (loop2), d2);
+  memory_strides_in_loop (nest, depth1, d1);
+  memory_strides_in_loop (nest, depth2, d2);
 
-  res = value_lt (d1, d2);
+  res = mpz_cmp (d1, d2) < 0;
 
-  value_clear (d1);
-  value_clear (d2);
+  mpz_clear (d1);
+  mpz_clear (d2);
 
   return res;
 }
@@ -521,7 +508,7 @@ lst_apply_interchange (lst_p lst, int depth1, int depth2)
       int i;
       lst_p l;
 
-      for (i = 0; VEC_iterate (lst_p, LST_SEQ (lst), i, l); i++)
+      FOR_EACH_VEC_ELT (lst_p, LST_SEQ (lst), i, l)
 	lst_apply_interchange (l, depth1, depth2);
     }
   else
@@ -603,11 +590,11 @@ lst_try_interchange_loops (scop_p scop, lst_p loop1, lst_p loop2)
 
   lst_p before = NULL, nest = NULL, after = NULL;
 
-  if (!lst_interchange_profitable_p (loop1, loop2))
-    return false;
-
   if (!lst_perfectly_nested_p (loop1, loop2))
     lst_perfect_nestify (loop1, loop2, &before, &nest, &after);
+
+  if (!lst_interchange_profitable_p (loop2, depth1, depth2))
+    return false;
 
   lst_apply_interchange (loop2, depth1, depth2);
 
@@ -667,7 +654,7 @@ lst_interchange_select_inner (scop_p scop, lst_p outer_father, int outer,
 
   loop1 = VEC_index (lst_p, LST_SEQ (outer_father), outer);
 
-  for (inner = 0; VEC_iterate (lst_p, LST_SEQ (inner_father), inner, loop2); inner++)
+  FOR_EACH_VEC_ELT (lst_p, LST_SEQ (inner_father), inner, loop2)
     if (LST_LOOP_P (loop2)
 	&& (lst_try_interchange_loops (scop, loop1, loop2)
 	    || lst_interchange_select_inner (scop, outer_father, outer, loop2)))
@@ -703,7 +690,7 @@ lst_interchange_select_outer (scop_p scop, lst_p loop, int outer)
     }
 
   if (LST_LOOP_P (loop))
-    for (i = 0; VEC_iterate (lst_p, LST_SEQ (loop), i, l); i++)
+    FOR_EACH_VEC_ELT (lst_p, LST_SEQ (loop), i, l)
       if (LST_LOOP_P (l))
 	res |= lst_interchange_select_outer (scop, l, i);
 

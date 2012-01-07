@@ -1,6 +1,6 @@
 /* Generate from machine description:
    - some #define configuration flags.
-   Copyright (C) 1987, 1991, 1997, 1998, 1999, 2000, 2003, 2004, 2007
+   Copyright (C) 1987, 1991, 1997, 1998, 1999, 2000, 2003, 2004, 2007, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -264,7 +264,7 @@ main (int argc, char **argv)
 
   progname = "genconfig";
 
-  if (init_md_reader_args (argc, argv) != SUCCESS_EXIT_CODE)
+  if (!init_rtx_reader_args (argc, argv))
     return (FATAL_EXIT_CODE);
 
   puts ("/* Generated automatically by the program `genconfig'");

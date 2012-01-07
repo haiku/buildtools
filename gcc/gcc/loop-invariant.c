@@ -536,7 +536,7 @@ merge_identical_invariants (void)
   htab_t eq = htab_create (VEC_length (invariant_p, invariants),
 			   hash_invariant_expr, eq_invariant_expr, free);
 
-  for (i = 0; VEC_iterate (invariant_p, invariants, i, inv); i++)
+  FOR_EACH_VEC_ELT (invariant_p, invariants, i, inv)
     find_identical_invariants (eq, inv);
 
   htab_delete (eq);
@@ -1173,11 +1173,13 @@ get_inv_cost (struct invariant *inv, int *comp_cost, unsigned *regs_needed)
 /* Calculates gain for eliminating invariant INV.  REGS_USED is the number
    of registers used in the loop, NEW_REGS is the number of new variables
    already added due to the invariant motion.  The number of registers needed
-   for it is stored in *REGS_NEEDED.  */
+   for it is stored in *REGS_NEEDED.  SPEED and CALL_P are flags passed
+   through to estimate_reg_pressure_cost. */
 
 static int
 gain_for_invariant (struct invariant *inv, unsigned *regs_needed,
-		    unsigned *new_regs, unsigned regs_used, bool speed)
+		    unsigned *new_regs, unsigned regs_used,
+		    bool speed, bool call_p)
 {
   int comp_cost, size_cost;
 
@@ -1188,9 +1190,9 @@ gain_for_invariant (struct invariant *inv, unsigned *regs_needed,
   if (! flag_ira_loop_pressure)
     {
       size_cost = (estimate_reg_pressure_cost (new_regs[0] + regs_needed[0],
-					       regs_used, speed)
+					       regs_used, speed, call_p)
 		   - estimate_reg_pressure_cost (new_regs[0],
-						 regs_used, speed));
+						 regs_used, speed, call_p));
     }
   else
     {
@@ -1245,13 +1247,14 @@ gain_for_invariant (struct invariant *inv, unsigned *regs_needed,
 
 static int
 best_gain_for_invariant (struct invariant **best, unsigned *regs_needed,
-			 unsigned *new_regs, unsigned regs_used, bool speed)
+			 unsigned *new_regs, unsigned regs_used,
+			 bool speed, bool call_p)
 {
   struct invariant *inv;
   int i, gain = 0, again;
   unsigned aregs_needed[N_REG_CLASSES], invno;
 
-  for (invno = 0; VEC_iterate (invariant_p, invariants, invno, inv); invno++)
+  FOR_EACH_VEC_ELT (invariant_p, invariants, invno, inv)
     {
       if (inv->move)
 	continue;
@@ -1261,7 +1264,7 @@ best_gain_for_invariant (struct invariant **best, unsigned *regs_needed,
 	continue;
 
       again = gain_for_invariant (inv, aregs_needed, new_regs, regs_used,
-      				  speed);
+      				  speed, call_p);
       if (again > gain)
 	{
 	  gain = again;
@@ -1314,7 +1317,7 @@ set_move_mark (unsigned invno, int gain)
 /* Determines which invariants to move.  */
 
 static void
-find_invariants_to_move (bool speed)
+find_invariants_to_move (bool speed, bool call_p)
 {
   int gain;
   unsigned i, regs_used, regs_needed[N_REG_CLASSES], new_regs[N_REG_CLASSES];
@@ -1353,7 +1356,8 @@ find_invariants_to_move (bool speed)
 	new_regs[ira_reg_class_cover[i]] = 0;
     }
   while ((gain = best_gain_for_invariant (&inv, regs_needed,
-					  new_regs, regs_used, speed)) > 0)
+					  new_regs, regs_used,
+					  speed, call_p)) > 0)
     {
       set_move_mark (inv->invno, gain);
       if (! flag_ira_loop_pressure)
@@ -1367,6 +1371,32 @@ find_invariants_to_move (bool speed)
     }
 }
 
+/* Replace the uses, reached by the definition of invariant INV, by REG.
+
+   IN_GROUP is nonzero if this is part of a group of changes that must be
+   performed as a group.  In that case, the changes will be stored.  The
+   function `apply_change_group' will validate and apply the changes.  */
+
+static int
+replace_uses (struct invariant *inv, rtx reg, bool in_group)
+{
+  /* Replace the uses we know to be dominated.  It saves work for copy
+     propagation, and also it is necessary so that dependent invariants
+     are computed right.  */
+  if (inv->def)
+    {
+      struct use *use;
+      for (use = inv->def->uses; use; use = use->next)
+	validate_change (use->insn, use->pos, reg, true);
+
+      /* If we aren't part of a larger group, apply the changes now.  */
+      if (!in_group)
+	return apply_change_group ();
+    }
+
+  return 1;
+}
+
 /* Move invariant INVNO out of the LOOP.  Returns true if this succeeds, false
    otherwise.  */
 
@@ -1378,15 +1408,14 @@ move_invariant_reg (struct loop *loop, unsigned invno)
   unsigned i;
   basic_block preheader = loop_preheader_edge (loop)->src;
   rtx reg, set, dest, note;
-  struct use *use;
   bitmap_iterator bi;
-  int regno;
+  int regno = -1;
 
   if (inv->reg)
     return true;
   if (!repr->move)
     return false;
-  regno = -1;
+
   /* If this is a representative of the class of equivalent invariants,
      really move the invariant.  Otherwise just replace its use with
      the register used for the representative.  */
@@ -1402,10 +1431,10 @@ move_invariant_reg (struct loop *loop, unsigned invno)
 	}
 
       /* Move the set out of the loop.  If the set is always executed (we could
-	 omit this condition if we know that the register is unused outside of the
-	 loop, but it does not seem worth finding out) and it has no uses that
-	 would not be dominated by it, we may just move it (TODO).  Otherwise we
-	 need to create a temporary register.  */
+	 omit this condition if we know that the register is unused outside of
+	 the loop, but it does not seem worth finding out) and it has no uses
+	 that would not be dominated by it, we may just move it (TODO).
+	 Otherwise we need to create a temporary register.  */
       set = single_set (inv->insn);
       reg = dest = SET_DEST (set);
       if (GET_CODE (reg) == SUBREG)
@@ -1416,9 +1445,14 @@ move_invariant_reg (struct loop *loop, unsigned invno)
       reg = gen_reg_rtx_and_attrs (dest);
 
       /* Try replacing the destination by a new pseudoregister.  */
-      if (!validate_change (inv->insn, &SET_DEST (set), reg, false))
+      validate_change (inv->insn, &SET_DEST (set), reg, true);
+
+      /* As well as all the dominated uses.  */
+      replace_uses (inv, reg, true);
+
+      /* And validate all the changes.  */
+      if (!apply_change_group ())
 	goto fail;
-      df_insn_rescan (inv->insn);
 
       emit_insn_after (gen_move_insn (dest, reg), inv->insn);
       reorder_insns (inv->insn, inv->insn, BB_END (preheader));
@@ -1441,26 +1475,15 @@ move_invariant_reg (struct loop *loop, unsigned invno)
 	goto fail;
       reg = repr->reg;
       regno = repr->orig_regno;
+      if (!replace_uses (inv, reg, false))
+	goto fail;
       set = single_set (inv->insn);
       emit_insn_after (gen_move_insn (SET_DEST (set), reg), inv->insn);
       delete_insn (inv->insn);
     }
 
-
   inv->reg = reg;
   inv->orig_regno = regno;
-
-  /* Replace the uses we know to be dominated.  It saves work for copy
-     propagation, and also it is necessary so that dependent invariants
-     are computed right.  */
-  if (inv->def)
-    {
-      for (use = inv->def->uses; use; use = use->next)
-	{
-	  *use->pos = reg;
-	  df_insn_rescan (use->insn);
-	}
-    }
 
   return true;
 
@@ -1485,11 +1508,11 @@ move_invariants (struct loop *loop)
   struct invariant *inv;
   unsigned i;
 
-  for (i = 0; VEC_iterate (invariant_p, invariants, i, inv); i++)
+  FOR_EACH_VEC_ELT (invariant_p, invariants, i, inv)
     move_invariant_reg (loop, i);
   if (flag_ira_loop_pressure && resize_reg_info ())
     {
-      for (i = 0; VEC_iterate (invariant_p, invariants, i, inv); i++)
+      FOR_EACH_VEC_ELT (invariant_p, invariants, i, inv)
 	if (inv->reg != NULL_RTX)
 	  {
 	    if (inv->orig_regno >= 0)
@@ -1538,7 +1561,7 @@ free_inv_motion_data (void)
 	}
     }
 
-  for (i = 0; VEC_iterate (invariant_p, invariants, i, inv); i++)
+  FOR_EACH_VEC_ELT (invariant_p, invariants, i, inv)
     {
       BITMAP_FREE (inv->depends_on);
       free (inv);
@@ -1554,7 +1577,8 @@ move_single_loop_invariants (struct loop *loop)
   init_inv_motion_data ();
 
   find_invariants (loop);
-  find_invariants_to_move (optimize_loop_for_speed_p (loop));
+  find_invariants_to_move (optimize_loop_for_speed_p (loop),
+			   LOOP_DATA (loop)->has_call);
   move_invariants (loop);
 
   free_inv_motion_data ();
@@ -1647,9 +1671,8 @@ mark_regno_live (int regno)
        loop != current_loops->tree_root;
        loop = loop_outer (loop))
     bitmap_set_bit (&LOOP_DATA (loop)->regs_live, regno);
-  if (bitmap_bit_p (&curr_regs_live, regno))
+  if (!bitmap_set_bit (&curr_regs_live, regno))
     return;
-  bitmap_set_bit (&curr_regs_live, regno);
   change_pressure (regno, true);
 }
 
@@ -1657,9 +1680,8 @@ mark_regno_live (int regno)
 static void
 mark_regno_death (int regno)
 {
-  if (! bitmap_bit_p (&curr_regs_live, regno))
+  if (! bitmap_clear_bit (&curr_regs_live, regno))
     return;
-  bitmap_clear_bit (&curr_regs_live, regno);
   change_pressure (regno, false);
 }
 

@@ -38,17 +38,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
-#include "rtl.h"
 #include "tm_p.h"
-#include "hard-reg-set.h"
 #include "basic-block.h"
-#include "output.h"
-#include "diagnostic.h"
+#include "tree-pretty-print.h"
+#include "gimple-pretty-print.h"
 #include "tree-flow.h"
 #include "tree-dump.h"
 #include "cfgloop.h"
 #include "tree-pass.h"
-#include "ggc.h"
 #include "tree-chrec.h"
 #include "tree-scalar-evolution.h"
 #include "params.h"
@@ -165,12 +162,8 @@ constant_after_peeling (tree op, gimple stmt, struct loop *loop)
       /* First make fast look if we see constant array inside.  */
       while (handled_component_p (base))
 	base = TREE_OPERAND (base, 0);
-      if ((DECL_P (base)
-      	   && TREE_STATIC (base)
-	   && TREE_READONLY (base)
-           && (DECL_INITIAL (base)
-	       || (!DECL_EXTERNAL (base)
-		   && targetm.binds_local_p (base))))
+      if ((DECL_P (base) == VAR_DECL
+	   && const_value_known_p (base))
 	  || CONSTANT_CLASS_P (base))
 	{
 	  /* If so, see if we understand all the indices.  */
@@ -406,7 +399,7 @@ try_unroll_loop_completely (struct loop *loop,
 	  return false;
 	}
 
-      for (i = 0; VEC_iterate (edge, to_remove, i, e); i++)
+      FOR_EACH_VEC_ELT (edge, to_remove, i, e)
 	{
 	  bool ok = remove_path (e);
 	  gcc_assert (ok);

@@ -1,6 +1,6 @@
 // unordered_set implementation -*- C++ -*-
 
-// Copyright (C) 2010 Free Software Foundation, Inc.
+// Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,15 +24,17 @@
 
 /** @file bits/unordered_set.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{unordered_set}
  */
 
 #ifndef _UNORDERED_SET_H
 #define _UNORDERED_SET_H
 
-_GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
-  // XXX When we get typedef templates these class definitions
+  // NB: When we get typedef templates these class definitions
   // will be unnecessary.
   template<class _Value,
 	   class _Hash = hash<_Value>,
@@ -56,6 +58,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
         _Base;
 
     public:
+      typedef typename _Base::value_type      value_type;
       typedef typename _Base::size_type       size_type;
       typedef typename _Base::hasher          hasher;
       typedef typename _Base::key_equal       key_equal;
@@ -68,22 +71,38 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 		      const allocator_type& __a = allocator_type())
       : _Base(__n, __hf, __detail::_Mod_range_hashing(),
 	      __detail::_Default_ranged_hash(), __eql,
-	      std::_Identity<_Value>(), __a)
+	      std::_Identity<value_type>(), __a)
       { }
 
       template<typename _InputIterator>
         __unordered_set(_InputIterator __f, _InputIterator __l, 
-			size_type __n = 10,
+			size_type __n = 0,
 			const hasher& __hf = hasher(), 
 			const key_equal& __eql = key_equal(), 
 			const allocator_type& __a = allocator_type())
 	: _Base(__f, __l, __n, __hf, __detail::_Mod_range_hashing(),
 		__detail::_Default_ranged_hash(), __eql,
-		std::_Identity<_Value>(), __a)
+		std::_Identity<value_type>(), __a)
         { }
 
-      __unordered_set(__unordered_set&& __x)
-      : _Base(std::forward<_Base>(__x)) { }
+      __unordered_set(initializer_list<value_type> __l,
+		      size_type __n = 0,
+		      const hasher& __hf = hasher(),
+		      const key_equal& __eql = key_equal(),
+		      const allocator_type& __a = allocator_type())
+      : _Base(__l.begin(), __l.end(), __n, __hf,
+	      __detail::_Mod_range_hashing(),
+	      __detail::_Default_ranged_hash(), __eql,
+	      std::_Identity<value_type>(), __a)
+      { }
+
+      __unordered_set&
+      operator=(initializer_list<value_type> __l)
+      {
+	this->clear();
+	this->insert(__l.begin(), __l.end());
+	return *this;
+      }
     };
 
   template<class _Value,
@@ -108,6 +127,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
         _Base;
 
     public:
+      typedef typename _Base::value_type      value_type;
       typedef typename _Base::size_type       size_type;
       typedef typename _Base::hasher          hasher;
       typedef typename _Base::key_equal       key_equal;
@@ -120,23 +140,39 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 			   const allocator_type& __a = allocator_type())
       : _Base(__n, __hf, __detail::_Mod_range_hashing(),
 	      __detail::_Default_ranged_hash(), __eql,
-	      std::_Identity<_Value>(), __a)
+	      std::_Identity<value_type>(), __a)
       { }
 
 
       template<typename _InputIterator>
         __unordered_multiset(_InputIterator __f, _InputIterator __l, 
-			     typename _Base::size_type __n = 0,
+			     size_type __n = 0,
 			     const hasher& __hf = hasher(), 
 			     const key_equal& __eql = key_equal(), 
 			     const allocator_type& __a = allocator_type())
 	: _Base(__f, __l, __n, __hf, __detail::_Mod_range_hashing(),
 		__detail::_Default_ranged_hash(), __eql,
-		std::_Identity<_Value>(), __a)
+		std::_Identity<value_type>(), __a)
         { }
 
-      __unordered_multiset(__unordered_multiset&& __x)
-      : _Base(std::forward<_Base>(__x)) { }
+      __unordered_multiset(initializer_list<value_type> __l,
+			   size_type __n = 0,
+			   const hasher& __hf = hasher(),
+			   const key_equal& __eql = key_equal(),
+			   const allocator_type& __a = allocator_type())
+      : _Base(__l.begin(), __l.end(), __n, __hf,
+	      __detail::_Mod_range_hashing(),
+	      __detail::_Default_ranged_hash(), __eql,
+	      std::_Identity<value_type>(), __a)
+      { }
+
+      __unordered_multiset&
+      operator=(initializer_list<value_type> __l)
+      {
+	this->clear();
+	this->insert(__l.begin(), __l.end());
+	return *this;
+      }
     };
 
   template<class _Value, class _Hash, class _Pred, class _Alloc,
@@ -232,33 +268,20 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 
       template<typename _InputIterator>
         unordered_set(_InputIterator __f, _InputIterator __l, 
-		      size_type __n = 10,
+		      size_type __n = 0,
 		      const hasher& __hf = hasher(), 
 		      const key_equal& __eql = key_equal(), 
 		      const allocator_type& __a = allocator_type())
 	: _Base(__f, __l, __n, __hf, __eql, __a)
         { }
 
-      unordered_set(unordered_set&& __x)
-      : _Base(std::forward<_Base>(__x)) { }
-
       unordered_set(initializer_list<value_type> __l,
-		    size_type __n = 10,
+		    size_type __n = 0,
 		    const hasher& __hf = hasher(),
 		    const key_equal& __eql = key_equal(),
 		    const allocator_type& __a = allocator_type())
-	: _Base(__l.begin(), __l.end(), __n, __hf, __eql, __a)
+      : _Base(__l.begin(), __l.end(), __n, __hf, __eql, __a)
       { }
-
-      unordered_set&
-      operator=(unordered_set&& __x)
-      {
-	// NB: DR 1204.
-	// NB: DR 675.
-	this->clear();
-	this->swap(__x);
-	return *this;	
-      }
 
       unordered_set&
       operator=(initializer_list<value_type> __l)
@@ -311,33 +334,20 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 
       template<typename _InputIterator>
         unordered_multiset(_InputIterator __f, _InputIterator __l, 
-			   typename _Base::size_type __n = 0,
+			   size_type __n = 0,
 			   const hasher& __hf = hasher(), 
 			   const key_equal& __eql = key_equal(), 
 			   const allocator_type& __a = allocator_type())
 	: _Base(__f, __l, __n, __hf, __eql, __a)
         { }
 
-      unordered_multiset(unordered_multiset&& __x)
-      : _Base(std::forward<_Base>(__x)) { }
-
       unordered_multiset(initializer_list<value_type> __l,
-			 size_type __n = 10,
+			 size_type __n = 0,
 			 const hasher& __hf = hasher(),
 			 const key_equal& __eql = key_equal(),
 			 const allocator_type& __a = allocator_type())
-	: _Base(__l.begin(), __l.end(), __n, __hf, __eql, __a)
+      : _Base(__l.begin(), __l.end(), __n, __hf, __eql, __a)
       { }
-
-      unordered_multiset&
-      operator=(unordered_multiset&& __x)
-      {
-	// NB: DR 1204.
-	// NB: DR 675.
-	this->clear();
-	this->swap(__x);
-	return *this;	
-      }
 
       unordered_multiset&
       operator=(initializer_list<value_type> __l)
@@ -384,7 +394,8 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	       const unordered_multiset<_Value, _Hash, _Pred, _Alloc>& __y)
     { return !(__x == __y); }
 
-_GLIBCXX_END_NESTED_NAMESPACE
+_GLIBCXX_END_NAMESPACE_CONTAINER
+} // namespace std
 
 #endif /* _UNORDERED_SET_H */
 

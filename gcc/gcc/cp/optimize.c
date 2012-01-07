@@ -1,6 +1,6 @@
 /* Perform optimizations on tree structure.
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009
-   Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009,
+   2010 Free Software Foundation, Inc.
    Written by Mark Michell (mark@codesourcery.com).
 
 This file is part of GCC.
@@ -25,12 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "cp-tree.h"
-#include "rtl.h"
-#include "insn-config.h"
 #include "input.h"
-#include "integrate.h"
-#include "toplev.h"
-#include "varray.h"
 #include "params.h"
 #include "hashtab.h"
 #include "target.h"
@@ -38,7 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-inline.h"
 #include "flags.h"
 #include "langhooks.h"
-#include "diagnostic.h"
+#include "diagnostic-core.h"
 #include "tree-dump.h"
 #include "gimple.h"
 #include "tree-iterator.h"
@@ -111,12 +106,11 @@ clone_body (tree clone, tree fn, void *arg_map)
   if (DECL_NAME (clone) == base_dtor_identifier
       || DECL_NAME (clone) == base_ctor_identifier)
     {
-      tree decls = DECL_STRUCT_FUNCTION (fn)->local_decls;
-      for (; decls; decls = TREE_CHAIN (decls))
-	{
-	  tree decl = TREE_VALUE (decls);
-	  walk_tree (&DECL_INITIAL (decl), copy_tree_body_r, &id, NULL);
-	}
+      unsigned ix;
+      tree decl;
+
+      FOR_EACH_LOCAL_DECL (DECL_STRUCT_FUNCTION (fn), ix, decl)
+        walk_tree (&DECL_INITIAL (decl), copy_tree_body_r, &id, NULL);
     }
 
   append_to_statement_list_force (stmts, &DECL_SAVED_TREE (clone));
@@ -262,6 +256,7 @@ maybe_clone_body (tree fn)
       /* Update CLONE's source position information to match FN's.  */
       DECL_SOURCE_LOCATION (clone) = DECL_SOURCE_LOCATION (fn);
       DECL_DECLARED_INLINE_P (clone) = DECL_DECLARED_INLINE_P (fn);
+      DECL_DECLARED_CONSTEXPR_P (clone) = DECL_DECLARED_CONSTEXPR_P (fn);
       DECL_COMDAT (clone) = DECL_COMDAT (fn);
       DECL_WEAK (clone) = DECL_WEAK (fn);
 
@@ -287,16 +282,16 @@ maybe_clone_body (tree fn)
       clone_parm = DECL_ARGUMENTS (clone);
       /* Update the `this' parameter, which is always first.  */
       update_cloned_parm (parm, clone_parm, first);
-      parm = TREE_CHAIN (parm);
-      clone_parm = TREE_CHAIN (clone_parm);
+      parm = DECL_CHAIN (parm);
+      clone_parm = DECL_CHAIN (clone_parm);
       if (DECL_HAS_IN_CHARGE_PARM_P (fn))
-	parm = TREE_CHAIN (parm);
+	parm = DECL_CHAIN (parm);
       if (DECL_HAS_VTT_PARM_P (fn))
-	parm = TREE_CHAIN (parm);
+	parm = DECL_CHAIN (parm);
       if (DECL_HAS_VTT_PARM_P (clone))
-	clone_parm = TREE_CHAIN (clone_parm);
+	clone_parm = DECL_CHAIN (clone_parm);
       for (; parm;
-	   parm = TREE_CHAIN (parm), clone_parm = TREE_CHAIN (clone_parm))
+	   parm = DECL_CHAIN (parm), clone_parm = DECL_CHAIN (clone_parm))
 	/* Update this parameter.  */
 	update_cloned_parm (parm, clone_parm, first);
 
@@ -314,7 +309,7 @@ maybe_clone_body (tree fn)
 	  && (!DECL_ONE_ONLY (fns[0])
 	      || (HAVE_COMDAT_GROUP
 		  && DECL_WEAK (fns[0])))
-	  && cgraph_same_body_alias (clone, fns[0]))
+	  && cgraph_same_body_alias (cgraph_node (fns[0]), clone, fns[0]))
 	{
 	  alias = true;
 	  if (DECL_ONE_ONLY (fns[0]))
@@ -353,7 +348,7 @@ maybe_clone_body (tree fn)
                 clone_parm = DECL_ARGUMENTS (clone);
               parm;
               ++parmno,
-                parm = TREE_CHAIN (parm))
+                parm = DECL_CHAIN (parm))
             {
               /* Map the in-charge parameter to an appropriate constant.  */
               if (DECL_HAS_IN_CHARGE_PARM_P (fn) && parmno == 1)
@@ -372,7 +367,7 @@ maybe_clone_body (tree fn)
                     {
                       DECL_ABSTRACT_ORIGIN (clone_parm) = parm;
                       *pointer_map_insert (decl_map, parm) = clone_parm;
-                      clone_parm = TREE_CHAIN (clone_parm);
+                      clone_parm = DECL_CHAIN (clone_parm);
                     }
                   /* Otherwise, map the VTT parameter to `NULL'.  */
                   else
@@ -384,7 +379,7 @@ maybe_clone_body (tree fn)
               else
                 {
                   *pointer_map_insert (decl_map, parm) = clone_parm;
-                  clone_parm = TREE_CHAIN (clone_parm);
+                  clone_parm = DECL_CHAIN (clone_parm);
                 }
             }
 

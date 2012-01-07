@@ -22,7 +22,7 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file condition_variable
+/** @file include/condition_variable
  *  This is a Standard C++ Library header.
  */
 
@@ -40,8 +40,10 @@
 
 #if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1)
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   /**
    * @defgroup condition_variables Condition Variables
    * @ingroup concurrency
@@ -254,7 +256,8 @@ namespace std
   };
 
   // @} group condition_variables
-}
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif // _GLIBCXX_HAS_GTHREADS && _GLIBCXX_USE_C99_STDINT_TR1
 

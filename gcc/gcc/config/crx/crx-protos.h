@@ -1,6 +1,6 @@
 /* Prototypes for exported functions defined in crx.c
    Copyright (C) 1991, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2007 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2007, 2010 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -32,10 +32,8 @@ extern enum reg_class crx_secondary_reload_class (enum reg_class, enum machine_m
 /* Passing function arguments.  */
 extern int crx_function_arg_regno_p (int);
 #ifdef TREE_CODE
-extern void crx_function_arg_advance (CUMULATIVE_ARGS *, enum machine_mode, tree, int);
 #ifdef RTX_CODE
 extern void crx_init_cumulative_args (CUMULATIVE_ARGS *, tree, rtx);
-extern rtx crx_function_arg (struct cumulative_args *, enum machine_mode, tree, int);
 #endif /* RTX_CODE */
 #endif /* TREE_CODE */
 

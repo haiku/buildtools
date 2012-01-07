@@ -1,5 +1,5 @@
 /* Subroutines used for code generation on Vitesse IQ2000 processors
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -21,13 +21,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include <signal.h>
 #include "tm.h"
 #include "tree.h"
 #include "rtl.h"
 #include "regs.h"
 #include "hard-reg-set.h"
-#include "real.h"
 #include "insn-config.h"
 #include "conditions.h"
 #include "output.h"
@@ -38,7 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "optabs.h"
 #include "libfuncs.h"
 #include "recog.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "reload.h"
 #include "ggc.h"
 #include "tm_p.h"
@@ -46,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "target.h"
 #include "target-def.h"
 #include "langhooks.h"
+#include "df.h"
 
 /* Enumeration for all of the relational tests, so that we can build
    arrays indexed by the test type, and not worry about the order
@@ -109,8 +108,8 @@ struct GTY(()) machine_function
 
 /* Global variables for machine-dependent things.  */
 
-/* List of all IQ2000 punctuation characters used by print_operand.  */
-char iq2000_print_operand_punct[256];
+/* List of all IQ2000 punctuation characters used by iq2000_print_operand.  */
+static char iq2000_print_operand_punct[256];
 
 /* The target cpu for optimization and scheduling.  */
 enum processor_type iq2000_tune;
@@ -147,6 +146,7 @@ static enum machine_mode gpr_mode;
 /* Initialize the GCC target structure.  */
 static struct machine_function* iq2000_init_machine_status (void);
 static bool iq2000_handle_option      (size_t, const char *, int);
+static void iq2000_option_override    (void);
 static section *iq2000_select_rtx_section (enum machine_mode, rtx,
 					   unsigned HOST_WIDE_INT);
 static void iq2000_init_builtins      (void);
@@ -163,6 +163,12 @@ static bool iq2000_pass_by_reference  (CUMULATIVE_ARGS *, enum machine_mode,
 				       const_tree, bool);
 static int  iq2000_arg_partial_bytes  (CUMULATIVE_ARGS *, enum machine_mode,
 				       tree, bool);
+static rtx iq2000_function_arg	      (CUMULATIVE_ARGS *,
+				       enum machine_mode, const_tree, bool);
+static void iq2000_function_arg_advance (CUMULATIVE_ARGS *,
+					 enum machine_mode, const_tree, bool);
+static unsigned int iq2000_function_arg_boundary (enum machine_mode,
+						  const_tree);
 static void iq2000_va_start	      (tree, rtx);
 static bool iq2000_legitimate_address_p (enum machine_mode, rtx, bool);
 static bool iq2000_can_eliminate      (const int, const int);
@@ -170,6 +176,16 @@ static void iq2000_asm_trampoline_template (FILE *);
 static void iq2000_trampoline_init    (rtx, tree, rtx);
 static rtx iq2000_function_value      (const_tree, const_tree, bool);
 static rtx iq2000_libcall_value       (enum machine_mode, const_rtx);
+static void iq2000_print_operand      (FILE *, rtx, int);
+static void iq2000_print_operand_address (FILE *, rtx);
+static bool iq2000_print_operand_punct_valid_p (unsigned char code);
+
+/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
+static const struct default_options iq2000_option_optimization_table[] =
+  {
+    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
+    { OPT_LEVELS_NONE, 0, NULL, 0 }
+  };
 
 #undef  TARGET_INIT_BUILTINS
 #define TARGET_INIT_BUILTINS 		iq2000_init_builtins
@@ -179,6 +195,10 @@ static rtx iq2000_libcall_value       (enum machine_mode, const_rtx);
 #define TARGET_ASM_SELECT_RTX_SECTION	iq2000_select_rtx_section
 #undef  TARGET_HANDLE_OPTION
 #define TARGET_HANDLE_OPTION		iq2000_handle_option
+#undef  TARGET_OPTION_OVERRIDE
+#define TARGET_OPTION_OVERRIDE		iq2000_option_override
+#undef  TARGET_OPTION_OPTIMIZATION_TABLE
+#define TARGET_OPTION_OPTIMIZATION_TABLE iq2000_option_optimization_table
 #undef  TARGET_RTX_COSTS
 #define TARGET_RTX_COSTS		iq2000_rtx_costs
 #undef  TARGET_ADDRESS_COST
@@ -193,6 +213,13 @@ static rtx iq2000_libcall_value       (enum machine_mode, const_rtx);
    iq2000_select_section doesn't yet make use of them.  */
 #undef  TARGET_HAVE_SWITCHABLE_BSS_SECTIONS
 #define TARGET_HAVE_SWITCHABLE_BSS_SECTIONS false
+
+#undef  TARGET_PRINT_OPERAND
+#define TARGET_PRINT_OPERAND		iq2000_print_operand
+#undef  TARGET_PRINT_OPERAND_ADDRESS
+#define TARGET_PRINT_OPERAND_ADDRESS	iq2000_print_operand_address
+#undef  TARGET_PRINT_OPERAND_PUNCT_VALID_P
+#define TARGET_PRINT_OPERAND_PUNCT_VALID_P iq2000_print_operand_punct_valid_p
 
 #undef  TARGET_PROMOTE_FUNCTION_MODE
 #define TARGET_PROMOTE_FUNCTION_MODE	default_promote_function_mode_always_promote
@@ -211,6 +238,12 @@ static rtx iq2000_libcall_value       (enum machine_mode, const_rtx);
 #define TARGET_CALLEE_COPIES		hook_callee_copies_named
 #undef  TARGET_ARG_PARTIAL_BYTES
 #define TARGET_ARG_PARTIAL_BYTES	iq2000_arg_partial_bytes
+#undef  TARGET_FUNCTION_ARG
+#define TARGET_FUNCTION_ARG		iq2000_function_arg
+#undef  TARGET_FUNCTION_ARG_ADVANCE
+#define TARGET_FUNCTION_ARG_ADVANCE	iq2000_function_arg_advance
+#undef  TARGET_FUNCTION_ARG_BOUNDARY
+#define TARGET_FUNCTION_ARG_BOUNDARY	iq2000_function_arg_boundary
 
 #undef  TARGET_SETUP_INCOMING_VARARGS
 #define TARGET_SETUP_INCOMING_VARARGS	iq2000_setup_incoming_varargs
@@ -1110,9 +1143,9 @@ init_cumulative_args (CUMULATIVE_ARGS *cum, tree fntype,
 /* Advance the argument of type TYPE and mode MODE to the next argument
    position in CUM.  */
 
-void
-function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode, tree type,
-		      int named)
+static void
+iq2000_function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+			     const_tree type, bool named)
 {
   if (TARGET_DEBUG_D_MODE)
     {
@@ -1120,7 +1153,7 @@ function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode, tree type,
 	       "function_adv({gp reg found = %d, arg # = %2d, words = %2d}, %4s, ",
 	       cum->gp_reg_found, cum->arg_number, cum->arg_words,
 	       GET_MODE_NAME (mode));
-      fprintf (stderr, "%p", (void *) type);
+      fprintf (stderr, "%p", CONST_CAST2 (void *, const_tree,  type));
       fprintf (stderr, ", %d )\n\n", named);
     }
 
@@ -1179,9 +1212,9 @@ function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode, tree type,
 /* Return an RTL expression containing the register for the given mode MODE
    and type TYPE in CUM, or 0 if the argument is to be passed on the stack.  */
 
-struct rtx_def *
-function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode, const_tree type,
-	      int named)
+static rtx
+iq2000_function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+		     const_tree type, bool named)
 {
   rtx ret;
   int regbase = -1;
@@ -1264,7 +1297,7 @@ function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode, const_tree type,
 	{
 	  tree field;
 
-	  for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+	  for (field = TYPE_FIELDS (type); field; field = DECL_CHAIN (field))
 	    if (TREE_CODE (field) == FIELD_DECL
 		&& TREE_CODE (TREE_TYPE (field)) == REAL_TYPE
 		&& TYPE_PRECISION (TREE_TYPE (field)) == BITS_PER_WORD
@@ -1301,7 +1334,7 @@ function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode, const_tree type,
 		{
 		  rtx reg;
 
-		  for (; field; field = TREE_CHAIN (field))
+		  for (; field; field = DECL_CHAIN (field))
 		    if (TREE_CODE (field) == FIELD_DECL
 			&& int_bit_position (field) >= bitpos)
 		      break;
@@ -1341,6 +1374,18 @@ function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode, const_tree type,
     }
 
   return ret;
+}
+
+static unsigned int
+iq2000_function_arg_boundary (enum machine_mode mode, const_tree type)
+{
+  return (type != NULL_TREE
+	  ? (TYPE_ALIGN (type) <= PARM_BOUNDARY
+	     ? PARM_BOUNDARY
+	     : TYPE_ALIGN (type))
+	  : (GET_MODE_ALIGNMENT (mode) <= PARM_BOUNDARY
+	     ? PARM_BOUNDARY
+	     : GET_MODE_ALIGNMENT (mode)));
 }
 
 static int
@@ -1386,11 +1431,7 @@ iq2000_va_start (tree valist, rtx nextarg)
 static struct machine_function *
 iq2000_init_machine_status (void)
 {
-  struct machine_function *f;
-
-  f = GGC_CNEW (struct machine_function);
-
-  return f;
+  return ggc_alloc_cleared_machine_function ();
 }
 
 /* Implement TARGET_HANDLE_OPTION.  */
@@ -1422,8 +1463,8 @@ iq2000_handle_option (size_t code, const char *arg, int value ATTRIBUTE_UNUSED)
 
 /* Detect any conflicts in the switches.  */
 
-void
-override_options (void)
+static void
+iq2000_option_override (void)
 {
   target_flags &= ~MASK_GPOPT;
 
@@ -1606,8 +1647,6 @@ compute_frame_size (HOST_WIDE_INT size)
   HOST_WIDE_INT gp_reg_size;	/* # bytes needed to store gp regs.  */
   HOST_WIDE_INT fp_reg_size;	/* # bytes needed to store fp regs.  */
   long mask;			/* mask of saved gp registers.  */
-  int  fp_inc;			/* 1 or 2 depending on the size of fp regs.  */
-  long fp_bits;			/* bitmask to use for each fp register.  */
 
   gp_reg_size = 0;
   fp_reg_size = 0;
@@ -1648,8 +1687,6 @@ compute_frame_size (HOST_WIDE_INT size)
 	}
     }
 
-  fp_inc = 2;
-  fp_bits = 3;
   gp_reg_rounded = IQ2000_STACK_ALIGN (gp_reg_size);
   total_size += gp_reg_rounded + IQ2000_STACK_ALIGN (fp_reg_size);
 
@@ -1704,7 +1741,7 @@ iq2000_can_eliminate (const int from, const int to)
 {
   return (from == RETURN_ADDRESS_POINTER_REGNUM
           && (! leaf_function_p ()
-              || (to == GP_REG_FIRST + 31 && leaf_function_p)))
+              || (to == GP_REG_FIRST + 31 && leaf_function_p ())))
           || (from != RETURN_ADDRESS_POINTER_REGNUM
               && (to == HARD_FRAME_POINTER_REGNUM
                   || (to == STACK_POINTER_REGNUM
@@ -1733,6 +1770,8 @@ iq2000_initial_elimination_offset (int from, int to ATTRIBUTE_UNUSED)
 	     + ((UNITS_PER_WORD - (POINTER_SIZE / BITS_PER_UNIT)) 
 		* (BYTES_BIG_ENDIAN != 0)); 
     }
+  else
+    gcc_unreachable ();
 
   return offset;
 }
@@ -1895,7 +1934,7 @@ iq2000_expand_prologue (void)
 					      PARM_DECL, NULL_TREE, type);
 
       DECL_ARG_TYPE (function_result_decl) = type;
-      TREE_CHAIN (function_result_decl) = fnargs;
+      DECL_CHAIN (function_result_decl) = fnargs;
       fnargs = function_result_decl;
     }
 
@@ -1921,10 +1960,12 @@ iq2000_expand_prologue (void)
 	  passed_mode = Pmode;
 	}
 
-      entry_parm = FUNCTION_ARG (args_so_far, passed_mode, passed_type, 1);
+      entry_parm = iq2000_function_arg (&args_so_far, passed_mode,
+					passed_type, true);
 
-      FUNCTION_ARG_ADVANCE (args_so_far, passed_mode, passed_type, 1);
-      next_arg = TREE_CHAIN (cur_arg);
+      iq2000_function_arg_advance (&args_so_far, passed_mode,
+				   passed_type, true);
+      next_arg = DECL_CHAIN (cur_arg);
 
       if (entry_parm && store_args_on_stack)
 	{
@@ -1962,10 +2003,11 @@ iq2000_expand_prologue (void)
 
   /* In order to pass small structures by value in registers we need to
      shift the value into the high part of the register.
-     Function_arg has encoded a PARALLEL rtx, holding a vector of
-     adjustments to be made as the next_arg_reg variable, so we split up the
-     insns, and emit them separately.  */
-  next_arg_reg = FUNCTION_ARG (args_so_far, VOIDmode, void_type_node, 1);
+     iq2000_unction_arg has encoded a PARALLEL rtx, holding a vector of
+     adjustments to be made as the next_arg_reg variable, so we split up
+     the insns, and emit them separately.  */
+  next_arg_reg = iq2000_function_arg (&args_so_far, VOIDmode,
+				      void_type_node, true);
   if (next_arg_reg != 0 && GET_CODE (next_arg_reg) == PARALLEL)
     {
       rtvec adjust = XVEC (next_arg_reg, 0);
@@ -1973,7 +2015,7 @@ iq2000_expand_prologue (void)
 
       for (i = 0; i < num; i++)
 	{
-	  rtx insn, pattern;
+	  rtx pattern;
 
 	  pattern = RTVEC_ELT (adjust, i);
 	  if (GET_CODE (pattern) != SET
@@ -1981,7 +2023,7 @@ iq2000_expand_prologue (void)
 	    abort_with_insn (pattern, "Insn is not a shift");
 	  PUT_CODE (SET_SRC (pattern), ASHIFTRT);
 
-	  insn = emit_insn (pattern);
+	  emit_insn (pattern);
 	}
     }
 
@@ -1990,9 +2032,7 @@ iq2000_expand_prologue (void)
   /* If this function is a varargs function, store any registers that
      would normally hold arguments ($4 - $7) on the stack.  */
   if (store_args_on_stack
-      && ((TYPE_ARG_TYPES (fntype) != 0
-	   && (TREE_VALUE (tree_last (TYPE_ARG_TYPES (fntype)))
-	       != void_type_node))
+      && (stdarg_p (fntype)
 	  || last_arg_is_vararg_marker))
     {
       int offset = (regno - GP_ARG_FIRST) * UNITS_PER_WORD;
@@ -2138,27 +2178,6 @@ iq2000_can_use_return_insn (void)
   return compute_frame_size (get_frame_size ()) == 0;
 }
 
-/* Returns nonzero if X contains a SYMBOL_REF.  */
-
-static int
-symbolic_expression_p (rtx x)
-{
-  if (GET_CODE (x) == SYMBOL_REF)
-    return 1;
-
-  if (GET_CODE (x) == CONST)
-    return symbolic_expression_p (XEXP (x, 0));
-
-  if (UNARY_P (x))
-    return symbolic_expression_p (XEXP (x, 0));
-
-  if (ARITHMETIC_P (x))
-    return (symbolic_expression_p (XEXP (x, 0))
-	    || symbolic_expression_p (XEXP (x, 1)));
-
-  return 0;
-}
-
 /* Choose the section to use for the constant rtx expression X that has
    mode MODE.  */
 
@@ -2224,7 +2243,7 @@ iq2000_function_value (const_tree valtype,
   int reg = GP_RETURN;
   enum machine_mode mode = TYPE_MODE (valtype);
   int unsignedp = TYPE_UNSIGNED (valtype);
-  tree func = fn_decl_or_type;
+  const_tree func = fn_decl_or_type;
 
   if (fn_decl_or_type
       && !DECL_P (fn_decl_or_type))
@@ -2277,7 +2296,7 @@ iq2000_pass_by_reference (CUMULATIVE_ARGS *cum, enum machine_mode mode,
        CUMULATIVE_ARGS temp;
 
        temp = *cum;
-       if (FUNCTION_ARG (temp, mode, type, named) != 0)
+       if (iq2000_function_arg (&temp, mode, type, named) != 0)
 	 return 1;
      }
 
@@ -2624,7 +2643,7 @@ expand_one_builtin (enum insn_code icode, rtx target, tree exp,
   for (i = 0; i < argcount; i++)
     {
       arg[i] = CALL_EXPR_ARG (exp, i);
-      op[i] = expand_expr (arg[i], NULL_RTX, VOIDmode, 0);
+      op[i] = expand_normal (arg[i]);
       mode[i] = insn_data[icode].operand[i].mode;
       if (code[i] == CONST_INT && GET_CODE (op[i]) != CONST_INT)
 	error ("argument %qd is not a constant", i + 1);
@@ -2925,8 +2944,8 @@ iq2000_setup_incoming_varargs (CUMULATIVE_ARGS *cum,
    assembler syntax for an instruction operand that is a memory
    reference whose address is ADDR.  ADDR is an RTL expression.  */
 
-void
-print_operand_address (FILE * file, rtx addr)
+static void
+iq2000_print_operand_address (FILE * file, rtx addr)
 {
   if (!addr)
     error ("PRINT_OPERAND_ADDRESS, null pointer");
@@ -2951,7 +2970,7 @@ print_operand_address (FILE * file, rtx addr)
 			     "PRINT_OPERAND_ADDRESS, LO_SUM with #1 not REG.");
 
 	  fprintf (file, "%%lo(");
-	  print_operand_address (file, arg1);
+	  iq2000_print_operand_address (file, arg1);
 	  fprintf (file, ")(%s)", reg_names [REGNO (arg0)]);
 	}
 	break;
@@ -3053,12 +3072,12 @@ print_operand_address (FILE * file, rtx addr)
    '$'	Print the name of the stack pointer register (sp or $29).
    '+'	Print the name of the gp register (gp or $28).  */
 
-void
-print_operand (FILE *file, rtx op, int letter)
+static void
+iq2000_print_operand (FILE *file, rtx op, int letter)
 {
   enum rtx_code code;
 
-  if (PRINT_OPERAND_PUNCT_VALID_P (letter))
+  if (iq2000_print_operand_punct_valid_p (letter))
     {
       switch (letter)
 	{
@@ -3171,7 +3190,8 @@ print_operand (FILE *file, rtx op, int letter)
       if (code != CONST_INT
 	  || (value = exact_log2 (INTVAL (op))) < 0)
 	output_operand_lossage ("invalid %%p value");
-      fprintf (file, "%d", value);
+      else
+	fprintf (file, "%d", value);
     }
 
   else if (letter == 'Z')
@@ -3239,13 +3259,18 @@ print_operand (FILE *file, rtx op, int letter)
 
   else if (code == CONST && GET_CODE (XEXP (op, 0)) == REG)
     {
-      print_operand (file, XEXP (op, 0), letter);
+      iq2000_print_operand (file, XEXP (op, 0), letter);
     }
 
   else
     output_addr_const (file, op);
 }
 
+static bool
+iq2000_print_operand_punct_valid_p (unsigned char code)
+{
+  return iq2000_print_operand_punct[code];
+}
 
 /* For the IQ2000, transform:
 

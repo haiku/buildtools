@@ -143,7 +143,7 @@ namespace __gnu_parallel
       /** @brief Current iterator __position. */
       _RAIter _M_current;
       /** @brief _Compare. */
-      mutable _Compare& __comp;
+      _Compare& __comp;
 
     public:
       /** @brief Constructor. Sets iterator to beginning of sequence.
@@ -502,11 +502,11 @@ namespace __gnu_parallel
       _LT __lt(__k, __comp);
 
       // Default value for potentially non-default-constructible types.
-      _ValueType* __arbitrary_element = NULL;
+      _ValueType* __arbitrary_element = 0;
 
       for (_SeqNumber __t = 0; __t < __k; ++__t)
 	{
-          if(__arbitrary_element == NULL
+          if(!__arbitrary_element
 	     && _GLIBCXX_PARALLEL_LENGTH(__seqs_begin[__t]) > 0)
             __arbitrary_element = &(*__seqs_begin[__t].first);
 	}
@@ -1045,11 +1045,12 @@ namespace __gnu_parallel
 	_ValueType;
 
       // __k sequences.
-      _SeqNumber __k = static_cast<_SeqNumber>(__seqs_end - __seqs_begin);
+      const _SeqNumber __k
+	= static_cast<_SeqNumber>(__seqs_end - __seqs_begin);
 
-      _ThreadIndex __num_threads = omp_get_num_threads();
+      const _ThreadIndex __num_threads = omp_get_num_threads();
 
-      _DifferenceType __num_samples =
+      const _DifferenceType __num_samples =
 	__gnu_parallel::_Settings::get().merge_oversampling * __num_threads;
 
       _ValueType* __samples = static_cast<_ValueType*>
@@ -1096,6 +1097,10 @@ namespace __gnu_parallel
 	      __pieces[__slab][__seq].second =
 		_GLIBCXX_PARALLEL_LENGTH(__seqs_begin[__seq]);
 	  }
+
+      for (_SeqNumber __s = 0; __s < __k; ++__s)
+	for (_DifferenceType __i = 0; __i < __num_samples; ++__i)
+	  __samples[__s * __num_samples + __i].~_ValueType();
       ::operator delete(__samples);
     }
 
@@ -1258,10 +1263,10 @@ namespace __gnu_parallel
 	__length = std::min<_DifferenceTp>(__length, __total_length);
 
 	if (__total_length == 0 || __k == 0)
-	{
-          delete[] __ne_seqs;
-          return __target;
-	}
+	  {
+	    delete[] __ne_seqs;
+	    return __target;
+	  }
 
 	std::vector<std::pair<_DifferenceType, _DifferenceType> >* __pieces;
 

@@ -1,4 +1,5 @@
-/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2009 Free Software Foundation, Inc.
+/* Copyright (C) 2001, 2002, 2003, 2004, 2005, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of GCC.
@@ -33,7 +34,7 @@
 #include "tconfig.h"
 #include "tsystem.h"
 #ifndef inhibit_libc
-#include <link.h>
+#include <elf.h>		/* Get DT_CONFIG.  */
 #endif
 #include "coretypes.h"
 #include "tm.h"
@@ -57,7 +58,15 @@
 # define USE_PT_GNU_EH_FRAME
 #endif
 
+#if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
+    && defined(TARGET_DL_ITERATE_PHDR) \
+    && defined(__sun__) && defined(__svr4__)
+# define USE_PT_GNU_EH_FRAME
+#endif
+
 #if defined(USE_PT_GNU_EH_FRAME)
+
+#include <link.h>
 
 #ifndef __RELOC_POINTER
 # define __RELOC_POINTER(ptr, base) ((ptr) + (base))
@@ -254,6 +263,12 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 	}
       else if (phdr->p_type == PT_GNU_EH_FRAME)
 	p_eh_frame_hdr = phdr;
+#ifdef PT_SUNW_UNWIND
+      /* Sun ld emits PT_SUNW_UNWIND .eh_frame_hdr sections instead of
+	 PT_SUNW_EH_FRAME/PT_GNU_EH_FRAME, so accept them as well.  */
+      else if (phdr->p_type == PT_SUNW_UNWIND)
+	p_eh_frame_hdr = phdr;
+#endif
       else if (phdr->p_type == PT_DYNAMIC)
 	p_dynamic = phdr;
     }
@@ -303,13 +318,22 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
       for (; dyn->d_tag != DT_NULL ; dyn++)
 	if (dyn->d_tag == DT_PLTGOT)
 	  {
-	    /* On IA-32, _DYNAMIC is writable and GLIBC has relocated it.  */
 	    data->dbase = (void *) dyn->d_un.d_ptr;
+#if defined __linux__
+	    /* On IA-32 Linux, _DYNAMIC is writable and GLIBC has
+	       relocated it.  */
+#elif defined __sun__ && defined __svr4__
+	    /* On Solaris 2/x86, we need to do this ourselves.  */
+	    data->dbase += load_base;
+#endif
 	    break;
 	  }
     }
 # elif defined __FRV_FDPIC__ && defined __linux__
   data->dbase = load_base.got_value;
+# elif defined __x86_64__ && defined __sun__ && defined __svr4__
+  /* While CRT_GET_RFIB_DATA is also defined for 64-bit Solaris 10+/x86, it
+     doesn't apply since it uses DW_EH_PE_pcrel encoding.  */
 # else
 #  error What is DW_EH_PE_datarel base on this platform?
 # endif

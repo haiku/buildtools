@@ -25,7 +25,6 @@
 #include "rtl.h"
 #include "regs.h"
 #include "hard-reg-set.h"
-#include "real.h"
 #include "insn-config.h"
 #include "conditions.h"
 #include "insn-flags.h"
@@ -34,7 +33,7 @@
 #include "flags.h"
 #include "recog.h"
 #include "reload.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "obstack.h"
 #include "tree.h"
 #include "expr.h"
@@ -71,12 +70,33 @@ moxie_return_in_memory (const_tree type, const_tree fntype ATTRIBUTE_UNUSED)
 
    We always return values in register $r0 for moxie.  */
 
-rtx
+static rtx
 moxie_function_value (const_tree valtype, 
 		      const_tree fntype_or_decl ATTRIBUTE_UNUSED,
 		      bool outgoing ATTRIBUTE_UNUSED)
 {
   return gen_rtx_REG (TYPE_MODE (valtype), MOXIE_R0);
+}
+
+/* Define how to find the value returned by a library function.
+
+   We always return values in register $r0 for moxie.  */
+
+static rtx
+moxie_libcall_value (enum machine_mode mode,
+                     const_rtx fun ATTRIBUTE_UNUSED)
+{
+  return gen_rtx_REG (mode, MOXIE_R0);
+}
+
+/* Handle TARGET_FUNCTION_VALUE_REGNO_P.
+
+   We always return values in register $r0 for moxie.  */
+
+static bool
+moxie_function_value_regno_p (const unsigned int regno)
+{
+  return (regno == MOXIE_R0);
 }
 
 /* Emit an error message when we're in an asm, and a fatal error for
@@ -206,14 +226,14 @@ struct GTY(()) machine_function
 static struct machine_function *
 moxie_init_machine_status (void)
 {
-  return GGC_CNEW (struct machine_function);
+  return ggc_alloc_cleared_machine_function ();
 }
 
 
-/* The OVERRIDE_OPTIONS worker.
+/* The TARGET_OPTION_OVERRIDE worker.
    All this curently does is set init_machine_status.  */
-void
-moxie_override_options (void)
+static void
+moxie_option_override (void)
 {
   /* Set the per-function-data initializer.  */
   init_machine_status = moxie_init_machine_status;
@@ -296,7 +316,7 @@ void
 moxie_expand_epilogue (void)
 {
   int regno;
-  rtx insn, reg, cfa_restores = NULL;
+  rtx reg;
 
   if (cfun->machine->callee_saved_reg_size != 0)
     {
@@ -319,7 +339,7 @@ moxie_expand_epilogue (void)
 	    && df_regs_ever_live_p (regno))
 	  {
 	    rtx preg = gen_rtx_REG (Pmode, regno);
-	    insn = emit_insn (gen_movsi_pop (reg, preg));
+	    emit_insn (gen_movsi_pop (reg, preg));
 	  }
     }
 
@@ -388,14 +408,28 @@ moxie_fixed_condition_code_regs (unsigned int *p1, unsigned int *p2)
 /* Return the next register to be used to hold a function argument or
    NULL_RTX if there's no more space.  */
 
-rtx
-moxie_function_arg (CUMULATIVE_ARGS cum, enum machine_mode mode,
-		    tree type ATTRIBUTE_UNUSED, int named ATTRIBUTE_UNUSED)
+static rtx
+moxie_function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+		    const_tree type ATTRIBUTE_UNUSED,
+		    bool named ATTRIBUTE_UNUSED)
 {
-  if (cum < 8)
-    return gen_rtx_REG (mode, cum);
+  if (*cum < 8)
+    return gen_rtx_REG (mode, *cum);
   else 
     return NULL_RTX;
+}
+
+#define MOXIE_FUNCTION_ARG_SIZE(MODE, TYPE)	\
+  ((MODE) != BLKmode ? GET_MODE_SIZE (MODE)	\
+   : (unsigned) int_size_in_bytes (TYPE))
+
+static void
+moxie_function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+			    const_tree type, bool named ATTRIBUTE_UNUSED)
+{
+  *cum = (*cum < MOXIE_R6
+	  ? *cum + ((3 + MOXIE_FUNCTION_ARG_SIZE (mode, type)) / 4)
+	  : *cum);
 }
 
 /* Return non-zero if the function argument described by TYPE is to be
@@ -518,6 +552,10 @@ moxie_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
 #define TARGET_PASS_BY_REFERENCE        moxie_pass_by_reference
 #undef  TARGET_ARG_PARTIAL_BYTES
 #define TARGET_ARG_PARTIAL_BYTES        moxie_arg_partial_bytes
+#undef  TARGET_FUNCTION_ARG
+#define TARGET_FUNCTION_ARG		moxie_function_arg
+#undef  TARGET_FUNCTION_ARG_ADVANCE
+#define TARGET_FUNCTION_ARG_ADVANCE	moxie_function_arg_advance
 
 
 #undef  TARGET_SETUP_INCOMING_VARARGS
@@ -531,6 +569,10 @@ moxie_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
    node node representing a data type.  */
 #undef TARGET_FUNCTION_VALUE
 #define TARGET_FUNCTION_VALUE moxie_function_value
+#undef TARGET_LIBCALL_VALUE
+#define TARGET_LIBCALL_VALUE moxie_libcall_value
+#undef TARGET_FUNCTION_VALUE_REGNO_P
+#define TARGET_FUNCTION_VALUE_REGNO_P moxie_function_value_regno_p
 
 #undef TARGET_FRAME_POINTER_REQUIRED
 #define TARGET_FRAME_POINTER_REQUIRED hook_bool_void_true
@@ -541,6 +583,9 @@ moxie_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
 #define TARGET_ASM_TRAMPOLINE_TEMPLATE moxie_asm_trampoline_template
 #undef TARGET_TRAMPOLINE_INIT
 #define TARGET_TRAMPOLINE_INIT moxie_trampoline_init
+
+#undef TARGET_OPTION_OVERRIDE
+#define TARGET_OPTION_OVERRIDE moxie_option_override
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

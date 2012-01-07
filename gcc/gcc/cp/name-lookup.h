@@ -1,5 +1,5 @@
 /* Declarations for C++ name lookup routines.
-   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
@@ -22,7 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_CP_NAME_LOOKUP_H
 #define GCC_CP_NAME_LOOKUP_H
 
-#include "c-common.h"
+#include "c-family/c-common.h"
 
 /* The type of dictionary used to map names to types declared at
    a given scope.  */
@@ -148,6 +148,16 @@ typedef struct GTY(()) cp_class_binding {
 DEF_VEC_O(cp_class_binding);
 DEF_VEC_ALLOC_O(cp_class_binding,gc);
 
+typedef struct GTY(()) cp_label_binding {
+  /* The bound LABEL_DECL.  */
+  tree label;
+  /* The previous IDENTIFIER_LABEL_VALUE.  */
+  tree prev_value;
+} cp_label_binding;
+
+DEF_VEC_O(cp_label_binding);
+DEF_VEC_ALLOC_O(cp_label_binding,gc);
+
 /* For each binding contour we allocate a binding_level structure
    which records the names defined in that contour.
    Contours include:
@@ -206,10 +216,9 @@ struct GTY(()) cp_binding_level {
        the class.  */
     tree type_shadowed;
 
-    /* A TREE_LIST.  Each TREE_VALUE is the LABEL_DECL for a local
-       label in this scope.  The TREE_PURPOSE is the previous value of
-       the IDENTIFIER_LABEL VALUE.  */
-    tree shadowed_labels;
+    /* Similar to class_shadowed, but for IDENTIFIER_LABEL_VALUE, and
+       used for all binding levels.  */
+    VEC(cp_label_binding,gc) *shadowed_labels;
 
     /* For each level (except not the global one),
        a chain of BLOCK nodes for all the levels
@@ -225,9 +234,8 @@ struct GTY(()) cp_binding_level {
 
     /* List of VAR_DECLS saved from a previous for statement.
        These would be dead in ISO-conforming code, but might
-       be referenced in ARM-era code.  These are stored in a
-       TREE_LIST; the TREE_VALUE is the actual declaration.  */
-    tree dead_vars_from_for;
+       be referenced in ARM-era code.  */
+    VEC(tree,gc) *dead_vars_from_for;
 
     /* STATEMENT_LIST for statements in this binding contour.
        Only used at present for SK_CLEANUP temporary bindings.  */
@@ -325,6 +333,7 @@ extern bool pushdecl_class_level (tree);
 extern tree pushdecl_namespace_level (tree, bool);
 extern bool push_class_level_binding (tree, tree);
 extern tree getdecls (void);
+extern int function_parm_depth (void);
 extern tree cp_namespace_decls (tree);
 extern void set_decl_namespace (tree, tree, bool);
 extern void push_decl_namespace (tree);
@@ -334,7 +343,7 @@ extern void do_toplevel_using_decl (tree, tree, tree);
 extern void do_local_using_decl (tree, tree, tree);
 extern tree do_class_using_decl (tree, tree);
 extern void do_using_directive (tree);
-extern tree lookup_arg_dependent (tree, tree, VEC(tree,gc) *);
+extern tree lookup_arg_dependent (tree, tree, VEC(tree,gc) *, bool);
 extern bool is_associated_namespace (tree, tree);
 extern void parse_using_directive (tree, tree);
 extern tree innermost_non_namespace_value (tree);

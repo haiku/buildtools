@@ -1,6 +1,6 @@
 // functional_hash.h header -*- C++ -*-
 
-// Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +24,7 @@
 
 /** @file bits/functional_hash.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{functional}
  */
 
 #ifndef _FUNCTIONAL_HASH_H
@@ -32,11 +32,12 @@
 
 #pragma GCC system_header
 
-#include <cstddef>
-#include <bits/stl_function.h>
+#include <bits/hash_bytes.h>
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   /** @defgroup hashes Hashes
    *  @ingroup functors
    *
@@ -45,9 +46,16 @@ namespace std
    *  @{
    */
 
+  template<typename _Result, typename _Arg>
+    struct __hash_base
+    {
+      typedef _Result     result_type;
+      typedef _Arg      argument_type;
+    };
+
   /// Primary class template hash.
   template<typename _Tp>
-    struct hash : public std::unary_function<_Tp, size_t>
+    struct hash : public __hash_base<size_t, _Tp>
     {
       size_t
       operator()(_Tp __val) const;
@@ -55,7 +63,7 @@ namespace std
 
   /// Partial specializations for pointer types.
   template<typename _Tp>
-    struct hash<_Tp*> : public std::unary_function<_Tp*, size_t>
+    struct hash<_Tp*> : public __hash_base<size_t, _Tp*>
     {
       size_t
       operator()(_Tp* __p) const
@@ -116,74 +124,41 @@ namespace std
 
 #undef _Cxx_hashtable_define_trivial_hash
 
-  // Fowler / Noll / Vo (FNV) Hash (type FNV-1a)
+  struct _Hash_impl
+  {
+    static size_t
+    hash(const void* __ptr, size_t __clength,
+	 size_t __seed = static_cast<size_t>(0xc70f6907UL))
+    { return _Hash_bytes(__ptr, __clength, __seed); }
 
-  // Dummy generic implementation (for sizeof(size_t) != 4, 8).
-  template<size_t>
-    struct _Fnv_hash_base
-    {
-      template<typename _Tp>
-        static size_t
-        hash(const _Tp* __ptr, size_t __clength, size_t __hash = 0)
-        {
-	  const char* __cptr = reinterpret_cast<const char*>(__ptr);
-	  for (; __clength; --__clength)
-	    __hash = (__hash * 131) + *__cptr++;
-	  return __hash;
-	}
-    };
+    template<typename _Tp>
+      static size_t
+      hash(const _Tp& __val)
+      { return hash(&__val, sizeof(__val)); }
 
-  template<>
-    struct _Fnv_hash_base<4>
-    {
-      template<typename _Tp>
-        static size_t
-        hash(const _Tp* __ptr, size_t __clength,
-	     size_t __hash = static_cast<size_t>(2166136261UL))
-        {
-	  const char* __cptr = reinterpret_cast<const char*>(__ptr);
-	  for (; __clength; --__clength)
-	    {
-	      __hash ^= static_cast<size_t>(*__cptr++);
-	      __hash *= static_cast<size_t>(16777619UL);
-	    }
-	  return __hash;
-	}
-    };
-  
-  template<>
-    struct _Fnv_hash_base<8>
-    {
-      template<typename _Tp>
-        static size_t
-        hash(const _Tp* __ptr, size_t __clength,
-	     size_t __hash = static_cast<size_t>(14695981039346656037ULL))
-        {
-	  const char* __cptr = reinterpret_cast<const char*>(__ptr);
-	  for (; __clength; --__clength)
-	    {
-	      __hash ^= static_cast<size_t>(*__cptr++);
-	      __hash *= static_cast<size_t>(1099511628211ULL);
-	    }
-	  return __hash;
-	}
-    };
+    template<typename _Tp>
+      static size_t
+      __hash_combine(const _Tp& __val, size_t __hash)
+      { return hash(&__val, sizeof(__val), __hash); }
+  };
 
-    struct _Fnv_hash
-    : public _Fnv_hash_base<sizeof(size_t)>
-    {
-      using _Fnv_hash_base<sizeof(size_t)>::hash;
+  struct _Fnv_hash_impl
+  {
+    static size_t
+    hash(const void* __ptr, size_t __clength,
+	 size_t __seed = static_cast<size_t>(2166136261UL))
+    { return _Fnv_hash_bytes(__ptr, __clength, __seed); }
 
-      template<typename _Tp>
-        static size_t
-        hash(const _Tp& __val)
-        { return hash(&__val, sizeof(__val)); }
+    template<typename _Tp>
+      static size_t
+      hash(const _Tp& __val)
+      { return hash(&__val, sizeof(__val)); }
 
-      template<typename _Tp>
-        static size_t
-        __hash_combine(const _Tp& __val, size_t __hash)
-        { return hash(&__val, sizeof(__val), __hash); }
-    };
+    template<typename _Tp>
+      static size_t
+      __hash_combine(const _Tp& __val, size_t __hash)
+      { return hash(&__val, sizeof(__val), __hash); }
+  };
 
   /// Specialization for float.
   template<>
@@ -191,7 +166,7 @@ namespace std
     hash<float>::operator()(float __val) const
     {
       // 0 and -0 both hash to zero.
-      return __val != 0.0f ? std::_Fnv_hash::hash(__val) : 0;
+      return __val != 0.0f ? std::_Hash_impl::hash(__val) : 0;
     }
 
   /// Specialization for double.
@@ -200,7 +175,7 @@ namespace std
     hash<double>::operator()(double __val) const
     {
       // 0 and -0 both hash to zero.
-      return __val != 0.0 ? std::_Fnv_hash::hash(__val) : 0;
+      return __val != 0.0 ? std::_Hash_impl::hash(__val) : 0;
     }
 
   /// Specialization for long double.
@@ -209,6 +184,8 @@ namespace std
     hash<long double>::operator()(long double __val) const;
 
   // @} group hashes
-}
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif // _FUNCTIONAL_HASH_H

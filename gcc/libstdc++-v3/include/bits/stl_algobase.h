@@ -1,7 +1,7 @@
 // Core algorithmic facilities -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-// Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+// 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -49,16 +49,15 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file stl_algobase.h
+/** @file bits/stl_algobase.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{algorithm}
  */
 
 #ifndef _STL_ALGOBASE_H
 #define _STL_ALGOBASE_H 1
 
 #include <bits/c++config.h>
-#include <cstddef>
 #include <bits/functexcept.h>
 #include <bits/cpp_type_traits.h>
 #include <ext/type_traits.h>
@@ -71,7 +70,9 @@
 #include <debug/debug.h>
 #include <bits/move.h> // For std::swap and _GLIBCXX_MOVE
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // See http://gcc.gnu.org/ml/libstdc++/2004-08/msg00167.html: in a
   // nutshell, we are partially implementing the resolution of DR 187,
@@ -258,27 +259,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       return __a;
     }
 
-
-  // If _Iterator has a base returns it otherwise _Iterator is returned
-  // untouched
-  template<typename _Iterator, bool _HasBase>
-    struct _Iter_base
-    {
-      typedef _Iterator iterator_type;
-      static iterator_type
-      _S_base(_Iterator __it)
-      { return __it; }
-    };
-
-  template<typename _Iterator>
-    struct _Iter_base<_Iterator, true>
-    {
-      typedef typename _Iterator::iterator_type iterator_type;
-      static iterator_type
-      _S_base(_Iterator __it)
-      { return __it.base(); }
-    };
-
   // If _Iterator is a __normal_iterator return its base (a plain pointer,
   // normally) otherwise return it untouched.  See copy, fill, ... 
   template<typename _Iterator>
@@ -395,7 +375,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       typedef typename iterator_traits<_II>::value_type _ValueTypeI;
       typedef typename iterator_traits<_OI>::value_type _ValueTypeO;
       typedef typename iterator_traits<_II>::iterator_category _Category;
-      const bool __simple = (__is_pod(_ValueTypeI)
+      const bool __simple = (__is_trivial(_ValueTypeI)
 	                     && __is_pointer<_II>::__value
 	                     && __is_pointer<_OI>::__value
 			     && __are_same<_ValueTypeI, _ValueTypeO>::__value);
@@ -590,7 +570,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       typedef typename iterator_traits<_BI1>::value_type _ValueType1;
       typedef typename iterator_traits<_BI2>::value_type _ValueType2;
       typedef typename iterator_traits<_BI1>::iterator_category _Category;
-      const bool __simple = (__is_pod(_ValueType1)
+      const bool __simple = (__is_trivial(_ValueType1)
 	                     && __is_pointer<_BI1>::__value
 	                     && __is_pointer<_BI2>::__value
 			     && __are_same<_ValueType1, _ValueType2>::__value);
@@ -661,7 +641,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
    *  loop count will be known (and therefore a candidate for compiler
    *  optimizations such as unrolling).
    *
-   *  Result may not be in the range [first,last).  Use move instead.  Note
+   *  Result may not be in the range (first,last].  Use move instead.  Note
    *  that the start of the output range may overlap [first,last).
   */
   template<typename _BI1, typename _BI2>
@@ -748,7 +728,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     __gnu_cxx::__enable_if<!__is_scalar<_Tp>::__value, _OutputIterator>::__type
     __fill_n_a(_OutputIterator __first, _Size __n, const _Tp& __value)
     {
-      for (; __n > 0; --__n, ++__first)
+      for (__decltype(__n + 0) __niter = __n;
+	   __niter > 0; --__niter, ++__first)
 	*__first = __value;
       return __first;
     }
@@ -759,7 +740,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     __fill_n_a(_OutputIterator __first, _Size __n, const _Tp& __value)
     {
       const _Tp __tmp = __value;
-      for (; __n > 0; --__n, ++__first)
+      for (__decltype(__n + 0) __niter = __n;
+	   __niter > 0; --__niter, ++__first)
 	*__first = __tmp;
       return __first;
     }
@@ -965,13 +947,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __glibcxx_requires_partitioned_lower(__first, __last, __val);
 
       _DistanceType __len = std::distance(__first, __last);
-      _DistanceType __half;
-      _ForwardIterator __middle;
 
       while (__len > 0)
 	{
-	  __half = __len >> 1;
-	  __middle = __first;
+	  _DistanceType __half = __len >> 1;
+	  _ForwardIterator __middle = __first;
 	  std::advance(__middle, __half);
 	  if (*__middle < __val)
 	    {
@@ -1009,9 +989,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   __lg(long long __n)
   { return sizeof(long long) * __CHAR_BIT__ - 1 - __builtin_clzll(__n); }
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
 
-_GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
+_GLIBCXX_BEGIN_NAMESPACE_ALGO
 
   /**
    *  @brief Tests a range for element-wise equality.
@@ -1218,7 +1198,8 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_P)
       return pair<_InputIterator1, _InputIterator2>(__first1, __first2);
     }
 
-_GLIBCXX_END_NESTED_NAMESPACE
+_GLIBCXX_END_NAMESPACE_ALGO
+} // namespace std
 
 // NB: This file is included within many other C++ includes, as a way
 // of getting the base algorithms. So, make sure that parallel bits

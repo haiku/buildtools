@@ -32,7 +32,9 @@
 #include <locale>
 #include <bits/c++locale_internal.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Construct and return valid pattern consisting of some combination of:
   // space none symbol sign value
@@ -574,7 +576,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	  __c_locale __old = __uselocale(__cloc);
 #else
 	  // Switch to named locale so that mbsrtowcs will work.
-	  char* __old = setlocale(LC_ALL, NULL);
+	  char* __old = setlocale(LC_ALL, 0);
           const size_t __llen = strlen(__old) + 1;
           char* __sav = new char[__llen];
           memcpy(__sav, __old, __llen);
@@ -757,7 +759,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	  __c_locale __old = __uselocale(__cloc);
 #else
 	  // Switch to named locale so that mbsrtowcs will work.
-	  char* __old = setlocale(LC_ALL, NULL);
+	  char* __old = setlocale(LC_ALL, 0);
           const size_t __llen = strlen(__old) + 1;
           char* __sav = new char[__llen];
           memcpy(__sav, __old, __llen);
@@ -929,4 +931,5 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     }
 #endif
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace

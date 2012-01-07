@@ -1,5 +1,6 @@
 /* Prototypes for pa.c functions used in the md file & elsewhere.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007 Free Software Foundation,
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2010
+   Free Software Foundation,
    Inc.
 
 This file is part of GCC.
@@ -79,7 +80,6 @@ extern int move_src_operand (rtx, enum machine_mode);
 extern int prefetch_cc_operand (rtx, enum machine_mode);
 extern int prefetch_nocc_operand (rtx, enum machine_mode);
 extern int and_operand (rtx, enum machine_mode);
-extern int ior_operand (rtx, enum machine_mode);
 extern int arith32_operand (rtx, enum machine_mode);
 extern int uint32_operand (rtx, enum machine_mode);
 extern int reg_before_reload_operand (rtx, enum machine_mode);
@@ -94,7 +94,6 @@ extern int ireg_or_int5_operand (rtx, enum machine_mode);
 extern int fmpyaddoperands (rtx *);
 extern int fmpysuboperands (rtx *);
 extern int call_operand_address (rtx, enum machine_mode);
-extern int ior_operand (rtx, enum machine_mode);
 extern void emit_bcond_fp (rtx[]);
 extern int emit_move_sequence (rtx *, enum machine_mode, rtx);
 extern int emit_hpdiv_const (rtx *, int);
@@ -131,7 +130,6 @@ extern int integer_store_memory_operand (rtx, enum machine_mode);
 extern int ldil_cint_p (HOST_WIDE_INT);
 extern int zdepi_cint_p (unsigned HOST_WIDE_INT);
 
-extern void override_options (void);
 extern void output_ascii (FILE *, const char *, int);
 extern HOST_WIDE_INT compute_frame_size (HOST_WIDE_INT, int *);
 extern int and_mask_p (unsigned HOST_WIDE_INT);
@@ -151,10 +149,6 @@ extern int cmpib_comparison_operator (rtx, enum machine_mode);
 /* Miscellaneous functions in pa.c.  */
 #ifdef TREE_CODE
 extern int reloc_needed (tree);
-#ifdef RTX_CODE
-extern rtx function_arg (CUMULATIVE_ARGS *, enum machine_mode,
-			 tree, int);
-#endif
 extern bool pa_return_in_memory (const_tree, const_tree);
 #endif /* TREE_CODE */
 
@@ -171,6 +165,7 @@ extern void pa_hpux_asm_output_external (FILE *, tree, const char *);
 extern bool pa_cannot_change_mode_class (enum machine_mode, enum machine_mode,
 					 enum reg_class);
 extern bool pa_modes_tieable_p (enum machine_mode, enum machine_mode);
+extern HOST_WIDE_INT pa_initial_elimination_offset (int, int);
 
 extern const int magic_milli[];
 extern int shadd_constant_p (int);

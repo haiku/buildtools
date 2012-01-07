@@ -39,16 +39,16 @@
 #include <profile/base.h>
 #include <profile/iterator_tracker.h>
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
 namespace __profile
 {
   template<typename _Tp,
 	   typename _Allocator = std::allocator<_Tp> >
     class vector
-    : public _GLIBCXX_STD_PR::vector<_Tp, _Allocator>
+    : public _GLIBCXX_STD_C::vector<_Tp, _Allocator>
     {
-      typedef _GLIBCXX_STD_PR::vector<_Tp, _Allocator> _Base;
+      typedef _GLIBCXX_STD_C::vector<_Tp, _Allocator> _Base;
 
     public:
       typedef typename _Base::reference             reference;
@@ -76,20 +76,40 @@ namespace __profile
       _M_base() const { return *this; }
 
       // 23.2.4.1 construct/copy/destroy:
-      explicit vector(const _Allocator& __a = _Allocator())
+      explicit
+      vector(const _Allocator& __a = _Allocator())
       : _Base(__a)
       { 
         __profcxx_vector_construct(this, this->capacity());
         __profcxx_vector_construct2(this);
       }
 
-      explicit vector(size_type __n, const _Tp& __value = _Tp(),
-		      const _Allocator& __a = _Allocator())
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      explicit
+      vector(size_type __n)
+      :  _Base(__n)
+      { 
+        __profcxx_vector_construct(this, this->capacity());
+        __profcxx_vector_construct2(this);
+      }
+
+      vector(size_type __n, const _Tp& __value,
+	     const _Allocator& __a = _Allocator())
       :  _Base(__n, __value, __a)
       { 
         __profcxx_vector_construct(this, this->capacity());
         __profcxx_vector_construct2(this);
       }
+#else
+      explicit
+      vector(size_type __n, const _Tp& __value = _Tp(),
+	     const _Allocator& __a = _Allocator())
+      :  _Base(__n, __value, __a)
+      { 
+        __profcxx_vector_construct(this, this->capacity());
+        __profcxx_vector_construct2(this);
+      }
+#endif
 
       template<class _InputIterator>
         vector(_InputIterator __first, _InputIterator __last,
@@ -117,7 +137,7 @@ namespace __profile
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       vector(vector&& __x)
-      : _Base(std::forward<vector>(__x))
+      : _Base(std::move(__x))
       {
         __profcxx_vector_construct(this, this->capacity());
         __profcxx_vector_construct2(this);
@@ -218,6 +238,23 @@ namespace __profile
       using _Base::size;
       using _Base::max_size;
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      void
+      resize(size_type __sz)
+      {
+        __profcxx_vector_invalid_operator(this);
+        _M_profile_resize(this, this->capacity(), __sz);
+        _Base::resize(__sz);
+      }
+
+      void
+      resize(size_type __sz, const _Tp& __c)
+      {
+        __profcxx_vector_invalid_operator(this);
+        _M_profile_resize(this, this->capacity(), __sz);
+        _Base::resize(__sz, __c);
+      }
+#else
       void
       resize(size_type __sz, _Tp __c = _Tp())
       {
@@ -225,6 +262,7 @@ namespace __profile
         _M_profile_resize(this, this->capacity(), __sz);
         _Base::resize(__sz, __c);
       }
+#endif
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       using _Base::shrink_to_fit;
@@ -467,11 +505,11 @@ namespace __profile
   /// std::hash specialization for vector<bool>.
   template<typename _Alloc>
     struct hash<__profile::vector<bool, _Alloc>>
-    : public std::unary_function<__profile::vector<bool, _Alloc>, size_t>
+    : public __hash_base<size_t, __profile::vector<bool, _Alloc>>
     {
       size_t
       operator()(const __profile::vector<bool, _Alloc>& __b) const
-      { return std::hash<_GLIBCXX_STD_D::vector<bool, _Alloc>>()
+      { return std::hash<_GLIBCXX_STD_C::vector<bool, _Alloc>>()
 	  (__b._M_base()); }
     };
 #endif

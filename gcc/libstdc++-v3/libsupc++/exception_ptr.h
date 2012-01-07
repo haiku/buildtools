@@ -1,6 +1,6 @@
 // Exception Handling support header (exception_ptr class) for -*- C++ -*-
 
-// Copyright (C) 2008, 2009 Free Software Foundation
+// Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation
 //
 // This file is part of GCC.
 //
@@ -23,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file exception_ptr.h
- *  This is an internal header file, included by other headers and the
- *  implementation. You should not attempt to use it directly.
+/** @file bits/exception_ptr.h
+ *  This is an internal header file, included by other library headers.
+ *  Do not attempt to use it directly. @headername{exception}
  */
 
 #ifndef _EXCEPTION_PTR_H
@@ -34,7 +34,7 @@
 #pragma GCC visibility push(default)
 
 #include <bits/c++config.h>
-#include <exception_defines.h>
+#include <bits/exception_defines.h>
 
 #if !defined(_GLIBCXX_ATOMIC_BUILTINS_4)
 #  error This platform does not support exception propagation.
@@ -81,25 +81,27 @@ namespace std
 
       void *_M_get() const throw() __attribute__ ((__pure__));
 
-      void _M_safe_bool_dummy() throw() __attribute__ ((__const__));
-
       friend exception_ptr std::current_exception() throw();
       friend void std::rethrow_exception(exception_ptr);
 
     public:
       exception_ptr() throw();
 
+      exception_ptr(const exception_ptr&) throw();
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      exception_ptr(nullptr_t) throw()
+      : _M_exception_object(0)
+      { }
+
+      exception_ptr(exception_ptr&& __o) throw()
+      : _M_exception_object(__o._M_exception_object)
+      { __o._M_exception_object = 0; }
+#else
       typedef void (exception_ptr::*__safe_bool)();
 
       // For construction from nullptr or 0.
       exception_ptr(__safe_bool) throw();
-
-      exception_ptr(const exception_ptr&) throw();
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-      exception_ptr(exception_ptr&& __o) throw()
-      : _M_exception_object(__o._M_exception_object)
-      { __o._M_exception_object = 0; }
 #endif
 
       exception_ptr& 
@@ -121,15 +123,21 @@ namespace std
 
 #ifdef _GLIBCXX_EH_PTR_COMPAT
       // Retained for compatibility with CXXABI_1.3.
+      void _M_safe_bool_dummy() throw() __attribute__ ((__const__));
       bool operator!() const throw() __attribute__ ((__pure__));
       operator __safe_bool() const throw();
+#endif
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      explicit operator bool() const
+      { return _M_exception_object; }
 #endif
 
       friend bool 
       operator==(const exception_ptr&, const exception_ptr&) throw() 
       __attribute__ ((__pure__));
 
-      const type_info*
+      const class type_info*
       __cxa_exception_type() const throw() __attribute__ ((__pure__));
     };
 
@@ -140,6 +148,11 @@ namespace std
     bool 
     operator!=(const exception_ptr&, const exception_ptr&) throw() 
     __attribute__ ((__pure__));
+
+    inline void
+    swap(exception_ptr& __lhs, exception_ptr& __rhs)
+    { __lhs.swap(__rhs); }
+
   } // namespace __exception_ptr
 
 
@@ -159,6 +172,14 @@ namespace std
 	  return current_exception();
 	}
     }
+
+  // _GLIBCXX_RESOLVE_LIB_DEFECTS
+  // 1130. copy_exception name misleading
+  /// Obtain an exception_ptr pointing to a copy of the supplied object.
+  template<typename _Ex>
+    exception_ptr 
+    make_exception_ptr(_Ex __ex) throw()
+    { return std::copy_exception<_Ex>(__ex); }
 
   // @} group exceptions
 } // namespace std

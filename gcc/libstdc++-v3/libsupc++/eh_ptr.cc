@@ -1,5 +1,5 @@
 // -*- C++ -*- Implement the members of exception_ptr.
-// Copyright (C) 2008, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -29,7 +29,7 @@
 #define _GLIBCXX_EH_PTR_COMPAT
 
 #include <exception>
-#include <exception_ptr.h>
+#include <bits/exception_ptr.h>
 #include "unwind-cxx.h"
 
 using namespace __cxxabiv1;
@@ -102,16 +102,17 @@ std::__exception_ptr::exception_ptr::_M_get() const throw()
 
 
 void
-std::__exception_ptr::exception_ptr::_M_safe_bool_dummy() throw () { }
-
-
-void
 std::__exception_ptr::exception_ptr::swap(exception_ptr &other) throw()
 {
   void *tmp = _M_exception_object;
   _M_exception_object = other._M_exception_object;
   other._M_exception_object = tmp;
 }
+
+
+// Retained for compatibility with CXXABI_1.3.
+void
+std::__exception_ptr::exception_ptr::_M_safe_bool_dummy() throw () { }
 
 
 // Retained for compatibility with CXXABI_1.3.

@@ -22,7 +22,7 @@
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "rtl.h"
+#include "rtl-error.h"
 #include "tm_p.h"
 #include "insn-config.h"
 #include "regs.h"
@@ -34,16 +34,39 @@
 #include "function.h"
 #include "recog.h"
 #include "flags.h"
-#include "toplev.h"
 #include "obstack.h"
 #include "timevar.h"
 #include "tree-pass.h"
 #include "df.h"
+#include "target.h"
+
+/* This file implements the RTL register renaming pass of the compiler.  It is
+   a semi-local pass whose goal is to maximize the usage of the register file
+   of the processor by substituting registers for others in the solution given
+   by the register allocator.  The algorithm is as follows:
+
+     1. Local def/use chains are built: within each basic block, chains are
+	opened and closed; if a chain isn't closed at the end of the block,
+	it is dropped.
+
+     2. For each chain, the set of possible renaming registers is computed.
+	This takes into account the renaming of previously processed chains.
+	Optionally, a preferred class is computed for the renaming register.
+
+     3. The best renaming register is computed for the chain in the above set,
+	using a round-robin allocation.  If a preferred class exists, then the
+	round-robin allocation is done within the class first, if possible.
+	The round-robin allocation of renaming registers itself is global.
+
+     4. If a renaming register has been found, it is substituted in the chain.
+
+  Targets can parameterize the pass by specifying a preferred class for the
+  renaming register for a given (super)class of registers to be renamed.  */
 
 #if HOST_BITS_PER_WIDE_INT <= MAX_RECOG_OPERANDS
 #error "Use a different bitmap implementation for untracked_operands."
 #endif
-   
+
 /* We keep linked lists of DU_HEAD structures, each of which describes
    a chain of occurrences of a reg.  */
 struct du_head
@@ -155,6 +178,53 @@ merge_overlapping_regs (HARD_REG_SET *pset, struct du_head *head)
     }
 }
 
+/* Check if NEW_REG can be the candidate register to rename for
+   REG in THIS_HEAD chain.  THIS_UNAVAILABLE is a set of unavailable hard
+   registers.  */
+
+static bool
+check_new_reg_p (int reg ATTRIBUTE_UNUSED, int new_reg,
+		 struct du_head *this_head, HARD_REG_SET this_unavailable)
+{
+  enum machine_mode mode = GET_MODE (*this_head->first->loc);
+  int nregs = hard_regno_nregs[new_reg][mode];
+  int i;
+  struct du_chain *tmp;
+
+  for (i = nregs - 1; i >= 0; --i)
+    if (TEST_HARD_REG_BIT (this_unavailable, new_reg + i)
+	|| fixed_regs[new_reg + i]
+	|| global_regs[new_reg + i]
+	/* Can't use regs which aren't saved by the prologue.  */
+	|| (! df_regs_ever_live_p (new_reg + i)
+	    && ! call_used_regs[new_reg + i])
+#ifdef LEAF_REGISTERS
+	/* We can't use a non-leaf register if we're in a
+	   leaf function.  */
+	|| (current_function_is_leaf
+	    && !LEAF_REGISTERS[new_reg + i])
+#endif
+#ifdef HARD_REGNO_RENAME_OK
+	|| ! HARD_REGNO_RENAME_OK (reg + i, new_reg + i)
+#endif
+	)
+      return false;
+
+  /* See whether it accepts all modes that occur in
+     definition and uses.  */
+  for (tmp = this_head->first; tmp; tmp = tmp->next_use)
+    if ((! HARD_REGNO_MODE_OK (new_reg, GET_MODE (*tmp->loc))
+	 && ! DEBUG_INSN_P (tmp->insn))
+	|| (this_head->need_caller_save_reg
+	    && ! (HARD_REGNO_CALL_PART_CLOBBERED
+		  (reg, GET_MODE (*tmp->loc)))
+	    && (HARD_REGNO_CALL_PART_CLOBBERED
+		(new_reg, GET_MODE (*tmp->loc)))))
+      return false;
+
+  return true;
+}
+
 /* Perform register renaming on the current function.  */
 
 static unsigned int
@@ -201,7 +271,7 @@ regrename_optimize (void)
       if (frame_pointer_needed)
 	{
 	  add_to_hard_reg_set (&unavailable, Pmode, FRAME_POINTER_REGNUM);
-#if FRAME_POINTER_REGNUM != HARD_FRAME_POINTER_REGNUM
+#if !HARD_FRAME_POINTER_IS_FRAME_POINTER
 	  add_to_hard_reg_set (&unavailable, Pmode, HARD_FRAME_POINTER_REGNUM);
 #endif
 	}
@@ -214,7 +284,10 @@ regrename_optimize (void)
 	  struct du_chain *tmp;
 	  HARD_REG_SET this_unavailable;
 	  int reg = this_head->regno;
-	  int i;
+	  int pass;
+	  enum reg_class super_class = NO_REGS;
+	  enum reg_class preferred_class;
+	  bool has_preferred_class;
 
 	  all_chains = this_head->next_chain;
 
@@ -234,7 +307,7 @@ regrename_optimize (void)
 #endif
 
 	  if (fixed_regs[reg] || global_regs[reg]
-#if FRAME_POINTER_REGNUM != HARD_FRAME_POINTER_REGNUM
+#if !HARD_FRAME_POINTER_IS_FRAME_POINTER
 	      || (frame_pointer_needed && reg == HARD_FRAME_POINTER_REGNUM)
 #else
 	      || (frame_pointer_needed && reg == FRAME_POINTER_REGNUM)
@@ -244,9 +317,12 @@ regrename_optimize (void)
 
 	  COPY_HARD_REG_SET (this_unavailable, unavailable);
 
-	  /* Count number of uses, and narrow the set of registers we can
-	     use for renaming.  */
+	  /* Iterate over elements in the chain in order to:
+	     1. Count number of uses, and narrow the set of registers we can
+		use for renaming.
+	     2. Compute the superunion of register classes in this chain.  */
 	  n_uses = 0;
+	  super_class = NO_REGS;
 	  for (tmp = this_head->first; tmp; tmp = tmp->next_use)
 	    {
 	      if (DEBUG_INSN_P (tmp->insn))
@@ -254,63 +330,63 @@ regrename_optimize (void)
 	      n_uses++;
 	      IOR_COMPL_HARD_REG_SET (this_unavailable,
 				      reg_class_contents[tmp->cl]);
+	      super_class
+		= reg_class_superunion[(int) super_class][(int) tmp->cl];
 	    }
 
 	  if (n_uses < 2)
 	    continue;
 
+	  /* Further narrow the set of registers we can use for renaming.
+	     If the chain needs a call-saved register, mark the call-used
+	     registers as unavailable.  */
 	  if (this_head->need_caller_save_reg)
 	    IOR_HARD_REG_SET (this_unavailable, call_used_reg_set);
 
+	  /* And mark registers that overlap its lifetime as unavailable.  */
 	  merge_overlapping_regs (&this_unavailable, this_head);
 
-	  /* Now potential_regs is a reasonable approximation, let's
-	     have a closer look at each register still in there.  */
-	  for (new_reg = 0; new_reg < FIRST_PSEUDO_REGISTER; new_reg++)
+	  /* Compute preferred rename class of super union of all the classes
+	     in the chain.  */
+	  preferred_class
+	    = (enum reg_class) targetm.preferred_rename_class (super_class);
+
+	  /* If PREFERRED_CLASS is not NO_REGS, we iterate in the first pass
+	     over registers that belong to PREFERRED_CLASS and try to find the
+	     best register within the class.  If that failed, we iterate in
+	     the second pass over registers that don't belong to the class.
+	     If PREFERRED_CLASS is NO_REGS, we iterate over all registers in
+	     ascending order without any preference.  */
+	  has_preferred_class = (preferred_class != NO_REGS);
+	  for (pass = (has_preferred_class ? 0 : 1); pass < 2; pass++)
 	    {
-	      enum machine_mode mode = GET_MODE (*this_head->first->loc);
-	      int nregs = hard_regno_nregs[new_reg][mode];
-
-	      for (i = nregs - 1; i >= 0; --i)
-	        if (TEST_HARD_REG_BIT (this_unavailable, new_reg + i)
-		    || fixed_regs[new_reg + i]
-		    || global_regs[new_reg + i]
-		    /* Can't use regs which aren't saved by the prologue.  */
-		    || (! df_regs_ever_live_p (new_reg + i)
-			&& ! call_used_regs[new_reg + i])
-#ifdef LEAF_REGISTERS
-		    /* We can't use a non-leaf register if we're in a
-		       leaf function.  */
-		    || (current_function_is_leaf
-			&& !LEAF_REGISTERS[new_reg + i])
-#endif
-#ifdef HARD_REGNO_RENAME_OK
-		    || ! HARD_REGNO_RENAME_OK (reg + i, new_reg + i)
-#endif
-		    )
-		  break;
-	      if (i >= 0)
-		continue;
-
-	      /* See whether it accepts all modes that occur in
-		 definition and uses.  */
-	      for (tmp = this_head->first; tmp; tmp = tmp->next_use)
-		if ((! HARD_REGNO_MODE_OK (new_reg, GET_MODE (*tmp->loc))
-		     && ! DEBUG_INSN_P (tmp->insn))
-		    || (this_head->need_caller_save_reg
-			&& ! (HARD_REGNO_CALL_PART_CLOBBERED
-			      (reg, GET_MODE (*tmp->loc)))
-			&& (HARD_REGNO_CALL_PART_CLOBBERED
-			    (new_reg, GET_MODE (*tmp->loc)))))
-		  break;
-	      if (! tmp)
+	      for (new_reg = 0; new_reg < FIRST_PSEUDO_REGISTER; new_reg++)
 		{
-		  if (tick[best_new_reg] > tick[new_reg])
+		  if (has_preferred_class
+		      && (pass == 0)
+			 != TEST_HARD_REG_BIT
+			    (reg_class_contents[preferred_class], new_reg))
+		    continue;
+
+		  /* In the first pass, we force the renaming of registers that
+		     don't belong to PREFERRED_CLASS to registers that do, even
+		     though the latters were used not very long ago.  */
+		  if (check_new_reg_p (reg, new_reg, this_head,
+				       this_unavailable)
+		      && ((pass == 0
+			   && !TEST_HARD_REG_BIT
+			       (reg_class_contents[preferred_class],
+			        best_new_reg))
+			  || tick[best_new_reg] > tick[new_reg]))
 		    {
+		      enum machine_mode mode
+			= GET_MODE (*this_head->first->loc);
 		      best_new_reg = new_reg;
-		      best_nregs = nregs;
+		      best_nregs = hard_regno_nregs[new_reg][mode];
 		    }
 		}
+	      if (pass == 0 && best_new_reg != reg)
+		break;
 	    }
 
 	  if (dump_file)
@@ -661,7 +737,6 @@ scan_rtx_reg (rtx insn, rtx *loc, enum reg_class cl, enum scan_actions action,
 	      else
 		head->last->next_use = this_du;
 	      head->last = this_du;
-
 	    }
 	  /* Avoid adding the same location in a DEBUG_INSN multiple times,
 	     which could happen with non-exact overlap.  */

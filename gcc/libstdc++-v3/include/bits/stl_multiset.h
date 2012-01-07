@@ -1,7 +1,7 @@
 // Multiset implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-// Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+// 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -49,9 +49,9 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file stl_multiset.h
+/** @file bits/stl_multiset.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{set}
  */
 
 #ifndef _STL_MULTISET_H
@@ -60,7 +60,9 @@
 #include <bits/concept_check.h>
 #include <initializer_list>
 
-_GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   /**
    *  @brief A standard container made up of elements, which can be retrieved
@@ -118,7 +120,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       typedef typename _Rep_type::const_iterator            iterator;
       typedef typename _Rep_type::const_iterator            const_iterator;
       typedef typename _Rep_type::const_reverse_iterator    reverse_iterator;
-      typedef typename _Rep_type::const_reverse_iterator    const_reverse_iterator;
+      typedef typename _Rep_type::const_reverse_iterator const_reverse_iterator;
       typedef typename _Rep_type::size_type                 size_type;
       typedef typename _Rep_type::difference_type           difference_type;
 
@@ -190,7 +192,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  The contents of @a x are a valid, but unspecified %multiset.
        */
       multiset(multiset&& __x)
-      : _M_t(std::forward<_Rep_type>(__x._M_t)) { }
+      : _M_t(std::move(__x._M_t)) { }
 
       /**
        *  @brief  Builds a %multiset from an initializer_list.
@@ -396,6 +398,12 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       insert(const value_type& __x)
       { return _M_t._M_insert_equal(__x); }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      iterator
+      insert(value_type&& __x)
+      { return _M_t._M_insert_equal(std::move(__x)); }
+#endif
+
       /**
        *  @brief Inserts an element into the %multiset.
        *  @param  position  An iterator that serves as a hint as to where the
@@ -417,8 +425,14 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  Insertion requires logarithmic time (if the hint is not taken).
        */
       iterator
-      insert(iterator __position, const value_type& __x)
+      insert(const_iterator __position, const value_type& __x)
       { return _M_t._M_insert_equal_(__position, __x); }
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      iterator
+      insert(const_iterator __position, value_type&& __x)
+      { return _M_t._M_insert_equal_(__position, std::move(__x)); }
+#endif
 
       /**
        *  @brief A template function that tries to insert a range of elements.
@@ -463,7 +477,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  responsibility.
        */
       iterator
-      erase(iterator __position)
+      erase(const_iterator __position)
       { return _M_t.erase(__position); }
 #else
       /**
@@ -509,10 +523,11 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  This function erases a sequence of elements from a %multiset.
        *  Note that this function only erases the elements, and that if
        *  the elements themselves are pointers, the pointed-to memory is not
-       *  touched in any way.  Managing the pointer is the user's responsibility.
+       *  touched in any way.  Managing the pointer is the user's
+       *  responsibility.
        */
       iterator
-      erase(iterator __first, iterator __last)
+      erase(const_iterator __first, const_iterator __last)
       { return _M_t.erase(__first, __last); }
 #else
       /**
@@ -524,7 +539,8 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  This function erases a sequence of elements from a %multiset.
        *  Note that this function only erases the elements, and that if
        *  the elements themselves are pointers, the pointed-to memory is not
-       *  touched in any way.  Managing the pointer is the user's responsibility.
+       *  touched in any way.  Managing the pointer is the user's
+       *  responsibility.
        */
       void
       erase(iterator __first, iterator __last)
@@ -716,6 +732,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	 multiset<_Key, _Compare, _Alloc>& __y)
     { __x.swap(__y); }
 
-_GLIBCXX_END_NESTED_NAMESPACE
+_GLIBCXX_END_NAMESPACE_CONTAINER
+} // namespace std
 
 #endif /* _STL_MULTISET_H */

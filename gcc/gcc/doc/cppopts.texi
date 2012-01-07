@@ -188,8 +188,8 @@ without @samp{-pedantic} but treats as warnings.
 
 @item -M
 @opindex M
-@cindex make
-@cindex dependencies, make
+@cindex @command{make}
+@cindex dependencies, @command{make}
 Instead of outputting the result of preprocessing, output a rule
 suitable for @command{make} describing the dependencies of the main
 source file.  The preprocessor outputs one @command{make} rule containing
@@ -330,10 +330,10 @@ header is used.
 @opindex fpch-preprocess
 This option allows use of a precompiled header (@pxref{Precompiled
 Headers}) together with @option{-E}.  It inserts a special @code{#pragma},
-@code{#pragma GCC pch_preprocess "<filename>"} in the output to mark
-the place where the precompiled header was found, and its filename.  When
-@option{-fpreprocessed} is in use, GCC recognizes this @code{#pragma} and
-loads the PCH@.
+@code{#pragma GCC pch_preprocess "@var{filename}"} in the output to mark
+the place where the precompiled header was found, and its @var{filename}.
+When @option{-fpreprocessed} is in use, GCC recognizes this @code{#pragma}
+and loads the PCH@.
 
 This option is off by default, because the resulting preprocessed output
 is only really suitable as input to GCC@.  It is switched on by
@@ -392,6 +392,9 @@ The 1990 C standard, as amended in 1994.
 The revised ISO C standard, published in December 1999.  Before
 publication, this was known as C9X@.
 
+@item c1x
+The next version of the ISO C standard, still under development.
+
 @item gnu90
 @itemx gnu89
 The 1990 C standard plus GNU extensions.  This is the default.
@@ -399,6 +402,10 @@ The 1990 C standard plus GNU extensions.  This is the default.
 @item gnu99
 @itemx gnu9x
 The 1999 C standard plus GNU extensions.
+
+@item gnu1x
+The next version of the ISO C standard, still under development, plus
+GNU extensions.
 
 @item c++98
 The 1998 ISO C++ standard plus amendments.
@@ -485,7 +492,9 @@ would; @option{-iwithprefix} puts it where @option{-idirafter} would.
 @item -isysroot @var{dir}
 @opindex isysroot
 This option is like the @option{--sysroot} option, but applies only to
-header files.  See the @option{--sysroot} option for more information.
+header files (except for Darwin targets, where it applies to both header
+files and libraries).  See the @option{--sysroot} option for more
+information.
 
 @item -imultilib @var{dir}
 @opindex imultilib

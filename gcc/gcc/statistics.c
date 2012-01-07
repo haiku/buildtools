@@ -1,5 +1,5 @@
 /* Optimization statistics functions.
-   Copyright (C) 2008
+   Copyright (C) 2008, 2010
    Free Software Foundation, Inc.
    Contributed by Richard Guenther  <rguenther@suse.de>
 
@@ -26,7 +26,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-dump.h"
 #include "statistics.h"
 #include "hashtab.h"
-#include "tm.h"
 #include "function.h"
 
 static int statistics_dump_nr;

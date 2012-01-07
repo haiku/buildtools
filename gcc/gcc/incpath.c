@@ -1,6 +1,6 @@
 /* Set up combined include path chain for the preprocessor.
    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010
    Free Software Foundation, Inc.
 
    Broken out of cppinit.c and cppfiles.c and rewritten Mar 2003.
@@ -100,7 +100,7 @@ add_env_var_paths (const char *env_var, int chain)
 {
   char *p, *q, *path;
 
-  GET_ENVIRONMENT (q, env_var);
+  q = getenv (env_var);
 
   if (!q)
     return;
@@ -239,7 +239,7 @@ remove_duplicates (cpp_reader *pfile, struct cpp_dir *head,
 	    }
 	}
       else if (!S_ISDIR (st.st_mode))
-	cpp_error_with_line (pfile, CPP_DL_ERROR, 0, 0,
+	cpp_error_with_line (pfile, CPP_DL_WARNING, 0, 0,
 			     "%s: not a directory", cur->name);
       else
 	{

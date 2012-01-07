@@ -1,7 +1,8 @@
 // -*- C++ -*-
 // Testing utilities for the tr1 testsuite.
 //
-// Copyright (C) 2004, 2005, 2006, 2007, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -56,7 +57,7 @@ namespace __gnu_test
   // For testing tr1/type_traits/extent, which has a second template
   // parameter.
   template<template<typename, unsigned> class Property,
-           typename Type, unsigned Uint>
+	   typename Type, unsigned Uint>
     bool
     test_property(typename Property<Type, Uint>::value_type value)
     {
@@ -79,7 +80,7 @@ namespace __gnu_test
 #endif
 
   template<template<typename, typename> class Relationship,
-           typename Type1, typename Type2>
+	   typename Type1, typename Type2>
     bool
     test_relationship(bool value)
     {
@@ -127,7 +128,38 @@ namespace __gnu_test
   {
     ExplicitClass(double&);
     explicit ExplicitClass(int&);
+    ExplicitClass(double&, int&, double&);
   };
+
+  struct NothrowExplicitClass
+  {
+    NothrowExplicitClass(double&) throw();
+    explicit NothrowExplicitClass(int&) throw();
+    NothrowExplicitClass(double&, int&, double&) throw();
+  };
+
+  struct ThrowExplicitClass
+  {
+    ThrowExplicitClass(double&) throw(int);
+    explicit ThrowExplicitClass(int&) throw(int);
+    ThrowExplicitClass(double&, int&, double&) throw(int);
+  };
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+  struct NoexceptExplicitClass
+  {
+    NoexceptExplicitClass(double&) noexcept(true);
+    explicit NoexceptExplicitClass(int&) noexcept(true);
+    NoexceptExplicitClass(double&, int&, double&) noexcept(true);
+  };
+
+  struct ExceptExplicitClass
+  {
+    ExceptExplicitClass(double&) noexcept(false);
+    explicit ExceptExplicitClass(int&) noexcept(false);
+    ExceptExplicitClass(double&, int&, double&) noexcept(false);
+  };
+#endif
 
   struct NType   // neither trivial nor standard-layout
   {
@@ -155,6 +187,33 @@ namespace __gnu_test
     int i;
     int j;
   };
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+  struct LType // literal type
+  {
+    int _M_i;
+
+    constexpr LType(int __i) : _M_i(__i) { }
+  };
+
+  struct LTypeDerived : public LType
+  {
+    constexpr LTypeDerived(int __i) : LType(__i) { }
+  };
+
+  struct NLType // not literal type
+  {
+    int _M_i;
+
+    NLType() : _M_i(0) { }
+
+    constexpr NLType(int __i) : _M_i(__i) { }
+
+    NLType(const NLType& __other) : _M_i(__other._M_i) { }
+
+    ~NLType() { _M_i = 0; }
+  };
+#endif
 
   int truncate_float(float x) { return (int)x; }
   long truncate_double(double x) { return (long)x; }
@@ -219,7 +278,7 @@ namespace __gnu_test
 
   // For use in 8_c_compatibility.
   template<typename R, typename T>
-    typename __gnu_cxx::__enable_if<std::__are_same<R, T>::__value, 
+    typename __gnu_cxx::__enable_if<std::__are_same<R, T>::__value,
 				    bool>::__type
     check_ret_type(T)
     { return true; }

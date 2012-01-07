@@ -1,5 +1,5 @@
 /* Mudflap: narrow-pointer bounds-checking by tree rewriting.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Frank Ch. Eigler <fche@redhat.com>
    and Graydon Hoare <graydon@redhat.com>
@@ -25,8 +25,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hard-reg-set.h"
-#include "rtl.h"
 #include "tree.h"
 #include "tm_p.h"
 #include "basic-block.h"
@@ -41,11 +39,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "hashtab.h"
 #include "diagnostic.h"
-#include <demangle.h>
+#include "demangle.h"
 #include "langhooks.h"
 #include "ggc.h"
 #include "cgraph.h"
-#include "toplev.h"
 #include "gimple.h"
 
 /* Internal function decls */
@@ -324,31 +321,13 @@ mf_make_mf_cache_struct_type (tree field_type)
   tree struct_type = make_node (RECORD_TYPE);
   DECL_CONTEXT (fieldlo) = struct_type;
   DECL_CONTEXT (fieldhi) = struct_type;
-  TREE_CHAIN (fieldlo) = fieldhi;
+  DECL_CHAIN (fieldlo) = fieldhi;
   TYPE_FIELDS (struct_type) = fieldlo;
   TYPE_NAME (struct_type) = get_identifier ("__mf_cache");
   layout_type (struct_type);
 
   return struct_type;
 }
-
-#define build_function_type_0(rtype)           				\
-  build_function_type (rtype, void_list_node)
-#define build_function_type_1(rtype, arg1)                		\
-  build_function_type (rtype, tree_cons (0, arg1, void_list_node))
-#define build_function_type_3(rtype, arg1, arg2, arg3)                  \
-  build_function_type (rtype,						\
-		       tree_cons (0, arg1, 				\
-				  tree_cons (0, arg2,  			\
-                                              tree_cons (0, arg3, 	\
-							 void_list_node))))
-#define build_function_type_4(rtype, arg1, arg2, arg3, arg4)            \
-  build_function_type (rtype, 						\
-		       tree_cons (0, arg1,				\
-				  tree_cons (0, arg2,   		\
-                                             tree_cons (0, arg3,	\
-							tree_cons (0, arg4, \
-                                                		   void_list_node)))))
 
 /* Initialize the global tree nodes that correspond to mf-runtime.h
    declarations.  */
@@ -377,15 +356,15 @@ mudflap_init (void)
   mf_cache_structptr_type = build_pointer_type (mf_cache_struct_type);
   mf_cache_array_type = build_array_type (mf_cache_struct_type, 0);
   mf_check_register_fntype =
-    build_function_type_4 (void_type_node, ptr_type_node, size_type_node,
-                           integer_type_node, mf_const_string_type);
+    build_function_type_list (void_type_node, ptr_type_node, size_type_node,
+			      integer_type_node, mf_const_string_type, NULL_TREE);
   mf_unregister_fntype =
-    build_function_type_3 (void_type_node, ptr_type_node, size_type_node,
-                           integer_type_node);
+    build_function_type_list (void_type_node, ptr_type_node, size_type_node,
+			      integer_type_node, NULL_TREE);
   mf_init_fntype =
-    build_function_type_0 (void_type_node);
+    build_function_type_list (void_type_node, NULL_TREE);
   mf_set_options_fntype =
-    build_function_type_1 (integer_type_node, mf_const_string_type);
+    build_function_type_list (integer_type_node, mf_const_string_type, NULL_TREE);
 
   mf_cache_array_decl = mf_make_builtin (VAR_DECL, "__mf_lookup_cache",
                                          mf_cache_array_type);
@@ -409,10 +388,6 @@ mudflap_init (void)
   mf_set_options_fndecl = mf_make_builtin (FUNCTION_DECL, "__mf_set_options",
                                            mf_set_options_fntype);
 }
-#undef build_function_type_4
-#undef build_function_type_3
-#undef build_function_type_1
-#undef build_function_type_0
 
 
 /* ------------------------------------------------------------------------ */
@@ -646,7 +621,7 @@ mf_build_check_statement_for (tree base, tree limit,
 
   u = build3 (COMPONENT_REF, mf_uintptr_type,
               build1 (INDIRECT_REF, mf_cache_struct_type, mf_elem),
-              TREE_CHAIN (TYPE_FIELDS (mf_cache_struct_type)), NULL_TREE);
+              DECL_CHAIN (TYPE_FIELDS (mf_cache_struct_type)), NULL_TREE);
 
   v = mf_limit;
 
@@ -814,7 +789,8 @@ mf_xform_derefs_1 (gimple_stmt_iterator *iter, tree *tp,
               }
             else if (TREE_CODE (var) == COMPONENT_REF)
               var = TREE_OPERAND (var, 0);
-            else if (INDIRECT_REF_P (var))
+            else if (INDIRECT_REF_P (var)
+		     || TREE_CODE (var) == MEM_REF)
               {
 		base = TREE_OPERAND (var, 0);
                 break;
@@ -884,6 +860,18 @@ mf_xform_derefs_1 (gimple_stmt_iterator *iter, tree *tp,
 
     case INDIRECT_REF:
       addr = TREE_OPERAND (t, 0);
+      base = addr;
+      limit = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
+			   fold_build2_loc (location,
+					POINTER_PLUS_EXPR, ptr_type_node, base,
+					size),
+			   size_int (-1));
+      break;
+
+    case MEM_REF:
+      addr = fold_build2_loc (location, POINTER_PLUS_EXPR, TREE_TYPE (TREE_OPERAND (t, 0)),
+		     TREE_OPERAND (t, 0),
+		     fold_convert (sizetype, TREE_OPERAND (t, 1)));
       base = addr;
       limit = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
 			   fold_build2_loc (location,
@@ -1085,7 +1073,7 @@ mx_register_decls (tree decl, gimple_seq seq, location_t location)
           unregister_fncall = gimple_build_call (mf_unregister_fndecl, 3,
 						 unregister_fncall_param,
 						 size,
-						 build_int_cst (NULL_TREE, 3));
+						 integer_three_node);
 
 
           variable_name = mf_varname_tree (decl);
@@ -1098,7 +1086,7 @@ mx_register_decls (tree decl, gimple_seq seq, location_t location)
 	  register_fncall = gimple_build_call (mf_register_fndecl, 4,
 					       register_fncall_param,
 					       size,
-					       build_int_cst (NULL_TREE, 3),
+					       integer_three_node,
 					       variable_name);
 
 
@@ -1125,7 +1113,7 @@ mx_register_decls (tree decl, gimple_seq seq, location_t location)
           mf_mark (decl);
         }
 
-      decl = TREE_CHAIN (decl);
+      decl = DECL_CHAIN (decl);
     }
 
   /* Actually, (initially_stmts!=NULL) <=> (finally_stmts!=NULL) */
@@ -1316,7 +1304,7 @@ mudflap_finish_file (void)
   tree ctor_statements = NULL_TREE;
 
   /* No need to continue when there were errors.  */
-  if (errorcount != 0 || sorrycount != 0)
+  if (seen_error ())
     return;
 
   /* Insert a call to __mf_init.  */
@@ -1338,7 +1326,7 @@ mudflap_finish_file (void)
     {
       size_t i;
       tree obj;
-      for (i = 0; VEC_iterate (tree, deferred_static_decls, i, obj); i++)
+      FOR_EACH_VEC_ELT (tree, deferred_static_decls, i, obj)
         {
           gcc_assert (DECL_P (obj));
 

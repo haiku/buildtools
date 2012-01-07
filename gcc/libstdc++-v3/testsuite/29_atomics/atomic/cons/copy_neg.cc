@@ -1,7 +1,7 @@
 // { dg-options "-std=gnu++0x" }
 // { dg-do compile }
 
-// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -28,20 +28,5 @@ int main()
   return 0;
 }
 
-// { dg-error "used here" "" { target *-*-* } 560 }
-// { dg-error "deleted function" "" { target *-*-* } 232 }
-// { dg-error "deleted function" "" { target *-*-* } 250 }
-// { dg-error "deleted function" "" { target *-*-* } 268 }
-// { dg-error "deleted function" "" { target *-*-* } 286 }
-// { dg-error "deleted function" "" { target *-*-* } 304 }
-// { dg-error "deleted function" "" { target *-*-* } 322 }
-// { dg-error "deleted function" "" { target *-*-* } 340 }
-// { dg-error "deleted function" "" { target *-*-* } 358 }
-// { dg-error "deleted function" "" { target *-*-* } 376 }
-// { dg-error "deleted function" "" { target *-*-* } 394 }
-// { dg-error "deleted function" "" { target *-*-* } 412 }
-// { dg-error "deleted function" "" { target *-*-* } 430 }
-// { dg-error "deleted function" "" { target *-*-* } 448 }
-// { dg-error "deleted function" "" { target *-*-* } 466 }
-// { dg-error "deleted function" "" { target *-*-* } 484 }
-// { dg-excess-errors "In member function" }
+// { dg-error "deleted" "" { target *-*-* } 611 }
+// { dg-prune-output "include" }

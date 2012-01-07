@@ -1,7 +1,8 @@
 /* Declarations for insn-output.c.  These functions are defined in recog.c,
    final.c, and varasm.c.
    Copyright (C) 1987, 1991, 1994, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -76,6 +77,9 @@ extern rtx final_scan_insn (rtx, FILE *, int, int, int *);
 /* Replace a SUBREG with a REG or a MEM, based on the thing it is a
    subreg of.  */
 extern rtx alter_subreg (rtx *);
+
+/* Print an operand using machine-dependent assembler syntax.  */
+extern void output_operand (rtx, int);
 
 /* Report inconsistency between the assembler template and the operands.
    In an `asm', it's the user's fault; otherwise, the compiler's fault.  */
@@ -161,8 +165,8 @@ extern void merge_weak (tree, tree);
 /* Emit any pending weak declarations.  */
 extern void weak_finish (void);
 
-/* Emit any pending emutls declarations and initializations.  */
-extern void emutls_finish (void);
+/* Return the default TLS model for a given variable.  */
+extern enum tls_model decl_default_tls_model (const_tree);
 
 /* Decode an `asm' spec for a declaration as a register name.
    Return the register number, or -1 if nothing specified,
@@ -172,6 +176,11 @@ extern void emutls_finish (void);
    Accept an exact spelling or a decimal number.
    Prefixes such as % are optional.  */
 extern int decode_reg_name (const char *);
+
+/* Similar to decode_reg_name, but takes an extra parameter that is a
+   pointer to the number of (internal) registers described by the
+   external name.  */
+extern int decode_reg_name_and_count (const char *, int *);
 
 extern void assemble_alias (tree, tree);
 
@@ -224,7 +233,7 @@ extern void assemble_string (const char *, int);
 extern void assemble_external_libcall (rtx);
 
 /* Assemble a label named NAME.  */
-extern void assemble_label (const char *);
+extern void assemble_label (FILE *, const char *);
 
 /* Output to FILE (an assembly file) a reference to NAME.  If NAME
    starts with a *, the rest of NAME is output verbatim.  Otherwise
@@ -260,6 +269,10 @@ extern bool default_assemble_integer (rtx, unsigned int, int);
    be outputable. */
 extern bool assemble_integer (rtx, unsigned, unsigned, int);
 
+/* Return section for TEXT_SECITON_NAME if DECL or DECL_SECTION_NAME (DECL)
+   is NULL.  */
+extern section *get_named_text_section (tree, const char *, const char *);
+
 /* An interface to assemble_integer for the common case in which a value is
    fully aligned and must be printed.  VALUE is the value of the integer
    object and SIZE is the number of bytes it contains.  */
@@ -284,6 +297,8 @@ extern rtx peephole (rtx);
 extern void output_shared_constant_pool (void);
 
 extern void output_object_blocks (void);
+
+extern void output_quoted_string (FILE *, const char *);
 
 /* Whether a constructor CTOR is a valid static constant initializer if all
    its elements are.  This used to be internal to initializer_constant_valid_p
@@ -402,6 +417,9 @@ extern const char *user_label_prefix;
 /* Default target function prologue and epilogue assembler output.  */
 extern void default_function_pro_epilogue (FILE *, HOST_WIDE_INT);
 
+/* Default target function switched text sections.  */
+extern void default_function_switched_text_sections (FILE *, tree, bool);
+
 /* Default target hook that outputs nothing to a stream.  */
 extern void no_asm_to_stream (FILE *);
 
@@ -423,7 +441,8 @@ extern void no_asm_to_stream (FILE *);
 #define SECTION_DECLARED 0x100000	/* section has been used */
 #define SECTION_STYLE_MASK 0x600000	/* bits used for SECTION_STYLE */
 #define SECTION_COMMON   0x800000	/* contains common data */
-#define SECTION_MACH_DEP 0x1000000	/* subsequent bits reserved for target */
+#define SECTION_RELRO	 0x1000000	/* data is readonly after relocation processing */
+#define SECTION_MACH_DEP 0x2000000	/* subsequent bits reserved for target */
 
 /* This SECTION_STYLE is used for unnamed sections that we can switch
    to using a special assembler directive.  */
@@ -472,10 +491,7 @@ enum section_category
 
   SECCAT_BSS,
   SECCAT_SBSS,
-  SECCAT_TBSS,
-
-  SECCAT_EMUTLS_VAR,
-  SECCAT_EMUTLS_TMPL
+  SECCAT_TBSS
 };
 
 /* Information that is provided by all instances of the section type.  */
@@ -570,6 +586,7 @@ extern section *get_unnamed_section (unsigned int, void (*) (const void *),
 				     const void *);
 extern section *get_section (const char *, unsigned int, tree);
 extern section *get_named_section (tree, const char *, int);
+extern section *get_variable_section (tree, bool);
 extern void place_block_symbol (rtx);
 extern rtx get_section_anchor (struct object_block *, HOST_WIDE_INT,
 			       enum tls_model);
@@ -587,6 +604,9 @@ extern section *get_cdtor_priority_section (int, bool);
 extern bool unlikely_text_section_p (section *);
 extern void switch_to_section (section *);
 extern void output_section_asm_op (const void *);
+
+extern void default_asm_output_source_filename (FILE *, const char *);
+extern void output_file_directive (FILE *, const char *);
 
 extern unsigned int default_section_type_flags (tree, const char *, int);
 
@@ -623,15 +643,23 @@ extern void default_globalize_label (FILE *, const char *);
 extern void default_globalize_decl_name (FILE *, tree);
 extern void default_emit_unwind_label (FILE *, tree, int, int);
 extern void default_emit_except_table_label (FILE *);
+extern void default_generate_internal_label (char *, const char *,
+					     unsigned long);
 extern void default_internal_label (FILE *, const char *, unsigned long);
+extern void default_asm_declare_constant_name (FILE *, const char *,
+					       const_tree, HOST_WIDE_INT);
 extern void default_file_start (void);
 extern void file_end_indicate_exec_stack (void);
+extern void file_end_indicate_split_stack (void);
 
 extern void default_elf_asm_output_external (FILE *file, tree,
 					     const char *);
 extern int maybe_assemble_visibility (tree);
 
 extern int default_address_cost (rtx, bool);
+
+/* Output stack usage information.  */
+extern void output_stack_usage (void);
 
 /* dbxout helper functions */
 #if defined DBX_DEBUGGING_INFO || defined XCOFF_DEBUGGING_INFO

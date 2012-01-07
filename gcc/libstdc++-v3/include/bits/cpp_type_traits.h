@@ -23,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file cpp_type_traits.h
+/** @file bits/cpp_type_traits.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{ext/type_traits}
  */
 
 // Written by Gabriel Dos Reis <dosreis@cmla.ens-cachan.fr>
@@ -66,14 +66,19 @@
 //
 
 // Forward declaration hack, should really include this from somewhere.
-_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Iterator, typename _Container>
     class __normal_iterator;
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   struct __true_type { };
   struct __false_type { };
@@ -414,34 +419,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     };
 #endif
 
-  template<typename _Tp>
-    class __is_iterator_helper
-    {
-      typedef char __one;
-      typedef struct { char __arr[2]; } __two;
-
-      template<typename _Up>
-        struct _Wrap_type
-	{ };
-
-      template<typename _Up>
-        static __one __test(_Wrap_type<typename _Up::iterator_category>*);
-
-      template<typename _Up>
-        static __two __test(...);
-
-    public:
-      static const bool __value = (sizeof(__test<_Tp>(0)) == 1
-				   || __is_pointer<_Tp>::__value);
-    };
-
-  template<typename _Tp>
-    struct __is_iterator
-    {
-      enum { __value = __is_iterator_helper<_Tp>::__value };
-      typedef typename __truth_type<__value>::__type __type;
-    };
-
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif //_CPP_TYPE_TRAITS_H

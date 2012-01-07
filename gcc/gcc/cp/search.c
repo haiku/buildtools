@@ -1,7 +1,7 @@
 /* Breadth-first and depth-first routines for
    searching multiple-inheritance lattice for GNU C++.
    Copyright (C) 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   1999, 2000, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
@@ -30,9 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "cp-tree.h"
 #include "intl.h"
-#include "obstack.h"
 #include "flags.h"
-#include "rtl.h"
 #include "output.h"
 #include "toplev.h"
 #include "target.h"
@@ -172,7 +170,7 @@ accessible_base_p (tree t, tree base, bool consider_local_p)
      public typedef created in the scope of every class.  */
   decl = TYPE_FIELDS (base);
   while (!DECL_SELF_REFERENCE_P (decl))
-    decl = TREE_CHAIN (decl);
+    decl = DECL_CHAIN (decl);
   while (ANON_AGGR_TYPE_P (t))
     t = TYPE_CONTEXT (t);
   return accessible_p (t, decl, consider_local_p);
@@ -218,8 +216,7 @@ lookup_base (tree t, tree base, base_access access, base_kind *kind_ptr)
 
   /* If BASE is incomplete, it can't be a base of T--and instantiating it
      might cause an error.  */
-  if (t_binfo && CLASS_TYPE_P (base)
-      && (COMPLETE_TYPE_P (base) || TYPE_BEING_DEFINED (base)))
+  if (t_binfo && CLASS_TYPE_P (base) && COMPLETE_OR_OPEN_TYPE_P (base))
     {
       struct lookup_base_data_s data;
 
@@ -450,7 +447,7 @@ lookup_field_1 (tree type, tree name, bool want_type)
 #ifdef GATHER_STATISTICS
   n_calls_lookup_field_1++;
 #endif /* GATHER_STATISTICS */
-  for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+  for (field = TYPE_FIELDS (type); field; field = DECL_CHAIN (field))
     {
 #ifdef GATHER_STATISTICS
       n_fields_searched++;
@@ -973,6 +970,7 @@ shared_member_p (tree t)
     return 1;
   if (is_overloaded_fn (t))
     {
+      t = get_fns (t);
       for (; t; t = OVL_NEXT (t))
 	{
 	  tree fn = OVL_CURRENT (t);
@@ -1337,7 +1335,7 @@ lookup_conversion_operator (tree class_type, tree type)
 }
 
 /* TYPE is a class type. Return the index of the fields within
-   the method vector with name NAME, or -1 is no such field exists.  */
+   the method vector with name NAME, or -1 if no such field exists.  */
 
 int
 lookup_fnfields_1 (tree type, tree name)
@@ -1363,9 +1361,13 @@ lookup_fnfields_1 (tree type, tree name)
 	  if (CLASSTYPE_LAZY_MOVE_CTOR (type))
 	    lazily_declare_fn (sfk_move_constructor, type);
 	}
-      else if (name == ansi_assopname(NOP_EXPR)
-	       && CLASSTYPE_LAZY_ASSIGNMENT_OP (type))
-	lazily_declare_fn (sfk_assignment_operator, type);
+      else if (name == ansi_assopname (NOP_EXPR))
+	{
+	  if (CLASSTYPE_LAZY_COPY_ASSIGN (type))
+	    lazily_declare_fn (sfk_copy_assignment, type);
+	  if (CLASSTYPE_LAZY_MOVE_ASSIGN (type))
+	    lazily_declare_fn (sfk_move_assignment, type);
+	}
       else if ((name == dtor_identifier
 		|| name == base_dtor_identifier
 		|| name == complete_dtor_identifier
@@ -1441,6 +1443,18 @@ lookup_fnfields_1 (tree type, tree name)
       }
 
   return -1;
+}
+
+/* TYPE is a class type. Return the field within the method vector with
+   name NAME, or NULL_TREE if no such field exists.  */
+
+tree
+lookup_fnfields_slot (tree type, tree name)
+{
+  int ix = lookup_fnfields_1 (type, name);
+  if (ix < 0)
+    return NULL_TREE;
+  return VEC_index (tree, CLASSTYPE_METHOD_VEC (type), ix);
 }
 
 /* Like lookup_fnfields_1, except that the name is extracted from
@@ -1821,11 +1835,17 @@ check_final_overrider (tree overrider, tree basefn)
 
       if (CLASS_TYPE_P (base_return) && CLASS_TYPE_P (over_return))
 	{
-	  tree binfo = lookup_base (over_return, base_return,
-				    ba_check | ba_quiet, NULL);
+	  /* Strictly speaking, the standard requires the return type to be
+	     complete even if it only differs in cv-quals, but that seems
+	     like a bug in the wording.  */
+	  if (!same_type_ignoring_top_level_qualifiers_p (base_return, over_return))
+	    {
+	      tree binfo = lookup_base (over_return, base_return,
+					ba_check | ba_quiet, NULL);
 
-	  if (!binfo)
-	    fail = 1;
+	      if (!binfo)
+		fail = 1;
+	    }
 	}
       else if (!pedantic
 	       && can_convert (TREE_TYPE (base_type), TREE_TYPE (over_type)))
@@ -1868,7 +1888,7 @@ check_final_overrider (tree overrider, tree basefn)
     }
 
   /* Check throw specifier is at least as strict.  */
-  if (!comp_except_specs (base_throw, over_throw, 0))
+  if (!comp_except_specs (base_throw, over_throw, ce_derived))
     {
       error ("looser throw specifier for %q+#F", overrider);
       error ("  overriding %q+#F", basefn);
@@ -1891,6 +1911,7 @@ check_final_overrider (tree overrider, tree basefn)
 	{
 	  error ("deleted function %q+D", overrider);
 	  error ("overriding non-deleted function %q+D", basefn);
+	  maybe_explain_implicit_delete (overrider);
 	}
       else
 	{
@@ -1919,6 +1940,11 @@ look_for_overrides (tree type, tree fndecl)
   tree base_binfo;
   int ix;
   int found = 0;
+
+  /* A constructor for a class T does not override a function T
+     in a base class.  */
+  if (DECL_CONSTRUCTOR_P (fndecl))
+    return 0;
 
   for (ix = 0; BINFO_BASE_ITERATE (binfo, ix, base_binfo); ix++)
     {

@@ -322,6 +322,9 @@ static struct demangle_component *
 d_make_name (struct d_info *, const char *, int);
 
 static struct demangle_component *
+d_make_demangle_mangled_name (struct d_info *, const char *);
+
+static struct demangle_component *
 d_make_builtin_type (struct d_info *,
                      const struct demangle_builtin_type_info *);
 
@@ -415,6 +418,9 @@ static int d_discriminator (struct d_info *);
 static struct demangle_component *d_lambda (struct d_info *);
 
 static struct demangle_component *d_unnamed_type (struct d_info *);
+
+static struct demangle_component *
+d_clone_suffix (struct d_info *, struct demangle_component *);
 
 static int
 d_add_substitution (struct d_info *, struct demangle_component *);
@@ -801,6 +807,7 @@ d_make_comp (struct d_info *di, enum demangle_component_type type,
     case DEMANGLE_COMPONENT_LITERAL_NEG:
     case DEMANGLE_COMPONENT_COMPOUND_NAME:
     case DEMANGLE_COMPONENT_VECTOR_TYPE:
+    case DEMANGLE_COMPONENT_CLONE:
       if (left == NULL || right == NULL)
 	return NULL;
       break;
@@ -867,6 +874,17 @@ d_make_comp (struct d_info *di, enum demangle_component_type type,
       p->u.s_binary.right = right;
     }
   return p;
+}
+
+/* Add a new demangle mangled name component.  */
+
+static struct demangle_component *
+d_make_demangle_mangled_name (struct d_info *di, const char *s)
+{
+  if (d_peek_char (di) != '_' || d_peek_next_char (di) != 'Z')
+    return d_make_name (di, s, strlen (s));
+  d_advance (di, 2);
+  return d_encoding (di, 0);
 }
 
 /* Add a new name component.  */
@@ -1022,7 +1040,7 @@ d_make_sub (struct d_info *di, const char *name, int len)
   return p;
 }
 
-/* <mangled-name> ::= _Z <encoding>
+/* <mangled-name> ::= _Z <encoding> [<clone-suffix>]*
 
    TOP_LEVEL is non-zero when called at the top level.  */
 
@@ -1030,6 +1048,8 @@ CP_STATIC_IF_GLIBCPP_V3
 struct demangle_component *
 cplus_demangle_mangled_name (struct d_info *di, int top_level)
 {
+  struct demangle_component *p;
+
   if (! d_check_char (di, '_')
       /* Allow missing _ if not at toplevel to work around a
 	 bug in G++ abi-version=2 mangling; see the comment in
@@ -1038,7 +1058,18 @@ cplus_demangle_mangled_name (struct d_info *di, int top_level)
     return NULL;
   if (! d_check_char (di, 'Z'))
     return NULL;
-  return d_encoding (di, top_level);
+  p = d_encoding (di, top_level);
+
+  /* If at top level and parsing parameters, check for a clone
+     suffix.  */
+  if (top_level && (di->options & DMGL_PARAMS) != 0)
+    while (d_peek_char (di) == '.'
+	   && (IS_LOWER (d_peek_next_char (di))
+	       || d_peek_next_char (di) == '_'
+	       || IS_DIGIT (d_peek_next_char (di))))
+      p = d_clone_suffix (di, p);
+
+  return p;
 }
 
 /* Return whether a function should have a return type.  The argument
@@ -1989,6 +2020,8 @@ cplus_demangle_builtin_types[D_BUILTIN_TYPE_COUNT] =
   /* 29 */ { NL ("half"),	NL ("half"),		D_PRINT_FLOAT },
   /* 30 */ { NL ("char16_t"),	NL ("char16_t"),	D_PRINT_DEFAULT },
   /* 31 */ { NL ("char32_t"),	NL ("char32_t"),	D_PRINT_DEFAULT },
+  /* 32 */ { NL ("decltype(nullptr)"),	NL ("decltype(nullptr)"),
+	     D_PRINT_DEFAULT },
 };
 
 CP_STATIC_IF_GLIBCPP_V3
@@ -2223,6 +2256,12 @@ cplus_demangle_type (struct d_info *di)
 	  ret = d_vector_type (di);
 	  break;
 
+        case 'n':
+          /* decltype(nullptr) */
+	  ret = d_make_builtin_type (di, &cplus_demangle_builtin_types[32]);
+	  di->expansion += ret->u.s_builtin.type->len;
+	  break;
+
 	default:
 	  return NULL;
 	}
@@ -2324,7 +2363,7 @@ d_parmlist (struct d_info *di)
       struct demangle_component *type;
 
       char peek = d_peek_char (di);
-      if (peek == '\0' || peek == 'E')
+      if (peek == '\0' || peek == 'E' || peek == '.')
 	break;
       type = cplus_demangle_type (di);
       if (type == NULL)
@@ -3044,6 +3083,33 @@ d_unnamed_type (struct d_info *di)
   return ret;
 }
 
+/* <clone-suffix> ::= [ . <clone-type-identifier> ] [ . <nonnegative number> ]*
+*/
+
+static struct demangle_component *
+d_clone_suffix (struct d_info *di, struct demangle_component *encoding)
+{
+  const char *suffix = d_str (di);
+  const char *pend = suffix;
+  struct demangle_component *n;
+
+  if (*pend == '.' && (IS_LOWER (pend[1]) || pend[1] == '_'))
+    {
+      pend += 2;
+      while (IS_LOWER (*pend) || *pend == '_')
+	++pend;
+    }
+  while (*pend == '.' && IS_DIGIT (pend[1]))
+    {
+      pend += 2;
+      while (IS_DIGIT (*pend))
+	++pend;
+    }
+  d_advance (di, pend - suffix);
+  n = d_make_name (di, suffix, pend - suffix);
+  return d_make_comp (di, DEMANGLE_COMPONENT_CLONE, encoding, n);
+}
+
 /* Add a new substitution.  */
 
 static int
@@ -3472,6 +3538,7 @@ d_find_pack (struct d_print_info *dpi,
     case DEMANGLE_COMPONENT_PACK_EXPANSION:
       return NULL;
       
+    case DEMANGLE_COMPONENT_LAMBDA:
     case DEMANGLE_COMPONENT_NAME:
     case DEMANGLE_COMPONENT_OPERATOR:
     case DEMANGLE_COMPONENT_BUILTIN_TYPE:
@@ -4320,6 +4387,13 @@ d_print_comp (struct d_print_info *dpi,
       d_append_char (dpi, '}');
       return;
 
+    case DEMANGLE_COMPONENT_CLONE:
+      d_print_comp (dpi, d_left (dc));
+      d_append_string (dpi, " [clone ");
+      d_print_comp (dpi, d_right (dc));
+      d_append_char (dpi, ']');
+      return;
+
     default:
       d_print_error (dpi);
       return;
@@ -4537,20 +4611,17 @@ d_print_function_type (struct d_print_info *dpi,
                        struct d_print_mod *mods)
 {
   int need_paren;
-  int saw_mod;
   int need_space;
   struct d_print_mod *p;
   struct d_print_mod *hold_modifiers;
 
   need_paren = 0;
-  saw_mod = 0;
   need_space = 0;
   for (p = mods; p != NULL; p = p->next)
     {
       if (p->printed)
 	break;
 
-      saw_mod = 1;
       switch (p->mod->type)
 	{
 	case DEMANGLE_COMPONENT_POINTER:
@@ -4578,9 +4649,6 @@ d_print_function_type (struct d_print_info *dpi,
       if (need_paren)
 	break;
     }
-
-  if (d_left (dc) != NULL && ! saw_mod)
-    need_paren = 1;
 
   if (need_paren)
     {
@@ -4820,7 +4888,7 @@ d_demangle_callback (const char *mangled, int options,
 			  (type == DCT_GLOBAL_CTORS
 			   ? DEMANGLE_COMPONENT_GLOBAL_CONSTRUCTORS
 			   : DEMANGLE_COMPONENT_GLOBAL_DESTRUCTORS),
-			  d_make_name (&di, d_str (&di), strlen (d_str (&di))),
+			  d_make_demangle_mangled_name (&di, d_str (&di)),
 			  NULL);
 	d_advance (&di, strlen (d_str (&di)));
 	break;

@@ -1,5 +1,5 @@
 /* Thread edges through blocks and update the control flow and SSA graphs.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation,
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2010 Free Software Foundation,
    Inc.
 
 This file is part of GCC.
@@ -24,14 +24,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "flags.h"
-#include "rtl.h"
 #include "tm_p.h"
-#include "ggc.h"
 #include "basic-block.h"
 #include "output.h"
-#include "expr.h"
 #include "function.h"
-#include "diagnostic.h"
 #include "tree-flow.h"
 #include "tree-dump.h"
 #include "tree-pass.h"

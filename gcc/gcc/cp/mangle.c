@@ -1,6 +1,6 @@
 /* Name mangling for the 3.0 C++ ABI.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
-   Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010,
+   2011  Free Software Foundation, Inc.
    Written by Alex Samuel <samuel@codesourcery.com>
 
    This file is part of GCC.
@@ -52,10 +52,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "tm_p.h"
 #include "cp-tree.h"
-#include "real.h"
 #include "obstack.h"
-#include "toplev.h"
-#include "varray.h"
 #include "flags.h"
 #include "target.h"
 #include "cgraph.h"
@@ -98,6 +95,9 @@ typedef struct GTY(()) globals {
 
   /* The entity that is being mangled.  */
   tree GTY ((skip)) entity;
+
+  /* How many parameter scopes we are inside.  */
+  int parm_depth;
 
   /* True if the mangling will be different in a future version of the
      ABI.  */
@@ -150,7 +150,9 @@ integer_type_codes[itk_none] =
   'l',  /* itk_long */
   'm',  /* itk_unsigned_long */
   'x',  /* itk_long_long */
-  'y'   /* itk_unsigned_long_long */
+  'y',  /* itk_unsigned_long_long */
+  'n',  /* itk_int128 */
+  'o',  /* itk_unsigned_int128  */
 };
 
 static int decl_is_template_id (const tree, tree* const);
@@ -307,7 +309,7 @@ dump_substitution_candidates (void)
   tree el;
 
   fprintf (stderr, "  ++ substitutions  ");
-  for (i = 0; VEC_iterate (tree, G.substitutions, i, el); ++i)
+  FOR_EACH_VEC_ELT (tree, G.substitutions, i, el)
     {
       const char *name = "???";
 
@@ -346,11 +348,19 @@ canonicalize_for_substitution (tree node)
   if (TYPE_P (node)
       && TYPE_CANONICAL (node) != node
       && TYPE_MAIN_VARIANT (node) != node)
+    {
       /* Here we want to strip the topmost typedef only.
          We need to do that so is_std_substitution can do proper
          name matching.  */
-    node = cp_build_qualified_type (TYPE_MAIN_VARIANT (node),
-                                    cp_type_quals (node));
+      if (TREE_CODE (node) == FUNCTION_TYPE)
+	/* Use build_qualified_type and TYPE_QUALS here to preserve
+	   the old buggy mangling of attribute noreturn with abi<5.  */
+	node = build_qualified_type (TYPE_MAIN_VARIANT (node),
+				     TYPE_QUALS (node));
+      else
+	node = cp_build_qualified_type (TYPE_MAIN_VARIANT (node),
+					cp_type_quals (node));
+    }
   return node;
 }
 
@@ -379,7 +389,7 @@ add_substitution (tree node)
     int i;
     tree candidate;
 
-    for (i = 0; VEC_iterate (tree, G.substitutions, i, candidate); i++)
+    FOR_EACH_VEC_ELT (tree, G.substitutions, i, candidate)
       {
 	gcc_assert (!(DECL_P (node) && node == candidate));
 	gcc_assert (!(TYPE_P (node) && TYPE_P (candidate)
@@ -933,7 +943,7 @@ write_nested_name (const tree decl)
   else
     {
       /* No, just use <prefix>  */
-      write_prefix (DECL_CONTEXT (decl));
+      write_prefix (CP_DECL_CONTEXT (decl));
       write_unqualified_name (decl);
     }
   write_char ('E');
@@ -1281,7 +1291,7 @@ nested_anon_class_index (tree type)
 {
   int index = 0;
   tree member = TYPE_FIELDS (TYPE_CONTEXT (type));
-  for (; member; member = TREE_CHAIN (member))
+  for (; member; member = DECL_CHAIN (member))
     if (DECL_IMPLICIT_TYPEDEF_P (member))
       {
 	tree memtype = TREE_TYPE (member);
@@ -1711,7 +1721,7 @@ write_local_name (tree function, const tree local_entity,
     {
       tree t;
       int i = 0;
-      for (t = DECL_ARGUMENTS (function); t; t = TREE_CHAIN (t))
+      for (t = DECL_ARGUMENTS (function); t; t = DECL_CHAIN (t))
 	{
 	  if (t == parm)
 	    i = 1;
@@ -1760,6 +1770,7 @@ write_local_name (tree function, const tree local_entity,
      <type> ::= Dt <expression> # decltype of an id-expression or 
                                 # class member access
      <type> ::= DT <expression> # decltype of an expression
+     <type> ::= Dn              # decltype of nullptr
 
    TYPE is a type node.  */
 
@@ -1775,14 +1786,10 @@ write_type (tree type)
   if (type == error_mark_node)
     return;
 
+  type = canonicalize_for_substitution (type);
   if (find_substitution (type))
     return;
 
-  /* According to the C++ ABI, some library classes are passed the
-     same as the scalar type of their single member and use the same
-     mangling.  */
-  if (TREE_CODE (type) == RECORD_TYPE && TYPE_TRANSPARENT_AGGR (type))
-    type = TREE_TYPE (first_field (type));
 
   if (write_CV_qualifiers_for_type (type) > 0)
     /* If TYPE was CV-qualified, we just wrote the qualifiers; now
@@ -1801,6 +1808,12 @@ write_type (tree type)
 
       /* See through any typedefs.  */
       type = TYPE_MAIN_VARIANT (type);
+
+      /* According to the C++ ABI, some library classes are passed the
+	 same as the scalar type of their single member and use the same
+	 mangling.  */
+      if (TREE_CODE (type) == RECORD_TYPE && TYPE_TRANSPARENT_AGGR (type))
+	type = TREE_TYPE (first_field (type));
 
       if (TYPE_PTRMEM_P (type))
 	write_pointer_to_member_type (type);
@@ -1868,16 +1881,25 @@ write_type (tree type)
 	      break;
 
 	    case POINTER_TYPE:
-	      write_char ('P');
-	      write_type (TREE_TYPE (type));
-	      break;
-
 	    case REFERENCE_TYPE:
-	      if (TYPE_REF_IS_RVALUE (type))
-        	write_char('O');
+	      if (TREE_CODE (type) == POINTER_TYPE)
+		write_char ('P');
+	      else if (TYPE_REF_IS_RVALUE (type))
+		write_char ('O');
               else
                 write_char ('R');
-	      write_type (TREE_TYPE (type));
+	      {
+		tree target = TREE_TYPE (type);
+		/* Attribute const/noreturn are not reflected in mangling.
+		   We strip them here rather than at a lower level because
+		   a typedef or template argument can have function type
+		   with function-cv-quals (that use the same representation),
+		   but you can't have a pointer/reference to such a type.  */
+		if (abi_version_at_least (5)
+		    && TREE_CODE (target) == FUNCTION_TYPE)
+		  target = build_qualified_type (target, TYPE_UNQUALIFIED);
+		write_type (target);
+	      }
 	      break;
 
 	    case TEMPLATE_TYPE_PARM:
@@ -1922,6 +1944,35 @@ write_type (tree type)
 	      gcc_assert (!DECLTYPE_FOR_LAMBDA_CAPTURE (type)
 			  && !DECLTYPE_FOR_LAMBDA_RETURN (type));
 
+	      /* In ABI <5, we stripped decltype of a plain decl.  */
+	      if (!abi_version_at_least (5)
+		  && DECLTYPE_TYPE_ID_EXPR_OR_MEMBER_ACCESS_P (type))
+		{
+		  tree expr = DECLTYPE_TYPE_EXPR (type);
+		  tree etype = NULL_TREE;
+		  switch (TREE_CODE (expr))
+		    {
+		    case VAR_DECL:
+		    case PARM_DECL:
+		    case RESULT_DECL:
+		    case FUNCTION_DECL:
+		    case CONST_DECL:
+		    case TEMPLATE_PARM_INDEX:
+		      etype = TREE_TYPE (expr);
+		      break;
+
+		    default:
+		      break;
+		    }
+
+		  if (etype && !type_uses_auto (etype))
+		    {
+		      G.need_abi_warning = 1;
+		      write_type (etype);
+		      return;
+		    }
+		}
+
               write_char ('D');
               if (DECLTYPE_TYPE_ID_EXPR_OR_MEMBER_ACCESS_P (type))
                 write_char ('t');
@@ -1933,9 +1984,16 @@ write_type (tree type)
               write_char ('E');
               break;
 
+	    case NULLPTR_TYPE:
+	      write_string ("Dn");
+	      break;
+
 	    case TYPEOF_TYPE:
 	      sorry ("mangling typeof, use decltype instead");
 	      break;
+
+	    case LANG_TYPE:
+	      /* fall through.  */
 
 	    default:
 	      gcc_unreachable ();
@@ -1967,18 +2025,19 @@ write_CV_qualifiers_for_type (const tree type)
      Note that we do not use cp_type_quals below; given "const
      int[3]", the "const" is emitted with the "int", not with the
      array.  */
+  cp_cv_quals quals = TYPE_QUALS (type);
 
-  if (TYPE_QUALS (type) & TYPE_QUAL_RESTRICT)
+  if (quals & TYPE_QUAL_RESTRICT)
     {
       write_char ('r');
       ++num_qualifiers;
     }
-  if (TYPE_QUALS (type) & TYPE_QUAL_VOLATILE)
+  if (quals & TYPE_QUAL_VOLATILE)
     {
       write_char ('V');
       ++num_qualifiers;
     }
-  if (TYPE_QUALS (type) & TYPE_QUAL_CONST)
+  if (quals & TYPE_QUAL_CONST)
     {
       write_char ('K');
       ++num_qualifiers;
@@ -2045,7 +2104,8 @@ write_builtin_type (tree type)
 	     it in the array of these nodes.  */
 	iagain:
 	  for (itk = 0; itk < itk_none; ++itk)
-	    if (type == integer_types[itk])
+	    if (integer_types[itk] != NULL_TREE
+		&& type == integer_types[itk])
 	      {
 		/* Print the corresponding single-letter code.  */
 		write_char (integer_type_codes[itk]);
@@ -2246,9 +2306,11 @@ write_bare_function_type (const tree type, const int include_return_type_p,
     write_type (TREE_TYPE (type));
 
   /* Now mangle the types of the arguments.  */
+  ++G.parm_depth;
   write_method_parms (TYPE_ARG_TYPES (type),
 		      TREE_CODE (type) == METHOD_TYPE,
 		      decl);
+  --G.parm_depth;
 }
 
 /* Write the mangled representation of a method parameter list of
@@ -2277,12 +2339,12 @@ write_method_parms (tree parm_types, const int method_p, const tree decl)
   if (method_p)
     {
       parm_types = TREE_CHAIN (parm_types);
-      parm_decl = parm_decl ? TREE_CHAIN (parm_decl) : NULL_TREE;
+      parm_decl = parm_decl ? DECL_CHAIN (parm_decl) : NULL_TREE;
 
       while (parm_decl && DECL_ARTIFICIAL (parm_decl))
 	{
 	  parm_types = TREE_CHAIN (parm_types);
-	  parm_decl = TREE_CHAIN (parm_decl);
+	  parm_decl = DECL_CHAIN (parm_decl);
 	}
     }
 
@@ -2434,8 +2496,28 @@ write_expression (tree expr)
     {
       /* A function parameter used in a late-specified return type.  */
       int index = DECL_PARM_INDEX (expr);
+      int level = DECL_PARM_LEVEL (expr);
+      int delta = G.parm_depth - level + 1;
       gcc_assert (index >= 1);
-      write_string ("fp");
+      write_char ('f');
+      if (delta != 0)
+	{
+	  if (abi_version_at_least (5))
+	    {
+	      /* Let L be the number of function prototype scopes from the
+		 innermost one (in which the parameter reference occurs) up
+		 to (and including) the one containing the declaration of
+		 the referenced parameter.  If the parameter declaration
+		 clause of the innermost function prototype scope has been
+		 completely seen, it is not counted (in that case -- which
+		 is perhaps the most common -- L can be zero).  */
+	      write_char ('L');
+	      write_unsigned_number (delta - 1);
+	    }
+	  else
+	    G.need_abi_warning = true;
+	}
+      write_char ('p');
       write_compact_number (index - 1);
     }
   else if (DECL_P (expr))
@@ -2465,7 +2547,7 @@ write_expression (tree expr)
       tree scope = TREE_OPERAND (expr, 0);
       tree member = TREE_OPERAND (expr, 1);
 
-      if (!abi_version_at_least (2))
+      if (!abi_version_at_least (2) && DECL_P (member))
 	{
 	  write_string ("sr");
 	  write_type (scope);
@@ -3089,7 +3171,7 @@ mangle_decl (const tree decl)
       if (vague_linkage_p (decl))
 	DECL_WEAK (alias) = 1;
       if (TREE_CODE (decl) == FUNCTION_DECL)
-	cgraph_same_body_alias (alias, decl);
+	cgraph_same_body_alias (cgraph_node (decl), alias, decl);
       else
 	varpool_extra_name_alias (alias, decl);
 #endif

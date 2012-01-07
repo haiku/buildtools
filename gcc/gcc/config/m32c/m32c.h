@@ -1,5 +1,5 @@
 /* Target Definitions for R8C/M16C/M32C
-   Copyright (C) 2005, 2007, 2008, 2009
+   Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Red Hat.
 
@@ -27,6 +27,13 @@
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "crt0.o%s crtbegin.o%s"
 
+#undef  ENDFILE_SPEC
+#define ENDFILE_SPEC "crtend.o%s crtn.o%s"
+
+#undef  LINK_SPEC
+#define LINK_SPEC "%{h*} %{v:-V} \
+		   %{static:-Bstatic} %{shared:-shared} %{symbolic:-Bsymbolic}"
+
 /* There are four CPU series we support, but they basically break down
    into two families - the R8C/M16C families, with 16-bit address
    registers and one set of opcodes, and the M32CM/M32C group, with
@@ -47,13 +54,13 @@
    family.  Most of the logic here is making sure we do the right
    thing when no CPU is specified, which defaults to R8C.  */
 #undef  LIB_SPEC
-#define LIB_SPEC "-( -lc %{msim*:-lsim}%{!msim*:-lnosys} -) \
-%{msim*:%{!T*: %{mcpu=m32cm:%Tsim24.ld}%{mcpu=m32c:%Tsim24.ld} \
-	%{!mcpu=m32cm:%{!mcpu=m32c:%Tsim16.ld}}}} \
-%{!T*:%{!msim*: %{mcpu=m16c:%Tm16c.ld} \
-		%{mcpu=m32cm:%Tm32cm.ld} \
-		%{mcpu=m32c:%Tm32c.ld} \
-		%{!mcpu=m16c:%{!mcpu=m32cm:%{!mcpu=m32c:%Tr8c.ld}}}}} \
+#define LIB_SPEC "-( -lc %{msim:-lsim}%{!msim:-lnosys} -) \
+%{msim:%{!T*: %{mcpu=m32cm:%Tsim24.ld}%{mcpu=m32c:%Tsim24.ld} \
+       %{!mcpu=m32cm:%{!mcpu=m32c:%Tsim16.ld}}}} \
+%{!T*:%{!msim: %{mcpu=m16c:%Tm16c.ld} \
+	       %{mcpu=m32cm:%Tm32cm.ld} \
+	       %{mcpu=m32c:%Tm32c.ld} \
+	       %{!mcpu=m16c:%{!mcpu=m32cm:%{!mcpu=m32c:%Tr8c.ld}}}}} \
 "
 
 /* Run-time Target Specification */
@@ -95,8 +102,6 @@ extern int target_memregs;
 #define TARGET_A24	(TARGET_M32CM || TARGET_M32C)
 
 #define TARGET_VERSION fprintf (stderr, " (m32c)");
-
-#define OVERRIDE_OPTIONS m32c_override_options ()
 
 /* Defining data structures for per-function information */
 
@@ -192,6 +197,15 @@ machine_function;
 #undef UINTPTR_TYPE
 #define UINTPTR_TYPE (TARGET_A16 ? "unsigned int" : "long unsigned int")
 
+#undef  SIZE_TYPE
+#define SIZE_TYPE "unsigned int"
+
+#undef  WCHAR_TYPE
+#define WCHAR_TYPE "long int"
+
+#undef  WCHAR_TYPE_SIZE
+#define WCHAR_TYPE_SIZE BITS_PER_WORD
+
 /* REGISTER USAGE */
 
 /* Register Basics */
@@ -229,8 +243,6 @@ machine_function;
 			      1, 1, 1, 0, \
 			      1, 1, 1, 1, \
 			      1, 1, 1, 1, 1, 1, 1, 1 }
-
-#define CONDITIONAL_REGISTER_USAGE m32c_conditional_register_usage ();
 
 /* The *_REGNO theme matches m32c.md and most register number
    arguments; the PC_REGNUM is the odd one out.  */
@@ -410,20 +422,20 @@ enum reg_class
 	 : (CHAR) == 'A' ? 2 \
 	 : DEFAULT_CONSTRAINT_LEN(CHAR,STR))
 #define REG_CLASS_FROM_CONSTRAINT(CHAR,STR) \
-	m32c_reg_class_from_constraint (CHAR, STR)
+	(enum reg_class) m32c_reg_class_from_constraint (CHAR, STR)
 
 #define REGNO_OK_FOR_BASE_P(NUM) m32c_regno_ok_for_base_p (NUM)
 #define REGNO_OK_FOR_INDEX_P(NUM) 0
 
 #define PREFERRED_RELOAD_CLASS(X,CLASS) m32c_preferred_reload_class (X, CLASS)
 #define PREFERRED_OUTPUT_RELOAD_CLASS(X,CLASS) m32c_preferred_output_reload_class (X, CLASS)
-#define LIMIT_RELOAD_CLASS(MODE,CLASS) m32c_limit_reload_class (MODE, CLASS)
+#define LIMIT_RELOAD_CLASS(MODE,CLASS) \
+  (enum reg_class) m32c_limit_reload_class (MODE, CLASS)
 
-#define SECONDARY_RELOAD_CLASS(CLASS,MODE,X) m32c_secondary_reload_class (CLASS, MODE, X)
+#define SECONDARY_RELOAD_CLASS(CLASS,MODE,X) \
+  (enum reg_class) m32c_secondary_reload_class (CLASS, MODE, X)
 
-#define SMALL_REGISTER_CLASSES 1
-
-#define CLASS_LIKELY_SPILLED_P(C) m32c_class_likely_spilled_p (C)
+#define TARGET_SMALL_REGISTER_CLASSES_FOR_MODE_P hook_bool_mode_true
 
 #define CLASS_MAX_NREGS(C,M) m32c_class_max_nregs (C, M)
 
@@ -503,13 +515,9 @@ enum reg_class
 
 #define PUSH_ARGS 1
 #define PUSH_ROUNDING(N) m32c_push_rounding (N)
-#define RETURN_POPS_ARGS(D,T,S) 0
 #define CALL_POPS_ARGS(C) 0
 
 /* Passing Arguments in Registers */
-
-#define FUNCTION_ARG(CA,MODE,TYPE,NAMED) \
-	m32c_function_arg (&(CA),MODE,TYPE,NAMED)
 
 typedef struct m32c_cumulative_args
 {
@@ -526,14 +534,7 @@ typedef struct m32c_cumulative_args
 #define CUMULATIVE_ARGS m32c_cumulative_args
 #define INIT_CUMULATIVE_ARGS(CA,FNTYPE,LIBNAME,FNDECL,N_NAMED_ARGS) \
 	m32c_init_cumulative_args (&(CA),FNTYPE,LIBNAME,FNDECL,N_NAMED_ARGS)
-#define FUNCTION_ARG_ADVANCE(CA,MODE,TYPE,NAMED) \
-	m32c_function_arg_advance (&(CA),MODE,TYPE,NAMED)
-#define FUNCTION_ARG_BOUNDARY(MODE,TYPE) (TARGET_A16 ? 8 : 16)
 #define FUNCTION_ARG_REGNO_P(r) m32c_function_arg_regno_p (r)
-
-/* How Scalar Function Values Are Returned */
-
-#define FUNCTION_VALUE_REGNO_P(r) m32c_function_value_regno_p (r)
 
 /* How Large Values Are Returned */
 
@@ -581,16 +582,13 @@ typedef struct m32c_cumulative_args
 
 #define LEGITIMATE_CONSTANT_P(X) m32c_legitimate_constant_p (X)
 
+/* Address spaces.  */
+#define ADDR_SPACE_FAR	1
+
+
 /* Condition Code Status */
 
 #define REVERSIBLE_CC_MODE(MODE) 1
-
-/* Describing Relative Costs of Operations */
-
-#define REGISTER_MOVE_COST(MODE,FROM,TO) \
-	m32c_register_move_cost (MODE, FROM, TO)
-#define MEMORY_MOVE_COST(MODE,CLASS,IN) \
-	m32c_memory_move_cost (MODE, CLASS, IN)
 
 /* Dividing the Output into Sections (Texts, Data, ...) */
 
@@ -643,6 +641,13 @@ typedef struct m32c_cumulative_args
 
 #define ASM_OUTPUT_REG_PUSH(S,R) m32c_output_reg_push (S, R)
 #define ASM_OUTPUT_REG_POP(S,R) m32c_output_reg_pop (S, R)
+
+#define ASM_OUTPUT_ALIGNED_DECL_COMMON(STREAM, DECL, NAME, SIZE, ALIGNMENT) \
+	m32c_output_aligned_common (STREAM, DECL, NAME, SIZE, ALIGNMENT, 1)
+
+#define ASM_OUTPUT_ALIGNED_DECL_LOCAL(STREAM, DECL, NAME, SIZE, ALIGNMENT) \
+	m32c_output_aligned_common (STREAM, DECL, NAME, SIZE, ALIGNMENT, 0)
+
 
 /* Output of Dispatch Tables */
 

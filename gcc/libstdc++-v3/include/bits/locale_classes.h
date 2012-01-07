@@ -1,7 +1,7 @@
 // Locale support -*- C++ -*-
 
 // Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-// 2006, 2007, 2008, 2009, 2010
+// 2006, 2007, 2008, 2009, 2010, 2011
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -24,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file locale_classes.h
+/** @file bits/locale_classes.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{locale}
  */
 
 //
@@ -42,7 +42,9 @@
 #include <string>
 #include <ext/atomicity.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // 22.1.1 Class locale
   /**
@@ -402,8 +404,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     void
     _M_remove_reference() const throw()
     {
+      // Be race-detector-friendly.  For more info see bits/c++config.
+      _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_refcount);
       if (__gnu_cxx::__exchange_and_add_dispatch(&_M_refcount, -1) == 1)
 	{
+          _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_refcount);
 	  __try
 	    { delete this; }
 	  __catch(...)
@@ -508,8 +513,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     void
     _M_remove_reference() throw()
     {
+      // Be race-detector-friendly.  For more info see bits/c++config.
+      _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_refcount);
       if (__gnu_cxx::__exchange_and_add_dispatch(&_M_refcount, -1) == 1)
 	{
+          _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_refcount);
 	  __try
 	    { delete this; }
 	  __catch(...)
@@ -809,10 +817,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       ~collate_byname() { }
     };
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
-#ifndef _GLIBCXX_EXPORT_TEMPLATE
 # include <bits/locale_classes.tcc>
-#endif
 
 #endif

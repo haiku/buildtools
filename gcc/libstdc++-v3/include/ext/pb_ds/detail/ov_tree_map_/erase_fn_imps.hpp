@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -56,7 +56,7 @@ clear()
     }
 
   _GLIBCXX_DEBUG_ONLY(debug_base::clear();)
-  m_a_values = NULL;
+  m_a_values = 0;
   m_size = 0;
   m_end_it = m_a_values;
   _GLIBCXX_DEBUG_ONLY(assert_valid();)

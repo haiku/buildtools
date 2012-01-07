@@ -119,7 +119,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC \
-  "%{ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+  "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
    crtend.o%s crtn.o%s"
 
 /* Select a format to encode pointers in exception handling data.  CODE
@@ -153,11 +153,18 @@ along with GCC; see the file COPYING3.  If not see
 #undef SUN_INTEGER_MULTIPLY_64
 #define SUN_INTEGER_MULTIPLY_64 1
 
-/* Solaris allows 64 bit out and global registers in 32 bit mode.
-   sparc_override_options will disable V8+ if not generating V9 code.  */
+/* Solaris allows 64-bit out and global registers to be used in 32-bit mode.
+   sparc_override_options will disable V8+ if either not generating V9 code
+   or generating 64-bit code.  */
 #undef TARGET_DEFAULT
-#define TARGET_DEFAULT (MASK_V8PLUS + MASK_APP_REGS + MASK_FPU \
-			+ MASK_LONG_DOUBLE_128)
+#ifdef TARGET_64BIT_DEFAULT
+#define TARGET_DEFAULT \
+  (MASK_V9 + MASK_64BIT + MASK_PTR64 + MASK_STACK_BIAS + \
+   MASK_V8PLUS + MASK_APP_REGS + MASK_FPU + MASK_LONG_DOUBLE_128)
+#else
+#define TARGET_DEFAULT \
+  (MASK_V8PLUS + MASK_APP_REGS + MASK_FPU + MASK_LONG_DOUBLE_128)
+#endif
 
 /* Solaris-specific #pragmas are implemented on top of attributes.  Hook in
    the bits from config/sol2.c.  */
@@ -188,11 +195,11 @@ along with GCC; see the file COPYING3.  If not see
 #undef TARGET_ASM_NAMED_SECTION
 #define TARGET_ASM_NAMED_SECTION sparc_solaris_elf_asm_named_section
 
-/* Solaris/SPARC as uses a non-standard .section/.pushsection syntax.
-   While gas supports it, too, we prefer the standard variant.  */
-#ifndef USE_GAS
+/* And SPARC non-standard pushsection syntax.  */
 #undef PUSHSECTION_FORMAT
-#define PUSHSECTION_FORMAT	"\t.pushsection\t\"%s\"\n"
-#endif
+#define PUSHSECTION_FORMAT "\t.pushsection\t\"%s\"\n"
+
+/* Static stack checking is supported by means of probes.  */
+#define STACK_CHECK_STATIC_BUILTIN 1
 
 #define MD_UNWIND_SUPPORT "config/sparc/sol2-unwind.h"

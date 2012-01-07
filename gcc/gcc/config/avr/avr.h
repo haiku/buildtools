@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler,
    for ATMEL AVR at90s8515, ATmega103/103L, ATmega603/603L microcontrollers.
    Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 
-   2008, 2009, 2010
+   2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Denis Chertykov (chertykov@gmail.com)
 
@@ -124,10 +124,6 @@ extern GTY(()) section *progmem_section;
 
 #define TARGET_VERSION fprintf (stderr, " (GNU assembler syntax)");
 
-#define OVERRIDE_OPTIONS avr_override_options ()
-
-#define CAN_DEBUG_WITHOUT_FP
-
 #define BITS_BIG_ENDIAN 0
 #define BYTES_BIG_ENDIAN 0
 #define WORDS_BIG_ENDIAN 0
@@ -232,7 +228,7 @@ extern GTY(()) section *progmem_section;
     32,33,34,35					\
     }
 
-#define ORDER_REGS_FOR_LOCAL_ALLOC order_regs_for_local_alloc ()
+#define ADJUST_REG_ALLOC_ORDER order_regs_for_local_alloc ()
 
 
 #define HARD_REGNO_NREGS(REGNO, MODE) ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
@@ -331,11 +327,7 @@ enum reg_class {
 
 #define REGNO_OK_FOR_INDEX_P(NUM) 0
 
-#define PREFERRED_RELOAD_CLASS(X, CLASS) preferred_reload_class(X,CLASS)
-
-#define SMALL_REGISTER_CLASSES 1
-
-#define CLASS_LIKELY_SPILLED_P(c) class_likely_spilled_p(c)
+#define TARGET_SMALL_REGISTER_CLASSES_FOR_MODE_P hook_bool_mode_true
 
 #define CLASS_MAX_NREGS(CLASS, MODE)   class_max_nregs (CLASS, MODE)
 
@@ -359,9 +351,6 @@ enum reg_class {
 
 #define STATIC_CHAIN_REGNUM 2
 
-/* Offset from the frame pointer register value to the top of the stack.  */
-#define FRAME_POINTER_CFA_OFFSET(FNDECL) 0
-
 #define ELIMINABLE_REGS {					\
       {ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM},		\
 	{FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}		\
@@ -376,10 +365,6 @@ enum reg_class {
    for POST_DEC targets (PR27386).  */
 /*#define PUSH_ROUNDING(NPUSHED) (NPUSHED)*/
 
-#define RETURN_POPS_ARGS(FUNDECL, FUNTYPE, STACK_SIZE) 0
-
-#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) (function_arg (&(CUM), MODE, TYPE, NAMED))
-
 typedef struct avr_args {
   int nregs;			/* # registers available for passing */
   int regno;			/* next available register number */
@@ -387,9 +372,6 @@ typedef struct avr_args {
 
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, FNDECL, N_NAMED_ARGS) \
   init_cumulative_args (&(CUM), FNTYPE, LIBNAME, FNDECL)
-
-#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)	\
-  (function_arg_advance (&CUM, MODE, TYPE, NAMED))
 
 #define FUNCTION_ARG_REGNO_P(r) function_arg_regno_p(r)
 
@@ -461,15 +443,6 @@ do {									    \
 } while(0)
 
 #define LEGITIMATE_CONSTANT_P(X) 1
-
-#define REGISTER_MOVE_COST(MODE, FROM, TO) ((FROM) == STACK_REG ? 6 \
-					    : (TO) == STACK_REG ? 12 \
-					    : 2)
-
-#define MEMORY_MOVE_COST(MODE,CLASS,IN) ((MODE)==QImode ? 2 :	\
-					 (MODE)==HImode ? 4 :	\
-					 (MODE)==SImode ? 8 :	\
-					 (MODE)==SFmode ? 8 : 16)
 
 #define BRANCH_COST(speed_p, predictable_p) 0
 
@@ -754,9 +727,9 @@ extern const char *avr_device_to_devicelib (int argc, const char **argv);
   { "device_to_startfile", avr_device_to_startfiles }, \
   { "device_to_devicelib", avr_device_to_devicelib },
 
-#define CPP_SPEC "%{posix:-D_POSIX_SOURCE}"
+#define CPP_SPEC ""
 
-#define CC1_SPEC "%{profile:-p}"
+#define CC1_SPEC ""
 
 #define CC1PLUS_SPEC "%{!frtti:-fno-rtti} \
     %{!fenforce-eh-specs:-fno-enforce-eh-specs} \
@@ -782,7 +755,7 @@ mmcu=*:-mmcu=%*}"
 #define LIB_SPEC \
   "%{!mmcu=at90s1*:%{!mmcu=attiny11:%{!mmcu=attiny12:%{!mmcu=attiny15:%{!mmcu=attiny28: -lc }}}}}"
 
-#define LIBSTDCXX "-lgcc"
+#define LIBSTDCXX "gcc"
 /* No libstdc++ for now.  Empty string doesn't work.  */
 
 #define LIBGCC_SPEC \
@@ -823,6 +796,13 @@ mmcu=*:-mmcu=%*}"
 #define DWARF2_ADDR_SIZE 4
 
 #define OBJECT_FORMAT_ELF
+
+#define INCOMING_RETURN_ADDR_RTX   avr_incoming_return_addr_rtx ()
+#define INCOMING_FRAME_SP_OFFSET   (AVR_3_BYTE_PC ? 3 : 2)
+
+/* The caller's stack pointer value immediately before the call
+   is one byte below the first argument.  */
+#define ARG_POINTER_CFA_OFFSET(FNDECL)  -1
 
 #define HARD_REGNO_RENAME_OK(OLD_REG, NEW_REG) \
   avr_hard_regno_rename_ok (OLD_REG, NEW_REG)
