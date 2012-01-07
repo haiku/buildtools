@@ -207,8 +207,6 @@ arm*-*-netbsdelf*)
 	;;
 arm*-*-netbsd*)
 	;;
-arm-*-haiku*)
-	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	;;
 arm*-*-uclinux*)		# ARM ucLinux
@@ -283,10 +281,6 @@ x86_64-*-elf*)
 i[34567]86-*-freebsd*)
 	;;
 x86_64-*-freebsd*)
-	;;
-i[34567]86-*-haiku*)
-	;;
-x86_64-*-haiku*)
 	;;
 i[34567]86-*-netbsdelf*)
 	;;
@@ -385,8 +379,6 @@ m68hc11-*-*|m6811-*-*)
         ;;
 m68hc12-*-*|m6812-*-*)
         ;;
-m68k-*-haiku*)
-	;;
 m68k-*-elf*)
 	;;
 m68k*-*-netbsdelf*)
@@ -414,8 +406,6 @@ mips64*-*-linux*)
 mips*-*-linux*)				# Linux MIPS, either endian.
 	;;
 mips*-*-openbsd*)
-	;;
-mips*-*-haiku*)
 	;;
 mipsisa32-*-elf* | mipsisa32el-*-elf*)
 	;;
@@ -462,8 +452,6 @@ powerpc-*-darwin*)
 powerpc64-*-darwin*)
 	;;
 powerpc*-*-freebsd*)
-	;;
-powerpc-*-haiku*)
 	;;
 powerpc-*-netbsd*)
 	;;
