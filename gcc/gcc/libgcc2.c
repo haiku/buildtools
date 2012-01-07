@@ -1,7 +1,7 @@
 /* More subroutines needed by GCC output code on some machines.  */
 /* Compile this one with gcc.  */
 /* Copyright (C) 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -36,15 +36,11 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define ATTRIBUTE_HIDDEN
 #endif
 
-#ifndef MIN_UNITS_PER_WORD
-#define MIN_UNITS_PER_WORD UNITS_PER_WORD
-#endif
-
 /* Work out the largest "word" size that we can deal with on this target.  */
 #if MIN_UNITS_PER_WORD > 4
 # define LIBGCC2_MAX_UNITS_PER_WORD 8
 #elif (MIN_UNITS_PER_WORD > 2 \
-       || (MIN_UNITS_PER_WORD > 1 && LONG_LONG_TYPE_SIZE > 32))
+       || (MIN_UNITS_PER_WORD > 1 && __SIZEOF_LONG_LONG__ > 4))
 # define LIBGCC2_MAX_UNITS_PER_WORD 4
 #else
 # define LIBGCC2_MAX_UNITS_PER_WORD MIN_UNITS_PER_WORD

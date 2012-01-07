@@ -5,8 +5,8 @@
    This code has no license restrictions, and is considered public
    domain.
 
-   Changes copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software Foundation,
-   Inc.
+   Changes copyright (C) 2005, 2006, 2007, 2008, 2009,
+   2010 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@inria.fr>
 
 This file is part of GCC.
@@ -34,11 +34,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "ggc.h"
 #include "tree.h"
-#include "diagnostic.h"
-#include "varray.h"
+#include "diagnostic-core.h"
 #include "tree-pass.h"
 #include "omega.h"
 
@@ -183,24 +180,6 @@ omega_no_procedure (omega_pb pb ATTRIBUTE_UNUSED)
 }
 
 void (*omega_when_reduced) (omega_pb) = omega_no_procedure;
-
-/* Compute the greatest common divisor of A and B.  */
-
-static inline int
-gcd (int b, int a)
-{
-  if (b == 1)
-    return 1;
-
-  while (b != 0)
-    {
-      int t = b;
-      b = a % b;
-      a = t;
-    }
-
-  return a;
-}
 
 /* Print to FILE from PB equation E with all its coefficients
    multiplied by C.  */
@@ -364,7 +343,7 @@ omega_print_vars (FILE *file, omega_pb pb)
 
 /* Debug problem PB.  */
 
-void
+DEBUG_FUNCTION void
 debug_omega_problem (omega_pb pb)
 {
   omega_print_problem (stderr, pb);
@@ -2214,7 +2193,6 @@ omega_eliminate_redundant (omega_pb pb, bool expensive)
 			  || pb->geqs[e3].color == omega_red)
 			goto nextE3;
 
-		      alpha3 = alpha3;
 		      /* verify alpha1*v1+alpha2*v2 = alpha3*v3 */
 		      for (k = pb->num_vars; k >= 1; k--)
 			if (alpha3 * pb->geqs[e3].coef[k]

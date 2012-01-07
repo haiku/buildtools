@@ -35,37 +35,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "ggc.h"
-#include "tree.h"
-#include "rtl.h"
-#include "basic-block.h"
-#include "diagnostic.h"
+#include "diagnostic-core.h"
 #include "tree-flow.h"
-#include "toplev.h"
 #include "tree-dump.h"
-#include "timevar.h"
 #include "cfgloop.h"
 #include "tree-chrec.h"
 #include "tree-data-ref.h"
 #include "tree-scalar-evolution.h"
-#include "tree-pass.h"
-#include "value-prof.h"
-#include "pointer-set.h"
-#include "gimple.h"
 #include "sese.h"
-#include "predict.h"
+#include "dbgcnt.h"
 
 #ifdef HAVE_cloog
 
-#include "cloog/cloog.h"
 #include "ppl_c.h"
 #include "graphite-ppl.h"
-#include "graphite.h"
 #include "graphite-poly.h"
 #include "graphite-scop-detection.h"
 #include "graphite-clast-to-gimple.h"
 #include "graphite-sese-to-poly.h"
+
+CloogState *cloog_state;
 
 /* Print global statistics to FILE.  */
 
@@ -190,7 +179,7 @@ print_graphite_statistics (FILE* file, VEC (scop_p, heap) *scops)
 
   scop_p scop;
 
-  for (i = 0; VEC_iterate (scop_p, scops, i, scop); i++)
+  FOR_EACH_VEC_ELT (scop_p, scops, i, scop)
     print_graphite_scop_statistics (file, scop);
 }
 
@@ -199,6 +188,8 @@ print_graphite_statistics (FILE* file, VEC (scop_p, heap) *scops)
 static bool
 graphite_initialize (void)
 {
+  int ppl_initialized;
+
   if (number_of_loops () <= 1
       /* FIXME: This limit on the number of basic blocks of a function
 	 should be removed when the SCOP detection is faster.  */
@@ -213,6 +204,11 @@ graphite_initialize (void)
   scev_reset ();
   recompute_all_dominators ();
   initialize_original_copy_tables ();
+
+  ppl_initialized = ppl_initialize ();
+  gcc_assert (ppl_initialized == 0);
+
+  cloog_state = cloog_state_malloc ();
   cloog_initialize ();
 
   if (dump_file && dump_flags)
@@ -236,7 +232,9 @@ graphite_finalize (bool need_cfg_cleanup_p)
       tree_estimate_probability ();
     }
 
+  cloog_state_free (cloog_state);
   cloog_finalize ();
+  ppl_finalize ();
   free_original_copy_tables ();
 
   if (dump_file && dump_flags)
@@ -268,14 +266,16 @@ graphite_transform_loops (void)
 
   bb_pbb_mapping = htab_create (10, bb_pbb_map_hash, eq_bb_pbb_map, free);
 
-  for (i = 0; VEC_iterate (scop_p, scops, i, scop); i++)
-    build_poly_scop (scop);
+  FOR_EACH_VEC_ELT (scop_p, scops, i, scop)
+    if (dbg_cnt (graphite_scop))
+      {
+	build_poly_scop (scop);
 
-  for (i = 0; VEC_iterate (scop_p, scops, i, scop); i++)
-    if (POLY_SCOP_P (scop)
-	&& apply_poly_transforms (scop)
-	&& gloog (scop, scops, bb_pbb_mapping))
-      need_cfg_cleanup_p = true;
+	if (POLY_SCOP_P (scop)
+	    && apply_poly_transforms (scop)
+	    && gloog (scop, bb_pbb_mapping))
+	  need_cfg_cleanup_p = true;
+      }
 
   htab_delete (bb_pbb_mapping);
   free_scops (scops);

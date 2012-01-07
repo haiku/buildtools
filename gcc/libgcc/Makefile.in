@@ -1,6 +1,6 @@
 # Makefile.in
 
-# Copyright (C) 2005, 2006, 2009 Free Software Foundation
+# Copyright (C) 2005, 2006, 2009, 2010 Free Software Foundation
 #
 # This file is part of GCC.
 #
@@ -41,6 +41,7 @@ enable_decimal_float = @enable_decimal_float@
 fixed_point = @fixed_point@
 
 host_noncanonical = @host_noncanonical@
+target_noncanonical = @target_noncanonical@
 
 # List of extra object files that should be compiled for this target machine.
 # The rules for compiling them should be in the t-* file for the machine.
@@ -147,6 +148,7 @@ configure_deps = \
 	$(srcdir)/../config/acx.m4 \
 	$(srcdir)/../config/no-executables.m4 \
 	$(srcdir)/../config/override.m4 \
+	$(srcdir)/../config/dfp.m4 \
 
 $(srcdir)/configure: @MAINT@ $(srcdir)/configure.ac $(configure_deps)
 	cd $(srcdir) && $(AUTOCONF)
@@ -174,6 +176,9 @@ STRIP_FOR_TARGET = $(STRIP)
 libsubdir = $(libdir)/gcc/$(host_noncanonical)/$(version)
 # Used to install the shared libgcc.
 slibdir = @slibdir@
+# Maybe used for DLLs on Windows targets.
+toolexecdir = @toolexecdir@
+toolexeclibdir = @toolexeclibdir@
 
 export AR_FOR_TARGET
 export AR_CREATE_FOR_TARGET
@@ -193,6 +198,8 @@ export STRIP_FOR_TARGET
 export RANLIB_FOR_TARGET
 export libsubdir
 export slibdir
+export toolexecdir
+export toolexeclibdir
 
 version := $(shell $(CC) -dumpversion)
 
@@ -384,9 +391,9 @@ ifneq ($(LIB2_SIDITI_CONV_FUNCS),)
 # functions are built with a wordsize of 4; the TImode functions are
 # built with the same labels, but a wordsize of 8.
 
-sifuncs = $(subst XX,si,$(swfloatfuncs))
-difuncs = $(subst XX,di,$(dwfloatfuncs))
-tifuncs = $(subst XX,ti,$(dwfloatfuncs))
+sifuncs := $(filter-out $(LIB2FUNCS_EXCLUDE),$(subst XX,si,$(swfloatfuncs)))
+difuncs := $(filter-out $(LIB2FUNCS_EXCLUDE),$(subst XX,di,$(dwfloatfuncs)))
+tifuncs := $(filter-out $(LIB2FUNCS_EXCLUDE),$(subst XX,ti,$(dwfloatfuncs)))
 
 iter-items := $(sifuncs) $(difuncs) $(tifuncs)
 iter-labels := $(sifuncs) $(difuncs) $(difuncs)
@@ -869,6 +876,10 @@ endif
 	for file in $$parts; do					\
 	  rm -f $(gcc_objdir)$(MULTISUBDIR)/$$file;		\
 	  $(INSTALL_DATA) $$file $(gcc_objdir)$(MULTISUBDIR)/;	\
+	  case $$file in 					\
+	    *.a)						\
+	      $(RANLIB) $(gcc_objdir)$(MULTISUBDIR)/$$file ;;	\
+	  esac;							\
 	done
 
 # Build extra startfiles in the gcc directory, for unconverted
@@ -902,6 +913,10 @@ gcc-extra-parts:
 	for file in $$parts; do					\
 	  rm -f $(gcc_objdir)$(MULTISUBDIR)/$$file;		\
 	  $(INSTALL_DATA) $$file $(gcc_objdir)$(MULTISUBDIR)/;	\
+	  case $$file in 					\
+	    *.a)						\
+	      $(RANLIB) $(gcc_objdir)$(MULTISUBDIR)/$$file ;;	\
+	  esac;							\
 	done
 
 all: $(extra-parts)
@@ -957,12 +972,18 @@ install-leaf: $(install-shared) $(install-libunwind)
 	for file in $$parts; do					\
 	  rm -f $(DESTDIR)$(inst_libdir)/$$file;		\
 	  $(INSTALL_DATA) $$file $(DESTDIR)$(inst_libdir)/;	\
+	  case $$file in 					\
+	    *.a)						\
+	      $(RANLIB) $(gcc_objdir)$(MULTISUBDIR)/$$file ;;	\
+	  esac;							\
 	done
 
 install: install-leaf
 	@: $(MAKE) ; $(MULTIDO) $(FLAGS_TO_PASS) multi-do DO=install
 
-.PHONY: install install-shared install-libunwind
+install-strip: install
+
+.PHONY: install install-shared install-libunwind install-strip
 
 # Don't export variables to the environment, in order to not confuse
 # configure.

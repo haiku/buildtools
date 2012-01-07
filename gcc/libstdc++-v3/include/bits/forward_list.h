@@ -1,6 +1,6 @@
 // <forward_list.h> -*- C++ -*-
 
-// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,8 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file forward_list.h
- *  This is a Standard C++ Library header.
+/** @file bits/forward_list.h
+ *  This is an internal header file, included by other library headers.
+ *  Do not attempt to use it directly. @headername{forward_list}
  */
 
 #ifndef _FORWARD_LIST_H
@@ -34,7 +35,9 @@
 #include <memory>
 #include <initializer_list>
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   /**
    *  @brief  A helper basic node class for %forward_list.
@@ -46,10 +49,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     _Fwd_list_node_base() : _M_next(0) { }
 
     _Fwd_list_node_base* _M_next;
-
-    static void
-    swap(_Fwd_list_node_base& __x, _Fwd_list_node_base& __y)
-    { std::swap(__x._M_next, __y._M_next); }
 
     _Fwd_list_node_base*
     _M_transfer_after(_Fwd_list_node_base* __begin)
@@ -139,7 +138,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       pointer
       operator->() const
-      { return &static_cast<_Node*>(this->_M_node)->_M_value; }
+      { return std::__addressof(static_cast<_Node*>
+				(this->_M_node)->_M_value); }
 
       _Self&
       operator++()
@@ -210,7 +210,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       pointer
       operator->() const
-      { return &static_cast<_Node*>(this->_M_node)->_M_value; }
+      { return std::__addressof(static_cast<_Node*>
+				(this->_M_node)->_M_value); }
 
       _Self&
       operator++()
@@ -307,24 +308,26 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { return *static_cast<const _Node_alloc_type*>(&this->_M_impl); }
 
       _Fwd_list_base()
-      : _M_impl()
-      { this->_M_impl._M_head._M_next = 0; }
+      : _M_impl() { }
 
       _Fwd_list_base(const _Alloc& __a)
-      : _M_impl(__a)
-      { this->_M_impl._M_head._M_next = 0; }
+      : _M_impl(__a) { }
 
       _Fwd_list_base(const _Fwd_list_base& __lst, const _Alloc& __a);
 
       _Fwd_list_base(_Fwd_list_base&& __lst, const _Alloc& __a)
       : _M_impl(__a)
-      { _Fwd_list_node_base::swap(this->_M_impl._M_head,
-				  __lst._M_impl._M_head); }
+      {
+	this->_M_impl._M_head._M_next = __lst._M_impl._M_head._M_next;
+	__lst._M_impl._M_head._M_next = 0;
+      }
 
       _Fwd_list_base(_Fwd_list_base&& __lst)
       : _M_impl(__lst._M_get_Node_allocator())
-      { _Fwd_list_node_base::swap(this->_M_impl._M_head,
-				  __lst._M_impl._M_head); }
+      {
+	this->_M_impl._M_head._M_next = __lst._M_impl._M_head._M_next;
+	__lst._M_impl._M_head._M_next = 0;
+      }
 
       ~_Fwd_list_base()
       { _M_erase_after(&_M_impl._M_head, 0); }
@@ -362,10 +365,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _M_put_node(_Node* __p)
       { _M_get_Node_allocator().deallocate(__p, 1); }
 
-      void
+      _Fwd_list_node_base*
       _M_erase_after(_Fwd_list_node_base* __pos);
 
-      void
+      _Fwd_list_node_base*
       _M_erase_after(_Fwd_list_node_base* __pos, 
                      _Fwd_list_node_base* __last);
     };
@@ -450,7 +453,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  @param  al    An allocator object.
        */
       forward_list(forward_list&& __list, const _Alloc& __al)
-      : _Base(std::forward<_Base>(__list), __al)
+      : _Base(std::move(__list), __al)
       { }
 
       /**
@@ -521,7 +524,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  %forward_list.
        */
       forward_list(forward_list&& __list)
-      : _Base(std::forward<_Base>(__list)) { }
+      : _Base(std::move(__list)) { }
 
       /**
        *  @brief  Builds a %forward_list from an initializer_list
@@ -922,6 +925,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  @brief  Removes the element pointed to by the iterator following
        *          @c pos.
        *  @param  pos  Iterator pointing before element to be erased.
+       *  @return  An iterator pointing to the element following the one
+       *           that was erased, or end() if no such element exists.
        *
        *  This function will erase the element at the given position and
        *  thus shorten the %forward_list by one.
@@ -933,9 +938,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  is itself a pointer, the pointed-to memory is not touched in
        *  any way.  Managing the pointer is the user's responsibility.
        */
-      void
+      iterator
       erase_after(const_iterator __pos)
-      { this->_M_erase_after(const_cast<_Node_base*>(__pos._M_node)); }
+      { return iterator(this->_M_erase_after(const_cast<_Node_base*>
+					     (__pos._M_node))); }
 
       /**
        *  @brief  Remove a range of elements.
@@ -943,6 +949,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *               erased.
        *  @param  last  Iterator pointing to one past the last element to be
        *                erased.
+       *  @return  @last.
        *
        *  This function will erase the elements in the range @a
        *  (pos,last) and shorten the %forward_list accordingly.
@@ -954,10 +961,12 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  pointed-to memory is not touched in any way.  Managing the pointer
        *  is the user's responsibility.
        */
-      void
+      iterator
       erase_after(const_iterator __pos, const_iterator __last)
-      { this->_M_erase_after(const_cast<_Node_base*>(__pos._M_node),
-			     const_cast<_Node_base*>(__last._M_node)); }
+      { return iterator(this->_M_erase_after(const_cast<_Node_base*>
+					     (__pos._M_node),
+					     const_cast<_Node_base*>
+					     (__last._M_node))); }
 
       /**
        *  @brief  Swaps data with another %forward_list.
@@ -971,7 +980,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        */
       void
       swap(forward_list& __list)
-      { _Node_base::swap(this->_M_impl._M_head, __list._M_impl._M_head); }
+      { std::swap(this->_M_impl._M_head._M_next,
+		  __list._M_impl._M_head._M_next); }
 
       /**
        *  @brief Resizes the %forward_list to the specified number of
@@ -1000,7 +1010,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  populated with given data.
        */
       void
-      resize(size_type __sz, value_type __val);
+      resize(size_type __sz, const value_type& __val);
 
       /**
        *  @brief  Erases all the elements.
@@ -1287,6 +1297,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	 forward_list<_Tp, _Alloc>& __ly)
     { __lx.swap(__ly); }
 
-_GLIBCXX_END_NAMESPACE // namespace std
+_GLIBCXX_END_NAMESPACE_CONTAINER
+} // namespace std
 
 #endif // _FORWARD_LIST_H

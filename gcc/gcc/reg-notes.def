@@ -99,11 +99,6 @@ REG_NOTE (DEP_ANTI)
    won't return.  */
 REG_NOTE (BR_PROB)
 
-/* REG_VALUE_PROFILE is attached when the profile is read in to an
-   insn before that the code to profile the value is inserted.  It
-   contains the results of profiling.  */
-REG_NOTE (VALUE_PROFILE)
-
 /* Attached to a call insn; indicates that the call is malloc-like and
    that the pointer returned cannot alias anything else.  */
 REG_NOTE (NOALIAS)
@@ -147,6 +142,12 @@ REG_NOTE (CFA_OFFSET)
    is a save to a register, i.e. will result in DW_CFA_register.  The insn
    or the pattern should be simple reg-reg move.  */
 REG_NOTE (CFA_REGISTER)
+
+/* Attached to insns that are RTX_FRAME_RELATED_P, but are too complex
+   for FRAME_RELATED_EXPR intuition.  This is a save to memory, i.e. will
+   result in a DW_CFA_expression.  The pattern or the insn should be a
+   store of a register to an arbitrary (non-validated) memory address.  */
+REG_NOTE (CFA_EXPRESSION)
 
 /* Attached to insns that are RTX_FRAME_RELATED_P, with the information
    that this is a restore operation, i.e. will result in DW_CFA_restore

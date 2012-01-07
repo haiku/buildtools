@@ -42,7 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 	{							\
 	  builtin_define ("__MINGW64__");			\
 	  builtin_define_std ("WIN64");				\
-	  builtin_define_std ("_WIN64");			\
+	  builtin_define ("_WIN64");				\
 	}							\
     }								\
   while (0)
@@ -77,7 +77,7 @@ along with GCC; see the file COPYING3.  If not see
    kernel32.  */
 #undef LIB_SPEC
 #define LIB_SPEC "%{pg:-lgmon} %{mwindows:-lgdi32 -lcomdlg32} \
-                  -luser32 -lkernel32 -ladvapi32 -lshell32"
+                  -ladvapi32 -lshell32 -luser32 -lkernel32"
 
 /* Weak symbols do not get resolved if using a Windows dll import lib.
    Make the unwind registration references strong undefs.  */
@@ -124,7 +124,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef ENDFILE_SPEC
 #define ENDFILE_SPEC \
-  "%{ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+  "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
   crtend.o%s"
 
 /* Override startfile prefix defaults.  */
@@ -134,14 +134,6 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef STANDARD_STARTFILE_PREFIX_2
 #define STANDARD_STARTFILE_PREFIX_2 ""
 #endif
-
-/* Put all *tf routines in libgcc.  */
-#undef LIBGCC2_HAS_TF_MODE
-#define LIBGCC2_HAS_TF_MODE 1
-#undef LIBGCC2_TF_CEXT
-#define LIBGCC2_TF_CEXT q
-#undef TF_SIZE
-#define TF_SIZE 113
 
 /* Output STRING, a string representing a filename, to FILE.
    We canonicalize it to be in Unix format (backslashes are replaced
@@ -245,5 +237,11 @@ __enable_execute_stack (void *addr)					\
 #define LIBGCC_SONAME "libgcc_s" LIBGCC_EH_EXTN "-1.dll"
 
 /* We should find a way to not have to update this manually.  */
-#define LIBGCJ_SONAME "libgcj" /*LIBGCC_EH_EXTN*/ "-11.dll"
+#define LIBGCJ_SONAME "libgcj" /*LIBGCC_EH_EXTN*/ "-12.dll"
+
+/* For 32-bit Windows we need valid frame-pointer for function using
+   setjmp.  */
+#undef SUBTARGET_FRAME_POINTER_REQUIRED
+#define SUBTARGET_FRAME_POINTER_REQUIRED \
+  (!TARGET_64BIT && cfun->calls_setjmp)
 

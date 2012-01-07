@@ -1,5 +1,5 @@
 /* Scanning of rtl for dataflow analysis.
-   Copyright (C) 2007, 2008, 2009
+   Copyright (C) 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck (zadeck@naturalbridge.com).
 
@@ -308,10 +308,9 @@ regstat_bb_compute_ri (unsigned int bb_index,
 		REG_BASIC_BLOCK (uregno) = REG_BLOCK_GLOBAL;
 	    }
 
-	  if (!bitmap_bit_p (live, uregno))
+	  if (bitmap_set_bit (live, uregno))
 	    {
 	      /* This register is now live.  */
-	      bitmap_set_bit (live, uregno);
 
 	      /* If we have seen this regno, then it has already been
 		 processed correctly with the per insn increment.  If

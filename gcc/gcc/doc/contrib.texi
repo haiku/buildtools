@@ -80,7 +80,7 @@ Janne Blomqvist for contributions to GNU Fortran.
 Segher Boessenkool for various fixes.
 
 @item
-Hans-J. Boehm for his @uref{http://www.hpl.hp.com/personal/Hans_Boehm/gc/,,
+Hans-J. Boehm for his @uref{http://www.hpl.hp.com/@/personal/@/Hans_Boehm/@/gc/,,
 garbage collector}, IA-64 libffi port, and other Java work.
 
 @item
@@ -237,6 +237,9 @@ architecture, libio maintenance, and early math work.
 
 @item
 Zdenek Dvorak for a new loop unroller and various fixes.
+
+@item
+Michael Eager for his work on the Xilinx MicroBlaze port.
 
 @item
 Richard Earnshaw for his ongoing work with the ARM@.
@@ -821,6 +824,9 @@ Andreas Schwab for his work on the m68k port.
 Lars Segerlund for work on GNU Fortran.
 
 @item
+Dodji Seketeli for numerous C++ bug fixes and debug info improvements.
+
+@item
 Joel Sherrill for his direction via the steering committee, RTEMS
 contributions and RTEMS testing.
 
@@ -894,8 +900,8 @@ Jeff Sturm for Java porting help, bug fixes, and encouragement.
 Shigeya Suzuki for this fixes for the bsdi platforms.
 
 @item
-Ian Lance Taylor for his mips16 work, general configury hacking,
-fixincludes, etc.
+Ian Lance Taylor for the Go frontend, the initial mips16 and mips64
+support, general configury hacking, fixincludes, etc.
 
 @item
 Holger Teutsch provided the support for the Clipper CPU@.

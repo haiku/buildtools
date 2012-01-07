@@ -49,9 +49,9 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file stl_iterator_base_funcs.h
+/** @file bits/stl_iterator_base_funcs.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{iterator}
  *
  *  This file contains all of the general iterator-related utility
  *  functions, such as distance() and advance().
@@ -64,7 +64,9 @@
 
 #include <bits/concept_check.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _InputIterator>
     inline typename iterator_traits<_InputIterator>::difference_type
@@ -173,18 +175,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       std::__advance(__i, __d, std::__iterator_category(__i));
     }
 
-_GLIBCXX_END_NAMESPACE
-
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
 
-#include <ext/type_traits.h> // For __enable_if and __is_iterator
-
-_GLIBCXX_BEGIN_NAMESPACE(std)
-
   template<typename _ForwardIterator>
-    inline typename
-    __gnu_cxx::__enable_if<__is_iterator<_ForwardIterator>::__value,
-			   _ForwardIterator>::__type
+    inline _ForwardIterator
     next(_ForwardIterator __x, typename
 	 iterator_traits<_ForwardIterator>::difference_type __n = 1)
     {
@@ -193,9 +187,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     }
 
   template<typename _BidirectionalIterator>
-    inline typename
-    __gnu_cxx::__enable_if<__is_iterator<_BidirectionalIterator>::__value,
-			   _BidirectionalIterator>::__type
+    inline _BidirectionalIterator
     prev(_BidirectionalIterator __x, typename
 	 iterator_traits<_BidirectionalIterator>::difference_type __n = 1) 
     {
@@ -203,8 +195,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       return __x;
     }
 
-_GLIBCXX_END_NAMESPACE
-
 #endif // __GXX_EXPERIMENTAL_CXX0X__
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif /* _STL_ITERATOR_BASE_FUNCS_H */

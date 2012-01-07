@@ -26,15 +26,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "ggc.h"
 #include "basic-block.h"
-#include "diagnostic.h"
+#include "tree-pretty-print.h"
+#include "gimple-pretty-print.h"
 #include "bitmap.h"
 #include "tree-flow.h"
 #include "timevar.h"
 #include "tree-dump.h"
 #include "tree-pass.h"
-#include "toplev.h"
-#include "expr.h"
+#include "diagnostic-core.h"
 #include "ssaexpand.h"
+
+/* FIXME: A lot of code here deals with expanding to RTL.  All that code
+   should be in cfgexpand.c.  */
+#include "expr.h"
 
 
 DEF_VEC_I(source_location);
@@ -398,7 +402,7 @@ elim_graph_add_node (elim_graph g, int node)
   int x;
   int t;
 
-  for (x = 0; VEC_iterate (int, g->nodes, x, t); x++)
+  FOR_EACH_VEC_ELT (int, g->nodes, x, t)
     if (t == node)
       return;
   VEC_safe_push (int, heap, g->nodes, node);
@@ -452,8 +456,9 @@ do {									\
       y_ = VEC_index (int, (GRAPH)->edge_list, x_);			\
       if (y_ != (NODE))							\
         continue;							\
-      (VAR) = VEC_index (int, (GRAPH)->edge_list, x_ + 1);		\
-      (LOCUS) = VEC_index (source_location, (GRAPH)->edge_locus, x_ / 2); \
+      (void) ((VAR) = VEC_index (int, (GRAPH)->edge_list, x_ + 1));	\
+      (void) ((LOCUS) = VEC_index (source_location,			\
+				   (GRAPH)->edge_locus, x_ / 2));	\
       CODE;								\
     }									\
 } while (0)
@@ -472,8 +477,9 @@ do {									\
       y_ = VEC_index (int, (GRAPH)->edge_list, x_ + 1);			\
       if (y_ != (NODE))							\
         continue;							\
-      (VAR) = VEC_index (int, (GRAPH)->edge_list, x_);			\
-      (LOCUS) = VEC_index (source_location, (GRAPH)->edge_locus, x_ / 2); \
+      (void) ((VAR) = VEC_index (int, (GRAPH)->edge_list, x_));		\
+      (void) ((LOCUS) = VEC_index (source_location,			\
+				   (GRAPH)->edge_locus, x_ / 2));	\
       CODE;								\
     }									\
 } while (0)
@@ -671,7 +677,7 @@ eliminate_phi (edge e, elim_graph g)
       sbitmap_zero (g->visited);
       VEC_truncate (int, g->stack, 0);
 
-      for (x = 0; VEC_iterate (int, g->nodes, x, part); x++)
+      FOR_EACH_VEC_ELT (int, g->nodes, x, part)
         {
 	  if (!TEST_BIT (g->visited, part))
 	    elim_forward (g, part);

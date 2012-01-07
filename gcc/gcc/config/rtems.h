@@ -18,6 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* The system headers under RTEMS are C++-aware.  */
+#undef NO_IMPLICIT_EXTERN_C
 #define NO_IMPLICIT_EXTERN_C
 
 /*
@@ -40,3 +41,5 @@ along with GCC; see the file COPYING3.  If not see
 "%{!nostdlib: %{qrtems: --start-group \
  -lrtemsbsp -lrtemscpu \
  -lc -lgcc --end-group %{!qnolinkcmds: -T linkcmds%s}}}"
+
+#define TARGET_POSIX_IO

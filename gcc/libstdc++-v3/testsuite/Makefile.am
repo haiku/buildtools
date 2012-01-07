@@ -1,7 +1,7 @@
 ## Makefile for the testsuite subdirectory of the GNU C++ Standard library.
 ##
-## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-## Free Software Foundation, Inc.
+## Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+## 2011 Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
 ## Process this file with automake to produce Makefile.in.
@@ -67,10 +67,12 @@ site.exp: Makefile
 	@mv site.tmp site.exp
 
 
-extract_symvers = $(glibcxx_srcdir)/scripts/extract_symvers
+extract_symvers = $(glibcxx_builddir)/scripts/extract_symvers
+
+baseline_subdir := $(shell $(CXX) --print-multi-dir)
 
 baseline_symbols:
-	-@(output=${baseline_dir}/baseline_symbols.txt; \
+	-@(output=${baseline_dir}/${baseline_subdir}/baseline_symbols.txt; \
 	  if test ! -f $${output}; then \
 	    echo "Baseline file doesn't exist."; \
 	    echo "Try 'make new-abi-baseline' to create it."; \
@@ -78,8 +80,8 @@ baseline_symbols:
 	  fi; true)
 
 new-abi-baseline:
-	-@$(mkinstalldirs) ${baseline_dir}
-	-@(output=${baseline_dir}/baseline_symbols.txt; \
+	-@$(mkinstalldirs) ${baseline_dir}/${baseline_subdir}
+	-@(output=${baseline_dir}/${baseline_subdir}/baseline_symbols.txt; \
 	  if test -f $${output}; then \
 	    output=$${output}.new; \
 	    t=`echo $${output} | sed 's=.*config/abi/=='`; \
@@ -245,8 +247,8 @@ check-profile: site.exp
 # By adding these files here, automake will remove them for 'make clean'
 CLEANFILES = *.txt *.tst *.exe core* filebuf_* tmp* ostream_* *.log *.sum \
 	     testsuite_* site.exp abi_check baseline_symbols *TEST* *.dat \
-	     *.s *.o *.cc *.a *.so *.xml 
+	     *.ii *.s *.o *.cc *.x *.a *.so *.xml *.raw *.out
 
 # To remove directories.
 clean-local:
-	rm -rf debug parallel profile
+	rm -rf de fr debug parallel profile binaries normal*

@@ -1,6 +1,6 @@
 /* Routines for performing Temporary Expression Replacement (TER) in SSA trees.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation,
-   Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Andrew MacLeod  <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -25,7 +25,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
-#include "diagnostic.h"
+#include "tree-pretty-print.h"
+#include "gimple-pretty-print.h"
 #include "bitmap.h"
 #include "tree-flow.h"
 #include "tree-dump.h"
@@ -166,6 +167,7 @@ typedef struct temp_expr_table_d
   bitmap partition_in_use;		/* Partitions with kill entries.  */
   bitmap new_replaceable_dependencies;	/* Holding place for pending dep's.  */
   int *num_in_part;			/* # of ssa_names in a partition.  */
+  int *call_cnt;			/* Call count at definition.  */
 } *temp_expr_table_p;
 
 /* Used to indicate a dependency on VDEFs.  */
@@ -208,6 +210,7 @@ new_temp_expr_table (var_map map)
       if (p != NO_PARTITION)
         t->num_in_part[p]++;
     }
+  t->call_cnt = XCNEWVEC (int, num_ssa_names + 1);
 
   return t;
 }
@@ -239,6 +242,7 @@ free_temp_expr_table (temp_expr_table_p t)
   free (t->kill_list);
   free (t->partition_dependencies);
   free (t->num_in_part);
+  free (t->call_cnt);
 
   if (t->replaceable_expressions)
     ret = t->replaceable_expressions;
@@ -292,9 +296,7 @@ add_to_partition_kill_list (temp_expr_table_p tab, int p, int ver)
 static inline void
 remove_from_partition_kill_list (temp_expr_table_p tab, int p, int version)
 {
-#ifdef ENABLE_CHECKING
-  gcc_assert (tab->kill_list[p]);
-#endif
+  gcc_checking_assert (tab->kill_list[p]);
   bitmap_clear_bit (tab->kill_list[p], version);
   if (bitmap_empty_p (tab->kill_list[p]))
     {
@@ -341,10 +343,8 @@ add_dependence (temp_expr_table_p tab, int version, tree var)
   else
     {
       i = var_to_partition (tab->map, var);
-#ifdef ENABLE_CHECKING
-      gcc_assert (i != NO_PARTITION);
-      gcc_assert (tab->num_in_part[i] != 0);
-#endif
+      gcc_checking_assert (i != NO_PARTITION);
+      gcc_checking_assert (tab->num_in_part[i] != 0);
       /* Only dependencies on ssa_names which are coalesced with something need
          to be tracked.  Partitions with containing only a single SSA_NAME
 	 *cannot* have their value changed.  */
@@ -357,10 +357,17 @@ add_dependence (temp_expr_table_p tab, int version, tree var)
 }
 
 
-/* Return TRUE if expression STMT is suitable for replacement.  */
+/* Return TRUE if expression STMT is suitable for replacement.
+   TER is true if is_replaceable_p is called from within TER, false
+   when used from within stmt_is_replaceable_p, i.e. EXPAND_INITIALIZER
+   expansion.  The differences are that with !TER some tests are skipped
+   to make it more aggressive (doesn't require the same bb, or for -O0
+   same locus and same BLOCK), on the other side never considers memory
+   loads as replaceable, because those don't ever lead into constant
+   expressions.  */
 
 static inline bool
-is_replaceable_p (gimple stmt)
+is_replaceable_p (gimple stmt, bool ter)
 {
   use_operand_p use_p;
   tree def;
@@ -386,7 +393,7 @@ is_replaceable_p (gimple stmt)
     return false;
 
   /* If the use isn't in this block, it wont be replaced either.  */
-  if (gimple_bb (use_stmt) != gimple_bb (stmt))
+  if (ter && gimple_bb (use_stmt) != gimple_bb (stmt))
     return false;
 
   locus1 = gimple_location (stmt);
@@ -404,6 +411,7 @@ is_replaceable_p (gimple stmt)
     }
 
   if (!optimize
+      && ter
       && ((locus1 && locus1 != locus2) || (block1 && block1 != block2)))
     return false;
 
@@ -416,7 +424,7 @@ is_replaceable_p (gimple stmt)
     return false;
 
   /* Without alias info we can't move around loads.  */
-  if (!optimize
+  if ((!optimize || !ter)
       && gimple_assign_single_p (stmt)
       && !is_gimple_val (gimple_assign_rhs1 (stmt)))
     return false;
@@ -441,6 +449,16 @@ is_replaceable_p (gimple stmt)
     return false;
 
   return true;
+}
+
+
+/* Variant of is_replaceable_p test for use in EXPAND_INITIALIZER
+   expansion.  */
+
+bool
+stmt_is_replaceable_p (gimple stmt)
+{
+  return is_replaceable_p (stmt, false);
 }
 
 
@@ -470,16 +488,14 @@ finished_with_expr (temp_expr_table_p tab, int version, bool free_expr)
 /* Create an expression entry for a replaceable expression.  */
 
 static void
-process_replaceable (temp_expr_table_p tab, gimple stmt)
+process_replaceable (temp_expr_table_p tab, gimple stmt, int call_cnt)
 {
   tree var, def, basevar;
   int version;
   ssa_op_iter iter;
   bitmap def_vars, use_vars;
 
-#ifdef ENABLE_CHECKING
-  gcc_assert (is_replaceable_p (stmt));
-#endif
+  gcc_checking_assert (is_replaceable_p (stmt, true));
 
   def = SINGLE_SSA_TREE_OPERAND (stmt, SSA_OP_DEF);
   version = SSA_NAME_VERSION (def);
@@ -511,6 +527,8 @@ process_replaceable (temp_expr_table_p tab, gimple stmt)
       make_dependent_on_partition (tab, version, VIRTUAL_PARTITION (tab));
       add_to_partition_kill_list (tab, VIRTUAL_PARTITION (tab), version);
     }
+
+  tab->call_cnt[version] = call_cnt;
 }
 
 
@@ -530,9 +548,7 @@ kill_expr (temp_expr_table_p tab, int partition)
       finished_with_expr (tab, version, true);
     }
 
-#ifdef ENABLE_CHECKING
-  gcc_assert (!tab->kill_list[partition]);
-#endif
+  gcc_checking_assert (!tab->kill_list[partition]);
 }
 
 
@@ -577,11 +593,12 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
 {
   gimple_stmt_iterator bsi;
   gimple stmt;
-  tree def, use;
+  tree def, use, fndecl;
   int partition;
   var_map map = tab->map;
   ssa_op_iter iter;
   bool stmt_replaceable;
+  int cur_call_cnt = 0;
 
   for (bsi = gsi_start_bb (bb); !gsi_end_p (bsi); gsi_next (&bsi))
     {
@@ -590,7 +607,7 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
       if (is_gimple_debug (stmt))
 	continue;
 
-      stmt_replaceable = is_replaceable_p (stmt);
+      stmt_replaceable = is_replaceable_p (stmt, true);
 
       /* Determine if this stmt finishes an existing expression.  */
       FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
@@ -617,10 +634,32 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
 		      }
 		  }
 
-	      /* Mark expression as replaceable unless stmt is volatile or the
+	      /* If the stmt does a memory store and the replacement
+	         is a load aliasing it avoid creating overlapping
+		 assignments which we cannot expand correctly.  */
+	      if (gimple_vdef (stmt)
+		  && gimple_assign_single_p (stmt))
+		{
+		  gimple def_stmt = SSA_NAME_DEF_STMT (use);
+		  while (is_gimple_assign (def_stmt)
+			 && gimple_assign_rhs_code (def_stmt) == SSA_NAME)
+		    def_stmt
+		      = SSA_NAME_DEF_STMT (gimple_assign_rhs1 (def_stmt));
+		  if (gimple_vuse (def_stmt)
+		      && gimple_assign_single_p (def_stmt)
+		      && refs_may_alias_p (gimple_assign_lhs (stmt),
+					   gimple_assign_rhs1 (def_stmt)))
+		    same_root_var = true;
+		}
+
+	      /* Mark expression as replaceable unless stmt is volatile, or the
 		 def variable has the same root variable as something in the
-		 substitution list.  */
-	      if (gimple_has_volatile_ops (stmt) || same_root_var)
+		 substitution list, or the def and use span a call such that
+		 we'll expand lifetimes across a call.  */
+	      if (gimple_has_volatile_ops (stmt) || same_root_var
+		  || (tab->call_cnt[ver] != cur_call_cnt
+		      && SINGLE_SSA_USE_OPERAND (SSA_NAME_DEF_STMT (use), SSA_OP_USE)
+			 == NULL_USE_OPERAND_P))
 		finished_with_expr (tab, ver, true);
 	      else
 		mark_replaceable (tab, use, stmt_replaceable);
@@ -635,9 +674,17 @@ find_replaceable_in_bb (temp_expr_table_p tab, basic_block bb)
 	    kill_expr (tab, partition);
 	}
 
+      /* Increment counter if this is a non BUILT_IN call. We allow
+	 replacement over BUILT_IN calls since many will expand to inline
+	 insns instead of a true call.  */
+      if (is_gimple_call (stmt)
+	  && !((fndecl = gimple_call_fndecl (stmt))
+	       && DECL_BUILT_IN (fndecl)))
+	cur_call_cnt++;
+
       /* Now see if we are creating a new expression or not.  */
       if (stmt_replaceable)
-	process_replaceable (tab, stmt);
+	process_replaceable (tab, stmt, cur_call_cnt);
 
       /* Free any unused dependency lists.  */
       bitmap_clear (tab->new_replaceable_dependencies);
@@ -669,9 +716,7 @@ find_replaceable_exprs (var_map map)
   FOR_EACH_BB (bb)
     {
       find_replaceable_in_bb (table, bb);
-#ifdef ENABLE_CHECKING
-      gcc_assert (bitmap_empty_p (table->partition_in_use));
-#endif
+      gcc_checking_assert (bitmap_empty_p (table->partition_in_use));
     }
 
   ret = free_temp_expr_table (table);
@@ -705,7 +750,7 @@ dump_replaceable_exprs (FILE *f, bitmap expr)
    exclusively to debug TER.  F is the place to send debug info and T is the
    table being debugged.  */
 
-void
+DEBUG_FUNCTION void
 debug_ter (FILE *f, temp_expr_table_p t)
 {
   unsigned x, y;
@@ -720,7 +765,7 @@ debug_ter (FILE *f, temp_expr_table_p t)
   for (x = 1; x < num_ssa_names; x++)
     if (t->expr_decl_uids[x])
       {
-        print_generic_expr (stderr, ssa_name (x), TDF_SLIM);
+        print_generic_expr (f, ssa_name (x), TDF_SLIM);
         fprintf (f, " dep-parts : ");
 	if (t->partition_dependencies[x]
 	    && !bitmap_empty_p (t->partition_dependencies[x]))
@@ -728,10 +773,11 @@ debug_ter (FILE *f, temp_expr_table_p t)
 	    EXECUTE_IF_SET_IN_BITMAP (t->partition_dependencies[x], 0, y, bi)
 	      fprintf (f, "P%d ",y);
 	  }
-	fprintf (stderr, "   basedecls: ");
+	fprintf (f, "   basedecls: ");
 	EXECUTE_IF_SET_IN_BITMAP (t->expr_decl_uids[x], 0, y, bi)
 	  fprintf (f, "%d ",y);
-	fprintf (stderr, "\n");
+	fprintf (f, "   call_cnt : %d",t->call_cnt[x]);
+	fprintf (f, "\n");
       }
 
   bitmap_print (f, t->partition_in_use, "Partitions in use ",

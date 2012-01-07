@@ -1,6 +1,6 @@
 /* Subroutines for code generation on Motorola 68HC11 and 68HC12.
    Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
-   2009 Free Software Foundation, Inc.
+   2009, 2010 Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
 This file is part of GCC.
@@ -32,7 +32,6 @@ Note:
 
 */
 
-#include <stdio.h>
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -43,7 +42,6 @@ Note:
 #include "tm_p.h"
 #include "regs.h"
 #include "hard-reg-set.h"
-#include "real.h"
 #include "insn-config.h"
 #include "conditions.h"
 #include "output.h"
@@ -52,7 +50,7 @@ Note:
 #include "recog.h"
 #include "expr.h"
 #include "libfuncs.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "basic-block.h"
 #include "function.h"
 #include "ggc.h"
@@ -61,6 +59,7 @@ Note:
 #include "target-def.h"
 #include "df.h"
 
+static void m68hc11_option_override (void);
 static void emit_move_after_reload (rtx, rtx, rtx);
 static rtx simplify_logical (enum machine_mode, int, rtx, rtx *);
 static void m68hc11_emit_logical (enum machine_mode, enum rtx_code, rtx *);
@@ -75,10 +74,13 @@ static int m68hc11_rtx_costs_1 (rtx, enum rtx_code, enum rtx_code);
 static bool m68hc11_rtx_costs (rtx, int, int, int *, bool);
 static tree m68hc11_handle_fntype_attribute (tree *, tree, tree, int, bool *);
 static tree m68hc11_handle_page0_attribute (tree *, tree, tree, int, bool *);
+static bool m68hc11_class_likely_spilled_p (reg_class_t);
 
 void create_regs_rtx (void);
 
 static void asm_print_register (FILE *, int);
+static void m68hc11_print_operand (FILE *, rtx, int);
+static void m68hc11_print_operand_address (FILE *, rtx);
 static void m68hc11_output_function_epilogue (FILE *, HOST_WIDE_INT);
 static void m68hc11_asm_out_constructor (rtx, int);
 static void m68hc11_asm_out_destructor (rtx, int);
@@ -92,7 +94,13 @@ static void m68hc11_init_libfuncs (void);
 static rtx m68hc11_struct_value_rtx (tree, int);
 static bool m68hc11_return_in_memory (const_tree, const_tree);
 static bool m68hc11_can_eliminate (const int, const int);
+static void m68hc11_conditional_register_usage (void);
 static void m68hc11_trampoline_init (rtx, tree, rtx);
+
+static rtx m68hc11_function_arg (CUMULATIVE_ARGS*, enum machine_mode,
+				 const_tree, bool);
+static void m68hc11_function_arg_advance (CUMULATIVE_ARGS*, enum machine_mode,
+					  const_tree, bool);
 
 /* Must be set to 1 to produce debug messages.  */
 int debug_m6811 = 0;
@@ -239,6 +247,11 @@ static const struct attribute_spec m68hc11_attribute_table[] =
 #undef TARGET_ASM_ALIGNED_HI_OP
 #define TARGET_ASM_ALIGNED_HI_OP "\t.word\t"
 
+#undef TARGET_PRINT_OPERAND
+#define TARGET_PRINT_OPERAND m68hc11_print_operand
+#undef TARGET_PRINT_OPERAND_ADDRESS
+#define TARGET_PRINT_OPERAND_ADDRESS m68hc11_print_operand_address
+
 #undef TARGET_ASM_FUNCTION_EPILOGUE
 #define TARGET_ASM_FUNCTION_EPILOGUE m68hc11_output_function_epilogue
 
@@ -267,6 +280,11 @@ static const struct attribute_spec m68hc11_attribute_table[] =
 #undef TARGET_INIT_LIBFUNCS
 #define TARGET_INIT_LIBFUNCS m68hc11_init_libfuncs
 
+#undef TARGET_FUNCTION_ARG
+#define TARGET_FUNCTION_ARG m68hc11_function_arg
+#undef TARGET_FUNCTION_ARG_ADVANCE
+#define TARGET_FUNCTION_ARG_ADVANCE m68hc11_function_arg_advance
+
 #undef TARGET_STRUCT_VALUE_RTX
 #define TARGET_STRUCT_VALUE_RTX m68hc11_struct_value_rtx
 #undef TARGET_RETURN_IN_MEMORY
@@ -283,13 +301,22 @@ static const struct attribute_spec m68hc11_attribute_table[] =
 #undef TARGET_CAN_ELIMINATE
 #define TARGET_CAN_ELIMINATE m68hc11_can_eliminate
 
+#undef TARGET_CONDITIONAL_REGISTER_USAGE
+#define TARGET_CONDITIONAL_REGISTER_USAGE m68hc11_conditional_register_usage
+
+#undef TARGET_CLASS_LIKELY_SPILLED_P
+#define TARGET_CLASS_LIKELY_SPILLED_P m68hc11_class_likely_spilled_p
+
 #undef TARGET_TRAMPOLINE_INIT
 #define TARGET_TRAMPOLINE_INIT m68hc11_trampoline_init
 
+#undef TARGET_OPTION_OVERRIDE
+#define TARGET_OPTION_OVERRIDE m68hc11_option_override
+
 struct gcc_target targetm = TARGET_INITIALIZER;
 
-int
-m68hc11_override_options (void)
+static void
+m68hc11_option_override (void)
 {
   memset (m68hc11_reg_valid_for_index, 0,
 	  sizeof (m68hc11_reg_valid_for_index));
@@ -354,11 +381,13 @@ m68hc11_override_options (void)
       if (TARGET_LONG_CALLS)
         current_function_far = 1;
     }
-  return 0;
 }
 
 
-void
+/* The soft-registers are disabled or enabled according to the
+  -msoft-reg-count=<n> option.  */
+
+static void
 m68hc11_conditional_register_usage (void)
 {
   int i;
@@ -569,6 +598,32 @@ preferred_reload_class (rtx operand, enum reg_class rclass)
     }
 
   return rclass;
+}
+
+/* Implement TARGET_CLASS_LIKELY_SPILLED_P.  */
+
+static bool
+m68hc11_class_likely_spilled_p (reg_class_t rclass)
+{
+  switch (rclass)
+    {
+    case D_REGS:
+    case X_REGS:
+    case Y_REGS:
+    case A_REGS:
+    case SP_REGS:
+    case D_OR_X_REGS:
+    case D_OR_Y_REGS:
+    case X_OR_SP_REGS:
+    case Y_OR_SP_REGS:
+    case D_OR_SP_REGS:
+      return true;
+
+    default:
+      break;
+    }
+
+  return false;
 }
 
 /* Return 1 if the operand is a valid indexed addressing mode.
@@ -1437,9 +1492,9 @@ m68hc11_init_cumulative_args (CUMULATIVE_ARGS *cum, tree fntype, rtx libname)
    of mode MODE and data type TYPE.
    (TYPE is null for libcalls where that information may not be available.)  */
 
-void
+static void
 m68hc11_function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode,
-                              tree type, int named ATTRIBUTE_UNUSED)
+                              const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   if (mode != BLKmode)
     {
@@ -1475,9 +1530,10 @@ m68hc11_function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode,
    NAMED is nonzero if this argument is a named parameter
     (otherwise it is an extra parameter matching an ellipsis).  */
 
-struct rtx_def *
-m68hc11_function_arg (const CUMULATIVE_ARGS *cum, enum machine_mode mode,
-                      tree type ATTRIBUTE_UNUSED, int named ATTRIBUTE_UNUSED)
+static rtx
+m68hc11_function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+                      const_tree type ATTRIBUTE_UNUSED,
+		      bool named ATTRIBUTE_UNUSED)
 {
   if (cum->words != 0)
     {
@@ -1948,7 +2004,7 @@ m68hc11_gen_highpart (enum machine_mode mode, rtx x)
 	}
       else if (mode == SImode)
        {
-         return gen_int_mode (val >> 32, SImode);
+         return gen_int_mode ((val >> 16) >> 16, SImode);
        }
     }
   if (mode == QImode && D_REG_P (x))
@@ -2124,8 +2180,8 @@ asm_print_register (FILE *file, int regno)
    'T' generate the low-part temporary scratch register.  The operand is
        ignored.  */
 
-void
-print_operand (FILE *file, rtx op, int letter)
+static void
+m68hc11_print_operand (FILE *file, rtx op, int letter)
 {
   if (letter == 't')
     {
@@ -2221,7 +2277,7 @@ print_operand (FILE *file, rtx op, int letter)
         case MEM:
           gcc_assert (TARGET_M6812);
 	  fprintf (file, "[");
-	  print_operand_address (file, XEXP (base, 0));
+	  m68hc11_print_operand_address (file, XEXP (base, 0));
 	  fprintf (file, "]");
           break;
 
@@ -2317,8 +2373,8 @@ must_parenthesize (rtx op)
    assembler syntax for an instruction operand that is a memory
    reference whose address is ADDR.  ADDR is an RTL expression.  */
 
-void
-print_operand_address (FILE *file, rtx addr)
+static void
+m68hc11_print_operand_address (FILE *file, rtx addr)
 {
   rtx base;
   rtx offset;
@@ -2916,8 +2972,6 @@ m68hc11_emit_logical (enum machine_mode mode, enum rtx_code code, rtx *operands)
     }
   else if (operands[1] != 0 && operands[2] != 0)
     {
-      rtx insn;
-
       if (!H_REG_P (operands[0]) && operands[3])
 	{
 	  emit_move_insn (operands[3], operands[1]);
@@ -2925,15 +2979,13 @@ m68hc11_emit_logical (enum machine_mode mode, enum rtx_code code, rtx *operands)
 				  operands[3],
 				  gen_rtx_fmt_ee (code, mode,
 						  operands[3], operands[2])));
-	  insn = emit_move_insn (operands[0], operands[3]);
+	  emit_move_insn (operands[0], operands[3]);
 	}
       else
 	{
-	  insn = emit_insn (gen_rtx_SET (mode,
-					 operands[0],
-					 gen_rtx_fmt_ee (code, mode,
-							 operands[0],
-							 operands[2])));
+	  emit_insn (gen_rtx_SET (mode, operands[0],
+				  gen_rtx_fmt_ee (code, mode,
+						  operands[0], operands[2])));
 	}
     }
 
@@ -4606,6 +4658,10 @@ m68hc11_check_z_replacement (rtx insn, struct replace_info *info)
     }
   if (GET_CODE (body) == CLOBBER)
     {
+      rtx dst = XEXP (body, 0);
+
+      this_insn_uses_ix = reg_mentioned_p (ix_reg, dst);
+      this_insn_uses_iy = reg_mentioned_p (iy_reg, dst);
 
       /* IX and IY are used at the same time, we have to restore
          the value of the scratch register before this insn.  */

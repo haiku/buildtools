@@ -1,5 +1,5 @@
 /* Fallback frame unwinding for Alpha/VMS.
-   Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2009
+   Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2009, 2010
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -283,6 +283,8 @@ alpha_vms_fallback_frame_state (struct _Unwind_Context *context,
       
       /* ??? floating point registers ?  */
     }
+
+  fs->signal_frame = 1;
 
   return _URC_NO_REASON;
 }

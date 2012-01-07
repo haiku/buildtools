@@ -1,6 +1,6 @@
 // <forward_list.tcc> -*- C++ -*-
 
-// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,14 +22,17 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file forward_list.tcc
- *  This is a Standard C++ Library header.
+/** @file bits/forward_list.tcc
+ *  This is an internal header file, included by other library headers.
+ *  Do not attempt to use it directly. @headername{forward_list}
  */
 
 #ifndef _FORWARD_LIST_TCC
 #define _FORWARD_LIST_TCC 1
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   template<typename _Tp, typename _Alloc>
     _Fwd_list_base<_Tp, _Alloc>::
@@ -63,7 +66,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       }
 
   template<typename _Tp, typename _Alloc>
-    void
+    _Fwd_list_node_base*
     _Fwd_list_base<_Tp, _Alloc>::
     _M_erase_after(_Fwd_list_node_base* __pos)
     {
@@ -71,10 +74,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       __pos->_M_next = __curr->_M_next;
       _M_get_Node_allocator().destroy(__curr);
       _M_put_node(__curr);
+      return __pos->_M_next;
     }
 
   template<typename _Tp, typename _Alloc>
-    void
+    _Fwd_list_node_base*
     _Fwd_list_base<_Tp, _Alloc>::
     _M_erase_after(_Fwd_list_node_base* __pos, 
                    _Fwd_list_node_base* __last)
@@ -88,8 +92,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
           _M_put_node(__temp);
         }
       __pos->_M_next = __last;
+      return __last;
     }
-  
+
   // Called by the range constructor to implement [23.1.1]/9
   template<typename _Tp, typename _Alloc>
     template<typename _InputIterator>
@@ -201,7 +206,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   template<typename _Tp, typename _Alloc>
     void
     forward_list<_Tp, _Alloc>::
-    resize(size_type __sz, value_type __val)
+    resize(size_type __sz, const value_type& __val)
     {
       iterator __k = before_begin();
 
@@ -286,13 +291,26 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     remove(const _Tp& __val)
     {
       _Node* __curr = static_cast<_Node*>(&this->_M_impl._M_head);
-      while (_Node* __temp = static_cast<_Node*>(__curr->_M_next))
+      _Node* __extra = 0;
+
+      while (_Node* __tmp = static_cast<_Node*>(__curr->_M_next))
         {
-          if (__temp->_M_value == __val)
-            this->_M_erase_after(__curr);
-          else
-            __curr = static_cast<_Node*>(__curr->_M_next);
+          if (__tmp->_M_value == __val)
+	    {
+	      if (std::__addressof(__tmp->_M_value)
+		  != std::__addressof(__val))
+		{
+		  this->_M_erase_after(__curr);
+		  continue;
+		}
+	      else
+		__extra = __curr;
+	    }
+	  __curr = static_cast<_Node*>(__curr->_M_next);
         }
+
+      if (__extra)
+	this->_M_erase_after(__extra);
     }
 
   template<typename _Tp, typename _Alloc>
@@ -302,9 +320,9 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       remove_if(_Pred __pred)
       {
 	_Node* __curr = static_cast<_Node*>(&this->_M_impl._M_head);
-        while (_Node* __temp = static_cast<_Node*>(__curr->_M_next))
+        while (_Node* __tmp = static_cast<_Node*>(__curr->_M_next))
           {
-            if (__pred(__temp->_M_value))
+            if (__pred(__tmp->_M_value))
               this->_M_erase_after(__curr);
             else
               __curr = static_cast<_Node*>(__curr->_M_next);
@@ -478,7 +496,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
           }
       }
  
-_GLIBCXX_END_NAMESPACE // namespace std
+_GLIBCXX_END_NAMESPACE_CONTAINER
+} // namespace std
 
 #endif /* _FORWARD_LIST_TCC */
 

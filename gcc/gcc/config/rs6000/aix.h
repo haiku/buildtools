@@ -24,6 +24,11 @@
 #undef  TARGET_AIX
 #define TARGET_AIX 1
 
+/* Linux64.h wants to redefine TARGET_AIX based on -m64, but it can't be used
+   in the #if conditional in options-default.h, so provide another macro.  */
+#undef  TARGET_AIX_OS
+#define TARGET_AIX_OS 1
+
 /* AIX always has a TOC.  */
 #define TARGET_NO_TOC 0
 #define TARGET_TOC 1
@@ -50,9 +55,6 @@
    a link with garbage collection activated.  */
 #define ASM_OUTPUT_DWARF_TABLE_REF rs6000_aix_asm_output_dwarf_table_ref
 #endif
-
-/* Handle #pragma weak and #pragma pack.  */
-#define HANDLE_SYSV_PRAGMA 1
 
 /* This is the only version of nm that collect2 can work with.  */
 #define REAL_NM_FILE_NAME "/usr/ucb/nm"
@@ -156,7 +158,7 @@
 %{p:-L%R/lib/profiled -L%R/usr/lib/profiled} %{!shared:%{g*:-lg}} -lc"
 
 /* Static linking with shared libstdc++ requires libsupc++ as well.  */
-#define LIBSTDCXX_STATIC "-lsupc++"
+#define LIBSTDCXX_STATIC "supc++"
 
 /* This now supports a natural alignment mode.  */
 /* AIX word-aligns FP doubles but doubleword-aligns 64-bit ints.  */
@@ -253,3 +255,6 @@
 
 /* WINT_TYPE */
 #define WINT_TYPE "int"
+
+/* Static stack checking is supported by means of probes.  */
+#define STACK_CHECK_STATIC_BUILTIN 1

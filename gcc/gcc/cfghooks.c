@@ -1,6 +1,6 @@
 /* Hooks for cfg representation specific functions.
-   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation,
-   Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2010
+   Free Software Foundation, Inc.
    Contributed by Sebastian Pop <s.pop@laposte.net>
 
 This file is part of GCC.
@@ -28,7 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "basic-block.h"
 #include "tree-flow.h"
 #include "timevar.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "cfgloop.h"
 
 /* A pointer to one of the hooks containers.  */
@@ -88,7 +88,7 @@ current_ir_type (void)
    Currently it does following: checks edge and basic block list correctness
    and calls into IL dependent checking then.  */
 
-void
+DEBUG_FUNCTION void
 verify_flow_info (void)
 {
   size_t *edge_checksum;
@@ -906,9 +906,7 @@ duplicate_block (basic_block bb, edge e, basic_block after)
   if (bb->count < new_count)
     new_count = bb->count;
 
-#ifdef ENABLE_CHECKING
-  gcc_assert (can_duplicate_block_p (bb));
-#endif
+  gcc_checking_assert (can_duplicate_block_p (bb));
 
   new_bb = cfg_hooks->duplicate_block (bb);
   if (after)

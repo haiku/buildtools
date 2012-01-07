@@ -81,6 +81,10 @@ The GCC runtime library.
 @item libgfortran
 The Fortran runtime library.
 
+@item libgo
+The Go runtime library.  The bulk of this library is mirrored from the
+@uref{http://code.google.com/@/p/@/go/, master Go repository}.
+
 @item libgomp
 The GNU OpenMP runtime library.
 
@@ -373,7 +377,7 @@ and they are included in release distributions.
 
 Manuals are also provided on the GCC web site, in both HTML and
 PostScript forms.  This is done via the script
-@file{maintainer-scripts/update_web_docs}.  Each manual to be
+@file{maintainer-scripts/update_web_docs_svn}.  Each manual to be
 provided online must be listed in the definition of @code{MANUALS} in
 that file; a file @file{@var{name}.texi} must only appear once in the
 source tree, and the output manual must have the same name as the
@@ -532,8 +536,7 @@ following are also necessary:
 @itemize @bullet
 @item
 At least one Bugzilla component for bugs in that front end and runtime
-libraries.  This category needs to be mentioned in
-@file{gcc/gccbug.in}, as well as being added to the Bugzilla database.
+libraries.  This category needs to be added to the Bugzilla database.
 @item
 Normally, one or more maintainers of that front end listed in
 @file{MAINTAINERS}.
@@ -547,7 +550,7 @@ A news item on @file{index.html}, and possibly an announcement on the
 @email{gcc-announce@@gcc.gnu.org} mailing list.
 @item
 The front end's manuals should be mentioned in
-@file{maintainer-scripts/update_web_docs} (@pxref{Texinfo Manuals})
+@file{maintainer-scripts/update_web_docs_svn} (@pxref{Texinfo Manuals})
 and the online manuals should be linked to from
 @file{onlinedocs/index.html}.
 @item
@@ -557,9 +560,6 @@ inclusion in GCC, should be made available on the GCC FTP site
 @item
 The release and snapshot script @file{maintainer-scripts/gcc_release}
 should be updated to generate appropriate tarballs for this front end.
-The associated @file{maintainer-scripts/snapshot-README} and
-@file{maintainer-scripts/snapshot-index.html} files should be updated
-to list the tarballs and diffs for this front end.
 @item
 If this front end includes its own version files that include the
 current date, @file{maintainer-scripts/update_version} should be
@@ -1324,11 +1324,6 @@ Target supports hardware vectors of @code{float}.
 @item vect_int
 Target supports hardware vectors of @code{int}.
 
-@item vect_int_mult
-Target supports a vector widening multiplication of @code{short} operands
-into an @code{int} result, or supports promotion (unpacking) from
-@code{short} to @code{int} and a non-widening multiplication of @code{int}.
-
 @item vect_long
 Target supports hardware vectors of @code{long}.
 
@@ -1500,8 +1495,14 @@ ARM target supports generating NEON instructions.
 Test system supports executing NEON instructions.
 
 @item arm_neon_ok
-ARM Target supports @code{-mfpu=neon -mfloat-abi=softfp}.
-Some multilibs may be incompatible with these options.
+@anchor{arm_neon_ok}
+ARM Target supports @code{-mfpu=neon -mfloat-abi=softfp} or compatible
+options.  Some multilibs may be incompatible with these options.
+
+@item arm_neon_fp16_ok
+@anchor{arm_neon_fp16_ok}
+ARM Target supports @code{-mfpu=neon-fp16 -mfloat-abi=softfp} or compatible
+options.  Some multilibs may be incompatible with these options.
 
 @item arm_thumb1_ok
 ARM target generates Thumb-1 code for @code{-mthumb}.
@@ -1587,7 +1588,10 @@ PowerPC target supports executing AltiVec instructions.
 
 @table @code
 @item avx
-Target supports compiling AVX instructions.
+Target supports compiling @code{avx} instructions.
+
+@item avx_runtime
+Target supports the execution of @code{avx} instructions.
 
 @item cell_hw
 Test system can execute AltiVec and Cell PPU instructions.
@@ -1878,6 +1882,16 @@ The supported values of @var{feature} for directive @code{dg-add-options}
 are:
 
 @table @code
+@item arm_neon
+NEON support.  Only ARM targets support this feature, and only then
+in certain modes; see the @ref{arm_neon_ok,,arm_neon_ok effective target
+keyword}.
+
+@item arm_neon_fp16
+NEON and half-precision floating point support.  Only ARM targets
+support this feature, and only then in certain modes; see
+the @ref{arm_neon_ok,,arm_neon_fp16_ok effective target keyword}.
+
 @item bind_pic_locally
 Add the target-specific flags needed to enable functions to bind
 locally when using pic/PIC passes in the testsuite.
@@ -2292,10 +2306,10 @@ This directive provides a list of one or more sets of compiler options
 to override @var{LTO_OPTIONS}.  Each test will be compiled and run with
 each of these sets of options.
 
-@item @{ dg-extra-ld-options @var{options} @}
+@item @{ dg-extra-ld-options @var{options} [@{ target @var{selector} @}]@}
 This directive adds @var{options} to the linker options used.
 
-@item @{ dg-suppress-ld-options @var{options} @}
+@item @{ dg-suppress-ld-options @var{options} [@{ target @var{selector} @}]@}
 This directive removes @var{options} from the set of linker options used.
 @end table
 

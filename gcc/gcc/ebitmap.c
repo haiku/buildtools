@@ -21,10 +21,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "rtl.h"
-#include "flags.h"
-#include "obstack.h"
 #include "ebitmap.h"
 
 /* The ebitmap data structure is a sparse bitmap structure that works
@@ -410,7 +406,7 @@ dump_ebitmap (FILE *file, ebitmap bmap)
 
 /* Dump ebitmap BMAP to stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_ebitmap (ebitmap bmap)
 {
   dump_ebitmap (stderr, bmap);

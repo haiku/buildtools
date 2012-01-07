@@ -21,7 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "rtl.h"
 #include "tm_p.h"
 #include "hard-reg-set.h"
@@ -31,7 +31,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "except.h"
-#include "toplev.h"
 #include "recog.h"
 #include "params.h"
 #include "target.h"
@@ -43,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "vec.h"
 #include "langhooks.h"
 #include "rtlhooks-def.h"
+#include "emit-rtl.h"  /* FIXME: Can go away once crtl is moved to rtl.h.  */
 
 #ifdef INSN_SCHEDULING
 #include "sel-sched-ir.h"
@@ -688,7 +688,7 @@ merge_fences (fence_t f, insn_t insn,
 
       /* Find fallthrough edge.  */
       gcc_assert (BLOCK_FOR_INSN (insn)->prev_bb);
-      candidate = find_fallthru_edge (BLOCK_FOR_INSN (insn)->prev_bb);
+      candidate = find_fallthru_edge_from (BLOCK_FOR_INSN (insn)->prev_bb);
 
       if (!candidate
           || (candidate->src != BLOCK_FOR_INSN (last_scheduled_insn)
@@ -2879,18 +2879,39 @@ init_global_and_expr_for_insn (insn_t insn)
     bool force_unique_p;
     ds_t spec_done_ds;
 
-    /* Certain instructions cannot be cloned.  */
-    if (CANT_MOVE (insn)
-	|| INSN_ASM_P (insn)
-	|| SCHED_GROUP_P (insn)
-	|| prologue_epilogue_contains (insn)
-	/* Exception handling insns are always unique.  */
-	|| (flag_non_call_exceptions && can_throw_internal (insn))
-	/* TRAP_IF though have an INSN code is control_flow_insn_p ().  */
-	|| control_flow_insn_p (insn))
-      force_unique_p = true;
+    /* Certain instructions cannot be cloned, and frame related insns and
+       the insn adjacent to NOTE_INSN_EPILOGUE_BEG cannot be moved out of
+       their block.  */
+    if (prologue_epilogue_contains (insn))
+      {
+        if (RTX_FRAME_RELATED_P (insn))
+          CANT_MOVE (insn) = 1;
+        else
+          {
+            rtx note;
+            for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
+              if (REG_NOTE_KIND (note) == REG_SAVE_NOTE
+                  && ((enum insn_note) INTVAL (XEXP (note, 0))
+                      == NOTE_INSN_EPILOGUE_BEG))
+                {
+                  CANT_MOVE (insn) = 1;
+                  break;
+                }
+          }
+        force_unique_p = true;
+      }
     else
-      force_unique_p = false;
+      if (CANT_MOVE (insn)
+          || INSN_ASM_P (insn)
+          || SCHED_GROUP_P (insn)
+	  || CALL_P (insn)
+          /* Exception handling insns are always unique.  */
+          || (cfun->can_throw_non_call_exceptions && can_throw_internal (insn))
+          /* TRAP_IF though have an INSN code is control_flow_insn_p ().  */
+          || control_flow_insn_p (insn))
+        force_unique_p = true;
+      else
+        force_unique_p = false;
 
     if (targetm.sched.get_insn_spec_ds)
       {
@@ -4695,7 +4716,6 @@ bb_ends_ebb_p (basic_block bb)
 {
   basic_block next_bb = bb_next_bb (bb);
   edge e;
-  edge_iterator ei;
 
   if (next_bb == EXIT_BLOCK_PTR
       || bitmap_bit_p (forced_ebb_heads, next_bb->index)
@@ -4708,13 +4728,13 @@ bb_ends_ebb_p (basic_block bb)
   if (!in_current_region_p (next_bb))
     return true;
 
-  FOR_EACH_EDGE (e, ei, bb->succs)
-    if ((e->flags & EDGE_FALLTHRU) != 0)
-      {
-	gcc_assert (e->dest == next_bb);
-
-	return false;
-      }
+  e = find_fallthru_edge (bb->succs);
+  if (e)
+    {
+      gcc_assert (e->dest == next_bb);
+      
+      return false;
+    }
 
   return true;
 }
@@ -5858,7 +5878,7 @@ make_region_from_loop_preheader (VEC(basic_block, heap) **loop_blocks)
 
   new_rgn_number = sel_create_new_region ();
 
-  for (i = 0; VEC_iterate (basic_block, *loop_blocks, i, bb); i++)
+  FOR_EACH_VEC_ELT (basic_block, *loop_blocks, i, bb)
     {
       gcc_assert (new_rgn_number >= 0);
 
@@ -6201,7 +6221,7 @@ sel_remove_loop_preheader (void)
         {
           /* If all preheader blocks are empty - dont create new empty region.
              Instead, remove them completely.  */
-          for (i = 0; VEC_iterate (basic_block, preheader_blocks, i, bb); i++)
+          FOR_EACH_VEC_ELT (basic_block, preheader_blocks, i, bb)
             {
               edge e;
               edge_iterator ei;

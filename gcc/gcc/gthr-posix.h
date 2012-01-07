@@ -1,7 +1,7 @@
 /* Threads compatibility routines for libgcc2 and libobjc.  */
 /* Compile this one with gcc.  */
 /* Copyright (C) 1997, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-   2008, 2009, 2011 Free Software Foundation, Inc.
+   2008, 2009, 2010 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -124,7 +124,9 @@ __gthrw(pthread_join)
 __gthrw(pthread_equal)
 __gthrw(pthread_self)
 __gthrw(pthread_detach)
+#ifndef __BIONIC__
 __gthrw(pthread_cancel)
+#endif
 __gthrw(sched_yield)
 
 __gthrw(pthread_mutex_lock)
@@ -238,7 +240,15 @@ static inline int
 __gthread_active_p (void)
 {
   static void *const __gthread_active_ptr
-    = __extension__ (void *) &__gthrw_(pthread_cancel);
+    = __extension__ (void *) &__gthrw_(
+/* Android's C library does not provide pthread_cancel, check for
+   `pthread_create' instead.  */
+#ifndef __BIONIC__
+				       pthread_cancel
+#else
+				       pthread_create
+#endif
+				       );
   return __gthread_active_ptr != 0;
 }
 
@@ -360,7 +370,8 @@ __gthread_objc_thread_detach (void (*func)(void *), void *arg)
   if (!__gthread_active_p ())
     return NULL;
 
-  if (!(__gthrw_(pthread_create) (&new_thread_handle, NULL, (void *) func, arg)))
+  if (!(__gthrw_(pthread_create) (&new_thread_handle, &_objc_thread_attribs,
+				  (void *) func, arg)))
     thread_id = (objc_thread_t) new_thread_handle;
   else
     thread_id = NULL;

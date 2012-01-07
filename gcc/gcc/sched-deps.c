@@ -26,7 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "rtl.h"
 #include "tm_p.h"
 #include "hard-reg-set.h"
@@ -36,7 +36,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "except.h"
-#include "toplev.h"
 #include "recog.h"
 #include "sched-int.h"
 #include "params.h"
@@ -603,8 +602,8 @@ sched_insn_is_legitimate_for_speculation_p (const_rtx insn, ds_t ds)
     /* The following instructions, which depend on a speculatively scheduled
        instruction, cannot be speculatively scheduled along.  */
     {
-      if (may_trap_p (PATTERN (insn)))
-	/* If instruction might trap, it cannot be speculatively scheduled.
+      if (may_trap_or_fault_p (PATTERN (insn)))
+	/* If instruction might fault, it cannot be speculatively scheduled.
 	   For control speculation it's obvious why and for data speculation
 	   it's because the insn might get wrong input if speculation
 	   wasn't successful.  */
@@ -716,9 +715,6 @@ sd_init_insn (rtx insn)
   INSN_FORW_DEPS (insn) = create_deps_list ();
   INSN_RESOLVED_FORW_DEPS (insn) = create_deps_list ();
 
-  if (DEBUG_INSN_P (insn))
-    DEBUG_INSN_SCHED_P (insn) = TRUE;
-
   /* ??? It would be nice to allocate dependency caches here.  */
 }
 
@@ -727,12 +723,6 @@ void
 sd_finish_insn (rtx insn)
 {
   /* ??? It would be nice to deallocate dependency caches here.  */
-
-  if (DEBUG_INSN_P (insn))
-    {
-      gcc_assert (DEBUG_INSN_SCHED_P (insn));
-      DEBUG_INSN_SCHED_P (insn) = FALSE;
-    }
 
   free_deps_list (INSN_HARD_BACK_DEPS (insn));
   INSN_HARD_BACK_DEPS (insn) = NULL;
@@ -1413,7 +1403,10 @@ add_dependence_list_and_free (struct deps_desc *deps, rtx insn, rtx *listp,
 {
   rtx list, next;
 
-  if (deps->readonly)
+  /* We don't want to short-circuit dependencies involving debug
+     insns, because they may cause actual dependencies to be
+     disregarded.  */
+  if (deps->readonly || DEBUG_INSN_P (insn))
     {
       add_dependence_list (insn, *listp, uncond, dep_type);
       return;
@@ -1573,7 +1566,7 @@ add_insn_mem_dependence (struct deps_desc *deps, bool read_p,
   if (sched_deps_info->use_cselib)
     {
       mem = shallow_copy_rtx (mem);
-      XEXP (mem, 0) = cselib_subst_to_values (XEXP (mem, 0));
+      XEXP (mem, 0) = cselib_subst_to_values (XEXP (mem, 0), GET_MODE (mem));
     }
   link = alloc_EXPR_LIST (VOIDmode, canon_rtx (mem), *mem_list);
   *mem_list = link;
@@ -2290,8 +2283,9 @@ sched_analyze_1 (struct deps_desc *deps, rtx x, rtx insn)
 	    = targetm.addr_space.address_mode (MEM_ADDR_SPACE (dest));
 
 	  t = shallow_copy_rtx (dest);
-	  cselib_lookup_from_insn (XEXP (t, 0), address_mode, 1, insn);
-	  XEXP (t, 0) = cselib_subst_to_values (XEXP (t, 0));
+	  cselib_lookup_from_insn (XEXP (t, 0), address_mode, 1,
+				   GET_MODE (t), insn);
+	  XEXP (t, 0) = cselib_subst_to_values (XEXP (t, 0), GET_MODE (t));
 	}
       t = canon_rtx (t);
 
@@ -2447,8 +2441,9 @@ sched_analyze_2 (struct deps_desc *deps, rtx x, rtx insn)
 	      = targetm.addr_space.address_mode (MEM_ADDR_SPACE (t));
 
 	    t = shallow_copy_rtx (t);
-	    cselib_lookup_from_insn (XEXP (t, 0), address_mode, 1, insn);
-	    XEXP (t, 0) = cselib_subst_to_values (XEXP (t, 0));
+	    cselib_lookup_from_insn (XEXP (t, 0), address_mode, 1,
+				     GET_MODE (t), insn);
+	    XEXP (t, 0) = cselib_subst_to_values (XEXP (t, 0), GET_MODE (t));
 	  }
 
 	if (!DEBUG_INSN_P (insn))
@@ -3057,8 +3052,8 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
      This insn must be a simple move of a hard reg to a pseudo or
      vice-versa.
 
-     We must avoid moving these insns for correctness on
-     SMALL_REGISTER_CLASS machines, and for special registers like
+     We must avoid moving these insns for correctness on targets
+     with small register classes, and for special registers like
      PIC_OFFSET_TABLE_REGNUM.  For simplicity, extend this to all
      hard regs for all targets.  */
 
@@ -4083,7 +4078,7 @@ dump_ds (FILE *f, ds_t s)
   fprintf (f, "}");
 }
 
-void
+DEBUG_FUNCTION void
 debug_ds (ds_t s)
 {
   dump_ds (stderr, s);

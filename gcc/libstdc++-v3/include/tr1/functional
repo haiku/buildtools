@@ -1,6 +1,6 @@
 // TR1 functional header -*- C++ -*-
 
-// Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010
+// Copyright (C) 2004, 2005, 2006, 2007, 2009, 2010, 2011
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -42,11 +42,14 @@
 #include <bits/stringfwd.h>
 #include <tr1/functional_hash.h>
 #include <ext/type_traits.h>
+#include <bits/move.h> // for std::__addressof
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
 namespace tr1
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   template<typename _MemberPointer>
     class _Mem_fn;
 
@@ -452,7 +455,8 @@ namespace tr1
       typedef _Tp type;
 
       explicit
-      reference_wrapper(_Tp& __indata): _M_data(&__indata)
+      reference_wrapper(_Tp& __indata)
+      : _M_data(std::__addressof(__indata))
       { }
 
       reference_wrapper(const reference_wrapper<_Tp>& __inref):
@@ -838,6 +842,8 @@ namespace tr1
   /// The type of placeholder objects defined by libstdc++.
   template<int _Num> struct _Placeholder { };
 
+_GLIBCXX_END_NAMESPACE_VERSION
+
   /** @namespace std::placeholders
    *  @brief ISO C++ 0x entities sub namespace for functional.
    *
@@ -847,6 +853,7 @@ namespace tr1
    */
   namespace placeholders 
   { 
+  _GLIBCXX_BEGIN_NAMESPACE_VERSION
     namespace 
     {
       _Placeholder<1> _1;
@@ -879,8 +886,10 @@ namespace tr1
       _Placeholder<28> _28;
       _Placeholder<29> _29;
     } 
+  _GLIBCXX_END_NAMESPACE_VERSION
   }
 
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
   /**
    *  Partial specialization of is_placeholder that provides the placeholder
    *  number for the placeholder objects defined by libstdc++.
@@ -1905,22 +1914,9 @@ namespace tr1
        */
       void swap(function& __x)
       {
-        /* We cannot perform direct assignments of the _M_functor
-	   parts as they are of type _Any_data and have a different
-	   dynamic type.  Doing so would violate type-based aliasing
-	   rules and lead to spurious miscompilations.
-	   Instead perform a bytewise exchange of the memory of
-	   both POD objects.
-	   ???  A wordwise exchange honoring alignment of _M_functor
-	   would be more efficient.  See PR42845.  */
-	for (unsigned i = 0; i < sizeof (_M_functor._M_pod_data); ++i)
-	  std::swap (_M_functor._M_pod_data[i], __x._M_functor._M_pod_data[i]);
-	_Manager_type __old_manager = _M_manager;
-	_M_manager = __x._M_manager;
-	__x._M_manager = __old_manager;
-	_Invoker_type __old_invoker = _M_invoker;
-	_M_invoker = __x._M_invoker;
-	__x._M_invoker = __old_invoker;
+	std::swap(_M_functor, __x._M_functor);
+	std::swap(_M_manager, __x._M_manager);
+	std::swap(_M_invoker, __x._M_invoker);
       }
 
       // [3.7.2.3] function capacity
@@ -2145,6 +2141,8 @@ namespace tr1
     inline void
     swap(function<_Signature>& __x, function<_Signature>& __y)
     { __x.swap(__y); }
+
+_GLIBCXX_END_NAMESPACE_VERSION
 }
 }
 

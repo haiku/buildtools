@@ -1,6 +1,6 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
    Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008,
-   2009 Free Software Foundation, Inc.
+   2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
 This file is part of GCC.
@@ -96,14 +96,6 @@ extern int cris_cpu_version;
 
 /* Node: Driver */
 
-/* When using make with defaults.mak for Sun this will handily remove
-   any "-target sun*" switches.  */
-/* We need to override any previous definitions (linux.h) */
-#undef WORD_SWITCH_TAKES_ARG
-#define WORD_SWITCH_TAKES_ARG(STR)		\
- (DEFAULT_WORD_SWITCH_TAKES_ARG (STR)		\
-  || !strcmp (STR, "target"))
-
 /* Also provide canonical vN definitions when user specifies an alias.
    Note that -melf overrides -maout.  */
 
@@ -168,12 +160,10 @@ extern int cris_cpu_version;
     " -D__CRIS_arch_tune=" CRIS_DEFAULT_TUNE "}}}}}"\
  CRIS_ARCH_CPP_DEFAULT
 
-/* Remove those Sun-make "target" switches.  */
 /* Override previous definitions (linux.h).  */
 #undef CC1_SPEC
 #define CC1_SPEC \
- "%{target*:}\
-  %{metrax4:-march=v3}\
+ "%{metrax4:-march=v3}\
   %{metrax100:-march=v8}\
   %(cc1_subtarget)"
 
@@ -202,14 +192,13 @@ extern int cris_cpu_version;
 #undef ASM_SPEC
 #define ASM_SPEC \
  MAYBE_AS_NO_MUL_BUG_ABORT \
- "%{v:-v}\
- %(asm_subtarget)\
- %{march=*:%{cpu=*:%eDo not specify both -march=... and -mcpu=...}}\
+ "%(asm_subtarget)\
+ %{march=*:%{mcpu=*:%edo not specify both -march=... and -mcpu=...}}\
  %{march=v32:--march=v32} %{mcpu=v32:--march=v32}"
 
 /* For the cris-*-elf subtarget.  */
 #define CRIS_ASM_SUBTARGET_SPEC \
- "--em=criself %{!march=*:%{!cpu=*:" CRIS_DEFAULT_ASM_ARCH_OPTION "}}"
+ "--em=criself %{!march=*:%{!mcpu=*:" CRIS_DEFAULT_ASM_ARCH_OPTION "}}"
 
 /* FIXME: We should propagate the -melf option to make the criself
    "emulation" unless a linker script is provided (-T*), but I don't know
@@ -218,11 +207,8 @@ extern int cris_cpu_version;
    time being.
 
    Note that -melf overrides -maout except that a.out-compiled libraries
-   are linked in (multilibbing).  The somewhat cryptic -rpath-link pair is
-   to avoid *only* picking up the linux multilib subdir from the "-B./"
-   option during build, while still giving it preference.  We'd need some
-   %s-variant that checked for existence of some specific file.  */
-/* Override previous definitions (svr4.h).  */
+   are linked in (multilibbing).  We'd need some %s-variant that
+   checked for existence of some specific file.  */
 #undef LINK_SPEC
 #define LINK_SPEC \
  "%{v:--verbose}\
@@ -280,9 +266,6 @@ extern int cris_cpu_version;
     }						\
   while (0)
 
-/* This needs to be at least 32 bits.  */
-extern int target_flags;
-
 /* Previously controlled by target_flags.  */
 #define TARGET_ELF 1
 
@@ -327,17 +310,6 @@ extern int target_flags;
 #define TARGET_V32 (cris_cpu_version >= CRIS_CPU_V32)
 
 #define CRIS_SUBTARGET_HANDLE_OPTION(x, y, z)
-
-#define OVERRIDE_OPTIONS cris_override_options ()
-
-#define OPTIMIZATION_OPTIONS(OPTIMIZE, SIZE)	\
-  do						\
-    {						\
-      if ((OPTIMIZE) >= 2 || (SIZE))		\
-	flag_omit_frame_pointer = 1;		\
-    }						\
-  while (0)
-
 
 /* Node: Storage Layout */
 
@@ -454,9 +426,6 @@ extern int target_flags;
    r10- for return values.  */
 #define CALL_USED_REGISTERS \
  {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1}
-
-#define CONDITIONAL_REGISTER_USAGE cris_conditional_register_usage ()
-
 
 /* Node: Allocation Order */
 
@@ -859,25 +828,8 @@ enum reg_class
 
 #define ACCUMULATE_OUTGOING_ARGS 1
 
-#define RETURN_POPS_ARGS(FUNDECL, FUNTYPE, STACKSIZE) 0
-
 
 /* Node: Register Arguments */
-
-/* The void_type_node is sent as a "closing" call.  */
-#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED)			\
- ((CUM).regs < CRIS_MAX_ARGS_IN_REGS				\
-  ? gen_rtx_REG (MODE, (CRIS_FIRST_ARG_REG) + (CUM).regs)	\
-  : NULL_RTX)
-
-/* The differences between this and the previous, is that this one checks
-   that an argument is named, since incoming stdarg/varargs arguments are
-   pushed onto the stack, and we don't have to check against the "closing"
-   void_type_node TYPE parameter.  */
-#define FUNCTION_INCOMING_ARG(CUM, MODE, TYPE, NAMED)		\
- ((NAMED) && (CUM).regs < CRIS_MAX_ARGS_IN_REGS			\
-  ? gen_rtx_REG (MODE, CRIS_FIRST_ARG_REG + (CUM).regs)		\
-  : NULL_RTX)
 
 /* Contrary to what you'd believe, defining FUNCTION_ARG_CALLEE_COPIES
    seems like a (small total) loss, at least for gcc-2.7.2 compiling and
@@ -895,9 +847,6 @@ struct cum_args {int regs;};
    registers so far.  */
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, FNDECL, N_NAMED_ARGS) \
  ((CUM).regs = 0)
-
-#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)		\
- ((CUM).regs += (3 + CRIS_FUNCTION_ARG_SIZE (MODE, TYPE)) / 4)
 
 #define FUNCTION_ARG_REGNO_P(REGNO)			\
  ((REGNO) >= CRIS_FIRST_ARG_REG				\
@@ -1089,14 +1038,6 @@ struct cum_args {int regs;};
 
 /* Node: Costs */
 
-#define REGISTER_MOVE_COST(MODE, FROM, TO)	\
-  cris_register_move_cost (MODE, FROM, TO)
-
-/* This isn't strictly correct for v0..3 in buswidth-8bit mode, but
-   should suffice.  */
-#define MEMORY_MOVE_COST(M, CLASS, IN) \
- (((M) == QImode) ? 4 : ((M) == HImode) ? 4 : 6)
-
 /* Regardless of the presence of delay slots, the default value of 1 for
    BRANCH_COST is the best in the range (1, 2, 3), tested with gcc-2.7.2
    with testcases ipps and gcc, giving smallest and fastest code.  */
@@ -1253,16 +1194,6 @@ enum cris_pic_symbol_type
 #define ADDITIONAL_REGISTER_NAMES \
  {{"r14", 14}, {"r15", 15}, {"pc", 15}}
 
-#define PRINT_OPERAND(FILE, X, CODE)		\
- cris_print_operand (FILE, X, CODE)
-
-/* For delay-slot handling.  */
-#define PRINT_OPERAND_PUNCT_VALID_P(CODE)	\
- ((CODE) == '#' || (CODE) == '!' || (CODE) == ':')
-
-#define PRINT_OPERAND_ADDRESS(FILE, ADDR)	\
-   cris_print_operand_address (FILE, ADDR)
-
 /* Output an empty line to illustrate the presence of the delay slot.  */
 #define DBR_OUTPUT_SEQEND(FILE) \
   fprintf (FILE, "\n")
@@ -1395,9 +1326,6 @@ enum cris_pic_symbol_type
 #define FUNCTION_MODE QImode
 
 #define NO_IMPLICIT_EXTERN_C
-
-/* No specific purpose other than warningless compatibility.  */
-#define HANDLE_PRAGMA_PACK_PUSH_POP 1
 
 /*
  * Local variables:

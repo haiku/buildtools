@@ -1,6 +1,6 @@
 // Allocators -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -51,7 +51,9 @@
 #include <ext/concurrence.h>
 #include <bits/move.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   using std::size_t;
   using std::ptrdiff_t;
@@ -147,10 +149,10 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       ~__pool_alloc() throw() { }
 
       pointer
-      address(reference __x) const { return &__x; }
+      address(reference __x) const { return std::__addressof(__x); }
 
       const_pointer
-      address(const_reference __x) const { return &__x; }
+      address(const_reference __x) const { return std::__addressof(__x); }
 
       size_type
       max_size() const throw() 
@@ -258,6 +260,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 	}
     }
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif

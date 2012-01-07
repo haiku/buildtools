@@ -64,7 +64,9 @@
 # include <tr1/random>
 #endif
 
-_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /**
    *  @brief Thown by exception safety machinery.
@@ -110,7 +112,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
     void
     insert(void* p, size_t size)
     {
-      if (p == NULL)
+      if (!p)
 	{
 	  std::string error("annotate_base::insert null insert!\n");
 	  log_to_string(error, make_entry(p, size));
@@ -620,6 +622,12 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       { return _M_allocator.max_size(); }
 
       pointer
+      address(reference __x) const { return std::__addressof(__x); }
+
+      const_pointer
+      address(const_reference __x) const { return std::__addressof(__x); }
+
+      pointer
       allocate(size_type __n, std::allocator<void>::const_pointer hint = 0)
       {
 	if (__n > this->max_size())
@@ -715,13 +723,14 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       ~throw_allocator_random() throw() { }
     };
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
 
 # include <bits/functional_hash.h>
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
   /// Explicit specialization of std::hash for __gnu_cxx::throw_value_limit.
   template<>
@@ -731,8 +740,8 @@ namespace std
       size_t
       operator()(const __gnu_cxx::throw_value_limit& __val) const
       {
-	std::hash<std::size_t> h;
-	size_t __result = h(__val._M_i);
+	std::hash<std::size_t> __h;
+	size_t __result = __h(__val._M_i);
 	return __result;
       }
     };
@@ -745,8 +754,8 @@ namespace std
       size_t
       operator()(const __gnu_cxx::throw_value_random& __val) const
       {
-	std::hash<std::size_t> h;
-	size_t __result = h(__val._M_i);
+	std::hash<std::size_t> __h;
+	size_t __result = __h(__val._M_i);
 	return __result;
       }
     };

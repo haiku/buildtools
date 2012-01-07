@@ -25,9 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "flags.h"
-#include "toplev.h"
-#include "output.h"
-#include "rtl.h"
+#include "diagnostic-core.h"
 #include "ggc.h"
 #include "tm_p.h"
 #include "cpplib.h"
@@ -210,7 +208,7 @@ register_attribute (const struct attribute_spec *attr)
 /* Return the spec for the attribute named NAME.  */
 
 const struct attribute_spec *
-lookup_attribute_spec (tree name)
+lookup_attribute_spec (const_tree name)
 {
   struct substring attr;
 
@@ -276,6 +274,19 @@ decl_attributes (tree *node, tree attributes, int flags)
 	attributes = tree_cons (get_identifier ("target"), opts, attributes);
       else
 	TREE_VALUE (cur_attr) = chainon (opts, TREE_VALUE (cur_attr));
+    }
+
+  /* A "naked" function attribute implies "noinline" and "noclone" for
+     those targets that support it.  */
+  if (TREE_CODE (*node) == FUNCTION_DECL
+      && lookup_attribute_spec (get_identifier ("naked"))
+      && lookup_attribute ("naked", attributes) != NULL)
+    {
+      if (lookup_attribute ("noinline", attributes) == NULL)
+	attributes = tree_cons (get_identifier ("noinline"), NULL, attributes);
+
+      if (lookup_attribute ("noclone", attributes) == NULL)
+	attributes = tree_cons (get_identifier ("noclone"),  NULL, attributes);
     }
 
   targetm.insert_attributes (*node, &attributes);

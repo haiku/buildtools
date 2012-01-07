@@ -1,6 +1,6 @@
 // Bitmap Allocator. -*- C++ -*-
 
-// Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009
+// Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -30,9 +30,8 @@
 #ifndef _BITMAP_ALLOCATOR_H
 #define _BITMAP_ALLOCATOR_H 1
 
-#include <cstddef> // For std::size_t, and ptrdiff_t.
-#include <bits/functexcept.h> // For __throw_bad_alloc().
 #include <utility> // For std::pair.
+#include <bits/functexcept.h> // For __throw_bad_alloc().
 #include <functional> // For greater_equal, and less_equal.
 #include <new> // For operator new.
 #include <debug/debug.h> // _GLIBCXX_DEBUG_ASSERT
@@ -44,13 +43,14 @@
  */
 #define _BALLOC_ALIGN_BYTES 8
 
-_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
-
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
   using std::size_t;
   using std::ptrdiff_t;
 
   namespace __detail
   {
+  _GLIBCXX_BEGIN_NAMESPACE_VERSION
     /** @class  __mini_vector bitmap_allocator.h bitmap_allocator.h
      *
      *  @brief  __mini_vector<> is a stripped down version of the
@@ -505,7 +505,11 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       size_t __mask = 1 << __pos;
       *__pbmap |= __mask;
     }
+
+  _GLIBCXX_END_NAMESPACE_VERSION
   } // namespace __detail
+
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /** @brief  Generic Version of the bsf instruction.
    */
@@ -1039,11 +1043,11 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
       pointer 
       address(reference __r) const
-      { return &__r; }
+      { return std::__addressof(__r); }
 
       const_pointer 
       address(const_reference __r) const
-      { return &__r; }
+      { return std::__addressof(__r); }
 
       size_type 
       max_size() const throw()
@@ -1101,7 +1105,8 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
     bitmap_allocator<_Tp>::_S_mut;
 #endif
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace __gnu_cxx
 
 #endif 
 

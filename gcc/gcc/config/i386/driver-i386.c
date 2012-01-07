@@ -1,5 +1,5 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2006, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2010 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,7 +21,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include <stdlib.h>
 
 const char *host_detect_local_cpu (int argc, const char **argv);
 
@@ -396,6 +395,8 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   unsigned int has_movbe = 0, has_sse4_1 = 0, has_sse4_2 = 0;
   unsigned int has_popcnt = 0, has_aes = 0, has_avx = 0;
   unsigned int has_pclmul = 0, has_abm = 0, has_lwp = 0;
+  unsigned int has_fma = 0, has_fma4 = 0, has_xop = 0;
+  unsigned int has_bmi = 0, has_tbm = 0;
 
   bool arch;
 
@@ -442,6 +443,7 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   has_popcnt = ecx & bit_POPCNT;
   has_aes = ecx & bit_AES;
   has_pclmul = ecx & bit_PCLMUL;
+  has_fma = ecx & bit_FMA;
 
   has_cmpxchg8b = edx & bit_CMPXCHG8B;
   has_cmov = edx & bit_CMOV;
@@ -460,10 +462,17 @@ const char *host_detect_local_cpu (int argc, const char **argv)
       has_sse4a = ecx & bit_SSE4a;
       has_abm = ecx & bit_ABM;
       has_lwp = ecx & bit_LWP;
+      has_fma4 = ecx & bit_FMA4;
+      has_xop = ecx & bit_XOP;
+      has_tbm = ecx & bit_TBM;
 
       has_longmode = edx & bit_LM;
       has_3dnowp = edx & bit_3DNOWP;
       has_3dnow = edx & bit_3DNOW;
+
+      __cpuid (0x7, eax, ebx, ecx, edx);
+
+      has_bmi = ebx & bit_BMI;
     }
 
   if (!arch)
@@ -490,6 +499,10 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 
       if (name == SIG_GEODE)
 	processor = PROCESSOR_GEODE;
+      else if (has_xop)
+	processor = PROCESSOR_BDVER1;
+      else if (has_sse4a && has_ssse3)
+        processor = PROCESSOR_BTVER1;
       else if (has_sse4a)
 	processor = PROCESSOR_AMDFAM10;
       else if (has_sse2 || has_longmode)
@@ -549,29 +562,47 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 	case 0x1e:
 	case 0x1f:
 	case 0x2e:
-	  /* FIXME: Optimize for Nehalem.  */
-	  cpu = "core2";
+	  /* Nehalem.  */
+	  cpu = "corei7";
 	  break;
 	case 0x25:
+	case 0x2c:
 	case 0x2f:
-	  /* FIXME: Optimize for Westmere.  */
-	  cpu = "core2";
+	  /* Westmere.  */
+	  cpu = "corei7";
+	  break;
+	case 0x2a:
+	  /* Sandy Bridge.  */
+	  cpu = "corei7-avx";
 	  break;
 	case 0x17:
 	case 0x1d:
-	  /* Penryn.  FIXME: -mtune=core2 is slower than -mtune=generic  */
+	  /* Penryn.  */
 	  cpu = "core2";
 	  break;
 	case 0x0f:
-	  /* Merom.  FIXME: -mtune=core2 is slower than -mtune=generic  */
+	  /* Merom.  */
 	  cpu = "core2";
 	  break;
 	default:
 	  if (arch)
 	    {
-	      if (has_ssse3)
-		/* If it is an unknown CPU with SSSE3, assume Core 2.  */
-		cpu = "core2";
+	      /* This is unknown family 0x6 CPU.  */
+	      if (has_avx)
+		/* Assume Sandy Bridge.  */
+		cpu = "corei7-avx";
+	      else if (has_sse4_2)
+		/* Assume Core i7.  */
+		cpu = "corei7";
+	      else if (has_ssse3)
+		{
+		  if (has_movbe)
+		    /* Assume Atom.  */
+		    cpu = "atom";
+		  else
+		    /* Assume Core 2.  */
+		    cpu = "core2";
+		}
 	      else if (has_sse3)
 		/* It is Core Duo.  */
 		cpu = "pentium-m";
@@ -629,6 +660,12 @@ const char *host_detect_local_cpu (int argc, const char **argv)
     case PROCESSOR_AMDFAM10:
       cpu = "amdfam10";
       break;
+    case PROCESSOR_BDVER1:
+      cpu = "bdver1";
+      break;
+    case PROCESSOR_BTVER1:
+      cpu = "btver1";
+      break;
 
     default:
       /* Use something reasonable.  */
@@ -658,29 +695,26 @@ const char *host_detect_local_cpu (int argc, const char **argv)
 
   if (arch)
     {
-      if (has_cmpxchg16b)
-	options = concat (options, " -mcx16", NULL);
-      if (has_lahf_lm)
-	options = concat (options, " -msahf", NULL);
-      if (has_movbe)
-	options = concat (options, " -mmovbe", NULL);
-      if (has_aes)
-	options = concat (options, " -maes", NULL);
-      if (has_pclmul)
-	options = concat (options, " -mpclmul", NULL);
-      if (has_popcnt)
-	options = concat (options, " -mpopcnt", NULL);
-      if (has_abm)
-	options = concat (options, " -mabm", NULL);
-      if (has_lwp)
-	options = concat (options, " -mlwp", NULL);
+      const char *cx16 = has_cmpxchg16b ? " -mcx16" : " -mno-cx16";
+      const char *sahf = has_lahf_lm ? " -msahf" : " -mno-sahf";
+      const char *movbe = has_movbe ? " -mmovbe" : " -mno-movbe";
+      const char *ase = has_aes ? " -maes" : " -mno-aes";
+      const char *pclmul = has_pclmul ? " -mpclmul" : " -mno-pclmul";
+      const char *popcnt = has_popcnt ? " -mpopcnt" : " -mno-popcnt";
+      const char *abm = has_abm ? " -mabm" : " -mno-abm";
+      const char *lwp = has_lwp ? " -mlwp" : " -mno-lwp";
+      const char *fma = has_fma ? " -mfma" : " -mno-fma";
+      const char *fma4 = has_fma4 ? " -mfma4" : " -mno-fma4";
+      const char *xop = has_xop ? " -mxop" : " -mno-xop";
+      const char *bmi = has_bmi ? " -mbmi" : " -mno-bmi";
+      const char *tbm = has_tbm ? " -mtbm" : " -mno-tbm";
+      const char *avx = has_avx ? " -mavx" : " -mno-avx";
+      const char *sse4_2 = has_sse4_2 ? " -msse4.2" : " -mno-sse4.2";
+      const char *sse4_1 = has_sse4_1 ? " -msse4.1" : " -mno-sse4.1";
 
-      if (has_avx)
-	options = concat (options, " -mavx", NULL);
-      else if (has_sse4_2)
-	options = concat (options, " -msse4.2", NULL);
-      else if (has_sse4_1)
-	options = concat (options, " -msse4.1", NULL);
+      options = concat (options, cx16, sahf, movbe, ase, pclmul,
+			popcnt, abm, lwp, fma, fma4, xop, bmi, tbm,
+			avx, sse4_2, sse4_1, NULL);
     }
 
 done:

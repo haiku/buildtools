@@ -20,7 +20,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 /* Describe a value.  */
-typedef struct GTY(()) cselib_val_struct {
+typedef struct cselib_val_struct {
   /* The hash value.  */
   unsigned int hash;
 
@@ -42,19 +42,13 @@ typedef struct GTY(()) cselib_val_struct {
 } cselib_val;
 
 /* A list of rtl expressions that hold the same value.  */
-struct GTY(()) elt_loc_list {
+struct elt_loc_list {
   /* Next element in the list.  */
   struct elt_loc_list *next;
   /* An rtl expression that holds the value.  */
   rtx loc;
   /* The insn that made the equivalence.  */
   rtx setting_insn;
-};
-
-/* A list of cselib_val structures.  */
-struct GTY(()) elt_list {
-  struct elt_list *next;
-  cselib_val *elt;
 };
 
 /* Describe a single set that is part of an insn.  */
@@ -76,8 +70,10 @@ extern void (*cselib_discard_hook) (cselib_val *);
 extern void (*cselib_record_sets_hook) (rtx insn, struct cselib_set *sets,
 					int n_sets);
 
-extern cselib_val *cselib_lookup (rtx, enum machine_mode, int);
-extern cselib_val *cselib_lookup_from_insn (rtx, enum machine_mode, int, rtx);
+extern cselib_val *cselib_lookup (rtx, enum machine_mode,
+				  int, enum machine_mode);
+extern cselib_val *cselib_lookup_from_insn (rtx, enum machine_mode,
+					    int, enum machine_mode, rtx);
 extern void cselib_init (int);
 extern void cselib_clear_table (void);
 extern void cselib_finish (void);
@@ -91,7 +87,7 @@ extern rtx cselib_expand_value_rtx_cb (rtx, bitmap, int,
 				       cselib_expand_callback, void *);
 extern bool cselib_dummy_expand_value_rtx_cb (rtx, bitmap, int,
 					      cselib_expand_callback, void *);
-extern rtx cselib_subst_to_values (rtx);
+extern rtx cselib_subst_to_values (rtx, enum machine_mode);
 extern void cselib_invalidate_rtx (rtx);
 
 extern void cselib_reset_table (unsigned int);

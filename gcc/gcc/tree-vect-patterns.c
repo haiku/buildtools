@@ -1,5 +1,5 @@
 /* Analysis Utilities for Loop Vectorization.
-   Copyright (C) 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
    Contributed by Dorit Nuzman <dorit@il.ibm.com>
 
 This file is part of GCC.
@@ -26,7 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "target.h"
 #include "basic-block.h"
-#include "diagnostic.h"
+#include "gimple-pretty-print.h"
 #include "tree-flow.h"
 #include "tree-dump.h"
 #include "cfgloop.h"
@@ -36,7 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-data-ref.h"
 #include "tree-vectorizer.h"
 #include "recog.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 
 /* Function prototypes */
 static void vect_pattern_recog_1
@@ -367,7 +367,7 @@ vect_recog_widen_mult_pattern (gimple last_stmt,
   tree oprnd0, oprnd1;
   tree type, half_type0, half_type1;
   gimple pattern_stmt;
-  tree vectype;
+  tree vectype, vectype_out;
   tree dummy;
   tree var;
   enum tree_code dummy_code;
@@ -410,14 +410,17 @@ vect_recog_widen_mult_pattern (gimple last_stmt,
 
   /* Check target support  */
   vectype = get_vectype_for_scalar_type (half_type0);
+  vectype_out = get_vectype_for_scalar_type (type);
   if (!vectype
-      || !supportable_widening_operation (WIDEN_MULT_EXPR, last_stmt, vectype,
+      || !vectype_out
+      || !supportable_widening_operation (WIDEN_MULT_EXPR, last_stmt,
+					  vectype_out, vectype,
 					  &dummy, &dummy, &dummy_code,
 					  &dummy_code, &dummy_int, &dummy_vec))
     return NULL;
 
   *type_in = vectype;
-  *type_out = NULL_TREE;
+  *type_out = vectype_out;
 
   /* Pattern supported. Create a stmt to be used to replace the pattern: */
   var = vect_recog_temp_ssa_var (type, NULL);
@@ -676,6 +679,8 @@ vect_pattern_recog_1 (
   tree pattern_vectype;
   tree type_in, type_out;
   enum tree_code code;
+  int i;
+  gimple next;
 
   pattern_stmt = (* vect_recog_func) (stmt, &type_in, &type_out);
   if (!pattern_stmt)
@@ -685,7 +690,9 @@ vect_pattern_recog_1 (
     {
       /* No need to check target support (already checked by the pattern
          recognition function).  */
-      pattern_vectype = type_in;
+      if (type_out)
+	gcc_assert (VECTOR_MODE_P (TYPE_MODE (type_out)));
+      pattern_vectype = type_out ? type_out : type_in;
     }
   else
     {
@@ -694,9 +701,16 @@ vect_pattern_recog_1 (
       optab optab;
 
       /* Check target support  */
-      pattern_vectype = get_vectype_for_scalar_type (type_in);
-      if (!pattern_vectype)
-        return;
+      type_in = get_vectype_for_scalar_type (type_in);
+      if (!type_in)
+	return;
+      if (type_out)
+	type_out = get_vectype_for_scalar_type (type_out);
+      else
+	type_out = type_in;
+      if (!type_out)
+	return;
+      pattern_vectype = type_out;
 
       if (is_gimple_assign (pattern_stmt))
 	code = gimple_assign_rhs_code (pattern_stmt);
@@ -706,15 +720,11 @@ vect_pattern_recog_1 (
 	  code = CALL_EXPR;
 	}
 
-      optab = optab_for_tree_code (code, pattern_vectype, optab_default);
-      vec_mode = TYPE_MODE (pattern_vectype);
+      optab = optab_for_tree_code (code, type_in, optab_default);
+      vec_mode = TYPE_MODE (type_in);
       if (!optab
-          || (icode = optab_handler (optab, vec_mode)->insn_code) ==
-              CODE_FOR_nothing
-          || (type_out
-              && (!get_vectype_for_scalar_type (type_out)
-                  || (insn_data[icode].operand[0].mode !=
-                      TYPE_MODE (get_vectype_for_scalar_type (type_out))))))
+          || (icode = optab_handler (optab, vec_mode)) == CODE_FOR_nothing
+          || (insn_data[icode].operand[0].mode != TYPE_MODE (type_out)))
 	return;
     }
 
@@ -737,7 +747,11 @@ vect_pattern_recog_1 (
   STMT_VINFO_IN_PATTERN_P (stmt_info) = true;
   STMT_VINFO_RELATED_STMT (stmt_info) = pattern_stmt;
 
-  return;
+  /* Patterns cannot be vectorized using SLP, because they change the order of
+     computation.  */
+  FOR_EACH_VEC_ELT (gimple, LOOP_VINFO_REDUCTIONS (loop_vinfo), i, next)
+    if (next == stmt)
+      VEC_ordered_remove (gimple, LOOP_VINFO_REDUCTIONS (loop_vinfo), i); 
 }
 
 

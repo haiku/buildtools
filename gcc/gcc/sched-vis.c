@@ -1,6 +1,7 @@
 /* Instruction scheduling pass.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010
+   Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) Enhanced by,
    and currently maintained by, Jim Wilson (wilson@cygnus.com)
 
@@ -28,7 +29,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "obstack.h"
 #include "hard-reg-set.h"
 #include "basic-block.h"
-#include "real.h"
 #include "insn-attr.h"
 #include "sched-int.h"
 #include "tree-pass.h"
@@ -429,6 +429,11 @@ print_value (char *buf, const_rtx x, int verbose)
   char t[BUF_LEN];
   char *cur = buf;
 
+  if (!x)
+    {
+      safe_concat (buf, buf, "(nil)");
+      return;
+    }
   switch (GET_CODE (x))
     {
     case CONST_INT:
@@ -764,7 +769,7 @@ dump_insn_slim (FILE *f, rtx x)
 }
 
 /* Emit a slim dump of X (an insn) to stderr.  */
-void
+DEBUG_FUNCTION void
 debug_insn_slim (rtx x)
 {
   dump_insn_slim (stderr, x);
@@ -815,13 +820,13 @@ print_rtl_slim (FILE *f, rtx first, rtx last, int count, int flags)
     }
 }
 
-void
+DEBUG_FUNCTION void
 debug_bb_slim (struct basic_block_def *bb)
 {
   print_rtl_slim (stderr, BB_HEAD (bb), BB_END (bb), -1, 32);
 }
 
-void
+DEBUG_FUNCTION void
 debug_bb_n_slim (int n)
 {
   struct basic_block_def *bb = BASIC_BLOCK (n);

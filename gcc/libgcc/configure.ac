@@ -5,6 +5,7 @@ sinclude(../config/tls.m4)
 sinclude(../config/acx.m4)
 sinclude(../config/no-executables.m4)
 sinclude(../config/override.m4)
+sinclude(../config/dfp.m4)
 
 AC_PREREQ(2.64)
 AC_INIT([GNU C Runtime Library], 1.0,,[libgcc])
@@ -103,7 +104,38 @@ esac
 
 AC_CANONICAL_HOST
 ACX_NONCANONICAL_HOST
+ACX_NONCANONICAL_TARGET
 GCC_TOPLEV_SUBDIRS
+
+# Calculate toolexeclibdir
+# Also toolexecdir, though it's only used in toolexeclibdir
+case ${version_specific_libs} in
+  yes)
+    # Need the gcc compiler version to know where to install libraries
+    # and header files if --enable-version-specific-runtime-libs option
+    # is selected.
+    toolexecdir='$(libdir)/gcc/$(target_noncanonical)'
+    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
+    ;;
+  no)
+    if test -n "$with_cross_host" &&
+       test x"$with_cross_host" != x"no"; then
+      # Install a library built with a cross compiler in tooldir, not libdir.
+      toolexecdir='$(exec_prefix)/$(target_noncanonical)'
+      toolexeclibdir='$(toolexecdir)/lib'
+    else
+      toolexecdir='$(libdir)/gcc-lib/$(target_noncanonical)'
+      toolexeclibdir='$(libdir)'
+    fi
+    multi_os_directory=`$CC -print-multi-os-directory`
+    case $multi_os_directory in
+      .) ;; # Avoid trailing /.
+      *) toolexeclibdir=$toolexeclibdir/$multi_os_directory ;;
+    esac
+    ;;
+esac
+AC_SUBST(toolexecdir)
+AC_SUBST(toolexeclibdir)
 
 dnl These must be called before AM_PROG_LIBTOOL, because it may want
 dnl to call AC_CHECK_PROG.
@@ -125,41 +157,7 @@ AC_CACHE_CHECK([whether decimal floating point is supported], [libgcc_cv_dfp],
 decimal_float=$libgcc_cv_dfp
 AC_SUBST(decimal_float)
 
-AC_ARG_ENABLE(decimal-float,
-[  --enable-decimal-float={no,yes,bid,dpd}
-			enable decimal float extension to C.  Selecting 'bid'
-			or 'dpd' choses which decimal floating point format
-			to use],
-[
-  case $enable_decimal_float in
-    yes | no | bid | dpd) ;;
-    *) AC_MSG_ERROR(['$enable_decimal_float' is an invalid value for --enable-decimal-float.
-Valid choices are 'yes', 'bid', 'dpd', and 'no'.]) ;;
-  esac
-],
-[
-  case $host in
-    powerpc*-*-linux* | i?86*-*-linux* | x86_64*-*-linux*)
-      enable_decimal_float=yes
-      ;;
-    *)
-      enable_decimal_float=no
-      ;;
-  esac
-])
-
-# x86's use BID format instead of DPD
-if test x$enable_decimal_float = xyes; then
-  case $host in
-    i?86*-*-linux* | x86_64*-*-linux*)
-      enable_decimal_float=bid
-      ;;
-    *)
-      enable_decimal_float=dpd
-      ;;
-  esac
-fi
-AC_SUBST(enable_decimal_float)
+GCC_AC_ENABLE_DECIMAL_FLOAT([$host])
 
 # Check for fixed-point support.
 AC_CACHE_CHECK([whether fixed-point is supported], [libgcc_cv_fixed_point],
@@ -167,6 +165,17 @@ AC_CACHE_CHECK([whether fixed-point is supported], [libgcc_cv_fixed_point],
 				  [libgcc_cv_fixed_point=no])])
 fixed_point=$libgcc_cv_fixed_point
 AC_SUBST(fixed_point)
+
+# Check for assembler CFI support.
+AC_CACHE_CHECK([whether assembler supports CFI directives], [libgcc_cv_cfi],
+	       [AC_COMPILE_IFELSE(
+[asm("\n\
+	.text\n\
+	.cfi_startproc\n\
+	.cfi_personality 0, symbol\n\
+	.cfi_endproc");],
+  [libgcc_cv_cfi=yes],
+  [libgcc_cv_cfi=no])])
 
 # Check 32bit or 64bit for x86.
 case ${host} in
@@ -191,7 +200,7 @@ esac
 # Link with -nostartfiles -nodefaultlibs since neither are present while
 # building libgcc.
 case ${host} in
-i?86-*-solaris2.1[[0-9]]*)
+i?86-*-solaris2*)
   cat > conftest.s <<EOF
 	.section	.eh_frame,"a",@unwind
 	.zero	4

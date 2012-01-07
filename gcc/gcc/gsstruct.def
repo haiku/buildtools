@@ -1,7 +1,7 @@
 /* This file contains the definitions for the gimple IR structure
    enumeration used in GCC.
 
-   Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2010 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>
 
 This file is part of GCC.
@@ -29,6 +29,7 @@ DEFGSSTRUCT(GSS_BASE, gimple_statement_base, false)
 DEFGSSTRUCT(GSS_WITH_OPS, gimple_statement_with_ops, true)
 DEFGSSTRUCT(GSS_WITH_MEM_OPS_BASE, gimple_statement_with_memory_ops_base, false)
 DEFGSSTRUCT(GSS_WITH_MEM_OPS, gimple_statement_with_memory_ops, true)
+DEFGSSTRUCT(GSS_CALL, gimple_statement_call, true)
 DEFGSSTRUCT(GSS_ASM, gimple_statement_asm, true)
 DEFGSSTRUCT(GSS_BIND, gimple_statement_bind, false)
 DEFGSSTRUCT(GSS_PHI, gimple_statement_phi, false)

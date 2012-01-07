@@ -1,5 +1,5 @@
 /* Part of CPP library.  (Precompiled header reading/writing.)
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
+   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify it
@@ -58,7 +58,9 @@ write_macdef (cpp_reader *pfile, cpp_hashnode *hn, void *file_p)
 	return 1;
 
     case NT_MACRO:
-      if ((hn->flags & NODE_BUILTIN))
+      if ((hn->flags & NODE_BUILTIN)
+	  && (!pfile->cb.user_builtin_macro
+	      || !pfile->cb.user_builtin_macro (pfile, hn)))
 	return 1;
 
       {
@@ -397,8 +399,6 @@ _cpp_restore_pushed_macros (cpp_reader *r, FILE *f)
   size_t i;
   struct def_pragma_macro *p;
   size_t nlen;
-  cpp_hashnode *h = NULL;
-  cpp_macro *m;
   uchar *defn;
   size_t defnlen;
 
@@ -411,49 +411,35 @@ _cpp_restore_pushed_macros (cpp_reader *r, FILE *f)
       if (fread (&nlen, sizeof (nlen), 1, f) != 1)
 	return 0;
       p = XNEW (struct def_pragma_macro);
+      memset (p, 0, sizeof (struct def_pragma_macro));
       p->name = XNEWVAR (char, nlen + 1);
       p->name[nlen] = 0;
       if (fread (p->name, nlen, 1, f) != 1)
 	return 0;
-      /* Save old state.  */
-      m = cpp_push_definition (r, p->name);
       if (fread (&defnlen, sizeof (defnlen), 1, f) != 1)
 	return 0;
-      defn = XNEWVAR (uchar, defnlen + 2);
-      defn[defnlen] = '\n';
-      defn[defnlen + 1] = 0;
+      if (defnlen == 0)
+        p->is_undef = 1;
+      else
+        {
+	  defn = XNEWVEC (uchar, defnlen + 1);
+	  defn[defnlen] = 0;
 
-      if (fread (defn, defnlen, 1, f) != 1)
-	return 0;
-      cpp_pop_definition (r, p->name, NULL);
-      {
-	size_t namelen;
-	uchar *dn;
+	  if (fread (defn, defnlen, 1, f) != 1)
+	    return 0;
 
-	namelen = ustrcspn (defn, "( \n");
-	h = cpp_lookup (r, defn, namelen);
-	dn = defn + namelen;
+	  p->definition = defn;
+	  if (fread (&(p->line), sizeof (source_location), 1, f) != 1)
+	    return 0;
+	  defnlen = 0;
+	  if (fread (&defnlen, sizeof (defnlen), 1, f) != 1)
+	    return 0;
+	  p->syshdr = ((defnlen & 1) != 0 ? 1 : 0);
+	  p->used =  ((defnlen & 2) != 0 ? 1 : 0);
+	}
 
-	h->type = NT_VOID;
-	h->flags &= ~(NODE_POISONED|NODE_BUILTIN|NODE_DISABLED|NODE_USED);
-	if (cpp_push_buffer (r, dn, ustrchr (dn, '\n') - dn, true)
-	    != NULL)
-	  {
-	    _cpp_clean_line (r);
-	    if (!_cpp_create_definition (r, h))
-	      abort ();
-	    _cpp_pop_buffer (r);
-	  }
-	else
-	  abort ();
-      }
-      p->value = cpp_push_definition (r, p->name);
-
-      free (defn);
       p->next = r->pushed_macros;
       r->pushed_macros = p;
-      /* Restore current state.  */
-      cpp_pop_definition (r, p->name, m);
     }
   return 1;
 }
@@ -464,10 +450,7 @@ _cpp_save_pushed_macros (cpp_reader *r, FILE *f)
   size_t count_saved = 0;
   size_t i;
   struct def_pragma_macro *p,**pp;
-  cpp_hashnode *node;
-  cpp_macro *m;
   size_t defnlen;
-  const uchar *defn;
 
   /* Get count. */
   p = r->pushed_macros;
@@ -494,22 +477,30 @@ _cpp_save_pushed_macros (cpp_reader *r, FILE *f)
     }
   for (i = 0; i < count_saved; i++)
     {
-      /* Save old state.  */
-      m = cpp_push_definition (r, pp[i]->name);
-      /* Set temporary macro name to saved state.  */
-      cpp_pop_definition (r, pp[i]->name, pp[i]->value);
-      node = _cpp_lex_identifier (r, pp[i]->name);
       defnlen = strlen (pp[i]->name);
       if (fwrite (&defnlen, sizeof (size_t), 1, f) != 1
 	  || fwrite (pp[i]->name, defnlen, 1, f) != 1)
 	return 0;
-      defn = cpp_macro_definition (r, node);
-      defnlen = ustrlen (defn);
-      if (fwrite (&defnlen, sizeof (size_t), 1, f) != 1
-	  || fwrite (defn, defnlen, 1, f) != 1)
-	return 0;
-      /* Restore current state.  */
-      cpp_pop_definition (r, pp[i]->name, m);
+      if (pp[i]->is_undef)
+	{
+	  defnlen = 0;
+	  if (fwrite (&defnlen, sizeof (size_t), 1, f) != 1)
+	    return 0;
+	}
+      else
+        {
+	  defnlen = ustrlen (pp[i]->definition);
+	  if (fwrite (&defnlen, sizeof (size_t), 1, f) != 1
+	      || fwrite (pp[i]->definition, defnlen, 1, f) != 1)
+	    return 0;
+	  if (fwrite (&(pp[i]->line), sizeof (source_location), 1, f) != 1)
+	    return 0;
+	  defnlen = 0;
+	  defnlen |= (pp[i]->syshdr != 0 ? 1 : 0);
+	  defnlen |= (pp[i]->used != 0 ? 2 : 0);
+	  if (fwrite (&defnlen, sizeof (defnlen), 1, f) != 1)
+	    return 0;
+	}
     }
   return 1;
 }
@@ -613,9 +604,9 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
 	  || h->flags & NODE_POISONED)
 	{
 	  if (CPP_OPTION (r, warn_invalid_pch))
-	    cpp_error (r, CPP_DL_WARNING_SYSHDR,
-		       "%s: not used because `%.*s' is poisoned",
-		       name, m.name_length, namebuf);
+	    cpp_warning_syshdr (r, CPP_W_INVALID_PCH,
+		                "%s: not used because `%.*s' is poisoned",
+		                name, m.name_length, namebuf);
 	  goto fail;
 	}
 
@@ -635,9 +626,9 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
 	    continue;
 
 	  if (CPP_OPTION (r, warn_invalid_pch))
-	    cpp_error (r, CPP_DL_WARNING_SYSHDR,
-		       "%s: not used because `%.*s' not defined",
-		       name, m.name_length, namebuf);
+	    cpp_warning_syshdr (r, CPP_W_INVALID_PCH,
+		                "%s: not used because `%.*s' not defined",
+		                name, m.name_length, namebuf);
 	  goto fail;
 	}
 
@@ -647,7 +638,7 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
 	  || memcmp (namebuf, newdefn, m.definition_length) != 0)
 	{
 	  if (CPP_OPTION (r, warn_invalid_pch))
-	    cpp_error (r, CPP_DL_WARNING_SYSHDR,
+	    cpp_warning_syshdr (r, CPP_W_INVALID_PCH,
 	       "%s: not used because `%.*s' defined as `%s' not `%.*s'",
 		       name, m.name_length, namebuf, newdefn + m.name_length,
 		       m.definition_length - m.name_length,
@@ -688,9 +679,9 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
       else
 	{
 	  if (CPP_OPTION (r, warn_invalid_pch))
-	    cpp_error (r, CPP_DL_WARNING_SYSHDR,
-		       "%s: not used because `%s' is defined",
-		       name, first);
+	    cpp_warning_syshdr (r, CPP_W_INVALID_PCH,
+		                "%s: not used because `%s' is defined",
+		                name, first);
 	  goto fail;
 	}
     }
@@ -708,9 +699,9 @@ cpp_valid_state (cpp_reader *r, const char *name, int fd)
   if (counter && r->counter)
     {
       if (CPP_OPTION (r, warn_invalid_pch))
-	cpp_error (r, CPP_DL_WARNING_SYSHDR,
-		   "%s: not used because `__COUNTER__' is invalid",
-		   name);
+	cpp_warning_syshdr (r, CPP_W_INVALID_PCH,
+		            "%s: not used because `__COUNTER__' is invalid",
+		            name);
 	goto fail;
     }
 
@@ -759,6 +750,12 @@ static int
 save_macros (cpp_reader *r, cpp_hashnode *h, void *data_p)
 {
   struct save_macro_data *data = (struct save_macro_data *)data_p;
+
+  if ((h->flags & NODE_BUILTIN)
+      && h->type == NT_MACRO
+      && r->cb.user_builtin_macro)
+    r->cb.user_builtin_macro (r, h);
+
   if (h->type != NT_VOID
       && (h->flags & NODE_BUILTIN) == 0)
     {

@@ -1,7 +1,7 @@
 /* Definitions for ia64-linux target.
 
 Copyright (C) 2000, 2001, 2002, 2003, 2004, 2006,
-2009 Free Software Foundation, Inc.
+2009, 2010 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -55,7 +55,7 @@ do {						\
 /* Similar to standard Linux, but adding -ffast-math support.  */
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC \
-  "%{ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+  "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
    %{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
 
 /* Define this for shared library support because it isn't in the main
@@ -69,7 +69,7 @@ do {						\
   %{!shared: \
     %{!static: \
       %{rdynamic:-export-dynamic} \
-      %{!dynamic-linker:-dynamic-linker " LINUX_DYNAMIC_LINKER "}} \
+      -dynamic-linker " LINUX_DYNAMIC_LINKER "} \
       %{static:-static}}"
 
 #define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"

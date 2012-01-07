@@ -1,7 +1,7 @@
 /* Gcov.c: prepend line execution counts and branch probabilities to a
    source file.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by James E. Wilson of Cygnus Support.
    Mangled by Bob Manson of Cygnus Support.
@@ -297,6 +297,11 @@ static int flag_unconditional = 0;
 
 static int flag_gcov_file = 1;
 
+/* Output progress indication if this is true.  This is off by default
+   and can be turned on by the -d option.  */
+
+static int flag_display_progress = 0;
+
 /* For included files, make the gcov output file name include the name
    of the input source file.  For example, if x.h is included in a.c,
    then the output file name is a.c##x.h.gcov instead of x.h.gcov.  */
@@ -355,6 +360,7 @@ int
 main (int argc, char **argv)
 {
   int argno;
+  int first_arg;
 
   /* Unlock the stdio streams.  */
   unlock_std_streams ();
@@ -371,8 +377,15 @@ main (int argc, char **argv)
   if (argc - argno > 1)
     multiple_files = 1;
 
+  first_arg = argno;
+  
   for (; argno != argc; argno++)
-    process_file (argv[argno]);
+    {
+      if (flag_display_progress)
+        printf("Processing file %d out of %d\n",  
+               argno - first_arg + 1, argc - first_arg);
+      process_file (argv[argno]);
+    }
 
   generate_results (multiple_files ? NULL : argv[argc - 1]);
 
@@ -415,6 +428,7 @@ print_usage (int error_p)
   fnotice (file, "  -o, --object-directory DIR|FILE Search for object files in DIR or called FILE\n");
   fnotice (file, "  -p, --preserve-paths            Preserve all pathname components\n");
   fnotice (file, "  -u, --unconditional-branches    Show unconditional branch counts too\n");
+  fnotice (file, "  -d, --display-progress          Display progress information\n");
   fnotice (file, "\nFor bug reporting instructions, please see:\n%s.\n",
 	   bug_report_url);
   exit (status);
@@ -426,7 +440,7 @@ static void
 print_version (void)
 {
   fnotice (stdout, "gcov %s%s\n", pkgversion_string, version_string);
-  fprintf (stdout, "Copyright %s 2010 Free Software Foundation, Inc.\n",
+  fprintf (stdout, "Copyright %s 2011 Free Software Foundation, Inc.\n",
 	   _("(C)"));
   fnotice (stdout,
 	   _("This is free software; see the source for copying conditions.\n"
@@ -449,6 +463,7 @@ static const struct option options[] =
   { "object-directory",     required_argument, NULL, 'o' },
   { "object-file",          required_argument, NULL, 'o' },
   { "unconditional-branches", no_argument,     NULL, 'u' },
+  { "display-progress",     no_argument,       NULL, 'd' },
   { 0, 0, 0, 0 }
 };
 
@@ -459,7 +474,7 @@ process_args (int argc, char **argv)
 {
   int opt;
 
-  while ((opt = getopt_long (argc, argv, "abcfhlno:puv", options, NULL)) != -1)
+  while ((opt = getopt_long (argc, argv, "abcdfhlno:puv", options, NULL)) != -1)
     {
       switch (opt)
 	{
@@ -493,6 +508,9 @@ process_args (int argc, char **argv)
 	case 'u':
 	  flag_unconditional = 1;
 	  break;
+        case 'd':
+          flag_display_progress = 1;
+          break;
 	case 'v':
 	  print_version ();
 	  /* print_version will exit.  */

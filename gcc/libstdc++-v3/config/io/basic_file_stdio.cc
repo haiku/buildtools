@@ -179,7 +179,9 @@ namespace
 } // anonymous namespace
 
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Definitions for __basic_file<char>.
   __basic_file<char>::__basic_file(__c_lock* /*__lock*/) throw()
@@ -334,6 +336,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   streamsize
   __basic_file<char>::showmanyc()
   {
+#ifndef _GLIBCXX_NO_IOCTL
 #ifdef FIONREAD
     // Pipes and sockets.    
 #ifdef _GLIBCXX_FIONREAD_TAKES_OFF_T
@@ -344,7 +347,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     int __r = ioctl(this->fd(), FIONREAD, &__num);
     if (!__r && __num >= 0)
       return __num; 
-#endif    
+#endif
+#endif
 
 #ifdef _GLIBCXX_HAVE_POLL
     // Cheap test.
@@ -376,5 +380,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     return 0;
   }
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 

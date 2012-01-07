@@ -1,5 +1,5 @@
 /* Pretty formatting of GIMPLE statements and expressions.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com> and
    Diego Novillo <dnovillo@google.com>
@@ -26,7 +26,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "diagnostic.h"
-#include "real.h"
+#include "tree-pretty-print.h"
+#include "gimple-pretty-print.h"
 #include "hashtab.h"
 #include "tree-flow.h"
 #include "tree-pass.h"
@@ -80,7 +81,7 @@ newline_and_indent (pretty_printer *buffer, int spc)
 
 /* Print the GIMPLE statement GS on stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_gimple_stmt (gimple gs)
 {
   print_gimple_stmt (stderr, gs, 0, TDF_VOPS|TDF_MEMSYMS);
@@ -146,7 +147,7 @@ print_gimple_seq (FILE *file, gimple_seq seq, int spc, int flags)
 
 /* Print the GIMPLE sequence SEQ on stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_gimple_seq (gimple_seq seq)
 {
   print_gimple_seq (stderr, seq, 0, TDF_VOPS|TDF_MEMSYMS);
@@ -376,6 +377,42 @@ dump_binary_rhs (pretty_printer *buffer, gimple gs, int spc, int flags)
     }
 }
 
+/* Helper for dump_gimple_assign.  Print the ternary RHS of the
+   assignment GS.  BUFFER, SPC and FLAGS are as in dump_gimple_stmt.  */
+
+static void
+dump_ternary_rhs (pretty_printer *buffer, gimple gs, int spc, int flags)
+{
+  const char *p;
+  enum tree_code code = gimple_assign_rhs_code (gs);
+  switch (code)
+    {
+    case WIDEN_MULT_PLUS_EXPR:
+    case WIDEN_MULT_MINUS_EXPR:
+      for (p = tree_code_name [(int) code]; *p; p++)
+	pp_character (buffer, TOUPPER (*p));
+      pp_string (buffer, " <");
+      dump_generic_node (buffer, gimple_assign_rhs1 (gs), spc, flags, false);
+      pp_string (buffer, ", ");
+      dump_generic_node (buffer, gimple_assign_rhs2 (gs), spc, flags, false);
+      pp_string (buffer, ", ");
+      dump_generic_node (buffer, gimple_assign_rhs3 (gs), spc, flags, false);
+      pp_character (buffer, '>');
+      break;
+
+    case FMA_EXPR:
+      dump_generic_node (buffer, gimple_assign_rhs1 (gs), spc, flags, false);
+      pp_string (buffer, " * ");
+      dump_generic_node (buffer, gimple_assign_rhs2 (gs), spc, flags, false);
+      pp_string (buffer, " + ");
+      dump_generic_node (buffer, gimple_assign_rhs3 (gs), spc, flags, false);
+      break;
+
+    default:
+      gcc_unreachable ();
+    }
+}
+
 
 /* Dump the gimple assignment GS.  BUFFER, SPC and FLAGS are as in
    dump_gimple_stmt.  */
@@ -418,6 +455,8 @@ dump_gimple_assign (pretty_printer *buffer, gimple gs, int spc, int flags)
         dump_unary_rhs (buffer, gs, spc, flags);
       else if (gimple_num_ops (gs) == 3)
         dump_binary_rhs (buffer, gs, spc, flags);
+      else if (gimple_num_ops (gs) == 4)
+        dump_ternary_rhs (buffer, gs, spc, flags);
       else
         gcc_unreachable ();
       if (!(flags & TDF_RHS_ONLY))
@@ -477,6 +516,56 @@ dump_gimple_call_args (pretty_printer *buffer, gimple gs, int flags)
     }
 }
 
+/* Dump the points-to solution *PT to BUFFER.  */
+
+static void
+pp_points_to_solution (pretty_printer *buffer, struct pt_solution *pt)
+{
+  if (pt->anything)
+    {
+      pp_string (buffer, "anything ");
+      return;
+    }
+  if (pt->nonlocal)
+    pp_string (buffer, "nonlocal ");
+  if (pt->escaped)
+    pp_string (buffer, "escaped ");
+  if (pt->ipa_escaped)
+    pp_string (buffer, "unit-escaped ");
+  if (pt->null)
+    pp_string (buffer, "null ");
+  if (pt->vars
+      && !bitmap_empty_p (pt->vars))
+    {
+      bitmap_iterator bi;
+      unsigned i;
+      pp_string (buffer, "{ ");
+      EXECUTE_IF_SET_IN_BITMAP (pt->vars, 0, i, bi)
+	{
+	  tree var = referenced_var_lookup (cfun, i);
+	  if (var)
+	    {
+	      dump_generic_node (buffer, var, 0, dump_flags, false);
+	      if (DECL_PT_UID (var) != DECL_UID (var))
+		{
+		  pp_string (buffer, "ptD.");
+		  pp_decimal_int (buffer, DECL_PT_UID (var));
+		}
+	    }
+	  else
+	    {
+	      pp_string (buffer, "D.");
+	      pp_decimal_int (buffer, i);
+	    }
+	  pp_character (buffer, ' ');
+	}
+      pp_character (buffer, '}');
+      if (pt->vars_contains_global)
+	pp_string (buffer, " (glob)");
+      if (pt->vars_contains_restrict)
+	pp_string (buffer, " (restr)");
+    }
+}
 
 /* Dump the call statement GS.  BUFFER, SPC and FLAGS are as in
    dump_gimple_stmt.  */
@@ -485,6 +574,25 @@ static void
 dump_gimple_call (pretty_printer *buffer, gimple gs, int spc, int flags)
 {
   tree lhs = gimple_call_lhs (gs);
+
+  if (flags & TDF_ALIAS)
+    {
+      struct pt_solution *pt;
+      pt = gimple_call_use_set (gs);
+      if (!pt_solution_empty_p (pt))
+	{
+	  pp_string (buffer, "# USE = ");
+	  pp_points_to_solution (buffer, pt);
+	  newline_and_indent (buffer, spc);
+	}
+      pt = gimple_call_clobber_set (gs);
+      if (!pt_solution_empty_p (pt))
+	{
+	  pp_string (buffer, "# CLB = ");
+	  pp_points_to_solution (buffer, pt);
+	  newline_and_indent (buffer, spc);
+	}
+    }
 
   if (flags & TDF_RAW)
     {
@@ -661,7 +769,7 @@ dump_gimple_bind (pretty_printer *buffer, gimple gs, int spc, int flags)
     {
       tree var;
 
-      for (var = gimple_bind_vars (gs); var; var = TREE_CHAIN (var))
+      for (var = gimple_bind_vars (gs); var; var = DECL_CHAIN (var))
 	{
           newline_and_indent (buffer, 2);
 	  print_declaration (buffer, var, spc, flags);
@@ -1257,13 +1365,29 @@ static void
 dump_gimple_phi (pretty_printer *buffer, gimple phi, int spc, int flags)
 {
   size_t i;
+  tree lhs = gimple_phi_result (phi);
+
+  if (flags & TDF_ALIAS
+      && POINTER_TYPE_P (TREE_TYPE (lhs))
+      && SSA_NAME_PTR_INFO (lhs))
+    {
+      struct ptr_info_def *pi = SSA_NAME_PTR_INFO (lhs);
+      pp_string (buffer, "PT = ");
+      pp_points_to_solution (buffer, &pi->pt);
+      newline_and_indent (buffer, spc);
+      if (pi->align != 1)
+	pp_printf (buffer, "# ALIGN = %u, MISALIGN = %u",
+		   pi->align, pi->misalign);
+      newline_and_indent (buffer, spc);
+      pp_string (buffer, "# ");
+    }
 
   if (flags & TDF_RAW)
       dump_gimple_fmt (buffer, spc, flags, "%G <%T, ", phi,
                        gimple_phi_result (phi));
   else
     {
-      dump_generic_node (buffer, gimple_phi_result (phi), spc, flags, false);
+      dump_generic_node (buffer, lhs, spc, flags, false);
       pp_string (buffer, " = PHI <");
     }
   for (i = 0; i < gimple_phi_num_args (phi); i++)
@@ -1531,6 +1655,27 @@ dump_gimple_stmt (pretty_printer *buffer, gimple gs, int spc, int flags)
       && gimple_has_mem_ops (gs))
     dump_gimple_mem_ops (buffer, gs, spc, flags);
 
+  if ((flags & TDF_ALIAS)
+      && gimple_has_lhs (gs))
+    {
+      tree lhs = gimple_get_lhs (gs);
+      if (TREE_CODE (lhs) == SSA_NAME
+	  && POINTER_TYPE_P (TREE_TYPE (lhs))
+	  && SSA_NAME_PTR_INFO (lhs))
+	{
+	  struct ptr_info_def *pi = SSA_NAME_PTR_INFO (lhs);
+	  pp_string (buffer, "# PT = ");
+	  pp_points_to_solution (buffer, &pi->pt);
+	  newline_and_indent (buffer, spc);
+	  if (pi->align != 1)
+	    {
+	      pp_printf (buffer, "# ALIGN = %u, MISALIGN = %u",
+			 pi->align, pi->misalign);
+	      newline_and_indent (buffer, spc);
+	    }
+	}
+    }
+
   switch (gimple_code (gs))
     {
     case GIMPLE_ASM:
@@ -1753,7 +1898,8 @@ dump_bb_header (pretty_printer *buffer, basic_block bb, int indent, int flags)
 	}
     }
   pp_write_text_to_stream (buffer);
-  check_bb_profile (bb, buffer->buffer->stream);
+  if (cfun)
+    check_bb_profile (bb, buffer->buffer->stream);
 }
 
 
@@ -1839,7 +1985,6 @@ dump_implicit_edges (pretty_printer *buffer, basic_block bb, int indent,
 		     int flags)
 {
   edge e;
-  edge_iterator ei;
   gimple stmt;
 
   stmt = last_stmt (bb);
@@ -1867,9 +2012,7 @@ dump_implicit_edges (pretty_printer *buffer, basic_block bb, int indent,
 
   /* If there is a fallthru edge, we may need to add an artificial
      goto to the dump.  */
-  FOR_EACH_EDGE (e, ei, bb->succs)
-    if (e->flags & EDGE_FALLTHRU)
-      break;
+  e = find_fallthru_edge (bb->succs);
 
   if (e && e->dest != bb->next_bb)
     {

@@ -1,5 +1,6 @@
 /* Interface for the GNU C++ pretty-printer.
-   Copyright (C) 2003, 2004, 2005, 2007, 2009 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -21,7 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_CXX_PRETTY_PRINT_H
 #define GCC_CXX_PRETTY_PRINT_H
 
-#include "c-pretty-print.h"
+#include "c-family/c-pretty-print.h"
 
 #undef pp_c_base
 #define pp_c_base(PP) (&(PP)->c_base)

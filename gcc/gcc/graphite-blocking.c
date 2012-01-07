@@ -1,7 +1,7 @@
 /* Heuristics and transform for loop blocking and strip mining on
    polyhedral representation.
 
-   Copyright (C) 2009 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@amd.com> and
    Pranav Garg  <pranav.garg2107@gmail.com>.
 
@@ -23,34 +23,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "ggc.h"
-#include "tree.h"
-#include "rtl.h"
-#include "output.h"
-#include "basic-block.h"
-#include "diagnostic.h"
 #include "tree-flow.h"
-#include "toplev.h"
 #include "tree-dump.h"
-#include "timevar.h"
 #include "cfgloop.h"
 #include "tree-chrec.h"
 #include "tree-data-ref.h"
-#include "tree-scalar-evolution.h"
-#include "tree-pass.h"
-#include "domwalk.h"
-#include "value-prof.h"
-#include "pointer-set.h"
-#include "gimple.h"
-#include "params.h"
+#include "sese.h"
 
 #ifdef HAVE_cloog
-#include "cloog/cloog.h"
 #include "ppl_c.h"
-#include "sese.h"
 #include "graphite-ppl.h"
-#include "graphite.h"
 #include "graphite-poly.h"
 
 
@@ -173,37 +155,36 @@ pbb_strip_mine_time_depth (poly_bb_p pbb, int time_depth, int stride)
   return true;
 }
 
-/* Returns true when strip mining with STRIDE of the loop around PBB
-   at DEPTH is profitable.  */
+/* Returns true when strip mining with STRIDE of the loop LST is
+   profitable.  */
 
 static bool
-pbb_strip_mine_profitable_p (poly_bb_p pbb,
-			     graphite_dim_t depth,
-			     int stride)
+lst_strip_mine_profitable_p (lst_p lst, int stride)
 {
-  Value niter, strip_stride;
+  mpz_t niter, strip_stride;
   bool res;
 
-  value_init (strip_stride);
-  value_init (niter);
-  value_set_si (strip_stride, stride);
-  pbb_number_of_iterations_at_time (pbb, psct_dynamic_dim (pbb, depth), niter);
-  res = value_gt (niter, strip_stride);
-  value_clear (strip_stride);
-  value_clear (niter);
+  gcc_assert (LST_LOOP_P (lst));
+  mpz_init (strip_stride);
+  mpz_init (niter);
 
+  mpz_set_si (strip_stride, stride);
+  lst_niter_for_loop (lst, niter);
+  res = (mpz_cmp (niter, strip_stride) > 0);
+
+  mpz_clear (strip_stride);
+  mpz_clear (niter);
   return res;
 }
 
-/* Strip-mines all the loops of LST that are considered profitable to
-   strip-mine.  Return true if it did strip-mined some loops.  */
+/* Strip-mines all the loops of LST with STRIDE.  Return true if it
+   did strip-mined some loops.  */
 
 static bool
-lst_do_strip_mine_loop (lst_p lst, int depth)
+lst_do_strip_mine_loop (lst_p lst, int depth, int stride)
 {
   int i;
   lst_p l;
-  int stride = PARAM_VALUE (PARAM_LOOP_BLOCK_TILE_SIZE);
   poly_bb_p pbb;
 
   if (!lst)
@@ -213,8 +194,8 @@ lst_do_strip_mine_loop (lst_p lst, int depth)
     {
       bool res = false;
 
-      for (i = 0; VEC_iterate (lst_p, LST_SEQ (lst), i, l); i++)
-	res |= lst_do_strip_mine_loop (l, depth);
+      FOR_EACH_VEC_ELT (lst_p, LST_SEQ (lst), i, l)
+	res |= lst_do_strip_mine_loop (l, depth, stride);
 
       return res;
     }
@@ -224,59 +205,58 @@ lst_do_strip_mine_loop (lst_p lst, int depth)
 				    stride);
 }
 
-/* Strip-mines all the loops of LST that are considered profitable to
-   strip-mine.  Return true if it did strip-mined some loops.  */
+/* Strip-mines all the loops of LST with STRIDE.  When STRIDE is zero,
+   read the stride from the PARAM_LOOP_BLOCK_TILE_SIZE.  Return true
+   if it did strip-mined some loops.
+
+   Strip mining transforms a loop
+
+   | for (i = 0; i < N; i++)
+   |   S (i);
+
+   into the following loop nest:
+
+   | for (k = 0; k < N; k += STRIDE)
+   |   for (j = 0; j < STRIDE; j++)
+   |     S (i = k + j);
+*/
 
 static bool
-lst_do_strip_mine (lst_p lst)
+lst_do_strip_mine (lst_p lst, int stride)
 {
   int i;
   lst_p l;
   bool res = false;
-  int stride = PARAM_VALUE (PARAM_LOOP_BLOCK_TILE_SIZE);
   int depth;
+
+  if (!stride)
+    stride = PARAM_VALUE (PARAM_LOOP_BLOCK_TILE_SIZE);
 
   if (!lst
       || !LST_LOOP_P (lst))
     return false;
 
-  for (i = 0; VEC_iterate (lst_p, LST_SEQ (lst), i, l); i++)
-    res |= lst_do_strip_mine (l);
+  FOR_EACH_VEC_ELT (lst_p, LST_SEQ (lst), i, l)
+    res |= lst_do_strip_mine (l, stride);
 
   depth = lst_depth (lst);
   if (depth >= 0
-      && pbb_strip_mine_profitable_p (LST_PBB (lst_find_first_pbb (lst)),
-				      depth, stride))
+      && lst_strip_mine_profitable_p (lst, stride))
     {
-      res |= lst_do_strip_mine_loop (lst, lst_depth (lst));
+      res |= lst_do_strip_mine_loop (lst, lst_depth (lst), stride);
       lst_add_loop_under_loop (lst);
     }
 
   return res;
 }
 
-/* Strip mines all the loops in SCOP.  Nothing profitable in all this:
-   this is just a driver function.  */
+/* Strip mines all the loops in SCOP.  Returns true when some loops
+   have been strip-mined.  */
 
 bool
-scop_do_strip_mine (scop_p scop)
+scop_do_strip_mine (scop_p scop, int stride)
 {
-  bool transform_done = false;
-
-  store_scattering (scop);
-
-  transform_done = lst_do_strip_mine (SCOP_TRANSFORMED_SCHEDULE (scop));
-
-  if (!transform_done)
-    return false;
-
-  if (!graphite_legal_transform (scop))
-    {
-      restore_scattering (scop);
-      return false;
-    }
-
-  return transform_done;
+  return lst_do_strip_mine (SCOP_TRANSFORMED_SCHEDULE (scop), stride);
 }
 
 /* Loop blocks all the loops in SCOP.  Returns true when we manage to
@@ -290,13 +270,13 @@ scop_do_block (scop_p scop)
 
   store_scattering (scop);
 
-  strip_mined = lst_do_strip_mine (SCOP_TRANSFORMED_SCHEDULE (scop));
+  strip_mined = lst_do_strip_mine (SCOP_TRANSFORMED_SCHEDULE (scop), 0);
   interchanged = scop_do_interchange (scop);
 
-  /* If we don't interchange loops, then the strip mine is not
-     profitable, and the transform is not a loop blocking.  */
-  if (!interchanged
-      || !graphite_legal_transform (scop))
+  /* If we don't interchange loops, the strip mine alone will not be
+     profitable, and the transform is not a loop blocking: so revert
+     the transform.  */
+  if (!interchanged)
     {
       restore_scattering (scop);
       return false;

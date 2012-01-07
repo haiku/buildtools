@@ -24,11 +24,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "ggc.h"
 #include "tree.h"
-#include "rtl.h"
 #include "tm_p.h"
 #include "basic-block.h"
 #include "timevar.h"
-#include "diagnostic.h"
+#include "gimple-pretty-print.h"
 #include "tree-flow.h"
 #include "tree-pass.h"
 #include "tree-dump.h"
@@ -83,6 +82,10 @@ struct dse_block_local_data
 {
   bitmap stores;
 };
+
+/* Bitmap of blocks that have had EH statements cleaned.  We should
+   remove their dead edges eventually.  */
+static bitmap need_eh_cleanup;
 
 static bool gate_dse (void);
 static unsigned int tree_ssa_dse (void);
@@ -302,8 +305,9 @@ dse_optimize_stmt (struct dse_global_data *dse_gd,
 	 virtual uses from stmt and the stmt which stores to that same
 	 memory location, then we may have found redundant store.  */
       if (bitmap_bit_p (dse_gd->stores, get_stmt_uid (use_stmt))
-	  && operand_equal_p (gimple_assign_lhs (stmt),
-			      gimple_assign_lhs (use_stmt), 0))
+	  && (operand_equal_p (gimple_assign_lhs (stmt),
+			       gimple_assign_lhs (use_stmt), 0)
+	      || stmt_kills_ref_p (use_stmt, gimple_assign_lhs (stmt))))
 	{
 	  /* If use_stmt is or might be a nop assignment, e.g. for
 	     struct { ... } S a, b, *p; ...
@@ -334,6 +338,8 @@ dse_optimize_stmt (struct dse_global_data *dse_gd,
 
 	  /* Then we need to fix the operand of the consuming stmt.  */
 	  unlink_stmt_vdef (stmt);
+
+	  bitmap_set_bit (need_eh_cleanup, gimple_bb (stmt)->index);
 
 	  /* Remove the dead store.  */
 	  gsi_remove (&gsi, true);
@@ -401,6 +407,8 @@ tree_ssa_dse (void)
   struct dom_walk_data walk_data;
   struct dse_global_data dse_gd;
 
+  need_eh_cleanup = BITMAP_ALLOC (NULL);
+
   renumber_gimple_stmt_uids ();
 
   /* We might consider making this a property of each pass so that it
@@ -435,6 +443,16 @@ tree_ssa_dse (void)
   /* Release the main bitmap.  */
   BITMAP_FREE (dse_gd.stores);
 
+  /* Removal of stores may make some EH edges dead.  Purge such edges from
+     the CFG as needed.  */
+  if (!bitmap_empty_p (need_eh_cleanup))
+    {
+      gimple_purge_all_dead_eh_edges (need_eh_cleanup);
+      cleanup_tree_cfg ();
+    }
+
+  BITMAP_FREE (need_eh_cleanup);
+    
   /* For now, just wipe the post-dominator information.  */
   free_dominance_info (CDI_POST_DOMINATORS);
   return 0;

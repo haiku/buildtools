@@ -1,5 +1,5 @@
 /* Tree SCC value numbering
-   Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dberlin@dberlin.org>
 
    This file is part of GCC.
@@ -72,6 +72,8 @@ typedef const struct vn_phi_s *const_vn_phi_t;
 typedef struct vn_reference_op_struct
 {
   enum tree_code opcode;
+  /* Constant offset this op adds or -1 if it is variable.  */
+  HOST_WIDE_INT off;
   tree type;
   tree op0;
   tree op1;
@@ -169,7 +171,7 @@ typedef enum { VN_NOWALK, VN_WALK, VN_WALKREWRITE } vn_lookup_kind;
 extern vn_ssa_aux_t VN_INFO (tree);
 extern vn_ssa_aux_t VN_INFO_GET (tree);
 tree vn_get_expr_for (tree);
-bool run_scc_vn (bool, vn_lookup_kind);
+bool run_scc_vn (vn_lookup_kind);
 void free_scc_vn (void);
 tree vn_nary_op_lookup (tree, vn_nary_op_t *);
 tree vn_nary_op_lookup_stmt (gimple, vn_nary_op_t *);
@@ -206,4 +208,5 @@ unsigned int get_next_value_id (void);
 unsigned int get_constant_value_id (tree);
 unsigned int get_or_alloc_constant_value_id (tree);
 bool value_id_constant_p (unsigned int);
+tree fully_constant_vn_reference_p (vn_reference_t);
 #endif /* TREE_SSA_SCCVN_H  */

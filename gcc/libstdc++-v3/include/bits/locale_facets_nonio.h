@@ -1,6 +1,6 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file locale_facets_nonio.h
+/** @file bits/locale_facets_nonio.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{locale}
  */
 
 //
@@ -38,7 +38,9 @@
 
 #include <ctime>	// For struct tm
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /**
    *  @brief  Time format ordering data.
@@ -118,20 +120,20 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       bool				_M_allocated;
 
       __timepunct_cache(size_t __refs = 0) : facet(__refs),
-      _M_date_format(NULL), _M_date_era_format(NULL), _M_time_format(NULL),
-      _M_time_era_format(NULL), _M_date_time_format(NULL),
-      _M_date_time_era_format(NULL), _M_am(NULL), _M_pm(NULL),
-      _M_am_pm_format(NULL), _M_day1(NULL), _M_day2(NULL), _M_day3(NULL),
-      _M_day4(NULL), _M_day5(NULL), _M_day6(NULL), _M_day7(NULL),
-      _M_aday1(NULL), _M_aday2(NULL), _M_aday3(NULL), _M_aday4(NULL),
-      _M_aday5(NULL), _M_aday6(NULL), _M_aday7(NULL), _M_month01(NULL),
-      _M_month02(NULL), _M_month03(NULL), _M_month04(NULL), _M_month05(NULL),
-      _M_month06(NULL), _M_month07(NULL), _M_month08(NULL), _M_month09(NULL),
-      _M_month10(NULL), _M_month11(NULL), _M_month12(NULL), _M_amonth01(NULL),
-      _M_amonth02(NULL), _M_amonth03(NULL), _M_amonth04(NULL),
-      _M_amonth05(NULL), _M_amonth06(NULL), _M_amonth07(NULL),
-      _M_amonth08(NULL), _M_amonth09(NULL), _M_amonth10(NULL),
-      _M_amonth11(NULL), _M_amonth12(NULL), _M_allocated(false)
+      _M_date_format(0), _M_date_era_format(0), _M_time_format(0),
+      _M_time_era_format(0), _M_date_time_format(0),
+      _M_date_time_era_format(0), _M_am(0), _M_pm(0),
+      _M_am_pm_format(0), _M_day1(0), _M_day2(0), _M_day3(0),
+      _M_day4(0), _M_day5(0), _M_day6(0), _M_day7(0),
+      _M_aday1(0), _M_aday2(0), _M_aday3(0), _M_aday4(0),
+      _M_aday5(0), _M_aday6(0), _M_aday7(0), _M_month01(0),
+      _M_month02(0), _M_month03(0), _M_month04(0), _M_month05(0),
+      _M_month06(0), _M_month07(0), _M_month08(0), _M_month09(0),
+      _M_month10(0), _M_month11(0), _M_month12(0), _M_amonth01(0),
+      _M_amonth02(0), _M_amonth03(0), _M_amonth04(0),
+      _M_amonth05(0), _M_amonth06(0), _M_amonth07(0),
+      _M_amonth08(0), _M_amonth09(0), _M_amonth10(0),
+      _M_amonth11(0), _M_amonth12(0), _M_allocated(false)
       { }
 
       ~__timepunct_cache();
@@ -313,7 +315,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       // For use at construction time only.
       void
-      _M_initialize_timepunct(__c_locale __cloc = NULL);
+      _M_initialize_timepunct(__c_locale __cloc = 0);
     };
 
   template<typename _CharT>
@@ -339,12 +341,15 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 				 const tm*) const throw ();
 #endif
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
   // Include host and configuration specific timepunct functions.
   #include <bits/time_members.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /**
    *  @brief  Primary class template time_get.
@@ -405,11 +410,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       /**
        *  @brief  Parse input time string.
        *
-       *  This function parses a time according to the format @a x and puts the
+       *  This function parses a time according to the format @a X and puts the
        *  results into a user-supplied struct tm.  The result is returned by
        *  calling time_get::do_get_time().
        *
-       *  If there is a valid time string according to format @a x, @a tm will
+       *  If there is a valid time string according to format @a X, @a tm will
        *  be filled in accordingly and the returned iterator will point to the
        *  first character beyond the time string.  If an error occurs before
        *  the end, err |= ios_base::failbit.  If parsing reads all the
@@ -430,11 +435,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       /**
        *  @brief  Parse input date string.
        *
-       *  This function parses a date according to the format @a X and puts the
+       *  This function parses a date according to the format @a x and puts the
        *  results into a user-supplied struct tm.  The result is returned by
        *  calling time_get::do_get_date().
        *
-       *  If there is a valid date string according to format @a X, @a tm will
+       *  If there is a valid date string according to format @a x, @a tm will
        *  be filled in accordingly and the returned iterator will point to the
        *  first character beyond the date string.  If an error occurs before
        *  the end, err |= ios_base::failbit.  If parsing reads all the
@@ -883,11 +888,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       bool				_M_allocated;
 
       __moneypunct_cache(size_t __refs = 0) : facet(__refs),
-      _M_grouping(NULL), _M_grouping_size(0), _M_use_grouping(false),
+      _M_grouping(0), _M_grouping_size(0), _M_use_grouping(false),
       _M_decimal_point(_CharT()), _M_thousands_sep(_CharT()),
-      _M_curr_symbol(NULL), _M_curr_symbol_size(0),
-      _M_positive_sign(NULL), _M_positive_sign_size(0),
-      _M_negative_sign(NULL), _M_negative_sign_size(0),
+      _M_curr_symbol(0), _M_curr_symbol_size(0),
+      _M_positive_sign(0), _M_positive_sign_size(0),
+      _M_negative_sign(0), _M_negative_sign_size(0),
       _M_frac_digits(0),
       _M_pos_format(money_base::pattern()),
       _M_neg_format(money_base::pattern()), _M_allocated(false)
@@ -955,7 +960,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
        *  @param refs  Passed to the base facet class.
       */
       explicit
-      moneypunct(size_t __refs = 0) : facet(__refs), _M_data(NULL)
+      moneypunct(size_t __refs = 0)
+      : facet(__refs), _M_data(0)
       { _M_initialize_moneypunct(); }
 
       /**
@@ -983,7 +989,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       */
       explicit
       moneypunct(__c_locale __cloc, const char* __s, size_t __refs = 0)
-      : facet(__refs), _M_data(NULL)
+      : facet(__refs), _M_data(0)
       { _M_initialize_moneypunct(__cloc, __s); }
 
       /**
@@ -1271,8 +1277,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       // For use at construction time only.
        void
-       _M_initialize_moneypunct(__c_locale __cloc = NULL,
-				const char* __name = NULL);
+       _M_initialize_moneypunct(__c_locale __cloc = 0,
+				const char* __name = 0);
     };
 
   template<typename _CharT, bool _Intl>
@@ -1345,7 +1351,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   template<typename _CharT, bool _Intl>
     const bool moneypunct_byname<_CharT, _Intl>::intl;
 
-_GLIBCXX_BEGIN_LDBL_NAMESPACE
+_GLIBCXX_BEGIN_NAMESPACE_LDBL
 
   /**
    *  @brief  Primary class template money_get.
@@ -1653,7 +1659,7 @@ _GLIBCXX_BEGIN_LDBL_NAMESPACE
   template<typename _CharT, typename _OutIter>
     locale::id money_put<_CharT, _OutIter>::id;
 
-_GLIBCXX_END_LDBL_NAMESPACE
+_GLIBCXX_END_NAMESPACE_LDBL
 
   /**
    *  @brief  Messages facet base class providing catalog typedef.
@@ -1918,7 +1924,8 @@ _GLIBCXX_END_LDBL_NAMESPACE
       { }
     };
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 // Include host and configuration specific messages functions.
 #include <bits/messages_members.h>
@@ -1926,8 +1933,6 @@ _GLIBCXX_END_NAMESPACE
 // 22.2.1.5  Template class codecvt
 #include <bits/codecvt.h>
 
-#ifndef _GLIBCXX_EXPORT_TEMPLATE
-# include <bits/locale_facets_nonio.tcc>
-#endif
+#include <bits/locale_facets_nonio.tcc>
 
 #endif

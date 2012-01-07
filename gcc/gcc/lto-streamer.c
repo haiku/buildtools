@@ -29,7 +29,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "gimple.h"
 #include "tree-flow.h"
-#include "diagnostic.h"
+#include "diagnostic-core.h"
 #include "bitmap.h"
 #include "vec.h"
 #include "lto-streamer.h"
@@ -133,51 +133,45 @@ lto_bitmap_free (bitmap b)
 
 
 /* Get a section name for a particular type or name.  The NAME field
-   is only used if SECTION_TYPE is LTO_section_function_body or
-   LTO_static_initializer.  For all others it is ignored.  The callee
-   of this function is responcible to free the returned name.  */
+   is only used if SECTION_TYPE is LTO_section_function_body. For all
+   others it is ignored.  The callee of this function is responsible
+   to free the returned name.  */
 
 char *
-lto_get_section_name (int section_type, const char *name)
+lto_get_section_name (int section_type, const char *name, struct lto_file_decl_data *f)
 {
-  switch (section_type)
+  const char *add;
+  char post[32];
+  const char *sep;
+
+  if (section_type == LTO_section_function_body)
     {
-    case LTO_section_function_body:
       gcc_assert (name != NULL);
       if (name[0] == '*')
 	name++;
-      return concat (LTO_SECTION_NAME_PREFIX, name, NULL);
-
-    case LTO_section_static_initializer:
-      return concat (LTO_SECTION_NAME_PREFIX, ".statics", NULL);
-
-    case LTO_section_symtab:
-      return concat (LTO_SECTION_NAME_PREFIX, ".symtab", NULL);
-
-    case LTO_section_decls:
-      return concat (LTO_SECTION_NAME_PREFIX, ".decls", NULL);
-
-    case LTO_section_cgraph:
-      return concat (LTO_SECTION_NAME_PREFIX, ".cgraph", NULL);
-
-    case LTO_section_jump_functions:
-      return concat (LTO_SECTION_NAME_PREFIX, ".jmpfuncs", NULL);
-
-    case LTO_section_ipa_pure_const:
-      return concat (LTO_SECTION_NAME_PREFIX, ".pureconst", NULL);
-
-    case LTO_section_ipa_reference:
-      return concat (LTO_SECTION_NAME_PREFIX, ".reference", NULL);
-
-    case LTO_section_wpa_fixup:
-      return concat (LTO_SECTION_NAME_PREFIX, ".wpa_fixup", NULL);
-
-    case LTO_section_opts:
-      return concat (LTO_SECTION_NAME_PREFIX, ".opts", NULL);
-
-    default:
-      internal_error ("bytecode stream: unexpected LTO section %s", name);
+      add = name;
+      sep = "";
     }
+  else if (section_type < LTO_N_SECTION_TYPES)
+    {
+      add = lto_section_name[section_type];
+      sep = ".";
+    }
+  else
+    internal_error ("bytecode stream: unexpected LTO section %s", name);
+
+  /* Make the section name unique so that ld -r combining sections
+     doesn't confuse the reader with merged sections.
+
+     For options don't add a ID, the option reader cannot deal with them
+     and merging should be ok here.
+
+     XXX: use crc64 to minimize collisions? */
+  if (section_type == LTO_section_opts)
+    strcpy (post, "");
+  else
+    sprintf (post, ".%x", f ? f->id : crc32_string(0, get_random_seed (false)));
+  return concat (LTO_SECTION_NAME_PREFIX, sep, add, post, NULL);
 }
 
 
@@ -261,130 +255,6 @@ print_lto_report (void)
 }
 
 
-/* Create a new bitpack.  */
-
-struct bitpack_d *
-bitpack_create (void)
-{
-  return XCNEW (struct bitpack_d);
-}
-
-
-/* Free the memory used by bitpack BP.  */
-
-void
-bitpack_delete (struct bitpack_d *bp)
-{
-  VEC_free (bitpack_word_t, heap, bp->values);
-  free (bp);
-}
-
-
-/* Return an index to the word in bitpack BP that contains the
-   next NBITS.  */
-
-static inline unsigned
-bp_get_next_word (struct bitpack_d *bp, unsigned nbits)
-{
-  unsigned last, ix;
-
-  /* In principle, the next word to use is determined by the
-     number of bits already processed in BP.  */
-  ix = bp->num_bits / BITS_PER_BITPACK_WORD;
-
-  /* All the encoded bit patterns in BP are contiguous, therefore if
-     the next NBITS would straddle over two different words, move the
-     index to the next word and update the number of encoded bits
-     by adding up the hole of unused bits created by this move.  */
-  bp->first_unused_bit %= BITS_PER_BITPACK_WORD;
-  last = bp->first_unused_bit + nbits - 1;
-  if (last >= BITS_PER_BITPACK_WORD)
-    {
-      ix++;
-      bp->num_bits += (BITS_PER_BITPACK_WORD - bp->first_unused_bit);
-      bp->first_unused_bit = 0;
-    }
-
-  return ix;
-}
-
-
-/* Pack NBITS of value VAL into bitpack BP.  */
-
-void
-bp_pack_value (struct bitpack_d *bp, bitpack_word_t val, unsigned nbits)
-{
-  unsigned ix;
-  bitpack_word_t word;
-
-  /* We cannot encode more bits than BITS_PER_BITPACK_WORD.  */
-  gcc_assert (nbits > 0 && nbits <= BITS_PER_BITPACK_WORD);
-
-  /* Compute which word will contain the next NBITS.  */
-  ix = bp_get_next_word (bp, nbits);
-  if (ix >= VEC_length (bitpack_word_t, bp->values))
-    {
-      /* If there is no room left in the last word of the values
-	 array, add a new word.  Additionally, we should only
-	 need to add a single word, since every pack operation cannot
-	 use more bits than fit in a single word.  */
-      gcc_assert (ix < VEC_length (bitpack_word_t, bp->values) + 1);
-      VEC_safe_push (bitpack_word_t, heap, bp->values, 0);
-    }
-
-  /* Grab the last word to pack VAL into.  */
-  word = VEC_index (bitpack_word_t, bp->values, ix);
-
-  /* To fit VAL in WORD, we need to shift VAL to the left to
-     skip the bottom BP->FIRST_UNUSED_BIT bits.  */
-  gcc_assert (BITS_PER_BITPACK_WORD >= bp->first_unused_bit + nbits);
-  val <<= bp->first_unused_bit;
-
-  /* Update WORD with VAL.  */
-  word |= val;
-
-  /* Update BP.  */
-  VEC_replace (bitpack_word_t, bp->values, ix, word);
-  bp->num_bits += nbits;
-  bp->first_unused_bit += nbits;
-}
-
-
-/* Unpack the next NBITS from bitpack BP.  */
-
-bitpack_word_t
-bp_unpack_value (struct bitpack_d *bp, unsigned nbits)
-{
-  bitpack_word_t val, word, mask;
-  unsigned ix;
-
-  /* We cannot decode more bits than BITS_PER_BITPACK_WORD.  */
-  gcc_assert (nbits > 0 && nbits <= BITS_PER_BITPACK_WORD);
-
-  /* Compute which word contains the next NBITS.  */
-  ix = bp_get_next_word (bp, nbits);
-  word = VEC_index (bitpack_word_t, bp->values, ix);
-
-  /* Compute the mask to get NBITS from WORD.  */
-  mask = (nbits == BITS_PER_BITPACK_WORD)
-	 ? (bitpack_word_t) -1
-	 : ((bitpack_word_t) 1 << nbits) - 1;
-
-  /* Shift WORD to the right to skip over the bits already decoded
-     in word.  */
-  word >>= bp->first_unused_bit;
-
-  /* Apply the mask to obtain the requested value.  */
-  val = word & mask;
-
-  /* Update BP->NUM_BITS for the next unpack operation.  */
-  bp->num_bits += nbits;
-  bp->first_unused_bit += nbits;
-
-  return val;
-}
-
-
 /* Check that all the TS_* structures handled by the lto_output_* and
    lto_input_* routines are exactly ALL the structures defined in
    treestruct.def.  */
@@ -433,6 +303,7 @@ check_handled_ts_structures (void)
   handled_p[TS_OMP_CLAUSE] = true;
   handled_p[TS_OPTIMIZATION] = true;
   handled_p[TS_TARGET_OPTION] = true;
+  handled_p[TS_TRANSLATION_UNIT_DECL] = true;
 
   /* Anything not marked above will trigger the following assertion.
      If this assertion triggers, it means that there is a new TS_*
@@ -455,7 +326,7 @@ lto_streamer_cache_add_to_node_array (struct lto_streamer_cache_d *cache,
   if (ix >= (int) VEC_length (tree, cache->nodes))
     {
       size_t sz = ix + (20 + ix) / 4;
-      VEC_safe_grow_cleared (tree, gc, cache->nodes, sz);
+      VEC_safe_grow_cleared (tree, heap, cache->nodes, sz);
       VEC_safe_grow_cleared (unsigned, heap, cache->offsets, sz);
     }
 
@@ -497,7 +368,7 @@ lto_streamer_cache_insert_1 (struct lto_streamer_cache_d *cache,
       else
 	ix = *ix_p;
 
-      entry = XCNEW (struct tree_int_map);
+      entry = (struct tree_int_map *)pool_alloc (cache->node_map_entries);
       entry->base.from = t;
       entry->to = (unsigned) ix;
       *slot = entry;
@@ -651,7 +522,15 @@ lto_record_common_node (tree *nodep, VEC(tree, heap) **common_nodes,
     return;
 
   if (TYPE_P (node))
-    *nodep = node = gimple_register_type (node);
+    {
+      /* Type merging will get confused by the canonical types as they
+	 are set by the middle-end.  */
+      if (in_lto_p)
+	TYPE_CANONICAL (node) = NULL_TREE;
+      node = gimple_register_type (node);
+      TYPE_CANONICAL (node) = gimple_register_canonical_type (node);
+      *nodep = node;
+    }
 
   /* Return if node is already seen.  */
   if (pointer_set_insert (seen_nodes, node))
@@ -759,12 +638,16 @@ lto_streamer_cache_create (void)
 
   cache->node_map = htab_create (101, tree_int_map_hash, tree_int_map_eq, NULL);
 
+  cache->node_map_entries = create_alloc_pool ("node map",
+					       sizeof (struct tree_int_map),
+					       100);
+
   /* Load all the well-known tree nodes that are always created by
      the compiler on startup.  This prevents writing them out
      unnecessarily.  */
   common_nodes = lto_get_common_nodes ();
 
-  for (i = 0; VEC_iterate (tree, common_nodes, i, node); i++)
+  FOR_EACH_VEC_ELT (tree, common_nodes, i, node)
     preload_common_node (cache, node);
 
   VEC_free(tree, heap, common_nodes);
@@ -782,7 +665,8 @@ lto_streamer_cache_delete (struct lto_streamer_cache_d *c)
     return;
 
   htab_delete (c->node_map);
-  VEC_free (tree, gc, c->nodes);
+  free_alloc_pool (c->node_map_entries);
+  VEC_free (tree, heap, c->nodes);
   VEC_free (unsigned, heap, c->offsets);
   free (c);
 }
@@ -837,7 +721,7 @@ gate_lto_out (void)
 {
   return ((flag_generate_lto || in_lto_p)
 	  /* Don't bother doing anything if the program has errors.  */
-	  && !(errorcount || sorrycount));
+	  && !seen_error ());
 }
 
 

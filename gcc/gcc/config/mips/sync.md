@@ -1,6 +1,6 @@
 ;;  Machine Description for MIPS based processor synchronization
 ;;  instructions.
-;;  Copyright (C) 2007, 2008, 2009
+;;  Copyright (C) 2007, 2008, 2009, 2010
 ;;  Free Software Foundation, Inc.
 
 ;; This file is part of GCC.
@@ -18,6 +18,18 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
+
+(define_c_enum "unspec" [
+  UNSPEC_COMPARE_AND_SWAP
+  UNSPEC_COMPARE_AND_SWAP_12
+  UNSPEC_SYNC_OLD_OP
+  UNSPEC_SYNC_NEW_OP
+  UNSPEC_SYNC_NEW_OP_12
+  UNSPEC_SYNC_OLD_OP_12
+  UNSPEC_SYNC_EXCHANGE
+  UNSPEC_SYNC_EXCHANGE_12
+  UNSPEC_MEMORY_BARRIER
+])
 
 ;; Atomic fetch bitwise operations.
 (define_code_iterator fetchop_bit [ior xor and])
