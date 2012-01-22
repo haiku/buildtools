@@ -817,6 +817,7 @@ arm*-*-netbsd*)
 arm*-*-haiku*)
 	tmake_file="${tmake_file} t-haiku arm/t-arm arm/t-arm-elf arm/t-bpabi arm/t-haiku"
 	tm_file="dbxelf.h elfos.h haiku.h arm/elf.h arm/bpabi.h arm/haiku.h"
+	tm_file="$tm_file ../../libgcc/config/arm/bpabi-lib.h"
 	# The BPABI long long divmod functions return a 128-bit value in
 	# registers r0-r3.  Correctly modeling that requires the use of
 	# TImode.
