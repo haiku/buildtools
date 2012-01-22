@@ -109,9 +109,9 @@ cd "$gccBuildDir"
 CFLAGS="-O2" CXXFLAGS="-O2" "$gccSources/configure" \
 	--prefix="$installDir" --enable-shared --enable-languages=c,c++ \
 	--disable-nls --without-libiconv-prefix --disable-libstdcxx-pch \
-	--with-htmldir=html-docs
+	--with-htmldir=html-docs --enable-frame-pointer
 make $jobArgs bootstrap
-make install install-html
+make install-strip install-html
 
 
 # remove installed stuff we don't want
@@ -151,7 +151,7 @@ zip -y "$packageFile" develop/abi/x86/gcc4/tools/current
 cd "$buildDir"
 echo "Package:		GCC
 Version:		${gccVersion}-haiku-${gccDate}
-Copyright:		1988-2010 Free Software Foundation, Inc.
+Copyright:		1988-2011 Free Software Foundation, Inc.
 License:		GNU GPL v3
 License:		GNU LGPL v3
 URL:			http://www.gnu.org/software/gcc/
