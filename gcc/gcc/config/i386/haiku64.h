@@ -26,6 +26,9 @@ Boston, MA 02111-1307, USA.  */
 #define TARGET_VERSION fprintf (stderr, " (i386 Haiku/ELF)");
 #endif
 
+#undef ASM_COMMENT_START
+#define ASM_COMMENT_START " #"
+
 /* The SVR4 ABI for the i386 says that records and unions are returned
  *   in memory.
  *
