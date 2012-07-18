@@ -1236,7 +1236,7 @@ i[34567]86-*-haiku*)
 	extra_parts='crtbegin.o crtend.o'
 	;;
 x86_64-*-haiku*)
-	tmake_file='t-haiku i386/t-haiku64 i386/t-crtpic'
+	tmake_file='t-haiku i386/t-haiku64'
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku64.h"
 	extra_parts='crtbegin.o crtend.o'
 	;;
