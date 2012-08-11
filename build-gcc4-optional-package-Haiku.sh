@@ -34,8 +34,7 @@ while [ $# -gt 0 ]; do
 		--arch)
 			case "$2" in
 				x86)	HAIKU_GCC_MACHINE=i586-pc-haiku;;
-				x86_64)	HAIKU_GCC_MACHINE=x86_64-pc-haiku; targetArch=x86_64;
-						gccMakeTarget= ;;
+				x86_64)	HAIKU_GCC_MACHINE=x86_64-unknown-haiku; targetArch=x86_64;;
 				ppc)	HAIKU_GCC_MACHINE=powerpc-apple-haiku; targetArch=ppc;
 						gccMakeTarget= gccConfigureArgs="--disable-shared --disable-multilib"
 						binutilsConfigureArgs="--disable-shared --disable-multilib" ;;
