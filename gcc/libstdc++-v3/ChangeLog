@@ -1,3 +1,205 @@
+2012-03-01  Release Manager
+
+	* GCC 4.6.3 released.
+
+2012-02-21  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/52317 (cont)
+	* include/profile/unordered_map: Ad Library Exception comment.
+	* include/profile/set: Likewise.
+	* include/profile/base.h: Likewise.
+	* include/profile/impl/profiler_list_to_slist.h: Likewise.
+	* include/profile/impl/profiler_container_size.h: Likewise.
+	* include/profile/impl/profiler_vector_size.h: Likewise.
+	* include/profile/impl/profiler_hash_func.h: Likewise.
+	* include/profile/impl/profiler_trace.h: Likewise.
+	* include/profile/impl/profiler_list_to_vector.h: Likewise.
+	* include/profile/impl/profiler_vector_to_list.h: Likewise.
+	* include/profile/impl/profiler.h: Likewise.
+	* include/profile/impl/profiler_state.h: Likewise.
+	* include/profile/impl/profiler_map_to_unordered_map.h: Likewise.
+	* include/profile/impl/profiler_algos.h: Likewise.
+	* include/profile/impl/profiler_hashtable_size.h: Likewise.
+	* include/profile/impl/profiler_node.h: Likewise.
+	* include/profile/vector: Likewise.
+	* include/profile/unordered_set: Likewise.
+	* include/profile/map.h: Likewise.
+	* include/profile/map: Likewise.
+
+2012-02-21  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/52317
+	* python/Makefile.am: Update boilerplate license text to GPLv3.
+	* include/profile/unordered_map: Likewise.
+	* include/profile/set: Likewise.
+	* include/profile/base.h: Likewise.
+	* include/profile/impl/profiler_list_to_slist.h: Likewise.
+	* include/profile/impl/profiler_container_size.h: Likewise.
+	* include/profile/impl/profiler_vector_size.h: Likewise.
+	* include/profile/impl/profiler_hash_func.h: Likewise.
+	* include/profile/impl/profiler_trace.h: Likewise.
+	* include/profile/impl/profiler_list_to_vector.h: Likewise.
+	* include/profile/impl/profiler_vector_to_list.h: Likewise.
+	* include/profile/impl/profiler.h: Likewise.
+	* include/profile/impl/profiler_state.h: Likewise.
+	* include/profile/impl/profiler_map_to_unordered_map.h: Likewise.
+	* include/profile/impl/profiler_algos.h: Likewise.
+	* include/profile/impl/profiler_hashtable_size.h: Likewise.
+	* include/profile/impl/profiler_node.h: Likewise.
+	* include/profile/vector: Likewise.
+	* include/profile/unordered_set: Likewise.
+	* include/profile/map.h: Likewise.
+	* include/profile/map: Likewise.
+	* testsuite/21_strings/basic_string/numeric_conversions/
+	wchar_t/dr1261.cc: Likewise.
+	* testsuite/21_strings/basic_string/numeric_conversions/
+	char/dr1261.cc: Likewise.
+	* testsuite/20_util/reference_wrapper/invoke-2.cc: Likewise.
+
+2012-02-20  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/52309
+	* include/bits/hashtable_policy.h (_Equality_base<, true,>::
+    	_M_equal(const _Hashtable&)): Compare values with operator==.
+	* testsuite/23_containers/unordered_set/operators/52309.cc: New.
+
+2012-02-01  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/51795
+	* include/bits/random.h (linear_congruential_generator): Add
+	static_assert preventing instantiation for values of 'a' and 'm'
+	currently handled incorrectly by _Mod::__calc.
+	* include/bits/random.tcc (seed_seq::generate): Avoid unsafe
+	uses of _Mod::__calc.
+
+2012-01-03  Chase Douglas  <chase.douglas@canonical.com>
+	    Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	* include/bits/shared_ptr.h: Default copy ctor and assignment.
+	* include/bits/shared_ptr_base.h: Likewise.
+	* testsuite/20_util/shared_ptr/cons/43820_neg.cc: Adjust dg-error
+	line numbers.
+	* testsuite/20_util/weak_ptr/comparison/cmp_neg.cc: Likewise.
+
+2011-12-30  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/51711
+	* include/bits/regex.h (regex_replace): Fix thinko.
+	* testsuite/28_regex/algorithms/regex_replace/char/51711.cc: New.
+	* testsuite/28_regex/algorithms/regex_replace/wchar_t/51711.cc:
+	Likewise.
+
+2011-12-19  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/51626
+	* include/bits/stl_uninitialized.h (_Construct_default_a_impl): Define
+	overloaded functions to conditionally use allocator::construct.
+	(_Construct_default_a): Define to dispatch to appropriate
+	_Construct_default_a_impl overload.
+	(__uninitialized_default_a, __uninitialized_default_n_a): Use
+	_Construct_default_a.
+	* testsuite/20_util/allocator/51626.cc: New.
+
+2011-12-19  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	* testsuite/ext/type_traits/remove_unsigned_integer_neg.cc: Adjust
+	dg-error line numbers.
+	* testsuite/ext/type_traits/add_unsigned_floating_neg.cc: Likewise.
+	* testsuite/ext/type_traits/remove_unsigned_floating_neg.cc: Likewise.
+	* testsuite/ext/type_traits/add_unsigned_integer_neg.cc: Likewise.
+
+2011-12-19  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	* include/c_global/cmath: Update copyright years.
+	* include/ext/type_traits.h: Likewise.
+
+2011-12-19  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	Backport from mainline
+	2011-11-13  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* include/c_global/cmath (atan2, pow): Simplify constraining on the
+	return type.
+
+	Backport from mainline
+	2011-11-12  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/51083
+	* include/ext/type_traits.h (__promote): Only define __type member
+	for integral and floating point types, to prevent math functions
+	participating in overload resolution for other types.
+	(__promote_2, __promote_3, __promote_4): Use __promote in default
+	template argument values, so deduction only succeeds for integral and
+	floating point types.
+	* testsuite/26_numerics/cmath/51083.cc: New.
+	* testsuite/26_numerics/complex/51083.cc: New.
+	* testsuite/tr1/8_c_compatibility/cmath/51083.cc: New.
+	* testsuite/tr1/8_c_compatibility/complex/51083.cc: New.
+
+2011-12-19  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/50862
+	* include/std/condition_variable (condition_variable_any::wait): Fix
+	deadlock and ensure _Lock::lock() is called on exit.
+	* testsuite/30_threads/condition_variable_any/50862.cc: New.
+
+2011-12-18  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/51540
+	* include/bits/stl_numeric.h (partial_sum): Adjust doxygen comments.
+
+2011-11-20  Andreas Tobler  <andreast@fgznet.ch>
+
+	* configure: Regenerate.
+
+2011-11-16  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/51142
+	* include/debug/unordered_map (unordered_map<>::erase(iterator),
+	unordered_multimap<>::erase(iterator)): Add, consistently with
+	LWG 2059.
+	* include/debug/unordered_set (unordered_set<>::erase(iterator),
+	unordered_multiset<>::erase(iterator)): Likewise.
+	* include/debug/map.h (map<>::erase(iterator)): Likewise.
+	* include/debug/multimap.h (multimap<>::erase(iterator)): Likewise.
+	* include/profile/map.h (map<>::erase(iterator)): Likewise.
+	* include/profile/multimap.h (multimap<>::erase(iterator)): Likewise.
+	* include/bits/hashtable.h (_Hashtable<>::erase(iterator)): Likewise.
+	* include/bits/stl_map.h (map<>::erase(iterator)): Likewise.
+	* include/bits/stl_multimap.h (multimap<>::erase(iterator)): Likewise.
+	* include/bits/stl_tree.h (_Rb_tree<>::erase(iterator)): Likewise.
+	* testsuite/23_containers/unordered_map/erase/51142.cc: New.
+	* testsuite/23_containers/multimap/modifiers/erase/51142.cc: Likewise.
+	* testsuite/23_containers/set/modifiers/erase/51142.cc: Likewise.
+	* testsuite/23_containers/unordered_multimap/erase/51142.cc: Likewise.
+	* testsuite/23_containers/unordered_set/erase/51142.cc: Likewise.
+	* testsuite/23_containers/multiset/modifiers/erase/51142.cc: Likewise.
+	* testsuite/23_containers/unordered_multiset/erase/51142.cc: Likewise.
+	* testsuite/23_containers/map/modifiers/erase/51142.cc: Likewise.
+
+2011-11-15  Jason Dick  <dickphd@gmail.com>
+
+	PR libstdc++/51133
+	* include/tr1/poly_hermite.tcc (__poly_hermite_recursion): Fix
+	wrong sign in recursion relation.
+
+2011-11-02  Richard B. Kreckel  <kreckel@ginac.de>
+	    Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/50880
+	* include/std/complex (__complex_acosh): Fix in a better way,
+	use Kahan's formula.
+	* include/tr1/complex (__complex_acosh): Likewise.
+
+2011-11-02  Richard B. Kreckel  <kreckel@ginac.de>
+	    Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/50880
+	* include/std/complex (__complex_acosh): Fix for __z.real() < 0.
+	* include/tr1/complex (__complex_acosh): Likewise.
+	* testsuite/26_numerics/complex/50880.cc: New.
+	* testsuite/tr1/8_c_compatibility/complex/50880.cc: Likewise.
+
 2011-10-26  Release Manager
 
 	* GCC 4.6.2 released.

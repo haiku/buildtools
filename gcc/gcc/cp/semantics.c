@@ -3348,7 +3348,7 @@ finish_offsetof (tree expr)
     }
   if (TREE_CODE (expr) == INDIRECT_REF && REFERENCE_REF_P (expr))
     expr = TREE_OPERAND (expr, 0);
-  return fold_offsetof (expr, NULL_TREE);
+  return fold_offsetof (expr);
 }
 
 /* Replace the AGGR_INIT_EXPR at *TP with an equivalent CALL_EXPR.  This
@@ -3804,6 +3804,8 @@ finish_omp_clauses (tree clauses)
 	  t = maybe_convert_cond (t);
 	  if (t == error_mark_node)
 	    remove = true;
+	  else if (!processing_template_decl)
+	    t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
 	  OMP_CLAUSE_IF_EXPR (c) = t;
 	  break;
 
@@ -3816,6 +3818,13 @@ finish_omp_clauses (tree clauses)
 	    {
 	      error ("num_threads expression must be integral");
 	      remove = true;
+	    }
+	  else
+	    {
+	      t = mark_rvalue_use (t);
+	      if (!processing_template_decl)
+		t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	      OMP_CLAUSE_NUM_THREADS_EXPR (c) = t;
 	    }
 	  break;
 
@@ -3830,6 +3839,13 @@ finish_omp_clauses (tree clauses)
 	    {
 	      error ("schedule chunk size expression must be integral");
 	      remove = true;
+	    }
+	  else
+	    {
+	      t = mark_rvalue_use (t);
+	      if (!processing_template_decl)
+		t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	      OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (c) = t;
 	    }
 	  break;
 
@@ -4927,8 +4943,9 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
           gcc_unreachable ();
 
         case INTEGER_CST:
+	case PTRMEM_CST:
           /* We can get here when the id-expression refers to an
-             enumerator.  */
+             enumerator or non-type template parameter.  */
           type = TREE_TYPE (expr);
           break;
 

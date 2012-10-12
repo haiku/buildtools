@@ -141,7 +141,9 @@ initialize_vtbl_ptrs (tree addr)
    zero-initialization does not simply mean filling the storage with
    zero bytes.  FIELD_SIZE, if non-NULL, is the bit size of the field,
    subfields with bit positions at or above that bit size shouldn't
-   be added.  */
+   be added.  Note that this only works when the result is assigned
+   to a base COMPONENT_REF; if we only have a pointer to the base subobject,
+   expand_assignment will end up clearing the full size of TYPE.  */
 
 static tree
 build_zero_init_1 (tree type, tree nelts, bool static_storage_p,
@@ -368,6 +370,12 @@ build_value_init (tree type, tsubst_flags_t complain)
 tree
 build_value_init_noctor (tree type, tsubst_flags_t complain)
 {
+  if (!COMPLETE_TYPE_P (type))
+    {
+      if (complain & tf_error)
+	error ("value-initialization of incomplete type %qT", type);
+      return error_mark_node;
+    }
   if (CLASS_TYPE_P (type))
     {
       gcc_assert (!TYPE_NEEDS_CONSTRUCTING (type));

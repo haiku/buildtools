@@ -8,24 +8,27 @@ see ONEWS.
 http://gcc.gnu.org/gcc-4.6/index.html
                              GCC 4.6 Release Series
 
-   October 26, 2011
+   March 1, 2012
 
    The [1]GNU project and the GCC developers are pleased to announce the
-   release of GCC 4.6.2.
+   release of GCC 4.6.3.
 
    This release is a bug-fix release, containing fixes for regressions in
-   GCC 4.6.1 relative to previous releases of GCC.
+   GCC 4.6.2 relative to previous releases of GCC.
 
 Release History
 
+   GCC 4.6.3
+          March 1, 2012 ([2]changes)
+
    GCC 4.6.2
-          October 26, 2011 ([2]changes)
+          October 26, 2011 ([3]changes)
 
    GCC 4.6.1
-          June 27, 2011 ([3]changes)
+          June 27, 2011 ([4]changes)
 
    GCC 4.6.0
-          March 25, 2011 ([4]changes)
+          March 25, 2011 ([5]changes)
 
 References and Acknowledgements
 
@@ -33,33 +36,33 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [5]successful builds is updated as new information becomes
+   A list of [6]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [6]amazing group of volunteers is
+   well as test results to GCC. This [7]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [7]GCC project
-   web site or contact the [8]GCC development mailing list.
+   For additional information about GCC please refer to the [8]GCC project
+   web site or contact the [9]GCC development mailing list.
 
-   To obtain GCC please use [9]our mirror sites or [10]our SVN server.
+   To obtain GCC please use [10]our mirror sites or [11]our SVN server.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [11]GCC manuals. If that fails, the
-    [12]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [12]GCC manuals. If that fails, the
+    [13]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [13]gcc@gcc.gnu.org. All of [14]our lists have public
+    list at [14]gcc@gcc.gnu.org. All of [15]our lists have public
     archives.
 
-   Copyright (C) [15]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [16]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [16]maintained by the GCC team. Last modified
-   2011-10-26[17].
+   These pages are [17]maintained by the GCC team. Last modified
+   2012-03-01[18].
 
 References
 
@@ -67,19 +70,20 @@ References
    2. http://gcc.gnu.org/gcc-4.6/changes.html
    3. http://gcc.gnu.org/gcc-4.6/changes.html
    4. http://gcc.gnu.org/gcc-4.6/changes.html
-   5. http://gcc.gnu.org/gcc-4.6/buildstat.html
-   6. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
-   7. http://gcc.gnu.org/index.html
-   8. mailto:gcc@gcc.gnu.org
-   9. http://gcc.gnu.org/mirrors.html
-  10. http://gcc.gnu.org/svn.html
-  11. http://gcc.gnu.org/onlinedocs/
-  12. mailto:gcc-help@gcc.gnu.org
-  13. mailto:gcc@gcc.gnu.org
-  14. http://gcc.gnu.org/lists.html
-  15. http://www.fsf.org/
-  16. http://gcc.gnu.org/about.html
-  17. http://validator.w3.org/check/referer
+   5. http://gcc.gnu.org/gcc-4.6/changes.html
+   6. http://gcc.gnu.org/gcc-4.6/buildstat.html
+   7. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
+   8. http://gcc.gnu.org/index.html
+   9. mailto:gcc@gcc.gnu.org
+  10. http://gcc.gnu.org/mirrors.html
+  11. http://gcc.gnu.org/svn.html
+  12. http://gcc.gnu.org/onlinedocs/
+  13. mailto:gcc-help@gcc.gnu.org
+  14. mailto:gcc@gcc.gnu.org
+  15. http://gcc.gnu.org/lists.html
+  16. http://www.fsf.org/
+  17. http://gcc.gnu.org/about.html
+  18. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.6/changes.html
                              GCC 4.6 Release Series
@@ -158,6 +162,8 @@ Caveats
        have been obsoleted.
      * Support has been removed for all the [3]configurations obsoleted in
        GCC 4.5.
+     * More information on porting to GCC 4.6 from previous versions of
+       GCC can be found in the [4]porting guide for this release.
 
 General Optimizer Improvements
 
@@ -166,7 +172,7 @@ General Optimizer Improvements
        affect standards compliance but result in better optimized code.
        For example, -Ofast enables -ffast-math.
      * Link-time optimization improvements:
-          + The [4]Scalable Whole Program Optimizer (WHOPR) project has
+          + The [5]Scalable Whole Program Optimizer (WHOPR) project has
             stabilized to the point of being usable. It has become the
             default mode when using the LTO optimization model. Link time
             optimization can now split itself into multiple parallel
@@ -212,7 +218,7 @@ General Optimizer Improvements
             optimization. Several scalability issues were resolved.
           + Improved auto-detection of const and pure functions. Newly,
             noreturn functions are auto-detected.
-            The [5]-Wsuggest-attribute=[const|pure|noreturn] flag is
+            The [6]-Wsuggest-attribute=[const|pure|noreturn] flag is
             available that informs users when adding attributes to headers
             might improve code generation.
           + A number of inlining heuristic improvements. In particular:
@@ -344,7 +350,7 @@ New Languages and Language specific improvements
 
   C++
 
-     * Improved [6]experimental support for the upcoming C++0x ISO C++
+     * Improved [7]experimental support for the upcoming C++0x ISO C++
        standard, including support for constexpr (thanks to Gabriel Dos
        Reis and Jason Merrill), nullptr (thanks to Magnus Fromreide),
        noexcept, unrestricted unions, range-based for loops (thanks to
@@ -354,14 +360,14 @@ New Languages and Language specific improvements
      * When an extern declaration within a function does not match a
        declaration in the enclosing context, G++ now properly declares the
        name within the namespace of the function rather than the namespace
-       which was open just before the function definition ([7]c++/43145).
+       which was open just before the function definition ([8]c++/43145).
      * GCC now warns by default when casting integers to larger pointer
        types. These warnings can be disabled with the option
        -Wno-int-to-pointer-cast, which is now also available in C++.
      * G++ no longer optimizes using the assumption that a value of
        enumeration type will fall within the range specified by the
        standard, since that assumption is easily violated with a
-       conversion from integer type ([8]c++/43680). The old behavior can
+       conversion from integer type ([9]c++/43680). The old behavior can
        be restored with -fstrict-enums.
      * The new -fnothrow-opt flag changes the semantics of a throw()
        exception specification to match the proposed semantics of the
@@ -384,7 +390,7 @@ New Languages and Language specific improvements
        class member declarations.
      * G++ now issues clearer diagnostics when a colon is used in a place
        where a double-colon was intended.
-     * G++ no longer accepts mutable on reference members ([9]c++/33558).
+     * G++ no longer accepts mutable on reference members ([10]c++/33558).
        Use -fpermissive to allow the old, non-conforming behaviour.
      * A few mangling fixes have been made, to attribute const/volatile on
        function pointer types, decltype of a plain decl, and use of a
@@ -397,7 +403,7 @@ New Languages and Language specific improvements
      * In 4.6.0 and 4.6.1 G++ no longer allows objects of const-qualified
        type to be default initialized unless the type has a user-declared
        default constructor. In 4.6.2 G++ implements the proposed
-       resolution of [10]DR 253, so default initialization is allowed if
+       resolution of [11]DR 253, so default initialization is allowed if
        it initializes all subobjects. Code that fails to compile can be
        fixed by providing an initializer e.g.
     struct A { A(); };
@@ -407,13 +413,13 @@ New Languages and Language specific improvements
 
     Runtime Library (libstdc++)
 
-     * [11]Improved experimental support for the upcoming ISO C++
+     * [12]Improved experimental support for the upcoming ISO C++
        standard, C++0x, including using constexpr and nullptr.
-     * Performance improvements to the [12]Debug Mode, thanks to Franc,ois
+     * Performance improvements to the [13]Debug Mode, thanks to Franc,ois
        Dumont.
      * Atomic operations used for reference-counting are annotated so that
        they can be understood by race detectors such as Helgrind, see
-       [13]Data Race Hunting.
+       [14]Data Race Hunting.
      * Most libstdc++ standard headers have been changed to no longer
        include the cstddef header as an implementation detail. Code that
        relied on that header being included as side-effect of including
@@ -437,7 +443,7 @@ New Languages and Language specific improvements
      * The -fwhole-file flag is now enabled by default. This improves code
        generation and diagnostics. It can be disabled using the deprecated
        -fno-whole-file flag.
-     * Support the generation of Makefile dependencies via the [14]-M...
+     * Support the generation of Makefile dependencies via the [15]-M...
        flags of GCC; you may need to specify the -cpp option in addition.
        The dependencies take modules, Fortran's include, and CPP's
        #include into account. Note: Using -M for the module path is no
@@ -454,7 +460,7 @@ New Languages and Language specific improvements
      * Fortran 2003 support has been extended:
           + Improved support for polymorphism between libraries and
             programs and for complicated inheritance patterns (cf.
-            [15]object-oriented programming).
+            [16]object-oriented programming).
           + Experimental support of the ASSOCIATE construct.
           + In pointer assignments it is now possible to specify the lower
             bounds of the pointer and, for a rank-1 or a simply contiguous
@@ -471,8 +477,8 @@ New Languages and Language specific improvements
           + Namelist variables with allocatable and pointer attribute and
             nonconstant length type parameter are supported.
      * Fortran 2008 support has been extended:
-          + Experimental [16]coarray support (for one image only, i.e.
-            num_images() == 1); use the [17]-fcoarray=single flag to
+          + Experimental [17]coarray support (for one image only, i.e.
+            num_images() == 1); use the [18]-fcoarray=single flag to
             enable it.
           + The STOP and the new ERROR STOP statements now support all
             constant expressions.
@@ -525,15 +531,13 @@ New Languages and Language specific improvements
 
   Go
 
-   Support for the [18]Go programming language has been added to GCC. It
+   Support for the [19]Go programming language has been added to GCC. It
    is not enabled by default when you build GCC; use the
    --enable-languages configure option to build it. The driver program for
    compiling Go code is gccgo.
 
    Go is currently known to work on GNU/Linux and RTEMS. Solaris support
    is in progress. It may or may not work on other platforms.
-
-  Java (GCJ)
 
   Objective-C and Objective-C++
 
@@ -745,7 +749,7 @@ New Targets and Target Specific Improvements
        section has been improved. A new command-line option,
        -mcmodel=MODEL, controls this feature; valid values for MODEL are
        small, medium, or large.
-     * The altivec builtin functions vec_ld and vec_st have been modified
+     * The Altivec builtin functions vec_ld and vec_st have been modified
        to generate the Altivec memory instructions LVX and STVX, even if
        the -mvsx option is used. In the initial GCC 4.5 release, these
        builtin functions were changed to generate VSX memory reference
@@ -800,6 +804,12 @@ New Targets and Target Specific Improvements
        callee for functions taking parameters with sub-word size in 32-bit
        mode, since this is redundant with the specification of the ABI.
        GCC has never done so in 64-bit mode since this is also redundant.
+
+  AVR
+
+     * The command line option -mfix-at697f has been added to enable the
+       documented workaround for the single erratum of the Atmel AT697F
+       processor.
 
 Operating Systems
 
@@ -887,8 +897,6 @@ Operating Systems
      * Enable 128-bit long double (__float128) support on MinGW and
        Cygwin.
 
-Documentation improvements
-
 Other significant improvements
 
   Installation changes
@@ -897,11 +905,11 @@ Other significant improvements
        executables, and may install libraries with unneeded or debugging
        sections stripped.
      * On Power7 systems, there is a potential problem if you build the
-       GCC compiler with a host compiler using options that enables the
-       VSX instruction set generation. If the host compiler has been
-       patched so that the vec_ld and vec_st builtin functions generate
-       Altivec memory instructions instead of VSX memory instructions,
-       then you should be able to build the compiler with VSX instruction
+       GCC compiler with a host compiler using options that enable the VSX
+       instruction set generation. If the host compiler has been patched
+       so that the vec_ld and vec_st builtin functions generate Altivec
+       memory instructions instead of VSX memory instructions, then you
+       should be able to build the compiler with VSX instruction
        generation.
 
 Changes for GCC Developers
@@ -917,68 +925,71 @@ Changes for GCC Developers
 
 GCC 4.6.1
 
-   This is the [19]list of problem reports (PRs) from GCC's bug tracking
+   This is the [20]list of problem reports (PRs) from GCC's bug tracking
    system that are known to be fixed in the 4.6.1 release. This list might
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
 GCC 4.6.2
 
-   This is the [20]list of problem reports (PRs) from GCC's bug tracking
+   This is the [21]list of problem reports (PRs) from GCC's bug tracking
    system that are known to be fixed in the 4.6.2 release. This list might
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
-  SPARC
+GCC 4.6.3
 
-     * The command line option -mfix-at697f has been added to enable the
-       documented workaround for the single erratum of the Atmel AT697F
-       processor.
+   This is the [22]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 4.6.3 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [21]GCC manuals. If that fails, the
-    [22]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [23]GCC manuals. If that fails, the
+    [24]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [23]gcc@gcc.gnu.org. All of [24]our lists have public
+    list at [25]gcc@gcc.gnu.org. All of [26]our lists have public
     archives.
 
-   Copyright (C) [25]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [27]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [26]maintained by the GCC team. Last modified
-   2011-10-13[27].
+   These pages are [28]maintained by the GCC team. Last modified
+   2012-03-01[29].
 
 References
 
    1. http://sourceware.org/bugzilla/show_bug.cgi?id=10401
    2. http://gcc.gnu.org/gcc-4.5/changes.html
    3. http://gcc.gnu.org/gcc-4.5/changes.html#obsoleted
-   4. http://gcc.gnu.org/projects/lto/whopr.pdf
-   5. http://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#Warning-Options
-   6. http://gcc.gnu.org/gcc-4.6/cxx0x_status.html
-   7. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43145
-   8. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43680
-   9. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33558
-  10. http://www.open-std.org/jtc1/sc22/wg21/docs/cwg_active.html#253
-  11. http://gcc.gnu.org/onlinedocs/libstdc++/manual/status.html#status.iso.200x
-  12. http://gcc.gnu.org/onlinedocs/libstdc++/manual/debug_mode.html
-  13. http://gcc.gnu.org/onlinedocs/libstdc++/manual/debug.html#debug.races
-  14. http://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html
-  15. http://gcc.gnu.org/wiki/OOP
-  16. http://gcc.gnu.org/wiki/Coarray
-  17. http://gcc.gnu.org/onlinedocs/gfortran/Code-Gen-Options.html#index-g_t_0040code_007bfcoarray_007d-233
-  18. http://golang.org/
-  19. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.1
-  20. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.2
-  21. http://gcc.gnu.org/onlinedocs/
-  22. mailto:gcc-help@gcc.gnu.org
-  23. mailto:gcc@gcc.gnu.org
-  24. http://gcc.gnu.org/lists.html
-  25. http://www.fsf.org/
-  26. http://gcc.gnu.org/about.html
-  27. http://validator.w3.org/check/referer
+   4. http://gcc.gnu.org/gcc-4.6/porting_to.html
+   5. http://gcc.gnu.org/projects/lto/whopr.pdf
+   6. http://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html#Warning-Options
+   7. http://gcc.gnu.org/gcc-4.6/cxx0x_status.html
+   8. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43145
+   9. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43680
+  10. http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33558
+  11. http://www.open-std.org/jtc1/sc22/wg21/docs/cwg_active.html#253
+  12. http://gcc.gnu.org/onlinedocs/libstdc++/manual/status.html#status.iso.200x
+  13. http://gcc.gnu.org/onlinedocs/libstdc++/manual/debug_mode.html
+  14. http://gcc.gnu.org/onlinedocs/libstdc++/manual/debug.html#debug.races
+  15. http://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html
+  16. http://gcc.gnu.org/wiki/OOP
+  17. http://gcc.gnu.org/wiki/Coarray
+  18. http://gcc.gnu.org/onlinedocs/gfortran/Code-Gen-Options.html#index-g_t_0040code_007bfcoarray_007d-233
+  19. http://golang.org/
+  20. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.1
+  21. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.2
+  22. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.3
+  23. http://gcc.gnu.org/onlinedocs/
+  24. mailto:gcc-help@gcc.gnu.org
+  25. mailto:gcc@gcc.gnu.org
+  26. http://gcc.gnu.org/lists.html
+  27. http://www.fsf.org/
+  28. http://gcc.gnu.org/about.html
+  29. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.5/index.html
                              GCC 4.5 Release Series
@@ -1144,10 +1155,10 @@ General Optimizer Improvements
        (e.g. csinf and csinl) are also handled.
      * A new link-time optimizer has been added ([8]-flto). When this
        option is used, GCC generates a bytecode representation of each
-       input file and writes it to special ELF sections in each object
+       input file and writes it to specially-named sections in each object
        file. When the object files are linked together, all the function
-       bodies are read from these ELF sections and instantiated as if they
-       had been part of the same translation unit. This enables
+       bodies are read from these named sections and instantiated as if
+       they had been part of the same translation unit. This enables
        interprocedural optimizations to work across different files (and
        even different languages), potentially improving the performance of
        the generated code. To use the link-timer optimizer, -flto needs to
@@ -1463,8 +1474,6 @@ vector-size: improvement = 3: call stack = 0x804842c ...
             ATAN(Y,X) is now an alias for ATAN2(Y,X).
           + The BLOCK construct has been implemented.
 
-  Java (GCJ)
-
 New Targets and Target Specific Improvements
 
   AIX
@@ -1568,8 +1577,6 @@ New Targets and Target Specific Improvements
        use_debug_exception_return. See the documentation for more details
        about these attributes.
 
-  picochip
-
   RS/6000 (POWER/PowerPC)
 
      * GCC now supports the Power ISA 2.06, which includes the VSX
@@ -1616,7 +1623,7 @@ Operating Systems
      * Numerous other minor bugfixes and improvements, and substantial
        enhancements to the Fortran language support library.
 
-Documentation improvements
+   >
 
 Other significant improvements
 
@@ -1681,7 +1688,7 @@ GCC 4.5.3
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
-   On the PowerPC compiler, the altivec builtin functions vec_ld and
+   On the PowerPC compiler, the Altivec builtin functions vec_ld and
    vec_st have been modified to generate the Altivec memory instructions
    LVX and STVX, even if the -mvsx option is used. In the initial GCC 4.5
    release, these builtin functions were changed to generate VSX memory
@@ -1704,7 +1711,7 @@ GCC 4.5.3
    provided this notice is preserved.
 
    These pages are [33]maintained by the GCC team. Last modified
-   2011-05-11[34].
+   2011-10-30[34].
 
 References
 
@@ -5002,7 +5009,7 @@ GCC 4.0.4
    provided this notice is preserved.
 
    These pages are [21]maintained by the GCC team. Last modified
-   2011-04-25[22].
+   2012-02-20[22].
 
 References
 
@@ -5013,7 +5020,7 @@ References
    5. http://gcc.gnu.org/news/sms.html
    6. http://www.akkadia.org/drepper/dsohowto.pdf
    7. http://gcc.gnu.org/gcc-4.0/changes.html#visibility
-   8. http://www.codesourcery.com/public/cxx-abi/
+   8. http://sourcery.mentor.com/public/cxx-abi/
    9. http://gcc.gnu.org/fortran/
   10. http://gcc.gnu.org/install/
   11. http://gcc.gnu.org/wiki/Visibility

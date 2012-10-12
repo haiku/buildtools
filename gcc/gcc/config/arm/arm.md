@@ -104,6 +104,7 @@
    (UNSPEC_SYMBOL_OFFSET 27) ; The offset of the start of the symbol from
                              ; another symbolic address.
    (UNSPEC_MEMORY_BARRIER 28) ; Represent a memory barrier.
+   (UNSPEC_PIC_UNIFIED 29)  ; Create a common pic addressing form.
   ]
 )
 
@@ -3272,7 +3273,7 @@
     bool need_else;
 
     if (which_alternative != 0 || operands[3] != const0_rtx
-        || (code != PLUS && code != MINUS && code != IOR && code != XOR))
+        || (code != PLUS && code != IOR && code != XOR))
       need_else = true;
     else
       need_else = false;
@@ -5257,6 +5258,30 @@
   "operands[3] = can_create_pseudo_p () ? gen_reg_rtx (SImode) : operands[0];"
 )
 
+;; operand1 is the memory address to go into 
+;; pic_load_addr_32bit.
+;; operand2 is the PIC label to be emitted 
+;; from pic_add_dot_plus_eight.
+;; We do this to allow hoisting of the entire insn.
+(define_insn_and_split "pic_load_addr_unified"
+  [(set (match_operand:SI 0 "s_register_operand" "=r,r,l")
+	(unspec:SI [(match_operand:SI 1 "" "mX,mX,mX") 
+		    (match_operand:SI 2 "" "")] 
+		    UNSPEC_PIC_UNIFIED))]
+ "flag_pic"
+ "#"
+ "&& reload_completed"
+ [(set (match_dup 0) (unspec:SI [(match_dup 1)] UNSPEC_PIC_SYM))
+  (set (match_dup 0) (unspec:SI [(match_dup 0) (match_dup 3)
+       		     		 (match_dup 2)] UNSPEC_PIC_BASE))]
+ "operands[3] = TARGET_THUMB ? GEN_INT (4) : GEN_INT (8);"
+ [(set_attr "type" "load1,load1,load1")
+  (set_attr "pool_range" "4096,4096,1024")
+  (set_attr "neg_pool_range" "4084,0,0")
+  (set_attr "arch"  "a,t2,t1")    
+  (set_attr "length" "8,6,4")]
+)
+
 ;; The rather odd constraints on the following are to force reload to leave
 ;; the insn alone, and to force the minipool generation pass to then move
 ;; the GOT symbol to memory.
@@ -5338,7 +5363,8 @@
 		    (const_int 8)
 		    (match_operand 1 "" "")]
 		   UNSPEC_PIC_BASE))
-   (set (match_operand:SI 2 "register_operand" "") (mem:SI (match_dup 0)))]
+   (set (match_operand:SI 2 "arm_general_register_operand" "")
+	(mem:SI (match_dup 0)))]
   "TARGET_ARM && peep2_reg_dead_p (2, operands[0])"
   [(set (match_dup 2)
 	(mem:SI (unspec:SI [(match_dup 3)
@@ -7346,7 +7372,7 @@
 	(not:SI (match_operator:SI 1 "arm_comparison_operator"
 		 [(match_operand 2 "cc_register" "") (const_int 0)])))]
   "TARGET_ARM"
-  "mov%D1\\t%0, #0\;mvn%d1\\t%0, #1"
+  "mvn%D1\\t%0, #0\;mvn%d1\\t%0, #1"
   [(set_attr "conds" "use")
    (set_attr "insn" "mov")
    (set_attr "length" "8")]

@@ -1,5 +1,5 @@
 This is doc/gcc.info, produced by makeinfo version 4.13 from
-/d/gcc-4.6.2/gcc-4.6.2/gcc/doc/gcc.texi.
+/d//gcc-4.6.3/gcc-4.6.3/gcc/doc/gcc.texi.
 
 Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
@@ -61,7 +61,7 @@ Introduction
 
 This manual documents how to use the GNU compilers, as well as their
 features and incompatibilities, and how to report bugs.  It corresponds
-to the compilers (GCC) version 4.6.2.  The internals of the GNU
+to the compilers (GCC) version 4.6.3.  The internals of the GNU
 compilers, including how to port them to new targets and some
 information about how to write front ends for new languages, are
 documented in a separate manual.  *Note Introduction: (gccint)Top.
@@ -6961,31 +6961,31 @@ optimizations to be performed is desired.
      function bodies are read from these ELF sections and instantiated
      as if they had been part of the same translation unit.
 
-     To use the link-timer optimizer, `-flto' needs to be specified at
-     compile time and during the final link.  For example,
+     To use the link-time optimizer, `-flto' needs to be specified at
+     compile time and during the final link.  For example:
 
           gcc -c -O2 -flto foo.c
           gcc -c -O2 -flto bar.c
           gcc -o myprog -flto -O2 foo.o bar.o
 
-     The first two invocations to GCC will save a bytecode
-     representation of GIMPLE into special ELF sections inside `foo.o'
-     and `bar.o'.  The final invocation will read the GIMPLE bytecode
-     from `foo.o' and `bar.o', merge the two files into a single
-     internal image, and compile the result as usual.  Since both
-     `foo.o' and `bar.o' are merged into a single image, this causes
-     all the inter-procedural analyses and optimizations in GCC to work
-     across the two files as if they were a single one.  This means,
-     for example, that the inliner will be able to inline functions in
-     `bar.o' into functions in `foo.o' and vice-versa.
+     The first two invocations to GCC save a bytecode representation of
+     GIMPLE into special ELF sections inside `foo.o' and `bar.o'.  The
+     final invocation reads the GIMPLE bytecode from `foo.o' and
+     `bar.o', merges the two files into a single internal image, and
+     compiles the result as usual.  Since both `foo.o' and `bar.o' are
+     merged into a single image, this causes all the interprocedural
+     analyses and optimizations in GCC to work across the two files as
+     if they were a single one.  This means, for example, that the
+     inliner is able to inline functions in `bar.o' into functions in
+     `foo.o' and vice-versa.
 
-     Another (simpler) way to enable link-time optimization is,
+     Another (simpler) way to enable link-time optimization is:
 
           gcc -o myprog -flto -O2 foo.c bar.c
 
-     The above will generate bytecode for `foo.c' and `bar.c', merge
-     them together into a single GIMPLE representation and optimize
-     them as usual to produce `myprog'.
+     The above generates bytecode for `foo.c' and `bar.c', merges them
+     together into a single GIMPLE representation and optimizes them as
+     usual to produce `myprog'.
 
      The only important thing to keep in mind is that to enable
      link-time optimizations the `-flto' flag needs to be passed to
@@ -6994,66 +6994,66 @@ optimizations to be performed is desired.
      To make whole program optimization effective, it is necessary to
      make certain whole program assumptions.  The compiler needs to know
      what functions and variables can be accessed by libraries and
-     runtime outside of the link time optimized unit.  When supported
+     runtime outside of the link-time optimized unit.  When supported
      by the linker, the linker plugin (see `-fuse-linker-plugin')
-     passes to the compiler information about used and externally
+     passes information to the compiler about used and externally
      visible symbols.  When the linker plugin is not available,
      `-fwhole-program' should be used to allow the compiler to make
-     these assumptions, which will lead to more aggressive optimization
+     these assumptions, which leads to more aggressive optimization
      decisions.
 
      Note that when a file is compiled with `-flto', the generated
-     object file will be larger than a regular object file because it
-     will contain GIMPLE bytecodes and the usual final code.  This
-     means that object files with LTO information can be linked as a
-     normal object file.  So, in the previous example, if the final
-     link is done with
-
-          gcc -o myprog foo.o bar.o
-
-     The only difference will be that no inter-procedural optimizations
-     will be applied to produce `myprog'.  The two object files `foo.o'
-     and `bar.o' will be simply sent to the regular linker.
+     object file is larger than a regular object file because it
+     contains GIMPLE bytecodes and the usual final code.  This means
+     that object files with LTO information can be linked as normal
+     object files; if `-flto' is not passed to the linker, no
+     interprocedural optimizations are applied.
 
      Additionally, the optimization flags used to compile individual
-     files are not necessarily related to those used at link-time.  For
+     files are not necessarily related to those used at link time.  For
      instance,
 
           gcc -c -O0 -flto foo.c
           gcc -c -O0 -flto bar.c
           gcc -o myprog -flto -O3 foo.o bar.o
 
-     This will produce individual object files with unoptimized
-     assembler code, but the resulting binary `myprog' will be
-     optimized at `-O3'.  Now, if the final binary is generated without
-     `-flto', then `myprog' will not be optimized.
+     This produces individual object files with unoptimized assembler
+     code, but the resulting binary `myprog' is optimized at `-O3'.
+     If, instead, the final binary is generated without `-flto', then
+     `myprog' is not optimized.
 
-     When producing the final binary with `-flto', GCC will only apply
+     When producing the final binary with `-flto', GCC only applies
      link-time optimizations to those files that contain bytecode.
      Therefore, you can mix and match object files and libraries with
-     GIMPLE bytecodes and final object code.  GCC will automatically
-     select which files to optimize in LTO mode and which files to link
-     without further processing.
+     GIMPLE bytecodes and final object code.  GCC automatically selects
+     which files to optimize in LTO mode and which files to link without
+     further processing.
 
-     There are some code generation flags that GCC will preserve when
+     There are some code generation flags that GCC preserves when
      generating bytecodes, as they need to be used during the final link
      stage.  Currently, the following options are saved into the GIMPLE
      bytecode files: `-fPIC', `-fcommon' and all the `-m' target flags.
 
-     At link time, these options are read-in and reapplied.  Note that
-     the current implementation makes no attempt at recognizing
-     conflicting values for these options.  If two or more files have a
-     conflicting value (e.g., one file is compiled with `-fPIC' and
-     another isn't), the compiler will simply use the last value read
-     from the bytecode files.  It is recommended, then, that all the
-     files participating in the same link be compiled with the same
+     At link time, these options are read in and reapplied.  Note that
+     the current implementation makes no attempt to recognize
+     conflicting values for these options.  If different files have
+     conflicting option values (e.g., one file is compiled with `-fPIC'
+     and another isn't), the compiler simply uses the last value read
+     from the bytecode files.  It is recommended, then, that you
+     compile all the files participating in the same link with the same
      options.
+
+     If LTO encounters objects with C linkage declared with incompatible
+     types in separate translation units to be linked together
+     (undefined behavior according to ISO C99 6.2.7), a non-fatal
+     diagnostic may be issued.  The behavior is still undefined at
+     runtime.
 
      Another feature of LTO is that it is possible to apply
      interprocedural optimizations on files written in different
-     languages.  This requires some support in the language front end.
+     languages.  This requires support in the language front end.
      Currently, the C, C++ and Fortran front ends are capable of
-     emitting GIMPLE bytecodes, so something like this should work
+     emitting GIMPLE bytecodes, so something like this should work:
 
           gcc -c -flto foo.c
           g++ -c -flto bar.cc
@@ -7063,50 +7063,43 @@ optimizations to be performed is desired.
      Notice that the final link is done with `g++' to get the C++
      runtime libraries and `-lgfortran' is added to get the Fortran
      runtime libraries.  In general, when mixing languages in LTO mode,
-     you should use the same link command used when mixing languages in
-     a regular (non-LTO) compilation.  This means that if your build
-     process was mixing languages before, all you need to add is
-     `-flto' to all the compile and link commands.
-
-     If LTO encounters objects with C linkage declared with incompatible
-     types in separate translation units to be linked together
-     (undefined behavior according to ISO C99 6.2.7), a non-fatal
-     diagnostic may be issued.  The behavior is still undefined at
-     runtime.
+     you should use the same link command options as when mixing
+     languages in a regular (non-LTO) compilation; all you need to add
+     is `-flto' to all the compile and link commands.
 
      If object files containing GIMPLE bytecode are stored in a library
      archive, say `libfoo.a', it is possible to extract and use them in
-     an LTO link if you are using a linker with linker plugin support.
-     To enable this feature, use the flag `-fuse-linker-plugin' at
-     link-time:
+     an LTO link if you are using a linker with plugin support.  To
+     enable this feature, use the flag `-fuse-linker-plugin' at link
+     time:
 
           gcc -o myprog -O2 -flto -fuse-linker-plugin a.o b.o -lfoo
 
-     With the linker plugin enabled, the linker will extract the needed
-     GIMPLE files from `libfoo.a' and pass them on to the running GCC
+     With the linker plugin enabled, the linker extracts the needed
+     GIMPLE files from `libfoo.a' and passes them on to the running GCC
      to make them part of the aggregated GIMPLE image to be optimized.
 
-     If you are not using a linker with linker plugin support and/or do
-     not enable linker plugin then the objects inside `libfoo.a' will
-     be extracted and linked as usual, but they will not participate in
-     the LTO optimization process.
+     If you are not using a linker with plugin support and/or do not
+     enable the linker plugin, then the objects inside `libfoo.a' are
+     extracted and linked as usual, but they do not participate in the
+     LTO optimization process.
 
-     Link time optimizations do not require the presence of the whole
+     Link-time optimizations do not require the presence of the whole
      program to operate.  If the program does not require any symbols
-     to be exported, it is possible to combine `-flto' and with
+     to be exported, it is possible to combine `-flto' and
      `-fwhole-program' to allow the interprocedural optimizers to use
      more aggressive assumptions which may lead to improved
      optimization opportunities.  Use of `-fwhole-program' is not
      needed when linker plugin is active (see `-fuse-linker-plugin').
 
-     Regarding portability: the current implementation of LTO makes no
-     attempt at generating bytecode that can be ported between different
-     types of hosts.  The bytecode files are versioned and there is a
-     strict version check, so bytecode files generated in one version of
-     GCC will not work with an older/newer version of GCC.
+     The current implementation of LTO makes no attempt to generate
+     bytecode that is portable between different types of hosts.  The
+     bytecode files are versioned and there is a strict version check,
+     so bytecode files generated in one version of GCC will not work
+     with an older/newer version of GCC.
 
-     Link time optimization does not play well with generating debugging
-     information.  Combining `-flto' with `-g' is currently
+     Link-time optimization does not work well with generation of
+     debugging information.  Combining `-flto' with `-g' is currently
      experimental and expected to produce wrong results.
 
      If you specify the optional N, the optimization and code
@@ -7118,14 +7111,14 @@ optimizations to be performed is desired.
      You can also specify `-flto=jobserver' to use GNU make's job
      server mode to determine the number of parallel jobs. This is
      useful when the Makefile calling GCC is already executing in
-     parallel.  The parent Makefile will need a `+' prepended to the
-     command recipe for this to work. This will likely only work if
-     `MAKE' is GNU make.
+     parallel.  You must prepend a `+' to the command recipe in the
+     parent Makefile for this to work.  This option likely only works
+     if `MAKE' is GNU make.
 
      This option is disabled by default.
 
 `-flto-partition=ALG'
-     Specify the partitioning algorithm used by the link time optimizer.
+     Specify the partitioning algorithm used by the link-time optimizer.
      The value is either `1to1' to specify a partitioning mirroring the
      original source files or `balanced' to specify partitioning into
      equally sized chunks (whenever possible).  Specifying `none' as an
@@ -7143,28 +7136,28 @@ optimizations to be performed is desired.
 `-flto-report'
      Prints a report with internal details on the workings of the
      link-time optimizer.  The contents of this report vary from
-     version to version, it is meant to be useful to GCC developers
+     version to version.  It is meant to be useful to GCC developers
      when processing object files in LTO mode (via `-flto').
 
      Disabled by default.
 
 `-fuse-linker-plugin'
-     Enables the use of linker plugin during link time optimization.
+     Enables the use of a linker plugin during link-time optimization.
      This option relies on the linker plugin support in linker that is
      available in gold or in GNU ld 2.21 or newer.
 
      This option enables the extraction of object files with GIMPLE
      bytecode out of library archives. This improves the quality of
-     optimization by exposing more code the the link time optimizer.
-     This information specify what symbols can be accessed externally
+     optimization by exposing more code to the link-time optimizer.
+     This information specifies what symbols can be accessed externally
      (by non-LTO object or during dynamic linking).  Resulting code
-     quality improvements on binaries (and shared libraries that do use
-     hidden visibility) is similar to `-fwhole-program'.  See `-flto'
-     for a description on the effect of this flag and how to use it.
+     quality improvements on binaries (and shared libraries that use
+     hidden visibility) are similar to `-fwhole-program'.  See `-flto'
+     for a description of the effect of this flag and how to use it.
 
-     Enabled by default when LTO support in GCC is enabled and GCC was
-     compiled with a linker supporting plugins (GNU ld 2.21 or newer or
-     gold).
+     This option is enabled by default when LTO support in GCC is
+     enabled and GCC was configured for use with a linker supporting
+     plugins (GNU ld 2.21 or newer or gold).
 
 `-fcompare-elim'
      After register allocation and post-register allocation instruction
@@ -44326,14 +44319,14 @@ look up both forms.
 * falign-jumps:                          Optimize Options.   (line 1444)
 * falign-labels:                         Optimize Options.   (line 1412)
 * falign-loops:                          Optimize Options.   (line 1430)
-* fassociative-math:                     Optimize Options.   (line 1875)
+* fassociative-math:                     Optimize Options.   (line 1868)
 * fasynchronous-unwind-tables:           Code Gen Options.   (line   64)
 * fauto-inc-dec:                         Optimize Options.   (line  510)
 * fbounds-check:                         Code Gen Options.   (line   15)
-* fbranch-probabilities:                 Optimize Options.   (line 2003)
-* fbranch-target-load-optimize:          Optimize Options.   (line 2110)
-* fbranch-target-load-optimize2:         Optimize Options.   (line 2116)
-* fbtr-bb-exclusive:                     Optimize Options.   (line 2120)
+* fbranch-probabilities:                 Optimize Options.   (line 1996)
+* fbranch-target-load-optimize:          Optimize Options.   (line 2103)
+* fbranch-target-load-optimize2:         Optimize Options.   (line 2109)
+* fbtr-bb-exclusive:                     Optimize Options.   (line 2113)
 * fcall-saved:                           Code Gen Options.   (line  262)
 * fcall-used:                            Code Gen Options.   (line  248)
 * fcaller-saves:                         Optimize Options.   (line  779)
@@ -44345,7 +44338,7 @@ look up both forms.
                                                              (line  105)
 * fcompare-debug:                        Debugging Options.  (line  156)
 * fcompare-debug-second:                 Debugging Options.  (line  182)
-* fcompare-elim:                         Optimize Options.   (line 1721)
+* fcompare-elim:                         Optimize Options.   (line 1714)
 * fcond-mismatch:                        C Dialect Options.  (line  290)
 * fconserve-space:                       C++ Dialect Options.
                                                              (line   55)
@@ -44354,13 +44347,13 @@ look up both forms.
                                                              (line   30)
 * fconstexpr-depth:                      C++ Dialect Options.
                                                              (line   67)
-* fcprop-registers:                      Optimize Options.   (line 1733)
+* fcprop-registers:                      Optimize Options.   (line 1726)
 * fcrossjumping:                         Optimize Options.   (line  503)
 * fcse-follow-jumps:                     Optimize Options.   (line  431)
 * fcse-skip-blocks:                      Optimize Options.   (line  440)
-* fcx-fortran-rules:                     Optimize Options.   (line 1989)
-* fcx-limited-range:                     Optimize Options.   (line 1977)
-* fdata-sections:                        Optimize Options.   (line 2091)
+* fcx-fortran-rules:                     Optimize Options.   (line 1982)
+* fcx-limited-range:                     Optimize Options.   (line 1970)
+* fdata-sections:                        Optimize Options.   (line 2084)
 * fdbg-cnt:                              Debugging Options.  (line  420)
 * fdbg-cnt-list:                         Debugging Options.  (line  417)
 * fdce:                                  Optimize Options.   (line  516)
@@ -44489,18 +44482,18 @@ look up both forms.
 * feliminate-unused-debug-types:         Debugging Options.  (line 1145)
 * fenable-icf-debug:                     Debugging Options.  (line  270)
 * fexceptions:                           Code Gen Options.   (line   34)
-* fexcess-precision:                     Optimize Options.   (line 1803)
+* fexcess-precision:                     Optimize Options.   (line 1796)
 * fexec-charset:                         Preprocessor Options.
                                                              (line  508)
 * fexpensive-optimizations:              Optimize Options.   (line  564)
 * fextended-identifiers:                 Preprocessor Options.
                                                              (line  484)
-* ffast-math:                            Optimize Options.   (line 1826)
-* ffinite-math-only:                     Optimize Options.   (line 1901)
+* ffast-math:                            Optimize Options.   (line 1819)
+* ffinite-math-only:                     Optimize Options.   (line 1894)
 * ffix-and-continue:                     Darwin Options.     (line  106)
 * ffixed:                                Code Gen Options.   (line  236)
 * ffloat-store <1>:                      Disappointments.    (line   77)
-* ffloat-store:                          Optimize Options.   (line 1789)
+* ffloat-store:                          Optimize Options.   (line 1782)
 * ffor-scope:                            C++ Dialect Options.
                                                              (line  121)
 * fforward-propagate:                    Optimize Options.   (line  174)
@@ -44512,7 +44505,7 @@ look up both forms.
 * ffreestanding:                         Standards.          (line   88)
 * ffriend-injection:                     C++ Dialect Options.
                                                              (line   91)
-* ffunction-sections:                    Optimize Options.   (line 2091)
+* ffunction-sections:                    Optimize Options.   (line 2084)
 * fgcse:                                 Optimize Options.   (line  454)
 * fgcse-after-reload:                    Optimize Options.   (line  490)
 * fgcse-las:                             Optimize Options.   (line  483)
@@ -44565,7 +44558,7 @@ look up both forms.
 * floop-parallelize-all:                 Optimize Options.   (line 1046)
 * floop-strip-mine:                      Optimize Options.   (line  982)
 * flto:                                  Optimize Options.   (line 1508)
-* flto-partition:                        Optimize Options.   (line 1679)
+* flto-partition:                        Optimize Options.   (line 1672)
 * fmax-errors:                           Warning Options.    (line   18)
 * fmem-report:                           Debugging Options.  (line  311)
 * fmerge-all-constants:                  Optimize Options.   (line  337)
@@ -44575,7 +44568,7 @@ look up both forms.
                                                              (line   15)
 * fmodulo-sched:                         Optimize Options.   (line  348)
 * fmodulo-sched-allow-regmoves:          Optimize Options.   (line  353)
-* fmove-loop-invariants:                 Optimize Options.   (line 2081)
+* fmove-loop-invariants:                 Optimize Options.   (line 2074)
 * fms-extensions <1>:                    Unnamed Fields.     (line   36)
 * fms-extensions <2>:                    C++ Dialect Options.
                                                              (line  156)
@@ -44632,7 +44625,7 @@ look up both forms.
 * fno-ira-share-save-slots:              Optimize Options.   (line  611)
 * fno-ira-share-spill-slots:             Optimize Options.   (line  617)
 * fno-jump-tables:                       Code Gen Options.   (line  228)
-* fno-math-errno:                        Optimize Options.   (line 1840)
+* fno-math-errno:                        Optimize Options.   (line 1833)
 * fno-merge-debug-strings:               Debugging Options.  (line  275)
 * fno-nil-receivers:                     Objective-C and Objective-C++ Dialect Options.
                                                              (line   49)
@@ -44655,12 +44648,12 @@ look up both forms.
 * fno-show-column:                       Preprocessor Options.
                                                              (line  546)
 * fno-signed-bitfields:                  C Dialect Options.  (line  328)
-* fno-signed-zeros:                      Optimize Options.   (line 1913)
+* fno-signed-zeros:                      Optimize Options.   (line 1906)
 * fno-stack-limit:                       Code Gen Options.   (line  400)
 * fno-threadsafe-statics:                C++ Dialect Options.
                                                              (line  240)
 * fno-toplevel-reorder:                  Optimize Options.   (line 1464)
-* fno-trapping-math:                     Optimize Options.   (line 1923)
+* fno-trapping-math:                     Optimize Options.   (line 1916)
 * fno-unsigned-bitfields:                C Dialect Options.  (line  328)
 * fno-use-cxa-get-exception-ptr:         C++ Dialect Options.
                                                              (line  253)
@@ -44702,7 +44695,7 @@ look up both forms.
                                                              (line  282)
 * fpch-preprocess:                       Preprocessor Options.
                                                              (line  290)
-* fpeel-loops:                           Optimize Options.   (line 2073)
+* fpeel-loops:                           Optimize Options.   (line 2066)
 * fpermissive:                           C++ Dialect Options.
                                                              (line  186)
 * fPIC:                                  Code Gen Options.   (line  205)
@@ -44718,18 +44711,18 @@ look up both forms.
                                                              (line  489)
 * fprofile-arcs <1>:                     Other Builtins.     (line  247)
 * fprofile-arcs:                         Debugging Options.  (line  352)
-* fprofile-correction:                   Optimize Options.   (line 1740)
-* fprofile-dir:                          Optimize Options.   (line 1747)
-* fprofile-generate:                     Optimize Options.   (line 1757)
-* fprofile-use:                          Optimize Options.   (line 1770)
-* fprofile-values:                       Optimize Options.   (line 2022)
+* fprofile-correction:                   Optimize Options.   (line 1733)
+* fprofile-dir:                          Optimize Options.   (line 1740)
+* fprofile-generate:                     Optimize Options.   (line 1750)
+* fprofile-use:                          Optimize Options.   (line 1763)
+* fprofile-values:                       Optimize Options.   (line 2015)
 * fpu:                                   RX Options.         (line   17)
 * frandom-seed:                          Debugging Options.  (line  950)
-* freciprocal-math:                      Optimize Options.   (line 1892)
+* freciprocal-math:                      Optimize Options.   (line 1885)
 * frecord-gcc-switches:                  Code Gen Options.   (line  174)
 * freg-struct-return:                    Code Gen Options.   (line   88)
 * fregmove:                              Optimize Options.   (line  571)
-* frename-registers:                     Optimize Options.   (line 2040)
+* frename-registers:                     Optimize Options.   (line 2033)
 * freorder-blocks:                       Optimize Options.   (line 1283)
 * freorder-blocks-and-partition:         Optimize Options.   (line 1289)
 * freorder-functions:                    Optimize Options.   (line 1300)
@@ -44741,7 +44734,7 @@ look up both forms.
                                                              (line  204)
 * frerun-cse-after-loop:                 Optimize Options.   (line  448)
 * freschedule-modulo-scheduled-loops:    Optimize Options.   (line  755)
-* frounding-math:                        Optimize Options.   (line 1938)
+* frounding-math:                        Optimize Options.   (line 1931)
 * fsched-critical-path-heuristic:        Optimize Options.   (line  721)
 * fsched-dep-count-heuristic:            Optimize Options.   (line  748)
 * fsched-group-heuristic:                Optimize Options.   (line  715)
@@ -44757,7 +44750,7 @@ look up both forms.
 * fsched2-use-superblocks:               Optimize Options.   (line  704)
 * fschedule-insns:                       Optimize Options.   (line  635)
 * fschedule-insns2:                      Optimize Options.   (line  645)
-* fsection-anchors:                      Optimize Options.   (line 2136)
+* fsection-anchors:                      Optimize Options.   (line 2129)
 * fsel-sched-pipelining:                 Optimize Options.   (line  769)
 * fsel-sched-pipelining-outer-loops:     Optimize Options.   (line  774)
 * fselective-scheduling:                 Optimize Options.   (line  761)
@@ -44769,13 +44762,13 @@ look up both forms.
                                                              (line   43)
 * fshort-enums:                          Code Gen Options.   (line  106)
 * fshort-wchar:                          Code Gen Options.   (line  125)
-* fsignaling-nans:                       Optimize Options.   (line 1958)
+* fsignaling-nans:                       Optimize Options.   (line 1951)
 * fsigned-bitfields <1>:                 Non-bugs.           (line   57)
 * fsigned-bitfields:                     C Dialect Options.  (line  328)
 * fsigned-char <1>:                      Characters implementation.
                                                              (line   31)
 * fsigned-char:                          C Dialect Options.  (line  318)
-* fsingle-precision-constant:            Optimize Options.   (line 1973)
+* fsingle-precision-constant:            Optimize Options.   (line 1966)
 * fsplit-ivs-in-unroller:                Optimize Options.   (line 1213)
 * fsplit-stack <1>:                      Function Attributes.
                                                              (line  904)
@@ -44784,8 +44777,8 @@ look up both forms.
 * fstack-check:                          Code Gen Options.   (line  361)
 * fstack-limit-register:                 Code Gen Options.   (line  400)
 * fstack-limit-symbol:                   Code Gen Options.   (line  400)
-* fstack-protector:                      Optimize Options.   (line 2124)
-* fstack-protector-all:                  Optimize Options.   (line 2133)
+* fstack-protector:                      Optimize Options.   (line 2117)
+* fstack-protector-all:                  Optimize Options.   (line 2126)
 * fstack-usage:                          Debugging Options.  (line  321)
 * fstats:                                C++ Dialect Options.
                                                              (line  219)
@@ -44837,7 +44830,7 @@ look up both forms.
 * funroll-all-loops:                     Optimize Options.   (line 1207)
 * funroll-loops:                         Optimize Options.   (line 1201)
 * funsafe-loop-optimizations:            Optimize Options.   (line  495)
-* funsafe-math-optimizations:            Optimize Options.   (line 1858)
+* funsafe-math-optimizations:            Optimize Options.   (line 1851)
 * funsigned-bitfields <1>:               Non-bugs.           (line   57)
 * funsigned-bitfields <2>:               Structures unions enumerations and bit-fields implementation.
                                                              (line   17)
@@ -44845,7 +44838,7 @@ look up both forms.
 * funsigned-char <1>:                    Characters implementation.
                                                              (line   31)
 * funsigned-char:                        C Dialect Options.  (line  300)
-* funswitch-loops:                       Optimize Options.   (line 2085)
+* funswitch-loops:                       Optimize Options.   (line 2078)
 * funwind-tables:                        Code Gen Options.   (line   57)
 * fuse-cxa-atexit:                       C++ Dialect Options.
                                                              (line  246)
@@ -44860,7 +44853,7 @@ look up both forms.
                                                              (line  258)
 * fvisibility-ms-compat:                 C++ Dialect Options.
                                                              (line  286)
-* fvpt:                                  Optimize Options.   (line 2031)
+* fvpt:                                  Optimize Options.   (line 2024)
 * fweb:                                  Optimize Options.   (line 1476)
 * fwhole-program:                        Optimize Options.   (line 1487)
 * fwide-exec-charset:                    Preprocessor Options.
@@ -45325,7 +45318,7 @@ look up both forms.
 * mfpe:                                  ARM Options.        (line  120)
 * mfpmath <1>:                           i386 and x86-64 Options.
                                                              (line  174)
-* mfpmath:                               Optimize Options.   (line 1818)
+* mfpmath:                               Optimize Options.   (line 1811)
 * mfpr-32:                               FRV Options.        (line   13)
 * mfpr-64:                               FRV Options.        (line   16)
 * mfprnd:                                RS/6000 and PowerPC Options.
@@ -46220,7 +46213,7 @@ look up both forms.
                                                              (line  603)
 * p:                                     Debugging Options.  (line  291)
 * pagezero_size:                         Darwin Options.     (line  199)
-* param:                                 Optimize Options.   (line 2160)
+* param:                                 Optimize Options.   (line 2153)
 * pass-exit-codes:                       Overall Options.    (line  150)
 * pedantic <1>:                          Warnings and Errors.
                                                              (line   25)
@@ -47312,7 +47305,7 @@ Keyword Index
 * flexible array members:                Zero Length.        (line    6)
 * float as function value type:          Incompatibilities.  (line  141)
 * floating point precision <1>:          Disappointments.    (line   68)
-* floating point precision:              Optimize Options.   (line 1793)
+* floating point precision:              Optimize Options.   (line 1786)
 * floor:                                 Other Builtins.     (line    6)
 * floorf:                                Other Builtins.     (line    6)
 * floorl:                                Other Builtins.     (line    6)
@@ -48329,290 +48322,290 @@ Keyword Index
 
 
 Tag Table:
-Node: Top2086
-Node: G++ and GCC3852
-Node: Standards5921
-Node: Invoking GCC18088
-Node: Option Summary21839
-Node: Overall Options58540
-Node: Invoking G++72876
-Node: C Dialect Options74399
-Node: C++ Dialect Options89479
-Node: Objective-C and Objective-C++ Dialect Options114479
-Node: Language Independent Options125018
-Node: Warning Options127942
-Node: Debugging Options191608
-Node: Optimize Options239388
-Ref: Type-punning295426
-Node: Preprocessor Options368155
-Ref: Wtrigraphs372253
-Ref: dashMF377001
-Ref: fdollars-in-identifiers387845
-Node: Assembler Options396406
-Node: Link Options397111
-Ref: Link Options-Footnote-1407469
-Node: Directory Options407803
-Node: Spec Files414092
-Node: Target Options435688
-Node: Submodel Options436087
-Node: ARC Options437706
-Node: ARM Options438896
-Node: AVR Options452627
-Node: Blackfin Options458205
-Node: CRIS Options466153
-Node: CRX Options469894
-Node: Darwin Options470319
-Node: DEC Alpha Options477811
-Node: DEC Alpha/VMS Options489727
-Node: FR30 Options490301
-Node: FRV Options490876
-Node: GNU/Linux Options497593
-Node: H8/300 Options498854
-Node: HPPA Options499921
-Node: i386 and x86-64 Options509421
-Node: i386 and x86-64 Windows Options540581
-Node: IA-64 Options543129
-Node: IA-64/VMS Options551147
-Node: LM32 Options551702
-Node: M32C Options552231
-Node: M32R/D Options553521
-Node: M680x0 Options557108
-Node: M68hc1x Options571115
-Node: MCore Options572684
-Node: MeP Options574191
-Node: MicroBlaze Options578164
-Node: MIPS Options580735
-Node: MMIX Options608655
-Node: MN10300 Options611137
-Node: PDP-11 Options613345
-Node: picoChip Options615039
-Node: PowerPC Options617238
-Node: RS/6000 and PowerPC Options617474
-Node: RX Options654216
-Node: S/390 and zSeries Options659788
-Node: Score Options667719
-Node: SH Options668547
-Node: Solaris 2 Options679686
-Node: SPARC Options681206
-Node: SPU Options691024
-Node: System V Options696028
-Node: V850 Options696851
-Node: VAX Options700430
-Node: VxWorks Options700978
-Node: x86-64 Options702133
-Node: Xstormy16 Options702351
-Node: Xtensa Options702640
-Node: zSeries Options706974
-Node: Code Gen Options707170
-Node: Environment Variables733601
-Node: Precompiled Headers741497
-Node: C Implementation747696
-Node: Translation implementation749359
-Node: Environment implementation749933
-Node: Identifiers implementation750483
-Node: Characters implementation751537
-Node: Integers implementation754343
-Node: Floating point implementation756168
-Node: Arrays and pointers implementation759097
-Ref: Arrays and pointers implementation-Footnote-1760532
-Node: Hints implementation760656
-Node: Structures unions enumerations and bit-fields implementation762122
-Node: Qualifiers implementation764108
-Node: Declarators implementation765880
-Node: Statements implementation766222
-Node: Preprocessing directives implementation766549
-Node: Library functions implementation768654
-Node: Architecture implementation769294
-Node: Locale-specific behavior implementation769997
-Node: C++ Implementation770302
-Node: Conditionally-supported behavior771582
-Node: Exception handling772092
-Node: C Extensions772501
-Node: Statement Exprs777336
-Node: Local Labels781849
-Node: Labels as Values784828
-Ref: Labels as Values-Footnote-1787237
-Node: Nested Functions787420
-Node: Constructing Calls791353
-Node: Typeof796084
-Node: Conditionals799399
-Node: __int128800290
-Node: Long Long800810
-Node: Complex802312
-Node: Floating Types804883
-Node: Half-Precision806021
-Node: Decimal Float808203
-Node: Hex Floats810070
-Node: Fixed-Point811111
-Node: Named Address Spaces814405
-Node: Zero Length815704
-Node: Empty Structures818991
-Node: Variable Length819407
-Node: Variadic Macros822060
-Node: Escaped Newlines824442
-Node: Subscripting825281
-Node: Pointer Arith826004
-Node: Initializers826572
-Node: Compound Literals827068
-Node: Designated Inits829243
-Node: Case Ranges832898
-Node: Cast to Union833581
-Node: Mixed Declarations834677
-Node: Function Attributes835183
-Node: Attribute Syntax916163
-Node: Function Prototypes926609
-Node: C++ Comments928390
-Node: Dollar Signs928909
-Node: Character Escapes929374
-Node: Variable Attributes929668
-Ref: MeP Variable Attributes944994
-Ref: i386 Variable Attributes946955
-Node: Type Attributes952648
-Ref: MeP Type Attributes966389
-Ref: i386 Type Attributes966663
-Ref: PowerPC Type Attributes967503
-Ref: SPU Type Attributes968365
-Node: Alignment968656
-Node: Inline970030
-Node: Volatiles975014
-Node: Extended Asm977909
-Ref: Example of asm with clobbered asm reg983998
-Ref: Extended asm with goto993765
-Node: Constraints1001500
-Node: Simple Constraints1002584
-Node: Multi-Alternative1009905
-Node: Modifiers1011622
-Node: Machine Constraints1014516
-Node: Asm Labels1053160
-Node: Explicit Reg Vars1054836
-Node: Global Reg Vars1056444
-Node: Local Reg Vars1060994
-Node: Alternate Keywords1063435
-Node: Incomplete Enums1064921
-Node: Function Names1065678
-Node: Return Address1067840
-Node: Vector Extensions1071393
-Node: Offsetof1075799
-Node: Atomic Builtins1076613
-Node: Object Size Checking1081991
-Node: Other Builtins1087419
-Node: Target Builtins1114099
-Node: Alpha Built-in Functions1115023
-Node: ARM iWMMXt Built-in Functions1118022
-Node: ARM NEON Intrinsics1124741
-Node: Blackfin Built-in Functions1330941
-Node: FR-V Built-in Functions1331555
-Node: Argument Types1332414
-Node: Directly-mapped Integer Functions1334170
-Node: Directly-mapped Media Functions1335252
-Node: Raw read/write Functions1342284
-Node: Other Built-in Functions1343196
-Node: X86 Built-in Functions1344385
-Node: MIPS DSP Built-in Functions1389521
-Node: MIPS Paired-Single Support1401968
-Node: MIPS Loongson Built-in Functions1403469
-Node: Paired-Single Arithmetic1409987
-Node: Paired-Single Built-in Functions1410933
-Node: MIPS-3D Built-in Functions1413603
-Node: picoChip Built-in Functions1418978
-Node: Other MIPS Built-in Functions1420344
-Node: PowerPC AltiVec/VSX Built-in Functions1420868
-Node: RX Built-in Functions1531526
-Node: SPARC VIS Built-in Functions1535536
-Node: SPU Built-in Functions1537215
-Node: Target Format Checks1538997
-Node: Solaris Format Checks1539429
-Node: Darwin Format Checks1539855
-Node: Pragmas1540682
-Node: ARM Pragmas1541392
-Node: M32C Pragmas1541995
-Node: MeP Pragmas1543069
-Node: RS/6000 and PowerPC Pragmas1545138
-Node: Darwin Pragmas1545879
-Node: Solaris Pragmas1546946
-Node: Symbol-Renaming Pragmas1548107
-Node: Structure-Packing Pragmas1550741
-Node: Weak Pragmas1552391
-Node: Diagnostic Pragmas1553125
-Node: Visibility Pragmas1556153
-Node: Push/Pop Macro Pragmas1556905
-Node: Function Specific Option Pragmas1557878
-Node: Unnamed Fields1560142
-Node: Thread-Local1562380
-Node: C99 Thread-Local Edits1564487
-Node: C++98 Thread-Local Edits1566499
-Node: Binary constants1569944
-Node: C++ Extensions1570615
-Node: C++ Volatiles1572263
-Node: Restricted Pointers1574623
-Node: Vague Linkage1576221
-Node: C++ Interface1579883
-Ref: C++ Interface-Footnote-11584180
-Node: Template Instantiation1584317
-Node: Bound member functions1591329
-Node: C++ Attributes1592872
-Node: Namespace Association1594530
-Node: Type Traits1595944
-Node: Java Exceptions1602299
-Node: Deprecated Features1603696
-Node: Backwards Compatibility1606661
-Node: Objective-C1608019
-Node: GNU Objective-C runtime API1608628
-Node: Modern GNU Objective-C runtime API1609635
-Node: Traditional GNU Objective-C runtime API1612072
-Node: Executing code before main1613694
-Node: What you can and what you cannot do in +load1616432
-Node: Type encoding1618822
-Node: Legacy type encoding1623898
-Node: @encode1624989
-Node: Method signatures1625530
-Node: Garbage Collection1627525
-Node: Constant string objects1630159
-Node: compatibility_alias1632667
-Node: Exceptions1633389
-Node: Synchronization1636100
-Node: Fast enumeration1637284
-Node: Using fast enumeration1637596
-Node: c99-like fast enumeration syntax1638807
-Node: Fast enumeration details1639510
-Node: Fast enumeration protocol1641851
-Node: Messaging with the GNU Objective-C runtime1645003
-Node: Dynamically registering methods1646374
-Node: Forwarding hook1648065
-Node: Compatibility1651104
-Node: Gcov1657671
-Node: Gcov Intro1658204
-Node: Invoking Gcov1660922
-Node: Gcov and Optimization1672862
-Node: Gcov Data Files1675517
-Node: Cross-profiling1676657
-Node: Trouble1678508
-Node: Actual Bugs1679993
-Node: Cross-Compiler Problems1680449
-Node: Interoperation1680863
-Node: Incompatibilities1688000
-Node: Fixed Headers1696151
-Node: Standard Libraries1697814
-Node: Disappointments1699186
-Node: C++ Misunderstandings1703544
-Node: Static Definitions1704355
-Node: Name lookup1705408
-Ref: Name lookup-Footnote-11710186
-Node: Temporaries1710373
-Node: Copy Assignment1712349
-Node: Non-bugs1714156
-Node: Warnings and Errors1724663
-Node: Bugs1726427
-Node: Bug Criteria1726991
-Node: Bug Reporting1729201
-Node: Service1729422
-Node: Contributing1730241
-Node: Funding1730981
-Node: GNU Project1733470
-Node: Copying1734116
-Node: GNU Free Documentation License1771644
-Node: Contributors1796781
-Node: Option Index1833650
-Node: Keyword Index2010454
+Node: Top2087
+Node: G++ and GCC3853
+Node: Standards5922
+Node: Invoking GCC18089
+Node: Option Summary21840
+Node: Overall Options58541
+Node: Invoking G++72877
+Node: C Dialect Options74400
+Node: C++ Dialect Options89480
+Node: Objective-C and Objective-C++ Dialect Options114480
+Node: Language Independent Options125019
+Node: Warning Options127943
+Node: Debugging Options191609
+Node: Optimize Options239389
+Ref: Type-punning295427
+Node: Preprocessor Options367801
+Ref: Wtrigraphs371899
+Ref: dashMF376647
+Ref: fdollars-in-identifiers387491
+Node: Assembler Options396052
+Node: Link Options396757
+Ref: Link Options-Footnote-1407115
+Node: Directory Options407449
+Node: Spec Files413738
+Node: Target Options435334
+Node: Submodel Options435733
+Node: ARC Options437352
+Node: ARM Options438542
+Node: AVR Options452273
+Node: Blackfin Options457851
+Node: CRIS Options465799
+Node: CRX Options469540
+Node: Darwin Options469965
+Node: DEC Alpha Options477457
+Node: DEC Alpha/VMS Options489373
+Node: FR30 Options489947
+Node: FRV Options490522
+Node: GNU/Linux Options497239
+Node: H8/300 Options498500
+Node: HPPA Options499567
+Node: i386 and x86-64 Options509067
+Node: i386 and x86-64 Windows Options540227
+Node: IA-64 Options542775
+Node: IA-64/VMS Options550793
+Node: LM32 Options551348
+Node: M32C Options551877
+Node: M32R/D Options553167
+Node: M680x0 Options556754
+Node: M68hc1x Options570761
+Node: MCore Options572330
+Node: MeP Options573837
+Node: MicroBlaze Options577810
+Node: MIPS Options580381
+Node: MMIX Options608301
+Node: MN10300 Options610783
+Node: PDP-11 Options612991
+Node: picoChip Options614685
+Node: PowerPC Options616884
+Node: RS/6000 and PowerPC Options617120
+Node: RX Options653862
+Node: S/390 and zSeries Options659434
+Node: Score Options667365
+Node: SH Options668193
+Node: Solaris 2 Options679332
+Node: SPARC Options680852
+Node: SPU Options690670
+Node: System V Options695674
+Node: V850 Options696497
+Node: VAX Options700076
+Node: VxWorks Options700624
+Node: x86-64 Options701779
+Node: Xstormy16 Options701997
+Node: Xtensa Options702286
+Node: zSeries Options706620
+Node: Code Gen Options706816
+Node: Environment Variables733247
+Node: Precompiled Headers741143
+Node: C Implementation747342
+Node: Translation implementation749005
+Node: Environment implementation749579
+Node: Identifiers implementation750129
+Node: Characters implementation751183
+Node: Integers implementation753989
+Node: Floating point implementation755814
+Node: Arrays and pointers implementation758743
+Ref: Arrays and pointers implementation-Footnote-1760178
+Node: Hints implementation760302
+Node: Structures unions enumerations and bit-fields implementation761768
+Node: Qualifiers implementation763754
+Node: Declarators implementation765526
+Node: Statements implementation765868
+Node: Preprocessing directives implementation766195
+Node: Library functions implementation768300
+Node: Architecture implementation768940
+Node: Locale-specific behavior implementation769643
+Node: C++ Implementation769948
+Node: Conditionally-supported behavior771228
+Node: Exception handling771738
+Node: C Extensions772147
+Node: Statement Exprs776982
+Node: Local Labels781495
+Node: Labels as Values784474
+Ref: Labels as Values-Footnote-1786883
+Node: Nested Functions787066
+Node: Constructing Calls790999
+Node: Typeof795730
+Node: Conditionals799045
+Node: __int128799936
+Node: Long Long800456
+Node: Complex801958
+Node: Floating Types804529
+Node: Half-Precision805667
+Node: Decimal Float807849
+Node: Hex Floats809716
+Node: Fixed-Point810757
+Node: Named Address Spaces814051
+Node: Zero Length815350
+Node: Empty Structures818637
+Node: Variable Length819053
+Node: Variadic Macros821706
+Node: Escaped Newlines824088
+Node: Subscripting824927
+Node: Pointer Arith825650
+Node: Initializers826218
+Node: Compound Literals826714
+Node: Designated Inits828889
+Node: Case Ranges832544
+Node: Cast to Union833227
+Node: Mixed Declarations834323
+Node: Function Attributes834829
+Node: Attribute Syntax915809
+Node: Function Prototypes926255
+Node: C++ Comments928036
+Node: Dollar Signs928555
+Node: Character Escapes929020
+Node: Variable Attributes929314
+Ref: MeP Variable Attributes944640
+Ref: i386 Variable Attributes946601
+Node: Type Attributes952294
+Ref: MeP Type Attributes966035
+Ref: i386 Type Attributes966309
+Ref: PowerPC Type Attributes967149
+Ref: SPU Type Attributes968011
+Node: Alignment968302
+Node: Inline969676
+Node: Volatiles974660
+Node: Extended Asm977555
+Ref: Example of asm with clobbered asm reg983644
+Ref: Extended asm with goto993411
+Node: Constraints1001146
+Node: Simple Constraints1002230
+Node: Multi-Alternative1009551
+Node: Modifiers1011268
+Node: Machine Constraints1014162
+Node: Asm Labels1052806
+Node: Explicit Reg Vars1054482
+Node: Global Reg Vars1056090
+Node: Local Reg Vars1060640
+Node: Alternate Keywords1063081
+Node: Incomplete Enums1064567
+Node: Function Names1065324
+Node: Return Address1067486
+Node: Vector Extensions1071039
+Node: Offsetof1075445
+Node: Atomic Builtins1076259
+Node: Object Size Checking1081637
+Node: Other Builtins1087065
+Node: Target Builtins1113745
+Node: Alpha Built-in Functions1114669
+Node: ARM iWMMXt Built-in Functions1117668
+Node: ARM NEON Intrinsics1124387
+Node: Blackfin Built-in Functions1330587
+Node: FR-V Built-in Functions1331201
+Node: Argument Types1332060
+Node: Directly-mapped Integer Functions1333816
+Node: Directly-mapped Media Functions1334898
+Node: Raw read/write Functions1341930
+Node: Other Built-in Functions1342842
+Node: X86 Built-in Functions1344031
+Node: MIPS DSP Built-in Functions1389167
+Node: MIPS Paired-Single Support1401614
+Node: MIPS Loongson Built-in Functions1403115
+Node: Paired-Single Arithmetic1409633
+Node: Paired-Single Built-in Functions1410579
+Node: MIPS-3D Built-in Functions1413249
+Node: picoChip Built-in Functions1418624
+Node: Other MIPS Built-in Functions1419990
+Node: PowerPC AltiVec/VSX Built-in Functions1420514
+Node: RX Built-in Functions1531172
+Node: SPARC VIS Built-in Functions1535182
+Node: SPU Built-in Functions1536861
+Node: Target Format Checks1538643
+Node: Solaris Format Checks1539075
+Node: Darwin Format Checks1539501
+Node: Pragmas1540328
+Node: ARM Pragmas1541038
+Node: M32C Pragmas1541641
+Node: MeP Pragmas1542715
+Node: RS/6000 and PowerPC Pragmas1544784
+Node: Darwin Pragmas1545525
+Node: Solaris Pragmas1546592
+Node: Symbol-Renaming Pragmas1547753
+Node: Structure-Packing Pragmas1550387
+Node: Weak Pragmas1552037
+Node: Diagnostic Pragmas1552771
+Node: Visibility Pragmas1555799
+Node: Push/Pop Macro Pragmas1556551
+Node: Function Specific Option Pragmas1557524
+Node: Unnamed Fields1559788
+Node: Thread-Local1562026
+Node: C99 Thread-Local Edits1564133
+Node: C++98 Thread-Local Edits1566145
+Node: Binary constants1569590
+Node: C++ Extensions1570261
+Node: C++ Volatiles1571909
+Node: Restricted Pointers1574269
+Node: Vague Linkage1575867
+Node: C++ Interface1579529
+Ref: C++ Interface-Footnote-11583826
+Node: Template Instantiation1583963
+Node: Bound member functions1590975
+Node: C++ Attributes1592518
+Node: Namespace Association1594176
+Node: Type Traits1595590
+Node: Java Exceptions1601945
+Node: Deprecated Features1603342
+Node: Backwards Compatibility1606307
+Node: Objective-C1607665
+Node: GNU Objective-C runtime API1608274
+Node: Modern GNU Objective-C runtime API1609281
+Node: Traditional GNU Objective-C runtime API1611718
+Node: Executing code before main1613340
+Node: What you can and what you cannot do in +load1616078
+Node: Type encoding1618468
+Node: Legacy type encoding1623544
+Node: @encode1624635
+Node: Method signatures1625176
+Node: Garbage Collection1627171
+Node: Constant string objects1629805
+Node: compatibility_alias1632313
+Node: Exceptions1633035
+Node: Synchronization1635746
+Node: Fast enumeration1636930
+Node: Using fast enumeration1637242
+Node: c99-like fast enumeration syntax1638453
+Node: Fast enumeration details1639156
+Node: Fast enumeration protocol1641497
+Node: Messaging with the GNU Objective-C runtime1644649
+Node: Dynamically registering methods1646020
+Node: Forwarding hook1647711
+Node: Compatibility1650750
+Node: Gcov1657317
+Node: Gcov Intro1657850
+Node: Invoking Gcov1660568
+Node: Gcov and Optimization1672508
+Node: Gcov Data Files1675163
+Node: Cross-profiling1676303
+Node: Trouble1678154
+Node: Actual Bugs1679639
+Node: Cross-Compiler Problems1680095
+Node: Interoperation1680509
+Node: Incompatibilities1687646
+Node: Fixed Headers1695797
+Node: Standard Libraries1697460
+Node: Disappointments1698832
+Node: C++ Misunderstandings1703190
+Node: Static Definitions1704001
+Node: Name lookup1705054
+Ref: Name lookup-Footnote-11709832
+Node: Temporaries1710019
+Node: Copy Assignment1711995
+Node: Non-bugs1713802
+Node: Warnings and Errors1724309
+Node: Bugs1726073
+Node: Bug Criteria1726637
+Node: Bug Reporting1728847
+Node: Service1729068
+Node: Contributing1729887
+Node: Funding1730627
+Node: GNU Project1733116
+Node: Copying1733762
+Node: GNU Free Documentation License1771290
+Node: Contributors1796427
+Node: Option Index1833296
+Node: Keyword Index2010100
 
 End Tag Table
