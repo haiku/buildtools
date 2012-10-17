@@ -23,7 +23,7 @@ gccBuildDir="$buildDir/gcc"
 targetArch=x86
 gccMakeTarget=bootstrap
 gccConfigureArgs="--enable-shared"
-binutilsConfigureArgs="--enable-shared=true"
+binutilsConfigureArgs="--enable-shared"
 
 # parse the arguments
 jobArgs=
