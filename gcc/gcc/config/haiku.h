@@ -170,3 +170,8 @@ Boston, MA 02111-1307, USA.  */
 
 /* Haiku headers are C++-aware (and often use C++).  */
 #define NO_IMPLICIT_EXTERN_C
+
+/* Only allow -lssp for SSP, as -lssp_nonshared is problematic in Haiku */
+#ifndef TARGET_LIBC_PROVIDES_SSP
+#define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all:-lssp}"
+#endif
