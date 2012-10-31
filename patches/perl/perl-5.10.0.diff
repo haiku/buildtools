@@ -238,11 +238,11 @@ Index: hints/haiku.sh
 +
 +prefix="/boot/home/config"
 +
-+libpth='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
++libpth='/boot/home/config/lib /boot/common/lib /boot/system/lib'
 +usrinc='/boot/develop/headers/posix'
 +locinc='/boot/home/config/include /boot/common/include /boot/develop/headers'
 +
-+libc='/boot/beos/system/lib/libroot.so'
++libc='/boot/system/lib/libroot.so'
 +libs=' '
 +
 +#d_bcmp='define'
