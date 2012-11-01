@@ -116,6 +116,7 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/develop/headers/3rdparty", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/bsd", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/glibc", 0, 0, 0, 0, 0 }, \
+    { "/boot/develop/headers/gnu", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers/posix", 0, 0, 0, 0, 0 }, \
     { "/boot/develop/headers", 0, 0, 0, 0, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
@@ -158,6 +159,7 @@ Boston, MA 02111-1307, USA.  */
     { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/glibc", 0, 0, 0, 1, 0 }, \
+    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR "/posix", 0, 0, 0, 1, 0 }, \
     { CROSS_INCLUDE_DIR , 0, 0, 0, 1, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
