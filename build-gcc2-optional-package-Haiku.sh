@@ -35,6 +35,9 @@ if [ ! -d "$base" ]; then
 	# From now on fail, if anything goes wrong.
 	set -o errexit
 
+	# forcefeed the POSIX locale, as the build (makeinfo) might choke otherwise
+	export LC_ALL=POSIX
+
 	cd $gcc_base/..
 
 	rm -rf binutils-obj

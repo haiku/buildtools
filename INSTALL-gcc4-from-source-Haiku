@@ -13,23 +13,23 @@ compile binutils:
 
 	mkdir binutils-obj
 	cd binutils-obj
-	CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure \
+	LC_ALL=POSIX CFLAGS="-O2" CXXFLAGS="-O2" ../binutils/configure \
 		--prefix=/boot/develop/abi/x86/gcc4/tools/${GCCVERSION} \
 		--disable-nls --enable-shared=yes \
 		--with-htmldir=html-docs
-	make -j2
+	LC_ALL=POSIX make -j2
 	cd ..
 
 compile gcc:	
 
 	mkdir gcc-obj
 	cd gcc-obj
-	CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
+	LC_ALL=POSIX CFLAGS="-O2" CXXFLAGS="-O2" ../gcc/configure \
 		--prefix=/boot/develop/abi/x86/gcc4/tools/${GCCVERSION} \
 		--enable-shared --enable-languages=c,c++ \
 		--disable-nls --without-libiconv-prefix --disable-libstdcxx-pch \
 		--with-htmldir=html-docs
-	make -j2 bootstrap
+	LC_ALL=POSIX make -j2 bootstrap
 	cd ..
 
 Ok, now everything is compiled and ready, waiting to be installed:

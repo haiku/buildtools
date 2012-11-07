@@ -70,8 +70,6 @@ case "$gccDate" in
 	*)	echo "Invalid GCC date string '$gccDate'." >&2; exit 1;;
 esac
 
-
-
 # get the GCC version
 gccVersion=`cat $gccSources/gcc/BASE-VER`
 if [ -z "$gccVersion" ]; then
@@ -103,10 +101,12 @@ echo
 echo "This is going to take a while ..."
 sleep 3
 
-
 # From now on fail, if anything goes wrong.
 set -o errexit
 
+
+# forcefeed the POSIX locale, as the build (makeinfo) might choke otherwise
+export LC_ALL=POSIX
 
 # remove and recreate the build directories
 rm -rf "$buildDir"
