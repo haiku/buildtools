@@ -28,8 +28,12 @@
 #undef  TARGET_DEFAULT_FLOAT_ABI
 #define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
 
+/* We default to the "aapcs-linux" ABI so that enums are int-sized by
+   default.  */
+#undef  ARM_DEFAULT_ABI
+#define ARM_DEFAULT_ABI ARM_ABI_AAPCS_LINUX
+
 /* bpabi.h sets FPUTYPE_DEFAULT to VFP */
-/* bpabi.h sets ARM_DEFAULT_ABI */
 
 #undef  MULTILIB_DEFAULTS
 #define MULTILIB_DEFAULTS \
