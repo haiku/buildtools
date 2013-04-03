@@ -141,7 +141,6 @@ ALL_EMULATION_SOURCES = \
 	earmcoff.c \
 	earmelf.c \
 	earmelf_fbsd.c \
-	earmelf_haiku.c \
 	earmelf_linux.c \
 	earmelf_linux_eabi.c \
 	earmelf_nbsd.c \
@@ -260,12 +259,9 @@ ALL_EMULATION_SOURCES = \
 	eelf_i386_be.c \
 	eelf_i386_chaos.c \
 	eelf_i386_fbsd.c \
-	eelf_i386_haiku.c \
 	eelf_i386_ldso.c \
 	eelf_i386_sol2.c \
 	eelf_i386_vxworks.c \
-	eelf_ppc_haiku.c \
-	eelf_mipsel_haiku.c \
 	eelf_s390.c \
 	egld960.c \
 	egld960coff.c \
@@ -698,10 +694,6 @@ earmelf_fbsd.c: $(srcdir)/emulparams/armelf_fbsd.sh \
   $(ELF_DEPS) $(srcdir)/emultempl/armelf.em \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 	${GENSCRIPTS} armelf_fbsd "$(tdir_armelf_fbsd)"
-earmelf_haiku.c: $(srcdir)/emulparams/armelf_haiku.sh \
-  $(srcdir)/emultempl/elf32.em $(srcdir)/emultempl/armelf.em \
-  $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
-	${GENSCRIPTS} armelf_haiku "$(tdir_armelf_haiku)"
 earmelf_linux.c: $(srcdir)/emulparams/armelf_linux.sh \
   $(ELF_DEPS) $(srcdir)/emultempl/armelf.em \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
@@ -1192,9 +1184,6 @@ eelf_i386_fbsd.c: $(srcdir)/emulparams/elf_i386_fbsd.sh \
   $(srcdir)/emulparams/elf_i386.sh \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 	${GENSCRIPTS} elf_i386_fbsd "$(tdir_elf_i386_fbsd)"
-eelf_i386_haiku.c: $(srcdir)/emulparams/elf_i386_haiku.sh \
-  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
-	${GENSCRIPTS} elf_i386_haiku "$(tdir_elf_i386_haiku)"
 eelf_i386_ldso.c: $(srcdir)/emulparams/elf_i386_ldso.sh \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 	${GENSCRIPTS} elf_i386_ldso "$(tdir_elf_i386_ldso)"
@@ -1203,12 +1192,6 @@ eelf_i386_sol2.c: $(srcdir)/emulparams/elf_i386_sol2.sh \
   $(srcdir)/emultempl/solaris2.em \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 	${GENSCRIPTS} elf_i386_sol2 "$(tdir_elf_i386_sol2)"
-eelf_ppc_haiku.c: $(srcdir)/emulparams/elf_ppc_haiku.sh \
-  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
-	${GENSCRIPTS} elf_ppc_haiku "$(tdir_elf_ppc_haiku)"
-eelf_mipsel_haiku.c: $(srcdir)/emulparams/elf_mipsel_haiku.sh \
-  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
-	${GENSCRIPTS} elf_mipsel_haiku "$(tdir_elf_mipsel_haiku)"
 eelf_i386_vxworks.c: $(srcdir)/emulparams/elf_i386_vxworks.sh \
   $(srcdir)/emulparams/vxworks.sh $(srcdir)/emultempl/vxworks.em \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
