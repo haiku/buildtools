@@ -198,7 +198,7 @@ parse_uint(const char* option_name, const char* arg, int* retval)
 {
   char* endptr;
   *retval = strtol(arg, &endptr, 0);
-  if (*endptr != '\0' || retval < 0)
+  if (*endptr != '\0' || *retval < 0)
     gold_fatal(_("%s: invalid option value (expected an integer): %s"),
                option_name, arg);
 }
@@ -1121,32 +1121,47 @@ General_options::finalize()
                  program_name);
 #endif
 
+  std::string libpath;
   if (this->user_set_Y())
     {
-      std::string s = this->Y();
-      if (s.compare(0, 2, "P,") == 0)
-	s.erase(0, 2);
+      libpath = this->Y();
+      if (libpath.compare(0, 2, "P,") == 0)
+	libpath.erase(0, 2);
+    }
+  else if (!this->nostdlib())
+    {
+#ifndef NATIVE_LINKER
+#define NATIVE_LINKER 0
+#endif
+      const char* p = LIB_PATH;
+      if (strcmp(p, "::DEFAULT::") != 0)
+	libpath = p;
+      else if (NATIVE_LINKER
+	       || this->user_set_sysroot()
+	       || *TARGET_SYSTEM_ROOT != '\0')
+	{
+	  this->add_to_library_path_with_sysroot("/lib");
+	  this->add_to_library_path_with_sysroot("/usr/lib");
+	}
+      else
+	this->add_to_library_path_with_sysroot(TOOLLIBDIR);
+    }
 
+  if (!libpath.empty())
+    {
       size_t pos = 0;
       size_t next_pos;
       do
 	{
-	  next_pos = s.find(':', pos);
+	  next_pos = libpath.find(':', pos);
 	  size_t len = (next_pos == std::string::npos
 			? next_pos
 			: next_pos - pos);
 	  if (len != 0)
-	    this->add_to_library_path_with_sysroot(s.substr(pos, len).c_str());
+	    this->add_to_library_path_with_sysroot(libpath.substr(pos, len));
 	  pos = next_pos + 1;
 	}
       while (next_pos != std::string::npos);
-    }
-  else if (!this->nostdlib())
-    {
-      // Even if they don't specify it, we add -L /lib and -L /usr/lib.
-      // FIXME: We should only do this when configured in native mode.
-      this->add_to_library_path_with_sysroot("/lib");
-      this->add_to_library_path_with_sysroot("/usr/lib");
     }
 
   // Parse the contents of -retain-symbols-file into a set.
@@ -1188,6 +1203,8 @@ General_options::finalize()
     gold_fatal(_("-shared and -static are incompatible"));
   if (this->shared() && this->pie())
     gold_fatal(_("-shared and -pie are incompatible"));
+  if (this->pie() && this->is_static())
+    gold_fatal(_("-pie and -static are incompatible"));
 
   if (this->shared() && this->relocatable())
     gold_fatal(_("-shared and -r are incompatible"));
@@ -1223,6 +1240,37 @@ General_options::finalize()
   if (this->implicit_incremental_ && this->incremental_mode_ == INCREMENTAL_OFF)
     gold_fatal(_("Options --incremental-changed, --incremental-unchanged, "
                  "--incremental-unknown require the use of --incremental"));
+
+  // Check for options that are not compatible with incremental linking.
+  // Where an option can be disabled without seriously changing the semantics
+  // of the link, we turn the option off; otherwise, we issue a fatal error.
+
+  if (this->incremental_mode_ != INCREMENTAL_OFF)
+    {
+      if (this->relocatable())
+	gold_fatal(_("incremental linking is not compatible with -r"));
+      if (this->emit_relocs())
+	gold_fatal(_("incremental linking is not compatible with "
+		     "--emit-relocs"));
+      if (this->has_plugins())
+	gold_fatal(_("incremental linking is not compatible with --plugin"));
+      if (this->gc_sections())
+	{
+	  gold_warning(_("ignoring --gc-sections for an incremental link"));
+	  this->set_gc_sections(false);
+	}
+      if (this->icf_enabled())
+	{
+	  gold_warning(_("ignoring --icf for an incremental link"));
+	  this->set_icf_status(ICF_NONE);
+	}
+      if (strcmp(this->compress_debug_sections(), "none") != 0)
+	{
+	  gold_warning(_("ignoring --compress-debug-sections for an "
+			 "incremental link"));
+	  this->set_compress_debug_sections("none");
+	}
+    }
 
   // FIXME: we can/should be doing a lot more sanity checking here.
 }

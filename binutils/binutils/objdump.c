@@ -1,7 +1,7 @@
 /* objdump.c -- dump information about an object file.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+   2012 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -70,8 +70,6 @@
 #ifdef HAVE_MMAP
 #include <sys/mman.h>
 #endif
-
-#include <sys/stat.h>
 
 /* Internal headers for the ELF .stab-dump code - sorry.  */
 #define	BYTES_IN_WORD	32
@@ -263,7 +261,9 @@ usage (FILE *stream, int status)
       fprintf (stream, _("\
       --dwarf-depth=N        Do not display DIEs at depth N or greater\n\
       --dwarf-start=N        Display DIEs starting with N, at the same depth\n\
-                             or deeper\n\n"));
+                             or deeper\n\
+      --dwarf-check          Make additional dwarf internal consistency checks.\
+      \n\n"));
       list_supported_targets (program_name, stream);
       list_supported_architectures (program_name, stream);
 
@@ -294,6 +294,7 @@ enum option_values
     OPTION_INSN_WIDTH,
     OPTION_ADJUST_VMA,
     OPTION_DWARF_DEPTH,
+    OPTION_DWARF_CHECK,
     OPTION_DWARF_START
   };
 
@@ -345,6 +346,7 @@ static struct option long_options[]=
   {"insn-width", required_argument, NULL, OPTION_INSN_WIDTH},
   {"dwarf-depth",      required_argument, 0, OPTION_DWARF_DEPTH},
   {"dwarf-start",      required_argument, 0, OPTION_DWARF_START},
+  {"dwarf-check",      no_argument, 0, OPTION_DWARF_CHECK},
   {0, no_argument, 0, 0}
 };
 
@@ -1084,6 +1086,7 @@ objdump_symbol_at_address (bfd_vma vma, struct disassemble_info * inf)
 
 static char *prev_functionname;
 static unsigned int prev_line;
+static unsigned int prev_discriminator;
 
 /* We keep a list of all files that we have seen when doing a
    disassembly with source, so that we know how much of the file to
@@ -1125,25 +1128,28 @@ slurp_file (const char *fn, size_t *size)
   if (fd < 0)
     return NULL;
   if (fstat (fd, &st) < 0)
-    return NULL;
+    {
+      close (fd);
+      return NULL;
+    }
   *size = st.st_size;
 #ifdef HAVE_MMAP
   msize = (*size + ps - 1) & ~(ps - 1);
   map = mmap (NULL, msize, PROT_READ, MAP_SHARED, fd, 0);
-  if (map != (char *)-1L)
+  if (map != (char *) -1L)
     {
-      close(fd);
-      return map; 
+      close (fd);
+      return map;
     }
 #endif
   map = (const char *) malloc (*size);
-  if (!map || (size_t) read (fd, (char *)map, *size) != *size) 
-    { 
-      free ((void *)map);
+  if (!map || (size_t) read (fd, (char *) map, *size) != *size)
+    {
+      free ((void *) map);
       map = NULL;
     }
   close (fd);
-  return map; 
+  return map;
 }
 
 #define line_map_decrease 5
@@ -1307,13 +1313,15 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
   const char *filename;
   const char *functionname;
   unsigned int linenumber;
+  unsigned int discriminator;
   bfd_boolean reloc;
 
   if (! with_line_numbers && ! with_source_code)
     return;
 
-  if (! bfd_find_nearest_line (abfd, section, syms, addr_offset, &filename,
-			       &functionname, &linenumber))
+  if (! bfd_find_nearest_line_discriminator (abfd, section, syms, addr_offset,
+                                             &filename, &functionname,
+                                             &linenumber, &discriminator))
     return;
 
   if (filename != NULL && *filename == '\0')
@@ -1365,8 +1373,15 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
 	  && (prev_functionname == NULL
 	      || strcmp (functionname, prev_functionname) != 0))
 	printf ("%s():\n", functionname);
-      if (linenumber > 0 && linenumber != prev_line)
-	printf ("%s:%u\n", filename == NULL ? "???" : filename, linenumber);
+      if (linenumber > 0 && (linenumber != prev_line || 
+                             (discriminator != prev_discriminator)))
+        { 
+          if (discriminator > 0)
+            printf ("%s:%u (discriminator %u)\n", filename == NULL ? "???" : filename,
+                    linenumber, discriminator);
+          else
+            printf ("%s:%u\n", filename == NULL ? "???" : filename, linenumber);
+        }
     }
 
   if (with_source_code
@@ -1418,6 +1433,9 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
 
   if (linenumber > 0 && linenumber != prev_line)
     prev_line = linenumber;
+
+  if (discriminator != prev_discriminator)
+    prev_discriminator = discriminator;
 }
 
 /* Pseudo FILE object for strings.  */
@@ -1835,8 +1853,15 @@ disassemble_bytes (struct disassemble_info * inf,
 
 	      if (q->addend)
 		{
-		  printf ("+0x");
-		  objdump_print_value (q->addend, inf, TRUE);
+		  bfd_signed_vma addend = q->addend;
+		  if (addend < 0)
+		    {
+		      printf ("-0x");
+		      addend = -addend;
+		    }
+		  else
+		    printf ("+0x");
+		  objdump_print_value (addend, inf, TRUE);
 		}
 
 	      printf ("\n");
@@ -2103,6 +2128,7 @@ disassemble_data (bfd *abfd)
   print_files = NULL;
   prev_functionname = NULL;
   prev_line = -1;
+  prev_discriminator = 0;
 
   /* We make a copy of syms to sort.  We don't want to sort syms
      because that will screw up the relocs.  */
@@ -2372,6 +2398,8 @@ dump_dwarf (bfd *abfd)
 	{
 	case bfd_mach_x86_64:
 	case bfd_mach_x86_64_intel_syntax:
+	case bfd_mach_x64_32:
+	case bfd_mach_x64_32_intel_syntax:
 	  init_dwarf_regnames_x86_64 ();
 	  break;
 
@@ -2883,6 +2911,7 @@ dump_reloc_set (bfd *abfd, asection *sec, arelent **relpp, long relcount)
   arelent **p;
   char *last_filename, *last_functionname;
   unsigned int last_line;
+  unsigned int last_discriminator;
 
   /* Get column headers lined up reasonably.  */
   {
@@ -2901,12 +2930,14 @@ dump_reloc_set (bfd *abfd, asection *sec, arelent **relpp, long relcount)
   last_filename = NULL;
   last_functionname = NULL;
   last_line = 0;
+  last_discriminator = 0;
 
   for (p = relpp; relcount && *p != NULL; p++, relcount--)
     {
       arelent *q = *p;
       const char *filename, *functionname;
       unsigned int linenumber;
+      unsigned int discriminator;
       const char *sym_name;
       const char *section_name;
       bfd_vma addend2 = 0;
@@ -2920,8 +2951,9 @@ dump_reloc_set (bfd *abfd, asection *sec, arelent **relpp, long relcount)
 
       if (with_line_numbers
 	  && sec != NULL
-	  && bfd_find_nearest_line (abfd, sec, syms, q->address,
-				    &filename, &functionname, &linenumber))
+	  && bfd_find_nearest_line_discriminator (abfd, sec, syms, q->address,
+                                                  &filename, &functionname,
+                                                  &linenumber, &discriminator))
 	{
 	  if (functionname != NULL
 	      && (last_functionname == NULL
@@ -2937,10 +2969,16 @@ dump_reloc_set (bfd *abfd, asection *sec, arelent **relpp, long relcount)
 	      && (linenumber != last_line
 		  || (filename != NULL
 		      && last_filename != NULL
-		      && filename_cmp (filename, last_filename) != 0)))
+		      && filename_cmp (filename, last_filename) != 0)
+                  || (discriminator != last_discriminator)))
 	    {
-	      printf ("%s:%u\n", filename == NULL ? "???" : filename, linenumber);
+              if (discriminator > 0)
+                printf ("%s:%u\n", filename == NULL ? "???" : filename, linenumber);
+              else
+                printf ("%s:%u (discriminator %u)\n", filename == NULL ? "???" : filename,
+                        linenumber, discriminator);
 	      last_line = linenumber;
+	      last_discriminator = discriminator;
 	      if (last_filename != NULL)
 		free (last_filename);
 	      if (filename == NULL)
@@ -3012,8 +3050,15 @@ dump_reloc_set (bfd *abfd, asection *sec, arelent **relpp, long relcount)
 
       if (q->addend)
 	{
-	  printf ("+0x");
-	  bfd_printf_vma (abfd, q->addend);
+	  bfd_signed_vma addend = q->addend;
+	  if (addend < 0)
+	    {
+	      printf ("-0x");
+	      addend = -addend;
+	    }
+	  else
+	    printf ("+0x");
+	  bfd_printf_vma (abfd, addend);
 	}
       if (addend2)
 	{
@@ -3229,6 +3274,7 @@ dump_bfd (bfd *abfd)
 	 info in the file, try DWARF instead.  */
       else if (! dump_dwarf_section_info)
 	{
+	  dwarf_select_sections_all (); 
 	  dump_dwarf (abfd);
 	}
     }
@@ -3257,7 +3303,7 @@ dump_bfd (bfd *abfd)
 }
 
 static void
-display_bfd (bfd *abfd)
+display_object_bfd (bfd *abfd)
 {
   char **matching;
 
@@ -3297,10 +3343,53 @@ display_bfd (bfd *abfd)
 }
 
 static void
+display_any_bfd (bfd *file, int level)
+{
+  /* Decompress sections unless dumping the section contents.  */
+  if (!dump_section_contents)
+    file->flags |= BFD_DECOMPRESS;
+
+  /* If the file is an archive, process all of its elements.  */
+  if (bfd_check_format (file, bfd_archive))
+    {
+      bfd *arfile = NULL;
+      bfd *last_arfile = NULL;
+
+      if (level == 0)
+        printf (_("In archive %s:\n"), bfd_get_filename (file));
+      else
+        printf (_("In nested archive %s:\n"), bfd_get_filename (file));
+
+      for (;;)
+	{
+	  bfd_set_error (bfd_error_no_error);
+
+	  arfile = bfd_openr_next_archived_file (file, arfile);
+	  if (arfile == NULL)
+	    {
+	      if (bfd_get_error () != bfd_error_no_more_archived_files)
+		nonfatal (bfd_get_filename (file));
+	      break;
+	    }
+
+	  display_any_bfd (arfile, level + 1);
+
+	  if (last_arfile != NULL)
+	    bfd_close (last_arfile);
+	  last_arfile = arfile;
+	}
+
+      if (last_arfile != NULL)
+	bfd_close (last_arfile);
+    }
+  else
+    display_object_bfd (file);
+}
+
+static void
 display_file (char *filename, char *target)
 {
   bfd *file;
-  bfd *arfile = NULL;
 
   if (get_file_size (filename) < 1)
     {
@@ -3315,40 +3404,7 @@ display_file (char *filename, char *target)
       return;
     }
 
-  /* Decompress sections unless dumping the section contents.  */
-  if (!dump_section_contents)
-    file->flags |= BFD_DECOMPRESS;
-
-  /* If the file is an archive, process all of its elements.  */
-  if (bfd_check_format (file, bfd_archive))
-    {
-      bfd *last_arfile = NULL;
-
-      printf (_("In archive %s:\n"), bfd_get_filename (file));
-      for (;;)
-	{
-	  bfd_set_error (bfd_error_no_error);
-
-	  arfile = bfd_openr_next_archived_file (file, arfile);
-	  if (arfile == NULL)
-	    {
-	      if (bfd_get_error () != bfd_error_no_more_archived_files)
-		nonfatal (bfd_get_filename (file));
-	      break;
-	    }
-
-	  display_bfd (arfile);
-
-	  if (last_arfile != NULL)
-	    bfd_close (last_arfile);
-	  last_arfile = arfile;
-	}
-
-      if (last_arfile != NULL)
-	bfd_close (last_arfile);
-    }
-  else
-    display_bfd (file);
+  display_any_bfd (file, 0);
 
   bfd_close (file);
 }
@@ -3574,6 +3630,9 @@ main (int argc, char **argv)
 	    dwarf_start_die = strtoul (optarg, & cp, 0);
 	    suppress_bfd_header = 1;
 	  }
+	  break;
+	case OPTION_DWARF_CHECK:
+	  dwarf_check = TRUE;
 	  break;
 	case 'G':
 	  dump_stab_section_info = TRUE;

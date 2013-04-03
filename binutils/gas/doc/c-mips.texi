@@ -79,7 +79,7 @@ VxWorks-style position-independent macro expansions.
 @itemx -mips2
 @itemx -mips3
 @itemx -mips4
-@itemx -mips5xo
+@itemx -mips5
 @itemx -mips32
 @itemx -mips32r2
 @itemx -mips64
@@ -211,7 +211,7 @@ all problems in hand-written assembler code.
 Insert nops to work around the VR4130 @samp{mflo}/@samp{mfhi} errata.
 
 @item -mfix-24k
-@itemx -no-mfix-24k
+@itemx -mno-fix-24k
 Insert nops to work around the 24K @samp{eret}/@samp{deret} errata.
 
 @item -mfix-cn63xxp1
@@ -290,6 +290,8 @@ m4k,
 m4kp,
 m14k,
 m14kc,
+m14ke,
+m14kec,
 24kc,
 24kf2_1,
 24kf,
@@ -321,7 +323,10 @@ loongson2e,
 loongson2f,
 loongson3a,
 octeon,
-xlr
+octeon+,
+octeon2,
+xlr,
+xlp
 @end quotation
 
 For compatibility reasons, @samp{@var{n}x} and @samp{@var{b}fx} are

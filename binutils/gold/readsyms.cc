@@ -161,8 +161,10 @@ void
 Read_symbols::run(Workqueue* workqueue)
 {
   // If we didn't queue a new task, then we need to explicitly unblock
-  // the token.
-  if (!this->do_read_symbols(workqueue))
+  // the token. If the object is a member of a lib group, however,
+  // the token was already added to the list of locks for the task,
+  // and it will be unblocked automatically at the end of the task.
+  if (!this->do_read_symbols(workqueue) && this->member_ == NULL)
     workqueue->queue_soon(new Unblock_token(this->this_blocker_,
 					    this->next_blocker_));
 }
@@ -600,6 +602,7 @@ Add_symbols::run(Workqueue*)
 
   if (!this->input_objects_->add_object(this->object_))
     {
+      this->object_->discard_decompressed_sections();
       gold_assert(this->sd_ != NULL);
       delete this->sd_;
       this->sd_ = NULL;
@@ -630,6 +633,7 @@ Add_symbols::run(Workqueue*)
 	}
       this->object_->layout(this->symtab_, this->layout_, this->sd_);
       this->object_->add_symbols(this->symtab_, this->sd_, this->layout_);
+      this->object_->discard_decompressed_sections();
       delete this->sd_;
       this->sd_ = NULL;
       this->object_->release();

@@ -1,5 +1,5 @@
 # Expect script for various ELF tests.
-#   Copyright 2002, 2003, 2005, 2007, 2009, 2010, 2011
+#   Copyright 2002, 2003, 2005, 2007, 2009, 2010, 2011, 2012
 #   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
@@ -37,6 +37,13 @@ if { [istarget alpha*-*-* ] } {
     set LDFLAGS "$LDFLAGS -Ttext-segment 0x1000000"
 }
 
+if { [istarget "*-*-nacl*"] } {
+    # The eh[1-4] cases are written to expect ELFCLASS64 layout on x86-64.
+    # But the target default is ELFCLASS32.  So the cases explicitly use
+    # -melf_x86_64 to select that, but NaCl needs a different emulation name.
+    set options_regsub(ld) {-melf_x86_64 -melf_x86_64_nacl}
+}
+
 if { [is_remote host] } then {
     remote_download host merge.ld
 }
@@ -50,6 +57,20 @@ if { ![istarget hppa64*-hpux*] } {
 	    "" ""
 	    {symbol3w.s} {} "symbol3w.a"}
     }
+
+    if { [check_shared_lib_support] } then {
+	run_ld_link_tests {
+	    {"Build pr14170a.o" "" "" "pr14170a.s" {} "pr14170.a" }
+	}
+	setup_xfail "tic6x-*-*"
+	run_ld_link_tests {
+	    {"Build shared library for pr14170"
+		"-shared" "" "pr14170b.s" {} "pr14170.so" }
+	    {"PR ld/14170"
+		"tmpdir/pr14170a.o tmpdir/pr14170.so" "" "pr14170c.s"
+		{ } "pr14170" }
+	}
+    }
 }
 
 # Run a test to check linking a shared library with a broken linker
@@ -58,48 +79,16 @@ if { ![istarget hppa64*-hpux*] } {
 # should not seg-fault whilst creating the binary.
 #
 # Only run the test on targets thats support creating shared libraries.
-if {    ! [istarget arc-*-*]
-     && ! [istarget avr-*-*]
-     && ! [istarget cr16-*-*]
-     && ! [istarget cris*-*-*]
-     && ! [istarget crx-*-*]
-     && ! [istarget d10v-*-*]
-     && ! [istarget d30v-*-*]
-     && ! [istarget dlx-*-*]
-     && ! [istarget fr30-*-*]
-     && ! [istarget frv-*-*]
-     && ! [istarget h8300-*-*]
-     && ! [istarget i860-*-*]
-     && ! [istarget i960-*-*]
-     && ! [istarget ip2k-*-*]
-     && ! [istarget iq2000-*-*]
-     && ! [istarget lm32-*-*]
-     && ! [istarget m32c-*-*]
-     && ! [istarget m32r-*-*]
-     && ! [istarget mcore*-*-*]
-     && ! [istarget mep-*-*]
-     && ! [istarget microblaze-*-*]
-     && ! [istarget mn10200-*-*]
-     && ! [istarget moxie-*-*]
-     && ! [istarget ms1-*-*]
-     && ! [istarget msp430-*-*]
-     && ! [istarget openrisc-*-*]
-     && ! [istarget or32-*-*]
-     && ! [istarget pj-*-*]
-     && ! [istarget rx-*-*]
-     && ! [istarget spu-*-*]
-     && ! [istarget v850*-*-*]
-     && ! [istarget xstormy16-*-*]
-     && ! [istarget *-*-irix*]
-     && ! [istarget *-*-rtems] } {
-  run_ld_link_tests {
-      {"Build shared library for next test"
-       "-shared" "" "note-3.s" {} "note-3.so" }
-      {"Link using broken linker script"
-        "--script note-3.t tmpdir/note-3.so" "" ""
-	  { { ld "note-3.l" } }
-	  "a.out" }
-  }
+if { [check_shared_lib_support] } then {
+    setup_xfail "tic6x-*-*"
+    run_ld_link_tests {
+	{"Build shared library for next test"
+	    "-shared" "" "note-3.s" {} "note-3.so" }
+	{"Link using broken linker script"
+	    "--script note-3.t tmpdir/note-3.so" "" ""
+	    { { ld "note-3.l" } }
+	    "a.out" }
+    }
 }
 
 set test_list [lsort [glob -nocomplain $srcdir/$subdir/*.d]]
@@ -110,6 +99,7 @@ foreach t $test_list {
 }
 
 if { [istarget *-*-linux*]
+     || [istarget *-*-nacl*]
      || [istarget *-*-gnu*] } {
     run_ld_link_tests {
 	{"Weak symbols in dynamic objects 1 (support)"
@@ -138,9 +128,11 @@ if ![isnative] {
     return
 }
 
-run_cc_link_tests {
-    {"PR ld/13195" "-Wl,--gc-sections" ""
-     {pr13195.c} {} "pr13195"}
+if [check_gc_sections_available] {
+    run_cc_link_tests {
+	{"PR ld/13195" "-Wl,--gc-sections" ""
+	 {pr13195.c} {} "pr13195"}
+    }
 }
 
 set array_tests {
@@ -167,6 +159,7 @@ set xfails [list "*-*-netbsdelf*"]
 run_ld_link_exec_tests $xfails $array_tests
 
 if { [istarget *-*-linux*]
+     || [istarget *-*-nacl*]
      || [istarget *-*-gnu*] } {
     run_ld_link_exec_tests $xfails $array_tests_pie
 }

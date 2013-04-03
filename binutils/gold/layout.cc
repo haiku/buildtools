@@ -1,6 +1,7 @@
 // layout.cc -- lay out output file sections for gold
 
-// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012
+// Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -44,6 +45,7 @@
 #include "symtab.h"
 #include "dynobj.h"
 #include "ehframe.h"
+#include "gdb-index.h"
 #include "compressed_output.h"
 #include "reduced_debug_output.h"
 #include "object.h"
@@ -154,9 +156,9 @@ off_t
 Free_list::allocate(off_t len, uint64_t align, off_t minoff)
 {
   gold_debug(DEBUG_INCREMENTAL,
-  	     "Free_list::allocate(%08lx, %d, %08lx)",
-  	     static_cast<long>(len), static_cast<int>(align),
-  	     static_cast<long>(minoff));
+	     "Free_list::allocate(%08lx, %d, %08lx)",
+	     static_cast<long>(len), static_cast<int>(align),
+	     static_cast<long>(minoff));
   if (len == 0)
     return align_address(minoff, align);
 
@@ -221,17 +223,17 @@ void
 Free_list::print_stats()
 {
   fprintf(stderr, _("%s: total free lists: %u\n"),
-          program_name, Free_list::num_lists);
+	  program_name, Free_list::num_lists);
   fprintf(stderr, _("%s: total free list nodes: %u\n"),
-          program_name, Free_list::num_nodes);
+	  program_name, Free_list::num_nodes);
   fprintf(stderr, _("%s: calls to Free_list::remove: %u\n"),
-          program_name, Free_list::num_removes);
+	  program_name, Free_list::num_removes);
   fprintf(stderr, _("%s: nodes visited: %u\n"),
-          program_name, Free_list::num_remove_visits);
+	  program_name, Free_list::num_remove_visits);
   fprintf(stderr, _("%s: calls to Free_list::allocate: %u\n"),
-          program_name, Free_list::num_allocates);
+	  program_name, Free_list::num_allocates);
   fprintf(stderr, _("%s: nodes visited: %u\n"),
-          program_name, Free_list::num_allocate_visits);
+	  program_name, Free_list::num_allocate_visits);
 }
 
 // Layout::Relaxation_debug_check methods.
@@ -255,7 +257,7 @@ Layout::Relaxation_debug_check::check_output_data_for_reset_values(
       ++p)
     gold_assert((*p)->address_and_file_offset_have_reset_values());
 }
-  
+
 // Save information of SECTIONS for checking later.
 
 void
@@ -318,7 +320,7 @@ Layout_task_runner::run(Workqueue* workqueue, const Task* task)
   Layout* layout = this->layout_;
   off_t file_size = layout->finalize(this->input_objects_,
 				     this->symtab_,
-                                     this->target_,
+				     this->target_,
 				     task);
 
   // Now we know the final size of the output file and we know where
@@ -348,8 +350,8 @@ Layout_task_runner::run(Workqueue* workqueue, const Task* task)
       // incremental information from the file before (possibly)
       // overwriting it.
       if (parameters->incremental_update())
-        layout->incremental_base()->apply_incremental_relocs(this->symtab_,
-        						     this->layout_,
+	layout->incremental_base()->apply_incremental_relocs(this->symtab_,
+							     this->layout_,
 							     of);
 
       of->resize(file_size);
@@ -390,6 +392,7 @@ Layout::Layout(int number_of_input_files, Script_options* script_options)
     eh_frame_data_(NULL),
     added_eh_frame_data_(false),
     eh_frame_hdr_section_(NULL),
+    gdb_index_data_(NULL),
     build_id_note_(NULL),
     debug_abbrev_(NULL),
     debug_info_(NULL),
@@ -410,6 +413,7 @@ Layout::Layout(int number_of_input_files, Script_options* script_options)
     script_output_section_data_list_(),
     segment_states_(NULL),
     relaxation_debug_check_(NULL),
+    section_order_map_(),
     input_section_position_(),
     input_section_glob_(),
     incremental_base_(NULL),
@@ -449,56 +453,98 @@ Layout::Hash_key::operator()(const Layout::Key& k) const
  return k.first + k.second.first + k.second.second;
 }
 
-// Returns whether the given section is in the list of
-// debug-sections-used-by-some-version-of-gdb.  Currently,
-// we've checked versions of gdb up to and including 6.7.1.
+// These are the debug sections that are actually used by gdb.
+// Currently, we've checked versions of gdb up to and including 7.4.
+// We only check the part of the name that follows ".debug_" or
+// ".zdebug_".
 
 static const char* gdb_sections[] =
-{ ".debug_abbrev",
-  // ".debug_aranges",   // not used by gdb as of 6.7.1
-  ".debug_frame",
-  ".debug_info",
-  ".debug_types",
-  ".debug_line",
-  ".debug_loc",
-  ".debug_macinfo",
-  // ".debug_pubnames",  // not used by gdb as of 6.7.1
-  ".debug_ranges",
-  ".debug_str",
+{
+  "abbrev",
+  "addr",         // Fission extension
+  // "aranges",   // not used by gdb as of 7.4
+  "frame",
+  "info",
+  "types",
+  "line",
+  "loc",
+  "macinfo",
+  "macro",
+  // "pubnames",  // not used by gdb as of 7.4
+  // "pubtypes",  // not used by gdb as of 7.4
+  "ranges",
+  "str",
 };
+
+// This is the minimum set of sections needed for line numbers.
 
 static const char* lines_only_debug_sections[] =
-{ ".debug_abbrev",
-  // ".debug_aranges",   // not used by gdb as of 6.7.1
-  // ".debug_frame",
-  ".debug_info",
-  // ".debug_types",
-  ".debug_line",
-  // ".debug_loc",
-  // ".debug_macinfo",
-  // ".debug_pubnames",  // not used by gdb as of 6.7.1
-  // ".debug_ranges",
-  ".debug_str",
+{
+  "abbrev",
+  // "addr",      // Fission extension
+  // "aranges",   // not used by gdb as of 7.4
+  // "frame",
+  "info",
+  // "types",
+  "line",
+  // "loc",
+  // "macinfo",
+  // "macro",
+  // "pubnames",  // not used by gdb as of 7.4
+  // "pubtypes",  // not used by gdb as of 7.4
+  // "ranges",
+  "str",
 };
 
+// These sections are the DWARF fast-lookup tables, and are not needed
+// when building a .gdb_index section.
+
+static const char* gdb_fast_lookup_sections[] =
+{
+  "aranges",
+  "pubnames",
+  "pubtypes",
+};
+
+// Returns whether the given debug section is in the list of
+// debug-sections-used-by-some-version-of-gdb.  SUFFIX is the
+// portion of the name following ".debug_" or ".zdebug_".
+
 static inline bool
-is_gdb_debug_section(const char* str)
+is_gdb_debug_section(const char* suffix)
 {
   // We can do this faster: binary search or a hashtable.  But why bother?
   for (size_t i = 0; i < sizeof(gdb_sections)/sizeof(*gdb_sections); ++i)
-    if (strcmp(str, gdb_sections[i]) == 0)
+    if (strcmp(suffix, gdb_sections[i]) == 0)
       return true;
   return false;
 }
 
+// Returns whether the given section is needed for lines-only debugging.
+
 static inline bool
-is_lines_only_debug_section(const char* str)
+is_lines_only_debug_section(const char* suffix)
 {
   // We can do this faster: binary search or a hashtable.  But why bother?
   for (size_t i = 0;
        i < sizeof(lines_only_debug_sections)/sizeof(*lines_only_debug_sections);
        ++i)
-    if (strcmp(str, lines_only_debug_sections[i]) == 0)
+    if (strcmp(suffix, lines_only_debug_sections[i]) == 0)
+      return true;
+  return false;
+}
+
+// Returns whether the given section is a fast-lookup section that
+// will not be needed when building a .gdb_index section.
+
+static inline bool
+is_gdb_fast_lookup_section(const char* suffix)
+{
+  // We can do this faster: binary search or a hashtable.  But why bother?
+  for (size_t i = 0;
+       i < sizeof(gdb_fast_lookup_sections)/sizeof(*gdb_fast_lookup_sections);
+       ++i)
+    if (strcmp(suffix, gdb_fast_lookup_sections[i]) == 0)
       return true;
   return false;
 }
@@ -575,26 +621,44 @@ Layout::include_section(Sized_relobj_file<size, big_endian>*, const char* name,
 	  && (shdr.get_sh_flags() & elfcpp::SHF_ALLOC) == 0)
 	{
 	  // Debugging sections can only be recognized by name.
-	  if (is_prefix_of(".debug", name)
-              && !is_lines_only_debug_section(name))
+	  if (is_prefix_of(".debug_", name)
+	      && !is_lines_only_debug_section(name + 7))
+	    return false;
+	  if (is_prefix_of(".zdebug_", name)
+	      && !is_lines_only_debug_section(name + 8))
 	    return false;
 	}
       if (parameters->options().strip_debug_gdb()
 	  && (shdr.get_sh_flags() & elfcpp::SHF_ALLOC) == 0)
 	{
 	  // Debugging sections can only be recognized by name.
-	  if (is_prefix_of(".debug", name)
-              && !is_gdb_debug_section(name))
+	  if (is_prefix_of(".debug_", name)
+	      && !is_gdb_debug_section(name + 7))
+	    return false;
+	  if (is_prefix_of(".zdebug_", name)
+	      && !is_gdb_debug_section(name + 8))
+	    return false;
+	}
+      if (parameters->options().gdb_index()
+	  && (shdr.get_sh_flags() & elfcpp::SHF_ALLOC) == 0)
+	{
+	  // When building .gdb_index, we can strip .debug_pubnames,
+	  // .debug_pubtypes, and .debug_aranges sections.
+	  if (is_prefix_of(".debug_", name)
+	      && is_gdb_fast_lookup_section(name + 7))
+	    return false;
+	  if (is_prefix_of(".zdebug_", name)
+	      && is_gdb_fast_lookup_section(name + 8))
 	    return false;
 	}
       if (parameters->options().strip_lto_sections()
-          && !parameters->options().relocatable()
-          && (shdr.get_sh_flags() & elfcpp::SHF_ALLOC) == 0)
-        {
-          // Ignore LTO sections containing intermediate code.
-          if (is_prefix_of(".gnu.lto_", name))
-            return false;
-        }
+	  && !parameters->options().relocatable()
+	  && (shdr.get_sh_flags() & elfcpp::SHF_ALLOC) == 0)
+	{
+	  // Ignore LTO sections containing intermediate code.
+	  if (is_prefix_of(".gnu.lto_", name))
+	    return false;
+	}
       // The GNU linker strips .gnu_debuglink sections, so we do too.
       // This is a feature used to keep debugging information in
       // separate files.
@@ -710,27 +774,27 @@ Layout::get_output_section(const char* name, Stringpool::Key name_key,
 
       if (lookup_type == elfcpp::SHT_PROGBITS)
 	{
-          if (flags == 0)
-            {
-              Output_section* same_name = this->find_output_section(name);
-              if (same_name != NULL
-                  && (same_name->type() == elfcpp::SHT_PROGBITS
+	  if (flags == 0)
+	    {
+	      Output_section* same_name = this->find_output_section(name);
+	      if (same_name != NULL
+		  && (same_name->type() == elfcpp::SHT_PROGBITS
 		      || same_name->type() == elfcpp::SHT_INIT_ARRAY
 		      || same_name->type() == elfcpp::SHT_FINI_ARRAY
 		      || same_name->type() == elfcpp::SHT_PREINIT_ARRAY)
-                  && (same_name->flags() & elfcpp::SHF_TLS) == 0)
-                os = same_name;
-            }
-          else if ((flags & elfcpp::SHF_TLS) == 0)
-            {
-              elfcpp::Elf_Xword zero_flags = 0;
-              const Key zero_key(name_key, std::make_pair(lookup_type,
+		  && (same_name->flags() & elfcpp::SHF_TLS) == 0)
+		os = same_name;
+	    }
+	  else if ((flags & elfcpp::SHF_TLS) == 0)
+	    {
+	      elfcpp::Elf_Xword zero_flags = 0;
+	      const Key zero_key(name_key, std::make_pair(lookup_type,
 							  zero_flags));
-              Section_name_map::iterator p =
-                  this->section_name_map_.find(zero_key);
-              if (p != this->section_name_map_.end())
+	      Section_name_map::iterator p =
+		  this->section_name_map_.find(zero_key);
+	      if (p != this->section_name_map_.end())
 		os = p->second;
-            }
+	    }
 	}
 
       if (os == NULL)
@@ -904,6 +968,13 @@ Layout::init_fixed_output_section(const char* name,
   if (!can_incremental_update(sh_type))
     return NULL;
 
+  // If we're generating a .gdb_index section, we need to regenerate
+  // it from scratch.
+  if (parameters->options().gdb_index()
+      && sh_type == elfcpp::SHT_PROGBITS
+      && strcmp(name, ".gdb_index") == 0)
+    return NULL;
+
   typename elfcpp::Elf_types<size>::Elf_Addr sh_addr = shdr.get_sh_addr();
   typename elfcpp::Elf_types<size>::Elf_Off sh_offset = shdr.get_sh_offset();
   typename elfcpp::Elf_types<size>::Elf_WXword sh_size = shdr.get_sh_size();
@@ -915,7 +986,7 @@ Layout::init_fixed_output_section(const char* name,
   Stringpool::Key name_key;
   name = this->namepool_.add(name, true, &name_key);
   Output_section* os = this->get_output_section(name, name_key, sh_type,
-  						sh_flags, ORDER_INVALID, false);
+						sh_flags, ORDER_INVALID, false);
   os->set_fixed_layout(sh_addr, sh_offset, sh_size, sh_addralign);
   if (sh_type != elfcpp::SHT_NOBITS)
     this->free_list_.remove(sh_offset, sh_offset + sh_size);
@@ -1291,6 +1362,38 @@ Layout::add_eh_frame_for_plt(Output_data* plt, const unsigned char* cie_data,
     }
 }
 
+// Scan a .debug_info or .debug_types section, and add summary
+// information to the .gdb_index section.
+
+template<int size, bool big_endian>
+void
+Layout::add_to_gdb_index(bool is_type_unit,
+			 Sized_relobj<size, big_endian>* object,
+			 const unsigned char* symbols,
+			 off_t symbols_size,
+			 unsigned int shndx,
+			 unsigned int reloc_shndx,
+			 unsigned int reloc_type)
+{
+  if (this->gdb_index_data_ == NULL)
+    {
+      Output_section* os = this->choose_output_section(NULL, ".gdb_index",
+						       elfcpp::SHT_PROGBITS, 0,
+						       false, ORDER_INVALID,
+						       false);
+      if (os == NULL)
+	return;
+
+      this->gdb_index_data_ = new Gdb_index(os);
+      os->add_output_section_data(this->gdb_index_data_);
+      os->set_after_input_sections();
+    }
+
+  this->gdb_index_data_->scan_debug_info(is_type_unit, object, symbols,
+					 symbols_size, shndx, reloc_shndx,
+					 reloc_type);
+}
+
 // Add POSD to an output section using NAME, TYPE, and FLAGS.  Return
 // the output section.
 
@@ -1337,22 +1440,22 @@ Layout::make_output_section(const char* name, elfcpp::Elf_Word type,
     os = new Output_compressed_section(&parameters->options(), name, type,
 				       flags);
   else if ((flags & elfcpp::SHF_ALLOC) == 0
-           && parameters->options().strip_debug_non_line()
-           && strcmp(".debug_abbrev", name) == 0)
+	   && parameters->options().strip_debug_non_line()
+	   && strcmp(".debug_abbrev", name) == 0)
     {
       os = this->debug_abbrev_ = new Output_reduced_debug_abbrev_section(
-          name, type, flags);
+	  name, type, flags);
       if (this->debug_info_)
-        this->debug_info_->set_abbreviations(this->debug_abbrev_);
+	this->debug_info_->set_abbreviations(this->debug_abbrev_);
     }
   else if ((flags & elfcpp::SHF_ALLOC) == 0
-           && parameters->options().strip_debug_non_line()
-           && strcmp(".debug_info", name) == 0)
+	   && parameters->options().strip_debug_non_line()
+	   && strcmp(".debug_info", name) == 0)
     {
       os = this->debug_info_ = new Output_reduced_debug_info_section(
-          name, type, flags);
+	  name, type, flags);
       if (this->debug_abbrev_)
-        this->debug_info_->set_abbreviations(this->debug_abbrev_);
+	this->debug_info_->set_abbreviations(this->debug_abbrev_);
     }
   else
     {
@@ -1378,24 +1481,28 @@ Layout::make_output_section(const char* name, elfcpp::Elf_Word type,
   bool is_relro_local = false;
   if (!this->script_options_->saw_sections_clause()
       && parameters->options().relro()
-      && type == elfcpp::SHT_PROGBITS
       && (flags & elfcpp::SHF_ALLOC) != 0
       && (flags & elfcpp::SHF_WRITE) != 0)
     {
-      if (strcmp(name, ".data.rel.ro") == 0)
-	is_relro = true;
-      else if (strcmp(name, ".data.rel.ro.local") == 0)
+      if (type == elfcpp::SHT_PROGBITS)
 	{
-	  is_relro = true;
-	  is_relro_local = true;
+	  if ((flags & elfcpp::SHF_TLS) != 0)
+	    is_relro = true;
+	  else if (strcmp(name, ".data.rel.ro") == 0)
+	    is_relro = true;
+	  else if (strcmp(name, ".data.rel.ro.local") == 0)
+	    {
+	      is_relro = true;
+	      is_relro_local = true;
+	    }
+	  else if (strcmp(name, ".ctors") == 0
+		   || strcmp(name, ".dtors") == 0
+		   || strcmp(name, ".jcr") == 0)
+	    is_relro = true;
 	}
       else if (type == elfcpp::SHT_INIT_ARRAY
 	       || type == elfcpp::SHT_FINI_ARRAY
 	       || type == elfcpp::SHT_PREINIT_ARRAY)
-	is_relro = true;
-      else if (strcmp(name, ".ctors") == 0
-	       || strcmp(name, ".dtors") == 0
-	       || strcmp(name, ".jcr") == 0)
 	is_relro = true;
     }
 
@@ -1453,18 +1560,18 @@ Layout::make_output_section(const char* name, elfcpp::Elf_Word type,
       // a minimum size, so we must prevent allocations from the
       // free list that leave a hole smaller than the minimum.
       if (strcmp(name, ".debug_info") == 0)
-        os->set_free_space_fill(new Output_fill_debug_info(false));
+	os->set_free_space_fill(new Output_fill_debug_info(false));
       else if (strcmp(name, ".debug_types") == 0)
-        os->set_free_space_fill(new Output_fill_debug_info(true));
+	os->set_free_space_fill(new Output_fill_debug_info(true));
       else if (strcmp(name, ".debug_line") == 0)
-        os->set_free_space_fill(new Output_fill_debug_line());
+	os->set_free_space_fill(new Output_fill_debug_line());
     }
 
   // If we have already attached the sections to segments, then we
   // need to attach this one now.  This happens for sections created
   // directly by the linker.
   if (this->sections_are_attached_)
-    this->attach_section_to_segment(os);
+    this->attach_section_to_segment(&parameters->target(), os);
 
   return os;
 }
@@ -1541,12 +1648,12 @@ Layout::default_section_order(Output_section* os, bool is_relro_local)
 // seen all the input sections.
 
 void
-Layout::attach_sections_to_segments()
+Layout::attach_sections_to_segments(const Target* target)
 {
   for (Section_list::iterator p = this->section_list_.begin();
        p != this->section_list_.end();
        ++p)
-    this->attach_section_to_segment(*p);
+    this->attach_section_to_segment(target, *p);
 
   this->sections_are_attached_ = true;
 }
@@ -1554,18 +1661,19 @@ Layout::attach_sections_to_segments()
 // Attach an output section to a segment.
 
 void
-Layout::attach_section_to_segment(Output_section* os)
+Layout::attach_section_to_segment(const Target* target, Output_section* os)
 {
   if ((os->flags() & elfcpp::SHF_ALLOC) == 0)
     this->unattached_section_list_.push_back(os);
   else
-    this->attach_allocated_section_to_segment(os);
+    this->attach_allocated_section_to_segment(target, os);
 }
 
 // Attach an allocated output section to a segment.
 
 void
-Layout::attach_allocated_section_to_segment(Output_section* os)
+Layout::attach_allocated_section_to_segment(const Target* target,
+					    Output_section* os)
 {
   elfcpp::Elf_Xword flags = os->flags();
   gold_assert((flags & elfcpp::SHF_ALLOC) != 0);
@@ -1605,9 +1713,9 @@ Layout::attach_allocated_section_to_segment(Output_section* os)
       if (!parameters->options().omagic()
 	  && ((*p)->flags() & elfcpp::PF_W) != (seg_flags & elfcpp::PF_W))
 	continue;
-      if (parameters->options().rosegment()
-          && ((*p)->flags() & elfcpp::PF_X) != (seg_flags & elfcpp::PF_X))
-        continue;
+      if ((target->isolate_execinstr() || parameters->options().rosegment())
+	  && ((*p)->flags() & elfcpp::PF_X) != (seg_flags & elfcpp::PF_X))
+	continue;
       // If -Tbss was specified, we need to separate the data and BSS
       // segments.
       if (parameters->options().user_set_Tbss())
@@ -1637,7 +1745,7 @@ Layout::attach_allocated_section_to_segment(Output_section* os)
   if (p == this->segment_list_.end())
     {
       Output_segment* oseg = this->make_output_segment(elfcpp::PT_LOAD,
-                                                       seg_flags);
+						       seg_flags);
       if (os->is_large_data_section())
 	oseg->set_is_large_data_segment();
       oseg->add_output_section_to_load(this, os, seg_flags);
@@ -1651,24 +1759,24 @@ Layout::attach_allocated_section_to_segment(Output_section* os)
     {
       // See if we already have an equivalent PT_NOTE segment.
       for (p = this->segment_list_.begin();
-           p != segment_list_.end();
-           ++p)
-        {
-          if ((*p)->type() == elfcpp::PT_NOTE
-              && (((*p)->flags() & elfcpp::PF_W)
-                  == (seg_flags & elfcpp::PF_W)))
-            {
-              (*p)->add_output_section_to_nonload(os, seg_flags);
-              break;
-            }
-        }
+	   p != segment_list_.end();
+	   ++p)
+	{
+	  if ((*p)->type() == elfcpp::PT_NOTE
+	      && (((*p)->flags() & elfcpp::PF_W)
+		  == (seg_flags & elfcpp::PF_W)))
+	    {
+	      (*p)->add_output_section_to_nonload(os, seg_flags);
+	      break;
+	    }
+	}
 
       if (p == this->segment_list_.end())
-        {
-          Output_segment* oseg = this->make_output_segment(elfcpp::PT_NOTE,
-                                                           seg_flags);
-          oseg->add_output_section_to_nonload(os, seg_flags);
-        }
+	{
+	  Output_segment* oseg = this->make_output_segment(elfcpp::PT_NOTE,
+							   seg_flags);
+	  oseg->add_output_section_to_nonload(os, seg_flags);
+	}
     }
 
   // If we see a loadable SHF_TLS section, we create a PT_TLS
@@ -1839,9 +1947,9 @@ Layout::define_section_symbols(Symbol_table* symtab)
 	{
 	  const std::string name_string(name);
 	  const std::string start_name(cident_section_start_prefix
-                                       + name_string);
+				       + name_string);
 	  const std::string stop_name(cident_section_stop_prefix
-                                      + name_string);
+				      + name_string);
 
 	  symtab->define_in_output_data(start_name.c_str(),
 					NULL, // version
@@ -1907,7 +2015,7 @@ Layout::define_group_signatures(Symbol_table* symtab)
 // necessary.
 
 Output_segment*
-Layout::find_first_load_seg()
+Layout::find_first_load_seg(const Target* target)
 {
   Output_segment* best = NULL;
   for (Segment_list::const_iterator p = this->segment_list_.begin();
@@ -1917,11 +2025,13 @@ Layout::find_first_load_seg()
       if ((*p)->type() == elfcpp::PT_LOAD
 	  && ((*p)->flags() & elfcpp::PF_R) != 0
 	  && (parameters->options().omagic()
-	      || ((*p)->flags() & elfcpp::PF_W) == 0))
-        {
-          if (best == NULL || this->segment_precedes(*p, best))
-            best = *p;
-        }
+	      || ((*p)->flags() & elfcpp::PF_W) == 0)
+	  && (!target->isolate_execinstr()
+	      || ((*p)->flags() & elfcpp::PF_X) == 0))
+	{
+	  if (best == NULL || this->segment_precedes(*p, best))
+	    best = *p;
+	}
     }
   if (best != NULL)
     return best;
@@ -1979,10 +2089,10 @@ Layout::restore_segments(const Segment_states* segment_states)
 	    this->relro_segment_ = segment;
 
 	  ++list_iter;
-	} 
+	}
       else
 	{
-	  list_iter = this->segment_list_.erase(list_iter); 
+	  list_iter = this->segment_list_.erase(list_iter);
 	  // This is a segment created during section layout.  It should be
 	  // safe to remove it since we should have removed all pointers to it.
 	  delete segment;
@@ -2015,7 +2125,7 @@ Layout::clean_up_after_relaxation()
 
       (*p)->reset_address_and_file_offset();
     }
-  
+
   // Reset special output object address and file offsets.
   for (Data_list::iterator p = this->special_output_list_.begin();
        p != this->special_output_list_.end();
@@ -2029,7 +2139,7 @@ Layout::clean_up_after_relaxation()
        p != this->script_output_section_data_list_.end();
        ++p)
     delete *p;
-  this->script_output_section_data_list_.clear(); 
+  this->script_output_section_data_list_.clear();
 }
 
 // Prepare for relaxation.
@@ -2052,7 +2162,7 @@ Layout::prepare_for_relaxation()
 
   if (is_debugging_enabled(DEBUG_RELAXATION))
     this->relaxation_debug_check_->check_output_data_for_reset_values(
-        this->section_list_, this->special_output_list_);
+	this->section_list_, this->special_output_list_);
 
   // Also enable recording of output section data from scripts.
   this->record_output_section_data_from_script_ = true;
@@ -2061,7 +2171,7 @@ Layout::prepare_for_relaxation()
 // Relaxation loop body:  If target has no relaxation, this runs only once
 // Otherwise, the target relaxation hook is called at the end of
 // each iteration.  If the hook returns true, it means re-layout of
-// section is required.  
+// section is required.
 //
 // The number of segments created by a linking script without a PHDRS
 // clause may be affected by section sizes and alignments.  There is
@@ -2071,8 +2181,8 @@ Layout::prepare_for_relaxation()
 // layout.  In order to be able to restart the section layout, we keep
 // a copy of the segment list right before the relaxation loop and use
 // that to restore the segments.
-// 
-// PASS is the current relaxation pass number. 
+//
+// PASS is the current relaxation pass number.
 // SYMTAB is a symbol table.
 // PLOAD_SEG is the address of a pointer for the load segment.
 // PHDR_SEG is a pointer to the PHDR segment.
@@ -2104,7 +2214,7 @@ Layout::relaxation_loop_body(
   else if (parameters->options().relocatable())
     load_seg = NULL;
   else
-    load_seg = this->find_first_load_seg();
+    load_seg = this->find_first_load_seg(target);
 
   if (parameters->options().oformat_enum()
       != General_options::OBJECT_FORMAT_ELF)
@@ -2161,9 +2271,9 @@ Layout::relaxation_loop_body(
 	  load_seg->add_initial_output_data(z);
 	}
       if (load_seg != NULL)
-        load_seg->add_initial_output_data(segment_headers);
+	load_seg->add_initial_output_data(segment_headers);
       if (phdr_seg != NULL)
-        phdr_seg->add_initial_output_data(segment_headers);
+	phdr_seg->add_initial_output_data(segment_headers);
     }
 
   // Lay out the file header.
@@ -2224,11 +2334,11 @@ Layout::find_section_order_index(const std::string& section_name)
        ++it)
     {
        if (fnmatch((*it).c_str(), section_name.c_str(), FNM_NOESCAPE) == 0)
-         {
-           map_it = this->input_section_position_.find(*it);
-           gold_assert(map_it != this->input_section_position_.end());
-           return map_it->second;
-         }
+	 {
+	   map_it = this->input_section_position_.find(*it);
+	   gold_assert(map_it != this->input_section_position_.end());
+	   return map_it->second;
+	 }
     }
   return 0;
 }
@@ -2246,7 +2356,7 @@ Layout::read_layout_from_file()
   in.open(filename);
   if (!in)
     gold_fatal(_("unable to open --section-ordering-file file %s: %s"),
-               filename, strerror(errno));
+	       filename, strerror(errno));
 
   std::getline(in, line);   // this chops off the trailing \n, if any
   unsigned int position = 1;
@@ -2255,17 +2365,17 @@ Layout::read_layout_from_file()
   while (in)
     {
       if (!line.empty() && line[line.length() - 1] == '\r')   // Windows
-        line.resize(line.length() - 1);
+	line.resize(line.length() - 1);
       // Ignore comments, beginning with '#'
       if (line[0] == '#')
-        {
-          std::getline(in, line);
-          continue;
-        }
+	{
+	  std::getline(in, line);
+	  continue;
+	}
       this->input_section_position_[line] = position;
       // Store all glob patterns in a vector.
       if (is_wildcard_string(line.c_str()))
-        this->input_section_glob_.push_back(line);
+	this->input_section_glob_.push_back(line);
       position++;
       std::getline(in, line);
     }
@@ -2329,7 +2439,7 @@ Layout::finalize(const Input_objects* input_objects, Symbol_table* symtab,
       std::vector<Symbol*> dynamic_symbols;
       unsigned int local_dynamic_count;
       Versions versions(*this->script_options()->version_script_info(),
-                        &this->dynpool_);
+			&this->dynpool_);
       this->create_dynamic_symtab(input_objects, symtab, &dynstr,
 				  &local_dynamic_count, &dynamic_symbols,
 				  &versions);
@@ -2340,7 +2450,7 @@ Layout::finalize(const Input_objects* input_objects, Symbol_table* symtab,
       if ((!parameters->options().shared()
 	   || parameters->options().dynamic_linker() != NULL)
 	  && this->interp_segment_ == NULL)
-        this->create_interp(target);
+	this->create_interp(target);
 
       // Finish the .dynamic section to hold the dynamic data, and put
       // it in a PT_DYNAMIC segment.
@@ -2359,7 +2469,7 @@ Layout::finalize(const Input_objects* input_objects, Symbol_table* symtab,
       // after we call create_version_sections.
       this->set_dynamic_symbol_size(symtab);
     }
-  
+
   // Create segment headers.
   Output_segment_headers* segment_headers =
     (parameters->options().relocatable()
@@ -2378,7 +2488,7 @@ Layout::finalize(const Input_objects* input_objects, Symbol_table* symtab,
   // a linker script.
   if (this->script_options_->saw_sections_clause())
     this->place_orphan_sections_in_script();
-  
+
   Output_segment* load_seg;
   off_t off;
   unsigned int shndx;
@@ -2387,7 +2497,7 @@ Layout::finalize(const Input_objects* input_objects, Symbol_table* symtab,
   // Take a snapshot of the section layout as needed.
   if (target->may_relax())
     this->prepare_for_relaxation();
-  
+
   // Run the relaxation loop to lay out sections.
   do
     {
@@ -2398,6 +2508,16 @@ Layout::finalize(const Input_objects* input_objects, Symbol_table* symtab,
     }
   while (target->may_relax()
 	 && target->relax(pass, input_objects, symtab, this, task));
+
+  // If there is a load segment that contains the file and program headers,
+  // provide a symbol __ehdr_start pointing there.
+  // A program can use this to examine itself robustly.
+  if (load_seg != NULL)
+    symtab->define_in_output_segment("__ehdr_start", NULL,
+				     Symbol_table::PREDEFINED, load_seg, 0, 0,
+				     elfcpp::STT_NOTYPE, elfcpp::STB_GLOBAL,
+				     elfcpp::STV_DEFAULT, 0,
+				     Symbol::SEGMENT_START, true);
 
   // Set the file offsets of all the non-data sections we've seen so
   // far which don't have to wait for the input sections.  We need
@@ -2829,8 +2949,8 @@ Layout::create_incremental_info_sections(Symbol_table* symtab)
   const char* incremental_strtab_name =
     this->namepool_.add(".gnu_incremental_strtab", false, NULL);
   Output_section* incremental_strtab_os = this->make_output_section(incremental_strtab_name,
-                                                        elfcpp::SHT_STRTAB, 0,
-                                                        ORDER_INVALID, false);
+							elfcpp::SHT_STRTAB, 0,
+							ORDER_INVALID, false);
   Output_data_strtab* strtab_data =
       new Output_data_strtab(incr->get_stringpool());
   incremental_strtab_os->add_output_section_data(strtab_data);
@@ -2975,8 +3095,9 @@ Layout::segment_precedes(const Output_segment* seg1,
 
   // We shouldn't get here--we shouldn't create segments which we
   // can't distinguish.  Unless of course we are using a weird linker
-  // script.
-  gold_assert(this->script_options_->saw_phdrs_clause());
+  // script or overlapping --section-start options.
+  gold_assert(this->script_options_->saw_phdrs_clause()
+	      || parameters->options().any_section_start());
   return false;
 }
 
@@ -3009,13 +3130,15 @@ Layout::set_segment_offsets(const Target* target, Output_segment* load_seg,
 
   // Find the PT_LOAD segments, and set their addresses and offsets
   // and their section's addresses and offsets.
-  uint64_t addr;
+  uint64_t start_addr;
   if (parameters->options().user_set_Ttext())
-    addr = parameters->options().Ttext();
+    start_addr = parameters->options().Ttext();
   else if (parameters->options().output_is_position_independent())
-    addr = 0;
+    start_addr = 0;
   else
-    addr = target->default_text_segment_address();
+    start_addr = target->default_text_segment_address();
+
+  uint64_t addr = start_addr;
   off_t off = 0;
 
   // If LOAD_SEG is NULL, then the file header and segment headers
@@ -3040,15 +3163,39 @@ Layout::set_segment_offsets(const Target* target, Output_segment* load_seg,
   const bool check_sections = parameters->options().check_sections();
   Output_segment* last_load_segment = NULL;
 
+  unsigned int shndx_begin = *pshndx;
+  unsigned int shndx_load_seg = *pshndx;
+
   for (Segment_list::iterator p = this->segment_list_.begin();
        p != this->segment_list_.end();
        ++p)
     {
       if ((*p)->type() == elfcpp::PT_LOAD)
 	{
-	  if (load_seg != NULL && load_seg != *p)
-	    gold_unreachable();
-	  load_seg = NULL;
+	  if (target->isolate_execinstr())
+	    {
+	      // When we hit the segment that should contain the
+	      // file headers, reset the file offset so we place
+	      // it and subsequent segments appropriately.
+	      // We'll fix up the preceding segments below.
+	      if (load_seg == *p)
+		{
+		  if (off == 0)
+		    load_seg = NULL;
+		  else
+		    {
+		      off = 0;
+		      shndx_load_seg = *pshndx;
+		    }
+		}
+	    }
+	  else
+	    {
+	      // Verify that the file headers fall into the first segment.
+	      if (load_seg != NULL && load_seg != *p)
+		gold_unreachable();
+	      load_seg = NULL;
+	    }
 
 	  bool are_addresses_set = (*p)->are_addresses_set();
 	  if (are_addresses_set)
@@ -3100,16 +3247,37 @@ Layout::set_segment_offsets(const Target* target, Output_segment* load_seg,
 	      addr = align_address(addr, (*p)->maximum_alignment());
 	      aligned_addr = addr;
 
-	      if ((addr & (abi_pagesize - 1)) != 0)
-                addr = addr + abi_pagesize;
+	      if (load_seg == *p)
+		{
+		  // This is the segment that will contain the file
+		  // headers, so its offset will have to be exactly zero.
+		  gold_assert(orig_off == 0);
 
-	      off = orig_off + ((addr - orig_addr) & (abi_pagesize - 1));
+		  // If the target wants a fixed minimum distance from the
+		  // text segment to the read-only segment, move up now.
+		  uint64_t min_addr = start_addr + target->rosegment_gap();
+		  if (addr < min_addr)
+		    addr = min_addr;
+
+		  // But this is not the first segment!  To make its
+		  // address congruent with its offset, that address better
+		  // be aligned to the ABI-mandated page size.
+		  addr = align_address(addr, abi_pagesize);
+		  aligned_addr = addr;
+		}
+	      else
+		{
+		  if ((addr & (abi_pagesize - 1)) != 0)
+		    addr = addr + abi_pagesize;
+
+		  off = orig_off + ((addr - orig_addr) & (abi_pagesize - 1));
+		}
 	    }
 
 	  if (!parameters->options().nmagic()
 	      && !parameters->options().omagic())
 	    off = align_file_offset(off, addr, abi_pagesize);
-	  else if (load_seg == NULL)
+	  else
 	    {
 	      // This is -N or -n with a section script which prevents
 	      // us from using a load segment.  We need to ensure that
@@ -3128,7 +3296,7 @@ Layout::set_segment_offsets(const Target* target, Output_segment* load_seg,
 	  uint64_t new_addr = (*p)->set_section_addresses(this, false, addr,
 							  &increase_relro,
 							  &has_relro,
-                                                          &off, pshndx);
+							  &off, pshndx);
 
 	  // Now that we know the size of this segment, we may be able
 	  // to save a page in memory, at the cost of wasting some
@@ -3167,7 +3335,7 @@ Layout::set_segment_offsets(const Target* target, Output_segment* load_seg,
 		  new_addr = (*p)->set_section_addresses(this, true, addr,
 							 &increase_relro,
 							 &has_relro,
-                                                         &off, pshndx);
+							 &off, pshndx);
 		}
 	    }
 
@@ -3192,6 +3360,38 @@ Layout::set_segment_offsets(const Target* target, Output_segment* load_seg,
 	    }
 	  last_load_segment = *p;
 	}
+    }
+
+  if (load_seg != NULL && target->isolate_execinstr())
+    {
+      // Process the early segments again, setting their file offsets
+      // so they land after the segments starting at LOAD_SEG.
+      off = align_file_offset(off, 0, target->abi_pagesize());
+
+      for (Segment_list::iterator p = this->segment_list_.begin();
+	   *p != load_seg;
+	   ++p)
+	{
+	  if ((*p)->type() == elfcpp::PT_LOAD)
+	    {
+	      // We repeat the whole job of assigning addresses and
+	      // offsets, but we really only want to change the offsets and
+	      // must ensure that the addresses all come out the same as
+	      // they did the first time through.
+	      bool has_relro = false;
+	      const uint64_t old_addr = (*p)->vaddr();
+	      const uint64_t old_end = old_addr + (*p)->memsz();
+	      uint64_t new_addr = (*p)->set_section_addresses(this, true,
+							      old_addr,
+							      &increase_relro,
+							      &has_relro,
+							      &off,
+							      &shndx_begin);
+	      gold_assert(new_addr == old_end);
+	    }
+	}
+
+      gold_assert(shndx_begin == shndx_load_seg);
     }
 
   // Handle the non-PT_LOAD segments, setting their offsets from their
@@ -3281,16 +3481,16 @@ Layout::set_section_offsets(off_t off, Layout::Section_offset_pass pass)
 	}
 
       if (pass == BEFORE_INPUT_SECTIONS_PASS
-          && (*p)->after_input_sections())
-        continue;
+	  && (*p)->after_input_sections())
+	continue;
       else if (pass == POSTPROCESSING_SECTIONS_PASS
-               && (!(*p)->after_input_sections()
-                   || (*p)->type() == elfcpp::SHT_STRTAB))
-        continue;
+	       && (!(*p)->after_input_sections()
+		   || (*p)->type() == elfcpp::SHT_STRTAB))
+	continue;
       else if (pass == STRTAB_AFTER_POSTPROCESSING_SECTIONS_PASS
-               && (!(*p)->after_input_sections()
-                   || (*p)->type() != elfcpp::SHT_STRTAB))
-        continue;
+	       && (!(*p)->after_input_sections()
+		   || (*p)->type() != elfcpp::SHT_STRTAB))
+	continue;
 
       if (!parameters->incremental_update())
 	{
@@ -3307,7 +3507,7 @@ Layout::set_section_offsets(off_t off, Layout::Section_offset_pass pass)
 	  if (off == -1)
 	    {
 	      if (is_debugging_enabled(DEBUG_INCREMENTAL))
-	        this->free_list_.dump();
+		this->free_list_.dump();
 	      gold_assert((*p)->output_section() != NULL);
 	      gold_fallback(_("out of patch space for section %s; "
 			      "relink with --incremental-full"),
@@ -3332,7 +3532,7 @@ Layout::set_section_offsets(off_t off, Layout::Section_offset_pass pass)
 
       off += (*p)->data_size();
       if (off > maxoff)
-        maxoff = off;
+	maxoff = off;
 
       // At this point the name must be set.
       if (pass != STRTAB_AFTER_POSTPROCESSING_SECTIONS_PASS)
@@ -3480,7 +3680,7 @@ Layout::create_symtab_sections(const Input_objects* input_objects,
        ++p)
     {
       unsigned int index = (*p)->finalize_local_symbols(local_symbol_index,
-                                                        off, symtab);
+							off, symtab);
       off += (index - local_symbol_index) * symsize;
       local_symbol_index = index;
     }
@@ -3574,7 +3774,7 @@ Layout::create_symtab_sections(const Input_objects* input_objects,
       else
 	{
 	  symtab_off = this->allocate(off, align, *poff);
-          if (off == -1)
+	  if (off == -1)
 	    gold_fallback(_("out of patch space for symbol table; "
 			    "relink with --incremental-full"));
 	  gold_debug(DEBUG_INCREMENTAL,
@@ -3677,7 +3877,7 @@ Layout::allocated_output_section_count() const
 
 void
 Layout::create_dynamic_symtab(const Input_objects* input_objects,
-                              Symbol_table* symtab,
+			      Symbol_table* symtab,
 			      Output_section** pdynstr,
 			      unsigned int* plocal_dynamic_count,
 			      std::vector<Symbol*>* pdynamic_symbols,
@@ -4256,45 +4456,45 @@ Layout::finish_dynamic_section(const Input_objects* input_objects,
       {
       case elfcpp::SHT_FINI_ARRAY:
 	odyn->add_section_address(elfcpp::DT_FINI_ARRAY, *p);
-	odyn->add_section_size(elfcpp::DT_FINI_ARRAYSZ, *p); 
+	odyn->add_section_size(elfcpp::DT_FINI_ARRAYSZ, *p);
 	break;
       case elfcpp::SHT_INIT_ARRAY:
 	odyn->add_section_address(elfcpp::DT_INIT_ARRAY, *p);
-	odyn->add_section_size(elfcpp::DT_INIT_ARRAYSZ, *p); 
+	odyn->add_section_size(elfcpp::DT_INIT_ARRAYSZ, *p);
 	break;
       case elfcpp::SHT_PREINIT_ARRAY:
 	odyn->add_section_address(elfcpp::DT_PREINIT_ARRAY, *p);
-	odyn->add_section_size(elfcpp::DT_PREINIT_ARRAYSZ, *p); 
+	odyn->add_section_size(elfcpp::DT_PREINIT_ARRAYSZ, *p);
 	break;
       default:
 	break;
       }
-  
+
   // Add a DT_RPATH entry if needed.
   const General_options::Dir_list& rpath(parameters->options().rpath());
   if (!rpath.empty())
     {
       std::string rpath_val;
       for (General_options::Dir_list::const_iterator p = rpath.begin();
-           p != rpath.end();
-           ++p)
-        {
-          if (rpath_val.empty())
-            rpath_val = p->name();
-          else
-            {
-              // Eliminate duplicates.
-              General_options::Dir_list::const_iterator q;
-              for (q = rpath.begin(); q != p; ++q)
+	   p != rpath.end();
+	   ++p)
+	{
+	  if (rpath_val.empty())
+	    rpath_val = p->name();
+	  else
+	    {
+	      // Eliminate duplicates.
+	      General_options::Dir_list::const_iterator q;
+	      for (q = rpath.begin(); q != p; ++q)
 		if (q->name() == p->name())
-                  break;
-              if (q == p)
-                {
-                  rpath_val += ':';
-                  rpath_val += p->name();
-                }
-            }
-        }
+		  break;
+	      if (q == p)
+		{
+		  rpath_val += ':';
+		  rpath_val += p->name();
+		}
+	    }
+	}
 
       odyn->add_string(elfcpp::DT_RPATH, rpath_val);
       if (parameters->options().enable_new_dtags())
@@ -4306,17 +4506,17 @@ Layout::finish_dynamic_section(const Input_objects* input_objects,
   if (!this->script_options_->saw_sections_clause())
     {
       for (Segment_list::const_iterator p = this->segment_list_.begin();
-           p != this->segment_list_.end();
-           ++p)
-        {
-          if ((*p)->type() == elfcpp::PT_LOAD
+	   p != this->segment_list_.end();
+	   ++p)
+	{
+	  if ((*p)->type() == elfcpp::PT_LOAD
 	      && ((*p)->flags() & elfcpp::PF_W) == 0
-              && (*p)->has_dynamic_reloc())
-            {
-              have_textrel = true;
-              break;
-            }
-        }
+	      && (*p)->has_dynamic_reloc())
+	    {
+	      have_textrel = true;
+	      break;
+	    }
+	}
     }
   else
     {
@@ -4325,17 +4525,17 @@ Layout::finish_dynamic_section(const Input_objects* input_objects,
       // relocations.  If those sections wind up in writable segments,
       // then we have created an unnecessary DT_TEXTREL entry.
       for (Section_list::const_iterator p = this->section_list_.begin();
-           p != this->section_list_.end();
-           ++p)
-        {
-          if (((*p)->flags() & elfcpp::SHF_ALLOC) != 0
-              && ((*p)->flags() & elfcpp::SHF_WRITE) == 0
-              && (*p)->has_dynamic_reloc())
-            {
-              have_textrel = true;
-              break;
-            }
-        }
+	   p != this->section_list_.end();
+	   ++p)
+	{
+	  if (((*p)->flags() & elfcpp::SHF_ALLOC) != 0
+	      && ((*p)->flags() & elfcpp::SHF_WRITE) == 0
+	      && (*p)->has_dynamic_reloc())
+	    {
+	      have_textrel = true;
+	      break;
+	    }
+	}
     }
 
   if (parameters->options().filter() != NULL)
@@ -4435,12 +4635,15 @@ Layout::set_dynamic_symbol_size(const Symbol_table* symtab)
 // based on the GNU linker default ELF linker script.
 
 #define MAPPING_INIT(f, t) { f, sizeof(f) - 1, t, sizeof(t) - 1 }
+#define MAPPING_INIT_EXACT(f, t) { f, 0, t, sizeof(t) - 1 }
 const Layout::Section_name_mapping Layout::section_name_mapping[] =
 {
   MAPPING_INIT(".text.", ".text"),
   MAPPING_INIT(".rodata.", ".rodata"),
-  MAPPING_INIT(".data.rel.ro.local", ".data.rel.ro.local"),
-  MAPPING_INIT(".data.rel.ro", ".data.rel.ro"),
+  MAPPING_INIT(".data.rel.ro.local.", ".data.rel.ro.local"),
+  MAPPING_INIT_EXACT(".data.rel.ro.local", ".data.rel.ro.local"),
+  MAPPING_INIT(".data.rel.ro.", ".data.rel.ro"),
+  MAPPING_INIT_EXACT(".data.rel.ro", ".data.rel.ro"),
   MAPPING_INIT(".data.", ".data"),
   MAPPING_INIT(".bss.", ".bss"),
   MAPPING_INIT(".tdata.", ".tdata"),
@@ -4479,6 +4682,7 @@ const Layout::Section_name_mapping Layout::section_name_mapping[] =
   MAPPING_INIT(".gnu.linkonce.armexidx.", ".ARM.exidx"),
 };
 #undef MAPPING_INIT
+#undef MAPPING_INIT_EXACT
 
 const int Layout::section_name_mapping_count =
   (sizeof(Layout::section_name_mapping)
@@ -4530,10 +4734,21 @@ Layout::output_section_name(const Relobj* relobj, const char* name,
   const Section_name_mapping* psnm = section_name_mapping;
   for (int i = 0; i < section_name_mapping_count; ++i, ++psnm)
     {
-      if (strncmp(name, psnm->from, psnm->fromlen) == 0)
+      if (psnm->fromlen > 0)
 	{
-	  *plen = psnm->tolen;
-	  return psnm->to;
+	  if (strncmp(name, psnm->from, psnm->fromlen) == 0)
+	    {
+	      *plen = psnm->tolen;
+	      return psnm->to;
+	    }
+	}
+      else
+	{
+	  if (strcmp(name, psnm->from) == 0)
+	    {
+	      *plen = psnm->tolen;
+	      return psnm->to;
+	    }
 	}
     }
 
@@ -4607,7 +4822,7 @@ Layout::find_or_add_kept_section(const std::string& name,
 				 unsigned int shndx,
 				 bool is_comdat,
 				 bool is_group_name,
-                                 Kept_section** kept_section)
+				 Kept_section** kept_section)
 {
   // It's normal to see a couple of entries here, for the x86 thunk
   // sections.  If we see more than a few, we're linking a C++
@@ -4646,12 +4861,12 @@ Layout::find_or_add_kept_section(const std::string& name,
       // If the kept group is from a plugin object, and we're in the
       // replacement phase, accept the new one as a replacement.
       if (ins.first->second.object() == NULL
-          && parameters->options().plugins()->in_replacement_phase())
-        {
+	  && parameters->options().plugins()->in_replacement_phase())
+	{
 	  ins.first->second.set_object(object);
 	  ins.first->second.set_shndx(shndx);
-          return true;
-        }
+	  return true;
+	}
       return false;
     }
   else if (is_group_name)
@@ -5291,6 +5506,54 @@ Layout::layout_eh_frame<64, true>(Sized_relobj_file<64, true>* object,
 				  unsigned int reloc_shndx,
 				  unsigned int reloc_type,
 				  off_t* off);
+#endif
+
+#ifdef HAVE_TARGET_32_LITTLE
+template
+void
+Layout::add_to_gdb_index(bool is_type_unit,
+			 Sized_relobj<32, false>* object,
+			 const unsigned char* symbols,
+			 off_t symbols_size,
+			 unsigned int shndx,
+			 unsigned int reloc_shndx,
+			 unsigned int reloc_type);
+#endif
+
+#ifdef HAVE_TARGET_32_BIG
+template
+void
+Layout::add_to_gdb_index(bool is_type_unit,
+			 Sized_relobj<32, true>* object,
+			 const unsigned char* symbols,
+			 off_t symbols_size,
+			 unsigned int shndx,
+			 unsigned int reloc_shndx,
+			 unsigned int reloc_type);
+#endif
+
+#ifdef HAVE_TARGET_64_LITTLE
+template
+void
+Layout::add_to_gdb_index(bool is_type_unit,
+			 Sized_relobj<64, false>* object,
+			 const unsigned char* symbols,
+			 off_t symbols_size,
+			 unsigned int shndx,
+			 unsigned int reloc_shndx,
+			 unsigned int reloc_type);
+#endif
+
+#ifdef HAVE_TARGET_64_BIG
+template
+void
+Layout::add_to_gdb_index(bool is_type_unit,
+			 Sized_relobj<64, true>* object,
+			 const unsigned char* symbols,
+			 off_t symbols_size,
+			 unsigned int shndx,
+			 unsigned int reloc_shndx,
+			 unsigned int reloc_type);
 #endif
 
 } // End namespace gold.

@@ -1,6 +1,6 @@
 /* This file is tc-arm.h
    Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2004, 2005, 2006, 2007, 2008, 2009  Free Software Foundation, Inc.
+   2004, 2005, 2006, 2007, 2008, 2009, 2012  Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rwe@pegasus.esprit.ec.org)
 	Modified by David Taylor (dtaylor@armltd.co.uk)
 
@@ -79,7 +79,16 @@ struct fix;
 # define TARGET_FORMAT	elf32_arm_target_format ()
 #endif
 
+/* We support double slash line-comments for compatibility with the ARM AArch64 Assembler.  */
+#define DOUBLESLASH_LINE_COMMENTS
+
+#define tc_symbol_chars arm_symbol_chars
+extern const char arm_symbol_chars[];
+
 #define TC_FORCE_RELOCATION(FIX) arm_force_relocation (FIX)
+
+extern unsigned int arm_frag_max_var (struct frag *);
+#define md_frag_max_var arm_frag_max_var
 
 #define md_relax_frag(segment, fragp, stretch) \
   arm_relax_frag (segment, fragp, stretch)
@@ -251,6 +260,8 @@ struct current_it
   int block_length;
   char *insn;
   int state_handled;
+  int warn_deprecated;
+  int insn_cond;
 };
 
 #ifdef OBJ_ELF

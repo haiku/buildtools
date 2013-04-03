@@ -1,7 +1,7 @@
 #source: tlslib.s
 #source: tlstoc.s
 #as: -a64
-#ld: -melf64ppc
+#ld: 
 #readelf: -WSsrl
 #target: powerpc64*-*-*
 
@@ -65,10 +65,10 @@ Symbol table '\.dynsym' contains [0-9]+ entries:
 .* NOTYPE +LOCAL +DEFAULT +UND 
 .* TLS +GLOBAL +DEFAULT +UND gd
 .* TLS +GLOBAL +DEFAULT +UND ld
-.* NOTYPE +GLOBAL +DEFAULT +ABS __bss_start
+.* NOTYPE +GLOBAL +DEFAULT +12 __bss_start
 .* FUNC +GLOBAL +DEFAULT +UND __tls_get_addr_opt
-.* NOTYPE +GLOBAL +DEFAULT +ABS _edata
-.* NOTYPE +GLOBAL +DEFAULT +ABS _end
+.* NOTYPE +GLOBAL +DEFAULT +11 _edata
+.* NOTYPE +GLOBAL +DEFAULT +12 _end
 
 Symbol table '\.symtab' contains [0-9]+ entries:
  +Num: +Value +Size +Type +Bind +Vis +Ndx +Name
@@ -85,6 +85,7 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* SECTION +LOCAL +DEFAULT +10 
 .* SECTION +LOCAL +DEFAULT +11 
 .* SECTION +LOCAL +DEFAULT +12 
+.* FILE +LOCAL +DEFAULT +ABS .*
 .* TLS +LOCAL +DEFAULT +8 gd4
 .* TLS +LOCAL +DEFAULT +8 ld4
 .* TLS +LOCAL +DEFAULT +8 ld5
@@ -93,10 +94,11 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* TLS +LOCAL +DEFAULT +8 le4
 .* TLS +LOCAL +DEFAULT +8 le5
 .* NOTYPE +LOCAL +DEFAULT +11 \.Lie0
+.* (FUNC|NOTYPE) +LOCAL +DEFAULT +UND \.__tls_get_addr(|_opt)
+.* FILE +LOCAL +DEFAULT +ABS .*
 .* OBJECT +LOCAL +DEFAULT +10 _DYNAMIC
-.* (NOTYPE +LOCAL +DEFAULT +7 00000010\.plt_call\.__tls_get_addr(|_opt)\+0|(FUNC|NOTYPE) +LOCAL +DEFAULT +UND \.__tls_get_addr(|_opt))
-.* (NOTYPE +LOCAL +DEFAULT +7 __glink_PLTresolve|NOTYPE +LOCAL +DEFAULT +7 00000010\.plt_call\.__tls_get_addr(|_opt)\+0)
-.* ((FUNC|NOTYPE) +LOCAL +DEFAULT +UND \.__tls_get_addr(|_opt)|NOTYPE +LOCAL +DEFAULT +7 __glink_PLTresolve)
+.* NOTYPE +LOCAL +DEFAULT +7 00000010\.plt_call\.__tls_get_addr(|_opt)\+0
+.* NOTYPE +LOCAL +DEFAULT +7 __glink_PLTresolve
 .* TLS +GLOBAL +DEFAULT +UND gd
 .* TLS +GLOBAL +DEFAULT +9 le0
 .* TLS +GLOBAL +DEFAULT +9 ld0
@@ -105,9 +107,9 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* NOTYPE +GLOBAL +DEFAULT +7 _start
 .* TLS +GLOBAL +DEFAULT +9 ld2
 .* TLS +GLOBAL +DEFAULT +9 ld1
-.* NOTYPE +GLOBAL +DEFAULT +ABS __bss_start
+.* NOTYPE +GLOBAL +DEFAULT +12 __bss_start
 .* FUNC +GLOBAL +DEFAULT +UND __tls_get_addr_opt
-.* NOTYPE +GLOBAL +DEFAULT +ABS _edata
-.* NOTYPE +GLOBAL +DEFAULT +ABS _end
+.* NOTYPE +GLOBAL +DEFAULT +11 _edata
+.* NOTYPE +GLOBAL +DEFAULT +12 _end
 .* TLS +GLOBAL +DEFAULT +9 gd0
 .* TLS +GLOBAL +DEFAULT +9 ie0

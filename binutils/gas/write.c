@@ -1,7 +1,7 @@
 /* write.c - emit .o file
    Copyright 1986, 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
    1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010, 2011 Free Software Foundation, Inc.
+   2010, 2011, 2012 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -151,7 +151,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 		  symbolS *sub_symbol,	/* X_op_symbol.  */
 		  offsetT offset,	/* X_add_number.  */
 		  int pcrel,		/* TRUE if PC-relative relocation.  */
-		  RELOC_ENUM r_type ATTRIBUTE_UNUSED /* Relocation type.  */,
+		  RELOC_ENUM r_type	/* Relocation type.  */,
 		  int at_beginning)	/* Add to the start of the list?  */
 {
   fixS *fixP;
@@ -406,8 +406,8 @@ chain_frchains_together_1 (segT section, struct frchain *frchp)
 	  prev_fix = frchp->fix_tail;
 	}
     }
-  gas_assert (prev_frag->fr_type != 0);
-  gas_assert (prev_frag != &dummy);
+  gas_assert (prev_frag != &dummy
+	      && prev_frag->fr_type != 0);
   prev_frag->fr_next = 0;
   return prev_frag;
 }
@@ -1019,6 +1019,10 @@ fixup_segment (fixS *fixP, segT this_segment)
 			      S_GET_NAME (fixP->fx_subsy),
 			      segment_name (sub_symbol_segment));
 	    }
+	  else if (sub_symbol_segment != undefined_section
+		   && ! bfd_is_com_section (sub_symbol_segment)
+		   && MD_APPLY_SYM_VALUE (fixP))
+	    add_number -= S_GET_VALUE (fixP->fx_subsy);
 	}
 
       if (fixP->fx_addsy)
@@ -1767,6 +1771,10 @@ write_object_file (void)
   fragS *fragP;			/* Track along all frags.  */
 #endif
 
+#ifdef md_pre_output_hook
+  md_pre_output_hook;
+#endif
+
   /* Do we really want to write it?  */
   {
     int n_warns, n_errs;
@@ -1789,6 +1797,10 @@ write_object_file (void)
 		    n_warns, n_warns == 1 ? "" : "s");
       }
   }
+
+#ifdef md_pre_relax_hook
+  md_pre_relax_hook;
+#endif
 
   /* From now on, we don't care about sub-segments.  Build one frag chain
      for each segment. Linked thru fr_next.  */

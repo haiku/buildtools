@@ -111,18 +111,6 @@ extern "C" void *gold_mremap(void *, size_t, size_t, int);
 # define MREMAP_MAYMOVE 1
 #endif
 
-#ifndef HAVE_POSIX_FALLOCATE
-// A dummy, non general, version of posix_fallocate.  Here we just set
-// the file size and hope that there is enough disk space.  FIXME: We
-// could allocate disk space by walking block by block and writing a
-// zero byte into each block.
-static int
-posix_fallocate(int o, off_t offset, off_t len)
-{
-  return ftruncate(o, offset + len);
-}
-#endif // !defined(HAVE_POSIX_FALLOCATE)
-
 // Mingw does not have S_ISLNK.
 #ifndef S_ISLNK
 # define S_ISLNK(mode) 0
@@ -130,6 +118,27 @@ posix_fallocate(int o, off_t offset, off_t len)
 
 namespace gold
 {
+
+// A wrapper around posix_fallocate.  If we don't have posix_fallocate,
+// or the --no-posix-fallocate option is set, we try the fallocate
+// system call directly.  If that fails, we use ftruncate to set
+// the file size and hope that there is enough disk space.
+
+static int
+gold_fallocate(int o, off_t offset, off_t len)
+{
+#ifdef HAVE_POSIX_FALLOCATE
+  if (parameters->options().posix_fallocate())
+    return ::posix_fallocate(o, offset, len);
+#endif // defined(HAVE_POSIX_FALLOCATE)
+#ifdef HAVE_FALLOCATE
+  if (::fallocate(o, 0, offset, len) == 0)
+    return 0;
+#endif // defined(HAVE_FALLOCATE)
+  if (::ftruncate(o, offset + len) < 0)
+    return errno;
+  return 0;
+}
 
 // Output_data variables.
 
@@ -703,10 +712,11 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Output_data* od,
     Address address,
     bool is_relative,
-    bool is_symbolless)
+    bool is_symbolless,
+    bool use_plt_offset)
   : address_(address), local_sym_index_(GSYM_CODE), type_(type),
     is_relative_(is_relative), is_symbolless_(is_symbolless),
-    is_section_symbol_(false), shndx_(INVALID_CODE)
+    is_section_symbol_(false), use_plt_offset_(use_plt_offset), shndx_(INVALID_CODE)
 {
   // this->type_ is a bitfield; make sure TYPE fits.
   gold_assert(this->type_ == type);
@@ -724,10 +734,11 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     unsigned int shndx,
     Address address,
     bool is_relative,
-    bool is_symbolless)
+    bool is_symbolless,
+    bool use_plt_offset)
   : address_(address), local_sym_index_(GSYM_CODE), type_(type),
     is_relative_(is_relative), is_symbolless_(is_symbolless),
-    is_section_symbol_(false), shndx_(shndx)
+    is_section_symbol_(false), use_plt_offset_(use_plt_offset), shndx_(shndx)
 {
   gold_assert(shndx != INVALID_CODE);
   // this->type_ is a bitfield; make sure TYPE fits.
@@ -749,10 +760,12 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address,
     bool is_relative,
     bool is_symbolless,
-    bool is_section_symbol)
+    bool is_section_symbol,
+    bool use_plt_offset)
   : address_(address), local_sym_index_(local_sym_index), type_(type),
     is_relative_(is_relative), is_symbolless_(is_symbolless),
-    is_section_symbol_(is_section_symbol), shndx_(INVALID_CODE)
+    is_section_symbol_(is_section_symbol), use_plt_offset_(use_plt_offset),
+    shndx_(INVALID_CODE)
 {
   gold_assert(local_sym_index != GSYM_CODE
               && local_sym_index != INVALID_CODE);
@@ -773,10 +786,12 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address,
     bool is_relative,
     bool is_symbolless,
-    bool is_section_symbol)
+    bool is_section_symbol,
+    bool use_plt_offset)
   : address_(address), local_sym_index_(local_sym_index), type_(type),
     is_relative_(is_relative), is_symbolless_(is_symbolless),
-    is_section_symbol_(is_section_symbol), shndx_(shndx)
+    is_section_symbol_(is_section_symbol), use_plt_offset_(use_plt_offset),
+    shndx_(shndx)
 {
   gold_assert(local_sym_index != GSYM_CODE
               && local_sym_index != INVALID_CODE);
@@ -799,7 +814,7 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address)
   : address_(address), local_sym_index_(SECTION_CODE), type_(type),
     is_relative_(false), is_symbolless_(false),
-    is_section_symbol_(true), shndx_(INVALID_CODE)
+    is_section_symbol_(true), use_plt_offset_(false), shndx_(INVALID_CODE)
 {
   // this->type_ is a bitfield; make sure TYPE fits.
   gold_assert(this->type_ == type);
@@ -820,7 +835,7 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address)
   : address_(address), local_sym_index_(SECTION_CODE), type_(type),
     is_relative_(false), is_symbolless_(false),
-    is_section_symbol_(true), shndx_(shndx)
+    is_section_symbol_(true), use_plt_offset_(false), shndx_(shndx)
 {
   gold_assert(shndx != INVALID_CODE);
   // this->type_ is a bitfield; make sure TYPE fits.
@@ -842,7 +857,7 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address)
   : address_(address), local_sym_index_(0), type_(type),
     is_relative_(false), is_symbolless_(false),
-    is_section_symbol_(false), shndx_(INVALID_CODE)
+    is_section_symbol_(false), use_plt_offset_(false), shndx_(INVALID_CODE)
 {
   // this->type_ is a bitfield; make sure TYPE fits.
   gold_assert(this->type_ == type);
@@ -858,7 +873,7 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address)
   : address_(address), local_sym_index_(0), type_(type),
     is_relative_(false), is_symbolless_(false),
-    is_section_symbol_(false), shndx_(shndx)
+    is_section_symbol_(false), use_plt_offset_(false), shndx_(shndx)
 {
   gold_assert(shndx != INVALID_CODE);
   // this->type_ is a bitfield; make sure TYPE fits.
@@ -877,7 +892,7 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address)
   : address_(address), local_sym_index_(TARGET_CODE), type_(type),
     is_relative_(false), is_symbolless_(false),
-    is_section_symbol_(false), shndx_(INVALID_CODE)
+    is_section_symbol_(false), use_plt_offset_(false), shndx_(INVALID_CODE)
 {
   // this->type_ is a bitfield; make sure TYPE fits.
   gold_assert(this->type_ == type);
@@ -894,7 +909,7 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::Output_reloc(
     Address address)
   : address_(address), local_sym_index_(TARGET_CODE), type_(type),
     is_relative_(false), is_symbolless_(false),
-    is_section_symbol_(false), shndx_(shndx)
+    is_section_symbol_(false), use_plt_offset_(false), shndx_(shndx)
 {
   gold_assert(shndx != INVALID_CODE);
   // this->type_ is a bitfield; make sure TYPE fits.
@@ -1110,7 +1125,14 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::symbol_value(
     {
       const Sized_symbol<size>* sym;
       sym = static_cast<const Sized_symbol<size>*>(this->u1_.gsym);
-      return sym->value() + addend;
+      if (this->use_plt_offset_ && sym->has_plt_offset())
+	{
+	  uint64_t plt_address =
+	    parameters->target().plt_address_for_global(sym);
+	  return plt_address + sym->plt_offset();
+	}
+      else
+	return sym->value() + addend;
     }
   gold_assert(this->local_sym_index_ != SECTION_CODE
 	      && this->local_sym_index_ != TARGET_CODE
@@ -1121,6 +1143,12 @@ Output_reloc<elfcpp::SHT_REL, dynamic, size, big_endian>::symbol_value(
   Sized_relobj_file<size, big_endian>* relobj =
       this->u1_.relobj->sized_relobj();
   gold_assert(relobj != NULL);
+  if (this->use_plt_offset_)
+    {
+      uint64_t plt_address =
+	  parameters->target().plt_address_for_local(relobj, lsi);
+      return plt_address + relobj->local_plt_offset(lsi);
+    }
   const Symbol_value<size>* symval = relobj->local_symbol(lsi);
   return symval->value(relobj, addend);
 }
@@ -1375,11 +1403,13 @@ Output_data_got<size, big_endian>::Got_entry::write(unsigned char* pov) const
 
     default:
       {
-	const Sized_relobj_file<size, big_endian>* object = this->u_.object;
+	const Relobj* object = this->u_.object;
         const unsigned int lsi = this->local_sym_index_;
-        const Symbol_value<size>* symval = object->local_symbol(lsi);
 	if (!this->use_plt_offset_)
-	  val = symval->value(this->u_.object, 0);
+	  {
+	    uint64_t lval = object->local_symbol_value(lsi, 0);
+	    val = convert_types<Valtype, uint64_t>(lval);
+	  }
 	else
 	  {
 	    uint64_t plt_address =
@@ -1436,7 +1466,7 @@ void
 Output_data_got<size, big_endian>::add_global_with_rel(
     Symbol* gsym,
     unsigned int got_type,
-    Rel_dyn* rel_dyn,
+    Output_data_reloc_generic* rel_dyn,
     unsigned int r_type)
 {
   if (gsym->has_got_offset(got_type))
@@ -1444,23 +1474,7 @@ Output_data_got<size, big_endian>::add_global_with_rel(
 
   unsigned int got_offset = this->add_got_entry(Got_entry());
   gsym->set_got_offset(got_type, got_offset);
-  rel_dyn->add_global(gsym, r_type, this, got_offset);
-}
-
-template<int size, bool big_endian>
-void
-Output_data_got<size, big_endian>::add_global_with_rela(
-    Symbol* gsym,
-    unsigned int got_type,
-    Rela_dyn* rela_dyn,
-    unsigned int r_type)
-{
-  if (gsym->has_got_offset(got_type))
-    return;
-
-  unsigned int got_offset = this->add_got_entry(Got_entry());
-  gsym->set_got_offset(got_type, got_offset);
-  rela_dyn->add_global(gsym, r_type, this, got_offset, 0);
+  rel_dyn->add_global_generic(gsym, r_type, this, got_offset, 0);
 }
 
 // Add a pair of entries for a global symbol to the GOT, and add
@@ -1471,7 +1485,7 @@ void
 Output_data_got<size, big_endian>::add_global_pair_with_rel(
     Symbol* gsym,
     unsigned int got_type,
-    Rel_dyn* rel_dyn,
+    Output_data_reloc_generic* rel_dyn,
     unsigned int r_type_1,
     unsigned int r_type_2)
 {
@@ -1480,30 +1494,11 @@ Output_data_got<size, big_endian>::add_global_pair_with_rel(
 
   unsigned int got_offset = this->add_got_entry_pair(Got_entry(), Got_entry());
   gsym->set_got_offset(got_type, got_offset);
-  rel_dyn->add_global(gsym, r_type_1, this, got_offset);
+  rel_dyn->add_global_generic(gsym, r_type_1, this, got_offset, 0);
 
   if (r_type_2 != 0)
-    rel_dyn->add_global(gsym, r_type_2, this, got_offset + size / 8);
-}
-
-template<int size, bool big_endian>
-void
-Output_data_got<size, big_endian>::add_global_pair_with_rela(
-    Symbol* gsym,
-    unsigned int got_type,
-    Rela_dyn* rela_dyn,
-    unsigned int r_type_1,
-    unsigned int r_type_2)
-{
-  if (gsym->has_got_offset(got_type))
-    return;
-
-  unsigned int got_offset = this->add_got_entry_pair(Got_entry(), Got_entry());
-  gsym->set_got_offset(got_type, got_offset);
-  rela_dyn->add_global(gsym, r_type_1, this, got_offset, 0);
-
-  if (r_type_2 != 0)
-    rela_dyn->add_global(gsym, r_type_2, this, got_offset + size / 8, 0);
+    rel_dyn->add_global_generic(gsym, r_type_2, this,
+				got_offset + size / 8, 0);
 }
 
 // Add an entry for a local symbol to the GOT.  This returns true if
@@ -1513,7 +1508,7 @@ Output_data_got<size, big_endian>::add_global_pair_with_rela(
 template<int size, bool big_endian>
 bool
 Output_data_got<size, big_endian>::add_local(
-    Sized_relobj_file<size, big_endian>* object,
+    Relobj* object,
     unsigned int symndx,
     unsigned int got_type)
 {
@@ -1531,7 +1526,7 @@ Output_data_got<size, big_endian>::add_local(
 template<int size, bool big_endian>
 bool
 Output_data_got<size, big_endian>::add_local_plt(
-    Sized_relobj_file<size, big_endian>* object,
+    Relobj* object,
     unsigned int symndx,
     unsigned int got_type)
 {
@@ -1550,10 +1545,10 @@ Output_data_got<size, big_endian>::add_local_plt(
 template<int size, bool big_endian>
 void
 Output_data_got<size, big_endian>::add_local_with_rel(
-    Sized_relobj_file<size, big_endian>* object,
+    Relobj* object,
     unsigned int symndx,
     unsigned int got_type,
-    Rel_dyn* rel_dyn,
+    Output_data_reloc_generic* rel_dyn,
     unsigned int r_type)
 {
   if (object->local_has_got_offset(symndx, got_type))
@@ -1561,24 +1556,7 @@ Output_data_got<size, big_endian>::add_local_with_rel(
 
   unsigned int got_offset = this->add_got_entry(Got_entry());
   object->set_local_got_offset(symndx, got_type, got_offset);
-  rel_dyn->add_local(object, symndx, r_type, this, got_offset);
-}
-
-template<int size, bool big_endian>
-void
-Output_data_got<size, big_endian>::add_local_with_rela(
-    Sized_relobj_file<size, big_endian>* object,
-    unsigned int symndx,
-    unsigned int got_type,
-    Rela_dyn* rela_dyn,
-    unsigned int r_type)
-{
-  if (object->local_has_got_offset(symndx, got_type))
-    return;
-
-  unsigned int got_offset = this->add_got_entry(Got_entry());
-  object->set_local_got_offset(symndx, got_type, got_offset);
-  rela_dyn->add_local(object, symndx, r_type, this, got_offset, 0);
+  rel_dyn->add_local_generic(object, symndx, r_type, this, got_offset, 0);
 }
 
 // Add a pair of entries for a local symbol to the GOT, and add
@@ -1587,11 +1565,11 @@ Output_data_got<size, big_endian>::add_local_with_rela(
 template<int size, bool big_endian>
 void
 Output_data_got<size, big_endian>::add_local_pair_with_rel(
-    Sized_relobj_file<size, big_endian>* object,
+    Relobj* object,
     unsigned int symndx,
     unsigned int shndx,
     unsigned int got_type,
-    Rel_dyn* rel_dyn,
+    Output_data_reloc_generic* rel_dyn,
     unsigned int r_type_1,
     unsigned int r_type_2)
 {
@@ -1603,35 +1581,11 @@ Output_data_got<size, big_endian>::add_local_pair_with_rel(
 			       Got_entry(object, symndx, false));
   object->set_local_got_offset(symndx, got_type, got_offset);
   Output_section* os = object->output_section(shndx);
-  rel_dyn->add_output_section(os, r_type_1, this, got_offset);
+  rel_dyn->add_output_section_generic(os, r_type_1, this, got_offset, 0);
 
   if (r_type_2 != 0)
-    rel_dyn->add_output_section(os, r_type_2, this, got_offset + size / 8);
-}
-
-template<int size, bool big_endian>
-void
-Output_data_got<size, big_endian>::add_local_pair_with_rela(
-    Sized_relobj_file<size, big_endian>* object,
-    unsigned int symndx,
-    unsigned int shndx,
-    unsigned int got_type,
-    Rela_dyn* rela_dyn,
-    unsigned int r_type_1,
-    unsigned int r_type_2)
-{
-  if (object->local_has_got_offset(symndx, got_type))
-    return;
-
-  unsigned int got_offset =
-      this->add_got_entry_pair(Got_entry(),
-			       Got_entry(object, symndx, false));
-  object->set_local_got_offset(symndx, got_type, got_offset);
-  Output_section* os = object->output_section(shndx);
-  rela_dyn->add_output_section(os, r_type_1, this, got_offset, 0);
-
-  if (r_type_2 != 0)
-    rela_dyn->add_output_section(os, r_type_2, this, got_offset + size / 8, 0);
+    rel_dyn->add_output_section_generic(os, r_type_2, this,
+					got_offset + size / 8, 0);
 }
 
 // Reserve a slot in the GOT for a local symbol or the second slot of a pair.
@@ -1640,11 +1594,11 @@ template<int size, bool big_endian>
 void
 Output_data_got<size, big_endian>::reserve_local(
     unsigned int i,
-    Sized_relobj<size, big_endian>* object,
+    Relobj* object,
     unsigned int sym_index,
     unsigned int got_type)
 {
-  this->reserve_slot(i);
+  this->do_reserve_slot(i);
   object->set_local_got_offset(sym_index, got_type, this->got_offset(i));
 }
 
@@ -1657,7 +1611,7 @@ Output_data_got<size, big_endian>::reserve_global(
     Symbol* gsym,
     unsigned int got_type)
 {
-  this->reserve_slot(i);
+  this->do_reserve_slot(i);
   gsym->set_got_offset(got_type, this->got_offset(i));
 }
 
@@ -1922,7 +1876,7 @@ Output_symtab_xindex::endian_do_write(unsigned char* const oview)
        ++p)
     {
       unsigned int symndx = p->first;
-      gold_assert(symndx * 4 < this->data_size());
+      gold_assert(static_cast<off_t>(symndx) * 4 < this->data_size());
       elfcpp::Swap<32, big_endian>::writeval(oview + symndx * 4, p->second);
     }
 }
@@ -2476,7 +2430,10 @@ Output_section::add_input_section(Layout* layout,
       || layout->is_section_ordering_specified())
     {
       Input_section isecn(object, shndx, input_section_size, addralign);
-      if (layout->is_section_ordering_specified())
+      /* If section ordering is requested by specifying a ordering file,
+	 using --section-ordering-file, match the section name with
+	 a pattern.  */
+      if (parameters->options().section_ordering_file())
         {
           unsigned int section_order_index =
             layout->find_section_order_index(std::string(secname));
@@ -2746,7 +2703,7 @@ Output_section::convert_input_sections_in_list_to_relaxed_sections(
       (*input_sections)[p->second].set_section_order_index(soi);
     }
 }
-  
+
 // Convert regular input sections into relaxed input sections. RELAXED_SECTIONS
 // is a vector of pointers to Output_relaxed_input_section or its derived
 // classes.  The relaxed sections must correspond to existing input sections.
@@ -2761,7 +2718,7 @@ Output_section::convert_input_sections_to_relaxed_sections(
   // this.  If there is no checkpoint active, just search the current
   // input section list and replace the sections there.  If there is
   // a checkpoint, also replace the sections there.
-  
+
   // By default, we look at the whole list.
   size_t limit = this->input_sections_.size();
 
@@ -2874,13 +2831,13 @@ Output_section::build_lookup_maps() const
 	  for (Output_merge_base::Input_sections::const_iterator is =
 		 pomb->input_sections_begin();
 	       is != pomb->input_sections_end();
-	       ++is) 
+	       ++is)
 	    {
 	      const Const_section_id& csid = *is;
 	    this->lookup_maps_->add_merge_input_section(csid.first,
 							csid.second, pomb);
 	    }
-	    
+
 	}
       else if (p->is_relaxed_input_section())
 	{
@@ -2922,7 +2879,7 @@ Output_section::is_input_address_mapped(const Relobj* object,
     {
       section_offset_type output_offset;
       bool found = posd->output_offset(object, shndx, offset, &output_offset);
-      gold_assert(found);   
+      gold_assert(found);
       return output_offset != -1;
     }
 
@@ -2957,13 +2914,13 @@ Output_section::output_offset(const Relobj* object, unsigned int shndx,
 
   // Look at the Output_section_data_maps first.
   const Output_section_data* posd = this->find_merge_section(object, shndx);
-  if (posd == NULL) 
+  if (posd == NULL)
     posd = this->find_relaxed_input_section(object, shndx);
   if (posd != NULL)
     {
       section_offset_type output_offset;
       bool found = posd->output_offset(object, shndx, offset, &output_offset);
-      gold_assert(found);   
+      gold_assert(found);
       return output_offset;
     }
 
@@ -2990,7 +2947,7 @@ Output_section::output_address(const Relobj* object, unsigned int shndx,
 
   // Look at the Output_section_data_maps first.
   const Output_section_data* posd = this->find_merge_section(object, shndx);
-  if (posd == NULL) 
+  if (posd == NULL)
     posd = this->find_relaxed_input_section(object, shndx);
   if (posd != NULL && posd->is_address_valid())
     {
@@ -3476,7 +3433,7 @@ Output_section::Input_section_sort_section_order_index_compare::operator()(
   // Keep input order if section ordering cannot determine order.
   if (s1_secn_index == s2_secn_index)
     return s1.index() < s2.index();
-  
+
   return s1_secn_index < s2_secn_index;
 }
 
@@ -3485,7 +3442,7 @@ Output_section::Input_section_sort_section_order_index_compare::operator()(
 
 void
 Output_section::update_section_layout(
-  const Section_layout_order& order_map)
+  const Section_layout_order* order_map)
 {
   for (Input_section_list::iterator p = this->input_sections_.begin();
        p != this->input_sections_.end();
@@ -3499,8 +3456,8 @@ Output_section::update_section_layout(
 		         : p->relaxed_input_section()->relobj());
 	  unsigned int shndx = p->shndx();
 	  Section_layout_order::const_iterator it
-	    = order_map.find(Section_id(obj, shndx));
-	  if (it == order_map.end())
+	    = order_map->find(Section_id(obj, shndx));
+	  if (it == order_map->end())
 	    continue;
 	  unsigned int section_order_index = it->second;
 	  if (section_order_index != 0)
@@ -3839,7 +3796,7 @@ Output_section::add_script_input_section(const Input_section& sis)
 
   this->input_sections_.push_back(sis);
 
-  // Update fast lookup maps if necessary. 
+  // Update fast lookup maps if necessary.
   if (this->lookup_maps_->is_valid())
     {
       if (sis.is_merge_section())
@@ -4153,7 +4110,7 @@ Output_segment::maximum_alignment()
   if (!this->is_max_align_known_)
     {
       for (int i = 0; i < static_cast<int>(ORDER_MAX); ++i)
-	{	
+	{
 	  const Output_data_list* pdl = &this->output_lists_[i];
 	  uint64_t addralign = Output_segment::maximum_alignment_list(pdl);
 	  if (addralign > this->max_align_)
@@ -4880,17 +4837,27 @@ Output_file::open_base_file(const char* base_name, bool writable)
   if (use_base_file)
     {
       this->open(s.st_size);
-      ssize_t len = ::read(o, this->base_, s.st_size);
-      if (len < 0)
-        {
-	  gold_info(_("%s: read failed: %s"), base_name, strerror(errno));
-	  return false;
-        }
-      if (len < s.st_size)
-        {
-	  gold_info(_("%s: file too short"), base_name);
-	  return false;
-        }
+      ssize_t bytes_to_read = s.st_size;
+      unsigned char* p = this->base_;
+      while (bytes_to_read > 0)
+	{
+	  ssize_t len = ::read(o, p, bytes_to_read);
+	  if (len < 0)
+	    {
+	      gold_info(_("%s: read failed: %s"), base_name, strerror(errno));
+	      return false;
+	    }
+	  if (len == 0)
+	    {
+	      gold_info(_("%s: file too short: read only %lld of %lld bytes"),
+			base_name,
+			static_cast<long long>(s.st_size - bytes_to_read),
+			static_cast<long long>(s.st_size));
+	      return false;
+	    }
+	  p += len;
+	  bytes_to_read -= len;
+	}
       ::close(o);
       return true;
     }
@@ -5052,8 +5019,12 @@ Output_file::map_no_anonymous(bool writable)
   // output file will wind up incomplete, but we will have already
   // exited.  The alternative to fallocate would be to use fdatasync,
   // but that would be a more significant performance hit.
-  if (writable && ::posix_fallocate(o, 0, this->file_size_) < 0)
-    gold_fatal(_("%s: %s"), this->name_, strerror(errno));
+  if (writable)
+    {
+      int err = gold_fallocate(o, 0, this->file_size_);
+      if (err != 0)
+       gold_fatal(_("%s: %s"), this->name_, strerror(err));
+    }
 
   // Map the file into memory.
   int prot = PROT_READ;
@@ -5077,7 +5048,8 @@ Output_file::map_no_anonymous(bool writable)
 void
 Output_file::map()
 {
-  if (this->map_no_anonymous(true))
+  if (parameters->options().mmap_output_file()
+      && this->map_no_anonymous(true))
     return;
 
   // The mmap call might fail because of file system issues: the file

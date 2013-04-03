@@ -13,7 +13,7 @@ fragment <<EOF
 
 /* ${ELFSIZE} bit ELF emulation code for ${EMULATION_NAME}
    Copyright 1991, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Written by Steve Chamberlain <sac@cygnus.com>
    ELF support by Ian Lance Taylor <ian@cygnus.com>
@@ -72,7 +72,7 @@ EOF
 
 if [ "x${USE_LIBPATH}" = xyes ] ; then
   case ${target} in
-    *-*-linux-* | *-*-k*bsd*-*)
+    *-*-linux-* | *-*-k*bsd*-* | *-*-gnu*)
   fragment <<EOF
 #ifdef HAVE_GLOB
 #include <glob.h>
@@ -102,8 +102,9 @@ static void
 gld${EMULATION_NAME}_before_parse (void)
 {
   ldfile_set_output_arch ("${OUTPUT_ARCH}", bfd_arch_`echo ${ARCH} | sed -e 's/:.*//'`);
-  config.dynamic_link = ${DYNAMIC_LINK-TRUE};
+  input_flags.dynamic = ${DYNAMIC_LINK-TRUE};
   config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo TRUE ; else echo FALSE ; fi`;
+  config.separate_code = `if test "x${SEPARATE_CODE}" = xyes ; then echo TRUE ; else echo FALSE ; fi`;
 }
 
 EOF
@@ -121,16 +122,16 @@ gld${EMULATION_NAME}_load_symbols (lang_input_statement_type *entry)
   /* Tell the ELF linker that we don't want the output file to have a
      DT_NEEDED entry for this file, unless it is used to resolve
      references in a regular object.  */
-  if (entry->add_DT_NEEDED_for_regular)
+  if (entry->flags.add_DT_NEEDED_for_regular)
     link_class = DYN_AS_NEEDED;
 
   /* Tell the ELF linker that we don't want the output file to have a
      DT_NEEDED entry for any dynamic library in DT_NEEDED tags from
      this file at all.  */
-  if (!entry->add_DT_NEEDED_for_dynamic)
+  if (!entry->flags.add_DT_NEEDED_for_dynamic)
     link_class |= DYN_NO_ADD_NEEDED;
 
-  if (entry->just_syms_flag
+  if (entry->flags.just_syms
       && (bfd_get_file_flags (entry->the_bfd) & DYNAMIC) != 0)
     einfo (_("%P%F: --just-symbols may not be used on DSO: %B\n"),
 	   entry->the_bfd);
@@ -140,7 +141,7 @@ gld${EMULATION_NAME}_load_symbols (lang_input_statement_type *entry)
     return FALSE;
 
   bfd_elf_set_dyn_lib_class (entry->the_bfd,
-                             (enum dynamic_lib_link_class) link_class);
+			     (enum dynamic_lib_link_class) link_class);
 
   /* Continue on with normal load_symbols processing.  */
   return FALSE;
@@ -374,7 +375,7 @@ gld${EMULATION_NAME}_try_needed (struct dt_needed *needed,
 
 EOF
 case ${target} in
-  *-*-linux-* | *-*-k*bsd*-*)
+  *-*-linux-* | *-*-k*bsd*-* | *-*-gnu*)
     fragment <<EOF
 	  {
 	    struct bfd_link_needed_list *l;
@@ -412,7 +413,7 @@ fragment <<EOF
   /* First strip off everything before the last '/'.  */
   soname = lbasename (abfd->filename);
 
-  if (trace_file_tries)
+  if (verbose)
     info_msg (_("found %s at %s\n"), soname, name);
 
   global_found = NULL;
@@ -568,7 +569,8 @@ EOF
 #endif
 
 static bfd_boolean
-gld${EMULATION_NAME}_check_ld_elf_hints (const char *name, int force)
+gld${EMULATION_NAME}_check_ld_elf_hints (const struct bfd_link_needed_list *l,
+					 int force)
 {
   static bfd_boolean initialized;
   static char *ld_elf_hints;
@@ -611,16 +613,15 @@ gld${EMULATION_NAME}_check_ld_elf_hints (const char *name, int force)
   if (ld_elf_hints == NULL)
     return FALSE;
 
-  needed.by = NULL;
-  needed.name = name;
-  return gld${EMULATION_NAME}_search_needed (ld_elf_hints, & needed,
-					     force);
+  needed.by = l->by;
+  needed.name = l->name;
+  return gld${EMULATION_NAME}_search_needed (ld_elf_hints, &needed, force);
 }
 EOF
     # FreeBSD
     ;;
 
-    *-*-linux-* | *-*-k*bsd*-*)
+    *-*-linux-* | *-*-k*bsd*-* | *-*-gnu*)
       fragment <<EOF
 /* For a native linker, check the file /etc/ld.so.conf for directories
    in which we may find shared libraries.  /etc/ld.so.conf is really
@@ -786,7 +787,8 @@ gld${EMULATION_NAME}_parse_ld_so_conf
 }
 
 static bfd_boolean
-gld${EMULATION_NAME}_check_ld_so_conf (const char *name, int force)
+gld${EMULATION_NAME}_check_ld_so_conf (const struct bfd_link_needed_list *l,
+				       int force)
 {
   static bfd_boolean initialized;
   static char *ld_so_conf;
@@ -823,8 +825,8 @@ gld${EMULATION_NAME}_check_ld_so_conf (const char *name, int force)
     return FALSE;
 
 
-  needed.by = NULL;
-  needed.name = name;
+  needed.by = l->by;
+  needed.name = l->name;
   return gld${EMULATION_NAME}_search_needed (ld_so_conf, &needed, force);
 }
 
@@ -862,7 +864,7 @@ gld${EMULATION_NAME}_check_needed (lang_input_statement_type *s)
       return;
     }
 
-  if (s->search_dirs_flag)
+  if (s->flags.search_dirs)
     {
       const char *f = strrchr (s->filename, '/');
       if (f != NULL
@@ -1104,7 +1106,7 @@ gld${EMULATION_NAME}_after_open (void)
 		{
 		  struct elf_obj_tdata *t = elf_tdata (link_info.output_bfd);
 		  struct build_id_info *b =
-                      (struct build_id_info *) xmalloc (sizeof *b);
+		      (struct build_id_info *) xmalloc (sizeof *b);
 
 		  b->style = link_info.emit_note_gnu_build_id;
 		  b->sec = s;
@@ -1142,10 +1144,11 @@ gld${EMULATION_NAME}_after_open (void)
 	  if (!warn_eh_frame)
 	    {
 	      s = bfd_get_section_by_name (abfd, ".eh_frame");
-	      warn_eh_frame
-		= (s
-		   && s->size > 8
-		   && !bfd_is_abs_section (s->output_section));
+	      while (s != NULL
+		     && (s->size <= 8
+			 || bfd_is_abs_section (s->output_section)))
+		s = bfd_get_next_section_by_name (s);
+	      warn_eh_frame = s != NULL;
 	    }
 	  if (elfbfd && warn_eh_frame)
 	    break;
@@ -1179,8 +1182,6 @@ gld${EMULATION_NAME}_after_open (void)
      special action by the person doing the link.  Note that the
      needed list can actually grow while we are stepping through this
      loop.  */
-  if (!link_info.executable)
-    return;
   needed = bfd_elf_get_needed_list (link_info.output_bfd, &link_info);
   for (l = needed; l != NULL; l = l->next)
     {
@@ -1189,9 +1190,13 @@ gld${EMULATION_NAME}_after_open (void)
       int force;
 
       /* If the lib that needs this one was --as-needed and wasn't
-	 found to be needed, then this lib isn't needed either.  */
+	 found to be needed, then this lib isn't needed either.  Skip
+	 the lib when creating a shared object unless we are copying
+	 DT_NEEDED entres.  */
       if (l->by != NULL
-	  && (bfd_elf_get_dyn_lib_class (l->by) & DYN_AS_NEEDED) != 0)
+	  && ((bfd_elf_get_dyn_lib_class (l->by) & DYN_AS_NEEDED) != 0
+	      || (!link_info.executable
+		  && bfd_elf_get_dyn_lib_class (l->by) & DYN_NO_ADD_NEEDED) != 0))
 	continue;
 
       /* If we've already seen this file, skip it.  */
@@ -1215,7 +1220,7 @@ gld${EMULATION_NAME}_after_open (void)
       n.by = l->by;
       n.name = l->name;
       nn.by = l->by;
-      if (trace_file_tries)
+      if (verbose)
 	info_msg (_("%s needed by %B\n"), l->name, l->by);
 
       /* As-needed libs specified on the command line (or linker script)
@@ -1304,16 +1309,16 @@ if [ "x${USE_LIBPATH}" = xyes ] ; then
   case ${target} in
     *-*-freebsd* | *-*-dragonfly*)
       fragment <<EOF
-	  if (gld${EMULATION_NAME}_check_ld_elf_hints (l->name, force))
+	  if (gld${EMULATION_NAME}_check_ld_elf_hints (l, force))
 	    break;
 EOF
     # FreeBSD
     ;;
 
-    *-*-linux-* | *-*-k*bsd*-*)
+    *-*-linux-* | *-*-k*bsd*-* | *-*-gnu*)
     # Linux
       fragment <<EOF
-	  if (gld${EMULATION_NAME}_check_ld_so_conf (l->name, force))
+	  if (gld${EMULATION_NAME}_check_ld_so_conf (l, force))
 	    break;
 
 EOF
@@ -1438,7 +1443,7 @@ if test x"$LDEMUL_BEFORE_ALLOCATION" != xgld"$EMULATION_NAME"_before_allocation;
 fragment <<EOF
 
 /* used by before_allocation and handle_option. */
-static void 
+static void
 gld${EMULATION_NAME}_append_to_separated_string (char **to, char *op_arg)
 {
   if (*to == NULL)
@@ -1506,7 +1511,7 @@ gld${EMULATION_NAME}_before_allocation (void)
       {
 	const char *audit_libs = elf_dt_audit (abfd);
 
-	/* If the input bfd contains an audit entry, we need to add it as 
+	/* If the input bfd contains an audit entry, we need to add it as
 	   a dep audit entry.  */
 	if (audit_libs && *audit_libs != '\0')
 	  {
@@ -1560,7 +1565,7 @@ ${ELF_INTERPRETER_SET_DEFAULT}
 	char *msg;
 	bfd_boolean ret;
 
-	if (is->just_syms_flag)
+	if (is->flags.just_syms)
 	  continue;
 
 	s = bfd_get_section_by_name (is->the_bfd, ".gnu.warning");
@@ -1621,7 +1626,7 @@ gld${EMULATION_NAME}_open_dynamic_archive
   const char *filename;
   char *string;
 
-  if (! entry->maybe_archive)
+  if (! entry->flags.maybe_archive)
     return FALSE;
 
   filename = entry->filename;
@@ -1675,7 +1680,7 @@ gld${EMULATION_NAME}_open_dynamic_archive
   if (bfd_check_format (entry->the_bfd, bfd_object)
       && (entry->the_bfd->flags & DYNAMIC) != 0)
     {
-      ASSERT (entry->maybe_archive && entry->search_dirs_flag);
+      ASSERT (entry->flags.maybe_archive && entry->flags.search_dirs);
 
       /* Rather than duplicating the logic above.  Just use the
 	 filename we recorded earlier.  */
@@ -1861,7 +1866,7 @@ gld${EMULATION_NAME}_place_orphan (asection *s,
 	       If the section already exists but does not have any flags
 	       set, then it has been created by the linker, probably as a
 	       result of a --section-start command line switch.  */
-	    lang_add_section (&os->children, s, os);
+	    lang_add_section (&os->children, s, NULL, os);
 	    return os;
 	  }
 
@@ -1875,7 +1880,7 @@ gld${EMULATION_NAME}_place_orphan (asection *s,
      unused one and use that.  */
   if (match_by_name)
     {
-      lang_add_section (&match_by_name->children, s, match_by_name);
+      lang_add_section (&match_by_name->children, s, NULL, match_by_name);
       return match_by_name;
     }
 
@@ -1901,7 +1906,7 @@ gld${EMULATION_NAME}_place_orphan (asection *s,
       && hold[orphan_text].os != NULL)
     {
       os = hold[orphan_text].os;
-      lang_add_section (&os->children, s, os);
+      lang_add_section (&os->children, s, NULL, os);
       return os;
     }
 
@@ -2203,7 +2208,7 @@ EOF
 if test x"$GENERATE_SHLIB_SCRIPT" = xyes; then
 fragment <<EOF
     case OPTION_AUDIT:
-  	gld${EMULATION_NAME}_append_to_separated_string (&audit, optarg); 
+	gld${EMULATION_NAME}_append_to_separated_string (&audit, optarg);
 	break;
 
     case 'P':
@@ -2379,7 +2384,7 @@ if test x"$GENERATE_SHLIB_SCRIPT" = xyes; then
 fragment <<EOF
   fprintf (file, _("\
   -P AUDITLIB, --depaudit=AUDITLIB\n" "\
-                              Specify a library to use for auditing dependencies\n"));
+			      Specify a library to use for auditing dependencies\n"));
   fprintf (file, _("\
   --disable-new-dtags         Disable new dynamic tags\n"));
   fprintf (file, _("\
@@ -2452,7 +2457,7 @@ fragment <<EOF
   -z now                      Mark object non-lazy runtime binding\n"));
   fprintf (file, _("\
   -z origin                   Mark object requiring immediate \$ORIGIN\n\
-                                processing at runtime\n"));
+				processing at runtime\n"));
   fprintf (file, _("\
   -z relro                    Create RELRO program header\n"));
 EOF

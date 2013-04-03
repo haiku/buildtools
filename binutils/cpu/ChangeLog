@@ -1,3 +1,30 @@
+2013-03-25  Tristan Gingold  <gingold@adacore.com>
+	Backport of: 2013-03-08  Yann Sionneau  <yann.sionneau@gmail.com>
+
+	PR binutils/15241
+	* lm32.cpu (Control and status registers): Add CFG2, PSW,
+	TLBVADDR, TLBPADDR and TLBBADVADDR.
+
+2012-02-27  Alan Modra  <amodra@gmail.com>
+
+	* mt.opc (print_dollarhex): Trim values to 32 bits.
+
+2011-12-15  Nick Clifton  <nickc@redhat.com>
+
+	* frv.opc (parse_uhi16): Fix handling of %hi operator on 64-bit
+	hosts.
+
+2011-10-26  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* epiphany.opc (parse_branch_addr): Fix type of valuep.
+	Cast value before printing it as a long.
+	(parse_postindex): Fix type of valuep.
+
+2011-10-25  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* cpu/epiphany.cpu: New file.
+	* cpu/epiphany.opc: New file.
+
 2011-08-22  Nick Clifton  <nickc@redhat.com>
 
 	* fr30.cpu: Newly contributed file.

@@ -59,6 +59,8 @@ config/tc-d30v.c
 config/tc-d30v.h
 config/tc-dlx.c
 config/tc-dlx.h
+config/tc-epiphany.c
+config/tc-epiphany.h
 config/tc-fr30.c
 config/tc-fr30.h
 config/tc-frv.c
@@ -122,6 +124,8 @@ config/tc-pj.c
 config/tc-pj.h
 config/tc-ppc.c
 config/tc-ppc.h
+config/tc-rl78.c
+config/tc-rl78.h
 config/tc-rx.c
 config/tc-rx.h
 config/tc-s390.c
