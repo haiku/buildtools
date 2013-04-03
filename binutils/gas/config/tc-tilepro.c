@@ -103,14 +103,14 @@ md_show_usage (FILE *stream)
 
 /* Extra expression types.  */
 
-#define O_lo16	      O_md1
-#define O_hi16	      O_md2
-#define O_ha16	      O_md3
-#define O_got	      O_md4
+#define O_lo16        O_md1
+#define O_hi16        O_md2
+#define O_ha16        O_md3
+#define O_got         O_md4
 #define O_got_lo16    O_md5
 #define O_got_hi16    O_md6
 #define O_got_ha16    O_md7
-#define O_plt	      O_md8
+#define O_plt         O_md8
 #define O_tls_gd      O_md9
 #define O_tls_gd_lo16 O_md10
 #define O_tls_gd_hi16 O_md11
@@ -119,6 +119,13 @@ md_show_usage (FILE *stream)
 #define O_tls_ie_lo16 O_md14
 #define O_tls_ie_hi16 O_md15
 #define O_tls_ie_ha16 O_md16
+#define O_tls_le      O_md17
+#define O_tls_le_lo16 O_md18
+#define O_tls_le_hi16 O_md19
+#define O_tls_le_ha16 O_md20
+#define O_tls_gd_call O_md21
+#define O_tls_gd_add  O_md22
+#define O_tls_ie_load O_md23
 
 static struct hash_control *special_operator_hash;
 
@@ -230,6 +237,13 @@ md_begin (void)
   INSERT_SPECIAL_OP(tls_ie_lo16);
   INSERT_SPECIAL_OP(tls_ie_hi16);
   INSERT_SPECIAL_OP(tls_ie_ha16);
+  INSERT_SPECIAL_OP(tls_le);
+  INSERT_SPECIAL_OP(tls_le_lo16);
+  INSERT_SPECIAL_OP(tls_le_hi16);
+  INSERT_SPECIAL_OP(tls_le_ha16);
+  INSERT_SPECIAL_OP(tls_gd_call);
+  INSERT_SPECIAL_OP(tls_gd_add);
+  INSERT_SPECIAL_OP(tls_ie_load);
 #undef INSERT_SPECIAL_OP
 
   /* Initialize op_hash hash table.  */
@@ -381,24 +395,12 @@ apply_special_operator (operatorT op, int num)
   switch (op)
     {
     case O_lo16:
-    case O_got:
-    case O_got_lo16:
-    case O_tls_gd:
-    case O_tls_gd_lo16:
-    case O_tls_ie:
-    case O_tls_ie_lo16:
       return (signed short)num;
 
     case O_hi16:
-    case O_got_hi16:
-    case O_tls_gd_hi16:
-    case O_tls_ie_hi16:
       return (signed short)(num >> 16);
 
     case O_ha16:
-    case O_got_ha16:
-    case O_tls_gd_ha16:
-    case O_tls_ie_ha16:
       return (signed short)((num + 0x8000) >> 16);
 
     default:
@@ -528,6 +530,26 @@ emit_tilepro_instruction (tilepro_bundle_bits bits,
 	      require_symbol = 1;
 	      break;
 
+	    case O_tls_le:
+	      HANDLE_OP16 (TLS_LE);
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_le_lo16:
+	      HANDLE_OP16 (TLS_LE_LO);
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_le_hi16:
+	      HANDLE_OP16 (TLS_LE_HI);
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_le_ha16:
+	      HANDLE_OP16 (TLS_LE_HA);
+	      require_symbol = 1;
+	      break;
+
 #undef HANDLE_OP16
 
 	    case O_plt:
@@ -535,6 +557,57 @@ emit_tilepro_instruction (tilepro_bundle_bits bits,
 		{
 		case BFD_RELOC_TILEPRO_JOFFLONG_X1:
 		  reloc = BFD_RELOC_TILEPRO_JOFFLONG_X1_PLT;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_gd_call:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEPRO_JOFFLONG_X1:
+		  reloc = BFD_RELOC_TILEPRO_TLS_GD_CALL;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_gd_add:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEPRO_IMM8_X0:
+		  reloc = BFD_RELOC_TILEPRO_IMM8_X0_TLS_GD_ADD;
+		  break;
+		case BFD_RELOC_TILEPRO_IMM8_X1:
+		  reloc = BFD_RELOC_TILEPRO_IMM8_X1_TLS_GD_ADD;
+		  break;
+		case BFD_RELOC_TILEPRO_IMM8_Y0:
+		  reloc = BFD_RELOC_TILEPRO_IMM8_Y0_TLS_GD_ADD;
+		  break;
+		case BFD_RELOC_TILEPRO_IMM8_Y1:
+		  reloc = BFD_RELOC_TILEPRO_IMM8_Y1_TLS_GD_ADD;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_ie_load:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEPRO_IMM8_X1:
+		  reloc = BFD_RELOC_TILEPRO_TLS_IE_LOAD;
 		  break;
 		default:
 		  die = 1;
@@ -558,17 +631,22 @@ emit_tilepro_instruction (tilepro_bundle_bits bits,
 	      /* Now that we've changed the reloc, change ha16(x) into x,
 		 etc.  */
 
-	      if (operand_exp->X_add_symbol->sy_value.X_md)
+	      if (!operand_exp->X_add_symbol->sy_flags.sy_local_symbol
+                  && operand_exp->X_add_symbol->sy_value.X_md)
 		{
-		  if (require_symbol)
-		    {
-		      as_bad (_("Operator may only be applied to symbols."));
-		    }
-
 		  /* HACK: We used X_md to mark this symbol as a fake wrapper
 		     around a real expression. To unwrap it, we just grab its
 		     value here.  */
 		  operand_exp = &operand_exp->X_add_symbol->sy_value;
+
+		  if (require_symbol)
+		    {
+		      /* Look at the expression, and reject it if it's not a
+			 plain symbol.  */
+		      if (operand_exp->X_op != O_symbol
+			  || operand_exp->X_add_number != 0)
+			as_bad (_("Operator may only be applied to symbols."));
+		    }
 		}
 	      else
 		{
@@ -1306,22 +1384,36 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
 #ifdef OBJ_ELF
       switch (fixP->fx_r_type)
 	{
+	case BFD_RELOC_TILEPRO_IMM8_X0_TLS_GD_ADD:
+	case BFD_RELOC_TILEPRO_IMM8_X1_TLS_GD_ADD:
+	case BFD_RELOC_TILEPRO_IMM8_Y0_TLS_GD_ADD:
+	case BFD_RELOC_TILEPRO_IMM8_Y1_TLS_GD_ADD:
 	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD:
 	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD:
-	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE:
-	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE:
 	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_LO:
 	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_LO:
-	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_LO:
-	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_LO:
 	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_HI:
 	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_HI:
-	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HI:
-	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HI:
 	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_HA:
 	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_HA:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_LO:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_LO:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HI:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HI:
 	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HA:
 	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HA:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_LE:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_LE:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_LE_LO:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_LE_LO:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_LE_HI:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_LE_HI:
+	case BFD_RELOC_TILEPRO_IMM16_X0_TLS_LE_HA:
+	case BFD_RELOC_TILEPRO_IMM16_X1_TLS_LE_HA:
+	case BFD_RELOC_TILEPRO_TLS_GD_CALL:
+	case BFD_RELOC_TILEPRO_TLS_IE_LOAD:
 	case BFD_RELOC_TILEPRO_TLS_DTPMOD32:
 	case BFD_RELOC_TILEPRO_TLS_DTPOFF32:
 	case BFD_RELOC_TILEPRO_TLS_TPOFF32:
@@ -1339,52 +1431,12 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
   /* Apply lo16, hi16, ha16, etc. munging. */
   switch (fixP->fx_r_type)
     {
-    case BFD_RELOC_TILEPRO_IMM16_X0_GOT:
-    case BFD_RELOC_TILEPRO_IMM16_X1_GOT:
-      *valP = value = apply_special_operator (O_got, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_GOT_LO:
-    case BFD_RELOC_TILEPRO_IMM16_X1_GOT_LO:
-      *valP = value = apply_special_operator (O_got_lo16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_GOT_HI:
-    case BFD_RELOC_TILEPRO_IMM16_X1_GOT_HI:
-      *valP = value = apply_special_operator (O_got_hi16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_GOT_HA:
-    case BFD_RELOC_TILEPRO_IMM16_X1_GOT_HA:
-      *valP = value = apply_special_operator (O_got_ha16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD:
-      *valP = value = apply_special_operator (O_tls_gd, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE:
-      *valP = value = apply_special_operator (O_tls_ie, value);
-      break;
-
     case BFD_RELOC_LO16:
     case BFD_RELOC_TILEPRO_IMM16_X0_LO:
     case BFD_RELOC_TILEPRO_IMM16_X1_LO:
     case BFD_RELOC_TILEPRO_IMM16_X0_LO_PCREL:
     case BFD_RELOC_TILEPRO_IMM16_X1_LO_PCREL:
       *valP = value = apply_special_operator (O_lo16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_LO:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_LO:
-      *valP = value = apply_special_operator (O_tls_gd_lo16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_LO:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_LO:
-      *valP = value = apply_special_operator (O_tls_ie_lo16, value);
       break;
 
     case BFD_RELOC_HI16:
@@ -1395,32 +1447,12 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
       *valP = value = apply_special_operator (O_hi16, value);
       break;
 
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_HI:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_HI:
-      *valP = value = apply_special_operator (O_tls_gd_hi16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HI:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HI:
-      *valP = value = apply_special_operator (O_tls_ie_hi16, value);
-      break;
-
     case BFD_RELOC_HI16_S:
     case BFD_RELOC_TILEPRO_IMM16_X0_HA:
     case BFD_RELOC_TILEPRO_IMM16_X1_HA:
     case BFD_RELOC_TILEPRO_IMM16_X0_HA_PCREL:
     case BFD_RELOC_TILEPRO_IMM16_X1_HA_PCREL:
       *valP = value = apply_special_operator (O_ha16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_GD_HA:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_GD_HA:
-      *valP = value = apply_special_operator (O_tls_gd_ha16, value);
-      break;
-
-    case BFD_RELOC_TILEPRO_IMM16_X0_TLS_IE_HA:
-    case BFD_RELOC_TILEPRO_IMM16_X1_TLS_IE_HA:
-      *valP = value = apply_special_operator (O_tls_ie_ha16, value);
       break;
 
     default:

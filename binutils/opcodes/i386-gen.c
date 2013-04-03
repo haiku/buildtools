@@ -1,4 +1,4 @@
-/* Copyright 2007, 2008, 2009, 2010, 2011
+/* Copyright 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
@@ -46,7 +46,7 @@ static initializer cpu_flag_init[] =
     "~(CpuL1OM|CpuK1OM)" },
   { "CPU_GENERIC32_FLAGS",
     "Cpu186|Cpu286|Cpu386" },
-  { "CPU_GENERIC64_FLAGS", 
+  { "CPU_GENERIC64_FLAGS",
     "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuClflush|Cpu387|Cpu687|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuLM" },
   { "CPU_NONE_FLAGS",
    "0" },
@@ -91,7 +91,13 @@ static initializer cpu_flag_init[] =
   { "CPU_BDVER1_FLAGS",
     "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuSYSCALL|CpuRdtscp|Cpu387|Cpu687|CpuFISTTP|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuSSE3|CpuSSE4a|CpuABM|CpuLM|CpuFMA4|CpuXOP|CpuLWP" },
   { "CPU_BDVER2_FLAGS",
-    "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuSYSCALL|CpuRdtscp|Cpu387|Cpu687|CpuFISTTP|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuSSE3|CpuSSE4a|CpuABM|CpuLM|CpuFMA4|CpuXOP|CpuLWP|CpuBMI|CpuTBM|CpuF16C" },
+    "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuSYSCALL|CpuRdtscp|Cpu387|Cpu687|CpuFISTTP|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuSSE3|CpuSSE4a|CpuABM|CpuLM|CpuFMA|CpuFMA4|CpuXOP|CpuLWP|CpuBMI|CpuTBM|CpuF16C" },
+  { "CPU_BDVER3_FLAGS",
+    "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuSYSCALL|CpuRdtscp|Cpu387|Cpu687|CpuFISTTP|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuSSE3|CpuSSE4a|CpuABM|CpuLM|CpuFMA|CpuFMA4|CpuXOP|CpuLWP|CpuBMI|CpuTBM|CpuF16C|CpuClflush|CpuSSSE3|CpuSVME|CpuSSE4_1|CpuSSE4_2|CpuAES|CpuAVX|CpuPCLMUL|CpuLZCNT|CpuPRFCHW|CpuXsave|CpuXsaveopt" },
+  { "CPU_BTVER1_FLAGS",
+    "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuSYSCALL|CpuRdtscp|Cpu387|Cpu687|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuSSE3|CpuSSSE3|CpuSSE4a|CpuABM|CpuLM|CpuPRFCHW" },
+  { "CPU_BTVER2_FLAGS",
+    "Cpu186|Cpu286|Cpu386|Cpu486|Cpu586|Cpu686|CpuSYSCALL|CpuRdtscp|Cpu387|Cpu687|CpuNop|CpuMMX|CpuSSE|CpuSSE2|CpuSSE3|CpuSSSE3|CpuSSE4a|CpuSSE4_1|CpuSSE4_2|CpuABM|CpuLM|CpuBMI|CpuF16C|CpuAES|CpuPCLMUL|CpuAVX|CpuMovbe|CpuXsave|CpuXsaveopt|CpuPRFCHW" },
   { "CPU_8087_FLAGS",
     "Cpu8087" },
   { "CPU_287_FLAGS",
@@ -162,8 +168,14 @@ static initializer cpu_flag_init[] =
     "CpuBMI2" },
   { "CPU_LZCNT_FLAGS",
     "CpuLZCNT" },
+  { "CPU_HLE_FLAGS",
+    "CpuHLE" },
+  { "CPU_RTM_FLAGS",
+    "CpuRTM" },
   { "CPU_INVPCID_FLAGS",
     "CpuINVPCID" },
+  { "CPU_VMFUNC_FLAGS",
+    "CpuVMFUNC" },
   { "CPU_3DNOW_FLAGS",
     "CpuMMX|Cpu3dnow" },
   { "CPU_3DNOWA_FLAGS",
@@ -186,6 +198,12 @@ static initializer cpu_flag_init[] =
     "unknown" },
   { "CPU_K1OM_FLAGS",
     "unknown" },
+  { "CPU_ADX_FLAGS",
+    "CpuADX" },
+  { "CPU_RDSEED_FLAGS",
+    "CpuRdSeed" },
+  { "CPU_PRFCHW_FLAGS",
+    "CpuPRFCHW" },
 };
 
 static initializer operand_type_init[] =
@@ -349,7 +367,13 @@ static bitfield cpu_flags[] =
   BITFIELD (CpuF16C),
   BITFIELD (CpuBMI2),
   BITFIELD (CpuLZCNT),
+  BITFIELD (CpuHLE),
+  BITFIELD (CpuRTM),
   BITFIELD (CpuINVPCID),
+  BITFIELD (CpuVMFUNC),
+  BITFIELD (CpuRDSEED),
+  BITFIELD (CpuADX),
+  BITFIELD (CpuPRFCHW),
   BITFIELD (Cpu64),
   BITFIELD (CpuNo64),
 #ifdef CpuUnused
@@ -389,6 +413,8 @@ static bitfield opcode_modifiers[] =
   BITFIELD (RegKludge),
   BITFIELD (FirstXmm0),
   BITFIELD (Implicit1stXmm0),
+  BITFIELD (RepPrefixOk),
+  BITFIELD (HLEPrefixOk),
   BITFIELD (ToDword),
   BITFIELD (ToQword),
   BITFIELD (AddrPrefixOp0),
@@ -478,7 +504,7 @@ static void
 fail (const char *message, ...)
 {
   va_list args;
-  
+
   va_start (args, message);
   fprintf (stderr, _("%s: Error: "), program_name);
   vfprintf (stderr, message, args);
@@ -556,7 +582,7 @@ next_field (char *str, char sep, char **next, char *last)
   *str = '\0';
   remove_trailing_whitespaces (p);
 
-  *next = str + 1; 
+  *next = str + 1;
 
   if (p >= last)
     abort ();
@@ -1045,7 +1071,7 @@ process_i386_opcodes (FILE *table)
   process_i386_cpu_flag (table, "0", 0, ",", "    ", -1);
 
   process_i386_opcode_modifier (table, "0", -1);
- 
+
   fprintf (table, "    { ");
   process_i386_operand_type (table, "0", 0, "\t  ", -1);
   fprintf (table, " } }\n");
@@ -1171,7 +1197,7 @@ process_i386_initializers (void)
 /* Program options.  */
 #define OPTION_SRCDIR	200
 
-struct option long_options[] = 
+struct option long_options[] =
 {
   {"srcdir",  required_argument, NULL, OPTION_SRCDIR},
   {"debug",   no_argument,       NULL, 'd'},
@@ -1202,7 +1228,7 @@ main (int argc, char **argv)
   char *srcdir = NULL;
   int c;
   FILE *table;
-  
+
   program_name = *argv;
   xmalloc_set_program_name (program_name);
 
@@ -1230,7 +1256,7 @@ main (int argc, char **argv)
   if (optind != argc)
     usage (stdout, 1);
 
-  if (srcdir != NULL) 
+  if (srcdir != NULL)
     if (chdir (srcdir) != 0)
       fail (_("unable to change directory to \"%s\", errno = %s\n"),
 	    srcdir, xstrerror (errno));

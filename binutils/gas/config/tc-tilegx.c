@@ -72,12 +72,18 @@ static int tilegx_arch_size = 64;
 const char *
 tilegx_target_format (void)
 {
-  return tilegx_arch_size == 64 ? "elf64-tilegx" : "elf32-tilegx";
+    if (target_big_endian) {
+        return tilegx_arch_size == 64 ? "elf64-tilegx-be" : "elf32-tilegx-be";
+    } else {
+        return tilegx_arch_size == 64 ? "elf64-tilegx-le" : "elf32-tilegx-le";
+    }
 }
 
 
 #define OPTION_32 (OPTION_MD_BASE + 0)
 #define OPTION_64 (OPTION_MD_BASE + 1)
+#define OPTION_EB (OPTION_MD_BASE + 2)
+#define OPTION_EL (OPTION_MD_BASE + 3)
 
 const char *md_shortopts = "VQ:";
 
@@ -85,6 +91,8 @@ struct option md_longopts[] =
 {
   {"32", no_argument, NULL, OPTION_32},
   {"64", no_argument, NULL, OPTION_64},
+  {"EB", no_argument, NULL, OPTION_EB },
+  {"EL", no_argument, NULL, OPTION_EL },
   {NULL, no_argument, NULL, 0}
 };
 
@@ -113,6 +121,14 @@ md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
       tilegx_arch_size = 64;
       break;
 
+    case OPTION_EB:
+      target_big_endian = 1;
+      break;
+
+    case OPTION_EL:
+      target_big_endian = 0;
+      break;
+
     default:
       return 0;
     }
@@ -126,6 +142,7 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\
   -Q                      ignored\n\
   -V                      print assembler version number\n\
+  -EB/-EL                 generate big-endian/little-endian code\n\
   --32/--64               generate 32bit/64bit code\n"));
 }
 
@@ -140,27 +157,22 @@ md_show_usage (FILE *stream)
 #define O_hw1_last		O_md6
 #define O_hw2_last		O_md7
 #define O_hw0_got		O_md8
-#define O_hw1_got		O_md9
-#define O_hw2_got		O_md10
-#define O_hw3_got		O_md11
-#define O_hw0_last_got		O_md12
-#define O_hw1_last_got		O_md13
-#define O_hw2_last_got		O_md14
-#define O_plt		   	O_md15
-#define O_hw0_tls_gd		O_md16
-#define O_hw1_tls_gd		O_md17
-#define O_hw2_tls_gd		O_md18
-#define O_hw3_tls_gd		O_md19
-#define O_hw0_last_tls_gd	O_md20
-#define O_hw1_last_tls_gd	O_md21
-#define O_hw2_last_tls_gd	O_md22
-#define O_hw0_tls_ie		O_md23
-#define O_hw1_tls_ie		O_md24
-#define O_hw2_tls_ie		O_md25
-#define O_hw3_tls_ie		O_md26
-#define O_hw0_last_tls_ie	O_md27
-#define O_hw1_last_tls_ie	O_md28
-#define O_hw2_last_tls_ie	O_md29
+#define O_hw0_last_got		O_md9
+#define O_hw1_last_got		O_md10
+#define O_plt		   	O_md11
+#define O_hw0_tls_gd		O_md12
+#define O_hw0_last_tls_gd	O_md13
+#define O_hw1_last_tls_gd	O_md14
+#define O_hw0_tls_ie		O_md15
+#define O_hw0_last_tls_ie	O_md16
+#define O_hw1_last_tls_ie	O_md17
+#define O_hw0_tls_le		O_md18
+#define O_hw0_last_tls_le	O_md19
+#define O_hw1_last_tls_le	O_md20
+#define O_tls_gd_call		O_md21
+#define O_tls_gd_add		O_md22
+#define O_tls_ie_load		O_md23
+#define O_tls_add		O_md24
 
 static struct hash_control *special_operator_hash;
 
@@ -241,6 +253,10 @@ md_begin (void)
 {
   const struct tilegx_opcode *op;
   int i;
+  int mach = (tilegx_arch_size == 64) ? bfd_mach_tilegx : bfd_mach_tilegx32;
+
+  if (! bfd_set_arch_mach (stdoutput, bfd_arch_tilegx, mach))
+    as_warn (_("Could not set architecture and machine"));
 
   /* Guarantee text section is aligned.  */
   bfd_set_section_alignment (stdoutput, text_section,
@@ -268,27 +284,22 @@ md_begin (void)
   /* hw3_last is a convenience alias for the equivalent hw3.  */
   hash_insert (special_operator_hash, "hw3_last", (void*)O_hw3);
   INSERT_SPECIAL_OP (hw0_got);
-  INSERT_SPECIAL_OP (hw1_got);
-  INSERT_SPECIAL_OP (hw2_got);
-  INSERT_SPECIAL_OP (hw3_got);
   INSERT_SPECIAL_OP (hw0_last_got);
   INSERT_SPECIAL_OP (hw1_last_got);
-  INSERT_SPECIAL_OP (hw2_last_got);
   INSERT_SPECIAL_OP(plt);
   INSERT_SPECIAL_OP (hw0_tls_gd);
-  INSERT_SPECIAL_OP (hw1_tls_gd);
-  INSERT_SPECIAL_OP (hw2_tls_gd);
-  INSERT_SPECIAL_OP (hw3_tls_gd);
   INSERT_SPECIAL_OP (hw0_last_tls_gd);
   INSERT_SPECIAL_OP (hw1_last_tls_gd);
-  INSERT_SPECIAL_OP (hw2_last_tls_gd);
   INSERT_SPECIAL_OP (hw0_tls_ie);
-  INSERT_SPECIAL_OP (hw1_tls_ie);
-  INSERT_SPECIAL_OP (hw2_tls_ie);
-  INSERT_SPECIAL_OP (hw3_tls_ie);
   INSERT_SPECIAL_OP (hw0_last_tls_ie);
   INSERT_SPECIAL_OP (hw1_last_tls_ie);
-  INSERT_SPECIAL_OP (hw2_last_tls_ie);
+  INSERT_SPECIAL_OP (hw0_tls_le);
+  INSERT_SPECIAL_OP (hw0_last_tls_le);
+  INSERT_SPECIAL_OP (hw1_last_tls_le);
+  INSERT_SPECIAL_OP (tls_gd_call);
+  INSERT_SPECIAL_OP (tls_gd_add);
+  INSERT_SPECIAL_OP (tls_ie_load);
+  INSERT_SPECIAL_OP (tls_add);
 #undef INSERT_SPECIAL_OP
 
   /* Initialize op_hash hash table.  */
@@ -422,41 +433,27 @@ apply_special_operator (operatorT op, offsetT num, char *file, unsigned lineno)
 
   switch (op)
     {
-    case O_hw0_last_tls_gd:
-    case O_hw0_last_tls_ie:
     case O_hw0_last:
       check_shift = 0;
       /* Fall through.  */
-    case O_hw0_tls_gd:
-    case O_hw0_tls_ie:
     case O_hw0:
       ret = (signed short)num;
       break;
 
-    case O_hw1_last_tls_gd:
-    case O_hw1_last_tls_ie:
     case O_hw1_last:
       check_shift = 16;
       /* Fall through.  */
-    case O_hw1_tls_gd:
-    case O_hw1_tls_ie:
     case O_hw1:
       ret = (signed short)(num >> 16);
       break;
 
-    case O_hw2_last_tls_gd:
-    case O_hw2_last_tls_ie:
     case O_hw2_last:
       check_shift = 32;
       /* Fall through.  */
-    case O_hw2_tls_gd:
-    case O_hw2_tls_ie:
     case O_hw2:
       ret = (signed short)(num >> 32);
       break;
 
-    case O_hw3_tls_gd:
-    case O_hw3_tls_ie:
     case O_hw3:
       ret = (signed short)(num >> 48);
       break;
@@ -559,21 +556,6 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 	      require_symbol = 1;
 	      break;
 
-	    case O_hw1_got:
-	      HANDLE_OP16 (HW1_GOT);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw2_got:
-	      HANDLE_OP16 (HW2_GOT);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw3_got:
-	      HANDLE_OP16 (HW3_GOT);
-	      require_symbol = 1;
-	      break;
-
 	    case O_hw0_last_got:
 	      HANDLE_OP16 (HW0_LAST_GOT);
 	      require_symbol = 1;
@@ -584,28 +566,8 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 	      require_symbol = 1;
 	      break;
 
-	    case O_hw2_last_got:
-	      HANDLE_OP16 (HW2_LAST_GOT);
-	      require_symbol = 1;
-	      break;
-
 	    case O_hw0_tls_gd:
 	      HANDLE_OP16 (HW0_TLS_GD);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw1_tls_gd:
-	      HANDLE_OP16 (HW1_TLS_GD);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw2_tls_gd:
-	      HANDLE_OP16 (HW2_TLS_GD);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw3_tls_gd:
-	      HANDLE_OP16 (HW3_TLS_GD);
 	      require_symbol = 1;
 	      break;
 
@@ -619,28 +581,8 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 	      require_symbol = 1;
 	      break;
 
-	    case O_hw2_last_tls_gd:
-	      HANDLE_OP16 (HW2_LAST_TLS_GD);
-	      require_symbol = 1;
-	      break;
-
 	    case O_hw0_tls_ie:
 	      HANDLE_OP16 (HW0_TLS_IE);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw1_tls_ie:
-	      HANDLE_OP16 (HW1_TLS_IE);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw2_tls_ie:
-	      HANDLE_OP16 (HW2_TLS_IE);
-	      require_symbol = 1;
-	      break;
-
-	    case O_hw3_tls_ie:
-	      HANDLE_OP16 (HW3_TLS_IE);
 	      require_symbol = 1;
 	      break;
 
@@ -654,8 +596,18 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 	      require_symbol = 1;
 	      break;
 
-	    case O_hw2_last_tls_ie:
-	      HANDLE_OP16 (HW2_LAST_TLS_IE);
+	    case O_hw0_tls_le:
+	      HANDLE_OP16 (HW0_TLS_LE);
+	      require_symbol = 1;
+	      break;
+
+	    case O_hw0_last_tls_le:
+	      HANDLE_OP16 (HW0_LAST_TLS_LE);
+	      require_symbol = 1;
+	      break;
+
+	    case O_hw1_last_tls_le:
+	      HANDLE_OP16 (HW1_LAST_TLS_LE);
 	      require_symbol = 1;
 	      break;
 
@@ -666,6 +618,80 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 		{
 		case BFD_RELOC_TILEGX_JUMPOFF_X1:
 		  reloc = BFD_RELOC_TILEGX_JUMPOFF_X1_PLT;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_gd_call:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEGX_JUMPOFF_X1:
+		  reloc = BFD_RELOC_TILEGX_TLS_GD_CALL;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_gd_add:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEGX_IMM8_X0:
+		  reloc = BFD_RELOC_TILEGX_IMM8_X0_TLS_GD_ADD;
+		  break;
+		case BFD_RELOC_TILEGX_IMM8_X1:
+		  reloc = BFD_RELOC_TILEGX_IMM8_X1_TLS_GD_ADD;
+		  break;
+		case BFD_RELOC_TILEGX_IMM8_Y0:
+		  reloc = BFD_RELOC_TILEGX_IMM8_Y0_TLS_GD_ADD;
+		  break;
+		case BFD_RELOC_TILEGX_IMM8_Y1:
+		  reloc = BFD_RELOC_TILEGX_IMM8_Y1_TLS_GD_ADD;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_ie_load:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEGX_IMM8_X1:
+		  reloc = BFD_RELOC_TILEGX_TLS_IE_LOAD;
+		  break;
+		default:
+		  die = 1;
+		  break;
+		}
+	      use_subexp = 1;
+	      require_symbol = 1;
+	      break;
+
+	    case O_tls_add:
+	      switch (reloc)
+		{
+		case BFD_RELOC_TILEGX_IMM8_X0:
+		  reloc = BFD_RELOC_TILEGX_IMM8_X0_TLS_ADD;
+		  break;
+		case BFD_RELOC_TILEGX_IMM8_X1:
+		  reloc = BFD_RELOC_TILEGX_IMM8_X1_TLS_ADD;
+		  break;
+		case BFD_RELOC_TILEGX_IMM8_Y0:
+		  reloc = BFD_RELOC_TILEGX_IMM8_Y0_TLS_ADD;
+		  break;
+		case BFD_RELOC_TILEGX_IMM8_Y1:
+		  reloc = BFD_RELOC_TILEGX_IMM8_Y1_TLS_ADD;
 		  break;
 		default:
 		  die = 1;
@@ -689,17 +715,22 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 	      /* Now that we've changed the reloc, change ha16(x) into x,
 		 etc.  */
 
-	      if (operand_exp->X_add_symbol->sy_value.X_md)
+	      if (!operand_exp->X_add_symbol->sy_flags.sy_local_symbol
+                  && operand_exp->X_add_symbol->sy_value.X_md)
 		{
-		  if (require_symbol)
-		    {
-		      as_bad (_("Operator may only be applied to symbols."));
-		    }
-
 		  /* HACK: We used X_md to mark this symbol as a fake wrapper
 		     around a real expression. To unwrap it, we just grab its
 		     value here.  */
 		  operand_exp = &operand_exp->X_add_symbol->sy_value;
+
+		  if (require_symbol)
+		    {
+		      /* Look at the expression, and reject it if it's not a
+			 plain symbol.  */
+		      if (operand_exp->X_op != O_symbol
+			  || operand_exp->X_add_number != 0)
+			as_bad (_("Operator may only be applied to symbols."));
+		    }
 		}
 	      else
 		{
@@ -1261,6 +1292,15 @@ const pseudo_typeS md_pseudo_table[] =
 /* Equal to MAX_PRECISION in atof-ieee.c  */
 #define MAX_LITTLENUMS 6
 
+void
+md_number_to_chars (char * buf, valueT val, int n)
+{
+  if (target_big_endian)
+    number_to_chars_bigendian (buf, val, n);
+  else
+    number_to_chars_littleendian (buf, val, n);
+}
+
 /* Turn the string pointed to by litP into a floating point constant
    of type TYPE, and emit the appropriate bytes.  The number of
    LITTLENUMS emitted is stored in *SIZEP.  An error message is
@@ -1466,34 +1506,34 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
 #ifdef OBJ_ELF
       switch (fixP->fx_r_type)
 	{
+	case BFD_RELOC_TILEGX_IMM8_X0_TLS_ADD:
+	case BFD_RELOC_TILEGX_IMM8_X1_TLS_ADD:
+	case BFD_RELOC_TILEGX_IMM8_Y0_TLS_ADD:
+	case BFD_RELOC_TILEGX_IMM8_Y1_TLS_ADD:
+	case BFD_RELOC_TILEGX_IMM8_X0_TLS_GD_ADD:
+	case BFD_RELOC_TILEGX_IMM8_X1_TLS_GD_ADD:
+	case BFD_RELOC_TILEGX_IMM8_Y0_TLS_GD_ADD:
+	case BFD_RELOC_TILEGX_IMM8_Y1_TLS_GD_ADD:
 	case BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_GD:
 	case BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_IE:
 	case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_GD:
 	case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW1_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW1_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW1_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW1_TLS_IE:
 	case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_GD:
 	case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_GD:
+	case BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_IE:
+	case BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_IE:
+	case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_IE:
+	case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_IE:
 	case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_IE:
 	case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW2_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW2_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW2_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW2_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW3_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW3_TLS_GD:
-	case BFD_RELOC_TILEGX_IMM16_X0_HW3_TLS_IE:
-	case BFD_RELOC_TILEGX_IMM16_X1_HW3_TLS_IE:
+	case BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_LE:
+	case BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_LE:
+	case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_LE:
+	case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_LE:
+	case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_LE:
+	case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_LE:
+	case BFD_RELOC_TILEGX_TLS_GD_CALL:
+	case BFD_RELOC_TILEGX_TLS_IE_LOAD:
 	case BFD_RELOC_TILEGX_TLS_DTPMOD64:
 	case BFD_RELOC_TILEGX_TLS_DTPOFF64:
 	case BFD_RELOC_TILEGX_TLS_TPOFF64:
@@ -1520,12 +1560,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW0:
     case BFD_RELOC_TILEGX_IMM16_X0_HW0_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW0_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW0_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW0_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_IE:
       special = O_hw0;
       break;
 
@@ -1534,12 +1568,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST:
     case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_IE:
       special = O_hw0_last;
       break;
 
@@ -1548,12 +1576,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW1:
     case BFD_RELOC_TILEGX_IMM16_X0_HW1_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW1_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW1_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW1_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW1_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW1_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW1_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW1_TLS_IE:
       special = O_hw1;
       break;
 
@@ -1562,12 +1584,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST:
     case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_IE:
       special = O_hw1_last;
       break;
 
@@ -1576,12 +1592,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW2:
     case BFD_RELOC_TILEGX_IMM16_X0_HW2_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW2_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW2_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW2_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW2_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW2_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW2_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW2_TLS_IE:
       special = O_hw2;
       break;
 
@@ -1590,12 +1600,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST:
     case BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_TLS_IE:
       special = O_hw2_last;
       break;
 
@@ -1604,12 +1608,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_TILEGX_IMM16_X1_HW3:
     case BFD_RELOC_TILEGX_IMM16_X0_HW3_PCREL:
     case BFD_RELOC_TILEGX_IMM16_X1_HW3_PCREL:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW3_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW3_GOT:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW3_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW3_TLS_GD:
-    case BFD_RELOC_TILEGX_IMM16_X0_HW3_TLS_IE:
-    case BFD_RELOC_TILEGX_IMM16_X1_HW3_TLS_IE:
       special = O_hw3;
       break;
 

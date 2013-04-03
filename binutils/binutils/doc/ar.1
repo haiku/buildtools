@@ -124,7 +124,7 @@
 .\" ========================================================================
 .\"
 .IX Title "AR 1"
-.TH AR 1 "2011-11-21" "binutils-2.21.90" "GNU Development Tools"
+.TH AR 1 "2013-03-25" "binutils-2.23.2" "GNU Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -325,6 +325,10 @@ for all files.  When this option is used, if \fBar\fR is used with
 identical options and identical input files, multiple runs will create
 identical output files regardless of the input files' owners, groups,
 file modes, or modification times.
+.Sp
+If \fIbinutils\fR was configured with
+\&\fB\-\-enable\-deterministic\-archives\fR, then this mode is on by default.
+It can be disabled with the \fBU\fR modifier, below.
 .IP "\fBf\fR" 4
 .IX Item "f"
 Truncate names in the archive.  \s-1GNU\s0 \fBar\fR will normally permit file
@@ -386,6 +390,14 @@ names, use this modifier.  The \fBu\fR modifier is allowed only for the
 operation \fBr\fR (replace).  In particular, the combination \fBqu\fR is
 not allowed, since checking the timestamps would lose any speed
 advantage from the operation \fBq\fR.
+.IP "\fBU\fR" 4
+.IX Item "U"
+Do \fInot\fR operate in \fIdeterministic\fR mode.  This is the inverse
+of the \fBD\fR modifier, above: added files and the archive index will
+get their actual \s-1UID\s0, \s-1GID\s0, timestamp, and file mode values.
+.Sp
+This is the default unless \fIbinutils\fR was configured with
+\&\fB\-\-enable\-deterministic\-archives\fR.
 .IP "\fBv\fR" 4
 .IX Item "v"
 This modifier requests the \fIverbose\fR version of an operation.  Many
@@ -427,8 +439,9 @@ with a backslash.  The \fIfile\fR may itself contain additional
 \&\fInm\fR\|(1), \fIranlib\fR\|(1), and the Info entries for \fIbinutils\fR.
 .SH "COPYRIGHT"
 .IX Header "COPYRIGHT"
-Copyright (c) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+Copyright (c) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+2010, 2011, 2012
 Free Software Foundation, Inc.
 .PP
 Permission is granted to copy, distribute and/or modify this document

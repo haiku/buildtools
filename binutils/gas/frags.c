@@ -1,6 +1,6 @@
 /* frags.c - manage frags -
    Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2011, 2012
    Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
@@ -101,9 +101,11 @@ frag_grow (unsigned int nchars)
       if (newc < 0)
         as_fatal (_("can't extend frag %u chars"), nchars);
 
-      /* Force to allocate at least NEWC bytes.  */
+      /* Force to allocate at least NEWC bytes, but not less than the
+         default.  */
       oldc = obstack_chunk_size (&frchain_now->frch_obstack);
-      obstack_chunk_size (&frchain_now->frch_obstack) = newc;
+      if (newc > oldc)
+	obstack_chunk_size (&frchain_now->frch_obstack) = newc;
 
       while (obstack_room (&frchain_now->frch_obstack) < nchars)
         {
@@ -394,10 +396,10 @@ frag_append_1_char (int datum)
    not already accounted for in the frag FR_ADDRESS.  */
 
 bfd_boolean
-frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, bfd_vma *offset)
+frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
 {
   const fragS *frag;
-  bfd_vma off;
+  offsetT off;
 
   /* Start with offset initialised to difference between the two frags.
      Prior to assigning frag addresses this will be zero.  */

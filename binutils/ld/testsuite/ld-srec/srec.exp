@@ -1,6 +1,6 @@
 # Test linking directly to S-records.
 # By Ian Lance Taylor, Cygnus Support.
-#   Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007, 2009, 2011
+#   Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007, 2009, 2011, 2012
 #   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
@@ -250,9 +250,12 @@ proc run_srec_test { test objs } {
 	setup_xfail "sh64*-*-*"
     }
 
-    if {[istarget arm*-*-*]} {
-        # ARM targets cannot convert format in the linker 
+    if {[istarget aarch64*-*-*]   || \
+        [istarget arm*-*-*]} {
+        # ARM targets cannot convert format in the linker
         # using the --oformat command line switch
+	setup_xfail "aarch64-*-*"
+	setup_xfail "aarch64_be-*-*"
 	setup_xfail "arm*-*-*"
     }
 
@@ -266,8 +269,25 @@ proc run_srec_test { test objs } {
 	set flags "$flags -no-relax"
     }
 
-    if [istarget powerpc64*-*-*] {
-	set flags "$flags --no-toc-optimize"
+    # Epiphany needs some help too
+    if [istarget epiphany*-*-*] {
+	set flags "$flags --defsym _start=00000060"
+	setup_xfail "epiphany*-*-*"
+    }
+
+    if [istarget m681*-*-*] {
+	set flags "$flags --defsym _start=0xc000"
+	setup_xfail "m681*-*-*"
+    }
+
+    if [istarget m68hc1*-*-*] {
+	set flags "$flags --defsym _start=0xc000"
+	setup_xfail "m68hc1*-*-*"
+    }
+
+    if [istarget m9s12x*-*-*] {
+	set flags "$flags --defsym _start=0xc000"
+	setup_xfail "m9s12x*-*-*"
     }
 
     if { ![ld_simple_link $ld tmpdir/sr1 "$flags $objs"] \

@@ -93,6 +93,16 @@
 #define DWARF2_VERSION 2
 #endif
 
+/* The .debug_aranges version has been 2 in DWARF version 2, 3 and 4. */
+#ifndef DWARF2_ARANGES_VERSION
+#define DWARF2_ARANGES_VERSION 2
+#endif
+
+/* This implementation output version 2 .debug_line information. */
+#ifndef DWARF2_LINE_VERSION
+#define DWARF2_LINE_VERSION 2
+#endif
+
 #include "subsegs.h"
 
 #include "dwarf2.h"
@@ -109,7 +119,7 @@
    opcodes and variable-length operands cannot be used.  If this macro is
    nonzero, use the DW_LNS_fixed_advance_pc opcode instead.  */
 #ifndef DWARF2_USE_FIXED_ADVANCE_PC
-# define DWARF2_USE_FIXED_ADVANCE_PC	0
+# define DWARF2_USE_FIXED_ADVANCE_PC	linkrelax
 #endif
 
 /* First special line opcde - leave room for the standard opcodes.
@@ -351,7 +361,17 @@ dwarf2_gen_line_info (addressT ofs, struct dwarf2_line_info *loc)
   filenum = loc->filenum;
 
   dwarf2_push_line (loc);
-  dwarf2_flush_pending_lines (symbol_temp_new (now_seg, ofs, frag_now));
+  if (linkrelax)
+    {
+      char name[120];
+
+      /* Use a non-fake name for the line number location,
+	 so that it can be referred to by relocations.  */
+      sprintf (name, ".Loc.%u.%u", line, filenum);
+      dwarf2_flush_pending_lines (symbol_new (name, now_seg, ofs, frag_now));
+    }
+  else
+    dwarf2_flush_pending_lines (symbol_temp_new (now_seg, ofs, frag_now));
 }
 
 /* Returns the current source information.  If .file directives have
@@ -862,24 +882,22 @@ out_set_addr (symbolS *sym)
   emit_expr (&exp, sizeof_address);
 }
 
-#if DWARF2_LINE_MIN_INSN_LENGTH > 1
 static void scale_addr_delta (addressT *);
 
 static void
 scale_addr_delta (addressT *addr_delta)
 {
   static int printed_this = 0;
-  if (*addr_delta % DWARF2_LINE_MIN_INSN_LENGTH != 0)
+  if (DWARF2_LINE_MIN_INSN_LENGTH > 1)
     {
-      if (!printed_this)
-	as_bad("unaligned opcodes detected in executable segment");
-      printed_this = 1;
+      if (*addr_delta % DWARF2_LINE_MIN_INSN_LENGTH != 0  && !printed_this)
+        {
+	  as_bad("unaligned opcodes detected in executable segment");
+          printed_this = 1;
+        }
+      *addr_delta /= DWARF2_LINE_MIN_INSN_LENGTH;
     }
-  *addr_delta /= DWARF2_LINE_MIN_INSN_LENGTH;
 }
-#else
-#define scale_addr_delta(A)
-#endif
 
 /* Encode a pair of line and address skips as efficiently as possible.
    Note that the line skip is signed, whereas the address skip is unsigned.
@@ -1054,6 +1072,7 @@ out_inc_line_addr (int line_delta, addressT addr_delta)
    line and address information, but it is required if linker relaxation
    could change the code offsets.  The following two routines *must* be
    kept in sync.  */
+#define ADDR_DELTA_LIMIT 50000
 
 static int
 size_fixed_inc_line_addr (int line_delta, addressT addr_delta)
@@ -1064,7 +1083,7 @@ size_fixed_inc_line_addr (int line_delta, addressT addr_delta)
   if (line_delta != INT_MAX)
     len = 1 + sizeof_leb128 (line_delta, 1);
 
-  if (addr_delta > 50000)
+  if (addr_delta > ADDR_DELTA_LIMIT)
     {
       /* DW_LNS_extended_op */
       len += 1 + sizeof_leb128 (sizeof_address + 1, 0);
@@ -1112,7 +1131,7 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
      which this function would not be used) could change the operand by
      an unknown amount.  If the address increment is getting close to
      the limit, just reset the address.  */
-  if (addr_delta > 50000)
+  if (addr_delta > ADDR_DELTA_LIMIT)
     {
       symbolS *to_sym;
       expressionS exp;
@@ -1221,7 +1240,24 @@ dwarf2dbg_convert_frag (fragS *frag)
 {
   offsetT addr_diff;
 
-  addr_diff = resolve_symbol_value (frag->fr_symbol);
+  if (DWARF2_USE_FIXED_ADVANCE_PC)
+    {
+      /* If linker relaxation is enabled then the distance bewteen the two
+	 symbols in the frag->fr_symbol expression might change.  Hence we
+	 cannot rely upon the value computed by resolve_symbol_value.
+	 Instead we leave the expression unfinalized and allow
+	 emit_fixed_inc_line_addr to create a fixup (which later becomes a
+	 relocation) that will allow the linker to correctly compute the
+	 actual address difference.  We have to use a fixed line advance for
+	 this as we cannot (easily) relocate leb128 encoded values.  */
+      int saved_finalize_syms = finalize_syms;
+
+      finalize_syms = 0;
+      addr_diff = resolve_symbol_value (frag->fr_symbol);
+      finalize_syms = saved_finalize_syms;
+    }
+  else
+    addr_diff = resolve_symbol_value (frag->fr_symbol);
 
   /* fr_var carries the max_chars that we created the fragment with.
      fr_subtype carries the current expected length.  We must, of
@@ -1457,7 +1493,7 @@ out_debug_line (segT line_seg)
   line_end = exp.X_add_symbol;
 
   /* Version.  */
-  out_two (DWARF2_VERSION);
+  out_two (DWARF2_LINE_VERSION);
 
   /* Length of the prologue following this length.  */
   prologue_end = symbol_temp_make ();
@@ -1565,7 +1601,7 @@ out_debug_aranges (segT aranges_seg, segT info_seg)
   aranges_end = exp.X_add_symbol;
 
   /* Version.  */
-  out_two (DWARF2_VERSION);
+  out_two (DWARF2_ARANGES_VERSION);
 
   /* Offset to .debug_info.  */
   TC_DWARF2_EMIT_OFFSET (section_symbol (info_seg), sizeof_offset);
@@ -1631,7 +1667,11 @@ out_debug_abbrev (segT abbrev_seg,
   if (all_segs->next == NULL)
     {
       out_abbrev (DW_AT_low_pc, DW_FORM_addr);
-      out_abbrev (DW_AT_high_pc, DW_FORM_addr);
+      if (DWARF2_VERSION < 4)
+	out_abbrev (DW_AT_high_pc, DW_FORM_addr);
+      else
+	out_abbrev (DW_AT_high_pc, (sizeof_address == 4
+				    ? DW_FORM_data4 : DW_FORM_data8));
     }
   else
     {
@@ -1694,7 +1734,13 @@ out_debug_info (segT info_seg, segT abbrev_seg, segT line_seg, segT ranges_seg)
       emit_expr (&exp, sizeof_address);
 
       /* DW_AT_high_pc */
-      exp.X_op = O_symbol;
+      if (DWARF2_VERSION < 4)
+	exp.X_op = O_symbol;
+      else
+	{
+	  exp.X_op = O_subtract;
+	  exp.X_op_symbol = all_segs->text_start;
+	}
       exp.X_add_symbol = all_segs->text_end;
       exp.X_add_number = 0;
       emit_expr (&exp, sizeof_address);

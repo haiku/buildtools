@@ -25,6 +25,8 @@
 #ifndef _MIPS_H_
 #define _MIPS_H_
 
+#include "bfd.h"
+
 /* These are bit masks and shift counts to use to access the various
    fields of an instruction.  To retrieve the X field of an
    instruction, use the expression
@@ -353,6 +355,9 @@ struct mips_opcode
   /* A collection of bits describing the instruction sets of which this
      instruction or macro is a member. */
   unsigned long membership;
+  /* A collection of bits describing the instruction sets of which this
+     instruction or macro is not a member.  */
+  unsigned long exclusions;
 };
 
 /* These are the characters which may appear in the args field of an
@@ -713,10 +718,12 @@ static const unsigned int mips_isa_table[] =
   { 0x0001, 0x0003, 0x0607, 0x1e0f, 0x3e1f, 0x0a23, 0x3e63, 0x3ebf, 0x3fff };
 
 /* Masks used for Chip specific instructions.  */
-#define INSN_CHIP_MASK		  0xc3ff0c20
+#define INSN_CHIP_MASK		  0xc3ff0f20
 
 /* Cavium Networks Octeon instructions.  */
 #define INSN_OCTEON		  0x00000800
+#define INSN_OCTEONP		  0x00000200
+#define INSN_OCTEON2		  0x00000100
 
 /* Masks used for MIPS-defined ASEs.  */
 #define INSN_ASE_MASK		  0x3c00f010
@@ -823,44 +830,106 @@ static const unsigned int mips_isa_table[] =
 #define CPU_LOONGSON_2F 3002
 #define CPU_LOONGSON_3A 3003
 #define CPU_OCTEON	6501
+#define CPU_OCTEONP	6601
+#define CPU_OCTEON2	6502
 #define CPU_XLR     	887682   	/* decimal 'XLR'   */
+
+/* Return true if the given CPU is included in INSN_* mask MASK.  */
+
+static inline bfd_boolean
+cpu_is_member (int cpu, unsigned int mask)
+{
+  switch (cpu)
+    {
+    case CPU_R4650:
+    case CPU_RM7000:
+    case CPU_RM9000:
+      return (mask & INSN_4650) != 0;
+
+    case CPU_R4010:
+      return (mask & INSN_4010) != 0;
+
+    case CPU_VR4100:
+      return (mask & INSN_4100) != 0;
+
+    case CPU_R3900:
+      return (mask & INSN_3900) != 0;
+
+    case CPU_R10000:
+    case CPU_R12000:
+    case CPU_R14000:
+    case CPU_R16000:
+      return (mask & INSN_10000) != 0;
+
+    case CPU_SB1:
+      return (mask & INSN_SB1) != 0;
+
+    case CPU_R4111:
+      return (mask & INSN_4111) != 0;
+
+    case CPU_VR4120:
+      return (mask & INSN_4120) != 0;
+
+    case CPU_VR5400:
+      return (mask & INSN_5400) != 0;
+
+    case CPU_VR5500:
+      return (mask & INSN_5500) != 0;
+
+    case CPU_LOONGSON_2E:
+      return (mask & INSN_LOONGSON_2E) != 0;
+
+    case CPU_LOONGSON_2F:
+      return (mask & INSN_LOONGSON_2F) != 0;
+
+    case CPU_LOONGSON_3A:
+      return (mask & INSN_LOONGSON_3A) != 0;
+
+    case CPU_OCTEON:
+      return (mask & INSN_OCTEON) != 0;
+
+    case CPU_OCTEONP:
+      return (mask & INSN_OCTEONP) != 0;
+
+    case CPU_OCTEON2:
+      return (mask & INSN_OCTEON2) != 0;
+
+    case CPU_XLR:
+      return (mask & INSN_XLR) != 0;
+
+    default:
+      return FALSE;
+    }
+}
 
 /* Test for membership in an ISA including chip specific ISAs.  INSN
    is pointer to an element of the opcode table; ISA is the specified
    ISA/ASE bitmask to test against; and CPU is the CPU specific ISA to
-   test, or zero if no CPU specific ISA test is desired.  */
+   test, or zero if no CPU specific ISA test is desired.  Return true
+   if instruction INSN is available to the given ISA and CPU. */
 
-#define OPCODE_IS_MEMBER(insn, isa, cpu)				\
-    (((isa & INSN_ISA_MASK) != 0                                        \
-      && ((insn)->membership & INSN_ISA_MASK) != 0                      \
-      && ((mips_isa_table [(isa & INSN_ISA_MASK) - 1] >>                \
-           (((insn)->membership & INSN_ISA_MASK) - 1)) & 1) != 0)       \
-     || ((isa & ~INSN_ISA_MASK)                                         \
-          & ((insn)->membership & ~INSN_ISA_MASK)) != 0                 \
-     || (cpu == CPU_R4650 && ((insn)->membership & INSN_4650) != 0)	\
-     || (cpu == CPU_RM7000 && ((insn)->membership & INSN_4650) != 0)	\
-     || (cpu == CPU_RM9000 && ((insn)->membership & INSN_4650) != 0)	\
-     || (cpu == CPU_R4010 && ((insn)->membership & INSN_4010) != 0)	\
-     || (cpu == CPU_VR4100 && ((insn)->membership & INSN_4100) != 0)	\
-     || (cpu == CPU_R3900 && ((insn)->membership & INSN_3900) != 0)	\
-     || ((cpu == CPU_R10000 || cpu == CPU_R12000 || cpu == CPU_R14000	\
-	  || cpu == CPU_R16000)						\
-	 && ((insn)->membership & INSN_10000) != 0)			\
-     || (cpu == CPU_SB1 && ((insn)->membership & INSN_SB1) != 0)	\
-     || (cpu == CPU_R4111 && ((insn)->membership & INSN_4111) != 0)	\
-     || (cpu == CPU_VR4120 && ((insn)->membership & INSN_4120) != 0)	\
-     || (cpu == CPU_VR5400 && ((insn)->membership & INSN_5400) != 0)	\
-     || (cpu == CPU_VR5500 && ((insn)->membership & INSN_5500) != 0)	\
-     || (cpu == CPU_LOONGSON_2E                                         \
-         && ((insn)->membership & INSN_LOONGSON_2E) != 0)               \
-     || (cpu == CPU_LOONGSON_2F                                         \
-         && ((insn)->membership & INSN_LOONGSON_2F) != 0)               \
-     || (cpu == CPU_LOONGSON_3A                                         \
-         && ((insn)->membership & INSN_LOONGSON_3A) != 0)               \
-     || (cpu == CPU_OCTEON						\
-	 && ((insn)->membership & INSN_OCTEON) != 0)			\
-     || (cpu == CPU_XLR && ((insn)->membership & INSN_XLR) != 0)        \
-     || 0)	/* Please keep this term for easier source merging.  */
+static inline bfd_boolean
+opcode_is_member (const struct mips_opcode *insn, int isa, int cpu)
+{
+  if (!cpu_is_member (cpu, insn->exclusions))
+    {
+      /* Test for ISA level compatibility.  */
+      if ((isa & INSN_ISA_MASK) != 0
+	  && (insn->membership & INSN_ISA_MASK) != 0
+	  && ((mips_isa_table[(isa & INSN_ISA_MASK) - 1]
+	       >> ((insn->membership & INSN_ISA_MASK) - 1)) & 1) != 0)
+	return TRUE;
+
+      /* Test for ASE compatibility.  */
+      if (((isa & ~INSN_ISA_MASK) & (insn->membership & ~INSN_ISA_MASK)) != 0)
+	return TRUE;
+
+      /* Test for processor-specific extensions.  */
+      if (cpu_is_member (cpu, insn->membership))
+	return TRUE;
+    }
+  return FALSE;
+}
 
 /* This is a list of macro expanded instructions.
 
@@ -1065,6 +1134,10 @@ enum
   M_S_DOB,
   M_S_DAB,
   M_S_S,
+  M_SAA_AB,
+  M_SAA_OB,
+  M_SAAD_AB,
+  M_SAAD_OB,
   M_SC_AB,
   M_SC_OB,
   M_SCD_AB,
@@ -1482,6 +1555,24 @@ extern const int bfd_mips16_num_opcodes;
 #define MICROMIPSOP_MASK_IMMY		0x1ff
 #define MICROMIPSOP_SH_IMMY		1
 
+/* MIPS DSP ASE */
+#define MICROMIPSOP_MASK_DSPACC		0x3
+#define MICROMIPSOP_SH_DSPACC		14
+#define MICROMIPSOP_MASK_DSPSFT		0x3f
+#define MICROMIPSOP_SH_DSPSFT		16
+#define MICROMIPSOP_MASK_SA3		0x7
+#define MICROMIPSOP_SH_SA3		13
+#define MICROMIPSOP_MASK_SA4		0xf
+#define MICROMIPSOP_SH_SA4		12
+#define MICROMIPSOP_MASK_IMM8		0xff
+#define MICROMIPSOP_SH_IMM8		13
+#define MICROMIPSOP_MASK_IMM10		0x3ff
+#define MICROMIPSOP_SH_IMM10		16
+#define MICROMIPSOP_MASK_WRDSP		0x3f
+#define MICROMIPSOP_SH_WRDSP		14
+#define MICROMIPSOP_MASK_BP		0x3
+#define MICROMIPSOP_SH_BP		14
+
 /* Placeholders for fields that only exist in the traditional 32-bit
    instruction encoding; see the comment above for details.  */
 #define MICROMIPSOP_MASK_CODE20		0
@@ -1496,28 +1587,12 @@ extern const int bfd_mips16_num_opcodes;
 #define MICROMIPSOP_SH_VECBYTE		0
 #define MICROMIPSOP_MASK_VECALIGN	0
 #define MICROMIPSOP_SH_VECALIGN		0
-#define MICROMIPSOP_MASK_DSPACC	 	0
-#define MICROMIPSOP_SH_DSPACC		0
 #define MICROMIPSOP_MASK_DSPACC_S	0
 #define MICROMIPSOP_SH_DSPACC_S	 	0
-#define MICROMIPSOP_MASK_DSPSFT	 	0
-#define MICROMIPSOP_SH_DSPSFT		0
 #define MICROMIPSOP_MASK_DSPSFT_7	0
 #define MICROMIPSOP_SH_DSPSFT_7	 	0
-#define MICROMIPSOP_MASK_SA3		0
-#define MICROMIPSOP_SH_SA3		0
-#define MICROMIPSOP_MASK_SA4		0
-#define MICROMIPSOP_SH_SA4		0
-#define MICROMIPSOP_MASK_IMM8		0
-#define MICROMIPSOP_SH_IMM8		0
-#define MICROMIPSOP_MASK_IMM10		0
-#define MICROMIPSOP_SH_IMM10		0
-#define MICROMIPSOP_MASK_WRDSP		0
-#define MICROMIPSOP_SH_WRDSP		0
 #define MICROMIPSOP_MASK_RDDSP		0
 #define MICROMIPSOP_SH_RDDSP		0
-#define MICROMIPSOP_MASK_BP		0
-#define MICROMIPSOP_SH_BP		0
 #define MICROMIPSOP_MASK_MT_U		0
 #define MICROMIPSOP_SH_MT_U		0
 #define MICROMIPSOP_MASK_MT_H		0
@@ -1616,7 +1691,7 @@ extern const int bfd_mips16_num_opcodes;
    "c" 10-bit higher breakpoint code (MICROMIPSOP_*_CODE)
    "d" 5-bit destination register specifier (MICROMIPSOP_*_RD)
    "h" 5-bit PREFX hint (MICROMIPSOP_*_PREFX)
-   "i" 16 bit unsigned immediate (MICROMIPSOP_*_IMMEDIATE)
+   "i" 16-bit unsigned immediate (MICROMIPSOP_*_IMMEDIATE)
    "j" 16-bit signed immediate (MICROMIPSOP_*_DELTA)
    "k" 5-bit cache opcode in target register position (MICROMIPSOP_*_CACHE)
    "n" register list for 32-bit LWM/SWM instruction (MICROMIPSOP_*_RT)
@@ -1634,7 +1709,7 @@ extern const int bfd_mips16_num_opcodes;
    "y" 5-bit source 3 register for ALNV.PS (MICROMIPSOP_*_RS3)
    "z" must be zero register
    "C" 23-bit coprocessor function code (MICROMIPSOP_*_COPZ)
-   "B" 8-bit syscall/wait function code (MICROMIPSOP_*_CODE10)
+   "B" 10-bit syscall/wait function code (MICROMIPSOP_*_CODE10)
    "K" 5-bit Hardware Register (RDHWR instruction) (MICROMIPSOP_*_RS)
 
    "+A" 5-bit INS/EXT/DINS/DEXT/DINSM/DEXTM position, which becomes
@@ -1690,6 +1765,18 @@ extern const int bfd_mips16_num_opcodes;
    "f" 32-bit floating point constant
    "l" 32-bit floating point constant in .lit4
 
+   DSP ASE usage:
+   "2" 2-bit unsigned immediate for byte align (MICROMIPSOP_*_BP)
+   "3" 3-bit unsigned immediate (MICROMIPSOP_*_SA3)
+   "4" 4-bit unsigned immediate (MICROMIPSOP_*_SA4)
+   "5" 8-bit unsigned immediate (MICROMIPSOP_*_IMM8)
+   "6" 5-bit unsigned immediate (MICROMIPSOP_*_RS)
+   "7" 2-bit DSP accumulator register (MICROMIPSOP_*_DSPACC)
+   "8" 6-bit unsigned immediate (MICROMIPSOP_*_WRDSP)
+   "0" 6-bit signed immediate (MICROMIPSOP_*_DSPSFT)
+   "@" 10-bit signed immediate (MICROMIPSOP_*_IMM10)
+   "^" 5-bit unsigned immediate (MICROMIPSOP_*_RD)
+
    Other:
    "()" parens surrounding optional value
    ","  separates operands
@@ -1697,8 +1784,8 @@ extern const int bfd_mips16_num_opcodes;
    "m"  start of microMIPS extension sequence
 
    Characters used so far, for quick reference when adding more:
-   "1234567890"
-   "<>(),+.\|~"
+   "12345678 0"
+   "<>(),+.@\^|~"
    "ABCDEFGHI KLMN   RST V    "
    "abcd f hijklmnopqrstuvw yz"
 

@@ -124,7 +124,7 @@
 .\" ========================================================================
 .\"
 .IX Title "OBJCOPY 1"
-.TH OBJCOPY 1 "2011-11-21" "binutils-2.21.90" "GNU Development Tools"
+.TH OBJCOPY 1 "2013-03-25" "binutils-2.23.2" "GNU Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -156,6 +156,8 @@ objcopy [\fB\-F\fR \fIbfdname\fR|\fB\-\-target=\fR\fIbfdname\fR]
         [\fB\-j\fR \fIsectionname\fR|\fB\-\-only\-section=\fR\fIsectionname\fR]
         [\fB\-R\fR \fIsectionname\fR|\fB\-\-remove\-section=\fR\fIsectionname\fR]
         [\fB\-p\fR|\fB\-\-preserve\-dates\fR]
+        [\fB\-D\fR|\fB\-\-enable\-deterministic\-archives\fR]
+        [\fB\-U\fR|\fB\-\-disable\-deterministic\-archives\fR]
         [\fB\-\-debugging\fR]
         [\fB\-\-gap\-fill=\fR\fIval\fR]
         [\fB\-\-pad\-to=\fR\fIaddress\fR]
@@ -190,6 +192,8 @@ objcopy [\fB\-F\fR \fIbfdname\fR|\fB\-\-target=\fR\fIbfdname\fR]
         [\fB\-\-add\-gnu\-debuglink=\fR\fIpath-to-file\fR]
         [\fB\-\-keep\-file\-symbols\fR]
         [\fB\-\-only\-keep\-debug\fR]
+        [\fB\-\-strip\-dwo\fR]
+        [\fB\-\-extract\-dwo\fR]
         [\fB\-\-extract\-symbol\fR]
         [\fB\-\-writable\-text\fR]
         [\fB\-\-readonly\-text\fR]
@@ -472,6 +476,32 @@ commands.  If the input was '12345678' then the outputs would be
 .PD
 Set the access and modification dates of the output file to be the same
 as those of the input file.
+.IP "\fB\-D\fR" 4
+.IX Item "-D"
+.PD 0
+.IP "\fB\-\-enable\-deterministic\-archives\fR" 4
+.IX Item "--enable-deterministic-archives"
+.PD
+Operate in \fIdeterministic\fR mode.  When copying archive members
+and writing the archive index, use zero for UIDs, GIDs, timestamps,
+and use consistent file modes for all files.
+.Sp
+If \fIbinutils\fR was configured with
+\&\fB\-\-enable\-deterministic\-archives\fR, then this mode is on by default.
+It can be disabled with the \fB\-U\fR option, below.
+.IP "\fB\-U\fR" 4
+.IX Item "-U"
+.PD 0
+.IP "\fB\-\-disable\-deterministic\-archives\fR" 4
+.IX Item "--disable-deterministic-archives"
+.PD
+Do \fInot\fR operate in \fIdeterministic\fR mode.  This is the
+inverse of the \fB\-D\fR option, above: when copying archive members
+and writing the archive index, use their actual \s-1UID\s0, \s-1GID\s0, timestamp,
+and file mode values.
+.Sp
+This is the default unless \fIbinutils\fR was configured with
+\&\fB\-\-enable\-deterministic\-archives\fR.
 .IP "\fB\-\-debugging\fR" 4
 .IX Item "--debugging"
 Convert debugging information, if possible.  This is not the default
@@ -612,7 +642,7 @@ the use of long section names in the output object; when \fBdisable\fR
 is in effect, any long section names in the input object will be truncated.
 The \fBenable\fR option will only emit long section names if any are
 present in the inputs; this is mostly the same as \fBkeep\fR, but it
-is left undefined whether the \fBenable\fR option might force the 
+is left undefined whether the \fBenable\fR option might force the
 creation of an empty string table in the output file.
 .IP "\fB\-\-change\-leading\-char\fR" 4
 .IX Item "--change-leading-char"
@@ -832,6 +862,21 @@ currently only supports the presence of one filename containing
 debugging information, not multiple filenames on a one-per-object-file
 basis.
 .RE
+.IP "\fB\-\-strip\-dwo\fR" 4
+.IX Item "--strip-dwo"
+Remove the contents of all \s-1DWARF\s0 .dwo sections, leaving the
+remaining debugging sections and all symbols intact.
+This option is intended for use by the compiler as part of
+the \fB\-gsplit\-dwarf\fR option, which splits debug information
+between the .o file and a separate .dwo file.  The compiler
+generates all debug information in the same file, then uses
+the \fB\-\-extract\-dwo\fR option to copy the .dwo sections to
+the .dwo file, then the \fB\-\-strip\-dwo\fR option to remove
+those sections from the original .o file.
+.IP "\fB\-\-extract\-dwo\fR" 4
+.IX Item "--extract-dwo"
+Extract the contents of all \s-1DWARF\s0 .dwo sections.  See the
+\&\fB\-\-strip\-dwo\fR option for more information.
 .IP "\fB\-\-file\-alignment\fR \fInum\fR" 4
 .IX Item "--file-alignment num"
 Specify the file alignment.  Sections in the file will always begin at
@@ -950,8 +995,9 @@ with a backslash.  The \fIfile\fR may itself contain additional
 \&\fIld\fR\|(1), \fIobjdump\fR\|(1), and the Info entries for \fIbinutils\fR.
 .SH "COPYRIGHT"
 .IX Header "COPYRIGHT"
-Copyright (c) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+Copyright (c) 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+2010, 2011, 2012
 Free Software Foundation, Inc.
 .PP
 Permission is granted to copy, distribute and/or modify this document

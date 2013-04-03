@@ -84,14 +84,11 @@ extern char *ppc_target_format (void);
     ppc_handle_align (FRAGP);
 
 extern void ppc_handle_align (struct frag *);
+extern void ppc_frag_check (struct frag *);
 
 #define SUB_SEGMENT_ALIGN(SEG, FRCHAIN) 0
 
-#define md_frag_check(FRAGP) \
-  if ((FRAGP)->has_code							\
-      && (((FRAGP)->fr_address + (FRAGP)->insn_addr) & 3) != 0)		\
-    as_bad_where ((FRAGP)->fr_file, (FRAGP)->fr_line,			\
-		  _("instruction address is not a multiple of 4"));
+#define md_frag_check(FRAGP) ppc_frag_check (FRAGP)
 
 /* Arrange to store the value of ppc_cpu at the site of a fixup
    for later use in md_apply_fix.  */
@@ -273,6 +270,8 @@ extern int tc_ppc_regname_to_dw2regnum (char *);
 
 extern int ppc_cie_data_alignment;
 
-#define DWARF2_LINE_MIN_INSN_LENGTH     4
+extern int ppc_dwarf2_line_min_insn_length;
+
+#define DWARF2_LINE_MIN_INSN_LENGTH     ppc_dwarf2_line_min_insn_length
 #define DWARF2_DEFAULT_RETURN_COLUMN    0x41
 #define DWARF2_CIE_DATA_ALIGNMENT       ppc_cie_data_alignment

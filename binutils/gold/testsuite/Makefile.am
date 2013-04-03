@@ -94,6 +94,9 @@ object_unittest_SOURCES = object_unittest.cc
 check_PROGRAMS += binary_unittest
 binary_unittest_SOURCES = binary_unittest.cc
 
+check_PROGRAMS += leb128_unittest
+leb128_unittest_SOURCES = leb128_unittest.cc
+
 endif NATIVE_OR_CROSS_LINKER
 
 # ---------------------------------------------------------------------
@@ -861,7 +864,7 @@ initpri1_LDADD =
 check_PROGRAMS += initpri2
 initpri2_SOURCES = initpri2.c
 initpri2_DEPENDENCIES = gcctestdir/ld
-initpri2_LDFLAGS = -Bgcctestdir/
+initpri2_LDFLAGS = -Bgcctestdir/ -Wl,--ctors-in-init-array
 initpri2_LDADD =
 
 check_PROGRAMS += initpri3a
@@ -870,11 +873,16 @@ initpri3a_DEPENDENCIES = gcctestdir/ld
 initpri3a_LDFLAGS = -Bgcctestdir/
 initpri3a_LDADD =
 
-check_PROGRAMS += initpri3b
-initpri3b_SOURCES = initpri3.c
-initpri3b_DEPENDENCIES = gcctestdir/ld
-initpri3b_LDFLAGS = -Bgcctestdir/ -Wl,--no-ctors-in-init-array
-initpri3b_LDADD =
+# This test fails on targets not using .ctors and .dtors sections (e.g. ARM
+# EABI). Given that gcc is moving towards using .init_array in all cases,
+# this test is commented out.  A better fix would be checking whether gcc
+# uses .ctors or .init_array sections in configure.
+
+# check_PROGRAMS += initpri3b
+# initpri3b_SOURCES = initpri3.c
+# initpri3b_DEPENDENCIES = gcctestdir/ld
+# initpri3b_LDFLAGS = -Bgcctestdir/ -Wl,--no-ctors-in-init-array
+# initpri3b_LDADD =
 
 # Test --detect-odr-violations
 check_SCRIPTS += debug_msg.sh
@@ -1510,6 +1518,20 @@ unused.o: unused.c
 unused.c:
 	@cp /dev/null $@
 
+check_SCRIPTS += plugin_final_layout.sh
+check_DATA += plugin_final_layout.stdout
+plugin_final_layout.o: plugin_final_layout.cc
+	$(CXXCOMPILE) -O0 -c -ffunction-sections  -fdata-sections -g -o $@ $<
+plugin_final_layout: plugin_final_layout.o plugin_section_order.so gcctestdir/ld
+	$(CXXLINK) -Bgcctestdir/ -Wl,--plugin,"./plugin_section_order.so" plugin_final_layout.o
+plugin_final_layout.stdout: plugin_final_layout
+	$(TEST_NM) -n plugin_final_layout > plugin_final_layout.stdout
+
+plugin_section_order.so: plugin_section_order.o
+	$(LINK) -Bgcctestdir/ -shared plugin_section_order.o
+plugin_section_order.o: plugin_section_order.c
+	$(COMPILE) -O0 -c -fpic -o $@ $<
+
 endif PLUGINS
 
 check_PROGRAMS += exclude_libs_test
@@ -1651,7 +1673,7 @@ no_version_test.stdout: libno_version_test.so
 if IFUNC
 
 ifuncmod1.o: ifuncmod1.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncmod1.so: ifuncmod1.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -shared ifuncmod1.o
 
@@ -1659,9 +1681,9 @@ ifuncdep1.o: ifuncmod1.c
 	$(COMPILE) -c -o $@ $<
 
 ifuncmain1pic.o: ifuncmain1.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncmain1pie.o: ifuncmain1.c
-	$(COMPILE) -c -fpie -o $@ $<
+	$(COMPILE) -c -fPIE -o $@ $<
 
 if HAVE_STATIC
 if IFUNC_STATIC
@@ -1695,7 +1717,7 @@ ifuncmain1vis_LDADD = ifuncmod1.so
 
 check_PROGRAMS += ifuncmain1vispic
 ifuncmain1vispic.o: ifuncmain1vis.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncmain1vispic: ifuncmain1vispic.o ifuncmod1.so gcctestdir/ld
 	$(LINK) -Bgcctestdir/ ifuncmain1pic.o ifuncmod1.so -Wl,-R,.
 
@@ -1709,7 +1731,7 @@ ifuncmain1pie: ifuncmain1pie.o ifuncmod1.so gcctestdir/ld
 
 check_PROGRAMS += ifuncmain1vispie
 ifuncmain1vispie.o: ifuncmain1vis.c
-	$(COMPILE) -c -fpie -o $@ $<
+	$(COMPILE) -c -fPIE -o $@ $<
 ifuncmain1vispie: ifuncmain1vispie.o ifuncmod1.so gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -pie ifuncmain1vispie.o ifuncmod1.so -Wl,-R,.
 
@@ -1718,10 +1740,10 @@ ifuncmain1staticpie: ifuncmain1pie.o ifuncmod1.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -pie ifuncmain1pie.o ifuncmod1.o
 
 ifuncmain2pic.o: ifuncmain2.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 
 ifuncdep2pic.o: ifuncdep2.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 
 if HAVE_STATIC
 if IFUNC_STATIC
@@ -1748,7 +1770,7 @@ ifuncmain2pic: ifuncmain2pic.o ifuncdep2pic.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ ifuncmain2pic.o ifuncdep2pic.o
 
 ifuncmod3.o: ifuncmod3.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncmod3.so: ifuncmod3.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -shared ifuncmod3.o
 
@@ -1759,7 +1781,7 @@ ifuncmain3_LDFLAGS = -Bgcctestdir/ -Wl,--export-dynamic -Wl,-R,.
 ifuncmain3_LDADD = -ldl
 
 ifuncmain4pic.o: ifuncmain4.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 
 if HAVE_STATIC
 if IFUNC_STATIC
@@ -1782,13 +1804,13 @@ ifuncmain4_LDFLAGS = -Bgcctestdir/
 ifuncmain4_LDADD =
 
 ifuncmain5pic.o: ifuncmain5.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 
 ifuncmain5pie.o: ifuncmain5.c
-	$(COMPILE) -c -fpie -o $@ $<
+	$(COMPILE) -c -fPIE -o $@ $<
 
 ifuncmod5.o: ifuncmod5.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncmod5.so: ifuncmod5.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -shared ifuncmod5.o
 
@@ -1828,10 +1850,10 @@ ifuncmain5pie: ifuncmain5pie.o ifuncmod5.so gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -pie ifuncmain5pie.o ifuncmod5.so -Wl,-R,.
 
 ifuncmain6pie.o: ifuncmain6pie.c
-	$(COMPILE) -c -fpie -o $@ $<
+	$(COMPILE) -c -fPIE -o $@ $<
 
 ifuncmod6.o: ifuncmod6.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncmod6.so: ifuncmod6.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -shared ifuncmod6.o
 
@@ -1840,10 +1862,10 @@ ifuncmain6pie: ifuncmain6pie.o ifuncmod6.so gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -pie ifuncmain6pie.o ifuncmod6.so -Wl,-R,.
 
 ifuncmain7pic.o: ifuncmain7.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 
 ifuncmain7pie.o: ifuncmain7.c
-	$(COMPILE) -c -fpie -o $@ $<
+	$(COMPILE) -c -fPIE -o $@ $<
 
 if HAVE_STATIC
 if IFUNC_STATIC
@@ -1875,9 +1897,9 @@ ifuncmain7pie: ifuncmain7pie.o gcctestdir/ld
 
 check_PROGRAMS += ifuncvar
 ifuncvar1_pic.o: ifuncvar1.c
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncvar2_pic.o: ifuncvar2.c	
-	$(COMPILE) -c -fpic -o $@ $<
+	$(COMPILE) -c -fPIC -o $@ $<
 ifuncvar.so: ifuncvar1_pic.o ifuncvar2_pic.o gcctestdir/ld
 	$(LINK) -Bgcctestdir/ -shared ifuncvar1_pic.o ifuncvar2_pic.o
 ifuncvar_SOURCES = ifuncvar3.c
@@ -1944,6 +1966,58 @@ memory_test: memory_test.o gcctestdir/ld $(srcdir)/memory_test.t
 	$(LINK) -Bgcctestdir/ -nostartfiles -nostdlib -T $(srcdir)/memory_test.t -o $@ memory_test.o
 memory_test.stdout: memory_test
 	$(TEST_READELF) -lWS  $< > $@
+
+if HAVE_PUBNAMES
+
+# Test that --gdb-index functions correctly without gcc-generated pubnames.
+check_SCRIPTS += gdb_index_test_1.sh
+check_DATA += gdb_index_test_1.stdout
+MOSTLYCLEANFILES += gdb_index_test_1.stdout gdb_index_test_1
+gdb_index_test.o: gdb_index_test.cc
+	$(CXXCOMPILE) -O0 -g -gno-pubnames -c -o $@ $<
+gdb_index_test_1: gdb_index_test.o gcctestdir/ld
+	$(CXXLINK) -Bgcctestdir/ -Wl,--gdb-index $<
+gdb_index_test_1.stdout: gdb_index_test_1
+	$(TEST_READELF) --debug-dump=gdb_index $< > $@
+
+if HAVE_ZLIB
+
+# Test that --gdb-index functions correctly with compressed debug sections.
+check_SCRIPTS += gdb_index_test_2.sh
+check_DATA += gdb_index_test_2.stdout
+MOSTLYCLEANFILES += gdb_index_test_2.stdout gdb_index_test_2
+gdb_index_test_cdebug.o: gdb_index_test.cc
+	$(CXXCOMPILE) -Bgcctestdir/ -O0 -g -Wa,--compress-debug-sections -c -o $@ $<
+gdb_index_test_2: gdb_index_test_cdebug.o gcctestdir/ld
+	$(CXXLINK) -Bgcctestdir/ -Wl,--gdb-index $<
+gdb_index_test_2.stdout: gdb_index_test_2
+	$(TEST_READELF) --debug-dump=gdb_index $< > $@
+
+endif HAVE_ZLIB
+
+# Another simple C test (DW_AT_high_pc encoding) for --gdb-index.
+check_SCRIPTS += gdb_index_test_3.sh
+check_DATA += gdb_index_test_3.stdout
+MOSTLYCLEANFILES += gdb_index_test_3.stdout gdb_index_test_3
+gdb_index_test_3.o: gdb_index_test_3.c
+	$(COMPILE) -O0 -g -c -o $@ $<
+gdb_index_test_3: gdb_index_test_3.o gcctestdir/ld
+	$(LINK) -Bgcctestdir/ -Wl,--gdb-index,--fatal-warnings $<
+gdb_index_test_3.stdout: gdb_index_test_3
+	$(TEST_READELF) --debug-dump=gdb_index $< > $@
+
+# Test that --gdb-index functions correctly with gcc-generated pubnames.
+check_SCRIPTS += gdb_index_test_4.sh
+check_DATA += gdb_index_test_4.stdout
+MOSTLYCLEANFILES += gdb_index_test_4.stdout gdb_index_test_4
+gdb_index_test_pub.o: gdb_index_test.cc
+	$(CXXCOMPILE) -O0 -g -gpubnames -c -o $@ $<
+gdb_index_test_4: gdb_index_test_pub.o gcctestdir/ld
+	$(CXXLINK) -Bgcctestdir/ -Wl,--gdb-index $<
+gdb_index_test_4.stdout: gdb_index_test_4
+	$(TEST_READELF) --debug-dump=gdb_index $< > $@
+
+endif HAVE_PUBNAMES
 
 # End-to-end incremental linking tests.
 # Incremental linking is currently supported only on the x86_64 target.
@@ -2483,7 +2557,7 @@ check_SCRIPTS += arm_exidx_test.sh
 check_DATA += arm_exidx_test.stdout
 
 arm_exidx_test.stdout: arm_exidx_test.so
-	$(TEST_READELF) -S $< > $@
+	$(TEST_READELF) -Sr $< > $@
 
 arm_exidx_test.so: arm_exidx_test.o ../ld-new
 	../ld-new -shared -o $@ $<

@@ -296,7 +296,7 @@ Symbol_table::resolve(Sized_symbol<size>* to,
 
   // Record if we've seen this symbol in a real ELF object (i.e., the
   // symbol is referenced from outside the world known to the plugin).
-  if (object->pluginobj() == NULL)
+  if (object->pluginobj() == NULL && !object->is_dynamic())
     to->set_in_real_elf();
 
   // If we're processing replacement files, allow new symbols to override
@@ -336,9 +336,9 @@ Symbol_table::resolve(Sized_symbol<size>* to,
       && to->name()[0] == '_' && to->name()[1] == 'Z')
     {
       Symbol_location fromloc
-          = { object, orig_st_shndx, sym.get_st_value() };
+          = { object, orig_st_shndx, static_cast<off_t>(sym.get_st_value()) };
       Symbol_location toloc = { to->object(), to->shndx(&to_is_ordinary),
-				to->value() };
+				static_cast<off_t>(to->value()) };
       this->candidate_odr_violations_[to->name()].insert(fromloc);
       this->candidate_odr_violations_[to->name()].insert(toloc);
     }
@@ -356,9 +356,15 @@ Symbol_table::resolve(Sized_symbol<size>* to,
 				    &adjust_dyndef))
     {
       elfcpp::STB tobinding = to->binding();
+      typename Sized_symbol<size>::Value_type tovalue = to->value();
       this->override(to, sym, st_shndx, is_ordinary, object, version);
-      if (adjust_common_sizes && tosize > to->symsize())
-        to->set_symsize(tosize);
+      if (adjust_common_sizes)
+	{
+	  if (tosize > to->symsize())
+	    to->set_symsize(tosize);
+	  if (tovalue > to->value())
+	    to->set_value(tovalue);
+	}
       if (adjust_dyndef)
 	{
 	  // We are overriding an UNDEF or WEAK UNDEF with a DYN DEF.
@@ -368,8 +374,13 @@ Symbol_table::resolve(Sized_symbol<size>* to,
     }
   else
     {
-      if (adjust_common_sizes && sym.get_st_size() > tosize)
-        to->set_symsize(sym.get_st_size());
+      if (adjust_common_sizes)
+	{
+	  if (sym.get_st_size() > tosize)
+	    to->set_symsize(sym.get_st_size());
+	  if (sym.get_st_value() > to->value())
+	    to->set_value(sym.get_st_value());
+	}
       if (adjust_dyndef)
 	{
 	  // We are keeping a DYN DEF after seeing an UNDEF or WEAK UNDEF.

@@ -237,33 +237,36 @@ static struct sparc_arch {
 } sparc_arch_table[] = {
   { "v6", "v6", v6, 0, 1, 0 },
   { "v7", "v7", v7, 0, 1, 0 },
-  { "v8", "v8", v8, 32, 1, F_MUL32|F_DIV32|F_FSMULD },
-  { "v8a", "v8", v8, 32, 1, F_MUL32|F_DIV32|F_FSMULD },
-  { "sparc", "v9", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS },
-  { "sparcvis", "v9a", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS },
-  { "sparcvis2", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2 },
-  { "sparcfmaf", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_FMAF },
-  { "sparcima", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_FMAF|F_IMA },
-  { "sparcvis3", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_FMAF|F_VIS3|F_HPC },
-  { "sparcvis3r", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_FMAF|F_VIS3|F_HPC|F_RANDOM|F_TRANS|F_FJFMAU },
-  { "sparclet", "sparclet", sparclet, 32, 1, F_MUL32|F_DIV32|F_FSMULD },
-  { "sparclite", "sparclite", sparclite, 32, 1, F_MUL32|F_DIV32|F_FSMULD },
-  { "sparc86x", "sparclite", sparc86x, 32, 1, F_MUL32|F_DIV32|F_FSMULD },
-  { "v8plus", "v9", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS },
-  { "v8plusa", "v9a", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS|F_VIS },
-  { "v8plusb", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS|F_VIS|F_VIS2 },
-  { "v8plusc", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS|F_VIS|F_VIS2|F_ASI_BLK_INIT },
-  { "v8plusd", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS|F_VIS|F_VIS2|F_ASI_BLK_INIT|F_FMAF|F_VIS3|F_HPC },
-  { "v8plusv", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_V8PLUS|F_VIS|F_VIS2|F_ASI_BLK_INIT|F_FMAF|F_VIS3|F_HPC|F_RANDOM|F_TRANS|F_FJFMAU|F_IMA|F_ASI_CACHE_SPARING },
-  { "v9", "v9", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC },
-  { "v9a", "v9a", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS },
-  { "v9b", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2 },
-  { "v9c", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_ASI_BLK_INIT },
-  { "v9d", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_ASI_BLK_INIT|F_FMAF|F_VIS3|F_HPC },
-  { "v9v", "v9b", v9, 0, 1, F_MUL32|F_DIV32|F_FSMULD|F_POPC|F_VIS|F_VIS2|F_ASI_BLK_INIT|F_FMAF|F_VIS3|F_HPC|F_RANDOM|F_TRANS|F_FJFMAU|F_IMA|F_ASI_CACHE_SPARING },
+  { "v8", "v8", v8, 32, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD },
+  { "v8a", "v8", v8, 32, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD },
+  { "sparc", "v9", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS },
+  { "sparcvis", "v9a", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS },
+  { "sparcvis2", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2 },
+  { "sparcfmaf", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_FMAF },
+  { "sparcima", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_FMAF|HWCAP_IMA },
+  { "sparcvis3", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC },
+  { "sparc4", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_RANDOM|HWCAP_TRANS|HWCAP_FJFMAU|HWCAP_AES|HWCAP_DES|HWCAP_KASUMI|HWCAP_CAMELLIA|HWCAP_MD5|HWCAP_SHA1|HWCAP_SHA256|HWCAP_SHA512|HWCAP_MPMUL|HWCAP_MONT|HWCAP_CRC32C|HWCAP_CBCOND|HWCAP_PAUSE },
+  { "sparcvis3r", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_RANDOM|HWCAP_TRANS|HWCAP_FJFMAU },
+  { "sparclet", "sparclet", sparclet, 32, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD },
+  { "sparclite", "sparclite", sparclite, 32, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD },
+  { "sparc86x", "sparclite", sparc86x, 32, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD },
+  { "v8plus", "v9", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS },
+  { "v8plusa", "v9a", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS|HWCAP_VIS },
+  { "v8plusb", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS|HWCAP_VIS|HWCAP_VIS2 },
+  { "v8plusc", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT },
+  { "v8plusd", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC },
+  { "v8pluse", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_AES|HWCAP_DES|HWCAP_KASUMI|HWCAP_CAMELLIA|HWCAP_MD5|HWCAP_SHA1|HWCAP_SHA256|HWCAP_SHA512|HWCAP_MPMUL|HWCAP_MONT|HWCAP_CRC32C|HWCAP_CBCOND|HWCAP_PAUSE },
+  { "v8plusv", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_V8PLUS|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_RANDOM|HWCAP_TRANS|HWCAP_FJFMAU|HWCAP_IMA|HWCAP_ASI_CACHE_SPARING|HWCAP_AES|HWCAP_DES|HWCAP_KASUMI|HWCAP_CAMELLIA|HWCAP_MD5|HWCAP_SHA1|HWCAP_SHA256|HWCAP_SHA512|HWCAP_MPMUL|HWCAP_MONT|HWCAP_CRC32C|HWCAP_CBCOND|HWCAP_PAUSE },
+  { "v9", "v9", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC },
+  { "v9a", "v9a", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS },
+  { "v9b", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2 },
+  { "v9c", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT },
+  { "v9d", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC },
+  { "v9e", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_AES|HWCAP_DES|HWCAP_KASUMI|HWCAP_CAMELLIA|HWCAP_MD5|HWCAP_SHA1|HWCAP_SHA256|HWCAP_SHA512|HWCAP_MPMUL|HWCAP_MONT|HWCAP_CRC32C|HWCAP_CBCOND|HWCAP_PAUSE },
+  { "v9v", "v9b", v9, 0, 1, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC|HWCAP_VIS|HWCAP_VIS2|HWCAP_ASI_BLK_INIT|HWCAP_FMAF|HWCAP_VIS3|HWCAP_HPC|HWCAP_RANDOM|HWCAP_TRANS|HWCAP_FJFMAU|HWCAP_IMA|HWCAP_ASI_CACHE_SPARING|HWCAP_AES|HWCAP_DES|HWCAP_KASUMI|HWCAP_CAMELLIA|HWCAP_MD5|HWCAP_SHA1|HWCAP_SHA256|HWCAP_SHA512|HWCAP_MPMUL|HWCAP_MONT|HWCAP_CRC32C|HWCAP_CBCOND|HWCAP_PAUSE },
   /* This exists to allow configure.in/Makefile.in to pass one
      value to specify both the default machine and default word size.  */
-  { "v9-64", "v9", v9, 64, 0, F_MUL32|F_DIV32|F_FSMULD|F_POPC },
+  { "v9-64", "v9", v9, 64, 0, HWCAP_MUL32|HWCAP_DIV32|HWCAP_FSMULD|HWCAP_POPC },
   { NULL, NULL, v8, 0, 0, 0 }
 };
 
@@ -796,11 +799,13 @@ struct priv_reg_entry v9a_asr_table[] =
   {"softint_set", 20},
   {"softint", 22},
   {"set_softint", 20},
+  {"pause", 27},
   {"pic", 17},
   {"pcr", 16},
   {"gsr", 19},
   {"dcr", 18},
   {"cps", 28},
+  {"cfr", 26},
   {"clear_softint", 21},
   {"", -1},			/* End marker.  */
 };
@@ -945,44 +950,7 @@ sparc_md_end (void)
 
 #if defined(OBJ_ELF) && !defined(TE_SOLARIS)
   if (hwcap_seen)
-    {
-      int bits = 0;
-
-      if (hwcap_seen & F_MUL32)
-	bits |= ELF_SPARC_HWCAP_MUL32;
-      if (hwcap_seen & F_DIV32)
-	bits |= ELF_SPARC_HWCAP_DIV32;
-      if (hwcap_seen & F_FSMULD)
-	bits |= ELF_SPARC_HWCAP_FSMULD;
-      if (hwcap_seen & F_V8PLUS)
-	bits |= ELF_SPARC_HWCAP_V8PLUS;
-      if (hwcap_seen & F_POPC)
-	bits |= ELF_SPARC_HWCAP_POPC;
-      if (hwcap_seen & F_VIS)
-	bits |= ELF_SPARC_HWCAP_VIS;
-      if (hwcap_seen & F_VIS2)
-	bits |= ELF_SPARC_HWCAP_VIS2;
-      if (hwcap_seen & F_ASI_BLK_INIT)
-	bits |= ELF_SPARC_HWCAP_ASI_BLK_INIT;
-      if (hwcap_seen & F_FMAF)
-	bits |= ELF_SPARC_HWCAP_FMAF;
-      if (hwcap_seen & F_VIS3)
-	bits |= ELF_SPARC_HWCAP_VIS3;
-      if (hwcap_seen & F_HPC)
-	bits |= ELF_SPARC_HWCAP_HPC;
-      if (hwcap_seen & F_RANDOM)
-	bits |= ELF_SPARC_HWCAP_RANDOM;
-      if (hwcap_seen & F_TRANS)
-	bits |= ELF_SPARC_HWCAP_TRANS;
-      if (hwcap_seen & F_FJFMAU)
-	bits |= ELF_SPARC_HWCAP_FJFMAU;
-      if (hwcap_seen & F_IMA)
-	bits |= ELF_SPARC_HWCAP_IMA;
-      if (hwcap_seen & F_ASI_CACHE_SPARING)
-	bits |= ELF_SPARC_HWCAP_ASI_CACHE_SPARING;
-
-      bfd_elf_add_obj_attr_int (stdoutput, OBJ_ATTR_GNU, Tag_GNU_Sparc_HWCAPS, bits);
-    }
+    bfd_elf_add_obj_attr_int (stdoutput, OBJ_ATTR_GNU, Tag_GNU_Sparc_HWCAPS, hwcap_seen);
 #endif
 }
 
@@ -1440,38 +1408,64 @@ md_assemble (char *str)
 static const char *
 get_hwcap_name (int mask)
 {
-  if (mask & F_MUL32)
+  if (mask & HWCAP_MUL32)
     return "mul32";
-  if (mask & F_DIV32)
+  if (mask & HWCAP_DIV32)
     return "div32";
-  if (mask & F_FSMULD)
+  if (mask & HWCAP_FSMULD)
     return "fsmuld";
-  if (mask & F_V8PLUS)
+  if (mask & HWCAP_V8PLUS)
     return "v8plus";
-  if (mask & F_POPC)
+  if (mask & HWCAP_POPC)
     return "popc";
-  if (mask & F_VIS)
+  if (mask & HWCAP_VIS)
     return "vis";
-  if (mask & F_VIS2)
+  if (mask & HWCAP_VIS2)
     return "vis2";
-  if (mask & F_ASI_BLK_INIT)
+  if (mask & HWCAP_ASI_BLK_INIT)
     return "ASIBlkInit";
-  if (mask & F_FMAF)
+  if (mask & HWCAP_FMAF)
     return "fmaf";
-  if (mask & F_VIS3)
+  if (mask & HWCAP_VIS3)
     return "vis3";
-  if (mask & F_HPC)
+  if (mask & HWCAP_HPC)
     return "hpc";
-  if (mask & F_RANDOM)
+  if (mask & HWCAP_RANDOM)
     return "random";
-  if (mask & F_TRANS)
+  if (mask & HWCAP_TRANS)
     return "trans";
-  if (mask & F_FJFMAU)
+  if (mask & HWCAP_FJFMAU)
     return "fjfmau";
-  if (mask & F_IMA)
+  if (mask & HWCAP_IMA)
     return "ima";
-  if (mask & F_ASI_CACHE_SPARING)
+  if (mask & HWCAP_ASI_CACHE_SPARING)
     return "cspare";
+  if (mask & HWCAP_AES)
+    return "aes";
+  if (mask & HWCAP_DES)
+    return "des";
+  if (mask & HWCAP_KASUMI)
+    return "kasumi";
+  if (mask & HWCAP_CAMELLIA)
+    return "camellia";
+  if (mask & HWCAP_MD5)
+    return "md5";
+  if (mask & HWCAP_SHA1)
+    return "sha1";
+  if (mask & HWCAP_SHA256)
+    return "sha256";
+  if (mask & HWCAP_SHA512)
+    return "sha512";
+  if (mask & HWCAP_MPMUL)
+    return "mpmul";
+  if (mask & HWCAP_MONT)
+    return "mont";
+  if (mask & HWCAP_PAUSE)
+    return "pause";
+  if (mask & HWCAP_CBCOND)
+    return "cbcond";
+  if (mask & HWCAP_CRC32C)
+    return "crc32c";
   return "UNKNOWN";
 }
 
@@ -1498,7 +1492,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
     {
       do
 	++s;
-      while (ISLOWER (*s) || ISDIGIT (*s));
+      while (ISLOWER (*s) || ISDIGIT (*s) || *s == '_');
     }
 
   switch (*s)
@@ -1810,6 +1804,47 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 	      the_insn.reloc = BFD_RELOC_SPARC_10;
 	      goto immediate;
 
+	    case ')':
+	      if (*s == ' ')
+		s++;
+	      if ((s[0] == '0' && s[1] == 'x' && ISXDIGIT (s[2]))
+		  || ISDIGIT (*s))
+		{
+		  long num = 0;
+
+		  if (s[0] == '0' && s[1] == 'x')
+		    {
+		      s += 2;
+		      while (ISXDIGIT (*s))
+			{
+			  num <<= 4;
+			  num |= hex_value (*s);
+			  ++s;
+			}
+		    }
+		  else
+		    {
+		      while (ISDIGIT (*s))
+			{
+			  num = num * 10 + *s - '0';
+			  ++s;
+			}
+		    }
+		  if (num < 0 || num > 31)
+		    {
+		      error_message = _(": crypto immediate must be between 0 and 31");
+		      goto error;
+		    }
+
+		  opcode |= RS3 (num);
+		  continue;
+		}
+	      else
+		{
+		  error_message = _(": expecting crypto immediate");
+		  goto error;
+		}
+
 	    case 'X':
 	      /* V8 systems don't understand BFD_RELOC_SPARC_5.  */
 	      if (SPARC_OPCODE_ARCH_V9_P (max_architecture))
@@ -1832,6 +1867,11 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 
 	    case 'k':
 	      the_insn.reloc = /* RELOC_WDISP2_14 */ BFD_RELOC_SPARC_WDISP16;
+	      the_insn.pcrel = 1;
+	      goto immediate;
+
+	    case '=':
+	      the_insn.reloc = /* RELOC_WDISP2_8 */ BFD_RELOC_SPARC_WDISP10;
 	      the_insn.pcrel = 1;
 	      goto immediate;
 
@@ -2418,6 +2458,8 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		      { "hh", 2, BFD_RELOC_SPARC_HH22, 1, 1 },
 		      { "hm", 2, BFD_RELOC_SPARC_HM10, 1, 1 },
 		      { "lm", 2, BFD_RELOC_SPARC_LM22, 1, 1 },
+		      { "h34", 3, BFD_RELOC_SPARC_H34, 1, 0 },
+		      { "l34", 3, BFD_RELOC_SPARC_L44, 1, 0 },
 		      { "h44", 3, BFD_RELOC_SPARC_H44, 1, 0 },
 		      { "m44", 3, BFD_RELOC_SPARC_M44, 1, 0 },
 		      { "l44", 3, BFD_RELOC_SPARC_L44, 1, 0 },
@@ -2581,6 +2623,11 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 			    val &= 0x3ff;
 			    break;
 
+			  case BFD_RELOC_SPARC_H34:
+			    val >>= 12;
+			    val &= 0x3fffff;
+			    break;
+
 			  case BFD_RELOC_SPARC_H44:
 			    val >>= 22;
 			    val &= 0x3fffff;
@@ -2658,6 +2705,26 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		     all the various cases (e.g. in md_apply_fix and
 		     bfd_install_relocation) so duplicating all that code
 		     here isn't right.  */
+
+		  /* This is a special case to handle cbcond instructions
+		     properly, which can need two relocations.  The first
+		     one is for the 5-bit immediate field and the latter
+		     is going to be for the WDISP10 branch part.  We
+		     handle the R_SPARC_5 immediate directly here so that
+		     we don't need to add support for multiple relocations
+		     in one instruction just yet.  */
+		  if (the_insn.reloc == BFD_RELOC_SPARC_5)
+		    {
+		      valueT val = the_insn.exp.X_add_number;
+
+		      if (! in_bitfield_range (val, 0x1f))
+			{
+			  error_message = _(": Immediate value in cbcond is out of range.");
+			  goto error;
+			}
+		      opcode |= val & 0x1f;
+		      the_insn.reloc = BFD_RELOC_NONE;
+		    }
 		}
 
 	      continue;
@@ -2850,7 +2917,7 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 	{
 	  /* We have a match.  Now see if the architecture is OK.  */
 	  int needed_arch_mask = insn->architecture;
-	  int hwcaps = insn->flags & F_HWCAP_MASK;
+	  int hwcaps = insn->hwcaps;
 
 #if defined(OBJ_ELF) && !defined(TE_SOLARIS)
 	  if (hwcaps)
@@ -3193,8 +3260,12 @@ md_apply_fix (fixS *fixP, valueT *valP, segT segment ATTRIBUTE_UNUSED)
 
   /* If this is a data relocation, just output VAL.  */
 
-  if (fixP->fx_r_type == BFD_RELOC_16
-      || fixP->fx_r_type == BFD_RELOC_SPARC_UA16)
+  if (fixP->fx_r_type == BFD_RELOC_8)
+    {
+      md_number_to_chars (buf, val, 1);
+    }
+  else if (fixP->fx_r_type == BFD_RELOC_16
+	   || fixP->fx_r_type == BFD_RELOC_SPARC_UA16)
     {
       md_number_to_chars (buf, val, 2);
     }
@@ -3356,6 +3427,18 @@ md_apply_fix (fixS *fixP, valueT *valP, segT segment ATTRIBUTE_UNUSED)
 	  insn |= val & 0x1f;
 	  break;
 
+	case BFD_RELOC_SPARC_WDISP10:
+	  if ((val & 3)
+	      || val >= 0x007fc
+	      || val <= -(offsetT) 0x808)
+	    as_bad_where (fixP->fx_file, fixP->fx_line,
+			  _("relocation overflow"));
+	  /* FIXME: The +1 deserves a comment.  */
+	  val = (val >> 2) + 1;
+	  insn |= ((val & 0x300) << 11)
+	    | ((val & 0xff) << 5);
+	  break;
+
 	case BFD_RELOC_SPARC_WDISP16:
 	  if ((val & 3)
 	      || val >= 0x1fffc
@@ -3427,6 +3510,15 @@ md_apply_fix (fixS *fixP, valueT *valP, segT segment ATTRIBUTE_UNUSED)
 	  /* Fall through.  */
 	case BFD_RELOC_SPARC_BASE22:
 	  insn |= val & 0x3fffff;
+	  break;
+
+	case BFD_RELOC_SPARC_H34:
+	  if (!fixP->fx_addsy)
+	    {
+	      bfd_vma tval = val;
+	      tval >>= 12;
+	      insn |= tval & 0x3fffff;
+	    }
 	  break;
 
 	case BFD_RELOC_SPARC_H44:
@@ -3509,6 +3601,7 @@ tc_gen_reloc (asection *section, fixS *fixp)
     case BFD_RELOC_SPARC_PC22:
     case BFD_RELOC_SPARC_PC10:
     case BFD_RELOC_SPARC_BASE13:
+    case BFD_RELOC_SPARC_WDISP10:
     case BFD_RELOC_SPARC_WDISP16:
     case BFD_RELOC_SPARC_WDISP19:
     case BFD_RELOC_SPARC_WDISP22:
@@ -3524,6 +3617,7 @@ tc_gen_reloc (asection *section, fixS *fixp)
     case BFD_RELOC_SPARC_PC_HH22:
     case BFD_RELOC_SPARC_PC_HM10:
     case BFD_RELOC_SPARC_PC_LM22:
+    case BFD_RELOC_SPARC_H34:
     case BFD_RELOC_SPARC_H44:
     case BFD_RELOC_SPARC_M44:
     case BFD_RELOC_SPARC_L44:
@@ -3679,6 +3773,7 @@ tc_gen_reloc (asection *section, fixS *fixp)
       && code != BFD_RELOC_SPARC_WDISP22
       && code != BFD_RELOC_SPARC_WDISP16
       && code != BFD_RELOC_SPARC_WDISP19
+      && code != BFD_RELOC_SPARC_WDISP10
       && code != BFD_RELOC_SPARC_WPLT30
       && code != BFD_RELOC_SPARC_TLS_GD_CALL
       && code != BFD_RELOC_SPARC_TLS_LDM_CALL)

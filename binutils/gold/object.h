@@ -1,6 +1,7 @@
 // object.h -- support for an object file for linking in gold  -*- C++ -*-
 
-// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012
+// Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -47,7 +48,7 @@ class Pluginobj;
 class Dynobj;
 class Object_merge_map;
 class Relocatable_relocs;
-class Symbols_data;
+struct Symbols_data;
 
 template<typename Stringpool_char>
 class Stringpool_template;
@@ -725,6 +726,20 @@ class Object
 			section_size_type* uncompressed_size) const
   { return this->do_section_is_compressed(shndx, uncompressed_size); }
 
+  // Return a view of the decompressed contents of a section.  Set *PLEN
+  // to the size.  Set *IS_NEW to true if the contents need to be freed
+  // by the caller.
+  const unsigned char*
+  decompressed_section_contents(unsigned int shndx, section_size_type* plen,
+				bool* is_cached)
+  { return this->do_decompressed_section_contents(shndx, plen, is_cached); }
+
+  // Discard any buffers of decompressed sections.  This is done
+  // at the end of the Add_symbols task.
+  void
+  discard_decompressed_sections()
+  { this->do_discard_decompressed_sections(); }
+
   // Return the index of the first incremental relocation for symbol SYMNDX.
   unsigned int
   get_incremental_reloc_base(unsigned int symndx) const
@@ -791,8 +806,9 @@ class Object
 
   // Return the location of the contents of a section.  Implemented by
   // child class.
-  virtual Location
-  do_section_contents(unsigned int shndx) = 0;
+  virtual const unsigned char*
+  do_section_contents(unsigned int shndx, section_size_type* plen,
+		      bool cache) = 0;
 
   // Get the size of a section--implemented by child class.
   virtual uint64_t
@@ -891,6 +907,27 @@ class Object
   virtual bool
   do_section_is_compressed(unsigned int, section_size_type*) const
   { return false; }
+
+  // Return a view of the decompressed contents of a section.  Set *PLEN
+  // to the size.  This default implementation simply returns the
+  // raw section contents and sets *IS_NEW to false to indicate
+  // that the contents do not need to be freed by the caller.
+  // This function must be overridden for any types of object files
+  // that might contain compressed sections.
+  virtual const unsigned char*
+  do_decompressed_section_contents(unsigned int shndx,
+				   section_size_type* plen,
+				   bool* is_new)
+  {
+    *is_new = false;
+    return this->do_section_contents(shndx, plen, false);
+  }
+
+  // Discard any buffers of decompressed sections.  This is done
+  // at the end of the Add_symbols task.
+  virtual void
+  do_discard_decompressed_sections()
+  { }
 
   // Return the index of the first incremental relocation for symbol SYMNDX--
   // implemented by child class.
@@ -1008,6 +1045,39 @@ class Relobj : public Object
   void
   scan_relocs(Symbol_table* symtab, Layout* layout, Read_relocs_data* rd)
   { return this->do_scan_relocs(symtab, layout, rd); }
+
+  // Return the value of the local symbol whose index is SYMNDX, plus
+  // ADDEND.  ADDEND is passed in so that we can correctly handle the
+  // section symbol for a merge section.
+  uint64_t
+  local_symbol_value(unsigned int symndx, uint64_t addend) const
+  { return this->do_local_symbol_value(symndx, addend); }
+
+  // Return the PLT offset for a local symbol.  It is an error to call
+  // this if it doesn't have one.
+  unsigned int
+  local_plt_offset(unsigned int symndx) const
+  { return this->do_local_plt_offset(symndx); }
+
+  // Return whether the local symbol SYMNDX has a GOT offset of type
+  // GOT_TYPE.
+  bool
+  local_has_got_offset(unsigned int symndx, unsigned int got_type) const
+  { return this->do_local_has_got_offset(symndx, got_type); }
+
+  // Return the GOT offset of type GOT_TYPE of the local symbol
+  // SYMNDX.  It is an error to call this if the symbol does not have
+  // a GOT offset of the specified type.
+  unsigned int
+  local_got_offset(unsigned int symndx, unsigned int got_type) const
+  { return this->do_local_got_offset(symndx, got_type); }
+
+  // Set the GOT offset with type GOT_TYPE of the local symbol SYMNDX
+  // to GOT_OFFSET.
+  void
+  set_local_got_offset(unsigned int symndx, unsigned int got_type,
+		       unsigned int got_offset)
+  { this->do_set_local_got_offset(symndx, got_type, got_offset); }
 
   // The number of local symbols in the input symbol table.
   virtual unsigned int
@@ -1166,6 +1236,28 @@ class Relobj : public Object
   // Scan the relocs--implemented by child class.
   virtual void
   do_scan_relocs(Symbol_table*, Layout*, Read_relocs_data*) = 0;
+
+  // Return the value of a local symbol.
+  virtual uint64_t
+  do_local_symbol_value(unsigned int symndx, uint64_t addend) const = 0;
+
+  // Return the PLT offset of a local symbol.
+  virtual unsigned int
+  do_local_plt_offset(unsigned int symndx) const = 0;
+
+  // Return whether a local symbol has a GOT offset of a given type.
+  virtual bool
+  do_local_has_got_offset(unsigned int symndx,
+			  unsigned int got_type) const = 0;
+
+  // Return the GOT offset of a given type of a local symbol.
+  virtual unsigned int
+  do_local_got_offset(unsigned int symndx, unsigned int got_type) const = 0;
+
+  // Set the GOT offset with a given type for a local symbol.
+  virtual void
+  do_set_local_got_offset(unsigned int symndx, unsigned int got_type,
+			  unsigned int got_offset) = 0;
 
   // Return the number of local symbols--implemented by child class.
   virtual unsigned int
@@ -1720,9 +1812,14 @@ class Reloc_symbol_changes
   std::vector<Symbol*> vec_;
 };
 
-// Type for mapping section index to uncompressed size.
+// Type for mapping section index to uncompressed size and contents.
 
-typedef std::map<unsigned int, section_size_type> Compressed_section_map;
+struct Compressed_section_info
+{
+  section_size_type size;
+  const unsigned char* contents;
+};
+typedef std::map<unsigned int, Compressed_section_info> Compressed_section_map;
 
 // Abstract base class for a regular object file, either a real object file
 // or an incremental (unchanged) object.  This is size and endian specific.
@@ -1775,47 +1872,6 @@ class Sized_relobj : public Relobj
     return this->section_offsets_[shndx];
   }
 
-  // Return whether the local symbol SYMNDX has a GOT offset.
-  // For TLS symbols, the GOT entry will hold its tp-relative offset.
-  bool
-  local_has_got_offset(unsigned int symndx, unsigned int got_type) const
-  {
-    Local_got_offsets::const_iterator p =
-        this->local_got_offsets_.find(symndx);
-    return (p != this->local_got_offsets_.end()
-            && p->second->get_offset(got_type) != -1U);
-  }
-
-  // Return the GOT offset of the local symbol SYMNDX.
-  unsigned int
-  local_got_offset(unsigned int symndx, unsigned int got_type) const
-  {
-    Local_got_offsets::const_iterator p =
-        this->local_got_offsets_.find(symndx);
-    gold_assert(p != this->local_got_offsets_.end());
-    unsigned int off = p->second->get_offset(got_type);
-    gold_assert(off != -1U);
-    return off;
-  }
-
-  // Set the GOT offset of the local symbol SYMNDX to GOT_OFFSET.
-  void
-  set_local_got_offset(unsigned int symndx, unsigned int got_type,
-                       unsigned int got_offset)
-  {
-    Local_got_offsets::const_iterator p =
-        this->local_got_offsets_.find(symndx);
-    if (p != this->local_got_offsets_.end())
-      p->second->set_offset(got_type, got_offset);
-    else
-      {
-        Got_offset_list* g = new Got_offset_list(got_type, got_offset);
-        std::pair<Local_got_offsets::iterator, bool> ins =
-            this->local_got_offsets_.insert(std::make_pair(symndx, g));
-        gold_assert(ins.second);
-      }
-  }
-
   // Iterate over local symbols, calling a visitor class V for each GOT offset
   // associated with a local symbol.
   void
@@ -1853,6 +1909,49 @@ class Sized_relobj : public Relobj
       (off == static_cast<uint64_t>(-1)
        ? invalid_address
        : convert_types<Address, uint64_t>(off));
+  }
+
+  // Return whether the local symbol SYMNDX has a GOT offset of type
+  // GOT_TYPE.
+  bool
+  do_local_has_got_offset(unsigned int symndx, unsigned int got_type) const
+  {
+    Local_got_offsets::const_iterator p =
+        this->local_got_offsets_.find(symndx);
+    return (p != this->local_got_offsets_.end()
+            && p->second->get_offset(got_type) != -1U);
+  }
+
+  // Return the GOT offset of type GOT_TYPE of the local symbol
+  // SYMNDX.
+  unsigned int
+  do_local_got_offset(unsigned int symndx, unsigned int got_type) const
+  {
+    Local_got_offsets::const_iterator p =
+        this->local_got_offsets_.find(symndx);
+    gold_assert(p != this->local_got_offsets_.end());
+    unsigned int off = p->second->get_offset(got_type);
+    gold_assert(off != -1U);
+    return off;
+  }
+
+  // Set the GOT offset with type GOT_TYPE of the local symbol SYMNDX
+  // to GOT_OFFSET.
+  void
+  do_set_local_got_offset(unsigned int symndx, unsigned int got_type,
+			  unsigned int got_offset)
+  {
+    Local_got_offsets::const_iterator p =
+        this->local_got_offsets_.find(symndx);
+    if (p != this->local_got_offsets_.end())
+      p->second->set_offset(got_type, got_offset);
+    else
+      {
+        Got_offset_list* g = new Got_offset_list(got_type, got_offset);
+        std::pair<Local_got_offsets::iterator, bool> ins =
+            this->local_got_offsets_.insert(std::make_pair(symndx, g));
+        gold_assert(ins.second);
+      }
   }
 
  private:
@@ -2000,11 +2099,6 @@ class Sized_relobj_file : public Sized_relobj<size, big_endian>
   bool
   local_has_plt_offset(unsigned int symndx) const;
 
-  // Return the PLT offset for a local symbol.  It is an error to call
-  // this if it doesn't have one.
-  unsigned int
-  local_plt_offset(unsigned int symndx) const;
-
   // Set the PLT offset of the local symbol SYMNDX.
   void
   set_local_plt_offset(unsigned int symndx, unsigned int plt_offset);
@@ -2049,6 +2143,19 @@ class Sized_relobj_file : public Sized_relobj<size, big_endian>
   // Read the symbols.
   void
   do_read_symbols(Read_symbols_data*);
+
+  // Return the value of a local symbol.
+  uint64_t
+  do_local_symbol_value(unsigned int symndx, uint64_t addend) const
+  {
+    const Symbol_value<size>* symval = this->local_symbol(symndx);
+    return symval->value(this, addend);
+  }
+
+  // Return the PLT offset for a local symbol.  It is an error to call
+  // this if it doesn't have one.
+  unsigned int
+  do_local_plt_offset(unsigned int symndx) const;
 
   // Return the number of local symbols.
   unsigned int
@@ -2132,9 +2239,19 @@ class Sized_relobj_file : public Sized_relobj<size, big_endian>
   { return this->elf_file_.section_name(shndx); }
 
   // Return the location of the contents of a section.
-  Object::Location
-  do_section_contents(unsigned int shndx)
-  { return this->elf_file_.section_contents(shndx); }
+  const unsigned char*
+  do_section_contents(unsigned int shndx, section_size_type* plen,
+		      bool cache)
+  {
+    Object::Location loc(this->elf_file_.section_contents(shndx));
+    *plen = convert_to_section_size_type(loc.data_size);
+    if (*plen == 0)
+      {
+	static const unsigned char empty[1] = { '\0' };
+	return empty;
+      }
+    return this->get_view(loc.file_offset, *plen, true, cache);
+  }
 
   // Return section flags.
   uint64_t
@@ -2254,11 +2371,24 @@ class Sized_relobj_file : public Sized_relobj<size, big_endian>
     if (p != this->compressed_sections_->end())
       {
 	if (uncompressed_size != NULL)
-	  *uncompressed_size = p->second;
+	  *uncompressed_size = p->second.size;
 	return true;
       }
     return false;
   }
+
+  // Return a view of the uncompressed contents of a section.  Set *PLEN
+  // to the size.  Set *IS_NEW to true if the contents need to be deleted
+  // by the caller.
+  const unsigned char*
+  do_decompressed_section_contents(unsigned int shndx,
+				   section_size_type* plen,
+				   bool* is_new);
+
+  // Discard any buffers of decompressed sections.  This is done
+  // at the end of the Add_symbols task.
+  void
+  do_discard_decompressed_sections();
 
  private:
   // For convenience.
@@ -2544,7 +2674,8 @@ class Sized_relobj_file : public Sized_relobj<size, big_endian>
   std::vector<Deferred_layout> deferred_layout_;
   // The list of relocation sections whose layout was deferred.
   std::vector<Deferred_layout> deferred_layout_relocs_;
-  // For compressed debug sections, map section index to uncompressed size.
+  // For compressed debug sections, map section index to uncompressed size
+  // and contents.
   Compressed_section_map* compressed_sections_;
 };
 

@@ -22,6 +22,8 @@
 
 #include "gold.h"
 
+#include <unistd.h>
+
 #ifdef HAVE_TIMES
 #include <sys/times.h>
 #endif
@@ -47,6 +49,15 @@ void
 Timer::start()
 {
   this->get_time(&this->start_time_);
+}
+
+// Record the time used by pass N (0 <= N <= 2).
+void
+Timer::stamp(int n)
+{
+  gold_assert(n >= 0 && n <= 2);
+  TimeStats& thispass = this->pass_times_[n];
+  this->get_time(&thispass);
 }
 
 #if HAVE_SYSCONF && defined _SC_CLK_TCK
@@ -104,6 +115,19 @@ Timer::get_elapsed_time()
   delta.user = now.user - this->start_time_.user;
   delta.sys = now.sys - this->start_time_.sys;
   return delta;
+}
+
+// Return the stats for pass N (0 <= N <= 2).
+Timer::TimeStats
+Timer::get_pass_time(int n)
+{
+  gold_assert(n >= 0 && n <= 2);
+  TimeStats thispass = this->pass_times_[n];
+  TimeStats& lastpass = n > 0 ? this->pass_times_[n-1] : this->start_time_;
+  thispass.wall -= lastpass.wall;
+  thispass.user -= lastpass.user;
+  thispass.sys -= lastpass.sys;
+  return thispass;
 }
 
 }

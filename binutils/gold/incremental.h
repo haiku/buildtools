@@ -1,6 +1,6 @@
 // inremental.h -- incremental linking support for gold   -*- C++ -*-
 
-// Copyright 2009, 2010 Free Software Foundation, Inc.
+// Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Mikolaj Zalewski <mikolajz@google.com>.
 
 // This file is part of gold.
@@ -758,6 +758,23 @@ class Incremental_inputs_reader
   typedef elfcpp::Swap<64, big_endian> Swap64;
 
  public:
+  // Size of the .gnu_incremental_inputs header.
+  // (3 x 4-byte fields, plus 4 bytes padding.)
+  static const unsigned int header_size = 16;
+  // Size of an input file entry.
+  // (2 x 4-byte fields, 1 x 12-byte field, 2 x 2-byte fields.)
+  static const unsigned int input_entry_size = 24;
+  // Size of the first part of the supplemental info block for
+  // relocatable objects and archive members.
+  // (7 x 4-byte fields, plus 4 bytes padding.)
+  static const unsigned int object_info_size = 32;
+  // Size of an input section entry.
+  // (2 x 4-byte fields, 2 x address-sized fields.)
+  static const unsigned int input_section_entry_size = 8 + 2 * size / 8;
+  // Size of a global symbol entry in the supplemental info block.
+  // (5 x 4-byte fields.)
+  static const unsigned int global_sym_entry_size = 20;
+
   Incremental_inputs_reader()
     : p_(NULL), strtab_(NULL, 0), input_file_count_(0)
   { }
@@ -788,6 +805,14 @@ class Incremental_inputs_reader
   // Reader class for an input file entry and its supplemental info.
   class Incremental_input_entry_reader
   {
+   private:
+    static const unsigned int object_info_size =
+	Incremental_inputs_reader<size, big_endian>::object_info_size;
+    static const unsigned int input_section_entry_size =
+	Incremental_inputs_reader<size, big_endian>::input_section_entry_size;
+    static const unsigned int global_sym_entry_size =
+	Incremental_inputs_reader<size, big_endian>::global_sym_entry_size;
+
    public:
     Incremental_input_entry_reader(const Incremental_inputs_reader* inputs,
 				   unsigned int offset)
@@ -866,9 +891,10 @@ class Incremental_inputs_reader
 		  || this->type() == INCREMENTAL_INPUT_ARCHIVE_MEMBER);
 
       unsigned int section_count = this->get_input_section_count();
-      return (this->info_offset_ + 28
-	      + section_count * input_section_entry_size
-	      + symndx * 20);
+      return (this->info_offset_
+	      + this->object_info_size
+	      + section_count * this->input_section_entry_size
+	      + symndx * this->global_sym_entry_size);
     }
 
     // Return the global symbol count -- for objects & shared libraries only.
@@ -1001,8 +1027,9 @@ class Incremental_inputs_reader
     {
       Input_section_info info;
       const unsigned char* p = (this->inputs_->p_
-				+ this->info_offset_ + 28
-				+ n * input_section_entry_size);
+				+ this->info_offset_
+				+ this->object_info_size
+				+ n * this->input_section_entry_size);
       unsigned int name_offset = Swap32::readval(p);
       info.name = this->inputs_->get_string(name_offset);
       info.output_shndx = Swap32::readval(p + 4);
@@ -1019,9 +1046,10 @@ class Incremental_inputs_reader
 		  || this->type() == INCREMENTAL_INPUT_ARCHIVE_MEMBER);
       unsigned int section_count = this->get_input_section_count();
       const unsigned char* p = (this->inputs_->p_
-				+ this->info_offset_ + 28
-				+ section_count * input_section_entry_size
-				+ n * 20);
+				+ this->info_offset_
+				+ this->object_info_size
+				+ section_count * this->input_section_entry_size
+				+ n * this->global_sym_entry_size);
       return Incremental_global_symbol_reader<big_endian>(p);
     }
 
@@ -1032,9 +1060,10 @@ class Incremental_inputs_reader
       unsigned int section_count = this->get_input_section_count();
       unsigned int symbol_count = this->get_global_symbol_count();
       const unsigned char* p = (this->inputs_->p_
-				+ this->info_offset_ + 28
-				+ section_count * input_section_entry_size
-				+ symbol_count * 20
+				+ this->info_offset_
+				+ this->object_info_size
+				+ section_count * this->input_section_entry_size
+				+ symbol_count * this->global_sym_entry_size
 				+ n * 4);
       unsigned int name_offset = Swap32::readval(p);
       return this->inputs_->get_string(name_offset);
@@ -1072,8 +1101,6 @@ class Incremental_inputs_reader
     }
 
    private:
-    // Size of an input section entry.
-    static const unsigned int input_section_entry_size = 8 + 2 * size / 8;
     // The reader instance for the containing section.
     const Incremental_inputs_reader* inputs_;
     // The flags, including the type of input file.
@@ -1089,14 +1116,14 @@ class Incremental_inputs_reader
   input_file_offset(unsigned int n) const
   {
     gold_assert(n < this->input_file_count_);
-    return 16 + n * 24;
+    return this->header_size + n * this->input_entry_size;
   }
 
   // Return the index of an input file entry given its OFFSET.
   unsigned int
   input_file_index(unsigned int offset) const
   {
-    int n = (offset - 16) / 24;
+    int n = ((offset - this->header_size) / this->input_entry_size);
     gold_assert(input_file_offset(n) == offset);
     return n;
   }
@@ -1110,7 +1137,8 @@ class Incremental_inputs_reader
   Incremental_input_entry_reader
   input_file_at_offset(unsigned int offset) const
   {
-    gold_assert(offset < 16 + this->input_file_count_ * 24);
+    gold_assert(offset < (this->header_size
+			  + this->input_file_count_ * this->input_entry_size));
     return Incremental_input_entry_reader(this, offset);
   }
 
@@ -1880,8 +1908,9 @@ class Sized_relobj_incr : public Sized_relobj<size, big_endian>
   do_section_name(unsigned int shndx);
 
   // Return a view of the contents of a section.
-  Object::Location
-  do_section_contents(unsigned int shndx);
+  const unsigned char*
+  do_section_contents(unsigned int shndx, section_size_type* plen,
+		      bool cache);
 
   // Return section flags.
   uint64_t
@@ -1923,6 +1952,15 @@ class Sized_relobj_incr : public Sized_relobj<size, big_endian>
   const Symbols*
   do_get_global_symbols() const
   { return &this->symbols_; }
+
+  // Return the value of a local symbol.
+  uint64_t
+  do_local_symbol_value(unsigned int, uint64_t) const
+  { gold_unreachable(); }
+
+  unsigned int
+  do_local_plt_offset(unsigned int) const
+  { gold_unreachable(); }
 
   // Return the number of local symbols.
   unsigned int
@@ -1996,6 +2034,8 @@ class Sized_relobj_incr : public Sized_relobj<size, big_endian>
   unsigned int local_dynsym_offset_;
   // The entries in the symbol table for the external symbols.
   Symbols symbols_;
+  // Number of symbols defined in object file itself.
+  size_t defined_count_;
   // The offset of the first incremental relocation for this object.
   unsigned int incr_reloc_offset_;
   // The number of incremental relocations for this object.
@@ -2075,8 +2115,9 @@ class Sized_incr_dynobj : public Dynobj
   do_section_name(unsigned int shndx);
 
   // Return a view of the contents of a section.
-  Object::Location
-  do_section_contents(unsigned int shndx);
+  const unsigned char*
+  do_section_contents(unsigned int shndx, section_size_type* plen,
+		      bool cache);
 
   // Return section flags.
   uint64_t
@@ -2127,6 +2168,8 @@ class Sized_incr_dynobj : public Dynobj
   Input_entry_reader input_reader_;
   // The entries in the symbol table for the external symbols.
   Symbols symbols_;
+  // Number of symbols defined in object file itself.
+  size_t defined_count_;
 };
 
 // Allocate an incremental object of the appropriate size and endianness.

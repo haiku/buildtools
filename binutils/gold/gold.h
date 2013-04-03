@@ -42,12 +42,10 @@
 # define _LIBGETTEXT_H
 #endif
 
-// Always include <clocale> first to avoid conflicts with the macros
-// used when ENABLE_NLS is not defined.
-#include <clocale>
-
 #ifdef ENABLE_NLS
+// On some systems, things go awry when <libintl.h> comes after <clocale>.
 # include <libintl.h>
+# include <clocale>
 # define _(String) gettext (String)
 # ifdef gettext_noop
 #  define N_(String) gettext_noop (String)
@@ -55,11 +53,13 @@
 #  define N_(String) (String)
 # endif
 #else
+// Include <clocale> first to avoid conflicts with these macros.
+# include <clocale>
 # define gettext(Msgid) (Msgid)
 # define dgettext(Domainname, Msgid) (Msgid)
 # define dcgettext(Domainname, Msgid, Category) (Msgid)
-# define textdomain(Domainname) while (0) /* nothing */
-# define bindtextdomain(Domainname, Dirname) while (0) /* nothing */
+# define textdomain(Domainname) do {} while (0) /* nothing */
+# define bindtextdomain(Domainname, Dirname) do {} while (0) /* nothing */
 # define _(String) (String)
 # define N_(String) (String)
 #endif
@@ -79,6 +79,22 @@
 #define Unordered_multimap std::tr1::unordered_multimap
 
 #define reserve_unordered_map(map, n) ((map)->rehash(n))
+
+#ifndef HAVE_TR1_HASH_OFF_T
+// The library does not support hashes of off_t values.  Add support
+// here.  This is likely to be specific to libstdc++.  This issue
+// arises with GCC 4.1.x when compiling in 32-bit mode with a 64-bit
+// off_t type.
+namespace std { namespace tr1 {
+template<>
+struct hash<off_t> : public std::unary_function<off_t, std::size_t>
+{
+  std::size_t
+  operator()(off_t val) const
+  { return static_cast<std::size_t>(val); }
+};
+} } // Close namespaces.
+#endif // !defined(HAVE_TR1_HASH_OFF_T)
 
 #elif defined(HAVE_EXT_HASH_MAP) && defined(HAVE_EXT_HASH_SET)
 

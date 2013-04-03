@@ -1,6 +1,6 @@
 \input texinfo @c                               -*-Texinfo-*-
 @c  Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-@c  2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+@c  2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
 @c  Free Software Foundation, Inc.
 @c UPDATE!!  On future updates--
 @c   (1)   check for new machine-dep cmdline options in
@@ -249,6 +249,11 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @c
 @c Target dependent options are listed below.  Keep the list sorted.
 @c Add an empty line for separation.
+@ifset AARCH64
+
+@emph{Target AArch64 options:}
+   [@b{-EB}|@b{-EL}]
+@end ifset
 @ifset ALPHA
 
 @emph{Target Alpha options:}
@@ -307,6 +312,11 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @emph{Target D30V options:}
    [@b{-O}|@b{-n}|@b{-N}]
 @end ifset
+@ifset EPIPHANY
+
+@emph{Target EPIPHANY options:}
+   [@b{-mepiphany}|@b{-mepiphany16}]
+@end ifset
 @ifset H8
 
 @emph{Target H8/300 options:}
@@ -364,7 +374,7 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @ifset M68HC11
 
 @emph{Target M68HC11 options:}
-   [@b{-m68hc11}|@b{-m68hc12}|@b{-m68hcs12}]
+   [@b{-m68hc11}|@b{-m68hc12}|@b{-m68hcs12}|@b{-mm9s12x}|@b{-mm9s12xg}]
    [@b{-mshort}|@b{-mlong}]
    [@b{-mshort-double}|@b{-mlong-double}]
    [@b{--force-long-branches}] [@b{--short-branches}]
@@ -434,8 +444,8 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-a32}|@b{-a64}]
    [@b{-mpwrx}|@b{-mpwr2}|@b{-mpwr}|@b{-m601}|@b{-mppc}|@b{-mppc32}|@b{-m603}|@b{-m604}|@b{-m403}|@b{-m405}|
     @b{-m440}|@b{-m464}|@b{-m476}|@b{-m7400}|@b{-m7410}|@b{-m7450}|@b{-m7455}|@b{-m750cl}|@b{-mppc64}|
-    @b{-m620}|@b{-me500}|@b{-e500x2}|@b{-me500mc}|@b{-me500mc64}|@b{-mppc64bridge}|@b{-mbooke}|
-    @b{-mpower4}|@b{-mpr4}|@b{-mpower5}|@b{-mpwr5}|@b{-mpwr5x}|@b{-mpower6}|@b{-mpwr6}|
+    @b{-m620}|@b{-me500}|@b{-e500x2}|@b{-me500mc}|@b{-me500mc64}|@b{-me5500}|@b{-me6500}|@b{-mppc64bridge}|
+    @b{-mbooke}|@b{-mpower4}|@b{-mpr4}|@b{-mpower5}|@b{-mpwr5}|@b{-mpwr5x}|@b{-mpower6}|@b{-mpwr6}|
     @b{-mpower7}|@b{-mpw7}|@b{-ma2}|@b{-mcell}|@b{-mspe}|@b{-mtitan}|@b{-me300}|@b{-mcom}]
    [@b{-many}] [@b{-maltivec}|@b{-mvsx}]
    [@b{-mregnames}|@b{-mno-regnames}]
@@ -492,7 +502,7 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @ifset TILEGX
 
 @emph{Target TILE-Gx options:}
-   [@b{-m32}|@b{-m64}]
+   [@b{-m32}|@b{-m64}][@b{-EB}][@b{-EL}]
 @end ifset
 @ifset TILEPRO
 @c TILEPro has no machine-dependent assembler options
@@ -728,6 +738,25 @@ Standard input, or source files to assemble.
 @end table
 @c man end
 
+@ifset AARCH64
+
+@ifclear man
+@xref{AArch64 Options}, for the options available when @value{AS} is configured
+for the 64-bit mode of the ARM Architecture (AArch64).
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for the
+64-bit mode of the ARM Architecture (AArch64).
+@c man end
+@c man begin INCLUDE
+@include c-aarch64.texi
+@c ended inside the included file
+@end ifset
+
+@end ifset
+
 @ifset ALPHA
 
 @ifclear man
@@ -842,6 +871,27 @@ Warn when a nop after a 32-bit multiply instruction is generated.
 @end table
 @end ifset
 @c man end
+
+@ifset EPIPHANY
+The following options are available when @value{AS} is configured for the
+Adapteva EPIPHANY series.
+
+@ifclear man
+@xref{Epiphany Options}, for the options available when @value{AS} is
+configured for an Epiphany processor.
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for
+an Epiphany processor.
+@c man end
+@c man begin INCLUDE
+@include c-epiphany.texi
+@c ended inside the included file
+@end ifset
+
+@end ifset
 
 @ifset I80386
 
@@ -1024,9 +1074,13 @@ Motorola 68HC11 or 68HC12 series.
 
 @table @gcctabopt
 
-@item -m68hc11 | -m68hc12 | -m68hcs12
+@item -m68hc11 | -m68hc12 | -m68hcs12 | -mm9s12x | -mm9s12xg
 Specify what processor is the target.  The default is
 defined by the configuration option when building the assembler.
+
+@item --xgate-ramoffset
+Instruct the linker to offset RAM addresses from S12X address space into
+XGATE address space.
 
 @item -mshort
 Specify to use the 16-bit integer ABI.
@@ -1057,10 +1111,10 @@ when the instruction does not support direct addressing mode.
 Print the syntax of instruction in case of error.
 
 @item --print-opcodes
-print the list of instructions with syntax and then exit.
+Print the list of instructions with syntax and then exit.
 
 @item --generate-example
-print an example of instruction for each possible instruction and then exit.
+Print an example of instruction for each possible instruction and then exit.
 This option is only useful for testing @command{@value{AS}}.
 
 @end table
@@ -2455,10 +2509,10 @@ On most machines, you can also use @code{$} in symbol names; exceptions
 are noted in @ref{Machine Dependencies}.
 @end ifset
 No symbol may begin with a digit.  Case is significant.
-There is no length limit: all characters are significant.  Symbols are
-delimited by characters not in that set, or by the beginning of a file
-(since the source program must end with a newline, the end of a file is
-not a possible symbol delimiter).  @xref{Symbols}.
+There is no length limit: all characters are significant.  Multibyte characters
+are supported.  Symbols are delimited by characters not in that set, or by the
+beginning of a file (since the source program must end with a newline, the end
+of a file is not a possible symbol delimiter).  @xref{Symbols}.
 @cindex length of symbols
 
 @node Statements
@@ -3384,6 +3438,11 @@ on the H8/300), and underscores.
 Case of letters is significant: @code{foo} is a different symbol name
 than @code{Foo}.
 
+Multibyte characters are supported.  To generate a symbol name containing
+multibyte characters enclose it within double quotes and use escape codes. cf
+@xref{Strings}.  Generating a multibyte symbol name from a label is not
+currently supported.
+
 Each symbol has exactly one name.  Each name in an assembly language program
 refers to exactly one symbol.  You may use that symbol name any number of times
 in a program.
@@ -3944,6 +4003,7 @@ Some machine configurations provide additional directives.
 * Ascii::                       @code{.ascii "@var{string}"}@dots{}
 * Asciz::                       @code{.asciz "@var{string}"}@dots{}
 * Balign::                      @code{.balign @var{abs-expr} , @var{abs-expr}}
+* Bundle directives::           @code{.bundle_align_mode @var{abs-expr}}, @code{.bundle_lock}, @code{.bundle_unlock}
 * Byte::                        @code{.byte @var{expressions}}
 * CFI directives::		@code{.cfi_startproc [simple]}, @code{.cfi_endproc}, etc.
 * Comm::                        @code{.comm @var{symbol} , @var{length} }
@@ -4265,6 +4325,62 @@ fill pattern as a four byte longword value.  For example, @code{.balignw
 filled in with the value 0x368d (the exact placement of the bytes depends upon
 the endianness of the processor).  If it skips 1 or 3 bytes, the fill value is
 undefined.
+
+@node Bundle directives
+@section @code{.bundle_align_mode @var{abs-expr}}
+@cindex @code{bundle_align_mode} directive
+@cindex bundle
+@cindex instruction bundle
+@cindex aligned instruction bundle
+@code{.bundle_align_mode} enables or disables @dfn{aligned instruction
+bundle} mode.  In this mode, sequences of adjacent instructions are grouped
+into fixed-sized @dfn{bundles}.  If the argument is zero, this mode is
+disabled (which is the default state).  If the argument it not zero, it
+gives the size of an instruction bundle as a power of two (as for the
+@code{.p2align} directive, @pxref{P2align}).
+
+For some targets, it's an ABI requirement that no instruction may span a
+certain aligned boundary.  A @dfn{bundle} is simply a sequence of
+instructions that starts on an aligned boundary.  For example, if
+@var{abs-expr} is @code{5} then the bundle size is 32, so each aligned
+chunk of 32 bytes is a bundle.  When aligned instruction bundle mode is in
+effect, no single instruction may span a boundary between bundles.  If an
+instruction would start too close to the end of a bundle for the length of
+that particular instruction to fit within the bundle, then the space at the
+end of that bundle is filled with no-op instructions so the instruction
+starts in the next bundle.  As a corollary, it's an error if any single
+instruction's encoding is longer than the bundle size.
+
+@section @code{.bundle_lock} and @code{.bundle_unlock}
+@cindex @code{bundle_lock} directive
+@cindex @code{bundle_unlock} directive
+The @code{.bundle_lock} and directive @code{.bundle_unlock} directives
+allow explicit control over instruction bundle padding.  These directives
+are only valid when @code{.bundle_align_mode} has been used to enable
+aligned instruction bundle mode.  It's an error if they appear when
+@code{.bundle_align_mode} has not been used at all, or when the last
+directive was @w{@code{.bundle_align_mode 0}}.
+
+@cindex bundle-locked
+For some targets, it's an ABI requirement that certain instructions may
+appear only as part of specified permissible sequences of multiple
+instructions, all within the same bundle.  A pair of @code{.bundle_lock}
+and @code{.bundle_unlock} directives define a @dfn{bundle-locked}
+instruction sequence.  For purposes of aligned instruction bundle mode, a
+sequence starting with @code{.bundle_lock} and ending with
+@code{.bundle_unlock} is treated as a single instruction.  That is, the
+entire sequence must fit into a single bundle and may not span a bundle
+boundary.  If necessary, no-op instructions will be inserted before the
+first instruction of the sequence so that the whole sequence starts on an
+aligned bundle boundary.  It's an error if the sequence is longer than the
+bundle size.
+
+For convenience when using @code{.bundle_lock} and @code{.bundle_unlock}
+inside assembler macros (@pxref{Macro}), bundle-locked sequences may be
+nested.  That is, a second @code{.bundle_lock} directive before the next
+@code{.bundle_unlock} directive has no effect except that it must be
+matched by another closing @code{.bundle_unlock} so that there is the
+same number of @code{.bundle_lock} and @code{.bundle_unlock} directives.
 
 @node Byte
 @section @code{.byte @var{expressions}}
@@ -5495,7 +5611,7 @@ hence @emph{octa}-word for 16 bytes.
 Set the location counter to @var{loc} in the absolute section.  @var{loc} must
 be an absolute expression.  This directive may be useful for defining
 symbols with absolute values.  Do not confuse it with the @code{.org}
-directive. 
+directive.
 
 @node Org
 @section @code{.org @var{new-lc} , @var{fill}}
@@ -6822,6 +6938,9 @@ include details on any machine's instruction set.  For details on that
 subject, see the hardware manufacturer's manual.
 
 @menu
+@ifset AARCH64
+* AArch64-Dependent::		AArch64 Dependent Features
+@end ifset
 @ifset ALPHA
 * Alpha-Dependent::		Alpha Dependent Features
 @end ifset
@@ -6848,6 +6967,9 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset D30V
 * D30V-Dependent::              D30V Dependent Features
+@end ifset
+@ifset EPIPHANY
+* Epiphany-Dependent::          EPIPHANY Dependent Features
 @end ifset
 @ifset H8/300
 * H8/300-Dependent::            Renesas H8/300 Dependent Features
@@ -6916,6 +7038,9 @@ subject, see the hardware manufacturer's manual.
 @ifset PPC
 * PPC-Dependent::               PowerPC Dependent Features
 @end ifset
+@ifset RL78
+* RL78-Dependent::              RL78 Dependent Features
+@end ifset
 @ifset RX
 * RX-Dependent::                RX Dependent Features
 @end ifset
@@ -6942,6 +7067,9 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset V850
 * V850-Dependent::              V850 Dependent Features
+@end ifset
+@ifset XGATE
+* XGATE-Dependent::             XGATE Features
 @end ifset
 @ifset XSTORMY16
 * XSTORMY16-Dependent::         XStormy16 Dependent Features
@@ -6970,6 +7098,10 @@ subject, see the hardware manufacturer's manual.
 @c major node below.  Node defaulting in makeinfo requires adjacency of
 @c node and sectioning commands; hence the repetition of @chapter BLAH
 @c in both conditional blocks.
+
+@ifset AARCH64
+@include c-aarch64.texi
+@end ifset
 
 @ifset ALPHA
 @include c-alpha.texi
@@ -7023,6 +7155,10 @@ family.
 
 @ifset D30V
 @include c-d30v.texi
+@end ifset
+
+@ifset EPIPHANY
+@include c-epiphany.texi
 @end ifset
 
 @ifset H8/300
@@ -7109,6 +7245,10 @@ family.
 @include c-ppc.texi
 @end ifset
 
+@ifset RL78
+@include c-rl78.texi
+@end ifset
+
 @ifset RX
 @include c-rx.texi
 @end ifset
@@ -7160,6 +7300,10 @@ family.
 
 @ifset V850
 @include c-v850.texi
+@end ifset
+
+@ifset XGATE
+@include c-xgate.texi
 @end ifset
 
 @ifset XSTORMY16
