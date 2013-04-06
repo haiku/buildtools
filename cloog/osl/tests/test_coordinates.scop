@@ -1,0 +1,32 @@
+<OpenScop>
+
+# =============================================== Global
+# Language
+C
+
+# Context
+CONTEXT
+0 2 0 0 0 0
+
+# Parameter names are not provided
+0
+
+# No statement
+0
+
+# =============================================== Options
+<coordinates>
+# File name
+./ax-do.c
+
+# Starting line
+9
+
+# Ending line
+15
+
+# Indentation
+2
+</coordinates>
+</OpenScop>
+

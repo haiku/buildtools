@@ -1,0 +1,2162 @@
+2008-12-31 Wednesday 23:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.37), README (1.21), configure.ac (1.58),
+	  doc/Makefile.am (1.9), doc/README.doc (1.4), doc/devref.tex
+	  (1.6), doc/pwl.sty (1.4), doc/user.tex (1.6), m4/Makefile.am
+	  (1.6), src/Doubly_Linked_Object.defs.hh (1.7),
+	  src/Doubly_Linked_Object.inlines.hh (1.7),
+	  src/Doubly_Linked_Object.types.hh (1.5), src/EList.defs.hh (1.9),
+	  src/EList.inlines.hh (1.7), src/EList.types.hh (1.5),
+	  src/EList_Iterator.defs.hh (1.7), src/EList_Iterator.inlines.hh
+	  (1.7), src/EList_Iterator.types.hh (1.5), src/Handler.defs.hh
+	  (1.8), src/Handler.inlines.hh (1.7), src/Handler.types.hh (1.5),
+	  src/Makefile.am (1.19), src/Pending_Element.cc (1.8),
+	  src/Pending_Element.defs.hh (1.8), src/Pending_Element.inlines.hh
+	  (1.7), src/Pending_Element.types.hh (1.5), src/Pending_List.cc
+	  (1.8), src/Pending_List.defs.hh (1.8),
+	  src/Pending_List.inlines.hh (1.7), src/Pending_List.types.hh
+	  (1.5), src/Time.cc (1.8), src/Time.defs.hh (1.8),
+	  src/Time.inlines.hh (1.7), src/Time.types.hh (1.5),
+	  src/Watchdog.cc (1.10), src/Watchdog.defs.hh (1.10),
+	  src/Watchdog.inlines.hh (1.7), src/Watchdog.types.hh (1.5),
+	  src/pwl_header.hh (1.8), tests/Makefile.am (1.7),
+	  tests/pwl_test.cc (1.4), tests/pwl_test.hh (1.4),
+	  tests/simple1.cc (1.4), utils/Makefile.am (1.13),
+	  utils/build_header.in (1.7): Copyright years extended.
+
+2008-12-16 Tuesday 07:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, README, config.rpath, configure.ac, doc/Makefile.am,
+	  doc/user.doxyconf-html.in, doc/user.doxyconf-latex.in,
+	  m4/Makefile.am, m4/lib-ld.m4, m4/lib-link.m4
+	  (bounded_arithmetic.[3,2,2,3,3,3,3,2,2,2]): Third merge of the
+	  trunk to the bounded_arithmetic branch.
+
+2008-11-30 Sunday 21:13  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.57): Postpone the AC_LIB_RPATH test.
+
+2008-11-05 Wednesday 19:17  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* doc/Makefile.am (1.8): Doxygen configuration files are generated
+	  by the configure script, so that they don't have to be listed in
+	  EXTRA_DIST.  (Thanks to Michael Tautschnig for pointing this
+	  out.)
+
+2008-11-04 Tuesday 10:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_10-branch.1): Mark ChangeLog.
+
+2008-11-04 Tuesday 09:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.24): Updated.
+
+2008-11-03 Monday 09:51  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.10): Previous commit reverted.
+
+2008-11-03 Monday 08:56  Patricia M. Hill <hill@comp.leeds.ac.uk>
+
+	* INSTALL (1.9): Same changes as in previous commit for the
+	  top-level ppl INSTALL file.
+
+2008-11-01 Saturday 15:59  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.20): Updated.
+
+2008-11-01 Saturday 12:54  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/: user.doxyconf-html.in (1.6), user.doxyconf-latex.in (1.6):
+	  Do not produce the collaboration graph in the user docs, as this
+	  graph contains implementation info.
+
+2008-10-31 Friday 19:44  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.23): Updated.
+
+2008-10-31 Friday 15:58  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.rpath (1.1), configure.ac (1.56), m4/Makefile.am (1.5),
+	  m4/lib-ld.m4 (1.1), m4/lib-link.m4 (1.1): Added the
+	  `--disable-rpath' option to the configuration script.  The
+	  definition of `m4macros' in `Makefile.am' had several omissions:
+	  fixed.
+
+2008-10-29 Wednesday 21:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Makefile.am, NEWS, README, config.guess, config.sub,
+	  configure.ac, doc/Makefile.am, doc/devref.doxyconf-html.in,
+	  doc/devref.doxyconf-latex.in, doc/user.doxyconf-html.in,
+	  doc/user.doxyconf-latex.in, m4/Makefile.am,
+	  m4/ax_prefix_config_h.m4, src/Doubly_Linked_Object.defs.hh,
+	  src/Doubly_Linked_Object.inlines.hh, src/EList.defs.hh,
+	  src/EList.inlines.hh, src/EList_Iterator.defs.hh,
+	  src/EList_Iterator.inlines.hh, src/Handler.defs.hh,
+	  src/Handler.inlines.hh, src/Makefile.am, src/Pending_Element.cc,
+	  src/Pending_Element.defs.hh, src/Pending_Element.inlines.hh,
+	  src/Pending_List.cc, src/Pending_List.defs.hh,
+	  src/Pending_List.inlines.hh, src/Time.cc, src/Time.defs.hh,
+	  src/Time.inlines.hh, src/Watchdog.cc, src/Watchdog.defs.hh,
+	  src/Watchdog.inlines.hh, src/pwl_header.hh, tests/.cvsignore,
+	  tests/Makefile.am, tests/pwl_test.cc, tests/pwl_test.hh,
+	  tests/simple1.cc, tests/valgrind_suppressions, utils/Makefile.am
+	  (bounded_arithmetic.[2,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2]):
+	  Second merge of the trunk to the bounded_arithmetic branch.
+
+2008-10-27 Monday 18:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.22): Updated.
+
+2008-10-26 Sunday 20:51  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (1.12): The target release date is November 4, 2008.
+
+2008-10-26 Sunday 20:36  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.19), ChangeLog (1.21): Updated.
+
+2008-10-26 Sunday 19:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.55), src/Makefile.am (1.18): Version number
+	  corrected.
+
+2008-10-26 Sunday 09:19  Patricia M. Hill <hill@comp.leeds.ac.uk>
+
+	* src/Makefile.am (1.17): Ensure the clean and mostlyclean comply
+	  with the 'STANDARDS' file and are used sensibly.
+
+	  Removed - Check all the Makefile.am's to make sure CLEANFILES,
+	  MOSTLYCLEANFILES   and DISTCLEANFILES are used in a sensible way.
+	   from the TODO list for 0.10
+
+2008-10-25 Saturday 22:42  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* doc/Makefile.am (1.7): Do clean .tag files generated by Doxygen.
+
+2008-10-24 Friday 22:14  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* doc/Makefile.am (1.6): Avoid cleaning distributed built files.
+	  Try to follow the rule stated in Section 27.5 of the Automake
+	  manual: distributed files should never depend upon
+	  non-distributed built files.
+
+2008-10-19 Sunday 14:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/pwl_test.cc (1.3): Do not rely on the definition of
+	  optional macros of <fenv.h>.
+
+2008-10-19 Sunday 14:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/pwl_test.cc (bounded_arithmetic.1): file pwl_test.cc was
+	  added on branch bounded_arithmetic on 2008-10-29 20:45:22 +0000
+
+2008-10-18 Saturday 21:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/pwl_test.hh (1.3): Define the NOISY and VERY_NOISY macros
+	  before they are used.  Unused parameter warning avoided.
+
+2008-10-18 Saturday 21:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/pwl_test.hh (bounded_arithmetic.1): file pwl_test.hh was
+	  added on branch bounded_arithmetic on 2008-10-29 20:45:22 +0000
+
+2008-10-18 Saturday 21:55  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/Makefile.am (1.6): Must link with -lm for fetestexcept().
+
+2008-10-18 Saturday 21:55  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/Makefile.am (bounded_arithmetic.1): file Makefile.am was
+	  added on branch bounded_arithmetic on 2008-10-29 20:45:22 +0000
+
+2008-10-18 Saturday 20:56  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.54): Improved and reorganized.
+
+2008-10-11 Saturday 22:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.53): The PWL is now enabled by default also on
+	  Cygwin.
+
+2008-10-11 Saturday 10:56  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.repo (1.5): The configure.repo files do not solve the
+	  problem they were meant to solve.
+
+2008-10-11 Saturday 10:42  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/Makefile.am (1.5): Avoid using $(builddir).
+
+2008-10-10 Friday 21:28  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.20): Updated.
+
+2008-10-06 Monday 21:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.36), configure.ac (1.52), configure.repo (1.4),
+	  src/Makefile.am (1.16): Fixed the machinery used to
+	  conditionalize the build of the PWL.	The PWL is currently
+	  disabled under Cygwin because of the bug reported in
+	  http://www.cs.unipr.it/pipermail/ppl-devel/2008-October/013156.html.
+
+2008-10-06 Monday 15:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/simple1.cc (bounded_arithmetic.1): file simple1.cc was
+	  added on branch bounded_arithmetic on 2008-10-29 20:45:22 +0000
+
+2008-10-06 Monday 15:26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.51), configure.repo (1.3), Makefile.am (1.35),
+	  README (1.18), m4/Makefile.am (1.4),
+	  src/Doubly_Linked_Object.defs.hh (1.6),
+	  src/Doubly_Linked_Object.inlines.hh (1.6), src/EList.defs.hh
+	  (1.8), src/EList.inlines.hh (1.6), src/EList_Iterator.defs.hh
+	  (1.6), src/EList_Iterator.inlines.hh (1.6), src/Handler.defs.hh
+	  (1.7), src/Handler.inlines.hh (1.6), src/Makefile.am (1.15),
+	  src/Pending_Element.cc (1.7), src/Pending_Element.defs.hh (1.7),
+	  src/Pending_Element.inlines.hh (1.6), src/Pending_List.cc (1.7),
+	  src/Pending_List.defs.hh (1.7), src/Pending_List.inlines.hh
+	  (1.6), src/Time.cc (1.7), src/Time.defs.hh (1.7),
+	  src/Time.inlines.hh (1.6), src/Watchdog.cc (1.9),
+	  src/Watchdog.defs.hh (1.9), src/Watchdog.inlines.hh (1.6),
+	  src/pwl_header.hh (1.7), tests/Makefile.am (1.4),
+	  tests/pwl_test.cc (1.2), tests/pwl_test.hh (1.2),
+	  tests/simple1.cc (1.3), utils/Makefile.am (1.12): Copyright
+	  notices made consistent.
+
+2008-10-05 Sunday 22:20  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/: devref.doxyconf-latex.in (1.4), user.doxyconf-html.in
+	  (1.5), user.doxyconf-latex.in (1.5): Updated for Doxygen 1.5.7.1.
+
+2008-10-05 Sunday 22:10  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/Makefile.am (1.3): Spurious backslash removed.
+
+2008-10-05 Sunday 22:05  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/: Makefile.am (1.2), valgrind_suppressions (1.1):
+	  Distribute also pwl_test.hh and valgrind_suppressions.
+
+2008-10-05 Sunday 22:05  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/valgrind_suppressions (bounded_arithmetic.1): file
+	  valgrind_suppressions was added on branch bounded_arithmetic on
+	  2008-10-29 20:45:22 +0000
+
+2008-10-05 Sunday 22:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.doxyconf-html.in (1.4): Updated for Doxygen 1.5.7.1.
+
+2008-10-05 Sunday 10:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/simple1.cc (1.2): Added some debug output.
+
+2008-10-05 Sunday 09:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/.cvsignore (bounded_arithmetic.1): file .cvsignore was
+	  added on branch bounded_arithmetic on 2008-10-29 20:45:22 +0000
+
+2008-10-05 Sunday 09:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.34), configure.ac (1.50), configure.repo (1.2),
+	  tests/.cvsignore (1.1), tests/Makefile.am (1.1),
+	  tests/pwl_test.cc (1.1), tests/pwl_test.hh (1.1),
+	  tests/simple1.cc (1.1): Make some simple tests also with the
+	  Parma Watchdog Library.
+
+2008-10-04 Saturday 18:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/ax_prefix_config_h.m4 (1.2): Updated.
+
+2008-10-04 Saturday 17:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.27), config.sub (1.25): Updated.
+
+2008-09-20 Saturday 20:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.49), configure.repo (1.1): Capitalization fixed.
+
+2008-09-20 Saturday 20:43  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (1.11): Set a tentative release date.
+
+2008-09-20 Saturday 20:36  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.48): We do not need the `win32-dll' Libtool
+	  option.
+
+2008-09-20 Saturday 20:06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.47): Punctuation improved.  Require Autoconf 2.60
+	  or later.
+
+2008-09-20 Saturday 19:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.19): Updated.
+
+2008-09-11 Thursday 22:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, INSTALL, config.guess, config.sub, configure.ac,
+	  ltmain.sh, doc/Makefile.am, doc/devref.doxyconf-html.in,
+	  doc/devref.doxyconf-latex.in, doc/user.doxyconf-html.in,
+	  doc/user.doxyconf-latex.in, m4/libtool.m4, m4/ltoptions.m4,
+	  m4/ltsugar.m4, m4/ltversion.m4, src/Makefile.am,
+	  utils/Makefile.am
+	  (bounded_arithmetic.[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]): First
+	  merge of the trunk to the bounded_arithmetic branch.
+
+2008-09-11 Thursday 20:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.8): Updated from Autoconf 2.63.
+
+2008-09-08 Monday 17:40  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.46), utils/Makefile.am (1.11): Use AC_PROG_SED in
+	  configure.ac's and $(SED), instead of plain `sed', in
+	  Makefile.am's.
+
+2008-09-07 Sunday 12:02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/Makefile.am (1.5): `abs_srcdir' is automatically set by
+	  Automake: removed redundant definitions.
+
+2008-09-07 Sunday 12:01  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.26), config.sub (1.24): Updated.
+
+2008-09-07 Sunday 11:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.am (1.14), utils/Makefile.am (1.10): Removed useless
+	  dependencies from Makefile.
+
+2008-09-07 Sunday 11:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.24), m4/libtool.m4 (1.6), m4/ltoptions.m4 (1.4),
+	  m4/ltsugar.m4 (1.2), m4/ltversion.m4 (1.5): Updated from Libtool
+	  2.2.6.
+
+2008-09-06 Saturday 17:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/: devref.doxyconf-html.in (1.3), devref.doxyconf-latex.in
+	  (1.3), user.doxyconf-html.in (1.4), user.doxyconf-latex.in (1.4):
+	  Updated.
+
+2008-08-15 Friday 15:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.18): Updated.
+
+2008-06-06 Friday 16:21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore, ChangeLog, INSTALL, config.guess, config.sub,
+	  configure.ac, depcomp, install-sh, ltmain.sh,
+	  doc/devref.doxyconf-html.in, doc/devref.doxyconf-latex.in,
+	  doc/devref.tex, doc/fdl.dox, doc/gpl.dox,
+	  doc/user.doxyconf-html.in, doc/user.doxyconf-latex.in,
+	  doc/user.tex, m4/libtool.m4, m4/ltoptions.m4, m4/ltsugar.m4,
+	  m4/ltversion.m4, m4/lt~obsolete.m4, src/.cvsignore
+	  (simplex.[1,4,3,5,5,3,1,3,3,3,3,3,3,3,3,3,3,2,2,2,2,2,2]): Fifth
+	  merge of the trunk to the `simplex' branch.
+
+2008-05-05 Monday 13:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.45), ltmain.sh (1.23), m4/libtool.m4 (1.5),
+	  m4/ltoptions.m4 (1.3), m4/ltversion.m4 (1.4), m4/lt~obsolete.m4
+	  (1.2): Updated to Libtool 2.2.4.
+
+2008-05-05 Monday 13:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/libtool.m4 (simplex.1): file libtool.m4 was added on branch
+	  simplex on 2008-06-06 14:21:55 +0000
+
+2008-05-05 Monday 13:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/ltoptions.m4 (simplex.1): file ltoptions.m4 was added on
+	  branch simplex on 2008-06-06 14:21:55 +0000
+
+2008-05-05 Monday 13:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/ltversion.m4 (simplex.1): file ltversion.m4 was added on
+	  branch simplex on 2008-06-06 14:21:55 +0000
+
+2008-05-05 Monday 13:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/lt~obsolete.m4 (simplex.1): file lt~obsolete.m4 was added on
+	  branch simplex on 2008-06-06 14:21:55 +0000
+
+2008-04-02 Wednesday 08:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.22), m4/libtool.m4 (1.4), m4/ltoptions.m4 (1.2),
+	  m4/ltversion.m4 (1.3): Updated from Libtool 2.2.2.
+
+2008-03-22 Saturday 10:32  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* doc/: devref.tex (1.5), fdl.dox (1.2), gpl.dox (1.3), user.tex
+	  (1.5): Properly named page anchors so as to avoid undefined
+	  references in the LaTeX documentation.
+
+2008-03-22 Saturday 10:32  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* doc/: devref.doxyconf-html.in (1.2), devref.doxyconf-latex.in
+	  (1.2), user.doxyconf-html.in (1.3), user.doxyconf-latex.in (1.3):
+	  Doxygen configuration files upgraded.
+
+2008-03-18 Tuesday 20:58  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.17): Updated.
+
+2008-03-08 Saturday 11:55  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.21), m4/libtool.m4 (1.3), m4/ltversion.m4 (1.2):
+	  Updated from Libtool 2.3a.
+
+2008-03-05 Wednesday 22:00  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.44): Use the new style macro to initialize
+	  Libtool.
+
+2008-03-05 Wednesday 21:49  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.20), m4/libtool.m4 (1.2): Updated to the CVS HEAD
+	  version of Libtool: this seems to solve the problems we
+	  experienced since the switch to Libtool 2.2.
+
+2008-03-02 Sunday 23:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/ltsugar.m4 (simplex.1): file ltsugar.m4 was added on branch
+	  simplex on 2008-06-06 14:21:55 +0000
+
+2008-03-02 Sunday 23:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.25), ltmain.sh (1.19), m4/libtool.m4 (1.1),
+	  m4/ltoptions.m4 (1.1), m4/ltsugar.m4 (1.1), m4/ltversion.m4
+	  (1.1), m4/lt~obsolete.m4 (1.1): Switched to Libtool 2.2.
+
+2008-01-22 Tuesday 08:48  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.7), config.guess (1.24), config.sub (1.23), depcomp
+	  (1.10), install-sh (1.15): Updated from Automake 1.10.1.
+
+2008-01-09 Wednesday 22:06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.7), src/.cvsignore (1.3): Ignore *.loT files.
+
+2008-01-09 Wednesday 22:01  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.6): Updated.
+
+2008-01-07 Monday 12:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* COPYING, ChangeLog, INSTALL, Makefile.am, NEWS, README, compile,
+	  config.guess, config.sub, configure.ac, ltmain.sh,
+	  doc/.cvsignore, doc/Makefile.am, doc/README.doc,
+	  doc/devref.doxyconf-html.in, doc/devref.doxyconf-latex.in,
+	  doc/devref.tex, doc/fdl.dox, doc/fdl.tex, doc/fdl.txt,
+	  doc/gpl.dox, doc/gpl.tex, doc/gpl.txt, doc/pwl.sty,
+	  doc/user.doxyconf-html.in, doc/user.doxyconf-latex.in,
+	  doc/user.tex, m4/.cvsignore, m4/Makefile.am,
+	  m4/ax_prefix_config_h.m4, src/Doubly_Linked_Object.defs.hh,
+	  src/Doubly_Linked_Object.inlines.hh,
+	  src/Doubly_Linked_Object.types.hh, src/EList.defs.hh,
+	  src/EList.inlines.hh, src/EList.types.hh,
+	  src/EList_Iterator.defs.hh, src/EList_Iterator.inlines.hh,
+	  src/EList_Iterator.types.hh, src/Handler.defs.hh,
+	  src/Handler.inlines.hh, src/Handler.types.hh, src/Makefile.am,
+	  src/Pending_Element.cc, src/Pending_Element.defs.hh,
+	  src/Pending_Element.inlines.hh, src/Pending_Element.types.hh,
+	  src/Pending_List.cc, src/Pending_List.defs.hh,
+	  src/Pending_List.inlines.hh, src/Pending_List.types.hh,
+	  src/Time.cc, src/Time.defs.hh, src/Time.inlines.hh,
+	  src/Time.types.hh, src/Watchdog.cc, src/Watchdog.defs.hh,
+	  src/Watchdog.inlines.hh, src/Watchdog.types.hh,
+	  src/pwl_header.hh, utils/Makefile.am, utils/build_header.in
+	  (simplex.[1,3,2,3,2,3,1,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,2,2,2,2,2,2,2,2,2,2,2,2,3,2,2,2,2,3,2]):
+	  Fourth merge of the trunk to the `simplex' branch.  The `simplex'
+	  branch is open again.
+
+2008-01-01 Tuesday 12:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.33), README (1.17), configure.ac (1.43),
+	  doc/Makefile.am (1.4), doc/README.doc (1.3), doc/devref.tex
+	  (1.4), doc/pwl.sty (1.3), doc/user.tex (1.4), m4/Makefile.am
+	  (1.3), src/Doubly_Linked_Object.defs.hh (1.5),
+	  src/Doubly_Linked_Object.inlines.hh (1.5),
+	  src/Doubly_Linked_Object.types.hh (1.4), src/EList.defs.hh (1.7),
+	  src/EList.inlines.hh (1.5), src/EList.types.hh (1.4),
+	  src/EList_Iterator.defs.hh (1.5), src/EList_Iterator.inlines.hh
+	  (1.5), src/EList_Iterator.types.hh (1.4), src/Handler.defs.hh
+	  (1.6), src/Handler.inlines.hh (1.5), src/Handler.types.hh (1.4),
+	  src/Makefile.am (1.13), src/Pending_Element.cc (1.6),
+	  src/Pending_Element.defs.hh (1.6), src/Pending_Element.inlines.hh
+	  (1.5), src/Pending_Element.types.hh (1.4), src/Pending_List.cc
+	  (1.6), src/Pending_List.defs.hh (1.6),
+	  src/Pending_List.inlines.hh (1.5), src/Pending_List.types.hh
+	  (1.4), src/Time.cc (1.6), src/Time.defs.hh (1.6),
+	  src/Time.inlines.hh (1.5), src/Time.types.hh (1.4),
+	  src/Watchdog.cc (1.8), src/Watchdog.defs.hh (1.8),
+	  src/Watchdog.inlines.hh (1.5), src/Watchdog.types.hh (1.4),
+	  src/pwl_header.hh (1.6), utils/Makefile.am (1.9),
+	  utils/build_header.in (1.6): Copyright years extended.
+
+2008-01-01 Tuesday 12:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/Makefile.am, m4/Makefile.am (simplex.[1,1]): file Makefile.am
+	  was added on branch simplex on 2008-01-07 11:15:25 +0000
+
+2008-01-01 Tuesday 12:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/README.doc (simplex.1): file README.doc was added on branch
+	  simplex on 2008-01-07 11:15:25 +0000
+
+2008-01-01 Tuesday 12:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.tex (simplex.1): file devref.tex was added on branch
+	  simplex on 2008-01-07 11:15:25 +0000
+
+2008-01-01 Tuesday 12:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/pwl.sty (simplex.1): file pwl.sty was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2008-01-01 Tuesday 12:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/user.tex (simplex.1): file user.tex was added on branch
+	  simplex on 2008-01-07 11:15:25 +0000
+
+2007-10-14 Sunday 14:28  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.defs.hh (1.7): Non-standard qualification removed.
+
+2007-10-09 Tuesday 21:56  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.6): The `make uninstall' command is now mentioned in
+	  the INSTALL file.
+
+2007-09-15 Saturday 18:26  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* src/Makefile.am (1.12): Made clean up independent from
+	  configuration.
+
+2007-09-13 Thursday 19:24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (1.10), doc/devref.tex (1.3), doc/gpl.dox (1.2), doc/gpl.tex
+	  (1.2), doc/gpl.txt (1.2), doc/user.tex (1.3): The Parma Watchdog
+	  Library is now released under the terms of the version 3 (or
+	  later) of the GNU General Public License.
+
+2007-09-13 Thursday 19:24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/gpl.dox (simplex.1): file gpl.dox was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2007-09-13 Thursday 19:24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/gpl.tex (simplex.1): file gpl.tex was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2007-09-13 Thursday 19:24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/gpl.txt (simplex.1): file gpl.txt was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2007-09-12 Wednesday 09:49  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.42): Do not allow AC_PROG_CC and AC_PROG_CXX to
+	  affect CFLAGS and CXXFLAGS.
+
+2007-09-10 Monday 15:44  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.41): Added a comment about the positioning of
+	  AC_PROG_CC and AC_PROG_CXX.
+
+2007-09-10 Monday 11:04  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.40): Pass the no-define option to
+	  AM_INIT_AUTOMAKE.
+
+2007-09-10 Monday 10:06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* compile (1.7), config.guess (1.23), config.sub (1.22): Updated.
+
+2007-09-10 Monday 09:48  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.39): Corrections to the handling of compilation
+	  flags.
+
+2007-08-27 Monday 15:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/: user.doxyconf-html.in (1.2), user.doxyconf-latex.in (1.2):
+	  Updated to Doxygen 1.5.3-20070815.
+
+2007-08-27 Monday 15:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/user.doxyconf-html.in (simplex.1): file user.doxyconf-html.in
+	  was added on branch simplex on 2008-01-07 11:15:25 +0000
+
+2007-08-27 Monday 15:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/user.doxyconf-latex.in (simplex.1): file
+	  user.doxyconf-latex.in was added on branch simplex on 2008-01-07
+	  11:15:25 +0000
+
+2007-07-30 Monday 13:04  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Makefile.am (1.32): Added a comment on the need to explicitly
+	  clean files generated by macro AX_PREFIX_CONFIG_H.
+
+2007-07-29 Sunday 16:58  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Makefile.am (1.31): The prefixed configuration header and
+	  _config.sed added to DESTCLEANFILES.
+
+2007-07-12 Thursday 09:22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* COPYING (1.4), Makefile.am (1.30), README (1.16), configure.ac
+	  (1.38), doc/Makefile.am (1.3), doc/README.doc (1.2),
+	  doc/devref.tex (1.2), doc/pwl.sty (1.2), doc/user.tex (1.2),
+	  m4/Makefile.am (1.2), src/Doubly_Linked_Object.defs.hh (1.4),
+	  src/Doubly_Linked_Object.inlines.hh (1.4), src/EList.defs.hh
+	  (1.6), src/EList.inlines.hh (1.4), src/EList_Iterator.defs.hh
+	  (1.4), src/EList_Iterator.inlines.hh (1.4), src/Handler.defs.hh
+	  (1.5), src/Handler.inlines.hh (1.4), src/Makefile.am (1.11),
+	  src/Pending_Element.cc (1.5), src/Pending_Element.defs.hh (1.5),
+	  src/Pending_Element.inlines.hh (1.4), src/Pending_List.cc (1.5),
+	  src/Pending_List.defs.hh (1.5), src/Pending_List.inlines.hh
+	  (1.4), src/Time.cc (1.5), src/Time.defs.hh (1.5),
+	  src/Time.inlines.hh (1.4), src/Watchdog.cc (1.7),
+	  src/Watchdog.defs.hh (1.6), src/Watchdog.inlines.hh (1.4),
+	  src/pwl_header.hh (1.5), utils/Makefile.am (1.8),
+	  utils/build_header.in (1.5): Started the upgrade to GPL version 3
+	  or later.
+
+2007-07-04 Wednesday 13:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.29): Added `m4' to `SUBDIRS'.
+
+2007-06-28 Thursday 11:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.18): Updated from Libtool 1.5.24.
+
+2007-06-08 Friday 18:20  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.37): Do not override the externally-provided
+	  CFLAGS and CXXFLAGS.
+
+2007-06-08 Friday 17:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/.cvsignore (simplex.1): file .cvsignore was added on branch
+	  simplex on 2008-01-07 11:15:25 +0000
+
+2007-06-08 Friday 17:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/ax_prefix_config_h.m4 (simplex.1): file ax_prefix_config_h.m4
+	  was added on branch simplex on 2008-01-07 11:15:25 +0000
+
+2007-06-08 Friday 17:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.28), NEWS (1.9), configure.ac (1.36),
+	  m4/.cvsignore (1.1), m4/Makefile.am (1.1),
+	  m4/ax_prefix_config_h.m4 (1.1), src/Makefile.am (1.10),
+	  src/Pending_Element.cc (1.4), src/Pending_List.cc (1.4),
+	  src/Time.cc (1.4), src/Watchdog.cc (1.6), src/Watchdog.defs.hh
+	  (1.5), src/pwl_header.hh (1.4): The `pwl.hh' header file no
+	  longer defines macros not prefixed by "PWL_".
+
+2007-05-21 Monday 15:02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.17): Updated from Libtool 1.5.23b.
+
+2007-03-11 Sunday 10:31  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/Makefile.am (1.2): No longer mention README.configure.
+
+2007-02-25 Sunday 19:26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am, README, configure.ac, doc/.cvsignore,
+	  doc/Makefile.am, doc/README.doc, doc/devref.doxyconf-html.in,
+	  doc/devref.doxyconf-latex.in, doc/devref.tex, doc/fdl.dox,
+	  doc/fdl.tex, doc/fdl.txt, doc/gpl.dox, doc/gpl.tex, doc/gpl.txt,
+	  doc/pwl.sty, doc/user.doxyconf-html.in,
+	  doc/user.doxyconf-latex.in, doc/user.tex,
+	  src/Doubly_Linked_Object.defs.hh,
+	  src/Doubly_Linked_Object.inlines.hh,
+	  src/Doubly_Linked_Object.types.hh, src/EList.defs.hh,
+	  src/EList.inlines.hh, src/EList.types.hh,
+	  src/EList_Iterator.defs.hh, src/EList_Iterator.inlines.hh,
+	  src/EList_Iterator.types.hh, src/Handler.defs.hh,
+	  src/Handler.inlines.hh, src/Handler.types.hh, src/Makefile.am,
+	  src/Pending_Element.cc, src/Pending_Element.defs.hh,
+	  src/Pending_Element.inlines.hh, src/Pending_Element.types.hh,
+	  src/Pending_List.cc, src/Pending_List.defs.hh,
+	  src/Pending_List.inlines.hh, src/Pending_List.types.hh,
+	  src/Time.cc, src/Time.defs.hh, src/Time.inlines.hh,
+	  src/Time.types.hh, src/Watchdog.cc, src/Watchdog.defs.hh,
+	  src/Watchdog.inlines.hh, src/Watchdog.types.hh,
+	  src/pwl_header.hh, utils/Makefile.am, utils/build_header.in
+	  (altnum.[7,4,5,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3]):
+	  Tenth merge of the main trunk to the `altnum' branch.
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/.cvsignore (altnum.1): file .cvsignore was added on branch
+	  altnum on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/.cvsignore (simplex.1): file .cvsignore was added on branch
+	  simplex on 2008-01-07 11:15:25 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/Makefile.am (altnum.1): file Makefile.am was added on branch
+	  altnum on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/README.doc (altnum.1): file README.doc was added on branch
+	  altnum on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.doxyconf-html.in (altnum.1): file
+	  devref.doxyconf-html.in was added on branch altnum on 2007-02-25
+	  18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.doxyconf-html.in (simplex.1): file
+	  devref.doxyconf-html.in was added on branch simplex on 2008-01-07
+	  11:15:25 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.doxyconf-latex.in (altnum.1): file
+	  devref.doxyconf-latex.in was added on branch altnum on 2007-02-25
+	  18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.doxyconf-latex.in (simplex.1): file
+	  devref.doxyconf-latex.in was added on branch simplex on
+	  2008-01-07 11:15:25 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/devref.tex (altnum.1): file devref.tex was added on branch
+	  altnum on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/fdl.dox (altnum.1): file fdl.dox was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/fdl.dox (simplex.1): file fdl.dox was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/fdl.tex (altnum.1): file fdl.tex was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/fdl.tex (simplex.1): file fdl.tex was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/fdl.txt (altnum.1): file fdl.txt was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/fdl.txt (simplex.1): file fdl.txt was added on branch simplex
+	  on 2008-01-07 11:15:25 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/gpl.dox (altnum.1): file gpl.dox was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/gpl.tex (altnum.1): file gpl.tex was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/gpl.txt (altnum.1): file gpl.txt was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/pwl.sty (altnum.1): file pwl.sty was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/user.doxyconf-html.in (altnum.1): file user.doxyconf-html.in
+	  was added on branch altnum on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/user.doxyconf-latex.in (altnum.1): file
+	  user.doxyconf-latex.in was added on branch altnum on 2007-02-25
+	  18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* doc/user.tex (altnum.1): file user.tex was added on branch altnum
+	  on 2007-02-25 18:26:53 +0000
+
+2007-02-18 Sunday 21:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.27), configure.ac (1.35), doc/.cvsignore (1.1),
+	  doc/Makefile.am (1.1), doc/README.doc (1.1),
+	  doc/devref.doxyconf-html.in (1.1), doc/devref.doxyconf-latex.in
+	  (1.1), doc/devref.tex (1.1), doc/fdl.dox (1.1), doc/fdl.tex
+	  (1.1), doc/fdl.txt (1.1), doc/gpl.dox (1.1), doc/gpl.tex (1.1),
+	  doc/gpl.txt (1.1), doc/pwl.sty (1.1), doc/user.doxyconf-html.in
+	  (1.1), doc/user.doxyconf-latex.in (1.1), doc/user.tex (1.1):
+	  Documentation for the Parma Watchdog Library.
+
+2007-02-18 Sunday 11:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README.doc (ppl-0_9-branch.1): Explains where to find the
+	  documentation.
+
+2007-01-01 Monday 01:25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.26), README (1.15), configure.ac (1.34),
+	  src/Doubly_Linked_Object.defs.hh (1.3),
+	  src/Doubly_Linked_Object.inlines.hh (1.3),
+	  src/Doubly_Linked_Object.types.hh (1.3), src/EList.defs.hh (1.5),
+	  src/EList.inlines.hh (1.3), src/EList.types.hh (1.3),
+	  src/EList_Iterator.defs.hh (1.3), src/EList_Iterator.inlines.hh
+	  (1.3), src/EList_Iterator.types.hh (1.3), src/Handler.defs.hh
+	  (1.4), src/Handler.inlines.hh (1.3), src/Handler.types.hh (1.3),
+	  src/Makefile.am (1.9), src/Pending_Element.cc (1.3),
+	  src/Pending_Element.defs.hh (1.4), src/Pending_Element.inlines.hh
+	  (1.3), src/Pending_Element.types.hh (1.3), src/Pending_List.cc
+	  (1.3), src/Pending_List.defs.hh (1.4),
+	  src/Pending_List.inlines.hh (1.3), src/Pending_List.types.hh
+	  (1.3), src/Time.cc (1.3), src/Time.defs.hh (1.4),
+	  src/Time.inlines.hh (1.3), src/Time.types.hh (1.3),
+	  src/Watchdog.cc (1.5), src/Watchdog.defs.hh (1.4),
+	  src/Watchdog.inlines.hh (1.3), src/Watchdog.types.hh (1.3),
+	  src/pwl_header.hh (1.3), utils/Makefile.am (1.7),
+	  utils/build_header.in (1.4): Copyright years extended.
+
+2006-12-02 Saturday 23:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess, config.sub (altnum.[6,5]): Ninth merge of the trunk
+	  to the `altnum' branch.
+
+2006-11-18 Saturday 21:36  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, INSTALL, config.guess, config.sub, install-sh,
+	  missing, mkinstalldirs, src/EList.defs.hh, src/Handler.defs.hh,
+	  src/Makefile.am, src/Pending_Element.defs.hh, src/Watchdog.cc,
+	  src/Watchdog.defs.hh (octagons.[1,1,1,1,1,1,1,1,1,1,1,2,1]):
+	  Second merge to octagons.
+
+2006-11-12 Sunday 15:08  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.22), config.sub (1.21): Updated.
+
+2006-10-29 Sunday 20:26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore, COPYING, CREDITS, ChangeLog,
+	  Doubly_Linked_Object.defs.hh, Doubly_Linked_Object.inlines.hh,
+	  Doubly_Linked_Object.types.hh, EList.defs.hh, EList.inlines.hh,
+	  EList.types.hh, EList_Iterator.defs.hh,
+	  EList_Iterator.inlines.hh, EList_Iterator.types.hh,
+	  Handler.defs.hh, Handler.inlines.hh, Handler.types.hh, INSTALL,
+	  Makefile.am, NEWS, Pending_Element.cc, Pending_Element.defs.hh,
+	  Pending_Element.inlines.hh, Pending_Element.types.hh,
+	  Pending_List.cc, Pending_List.defs.hh, Pending_List.inlines.hh,
+	  Pending_List.types.hh, README, Time.cc, Time.defs.hh,
+	  Time.inlines.hh, Time.types.hh, Watchdog.cc, Watchdog.defs.hh,
+	  Watchdog.inlines.hh, Watchdog.types.hh, compile, config.guess,
+	  config.sub, configure.ac, depcomp, install-sh, ltmain.sh,
+	  missing, mkinstalldirs, pwl_header.bottom, pwl_header.middle,
+	  pwl_header.top, src/.cvsignore, src/Doubly_Linked_Object.defs.hh,
+	  src/Doubly_Linked_Object.inlines.hh,
+	  src/Doubly_Linked_Object.types.hh, src/EList.defs.hh,
+	  src/EList.inlines.hh, src/EList.types.hh,
+	  src/EList_Iterator.defs.hh, src/EList_Iterator.inlines.hh,
+	  src/EList_Iterator.types.hh, src/Handler.defs.hh,
+	  src/Handler.inlines.hh, src/Handler.types.hh, src/Makefile.am,
+	  src/Pending_Element.cc, src/Pending_Element.defs.hh,
+	  src/Pending_Element.inlines.hh, src/Pending_Element.types.hh,
+	  src/Pending_List.cc, src/Pending_List.defs.hh,
+	  src/Pending_List.inlines.hh, src/Pending_List.types.hh,
+	  src/Time.cc, src/Time.defs.hh, src/Time.inlines.hh,
+	  src/Time.types.hh, src/Watchdog.cc, src/Watchdog.defs.hh,
+	  src/Watchdog.inlines.hh, src/Watchdog.types.hh,
+	  src/pwl_header.hh, utils/.cvsignore, utils/Makefile.am,
+	  utils/build_header.in
+	  (altnum.[1,1,1,3,2,2,2,2,2,2,2,3,2,3,2,2,2,6,3,2,2,2,2,2,2,2,2,3,2,2,2,2,3,3,2,1,3,5,4,4,2,5,3,2,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2]):
+	  Eighth merge from the main trunk.
+
+2006-09-28 Thursday 22:46  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, INSTALL, config.guess, config.sub, install-sh,
+	  missing, mkinstalldirs, src/EList.defs.hh, src/Handler.defs.hh,
+	  src/Makefile.am, src/Pending_Element.defs.hh, src/Watchdog.cc,
+	  src/Watchdog.defs.hh (interfaces.[1,1,1,1,1,1,1,1,1,1,1,1,1]):
+	  Second merge from main trunk (several compilation errors still to
+	  be fixed).
+
+2006-09-26 Tuesday 22:00  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.am (1.8): Typos fixed.
+
+2006-09-26 Tuesday 22:00  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.am (altnum.1): file Makefile.am was added on branch
+	  altnum on 2006-10-29 19:26:51 +0000
+
+2006-09-26 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/: EList.defs.hh (1.4), Handler.defs.hh (1.3),
+	  Pending_Element.defs.hh (1.3), Watchdog.cc (1.4),
+	  Watchdog.defs.hh (1.3): Comments improved.
+
+2006-09-26 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/EList.defs.hh (altnum.1): file EList.defs.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-09-26 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Handler.defs.hh (altnum.1): file Handler.defs.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-09-26 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_Element.defs.hh (altnum.1): file
+	  Pending_Element.defs.hh was added on branch altnum on 2006-10-29
+	  19:26:51 +0000
+
+2006-09-26 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.cc (altnum.1): file Watchdog.cc was added on branch
+	  altnum on 2006-10-29 19:26:51 +0000
+
+2006-09-26 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.defs.hh (altnum.1): file Watchdog.defs.hh was added
+	  on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-09-23 Saturday 14:29  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.16): Updated.
+
+2006-09-06 Wednesday 20:41  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL, config.guess, config.sub, install-sh, missing,
+	  mkinstalldirs (simplex.[1,3,3,2,1,1]): Third merge from the main
+	  trunk.
+
+2006-06-29 Thursday 17:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.5), config.guess (1.21), config.sub (1.20), install-sh
+	  (1.14), missing (1.9), mkinstalldirs (1.6): Updated from Autoconf
+	  2.60.
+
+2006-05-08 Monday 19:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* CREDITS, ChangeLog, Makefile.am, NEWS, README, config.guess,
+	  config.sub, src/.cvsignore, src/Makefile.am, src/Watchdog.cc,
+	  utils/.cvsignore, utils/Makefile.am
+	  (simplex.[1,2,2,1,2,2,2,1,2,2,1,2]): Second merge from main
+	  trunk.
+
+2006-05-08 Monday 18:16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.cc (octagons.1): First merge from main trunk.
+
+2006-04-08 Saturday 16:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.cc (1.3): Typo fixed in comment.
+
+2006-03-12 Sunday 08:46  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_9-branch.1): Mark ChangeLog.
+
+2006-03-10 Friday 17:29  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.15): Updated.
+
+2006-03-10 Friday 16:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.14): Updated.
+
+2006-03-05 Sunday 17:53  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.20), config.sub (1.19): Updated.
+
+2006-02-18 Saturday 07:24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.am (1.7): Do not distribute ppl_include_files.hh and
+	  pwl_include_files.hh.  Now ppl.hh and pwl.hh installation can be
+	  completely delegated to Automake.
+
+2006-02-11 Saturday 11:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/: .cvsignore (1.2), Makefile.am (1.6): We now directly create
+	  `pwl.hh': `pwl_install.hh' does not exist any longer.
+
+2006-02-11 Saturday 11:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/.cvsignore (altnum.1): file .cvsignore was added on branch
+	  altnum on 2006-10-29 19:26:51 +0000
+
+2006-02-11 Saturday 11:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* utils/.cvsignore (1.2): Ignore more built files and directories.
+
+2006-02-11 Saturday 11:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* utils/.cvsignore (altnum.1): file .cvsignore was added on branch
+	  altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-25 Wednesday 21:08  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.in (grids.4): Makefile.in is automatically
+	  generated: it should not be under CVS.
+
+2006-01-25 Wednesday 19:31  Matthew Mundell
+
+	* CREDITS, ChangeLog, NEWS, README (grids.[1,3,2,3]): Eighth and
+	  last merge from the main trunk.
+
+2006-01-20 Friday 09:26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_8-branch.2): Mark ChangeLog.
+
+2006-01-20 Friday 09:21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_8-branch.1): Updated.
+
+2006-01-17 Tuesday 15:51  Patricia M. Hill <hill@comp.leeds.ac.uk>
+
+	* CREDITS (1.2): "inexistent" replaced by "non-existent".
+
+2006-01-17 Tuesday 14:47  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.13): Updated.
+
+2006-01-16 Monday 22:39  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.14): Updated.
+
+2006-01-16 Monday 14:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (1.8): Release date decided.
+
+2006-01-16 Monday 02:10  Matthew Mundell
+
+	* ChangeLog, Makefile.am, NEWS, README, config.guess, config.sub,
+	  configure.ac, install-sh, ltmain.sh,
+	  src/Doubly_Linked_Object.defs.hh,
+	  src/Doubly_Linked_Object.inlines.hh,
+	  src/Doubly_Linked_Object.types.hh, src/EList.defs.hh,
+	  src/EList.inlines.hh, src/EList.types.hh,
+	  src/EList_Iterator.defs.hh, src/EList_Iterator.inlines.hh,
+	  src/EList_Iterator.types.hh, src/Handler.defs.hh,
+	  src/Handler.inlines.hh, src/Handler.types.hh, src/Makefile.am,
+	  src/Makefile.in, src/Pending_Element.cc,
+	  src/Pending_Element.defs.hh, src/Pending_Element.inlines.hh,
+	  src/Pending_Element.types.hh, src/Pending_List.cc,
+	  src/Pending_List.defs.hh, src/Pending_List.inlines.hh,
+	  src/Pending_List.types.hh, src/Time.cc, src/Time.defs.hh,
+	  src/Time.inlines.hh, src/Time.types.hh, src/Watchdog.cc,
+	  src/Watchdog.defs.hh, src/Watchdog.inlines.hh,
+	  src/Watchdog.types.hh, src/pwl_header.hh, utils/Makefile.am,
+	  utils/build_header.in
+	  (grids.[2,3,1,2,4,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,3,3,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,4,2]):
+	  Seventh (last but one?) merge of the main trunk to the grids
+	  branch.
+
+2006-01-14 Saturday 15:48  Matthew Mundell
+
+	* NEWS (1.7): Add detail to the 0.5 Time entry.
+
+2006-01-14 Saturday 15:37  Matthew Mundell
+
+	* NEWS (1.6): Update 0.8 entries from ChangeLog.
+
+2006-01-10 Tuesday 18:55  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* utils/Makefile.am (altnum.1): file Makefile.am was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-10 Tuesday 18:55  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.25), src/Makefile.am (1.5), utils/Makefile.am
+	  (1.6): Avoid providing default information that Automake does
+	  figure out by itself.
+
+2006-01-09 Monday 22:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.19), config.sub (1.18): Updated.
+
+2006-01-09 Monday 21:49  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.13): Updated.
+
+2006-01-06 Friday 21:00  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* ChangeLog, Makefile.am, README, config.guess, config.sub,
+	  configure.ac, install-sh, ltmain.sh,
+	  src/Doubly_Linked_Object.defs.hh,
+	  src/Doubly_Linked_Object.inlines.hh,
+	  src/Doubly_Linked_Object.types.hh, src/EList.defs.hh,
+	  src/EList.inlines.hh, src/EList.types.hh,
+	  src/EList_Iterator.defs.hh, src/EList_Iterator.inlines.hh,
+	  src/EList_Iterator.types.hh, src/Handler.defs.hh,
+	  src/Handler.inlines.hh, src/Handler.types.hh, src/Makefile.am,
+	  src/Pending_Element.cc, src/Pending_Element.defs.hh,
+	  src/Pending_Element.inlines.hh, src/Pending_Element.types.hh,
+	  src/Pending_List.cc, src/Pending_List.defs.hh,
+	  src/Pending_List.inlines.hh, src/Pending_List.types.hh,
+	  src/Time.cc, src/Time.defs.hh, src/Time.inlines.hh,
+	  src/Time.types.hh, src/Watchdog.cc, src/Watchdog.defs.hh,
+	  src/Watchdog.inlines.hh, src/Watchdog.types.hh,
+	  src/pwl_header.hh, utils/Makefile.am, utils/build_header.in
+	  (simplex.[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]):
+	  First merge from the main trunk.
+
+2006-01-01 Sunday 22:47  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* src/: EList.defs.hh (1.3), Pending_List.defs.hh (1.3),
+	  Time.defs.hh (1.3): Do adopt the new format for multiline brief
+	  doxygen documentation.
+
+2006-01-01 Sunday 22:47  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_List.defs.hh (altnum.1): file Pending_List.defs.hh
+	  was added on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 22:47  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Time.defs.hh (altnum.1): file Time.defs.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* utils/build_header.in (altnum.1): file build_header.in was added
+	  on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.24), README (1.12), configure.ac (1.33),
+	  src/Doubly_Linked_Object.defs.hh (1.2),
+	  src/Doubly_Linked_Object.inlines.hh (1.2),
+	  src/Doubly_Linked_Object.types.hh (1.2), src/EList.defs.hh (1.2),
+	  src/EList.inlines.hh (1.2), src/EList.types.hh (1.2),
+	  src/EList_Iterator.defs.hh (1.2), src/EList_Iterator.inlines.hh
+	  (1.2), src/EList_Iterator.types.hh (1.2), src/Handler.defs.hh
+	  (1.2), src/Handler.inlines.hh (1.2), src/Handler.types.hh (1.2),
+	  src/Makefile.am (1.4), src/Pending_Element.cc (1.2),
+	  src/Pending_Element.defs.hh (1.2), src/Pending_Element.inlines.hh
+	  (1.2), src/Pending_Element.types.hh (1.2), src/Pending_List.cc
+	  (1.2), src/Pending_List.defs.hh (1.2),
+	  src/Pending_List.inlines.hh (1.2), src/Pending_List.types.hh
+	  (1.2), src/Time.cc (1.2), src/Time.defs.hh (1.2),
+	  src/Time.inlines.hh (1.2), src/Time.types.hh (1.2),
+	  src/Watchdog.cc (1.2), src/Watchdog.defs.hh (1.2),
+	  src/Watchdog.inlines.hh (1.2), src/Watchdog.types.hh (1.2),
+	  src/pwl_header.hh (1.2), utils/Makefile.am (1.5),
+	  utils/build_header.in (1.3): Copyright years extended.
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Doubly_Linked_Object.defs.hh (altnum.1): file
+	  Doubly_Linked_Object.defs.hh was added on branch altnum on
+	  2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Doubly_Linked_Object.inlines.hh (altnum.1): file
+	  Doubly_Linked_Object.inlines.hh was added on branch altnum on
+	  2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Doubly_Linked_Object.types.hh (altnum.1): file
+	  Doubly_Linked_Object.types.hh was added on branch altnum on
+	  2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/EList.inlines.hh (altnum.1): file EList.inlines.hh was added
+	  on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/EList.types.hh (altnum.1): file EList.types.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/EList_Iterator.defs.hh (altnum.1): file
+	  EList_Iterator.defs.hh was added on branch altnum on 2006-10-29
+	  19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/EList_Iterator.inlines.hh (altnum.1): file
+	  EList_Iterator.inlines.hh was added on branch altnum on
+	  2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/EList_Iterator.types.hh (altnum.1): file
+	  EList_Iterator.types.hh was added on branch altnum on 2006-10-29
+	  19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Handler.inlines.hh (altnum.1): file Handler.inlines.hh was
+	  added on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Handler.types.hh (altnum.1): file Handler.types.hh was added
+	  on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_Element.cc (altnum.1): file Pending_Element.cc was
+	  added on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_Element.inlines.hh (altnum.1): file
+	  Pending_Element.inlines.hh was added on branch altnum on
+	  2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_Element.types.hh (altnum.1): file
+	  Pending_Element.types.hh was added on branch altnum on 2006-10-29
+	  19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_List.cc (altnum.1): file Pending_List.cc was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_List.inlines.hh (altnum.1): file
+	  Pending_List.inlines.hh was added on branch altnum on 2006-10-29
+	  19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Pending_List.types.hh (altnum.1): file Pending_List.types.hh
+	  was added on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Time.cc (altnum.1): file Time.cc was added on branch altnum
+	  on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Time.inlines.hh (altnum.1): file Time.inlines.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Time.types.hh (altnum.1): file Time.types.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.inlines.hh (altnum.1): file Watchdog.inlines.hh was
+	  added on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Watchdog.types.hh (altnum.1): file Watchdog.types.hh was
+	  added on branch altnum on 2006-10-29 19:26:51 +0000
+
+2006-01-01 Sunday 09:27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/pwl_header.hh (altnum.1): file pwl_header.hh was added on
+	  branch altnum on 2006-10-29 19:26:51 +0000
+
+2005-12-19 Monday 07:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.18), config.sub (1.17), install-sh (1.13),
+	  ltmain.sh (1.16): Updated from Libtool 1.5.22.
+
+2005-12-05 Monday 22:01  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.12): Updated.
+
+2005-10-11 Tuesday 10:46  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess, src/Makefile.am, src/Makefile.in, utils/Makefile.am
+	  (grids.[3,2,2,3]): Fifth merge from main trunk.
+
+2005-10-02 Sunday 14:49  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.am (1.3): Definition of BUILT_SOURCES revised.
+
+2005-10-02 Sunday 11:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.17): Updated.
+
+2005-09-28 Wednesday 22:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Makefile.am (1.2): A PPL distribution should now be
+	  compilable even on environments lacking Perl.
+
+2005-09-28 Wednesday 21:31  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/: .cvsignore, Doubly_Linked_Object.defs.hh,
+	  Doubly_Linked_Object.inlines.hh, Doubly_Linked_Object.types.hh,
+	  EList.defs.hh, EList.inlines.hh, EList.types.hh,
+	  EList_Iterator.defs.hh, EList_Iterator.inlines.hh,
+	  EList_Iterator.types.hh, Handler.defs.hh, Handler.inlines.hh,
+	  Handler.types.hh, Makefile.am, Makefile.in, Pending_Element.cc,
+	  Pending_Element.defs.hh, Pending_Element.inlines.hh,
+	  Pending_Element.types.hh, Pending_List.cc, Pending_List.defs.hh,
+	  Pending_List.inlines.hh, Pending_List.types.hh, Time.cc,
+	  Time.defs.hh, Time.inlines.hh, Time.types.hh, Watchdog.cc,
+	  Watchdog.defs.hh, Watchdog.inlines.hh, Watchdog.types.hh,
+	  pwl_header.hh
+	  (grids.[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]):
+	  Files moved as in the main trunk.
+
+2005-09-28 Wednesday 21:04  Matthew Mundell
+
+	* .cvsignore, ChangeLog, Doubly_Linked_Object.defs.hh,
+	  Doubly_Linked_Object.inlines.hh, Doubly_Linked_Object.types.hh,
+	  EList.defs.hh, EList.inlines.hh, EList.types.hh,
+	  EList_Iterator.defs.hh, EList_Iterator.inlines.hh,
+	  EList_Iterator.types.hh, Handler.defs.hh, Handler.inlines.hh,
+	  Handler.types.hh, Makefile.am, Pending_Element.cc,
+	  Pending_Element.defs.hh, Pending_Element.inlines.hh,
+	  Pending_Element.types.hh, Pending_List.cc, Pending_List.defs.hh,
+	  Pending_List.inlines.hh, Pending_List.types.hh, Time.cc,
+	  Time.defs.hh, Time.inlines.hh, Time.types.hh, Watchdog.cc,
+	  Watchdog.defs.hh, Watchdog.inlines.hh, Watchdog.types.hh,
+	  configure.ac, pwl_header.hh, utils/Makefile.am,
+	  utils/build_header, utils/build_header.in
+	  (grids.[1,1,2,2,1,2,2,1,2,2,1,3,3,1,2,2,2,2,1,2,2,2,1,2,2,3,1,2,2,2,1,2,2,2,2,1]):
+	  Fourth merge from the main trunk.
+
+2005-09-28 Wednesday 18:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* utils/Makefile.am (1.4): Make sure the scripts in the `utils'
+	  subdirectory are made also at distribution time, even if they are
+	  not distributed themselves.
+
+2005-09-23 Friday 22:04  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.5): Updated.
+
+2005-09-23 Friday 21:55  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Doubly_Linked_Object.defs.hh (1.4),
+	  Doubly_Linked_Object.inlines.hh (1.4),
+	  Doubly_Linked_Object.types.hh (1.3), EList.defs.hh (1.6),
+	  EList.inlines.hh (1.5), EList.types.hh (1.3),
+	  EList_Iterator.defs.hh (1.4), EList_Iterator.inlines.hh (1.5),
+	  EList_Iterator.types.hh (1.3), Handler.defs.hh (1.6),
+	  Handler.inlines.hh (1.5), Handler.types.hh (1.3), Makefile.am
+	  (1.23), Pending_Element.cc (1.4), Pending_Element.defs.hh (1.4),
+	  Pending_Element.inlines.hh (1.4), Pending_Element.types.hh (1.3),
+	  Pending_List.cc (1.4), Pending_List.defs.hh (1.4),
+	  Pending_List.inlines.hh (1.4), Pending_List.types.hh (1.3),
+	  Time.cc (1.4), Time.defs.hh (1.4), Time.inlines.hh (1.5),
+	  Time.types.hh (1.3), Watchdog.cc (1.21), Watchdog.defs.hh (1.17),
+	  Watchdog.inlines.hh (1.14), Watchdog.types.hh (1.7), configure.ac
+	  (1.32), pwl_header.hh (1.2), src/.cvsignore (1.1),
+	  src/Doubly_Linked_Object.defs.hh (1.1),
+	  src/Doubly_Linked_Object.inlines.hh (1.1),
+	  src/Doubly_Linked_Object.types.hh (1.1), src/EList.defs.hh (1.1),
+	  src/EList.inlines.hh (1.1), src/EList.types.hh (1.1),
+	  src/EList_Iterator.defs.hh (1.1), src/EList_Iterator.inlines.hh
+	  (1.1), src/EList_Iterator.types.hh (1.1), src/Handler.defs.hh
+	  (1.1), src/Handler.inlines.hh (1.1), src/Handler.types.hh (1.1),
+	  src/Makefile.am (1.1), src/Pending_Element.cc (1.1),
+	  src/Pending_Element.defs.hh (1.1), src/Pending_Element.inlines.hh
+	  (1.1), src/Pending_Element.types.hh (1.1), src/Pending_List.cc
+	  (1.1), src/Pending_List.defs.hh (1.1),
+	  src/Pending_List.inlines.hh (1.1), src/Pending_List.types.hh
+	  (1.1), src/Time.cc (1.1), src/Time.defs.hh (1.1),
+	  src/Time.inlines.hh (1.1), src/Time.types.hh (1.1),
+	  src/Watchdog.cc (1.1), src/Watchdog.defs.hh (1.1),
+	  src/Watchdog.inlines.hh (1.1), src/Watchdog.types.hh (1.1),
+	  src/pwl_header.hh (1.1): Restructured.
+
+2005-09-23 Friday 21:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.31): Configure is no longer responsible for
+	  creating build_header.
+
+2005-09-23 Friday 19:04  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* utils/: Makefile.am (1.3), build_header.in (1.2): Generation of
+	  utility scripts fixed.
+
+2005-09-23 Friday 14:31  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.22), configure.ac (1.30), utils/Makefile.am (1.2),
+	  utils/build_header (1.2), utils/build_header.in (1.1): Allow Perl
+	  to be installed into non-standard places.
+
+2005-09-23 Friday 12:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.29): Check for Perl.
+
+2005-09-19 Monday 14:38  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.11): Updated.
+
+2005-09-08 Thursday 01:26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.28): Allow the specification of
+	  --enable-optimization=zero to temporarily get around bugs such as
+	  the one affecting Intel C/C++ 9.0.25 under Fedora Core 4.
+
+2005-09-02 Friday 18:10  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* COPYING, Doubly_Linked_Object.defs.hh,
+	  Doubly_Linked_Object.inlines.hh, EList.defs.hh, EList.inlines.hh,
+	  EList_Iterator.defs.hh, EList_Iterator.inlines.hh,
+	  Handler.defs.hh, Handler.inlines.hh, Makefile.am,
+	  Pending_Element.cc, Pending_Element.defs.hh,
+	  Pending_Element.inlines.hh, Pending_List.cc,
+	  Pending_List.defs.hh, Pending_List.inlines.hh, README, Time.cc,
+	  Time.defs.hh, Time.inlines.hh, Watchdog.cc, Watchdog.defs.hh,
+	  Watchdog.inlines.hh, compile, config.guess, config.sub,
+	  configure.ac, depcomp, install-sh, ltmain.sh, missing,
+	  mkinstalldirs, pwl_header.bottom, pwl_header.hh,
+	  pwl_header.middle, pwl_header.top, utils/.cvsignore,
+	  utils/Makefile.am, utils/build_header
+	  (grids.[1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,2,2,1,1,2,2,1,1,1,1,1,1,1,1,1]):
+	  Second merge from main trunk.
+
+2005-09-01 Thursday 14:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* install-sh (1.12), ltmain.sh (1.15): Updated from Libtool 1.5.20.
+
+2005-08-28 Sunday 10:05  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* missing (1.8): Broken comments restored.
+
+2005-08-27 Saturday 21:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.21): The `configure' script is now listed in
+	  `dist_noinst_SCRIPTS' and no longer in `EXTRA_DIST'.
+
+2005-08-27 Saturday 17:16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.20), configure.ac (1.27), pwl_header.bottom (1.3),
+	  pwl_header.hh (1.1), pwl_header.middle (1.4), pwl_header.top
+	  (1.8), utils/.cvsignore (1.1), utils/Makefile.am (1.1),
+	  utils/build_header (1.1): Definitely switch to the new mechanism
+	  to build the library headers.  The `build_header' script belongs
+	  to the `utils' directories.
+
+2005-08-22 Monday 00:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.16), config.sub (1.16): Updated.
+
+2005-08-22 Monday 00:40  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* COPYING (1.3), Doubly_Linked_Object.defs.hh (1.3),
+	  Doubly_Linked_Object.inlines.hh (1.3), EList.defs.hh (1.5),
+	  EList.inlines.hh (1.4), EList_Iterator.defs.hh (1.3),
+	  EList_Iterator.inlines.hh (1.4), Handler.defs.hh (1.5),
+	  Handler.inlines.hh (1.4), Makefile.am (1.19), Pending_Element.cc
+	  (1.3), Pending_Element.defs.hh (1.3), Pending_Element.inlines.hh
+	  (1.3), Pending_List.cc (1.3), Pending_List.defs.hh (1.3),
+	  Pending_List.inlines.hh (1.3), README (1.11), Time.cc (1.3),
+	  Time.defs.hh (1.3), Time.inlines.hh (1.4), Watchdog.cc (1.20),
+	  Watchdog.defs.hh (1.16), Watchdog.inlines.hh (1.13), compile
+	  (1.6), config.guess (1.15), config.sub (1.15), configure.ac
+	  (1.26), depcomp (1.9), ltmain.sh (1.14), missing (1.7),
+	  pwl_header.top (1.7): Address of the Free Software Foundation
+	  updated.
+
+2005-07-11 Monday 08:32  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* compile (1.5), config.guess (1.14), config.sub (1.14), depcomp
+	  (1.8), missing (1.6), mkinstalldirs (1.5): Updated from Automake
+	  1.9.6.
+
+2005-07-06 Wednesday 09:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Handler.defs.hh, Handler.inlines.hh, Time.inlines.hh,
+	  config.guess, config.sub, install-sh, ltmain.sh
+	  (grids.[1,1,1,1,1,1,1]): First merge from main trunk.
+
+2005-05-25 Wednesday 12:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.13), config.sub (1.13), install-sh (1.11),
+	  ltmain.sh (1.13): Updated from Libtool 1.5.18.
+
+2005-05-25 Wednesday 07:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.12), config.sub (1.12), ltmain.sh (1.12): Updated
+	  from Libtool 1.5.16.
+
+2005-04-11 Monday 00:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Time.inlines.hh (1.3): Fixed a bug in Time::operator+=(const
+	  Time&).
+
+2005-02-27 Sunday 16:16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Handler.defs.hh (1.4), Handler.inlines.hh (1.3): Class Handler
+	  was missing a virtual destructor: added.
+
+2005-02-13 Sunday 08:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.4), compile (1.4), config.guess (1.11), config.sub
+	  (1.11), depcomp (1.7), missing (1.5), mkinstalldirs (1.4):
+	  Updated from Automake 1.9.5.
+
+2005-02-12 Saturday 15:42  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.11): Updated from Libtool 1.5.14.
+
+2005-02-08 Tuesday 20:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.sub (1.10), install-sh (1.10): Updated.
+
+2005-02-08 Tuesday 20:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.10): Updated from Libtool 1.5.12.
+
+2005-01-01 Saturday 00:45  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Doubly_Linked_Object.defs.hh (1.2),
+	  Doubly_Linked_Object.inlines.hh (1.2),
+	  Doubly_Linked_Object.types.hh (1.2), EList.defs.hh (1.4),
+	  EList.inlines.hh (1.3), EList.types.hh (1.2),
+	  EList_Iterator.defs.hh (1.2), EList_Iterator.inlines.hh (1.3),
+	  EList_Iterator.types.hh (1.2), Handler.defs.hh (1.3),
+	  Handler.inlines.hh (1.2), Handler.types.hh (1.2), Makefile.am
+	  (1.18), Pending_Element.cc (1.2), Pending_Element.defs.hh (1.2),
+	  Pending_Element.inlines.hh (1.2), Pending_Element.types.hh (1.2),
+	  Pending_List.cc (1.2), Pending_List.defs.hh (1.2),
+	  Pending_List.inlines.hh (1.2), Pending_List.types.hh (1.2),
+	  README (1.10), Time.cc (1.2), Time.defs.hh (1.2), Time.inlines.hh
+	  (1.2), Time.types.hh (1.2), Watchdog.cc (1.19), Watchdog.defs.hh
+	  (1.15), Watchdog.inlines.hh (1.12), Watchdog.types.hh (1.6),
+	  configure.ac (1.25), pwl_header.top (1.6): Copyright years
+	  extended.
+
+2004-12-25 Saturday 23:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Makefile.am, NEWS, README, config.guess, config.sub,
+	  configure.ac, install-sh, pwl_filter_doxygen.sed,
+	  pwl_filter_install.sed, pwl_header.bottom, pwl_header.middle,
+	  pwl_header.top (altnum.[2,5,2,2,4,3,3,4,1,1,1,1,1]): Seventh
+	  merge from main trunk.
+
+2004-12-24 Friday 16:41  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_7-branch.1): Mark ChangeLog.
+
+2004-12-24 Friday 15:18  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.10): Updated.
+
+2004-12-24 Friday 15:11  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.9): Updated.
+
+2004-12-24 Friday 12:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.17): No longer mention erased files.
+
+2004-12-24 Friday 11:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* pwl_header.bottom (1.2), pwl_header.top (1.5): Handling of NDEBUG
+	  improved.
+
+2004-12-24 Friday 11:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* pwl_header.middle (1.3): We no longer support GCC versions prior
+	  to 3.
+
+2004-12-24 Friday 11:32  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.24): Require Autoconf 2.59.
+
+2004-12-24 Friday 11:31  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.8): Version number bumped.
+
+2004-12-24 Friday 11:16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.16), pwl_filter_doxygen.sed (1.2),
+	  pwl_filter_install.sed (1.2): Obsolete filters removed.  Shared
+	  library version info updated.
+
+2004-12-24 Friday 09:00  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.15), configure.ac (1.23): Enable the creation of
+	  DLLs under Cygwin.
+
+2004-12-19 Sunday 12:04  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.22): Version number bumped.
+
+2004-12-19 Sunday 11:41  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (1.5): The tentative release date for PPL 0.7 is December
+	  24, 2004.
+
+2004-12-19 Sunday 07:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.9): Updated.
+
+2004-12-19 Sunday 07:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.10), config.sub (1.9): Updated.
+
+2004-12-19 Sunday 07:25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* install-sh (1.9): Updated from Automake 1.9.4.
+
+2004-12-11 Saturday 22:34  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* EList_Iterator.inlines.hh, Handler.defs.hh, Makefile.am,
+	  Watchdog.defs.hh (altnum.[2,2,4,2]): Sixth merge from main trunk.
+
+2004-12-11 Saturday 22:06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* EList_Iterator.inlines.hh (1.2), Handler.defs.hh (1.2),
+	  Makefile.am (1.14), Watchdog.defs.hh (1.14): Try to avoid very
+	  long lines.
+
+2004-11-27 Saturday 17:08  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL, Makefile.am, compile, config.guess, configure.ac,
+	  install-sh (altnum.[1,3,2,3,2,3]): Fifth number from main
+	  repository.
+
+2004-11-20 Saturday 08:10  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.21): Define the PROFILING symbol when compiling
+	  for profiling.
+
+2004-11-01 Monday 15:39  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL (1.3), compile (1.3), config.guess (1.9), install-sh
+	  (1.8): Updated from Automake 1.9.3.
+
+2004-10-29 Friday 17:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.13): Always specify the condition which is closed
+	  by an Automake's `end',
+
+2004-10-01 Friday 19:28  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* compile, config.guess, config.sub, install-sh, ltmain.sh, missing
+	  (altnum.[1,2,2,2,2,1]): Third merge from main trunk.
+
+2004-09-20 Monday 09:22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* compile (1.2), install-sh (1.7), missing (1.4): Updated from
+	  Automake 1.9.2.
+
+2004-09-19 Sunday 22:53  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am, Watchdog.cc (altnum.[2,2]): Second merge from main
+	  trunk.
+
+2004-09-19 Sunday 18:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.8), config.sub (1.8): Updated.
+
+2004-09-19 Sunday 18:29  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.9): Updated from Libtool 1.5.10.
+
+2004-09-16 Thursday 09:47  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog.cc (1.18): Simplified the progrma logic in a few places
+	  where we remove elements from a container by using the return
+	  value of method erase().
+
+2004-09-02 Thursday 22:06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.12): Prepared for PPL 0.7.
+
+2004-08-21 Saturday 17:58  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.11): Match every `endif' with the corresponding
+	  `if' condition.
+
+2004-08-20 Friday 19:56  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_6-branch.3): Mark ChangeLog.
+
+2004-08-20 Friday 17:46  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_6-branch.2): Updated.
+
+2004-08-20 Friday 15:08  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (ppl-0_6-branch.1): Updated for the release of PPL 0.6.1.
+
+2004-08-19 Thursday 17:43  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Doubly_Linked_Object.defs.hh,
+	  Doubly_Linked_Object.inlines.hh, Doubly_Linked_Object.types.hh,
+	  EList.defs.hh, EList.inlines.hh, EList.types.hh,
+	  EList_Iterator.defs.hh, EList_Iterator.inlines.hh,
+	  EList_Iterator.types.hh, Handler.defs.hh, Handler.inlines.hh,
+	  Handler.types.hh, Makefile.am, NEWS, Pending_Element.cc,
+	  Pending_Element.defs.hh, Pending_Element.inlines.hh,
+	  Pending_Element.types.hh, Pending_List.cc, Pending_List.defs.hh,
+	  Pending_List.inlines.hh, Pending_List.types.hh, README, Time.cc,
+	  Time.defs.hh, Time.inlines.hh, Time.types.hh, Watchdog.cc,
+	  Watchdog.defs.hh, Watchdog.inlines.hh, config.guess, config.sub,
+	  configure.ac, depcomp, install-sh, ltmain.sh
+	  (altnum.[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]):
+	  First merge from main trunk.
+
+2004-08-18 Wednesday 22:58  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (ppl-0_6-branch.1), ChangeLog (1.8), configure.ac
+	  (1.20): Version number bumped.
+
+2004-08-18 Wednesday 18:31  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_6-branch.1): Mark ChangeLog.
+
+2004-08-16 Monday 18:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README (1.7): Updated.
+
+2004-08-16 Monday 09:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS (1.4): Our tentative release date is August 18, 2004.
+
+2004-08-16 Monday 08:36  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.7): Updated.
+
+2004-08-13 Friday 18:02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.10): Version info updated for the libtool
+	  libraries.
+
+2004-08-08 Sunday 19:36  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.9), Watchdog.cc (1.17), Watchdog.defs.hh (1.13),
+	  Watchdog.inlines.hh (1.11): Watchdog library completely
+	  reorganized.	Deadlock bug fixed in the process.
+
+2004-08-08 Sunday 19:30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Handler.defs.hh (1.1), Handler.inlines.hh (1.1), Handler.types.hh
+	  (1.1): Classes for handlers of the watchdog events.
+
+2004-08-07 Saturday 19:16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.8): Updated from Libtool 1.5.8.
+
+2004-08-07 Saturday 08:48  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Pending_List.cc (1.1), Pending_List.defs.hh (1.1),
+	  Pending_List.inlines.hh (1.1), Pending_List.types.hh (1.1): An
+	  ordered list for recording pending watchdog events.
+
+2004-08-07 Saturday 08:41  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* EList.defs.hh (1.3), EList.inlines.hh (1.2): The clear() method
+	  has been removed.  The destructor now destructs also the elements
+	  in the list.
+
+2004-08-06 Friday 19:37  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Pending_Element.cc (1.1), Pending_Element.defs.hh (1.1),
+	  Pending_Element.inlines.hh (1.1), Pending_Element.types.hh (1.1):
+	  A class for pending watchdog events with embedded links.
+
+2004-08-06 Friday 18:53  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Doubly_Linked_Object.defs.hh (1.1),
+	  Doubly_Linked_Object.inlines.hh (1.1),
+	  Doubly_Linked_Object.types.hh (1.1): A (base) class for doubly
+	  linked objects.
+
+2004-08-06 Friday 18:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* EList_Iterator.defs.hh (1.1), EList_Iterator.inlines.hh (1.1),
+	  EList_Iterator.types.hh (1.1): A class providing iterators for
+	  embedded lists.
+
+2004-08-06 Friday 18:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* EList.defs.hh (1.2): Class comment revised.
+
+2004-08-06 Friday 18:21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* EList.defs.hh (1.1), EList.inlines.hh (1.1), EList.types.hh
+	  (1.1): A list of doubly linked objects (where the links are
+	  embedded in the objects themselves).
+
+2004-08-06 Friday 18:04  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Time.cc (1.1), Time.defs.hh (1.1), Time.inlines.hh (1.1),
+	  Time.types.hh (1.1): A class for representing and manipulating
+	  positive time intervals.
+
+2004-08-04 Wednesday 22:28  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* depcomp (1.6), install-sh (1.6): Updated from Automake 1.9.
+
+2004-08-04 Wednesday 20:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.7), config.sub (1.7): Updated.
+
+2004-07-08 Thursday 16:50  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.16): Spacing fixed.
+
+2004-05-09 Sunday 17:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.15): Anachronisms removed.
+
+2004-04-25 Sunday 22:13  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* depcomp (1.5), install-sh (1.5), mkinstalldirs (1.3): Updated
+	  from Automake 1.8.4.
+
+2004-04-06 Tuesday 21:38  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.6), config.sub (1.6), ltmain.sh (1.7): Updated
+	  from libtool-1.5.4.
+
+2004-01-28 Wednesday 09:08  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.8), README (1.6), Watchdog.cc (1.14),
+	  Watchdog.defs.hh (1.12), Watchdog.inlines.hh (1.10),
+	  Watchdog.types.hh (1.5), configure.ac (1.19), pwl_header.top
+	  (1.4): Update copyright years.
+
+2004-01-27 Tuesday 17:39  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* compile (1.1): Added from Automake 1.8.2.
+
+2004-01-25 Sunday 22:56  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* depcomp (1.4), install-sh (1.4), missing (1.3), mkinstalldirs
+	  (1.2): Update from Automake.
+
+2004-01-25 Sunday 22:47  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.5), config.sub (1.5): Updated from config.
+
+2004-01-25 Sunday 22:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.6): Updated from Libtool 1.5.2.
+
+2003-12-05 Friday 11:24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.13): Do not use the ITIMER_PROF timer when
+	  profiling.
+
+2003-11-04 Tuesday 17:58  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.4), config.sub (1.4): Updated.
+
+2003-10-03 Friday 12:22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.4): Ignore config.h.in.
+
+2003-10-03 Friday 09:44  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.h.in (1.4): These should not be in the repository, since
+	  they are automatically generated.
+
+2003-09-10 Wednesday 18:41  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.3), config.sub (1.3), depcomp (1.3), install-sh
+	  (1.3), missing (1.2): Updated.
+
+2003-08-06 Wednesday 08:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.18): Allow for `mild', -O1 optimization.
+
+2003-07-05 Saturday 17:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.12): Delete statement uncommented.
+
+2003-04-27 Sunday 21:53  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, NEWS, README, configure.ac (ppl-0_5-branch.[2,1,1,1]):
+	  Synchronize with the main trunk.
+
+2003-04-27 Sunday 21:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_5-branch.1): Mark ChangeLog.
+
+2003-04-27 Sunday 21:31  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.6): Updated.
+
+2003-04-27 Sunday 21:25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.17): Version number bumped.
+
+2003-04-27 Sunday 21:18  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.5): Updated.
+
+2003-04-27 Sunday 21:16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.4), NEWS (1.3), README (1.5): Updated for release
+	  0.2.
+
+2003-04-17 Thursday 22:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.11): Prefer anonymous namespaces to static
+	  declarations.
+
+2003-04-15 Tuesday 13:38  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.5): Updated.
+
+2003-04-11 Friday 08:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.4): Updated.
+
+2003-04-07 Monday 16:25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ltmain.sh (1.3): Updated.
+
+2003-03-03 Monday 21:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* depcomp (1.2), install-sh (1.2): Updated.
+
+2003-03-03 Monday 21:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.16): Require Autoconf 2.57 or following and
+	  Automake 1.7.3 or following.
+
+2003-03-03 Monday 18:35  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* COPYING (1.2), ChangeLog (1.3), INSTALL (1.2), NEWS (1.2),
+	  config.guess (1.2), config.sub (1.2), ltmain.sh (1.2): Updated.
+
+2003-03-03 Monday 18:21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.7): Update version info.
+
+2003-02-07 Friday 10:56  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.10): Throw std::runtime_error instead of calling
+	  abort().
+
+2003-02-07 Friday 10:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.inlines.hh (1.9): Throw std::invalid_argument if a
+	  Watchdog constructor is called with a non-positive number of time
+	  units.
+
+2003-01-26 Sunday 22:02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.9): Ported to Cygwin (it only supports
+	  ITIMER_REAL).  Robustness increased.	Throw std:runtime_error
+	  exceptions instead of calling exit().
+
+2003-01-12 Sunday 08:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.defs.hh (1.11): Spurious, illegal qualification removed.
+
+2003-01-10 Friday 09:48  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.8), Watchdog.defs.hh (1.10), Watchdog.inlines.hh
+	  (1.8), Watchdog.types.hh (1.4): New "nifty counter"
+	  implementation of library's initialization and finalization.
+	  Explicit initialization and finalization is no longer necessary
+	  nor possible.
+
+2003-01-09 Thursday 10:11  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.15): Building the Parma Watchdog Library is now
+	  enabled by default.
+
+2003-01-01 Wednesday 02:48  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.6), README (1.4), Watchdog.cc (1.7),
+	  Watchdog.defs.hh (1.9), Watchdog.inlines.hh (1.7),
+	  Watchdog.types.hh (1.3), configure.ac (1.14), pwl_header.top
+	  (1.3): Update copyright years.
+
+2002-11-05 Tuesday 11:49  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.6), Watchdog.defs.hh (1.8): Standard conformance
+	  fixes.
+
+2002-11-05 Tuesday 10:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.13): Work around a bug in AC_CHECK_FUNCS as
+	  implemented in autoconf 2.54c and previous versions.	For more
+	  information, see
+	  http://www.cs.unipr.it/pipermail/ppl-devel/2002-November/002929.html.
+
+2002-11-05 Tuesday 10:11  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.12): Avoid using obsolete macros.
+
+2002-11-03 Sunday 11:06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* pwl_header.middle (1.2): Include sys/time.h, if available.
+
+2002-11-03 Sunday 09:42  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.defs.hh (1.7), Watchdog.inlines.hh (1.6): Little
+	  cleaning.
+
+2002-11-03 Sunday 09:42  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.h.in (1.3), configure.ac (1.11): Get rid of AC_C_INLINE:
+	  we do not use inlines in C code and it was doing harm with some
+	  compilers.
+
+2002-11-02 Saturday 16:46  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.10): Buggy conditional fixed.
+
+2002-10-19 Saturday 00:40  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* config.guess (1.1), config.sub (1.1), depcomp (1.1), install-sh
+	  (1.1), ltmain.sh (1.1), missing (1.1), mkinstalldirs (1.1):
+	  Missing files added.
+
+2002-10-04 Friday 12:21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_4-branch.3): Mark ChangeLog.
+
+2002-08-17 Saturday 13:44  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.defs.hh, Watchdog.inlines.hh, Watchdog.types.hh,
+	  pwl_header.top (alt_nnc.[1,1,1,1]): Merge changes from the trunk
+	  between tags `merge_to_alt_nnc' and `second_merge_to_alt_nnc'.
+
+2002-08-16 Friday 10:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.defs.hh (1.6), Watchdog.inlines.hh (1.5),
+	  Watchdog.types.hh (1.2), pwl_header.top (1.2): According to the
+	  C++ standard (Section 17.4), every name that starts with an
+	  underscore is reserved to the implementation.  All the multiple
+	  inclusion guards have been renamed (some missing ones have been
+	  added).
+
+2002-07-30 Tuesday 11:14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_4-branch.2): Mark ChangeLog.
+
+2002-07-02 Tuesday 21:52  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.9): Shared libraries are again turned off by
+	  default.
+
+2002-07-01 Monday 18:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (ppl-0_4-branch.1): Mark ChangeLog.
+
+2002-06-30 Sunday 20:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.defs.hh (1.5), Watchdog.inlines.hh (1.4): Implementation
+	  of inline functions moved to Watchdog.inlines.hh.
+
+2002-06-30 Sunday 17:08  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog (1.2): This file will no longer be empty.
+
+2002-06-30 Sunday 15:21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.8): Invocations to AC_PROG_* macros repositioned.
+
+2002-06-30 Sunday 15:17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.defs.hh (1.4), Watchdog.inlines.hh (1.3): Use methods
+	  instead of friends for binary operators over Time.
+
+2002-06-25 Tuesday 15:03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.3): For those building in the sources' directory.
+
+2002-06-24 Monday 12:23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.7): Fixed typo in a comment.
+
+2002-06-17 Monday 08:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.5), Watchdog.defs.hh (1.3): Use #ifdef to test
+	  configuration symbols that may be undefined or defined to 1.
+
+2002-06-15 Saturday 14:47  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.5): dist-hook goes into the unconditional section.
+
+2002-06-09 Sunday 16:36  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.4), configure.ac (1.6): Consistent spelling for
+	  Autoconf and Automake.
+
+2002-06-09 Sunday 16:33  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.5): Set CFLAGS properly.  Check for header files
+	  and library functions only if we are building the library.
+
+2002-06-09 Sunday 16:15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac (1.4): Be more friendly to compilers different from
+	  GCC.
+
+2002-05-28 Tuesday 13:07  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.2): For those building in the sources' tree.
+
+2002-05-28 Tuesday 12:58  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog.cc (1.4), Watchdog.defs.hh (1.2), Watchdog.inlines.hh
+	  (1.2): Better implementation using templates.
+
+2002-05-27 Monday 15:57  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.3), README (1.3), Timeout.hh (1.3), Watchdog.cc
+	  (1.3), Watchdog.defs.hh (1.1), Watchdog.hh (1.3),
+	  Watchdog.inlines.hh (1.1), Watchdog.types.hh (1.1), configure.ac
+	  (1.3), pwl_filter_doxygen.sed (1.1), pwl_filter_install.sed
+	  (1.1), pwl_header.bottom (1.1), pwl_header.middle (1.1),
+	  pwl_header.top (1.1): The Watchdog library is now complete.
+
+2002-05-24 Friday 07:25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am (1.2), README (1.2), Timeout.hh (1.2), Watchdog.cc
+	  (1.2), Watchdog.hh (1.2), config.h.in (1.2), configure.ac (1.2):
+	  Several improvement (but still not operational).
+
+2002-05-22 Wednesday 11:02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .cvsignore (1.1), BUGS (1.1), COPYING (1.1), CREDITS (1.1),
+	  ChangeLog (1.1), INSTALL (1.1), Makefile.am (1.1), NEWS (1.1),
+	  README (1.1), Timeout.hh (1.1), Watchdog.cc (1.1), Watchdog.hh
+	  (1.1), config.h.in (1.1), configure.ac (1.1): Even though the
+	  Watchdog library is completely independent from the PPL, it will
+	  live with it, at least for a while.
+

@@ -1,0 +1,17 @@
+There appears to be a bug in GCC (all versions up to and including
+4.3.x) concerning exception handling on the Alpha.  This may be
+related to
+
+  http://gcc.gnu.org/bugzilla/show_bug.cgi?id=8966
+
+Strictily speaking, the PPL uses exception handling, so if that does
+not work on the Alpha, then the PPL does not work on the Alpha.  And
+there is nothing to do but fix the GCC bug.
+
+However, if that GCC bug really only affects exception handling and nothing
+else, given that the PPL only uses exceptions for error reporting, we can
+probably say that the PPL works on the Alpha *apart* from error reporting.
+In other words, under this hypothesis (which we have no way to check),
+users that are not interested in catching exceptions thrown by the PPL
+(in response to invalid arguments, heap exhaustion, overflows, ...)
+should probably not worry.  Your mileage may vary...

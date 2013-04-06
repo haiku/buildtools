@@ -1,0 +1,18 @@
+* * * * * * * * * * * * * *
+* OpenScop Library  0.5.0 *
+* * * * * * * * * * * * * *
+
+Install
+-------
+
+$> ./autogen.sh
+$> ./configure
+$> make 
+$> make install
+
+Support
+-------
+
+Please contact:
+openscop-development@googlegroups.com
+

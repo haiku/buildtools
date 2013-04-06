@@ -1,0 +1,8 @@
+Build problems have been reported for Solaris 10, affecting the build
+of the Java language interface, which are due to the use of an
+incompatible version of sed:
+
+  https://www.cs.unipr.it/mantis/view.php?id=103
+
+The solution is to install and use GNU sed.
+This is recommended, even when only using the C++ language interface.

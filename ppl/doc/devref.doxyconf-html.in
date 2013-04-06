@@ -1,0 +1,508 @@
+# Doxyfile 1.6.3
+
+#---------------------------------------------------------------------------
+# Project related configuration options
+#---------------------------------------------------------------------------
+DOXYFILE_ENCODING      = UTF-8
+PROJECT_NAME           = PPL
+PROJECT_NUMBER         = @VERSION@
+OUTPUT_DIRECTORY       = .
+CREATE_SUBDIRS         = NO
+OUTPUT_LANGUAGE        = English
+BRIEF_MEMBER_DESC      = YES
+REPEAT_BRIEF           = YES
+ABBREVIATE_BRIEF       =
+ALWAYS_DETAILED_SEC    = NO
+INLINE_INHERITED_MEMB  = NO
+FULL_PATH_NAMES        = NO
+STRIP_FROM_PATH        =
+STRIP_FROM_INC_PATH    =
+SHORT_NAMES            = NO
+JAVADOC_AUTOBRIEF      = NO
+QT_AUTOBRIEF           = NO
+MULTILINE_CPP_IS_BRIEF = NO
+INHERIT_DOCS           = YES
+SEPARATE_MEMBER_PAGES  = NO
+TAB_SIZE               = 8
+ALIASES                =
+OPTIMIZE_OUTPUT_FOR_C  = NO
+OPTIMIZE_OUTPUT_JAVA   = NO
+OPTIMIZE_FOR_FORTRAN   = NO
+OPTIMIZE_OUTPUT_VHDL   = NO
+EXTENSION_MAPPING      =
+BUILTIN_STL_SUPPORT    = NO
+CPP_CLI_SUPPORT        = NO
+SIP_SUPPORT            = NO
+IDL_PROPERTY_SUPPORT   = YES
+DISTRIBUTE_GROUP_DOC   = NO
+SUBGROUPING            = YES
+TYPEDEF_HIDES_STRUCT   = NO
+SYMBOL_CACHE_SIZE      = 0
+#---------------------------------------------------------------------------
+# Build related configuration options
+#---------------------------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_LOCAL_METHODS  = NO
+EXTRACT_ANON_NSPACES   = NO
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+HIDE_FRIEND_COMPOUNDS  = NO
+HIDE_IN_BODY_DOCS      = NO
+INTERNAL_DOCS          = YES
+CASE_SENSE_NAMES       = YES
+HIDE_SCOPE_NAMES       = NO
+SHOW_INCLUDE_FILES     = YES
+FORCE_LOCAL_INCLUDES   = NO
+INLINE_INFO            = YES
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = NO
+SORT_MEMBERS_CTORS_1ST = NO
+SORT_GROUP_NAMES       = NO
+SORT_BY_SCOPE_NAME     = NO
+GENERATE_TODOLIST      = YES
+GENERATE_TESTLIST      = YES
+GENERATE_BUGLIST       = YES
+GENERATE_DEPRECATEDLIST= YES
+ENABLED_SECTIONS       = Include_Implementation_Details
+MAX_INITIALIZER_LINES  = 5
+SHOW_USED_FILES        = YES
+SHOW_DIRECTORIES       = NO
+SHOW_FILES             = YES
+SHOW_NAMESPACES        = YES
+FILE_VERSION_FILTER    =
+LAYOUT_FILE            =
+#---------------------------------------------------------------------------
+# configuration options related to warning and progress messages
+#---------------------------------------------------------------------------
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = NO
+WARN_FORMAT            = "$file:$line: $text "
+WARN_LOGFILE           =
+#---------------------------------------------------------------------------
+# configuration options related to the input files
+#---------------------------------------------------------------------------
+INPUT                  = @srcdir@/definitions.dox \
+                         @srcdir@/../src/namespaces.hh \
+                         ../src/version.hh \
+                         @srcdir@/../src/version.cc \
+                         @srcdir@/../src/meta_programming.hh \
+                         @srcdir@/../src/Float.defs.hh \
+                         @srcdir@/../src/Float.inlines.hh \
+                         @srcdir@/../src/Float.cc \
+                         @srcdir@/../src/Checked_Number.types.hh \
+                         @srcdir@/../src/Checked_Number.defs.hh \
+                         @srcdir@/../src/Checked_Number.inlines.hh \
+                         @srcdir@/../src/Checked_Number.cc \
+                         @srcdir@/../src/GMP_Integer.types.hh \
+                         @srcdir@/../src/GMP_Integer.defs.hh \
+                         @srcdir@/../src/GMP_Integer.inlines.hh \
+                         @srcdir@/../src/Coefficient_traits_template.hh \
+                         @srcdir@/../src/Coefficient.types.hh \
+                         @srcdir@/../src/Coefficient.defs.hh \
+                         @srcdir@/../src/Coefficient.inlines.hh \
+                         @srcdir@/../src/Coefficient.cc \
+                         @srcdir@/../src/checked.defs.hh \
+                         @srcdir@/../src/checked.inlines.hh \
+                         @srcdir@/../src/checked_float.inlines.hh \
+                         @srcdir@/../src/checked_int.inlines.hh \
+                         @srcdir@/../src/checked_mpq.inlines.hh \
+                         @srcdir@/../src/checked_mpz.inlines.hh \
+                         @srcdir@/../src/checked.cc \
+                         @srcdir@/../src/Init.types.hh \
+                         @srcdir@/../src/Init.defs.hh \
+                         @srcdir@/../src/Init.inlines.hh \
+                         @srcdir@/../src/Init.cc \
+                         @srcdir@/../src/initializer.hh \
+                         @srcdir@/../src/globals.types.hh \
+                         @srcdir@/../src/globals.defs.hh \
+                         @srcdir@/../src/globals.inlines.hh \
+                         @srcdir@/../src/globals.cc \
+                         @srcdir@/../src/math_utilities.defs.hh \
+                         @srcdir@/../src/math_utilities.inlines.hh \
+                         @srcdir@/../src/distances.types.hh \
+                         @srcdir@/../src/distances.defs.hh \
+                         @srcdir@/../src/distances.inlines.hh \
+                         @srcdir@/../src/stdiobuf.types.hh \
+                         @srcdir@/../src/stdiobuf.defs.hh \
+                         @srcdir@/../src/stdiobuf.inlines.hh \
+                         @srcdir@/../src/stdiobuf.cc \
+                         @srcdir@/../src/termination.defs.hh \
+                         @srcdir@/../src/termination.templates.hh \
+                         @srcdir@/../src/termination.cc \
+                         @srcdir@/../src/Topology.hh \
+                         @srcdir@/../src/Row.types.hh \
+                         @srcdir@/../src/Row.defs.hh \
+                         @srcdir@/../src/Row.inlines.hh \
+                         @srcdir@/../src/Row.cc \
+                         @srcdir@/../src/Matrix.types.hh \
+                         @srcdir@/../src/Matrix.defs.hh \
+                         @srcdir@/../src/Matrix.inlines.hh \
+                         @srcdir@/../src/Matrix.cc \
+                         @srcdir@/../src/Linear_Row.types.hh \
+                         @srcdir@/../src/Linear_Row.defs.hh \
+                         @srcdir@/../src/Linear_Row.inlines.hh \
+                         @srcdir@/../src/Linear_Row.cc \
+                         @srcdir@/../src/Linear_System.types.hh \
+                         @srcdir@/../src/Linear_System.defs.hh \
+                         @srcdir@/../src/Linear_System.inlines.hh \
+                         @srcdir@/../src/Linear_System.cc \
+                         @srcdir@/../src/MIP_Problem.types.hh \
+                         @srcdir@/../src/MIP_Problem.defs.hh \
+                         @srcdir@/../src/MIP_Problem.inlines.hh \
+                         @srcdir@/../src/MIP_Problem.templates.hh \
+                         @srcdir@/../src/MIP_Problem.cc \
+                         @srcdir@/../src/Bit_Row.types.hh \
+                         @srcdir@/../src/Bit_Row.defs.hh \
+                         @srcdir@/../src/Bit_Row.inlines.hh \
+                         @srcdir@/../src/Bit_Row.cc \
+                         @srcdir@/../src/Bit_Matrix.types.hh \
+                         @srcdir@/../src/Bit_Matrix.defs.hh \
+                         @srcdir@/../src/Bit_Matrix.inlines.hh \
+                         @srcdir@/../src/Bit_Matrix.cc \
+                         @srcdir@/../src/Variable.types.hh \
+                         @srcdir@/../src/Variable.defs.hh \
+                         @srcdir@/../src/Variable.inlines.hh \
+                         @srcdir@/../src/Variable.cc \
+                         @srcdir@/../src/Variables_Set.types.hh \
+                         @srcdir@/../src/Variables_Set.defs.hh \
+                         @srcdir@/../src/Variables_Set.inlines.hh \
+                         @srcdir@/../src/Variables_Set.cc \
+                         @srcdir@/../src/Linear_Expression.types.hh \
+                         @srcdir@/../src/Linear_Expression.defs.hh \
+                         @srcdir@/../src/Linear_Expression.inlines.hh \
+                         @srcdir@/../src/Linear_Expression.cc \
+                         @srcdir@/../src/Constraint.types.hh \
+                         @srcdir@/../src/Constraint.defs.hh \
+                         @srcdir@/../src/Constraint.inlines.hh \
+                         @srcdir@/../src/Constraint.cc \
+                         @srcdir@/../src/Congruence.types.hh \
+                         @srcdir@/../src/Congruence.defs.hh \
+                         @srcdir@/../src/Congruence.inlines.hh \
+                         @srcdir@/../src/Congruence.cc \
+                         @srcdir@/../src/Generator.types.hh \
+                         @srcdir@/../src/Generator.defs.hh \
+                         @srcdir@/../src/Generator.inlines.hh \
+                         @srcdir@/../src/Generator.cc \
+                         @srcdir@/../src/Grid_Generator.types.hh \
+                         @srcdir@/../src/Grid_Generator.defs.hh \
+                         @srcdir@/../src/Grid_Generator.inlines.hh \
+                         @srcdir@/../src/Grid_Generator.cc \
+                         @srcdir@/../src/Constraint_System.types.hh \
+                         @srcdir@/../src/Constraint_System.defs.hh \
+                         @srcdir@/../src/Constraint_System.inlines.hh \
+                         @srcdir@/../src/Constraint_System.cc \
+                         @srcdir@/../src/Congruence_System.types.hh \
+                         @srcdir@/../src/Congruence_System.defs.hh \
+                         @srcdir@/../src/Congruence_System.inlines.hh \
+                         @srcdir@/../src/Congruence_System.cc \
+                         @srcdir@/../src/Generator_System.defs.hh \
+                         @srcdir@/../src/Generator_System.types.hh \
+                         @srcdir@/../src/Generator_System.inlines.hh \
+                         @srcdir@/../src/Generator_System.cc \
+                         @srcdir@/../src/Grid_Generator_System.defs.hh \
+                         @srcdir@/../src/Grid_Generator_System.types.hh \
+                         @srcdir@/../src/Grid_Generator_System.inlines.hh \
+                         @srcdir@/../src/Grid_Generator_System.cc \
+                         @srcdir@/../src/Scalar_Products.types.hh \
+                         @srcdir@/../src/Scalar_Products.defs.hh \
+                         @srcdir@/../src/Scalar_Products.inlines.hh \
+                         @srcdir@/../src/Scalar_Products.cc \
+                         @srcdir@/../src/Ph_Status.idefs.hh \
+                         @srcdir@/../src/Ph_Status.inlines.hh \
+                         @srcdir@/../src/Ph_Status.cc \
+                         @srcdir@/../src/Polyhedron.types.hh \
+                         @srcdir@/../src/Polyhedron.defs.hh \
+                         @srcdir@/../src/Polyhedron.inlines.hh \
+                         @srcdir@/../src/Polyhedron.templates.hh \
+                         @srcdir@/../src/Polyhedron_public.cc \
+                         @srcdir@/../src/Polyhedron_nonpublic.cc \
+                         @srcdir@/../src/Polyhedron_widenings.cc \
+                         @srcdir@/../src/Polyhedron_chdims.cc \
+                         @srcdir@/../src/conversion.cc \
+                         @srcdir@/../src/minimize.cc \
+                         @srcdir@/../src/simplify.cc \
+                         @srcdir@/../src/Grid.types.hh \
+                         @srcdir@/../src/Grid.defs.hh \
+                         @srcdir@/../src/Grid.inlines.hh \
+                         @srcdir@/../src/Grid.templates.hh \
+                         @srcdir@/../src/Grid_public.cc \
+                         @srcdir@/../src/Grid_nonpublic.cc \
+                         @srcdir@/../src/Grid_conversion.cc \
+                         @srcdir@/../src/Grid_simplify.cc \
+                         @srcdir@/../src/Grid_widenings.cc \
+                         @srcdir@/../src/Grid_chdims.cc \
+                         @srcdir@/../src/Poly_Con_Relation.types.hh \
+                         @srcdir@/../src/Poly_Con_Relation.defs.hh \
+                         @srcdir@/../src/Poly_Con_Relation.inlines.hh \
+                         @srcdir@/../src/Poly_Con_Relation.cc \
+                         @srcdir@/../src/Poly_Gen_Relation.types.hh \
+                         @srcdir@/../src/Poly_Gen_Relation.defs.hh \
+                         @srcdir@/../src/Poly_Gen_Relation.inlines.hh \
+                         @srcdir@/../src/Poly_Gen_Relation.cc \
+                         @srcdir@/../src/Interval_Restriction.defs.hh \
+                         @srcdir@/../src/Interval_Info.types.hh \
+                         @srcdir@/../src/Interval_Info.defs.hh \
+                         @srcdir@/../src/Interval_Info.inlines.hh \
+                         @srcdir@/../src/Interval.types.hh \
+                         @srcdir@/../src/Interval.defs.hh \
+                         @srcdir@/../src/Interval.inlines.hh \
+                         @srcdir@/../src/C_Polyhedron.types.hh \
+                         @srcdir@/../src/C_Polyhedron.defs.hh \
+                         @srcdir@/../src/C_Polyhedron.inlines.hh \
+                         @srcdir@/../src/C_Polyhedron.cc \
+                         @srcdir@/../src/NNC_Polyhedron.types.hh \
+                         @srcdir@/../src/NNC_Polyhedron.defs.hh \
+                         @srcdir@/../src/NNC_Polyhedron.inlines.hh \
+                         @srcdir@/../src/NNC_Polyhedron.cc \
+                         @srcdir@/../src/Widening_Function.types.hh \
+                         @srcdir@/../src/Widening_Function.defs.hh \
+                         @srcdir@/../src/Widening_Function.inlines.hh \
+                         @srcdir@/../src/BHRZ03_Certificate.types.hh \
+                         @srcdir@/../src/BHRZ03_Certificate.defs.hh \
+                         @srcdir@/../src/BHRZ03_Certificate.inlines.hh \
+                         @srcdir@/../src/BHRZ03_Certificate.cc \
+                         @srcdir@/../src/H79_Certificate.types.hh \
+                         @srcdir@/../src/H79_Certificate.defs.hh \
+                         @srcdir@/../src/H79_Certificate.inlines.hh \
+                         @srcdir@/../src/H79_Certificate.cc \
+                         @srcdir@/../src/Grid_Certificate.types.hh \
+                         @srcdir@/../src/Grid_Certificate.defs.hh \
+                         @srcdir@/../src/Grid_Certificate.inlines.hh \
+                         @srcdir@/../src/Grid_Certificate.cc \
+                         @srcdir@/../src/Determinate.defs.hh \
+                         @srcdir@/../src/Determinate.inlines.hh \
+                         @srcdir@/../src/iterator_to_const.types.hh \
+                         @srcdir@/../src/iterator_to_const.defs.hh \
+                         @srcdir@/../src/iterator_to_const.inlines.hh \
+                         @srcdir@/../src/Powerset.types.hh \
+                         @srcdir@/../src/Powerset.defs.hh \
+                         @srcdir@/../src/Powerset.inlines.hh \
+                         @srcdir@/../src/Powerset.templates.hh \
+                         @srcdir@/../src/Pointset_Powerset.types.hh \
+                         @srcdir@/../src/Pointset_Powerset.defs.hh \
+                         @srcdir@/../src/Pointset_Powerset.inlines.hh \
+                         @srcdir@/../src/Pointset_Powerset.templates.hh \
+                         @srcdir@/../src/Pointset_Powerset.cc \
+                         @srcdir@/../src/Partially_Reduced_Product.types.hh \
+                         @srcdir@/../src/Partially_Reduced_Product.defs.hh \
+                         @srcdir@/../src/Partially_Reduced_Product.inlines.hh \
+                         @srcdir@/../src/Partially_Reduced_Product.templates.hh \
+                         @srcdir@/../src/algorithms.hh \
+                         @srcdir@/../src/Box.types.hh \
+                         @srcdir@/../src/Box.defs.hh \
+                         @srcdir@/../src/Box.inlines.hh \
+                         @srcdir@/../src/Box.templates.hh \
+                         @srcdir@/../src/Box.cc \
+                         @srcdir@/../src/DB_Row.types.hh \
+                         @srcdir@/../src/DB_Row.defs.hh \
+                         @srcdir@/../src/DB_Row.inlines.hh \
+                         @srcdir@/../src/DB_Row.templates.hh \
+                         @srcdir@/../src/DB_Matrix.types.hh \
+                         @srcdir@/../src/DB_Matrix.defs.hh \
+                         @srcdir@/../src/DB_Matrix.inlines.hh \
+                         @srcdir@/../src/DB_Matrix.templates.hh \
+                         @srcdir@/../src/BD_Shape.types.hh \
+                         @srcdir@/../src/BD_Shape.defs.hh \
+                         @srcdir@/../src/BD_Shape.inlines.hh \
+                         @srcdir@/../src/BD_Shape.templates.hh \
+                         @srcdir@/../src/BD_Shape.cc \
+                         @srcdir@/../src/OR_Matrix.types.hh \
+                         @srcdir@/../src/OR_Matrix.defs.hh \
+                         @srcdir@/../src/OR_Matrix.inlines.hh \
+                         @srcdir@/../src/OR_Matrix.templates.hh \
+                         @srcdir@/../src/Octagonal_Shape.types.hh \
+                         @srcdir@/../src/Octagonal_Shape.defs.hh \
+                         @srcdir@/../src/Octagonal_Shape.inlines.hh \
+                         @srcdir@/../src/Octagonal_Shape.templates.hh \
+                         @srcdir@/../src/Octagonal_Shape.cc \
+                         @srcdir@/../src/PIP_Problem.types.hh \
+                         @srcdir@/../src/PIP_Problem.defs.hh \
+                         @srcdir@/../src/PIP_Problem.inlines.hh \
+                         @srcdir@/../src/PIP_Problem.templates.hh \
+                         @srcdir@/../src/PIP_Problem.cc \
+                         @srcdir@/../src/PIP_Tree.types.hh \
+                         @srcdir@/../src/PIP_Tree.defs.hh \
+                         @srcdir@/../src/PIP_Tree.inlines.hh \
+                         @srcdir@/../src/PIP_Tree.cc \
+                         @srcdir@/gpl.dox \
+                         @srcdir@/fdl.dox
+INPUT_ENCODING         = UTF-8
+FILE_PATTERNS          = *.hh \
+                         *.cc \
+                         *.dox
+RECURSIVE              = YES
+EXCLUDE                =
+EXCLUDE_SYMLINKS       = NO
+EXCLUDE_PATTERNS       =
+EXCLUDE_SYMBOLS        =
+EXAMPLE_PATH           =
+EXAMPLE_PATTERNS       =
+EXAMPLE_RECURSIVE      = NO
+IMAGE_PATH             =
+INPUT_FILTER           =
+FILTER_PATTERNS        =
+FILTER_SOURCE_FILES    = NO
+#---------------------------------------------------------------------------
+# configuration options related to source browsing
+#---------------------------------------------------------------------------
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = YES
+STRIP_CODE_COMMENTS    = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+REFERENCES_LINK_SOURCE = YES
+USE_HTAGS              = NO
+VERBATIM_HEADERS       = YES
+#---------------------------------------------------------------------------
+# configuration options related to the alphabetical class index
+#---------------------------------------------------------------------------
+ALPHABETICAL_INDEX     = NO
+COLS_IN_ALPHA_INDEX    = 5
+IGNORE_PREFIX          =
+#---------------------------------------------------------------------------
+# configuration options related to the HTML output
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = ppl-devref-@VERSION@-html
+HTML_FILE_EXTENSION    = .html
+HTML_HEADER            =
+HTML_FOOTER            =
+HTML_STYLESHEET        =
+HTML_TIMESTAMP         = YES
+HTML_ALIGN_MEMBERS     = YES
+HTML_DYNAMIC_SECTIONS  = NO
+GENERATE_DOCSET        = NO
+DOCSET_FEEDNAME        = "Doxygen generated docs"
+DOCSET_BUNDLE_ID       = org.doxygen.Project
+GENERATE_HTMLHELP      = NO
+CHM_FILE               =
+HHC_LOCATION           =
+GENERATE_CHI           = NO
+CHM_INDEX_ENCODING     =
+BINARY_TOC             = NO
+TOC_EXPAND             = NO
+GENERATE_QHP           = NO
+QCH_FILE               =
+QHP_NAMESPACE          = org.doxygen.Project
+QHP_VIRTUAL_FOLDER     = doc
+QHP_CUST_FILTER_NAME   =
+QHP_CUST_FILTER_ATTRS  =
+QHP_SECT_FILTER_ATTRS  =
+QHG_LOCATION           =
+GENERATE_ECLIPSEHELP   = NO
+ECLIPSE_DOC_ID         = org.doxygen.Project
+DISABLE_INDEX          = NO
+ENUM_VALUES_PER_LINE   = 4
+GENERATE_TREEVIEW      = YES
+USE_INLINE_TREES       = NO
+TREEVIEW_WIDTH         = 250
+FORMULA_FONTSIZE       = 10
+SEARCHENGINE           = NO
+SERVER_BASED_SEARCH    = NO
+#---------------------------------------------------------------------------
+# configuration options related to the LaTeX output
+#---------------------------------------------------------------------------
+GENERATE_LATEX         = NO
+LATEX_OUTPUT           = devref.latex-dir
+LATEX_CMD_NAME         = latex
+MAKEINDEX_CMD_NAME     = makeindex
+COMPACT_LATEX          = YES
+PAPER_TYPE             = a4wide
+EXTRA_PACKAGES         = ppl
+LATEX_HEADER           = @srcdir@/devref.tex
+PDF_HYPERLINKS         = YES
+USE_PDFLATEX           = YES
+LATEX_BATCHMODE        = YES
+LATEX_HIDE_INDICES     = NO
+LATEX_SOURCE_CODE      = NO
+#---------------------------------------------------------------------------
+# configuration options related to the RTF output
+#---------------------------------------------------------------------------
+GENERATE_RTF           = NO
+RTF_OUTPUT             = rtf
+COMPACT_RTF            = NO
+RTF_HYPERLINKS         = YES
+RTF_STYLESHEET_FILE    =
+RTF_EXTENSIONS_FILE    =
+#---------------------------------------------------------------------------
+# configuration options related to the man page output
+#---------------------------------------------------------------------------
+GENERATE_MAN           = NO
+MAN_OUTPUT             = man
+MAN_EXTENSION          = .3
+MAN_LINKS              = NO
+#---------------------------------------------------------------------------
+# configuration options related to the XML output
+#---------------------------------------------------------------------------
+GENERATE_XML           = NO
+XML_OUTPUT             = xml
+XML_SCHEMA             =
+XML_DTD                =
+XML_PROGRAMLISTING     = YES
+#---------------------------------------------------------------------------
+# configuration options for the AutoGen Definitions output
+#---------------------------------------------------------------------------
+GENERATE_AUTOGEN_DEF   = NO
+#---------------------------------------------------------------------------
+# configuration options related to the Perl module output
+#---------------------------------------------------------------------------
+GENERATE_PERLMOD       = NO
+PERLMOD_LATEX          = NO
+PERLMOD_PRETTY         = YES
+PERLMOD_MAKEVAR_PREFIX =
+#---------------------------------------------------------------------------
+# Configuration options related to the preprocessor
+#---------------------------------------------------------------------------
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+SEARCH_INCLUDES        = YES
+INCLUDE_PATH           =
+INCLUDE_FILE_PATTERNS  =
+PREDEFINED             = PPL_DOXYGEN_INCLUDE_IMPLEMENTATION_DETAILS
+EXPAND_AS_DEFINED      = PPL_OUTPUT_DECLARATIONS
+SKIP_FUNCTION_MACROS   = YES
+#---------------------------------------------------------------------------
+# Configuration::additions related to external references
+#---------------------------------------------------------------------------
+TAGFILES               =
+GENERATE_TAGFILE       = ppl-devref-@VERSION@-html.tag
+ALLEXTERNALS           = NO
+EXTERNAL_GROUPS        = YES
+PERL_PATH              = @PERL@
+#---------------------------------------------------------------------------
+# Configuration options related to the dot tool
+#---------------------------------------------------------------------------
+CLASS_DIAGRAMS         = YES
+MSCGEN_PATH            =
+HIDE_UNDOC_RELATIONS   = YES
+HAVE_DOT               = YES
+DOT_FONTNAME           = FreeSans
+DOT_FONTSIZE           = 10
+DOT_FONTPATH           =
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+GROUP_GRAPHS           = YES
+UML_LOOK               = NO
+TEMPLATE_RELATIONS     = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = NO
+DOT_IMAGE_FORMAT       = png
+DOT_PATH               =
+DOTFILE_DIRS           =
+DOT_GRAPH_MAX_NODES    = 50
+MAX_DOT_GRAPH_DEPTH    = 0
+DOT_TRANSPARENT        = NO
+DOT_MULTI_TARGETS      = NO
+GENERATE_LEGEND        = YES
+DOT_CLEANUP            = YES

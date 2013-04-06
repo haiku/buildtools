@@ -1,0 +1,4 @@
+The Ciao Prolog interface to the PPL only supports versions of Ciao
+Prolog dated later than Octber 15th, 2008 (corresponding to SVN
+revision 9859).  If in doubt, please check with the Ciao developers
+(ciao@clip.dia.fi.upm.es) how to obtain such a version.

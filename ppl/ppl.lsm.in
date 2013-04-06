@@ -1,0 +1,31 @@
+Begin4
+Title:		ppl
+Version:	@VERSION@
+Entered-date:	@ISODATE@
+Description:	The Parma Polyhedra Library (PPL) is a C++ library
+		for the manipulation of numerical abstractions.
+Keywords:	C++ library convex polyhedra
+Author:		Roberto Bagnara (bagnara@cs.unipr.it)
+		Patricia M. Hill (hill@comp.leeds.ac.uk)
+		Enea Zaffanella (zaffanella@cs.unipr.it)
+		Abramo Bagnara (Opera Unica)
+                Andrea Cimino (University of Parma)
+		Giordano Fracasso (University of Parma)
+                Elena Mazzi (University of Parma)
+                Matthew Mundell (University of Leeds)
+                Barbara Quartieri (University of Parma)
+		Elisa Ricci (former student of the University of Parma)
+		Sara Bonini (former student of the University of Parma)
+		Andrea Pescetti (former student of the University of Parma)
+		Angela Stazzone (former student of the University of Parma)
+		Tatiana Zolo (former student of the University of Parma)
+Maintained-by:	ppl-devel@cs.unipr.it (PPL developers)
+Primary-site:	metlab.unc.edu /pub/linux/libs
+		5850k ppl-@VERSION@.tar.gz
+		800 ppl.lsm
+Alternate-site:	
+Original-site:	http://www.cs.unipr.it/ppl/
+Platforms:      Portable; tested on Linux, FreeBSD, OpenBSD, Solaris,
+                IRIX64, Mac OS X, Cygwin, DEC OSF/1.
+Copying-policy:	GPL
+End

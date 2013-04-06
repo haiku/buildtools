@@ -1,0 +1,2098 @@
+/* Configuration Independent Documentation for Prolog.
+   Copyright (C) 2001-2010 Roberto Bagnara <bagnara@cs.unipr.it>
+   Copyright (C) 2010-2011 BUGSENG srl (http://bugseng.com)
+
+This file is part of the Parma Polyhedra Library (PPL).
+
+The PPL is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
+option) any later version.
+
+The PPL is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software Foundation,
+Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1307, USA.
+
+For the most up-to-date information see the Parma Polyhedra Library
+site: http://www.cs.unipr.it/ppl/ . */
+
+/*!
+  \defgroup PPL_Prolog_interface Prolog Language Interface
+
+  The Parma Polyhedra Library comes equipped with an interface
+  for the Prolog language.
+*/
+
+/*! \mainpage Prolog Language Interface
+
+The Parma Polyhedra Library comes equipped with a Prolog interface.
+Despite the lack of standardization of Prolog's foreign language interfaces,
+the PPL Prolog interface supports several Prolog systems and, to the
+extent this is possible, provides a uniform view of the library from
+each such system.
+
+The system-independent features of the library are described in
+Section \ref PI_SI_Features "System-Independent Features".
+Section \ref PI_Compilation "Compilation and Installation"
+explains how the Prolog interface is compiled and installed.
+Section \ref PI_SD_Features "System-Dependent Features"
+illustrates the system-dependent features of the interface
+for all the supported systems.
+
+The structure of this section is as follows:
+- \ref PI_SI_Features "System-Independent Features"
+    - \ref Prolog_Interface_Overview "Overview"
+    - \ref Predicate_Specifications "Predicate Specifications"
+    - \ref predicate_descriptions "Predicate Descriptions"
+        - \ref di_predicates "Domain Independent Predicates"
+        - \ref mip_predicates "MIP Predicates"
+        - \ref pip_predicates "PIP Predicates"
+        - \ref Polyhedron_predicates "Predicates for C Polyhedra"
+        - \ref other_domains "Ad hoc Predicates for Other Domains"
+- \ref PI_Compilation "Compilation and Installation"
+- \ref PI_SD_Features "System-Dependent Features"
+    - \ref GNU_Prolog "GNU Prolog"
+    - \ref CIAO_Prolog "CIAO Prolog"
+    - \ref SICStus_Prolog "SICStus Prolog"
+    - \ref SWI_Prolog "SWI Prolog"
+    - \ref XSB_Prolog "XSB"
+    - \ref YAP_Prolog "YAP"
+
+In the sequel, <CODE>prefix</CODE> is the prefix under which
+you have installed the library (typically <CODE>/usr</CODE>
+or <CODE>/usr/local</CODE>).
+
+\anchor PI_SI_Features
+<H1>System-Independent Features</H1>
+
+The Prolog interface provides access to the numerical abstractions
+(convex polyhedra, BD shapes, octagonal shapes, etc.) implemented
+by the PPL library.
+A general introduction to the numerical abstractions,
+their representation in the PPL and the operations provided
+by the PPL is given in the main \extref{preamble, PPL user manual}.
+Here we just describe those aspects that are specific to the Prolog interface.
+
+\anchor Prolog_Interface_Overview
+<H2>Overview</H2>
+
+First, here is a list of notes with general information and advice
+on the use of the interface.
+
+- The numerical abstract domains available to the Prolog user consist
+  of the <EM>simple</EM> domains, <EM>powersets</EM> of a simple domain and
+  <EM>products</EM> of simple domains.
+  - The simple domains are:
+     - convex polyhedra, which consist of C_Polyhedron and
+       NNC_Polyhedron;<BR>
+     - weakly relational, which consist of BD_Shape_N and
+       Octagonal_Shape_N
+       where N is one of the numeric types
+       int8, int16, int32, int64, mpz_class, mpq_class,
+       float, double, long_double;<BR>
+     - boxes which consist of
+       Int8_Box, Int16_Box,
+       Int32_Box, Int64_Box,
+       Uint8_Box, Uint16_Box,
+       Uint32_Box, Uint64_Box,
+       Double_Box, Long_Double_Box,
+       Z_Box, Rational_Box, Float_Box; and<BR>
+     - the Grid domain.
+  - The powerset domains are Pointset_Powerset_S where S is
+    a simple domain.
+  - The product domains consist of
+    Direct_Product_S_T,
+    Smash_Product_S_T,
+    Constraints_Product_S_T and
+    Shape_Preserving_Product_S_T where S
+    and T are simple domains.
+- In the following, any of the above numerical
+  abstract domains  is called a PPL <EM>domain</EM>
+  and any element of a PPL domain is called a <EM>PPL object</EM>.
+- The Prolog interface to the PPL is initialized and finalized by the
+  predicates <CODE>ppl_initialize/0</CODE> and <CODE>ppl_finalize/0</CODE>.
+  Thus the only interface predicates callable after
+  <CODE>ppl_finalize/0</CODE> are <CODE>ppl_finalize/0</CODE> itself
+  (this further call has no effect) and <CODE>ppl_initialize/0</CODE>,
+  after which the interface's services are usable again.
+  Some Prolog systems allow the specification of initialization
+  and deinitialization functions in their foreign language interfaces.
+  The corresponding incarnations of the Prolog interface
+  have been written so that <CODE>ppl_initialize/0</CODE> and/or
+  <CODE>ppl_finalize/0</CODE> are called automatically.
+  Section \ref PI_SD_Features "System-Dependent Features" will detail
+  in which cases initialization and finalization is automatically
+  performed or is left to the Prolog programmer's responsibility.
+  However, for portable applications, it is best
+  to invoke <CODE>ppl_initialize/0</CODE> and <CODE>ppl_finalize/0</CODE>
+  explicitly: since they can be called multiple times without problems,
+  this will result in enhanced portability at a cost that is, by all means,
+  negligible.
+- A PPL object such as a polyhedron can only be accessed
+  by means of a Prolog term called a <EM>handle</EM>.
+  Note, however, that the data structure of a handle,
+  is implementation-dependent, system-dependent and
+  version-dependent, and, for this reason, deliberately left unspecified.
+  What we do guarantee is that the handle requires very little memory.
+- A Prolog term can be bound to a valid handle for a PPL object by using
+  predicates such as
+\code
+  ppl_new_C_Polyhedron_from_space_dimension/3,
+  ppl_new_C_Polyhedron_from_C_Polyhedron/2,
+  ppl_new_C_Polyhedron_from_constraints/2,
+  ppl_new_C_Polyhedron_from_generators/2,
+\endcode
+  These predicates will create or copy a PPL polyhedron
+  and construct a valid handle for referencing it.
+  The last argument is a Prolog term that is
+  unified with a new valid handle for accessing this polyhedron.
+
+- As soon as a PPL object is no longer required,
+  the memory occupied by it should be released
+  using the PPL predicate such as <CODE>ppl_delete_Polyhedron/1</CODE>.
+  To understand why this is important,
+  consider a Prolog program and a variable that is bound to
+  a Herbrand term.
+  When the variable dies (goes out of scope) or is uninstantiated
+  (on backtracking), the term it is bound to is amenable to garbage collection.
+  But this only applies for the standard domain of the language:
+  Herbrand terms.
+  In Prolog+PPL, when, for example,
+  a variable bound to a handle for a Polyhedron dies
+  or is uninstantiated,
+  the handle can be garbage-collected, but the polyhedron to which
+  the handle refers will not be released.
+  Once a handle has been used as an argument in
+  <CODE>ppl_delete_Polyhedron/1</CODE>,
+  it becomes invalid.
+- For a PPL object with space dimension \p k,
+  the identifiers used for the PPL variables
+  must lie between 0 and \f$k-1\f$ and correspond to the indices of the
+  associated Cartesian axes.
+  For example, when using the predicates that combine PPL polyhedra
+  or add constraints or generators to a representation of
+  a PPL polyhedron,
+  the polyhedra referenced and any constraints or generators in the call
+  should follow all the (space) dimension-compatibility rules stated in
+  Section \extref{representation, Representations of Convex Polyhedra}
+  of the main \extref{preamble, PPL user manual}.
+- As explained above, a polyhedron has a fixed topology C or NNC,
+  that is determined at the time of its initialization.
+  All subsequent operations on the polyhedron must respect all the
+  topological compatibility rules stated in Section
+  \extref{representation, Representations of Convex Polyhedra}
+  of the main \extref{preamble, PPL user manual}.
+- Any application using the PPL should make sure that only the
+  intended version(s) of the library are ever used.
+  Predicates
+\code
+  ppl_version_major/1,
+  ppl_version_minor/1,
+  ppl_version_revision/1,
+  ppl_version_beta/1,
+  ppl_version/1,
+  ppl_banner.
+\endcode
+  allow run-time checking of information about the version being used.
+
+\anchor Predicate_Specifications
+<H2>Predicate Specifications</H2>
+
+The PPL predicates provided by the Prolog interface are specified below.
+The specification uses the following grammar rules:
+\code
+
+ Number      --> unsigned integer	ranging from 0 to an upper bound
+					depending on the actual Prolog system.
+
+ C_int       --> Number | - Number	C integer
+
+ C_unsigned  --> Number			C unsigned integer
+
+ Coeff       --> Number			used in linear expressions;
+					the upper bound will depend on how
+					the PPL has been configured
+
+ Dimension_Type
+             --> Number			used for the number of affine and
+					space dimensions and the names of
+ 					the dimensions;
+					the upper bound will depend on
+					the maximum number of dimensions
+					allowed by the PPL
+					(see ppl_max_space_dimensions/1)
+
+ Boolean     --> true | false
+
+ Handle      --> Prolog term		used to identify a Polyhedron
+
+ Topology    --> c | nnc		Polyhedral kind;
+					c is closed and nnc is NNC
+
+ VarId       --> Dimension_Type 	variable identifier
+
+ PPL_Var     --> '$VAR'(VarId)		PPL variable
+
+ Lin_Expr    --> PPL_Var		PPL variable
+            | Coeff
+            | Lin_Expr			unary plus
+            | - Lin_Expr		unary minus
+            | Lin_Expr + Lin_Expr	addition
+            | Lin_Expr - Lin_Expr	subtraction
+            | Coeff * Lin_Expr	        multiplication
+            | Lin_Expr * Coeff	        multiplication
+
+ Relation_Symbol --> =			equals
+            | =< 			less than or equal
+            | >=			greater than or equal
+            | < 			strictly less than
+            | > 			strictly greater than
+
+ Constraint  --> Lin_Expr Relation_Symbol Lin_Expr
+					constraint
+
+ Constraint_System			list of constraints
+             --> []
+            | [Constraint | Constraint_System]
+
+ Modulus     --> Coeff | - Coeff
+
+ Congruence  --> Lin_Expr =:= Lin_Expr  congruence with modulo 1
+            | (Lin_Expr =:= Lin_Expr) / Modulus
+                                        congruence with modulo Modulus
+
+ Congruence_System			list of congruences
+             --> []
+            | [Congruence | Congruence_System]
+
+ Generator_Denominator --> Coeff	must be non-zero
+	    | - Coeff
+
+ Generator   --> point(Lin_Expr)	point
+            | point(Lin_Expr, Generator_Denominator)
+					point
+            | closure_point(Lin_Expr)	closure point
+            | closure_point(Lin_Expr, Generator_Denominator)
+					closure point
+            | ray(Lin_Expr)		ray
+            | line(Lin_Expr)		line
+
+ Generator_System			list of generators
+             --> []
+	    | [Generator | Generator_System]
+
+ Grid_Generator
+             --> grid_point(Lin_Expr)	grid point
+            | grid_point(Lin_Expr, Generator_Denominator)
+					grid point
+            | parameter(Lin_Expr)	parameter
+            | parameter(Lin_Expr, Generator_Denominator)
+                                        parameter
+            | grid_line(Lin_Expr)       grid line
+
+ Grid_Generator_System			list of grid generators
+             --> []
+	    | [Grid_Generator | Grid_Generator_System]
+
+ Artificial_Parameter  --> Lin_Expr / Coeff
+
+ Artificial_Parameter_List --> []
+	    | [Artificial_Parameter | Artificial_Parameter_List]
+
+ Atom        --> Prolog atom
+
+ Universe_or_Empty			PPL object
+             --> universe | empty
+
+ Poly_Relation --> is_disjoint          with a constraint or congruence
+	    | strictly_intersects	with a constraint or congruence
+	    | is_included		with a constraint or congruence
+	    | saturates			with a constraint or congruence
+            | subsumes			with a (grid) generator
+
+ Relation_List --> []
+	    | [Poly_Relation | Relation_List]
+
+ Complexity  --> polynomial | simplex | any
+
+ Vars_Pair   --> PPLVar - PPLVar        map relation
+
+ P_Func      --> []    			list of map relations
+            | [Vars_Pair | P_Func].
+
+ Width  --> bits_8 | bits_16 | bits_32 | bits_64 | bits_128
+
+ Representation  --> unsigned | signed_2_complement
+
+ Overflow  --> overflow_wraps | overflow_undefined | overflow_impossible
+
+ Optimization_Mode --> max | min
+
+ Problem_Status --> unfeasible
+            | unbounded
+            | optimized
+
+ Control_Parameter_Name --> pricing            for MIP problems
+                        | control_strategy     for PIP problems
+                        | pivot_row_strategy   for PIP problems
+
+ Control_Parameter_Value
+             --> pricing_steepest_edge_float
+            | pricing_steepest_edge_exact
+            | pricing_textbook
+            | control_strategy_first
+            | control_strategy_deepest
+            | control_strategy_all
+            | pivot_row_strategy_first
+            | pivot_row_strategy_max_column
+
+ Vars_List   --> []    			list of PPL variables
+            | [PPL_Var | Vars_List].
+\endcode
+
+\anchor predicate_descriptions
+<H2> Predicate Descriptions </H2>
+
+Below is a short description of many of the interface predicates.
+For full definitions of terminology used here,
+see the main \extref{preamble, PPL user manual}.
+
+\anchor di_predicates
+<H3> Domain Independent Predicates </H3>
+
+First we describe the domain independent predicates
+that are included with all instantiations of the Prolog interfaces.
+
+<P><CODE> ppl_version_major(?C_int) </CODE><BR>
+  <EM>Unifies <CODE>C_int</CODE> with the major number of the PPL version.</EM>
+
+<P><CODE> ppl_version_minor(?C_int) </CODE><BR>
+  <EM>Unifies <CODE>C_int</CODE> with the minor number of the PPL version.</EM>
+
+<P><CODE> ppl_version_revision(?C_int) </CODE><BR>
+  <EM>Unifies <CODE>C_int</CODE> with the revision number
+  of the PPL version.</EM>
+
+<P><CODE> ppl_version_beta(?C_int) </CODE><BR>
+  <EM>Unifies <CODE>C_int</CODE> with the beta number of the PPL version.</EM>
+
+<P><CODE> ppl_version(?Atom) </CODE><BR>
+  <EM>Unifies <CODE>Atom</CODE> with the PPL version.</EM>
+
+<P><CODE> ppl_banner(?Atom) </CODE><BR>
+  <EM>Unifies <CODE>Atom</CODE> with
+  information about the PPL version, the licensing, the lack of any
+  warranty whatsoever, the C++ compiler used to build the library,
+  where to report bugs and where to look for further information.</EM>
+
+<P><CODE> ppl_Coefficient_bits(?Bits) </CODE><BR>
+
+  <EM>Unifies <CODE>Bits</CODE> with the number of bits used to encode a
+  Coefficient in the C++ interface; 0 if unbounded.</EM>
+
+<P><CODE> ppl_Coefficient_is_bounded </CODE><BR>
+
+  <EM>Succeeds if and only if the Coefficients in the C++ interface are bounded.</EM>
+
+<P><CODE> ppl_Coefficient_max(Max) </CODE><BR>
+
+  <EM>If the Coefficients in the C++ interface are bounded,
+  then the maximum coefficient the C++ interface can handle is
+  unified with <CODE>Max</Code>.
+  If the Prolog system cannot handle this coefficient, then
+  an exception is thrown.
+  It fails if the Coefficients in the C++ interface are unbounded.</EM>
+
+<P><CODE> ppl_Coefficient_min(Min) </CODE><BR>
+
+  <EM>If the Coefficients in the C++ interface are bounded,
+  then the minimum coefficient the C++ interface can handle is
+  unified with <CODE>Min</Code>.
+  If the Prolog system cannot handle this coefficient, then
+  an exception is thrown.
+  It fails if the Coefficients in the C++ interface are unbounded.</EM>
+
+<P><CODE> ppl_max_space_dimension(?Dimension_Type) </CODE><BR>
+
+  <EM>Unifies <CODE>Dimension_Type</CODE> with the maximum space dimension
+  this library can handle.</EM>
+
+<P><CODE>
+  ppl_initialize
+ </CODE><BR>
+
+  <EM>Initializes the PPL interface.
+  Multiple calls to <CODE>ppl_initialize</CODE> does no harm.</EM>
+
+<P><CODE>
+  ppl_finalize
+ </CODE><BR>
+
+  <EM>Finalizes the PPL interface.
+  Once this is executed, the next call to an interface predicate must
+  either be to <CODE>ppl_initialize</CODE> or to <CODE>ppl_finalize</CODE>.
+  Multiple calls to <CODE>ppl_finalize</CODE> does no harm.</EM>
+
+<P><CODE> ppl_set_timeout_exception_atom(+Atom) </CODE><BR>
+
+   <EM>Sets the atom to be thrown by timeout exceptions
+   to <CODE>Atom</CODE>.
+   The default value is <CODE>time_out</CODE>.</EM>
+
+<P><CODE> ppl_timeout_exception_atom(?Atom) </CODE><BR>
+
+   <EM>The atom to be thrown by timeout exceptions
+   is unified with <CODE>Atom</CODE>.</EM>
+
+<P><CODE> ppl_set_timeout(+Hsecs) </CODE><BR>
+
+   <EM>Computations taking exponential time will be interrupted
+   some time after <CODE>Hsecs</CODE> hundreths of seconds after that call.
+   If the computation is interrupted that way, the current timeout
+   exception atom will be thrown.
+   <CODE>Hsecs</CODE> must be strictly greater than zero.</EM>
+
+<P><CODE> ppl_reset_timeout </CODE><BR>
+
+   <EM>Resets the timeout time so that the computation is not interrupted.</EM>
+
+<P><CODE> ppl_set_deterministic_timeout(+Weight) </CODE><BR>
+
+   <EM>Computations taking exponential time will be interrupted
+   some time after reaching the <CODE>Weight</CODE> complexity threshold.
+   If the computation is interrupted that way, the current timeout
+   exception atom will be thrown.
+   <CODE>Weight</CODE> must be strictly greater than zero.</EM>
+   <P>
+   <EM>NOTE:</EM> This "timeout" checking functionality is said to be
+   <EM>deterministic</EM> because it is not based on actual elapsed time.
+   Its behavior will only depend on (some of the) computations performed
+   in the PPL library and it will be otherwise independent from the
+   computation environment (CPU, operating system, compiler, etc.).
+   The weight mechanism is under alpha testing: client applications
+   should be ready to reconsider the tuning of these weight thresholds
+   when upgrading to newer version of the PPL.
+
+<P><CODE> ppl_reset_deterministic_timeout </CODE><BR>
+
+   <EM>Resets the deterministic timeout so that the computation is not
+   interrupted.</EM>
+
+<P><CODE> ppl_set_rounding_for_PPL </CODE><BR>
+
+   <EM>Sets the FPU rounding mode so that the PPL abstractions based on
+  floating point numbers work correctly.
+  This is performed automatically at initialization-time.  Calling
+  this function is needed only if restore_pre_PPL_rounding() has
+  previously been called.</EM>
+
+
+<P><CODE> ppl_restore_pre_PPL_rounding </CODE><BR>
+
+   <EM>Sets the FPU rounding mode as it was before initialization of the PPL.
+  After calling this function it is absolutely necessary to call
+  set_rounding_for_PPL() before using any PPL abstractions based on
+  floating point numbers.
+  This is performed automatically at finalization-time.</EM>
+
+<P><CODE> ppl_irrational_precision(?Precision) </CODE><BR>
+
+  <EM>Unifies <CODE>Precision</CODE> with the precision parameter for
+  irrational calculations.</EM>
+
+<P><CODE> ppl_set_irrational_precision(+Precision) </CODE><BR>
+
+  <EM>Sets the precision parameter for irrational calculations to
+  <CODE>Precision</CODE>. In the following irrational calculations
+  returning an unbounded rational (e.g., when computing a square root),
+  the lesser between numerator and denominator will be limited to
+  <CODE>2**Precision</CODE>.</EM>
+
+
+\anchor mip_predicates
+<H3> MIP Predicates </H3>
+Here we describe the predicates available for PPL objects
+defining mixed integer (linear) programming problems.
+
+<P><CODE>
+  ppl_new_MIP_Problem_from_space_dimension(+Dimension_Type, -Handle)
+</CODE><BR>
+
+   <EM>Creates an MIP Problem \f$\mathrm{MIP}\f$ with the feasible region
+   the vector space of dimension <CODE>Dimension_Type</CODE>,
+   objective function \f$0\f$ and optimization mode <CODE>max</CODE>.
+   <CODE>Handle</CODE> is unified with the handle for \f$\mathrm{MIP}\f$.</EM>
+
+<P><CODE>
+  ppl_new_MIP_Problem(+Constraint_System, +Lin_Expr, +Optimization_Mode,
+                      -Handle)
+</CODE><BR>
+
+   <EM>Creates an MIP Problem \f$\mathrm{MIP}\f$ with
+   the feasible region represented by <CODE>Constraint_System</CODE>,
+   objective function <CODE>Lin_Expr</CODE> and optimization mode
+   <CODE>Optimization_Mode</CODE>.
+   <CODE>Handle</CODE> is unified with the handle for \f$\mathrm{MIP}\f$.</EM>
+
+<P><CODE>
+  ppl_new_MIP_Problem_from_MIP_Problem(+Handle_1, -Handle_2)
+</CODE><BR>
+
+   <EM>Creates an MIP Problem \f$\mathrm{MIP}\f$ from the MIP Problem
+   referenced by \c Handle_1.
+   \c Handle_2 is unified with the handle for \f$\mathrm{MIP}\f$.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_swap(+Handle_1, +Handle_2)
+</CODE><BR>
+
+   <EM>Swaps the MIP Problem referenced by <CODE>Handle_1</CODE>
+   with the one referenced by <CODE>Handle_2</CODE>.</EM>
+
+<P><CODE>
+  ppl_delete_MIP_Problem(+Handle)
+</CODE><BR>
+
+   <EM>Deletes the MIP Problem referenced by <CODE>Handle</CODE>.
+   After execution,
+   <CODE>Handle</CODE> is no longer a valid handle for a PPL MIP Problem.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_space_dimension(+Handle, ?Dimension_Type)
+</CODE><BR>
+
+   <EM>Unifies the dimension of the vector space in which the
+   MIP Problem referenced by <CODE>Handle</CODE> is embedded
+   with <CODE>Dimension_Type</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_integer_space_dimensions(+Handle, ?Vars_List)
+</CODE><BR>
+
+   <EM>Unifies <CODE>Vars_List</CODE> with a list of variables representing
+   the integer space dimensions of the MIP Problem
+   referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_constraints(+Handle, -Constraint_System)
+</CODE><BR>
+
+   <EM>Unifies <CODE>Constraint_System</CODE> with a list of
+   the constraints in the constraints system
+   representing the feasible region for the MIP Problem
+   referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_objective_function(+Handle, ?Lin_Expr)
+</CODE><BR>
+
+   <EM>Unifies <CODE>Lin_Expr</CODE> with the objective function
+   for the MIP Problem referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_optimization_mode(+Handle, ?Optimization_Mode)
+</CODE><BR>
+
+   <EM>Unifies <CODE>Optimization_Mode</CODE> with the optimization mode
+   for the MIP Problem referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_clear(+Handle)
+</CODE><BR>
+
+  <EM>Resets the MIP problem referenced by <CODE>Handle</CODE>
+  to be the trivial problem with
+  the feasible region the \f$0\f$-dimensional universe,
+  objective function \f$0\f$ and optimization mode <CODE>max</CODE>.</EM>
+
+<P><CODE> ppl_MIP_Problem_add_space_dimensions_and_embed(
+             +Handle, +Dimension_Type)
+ </CODE><BR>
+
+   <EM>Embeds the MIP problem referenced by <CODE>Handle</CODE>
+   in a space that is enlarged by <CODE>Dimension_Type</CODE> dimensions.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_add_to_integer_space_dimensions(+Handle, +Vars_List)
+</CODE><BR>
+
+   <EM>Updates the MIP Problem referenced by <CODE>Handle</CODE>
+   so that the variables in <CODE>Vars_List</CODE> are added to
+   the set of integer space dimensions.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_add_constraint(+Handle, +Constraint)
+</CODE><BR>
+
+   <EM>Updates the MIP Problem referenced by <CODE>Handle</CODE>
+   so that the feasible region is represented by the original constraint
+   system together with the constraint <CODE>Constraint</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_add_constraints(+Handle, +Constraint_System)
+</CODE><BR>
+
+   <EM>Updates the MIP Problem referenced by <CODE>Handle</CODE>
+   so that the feasible region is represented by the original constraint
+   system together with all the constraints in
+   <CODE>Constraint_System</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_set_objective_function(+Handle, +Lin_Expr)
+</CODE><BR>
+
+   <EM>Updates the MIP Problem referenced by <CODE>Handle</CODE>
+   so that the objective function is changed to <CODE>Lin_Expr</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_set_control_parameter(+Handle, +Control_Parameter_Value)
+</CODE><BR>
+
+   <EM>Updates the MIP Problem referenced by <CODE>Handle</CODE>
+   so that the value for the relevant control parameter name is
+   changed to <CODE>Control_Parameter_Value</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_get_control_parameter(+Handle, +Control_Parameter_Name,
+                                        ?Control_Parameter_Value)
+</CODE><BR>
+
+   <EM>Unifies \c Control_Parameter_Value with the value of the
+   control parameter \c Control_Parameter_Name.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_set_optimization_mode(+Handle, +Optimization_Mode)
+</CODE><BR>
+
+   <EM>Updates the MIP Problem referenced by <CODE>Handle</CODE>
+   so that the optimization mode is changed to
+   <CODE>Optimization_Mode</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_is_satisfiable(+Handle)
+</CODE><BR>
+
+  <EM>Succeeds if and only if the MIP Problem referenced by
+  <CODE>Handle</CODE> is satisfiable.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_solve(+Handle, ?MIP_Problem_Status)
+</CODE><BR>
+
+  <EM>Solves the MIP problem  referenced by
+  <CODE>Handle</CODE> and unifies <CODE>MIP_Problem_Status</CODE>
+  with:
+  <CODE>unfeasible</CODE>, if the MIP problem is not satisfiable;
+  <CODE>unbounded</CODE>, if the MIP problem is satisfiable but
+  there is no finite bound to the value of the objective function;
+  <CODE>optimized</CODE>, if the MIP problem admits an optimal solution.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_feasible_point(+Handle, ?Generator)
+</CODE><BR>
+
+  <EM>Unifies  <CODE>Generator</CODE> with a feasible point
+  for the MIP problem referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_optimizing_point(+Handle, ?Generator)
+</CODE><BR>
+
+  <EM>Unifies  <CODE>Generator</CODE> with an optimizing point for
+  the MIP problem referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_optimal_value(+Handle, ?Coeff_1, ?Coeff_2)
+</CODE><BR>
+
+  <EM>Unifies <CODE>Coeff_1</CODE> and <CODE>Coeff_2</CODE>
+  with the numerator and denominator, respectively, for the optimal value
+  for the MIP problem  referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_evaluate_objective_function(+Handle, +Generator,
+                                             ?Coeff_1, ?Coeff_2)
+</CODE><BR>
+  <EM>Evaluates the objective function of the MIP problem  referenced by
+  <CODE>Handle</CODE> at point <CODE>Generator</CODE>.
+  <CODE>Coefficient_1</CODE> is unified with the numerator and
+  <CODE>Coefficient_2</CODE> is unified with the denominator of the
+  objective function value at <CODE>Generator</CODE>.</EM>
+
+<P><CODE>
+  ppl_MIP_Problem_OK(+Handle)
+</CODE><BR>
+
+   <EM>Succeeds only if the MIP Problem referenced by
+   <CODE>Handle</CODE> is well formed, i.e., if it
+   satisfies all its implementation invariants.
+   Useful for debugging purposes.</EM>
+
+<BR>
+
+\anchor pip_predicates
+<H3> PIP Predicates </H3>
+Here we describe some functions available for PPL objects
+defining parametric integer programming problems.
+
+<P><CODE>
+  ppl_new_PIP_Problem_from_space_dimension(+Dimension_Type, -Handle)
+</CODE><BR>
+
+   <EM>Creates a PIP Problem \f$\mathrm{PIP}\f$ with the
+   feasible region the vector space of dimension <CODE>dimension</CODE>,
+   empty constraint_system and empty set of parametric variables.
+   <CODE>Handle</CODE> is unified with the handle for \f$\mathrm{PIP}\f$.</EM>
+
+<P><CODE>
+  ppl_new_PIP_Problem(+Constraint_System, +Lin_Expr, +Vars_List,
+                      -Handle)
+</CODE><BR>
+
+   <EM>Creates a PIP Problem \f$\mathrm{PIP}\f$ having space
+   dimension <CODE>dimension</CODE>, a feasible region represented by
+   <CODE>constraint_system</CODE> and parametric variables represented
+   by <CODE>Vars_List</CODE>.
+   <CODE>Handle</CODE> is unified with the handle for \f$\mathrm{PIP}\f$.</EM>
+
+<P><CODE>
+  ppl_new_PIP_Problem_from_PIP_Problem(+Handle_1, -Handle_2)
+</CODE><BR>
+   <EM>Creates a PIP Problem \f$\mathrm{PIP}\f$ from the PIP Problem
+   referenced by \c Handle_1.
+   \c Handle_2 is unified with the handle for \f$\mathrm{PIP}\f$.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_swap(+Handle_1, +Handle_2)
+</CODE><BR>
+   <EM>Swaps the PIP Problem referenced by <CODE>Handle_1</CODE>
+   with the one referenced by <CODE>Handle_2</CODE>.</EM>
+
+<P><CODE>
+  ppl_delete_PIP_Problem(+Handle)
+</CODE><BR>
+   <EM>Deletes the PIP Problem referenced by <CODE>Handle</CODE>.
+   After execution,
+   <CODE>Handle</CODE> is no longer a valid handle for a PPL PIP Problem.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_space_dimension(+Handle, ?Dimension_Type)
+</CODE><BR>
+   <EM>Unifies the dimension of the vector space in which the
+   PIP Problem referenced by <CODE>Handle</CODE> is embedded
+   with <CODE>Dimension_Type</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_parameter_space_dimensions(+Handle, ?Vars_List)
+</CODE><BR>
+   <EM>Unifies <CODE>Vars_List</CODE> with a list of variables representing
+   the parameter space dimensions of the PIP Problem
+   referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_constraints(+Handle, ?Constraint_System)
+</CODE><BR>
+   <EM>Unifies <CODE>Constraint_System</CODE> with a list of
+   the constraints in the constraints system
+   representing the feasible region for the PIP Problem
+   referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_clear(+Handle)
+</CODE><BR>
+  <EM>Resets the PIP problem referenced by <CODE>Handle</CODE>
+  to be the trivial problem with
+  the feasible region the \f$0\f$-dimensional universe.</EM>
+
+<P><CODE> ppl_PIP_Problem_add_space_dimensions_and_embed(
+             +Handle, +Dimension_Type1, +Dimension_Type2)
+ </CODE><BR>
+   <EM>Embeds the PIP problem referenced by <CODE>handle</CODE>
+   in a space that is enlarged by <CODE>dimension1</CODE> non-parameter
+   dimensions and <CODE>dimension2</CODE> parameter dimensions.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_add_to_parameter_space_dimensions(+Handle, +Vars_List)
+</CODE><BR>
+   <EM>Updates the PIP Problem referenced by <CODE>Handle</CODE>
+   so that the variables in <CODE>Vars_List</CODE> are added to
+   the set of parameter space dimensions.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_add_constraint(+Handle, +Constraint)
+</CODE><BR>
+   <EM>Updates the PIP Problem referenced by <CODE>Handle</CODE>
+   so that the feasible region is represented by the original constraint
+   system together with the constraint <CODE>Constraint</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_add_constraints(+Handle, +Constraint_System)
+</CODE><BR>
+   <EM>Updates the PIP Problem referenced by <CODE>Handle</CODE>
+   so that the feasible region is represented by the original constraint
+   system together with all the constraints in
+   <CODE>Constraint_System</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_set_big_parameter_dimension(+Handle, +Dimension_Type)
+</CODE><BR>
+
+   <EM>Updates the PIP Problem referenced by <CODE>Handle</CODE>
+       so that the dimension for the big parameter is \p Dimension_Type.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_has_big_parameter_dimension(+Handle, +Dimension_Type)
+</CODE><BR>
+   <EM>Succeeds if and only if the PIP Problem referenced by
+       <CODE>Handle</CODE> has a dimension \p dim for the big parameter
+       and \p Dimension_Type unifies with \p dim.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_is_satisfiable(+Handle)
+</CODE><BR>
+  <EM>Succeeds if and only if the PIP Problem referenced by
+  <CODE>Handle</CODE> is satisfiable.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_solve(+Handle, ?PIP_Problem_Status)
+</CODE><BR>
+  <EM>Solves the PIP problem  referenced by
+  <CODE>Handle</CODE> and unifies <CODE>PIP_Problem_Status</CODE>
+  with:
+  <CODE>unfeasible</CODE>, if the PIP problem is not satisfiable;
+  <CODE>optimized</CODE>, if the PIP problem admits an optimal solution.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_solution(+Handle1, ?Handle2)
+</CODE><BR>
+  <EM>Solves the PIP problem referenced by <CODE>Handle1</CODE> and
+  creates a PIP tree node \f$\mathrm{Node}\f$ representing this a solution
+  if it exists and bottom otherwise
+  \c Handle_2 is unified with the handle for \f$\mathrm{Sol}\f$.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_optimizing_solution(+Handle, ?PIP_Tree_Node)
+</CODE><BR>
+  <EM>Solves the PIP problem referenced by <CODE>Handle1</CODE> and
+  creates a PIP tree node \f$\mathrm{Node}\f$ representing this an optimizing
+  solution if a solution exists and bottom otherwise
+  \c Handle_2 is unified with the handle for \f$\mathrm{Sol}\f$.</EM>
+
+<P><CODE>ppl_PIP_Problem_ascii_dump(+Handle)</CODE><BR>
+  <EM>Dumps an ascii representation of the PPL internal state for
+  the PIP problem referenced by \c Handle on the standard output.</EM>
+
+<P><CODE>
+  ppl_PIP_Problem_OK(+Handle)
+</CODE><BR>
+   <EM>Succeeds only if the PIP Problem referenced by
+   <CODE>Handle</CODE> is well formed, i.e., if it
+   satisfies all its implementation invariants.
+   Useful for debugging purposes.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_swap(+Handle_1, +Handle_2)
+</CODE><BR>
+   <EM>Swaps the PIP tree node referenced by <CODE>Handle_1</CODE>
+   with the one referenced by <CODE>Handle_2</CODE>.</EM>
+
+<P><CODE>ppl_PIP_Tree_Node_ascii_dump(+Handle)</CODE><BR>
+  <EM>Dumps an ascii representation of the PPL internal state for
+  the PIP tree node referenced by \c Handle on the standard output.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_OK(+Handle)
+</CODE><BR>
+   <EM>Succeeds only if the PIP tree node referenced by
+   <CODE>Handle</CODE> is well formed, i.e., if it
+   satisfies all its implementation invariants.
+   Useful for debugging purposes.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_constraints(+Handle, ?Constraint_System)
+</CODE><BR>
+   <EM>Unifies <CODE>Constraint_System</CODE> with a list of
+   the parameter constraints in the PIP tree node
+   referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_artificials(+Handle, ?Artificial_Parameter_List)
+</CODE><BR>
+   <EM>Unifies <CODE>Artificial_Parameter_List</CODE> with a list of
+   the artificial parameters in the PIP tree node
+   referenced by <CODE>Handle</CODE>.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_is_bottom(+Handle)
+</CODE><BR>
+   <EM>Succeeds if and only if <CODE>handle</CODE> represents bottom.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_is_decision(+Handle)
+</CODE><BR>
+   <EM>Succeeds if and only if <CODE>handle</CODE> represents
+   a decision node.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_is_solution(+Handle)
+</CODE><BR>
+   <EM>Succeeds if and only if <CODE>handle</CODE> represents
+   a solution node.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_parametric_values(+Handle, +Var, ?Lin_Expr)
+</CODE><BR>
+   <EM>Unifies \p Lin_Expr with a linear expression representing
+   the values of problem variable \p Var in the solution node
+   represented by <CODE>Handle</CODE>.
+   The  linear expression may involve problem parameters
+   as well as artificial parameters.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_true_child(+Handle1, ?Handle2)
+</CODE><BR>
+  <EM>If the PIP_Tree_Node represented by \p Handle1 is a decision node
+   unifies the PIP tree node referenced by <CODE>Handle2</CODE>
+   with the child on the true branch of the
+   PIP tree node represented by <CODE>Handle1</CODE>.
+   An exception is thrown if this is not a decision node.</EM>
+
+<P><CODE>
+  ppl_PIP_Tree_Node_false_child(+Handle1, ?Handle2)
+</CODE><BR>
+  <EM>If the PIP_Tree_Node represented by \p Handle1 is a decision node
+   unifies the PIP tree node referenced by <CODE>Handle2</CODE>
+   with the child on the false branch of the
+   PIP tree node represented by <CODE>Handle1</CODE>.
+   An exception is thrown if this is not a decision node.</EM>
+
+<BR>
+
+\anchor Polyhedron_predicates
+<H1>Predicates for the C Polyhedron Domain</H1>
+  Here we provide a short description for each of the predicates
+  available for the domain of C polyhedra.
+Note that predicates for other domains will follow a similar pattern.
+
+<H2>Constructor, copy, conversion and destructor predicates</H2>
+<H3>Constructor predicates for C polyhedra</H3>
+The constructor predicates build a
+C polyhedron from a specification
+and binds the given variable to a handle for future referencing.
+The specification can be:
+- the number of space dimensions and an atom indicating if it
+  is to be the universe or empty element.
+- a representation for the particular class of semantic geometric
+  descriptors to which the element being built belongs.
+For example,
+  a C Polyhedron can be built from a list of
+  non-strict inequality or equality constraints or a list of equality
+  congruences or a list of generators that contains no closure points.
+
+<P><CODE>ppl_new_C_Polyhedron_from_space_dimension(+Dimension_Type, +Universe_or_Empty, -Handle)</CODE><BR>
+   <EM>Builds a new C polyhedron \f$\cP\f$
+   with \c Dimension_Type dimensions; it is empty
+   or the universe depending on whether \c Atom
+   is \c empty or \c universe, respectively.
+   \c Handle is unified with the handle for \f$\cP\f$.
+   Thus the query
+\code
+   ?- ppl_new_C_Polyhedron_from_space_dimension(3, universe, X).
+\endcode
+   creates the C polyhedron defining the
+   3-dimensional vector space
+   \f$\Rset^3\f$ with \c X bound to a valid handle for accessing it.</EM>
+
+<P><CODE>ppl_new_C_Polyhedron_from_constraints(+Constraint_System, -Handle)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P from
+  \c Constraint_System.
+  \c Handle is unified with the handle for \p P.</EM>
+
+<P><CODE>ppl_new_C_Polyhedron_from_congruences(+Congruence_System, -Handle)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P from
+  \c Congruence_System.
+  \c Handle is unified with the handle for \p P.</EM>
+
+<P><CODE>ppl_new_C_Polyhedron_from_generators(+Generator_System, -Handle)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P from
+  \c Generator_System.
+  \c Handle is unified with the handle for \p P.</EM>
+
+
+<H3>Predicates that build new C polyhedra
+  by copying or converting from
+  other semantic geometric descriptions</H3>
+  Besides the constructors listed above, the library also
+  provides:
+- copy constructors that will copy an element belonging
+  to the same class of semantic geometric descriptions
+- conversion operators that build a new semantic geometric
+  description starting from a \b friend;
+  that is, a semantic geometric description in different class
+  (e.g., ppl_new_Grid_from_C_Polyhedron,
+  ppl_new_C_Polyhedron_from_BD_Shape_mpq_class, etc.).<BR>
+
+  The copy and conversion predicates have two versions,
+  one with arity 2 for the source and target handles and one
+  with an extra argument denoting the maximum complexity to be used
+  in the conversion;
+  this complexity argument is ignored when the
+  the friend and the element being built are in the same class.
+
+<P><CODE>ppl_new_C_Polyhedron_from_C_Polyhedron(+Handle_1, -Handle_2)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P_1 from
+   the c polyhedron referenced by handle \c Handle_1.
+  \c Handle_2 is unified with the handle for \p P_1.</EM>
+
+<P><CODE>ppl_new_C_Polyhedron_from_NNC_Polyhedron(+Handle_1, -Handle_2)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P_1 from
+   the nnc polyhedron referenced by handle \c Handle_1.
+  \c Handle_2 is unified with the handle for \p P_1.</EM>
+
+<P><CODE>ppl_new_C_Polyhedron_from_C_Polyhedron_with_complexity(+Handle, +Complexity, -Handle)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P_1 from
+   the c polyhedron referenced by handle \c Handle_1
+  using an algorithm whose complexity does not exceed \c Complexity;
+  \c Handle_2 is unified with the handle for \p P_1.</EM>
+
+<P><CODE>ppl_new_C_Polyhedron_from_NNC_Polyhedron_with_complexity(+Handle, +Complexity, -Handle)</CODE><BR>
+  <EM>Builds a new C polyhedron \p P_1 from
+   the nnc polyhedron referenced by handle \c Handle_1
+  using an algorithm whose complexity does not exceed \c Complexity;
+  \c Handle_2 is unified with the handle for \p P_1.</EM>
+
+
+<H3>Destructor predicate</H3>
+Below is the destructor predicate for the Polyhedron domain.
+
+<P><CODE>ppl_delete_Polyhedron(+Handle)</CODE><BR>
+  <EM>Invalidates the handle  referenced by \c Handle:
+  this makes sure the corresponding resources will eventually be released.</EM>
+
+
+<H2>Predicates that do not change the polyhedron</H2>
+<H3>Test Predicates</H3>
+These predicates test the polyhedron for different properties
+and succeed or fail depending on the outcome.
+
+<P><CODE>ppl_Polyhedron_is_empty(+Handle)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle is empty.</EM>
+
+<P><CODE>ppl_Polyhedron_is_universe(+Handle)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle is the universe.</EM>
+
+<P><CODE>ppl_Polyhedron_is_bounded(+Handle)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle is bounded.</EM>
+
+<P><CODE>ppl_Polyhedron_contains_integer_point(+Handle)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle contains an integer point.</EM>
+
+<P><CODE>ppl_Polyhedron_is_topologically_closed(+Handle)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle is topologically closed.</EM>
+
+<P><CODE>ppl_Polyhedron_is_discrete(+Handle)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle is discrete.</EM>
+
+<P><CODE>ppl_Polyhedron_bounds_from_above(+Handle, +Lin_Expr)</CODE><BR>
+   <EM>Succeeds if and only if <CODE>Lin_Expr</CODE> is bounded from above
+   in the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_bounds_from_below(+Handle, +Lin_Expr)</CODE><BR>
+   <EM>Succeeds if and only if <CODE>Lin_Expr</CODE> is bounded from below
+   in the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_contains_Polyhedron(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   <CODE>Handle_2</CODE> is included in or equal to
+   the polyhedron referenced by <CODE>Handle_1</CODE>.</EM>
+
+<P><CODE>ppl_Polyhedron_strictly_contains_Polyhedron(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   <CODE>Handle_2</CODE> is included in but not equal to
+   the polyhedron referenced by <CODE>Handle_1</CODE>.</EM>
+
+<P><CODE>ppl_Polyhedron_is_disjoint_from_Polyhedron(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   <CODE>Handle_2</CODE> is disjoint from
+   the polyhedron referenced by <CODE>Handle_1</CODE>.</EM>
+
+<P><CODE>ppl_Polyhedron_equals_Polyhedron(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Succeeds if and only if the polyhedron referenced by
+   <CODE>Handle_1</CODE> is
+   equal to the polyhedron referenced by <CODE>Handle_2</CODE>.</EM>
+
+<P><CODE>ppl_Polyhedron_OK(+Handle)</CODE><BR>
+   <EM>Succeeds only if the polyhedron referenced by
+   \c Handle is well formed, i.e., if it
+   satisfies all its implementation invariants.
+   Useful for debugging purposes.</EM>
+
+<P><CODE>ppl_Polyhedron_constrains(+Handle, +PPL_Var)</CODE><BR>
+  <EM>Succeeds if and only if the polyhedron referenced by
+   \c Handle constrains the dimension \c PPL_Var.</EM>
+
+
+<H3>Predicates that return information about the polyhedron</H3>
+These predicates will obtain more detailed information about the
+polyhedron
+unifying some of their arguments with the results.
+
+<P><CODE>ppl_Polyhedron_space_dimension(+Handle, ?Dimension_Type)</CODE><BR>
+   <EM>Unifies \c Dimension_Type with the dimension of the vector space enclosing
+   the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_affine_dimension(+Handle, ?Dimension_Type)</CODE><BR>
+   <EM>Unifies \c Dimension_Type with the affine dimension of
+   the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_relation_with_constraint(+Handle, +Constraint, ?Relation_List)</CODE><BR>
+  <EM>Unifies \c Relation_List with the list of relations the
+  polyhedron referenced by \c Handle has with \c Constraint.
+  The possible relations are listed in the
+  grammar rules above.</EM>
+
+<P><CODE>ppl_Polyhedron_relation_with_generator(+Handle, +Generator, ?Relation_List)</CODE><BR>
+  <EM>Unifies \c Relation_List with the list of relations the
+  polyhedron referenced by \c Handle has with \c Generator.
+  The possible relations are listed in the
+  grammar rules above.</EM>
+
+<P><CODE>ppl_Polyhedron_relation_with_congruence(+Handle, +Congruence, ?Relation_List)</CODE><BR>
+  <EM>Unifies \c Relation_List with the list of relations the
+  polyhedron referenced by \c Handle has with \c Congruence.
+  The possible relations are listed in the
+  grammar rules above.</EM>
+
+<P><CODE>ppl_Polyhedron_get_constraints(+Handle, ?Constraint_System)</CODE><BR>
+   <EM>Unifies \c Constraint_System with
+   the constraints (in the form of a list) in the constraint system
+   satisfied by the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_get_congruences(+Handle, ?Congruence_System)</CODE><BR>
+   <EM>Unifies \c Congruence_System with
+   the congruences (in the form of a list) in the congruence system
+   satisfied by the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_get_generators(+Handle, ?Generator_System)</CODE><BR>
+   <EM>Unifies \c Generator_System with
+   the generators (in the form of a list) in the generator system
+   for the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_get_minimized_constraints(+Handle, ?Constraint_System)</CODE><BR>
+   <EM>Unifies \c Constraint_System with
+   the constraints (in the form of a list)
+   in the minimized constraint system
+   satisfied by the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_get_minimized_congruences(+Handle, ?Congruence_System)</CODE><BR>
+   <EM>Unifies \c Congruence_System with
+   the congruences (in the form of a list)
+   in the minimized congruence system
+   for the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_get_minimized_generators(+Handle, ?Generator_System)</CODE><BR>
+   <EM>Unifies \c Generator_System with
+   the generators (in the form of a list)
+   in the minimized generator system
+   satisfied by the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_maximize(+Handle, +Lin_Expr, ?Coeff_1, ?Coeff_2, ?Boolean)</CODE><BR>
+  <EM>Succeeds if and only if polyhedron \p P referenced by \c Handle
+  is not empty and \c Lin_Expr is bounded from above in \p P.
+
+  \c Coeff_1 is unified with the numerator of the supremum value
+  and \c Coeff_2 with the denominator of the supremum value.
+  If the supremum is also the maximum, \c Boolean is unified
+  with the atom \c true and, otherwise, unified with
+  the atom \c false.</EM>
+
+<P><CODE>ppl_Polyhedron_minimize(+Handle, +Lin_Expr, ?Coeff_1, ?Coeff_2, ?Boolean)</CODE><BR>
+  <EM>Succeeds if and only if polyhedron \p P referenced by \c Handle
+  is not empty and \c Lin_Expr is bounded from below in \p P.
+
+  \c Coeff_1 is unified with the numerator of the infinum value
+  and \c Coeff_2 with the denominator of the infinum value.
+  If the infinum is also the minimum, \c Boolean is unified
+  with the atom \c true and, otherwise, unified with
+  the atom \c false.</EM>
+
+<P><CODE>ppl_Polyhedron_maximize_with_point(+Handle, +Lin_Expr, ?Coeff_1, ?Coeff_2, ?Boolean, ?Point)</CODE><BR>
+  <EM>Succeeds if and only if polyhedron \p P referenced by \c Handle
+  is not empty and \c Lin_Expr is bounded from above in \p P.
+
+  \c Coeff_1 is unified with the numerator of the supremum value
+  and \c Coeff_2 with the denominator of the supremum value
+  and \c Point with a point or closure point where \c Lin_Expr reaches
+  this value.
+  If the supremum is also the maximum, \c Boolean is unified
+  with the atom \c true and, otherwise, unified with the
+  atom \c false.</EM>
+
+<P><CODE>ppl_Polyhedron_minimize_with_point(+Handle, +Lin_Expr, ?Coeff_1, ?Coeff_2, ?Boolean, ?Point)</CODE><BR>
+  <EM>Succeeds if and only if polyhedron \p P referenced by \c Handle
+  is not empty and \c Lin_Expr is bounded from below in \p P.
+
+  \c Coeff_1 is unified with the numerator of the infinum value
+  and \c Coeff_2 with the denominator of the infinum value
+  and \c Point with a point or closure point where \c Lin_Expr reaches
+  this value.
+  If the infinum is also the minimum, \c Boolean is unified
+  with the atom \c true and, otherwise, unified with the
+  atom \c false.</EM>
+
+<P><CODE>ppl_Polyhedron_external_memory_in_bytes(+Handle, ?Number)</CODE><BR>
+<EM>Unifies \c Number with the size of the total memory in
+bytes occupied by the polyhedron referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Polyhedron_total_memory_in_bytes(+Handle, ?Number)</CODE><BR>
+<EM>Unifies \c Number with the size of the external memory in
+bytes occupied by the polyhedron referenced by \c Handle.</EM>
+
+
+<H3>Ascii dump predicate</H3>
+This output predicate is useful for debugging.
+
+<P><CODE>ppl_Polyhedron_ascii_dump(+Handle)</CODE><BR>
+  <EM>Dumps an ascii representation of the PPL internal state for
+  the polyhedron referenced by \c Handle on the standard output.</EM>
+
+
+<H2>Space-dimension preserving predicates that may change
+    the polyhedron</H2>
+These predicates may modify the polyhedron referred to
+by the handle in first argument;
+the (dimension of the) vector space in which it is embedded is unchanged.
+<H3>Predicates that may change the polyhedron by adding
+to its constraint or generator descriptions</H3>
+Note that there are two forms of these predicates
+differentiated in the names by the
+words "add" or "refine with";
+see Section \extref{Generic_Operations_on_Semantic_Geometric_Descriptors, Generic Operations on Semantic Geometric Descriptors} in the
+main \extref{preamble, PPL User Manual}
+for the differences in the semantics and therefore, the expected behavior,
+between these forms.
+
+<P><CODE>ppl_Polyhedron_add_constraint(+Handle, +Constraint)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by adding
+   \c Constraint to its constraint system.
+   For a C polyhedron, \c Constraint must be
+   an equality or a non-strict inequality.</EM>
+
+<P><CODE>ppl_Polyhedron_add_congruence(+Handle, +Congruence)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by adding
+   \c Congruence to its congruence system.
+   For a C polyhedron, \c Congruence must be
+   an equality.</EM>
+
+<P><CODE>ppl_Polyhedron_add_generator(+Handle, +Generator)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by adding
+   \c Generator to its generator system.
+   For a C polyhedron, \c Generator must be
+   a line, ray or point.</EM>
+
+<P><CODE>ppl_Polyhedron_add_constraints(
+                  +Handle,
+                  +Constraint_System)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by adding to its constraint system the constraints in
+   \c Constraint_System.
+   For a C polyhedron, \c Constraints must be a list of
+   equalities and non-strict inequalities.</EM>
+
+<P><CODE>ppl_Polyhedron_add_congruences(
+                  +Handle,
+                  +Congruence_System)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by adding to its congruence system the congruences in
+   \c Congruence_System.
+   For a C polyhedron, \c Congruences must be a list of
+   equalities.</EM>
+
+<P><CODE>ppl_Polyhedron_add_generators(
+                  +Handle,
+                  +Generator_System)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by adding to its generator system the generators in
+   \c Generator_System.
+   For a C polyhedron, \c Generators must be a list of
+   lines, rays and points.</EM>
+
+<P><CODE>ppl_Polyhedron_refine_with_constraint(
+                  +Handle,
+                  +Constraint)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by refining its constraint system with
+   \c Constraint.</EM>
+
+<P><CODE>ppl_Polyhedron_refine_with_congruence(
+                  +Handle,
+                  +Congruence)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by refining its congruence system with
+   \c Congruence.</EM>
+
+<P><CODE>ppl_Polyhedron_refine_with_constraints(
+                  +Handle,
+                  +Constraint_System)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by refining its constraint system with
+   the constraints in \c Constraint_System.</EM>
+
+<P><CODE>ppl_Polyhedron_refine_with_congruences(
+                  +Handle,
+                  +Congruence_System)</CODE><BR>
+   <EM>Updates the polyhedron referenced by \c Handle to
+   one obtained by refining its congruence system with
+   the congruences in \c Congruence_System.</EM>
+
+
+<H3>Predicates that transform the polyhedron</H3>
+These predicates enable transformations
+such as taking the topological closure (which for the domain of
+C polyhedron is the identity transformation),
+unconstraining a specified dimension
+as explained in the
+main \extref{preamble, PPL User Manual} in Section
+\extref{Cylindrification, Cylindrification Operator}
+and several different image and preimage affine transfer relations;
+for details of the latter see Sections
+\extref{Images_and_Preimages_of_Affine_Transfer_Relations, Images and Preimages of Affine Transfer Relations}
+and
+\extref{Generalized_Affine_Relations, Generalized Affine Relations}
+<P><CODE>ppl_Polyhedron_topological_closure_assign(+Handle)</CODE><BR>
+  <EM>Assigns to the polyhedron referenced by \c Handle
+  its topological closure.</EM>
+
+<P><CODE>ppl_Polyhedron_unconstrain_space_dimension(+Handle, +PPL_Var)</CODE><BR>
+  <EM>Modifies the polyhedron \p P referenced by \c Handle by unconstraining
+  the space dimension \c PPL_Var.</EM>
+
+<P><CODE>ppl_Polyhedron_unconstrain_space_dimensions(+Handle, +List_of_PPL_Var)</CODE><BR>
+  <EM>Modifies the polyhedron \p P referenced by \c Handle by unconstraining
+  the space dimensions that are specified in \c List_of_PPL_Var.
+  The presence of duplicates in \c List_of_PPL_Var is a waste
+  but an innocuous one.</EM>
+
+<P><CODE>ppl_Polyhedron_affine_image(+Handle, +PPL_Var, +Lin_Expr, +Coeff)</CODE><BR>
+   <EM>Transforms the polyhedron referenced by \c Handle
+   assigning the affine expression for \c Lin_Expr/\c Coeff to \c PPL_Var.</EM>
+
+<P><CODE>ppl_Polyhedron_affine_preimage(+Handle, +PPL_Var, +Lin_Expr, +Coeff)</CODE><BR>
+   <EM>Transforms the polyhedron referenced by \c Handle
+   substituting the affine expression for \c Lin_Expr/\c Coeff to \c PPL_Var.</EM>
+
+<P><CODE>ppl_Polyhedron_bounded_affine_image(+Handle, +PPL_Var, +Lin_Expr_1, +Lin_Expr_2, +Coeff)</CODE><BR>
+  <EM>Assigns to polyhedron \p P referenced by \c Handle
+  the generalized image with respect to the
+  generalized affine transfer relation
+  \c Lin_Expr_1/Coeff
+    \f$\leq\f$ \c PPL_Var
+      \f$\leq\f$ \c Lin_Expr_2/Coeff.</EM>
+
+<P><CODE>ppl_Polyhedron_bounded_affine_preimage(+Handle, +PPL_Var, +Lin_Expr_1, +Lin_Expr_2, +Coeff)</CODE><BR>
+  <EM>Assigns to polyhedron \p P referenced by \c Handle
+  the generalized preimage with respect to the
+  generalized affine transfer relation
+  \c Lin_Expr_1/Coeff
+    \f$\leq\f$ \c PPL_Var
+      \f$\leq\f$ \c Lin_Expr_2/Coeff.</EM>
+
+<P><CODE>ppl_Polyhedron_generalized_affine_image(+Handle, +PPL_Var, +Relation_Symbol, +Lin_Expr, +Coeff)</CODE><BR>
+  <EM>Assigns to polyhedron \p P referenced by \c Handle
+  the generalized image with respect to the
+  generalized affine transfer relation
+   \c PPL_Var \f$\bowtie\f$ \c Lin_Expr/\c Coeff,
+   where \f$\bowtie\f$ is the symbol
+   represented by \c Relation_Symbol.</EM>
+
+<P><CODE>ppl_Polyhedron_generalized_affine_preimage(+Handle, +PPL_Var, +Relation_Symbol, +Lin_Expr, +Coeff)</CODE><BR>
+  <EM>Assigns to polyhedron \p P referenced by \c Handle
+  the generalized preimage with respect to the
+  generalized affine transfer relation
+   \c PPL_Var \f$\bowtie\f$ \c Lin_Expr/\c Coeff,
+   where \f$\bowtie\f$ is the symbol
+   represented by \c Relation_Symbol.</EM>
+
+<P><CODE>ppl_Polyhedron_generalized_affine_image_lhs_rhs(+Handle, +Lin_Expr_1, +Relation_Symbol, +Lin_Expr_2)</CODE><BR>
+  <EM>Assigns to polyhedron \p P referenced by \c Handle
+  the generalized image with respect to the
+  generalized affine transfer relation
+   \c Lin_Expr_1 \f$\bowtie\f$ \c Lin_Expr_2,
+   where \f$\bowtie\f$ is the symbol
+   represented by \c Relation_Symbol.</EM>
+
+<P><CODE>ppl_Polyhedron_generalized_affine_preimage_lhs_rhs(+Handle, +Lin_Expr_1, +Relation_Symbol, +Lin_Expr_2)</CODE><BR>
+  <EM>Assigns to polyhedron \p P referenced by \c Handle
+  the generalized preimage with respect to the
+  generalized affine transfer relation
+   \c Lin_Expr_1 \f$\bowtie\f$ \c Lin_Expr_2,
+   where \f$\bowtie\f$ is the symbol
+   represented by \c Relation_Symbol.</EM>
+
+
+<H3>Predicates whose results depend on more than one polyhedron</H3>
+These predicates include the binary operators which will assign to the
+polyhedron referred to by the first argument
+its combination with the polyhedron referred to by the second argument
+as described in the
+main \extref{preamble, PPL User Manual} in Sections
+\extref{Intersection_and_Convex_Polyhedral_Hull, Intersection and Convex Polyhedral Hull}
+and
+\extref{Convex_Polyhedral_Difference, Convex Polyhedral Difference};
+and a linear partitioning operator described below.
+
+<P><CODE>ppl_Polyhedron_intersection_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the intersection of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_upper_bound_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the upper bound of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_difference_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the difference of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_time_elapse_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the time elapse of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_poly_hull(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the poly-hull of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_poly_difference(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the poly-difference of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_upper_bound_assign_if_exact(+Handle_1, +Handle_2)</CODE><BR>
+    <EM>Succeeds if the least upper bound of the
+    polyhedron \p P_1 referenced by \c Handle_1
+    with the polyhedron referenced by \c Handle_2 is exact;
+    in which case the least upper bound is assigned
+    to \p P_1;
+    fails otherwise.</EM>
+
+<P><CODE>ppl_Polyhedron_poly_hull_assign_if_exact(+Handle_1, +Handle_2)</CODE><BR>
+    <EM>Succeeds if the least upper bound of the
+    polyhedron \p P_1 referenced by \c Handle_1
+    with the polyhedron referenced by \c Handle_2 is exact;
+    in which case the least upper bound is assigned
+    to \p P_1;
+    fails otherwise.</EM>
+
+<P><CODE>ppl_Polyhedron_simplify_using_context_assign(+Handle_1, +Handle_2, ?Boolean)</CODE><BR>
+    <EM>Succeeds if and only if the intersection of polyhedron \p P_1
+    referenced by \c Handle_1 and the polyhedron \p P_2 referenced by \c Handle_2
+    is non-empty.
+    Assigns to \p P_1 its meet-preserving simplification with
+    respect to \p P_2.</EM>
+
+<P><CODE>ppl_Polyhedron_linear_partition(+Handle_1, +Handle_2, -Handle_3,
+                                        -Handle_4)</CODE><BR>
+  <EM>\c Handle_1 and \c Handle_2 are handles for elements \p P_1 and \p P_2
+  in the Polyhedron domain. The predicate unifies handle
+  \c Handle_3 to a reference to the intersection of
+  \p P_1 and \p P_2 and \c Handle_4 to a reference to
+  a pointset powerset of nnc polyhedra \p P_4;
+  where \p P_4 is the linear partition of \p P_1 with respect to \p P_2.
+  This predicate is only provided if the
+  class \c Pointset_Powerset_NNC_Polyhedron
+  has been enabled when configuring the library.</EM>
+
+
+<H3>Predicates for widening and extrapolation</H3>
+In addition to the above binary operators, there are also a number
+of widening, extrapolation and narrowing operators
+as described in the
+main \extref{preamble, PPL User Manual} in Sections
+\extref{Widening_Operators, Widening Operators},
+\extref{Widening_with_Tokens, Widening with Tokens} and
+\extref{Extrapolation_Operators, Extrapolation Operators}.
+Note that for all these widening and extrapolation predicates
+to behave as specified
+the polyhedron referred to by the second argument has to be
+contained in (or equal to) the polyhedron referred to by the first argument.
+
+<P><CODE>ppl_Polyhedron_BHRZ03_widening_assign_with_tokens(+Handle_1, +Handle_2, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the BHRZ03-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2.
+   The widening with tokens delay
+   technique is applied with \c C_unsigned_1 tokens;
+   \c C_unsigned_2 is unified with the number of tokens
+   remaining at the end of the operation.</EM>
+
+<P><CODE>ppl_Polyhedron_H79_widening_assign_with_tokens(+Handle_1, +Handle_2, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the H79-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2.
+   The widening with tokens delay
+   technique is applied with \c C_unsigned_1 tokens;
+   \c C_unsigned_2 is unified with the number of tokens
+   remaining at the end of the operation.</EM>
+
+<P><CODE>ppl_Polyhedron_BHRZ03_widening_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the BHRZ03-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_H79_widening_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the H79-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2.</EM>
+
+<P><CODE>ppl_Polyhedron_widening_assign_with_tokens(+Handle_1, +Handle_2, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+<EM>Same as predicate <CODE>ppl_Polyhedron_H79_widening_assign_with_tokens</CODE>/4</EM>
+
+<P><CODE>ppl_Polyhedron_widening_assign(+Handle_1, +Handle_2)</CODE><BR>
+<EM>Same as predicate <CODE>ppl_Polyhedron_H79_widening_assign</CODE>/2</EM>
+
+<P><CODE>ppl_Polyhedron_limited_BHRZ03_extrapolation_assign_with_tokens(+Handle_1, +Handle_2, +Constraint_System, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the BHRZ03-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1.
+   The widening with tokens delay
+   technique is applied with \c C_unsigned_1 tokens;
+   \c C_unsigned_2 is unified with the number of tokens
+   remaining at the end of the operation.</EM>
+
+<P><CODE>ppl_Polyhedron_bounded_BHRZ03_extrapolation_assign_with_tokens(+Handle_1, +Handle_2, +Constraint_System, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the BHRZ03-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1, further intersected with the smallest box containing \p P_1.
+   The widening with tokens delay
+   technique is applied with \c C_unsigned_1 tokens;
+   \c C_unsigned_2 is unified with the number of tokens
+   remaining at the end of the operation.</EM>
+
+<P><CODE>ppl_Polyhedron_limited_H79_extrapolation_assign_with_tokens(+Handle_1, +Handle_2, +Constraint_System, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the H79-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1.
+   The widening with tokens delay
+   technique is applied with \c C_unsigned_1 tokens;
+   \c C_unsigned_2 is unified with the number of tokens
+   remaining at the end of the operation.</EM>
+
+<P><CODE>ppl_Polyhedron_bounded_H79_extrapolation_assign_with_tokens(+Handle_1, +Handle_2, +Constraint_System, +C_unsigned_1, ?C_unsigned_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the H79-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1, further intersected with the smallest box containing \p P_1.
+   The widening with tokens delay
+   technique is applied with \c C_unsigned_1 tokens;
+   \c C_unsigned_2 is unified with the number of tokens
+   remaining at the end of the operation.</EM>
+
+<P><CODE>ppl_Polyhedron_limited_BHRZ03_extrapolation_assign(+Handle_1, +Handle_2, +Constraint_System)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the BHRZ03-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1.</EM>
+
+<P><CODE>ppl_Polyhedron_bounded_BHRZ03_extrapolation_assign(+Handle_1, +Handle_2, +Constraint_System)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the BHRZ03-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1, further intersected with the smallest box containing \p P_1.</EM>
+
+<P><CODE>ppl_Polyhedron_limited_H79_extrapolation_assign(+Handle_1, +Handle_2, +Constraint_System)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the H79-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1.</EM>
+
+<P><CODE>ppl_Polyhedron_bounded_H79_extrapolation_assign(+Handle_1, +Handle_2, +Constraint_System)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P_1 referenced by \c Handle_1
+   the H79-widening of \p P_1 with the polyhedron
+   referenced by \c Handle_2 intersected with the constraints in
+   \c Constraint_System that are
+   satisfied by all the points of \p P_1, further intersected with the smallest box containing \p P_1.</EM>
+
+
+<H2>Predicates that may modify the vector space</H2>
+These predicates enable the modification of the vector space
+of the polyhedron referred to in the first argument.
+<H3>Predicate for concatenation</H3>
+For more information on this operation, see Section
+\extref{Concatenating_Polyhedra, Concatenating Polyhedra},
+of the main \extref{preamble, PPL User Manual}.
+
+<P><CODE>ppl_Polyhedron_concatenate_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the polyhedron \p P referenced by \c Handle_1
+   the concatenation of \p P and the polyhedron referenced by \c Handle_2.</EM>
+
+
+<H3>Predicates for mapping dimensions or changing the vector space</H3>
+These predicates enable the modification of the vector space
+of the polyhedron referred to in the first argument.
+These predicates enable the modification of the vector space
+of the polyhedron referred to in the first argument.
+Detailed descriptions of these can be found in the
+main \extref{preamble, PPL User Manual} in Sections
+\extref{Adding_New_Dimensions_to_the_Vector_Space, Adding New Dimensions to the Vector Space},
+\extref{Removing_Dimensions_from_the_Vector_Space, Removing Dimensions from the Vector Space},
+\extref{Mapping_the_Dimensions_of_the_Vector_Space, Mapping the Dimensions of the Vector Space},
+\extref{expand_space_dimension, Expanding One Dimension of the Vector Space to Multiple Dimensions}
+and
+\extref{Folding_Multiple_Dimensions_of_the_Vector_Space_into_One_Dimension, Folding Multiple Dimensions of the Vector Space into One Dimension}.
+
+<P><CODE>ppl_Polyhedron_add_space_dimensions_and_embed(+Handle, +Dimension_Type)</CODE><BR>
+  <EM>Adds \c Dimension_Type new dimensions to the space enclosing
+  the polyhedron \p P referenced by \c Handle
+  and and_embeds \p P in this space.</EM>
+
+<P><CODE>ppl_Polyhedron_add_space_dimensions_and_project(+Handle, +Dimension_Type)</CODE><BR>
+  <EM>Adds \c Dimension_Type new dimensions to the space enclosing
+  the polyhedron \p P referenced by \c Handle
+  and and_projects \p P in this space.</EM>
+
+<P><CODE>ppl_Polyhedron_remove_space_dimensions(+Handle, +List_of_PPL_Vars)</CODE><BR>
+  <EM>Removes from the vector space enclosing
+  the polyhedron \p P referenced by \c Handle the space dimensions that
+  are specified in \c List_of_PPL_Var.  The presence
+  of duplicates in  \c List_of_PPL_Var is a waste but an innocuous one.</EM>
+
+<P><CODE>ppl_Polyhedron_remove_higher_space_dimensions(+Handle, +Dimension_Type)</CODE><BR>
+  <EM>Removes the higher dimensions from the vector space enclosing
+  the polyhedron \p P referenced by \c Handle
+  so that, upon successful return, the new space dimension is
+  \c Dimension_Type.</EM>
+
+<P><CODE>ppl_Polyhedron_expand_space_dimension(+Handle, +PPL_Var, +Dimension_Type)</CODE><BR>
+  <EM>Expands the \c  PPL_Var-th
+  dimension of the vector space enclosing
+  the polyhedron referenced by \c Handle to
+  \c Dimension_Type new space dimensions.</EM>
+
+<P><CODE>ppl_Polyhedron_fold_space_dimensions(+Handle, +List_of_PPL_Vars, +PPL_Var)</CODE><BR>
+  <EM>Modifies the polyhedron referenced by \c Handle
+  by folding the
+  space dimensions contained in \c List_of_PPL_Vars
+  into dimension \c PPL_Var.
+  The presence of duplicates in \c List_of_PPL_Vars is a waste
+  but an innocuous one.</EM>
+
+<P><CODE>ppl_Polyhedron_map_space_dimensions(+Handle, +P_Func)</CODE><BR>
+  <EM>Remaps the dimensions of the vector space according to a
+  partial function.
+  This function is specified by means of the \c P_Func,
+  which has \p n entries.
+  The result is undefined if \c P_Func does not encode a partial
+  function.</EM>
+
+
+\anchor other_domains
+<H1>Ad hoc Predicates for Other Domains</H1>
+<H2>Extra Predicates Specifically for the Pointset Powerset Domains</H2>
+  The powerset domains can be instantiated by taking as a base domain
+  any fixed semantic geometric description
+  (C and NNC polyhedra, BD and octagonal shapes, boxes and grids).
+  An element of the powerset domain represents a disjunctive collection
+  of base objects (its disjuncts), all having the same space dimension.
+  For more information on this construct,
+  see Section \extref{The_Powerset_Domain, The Powerset Domain}
+  in the main \extref{preamble, PPL User Manual}.
+
+  Besides the predicates that are available in all semantic geometric
+  descriptions (whose documentation is not repeated here),
+  the powerset domain also provides several ad hoc predicates.
+  These are specified below, instantiated for the
+  PPL domain Pointset_Powerset_C_Polyhedron.
+  Note that predicates for other pointset powerset domains
+  will follow similar patterns.
+
+  <H3>Predicates for pointset powerset iterators and disjuncts.</H3>
+Iterators allow the user to examine and change individual elements
+(called here disjuncts) of a pointset powerset.
+Detailed descriptions for adding and removing disjuncts can be found in the
+main \extref{preamble, PPL User Manual} in Section
+\extref{Adding_a_Disjunct, Adding a Disjunct}.
+The following predicates support useful operations
+on these iterators and disjuncts via the usual handles.
+
+<P><CODE>ppl_new_Pointset_Powerset_C_Polyhedron_iterator_from_iterator(+Iterator_1, -Iterator_2)</CODE><BR>
+  <EM>Builds a new iterator \p it from the iterator referenced by
+  \c Iterator_1. <CODE>Iterator_2</CODE> is unified with the handle
+  for \p it.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_begin_iterator(+Handle, -Iterator)</CODE><BR>
+  <EM>Unifies \c Iterator with a handle to an iterator "pointing"
+  to the beginning of
+  the sequence of disjuncts of the powerset referred to by \c Handle.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_end_iterator(+Handle, -Iterator)</CODE><BR>
+  <EM>Unifies \c Iterator with a handle to an iterator "pointing"
+  to the end of
+  the sequence of disjuncts of the powerset referred to by \c Handle.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_iterator_equals_iterator(+Iterator_1, +Iterator_2)</CODE><BR>
+   <EM>Succeeds if and only if the iterator referenced by
+   \c Iterator_1 is equal to the iterator referenced by
+   \c Iterator_2.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_iterator_increment(+Iterator)</CODE><BR>
+  <EM>Increments the iterator referenced by \c Iterator
+  so that it "points" to the next disjunct.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_iterator_decrement(+Iterator)</CODE><BR>
+  <EM>Decrements the iterator referenced by \c Iterator
+  so that it "points" to the previous disjunct.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_iterator_get_disjunct(+Iterator, -Handle)</CODE><BR>
+  <EM>Unifies with \c Handle a reference to the disjunct referred
+  to by \c Iterator_1.</EM>
+
+<P><CODE>ppl_delete_Pointset_Powerset_C_Polyhedron_iterator(+Iterator)</CODE><BR>
+  <EM>Invalidates the handle referenced by <CODE>Iterator</CODE>:
+  this makes sure the corresponding resources
+  will eventually be released.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_add_disjunct(+Handle_1, +Handle_2)</CODE><BR>
+  <EM>Adds to the pointset powerset referenced by \c Handle_1 a disjunct
+  referred to by \c Handle_2.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_drop_disjunct(+Handle, +Iterator)</CODE><BR>
+  <EM>If \p it is the iterator referred to by \c Iterator,
+  drops from the pointset powerset referenced by \c Handle
+  the disjunct pointed to by \p it and
+  assigns to \p it an iterator to the next disjunct.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_drop_disjuncts(+Handle, +Iterator_1, +Iterator_2)</CODE><BR>
+  <EM>If \p it_1 and \p it_2 are the iterators referred to by \c Iterator_1
+  and \c Iterator_2, respectively,
+  drops from the pointset powerset referenced by \c Handle
+   all the disjuncts from \p it_1 to \p it_2 (excluded).</EM>
+
+  <H3>Other Ad Hoc Predicates for the pointset powerset domains.</H3>
+Collected here are some other predicates that are specific to
+pointset powersets of C polyhedra;
+these provide operations for
+simplifying the powerset,
+geometric comparisons
+and widening and extrapolation.
+Detailed descriptions of these can be found in the
+main \extref{preamble, PPL User Manual} in Sections
+\extref{Geometric_Comparisons, Geometric Comparisons},
+\extref{Certificate_Based_Widenings, Certificate-Based Widenings},
+\extref{Powerset_Extrapolation_Operators, Powerset Extrapolation Operators}.
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_pairwise_reduce(+Handle)</CODE><BR>
+   <EM>Assigns the result of pairwise reduction on
+   the pointset powerset referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_omega_reduce(+Handle)</CODE><BR>
+   <EM>Assigns the result of omega reduction on
+   the pointset powerset referenced by \c Handle.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_geometrically_covers_Pointset_Powerset_C_Polyhedron(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Succeeds if and only if the pointset powerset referenced by
+   \c Handle_2 geometrically covers
+   the pointset powerset referenced by \c Handle_1;
+   see Section \extref{Geometric_Comparisons, Geometric Comparisons}
+  in the main \extref{preamble, PPL User Manual}.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_geometrically_equals_Pointset_Powerset_C_Polyhedron(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Succeeds if and only if the pointset powerset referenced by
+   \c Handle_2 geometrically equals
+   the pointset powerset referenced by \c Handle_1;
+   see Section \extref{Geometric_Comparisons, Geometric Comparisons}
+  in the main \extref{preamble, PPL User Manual}.</EM>
+
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_BHZ03_BHRZ03_BHRZ03_widening_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the pointset powerset \p P_1 referenced by
+   \c Handle_1 the \extref{pps_certificate_widening, BHZ03-widening}
+    between \p P_1 and the pointset powerset referenced by
+   \c Handle_2, using the BHRZ03-widening
+    certified by the convergence certificate for BHRZ03.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_BHZ03_H79_H79_widening_assign(+Handle_1, +Handle_2)</CODE><BR>
+   <EM>Assigns to the pointset powerset \p P_1 referenced by
+   \c Handle_1 the \extref{pps_certificate_widening, BHZ03-widening}
+    between \p P_1 and the pointset powerset referenced by
+   \c Handle_2, using the H79-widening
+    certified by the convergence certificate for H79.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_BGP99_BHRZ03_extrapolation_assign(+Handle_1, +Handle_2, C_unsigned)</CODE><BR>
+    <EM>Assigns to the pointset powerset \p P_1 referenced by
+   \c Handle_1 the result of applying the
+    \extref{pps_bgp99_extrapolation, BGP99 extrapolation operator}
+    between \p P_1 and the pointset powerset referenced by
+   \c Handle_2, using the BHRZ03-widening
+    and the cardinality threshold \c C_unsigned.</EM>
+
+<P><CODE>ppl_Pointset_Powerset_C_Polyhedron_BGP99_H79_extrapolation_assign(+Handle_1, +Handle_2, C_unsigned)</CODE><BR>
+    <EM>Assigns to the pointset powerset \p P_1 referenced by
+   \c Handle_1 the result of applying the
+    \extref{pps_bgp99_extrapolation, BGP99 extrapolation operator}
+    between \p P_1 and the pointset powerset referenced by
+   \c Handle_2, using the H79-widening
+    and the cardinality threshold \c C_unsigned.</EM>
+
+
+\anchor PI_Compilation
+<H1>Compilation and Installation</H1>
+
+When the Parma Polyhedra Library is configured, it tests for the existence
+of each supported Prolog system.  If a supported Prolog system is
+correctly installed in a standard location, things are arranged
+so that the corresponding interface is built and installed.
+
+The Prolog interface files are all installed in the directory
+<CODE>prefix/lib/ppl</CODE>.  Since this includes shared and
+dynamically loaded libraries, you must make your dynamic
+linker/loader aware of this fact.  If you use a GNU/Linux system,
+try the commands <CODE>man ld.so</CODE> and <CODE>man ldconfig</CODE>
+for more information.
+
+As an option, the Prolog interface can track the creation and disposal
+of polyhedra.  In fact, differently from native Prolog data, PPL polyhedra
+must be explicitly disposed and forgetting to do so is a very common mistake.
+To enable this option, configure the library adding
+<CODE>-DPROLOG_TRACK_ALLOCATION</CODE> to the options passed to the
+C++ compiler.
+Your configure command would then look like
+\code
+  path/to/configure --with-cxxflags="-DPROLOG_TRACK_ALLOCATION" ...
+\endcode
+
+\anchor PI_SD_Features
+<H1>System-Dependent Features</H1>
+
+\anchor CIAO_Prolog
+<H2>CIAO Prolog</H2>
+
+The Ciao Prolog interface to the PPL is available
+both as `PPL enhanced' Ciao Prolog interpreter
+and as a library that can be linked to Ciao Prolog programs.
+Only Ciao Prolog versions 1.10 #5 and later are supported.
+
+So that it can be used with the Ciao Prolog PPL interface, the
+Ciao Prolog installation must be configured with the
+<CODE>--disable-regs</CODE> option.
+
+<H3>The <CODE>ppl_ciao</CODE> Executable</H3>
+
+If an appropriate version of Ciao Prolog is installed on the machine
+on which you compiled the library, the command <CODE>make install</CODE>
+will install the executable <CODE>ppl_ciao</CODE> in the directory
+<CODE>prefix/bin</CODE>.
+The <CODE>ppl_ciao</CODE> executable is simply the Ciao Prolog
+interpreter with the Parma Polyhedra Library linked in.
+The only thing you should do to use the library is to
+call <CODE>ppl_initialize/0</CODE> before any other PPL predicate
+and to call <CODE>ppl_finalize/0</CODE> when you are done with the
+library.
+
+<H3>Linking the Library To Ciao Prolog Programs</H3>
+
+In order to allow linking Ciao Prolog programs to the PPL,
+the following files are installed in the directory
+<CODE>prefix/lib/ppl</CODE>:
+<CODE>ppl_ciao.pl</CODE> contains the required foreign declarations;
+<CODE>libppl_ciao.*</CODE> contain the executable code for the
+Ciao Prolog interface in various formats (static library, shared library,
+libtool library).
+If your Ciao Prolog program is constituted by, say, <CODE>source1.pl</CODE>
+and <CODE>source2.pl</CODE> and you want to create the executable
+<CODE>myprog</CODE>, your compilation command may look like
+\code
+ciaoc -o myprog prefix/lib/ppl/ppl_ciao.pl ciao_pl_check.pl \
+  -L '-Lprefix/lib/ppl -lppl_ciao -Lprefix/lib -lppl -lgmpxx -lgmp -lstdc++'
+\endcode
+
+\anchor GNU_Prolog
+<H2>GNU Prolog</H2>
+
+The GNU Prolog interface to the PPL is available both as a
+`PPL enhanced' GNU Prolog interpreter and as a library that can be
+linked to GNU Prolog programs.
+The only GNU Prolog version that is known to work is a patched
+version of the `unstable version' tagged
+<A HREF="ftp://ftp.inria.fr/INRIA/Projects/contraintes/gprolog/unstable/gprolog-20040608.tgz">20040608</A>
+(which unpacks to a directory called <CODE>gprolog-1.2.18</CODE>).
+The patch is contained in the
+<CODE>interfaces/Prolog/GNU/README</CODE> file of the PPL's distribution.
+
+So that it can be used with the GNU Prolog PPL interface
+(and, for that matter, with any foreign code),
+the GNU Prolog installation must be configured with the
+<CODE>--disable-regs</CODE> option.
+
+<H3>The <CODE>ppl_gprolog</CODE> Executable</H3>
+
+If an appropriate version of GNU Prolog is installed on the machine
+on which you compiled the library, the command <CODE>make install</CODE>
+will install the executable <CODE>ppl_gprolog</CODE> in the directory
+<CODE>prefix/bin</CODE>.
+The <CODE>ppl_gprolog</CODE> executable is simply the GNU Prolog
+interpreter with the Parma Polyhedra Library linked in.
+The only thing you should do to use the library is to
+call <CODE>ppl_initialize/0</CODE> before any other PPL predicate
+and to call <CODE>ppl_finalize/0</CODE> when you are done with the
+library.
+
+<H3>Linking the Library To GNU Prolog Programs</H3>
+
+In order to allow linking GNU Prolog programs to the PPL,
+the following files are installed in the directory
+<CODE>prefix/lib/ppl</CODE>:
+<CODE>ppl_gprolog.pl</CODE> contains the required foreign declarations;
+<CODE>libppl_gprolog.*</CODE> contain the executable code for the
+GNU Prolog interface in various formats (static library, shared library,
+libtool library).
+If your GNU Prolog program is constituted by, say, <CODE>source1.pl</CODE>
+and <CODE>source2.pl</CODE> and you want to create the executable
+<CODE>myprog</CODE>, your compilation command may look like
+\code
+gplc -o myprog prefix/lib/ppl/ppl_gprolog.pl source1.pl source2.pl \
+  -L '-Lprefix/lib/ppl -lppl_gprolog -Lprefix/lib -lppl -lgmpxx -lgmp -lstdc++'
+\endcode
+
+GNU Prolog uses several stacks to execute a Prolog program each with a
+pre-defined default size.  If the size of a stack is too small for the
+application an overflow will occur.  To change the default size of a
+stack, the user has to set the value of the relevant environment
+variable; in particular, to execute some of the tests, we found it
+necessary to increase the size of GLOBALSZ.
+Thus, for the above example, the compilation command would be
+\code
+GLOBALSZ=32768 gplc -o myprog prefix/lib/ppl/ppl_gprolog.pl source1.pl source2.pl \
+  -L '-Lprefix/lib/ppl -lppl_gprolog -Lprefix/lib -lppl -lgmpxx -lgmp -lstdc++'
+\endcode
+More information on
+adjusting the size of the stacks can be found in Section 3.3 in the
+<A HREF="http://www.gprolog.org/manual/gprolog.html">GNU Prolog
+Manual</A>
+
+\anchor SICStus_Prolog
+<H2>SICStus Prolog</H2>
+
+The SICStus Prolog interface to the PPL is available
+both as a statically linked module or as a dynamically linked one.
+Only SICStus Prolog versions 3.9.1 and later are supported.
+
+<H3>The Statically Linked <CODE>ppl_sicstus</CODE> Executable</H3>
+
+If an appropriate version of SICStus Prolog is installed on the machine
+on which you compiled the library, the command <CODE>make install</CODE>
+will install the executable <CODE>ppl_sicstus</CODE> in the directory
+<CODE>prefix/bin</CODE>.
+The <CODE>ppl_sicstus</CODE> executable is simply the SICStus Prolog
+system with the Parma Polyhedra Library statically linked.
+The only thing you should do to use the library is to
+load <CODE>prefix/lib/ppl/ppl_sicstus.pl</CODE>.
+
+<H3>Loading the SICStus Interface Dynamically</H3>
+
+In order to dynamically load the library from SICStus Prolog you should
+simply load <CODE>prefix/lib/ppl/ppl_sicstus.pl</CODE>.
+Notice that, for dynamic linking to work, you should have configured
+the library with the <CODE>--enable-shared</CODE> option.
+
+
+\anchor SWI_Prolog
+<H2>SWI-Prolog</H2>
+
+The SWI-Prolog interface to the PPL is available
+both as a statically linked module or as a dynamically linked one.
+Only SWI-Prolog version 5.6.0 and later versions are supported.
+
+<H3>The <CODE>ppl_pl</CODE> Executable</H3>
+
+If an appropriate version of SWI-Prolog is installed on the machine
+on which you compiled the library, the command <CODE>make install</CODE>
+will install the executable <CODE>ppl_pl</CODE> in the directory
+<CODE>prefix/bin</CODE>.
+The <CODE>ppl_pl</CODE> executable is simply the SWI-Prolog
+shell with the Parma Polyhedra Library statically linked:
+from within <CODE>ppl_pl</CODE> all the services of the library
+are available without further action.
+
+<H3>Loading the SWI-Prolog Interface Dynamically</H3>
+
+In order to dynamically load the library from SWI-Prolog you should
+simply load <CODE>prefix/lib/ppl/ppl_swiprolog.pl</CODE>.
+This will invoke <CODE>ppl_initialize/0</CODE> and
+<CODE>ppl_finalize/0</CODE> automatically.
+Alternatively, you can load the library directly with
+\code
+:- load_foreign_library('prefix/lib/ppl/libppl_swiprolog').
+\endcode
+This will call <CODE>ppl_initialize/0</CODE> automatically.
+Analogously,
+\code
+:- unload_foreign_library('prefix/lib/ppl/libppl_swiprolog').
+\endcode
+will, as part of the unload process, invoke <CODE>ppl_finalize/0</CODE>.
+
+Notice that, for dynamic linking to work, you should have configured
+the library with the <CODE>--enable-shared</CODE> option.
+
+
+\anchor XSB_Prolog
+<H2>XSB</H2>
+
+The XSB Prolog interface to the PPL is available
+as a dynamically linked module.
+Only some CVS versions of XSB starting from 2 July 2005 are known to work.
+CVS versions starting from 11 November 2005 are known not to work.
+
+In order to dynamically load the library from XSB you should
+load the <CODE>ppl_xsb</CODE> module and import the predicates
+you need.
+For things to work, you may have to copy the files
+<CODE>prefix/lib/ppl/ppl_xsb.xwam</CODE>
+and
+<CODE>prefix/lib/ppl/ppl_xsb.so</CODE>
+in your current directory or in one of the XSB library directories.
+
+
+\anchor YAP_Prolog
+<H2>YAP</H2>
+
+The YAP Prolog interface to the PPL is available
+as a dynamically linked module.
+Only YAP versions following 5.1.0 and CVS HEAD versions starting from
+4 January 2006 are supported.  Notice that support for unbounded
+integers in YAP is young and may have errors that could affect
+programs using the PPL (see, e.g.,
+<A HREF="http://www.cs.unipr.it/pipermail/ppl-devel/2006-January/007780.html">http://www.cs.unipr.it/pipermail/ppl-devel/2006-January/007780.html</A>).
+
+In order to dynamically load the library from YAP you should
+simply load <CODE>prefix/lib/ppl/ppl_yap.pl</CODE>.
+This will invoke <CODE>ppl_initialize/0</CODE> automatically;
+it is the programmer's responsibility to call <CODE>ppl_finalize/0</CODE>
+when the PPL library is no longer needed.
+Notice that, for dynamic linking to work, you should have configured
+the library with the <CODE>--enable-shared</CODE> option.
+
+*/ /* \mainpage */
+
+

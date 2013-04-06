@@ -1,0 +1,12 @@
+On the ARM, whether or not the rounding mode can be set in a way that allows
+the PPL to work with floating point numbers, will depend on the actual
+hardware.  However, disabling the affected PPL code at run-time is
+impractical.  Thus, to ensure that the binary distributions of the PPL for the
+ARM work as expected on any hardware, on the ARM, the affected code
+is disabled at compile-time.  It is still possible to build a binary
+for the ARM that assumes the hardware can control the rounding mode;
+for this, configure the PPL with `-DPPL_ARM_CAN_CONTROL_FPU=1' included in
+CPPFLAGS.
+For example:
+
+  CPPFLAGS="-DPPL_ARM_CAN_CONTROL_FPU=1" .../configure ...

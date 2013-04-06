@@ -1,0 +1,121 @@
+% Copyright (C) 2001-2010 Roberto Bagnara <bagnara@cs.unipr.it>
+% Copyright (C) 2010-2011 BUGSENG srl (http://bugseng.com)
+%
+% This document describes the Parma Watchdog Library (PWL).
+%
+% Permission is granted to copy, distribute and/or modify this document
+% under the terms of the GNU Free Documentation License, Version 1.2
+% or any later version published by the Free Software Foundation;
+% with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+% The license is included, in various formats, in the `doc' subdirectory
+% of each distribution of the PWL in files called `fdl.*'.
+%
+% The PWL is free software; you can redistribute it and/or modify it
+% under the terms of the GNU General Public License as published by the
+% Free Software Foundation; either version 3 of the License, or (at your
+% option) any later version.  The license is included, in various
+% formats, in the `doc' subdirectory of each distribution of the PWL in
+% files are called `gpl.*'.
+%
+% The PWL is distributed in the hope that it will be useful, but WITHOUT
+% ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+% FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+% for more details.
+%
+% For the most up-to-date information see the Parma Watchdog Library
+% site: http://www.cs.unipr.it/pwl/ .
+
+\documentclass[a4paper]{article}
+\nonstopmode
+\usepackage{a4wide}
+\usepackage{makeidx}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{alltt}
+\usepackage{doxygen}
+\usepackage{times}
+\ifx\pdfoutput\undefined
+\usepackage[ps2pdf,
+            pagebackref=true,
+            colorlinks=true,
+            linkcolor=blue
+           ]{hyperref}
+\usepackage{pspicture}
+\else
+\usepackage[pdftex,
+            pagebackref=true,
+            colorlinks=true,
+            linkcolor=blue
+           ]{hyperref}
+\fi
+\usepackage{pwl}
+\makeindex
+\setcounter{tocdepth}{1}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\rfoot[\fancyplain{}{\scriptsize The Parma Watchdog Library User's Manual (version $projectnumber). See \url{http://www.cs.unipr.it/pwl/} for more information.}]{}
+\lfoot[]{\fancyplain{}{\scriptsize The Parma Watchdog Library User's Manual (version $projectnumber). See \url{http://www.cs.unipr.it/pwl/} for more information.}}
+
+\begin{document}
+\title{
+The Parma Watchdog Library \\
+User's Manual\thanks{This work
+  has been partly supported by:
+  University of Parma's FIL scientific research project (ex 60\%)
+    ``Pure and Applied Mathematics'';
+  MURST project
+    ``Automatic Program Certification by Abstract Interpretation'';
+  MURST project
+    ``Abstract Interpretation, Type Systems and Control-Flow Analysis'';
+  MURST project
+    ``Automatic Aggregate- and Number-Reasoning for Computing: from
+      Decision Algorithms to Constraint Programming with Multisets,
+      Sets, and Maps'';
+  MURST project
+    ``Constraint Based Verification of Reactive Systems'';
+  MURST project
+    ``Abstract Interpretation: Design and Applications''.
+  } \\
+(version $projectnumber)
+}
+\author{
+Roberto Bagnara\thanks{bagnara@cs.unipr.it,
+  Department of Mathematics, University of Parma, Italy.}
+}
+\maketitle
+
+\newpage
+Copyright \copyright\ 2001--2010 Roberto Bagnara (bagnara@cs.unipr.it).
+
+This document describes the Parma Watchdog Library (PWL).
+
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.2
+or any later version published by the
+\href{http://www.fsf.org}{Free Software Foundation};
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled
+``\hyperlink{GFDL_GFDL}{GNU Free Documentation License}''.
+
+The PWL is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+\href{http://www.fsf.org}{Free Software Foundation}; either version 3
+of the License, or (at your option) any later version.
+A copy of the license is included in the section entitled
+``\hyperlink{GPL_GPL}{GNU GENERAL PUBLIC LICENSE}''.
+
+The PWL is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+For the most up-to-date information see the Parma Watchdog Library
+site:
+\begin{center}
+\href{http://www.cs.unipr.it/pwl/}{\tt http://www.cs.unipr.it/pwl/}
+\end{center}
+
+\pagenumbering{roman}
+\tableofcontents
+\pagenumbering{arabic}
