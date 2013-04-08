@@ -1,6 +1,5 @@
 /* elfcomm.c -- common code for ELF format file.
-   Copyright 2010
-   Free Software Foundation, Inc.
+   Copyright 2010-2013 Free Software Foundation, Inc.
 
    Originally developed by Eric Youngdale <eric@andante.jic.com>
    Modifications by Nick Clifton <nickc@redhat.com>
@@ -36,6 +35,9 @@ error (const char *message, ...)
 {
   va_list args;
 
+  /* Try to keep error messages in sync with the program's normal output.  */
+  fflush (stdout);
+
   va_start (args, message);
   fprintf (stderr, _("%s: Error: "), program_name);
   vfprintf (stderr, message, args);
@@ -47,6 +49,9 @@ warn (const char *message, ...)
 {
   va_list args;
 
+  /* Try to keep warning messages in sync with the program's normal output.  */
+  fflush (stdout);
+  
   va_start (args, message);
   fprintf (stderr, _("%s: Warning: "), program_name);
   vfprintf (stderr, message, args);
@@ -586,6 +591,12 @@ get_archive_member_name (struct archive_info *arch,
       char *member_file_name;
       char *member_name;
 
+      if (arch->longnames == NULL || arch->longnames_size == 0)
+	{
+	  error (_("Archive member uses long names, but no longname table found\n"));
+	  return NULL;
+	}
+      
       arch->nested_member_origin = 0;
       k = j = strtoul (arch->arhdr.ar_name + 1, &endp, 10);
       if (arch->is_thin_archive && endp != NULL && * endp == ':')
@@ -684,12 +695,20 @@ make_qualified_name (struct archive_info * arch,
 		     struct archive_info * nested_arch,
 		     const char *member_name)
 {
+  const char * error_name = _("<corrupt>");
   size_t len;
   char * name;
 
   len = strlen (arch->file_name) + strlen (member_name) + 3;
-  if (arch->is_thin_archive && arch->nested_member_origin != 0)
-    len += strlen (nested_arch->file_name) + 2;
+  if (arch->is_thin_archive
+      && arch->nested_member_origin != 0)
+    {
+      /* PR 15140: Allow for corrupt thin archives.  */
+      if (nested_arch->file_name)
+	len += strlen (nested_arch->file_name) + 2;
+      else
+	len += strlen (error_name) + 2;
+    }
 
   name = (char *) malloc (len);
   if (name == NULL)
@@ -698,9 +717,16 @@ make_qualified_name (struct archive_info * arch,
       return NULL;
     }
 
-  if (arch->is_thin_archive && arch->nested_member_origin != 0)
-    snprintf (name, len, "%s[%s(%s)]", arch->file_name,
-	      nested_arch->file_name, member_name);
+  if (arch->is_thin_archive
+      && arch->nested_member_origin != 0)
+    {
+      if (nested_arch->file_name)
+	snprintf (name, len, "%s[%s(%s)]", arch->file_name,
+		  nested_arch->file_name, member_name);
+      else
+	snprintf (name, len, "%s[%s(%s)]", arch->file_name,
+		  error_name, member_name);	
+    }
   else if (arch->is_thin_archive)
     snprintf (name, len, "%s[%s]", arch->file_name, member_name);
   else

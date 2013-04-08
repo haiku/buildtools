@@ -570,7 +570,7 @@ elfNN_ia64_relax_section (bfd *abfd, asection *sec,
 	     .plt section.  After the first relaxation pass, linker may
 	     increase the gap between the .plt and .text sections up
 	     to 32byte.  We assume linker will always insert 32byte
-	     between the .plt and .text sections after the the first
+	     between the .plt and .text sections after the first
 	     relaxation pass.  */
 	  if (tsec == ia64_info->root.splt)
 	    offset = -0x1000000 + 32;
@@ -1094,7 +1094,7 @@ elfNN_ia64_modify_segment_map (bfd *abfd,
   s = bfd_get_section_by_name (abfd, ELF_STRING_ia64_archext);
   if (s && (s->flags & SEC_LOAD))
     {
-      for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+      for (m = elf_seg_map (abfd); m != NULL; m = m->next)
 	if (m->p_type == PT_IA_64_ARCHEXT)
 	  break;
       if (m == NULL)
@@ -1109,7 +1109,7 @@ elfNN_ia64_modify_segment_map (bfd *abfd,
 	  m->sections[0] = s;
 
 	  /* We want to put it after the PHDR and INTERP segments.  */
-	  pm = &elf_tdata (abfd)->segment_map;
+	  pm = &elf_seg_map (abfd);
 	  while (*pm != NULL
 		 && ((*pm)->p_type == PT_PHDR
 		     || (*pm)->p_type == PT_INTERP))
@@ -1129,7 +1129,7 @@ elfNN_ia64_modify_segment_map (bfd *abfd,
 
       if (s && (s->flags & SEC_LOAD))
 	{
-	  for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+	  for (m = elf_seg_map (abfd); m != NULL; m = m->next)
 	    if (m->p_type == PT_IA_64_UNWIND)
 	      {
 		int i;
@@ -1158,7 +1158,7 @@ elfNN_ia64_modify_segment_map (bfd *abfd,
 	      m->next = NULL;
 
 	      /* We want to put it last.  */
-	      pm = &elf_tdata (abfd)->segment_map;
+	      pm = &elf_seg_map (abfd);
 	      while (*pm != NULL)
 		pm = &(*pm)->next;
 	      *pm = m;
@@ -1181,7 +1181,7 @@ elfNN_ia64_modify_program_headers (bfd *abfd,
   struct elf_segment_map *m;
   Elf_Internal_Phdr *p;
 
-  for (p = tdata->phdr, m = tdata->segment_map; m != NULL; m = m->next, p++)
+  for (p = tdata->phdr, m = elf_seg_map (abfd); m != NULL; m = m->next, p++)
     if (m->p_type == PT_LOAD)
       {
 	int i;
@@ -1463,7 +1463,7 @@ elfNN_ia64_hash_table_free (struct bfd_link_hash_table *hash)
     objalloc_free ((struct objalloc *) ia64_info->loc_hash_memory);
   elf_link_hash_traverse (&ia64_info->root,
 			  elfNN_ia64_global_dyn_info_free, NULL);
-  _bfd_generic_link_hash_table_free (hash);
+  _bfd_elf_link_hash_table_free (hash);
 }
 
 /* Traverse both local and global hash tables.  */
@@ -2352,6 +2352,9 @@ elfNN_ia64_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
 
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	  h->ref_regular = 1;
 	}
       else
@@ -4586,7 +4589,7 @@ elfNN_ia64_finish_dynamic_symbol (bfd *output_bfd,
     }
 
   /* Mark some specially defined symbols as absolute.  */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == ia64_info->root.hdynamic
       || h == ia64_info->root.hgot
       || h == ia64_info->root.hplt)
     sym->st_shndx = SHN_ABS;
@@ -4808,7 +4811,9 @@ elfNN_ia64_print_private_bfd_data (bfd *abfd, void * ptr)
 }
 
 static enum elf_reloc_type_class
-elfNN_ia64_reloc_type_class (const Elf_Internal_Rela *rela)
+elfNN_ia64_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			     const asection *rel_sec ATTRIBUTE_UNUSED,
+			     const Elf_Internal_Rela *rela)
 {
   switch ((int) ELFNN_R_TYPE (rela->r_info))
     {

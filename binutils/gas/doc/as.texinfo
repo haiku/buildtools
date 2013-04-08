@@ -328,7 +328,7 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 @ifset I80386
 
 @emph{Target i386 options:}
-   [@b{--32}|@b{--n32}|@b{--64}] [@b{-n}]
+   [@b{--32}|@b{--x32}|@b{--64}] [@b{-n}]
    [@b{-march}=@var{CPU}[+@var{EXTENSION}@dots{}]] [@b{-mtune}=@var{CPU}]
 @end ifset
 @ifset I960
@@ -387,6 +387,11 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-jsri2bsr}] [@b{-sifilter}] [@b{-relax}]
    [@b{-mcpu=[210|340]}]
 @end ifset
+@ifset METAG
+
+@emph{Target Meta options:}
+   [@b{-mcpu=@var{cpu}}] [@b{-mfpu=@var{cpu}}] [@b{-mdsp=@var{cpu}}]
+@end ifset
 @ifset MICROBLAZE
 @emph{Target MICROBLAZE options:}
 @c MicroBlaze has no machine-dependent assembler options.
@@ -426,6 +431,12 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{--no-expand}] [@b{--no-merge-gregs}] [@b{-x}]
    [@b{--linker-allocated-gregs}]
 @end ifset
+@ifset NIOSII
+
+@emph{Target Nios II options:}
+   [@b{-relax-all}] [@b{-relax-section}] [@b{-no-relax}]
+   [@b{-EB}] [@b{-EL}]
+@end ifset
 @ifset PDP11
 
 @emph{Target PDP11 options:}
@@ -445,9 +456,9 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mpwrx}|@b{-mpwr2}|@b{-mpwr}|@b{-m601}|@b{-mppc}|@b{-mppc32}|@b{-m603}|@b{-m604}|@b{-m403}|@b{-m405}|
     @b{-m440}|@b{-m464}|@b{-m476}|@b{-m7400}|@b{-m7410}|@b{-m7450}|@b{-m7455}|@b{-m750cl}|@b{-mppc64}|
     @b{-m620}|@b{-me500}|@b{-e500x2}|@b{-me500mc}|@b{-me500mc64}|@b{-me5500}|@b{-me6500}|@b{-mppc64bridge}|
-    @b{-mbooke}|@b{-mpower4}|@b{-mpr4}|@b{-mpower5}|@b{-mpwr5}|@b{-mpwr5x}|@b{-mpower6}|@b{-mpwr6}|
-    @b{-mpower7}|@b{-mpw7}|@b{-ma2}|@b{-mcell}|@b{-mspe}|@b{-mtitan}|@b{-me300}|@b{-mcom}]
-   [@b{-many}] [@b{-maltivec}|@b{-mvsx}]
+    @b{-mbooke}|@b{-mpower4}|@b{-mpwr4}|@b{-mpower5}|@b{-mpwr5}|@b{-mpwr5x}|@b{-mpower6}|@b{-mpwr6}|
+    @b{-mpower7}|@b{-mpwr7}|@b{-mpower8}|@b{-mpwr8}|@b{-ma2}|@b{-mcell}|@b{-mspe}|@b{-mtitan}|@b{-me300}|@b{-mcom}]
+   [@b{-many}] [@b{-maltivec}|@b{-mvsx}|@b{-mhtm}|@b{-mvle}]
    [@b{-mregnames}|@b{-mno-regnames}]
    [@b{-mrelocatable}|@b{-mrelocatable-lib}|@b{-K PIC}] [@b{-memb}]
    [@b{-mlittle}|@b{-mlittle-endian}|@b{-le}|@b{-mbig}|@b{-mbig-endian}|@b{-be}]
@@ -458,8 +469,13 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 
 @emph{Target RX options:}
    [@b{-mlittle-endian}|@b{-mbig-endian}]
-   [@b{-m32bit-ints}|@b{-m16bit-ints}]
    [@b{-m32bit-doubles}|@b{-m64bit-doubles}]
+   [@b{-muse-conventional-section-names}]
+   [@b{-msmall-data-limit}]
+   [@b{-mpid}]
+   [@b{-mrelax}]
+   [@b{-mint-register=@var{number}}]
+   [@b{-mgcc-abi}|@b{-mrx-abi}]
 @end ifset
 @ifset S390
 
@@ -893,6 +909,25 @@ an Epiphany processor.
 
 @end ifset
 
+@ifset H8300
+
+@ifclear man
+@xref{H8/300 Options}, for the options available when @value{AS} is configured
+for an H8/300 processor.
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for an H8/300
+processor.
+@c man end
+@c man begin INCLUDE
+@include c-h8300.texi
+@c ended inside the included file
+@end ifset
+
+@end ifset
+
 @ifset I80386
 
 @ifclear man
@@ -1016,6 +1051,24 @@ The target machine does (or does not) have a memory-management
 unit coprocessor.  The default is to assume an MMU for 68020 and up.
 
 @end table
+@end ifset
+
+@ifset NIOSII
+
+@ifclear man
+@xref{Nios II Options}, for the options available when @value{AS} is configured
+for an Altera Nios II processor.
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for an
+Altera Nios II processor.
+@c man end
+@c man begin INCLUDE
+@include c-nios2.texi
+@c ended inside the included file
+@end ifset
 @end ifset
 
 @ifset PDP11
@@ -1367,7 +1420,28 @@ Assemble for a little endian target.
 
 @end table
 @end ifset
+@c man end
 
+@ifset METAG
+
+@ifclear man
+@xref{Meta Options}, for the options available when @value{AS} is configured
+for a Meta processor.
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for a
+Meta processor.
+@c man end
+@c man begin INCLUDE
+@include c-metag.texi
+@c ended inside the included file
+@end ifset
+
+@end ifset
+
+@c man begin OPTIONS
 @ifset MMIX
 See the info pages for documentation of the MMIX-specific options.
 @end ifset
@@ -1411,7 +1485,8 @@ Select the architecture mode, either the Enterprise System
 Architecture (esa) or the z/Architecture mode (zarch).
 @item -march=@var{processor}
 Specify which s390 processor variant is the target, @samp{g6}, @samp{g6},
-@samp{z900}, @samp{z990}, @samp{z9-109}, @samp{z9-ec}, or @samp{z10}.
+@samp{z900}, @samp{z990}, @samp{z9-109}, @samp{z9-ec}, @samp{z10},
+@samp{z196}, or @samp{zEC12}.
 @item -mregnames
 @itemx -mno-regnames
 Allow or disallow symbolic names for registers.
@@ -5952,6 +6027,8 @@ section is not loaded
 writable section
 @item d
 data section
+@item e
+exclude section from linking
 @item r
 read-only section
 @item x
@@ -7010,6 +7087,9 @@ subject, see the hardware manufacturer's manual.
 @ifset M68HC11
 * M68HC11-Dependent::           M68HC11 and 68HC12 Dependent Features
 @end ifset
+@ifset METAG
+* Meta-Dependent ::             Meta Dependent Features
+@end ifset
 @ifset MICROBLAZE
 * MicroBlaze-Dependent::	MICROBLAZE Dependent Features
 @end ifset
@@ -7021,6 +7101,9 @@ subject, see the hardware manufacturer's manual.
 @end ifset
 @ifset MSP430
 * MSP430-Dependent::		MSP430 Dependent Features
+@end ifset
+@ifset NIOSII
+* NiosII-Dependent::            Altera Nios II Dependent Features
 @end ifset
 @ifset NS32K
 * NS32K-Dependent::		NS32K Dependent Features
@@ -7213,6 +7296,10 @@ family.
 @include c-m68hc11.texi
 @end ifset
 
+@ifset METAG
+@include c-metag.texi
+@end ifset
+
 @ifset MICROBLAZE
 @include c-microblaze.texi
 @end ifset
@@ -7227,6 +7314,10 @@ family.
 
 @ifset MSP430
 @include c-msp430.texi
+@end ifset
+
+@ifset NIOSII
+@include c-nios2.texi
 @end ifset
 
 @ifset NS32K
@@ -7529,8 +7620,8 @@ things without first using the debugger to find the facts.
 If you have contributed to GAS and your name isn't listed here,
 it is not meant as a slight.  We just don't know about it.  Send mail to the
 maintainer, and we'll correct the situation.  Currently
-@c (January 1994),
-the maintainer is Ken Raeburn (email address @code{raeburn@@cygnus.com}).
+@c (October 2012),
+the maintainer is Nick Clifton (email address @code{nickc@@redhat.com}).
 
 Dean Elsner wrote the original @sc{gnu} assembler for the VAX.@footnote{Any
 more details?}

@@ -120,6 +120,8 @@ enum
   CpuTBM,
   /* MOVBE Instruction support required */
   CpuMovbe,
+  /* CMPXCHG16B instruction support required.  */
+  CpuCX16,
   /* EPT Instructions required */
   CpuEPT,
   /* RDTSCP Instruction support required */
@@ -150,6 +152,8 @@ enum
   CpuADX,
   /* Supports prefetchw and prefetch instructions.  */
   CpuPRFCHW,
+  /* SMAP instructions required.  */
+  CpuSMAP,
   /* 64bit support required  */
   Cpu64,
   /* Not supported in the 64bit mode  */
@@ -217,6 +221,7 @@ typedef union i386_cpu_flags
       unsigned int cpubmi:1;
       unsigned int cputbm:1;
       unsigned int cpumovbe:1;
+      unsigned int cpucx16:1;
       unsigned int cpuept:1;
       unsigned int cpurdtscp:1;
       unsigned int cpufsgsbase:1;
@@ -232,6 +237,7 @@ typedef union i386_cpu_flags
       unsigned int cpurdseed:1;
       unsigned int cpuadx:1;
       unsigned int cpuprfchw:1;
+      unsigned int cpusmap:1;
       unsigned int cpu64:1;
       unsigned int cpuno64:1;
 #ifdef CpuUnused

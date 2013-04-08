@@ -1,4 +1,21 @@
 # gas target specific configuration file.  This is a -*- sh -*- file.
+#
+#   Copyright 2012 Free Software Foundation
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+#
 
 # This is invoked by configure.  Putting it in a separate shell file
 # lets us skip running autoconf when modifying target specific
@@ -57,7 +74,8 @@ case ${cpu} in
   m6811|m6812|m68hc12)	cpu_type=m68hc11 ;;
   m683??)		cpu_type=m68k ;;
   mep)			cpu_type=mep endian=little ;;
-  microblaze*)		cpu_type=microblaze ;;
+  microblazeel*)	cpu_type=microblaze endian=little;;
+  microblaze*)		cpu_type=microblaze endian=big;;
   mips*el)		cpu_type=mips endian=little ;;
   mips*)		cpu_type=mips endian=big ;;
   mt)			cpu_type=mt endian=big ;;
@@ -288,6 +306,9 @@ case ${generic_target} in
 
   mep-*-elf)				fmt=elf ;;
 
+  metag-*-elf)				fmt=elf ;;
+  metag-*-linux*)			fmt=elf em=linux ;;
+
   mcore-*-elf)				fmt=elf ;;
   mcore-*-pe)				fmt=coff em=pe bfd_gas=yes ;;
 
@@ -308,7 +329,7 @@ case ${generic_target} in
   mips*-*-freebsd* | mips*-*-kfreebsd*-gnu)
 					fmt=elf em=freebsd ;;
   mips-*-sysv4*MP* | mips-*-gnu*)	fmt=elf em=tmips ;;
-  mips*-sde-elf*)			fmt=elf em=tmips ;;
+  mips*-sde-elf* | mips*-mti-elf*)	fmt=elf em=tmips ;;
   mips-*-sysv*)				fmt=ecoff ;;
   mips-*-elf* | mips-*-rtems*)		fmt=elf ;;
   mips-*-netbsd*)			fmt=elf em=tmips ;;
@@ -328,6 +349,9 @@ case ${generic_target} in
   mt-*-elf)				fmt=elf bfd_gas=yes ;;
 
   msp430-*-*)				fmt=elf ;;
+
+  nios2-*-rtems*)			fmt=elf ;;
+  nios2*-linux*)			fmt=elf em=linux ;;
 
   ns32k-pc532-mach*)			fmt=aout em=pc532mach ;;
   ns32k-pc532-ux*)			fmt=aout em=pc532mach ;;

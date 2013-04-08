@@ -335,10 +335,10 @@ class Dwarf_range_list
 class Dwarf_ranges_table
 {
  public:
-  Dwarf_ranges_table()
-    : ranges_shndx_(0), ranges_buffer_(NULL), ranges_buffer_end_(NULL),
-      owns_ranges_buffer_(false), ranges_reloc_mapper_(NULL),
-      output_section_offset_(0)
+  Dwarf_ranges_table(Dwarf_info_reader* dwinfo)
+    : dwinfo_(dwinfo), ranges_shndx_(0), ranges_buffer_(NULL),
+      ranges_buffer_end_(NULL), owns_ranges_buffer_(false),
+      ranges_reloc_mapper_(NULL), output_section_offset_(0)
   { }
 
   ~Dwarf_ranges_table()
@@ -366,6 +366,8 @@ class Dwarf_ranges_table
 		  off_t ranges_offset);
 
  private:
+  // The Dwarf_info_reader, for reading data.
+  Dwarf_info_reader* dwinfo_;
   // The section index of the ranges table.
   unsigned int ranges_shndx_;
   // The buffer containing the .debug_ranges section.
@@ -388,8 +390,8 @@ class Dwarf_ranges_table
 class Dwarf_pubnames_table
 {
  public:
-  Dwarf_pubnames_table(bool is_pubtypes)
-    : buffer_(NULL), buffer_end_(NULL), owns_buffer_(false),
+  Dwarf_pubnames_table(Dwarf_info_reader* dwinfo, bool is_pubtypes)
+    : dwinfo_(dwinfo), buffer_(NULL), buffer_end_(NULL), owns_buffer_(false),
       offset_size_(0), pinfo_(NULL), is_pubtypes_(is_pubtypes),
       output_section_offset_(0)
   { }
@@ -413,6 +415,8 @@ class Dwarf_pubnames_table
   next_name();
 
  private:
+  // The Dwarf_info_reader, for reading data.
+  Dwarf_info_reader* dwinfo_;
   // The buffer containing the .debug_ranges section.
   const unsigned char* buffer_;
   const unsigned char* buffer_end_;
@@ -662,12 +666,12 @@ class Dwarf_info_reader
 		    unsigned int reloc_type)
     : is_type_unit_(is_type_unit), object_(object), symtab_(symtab),
       symtab_size_(symtab_size), shndx_(shndx), reloc_shndx_(reloc_shndx),
-      reloc_type_(reloc_type), string_shndx_(0), buffer_(NULL),
-      buffer_end_(NULL), cu_offset_(0), cu_length_(0), offset_size_(0),
-      address_size_(0), cu_version_(0), type_signature_(0), type_offset_(0),
-      abbrev_table_(), reloc_mapper_(NULL), string_buffer_(NULL),
-      string_buffer_end_(NULL), owns_string_buffer_(false),
-      string_output_section_offset_(0)
+      reloc_type_(reloc_type), abbrev_shndx_(0), string_shndx_(0),
+      buffer_(NULL), buffer_end_(NULL), cu_offset_(0), cu_length_(0),
+      offset_size_(0), address_size_(0), cu_version_(0), type_signature_(0),
+      type_offset_(0), abbrev_table_(), ranges_table_(this),
+      reloc_mapper_(NULL), string_buffer_(NULL), string_buffer_end_(NULL),
+      owns_string_buffer_(false), string_output_section_offset_(0)
   { }
 
   virtual
@@ -700,6 +704,16 @@ class Dwarf_info_reader
     return NULL;
   }
 
+  // Read a possibly unaligned integer of SIZE.
+  template <int valsize>
+  inline typename elfcpp::Valtype_base<valsize>::Valtype
+  read_from_pointer(const unsigned char* source);
+
+  // Read a possibly unaligned integer of SIZE.  Update SOURCE after read.
+  template <int valsize>
+  inline typename elfcpp::Valtype_base<valsize>::Valtype
+  read_from_pointer(const unsigned char** source);
+
   // Look for a relocation at offset ATTR_OFF in the dwarf info,
   // and return the section index and offset of the target.
   unsigned int
@@ -719,6 +733,13 @@ class Dwarf_info_reader
   address_size() const
   { return this->address_size_; }
 
+  // Set the section index of the .debug_abbrev section.
+  // We use this if there are no relocations for the .debug_info section.
+  // If not set, the code parse() routine will search for the section by name.
+  void
+  set_abbrev_shndx(unsigned int abbrev_shndx)
+  { this->abbrev_shndx_ = abbrev_shndx; }
+
  protected:
   // Begin parsing the debug info.  This calls visit_compilation_unit()
   // or visit_type_unit() for each compilation or type unit found in the
@@ -737,8 +758,8 @@ class Dwarf_info_reader
 
   // Visit a type unit.
   virtual void
-  visit_type_unit(off_t tu_offset, off_t type_offset, uint64_t signature,
-		  Dwarf_die* root_die);
+  visit_type_unit(off_t tu_offset, off_t tu_length, off_t type_offset,
+		  uint64_t signature, Dwarf_die* root_die);
 
   // Read the range table.
   Dwarf_range_list*
@@ -778,9 +799,21 @@ class Dwarf_info_reader
   { this->reloc_mapper_->reset(checkpoint); }
 
  private:
+  // Print a warning about a corrupt debug section.
+  void
+  warn_corrupt_debug_section() const;
+
   // Check that P is within the bounds of the current section.
   bool
-  check_buffer(const unsigned char* p) const;
+  check_buffer(const unsigned char* p) const
+  {
+    if (p > this->buffer_ + this->cu_offset_ + this->cu_length_)
+      {
+	this->warn_corrupt_debug_section();
+	return false;
+      }
+    return true;
+  }
 
   // Read the DWARF string table.
   bool
@@ -811,6 +844,8 @@ class Dwarf_info_reader
   unsigned int reloc_shndx_;
   // Type of the relocation section (SHT_REL or SHT_RELA).
   unsigned int reloc_type_;
+  // Index of the .debug_abbrev section (0 if not known).
+  unsigned int abbrev_shndx_;
   // Index of the .debug_str section.
   unsigned int string_shndx_;
   // The buffer for the debug info.

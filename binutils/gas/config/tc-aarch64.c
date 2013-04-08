@@ -2354,6 +2354,12 @@ static struct reloc_table_entry reloc_table[] = {
    BFD_RELOC_AARCH64_MOVW_G3,
    0,
    0},
+  /* Get to the GOT entry for a symbol.  */
+  {"got_prel19", 0,
+   0,
+   0,
+   0,
+   BFD_RELOC_AARCH64_GOT_LD_PREL19},
   /* Get to the page containing GOT entry for a symbol.  */
   {"got", 1,
    BFD_RELOC_AARCH64_ADR_GOT_PAGE,
@@ -2872,14 +2878,53 @@ parse_address_main (char **str, aarch64_opnd_info *operand, int reloc,
       operand->addr.pcrel = 1;
       operand->addr.preind = 1;
 
-      if (skip_past_char (&p, '='))
-	/* =immediate; need to generate the literal in the liternal pool.  */
-	inst.gen_lit_pool = 1;
-
-      if (! my_get_expression (exp, &p, GE_NO_PREFIX, 1))
+      /* #:<reloc_op>:<symbol>  */
+      skip_past_char (&p, '#');
+      if (reloc && skip_past_char (&p, ':'))
 	{
-	  set_syntax_error (_("invalid address"));
-	  return FALSE;
+	  struct reloc_table_entry *entry;
+
+	  /* Try to parse a relocation modifier.  Anything else is
+	     an error.  */
+	  entry = find_reloc_table_entry (&p);
+	  if (! entry)
+	    {
+	      set_syntax_error (_("unknown relocation modifier"));
+	      return FALSE;
+	    }
+
+	  if (entry->ldst_type == 0)
+	    {
+	      set_syntax_error
+		(_("this relocation modifier is not allowed on this "
+		   "instruction"));
+	      return FALSE;
+	    }
+
+	  /* #:<reloc_op>:  */
+	  if (! my_get_expression (exp, &p, GE_NO_PREFIX, 1))
+	    {
+	      set_syntax_error (_("invalid relocation expression"));
+	      return FALSE;
+	    }
+
+	  /* #:<reloc_op>:<expr>  */
+	  /* Record the load/store relocation type.  */
+	  inst.reloc.type = entry->ldst_type;
+	  inst.reloc.pc_rel = entry->pc_rel;
+	}
+      else
+	{
+
+	  if (skip_past_char (&p, '='))
+	    /* =immediate; need to generate the literal in the literal pool. */
+	    inst.gen_lit_pool = 1;
+
+	  if (!my_get_expression (exp, &p, GE_NO_PREFIX, 1))
+	    {
+	      set_syntax_error (_("invalid address"));
+	      return FALSE;
+	    }
 	}
 
       *str = p;
@@ -3243,10 +3288,14 @@ parse_sys_reg (char **str, struct hash_control *sys_regs, int imple_defined_p)
 	  unsigned int op0, op1, cn, cm, op2;
 	  if (sscanf (buf, "s%u_%u_c%u_c%u_%u", &op0, &op1, &cn, &cm, &op2) != 5)
 	    return PARSE_FAIL;
-	  /* Register access is encoded as follows:
+	  /* The architecture specifies the encoding space for implementation
+	     defined registers as:
 	     op0  op1  CRn   CRm   op2
-	     11   xxx  1x11  xxxx  xxx.  */
-	  if (op0 != 3 || op1 > 7 || (cn | 0x4) != 0xf || cm > 15 || op2 > 7)
+	     11   xxx  1x11  xxxx  xxx
+	     For convenience GAS accepts a wider encoding space, as follows:
+	     op0  op1  CRn   CRm   op2
+	     11   xxx  xxxx  xxxx  xxx  */
+	  if (op0 != 3 || op1 > 7 || cn > 15 || cm > 15 || op2 > 7)
 	    return PARSE_FAIL;
 	  value = (op0 << 14) | (op1 << 11) | (cn << 7) | (cm << 3) | op2;
 	}
@@ -3972,9 +4021,14 @@ output_operand_error_record (const operand_error_record *record, char *str)
       break;
 
     case AARCH64_OPDE_OUT_OF_RANGE:
-      as_bad (_("%s out of range %d to %d at operand %d -- `%s'"),
-	      detail->error ? detail->error : _("immediate value"),
-	      detail->data[0], detail->data[1], detail->index + 1, str);
+      if (detail->data[0] != detail->data[1])
+	as_bad (_("%s out of range %d to %d at operand %d -- `%s'"),
+		detail->error ? detail->error : _("immediate value"),
+		detail->data[0], detail->data[1], detail->index + 1, str);
+      else
+	as_bad (_("%s expected to be %d at operand %d -- `%s'"),
+		detail->error ? detail->error : _("immediate value"),
+		detail->data[0], detail->index + 1, str);
       break;
 
     case AARCH64_OPDE_REG_LIST:
@@ -4948,37 +5002,39 @@ parse_operands (char *str, const aarch64_opcode *opcode)
 	  else
 	    {
 	      info->imm.value = 0;
-	      switch (opcode->iclass)
-		{
-		case compbranch:
-		case condbranch:
-		  /* e.g. CBZ or B.COND  */
-		  gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL19);
-		  inst.reloc.type = BFD_RELOC_AARCH64_BRANCH19;
-		  break;
-		case testbranch:
-		  /* e.g. TBZ  */
-		  gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL14);
-		  inst.reloc.type = BFD_RELOC_AARCH64_TSTBR14;
-		  break;
-		case branch_imm:
-		  /* e.g. B or BL  */
-		  gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL26);
-		  inst.reloc.type = (opcode->op == OP_BL)
-		    ? BFD_RELOC_AARCH64_CALL26 : BFD_RELOC_AARCH64_JUMP26;
-		  break;
-		case loadlit:
-		  gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL19);
-		  inst.reloc.type = BFD_RELOC_AARCH64_LD_LO19_PCREL;
-		  break;
-		case pcreladdr:
-		  gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL21);
-		  inst.reloc.type = BFD_RELOC_AARCH64_ADR_LO21_PCREL;
-		  break;
-		default:
-		  gas_assert (0);
-		  abort ();
-		}
+	      if (inst.reloc.type == BFD_RELOC_UNUSED)
+		switch (opcode->iclass)
+		  {
+		  case compbranch:
+		  case condbranch:
+		    /* e.g. CBZ or B.COND  */
+		    gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL19);
+		    inst.reloc.type = BFD_RELOC_AARCH64_BRANCH19;
+		    break;
+		  case testbranch:
+		    /* e.g. TBZ  */
+		    gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL14);
+		    inst.reloc.type = BFD_RELOC_AARCH64_TSTBR14;
+		    break;
+		  case branch_imm:
+		    /* e.g. B or BL  */
+		    gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL26);
+		    inst.reloc.type =
+		      (opcode->op == OP_BL) ? BFD_RELOC_AARCH64_CALL26
+			 : BFD_RELOC_AARCH64_JUMP26;
+		    break;
+		  case loadlit:
+		    gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL19);
+		    inst.reloc.type = BFD_RELOC_AARCH64_LD_LO19_PCREL;
+		    break;
+		  case pcreladdr:
+		    gas_assert (operands[i] == AARCH64_OPND_ADDR_PCREL21);
+		    inst.reloc.type = BFD_RELOC_AARCH64_ADR_LO21_PCREL;
+		    break;
+		  default:
+		    gas_assert (0);
+		    abort ();
+		  }
 	      inst.reloc.pc_rel = 1;
 	    }
 	  break;
@@ -5304,25 +5360,6 @@ programmer_friendly_fixup (aarch64_instruction *instr)
 				    _("literal pool insertion failed"));
 	      return FALSE;
 	    }
-	}
-      break;
-    case asimdimm:
-      /* Allow MOVI V0.16B, 97, LSL 0, although the preferred architectural
-	 syntax requires that the LSL shifter can only be used when the
-	 destination register has the shape of 4H, 8H, 2S or 4S.  */
-      if (op == OP_V_MOVI_B && operands[1].shifter.kind == AARCH64_MOD_LSL
-	  && (operands[0].qualifier == AARCH64_OPND_QLF_V_8B
-	      || operands[0].qualifier == AARCH64_OPND_QLF_V_16B))
-	{
-	  if (operands[1].shifter.amount != 0)
-	    {
-	      record_operand_error (opcode, 1,
-				    AARCH64_OPDE_OTHER_ERROR,
-				    _("shift amount non-zero"));
-	      return FALSE;
-	    }
-	  operands[1].shifter.kind = AARCH64_MOD_NONE;
-	  operands[1].qualifier = AARCH64_OPND_QLF_NIL;
 	}
       break;
     case log_shift:
@@ -6480,6 +6517,7 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg)
     case BFD_RELOC_AARCH64_LDST32_LO12:
     case BFD_RELOC_AARCH64_LDST64_LO12:
     case BFD_RELOC_AARCH64_LDST128_LO12:
+    case BFD_RELOC_AARCH64_GOT_LD_PREL19:
     case BFD_RELOC_AARCH64_ADR_GOT_PAGE:
     case BFD_RELOC_AARCH64_LD64_GOT_LO12_NC:
       /* Should always be exported to object file, see
@@ -6637,6 +6675,7 @@ aarch64_force_relocation (struct fix *fixp)
     case BFD_RELOC_AARCH64_LDST32_LO12:
     case BFD_RELOC_AARCH64_LDST64_LO12:
     case BFD_RELOC_AARCH64_LDST128_LO12:
+    case BFD_RELOC_AARCH64_GOT_LD_PREL19:
       /* Always leave these relocations for the linker.  */
       return 1;
 
@@ -7012,6 +7051,8 @@ struct aarch64_cpu_option_table
    recognized by GCC.  */
 static const struct aarch64_cpu_option_table aarch64_cpus[] = {
   {"all", AARCH64_ANY, NULL},
+  {"cortex-a53",	AARCH64_ARCH_V8, "Cortex-A53"},
+  {"cortex-a57",	AARCH64_ARCH_V8, "Cortex-A57"},
   {"generic", AARCH64_ARCH_V8, NULL},
 
   /* These two are example CPUs supported in GCC, once we have real
@@ -7044,6 +7085,7 @@ struct aarch64_option_cpu_value_table
 };
 
 static const struct aarch64_option_cpu_value_table aarch64_features[] = {
+  {"crc",		AARCH64_FEATURE (AARCH64_FEATURE_CRC, 0)},
   {"crypto",		AARCH64_FEATURE (AARCH64_FEATURE_CRYPTO, 0)},
   {"fp",		AARCH64_FEATURE (AARCH64_FEATURE_FP, 0)},
   {"simd",		AARCH64_FEATURE (AARCH64_FEATURE_SIMD, 0)},

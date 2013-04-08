@@ -363,7 +363,7 @@ static void mmo_find_sec_w_addr (bfd *, asection *, void *);
 static void mmo_find_sec_w_addr_grow (bfd *, asection *, void *);
 static asection *mmo_make_section (bfd *, const char *);
 static void mmo_get_symbol_info (bfd *, asymbol *, symbol_info *);
-static void mmo_print_symbol (bfd *, void *, asymbol *, 
+static void mmo_print_symbol (bfd *, void *, asymbol *,
 			      bfd_print_symbol_type);
 static void mmo_init (void);
 static bfd_boolean mmo_mkobject (bfd *);
@@ -1536,6 +1536,7 @@ mmo_scan (bfd *abfd)
   long stab_loc = -1;
   char *file_names[256];
 
+  abfd->symcount = 0;
   memset (file_names, 0, sizeof (file_names));
 
   if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0)

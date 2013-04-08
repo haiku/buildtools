@@ -1,6 +1,6 @@
 /* MIPS-specific support for ELF
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013
    Free Software Foundation, Inc.
 
    Most of the information added by Ian Lance Taylor, Cygnus Support,
@@ -47,42 +47,35 @@
 
 #include "hashtab.h"
 
+/* Types of TLS GOT entry.  */
+enum mips_got_tls_type {
+  GOT_TLS_NONE,
+  GOT_TLS_GD,
+  GOT_TLS_LDM,
+  GOT_TLS_IE
+};
+
 /* This structure is used to hold information about one GOT entry.
-   There are three types of entry:
+   There are four types of entry:
 
-      (1) absolute addresses
-	    (abfd == NULL)
-      (2) SYMBOL + OFFSET addresses, where SYMBOL is local to an input bfd
-	    (abfd != NULL, symndx >= 0)
-      (3) SYMBOL addresses, where SYMBOL is not local to an input bfd
-	    (abfd != NULL, symndx == -1)
+      (1) an absolute address
+	    requires: abfd == NULL
+	    fields: d.address
 
-   Type (3) entries are treated differently for different types of GOT.
-   In the "master" GOT -- i.e.  the one that describes every GOT
-   reference needed in the link -- the mips_got_entry is keyed on both
-   the symbol and the input bfd that references it.  If it turns out
-   that we need multiple GOTs, we can then use this information to
-   create separate GOTs for each input bfd.
+      (2) a SYMBOL + OFFSET address, where SYMBOL is local to an input bfd
+	    requires: abfd != NULL, symndx >= 0, tls_type != GOT_TLS_LDM
+	    fields: abfd, symndx, d.addend, tls_type
 
-   However, we want each of these separate GOTs to have at most one
-   entry for a given symbol, so their type (3) entries are keyed only
-   on the symbol.  The input bfd given by the "abfd" field is somewhat
-   arbitrary in this case.
+      (3) a SYMBOL address, where SYMBOL is not local to an input bfd
+	    requires: abfd != NULL, symndx == -1
+	    fields: d.h, tls_type
 
-   This means that when there are multiple GOTs, each GOT has a unique
-   mips_got_entry for every symbol within it.  We can therefore use the
-   mips_got_entry fields (tls_type and gotidx) to track the symbol's
-   GOT index.
-
-   However, if it turns out that we need only a single GOT, we continue
-   to use the master GOT to describe it.  There may therefore be several
-   mips_got_entries for the same symbol, each with a different input bfd.
-   We want to make sure that each symbol gets a unique GOT entry, so when
-   there's a single GOT, we use the symbol's hash entry, not the
-   mips_got_entry fields, to track a symbol's GOT index.  */
+      (4) a TLS LDM slot
+	    requires: abfd != NULL, symndx == 0, tls_type == GOT_TLS_LDM
+	    fields: none; there's only one of these per GOT.  */
 struct mips_got_entry
 {
-  /* The input bfd in which the symbol is defined.  */
+  /* One input bfd that needs the GOT entry.  */
   bfd *abfd;
   /* The index of the symbol, as stored in the relocation r_info, if
      we have a local symbol; -1 otherwise.  */
@@ -95,23 +88,45 @@ struct mips_got_entry
        that should be added to the symbol value.  */
     bfd_vma addend;
     /* If abfd != NULL && symndx == -1, the hash table entry
-       corresponding to symbol in the GOT.  The symbol's entry
+       corresponding to a symbol in the GOT.  The symbol's entry
        is in the local area if h->global_got_area is GGA_NONE,
        otherwise it is in the global area.  */
     struct mips_elf_link_hash_entry *h;
   } d;
 
-  /* The TLS types included in this GOT entry (specifically, GD and
-     IE).  The GD and IE flags can be added as we encounter new
-     relocations.  LDM can also be set; it will always be alone, not
-     combined with any GD or IE flags.  An LDM GOT entry will be
-     a local symbol entry with r_symndx == 0.  */
+  /* The TLS type of this GOT entry.  An LDM GOT entry will be a local
+     symbol entry with r_symndx == 0.  */
   unsigned char tls_type;
+
+  /* True if we have filled in the GOT contents for a TLS entry,
+     and created the associated relocations.  */
+  unsigned char tls_initialized;
 
   /* The offset from the beginning of the .got section to the entry
      corresponding to this symbol+addend.  If it's a global symbol
      whose offset is yet to be decided, it's going to be -1.  */
   long gotidx;
+};
+
+/* This structure represents a GOT page reference from an input bfd.
+   Each instance represents a symbol + ADDEND, where the representation
+   of the symbol depends on whether it is local to the input bfd.
+   If it is, then SYMNDX >= 0, and the symbol has index SYMNDX in U.ABFD.
+   Otherwise, SYMNDX < 0 and U.H points to the symbol's hash table entry.
+
+   Page references with SYMNDX >= 0 always become page references
+   in the output.  Page references with SYMNDX < 0 only become page
+   references if the symbol binds locally; in other cases, the page
+   reference decays to a global GOT reference.  */
+struct mips_got_page_ref
+{
+  long symndx;
+  union
+  {
+    struct mips_elf_link_hash_entry *h;
+    bfd *abfd;
+  } u;
+  bfd_vma addend;
 };
 
 /* This structure describes a range of addends: [MIN_ADDEND, MAX_ADDEND].
@@ -125,13 +140,11 @@ struct mips_got_page_range
 };
 
 /* This structure describes the range of addends that are applied to page
-   relocations against a given symbol.  */
+   relocations against a given section.  */
 struct mips_got_page_entry
 {
-  /* The input bfd in which the symbol is defined.  */
-  bfd *abfd;
-  /* The index of the symbol, as stored in the relocation r_info.  */
-  long symndx;
+  /* The section that these entries are based on.  */
+  asection *sec;
   /* The ranges for this page entry.  */
   struct mips_got_page_range *ranges;
   /* The maximum number of page entries needed for RANGES.  */
@@ -142,9 +155,6 @@ struct mips_got_page_entry
 
 struct mips_got_info
 {
-  /* The global symbol in the GOT with the lowest index in the dynamic
-     symbol table.  */
-  struct elf_link_hash_entry *global_gotsym;
   /* The number of global .got entries.  */
   unsigned int global_gotno;
   /* The number of global .got entries that are in the GGA_RELOC_ONLY area.  */
@@ -158,40 +168,25 @@ struct mips_got_info
   unsigned int local_gotno;
   /* The maximum number of page entries needed.  */
   unsigned int page_gotno;
+  /* The number of relocations needed for the GOT entries.  */
+  unsigned int relocs;
   /* The number of local .got entries we have used.  */
   unsigned int assigned_gotno;
   /* A hash table holding members of the got.  */
   struct htab *got_entries;
+  /* A hash table holding mips_got_page_ref structures.  */
+  struct htab *got_page_refs;
   /* A hash table of mips_got_page_entry structures.  */
   struct htab *got_page_entries;
-  /* A hash table mapping input bfds to other mips_got_info.  NULL
-     unless multi-got was necessary.  */
-  struct htab *bfd2got;
   /* In multi-got links, a pointer to the next got (err, rather, most
      of the time, it points to the previous got).  */
   struct mips_got_info *next;
-  /* This is the GOT index of the TLS LDM entry for the GOT, MINUS_ONE
-     for none, or MINUS_TWO for not yet assigned.  This is needed
-     because a single-GOT link may have multiple hash table entries
-     for the LDM.  It does not get initialized in multi-GOT mode.  */
-  bfd_vma tls_ldm_offset;
 };
 
-/* Map an input bfd to a got in a multi-got link.  */
-
-struct mips_elf_bfd2got_hash
-{
-  bfd *bfd;
-  struct mips_got_info *g;
-};
-
-/* Structure passed when traversing the bfd2got hash table, used to
-   create and merge bfd's gots.  */
+/* Structure passed when merging bfds' gots.  */
 
 struct mips_elf_got_per_bfd_arg
 {
-  /* A hashtable that maps bfds to gots.  */
-  htab_t bfd2got;
   /* The output bfd.  */
   bfd *obfd;
   /* The link information.  */
@@ -215,23 +210,14 @@ struct mips_elf_got_per_bfd_arg
   unsigned int global_count;
 };
 
-/* Another structure used to pass arguments for got entries traversal.  */
+/* A structure used to pass information to htab_traverse callbacks
+   when laying out the GOT.  */
 
-struct mips_elf_set_global_got_offset_arg
+struct mips_elf_traverse_got_arg
 {
+  struct bfd_link_info *info;
   struct mips_got_info *g;
   int value;
-  unsigned int needed_relocs;
-  struct bfd_link_info *info;
-};
-
-/* A structure used to count TLS relocations or GOT entries, for GOT
-   entry or ELF symbol table traversal.  */
-
-struct mips_elf_count_tls_arg
-{
-  struct bfd_link_info *info;
-  unsigned int needed;
 };
 
 struct _mips_elf_section_data
@@ -362,22 +348,6 @@ struct mips_elf_link_hash_entry
      being called returns a floating point value.  */
   asection *call_fp_stub;
 
-#define GOT_NORMAL	0
-#define GOT_TLS_GD	1
-#define GOT_TLS_LDM	2
-#define GOT_TLS_IE	4
-#define GOT_TLS_OFFSET_DONE    0x40
-#define GOT_TLS_DONE    0x80
-  unsigned char tls_type;
-
-  /* This is only used in single-GOT mode; in multi-GOT mode there
-     is one mips_got_entry per GOT entry, so the offset is stored
-     there.  In single-GOT mode there may be many mips_got_entry
-     structures all referring to the same GOT slot.  It might be
-     possible to use root.got.offset instead, but that field is
-     overloaded already.  */
-  bfd_vma tls_got_offset;
-
   /* The highest GGA_* value that satisfies all references to this symbol.  */
   unsigned int global_got_area : 2;
 
@@ -420,11 +390,6 @@ struct mips_elf_link_hash_entry
 struct mips_elf_link_hash_table
 {
   struct elf_link_hash_table root;
-#if 0
-  /* We no longer use this.  */
-  /* String section indices for the dynamic section symbols.  */
-  bfd_size_type dynsym_sec_strindex[SIZEOF_MIPS_DYNSYM_SECNAMES];
-#endif
 
   /* The number of .rtproc entries.  */
   bfd_size_type procedure_count;
@@ -432,8 +397,8 @@ struct mips_elf_link_hash_table
   /* The size of the .compact_rel section (if SGI_COMPAT).  */
   bfd_size_type compact_rel_size;
 
-  /* This flag indicates that the value of DT_MIPS_RLD_MAP dynamic
-     entry is set to the address of __rld_obj_head as in IRIX5.  */
+  /* This flag indicates that the value of DT_MIPS_RLD_MAP dynamic entry
+     is set to the address of __rld_obj_head as in IRIX5 and IRIX6.  */
   bfd_boolean use_rld_obj_head;
 
   /* The  __rld_map or __rld_obj_head symbol. */
@@ -464,6 +429,10 @@ struct mips_elf_link_hash_table
 
   /* The master GOT information.  */
   struct mips_got_info *got_info;
+
+  /* The global symbol in the GOT with the lowest index in the dynamic
+     symbol table.  */
+  struct elf_link_hash_entry *global_gotsym;
 
   /* The size of the PLT header in bytes.  */
   bfd_vma plt_header_size;
@@ -496,6 +465,9 @@ struct mips_elf_link_hash_table
      The function returns the new section on success, otherwise it
      returns null.  */
   asection *(*add_stub_section) (const char *, asection *, asection *);
+
+  /* Small local sym cache.  */
+  struct sym_cache sym_cache;
 };
 
 /* Get the MIPS ELF linker hash table from a link_info structure.  */
@@ -514,6 +486,41 @@ struct mips_htab_traverse_info
   /* Starts off FALSE and is set to TRUE if the link should be aborted.  */
   bfd_boolean error;
 };
+
+/* MIPS ELF private object data.  */
+
+struct mips_elf_obj_tdata
+{
+  /* Generic ELF private object data.  */
+  struct elf_obj_tdata root;
+
+  /* Input BFD providing Tag_GNU_MIPS_ABI_FP attribute for output.  */
+  bfd *abi_fp_bfd;
+
+  /* The GOT requirements of input bfds.  */
+  struct mips_got_info *got;
+
+  /* Used by _bfd_mips_elf_find_nearest_line.  The structure could be
+     included directly in this one, but there's no point to wasting
+     the memory just for the infrequently called find_nearest_line.  */
+  struct mips_elf_find_line *find_line_info;
+
+  /* An array of stub sections indexed by symbol number.  */
+  asection **local_stubs;
+  asection **local_call_stubs;
+
+  /* The Irix 5 support uses two virtual sections, which represent
+     text/data symbols defined in dynamic objects.  */
+  asymbol *elf_data_symbol;
+  asymbol *elf_text_symbol;
+  asection *elf_data_section;
+  asection *elf_text_section;
+};
+
+/* Get MIPS ELF private object data from BFD's tdata.  */
+
+#define mips_elf_tdata(bfd) \
+  ((struct mips_elf_obj_tdata *) (bfd)->tdata.any)
 
 #define TLS_RELOC_P(r_type) \
   (r_type == R_MIPS_TLS_DTPMOD32		\
@@ -687,12 +694,8 @@ static bfd_boolean mips_elf_create_dynamic_relocation
   (bfd *, struct bfd_link_info *, const Elf_Internal_Rela *,
    struct mips_elf_link_hash_entry *, asection *, bfd_vma,
    bfd_vma *, asection *);
-static hashval_t mips_elf_got_entry_hash
-  (const void *);
 static bfd_vma mips_elf_adjust_gp
   (bfd *, struct mips_got_info *, bfd *);
-static struct mips_got_info *mips_elf_got_for_ibfd
-  (struct mips_got_info *, bfd *);
 
 /* This will be used when we sort the dynamic relocation records.  */
 static bfd *reldyn_sorting_bfd;
@@ -733,6 +736,10 @@ static bfd *reldyn_sorting_bfd;
 
 /* Nonzero if ABFD is using NewABI conventions.  */
 #define NEWABI_P(abfd) (ABI_N32_P (abfd) || ABI_64_P (abfd))
+
+/* Nonzero if ABFD has microMIPS code.  */
+#define MICROMIPS_P(abfd) \
+  ((elf_elfheader (abfd)->e_flags & EF_MIPS_ARCH_ASE_MICROMIPS) != 0)
 
 /* The IRIX compatibility level we are striving for.  */
 #define IRIX_COMPAT(abfd) \
@@ -1101,7 +1108,6 @@ mips_elf_link_hash_newfunc (struct bfd_hash_entry *entry,
       ret->fn_stub = NULL;
       ret->call_stub = NULL;
       ret->call_fp_stub = NULL;
-      ret->tls_type = GOT_NORMAL;
       ret->global_got_area = GGA_NONE;
       ret->got_only_for_calls = TRUE;
       ret->readonly_reloc = FALSE;
@@ -1113,6 +1119,15 @@ mips_elf_link_hash_newfunc (struct bfd_hash_entry *entry,
     }
 
   return (struct bfd_hash_entry *) ret;
+}
+
+/* Allocate MIPS ELF private object data.  */
+
+bfd_boolean
+_bfd_mips_elf_mkobject (bfd *abfd)
+{
+  return bfd_elf_allocate_object (abfd, sizeof (struct mips_elf_obj_tdata),
+				  MIPS_ELF_DATA);
 }
 
 bfd_boolean
@@ -2770,21 +2785,18 @@ mips_elf_hash_bfd_vma (bfd_vma addr)
 #endif
 }
 
-/* got_entries only match if they're identical, except for gotidx, so
-   use all fields to compute the hash, and compare the appropriate
-   union members.  */
-
 static hashval_t
 mips_elf_got_entry_hash (const void *entry_)
 {
   const struct mips_got_entry *entry = (struct mips_got_entry *)entry_;
 
-  return entry->symndx
-    + ((entry->tls_type & GOT_TLS_LDM) << 17)
-    + (! entry->abfd ? mips_elf_hash_bfd_vma (entry->d.address)
-       : entry->abfd->id
-         + (entry->symndx >= 0 ? mips_elf_hash_bfd_vma (entry->d.addend)
-	    : entry->d.h->root.root.root.hash));
+  return (entry->symndx
+	  + ((entry->tls_type == GOT_TLS_LDM) << 18)
+	  + (entry->tls_type == GOT_TLS_LDM ? 0
+	     : !entry->abfd ? mips_elf_hash_bfd_vma (entry->d.address)
+	     : entry->symndx >= 0 ? (entry->abfd->id
+				     + mips_elf_hash_bfd_vma (entry->d.addend))
+	     : entry->d.h->root.root.root.hash));
 }
 
 static int
@@ -2793,56 +2805,39 @@ mips_elf_got_entry_eq (const void *entry1, const void *entry2)
   const struct mips_got_entry *e1 = (struct mips_got_entry *)entry1;
   const struct mips_got_entry *e2 = (struct mips_got_entry *)entry2;
 
-  /* An LDM entry can only match another LDM entry.  */
-  if ((e1->tls_type ^ e2->tls_type) & GOT_TLS_LDM)
-    return 0;
-
-  return e1->abfd == e2->abfd && e1->symndx == e2->symndx
-    && (! e1->abfd ? e1->d.address == e2->d.address
-	: e1->symndx >= 0 ? e1->d.addend == e2->d.addend
-	: e1->d.h == e2->d.h);
+  return (e1->symndx == e2->symndx
+	  && e1->tls_type == e2->tls_type
+	  && (e1->tls_type == GOT_TLS_LDM ? TRUE
+	      : !e1->abfd ? !e2->abfd && e1->d.address == e2->d.address
+	      : e1->symndx >= 0 ? (e1->abfd == e2->abfd
+				   && e1->d.addend == e2->d.addend)
+	      : e2->abfd && e1->d.h == e2->d.h));
 }
 
-/* multi_got_entries are still a match in the case of global objects,
-   even if the input bfd in which they're referenced differs, so the
-   hash computation and compare functions are adjusted
-   accordingly.  */
-
 static hashval_t
-mips_elf_multi_got_entry_hash (const void *entry_)
+mips_got_page_ref_hash (const void *ref_)
 {
-  const struct mips_got_entry *entry = (struct mips_got_entry *)entry_;
+  const struct mips_got_page_ref *ref;
 
-  return entry->symndx
-    + (! entry->abfd
-       ? mips_elf_hash_bfd_vma (entry->d.address)
-       : entry->symndx >= 0
-       ? ((entry->tls_type & GOT_TLS_LDM)
-	  ? (GOT_TLS_LDM << 17)
-	  : (entry->abfd->id
-	     + mips_elf_hash_bfd_vma (entry->d.addend)))
-       : entry->d.h->root.root.root.hash);
+  ref = (const struct mips_got_page_ref *) ref_;
+  return ((ref->symndx >= 0
+	   ? (hashval_t) (ref->u.abfd->id + ref->symndx)
+	   : ref->u.h->root.root.root.hash)
+	  + mips_elf_hash_bfd_vma (ref->addend));
 }
 
 static int
-mips_elf_multi_got_entry_eq (const void *entry1, const void *entry2)
+mips_got_page_ref_eq (const void *ref1_, const void *ref2_)
 {
-  const struct mips_got_entry *e1 = (struct mips_got_entry *)entry1;
-  const struct mips_got_entry *e2 = (struct mips_got_entry *)entry2;
+  const struct mips_got_page_ref *ref1, *ref2;
 
-  /* Any two LDM entries match.  */
-  if (e1->tls_type & e2->tls_type & GOT_TLS_LDM)
-    return 1;
-
-  /* Nothing else matches an LDM entry.  */
-  if ((e1->tls_type ^ e2->tls_type) & GOT_TLS_LDM)
-    return 0;
-
-  return e1->symndx == e2->symndx
-    && (e1->symndx >= 0 ? e1->abfd == e2->abfd && e1->d.addend == e2->d.addend
-	: e1->abfd == NULL || e2->abfd == NULL
-	? e1->abfd == e2->abfd && e1->d.address == e2->d.address
-	: e1->d.h == e2->d.h);
+  ref1 = (const struct mips_got_page_ref *) ref1_;
+  ref2 = (const struct mips_got_page_ref *) ref2_;
+  return (ref1->symndx == ref2->symndx
+	  && (ref1->symndx < 0
+	      ? ref1->u.h == ref2->u.h
+	      : ref1->u.abfd == ref2->u.abfd)
+	  && ref1->addend == ref2->addend);
 }
 
 static hashval_t
@@ -2851,7 +2846,7 @@ mips_got_page_entry_hash (const void *entry_)
   const struct mips_got_page_entry *entry;
 
   entry = (const struct mips_got_page_entry *) entry_;
-  return entry->abfd->id + entry->symndx;
+  return entry->sec->id;
 }
 
 static int
@@ -2861,9 +2856,71 @@ mips_got_page_entry_eq (const void *entry1_, const void *entry2_)
 
   entry1 = (const struct mips_got_page_entry *) entry1_;
   entry2 = (const struct mips_got_page_entry *) entry2_;
-  return entry1->abfd == entry2->abfd && entry1->symndx == entry2->symndx;
+  return entry1->sec == entry2->sec;
 }
 
+/* Create and return a new mips_got_info structure.  */
+
+static struct mips_got_info *
+mips_elf_create_got_info (bfd *abfd)
+{
+  struct mips_got_info *g;
+
+  g = bfd_zalloc (abfd, sizeof (struct mips_got_info));
+  if (g == NULL)
+    return NULL;
+
+  g->got_entries = htab_try_create (1, mips_elf_got_entry_hash,
+				    mips_elf_got_entry_eq, NULL);
+  if (g->got_entries == NULL)
+    return NULL;
+
+  g->got_page_refs = htab_try_create (1, mips_got_page_ref_hash,
+				      mips_got_page_ref_eq, NULL);
+  if (g->got_page_refs == NULL)
+    return NULL;
+
+  return g;
+}
+
+/* Return the GOT info for input bfd ABFD, trying to create a new one if
+   CREATE_P and if ABFD doesn't already have a GOT.  */
+
+static struct mips_got_info *
+mips_elf_bfd_got (bfd *abfd, bfd_boolean create_p)
+{
+  struct mips_elf_obj_tdata *tdata;
+
+  if (!is_mips_elf (abfd))
+    return NULL;
+
+  tdata = mips_elf_tdata (abfd);
+  if (!tdata->got && create_p)
+    tdata->got = mips_elf_create_got_info (abfd);
+  return tdata->got;
+}
+
+/* Record that ABFD should use output GOT G.  */
+
+static void
+mips_elf_replace_bfd_got (bfd *abfd, struct mips_got_info *g)
+{
+  struct mips_elf_obj_tdata *tdata;
+
+  BFD_ASSERT (is_mips_elf (abfd));
+  tdata = mips_elf_tdata (abfd);
+  if (tdata->got)
+    {
+      /* The GOT structure itself and the hash table entries are
+	 allocated to a bfd, but the hash tables aren't.  */
+      htab_delete (tdata->got->got_entries);
+      htab_delete (tdata->got->got_page_refs);
+      if (tdata->got->got_page_entries)
+	htab_delete (tdata->got->got_page_entries);
+    }
+  tdata->got = g;
+}
+
 /* Return the dynamic relocation section.  If it doesn't exist, try to
    create a new it if CREATE_P, otherwise return NULL.  Also return NULL
    if creation fails.  */
@@ -2895,6 +2952,43 @@ mips_elf_rel_dyn_section (struct bfd_link_info *info, bfd_boolean create_p)
   return sreloc;
 }
 
+/* Return the GOT_TLS_* type required by relocation type R_TYPE.  */
+
+static int
+mips_elf_reloc_tls_type (unsigned int r_type)
+{
+  if (tls_gd_reloc_p (r_type))
+    return GOT_TLS_GD;
+
+  if (tls_ldm_reloc_p (r_type))
+    return GOT_TLS_LDM;
+
+  if (tls_gottprel_reloc_p (r_type))
+    return GOT_TLS_IE;
+
+  return GOT_TLS_NONE;
+}
+
+/* Return the number of GOT slots needed for GOT TLS type TYPE.  */
+
+static int
+mips_tls_got_entries (unsigned int type)
+{
+  switch (type)
+    {
+    case GOT_TLS_GD:
+    case GOT_TLS_LDM:
+      return 2;
+
+    case GOT_TLS_IE:
+      return 1;
+
+    case GOT_TLS_NONE:
+      return 0;
+    }
+  abort ();
+}
+
 /* Count the number of relocations needed for a TLS GOT entry, with
    access types from TLS_TYPE, and symbol H (or a local symbol if H
    is NULL).  */
@@ -2904,7 +2998,6 @@ mips_tls_got_relocs (struct bfd_link_info *info, unsigned char tls_type,
 		     struct elf_link_hash_entry *h)
 {
   int indx = 0;
-  int ret = 0;
   bfd_boolean need_relocs = FALSE;
   bfd_boolean dyn = elf_hash_table (info)->dynamic_sections_created;
 
@@ -2919,70 +3012,43 @@ mips_tls_got_relocs (struct bfd_link_info *info, unsigned char tls_type,
     need_relocs = TRUE;
 
   if (!need_relocs)
-    return FALSE;
+    return 0;
 
-  if (tls_type & GOT_TLS_GD)
+  switch (tls_type)
     {
-      ret++;
-      if (indx != 0)
-	ret++;
+    case GOT_TLS_GD:
+      return indx != 0 ? 2 : 1;
+
+    case GOT_TLS_IE:
+      return 1;
+
+    case GOT_TLS_LDM:
+      return info->shared ? 1 : 0;
+
+    default:
+      return 0;
     }
-
-  if (tls_type & GOT_TLS_IE)
-    ret++;
-
-  if ((tls_type & GOT_TLS_LDM) && info->shared)
-    ret++;
-
-  return ret;
 }
 
-/* Count the number of TLS relocations required for the GOT entry in
-   ARG1, if it describes a local symbol.  */
+/* Add the number of GOT entries and TLS relocations required by ENTRY
+   to G.  */
 
-static int
-mips_elf_count_local_tls_relocs (void **arg1, void *arg2)
+static void
+mips_elf_count_got_entry (struct bfd_link_info *info,
+			  struct mips_got_info *g,
+			  struct mips_got_entry *entry)
 {
-  struct mips_got_entry *entry = * (struct mips_got_entry **) arg1;
-  struct mips_elf_count_tls_arg *arg = arg2;
-
-  if (entry->abfd != NULL && entry->symndx != -1)
-    arg->needed += mips_tls_got_relocs (arg->info, entry->tls_type, NULL);
-
-  return 1;
-}
-
-/* Count the number of TLS GOT entries required for the global (or
-   forced-local) symbol in ARG1.  */
-
-static int
-mips_elf_count_global_tls_entries (void *arg1, void *arg2)
-{
-  struct mips_elf_link_hash_entry *hm
-    = (struct mips_elf_link_hash_entry *) arg1;
-  struct mips_elf_count_tls_arg *arg = arg2;
-
-  if (hm->tls_type & GOT_TLS_GD)
-    arg->needed += 2;
-  if (hm->tls_type & GOT_TLS_IE)
-    arg->needed += 1;
-
-  return 1;
-}
-
-/* Count the number of TLS relocations required for the global (or
-   forced-local) symbol in ARG1.  */
-
-static int
-mips_elf_count_global_tls_relocs (void *arg1, void *arg2)
-{
-  struct mips_elf_link_hash_entry *hm
-    = (struct mips_elf_link_hash_entry *) arg1;
-  struct mips_elf_count_tls_arg *arg = arg2;
-
-  arg->needed += mips_tls_got_relocs (arg->info, hm->tls_type, &hm->root);
-
-  return 1;
+  if (entry->tls_type)
+    {
+      g->tls_gotno += mips_tls_got_entries (entry->tls_type);
+      g->relocs += mips_tls_got_relocs (info, entry->tls_type,
+					entry->symndx < 0
+					? &entry->d.h->root : NULL);
+    }
+  else if (entry->symndx >= 0 || entry->d.h->global_got_area == GGA_NONE)
+    g->local_gotno += 1;
+  else
+    g->global_gotno += 1;
 }
 
 /* Output a simple dynamic relocation into SRELOC.  */
@@ -3019,16 +3085,15 @@ mips_elf_output_dynamic_relocation (bfd *output_bfd,
 /* Initialize a set of TLS GOT entries for one symbol.  */
 
 static void
-mips_elf_initialize_tls_slots (bfd *abfd, bfd_vma got_offset,
-			       unsigned char *tls_type_p,
-			       struct bfd_link_info *info,
+mips_elf_initialize_tls_slots (bfd *abfd, struct bfd_link_info *info,
+			       struct mips_got_entry *entry,
 			       struct mips_elf_link_hash_entry *h,
 			       bfd_vma value)
 {
   struct mips_elf_link_hash_table *htab;
   int indx;
   asection *sreloc, *sgot;
-  bfd_vma offset, offset2;
+  bfd_vma got_offset, got_offset2;
   bfd_boolean need_relocs = FALSE;
 
   htab = mips_elf_hash_table (info);
@@ -3047,7 +3112,7 @@ mips_elf_initialize_tls_slots (bfd *abfd, bfd_vma got_offset,
 	indx = h->root.dynindx;
     }
 
-  if (*tls_type_p & GOT_TLS_DONE)
+  if (entry->tls_initialized)
     return;
 
   if ((info->shared || indx != 0)
@@ -3064,66 +3129,61 @@ mips_elf_initialize_tls_slots (bfd *abfd, bfd_vma got_offset,
 
   /* Emit necessary relocations.  */
   sreloc = mips_elf_rel_dyn_section (info, FALSE);
+  got_offset = entry->gotidx;
 
-  /* General Dynamic.  */
-  if (*tls_type_p & GOT_TLS_GD)
+  switch (entry->tls_type)
     {
-      offset = got_offset;
-      offset2 = offset + MIPS_ELF_GOT_SIZE (abfd);
+    case GOT_TLS_GD:
+      /* General Dynamic.  */
+      got_offset2 = got_offset + MIPS_ELF_GOT_SIZE (abfd);
 
       if (need_relocs)
 	{
 	  mips_elf_output_dynamic_relocation
 	    (abfd, sreloc, sreloc->reloc_count++, indx,
 	     ABI_64_P (abfd) ? R_MIPS_TLS_DTPMOD64 : R_MIPS_TLS_DTPMOD32,
-	     sgot->output_offset + sgot->output_section->vma + offset);
+	     sgot->output_offset + sgot->output_section->vma + got_offset);
 
 	  if (indx)
 	    mips_elf_output_dynamic_relocation
 	      (abfd, sreloc, sreloc->reloc_count++, indx,
 	       ABI_64_P (abfd) ? R_MIPS_TLS_DTPREL64 : R_MIPS_TLS_DTPREL32,
-	       sgot->output_offset + sgot->output_section->vma + offset2);
+	       sgot->output_offset + sgot->output_section->vma + got_offset2);
 	  else
 	    MIPS_ELF_PUT_WORD (abfd, value - dtprel_base (info),
-			       sgot->contents + offset2);
+			       sgot->contents + got_offset2);
 	}
       else
 	{
 	  MIPS_ELF_PUT_WORD (abfd, 1,
-			     sgot->contents + offset);
+			     sgot->contents + got_offset);
 	  MIPS_ELF_PUT_WORD (abfd, value - dtprel_base (info),
-			     sgot->contents + offset2);
+			     sgot->contents + got_offset2);
 	}
+      break;
 
-      got_offset += 2 * MIPS_ELF_GOT_SIZE (abfd);
-    }
-
-  /* Initial Exec model.  */
-  if (*tls_type_p & GOT_TLS_IE)
-    {
-      offset = got_offset;
-
+    case GOT_TLS_IE:
+      /* Initial Exec model.  */
       if (need_relocs)
 	{
 	  if (indx == 0)
 	    MIPS_ELF_PUT_WORD (abfd, value - elf_hash_table (info)->tls_sec->vma,
-			       sgot->contents + offset);
+			       sgot->contents + got_offset);
 	  else
 	    MIPS_ELF_PUT_WORD (abfd, 0,
-			       sgot->contents + offset);
+			       sgot->contents + got_offset);
 
 	  mips_elf_output_dynamic_relocation
 	    (abfd, sreloc, sreloc->reloc_count++, indx,
 	     ABI_64_P (abfd) ? R_MIPS_TLS_TPREL64 : R_MIPS_TLS_TPREL32,
-	     sgot->output_offset + sgot->output_section->vma + offset);
+	     sgot->output_offset + sgot->output_section->vma + got_offset);
 	}
       else
 	MIPS_ELF_PUT_WORD (abfd, value - tprel_base (info),
-			   sgot->contents + offset);
-    }
+			   sgot->contents + got_offset);
+      break;
 
-  if (*tls_type_p & GOT_TLS_LDM)
-    {
+    case GOT_TLS_LDM:
       /* The initial offset is zero, and the LD offsets will include the
 	 bias by DTP_OFFSET.  */
       MIPS_ELF_PUT_WORD (abfd, 0,
@@ -3138,49 +3198,13 @@ mips_elf_initialize_tls_slots (bfd *abfd, bfd_vma got_offset,
 	  (abfd, sreloc, sreloc->reloc_count++, indx,
 	   ABI_64_P (abfd) ? R_MIPS_TLS_DTPMOD64 : R_MIPS_TLS_DTPMOD32,
 	   sgot->output_offset + sgot->output_section->vma + got_offset);
+      break;
+
+    default:
+      abort ();
     }
 
-  *tls_type_p |= GOT_TLS_DONE;
-}
-
-/* Return the GOT index to use for a relocation of type R_TYPE against
-   a symbol accessed using TLS_TYPE models.  The GOT entries for this
-   symbol in this GOT start at GOT_INDEX.  This function initializes the
-   GOT entries and corresponding relocations.  */
-
-static bfd_vma
-mips_tls_got_index (bfd *abfd, bfd_vma got_index, unsigned char *tls_type,
-		    int r_type, struct bfd_link_info *info,
-		    struct mips_elf_link_hash_entry *h, bfd_vma symbol)
-{
-  BFD_ASSERT (tls_gottprel_reloc_p (r_type)
-	      || tls_gd_reloc_p (r_type)
-	      || tls_ldm_reloc_p (r_type));
-
-  mips_elf_initialize_tls_slots (abfd, got_index, tls_type, info, h, symbol);
-
-  if (tls_gottprel_reloc_p (r_type))
-    {
-      BFD_ASSERT (*tls_type & GOT_TLS_IE);
-      if (*tls_type & GOT_TLS_GD)
-	return got_index + 2 * MIPS_ELF_GOT_SIZE (abfd);
-      else
-	return got_index;
-    }
-
-  if (tls_gd_reloc_p (r_type))
-    {
-      BFD_ASSERT (*tls_type & GOT_TLS_GD);
-      return got_index;
-    }
-
-  if (tls_ldm_reloc_p (r_type))
-    {
-      BFD_ASSERT (*tls_type & GOT_TLS_LDM);
-      return got_index;
-    }
-
-  return got_index;
+  entry->tls_initialized = TRUE;
 }
 
 /* Return the offset from _GLOBAL_OFFSET_TABLE_ of the .got.plt entry
@@ -3240,79 +3264,75 @@ mips_elf_local_got_index (bfd *abfd, bfd *ibfd, struct bfd_link_info *info,
   if (!entry)
     return MINUS_ONE;
 
-  if (TLS_RELOC_P (r_type))
-    {
-      if (entry->symndx == -1 && htab->got_info->next == NULL)
-	/* A type (3) entry in the single-GOT case.  We use the symbol's
-	   hash table entry to track the index.  */
-	return mips_tls_got_index (abfd, h->tls_got_offset, &h->tls_type,
-				   r_type, info, h, value);
-      else
-	return mips_tls_got_index (abfd, entry->gotidx, &entry->tls_type,
-				   r_type, info, h, value);
-    }
-  else
-    return entry->gotidx;
+  if (entry->tls_type)
+    mips_elf_initialize_tls_slots (abfd, info, entry, h, value);
+  return entry->gotidx;
 }
 
-/* Returns the GOT index for the global symbol indicated by H.  */
+/* Return the GOT index of global symbol H in the primary GOT.  */
 
 static bfd_vma
-mips_elf_global_got_index (bfd *abfd, bfd *ibfd, struct elf_link_hash_entry *h,
-			   int r_type, struct bfd_link_info *info)
+mips_elf_primary_global_got_index (bfd *obfd, struct bfd_link_info *info,
+				   struct elf_link_hash_entry *h)
 {
   struct mips_elf_link_hash_table *htab;
+  long global_got_dynindx;
+  struct mips_got_info *g;
   bfd_vma got_index;
-  struct mips_got_info *g, *gg;
-  long global_got_dynindx = 0;
 
   htab = mips_elf_hash_table (info);
   BFD_ASSERT (htab != NULL);
 
-  gg = g = htab->got_info;
-  if (g->bfd2got && ibfd)
+  global_got_dynindx = 0;
+  if (htab->global_gotsym != NULL)
+    global_got_dynindx = htab->global_gotsym->dynindx;
+
+  /* Once we determine the global GOT entry with the lowest dynamic
+     symbol table index, we must put all dynamic symbols with greater
+     indices into the primary GOT.  That makes it easy to calculate the
+     GOT offset.  */
+  BFD_ASSERT (h->dynindx >= global_got_dynindx);
+  g = mips_elf_bfd_got (obfd, FALSE);
+  got_index = ((h->dynindx - global_got_dynindx + g->local_gotno)
+	       * MIPS_ELF_GOT_SIZE (obfd));
+  BFD_ASSERT (got_index < htab->sgot->size);
+
+  return got_index;
+}
+
+/* Return the GOT index for the global symbol indicated by H, which is
+   referenced by a relocation of type R_TYPE in IBFD.  */
+
+static bfd_vma
+mips_elf_global_got_index (bfd *obfd, struct bfd_link_info *info, bfd *ibfd,
+			   struct elf_link_hash_entry *h, int r_type)
+{
+  struct mips_elf_link_hash_table *htab;
+  struct mips_got_info *g;
+  struct mips_got_entry lookup, *entry;
+  bfd_vma gotidx;
+
+  htab = mips_elf_hash_table (info);
+  BFD_ASSERT (htab != NULL);
+
+  g = mips_elf_bfd_got (ibfd, FALSE);
+  BFD_ASSERT (g);
+
+  lookup.tls_type = mips_elf_reloc_tls_type (r_type);
+  if (!lookup.tls_type && g == mips_elf_bfd_got (obfd, FALSE))
+    return mips_elf_primary_global_got_index (obfd, info, h);
+
+  lookup.abfd = ibfd;
+  lookup.symndx = -1;
+  lookup.d.h = (struct mips_elf_link_hash_entry *) h;
+  entry = htab_find (g->got_entries, &lookup);
+  BFD_ASSERT (entry);
+
+  gotidx = entry->gotidx;
+  BFD_ASSERT (gotidx > 0 && gotidx < htab->sgot->size);
+
+  if (lookup.tls_type)
     {
-      struct mips_got_entry e, *p;
-
-      BFD_ASSERT (h->dynindx >= 0);
-
-      g = mips_elf_got_for_ibfd (g, ibfd);
-      if (g->next != gg || TLS_RELOC_P (r_type))
-	{
-	  e.abfd = ibfd;
-	  e.symndx = -1;
-	  e.d.h = (struct mips_elf_link_hash_entry *)h;
-	  e.tls_type = 0;
-
-	  p = htab_find (g->got_entries, &e);
-
-	  BFD_ASSERT (p->gotidx > 0);
-
-	  if (TLS_RELOC_P (r_type))
-	    {
-	      bfd_vma value = MINUS_ONE;
-	      if ((h->root.type == bfd_link_hash_defined
-		   || h->root.type == bfd_link_hash_defweak)
-		  && h->root.u.def.section->output_section)
-		value = (h->root.u.def.value
-			 + h->root.u.def.section->output_offset
-			 + h->root.u.def.section->output_section->vma);
-
-	      return mips_tls_got_index (abfd, p->gotidx, &p->tls_type, r_type,
-					 info, e.d.h, value);
-	    }
-	  else
-	    return p->gotidx;
-	}
-    }
-
-  if (gg->global_gotsym != NULL)
-    global_got_dynindx = gg->global_gotsym->dynindx;
-
-  if (TLS_RELOC_P (r_type))
-    {
-      struct mips_elf_link_hash_entry *hm
-	= (struct mips_elf_link_hash_entry *) h;
       bfd_vma value = MINUS_ONE;
 
       if ((h->root.type == bfd_link_hash_defined
@@ -3322,22 +3342,9 @@ mips_elf_global_got_index (bfd *abfd, bfd *ibfd, struct elf_link_hash_entry *h,
 		 + h->root.u.def.section->output_offset
 		 + h->root.u.def.section->output_section->vma);
 
-      got_index = mips_tls_got_index (abfd, hm->tls_got_offset, &hm->tls_type,
-				      r_type, info, hm, value);
+      mips_elf_initialize_tls_slots (obfd, info, entry, lookup.d.h, value);
     }
-  else
-    {
-      /* Once we determine the global GOT entry with the lowest dynamic
-	 symbol table index, we must put all dynamic symbols with greater
-	 indices into the GOT.  That makes it easy to calculate the GOT
-	 offset.  */
-      BFD_ASSERT (h->dynindx >= global_got_dynindx);
-      got_index = ((h->dynindx - global_got_dynindx + g->local_gotno)
-		   * MIPS_ELF_GOT_SIZE (abfd));
-    }
-  BFD_ASSERT (got_index < htab->sgot->size);
-
-  return got_index;
+  return gotidx;
 }
 
 /* Find a GOT page entry that points to within 32KB of VALUE.  These
@@ -3429,72 +3436,68 @@ mips_elf_create_local_got_entry (bfd *abfd, struct bfd_link_info *info,
 				 struct mips_elf_link_hash_entry *h,
 				 int r_type)
 {
-  struct mips_got_entry entry, **loc;
+  struct mips_got_entry lookup, *entry;
+  void **loc;
   struct mips_got_info *g;
   struct mips_elf_link_hash_table *htab;
+  bfd_vma gotidx;
 
   htab = mips_elf_hash_table (info);
   BFD_ASSERT (htab != NULL);
 
-  entry.abfd = NULL;
-  entry.symndx = -1;
-  entry.d.address = value;
-  entry.tls_type = 0;
-
-  g = mips_elf_got_for_ibfd (htab->got_info, ibfd);
+  g = mips_elf_bfd_got (ibfd, FALSE);
   if (g == NULL)
     {
-      g = mips_elf_got_for_ibfd (htab->got_info, abfd);
+      g = mips_elf_bfd_got (abfd, FALSE);
       BFD_ASSERT (g != NULL);
     }
 
   /* This function shouldn't be called for symbols that live in the global
      area of the GOT.  */
   BFD_ASSERT (h == NULL || h->global_got_area == GGA_NONE);
-  if (TLS_RELOC_P (r_type))
-    {
-      struct mips_got_entry *p;
 
-      entry.abfd = ibfd;
+  lookup.tls_type = mips_elf_reloc_tls_type (r_type);
+  if (lookup.tls_type)
+    {
+      lookup.abfd = ibfd;
       if (tls_ldm_reloc_p (r_type))
 	{
-	  entry.tls_type = GOT_TLS_LDM;
-	  entry.symndx = 0;
-	  entry.d.addend = 0;
+	  lookup.symndx = 0;
+	  lookup.d.addend = 0;
 	}
       else if (h == NULL)
 	{
-	  entry.symndx = r_symndx;
-	  entry.d.addend = 0;
+	  lookup.symndx = r_symndx;
+	  lookup.d.addend = 0;
 	}
       else
-	entry.d.h = h;
+	{
+	  lookup.symndx = -1;
+	  lookup.d.h = h;
+	}
 
-      p = (struct mips_got_entry *)
-	htab_find (g->got_entries, &entry);
+      entry = (struct mips_got_entry *) htab_find (g->got_entries, &lookup);
+      BFD_ASSERT (entry);
 
-      BFD_ASSERT (p);
-      return p;
+      gotidx = entry->gotidx;
+      BFD_ASSERT (gotidx > 0 && gotidx < htab->sgot->size);
+
+      return entry;
     }
 
-  loc = (struct mips_got_entry **) htab_find_slot (g->got_entries, &entry,
-						   INSERT);
-  if (*loc)
-    return *loc;
-
-  entry.gotidx = MIPS_ELF_GOT_SIZE (abfd) * g->assigned_gotno++;
-  entry.tls_type = 0;
-
-  *loc = (struct mips_got_entry *)bfd_alloc (abfd, sizeof entry);
-
-  if (! *loc)
+  lookup.abfd = NULL;
+  lookup.symndx = -1;
+  lookup.d.address = value;
+  loc = htab_find_slot (g->got_entries, &lookup, INSERT);
+  if (!loc)
     return NULL;
 
-  memcpy (*loc, &entry, sizeof entry);
+  entry = (struct mips_got_entry *) *loc;
+  if (entry)
+    return entry;
 
-  if (g->assigned_gotno > g->local_gotno)
+  if (g->assigned_gotno >= g->local_gotno)
     {
-      (*loc)->gotidx = -1;
       /* We didn't allocate enough space in the GOT.  */
       (*_bfd_error_handler)
 	(_("not enough GOT space for local GOT entries"));
@@ -3502,8 +3505,15 @@ mips_elf_create_local_got_entry (bfd *abfd, struct bfd_link_info *info,
       return NULL;
     }
 
-  MIPS_ELF_PUT_WORD (abfd, value,
-		     (htab->sgot->contents + entry.gotidx));
+  entry = (struct mips_got_entry *) bfd_alloc (abfd, sizeof (*entry));
+  if (!entry)
+    return NULL;
+
+  lookup.gotidx = MIPS_ELF_GOT_SIZE (abfd) * g->assigned_gotno++;
+  *entry = lookup;
+  *loc = entry;
+
+  MIPS_ELF_PUT_WORD (abfd, value, htab->sgot->contents + entry->gotidx);
 
   /* These GOT entries need a dynamic relocation on VxWorks.  */
   if (htab->is_vxworks)
@@ -3516,7 +3526,7 @@ mips_elf_create_local_got_entry (bfd *abfd, struct bfd_link_info *info,
       s = mips_elf_rel_dyn_section (info, FALSE);
       got_address = (htab->sgot->output_section->vma
 		     + htab->sgot->output_offset
-		     + entry.gotidx);
+		     + entry->gotidx);
 
       rloc = s->contents + (s->reloc_count++ * sizeof (Elf32_External_Rela));
       outrel.r_offset = got_address;
@@ -3525,7 +3535,7 @@ mips_elf_create_local_got_entry (bfd *abfd, struct bfd_link_info *info,
       bfd_elf32_swap_reloca_out (abfd, &outrel, rloc);
     }
 
-  return *loc;
+  return entry;
 }
 
 /* Return the number of dynamic section symbols required by OUTPUT_BFD.
@@ -3594,7 +3604,7 @@ mips_elf_sort_hash_table (bfd *abfd, struct bfd_link_info *info)
 
   /* Now we know which dynamic symbol has the lowest dynamic symbol
      table index in the GOT.  */
-  g->global_gotsym = hsd.low;
+  htab->global_gotsym = hsd.low;
 
   return TRUE;
 }
@@ -3620,15 +3630,11 @@ mips_elf_sort_hash_table_f (struct mips_elf_link_hash_entry *h, void *data)
       break;
 
     case GGA_NORMAL:
-      BFD_ASSERT (h->tls_type == GOT_NORMAL);
-
       h->root.dynindx = --hsd->min_got_dynindx;
       hsd->low = (struct elf_link_hash_entry *) h;
       break;
 
     case GGA_RELOC_ONLY:
-      BFD_ASSERT (h->tls_type == GOT_NORMAL);
-
       if (hsd->max_unref_got_dynindx == hsd->min_got_dynindx)
 	hsd->low = (struct elf_link_hash_entry *) h;
       h->root.dynindx = hsd->max_unref_got_dynindx++;
@@ -3638,21 +3644,67 @@ mips_elf_sort_hash_table_f (struct mips_elf_link_hash_entry *h, void *data)
   return TRUE;
 }
 
-/* If H is a symbol that needs a global GOT entry, but has a dynamic
-   symbol table index lower than any we've seen to date, record it for
-   posterity.  FOR_CALL is true if the caller is only interested in
+/* Record that input bfd ABFD requires a GOT entry like *LOOKUP
+   (which is owned by the caller and shouldn't be added to the
+   hash table directly).  */
+
+static bfd_boolean
+mips_elf_record_got_entry (struct bfd_link_info *info, bfd *abfd,
+			   struct mips_got_entry *lookup)
+{
+  struct mips_elf_link_hash_table *htab;
+  struct mips_got_entry *entry;
+  struct mips_got_info *g;
+  void **loc, **bfd_loc;
+
+  /* Make sure there's a slot for this entry in the master GOT.  */
+  htab = mips_elf_hash_table (info);
+  g = htab->got_info;
+  loc = htab_find_slot (g->got_entries, lookup, INSERT);
+  if (!loc)
+    return FALSE;
+
+  /* Populate the entry if it isn't already.  */
+  entry = (struct mips_got_entry *) *loc;
+  if (!entry)
+    {
+      entry = (struct mips_got_entry *) bfd_alloc (abfd, sizeof (*entry));
+      if (!entry)
+	return FALSE;
+
+      lookup->tls_initialized = FALSE;
+      lookup->gotidx = -1;
+      *entry = *lookup;
+      *loc = entry;
+    }
+
+  /* Reuse the same GOT entry for the BFD's GOT.  */
+  g = mips_elf_bfd_got (abfd, TRUE);
+  if (!g)
+    return FALSE;
+
+  bfd_loc = htab_find_slot (g->got_entries, lookup, INSERT);
+  if (!bfd_loc)
+    return FALSE;
+
+  if (!*bfd_loc)
+    *bfd_loc = entry;
+  return TRUE;
+}
+
+/* ABFD has a GOT relocation of type R_TYPE against H.  Reserve a GOT
+   entry for it.  FOR_CALL is true if the caller is only interested in
    using the GOT entry for calls.  */
 
 static bfd_boolean
 mips_elf_record_global_got_symbol (struct elf_link_hash_entry *h,
 				   bfd *abfd, struct bfd_link_info *info,
-				   bfd_boolean for_call,
-				   unsigned char tls_flag)
+				   bfd_boolean for_call, int r_type)
 {
   struct mips_elf_link_hash_table *htab;
   struct mips_elf_link_hash_entry *hmips;
-  struct mips_got_entry entry, **loc;
-  struct mips_got_info *g;
+  struct mips_got_entry entry;
+  unsigned char tls_type;
 
   htab = mips_elf_hash_table (info);
   BFD_ASSERT (htab != NULL);
@@ -3676,53 +3728,27 @@ mips_elf_record_global_got_symbol (struct elf_link_hash_entry *h,
 	return FALSE;
     }
 
-  /* Make sure we have a GOT to put this entry into.  */
-  g = htab->got_info;
-  BFD_ASSERT (g != NULL);
+  tls_type = mips_elf_reloc_tls_type (r_type);
+  if (tls_type == GOT_TLS_NONE && hmips->global_got_area > GGA_NORMAL)
+    hmips->global_got_area = GGA_NORMAL;
 
   entry.abfd = abfd;
   entry.symndx = -1;
   entry.d.h = (struct mips_elf_link_hash_entry *) h;
-  entry.tls_type = 0;
-
-  loc = (struct mips_got_entry **) htab_find_slot (g->got_entries, &entry,
-						   INSERT);
-
-  /* If we've already marked this entry as needing GOT space, we don't
-     need to do it again.  */
-  if (*loc)
-    {
-      (*loc)->tls_type |= tls_flag;
-      return TRUE;
-    }
-
-  *loc = (struct mips_got_entry *)bfd_alloc (abfd, sizeof entry);
-
-  if (! *loc)
-    return FALSE;
-
-  entry.gotidx = -1;
-  entry.tls_type = tls_flag;
-
-  memcpy (*loc, &entry, sizeof entry);
-
-  if (tls_flag == 0)
-    hmips->global_got_area = GGA_NORMAL;
-
-  return TRUE;
+  entry.tls_type = tls_type;
+  return mips_elf_record_got_entry (info, abfd, &entry);
 }
 
-/* Reserve space in G for a GOT entry containing the value of symbol
-   SYMNDX in input bfd ABDF, plus ADDEND.  */
+/* ABFD has a GOT relocation of type R_TYPE against symbol SYMNDX + ADDEND,
+   where SYMNDX is a local symbol.  Reserve a GOT entry for it.  */
 
 static bfd_boolean
 mips_elf_record_local_got_symbol (bfd *abfd, long symndx, bfd_vma addend,
-				  struct bfd_link_info *info,
-				  unsigned char tls_flag)
+				  struct bfd_link_info *info, int r_type)
 {
   struct mips_elf_link_hash_table *htab;
   struct mips_got_info *g;
-  struct mips_got_entry entry, **loc;
+  struct mips_got_entry entry;
 
   htab = mips_elf_hash_table (info);
   BFD_ASSERT (htab != NULL);
@@ -3733,53 +3759,184 @@ mips_elf_record_local_got_symbol (bfd *abfd, long symndx, bfd_vma addend,
   entry.abfd = abfd;
   entry.symndx = symndx;
   entry.d.addend = addend;
-  entry.tls_type = tls_flag;
-  loc = (struct mips_got_entry **)
-    htab_find_slot (g->got_entries, &entry, INSERT);
+  entry.tls_type = mips_elf_reloc_tls_type (r_type);
+  return mips_elf_record_got_entry (info, abfd, &entry);
+}
 
-  if (*loc)
-    {
-      if (tls_flag == GOT_TLS_GD && !((*loc)->tls_type & GOT_TLS_GD))
-	{
-	  g->tls_gotno += 2;
-	  (*loc)->tls_type |= tls_flag;
-	}
-      else if (tls_flag == GOT_TLS_IE && !((*loc)->tls_type & GOT_TLS_IE))
-	{
-	  g->tls_gotno += 1;
-	  (*loc)->tls_type |= tls_flag;
-	}
-      return TRUE;
-    }
+/* Record that ABFD has a page relocation against SYMNDX + ADDEND.
+   H is the symbol's hash table entry, or null if SYMNDX is local
+   to ABFD.  */
 
-  if (tls_flag != 0)
+static bfd_boolean
+mips_elf_record_got_page_ref (struct bfd_link_info *info, bfd *abfd,
+			      long symndx, struct elf_link_hash_entry *h,
+			      bfd_signed_vma addend)
+{
+  struct mips_elf_link_hash_table *htab;
+  struct mips_got_info *g1, *g2;
+  struct mips_got_page_ref lookup, *entry;
+  void **loc, **bfd_loc;
+
+  htab = mips_elf_hash_table (info);
+  BFD_ASSERT (htab != NULL);
+
+  g1 = htab->got_info;
+  BFD_ASSERT (g1 != NULL);
+
+  if (h)
     {
-      entry.gotidx = -1;
-      entry.tls_type = tls_flag;
-      if (tls_flag == GOT_TLS_IE)
-	g->tls_gotno += 1;
-      else if (tls_flag == GOT_TLS_GD)
-	g->tls_gotno += 2;
-      else if (g->tls_ldm_offset == MINUS_ONE)
-	{
-	  g->tls_ldm_offset = MINUS_TWO;
-	  g->tls_gotno += 2;
-	}
+      lookup.symndx = -1;
+      lookup.u.h = (struct mips_elf_link_hash_entry *) h;
     }
   else
     {
-      entry.gotidx = g->local_gotno++;
-      entry.tls_type = 0;
+      lookup.symndx = symndx;
+      lookup.u.abfd = abfd;
     }
-
-  *loc = (struct mips_got_entry *)bfd_alloc (abfd, sizeof entry);
-
-  if (! *loc)
+  lookup.addend = addend;
+  loc = htab_find_slot (g1->got_page_refs, &lookup, INSERT);
+  if (loc == NULL)
     return FALSE;
 
-  memcpy (*loc, &entry, sizeof entry);
+  entry = (struct mips_got_page_ref *) *loc;
+  if (!entry)
+    {
+      entry = bfd_alloc (abfd, sizeof (*entry));
+      if (!entry)
+	return FALSE;
+
+      *entry = lookup;
+      *loc = entry;
+    }
+
+  /* Add the same entry to the BFD's GOT.  */
+  g2 = mips_elf_bfd_got (abfd, TRUE);
+  if (!g2)
+    return FALSE;
+
+  bfd_loc = htab_find_slot (g2->got_page_refs, &lookup, INSERT);
+  if (!bfd_loc)
+    return FALSE;
+
+  if (!*bfd_loc)
+    *bfd_loc = entry;
 
   return TRUE;
+}
+
+/* Add room for N relocations to the .rel(a).dyn section in ABFD.  */
+
+static void
+mips_elf_allocate_dynamic_relocations (bfd *abfd, struct bfd_link_info *info,
+				       unsigned int n)
+{
+  asection *s;
+  struct mips_elf_link_hash_table *htab;
+
+  htab = mips_elf_hash_table (info);
+  BFD_ASSERT (htab != NULL);
+
+  s = mips_elf_rel_dyn_section (info, FALSE);
+  BFD_ASSERT (s != NULL);
+
+  if (htab->is_vxworks)
+    s->size += n * MIPS_ELF_RELA_SIZE (abfd);
+  else
+    {
+      if (s->size == 0)
+	{
+	  /* Make room for a null element.  */
+	  s->size += MIPS_ELF_REL_SIZE (abfd);
+	  ++s->reloc_count;
+	}
+      s->size += n * MIPS_ELF_REL_SIZE (abfd);
+    }
+}
+
+/* A htab_traverse callback for GOT entries, with DATA pointing to a
+   mips_elf_traverse_got_arg structure.  Count the number of GOT
+   entries and TLS relocs.  Set DATA->value to true if we need
+   to resolve indirect or warning symbols and then recreate the GOT.  */
+
+static int
+mips_elf_check_recreate_got (void **entryp, void *data)
+{
+  struct mips_got_entry *entry;
+  struct mips_elf_traverse_got_arg *arg;
+
+  entry = (struct mips_got_entry *) *entryp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  if (entry->abfd != NULL && entry->symndx == -1)
+    {
+      struct mips_elf_link_hash_entry *h;
+
+      h = entry->d.h;
+      if (h->root.root.type == bfd_link_hash_indirect
+	  || h->root.root.type == bfd_link_hash_warning)
+	{
+	  arg->value = TRUE;
+	  return 0;
+	}
+    }
+  mips_elf_count_got_entry (arg->info, arg->g, entry);
+  return 1;
+}
+
+/* A htab_traverse callback for GOT entries, with DATA pointing to a
+   mips_elf_traverse_got_arg structure.  Add all entries to DATA->g,
+   converting entries for indirect and warning symbols into entries
+   for the target symbol.  Set DATA->g to null on error.  */
+
+static int
+mips_elf_recreate_got (void **entryp, void *data)
+{
+  struct mips_got_entry new_entry, *entry;
+  struct mips_elf_traverse_got_arg *arg;
+  void **slot;
+
+  entry = (struct mips_got_entry *) *entryp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  if (entry->abfd != NULL
+      && entry->symndx == -1
+      && (entry->d.h->root.root.type == bfd_link_hash_indirect
+	  || entry->d.h->root.root.type == bfd_link_hash_warning))
+    {
+      struct mips_elf_link_hash_entry *h;
+
+      new_entry = *entry;
+      entry = &new_entry;
+      h = entry->d.h;
+      do
+	{
+	  BFD_ASSERT (h->global_got_area == GGA_NONE);
+	  h = (struct mips_elf_link_hash_entry *) h->root.root.u.i.link;
+	}
+      while (h->root.root.type == bfd_link_hash_indirect
+	     || h->root.root.type == bfd_link_hash_warning);
+      entry->d.h = h;
+    }
+  slot = htab_find_slot (arg->g->got_entries, entry, INSERT);
+  if (slot == NULL)
+    {
+      arg->g = NULL;
+      return 0;
+    }
+  if (*slot == NULL)
+    {
+      if (entry == &new_entry)
+	{
+	  entry = bfd_alloc (entry->abfd, sizeof (*entry));
+	  if (!entry)
+	    {
+	      arg->g = NULL;
+	      return 0;
+	    }
+	  *entry = new_entry;
+	}
+      *slot = entry;
+      mips_elf_count_got_entry (arg->info, arg->g, entry);
+    }
+  return 1;
 }
 
 /* Return the maximum number of GOT page entries required for RANGE.  */
@@ -3790,50 +3947,33 @@ mips_elf_pages_for_range (const struct mips_got_page_range *range)
   return (range->max_addend - range->min_addend + 0x1ffff) >> 16;
 }
 
-/* Record that ABFD has a page relocation against symbol SYMNDX and
-   that ADDEND is the addend for that relocation.
-
-   This function creates an upper bound on the number of GOT slots
-   required; no attempt is made to combine references to non-overridable
-   global symbols across multiple input files.  */
+/* Record that G requires a page entry that can reach SEC + ADDEND.  */
 
 static bfd_boolean
-mips_elf_record_got_page_entry (struct bfd_link_info *info, bfd *abfd,
-				long symndx, bfd_signed_vma addend)
+mips_elf_record_got_page_entry (struct mips_got_info *g,
+				asection *sec, bfd_signed_vma addend)
 {
-  struct mips_elf_link_hash_table *htab;
-  struct mips_got_info *g;
   struct mips_got_page_entry lookup, *entry;
   struct mips_got_page_range **range_ptr, *range;
   bfd_vma old_pages, new_pages;
   void **loc;
 
-  htab = mips_elf_hash_table (info);
-  BFD_ASSERT (htab != NULL);
-
-  g = htab->got_info;
-  BFD_ASSERT (g != NULL);
-
-  /* Find the mips_got_page_entry hash table entry for this symbol.  */
-  lookup.abfd = abfd;
-  lookup.symndx = symndx;
+  /* Find the mips_got_page_entry hash table entry for this section.  */
+  lookup.sec = sec;
   loc = htab_find_slot (g->got_page_entries, &lookup, INSERT);
   if (loc == NULL)
     return FALSE;
 
   /* Create a mips_got_page_entry if this is the first time we've
-     seen the symbol.  */
+     seen the section.  */
   entry = (struct mips_got_page_entry *) *loc;
   if (!entry)
     {
-      entry = bfd_alloc (abfd, sizeof (*entry));
+      entry = bfd_zalloc (sec->owner, sizeof (*entry));
       if (!entry)
 	return FALSE;
 
-      entry->abfd = abfd;
-      entry->symndx = symndx;
-      entry->ranges = NULL;
-      entry->num_pages = 0;
+      entry->sec = sec;
       *loc = entry;
     }
 
@@ -3849,7 +3989,7 @@ mips_elf_record_got_page_entry (struct bfd_link_info *info, bfd *abfd,
   range = *range_ptr;
   if (!range || addend < range->min_addend - 0xffff)
     {
-      range = bfd_alloc (abfd, sizeof (*range));
+      range = bfd_zalloc (sec->owner, sizeof (*range));
       if (!range)
 	return FALSE;
 
@@ -3892,128 +4032,142 @@ mips_elf_record_got_page_entry (struct bfd_link_info *info, bfd *abfd,
   return TRUE;
 }
 
-/* Add room for N relocations to the .rel(a).dyn section in ABFD.  */
+/* A htab_traverse callback for which *REFP points to a mips_got_page_ref
+   and for which DATA points to a mips_elf_traverse_got_arg.  Work out
+   whether the page reference described by *REFP needs a GOT page entry,
+   and record that entry in DATA->g if so.  Set DATA->g to null on failure.  */
 
-static void
-mips_elf_allocate_dynamic_relocations (bfd *abfd, struct bfd_link_info *info,
-				       unsigned int n)
+static bfd_boolean
+mips_elf_resolve_got_page_ref (void **refp, void *data)
 {
-  asection *s;
+  struct mips_got_page_ref *ref;
+  struct mips_elf_traverse_got_arg *arg;
   struct mips_elf_link_hash_table *htab;
+  asection *sec;
+  bfd_vma addend;
 
-  htab = mips_elf_hash_table (info);
-  BFD_ASSERT (htab != NULL);
+  ref = (struct mips_got_page_ref *) *refp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  htab = mips_elf_hash_table (arg->info);
 
-  s = mips_elf_rel_dyn_section (info, FALSE);
-  BFD_ASSERT (s != NULL);
+  if (ref->symndx < 0)
+    {
+      struct mips_elf_link_hash_entry *h;
 
-  if (htab->is_vxworks)
-    s->size += n * MIPS_ELF_RELA_SIZE (abfd);
+      /* Global GOT_PAGEs decay to GOT_DISP and so don't need page entries.  */
+      h = ref->u.h;
+      if (!SYMBOL_REFERENCES_LOCAL (arg->info, &h->root))
+	return 1;
+
+      /* Ignore undefined symbols; we'll issue an error later if
+	 appropriate.  */
+      if (!((h->root.root.type == bfd_link_hash_defined
+	     || h->root.root.type == bfd_link_hash_defweak)
+	    && h->root.root.u.def.section))
+	return 1;
+
+      sec = h->root.root.u.def.section;
+      addend = h->root.root.u.def.value + ref->addend;
+    }
   else
     {
-      if (s->size == 0)
+      Elf_Internal_Sym *isym;
+
+      /* Read in the symbol.  */
+      isym = bfd_sym_from_r_symndx (&htab->sym_cache, ref->u.abfd,
+				    ref->symndx);
+      if (isym == NULL)
 	{
-	  /* Make room for a null element.  */
-	  s->size += MIPS_ELF_REL_SIZE (abfd);
-	  ++s->reloc_count;
-	}
-      s->size += n * MIPS_ELF_REL_SIZE (abfd);
-    }
-}
-
-/* A htab_traverse callback for GOT entries.  Set boolean *DATA to true
-   if the GOT entry is for an indirect or warning symbol.  */
-
-static int
-mips_elf_check_recreate_got (void **entryp, void *data)
-{
-  struct mips_got_entry *entry;
-  bfd_boolean *must_recreate;
-
-  entry = (struct mips_got_entry *) *entryp;
-  must_recreate = (bfd_boolean *) data;
-  if (entry->abfd != NULL && entry->symndx == -1)
-    {
-      struct mips_elf_link_hash_entry *h;
-
-      h = entry->d.h;
-      if (h->root.root.type == bfd_link_hash_indirect
-	  || h->root.root.type == bfd_link_hash_warning)
-	{
-	  *must_recreate = TRUE;
+	  arg->g = NULL;
 	  return 0;
 	}
-    }
-  return 1;
-}
 
-/* A htab_traverse callback for GOT entries.  Add all entries to
-   hash table *DATA, converting entries for indirect and warning
-   symbols into entries for the target symbol.  Set *DATA to null
-   on error.  */
-
-static int
-mips_elf_recreate_got (void **entryp, void *data)
-{
-  htab_t *new_got;
-  struct mips_got_entry *entry;
-  void **slot;
-
-  new_got = (htab_t *) data;
-  entry = (struct mips_got_entry *) *entryp;
-  if (entry->abfd != NULL && entry->symndx == -1)
-    {
-      struct mips_elf_link_hash_entry *h;
-
-      h = entry->d.h;
-      while (h->root.root.type == bfd_link_hash_indirect
-	     || h->root.root.type == bfd_link_hash_warning)
+      /* Get the associated input section.  */
+      sec = bfd_section_from_elf_index (ref->u.abfd, isym->st_shndx);
+      if (sec == NULL)
 	{
-	  BFD_ASSERT (h->global_got_area == GGA_NONE);
-	  h = (struct mips_elf_link_hash_entry *) h->root.root.u.i.link;
+	  arg->g = NULL;
+	  return 0;
 	}
-      entry->d.h = h;
+
+      /* If this is a mergable section, work out the section and offset
+	 of the merged data.  For section symbols, the addend specifies
+	 of the offset _of_ the first byte in the data, otherwise it
+	 specifies the offset _from_ the first byte.  */
+      if (sec->flags & SEC_MERGE)
+	{
+	  void *secinfo;
+
+	  secinfo = elf_section_data (sec)->sec_info;
+	  if (ELF_ST_TYPE (isym->st_info) == STT_SECTION)
+	    addend = _bfd_merged_section_offset (ref->u.abfd, &sec, secinfo,
+						 isym->st_value + ref->addend);
+	  else
+	    addend = _bfd_merged_section_offset (ref->u.abfd, &sec, secinfo,
+						 isym->st_value) + ref->addend;
+	}
+      else
+	addend = isym->st_value + ref->addend;
     }
-  slot = htab_find_slot (*new_got, entry, INSERT);
-  if (slot == NULL)
+  if (!mips_elf_record_got_page_entry (arg->g, sec, addend))
     {
-      *new_got = NULL;
+      arg->g = NULL;
       return 0;
     }
-  if (*slot == NULL)
-    *slot = entry;
   return 1;
 }
 
 /* If any entries in G->got_entries are for indirect or warning symbols,
-   replace them with entries for the target symbol.  */
+   replace them with entries for the target symbol.  Convert g->got_page_refs
+   into got_page_entry structures and estimate the number of page entries
+   that they require.  */
 
 static bfd_boolean
-mips_elf_resolve_final_got_entries (struct mips_got_info *g)
+mips_elf_resolve_final_got_entries (struct bfd_link_info *info,
+				    struct mips_got_info *g)
 {
-  bfd_boolean must_recreate;
-  htab_t new_got;
+  struct mips_elf_traverse_got_arg tga;
+  struct mips_got_info oldg;
 
-  must_recreate = FALSE;
-  htab_traverse (g->got_entries, mips_elf_check_recreate_got, &must_recreate);
-  if (must_recreate)
+  oldg = *g;
+
+  tga.info = info;
+  tga.g = g;
+  tga.value = FALSE;
+  htab_traverse (g->got_entries, mips_elf_check_recreate_got, &tga);
+  if (tga.value)
     {
-      new_got = htab_create (htab_size (g->got_entries),
-			     mips_elf_got_entry_hash,
-			     mips_elf_got_entry_eq, NULL);
-      htab_traverse (g->got_entries, mips_elf_recreate_got, &new_got);
-      if (new_got == NULL)
+      *g = oldg;
+      g->got_entries = htab_create (htab_size (oldg.got_entries),
+				    mips_elf_got_entry_hash,
+				    mips_elf_got_entry_eq, NULL);
+      if (!g->got_entries)
 	return FALSE;
 
-      htab_delete (g->got_entries);
-      g->got_entries = new_got;
+      htab_traverse (oldg.got_entries, mips_elf_recreate_got, &tga);
+      if (!tga.g)
+	return FALSE;
+
+      htab_delete (oldg.got_entries);
     }
+
+  g->got_page_entries = htab_try_create (1, mips_got_page_entry_hash,
+					 mips_got_page_entry_eq, NULL);
+  if (g->got_page_entries == NULL)
+    return FALSE;
+
+  tga.info = info;
+  tga.g = g;
+  htab_traverse (g->got_page_refs, mips_elf_resolve_got_page_ref, &tga);
+
   return TRUE;
 }
 
-/* A mips_elf_link_hash_traverse callback for which DATA points
-   to the link_info structure.  Count the number of type (3) entries
-   in the master GOT.  */
+/* A mips_elf_link_hash_traverse callback for which DATA points to the
+   link_info structure.  Decide whether the hash entry needs an entry in
+   the global part of the primary GOT, setting global_got_area accordingly.
+   Count the number of global symbols that are in the primary GOT only
+   because they have relocations against them (reloc_only_gotno).  */
 
 static int
 mips_elf_count_got_symbols (struct mips_elf_link_hash_entry *h, void *data)
@@ -4040,14 +4194,10 @@ mips_elf_count_got_symbols (struct mips_elf_link_hash_entry *h, void *data)
 	  || (h->got_only_for_calls
 	      ? SYMBOL_CALLS_LOCAL (info, &h->root)
 	      : SYMBOL_REFERENCES_LOCAL (info, &h->root)))
-	{
-	  /* The symbol belongs in the local GOT.  We no longer need this
-	     entry if it was only used for relocations; those relocations
-	     will be against the null or section symbol instead of H.  */
-	  if (h->global_got_area != GGA_RELOC_ONLY)
-	    g->local_gotno++;
-	  h->global_got_area = GGA_NONE;
-	}
+	/* The symbol belongs in the local GOT.  We no longer need this
+	   entry if it was only used for relocations; those relocations
+	   will be against the null or section symbol instead of H.  */
+	h->global_got_area = GGA_NONE;
       else if (htab->is_vxworks
 	       && h->got_only_for_calls
 	       && h->root.plt.offset != MINUS_ONE)
@@ -4055,194 +4205,79 @@ mips_elf_count_got_symbols (struct mips_elf_link_hash_entry *h, void *data)
 	   they don't need entries in the regular GOT.  .got.plt entries
 	   will be allocated by _bfd_mips_elf_adjust_dynamic_symbol.  */
 	h->global_got_area = GGA_NONE;
-      else
+      else if (h->global_got_area == GGA_RELOC_ONLY)
 	{
+	  g->reloc_only_gotno++;
 	  g->global_gotno++;
-	  if (h->global_got_area == GGA_RELOC_ONLY)
-	    g->reloc_only_gotno++;
 	}
     }
   return 1;
 }
 
-/* Compute the hash value of the bfd in a bfd2got hash entry.  */
-
-static hashval_t
-mips_elf_bfd2got_entry_hash (const void *entry_)
-{
-  const struct mips_elf_bfd2got_hash *entry
-    = (struct mips_elf_bfd2got_hash *)entry_;
-
-  return entry->bfd->id;
-}
-
-/* Check whether two hash entries have the same bfd.  */
+/* A htab_traverse callback for GOT entries.  Add each one to the GOT
+   given in mips_elf_traverse_got_arg DATA.  Clear DATA->G on error.  */
 
 static int
-mips_elf_bfd2got_entry_eq (const void *entry1, const void *entry2)
+mips_elf_add_got_entry (void **entryp, void *data)
 {
-  const struct mips_elf_bfd2got_hash *e1
-    = (const struct mips_elf_bfd2got_hash *)entry1;
-  const struct mips_elf_bfd2got_hash *e2
-    = (const struct mips_elf_bfd2got_hash *)entry2;
+  struct mips_got_entry *entry;
+  struct mips_elf_traverse_got_arg *arg;
+  void **slot;
 
-  return e1->bfd == e2->bfd;
-}
-
-/* In a multi-got link, determine the GOT to be used for IBFD.  G must
-   be the master GOT data.  */
-
-static struct mips_got_info *
-mips_elf_got_for_ibfd (struct mips_got_info *g, bfd *ibfd)
-{
-  struct mips_elf_bfd2got_hash e, *p;
-
-  if (! g->bfd2got)
-    return g;
-
-  e.bfd = ibfd;
-  p = htab_find (g->bfd2got, &e);
-  return p ? p->g : NULL;
-}
-
-/* Use BFD2GOT to find ABFD's got entry, creating one if none exists.
-   Return NULL if an error occured.  */
-
-static struct mips_got_info *
-mips_elf_get_got_for_bfd (struct htab *bfd2got, bfd *output_bfd,
-			  bfd *input_bfd)
-{
-  struct mips_elf_bfd2got_hash bfdgot_entry, *bfdgot;
-  struct mips_got_info *g;
-  void **bfdgotp;
-
-  bfdgot_entry.bfd = input_bfd;
-  bfdgotp = htab_find_slot (bfd2got, &bfdgot_entry, INSERT);
-  bfdgot = (struct mips_elf_bfd2got_hash *) *bfdgotp;
-
-  if (bfdgot == NULL)
+  entry = (struct mips_got_entry *) *entryp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  slot = htab_find_slot (arg->g->got_entries, entry, INSERT);
+  if (!slot)
     {
-      bfdgot = ((struct mips_elf_bfd2got_hash *)
-		bfd_alloc (output_bfd, sizeof (struct mips_elf_bfd2got_hash)));
-      if (bfdgot == NULL)
-	return NULL;
-
-      *bfdgotp = bfdgot;
-
-      g = ((struct mips_got_info *)
-	   bfd_alloc (output_bfd, sizeof (struct mips_got_info)));
-      if (g == NULL)
-	return NULL;
-
-      bfdgot->bfd = input_bfd;
-      bfdgot->g = g;
-
-      g->global_gotsym = NULL;
-      g->global_gotno = 0;
-      g->reloc_only_gotno = 0;
-      g->local_gotno = 0;
-      g->page_gotno = 0;
-      g->assigned_gotno = -1;
-      g->tls_gotno = 0;
-      g->tls_assigned_gotno = 0;
-      g->tls_ldm_offset = MINUS_ONE;
-      g->got_entries = htab_try_create (1, mips_elf_multi_got_entry_hash,
-					mips_elf_multi_got_entry_eq, NULL);
-      if (g->got_entries == NULL)
-	return NULL;
-
-      g->got_page_entries = htab_try_create (1, mips_got_page_entry_hash,
-					     mips_got_page_entry_eq, NULL);
-      if (g->got_page_entries == NULL)
-	return NULL;
-
-      g->bfd2got = NULL;
-      g->next = NULL;
-    }
-
-  return bfdgot->g;
-}
-
-/* A htab_traverse callback for the entries in the master got.
-   Create one separate got for each bfd that has entries in the global
-   got, such that we can tell how many local and global entries each
-   bfd requires.  */
-
-static int
-mips_elf_make_got_per_bfd (void **entryp, void *p)
-{
-  struct mips_got_entry *entry = (struct mips_got_entry *)*entryp;
-  struct mips_elf_got_per_bfd_arg *arg = (struct mips_elf_got_per_bfd_arg *)p;
-  struct mips_got_info *g;
-
-  g = mips_elf_get_got_for_bfd (arg->bfd2got, arg->obfd, entry->abfd);
-  if (g == NULL)
-    {
-      arg->obfd = NULL;
+      arg->g = NULL;
       return 0;
     }
-
-  /* Insert the GOT entry in the bfd's got entry hash table.  */
-  entryp = htab_find_slot (g->got_entries, entry, INSERT);
-  if (*entryp != NULL)
-    return 1;
-
-  *entryp = entry;
-
-  if (entry->tls_type)
+  if (!*slot)
     {
-      if (entry->tls_type & (GOT_TLS_GD | GOT_TLS_LDM))
-	g->tls_gotno += 2;
-      if (entry->tls_type & GOT_TLS_IE)
-	g->tls_gotno += 1;
+      *slot = entry;
+      mips_elf_count_got_entry (arg->info, arg->g, entry);
     }
-  else if (entry->symndx >= 0 || entry->d.h->global_got_area == GGA_NONE)
-    ++g->local_gotno;
-  else
-    ++g->global_gotno;
-
   return 1;
 }
 
-/* A htab_traverse callback for the page entries in the master got.
-   Associate each page entry with the bfd's got.  */
+/* A htab_traverse callback for GOT page entries.  Add each one to the GOT
+   given in mips_elf_traverse_got_arg DATA.  Clear DATA->G on error.  */
 
 static int
-mips_elf_make_got_pages_per_bfd (void **entryp, void *p)
+mips_elf_add_got_page_entry (void **entryp, void *data)
 {
-  struct mips_got_page_entry *entry = (struct mips_got_page_entry *) *entryp;
-  struct mips_elf_got_per_bfd_arg *arg = (struct mips_elf_got_per_bfd_arg *) p;
-  struct mips_got_info *g;
+  struct mips_got_page_entry *entry;
+  struct mips_elf_traverse_got_arg *arg;
+  void **slot;
 
-  g = mips_elf_get_got_for_bfd (arg->bfd2got, arg->obfd, entry->abfd);
-  if (g == NULL)
+  entry = (struct mips_got_page_entry *) *entryp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  slot = htab_find_slot (arg->g->got_page_entries, entry, INSERT);
+  if (!slot)
     {
-      arg->obfd = NULL;
+      arg->g = NULL;
       return 0;
     }
-
-  /* Insert the GOT entry in the bfd's got entry hash table.  */
-  entryp = htab_find_slot (g->got_page_entries, entry, INSERT);
-  if (*entryp != NULL)
-    return 1;
-
-  *entryp = entry;
-  g->page_gotno += entry->num_pages;
+  if (!*slot)
+    {
+      *slot = entry;
+      arg->g->page_gotno += entry->num_pages;
+    }
   return 1;
 }
 
-/* Consider merging the got described by BFD2GOT with TO, using the
-   information given by ARG.  Return -1 if this would lead to overflow,
-   1 if they were merged successfully, and 0 if a merge failed due to
-   lack of memory.  (These values are chosen so that nonnegative return
-   values can be returned by a htab_traverse callback.)  */
+/* Consider merging FROM, which is ABFD's GOT, into TO.  Return -1 if
+   this would lead to overflow, 1 if they were merged successfully,
+   and 0 if a merge failed due to lack of memory.  (These values are chosen
+   so that nonnegative return values can be returned by a htab_traverse
+   callback.)  */
 
 static int
-mips_elf_merge_got_with (struct mips_elf_bfd2got_hash *bfd2got,
+mips_elf_merge_got_with (bfd *abfd, struct mips_got_info *from,
 			 struct mips_got_info *to,
 			 struct mips_elf_got_per_bfd_arg *arg)
 {
-  struct mips_got_info *from = bfd2got->g;
+  struct mips_elf_traverse_got_arg tga;
   unsigned int estimate;
 
   /* Work out how many page entries we would need for the combined GOT.  */
@@ -4255,10 +4290,10 @@ mips_elf_merge_got_with (struct mips_elf_bfd2got_hash *bfd2got,
   estimate += from->local_gotno + to->local_gotno;
   estimate += from->tls_gotno + to->tls_gotno;
 
-  /* If we're merging with the primary got, we will always have
-     the full set of global entries.  Otherwise estimate those
+  /* If we're merging with the primary got, any TLS relocations will
+     come after the full set of global entries.  Otherwise estimate those
      conservatively as well.  */
-  if (to == arg->primary)
+  if (to == arg->primary && from->tls_gotno + to->tls_gotno)
     estimate += arg->global_count;
   else
     estimate += from->global_gotno + to->global_gotno;
@@ -4267,44 +4302,37 @@ mips_elf_merge_got_with (struct mips_elf_bfd2got_hash *bfd2got,
   if (estimate > arg->max_count)
     return -1;
 
-  /* Commit to the merge.  Record that TO is now the bfd for this got.  */
-  bfd2got->g = to;
-
   /* Transfer the bfd's got information from FROM to TO.  */
-  htab_traverse (from->got_entries, mips_elf_make_got_per_bfd, arg);
-  if (arg->obfd == NULL)
+  tga.info = arg->info;
+  tga.g = to;
+  htab_traverse (from->got_entries, mips_elf_add_got_entry, &tga);
+  if (!tga.g)
     return 0;
 
-  htab_traverse (from->got_page_entries, mips_elf_make_got_pages_per_bfd, arg);
-  if (arg->obfd == NULL)
+  htab_traverse (from->got_page_entries, mips_elf_add_got_page_entry, &tga);
+  if (!tga.g)
     return 0;
 
-  /* We don't have to worry about releasing memory of the actual
-     got entries, since they're all in the master got_entries hash
-     table anyway.  */
-  htab_delete (from->got_entries);
-  htab_delete (from->got_page_entries);
+  mips_elf_replace_bfd_got (abfd, to);
   return 1;
 }
 
-/* Attempt to merge gots of different input bfds.  Try to use as much
+/* Attempt to merge GOT G, which belongs to ABFD.  Try to use as much
    as possible of the primary got, since it doesn't require explicit
    dynamic relocations, but don't use bfds that would reference global
    symbols out of the addressable range.  Failing the primary got,
    attempt to merge with the current got, or finish the current got
    and then make make the new got current.  */
 
-static int
-mips_elf_merge_gots (void **bfd2got_, void *p)
+static bfd_boolean
+mips_elf_merge_got (bfd *abfd, struct mips_got_info *g,
+		    struct mips_elf_got_per_bfd_arg *arg)
 {
-  struct mips_elf_bfd2got_hash *bfd2got
-    = (struct mips_elf_bfd2got_hash *)*bfd2got_;
-  struct mips_elf_got_per_bfd_arg *arg = (struct mips_elf_got_per_bfd_arg *)p;
-  struct mips_got_info *g;
   unsigned int estimate;
   int result;
 
-  g = bfd2got->g;
+  if (!mips_elf_resolve_final_got_entries (arg->info, g))
+    return FALSE;
 
   /* Work out the number of page, local and TLS entries.  */
   estimate = arg->max_pages;
@@ -4324,12 +4352,12 @@ mips_elf_merge_gots (void **bfd2got_, void *p)
 	 a starting point for the primary GOT.  */
       if (!arg->primary)
 	{
-	  arg->primary = bfd2got->g;
-	  return 1;
+	  arg->primary = g;
+	  return TRUE;
 	}
 
       /* Try merging with the primary GOT.  */
-      result = mips_elf_merge_got_with (bfd2got, arg->primary, arg);
+      result = mips_elf_merge_got_with (abfd, g, arg->primary, arg);
       if (result >= 0)
 	return result;
     }
@@ -4337,7 +4365,7 @@ mips_elf_merge_gots (void **bfd2got_, void *p)
   /* If we can merge with the last-created got, do it.  */
   if (arg->current)
     {
-      result = mips_elf_merge_got_with (bfd2got, arg->current, arg);
+      result = mips_elf_merge_got_with (abfd, g, arg->current, arg);
       if (result >= 0)
 	return result;
     }
@@ -4348,106 +4376,110 @@ mips_elf_merge_gots (void **bfd2got_, void *p)
   g->next = arg->current;
   arg->current = g;
 
-  return 1;
+  return TRUE;
 }
 
-/* Set the TLS GOT index for the GOT entry in ENTRYP.  ENTRYP's NEXT field
-   is null iff there is just a single GOT.  */
+/* ENTRYP is a hash table entry for a mips_got_entry.  Set its gotidx
+   to GOTIDX, duplicating the entry if it has already been assigned
+   an index in a different GOT.  */
+
+static bfd_boolean
+mips_elf_set_gotidx (void **entryp, long gotidx)
+{
+  struct mips_got_entry *entry;
+
+  entry = (struct mips_got_entry *) *entryp;
+  if (entry->gotidx > 0)
+    {
+      struct mips_got_entry *new_entry;
+
+      new_entry = bfd_alloc (entry->abfd, sizeof (*entry));
+      if (!new_entry)
+	return FALSE;
+
+      *new_entry = *entry;
+      *entryp = new_entry;
+      entry = new_entry;
+    }
+  entry->gotidx = gotidx;
+  return TRUE;
+}
+
+/* Set the TLS GOT index for the GOT entry in ENTRYP.  DATA points to a
+   mips_elf_traverse_got_arg in which DATA->value is the size of one
+   GOT entry.  Set DATA->g to null on failure.  */
 
 static int
-mips_elf_initialize_tls_index (void **entryp, void *p)
+mips_elf_initialize_tls_index (void **entryp, void *data)
 {
-  struct mips_got_entry *entry = (struct mips_got_entry *)*entryp;
-  struct mips_got_info *g = p;
-  bfd_vma next_index;
-  unsigned char tls_type;
+  struct mips_got_entry *entry;
+  struct mips_elf_traverse_got_arg *arg;
 
   /* We're only interested in TLS symbols.  */
-  if (entry->tls_type == 0)
+  entry = (struct mips_got_entry *) *entryp;
+  if (entry->tls_type == GOT_TLS_NONE)
     return 1;
 
-  next_index = MIPS_ELF_GOT_SIZE (entry->abfd) * (long) g->tls_assigned_gotno;
-
-  if (entry->symndx == -1 && g->next == NULL)
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  if (!mips_elf_set_gotidx (entryp, arg->value * arg->g->tls_assigned_gotno))
     {
-      /* A type (3) got entry in the single-GOT case.  We use the symbol's
-	 hash table entry to track its index.  */
-      if (entry->d.h->tls_type & GOT_TLS_OFFSET_DONE)
-	return 1;
-      entry->d.h->tls_type |= GOT_TLS_OFFSET_DONE;
-      entry->d.h->tls_got_offset = next_index;
-      tls_type = entry->d.h->tls_type;
-    }
-  else
-    {
-      if (entry->tls_type & GOT_TLS_LDM)
-	{
-	  /* There are separate mips_got_entry objects for each input bfd
-	     that requires an LDM entry.  Make sure that all LDM entries in
-	     a GOT resolve to the same index.  */
-	  if (g->tls_ldm_offset != MINUS_TWO && g->tls_ldm_offset != MINUS_ONE)
-	    {
-	      entry->gotidx = g->tls_ldm_offset;
-	      return 1;
-	    }
-	  g->tls_ldm_offset = next_index;
-	}
-      entry->gotidx = next_index;
-      tls_type = entry->tls_type;
+      arg->g = NULL;
+      return 0;
     }
 
   /* Account for the entries we've just allocated.  */
-  if (tls_type & (GOT_TLS_GD | GOT_TLS_LDM))
-    g->tls_assigned_gotno += 2;
-  if (tls_type & GOT_TLS_IE)
-    g->tls_assigned_gotno += 1;
-
+  arg->g->tls_assigned_gotno += mips_tls_got_entries (entry->tls_type);
   return 1;
 }
 
-/* If passed a NULL mips_got_info in the argument, set the marker used
-   to tell whether a global symbol needs a got entry (in the primary
-   got) to the given VALUE.
+/* A htab_traverse callback for GOT entries, where DATA points to a
+   mips_elf_traverse_got_arg.  Set the global_got_area of each global
+   symbol to DATA->value.  */
 
-   If passed a pointer G to a mips_got_info in the argument (it must
-   not be the primary GOT), compute the offset from the beginning of
-   the (primary) GOT section to the entry in G corresponding to the
-   global symbol.  G's assigned_gotno must contain the index of the
-   first available global GOT entry in G.  VALUE must contain the size
-   of a GOT entry in bytes.  For each global GOT entry that requires a
-   dynamic relocation, NEEDED_RELOCS is incremented, and the symbol is
-   marked as not eligible for lazy resolution through a function
-   stub.  */
 static int
-mips_elf_set_global_got_offset (void **entryp, void *p)
+mips_elf_set_global_got_area (void **entryp, void *data)
 {
-  struct mips_got_entry *entry = (struct mips_got_entry *)*entryp;
-  struct mips_elf_set_global_got_offset_arg *arg
-    = (struct mips_elf_set_global_got_offset_arg *)p;
-  struct mips_got_info *g = arg->g;
+  struct mips_got_entry *entry;
+  struct mips_elf_traverse_got_arg *arg;
 
-  if (g && entry->tls_type != GOT_NORMAL)
-    arg->needed_relocs +=
-      mips_tls_got_relocs (arg->info, entry->tls_type,
-			   entry->symndx == -1 ? &entry->d.h->root : NULL);
+  entry = (struct mips_got_entry *) *entryp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
+  if (entry->abfd != NULL
+      && entry->symndx == -1
+      && entry->d.h->global_got_area != GGA_NONE)
+    entry->d.h->global_got_area = arg->value;
+  return 1;
+}
 
+/* A htab_traverse callback for secondary GOT entries, where DATA points
+   to a mips_elf_traverse_got_arg.  Assign GOT indices to global entries
+   and record the number of relocations they require.  DATA->value is
+   the size of one GOT entry.  Set DATA->g to null on failure.  */
+
+static int
+mips_elf_set_global_gotidx (void **entryp, void *data)
+{
+  struct mips_got_entry *entry;
+  struct mips_elf_traverse_got_arg *arg;
+
+  entry = (struct mips_got_entry *) *entryp;
+  arg = (struct mips_elf_traverse_got_arg *) data;
   if (entry->abfd != NULL
       && entry->symndx == -1
       && entry->d.h->global_got_area != GGA_NONE)
     {
-      if (g)
+      if (!mips_elf_set_gotidx (entryp, arg->value * arg->g->assigned_gotno))
 	{
-	  BFD_ASSERT (g->global_gotsym == NULL);
-
-	  entry->gotidx = arg->value * (long) g->assigned_gotno++;
-	  if (arg->info->shared
-	      || (elf_hash_table (arg->info)->dynamic_sections_created
-		  && entry->d.h->root.def_dynamic
-		  && !entry->d.h->root.def_regular))
-	    ++arg->needed_relocs;
+	  arg->g = NULL;
+	  return 0;
 	}
-      else
-	entry->d.h->global_got_area = arg->value;
+      arg->g->assigned_gotno += 1;
+
+      if (arg->info->shared
+	  || (elf_hash_table (arg->info)->dynamic_sections_created
+	      && entry->d.h->root.def_dynamic
+	      && !entry->d.h->root.def_regular))
+	arg->g->relocs += 1;
     }
 
   return 1;
@@ -4485,10 +4517,10 @@ mips_elf_forbid_lazy_stubs (void **entryp, void *data)
 static bfd_vma
 mips_elf_adjust_gp (bfd *abfd, struct mips_got_info *g, bfd *ibfd)
 {
-  if (g->bfd2got == NULL)
+  if (!g->next)
     return 0;
 
-  g = mips_elf_got_for_ibfd (g, ibfd);
+  g = mips_elf_bfd_got (ibfd, FALSE);
   if (! g)
     return 0;
 
@@ -4509,37 +4541,19 @@ mips_elf_multi_got (bfd *abfd, struct bfd_link_info *info,
 {
   struct mips_elf_link_hash_table *htab;
   struct mips_elf_got_per_bfd_arg got_per_bfd_arg;
-  struct mips_elf_set_global_got_offset_arg set_got_offset_arg;
+  struct mips_elf_traverse_got_arg tga;
   struct mips_got_info *g, *gg;
   unsigned int assign, needed_relocs;
-  bfd *dynobj;
+  bfd *dynobj, *ibfd;
 
   dynobj = elf_hash_table (info)->dynobj;
   htab = mips_elf_hash_table (info);
   BFD_ASSERT (htab != NULL);
 
   g = htab->got_info;
-  g->bfd2got = htab_try_create (1, mips_elf_bfd2got_entry_hash,
-				mips_elf_bfd2got_entry_eq, NULL);
-  if (g->bfd2got == NULL)
-    return FALSE;
 
-  got_per_bfd_arg.bfd2got = g->bfd2got;
   got_per_bfd_arg.obfd = abfd;
   got_per_bfd_arg.info = info;
-
-  /* Count how many GOT entries each input bfd requires, creating a
-     map from bfd to got info while at that.  */
-  htab_traverse (g->got_entries, mips_elf_make_got_per_bfd, &got_per_bfd_arg);
-  if (got_per_bfd_arg.obfd == NULL)
-    return FALSE;
-
-  /* Also count how many page entries each input bfd requires.  */
-  htab_traverse (g->got_page_entries, mips_elf_make_got_pages_per_bfd,
-		 &got_per_bfd_arg);
-  if (got_per_bfd_arg.obfd == NULL)
-    return FALSE;
-
   got_per_bfd_arg.current = NULL;
   got_per_bfd_arg.primary = NULL;
   got_per_bfd_arg.max_count = ((MIPS_ELF_GOT_MAX_SIZE (info)
@@ -4547,46 +4561,23 @@ mips_elf_multi_got (bfd *abfd, struct bfd_link_info *info,
 			       - htab->reserved_gotno);
   got_per_bfd_arg.max_pages = pages;
   /* The number of globals that will be included in the primary GOT.
-     See the calls to mips_elf_set_global_got_offset below for more
+     See the calls to mips_elf_set_global_got_area below for more
      information.  */
   got_per_bfd_arg.global_count = g->global_gotno;
 
   /* Try to merge the GOTs of input bfds together, as long as they
      don't seem to exceed the maximum GOT size, choosing one of them
      to be the primary GOT.  */
-  htab_traverse (g->bfd2got, mips_elf_merge_gots, &got_per_bfd_arg);
-  if (got_per_bfd_arg.obfd == NULL)
-    return FALSE;
+  for (ibfd = info->input_bfds; ibfd; ibfd = ibfd->link_next)
+    {
+      gg = mips_elf_bfd_got (ibfd, FALSE);
+      if (gg && !mips_elf_merge_got (ibfd, gg, &got_per_bfd_arg))
+	return FALSE;
+    }
 
   /* If we do not find any suitable primary GOT, create an empty one.  */
   if (got_per_bfd_arg.primary == NULL)
-    {
-      g->next = (struct mips_got_info *)
-	bfd_alloc (abfd, sizeof (struct mips_got_info));
-      if (g->next == NULL)
-	return FALSE;
-
-      g->next->global_gotsym = NULL;
-      g->next->global_gotno = 0;
-      g->next->reloc_only_gotno = 0;
-      g->next->local_gotno = 0;
-      g->next->page_gotno = 0;
-      g->next->tls_gotno = 0;
-      g->next->assigned_gotno = 0;
-      g->next->tls_assigned_gotno = 0;
-      g->next->tls_ldm_offset = MINUS_ONE;
-      g->next->got_entries = htab_try_create (1, mips_elf_multi_got_entry_hash,
-					      mips_elf_multi_got_entry_eq,
-					      NULL);
-      if (g->next->got_entries == NULL)
-	return FALSE;
-      g->next->got_page_entries = htab_try_create (1, mips_got_page_entry_hash,
-						   mips_got_page_entry_eq,
-						   NULL);
-      if (g->next->got_page_entries == NULL)
-	return FALSE;
-      g->next->bfd2got = NULL;
-    }
+    g->next = mips_elf_create_got_info (abfd);
   else
     g->next = got_per_bfd_arg.primary;
   g->next->next = got_per_bfd_arg.current;
@@ -4600,23 +4591,7 @@ mips_elf_multi_got (bfd *abfd, struct bfd_link_info *info,
      didn't mark in check_relocs, and we want a quick way to find it.
      We can't just use gg->next because we're going to reverse the
      list.  */
-  {
-    struct mips_elf_bfd2got_hash *bfdgot;
-    void **bfdgotp;
-
-    bfdgot = (struct mips_elf_bfd2got_hash *)bfd_alloc
-      (abfd, sizeof (struct mips_elf_bfd2got_hash));
-
-    if (bfdgot == NULL)
-      return FALSE;
-
-    bfdgot->bfd = abfd;
-    bfdgot->g = g;
-    bfdgotp = htab_find_slot (gg->bfd2got, bfdgot, INSERT);
-
-    BFD_ASSERT (*bfdgotp == NULL);
-    *bfdgotp = bfdgot;
-  }
+  mips_elf_replace_bfd_got (abfd, g);
 
   /* Every symbol that is referenced in a dynamic relocation must be
      present in the primary GOT, so arrange for them to appear after
@@ -4624,13 +4599,11 @@ mips_elf_multi_got (bfd *abfd, struct bfd_link_info *info,
   gg->reloc_only_gotno = gg->global_gotno - g->global_gotno;
   g->global_gotno = gg->global_gotno;
 
-  set_got_offset_arg.g = NULL;
-  set_got_offset_arg.value = GGA_RELOC_ONLY;
-  htab_traverse (gg->got_entries, mips_elf_set_global_got_offset,
-		 &set_got_offset_arg);
-  set_got_offset_arg.value = GGA_NORMAL;
-  htab_traverse (g->got_entries, mips_elf_set_global_got_offset,
-		 &set_got_offset_arg);
+  tga.info = info;
+  tga.value = GGA_RELOC_ONLY;
+  htab_traverse (gg->got_entries, mips_elf_set_global_got_area, &tga);
+  tga.value = GGA_NORMAL;
+  htab_traverse (g->got_entries, mips_elf_set_global_got_area, &tga);
 
   /* Now go through the GOTs assigning them offset ranges.
      [assigned_gotno, local_gotno[ will be set to the range of local
@@ -4671,7 +4644,12 @@ mips_elf_multi_got (bfd *abfd, struct bfd_link_info *info,
       /* Set up any TLS entries.  We always place the TLS entries after
 	 all non-TLS entries.  */
       g->tls_assigned_gotno = g->local_gotno + g->global_gotno;
-      htab_traverse (g->got_entries, mips_elf_initialize_tls_index, g);
+      tga.g = g;
+      tga.value = MIPS_ELF_GOT_SIZE (abfd);
+      htab_traverse (g->got_entries, mips_elf_initialize_tls_index, &tga);
+      if (!tga.g)
+	return FALSE;
+      BFD_ASSERT (g->tls_assigned_gotno == assign);
 
       /* Move onto the next GOT.  It will be a secondary GOT if nonull.  */
       g = gn;
@@ -4683,38 +4661,37 @@ mips_elf_multi_got (bfd *abfd, struct bfd_link_info *info,
     }
   while (g);
 
-  got->size = (gg->next->local_gotno
-	       + gg->next->global_gotno
-	       + gg->next->tls_gotno) * MIPS_ELF_GOT_SIZE (abfd);
+  got->size = assign * MIPS_ELF_GOT_SIZE (abfd);
 
   needed_relocs = 0;
-  set_got_offset_arg.value = MIPS_ELF_GOT_SIZE (abfd);
-  set_got_offset_arg.info = info;
   for (g = gg->next; g && g->next != gg; g = g->next)
     {
       unsigned int save_assign;
 
-      /* Assign offsets to global GOT entries.  */
+      /* Assign offsets to global GOT entries and count how many
+	 relocations they need.  */
       save_assign = g->assigned_gotno;
       g->assigned_gotno = g->local_gotno;
-      set_got_offset_arg.g = g;
-      set_got_offset_arg.needed_relocs = 0;
-      htab_traverse (g->got_entries,
-		     mips_elf_set_global_got_offset,
-		     &set_got_offset_arg);
-      needed_relocs += set_got_offset_arg.needed_relocs;
-      BFD_ASSERT (g->assigned_gotno - g->local_gotno <= g->global_gotno);
-
+      tga.info = info;
+      tga.value = MIPS_ELF_GOT_SIZE (abfd);
+      tga.g = g;
+      htab_traverse (g->got_entries, mips_elf_set_global_gotidx, &tga);
+      if (!tga.g)
+	return FALSE;
+      BFD_ASSERT (g->assigned_gotno == g->local_gotno + g->global_gotno);
       g->assigned_gotno = save_assign;
+
       if (info->shared)
 	{
-	  needed_relocs += g->local_gotno - g->assigned_gotno;
+	  g->relocs += g->local_gotno - g->assigned_gotno;
 	  BFD_ASSERT (g->assigned_gotno == g->next->local_gotno
 		      + g->next->global_gotno
 		      + g->next->tls_gotno
 		      + htab->reserved_gotno);
 	}
+      needed_relocs += g->relocs;
     }
+  needed_relocs += g->relocs;
 
   if (needed_relocs)
     mips_elf_allocate_dynamic_relocations (dynobj, info,
@@ -4871,8 +4848,6 @@ mips_elf_create_got_section (bfd *abfd, struct bfd_link_info *info)
   register asection *s;
   struct elf_link_hash_entry *h;
   struct bfd_link_hash_entry *bh;
-  struct mips_got_info *g;
-  bfd_size_type amt;
   struct mips_elf_link_hash_table *htab;
 
   htab = mips_elf_hash_table (info);
@@ -4912,29 +4887,7 @@ mips_elf_create_got_section (bfd *abfd, struct bfd_link_info *info)
       && ! bfd_elf_link_record_dynamic_symbol (info, h))
     return FALSE;
 
-  amt = sizeof (struct mips_got_info);
-  g = bfd_alloc (abfd, amt);
-  if (g == NULL)
-    return FALSE;
-  g->global_gotsym = NULL;
-  g->global_gotno = 0;
-  g->reloc_only_gotno = 0;
-  g->tls_gotno = 0;
-  g->local_gotno = 0;
-  g->page_gotno = 0;
-  g->assigned_gotno = 0;
-  g->bfd2got = NULL;
-  g->next = NULL;
-  g->tls_ldm_offset = MINUS_ONE;
-  g->got_entries = htab_try_create (1, mips_elf_got_entry_hash,
-				    mips_elf_got_entry_eq, NULL);
-  if (g->got_entries == NULL)
-    return FALSE;
-  g->got_page_entries = htab_try_create (1, mips_got_page_entry_hash,
-					 mips_got_page_entry_eq, NULL);
-  if (g->got_page_entries == NULL)
-    return FALSE;
-  htab->got_info = g;
+  htab->got_info = mips_elf_create_got_info (abfd);
   mips_elf_section_data (s)->elf.this_hdr.sh_flags
     |= SHF_ALLOC | SHF_WRITE | SHF_MIPS_GPREL;
 
@@ -5247,8 +5200,8 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
 	   && h->fn_stub != NULL
 	   && (r_type != R_MIPS16_CALL16 || h->need_fn_stub))
 	  || (local_p
-	      && elf_tdata (input_bfd)->local_stubs != NULL
-	      && elf_tdata (input_bfd)->local_stubs[r_symndx] != NULL))
+	      && mips_elf_tdata (input_bfd)->local_stubs != NULL
+	      && mips_elf_tdata (input_bfd)->local_stubs[r_symndx] != NULL))
       && !section_allows_mips16_refs_p (input_section))
     {
       /* This is a 32- or 64-bit call to a 16-bit function.  We should
@@ -5256,7 +5209,7 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
 	 stub.  */
       if (local_p)
 	{
-	  sec = elf_tdata (input_bfd)->local_stubs[r_symndx];
+	  sec = mips_elf_tdata (input_bfd)->local_stubs[r_symndx];
 	  value = 0;
 	}
       else
@@ -5287,12 +5240,12 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
   else if (r_type == R_MIPS16_26 && !info->relocatable
 	   && ((h != NULL && (h->call_stub != NULL || h->call_fp_stub != NULL))
 	       || (local_p
-		   && elf_tdata (input_bfd)->local_call_stubs != NULL
-		   && elf_tdata (input_bfd)->local_call_stubs[r_symndx] != NULL))
+		   && mips_elf_tdata (input_bfd)->local_call_stubs != NULL
+		   && mips_elf_tdata (input_bfd)->local_call_stubs[r_symndx] != NULL))
 	   && !target_is_16_bit_code_p)
     {
       if (local_p)
-	sec = elf_tdata (input_bfd)->local_call_stubs[r_symndx];
+	sec = mips_elf_tdata (input_bfd)->local_call_stubs[r_symndx];
       else
 	{
 	  /* If both call_stub and call_fp_stub are defined, we can figure
@@ -5301,7 +5254,7 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
 	  if (h->call_stub != NULL && h->call_fp_stub != NULL)
 	    {
 	      asection *o;
-	      
+
 	      sec = NULL;
 	      for (o = input_bfd->sections; o != NULL; o = o->next)
 		{
@@ -5432,9 +5385,9 @@ mips_elf_calculate_relocation (bfd *abfd, bfd *input_bfd,
 	  else
 	    {
 	      BFD_ASSERT (addend == 0);
-	      g = mips_elf_global_got_index (dynobj, input_bfd,
-					     &h->root, r_type, info);
-	      if (h->tls_type == GOT_NORMAL
+	      g = mips_elf_global_got_index (abfd, info, input_bfd,
+					     &h->root, r_type);
+	      if (!TLS_RELOC_P (r_type)
 		  && !elf_hash_table (info)->dynamic_sections_created)
 		/* This is a static link.  We must initialize the GOT entry.  */
 		MIPS_ELF_PUT_WORD (dynobj, symbol, htab->sgot->contents + g);
@@ -5890,7 +5843,7 @@ mips_elf_obtain_contents (reloc_howto_type *howto,
 /* It has been determined that the result of the RELOCATION is the
    VALUE.  Use HOWTO to place VALUE into the output file at the
    appropriate position.  The SECTION is the section to which the
-   relocation applies.  
+   relocation applies.
    CROSS_MODE_JUMP_P is true if the relocation field
    is a MIPS16 or microMIPS jump to standard MIPS code, or vice versa.
 
@@ -6265,6 +6218,9 @@ _bfd_elf_mips_mach (flagword flags)
     case E_MIPS_MACH_5500:
       return bfd_mach_mips5500;
 
+    case E_MIPS_MACH_5900:
+      return bfd_mach_mips5900;
+
     case E_MIPS_MACH_9000:
       return bfd_mach_mips9000;
 
@@ -6471,7 +6427,7 @@ _bfd_mips_elf_symbol_processing (bfd *abfd, asymbol *asym)
       && (asym->value & 1) != 0)
     {
       asym->value--;
-      if (elf_elfheader (abfd)->e_flags & EF_MIPS_ARCH_ASE_MICROMIPS)
+      if (MICROMIPS_P (abfd))
 	elfsym->internal_elf_sym.st_other
 	  = ELF_ST_SET_MICROMIPS (elfsym->internal_elf_sym.st_other);
       else
@@ -7073,7 +7029,7 @@ _bfd_mips_elf_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
 
     case SHN_MIPS_TEXT:
       /* This section is used in a shared object.  */
-      if (elf_tdata (abfd)->elf_text_section == NULL)
+      if (mips_elf_tdata (abfd)->elf_text_section == NULL)
 	{
 	  asymbol *elf_text_symbol;
 	  asection *elf_text_section;
@@ -7090,11 +7046,11 @@ _bfd_mips_elf_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
 
 	  /* Initialize the section.  */
 
-	  elf_tdata (abfd)->elf_text_section = elf_text_section;
-	  elf_tdata (abfd)->elf_text_symbol = elf_text_symbol;
+	  mips_elf_tdata (abfd)->elf_text_section = elf_text_section;
+	  mips_elf_tdata (abfd)->elf_text_symbol = elf_text_symbol;
 
 	  elf_text_section->symbol = elf_text_symbol;
-	  elf_text_section->symbol_ptr_ptr = &elf_tdata (abfd)->elf_text_symbol;
+	  elf_text_section->symbol_ptr_ptr = &mips_elf_tdata (abfd)->elf_text_symbol;
 
 	  elf_text_section->name = ".text";
 	  elf_text_section->flags = SEC_NO_FLAGS;
@@ -7107,14 +7063,14 @@ _bfd_mips_elf_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
       /* This code used to do *secp = bfd_und_section_ptr if
          info->shared.  I don't know why, and that doesn't make sense,
          so I took it out.  */
-      *secp = elf_tdata (abfd)->elf_text_section;
+      *secp = mips_elf_tdata (abfd)->elf_text_section;
       break;
 
     case SHN_MIPS_ACOMMON:
       /* Fall through. XXX Can we treat this as allocated data?  */
     case SHN_MIPS_DATA:
       /* This section is used in a shared object.  */
-      if (elf_tdata (abfd)->elf_data_section == NULL)
+      if (mips_elf_tdata (abfd)->elf_data_section == NULL)
 	{
 	  asymbol *elf_data_symbol;
 	  asection *elf_data_section;
@@ -7131,11 +7087,11 @@ _bfd_mips_elf_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
 
 	  /* Initialize the section.  */
 
-	  elf_tdata (abfd)->elf_data_section = elf_data_section;
-	  elf_tdata (abfd)->elf_data_symbol = elf_data_symbol;
+	  mips_elf_tdata (abfd)->elf_data_section = elf_data_section;
+	  mips_elf_tdata (abfd)->elf_data_symbol = elf_data_symbol;
 
 	  elf_data_section->symbol = elf_data_symbol;
-	  elf_data_section->symbol_ptr_ptr = &elf_tdata (abfd)->elf_data_symbol;
+	  elf_data_section->symbol_ptr_ptr = &mips_elf_tdata (abfd)->elf_data_symbol;
 
 	  elf_data_section->name = ".data";
 	  elf_data_section->flags = SEC_NO_FLAGS;
@@ -7148,7 +7104,7 @@ _bfd_mips_elf_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
       /* This code used to do *secp = bfd_und_section_ptr if
          info->shared.  I don't know why, and that doesn't make sense,
          so I took it out.  */
-      *secp = elf_tdata (abfd)->elf_data_section;
+      *secp = mips_elf_tdata (abfd)->elf_data_section;
       break;
 
     case SHN_MIPS_SUNDEFINED:
@@ -7264,7 +7220,7 @@ _bfd_mips_elf_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
     return FALSE;
   htab->sstubs = s;
 
-  if ((IRIX_COMPAT (abfd) == ict_irix5 || IRIX_COMPAT (abfd) == ict_none)
+  if (!mips_elf_hash_table (info)->use_rld_obj_head
       && !info->shared
       && bfd_get_linker_section (abfd, ".rld_map") == NULL)
     {
@@ -7372,7 +7328,7 @@ _bfd_mips_elf_create_dynamic_sections (bfd *abfd, struct bfd_link_info *info)
     }
 
   /* Create the .plt, .rel(a).plt, .dynbss and .rel(a).bss sections.
-     Also create the _PROCEDURE_LINKAGE_TABLE symbol.  */
+     Also, on VxWorks, create the _PROCEDURE_LINKAGE_TABLE_ symbol.  */
   if (!_bfd_elf_create_dynamic_sections (abfd, info))
     return FALSE;
 
@@ -7654,7 +7610,7 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	  /* Record this stub in an array of local symbol stubs for
              this BFD.  */
-	  if (elf_tdata (abfd)->local_stubs == NULL)
+	  if (mips_elf_tdata (abfd)->local_stubs == NULL)
 	    {
 	      unsigned long symcount;
 	      asection **n;
@@ -7668,11 +7624,11 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	      n = bfd_zalloc (abfd, amt);
 	      if (n == NULL)
 		return FALSE;
-	      elf_tdata (abfd)->local_stubs = n;
+	      mips_elf_tdata (abfd)->local_stubs = n;
 	    }
 
 	  sec->flags |= SEC_KEEP;
-	  elf_tdata (abfd)->local_stubs[r_symndx] = sec;
+	  mips_elf_tdata (abfd)->local_stubs[r_symndx] = sec;
 
 	  /* We don't need to set mips16_stubs_seen in this case.
              That flag is used to see whether we need to look through
@@ -7779,7 +7735,7 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	  /* Record this stub in an array of local symbol call_stubs for
              this BFD.  */
-	  if (elf_tdata (abfd)->local_call_stubs == NULL)
+	  if (mips_elf_tdata (abfd)->local_call_stubs == NULL)
 	    {
 	      unsigned long symcount;
 	      asection **n;
@@ -7793,11 +7749,11 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	      n = bfd_zalloc (abfd, amt);
 	      if (n == NULL)
 		return FALSE;
-	      elf_tdata (abfd)->local_call_stubs = n;
+	      mips_elf_tdata (abfd)->local_call_stubs = n;
 	    }
 
 	  sec->flags |= SEC_KEEP;
-	  elf_tdata (abfd)->local_call_stubs[r_symndx] = sec;
+	  mips_elf_tdata (abfd)->local_call_stubs[r_symndx] = sec;
 
 	  /* We don't need to set mips16_stubs_seen in this case.
              That flag is used to see whether we need to look through
@@ -7808,14 +7764,14 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	{
 	  h = ((struct mips_elf_link_hash_entry *)
 	       sym_hashes[r_symndx - extsymoff]);
-	  
+
 	  /* H is the symbol this stub is for.  */
-	  
+
 	  if (CALL_FP_STUB_P (name))
 	    loc = &h->call_fp_stub;
 	  else
 	    loc = &h->call_stub;
-	  
+
 	  /* If we already have an appropriate stub for this function, we
 	     don't need another one, so we can discard this one.  Since
 	     this function is called before the linker maps input sections
@@ -7858,10 +7814,16 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
       else
 	{
 	  h = sym_hashes[r_symndx - extsymoff];
-	  while (h != NULL
-		 && (h->root.type == bfd_link_hash_indirect
-		     || h->root.type == bfd_link_hash_warning))
-	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+	  if (h != NULL)
+	    {
+	      while (h->root.type == bfd_link_hash_indirect
+		     || h->root.type == bfd_link_hash_warning)
+		h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	      /* PR15323, ref flags aren't set for references in the
+		 same object.  */
+	      h->root.non_ir_ref = 1;
+	    }
 	}
 
       /* Set CAN_MAKE_DYNAMIC_P to true if we can convert this
@@ -8019,7 +7981,7 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	     R_MIPS_CALL_HI16 because these are always followed by an
 	     R_MIPS_GOT_LO16 or R_MIPS_CALL_LO16.  */
 	  if (!mips_elf_record_local_got_symbol (abfd, r_symndx,
-						 rel->r_addend, info, 0))
+						 rel->r_addend, info, r_type))
 	    return FALSE;
 	}
 
@@ -8052,7 +8014,8 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	      /* Make sure there is room in the regular GOT to hold the
 		 function's address.  We may eliminate it in favour of
 		 a .got.plt entry later; see mips_elf_count_got_symbols.  */
-	      if (!mips_elf_record_global_got_symbol (h, abfd, info, TRUE, 0))
+	      if (!mips_elf_record_global_got_symbol (h, abfd, info, TRUE,
+						      r_type))
 		return FALSE;
 
 	      /* We need a stub, not a plt entry for the undefined
@@ -8065,21 +8028,6 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 
 	case R_MIPS_GOT_PAGE:
 	case R_MICROMIPS_GOT_PAGE:
-	  /* If this is a global, overridable symbol, GOT_PAGE will
-	     decay to GOT_DISP, so we'll need a GOT entry for it.  */
-	  if (h)
-	    {
-	      struct mips_elf_link_hash_entry *hmips =
-		(struct mips_elf_link_hash_entry *) h;
-
-	      /* This symbol is definitely not overridable.  */
-	      if (hmips->root.def_regular
-		  && ! (info->shared && ! info->symbolic
-			&& ! hmips->root.forced_local))
-		h = NULL;
-	    }
-	  /* Fall through.  */
-
 	case R_MIPS16_GOT16:
 	case R_MIPS_GOT16:
 	case R_MIPS_GOT_HI16:
@@ -8108,16 +8056,30 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		}
 	      else
 		addend = rel->r_addend;
-	      if (!mips_elf_record_got_page_entry (info, abfd, r_symndx,
-						   addend))
+	      if (!mips_elf_record_got_page_ref (info, abfd, r_symndx,
+						 h, addend))
 		return FALSE;
+
+	      if (h)
+		{
+		  struct mips_elf_link_hash_entry *hmips =
+		    (struct mips_elf_link_hash_entry *) h;
+
+		  /* This symbol is definitely not overridable.  */
+		  if (hmips->root.def_regular
+		      && ! (info->shared && ! info->symbolic
+			    && ! hmips->root.forced_local))
+		    h = NULL;
+		}
 	    }
+	  /* If this is a global, overridable symbol, GOT_PAGE will
+	     decay to GOT_DISP, so we'll need a GOT entry for it.  */
 	  /* Fall through.  */
 
 	case R_MIPS_GOT_DISP:
 	case R_MICROMIPS_GOT_DISP:
 	  if (h && !mips_elf_record_global_got_symbol (h, abfd, info,
-						       FALSE, 0))
+						       FALSE, r_type))
 	    return FALSE;
 	  break;
 
@@ -8143,32 +8105,19 @@ _bfd_mips_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_MICROMIPS_TLS_GD:
 	  /* This symbol requires a global offset table entry, or two
 	     for TLS GD relocations.  */
-	  {
-	    unsigned char flag;
-
-	    flag = (tls_gd_reloc_p (r_type)
-		    ? GOT_TLS_GD
-		    : tls_ldm_reloc_p (r_type) ? GOT_TLS_LDM : GOT_TLS_IE);
-	    if (h != NULL)
-	      {
-		struct mips_elf_link_hash_entry *hmips =
-		  (struct mips_elf_link_hash_entry *) h;
-		hmips->tls_type |= flag;
-
-		if (h && !mips_elf_record_global_got_symbol (h, abfd, info,
-							     FALSE, flag))
-		  return FALSE;
-	      }
-	    else
-	      {
-		BFD_ASSERT (flag == GOT_TLS_LDM || r_symndx != STN_UNDEF);
-
-		if (!mips_elf_record_local_got_symbol (abfd, r_symndx,
-						       rel->r_addend,
-						       info, flag))
-		  return FALSE;
-	      }
-	  }
+	  if (h != NULL)
+	    {
+	      if (!mips_elf_record_global_got_symbol (h, abfd, info,
+						      FALSE, r_type))
+		return FALSE;
+	    }
+	  else
+	    {
+	      if (!mips_elf_record_local_got_symbol (abfd, r_symndx,
+						     rel->r_addend,
+						     info, r_type))
+		return FALSE;
+	    }
 	  break;
 
 	case R_MIPS_32:
@@ -8539,7 +8488,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
   if (! info->relocatable
       && hmips->possibly_dynamic_relocs != 0
       && (h->root.type == bfd_link_hash_defweak
-	  || !h->def_regular
+	  || (!h->def_regular && !ELF_COMMON_DEF_P (h))
 	  || info->shared))
     {
       bfd_boolean do_copy = TRUE;
@@ -8829,8 +8778,8 @@ mips_elf_lay_out_got (bfd *output_bfd, struct bfd_link_info *info)
   struct mips_got_info *g;
   bfd_size_type loadable_size = 0;
   bfd_size_type page_gotno;
-  bfd *sub;
-  struct mips_elf_count_tls_arg count_tls_arg;
+  bfd *ibfd;
+  struct mips_elf_traverse_got_arg tga;
   struct mips_elf_link_hash_table *htab;
 
   htab = mips_elf_hash_table (info);
@@ -8853,22 +8802,21 @@ mips_elf_lay_out_got (bfd *output_bfd, struct bfd_link_info *info)
   g->local_gotno += htab->reserved_gotno;
   g->assigned_gotno = htab->reserved_gotno;
 
-  /* Replace entries for indirect and warning symbols with entries for
-     the target symbol.  */
-  if (!mips_elf_resolve_final_got_entries (g))
-    return FALSE;
-
-  /* Count the number of GOT symbols.  */
+  /* Decide which symbols need to go in the global part of the GOT and
+     count the number of reloc-only GOT symbols.  */
   mips_elf_link_hash_traverse (htab, mips_elf_count_got_symbols, info);
+
+  if (!mips_elf_resolve_final_got_entries (info, g))
+    return FALSE;
 
   /* Calculate the total loadable size of the output.  That
      will give us the maximum number of GOT_PAGE entries
      required.  */
-  for (sub = info->input_bfds; sub; sub = sub->link_next)
+  for (ibfd = info->input_bfds; ibfd; ibfd = ibfd->link_next)
     {
       asection *subsection;
 
-      for (subsection = sub->sections;
+      for (subsection = ibfd->sections;
 	   subsection;
 	   subsection = subsection->next)
 	{
@@ -8889,64 +8837,52 @@ mips_elf_lay_out_got (bfd *output_bfd, struct bfd_link_info *info)
        sections.  Is 5 enough?  */
     page_gotno = (loadable_size >> 16) + 5;
 
-  /* Choose the smaller of the two estimates; both are intended to be
+  /* Choose the smaller of the two page estimates; both are intended to be
      conservative.  */
   if (page_gotno > g->page_gotno)
     page_gotno = g->page_gotno;
 
   g->local_gotno += page_gotno;
+
   s->size += g->local_gotno * MIPS_ELF_GOT_SIZE (output_bfd);
   s->size += g->global_gotno * MIPS_ELF_GOT_SIZE (output_bfd);
-
-  /* We need to calculate tls_gotno for global symbols at this point
-     instead of building it up earlier, to avoid doublecounting
-     entries for one global symbol from multiple input files.  */
-  count_tls_arg.info = info;
-  count_tls_arg.needed = 0;
-  elf_link_hash_traverse (elf_hash_table (info),
-			  mips_elf_count_global_tls_entries,
-			  &count_tls_arg);
-  g->tls_gotno += count_tls_arg.needed;
   s->size += g->tls_gotno * MIPS_ELF_GOT_SIZE (output_bfd);
 
   /* VxWorks does not support multiple GOTs.  It initializes $gp to
      __GOTT_BASE__[__GOTT_INDEX__], the value of which is set by the
      dynamic loader.  */
-  if (htab->is_vxworks)
-    {
-      /* VxWorks executables do not need a GOT.  */
-      if (info->shared)
-	{
-	  /* Each VxWorks GOT entry needs an explicit relocation.  */
-	  unsigned int count;
-
-	  count = g->global_gotno + g->local_gotno - htab->reserved_gotno;
-	  if (count)
-	    mips_elf_allocate_dynamic_relocations (dynobj, info, count);
-	}
-    }
-  else if (s->size > MIPS_ELF_GOT_MAX_SIZE (info))
+  if (!htab->is_vxworks && s->size > MIPS_ELF_GOT_MAX_SIZE (info))
     {
       if (!mips_elf_multi_got (output_bfd, info, s, page_gotno))
 	return FALSE;
     }
   else
     {
-      struct mips_elf_count_tls_arg arg;
+      /* Record that all bfds use G.  This also has the effect of freeing
+	 the per-bfd GOTs, which we no longer need.  */
+      for (ibfd = info->input_bfds; ibfd; ibfd = ibfd->link_next)
+	if (mips_elf_bfd_got (ibfd, FALSE))
+	  mips_elf_replace_bfd_got (ibfd, g);
+      mips_elf_replace_bfd_got (output_bfd, g);
 
       /* Set up TLS entries.  */
       g->tls_assigned_gotno = g->global_gotno + g->local_gotno;
-      htab_traverse (g->got_entries, mips_elf_initialize_tls_index, g);
+      tga.info = info;
+      tga.g = g;
+      tga.value = MIPS_ELF_GOT_SIZE (output_bfd);
+      htab_traverse (g->got_entries, mips_elf_initialize_tls_index, &tga);
+      if (!tga.g)
+	return FALSE;
+      BFD_ASSERT (g->tls_assigned_gotno
+		  == g->global_gotno + g->local_gotno + g->tls_gotno);
+
+      /* Each VxWorks GOT entry needs an explicit relocation.  */
+      if (htab->is_vxworks && info->shared)
+	g->relocs += g->global_gotno + g->local_gotno - htab->reserved_gotno;
 
       /* Allocate room for the TLS relocations.  */
-      arg.info = info;
-      arg.needed = 0;
-      htab_traverse (g->got_entries, mips_elf_count_local_tls_relocs, &arg);
-      elf_link_hash_traverse (elf_hash_table (info),
-			      mips_elf_count_global_tls_relocs,
-			      &arg);
-      if (arg.needed)
-	mips_elf_allocate_dynamic_relocations (dynobj, info, arg.needed);
+      if (g->relocs)
+	mips_elf_allocate_dynamic_relocations (dynobj, info, g->relocs);
     }
 
   return TRUE;
@@ -8990,7 +8926,7 @@ mips_elf_estimate_stub_size (bfd *output_bfd, struct bfd_link_info *info)
    allocate an entry in the stubs section.  */
 
 static bfd_boolean
-mips_elf_allocate_lazy_stub (struct mips_elf_link_hash_entry *h, void **data)
+mips_elf_allocate_lazy_stub (struct mips_elf_link_hash_entry *h, void *data)
 {
   struct mips_elf_link_hash_table *htab;
 
@@ -9189,8 +9125,8 @@ _bfd_mips_elf_size_dynamic_sections (bfd *output_bfd,
 
       /* SGI object has the equivalence of DT_DEBUG in the
 	 DT_MIPS_RLD_MAP entry.  This must come first because glibc
-	 only fills in DT_MIPS_RLD_MAP (not DT_DEBUG) and GDB only
-	 looks at the first one it sees.  */
+	 only fills in DT_MIPS_RLD_MAP (not DT_DEBUG) and some tools
+	 may only look at the first one they see.  */
       if (!info->shared
 	  && !MIPS_ELF_ADD_DYNAMIC_ENTRY (info, DT_MIPS_RLD_MAP, 0))
 	return FALSE;
@@ -10065,12 +10001,11 @@ _bfd_mips_elf_finish_dynamic_symbol (bfd *output_bfd,
       bfd_vma value;
 
       value = sym->st_value;
-      offset = mips_elf_global_got_index (dynobj, output_bfd, h,
-					  R_MIPS_GOT16, info);
+      offset = mips_elf_primary_global_got_index (output_bfd, info, h);
       MIPS_ELF_PUT_WORD (output_bfd, value, sgot->contents + offset);
     }
 
-  if (hmips->global_got_area != GGA_NONE && g->next && h->type != STT_TLS)
+  if (hmips->global_got_area != GGA_NONE && g->next)
     {
       struct mips_got_entry e, *p;
       bfd_vma entry;
@@ -10081,7 +10016,7 @@ _bfd_mips_elf_finish_dynamic_symbol (bfd *output_bfd,
       e.abfd = output_bfd;
       e.symndx = -1;
       e.d.h = hmips;
-      e.tls_type = 0;
+      e.tls_type = GOT_TLS_NONE;
 
       for (g = g->next; g->next != gg; g = g->next)
 	{
@@ -10090,6 +10025,7 @@ _bfd_mips_elf_finish_dynamic_symbol (bfd *output_bfd,
 							   &e)))
 	    {
 	      offset = p->gotidx;
+	      BFD_ASSERT (offset > 0 && offset < htab->sgot->size);
 	      if (info->shared
 		  || (elf_hash_table (info)->dynamic_sections_created
 		      && p->d.h != NULL
@@ -10125,7 +10061,7 @@ _bfd_mips_elf_finish_dynamic_symbol (bfd *output_bfd,
 
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
   name = h->root.root.string;
-  if (strcmp (name, "_DYNAMIC") == 0
+  if (h == elf_hash_table (info)->hdynamic
       || h == elf_hash_table (info)->hgot)
     sym->st_shndx = SHN_ABS;
   else if (strcmp (name, "_DYNAMIC_LINK") == 0
@@ -10188,12 +10124,17 @@ _bfd_mips_elf_finish_dynamic_symbol (bfd *output_bfd,
   if (IRIX_COMPAT (output_bfd) == ict_irix6)
     mips_elf_irix6_finish_dynamic_symbol (output_bfd, name, sym);
 
-  /* Keep dynamic MIPS16 symbols odd.  This allows the dynamic linker to
-     treat MIPS16 symbols like any other.  */
+  /* Keep dynamic compressed symbols odd.  This allows the dynamic linker
+     to treat compressed symbols like any other.  */
   if (ELF_ST_IS_MIPS16 (sym->st_other))
     {
       BFD_ASSERT (sym->st_value & 1);
       sym->st_other -= STO_MIPS16;
+    }
+  else if (ELF_ST_IS_MICROMIPS (sym->st_other))
+    {
+      BFD_ASSERT (sym->st_value & 1);
+      sym->st_other -= STO_MICROMIPS;
     }
 
   return TRUE;
@@ -10330,8 +10271,7 @@ _bfd_mips_vxworks_finish_dynamic_symbol (bfd *output_bfd,
       asection *s;
 
       /* Install the symbol value in the GOT.   */
-      offset = mips_elf_global_got_index (dynobj, output_bfd, h,
-					  R_MIPS_GOT16, info);
+      offset = mips_elf_primary_global_got_index (output_bfd, info, h);
       MIPS_ELF_PUT_WORD (output_bfd, sym->st_value, sgot->contents + offset);
 
       /* Add a dynamic relocation for it.  */
@@ -10537,7 +10477,7 @@ _bfd_mips_elf_finish_dynamic_sections (bfd *output_bfd,
       BFD_ASSERT (sdyn != NULL);
       BFD_ASSERT (gg != NULL);
 
-      g = mips_elf_got_for_ibfd (gg, output_bfd);
+      g = mips_elf_bfd_got (output_bfd, FALSE);
       BFD_ASSERT (g != NULL);
 
       for (b = sdyn->contents;
@@ -10627,9 +10567,9 @@ _bfd_mips_elf_finish_dynamic_sections (bfd *output_bfd,
 	      break;
 
 	    case DT_MIPS_GOTSYM:
-	      if (gg->global_gotsym)
+	      if (htab->global_gotsym)
 		{
-		  dyn.d_un.d_val = gg->global_gotsym->dynindx;
+		  dyn.d_un.d_val = htab->global_gotsym->dynindx;
 		  break;
 		}
 	      /* In case if we don't have global got symbols we default
@@ -10997,6 +10937,10 @@ mips_set_isa_flags (bfd *abfd)
       val = E_MIPS_ARCH_4 | E_MIPS_MACH_5500;
       break;
 
+    case bfd_mach_mips5900:
+      val = E_MIPS_ARCH_3 | E_MIPS_MACH_5900;
+      break;
+
     case bfd_mach_mips9000:
       val = E_MIPS_ARCH_4 | E_MIPS_MACH_9000;
       break;
@@ -11203,7 +11147,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
   s = bfd_get_section_by_name (abfd, ".reginfo");
   if (s != NULL && (s->flags & SEC_LOAD) != 0)
     {
-      for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+      for (m = elf_seg_map (abfd); m != NULL; m = m->next)
 	if (m->p_type == PT_MIPS_REGINFO)
 	  break;
       if (m == NULL)
@@ -11218,7 +11162,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
 	  m->sections[0] = s;
 
 	  /* We want to put it after the PHDR and INTERP segments.  */
-	  pm = &elf_tdata (abfd)->segment_map;
+	  pm = &elf_seg_map (abfd);
 	  while (*pm != NULL
 		 && ((*pm)->p_type == PT_PHDR
 		     || (*pm)->p_type == PT_INTERP))
@@ -11248,7 +11192,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
 	{
 	  struct elf_segment_map *options_segment;
 
-	  pm = &elf_tdata (abfd)->segment_map;
+	  pm = &elf_seg_map (abfd);
 	  while (*pm != NULL
 		 && ((*pm)->p_type == PT_PHDR
 		     || (*pm)->p_type == PT_INTERP))
@@ -11278,7 +11222,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
 	      && bfd_get_section_by_name (abfd, ".dynamic") != NULL
 	      && bfd_get_section_by_name (abfd, ".mdebug") != NULL)
 	    {
-	      for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+	      for (m = elf_seg_map (abfd); m != NULL; m = m->next)
 		if (m->p_type == PT_MIPS_RTPROC)
 		  break;
 	      if (m == NULL)
@@ -11304,7 +11248,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
 		    }
 
 		  /* We want to put it after the DYNAMIC segment.  */
-		  pm = &elf_tdata (abfd)->segment_map;
+		  pm = &elf_seg_map (abfd);
 		  while (*pm != NULL && (*pm)->p_type != PT_DYNAMIC)
 		    pm = &(*pm)->next;
 		  if (*pm != NULL)
@@ -11318,7 +11262,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
       /* On IRIX5, the PT_DYNAMIC segment includes the .dynamic,
 	 .dynstr, .dynsym, and .hash sections, and everything in
 	 between.  */
-      for (pm = &elf_tdata (abfd)->segment_map; *pm != NULL;
+      for (pm = &elf_seg_map (abfd); *pm != NULL;
 	   pm = &(*pm)->next)
 	if ((*pm)->p_type == PT_DYNAMIC)
 	  break;
@@ -11425,7 +11369,7 @@ _bfd_mips_elf_modify_segment_map (bfd *abfd,
       && !SGI_COMPAT (abfd)
       && bfd_get_section_by_name (abfd, ".dynamic"))
     {
-      for (pm = &elf_tdata (abfd)->segment_map; *pm != NULL; pm = &(*pm)->next)
+      for (pm = &elf_seg_map (abfd); *pm != NULL; pm = &(*pm)->next)
 	if ((*pm)->p_type == PT_NULL)
 	  break;
       if (*pm == NULL)
@@ -11580,9 +11524,6 @@ _bfd_mips_elf_copy_indirect_symbol (struct bfd_link_info *info,
     indmips->global_got_area = GGA_NONE;
   if (indmips->has_nonpic_branches)
     dirmips->has_nonpic_branches = TRUE;
-
-  if (dirmips->tls_type == 0)
-    dirmips->tls_type = indmips->tls_type;
 }
 
 #define PDR_SIZE 32
@@ -11739,7 +11680,7 @@ _bfd_mips_elf_find_nearest_line (bfd *abfd, asection *section,
       if (elf_section_data (msec)->this_hdr.sh_type != SHT_NOBITS)
 	msec->flags |= SEC_HAS_CONTENTS;
 
-      fi = elf_tdata (abfd)->find_line_info;
+      fi = mips_elf_tdata (abfd)->find_line_info;
       if (fi == NULL)
 	{
 	  bfd_size_type external_fdr_size;
@@ -11777,7 +11718,7 @@ _bfd_mips_elf_find_nearest_line (bfd *abfd, asection *section,
 	  for (; fraw_src < fraw_end; fraw_src += external_fdr_size, fdr_ptr++)
 	    (*swap->swap_fdr_in) (abfd, fraw_src, fdr_ptr);
 
-	  elf_tdata (abfd)->find_line_info = fi;
+	  mips_elf_tdata (abfd)->find_line_info = fi;
 
 	  /* Note that we don't bother to ever free this information.
              find_nearest_line is either called all the time, as in
@@ -12760,7 +12701,7 @@ _bfd_mips_elf_relax_section (bfd *abfd, asection *sec,
 	  /* Fix the relocation's type.  */
 	  irel->r_info = ELF32_R_INFO (r_symndx, R_MICROMIPS_PC10_S1);
 
-	  /* Replace the the 32-bit opcode with a 16-bit opcode.  */
+	  /* Replace the 32-bit opcode with a 16-bit opcode.  */
 	  bfd_put_16 (abfd,
 		      (b_insn_16.match
 		       | (opcode & 0x3ff)),		/* Addend value.  */
@@ -12787,7 +12728,7 @@ _bfd_mips_elf_relax_section (bfd *abfd, asection *sec,
 	  /* Fix the relocation's type.  */
 	  irel->r_info = ELF32_R_INFO (r_symndx, R_MICROMIPS_PC7_S1);
 
-	  /* Replace the the 32-bit opcode with a 16-bit opcode.  */
+	  /* Replace the 32-bit opcode with a 16-bit opcode.  */
 	  bfd_put_16 (abfd,
 		      (bz_insns_16[fndopc].match
 		       | BZ16_REG_FIELD (reg)
@@ -12913,7 +12854,7 @@ _bfd_mips_elf_link_hash_table_create (bfd *abfd)
   struct mips_elf_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct mips_elf_link_hash_table);
 
-  ret = bfd_malloc (amt);
+  ret = bfd_zmalloc (amt);
   if (ret == NULL)
     return NULL;
 
@@ -12925,36 +12866,6 @@ _bfd_mips_elf_link_hash_table_create (bfd *abfd)
       free (ret);
       return NULL;
     }
-
-#if 0
-  /* We no longer use this.  */
-  for (i = 0; i < SIZEOF_MIPS_DYNSYM_SECNAMES; i++)
-    ret->dynsym_sec_strindex[i] = (bfd_size_type) -1;
-#endif
-  ret->procedure_count = 0;
-  ret->compact_rel_size = 0;
-  ret->use_rld_obj_head = FALSE;
-  ret->rld_symbol = NULL;
-  ret->mips16_stubs_seen = FALSE;
-  ret->use_plts_and_copy_relocs = FALSE;
-  ret->is_vxworks = FALSE;
-  ret->small_data_overflow_reported = FALSE;
-  ret->srelbss = NULL;
-  ret->sdynbss = NULL;
-  ret->srelplt = NULL;
-  ret->srelplt2 = NULL;
-  ret->sgotplt = NULL;
-  ret->splt = NULL;
-  ret->sstubs = NULL;
-  ret->sgot = NULL;
-  ret->got_info = NULL;
-  ret->plt_header_size = 0;
-  ret->plt_entry_size = 0;
-  ret->lazy_stub_count = 0;
-  ret->function_stub_size = 0;
-  ret->strampoline = NULL;
-  ret->la25_stubs = NULL;
-  ret->add_stub_section = NULL;
 
   return &ret->root.root;
 }
@@ -13679,6 +13590,7 @@ static const struct mips_mach_extension mips_mach_extensions[] = {
   { bfd_mach_mips4300, bfd_mach_mips4000 },
   { bfd_mach_mips4100, bfd_mach_mips4000 },
   { bfd_mach_mips4010, bfd_mach_mips4000 },
+  { bfd_mach_mips5900, bfd_mach_mips4000 },
 
   /* MIPS32 extensions.  */
   { bfd_mach_mipsisa32r2, bfd_mach_mipsisa32 },
@@ -13745,6 +13657,12 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 {
   obj_attribute *in_attr;
   obj_attribute *out_attr;
+  bfd *abi_fp_bfd;
+
+  abi_fp_bfd = mips_elf_tdata (obfd)->abi_fp_bfd;
+  in_attr = elf_known_obj_attributes (ibfd)[OBJ_ATTR_GNU];
+  if (!abi_fp_bfd && in_attr[Tag_GNU_MIPS_ABI_FP].i != 0)
+    mips_elf_tdata (obfd)->abi_fp_bfd = ibfd;
 
   if (!elf_known_obj_attributes_proc (obfd)[0].i)
     {
@@ -13760,24 +13678,13 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 
   /* Check for conflicting Tag_GNU_MIPS_ABI_FP attributes and merge
      non-conflicting ones.  */
-  in_attr = elf_known_obj_attributes (ibfd)[OBJ_ATTR_GNU];
   out_attr = elf_known_obj_attributes (obfd)[OBJ_ATTR_GNU];
   if (in_attr[Tag_GNU_MIPS_ABI_FP].i != out_attr[Tag_GNU_MIPS_ABI_FP].i)
     {
       out_attr[Tag_GNU_MIPS_ABI_FP].type = 1;
       if (out_attr[Tag_GNU_MIPS_ABI_FP].i == 0)
 	out_attr[Tag_GNU_MIPS_ABI_FP].i = in_attr[Tag_GNU_MIPS_ABI_FP].i;
-      else if (in_attr[Tag_GNU_MIPS_ABI_FP].i == 0)
-	;
-      else if (in_attr[Tag_GNU_MIPS_ABI_FP].i > 4)
-	_bfd_error_handler
-	  (_("Warning: %B uses unknown floating point ABI %d"), ibfd,
-	   in_attr[Tag_GNU_MIPS_ABI_FP].i);
-      else if (out_attr[Tag_GNU_MIPS_ABI_FP].i > 4)
-	_bfd_error_handler
-	  (_("Warning: %B uses unknown floating point ABI %d"), obfd,
-	   out_attr[Tag_GNU_MIPS_ABI_FP].i);
-      else
+      else if (in_attr[Tag_GNU_MIPS_ABI_FP].i != 0)
 	switch (out_attr[Tag_GNU_MIPS_ABI_FP].i)
 	  {
 	  case 1:
@@ -13785,24 +13692,30 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 	      {
 	      case 2:
 		_bfd_error_handler
-		  (_("Warning: %B uses -msingle-float, %B uses -mdouble-float"),
-		   obfd, ibfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd, "-mdouble-float", "-msingle-float");
 		break;
 
 	      case 3:
 		_bfd_error_handler
-		  (_("Warning: %B uses hard float, %B uses soft float"),
-		   obfd, ibfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd, "-mhard-float", "-msoft-float");
 		break;
 
 	      case 4:
 		_bfd_error_handler
-		  (_("Warning: %B uses -msingle-float, %B uses -mips32r2 -mfp64"),
-		   obfd, ibfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-mdouble-float", "-mips32r2 -mfp64");
 		break;
 
 	      default:
-		abort ();
+		_bfd_error_handler
+		  (_("Warning: %B uses %s (set by %B), "
+		     "%B uses unknown floating point ABI %d"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-mdouble-float", in_attr[Tag_GNU_MIPS_ABI_FP].i);
+		break;
 	      }
 	    break;
 
@@ -13811,24 +13724,30 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 	      {
 	      case 1:
 		_bfd_error_handler
-		  (_("Warning: %B uses -msingle-float, %B uses -mdouble-float"),
-		   ibfd, obfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd, "-msingle-float", "-mdouble-float");
 		break;
 
 	      case 3:
 		_bfd_error_handler
-		  (_("Warning: %B uses hard float, %B uses soft float"),
-		   obfd, ibfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd, "-mhard-float", "-msoft-float");
 		break;
 
 	      case 4:
 		_bfd_error_handler
-		  (_("Warning: %B uses -mdouble-float, %B uses -mips32r2 -mfp64"),
-		   obfd, ibfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-msingle-float", "-mips32r2 -mfp64");
 		break;
 
 	      default:
-		abort ();
+		_bfd_error_handler
+		  (_("Warning: %B uses %s (set by %B), "
+		     "%B uses unknown floating point ABI %d"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-msingle-float", in_attr[Tag_GNU_MIPS_ABI_FP].i);
+		break;
 	      }
 	    break;
 
@@ -13839,12 +13758,17 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 	      case 2:
 	      case 4:
 		_bfd_error_handler
-		  (_("Warning: %B uses hard float, %B uses soft float"),
-		   ibfd, obfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd, "-msoft-float", "-mhard-float");
 		break;
 
 	      default:
-		abort ();
+		_bfd_error_handler
+		  (_("Warning: %B uses %s (set by %B), "
+		     "%B uses unknown floating point ABI %d"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-msoft-float", in_attr[Tag_GNU_MIPS_ABI_FP].i);
+		break;
 	      }
 	    break;
 
@@ -13853,29 +13777,79 @@ mips_elf_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 	      {
 	      case 1:
 		_bfd_error_handler
-		  (_("Warning: %B uses -msingle-float, %B uses -mips32r2 -mfp64"),
-		   ibfd, obfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-mips32r2 -mfp64", "-mdouble-float");
 		break;
 
 	      case 2:
 		_bfd_error_handler
-		  (_("Warning: %B uses -mdouble-float, %B uses -mips32r2 -mfp64"),
-		   ibfd, obfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-mips32r2 -mfp64", "-msingle-float");
 		break;
 
 	      case 3:
 		_bfd_error_handler
-		  (_("Warning: %B uses hard float, %B uses soft float"),
-		   obfd, ibfd);
+		  (_("Warning: %B uses %s (set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd, "-mhard-float", "-msoft-float");
 		break;
 
 	      default:
-		abort ();
+		_bfd_error_handler
+		  (_("Warning: %B uses %s (set by %B), "
+		     "%B uses unknown floating point ABI %d"),
+		   obfd, abi_fp_bfd, ibfd,
+		   "-mips32r2 -mfp64", in_attr[Tag_GNU_MIPS_ABI_FP].i);
+		break;
 	      }
 	    break;
 
 	  default:
-	    abort ();
+	    switch (in_attr[Tag_GNU_MIPS_ABI_FP].i)
+	      {
+	      case 1:
+		_bfd_error_handler
+		  (_("Warning: %B uses unknown floating point ABI %d "
+		     "(set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   out_attr[Tag_GNU_MIPS_ABI_FP].i, "-mdouble-float");
+		break;
+
+	      case 2:
+		_bfd_error_handler
+		  (_("Warning: %B uses unknown floating point ABI %d "
+		     "(set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   out_attr[Tag_GNU_MIPS_ABI_FP].i, "-msingle-float");
+		break;
+
+	      case 3:
+		_bfd_error_handler
+		  (_("Warning: %B uses unknown floating point ABI %d "
+		     "(set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   out_attr[Tag_GNU_MIPS_ABI_FP].i, "-msoft-float");
+		break;
+
+	      case 4:
+		_bfd_error_handler
+		  (_("Warning: %B uses unknown floating point ABI %d "
+		     "(set by %B), %B uses %s"),
+		   obfd, abi_fp_bfd, ibfd,
+		   out_attr[Tag_GNU_MIPS_ABI_FP].i, "-mips32r2 -mfp64");
+		break;
+
+	      default:
+		_bfd_error_handler
+		  (_("Warning: %B uses unknown floating point ABI %d "
+		     "(set by %B), %B uses unknown floating point ABI %d"),
+		   obfd, abi_fp_bfd, ibfd,
+		   out_attr[Tag_GNU_MIPS_ABI_FP].i,
+		   in_attr[Tag_GNU_MIPS_ABI_FP].i);
+		break;
+	      }
+	    break;
 	  }
     }
 
@@ -13933,7 +13907,7 @@ _bfd_mips_elf_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
 
       if (bfd_get_arch (obfd) == bfd_get_arch (ibfd)
 	  && (bfd_get_arch_info (obfd)->the_default
-	      || mips_mach_extends_p (bfd_get_mach (obfd), 
+	      || mips_mach_extends_p (bfd_get_mach (obfd),
 				      bfd_get_mach (ibfd))))
 	{
 	  if (! bfd_set_arch_mach (obfd, bfd_get_arch (ibfd),

@@ -131,21 +131,21 @@ class Target_sparc : public Sized_target<size, big_endian>
 			  const unsigned char* plocal_symbols,
 			  Relocatable_relocs*);
 
-  // Relocate a section during a relocatable link.
+  // Emit relocations for a section.
   void
-  relocate_for_relocatable(const Relocate_info<size, big_endian>*,
-			   unsigned int sh_type,
-			   const unsigned char* prelocs,
-			   size_t reloc_count,
-			   Output_section* output_section,
-			   typename elfcpp::Elf_types<size>::Elf_Off
-                             offset_in_output_section,
-			   const Relocatable_relocs*,
-			   unsigned char* view,
-			   typename elfcpp::Elf_types<size>::Elf_Addr view_address,
-			   section_size_type view_size,
-			   unsigned char* reloc_view,
-			   section_size_type reloc_view_size);
+  relocate_relocs(const Relocate_info<size, big_endian>*,
+		  unsigned int sh_type,
+		  const unsigned char* prelocs,
+		  size_t reloc_count,
+		  Output_section* output_section,
+		  typename elfcpp::Elf_types<size>::Elf_Off
+                    offset_in_output_section,
+		  const Relocatable_relocs*,
+		  unsigned char* view,
+		  typename elfcpp::Elf_types<size>::Elf_Addr view_address,
+		  section_size_type view_size,
+		  unsigned char* reloc_view,
+		  section_size_type reloc_view_size);
 
   // Return whether SYM is defined by the ABI.
   bool
@@ -238,7 +238,8 @@ class Target_sparc : public Sized_target<size, big_endian>
 	  unsigned int data_shndx,
 	  Output_section* output_section,
 	  const elfcpp::Rela<size, big_endian>& reloc, unsigned int r_type,
-	  const elfcpp::Sym<size, big_endian>& lsym);
+	  const elfcpp::Sym<size, big_endian>& lsym,
+	  bool is_discarded);
 
     inline void
     global(Symbol_table* symtab, Layout* layout, Target_sparc* target,
@@ -1619,7 +1620,7 @@ Output_data_plt_sparc<size, big_endian>::address_for_global(const Symbol* gsym)
   if (gsym->type() == elfcpp::STT_GNU_IFUNC
       && gsym->can_use_relative_reloc(false))
     offset = plt_index_to_offset(this->count_ + 4);
-  return this->address() + offset;
+  return this->address() + offset + gsym->plt_offset();
 }
 
 // Return the PLT address to use for a local symbol.  These are always
@@ -1628,10 +1629,12 @@ Output_data_plt_sparc<size, big_endian>::address_for_global(const Symbol* gsym)
 template<int size, bool big_endian>
 uint64_t
 Output_data_plt_sparc<size, big_endian>::address_for_local(
-	const Relobj*,
-	unsigned int)
+	const Relobj* object,
+	unsigned int r_sym)
 {
-  return this->address() + plt_index_to_offset(this->count_ + 4);
+  return (this->address()
+	  + plt_index_to_offset(this->count_ + 4)
+	  + object->local_plt_offset(r_sym));
 }
 
 static const unsigned int sparc_nop = 0x01000000;
@@ -2241,8 +2244,12 @@ Target_sparc<size, big_endian>::Scan::local(
 			Output_section* output_section,
 			const elfcpp::Rela<size, big_endian>& reloc,
 			unsigned int r_type,
-			const elfcpp::Sym<size, big_endian>& lsym)
+			const elfcpp::Sym<size, big_endian>& lsym,
+			bool is_discarded)
 {
+  if (is_discarded)
+    return;
+
   bool is_ifunc = lsym.get_st_type() == elfcpp::STT_GNU_IFUNC;
   unsigned int orig_r_type = r_type;
   r_type &= 0xff;
@@ -2430,8 +2437,7 @@ Target_sparc<size, big_endian>::Scan::local(
 					       target->rela_dyn_section(layout),
 					       (size == 64
 						? elfcpp::R_SPARC_TLS_DTPMOD64
-						: elfcpp::R_SPARC_TLS_DTPMOD32),
-					       0);
+						: elfcpp::R_SPARC_TLS_DTPMOD32));
 		if (r_type == elfcpp::R_SPARC_TLS_GD_CALL)
 		  generate_tls_call(symtab, layout, target);
 	      }
@@ -3196,7 +3202,7 @@ Target_sparc<size, big_endian>::Relocate::relocate(
     {
       elfcpp::Elf_Xword value;
 
-      value = target->plt_address_for_global(gsym) + gsym->plt_offset();
+      value = target->plt_address_for_global(gsym);
 
       symval.set_output_value(value);
 
@@ -3207,8 +3213,7 @@ Target_sparc<size, big_endian>::Relocate::relocate(
       unsigned int r_sym = elfcpp::elf_r_sym<size>(rela.get_r_info());
       if (object->local_has_plt_offset(r_sym))
 	{
-	  symval.set_output_value(target->plt_address_for_local(object, r_sym)
-				  + object->local_plt_offset(r_sym));
+	  symval.set_output_value(target->plt_address_for_local(object, r_sym));
 	  psymval = &symval;
 	}
     }
@@ -4134,7 +4139,7 @@ Target_sparc<size, big_endian>::relocate_section(
   gold_assert(sh_type == elfcpp::SHT_RELA);
 
   gold::relocate_section<size, big_endian, Sparc, elfcpp::SHT_RELA,
-    Sparc_relocate>(
+			 Sparc_relocate, gold::Default_comdat_behavior>(
     relinfo,
     this,
     prelocs,
@@ -4199,11 +4204,11 @@ Target_sparc<size, big_endian>::scan_relocatable_relocs(
     rr);
 }
 
-// Relocate a section during a relocatable link.
+// Emit relocations for a section.
 
 template<int size, bool big_endian>
 void
-Target_sparc<size, big_endian>::relocate_for_relocatable(
+Target_sparc<size, big_endian>::relocate_relocs(
     const Relocate_info<size, big_endian>* relinfo,
     unsigned int sh_type,
     const unsigned char* prelocs,
@@ -4219,7 +4224,7 @@ Target_sparc<size, big_endian>::relocate_for_relocatable(
 {
   gold_assert(sh_type == elfcpp::SHT_RELA);
 
-  gold::relocate_for_relocatable<size, big_endian, elfcpp::SHT_RELA>(
+  gold::relocate_relocs<size, big_endian, elfcpp::SHT_RELA>(
     relinfo,
     prelocs,
     reloc_count,

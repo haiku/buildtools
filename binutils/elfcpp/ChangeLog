@@ -1,3 +1,26 @@
+2013-03-01  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf.h (enum DW_LANG): Adjust spacing for consistency.
+	(enum DW_SECT): New enum type.
+
+2012-12-17  Nick Clifton  <nickc@redhat.com>
+
+	* README: Add copyright notice.
+
+2012-10-30  Steve McIntyre  <steve.mcintyre@linaro.org>
+
+	* arm.h: New enum for EABI soft- and hard-float flags.
+
+2012-09-15  Jiong Wang  <jiwang@tilera.com>
+
+	* tilegx.h: New file.
+	* elfcpp.h: add EM_TILEGX.
+
+2012-08-14  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.h: Add more relocs.
+	(R_PPC_REL16*): Rename to R_POWERPC_REL16*.
+
 2012-05-11  H.J. Lu  <hongjiu.lu@intel.com>
 
 	PR gold/14091
@@ -262,4 +285,16 @@
 2008-03-21  Ian Lance Taylor  <iant@google.com>
 
 	* Added source code to GNU binutils.
+
+Copyright (C) 2008-2012 Free Software Foundation, Inc.
 
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Local Variables:
+mode: change-log
+left-margin: 8
+fill-column: 74
+version-control: never
+End:

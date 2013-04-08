@@ -38,7 +38,9 @@ const char comment_chars[]        = ";";
    first line of the input file.  This is because the compiler outputs
    #NO_APP at the beginning of its output.  */
 const char line_comment_chars[]   = "#";
-const char line_separator_chars[] = "|";
+/* Use something that isn't going to be needed by any expressions or
+   other syntax.  */
+const char line_separator_chars[] = "@";
 
 const char EXP_CHARS[]            = "eE";
 const char FLT_CHARS[]            = "dD";
@@ -192,6 +194,9 @@ rl78_op (expressionS exp, int nbytes, int type)
     }
   else
     {
+      if (nbytes > 2
+	  && exp.X_md == BFD_RELOC_RL78_CODE)
+	exp.X_md = 0;
       rl78_op_fixup (exp, rl78_bytes.n_ops * 8, nbytes * 8, type);
       memset (rl78_bytes.ops + rl78_bytes.n_ops, 0, nbytes);
       rl78_bytes.n_ops += nbytes;
@@ -335,6 +340,7 @@ static struct
 }
 reloc_functions[] =
 {
+  { "code", BFD_RELOC_RL78_CODE },
   { "lo16", BFD_RELOC_RL78_LO16 },
   { "hi16", BFD_RELOC_RL78_HI16 },
   { "hi8",  BFD_RELOC_RL78_HI8 },
@@ -552,6 +558,27 @@ rl78_cons_fix_new (fragS *	frag,
       return;
     }
 
+  switch (exp->X_md)
+    {
+    case BFD_RELOC_RL78_CODE:
+      if (size == 2)
+	type = exp->X_md;
+      break;
+    case BFD_RELOC_RL78_LO16:
+    case BFD_RELOC_RL78_HI16:
+      if (size != 2)
+	as_bad (_("%%hi16/%%lo16 only applies to .short or .hword"));
+      type = exp->X_md;
+      break;
+    case BFD_RELOC_RL78_HI8:
+      if (size != 1)
+	as_bad (_("%%hi8 only applies to .byte"));
+      type = exp->X_md;
+      break;
+    default:
+      break;
+    }
+
   if (exp->X_op == O_subtract && exp->X_op_symbol)
     {
       if (size != 4 && size != 2 && size != 1)
@@ -644,6 +671,11 @@ tc_gen_reloc (asection * seg ATTRIBUTE_UNUSED, fixS * fixp)
       SYM0 ();
       OP (OP_NEG);
       OP (ABS32);
+      break;
+
+    case BFD_RELOC_RL78_CODE:
+      SYM0 ();
+      OP (ABS16);
       break;
 
     case BFD_RELOC_RL78_LO16:
@@ -752,6 +784,7 @@ md_apply_fix (struct fix * f ATTRIBUTE_UNUSED,
 
     case BFD_RELOC_16:
     case BFD_RELOC_16_PCREL:
+    case BFD_RELOC_RL78_CODE:
       op[0] = val;
       op[1] = val >> 8;
       break;

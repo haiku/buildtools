@@ -15,6 +15,24 @@
 
 @SET_MAKE@
 
+#
+#   Copyright 2012 Free Software Foundation
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+#
+
 
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
@@ -406,6 +424,7 @@ TARGET_CPU_CFILES = \
 	config/tc-m68k.c \
 	config/tc-mcore.c \
 	config/tc-mep.c \
+	config/tc-metag.c \
 	config/tc-microblaze.c \
 	config/tc-mips.c \
 	config/tc-mmix.c \
@@ -414,6 +433,7 @@ TARGET_CPU_CFILES = \
 	config/tc-moxie.c \
 	config/tc-msp430.c \
 	config/tc-mt.c \
+	config/tc-nios2.c \
 	config/tc-ns32k.c \
 	config/tc-openrisc.c \
 	config/tc-or32.c \
@@ -476,6 +496,7 @@ TARGET_CPU_HFILES = \
 	config/tc-m68k.h \
 	config/tc-mcore.h \
 	config/tc-mep.h \
+	config/tc-metag.h \
 	config/tc-microblaze.h \
 	config/tc-mips.h \
 	config/tc-mmix.h \
@@ -483,6 +504,7 @@ TARGET_CPU_HFILES = \
 	config/tc-mn10300.h \
 	config/tc-msp430.h \
 	config/tc-mt.h \
+	config/tc-nios2.h \
 	config/tc-ns32k.h \
 	config/tc-openrisc.h \
 	config/tc-or32.h \
@@ -826,6 +848,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-m68k.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-mcore.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-mep.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-metag.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-microblaze.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-mips.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-mmix.Po@am__quote@
@@ -834,6 +857,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-moxie.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-msp430.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-mt.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-nios2.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-ns32k.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-openrisc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/tc-or32.Po@am__quote@
@@ -1321,6 +1345,20 @@ tc-mep.obj: config/tc-mep.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-mep.obj `if test -f 'config/tc-mep.c'; then $(CYGPATH_W) 'config/tc-mep.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-mep.c'; fi`
 
+tc-metag.o: config/tc-metag.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-metag.o -MD -MP -MF $(DEPDIR)/tc-metag.Tpo -c -o tc-metag.o `test -f 'config/tc-metag.c' || echo '$(srcdir)/'`config/tc-metag.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-metag.Tpo $(DEPDIR)/tc-metag.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-metag.c' object='tc-metag.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-metag.o `test -f 'config/tc-metag.c' || echo '$(srcdir)/'`config/tc-metag.c
+
+tc-metag.obj: config/tc-metag.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-metag.obj -MD -MP -MF $(DEPDIR)/tc-metag.Tpo -c -o tc-metag.obj `if test -f 'config/tc-metag.c'; then $(CYGPATH_W) 'config/tc-metag.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-metag.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-metag.Tpo $(DEPDIR)/tc-metag.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-metag.c' object='tc-metag.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-metag.obj `if test -f 'config/tc-metag.c'; then $(CYGPATH_W) 'config/tc-metag.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-metag.c'; fi`
+
 tc-microblaze.o: config/tc-microblaze.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-microblaze.o -MD -MP -MF $(DEPDIR)/tc-microblaze.Tpo -c -o tc-microblaze.o `test -f 'config/tc-microblaze.c' || echo '$(srcdir)/'`config/tc-microblaze.c
 @am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-microblaze.Tpo $(DEPDIR)/tc-microblaze.Po
@@ -1432,6 +1470,20 @@ tc-mt.obj: config/tc-mt.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-mt.c' object='tc-mt.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-mt.obj `if test -f 'config/tc-mt.c'; then $(CYGPATH_W) 'config/tc-mt.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-mt.c'; fi`
+
+tc-nios2.o: config/tc-nios2.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-nios2.o -MD -MP -MF $(DEPDIR)/tc-nios2.Tpo -c -o tc-nios2.o `test -f 'config/tc-nios2.c' || echo '$(srcdir)/'`config/tc-nios2.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-nios2.Tpo $(DEPDIR)/tc-nios2.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-nios2.c' object='tc-nios2.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-nios2.o `test -f 'config/tc-nios2.c' || echo '$(srcdir)/'`config/tc-nios2.c
+
+tc-nios2.obj: config/tc-nios2.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-nios2.obj -MD -MP -MF $(DEPDIR)/tc-nios2.Tpo -c -o tc-nios2.obj `if test -f 'config/tc-nios2.c'; then $(CYGPATH_W) 'config/tc-nios2.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-nios2.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/tc-nios2.Tpo $(DEPDIR)/tc-nios2.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='config/tc-nios2.c' object='tc-nios2.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o tc-nios2.obj `if test -f 'config/tc-nios2.c'; then $(CYGPATH_W) 'config/tc-nios2.c'; else $(CYGPATH_W) '$(srcdir)/config/tc-nios2.c'; fi`
 
 tc-ns32k.o: config/tc-ns32k.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT tc-ns32k.o -MD -MP -MF $(DEPDIR)/tc-ns32k.Tpo -c -o tc-ns32k.o `test -f 'config/tc-ns32k.c' || echo '$(srcdir)/'`config/tc-ns32k.c
@@ -2582,7 +2634,7 @@ install-exec-tooldir: install-exec-bindir $(noinst_PROGRAMS)
 
 .PHONY: bootstrap bootstrap2 bootstrap3 stage1 stage2 stage3 comparison
 
-bootstrap: as-new
+bootstrap: as-new$(EXEEXT)
 	$(MAKE) stage1
 	rm -f stage && ln -s stage1 stage
 	$(MAKE) CC="$(CC)" CFLAGS="-O -Bstage/ $(CFLAGS)" libdir=$(libdir) ALLOCA= $(noinst_PROGRAMS)

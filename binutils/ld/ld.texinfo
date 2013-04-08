@@ -1,8 +1,6 @@
 \input texinfo
 @setfilename ld.info
-@c Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-@c 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
-@c Free Software Foundation, Inc.
+@c Copyright 1991-2013 Free Software Foundation, Inc.
 @syncodeindex ky cp
 @c man begin INCLUDE
 @include configdoc.texi
@@ -54,8 +52,7 @@ This file documents the @sc{gnu} linker LD
 @end ifset
 version @value{VERSION}.
 
-Copyright @copyright{} 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2013 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -92,9 +89,7 @@ section entitled ``GNU Free Documentation License''.
 
 @vskip 0pt plus 1filll
 @c man begin COPYRIGHT
-Copyright @copyright{} 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 Free
-Software Foundation, Inc.
+Copyright @copyright{} 1991-2013 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -142,11 +137,11 @@ in the section entitled ``GNU Free Documentation License''.
 @ifset ARM
 * ARM::				ld and the ARM family
 @end ifset
-@ifset HPPA
-* HPPA ELF32::                  ld and HPPA 32-bit ELF
-@end ifset
 @ifset M68HC11
 * M68HC11/68HC12::              ld and the Motorola 68HC11 and 68HC12 families
+@end ifset
+@ifset HPPA
+* HPPA ELF32::                  ld and HPPA 32-bit ELF
 @end ifset
 @ifset M68K
 * M68K::                        ld and Motorola 68K family
@@ -1024,6 +1019,11 @@ shared libraries are still allowed.
 @item execstack
 Marks the object as requiring executable stack.
 
+@item global
+This option is only meaningful when building a shared object.  It makes
+the symbols defined by this shared object available for symbol resolution
+of subsequently loaded libraries.
+
 @item initfirst
 This option is only meaningful when building a shared object.
 It marks the object so that its runtime initialization will occur
@@ -1093,6 +1093,11 @@ Set the emulation maximum page size to @var{value}.
 @item common-page-size=@var{value}
 Set the emulation common page size to @var{value}.
 
+@item stack-size=@var{value}
+Specify a stack size for in an ELF @code{PT_GNU_STACK} segment.
+Specifying zero will override any default non-zero sized
+@code{PT_GNU_STACK} segment creation.
+
 @end table
 
 Other keywords are ignored for Solaris compatibility.
@@ -1138,11 +1143,14 @@ on the command line after the @option{--as-needed} option.  Normally
 the linker will add a DT_NEEDED tag for each dynamic library mentioned
 on the command line, regardless of whether the library is actually
 needed or not.  @option{--as-needed} causes a DT_NEEDED tag to only be
-emitted for a library that satisfies an undefined symbol reference
-from a regular object file or, if the library is not found in the
-DT_NEEDED lists of other libraries linked up to that point, an
-undefined symbol reference from another dynamic library.
-@option{--no-as-needed} restores the default behaviour.
+emitted for a library that @emph{at that point in the link} satisfies a
+non-weak undefined symbol reference from a regular object file or, if
+the library is not found in the DT_NEEDED lists of other libraries, a
+non-weak undefined symbol reference from another dynamic library.
+Object files or libraries appearing on the command line @emph{after}
+the library in question do not affect whether the library is seen as
+needed.  This is similar to the rules for extraction of object files
+from archives.  @option{--no-as-needed} restores the default behaviour.
 
 @kindex --add-needed
 @kindex --no-add-needed
@@ -1598,7 +1606,7 @@ On some platforms the @samp{--relax} option performs target specific,
 global optimizations that become possible when the linker resolves
 addressing in the program, such as relaxing address modes,
 synthesizing new instructions, selecting shorter version of current
-instructions, and combinig constant values.
+instructions, and combining constant values.
 
 On some platforms these link time global optimizations may make symbolic
 debugging of the resulting executable impossible.
@@ -1705,7 +1713,7 @@ environment variable @code{LD_RUN_PATH}.
 On SunOS, if the @option{-rpath} option was not used, search any
 directories specified using @option{-L} options.
 @item
-For a native linker, the search the contents of the environment
+For a native linker, search the contents of the environment
 variable @code{LD_LIBRARY_PATH}.
 @item
 For a native ELF linker, the directories in @code{DT_RUNPATH} or
@@ -1834,6 +1842,12 @@ When creating an ELF executable or shared object for a target where
 the read-only data is in its own segment separate from the executable
 text, it will set the address of the first byte of the read-only data segment.
 
+@kindex -Tldata-segment=@var{org}
+@item -Tldata-segment=@var{org}
+@cindex ldata segment origin, cmd line
+When creating an ELF executable or shared object for x86-64 medium memory
+model, it will set the address of the first byte of the ldata segment.
+
 @kindex --unresolved-symbols
 @item --unresolved-symbols=@var{method}
 Determine how to handle unresolved symbols.  There are four possible
@@ -1891,10 +1905,10 @@ symbols marked @samp{local} in the version script will not be exported.
 @cindex combining symbols, warnings on
 @item --warn-common
 Warn when a common symbol is combined with another common symbol or with
-a symbol definition.  Unix linkers allow this somewhat sloppy practise,
+a symbol definition.  Unix linkers allow this somewhat sloppy practice,
 but linkers on some other operating systems do not.  This option allows
 you to find potential problems from combining global symbols.
-Unfortunately, some C libraries use this practise, so you may get some
+Unfortunately, some C libraries use this practice, so you may get some
 warnings about symbols in the libraries as well as in your programs.
 
 There are three kinds of global symbols, illustrated here by C examples:
@@ -2094,7 +2108,8 @@ if linker generated unwind info is supported.
 @itemx --disable-new-dtags
 This linker can create the new dynamic tags in ELF. But the older ELF
 systems may not understand them. If you specify
-@option{--enable-new-dtags}, the dynamic tags will be created as needed.
+@option{--enable-new-dtags}, the new dynamic tags will be created as needed
+and older dynamic tags will be omitted.
 If you specify @option{--disable-new-dtags}, no new dynamic tags will be
 created. By default, the new dynamic tags are not created. Note that
 those options are only available for ELF systems.
@@ -2482,7 +2497,7 @@ extern_ll -->
 
 A third method of dealing with this difficulty is to abandon
 'auto-import' for the offending symbol and mark it with
-@code{__declspec(dllimport)}.  However, in practise that
+@code{__declspec(dllimport)}.  However, in practice that
 requires using compile-time #defines to indicate whether you are
 building a DLL, building client code that will link to the DLL, or
 merely building/linking to a static library.   In making the choice
@@ -2554,7 +2569,7 @@ environment to adjust references to such data in your client code.
 @kindex --disable-runtime-pseudo-reloc
 @item --disable-runtime-pseudo-reloc
 Do not create pseudo relocations for non-zero offset DATA imports from
-DLLs.  This is the default.
+DLLs.
 [This option is specific to the i386 PE targeted port of the linker]
 
 @kindex --enable-extra-pe-debug
@@ -2827,7 +2842,7 @@ in the output file is an @dfn{output section}.
 
 Each section in an object file has a name and a size.  Most sections
 also have an associated block of data, known as the @dfn{section
-contents}.  A section may be marked as @dfn{loadable}, which mean that
+contents}.  A section may be marked as @dfn{loadable}, which means that
 the contents should be loaded into memory when the output file is run.
 A section with no contents may be @dfn{allocatable}, which means that an
 area in memory should be set aside, but nothing in particular should be
@@ -4661,7 +4676,7 @@ OVERLAY [@var{start}] : [NOCROSSREFS] [AT ( @var{ldaddr} )]
 Everything is optional except @code{OVERLAY} (a keyword), and each
 section must have a name (@var{secname1} and @var{secname2} above).  The
 section definitions within the @code{OVERLAY} construct are identical to
-those within the general @code{SECTIONS} contruct (@pxref{SECTIONS}),
+those within the general @code{SECTIONS} construct (@pxref{SECTIONS}),
 except that no addresses and no memory regions may be defined for
 sections within an @code{OVERLAY}.
 
@@ -4672,11 +4687,11 @@ whole (as with normal section definitions, the load address is optional,
 and defaults to the start address; the start address is also optional,
 and defaults to the current value of the location counter).
 
-If the @code{NOCROSSREFS} keyword is used, and there any references
-among the sections, the linker will report an error.  Since the sections
-all run at the same address, it normally does not make sense for one
-section to refer directly to another.  @xref{Miscellaneous Commands,
-NOCROSSREFS}.
+If the @code{NOCROSSREFS} keyword is used, and there are any
+references among the sections, the linker will report an error.  Since
+the sections all run at the same address, it normally does not make
+sense for one section to refer directly to another.
+@xref{Miscellaneous Commands, NOCROSSREFS}.
 
 For each section within the @code{OVERLAY}, the linker automatically
 provides two symbols.  The symbol @code{__load_start_@var{secname}} is
@@ -5239,7 +5254,7 @@ All constants are integers.
 As in C, the linker considers an integer beginning with @samp{0} to be
 octal, and an integer beginning with @samp{0x} or @samp{0X} to be
 hexadecimal.  Alternatively the linker accepts suffixes of @samp{h} or
-@samp{H} for hexadeciaml, @samp{o} or @samp{O} for octal, @samp{b} or
+@samp{H} for hexadecimal, @samp{o} or @samp{O} for octal, @samp{b} or
 @samp{B} for binary and @samp{d} or @samp{D} for decimal.  Any integer
 value without a prefix or a suffix is considered to be decimal.
 
@@ -5653,14 +5668,18 @@ addresses, ld follows these rules to evaluate terms:
 
 @itemize @bullet
 @item
+Unary operations on an absolute address or number, and binary
+operations on two absolute addresses or two numbers, or between one
+absolute address and a number, apply the operator to the value(s).
+@item
 Unary operations on a relative address, and binary operations on two
 relative addresses in the same section or between one relative address
 and a number, apply the operator to the offset part of the address(es).
 @item
-Unary operations on an absolute address, and binary operations on one
-or more absolute addresses or on two relative addresses not in the
-same section, first convert any non-absolute term to an absolute
-address before applying the operator.
+Other binary operations, that is, between two relative addresses not
+in the same section, or between a relative address and an absolute
+address, first convert any non-absolute term to an absolute address
+before applying the operator.
 @end itemize
 
 The result section of each sub-expression is as follows:
@@ -5672,7 +5691,7 @@ An operation involving only numbers results in a number.
 The result of comparisons, @samp{&&} and @samp{||} is also a number.
 @item
 The result of other binary arithmetic and logical operations on two
-relative addresses in the same section or two absolute addresess
+relative addresses in the same section or two absolute addresses
 (after above conversions) is also a number.
 @item
 The result of other operations on relative addresses or one
@@ -5998,6 +6017,9 @@ functionality are not listed.
 @ifset I960
 * i960::                        @command{ld} and the Intel 960 family
 @end ifset
+@ifset M68HC11
+* M68HC11/68HC12::		@code{ld} and the Motorola 68HC11 and 68HC12 families
+@end ifset
 @ifset ARM
 * ARM::				@command{ld} and the ARM family
 @end ifset
@@ -6012,9 +6034,6 @@ functionality are not listed.
 @end ifset
 @ifset MSP430
 * MSP430::			@command{ld} and MSP430
-@end ifset
-@ifset M68HC11
-* M68HC11/68HC12::		@code{ld} and the Motorola 68HC11 and 68HC12 families
 @end ifset
 @ifset POWERPC
 * PowerPC ELF32::		@command{ld} and PowerPC 32-bit ELF Support
@@ -6059,13 +6078,21 @@ respectively.
 
 @cindex synthesizing on H8/300
 @item synthesizing instructions
-@c FIXME: specifically mov.b, or any mov instructions really?
+@c FIXME: specifically mov.b, or any mov instructions really? -> mov.b only, at least on H8, H8H, H8S
 @command{ld} finds all @code{mov.b} instructions which use the
 sixteen-bit absolute address form, but refer to the top
 page of memory, and changes them to use the eight-bit address form.
 (That is: the linker turns @samp{mov.b @code{@@}@var{aa}:16} into
 @samp{mov.b @code{@@}@var{aa}:8} whenever the address @var{aa} is in the
 top page of memory).
+
+@command{ld} finds all @code{mov} instructions which use the register
+indirect with 32-bit displacement addressing mode, but use a small
+displacement inside 16-bit displacement range, and changes them to use
+the 16-bit displacement form.  (That is: the linker turns @samp{mov.b
+@code{@@}@var{d}:32,ERx} into @samp{mov.b @code{@@}@var{d}:16,ERx}
+whenever the displacement @var{d} is in the 16 bit signed integer
+range. Only implemented in ELF-format ld).
 
 @item bit manipulation instructions
 @command{ld} finds all bit manipulation instructions like @code{band, bclr,
@@ -6256,7 +6283,7 @@ executing in Thumb mode straight away.
 @kindex --use-nul-prefixed-import-tables
 The @samp{--use-nul-prefixed-import-tables} switch is specifying, that
 the import tables idata4 and idata5 have to be generated with a zero
-elememt prefix for import libraries. This is the old style to generate
+element prefix for import libraries. This is the old style to generate
 import tables. By default this option is turned off.
 
 @cindex BE8
@@ -6314,7 +6341,7 @@ BX Rn
 
 This allows generation of libraries/applications that work on ARMv4 cores
 and are still interworking safe.  Note that the above veneer clobbers the
-condition flags, so may cause incorrect progrm behavior in rare cases.
+condition flags, so may cause incorrect program behavior in rare cases.
 
 @cindex USE_BLX
 @kindex --use-blx
@@ -6362,11 +6389,11 @@ are sufficient to avoid the erratum in both the scalar and vector cases.
 @kindex --no-fix-arm1176
 The @samp{--fix-arm1176} switch enables a link-time workaround for an erratum
 in certain ARM1176 processors.  The workaround is enabled by default if you
-are targetting ARM v6 (excluding ARM v6T2) or earlier.  It can be disabled
+are targeting ARM v6 (excluding ARM v6T2) or earlier.  It can be disabled
 unconditionally by specifying @samp{--no-fix-arm1176}.
 
 Further information is available in the ``ARM1176JZ-S and ARM1176JZF-S
-Programmer Advice Notice'' available on the ARM documentaion website at:
+Programmer Advice Notice'' available on the ARM documentation website at:
 http://infocenter.arm.com/.
 
 @cindex NO_ENUM_SIZE_WARNING
@@ -6401,7 +6428,7 @@ perform a function call to a symbol that is too far away.  The
 placement of these sequences of instructions - called stubs - is
 controlled by the command line option @option{--stub-group-size=N}.
 The placement is important because a poor choice can create a need for
-duplicate stubs, increasing the code sizw.  The linker will try to
+duplicate stubs, increasing the code size.  The linker will try to
 group stubs together in order to reduce interruptions to the flow of
 code, but it needs guidance as to how big these groups should be and
 where they should be placed.
@@ -7863,7 +7890,7 @@ If you have more than one @code{SECT} statement for the same
 @printindex cp
 
 @tex
-% I think something like @colophon should be in texinfo.  In the
+% I think something like @@colophon should be in texinfo.  In the
 % meantime:
 \long\def\colophon{\hbox to0pt{}\vfill
 \centerline{The body of this manual is set in}
@@ -7874,7 +7901,7 @@ If you have more than one @code{SECT} statement for the same
 \centerline{{\sl\fontname\tensl\/}}
 \centerline{are used for emphasis.}\vfill}
 \page\colophon
-% Blame: doc@cygnus.com, 28mar91.
+% Blame: doc@@cygnus.com, 28mar91.
 @end tex
 
 @bye

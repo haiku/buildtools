@@ -203,8 +203,8 @@ class Gdb_index_info_reader : public Dwarf_info_reader
 
   // Visit a type unit.
   virtual void
-  visit_type_unit(off_t tu_offset, off_t type_offset, uint64_t signature,
-		  Dwarf_die*);
+  visit_type_unit(off_t tu_offset, off_t tu_length, off_t type_offset,
+		  uint64_t signature, Dwarf_die*);
 
  private:
   // A map for recording DIEs we've seen that may be referred to be
@@ -325,8 +325,9 @@ Gdb_index_info_reader::visit_compilation_unit(off_t cu_offset, off_t cu_length,
 // Process a type unit and parse its child DIE.
 
 void
-Gdb_index_info_reader::visit_type_unit(off_t tu_offset, off_t type_offset,
-				       uint64_t signature, Dwarf_die* root_die)
+Gdb_index_info_reader::visit_type_unit(off_t tu_offset, off_t,
+				       off_t type_offset, uint64_t signature,
+				       Dwarf_die* root_die)
 {
   ++Gdb_index_info_reader::dwarf_tu_count;
   // Use a negative index to flag this as a TU instead of a CU.
@@ -864,11 +865,12 @@ Gdb_index_info_reader::read_pubnames_and_pubtypes(Dwarf_die* die)
 					     &pubnames_shndx);
   if (pubnames_offset != -1)
     {
-      if (this->gdb_index_->pubnames_read(pubnames_shndx, pubnames_offset))
+      if (this->gdb_index_->pubnames_read(this->object(), pubnames_shndx,
+                                          pubnames_offset))
 	ret = true;
       else
 	{
-	  Dwarf_pubnames_table pubnames(false);
+	  Dwarf_pubnames_table pubnames(this, false);
 	  if (!pubnames.read_section(this->object(), pubnames_shndx))
 	    return false;
 	  if (!pubnames.read_header(pubnames_offset))
@@ -890,11 +892,12 @@ Gdb_index_info_reader::read_pubnames_and_pubtypes(Dwarf_die* die)
 					     &pubtypes_shndx);
   if (pubtypes_offset != -1)
     {
-      if (this->gdb_index_->pubtypes_read(pubtypes_shndx, pubtypes_offset))
+      if (this->gdb_index_->pubtypes_read(this->object(),
+                                          pubtypes_shndx, pubtypes_offset))
 	ret = true;
       else
 	{
-	  Dwarf_pubnames_table pubtypes(true);
+	  Dwarf_pubnames_table pubtypes(this, true);
 	  if (!pubtypes.read_section(this->object(), pubtypes_shndx))
 	    return false;
 	  if (!pubtypes.read_header(pubtypes_offset))
@@ -961,8 +964,10 @@ Gdb_index::Gdb_index(Output_section* gdb_index_section)
     symtab_offset_(0),
     cu_pool_offset_(0),
     stringpool_offset_(0),
+    pubnames_object_(NULL),
     pubnames_shndx_(0),
     pubnames_offset_(0),
+    pubtypes_object_(NULL),
     pubtypes_shndx_(0),
     pubtypes_offset_(0)
 {
@@ -1034,10 +1039,12 @@ Gdb_index::add_symbol(int cu_index, const char* sym_name)
 // OFFSET in section SHNDX
 
 bool
-Gdb_index::pubnames_read(unsigned int shndx, off_t offset)
+Gdb_index::pubnames_read(const Relobj* object, unsigned int shndx, off_t offset)
 {
-  bool ret = (this->pubnames_shndx_ == shndx
+  bool ret = (this->pubnames_object_ == object
+              && this->pubnames_shndx_ == shndx
 	      && this->pubnames_offset_ == offset);
+  this->pubnames_object_ = object;
   this->pubnames_shndx_ = shndx;
   this->pubnames_offset_ = offset;
   return ret;
@@ -1047,10 +1054,12 @@ Gdb_index::pubnames_read(unsigned int shndx, off_t offset)
 // OFFSET in section SHNDX
 
 bool
-Gdb_index::pubtypes_read(unsigned int shndx, off_t offset)
+Gdb_index::pubtypes_read(const Relobj* object, unsigned int shndx, off_t offset)
 {
-  bool ret = (this->pubtypes_shndx_ == shndx
+  bool ret = (this->pubtypes_object_ == object
+              && this->pubtypes_shndx_ == shndx
 	      && this->pubtypes_offset_ == offset);
+  this->pubtypes_object_ = object;
   this->pubtypes_shndx_ = shndx;
   this->pubtypes_offset_ = offset;
   return ret;

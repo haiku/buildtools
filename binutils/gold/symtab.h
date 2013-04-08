@@ -62,7 +62,7 @@ class Garbage_collection;
 class Icf;
 
 // The base class of an entry in the symbol table.  The symbol table
-// can have a lot of entries, so we don't want this class to big.
+// can have a lot of entries, so we don't want this class too big.
 // Size dependent fields can be found in the template class
 // Sized_symbol.  Targets may support their own derived classes.
 
@@ -120,6 +120,10 @@ class Symbol
   const char*
   version() const
   { return this->version_; }
+
+  void
+  clear_version()
+  { this->version_ = NULL; }
 
   // Return whether this version is the default for this symbol name
   // (eg, "foo@@V2" is a default version; "foo@V1" is not).  Only
@@ -1180,6 +1184,25 @@ struct Define_symbol_in_segment
   bool only_if_ref;
 };
 
+// Specify an object/section/offset location.  Used by ODR code.
+
+struct Symbol_location
+{
+  // Object where the symbol is defined.
+  Object* object;
+  // Section-in-object where the symbol is defined.
+  unsigned int shndx;
+  // For relocatable objects, offset-in-section where the symbol is defined.
+  // For dynamic objects, address where the symbol is defined.
+  off_t offset;
+  bool operator==(const Symbol_location& that) const
+  {
+    return (this->object == that.object
+	    && this->shndx == that.shndx
+	    && this->offset == that.offset);
+  }
+};
+
 // This class manages warnings.  Warnings are a GNU extension.  When
 // we see a section named .gnu.warning.SYM in an object file, and if
 // we wind using the definition of SYM from that object file, then we
@@ -1599,19 +1622,6 @@ class Symbol_table
   // the locations the symbols is (weakly) defined (and certain other
   // conditions are met).  This map will be used later to detect
   // possible One Definition Rule (ODR) violations.
-  struct Symbol_location
-  {
-    Object* object;         // Object where the symbol is defined.
-    unsigned int shndx;     // Section-in-object where the symbol is defined.
-    off_t offset;           // Offset-in-section where the symbol is defined.
-    bool operator==(const Symbol_location& that) const
-    {
-      return (this->object == that.object
-              && this->shndx == that.shndx
-              && this->offset == that.offset);
-    }
-  };
-
   struct Symbol_location_hash
   {
     size_t operator()(const Symbol_location& loc) const

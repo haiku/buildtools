@@ -782,14 +782,17 @@ process_def_file_and_drectve (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *
     {
       for (i = 0; i < NE; i++)
 	{
-	  if (strchr (pe_def_file->exports[i].name, '@'))
+	  /* Check for fastcall/stdcall-decoration, but ignore
+	     C++ mangled names.  */
+	  if (pe_def_file->exports[i].name[0] != '?'
+	      && strchr (pe_def_file->exports[i].name, '@'))
 	    {
 	      /* This will preserve internal_name, which may have been
 		 pointing to the same memory as name, or might not
 		 have.  */
 	      int lead_at = (*pe_def_file->exports[i].name == '@');
 	      char *tmp = xstrdup (pe_def_file->exports[i].name + lead_at);
-	      char *tmp_at = strchr (tmp, '@');
+	      char *tmp_at = strrchr (tmp, '@');
 
 	      if (tmp_at)
 	        *tmp_at = 0;
@@ -2844,7 +2847,7 @@ pe_find_cdecl_alias_match (struct bfd_link_info *linfo, char *name)
   struct key_value *kv;
   struct key_value key;
   char *at, *lname = (char *) alloca (strlen (name) + 3);
-  
+
   strcpy (lname, name);
 
   at = strchr (lname + (lname[0] == '@'), '@');
@@ -2925,7 +2928,7 @@ pe_find_cdecl_alias_match (struct bfd_link_info *linfo, char *name)
       if (h->type == bfd_link_hash_undefined)
         return h;
     }
-  
+
   return NULL;
 }
 

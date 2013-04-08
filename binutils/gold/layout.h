@@ -528,6 +528,39 @@ class Layout
   get_section_order_map()
   { return &this->section_order_map_; }
 
+  // Struct to store segment info when mapping some input sections to
+  // unique segments using linker plugins.  Mapping an input section to
+  // a unique segment is done by first placing such input sections in
+  // unique output sections and then mapping the output section to a
+  // unique segment.  NAME is the name of the output section.  FLAGS
+  // and ALIGN are the extra flags and alignment of the segment.
+  struct Unique_segment_info
+  {
+    // Identifier for the segment.  ELF segments dont have names.  This
+    // is used as the name of the output section mapped to the segment.
+    const char* name;
+    // Additional segment flags.
+    uint64_t flags;
+    // Segment alignment.
+    uint64_t align;
+  };
+
+  // Mapping from input section to segment.
+  typedef std::map<Const_section_id, Unique_segment_info*>
+  Section_segment_map;
+
+  // Maps section SECN to SEGMENT s.
+  void
+  insert_section_segment_map(Const_section_id secn, Unique_segment_info *s);
+
+  // Some input sections require special ordering, for compatibility
+  // with GNU ld.  Given the name of an input section, return -1 if it
+  // does not require special ordering.  Otherwise, return the index
+  // by which it should be ordered compared to other input sections
+  // that require special ordering.
+  static int
+  special_ordering_of_input_section(const char* name);
+
   bool
   is_section_ordering_specified()
   { return this->section_ordering_specified_; }
@@ -535,6 +568,14 @@ class Layout
   void
   set_section_ordering_specified()
   { this->section_ordering_specified_ = true; }
+
+  bool
+  is_unique_segment_for_sections_specified() const
+  { return this->unique_segment_for_sections_specified_; }
+
+  void
+  set_unique_segment_for_sections_specified()
+  { this->unique_segment_for_sections_specified_ = true; }
 
   // For incremental updates, allocate a block of memory from the
   // free list.  Find a block starting at or after MINOFF.
@@ -884,6 +925,10 @@ class Layout
   void
   get_allocated_sections(Section_list*) const;
 
+  // Store the executable sections into the section list.
+  void
+  get_executable_sections(Section_list*) const;
+
   // Make a section for a linker script to hold data.
   Output_section*
   make_output_section_for_script(const char* name,
@@ -920,6 +965,11 @@ class Layout
   section_list() const
   { return this->section_list_; }
 
+  // Returns TRUE iff NAME (an input section from RELOBJ) will
+  // be mapped to an output section that should be KEPT.
+  bool
+  keep_input_section(const Relobj*, const char*);
+  
  private:
   Layout(const Layout&);
   Layout& operator=(const Layout&);
@@ -1064,6 +1114,11 @@ class Layout
   get_output_section(const char* name, Stringpool::Key name_key,
 		     elfcpp::Elf_Word type, elfcpp::Elf_Xword flags,
 		     Output_section_order order, bool is_relro);
+
+  // Clear the input section flags that should not be copied to the
+  // output section.
+  elfcpp::Elf_Xword
+  get_output_section_flags (elfcpp::Elf_Xword input_section_flags);
 
   // Choose the output section for NAME in RELOBJ.
   Output_section*
@@ -1331,6 +1386,9 @@ class Layout
   // True if the input sections in the output sections should be sorted
   // as specified in a section ordering file.
   bool section_ordering_specified_;
+  // True if some input sections need to be mapped to a unique segment,
+  // after being mapped to a unique Output_section.
+  bool unique_segment_for_sections_specified_;
   // In incremental build, holds information check the inputs and build the
   // .gnu_incremental_inputs section.
   Incremental_inputs* incremental_inputs_;
@@ -1345,6 +1403,11 @@ class Layout
   // Plugins specify section_ordering using this map.  This is set in
   // update_section_order in plugin.cc
   std::map<Section_id, unsigned int> section_order_map_;
+  // This maps an input section to a unique segment. This is done by first
+  // placing such input sections in unique output sections and then mapping
+  // the output section to a unique segment.  Unique_segment_info stores
+  // any additional flags and alignment of the new segment.
+  Section_segment_map section_segment_map_;
   // Hash a pattern to its position in the section ordering file.
   Unordered_map<std::string, unsigned int> input_section_position_;
   // Vector of glob only patterns in the section_ordering file.

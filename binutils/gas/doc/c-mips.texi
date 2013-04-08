@@ -1,5 +1,5 @@
 @c Copyright 1991, 1992, 1993, 1994, 1995, 1997, 1999, 2000, 2001,
-@c 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+@c 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2013
 @c Free Software Foundation, Inc.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
@@ -234,7 +234,7 @@ the @samp{mad} and @samp{madu} instruction, and to not schedule @samp{nop}
 instructions around accesses to the @samp{HI} and @samp{LO} registers.
 @samp{-no-m4650} turns off this option.
 
-@itemx -m3900
+@item -m3900
 @itemx -no-m3900
 @itemx -m4100
 @itemx -no-m4100
@@ -304,6 +304,7 @@ m14kec,
 34kf2_1,
 34kf,
 34kf1_1,
+34kn,
 74kc,
 74kf2_1,
 74kf,
@@ -601,7 +602,7 @@ bar:
         .word 0x0
 baz:
         .word 0x1
-        
+
 @end example
 
 @node MIPS option stack

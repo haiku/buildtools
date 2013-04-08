@@ -962,14 +962,14 @@ plugin_notice (struct bfd_link_info *info,
     {
       bfd *sym_bfd;
 
-      /* No further processing if this def/ref is from an IR dummy BFD.  */
+      /* Nothing to do here if this def/ref is from an IR dummy BFD.  */
       if (is_ir_dummy_bfd (abfd))
-	return TRUE;
+	;
 
       /* Making an indirect symbol counts as a reference unless this
 	 is a brand new symbol.  */
-      if (bfd_is_ind_section (section)
-	  || (flags & BSF_INDIRECT) != 0)
+      else if (bfd_is_ind_section (section)
+	       || (flags & BSF_INDIRECT) != 0)
 	{
 	  if (h->type != bfd_link_hash_new)
 	    {
@@ -993,7 +993,15 @@ plugin_notice (struct bfd_link_info *info,
 
       /* If this is a ref, set non_ir_ref.  */
       else if (bfd_is_und_section (section))
-	h->non_ir_ref = TRUE;
+	{
+	  /* Replace the undefined dummy bfd with the real one.  */
+	  if ((h->type == bfd_link_hash_undefined
+	       || h->type == bfd_link_hash_undefweak)
+	      && (h->u.undef.abfd == NULL
+		  || (h->u.undef.abfd->flags & BFD_PLUGIN) != 0))
+	    h->u.undef.abfd = abfd;
+	  h->non_ir_ref = TRUE;
+	}
 
       /* Otherwise, it must be a new def.  Ensure any symbol defined
 	 in an IR dummy BFD takes on a new value from a real BFD.

@@ -187,8 +187,6 @@ gc_process_relocs(
     size_t local_count,
     const unsigned char* plocal_syms)
 {
-  Object* dst_obj;
-  unsigned int dst_indx;
   Scan scan;
 
   typedef typename Reloc_types<sh_type, size, big_endian>::Reloc Reltype;
@@ -235,27 +233,33 @@ gc_process_relocs(
       unsigned int r_type = elfcpp::elf_r_type<size>(r_info);
       typename elfcpp::Elf_types<size>::Elf_Swxword addend =
       Reloc_types<sh_type, size, big_endian>::get_reloc_addend_noerror(&reloc);
+      Object* dst_obj;
+      unsigned int dst_indx;
+      typedef typename elfcpp::Elf_types<size>::Elf_Addr Address;
+      Address dst_off;
 
       if (r_sym < local_count)
         {
           gold_assert(plocal_syms != NULL);
           typename elfcpp::Sym<size, big_endian> lsym(plocal_syms
                                                       + r_sym * sym_size);
-          unsigned int shndx = lsym.get_st_shndx();
+	  dst_indx = lsym.get_st_shndx();
           bool is_ordinary;
-          shndx = src_obj->adjust_sym_shndx(r_sym, shndx, &is_ordinary);
+	  dst_indx = src_obj->adjust_sym_shndx(r_sym, dst_indx, &is_ordinary);
           dst_obj = src_obj;
-          dst_indx = shndx;
+	  dst_off = lsym.get_st_value() + addend;
+
           if (is_icf_tracked)
             {
+	      Address symvalue = dst_off - addend;
 	      if (is_ordinary) 
-                (*secvec).push_back(Section_id(dst_obj, dst_indx));
+		(*secvec).push_back(Section_id(dst_obj, dst_indx));
 	      else
                 (*secvec).push_back(Section_id(NULL, 0));
               (*symvec).push_back(NULL);
-              long long symvalue = static_cast<long long>(lsym.get_st_value());
-              (*addendvec).push_back(std::make_pair(symvalue,
-                                              static_cast<long long>(addend)));
+	      (*addendvec).push_back(std::make_pair(
+					static_cast<long long>(symvalue),
+					static_cast<long long>(addend)));
               uint64_t reloc_offset =
                 convert_to_section_size_type(reloc.get_r_offset());
 	      (*offsetvec).push_back(reloc_offset);
@@ -276,7 +280,7 @@ gc_process_relocs(
             symtab->icf()->set_section_has_function_pointers(
               src_obj, lsym.get_st_shndx());
 
-          if (!is_ordinary || shndx == src_indx)
+          if (!is_ordinary || dst_indx == src_indx)
             continue;
         }
       else
@@ -294,6 +298,8 @@ gc_process_relocs(
               dst_obj = gsym->object();
               dst_indx = gsym->shndx(&is_ordinary);
             }
+	  dst_off = static_cast<const Sized_symbol<size>*>(gsym)->value();
+	  dst_off += addend;
 
 	  // When doing safe folding, check to see if this relocation is that
 	  // of a function pointer being taken.
@@ -321,17 +327,15 @@ gc_process_relocs(
             }
           if (is_icf_tracked)
             {
+	      Address symvalue = dst_off - addend;
               if (is_ordinary && gsym->source() == Symbol::FROM_OBJECT)
-                (*secvec).push_back(Section_id(dst_obj, dst_indx));
+		(*secvec).push_back(Section_id(dst_obj, dst_indx));
 	      else
                 (*secvec).push_back(Section_id(NULL, 0));
               (*symvec).push_back(gsym);
-              Sized_symbol<size>* sized_gsym =
-                        static_cast<Sized_symbol<size>* >(gsym);
-              long long symvalue =
-                        static_cast<long long>(sized_gsym->value());
-              (*addendvec).push_back(std::make_pair(symvalue,
-                                        static_cast<long long>(addend)));
+	      (*addendvec).push_back(std::make_pair(
+					static_cast<long long>(symvalue),
+					static_cast<long long>(addend)));
               uint64_t reloc_offset =
                 convert_to_section_size_type(reloc.get_r_offset());
 	      (*offsetvec).push_back(reloc_offset);
@@ -348,6 +352,9 @@ gc_process_relocs(
       if (parameters->options().gc_sections())
         {
 	  symtab->gc()->add_reference(src_obj, src_indx, dst_obj, dst_indx);
+	  parameters->sized_target<size, big_endian>()
+	    ->gc_add_reference(symtab, src_obj, src_indx,
+			       dst_obj, dst_indx, dst_off);
           if (cident_section_name != NULL)
             {
               Garbage_collection::Cident_section_map::iterator ele =

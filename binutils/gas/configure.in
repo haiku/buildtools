@@ -3,6 +3,21 @@ dnl
 dnl And be careful when changing it!  If you must add tests with square
 dnl brackets, be sure changequote invocations surround it.
 dnl
+dnl   Copyright 2012, 2013 Free Software Foundation
+dnl
+dnl This file is free software; you can redistribute it and/or modify
+dnl it under the terms of the GNU General Public License as published by
+dnl the Free Software Foundation; either version 3 of the License, or
+dnl (at your option) any later version.
+dnl 
+dnl This program is distributed in the hope that it will be useful,
+dnl but WITHOUT ANY WARRANTY; without even the implied warranty of
+dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+dnl GNU General Public License for more details.
+dnl 
+dnl You should have received a copy of the GNU General Public License
+dnl along with this program; see the file COPYING3.  If not see
+dnl <http://www.gnu.org/licenses/>.
 dnl
 dnl v2.5 needed for --bindir et al
 AC_PREREQ(2.59)
@@ -17,7 +32,7 @@ AC_CANONICAL_TARGET
 AC_ISC_POSIX
 
 changequote(,)dnl
-BFD_VERSION=`sed -n -e 's/^.._INIT_AUTOMAKE.*,[ 	]*\([^ 	]*\)[ 	]*).*/\1/p' < ${srcdir}/../bfd/configure.in`
+BFD_VERSION=`${srcdir}/../bfd/configure --version | sed -n -e '1s,.* ,,p'`
 changequote([,])dnl
 AM_INIT_AUTOMAKE(gas, ${BFD_VERSION})
 
@@ -230,6 +245,11 @@ changequote([,])dnl
 	  mips64* | mipsisa64* | mipsisa32*)
 changequote(,)dnl
 	    mips_cpu=`echo $target_cpu | sed -e 's/[a-z]*..//' -e 's/el$//'`
+changequote([,])dnl
+	    ;;
+	  mips*)
+changequote(,)dnl
+	    mips_cpu=`echo $target_cpu | sed -e 's/^mips//' -e 's/el$//'`
 changequote([,])dnl
 	    ;;
 	  *)

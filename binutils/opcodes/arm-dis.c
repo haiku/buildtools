@@ -498,10 +498,10 @@ static const struct opcode32 coprocessor_opcodes[] =
   {FPU_VFP_EXT_ARMV8, 0xfe800b40, 0xffb00f40, "vminnm%u.f64\t%z1, %z2, %z0"},
   {FPU_VFP_EXT_ARMV8, 0xfebc0a40, 0xffbc0f50, "vcvt%16-17?mpna%u.%7?su32.f32\t%y1, %y0"},
   {FPU_VFP_EXT_ARMV8, 0xfebc0b40, 0xffbc0f50, "vcvt%16-17?mpna%u.%7?su32.f64\t%y1, %z0"},
-  {FPU_VFP_EXT_ARMV8, 0x0eb60a40, 0x0fbe0f50, "vrint%7,16??xzr%c.f32.f32\t%y1, %y0"},
-  {FPU_VFP_EXT_ARMV8, 0x0eb60b40, 0x0fbe0f50, "vrint%7,16??xzr%c.f64.f64\t%z1, %z0"},
-  {FPU_VFP_EXT_ARMV8, 0xfeb80a40, 0xffbc0f50, "vrint%16-17?mpna%u.f32.f32\t%y1, %y0"},
-  {FPU_VFP_EXT_ARMV8, 0xfeb80b40, 0xffbc0f50, "vrint%16-17?mpna%u.f64.f64\t%z1, %z0"},
+  {FPU_VFP_EXT_ARMV8, 0x0eb60a40, 0x0fbe0f50, "vrint%7,16??xzr%c.f32\t%y1, %y0"},
+  {FPU_VFP_EXT_ARMV8, 0x0eb60b40, 0x0fbe0f50, "vrint%7,16??xzr%c.f64\t%z1, %z0"},
+  {FPU_VFP_EXT_ARMV8, 0xfeb80a40, 0xffbc0f50, "vrint%16-17?mpna%u.f32\t%y1, %y0"},
+  {FPU_VFP_EXT_ARMV8, 0xfeb80b40, 0xffbc0f50, "vrint%16-17?mpna%u.f64\t%z1, %z0"},
 
   /* Generic coprocessor instructions.  */
   { 0, SENTINEL_GENERIC_START, 0, "" },
@@ -584,7 +584,7 @@ static const struct opcode32 neon_opcodes[] =
   {FPU_NEON_EXT_FMA, 0xf2200c10, 0xffa00f10, "vfms%c.f%20U0\t%12-15,22R, %16-19,7R, %0-3,5R"},
 
   /* Two registers, miscellaneous.  */
-  {FPU_NEON_EXT_ARMV8, 0xf3ba0400, 0xffbf0c10, "vrint%7-9?p?m?zaxn%u.f32.f32\t%12-15,22R, %0-3,5R"},
+  {FPU_NEON_EXT_ARMV8, 0xf3ba0400, 0xffbf0c10, "vrint%7-9?p?m?zaxn%u.f32\t%12-15,22R, %0-3,5R"},
   {FPU_NEON_EXT_ARMV8, 0xf3bb0000, 0xffbf0c10, "vcvt%8-9?mpna%u.%7?us32.f32\t%12-15,22R, %0-3,5R"},
   {FPU_CRYPTO_EXT_ARMV8, 0xf3b00300, 0xffbf0fd0, "aese%u.8\t%12-15,22Q, %0-3,5Q"},
   {FPU_CRYPTO_EXT_ARMV8, 0xf3b00340, 0xffbf0fd0, "aesd%u.8\t%12-15,22Q, %0-3,5Q"},
@@ -903,6 +903,13 @@ static const struct opcode32 arm_opcodes[] =
   {ARM_EXT_V8,	 0x01d00c9f, 0x0ff00fff, "ldab%c\t%12-15r, [%16-19R]"},
   {ARM_EXT_V8,	 0x01e0fc90, 0x0ff0fff0, "stlh%c\t%0-3r, [%16-19R]"},
   {ARM_EXT_V8,	 0x01f00c9f, 0x0ff00fff, "ldaexh%c\t%12-15r, [%16-19R]"},
+  /* CRC32 instructions.  */
+  {CRC_EXT_ARMV8, 0xe1000040, 0xfff00ff0, "crc32b\t%12-15R, %16-19R, %0-3R"},
+  {CRC_EXT_ARMV8, 0xe1200040, 0xfff00ff0, "crc32h\t%12-15R, %16-19R, %0-3R"},
+  {CRC_EXT_ARMV8, 0xe1400040, 0xfff00ff0, "crc32w\t%12-15R, %16-19R, %0-3R"},
+  {CRC_EXT_ARMV8, 0xe1000240, 0xfff00ff0, "crc32cb\t%12-15R, %16-19R, %0-3R"},
+  {CRC_EXT_ARMV8, 0xe1200240, 0xfff00ff0, "crc32ch\t%12-15R, %16-19R, %0-3R"},
+  {CRC_EXT_ARMV8, 0xe1400240, 0xfff00ff0, "crc32cw\t%12-15R, %16-19R, %0-3R"},
 
   /* Virtualization Extension instructions.  */
   {ARM_EXT_VIRT, 0x0160006e, 0x0fffffff, "eret%c"},
@@ -928,8 +935,8 @@ static const struct opcode32 arm_opcodes[] =
   {ARM_EXT_V6T2, 0x07c0001f, 0x0fe0007f, "bfc%c\t%12-15R, %E"},
   {ARM_EXT_V6T2, 0x07c00010, 0x0fe00070, "bfi%c\t%12-15R, %0-3r, %E"},
   {ARM_EXT_V6T2, 0x00600090, 0x0ff000f0, "mls%c\t%16-19R, %0-3R, %8-11R, %12-15R"},
-  {ARM_EXT_V6T2, 0x006000b0, 0x0f7000f0, "strht%c\t%12-15R, %S"},
-  
+  {ARM_EXT_V6T2, 0x002000b0, 0x0f3000f0, "strht%c\t%12-15R, %S"},
+
   {ARM_EXT_V6T2, 0x00300090, 0x0f3000f0, UNDEFINED_INSTRUCTION },
   {ARM_EXT_V6T2, 0x00300090, 0x0f300090, "ldr%6's%5?hbt%c\t%12-15R, %S"},
   
@@ -1455,7 +1462,8 @@ static const struct opcode16 thumb_opcodes[] =
        %<bitfield>d	print bitfield in decimal
        %<bitfield>W	print bitfield*4 in decimal
        %<bitfield>r	print bitfield as an ARM register
-       %<bitfield>R	as %<>r bit r15 is UNPREDICTABLE
+       %<bitfield>R	as %<>r but r15 is UNPREDICTABLE
+       %<bitfield>S	as %<>R but r13 is UNPREDICTABLE
        %<bitfield>c	print bitfield as a condition code
 
        %<bitfield>'c	print specified char iff bitfield is all ones
@@ -1489,6 +1497,14 @@ static const struct opcode32 thumb32_opcodes[] =
   {ARM_EXT_V8, 0xe8d00fdf, 0xfff00fff, "ldaexh%c\t%12-15r, [%16-19R]"},
   {ARM_EXT_V8, 0xe8d00fef, 0xfff00fff, "ldaex%c\t%12-15r, [%16-19R]"},
   {ARM_EXT_V8, 0xe8d000ff, 0xfff000ff, "ldaexd%c\t%12-15r, %8-11r, [%16-19R]"},
+
+  /* CRC32 instructions.  */
+  {CRC_EXT_ARMV8, 0xfac0f080, 0xfff0f0f0, "crc32b\t%8-11S, %16-19S, %0-3S"},
+  {CRC_EXT_ARMV8, 0xfac0f090, 0xfff0f0f0, "crc32h\t%9-11S, %16-19S, %0-3S"},
+  {CRC_EXT_ARMV8, 0xfac0f0a0, 0xfff0f0f0, "crc32w\t%8-11S, %16-19S, %0-3S"},
+  {CRC_EXT_ARMV8, 0xfad0f080, 0xfff0f0f0, "crc32cb\t%8-11S, %16-19S, %0-3S"},
+  {CRC_EXT_ARMV8, 0xfad0f090, 0xfff0f0f0, "crc32ch\t%8-11S, %16-19S, %0-3S"},
+  {CRC_EXT_ARMV8, 0xfad0f0a0, 0xfff0f0f0, "crc32cw\t%8-11S, %16-19S, %0-3S"},
 
   /* V7 instructions.  */
   {ARM_EXT_V7, 0xf910f000, 0xff70f000, "pli%c\t%a"},
@@ -4427,6 +4443,10 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		      value_in_comment = val * 4;
 		      break;
 
+		    case 'S':
+		      if (val == 13)
+			is_unpredictable = TRUE;
+		      /* Fall through.  */
 		    case 'R':
 		      if (val == 15)
 			is_unpredictable = TRUE;

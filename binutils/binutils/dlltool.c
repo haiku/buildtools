@@ -1694,10 +1694,12 @@ scan_obj_file (const char *filename)
       bfd *arfile = bfd_openr_next_archived_file (f, 0);
       while (arfile)
 	{
+	  bfd *next;
 	  if (bfd_check_format (arfile, bfd_object))
 	    scan_open_obj_file (arfile);
+	  next = bfd_openr_next_archived_file (f, arfile);
 	  bfd_close (arfile);
-	  arfile = bfd_openr_next_archived_file (f, arfile);
+	  arfile = next;
 	}
 
 #ifdef DLLTOOL_MCORE_ELF
@@ -2276,6 +2278,9 @@ typedef struct
   unsigned char *data;
 } sinfo;
 
+#define INIT_SEC_DATA(id, name, flags, align) \
+        { id, name, flags, align, NULL, NULL, NULL, 0, NULL }
+
 #ifndef DLLTOOL_PPC
 
 #define TEXT 0
@@ -2293,8 +2298,6 @@ typedef struct
 #define DATA_SEC_FLAGS   (SEC_ALLOC | SEC_LOAD | SEC_DATA)
 #define BSS_SEC_FLAGS     SEC_ALLOC
 
-#define INIT_SEC_DATA(id, name, flags, align) \
-        { id, name, flags, align, NULL, NULL, NULL, 0, NULL }
 static sinfo secdata[NSECS] =
 {
   INIT_SEC_DATA (TEXT,   ".text",    TEXT_SEC_FLAGS,   2),
@@ -2324,15 +2327,15 @@ static sinfo secdata[NSECS] =
 
 static sinfo secdata[NSECS] =
 {
-  { TEXT,   ".text",    SEC_CODE | SEC_HAS_CONTENTS, 3},
-  { PDATA,  ".pdata",   SEC_HAS_CONTENTS,            2},
-  { RDATA,  ".reldata", SEC_HAS_CONTENTS,            2},
-  { IDATA5, ".idata$5", SEC_HAS_CONTENTS,            2},
-  { IDATA4, ".idata$4", SEC_HAS_CONTENTS,            2},
-  { IDATA6, ".idata$6", SEC_HAS_CONTENTS,            1},
-  { IDATA7, ".idata$7", SEC_HAS_CONTENTS,            2},
-  { DATA,   ".data",    SEC_DATA,                    2},
-  { BSS,    ".bss",     0,                           2}
+  INIT_SEC_DATA (TEXT,   ".text",    SEC_CODE | SEC_HAS_CONTENTS, 3),
+  INIT_SEC_DATA (PDATA,  ".pdata",   SEC_HAS_CONTENTS,            2),
+  INIT_SEC_DATA (RDATA,  ".reldata", SEC_HAS_CONTENTS,            2),
+  INIT_SEC_DATA (IDATA5, ".idata$5", SEC_HAS_CONTENTS,            2),
+  INIT_SEC_DATA (IDATA4, ".idata$4", SEC_HAS_CONTENTS,            2),
+  INIT_SEC_DATA (IDATA6, ".idata$6", SEC_HAS_CONTENTS,            1),
+  INIT_SEC_DATA (IDATA7, ".idata$7", SEC_HAS_CONTENTS,            2),
+  INIT_SEC_DATA (DATA,   ".data",    SEC_DATA,                    2),
+  INIT_SEC_DATA (BSS,    ".bss",     0,                           2)
 };
 
 #endif

@@ -415,7 +415,7 @@ s390_elf_ldisp_reloc (bfd *abfd,
       relocation -= reloc_entry->address;
     }
 
-  insn = bfd_get_32 (abfd, (bfd_byte *) data + reloc_entry->address); 
+  insn = bfd_get_32 (abfd, (bfd_byte *) data + reloc_entry->address);
   insn |= (relocation & 0xfff) << 16 | (relocation & 0xff000) >> 4;
   bfd_put_32 (abfd, insn, (bfd_byte *) data + reloc_entry->address);
 
@@ -699,7 +699,7 @@ elf_s390_link_hash_table_create (bfd *abfd)
   struct elf_s390_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf_s390_link_hash_table);
 
-  ret = (struct elf_s390_link_hash_table *) bfd_malloc (amt);
+  ret = (struct elf_s390_link_hash_table *) bfd_zmalloc (amt);
   if (ret == NULL)
     return NULL;
 
@@ -710,16 +710,6 @@ elf_s390_link_hash_table_create (bfd *abfd)
       free (ret);
       return NULL;
     }
-
-  ret->elf.sgot = NULL;
-  ret->elf.sgotplt = NULL;
-  ret->elf.srelgot = NULL;
-  ret->elf.splt = NULL;
-  ret->elf.srelplt = NULL;
-  ret->sdynbss = NULL;
-  ret->srelbss = NULL;
-  ret->tls_ldm_got.refcount = 0;
-  ret->sym_cache.abfd = NULL;
 
   return &ret->elf.root;
 }
@@ -960,6 +950,10 @@ elf_s390_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       /* Create got section and local_got_refcounts array if they
@@ -2309,6 +2303,11 @@ elf_s390_relocate_section (bfd *output_bfd,
 
 	      switch (r_type)
 		{
+		case R_390_PLTOFF16:
+		case R_390_PLTOFF32:
+		case R_390_PLTOFF64:
+		  relocation -= htab->elf.sgot->output_section->vma;
+		  break;
 		case R_390_GOTPLT12:
 		case R_390_GOTPLT16:
 		case R_390_GOTPLT20:
@@ -2564,7 +2563,7 @@ elf_s390_relocate_section (bfd *output_bfd,
 	    break;
 
 	  if (h->plt.offset == (bfd_vma) -1
-	      || (htab->elf.splt == NULL && htab->elf.iplt == NULL))
+	      || (htab->elf.splt == NULL && !s390_is_ifunc_symbol_p (h)))
 	    {
 	      /* We didn't make a PLT entry for this symbol.  This
 		 happens when statically linking PIC code, or when
@@ -2590,9 +2589,9 @@ elf_s390_relocate_section (bfd *output_bfd,
 
 	  /* For local symbols or if we didn't make a PLT entry for
 	     this symbol resolve the symbol directly.  */
-	  if (   h == NULL
+	  if (h == NULL
 	      || h->plt.offset == (bfd_vma) -1
-	      || htab->elf.splt == NULL)
+	      || (htab->elf.splt == NULL && !s390_is_ifunc_symbol_p (h)))
 	    {
 	      relocation -= htab->elf.sgot->output_section->vma;
 	      break;
@@ -3509,7 +3508,7 @@ do_glob_dat:
     }
 
   /* Mark some specially defined symbols as absolute.  */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == htab->elf.hdynamic
       || h == htab->elf.hgot
       || h == htab->elf.hplt)
     sym->st_shndx = SHN_ABS;
@@ -3521,7 +3520,9 @@ do_glob_dat:
    dynamic linker, before writing them out.  */
 
 static enum elf_reloc_type_class
-elf_s390_reloc_type_class (const Elf_Internal_Rela *rela)
+elf_s390_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			   const asection *rel_sec ATTRIBUTE_UNUSED,
+			   const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF64_R_TYPE (rela->r_info))
     {
@@ -3757,7 +3758,6 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_relocate_section	      elf_s390_relocate_section
 #define elf_backend_size_dynamic_sections     elf_s390_size_dynamic_sections
 #define elf_backend_init_index_section	      _bfd_elf_init_1_index_section
-#define elf_backend_reloc_type_class	      elf_s390_reloc_type_class
 #define elf_backend_plt_sym_val		      elf_s390_plt_sym_val
 #define elf_backend_add_symbol_hook           elf_s390_add_symbol_hook
 

@@ -1,7 +1,7 @@
 /* Object file "section" support for the BFD library.
    Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
    2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
-   2012
+   2012, 2013
    Free Software Foundation, Inc.
    Written by Cygnus Support.
 
@@ -532,12 +532,12 @@ CODE_FRAGMENT
 .} asection;
 .
 .{* Relax table contains information about instructions which can
-.   be removed by relaxation -- replacing a long address with a 
+.   be removed by relaxation -- replacing a long address with a
 .   short address.  *}
 .struct relax_table {
 .  {* Address where bytes may be deleted. *}
 .  bfd_vma addr;
-.  
+.
 .  {* Number of bytes to be deleted.  *}
 .  int size;
 .};
@@ -545,7 +545,7 @@ CODE_FRAGMENT
 .{* These sections are global, and are managed by BFD.  The application
 .   and target back end are not permitted to change the values in
 .   these sections.  *}
-.extern asection std_section[4];
+.extern asection _bfd_std_section[4];
 .
 .#define BFD_ABS_SECTION_NAME "*ABS*"
 .#define BFD_UND_SECTION_NAME "*UND*"
@@ -553,13 +553,13 @@ CODE_FRAGMENT
 .#define BFD_IND_SECTION_NAME "*IND*"
 .
 .{* Pointer to the common section.  *}
-.#define bfd_com_section_ptr (&std_section[0])
+.#define bfd_com_section_ptr (&_bfd_std_section[0])
 .{* Pointer to the undefined section.  *}
-.#define bfd_und_section_ptr (&std_section[1])
+.#define bfd_und_section_ptr (&_bfd_std_section[1])
 .{* Pointer to the absolute section.  *}
-.#define bfd_abs_section_ptr (&std_section[2])
+.#define bfd_abs_section_ptr (&_bfd_std_section[2])
 .{* Pointer to the indirect section.  *}
-.#define bfd_ind_section_ptr (&std_section[3])
+.#define bfd_ind_section_ptr (&_bfd_std_section[3])
 .
 .#define bfd_is_und_section(sec) ((sec) == bfd_und_section_ptr)
 .#define bfd_is_abs_section(sec) ((sec) == bfd_abs_section_ptr)
@@ -725,9 +725,9 @@ static const asymbol global_syms[] =
 };
 
 #define STD_SECTION(NAME, IDX, FLAGS) \
-  BFD_FAKE_SECTION(std_section[IDX], FLAGS, &global_syms[IDX], NAME, IDX)
+  BFD_FAKE_SECTION(_bfd_std_section[IDX], FLAGS, &global_syms[IDX], NAME, IDX)
 
-asection std_section[] = {
+asection _bfd_std_section[] = {
   STD_SECTION (BFD_COM_SECTION_NAME, 0, SEC_IS_COMMON),
   STD_SECTION (BFD_UND_SECTION_NAME, 1, 0),
   STD_SECTION (BFD_ABS_SECTION_NAME, 2, 0),
@@ -835,6 +835,7 @@ bfd_section_list_clear (bfd *abfd)
   abfd->section_count = 0;
   memset (abfd->section_htab.table, 0,
 	  abfd->section_htab.size * sizeof (struct bfd_hash_entry *));
+  abfd->section_htab.count = 0;
 }
 
 /*
@@ -1545,8 +1546,8 @@ bfd_get_section_contents (bfd *abfd,
 	  bfd_set_error (bfd_error_invalid_operation);
 	  return FALSE;
 	}
-      
-      memcpy (location, section->contents + offset, (size_t) count);
+
+      memmove (location, section->contents + offset, (size_t) count);
       return TRUE;
     }
 

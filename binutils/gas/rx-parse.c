@@ -1,24 +1,23 @@
-/* A Bison parser, made by GNU Bison 2.3.  */
+
+/* A Bison parser, made by GNU Bison 2.4.1.  */
 
 /* Skeleton implementation for Bison's Yacc-like parsers in C
-
-   Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005, 2006
+   
+      Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005, 2006
    Free Software Foundation, Inc.
-
-   This program is free software; you can redistribute it and/or modify
+   
+   This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2, or (at your option)
-   any later version.
-
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+   
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-
+   
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor,
-   Boston, MA 02110-1301, USA.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -29,7 +28,7 @@
    special exception, which will cause the skeleton and the resulting
    Bison output files to be licensed under the GNU General Public
    License without this special exception.
-
+   
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
@@ -47,7 +46,7 @@
 #define YYBISON 1
 
 /* Bison version.  */
-#define YYBISON_VERSION "2.3"
+#define YYBISON_VERSION "2.4.1"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -55,17 +54,160 @@
 /* Pure parsers.  */
 #define YYPURE 0
 
+/* Push parsers.  */
+#define YYPUSH 0
+
+/* Pull parsers.  */
+#define YYPULL 1
+
 /* Using locations.  */
 #define YYLSP_NEEDED 0
 
 /* Substitute the variable and function names.  */
-#define yyparse rx_parse
-#define yylex   rx_lex
-#define yyerror rx_error
-#define yylval  rx_lval
-#define yychar  rx_char
-#define yydebug rx_debug
-#define yynerrs rx_nerrs
+#define yyparse         rx_parse
+#define yylex           rx_lex
+#define yyerror         rx_error
+#define yylval          rx_lval
+#define yychar          rx_char
+#define yydebug         rx_debug
+#define yynerrs         rx_nerrs
+
+
+/* Copy the first part of user declarations.  */
+
+/* Line 189 of yacc.c  */
+#line 21 "rx-parse.y"
+
+
+#include "as.h"
+#include "safe-ctype.h"
+#include "rx-defs.h"
+
+static int rx_lex (void);
+
+#define COND_EQ	0
+#define COND_NE	1
+
+#define MEMEX 0x06
+
+#define BSIZE 0
+#define WSIZE 1
+#define LSIZE 2
+
+/*                       .sb    .sw    .l     .uw   */
+static int sizemap[] = { BSIZE, WSIZE, LSIZE, WSIZE };
+
+/* Ok, here are the rules for using these macros...
+
+   B*() is used to specify the base opcode bytes.  Fields to be filled
+        in later, leave zero.  Call this first.
+
+   F() and FE() are used to fill in fields within the base opcode bytes.  You MUST
+        call B*() before any F() or FE().
+
+   [UN]*O*(), PC*() appends operands to the end of the opcode.  You
+        must call P() and B*() before any of these, so that the fixups
+        have the right byte location.
+        O = signed, UO = unsigned, NO = negated, PC = pcrel
+
+   IMM() adds an immediate and fills in the field for it.
+   NIMM() same, but negates the immediate.
+   NBIMM() same, but negates the immediate, for sbb.
+   DSP() adds a displacement, and fills in the field for it.
+
+   Note that order is significant for the O, IMM, and DSP macros, as
+   they append their data to the operand buffer in the order that you
+   call them.
+
+   Use "disp" for displacements whenever possible; this handles the
+   "0" case properly.  */
+
+#define B1(b1)             rx_base1 (b1)
+#define B2(b1, b2)         rx_base2 (b1, b2)
+#define B3(b1, b2, b3)     rx_base3 (b1, b2, b3)
+#define B4(b1, b2, b3, b4) rx_base4 (b1, b2, b3, b4)
+
+/* POS is bits from the MSB of the first byte to the LSB of the last byte.  */
+#define F(val,pos,sz)      rx_field (val, pos, sz)
+#define FE(exp,pos,sz)	   rx_field (exp_val (exp), pos, sz);
+
+#define O1(v)              rx_op (v, 1, RXREL_SIGNED); rx_range (v, -128, 255)
+#define O2(v)              rx_op (v, 2, RXREL_SIGNED); rx_range (v, -32768, 65536)
+#define O3(v)              rx_op (v, 3, RXREL_SIGNED); rx_range (v, -8388608, 16777216)
+#define O4(v)              rx_op (v, 4, RXREL_SIGNED)
+
+#define UO1(v)             rx_op (v, 1, RXREL_UNSIGNED); rx_range (v, 0, 255)
+#define UO2(v)             rx_op (v, 2, RXREL_UNSIGNED); rx_range (v, 0, 65536)
+#define UO3(v)             rx_op (v, 3, RXREL_UNSIGNED); rx_range (v, 0, 16777216)
+#define UO4(v)             rx_op (v, 4, RXREL_UNSIGNED)
+
+#define NO1(v)             rx_op (v, 1, RXREL_NEGATIVE)
+#define NO2(v)             rx_op (v, 2, RXREL_NEGATIVE)
+#define NO3(v)             rx_op (v, 3, RXREL_NEGATIVE)
+#define NO4(v)             rx_op (v, 4, RXREL_NEGATIVE)
+
+#define PC1(v)             rx_op (v, 1, RXREL_PCREL)
+#define PC2(v)             rx_op (v, 2, RXREL_PCREL)
+#define PC3(v)             rx_op (v, 3, RXREL_PCREL)
+
+#define IMM_(v,pos,size)   F (immediate (v, RXREL_SIGNED, pos, size), pos, 2); \
+			   if (v.X_op != O_constant && v.X_op != O_big) rx_linkrelax_imm (pos)
+#define IMM(v,pos)	   IMM_ (v, pos, 32)
+#define IMMW(v,pos)	   IMM_ (v, pos, 16); rx_range (v, -32768, 65536)
+#define IMMB(v,pos)	   IMM_ (v, pos, 8); rx_range (v, -128, 255)
+#define NIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE, pos, 32), pos, 2)
+#define NBIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE_BORROW, pos, 32), pos, 2)
+#define DSP(v,pos,msz)	   if (!v.X_md) rx_relax (RX_RELAX_DISP, pos); \
+			   else rx_linkrelax_dsp (pos); \
+			   F (displacement (v, msz), pos, 2)
+
+#define id24(a,b2,b3)	   B3 (0xfb+a, b2, b3)
+
+static int         rx_intop (expressionS, int, int);
+static int         rx_uintop (expressionS, int);
+static int         rx_disp3op (expressionS);
+static int         rx_disp5op (expressionS *, int);
+static int         rx_disp5op0 (expressionS *, int);
+static int         exp_val (expressionS exp);
+static expressionS zero_expr (void);
+static int         immediate (expressionS, int, int, int);
+static int         displacement (expressionS, int);
+static void        rtsd_immediate (expressionS);
+static void	   rx_range (expressionS, int, int);
+
+static int    need_flag = 0;
+static int    rx_in_brackets = 0;
+static int    rx_last_token = 0;
+static char * rx_init_start;
+static char * rx_last_exp_start = 0;
+static int    sub_op;
+static int    sub_op2;
+
+#define YYDEBUG 1
+#define YYERROR_VERBOSE 1
+
+
+
+/* Line 189 of yacc.c  */
+#line 193 "rx-parse.c"
+
+/* Enabling traces.  */
+#ifndef YYDEBUG
+# define YYDEBUG 0
+#endif
+
+/* Enabling verbose error messages.  */
+#ifdef YYERROR_VERBOSE
+# undef YYERROR_VERBOSE
+# define YYERROR_VERBOSE 1
+#else
+# define YYERROR_VERBOSE 0
+#endif
+
+/* Enabling the token table.  */
+#ifndef YYTOKEN_TABLE
+# define YYTOKEN_TABLE 0
+#endif
 
 
 /* Tokens.  */
@@ -305,159 +447,32 @@
 
 
 
-/* Copy the first part of user declarations.  */
-#line 21 "rx-parse.y"
-
-
-#include "as.h"
-#include "safe-ctype.h"
-#include "rx-defs.h"
-
-static int rx_lex (void);
-
-#define COND_EQ	0
-#define COND_NE	1
-
-#define MEMEX 0x06
-
-#define BSIZE 0
-#define WSIZE 1
-#define LSIZE 2
-
-/*                       .sb    .sw    .l     .uw   */
-static int sizemap[] = { BSIZE, WSIZE, LSIZE, WSIZE };
-
-/* Ok, here are the rules for using these macros...
-
-   B*() is used to specify the base opcode bytes.  Fields to be filled
-        in later, leave zero.  Call this first.
-
-   F() and FE() are used to fill in fields within the base opcode bytes.  You MUST
-        call B*() before any F() or FE().
-
-   [UN]*O*(), PC*() appends operands to the end of the opcode.  You
-        must call P() and B*() before any of these, so that the fixups
-        have the right byte location.
-        O = signed, UO = unsigned, NO = negated, PC = pcrel
-
-   IMM() adds an immediate and fills in the field for it.
-   NIMM() same, but negates the immediate.
-   NBIMM() same, but negates the immediate, for sbb.
-   DSP() adds a displacement, and fills in the field for it.
-
-   Note that order is significant for the O, IMM, and DSP macros, as
-   they append their data to the operand buffer in the order that you
-   call them.
-
-   Use "disp" for displacements whenever possible; this handles the
-   "0" case properly.  */
-
-#define B1(b1)             rx_base1 (b1)
-#define B2(b1, b2)         rx_base2 (b1, b2)
-#define B3(b1, b2, b3)     rx_base3 (b1, b2, b3)
-#define B4(b1, b2, b3, b4) rx_base4 (b1, b2, b3, b4)
-
-/* POS is bits from the MSB of the first byte to the LSB of the last byte.  */
-#define F(val,pos,sz)      rx_field (val, pos, sz)
-#define FE(exp,pos,sz)	   rx_field (exp_val (exp), pos, sz);
-
-#define O1(v)              rx_op (v, 1, RXREL_SIGNED); rx_range (v, -128, 255)
-#define O2(v)              rx_op (v, 2, RXREL_SIGNED); rx_range (v, -32768, 65536)
-#define O3(v)              rx_op (v, 3, RXREL_SIGNED); rx_range (v, -8388608, 16777216)
-#define O4(v)              rx_op (v, 4, RXREL_SIGNED)
-
-#define UO1(v)             rx_op (v, 1, RXREL_UNSIGNED); rx_range (v, 0, 255)
-#define UO2(v)             rx_op (v, 2, RXREL_UNSIGNED); rx_range (v, 0, 65536)
-#define UO3(v)             rx_op (v, 3, RXREL_UNSIGNED); rx_range (v, 0, 16777216)
-#define UO4(v)             rx_op (v, 4, RXREL_UNSIGNED)
-
-#define NO1(v)             rx_op (v, 1, RXREL_NEGATIVE)
-#define NO2(v)             rx_op (v, 2, RXREL_NEGATIVE)
-#define NO3(v)             rx_op (v, 3, RXREL_NEGATIVE)
-#define NO4(v)             rx_op (v, 4, RXREL_NEGATIVE)
-
-#define PC1(v)             rx_op (v, 1, RXREL_PCREL)
-#define PC2(v)             rx_op (v, 2, RXREL_PCREL)
-#define PC3(v)             rx_op (v, 3, RXREL_PCREL)
-
-#define IMM_(v,pos,size)   F (immediate (v, RXREL_SIGNED, pos, size), pos, 2); \
-			   if (v.X_op != O_constant && v.X_op != O_big) rx_linkrelax_imm (pos)
-#define IMM(v,pos)	   IMM_ (v, pos, 32)
-#define IMMW(v,pos)	   IMM_ (v, pos, 16); rx_range (v, -32768, 65536)
-#define IMMB(v,pos)	   IMM_ (v, pos, 8); rx_range (v, -128, 255)
-#define NIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE, pos, 32), pos, 2)
-#define NBIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE_BORROW, pos, 32), pos, 2)
-#define DSP(v,pos,msz)	   if (!v.X_md) rx_relax (RX_RELAX_DISP, pos); \
-			   else rx_linkrelax_dsp (pos); \
-			   F (displacement (v, msz), pos, 2)
-
-#define id24(a,b2,b3)	   B3 (0xfb+a, b2, b3)
-
-static int         rx_intop (expressionS, int, int);
-static int         rx_uintop (expressionS, int);
-static int         rx_disp3op (expressionS);
-static int         rx_disp5op (expressionS *, int);
-static int         rx_disp5op0 (expressionS *, int);
-static int         exp_val (expressionS exp);
-static expressionS zero_expr (void);
-static int         immediate (expressionS, int, int, int);
-static int         displacement (expressionS, int);
-static void        rtsd_immediate (expressionS);
-static void	   rx_range (expressionS, int, int);
-
-static int    need_flag = 0;
-static int    rx_in_brackets = 0;
-static int    rx_last_token = 0;
-static char * rx_init_start;
-static char * rx_last_exp_start = 0;
-static int    sub_op;
-static int    sub_op2;
-
-#define YYDEBUG 1
-#define YYERROR_VERBOSE 1
-
-
-
-/* Enabling traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 0
-#endif
-
-/* Enabling verbose error messages.  */
-#ifdef YYERROR_VERBOSE
-# undef YYERROR_VERBOSE
-# define YYERROR_VERBOSE 1
-#else
-# define YYERROR_VERBOSE 0
-#endif
-
-/* Enabling the token table.  */
-#ifndef YYTOKEN_TABLE
-# define YYTOKEN_TABLE 0
-#endif
-
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 134 "rx-parse.y"
 {
+
+/* Line 214 of yacc.c  */
+#line 134 "rx-parse.y"
+
   int regno;
   expressionS exp;
-}
-/* Line 193 of yacc.c.  */
-#line 448 "rx-parse.c"
-	YYSTYPE;
+
+
+
+/* Line 214 of yacc.c  */
+#line 464 "rx-parse.c"
+} YYSTYPE;
+# define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
-# define YYSTYPE_IS_TRIVIAL 1
 #endif
-
 
 
 /* Copy the second part of user declarations.  */
 
 
-/* Line 216 of yacc.c.  */
-#line 461 "rx-parse.c"
+/* Line 264 of yacc.c  */
+#line 476 "rx-parse.c"
 
 #ifdef short
 # undef short
@@ -507,7 +522,7 @@ typedef short int yytype_int16;
 #define YYSIZE_MAXIMUM ((YYSIZE_T) -1)
 
 #ifndef YY_
-# if defined YYENABLE_NLS && YYENABLE_NLS
+# if YYENABLE_NLS
 #  if ENABLE_NLS
 #   include <libintl.h> /* INFRINGES ON USER NAME SPACE */
 #   define YY_(msgid) dgettext ("bison-runtime", msgid)
@@ -532,14 +547,14 @@ typedef short int yytype_int16;
 #if (defined __STDC__ || defined __C99__FUNC__ \
      || defined __cplusplus || defined _MSC_VER)
 static int
-YYID (int i)
+YYID (int yyi)
 #else
 static int
-YYID (i)
-    int i;
+YYID (yyi)
+    int yyi;
 #endif
 {
-  return i;
+  return yyi;
 }
 #endif
 
@@ -620,9 +635,9 @@ void free (void *); /* INFRINGES ON USER NAME SPACE */
 /* A type that is properly aligned for any stack member.  */
 union yyalloc
 {
-  yytype_int16 yyss;
-  YYSTYPE yyvs;
-  };
+  yytype_int16 yyss_alloc;
+  YYSTYPE yyvs_alloc;
+};
 
 /* The size of the maximum gap between one aligned stack and the next.  */
 # define YYSTACK_GAP_MAXIMUM (sizeof (union yyalloc) - 1)
@@ -656,12 +671,12 @@ union yyalloc
    elements in the stack, and YYPTR gives the new location of the
    stack.  Advance YYPTR to a properly aligned location for the next
    stack.  */
-# define YYSTACK_RELOCATE(Stack)					\
+# define YYSTACK_RELOCATE(Stack_alloc, Stack)				\
     do									\
       {									\
 	YYSIZE_T yynewbytes;						\
-	YYCOPY (&yyptr->Stack, Stack, yysize);				\
-	Stack = &yyptr->Stack;						\
+	YYCOPY (&yyptr->Stack_alloc, Stack, yysize);			\
+	Stack = &yyptr->Stack_alloc;					\
 	yynewbytes = yystacksize * sizeof (*Stack) + YYSTACK_GAP_MAXIMUM; \
 	yyptr += yynewbytes / sizeof (*yyptr);				\
       }									\
@@ -921,14 +936,15 @@ static const char *const yytname[] =
   "RTSD", "SAT", "SATR", "SBB", "SCCND", "SCMPU", "SETPSW", "SHAR", "SHLL",
   "SHLR", "SMOVB", "SMOVF", "SMOVU", "SSTR", "STNZ", "STOP", "STZ", "SUB",
   "SUNTIL", "SWHILE", "TST", "WAIT", "XCHG", "XOR", "'#'", "','", "'['",
-  "']'", "'-'", "'+'", "$accept", "statement", "@1", "@2", "@3", "@4",
-  "@5", "@6", "@7", "@8", "@9", "@10", "@11", "@12", "@13", "@14", "@15",
-  "@16", "@17", "@18", "@19", "@20", "@21", "@22", "@23", "@24", "@25",
-  "@26", "@27", "@28", "@29", "@30", "@31", "@32", "@33", "@34", "@35",
-  "@36", "@37", "@38", "op_subadd", "op_dp20_rm_l", "op_dp20_rm",
-  "op_dp20_i", "op_dp20_rim", "op_dp20_rim_l", "op_dp20_rr", "op_xchg",
-  "op_shift_rot", "op_shift", "float2_op", "float2_op_ni", "disp", "flag",
-  "@39", "memex", "bwl", "bw", "opt_l", 0
+  "']'", "'-'", "'+'", "$accept", "statement", "$@1", "$@2", "$@3", "$@4",
+  "$@5", "$@6", "$@7", "$@8", "$@9", "$@10", "$@11", "$@12", "$@13",
+  "$@14", "$@15", "$@16", "$@17", "$@18", "$@19", "$@20", "$@21", "$@22",
+  "$@23", "$@24", "$@25", "$@26", "$@27", "$@28", "$@29", "$@30", "$@31",
+  "$@32", "$@33", "$@34", "$@35", "$@36", "$@37", "$@38", "op_subadd",
+  "op_dp20_rm_l", "op_dp20_rm", "op_dp20_i", "op_dp20_rim",
+  "op_dp20_rim_l", "op_dp20_rr", "op_xchg", "op_shift_rot", "op_shift",
+  "float2_op", "float2_op_ni", "disp", "flag", "$@39", "memex", "bwl",
+  "bw", "opt_l", 0
 };
 #endif
 
@@ -1446,7 +1462,7 @@ while (YYID (0))
    we won't break user code: when these are the locations we know.  */
 
 #ifndef YY_LOCATION_PRINT
-# if defined YYLTYPE_IS_TRIVIAL && YYLTYPE_IS_TRIVIAL
+# if YYLTYPE_IS_TRIVIAL
 #  define YY_LOCATION_PRINT(File, Loc)			\
      fprintf (File, "%d.%d-%d.%d",			\
 	      (Loc).first_line, (Loc).first_column,	\
@@ -1557,17 +1573,20 @@ yy_symbol_print (yyoutput, yytype, yyvaluep)
 #if (defined __STDC__ || defined __C99__FUNC__ \
      || defined __cplusplus || defined _MSC_VER)
 static void
-yy_stack_print (yytype_int16 *bottom, yytype_int16 *top)
+yy_stack_print (yytype_int16 *yybottom, yytype_int16 *yytop)
 #else
 static void
-yy_stack_print (bottom, top)
-    yytype_int16 *bottom;
-    yytype_int16 *top;
+yy_stack_print (yybottom, yytop)
+    yytype_int16 *yybottom;
+    yytype_int16 *yytop;
 #endif
 {
   YYFPRINTF (stderr, "Stack now");
-  for (; bottom <= top; ++bottom)
-    YYFPRINTF (stderr, " %d", *bottom);
+  for (; yybottom <= yytop; yybottom++)
+    {
+      int yybot = *yybottom;
+      YYFPRINTF (stderr, " %d", yybot);
+    }
   YYFPRINTF (stderr, "\n");
 }
 
@@ -1601,11 +1620,11 @@ yy_reduce_print (yyvsp, yyrule)
   /* The symbols being reduced.  */
   for (yyi = 0; yyi < yynrhs; yyi++)
     {
-      fprintf (stderr, "   $%d = ", yyi + 1);
+      YYFPRINTF (stderr, "   $%d = ", yyi + 1);
       yy_symbol_print (stderr, yyrhs[yyprhs[yyrule] + yyi],
 		       &(yyvsp[(yyi + 1) - (yynrhs)])
 		       		       );
-      fprintf (stderr, "\n");
+      YYFPRINTF (stderr, "\n");
     }
 }
 
@@ -1885,10 +1904,8 @@ yydestruct (yymsg, yytype, yyvaluep)
 	break;
     }
 }
-
 
 /* Prevent warnings from -Wmissing-prototypes.  */
-
 #ifdef YYPARSE_PARAM
 #if defined __STDC__ || defined __cplusplus
 int yyparse (void *YYPARSE_PARAM);
@@ -1904,11 +1921,10 @@ int yyparse ();
 #endif /* ! YYPARSE_PARAM */
 
 
-
-/* The look-ahead symbol.  */
+/* The lookahead symbol.  */
 int yychar;
 
-/* The semantic value of the look-ahead symbol.  */
+/* The semantic value of the lookahead symbol.  */
 YYSTYPE yylval;
 
 /* Number of syntax errors so far.  */
@@ -1916,9 +1932,9 @@ int yynerrs;
 
 
 
-/*----------.
-| yyparse.  |
-`----------*/
+/*-------------------------.
+| yyparse or yypush_parse.  |
+`-------------------------*/
 
 #ifdef YYPARSE_PARAM
 #if (defined __STDC__ || defined __C99__FUNC__ \
@@ -1942,14 +1958,39 @@ yyparse ()
 #endif
 #endif
 {
-  
-  int yystate;
+
+
+    int yystate;
+    /* Number of tokens to shift before error messages enabled.  */
+    int yyerrstatus;
+
+    /* The stacks and their tools:
+       `yyss': related to states.
+       `yyvs': related to semantic values.
+
+       Refer to the stacks thru separate pointers, to allow yyoverflow
+       to reallocate them elsewhere.  */
+
+    /* The state stack.  */
+    yytype_int16 yyssa[YYINITDEPTH];
+    yytype_int16 *yyss;
+    yytype_int16 *yyssp;
+
+    /* The semantic value stack.  */
+    YYSTYPE yyvsa[YYINITDEPTH];
+    YYSTYPE *yyvs;
+    YYSTYPE *yyvsp;
+
+    YYSIZE_T yystacksize;
+
   int yyn;
   int yyresult;
-  /* Number of tokens to shift before error messages enabled.  */
-  int yyerrstatus;
-  /* Look-ahead token as an internal (translated) token number.  */
-  int yytoken = 0;
+  /* Lookahead token as an internal (translated) token number.  */
+  int yytoken;
+  /* The variables used to return semantic value and location from the
+     action routines.  */
+  YYSTYPE yyval;
+
 #if YYERROR_VERBOSE
   /* Buffer for error messages, and its allocated size.  */
   char yymsgbuf[128];
@@ -1957,51 +1998,28 @@ yyparse ()
   YYSIZE_T yymsg_alloc = sizeof yymsgbuf;
 #endif
 
-  /* Three stacks and their tools:
-     `yyss': related to states,
-     `yyvs': related to semantic values,
-     `yyls': related to locations.
-
-     Refer to the stacks thru separate pointers, to allow yyoverflow
-     to reallocate them elsewhere.  */
-
-  /* The state stack.  */
-  yytype_int16 yyssa[YYINITDEPTH];
-  yytype_int16 *yyss = yyssa;
-  yytype_int16 *yyssp;
-
-  /* The semantic value stack.  */
-  YYSTYPE yyvsa[YYINITDEPTH];
-  YYSTYPE *yyvs = yyvsa;
-  YYSTYPE *yyvsp;
-
-
-
 #define YYPOPSTACK(N)   (yyvsp -= (N), yyssp -= (N))
-
-  YYSIZE_T yystacksize = YYINITDEPTH;
-
-  /* The variables used to return semantic value and location from the
-     action routines.  */
-  YYSTYPE yyval;
-
 
   /* The number of symbols on the RHS of the reduced rule.
      Keep to zero when no symbol should be popped.  */
   int yylen = 0;
+
+  yytoken = 0;
+  yyss = yyssa;
+  yyvs = yyvsa;
+  yystacksize = YYINITDEPTH;
 
   YYDPRINTF ((stderr, "Starting parse\n"));
 
   yystate = 0;
   yyerrstatus = 0;
   yynerrs = 0;
-  yychar = YYEMPTY;		/* Cause a token to be read.  */
+  yychar = YYEMPTY; /* Cause a token to be read.  */
 
   /* Initialize stack pointers.
      Waste one element of value and location stack
      so that they stay on the same level as the state stack.
      The wasted elements are never initialized.  */
-
   yyssp = yyss;
   yyvsp = yyvs;
 
@@ -2031,7 +2049,6 @@ yyparse ()
 	YYSTYPE *yyvs1 = yyvs;
 	yytype_int16 *yyss1 = yyss;
 
-
 	/* Each stack pointer address is followed by the size of the
 	   data in use in that stack, in bytes.  This used to be a
 	   conditional around just the two extra args, but that might
@@ -2039,7 +2056,6 @@ yyparse ()
 	yyoverflow (YY_("memory exhausted"),
 		    &yyss1, yysize * sizeof (*yyssp),
 		    &yyvs1, yysize * sizeof (*yyvsp),
-
 		    &yystacksize);
 
 	yyss = yyss1;
@@ -2062,9 +2078,8 @@ yyparse ()
 	  (union yyalloc *) YYSTACK_ALLOC (YYSTACK_BYTES (yystacksize));
 	if (! yyptr)
 	  goto yyexhaustedlab;
-	YYSTACK_RELOCATE (yyss);
-	YYSTACK_RELOCATE (yyvs);
-
+	YYSTACK_RELOCATE (yyss_alloc, yyss);
+	YYSTACK_RELOCATE (yyvs_alloc, yyvs);
 #  undef YYSTACK_RELOCATE
 	if (yyss1 != yyssa)
 	  YYSTACK_FREE (yyss1);
@@ -2075,7 +2090,6 @@ yyparse ()
       yyssp = yyss + yysize - 1;
       yyvsp = yyvs + yysize - 1;
 
-
       YYDPRINTF ((stderr, "Stack size increased to %lu\n",
 		  (unsigned long int) yystacksize));
 
@@ -2085,6 +2099,9 @@ yyparse ()
 
   YYDPRINTF ((stderr, "Entering state %d\n", yystate));
 
+  if (yystate == YYFINAL)
+    YYACCEPT;
+
   goto yybackup;
 
 /*-----------.
@@ -2093,16 +2110,16 @@ yyparse ()
 yybackup:
 
   /* Do appropriate processing given the current state.  Read a
-     look-ahead token if we need one and don't already have one.  */
+     lookahead token if we need one and don't already have one.  */
 
-  /* First try to decide what to do without reference to look-ahead token.  */
+  /* First try to decide what to do without reference to lookahead token.  */
   yyn = yypact[yystate];
   if (yyn == YYPACT_NINF)
     goto yydefault;
 
-  /* Not known => get a look-ahead token if don't already have one.  */
+  /* Not known => get a lookahead token if don't already have one.  */
 
-  /* YYCHAR is either YYEMPTY or YYEOF or a valid look-ahead symbol.  */
+  /* YYCHAR is either YYEMPTY or YYEOF or a valid lookahead symbol.  */
   if (yychar == YYEMPTY)
     {
       YYDPRINTF ((stderr, "Reading a token: "));
@@ -2134,20 +2151,16 @@ yybackup:
       goto yyreduce;
     }
 
-  if (yyn == YYFINAL)
-    YYACCEPT;
-
   /* Count tokens shifted since error; after three, turn off error
      status.  */
   if (yyerrstatus)
     yyerrstatus--;
 
-  /* Shift the look-ahead token.  */
+  /* Shift the lookahead token.  */
   YY_SYMBOL_PRINT ("Shifting", yytoken, &yylval, &yylloc);
 
-  /* Discard the shifted token unless it is eof.  */
-  if (yychar != YYEOF)
-    yychar = YYEMPTY;
+  /* Discard the shifted token.  */
+  yychar = YYEMPTY;
 
   yystate = yyn;
   *++yyvsp = yylval;
@@ -2187,31 +2200,43 @@ yyreduce:
   switch (yyn)
     {
         case 2:
+
+/* Line 1455 of yacc.c  */
 #line 175 "rx-parse.y"
     { as_bad (_("Unknown opcode: %s"), rx_init_start); }
     break;
 
   case 3:
+
+/* Line 1455 of yacc.c  */
 #line 180 "rx-parse.y"
     { B1 (0x00); }
     break;
 
   case 4:
+
+/* Line 1455 of yacc.c  */
 #line 183 "rx-parse.y"
     { B1 (0x01); }
     break;
 
   case 5:
+
+/* Line 1455 of yacc.c  */
 #line 186 "rx-parse.y"
     { B1 (0x02); }
     break;
 
   case 6:
+
+/* Line 1455 of yacc.c  */
 #line 189 "rx-parse.y"
     { B1 (0x03); }
     break;
 
   case 7:
+
+/* Line 1455 of yacc.c  */
 #line 194 "rx-parse.y"
     { if (rx_disp3op ((yyvsp[(2) - (2)].exp)))
 	      { B1 (0x08); rx_disp3 ((yyvsp[(2) - (2)].exp), 5); }
@@ -2229,16 +2254,22 @@ yyreduce:
     break;
 
   case 8:
+
+/* Line 1455 of yacc.c  */
 #line 209 "rx-parse.y"
     { B1 (0x04); PC3 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 9:
+
+/* Line 1455 of yacc.c  */
 #line 212 "rx-parse.y"
     { B1 (0x08); rx_disp3 ((yyvsp[(3) - (3)].exp), 5); }
     break;
 
   case 10:
+
+/* Line 1455 of yacc.c  */
 #line 217 "rx-parse.y"
     { if (rx_intop ((yyvsp[(2) - (2)].exp), 16, 16))
 	      { B1 (0x39); PC2 ((yyvsp[(2) - (2)].exp)); }
@@ -2251,11 +2282,15 @@ yyreduce:
     break;
 
   case 11:
+
+/* Line 1455 of yacc.c  */
 #line 226 "rx-parse.y"
     { B1 (0x05), PC3 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 12:
+
+/* Line 1455 of yacc.c  */
 #line 231 "rx-parse.y"
     { if ((yyvsp[(1) - (3)].regno) == COND_EQ || (yyvsp[(1) - (3)].regno) == COND_NE)
 	      { B1 ((yyvsp[(1) - (3)].regno) == COND_EQ ? 0x10 : 0x18); rx_disp3 ((yyvsp[(3) - (3)].exp), 5); }
@@ -2264,26 +2299,36 @@ yyreduce:
     break;
 
   case 13:
+
+/* Line 1455 of yacc.c  */
 #line 239 "rx-parse.y"
     { B1 (0x20); F ((yyvsp[(1) - (3)].regno), 4, 4); PC1 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 14:
+
+/* Line 1455 of yacc.c  */
 #line 242 "rx-parse.y"
     { B1 (0x2e), PC1 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 15:
+
+/* Line 1455 of yacc.c  */
 #line 247 "rx-parse.y"
     { B1 (0x38), PC2 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 16:
+
+/* Line 1455 of yacc.c  */
 #line 249 "rx-parse.y"
     { B1 (0x39), PC2 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 17:
+
+/* Line 1455 of yacc.c  */
 #line 251 "rx-parse.y"
     { if ((yyvsp[(1) - (3)].regno) == COND_EQ || (yyvsp[(1) - (3)].regno) == COND_NE)
 	      { B1 ((yyvsp[(1) - (3)].regno) == COND_EQ ? 0x3a : 0x3b); PC2 ((yyvsp[(3) - (3)].exp)); }
@@ -2292,6 +2337,8 @@ yyreduce:
     break;
 
   case 18:
+
+/* Line 1455 of yacc.c  */
 #line 256 "rx-parse.y"
     { if ((yyvsp[(1) - (2)].regno) == COND_EQ || (yyvsp[(1) - (2)].regno) == COND_NE)
 	      {
@@ -2310,6 +2357,8 @@ yyreduce:
     break;
 
   case 19:
+
+/* Line 1455 of yacc.c  */
 #line 275 "rx-parse.y"
     { if ((yyvsp[(8) - (9)].regno) <= 7 && rx_uintop ((yyvsp[(4) - (9)].exp), 8) && rx_disp5op0 (&(yyvsp[(6) - (9)].exp), BSIZE))
 	      { B2 (0x3c, 0); rx_field5s2 ((yyvsp[(6) - (9)].exp)); F ((yyvsp[(8) - (9)].regno), 9, 3); O1 ((yyvsp[(4) - (9)].exp)); }
@@ -2319,6 +2368,8 @@ yyreduce:
     break;
 
   case 20:
+
+/* Line 1455 of yacc.c  */
 #line 282 "rx-parse.y"
     { if ((yyvsp[(8) - (9)].regno) <= 7 && rx_uintop ((yyvsp[(4) - (9)].exp), 8) && rx_disp5op0 (&(yyvsp[(6) - (9)].exp), WSIZE))
 	      { B2 (0x3d, 0); rx_field5s2 ((yyvsp[(6) - (9)].exp)); F ((yyvsp[(8) - (9)].regno), 9, 3); O1 ((yyvsp[(4) - (9)].exp)); }
@@ -2327,6 +2378,8 @@ yyreduce:
     break;
 
   case 21:
+
+/* Line 1455 of yacc.c  */
 #line 288 "rx-parse.y"
     { if ((yyvsp[(8) - (9)].regno) <= 7 && rx_uintop ((yyvsp[(4) - (9)].exp), 8) && rx_disp5op0 (&(yyvsp[(6) - (9)].exp), LSIZE))
 	      { B2 (0x3e, 0); rx_field5s2 ((yyvsp[(6) - (9)].exp)); F ((yyvsp[(8) - (9)].regno), 9, 3); O1 ((yyvsp[(4) - (9)].exp)); }
@@ -2335,6 +2388,8 @@ yyreduce:
     break;
 
   case 22:
+
+/* Line 1455 of yacc.c  */
 #line 296 "rx-parse.y"
     { B2 (0x3f, 0); F ((yyvsp[(5) - (7)].regno), 8, 4); F ((yyvsp[(7) - (7)].regno), 12, 4); rtsd_immediate ((yyvsp[(3) - (7)].exp));
 	    if ((yyvsp[(5) - (7)].regno) == 0)
@@ -2344,31 +2399,43 @@ yyreduce:
     break;
 
   case 23:
+
+/* Line 1455 of yacc.c  */
 #line 305 "rx-parse.y"
     { B2 (0x47, 0); F ((yyvsp[(2) - (4)].regno), 8, 4); F ((yyvsp[(4) - (4)].regno), 12, 4); }
     break;
 
   case 24:
+
+/* Line 1455 of yacc.c  */
 #line 310 "rx-parse.y"
     { B2 (0x44, 0); F ((yyvsp[(4) - (8)].regno), 8, 4); F ((yyvsp[(8) - (8)].regno), 12, 4); DSP ((yyvsp[(2) - (8)].exp), 6, BSIZE); }
     break;
 
   case 25:
+
+/* Line 1455 of yacc.c  */
 #line 313 "rx-parse.y"
     { B3 (MEMEX, 0x04, 0); F ((yyvsp[(6) - (8)].regno), 8, 2);  F ((yyvsp[(4) - (8)].regno), 16, 4); F ((yyvsp[(8) - (8)].regno), 20, 4); DSP ((yyvsp[(2) - (8)].exp), 14, sizemap[(yyvsp[(6) - (8)].regno)]); }
     break;
 
   case 26:
+
+/* Line 1455 of yacc.c  */
 #line 318 "rx-parse.y"
     { B2 (0x5b, 0x00); F ((yyvsp[(2) - (5)].regno), 5, 1); F ((yyvsp[(3) - (5)].regno), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
     break;
 
   case 27:
+
+/* Line 1455 of yacc.c  */
 #line 323 "rx-parse.y"
     { B2 (0x58, 0x00); F ((yyvsp[(2) - (7)].regno), 5, 1); F ((yyvsp[(4) - (7)].regno), 8, 4); F ((yyvsp[(7) - (7)].regno), 12, 4); }
     break;
 
   case 28:
+
+/* Line 1455 of yacc.c  */
 #line 326 "rx-parse.y"
     { if ((yyvsp[(5) - (8)].regno) <= 7 && (yyvsp[(8) - (8)].regno) <= 7 && rx_disp5op (&(yyvsp[(3) - (8)].exp), (yyvsp[(2) - (8)].regno)))
 	      { B2 (0xb0, 0); F ((yyvsp[(2) - (8)].regno), 4, 1); F ((yyvsp[(5) - (8)].regno), 9, 3); F ((yyvsp[(8) - (8)].regno), 13, 3); rx_field5s ((yyvsp[(3) - (8)].exp)); }
@@ -2377,6 +2444,8 @@ yyreduce:
     break;
 
   case 29:
+
+/* Line 1455 of yacc.c  */
 #line 334 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x60, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2386,6 +2455,8 @@ yyreduce:
     break;
 
   case 30:
+
+/* Line 1455 of yacc.c  */
 #line 341 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x61, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2396,6 +2467,8 @@ yyreduce:
     break;
 
   case 31:
+
+/* Line 1455 of yacc.c  */
 #line 349 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x62, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2404,6 +2477,8 @@ yyreduce:
     break;
 
   case 32:
+
+/* Line 1455 of yacc.c  */
 #line 355 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x63, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2412,6 +2487,8 @@ yyreduce:
     break;
 
   case 33:
+
+/* Line 1455 of yacc.c  */
 #line 361 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x64, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2420,6 +2497,8 @@ yyreduce:
     break;
 
   case 34:
+
+/* Line 1455 of yacc.c  */
 #line 367 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x65, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2428,6 +2507,8 @@ yyreduce:
     break;
 
   case 35:
+
+/* Line 1455 of yacc.c  */
 #line 373 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(4) - (6)].exp), 4))
 	      { B2 (0x66, 0); FE ((yyvsp[(4) - (6)].exp), 8, 4); F ((yyvsp[(6) - (6)].regno), 12, 4); }
@@ -2438,6 +2519,8 @@ yyreduce:
     break;
 
   case 36:
+
+/* Line 1455 of yacc.c  */
 #line 381 "rx-parse.y"
     { if (rx_uintop ((yyvsp[(3) - (5)].exp), 4))
 	      { B2 (0x66, 0); FE ((yyvsp[(3) - (5)].exp), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
@@ -2448,26 +2531,36 @@ yyreduce:
     break;
 
   case 37:
+
+/* Line 1455 of yacc.c  */
 #line 391 "rx-parse.y"
     { B1 (0x67); rtsd_immediate ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 38:
+
+/* Line 1455 of yacc.c  */
 #line 395 "rx-parse.y"
     { sub_op = 0; }
     break;
 
   case 40:
+
+/* Line 1455 of yacc.c  */
 #line 396 "rx-parse.y"
     { sub_op = 1; }
     break;
 
   case 42:
+
+/* Line 1455 of yacc.c  */
 #line 397 "rx-parse.y"
     { sub_op = 2; }
     break;
 
   case 44:
+
+/* Line 1455 of yacc.c  */
 #line 402 "rx-parse.y"
     {
 	    if ((yyvsp[(2) - (4)].regno) == (yyvsp[(4) - (4)].regno))
@@ -2481,6 +2574,8 @@ yyreduce:
     break;
 
   case 45:
+
+/* Line 1455 of yacc.c  */
 #line 415 "rx-parse.y"
     {
 	    if ((yyvsp[(2) - (4)].regno) == (yyvsp[(4) - (4)].regno))
@@ -2494,56 +2589,78 @@ yyreduce:
     break;
 
   case 46:
+
+/* Line 1455 of yacc.c  */
 #line 428 "rx-parse.y"
     { B2 (0x70, 0x00); F ((yyvsp[(5) - (7)].regno), 8, 4); F ((yyvsp[(7) - (7)].regno), 12, 4); IMM ((yyvsp[(3) - (7)].exp), 6); }
     break;
 
   case 47:
+
+/* Line 1455 of yacc.c  */
 #line 433 "rx-parse.y"
     { B2(0x75, 0x60), UO1 ((yyvsp[(3) - (3)].exp)); }
     break;
 
   case 48:
+
+/* Line 1455 of yacc.c  */
 #line 438 "rx-parse.y"
     { B2 (0x78, 0); FE ((yyvsp[(3) - (5)].exp), 7, 5); F ((yyvsp[(5) - (5)].regno), 12, 4); }
     break;
 
   case 49:
+
+/* Line 1455 of yacc.c  */
 #line 440 "rx-parse.y"
     { B2 (0x7a, 0); FE ((yyvsp[(3) - (5)].exp), 7, 5); F ((yyvsp[(5) - (5)].regno), 12, 4); }
     break;
 
   case 50:
+
+/* Line 1455 of yacc.c  */
 #line 445 "rx-parse.y"
     { B2 (0x7c, 0x00); FE ((yyvsp[(3) - (5)].exp), 7, 5); F ((yyvsp[(5) - (5)].regno), 12, 4); }
     break;
 
   case 51:
+
+/* Line 1455 of yacc.c  */
 #line 450 "rx-parse.y"
     { B2 (0x7e, 0x30); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 52:
+
+/* Line 1455 of yacc.c  */
 #line 452 "rx-parse.y"
     { B2 (0x7e, 0x40); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 53:
+
+/* Line 1455 of yacc.c  */
 #line 454 "rx-parse.y"
     { B2 (0x7e, 0x50); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 54:
+
+/* Line 1455 of yacc.c  */
 #line 459 "rx-parse.y"
     { B2 (0x7e, 0x80); F ((yyvsp[(2) - (3)].regno), 10, 2); F ((yyvsp[(3) - (3)].regno), 12, 4); }
     break;
 
   case 55:
+
+/* Line 1455 of yacc.c  */
 #line 464 "rx-parse.y"
     { B2 (0x7e, 0xb0); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 56:
+
+/* Line 1455 of yacc.c  */
 #line 469 "rx-parse.y"
     { if ((yyvsp[(2) - (2)].regno) < 16)
 	      { B2 (0x7e, 0xc0); F ((yyvsp[(2) - (2)].regno), 12, 4); }
@@ -2552,6 +2669,8 @@ yyreduce:
     break;
 
   case 57:
+
+/* Line 1455 of yacc.c  */
 #line 477 "rx-parse.y"
     { if ((yyvsp[(2) - (2)].regno) < 16)
 	      { B2 (0x7e, 0xe0); F ((yyvsp[(2) - (2)].regno), 12, 4); }
@@ -2560,101 +2679,141 @@ yyreduce:
     break;
 
   case 58:
+
+/* Line 1455 of yacc.c  */
 #line 485 "rx-parse.y"
     { B2 (0x7f, 0xa0); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 59:
+
+/* Line 1455 of yacc.c  */
 #line 487 "rx-parse.y"
     { B2 (0x7f, 0xb0); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 60:
+
+/* Line 1455 of yacc.c  */
 #line 492 "rx-parse.y"
     { B2 (0x7f, 0x00); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 61:
+
+/* Line 1455 of yacc.c  */
 #line 494 "rx-parse.y"
     { B2 (0x7f, 0x10); F ((yyvsp[(2) - (2)].regno), 12, 4); }
     break;
 
   case 62:
+
+/* Line 1455 of yacc.c  */
 #line 496 "rx-parse.y"
     { B2 (0x7f, 0x40); F ((yyvsp[(3) - (3)].regno), 12, 4); }
     break;
 
   case 63:
+
+/* Line 1455 of yacc.c  */
 #line 498 "rx-parse.y"
     { B2 (0x7f, 0x50); F ((yyvsp[(3) - (3)].regno), 12, 4); }
     break;
 
   case 64:
+
+/* Line 1455 of yacc.c  */
 #line 503 "rx-parse.y"
     { B2 (0x7f, 0x83); }
     break;
 
   case 65:
+
+/* Line 1455 of yacc.c  */
 #line 505 "rx-parse.y"
     { B2 (0x7f, 0x87); }
     break;
 
   case 66:
+
+/* Line 1455 of yacc.c  */
 #line 507 "rx-parse.y"
     { B2 (0x7f, 0x8b); }
     break;
 
   case 67:
+
+/* Line 1455 of yacc.c  */
 #line 509 "rx-parse.y"
     { B2 (0x7f, 0x8f); }
     break;
 
   case 68:
+
+/* Line 1455 of yacc.c  */
 #line 514 "rx-parse.y"
     { B2 (0x7f, 0x80); F ((yyvsp[(2) - (2)].regno), 14, 2); }
     break;
 
   case 69:
+
+/* Line 1455 of yacc.c  */
 #line 516 "rx-parse.y"
     { B2 (0x7f, 0x84); F ((yyvsp[(2) - (2)].regno), 14, 2); }
     break;
 
   case 70:
+
+/* Line 1455 of yacc.c  */
 #line 518 "rx-parse.y"
     { B2 (0x7f, 0x88); F ((yyvsp[(2) - (2)].regno), 14, 2); }
     break;
 
   case 71:
+
+/* Line 1455 of yacc.c  */
 #line 523 "rx-parse.y"
     { B2 (0x7f, 0x8c); F ((yyvsp[(2) - (2)].regno), 14, 2); }
     break;
 
   case 72:
+
+/* Line 1455 of yacc.c  */
 #line 528 "rx-parse.y"
     { B2 (0x7f, 0x94); }
     break;
 
   case 73:
+
+/* Line 1455 of yacc.c  */
 #line 530 "rx-parse.y"
     { B2 (0x7f, 0x95); }
     break;
 
   case 74:
+
+/* Line 1455 of yacc.c  */
 #line 532 "rx-parse.y"
     { B2 (0x7f, 0x96); }
     break;
 
   case 75:
+
+/* Line 1455 of yacc.c  */
 #line 534 "rx-parse.y"
     { B2 (0x7f, 0x93); }
     break;
 
   case 76:
+
+/* Line 1455 of yacc.c  */
 #line 539 "rx-parse.y"
     { B3 (0x75, 0x70, 0x00); FE ((yyvsp[(3) - (3)].exp), 20, 4); }
     break;
 
   case 77:
+
+/* Line 1455 of yacc.c  */
 #line 545 "rx-parse.y"
     { if ((yyvsp[(3) - (8)].regno) <= 7 && (yyvsp[(7) - (8)].regno) <= 7 && rx_disp5op (&(yyvsp[(5) - (8)].exp), (yyvsp[(2) - (8)].regno)))
 	      { B2 (0x80, 0); F ((yyvsp[(2) - (8)].regno), 2, 2); F ((yyvsp[(7) - (8)].regno), 9, 3); F ((yyvsp[(3) - (8)].regno), 13, 3); rx_field5s ((yyvsp[(5) - (8)].exp)); }
@@ -2663,6 +2822,8 @@ yyreduce:
     break;
 
   case 78:
+
+/* Line 1455 of yacc.c  */
 #line 553 "rx-parse.y"
     { if ((yyvsp[(5) - (8)].regno) <= 7 && (yyvsp[(8) - (8)].regno) <= 7 && rx_disp5op (&(yyvsp[(3) - (8)].exp), (yyvsp[(2) - (8)].regno)))
 	      { B2 (0x88, 0); F ((yyvsp[(2) - (8)].regno), 2, 2); F ((yyvsp[(5) - (8)].regno), 9, 3); F ((yyvsp[(8) - (8)].regno), 13, 3); rx_field5s ((yyvsp[(3) - (8)].exp)); }
@@ -2671,288 +2832,402 @@ yyreduce:
     break;
 
   case 79:
+
+/* Line 1455 of yacc.c  */
 #line 567 "rx-parse.y"
     { B2 (0xc3, 0x00); F ((yyvsp[(2) - (7)].regno), 2, 2); F ((yyvsp[(6) - (7)].regno), 8, 4); F ((yyvsp[(3) - (7)].regno), 12, 4); }
     break;
 
   case 80:
+
+/* Line 1455 of yacc.c  */
 #line 572 "rx-parse.y"
     { B2 (0xc0, 0); F ((yyvsp[(2) - (10)].regno), 2, 2); F ((yyvsp[(4) - (10)].regno), 8, 4); F ((yyvsp[(9) - (10)].regno), 12, 4); DSP ((yyvsp[(7) - (10)].exp), 4, (yyvsp[(2) - (10)].regno)); }
     break;
 
   case 81:
+
+/* Line 1455 of yacc.c  */
 #line 577 "rx-parse.y"
     { B2 (0xc0, 0x00); F ((yyvsp[(2) - (11)].regno), 2, 2); F ((yyvsp[(5) - (11)].regno), 8, 4); F ((yyvsp[(10) - (11)].regno), 12, 4); DSP ((yyvsp[(3) - (11)].exp), 6, (yyvsp[(2) - (11)].regno)); DSP ((yyvsp[(8) - (11)].exp), 4, (yyvsp[(2) - (11)].regno)); }
     break;
 
   case 82:
+
+/* Line 1455 of yacc.c  */
 #line 582 "rx-parse.y"
     { B2 (0xcf, 0x00); F ((yyvsp[(2) - (5)].regno), 2, 2); F ((yyvsp[(3) - (5)].regno), 8, 4); F ((yyvsp[(5) - (5)].regno), 12, 4); }
     break;
 
   case 83:
+
+/* Line 1455 of yacc.c  */
 #line 587 "rx-parse.y"
     { B2 (0xcc, 0x00); F ((yyvsp[(2) - (7)].regno), 2, 2); F ((yyvsp[(4) - (7)].regno), 8, 4); F ((yyvsp[(7) - (7)].regno), 12, 4); }
     break;
 
   case 84:
+
+/* Line 1455 of yacc.c  */
 #line 592 "rx-parse.y"
     { B2 (0xf0, 0x00); F ((yyvsp[(7) - (9)].regno), 8, 4); FE ((yyvsp[(3) - (9)].exp), 13, 3); DSP ((yyvsp[(5) - (9)].exp), 6, BSIZE); }
     break;
 
   case 85:
+
+/* Line 1455 of yacc.c  */
 #line 594 "rx-parse.y"
     { B2 (0xf0, 0x08); F ((yyvsp[(7) - (9)].regno), 8, 4); FE ((yyvsp[(3) - (9)].exp), 13, 3); DSP ((yyvsp[(5) - (9)].exp), 6, BSIZE); }
     break;
 
   case 86:
+
+/* Line 1455 of yacc.c  */
 #line 596 "rx-parse.y"
     { B2 (0xf4, 0x00); F ((yyvsp[(7) - (9)].regno), 8, 4); FE ((yyvsp[(3) - (9)].exp), 13, 3); DSP ((yyvsp[(5) - (9)].exp), 6, BSIZE); }
     break;
 
   case 87:
+
+/* Line 1455 of yacc.c  */
 #line 601 "rx-parse.y"
     { B2 (0xf4, 0x08); F ((yyvsp[(2) - (6)].regno), 14, 2); F ((yyvsp[(5) - (6)].regno), 8, 4); DSP ((yyvsp[(3) - (6)].exp), 6, (yyvsp[(2) - (6)].regno)); }
     break;
 
   case 88:
+
+/* Line 1455 of yacc.c  */
 #line 605 "rx-parse.y"
     { sub_op = 0; }
     break;
 
   case 90:
+
+/* Line 1455 of yacc.c  */
 #line 606 "rx-parse.y"
     { sub_op = 1; sub_op2 = 1; }
     break;
 
   case 92:
+
+/* Line 1455 of yacc.c  */
 #line 607 "rx-parse.y"
     { sub_op = 2; }
     break;
 
   case 94:
+
+/* Line 1455 of yacc.c  */
 #line 608 "rx-parse.y"
     { sub_op = 3; sub_op2 = 2; }
     break;
 
   case 96:
+
+/* Line 1455 of yacc.c  */
 #line 609 "rx-parse.y"
     { sub_op = 4; }
     break;
 
   case 98:
+
+/* Line 1455 of yacc.c  */
 #line 610 "rx-parse.y"
     { sub_op = 5; }
     break;
 
   case 100:
+
+/* Line 1455 of yacc.c  */
 #line 611 "rx-parse.y"
     { sub_op = 6; }
     break;
 
   case 102:
+
+/* Line 1455 of yacc.c  */
 #line 612 "rx-parse.y"
     { sub_op = 7; }
     break;
 
   case 104:
+
+/* Line 1455 of yacc.c  */
 #line 613 "rx-parse.y"
     { sub_op = 8; }
     break;
 
   case 106:
+
+/* Line 1455 of yacc.c  */
 #line 614 "rx-parse.y"
     { sub_op = 9; }
     break;
 
   case 108:
+
+/* Line 1455 of yacc.c  */
 #line 615 "rx-parse.y"
     { sub_op = 12; }
     break;
 
   case 110:
+
+/* Line 1455 of yacc.c  */
 #line 616 "rx-parse.y"
     { sub_op = 13; }
     break;
 
   case 112:
+
+/* Line 1455 of yacc.c  */
 #line 617 "rx-parse.y"
     { sub_op = 14; sub_op2 = 0; }
     break;
 
   case 114:
+
+/* Line 1455 of yacc.c  */
 #line 618 "rx-parse.y"
     { sub_op = 14; }
     break;
 
   case 116:
+
+/* Line 1455 of yacc.c  */
 #line 619 "rx-parse.y"
     { sub_op = 15; }
     break;
 
   case 118:
+
+/* Line 1455 of yacc.c  */
 #line 623 "rx-parse.y"
     { sub_op = 6; }
     break;
 
   case 120:
+
+/* Line 1455 of yacc.c  */
 #line 624 "rx-parse.y"
     { sub_op = 7; }
     break;
 
   case 122:
+
+/* Line 1455 of yacc.c  */
 #line 625 "rx-parse.y"
     { sub_op = 16; }
     break;
 
   case 124:
+
+/* Line 1455 of yacc.c  */
 #line 626 "rx-parse.y"
     { sub_op = 17; }
     break;
 
   case 126:
+
+/* Line 1455 of yacc.c  */
 #line 631 "rx-parse.y"
     { id24 (1, 0x63, 0x00); F ((yyvsp[(4) - (4)].regno), 16, 4); F ((yyvsp[(2) - (4)].regno), 20, 4); }
     break;
 
   case 127:
+
+/* Line 1455 of yacc.c  */
 #line 633 "rx-parse.y"
     { id24 (1, 0x67, 0x00); F ((yyvsp[(4) - (4)].regno), 16, 4); F ((yyvsp[(2) - (4)].regno), 20, 4); }
     break;
 
   case 128:
+
+/* Line 1455 of yacc.c  */
 #line 635 "rx-parse.y"
     { id24 (1, 0x6b, 0x00); F ((yyvsp[(4) - (4)].regno), 16, 4); F ((yyvsp[(2) - (4)].regno), 20, 4); }
     break;
 
   case 129:
+
+/* Line 1455 of yacc.c  */
 #line 637 "rx-parse.y"
     { id24 (1, 0x6f, 0x00); F ((yyvsp[(4) - (4)].regno), 16, 4); F ((yyvsp[(2) - (4)].regno), 20, 4); }
     break;
 
   case 130:
+
+/* Line 1455 of yacc.c  */
 #line 640 "rx-parse.y"
     { id24 (1, 0x60, 0x00); F ((yyvsp[(6) - (8)].regno), 16, 4); F ((yyvsp[(2) - (8)].regno), 20, 4); DSP ((yyvsp[(4) - (8)].exp), 14, BSIZE); }
     break;
 
   case 131:
+
+/* Line 1455 of yacc.c  */
 #line 642 "rx-parse.y"
     { id24 (1, 0x64, 0x00); F ((yyvsp[(6) - (8)].regno), 16, 4); F ((yyvsp[(2) - (8)].regno), 20, 4); DSP ((yyvsp[(4) - (8)].exp), 14, BSIZE); }
     break;
 
   case 132:
+
+/* Line 1455 of yacc.c  */
 #line 644 "rx-parse.y"
     { id24 (1, 0x68, 0x00); F ((yyvsp[(6) - (8)].regno), 16, 4); F ((yyvsp[(2) - (8)].regno), 20, 4); DSP ((yyvsp[(4) - (8)].exp), 14, BSIZE); }
     break;
 
   case 133:
+
+/* Line 1455 of yacc.c  */
 #line 646 "rx-parse.y"
     { id24 (1, 0x6c, 0x00); F ((yyvsp[(6) - (8)].regno), 16, 4); F ((yyvsp[(2) - (8)].regno), 20, 4); DSP ((yyvsp[(4) - (8)].exp), 14, BSIZE); }
     break;
 
   case 134:
+
+/* Line 1455 of yacc.c  */
 #line 650 "rx-parse.y"
     { sub_op = 0; }
     break;
 
   case 136:
+
+/* Line 1455 of yacc.c  */
 #line 651 "rx-parse.y"
     { sub_op = 1; }
     break;
 
   case 138:
+
+/* Line 1455 of yacc.c  */
 #line 652 "rx-parse.y"
     { sub_op = 2; }
     break;
 
   case 140:
+
+/* Line 1455 of yacc.c  */
 #line 653 "rx-parse.y"
     { sub_op = 3; }
     break;
 
   case 142:
+
+/* Line 1455 of yacc.c  */
 #line 654 "rx-parse.y"
     { sub_op = 4; }
     break;
 
   case 144:
+
+/* Line 1455 of yacc.c  */
 #line 655 "rx-parse.y"
     { sub_op = 5; }
     break;
 
   case 146:
+
+/* Line 1455 of yacc.c  */
 #line 656 "rx-parse.y"
     { sub_op = 6; }
     break;
 
   case 148:
+
+/* Line 1455 of yacc.c  */
 #line 661 "rx-parse.y"
     { id24 (1, 0xdb, 0x00); F ((yyvsp[(1) - (3)].regno), 20, 4); F ((yyvsp[(3) - (3)].regno), 16, 4); }
     break;
 
   case 149:
+
+/* Line 1455 of yacc.c  */
 #line 663 "rx-parse.y"
     { id24 (1, 0xd0, 0x00); F ((yyvsp[(1) - (6)].regno), 20, 4); F ((yyvsp[(2) - (6)].regno), 12, 2); F ((yyvsp[(5) - (6)].regno), 16, 4); DSP ((yyvsp[(3) - (6)].exp), 14, (yyvsp[(2) - (6)].regno)); }
     break;
 
   case 150:
+
+/* Line 1455 of yacc.c  */
 #line 668 "rx-parse.y"
     { id24 (1, 0xe0, 0x00); F ((yyvsp[(1) - (9)].regno), 20, 4); FE ((yyvsp[(3) - (9)].exp), 11, 3);
 	      F ((yyvsp[(7) - (9)].regno), 16, 4); DSP ((yyvsp[(5) - (9)].exp), 14, BSIZE); }
     break;
 
   case 151:
+
+/* Line 1455 of yacc.c  */
 #line 674 "rx-parse.y"
     { id24 (1, 0xe0, 0x0f); FE ((yyvsp[(3) - (9)].exp), 11, 3); F ((yyvsp[(7) - (9)].regno), 16, 4);
 	      DSP ((yyvsp[(5) - (9)].exp), 14, BSIZE); }
     break;
 
   case 152:
+
+/* Line 1455 of yacc.c  */
 #line 680 "rx-parse.y"
     { id24 (2, 0x00, 0x00); F ((yyvsp[(2) - (4)].regno), 16, 4); F ((yyvsp[(4) - (4)].regno), 20, 4); }
     break;
 
   case 153:
+
+/* Line 1455 of yacc.c  */
 #line 682 "rx-parse.y"
     { id24 (2, 0x01, 0x00); F ((yyvsp[(2) - (4)].regno), 16, 4); F ((yyvsp[(4) - (4)].regno), 20, 4); }
     break;
 
   case 154:
+
+/* Line 1455 of yacc.c  */
 #line 684 "rx-parse.y"
     { id24 (2, 0x04, 0x00); F ((yyvsp[(2) - (4)].regno), 16, 4); F ((yyvsp[(4) - (4)].regno), 20, 4); }
     break;
 
   case 155:
+
+/* Line 1455 of yacc.c  */
 #line 686 "rx-parse.y"
     { id24 (2, 0x05, 0x00); F ((yyvsp[(2) - (4)].regno), 16, 4); F ((yyvsp[(4) - (4)].regno), 20, 4); }
     break;
 
   case 156:
+
+/* Line 1455 of yacc.c  */
 #line 692 "rx-parse.y"
     { id24 (2, 0x17, 0x00); F ((yyvsp[(2) - (2)].regno), 20, 4); }
     break;
 
   case 157:
+
+/* Line 1455 of yacc.c  */
 #line 694 "rx-parse.y"
     { id24 (2, 0x17, 0x10); F ((yyvsp[(2) - (2)].regno), 20, 4); }
     break;
 
   case 158:
+
+/* Line 1455 of yacc.c  */
 #line 696 "rx-parse.y"
     { id24 (2, 0x1f, 0x00); F ((yyvsp[(2) - (2)].regno), 20, 4); }
     break;
 
   case 159:
+
+/* Line 1455 of yacc.c  */
 #line 698 "rx-parse.y"
     { id24 (2, 0x1f, 0x20); F ((yyvsp[(2) - (2)].regno), 20, 4); }
     break;
 
   case 160:
+
+/* Line 1455 of yacc.c  */
 #line 700 "rx-parse.y"
     { id24 (2, 0x1f, 0x10); F ((yyvsp[(2) - (2)].regno), 20, 4); }
     break;
 
   case 161:
+
+/* Line 1455 of yacc.c  */
 #line 703 "rx-parse.y"
     { id24 (2, 0x18, 0x00);
 	    if (rx_uintop ((yyvsp[(3) - (3)].exp), 4) && (yyvsp[(3) - (3)].exp).X_add_number == 1)
@@ -2964,338 +3239,469 @@ yyreduce:
     break;
 
   case 162:
+
+/* Line 1455 of yacc.c  */
 #line 714 "rx-parse.y"
     { id24 (2, 0x20, 0); F ((yyvsp[(2) - (8)].regno), 14, 2); F ((yyvsp[(6) - (8)].regno), 16, 4); F ((yyvsp[(3) - (8)].regno), 20, 4); }
     break;
 
   case 163:
+
+/* Line 1455 of yacc.c  */
 #line 716 "rx-parse.y"
     { id24 (2, 0x24, 0); F ((yyvsp[(2) - (8)].regno), 14, 2); F ((yyvsp[(7) - (8)].regno), 16, 4); F ((yyvsp[(3) - (8)].regno), 20, 4); }
     break;
 
   case 164:
+
+/* Line 1455 of yacc.c  */
 #line 721 "rx-parse.y"
     { id24 (2, 0x28, 0); F ((yyvsp[(2) - (8)].regno), 14, 2); F ((yyvsp[(4) - (8)].regno), 16, 4); F ((yyvsp[(8) - (8)].regno), 20, 4); }
     break;
 
   case 165:
+
+/* Line 1455 of yacc.c  */
 #line 723 "rx-parse.y"
     { id24 (2, 0x2c, 0); F ((yyvsp[(2) - (8)].regno), 14, 2); F ((yyvsp[(5) - (8)].regno), 16, 4); F ((yyvsp[(8) - (8)].regno), 20, 4); }
     break;
 
   case 166:
+
+/* Line 1455 of yacc.c  */
 #line 728 "rx-parse.y"
     { id24 (2, 0x38, 0); F ((yyvsp[(2) - (8)].regno), 15, 1); F ((yyvsp[(4) - (8)].regno), 16, 4); F ((yyvsp[(8) - (8)].regno), 20, 4); }
     break;
 
   case 167:
+
+/* Line 1455 of yacc.c  */
 #line 730 "rx-parse.y"
     { id24 (2, 0x3c, 0); F ((yyvsp[(2) - (8)].regno), 15, 1); F ((yyvsp[(5) - (8)].regno), 16, 4); F ((yyvsp[(8) - (8)].regno), 20, 4); }
     break;
 
   case 168:
+
+/* Line 1455 of yacc.c  */
 #line 734 "rx-parse.y"
     { sub_op = 6; }
     break;
 
   case 170:
+
+/* Line 1455 of yacc.c  */
 #line 735 "rx-parse.y"
     { sub_op = 4; }
     break;
 
   case 172:
+
+/* Line 1455 of yacc.c  */
 #line 736 "rx-parse.y"
     { sub_op = 5; }
     break;
 
   case 174:
+
+/* Line 1455 of yacc.c  */
 #line 737 "rx-parse.y"
     { sub_op = 7; }
     break;
 
   case 176:
+
+/* Line 1455 of yacc.c  */
 #line 742 "rx-parse.y"
     { id24 (2, 0x68, 0x00); F ((yyvsp[(4) - (4)].regno) % 16, 20, 4); F ((yyvsp[(4) - (4)].regno) / 16, 15, 1);
 	    F ((yyvsp[(2) - (4)].regno), 16, 4); }
     break;
 
   case 177:
+
+/* Line 1455 of yacc.c  */
 #line 748 "rx-parse.y"
     { id24 (2, 0x6a, 0); F ((yyvsp[(2) - (4)].regno), 15, 5); F ((yyvsp[(4) - (4)].regno), 20, 4); }
     break;
 
   case 178:
+
+/* Line 1455 of yacc.c  */
 #line 753 "rx-parse.y"
     { id24 (2, 0x6e, 0); FE ((yyvsp[(3) - (5)].exp), 15, 5); F ((yyvsp[(5) - (5)].regno), 20, 4); }
     break;
 
   case 179:
+
+/* Line 1455 of yacc.c  */
 #line 755 "rx-parse.y"
     { id24 (2, 0x6c, 0); FE ((yyvsp[(3) - (5)].exp), 15, 5); F ((yyvsp[(5) - (5)].regno), 20, 4); }
     break;
 
   case 180:
+
+/* Line 1455 of yacc.c  */
 #line 760 "rx-parse.y"
     { id24 (2, 0x73, 0x00); F ((yyvsp[(5) - (5)].regno), 19, 5); IMM ((yyvsp[(3) - (5)].exp), 12); }
     break;
 
   case 181:
+
+/* Line 1455 of yacc.c  */
 #line 765 "rx-parse.y"
     { id24 (2, 0xe0, 0x00); F ((yyvsp[(1) - (5)].regno), 16, 4); FE ((yyvsp[(3) - (5)].exp), 11, 5);
 	      F ((yyvsp[(5) - (5)].regno), 20, 4); }
     break;
 
   case 182:
+
+/* Line 1455 of yacc.c  */
 #line 771 "rx-parse.y"
     { id24 (2, 0xe0, 0xf0); FE ((yyvsp[(3) - (5)].exp), 11, 5); F ((yyvsp[(5) - (5)].regno), 20, 4); }
     break;
 
   case 183:
+
+/* Line 1455 of yacc.c  */
 #line 776 "rx-parse.y"
     { id24 (3, 0x00, 0); F ((yyvsp[(2) - (9)].regno), 10, 2); F ((yyvsp[(6) - (9)].regno), 12, 4); F ((yyvsp[(8) - (9)].regno), 16, 4); F ((yyvsp[(3) - (9)].regno), 20, 4); }
     break;
 
   case 184:
+
+/* Line 1455 of yacc.c  */
 #line 779 "rx-parse.y"
     { id24 (3, 0x40, 0); F ((yyvsp[(2) - (9)].regno), 10, 2); F ((yyvsp[(4) - (9)].regno), 12, 4); F ((yyvsp[(6) - (9)].regno), 16, 4); F ((yyvsp[(9) - (9)].regno), 20, 4); }
     break;
 
   case 185:
+
+/* Line 1455 of yacc.c  */
 #line 782 "rx-parse.y"
     { id24 (3, 0xc0, 0); F ((yyvsp[(2) - (9)].regno), 10, 2); F ((yyvsp[(4) - (9)].regno), 12, 4); F ((yyvsp[(6) - (9)].regno), 16, 4); F ((yyvsp[(9) - (9)].regno), 20, 4); }
     break;
 
   case 186:
+
+/* Line 1455 of yacc.c  */
 #line 786 "rx-parse.y"
     { sub_op = 0; }
     break;
 
   case 188:
+
+/* Line 1455 of yacc.c  */
 #line 787 "rx-parse.y"
     { sub_op = 2; }
     break;
 
   case 190:
+
+/* Line 1455 of yacc.c  */
 #line 788 "rx-parse.y"
     { sub_op = 3; }
     break;
 
   case 192:
+
+/* Line 1455 of yacc.c  */
 #line 789 "rx-parse.y"
     { sub_op = 4; }
     break;
 
   case 194:
+
+/* Line 1455 of yacc.c  */
 #line 790 "rx-parse.y"
     { sub_op = 5; }
     break;
 
   case 196:
+
+/* Line 1455 of yacc.c  */
 #line 796 "rx-parse.y"
     { id24 (2, 0x70, 0x20); F ((yyvsp[(5) - (5)].regno), 20, 4); NBIMM ((yyvsp[(3) - (5)].exp), 12); }
     break;
 
   case 197:
+
+/* Line 1455 of yacc.c  */
 #line 806 "rx-parse.y"
     { B2 (0x43 + (sub_op<<2), 0); F ((yyvsp[(1) - (3)].regno), 8, 4); F ((yyvsp[(3) - (3)].regno), 12, 4); }
     break;
 
   case 198:
+
+/* Line 1455 of yacc.c  */
 #line 808 "rx-parse.y"
     { B2 (0x40 + (sub_op<<2), 0); F ((yyvsp[(3) - (7)].regno), 8, 4); F ((yyvsp[(7) - (7)].regno), 12, 4); DSP ((yyvsp[(1) - (7)].exp), 6, BSIZE); }
     break;
 
   case 199:
+
+/* Line 1455 of yacc.c  */
 #line 810 "rx-parse.y"
     { B3 (MEMEX, sub_op<<2, 0); F ((yyvsp[(5) - (7)].regno), 8, 2); F ((yyvsp[(3) - (7)].regno), 16, 4); F ((yyvsp[(7) - (7)].regno), 20, 4); DSP ((yyvsp[(1) - (7)].exp), 14, sizemap[(yyvsp[(5) - (7)].regno)]); }
     break;
 
   case 200:
+
+/* Line 1455 of yacc.c  */
 #line 812 "rx-parse.y"
     { id24 (4, sub_op<<4, 0), F ((yyvsp[(5) - (5)].regno), 12, 4), F ((yyvsp[(1) - (5)].regno), 16, 4), F ((yyvsp[(3) - (5)].regno), 20, 4); }
     break;
 
   case 201:
+
+/* Line 1455 of yacc.c  */
 #line 819 "rx-parse.y"
     { id24 (1, 0x03 + (sub_op<<2), 0x00); F ((yyvsp[(1) - (3)].regno), 16, 4); F ((yyvsp[(3) - (3)].regno), 20, 4); }
     break;
 
   case 202:
+
+/* Line 1455 of yacc.c  */
 #line 821 "rx-parse.y"
     { B4 (MEMEX, 0xa0, 0x00 + sub_op, 0x00);
 	  F ((yyvsp[(3) - (7)].regno), 24, 4); F ((yyvsp[(7) - (7)].regno), 28, 4); DSP ((yyvsp[(1) - (7)].exp), 14, LSIZE); }
     break;
 
   case 203:
+
+/* Line 1455 of yacc.c  */
 #line 829 "rx-parse.y"
     { id24 (1, 0x03 + (sub_op<<2), 0x00); F ((yyvsp[(1) - (3)].regno), 16, 4); F ((yyvsp[(3) - (3)].regno), 20, 4); }
     break;
 
   case 204:
+
+/* Line 1455 of yacc.c  */
 #line 831 "rx-parse.y"
     { id24 (1, 0x00 + (sub_op<<2), 0x00); F ((yyvsp[(3) - (7)].regno), 16, 4); F ((yyvsp[(7) - (7)].regno), 20, 4); DSP ((yyvsp[(1) - (7)].exp), 14, BSIZE); }
     break;
 
   case 205:
+
+/* Line 1455 of yacc.c  */
 #line 833 "rx-parse.y"
     { B4 (MEMEX, 0x20 + ((yyvsp[(5) - (7)].regno) << 6), 0x00 + sub_op, 0x00);
 	  F ((yyvsp[(3) - (7)].regno), 24, 4); F ((yyvsp[(7) - (7)].regno), 28, 4); DSP ((yyvsp[(1) - (7)].exp), 14, sizemap[(yyvsp[(5) - (7)].regno)]); }
     break;
 
   case 206:
+
+/* Line 1455 of yacc.c  */
 #line 839 "rx-parse.y"
     { id24 (2, 0x70, sub_op<<4); F ((yyvsp[(4) - (4)].regno), 20, 4); IMM ((yyvsp[(2) - (4)].exp), 12); }
     break;
 
   case 211:
+
+/* Line 1455 of yacc.c  */
 #line 854 "rx-parse.y"
     { id24 (1, 0x03 + (sub_op<<2), 0x00); F ((yyvsp[(1) - (3)].regno), 16, 4); F ((yyvsp[(3) - (3)].regno), 20, 4); }
     break;
 
   case 212:
+
+/* Line 1455 of yacc.c  */
 #line 856 "rx-parse.y"
     { B2 (0x7e, sub_op2 << 4); F ((yyvsp[(1) - (1)].regno), 12, 4); }
     break;
 
   case 213:
+
+/* Line 1455 of yacc.c  */
 #line 862 "rx-parse.y"
     { id24 (1, 0x03 + (sub_op<<2), 0); F ((yyvsp[(1) - (3)].regno), 16, 4); F ((yyvsp[(3) - (3)].regno), 20, 4); }
     break;
 
   case 214:
+
+/* Line 1455 of yacc.c  */
 #line 864 "rx-parse.y"
     { id24 (1, 0x00 + (sub_op<<2), 0); F ((yyvsp[(3) - (7)].regno), 16, 4); F ((yyvsp[(7) - (7)].regno), 20, 4); DSP ((yyvsp[(1) - (7)].exp), 14, BSIZE); }
     break;
 
   case 215:
+
+/* Line 1455 of yacc.c  */
 #line 866 "rx-parse.y"
     { B4 (MEMEX, 0x20, 0x00 + sub_op, 0); F ((yyvsp[(5) - (7)].regno), 8, 2); F ((yyvsp[(3) - (7)].regno), 24, 4); F ((yyvsp[(7) - (7)].regno), 28, 4);
 	    DSP ((yyvsp[(1) - (7)].exp), 14, sizemap[(yyvsp[(5) - (7)].regno)]); }
     break;
 
   case 216:
+
+/* Line 1455 of yacc.c  */
 #line 873 "rx-parse.y"
     { id24 (2, 0x60 + sub_op, 0); F ((yyvsp[(1) - (3)].regno), 16, 4); F ((yyvsp[(3) - (3)].regno), 20, 4); }
     break;
 
   case 217:
+
+/* Line 1455 of yacc.c  */
 #line 877 "rx-parse.y"
     { B2 (0x68 + (sub_op<<1), 0); FE ((yyvsp[(2) - (4)].exp), 7, 5); F ((yyvsp[(4) - (4)].regno), 12, 4); }
     break;
 
   case 218:
+
+/* Line 1455 of yacc.c  */
 #line 879 "rx-parse.y"
     { id24 (2, 0x80 + (sub_op << 5), 0); FE ((yyvsp[(2) - (6)].exp), 11, 5); F ((yyvsp[(4) - (6)].regno), 16, 4); F ((yyvsp[(6) - (6)].regno), 20, 4); }
     break;
 
   case 220:
+
+/* Line 1455 of yacc.c  */
 #line 887 "rx-parse.y"
     { id24 (2, 0x72, sub_op << 4); F ((yyvsp[(4) - (4)].regno), 20, 4); O4 ((yyvsp[(2) - (4)].exp)); }
     break;
 
   case 222:
+
+/* Line 1455 of yacc.c  */
 #line 892 "rx-parse.y"
     { id24 (1, 0x83 + (sub_op << 2), 0); F ((yyvsp[(1) - (3)].regno), 16, 4); F ((yyvsp[(3) - (3)].regno), 20, 4); }
     break;
 
   case 223:
+
+/* Line 1455 of yacc.c  */
 #line 894 "rx-parse.y"
     { id24 (1, 0x80 + (sub_op << 2), 0); F ((yyvsp[(3) - (7)].regno), 16, 4); F ((yyvsp[(7) - (7)].regno), 20, 4); DSP ((yyvsp[(1) - (7)].exp), 14, LSIZE); }
     break;
 
   case 224:
+
+/* Line 1455 of yacc.c  */
 #line 899 "rx-parse.y"
     { (yyval.exp) = zero_expr (); }
     break;
 
   case 225:
+
+/* Line 1455 of yacc.c  */
 #line 900 "rx-parse.y"
     { (yyval.exp) = (yyvsp[(1) - (1)].exp); }
     break;
 
   case 226:
+
+/* Line 1455 of yacc.c  */
 #line 903 "rx-parse.y"
     { need_flag = 1; }
     break;
 
   case 227:
+
+/* Line 1455 of yacc.c  */
 #line 903 "rx-parse.y"
     { need_flag = 0; (yyval.regno) = (yyvsp[(2) - (2)].regno); }
     break;
 
   case 228:
+
+/* Line 1455 of yacc.c  */
 #line 908 "rx-parse.y"
     { (yyval.regno) = 0; }
     break;
 
   case 229:
+
+/* Line 1455 of yacc.c  */
 #line 909 "rx-parse.y"
     { (yyval.regno) = 1; }
     break;
 
   case 230:
+
+/* Line 1455 of yacc.c  */
 #line 910 "rx-parse.y"
     { (yyval.regno) = 2; }
     break;
 
   case 231:
+
+/* Line 1455 of yacc.c  */
 #line 911 "rx-parse.y"
     { (yyval.regno) = 2; }
     break;
 
   case 232:
+
+/* Line 1455 of yacc.c  */
 #line 912 "rx-parse.y"
     { (yyval.regno) = 3; }
     break;
 
   case 233:
+
+/* Line 1455 of yacc.c  */
 #line 915 "rx-parse.y"
     { (yyval.regno) = LSIZE; }
     break;
 
   case 234:
+
+/* Line 1455 of yacc.c  */
 #line 916 "rx-parse.y"
     { (yyval.regno) = BSIZE; }
     break;
 
   case 235:
+
+/* Line 1455 of yacc.c  */
 #line 917 "rx-parse.y"
     { (yyval.regno) = WSIZE; }
     break;
 
   case 236:
+
+/* Line 1455 of yacc.c  */
 #line 918 "rx-parse.y"
     { (yyval.regno) = LSIZE; }
     break;
 
   case 237:
+
+/* Line 1455 of yacc.c  */
 #line 921 "rx-parse.y"
     { (yyval.regno) = 1; }
     break;
 
   case 238:
+
+/* Line 1455 of yacc.c  */
 #line 922 "rx-parse.y"
     { (yyval.regno) = 0; }
     break;
 
   case 239:
+
+/* Line 1455 of yacc.c  */
 #line 923 "rx-parse.y"
     { (yyval.regno) = 1; }
     break;
 
   case 240:
+
+/* Line 1455 of yacc.c  */
 #line 926 "rx-parse.y"
     {}
     break;
 
   case 241:
+
+/* Line 1455 of yacc.c  */
 #line 927 "rx-parse.y"
     {}
     break;
 
 
-/* Line 1267 of yacc.c.  */
-#line 3299 "rx-parse.c"
+
+/* Line 1455 of yacc.c  */
+#line 3705 "rx-parse.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -3305,7 +3711,6 @@ yyreduce:
   YY_STACK_PRINT (yyss, yyssp);
 
   *++yyvsp = yyval;
-
 
   /* Now `shift' the result of the reduction.  Determine what state
      that goes to, based on the state we popped back to and the rule
@@ -3371,7 +3776,7 @@ yyerrlab:
 
   if (yyerrstatus == 3)
     {
-      /* If just tried and failed to reuse look-ahead token after an
+      /* If just tried and failed to reuse lookahead token after an
 	 error, discard it.  */
 
       if (yychar <= YYEOF)
@@ -3388,7 +3793,7 @@ yyerrlab:
 	}
     }
 
-  /* Else will try to reuse look-ahead token after shifting the error
+  /* Else will try to reuse lookahead token after shifting the error
      token.  */
   goto yyerrlab1;
 
@@ -3445,9 +3850,6 @@ yyerrlab1:
       YY_STACK_PRINT (yyss, yyssp);
     }
 
-  if (yyn == YYFINAL)
-    YYACCEPT;
-
   *++yyvsp = yylval;
 
 
@@ -3472,7 +3874,7 @@ yyabortlab:
   yyresult = 1;
   goto yyreturn;
 
-#ifndef yyoverflow
+#if !defined(yyoverflow) || YYERROR_VERBOSE
 /*-------------------------------------------------.
 | yyexhaustedlab -- memory exhaustion comes here.  |
 `-------------------------------------------------*/
@@ -3483,7 +3885,7 @@ yyexhaustedlab:
 #endif
 
 yyreturn:
-  if (yychar != YYEOF && yychar != YYEMPTY)
+  if (yychar != YYEMPTY)
      yydestruct ("Cleanup: discarding lookahead",
 		 yytoken, &yylval);
   /* Do not reclaim the symbols of the rule which action triggered
@@ -3509,6 +3911,8 @@ yyreturn:
 }
 
 
+
+/* Line 1675 of yacc.c  */
 #line 930 "rx-parse.y"
 
 /* ====================================================================== */

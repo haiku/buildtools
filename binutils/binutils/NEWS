@@ -1,5 +1,10 @@
 -*- text -*-
 
+* Objcopy now supports wildcard characters in command line options that take
+  section names.
+
+* Add support for Altera Nios II.
+
 Changes in 2.23:
 
 * Add support for the VLE extension to the PowerPC architecture.
@@ -474,6 +479,12 @@ Changes in binutils 2.1:
   and/or local symbols only.  They now also support long options.
 
 
+Copyright (C) 2012 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
 Local variables:
 fill-column: 79
 End:

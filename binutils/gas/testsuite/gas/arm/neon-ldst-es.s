@@ -57,3 +57,6 @@
 	vld2.32 {q1},[r7]
 	vld4.32 {q1-q2},[r7]
 	vld4.32 {q14-q15},[r7]
+
+	@ PR 14987 and 14887: Allow for whitespace in the instruction.
+	vld1.32 { d1 [ ] } , [ r2 ] , r3

@@ -461,7 +461,7 @@ _bfd_XXi_swap_aouthdr_in (bfd * abfd,
   {
     int idx;
 
-    for (idx = 0; idx < 16; idx++)
+    for (idx = 0; idx < a->NumberOfRvaAndSizes; idx++)
       {
         /* If data directory is empty, rva also should be 0.  */
 	int size =
@@ -590,9 +590,6 @@ _bfd_XXi_swap_aouthdr_out (bfd * abfd, void * in, void * out)
   aouthdr_in->bsize = FA (aouthdr_in->bsize);
 
   extra->NumberOfRvaAndSizes = IMAGE_NUMBEROF_DIRECTORY_ENTRIES;
-
-  /* First null out all data directory entries.  */
-  memset (extra->DataDirectory, 0, sizeof (extra->DataDirectory));
 
   add_data_entry (abfd, extra, 0, ".edata", ib);
   add_data_entry (abfd, extra, 2, ".rsrc", ib);
@@ -2442,7 +2439,7 @@ _bfd_XXi_final_link_postscript (bfd * abfd, struct coff_final_link_info *pfinfo)
      /* According to PECOFF sepcifications by Microsoft version 8.2
 	the TLS data directory consists of 4 pointers, followed
 	by two 4-byte integer. This implies that the total size
-	is different for 32-bit and 64-bit executables.  */ 
+	is different for 32-bit and 64-bit executables.  */
 #if !defined(COFF_WITH_pep) && !defined(COFF_WITH_pex64)
       pe_data (abfd)->pe_opthdr.DataDirectory[PE_TLS_TABLE].Size = 0x18;
 #else

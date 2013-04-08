@@ -469,9 +469,9 @@ class Target_x86_64 : public Sized_target<size, false>
 			  const unsigned char* plocal_symbols,
 			  Relocatable_relocs*);
 
-  // Relocate a section during a relocatable link.
+  // Emit relocations for a section.
   void
-  relocate_for_relocatable(
+  relocate_relocs(
       const Relocate_info<size, false>*,
       unsigned int sh_type,
       const unsigned char* prelocs,
@@ -676,7 +676,8 @@ class Target_x86_64 : public Sized_target<size, false>
 	  unsigned int data_shndx,
 	  Output_section* output_section,
 	  const elfcpp::Rela<size, false>& reloc, unsigned int r_type,
-	  const elfcpp::Sym<size, false>& lsym);
+	  const elfcpp::Sym<size, false>& lsym,
+	  bool is_discarded);
 
     inline void
     global(Symbol_table* symtab, Layout* layout, Target_x86_64* target,
@@ -1384,7 +1385,7 @@ Output_data_plt_x86_64<size>::address_for_global(const Symbol* gsym)
   if (gsym->type() == elfcpp::STT_GNU_IFUNC
       && gsym->can_use_relative_reloc(false))
     offset = (this->count_ + 1) * this->get_plt_entry_size();
-  return this->address() + offset;
+  return this->address() + offset + gsym->plt_offset();
 }
 
 // Return the PLT address to use for a local symbol.  These are always
@@ -1392,9 +1393,12 @@ Output_data_plt_x86_64<size>::address_for_global(const Symbol* gsym)
 
 template<int size>
 uint64_t
-Output_data_plt_x86_64<size>::address_for_local(const Relobj*, unsigned int)
+Output_data_plt_x86_64<size>::address_for_local(const Relobj* object,
+						unsigned int r_sym)
 {
-  return this->address() + (this->count_ + 1) * this->get_plt_entry_size();
+  return (this->address()
+	  + (this->count_ + 1) * this->get_plt_entry_size()
+	  + object->local_plt_offset(r_sym));
 }
 
 // Set the final size.
@@ -2270,8 +2274,12 @@ Target_x86_64<size>::Scan::local(Symbol_table* symtab,
 				 Output_section* output_section,
 				 const elfcpp::Rela<size, false>& reloc,
 				 unsigned int r_type,
-				 const elfcpp::Sym<size, false>& lsym)
+				 const elfcpp::Sym<size, false>& lsym,
+				 bool is_discarded)
 {
+  if (is_discarded)
+    return;
+
   // A local STT_GNU_IFUNC symbol may require a PLT entry.
   bool is_ifunc = lsym.get_st_type() == elfcpp::STT_GNU_IFUNC;
   if (is_ifunc && this->reloc_needs_plt_for_ifunc(object, r_type))
@@ -2477,7 +2485,7 @@ Target_x86_64<size>::Scan::local(Symbol_table* symtab,
 					       shndx,
 					       GOT_TYPE_TLS_PAIR,
 					       target->rela_dyn_section(layout),
-					       elfcpp::R_X86_64_DTPMOD64, 0);
+					       elfcpp::R_X86_64_DTPMOD64);
 	      }
 	    else if (optimized_type != tls::TLSOPT_TO_LE)
 	      unsupported_reloc_local(object, r_type);
@@ -3006,7 +3014,7 @@ Target_x86_64<size>::Scan::global(Symbol_table* symtab,
 	  case elfcpp::R_X86_64_TPOFF32:     // Local-exec
 	    layout->set_has_static_tls();
 	    if (parameters->options().shared())
-	      unsupported_reloc_local(object, r_type);
+	      unsupported_reloc_global(object, r_type, gsym);
 	    break;
 
 	  default:
@@ -3229,8 +3237,7 @@ Target_x86_64<size>::Relocate::relocate(
   if (gsym != NULL
       && gsym->use_plt_offset(Scan::get_reference_flags(r_type)))
     {
-      symval.set_output_value(target->plt_address_for_global(gsym)
-			      + gsym->plt_offset());
+      symval.set_output_value(target->plt_address_for_global(gsym));
       psymval = &symval;
     }
   else if (gsym == NULL && psymval->is_ifunc_symbol())
@@ -3238,8 +3245,7 @@ Target_x86_64<size>::Relocate::relocate(
       unsigned int r_sym = elfcpp::elf_r_sym<size>(rela.get_r_info());
       if (object->local_has_plt_offset(r_sym))
 	{
-	  symval.set_output_value(target->plt_address_for_local(object, r_sym)
-				  + object->local_plt_offset(r_sym));
+	  symval.set_output_value(target->plt_address_for_local(object, r_sym));
 	  psymval = &symval;
 	}
     }
@@ -4061,7 +4067,8 @@ Target_x86_64<size>::relocate_section(
   gold_assert(sh_type == elfcpp::SHT_RELA);
 
   gold::relocate_section<size, false, Target_x86_64<size>, elfcpp::SHT_RELA,
-			 typename Target_x86_64<size>::Relocate>(
+			 typename Target_x86_64<size>::Relocate,
+			 gold::Default_comdat_behavior>(
     relinfo,
     this,
     prelocs,
@@ -4215,7 +4222,7 @@ Target_x86_64<size>::scan_relocatable_relocs(
 
 template<int size>
 void
-Target_x86_64<size>::relocate_for_relocatable(
+Target_x86_64<size>::relocate_relocs(
     const Relocate_info<size, false>* relinfo,
     unsigned int sh_type,
     const unsigned char* prelocs,
@@ -4231,7 +4238,7 @@ Target_x86_64<size>::relocate_for_relocatable(
 {
   gold_assert(sh_type == elfcpp::SHT_RELA);
 
-  gold::relocate_for_relocatable<size, false, elfcpp::SHT_RELA>(
+  gold::relocate_relocs<size, false, elfcpp::SHT_RELA>(
     relinfo,
     prelocs,
     reloc_count,
@@ -4255,7 +4262,7 @@ uint64_t
 Target_x86_64<size>::do_dynsym_value(const Symbol* gsym) const
 {
   gold_assert(gsym->is_from_dynobj() && gsym->has_plt_offset());
-  return this->plt_address_for_global(gsym) + gsym->plt_offset();
+  return this->plt_address_for_global(gsym);
 }
 
 // Return a string used to fill a code section with nops to take up
