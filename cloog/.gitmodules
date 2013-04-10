@@ -1,6 +1,0 @@
-[submodule "isl"]
-	path = isl
-	url = git://repo.or.cz/isl.git
-[submodule "osl"]
-	path = osl
-	url = git://repo.or.cz/openscop.git
