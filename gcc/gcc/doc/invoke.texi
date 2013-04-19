@@ -165,7 +165,7 @@ in the following sections.
 -pipe  -pass-exit-codes  @gol
 -x @var{language}  -v  -###  --help@r{[}=@var{class}@r{[},@dots{}@r{]]}  --target-help  @gol
 --version -wrapper @@@var{file} -fplugin=@var{file} -fplugin-arg-@var{name}=@var{arg}  @gol
--fdump-ada-spec@r{[}-slim@r{]} -fdump-go-spec=@var{file}}
+-fdump-ada-spec@r{[}-slim@r{]}} -fdump-go-spec=@var{file}
 
 @item C Language Options
 @xref{C Dialect Options,,Options Controlling C Dialect}.
@@ -5085,11 +5085,11 @@ Dump after duplicating the computed gotos.
 @option{-fdump-rtl-ce3} enable dumping after the three
 if conversion passes.
 
-@item -fdump-rtl-cprop_hardreg
+@itemx -fdump-rtl-cprop_hardreg
 @opindex fdump-rtl-cprop_hardreg
 Dump after hard register copy propagation.
 
-@item -fdump-rtl-csa
+@itemx -fdump-rtl-csa
 @opindex fdump-rtl-csa
 Dump after combining stack adjustments.
 
@@ -5100,11 +5100,11 @@ Dump after combining stack adjustments.
 @option{-fdump-rtl-cse1} and @option{-fdump-rtl-cse2} enable dumping after
 the two common sub-expression elimination passes.
 
-@item -fdump-rtl-dce
+@itemx -fdump-rtl-dce
 @opindex fdump-rtl-dce
 Dump after the standalone dead code elimination passes.
 
-@item -fdump-rtl-dbr
+@itemx -fdump-rtl-dbr
 @opindex fdump-rtl-dbr
 Dump after delayed branch scheduling.
 
@@ -5149,7 +5149,7 @@ Dump after the initialization of the registers.
 @opindex fdump-rtl-initvals
 Dump after the computation of the initial value sets.
 
-@item -fdump-rtl-into_cfglayout
+@itemx -fdump-rtl-into_cfglayout
 @opindex fdump-rtl-into_cfglayout
 Dump after converting to cfglayout mode.
 
@@ -5179,7 +5179,7 @@ Dump after removing redundant mode switches.
 @opindex fdump-rtl-rnreg
 Dump after register renumbering.
 
-@item -fdump-rtl-outof_cfglayout
+@itemx -fdump-rtl-outof_cfglayout
 @opindex fdump-rtl-outof_cfglayout
 Dump after converting from cfglayout mode.
 
@@ -5191,7 +5191,7 @@ Dump after the peephole pass.
 @opindex fdump-rtl-postreload
 Dump after post-reload optimizations.
 
-@item -fdump-rtl-pro_and_epilogue
+@itemx -fdump-rtl-pro_and_epilogue
 @opindex fdump-rtl-pro_and_epilogue
 Dump after generating the function pro and epilogues.
 

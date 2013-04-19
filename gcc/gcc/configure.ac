@@ -922,15 +922,6 @@ AC_LANG_POP(C++)
 # --------
 
 
-# Configure -lm usage for host tools that need it
-math_library="-lm"
-case $host in
-  *-*-haiku*)
-    # no separate math library needed
-    math_library=
-    ;;
-esac
-
 # These libraries may be used by collect2.
 # We may need a special search path to get them linked.
 AC_CACHE_CHECK(for collect2 libraries, gcc_cv_collect2_libs,
@@ -1330,7 +1321,7 @@ case ${enable_threads} in
     # default
     target_thread_file='single'
     ;;
-  aix | dce | gnat | haiku | irix | posix | posix95 | rtems | \
+  aix | dce | gnat | irix | posix | posix95 | rtems | \
   single | solaris | vxworks | win32 | mipssde)
     target_thread_file=${enable_threads}
     ;;
