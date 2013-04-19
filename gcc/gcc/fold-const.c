@@ -3873,6 +3873,10 @@ make_range (tree exp, int *pin_p, tree *plow, tree *phigh,
       switch (code)
 	{
 	case TRUTH_NOT_EXPR:
+	  /* We can only do something if the range is testing for zero.  */
+	  if (low == NULL_TREE || high == NULL_TREE
+	      || ! integer_zerop (low) || ! integer_zerop (high))
+	    break;
 	  in_p = ! in_p, exp = arg0;
 	  continue;
 
@@ -6003,10 +6007,11 @@ fold_binary_op_with_conditional_arg (location_t loc,
     }
 
   /* This transformation is only worthwhile if we don't have to wrap ARG
-     in a SAVE_EXPR and the operation can be simplified on at least one
-     of the branches once its pushed inside the COND_EXPR.  */
+     in a SAVE_EXPR and the operation can be simplified without recursing
+     on at least one of the branches once its pushed inside the COND_EXPR.  */
   if (!TREE_CONSTANT (arg)
       && (TREE_SIDE_EFFECTS (arg)
+	  || TREE_CODE (arg) == COND_EXPR || TREE_CODE (arg) == VEC_COND_EXPR
 	  || TREE_CONSTANT (true_value) || TREE_CONSTANT (false_value)))
     return NULL_TREE;
 
@@ -6771,10 +6776,12 @@ fold_sign_changed_comparison (location_t loc, enum tree_code code, tree type,
 	   && TREE_TYPE (TREE_OPERAND (arg1, 0)) == inner_type))
     return NULL_TREE;
 
-  if ((TYPE_UNSIGNED (inner_type) != TYPE_UNSIGNED (outer_type)
-       || POINTER_TYPE_P (inner_type) != POINTER_TYPE_P (outer_type))
+  if (TYPE_UNSIGNED (inner_type) != TYPE_UNSIGNED (outer_type)
       && code != NE_EXPR
       && code != EQ_EXPR)
+    return NULL_TREE;
+
+  if (POINTER_TYPE_P (inner_type) != POINTER_TYPE_P (outer_type))
     return NULL_TREE;
 
   if (TREE_CODE (arg1) == INTEGER_CST)

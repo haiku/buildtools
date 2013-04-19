@@ -660,12 +660,13 @@ layout_decl (tree decl, unsigned int known_align)
 	  /* See if we can use an ordinary integer mode for a bit-field.
 	     Conditions are: a fixed size that is correct for another mode,
 	     occupying a complete byte or bytes on proper boundary,
-	     and not volatile or not -fstrict-volatile-bitfields.  */
+	     and not -fstrict-volatile-bitfields.  If the latter is set,
+	     we unfortunately can't check TREE_THIS_VOLATILE, as a cast
+	     may make a volatile object later.  */
 	  if (TYPE_SIZE (type) != 0
 	      && TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST
 	      && GET_MODE_CLASS (TYPE_MODE (type)) == MODE_INT
-	      && !(TREE_THIS_VOLATILE (decl)
-		   && flag_strict_volatile_bitfields > 0))
+	      && flag_strict_volatile_bitfields <= 0)
 	    {
 	      enum machine_mode xmode
 		= mode_for_size_tree (DECL_SIZE (decl), MODE_INT, 1);
@@ -1926,9 +1927,17 @@ layout_type (tree type)
 	TYPE_SIZE (type) = int_const_binop (MULT_EXPR, TYPE_SIZE (innertype),
 					    bitsize_int (nunits), 0);
 
-	/* Always naturally align vectors.  This prevents ABI changes
-	   depending on whether or not native vector modes are supported.  */
-	TYPE_ALIGN (type) = tree_low_cst (TYPE_SIZE (type), 0);
+	/* For vector types, we do not default to the mode's alignment.
+	   Instead, query a target hook, defaulting to natural alignment.
+	   This prevents ABI changes depending on whether or not native
+	   vector modes are supported.  */
+	TYPE_ALIGN (type) = targetm.vector_alignment (type);
+
+	/* However, if the underlying mode requires a bigger alignment than
+	   what the target hook provides, we cannot use the mode.  For now,
+	   simply reject that case.  */
+	gcc_assert (TYPE_ALIGN (type)
+		    >= GET_MODE_ALIGNMENT (TYPE_MODE (type)));
         break;
       }
 

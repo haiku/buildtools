@@ -848,9 +848,7 @@ extern int may_call_alloca;
    && (NEW_HP_ASSEMBLER						\
        || TARGET_GAS						\
        || GET_CODE (X) != LABEL_REF)				\
-   && (!PA_SYMBOL_REF_TLS_P (X)					\
-       || (SYMBOL_REF_TLS_MODEL (X) != TLS_MODEL_GLOBAL_DYNAMIC		\
-	   && SYMBOL_REF_TLS_MODEL (X) != TLS_MODEL_LOCAL_DYNAMIC))	\
+   && !PA_SYMBOL_REF_TLS_P (X)					\
    && (!TARGET_64BIT						\
        || GET_CODE (X) != CONST_DOUBLE)				\
    && (!TARGET_64BIT						\
@@ -1317,8 +1315,8 @@ do { 									\
 
 /* Handling the special cases is going to get too complicated for a macro,
    just call `pa_adjust_insn_length' to do the real work.  */
-#define ADJUST_INSN_LENGTH(INSN, LENGTH)	\
-  LENGTH += pa_adjust_insn_length (INSN, LENGTH);
+#define ADJUST_INSN_LENGTH(INSN, LENGTH) \
+  ((LENGTH) = pa_adjust_insn_length ((INSN), (LENGTH)))
 
 /* Millicode insns are actually function calls with some special
    constraints on arguments and register usage.
@@ -1563,3 +1561,12 @@ do { 									\
 #undef TARGET_HAVE_TLS
 #define TARGET_HAVE_TLS true
 #endif
+
+/* The maximum offset in bytes for a PA 1.X pc-relative call to the
+   head of the preceding stub table.  The selected offsets have been
+   chosen so that approximately one call stub is allocated for every
+   86.7 instructions.  A long branch stub is two instructions when
+   not generating PIC code.  For HP-UX and ELF targets, PIC stubs are
+   seven and four instructions, respectively.  */  
+#define MAX_PCREL17F_OFFSET \
+  (flag_pic ? (TARGET_HPUX ? 198164 : 221312) : 240000)

@@ -1005,6 +1005,14 @@ information normally used on 386 SVR4 platforms; stabs provide a
 workable alternative.  This requires gas and gdb, as the normal SVR4
 tools can not generate or interpret stabs.
 
+@item --enable-multiarch
+Specify whether to enable or disable multiarch support.  The default is
+to check for glibc start files in a multiarch location, and enable it
+if the files are found.  The auto detection is enabled for native builds,
+and for cross builds configured with @option{--with-sysroot}.
+More documentation about multiarch can be found at
+@uref{http://wiki.debian.org/Multiarch}.
+
 @item --disable-multilib
 Specify that multiple target
 libraries to support different target variants, calling
@@ -1208,7 +1216,7 @@ Division by zero checks use the break instruction.
 
 @item --with-llsc
 On MIPS targets, make @option{-mllsc} the default when no
-@option{-mno-lsc} option is passed.  This is the default for
+@option{-mno-llsc} option is passed.  This is the default for
 Linux-based targets, as the kernel will emulate them if the ISA does
 not provide them.
 
@@ -4365,9 +4373,9 @@ releases mishandled unaligned relocations on @code{sparc-*-*} targets.
 @end html
 @heading @anchor{sparc64-x-solaris2}sparc64-*-solaris2*
 
-When configuring the GNU Multiple Precision Library (GMP) or the
-MPFR library, the canonical target triplet must be specified as
-the @command{build} parameter on the configure line.  For example
+When configuring the GNU Multiple Precision Library (GMP), the MPFR
+library or the MPC library, the canonical target triplet must be specified
+as the @command{build} parameter on the configure line.  For example
 on a Solaris 9 system:
 
 @smallexample

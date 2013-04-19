@@ -1019,7 +1019,7 @@ vect_update_misalignment_for_peel (struct data_reference *dr,
       int misal = DR_MISALIGNMENT (dr);
       tree vectype = STMT_VINFO_VECTYPE (stmt_info);
       misal += negative ? -npeel * dr_size : npeel * dr_size;
-      misal &= GET_MODE_SIZE (TYPE_MODE (vectype)) - 1;
+      misal &= (TYPE_ALIGN (vectype) / BITS_PER_UNIT) - 1;
       SET_DR_MISALIGNMENT (dr, misal);
       return;
     }
@@ -1294,7 +1294,7 @@ vect_peeling_hash_get_lowest_cost (void **slot, void *data)
     }
 
   outside_cost += vect_get_known_peeling_cost (loop_vinfo, elem->npeel, &dummy,
-                         vect_get_single_scalar_iteraion_cost (loop_vinfo));
+                         vect_get_single_scalar_iteration_cost (loop_vinfo));
 
   if (inside_cost < min->inside_cost
       || (inside_cost == min->inside_cost && outside_cost < min->outside_cost))

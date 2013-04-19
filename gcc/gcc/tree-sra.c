@@ -666,6 +666,7 @@ type_internals_preclude_sra_p (tree type)
 		|| !DECL_FIELD_OFFSET (fld) || !DECL_SIZE (fld)
 		|| !host_integerp (DECL_FIELD_OFFSET (fld), 1)
 		|| !host_integerp (DECL_SIZE (fld), 1)
+		|| !host_integerp (bit_position (fld), 0)
 		|| (AGGREGATE_TYPE_P (ft)
 		    && int_bit_position (fld) % BITS_PER_UNIT != 0))
 	      return true;
@@ -910,7 +911,8 @@ static void
 disqualify_base_of_expr (tree t, const char *reason)
 {
   t = get_base_address (t);
-  if (sra_mode == SRA_MODE_EARLY_IPA
+  if (t
+      && sra_mode == SRA_MODE_EARLY_IPA
       && TREE_CODE (t) == MEM_REF)
     t = get_ssa_base_param (TREE_OPERAND (t, 0));
 
@@ -2867,15 +2869,13 @@ sra_modify_assign (gimple *stmt, gimple_stmt_iterator *gsi)
 	     ???  This should move to fold_stmt which we simply should
 	     call after building a VIEW_CONVERT_EXPR here.  */
 	  if (AGGREGATE_TYPE_P (TREE_TYPE (lhs))
-	      && !contains_bitfld_comp_ref_p (lhs)
-	      && !access_has_children_p (lacc))
+	      && !contains_bitfld_comp_ref_p (lhs))
 	    {
 	      lhs = build_ref_for_model (loc, lhs, 0, racc, gsi, false);
 	      gimple_assign_set_lhs (*stmt, lhs);
 	    }
 	  else if (AGGREGATE_TYPE_P (TREE_TYPE (rhs))
-		   && !contains_vce_or_bfcref_p (rhs)
-		   && !access_has_children_p (racc))
+		   && !contains_vce_or_bfcref_p (rhs))
 	    rhs = build_ref_for_model (loc, rhs, 0, lacc, gsi, false);
 
 	  if (!useless_type_conversion_p (TREE_TYPE (lhs), TREE_TYPE (rhs)))
@@ -2937,7 +2937,13 @@ sra_modify_assign (gimple *stmt, gimple_stmt_iterator *gsi)
     }
   else
     {
-      if (access_has_children_p (lacc) && access_has_children_p (racc))
+      if (access_has_children_p (lacc)
+	  && access_has_children_p (racc)
+	  /* When an access represents an unscalarizable region, it usually
+	     represents accesses with variable offset and thus must not be used
+	     to generate new memory accesses.  */
+	  && !lacc->grp_unscalarizable_region
+	  && !racc->grp_unscalarizable_region)
 	{
 	  gimple_stmt_iterator orig_gsi = *gsi;
 	  enum unscalarized_data_handling refreshed;

@@ -3809,6 +3809,12 @@ expand_call_inline (basic_block bb, gimple stmt, copy_body_data *id)
 	goto egress;
 
       if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (fn))
+          /* For extern inline functions that get redefined we always
+	     silently ignored always_inline flag. Better behaviour would
+	     be to be able to keep both bodies and use extern inline body
+	     for inlining, but we can't do that because frontends overwrite
+	     the body.  */
+	  && !cg_edge->callee->local.redefined_extern_inline
 	  /* Avoid warnings during early inline pass. */
 	  && cgraph_global_info_ready)
 	{
@@ -4947,7 +4953,7 @@ delete_unreachable_blocks_update_callgraph (copy_body_data *id)
 	        if ((e = cgraph_edge (id->dst_node, gsi_stmt (bsi))) != NULL)
 		  {
 		    if (!e->inline_failed)
-		      cgraph_remove_node_and_inline_clones (e->callee);
+		      cgraph_remove_node_and_inline_clones (e->callee, id->dst_node);
 		    else
 	              cgraph_remove_edge (e);
 		  }
@@ -4957,8 +4963,8 @@ delete_unreachable_blocks_update_callgraph (copy_body_data *id)
 		    {
 	              if ((e = cgraph_edge (node, gsi_stmt (bsi))) != NULL)
 			{
-		          if (!e->inline_failed)
-		            cgraph_remove_node_and_inline_clones (e->callee);
+		          if (!e->inline_failed && e->callee != id->src_node)
+		            cgraph_remove_node_and_inline_clones (e->callee, id->dst_node);
 			  else
 	                    cgraph_remove_edge (e);
 			}

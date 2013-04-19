@@ -161,7 +161,7 @@ static tree tsubst_template_parms (tree, tree, tsubst_flags_t);
 static void regenerate_decl_from_template (tree, tree);
 static tree most_specialized_class (tree, tree, tsubst_flags_t);
 static tree tsubst_aggr_type (tree, tree, tsubst_flags_t, tree, int);
-static tree tsubst_arg_types (tree, tree, tsubst_flags_t, tree);
+static tree tsubst_arg_types (tree, tree, tree, tsubst_flags_t, tree);
 static tree tsubst_function_type (tree, tree, tsubst_flags_t, tree);
 static bool check_specialization_scope (void);
 static tree process_partial_specialization (tree);
@@ -1432,14 +1432,21 @@ register_specialization (tree spec, tree tmpl, tree args, bool is_friend,
 /* Returns true iff two spec_entry nodes are equivalent.  Only compares the
    TMPL and ARGS members, ignores SPEC.  */
 
+int comparing_specializations;
+
 static int
 eq_specializations (const void *p1, const void *p2)
 {
   const spec_entry *e1 = (const spec_entry *)p1;
   const spec_entry *e2 = (const spec_entry *)p2;
+  int equal;
 
-  return (e1->tmpl == e2->tmpl
-	  && comp_template_args (e1->args, e2->args));
+  ++comparing_specializations;
+  equal = (e1->tmpl == e2->tmpl
+	   && comp_template_args (e1->args, e2->args));
+  --comparing_specializations;
+
+  return equal;
 }
 
 /* Returns a hash for a template TMPL and template arguments ARGS.  */
@@ -10028,6 +10035,16 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain)
 	    break;
 	  }
 
+	if (TREE_CODE (t) == VAR_DECL && DECL_ANON_UNION_VAR_P (t))
+	  {
+	    /* Just use name lookup to find a member alias for an anonymous
+	       union, but then add it to the hash table.  */
+	    r = lookup_name (DECL_NAME (t));
+	    gcc_assert (DECL_ANON_UNION_VAR_P (r));
+	    register_local_specialization (r, t);
+	    break;
+	  }
+
 	/* Create a new node for the specialization we need.  */
 	r = copy_decl (t);
 	if (type == NULL_TREE)
@@ -10176,11 +10193,14 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain)
   return r;
 }
 
-/* Substitute into the ARG_TYPES of a function type.  */
+/* Substitute into the ARG_TYPES of a function type.
+   If END is a TREE_CHAIN, leave it and any following types
+   un-substituted.  */
 
 static tree
 tsubst_arg_types (tree arg_types,
 		  tree args,
+		  tree end,
 		  tsubst_flags_t complain,
 		  tree in_decl)
 {
@@ -10190,11 +10210,11 @@ tsubst_arg_types (tree arg_types,
   tree expanded_args = NULL_TREE;
   tree default_arg;
 
-  if (!arg_types || arg_types == void_list_node)
+  if (!arg_types || arg_types == void_list_node || arg_types == end)
     return arg_types;
 
   remaining_arg_types = tsubst_arg_types (TREE_CHAIN (arg_types),
-					  args, complain, in_decl);
+					  args, end, complain, in_decl);
   if (remaining_arg_types == error_mark_node)
     return error_mark_node;
 
@@ -10319,7 +10339,7 @@ tsubst_function_type (tree t,
     }
 
   /* Substitute the argument types.  */
-  arg_types = tsubst_arg_types (TYPE_ARG_TYPES (t), args,
+  arg_types = tsubst_arg_types (TYPE_ARG_TYPES (t), args, NULL_TREE,
 				complain, in_decl);
   if (arg_types == error_mark_node)
     return error_mark_node;
@@ -15900,12 +15920,9 @@ check_undeduced_parms (tree targs, tree args, tree end)
       }
   if (found)
     {
-      for (; args != end; args = TREE_CHAIN (args))
-	{
-	  tree substed = tsubst (TREE_VALUE (args), targs, tf_none, NULL_TREE);
-	  if (substed == error_mark_node)
-	    return true;
-	}
+      tree substed = tsubst_arg_types (args, targs, end, tf_none, NULL_TREE);
+      if (substed == error_mark_node)
+	return true;
     }
   return false;
 }
@@ -17785,6 +17802,7 @@ tsubst_initializer_list (tree t, tree argvec)
             }
           else
             {
+	      tree tmp;
               decl = tsubst_copy (TREE_PURPOSE (t), argvec, 
                                   tf_warning_or_error, NULL_TREE);
 
@@ -17793,10 +17811,17 @@ tsubst_initializer_list (tree t, tree argvec)
                 in_base_initializer = 1;
 
 	      init = TREE_VALUE (t);
+	      tmp = init;
 	      if (init != void_type_node)
 		init = tsubst_expr (init, argvec,
 				    tf_warning_or_error, NULL_TREE,
 				    /*integral_constant_expression_p=*/false);
+	      if (init == NULL_TREE && tmp != NULL_TREE)
+		/* If we had an initializer but it instantiated to nothing,
+		   value-initialize the object.  This will only occur when
+		   the initializer was a pack expansion where the parameter
+		   packs used in that expansion were of length zero.  */
+		init = void_type_node;
               in_base_initializer = 0;
             }
 

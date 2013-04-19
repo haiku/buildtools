@@ -5971,6 +5971,8 @@ store_field (rtx target, HOST_WIDE_INT bitsize, HOST_WIDE_INT bitpos,
 		|| bitpos % GET_MODE_ALIGNMENT (mode))
 	       && SLOW_UNALIGNED_ACCESS (mode, MEM_ALIGN (target)))
 	      || (bitpos % BITS_PER_UNIT != 0)))
+      || (bitsize >= 0 && mode != BLKmode
+	  && GET_MODE_BITSIZE (mode) > bitsize)
       /* If the RHS and field are a constant size and the size of the
 	 RHS isn't the same size as the bitfield, we must use bitfield
 	 operations.  */
@@ -8306,6 +8308,54 @@ expand_expr_real_2 (sepops ops, rtx target, enum machine_mode tmode,
 
       if (!target)
 	target = gen_reg_rtx (TYPE_MODE (type));
+      else
+	/* If target overlaps with op1, then either we need to force
+	   op1 into a pseudo (if target also overlaps with op0),
+	   or write the complex parts in reverse order.  */
+	switch (GET_CODE (target))
+	  {
+	  case CONCAT:
+	    if (reg_overlap_mentioned_p (XEXP (target, 0), op1))
+	      {
+		if (reg_overlap_mentioned_p (XEXP (target, 1), op0))
+		  {
+		  complex_expr_force_op1:
+		    temp = gen_reg_rtx (GET_MODE_INNER (GET_MODE (target)));
+		    emit_move_insn (temp, op1);
+		    op1 = temp;
+		    break;
+		  }
+	      complex_expr_swap_order:
+		/* Move the imaginary (op1) and real (op0) parts to their
+		   location.  */
+		write_complex_part (target, op1, true);
+		write_complex_part (target, op0, false);
+
+		return target;
+	      }
+	    break;
+	  case MEM:
+	    temp = adjust_address_nv (target,
+				      GET_MODE_INNER (GET_MODE (target)), 0);
+	    if (reg_overlap_mentioned_p (temp, op1))
+	      {
+		enum machine_mode imode = GET_MODE_INNER (GET_MODE (target));
+		temp = adjust_address_nv (target, imode,
+					  GET_MODE_SIZE (imode));
+		if (reg_overlap_mentioned_p (temp, op0))
+		  goto complex_expr_force_op1;
+		goto complex_expr_swap_order;
+	      }
+	    break;
+	  default:
+	    if (reg_overlap_mentioned_p (target, op1))
+	      {
+		if (reg_overlap_mentioned_p (target, op0))
+		  goto complex_expr_force_op1;
+		goto complex_expr_swap_order;
+	      }
+	    break;
+	  }
 
       /* Move the real (op0) and imaginary (op1) parts to their location.  */
       write_complex_part (target, op0, false);
@@ -9182,6 +9232,7 @@ expand_expr_real_1 (tree exp, rtx target, enum machine_mode tmode,
 	orig_op0 = op0
 	  = expand_expr (tem,
 			 (TREE_CODE (TREE_TYPE (tem)) == UNION_TYPE
+			  && COMPLETE_TYPE_P (TREE_TYPE (tem))
 			  && (TREE_CODE (TYPE_SIZE (TREE_TYPE (tem)))
 			      != INTEGER_CST)
 			  && modifier != EXPAND_STACK_PARM

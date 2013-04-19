@@ -529,6 +529,7 @@ default_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
       case scalar_to_vec:
       case cond_branch_not_taken:
       case vec_perm:
+      case vec_promote_demote:
         return 1;
 
       case unaligned_load:
@@ -976,6 +977,13 @@ tree default_mangle_decl_assembler_name (tree decl ATTRIBUTE_UNUSED,
 					 tree id)
 {
    return id;
+}
+
+/* Default to natural alignment for vector types.  */
+HOST_WIDE_INT
+default_vector_alignment (const_tree type)
+{
+  return tree_low_cst (TYPE_SIZE (type), 0);
 }
 
 bool

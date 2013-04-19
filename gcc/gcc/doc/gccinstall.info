@@ -1,5 +1,5 @@
 This is doc/gccinstall.info, produced by makeinfo version 4.13 from
-/d//gcc-4.6.3/gcc-4.6.3/gcc/doc/install.texi.
+/home/jakub/gcc-4.6.4/gcc-4.6.4/gcc/doc/install.texi.
 
 Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
@@ -793,6 +793,14 @@ option.
      provide a workable alternative.  This requires gas and gdb, as the
      normal SVR4 tools can not generate or interpret stabs.
 
+`--enable-multiarch'
+     Specify whether to enable or disable multiarch support.  The
+     default is to check for glibc start files in a multiarch location,
+     and enable it if the files are found.  The auto detection is
+     enabled for native builds, and for cross builds configured with
+     `--with-sysroot'.  More documentation about multiarch can be found
+     at `http://wiki.debian.org/Multiarch'.
+
 `--disable-multilib'
      Specify that multiple target libraries to support different target
      variants, calling conventions, etc. should not be built.  The
@@ -1000,7 +1008,7 @@ option.
           Division by zero checks use the break instruction.
 
 `--with-llsc'
-     On MIPS targets, make `-mllsc' the default when no `-mno-lsc'
+     On MIPS targets, make `-mllsc' the default when no `-mno-llsc'
      option is passed.  This is the default for Linux-based targets, as
      the kernel will emulate them if the ISA does not provide them.
 
@@ -3620,9 +3628,10 @@ mishandled unaligned relocations on `sparc-*-*' targets.
 sparc64-*-solaris2*
 ===================
 
-When configuring the GNU Multiple Precision Library (GMP) or the MPFR
-library, the canonical target triplet must be specified as the `build'
-parameter on the configure line.  For example on a Solaris 9 system:
+When configuring the GNU Multiple Precision Library (GMP), the MPFR
+library or the MPC library, the canonical target triplet must be
+specified as the `build' parameter on the configure line.  For example
+on a Solaris 9 system:
 
      % ./configure --build=sparc64-sun-solaris2.9 --prefix=xxx
 
@@ -4497,7 +4506,7 @@ Concept Index
 * Menu:
 
 * Binaries:                              Binaries.           (line    6)
-* build_configargs:                      Configuration.      (line 1393)
+* build_configargs:                      Configuration.      (line 1401)
 * Configuration:                         Configuration.      (line    6)
 * configurations supported by GCC:       Configurations.     (line    6)
 * Downloading GCC:                       Downloading the source.
@@ -4507,7 +4516,7 @@ Concept Index
 * FDL, GNU Free Documentation License:   GNU Free Documentation License.
                                                              (line    6)
 * Host specific installation:            Specific.           (line    6)
-* host_configargs:                       Configuration.      (line 1397)
+* host_configargs:                       Configuration.      (line 1405)
 * Installing GCC: Binaries:              Binaries.           (line    6)
 * Installing GCC: Building:              Building.           (line    6)
 * Installing GCC: Configuration:         Configuration.      (line    6)
@@ -4517,96 +4526,96 @@ Concept Index
 * Specific installation notes:           Specific.           (line    6)
 * Target specific installation:          Specific.           (line    6)
 * Target specific installation notes:    Specific.           (line    6)
-* target_configargs:                     Configuration.      (line 1401)
+* target_configargs:                     Configuration.      (line 1409)
 * Testing:                               Testing.            (line    6)
 * Testsuite:                             Testing.            (line    6)
 
 
 
 Tag Table:
-Node: Top1964
-Node: Installing GCC2522
-Node: Prerequisites4037
-Node: Downloading the source14193
-Node: Configuration16130
-Ref: with-gnu-as30273
-Ref: with-as31171
-Ref: with-gnu-ld32584
-Node: Building77512
-Node: Testing92997
-Node: Final install100694
-Node: Binaries106008
-Node: Specific107609
-Ref: alpha-x-x108115
-Ref: alpha-dec-osf51108604
-Ref: arc-x-elf110802
-Ref: arm-x-elf110902
-Ref: avr111122
-Ref: bfin111762
-Ref: cris112004
-Ref: crx112820
-Ref: dos113498
-Ref: x-x-freebsd113821
-Ref: h8300-hms115658
-Ref: hppa-hp-hpux116010
-Ref: hppa-hp-hpux10118381
-Ref: hppa-hp-hpux11118794
-Ref: x-x-linux-gnu124453
-Ref: ix86-x-linux124646
-Ref: ix86-x-solaris289124959
-Ref: ix86-x-solaris210125803
-Ref: ia64-x-linux127029
-Ref: ia64-x-hpux127799
-Ref: x-ibm-aix128354
-Ref: iq2000-x-elf134592
-Ref: lm32-x-elf134732
-Ref: lm32-x-uclinux134836
-Ref: m32c-x-elf134964
-Ref: m32r-x-elf135066
-Ref: m6811-elf135168
-Ref: m6812-elf135318
-Ref: m68k-x-x135468
-Ref: m68k-x-uclinux136440
-Ref: mep-x-elf136803
-Ref: microblaze-x-elf136913
-Ref: mips-x-x137032
-Ref: mips-sgi-irix5139709
-Ref: mips-sgi-irix6139789
-Ref: moxie-x-elf142857
-Ref: powerpc-x-x142977
-Ref: powerpc-x-darwin143182
-Ref: powerpc-x-elf143676
-Ref: powerpc-x-linux-gnu143761
-Ref: powerpc-x-netbsd143856
-Ref: powerpc-x-eabisim143944
-Ref: powerpc-x-eabi144070
-Ref: powerpcle-x-elf144146
-Ref: powerpcle-x-eabisim144238
-Ref: powerpcle-x-eabi144371
-Ref: rx-x-elf144454
-Ref: s390-x-linux144653
-Ref: s390x-x-linux144725
-Ref: s390x-ibm-tpf144812
-Ref: x-x-solaris2144943
-Ref: sparc-x-x150091
-Ref: sparc-sun-solaris2150593
-Ref: sparc-sun-solaris210153347
-Ref: sparc-x-linux153723
-Ref: sparc64-x-solaris2153948
-Ref: sparcv9-x-solaris2154584
-Ref: x-x-vxworks154671
-Ref: x86-64-x-x156193
-Ref: xtensa-x-elf156521
-Ref: xtensa-x-linux157192
-Ref: windows157533
-Ref: x-x-cygwin159490
-Ref: x-x-interix160043
-Ref: x-x-mingw32160352
-Ref: older160578
-Ref: elf162695
-Node: Old162953
-Node: Configurations166090
-Node: GNU Free Documentation License170072
-Node: Concept Index195219
+Node: Top1972
+Node: Installing GCC2530
+Node: Prerequisites4045
+Node: Downloading the source14201
+Node: Configuration16138
+Ref: with-gnu-as30281
+Ref: with-as31179
+Ref: with-gnu-ld32592
+Node: Building77932
+Node: Testing93417
+Node: Final install101114
+Node: Binaries106428
+Node: Specific108029
+Ref: alpha-x-x108535
+Ref: alpha-dec-osf51109024
+Ref: arc-x-elf111222
+Ref: arm-x-elf111322
+Ref: avr111542
+Ref: bfin112182
+Ref: cris112424
+Ref: crx113240
+Ref: dos113918
+Ref: x-x-freebsd114241
+Ref: h8300-hms116078
+Ref: hppa-hp-hpux116430
+Ref: hppa-hp-hpux10118801
+Ref: hppa-hp-hpux11119214
+Ref: x-x-linux-gnu124873
+Ref: ix86-x-linux125066
+Ref: ix86-x-solaris289125379
+Ref: ix86-x-solaris210126223
+Ref: ia64-x-linux127449
+Ref: ia64-x-hpux128219
+Ref: x-ibm-aix128774
+Ref: iq2000-x-elf135012
+Ref: lm32-x-elf135152
+Ref: lm32-x-uclinux135256
+Ref: m32c-x-elf135384
+Ref: m32r-x-elf135486
+Ref: m6811-elf135588
+Ref: m6812-elf135738
+Ref: m68k-x-x135888
+Ref: m68k-x-uclinux136860
+Ref: mep-x-elf137223
+Ref: microblaze-x-elf137333
+Ref: mips-x-x137452
+Ref: mips-sgi-irix5140129
+Ref: mips-sgi-irix6140209
+Ref: moxie-x-elf143277
+Ref: powerpc-x-x143397
+Ref: powerpc-x-darwin143602
+Ref: powerpc-x-elf144096
+Ref: powerpc-x-linux-gnu144181
+Ref: powerpc-x-netbsd144276
+Ref: powerpc-x-eabisim144364
+Ref: powerpc-x-eabi144490
+Ref: powerpcle-x-elf144566
+Ref: powerpcle-x-eabisim144658
+Ref: powerpcle-x-eabi144791
+Ref: rx-x-elf144874
+Ref: s390-x-linux145073
+Ref: s390x-x-linux145145
+Ref: s390x-ibm-tpf145232
+Ref: x-x-solaris2145363
+Ref: sparc-x-x150511
+Ref: sparc-sun-solaris2151013
+Ref: sparc-sun-solaris210153767
+Ref: sparc-x-linux154143
+Ref: sparc64-x-solaris2154368
+Ref: sparcv9-x-solaris2155021
+Ref: x-x-vxworks155108
+Ref: x86-64-x-x156630
+Ref: xtensa-x-elf156958
+Ref: xtensa-x-linux157629
+Ref: windows157970
+Ref: x-x-cygwin159927
+Ref: x-x-interix160480
+Ref: x-x-mingw32160789
+Ref: older161015
+Ref: elf163132
+Node: Old163390
+Node: Configurations166527
+Node: GNU Free Documentation License170509
+Node: Concept Index195656
 
 End Tag Table
