@@ -1,6 +1,6 @@
 /* Branch prediction routines for the GNU compiler.
    Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   2011, 2012, 2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -966,7 +966,8 @@ predict_loops (void)
 	  if (TREE_CODE (niter) == INTEGER_CST)
 	    {
 	      if (host_integerp (niter, 1)
-		  && compare_tree_int (niter, max-1) == -1)
+		  && max
+		  && compare_tree_int (niter, max - 1) == -1)
 		nitercst = tree_low_cst (niter, 1) + 1;
 	      else
 		nitercst = max;
@@ -986,6 +987,11 @@ predict_loops (void)
 	      predictor = PRED_LOOP_ITERATIONS_GUESSED;
 	    }
 	  else
+	    continue;
+
+	  /* If the prediction for number of iterations is zero, do not
+	     predict the exit edges.  */
+	  if (nitercst == 0)
 	    continue;
 
 	  probability = ((REG_BR_PROB_BASE + nitercst / 2) / nitercst);
@@ -1790,7 +1796,8 @@ tree_estimate_probability_driver (void)
 static void
 predict_paths_for_bb (basic_block cur, basic_block bb,
 		      enum br_predictor pred,
-		      enum prediction taken)
+		      enum prediction taken,
+		      bitmap visited)
 {
   edge e;
   edge_iterator ei;
@@ -1811,7 +1818,7 @@ predict_paths_for_bb (basic_block cur, basic_block bb,
 	continue;
       gcc_assert (bb == cur || dominated_by_p (CDI_POST_DOMINATORS, cur, bb));
 
-      /* See if there is how many edge from e->src that is not abnormal
+      /* See if there is an edge from e->src that is not abnormal
 	 and does not lead to BB.  */
       FOR_EACH_EDGE (e2, ei2, e->src->succs)
 	if (e2 != e
@@ -1824,16 +1831,20 @@ predict_paths_for_bb (basic_block cur, basic_block bb,
 
       /* If there is non-abnormal path leaving e->src, predict edge
 	 using predictor.  Otherwise we need to look for paths
-	 leading to e->src.  */
+	 leading to e->src.
+
+	 The second may lead to infinite loop in the case we are predicitng
+	 regions that are only reachable by abnormal edges.  We simply
+	 prevent visiting given BB twice.  */
       if (found)
         predict_edge_def (e, pred, taken);
-      else
-	predict_paths_for_bb (e->src, e->src, pred, taken);
+      else if (bitmap_set_bit (visited, e->src->index))
+	predict_paths_for_bb (e->src, e->src, pred, taken, visited);
     }
   for (son = first_dom_son (CDI_POST_DOMINATORS, cur);
        son;
        son = next_dom_son (CDI_POST_DOMINATORS, son))
-    predict_paths_for_bb (son, bb, pred, taken);
+    predict_paths_for_bb (son, bb, pred, taken, visited);
 }
 
 /* Sets branch probabilities according to PREDiction and
@@ -1843,7 +1854,9 @@ static void
 predict_paths_leading_to (basic_block bb, enum br_predictor pred,
 			  enum prediction taken)
 {
-  predict_paths_for_bb (bb, bb, pred, taken);
+  bitmap visited = BITMAP_ALLOC (NULL);
+  predict_paths_for_bb (bb, bb, pred, taken, visited);
+  BITMAP_FREE (visited);
 }
 
 /* Like predict_paths_leading_to but take edge instead of basic block.  */
@@ -1866,7 +1879,11 @@ predict_paths_leading_to_edge (edge e, enum br_predictor pred,
 	break;
       }
   if (!has_nonloop_edge)
-    predict_paths_for_bb (bb, bb, pred, taken);
+    {
+      bitmap visited = BITMAP_ALLOC (NULL);
+      predict_paths_for_bb (bb, bb, pred, taken, visited);
+      BITMAP_FREE (visited);
+    }
   else
     predict_edge_def (e, pred, taken);
 }

@@ -94,6 +94,7 @@ static bool avr_hard_regno_scratch_ok (unsigned int);
 static unsigned int avr_case_values_threshold (void);
 static bool avr_frame_pointer_required_p (void);
 static bool avr_can_eliminate (const int, const int);
+static bool avr_allocate_stack_slots_for_args (void);
 static bool avr_class_likely_spilled_p (reg_class_t c);
 static rtx avr_function_arg (CUMULATIVE_ARGS *, enum machine_mode,
 			     const_tree, bool);
@@ -217,6 +218,9 @@ static const struct default_options avr_option_optimization_table[] =
 #define TARGET_FRAME_POINTER_REQUIRED avr_frame_pointer_required_p
 #undef TARGET_CAN_ELIMINATE
 #define TARGET_CAN_ELIMINATE avr_can_eliminate
+
+#undef TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS
+#define TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS avr_allocate_stack_slots_for_args
 
 #undef TARGET_CLASS_LIKELY_SPILLED_P
 #define TARGET_CLASS_LIKELY_SPILLED_P avr_class_likely_spilled_p
@@ -445,6 +449,16 @@ avr_regs_to_save (HARD_REG_SET *set)
     }
   return count;
 }
+
+
+/* Implement `TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS' */
+
+static bool
+avr_allocate_stack_slots_for_args (void)
+{
+  return !cfun->machine->is_naked;
+}
+
 
 /* Return true if register FROM can be eliminated via register TO.  */
 
@@ -1879,12 +1893,9 @@ output_movhi (rtx insn, rtx operands[], int *l)
 	    }
 	  else if (test_hard_reg_class (STACK_REG, src))
 	    {
-              *l = 2;
-              return AVR_HAVE_8BIT_SP
-                ? (AS2 (in,%A0,__SP_L__) CR_TAB
-                   AS1 (clr,%B0))
-                : (AS2 (in,%A0,__SP_L__) CR_TAB
-                   AS2 (in,%B0,__SP_H__));
+	      *l = 2;	
+	      return (AS2 (in,%A0,__SP_L__) CR_TAB
+		      AS2 (in,%B0,__SP_H__));
 	    }
 
 	  if (AVR_HAVE_MOVW)
@@ -5177,10 +5188,9 @@ avr_file_start (void)
 
   default_file_start ();
 
-  fputs ("__SREG__ = 0x3f\n", asm_out_file);
-  if (!AVR_HAVE_8BIT_SP)
-    fputs ("__SP_H__ = 0x3e\n", asm_out_file);
-  fputs ("__SP_L__ = 0x3d\n", asm_out_file);
+  fputs ("__SREG__ = 0x3f\n"
+	 "__SP_H__ = 0x3e\n"
+	 "__SP_L__ = 0x3d\n", asm_out_file);
   
   fputs ("__tmp_reg__ = 0\n" 
          "__zero_reg__ = 1\n", asm_out_file);

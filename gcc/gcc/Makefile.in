@@ -3,7 +3,7 @@
 
 # Copyright (C) 1987, 1988, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
 # 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-# 2008, 2009, 2010 Free Software Foundation, Inc.
+# 2008, 2009, 2010, 2012 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -513,6 +513,21 @@ GTHREAD_FLAGS=@gthread_flags@
 extra_modes_file=@extra_modes_file@
 extra_opt_files=@extra_opt_files@
 host_hook_obj=@out_host_hook_obj@
+
+# Multiarch support
+enable_multiarch = @enable_multiarch@
+with_cpu = @with_cpu@
+with_float = @with_float@
+ifeq ($(enable_multiarch),yes)
+  if_multiarch = $(1)
+else
+  ifeq ($(enable_multiarch),auto)
+    # SYSTEM_HEADER_DIR is makefile syntax, cannot be evaluated in configure.ac
+    if_multiarch = $(if $(wildcard $(shell echo $(SYSTEM_HEADER_DIR))/../../usr/lib/*/crti.o),$(1))
+  else
+    if_multiarch =
+  endif
+endif
 
 # ------------------------
 # Installation directories
@@ -1941,10 +1956,11 @@ s-mlib: $(srcdir)/genmultilib Makefile
 	    "$(MULTILIB_EXTRA_OPTS)" \
 	    "$(MULTILIB_EXCLUSIONS)" \
 	    "$(MULTILIB_OSDIRNAMES)" \
+	    "$(MULTIARCH_DIRNAME)" \
 	    "@enable_multilib@" \
 	    > tmp-mlib.h; \
 	else \
-	  $(SHELL) $(srcdir)/genmultilib '' '' '' '' '' '' '' no \
+	  $(SHELL) $(srcdir)/genmultilib '' '' '' '' '' '' '' "$(MULTIARCH_DIRNAME)" no \
 	    > tmp-mlib.h; \
 	fi
 	$(SHELL) $(srcdir)/../move-if-change tmp-mlib.h multilib.h
@@ -3389,7 +3405,7 @@ sel-sched.o : sel-sched.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    $(FUNCTION_H) $(INSN_ATTR_H)  $(RECOG_H) $(EXCEPT_H) $(PARAMS_H) \
    $(TM_P_H) output.h $(TARGET_H) $(TIMEVAR_H) $(TREE_PASS_H)  \
    $(SCHED_INT_H) $(GGC_H) $(TREE_H) langhooks.h rtlhooks-def.h \
-   $(SEL_SCHED_IR_H) $(SEL_SCHED_DUMP_H) sel-sched.h $(DBGCNT_H) $(EMIT_RTL_H)
+   $(SEL_SCHED_IR_H) $(SEL_SCHED_DUMP_H) sel-sched.h $(DBGCNT_H) $(EMIT_RTL_H) ira.h
 sel-sched-dump.o : sel-sched-dump.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    $(RTL_H) $(REGS_H) hard-reg-set.h $(FLAGS_H) insn-config.h \
    $(FUNCTION_H) $(INSN_ATTR_H) $(DIAGNOSTIC_CORE_H) $(RECOG_H) $(EXCEPT_H) $(PARAMS_H) \

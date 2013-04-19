@@ -1,3 +1,100 @@
+2013-04-12  Release Manager
+
+	* GCC 4.6.4 released.
+
+2013-04-03  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from mainline
+	2013-02-07  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/56239
+	* parser.c (cp_parser_token_starts_cast_expression): Renamed to...
+	(cp_parser_tokens_start_cast_expression): ... this.  Change parameter
+	to cp_parser *, call cp_lexer_peek_token first.  For CPP_OPEN_PAREN,
+	return true only if 2nd token isn't CPP_CLOSE_PAREN.
+	(cp_parser_cast_expression): Adjust caller.
+
+	2012-10-08  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/54858
+	* tree.c (cp_tree_equal): Handle FIELD_DECL.
+
+2013-03-14  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/56403
+	* init.c (build_zero_init_1): Use RECORD_OR_UNION_CODE_P instead
+	of CLASS_TYPE_P.
+
+2013-02-09  Jason Merrill  <jason@redhat.com>
+
+	PR c++/56247
+	* pt.c (eq_specializations): Set comparing_specializations.
+	* tree.c (cp_tree_equal): Check it.
+	* cp-tree.h: Declare it.
+
+2013-01-04  Jason Merrill  <jason@redhat.com>
+
+	PR c++/55877
+	* decl.c (reset_type_linkage, bt_reset_linkage): New.
+	(grokdeclarator): Use reset_type_linkage.
+	* name-lookup.c (binding_table_foreach): Handle null table.
+	* tree.c (decl_anon_ns_mem_p): Check TYPE_MAIN_DECL, not TYPE_NAME.
+
+2013-01-02  Jason Merrill  <jason@redhat.com>
+
+	PR c++/55032
+	PR c++/55245
+	* tree.c (build_cplus_array_type): Copy layout information
+	to main variant if necessary.
+
+2012-12-11  Jason Merrill  <jason@redhat.com>
+
+	PR c++/54883
+	* decl2.c (min_vis_r): Handle anon visibility for enums.
+
+2012-12-06  Jason Merrill  <jason@redhat.com>
+
+	PR c++/55249
+	* tree.c (build_vec_init_elt): Use the type of the initializer.
+
+2012-11-29  Jason Merrill  <jason@redhat.com>
+
+	PR c++/53862
+	* pt.c (tsubst_arg_types): Add "end" parameter.
+	(check_undeduced_parms): Use it.
+
+	PR c++/51662
+	* method.c (process_subob_fn): Increment function_depth around call to
+	instantiate_decl.
+
+2012-11-29  Kai Tietz  <ktietz@redhat.com>
+
+	PR target/53912
+	* class.c (dump_class_hierarchy_r): Cast from pointer via uintptr_t.
+	(dump_vtable): Likewise.
+
+2012-09-13  Jason Merrill  <jason@redhat.com>
+
+	PR c++/54511
+	* pt.c (tsubst_decl) [VAR_DECL]: Handle DECL_ANON_UNION_VAR_P.
+
+2012-06-25  Jason Merrill  <jason@redhat.com>
+
+	PR c++/52988
+	* typeck.c (decay_conversion): Don't discard side-effects from
+	expressions of nullptr_t.
+
+2012-04-04  Steve Ellcey <sje@cup.hp.com>
+
+	Backported from mainline.
+	* decl.c (cxx_init_decl_processing): Use ptr_mode instead of Pmode.
+
+2012-04-03  Jason Merrill  <jason@redhat.com>
+
+	PR c++/52796
+	* pt.c (tsubst_initializer_list): A pack expansion with no elements
+	means value-initialization.
+
 2012-03-01  Release Manager
 
 	* GCC 4.6.3 released.

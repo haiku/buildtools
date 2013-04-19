@@ -490,7 +490,8 @@ build_vec_init_elt (tree type, tree init)
   argvec = make_tree_vector ();
   if (init)
     {
-      tree dummy = build_dummy_object (inner_type);
+      tree init_type = strip_array_types (TREE_TYPE (init));
+      tree dummy = build_dummy_object (init_type);
       if (!real_lvalue_p (init))
 	dummy = move (dummy);
       VEC_quick_push (tree, argvec, dummy);
@@ -701,6 +702,7 @@ tree
 build_cplus_array_type (tree elt_type, tree index_type)
 {
   tree t;
+  bool needs_ctor, needs_dtor;
 
   if (elt_type == error_mark_node || index_type == error_mark_node)
     return error_mark_node;
@@ -755,6 +757,15 @@ build_cplus_array_type (tree elt_type, tree index_type)
   else
     t = build_array_type (elt_type, index_type);
 
+  /* Push these needs up so that initialization takes place
+     more easily.  */
+  needs_ctor
+    = TYPE_NEEDS_CONSTRUCTING (TYPE_MAIN_VARIANT (elt_type));
+  TYPE_NEEDS_CONSTRUCTING (t) = needs_ctor;
+  needs_dtor
+    = TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TYPE_MAIN_VARIANT (elt_type));
+  TYPE_HAS_NONTRIVIAL_DESTRUCTOR (t) = needs_dtor;
+
   /* We want TYPE_MAIN_VARIANT of an array to strip cv-quals from the
      element type as well, so fix it up if needed.  */
   if (elt_type != TYPE_MAIN_VARIANT (elt_type))
@@ -763,18 +774,34 @@ build_cplus_array_type (tree elt_type, tree index_type)
 				       index_type);
       if (TYPE_MAIN_VARIANT (t) != m)
 	{
+	  if (COMPLETE_TYPE_P (t) && !COMPLETE_TYPE_P (m))
+	    {
+	      /* m was built before the element type was complete, so we
+		 also need to copy the layout info from t.  */
+	      tree size = TYPE_SIZE (t);
+	      tree size_unit = TYPE_SIZE_UNIT (t);
+	      unsigned int align = TYPE_ALIGN (t);
+	      unsigned int user_align = TYPE_USER_ALIGN (t);
+	      enum machine_mode mode = TYPE_MODE (t);
+	      tree var;
+	      for (var = m; var; var = TYPE_NEXT_VARIANT (var))
+		{
+		  TYPE_SIZE (var) = size;
+		  TYPE_SIZE_UNIT (var) = size_unit;
+		  TYPE_ALIGN (var) = align;
+		  TYPE_USER_ALIGN (var) = user_align;
+		  SET_TYPE_MODE (var, mode);
+		  TYPE_NEEDS_CONSTRUCTING (var) = needs_ctor;
+		  TYPE_HAS_NONTRIVIAL_DESTRUCTOR (var) = needs_dtor;
+		}
+	    }
+
 	  TYPE_MAIN_VARIANT (t) = m;
 	  TYPE_NEXT_VARIANT (t) = TYPE_NEXT_VARIANT (m);
 	  TYPE_NEXT_VARIANT (m) = t;
 	}
     }
 
-  /* Push these needs up so that initialization takes place
-     more easily.  */
-  TYPE_NEEDS_CONSTRUCTING (t)
-    = TYPE_NEEDS_CONSTRUCTING (TYPE_MAIN_VARIANT (elt_type));
-  TYPE_HAS_NONTRIVIAL_DESTRUCTOR (t)
-    = TYPE_HAS_NONTRIVIAL_DESTRUCTOR (TYPE_MAIN_VARIANT (elt_type));
   return t;
 }
 
@@ -2073,7 +2100,7 @@ decl_anon_ns_mem_p (const_tree decl)
       /* Classes and namespaces inside anonymous namespaces have
          TREE_PUBLIC == 0, so we can shortcut the search.  */
       else if (TYPE_P (decl))
-	return (TREE_PUBLIC (TYPE_NAME (decl)) == 0);
+	return (TREE_PUBLIC (TYPE_MAIN_DECL (decl)) == 0);
       else if (TREE_CODE (decl) == NAMESPACE_DECL)
 	return (TREE_PUBLIC (decl) == 0);
       else
@@ -2218,6 +2245,13 @@ cp_tree_equal (tree t1, tree t2)
 	 with an out-of-class definition of the function, but can also come
 	 up for expressions that involve 'this' in a member function
 	 template.  */
+
+      if (comparing_specializations)
+	/* When comparing hash table entries, only an exact match is
+	   good enough; we don't want to replace 'this' with the
+	   version from another function.  */
+	return false;
+
       if (same_type_p (TREE_TYPE (t1), TREE_TYPE (t2)))
 	{
 	  if (DECL_ARTIFICIAL (t1) ^ DECL_ARTIFICIAL (t2))
@@ -2231,6 +2265,7 @@ cp_tree_equal (tree t1, tree t2)
 
     case VAR_DECL:
     case CONST_DECL:
+    case FIELD_DECL:
     case FUNCTION_DECL:
     case TEMPLATE_DECL:
     case IDENTIFIER_NODE:

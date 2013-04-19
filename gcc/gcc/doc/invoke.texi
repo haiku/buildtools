@@ -165,7 +165,7 @@ in the following sections.
 -pipe  -pass-exit-codes  @gol
 -x @var{language}  -v  -###  --help@r{[}=@var{class}@r{[},@dots{}@r{]]}  --target-help  @gol
 --version -wrapper @@@var{file} -fplugin=@var{file} -fplugin-arg-@var{name}=@var{arg}  @gol
--fdump-ada-spec@r{[}-slim@r{]}} -fdump-go-spec=@var{file}
+-fdump-ada-spec@r{[}-slim@r{]} -fdump-go-spec=@var{file}}
 
 @item C Language Options
 @xref{C Dialect Options,,Options Controlling C Dialect}.
@@ -598,7 +598,8 @@ Objective-C and Objective-C++ Dialects}.
 -mno-wide-multiply  -mrtd  -malign-double @gol
 -mpreferred-stack-boundary=@var{num}
 -mincoming-stack-boundary=@var{num} @gol
--mcld -mcx16 -msahf -mmovbe -mcrc32 -mrecip -mvzeroupper @gol
+-mcld -mcx16 -msahf -mmovbe -mcrc32 -mrecip @gol
+-mvzeroupper -mprefer-avx128 @gol
 -mmmx  -msse  -msse2 -msse3 -mssse3 -msse4.1 -msse4.2 -msse4 -mavx @gol
 -maes -mpclmul -mfsgsbase -mrdrnd -mf16c -mfused-madd @gol
 -msse4a -m3dnow -mpopcnt -mabm -mbmi -mtbm -mfma4 -mxop -mlwp @gol
@@ -853,8 +854,8 @@ See RS/6000 and PowerPC Options.
 -m5-compact  -m5-compact-nofpu @gol
 -mb  -ml  -mdalign  -mrelax @gol
 -mbigtable -mfmovd -mhitachi -mrenesas -mno-renesas -mnomacsave @gol
--mieee  -mbitops  -misize  -minline-ic_invalidate -mpadstruct  -mspace @gol
--mprefergot  -musermode -multcost=@var{number} -mdiv=@var{strategy} @gol
+-mieee -mno-ieee -mbitops  -misize  -minline-ic_invalidate -mpadstruct @gol
+-mspace -mprefergot  -musermode -multcost=@var{number} -mdiv=@var{strategy} @gol
 -mdivsi3_libfunc=@var{name} -mfixed-range=@var{register-range} @gol
 -madjust-unroll -mindexed-addressing -mgettrcost=@var{number} -mpt-fixed @gol
 -maccumulate-outgoing-args -minvalid-symbols}
@@ -5085,11 +5086,11 @@ Dump after duplicating the computed gotos.
 @option{-fdump-rtl-ce3} enable dumping after the three
 if conversion passes.
 
-@itemx -fdump-rtl-cprop_hardreg
+@item -fdump-rtl-cprop_hardreg
 @opindex fdump-rtl-cprop_hardreg
 Dump after hard register copy propagation.
 
-@itemx -fdump-rtl-csa
+@item -fdump-rtl-csa
 @opindex fdump-rtl-csa
 Dump after combining stack adjustments.
 
@@ -5100,11 +5101,11 @@ Dump after combining stack adjustments.
 @option{-fdump-rtl-cse1} and @option{-fdump-rtl-cse2} enable dumping after
 the two common sub-expression elimination passes.
 
-@itemx -fdump-rtl-dce
+@item -fdump-rtl-dce
 @opindex fdump-rtl-dce
 Dump after the standalone dead code elimination passes.
 
-@itemx -fdump-rtl-dbr
+@item -fdump-rtl-dbr
 @opindex fdump-rtl-dbr
 Dump after delayed branch scheduling.
 
@@ -5149,7 +5150,7 @@ Dump after the initialization of the registers.
 @opindex fdump-rtl-initvals
 Dump after the computation of the initial value sets.
 
-@itemx -fdump-rtl-into_cfglayout
+@item -fdump-rtl-into_cfglayout
 @opindex fdump-rtl-into_cfglayout
 Dump after converting to cfglayout mode.
 
@@ -5179,7 +5180,7 @@ Dump after removing redundant mode switches.
 @opindex fdump-rtl-rnreg
 Dump after register renumbering.
 
-@itemx -fdump-rtl-outof_cfglayout
+@item -fdump-rtl-outof_cfglayout
 @opindex fdump-rtl-outof_cfglayout
 Dump after converting from cfglayout mode.
 
@@ -5191,7 +5192,7 @@ Dump after the peephole pass.
 @opindex fdump-rtl-postreload
 Dump after post-reload optimizations.
 
-@itemx -fdump-rtl-pro_and_epilogue
+@item -fdump-rtl-pro_and_epilogue
 @opindex fdump-rtl-pro_and_epilogue
 Dump after generating the function pro and epilogues.
 
@@ -5282,7 +5283,9 @@ Dump after live range splitting.
 @opindex fdump-rtl-dfinish
 These dumps are defined but always produce empty files.
 
-@item -fdump-rtl-all
+@item -da
+@itemx -fdump-rtl-all
+@opindex da
 @opindex fdump-rtl-all
 Produce all the dumps listed above.
 
@@ -5298,11 +5301,6 @@ normal output.
 @item -dH
 @opindex dH
 Produce a core dump whenever an error occurs.
-
-@item -dm
-@opindex dm
-Print statistics on memory usage, at the end of the run, to
-standard error.
 
 @item -dp
 @opindex dp
@@ -5788,6 +5786,11 @@ usually just @file{.}, if OS libraries are present in @file{lib@var{suffix}}
 sibling directories this prints e.g.@: @file{../lib64}, @file{../lib} or
 @file{../lib32}, or if OS libraries are present in @file{lib/@var{subdir}}
 subdirectories it prints e.g.@: @file{amd64}, @file{sparcv9} or @file{ev6}.
+
+@item -print-multiarch
+@opindex print-multiarch
+Print the path to OS libraries for the selected multiarch,
+relative to some @file{lib} subdirectory.
 
 @item -print-prog-name=@var{program}
 @opindex print-prog-name
@@ -12708,6 +12711,11 @@ before a transfer of control flow out of the function to minimize
 AVX to SSE transition penalty as well as remove unnecessary zeroupper 
 intrinsics.
 
+@item -mprefer-avx128
+@opindex mprefer-avx128
+This option instructs GCC to use 128-bit AVX instructions instead of
+256-bit AVX instructions in the auto-vectorizer.
+
 @item -mcx16
 @opindex mcx16
 This option will enable GCC to use CMPXCHG16B instruction in generated code.
@@ -16938,13 +16946,15 @@ Mark the @code{MAC} register as call-clobbered, even if
 @option{-mhitachi} is given.
 
 @item -mieee
+@item -mno-ieee
 @opindex mieee
-Increase IEEE-compliance of floating-point code.
-At the moment, this is equivalent to @option{-fno-finite-math-only}.
-When generating 16 bit SH opcodes, getting IEEE-conforming results for
-comparisons of NANs / infinities incurs extra overhead in every
-floating point comparison, therefore the default is set to
-@option{-ffinite-math-only}.
+@opindex mnoieee
+Control the IEEE compliance of floating-point comparisons, which affects the
+handling of cases where the result of a comparison is unordered.  By default
+@option{-mieee} is implicitly enabled.  If @option{-ffinite-math-only} is
+enabled @option{-mno-ieee} is implicitly set, which results in faster
+floating-point greater-equal and less-equal comparisons.  The implcit settings
+can be overridden by specifying either @option{-mieee} or @option{-mno-ieee}.
 
 @item -minline-ic_invalidate
 @opindex minline-ic_invalidate

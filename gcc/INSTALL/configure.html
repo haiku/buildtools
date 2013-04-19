@@ -415,6 +415,13 @@ information normally used on 386 SVR4 platforms; stabs provide a
 workable alternative.  This requires gas and gdb, as the normal SVR4
 tools can not generate or interpret stabs.
 
+     <br><dt><code>--enable-multiarch</code><dd>Specify whether to enable or disable multiarch support.  The default is
+to check for glibc start files in a multiarch location, and enable it
+if the files are found.  The auto detection is enabled for native builds,
+and for cross builds configured with <samp><span class="option">--with-sysroot</span></samp>. 
+More documentation about multiarch can be found at
+<a href="http://wiki.debian.org/Multiarch">http://wiki.debian.org/Multiarch</a>.
+
      <br><dt><code>--disable-multilib</code><dd>Specify that multiple target
 libraries to support different target variants, calling
 conventions, etc. should not be built.  The default is to build a
@@ -563,7 +570,7 @@ systems that support conditional traps).
      <!-- If you make -with-llsc the default for additional targets, -->
      <!-- update the -with-llsc description in the MIPS section below. -->
      <br><dt><code>--with-llsc</code><dd>On MIPS targets, make <samp><span class="option">-mllsc</span></samp> the default when no
-<samp><span class="option">-mno-lsc</span></samp> option is passed.  This is the default for
+<samp><span class="option">-mno-llsc</span></samp> option is passed.  This is the default for
 Linux-based targets, as the kernel will emulate them if the ISA does
 not provide them.
 

@@ -1,5 +1,5 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2006, 2007, 2008, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2006-2012 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -397,6 +397,8 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   unsigned int has_pclmul = 0, has_abm = 0, has_lwp = 0;
   unsigned int has_fma = 0, has_fma4 = 0, has_xop = 0;
   unsigned int has_bmi = 0, has_tbm = 0;
+  unsigned int has_rdrnd = 0, has_f16c = 0, has_fsgsbase = 0;
+  unsigned int has_osxsave = 0;
 
   bool arch;
 
@@ -438,18 +440,48 @@ const char *host_detect_local_cpu (int argc, const char **argv)
   has_sse4_1 = ecx & bit_SSE4_1;
   has_sse4_2 = ecx & bit_SSE4_2;
   has_avx = ecx & bit_AVX;
+  has_osxsave = ecx & bit_OSXSAVE;
   has_cmpxchg16b = ecx & bit_CMPXCHG16B;
   has_movbe = ecx & bit_MOVBE;
   has_popcnt = ecx & bit_POPCNT;
   has_aes = ecx & bit_AES;
   has_pclmul = ecx & bit_PCLMUL;
   has_fma = ecx & bit_FMA;
+  has_f16c = ecx & bit_F16C;
+  has_rdrnd = ecx & bit_RDRND;
 
   has_cmpxchg8b = edx & bit_CMPXCHG8B;
   has_cmov = edx & bit_CMOV;
   has_mmx = edx & bit_MMX;
   has_sse = edx & bit_SSE;
   has_sse2 = edx & bit_SSE2;
+
+  if (max_level >= 7)
+    {
+      __cpuid_count (7, 0, eax, ebx, ecx, edx);
+
+      has_fsgsbase = ebx & bit_FSGSBASE;
+    }
+
+  /* Get XCR_XFEATURE_ENABLED_MASK register with xgetbv.  */
+#define XCR_XFEATURE_ENABLED_MASK	0x0
+#define XSTATE_FP			0x1
+#define XSTATE_SSE			0x2
+#define XSTATE_YMM			0x4
+  if (has_osxsave)
+    asm (".byte 0x0f; .byte 0x01; .byte 0xd0"
+	 : "=a" (eax), "=d" (edx)
+	 : "c" (XCR_XFEATURE_ENABLED_MASK));
+
+  /* Check if SSE and YMM states are supported.  */
+  if (!has_osxsave
+      || (eax & (XSTATE_SSE | XSTATE_YMM)) != (XSTATE_SSE | XSTATE_YMM))
+    {
+      has_avx = 0;
+      has_fma = 0;
+      has_fma4 = 0;
+      has_xop = 0;
+    }
 
   /* Check cpuid level of extended features.  */
   __cpuid (0x80000000, ext_level, ebx, ecx, edx);
@@ -711,10 +743,13 @@ const char *host_detect_local_cpu (int argc, const char **argv)
       const char *avx = has_avx ? " -mavx" : " -mno-avx";
       const char *sse4_2 = has_sse4_2 ? " -msse4.2" : " -mno-sse4.2";
       const char *sse4_1 = has_sse4_1 ? " -msse4.1" : " -mno-sse4.1";
+      const char *rdrnd = has_rdrnd ? " -mrdrnd" : " -mno-rdrnd";
+      const char *f16c = has_f16c ? " -mf16c" : " -mno-f16c";
+      const char *fsgsbase = has_fsgsbase ? " -mfsgsbase" : " -mno-fsgsbase";
 
       options = concat (options, cx16, sahf, movbe, ase, pclmul,
 			popcnt, abm, lwp, fma, fma4, xop, bmi, tbm,
-			avx, sse4_2, sse4_1, NULL);
+			avx, sse4_2, sse4_1, rdrnd, f16c, fsgsbase, NULL);
     }
 
 done:

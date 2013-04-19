@@ -3658,13 +3658,17 @@ sparc_delegitimize_address (rtx x)
 {
   x = delegitimize_mem_from_attrs (x);
 
-  if (GET_CODE (x) == LO_SUM
-      && GET_CODE (XEXP (x, 1)) == UNSPEC
-      && XINT (XEXP (x, 1), 1) == UNSPEC_TLSLE)
-    {
-      x = XVECEXP (XEXP (x, 1), 0, 0);
-      gcc_assert (GET_CODE (x) == SYMBOL_REF);
-    }
+  if (GET_CODE (x) == LO_SUM && GET_CODE (XEXP (x, 1)) == UNSPEC)
+    switch (XINT (XEXP (x, 1), 1))
+      {
+      case UNSPEC_MOVE_PIC:
+      case UNSPEC_TLSLE:
+	x = XVECEXP (XEXP (x, 1), 0, 0);
+	gcc_assert (GET_CODE (x) == SYMBOL_REF);
+	break;
+      default:
+	break;
+      }
 
   return x;
 }
@@ -9452,7 +9456,10 @@ sparc_reorg (void)
   /* We need to have the (essentially) final form of the insn stream in order
      to properly detect the various hazards.  Run delay slot scheduling.  */
   if (optimize > 0 && flag_delayed_branch)
-    dbr_schedule (get_insns ());
+    {
+      cleanup_barriers ();
+      dbr_schedule (get_insns ());
+    }
 
   /* Now look for specific patterns in the insn stream.  */
   for (insn = get_insns (); insn; insn = next)
@@ -9634,6 +9641,7 @@ sparc_file_end (void)
 						       void_list_node));
 	  DECL_RESULT (decl) = build_decl (BUILTINS_LOCATION, RESULT_DECL,
 					   NULL_TREE, void_type_node);
+	  TREE_PUBLIC (decl) = 1;
 	  TREE_STATIC (decl) = 1;
 	  make_decl_one_only (decl, DECL_ASSEMBLER_NAME (decl));
 	  DECL_VISIBILITY (decl) = VISIBILITY_HIDDEN;
