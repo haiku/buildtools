@@ -82,7 +82,7 @@ static int reg_restore_code (int, enum machine_mode);
 
 struct saved_hard_reg;
 static void initiate_saved_hard_regs (void);
-static struct saved_hard_reg *new_saved_hard_reg (int, int);
+static void new_saved_hard_reg (int, int);
 static void finish_saved_hard_regs (void);
 static int saved_hard_reg_compare_func (const void *, const void *);
 
@@ -231,7 +231,8 @@ init_caller_save (void)
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     if (TEST_HARD_REG_BIT
 	(reg_class_contents
-	 [(int) base_reg_class (regno_save_mode[i][1], PLUS, CONST_INT)], i))
+	 [(int) base_reg_class (regno_save_mode[i][1], ADDR_SPACE_GENERIC,
+				PLUS, CONST_INT)], i))
       break;
 
   gcc_assert (i < FIRST_PSEUDO_REGISTER);
@@ -346,7 +347,7 @@ initiate_saved_hard_regs (void)
 
 /* Allocate and return new saved hard register with given REGNO and
    CALL_FREQ.  */
-static struct saved_hard_reg *
+static void
 new_saved_hard_reg (int regno, int call_freq)
 {
   struct saved_hard_reg *saved_reg;
@@ -359,7 +360,6 @@ new_saved_hard_reg (int regno, int call_freq)
   saved_reg->call_freq = call_freq;
   saved_reg->first_p = FALSE;
   saved_reg->next = -1;
-  return saved_reg;
 }
 
 /* Free memory allocated for the saved hard registers.  */
@@ -463,7 +463,7 @@ setup_save_areas (void)
 	    if (hard_reg_map[regno] != NULL)
 	      hard_reg_map[regno]->call_freq += freq;
 	    else
-	      saved_reg = new_saved_hard_reg (regno, freq);
+	      new_saved_hard_reg (regno, freq);
 	    SET_HARD_REG_BIT (hard_regs_used, regno);
 	  }
       /* Look through all live pseudos, mark their hard registers.  */
@@ -483,7 +483,7 @@ setup_save_areas (void)
 		if (hard_reg_map[r] != NULL)
 		  hard_reg_map[r]->call_freq += freq;
 		else
-		  saved_reg = new_saved_hard_reg (r, freq);
+		  new_saved_hard_reg (r, freq);
 		 SET_HARD_REG_BIT (hard_regs_to_save, r);
 		 SET_HARD_REG_BIT (hard_regs_used, r);
 	      }
@@ -1027,10 +1027,10 @@ mark_referenced_regs (rtx *loc, refmarker_fn *mark, void *arg)
       /* If this is a pseudo that did not get a hard register, scan its
 	 memory location, since it might involve the use of another
 	 register, which might be saved.  */
-      else if (reg_equiv_mem[regno] != 0)
-	mark_referenced_regs (&XEXP (reg_equiv_mem[regno], 0), mark, arg);
-      else if (reg_equiv_address[regno] != 0)
-	mark_referenced_regs (&reg_equiv_address[regno], mark, arg);
+      else if (reg_equiv_mem (regno) != 0)
+	mark_referenced_regs (&XEXP (reg_equiv_mem (regno), 0), mark, arg);
+      else if (reg_equiv_address (regno) != 0)
+	mark_referenced_regs (&reg_equiv_address (regno), mark, arg);
       return;
     }
 
@@ -1312,7 +1312,7 @@ insert_save (struct insn_chain *chain, int before_p, int regno,
 static int
 add_used_regs_1 (rtx *loc, void *data)
 {
-  int regno, i;
+  unsigned int regno;
   regset live;
   rtx x;
 
@@ -1321,11 +1321,10 @@ add_used_regs_1 (rtx *loc, void *data)
   if (REG_P (x))
     {
       regno = REGNO (x);
-      if (!HARD_REGISTER_NUM_P (regno))
+      if (HARD_REGISTER_NUM_P (regno))
+	bitmap_set_range (live, regno, hard_regno_nregs[regno][GET_MODE (x)]);
+      else
 	regno = reg_renumber[regno];
-      if (regno >= 0)
-	for (i = hard_regno_nregs[regno][GET_MODE (x)] - 1; i >= 0; i--)
-	  SET_REGNO_REG_SET (live, regno + i);
     }
   return 0;
 }

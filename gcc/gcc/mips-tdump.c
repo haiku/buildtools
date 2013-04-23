@@ -1,6 +1,6 @@
 /* Read and manage MIPS symbol tables from object modules.
    Copyright (C) 1991, 1994, 1995, 1997, 1998, 1999, 2000, 2001, 2003, 2004,
-   2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+   2006, 2007, 2008, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
    Contributed by hartzell@boulder.colorado.edu,
    Rewritten by meissner@osf.org.
 
@@ -22,25 +22,17 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "config.h"
 #include "system.h"
-#include "coretypes.h"
-#include "tm.h"
 #include "version.h"
 #ifdef index
 #undef index
 #endif
-#ifndef CROSS_DIRECTORY_STRUCTURE
 #include <a.out.h>
-#else
-#include "mips/a.out.h"
-#endif /* CROSS_DIRECTORY_STRUCTURE */
 
 /* Include getopt.h for the sake of getopt_long.  */
 #include "getopt.h"
 
-#ifndef MIPS_IS_STAB
 /* Macros for mips-tfile.c to encapsulate stabs in ECOFF, and for
-   and mips-tdump.c to print them out.  This is used on the Alpha,
-   which does not include mips.h.
+   mips-tdump.c to print them out.
 
    These must match the corresponding definitions in gdb/mipsread.c.
    Unfortunately, gcc and gdb do not currently share any directories.  */
@@ -49,7 +41,6 @@ along with GCC; see the file COPYING3.  If not see
 #define MIPS_IS_STAB(sym) (((sym)->index & 0xFFF00) == CODE_MASK)
 #define MIPS_MARK_STAB(code) ((code)+CODE_MASK)
 #define MIPS_UNMARK_STAB(code) ((code)-CODE_MASK)
-#endif
 
 #define uchar	unsigned char
 #define ushort	unsigned short
@@ -1414,7 +1405,7 @@ main (int argc, char **argv)
   if (version)
     {
       printf ("mips-tdump %s%s\n", pkgversion_string, version_string);
-      fputs ("Copyright (C) 2011 Free Software Foundation, Inc.\n", stdout);
+      fputs ("Copyright (C) 2012 Free Software Foundation, Inc.\n", stdout);
       fputs ("This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
              stdout);
@@ -1425,13 +1416,7 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
     errors++;
 
   if (verbose || errors)
-    {
-      fprintf (stderr, "mips-tdump (GCC) %s", version_string);
-#ifdef TARGET_VERSION
-      TARGET_VERSION;
-#endif
-      fputc ('\n', stderr);
-    }
+    fprintf (stderr, "mips-tdump (GCC) %s\n", version_string);
 
   if (errors)
     {

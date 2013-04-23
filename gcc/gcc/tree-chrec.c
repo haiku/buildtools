@@ -95,14 +95,14 @@ chrec_fold_plus_poly_poly (enum tree_code code,
   tree left, right;
   struct loop *loop0 = get_chrec_loop (poly0);
   struct loop *loop1 = get_chrec_loop (poly1);
-  tree rtype = code == POINTER_PLUS_EXPR ? sizetype : type;
+  tree rtype = code == POINTER_PLUS_EXPR ? chrec_type (poly1) : type;
 
   gcc_assert (poly0);
   gcc_assert (poly1);
   gcc_assert (TREE_CODE (poly0) == POLYNOMIAL_CHREC);
   gcc_assert (TREE_CODE (poly1) == POLYNOMIAL_CHREC);
   if (POINTER_TYPE_P (chrec_type (poly0)))
-    gcc_assert (chrec_type (poly1) == sizetype);
+    gcc_assert (ptrofftype_p (chrec_type (poly1)));
   else
     gcc_assert (chrec_type (poly0) == chrec_type (poly1));
   gcc_assert (type == chrec_type (poly0));
@@ -262,8 +262,6 @@ static tree
 chrec_fold_plus_1 (enum tree_code code, tree type,
 		   tree op0, tree op1)
 {
-  tree op1_type = code == POINTER_PLUS_EXPR ? sizetype : type;
-
   if (automatically_generated_chrec_p (op0)
       || automatically_generated_chrec_p (op1))
     return chrec_fold_automatically_generated_operands (op0, op1);
@@ -327,9 +325,15 @@ chrec_fold_plus_1 (enum tree_code code, tree type,
 		&& size < PARAM_VALUE (PARAM_SCEV_MAX_EXPR_SIZE))
 	      return build2 (code, type, op0, op1);
 	    else if (size < PARAM_VALUE (PARAM_SCEV_MAX_EXPR_SIZE))
-	      return fold_build2 (code, type,
-				  fold_convert (type, op0),
-				  fold_convert (op1_type, op1));
+	      {
+		if (code == POINTER_PLUS_EXPR)
+		  return fold_build_pointer_plus (fold_convert (type, op0),
+						  op1);
+		else
+		  return fold_build2 (code, type,
+				      fold_convert (type, op0),
+				      fold_convert (type, op1));
+	      }
 	    else
 	      return chrec_dont_know;
 	  }
@@ -587,7 +591,7 @@ chrec_apply (unsigned var,
       || chrec_contains_symbols_defined_in_loop (chrec, var))
     return chrec_dont_know;
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     fprintf (dump_file, "(chrec_apply \n");
 
   if (TREE_CODE (x) == INTEGER_CST && SCALAR_FLOAT_TYPE_P (type))
@@ -628,7 +632,7 @@ chrec_apply (unsigned var,
       break;
     }
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (varying_loop = %d\n", var);
       fprintf (dump_file, ")\n  (chrec = ");
@@ -831,7 +835,7 @@ reset_evolution_in_loop (unsigned loop_num,
   struct loop *loop = get_loop (loop_num);
 
   if (POINTER_TYPE_P (chrec_type (chrec)))
-    gcc_assert (sizetype == chrec_type (new_evol));
+    gcc_assert (ptrofftype_p (chrec_type (new_evol)));
   else
     gcc_assert (chrec_type (chrec) == chrec_type (new_evol));
 
@@ -843,8 +847,7 @@ reset_evolution_in_loop (unsigned loop_num,
       tree right = reset_evolution_in_loop (loop_num, CHREC_RIGHT (chrec),
 					    new_evol);
       return build3 (POLYNOMIAL_CHREC, TREE_TYPE (left),
-		     build_int_cst (NULL_TREE, CHREC_VARIABLE (chrec)),
-		     left, right);
+		     CHREC_VAR (chrec), left, right);
     }
 
   while (TREE_CODE (chrec) == POLYNOMIAL_CHREC
@@ -1008,6 +1011,8 @@ evolution_function_is_invariant_rec_p (tree chrec, int loopnum)
   if (TREE_CODE (chrec) == POLYNOMIAL_CHREC)
     {
       if (CHREC_VARIABLE (chrec) == (unsigned) loopnum
+	  || flow_loop_nested_p (get_loop (loopnum),
+				 get_loop (CHREC_VARIABLE (chrec)))
 	  || !evolution_function_is_invariant_rec_p (CHREC_RIGHT (chrec),
 						     loopnum)
 	  || !evolution_function_is_invariant_rec_p (CHREC_LEFT (chrec),
@@ -1111,6 +1116,8 @@ evolution_function_is_univariate_p (const_tree chrec)
 	  break;
 
 	default:
+	  if (tree_contains_chrecs (CHREC_LEFT (chrec), NULL))
+	    return false;
 	  break;
 	}
 
@@ -1124,6 +1131,8 @@ evolution_function_is_univariate_p (const_tree chrec)
 	  break;
 
 	default:
+	  if (tree_contains_chrecs (CHREC_RIGHT (chrec), NULL))
+	    return false;
 	  break;
 	}
 

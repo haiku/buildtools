@@ -1,5 +1,5 @@
 /* Definitions for SOM assembler support.
-   Copyright (C) 1999, 2001, 2002, 2003, 2004, 2005, 2007, 2010
+   Copyright (C) 1999, 2001, 2002, 2003, 2004, 2005, 2007, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -227,7 +227,7 @@ do {								\
        tree id;								\
 									\
        if (!function_label_operand (RTL, VOIDmode))			\
-	 hppa_encode_label (RTL);					\
+	 pa_encode_label (RTL);						\
 									\
        name = targetm.strip_name_encoding (XSTR ((RTL), 0));		\
        id = maybe_get_identifier (name);				\
@@ -269,7 +269,8 @@ do {						\
    must be removed from library prefixes to prevent binaries from depending
    on the location of the GCC tool directory.  The downside is GCC
    cannot be moved after installation using a symlink.  */
-#define ALWAYS_STRIP_DOTDOT 1
+#undef TARGET_ALWAYS_STRIP_DOTDOT
+#define TARGET_ALWAYS_STRIP_DOTDOT true
 
 /* If GAS supports weak, we can support weak when we have working linker
    support for secondary definitions and are generating code for GAS.
@@ -339,3 +340,7 @@ do {						\
 /* Shared library suffix.  Collect2 strips the version string after
    this suffix when generating constructor/destructor names.  */ 
 #define SHLIB_SUFFIX ".sl"
+
+#define TARGET_HAVE_NAMED_SECTIONS false
+
+#define TARGET_ASM_TM_CLONE_TABLE_SECTION pa_som_tm_clone_table_section

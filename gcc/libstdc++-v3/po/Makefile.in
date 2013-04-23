@@ -107,7 +107,6 @@ CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 C_INCLUDE_DIR = @C_INCLUDE_DIR@
 DBLATEX = @DBLATEX@
-DBTOEPUB = @DBTOEPUB@
 DEBUG_FLAGS = @DEBUG_FLAGS@
 DEFS = @DEFS@
 DOT = @DOT@
@@ -135,7 +134,6 @@ LDFLAGS = @LDFLAGS@
 LIBICONV = @LIBICONV@
 LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
-LIBSUPCXX_PICFLAGS = @LIBSUPCXX_PICFLAGS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
 LN_S = @LN_S@
@@ -163,7 +161,6 @@ PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PDFLATEX = @PDFLATEX@
 RANLIB = @RANLIB@
-RUBY = @RUBY@
 SECTION_FLAGS = @SECTION_FLAGS@
 SECTION_LDFLAGS = @SECTION_LDFLAGS@
 SED = @SED@
@@ -190,6 +187,7 @@ am__leading_dot = @am__leading_dot@
 am__tar = @am__tar@
 am__untar = @am__untar@
 baseline_dir = @baseline_dir@
+baseline_subdir_switch = @baseline_subdir_switch@
 bindir = @bindir@
 build = @build@
 build_alias = @build_alias@
@@ -209,10 +207,12 @@ glibcxx_MOFILES = @glibcxx_MOFILES@
 glibcxx_PCHFLAGS = @glibcxx_PCHFLAGS@
 glibcxx_POFILES = @glibcxx_POFILES@
 glibcxx_builddir = @glibcxx_builddir@
+glibcxx_compiler_pic_flag = @glibcxx_compiler_pic_flag@
+glibcxx_compiler_shared_flag = @glibcxx_compiler_shared_flag@
 glibcxx_localedir = @glibcxx_localedir@
+glibcxx_lt_pic_flag = @glibcxx_lt_pic_flag@
 glibcxx_prefixdir = @glibcxx_prefixdir@
 glibcxx_srcdir = @glibcxx_srcdir@
-glibcxx_thread_h = @glibcxx_thread_h@
 glibcxx_toolexecdir = @glibcxx_toolexecdir@
 glibcxx_toolexeclibdir = @glibcxx_toolexeclibdir@
 gxx_include_dir = @gxx_include_dir@
@@ -240,6 +240,7 @@ port_specific_symbol_files = @port_specific_symbol_files@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+python_mod_dir = @python_mod_dir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -252,6 +253,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+toplevel_builddir = @toplevel_builddir@
 toplevel_srcdir = @toplevel_srcdir@
 
 # May be used by various substitution variables.
@@ -262,14 +264,16 @@ PWD_COMMAND = $${PWDCMD-pwd}
 STAMP = echo timestamp >
 toolexecdir = $(glibcxx_toolexecdir)
 toolexeclibdir = $(glibcxx_toolexeclibdir)
+@ENABLE_WERROR_FALSE@WERROR_FLAG = 
+@ENABLE_WERROR_TRUE@WERROR_FLAG = $(WERROR)
 
 # These bits are all figured out from configure.  Look in acinclude.m4
 # or configure.ac to see how they are set.  See GLIBCXX_EXPORT_FLAGS.
 CONFIG_CXXFLAGS = \
-	$(SECTION_FLAGS) $(EXTRA_CXX_FLAGS)
+	$(SECTION_FLAGS) $(EXTRA_CXX_FLAGS) -frandom-seed=$@
 
 WARN_CXXFLAGS = \
-	$(WARN_FLAGS) $(WERROR) -fdiagnostics-show-location=once
+	$(WARN_FLAGS) $(WERROR_FLAG) -fdiagnostics-show-location=once 
 
 
 # -I/-D flags to pass when compiling.

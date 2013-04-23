@@ -1,5 +1,5 @@
 ;; GCC machine description for MMX and 3dNOW! instructions
-;; Copyright (C) 2005, 2007, 2008, 2009, 2010
+;; Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
 ;; Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
@@ -29,6 +29,20 @@
 ;; know how to do that itself, which means it's up to the user.  Which
 ;; means that we should never use any of these patterns except at the
 ;; direction of the user via a builtin.
+
+(define_c_enum "unspec" [
+  UNSPEC_MOVNTQ
+  UNSPEC_PFRCP
+  UNSPEC_PFRCPIT1
+  UNSPEC_PFRCPIT2
+  UNSPEC_PFRSQRT
+  UNSPEC_PFRSQIT1
+])
+
+(define_c_enum "unspecv" [
+  UNSPECV_EMMS
+  UNSPECV_FEMMS
+])
 
 ;; 8 byte integral modes handled by MMX (and by extension, SSE)
 (define_mode_iterator MMXMODEI [V8QI V4HI V2SI])
@@ -66,9 +80,9 @@
 ;; movd instead of movq is required to handle broken assemblers.
 (define_insn "*mov<mode>_internal_rex64"
   [(set (match_operand:MMXMODEI8 0 "nonimmediate_operand"
-	 "=rm,r,!?y,!y,!?y,m  ,!y ,*Y2,x,x ,m,r ,Yi")
+	 "=rm,r,!?y,!y,!?y,m  ,!y ,*x,x,x ,m,r ,Yi")
 	(match_operand:MMXMODEI8 1 "vector_move_operand"
-	 "Cr ,m,C  ,!y,m  ,!?y,*Y2,!y ,C,xm,x,Yi,r"))]
+	 "Cr ,m,C  ,!y,m  ,!?y,*x,!y ,C,xm,x,Yi,r"))]
   "TARGET_64BIT && TARGET_MMX
    && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
   "@
@@ -85,10 +99,31 @@
     %vmovq\t{%1, %0|%0, %1}
     %vmovd\t{%1, %0|%0, %1}
     %vmovd\t{%1, %0|%0, %1}"
-  [(set_attr "type" "imov,imov,mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,ssemov,ssemov")
-   (set_attr "unit" "*,*,*,*,*,*,mmx,mmx,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,*,*,1,1,*,1,*,*,*")
-   (set_attr "prefix_data16" "*,*,*,*,*,*,*,*,*,*,1,1,1")
+  [(set (attr "type")
+     (cond [(eq_attr "alternative" "0,1")
+	      (const_string "imov")
+	    (eq_attr "alternative" "2")
+	      (const_string "mmx")
+	    (eq_attr "alternative" "3,4,5")
+	      (const_string "mmxmov")
+	    (eq_attr "alternative" "6,7")
+	      (const_string "ssecvt")
+	    (eq_attr "alternative" "8")
+	      (const_string "sselog1")
+	   ]
+	   (const_string "ssemov")))
+   (set (attr "unit")
+     (if_then_else (eq_attr "alternative" "6,7")
+       (const_string "mmx")
+       (const_string "*")))
+   (set (attr "prefix_rep")
+     (if_then_else (eq_attr "alternative" "6,7,9")
+       (const_string "1")
+       (const_string "*")))
+   (set (attr "prefix_data16")
+     (if_then_else (eq_attr "alternative" "10,11,12")
+       (const_string "1")
+       (const_string "*")))
    (set (attr "prefix_rex")
      (if_then_else (eq_attr "alternative" "9,10")
        (symbol_ref "x86_extended_reg_mentioned_p (insn)")
@@ -99,40 +134,12 @@
        (const_string "orig")))
    (set_attr "mode" "DI")])
 
-(define_insn "*mov<mode>_internal_avx"
-  [(set (match_operand:MMXMODEI8 0 "nonimmediate_operand"
-	 "=!?y,!y,!?y,m  ,!y ,*Y2,*Y2,*Y2 ,m  ,r  ,m")
-	(match_operand:MMXMODEI8 1 "vector_move_operand"
-	 "C   ,!y,m  ,!?y,*Y2,!y ,C  ,*Y2m,*Y2,irm,r"))]
-  "TARGET_AVX
-   && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
-  "@
-    pxor\t%0, %0
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
-    movdq2q\t{%1, %0|%0, %1}
-    movq2dq\t{%1, %0|%0, %1}
-    vpxor\t%0, %0, %0
-    vmovq\t{%1, %0|%0, %1}
-    vmovq\t{%1, %0|%0, %1}
-    #
-    #"
-  [(set_attr "type" "mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,*,*")
-   (set_attr "unit" "*,*,*,*,mmx,mmx,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,1,1,*,*,*,*,*")
-   (set (attr "prefix")
-     (if_then_else (eq_attr "alternative" "6,7,8")
-       (const_string "vex")
-       (const_string "orig")))
-   (set_attr "mode" "DI,DI,DI,DI,DI,DI,TI,DI,DI,DI,DI")])
-
 (define_insn "*mov<mode>_internal"
   [(set (match_operand:MMXMODEI8 0 "nonimmediate_operand"
-	 "=!?y,!y,!?y,m  ,!y ,*Y2,*Y2,*Y2 ,m  ,*x,*x,*x,m ,r  ,m")
+	 "=!?y,!y,!?y,m  ,!y,*x,*x,*x ,m ,*x,*x,*x,m ,r  ,m")
 	(match_operand:MMXMODEI8 1 "vector_move_operand"
-	 "C   ,!y,m  ,!?y,*Y2,!y ,C  ,*Y2m,*Y2,C ,*x,m ,*x,irm,r"))]
-  "TARGET_MMX
+	 "C   ,!y,m  ,!?y,*x,!y,C ,*xm,*x,C ,*x,m ,*x,irm,r"))]
+  "!TARGET_64BIT && TARGET_MMX
    && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
   "@
     pxor\t%0, %0
@@ -141,19 +148,56 @@
     movq\t{%1, %0|%0, %1}
     movdq2q\t{%1, %0|%0, %1}
     movq2dq\t{%1, %0|%0, %1}
-    pxor\t%0, %0
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
+    %vpxor\t%0, %d0
+    %vmovq\t{%1, %0|%0, %1}
+    %vmovq\t{%1, %0|%0, %1}
     xorps\t%0, %0
     movaps\t{%1, %0|%0, %1}
     movlps\t{%1, %0|%0, %1}
     movlps\t{%1, %0|%0, %1}
     #
     #"
-  [(set_attr "type" "mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,sselog1,ssemov,ssemov,ssemov,*,*")
-   (set_attr "unit" "*,*,*,*,mmx,mmx,*,*,*,*,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,1,1,*,1,*,*,*,*,*,*,*")
-   (set_attr "prefix_data16" "*,*,*,*,*,*,*,*,1,*,*,*,*,*,*")
+  [(set (attr "isa")
+     (cond [(eq_attr "alternative" "4,5,6,7,8")
+	      (const_string "sse2")
+	    (eq_attr "alternative" "9,10,11,12")
+	      (const_string "noavx")
+	   ]
+           (const_string "*")))
+   (set (attr "type")
+     (cond [(eq_attr "alternative" "0")
+	      (const_string "mmx")
+	    (eq_attr "alternative" "1,2,3")
+	      (const_string "mmxmov")
+	    (eq_attr "alternative" "4,5")
+	      (const_string "ssecvt")
+	    (eq_attr "alternative" "6,9")
+	      (const_string "sselog1")
+	    (eq_attr "alternative" "13,14")
+	      (const_string "multi")
+	   ]
+	   (const_string "ssemov")))
+   (set (attr "unit")
+     (if_then_else (eq_attr "alternative" "4,5")
+       (const_string "mmx")
+       (const_string "*")))
+   (set (attr "prefix_rep")
+     (if_then_else
+       (ior (eq_attr "alternative" "4,5")
+	    (and (eq_attr "alternative" "7")
+		 (not (match_test "TARGET_AVX"))))
+       (const_string "1")
+       (const_string "*")))
+   (set (attr "prefix_data16")
+     (if_then_else
+       (and (eq_attr "alternative" "8")
+	    (not (match_test "TARGET_AVX")))
+       (const_string "1")
+       (const_string "*")))
+   (set (attr "prefix")
+     (if_then_else (eq_attr "alternative" "6,7,8")
+       (const_string "maybe_vex")
+       (const_string "orig")))
    (set_attr "mode" "DI,DI,DI,DI,DI,DI,TI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
 
 (define_expand "movv2sf"
@@ -165,44 +209,12 @@
   DONE;
 })
 
-(define_insn "*movv2sf_internal_rex64_avx"
-  [(set (match_operand:V2SF 0 "nonimmediate_operand"
-	 "=rm,r,!?y,!y,!?y,m  ,!y,Y2,x,x,x,m,r,x")
-        (match_operand:V2SF 1 "vector_move_operand"
-	 "Cr ,m,C  ,!y,m  ,!?y,Y2,!y,C,x,m,x,x,r"))]
-  "TARGET_64BIT && TARGET_AVX
-   && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
-  "@
-    mov{q}\t{%1, %0|%0, %1}
-    mov{q}\t{%1, %0|%0, %1}
-    pxor\t%0, %0
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
-    movdq2q\t{%1, %0|%0, %1}
-    movq2dq\t{%1, %0|%0, %1}
-    vxorps\t%0, %0, %0
-    vmovaps\t{%1, %0|%0, %1}
-    vmovlps\t{%1, %0, %0|%0, %0, %1}
-    vmovlps\t{%1, %0|%0, %1}
-    vmovq\t{%1, %0|%0, %1}
-    vmovq\t{%1, %0|%0, %1}"
-  [(set_attr "type" "imov,imov,mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,sselog1,ssemov,ssemov,ssemov,ssemov")
-   (set_attr "unit" "*,*,*,*,*,*,mmx,mmx,*,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,*,*,1,1,*,*,*,*,*,*")
-   (set_attr "length_vex" "*,*,*,*,*,*,*,*,*,*,*,*,4,4")
-   (set (attr "prefix")
-     (if_then_else (eq_attr "alternative" "8,9,10,11,12,13")
-       (const_string "vex")
-       (const_string "orig")))
-   (set_attr "mode" "DI,DI,DI,DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
-
 ;; movd instead of movq is required to handle broken assemblers.
 (define_insn "*movv2sf_internal_rex64"
   [(set (match_operand:V2SF 0 "nonimmediate_operand"
-	 "=rm,r,!?y,!y,!?y,m  ,!y ,*Y2,x,x,x,m,r ,Yi")
+	 "=rm,r,!?y,!y,!?y,m  ,!y,*x,x,x,x,m,r ,Yi")
         (match_operand:V2SF 1 "vector_move_operand"
-	 "Cr ,m,C  ,!y,m  ,!?y,*Y2,!y ,C,x,m,x,Yi,r"))]
+	 "Cr ,m,C  ,!y,m  ,!?y,*x,!y,C,x,m,x,Yi,r"))]
   "TARGET_64BIT && TARGET_MMX
    && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
   "@
@@ -214,52 +226,51 @@
     movq\t{%1, %0|%0, %1}
     movdq2q\t{%1, %0|%0, %1}
     movq2dq\t{%1, %0|%0, %1}
-    xorps\t%0, %0
-    movaps\t{%1, %0|%0, %1}
-    movlps\t{%1, %0|%0, %1}
-    movlps\t{%1, %0|%0, %1}
-    movd\t{%1, %0|%0, %1}
-    movd\t{%1, %0|%0, %1}"
-  [(set_attr "type" "imov,imov,mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,ssemov,sselog1,ssemov,ssemov,ssemov,ssemov")
-   (set_attr "unit" "*,*,*,*,*,*,mmx,mmx,*,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,*,*,1,1,*,*,*,*,*,*")
-   (set_attr "mode" "DI,DI,DI,DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
-
-(define_insn "*movv2sf_internal_avx"
-  [(set (match_operand:V2SF 0 "nonimmediate_operand"
-	 "=!?y,!y,!?y,m  ,!y ,*Y2,*x,*x,*x,m ,r  ,m")
-        (match_operand:V2SF 1 "vector_move_operand"
-	 "C   ,!y,m  ,!?y,*Y2,!y ,C ,*x,m ,*x,irm,r"))]
-  "TARGET_AVX
-   && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
-  "@
-    pxor\t%0, %0
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
-    movq\t{%1, %0|%0, %1}
-    movdq2q\t{%1, %0|%0, %1}
-    movq2dq\t{%1, %0|%0, %1}
-    vxorps\t%0, %0, %0
-    vmovaps\t{%1, %0|%0, %1}
-    vmovlps\t{%1, %0, %0|%0, %0, %1}
-    vmovlps\t{%1, %0|%0, %1}
-    #
-    #"
-  [(set_attr "type" "mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,ssemov,*,*")
-   (set_attr "unit" "*,*,*,*,mmx,mmx,*,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,1,1,*,*,*,*,*,*")
+    %vxorps\t%0, %d0
+    %vmovaps\t{%1, %0|%0, %1}
+    %vmovlps\t{%1, %d0|%d0, %1}
+    %vmovlps\t{%1, %0|%0, %1}
+    %vmovd\t{%1, %0|%0, %1}
+    %vmovd\t{%1, %0|%0, %1}"
+  [(set (attr "type")
+     (cond [(eq_attr "alternative" "0,1")
+	      (const_string "imov")
+	    (eq_attr "alternative" "2")
+	      (const_string "mmx")
+	    (eq_attr "alternative" "3,4,5")
+	      (const_string "mmxmov")
+	    (eq_attr "alternative" "6,7")
+	      (const_string "ssecvt")
+	    (eq_attr "alternative" "9")
+	      (const_string "sselog1")
+	   ]
+	   (const_string "ssemov")))
+   (set (attr "unit")
+     (if_then_else (eq_attr "alternative" "6,7")
+       (const_string "mmx")
+       (const_string "*")))
+   (set (attr "prefix_rep")
+     (if_then_else (eq_attr "alternative" "6,7")
+       (const_string "1")
+       (const_string "*")))
+   (set (attr "length_vex")
+     (if_then_else
+       (and (eq_attr "alternative" "12,13")
+	    (match_test "TARGET_AVX"))
+       (const_string "4")
+       (const_string "*")))
    (set (attr "prefix")
-     (if_then_else (eq_attr "alternative" "6,7,8,9")
-       (const_string "vex")
+     (if_then_else (eq_attr "alternative" "8,9,10,11,12,13")
+       (const_string "maybe_vex")
        (const_string "orig")))
-   (set_attr "mode" "DI,DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
+   (set_attr "mode" "DI,DI,DI,DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
 
 (define_insn "*movv2sf_internal"
   [(set (match_operand:V2SF 0 "nonimmediate_operand"
-	 "=!?y,!y,!?y,m  ,!y ,*Y2,*x,*x,*x,m ,r  ,m")
+	 "=!?y,!y,!?y,m  ,!y,*x,*x,*x,*x,m ,r  ,m")
         (match_operand:V2SF 1 "vector_move_operand"
-	 "C   ,!y,m  ,!?y,*Y2,!y ,C ,*x,m ,*x,irm,r"))]
-  "TARGET_MMX
+	 "C   ,!y,m  ,!?y,*x,!y,C ,*x,m ,*x,irm,r"))]
+  "!TARGET_64BIT && TARGET_MMX
    && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
   "@
     pxor\t%0, %0
@@ -268,15 +279,41 @@
     movq\t{%1, %0|%0, %1}
     movdq2q\t{%1, %0|%0, %1}
     movq2dq\t{%1, %0|%0, %1}
-    xorps\t%0, %0
-    movaps\t{%1, %0|%0, %1}
-    movlps\t{%1, %0|%0, %1}
-    movlps\t{%1, %0|%0, %1}
+    %vxorps\t%0, %d0
+    %vmovaps\t{%1, %0|%0, %1}
+    %vmovlps\t{%1, %d0|%d0, %1}
+    %vmovlps\t{%1, %0|%0, %1}
     #
     #"
-  [(set_attr "type" "mmx,mmxmov,mmxmov,mmxmov,ssecvt,ssecvt,sselog1,ssemov,ssemov,ssemov,*,*")
-   (set_attr "unit" "*,*,*,*,mmx,mmx,*,*,*,*,*,*")
-   (set_attr "prefix_rep" "*,*,*,*,1,1,*,*,*,*,*,*")
+  [(set (attr "isa")
+     (if_then_else (eq_attr "alternative" "4,5")
+       (const_string "sse2")
+       (const_string "*")))
+   (set (attr "type")
+     (cond [(eq_attr "alternative" "0")
+	      (const_string "mmx")
+	    (eq_attr "alternative" "1,2,3")
+	      (const_string "mmxmov")
+	    (eq_attr "alternative" "4,5")
+	      (const_string "ssecvt")
+	    (eq_attr "alternative" "6")
+	      (const_string "sselog1")
+	    (eq_attr "alternative" "10,11")
+	      (const_string "multi")
+	   ]
+	   (const_string "ssemov")))
+   (set (attr "unit")
+     (if_then_else (eq_attr "alternative" "4,5")
+       (const_string "mmx")
+       (const_string "*")))
+   (set (attr "prefix_rep")
+     (if_then_else (eq_attr "alternative" "4,5")
+       (const_string "1")
+       (const_string "*")))
+   (set (attr "prefix")
+     (if_then_else (eq_attr "alternative" "6,7,8,9")
+       (const_string "maybe_vex")
+       (const_string "orig")))
    (set_attr "mode" "DI,DI,DI,DI,DI,DI,V4SF,V4SF,V2SF,V2SF,DI,DI")])
 
 ;; %%% This multiword shite has got to go.
@@ -284,8 +321,8 @@
   [(set (match_operand:MMXMODE 0 "nonimmediate_operand" "")
         (match_operand:MMXMODE 1 "general_operand" ""))]
   "!TARGET_64BIT && reload_completed
-   && (!MMX_REG_P (operands[0]) && !SSE_REG_P (operands[0]))
-   && (!MMX_REG_P (operands[1]) && !SSE_REG_P (operands[1]))"
+   && !(MMX_REG_P (operands[0]) || SSE_REG_P (operands[0])
+	|| MMX_REG_P (operands[1]) || SSE_REG_P (operands[1]))"
   [(const_int 0)]
   "ix86_split_long_move (operands); DONE;")
 
@@ -306,10 +343,10 @@
   DONE;
 })
 
-(define_insn "sse_movntdi"
+(define_insn "sse_movntq"
   [(set (match_operand:DI 0 "memory_operand" "=m")
 	(unspec:DI [(match_operand:DI 1 "register_operand" "y")]
-		   UNSPEC_MOVNT))]
+		   UNSPEC_MOVNTQ))]
   "TARGET_SSE || TARGET_3DNOW_A"
   "movntq\t{%1, %0|%0, %1}"
   [(set_attr "type" "mmxmov")
@@ -1014,27 +1051,13 @@
        (const_string "0")))
    (set_attr "mode" "DI")])
 
-(define_insn "mmx_lshr<mode>3"
+(define_insn "mmx_<shift_insn><mode>3"
   [(set (match_operand:MMXMODE248 0 "register_operand" "=y")
-        (lshiftrt:MMXMODE248
+        (any_lshift:MMXMODE248
 	  (match_operand:MMXMODE248 1 "register_operand" "0")
 	  (match_operand:SI 2 "nonmemory_operand" "yN")))]
   "TARGET_MMX"
-  "psrl<mmxvecsize>\t{%2, %0|%0, %2}"
-  [(set_attr "type" "mmxshft")
-   (set (attr "length_immediate")
-     (if_then_else (match_operand 2 "const_int_operand" "")
-       (const_string "1")
-       (const_string "0")))
-   (set_attr "mode" "DI")])
-
-(define_insn "mmx_ashl<mode>3"
-  [(set (match_operand:MMXMODE248 0 "register_operand" "=y")
-        (ashift:MMXMODE248
-	  (match_operand:MMXMODE248 1 "register_operand" "0")
-	  (match_operand:SI 2 "nonmemory_operand" "yN")))]
-  "TARGET_MMX"
-  "psll<mmxvecsize>\t{%2, %0|%0, %2}"
+  "p<vshift><mmxvecsize>\t{%2, %0|%0, %2}"
   [(set_attr "type" "mmxshft")
    (set (attr "length_immediate")
      (if_then_else (match_operand 2 "const_int_operand" "")
@@ -1253,8 +1276,10 @@
           (vec_duplicate:V4HI
             (match_operand:HI 2 "nonimmediate_operand" "rm"))
 	  (match_operand:V4HI 1 "register_operand" "0")
-          (match_operand:SI 3 "const_pow2_1_to_8_operand" "n")))]
-  "TARGET_SSE || TARGET_3DNOW_A"
+          (match_operand:SI 3 "const_int_operand" "")))]
+  "(TARGET_SSE || TARGET_3DNOW_A)
+   && ((unsigned) exact_log2 (INTVAL (operands[3]))
+       < GET_MODE_NUNITS (V4HImode))"
 {
   operands[3] = GEN_INT (exact_log2 (INTVAL (operands[3])));
   if (MEM_P (operands[2]))
@@ -1394,9 +1419,9 @@
 ;; Avoid combining registers from different units in a single alternative,
 ;; see comment above inline_secondary_memory_needed function in i386.c
 (define_insn "*vec_extractv2si_1"
-  [(set (match_operand:SI 0 "nonimmediate_operand"     "=y,Y2,Y2,x,y,x,r")
+  [(set (match_operand:SI 0 "nonimmediate_operand"     "=y,x,x,x,y,x,r")
 	(vec_select:SI
-	  (match_operand:V2SI 1 "nonimmediate_operand" " 0,0 ,Y2,0,o,o,o")
+	  (match_operand:V2SI 1 "nonimmediate_operand" " 0,0,x,0,o,o,o")
 	  (parallel [(const_int 1)])))]
   "TARGET_MMX && !(MEM_P (operands[0]) && MEM_P (operands[1]))"
   "@
@@ -1407,7 +1432,11 @@
    #
    #
    #"
-  [(set_attr "type" "mmxcvt,sselog1,sselog1,sselog1,mmxmov,ssemov,imov")
+  [(set (attr "isa")
+     (if_then_else (eq_attr "alternative" "1,2")
+       (const_string "sse2")
+       (const_string "*")))
+   (set_attr "type" "mmxcvt,sselog1,sselog1,sselog1,mmxmov,ssemov,imov")
    (set_attr "length_immediate" "*,*,1,*,*,*,*")
    (set_attr "mode" "DI,TI,TI,V4SF,SI,SI,SI")])
 
@@ -1558,7 +1587,8 @@
   [(set_attr "type" "mmxshft")
    (set (attr "prefix_extra")
      (if_then_else
-       (eq (symbol_ref "(TARGET_SSE || TARGET_3DNOW_A)") (const_int 0))
+       (not (ior (match_test "TARGET_SSE")
+		 (match_test "TARGET_3DNOW_A")))
        (const_string "1")
        (const_string "*")))
    (set_attr "mode" "DI")])
@@ -1626,24 +1656,12 @@
   "TARGET_SSE || TARGET_3DNOW_A")
 
 (define_insn "*mmx_maskmovq"
-  [(set (mem:V8QI (match_operand:SI 0 "register_operand" "D"))
+  [(set (mem:V8QI (match_operand:P 0 "register_operand" "D"))
 	(unspec:V8QI [(match_operand:V8QI 1 "register_operand" "y")
 		      (match_operand:V8QI 2 "register_operand" "y")
 		      (mem:V8QI (match_dup 0))]
 		     UNSPEC_MASKMOV))]
-  "(TARGET_SSE || TARGET_3DNOW_A) && !TARGET_64BIT"
-  ;; @@@ check ordering of operands in intel/nonintel syntax
-  "maskmovq\t{%2, %1|%1, %2}"
-  [(set_attr "type" "mmxcvt")
-   (set_attr "mode" "DI")])
-
-(define_insn "*mmx_maskmovq_rex"
-  [(set (mem:V8QI (match_operand:DI 0 "register_operand" "D"))
-	(unspec:V8QI [(match_operand:V8QI 1 "register_operand" "y")
-		      (match_operand:V8QI 2 "register_operand" "y")
-		      (mem:V8QI (match_dup 0))]
-		     UNSPEC_MASKMOV))]
-  "(TARGET_SSE || TARGET_3DNOW_A) && TARGET_64BIT"
+  "TARGET_SSE || TARGET_3DNOW_A"
   ;; @@@ check ordering of operands in intel/nonintel syntax
   "maskmovq\t{%2, %1|%1, %2}"
   [(set_attr "type" "mmxcvt")

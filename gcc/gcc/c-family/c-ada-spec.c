@@ -559,7 +559,8 @@ compare_comment (const void *lp, const void *rp)
   const cpp_comment *rhs = (const cpp_comment *) rp;
 
   if (LOCATION_FILE (lhs->sloc) != LOCATION_FILE (rhs->sloc))
-    return strcmp (LOCATION_FILE (lhs->sloc), LOCATION_FILE (rhs->sloc));
+    return filename_cmp (LOCATION_FILE (lhs->sloc),
+			 LOCATION_FILE (rhs->sloc));
 
   if (LOCATION_LINE (lhs->sloc) != LOCATION_LINE (rhs->sloc))
     return LOCATION_LINE (lhs->sloc) - LOCATION_LINE (rhs->sloc);
@@ -1681,8 +1682,8 @@ dump_template_types (pretty_printer *buffer, tree types,
     }
 }
 
-/* Dump in BUFFER the contents of all instantiations associated with a given
-   template T.  CPP_CHECK is used to perform C++ queries on nodes.
+/* Dump in BUFFER the contents of all class instantiations associated with
+   a given template T.  CPP_CHECK is used to perform C++ queries on nodes.
    SPC is the indentation level. */
 
 static int
@@ -1701,7 +1702,7 @@ dump_ada_template (pretty_printer *buffer, tree t,
       if (TREE_VEC_LENGTH (types) == 0)
 	break;
 
-      if (!TYPE_METHODS (instance))
+      if (!TYPE_P (instance) || !TYPE_METHODS (instance))
 	break;
 
       num_inst++;
@@ -2332,7 +2333,8 @@ dump_nested_types (pretty_printer *buffer, tree t, tree parent, bool forward,
 		if (TREE_CODE (decl) == FUNCTION_TYPE)
 		  for (decl = TREE_TYPE (decl);
 		       decl && TREE_CODE (decl) == POINTER_TYPE;
-		       decl = TREE_TYPE (decl));
+		       decl = TREE_TYPE (decl))
+		    ;
 
 		decl = get_underlying_decl (decl);
 
@@ -3232,7 +3234,7 @@ dump_ads (const char *source_file,
 
   pkg_name = get_ada_package (source_file);
 
-  /* Construct the the .ads filename and package name.  */
+  /* Construct the .ads filename and package name.  */
   ads_name = xstrdup (pkg_name);
 
   for (s = ads_name; *s; s++)

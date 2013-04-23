@@ -60,22 +60,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   {
     typedef chrono::system_clock	__clock_t;
     typedef __gthread_cond_t		__native_type;
+
+#ifdef __GTHREAD_COND_INIT
+    __native_type			_M_cond = __GTHREAD_COND_INIT;
+#else
     __native_type			_M_cond;
+#endif
 
   public:
     typedef __native_type* 		native_handle_type;
 
-    condition_variable() throw ();
-    ~condition_variable() throw ();
+    condition_variable() noexcept;
+    ~condition_variable() noexcept;
 
     condition_variable(const condition_variable&) = delete;
     condition_variable& operator=(const condition_variable&) = delete;
 
     void
-    notify_one();
+    notify_one() noexcept;
 
     void
-    notify_all();
+    notify_all() noexcept;
 
     void
     wait(unique_lock<mutex>& __lock);
@@ -102,8 +107,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// DR 887 - Sync unknown clock to known clock.
 	const typename _Clock::time_point __c_entry = _Clock::now();
 	const __clock_t::time_point __s_entry = __clock_t::now();
-	const chrono::nanoseconds __delta = __atime - __c_entry;
-	const __clock_t::time_point __s_atime = __s_entry + __delta;
+	const auto __delta = __atime - __c_entry;
+	const auto __s_atime = __s_entry + __delta;
 
 	return __wait_until_impl(__lock, __s_atime);
       }
@@ -192,23 +197,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       };
 
   public:
-    typedef condition_variable::native_handle_type	native_handle_type;
 
-    condition_variable_any() throw ();
-    ~condition_variable_any() throw ();
+    condition_variable_any() noexcept;
+    ~condition_variable_any() noexcept;
 
     condition_variable_any(const condition_variable_any&) = delete;
     condition_variable_any& operator=(const condition_variable_any&) = delete;
 
     void
-    notify_one()
+    notify_one() noexcept
     {
       lock_guard<mutex> __lock(_M_mutex);
       _M_cond.notify_one();
     }
 
     void
-    notify_all()
+    notify_all() noexcept
     {
       lock_guard<mutex> __lock(_M_mutex);
       _M_cond.notify_all();
@@ -272,10 +276,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       wait_for(_Lock& __lock,
 	       const chrono::duration<_Rep, _Period>& __rtime, _Predicate __p)
       { return wait_until(__lock, __clock_t::now() + __rtime, std::move(__p)); }
-
-    native_handle_type
-    native_handle()
-    { return _M_cond.native_handle(); }
   };
 
   // @} group condition_variables

@@ -90,10 +90,19 @@ bb_seen_p (basic_block bb)
 static bool
 ignore_bb_p (const_basic_block bb)
 {
+  gimple g;
+
   if (bb->index < NUM_FIXED_BLOCKS)
     return true;
   if (optimize_bb_for_size_p (bb))
     return true;
+
+  /* A transaction is a single entry multiple exit region.  It must be
+     duplicated in its entirety or not at all.  */
+  g = last_stmt (CONST_CAST_BB (bb));
+  if (g && gimple_code (g) == GIMPLE_TRANSACTION)
+    return true;
+
   return false;
 }
 
@@ -393,8 +402,7 @@ struct gimple_opt_pass pass_tracer =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func
-    | TODO_update_ssa
+  TODO_update_ssa
     | TODO_verify_ssa                   /* todo_flags_finish */
  }
 };

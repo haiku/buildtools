@@ -1,5 +1,5 @@
 ;; Constraint definitions for Renesas / SuperH SH.
-;; Copyright (C) 2007, 2008 Free Software Foundation, Inc.
+;; Copyright (C) 2007, 2008, 2011, 2012 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -75,6 +75,9 @@
 (define_register_constraint "t" "T_REGS"
   "T register.")
 
+(define_register_constraint "u" "NON_SP_REGS"
+  "Non-stack-pointer register.")
+
 (define_register_constraint "w" "FP0_REGS"
   "Floating-point register 0.")
 
@@ -99,7 +102,7 @@
        (match_test "ival >= -128 && ival <= 127")))
 
 (define_constraint "I10"
-  "A signed 10-bit constant, as used in in SHmedia andi, ori."
+  "A signed 10-bit constant, as used in SHmedia andi, ori."
   (and (match_code "const_int")
        (match_test "ival >= -512 && ival <= 511")))
 
@@ -136,7 +139,7 @@
        (match_test "ival >= 0 && ival <= 255")))
  
 (define_constraint "K12"
-  "An unsigned 8-bit constant, as used in SH2A 12-bit display."
+  "An unsigned 12-bit constant, as used in SH2A 12-bit displacement addressing."
   (and (match_code "const_int")
        (match_test "ival >= 0 && ival <= 4095")))
 

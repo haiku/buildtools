@@ -26,7 +26,7 @@
   do 						\
     {						\
       TARGET_BPABI_CPP_BUILTINS();		\
-      LINUX_TARGET_OS_CPP_BUILTINS();		\
+      GNU_USER_TARGET_OS_CPP_BUILTINS();	\
       ANDROID_TARGET_OS_CPP_BUILTINS();		\
     }						\
   while (false)
@@ -97,7 +97,9 @@
 #undef LIBGCC_SPEC
 
 /* Clear the instruction cache from `beg' to `end'.  This is
-   implemented in lib1funcs.asm, so ensure an error if this definition
+   implemented in lib1funcs.S, so ensure an error if this definition
    is used.  */
 #undef  CLEAR_INSN_CACHE
 #define CLEAR_INSN_CACHE(BEG, END) not_used
+
+#define ARM_TARGET2_DWARF_FORMAT (DW_EH_PE_pcrel | DW_EH_PE_indirect)

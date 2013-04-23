@@ -1,6 +1,6 @@
 // Debugging vector implementation -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -47,11 +47,14 @@ namespace __debug
       public __gnu_debug::_Safe_sequence<vector<_Tp, _Allocator> >
     {
       typedef _GLIBCXX_STD_C::vector<_Tp, _Allocator> _Base;
-      typedef __gnu_debug::_Safe_sequence<vector>              _Safe_base;
 
       typedef typename _Base::iterator _Base_iterator;
       typedef typename _Base::const_iterator _Base_const_iterator;
       typedef __gnu_debug::_Equal_to<_Base_const_iterator> _Equal;
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      typedef __gnu_cxx::__alloc_traits<_Allocator>  _Alloc_traits;
+#endif
 
     public:
       typedef typename _Base::reference             reference;
@@ -102,28 +105,39 @@ namespace __debug
         { _M_update_guaranteed_capacity(); }
 
       vector(const vector& __x)
-      : _Base(__x), _Safe_base(), _M_guaranteed_capacity(__x.size()) { }
+      : _Base(__x), _M_guaranteed_capacity(__x.size()) { }
 
       /// Construction from a release-mode vector
       vector(const _Base& __x)
-      : _Base(__x), _Safe_base(), _M_guaranteed_capacity(__x.size()) { }
+      : _Base(__x), _M_guaranteed_capacity(__x.size()) { }
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
-      vector(vector&& __x)
-      : _Base(std::move(__x)), _Safe_base(),
+      vector(vector&& __x) noexcept
+      : _Base(std::move(__x)),
 	_M_guaranteed_capacity(this->size())
       {
 	this->_M_swap(__x);
 	__x._M_guaranteed_capacity = 0;
       }
 
+      vector(const vector& __x, const allocator_type& __a)
+      : _Base(__x, __a), _M_guaranteed_capacity(__x.size()) { }
+
+      vector(vector&& __x, const allocator_type& __a)
+      : _Base(std::move(__x), __a),
+        _M_guaranteed_capacity(this->size())
+      {
+	__x._M_invalidate_all();
+	__x._M_guaranteed_capacity = 0;
+      }
+
       vector(initializer_list<value_type> __l,
 	     const allocator_type& __a = allocator_type())
-      : _Base(__l, __a), _Safe_base(),
+      : _Base(__l, __a),
 	_M_guaranteed_capacity(__l.size()) { }
 #endif
 
-      ~vector() { }
+      ~vector() _GLIBCXX_NOEXCEPT { }
 
       vector&
       operator=(const vector& __x)
@@ -136,12 +150,13 @@ namespace __debug
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       vector&
-      operator=(vector&& __x)
+      operator=(vector&& __x) noexcept(_Alloc_traits::_S_nothrow_move())
       {
-	// NB: DR 1204.
-	// NB: DR 675.
-	clear();
-	swap(__x);
+	_Base::operator=(std::move(__x));
+	this->_M_invalidate_all();
+	_M_update_guaranteed_capacity();
+	__x._M_invalidate_all();
+	__x._M_guaranteed_capacity = 0;
 	return *this;
       }
 
@@ -188,52 +203,52 @@ namespace __debug
 
       // iterators:
       iterator
-      begin()
+      begin() _GLIBCXX_NOEXCEPT
       { return iterator(_Base::begin(), this); }
 
       const_iterator
-      begin() const
+      begin() const _GLIBCXX_NOEXCEPT
       { return const_iterator(_Base::begin(), this); }
 
       iterator
-      end()
+      end() _GLIBCXX_NOEXCEPT
       { return iterator(_Base::end(), this); }
 
       const_iterator
-      end() const
+      end() const _GLIBCXX_NOEXCEPT
       { return const_iterator(_Base::end(), this); }
 
       reverse_iterator
-      rbegin()
+      rbegin() _GLIBCXX_NOEXCEPT
       { return reverse_iterator(end()); }
 
       const_reverse_iterator
-      rbegin() const
+      rbegin() const _GLIBCXX_NOEXCEPT
       { return const_reverse_iterator(end()); }
 
       reverse_iterator
-      rend()
+      rend() _GLIBCXX_NOEXCEPT
       { return reverse_iterator(begin()); }
 
       const_reverse_iterator
-      rend() const
+      rend() const _GLIBCXX_NOEXCEPT
       { return const_reverse_iterator(begin()); }
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       const_iterator
-      cbegin() const
+      cbegin() const noexcept
       { return const_iterator(_Base::begin(), this); }
 
       const_iterator
-      cend() const
+      cend() const noexcept
       { return const_iterator(_Base::end(), this); }
 
       const_reverse_iterator
-      crbegin() const
+      crbegin() const noexcept
       { return const_reverse_iterator(end()); }
 
       const_reverse_iterator
-      crend() const
+      crend() const noexcept
       { return const_reverse_iterator(begin()); }
 #endif
 
@@ -280,11 +295,19 @@ namespace __debug
 #endif
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
-      using _Base::shrink_to_fit;
+      void
+      shrink_to_fit()
+      {
+	if (_Base::_M_shrink_to_fit())
+	  {
+	    _M_guaranteed_capacity = _Base::capacity();
+	    this->_M_invalidate_all();
+	  }
+      }
 #endif
 
       size_type
-      capacity() const
+      capacity() const _GLIBCXX_NOEXCEPT
       {
 #ifdef _GLIBCXX_DEBUG_PEDANTIC
 	return _M_guaranteed_capacity;
@@ -506,6 +529,9 @@ namespace __debug
 
       void
       swap(vector& __x)
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+			noexcept(_Alloc_traits::_S_nothrow_swap())
+#endif
       {
 	_Base::swap(__x);
 	this->_M_swap(__x);
@@ -513,7 +539,7 @@ namespace __debug
       }
 
       void
-      clear()
+      clear() _GLIBCXX_NOEXCEPT
       {
 	_Base::clear();
 	this->_M_invalidate_all();
@@ -521,10 +547,10 @@ namespace __debug
       }
 
       _Base&
-      _M_base() { return *this; }
+      _M_base() _GLIBCXX_NOEXCEPT { return *this; }
 
       const _Base&
-      _M_base() const { return *this; }
+      _M_base() const _GLIBCXX_NOEXCEPT { return *this; }
 
     private:
       size_type _M_guaranteed_capacity;
@@ -599,7 +625,7 @@ namespace __debug
     : public __hash_base<size_t, __debug::vector<bool, _Alloc>>
     {
       size_t
-      operator()(const __debug::vector<bool, _Alloc>& __b) const
+      operator()(const __debug::vector<bool, _Alloc>& __b) const noexcept
       { return std::hash<_GLIBCXX_STD_C::vector<bool, _Alloc>>()
 	  (__b._M_base()); }
     };

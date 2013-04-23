@@ -180,6 +180,8 @@ c_common_write_pch (void)
 
   timevar_push (TV_PCH_SAVE);
 
+  targetm.prepare_pch_save ();
+
   (*debug_hooks->handle_pch) (1);
 
   cpp_write_pch_deps (parse_in, pch_outfile);
@@ -431,6 +433,7 @@ c_common_read_pch (cpp_reader *pfile, const char *name,
   timevar_pop (TV_PCH_CPP_RESTORE);
 
   gt_pch_restore (f);
+  cpp_set_line_map (pfile, line_table);
 
   timevar_push (TV_PCH_CPP_RESTORE);
   if (cpp_read_state (pfile, name, f, smd) != 0)
@@ -445,8 +448,7 @@ c_common_read_pch (cpp_reader *pfile, const char *name,
   fclose (f);
 
   line_table->trace_includes = saved_trace_includes;
-  cpp_set_line_map (pfile, line_table);
-  linemap_add (line_table, LC_RENAME, 0, saved_loc.file, saved_loc.line);
+  linemap_add (line_table, LC_ENTER, 0, saved_loc.file, saved_loc.line);
 
   /* Give the front end a chance to take action after a PCH file has
      been loaded.  */

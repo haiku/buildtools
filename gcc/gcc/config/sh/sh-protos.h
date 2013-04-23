@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler for Renesas / SuperH SH.
    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2003,
-   2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com).
    Improved by Jim Wilson (wilson@cygnus.com).
@@ -51,7 +51,7 @@ extern const char *output_movedouble (rtx, rtx[], enum machine_mode);
 extern const char *output_movepcrel (rtx, rtx[], enum machine_mode);
 extern const char *output_far_jump (rtx, rtx);
 
-extern struct rtx_def *sfunc_uses_reg (rtx);
+extern rtx sfunc_uses_reg (rtx);
 extern int barrier_align (rtx);
 extern int sh_loop_align (rtx);
 extern int fp_zero_operand (rtx);
@@ -104,7 +104,6 @@ extern int fp_arith_reg_operand (rtx, enum machine_mode);
 extern int arith_operand (rtx, enum machine_mode);
 extern int arith_reg_or_0_operand (rtx, enum machine_mode);
 extern int logical_operand (rtx, enum machine_mode);
-extern int tertiary_reload_operand (rtx, enum machine_mode);
 extern int fpscr_operand (rtx, enum machine_mode);
 extern int fpul_operand (rtx, enum machine_mode);
 extern int commutative_float_operator (rtx, enum machine_mode);
@@ -126,7 +125,7 @@ extern bool sh_vector_mode_supported_p (enum machine_mode);
 
 extern const char *output_jump_label_table (void);
 extern int sh_handle_pragma (int (*)(void), void (*)(int), const char *);
-extern struct rtx_def *get_fpscr_rtx (void);
+extern rtx get_fpscr_rtx (void);
 extern int sh_media_register_for_return (void);
 extern void sh_expand_prologue (void);
 extern void sh_expand_epilogue (bool);
@@ -170,17 +169,3 @@ extern int sh2a_is_function_vector_call (rtx);
 extern void sh_fix_range (const char *);
 extern bool sh_hard_regno_mode_ok (unsigned int, enum machine_mode);
 #endif /* ! GCC_SH_PROTOS_H */
-
-#ifdef SYMBIAN
-extern const char * sh_symbian_strip_name_encoding    (const char *);
-extern bool         sh_symbian_is_dllexported_name    (const char *);
-#ifdef TREE_CODE
-extern bool         sh_symbian_is_dllexported         (tree);
-extern int          sh_symbian_import_export_class    (tree, int);
-extern tree         sh_symbian_handle_dll_attribute   (tree *, tree, tree, int, bool *);
-#ifdef RTX_CODE
-extern void         sh_symbian_encode_section_info    (tree, rtx, int);
-#endif
-#endif
-#endif /* SYMBIAN */
-

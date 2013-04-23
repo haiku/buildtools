@@ -160,19 +160,6 @@ unknown_option_callback (const struct cl_decoded_option *decoded)
     return true;
 }
 
-/* Note that an option DECODED has been successfully handled with a
-   handler for mask MASK.  */
-
-static void
-post_handling_callback (const struct cl_decoded_option *decoded ATTRIBUTE_UNUSED,
-			unsigned int mask ATTRIBUTE_UNUSED)
-{
-#ifdef ENABLE_LTO
-  lto_register_user_option (decoded->opt_index, decoded->arg,
-			    decoded->value, mask);
-#endif
-}
-
 /* Handle a front-end option; arguments and return value as for
    handle_option.  */
 
@@ -282,7 +269,6 @@ set_default_handlers (struct cl_option_handlers *handlers)
 {
   handlers->unknown_option_callback = unknown_option_callback;
   handlers->wrong_lang_callback = complain_wrong_lang;
-  handlers->post_handling_callback = post_handling_callback;
   handlers->num_handlers = 3;
   handlers->handlers[0].handler = lang_handle_option;
   handlers->handlers[0].mask = initial_lang_mask;
@@ -310,19 +296,9 @@ decode_options (struct gcc_options *opts, struct gcc_options *opts_set,
 
   set_default_handlers (&handlers);
 
-  /* Enable -Werror=coverage-mismatch by default.  */
-  control_warning_option (OPT_Wcoverage_mismatch, (int) DK_ERROR, true,
-			  loc, lang_mask,
-			  &handlers, opts, opts_set, dc);
-
   default_options_optimization (opts, opts_set,
 				decoded_options, decoded_options_count,
 				loc, lang_mask, &handlers, dc);
-
-#ifdef ENABLE_LTO
-  /* Clear any options currently held for LTO.  */
-  lto_clear_user_options ();
-#endif
 
   read_cmdline_options (opts, opts_set,
 			decoded_options, decoded_options_count,
@@ -374,6 +350,14 @@ handle_common_deferred_options (void)
 	  if (!dump_switch_p (opt->arg))
 	    error ("unrecognized command line option %<-fdump-%s%>", opt->arg);
 	  break;
+
+	case OPT_fenable_:
+	case OPT_fdisable_:
+	  if (opt->opt_index == OPT_fenable_)
+	    enable_pass (opt->arg);
+          else
+	    disable_pass (opt->arg);
+          break;
 
 	case OPT_ffixed_:
 	  /* Deferred.  */

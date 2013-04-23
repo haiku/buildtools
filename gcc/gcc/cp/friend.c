@@ -1,6 +1,6 @@
 /* Help friends in C++.
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007, 2008, 2010  Free Software Foundation, Inc.
+   2007, 2008, 2010, 2011  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -226,9 +226,18 @@ make_friend_class (tree type, tree friend_type, bool complain)
 
   if (! MAYBE_CLASS_TYPE_P (friend_type))
     {
-      error ("invalid type %qT declared %<friend%>", friend_type);
+      /* N1791: If the type specifier in a friend declaration designates a
+	 (possibly cv-qualified) class type, that class is declared as a
+	 friend; otherwise, the friend declaration is ignored.
+
+         So don't complain in C++0x mode.  */
+      if (cxx_dialect < cxx0x)
+	pedwarn (input_location, complain ? 0 : OPT_pedantic,
+		 "invalid type %qT declared %<friend%>", friend_type);
       return;
     }
+
+  friend_type = cv_unqualified (friend_type);
 
   if (friend_depth)
     /* If the TYPE is a template then it makes sense for it to be
@@ -305,7 +314,7 @@ make_friend_class (tree type, tree friend_type, bool complain)
 	    }
 	  else
 	    {
-	      decl = lookup_member (ctype, name, 0, true);
+	      decl = lookup_member (ctype, name, 0, true, tf_warning_or_error);
 	      if (!decl)
 		{
 		  error ("%qT is not a member of %qT", name, ctype);

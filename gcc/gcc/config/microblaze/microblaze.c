@@ -1,5 +1,5 @@
 /* Subroutines used for code generation on Xilinx MicroBlaze.
-   Copyright 2009, 2010 Free Software Foundation, Inc.
+   Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Michael Eager <eager@eagercon.com>.
 
@@ -152,7 +152,7 @@ int microblaze_no_unsafe_delay;
 enum pipeline_type microblaze_pipe = MICROBLAZE_PIPE_5;
 
 /* High and low marks for floating point values which we will accept
-   as legitimate constants for LEGITIMATE_CONSTANT_P.  These are
+   as legitimate constants for TARGET_LEGITIMATE_CONSTANT_P.  These are
    initialized in override_options.  */
 REAL_VALUE_TYPE dfhigh, dflow, sfhigh, sflow;
 
@@ -195,10 +195,14 @@ int interrupt_handler;
 int save_volatiles;
 
 const struct attribute_spec microblaze_attribute_table[] = {
-  /* name         min_len, max_len, decl_req, type_req, fn_type, req_handler */
-  {"interrupt_handler", 0,       0,     true,    false,   false,        NULL},
-  {"save_volatiles"   , 0,       0,     true,    false,   false,        NULL},
-  { NULL,        	0,       0,    false,    false,   false,        NULL}
+  /* name         min_len, max_len, decl_req, type_req, fn_type, req_handler,
+     affects_type_identity */
+  {"interrupt_handler", 0,       0,     true,    false,   false,        NULL,
+    false },
+  {"save_volatiles"   , 0,       0,     true,    false,   false,        NULL,
+    false },
+  { NULL,        	0,       0,    false,    false,   false,        NULL,
+    false }
 };
 
 static int microblaze_interrupt_function_p (tree);
@@ -206,7 +210,7 @@ static int microblaze_interrupt_function_p (tree);
 section *sdata2_section;
 
 /* Return truth value if a CONST_DOUBLE is ok to be a legitimate constant.  */
-int
+static bool
 microblaze_const_double_ok (rtx op, enum machine_mode mode)
 {
   REAL_VALUE_TYPE d;
@@ -214,7 +218,7 @@ microblaze_const_double_ok (rtx op, enum machine_mode mode)
   if (GET_CODE (op) != CONST_DOUBLE)
     return 0;
 
-  if (mode == VOIDmode)
+  if (GET_MODE (op) == VOIDmode)
     return 1;
 
   if (mode != SFmode && mode != DFmode)
@@ -322,8 +326,8 @@ double_memory_operand (rtx op, enum machine_mode mode)
 	  && GET_CODE (op) == REG
 	  && REGNO (op) >= FIRST_PSEUDO_REGISTER
 	  && reg_renumber[REGNO (op)] < 0
-	  && reg_equiv_mem[REGNO (op)] != 0
-	  && double_memory_operand (reg_equiv_mem[REGNO (op)], mode))
+	  && reg_equiv_mem (REGNO (op)) != 0
+	  && double_memory_operand (reg_equiv_mem (REGNO (op)), mode))
 	return 1;
       return 0;
     }
@@ -857,7 +861,8 @@ microblaze_expand_block_move (rtx dest, rtx src, rtx length, rtx align_rtx)
 }
 
 static bool
-microblaze_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *total, 
+microblaze_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED,
+		      int opno ATTRIBUTE_UNUSED, int *total,
 		      bool speed ATTRIBUTE_UNUSED)
 {
   enum machine_mode mode = GET_MODE (x);
@@ -915,7 +920,7 @@ microblaze_rtx_costs (rtx x, int code, int outer_code ATTRIBUTE_UNUSED, int *tot
 	  {
 	    /* Add 1 to make shift slightly more expensive than add.  */
 	    *total = COSTS_N_INSNS (INTVAL (XEXP (x, 1))) + 1;
-	    /* Reduce shift costs for for special circumstances.  */
+	    /* Reduce shift costs for special circumstances.  */
 	    if (optimize_size && INTVAL (XEXP (x, 1)) > 5)
 	      *total -= 2;
 	    if (!optimize_size && INTVAL (XEXP (x, 1)) > 17)
@@ -1087,9 +1092,12 @@ init_cumulative_args (CUMULATIVE_ARGS * cum, tree fntype,
 /* Advance the argument to the next argument position.  */
 
 static void
-microblaze_function_arg_advance (CUMULATIVE_ARGS * cum, enum machine_mode mode,
+microblaze_function_arg_advance (cumulative_args_t cum_v,
+				 enum machine_mode mode,
 				 const_tree type, bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
   cum->arg_number++;
   switch (mode)
     {
@@ -1142,10 +1150,12 @@ microblaze_function_arg_advance (CUMULATIVE_ARGS * cum, enum machine_mode mode,
    or 0 if the argument is to be passed on the stack.  */
 
 static rtx
-microblaze_function_arg (CUMULATIVE_ARGS * cum, enum machine_mode mode, 
+microblaze_function_arg (cumulative_args_t cum_v, enum machine_mode mode, 
 			 const_tree type ATTRIBUTE_UNUSED,
 			 bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
   rtx ret;
   int regbase = -1;
   int *arg_words = &cum->arg_words;
@@ -1193,9 +1203,11 @@ microblaze_function_arg (CUMULATIVE_ARGS * cum, enum machine_mode mode,
 
 /* Return number of bytes of argument to put in registers. */
 static int
-function_arg_partial_bytes (CUMULATIVE_ARGS * cum, enum machine_mode mode,	
+function_arg_partial_bytes (cumulative_args_t cum_v, enum machine_mode mode,	
 			    tree type, bool named ATTRIBUTE_UNUSED)	
 {
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
   if ((mode == BLKmode
        || GET_MODE_CLASS (mode) != MODE_COMPLEX_INT
        || GET_MODE_CLASS (mode) != MODE_COMPLEX_FLOAT)
@@ -1269,24 +1281,6 @@ microblaze_version_to_int (const char *version)
     return -1;
 
   return iver;
-}
-
-static bool
-microblaze_handle_option (size_t code,
-			  const char *arg ATTRIBUTE_UNUSED,
-			  int value ATTRIBUTE_UNUSED)
-{
-  switch (code)
-    {
-    case OPT_mno_clearbss:
-      flag_zero_initialized_in_bss = 0;
-      warning (0, "-mno-clearbss is deprecated; use -fno-zero-initialized-in-bss");
-      break;
-    case OPT_mxl_stack_check:
-      warning (0, "-mxl_stack_check is deprecated; use -fstack-check");
-      break;
-    }
-  return true;
 }
 
 
@@ -1429,13 +1423,6 @@ microblaze_option_override (void)
 	}
     }
 }
-
-/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
-static const struct default_options microblaze_option_optimization_table[] =
-  {
-    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
-    { OPT_LEVELS_NONE, 0, NULL, 0 }
-  };
 
 /* Return true if FUNC is an interrupt function as specified
    by the "interrupt_handler" attribute.  */
@@ -2241,7 +2228,8 @@ microblaze_expand_prologue (void)
   int i;
   tree next_arg;
   tree cur_arg;
-  CUMULATIVE_ARGS args_so_far;
+  CUMULATIVE_ARGS args_so_far_v;
+  cumulative_args_t args_so_far;
   rtx mem_rtx, reg_rtx;
 
   /* If struct value address is treated as the first argument, make it so.  */
@@ -2259,7 +2247,8 @@ microblaze_expand_prologue (void)
 
   /* Determine the last argument, and get its name.  */
 
-  INIT_CUMULATIVE_ARGS (args_so_far, fntype, NULL_RTX, 0, 0);
+  INIT_CUMULATIVE_ARGS (args_so_far_v, fntype, NULL_RTX, 0, 0);
+  args_so_far = pack_cumulative_args (&args_so_far_v);
   regno = GP_ARG_FIRST;
 
   for (cur_arg = fnargs; cur_arg != 0; cur_arg = next_arg)
@@ -2274,7 +2263,7 @@ microblaze_expand_prologue (void)
 	  passed_mode = Pmode;
 	}
 
-      entry_parm = targetm.calls.function_arg (&args_so_far, passed_mode,
+      entry_parm = targetm.calls.function_arg (args_so_far, passed_mode,
 					       passed_type, true);
 
       if (entry_parm)
@@ -2295,7 +2284,7 @@ microblaze_expand_prologue (void)
 	  break;
 	}
 
-      targetm.calls.function_arg_advance (&args_so_far, passed_mode,
+      targetm.calls.function_arg_advance (args_so_far, passed_mode,
 					  passed_type, true);
 
       next_arg = TREE_CHAIN (cur_arg);
@@ -2310,7 +2299,7 @@ microblaze_expand_prologue (void)
 
   /* Split parallel insn into a sequence of insns.  */
 
-  next_arg_reg = targetm.calls.function_arg (&args_so_far, VOIDmode,
+  next_arg_reg = targetm.calls.function_arg (args_so_far, VOIDmode,
 					     void_type_node, true);
   if (next_arg_reg != 0 && GET_CODE (next_arg_reg) == PARALLEL)
     {
@@ -2822,11 +2811,13 @@ microblaze_emit_compare (enum machine_mode mode, rtx cmp, enum rtx_code *cmp_cod
       if (TARGET_PATTERN_COMPARE && GET_CODE(cmp_op1) == REG) 
         {
           if (code == EQ) 
-	    emit_insn (gen_seq_internal_pat (comp_reg, cmp_op0, cmp_op1));
+	    {
+	      emit_insn (gen_seq_internal_pat (comp_reg, cmp_op0, cmp_op1));
+	      *cmp_code = NE;
+	    }
 	  else
 	    {    
 	      emit_insn (gen_sne_internal_pat (comp_reg, cmp_op0, cmp_op1));
-	      *cmp_code = EQ;
 	    }
         }
       else
@@ -2965,6 +2956,16 @@ microblaze_adjust_cost (rtx insn ATTRIBUTE_UNUSED, rtx link,
     return 0;
   return cost;
 }
+
+/* Implement TARGET_LEGITIMATE_CONSTANT_P.
+
+   At present, GAS doesn't understand li.[sd], so don't allow it
+   to be generated at present.  */
+static bool
+microblaze_legitimate_constant_p (enum machine_mode mode, rtx x)
+{
+  return GET_CODE (x) != CONST_DOUBLE || microblaze_const_double_ok (x, mode);
+}
 
 #undef TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO      microblaze_encode_section_info
@@ -2999,12 +3000,6 @@ microblaze_adjust_cost (rtx insn ATTRIBUTE_UNUSED, rtx link,
 #undef TARGET_ASM_FUNCTION_END_PROLOGUE
 #define TARGET_ASM_FUNCTION_END_PROLOGUE \
                                         microblaze_function_end_prologue
-
-#undef TARGET_HANDLE_OPTION
-#define TARGET_HANDLE_OPTION		microblaze_handle_option
-
-#undef TARGET_DEFAULT_TARGET_FLAGS
-#define TARGET_DEFAULT_TARGET_FLAGS	TARGET_DEFAULT
 
 #undef TARGET_ARG_PARTIAL_BYTES
 #define TARGET_ARG_PARTIAL_BYTES	function_arg_partial_bytes
@@ -3051,11 +3046,8 @@ microblaze_adjust_cost (rtx insn ATTRIBUTE_UNUSED, rtx link,
 #undef  TARGET_OPTION_OVERRIDE
 #define TARGET_OPTION_OVERRIDE		microblaze_option_override 
 
-#undef  TARGET_OPTION_OPTIMIZATION_TABLE
-#define TARGET_OPTION_OPTIMIZATION_TABLE microblaze_option_optimization_table
-
-#undef TARGET_EXCEPT_UNWIND_INFO
-#define TARGET_EXCEPT_UNWIND_INFO  sjlj_except_unwind_info
+#undef TARGET_LEGITIMATE_CONSTANT_P
+#define TARGET_LEGITIMATE_CONSTANT_P microblaze_legitimate_constant_p
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

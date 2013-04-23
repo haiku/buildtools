@@ -1,6 +1,6 @@
 // random number generation (out of line) -*- C++ -*-
 
-// Copyright (C) 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
+// Copyright (C) 2009-2012 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -401,6 +401,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
         if (__zero)
           _M_x[0] = __detail::_Shift<_UIntType, __w - 1>::__value;
+	_M_p = state_size;
       }
 
   template<typename _UIntType, size_t __w,
@@ -473,9 +474,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __os.flags(__ios_base::dec | __ios_base::fixed | __ios_base::left);
       __os.fill(__space);
 
-      for (size_t __i = 0; __i < __n - 1; ++__i)
+      for (size_t __i = 0; __i < __n; ++__i)
 	__os << __x._M_x[__i] << __space;
-      __os << __x._M_x[__n - 1];
+      __os << __x._M_p;
 
       __os.flags(__flags);
       __os.fill(__fill);
@@ -500,6 +501,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       for (size_t __i = 0; __i < __n; ++__i)
 	__is >> __x._M_x[__i];
+      __is >> __x._M_p;
 
       __is.flags(__flags);
       return __is;
@@ -629,7 +631,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       for (size_t __i = 0; __i < __r; ++__i)
 	__os << __x._M_x[__i] << __space;
-      __os << __x._M_carry;
+      __os << __x._M_carry << __space << __x._M_p;
 
       __os.flags(__flags);
       __os.fill(__fill);
@@ -651,6 +653,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       for (size_t __i = 0; __i < __r; ++__i)
 	__is >> __x._M_x[__i];
       __is >> __x._M_carry;
+      __is >> __x._M_p;
 
       __is.flags(__flags);
       return __is;
@@ -728,40 +731,65 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     independent_bits_engine<_RandomNumberEngine, __w, _UIntType>::
     operator()()
     {
-      const long double __r = static_cast<long double>(_M_b.max())
-			    - static_cast<long double>(_M_b.min()) + 1.0L;
-      const result_type __m = std::log(__r) / std::log(2.0L);
-      result_type __n, __n0, __y0, __y1, __s0, __s1;
+      typedef typename _RandomNumberEngine::result_type _Eresult_type;
+      const _Eresult_type __r
+	= (_M_b.max() - _M_b.min() < std::numeric_limits<_Eresult_type>::max()
+	   ? _M_b.max() - _M_b.min() + 1 : 0);
+      const unsigned __edig = std::numeric_limits<_Eresult_type>::digits;
+      const unsigned __m = __r ? std::__lg(__r) : __edig;
+
+      typedef typename std::common_type<_Eresult_type, result_type>::type
+	__ctype;
+      const unsigned __cdig = std::numeric_limits<__ctype>::digits;
+
+      unsigned __n, __n0;
+      __ctype __s0, __s1, __y0, __y1;
+
       for (size_t __i = 0; __i < 2; ++__i)
 	{
 	  __n = (__w + __m - 1) / __m + __i;
 	  __n0 = __n - __w % __n;
-	  const result_type __w0 = __w / __n;
-	  const result_type __w1 = __w0 + 1;
-	  __s0 = result_type(1) << __w0;
-	  __s1 = result_type(1) << __w1;
-	  __y0 = __s0 * (__r / __s0);
-	  __y1 = __s1 * (__r / __s1);
-	  if (__r - __y0 <= __y0 / __n)
+	  const unsigned __w0 = __w / __n;  // __w0 <= __m
+
+	  __s0 = 0;
+	  __s1 = 0;
+	  if (__w0 < __cdig)
+	    {
+	      __s0 = __ctype(1) << __w0;
+	      __s1 = __s0 << 1;
+	    }
+
+	  __y0 = 0;
+	  __y1 = 0;
+	  if (__r)
+	    {
+	      __y0 = __s0 * (__r / __s0);
+	      if (__s1)
+		__y1 = __s1 * (__r / __s1);
+
+	      if (__r - __y0 <= __y0 / __n)
+		break;
+	    }
+	  else
 	    break;
 	}
 
       result_type __sum = 0;
       for (size_t __k = 0; __k < __n0; ++__k)
 	{
-	  result_type __u;
+	  __ctype __u;
 	  do
 	    __u = _M_b() - _M_b.min();
-	  while (__u >= __y0);
-	  __sum = __s0 * __sum + __u % __s0;
+	  while (__y0 && __u >= __y0);
+	  __sum = __s0 * __sum + (__s0 ? __u % __s0 : __u);
 	}
       for (size_t __k = __n0; __k < __n; ++__k)
 	{
-	  result_type __u;
+	  __ctype __u;
 	  do
 	    __u = _M_b() - _M_b.min();
-	  while (__u >= __y1);
-	  __sum = __s1 * __sum + __u % __s1;
+	  while (__y1 && __u >= __y1);
+	  __sum = __s1 * __sum + (__s1 ? __u % __s1 : __u);
 	}
       return __sum;
     }
@@ -838,12 +866,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       operator()(_UniformRandomNumberGenerator& __urng,
 		 const param_type& __param)
       {
-	typedef typename std::make_unsigned<typename
-	  _UniformRandomNumberGenerator::result_type>::type __urngtype;
+	typedef typename _UniformRandomNumberGenerator::result_type
+	  _Gresult_type;
 	typedef typename std::make_unsigned<result_type>::type __utype;
-	typedef typename std::conditional<(sizeof(__urngtype)
-					   > sizeof(__utype)),
-	  __urngtype, __utype>::type __uctype;
+	typedef typename std::common_type<_Gresult_type, __utype>::type
+	  __uctype;
 
 	const __uctype __urngmin = __urng.min();
 	const __uctype __urngmax = __urng.max();
@@ -1027,7 +1054,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	double __cand;
 	do
-	  __cand = std::floor(std::log(__aurng()) / __param._M_log_1_p);
+	  __cand = std::floor(std::log(1.0 - __aurng()) / __param._M_log_1_p);
 	while (__cand >= __thr);
 
 	return result_type(__cand + __naf);
@@ -1077,7 +1104,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __is;
     }
 
-
+  // This is Leger's algorithm, also in Devroye, Ch. X, Example 1.5.
   template<typename _IntType>
     template<typename _UniformRandomNumberGenerator>
       typename negative_binomial_distribution<_IntType>::result_type
@@ -1232,7 +1259,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    do
 	      {
 		const double __u = __c * __aurng();
-		const double __e = -std::log(__aurng());
+		const double __e = -std::log(1.0 - __aurng());
 
 		double __w = 0.0;
 
@@ -1264,7 +1291,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		  __x = 1;
 		else
 		  {
-		    const double __v = -std::log(__aurng());
+		    const double __v = -std::log(1.0 - __aurng());
 		    const double __y = __param._M_d
 				     + __v * __2cx / __param._M_d;
 		    __x = std::ceil(__y);
@@ -1408,7 +1435,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	do
 	  {
-	    const double __e = -std::log(__aurng());
+	    const double __e = -std::log(1.0 - __aurng());
 	    __sum += __e / (__t - __x);
 	    __x += 1;
 	  }
@@ -1476,7 +1503,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    __reject = __y >= __param._M_d1;
 		    if (!__reject)
 		      {
-			const double __e = -std::log(__aurng());
+			const double __e = -std::log(1.0 - __aurng());
 			__x = std::floor(__y);
 			__v = -__e - __n * __n / 2 + __param._M_c;
 		      }
@@ -1488,15 +1515,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    __reject = __y >= __param._M_d2;
 		    if (!__reject)
 		      {
-			const double __e = -std::log(__aurng());
+			const double __e = -std::log(1.0 - __aurng());
 			__x = std::floor(-__y);
 			__v = -__e - __n * __n / 2;
 		      }
 		  }
 		else if (__u <= __a123)
 		  {
-		    const double __e1 = -std::log(__aurng());
-		    const double __e2 = -std::log(__aurng());
+		    const double __e1 = -std::log(1.0 - __aurng());
+		    const double __e2 = -std::log(1.0 - __aurng());
 
 		    const double __y = __param._M_d1
 				     + 2 * __s1s * __e1 / __param._M_d1;
@@ -1507,8 +1534,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		  }
 		else
 		  {
-		    const double __e1 = -std::log(__aurng());
-		    const double __e2 = -std::log(__aurng());
+		    const double __e1 = -std::log(1.0 - __aurng());
+		    const double __e2 = -std::log(1.0 - __aurng());
 
 		    const double __y = __param._M_d2
 				     + 2 * __s2s * __e1 / __param._M_d2;
@@ -2110,7 +2137,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
 	__detail::_Adaptor<_UniformRandomNumberGenerator, result_type>
 	  __aurng(__urng);
-	return __p.b() * std::pow(-std::log(__aurng()),
+	return __p.b() * std::pow(-std::log(result_type(1) - __aurng()),
 				  result_type(1) / __p.a());
       }
 
@@ -2168,7 +2195,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
 	__detail::_Adaptor<_UniformRandomNumberGenerator, result_type>
 	  __aurng(__urng);
-	return __p.a() - __p.b() * std::log(-std::log(__aurng()));
+	return __p.a() - __p.b() * std::log(-std::log(result_type(1)
+						      - __aurng()));
       }
 
   template<typename _RealType, typename _CharT, typename _Traits>
@@ -2763,7 +2791,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		       : (__n - 1) / 2;
       const size_t __p = (__n - __t) / 2;
       const size_t __q = __p + __t;
-      const size_t __m = std::max(__s + 1, __n);
+      const size_t __m = std::max(size_t(__s + 1), __n);
 
       for (size_t __k = 0; __k < __m; ++__k)
 	{

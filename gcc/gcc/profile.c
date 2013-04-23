@@ -1,6 +1,6 @@
 /* Calculate branch probabilities, and basic block execution counts.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
@@ -102,13 +102,6 @@ static int total_num_branches;
 
 /* Forward declarations.  */
 static void find_spanning_tree (struct edge_list *);
-static unsigned instrument_edges (struct edge_list *);
-static void instrument_values (histogram_values);
-static void compute_branch_probabilities (void);
-static void compute_value_histograms (histogram_values);
-static gcov_type * get_exec_counts (void);
-static basic_block find_group (basic_block);
-static void union_groups (basic_block, basic_block);
 
 /* Add edge instrumentation code to the entire insn chain.
 
@@ -233,10 +226,12 @@ instrument_values (histogram_values values)
 }
 
 
-/* Computes hybrid profile for all matching entries in da_file.  */
+/* Computes hybrid profile for all matching entries in da_file.  
+   
+   CFG_CHECKSUM is the precomputed checksum for the CFG.  */
 
 static gcov_type *
-get_exec_counts (void)
+get_exec_counts (unsigned cfg_checksum, unsigned lineno_checksum)
 {
   unsigned num_edges = 0;
   basic_block bb;
@@ -253,7 +248,8 @@ get_exec_counts (void)
 	  num_edges++;
     }
 
-  counts = get_coverage_counts (GCOV_COUNTER_ARCS, num_edges, &profile_info);
+  counts = get_coverage_counts (GCOV_COUNTER_ARCS, num_edges, cfg_checksum,
+				lineno_checksum, &profile_info);
   if (!counts)
     return NULL;
 
@@ -441,11 +437,46 @@ read_profile_edge_counts (gcov_type *exec_counts)
     return num_edges;
 }
 
+#define OVERLAP_BASE 10000
+
+/* Compare the static estimated profile to the actual profile, and
+   return the "degree of overlap" measure between them.
+
+   Degree of overlap is a number between 0 and OVERLAP_BASE. It is
+   the sum of each basic block's minimum relative weights between
+   two profiles. And overlap of OVERLAP_BASE means two profiles are
+   identical.  */
+
+static int
+compute_frequency_overlap (void)
+{
+  gcov_type count_total = 0, freq_total = 0;
+  int overlap = 0;
+  basic_block bb;
+
+  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
+    {
+      count_total += bb->count;
+      freq_total += bb->frequency;
+    }
+
+  if (count_total == 0 || freq_total == 0)
+    return 0;
+
+  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
+    overlap += MIN (bb->count * OVERLAP_BASE / count_total,
+		    bb->frequency * OVERLAP_BASE / freq_total);
+
+  return overlap;
+}
+
 /* Compute the branch probabilities for the various branches.
-   Annotate them accordingly.  */
+   Annotate them accordingly.  
+
+   CFG_CHECKSUM is the precomputed checksum for the CFG.  */
 
 static void
-compute_branch_probabilities (void)
+compute_branch_probabilities (unsigned cfg_checksum, unsigned lineno_checksum)
 {
   basic_block bb;
   int i;
@@ -454,7 +485,7 @@ compute_branch_probabilities (void)
   int passes;
   int hist_br_prob[20];
   int num_branches;
-  gcov_type *exec_counts = get_exec_counts ();
+  gcov_type *exec_counts = get_exec_counts (cfg_checksum, lineno_checksum);
   int inconsistent = 0;
 
   /* Very simple sanity checks so we catch bugs in our profiling code.  */
@@ -609,7 +640,13 @@ compute_branch_probabilities (void)
 	}
     }
   if (dump_file)
-    dump_flow_info (dump_file, dump_flags);
+    {
+      int overlap = compute_frequency_overlap ();
+      dump_flow_info (dump_file, dump_flags);
+      fprintf (dump_file, "Static profile overlap: %d.%d%%\n",
+	       overlap / (OVERLAP_BASE / 100),
+	       overlap % (OVERLAP_BASE / 100));
+    }
 
   total_num_passes += passes;
   if (dump_file)
@@ -750,6 +787,7 @@ compute_branch_probabilities (void)
     }
   counts_to_freqs ();
   profile_status = PROFILE_READ;
+  compute_function_frequency ();
 
   if (dump_file)
     {
@@ -772,10 +810,13 @@ compute_branch_probabilities (void)
 }
 
 /* Load value histograms values whose description is stored in VALUES array
-   from .gcda file.  */
+   from .gcda file.  
+
+   CFG_CHECKSUM is the precomputed checksum for the CFG.  */
 
 static void
-compute_value_histograms (histogram_values values)
+compute_value_histograms (histogram_values values, unsigned cfg_checksum,
+                          unsigned lineno_checksum)
 {
   unsigned i, j, t, any;
   unsigned n_histogram_counters[GCOV_N_VALUE_COUNTERS];
@@ -803,7 +844,8 @@ compute_value_histograms (histogram_values values)
 
       histogram_counts[t] =
 	get_coverage_counts (COUNTER_FOR_HIST_TYPE (t),
-			     n_histogram_counters[t], NULL);
+			     n_histogram_counters[t], cfg_checksum,
+			     lineno_checksum, NULL);
       if (histogram_counts[t])
 	any = 1;
       act_count[t] = histogram_counts[t];
@@ -828,8 +870,7 @@ compute_value_histograms (histogram_values values)
     }
 
   for (t = 0; t < GCOV_N_VALUE_COUNTERS; t++)
-    if (histogram_counts[t])
-      free (histogram_counts[t]);
+    free (histogram_counts[t]);
 }
 
 /* The entry basic block will be moved around so that it has index=1,
@@ -853,7 +894,7 @@ output_location (char const *file_name, int line,
       return;
     }
 
-  name_differs = !prev_file_name || strcmp (file_name, prev_file_name);
+  name_differs = !prev_file_name || filename_cmp (file_name, prev_file_name);
   line_differs = prev_line != line;
 
   if (name_differs || line_differs)
@@ -906,6 +947,7 @@ branch_prob (void)
   unsigned num_instrumented;
   struct edge_list *el;
   histogram_values values = NULL;
+  unsigned cfg_checksum, lineno_checksum;
 
   total_num_times_called++;
 
@@ -1094,31 +1136,34 @@ branch_prob (void)
   if (dump_file)
     fprintf (dump_file, "%d ignored edges\n", ignored_edges);
 
-  /* Write the data from which gcov can reconstruct the basic block
-     graph.  */
 
-  /* Basic block flags */
-  if (coverage_begin_output ())
+  /* Compute two different checksums. Note that we want to compute
+     the checksum in only once place, since it depends on the shape
+     of the control flow which can change during 
+     various transformations.  */
+  cfg_checksum = coverage_compute_cfg_checksum ();
+  lineno_checksum = coverage_compute_lineno_checksum ();
+
+  /* Write the data from which gcov can reconstruct the basic block
+     graph and function line numbers  */
+
+  if (coverage_begin_function (lineno_checksum, cfg_checksum))
     {
       gcov_position_t offset;
 
+      /* Basic block flags */
       offset = gcov_write_tag (GCOV_TAG_BLOCKS);
       for (i = 0; i != (unsigned) (n_basic_blocks); i++)
 	gcov_write_unsigned (0);
       gcov_write_length (offset);
-    }
 
-   /* Keep all basic block indexes nonnegative in the gcov output.
-      Index 0 is used for entry block, last index is for exit block.
-      */
-  ENTRY_BLOCK_PTR->index = 1;
-  EXIT_BLOCK_PTR->index = last_basic_block;
+      /* Keep all basic block indexes nonnegative in the gcov output.
+	 Index 0 is used for entry block, last index is for exit
+	 block.    */
+      ENTRY_BLOCK_PTR->index = 1;
+      EXIT_BLOCK_PTR->index = last_basic_block;
 
-  /* Arcs */
-  if (coverage_begin_output ())
-    {
-      gcov_position_t offset;
-
+      /* Arcs */
       FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, EXIT_BLOCK_PTR, next_bb)
 	{
 	  edge e;
@@ -1153,21 +1198,18 @@ branch_prob (void)
 
 	  gcov_write_length (offset);
 	}
-    }
 
-  /* Line numbers.  */
-  if (coverage_begin_output ())
-    {
-      gcov_position_t offset;
+      ENTRY_BLOCK_PTR->index = ENTRY_BLOCK;
+      EXIT_BLOCK_PTR->index = EXIT_BLOCK;
 
+      /* Line numbers.  */
       /* Initialize the output.  */
       output_location (NULL, 0, NULL, NULL);
 
       FOR_EACH_BB (bb)
 	{
 	  gimple_stmt_iterator gsi;
-
-	  offset = 0;
+	  gcov_position_t offset = 0;
 
 	  if (bb == ENTRY_BLOCK_PTR->next_bb)
 	    {
@@ -1185,15 +1227,14 @@ branch_prob (void)
 				 &offset, bb);
 	    }
 
-	  /* Notice GOTO expressions we eliminated while constructing the
-	     CFG.  */
+	  /* Notice GOTO expressions eliminated while constructing the CFG.  */
 	  if (single_succ_p (bb)
 	      && single_succ_edge (bb)->goto_locus != UNKNOWN_LOCATION)
 	    {
-	      location_t curr_location = single_succ_edge (bb)->goto_locus;
-	      /* ??? The FILE/LINE API is inconsistent for these cases.  */
-	      output_location (LOCATION_FILE (curr_location),
-			       LOCATION_LINE (curr_location), &offset, bb);
+	      expanded_location curr_location
+		= expand_location (single_succ_edge (bb)->goto_locus);
+	      output_location (curr_location.file, curr_location.line,
+			       &offset, bb);
 	    }
 
 	  if (offset)
@@ -1206,8 +1247,6 @@ branch_prob (void)
 	}
     }
 
-  ENTRY_BLOCK_PTR->index = ENTRY_BLOCK;
-  EXIT_BLOCK_PTR->index = EXIT_BLOCK;
 #undef BB_TO_GCOV_INDEX
 
   if (flag_profile_values)
@@ -1215,9 +1254,9 @@ branch_prob (void)
 
   if (flag_branch_probabilities)
     {
-      compute_branch_probabilities ();
+      compute_branch_probabilities (cfg_checksum, lineno_checksum);
       if (flag_profile_values)
-	compute_value_histograms (values);
+	compute_value_histograms (values, cfg_checksum, lineno_checksum);
     }
 
   remove_fake_edges ();
@@ -1245,7 +1284,7 @@ branch_prob (void)
 
   VEC_free (histogram_value, heap, values);
   free_edge_list (el);
-  coverage_end_function ();
+  coverage_end_function (lineno_checksum, cfg_checksum);
 }
 
 /* Union find algorithm implementation for the basic blocks using
@@ -1412,4 +1451,3 @@ end_branch_prob (void)
 	}
     }
 }
-

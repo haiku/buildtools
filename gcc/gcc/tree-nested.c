@@ -486,7 +486,7 @@ get_trampoline_type (struct nesting_info *info)
       align = STACK_BOUNDARY;
     }
 
-  t = build_index_type (build_int_cst (NULL_TREE, size - 1));
+  t = build_index_type (size_int (size - 1));
   t = build_array_type (char_type_node, t);
   t = build_decl (DECL_SOURCE_LOCATION (info->context),
 		  FIELD_DECL, get_identifier ("__data"), t);
@@ -561,7 +561,7 @@ get_nl_goto_field (struct nesting_info *info)
       size = size + 1;
 
       type = build_array_type
-	(type, build_index_type (build_int_cst (NULL_TREE, size)));
+	(type, build_index_type (size_int (size)));
 
       field = make_node (FIELD_DECL);
       DECL_NAME (field) = get_identifier ("__nl_goto_buf");
@@ -693,7 +693,7 @@ walk_all_functions (walk_stmt_fn callback_stmt, walk_tree_fn callback_op,
 static bool
 check_for_nested_with_variably_modified (tree fndecl, tree orig_fndecl)
 {
-  struct cgraph_node *cgn = cgraph_node (fndecl);
+  struct cgraph_node *cgn = cgraph_get_node (fndecl);
   tree arg;
 
   for (cgn = cgn->nested; cgn ; cgn = cgn->next_nested)
@@ -1097,6 +1097,7 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	  if (OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (clause) == NULL)
 	    break;
 	  /* FALLTHRU */
+	case OMP_CLAUSE_FINAL:
 	case OMP_CLAUSE_IF:
 	case OMP_CLAUSE_NUM_THREADS:
 	  wi->val_only = true;
@@ -1111,6 +1112,7 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE_COPYIN:
 	case OMP_CLAUSE_COLLAPSE:
 	case OMP_CLAUSE_UNTIED:
+	case OMP_CLAUSE_MERGEABLE:
 	  break;
 
 	default:
@@ -1594,6 +1596,7 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	  if (OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (clause) == NULL)
 	    break;
 	  /* FALLTHRU */
+	case OMP_CLAUSE_FINAL:
 	case OMP_CLAUSE_IF:
 	case OMP_CLAUSE_NUM_THREADS:
 	  wi->val_only = true;
@@ -1608,6 +1611,7 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	case OMP_CLAUSE_COPYIN:
 	case OMP_CLAUSE_COLLAPSE:
 	case OMP_CLAUSE_UNTIED:
+	case OMP_CLAUSE_MERGEABLE:
 	  break;
 
 	default:
@@ -1807,8 +1811,8 @@ convert_nl_goto_reference (gimple_stmt_iterator *gsi, bool *handled_ops_p,
   x = get_frame_field (info, target_context, field, &wi->gsi);
   x = build_addr (x, target_context);
   x = gsi_gimplify_val (info, x, &wi->gsi);
-  call = gimple_build_call (implicit_built_in_decls[BUILT_IN_NONLOCAL_GOTO], 2,
-			    build_addr (new_label, target_context), x);
+  call = gimple_build_call (builtin_decl_implicit (BUILT_IN_NONLOCAL_GOTO),
+			    2, build_addr (new_label, target_context), x);
   gsi_replace (&wi->gsi, call, false);
 
   /* We have handled all of STMT's operands, no need to keep going.  */
@@ -1920,7 +1924,7 @@ convert_tramp_reference_op (tree *tp, int *walk_subtrees, void *data)
 
       /* Do machine-specific ugliness.  Normally this will involve
 	 computing extra alignment, but it can really be anything.  */
-      builtin = implicit_built_in_decls[BUILT_IN_ADJUST_TRAMPOLINE];
+      builtin = builtin_decl_implicit (BUILT_IN_ADJUST_TRAMPOLINE);
       call = gimple_build_call (builtin, 1, x);
       x = init_tmp_var_with_call (info, &wi->gsi, call);
 
@@ -2413,7 +2417,7 @@ finalize_nesting_tree_1 (struct nesting_info *root)
 		      root->frame_decl, field, NULL_TREE);
 	  arg1 = build_addr (x, context);
 
-	  x = implicit_built_in_decls[BUILT_IN_INIT_TRAMPOLINE];
+	  x = builtin_decl_implicit (BUILT_IN_INIT_TRAMPOLINE);
 	  stmt = gimple_build_call (x, 3, arg1, arg2, arg3);
 	  gimple_seq_add_stmt (&stmt_list, stmt);
 	}
@@ -2541,13 +2545,13 @@ finalize_nesting_tree (struct nesting_info *root)
 static void
 unnest_nesting_tree_1 (struct nesting_info *root)
 {
-  struct cgraph_node *node = cgraph_node (root->context);
+  struct cgraph_node *node = cgraph_get_node (root->context);
 
   /* For nested functions update the cgraph to reflect unnesting.
      We also delay finalizing of these functions up to this point.  */
   if (node->origin)
     {
-       cgraph_unnest_node (cgraph_node (root->context));
+       cgraph_unnest_node (node);
        cgraph_finalize_function (root->context, true);
     }
 }
@@ -2601,7 +2605,7 @@ lower_nested_functions (tree fndecl)
   struct nesting_info *root;
 
   /* If there are no nested functions, there's nothing to do.  */
-  cgn = cgraph_node (fndecl);
+  cgn = cgraph_get_node (fndecl);
   if (!cgn->nested)
     return;
 

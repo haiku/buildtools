@@ -1,7 +1,7 @@
 // List implementation (out of line) -*- C++ -*-
 
 // Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
-// 2011 Free Software Foundation, Inc.
+// 2011, 2012 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -67,8 +67,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     _M_clear()
     {
       typedef _List_node<_Tp>  _Node;
-      _Node* __cur = static_cast<_Node*>(this->_M_impl._M_node._M_next);
-      while (__cur != &this->_M_impl._M_node)
+      _Node* __cur = static_cast<_Node*>(_M_impl._M_node._M_next);
+      while (__cur != &_M_impl._M_node)
 	{
 	  _Node* __tmp = __cur;
 	  __cur = static_cast<_Node*>(__cur->_M_next);

@@ -1,6 +1,7 @@
 /* Definitions of taret machine for GNU compiler.
    Matsushita AM33/2.0
-   Copyright 2001, 2002, 2005, 2006, 2007, 2010 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2005, 2006, 2007, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Alexandre Oliva <aoliva@redhat.com>
 
    This file is part of GCC.
@@ -22,7 +23,7 @@
 #undef  PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
-#define TARGET_OS_CPP_BUILTINS() LINUX_TARGET_OS_CPP_BUILTINS()
+#define TARGET_OS_CPP_BUILTINS() GNU_USER_TARGET_OS_CPP_BUILTINS()
 
 #undef  CPP_SPEC
 #define CPP_SPEC "%{mam33:-D__AM33__} %{!mam33:-D__AM33__=2 -D__AM33_2__} \
@@ -38,14 +39,11 @@
 #define LINK_SPEC "%{mrelax:--relax} %{shared:-shared} \
    %{!static: \
      %{rdynamic:-export-dynamic} \
-     -dynamic-linker " LINUX_DYNAMIC_LINKER "} \
+     -dynamic-linker " GNU_USER_DYNAMIC_LINKER "} \
    %{static:-static}"
 
 #undef  PROCESSOR_DEFAULT
 #define PROCESSOR_DEFAULT PROCESSOR_AM33_2
-
-#undef  TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (AM33/2.0 GNU/Linux)");
 
 #define DBX_REGISTER_NUMBER(REGNO) (REGNO)
 

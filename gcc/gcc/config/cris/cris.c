@@ -1,6 +1,6 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
    Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-   2008, 2009, 2010  Free Software Foundation, Inc.
+   2008, 2009, 2010, 2011  Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
 This file is part of GCC.
@@ -40,11 +40,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "debug.h"
 #include "output.h"
+#include "tm-constrs.h"
 #include "target.h"
 #include "target-def.h"
 #include "ggc.h"
 #include "optabs.h"
 #include "df.h"
+#include "opts.h"
 
 /* Usable when we have an amount to add or subtract, and want the
    optimal size of the insn.  */
@@ -97,7 +99,7 @@ static struct machine_function * cris_init_machine_status (void);
 
 static rtx cris_struct_value_rtx (tree, int);
 
-static void cris_setup_incoming_varargs (CUMULATIVE_ARGS *, enum machine_mode,
+static void cris_setup_incoming_varargs (cumulative_args_t, enum machine_mode,
 					 tree type, int *, int);
 
 static int cris_initial_frame_pointer_offset (void);
@@ -112,6 +114,8 @@ static void cris_print_operand_address (FILE *, rtx);
 
 static bool cris_print_operand_punct_valid_p (unsigned char code);
 
+static bool cris_output_addr_const_extra (FILE *, rtx);
+
 static void cris_conditional_register_usage (void);
 
 static void cris_asm_output_mi_thunk
@@ -120,23 +124,26 @@ static void cris_asm_output_mi_thunk
 static void cris_file_start (void);
 static void cris_init_libfuncs (void);
 
+static reg_class_t cris_preferred_reload_class (rtx, reg_class_t);
+
+static bool cris_legitimate_address_p (enum machine_mode, rtx, bool);
+
 static int cris_register_move_cost (enum machine_mode, reg_class_t, reg_class_t);
 static int cris_memory_move_cost (enum machine_mode, reg_class_t, bool);
-static bool cris_rtx_costs (rtx, int, int, int *, bool);
+static bool cris_rtx_costs (rtx, int, int, int, int *, bool);
 static int cris_address_cost (rtx, bool);
-static bool cris_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
+static bool cris_pass_by_reference (cumulative_args_t, enum machine_mode,
 				    const_tree, bool);
-static int cris_arg_partial_bytes (CUMULATIVE_ARGS *, enum machine_mode,
+static int cris_arg_partial_bytes (cumulative_args_t, enum machine_mode,
 				   tree, bool);
-static rtx cris_function_arg (CUMULATIVE_ARGS *, enum machine_mode,
+static rtx cris_function_arg (cumulative_args_t, enum machine_mode,
 			      const_tree, bool);
-static rtx cris_function_incoming_arg (CUMULATIVE_ARGS *,
+static rtx cris_function_incoming_arg (cumulative_args_t,
 				       enum machine_mode, const_tree, bool);
-static void cris_function_arg_advance (CUMULATIVE_ARGS *, enum machine_mode,
+static void cris_function_arg_advance (cumulative_args_t, enum machine_mode,
 				       const_tree, bool);
 static tree cris_md_asm_clobbers (tree, tree, tree);
 
-static bool cris_handle_option (size_t, const char *, int);
 static void cris_option_override (void);
 
 static bool cris_frame_pointer_required (void);
@@ -146,6 +153,7 @@ static void cris_trampoline_init (rtx, tree, rtx);
 
 static rtx cris_function_value(const_tree, const_tree, bool);
 static rtx cris_libcall_value (enum machine_mode, const_rtx);
+static bool cris_function_value_regno_p (const unsigned int);
 
 /* This is the parsed result of the "-max-stack-stackframe=" option.  If
    it (still) is zero, then there was no such option given.  */
@@ -153,14 +161,6 @@ int cris_max_stackframe = 0;
 
 /* This is the parsed result of the "-march=" option, if given.  */
 int cris_cpu_version = CRIS_DEFAULT_CPU_VERSION;
-
-/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
-
-static const struct default_options cris_option_optimization_table[] =
-  {
-    { OPT_LEVELS_2_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
-    { OPT_LEVELS_NONE, 0, NULL, 0 }
-  };
 
 #undef TARGET_ASM_ALIGNED_HI_OP
 #define TARGET_ASM_ALIGNED_HI_OP "\t.word\t"
@@ -187,6 +187,8 @@ static const struct default_options cris_option_optimization_table[] =
 #define TARGET_PRINT_OPERAND_ADDRESS cris_print_operand_address
 #undef TARGET_PRINT_OPERAND_PUNCT_VALID_P
 #define TARGET_PRINT_OPERAND_PUNCT_VALID_P cris_print_operand_punct_valid_p
+#undef TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA
+#define TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA cris_output_addr_const_extra
 
 #undef TARGET_CONDITIONAL_REGISTER_USAGE
 #define TARGET_CONDITIONAL_REGISTER_USAGE cris_conditional_register_usage
@@ -201,6 +203,12 @@ static const struct default_options cris_option_optimization_table[] =
 
 #undef TARGET_INIT_LIBFUNCS
 #define TARGET_INIT_LIBFUNCS cris_init_libfuncs
+
+#undef TARGET_LEGITIMATE_ADDRESS_P
+#define TARGET_LEGITIMATE_ADDRESS_P cris_legitimate_address_p
+
+#undef TARGET_PREFERRED_RELOAD_CLASS
+#define TARGET_PREFERRED_RELOAD_CLASS cris_preferred_reload_class
 
 #undef TARGET_REGISTER_MOVE_COST
 #define TARGET_REGISTER_MOVE_COST cris_register_move_cost
@@ -230,17 +238,11 @@ static const struct default_options cris_option_optimization_table[] =
 #define TARGET_FUNCTION_ARG_ADVANCE cris_function_arg_advance
 #undef TARGET_MD_ASM_CLOBBERS
 #define TARGET_MD_ASM_CLOBBERS cris_md_asm_clobbers
-#undef TARGET_DEFAULT_TARGET_FLAGS
-#define TARGET_DEFAULT_TARGET_FLAGS (TARGET_DEFAULT | CRIS_SUBTARGET_DEFAULT)
-#undef TARGET_HANDLE_OPTION
-#define TARGET_HANDLE_OPTION cris_handle_option
 #undef TARGET_FRAME_POINTER_REQUIRED
 #define TARGET_FRAME_POINTER_REQUIRED cris_frame_pointer_required
 
 #undef TARGET_OPTION_OVERRIDE
 #define TARGET_OPTION_OVERRIDE cris_option_override
-#undef TARGET_OPTION_OPTIMIZATION_TABLE
-#define TARGET_OPTION_OPTIMIZATION_TABLE cris_option_optimization_table
 
 #undef TARGET_ASM_TRAMPOLINE_TEMPLATE
 #define TARGET_ASM_TRAMPOLINE_TEMPLATE cris_asm_trampoline_template
@@ -251,6 +253,8 @@ static const struct default_options cris_option_optimization_table[] =
 #define TARGET_FUNCTION_VALUE cris_function_value
 #undef TARGET_LIBCALL_VALUE
 #define TARGET_LIBCALL_VALUE cris_libcall_value
+#undef TARGET_FUNCTION_VALUE_REGNO_P
+#define TARGET_FUNCTION_VALUE_REGNO_P cris_function_value_regno_p
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -703,8 +707,7 @@ cris_print_operand (FILE *file, rtx x, int code)
     case 'b':
       /* Print the unsigned supplied integer as if it were signed
 	 and < 0, i.e print 255 or 65535 as -1, 254, 65534 as -2, etc.  */
-      if (!CONST_INT_P (x)
-	  || !CRIS_CONST_OK_FOR_LETTER_P (INTVAL (x), 'O'))
+      if (!satisfies_constraint_O (x))
 	LOSE_AND_RETURN ("invalid operand for 'b' modifier", x);
       fprintf (file, HOST_WIDE_INT_PRINT_DEC,
 	       INTVAL (x)| (INTVAL (x) <= 255 ? ~255 : ~65535));
@@ -1127,7 +1130,7 @@ cris_print_operand_address (FILE *file, rtx x)
 
   if (CONSTANT_ADDRESS_P (x))
     cris_output_addr_const (file, x);
-  else if (BASE_OR_AUTOINCR_P (x))
+  else if (cris_base_or_autoincr_p (x, true))
     cris_print_base (x, file);
   else if (GET_CODE (x) == PLUS)
     {
@@ -1135,12 +1138,12 @@ cris_print_operand_address (FILE *file, rtx x)
 
       x1 = XEXP (x, 0);
       x2 = XEXP (x, 1);
-      if (BASE_P (x1))
+      if (cris_base_p (x1, true))
 	{
 	  cris_print_base (x1, file);
 	  cris_print_index (x2, file);
 	}
-      else if (BASE_P (x2))
+      else if (cris_base_p (x2, true))
 	{
 	  cris_print_base (x2, file);
 	  cris_print_index (x1, file);
@@ -1277,6 +1280,136 @@ cris_initial_elimination_offset (int fromreg, int toreg)
   gcc_unreachable ();
 }
 
+/* Nonzero if X is a hard reg that can be used as an index.  */
+static inline bool
+reg_ok_for_base_p (const_rtx x, bool strict)
+{
+  return ((! strict && ! HARD_REGISTER_P (x))
+          || REGNO_OK_FOR_BASE_P (REGNO (x)));
+}
+
+/* Nonzero if X is a hard reg that can be used as an index.  */
+static inline bool
+reg_ok_for_index_p (const_rtx x, bool strict)
+{
+  return reg_ok_for_base_p (x, strict);
+}
+
+/* No symbol can be used as an index (or more correct, as a base) together
+   with a register with PIC; the PIC register must be there.  */
+
+bool
+cris_constant_index_p (const_rtx x)
+{
+  return (CONSTANT_P (x) && (!flag_pic || cris_valid_pic_const (x, true)));
+}
+
+/* True if X is a valid base register.  */
+
+bool
+cris_base_p (const_rtx x, bool strict)
+{
+  return (REG_P (x) && reg_ok_for_base_p (x, strict));
+}
+
+/* True if X is a valid index register.  */
+
+static inline bool
+cris_index_p (const_rtx x, bool strict)
+{
+  return (REG_P (x) && reg_ok_for_index_p (x, strict));
+}
+
+/* True if X is a valid base register with or without autoincrement.  */
+
+bool
+cris_base_or_autoincr_p (const_rtx x, bool strict)
+{
+  return (cris_base_p (x, strict)
+	  || (GET_CODE (x) == POST_INC
+	      && cris_base_p (XEXP (x, 0), strict)
+	      && REGNO (XEXP (x, 0)) != CRIS_ACR_REGNUM));
+}
+
+/* True if X is a valid (register) index for BDAP, i.e. [Rs].S or [Rs+].S.  */
+
+bool
+cris_bdap_index_p (const_rtx x, bool strict)
+{
+  return ((MEM_P (x)
+	   && GET_MODE (x) == SImode
+	   && cris_base_or_autoincr_p (XEXP (x, 0), strict))
+	  || (GET_CODE (x) == SIGN_EXTEND
+	      && MEM_P (XEXP (x, 0))
+	      && (GET_MODE (XEXP (x, 0)) == HImode
+		  || GET_MODE (XEXP (x, 0)) == QImode)
+	      && cris_base_or_autoincr_p (XEXP (XEXP (x, 0), 0), strict)));
+}
+
+/* True if X is a valid (register) index for BIAP, i.e. Rd.m.  */
+
+bool
+cris_biap_index_p (const_rtx x, bool strict)
+{
+  return (cris_index_p (x, strict)
+	  || (GET_CODE (x) == MULT
+	      && cris_index_p (XEXP (x, 0), strict)
+	      && cris_scale_int_operand (XEXP (x, 1), VOIDmode)));
+}
+
+/* Worker function for TARGET_LEGITIMATE_ADDRESS_P.
+
+   A PIC operand looks like a normal symbol here.  At output we dress it
+   in "[rPIC+symbol:GOT]" (global symbol) or "rPIC+symbol:GOTOFF" (local
+   symbol) so we exclude all addressing modes where we can't replace a
+   plain "symbol" with that.  A global PIC symbol does not fit anywhere
+   here (but is thankfully a general_operand in itself).  A local PIC
+   symbol is valid for the plain "symbol + offset" case.  */
+
+static bool
+cris_legitimate_address_p (enum machine_mode mode, rtx x, bool strict)
+{
+  const_rtx x1, x2;
+
+  if (cris_base_or_autoincr_p (x, strict))
+    return true;
+  else if (TARGET_V32)
+    /* Nothing else is valid then.  */
+    return false;
+  else if (cris_constant_index_p (x))
+    return true;
+  /* Indexed?  */
+  else if (GET_CODE (x) == PLUS)
+    {
+      x1 = XEXP (x, 0);
+      x2 = XEXP (x, 1);
+      /* BDAP o, Rd.  */
+      if ((cris_base_p (x1, strict) && cris_constant_index_p (x2))
+	  || (cris_base_p (x2, strict) && cris_constant_index_p (x1))
+	   /* BDAP Rs[+], Rd.  */
+	  || (GET_MODE_SIZE (mode) <= UNITS_PER_WORD
+	      && ((cris_base_p (x1, strict)
+		   && cris_bdap_index_p (x2, strict))
+		  || (cris_base_p (x2, strict)
+		      && cris_bdap_index_p (x1, strict))
+		  /* BIAP.m Rs, Rd */
+		  || (cris_base_p (x1, strict)
+		      && cris_biap_index_p (x2, strict))
+		  || (cris_base_p (x2, strict)
+		      && cris_biap_index_p (x1, strict)))))
+	return true;
+     }
+  else if (MEM_P (x))
+    {
+      /* DIP (Rs).  Reject [[reg+]] and [[reg]] for DImode (long long).  */
+      if (GET_MODE_SIZE (mode) <= UNITS_PER_WORD
+	  && cris_base_or_autoincr_p (XEXP (x, 0), strict))
+	return true;
+    }
+
+  return false;
+}
+
 /* Worker function for LEGITIMIZE_RELOAD_ADDRESS.  */
 
 bool
@@ -1352,30 +1485,42 @@ cris_reload_address_legitimized (rtx x,
   return false;
 }
 
+
+/* Worker function for TARGET_PREFERRED_RELOAD_CLASS.
+
+   It seems like gcc (2.7.2 and 2.9x of 2000-03-22) may send "NO_REGS" as
+   the class for a constant (testcase: __Mul in arit.c).  To avoid forcing
+   out a constant into the constant pool, we will trap this case and
+   return something a bit more sane.  FIXME: Check if this is a bug.
+   Beware that we must not "override" classes that can be specified as
+   constraint letters, or else asm operands using them will fail when
+   they need to be reloaded.  FIXME: Investigate whether that constitutes
+   a bug.  */
+
+static reg_class_t
+cris_preferred_reload_class (rtx x ATTRIBUTE_UNUSED, reg_class_t rclass)
+{
+  if (rclass != ACR_REGS
+      && rclass != MOF_REGS
+      && rclass != SRP_REGS
+      && rclass != CC0_REGS
+      && rclass != SPECIAL_REGS)
+    return GENERAL_REGS;
+
+  return rclass;
+}
+
 /* Worker function for TARGET_REGISTER_MOVE_COST.  */
 
 static int
 cris_register_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
 			 reg_class_t from, reg_class_t to)
 {
-  if (!TARGET_V32)
-    {
-      /* Pretend that classes that we don't support are ALL_REGS, so
-	 we give them the highest cost.  */
-      if (from != SPECIAL_REGS && from != MOF_REGS
-	  && from != GENERAL_REGS && from != GENNONACR_REGS)
-	from = ALL_REGS;
-
-      if (to != SPECIAL_REGS && to != MOF_REGS
-	  && to != GENERAL_REGS && to != GENNONACR_REGS)
-	to = ALL_REGS;
-    }
-
   /* Can't move to and from a SPECIAL_REGS register, so we have to say
      their move cost within that class is higher.  How about 7?  That's 3
      for a move to a GENERAL_REGS register, 3 for the move from the
      GENERAL_REGS register, and 1 for the increased register pressure.
-     Also, it's higher than the memory move cost, which is in order.  
+     Also, it's higher than the memory move cost, as it should.
      We also do this for ALL_REGS, since we don't want that class to be
      preferred (even to memory) at all where GENERAL_REGS doesn't fit.
      Whenever it's about to be used, it's for SPECIAL_REGS.  If we don't
@@ -1384,13 +1529,15 @@ cris_register_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
      GENERAL_REGS left to allocate.  This is because the fall-back when
      the most preferred register class isn't available, isn't the next
      (or next good) wider register class, but the *most widest* register
-     class.  */
+     class.  FIXME: pre-IRA comment, perhaps obsolete now.  */
 
   if ((reg_classes_intersect_p (from, SPECIAL_REGS)
        && reg_classes_intersect_p (to, SPECIAL_REGS))
       || from == ALL_REGS || to == ALL_REGS)
     return 7;
 
+  /* Make moves to/from SPECIAL_REGS slightly more expensive, as we
+     generally prefer GENERAL_REGS.  */
   if (reg_classes_intersect_p (from, SPECIAL_REGS)
       || reg_classes_intersect_p (to, SPECIAL_REGS))
     return 3;
@@ -1548,9 +1695,8 @@ cris_normal_notice_update_cc (rtx exp, rtx insn)
 		       && (REGNO (SET_SRC (exp))
 			   > CRIS_LAST_GENERAL_REGISTER))
 		   || (TARGET_V32
-		       && GET_CODE (SET_SRC (exp)) == CONST_INT
-		       && CRIS_CONST_OK_FOR_LETTER_P (INTVAL (SET_SRC (exp)),
-						      'I')))
+		       && REG_P (SET_DEST (exp))
+		       && satisfies_constraint_I (SET_SRC (exp))))
 	    {
 	      /* There's no CC0 change for this case.  Just check
 		 for overlap.  */
@@ -1788,7 +1934,7 @@ cris_expand_return (bool on_stack)
      we do that until they're fixed.  Currently, all return insns in a
      function must be the same (not really a limiting factor) so we need
      to check that it doesn't change half-way through.  */
-  emit_jump_insn (gen_rtx_RETURN (VOIDmode));
+  emit_jump_insn (ret_rtx);
 
   CRIS_ASSERT (cfun->machine->return_type != CRIS_RETINSN_RET || !on_stack);
   CRIS_ASSERT (cfun->machine->return_type != CRIS_RETINSN_JUMP || on_stack);
@@ -1802,7 +1948,7 @@ cris_expand_return (bool on_stack)
    scanned.  In either case, *TOTAL contains the cost result.  */
 
 static bool
-cris_rtx_costs (rtx x, int code, int outer_code, int *total,
+cris_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 		bool speed)
 {
   switch (code)
@@ -1851,7 +1997,7 @@ cris_rtx_costs (rtx x, int code, int outer_code, int *total,
 
 	 FIXME: this case is a stop-gap for 4.3 and 4.4, this whole
 	 function should be rewritten.  */
-      if (outer_code == PLUS && BIAP_INDEX_P (x))
+      if (outer_code == PLUS && cris_biap_index_p (x, false))
 	{
 	  *total = 0;
 	  return true;
@@ -1893,10 +2039,11 @@ cris_rtx_costs (rtx x, int code, int outer_code, int *total,
       if (CONST_INT_P (XEXP (x, 1))
           /* Two constants may actually happen before optimization.  */
           && !CONST_INT_P (XEXP (x, 0))
-          && !CRIS_CONST_OK_FOR_LETTER_P (INTVAL (XEXP (x, 1)), 'I'))
+	  && !satisfies_constraint_I (XEXP (x, 1)))
 	{
 	  *total
-	    = (rtx_cost (XEXP (x, 0), (enum rtx_code) outer_code, speed) + 2
+	    = (rtx_cost (XEXP (x, 0), (enum rtx_code) outer_code,
+			 opno, speed) + 2
 	       + 2 * GET_MODE_NUNITS (GET_MODE (XEXP (x, 0))));
 	  return true;
 	}
@@ -1908,7 +2055,7 @@ cris_rtx_costs (rtx x, int code, int outer_code, int *total,
       /* fall through */
 
     case ZERO_EXTEND: case SIGN_EXTEND:
-      *total = rtx_cost (XEXP (x, 0), (enum rtx_code) outer_code, speed);
+      *total = rtx_cost (XEXP (x, 0), (enum rtx_code) outer_code, opno, speed);
       return true;
 
     default:
@@ -1932,7 +2079,7 @@ cris_address_cost (rtx x, bool speed ATTRIBUTE_UNUSED)
      loop there, without apparent reason.  */
 
   /* The cheapest addressing modes get 0, since nothing extra is needed.  */
-  if (BASE_OR_AUTOINCR_P (x))
+  if (cris_base_or_autoincr_p (x, false))
     return 0;
 
   /* An indirect mem must be a DIP.  This means two bytes extra for code,
@@ -1962,7 +2109,7 @@ cris_address_cost (rtx x, bool speed ATTRIBUTE_UNUSED)
       /* A BIAP is 2 extra bytes for the prefix insn, nothing more.  We
 	 recognize the typical MULT which is always in tem1 because of
 	 insn canonicalization.  */
-      if ((GET_CODE (tem1) == MULT && BIAP_INDEX_P (tem1))
+      if ((GET_CODE (tem1) == MULT && cris_biap_index_p (tem1, false))
 	  || REG_P (tem2))
 	return 2 / 2;
 
@@ -1973,8 +2120,7 @@ cris_address_cost (rtx x, bool speed ATTRIBUTE_UNUSED)
 
       /* A BDAP -32768 .. 32767 is like BDAP quick, but with 2 extra
 	 bytes.  */
-      if (CONST_INT_P (tem2)
-	  && CRIS_CONST_OK_FOR_LETTER_P (INTVAL (tem2), 'L'))
+      if (satisfies_constraint_L (tem2))
 	return (2 + 2) / 2;
 
       /* A BDAP with some other constant is 2 bytes extra.  */
@@ -2020,12 +2166,12 @@ cris_side_effect_mode_ok (enum rtx_code code, rtx *ops,
   /* The operands may be swapped.  Canonicalize them in reg_rtx and
      val_rtx, where reg_rtx always is a reg (for this constraint to
      match).  */
-  if (! BASE_P (reg_rtx))
+  if (! cris_base_p (reg_rtx, reload_in_progress || reload_completed))
     reg_rtx = val_rtx, val_rtx = ops[rreg];
 
   /* Don't forget to check that reg_rtx really is a reg.  If it isn't,
      we have no business.  */
-  if (! BASE_P (reg_rtx))
+  if (! cris_base_p (reg_rtx, reload_in_progress || reload_completed))
     return 0;
 
   /* Don't do this when -mno-split.  */
@@ -2050,8 +2196,9 @@ cris_side_effect_mode_ok (enum rtx_code code, rtx *ops,
       /* Check if the lvalue register is the same as the "other
 	 operand".  If so, the result is undefined and we shouldn't do
 	 this.  FIXME:  Check again.  */
-      if ((BASE_P (ops[lreg])
-	   && BASE_P (ops[other_op])
+      if ((cris_base_p (ops[lreg], reload_in_progress || reload_completed)
+	   && cris_base_p (ops[other_op],
+			   reload_in_progress || reload_completed)
 	   && REGNO (ops[lreg]) == REGNO (ops[other_op]))
 	  || rtx_equal_p (ops[other_op], ops[lreg]))
       return 0;
@@ -2064,7 +2211,7 @@ cris_side_effect_mode_ok (enum rtx_code code, rtx *ops,
     return 0;
 
   if (code == PLUS
-      && ! BASE_P (val_rtx))
+      && ! cris_base_p (val_rtx, reload_in_progress || reload_completed))
     {
 
       /* Do not allow rx = rx + n if a normal add or sub with same size
@@ -2078,19 +2225,24 @@ cris_side_effect_mode_ok (enum rtx_code code, rtx *ops,
       if (CONSTANT_P (val_rtx))
 	return 1;
 
-      if (MEM_P (val_rtx) && BASE_OR_AUTOINCR_P (XEXP (val_rtx, 0)))
+      if (MEM_P (val_rtx)
+	  && cris_base_or_autoincr_p (XEXP (val_rtx, 0),
+				      reload_in_progress || reload_completed))
 	return 1;
 
       if (GET_CODE (val_rtx) == SIGN_EXTEND
 	  && MEM_P (XEXP (val_rtx, 0))
-	  && BASE_OR_AUTOINCR_P (XEXP (XEXP (val_rtx, 0), 0)))
+	  && cris_base_or_autoincr_p (XEXP (XEXP (val_rtx, 0), 0),
+				      reload_in_progress || reload_completed))
 	return 1;
 
       /* If we got here, it's not a valid addressing mode.  */
       return 0;
     }
   else if (code == MULT
-	   || (code == PLUS && BASE_P (val_rtx)))
+	   || (code == PLUS
+	       && cris_base_p (val_rtx,
+			       reload_in_progress || reload_completed)))
     {
       /* Do not allow rx = rx + ry.S, since it doesn't give better code.  */
       if (rtx_equal_p (ops[lreg], reg_rtx)
@@ -2102,7 +2254,7 @@ cris_side_effect_mode_ok (enum rtx_code code, rtx *ops,
 	return 0;
 
       /* Only allow  r + ...  */
-      if (! BASE_P (reg_rtx))
+      if (! cris_base_p (reg_rtx, reload_in_progress || reload_completed))
 	return 0;
 
       /* If we got here, all seems ok.
@@ -2192,7 +2344,7 @@ cris_target_asm_named_section (const char *name, unsigned int flags,
    elsewhere.  */
 
 bool
-cris_valid_pic_const (rtx x, bool any_operand)
+cris_valid_pic_const (const_rtx x, bool any_operand)
 {
   gcc_assert (flag_pic);
 
@@ -2242,7 +2394,7 @@ cris_valid_pic_const (rtx x, bool any_operand)
    given the original (non-PIC) representation.  */
 
 enum cris_pic_symbol_type
-cris_pic_symbol_type_of (rtx x)
+cris_pic_symbol_type_of (const_rtx x)
 {
   switch (GET_CODE (x))
     {
@@ -2300,12 +2452,22 @@ cris_legitimate_pic_operand (rtx x)
 void
 cris_asm_output_case_end (FILE *stream, int num, rtx table)
 {
+  /* Step back, over the label for the table, to the actual casejump and
+     assert that we find only what's expected.  */
+  rtx whole_jump_insn = prev_nonnote_nondebug_insn (table);
+  gcc_assert (whole_jump_insn != NULL_RTX && LABEL_P (whole_jump_insn));
+  whole_jump_insn = prev_nonnote_nondebug_insn (whole_jump_insn);
+  gcc_assert (whole_jump_insn != NULL_RTX
+	      && (JUMP_P (whole_jump_insn)
+		  || (TARGET_V32 && INSN_P (whole_jump_insn)
+		      && GET_CODE (PATTERN (whole_jump_insn)) == SEQUENCE)));
+  /* Get the pattern of the casejump, so we can extract the default label.  */
+  whole_jump_insn = PATTERN (whole_jump_insn);
+
   if (TARGET_V32)
     {
-      rtx whole_jump_insn = PATTERN (PREV_INSN (PREV_INSN (table)));
-
       /* This can be a SEQUENCE, meaning the delay-slot of the jump is
-	 filled.  */
+	 filled.  We also output the offset word a little differently.  */
       rtx parallel_jump
 	= (GET_CODE (whole_jump_insn) == SEQUENCE
 	   ? PATTERN (XVECEXP (whole_jump_insn, 0, 0)) : whole_jump_insn);
@@ -2323,72 +2485,10 @@ cris_asm_output_case_end (FILE *stream, int num, rtx table)
 	       "\t.word %LL%d-%LL%d%s\n",
 	       CODE_LABEL_NUMBER (XEXP
 				  (XEXP
-				   (XEXP
-				    (XVECEXP
-				     (PATTERN
-				      (PREV_INSN
-				       (PREV_INSN (table))), 0, 0), 1),
+				   (XEXP (XVECEXP (whole_jump_insn, 0, 0), 1), 
 				    2), 0)),
 	       num,
 	       (TARGET_PDEBUG ? "; default" : ""));
-}
-
-/* TARGET_HANDLE_OPTION worker.  We just store the values into local
-   variables here.  Checks for correct semantics are in
-   cris_option_override.  */
-
-static bool
-cris_handle_option (size_t code, const char *arg ATTRIBUTE_UNUSED,
-		    int value ATTRIBUTE_UNUSED)
-{
-  switch (code)
-    {
-    case OPT_metrax100:
-      target_flags
-	|= (MASK_SVINTO
-	    + MASK_ETRAX4_ADD
-	    + MASK_ALIGN_BY_32);
-      break;
-
-    case OPT_mno_etrax100:
-      target_flags
-	&= ~(MASK_SVINTO
-	     + MASK_ETRAX4_ADD
-	     + MASK_ALIGN_BY_32);
-      break;
-
-    case OPT_m32_bit:
-    case OPT_m32bit:
-      target_flags
-	|= (MASK_STACK_ALIGN
-	    + MASK_CONST_ALIGN
-	    + MASK_DATA_ALIGN
-	    + MASK_ALIGN_BY_32);
-      break;
-
-    case OPT_m16_bit:
-    case OPT_m16bit:
-      target_flags
-	|= (MASK_STACK_ALIGN
-	    + MASK_CONST_ALIGN
-	    + MASK_DATA_ALIGN);
-      break;
-
-    case OPT_m8_bit:
-    case OPT_m8bit:
-      target_flags
-	&= ~(MASK_STACK_ALIGN
-	     + MASK_CONST_ALIGN
-	     + MASK_DATA_ALIGN);
-      break;
-
-    default:
-      break;
-    }
-
-  CRIS_SUBTARGET_HANDLE_OPTION(code, arg, value);
-
-  return true;
 }
 
 /* The TARGET_OPTION_OVERRIDE worker.
@@ -3684,9 +3784,9 @@ cris_asm_output_label_ref (FILE *file, char *buf)
     assemble_name (file, buf);
 }
 
-/* Worker function for OUTPUT_ADDR_CONST_EXTRA.  */
+/* Worker function for TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA.  */
 
-bool
+static bool
 cris_output_addr_const_extra (FILE *file, rtx xconst)
 {
   switch (GET_CODE (xconst))
@@ -3759,12 +3859,14 @@ cris_struct_value_rtx (tree fntype ATTRIBUTE_UNUSED,
 /* Worker function for TARGET_SETUP_INCOMING_VARARGS.  */
 
 static void
-cris_setup_incoming_varargs (CUMULATIVE_ARGS *ca,
+cris_setup_incoming_varargs (cumulative_args_t ca_v,
 			     enum machine_mode mode ATTRIBUTE_UNUSED,
 			     tree type ATTRIBUTE_UNUSED,
 			     int *pretend_arg_size,
 			     int second_time)
 {
+  CUMULATIVE_ARGS *ca = get_cumulative_args (ca_v);
+
   if (ca->regs < CRIS_MAX_ARGS_IN_REGS)
     {
       int stdarg_regs = CRIS_MAX_ARGS_IN_REGS - ca->regs;
@@ -3782,7 +3884,7 @@ cris_setup_incoming_varargs (CUMULATIVE_ARGS *ca,
    For cris, we pass <= 8 bytes by value, others by reference.  */
 
 static bool
-cris_pass_by_reference (CUMULATIVE_ARGS *ca ATTRIBUTE_UNUSED,
+cris_pass_by_reference (cumulative_args_t ca ATTRIBUTE_UNUSED,
 			enum machine_mode mode, const_tree type,
 			bool named ATTRIBUTE_UNUSED)
 {
@@ -3833,17 +3935,17 @@ cris_libcall_value (enum machine_mode mode,
 /* Let's assume all functions return in r[CRIS_FIRST_ARG_REG] for the
    time being.  */
 
-bool
+static bool
 cris_function_value_regno_p (const unsigned int regno)
 {
   return (regno == CRIS_FIRST_ARG_REG);
 }
 
 static int
-cris_arg_partial_bytes (CUMULATIVE_ARGS *ca, enum machine_mode mode,
+cris_arg_partial_bytes (cumulative_args_t ca, enum machine_mode mode,
 			tree type, bool named ATTRIBUTE_UNUSED)
 {
-  if (ca->regs == CRIS_MAX_ARGS_IN_REGS - 1
+  if (get_cumulative_args (ca)->regs == CRIS_MAX_ARGS_IN_REGS - 1
       && !targetm.calls.must_pass_in_stack (mode, type)
       && CRIS_FUNCTION_ARG_SIZE (mode, type) > 4
       && CRIS_FUNCTION_ARG_SIZE (mode, type) <= 8)
@@ -3853,11 +3955,13 @@ cris_arg_partial_bytes (CUMULATIVE_ARGS *ca, enum machine_mode mode,
 }
 
 static rtx
-cris_function_arg_1 (const CUMULATIVE_ARGS *ca,
+cris_function_arg_1 (cumulative_args_t ca_v,
 		     enum machine_mode mode ATTRIBUTE_UNUSED,
 		     const_tree type ATTRIBUTE_UNUSED,
 		     bool named, bool incoming)
 {
+  const CUMULATIVE_ARGS *ca = get_cumulative_args (ca_v);
+
   if ((!incoming || named) && ca->regs < CRIS_MAX_ARGS_IN_REGS)
     return gen_rtx_REG (mode, CRIS_FIRST_ARG_REG + ca->regs);
   else
@@ -3868,7 +3972,7 @@ cris_function_arg_1 (const CUMULATIVE_ARGS *ca,
    The void_type_node is sent as a "closing" call.  */
 
 static rtx
-cris_function_arg (CUMULATIVE_ARGS *ca, enum machine_mode mode,
+cris_function_arg (cumulative_args_t ca, enum machine_mode mode,
 		   const_tree type, bool named)
 {
   return cris_function_arg_1 (ca, mode, type, named, false);
@@ -3882,7 +3986,7 @@ cris_function_arg (CUMULATIVE_ARGS *ca, enum machine_mode mode,
    void_type_node TYPE parameter.  */
 
 static rtx
-cris_function_incoming_arg (CUMULATIVE_ARGS *ca, enum machine_mode mode,
+cris_function_incoming_arg (cumulative_args_t ca, enum machine_mode mode,
 			    const_tree type, bool named)
 {
   return cris_function_arg_1 (ca, mode, type, named, true);
@@ -3891,9 +3995,11 @@ cris_function_incoming_arg (CUMULATIVE_ARGS *ca, enum machine_mode mode,
 /* Worker function for TARGET_FUNCTION_ARG_ADVANCE.  */
 
 static void
-cris_function_arg_advance (CUMULATIVE_ARGS *ca, enum machine_mode mode,
+cris_function_arg_advance (cumulative_args_t ca_v, enum machine_mode mode,
 			   const_tree type, bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *ca = get_cumulative_args (ca_v);
+
   ca->regs += (3 + CRIS_FUNCTION_ARG_SIZE (mode, type)) / 4;
 }
 

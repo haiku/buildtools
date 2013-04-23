@@ -1,6 +1,6 @@
 /* Output variables, constants and external declarations, for GNU compiler.
    Copyright (C) 1996, 1997, 1998, 2000, 2001, 2002, 2004, 2005, 2007, 2008,
-   2009, 2010
+   2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -19,12 +19,13 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define TARGET_OBJECT_SUFFIX ".obj"
-#define TARGET_EXECUTABLE_SUFFIX ".exe"
-
 /* Alpha/VMS object format is not really Elf, but this makes compiling
    crtstuff.c and dealing with shared library initialization much easier.  */
 #define OBJECT_FORMAT_ELF
+
+/* Do not use TM clone registry as it currently doesn't work.  Alpha/VMS
+   object is too far from ELF for supporting TM out of the box.  */
+#define USE_TM_CLONE_REGISTRY 0
 
 /* This enables certain macros in alpha.h, which will make an indirect
    reference to an external symbol an invalid address.  This needs to be
@@ -33,41 +34,25 @@ along with GCC; see the file COPYING3.  If not see
 
 #define NO_EXTERNAL_INDIRECT_ADDRESS
 
-#define TARGET_OS_CPP_BUILTINS()		\
+#define SUBTARGET_OS_CPP_BUILTINS()		\
     do {					\
-	builtin_define_std ("vms");		\
-	builtin_define_std ("VMS");		\
-	builtin_define ("__ALPHA");		\
-	builtin_assert ("system=vms");		\
-	if (TARGET_FLOAT_VAX)			\
-	  builtin_define ("__G_FLOAT");		\
-	else					\
-	  builtin_define ("__IEEE_FLOAT");	\
+      builtin_define ("__ALPHA");		\
+      if (TARGET_FLOAT_VAX)			\
+        builtin_define ("__G_FLOAT");		\
+      else					\
+        builtin_define ("__IEEE_FLOAT");	\
     } while (0)
 
 #undef TARGET_DEFAULT
-#define TARGET_DEFAULT (MASK_FPREGS|MASK_GAS)
-#undef TARGET_ABI_OPEN_VMS
-#define TARGET_ABI_OPEN_VMS 1
-
-#undef TARGET_NAME   
-#define TARGET_NAME "OpenVMS/Alpha"
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (%s)", TARGET_NAME);           
+#if POINTER_SIZE == 64
+#define TARGET_DEFAULT (MASK_FPREGS | MASK_GAS | MASK_MALLOC64)
+#else
+#define TARGET_DEFAULT (MASK_FPREGS | MASK_GAS)
+#endif
 
 #define VMS_DEBUG_MAIN_POINTER "TRANSFER$BREAK$GO"
 
 #undef PCC_STATIC_STRUCT_RETURN
-
-/* "long" is 32 bits, but 64 bits for Ada.  */
-#undef LONG_TYPE_SIZE
-#define LONG_TYPE_SIZE 32
-#define ADA_LONG_TYPE_SIZE 64
-
-/* Pointer is 32 bits but the hardware has 64-bit addresses, sign extended.  */
-#undef POINTER_SIZE
-#define POINTER_SIZE 32
-#define POINTERS_EXTEND_UNSIGNED 0
 
 #define MAX_OFILE_ALIGNMENT 524288  /* 8 x 2^16 by DEC Ada Test CD40VRA */
 
@@ -175,6 +160,12 @@ typedef struct {int num_args; enum avms_arg_type atypes[6];} avms_arg_info;
 
 #define DEFAULT_PCC_STRUCT_RETURN 0
 
+#if POINTER_SIZE == 64
+/* Eventhough pointers are 64bits, only 32bit ever remain significant in code
+   addresses.  */
+#define MASK_RETURN_ADDR (GEN_INT (0xffffffff))
+#endif
+
 #undef  ASM_WEAKEN_LABEL
 #define ASM_WEAKEN_LABEL(FILE, NAME)                            \
    do { fputs ("\t.weak\t", FILE); assemble_name (FILE, NAME);  \
@@ -188,7 +179,6 @@ typedef struct {int num_args; enum avms_arg_type atypes[6];} avms_arg_info;
    asm (SECTION_OP "\n\t.long " #FUNC"\n");
 
 #undef ASM_OUTPUT_ADDR_DIFF_ELT
-#define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) gcc_unreachable ()
 
 #undef ASM_OUTPUT_ADDR_VEC_ELT
 #define ASM_OUTPUT_ADDR_VEC_ELT(FILE, VALUE) \
@@ -231,63 +221,6 @@ typedef struct {int num_args; enum avms_arg_type atypes[6];} avms_arg_info;
 #define LINK_EH_SPEC "vms-dwarf2eh.o%s "
 #define LINK_GCC_C_SEQUENCE_SPEC "%G"
 
-#ifdef IN_LIBGCC2
-/* Get the definition for MD_FALLBACK_FRAME_STATE_FOR from a separate
-   file. This avoids having to recompile the world instead of libgcc only
-   when changes to this macro are exercised.  */
-
-#define MD_UNWIND_SUPPORT "config/alpha/vms-unwind.h"
-#endif
-
-#define ASM_OUTPUT_EXTERNAL(FILE, DECL, NAME) \
-  avms_asm_output_external (FILE, DECL, NAME)
-
-typedef struct crtl_name_spec
-{
-  const char *const name;
-  const char *deccname;
-  int referenced;
-} crtl_name_spec;
-
-#include "config/vms/vms-crtl.h"
-
-/* Alias CRTL names to 32/64bit DECCRTL functions. 
-   Fixme: This should do a binary search.  */
-#define DO_CRTL_NAMES                                                      \
-  do                                                                       \
-    {                                                                      \
-      int i;                                                               \
-      static crtl_name_spec vms_crtl_names[] = CRTL_NAMES;                 \
-      static int malloc64_init = 0;                                        \
-                                                                           \
-      if ((malloc64_init == 0) && TARGET_MALLOC64)          		   \
-	{                                                                  \
-          for (i=0; vms_crtl_names [i].name; i++)                          \
-            {                                                              \
-	      if (strcmp ("calloc", vms_crtl_names [i].name) == 0)         \
-                vms_crtl_names [i].deccname = "decc$_calloc64";            \
-              else                                                         \
-	      if (strcmp ("malloc", vms_crtl_names [i].name) == 0)         \
-                vms_crtl_names [i].deccname = "decc$_malloc64";            \
-              else                                                         \
-	      if (strcmp ("realloc", vms_crtl_names [i].name) == 0)        \
-                vms_crtl_names [i].deccname = "decc$_realloc64";           \
-              else                                                         \
-	      if (strcmp ("strdup", vms_crtl_names [i].name) == 0)         \
-                vms_crtl_names [i].deccname = "decc$_strdup64";            \
-	    }                                                              \
-            malloc64_init = 1;                                             \
-        }                                                                  \
-      for (i=0; vms_crtl_names [i].name; i++)                              \
-	if (!vms_crtl_names [i].referenced &&                              \
-	    (strcmp (name, vms_crtl_names [i].name) == 0))                 \
-	  {                                                                \
-	    fprintf (file, "\t%s=%s\n",                        \
-		     name, vms_crtl_names [i].deccname);                   \
-	    vms_crtl_names [i].referenced = 1;                             \
-	  }                                                                \
-    } while (0)
-
 /* This is how to output an assembler line
    that says to advance the location counter
    to a multiple of 2**LOG bytes.  */
@@ -299,15 +232,16 @@ typedef struct crtl_name_spec
 /* Switch into a generic section.  */
 #define TARGET_ASM_NAMED_SECTION vms_asm_named_section
 
-#define ASM_OUTPUT_DEF(FILE,LABEL1,LABEL2)				\
-  do {	fprintf ((FILE), "\t.literals\n");				\
-	in_section = NULL;						\
-	fprintf ((FILE), "\t");						\
-	assemble_name (FILE, LABEL1);					\
-	fprintf (FILE, " = ");						\
-	assemble_name (FILE, LABEL2);					\
-	fprintf (FILE, "\n");						\
-  } while (0)
+#define ASM_OUTPUT_DEF(FILE,LABEL1,LABEL2)      \
+  do                                            \
+    {                                           \
+      fprintf ((FILE), "\t");                   \
+      assemble_name (FILE, LABEL1);             \
+      fprintf (FILE, " = ");                    \
+      assemble_name (FILE, LABEL2);             \
+      fprintf (FILE, "\n");                     \
+    }                                           \
+ while (0)
 
 #undef PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE VMS_AND_DWARF2_DEBUG
@@ -334,11 +268,16 @@ do {                                                \
     }                                               \
 } while (0)
 
+#undef LINK_SPEC
+#if HAVE_GNU_LD
+/* GNU-ld built-in linker script already handles the dwarf2 debug sections.  */
+#define LINK_SPEC "%{shared} %{v}"
+#else
 /* Link with vms-dwarf2.o if -g (except -g0). This causes the
    VMS link to pull all the dwarf2 debug sections together.  */
-#undef LINK_SPEC
 #define LINK_SPEC "%{g:-g vms-dwarf2.o%s} %{g0} %{g1:-g1 vms-dwarf2.o%s} \
 %{g2:-g2 vms-dwarf2.o%s} %{g3:-g3 vms-dwarf2.o%s} %{shared} %{v} %{map}"
+#endif
 
 #undef STARTFILE_SPEC
 #define STARTFILE_SPEC \

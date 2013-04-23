@@ -1,12 +1,12 @@
-// { dg-do run { target *-*-freebsd* *-*-netbsd* *-*-linux* *-*-solaris* *-*-cygwin *-*-darwin* alpha*-*-osf* mips-sgi-irix6* } }
-// { dg-options " -std=gnu++0x -pthread" { target *-*-freebsd* *-*-netbsd* *-*-linux* alpha*-*-osf* mips-sgi-irix6* } }
+// { dg-do run { target *-*-freebsd* *-*-netbsd* *-*-linux* *-*-solaris* *-*-cygwin *-*-darwin* alpha*-*-osf* mips-sgi-irix6* powerpc-ibm-aix* } }
+// { dg-options " -std=gnu++0x -pthread" { target *-*-freebsd* *-*-netbsd* *-*-linux* alpha*-*-osf* mips-sgi-irix6* powerpc-ibm-aix* } }
 // { dg-options " -std=gnu++0x -pthreads" { target *-*-solaris* } }
 // { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
 // { dg-require-cstdint "" }
 // { dg-require-gthreads "" }
 // { dg-require-atomic-builtins "" }
 
-// Copyright (C) 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -41,24 +41,26 @@ struct tester
 std::promise<tester> pglobal;
 std::future<tester> fglobal = pglobal.get_future();
 
+auto delay = std::chrono::milliseconds(1);
+
 tester::tester(int)
 {
   bool test __attribute__((unused)) = true;
-  VERIFY (!fglobal.wait_for(std::chrono::milliseconds(1)));
+  VERIFY (fglobal.wait_for(delay) == std::future_status::timeout);
 }
 
 tester::tester(const tester&)
 {
   bool test __attribute__((unused)) = true;
   // if this copy happens while a mutex is locked next line could deadlock:
-  VERIFY (!fglobal.wait_for(std::chrono::milliseconds(1)));
+  VERIFY (fglobal.wait_for(delay) == std::future_status::timeout);
 }
 
 tester& tester::operator=(const tester&)
 {
   bool test __attribute__((unused)) = true;
   // if this copy happens while a mutex is locked next line could deadlock:
-  VERIFY (!fglobal.wait_for(std::chrono::milliseconds(1)));
+  VERIFY (fglobal.wait_for(delay) == std::future_status::timeout);
   return *this;
 }
 
@@ -68,7 +70,7 @@ void test01()
 
   pglobal.set_value( tester(1) );
 
-  VERIFY( fglobal.wait_for(std::chrono::milliseconds(1)) );
+  VERIFY (fglobal.wait_for(delay) == std::future_status::ready);
 }
 
 int main()

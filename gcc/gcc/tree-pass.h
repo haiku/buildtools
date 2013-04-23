@@ -83,6 +83,7 @@ enum tree_dump_index
 #define TDF_ALIAS	(1 << 21)	/* display alias information  */
 #define TDF_ENUMERATE_LOCALS (1 << 22)	/* Enumerate locals by uid.  */
 #define TDF_CSELIB	(1 << 23)	/* Dump cselib details.  */
+#define TDF_SCEV	(1 << 24)	/* Dump SCEV details.  */
 
 
 /* In tree-dump.c */
@@ -400,6 +401,7 @@ extern struct gimple_opt_pass pass_call_cdce;
 extern struct gimple_opt_pass pass_merge_phi;
 extern struct gimple_opt_pass pass_split_crit_edges;
 extern struct gimple_opt_pass pass_pre;
+extern unsigned int tail_merge_optimize (unsigned int);
 extern struct gimple_opt_pass pass_profile;
 extern struct gimple_opt_pass pass_strip_predict_hints;
 extern struct gimple_opt_pass pass_lower_complex_O0;
@@ -411,6 +413,7 @@ extern struct gimple_opt_pass pass_diagnose_omp_blocks;
 extern struct gimple_opt_pass pass_expand_omp;
 extern struct gimple_opt_pass pass_expand_omp_ssa;
 extern struct gimple_opt_pass pass_object_sizes;
+extern struct gimple_opt_pass pass_strlen;
 extern struct gimple_opt_pass pass_fold_builtins;
 extern struct gimple_opt_pass pass_stdarg;
 extern struct gimple_opt_pass pass_early_warn_uninitialized;
@@ -444,6 +447,12 @@ extern struct gimple_opt_pass pass_build_cgraph_edges;
 extern struct gimple_opt_pass pass_local_pure_const;
 extern struct gimple_opt_pass pass_tracer;
 extern struct gimple_opt_pass pass_warn_unused_result;
+extern struct gimple_opt_pass pass_diagnose_tm_blocks;
+extern struct gimple_opt_pass pass_lower_tm;
+extern struct gimple_opt_pass pass_tm_init;
+extern struct gimple_opt_pass pass_tm_mark;
+extern struct gimple_opt_pass pass_tm_memopt;
+extern struct gimple_opt_pass pass_tm_edges;
 extern struct gimple_opt_pass pass_split_functions;
 extern struct gimple_opt_pass pass_feedback_split_functions;
 
@@ -463,11 +472,10 @@ extern struct simple_ipa_opt_pass pass_ipa_free_lang_data;
 extern struct ipa_opt_pass_d pass_ipa_cp;
 extern struct ipa_opt_pass_d pass_ipa_reference;
 extern struct ipa_opt_pass_d pass_ipa_pure_const;
-extern struct simple_ipa_opt_pass pass_ipa_type_escape;
 extern struct simple_ipa_opt_pass pass_ipa_pta;
-extern struct simple_ipa_opt_pass pass_ipa_struct_reorg;
 extern struct ipa_opt_pass_d pass_ipa_lto_wpa_fixup;
 extern struct ipa_opt_pass_d pass_ipa_lto_finish_out;
+extern struct simple_ipa_opt_pass pass_ipa_tm;
 extern struct ipa_opt_pass_d pass_ipa_profile;
 extern struct ipa_opt_pass_d pass_ipa_cdtor_merge;
 
@@ -522,7 +530,7 @@ extern struct rtl_opt_pass pass_stack_ptr_mod;
 extern struct rtl_opt_pass pass_initialize_regs;
 extern struct rtl_opt_pass pass_combine;
 extern struct rtl_opt_pass pass_if_after_combine;
-extern struct rtl_opt_pass pass_implicit_zee;
+extern struct rtl_opt_pass pass_ree;
 extern struct rtl_opt_pass pass_partition_blocks;
 extern struct rtl_opt_pass pass_match_asm_constraints;
 extern struct rtl_opt_pass pass_regmove;
@@ -533,6 +541,7 @@ extern struct rtl_opt_pass pass_mode_switching;
 extern struct rtl_opt_pass pass_sms;
 extern struct rtl_opt_pass pass_sched;
 extern struct rtl_opt_pass pass_ira;
+extern struct rtl_opt_pass pass_reload;
 extern struct rtl_opt_pass pass_postreload;
 extern struct rtl_opt_pass pass_clean_state;
 extern struct rtl_opt_pass pass_branch_prob;
@@ -568,6 +577,7 @@ extern struct rtl_opt_pass pass_split_before_regstack;
 extern struct rtl_opt_pass pass_convert_to_eh_region_ranges;
 extern struct rtl_opt_pass pass_shorten_branches;
 extern struct rtl_opt_pass pass_set_nothrow_function_flags;
+extern struct rtl_opt_pass pass_dwarf2_frame;
 extern struct rtl_opt_pass pass_final;
 extern struct rtl_opt_pass pass_rtl_seqabstr;
 extern struct gimple_opt_pass pass_release_ssa_names;
@@ -579,7 +589,7 @@ extern struct gimple_opt_pass pass_convert_switch;
 
 /* The root of the compilation pass tree, once constructed.  */
 extern struct opt_pass *all_passes, *all_small_ipa_passes, *all_lowering_passes,
-                       *all_regular_ipa_passes, *all_lto_gen_passes;
+                       *all_regular_ipa_passes, *all_lto_gen_passes, *all_late_ipa_passes;
 
 /* Define a list of pass lists so that both passes.c and plugins can easily
    find all the pass lists.  */
@@ -638,5 +648,9 @@ extern bool first_pass_instance;
 
 /* Declare for plugins.  */
 extern void do_per_function_toporder (void (*) (void *), void *);
+
+extern void disable_pass (const char *);
+extern void enable_pass (const char *);
+extern void dump_passes (void);
 
 #endif /* GCC_TREE_PASS_H */

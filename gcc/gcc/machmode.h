@@ -221,6 +221,8 @@ extern const unsigned char mode_nunits[NUM_MACHINE_MODES];
 extern const unsigned char mode_wider[NUM_MACHINE_MODES];
 #define GET_MODE_WIDER_MODE(MODE) ((enum machine_mode) mode_wider[MODE])
 
+/* For scalars, this is a mode with twice the precision.  For vectors,
+   this is a mode with the same inner mode but with twice the elements.  */
 extern const unsigned char mode_2xwider[NUM_MACHINE_MODES];
 #define GET_MODE_2XWIDER_MODE(MODE) ((enum machine_mode) mode_2xwider[MODE])
 
@@ -248,7 +250,10 @@ extern enum machine_mode mode_for_vector (enum machine_mode, unsigned);
 
 /* Find the best mode to use to access a bit field.  */
 
-extern enum machine_mode get_best_mode (int, int, unsigned int,
+extern enum machine_mode get_best_mode (int, int,
+					unsigned HOST_WIDE_INT,
+					unsigned HOST_WIDE_INT,
+					unsigned int,
 					enum machine_mode, int);
 
 /* Determine alignment, 1<=result<=BIGGEST_ALIGNMENT.  */
@@ -274,5 +279,13 @@ extern enum machine_mode ptr_mode;
 
 /* Target-dependent machine mode initialization - in insn-modes.c.  */
 extern void init_adjust_machine_modes (void);
+
+#define TRULY_NOOP_TRUNCATION_MODES_P(MODE1, MODE2) \
+  TRULY_NOOP_TRUNCATION (GET_MODE_PRECISION (MODE1), \
+			 GET_MODE_PRECISION (MODE2))
+
+#define HWI_COMPUTABLE_MODE_P(MODE) \
+  (SCALAR_INT_MODE_P (MODE) \
+   && GET_MODE_PRECISION (MODE) <= HOST_BITS_PER_WIDE_INT)
 
 #endif /* not HAVE_MACHINE_MODES */

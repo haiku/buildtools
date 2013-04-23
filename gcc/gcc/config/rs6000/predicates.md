@@ -1,5 +1,5 @@
 ;; Predicate definitions for POWER and PowerPC.
-;; Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+;; Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011
 ;; Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
@@ -111,6 +111,16 @@
 (define_predicate "exact_log2_cint_operand"
   (and (match_code "const_int")
        (match_test "INTVAL (op) > 0 && exact_log2 (INTVAL (op)) >= 0")))
+
+;; Match op = 0 or op = 1.
+(define_predicate "const_0_to_1_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 0, 1)")))
+
+;; Match op = 2 or op = 3.
+(define_predicate "const_2_to_3_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 2, 3)")))
 
 ;; Return 1 if op is a register that is not special.
 (define_predicate "gpc_reg_operand"
@@ -435,9 +445,12 @@
     op = XEXP (op, 0);
   else if (GET_CODE (op) == PRE_MODIFY)
     op = XEXP (op, 1);
+  else if (GET_CODE (op) == LO_SUM
+	   && GET_CODE (XEXP (op, 0)) == REG
+	   && GET_CODE (XEXP (op, 1)) == CONST)
+    op = XEXP (XEXP (op, 1), 0);
 
   return (GET_CODE (op) != PLUS
-	  || ! REG_P (XEXP (op, 0))
 	  || GET_CODE (XEXP (op, 1)) != CONST_INT
 	  || INTVAL (XEXP (op, 1)) % 4 == 0);
 })
@@ -869,6 +882,27 @@
     return 1;
 
   return 0;
+})
+
+;; Return 1 if this operand is a valid input for a vsx_splat insn.
+(define_predicate "splat_input_operand"
+  (match_code "label_ref,symbol_ref,const,high,reg,subreg,mem,
+	       const_double,const_vector,const_int,plus")
+{
+  if (MEM_P (op))
+    {
+      if (! volatile_ok && MEM_VOLATILE_P (op))
+	return 0;
+      if (mode == DFmode)
+	mode = V2DFmode;
+      else if (mode == DImode)
+	mode = V2DImode;
+      else
+	gcc_unreachable ();
+      return memory_address_addr_space_p (mode, XEXP (op, 0),
+					  MEM_ADDR_SPACE (op));
+    }
+  return input_operand (op, mode);
 })
 
 ;; Return true if OP is an invalid SUBREG operation on the e500.

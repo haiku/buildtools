@@ -1,5 +1,5 @@
 /* Target definitions for x86 running Darwin.
-   Copyright (C) 2001, 2002, 2004, 2005, 2006, 2007, 2008, 2010
+   Copyright (C) 2001, 2002, 2004, 2005, 2006, 2007, 2008, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
@@ -25,8 +25,6 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef DARWIN_X86
 #define DARWIN_X86 1
-
-#define TARGET_VERSION fprintf (stderr, " (i686 Darwin)");
 
 #undef  TARGET_64BIT
 #define TARGET_64BIT OPTION_ISA_64BIT
@@ -134,7 +132,8 @@ extern int darwin_emit_branch_islands;
   "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
    %{mpc32:crtprec32.o%s} \
    %{mpc64:crtprec64.o%s} \
-   %{mpc80:crtprec80.o%s}"
+   %{mpc80:crtprec80.o%s} \
+   %{fgnu-tm: -lcrttme.o}"
 
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS                                   \
@@ -312,12 +311,3 @@ do {								\
     = darwin_init_cfstring_builtins ((unsigned) (IX86_BUILTIN_CFSTRING));	\
   darwin_rename_builtins ();					\
 } while(0)
-
-/* The system ___divdc3 routine in libSystem on darwin10 is not
-   accurate to 1ulp, ours is, so we avoid ever using the system name
-   for this routine and instead install a non-conflicting name that is
-   accurate.  See darwin_rename_builtins.  */
-#ifdef L_divdc3
-#define DECLARE_LIBRARY_RENAMES \
-  asm(".text; ___divdc3: jmp ___ieee_divdc3 ; .globl ___divdc3");
-#endif

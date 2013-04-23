@@ -1,6 +1,6 @@
 /* RTL utility routines.
    Copyright (C) 1987, 1988, 1991, 1994, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -255,6 +255,8 @@ copy_rtx (rtx orig)
     case CODE_LABEL:
     case PC:
     case CC0:
+    case RETURN:
+    case SIMPLE_RETURN:
     case SCRATCH:
       /* SCRATCH must be shared because they represent distinct values.  */
       return orig;
@@ -286,12 +288,6 @@ copy_rtx (rtx orig)
   /* We do not copy the USED flag, which is used as a mark bit during
      walks over the RTL.  */
   RTX_FLAG (copy, used) = 0;
-
-  /* We do not copy FRAME_RELATED for INSNs.  */
-  if (INSN_P (orig))
-    RTX_FLAG (copy, frame_related) = 0;
-  RTX_FLAG (copy, jump) = RTX_FLAG (orig, jump);
-  RTX_FLAG (copy, call) = RTX_FLAG (orig, call);
 
   format_ptr = GET_RTX_FORMAT (GET_CODE (copy));
 
@@ -411,6 +407,13 @@ rtx_equal_p_cb (const_rtx x, const_rtx y, rtx_equal_p_callback_function cb)
     case DEBUG_IMPLICIT_PTR:
       return DEBUG_IMPLICIT_PTR_DECL (x)
 	     == DEBUG_IMPLICIT_PTR_DECL (y);
+
+    case DEBUG_PARAMETER_REF:
+      return DEBUG_PARAMETER_REF_DECL (x)
+	     == DEBUG_PARAMETER_REF_DECL (x);
+
+    case ENTRY_VALUE:
+      return rtx_equal_p_cb (ENTRY_VALUE_EXP (x), ENTRY_VALUE_EXP (y), cb);
 
     default:
       break;
@@ -544,6 +547,13 @@ rtx_equal_p (const_rtx x, const_rtx y)
       return DEBUG_IMPLICIT_PTR_DECL (x)
 	     == DEBUG_IMPLICIT_PTR_DECL (y);
 
+    case DEBUG_PARAMETER_REF:
+      return DEBUG_PARAMETER_REF_DECL (x)
+	     == DEBUG_PARAMETER_REF_DECL (y);
+
+    case ENTRY_VALUE:
+      return rtx_equal_p (ENTRY_VALUE_EXP (x), ENTRY_VALUE_EXP (y));
+
     default:
       break;
     }
@@ -653,6 +663,7 @@ iterative_hash_rtx (const_rtx x, hashval_t hash)
     case CONST_DOUBLE:
     case CONST_FIXED:
     case DEBUG_IMPLICIT_PTR:
+    case DEBUG_PARAMETER_REF:
       return hash;
     default:
       break;

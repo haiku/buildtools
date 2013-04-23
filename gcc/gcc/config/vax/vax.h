@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.  VAX version.
    Copyright (C) 1987, 1988, 1991, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -50,13 +50,6 @@ along with GCC; see the file COPYING3.  If not see
   %{p:%eprofiling not supported with -mg\n}\
   %{pg:%eprofiling not supported with -mg\n}}\
  %{!mg:%{!p:%{!pg:-lc}}%{p:-lc_p}%{pg:-lc_p}}"
-
-/* Print subsidiary information on the compiler version in use.  */
-
-#ifndef TARGET_NAME	/* A more specific value might be supplied via -D.  */
-#define TARGET_NAME "vax"
-#endif
-#define TARGET_VERSION fprintf (stderr, " (%s)", TARGET_NAME)
 
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
@@ -226,20 +219,6 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 #define REG_CLASS_NAMES	\
   { "NO_REGS", "ALL_REGS" }
 
-/* The following macro defines cover classes for Integrated Register
-   Allocator.  Cover classes is a set of non-intersected register
-   classes covering all hard registers used for register allocation
-   purpose.  Any move between two registers of a cover class should be
-   cheaper than load or store of the registers.  The macro value is
-   array of register classes with LIM_REG_CLASSES used as the end
-   marker.  */
-#define IRA_COVER_CLASSES { ALL_REGS, LIM_REG_CLASSES }
-
-/* Return the maximum number of consecutive registers
-   needed to represent mode MODE in a register of class CLASS.  */
-#define CLASS_MAX_NREGS(CLASS, MODE)	\
-  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
-
 /* Define which registers fit in which classes.
    This is an initializer for a vector of HARD_REG_SET
    of length N_REG_CLASSES.  */
@@ -258,12 +237,6 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 #define INDEX_REG_CLASS ALL_REGS
 #define BASE_REG_CLASS ALL_REGS
 
-/* Return the maximum number of consecutive registers
-   needed to represent mode MODE in a register of class CLASS.  */
-/* On the VAX, this is always the size of MODE in words,
-   since all registers are the same size.  */
-#define CLASS_MAX_NREGS(CLASS, MODE)	\
- ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* Stack layout; function entry, exit and calling.  */
 
@@ -427,11 +400,6 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 /* 1 if X is an rtx for a constant that is a valid address.  */
 
 #define CONSTANT_ADDRESS_P(X) legitimate_constant_address_p (X)
-
-/* Nonzero if the constant value X is a legitimate general operand.
-   It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
-
-#define LEGITIMATE_CONSTANT_P(X) legitimate_constant_p (X)
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.

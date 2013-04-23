@@ -1,7 +1,7 @@
 /* This file contains the definitions for timing variables used to
    measure run-time performance of the compiler.
    Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
-   2009, 2010
+   2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Alex Samuel <samuel@codesourcery.com>
 
@@ -33,6 +33,18 @@
 
 /* The total execution time.  */
 DEFTIMEVAR (TV_TOTAL                 , "total time")
+DEFTIMEVAR (TV_PHASE_SETUP           , "phase setup")
+DEFTIMEVAR (TV_PHASE_PARSING         , "phase parsing")
+DEFTIMEVAR (TV_PHASE_DEFERRED        , "phase lang. deferred")
+DEFTIMEVAR (TV_PHASE_CGRAPH          , "phase cgraph")
+DEFTIMEVAR (TV_PHASE_DBGINFO         , "phase debug info")
+DEFTIMEVAR (TV_PHASE_CHECK_DBGINFO   , "phase check & debug info")
+DEFTIMEVAR (TV_PHASE_GENERATE        , "phase generate")
+DEFTIMEVAR (TV_PHASE_FINALIZE        , "phase finalize")
+
+/* Concurrent timers, indicated by "|".  */
+DEFTIMEVAR (TV_NAME_LOOKUP           , "|name lookup")
+DEFTIMEVAR (TV_OVERLOAD              , "|overload resolution")
 
 /* Time spent garbage-collecting.  */
 DEFTIMEVAR (TV_GC                    , "garbage collection")
@@ -70,7 +82,6 @@ DEFTIMEVAR (TV_WHOPR_WPA_LTRANS_EXEC , "whopr wpa->ltrans")
 DEFTIMEVAR (TV_IPA_REFERENCE         , "ipa reference")
 DEFTIMEVAR (TV_IPA_PROFILE           , "ipa profile")
 DEFTIMEVAR (TV_IPA_PURE_CONST        , "ipa pure const")
-DEFTIMEVAR (TV_IPA_TYPE_ESCAPE       , "ipa type escape")
 DEFTIMEVAR (TV_IPA_PTA               , "ipa points-to")
 DEFTIMEVAR (TV_IPA_SRA               , "ipa SRA")
 DEFTIMEVAR (TV_IPA_FREE_LANG_DATA    , "ipa free lang data")
@@ -103,14 +114,20 @@ DEFTIMEVAR (TV_REBUILD_JUMP	     , "rebuild jump labels")
 /* Timing in various stages of the compiler.  */
 DEFTIMEVAR (TV_CPP		     , "preprocessing")
 DEFTIMEVAR (TV_LEX		     , "lexical analysis")
-DEFTIMEVAR (TV_PARSE                 , "parser")
-DEFTIMEVAR (TV_NAME_LOOKUP           , "name lookup")
+DEFTIMEVAR (TV_PARSE_GLOBAL          , "parser (global)")
+DEFTIMEVAR (TV_PARSE_STRUCT          , "parser struct body")
+DEFTIMEVAR (TV_PARSE_ENUM            , "parser enumerator list")
+DEFTIMEVAR (TV_PARSE_FUNC            , "parser function body")
+DEFTIMEVAR (TV_PARSE_INLINE          , "parser inl. func. body")
+DEFTIMEVAR (TV_PARSE_INMETH          , "parser inl. meth. body")
+DEFTIMEVAR (TV_TEMPLATE_INST         , "template instantiation")
 DEFTIMEVAR (TV_INLINE_HEURISTICS     , "inline heuristics")
 DEFTIMEVAR (TV_INTEGRATION           , "integration")
 DEFTIMEVAR (TV_TREE_GIMPLIFY	     , "tree gimplify")
 DEFTIMEVAR (TV_TREE_EH		     , "tree eh")
 DEFTIMEVAR (TV_TREE_CFG		     , "tree CFG construction")
 DEFTIMEVAR (TV_TREE_CLEANUP_CFG	     , "tree CFG cleanup")
+DEFTIMEVAR (TV_TREE_TAIL_MERGE       , "tree tail merge")
 DEFTIMEVAR (TV_TREE_VRP              , "tree VRP")
 DEFTIMEVAR (TV_TREE_COPY_PROP        , "tree copy propagation")
 DEFTIMEVAR (TV_FIND_REFERENCED_VARS  , "tree find ref. vars")
@@ -167,12 +184,12 @@ DEFTIMEVAR (TV_TREE_COPY_RENAME	     , "tree rename SSA copies")
 DEFTIMEVAR (TV_TREE_SSA_VERIFY       , "tree SSA verifier")
 DEFTIMEVAR (TV_TREE_STMT_VERIFY      , "tree STMT verifier")
 DEFTIMEVAR (TV_TREE_SWITCH_CONVERSION, "tree switch initialization conversion")
+DEFTIMEVAR (TV_TRANS_MEM             , "transactional memory")
+DEFTIMEVAR (TV_TREE_STRLEN           , "tree strlen optimization")
 DEFTIMEVAR (TV_CGRAPH_VERIFY         , "callgraph verifier")
 DEFTIMEVAR (TV_DOM_FRONTIERS         , "dominance frontiers")
 DEFTIMEVAR (TV_DOMINANCE             , "dominance computation")
 DEFTIMEVAR (TV_CONTROL_DEPENDENCES   , "control dependences")
-DEFTIMEVAR (TV_OVERLOAD              , "overload resolution")
-DEFTIMEVAR (TV_TEMPLATE_INSTANTIATION, "template instantiation")
 DEFTIMEVAR (TV_OUT_OF_SSA	     , "out of ssa")
 DEFTIMEVAR (TV_VAR_EXPAND	     , "expand vars")
 DEFTIMEVAR (TV_EXPAND		     , "expand")
@@ -213,7 +230,7 @@ DEFTIMEVAR (TV_RELOAD	   	     , "reload")
 DEFTIMEVAR (TV_RELOAD_CSE_REGS       , "reload CSE regs")
 DEFTIMEVAR (TV_SEQABSTR              , "sequence abstraction")
 DEFTIMEVAR (TV_GCSE_AFTER_RELOAD      , "load CSE after reload")
-DEFTIMEVAR (TV_ZEE		     , "zee")
+DEFTIMEVAR (TV_REE		     , "ree")
 DEFTIMEVAR (TV_THREAD_PROLOGUE_AND_EPILOGUE, "thread pro- & epilogue")
 DEFTIMEVAR (TV_IFCVT2		     , "if-conversion 2")
 DEFTIMEVAR (TV_COMBINE_STACK_ADJUST  , "combine stack adjustments")

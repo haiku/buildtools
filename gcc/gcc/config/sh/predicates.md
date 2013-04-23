@@ -1,5 +1,5 @@
 ;; Predicate definitions for Renesas / SuperH SH.
-;; Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+;; Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2012
 ;; Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
@@ -394,6 +394,19 @@
 	return 0;
     }
 
+  if ((mode == QImode || mode == HImode)
+      && mode == GET_MODE (op)
+      && (MEM_P (op)
+	  || (GET_CODE (op) == SUBREG && MEM_P (SUBREG_REG (op)))))
+    {
+      rtx x = XEXP ((MEM_P (op) ? op : SUBREG_REG (op)), 0);
+
+      if (GET_CODE (x) == PLUS
+	  && REG_P (XEXP (x, 0))
+	  && CONST_INT_P (XEXP (x, 1)))
+	return sh_legitimate_index_p (mode, XEXP (x, 1));
+    }
+
   if (TARGET_SHMEDIA
       && (GET_CODE (op) == PARALLEL || GET_CODE (op) == CONST_VECTOR)
       && sh_rep_vec (op, mode))
@@ -419,9 +432,21 @@
       && ! (high_life_started || reload_completed))
     return 0;
 
+  if ((mode == QImode || mode == HImode)
+      && mode == GET_MODE (op)
+      && (MEM_P (op)
+	  || (GET_CODE (op) == SUBREG && MEM_P (SUBREG_REG (op)))))
+    {
+      rtx x = XEXP ((MEM_P (op) ? op : SUBREG_REG (op)), 0);
+
+      if (GET_CODE (x) == PLUS
+	  && REG_P (XEXP (x, 0))
+	  && CONST_INT_P (XEXP (x, 1)))
+	return sh_legitimate_index_p (mode, XEXP (x, 1));
+    }
+
   return general_operand (op, mode);
 })
-
 
 ;; Returns 1 if OP is a POST_INC on stack pointer register.
 
@@ -439,7 +464,6 @@
 
   return 0;
 })
-
 
 ;; Returns 1 if OP is a MEM that can be source of a simple move operation.
 

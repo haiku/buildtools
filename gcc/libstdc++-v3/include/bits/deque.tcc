@@ -1,7 +1,7 @@
 // Deque implementation (out of line) -*- C++ -*-
 
 // Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
-// 2009, 2010, 2011
+// 2009, 2010, 2011, 2012
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -175,12 +175,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       {
 	if (__position._M_cur == this->_M_impl._M_start._M_cur)
 	  {
-	    push_front(std::forward<_Args>(__args)...);
+	    emplace_front(std::forward<_Args>(__args)...);
 	    return this->_M_impl._M_start;
 	  }
 	else if (__position._M_cur == this->_M_impl._M_finish._M_cur)
 	  {
-	    push_back(std::forward<_Args>(__args)...);
+	    emplace_back(std::forward<_Args>(__args)...);
 	    iterator __tmp = this->_M_impl._M_finish;
 	    --__tmp;
 	    return __tmp;
@@ -326,6 +326,24 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	      __throw_exception_again;
 	    }
 	}
+    }
+
+  template <typename _Tp, typename _Alloc>
+    bool
+    deque<_Tp, _Alloc>::
+    _M_shrink_to_fit()
+    {
+      const difference_type __front_capacity
+	= (this->_M_impl._M_start._M_cur - this->_M_impl._M_start._M_first);
+      if (__front_capacity == 0)
+	return false;
+
+      const difference_type __back_capacity
+	= (this->_M_impl._M_finish._M_last - this->_M_impl._M_finish._M_cur);
+      if (__front_capacity + __back_capacity < _S_buffer_size())
+	return false;
+
+      return std::__shrink_to_fit_aux<deque>::_S_do_it(*this);
     }
 #endif
 

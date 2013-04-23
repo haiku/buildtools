@@ -71,7 +71,8 @@ name of the include file.
 
 @item
 A variable record to record any additional files that the
-@file{options.c} file should include.  This is useful to provide
+@file{options.c} or @file{options-save.c} file should include.  This
+is useful to provide
 inline functions needed for target variables and/or @code{#ifdef}
 sequences to properly set up the initialization.  These records have
 two fields: the string @samp{SourceInclude} and the name of the
@@ -222,6 +223,13 @@ the option name with the leading ``-'' removed.  This chain action will
 propagate through the @code{Negative} property of the option to be
 turned off.
 
+As a consequence, if you have a group of mutually-exclusive
+options, their @code{Negative} properties should form a circular chain.
+For example, if options @option{-@var{a}}, @option{-@var{b}} and
+@option{-@var{c}} are mutually exclusive, their respective @code{Negative}
+properties should be @samp{Negative(@var{b})}, @samp{Negative(@var{c})}
+and @samp{Negative(@var{a})}.
+
 @item Joined
 @itemx Separate
 The option takes a mandatory argument.  @code{Joined} indicates
@@ -256,6 +264,11 @@ option handler.  @code{UInteger} should also be used on options like
 @code{-falign-loops} where both @code{-falign-loops} and
 @code{-falign-loops}=@var{n} are supported to make sure the saved
 options are given a full integer.
+
+@item ToLower
+The option's argument should be converted to lowercase as part of
+putting it in canonical form, and before comparing with the strings
+indicated by any @code{Enum} property.
 
 @item NoDriverArg
 For an option marked @code{Separate}, the option only takes an
@@ -364,7 +377,8 @@ for later processing.
 @item Alias(@var{opt})
 @itemx Alias(@var{opt}, @var{arg})
 @itemx Alias(@var{opt}, @var{posarg}, @var{negarg})
-The option is an alias for @option{-@var{opt}}.  In the first form,
+The option is an alias for @option{-@var{opt}} (or the negative form
+of that option, depending on @code{NegativeAlias}).  In the first form,
 any argument passed to the alias is considered to be passed to
 @option{-@var{opt}}, and @option{-@var{opt}} is considered to be
 negated if the alias is used in negated form.  In the second form, the
@@ -386,6 +400,13 @@ When an @code{Alias} definition is used for an option, driver specs do
 not need to handle it and no @samp{OPT_} enumeration value is defined
 for it; only the canonical form of the option will be seen in those
 places.
+
+@item NegativeAlias
+For an option marked with @code{Alias(@var{opt})}, the option is
+considered to be an alias for the positive form of @option{-@var{opt}}
+if negated and for the negative form of @option{-@var{opt}} if not
+negated.  @code{NegativeAlias} may not be used with the forms of
+@code{Alias} taking more than one argument.
 
 @item Ignore
 This option is ignored apart from printing any warning specified using

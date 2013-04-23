@@ -1,5 +1,5 @@
 /* Output Go language descriptions of types.
-   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <iant@google.com>.
 
 This file is part of GCC.
@@ -62,7 +62,47 @@ static GTY(()) VEC(tree,gc) *queue;
 
 static htab_t macro_hash;
 
-/* For the hash tables.  */
+/* The type of a value in macro_hash.  */
+
+struct macro_hash_value
+{
+  /* The name stored in the hash table.  */
+  char *name;
+  /* The value of the macro.  */
+  char *value;
+};
+
+/* Calculate the hash value for an entry in the macro hash table.  */
+
+static hashval_t
+macro_hash_hashval (const void *val)
+{
+  const struct macro_hash_value *mhval = (const struct macro_hash_value *) val;
+  return htab_hash_string (mhval->name);
+}
+
+/* Compare values in the macro hash table for equality.  */
+
+static int
+macro_hash_eq (const void *v1, const void *v2)
+{
+  const struct macro_hash_value *mhv1 = (const struct macro_hash_value *) v1;
+  const struct macro_hash_value *mhv2 = (const struct macro_hash_value *) v2;
+  return strcmp (mhv1->name, mhv2->name) == 0;
+}
+
+/* Free values deleted from the macro hash table.  */
+
+static void
+macro_hash_del (void *v)
+{
+  struct macro_hash_value *mhv = (struct macro_hash_value *) v;
+  XDELETEVEC (mhv->name);
+  XDELETEVEC (mhv->value);
+  XDELETE (mhv);
+}
+
+/* For the string hash tables.  */
 
 static int
 string_hash_eq (const void *y1, const void *y2)
@@ -77,10 +117,12 @@ go_define (unsigned int lineno, const char *buffer)
 {
   const char *p;
   const char *name_end;
+  size_t out_len;
   char *out_buffer;
   char *q;
   bool saw_operand;
   bool need_operand;
+  struct macro_hash_value *mhval;
   char *copy;
   hashval_t hashval;
   void **slot;
@@ -105,17 +147,17 @@ go_define (unsigned int lineno, const char *buffer)
   memcpy (copy, buffer, name_end - buffer);
   copy[name_end - buffer] = '\0';
 
+  mhval = XNEW (struct macro_hash_value);
+  mhval->name = copy;
+  mhval->value = NULL;
+
   hashval = htab_hash_string (copy);
-  slot = htab_find_slot_with_hash (macro_hash, copy, hashval, NO_INSERT);
-  if (slot != NULL)
-    {
-      XDELETEVEC (copy);
-      return;
-    }
+  slot = htab_find_slot_with_hash (macro_hash, mhval, hashval, NO_INSERT);
 
   /* For simplicity, we force all names to be hidden by adding an
      initial underscore, and let the user undo this as needed.  */
-  out_buffer = XNEWVEC (char, strlen (p) * 2 + 1);
+  out_len = strlen (p) * 2 + 1;
+  out_buffer = XNEWVEC (char, out_len);
   q = out_buffer;
   saw_operand = false;
   need_operand = false;
@@ -141,6 +183,7 @@ go_define (unsigned int lineno, const char *buffer)
 	       don't worry about them.  */
 	    const char *start;
 	    char *n;
+	    struct macro_hash_value idval;
 
 	    if (saw_operand)
 	      goto unknown;
@@ -151,8 +194,9 @@ go_define (unsigned int lineno, const char *buffer)
 	    n = XALLOCAVEC (char, p - start + 1);
 	    memcpy (n, start, p - start);
 	    n[p - start] = '\0';
-	    slot = htab_find_slot (macro_hash, n, NO_INSERT);
-	    if (slot == NULL || *slot == NULL)
+	    idval.name = n;
+	    idval.value = NULL;
+	    if (htab_find (macro_hash, &idval) == NULL)
 	      {
 		/* This is a reference to a name which was not defined
 		   as a macro.  */
@@ -300,14 +344,22 @@ go_define (unsigned int lineno, const char *buffer)
 	case '"':
 	case '\'':
 	  {
-	    char quote = *p;
+	    char quote;
+	    int count;
+
+	    if (saw_operand)
+	      goto unknown;
+	    quote = *p;
 	    *q++ = *p++;
+	    count = 0;
 	    while (*p != quote)
 	      {
 		int c;
 
 		if (*p == '\0')
 		  goto unknown;
+
+		++count;
 
 		if (*p != '\\')
 		  {
@@ -354,7 +406,15 @@ go_define (unsigned int lineno, const char *buffer)
 		    goto unknown;
 		  }
 	      }
+
 	    *q++ = *p++;
+
+	    if (quote == '\'' && count != 1)
+	      goto unknown;
+
+	    saw_operand = true;
+	    need_operand = false;
+
 	    break;
 	  }
 
@@ -366,18 +426,30 @@ go_define (unsigned int lineno, const char *buffer)
   if (need_operand)
     goto unknown;
 
+  gcc_assert ((size_t) (q - out_buffer) < out_len);
   *q = '\0';
 
-  slot = htab_find_slot_with_hash (macro_hash, copy, hashval, INSERT);
-  *slot = copy;
+  mhval->value = out_buffer;
 
-  fprintf (go_dump_file, "const _%s = %s\n", copy, out_buffer);
+  if (slot == NULL)
+    {
+      slot = htab_find_slot_with_hash (macro_hash, mhval, hashval, INSERT);
+      gcc_assert (slot != NULL && *slot == NULL);
+    }
+  else
+    {
+      if (*slot != NULL)
+	macro_hash_del (*slot);
+    }
 
-  XDELETEVEC (out_buffer);
+  *slot = mhval;
+
   return;
 
  unknown:
   fprintf (go_dump_file, "// unknowndefine %s\n", buffer);
+  if (slot != NULL)
+    htab_clear_slot (macro_hash, slot);
   XDELETEVEC (out_buffer);
   XDELETEVEC (copy);
 }
@@ -387,16 +459,16 @@ go_define (unsigned int lineno, const char *buffer)
 static void
 go_undef (unsigned int lineno, const char *buffer)
 {
+  struct macro_hash_value mhval;
   void **slot;
 
   real_debug_hooks->undef (lineno, buffer);
 
-  slot = htab_find_slot (macro_hash, buffer, NO_INSERT);
-  if (slot == NULL)
-    return;
-  fprintf (go_dump_file, "// undef _%s\n", buffer);
-  /* We don't delete the slot from the hash table because that will
-     cause a duplicate const definition.  */
+  mhval.name = CONST_CAST (char *, buffer);
+  mhval.value = NULL;
+  slot = htab_find_slot (macro_hash, &mhval, NO_INSERT);
+  if (slot != NULL)
+    htab_clear_slot (macro_hash, slot);
 }
 
 /* A function or variable decl.  */
@@ -464,6 +536,9 @@ struct godump_container
   /* Global type definitions.  */
   htab_t type_hash;
 
+  /* Invalid types.  */
+  htab_t invalid_hash;
+
   /* Obstack used to write out a type definition.  */
   struct obstack type_obstack;
 };
@@ -500,20 +575,20 @@ go_format_type (struct godump_container *container, tree type,
 	  || TREE_CODE (type) == FUNCTION_TYPE))
     {
       tree name;
+      void **slot;
 
       name = TYPE_NAME (type);
-      if (TREE_CODE (name) == IDENTIFIER_NODE)
-	{
-	  obstack_1grow (ob, '_');
-	  go_append_string (ob, name);
-	  return ret;
-	}
-      else if (TREE_CODE (name) == TYPE_DECL)
-	{
-	  obstack_1grow (ob, '_');
-	  go_append_string (ob, DECL_NAME (name));
-	  return ret;
-	}
+      if (TREE_CODE (name) == TYPE_DECL)
+	name = DECL_NAME (name);
+
+      slot = htab_find_slot (container->invalid_hash, IDENTIFIER_POINTER (name),
+			     NO_INSERT);
+      if (slot != NULL)
+	ret = false;
+
+      obstack_1grow (ob, '_');
+      go_append_string (ob, name);
+      return ret;
     }
 
   pointer_set_insert (container->decls_seen, type);
@@ -525,8 +600,18 @@ go_format_type (struct godump_container *container, tree type,
       break;
 
     case TYPE_DECL:
-      obstack_1grow (ob, '_');
-      go_append_string (ob, DECL_NAME (type));
+      {
+	void **slot;
+
+	slot = htab_find_slot (container->invalid_hash,
+			       IDENTIFIER_POINTER (DECL_NAME (type)),
+			       NO_INSERT);
+	if (slot != NULL)
+	  ret = false;
+
+	obstack_1grow (ob, '_');
+	go_append_string (ob, DECL_NAME (type));
+      }
       break;
 
     case INTEGER_TYPE:
@@ -597,31 +682,28 @@ go_format_type (struct godump_container *container, tree type,
 		      == FUNCTION_TYPE))))
         {
 	  tree name;
+	  void **slot;
 
 	  name = TYPE_NAME (TREE_TYPE (type));
-	  if (TREE_CODE (name) == IDENTIFIER_NODE)
-	    {
-	      obstack_grow (ob, "*_", 2);
-	      go_append_string (ob, name);
+	  if (TREE_CODE (name) == TYPE_DECL)
+	    name = DECL_NAME (name);
 
-	      /* The pointer here can be used without the struct or
-		 union definition.  So this struct or union is a a
-		 potential dummy type.  */
-	      if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (type)))
-		pointer_set_insert (container->pot_dummy_types,
-				    IDENTIFIER_POINTER (name));
+	  slot = htab_find_slot (container->invalid_hash,
+				 IDENTIFIER_POINTER (name), NO_INSERT);
+	  if (slot != NULL)
+	    ret = false;
 
-	      return ret;
-	    }
-	  else if (TREE_CODE (name) == TYPE_DECL)
-	    {
-	      obstack_grow (ob, "*_", 2);
-	      go_append_string (ob, DECL_NAME (name));
-	      if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (type)))
-		pointer_set_insert (container->pot_dummy_types,
-				    IDENTIFIER_POINTER (DECL_NAME (name)));
-	      return ret;
-	    }
+	  obstack_grow (ob, "*_", 2);
+	  go_append_string (ob, name);
+
+	  /* The pointer here can be used without the struct or union
+	     definition.  So this struct or union is a potential dummy
+	     type.  */
+	  if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (type)))
+	    pointer_set_insert (container->pot_dummy_types,
+				IDENTIFIER_POINTER (name));
+
+	  return ret;
         }
       if (TREE_CODE (TREE_TYPE (type)) == FUNCTION_TYPE)
 	obstack_grow (ob, "func", 4);
@@ -671,11 +753,22 @@ go_format_type (struct godump_container *container, tree type,
 	     field != NULL_TREE;
 	     field = TREE_CHAIN (field))
 	  {
+	    struct obstack hold_type_obstack;
+	    bool field_ok;
+
+	    if (TREE_CODE (type) == UNION_TYPE)
+	      {
+		hold_type_obstack = container->type_obstack;
+		obstack_init (&container->type_obstack);
+	      }
+
+	    field_ok = true;
+
 	    if (DECL_NAME (field) == NULL)
 	      {
 		char buf[100];
 
-		obstack_grow (ob, "_f", 2);
+		obstack_grow (ob, "Godump_", 7);
 		snprintf (buf, sizeof buf, "%d", i);
 		obstack_grow (ob, buf, strlen (buf));
 		i++;
@@ -697,7 +790,7 @@ go_format_type (struct godump_container *container, tree type,
 	    if (DECL_BIT_FIELD (field))
 	      {
 		obstack_grow (ob, "INVALID-bit-field", 17);
-		ret = false;
+		field_ok = false;
 	      }
 	    else
               {
@@ -709,31 +802,59 @@ go_format_type (struct godump_container *container, tree type,
 			    && (TREE_CODE (TREE_TYPE (TREE_TYPE (field)))
                                 == FUNCTION_TYPE))))
 		  {
-		    tree name = TYPE_NAME (TREE_TYPE (field));
-		    if (TREE_CODE (name) == IDENTIFIER_NODE)
-		      {
-			obstack_1grow (ob, '_');
-			go_append_string (ob, name);
-		      }
-		    else if (TREE_CODE (name) == TYPE_DECL)
-		      {
-			obstack_1grow (ob, '_');
-			go_append_string (ob, DECL_NAME (name));
-		      }
+		    tree name;
+		    void **slot;
+
+		    name = TYPE_NAME (TREE_TYPE (field));
+		    if (TREE_CODE (name) == TYPE_DECL)
+		      name = DECL_NAME (name);
+
+		    slot = htab_find_slot (container->invalid_hash,
+					   IDENTIFIER_POINTER (name),
+					   NO_INSERT);
+		    if (slot != NULL)
+		      field_ok = false;
+
+		    obstack_1grow (ob, '_');
+		    go_append_string (ob, name);
 		  }
 		else
 		  {
 		    if (!go_format_type (container, TREE_TYPE (field), true,
 					 false))
-		      ret = false;
+		      field_ok = false;
 		  }
               }
 	    obstack_grow (ob, "; ", 2);
 
-	    /* Only output the first field of a union, and hope for
-	       the best.  */
+	    /* Only output the first successful field of a union, and
+	       hope for the best.  */
 	    if (TREE_CODE (type) == UNION_TYPE)
-	      break;
+	      {
+		if (!field_ok && TREE_CHAIN (field) == NULL_TREE)
+		  {
+		    field_ok = true;
+		    ret = false;
+		  }
+		if (field_ok)
+		  {
+		    unsigned int sz;
+
+		    sz = obstack_object_size (&container->type_obstack);
+		    obstack_grow (&hold_type_obstack,
+				  obstack_base (&container->type_obstack),
+				  sz);
+		  }
+		obstack_free (&container->type_obstack, NULL);
+		container->type_obstack = hold_type_obstack;
+		if (field_ok)
+		  break;
+	      }
+	    else
+	      {
+		if (!field_ok)
+		  ret = false;
+	      }
 	  }
 	obstack_1grow (ob, '}');
       }
@@ -741,9 +862,11 @@ go_format_type (struct godump_container *container, tree type,
 
     case FUNCTION_TYPE:
       {
-	tree args;
+	tree arg_type;
 	bool is_varargs;
 	tree result;
+	function_args_iterator iter;
+	bool seen_arg;
 
 	/* Go has no way to write a type which is a function but not a
 	   pointer to a function.  */
@@ -754,25 +877,21 @@ go_format_type (struct godump_container *container, tree type,
 	  }
 
 	obstack_1grow (ob, '(');
-	is_varargs = true;
-	for (args = TYPE_ARG_TYPES (type);
-	     args != NULL_TREE;
-	     args = TREE_CHAIN (args))
+	is_varargs = stdarg_p (type);
+	seen_arg = false;
+	FOREACH_FUNCTION_ARGS (type, arg_type, iter)
 	  {
-	    if (VOID_TYPE_P (TREE_VALUE (args)))
-	      {
-		gcc_assert (TREE_CHAIN (args) == NULL);
-		is_varargs = false;
-		break;
-	      }
-	    if (args != TYPE_ARG_TYPES (type))
+	    if (VOID_TYPE_P (arg_type))
+	      break;
+	    if (seen_arg)
 	      obstack_grow (ob, ", ", 2);
-	    if (!go_format_type (container, TREE_VALUE (args), true, false))
+	    if (!go_format_type (container, arg_type, true, false))
 	      ret = false;
+	    seen_arg = true;
 	  }
 	if (is_varargs)
 	  {
-	    if (TYPE_ARG_TYPES (type) != NULL_TREE)
+	    if (prototype_p (type))
 	      obstack_grow (ob, ", ", 2);
 	    obstack_grow (ob, "...interface{}", 14);
 	  }
@@ -845,23 +964,39 @@ go_output_typedef (struct godump_container *container, tree decl)
 	   element != NULL_TREE;
 	   element = TREE_CHAIN (element))
 	{
-	  fprintf (go_dump_file, "const _%s = ",
-		   IDENTIFIER_POINTER (TREE_PURPOSE (element)));
+	  const char *name;
+	  struct macro_hash_value *mhval;
+	  void **slot;
+	  char buf[100];
+
+	  name = IDENTIFIER_POINTER (TREE_PURPOSE (element));
+
+	  /* Sometimes a name will be defined as both an enum constant
+	     and a macro.  Avoid duplicate definition errors by
+	     treating enum constants as macros.  */
+	  mhval = XNEW (struct macro_hash_value);
+	  mhval->name = xstrdup (name);
+	  mhval->value = NULL;
+	  slot = htab_find_slot (macro_hash, mhval, INSERT);
+	  if (*slot != NULL)
+	    macro_hash_del (*slot);
+
 	  if (host_integerp (TREE_VALUE (element), 0))
-	    fprintf (go_dump_file, HOST_WIDE_INT_PRINT_DEC,
+	    snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_DEC,
 		     tree_low_cst (TREE_VALUE (element), 0));
 	  else if (host_integerp (TREE_VALUE (element), 1))
-	    fprintf (go_dump_file, HOST_WIDE_INT_PRINT_UNSIGNED,
+	    snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_UNSIGNED,
 		     ((unsigned HOST_WIDE_INT)
 		      tree_low_cst (TREE_VALUE (element), 1)));
 	  else
-	    fprintf (go_dump_file, HOST_WIDE_INT_PRINT_DOUBLE_HEX,
+	    snprintf (buf, sizeof buf, HOST_WIDE_INT_PRINT_DOUBLE_HEX,
 		     ((unsigned HOST_WIDE_INT)
 		      TREE_INT_CST_HIGH (TREE_VALUE (element))),
 		     TREE_INT_CST_LOW (TREE_VALUE (element)));
-	  fprintf (go_dump_file, "\n");
-	}
 
+	  mhval->value = xstrdup (buf);
+	  *slot = mhval;
+	}
       pointer_set_insert (container->decls_seen, TREE_TYPE (decl));
       if (TYPE_CANONICAL (TREE_TYPE (decl)) != NULL_TREE)
 	pointer_set_insert (container->decls_seen,
@@ -881,16 +1016,33 @@ go_output_typedef (struct godump_container *container, tree decl)
       *slot = CONST_CAST (void *, (const void *) type);
 
       if (!go_format_type (container, TREE_TYPE (decl), false, false))
-	fprintf (go_dump_file, "// ");
+	{
+	  fprintf (go_dump_file, "// ");
+	  slot = htab_find_slot (container->invalid_hash, type, INSERT);
+	  *slot = CONST_CAST (void *, (const void *) type);
+	}
       fprintf (go_dump_file, "type _%s ",
 	       IDENTIFIER_POINTER (DECL_NAME (decl)));
       go_output_type (container);
+
+      if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (decl)))
+	{
+	  HOST_WIDE_INT size = int_size_in_bytes (TREE_TYPE (decl));
+
+	  if (size > 0)
+	    fprintf (go_dump_file,
+		     "\nconst _sizeof_%s = " HOST_WIDE_INT_PRINT_DEC,
+		     IDENTIFIER_POINTER (DECL_NAME (decl)),
+		     size);
+	}
+
       pointer_set_insert (container->decls_seen, decl);
     }
   else if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (decl)))
     {
        void **slot;
        const char *type;
+       HOST_WIDE_INT size;
 
        type = IDENTIFIER_POINTER (TYPE_NAME (TREE_TYPE ((decl))));
        /* If type defined already, skip.  */
@@ -900,10 +1052,21 @@ go_output_typedef (struct godump_container *container, tree decl)
        *slot = CONST_CAST (void *, (const void *) type);
 
        if (!go_format_type (container, TREE_TYPE (decl), false, false))
-	 fprintf (go_dump_file, "// ");
+	 {
+	   fprintf (go_dump_file, "// ");
+	   slot = htab_find_slot (container->invalid_hash, type, INSERT);
+	   *slot = CONST_CAST (void *, (const void *) type);
+	 }
        fprintf (go_dump_file, "type _%s ",
 	       IDENTIFIER_POINTER (TYPE_NAME (TREE_TYPE (decl))));
        go_output_type (container);
+
+       size = int_size_in_bytes (TREE_TYPE (decl));
+       if (size > 0)
+	 fprintf (go_dump_file,
+		  "\nconst _sizeof_%s = " HOST_WIDE_INT_PRINT_DEC,
+		  IDENTIFIER_POINTER (TYPE_NAME (TREE_TYPE (decl))),
+		  size);
     }
   else
     return;
@@ -957,6 +1120,17 @@ go_output_var (struct godump_container *container, tree decl)
     }
 }
 
+/* Output the final value of a preprocessor macro or enum constant.
+   This is called via htab_traverse_noresize.  */
+
+static int
+go_print_macro (void **slot, void *arg ATTRIBUTE_UNUSED)
+{
+  struct macro_hash_value *mhval = (struct macro_hash_value *) *slot;
+  fprintf (go_dump_file, "const _%s = %s\n", mhval->name, mhval->value);
+  return 1;
+}
+
 /* Build a hash table with the Go keywords.  */
 
 static const char * const keywords[] = {
@@ -990,9 +1164,11 @@ find_dummy_types (const void *ptr, void *adata)
   struct godump_container *data = (struct godump_container *) adata;
   const char *type = (const char *) ptr;
   void **slot;
+  void **islot;
 
   slot = htab_find_slot (data->type_hash, type, NO_INSERT);
-  if (slot == NULL)
+  islot = htab_find_slot (data->invalid_hash, type, NO_INSERT);
+  if (slot == NULL || islot != NULL)
     fprintf (go_dump_file, "type _%s struct {}\n", type);
   return true;
 }
@@ -1012,6 +1188,8 @@ go_finish (const char *filename)
   container.pot_dummy_types = pointer_set_create ();
   container.type_hash = htab_create (100, htab_hash_string,
                                      string_hash_eq, NULL);
+  container.invalid_hash = htab_create (10, htab_hash_string,
+					string_hash_eq, NULL);
   container.keyword_hash = htab_create (50, htab_hash_string,
                                         string_hash_eq, NULL);
   obstack_init (&container.type_obstack);
@@ -1039,6 +1217,8 @@ go_finish (const char *filename)
 	}
     }
 
+  htab_traverse_noresize (macro_hash, go_print_macro, NULL);
+
   /* To emit dummy definitions.  */
   pointer_set_traverse (container.pot_dummy_types, find_dummy_types,
                         (void *) &container);
@@ -1046,6 +1226,7 @@ go_finish (const char *filename)
   pointer_set_destroy (container.decls_seen);
   pointer_set_destroy (container.pot_dummy_types);
   htab_delete (container.type_hash);
+  htab_delete (container.invalid_hash);
   htab_delete (container.keyword_hash);
   obstack_free (&container.type_obstack, NULL);
 
@@ -1078,7 +1259,8 @@ dump_go_spec_init (const char *filename, const struct gcc_debug_hooks *hooks)
   go_debug_hooks.global_decl = go_global_decl;
   go_debug_hooks.type_decl = go_type_decl;
 
-  macro_hash = htab_create (100, htab_hash_string, string_hash_eq, NULL);
+  macro_hash = htab_create (100, macro_hash_hashval, macro_hash_eq,
+			    macro_hash_del);
 
   return &go_debug_hooks;
 }

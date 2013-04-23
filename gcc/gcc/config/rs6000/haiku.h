@@ -20,9 +20,6 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (PowerPC Haiku/ELF)");
-
 /* long double is 128 bits wide; the documentation claims
    LIBGCC2_LONG_DOUBLE_TYPE_SIZE to default to LONG_DOUBLE_TYPE_SIZE, but
    it apparently does not */

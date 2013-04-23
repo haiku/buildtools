@@ -1,6 +1,6 @@
 /* Definitions for C parsing and type checking.
    Copyright (C) 1987, 1993, 1994, 1995, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -130,6 +130,22 @@ struct c_expr
   tree original_type;
 };
 
+/* Type alias for struct c_expr. This allows to use the structure
+   inside the VEC types.  */
+typedef struct c_expr c_expr_t;
+
+/* A varray of c_expr_t.  */
+DEF_VEC_O (c_expr_t);
+DEF_VEC_ALLOC_O (c_expr_t, gc);
+DEF_VEC_ALLOC_O (c_expr_t, heap);
+
+/* Append a new c_expr_t element to V.  */
+#define C_EXPR_APPEND(V, ELEM) \
+  do { \
+    c_expr_t *__elem_p = VEC_safe_push (c_expr_t, gc, V, NULL); \
+    *__elem_p = (ELEM); \
+  } while (0)
+
 /* A kind of type specifier.  Note that this information is currently
    only used to distinguish tag definitions, tag references and typeof
    uses.  */
@@ -222,6 +238,10 @@ struct c_declspecs {
      NULL; attributes (possibly from multiple lists) will be passed
      separately.  */
   tree attrs;
+  /* The base-2 log of the greatest alignment required by an _Alignas
+     specifier, in bytes, or -1 if no such specifiers with nonzero
+     alignment.  */
+  int align_log;
   /* The storage class specifier, or csc_none if none.  */
   enum c_storage_class storage_class;
   /* Any type specifier keyword used such as "int", not reflecting
@@ -266,6 +286,8 @@ struct c_declspecs {
   BOOL_BITFIELD complex_p : 1;
   /* Whether "inline" was specified.  */
   BOOL_BITFIELD inline_p : 1;
+  /* Whether "_Noreturn" was speciied.  */
+  BOOL_BITFIELD noreturn_p : 1;
   /* Whether "__thread" was specified.  */
   BOOL_BITFIELD thread_p : 1;
   /* Whether "const" was specified.  */
@@ -276,6 +298,9 @@ struct c_declspecs {
   BOOL_BITFIELD restrict_p : 1;
   /* Whether "_Sat" was specified.  */
   BOOL_BITFIELD saturating_p : 1;
+  /* Whether any alignment specifier (even with zero alignment) was
+     specified.  */
+  BOOL_BITFIELD alignas_p : 1;
   /* The address space that the declaration belongs to.  */
   addr_space_t address_space;
 };
@@ -315,11 +340,12 @@ struct c_arg_info {
   /* A list of non-parameter decls (notably enumeration constants)
      defined with the parameters.  */
   tree others;
-  /* A VEC of VLA sizes from the parameters.  In a function
-     definition, these are used to ensure that side-effects in sizes
-     of arrays converted to pointers (such as a parameter int i[n++])
-     take place; otherwise, they are ignored.  */
-  VEC(tree,gc) *pending_sizes;
+  /* A compound expression of VLA sizes from the parameters, or NULL.
+     In a function definition, these are used to ensure that
+     side-effects in sizes of arrays converted to pointers (such as a
+     parameter int i[n++]) take place; otherwise, they are
+     ignored.  */
+  tree pending_sizes;
   /* True when these arguments had [*].  */
   BOOL_BITFIELD had_vla_unspec : 1;
 };
@@ -412,7 +438,7 @@ extern struct obstack parser_obstack;
 extern tree c_break_label;
 extern tree c_cont_label;
 
-extern int global_bindings_p (void);
+extern bool global_bindings_p (void);
 extern void push_scope (void);
 extern tree pop_scope (void);
 extern void c_bindings_start_stmt_expr (struct c_spot_bindings *);
@@ -445,17 +471,17 @@ extern void finish_function (void);
 extern tree finish_struct (location_t, tree, tree, tree,
 			   struct c_struct_parse_info *);
 extern struct c_arg_info *build_arg_info (void);
-extern struct c_arg_info *get_parm_info (bool);
+extern struct c_arg_info *get_parm_info (bool, tree);
 extern tree grokfield (location_t, struct c_declarator *,
 		       struct c_declspecs *, tree, tree *);
 extern tree groktypename (struct c_type_name *, tree *, bool *);
-extern tree grokparm (const struct c_parm *);
+extern tree grokparm (const struct c_parm *, tree *);
 extern tree implicitly_declare (location_t, tree);
 extern void keep_next_level (void);
 extern void pending_xref_error (void);
 extern void c_push_function_context (void);
 extern void c_pop_function_context (void);
-extern void push_parm_decl (const struct c_parm *);
+extern void push_parm_decl (const struct c_parm *, tree *);
 extern struct c_declarator *set_array_declarator_inner (struct c_declarator *,
 							struct c_declarator *);
 extern tree c_builtin_function (tree);
@@ -491,6 +517,7 @@ extern struct c_declspecs *declspecs_add_scspec (struct c_declspecs *, tree);
 extern struct c_declspecs *declspecs_add_attrs (struct c_declspecs *, tree);
 extern struct c_declspecs *declspecs_add_addrspace (struct c_declspecs *,
 						    addr_space_t);
+extern struct c_declspecs *declspecs_add_alignas (struct c_declspecs *, tree);
 extern struct c_declspecs *finish_declspecs (struct c_declspecs *);
 
 /* in c-objc-common.c */
@@ -576,6 +603,8 @@ extern tree c_begin_omp_task (void);
 extern tree c_finish_omp_task (location_t, tree, tree);
 extern tree c_finish_omp_clauses (tree);
 extern tree c_build_va_arg (location_t, tree, tree);
+extern tree c_finish_transaction (location_t, tree, int);
+extern tree c_build_vec_perm_expr (location_t, tree, tree, tree);
 
 /* Set to 0 at beginning of a function definition, set to 1 if
    a return statement that specifies a return value is seen.  */
@@ -595,11 +624,6 @@ extern int current_function_returns_abnormally;
 /* Nonzero means we are reading code that came from a system header file.  */
 
 extern int system_header_p;
-
-/* True means global_bindings_p should return false even if the scope stack
-   says we are in file scope.  */
-
-extern bool c_override_global_bindings_to_false;
 
 /* In c-decl.c */
 extern void c_finish_incomplete_decl (tree);

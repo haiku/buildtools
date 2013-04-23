@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005, 2006, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file erase_fn_imps.hpp
+ * @file left_child_next_sibling_heap_/erase_fn_imps.hpp
  * Contains an implementation class for left_child_next_sibling_heap_.
  */
 
@@ -78,7 +78,7 @@ void
 PB_DS_CLASS_C_DEC::
 to_linked_list()
 {
-  _GLIBCXX_DEBUG_ONLY(assert_valid();)
+  PB_DS_ASSERT_VALID((*this))
   node_pointer p_cur = m_p_root;
   while (p_cur != 0)
     if (p_cur->m_p_l_child != 0)
@@ -92,7 +92,7 @@ to_linked_list()
       p_cur = p_cur->m_p_next_sibling;
 
 #ifdef _GLIBCXX_DEBUG
-  const_node_pointer p_counter = m_p_root;
+  node_const_pointer p_counter = m_p_root;
   size_type count = 0;
   while (p_counter != 0)
     {

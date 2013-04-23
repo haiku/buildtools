@@ -420,7 +420,7 @@ remove_forwarder_block (basic_block bb)
 	}
     }
 
-  can_move_debug_stmts = single_pred_p (dest);
+  can_move_debug_stmts = MAY_HAVE_DEBUG_STMTS && single_pred_p (dest);
 
   /* Redirect the edges.  */
   for (ei = ei_start (bb->preds); (e = ei_safe_edge (ei)); )
@@ -476,8 +476,7 @@ remove_forwarder_block (basic_block bb)
 	gsi_next (&gsi);
     }
 
-  /* Move debug statements if the destination has just a single
-     predecessor.  */
+  /* Move debug statements if the destination has a single predecessor.  */
   if (can_move_debug_stmts)
     {
       gsi_to = gsi_after_labels (dest);
@@ -611,48 +610,13 @@ split_bbs_on_noreturn_calls (void)
   return changed;
 }
 
-/* If GIMPLE_OMP_RETURN in basic block BB is unreachable, remove it.  */
-
-static bool
-cleanup_omp_return (basic_block bb)
-{
-  gimple stmt = last_stmt (bb);
-  basic_block control_bb;
-
-  if (stmt == NULL
-      || gimple_code (stmt) != GIMPLE_OMP_RETURN
-      || !single_pred_p (bb))
-    return false;
-
-  control_bb = single_pred (bb);
-  stmt = last_stmt (control_bb);
-
-  if (stmt == NULL || gimple_code (stmt) != GIMPLE_OMP_SECTIONS_SWITCH)
-    return false;
-
-  /* The block with the control statement normally has two entry edges -- one
-     from entry, one from continue.  If continue is removed, return is
-     unreachable, so we remove it here as well.  */
-  if (EDGE_COUNT (control_bb->preds) == 2)
-    return false;
-
-  gcc_assert (EDGE_COUNT (control_bb->preds) == 1);
-  remove_edge_and_dominated_blocks (single_pred_edge (bb));
-  return true;
-}
-
 /* Tries to cleanup cfg in basic block BB.  Returns true if anything
    changes.  */
 
 static bool
 cleanup_tree_cfg_bb (basic_block bb)
 {
-  bool retval = false;
-
-  if (cleanup_omp_return (bb))
-    return true;
-
-  retval = cleanup_control_flow_bb (bb);
+  bool retval = cleanup_control_flow_bb (bb);
 
   if (tree_forwarder_block_p (bb, false)
       && remove_forwarder_block (bb))
@@ -1055,7 +1019,7 @@ struct gimple_opt_pass pass_merge_phi =
   0,				/* properties_provided */
   0,				/* properties_destroyed */
   0,				/* todo_flags_start */
-  TODO_dump_func | TODO_ggc_collect	/* todo_flags_finish */
+  TODO_ggc_collect      	/* todo_flags_finish */
   | TODO_verify_ssa
  }
 };

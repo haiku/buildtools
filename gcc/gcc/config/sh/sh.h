@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler for Renesas / SuperH SH.
    Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com).
    Improved by Jim Wilson (wilson@cygnus.com).
@@ -25,9 +25,6 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_SH_H
 
 #include "config/vxworks-dummy.h"
-
-#define TARGET_VERSION \
-  fputs (" (Hitachi SH)", stderr);
 
 /* Unfortunately, insn-attrtab.c doesn't include insn-codes.h.  We can't
    include it here, because bconfig.h is also included by gencodes.c .  */
@@ -211,14 +208,16 @@ do { \
 				  | MASK_SH2 | MASK_SH1)
 #define SELECT_SH2A_NOFPU        (MASK_HARD_SH2A | MASK_SH2 | MASK_SH1)
 #define SELECT_SH2A_SINGLE_ONLY  (MASK_SH_E | MASK_HARD_SH2A | MASK_SH2 \
-				  | MASK_SH1 | MASK_FPU_SINGLE)
+				  | MASK_SH1 | MASK_FPU_SINGLE \
+				  | MASK_FPU_SINGLE_ONLY)
 #define SELECT_SH2A_SINGLE       (MASK_SH_E | MASK_HARD_SH2A \
 				  | MASK_FPU_SINGLE | MASK_HARD_SH2A_DOUBLE \
 				  | MASK_SH2 | MASK_SH1)
 #define SELECT_SH3               (MASK_SH3 | SELECT_SH2)
 #define SELECT_SH3E              (MASK_SH_E | MASK_FPU_SINGLE | SELECT_SH3)
 #define SELECT_SH4_NOFPU         (MASK_HARD_SH4 | SELECT_SH3)
-#define SELECT_SH4_SINGLE_ONLY   (MASK_HARD_SH4 | SELECT_SH3E)
+#define SELECT_SH4_SINGLE_ONLY   (MASK_HARD_SH4 | SELECT_SH3E \
+				  | MASK_FPU_SINGLE_ONLY)
 #define SELECT_SH4               (MASK_SH4 | MASK_SH_E | MASK_HARD_SH4 \
 				  | SELECT_SH3)
 #define SELECT_SH4_SINGLE        (MASK_FPU_SINGLE | SELECT_SH4)
@@ -285,7 +284,8 @@ do { \
 /* Reset all target-selection flags.  */
 #define MASK_ARCH (MASK_SH1 | MASK_SH2 | MASK_SH3 | MASK_SH_E | MASK_SH4 \
 		   | MASK_HARD_SH2A | MASK_HARD_SH2A_DOUBLE | MASK_SH4A \
-		   | MASK_HARD_SH4 | MASK_FPU_SINGLE | MASK_SH5)
+		   | MASK_HARD_SH4 | MASK_FPU_SINGLE | MASK_SH5 \
+		   | MASK_FPU_SINGLE_ONLY)
 
 /* This defaults us to big-endian.  */
 #ifndef TARGET_ENDIAN_DEFAULT
@@ -420,7 +420,23 @@ do { \
 #define SH_DIV_STR_FOR_SIZE "call"
 #endif
 
-#define DRIVER_SELF_SPECS "%{m2a:%{ml:%eSH2a does not support little-endian}}"
+/* SH2A does not support little-endian.  Catch such combinations
+   taking into account the default configuration.  */
+#if TARGET_ENDIAN_DEFAULT == MASK_BIG_ENDIAN
+#define IS_LITTLE_ENDIAN_OPTION "%{ml:"
+#else
+#define IS_LITTLE_ENDIAN_OPTION "%{!mb:"
+#endif
+ 
+#if TARGET_CPU_DEFAULT & MASK_HARD_SH2A
+#define UNSUPPORTED_SH2A IS_LITTLE_ENDIAN_OPTION \
+"%{m2a*|!m1:%{!m2*:%{!m3*:%{!m4*:{!m5*:%eSH2a does not support little-endian}}}}}}"
+#else
+#define UNSUPPORTED_SH2A IS_LITTLE_ENDIAN_OPTION \
+"%{m2a*:%eSH2a does not support little-endian}}"
+#endif
+
+#define DRIVER_SELF_SPECS UNSUPPORTED_SH2A
 
 #define ASSEMBLER_DIALECT assembler_dialect
 
@@ -1046,6 +1062,7 @@ enum reg_class
   MAC_REGS,
   FPUL_REGS,
   SIBCALL_REGS,
+  NON_SP_REGS,
   GENERAL_REGS,
   FP0_REGS,
   FP_REGS,
@@ -1071,6 +1088,7 @@ enum reg_class
   "MAC_REGS",		\
   "FPUL_REGS",		\
   "SIBCALL_REGS",	\
+  "NON_SP_REGS",	\
   "GENERAL_REGS",	\
   "FP0_REGS",		\
   "FP_REGS",		\
@@ -1103,6 +1121,8 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00400000 },	\
 /* SIBCALL_REGS: Initialized in TARGET_CONDITIONAL_REGISTER_USAGE.  */	\
   { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000 },	\
+/* NON_SP_REGS:  */							\
+  { 0xffff7fff, 0xffffffff, 0x00000000, 0x00000000, 0x03020000 },	\
 /* GENERAL_REGS:  */							\
   { 0xffffffff, 0xffffffff, 0x00000000, 0x00000000, 0x03020000 },	\
 /* FP0_REGS:  */							\
@@ -1132,20 +1152,6 @@ enum reg_class
 
 extern enum reg_class regno_reg_class[FIRST_PSEUDO_REGISTER];
 #define REGNO_REG_CLASS(REGNO) regno_reg_class[(REGNO)]
-
-/* The following macro defines cover classes for Integrated Register
-   Allocator.  Cover classes is a set of non-intersected register
-   classes covering all hard registers used for register allocation
-   purpose.  Any move between two registers of a cover class should be
-   cheaper than load or store of the registers.  The macro value is
-   array of register classes with LIM_REG_CLASSES used as the end
-   marker.  */
-
-#define IRA_COVER_CLASSES						     \
-{									     \
-  GENERAL_REGS, FP_REGS, PR_REGS, T_REGS, MAC_REGS, TARGET_REGS,  	     \
-  FPUL_REGS, LIM_REG_CLASSES						     \
-}
 
 /* When this hook returns true for MODE, the compiler allows
    registers explicitly used in the rtl to be used as spill registers
@@ -1211,6 +1217,9 @@ extern enum reg_class regno_reg_class[FIRST_PSEUDO_REGISTER];
 
 #define CONST_OK_FOR_K08(VALUE) (((HOST_WIDE_INT)(VALUE))>= 0 \
 				 && ((HOST_WIDE_INT)(VALUE)) <= 255)
+
+#define ZERO_EXTRACT_ANDMASK(EXTRACT_SZ_RTX, EXTRACT_POS_RTX)\
+  (((1 << INTVAL (EXTRACT_SZ_RTX)) - 1) << INTVAL (EXTRACT_POS_RTX))
 
 #if 0
 #define SECONDARY_INOUT_RELOAD_CLASS(CLASS,MODE,X,ELSE) \
@@ -1778,20 +1787,6 @@ struct sh_args {
 
 #define CONSTANT_ADDRESS_P(X)	(GET_CODE (X) == LABEL_REF)
 
-/* Nonzero if the constant value X is a legitimate general operand.  */
-/* can_store_by_pieces constructs VOIDmode CONST_DOUBLEs.  */
-
-#define LEGITIMATE_CONSTANT_P(X) \
-  (TARGET_SHMEDIA							\
-   ? ((GET_MODE (X) != DFmode						\
-       && GET_MODE_CLASS (GET_MODE (X)) != MODE_VECTOR_FLOAT)		\
-      || (X) == CONST0_RTX (GET_MODE (X))				\
-      || ! TARGET_SHMEDIA_FPU						\
-      || TARGET_SHMEDIA64)						\
-   : (GET_CODE (X) != CONST_DOUBLE					\
-      || GET_MODE (X) == DFmode || GET_MODE (X) == SFmode		\
-      || GET_MODE (X) == DImode || GET_MODE (X) == VOIDmode))
-
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
    The suitable hard regs are always accepted and all pseudo regs
@@ -1917,12 +1912,6 @@ struct sh_args {
 
 #define ALLOW_INDEXED_ADDRESS \
   ((!TARGET_SHMEDIA32 && !TARGET_SHCOMPACT) || TARGET_ALLOW_INDEXED_ADDRESS)
-
-#define GO_IF_LEGITIMATE_INDEX(MODE, OP, WIN)	\
-  do {						\
-    if (sh_legitimate_index_p ((MODE), (OP)))	\
-      goto WIN;					\
-  } while (0)
 
 /* A C compound statement that attempts to replace X, which is an address
    that needs reloading, with a valid memory address for an operand of
@@ -2011,7 +2000,7 @@ struct sh_args {
    that the native compiler puts too large (> 32) immediate shift counts
    into a register and shifts by the register, letting the SH decide what
    to do instead of doing that itself.  */
-/* ??? The library routines in lib1funcs.asm truncate the shift count.
+/* ??? The library routines in lib1funcs.S truncate the shift count.
    However, the SH3 has hardware shifts that do not truncate exactly as gcc
    expects - the sign bit is significant - so it appears that we need to
    leave this zero for correct SH3 code.  */
@@ -2084,7 +2073,7 @@ struct sh_args {
    register information here is not used for SFmode.  */
 
 #define REGCLASS_HAS_GENERAL_REG(CLASS) \
-  ((CLASS) == GENERAL_REGS || (CLASS) == R0_REGS \
+  ((CLASS) == GENERAL_REGS || (CLASS) == R0_REGS || (CLASS) == NON_SP_REGS \
     || (! TARGET_SHMEDIA && (CLASS) == SIBCALL_REGS))
 
 #define REGCLASS_HAS_FP_REG(CLASS) \
@@ -2096,12 +2085,8 @@ struct sh_args {
    different code that does fewer memory accesses.  */
 
 /* A C expression for the cost of a branch instruction.  A value of 1
-   is the default; other values are interpreted relative to that.
-   The SH1 does not have delay slots, hence we get a pipeline stall
-   at every branch.  The SH4 is superscalar, so the single delay slot
-   is not sufficient to keep both pipelines filled.  */
-#define BRANCH_COST(speed_p, predictable_p) \
-	(TARGET_SH5 ? 1 : ! TARGET_SH2 || TARGET_HARD_SH4 ? 2 : 1)
+   is the default; other values are interpreted relative to that.  */
+#define BRANCH_COST(speed_p, predictable_p) sh_branch_cost
 
 /* Assembler output control.  */
 
@@ -2130,26 +2115,10 @@ struct sh_args {
 # endif
 #endif
 
-
-/* If defined, a C expression whose value is a string containing the
-   assembler operation to identify the following data as
-   uninitialized global data.  If not defined, and neither
-   `ASM_OUTPUT_BSS' nor `ASM_OUTPUT_ALIGNED_BSS' are defined,
-   uninitialized global data will be output in the data section if
-   `-fno-common' is passed, otherwise `ASM_OUTPUT_COMMON' will be
-   used.  */
 #ifndef BSS_SECTION_ASM_OP
 #define BSS_SECTION_ASM_OP	"\t.section\t.bss"
 #endif
 
-/* Like `ASM_OUTPUT_BSS' except takes the required alignment as a
-   separate, explicit argument.  If you define this macro, it is used
-   in place of `ASM_OUTPUT_BSS', and gives you more flexibility in
-   handling the required alignment of the variable.  The alignment is
-   specified as the number of bits.
-
-   Try to use function `asm_output_aligned_bss' defined in file
-   `varasm.c' when defining this macro.  */
 #ifndef ASM_OUTPUT_ALIGNED_BSS
 #define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN) \
   asm_output_aligned_bss (FILE, DECL, NAME, SIZE, ALIGN)
@@ -2338,8 +2307,8 @@ struct sh_args {
   final_prescan_insn ((INSN), (OPVEC), (NOPERANDS))
 
 
-extern struct rtx_def *sh_compare_op0;
-extern struct rtx_def *sh_compare_op1;
+extern rtx sh_compare_op0;
+extern rtx sh_compare_op1;
 
 /* Which processor to schedule for.  The elements of the enumeration must
    match exactly the cpu attribute in the sh.md file.  */
@@ -2418,7 +2387,8 @@ extern int current_function_interrupt;
 #define ACCUMULATE_OUTGOING_ARGS TARGET_ACCUMULATE_OUTGOING_ARGS
 
 #define SH_DYNAMIC_SHIFT_COST \
-  (TARGET_HARD_SH4 ? 1 : TARGET_SH3 ? (optimize_size ? 1 : 2) : 20)
+  (TARGET_HARD_SH4 ? 1	\
+   : (TARGET_SH3 || TARGET_SH2A) ? (optimize_size ? 1 : 2) : 20)
 
 
 #define NUM_MODES_FOR_MODE_SWITCHING { FP_MODE_NONE }

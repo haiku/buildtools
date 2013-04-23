@@ -1,6 +1,6 @@
 /* Output VMS debug format symbol table information from GCC.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Douglas B. Rupp (rupp@gnat.com).
    Updated by Bernard W. Giroud (bgiroud@users.sourceforge.net).
@@ -71,14 +71,8 @@ typedef struct dst_file_info_struct
   long ebk;
   short ffb;
   char rfo;
-  char flen;
 }
 dst_file_info_entry;
-
-/* How to start an assembler comment.  */
-#ifndef ASM_COMMENT_START
-#define ASM_COMMENT_START ";#"
-#endif
 
 /* Maximum size (in bytes) of an artificially generated label.  */
 #define MAX_ARTIFICIAL_LABEL_BYTES	30
@@ -164,6 +158,7 @@ static void vmsdbgout_begin_block (unsigned int, unsigned int);
 static void vmsdbgout_end_block (unsigned int, unsigned int);
 static bool vmsdbgout_ignore_block (const_tree);
 static void vmsdbgout_source_line (unsigned int, const char *, int, bool);
+static void vmsdbgout_write_source_line (unsigned, const char *, int , bool);
 static void vmsdbgout_begin_prologue (unsigned int, const char *);
 static void vmsdbgout_end_prologue (unsigned int, const char *);
 static void vmsdbgout_end_function (unsigned int);
@@ -205,10 +200,6 @@ const struct gcc_debug_hooks vmsdbg_debug_hooks
    debug_nothing_int,		  /* handle_pch */
    debug_nothing_rtx,		  /* var_location */
    debug_nothing_void,            /* switch_text_section */
-   debug_nothing_tree,		  /* direct_call */
-   debug_nothing_tree_int,	  /* virtual_call_token */
-   debug_nothing_rtx_rtx,	  /* copy_call_info */
-   debug_nothing_uid,		  /* virtual_call */
    debug_nothing_tree_tree,	  /* set_name */
    0,                             /* start_end_main_source_file */
    TYPE_SYMTAB_IS_ADDRESS         /* tree_type_symtab_field */
@@ -936,7 +927,7 @@ write_srccorr (int fileid, dst_file_info_entry file_info_entry,
   int src_command_size;
   int linesleft = file_info_entry.max_line;
   int linestart = file_info_entry.listing_line_start;
-  int flen = file_info_entry.flen;
+  int flen = strlen (file_info_entry.file_name);
   int linestodo = 0;
   DST_SOURCE_CORR src_header;
   DST_SRC_COMMAND src_command;
@@ -981,7 +972,7 @@ write_srccorr (int fileid, dst_file_info_entry file_info_entry,
   src_command.dst_a_src_cmd_fields.dst_a_src_decl_src.dst_b_src_df_rms_rfo
     = file_info_entry.rfo;
   src_command.dst_a_src_cmd_fields.dst_a_src_decl_src.dst_b_src_df_filename
-    = file_info_entry.flen;
+    = flen;
 
   src_header.dst_a_source_corr_header.dst__header_length.dst_w_length
     = DST_K_SOURCE_CORR_HEADER_SIZE + src_command_size - 1;
@@ -1172,7 +1163,7 @@ vmsdbgout_end_prologue (unsigned int line, const char *file)
       ASM_OUTPUT_LABEL (asm_out_file, label);
 
       /* VMS PCA expects every PC range to correlate to some line and file.  */
-      vmsdbgout_source_line (line, file, 0, true);
+      vmsdbgout_write_source_line (line, file, 0, true);
     }
 }
 
@@ -1212,7 +1203,7 @@ vmsdbgout_begin_epilogue (unsigned int line, const char *file)
 
 	  /* VMS PCA expects every PC range to correlate to some line and
 	     file.  */
-	  vmsdbgout_source_line (line, file, 0, true);
+	  vmsdbgout_write_source_line (line, file, 0, true);
 	}
     }
 }
@@ -1238,7 +1229,7 @@ vmsdbgout_end_epilogue (unsigned int line, const char *file)
       ASM_OUTPUT_LABEL (asm_out_file, label);
 
       /* VMS PCA expects every PC range to correlate to some line and file.  */
-      vmsdbgout_source_line (line, file, 0, true);
+      vmsdbgout_write_source_line (line, file, 0, true);
     }
 }
 
@@ -1336,7 +1327,6 @@ lookup_filename (const char *file_name)
   register char *fn;
   register unsigned i;
   const char *fnam;
-  char flen;
   long long cdt = 0;
   long ebk = 0;
   short ffb = 0;
@@ -1345,7 +1335,6 @@ lookup_filename (const char *file_name)
   int ver = 0;
 
   fnam = full_name (file_name);
-  flen = strlen (fnam);
 
   /* Check to see if the file name that was searched on the previous call
      matches this file name. If so, return the index.  */
@@ -1390,7 +1379,6 @@ lookup_filename (const char *file_name)
   file_info_table[file_info_table_in_use].ebk = ebk;
   file_info_table[file_info_table_in_use].ffb = ffb;
   file_info_table[file_info_table_in_use].rfo = rfo;
-  file_info_table[file_info_table_in_use].flen = flen;
 
   last_file_lookup_index = file_info_table_in_use++;
   return last_file_lookup_index;
@@ -1401,6 +1389,31 @@ lookup_filename (const char *file_name)
    'line_info_table' for later output of the .debug_line section.  */
 
 static void
+vmsdbgout_write_source_line (unsigned line, const char *filename,
+                             int discriminator, bool is_stmt)
+{
+  dst_line_info_ref line_info;
+
+  targetm.asm_out.internal_label (asm_out_file, LINE_CODE_LABEL,
+                                  line_info_table_in_use);
+
+  /* Expand the line info table if necessary.  */
+  if (line_info_table_in_use == line_info_table_allocated)
+    {
+      line_info_table_allocated += LINE_INFO_TABLE_INCREMENT;
+      line_info_table = XRESIZEVEC (dst_line_info_entry, line_info_table,
+                                    line_info_table_allocated);
+    }
+
+  /* Add the new entry at the end of the line_info_table.  */
+  line_info = &line_info_table[line_info_table_in_use++];
+  line_info->dst_file_num = lookup_filename (filename);
+  line_info->dst_line_num = line;
+  if (line > file_info_table[line_info->dst_file_num].max_line)
+    file_info_table[line_info->dst_file_num].max_line = line;
+}
+
+static void
 vmsdbgout_source_line (register unsigned line, register const char *filename,
                        int discriminator, bool is_stmt)
 {
@@ -1408,27 +1421,7 @@ vmsdbgout_source_line (register unsigned line, register const char *filename,
     (*dwarf2_debug_hooks.source_line) (line, filename, discriminator, is_stmt);
 
   if (debug_info_level >= DINFO_LEVEL_TERSE)
-    {
-      dst_line_info_ref line_info;
-
-      targetm.asm_out.internal_label (asm_out_file, LINE_CODE_LABEL,
-				      line_info_table_in_use);
-
-      /* Expand the line info table if necessary.  */
-      if (line_info_table_in_use == line_info_table_allocated)
-	{
-	  line_info_table_allocated += LINE_INFO_TABLE_INCREMENT;
-	  line_info_table = XRESIZEVEC (dst_line_info_entry, line_info_table,
-					line_info_table_allocated);
-	}
-
-      /* Add the new entry at the end of the line_info_table.  */
-      line_info = &line_info_table[line_info_table_in_use++];
-      line_info->dst_file_num = lookup_filename (filename);
-      line_info->dst_line_num = line;
-      if (line > file_info_table[line_info->dst_file_num].max_line)
-	file_info_table[line_info->dst_file_num].max_line = line;
-    }
+    vmsdbgout_write_source_line (line, filename, discriminator, is_stmt);
 }
 
 /* Record the beginning of a new source file, for later output.

@@ -2,7 +2,7 @@
    them.
 
    Copyright (C) 1995, 1998, 1999, 2000, 2001, 2003, 2004, 2005, 2007, 2008,
-   2009, 2010 Free Software Foundation, Inc.
+   2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Jason Merrill (jason@cygnus.com).
 
 This file is part of GCC.
@@ -30,6 +30,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "hashtab.h"
 #include "demangle.h"
 #include "collect2.h"
+#include "filenames.h"
+#include "diagnostic-core.h"
+#include "vec.h"
 
 /* TARGET_64BIT may be defined to use driver specific functionality. */
 #undef TARGET_64BIT
@@ -65,10 +68,14 @@ typedef struct file_hash_entry
   int tweaking;
 } file;
 
+typedef const char *str;
+DEF_VEC_P(str);
+DEF_VEC_ALLOC_P(str,heap);
+
 typedef struct demangled_hash_entry
 {
   const char *key;
-  const char *mangled;
+  VEC(str,heap) *mangled;
 } demangled;
 
 /* Hash and comparison functions for these hash tables.  */
@@ -293,10 +300,9 @@ tlink_execute (const char *prog, char **argv, const char *outname,
 static char *
 frob_extension (const char *s, const char *ext)
 {
-  const char *p = strrchr (s, '/');
-  if (! p)
-    p = s;
-  p = strrchr (p, '.');
+  const char *p;
+
+  p = strrchr (lbasename (s), '.');
   if (! p)
     p = s + strlen (s);
 
@@ -434,9 +440,15 @@ maybe_tweak (char *line, file *f)
       sym->tweaked = 1;
 
       if (line[0] == 'O')
-	line[0] = 'C';
+	{
+	  line[0] = 'C';
+	  sym->chosen = 1;
+	}
       else
-	line[0] = 'O';
+	{
+	  line[0] = 'O';
+	  sym->chosen = 0;
+	}
     }
 }
 
@@ -477,9 +489,9 @@ recompile_files (void)
 	 the new file name already exists.  Therefore, we explicitly
 	 remove the old file first.  */
       if (remove (f->key) == -1)
-	fatal_perror ("removing .rpo file");
+	fatal_error ("removing .rpo file: %m");
       if (rename (outname, f->key) == -1)
-	fatal_perror ("renaming .rpo file");
+	fatal_error ("renaming .rpo file: %m");
 
       if (!f->args)
 	{
@@ -597,8 +609,32 @@ demangle_new_symbols (void)
 	continue;
 
       dem = demangled_hash_lookup (p, true);
-      dem->mangled = sym->key;
+      VEC_safe_push (str, heap, dem->mangled, sym->key);
     }
+}
+
+/* We want to tweak symbol SYM.  Return true if all is well, false on
+   error.  */
+
+static bool
+start_tweaking (symbol *sym)
+{
+  if (sym && sym->tweaked)
+    {
+      error ("'%s' was assigned to '%s', but was not defined "
+	     "during recompilation, or vice versa",
+	     sym->key, sym->file->key);
+      return 0;
+    }
+  if (sym && !sym->tweaking)
+    {
+      if (tlink_verbose >= 2)
+	fprintf (stderr, _("collect: tweaking %s in %s\n"),
+		 sym->key, sym->file->key);
+      sym->tweaking = 1;
+      file_push (sym->file);
+    }
+  return true;
 }
 
 /* Step through the output of the linker, in the file named FNAME, and
@@ -615,8 +651,11 @@ scan_linker_output (const char *fname)
     {
       char *p = line, *q;
       symbol *sym;
+      demangled *dem = 0;
       int end;
       int ok = 0;
+      unsigned ix;
+      str s;
 
       /* On darwin9, we might have to skip " in " lines as well.  */
       if (skip_next_in_line
@@ -661,7 +700,6 @@ scan_linker_output (const char *fname)
 	/* Try a mangled name in quotes.  */
 	{
 	  char *oldq = q + 1;
-	  demangled *dem = 0;
 	  q = 0;
 
 	  /* On darwin9, we look for "foo" referenced from:\n\(.* in .*\n\)*  */
@@ -717,9 +755,7 @@ scan_linker_output (const char *fname)
 	    {
 	      *q = 0;
 	      dem = demangled_hash_lookup (p, false);
-	      if (dem)
-		sym = symbol_hash_lookup (dem->mangled, false);
-	      else
+	      if (!dem)
 		{
 		  if (!strncmp (p, USER_LABEL_PREFIX,
 				strlen (USER_LABEL_PREFIX)))
@@ -729,24 +765,43 @@ scan_linker_output (const char *fname)
 	    }
 	}
 
-      if (sym && sym->tweaked)
+      if (dem)
 	{
-	  error ("'%s' was assigned to '%s', but was not defined "
-		 "during recompilation, or vice versa",
-		 sym->key, sym->file->key);
+	  /* We found a demangled name.  If this is the name of a
+	     constructor or destructor, there can be several mangled names
+	     that match it, so choose or unchoose all of them.  If some are
+	     chosen and some not, leave the later ones that don't match
+	     alone for now; either this will cause the link to suceed, or
+	     on the next attempt we will switch all of them the other way
+	     and that will cause it to succeed.  */
+	  int chosen = 0;
+	  int len = VEC_length (str, dem->mangled);
+	  ok = true;
+	  FOR_EACH_VEC_ELT (str, dem->mangled, ix, s)
+	    {
+	      sym = symbol_hash_lookup (s, false);
+	      if (ix == 0)
+		chosen = sym->chosen;
+	      else if (sym->chosen != chosen)
+		/* Mismatch.  */
+		continue;
+	      /* Avoid an error about re-tweaking when we guess wrong in
+		 the case of mismatch.  */
+	      if (len > 1)
+		sym->tweaked = false;
+	      ok = start_tweaking (sym);
+	    }
+	}
+      else
+	ok = start_tweaking (sym);
+
+      obstack_free (&temporary_obstack, temporary_firstobj);
+
+      if (!ok)
+	{
 	  fclose (stream);
 	  return 0;
 	}
-      if (sym && !sym->tweaking)
-	{
-	  if (tlink_verbose >= 2)
-	    fprintf (stderr, _("collect: tweaking %s in %s\n"),
-		     sym->key, sym->file->key);
-	  sym->tweaking = 1;
-	  file_push (sym->file);
-	}
-
-      obstack_free (&temporary_obstack, temporary_firstobj);
     }
 
   fclose (stream);

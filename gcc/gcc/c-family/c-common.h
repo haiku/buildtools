@@ -43,8 +43,7 @@ never after.
 #include "diagnostic-core.h"
 
 /* Usage of TREE_LANG_FLAG_?:
-   0: TREE_NEGATED_INT (in INTEGER_CST).
-      IDENTIFIER_MARKED (used by search routines).
+   0: IDENTIFIER_MARKED (used by search routines).
       DECL_PRETTY_FUNCTION_P (in VAR_DECL)
       C_MAYBE_CONST_EXPR_INT_OPERANDS (in C_MAYBE_CONST_EXPR, for C)
    1: C_DECLARED_LABEL_FLAG (in LABEL_DECL)
@@ -58,7 +57,7 @@ never after.
 /* Reserved identifiers.  This is the union of all the keywords for C,
    C++, and Objective-C.  All the type modifiers have to be in one
    block at the beginning, because they are used as mask bits.  There
-   are 27 type modifiers; if we add many more we will have to redesign
+   are 28 type modifiers; if we add many more we will have to redesign
    the mask mechanism.  */
 
 enum rid
@@ -69,6 +68,7 @@ enum rid
   RID_UNSIGNED, RID_LONG,    RID_CONST, RID_EXTERN,
   RID_REGISTER, RID_TYPEDEF, RID_SHORT, RID_INLINE,
   RID_VOLATILE, RID_SIGNED,  RID_AUTO,  RID_RESTRICT,
+  RID_NORETURN,
 
   /* C extensions */
   RID_COMPLEX, RID_THREAD, RID_SAT,
@@ -102,13 +102,19 @@ enum rid
   /* C extensions */
   RID_ASM,       RID_TYPEOF,   RID_ALIGNOF,  RID_ATTRIBUTE,  RID_VA_ARG,
   RID_EXTENSION, RID_IMAGPART, RID_REALPART, RID_LABEL,      RID_CHOOSE_EXPR,
-  RID_TYPES_COMPATIBLE_P,
+  RID_TYPES_COMPATIBLE_P,      RID_BUILTIN_COMPLEX,	     RID_BUILTIN_SHUFFLE,
   RID_DFLOAT32, RID_DFLOAT64, RID_DFLOAT128,
   RID_FRACT, RID_ACCUM,
+
+  /* C11 */
+  RID_ALIGNAS,
 
   /* This means to warn that this is a C++ keyword, and then treat it
      as a normal identifier.  */
   RID_CXX_COMPAT_WARN,
+
+  /* GNU transactional memory extension */
+  RID_TRANSACTION_ATOMIC, RID_TRANSACTION_RELAXED, RID_TRANSACTION_CANCEL,
 
   /* Too many ways of getting the name of a function as a string */
   RID_FUNCTION_NAME, RID_PRETTY_FUNCTION_NAME, RID_C99_FUNCTION_NAME,
@@ -128,18 +134,20 @@ enum rid
   RID_CONSTCAST, RID_DYNCAST, RID_REINTCAST, RID_STATCAST,
 
   /* C++ extensions */
+  RID_BASES,                   RID_DIRECT_BASES,
   RID_HAS_NOTHROW_ASSIGN,      RID_HAS_NOTHROW_CONSTRUCTOR,
   RID_HAS_NOTHROW_COPY,        RID_HAS_TRIVIAL_ASSIGN,
   RID_HAS_TRIVIAL_CONSTRUCTOR, RID_HAS_TRIVIAL_COPY,
   RID_HAS_TRIVIAL_DESTRUCTOR,  RID_HAS_VIRTUAL_DESTRUCTOR,
   RID_IS_ABSTRACT,             RID_IS_BASE_OF,
-  RID_IS_CONVERTIBLE_TO,       RID_IS_CLASS,
+  RID_IS_CLASS,                RID_IS_CONVERTIBLE_TO,
   RID_IS_EMPTY,                RID_IS_ENUM,
+  RID_IS_FINAL,                RID_IS_LITERAL_TYPE,
   RID_IS_POD,                  RID_IS_POLYMORPHIC,
   RID_IS_STD_LAYOUT,           RID_IS_TRIVIAL,
-  RID_IS_UNION,                RID_IS_LITERAL_TYPE,
+  RID_IS_UNION,                RID_UNDERLYING_TYPE,
 
-  /* C++0x */
+  /* C++11 */
   RID_CONSTEXPR, RID_DECLTYPE, RID_NOEXCEPT, RID_NULLPTR, RID_STATIC_ASSERT,
 
   /* Objective-C ("AT" reserved words - they are only keywords when
@@ -319,6 +327,30 @@ struct c_common_resword
   const unsigned int disable   : 16;
 };
 
+/* Extra cpp_ttype values for C++.  */
+
+/* A token type for keywords, as opposed to ordinary identifiers.  */
+#define CPP_KEYWORD ((enum cpp_ttype) (N_TTYPES + 1))
+
+/* A token type for template-ids.  If a template-id is processed while
+   parsing tentatively, it is replaced with a CPP_TEMPLATE_ID token;
+   the value of the CPP_TEMPLATE_ID is whatever was returned by
+   cp_parser_template_id.  */
+#define CPP_TEMPLATE_ID ((enum cpp_ttype) (CPP_KEYWORD + 1))
+
+/* A token type for nested-name-specifiers.  If a
+   nested-name-specifier is processed while parsing tentatively, it is
+   replaced with a CPP_NESTED_NAME_SPECIFIER token; the value of the
+   CPP_NESTED_NAME_SPECIFIER is whatever was returned by
+   cp_parser_nested_name_specifier_opt.  */
+#define CPP_NESTED_NAME_SPECIFIER ((enum cpp_ttype) (CPP_TEMPLATE_ID + 1))
+
+/* A token type for pre-parsed C++0x decltype.  */
+#define CPP_DECLTYPE ((enum cpp_ttype) (CPP_NESTED_NAME_SPECIFIER + 1))
+
+/* The number of token types, including C++-specific ones.  */
+#define N_CP_TTYPES ((int) (CPP_DECLTYPE + 1))
+
 /* Disable mask.  Keywords are disabled if (reswords[i].disable &
    mask) is _true_.  Thus for keywords which are present in all
    languages the disable field is zero.  */
@@ -451,21 +483,16 @@ typedef enum ref_operator {
 /* Information about a statement tree.  */
 
 struct GTY(()) stmt_tree_s {
-  /* The current statement list being collected.  */
-  tree x_cur_stmt_list;
+  /* A stack of statement lists being collected.  */
+  VEC(tree,gc) *x_cur_stmt_list;
 
   /* In C++, Nonzero if we should treat statements as full
-     expressions.  In particular, this variable is no-zero if at the
+     expressions.  In particular, this variable is non-zero if at the
      end of a statement we should destroy any temporaries created
      during that statement.  Similarly, if, at the end of a block, we
      should destroy any local variables in this block.  Normally, this
      variable is nonzero, since those are the normal semantics of
      C++.
-
-     However, in order to represent aggregate initialization code as
-     tree structure, we use statement-expressions.  The statements
-     within the statement expression should not result in cleanups
-     being run until the entire enclosing statement is complete.
 
      This flag has no effect in C.  */
   int stmts_are_full_exprs_p;
@@ -480,13 +507,23 @@ struct GTY(()) c_language_function {
   /* While we are parsing the function, this contains information
      about the statement-tree that we are building.  */
   struct stmt_tree_s x_stmt_tree;
+
+  /* Vector of locally defined typedefs, for
+     -Wunused-local-typedefs.  */
+  VEC(tree,gc) *local_typedefs;
 };
 
-/* When building a statement-tree, this is the current statement list
-   being collected.  It's TREE_CHAIN is a back-pointer to the previous
-   statement list.  */
+#define stmt_list_stack (current_stmt_tree ()->x_cur_stmt_list)
 
-#define cur_stmt_list (current_stmt_tree ()->x_cur_stmt_list)
+/* When building a statement-tree, this is the current statement list
+   being collected.  We define it in this convoluted way, rather than
+   using VEC_last, because it must be an lvalue.  */
+
+#define cur_stmt_list							\
+  (*(VEC_address (tree, stmt_list_stack)				\
+     + VEC_length (tree, stmt_list_stack) - 1))
+
+#define building_stmt_list_p() (!VEC_empty (tree, stmt_list_stack))
 
 /* Language-specific hooks.  */
 
@@ -570,13 +607,13 @@ extern int flag_cond_mismatch;
 
 extern int flag_isoc94;
 
-/* Nonzero means use the ISO C99 (or C1X) dialect of C.  */
+/* Nonzero means use the ISO C99 (or C11) dialect of C.  */
 
 extern int flag_isoc99;
 
-/* Nonzero means use the ISO C1X dialect of C.  */
+/* Nonzero means use the ISO C11 dialect of C.  */
 
-extern int flag_isoc1x;
+extern int flag_isoc11;
 
 /* Nonzero means that we have builtin functions, and main is an int.  */
 
@@ -607,11 +644,12 @@ extern int flag_use_repository;
 /* The supported C++ dialects.  */
 
 enum cxx_dialect {
-  /* C++98  */
+  /* C++98 with TC1  */
   cxx98,
-  /* Experimental features that are likely to become part of
-     C++0x.  */
-  cxx0x
+  cxx03 = cxx98,
+  /* C++11  */
+  cxx0x,
+  cxx11 = cxx0x
 };
 
 /* The C++ dialect being used. C++98 is the default.  */
@@ -619,7 +657,7 @@ extern enum cxx_dialect cxx_dialect;
 
 /* Maximum template instantiation depth.  This limit is rather
    arbitrary, but it exists to limit the time it takes to notice
-   infinite template instantiations.  */
+   excessively recursive template instantiations.  */
 
 extern int max_tinst_depth;
 
@@ -679,6 +717,7 @@ extern void c_register_addr_space (const char *str, addr_space_t as);
 extern bool in_late_binary_op;
 extern const char *c_addr_space_name (addr_space_t as);
 extern tree identifier_global_value (tree);
+extern tree c_linkage_bindings (tree);
 extern void record_builtin_type (enum rid, const char *, tree);
 extern tree build_void_list_node (void);
 extern void start_fname_decls (void);
@@ -686,7 +725,8 @@ extern void finish_fname_decls (void);
 extern const char *fname_as_string (int);
 extern tree fname_decl (location_t, unsigned, tree);
 
-extern void check_function_arguments (tree, int, tree *, tree);
+extern int check_user_alignment (const_tree, bool);
+extern void check_function_arguments (const_tree, int, tree *);
 extern void check_function_arguments_recurse (void (*)
 					      (void *, tree,
 					       unsigned HOST_WIDE_INT),
@@ -700,6 +740,7 @@ extern tree handle_format_arg_attribute (tree *, tree, tree, int, bool *);
 extern bool attribute_takes_identifier_p (const_tree);
 extern bool c_common_handle_option (size_t, const char *, int, int, location_t,
 				    const struct cl_option_handlers *);
+extern bool default_handle_c_option (size_t, const char *, int);
 extern tree c_common_type_for_mode (enum machine_mode, int);
 extern tree c_common_type_for_size (unsigned int, int);
 extern tree c_common_fixed_point_type_for_size (unsigned int, unsigned int,
@@ -707,7 +748,9 @@ extern tree c_common_fixed_point_type_for_size (unsigned int, unsigned int,
 extern tree c_common_unsigned_type (tree);
 extern tree c_common_signed_type (tree);
 extern tree c_common_signed_or_unsigned_type (int, tree);
+extern void c_common_init_ts (void);
 extern tree c_build_bitfield_integer_type (unsigned HOST_WIDE_INT, int);
+extern bool unsafe_conversion_p (tree, tree, bool);
 extern bool decl_with_nonnull_addr_p (const_tree);
 extern tree c_fully_fold (tree, bool, bool *);
 extern tree decl_constant_value_for_optimization (tree);
@@ -828,7 +871,6 @@ extern void warn_for_omitted_condop (location_t, tree);
 
 extern tree do_case (location_t, tree, tree);
 extern tree build_stmt (location_t, enum tree_code, ...);
-extern tree build_case_label (location_t, tree, tree, tree);
 extern tree build_real_imag_expr (location_t, enum tree_code, tree);
 
 /* These functions must be defined by each front-end which implements
@@ -953,10 +995,14 @@ extern void warn_for_sign_compare (location_t,
 				   enum tree_code resultcode);
 extern void do_warn_double_promotion (tree, tree, tree, const char *, 
 				      location_t);
-extern void set_underlying_type (tree x);
+extern void set_underlying_type (tree);
+extern void record_locally_defined_typedef (tree);
+extern void maybe_record_typedef_use (tree);
+extern void maybe_warn_unused_local_typedefs (void);
 extern VEC(tree,gc) *make_tree_vector (void);
 extern void release_tree_vector (VEC(tree,gc) *);
 extern VEC(tree,gc) *make_tree_vector_single (tree);
+extern VEC(tree,gc) *make_tree_vector_from_list (tree);
 extern VEC(tree,gc) *make_tree_vector_copy (const VEC(tree,gc) *);
 
 /* In c-gimplify.c  */
@@ -996,9 +1042,11 @@ extern tree c_finish_omp_master (location_t, tree);
 extern tree c_finish_omp_critical (location_t, tree, tree);
 extern tree c_finish_omp_ordered (location_t, tree);
 extern void c_finish_omp_barrier (location_t);
-extern tree c_finish_omp_atomic (location_t, enum tree_code, tree, tree);
+extern tree c_finish_omp_atomic (location_t, enum tree_code, enum tree_code,
+				 tree, tree, tree, tree, tree);
 extern void c_finish_omp_flush (location_t);
 extern void c_finish_omp_taskwait (location_t);
+extern void c_finish_omp_taskyield (location_t);
 extern tree c_finish_omp_for (location_t, tree, tree, tree, tree, tree, tree);
 extern void c_split_parallel_clauses (location_t, tree, tree *, tree *);
 extern enum omp_clause_default_kind c_omp_predetermined_sharing (tree);
@@ -1007,5 +1055,65 @@ extern enum omp_clause_default_kind c_omp_predetermined_sharing (tree);
 extern bool c_omp_sharing_predetermined (tree);
 extern tree c_omp_remap_decl (tree, bool);
 extern void record_types_used_by_current_var_decl (tree);
+
+/* Return next tree in the chain for chain_next walking of tree nodes.  */
+static inline tree
+c_tree_chain_next (tree t)
+{
+  /* TREE_CHAIN of a type is TYPE_STUB_DECL, which is different
+     kind of object, never a long chain of nodes.  Prefer
+     TYPE_NEXT_VARIANT for types.  */
+  if (CODE_CONTAINS_STRUCT (TREE_CODE (t), TS_TYPE_COMMON))
+    return TYPE_NEXT_VARIANT (t);
+  /* Otherwise, if there is TREE_CHAIN, return it.  */
+  if (CODE_CONTAINS_STRUCT (TREE_CODE (t), TS_COMMON))
+    return TREE_CHAIN (t);
+  return NULL;
+}
+
+/* Mask used by tm_stmt_attr.  */
+#define TM_STMT_ATTR_OUTER	2
+#define TM_STMT_ATTR_ATOMIC	4
+#define TM_STMT_ATTR_RELAXED	8
+
+extern int parse_tm_stmt_attr (tree, int);
+
+/* Mask used by tm_attr_to_mask and tm_mask_to_attr.  Note that these
+   are ordered specifically such that more restrictive attributes are
+   at lower bit positions.  This fact is known by the C++ tm attribute
+   inheritance code such that least bit extraction (mask & -mask) results
+   in the most restrictive attribute.  */
+#define TM_ATTR_SAFE			1
+#define TM_ATTR_CALLABLE		2
+#define TM_ATTR_PURE			4
+#define TM_ATTR_IRREVOCABLE		8
+#define TM_ATTR_MAY_CANCEL_OUTER	16
+
+extern int tm_attr_to_mask (tree);
+extern tree tm_mask_to_attr (int);
+extern tree find_tm_attribute (tree);
+
+/* A suffix-identifier value doublet that represents user-defined literals
+   for C++-0x.  */
+struct GTY(()) tree_userdef_literal {
+  struct tree_base base;
+  tree suffix_id;
+  tree value;
+  tree num_string;
+};
+
+#define USERDEF_LITERAL_SUFFIX_ID(NODE) \
+  (((struct tree_userdef_literal *)USERDEF_LITERAL_CHECK (NODE))->suffix_id)
+
+#define USERDEF_LITERAL_VALUE(NODE) \
+  (((struct tree_userdef_literal *)USERDEF_LITERAL_CHECK (NODE))->value)
+
+#define USERDEF_LITERAL_NUM_STRING(NODE) \
+  (((struct tree_userdef_literal *)USERDEF_LITERAL_CHECK (NODE))->num_string)
+
+#define USERDEF_LITERAL_TYPE(NODE) \
+  (TREE_TYPE (USERDEF_LITERAL_VALUE (NODE)))
+
+extern tree build_userdef_literal (tree suffix_id, tree value, tree num_string);
 
 #endif /* ! GCC_C_COMMON_H */

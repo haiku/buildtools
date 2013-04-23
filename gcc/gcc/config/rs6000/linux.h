@@ -88,9 +88,6 @@
 #define USE_LD_AS_NEEDED 1
 #endif
 
-#undef  TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (PowerPC GNU/Linux)");
-
 /* Override rs6000.h definition.  */
 #undef  ASM_APP_ON
 #define ASM_APP_ON "#APP\n"
@@ -115,8 +112,6 @@
   (target_flags & target_flags_explicit & MASK_RELOCATABLE)
 
 #define TARGET_POSIX_IO
-
-#define MD_UNWIND_SUPPORT "config/rs6000/linux-unwind.h"
 
 #ifdef TARGET_LIBC_PROVIDES_SSP
 /* ppc32 glibc provides __stack_chk_guard in -0x7008(2).  */

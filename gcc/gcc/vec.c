@@ -28,19 +28,11 @@ along with GCC; see the file COPYING3.  If not see
 #endif
 
 #include "system.h"
+#include "coretypes.h"
 #include "ggc.h"
 #include "vec.h"
-#include "coretypes.h"
 #include "diagnostic-core.h"
 #include "hashtab.h"
-
-struct vec_prefix
-{
-  unsigned num;
-  unsigned alloc;
-  void *vec[1];
-};
-
 
 #ifdef GATHER_STATISTICS
 
@@ -229,6 +221,7 @@ vec_gc_o_reserve_1 (void *vec, int reserve, size_t vec_offset, size_t elt_size,
 {
   struct vec_prefix *pfx = (struct vec_prefix *) vec;
   unsigned alloc = calculate_allocation (pfx, reserve, exact);
+  size_t size;
 
   if (!alloc)
     {
@@ -237,7 +230,17 @@ vec_gc_o_reserve_1 (void *vec, int reserve, size_t vec_offset, size_t elt_size,
       return NULL;
     }
 
-  vec = ggc_realloc_stat (vec, vec_offset + alloc * elt_size PASS_MEM_STAT);
+  /* Calculate the amount of space we want.  */
+  size = vec_offset + alloc * elt_size;
+  /* Ask the allocator how much space it will really give us.  */
+  size = ggc_round_alloc_size (size);
+  /* Adjust the number of slots accordingly.  */
+  alloc = (size - vec_offset) / elt_size;
+  /* And finally, recalculate the amount of space we ask for.  */
+  size = vec_offset + alloc * elt_size;
+
+  vec = ggc_realloc_stat (vec, size PASS_MEM_STAT);
+
   ((struct vec_prefix *)vec)->alloc = alloc;
   if (!pfx)
     ((struct vec_prefix *)vec)->num = 0;
@@ -254,7 +257,7 @@ void *
 vec_gc_p_reserve (void *vec, int reserve MEM_STAT_DECL)
 {
   return vec_gc_o_reserve_1 (vec, reserve,
-			     offsetof (struct vec_prefix, vec),
+			     sizeof (struct vec_prefix),
 			     sizeof (void *), false
 			     PASS_MEM_STAT);
 }
@@ -268,7 +271,7 @@ void *
 vec_gc_p_reserve_exact (void *vec, int reserve MEM_STAT_DECL)
 {
   return vec_gc_o_reserve_1 (vec, reserve,
-			     offsetof (struct vec_prefix, vec),
+			     sizeof (struct vec_prefix),
 			     sizeof (void *), true
 			     PASS_MEM_STAT);
 }
@@ -337,7 +340,7 @@ void *
 vec_heap_p_reserve (void *vec, int reserve MEM_STAT_DECL)
 {
   return vec_heap_o_reserve_1 (vec, reserve,
-			       offsetof (struct vec_prefix, vec),
+			       sizeof (struct vec_prefix),
 			       sizeof (void *), false
 			       PASS_MEM_STAT);
 }
@@ -348,7 +351,7 @@ void *
 vec_heap_p_reserve_exact (void *vec, int reserve MEM_STAT_DECL)
 {
   return vec_heap_o_reserve_1 (vec, reserve,
-			       offsetof (struct vec_prefix, vec),
+			       sizeof (struct vec_prefix),
 			       sizeof (void *), true
 			       PASS_MEM_STAT);
 }
@@ -443,8 +446,8 @@ vec_stack_o_reserve_1 (void *vec, int reserve, size_t vec_offset,
   if (newvec && vec)
     {
       ((struct vec_prefix *) newvec)->num = ((struct vec_prefix *) vec)->num;
-      memcpy (((struct vec_prefix *) newvec)->vec,
-	      ((struct vec_prefix *) vec)->vec,
+      memcpy (((struct vec_prefix *) newvec)+1,
+	      ((struct vec_prefix *) vec)+1,
 	      ((struct vec_prefix *) vec)->num * elt_size);
     }
   return newvec;
@@ -456,7 +459,7 @@ void *
 vec_stack_p_reserve (void *vec, int reserve MEM_STAT_DECL)
 {
   return vec_stack_o_reserve_1 (vec, reserve,
-				offsetof (struct vec_prefix, vec),
+				sizeof (struct vec_prefix),
 				sizeof (void *), false
 				PASS_MEM_STAT);
 }
@@ -467,7 +470,7 @@ void *
 vec_stack_p_reserve_exact (void *vec, int reserve MEM_STAT_DECL)
 {
   return vec_stack_o_reserve_1 (vec, reserve,
-				offsetof (struct vec_prefix, vec),
+				sizeof (struct vec_prefix),
 				sizeof (void *), true
 				PASS_MEM_STAT);
 }

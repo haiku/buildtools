@@ -60,6 +60,9 @@
 /* Define if ECANCELED exists. */
 #undef HAVE_ECANCELED
 
+/* Define if ECHILD exists. */
+#undef HAVE_ECHILD
+
 /* Define if EIDRM exists. */
 #undef HAVE_EIDRM
 
@@ -71,6 +74,9 @@
 
 /* Define if ENOLINK exists. */
 #undef HAVE_ENOLINK
+
+/* Define if ENOSPC exists. */
+#undef HAVE_ENOSPC
 
 /* Define if ENOSR exists. */
 #undef HAVE_ENOSR
@@ -90,14 +96,23 @@
 /* Define if EOWNERDEAD exists. */
 #undef HAVE_EOWNERDEAD
 
+/* Define if EPERM exists. */
+#undef HAVE_EPERM
+
 /* Define if EPROTO exists. */
 #undef HAVE_EPROTO
 
 /* Define if ETIME exists. */
 #undef HAVE_ETIME
 
+/* Define if ETIMEDOUT exists. */
+#undef HAVE_ETIMEDOUT
+
 /* Define if ETXTBSY exists. */
 #undef HAVE_ETXTBSY
+
+/* Define if EWOULDBLOCK exists. */
+#undef HAVE_EWOULDBLOCK
 
 /* Define to 1 if you have the <execinfo.h> header file. */
 #undef HAVE_EXECINFO_H
@@ -156,9 +171,8 @@
 /* Define if _Unwind_GetIPInfo is available. */
 #undef HAVE_GETIPINFO
 
-/* Define if gthr-default.h exists (meaning that threading support is
-   enabled). */
-#undef HAVE_GTHR_DEFAULT
+/* Define if gets is available in <stdio.h>. */
+#undef HAVE_GETS
 
 /* Define to 1 if you have the `hypot' function. */
 #undef HAVE_HYPOT
@@ -319,6 +333,9 @@
 /* Define to 1 if you have the `sqrtl' function. */
 #undef HAVE_SQRTL
 
+/* Define to 1 if you have the <stdalign.h> header file. */
+#undef HAVE_STDALIGN_H
+
 /* Define to 1 if you have the <stdbool.h> header file. */
 #undef HAVE_STDBOOL_H
 
@@ -379,6 +396,9 @@
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
+
+/* Define to 1 if you have the <sys/sysinfo.h> header file. */
+#undef HAVE_SYS_SYSINFO_H
 
 /* Define to 1 if you have the <sys/time.h> header file. */
 #undef HAVE_SYS_TIME_H
@@ -672,28 +692,15 @@
 /* Version number of package */
 #undef VERSION
 
-/* Define if builtin atomic operations for bool are supported on this host. */
-#undef _GLIBCXX_ATOMIC_BUILTINS_1
-
-/* Define if builtin atomic operations for short are supported on this host.
-   */
-#undef _GLIBCXX_ATOMIC_BUILTINS_2
-
-/* Define if builtin atomic operations for int are supported on this host. */
-#undef _GLIBCXX_ATOMIC_BUILTINS_4
-
-/* Define if builtin atomic operations for long long are supported on this
-   host. */
-#undef _GLIBCXX_ATOMIC_BUILTINS_8
+/* Define if the compiler supports C++11 atomics. */
+#undef _GLIBCXX_ATOMIC_BUILTINS
 
 /* Define to use concept checking code from the boost libraries. */
 #undef _GLIBCXX_CONCEPT_CHECKS
 
-/* Define if a fully dynamic basic_string is wanted. */
+/* Define to 1 if a fully dynamic basic_string is wanted, 0 to disable,
+   undefined for platform defaults */
 #undef _GLIBCXX_FULLY_DYNAMIC_STRING
-
-/* Define if gthreads types cannot be copy-assigned in C++11. */
-#undef _GLIBCXX_GTHREADS_NO_COPY_ASSIGN_IN_CXX11
 
 /* Define if gthreads library is available. */
 #undef _GLIBCXX_HAS_GTHREADS
@@ -792,8 +799,17 @@
    this host. */
 #undef _GLIBCXX_USE_DECIMAL_FLOAT
 
+/* Define if __float128 is supported on this host. */
+#undef _GLIBCXX_USE_FLOAT128
+
 /* Defined if gettimeofday is available. */
 #undef _GLIBCXX_USE_GETTIMEOFDAY
+
+/* Define if get_nprocs is available in <sys/sysinfo.h>. */
+#undef _GLIBCXX_USE_GET_NPROCS
+
+/* Define if __int128 is supported on this host. */
+#undef _GLIBCXX_USE_INT128
 
 /* Define if LFS support is available. */
 #undef _GLIBCXX_USE_LFS
@@ -807,6 +823,9 @@
 /* Define if NLS translations are to be used. */
 #undef _GLIBCXX_USE_NLS
 
+/* Define if pthreads_num_processors_np is available in <pthread.h>. */
+#undef _GLIBCXX_USE_PTHREADS_NUM_PROCESSORS_NP
+
 /* Define if /dev/random and /dev/urandom are available for the random_device
    of TR1 (Chapter 5.1). */
 #undef _GLIBCXX_USE_RANDOM_TR1
@@ -814,8 +833,35 @@
 /* Defined if sched_yield is available. */
 #undef _GLIBCXX_USE_SCHED_YIELD
 
+/* Define if _SC_NPROCESSORS_ONLN is available in <unistd.h>. */
+#undef _GLIBCXX_USE_SC_NPROCESSORS_ONLN
+
+/* Define if _SC_NPROC_ONLN is available in <unistd.h>. */
+#undef _GLIBCXX_USE_SC_NPROC_ONLN
+
+/* Define if sysctl(), CTL_HW and HW_NCPU are available in <sys/sysctl.h>. */
+#undef _GLIBCXX_USE_SYSCTL_HW_NCPU
+
 /* Define if code specialized for wchar_t should be used. */
 #undef _GLIBCXX_USE_WCHAR_T
+
+/* Define to 1 if mutex_timedlock is available. */
+#undef _GTHREAD_USE_MUTEX_TIMEDLOCK
+
+/* Define if all C++ overloads are available in <math.h>.  */
+#if __cplusplus >= 199711L
+#undef __CORRECT_ISO_CPP_MATH_H_PROTO1
+#endif
+
+/* Define if only double std::abs(double) is available in <math.h>.  */
+#if __cplusplus >= 199711L
+#undef __CORRECT_ISO_CPP_MATH_H_PROTO2
+#endif
+
+/* Define if all C++ overloads are available in <stdlib.h>.  */
+#if __cplusplus >= 199711L
+#undef __CORRECT_ISO_CPP_STDLIB_H_PROTO
+#endif
 
 #if defined (HAVE__ACOSF) && ! defined (HAVE_ACOSF)
 # define HAVE_ACOSF 1

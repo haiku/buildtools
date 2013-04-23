@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler.
    Matsushita MN10300 series
    Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Jeff Law (law@cygnus.com).
 
    This file is part of GCC.
@@ -24,7 +24,7 @@
 #undef LIB_SPEC
 #undef ENDFILE_SPEC
 #undef  LINK_SPEC
-#define LINK_SPEC "%{mrelax:--relax}"
+#define LINK_SPEC "%{mrelax:%{!r:--relax}}"
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "%{!mno-crt0:%{!shared:%{pg:gcrt0%O%s}%{!pg:%{p:mcrt0%O%s}%{!p:crt0%O%s}}}}"
 
@@ -54,18 +54,15 @@
       builtin_define (TARGET_ALLOW_LIW ?	\
 		      "__LIW__" : "__NO_LIW__");\
 						\
+      builtin_define (TARGET_ALLOW_SETLB  ?	\
+		      "__SETLB__" : "__NO_SETLB__");\
     }						\
   while (0)
 
-enum processor_type
-{
-  PROCESSOR_MN10300,
-  PROCESSOR_AM33,
-  PROCESSOR_AM33_2,
-  PROCESSOR_AM34
-};
+#ifndef MN10300_OPTS_H
+#include "config/mn10300/mn10300-opts.h"
+#endif
 
-extern enum processor_type mn10300_processor;
 extern enum processor_type mn10300_tune_cpu;
 
 #define TARGET_AM33	(mn10300_processor >= PROCESSOR_AM33)
@@ -75,10 +72,6 @@ extern enum processor_type mn10300_tune_cpu;
 #ifndef PROCESSOR_DEFAULT
 #define PROCESSOR_DEFAULT PROCESSOR_MN10300
 #endif
-
-/* Print subsidiary information on the compiler version in use.  */
-
-#define TARGET_VERSION fprintf (stderr, " (MN10300)");
 
 
 /* Target machine storage layout */
@@ -314,19 +307,6 @@ enum reg_class
   { 0xffffffff, 0xfffff } /* ALL_REGS */			\
 }
 
-/* The following macro defines cover classes for Integrated Register
-   Allocator.  Cover classes is a set of non-intersected register
-   classes covering all hard registers used for register allocation
-   purpose.  Any move between two registers of a cover class should be
-   cheaper than load or store of the registers.  The macro value is
-   array of register classes with LIM_REG_CLASSES used as the end
-   marker.  */
-
-#define IRA_COVER_CLASSES					\
-{								\
-  GENERAL_REGS, FP_REGS, MDR_REGS, LIM_REG_CLASSES		\
-}
-
 /* The same information, inverted:
    Return the class number of the smallest class containing
    reg number REGNO.  This could be a conditional expression
@@ -407,12 +387,6 @@ enum reg_class
 
 #define LIMIT_RELOAD_CLASS(MODE, CLASS) \
   (!TARGET_AM33 && (MODE == QImode || MODE == HImode) ? DATA_REGS : CLASS)
-
-/* Return the maximum number of consecutive registers
-   needed to represent mode MODE in a register of class CLASS.  */
-
-#define CLASS_MAX_NREGS(CLASS, MODE)	\
-  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* A class that contains registers which the compiler must always
    access in a mode that is the same size as the mode in which it
@@ -578,10 +552,6 @@ do {									     \
     }									     \
 } while (0)
 
-
-/* Nonzero if the constant value X is a legitimate general operand.
-   It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
-#define LEGITIMATE_CONSTANT_P(X) mn10300_legitimate_constant_p (X)
 
 /* Zero if this needs fixing up to become PIC.  */
 

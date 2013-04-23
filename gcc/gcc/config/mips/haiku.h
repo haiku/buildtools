@@ -20,9 +20,6 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (MIPSEL Haiku/ELF)");
-
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
     {									\

@@ -272,6 +272,8 @@ struct insn_operand_data
   const char is_operator;
 
   const char eliminable;
+
+  const char allows_mem;
 };
 
 /* Legal values for insn_data.output_format.  Indicate what type of data
@@ -284,7 +286,7 @@ struct insn_operand_data
 struct insn_data_d
 {
   const char *const name;
-#if HAVE_DESIGNATED_INITIALIZERS
+#if HAVE_DESIGNATED_UNION_INITIALIZERS
   union {
     const char *single;
     const char *const *multi;
@@ -300,6 +302,7 @@ struct insn_data_d
   const insn_gen_fn genfun;
   const struct insn_operand_data *const operand;
 
+  const char n_generator_args;
   const char n_operands;
   const char n_dups;
   const char n_alternatives;

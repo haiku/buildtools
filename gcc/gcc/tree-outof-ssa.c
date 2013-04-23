@@ -1022,6 +1022,8 @@ insert_backedge_copies (void)
   basic_block bb;
   gimple_stmt_iterator gsi;
 
+  mark_dfs_back_edges ();
+
   FOR_EACH_BB (bb)
     {
       /* Mark block as possibly needing calculation of UIDs.  */

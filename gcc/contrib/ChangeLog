@@ -1,22 +1,159 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
-2012-03-01  Release Manager
+2012-09-20  Release Manager
 
-	* GCC 4.6.3 released.
+	* GCC 4.7.2 released.
 
-2011-10-26  Release Manager
+2012-06-14  Release Manager
 
-	* GCC 4.6.2 released.
+	* GCC 4.7.1 released.
 
-2011-06-27  Release Manager
+2012-03-22  Release Manager
 
-	* GCC 4.6.1 released.
+	* GCC 4.7.0 released.
 
-2011-03-25  Release Manager
+2012-03-13  Joseph Myers  <joseph@codesourcery.com>
 
-	* GCC 4.6.0 released.
+	* gennews (files): Add files for GCC 4.7.
+
+2012-02-27  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR libstdc++/52188
+	* make_sunver.pl: Remove #ifdef handling.
+
+2012-02-17   Doug Kwan  <dougkwan@google.com>
+
+	* contrib/testsuite-management/validate_failures.py
+	(GetMakefileValue): Check for cross compilers.
+
+2012-02-15   Quentin Neill  <quentin.neill@amd.com>
+
+	* compare_tests: Fix trailing paths in dir arguments.
+	Handle sum1/sum2 temp files with others.
+
+2012-02-14  Walter Lee  <walt@tilera.com>
+
+	* config-list.mk (LIST): Add tilegx-linux-gnu and
+	tilepro-linux-gnu.
+	* gcc_update (gcc/config/tilegx/mul-tables.c): New dependencies.
+	(gcc/config/tilepro/mul-tables.c): New dependencies.
+
+2012-02-11  Mike Stump  <mikestump@comcast.net>
+
+	* compare_tests (exit_status): Fix.
+
+2012-02-10   Diego Novillo  <dnovillo@google.com>
+
+	* repro_fail: Add --debug and --debug-tui flags.
+
+2012-02-02  Sumanth G <sumanth.gundapaneni@kpitcummins.com>
+	    Jayant R Sonar <jayant.sonar@kpitcummins.com>
+
+	* config-list.mk (LIST): Add cr16-elf.
+
+2012-01-02  Georg-Johann Lay  <avr@gjlay.de>
+
+	PR target/51345
+	* gcc_update (files_and_dependencies): Add
+	gcc/config/avr/t-multilib, gcc/config/avr/multilib.h.
+
+2011-11-29  DJ Delorie  <dj@redhat.com>
+
+	* config-list.mk (LIST): Add rl78-elf.
+
+2011-11-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* make_sunver.pl: Convert '?' in glob patterns to '.'.
+
+2011-11-07  Richard Henderson  <rth@redhat.com>
+
+	Merged from transactional-memory.
+
+	* gcc_update: Add libitm to touch data.
+
+2011-11-07   Quentin Neill  <quentin.neill@amd.com>
+
+	* compare_tests: Add ability to compare all .sum
+	files from two build directories.
+
+2011-11-05  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* contrib-list.mk: Add Epiphany configurations.
+
+2011-09-13   Diego Novillo  <dnovillo@google.com>
+
+	* testsuite-management: New.
+	* testsuite-management/validate_failures.py: New.
+
+2011-08-25  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* gcc_update: Determine svn branch from hg convert_revision.
+
+2011-07-18  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* config-list.mk (i586-netware): Remove.
+	(.PHONY): Remove make-script-dir dependency.
+	(make-script-dir): Remove.
+	($(LIST)): Remove make-script-dir dependency.
+
+2011-07-15  Bernd Schmidt  <bernds@codesourcery.com>
+
+	* gcc_update: Add C6X generated files.
+	* contrib/config-list.mk: Add c6x-elf and c6x-uclinux.
+
+2011-07-01  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* config-list.mk (LIST): Append OPT-enable-obsolete to
+	alpha-dec-osf5.1, mips-sgi-irix6.5.
+
+2011-06-24  Diego Novillo  <dnovillo@google.com>
+
+	* repro_fail: New.
+
+2011-06-21  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc_update (gcc/config/avr/avr-tables.opt): New dependencies.
+
+2011-05-19  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc_update (gcc/config/arm/arm-tables.opt): Also depend on
+	gcc/config/arm/arm-fpus.def.
+
+2011-05-10  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc_update (gcc/config/rs6000/rs6000-tables.opt): New
+	dependencies.
+
+2011-05-09  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc_update (gcc/config/mips/mips-tables.opt): New dependencies.
+
+2010-05-05  Joern Rennecke  <joern.rennecke@embecosm.com>
+
+	* config-list.mk: New file.
+
+2011-05-02  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc_update (gcc/config/m68k/m68k-tables.opt): New dependencies.
+
+2011-04-25  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* paranoia.cc (ENUM_BITFIELD): Remove.
+
+2011-04-08  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc_update (gcc/config/arm/arm-tables.opt): New dependencies.
+
+2011-03-22  Joseph Myers  <joseph@codesourcery.com>
+
+	* compare-all-tests (all_targets): Remove crx and m68hc11.
+
+2011-03-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR bootstrap/48135
+	* make_sunver.pl: Don't use File::Glob.
 
 2011-03-05  Joseph Myers  <joseph@codesourcery.com>
 

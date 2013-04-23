@@ -1,5 +1,5 @@
 /* Definitions of target machine GNU compiler. IA64-VMS version.
-   Copyright (C) 2003-2010 Free Software Foundation, Inc.
+   Copyright (C) 2003-2011 Free Software Foundation, Inc.
    Contributed by Douglas B Rupp (rupp@gnat.com).
 
 This file is part of GCC.
@@ -18,46 +18,23 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define TARGET_OBJECT_SUFFIX ".obj"
-#define TARGET_EXECUTABLE_SUFFIX ".exe"
-
 #define OBJECT_FORMAT_ELF
 
-#define TARGET_OS_CPP_BUILTINS()		\
+#define SUBTARGET_OS_CPP_BUILTINS()		\
     do {					\
-	builtin_define_std ("vms");		\
-	builtin_define_std ("VMS");		\
 	builtin_define ("__IA64");		\
-	builtin_assert ("system=vms");		\
 	builtin_define ("__IEEE_FLOAT");	\
     } while (0)
 
-/* By default, allow $ to be part of an identifier.  */
-#define DOLLARS_IN_IDENTIFIERS 2
-
-#undef TARGET_ABI_OPEN_VMS
-#define TARGET_ABI_OPEN_VMS 1
-
-#undef TARGET_NAME   
-#define TARGET_NAME "OpenVMS/IA64"
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (%s)", TARGET_NAME);           
-
 /* Need .debug_line info generated from gcc and gas.  */
 #undef TARGET_DEFAULT
+#if POINTER_SIZE == 64
+#define TARGET_DEFAULT (MASK_DWARF2_ASM | MASK_GNU_AS | MASK_MALLOC64)
+#else
 #define TARGET_DEFAULT (MASK_DWARF2_ASM | MASK_GNU_AS)
+#endif
 
 #define VMS_DEBUG_MAIN_POINTER "TRANSFER$BREAK$GO"
-
-/* "long" is 32 bits, but 64 bits for Ada.  */
-#undef LONG_TYPE_SIZE
-#define LONG_TYPE_SIZE 32
-#define ADA_LONG_TYPE_SIZE 64
-
-/* Pointer is 32 bits but the hardware has 64-bit addresses, sign extended.  */
-#undef POINTER_SIZE
-#define POINTER_SIZE 32
-#define POINTERS_EXTEND_UNSIGNED 0
 
 #undef MAX_OFILE_ALIGNMENT
 #define MAX_OFILE_ALIGNMENT 524288  /* 8 x 2^16 by DEC Ada Test CD40VRA */
@@ -137,63 +114,12 @@ STATIC func_ptr __CTOR_LIST__[1]                                             \
 /* Maybe same as HPUX?  Needs to be checked.  */
 #define JMP_BUF_SIZE  (8 * 76)
 
-typedef struct crtl_name_spec
-{
-  const char *const name;
-  const char *deccname;
-  int referenced;
-} crtl_name_spec;
-
-#include "config/vms/vms-crtl.h"
-
-/* Alias CRTL names to 32/64bit DECCRTL functions.
-   Fixme: This should do a binary search.  */
-#define DO_CRTL_NAMES                                                      \
-  do                                                                       \
-    {                                                                      \
-      int i;                                                               \
-      static crtl_name_spec vms_crtl_names[] = CRTL_NAMES;                 \
-      static int malloc64_init = 0;                                        \
-                                                                           \
-      if ((malloc64_init == 0) && TARGET_MALLOC64)                         \
-	{                                                                  \
-          for (i=0; vms_crtl_names [i].name; i++)                          \
-            {                                                              \
-	      if (strcmp ("calloc", vms_crtl_names [i].name) == 0)         \
-                vms_crtl_names [i].deccname = "decc$_calloc64";            \
-              else                                                         \
-	      if (strcmp ("malloc", vms_crtl_names [i].name) == 0)         \
-                vms_crtl_names [i].deccname = "decc$_malloc64";            \
-              else                                                         \
-	      if (strcmp ("realloc", vms_crtl_names [i].name) == 0)        \
-                vms_crtl_names [i].deccname = "decc$_realloc64";           \
-              else                                                         \
-	      if (strcmp ("strdup", vms_crtl_names [i].name) == 0)         \
-                vms_crtl_names [i].deccname = "decc$_strdup64";            \
-	    }                                                              \
-            malloc64_init = 1;                                             \
-        }                                                                  \
-      for (i=0; vms_crtl_names [i].name; i++)                              \
-	if (!vms_crtl_names [i].referenced &&                              \
-	    (strcmp (name, vms_crtl_names [i].name) == 0))                 \
-	  {                                                                \
-	    fprintf (file, "\t.alias %s, \"%s\"\n",                        \
-		     name, vms_crtl_names [i].deccname);                   \
-	    vms_crtl_names [i].referenced = 1;                             \
-	  }                                                                \
-    } while (0)
-
 #undef SUBTARGET_OPTIMIZATION_OPTIONS
 #define SUBTARGET_OPTIMIZATION_OPTIONS			\
   { OPT_LEVELS_ALL, OPT_fmerge_constants, NULL, 0 }
 
 /* Define this to be nonzero if static stack checking is supported.  */
 #define STACK_CHECK_STATIC_BUILTIN 1
-
-#define MD_UNWIND_SUPPORT "config/ia64/vms-unwind.h"
-
-#define UNW_IVMS_MODE(HEADER) (((HEADER) >> 44) & 0x3L)
-#define MD_UNW_COMPATIBLE_PERSONALITY_P(HEADER) (!UNW_IVMS_MODE (HEADER))
 
 /* Minimum amount of stack required to recover from an anticipated stack
    overflow detection.  The default value conveys an estimate of the amount
@@ -209,3 +135,29 @@ typedef struct crtl_name_spec
 
 #undef TARGET_ASM_NAMED_SECTION
 #define TARGET_ASM_NAMED_SECTION ia64_vms_elf_asm_named_section
+
+/* Define this macro if it is advisable to hold scalars in registers
+   in a wider mode than that declared by the program.  In such cases,
+   the value is constrained to be within the bounds of the declared
+   type, but kept valid in the wider mode.  The signedness of the
+   extension may differ from that of the type.
+
+   For ia64, we always store objects in a full register.  32-bit integers
+   are always sign-extended, but smaller objects retain their signedness.  */
+
+#undef PROMOTE_MODE
+#define PROMOTE_MODE(MODE,UNSIGNEDP,TYPE)			\
+  if (GET_MODE_CLASS (MODE) == MODE_INT				\
+      && GET_MODE_SIZE (MODE) < UNITS_PER_WORD)			\
+    {								\
+      if ((MODE) == SImode)					\
+	(UNSIGNEDP) = 0;					\
+      (MODE) = DImode;						\
+    }
+
+#undef TARGET_PROMOTE_FUNCTION_MODE
+#define TARGET_PROMOTE_FUNCTION_MODE default_promote_function_mode_always_promote
+
+/* IA64 VMS doesn't fully support COMDAT sections.  */
+
+#define SUPPORTS_ONE_ONLY 0

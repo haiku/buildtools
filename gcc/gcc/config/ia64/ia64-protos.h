@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler for IA-64.
-   Copyright (C) 1999, 2000, 2002, 2003, 2004, 2005, 2007, 2010
+   Copyright (C) 1999, 2000, 2002, 2003, 2004, 2005, 2007, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -18,6 +18,9 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Shared between the driver and cc1.  */
+extern enum unwind_info_type ia64_except_unwind_info (struct gcc_options *);
+
 /* Functions defined in ia64.c */
 
 extern int bundling_p;
@@ -25,8 +28,6 @@ extern int bundling_p;
 extern int ia64_st_address_bypass_p (rtx, rtx);
 extern int ia64_ld_address_bypass_p (rtx, rtx);
 extern int ia64_produce_address_p (rtx);
-
-extern bool ia64_legitimate_constant_p (rtx);
 
 extern rtx ia64_expand_move (rtx, rtx);
 extern int ia64_move_ok (rtx, rtx);
@@ -46,7 +47,8 @@ extern void ia64_expand_dot_prod_v8qi (rtx[], bool);
 extern void ia64_expand_call (rtx, rtx, rtx, int);
 extern void ia64_split_call (rtx, rtx, rtx, rtx, rtx, int, int);
 extern void ia64_reload_gp (void);
-extern void ia64_expand_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx);
+extern void ia64_expand_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx,
+				   enum memmodel);
 
 extern HOST_WIDE_INT ia64_initial_elimination_offset (int, int);
 extern void ia64_expand_prologue (void);
@@ -56,11 +58,13 @@ extern int ia64_direct_return (void);
 extern bool ia64_expand_load_address (rtx, rtx);
 extern int ia64_hard_regno_rename_ok (int, int);
 
-extern void ia64_print_operand_address (FILE *, rtx);
-extern void ia64_print_operand (FILE *, rtx, int);
 extern enum reg_class ia64_secondary_reload_class (enum reg_class,
 						   enum machine_mode, rtx);
 extern const char *get_bundle_name (int);
+
+extern void ia64_expand_vec_perm_even_odd (rtx, rtx, rtx, int);
+extern bool ia64_expand_vec_perm_const (rtx op[4]);
+extern void ia64_expand_vec_setv2sf (rtx op[3]);
 #endif /* RTX_CODE */
 
 #ifdef TREE_CODE

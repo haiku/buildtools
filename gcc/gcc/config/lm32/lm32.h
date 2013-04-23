@@ -23,11 +23,6 @@
 /* Run-time Target Specification */
 /*-------------------------------*/
 
-/* Print subsidiary information on the compiler version in use.  */
-#ifndef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (LatticeMico32)")
-#endif
-
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS()                       \
   do                                                    \
@@ -207,9 +202,6 @@ enum reg_class
 #define REGNO_REG_CLASS(REGNO) \
     (G_REG_P(REGNO) ? GENERAL_REGS : NO_REGS)
 
-#define CLASS_MAX_NREGS(CLASS, MODE) \
-    ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
-
 #define INDEX_REG_CLASS NO_REGS
 
 #define BASE_REG_CLASS GENERAL_REGS
@@ -350,8 +342,6 @@ enum reg_class
 #else
 #define REG_OK_FOR_BASE_P(X) NONSTRICT_REG_OK_FOR_BASE_P(X)
 #endif
-
-#define LEGITIMATE_CONSTANT_P(X) lm32_legitimate_constant_p (X)
 
 /*-------------------------*/
 /* Condition Code Status.  */

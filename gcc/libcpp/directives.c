@@ -1,7 +1,7 @@
 /* CPP Library. (Directive handling.)
    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
    1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -32,7 +32,7 @@ along with this program; see the file COPYING3.  If not see
 struct if_stack
 {
   struct if_stack *next;
-  linenum_type line;		/* Line where condition started.  */
+  source_location line;		/* Line where condition started.  */
   const cpp_hashnode *mi_cmacro;/* macro name for #ifndef around entire file */
   bool skip_elses;		/* Can future #else / #elif be skipped?  */
   bool was_skipping;		/* If were skipping on entry.  */
@@ -884,14 +884,14 @@ static void
 do_line (cpp_reader *pfile)
 {
   const struct line_maps *line_table = pfile->line_table;
-  const struct line_map *map = &line_table->maps[line_table->used - 1];
+  const struct line_map *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
 
   /* skip_rest_of_line() may cause line table to be realloc()ed so note down
      sysp right now.  */
 
-  unsigned char map_sysp = map->sysp;
+  unsigned char map_sysp = ORDINARY_MAP_IN_SYSTEM_HEADER_P (map);
   const cpp_token *token;
-  const char *new_file = map->to_file;
+  const char *new_file = ORDINARY_MAP_FILE_NAME (map);
   linenum_type new_lineno;
 
   /* C99 raised the minimum limit on #line numbers.  */
@@ -946,11 +946,11 @@ static void
 do_linemarker (cpp_reader *pfile)
 {
   const struct line_maps *line_table = pfile->line_table;
-  const struct line_map *map = &line_table->maps[line_table->used - 1];
+  const struct line_map *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
   const cpp_token *token;
-  const char *new_file = map->to_file;
+  const char *new_file = ORDINARY_MAP_FILE_NAME (map);
   linenum_type new_lineno;
-  unsigned int new_sysp = map->sysp;
+  unsigned int new_sysp = ORDINARY_MAP_IN_SYSTEM_HEADER_P (map);
   enum lc_reason reason = LC_RENAME_VERBATIM;
   int flag;
   bool wrapped;
@@ -1038,7 +1038,9 @@ _cpp_do_file_change (cpp_reader *pfile, enum lc_reason reason,
   const struct line_map *map = linemap_add (pfile->line_table, reason, sysp,
 					    to_file, file_line);
   if (map != NULL)
-    linemap_line_start (pfile->line_table, map->to_line, 127);
+    linemap_line_start (pfile->line_table,
+			ORDINARY_MAP_STARTING_LINE_NUMBER (map),
+			127);
 
   if (pfile->cb.file_change)
     pfile->cb.file_change (pfile, map);
@@ -1360,7 +1362,36 @@ do_pragma (cpp_reader *pfile)
 	{
 	  bool allow_name_expansion = p->allow_expansion;
 	  if (allow_name_expansion)
-	    pfile->state.prevent_expansion--;
+	    {
+	      pfile->state.prevent_expansion--;
+	      /*
+		Kludge ahead.
+
+		Consider this code snippet:
+
+		#define P parallel
+		#pragma omp P for
+		... a for loop ...
+
+		Once we parsed the 'omp' namespace of the #pragma
+		directive, we then parse the 'P' token that represents the
+		pragma name.  P being a macro, it is expanded into the
+		resulting 'parallel' token.
+
+		At this point the 'p' variable contains the 'parallel'
+		pragma name.  And pfile->context->macro is non-null
+		because we are still right at the end of the macro
+		context of 'P'.  The problem is, if we are being
+		(indirectly) called by cpp_get_token_with_location,
+		that function might test pfile->context->macro to see
+		if we are in the context of a macro expansion, (and we
+		are) and then use pfile->invocation_location as the
+		location of the macro invocation.  So we must instruct
+		cpp_get_token below to set
+		pfile->invocation_location.  */
+	      pfile->set_invocation_location = true;
+	    }
+
 	  token = cpp_get_token (pfile);
 	  if (token->type == CPP_NAME)
 	    p = lookup_pragma_entry (p->u.space, token->val.node.node);
@@ -1711,7 +1742,7 @@ destringize_and_run (cpp_reader *pfile, const cpp_string *in)
   saved_cur_run = pfile->cur_run;
 
   pfile->context = XNEW (cpp_context);
-  pfile->context->macro = 0;
+  pfile->context->c.macro = 0;
   pfile->context->prev = 0;
   pfile->context->next = 0;
 

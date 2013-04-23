@@ -1,5 +1,6 @@
 /* score.h for Sunplus S+CORE processor
-   Copyright (C) 2005, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Sunnorth.
 
    This file is part of GCC.
@@ -64,9 +65,6 @@
 #define TARGET_DEFAULT         0
 
 #define SCORE_GCC_VERSION      "1.6"
-
-#define TARGET_VERSION \
-      fprintf (stderr, "Sunplus S+core rev=%s", SCORE_GCC_VERSION);
 
 /* Target machine storage layout.  */
 #define BITS_BIG_ENDIAN        0
@@ -390,18 +388,6 @@ enum reg_class
    also contains the register.  */
 #define REGNO_REG_CLASS(REGNO) (enum reg_class) score_reg_class (REGNO)
 
-/* The following macro defines cover classes for Integrated Register
-   Allocator.  Cover classes is a set of non-intersected register
-   classes covering all hard registers used for register allocation
-   purpose.  Any move between two registers of a cover class should be
-   cheaper than load or store of the registers.  The macro value is
-   array of register classes with LIM_REG_CLASSES used as the end
-   marker.  */
-#define IRA_COVER_CLASSES					\
-{								\
-  G32_REGS, CE_REGS, SP_REGS, LIM_REG_CLASSES			\
-}
-
 /* A macro whose definition is the name of the class to which a
    valid base register must belong.  A base register is one used in
    an address which is the register value plus a displacement.  */
@@ -431,11 +417,6 @@ extern enum reg_class score_char_to_class[256];
    NO_REGS is returned.  */
 #define SECONDARY_OUTPUT_RELOAD_CLASS(CLASS, MODE, X) \
   score_secondary_reload_class (CLASS, MODE, X)
-
-/* Return the maximum number of consecutive registers
-   needed to represent mode MODE in a register of class CLASS.  */
-#define CLASS_MAX_NREGS(CLASS, MODE) \
-  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 #define CANNOT_CHANGE_MODE_CLASS(FROM, TO, CLASS)    \
   (GET_MODE_SIZE (FROM) != GET_MODE_SIZE (TO)        \
@@ -612,8 +593,6 @@ typedef struct score_args
 
 #define REG_OK_FOR_INDEX_P(X) 0
 
-#define LEGITIMATE_CONSTANT_P(X)        1
-
 /* Condition Code Status.  */
 #define SELECT_CC_MODE(OP, X, Y)        score_select_cc_mode (OP, X, Y)
 
@@ -622,14 +601,6 @@ typedef struct score_args
 #define REVERSIBLE_CC_MODE(MODE)        1
 
 /* Describing Relative Costs of Operations  */
-/* Compute extra cost of moving data between one register class and another.  */
-#define REGISTER_MOVE_COST(MODE, FROM, TO) \
-  score_register_move_cost (MODE, FROM, TO)
-
-/* Moves to and from memory are quite expensive */
-#define MEMORY_MOVE_COST(MODE, CLASS, TO_P) \
-  (4 + memory_move_secondary_cost ((MODE), (CLASS), (TO_P)))
-
 /* Try to generate sequences that don't involve branches.  */
 #define BRANCH_COST(speed_p, predictable_p) 2
 

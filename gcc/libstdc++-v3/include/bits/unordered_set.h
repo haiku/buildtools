@@ -1,6 +1,6 @@
 // unordered_set implementation -*- C++ -*-
 
-// Copyright (C) 2010, 2011 Free Software Foundation, Inc.
+// Copyright (C) 2010, 2011, 2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -40,14 +40,18 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	   class _Hash = hash<_Value>,
 	   class _Pred = std::equal_to<_Value>,
 	   class _Alloc = std::allocator<_Value>,
-	   bool __cache_hash_code = false>
+	   bool __cache_hash_code =
+	     __not_<__and_<is_integral<_Value>, is_empty<_Hash>,
+			   integral_constant<bool, !__is_final(_Hash)>,
+			   __detail::__is_noexcept_hash<_Value, _Hash>>>::value>
     class __unordered_set
     : public _Hashtable<_Value, _Value, _Alloc,
 			std::_Identity<_Value>, _Pred,
 			_Hash, __detail::_Mod_range_hashing,
 			__detail::_Default_ranged_hash,
 			__detail::_Prime_rehash_policy,
-			__cache_hash_code, true, true>
+			__cache_hash_code, true, true>,
+      __check_copy_constructible<_Alloc>
     {
       typedef _Hashtable<_Value, _Value, _Alloc,
 			 std::_Identity<_Value>, _Pred,
@@ -63,7 +67,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       typedef typename _Base::hasher          hasher;
       typedef typename _Base::key_equal       key_equal;
       typedef typename _Base::allocator_type  allocator_type;
-      
+      typedef typename _Base::iterator        iterator;
+      typedef typename _Base::const_iterator  const_iterator;
+
       explicit
       __unordered_set(size_type __n = 10,
 		      const hasher& __hf = hasher(),
@@ -103,20 +109,34 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	this->insert(__l.begin(), __l.end());
 	return *this;
       }
+
+      using _Base::insert;
+
+      std::pair<iterator, bool>
+      insert(value_type&& __v)
+      { return this->_M_insert(std::move(__v), std::true_type()); }
+
+      iterator
+      insert(const_iterator, value_type&& __v)
+      { return insert(std::move(__v)).first; }
     };
 
   template<class _Value,
 	   class _Hash = hash<_Value>,
 	   class _Pred = std::equal_to<_Value>,
 	   class _Alloc = std::allocator<_Value>,
-	   bool __cache_hash_code = false>
+	   bool __cache_hash_code =
+	     __not_<__and_<is_integral<_Value>, is_empty<_Hash>,
+			   integral_constant<bool, !__is_final(_Hash)>,
+			   __detail::__is_noexcept_hash<_Value, _Hash>>>::value>
     class __unordered_multiset
     : public _Hashtable<_Value, _Value, _Alloc,
 			std::_Identity<_Value>, _Pred,
 			_Hash, __detail::_Mod_range_hashing,
 			__detail::_Default_ranged_hash,
 			__detail::_Prime_rehash_policy,
-			__cache_hash_code, true, false>
+			__cache_hash_code, true, false>,
+      __check_copy_constructible<_Alloc>
     {
       typedef _Hashtable<_Value, _Value, _Alloc,
 			 std::_Identity<_Value>, _Pred,
@@ -132,7 +152,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       typedef typename _Base::hasher          hasher;
       typedef typename _Base::key_equal       key_equal;
       typedef typename _Base::allocator_type  allocator_type;
-      
+      typedef typename _Base::iterator        iterator;
+      typedef typename _Base::const_iterator  const_iterator;
+
       explicit
       __unordered_multiset(size_type __n = 10,
 			   const hasher& __hf = hasher(),
@@ -173,6 +195,16 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	this->insert(__l.begin(), __l.end());
 	return *this;
       }
+
+      using _Base::insert;
+
+      iterator
+      insert(value_type&& __v)
+      { return this->_M_insert(std::move(__v), std::false_type()); }
+
+      iterator
+      insert(const_iterator, value_type&& __v)
+      { return insert(std::move(__v)); }
     };
 
   template<class _Value, class _Hash, class _Pred, class _Alloc,

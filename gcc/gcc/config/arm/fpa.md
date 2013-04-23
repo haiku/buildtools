@@ -567,7 +567,7 @@
     case 0: return \"ldm%(ia%)\\t%m1, %M0\\t%@ double\";
     case 1: return \"stm%(ia%)\\t%m0, %M1\\t%@ double\";
     case 2: return \"#\";
-    case 3: case 4: return output_move_double (operands);
+    case 3: case 4: return output_move_double (operands, true, NULL);
     case 5: return \"mvf%?d\\t%0, %1\";
     case 6: return \"mnf%?d\\t%0, #%N1\";
     case 7: return \"ldf%?d\\t%0, %1\";
@@ -657,7 +657,7 @@
     default:
     case 0: return \"ldm%(ia%)\\t%m1, %M0\\t%@ double\";
     case 1: return \"stm%(ia%)\\t%m0, %M1\\t%@ double\";
-    case 2: case 3: case 4: return output_move_double (operands);
+    case 2: case 3: case 4: return output_move_double (operands, true, NULL);
     case 5: return \"mvf%?d\\t%0, %1\";
     case 6: return \"mnf%?d\\t%0, #%N1\";
     case 7: return \"ldf%?d\\t%0, %1\";
@@ -671,7 +671,7 @@
    (set_attr "type"
     "load1,store2,*,store2,load1,ffarith,ffarith,f_fpa_load,f_fpa_store,r_mem_f,f_mem_r")
    (set_attr "pool_range" "*,*,*,*,4092,*,*,1024,*,*,*")
-   (set_attr "neg_pool_range" "*,*,*,*,0,*,*,1020,*,*,*")]
+   (set_attr "neg_pool_range" "*,*,*,*,0,*,*,1008,*,*,*")]
 )
 
 ;; Saving and restoring the floating point registers in the prologue should

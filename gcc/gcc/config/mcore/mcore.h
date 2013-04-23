@@ -324,11 +324,6 @@ enum reg_class
 
 #define N_REG_CLASSES  (int) LIM_REG_CLASSES
 
-#define IRA_COVER_CLASSES		\
-{					\
-  GENERAL_REGS, C_REGS, LIM_REG_CLASSES	\
-}
-
 
 /* Give names of register classes as strings for dump file.  */
 #define REG_CLASS_NAMES  \
@@ -362,7 +357,7 @@ enum reg_class
    or could index an array.  */
 
 extern const enum reg_class regno_reg_class[FIRST_PSEUDO_REGISTER];
-#define REGNO_REG_CLASS(REGNO) regno_reg_class[REGNO]
+#define REGNO_REG_CLASS(REGNO) ((REGNO) < FIRST_PSEUDO_REGISTER ? regno_reg_class[REGNO] : NO_REGS)
 
 /* When this hook returns true for MODE, the compiler allows
    registers explicitly used in the rtl to be used as spill registers
@@ -533,13 +528,6 @@ extern const enum reg_class regno_reg_class[FIRST_PSEUDO_REGISTER];
 
 /* Recognize any constant value that is a valid address.  */
 #define CONSTANT_ADDRESS_P(X) 	 (GET_CODE (X) == LABEL_REF)
-
-/* Nonzero if the constant value X is a legitimate general operand.
-   It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.
-
-   On the MCore, allow anything but a double.  */
-#define LEGITIMATE_CONSTANT_P(X) (GET_CODE(X) != CONST_DOUBLE \
-				  && CONSTANT_P (X))
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
