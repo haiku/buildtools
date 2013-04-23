@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using a Unix style C library and tools.
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2004, 2005, 2007, 2008, 2009, 2010
+   2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -84,7 +84,7 @@ along with GCC; see the file COPYING3.  If not see
   (TARGET_64BIT ? dbx64_register_map[(n)]		\
 		: svr4_dbx_register_map[(n)])
 
-/* The MS_ABI changes the set of call-used registers.  */
+/* The 64-bit MS_ABI changes the set of call-used registers.  */
 #undef DWARF_FRAME_REGISTERS
 #define DWARF_FRAME_REGISTERS (TARGET_64BIT ? 33 : 17)
 
@@ -176,9 +176,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef LONG_TYPE_SIZE
 #define LONG_TYPE_SIZE 32
 
-union tree_node;
-#define TREE union tree_node *
-
 #define drectve_section() \
   (fprintf (asm_out_file, "\t.section .drectve\n"), \
    in_section = NULL)
@@ -207,7 +204,7 @@ do {									\
 	       (flag_pic > 1) ? "PIC" : "pic");				\
       flag_pic = 0;							\
     }									\
-} while (0)								\
+} while (0)
 
 /* Define this macro if references to a symbol must be treated
    differently depending on something about the variable or
@@ -262,7 +259,7 @@ do {						\
 #define CHECK_STACK_LIMIT 4000
 
 #undef STACK_BOUNDARY
-#define STACK_BOUNDARY	(ix86_abi == MS_ABI ? 128 : BITS_PER_WORD)
+#define STACK_BOUNDARY	(TARGET_64BIT && ix86_abi == MS_ABI ? 128 : BITS_PER_WORD)
 
 /* By default, target has a 80387, uses IEEE compatible arithmetic,
    returns float values in the 387 and needs stack probes.
@@ -454,8 +451,10 @@ do {						\
 #define TARGET_USE_LOCAL_THUNK_ALIAS_P(DECL) (!DECL_ONE_ONLY (DECL))
 
 #define SUBTARGET_ATTRIBUTE_TABLE \
-  { "selectany", 0, 0, true, false, false, ix86_handle_selectany_attribute }
-  /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler } */
+  { "selectany", 0, 0, true, false, false, ix86_handle_selectany_attribute, \
+    false }
+  /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler,
+       affects_type_identity } */
 
 /*  mcount() does not need a counter variable.  */
 #undef NO_PROFILE_COUNTERS
@@ -470,9 +469,3 @@ do {						\
 
 /* Static stack checking is supported by means of probes.  */
 #define STACK_CHECK_STATIC_BUILTIN 1
-
-#undef TREE
-
-#ifndef BUFSIZ
-# undef FILE
-#endif

@@ -170,7 +170,7 @@ gen_stdcall_or_fastcall_suffix (tree decl, tree id, bool fastcall)
   HOST_WIDE_INT total = 0;
   const char *old_str = IDENTIFIER_POINTER (id != NULL_TREE ? id : DECL_NAME (decl));
   char *new_str, *p;
-  tree type = TREE_TYPE (decl);
+  tree type = TREE_TYPE (DECL_ORIGIN (decl));
   tree arg;
   function_args_iterator args_iter;
 
@@ -202,7 +202,8 @@ gen_stdcall_or_fastcall_suffix (tree decl, tree id, bool fastcall)
 		       / parm_boundary_bytes * parm_boundary_bytes);
 	  total += parm_size;
 	}
-      }
+    }
+
   /* Assume max of 8 base 10 digits in the suffix.  */
   p = new_str = XALLOCAVEC (char, 1 + strlen (old_str) + 1 + 8 + 1);
   if (fastcall)
@@ -222,10 +223,16 @@ i386_pe_maybe_mangle_decl_assembler_name (tree decl, tree id)
 
   if (TREE_CODE (decl) == FUNCTION_DECL)
     { 
-      tree type_attributes = TYPE_ATTRIBUTES (TREE_TYPE (decl));
-      if (lookup_attribute ("stdcall", type_attributes))
-	new_id = gen_stdcall_or_fastcall_suffix (decl, id, false);
-      else if (lookup_attribute ("fastcall", type_attributes))
+      unsigned int ccvt = ix86_get_callcvt (TREE_TYPE (decl));
+      if ((ccvt & IX86_CALLCVT_STDCALL) != 0)
+        {
+	  if (TARGET_RTD)
+	    /* If we are using -mrtd emit undecorated symbol and let linker
+	       do the proper resolving.  */
+	    return NULL_TREE;
+	  new_id = gen_stdcall_or_fastcall_suffix (decl, id, false);
+	}
+      else if ((ccvt & IX86_CALLCVT_FASTCALL) != 0)
 	new_id = gen_stdcall_or_fastcall_suffix (decl, id, true);
     }
 
@@ -343,21 +350,22 @@ i386_pe_encode_section_info (tree decl, rtx rtl, int first)
   SYMBOL_REF_FLAGS (symbol) = flags;
 }
 
+
 bool
 i386_pe_binds_local_p (const_tree exp)
 {
-  /* PE does not do dynamic binding.  Indeed, the only kind of
-     non-local reference comes from a dllimport'd symbol.  */
   if ((TREE_CODE (exp) == VAR_DECL || TREE_CODE (exp) == FUNCTION_DECL)
       && DECL_DLLIMPORT_P (exp))
     return false;
 
-  /* Or a weak one, now that they are supported.  */
-  if ((TREE_CODE (exp) == VAR_DECL || TREE_CODE (exp) == FUNCTION_DECL)
-      && DECL_WEAK (exp))
-    return false;
-
-  return true;
+  /* External public symbols, which aren't weakref-s,
+     have local-binding for PE targets.  */
+  if (DECL_P (exp)
+      && !lookup_attribute ("weakref", DECL_ATTRIBUTES (exp))
+      && TREE_PUBLIC (exp)
+      && DECL_EXTERNAL (exp))
+    return true;
+  return default_binds_local_p_1 (exp, 0);
 }
 
 /* Also strip the fastcall prefix and stdcall suffix.  */
@@ -477,6 +485,11 @@ i386_pe_asm_named_section (const char *name, unsigned int flags,
 {
   char flagchars[8], *f = flagchars;
 
+#if defined (HAVE_GAS_SECTION_EXCLUDE) && HAVE_GAS_SECTION_EXCLUDE == 1
+  if ((flags & SECTION_EXCLUDE) != 0)
+    *f++ = 'e';
+#endif
+
   if ((flags & (SECTION_CODE | SECTION_WRITE)) == 0)
     /* readonly data */
     {
@@ -491,6 +504,12 @@ i386_pe_asm_named_section (const char *name, unsigned int flags,
         *f++ = 'w';
       if (flags & SECTION_PE_SHARED)
         *f++ = 's';
+#if !defined (HAVE_GAS_SECTION_EXCLUDE) || HAVE_GAS_SECTION_EXCLUDE == 0
+      /* If attribute "e" isn't supported we mark this section as
+         never-load.  */
+      if ((flags & SECTION_EXCLUDE) != 0)
+	*f++ = 'n';
+#endif
     }
 
   /* LTO sections need 1-byte alignment to avoid confusing the
@@ -802,22 +821,6 @@ i386_pe_seh_end_prologue (FILE *f)
     return;
   seh = cfun->machine->seh;
 
-  /* Emit an assembler directive to set up the frame pointer.  Always do
-     this last.  The documentation talks about doing this "before" any
-     other code that uses offsets, but (experimentally) that's after we
-     emit the codes in reverse order (handled by the assembler).  */
-  if (seh->cfa_reg != stack_pointer_rtx)
-    {
-      HOST_WIDE_INT offset = seh->sp_offset - seh->cfa_offset;
-
-      gcc_assert ((offset & 15) == 0);
-      gcc_assert (IN_RANGE (offset, 0, 240));
-
-      fputs ("\t.seh_setframe\t", f);
-      print_reg (seh->cfa_reg, 0, f);
-      fprintf (f, ", " HOST_WIDE_INT_PRINT_DEC "\n", offset);
-    }
-
   XDELETE (seh);
   cfun->machine->seh = NULL;
 
@@ -888,7 +891,10 @@ seh_emit_stackalloc (FILE *f, struct seh_frame_state *seh,
     seh->cfa_offset += offset;
   seh->sp_offset += offset;
 
-  fprintf (f, "\t.seh_stackalloc\t" HOST_WIDE_INT_PRINT_DEC "\n", offset);
+  /* Do not output the stackalloc in that case (it won't work as there is no
+     encoding for very large frame size).  */
+  if (offset < SEH_MAX_FRAME_SIZE)
+    fprintf (f, "\t.seh_stackalloc\t" HOST_WIDE_INT_PRINT_DEC "\n", offset);
 }
 
 /* Process REG_CFA_ADJUST_CFA for SEH.  */
@@ -921,8 +927,19 @@ seh_cfa_adjust_cfa (FILE *f, struct seh_frame_state *seh, rtx pat)
     seh_emit_stackalloc (f, seh, reg_offset);
   else if (dest_regno == HARD_FRAME_POINTER_REGNUM)
     {
+      HOST_WIDE_INT offset;
+
       seh->cfa_reg = dest;
       seh->cfa_offset -= reg_offset;
+
+      offset = seh->sp_offset - seh->cfa_offset;
+
+      gcc_assert ((offset & 15) == 0);
+      gcc_assert (IN_RANGE (offset, 0, 240));
+
+      fputs ("\t.seh_setframe\t", f);
+      print_reg (seh->cfa_reg, 0, f);
+      fprintf (f, ", " HOST_WIDE_INT_PRINT_DEC "\n", offset);
     }
   else
     gcc_unreachable ();

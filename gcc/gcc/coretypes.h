@@ -136,6 +136,16 @@ enum node_frequency {
   NODE_FREQUENCY_HOT
 };
 
+/* Possible initialization status of a variable.   When requested
+   by the user, this information is tracked and recorded in the DWARF
+   debug information, along with the variable's location.  */
+enum var_init_status
+{
+  VAR_INIT_STATUS_UNKNOWN,
+  VAR_INIT_STATUS_UNINITIALIZED,
+  VAR_INIT_STATUS_INITIALIZED
+};
+
 
 struct edge_def;
 typedef struct edge_def *edge;
@@ -170,6 +180,19 @@ union _dont_use_tree_here_;
 #define const_tree union _dont_use_tree_here_ *
 
 #endif
+
+/* Memory model types for the __atomic* builtins. 
+   This must match the order in libstdc++-v3/include/bits/atomic_base.h.  */
+enum memmodel
+{
+  MEMMODEL_RELAXED = 0,
+  MEMMODEL_CONSUME = 1,
+  MEMMODEL_ACQUIRE = 2,
+  MEMMODEL_RELEASE = 3,
+  MEMMODEL_ACQ_REL = 4,
+  MEMMODEL_SEQ_CST = 5,
+  MEMMODEL_LAST = 6
+};
 
 #endif /* coretypes.h */
 

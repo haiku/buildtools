@@ -1,5 +1,5 @@
 /* Process source files and output type information.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -18,7 +18,11 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
+#ifdef GENERATOR_FILE
 #include "bconfig.h"
+#else
+#include "config.h"
+#endif
 #include "system.h"
 #include "errors.h"		/* for fatal */
 #include "getopt.h"
@@ -28,6 +32,7 @@
 #include "xregex.h"
 #include "obstack.h"
 #include "gengtype.h"
+#include "filenames.h"
 
 /* Data types, macros, etc. used only in this file.  */
 
@@ -429,6 +434,12 @@ read_input_list (const char *listname)
 	lang_bitmap bitmap = get_lang_bitmap (gt_files[f]);
 	const char *basename = get_file_basename (gt_files[f]);
 	const char *slashpos = strchr (basename, '/');
+#ifdef HAVE_DOS_BASED_FILE_SYSTEM
+	const char *slashpos2 = strchr (basename, '\\');
+
+	if (!slashpos || (slashpos2 && slashpos2 < slashpos))
+	  slashpos = slashpos2;
+#endif
 
 	if (slashpos)
 	  {
@@ -1004,6 +1015,7 @@ adjust_field_rtx_def (type_p t, options_p ARG_UNUSED (opt))
 	  {
 	  case NOTE_INSN_MAX:
 	  case NOTE_INSN_DELETED_LABEL:
+	  case NOTE_INSN_DELETED_DEBUG_LABEL:
 	    note_flds = create_field (note_flds, &string_type, "rt_str");
 	    break;
 
@@ -1013,6 +1025,7 @@ adjust_field_rtx_def (type_p t, options_p ARG_UNUSED (opt))
 	    break;
 
 	  case NOTE_INSN_VAR_LOCATION:
+	  case NOTE_INSN_CALL_ARG_LOCATION:
 	    note_flds = create_field (note_flds, rtx_tp, "rt_rtx");
 	    break;
 
@@ -1100,6 +1113,8 @@ adjust_field_rtx_def (type_p t, options_p ARG_UNUSED (opt))
 		t = symbol_union_tp, subname = "";
 	      else if (i == BARRIER && aindex >= 3)
 		t = scalar_tp, subname = "rt_int";
+	      else if (i == ENTRY_VALUE && aindex == 0)
+		t = rtx_tp, subname = "rt_rtx";
 	      else
 		{
 		  error_at_line 
@@ -1549,7 +1564,8 @@ open_base_files (void)
       "optabs.h", "libfuncs.h", "debug.h", "ggc.h", "cgraph.h",
       "tree-flow.h", "reload.h", "cpp-id-data.h", "tree-chrec.h",
       "cfglayout.h", "except.h", "output.h", "gimple.h", "cfgloop.h",
-      "target.h", "ipa-prop.h", "lto-streamer.h", "target-globals.h", NULL
+      "target.h", "ipa-prop.h", "lto-streamer.h", "target-globals.h",
+      "ipa-inline.h", "dwarf2out.h", NULL
     };
     const char *const *ifp;
     outf_p gtype_desc_c;
@@ -1570,10 +1586,7 @@ open_base_files (void)
 static const char *
 get_file_realbasename (const input_file *inpf)
 {
-  const char *f = get_input_file_name (inpf);
-  const char *lastslash = strrchr (f, '/');
-
-  return (lastslash != NULL) ? lastslash + 1 : f;
+  return lbasename (get_input_file_name (inpf));
 }
 
 /* For INPF a filename, return the relative path to INPF from
@@ -1758,6 +1771,12 @@ static outf_p source_dot_c_frul (input_file*, char**, char**);
    matters, so change with extreme care!  */
 
 struct file_rule_st files_rules[] = {
+  /* The general rule assumes that files in subdirectories belong to a
+     particular front-end, and files not in subdirectories are shared.
+     The following rules deal with exceptions - files that are in
+     subdirectories and yet are shared, and files that are top-level,
+     but are not shared.  */
+
   /* the c-family/ source directory is special.  */
   { DIR_PREFIX_REGEX "c-family/([[:alnum:]_-]*)\\.c$",
     REG_EXTENDED, NULL_REGEX,
@@ -1789,10 +1808,20 @@ struct file_rule_st files_rules[] = {
     REG_EXTENDED, NULL_REGEX,
     "gt-cp-name-lookup.h", "cp/name-lookup.c", NULL_FRULACT },
 
-  /* objc/objc-act.h fives gt-objc-objc-act.h for objc/objc-act.c !  */
+  /* cp/parser.h gives gt-cp-parser.h for cp/parser.c !  */
+  { DIR_PREFIX_REGEX "cp/parser\\.h$",
+    REG_EXTENDED, NULL_REGEX,
+    "gt-cp-parser.h", "cp/parser.c", NULL_FRULACT },
+
+  /* objc/objc-act.h gives gt-objc-objc-act.h for objc/objc-act.c !  */
   { DIR_PREFIX_REGEX "objc/objc-act\\.h$",
     REG_EXTENDED, NULL_REGEX,
     "gt-objc-objc-act.h", "objc/objc-act.c", NULL_FRULACT },
+
+  /* objc/objc-map.h gives gt-objc-objc-map.h for objc/objc-map.c !  */
+  { DIR_PREFIX_REGEX "objc/objc-map\\.h$",
+    REG_EXTENDED, NULL_REGEX,
+    "gt-objc-objc-map.h", "objc/objc-map.c", NULL_FRULACT },
 
   /* General cases.  For header *.h and source *.c files, we need
    * special actions to handle the language.  */
@@ -1925,7 +1954,7 @@ matching_file_name_substitute (const char *filnam, regmatch_t pmatch[10],
   obstack_1grow (&str_obstack, '\0');
   rawstr = XOBFINISH (&str_obstack, char *);
   str = xstrdup (rawstr);
-  obstack_free (&str_obstack, rawstr);
+  obstack_free (&str_obstack, NULL);
   DBGPRINTF ("matched replacement %s", str);
   rawstr = NULL;
   return str;
@@ -1934,7 +1963,7 @@ matching_file_name_substitute (const char *filnam, regmatch_t pmatch[10],
 
 /* An output file, suitable for definitions, that can see declarations
    made in INPF and is linked into every language that uses INPF.
-   Since the the result is cached inside INPF, that argument cannot be
+   Since the result is cached inside INPF, that argument cannot be
    declared constant, but is "almost" constant. */
 
 outf_p
@@ -2067,7 +2096,7 @@ get_output_file_with_visibility (input_file *inpf)
   /* Look through to see if we've ever seen this output filename
      before.  If found, cache the result in inpf.  */
   for (r = output_files; r; r = r->next)
-    if (strcmp (r->name, output_name) == 0)
+    if (filename_cmp (r->name, output_name) == 0)
       {
 	inpf->inpoutf = r;
 	DBGPRINTF ("found r @ %p for output_name %s for_name %s", (void*)r,
@@ -2367,6 +2396,7 @@ walk_type (type_p t, struct walk_type_data *d)
   int maybe_undef_p = 0;
   int use_param_num = -1;
   int use_params_p = 0;
+  int atomic_p = 0;
   options_p oo;
   const struct nested_ptr_data *nested_ptr_d = NULL;
 
@@ -2396,6 +2426,8 @@ walk_type (type_p t, struct walk_type_data *d)
       ;
     else if (strcmp (oo->name, "skip") == 0)
       ;
+    else if (strcmp (oo->name, "atomic") == 0)
+      atomic_p = 1;
     else if (strcmp (oo->name, "default") == 0)
       ;
     else if (strcmp (oo->name, "param_is") == 0)
@@ -2461,6 +2493,12 @@ walk_type (type_p t, struct walk_type_data *d)
       return;
     }
 
+  if (atomic_p && (t->kind != TYPE_POINTER))
+    {
+      error_at_line (d->line, "field `%s' has invalid option `atomic'\n", d->val);
+      return;
+    }
+
   switch (t->kind)
     {
     case TYPE_SCALAR:
@@ -2473,6 +2511,25 @@ walk_type (type_p t, struct walk_type_data *d)
 	if (maybe_undef_p && t->u.p->u.s.line.file == NULL)
 	  {
 	    oprintf (d->of, "%*sgcc_assert (!%s);\n", d->indent, "", d->val);
+	    break;
+	  }
+
+	/* If a pointer type is marked as "atomic", we process the
+	   field itself, but we don't walk the data that they point to.
+	   
+	   There are two main cases where we walk types: to mark
+	   pointers that are reachable, and to relocate pointers when
+	   writing a PCH file.  In both cases, an atomic pointer is
+	   itself marked or relocated, but the memory that it points
+	   to is left untouched.  In the case of PCH, that memory will
+	   be read/written unchanged to the PCH file.  */
+	if (atomic_p)
+	  {
+	    oprintf (d->of, "%*sif (%s != NULL) {\n", d->indent, "", d->val);
+	    d->indent += 2;
+	    d->process_field (t, d);
+	    d->indent -= 2;
+	    oprintf (d->of, "%*s}\n", d->indent, "");
 	    break;
 	  }
 
@@ -4082,14 +4139,36 @@ write_roots (pair_p variables, bool emit_pch)
   finish_root_table (flp, "pch_rs", "LAST_GGC_ROOT_TAB", "ggc_root_tab",
 		     "gt_pch_scalar_rtab");
 }
+/* Record the definition of the vec_prefix structure, as defined in vec.h:
+
+   struct vec_prefix GTY(()) {
+   unsigned num;
+   unsigned alloc;
+   };  */
+static type_p
+vec_prefix_type (void)
+{
+  static type_p prefix_type = NULL;
+  if (prefix_type == NULL)
+    {
+      pair_p fields;
+      static struct fileloc pos = { NULL, 0 };
+      type_p len_ty = create_scalar_type ("unsigned");
+      pos.file = input_file_by_name (__FILE__); pos.line = __LINE__;
+      fields = create_field_at (0, len_ty, "alloc", 0, &pos);
+      fields = create_field_at (fields, len_ty, "num", 0, &pos);
+      prefix_type = new_structure ("vec_prefix", 0, &pos, fields, 0);
+      prefix_type->u.s.bitmap = -1;
+    }
+  return prefix_type;
+}
 
 /* Record the definition of a generic VEC structure, as if we had expanded
    the macros in vec.h:
 
    typedef struct VEC_<type>_base GTY(()) {
-   unsigned num;
-   unsigned alloc;
-   <type> GTY((length ("%h.num"))) vec[1];
+   struct vec_prefix prefix;
+   <type> GTY((length ("%h.prefix.num"))) vec[1];
    } VEC_<type>_base
 
    where the GTY(()) tags are only present if is_scalar is _false_.  */
@@ -4100,7 +4179,6 @@ note_def_vec (const char *type_name, bool is_scalar, struct fileloc *pos)
   pair_p fields;
   type_p t;
   options_p o;
-  type_p len_ty = create_scalar_type ("unsigned");
   const char *name = concat ("VEC_", type_name, "_base", (char *) 0);
 
   if (is_scalar)
@@ -4111,12 +4189,11 @@ note_def_vec (const char *type_name, bool is_scalar, struct fileloc *pos)
   else
     {
       t = resolve_typedef (type_name, pos);
-      o = create_string_option (0, "length", "%h.num");
+      o = create_string_option (0, "length", "%h.prefix.num");
     }
   /* We assemble the field list in reverse order.  */
   fields = create_field_at (0, create_array (t, "1"), "vec", o, pos);
-  fields = create_field_at (fields, len_ty, "alloc", 0, pos);
-  fields = create_field_at (fields, len_ty, "num", 0, pos);
+  fields = create_field_at (fields, vec_prefix_type (), "prefix", 0, pos);
 
   do_typedef (name, new_structure (name, 0, pos, fields, 0), pos);
 }
@@ -4170,104 +4247,127 @@ enum alloc_quantity
 enum alloc_zone
 { any_zone, specific_zone };
 
-/* Writes one typed allocator definition for type identifier TYPE_NAME with
-   optional type specifier TYPE_SPECIFIER.  The allocator name will contain
-   ALLOCATOR_TYPE.  If VARIABLE_SIZE is true, the allocator will have an extra
-   parameter specifying number of bytes to allocate.  If QUANTITY is set to
-   VECTOR, a vector allocator will be output, if ZONE is set to SPECIFIC_ZONE,
+/* Writes one typed allocator definition into output F for type
+   identifier TYPE_NAME with optional type specifier TYPE_SPECIFIER.
+   The allocator name will contain ALLOCATOR_TYPE.  If VARIABLE_SIZE
+   is true, the allocator will have an extra parameter specifying
+   number of bytes to allocate.  If QUANTITY is set to VECTOR, a
+   vector allocator will be output, if ZONE is set to SPECIFIC_ZONE,
    the allocator will be zone-specific.  */
 
 static void
-write_typed_alloc_def (bool variable_size, const char *type_specifier,
-		       const char *type_name, const char *allocator_type,
-		       enum alloc_quantity quantity, enum alloc_zone zone)
+write_typed_alloc_def (outf_p f, 
+                       bool variable_size, const char *type_specifier,
+                       const char *type_name, const char *allocator_type,
+                       enum alloc_quantity quantity, enum alloc_zone zone)
 {
   bool two_args = variable_size && (quantity == vector);
   bool third_arg = ((zone == specific_zone)
 		    && (variable_size || (quantity == vector)));
-
-  oprintf (header_file, "#define ggc_alloc_%s%s", allocator_type, type_name);
-  oprintf (header_file, "(%s%s%s%s%s) ",
+  gcc_assert (f != NULL);
+  oprintf (f, "#define ggc_alloc_%s%s", allocator_type, type_name);
+  oprintf (f, "(%s%s%s%s%s) ",
 	   (variable_size ? "SIZE" : ""),
 	   (two_args ? ", " : ""),
 	   (quantity == vector) ? "n" : "",
 	   (third_arg ? ", " : ""), (zone == specific_zone) ? "z" : "");
-  oprintf (header_file, "((%s%s *)", type_specifier, type_name);
-  oprintf (header_file, "(ggc_internal_%salloc_stat (", allocator_type);
+  oprintf (f, "((%s%s *)", type_specifier, type_name);
+  oprintf (f, "(ggc_internal_%salloc_stat (", allocator_type);
   if (zone == specific_zone)
-    oprintf (header_file, "z, ");
+    oprintf (f, "z, ");
   if (variable_size)
-    oprintf (header_file, "SIZE");
+    oprintf (f, "SIZE");
   else
-    oprintf (header_file, "sizeof (%s%s)", type_specifier, type_name);
+    oprintf (f, "sizeof (%s%s)", type_specifier, type_name);
   if (quantity == vector)
-    oprintf (header_file, ", n");
-  oprintf (header_file, " MEM_STAT_INFO)))\n");
+    oprintf (f, ", n");
+  oprintf (f, " MEM_STAT_INFO)))\n");
 }
 
-/* Writes a typed allocator definition for a struct or union S.  */
+/* Writes a typed allocator definition into output F for a struct or
+   union S, with a given ALLOCATOR_TYPE and QUANTITY for ZONE.  */
 
 static void
-write_typed_struct_alloc_def (const type_p s, const char *allocator_type,
+write_typed_struct_alloc_def (outf_p f,
+			      const type_p s, const char *allocator_type,
 			      enum alloc_quantity quantity,
 			      enum alloc_zone zone)
 {
-  write_typed_alloc_def (variable_size_p (s), get_type_specifier (s),
-			 s->u.s.tag, allocator_type, quantity, zone);
+  gcc_assert (UNION_OR_STRUCT_P (s));
+  write_typed_alloc_def (f, variable_size_p (s), get_type_specifier (s),
+                         s->u.s.tag, allocator_type, quantity, zone);
 }
 
-/* Writes a typed allocator definition for a typedef P.  */
+/* Writes a typed allocator definition into output F for a typedef P,
+   with a given ALLOCATOR_TYPE and QUANTITY for ZONE.  */
 
 static void
-write_typed_typedef_alloc_def (const pair_p p, const char *allocator_type,
-			       enum alloc_quantity quantity,
-			       enum alloc_zone zone)
+write_typed_typedef_alloc_def (outf_p f,
+                               const pair_p p, const char *allocator_type,
+                               enum alloc_quantity quantity,
+                               enum alloc_zone zone)
 {
-  write_typed_alloc_def (variable_size_p (p->type), "", p->name,
-			 allocator_type, quantity, zone);
+  write_typed_alloc_def (f, variable_size_p (p->type), "", p->name,
+                         allocator_type, quantity, zone);
 }
 
-/* Writes typed allocator definitions for the types in STRUCTURES and
-   TYPEDEFS that are used by GC.  */
+/* Writes typed allocator definitions into output F for the types in
+   STRUCTURES and TYPEDEFS that are used by GC.  */
 
 static void
-write_typed_alloc_defns (const type_p structures, const pair_p typedefs)
+write_typed_alloc_defns (outf_p f,
+                         const type_p structures, const pair_p typedefs)
 {
   type_p s;
   pair_p p;
 
-  oprintf (header_file,
+  gcc_assert (f != NULL);
+  oprintf (f,
 	   "\n/* Allocators for known structs and unions.  */\n\n");
   for (s = structures; s; s = s->next)
     {
       if (!USED_BY_TYPED_GC_P (s))
 	continue;
-      write_typed_struct_alloc_def (s, "", single, any_zone);
-      write_typed_struct_alloc_def (s, "cleared_", single, any_zone);
-      write_typed_struct_alloc_def (s, "vec_", vector, any_zone);
-      write_typed_struct_alloc_def (s, "cleared_vec_", vector, any_zone);
-      write_typed_struct_alloc_def (s, "zone_", single, specific_zone);
-      write_typed_struct_alloc_def (s, "zone_cleared_", single,
+      gcc_assert (UNION_OR_STRUCT_P (s));
+      /* In plugin mode onput output ggc_alloc macro definitions
+	 relevant to plugin input files.  */
+      if (nb_plugin_files > 0 
+	  && ((s->u.s.line.file == NULL) || !s->u.s.line.file->inpisplugin))
+	continue;
+      write_typed_struct_alloc_def (f, s, "", single, any_zone);
+      write_typed_struct_alloc_def (f, s, "cleared_", single, any_zone);
+      write_typed_struct_alloc_def (f, s, "vec_", vector, any_zone);
+      write_typed_struct_alloc_def (f, s, "cleared_vec_", vector, any_zone);
+      write_typed_struct_alloc_def (f, s, "zone_", single, specific_zone);
+      write_typed_struct_alloc_def (f, s, "zone_cleared_", single,
 				    specific_zone);
-      write_typed_struct_alloc_def (s, "zone_vec_", vector, specific_zone);
-      write_typed_struct_alloc_def (s, "zone_cleared_vec_", vector,
+      write_typed_struct_alloc_def (f, s, "zone_vec_", vector, specific_zone);
+      write_typed_struct_alloc_def (f, s, "zone_cleared_vec_", vector,
 				    specific_zone);
     }
 
-  oprintf (header_file, "\n/* Allocators for known typedefs.  */\n");
+  oprintf (f, "\n/* Allocators for known typedefs.  */\n");
   for (p = typedefs; p; p = p->next)
     {
       s = p->type;
       if (!USED_BY_TYPED_GC_P (s) || (strcmp (p->name, s->u.s.tag) == 0))
 	continue;
-      write_typed_typedef_alloc_def (p, "", single, any_zone);
-      write_typed_typedef_alloc_def (p, "cleared_", single, any_zone);
-      write_typed_typedef_alloc_def (p, "vec_", vector, any_zone);
-      write_typed_typedef_alloc_def (p, "cleared_vec_", vector, any_zone);
-      write_typed_typedef_alloc_def (p, "zone_", single, specific_zone);
-      write_typed_typedef_alloc_def (p, "zone_cleared_", single,
+      /* In plugin mode onput output ggc_alloc macro definitions
+	 relevant to plugin input files.  */
+      if (nb_plugin_files > 0) 
+	{
+	  struct fileloc* filoc = type_fileloc(s);
+	  if (!filoc || !filoc->file->inpisplugin)
+	    continue;
+	};
+      write_typed_typedef_alloc_def (f, p, "", single, any_zone);
+      write_typed_typedef_alloc_def (f, p, "cleared_", single, any_zone);
+      write_typed_typedef_alloc_def (f, p, "vec_", vector, any_zone);
+      write_typed_typedef_alloc_def (f, p, "cleared_vec_", vector, any_zone);
+      write_typed_typedef_alloc_def (f, p, "zone_", single, specific_zone);
+      write_typed_typedef_alloc_def (f, p, "zone_cleared_", single,
 				     specific_zone);
-      write_typed_typedef_alloc_def (p, "zone_cleared_vec_", vector,
+      write_typed_typedef_alloc_def (f, p, "zone_cleared_vec_", vector,
 				     specific_zone);
     }
 }
@@ -4787,6 +4887,7 @@ input_file_by_name (const char* name)
   f = XCNEWVAR (input_file, sizeof (input_file)+namlen+2);
   f->inpbitmap = 0;
   f->inpoutf = NULL;
+  f->inpisplugin = false;
   strcpy (f->inpname, name);
   slot = htab_find_slot (input_file_htab, f, INSERT);
   gcc_assert (slot != NULL);
@@ -4816,7 +4917,7 @@ htab_eq_inputfile (const void *x, const void *y)
   const input_file *inpfx = (const input_file *) x;
   const input_file *inpfy = (const input_file *) y;
   gcc_assert (inpfx != NULL && inpfy != NULL);
-  return !strcmp (get_input_file_name (inpfx), get_input_file_name (inpfy));
+  return !filename_cmp (get_input_file_name (inpfx), get_input_file_name (inpfy));
 }
 
 
@@ -4918,8 +5019,11 @@ main (int argc, char **argv)
 
       /* Parse our plugin files and augment the state.  */
       for (ix = 0; ix < nb_plugin_files; ix++)
-	parse_file (get_input_file_name (plugin_files[ix]));
-
+	{
+	  input_file* pluginput = plugin_files [ix];
+	  pluginput->inpisplugin = true;
+	  parse_file (get_input_file_name (pluginput));
+	}
       if (hit_error)
 	return 1;
 
@@ -4971,8 +5075,8 @@ main (int argc, char **argv)
   open_base_files ();
 
   write_enum_defn (structures, param_structs);
-  write_typed_alloc_defns (structures, typedefs);
   output_header = plugin_output ? plugin_output : header_file;
+  write_typed_alloc_defns (output_header, structures, typedefs);
   DBGPRINT_COUNT_TYPE ("structures before write_types outputheader",
 		       structures);
   DBGPRINT_COUNT_TYPE ("param_structs before write_types outputheader",

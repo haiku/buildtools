@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler, for DEC Alpha.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009, 2010
+   2000, 2001, 2002, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
@@ -96,9 +96,6 @@ along with GCC; see the file COPYING3.  If not see
   while (0)
 #endif
 
-/* Print subsidiary information on the compiler version in use.  */
-#define TARGET_VERSION
-
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
 /* Which processor to schedule for. The cpu attribute defines a list that
@@ -146,12 +143,8 @@ extern enum alpha_fp_trap_mode alpha_fptm;
 #define TARGET_FP	(!TARGET_SOFT_FP)
 
 /* These are for target os support and cannot be changed at runtime.  */
-#define TARGET_ABI_WINDOWS_NT 0
-#define TARGET_ABI_OPEN_VMS 0
-#define TARGET_ABI_UNICOSMK 0
-#define TARGET_ABI_OSF (!TARGET_ABI_WINDOWS_NT	\
-			&& !TARGET_ABI_OPEN_VMS	\
-			&& !TARGET_ABI_UNICOSMK)
+#define TARGET_ABI_OPEN_VMS	0
+#define TARGET_ABI_OSF		(!TARGET_ABI_OPEN_VMS)
 
 #ifndef TARGET_AS_CAN_SUBTRACT_LABELS
 #define TARGET_AS_CAN_SUBTRACT_LABELS TARGET_GAS
@@ -515,19 +508,6 @@ enum reg_class {
   {0x00000000, 0x7fffffff},	/* FLOAT_REGS */	\
   {0xffffffff, 0xffffffff} }
 
-/* The following macro defines cover classes for Integrated Register
-   Allocator.  Cover classes is a set of non-intersected register
-   classes covering all hard registers used for register allocation
-   purpose.  Any move between two registers of a cover class should be
-   cheaper than load or store of the registers.  The macro value is
-   array of register classes with LIM_REG_CLASSES used as the end
-   marker.  */
-
-#define IRA_COVER_CLASSES						     \
-{									     \
-  GENERAL_REGS, FLOAT_REGS, LIM_REG_CLASSES				     \
-}
-
 /* The same information, inverted:
    Return the class number of the smallest class containing
    reg number REGNO.  This could be a conditional expression
@@ -568,12 +548,6 @@ enum reg_class {
   (GET_MODE_CLASS (MODE) == MODE_FLOAT ? (MODE)		\
    : GET_MODE_SIZE (MODE) >= 4 ? (MODE)			\
    : mode_for_size (BITS_PER_WORD, GET_MODE_CLASS (MODE), 0))
-
-/* Return the maximum number of consecutive registers
-   needed to represent mode MODE in a register of class CLASS.  */
-
-#define CLASS_MAX_NREGS(CLASS, MODE)				\
- ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* Return the class of registers that cannot change mode from FROM to TO.  */
 
@@ -827,11 +801,6 @@ extern int alpha_memory_latency;
 #define CONSTANT_ADDRESS_P(X)   \
   (CONST_INT_P (X)		\
    && (unsigned HOST_WIDE_INT) (INTVAL (X) + 0x8000) < 0x10000)
-
-/* Include all constant integers and constant doubles, but not
-   floating-point, except for floating-point zero.  */
-
-#define LEGITIMATE_CONSTANT_P  alpha_legitimate_constant_p
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
@@ -1126,8 +1095,7 @@ do {						\
 /* This is how to output an element of a case-vector that is relative.  */
 
 #define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, BODY, VALUE, REL) \
-  fprintf (FILE, "\t.%s $L%d\n", TARGET_ABI_WINDOWS_NT ? "long" : "gprel32", \
-	   (VALUE))
+  fprintf (FILE, "\t.gprel32 $L%d\n", (VALUE))
 
 /* This is how to output an assembler line
    that says to advance the location counter
@@ -1319,26 +1287,6 @@ do {							\
 #define PUT_SDB_FUNCTION_END(LINE)
 
 #define PUT_SDB_EPILOGUE_END(NAME) ((void)(NAME))
-
-/* Macros for mips-tfile.c to encapsulate stabs in ECOFF, and for
-   mips-tdump.c to print them out.
-
-   These must match the corresponding definitions in gdb/mipsread.c.
-   Unfortunately, gcc and gdb do not currently share any directories.  */
-
-#define CODE_MASK 0x8F300
-#define MIPS_IS_STAB(sym) (((sym)->index & 0xFFF00) == CODE_MASK)
-#define MIPS_MARK_STAB(code) ((code)+CODE_MASK)
-#define MIPS_UNMARK_STAB(code) ((code)-CODE_MASK)
-
-/* Override some mips-tfile definitions.  */
-
-#define SHASH_SIZE 511
-#define THASH_SIZE 55
-
-/* Align ecoff symbol tables to avoid OSF1/1.3 nm complaints.  */
-
-#define ALIGN_SYMTABLE_OFFSET(OFFSET) (((OFFSET) + 7) & ~7)
 
 /* The system headers under Alpha systems are generally C++-aware.  */
 #define NO_IMPLICIT_EXTERN_C

@@ -52,10 +52,9 @@
 # define _GLIBCXX_NORETURN __attribute__ ((__noreturn__))
 #endif
 
+// See below for C++
 #ifndef _GLIBCXX_NOTHROW
-# ifdef __cplusplus
-#  define _GLIBCXX_NOTHROW throw()
-# else
+# ifndef __cplusplus
 #  define _GLIBCXX_NOTHROW __attribute__((__nothrow__))
 # endif
 #endif
@@ -99,6 +98,23 @@
 # endif
 #endif
 
+// Macro for noexcept, to support in mixed 03/0x mode.
+#ifndef _GLIBCXX_NOEXCEPT
+# ifdef __GXX_EXPERIMENTAL_CXX0X__
+#  define _GLIBCXX_NOEXCEPT noexcept
+#  define _GLIBCXX_USE_NOEXCEPT noexcept
+#  define _GLIBCXX_THROW(_EXC)
+# else
+#  define _GLIBCXX_NOEXCEPT
+#  define _GLIBCXX_USE_NOEXCEPT throw()
+#  define _GLIBCXX_THROW(_EXC) throw(_EXC)
+# endif
+#endif
+
+#ifndef _GLIBCXX_NOTHROW
+# define _GLIBCXX_NOTHROW _GLIBCXX_USE_NOEXCEPT
+#endif
+
 // Macro for extern template, ie controling template linkage via use
 // of extern keyword on template declaration. As documented in the g++
 // manual, it inhibits all implicit instantiations and is used
@@ -132,6 +148,8 @@
       namespace __detail { }
     }
 
+    namespace tr2 { }
+    
     namespace decimal { }
 
     namespace chrono { }
@@ -180,6 +198,9 @@ namespace std
     namespace regex_constants { inline namespace __7 { } }
     namespace __detail { inline namespace __7 { } }
   }
+
+  namespace tr2
+  { inline namespace __7 { } }
 
   namespace decimal { inline namespace __7 { } }
 

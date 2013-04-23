@@ -1,5 +1,5 @@
 /* Tail call optimization on trees.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "dbgcnt.h"
 #include "target.h"
+#include "common/common-target.h"
 
 /* The file implements the tail recursion elimination.  It is also used to
    analyze the tail calls in general, passing the results to the rtl level
@@ -152,7 +153,7 @@ suitable_for_tail_call_opt_p (void)
   /* If we are using sjlj exceptions, we may need to add a call to
      _Unwind_SjLj_Unregister at exit of the function.  Which means
      that we cannot do any sibcall transformations.  */
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ
       && current_function_has_exception_handlers ())
     return false;
 
@@ -399,8 +400,11 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
     {
       stmt = gsi_stmt (gsi);
 
-      /* Ignore labels.  */
-      if (gimple_code (stmt) == GIMPLE_LABEL || is_gimple_debug (stmt))
+      /* Ignore labels, returns, clobbers and debug stmts.  */
+      if (gimple_code (stmt) == GIMPLE_LABEL
+	  || gimple_code (stmt) == GIMPLE_RETURN
+	  || gimple_clobber_p (stmt)
+	  || is_gimple_debug (stmt))
 	continue;
 
       /* Check for a call.  */
@@ -519,6 +523,9 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
 
       if (gimple_code (stmt) == GIMPLE_RETURN)
 	break;
+
+      if (gimple_clobber_p (stmt))
+	continue;
 
       if (is_gimple_debug (stmt))
 	continue;
@@ -1090,7 +1097,7 @@ struct gimple_opt_pass pass_tail_recursion =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_ssa	/* todo_flags_finish */
+  TODO_verify_ssa	                /* todo_flags_finish */
  }
 };
 
@@ -1109,6 +1116,6 @@ struct gimple_opt_pass pass_tail_calls =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_ssa	/* todo_flags_finish */
+  TODO_verify_ssa	                /* todo_flags_finish */
  }
 };

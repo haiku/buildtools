@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler,
    for m68k (including m68010) NetBSD platforms using the
    ELF object format.
-   Copyright (C) 2002, 2003, 2004, 2006, 2007, 2009, 2010
+   Copyright (C) 2002, 2003, 2004, 2006, 2007, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Wasabi Systems. Inc.
 
@@ -50,14 +50,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS \
   { "netbsd_entry_point",   NETBSD_ENTRY_POINT },
-
-
-#undef TARGET_VERSION
-#define TARGET_VERSION			\
-  fprintf (stderr,			\
-	   TARGET_68010			\
-	   ? " (NetBSD/68010 ELF)"	\
-	   : " (NetBSD/m68k ELF)");
 
 
 /* Provide a CPP_SPEC appropriate for NetBSD m68k targets.  Currently we
@@ -178,15 +170,6 @@ while (0)
 
 #define BSS_SECTION_ASM_OP	".section\t.bss"
 
-
-/* Like `ASM_OUTPUT_BSS' except takes the required alignment as a
-   separate, explicit argument.  If you define this macro, it is used
-   in place of `ASM_OUTPUT_BSS', and gives you more flexibility in
-   handling the required alignment of the variable.  The alignment is
-   specified as the number of bits.
-
-   Try to use function `asm_output_aligned_bss' defined in file
-   `varasm.c' when defining this macro.  */
 
 #undef ASM_OUTPUT_ALIGNED_BSS
 #define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN)		\

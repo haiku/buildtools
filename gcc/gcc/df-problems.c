@@ -1,6 +1,6 @@
 /* Standard problems for dataflow support routines.
    Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
-   2008, 2009, 2010 Free Software Foundation, Inc.
+   2008, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
    Originally contributed by Michael P. Hayes
              (m.hayes@elec.canterbury.ac.nz, mhayes@redhat.com)
    Major rewrite contributed by Danny Berlin (dberlin@dberlin.org)
@@ -906,6 +906,7 @@ df_lr_local_compute (bitmap all_blocks ATTRIBUTE_UNUSED)
      blocks within infinite loops.  */
   if (!reload_completed)
     {
+      unsigned int pic_offset_table_regnum = PIC_OFFSET_TABLE_REGNUM;
       /* Any reference to any pseudo before reload is a potential
 	 reference of the frame pointer.  */
       bitmap_set_bit (&df->hardware_regs_used, FRAME_POINTER_REGNUM);
@@ -919,9 +920,9 @@ df_lr_local_compute (bitmap all_blocks ATTRIBUTE_UNUSED)
 
       /* Any constant, or pseudo with constant equivalences, may
 	 require reloading from memory using the pic register.  */
-      if ((unsigned) PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM
-	  && fixed_regs[PIC_OFFSET_TABLE_REGNUM])
-	bitmap_set_bit (&df->hardware_regs_used, PIC_OFFSET_TABLE_REGNUM);
+      if (pic_offset_table_regnum != INVALID_REGNUM
+	  && fixed_regs[pic_offset_table_regnum])
+	bitmap_set_bit (&df->hardware_regs_used, pic_offset_table_regnum);
     }
 
   EXECUTE_IF_SET_IN_BITMAP (df_lr->out_of_date_transfer_functions, 0, bb_index, bi)
@@ -2747,10 +2748,12 @@ df_ignore_stack_reg (int regno ATTRIBUTE_UNUSED)
 
 
 /* Remove all of the REG_DEAD or REG_UNUSED notes from INSN and add
-   them to OLD_DEAD_NOTES and OLD_UNUSED_NOTES.  */
+   them to OLD_DEAD_NOTES and OLD_UNUSED_NOTES.  Remove also
+   REG_EQUAL/REG_EQUIV notes referring to dead pseudos using LIVE
+   as the bitmap of currently live registers.  */
 
 static void
-df_kill_notes (rtx insn)
+df_kill_notes (rtx insn, bitmap live)
 {
   rtx *pprev = &REG_NOTES (insn);
   rtx link = *pprev;
@@ -2797,6 +2800,47 @@ df_kill_notes (rtx insn)
 	    }
 	  break;
 
+	case REG_EQUAL:
+	case REG_EQUIV:
+	  {
+	    /* Remove the notes that refer to dead registers.  As we have at most
+	       one REG_EQUAL/EQUIV note, all of EQ_USES will refer to this note
+	       so we need to purge the complete EQ_USES vector when removing
+	       the note using df_notes_rescan.  */
+	    df_ref *use_rec;
+	    bool deleted = false;
+
+	    for (use_rec = DF_INSN_EQ_USES (insn); *use_rec; use_rec++)
+	      {
+		df_ref use = *use_rec;
+		if (DF_REF_REGNO (use) > FIRST_PSEUDO_REGISTER
+		    && DF_REF_LOC (use)
+		    && (DF_REF_FLAGS (use) & DF_REF_IN_NOTE)
+		    && ! bitmap_bit_p (live, DF_REF_REGNO (use))
+		    && loc_mentioned_in_p (DF_REF_LOC (use), XEXP (link, 0)))
+		  {
+		    deleted = true;
+		    break;
+		  }
+	      }
+	    if (deleted)
+	      {
+		rtx next;
+#ifdef REG_DEAD_DEBUGGING
+		df_print_note ("deleting: ", insn, link);
+#endif
+		next = XEXP (link, 1);
+		free_EXPR_LIST_node (link);
+		*pprev = link = next;
+		df_notes_rescan (insn);
+	      }
+	    else
+	      {
+		pprev = &XEXP (link, 1);
+		link = *pprev;
+	      }
+	    break;
+	  }
 	default:
 	  pprev = &XEXP (link, 1);
 	  link = *pprev;
@@ -3298,7 +3342,7 @@ df_note_bb_compute (unsigned int bb_index,
       debug_insn = DEBUG_INSN_P (insn);
 
       bitmap_clear (do_not_gen);
-      df_kill_notes (insn);
+      df_kill_notes (insn, live);
 
       /* Process the defs.  */
       if (CALL_P (insn))
@@ -3375,7 +3419,7 @@ df_note_bb_compute (unsigned int bb_index,
       while (*mws_rec)
 	{
 	  struct df_mw_hardreg *mws = *mws_rec;
-	  if ((DF_MWS_REG_DEF_P (mws))
+	  if (DF_MWS_REG_USE_P (mws)
 	      && !df_ignore_stack_reg (mws->start_regno))
 	    {
 	      bool really_add_notes = debug_insn != 0;
@@ -3794,12 +3838,9 @@ df_simulate_one_insn_forwards (basic_block bb, rtx insn, bitmap live)
 	  {
 	    rtx reg = XEXP (link, 0);
 	    int regno = REGNO (reg);
-	    if (regno < FIRST_PSEUDO_REGISTER)
-	      {
-		int n = hard_regno_nregs[regno][GET_MODE (reg)];
-		while (--n >= 0)
-		  bitmap_clear_bit (live, regno + n);
-	      }
+	    if (HARD_REGISTER_NUM_P (regno))
+	      bitmap_clear_range (live, regno,
+				  hard_regno_nregs[regno][GET_MODE (reg)]);
 	    else
 	      bitmap_clear_bit (live, regno);
 	  }
@@ -3920,6 +3961,19 @@ can_move_insns_across (rtx from, rtx to, rtx across_from, rtx across_to,
 
   for (insn = across_to; ; insn = next)
     {
+      if (CALL_P (insn))
+	{
+	  if (RTL_CONST_OR_PURE_CALL_P (insn))
+	    /* Pure functions can read from memory.  Const functions can
+	       read from arguments that the ABI has forced onto the stack.
+	       Neither sort of read can be volatile.  */
+	    memrefs_in_across |= MEMREF_NORMAL;
+	  else
+	    {
+	      memrefs_in_across |= MEMREF_VOLATILE;
+	      mem_sets_in_across |= MEMREF_VOLATILE;
+	    }
+	}
       if (NONDEBUG_INSN_P (insn))
 	{
 	  memrefs_in_across |= for_each_rtx (&PATTERN (insn), find_memory,
@@ -3956,19 +4010,6 @@ can_move_insns_across (rtx from, rtx to, rtx across_from, rtx across_to,
   df_simulate_initialize_backwards (merge_bb, test_use);
   for (insn = across_to; ; insn = next)
     {
-      if (CALL_P (insn))
-	{
-	  if (RTL_CONST_OR_PURE_CALL_P (insn))
-	    /* Pure functions can read from memory.  Const functions can
-	       read from arguments that the ABI has forced onto the stack.
-	       Neither sort of read can be volatile.  */
-	    memrefs_in_across |= MEMREF_NORMAL;
-	  else
-	    {
-	      memrefs_in_across |= MEMREF_VOLATILE;
-	      mem_sets_in_across |= MEMREF_VOLATILE;
-	    }
-	}
       if (NONDEBUG_INSN_P (insn))
 	{
 	  df_simulate_find_defs (insn, test_set);
@@ -4037,7 +4078,10 @@ can_move_insns_across (rtx from, rtx to, rtx across_from, rtx across_to,
 	  if (bitmap_intersect_p (merge_set, test_use)
 	      || bitmap_intersect_p (merge_use, test_set))
 	    break;
-	  max_to = insn;
+#ifdef HAVE_cc0
+	  if (!sets_cc0_p (insn))
+#endif
+	    max_to = insn;
 	}
       next = NEXT_INSN (insn);
       if (insn == to)
@@ -4074,7 +4118,11 @@ can_move_insns_across (rtx from, rtx to, rtx across_from, rtx across_to,
     {
       if (NONDEBUG_INSN_P (insn))
 	{
-	  if (!bitmap_intersect_p (test_set, local_merge_live))
+	  if (!bitmap_intersect_p (test_set, local_merge_live)
+#ifdef HAVE_cc0
+	      && !sets_cc0_p (insn)
+#endif
+	      )
 	    {
 	      max_to = insn;
 	      break;

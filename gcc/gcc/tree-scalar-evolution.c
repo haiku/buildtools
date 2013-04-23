@@ -499,65 +499,6 @@ compute_overall_effect_of_inner_loop (struct loop *loop, tree evolution_fn)
     return chrec_dont_know;
 }
 
-/* Determine whether the CHREC is always positive/negative.  If the expression
-   cannot be statically analyzed, return false, otherwise set the answer into
-   VALUE.  */
-
-bool
-chrec_is_positive (tree chrec, bool *value)
-{
-  bool value0, value1, value2;
-  tree end_value, nb_iter;
-
-  switch (TREE_CODE (chrec))
-    {
-    case POLYNOMIAL_CHREC:
-      if (!chrec_is_positive (CHREC_LEFT (chrec), &value0)
-	  || !chrec_is_positive (CHREC_RIGHT (chrec), &value1))
-	return false;
-
-      /* FIXME -- overflows.  */
-      if (value0 == value1)
-	{
-	  *value = value0;
-	  return true;
-	}
-
-      /* Otherwise the chrec is under the form: "{-197, +, 2}_1",
-	 and the proof consists in showing that the sign never
-	 changes during the execution of the loop, from 0 to
-	 loop->nb_iterations.  */
-      if (!evolution_function_is_affine_p (chrec))
-	return false;
-
-      nb_iter = number_of_latch_executions (get_chrec_loop (chrec));
-      if (chrec_contains_undetermined (nb_iter))
-	return false;
-
-#if 0
-      /* TODO -- If the test is after the exit, we may decrease the number of
-	 iterations by one.  */
-      if (after_exit)
-	nb_iter = chrec_fold_minus (type, nb_iter, build_int_cst (type, 1));
-#endif
-
-      end_value = chrec_apply (CHREC_VARIABLE (chrec), chrec, nb_iter);
-
-      if (!chrec_is_positive (end_value, &value2))
-	return false;
-
-      *value = value0;
-      return value0 == value1;
-
-    case INTEGER_CST:
-      *value = (tree_int_cst_sgn (chrec) == 1);
-      return true;
-
-    default:
-      return false;
-    }
-}
-
 /* Associate CHREC to SCALAR.  */
 
 static void
@@ -572,7 +513,7 @@ set_scalar_evolution (basic_block instantiated_below, tree scalar, tree chrec)
 
   if (dump_file)
     {
-      if (dump_flags & TDF_DETAILS)
+      if (dump_flags & TDF_SCEV)
 	{
 	  fprintf (dump_file, "(set_scalar_evolution \n");
 	  fprintf (dump_file, "  instantiated_below = %d \n",
@@ -600,7 +541,7 @@ get_scalar_evolution (basic_block instantiated_below, tree scalar)
 
   if (dump_file)
     {
-      if (dump_flags & TDF_DETAILS)
+      if (dump_flags & TDF_SCEV)
 	{
 	  fprintf (dump_file, "(get_scalar_evolution \n");
 	  fprintf (dump_file, "  (scalar = ");
@@ -628,7 +569,7 @@ get_scalar_evolution (basic_block instantiated_below, tree scalar)
       break;
     }
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (scalar_evolution = ");
       print_generic_expr (dump_file, res, 0);
@@ -861,7 +802,7 @@ add_to_evolution (unsigned loop_nb, tree chrec_before, enum tree_code code,
     /* This should not happen.  */
     return chrec_dont_know;
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "(add_to_evolution \n");
       fprintf (dump_file, "  (loop_nb = %d)\n", loop_nb);
@@ -879,7 +820,7 @@ add_to_evolution (unsigned loop_nb, tree chrec_before, enum tree_code code,
 
   res = add_to_evolution_1 (loop_nb, chrec_before, to_add, at_stmt);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (res = ");
       print_generic_expr (dump_file, res, 0);
@@ -905,7 +846,7 @@ get_loop_exit_condition (const struct loop *loop)
   gimple res = NULL;
   edge exit_edge = single_exit (loop);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     fprintf (dump_file, "(get_loop_exit_condition \n  ");
 
   if (exit_edge)
@@ -917,7 +858,7 @@ get_loop_exit_condition (const struct loop *loop)
 	res = stmt;
     }
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       print_gimple_stmt (dump_file, res, 0, 0);
       fprintf (dump_file, ")\n");
@@ -1461,7 +1402,7 @@ analyze_evolution_in_loop (gimple loop_phi_node,
   struct loop *loop = loop_containing_stmt (loop_phi_node);
   basic_block bb;
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "(analyze_evolution_in_loop \n");
       fprintf (dump_file, "  (loop_phi_node = ");
@@ -1517,7 +1458,7 @@ analyze_evolution_in_loop (gimple loop_phi_node,
       evolution_function = chrec_merge (evolution_function, ev_fn);
     }
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (evolution_function = ");
       print_generic_expr (dump_file, evolution_function, 0);
@@ -1541,7 +1482,7 @@ analyze_initial_condition (gimple loop_phi_node)
   tree init_cond = chrec_not_analyzed_yet;
   struct loop *loop = loop_containing_stmt (loop_phi_node);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "(analyze_initial_condition \n");
       fprintf (dump_file, "  (loop_phi_node = \n");
@@ -1593,7 +1534,7 @@ analyze_initial_condition (gimple loop_phi_node)
 	init_cond = res;
     }
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (init_cond = ");
       print_generic_expr (dump_file, init_cond, 0);
@@ -1642,8 +1583,8 @@ interpret_loop_phi (struct loop *loop, gimple loop_phi_node)
       else if (TREE_CODE (res) == POLYNOMIAL_CHREC)
 	new_init = CHREC_LEFT (res);
       STRIP_USELESS_TYPE_CONVERSION (new_init);
-      gcc_assert (TREE_CODE (new_init) != POLYNOMIAL_CHREC);
-      if (!operand_equal_p (init_cond, new_init, 0))
+      if (TREE_CODE (new_init) == POLYNOMIAL_CHREC
+	  || !operand_equal_p (init_cond, new_init, 0))
 	return chrec_dont_know;
     }
 
@@ -1727,7 +1668,7 @@ interpret_rhs_expr (struct loop *loop, gimple at_stmt,
       chrec1 = analyze_scalar_evolution (loop, rhs1);
       chrec2 = analyze_scalar_evolution (loop, rhs2);
       chrec1 = chrec_convert (type, chrec1, at_stmt);
-      chrec2 = chrec_convert (sizetype, chrec2, at_stmt);
+      chrec2 = chrec_convert (TREE_TYPE (rhs2), chrec2, at_stmt);
       res = chrec_fold_plus (type, chrec1, chrec2);
       break;
 
@@ -1796,7 +1737,8 @@ interpret_expr (struct loop *loop, gimple at_stmt, tree expr)
   if (automatically_generated_chrec_p (expr))
     return expr;
 
-  if (TREE_CODE (expr) == POLYNOMIAL_CHREC)
+  if (TREE_CODE (expr) == POLYNOMIAL_CHREC
+      || get_gimple_rhs_class (TREE_CODE (expr)) == GIMPLE_TERNARY_RHS)
     return chrec_dont_know;
 
   extract_ops_from_tree (expr, &code, &op0, &op1);
@@ -1942,7 +1884,7 @@ analyze_scalar_evolution (struct loop *loop, tree var)
 {
   tree res;
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "(analyze_scalar_evolution \n");
       fprintf (dump_file, "  (loop_nb = %d)\n", loop->num);
@@ -1954,7 +1896,7 @@ analyze_scalar_evolution (struct loop *loop, tree var)
   res = get_scalar_evolution (block_before_loop (loop), var);
   res = analyze_scalar_evolution_1 (loop, var, res);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     fprintf (dump_file, ")\n");
 
   return res;
@@ -2645,6 +2587,7 @@ instantiate_scev_r (basic_block instantiate_below,
 				   TREE_OPERAND (chrec, 0),
 				   fold_conversions, cache, size_expr);
 
+    case ADDR_EXPR:
     case SCEV_NOT_KNOWN:
       return chrec_dont_know;
 
@@ -2700,7 +2643,7 @@ instantiate_scev (basic_block instantiate_below, struct loop *evolution_loop,
   tree res;
   htab_t cache = htab_create (10, hash_scev_info, eq_scev_info, del_scev_info);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "(instantiate_scev \n");
       fprintf (dump_file, "  (instantiate_below = %d)\n", instantiate_below->index);
@@ -2713,7 +2656,7 @@ instantiate_scev (basic_block instantiate_below, struct loop *evolution_loop,
   res = instantiate_scev_r (instantiate_below, evolution_loop, chrec, false,
 			    cache, 0);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (res = ");
       print_generic_expr (dump_file, res, 0);
@@ -2779,7 +2722,7 @@ number_of_latch_executions (struct loop *loop)
 
   may_be_zero = NULL_TREE;
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     fprintf (dump_file, "(number_of_iterations_in_loop = \n");
 
   res = chrec_dont_know;
@@ -2804,7 +2747,7 @@ number_of_latch_executions (struct loop *loop)
   else
     res = chrec_dont_know;
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file && (dump_flags & TDF_SCEV))
     {
       fprintf (dump_file, "  (set_nb_iterations_in_loop = ");
       print_generic_expr (dump_file, res, 0);
@@ -3170,8 +3113,8 @@ simple_iv (struct loop *wrto_loop, struct loop *use_loop, tree op,
   iv->no_overflow = false;
 
   type = TREE_TYPE (op);
-  if (TREE_CODE (type) != INTEGER_TYPE
-      && TREE_CODE (type) != POINTER_TYPE)
+  if (!POINTER_TYPE_P (type)
+      && !INTEGRAL_TYPE_P (type))
     return false;
 
   ev = analyze_scalar_evolution_in_loop (wrto_loop, use_loop, op,

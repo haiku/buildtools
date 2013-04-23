@@ -1,5 +1,5 @@
 /* Define builtin-in macros for the C family front ends.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -31,6 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "debug.h"		/* For dwarf2out_do_cfi_asm.  */
 #include "tm_p.h"		/* For TARGET_CPU_CPP_BUILTINS & friends.  */
 #include "target.h"
+#include "common/common-target.h"
 #include "cpp-id-data.h"
 #include "cppbuiltin.h"
 
@@ -559,13 +560,129 @@ c_cpp_builtins_optimize_pragma (cpp_reader *pfile, tree prev_tree,
       cpp_undef (pfile, "__FINITE_MATH_ONLY__");
       cpp_define (pfile, "__FINITE_MATH_ONLY__=1");
     }
-  else if (!prev->x_flag_finite_math_only && cur->x_flag_finite_math_only)
+  else if (prev->x_flag_finite_math_only && !cur->x_flag_finite_math_only)
     {
       cpp_undef (pfile, "__FINITE_MATH_ONLY__");
       cpp_define (pfile, "__FINITE_MATH_ONLY__=0");
     }
 }
 
+
+/* This function will emit cpp macros to indicate the presence of various lock
+   free atomic operations.  */
+   
+static void
+cpp_atomic_builtins (cpp_reader *pfile)
+{
+  /* Set a flag for each size of object that compare and swap exists for up to
+     a 16 byte object.  */
+#define SWAP_LIMIT  17
+  bool have_swap[SWAP_LIMIT];
+  unsigned int psize;
+
+  /* Clear the map of sizes compare_and swap exists for.  */
+  memset (have_swap, 0, sizeof (have_swap));
+
+  /* Tell source code if the compiler makes sync_compare_and_swap
+     builtins available.  */
+#ifndef HAVE_sync_compare_and_swapqi
+#define HAVE_sync_compare_and_swapqi 0
+#endif
+#ifndef HAVE_atomic_compare_and_swapqi
+#define HAVE_atomic_compare_and_swapqi 0
+#endif
+
+  if (HAVE_sync_compare_and_swapqi || HAVE_atomic_compare_and_swapqi)
+    {
+      cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1");
+      have_swap[1] = true;
+    }
+
+#ifndef HAVE_sync_compare_and_swaphi
+#define HAVE_sync_compare_and_swaphi 0
+#endif
+#ifndef HAVE_atomic_compare_and_swaphi
+#define HAVE_atomic_compare_and_swaphi 0
+#endif
+  if (HAVE_sync_compare_and_swaphi || HAVE_atomic_compare_and_swaphi)
+    {
+      cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2");
+      have_swap[2] = true;
+    }
+
+#ifndef HAVE_sync_compare_and_swapsi
+#define HAVE_sync_compare_and_swapsi 0
+#endif
+#ifndef HAVE_atomic_compare_and_swapsi
+#define HAVE_atomic_compare_and_swapsi 0
+#endif
+  if (HAVE_sync_compare_and_swapsi || HAVE_atomic_compare_and_swapsi)
+    {
+      cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4");
+      have_swap[4] = true;
+    }
+
+#ifndef HAVE_sync_compare_and_swapdi
+#define HAVE_sync_compare_and_swapdi 0
+#endif
+#ifndef HAVE_atomic_compare_and_swapdi
+#define HAVE_atomic_compare_and_swapdi 0
+#endif
+  if (HAVE_sync_compare_and_swapdi || HAVE_atomic_compare_and_swapdi)
+    {
+      cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8");
+      have_swap[8] = true;
+    }
+
+#ifndef HAVE_sync_compare_and_swapti
+#define HAVE_sync_compare_and_swapti 0
+#endif
+#ifndef HAVE_atomic_compare_and_swapti
+#define HAVE_atomic_compare_and_swapti 0
+#endif
+  if (HAVE_sync_compare_and_swapti || HAVE_atomic_compare_and_swapti)
+    {
+      cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16");
+      have_swap[16] = true;
+    }
+
+  /* Tell the source code about various types.  These map to the C++11 and C11
+     macros where 2 indicates lock-free always, and 1 indicates sometimes
+     lock free.  */
+#define SIZEOF_NODE(T) (tree_low_cst (TYPE_SIZE_UNIT (T), 1))
+#define SWAP_INDEX(T) ((SIZEOF_NODE (T) < SWAP_LIMIT) ? SIZEOF_NODE (T) : 0)
+  builtin_define_with_int_value ("__GCC_ATOMIC_BOOL_LOCK_FREE", 
+			(have_swap[SWAP_INDEX (boolean_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_CHAR_LOCK_FREE", 
+			(have_swap[SWAP_INDEX (signed_char_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_CHAR16_T_LOCK_FREE", 
+			(have_swap[SWAP_INDEX (char16_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_CHAR32_T_LOCK_FREE", 
+			(have_swap[SWAP_INDEX (char32_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_WCHAR_T_LOCK_FREE", 
+			(have_swap[SWAP_INDEX (wchar_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_SHORT_LOCK_FREE", 
+		      (have_swap[SWAP_INDEX (short_integer_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_INT_LOCK_FREE", 
+			(have_swap[SWAP_INDEX (integer_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_LONG_LOCK_FREE", 
+		      (have_swap[SWAP_INDEX (long_integer_type_node)]? 2 : 1));
+  builtin_define_with_int_value ("__GCC_ATOMIC_LLONG_LOCK_FREE", 
+		(have_swap[SWAP_INDEX (long_long_integer_type_node)]? 2 : 1));
+
+  /* If we're dealing with a "set" value that doesn't exactly correspond
+     to a boolean truth value, let the library work around that.  */
+  builtin_define_with_int_value ("__GCC_ATOMIC_TEST_AND_SET_TRUEVAL",
+				 targetm.atomic_test_and_set_trueval);
+
+  /* ptr_type_node can't be used here since ptr_mode is only set when
+     toplev calls backend_init which is not done with -E  or pch.  */
+  psize = POINTER_SIZE / BITS_PER_UNIT;
+  if (psize >= SWAP_LIMIT)
+    psize = 0;
+  builtin_define_with_int_value ("__GCC_ATOMIC_POINTER_LOCK_FREE", 
+			(have_swap[psize]? 2 : 1));
+}
 
 /* Hook that registers front end and target-specific built-ins.  */
 void
@@ -626,7 +743,7 @@ c_cpp_builtins (cpp_reader *pfile)
 				   1000 + flag_abi_version);
 
   /* libgcc needs to know this.  */
-  if (targetm.except_unwind_info (&global_options) == UI_SJLJ)
+  if (targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
     cpp_define (pfile, "__USING_SJLJ_EXCEPTIONS__");
 
   /* limits.h and stdint.h need to know these.  */
@@ -727,6 +844,12 @@ c_cpp_builtins (cpp_reader *pfile)
       builtin_define_fixed_point_constants ("UTA", "", uta_type_node);
     }
 
+  /* For libgcc-internal use only.  */
+  if (flag_building_libgcc)
+    /* For libgcc enable-execute-stack.c.  */
+    builtin_define_with_int_value ("__LIBGCC_TRAMPOLINE_SIZE__",
+				   TRAMPOLINE_SIZE);
+
   /* For use in assembly language.  */
   builtin_define_with_value ("__REGISTER_PREFIX__", REGISTER_PREFIX, 0);
   builtin_define_with_value ("__USER_LABEL_PREFIX__", user_label_prefix, 0);
@@ -749,33 +872,8 @@ c_cpp_builtins (cpp_reader *pfile)
   if (c_dialect_cxx () && TYPE_UNSIGNED (wchar_type_node))
     cpp_define (pfile, "__WCHAR_UNSIGNED__");
 
-  /* Tell source code if the compiler makes sync_compare_and_swap
-     builtins available.  */
-#ifdef HAVE_sync_compare_and_swapqi
-  if (HAVE_sync_compare_and_swapqi)
-    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1");
-#endif
-
-#ifdef HAVE_sync_compare_and_swaphi
-  if (HAVE_sync_compare_and_swaphi)
-    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2");
-#endif
-
-#ifdef HAVE_sync_compare_and_swapsi
-  if (HAVE_sync_compare_and_swapsi)
-    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4");
-#endif
-
-#ifdef HAVE_sync_compare_and_swapdi
-  if (HAVE_sync_compare_and_swapdi)
-    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8");
-#endif
-
-#ifdef HAVE_sync_compare_and_swapti
-  if (HAVE_sync_compare_and_swapti)
-    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16");
-#endif
-
+  cpp_atomic_builtins (pfile);
+    
 #ifdef DWARF2_UNWIND_INFO
   if (dwarf2out_do_cfi_asm ())
     cpp_define (pfile, "__GCC_HAVE_DWARF2_CFI_ASM");
@@ -800,7 +898,7 @@ c_cpp_builtins (cpp_reader *pfile)
     cpp_define (pfile, "__SSP__=1");
 
   if (flag_openmp)
-    cpp_define (pfile, "_OPENMP=200805");
+    cpp_define (pfile, "_OPENMP=201107");
 
   if (int128_integer_type_node != NULL_TREE)
     builtin_define_type_sizeof ("__SIZEOF_INT128__",

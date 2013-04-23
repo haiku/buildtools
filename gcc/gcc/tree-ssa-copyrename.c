@@ -40,6 +40,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "langhooks.h"
 
+static struct
+{
+  /* Number of copies coalesced.  */
+  int coalesced;
+} stats;
+
 /* The following routines implement the SSA copy renaming phase.
 
    This optimization looks for copies between 2 SSA_NAMES, either through a
@@ -290,6 +296,8 @@ rename_ssa_copies (void)
   FILE *debug;
   bool updated = false;
 
+  memset (&stats, 0, sizeof (stats));
+
   if (dump_file && (dump_flags & TDF_DETAILS))
     debug = dump_file;
   else
@@ -349,20 +357,22 @@ rename_ssa_copies (void)
       if (!part_var)
         continue;
       var = ssa_name (x);
+      if (SSA_NAME_VAR (var) == SSA_NAME_VAR (part_var))
+	continue;
       if (debug)
         {
-	  if (SSA_NAME_VAR (var) != SSA_NAME_VAR (part_var))
-	    {
-	      fprintf (debug, "Coalesced ");
-	      print_generic_expr (debug, var, TDF_SLIM);
-	      fprintf (debug, " to ");
-	      print_generic_expr (debug, part_var, TDF_SLIM);
-	      fprintf (debug, "\n");
-	    }
+	  fprintf (debug, "Coalesced ");
+	  print_generic_expr (debug, var, TDF_SLIM);
+	  fprintf (debug, " to ");
+	  print_generic_expr (debug, part_var, TDF_SLIM);
+	  fprintf (debug, "\n");
 	}
+      stats.coalesced++;
       replace_ssa_name_symbol (var, SSA_NAME_VAR (part_var));
     }
 
+  statistics_counter_event (cfun, "copies coalesced",
+			    stats.coalesced);
   delete_var_map (map);
   return updated ? TODO_remove_unused_locals : 0;
 }
@@ -390,6 +400,6 @@ struct gimple_opt_pass pass_rename_ssa_copies =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_ssa      /* todo_flags_finish */
+  TODO_verify_ssa                       /* todo_flags_finish */
  }
 };

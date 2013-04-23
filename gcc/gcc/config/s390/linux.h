@@ -1,5 +1,5 @@
 /* Definitions for Linux for S/390.
-   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2010
+   Copyright (C) 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Hartmut Penner (hpenner@de.ibm.com) and
                   Ulrich Weigand (uweigand@de.ibm.com).
@@ -23,17 +23,6 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef _LINUX_H
 #define _LINUX_H
 
-/* Target specific version string.  */
-
-#ifdef DEFAULT_TARGET_64BIT
-#undef  TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (Linux for zSeries)");
-#else
-#undef  TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (Linux for S/390)");
-#endif
-
-
 /* Target specific type definitions.  */
 
 /* ??? Do we really want long as size_t on 31-bit?  */
@@ -53,7 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #define TARGET_OS_CPP_BUILTINS()		\
   do						\
     {						\
-      LINUX_TARGET_OS_CPP_BUILTINS();		\
+      GNU_USER_TARGET_OS_CPP_BUILTINS();	\
     }						\
   while (0)
 
@@ -83,14 +72,12 @@ along with GCC; see the file COPYING3.  If not see
       %{static:-static} \
       %{!static: \
 	%{rdynamic:-export-dynamic} \
-	%{m31:-dynamic-linker " LINUX_DYNAMIC_LINKER32 "} \
-	%{m64:-dynamic-linker " LINUX_DYNAMIC_LINKER64 "}}}"
+	%{m31:-dynamic-linker " GNU_USER_DYNAMIC_LINKER32 "} \
+	%{m64:-dynamic-linker " GNU_USER_DYNAMIC_LINKER64 "}}}"
 
 #define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
 
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
-
-#define MD_UNWIND_SUPPORT "config/s390/linux-unwind.h"
 
 #ifdef TARGET_LIBC_PROVIDES_SSP
 /* s390 glibc provides __stack_chk_guard in 0x14(tp),

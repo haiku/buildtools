@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.  
    Vitesse IQ2000 processors
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -56,21 +56,6 @@
 
 #ifndef IQ2000_ISA_DEFAULT
 #define IQ2000_ISA_DEFAULT 1
-#endif
-
-#define IQ2000_VERSION "[1.0]"
-
-#ifndef MACHINE_TYPE
-#define MACHINE_TYPE "IQ2000"
-#endif
-
-#ifndef TARGET_VERSION_INTERNAL
-#define TARGET_VERSION_INTERNAL(STREAM)					\
-  fprintf (STREAM, " %s %s", IQ2000_VERSION, MACHINE_TYPE)
-#endif
-
-#ifndef TARGET_VERSION
-#define TARGET_VERSION TARGET_VERSION_INTERNAL (stderr)
 #endif
 
 /* Storage Layout.  */
@@ -209,11 +194,6 @@ enum reg_class
 
 #define N_REG_CLASSES (int) LIM_REG_CLASSES
 
-#define IRA_COVER_CLASSES	\
-{				\
-  GR_REGS, LIM_REG_CLASSES	\
-}
-
 #define REG_CLASS_NAMES						\
 {								\
   "NO_REGS",							\
@@ -247,9 +227,6 @@ enum reg_class
 	  || GET_MODE (X) == VOIDmode)				\
 	 ? (GR_REGS)						\
 	 : (CLASS))))
-
-#define CLASS_MAX_NREGS(CLASS, MODE)    \
-  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 
 /* Basic Stack Layout.  */
@@ -334,7 +311,7 @@ typedef struct iq2000_args
   int fp_code;			/* Mode of FP arguments.  */
   unsigned int num_adjusts;	/* Number of adjustments made.  */
 				/* Adjustments made to args pass in regs.  */
-  struct rtx_def * adjust[MAX_ARGS_IN_REGISTERS * 2];
+  rtx adjust[MAX_ARGS_IN_REGISTERS * 2];
 } CUMULATIVE_ARGS;
 
 /* Initialize a variable CUM of type CUMULATIVE_ARGS
@@ -408,8 +385,6 @@ typedef struct iq2000_args
 #define MAX_REGS_PER_ADDRESS 1
 
 #define REG_OK_FOR_INDEX_P(X) 0
-
-#define LEGITIMATE_CONSTANT_P(X) (1)
 
 
 /* Describing Relative Costs of Operations.  */
@@ -607,15 +582,6 @@ enum delay_type
   DELAY_NONE,				/* No delay slot.  */
   DELAY_LOAD,				/* Load from memory delay.  */
   DELAY_FCMP				/* Delay after doing c.<xx>.{d,s}.  */
-};
-
-/* Which processor to schedule for.  */
-
-enum processor_type
-{
-  PROCESSOR_DEFAULT,
-  PROCESSOR_IQ2000,
-  PROCESSOR_IQ10
 };
 
 /* Recast the cpu class to be the cpu attribute.  */
@@ -850,9 +816,6 @@ enum processor_type
 #define SDATA_SECTION_ASM_OP	"\t.sdata"	/* Small data.  */
 
 
-/* The target cpu for optimization and scheduling.  */
-extern enum processor_type iq2000_tune;
-
 /* Which instruction set architecture to use.  */
 extern int iq2000_isa;
 

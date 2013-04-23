@@ -1,7 +1,8 @@
 /* Instruction scheduling pass.  This file computes dependencies between
    instructions.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+   2011, 2012
    Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) Enhanced by,
    and currently maintained by, Jim Wilson (wilson@cygnus.com)
@@ -51,12 +52,6 @@ along with GCC; see the file COPYING3.  If not see
 #define CHECK (false)
 #endif
 
-/* In deps->last_pending_memory_flush marks JUMP_INSNs that weren't
-   added to the list because of flush_pending_lists, stands just
-   for itself and not for any other pending memory reads/writes.  */
-#define NON_FLUSH_JUMP_KIND REG_DEP_ANTI
-#define NON_FLUSH_JUMP_P(x) (REG_NOTE_KIND (x) == NON_FLUSH_JUMP_KIND)
-
 /* Holds current parameters for the dependency analyzer.  */
 struct sched_deps_info_def *sched_deps_info;
 
@@ -72,6 +67,9 @@ ds_to_dk (ds_t ds)
 
   if (ds & DEP_OUTPUT)
     return REG_DEP_OUTPUT;
+
+  if (ds & DEP_CONTROL)
+    return REG_DEP_CONTROL;
 
   gcc_assert (ds & DEP_ANTI);
 
@@ -90,6 +88,9 @@ dk_to_ds (enum reg_note dk)
     case REG_DEP_OUTPUT:
       return DEP_OUTPUT;
 
+    case REG_DEP_CONTROL:
+      return DEP_CONTROL;
+
     default:
       gcc_assert (dk == REG_DEP_ANTI);
       return DEP_ANTI;
@@ -106,6 +107,7 @@ init_dep_1 (dep_t dep, rtx pro, rtx con, enum reg_note type, ds_t ds)
   DEP_CON (dep) = con;
   DEP_TYPE (dep) = type;
   DEP_STATUS (dep) = ds;
+  DEP_COST (dep) = UNKNOWN_DEP_COST;
 }
 
 /* Init DEP with the arguments.
@@ -119,7 +121,7 @@ init_dep (dep_t dep, rtx pro, rtx con, enum reg_note kind)
   if ((current_sched_info->flags & USE_DEPS_LIST))
     ds = dk_to_ds (kind);
   else
-    ds = -1;
+    ds = 0;
 
   init_dep_1 (dep, pro, con, kind, ds);
 }
@@ -183,6 +185,10 @@ dump_dep (FILE *dump, dep_t dep, int flags)
 
 	case REG_DEP_OUTPUT:
 	  t = 'o';
+	  break;
+
+	case REG_DEP_CONTROL:
+	  t = 'c';
 	  break;
 
 	case REG_DEP_ANTI:
@@ -412,9 +418,28 @@ clear_deps_list (deps_list_t l)
   while (1);
 }
 
+/* Decide whether a dependency should be treated as a hard or a speculative
+   dependency.  */
+static bool
+dep_spec_p (dep_t dep)
+{
+  if (current_sched_info->flags & DO_SPECULATION)
+    {
+      if (DEP_STATUS (dep) & SPECULATIVE)
+	return true;
+    }
+  if (current_sched_info->flags & DO_PREDICATION)
+    {
+      if (DEP_TYPE (dep) == REG_DEP_CONTROL)
+	return true;
+    }
+  return false;
+}
+
 static regset reg_pending_sets;
 static regset reg_pending_clobbers;
 static regset reg_pending_uses;
+static regset reg_pending_control_uses;
 static enum reg_pending_barrier_mode reg_pending_barrier;
 
 /* Hard registers implicitly clobbered or used (or may be implicitly
@@ -442,10 +467,12 @@ static HARD_REG_SET implicit_reg_pending_uses;
 static bitmap_head *true_dependency_cache = NULL;
 static bitmap_head *output_dependency_cache = NULL;
 static bitmap_head *anti_dependency_cache = NULL;
+static bitmap_head *control_dependency_cache = NULL;
 static bitmap_head *spec_dependency_cache = NULL;
 static int cache_size;
 
 static int deps_may_trap_p (const_rtx);
+static void add_dependence_1 (rtx, rtx, enum reg_note);
 static void add_dependence_list (rtx, rtx, int, enum reg_note);
 static void add_dependence_list_and_free (struct deps_desc *, rtx,
 					  rtx *, int, enum reg_note);
@@ -489,13 +516,10 @@ deps_may_trap_p (const_rtx mem)
    it is set to TRUE when the returned comparison should be reversed
    to get the actual condition.  */
 static rtx
-sched_get_condition_with_rev (const_rtx insn, bool *rev)
+sched_get_condition_with_rev_uncached (const_rtx insn, bool *rev)
 {
   rtx pat = PATTERN (insn);
   rtx src;
-
-  if (pat == 0)
-    return 0;
 
   if (rev)
     *rev = false;
@@ -526,6 +550,62 @@ sched_get_condition_with_rev (const_rtx insn, bool *rev)
   return 0;
 }
 
+/* Return the condition under which INSN does not execute (i.e.  the
+   not-taken condition for a conditional branch), or NULL if we cannot
+   find such a condition.  The caller should make a copy of the condition
+   before using it.  */
+rtx
+sched_get_reverse_condition_uncached (const_rtx insn)
+{
+  bool rev;
+  rtx cond = sched_get_condition_with_rev_uncached (insn, &rev);
+  if (cond == NULL_RTX)
+    return cond;
+  if (!rev)
+    {
+      enum rtx_code revcode = reversed_comparison_code (cond, insn);
+      cond = gen_rtx_fmt_ee (revcode, GET_MODE (cond),
+			     XEXP (cond, 0),
+			     XEXP (cond, 1));
+    }
+  return cond;
+}
+
+/* Caching variant of sched_get_condition_with_rev_uncached.
+   We only do actual work the first time we come here for an insn; the
+   results are cached in INSN_CACHED_COND and INSN_REVERSE_COND.  */
+static rtx
+sched_get_condition_with_rev (const_rtx insn, bool *rev)
+{
+  bool tmp;
+
+  if (INSN_LUID (insn) == 0)
+    return sched_get_condition_with_rev_uncached (insn, rev);
+
+  if (INSN_CACHED_COND (insn) == const_true_rtx)
+    return NULL_RTX;
+
+  if (INSN_CACHED_COND (insn) != NULL_RTX)
+    {
+      if (rev)
+	*rev = INSN_REVERSE_COND (insn);
+      return INSN_CACHED_COND (insn);
+    }
+
+  INSN_CACHED_COND (insn) = sched_get_condition_with_rev_uncached (insn, &tmp);
+  INSN_REVERSE_COND (insn) = tmp;
+
+  if (INSN_CACHED_COND (insn) == NULL_RTX)
+    {
+      INSN_CACHED_COND (insn) = const_true_rtx;
+      return NULL_RTX;
+    }
+
+  if (rev)
+    *rev = INSN_REVERSE_COND (insn);
+  return INSN_CACHED_COND (insn);
+}
+
 /* True when we can find a condition under which INSN is executed.  */
 static bool
 sched_has_condition_p (const_rtx insn)
@@ -545,7 +625,7 @@ conditions_mutex_p (const_rtx cond1, const_rtx cond2, bool rev1, bool rev2)
 	  (rev1==rev2
 	  ? reversed_comparison_code (cond2, NULL)
 	  : GET_CODE (cond2))
-      && XEXP (cond1, 0) == XEXP (cond2, 0)
+      && rtx_equal_p (XEXP (cond1, 0), XEXP (cond2, 0))
       && XEXP (cond1, 1) == XEXP (cond2, 1))
     return 1;
   return 0;
@@ -814,12 +894,10 @@ sd_find_dep_between (rtx pro, rtx con, bool resolved_p)
       int elem_luid = INSN_LUID (pro);
       int insn_luid = INSN_LUID (con);
 
-      gcc_assert (output_dependency_cache != NULL
-		  && anti_dependency_cache != NULL);
-
       if (!bitmap_bit_p (&true_dependency_cache[insn_luid], elem_luid)
 	  && !bitmap_bit_p (&output_dependency_cache[insn_luid], elem_luid)
-	  && !bitmap_bit_p (&anti_dependency_cache[insn_luid], elem_luid))
+	  && !bitmap_bit_p (&anti_dependency_cache[insn_luid], elem_luid)
+	  && !bitmap_bit_p (&control_dependency_cache[insn_luid], elem_luid))
 	return NULL;
     }
 
@@ -872,7 +950,8 @@ ask_dependency_caches (dep_t dep)
 
   gcc_assert (true_dependency_cache != NULL
 	      && output_dependency_cache != NULL
-	      && anti_dependency_cache != NULL);
+	      && anti_dependency_cache != NULL
+	      && control_dependency_cache != NULL);
 
   if (!(current_sched_info->flags & USE_DEPS_LIST))
     {
@@ -884,6 +963,8 @@ ask_dependency_caches (dep_t dep)
 	present_dep_type = REG_DEP_OUTPUT;
       else if (bitmap_bit_p (&anti_dependency_cache[insn_luid], elem_luid))
 	present_dep_type = REG_DEP_ANTI;
+      else if (bitmap_bit_p (&control_dependency_cache[insn_luid], elem_luid))
+	present_dep_type = REG_DEP_CONTROL;
       else
 	/* There is no existing dep so it should be created.  */
 	return DEP_CREATED;
@@ -902,6 +983,8 @@ ask_dependency_caches (dep_t dep)
 	present_dep_types |= DEP_OUTPUT;
       if (bitmap_bit_p (&anti_dependency_cache[insn_luid], elem_luid))
 	present_dep_types |= DEP_ANTI;
+      if (bitmap_bit_p (&control_dependency_cache[insn_luid], elem_luid))
+	present_dep_types |= DEP_CONTROL;
 
       if (present_dep_types == 0)
 	/* There is no existing dep so it should be created.  */
@@ -955,6 +1038,10 @@ set_dependency_caches (dep_t dep)
 	  bitmap_set_bit (&anti_dependency_cache[insn_luid], elem_luid);
 	  break;
 
+	case REG_DEP_CONTROL:
+	  bitmap_set_bit (&control_dependency_cache[insn_luid], elem_luid);
+	  break;
+
 	default:
 	  gcc_unreachable ();
 	}
@@ -969,6 +1056,8 @@ set_dependency_caches (dep_t dep)
 	bitmap_set_bit (&output_dependency_cache[insn_luid], elem_luid);
       if (ds & DEP_ANTI)
 	bitmap_set_bit (&anti_dependency_cache[insn_luid], elem_luid);
+      if (ds & DEP_CONTROL)
+	bitmap_set_bit (&control_dependency_cache[insn_luid], elem_luid);
 
       if (ds & SPECULATIVE)
 	{
@@ -998,6 +1087,10 @@ update_dependency_caches (dep_t dep, enum reg_note old_type)
 
 	case REG_DEP_ANTI:
 	  bitmap_clear_bit (&anti_dependency_cache[insn_luid], elem_luid);
+	  break;
+
+	case REG_DEP_CONTROL:
+	  bitmap_clear_bit (&control_dependency_cache[insn_luid], elem_luid);
 	  break;
 
 	default:
@@ -1040,6 +1133,7 @@ update_dep (dep_t dep, dep_t new_dep,
 {
   enum DEPS_ADJUST_RESULT res = DEP_PRESENT;
   enum reg_note old_type = DEP_TYPE (dep);
+  bool was_spec = dep_spec_p (dep);
 
   /* If this is a more restrictive type of dependence than the
      existing one, then change the existing dependence to this
@@ -1058,20 +1152,13 @@ update_dep (dep_t dep, dep_t new_dep,
       ds_t new_status = ds | dep_status;
 
       if (new_status & SPECULATIVE)
-	/* Either existing dep or a dep we're adding or both are
-	   speculative.  */
 	{
+	  /* Either existing dep or a dep we're adding or both are
+	     speculative.  */
 	  if (!(ds & SPECULATIVE)
 	      || !(dep_status & SPECULATIVE))
 	    /* The new dep can't be speculative.  */
-	    {
-	      new_status &= ~SPECULATIVE;
-
-	      if (dep_status & SPECULATIVE)
-		/* The old dep was speculative, but now it
-		   isn't.  */
-		change_spec_dep_to_hard (sd_it);
-	    }
+	    new_status &= ~SPECULATIVE;
 	  else
 	    {
 	      /* Both are speculative.  Merge probabilities.  */
@@ -1095,6 +1182,10 @@ update_dep (dep_t dep, dep_t new_dep,
 	  res = DEP_CHANGED;
 	}
     }
+
+  if (was_spec && !dep_spec_p (dep))
+    /* The old dep was speculative, but now it isn't.  */
+    change_spec_dep_to_hard (sd_it);
 
   if (true_dependency_cache != NULL
       && res == DEP_CHANGED)
@@ -1196,8 +1287,7 @@ get_back_and_forw_lists (dep_t dep, bool resolved_p,
 
   if (!resolved_p)
     {
-      if ((current_sched_info->flags & DO_SPECULATION)
-	  && (DEP_STATUS (dep) & SPECULATIVE))
+      if (dep_spec_p (dep))
 	*back_list_ptr = INSN_SPEC_BACK_DEPS (con);
       else
 	*back_list_ptr = INSN_HARD_BACK_DEPS (con);
@@ -1224,8 +1314,8 @@ sd_add_dep (dep_t dep, bool resolved_p)
 
   gcc_assert (INSN_P (insn) && INSN_P (elem) && insn != elem);
 
-  if ((current_sched_info->flags & DO_SPECULATION)
-      && !sched_insn_is_legitimate_for_speculation_p (insn, DEP_STATUS (dep)))
+  if ((current_sched_info->flags & DO_SPECULATION) == 0
+      || !sched_insn_is_legitimate_for_speculation_p (insn, DEP_STATUS (dep)))
     DEP_STATUS (dep) &= ~SPECULATIVE;
 
   copy_dep (DEP_NODE_DEP (n), dep);
@@ -1265,8 +1355,7 @@ sd_resolve_dep (sd_iterator_def sd_it)
   rtx pro = DEP_PRO (dep);
   rtx con = DEP_CON (dep);
 
-  if ((current_sched_info->flags & DO_SPECULATION)
-      && (DEP_STATUS (dep) & SPECULATIVE))
+  if (dep_spec_p (dep))
     move_dep_link (DEP_NODE_BACK (node), INSN_SPEC_BACK_DEPS (con),
 		   INSN_RESOLVED_BACK_DEPS (con));
   else
@@ -1275,6 +1364,27 @@ sd_resolve_dep (sd_iterator_def sd_it)
 
   move_dep_link (DEP_NODE_FORW (node), INSN_FORW_DEPS (pro),
 		 INSN_RESOLVED_FORW_DEPS (pro));
+}
+
+/* Perform the inverse operation of sd_resolve_dep.  Restore the dependence
+   pointed to by SD_IT to unresolved state.  */
+void
+sd_unresolve_dep (sd_iterator_def sd_it)
+{
+  dep_node_t node = DEP_LINK_NODE (*sd_it.linkp);
+  dep_t dep = DEP_NODE_DEP (node);
+  rtx pro = DEP_PRO (dep);
+  rtx con = DEP_CON (dep);
+
+  if (dep_spec_p (dep))
+    move_dep_link (DEP_NODE_BACK (node), INSN_RESOLVED_BACK_DEPS (con),
+		   INSN_SPEC_BACK_DEPS (con));
+  else
+    move_dep_link (DEP_NODE_BACK (node), INSN_RESOLVED_BACK_DEPS (con),
+		   INSN_HARD_BACK_DEPS (con));
+
+  move_dep_link (DEP_NODE_FORW (node), INSN_RESOLVED_FORW_DEPS (pro),
+		 INSN_FORW_DEPS (pro));
 }
 
 /* Make TO depend on all the FROM's producers.
@@ -1317,6 +1427,7 @@ sd_delete_dep (sd_iterator_def sd_it)
 
       bitmap_clear_bit (&true_dependency_cache[insn_luid], elem_luid);
       bitmap_clear_bit (&anti_dependency_cache[insn_luid], elem_luid);
+      bitmap_clear_bit (&control_dependency_cache[insn_luid], elem_luid);
       bitmap_clear_bit (&output_dependency_cache[insn_luid], elem_luid);
 
       if (current_sched_info->flags & DO_SPECULATION)
@@ -1380,6 +1491,57 @@ sd_debug_lists (rtx insn, sd_list_types_def types)
 {
   dump_lists (stderr, insn, types, 1);
   fprintf (stderr, "\n");
+}
+
+/* A wrapper around add_dependence_1, to add a dependence of CON on
+   PRO, with type DEP_TYPE.  This function implements special handling
+   for REG_DEP_CONTROL dependencies.  For these, we optionally promote
+   the type to REG_DEP_ANTI if we can determine that predication is
+   impossible; otherwise we add additional true dependencies on the
+   INSN_COND_DEPS list of the jump (which PRO must be).  */
+void
+add_dependence (rtx con, rtx pro, enum reg_note dep_type)
+{
+  if (dep_type == REG_DEP_CONTROL
+      && !(current_sched_info->flags & DO_PREDICATION))
+    dep_type = REG_DEP_ANTI;
+
+  /* A REG_DEP_CONTROL dependence may be eliminated through predication,
+     so we must also make the insn dependent on the setter of the
+     condition.  */
+  if (dep_type == REG_DEP_CONTROL)
+    {
+      rtx real_pro = pro;
+      rtx other = real_insn_for_shadow (real_pro);
+      rtx cond;
+
+      if (other != NULL_RTX)
+	real_pro = other;
+      cond = sched_get_reverse_condition_uncached (real_pro);
+      /* Verify that the insn does not use a different value in
+	 the condition register than the one that was present at
+	 the jump.  */
+      if (cond == NULL_RTX)
+	dep_type = REG_DEP_ANTI;
+      else if (INSN_CACHED_COND (real_pro) == const_true_rtx)
+	{
+	  HARD_REG_SET uses;
+	  CLEAR_HARD_REG_SET (uses);
+	  note_uses (&PATTERN (con), record_hard_reg_uses, &uses);
+	  if (TEST_HARD_REG_BIT (uses, REGNO (XEXP (cond, 0))))
+	    dep_type = REG_DEP_ANTI;
+	}
+      if (dep_type == REG_DEP_CONTROL)
+	{
+	  if (sched_verbose >= 5)
+	    fprintf (sched_dump, "making DEP_CONTROL for %d\n",
+		     INSN_UID (real_pro));
+	  add_dependence_list (con, INSN_COND_DEPS (real_pro), 0,
+			       REG_DEP_TRUE);
+	}
+    }
+	  
+  add_dependence_1 (con, pro, dep_type);
 }
 
 /* A convenience wrapper to operate on an entire list.  */
@@ -1566,7 +1728,8 @@ add_insn_mem_dependence (struct deps_desc *deps, bool read_p,
   if (sched_deps_info->use_cselib)
     {
       mem = shallow_copy_rtx (mem);
-      XEXP (mem, 0) = cselib_subst_to_values (XEXP (mem, 0), GET_MODE (mem));
+      XEXP (mem, 0) = cselib_subst_to_values_from_insn (XEXP (mem, 0),
+							GET_MODE (mem), insn);
     }
   link = alloc_EXPR_LIST (VOIDmode, canon_rtx (mem), *mem_list);
   *mem_list = link;
@@ -1597,6 +1760,10 @@ flush_pending_lists (struct deps_desc *deps, rtx insn, int for_read,
   add_dependence_list_and_free (deps, insn,
                                 &deps->last_pending_memory_flush, 1,
                                 for_read ? REG_DEP_ANTI : REG_DEP_OUTPUT);
+
+  add_dependence_list_and_free (deps, insn, &deps->pending_jump_insns, 1,
+				REG_DEP_ANTI);
+
   if (!deps->readonly)
     {
       free_EXPR_LIST_list (&deps->pending_write_mems);
@@ -1659,7 +1826,7 @@ haifa_note_mem_dep (rtx mem, rtx pending_mem, rtx pending_insn, ds_t ds)
     dep_def _dep, *dep = &_dep;
 
     init_dep_1 (dep, pending_insn, cur_insn, ds_to_dt (ds),
-                current_sched_info->flags & USE_DEPS_LIST ? ds : -1);
+                current_sched_info->flags & USE_DEPS_LIST ? ds : 0);
     maybe_add_or_update_dep_1 (dep, false, pending_mem, mem);
   }
 
@@ -1718,10 +1885,12 @@ ds_to_dt (ds_t ds)
     return REG_DEP_TRUE;
   else if (ds & DEP_OUTPUT)
     return REG_DEP_OUTPUT;
+  else if (ds & DEP_ANTI)
+    return REG_DEP_ANTI;
   else
     {
-      gcc_assert (ds & DEP_ANTI);
-      return REG_DEP_ANTI;
+      gcc_assert (ds & DEP_CONTROL);
+      return REG_DEP_CONTROL;
     }
 }
 
@@ -1821,10 +1990,10 @@ mark_insn_pseudo_birth (rtx insn, int regno, bool clobber_p, bool unused_p)
   enum reg_class cl;
 
   gcc_assert (regno >= FIRST_PSEUDO_REGISTER);
-  cl = sched_regno_cover_class[regno];
+  cl = sched_regno_pressure_class[regno];
   if (cl != NO_REGS)
     {
-      incr = ira_reg_class_nregs[cl][PSEUDO_REGNO_MODE (regno)];
+      incr = ira_reg_class_max_nregs[cl][PSEUDO_REGNO_MODE (regno)];
       if (clobber_p)
 	{
 	  new_incr = reg_pressure_info[cl].clobber_increase + incr;
@@ -1861,7 +2030,7 @@ mark_insn_hard_regno_birth (rtx insn, int regno, int nregs,
       gcc_assert (regno < FIRST_PSEUDO_REGISTER);
       if (! TEST_HARD_REG_BIT (ira_no_alloc_regs, regno))
 	{
-	  cl = sched_regno_cover_class[regno];
+	  cl = sched_regno_pressure_class[regno];
 	  if (cl != NO_REGS)
 	    {
 	      if (clobber_p)
@@ -1922,10 +2091,10 @@ mark_pseudo_death (int regno)
   enum reg_class cl;
 
   gcc_assert (regno >= FIRST_PSEUDO_REGISTER);
-  cl = sched_regno_cover_class[regno];
+  cl = sched_regno_pressure_class[regno];
   if (cl != NO_REGS)
     {
-      incr = ira_reg_class_nregs[cl][PSEUDO_REGNO_MODE (regno)];
+      incr = ira_reg_class_max_nregs[cl][PSEUDO_REGNO_MODE (regno)];
       reg_pressure_info[cl].change -= incr;
     }
 }
@@ -1943,7 +2112,7 @@ mark_hard_regno_death (int regno, int nregs)
       gcc_assert (regno < FIRST_PSEUDO_REGISTER);
       if (! TEST_HARD_REG_BIT (ira_no_alloc_regs, regno))
 	{
-	  cl = sched_regno_cover_class[regno];
+	  cl = sched_regno_pressure_class[regno];
 	  if (cl != NO_REGS)
 	    reg_pressure_info[cl].change -= 1;
 	}
@@ -1991,8 +2160,8 @@ mark_insn_reg_clobber (rtx reg, const_rtx setter, void *data)
 }
 
 /* Set up reg pressure info related to INSN.  */
-static void
-setup_insn_reg_pressure_info (rtx insn)
+void
+init_insn_reg_pressure_info (rtx insn)
 {
   int i, len;
   enum reg_class cl;
@@ -2004,9 +2173,9 @@ setup_insn_reg_pressure_info (rtx insn)
   if (! INSN_P (insn))
     return;
 
-  for (i = 0; i < ira_reg_class_cover_size; i++)
+  for (i = 0; i < ira_pressure_classes_num; i++)
     {
-      cl = ira_reg_class_cover[i];
+      cl = ira_pressure_classes[i];
       reg_pressure_info[cl].clobber_increase = 0;
       reg_pressure_info[cl].set_increase = 0;
       reg_pressure_info[cl].unused_set_increase = 0;
@@ -2027,14 +2196,14 @@ setup_insn_reg_pressure_info (rtx insn)
     if (REG_NOTE_KIND (link) == REG_DEAD)
       mark_reg_death (XEXP (link, 0));
 
-  len = sizeof (struct reg_pressure_data) * ira_reg_class_cover_size;
+  len = sizeof (struct reg_pressure_data) * ira_pressure_classes_num;
   pressure_info
     = INSN_REG_PRESSURE (insn) = (struct reg_pressure_data *) xmalloc (len);
-  INSN_MAX_REG_PRESSURE (insn) = (int *) xcalloc (ira_reg_class_cover_size
+  INSN_MAX_REG_PRESSURE (insn) = (int *) xcalloc (ira_pressure_classes_num
 						  * sizeof (int), 1);
-  for (i = 0; i < ira_reg_class_cover_size; i++)
+  for (i = 0; i < ira_pressure_classes_num; i++)
     {
-      cl = ira_reg_class_cover[i];
+      cl = ira_pressure_classes[i];
       pressure_info[i].clobber_increase
 	= reg_pressure_info[cl].clobber_increase;
       pressure_info[i].set_increase = reg_pressure_info[cl].set_increase;
@@ -2259,16 +2428,12 @@ sched_analyze_1 (struct deps_desc *deps, rtx x, rtx insn)
       /* Treat all writes to a stack register as modifying the TOS.  */
       if (regno >= FIRST_STACK_REG && regno <= LAST_STACK_REG)
 	{
-	  int nregs;
-
 	  /* Avoid analyzing the same register twice.  */
 	  if (regno != FIRST_STACK_REG)
 	    sched_analyze_reg (deps, FIRST_STACK_REG, mode, code, insn);
 
-	  nregs = hard_regno_nregs[FIRST_STACK_REG][mode];
-	  while (--nregs >= 0)
-	    SET_HARD_REG_BIT (implicit_reg_pending_uses,
-			      FIRST_STACK_REG + nregs);
+	  add_to_hard_reg_set (&implicit_reg_pending_uses, mode,
+			       FIRST_STACK_REG);
 	}
 #endif
     }
@@ -2285,7 +2450,9 @@ sched_analyze_1 (struct deps_desc *deps, rtx x, rtx insn)
 	  t = shallow_copy_rtx (dest);
 	  cselib_lookup_from_insn (XEXP (t, 0), address_mode, 1,
 				   GET_MODE (t), insn);
-	  XEXP (t, 0) = cselib_subst_to_values (XEXP (t, 0), GET_MODE (t));
+	  XEXP (t, 0)
+	    = cselib_subst_to_values_from_insn (XEXP (t, 0), GET_MODE (t),
+						insn);
 	}
       t = canon_rtx (t);
 
@@ -2333,6 +2500,8 @@ sched_analyze_1 (struct deps_desc *deps, rtx x, rtx insn)
 
 	  add_dependence_list (insn, deps->last_pending_memory_flush, 1,
 			       REG_DEP_ANTI);
+	  add_dependence_list (insn, deps->pending_jump_insns, 1,
+			       REG_DEP_CONTROL);
 
           if (!deps->readonly)
             add_insn_mem_dependence (deps, false, insn, dest);
@@ -2443,7 +2612,9 @@ sched_analyze_2 (struct deps_desc *deps, rtx x, rtx insn)
 	    t = shallow_copy_rtx (t);
 	    cselib_lookup_from_insn (XEXP (t, 0), address_mode, 1,
 				     GET_MODE (t), insn);
-	    XEXP (t, 0) = cselib_subst_to_values (XEXP (t, 0), GET_MODE (t));
+	    XEXP (t, 0)
+	      = cselib_subst_to_values_from_insn (XEXP (t, 0), GET_MODE (t),
+						  insn);
 	  }
 
 	if (!DEBUG_INSN_P (insn))
@@ -2467,8 +2638,7 @@ sched_analyze_2 (struct deps_desc *deps, rtx x, rtx insn)
 	    pending_mem = deps->pending_write_mems;
 	    while (pending)
 	      {
-		if (true_dependence (XEXP (pending_mem, 0), VOIDmode,
-				     t, rtx_varies_p)
+		if (true_dependence (XEXP (pending_mem, 0), VOIDmode, t)
 		    && ! sched_insns_conditions_mutex_p (insn,
 							 XEXP (pending, 0)))
 		  note_mem_dep (t, XEXP (pending_mem, 0), XEXP (pending, 0),
@@ -2480,23 +2650,22 @@ sched_analyze_2 (struct deps_desc *deps, rtx x, rtx insn)
 	      }
 
 	    for (u = deps->last_pending_memory_flush; u; u = XEXP (u, 1))
-	      {
-		if (! NON_FLUSH_JUMP_P (u))
-		  add_dependence (insn, XEXP (u, 0), REG_DEP_ANTI);
-		else if (deps_may_trap_p (x))
-		  {
-		    if ((sched_deps_info->generate_spec_deps)
-			&& sel_sched_p () && (spec_info->mask & BEGIN_CONTROL))
-		      {
-			ds_t ds = set_dep_weak (DEP_ANTI, BEGIN_CONTROL,
-						MAX_DEP_WEAK);
+	      add_dependence (insn, XEXP (u, 0), REG_DEP_ANTI);
 
-			note_dep (XEXP (u, 0), ds);
-		      }
-		    else
-		      add_dependence (insn, XEXP (u, 0), REG_DEP_ANTI);
-		  }
-	      }
+	    for (u = deps->pending_jump_insns; u; u = XEXP (u, 1))
+	      if (deps_may_trap_p (x))
+		{
+		  if ((sched_deps_info->generate_spec_deps)
+		      && sel_sched_p () && (spec_info->mask & BEGIN_CONTROL))
+		    {
+		      ds_t ds = set_dep_weak (DEP_ANTI, BEGIN_CONTROL,
+					      MAX_DEP_WEAK);
+		      
+		      note_dep (XEXP (u, 0), ds);
+		    }
+		  else
+		    add_dependence (insn, XEXP (u, 0), REG_DEP_CONTROL);
+		}
 	  }
 
 	/* Always add these dependencies to pending_reads, since
@@ -2635,6 +2804,24 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
     add_dependence_list (insn, deps->last_function_call_may_noreturn,
 			 1, REG_DEP_ANTI);
 
+  /* We must avoid creating a situation in which two successors of the
+     current block have different unwind info after scheduling.  If at any
+     point the two paths re-join this leads to incorrect unwind info.  */
+  /* ??? There are certain situations involving a forced frame pointer in
+     which, with extra effort, we could fix up the unwind info at a later
+     CFG join.  However, it seems better to notice these cases earlier
+     during prologue generation and avoid marking the frame pointer setup
+     as frame-related at all.  */
+  if (RTX_FRAME_RELATED_P (insn))
+    {
+      /* Make sure prologue insn is scheduled before next jump.  */
+      deps->sched_before_next_jump
+	= alloc_INSN_LIST (insn, deps->sched_before_next_jump);
+
+      /* Make sure epilogue insn is scheduled after preceding jumps.  */
+      add_dependence_list (insn, deps->pending_jump_insns, 1, REG_DEP_ANTI);
+    }
+
   if (code == COND_EXEC)
     {
       sched_analyze_2 (deps, COND_EXEC_TEST (x), insn);
@@ -2707,14 +2894,11 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 
           if (sched_deps_info->compute_jump_reg_dependencies)
             {
-              regset_head tmp_uses, tmp_sets;
-              INIT_REG_SET (&tmp_uses);
-              INIT_REG_SET (&tmp_sets);
-
               (*sched_deps_info->compute_jump_reg_dependencies)
-                (insn, &deps->reg_conditional_sets, &tmp_uses, &tmp_sets);
+		(insn, reg_pending_control_uses);
+
               /* Make latency of jump equal to 0 by using anti-dependence.  */
-              EXECUTE_IF_SET_IN_REG_SET (&tmp_uses, 0, i, rsi)
+              EXECUTE_IF_SET_IN_REG_SET (reg_pending_control_uses, 0, i, rsi)
                 {
                   struct deps_reg *reg_last = &deps->reg_last[i];
                   add_dependence_list (insn, reg_last->sets, 0, REG_DEP_ANTI);
@@ -2722,17 +2906,7 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 				       0, REG_DEP_ANTI);
                   add_dependence_list (insn, reg_last->clobbers, 0,
 				       REG_DEP_ANTI);
-
-                  if (!deps->readonly)
-                    {
-                      reg_last->uses_length++;
-                      reg_last->uses = alloc_INSN_LIST (insn, reg_last->uses);
-                    }
                 }
-              IOR_REG_SET (reg_pending_sets, &tmp_sets);
-
-              CLEAR_REG_SET (&tmp_uses);
-              CLEAR_REG_SET (&tmp_sets);
             }
 
 	  /* All memory writes and volatile reads must happen before the
@@ -2762,6 +2936,8 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 
 	  add_dependence_list (insn, deps->last_pending_memory_flush, 1,
 			       REG_DEP_ANTI);
+	  add_dependence_list (insn, deps->pending_jump_insns, 1,
+			       REG_DEP_ANTI);
 	}
     }
 
@@ -2778,7 +2954,7 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
   if (sched_pressure_p)
     {
       setup_insn_reg_uses (deps, insn);
-      setup_insn_reg_pressure_info (insn);
+      init_insn_reg_pressure_info (insn);
     }
 
   /* Add register dependencies for insn.  */
@@ -2797,13 +2973,15 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 			   REG_DEP_ANTI);
 
       for (u = deps->last_pending_memory_flush; u; u = XEXP (u, 1))
-	if (! NON_FLUSH_JUMP_P (u) || !sel_sched_p ())
+	if (!sel_sched_p ())
 	  add_dependence (insn, XEXP (u, 0), REG_DEP_ANTI);
 
       EXECUTE_IF_SET_IN_REG_SET (reg_pending_uses, 0, i, rsi)
 	{
 	  struct deps_reg *reg_last = &deps->reg_last[i];
 	  add_dependence_list (insn, reg_last->sets, 1, REG_DEP_ANTI);
+	  /* There's no point in making REG_DEP_CONTROL dependencies for
+	     debug insns.  */
 	  add_dependence_list (insn, reg_last->clobbers, 1, REG_DEP_ANTI);
 
 	  if (!deps->readonly)
@@ -2825,6 +3003,8 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
     }
   else
     {
+      regset_head set_or_clobbered;
+
       EXECUTE_IF_SET_IN_REG_SET (reg_pending_uses, 0, i, rsi)
 	{
 	  struct deps_reg *reg_last = &deps->reg_last[i];
@@ -2855,6 +3035,25 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 	      }
 	  }
 
+      if (targetm.sched.exposed_pipeline)
+	{
+	  INIT_REG_SET (&set_or_clobbered);
+	  bitmap_ior (&set_or_clobbered, reg_pending_clobbers,
+		      reg_pending_sets);
+	  EXECUTE_IF_SET_IN_REG_SET (&set_or_clobbered, 0, i, rsi)
+	    {
+	      struct deps_reg *reg_last = &deps->reg_last[i];
+	      rtx list;
+	      for (list = reg_last->uses; list; list = XEXP (list, 1))
+		{
+		  rtx other = XEXP (list, 0);
+		  if (INSN_CACHED_COND (other) != const_true_rtx
+		      && refers_to_regno_p (i, i + 1, INSN_CACHED_COND (other), NULL))
+		    INSN_CACHED_COND (other) = const_true_rtx;
+		}
+	    }
+	}
+
       /* If the current insn is conditional, we can't free any
 	 of the lists.  */
       if (sched_has_condition_p (insn))
@@ -2866,6 +3065,8 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 	      add_dependence_list (insn, reg_last->implicit_sets, 0,
 				   REG_DEP_ANTI);
 	      add_dependence_list (insn, reg_last->uses, 0, REG_DEP_ANTI);
+	      add_dependence_list (insn, reg_last->control_uses, 0,
+				   REG_DEP_CONTROL);
 
 	      if (!deps->readonly)
 		{
@@ -2882,12 +3083,11 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 				   REG_DEP_ANTI);
 	      add_dependence_list (insn, reg_last->clobbers, 0, REG_DEP_OUTPUT);
 	      add_dependence_list (insn, reg_last->uses, 0, REG_DEP_ANTI);
+	      add_dependence_list (insn, reg_last->control_uses, 0,
+				   REG_DEP_CONTROL);
 
 	      if (!deps->readonly)
-		{
-		  reg_last->sets = alloc_INSN_LIST (insn, reg_last->sets);
-		  SET_REGNO_REG_SET (&deps->reg_conditional_sets, i);
-		}
+		reg_last->sets = alloc_INSN_LIST (insn, reg_last->sets);
 	    }
 	}
       else
@@ -2905,6 +3105,9 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 						REG_DEP_ANTI);
 		  add_dependence_list_and_free (deps, insn, &reg_last->uses, 0,
 						REG_DEP_ANTI);
+		  add_dependence_list_and_free (deps, insn,
+						&reg_last->control_uses, 0,
+						REG_DEP_ANTI);
 		  add_dependence_list_and_free
 		    (deps, insn, &reg_last->clobbers, 0, REG_DEP_OUTPUT);
 
@@ -2921,6 +3124,8 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 		  add_dependence_list (insn, reg_last->implicit_sets, 0,
 				       REG_DEP_ANTI);
 		  add_dependence_list (insn, reg_last->uses, 0, REG_DEP_ANTI);
+		  add_dependence_list (insn, reg_last->control_uses, 0,
+				       REG_DEP_CONTROL);
 		}
 
 	      if (!deps->readonly)
@@ -2943,14 +3148,24 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 					    REG_DEP_OUTPUT);
 	      add_dependence_list_and_free (deps, insn, &reg_last->uses, 0,
 					    REG_DEP_ANTI);
+	      add_dependence_list (insn, reg_last->control_uses, 0,
+				   REG_DEP_CONTROL);
 
 	      if (!deps->readonly)
 		{
 		  reg_last->sets = alloc_INSN_LIST (insn, reg_last->sets);
 		  reg_last->uses_length = 0;
 		  reg_last->clobbers_length = 0;
-		  CLEAR_REGNO_REG_SET (&deps->reg_conditional_sets, i);
 		}
+	    }
+	}
+      if (!deps->readonly)
+	{
+	  EXECUTE_IF_SET_IN_REG_SET (reg_pending_control_uses, 0, i, rsi)
+	    {
+	      struct deps_reg *reg_last = &deps->reg_last[i];
+	      reg_last->control_uses
+		= alloc_INSN_LIST (insn, reg_last->control_uses);
 	    }
 	}
     }
@@ -2962,6 +3177,7 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 	add_dependence_list (insn, reg_last->sets, 0, REG_DEP_ANTI);
 	add_dependence_list (insn, reg_last->clobbers, 0, REG_DEP_ANTI);
 	add_dependence_list (insn, reg_last->uses, 0, REG_DEP_ANTI);
+	add_dependence_list (insn, reg_last->control_uses, 0, REG_DEP_ANTI);
 
 	if (!deps->readonly)
 	  reg_last->implicit_sets
@@ -2985,6 +3201,7 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
   CLEAR_REG_SET (reg_pending_uses);
   CLEAR_REG_SET (reg_pending_clobbers);
   CLEAR_REG_SET (reg_pending_sets);
+  CLEAR_REG_SET (reg_pending_control_uses);
   CLEAR_HARD_REG_SET (implicit_reg_pending_clobbers);
   CLEAR_HARD_REG_SET (implicit_reg_pending_uses);
 
@@ -3016,6 +3233,9 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
 	      struct deps_reg *reg_last = &deps->reg_last[i];
 	      add_dependence_list_and_free (deps, insn, &reg_last->uses, 0,
 					    REG_DEP_ANTI);
+	      add_dependence_list_and_free (deps, insn,
+					    &reg_last->control_uses, 0,
+					    REG_DEP_CONTROL);
 	      add_dependence_list_and_free (deps, insn, &reg_last->sets, 0,
 					    reg_pending_barrier == TRUE_BARRIER
 					    ? REG_DEP_TRUE : REG_DEP_ANTI);
@@ -3047,8 +3267,6 @@ sched_analyze_insn (struct deps_desc *deps, rtx x, rtx insn)
                              && sel_insn_is_speculation_check (insn)))
 	flush_pending_lists (deps, insn, true, true);
 
-      if (!deps->readonly)
-        CLEAR_REG_SET (&deps->reg_conditional_sets);
       reg_pending_barrier = NOT_A_BARRIER;
     }
 
@@ -3229,12 +3447,41 @@ deps_analyze_insn (struct deps_desc *deps, rtx insn)
   if (sched_deps_info->start_insn)
     sched_deps_info->start_insn (insn);
 
-  if (NONJUMP_INSN_P (insn) || DEBUG_INSN_P (insn) || JUMP_P (insn))
+  /* Record the condition for this insn.  */
+  if (NONDEBUG_INSN_P (insn))
+    {
+      rtx t;
+      sched_get_condition_with_rev (insn, NULL);
+      t = INSN_CACHED_COND (insn);
+      INSN_COND_DEPS (insn) = NULL_RTX;
+      if (reload_completed
+	  && (current_sched_info->flags & DO_PREDICATION)
+	  && COMPARISON_P (t)
+	  && REG_P (XEXP (t, 0))
+	  && CONSTANT_P (XEXP (t, 1)))
+	{
+	  unsigned int regno;
+	  int nregs;
+	  t = XEXP (t, 0);
+	  regno = REGNO (t);
+	  nregs = hard_regno_nregs[regno][GET_MODE (t)];
+	  t = NULL_RTX;
+	  while (nregs-- > 0)
+	    {
+	      struct deps_reg *reg_last = &deps->reg_last[regno + nregs];
+	      t = concat_INSN_LIST (reg_last->sets, t);
+	      t = concat_INSN_LIST (reg_last->clobbers, t);
+	      t = concat_INSN_LIST (reg_last->implicit_sets, t);
+	    }
+	  INSN_COND_DEPS (insn) = t;
+	}
+    }
+
+  if (JUMP_P (insn))
     {
       /* Make each JUMP_INSN (but not a speculative check)
          a scheduling barrier for memory references.  */
       if (!deps->readonly
-          && JUMP_P (insn)
           && !(sel_sched_p ()
                && sel_insn_is_speculation_check (insn)))
         {
@@ -3242,17 +3489,19 @@ deps_analyze_insn (struct deps_desc *deps, rtx insn)
           if (deps->pending_flush_length++ > MAX_PENDING_LIST_LENGTH)
             flush_pending_lists (deps, insn, true, true);
           else
-	    {
-	      deps->last_pending_memory_flush
-		= alloc_INSN_LIST (insn, deps->last_pending_memory_flush);
-	      /* Signal to sched_analyze_insn that this jump stands
-		 just for its own, not any other pending memory
-		 reads/writes flush_pending_lists had to flush.  */
-	      PUT_REG_NOTE_KIND (deps->last_pending_memory_flush,
-				 NON_FLUSH_JUMP_KIND);
-	    }
+	    deps->pending_jump_insns
+              = alloc_INSN_LIST (insn, deps->pending_jump_insns);
         }
 
+      /* For each insn which shouldn't cross a jump, add a dependence.  */
+      add_dependence_list_and_free (deps, insn,
+				    &deps->sched_before_next_jump, 1,
+				    REG_DEP_ANTI);
+
+      sched_analyze_insn (deps, PATTERN (insn), insn);
+    }
+  else if (NONJUMP_INSN_P (insn) || DEBUG_INSN_P (insn))
+    {
       sched_analyze_insn (deps, PATTERN (insn), insn);
     }
   else if (CALL_P (insn))
@@ -3449,18 +3698,23 @@ sched_free_deps (rtx head, rtx tail, bool resolved_p)
   rtx insn;
   rtx next_tail = NEXT_INSN (tail);
 
+  /* We make two passes since some insns may be scheduled before their
+     dependencies are resolved.  */
   for (insn = head; insn != next_tail; insn = NEXT_INSN (insn))
     if (INSN_P (insn) && INSN_LUID (insn) > 0)
       {
-	/* Clear resolved back deps together with its dep_nodes.  */
-	delete_dep_nodes_in_back_deps (insn, resolved_p);
-
 	/* Clear forward deps and leave the dep_nodes to the
 	   corresponding back_deps list.  */
 	if (resolved_p)
 	  clear_deps_list (INSN_RESOLVED_FORW_DEPS (insn));
 	else
 	  clear_deps_list (INSN_FORW_DEPS (insn));
+      }
+  for (insn = head; insn != next_tail; insn = NEXT_INSN (insn))
+    if (INSN_P (insn) && INSN_LUID (insn) > 0)
+      {
+	/* Clear resolved back deps together with its dep_nodes.  */
+	delete_dep_nodes_in_back_deps (insn, resolved_p);
 
 	sd_finish_insn (insn);
       }
@@ -3481,12 +3735,12 @@ init_deps (struct deps_desc *deps, bool lazy_reg_last)
   else
     deps->reg_last = XCNEWVEC (struct deps_reg, max_reg);
   INIT_REG_SET (&deps->reg_last_in_use);
-  INIT_REG_SET (&deps->reg_conditional_sets);
 
   deps->pending_read_insns = 0;
   deps->pending_read_mems = 0;
   deps->pending_write_insns = 0;
   deps->pending_write_mems = 0;
+  deps->pending_jump_insns = 0;
   deps->pending_read_list_length = 0;
   deps->pending_write_list_length = 0;
   deps->pending_flush_length = 0;
@@ -3494,6 +3748,7 @@ init_deps (struct deps_desc *deps, bool lazy_reg_last)
   deps->last_function_call = 0;
   deps->last_function_call_may_noreturn = 0;
   deps->sched_before_next_call = 0;
+  deps->sched_before_next_jump = 0;
   deps->in_post_call_group_p = not_post_call;
   deps->last_debug_insn = 0;
   deps->last_reg_pending_barrier = NOT_A_BARRIER;
@@ -3546,23 +3801,22 @@ free_deps (struct deps_desc *deps)
 	free_INSN_LIST_list (&reg_last->sets);
       if (reg_last->implicit_sets)
 	free_INSN_LIST_list (&reg_last->implicit_sets);
+      if (reg_last->control_uses)
+	free_INSN_LIST_list (&reg_last->control_uses);
       if (reg_last->clobbers)
 	free_INSN_LIST_list (&reg_last->clobbers);
     }
   CLEAR_REG_SET (&deps->reg_last_in_use);
-  CLEAR_REG_SET (&deps->reg_conditional_sets);
 
   /* As we initialize reg_last lazily, it is possible that we didn't allocate
      it at all.  */
-  if (deps->reg_last)
-    free (deps->reg_last);
+  free (deps->reg_last);
   deps->reg_last = NULL;
 
   deps = NULL;
 }
 
-/* Remove INSN from dependence contexts DEPS.  Caution: reg_conditional_sets
-   is not handled.  */
+/* Remove INSN from dependence contexts DEPS.  */
 void
 remove_from_deps (struct deps_desc *deps, rtx insn)
 {
@@ -3577,6 +3831,9 @@ remove_from_deps (struct deps_desc *deps, rtx insn)
   removed = remove_from_both_dependence_lists (insn, &deps->pending_write_insns,
                                                &deps->pending_write_mems);
   deps->pending_write_list_length -= removed;
+
+  removed = remove_from_dependence_list (insn, &deps->pending_jump_insns);
+  deps->pending_flush_length -= removed;
   removed = remove_from_dependence_list (insn, &deps->last_pending_memory_flush);
   deps->pending_flush_length -= removed;
 
@@ -3671,6 +3928,8 @@ extend_dependency_caches (int n, bool create_p)
 					    output_dependency_cache, luid);
       anti_dependency_cache = XRESIZEVEC (bitmap_head, anti_dependency_cache,
 					  luid);
+      control_dependency_cache = XRESIZEVEC (bitmap_head, control_dependency_cache,
+					  luid);
 
       if (current_sched_info->flags & DO_SPECULATION)
         spec_dependency_cache = XRESIZEVEC (bitmap_head, spec_dependency_cache,
@@ -3681,6 +3940,7 @@ extend_dependency_caches (int n, bool create_p)
 	  bitmap_initialize (&true_dependency_cache[i], 0);
 	  bitmap_initialize (&output_dependency_cache[i], 0);
 	  bitmap_initialize (&anti_dependency_cache[i], 0);
+	  bitmap_initialize (&control_dependency_cache[i], 0);
 
           if (current_sched_info->flags & DO_SPECULATION)
             bitmap_initialize (&spec_dependency_cache[i], 0);
@@ -3710,6 +3970,7 @@ sched_deps_finish (void)
 	  bitmap_clear (&true_dependency_cache[i]);
 	  bitmap_clear (&output_dependency_cache[i]);
 	  bitmap_clear (&anti_dependency_cache[i]);
+	  bitmap_clear (&control_dependency_cache[i]);
 
           if (sched_deps_info->generate_spec_deps)
             bitmap_clear (&spec_dependency_cache[i]);
@@ -3720,6 +3981,8 @@ sched_deps_finish (void)
       output_dependency_cache = NULL;
       free (anti_dependency_cache);
       anti_dependency_cache = NULL;
+      free (control_dependency_cache);
+      control_dependency_cache = NULL;
 
       if (sched_deps_info->generate_spec_deps)
         {
@@ -3741,6 +4004,7 @@ init_deps_global (void)
   reg_pending_sets = ALLOC_REG_SET (&reg_obstack);
   reg_pending_clobbers = ALLOC_REG_SET (&reg_obstack);
   reg_pending_uses = ALLOC_REG_SET (&reg_obstack);
+  reg_pending_control_uses = ALLOC_REG_SET (&reg_obstack);
   reg_pending_barrier = NOT_A_BARRIER;
 
   if (!sel_sched_p () || sched_emulate_haifa_p)
@@ -3765,6 +4029,7 @@ finish_deps_global (void)
   FREE_REG_SET (reg_pending_sets);
   FREE_REG_SET (reg_pending_clobbers);
   FREE_REG_SET (reg_pending_uses);
+  FREE_REG_SET (reg_pending_control_uses);
 }
 
 /* Estimate the weakness of dependence between MEM1 and MEM2.  */
@@ -3798,8 +4063,8 @@ estimate_dep_weak (rtx mem1, rtx mem2)
 /* Add or update backward dependence between INSN and ELEM with type DEP_TYPE.
    This function can handle same INSN and ELEM (INSN == ELEM).
    It is a convenience wrapper.  */
-void
-add_dependence (rtx insn, rtx elem, enum reg_note dep_type)
+static void
+add_dependence_1 (rtx insn, rtx elem, enum reg_note dep_type)
 {
   ds_t ds;
   bool internal;
@@ -3808,6 +4073,8 @@ add_dependence (rtx insn, rtx elem, enum reg_note dep_type)
     ds = DEP_TRUE;
   else if (dep_type == REG_DEP_OUTPUT)
     ds = DEP_OUTPUT;
+  else if (dep_type == REG_DEP_CONTROL)
+    ds = DEP_CONTROL;
   else
     {
       gcc_assert (dep_type == REG_DEP_ANTI);
@@ -4074,10 +4341,12 @@ dump_ds (FILE *f, ds_t s)
 
   if (s & DEP_TRUE)
     fprintf (f, "DEP_TRUE; ");
-  if (s & DEP_ANTI)
-    fprintf (f, "DEP_ANTI; ");
   if (s & DEP_OUTPUT)
     fprintf (f, "DEP_OUTPUT; ");
+  if (s & DEP_ANTI)
+    fprintf (f, "DEP_ANTI; ");
+  if (s & DEP_CONTROL)
+    fprintf (f, "DEP_CONTROL; ");
 
   fprintf (f, "}");
 }
@@ -4102,7 +4371,7 @@ check_dep (dep_t dep, bool relaxed_p)
 
   if (!(current_sched_info->flags & USE_DEPS_LIST))
     {
-      gcc_assert (ds == -1);
+      gcc_assert (ds == 0);
       return;
     }
 
@@ -4112,10 +4381,13 @@ check_dep (dep_t dep, bool relaxed_p)
   else if (dt == REG_DEP_OUTPUT)
     gcc_assert ((ds & DEP_OUTPUT)
 		&& !(ds & DEP_TRUE));
-  else
-    gcc_assert ((dt == REG_DEP_ANTI)
-		&& (ds & DEP_ANTI)
+  else if (dt == REG_DEP_ANTI)
+    gcc_assert ((ds & DEP_ANTI)
 		&& !(ds & (DEP_OUTPUT | DEP_TRUE)));
+  else
+    gcc_assert (dt == REG_DEP_CONTROL
+		&& (ds & DEP_CONTROL)
+		&& !(ds & (DEP_OUTPUT | DEP_ANTI | DEP_TRUE)));
 
   /* HARD_DEP can not appear in dep_status of a link.  */
   gcc_assert (!(ds & HARD_DEP));

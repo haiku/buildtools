@@ -1,5 +1,5 @@
 /* Target Code for R8C/M16C/M32C
-   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Red Hat.
 
@@ -73,15 +73,15 @@ static struct machine_function *m32c_init_machine_status (void);
 static void m32c_insert_attributes (tree, tree *);
 static bool m32c_legitimate_address_p (enum machine_mode, rtx, bool);
 static bool m32c_addr_space_legitimate_address_p (enum machine_mode, rtx, bool, addr_space_t);
-static rtx m32c_function_arg (CUMULATIVE_ARGS *, enum machine_mode,
+static rtx m32c_function_arg (cumulative_args_t, enum machine_mode,
 			      const_tree, bool);
-static bool m32c_pass_by_reference (CUMULATIVE_ARGS *, enum machine_mode,
+static bool m32c_pass_by_reference (cumulative_args_t, enum machine_mode,
 				    const_tree, bool);
-static void m32c_function_arg_advance (CUMULATIVE_ARGS *, enum machine_mode,
+static void m32c_function_arg_advance (cumulative_args_t, enum machine_mode,
 				       const_tree, bool);
 static unsigned int m32c_function_arg_boundary (enum machine_mode, const_tree);
 static int m32c_pushm_popm (Push_Pop_Type);
-static bool m32c_strict_argument_naming (CUMULATIVE_ARGS *);
+static bool m32c_strict_argument_naming (cumulative_args_t);
 static rtx m32c_struct_value_rtx (tree, int);
 static rtx m32c_subreg (enum machine_mode, rtx, enum machine_mode, int);
 static int need_to_save (int);
@@ -318,44 +318,31 @@ reg_push_size (int regno)
     }
 }
 
-static int *class_sizes = 0;
-
 /* Given two register classes, find the largest intersection between
    them.  If there is no intersection, return RETURNED_IF_EMPTY
    instead.  */
-static int
-reduce_class (int original_class, int limiting_class, int returned_if_empty)
+static reg_class_t
+reduce_class (reg_class_t original_class, reg_class_t limiting_class,
+	      reg_class_t returned_if_empty)
 {
-  int cc = class_contents[original_class][0];
-  int i, best = NO_REGS;
-  int best_size = 0;
+  HARD_REG_SET cc;
+  int i;
+  reg_class_t best = NO_REGS;
+  unsigned int best_size = 0;
 
   if (original_class == limiting_class)
     return original_class;
 
-  if (!class_sizes)
-    {
-      int r;
-      class_sizes = (int *) xmalloc (LIM_REG_CLASSES * sizeof (int));
-      for (i = 0; i < LIM_REG_CLASSES; i++)
-	{
-	  class_sizes[i] = 0;
-	  for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	    if (class_contents[i][0] & (1 << r))
-	      class_sizes[i]++;
-	}
-    }
+  cc = reg_class_contents[original_class];
+  AND_HARD_REG_SET (cc, reg_class_contents[limiting_class]);
 
-  cc &= class_contents[limiting_class][0];
   for (i = 0; i < LIM_REG_CLASSES; i++)
     {
-      int ic = class_contents[i][0];
-
-      if ((~cc & ic) == 0)
-	if (best_size < class_sizes[i])
+      if (hard_reg_set_subset_p (reg_class_contents[i], cc))
+	if (best_size < reg_class_size[i])
 	  {
-	    best = i;
-	    best_size = class_sizes[i];
+	    best = (reg_class_t) i;
+	    best_size = reg_class_size[i];
 	  }
 
     }
@@ -404,27 +391,10 @@ class_can_hold_mode (reg_class_t rclass, enum machine_mode mode)
    we allow the user to limit the number of memregs available, in
    order to try to persuade gcc to try harder to use real registers.
 
-   Memregs are provided by m32c-lib1.S.
+   Memregs are provided by lib1funcs.S.
 */
 
-int target_memregs = 16;
-static bool target_memregs_set = FALSE;
 int ok_to_change_target_memregs = TRUE;
-
-#undef  TARGET_HANDLE_OPTION
-#define TARGET_HANDLE_OPTION m32c_handle_option
-static bool
-m32c_handle_option (size_t code,
-		    const char *arg ATTRIBUTE_UNUSED,
-		    int value ATTRIBUTE_UNUSED)
-{
-  if (code == OPT_memregs_)
-    {
-      target_memregs_set = TRUE;
-      target_memregs = atoi (arg);
-    }
-  return TRUE;
-}
 
 /* Implements TARGET_OPTION_OVERRIDE.  */
 
@@ -435,7 +405,7 @@ static void
 m32c_option_override (void)
 {
   /* We limit memregs to 0..16, and provide a default.  */
-  if (target_memregs_set)
+  if (global_options_set.x_target_memregs)
     {
       if (target_memregs < 0 || target_memregs > 16)
 	error ("invalid target memregs value '%d'", target_memregs);
@@ -759,12 +729,16 @@ m32c_regno_ok_for_base_p (int regno)
 
 #define DEBUG_RELOAD 0
 
-/* Implements PREFERRED_RELOAD_CLASS.  In general, prefer general
+/* Implements TARGET_PREFERRED_RELOAD_CLASS.  In general, prefer general
    registers of the appropriate size.  */
-int
-m32c_preferred_reload_class (rtx x, int rclass)
+
+#undef TARGET_PREFERRED_RELOAD_CLASS
+#define TARGET_PREFERRED_RELOAD_CLASS m32c_preferred_reload_class
+
+static reg_class_t
+m32c_preferred_reload_class (rtx x, reg_class_t rclass)
 {
-  int newclass = rclass;
+  reg_class_t newclass = rclass;
 
 #if DEBUG_RELOAD
   fprintf (stderr, "\npreferred_reload_class for %s is ",
@@ -789,7 +763,7 @@ m32c_preferred_reload_class (rtx x, int rclass)
   else if (newclass == QI_REGS && GET_MODE_SIZE (GET_MODE (x)) > 2)
     newclass = SI_REGS;
   else if (GET_MODE_SIZE (GET_MODE (x)) > 4
-	   && ~class_contents[rclass][0] & 0x000f)
+	   && ! reg_class_subset_p (R03_REGS, rclass))
     newclass = DI_REGS;
 
   rclass = reduce_class (rclass, newclass, rclass);
@@ -809,9 +783,13 @@ m32c_preferred_reload_class (rtx x, int rclass)
   return rclass;
 }
 
-/* Implements PREFERRED_OUTPUT_RELOAD_CLASS.  */
-int
-m32c_preferred_output_reload_class (rtx x, int rclass)
+/* Implements TARGET_PREFERRED_OUTPUT_RELOAD_CLASS.  */
+
+#undef TARGET_PREFERRED_OUTPUT_RELOAD_CLASS
+#define TARGET_PREFERRED_OUTPUT_RELOAD_CLASS m32c_preferred_output_reload_class
+
+static reg_class_t
+m32c_preferred_output_reload_class (rtx x, reg_class_t rclass)
 {
   return m32c_preferred_reload_class (x, rclass);
 }
@@ -862,7 +840,7 @@ m32c_secondary_reload_class (int rclass, enum machine_mode mode, rtx x)
   if (reg_classes_intersect_p (rclass, CR_REGS)
       && GET_CODE (x) == REG
       && REGNO (x) >= SB_REGNO && REGNO (x) <= SP_REGNO)
-    return TARGET_A16 ? HI_REGS : A_REGS;
+    return (TARGET_A16 || mode == HImode) ? HI_REGS : A_REGS;
   return NO_REGS;
 }
 
@@ -881,18 +859,23 @@ m32c_class_likely_spilled_p (reg_class_t regclass)
   return (reg_class_size[(int) regclass] == 1);
 }
 
-/* Implements CLASS_MAX_NREGS.  We calculate this according to its
+/* Implements TARGET_CLASS_MAX_NREGS.  We calculate this according to its
    documented meaning, to avoid potential inconsistencies with actual
    class definitions.  */
-int
-m32c_class_max_nregs (int regclass, enum machine_mode mode)
+
+#undef TARGET_CLASS_MAX_NREGS
+#define TARGET_CLASS_MAX_NREGS m32c_class_max_nregs
+
+static unsigned char
+m32c_class_max_nregs (reg_class_t regclass, enum machine_mode mode)
 {
-  int rn, max = 0;
+  int rn;
+  unsigned char max = 0;
 
   for (rn = 0; rn < FIRST_PSEUDO_REGISTER; rn++)
-    if (class_contents[regclass][0] & (1 << rn))
+    if (TEST_HARD_REG_BIT (reg_class_contents[(int) regclass], rn))
       {
-	int n = m32c_hard_regno_nregs (rn, mode);
+	unsigned char n = m32c_hard_regno_nregs (rn, mode);
 	if (max < n)
 	  max = n;
       }
@@ -1553,9 +1536,11 @@ m32c_push_rounding (int n)
 #undef TARGET_FUNCTION_ARG
 #define TARGET_FUNCTION_ARG m32c_function_arg
 static rtx
-m32c_function_arg (CUMULATIVE_ARGS * ca,
+m32c_function_arg (cumulative_args_t ca_v,
 		   enum machine_mode mode, const_tree type, bool named)
 {
+  CUMULATIVE_ARGS *ca = get_cumulative_args (ca_v);
+
   /* Can return a reg, parallel, or 0 for stack */
   rtx rv = NULL_RTX;
 #if DEBUG0
@@ -1604,7 +1589,7 @@ m32c_function_arg (CUMULATIVE_ARGS * ca,
 #undef TARGET_PASS_BY_REFERENCE
 #define TARGET_PASS_BY_REFERENCE m32c_pass_by_reference
 static bool
-m32c_pass_by_reference (CUMULATIVE_ARGS * ca ATTRIBUTE_UNUSED,
+m32c_pass_by_reference (cumulative_args_t ca ATTRIBUTE_UNUSED,
 			enum machine_mode mode ATTRIBUTE_UNUSED,
 			const_tree type ATTRIBUTE_UNUSED,
 			bool named ATTRIBUTE_UNUSED)
@@ -1634,11 +1619,13 @@ m32c_init_cumulative_args (CUMULATIVE_ARGS * ca,
 #undef TARGET_FUNCTION_ARG_ADVANCE
 #define TARGET_FUNCTION_ARG_ADVANCE m32c_function_arg_advance
 static void
-m32c_function_arg_advance (CUMULATIVE_ARGS * ca,
+m32c_function_arg_advance (cumulative_args_t ca_v,
 			   enum machine_mode mode ATTRIBUTE_UNUSED,
 			   const_tree type ATTRIBUTE_UNUSED,
 			   bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *ca = get_cumulative_args (ca_v);
+
   if (ca->force_mem)
     ca->force_mem = 0;
   else
@@ -1800,7 +1787,7 @@ m32c_epilogue_uses (int regno ATTRIBUTE_UNUSED)
 #undef TARGET_STRICT_ARGUMENT_NAMING
 #define TARGET_STRICT_ARGUMENT_NAMING m32c_strict_argument_naming
 static bool
-m32c_strict_argument_naming (CUMULATIVE_ARGS * ca ATTRIBUTE_UNUSED)
+m32c_strict_argument_naming (cumulative_args_t ca ATTRIBUTE_UNUSED)
 {
   return 1;
 }
@@ -2165,15 +2152,6 @@ m32c_legitimize_reload_address (rtx * x,
   return 0;
 }
 
-/* Implements LEGITIMATE_CONSTANT_P.  We split large constants anyway,
-   so we can allow anything.  */
-int
-m32c_legitimate_constant_p (rtx x ATTRIBUTE_UNUSED)
-{
-  return 1;
-}
-
-
 /* Return the appropriate mode for a named address pointer.  */
 #undef TARGET_ADDR_SPACE_POINTER_MODE
 #define TARGET_ADDR_SPACE_POINTER_MODE m32c_addr_space_pointer_mode
@@ -2456,8 +2434,8 @@ m32c_memory_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
 #undef TARGET_RTX_COSTS
 #define TARGET_RTX_COSTS m32c_rtx_costs
 static bool
-m32c_rtx_costs (rtx x, int code, int outer_code, int *total,
-		bool speed ATTRIBUTE_UNUSED)
+m32c_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
+		int *total, bool speed ATTRIBUTE_UNUSED)
 {
   switch (code)
     {
@@ -2575,11 +2553,6 @@ m32c_address_cost (rtx addr, bool speed ATTRIBUTE_UNUSED)
 
 /* Defining the Output Assembler Language */
 
-/* The Overall Framework of an Assembler File */
-
-#undef TARGET_HAVE_NAMED_SECTIONS
-#define TARGET_HAVE_NAMED_SECTIONS true
-
 /* Output of Data */
 
 /* We may have 24 bit sizes, which is the native address size.
@@ -2671,8 +2644,12 @@ static char const *pushm_regs[] = {
   "fb", "sb", "a1", "a0", "r3", "r2", "r1", "r0"
 };
 
-/* Implements PRINT_OPERAND.  */
-void
+/* Implements TARGET_PRINT_OPERAND.  */
+
+#undef TARGET_PRINT_OPERAND
+#define TARGET_PRINT_OPERAND m32c_print_operand
+
+static void
 m32c_print_operand (FILE * file, rtx x, int code)
 {
   int i, j, b;
@@ -3025,18 +3002,28 @@ m32c_print_operand (FILE * file, rtx x, int code)
   return;
 }
 
-/* Implements PRINT_OPERAND_PUNCT_VALID_P.  See m32c_print_operand
-   above for descriptions of what these do.  */
-int
-m32c_print_operand_punct_valid_p (int c)
+/* Implements TARGET_PRINT_OPERAND_PUNCT_VALID_P.
+
+   See m32c_print_operand above for descriptions of what these do.  */
+
+#undef TARGET_PRINT_OPERAND_PUNCT_VALID_P
+#define TARGET_PRINT_OPERAND_PUNCT_VALID_P m32c_print_operand_punct_valid_p
+
+static bool 
+m32c_print_operand_punct_valid_p (unsigned char c)
 {
   if (c == '&' || c == '!')
-    return 1;
-  return 0;
+    return true;
+
+  return false;
 }
 
-/* Implements PRINT_OPERAND_ADDRESS.  Nothing unusual here.  */
-void
+/* Implements TARGET_PRINT_OPERAND_ADDRESS.  Nothing unusual here.  */
+
+#undef TARGET_PRINT_OPERAND_ADDRESS
+#define TARGET_PRINT_OPERAND_ADDRESS m32c_print_operand_address
+
+static void
 m32c_print_operand_address (FILE * stream, rtx address)
 {
   if (GET_CODE (address) == MEM)
@@ -3232,11 +3219,12 @@ current_function_special_page_vector (rtx x)
 #undef TARGET_ATTRIBUTE_TABLE
 #define TARGET_ATTRIBUTE_TABLE m32c_attribute_table
 static const struct attribute_spec m32c_attribute_table[] = {
-  {"interrupt", 0, 0, false, false, false, interrupt_handler},
-  {"bank_switch", 0, 0, false, false, false, interrupt_handler},
-  {"fast_interrupt", 0, 0, false, false, false, interrupt_handler},
-  {"function_vector", 1, 1, true,  false, false, function_vector_handler},
-  {0, 0, 0, 0, 0, 0, 0}
+  {"interrupt", 0, 0, false, false, false, interrupt_handler, false},
+  {"bank_switch", 0, 0, false, false, false, interrupt_handler, false},
+  {"fast_interrupt", 0, 0, false, false, false, interrupt_handler, false},
+  {"function_vector", 1, 1, true,  false, false, function_vector_handler,
+   false},
+  {0, 0, 0, 0, 0, 0, 0, false}
 };
 
 #undef TARGET_COMP_TYPE_ATTRIBUTES
@@ -3487,95 +3475,11 @@ m32c_mov_ok (rtx * operands, enum machine_mode mode ATTRIBUTE_UNUSED)
    for moving an immediate double data to a double data type variable
    location, can be combined into single SImode mov instruction.  */
 bool
-m32c_immd_dbl_mov (rtx * operands, 
+m32c_immd_dbl_mov (rtx * operands ATTRIBUTE_UNUSED,
 		   enum machine_mode mode ATTRIBUTE_UNUSED)
 {
-  int flag = 0, okflag = 0, offset1 = 0, offset2 = 0, offsetsign = 0;
-  const char *str1;
-  const char *str2;
-
-  if (GET_CODE (XEXP (operands[0], 0)) == SYMBOL_REF
-      && MEM_SCALAR_P (operands[0])
-      && !MEM_IN_STRUCT_P (operands[0])
-      && GET_CODE (XEXP (operands[2], 0)) == CONST
-      && GET_CODE (XEXP (XEXP (operands[2], 0), 0)) == PLUS
-      && GET_CODE (XEXP (XEXP (XEXP (operands[2], 0), 0), 0)) == SYMBOL_REF
-      && GET_CODE (XEXP (XEXP (XEXP (operands[2], 0), 0), 1)) == CONST_INT
-      && MEM_SCALAR_P (operands[2])
-      && !MEM_IN_STRUCT_P (operands[2]))
-    flag = 1; 
-
-  else if (GET_CODE (XEXP (operands[0], 0)) == CONST
-           && GET_CODE (XEXP (XEXP (operands[0], 0), 0)) == PLUS
-           && GET_CODE (XEXP (XEXP (XEXP (operands[0], 0), 0), 0)) == SYMBOL_REF
-           && MEM_SCALAR_P (operands[0])
-           && !MEM_IN_STRUCT_P (operands[0])
-           && !(INTVAL (XEXP (XEXP (XEXP (operands[0], 0), 0), 1)) %4)
-           && GET_CODE (XEXP (operands[2], 0)) == CONST
-           && GET_CODE (XEXP (XEXP (operands[2], 0), 0)) == PLUS
-           && GET_CODE (XEXP (XEXP (XEXP (operands[2], 0), 0), 0)) == SYMBOL_REF
-           && MEM_SCALAR_P (operands[2])
-           && !MEM_IN_STRUCT_P (operands[2]))
-    flag = 2; 
-
-  else if (GET_CODE (XEXP (operands[0], 0)) == PLUS
-           &&  GET_CODE (XEXP (XEXP (operands[0], 0), 0)) == REG
-           &&  REGNO (XEXP (XEXP (operands[0], 0), 0)) == FB_REGNO 
-           &&  GET_CODE (XEXP (XEXP (operands[0], 0), 1)) == CONST_INT
-           &&  MEM_SCALAR_P (operands[0])
-           &&  !MEM_IN_STRUCT_P (operands[0])
-           &&  !(INTVAL (XEXP (XEXP (operands[0], 0), 1)) %4)
-           &&  REGNO (XEXP (XEXP (operands[2], 0), 0)) == FB_REGNO 
-           &&  GET_CODE (XEXP (XEXP (operands[2], 0), 1)) == CONST_INT
-           &&  MEM_SCALAR_P (operands[2])
-           &&  !MEM_IN_STRUCT_P (operands[2]))
-    flag = 3; 
-
-  else
-    return false;
-
-  switch (flag)
-    {
-    case 1:
-      str1 = XSTR (XEXP (operands[0], 0), 0);
-      str2 = XSTR (XEXP (XEXP (XEXP (operands[2], 0), 0), 0), 0);
-      if (strcmp (str1, str2) == 0)
-	okflag = 1; 
-      else
-	okflag = 0; 
-      break;
-    case 2:
-      str1 = XSTR (XEXP (XEXP (XEXP (operands[0], 0), 0), 0), 0);
-      str2 = XSTR (XEXP (XEXP (XEXP (operands[2], 0), 0), 0), 0);
-      if (strcmp(str1,str2) == 0)
-	okflag = 1; 
-      else
-	okflag = 0; 
-      break; 
-    case 3:
-      offset1 = INTVAL (XEXP (XEXP (operands[0], 0), 1));
-      offset2 = INTVAL (XEXP (XEXP (operands[2], 0), 1));
-      offsetsign = offset1 >> ((sizeof (offset1) * 8) -1);
-      if (((offset2-offset1) == 2) && offsetsign != 0)
-	okflag = 1;
-      else 
-	okflag = 0; 
-      break; 
-    default:
-      okflag = 0; 
-    } 
-      
-  if (okflag == 1)
-    {
-      HOST_WIDE_INT val;
-      operands[4] = gen_rtx_MEM (SImode, XEXP (operands[0], 0));
-
-      val = (INTVAL (operands[3]) << 16) + (INTVAL (operands[1]) & 0xFFFF);
-      operands[5] = gen_rtx_CONST_INT (VOIDmode, val);
-     
-      return true;
-    }
-
+  /* ??? This relied on the now-defunct MEM_SCALAR and MEM_IN_STRUCT_P
+     flags.  */
   return false;
 }  
 
@@ -4501,11 +4405,14 @@ m32c_emit_prologue (void)
 void
 m32c_emit_epilogue (void)
 {
+  int popm_count = m32c_pushm_popm (PP_justcount);
+
   /* This just emits a comment into the .s file for debugging.  */
-  if (m32c_pushm_popm (PP_justcount) > 0 || cfun->machine->is_interrupt)
+  if (popm_count > 0 || cfun->machine->is_interrupt)
     emit_insn (gen_epilogue_start ());
 
-  m32c_pushm_popm (PP_popm);
+  if (popm_count > 0)
+    m32c_pushm_popm (PP_popm);
 
   if (cfun->machine->is_interrupt)
     {
@@ -4562,7 +4469,6 @@ m32c_emit_epilogue (void)
     emit_jump_insn (gen_epilogue_exitd_16 ());
   else
     emit_jump_insn (gen_epilogue_exitd_24 ());
-  emit_barrier ();
 }
 
 void
@@ -4574,7 +4480,6 @@ m32c_emit_eh_epilogue (rtx ret_addr)
      assembler, so punt to libgcc.  */
   emit_jump_insn (gen_eh_epilogue (ret_addr, cfun->machine->eh_stack_adjust));
   /*  emit_clobber (gen_rtx_REG (HImode, R0L_REGNO)); */
-  emit_barrier ();
 }
 
 /* Indicate which flags must be properly set for a given conditional.  */

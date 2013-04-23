@@ -52,7 +52,7 @@ along with GCC; see the file COPYING3.  If not see
 	 }
      }
 
-   Where COND and INV are is invariants, but evaluating INV may trap or be
+   Where COND and INV are invariants, but evaluating INV may trap or be
    invalid from some other reason if !COND.  This may be transformed to
 
    if (cond)
@@ -135,8 +135,6 @@ typedef struct mem_ref
   VEC (mem_ref_locs_p, heap) *accesses_in_loop;
 				/* The locations of the accesses.  Vector
 				   indexed by the loop number.  */
-  bitmap vops;			/* Vops corresponding to this memory
-				   location.  */
 
   /* The following sets are computed on demand.  We keep both set and
      its complement, so that we know whether the information was
@@ -152,7 +150,7 @@ typedef struct mem_ref
 
   bitmap indep_ref;		/* The set of memory references on that
 				   this reference is independent.  */
-  bitmap dep_ref;		/* The complement of DEP_REF.  */
+  bitmap dep_ref;		/* The complement of INDEP_REF.  */
 } *mem_ref_p;
 
 DEF_VEC_P(mem_ref_p);
@@ -181,12 +179,9 @@ static struct
      subloops.  */
   VEC (bitmap, heap) *all_refs_in_loop;
 
-  /* The set of virtual operands clobbered in a given loop.  */
-  VEC (bitmap, heap) *clobbered_vops;
-
-  /* Map from the pair (loop, virtual operand) to the set of refs that
-     touch the virtual operand in the loop.  */
-  VEC (htab_t, heap) *vop_ref_map;
+  /* The set of memory references stored in each loop, including
+     subloops.  */
+  VEC (bitmap, heap) *all_refs_stored_in_loop;
 
   /* Cache for expanding memory addresses.  */
   struct pointer_map_t *ttae_cache;
@@ -197,9 +192,13 @@ static bool ref_indep_loop_p (struct loop *, mem_ref_p);
 /* Minimum cost of an expensive expression.  */
 #define LIM_EXPENSIVE ((unsigned) PARAM_VALUE (PARAM_LIM_EXPENSIVE))
 
-/* The outermost loop for that execution of the header guarantees that the
+/* The outermost loop for which execution of the header guarantees that the
    block will be executed.  */
 #define ALWAYS_EXECUTED_IN(BB) ((struct loop *) (BB)->aux)
+#define SET_ALWAYS_EXECUTED_IN(BB, VAL) ((BB)->aux = (void *) (VAL))
+
+/* Whether the reference was analyzable.  */
+#define MEM_ANALYZABLE(REF) ((REF)->mem != error_mark_node)
 
 static struct lim_aux_data *
 init_lim_data (gimple stmt)
@@ -413,6 +412,26 @@ movement_possibility (gimple stmt)
       || gimple_could_trap_p (stmt))
     return MOVE_PRESERVE_EXECUTION;
 
+  /* Non local loads in a transaction cannot be hoisted out.  Well,
+     unless the load happens on every path out of the loop, but we
+     don't take this into account yet.  */
+  if (flag_tm
+      && gimple_in_transaction (stmt)
+      && gimple_assign_single_p (stmt))
+    {
+      tree rhs = gimple_assign_rhs1 (stmt);
+      if (DECL_P (rhs) && is_global_var (rhs))
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Cannot hoist conditional load of ");
+	      print_generic_expr (dump_file, rhs, TDF_SLIM);
+	      fprintf (dump_file, " because it is in a transaction.\n");
+	    }
+	  return MOVE_IMPOSSIBLE;
+	}
+    }
+
   return ret;
 }
 
@@ -508,28 +527,21 @@ add_dependency (tree def, struct lim_aux_data *data, struct loop *loop,
   return true;
 }
 
-/* Returns an estimate for a cost of statement STMT.  TODO -- the values here
-   are just ad-hoc constants.  The estimates should be based on target-specific
-   values.  */
+/* Returns an estimate for a cost of statement STMT.  The values here
+   are just ad-hoc constants, similar to costs for inlining.  */
 
 static unsigned
 stmt_cost (gimple stmt)
 {
-  tree fndecl;
-  unsigned cost = 1;
-
   /* Always try to create possibilities for unswitching.  */
   if (gimple_code (stmt) == GIMPLE_COND
       || gimple_code (stmt) == GIMPLE_PHI)
     return LIM_EXPENSIVE;
 
-  /* Hoisting memory references out should almost surely be a win.  */
-  if (gimple_references_memory_p (stmt))
-    cost += 20;
-
+  /* We should be hoisting calls if possible.  */
   if (is_gimple_call (stmt))
     {
-      /* We should be hoisting calls if possible.  */
+      tree fndecl;
 
       /* Unless the call is a builtin_constant_p; this always folds to a
 	 constant, so moving it is useless.  */
@@ -539,15 +551,24 @@ stmt_cost (gimple stmt)
 	  && DECL_FUNCTION_CODE (fndecl) == BUILT_IN_CONSTANT_P)
 	return 0;
 
-      return cost + 20;
+      return LIM_EXPENSIVE;
     }
 
+  /* Hoisting memory references out should almost surely be a win.  */
+  if (gimple_references_memory_p (stmt))
+    return LIM_EXPENSIVE;
+
   if (gimple_code (stmt) != GIMPLE_ASSIGN)
-    return cost;
+    return 1;
 
   switch (gimple_assign_rhs_code (stmt))
     {
     case MULT_EXPR:
+    case WIDEN_MULT_EXPR:
+    case WIDEN_MULT_PLUS_EXPR:
+    case WIDEN_MULT_MINUS_EXPR:
+    case DOT_PROD_EXPR:
+    case FMA_EXPR:
     case TRUNC_DIV_EXPR:
     case CEIL_DIV_EXPR:
     case FLOOR_DIV_EXPR:
@@ -559,19 +580,31 @@ stmt_cost (gimple stmt)
     case TRUNC_MOD_EXPR:
     case RDIV_EXPR:
       /* Division and multiplication are usually expensive.  */
-      cost += 20;
-      break;
+      return LIM_EXPENSIVE;
 
     case LSHIFT_EXPR:
     case RSHIFT_EXPR:
-      cost += 20;
-      break;
+    case WIDEN_LSHIFT_EXPR:
+    case LROTATE_EXPR:
+    case RROTATE_EXPR:
+      /* Shifts and rotates are usually expensive.  */
+      return LIM_EXPENSIVE;
+
+    case CONSTRUCTOR:
+      /* Make vector construction cost proportional to the number
+         of elements.  */
+      return CONSTRUCTOR_NELTS (gimple_assign_rhs1 (stmt));
+
+    case SSA_NAME:
+    case PAREN_EXPR:
+      /* Whether or not something is wrapped inside a PAREN_EXPR
+         should not change move cost.  Nor should an intermediate
+	 unpropagated SSA name copy.  */
+      return 0;
 
     default:
-      break;
+      return 1;
     }
-
-  return cost;
 }
 
 /* Finds the outermost loop between OUTER and LOOP in that the memory reference
@@ -1250,11 +1283,9 @@ move_computations_stmt (struct dom_walk_data *dw_data,
 	  gcc_assert (arg0 && arg1);
 	  t = build2 (gimple_cond_code (cond), boolean_type_node,
 		      gimple_cond_lhs (cond), gimple_cond_rhs (cond));
-	  t = build3 (COND_EXPR, TREE_TYPE (gimple_phi_result (stmt)),
-		      t, arg0, arg1);
-	  new_stmt = gimple_build_assign_with_ops (COND_EXPR,
-						   gimple_phi_result (stmt),
-						   t, NULL_TREE);
+	  new_stmt = gimple_build_assign_with_ops3 (COND_EXPR,
+						    gimple_phi_result (stmt),
+						    t, arg0, arg1);
 	  SSA_NAME_DEF_STMT (gimple_phi_result (stmt)) = new_stmt;
 	  *((unsigned int *)(dw_data->global_data)) |= TODO_cleanup_cfg;
 	}
@@ -1449,9 +1480,8 @@ free_mem_ref_locs (mem_ref_locs_p accs)
 /* A function to free the mem_ref object OBJ.  */
 
 static void
-memref_free (void *obj)
+memref_free (struct mem_ref *mem)
 {
-  struct mem_ref *const mem = (struct mem_ref *) obj;
   unsigned i;
   mem_ref_locs_p accs;
 
@@ -1465,7 +1495,6 @@ memref_free (void *obj)
     free_mem_ref_locs (accs);
   VEC_free (mem_ref_locs_p, heap, mem->accesses_in_loop);
 
-  BITMAP_FREE (mem->vops);
   free (mem);
 }
 
@@ -1485,7 +1514,6 @@ mem_ref_alloc (tree mem, unsigned hash, unsigned id)
   ref->indep_ref = BITMAP_ALLOC (NULL);
   ref->dep_ref = BITMAP_ALLOC (NULL);
   ref->accesses_in_loop = NULL;
-  ref->vops = BITMAP_ALLOC (NULL);
 
   return ref;
 }
@@ -1552,9 +1580,7 @@ gather_mem_refs_stmt (struct loop *loop, gimple stmt)
   hashval_t hash;
   PTR *slot;
   mem_ref_p ref;
-  tree vname;
   bool is_stored;
-  bitmap clvops;
   unsigned id;
 
   if (!gimple_vuse (stmt))
@@ -1562,7 +1588,20 @@ gather_mem_refs_stmt (struct loop *loop, gimple stmt)
 
   mem = simple_mem_ref_in_stmt (stmt, &is_stored);
   if (!mem)
-    goto fail;
+    {
+      id = VEC_length (mem_ref_p, memory_accesses.refs_list);
+      ref = mem_ref_alloc (error_mark_node, 0, id);
+      VEC_safe_push (mem_ref_p, heap, memory_accesses.refs_list, ref);
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  fprintf (dump_file, "Unanalyzed memory reference %u: ", id);
+	  print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
+	}
+      if (gimple_vdef (stmt))
+	mark_ref_stored (ref, loop);
+      record_mem_ref_loc (ref, loop, stmt, mem);
+      return;
+    }
 
   hash = iterative_hash_expr (*mem, 0);
   slot = htab_find_slot_with_hash (memory_accesses.refs, *mem, hash, INSERT);
@@ -1586,18 +1625,12 @@ gather_mem_refs_stmt (struct loop *loop, gimple stmt)
 	  fprintf (dump_file, "\n");
 	}
     }
+
   if (is_stored)
     mark_ref_stored (ref, loop);
 
-  if ((vname = gimple_vuse (stmt)) != NULL_TREE)
-    bitmap_set_bit (ref->vops, DECL_UID (SSA_NAME_VAR (vname)));
   record_mem_ref_loc (ref, loop, stmt, mem);
   return;
-
-fail:
-  clvops = VEC_index (bitmap, memory_accesses.clobbered_vops, loop->num);
-  if ((vname = gimple_vuse (stmt)) != NULL_TREE)
-    bitmap_set_bit (clvops, DECL_UID (SSA_NAME_VAR (vname)));
 }
 
 /* Gathers memory references in loops.  */
@@ -1609,7 +1642,6 @@ gather_mem_refs_in_loops (void)
   basic_block bb;
   struct loop *loop;
   loop_iterator li;
-  bitmap clvo, clvi;
   bitmap lrefs, alrefs, alrefso;
 
   FOR_EACH_BB (bb)
@@ -1622,8 +1654,8 @@ gather_mem_refs_in_loops (void)
 	gather_mem_refs_stmt (loop, gsi_stmt (bsi));
     }
 
-  /* Propagate the information about clobbered vops and accessed memory
-     references up the loop hierarchy.  */
+  /* Propagate the information about accessed memory references up
+     the loop hierarchy.  */
   FOR_EACH_LOOP (li, loop, LI_FROM_INNERMOST)
     {
       lrefs = VEC_index (bitmap, memory_accesses.refs_in_loop, loop->num);
@@ -1633,130 +1665,9 @@ gather_mem_refs_in_loops (void)
       if (loop_outer (loop) == current_loops->tree_root)
 	continue;
 
-      clvi = VEC_index (bitmap, memory_accesses.clobbered_vops, loop->num);
-      clvo = VEC_index (bitmap, memory_accesses.clobbered_vops,
-			loop_outer (loop)->num);
-      bitmap_ior_into (clvo, clvi);
-
       alrefso = VEC_index (bitmap, memory_accesses.all_refs_in_loop,
 			   loop_outer (loop)->num);
       bitmap_ior_into (alrefso, alrefs);
-    }
-}
-
-/* Element of the hash table that maps vops to memory references.  */
-
-struct vop_to_refs_elt
-{
-  /* DECL_UID of the vop.  */
-  unsigned uid;
-
-  /* List of the all references.  */
-  bitmap refs_all;
-
-  /* List of stored references.  */
-  bitmap refs_stored;
-};
-
-/* A hash function for struct vop_to_refs_elt object OBJ.  */
-
-static hashval_t
-vtoe_hash (const void *obj)
-{
-  const struct vop_to_refs_elt *const vtoe =
-    (const struct vop_to_refs_elt *) obj;
-
-  return vtoe->uid;
-}
-
-/* An equality function for struct vop_to_refs_elt object OBJ1 with
-   uid of a vop OBJ2.  */
-
-static int
-vtoe_eq (const void *obj1, const void *obj2)
-{
-  const struct vop_to_refs_elt *const vtoe =
-    (const struct vop_to_refs_elt *) obj1;
-  const unsigned *const uid = (const unsigned *) obj2;
-
-  return vtoe->uid == *uid;
-}
-
-/* A function to free the struct vop_to_refs_elt object.  */
-
-static void
-vtoe_free (void *obj)
-{
-  struct vop_to_refs_elt *const vtoe =
-    (struct vop_to_refs_elt *) obj;
-
-  BITMAP_FREE (vtoe->refs_all);
-  BITMAP_FREE (vtoe->refs_stored);
-  free (vtoe);
-}
-
-/* Records REF to hashtable VOP_TO_REFS for the index VOP.  STORED is true
-   if the reference REF is stored.  */
-
-static void
-record_vop_access (htab_t vop_to_refs, unsigned vop, unsigned ref, bool stored)
-{
-  void **slot = htab_find_slot_with_hash (vop_to_refs, &vop, vop, INSERT);
-  struct vop_to_refs_elt *vtoe;
-
-  if (!*slot)
-    {
-      vtoe = XNEW (struct vop_to_refs_elt);
-      vtoe->uid = vop;
-      vtoe->refs_all = BITMAP_ALLOC (NULL);
-      vtoe->refs_stored = BITMAP_ALLOC (NULL);
-      *slot = vtoe;
-    }
-  else
-    vtoe = (struct vop_to_refs_elt *) *slot;
-
-  bitmap_set_bit (vtoe->refs_all, ref);
-  if (stored)
-    bitmap_set_bit (vtoe->refs_stored, ref);
-}
-
-/* Returns the set of references that access VOP according to the table
-   VOP_TO_REFS.  */
-
-static bitmap
-get_vop_accesses (htab_t vop_to_refs, unsigned vop)
-{
-  struct vop_to_refs_elt *const vtoe =
-    (struct vop_to_refs_elt *) htab_find_with_hash (vop_to_refs, &vop, vop);
-  return vtoe->refs_all;
-}
-
-/* Returns the set of stores that access VOP according to the table
-   VOP_TO_REFS.  */
-
-static bitmap
-get_vop_stores (htab_t vop_to_refs, unsigned vop)
-{
-  struct vop_to_refs_elt *const vtoe =
-    (struct vop_to_refs_elt *) htab_find_with_hash (vop_to_refs, &vop, vop);
-  return vtoe->refs_stored;
-}
-
-/* Adds REF to mapping from virtual operands to references in LOOP.  */
-
-static void
-add_vop_ref_mapping (struct loop *loop, mem_ref_p ref)
-{
-  htab_t map = VEC_index (htab_t, memory_accesses.vop_ref_map, loop->num);
-  bool stored = bitmap_bit_p (ref->stored, loop->num);
-  bitmap clobbers = VEC_index (bitmap, memory_accesses.clobbered_vops,
-			       loop->num);
-  bitmap_iterator bi;
-  unsigned vop;
-
-  EXECUTE_IF_AND_COMPL_IN_BITMAP (ref->vops, clobbers, 0, vop, bi)
-    {
-      record_vop_access (map, vop, ref->id, stored);
     }
 }
 
@@ -1775,8 +1686,15 @@ create_vop_ref_mapping_loop (struct loop *loop)
   EXECUTE_IF_SET_IN_BITMAP (refs, 0, i, bi)
     {
       ref = VEC_index (mem_ref_p, memory_accesses.refs_list, i);
-      for (sloop = loop; sloop != current_loops->tree_root; sloop = loop_outer (sloop))
-	add_vop_ref_mapping (sloop, ref);
+      for (sloop = loop; sloop != current_loops->tree_root;
+	   sloop = loop_outer (sloop))
+	if (bitmap_bit_p (ref->stored, loop->num))
+	  {
+	    bitmap refs_stored
+	      = VEC_index (bitmap, memory_accesses.all_refs_stored_in_loop,
+			   sloop->num);
+	    bitmap_set_bit (refs_stored, ref->id);
+	  }
     }
 }
 
@@ -1802,19 +1720,15 @@ analyze_memory_references (void)
 {
   unsigned i;
   bitmap empty;
-  htab_t hempty;
 
-  memory_accesses.refs
-	  = htab_create (100, memref_hash, memref_eq, memref_free);
+  memory_accesses.refs = htab_create (100, memref_hash, memref_eq, NULL);
   memory_accesses.refs_list = NULL;
   memory_accesses.refs_in_loop = VEC_alloc (bitmap, heap,
 					    number_of_loops ());
   memory_accesses.all_refs_in_loop = VEC_alloc (bitmap, heap,
 						number_of_loops ());
-  memory_accesses.clobbered_vops = VEC_alloc (bitmap, heap,
-					      number_of_loops ());
-  memory_accesses.vop_ref_map = VEC_alloc (htab_t, heap,
-					   number_of_loops ());
+  memory_accesses.all_refs_stored_in_loop = VEC_alloc (bitmap, heap,
+						       number_of_loops ());
 
   for (i = 0; i < number_of_loops (); i++)
     {
@@ -1823,42 +1737,13 @@ analyze_memory_references (void)
       empty = BITMAP_ALLOC (NULL);
       VEC_quick_push (bitmap, memory_accesses.all_refs_in_loop, empty);
       empty = BITMAP_ALLOC (NULL);
-      VEC_quick_push (bitmap, memory_accesses.clobbered_vops, empty);
-      hempty = htab_create (10, vtoe_hash, vtoe_eq, vtoe_free);
-      VEC_quick_push (htab_t, memory_accesses.vop_ref_map, hempty);
+      VEC_quick_push (bitmap, memory_accesses.all_refs_stored_in_loop, empty);
     }
 
   memory_accesses.ttae_cache = NULL;
 
   gather_mem_refs_in_loops ();
   create_vop_ref_mapping ();
-}
-
-/* Returns true if a region of size SIZE1 at position 0 and a region of
-   size SIZE2 at position DIFF cannot overlap.  */
-
-static bool
-cannot_overlap_p (aff_tree *diff, double_int size1, double_int size2)
-{
-  double_int d, bound;
-
-  /* Unless the difference is a constant, we fail.  */
-  if (diff->n != 0)
-    return false;
-
-  d = diff->offset;
-  if (double_int_negative_p (d))
-    {
-      /* The second object is before the first one, we succeed if the last
-	 element of the second object is before the start of the first one.  */
-      bound = double_int_add (d, double_int_add (size2, double_int_minus_one));
-      return double_int_negative_p (bound);
-    }
-  else
-    {
-      /* We succeed if the second object starts after the first one ends.  */
-      return double_int_scmp (size1, d) <= 0;
-    }
 }
 
 /* Returns true if MEM1 and MEM2 may alias.  TTAE_CACHE is used as a cache in
@@ -1889,7 +1774,7 @@ mem_refs_may_alias_p (tree mem1, tree mem2, struct pointer_map_t **ttae_cache)
   aff_combination_scale (&off1, double_int_minus_one);
   aff_combination_add (&off2, &off1);
 
-  if (cannot_overlap_p (&off2, size1, size2))
+  if (aff_comb_cannot_overlap_p (&off2, size1, size2))
     return false;
 
   return true;
@@ -1981,6 +1866,7 @@ gen_lsm_tmp_name (tree ref)
   switch (TREE_CODE (ref))
     {
     case MEM_REF:
+    case TARGET_MEM_REF:
       gen_lsm_tmp_name (TREE_OPERAND (ref, 0));
       lsm_tmp_name_add ("_");
       break;
@@ -2069,6 +1955,173 @@ get_lsm_tmp_name (tree ref, unsigned n)
   return lsm_tmp_name;
 }
 
+struct prev_flag_edges {
+  /* Edge to insert new flag comparison code.  */
+  edge append_cond_position;
+
+  /* Edge for fall through from previous flag comparison.  */
+  edge last_cond_fallthru;
+};
+
+/* Helper function for execute_sm.  Emit code to store TMP_VAR into
+   MEM along edge EX.
+
+   The store is only done if MEM has changed.  We do this so no
+   changes to MEM occur on code paths that did not originally store
+   into it.
+
+   The common case for execute_sm will transform:
+
+     for (...) {
+       if (foo)
+         stuff;
+       else
+         MEM = TMP_VAR;
+     }
+
+   into:
+
+     lsm = MEM;
+     for (...) {
+       if (foo)
+         stuff;
+       else
+         lsm = TMP_VAR;
+     }
+     MEM = lsm;
+
+  This function will generate:
+
+     lsm = MEM;
+
+     lsm_flag = false;
+     ...
+     for (...) {
+       if (foo)
+         stuff;
+       else {
+         lsm = TMP_VAR;
+         lsm_flag = true;
+       }
+     }
+     if (lsm_flag)	<--
+       MEM = lsm;	<--
+*/
+
+static void
+execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag)
+{
+  basic_block new_bb, then_bb, old_dest;
+  bool loop_has_only_one_exit;
+  edge then_old_edge, orig_ex = ex;
+  gimple_stmt_iterator gsi;
+  gimple stmt;
+  struct prev_flag_edges *prev_edges = (struct prev_flag_edges *) ex->aux;
+
+  /* ?? Insert store after previous store if applicable.  See note
+     below.  */
+  if (prev_edges)
+    ex = prev_edges->append_cond_position;
+
+  loop_has_only_one_exit = single_pred_p (ex->dest);
+
+  if (loop_has_only_one_exit)
+    ex = split_block_after_labels (ex->dest);
+
+  old_dest = ex->dest;
+  new_bb = split_edge (ex);
+  then_bb = create_empty_bb (new_bb);
+  if (current_loops && new_bb->loop_father)
+    add_bb_to_loop (then_bb, new_bb->loop_father);
+
+  gsi = gsi_start_bb (new_bb);
+  stmt = gimple_build_cond (NE_EXPR, flag, boolean_false_node,
+			    NULL_TREE, NULL_TREE);
+  gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
+
+  gsi = gsi_start_bb (then_bb);
+  /* Insert actual store.  */
+  stmt = gimple_build_assign (unshare_expr (mem), tmp_var);
+  gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
+
+  make_edge (new_bb, then_bb, EDGE_TRUE_VALUE);
+  make_edge (new_bb, old_dest, EDGE_FALSE_VALUE);
+  then_old_edge = make_edge (then_bb, old_dest, EDGE_FALLTHRU);
+
+  set_immediate_dominator (CDI_DOMINATORS, then_bb, new_bb);
+
+  if (prev_edges)
+    {
+      basic_block prevbb = prev_edges->last_cond_fallthru->src;
+      redirect_edge_succ (prev_edges->last_cond_fallthru, new_bb);
+      set_immediate_dominator (CDI_DOMINATORS, new_bb, prevbb);
+      set_immediate_dominator (CDI_DOMINATORS, old_dest,
+			       recompute_dominator (CDI_DOMINATORS, old_dest));
+    }
+
+  /* ?? Because stores may alias, they must happen in the exact
+     sequence they originally happened.  Save the position right after
+     the (_lsm) store we just created so we can continue appending after
+     it and maintain the original order.  */
+  {
+    struct prev_flag_edges *p;
+
+    if (orig_ex->aux)
+      orig_ex->aux = NULL;
+    alloc_aux_for_edge (orig_ex, sizeof (struct prev_flag_edges));
+    p = (struct prev_flag_edges *) orig_ex->aux;
+    p->append_cond_position = then_old_edge;
+    p->last_cond_fallthru = find_edge (new_bb, old_dest);
+    orig_ex->aux = (void *) p;
+  }
+
+  if (!loop_has_only_one_exit)
+    for (gsi = gsi_start_phis (old_dest); !gsi_end_p (gsi); gsi_next (&gsi))
+      {
+	gimple phi = gsi_stmt (gsi);
+	unsigned i;
+
+	for (i = 0; i < gimple_phi_num_args (phi); i++)
+	  if (gimple_phi_arg_edge (phi, i)->src == new_bb)
+	    {
+	      tree arg = gimple_phi_arg_def (phi, i);
+	      add_phi_arg (phi, arg, then_old_edge, UNKNOWN_LOCATION);
+	      update_stmt (phi);
+	    }
+      }
+  /* Remove the original fall through edge.  This was the
+     single_succ_edge (new_bb).  */
+  EDGE_SUCC (new_bb, 0)->flags &= ~EDGE_FALLTHRU;
+}
+
+/* Helper function for execute_sm.  On every location where REF is
+   set, set an appropriate flag indicating the store.  */
+
+static tree
+execute_sm_if_changed_flag_set (struct loop *loop, mem_ref_p ref)
+{
+  unsigned i;
+  mem_ref_loc_p loc;
+  tree flag;
+  VEC (mem_ref_loc_p, heap) *locs = NULL;
+  char *str = get_lsm_tmp_name (ref->mem, ~0);
+
+  lsm_tmp_name_add ("_flag");
+  flag = make_rename_temp (boolean_type_node, str);
+  get_all_locs_in_loop (loop, ref, &locs);
+  FOR_EACH_VEC_ELT (mem_ref_loc_p, locs, i, loc)
+    {
+      gimple_stmt_iterator gsi;
+      gimple stmt;
+
+      gsi = gsi_for_stmt (loc->stmt);
+      stmt = gimple_build_assign (flag, boolean_true_node);
+      gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
+    }
+  VEC_free (mem_ref_loc_p, heap, locs);
+  return flag;
+}
+
 /* Executes store motion of memory reference REF from LOOP.
    Exits from the LOOP are stored in EXITS.  The initialization of the
    temporary variable is put to the preheader of the loop, and assignments
@@ -2077,12 +2130,13 @@ get_lsm_tmp_name (tree ref, unsigned n)
 static void
 execute_sm (struct loop *loop, VEC (edge, heap) *exits, mem_ref_p ref)
 {
-  tree tmp_var;
+  tree tmp_var, store_flag;
   unsigned i;
-  gimple load, store;
+  gimple load;
   struct fmt_data fmt_data;
-  edge ex;
+  edge ex, latch_edge;
   struct lim_aux_data *lim_data;
+  bool multi_threaded_model_p = false;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -2098,23 +2152,47 @@ execute_sm (struct loop *loop, VEC (edge, heap) *exits, mem_ref_p ref)
   fmt_data.orig_loop = loop;
   for_each_index (&ref->mem, force_move_till, &fmt_data);
 
+  if (block_in_transaction (loop_preheader_edge (loop)->src)
+      || !PARAM_VALUE (PARAM_ALLOW_STORE_DATA_RACES))
+    multi_threaded_model_p = true;
+
+  if (multi_threaded_model_p)
+    store_flag = execute_sm_if_changed_flag_set (loop, ref);
+
   rewrite_mem_refs (loop, ref, tmp_var);
 
-  /* Emit the load & stores.  */
+  /* Emit the load code into the latch, so that we are sure it will
+     be processed after all dependencies.  */
+  latch_edge = loop_latch_edge (loop);
+
+  /* FIXME/TODO: For the multi-threaded variant, we could avoid this
+     load altogether, since the store is predicated by a flag.  We
+     could, do the load only if it was originally in the loop.  */
   load = gimple_build_assign (tmp_var, unshare_expr (ref->mem));
   lim_data = init_lim_data (load);
   lim_data->max_loop = loop;
   lim_data->tgt_loop = loop;
+  gsi_insert_on_edge (latch_edge, load);
 
-  /* Put this into the latch, so that we are sure it will be processed after
-     all dependencies.  */
-  gsi_insert_on_edge (loop_latch_edge (loop), load);
-
-  FOR_EACH_VEC_ELT (edge, exits, i, ex)
+  if (multi_threaded_model_p)
     {
-      store = gimple_build_assign (unshare_expr (ref->mem), tmp_var);
-      gsi_insert_on_edge (ex, store);
+      load = gimple_build_assign (store_flag, boolean_false_node);
+      lim_data = init_lim_data (load);
+      lim_data->max_loop = loop;
+      lim_data->tgt_loop = loop;
+      gsi_insert_on_edge (latch_edge, load);
     }
+
+  /* Sink the store to every exit from the loop.  */
+  FOR_EACH_VEC_ELT (edge, exits, i, ex)
+    if (!multi_threaded_model_p)
+      {
+	gimple store;
+	store = gimple_build_assign (unshare_expr (ref->mem), tmp_var);
+	gsi_insert_on_edge (ex, store);
+      }
+    else
+      execute_sm_if_changed (ex, ref->mem, tmp_var, store_flag);
 }
 
 /* Hoists memory references MEM_REFS out of LOOP.  EXITS is the list of exit
@@ -2202,6 +2280,9 @@ refs_independent_p (mem_ref_p ref1, mem_ref_p ref2)
     return true;
   if (bitmap_bit_p (ref1->dep_ref, ref2->id))
     return false;
+  if (!MEM_ANALYZABLE (ref1)
+      || !MEM_ANALYZABLE (ref2))
+    return false;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "Querying dependency of refs %u and %u: ",
@@ -2244,35 +2325,25 @@ record_indep_loop (struct loop *loop, mem_ref_p ref, bool indep)
 static bool
 ref_indep_loop_p_1 (struct loop *loop, mem_ref_p ref)
 {
-  bitmap clobbers, refs_to_check, refs;
+  bitmap refs_to_check;
   unsigned i;
   bitmap_iterator bi;
   bool ret = true, stored = bitmap_bit_p (ref->stored, loop->num);
-  htab_t map;
   mem_ref_p aref;
 
-  /* If the reference is clobbered, it is not independent.  */
-  clobbers = VEC_index (bitmap, memory_accesses.clobbered_vops, loop->num);
-  if (bitmap_intersect_p (ref->vops, clobbers))
-    return false;
-
-  refs_to_check = BITMAP_ALLOC (NULL);
-
-  map = VEC_index (htab_t, memory_accesses.vop_ref_map, loop->num);
-  EXECUTE_IF_AND_COMPL_IN_BITMAP (ref->vops, clobbers, 0, i, bi)
-    {
-      if (stored)
-	refs = get_vop_accesses (map, i);
-      else
-	refs = get_vop_stores (map, i);
-
-      bitmap_ior_into (refs_to_check, refs);
-    }
+  if (stored)
+    refs_to_check = VEC_index (bitmap,
+			       memory_accesses.all_refs_in_loop, loop->num);
+  else
+    refs_to_check = VEC_index (bitmap,
+			       memory_accesses.all_refs_stored_in_loop,
+			       loop->num);
 
   EXECUTE_IF_SET_IN_BITMAP (refs_to_check, 0, i, bi)
     {
       aref = VEC_index (mem_ref_p, memory_accesses.refs_list, i);
-      if (!refs_independent_p (ref, aref))
+      if (!MEM_ANALYZABLE (aref)
+	  || !refs_independent_p (ref, aref))
 	{
 	  ret = false;
 	  record_indep_loop (loop, aref, false);
@@ -2280,7 +2351,6 @@ ref_indep_loop_p_1 (struct loop *loop, mem_ref_p ref)
 	}
     }
 
-  BITMAP_FREE (refs_to_check);
   return ret;
 }
 
@@ -2314,6 +2384,10 @@ static bool
 can_sm_ref_p (struct loop *loop, mem_ref_p ref)
 {
   tree base;
+
+  /* Can't hoist unanalyzable refs.  */
+  if (!MEM_ANALYZABLE (ref))
+    return false;
 
   /* Unless the reference is stored in the loop, there is nothing to do.  */
   if (!bitmap_bit_p (ref->stored, loop->num))
@@ -2440,7 +2514,7 @@ fill_always_executed_in (struct loop *loop, sbitmap contains_call)
   edge e;
   struct loop *inn_loop = loop;
 
-  if (!loop->header->aux)
+  if (ALWAYS_EXECUTED_IN (loop->header) == NULL)
     {
       bbs = get_loop_body_in_dom_order (loop);
 
@@ -2482,7 +2556,7 @@ fill_always_executed_in (struct loop *loop, sbitmap contains_call)
 
       while (1)
 	{
-	  last->aux = loop;
+	  SET_ALWAYS_EXECUTED_IN (last, loop);
 	  if (last == loop->header)
 	    break;
 	  last = get_immediate_dominator (CDI_DOMINATORS, last);
@@ -2524,6 +2598,11 @@ tree_ssa_lim_initialize (void)
   sbitmap_free (contains_call);
 
   lim_aux_data_map = pointer_map_create ();
+
+  if (flag_tm)
+    compute_transaction_bits ();
+
+  alloc_aux_for_edges (0);
 }
 
 /* Cleans up after the invariant motion pass.  */
@@ -2534,17 +2613,20 @@ tree_ssa_lim_finalize (void)
   basic_block bb;
   unsigned i;
   bitmap b;
-  htab_t h;
+  mem_ref_p ref;
+
+  free_aux_for_edges ();
 
   FOR_EACH_BB (bb)
-    {
-      bb->aux = NULL;
-    }
+    SET_ALWAYS_EXECUTED_IN (bb, NULL);
 
   pointer_map_destroy (lim_aux_data_map);
 
-  VEC_free (mem_ref_p, heap, memory_accesses.refs_list);
   htab_delete (memory_accesses.refs);
+
+  FOR_EACH_VEC_ELT (mem_ref_p, memory_accesses.refs_list, i, ref)
+    memref_free (ref);
+  VEC_free (mem_ref_p, heap, memory_accesses.refs_list);
 
   FOR_EACH_VEC_ELT (bitmap, memory_accesses.refs_in_loop, i, b)
     BITMAP_FREE (b);
@@ -2554,16 +2636,12 @@ tree_ssa_lim_finalize (void)
     BITMAP_FREE (b);
   VEC_free (bitmap, heap, memory_accesses.all_refs_in_loop);
 
-  FOR_EACH_VEC_ELT (bitmap, memory_accesses.clobbered_vops, i, b)
+  FOR_EACH_VEC_ELT (bitmap, memory_accesses.all_refs_stored_in_loop, i, b)
     BITMAP_FREE (b);
-  VEC_free (bitmap, heap, memory_accesses.clobbered_vops);
-
-  FOR_EACH_VEC_ELT (htab_t, memory_accesses.vop_ref_map, i, h)
-    htab_delete (h);
-  VEC_free (htab_t, heap, memory_accesses.vop_ref_map);
+  VEC_free (bitmap, heap, memory_accesses.all_refs_stored_in_loop);
 
   if (memory_accesses.ttae_cache)
-    pointer_map_destroy (memory_accesses.ttae_cache);
+    free_affine_expand_cache (&memory_accesses.ttae_cache);
 }
 
 /* Moves invariants from loops.  Only "expensive" invariants are moved out --

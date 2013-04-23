@@ -1,5 +1,5 @@
 /* Definitions for Toshiba Media Processor
-   Copyright (C) 2001, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Copyright (C) 2001, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
@@ -129,8 +129,6 @@ crtbegin.o%s"
 #define TARGET_BIG_ENDIAN	(! (target_flags & MASK_LITTLE_ENDIAN))
 
 #define TARGET_COPRO_MULT	0
-
-#define TARGET_VERSION fprintf (stderr, " (Toshiba Media Processor (MeP))");
 
 /* The MeP config tool will replace this as appropriate.  */
 #define DEFAULT_ENDIAN_SPEC "%{!meb: -mel}"
@@ -407,8 +405,6 @@ enum reg_class
 
 #define REGNO_REG_CLASS(REGNO) (enum reg_class) mep_regno_reg_class (REGNO)
 
-#define IRA_COVER_CLASSES { GENERAL_REGS, CONTROL_REGS, CR_REGS, CCR_REGS, LIM_REG_CLASSES }
-
 #define BASE_REG_CLASS GENERAL_REGS
 #define INDEX_REG_CLASS GENERAL_REGS
 
@@ -431,9 +427,6 @@ enum reg_class
 	mep_secondary_output_reload_class (CLASS, MODE, X)
 #define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, MODE) \
 	mep_secondary_memory_needed (CLASS1, CLASS2, MODE)
-
-#define CLASS_MAX_NREGS(CLASS, MODE) \
-  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 #if 0
 #define CONST_OK_FOR_LETTER_P(VALUE, C) mep_const_ok_for_letter_p (VALUE, C)
@@ -569,9 +562,6 @@ typedef struct
     goto WIN
 
 #define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)
-
-#define LEGITIMATE_CONSTANT_P(X) \
-  mep_legitimate_constant_p(X)
 
 #define SELECT_CC_MODE(OP, X, Y)  CCmode
 

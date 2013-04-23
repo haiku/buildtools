@@ -1,5 +1,6 @@
 /* Some code common to C++ and ObjC++ front ends.
-   Copyright (C) 2004, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Ziemowit Laski  <zlaski@apple.com>
 
 This file is part of GCC.
@@ -78,6 +79,7 @@ cp_tree_size (enum tree_code code)
     case BASELINK:		return sizeof (struct tree_baselink);
     case TEMPLATE_PARM_INDEX:	return sizeof (template_parm_index);
     case DEFAULT_ARG:		return sizeof (struct tree_default_arg);
+    case DEFERRED_NOEXCEPT:	return sizeof (struct tree_deferred_noexcept);
     case OVERLOAD:		return sizeof (struct tree_overload);
     case STATIC_ASSERT:         return sizeof (struct tree_static_assert);
     case TYPE_ARGUMENT_PACK:
@@ -97,6 +99,8 @@ cp_tree_size (enum tree_code code)
     case LAMBDA_EXPR:           return sizeof (struct tree_lambda_expr);
 
     case TEMPLATE_INFO:         return sizeof (struct tree_template_info);
+
+    case USERDEF_LITERAL:	return sizeof (struct tree_userdef_literal);
 
     default:
       gcc_unreachable ();
@@ -160,6 +164,7 @@ cp_function_decl_explicit_p (tree decl)
 {
   return (decl
 	  && FUNCTION_FIRST_USER_PARMTYPE (decl) != void_list_node
+	  && DECL_LANG_SPECIFIC (STRIP_TEMPLATE (decl))
 	  && DECL_NONCONVERTING_P (decl));
 }
 
@@ -222,5 +227,101 @@ init_shadowed_var_for_decl (void)
 					   tree_decl_map_eq, 0);
 }
 
+/* Return true if stmt can fall thru.  Used by block_may_fallthru
+   default case.  */
+
+bool
+cxx_block_may_fallthru (const_tree stmt)
+{
+  switch (TREE_CODE (stmt))
+    {
+    case EXPR_STMT:
+      return block_may_fallthru (EXPR_STMT_EXPR (stmt));
+
+    case THROW_EXPR:
+      return false;
+
+    default:
+      return true;
+    }
+}
+
+void
+cp_common_init_ts (void)
+{
+  MARK_TS_DECL_NON_COMMON (NAMESPACE_DECL);
+  MARK_TS_DECL_NON_COMMON (USING_DECL);
+  MARK_TS_DECL_NON_COMMON (TEMPLATE_DECL);
+
+  MARK_TS_COMMON (TEMPLATE_TEMPLATE_PARM);
+  MARK_TS_COMMON (TEMPLATE_TYPE_PARM);
+  MARK_TS_COMMON (TEMPLATE_PARM_INDEX);
+  MARK_TS_COMMON (OVERLOAD);
+  MARK_TS_COMMON (TEMPLATE_INFO);
+  MARK_TS_COMMON (TYPENAME_TYPE);
+  MARK_TS_COMMON (TYPEOF_TYPE);
+  MARK_TS_COMMON (UNDERLYING_TYPE);
+  MARK_TS_COMMON (BASELINK);
+  MARK_TS_COMMON (TYPE_PACK_EXPANSION);
+  MARK_TS_COMMON (TYPE_ARGUMENT_PACK);
+  MARK_TS_COMMON (DECLTYPE_TYPE);
+  MARK_TS_COMMON (BOUND_TEMPLATE_TEMPLATE_PARM);
+  MARK_TS_COMMON (UNBOUND_CLASS_TEMPLATE);
+
+  MARK_TS_TYPED (EXPR_PACK_EXPANSION);
+  MARK_TS_TYPED (SWITCH_STMT);
+  MARK_TS_TYPED (IF_STMT);
+  MARK_TS_TYPED (FOR_STMT);
+  MARK_TS_TYPED (RANGE_FOR_STMT);
+  MARK_TS_TYPED (AGGR_INIT_EXPR);
+  MARK_TS_TYPED (EXPR_STMT);
+  MARK_TS_TYPED (EH_SPEC_BLOCK);
+  MARK_TS_TYPED (CLEANUP_STMT);
+  MARK_TS_TYPED (SCOPE_REF);
+  MARK_TS_TYPED (CAST_EXPR);
+  MARK_TS_TYPED (NON_DEPENDENT_EXPR);
+  MARK_TS_TYPED (MODOP_EXPR);
+  MARK_TS_TYPED (TRY_BLOCK);
+  MARK_TS_TYPED (THROW_EXPR);
+  MARK_TS_TYPED (HANDLER);
+  MARK_TS_TYPED (REINTERPRET_CAST_EXPR);
+  MARK_TS_TYPED (CONST_CAST_EXPR);
+  MARK_TS_TYPED (STATIC_CAST_EXPR);
+  MARK_TS_TYPED (DYNAMIC_CAST_EXPR);
+  MARK_TS_TYPED (IMPLICIT_CONV_EXPR);
+  MARK_TS_TYPED (TEMPLATE_ID_EXPR);
+  MARK_TS_TYPED (ARROW_EXPR);
+  MARK_TS_TYPED (SIZEOF_EXPR);
+  MARK_TS_TYPED (ALIGNOF_EXPR);
+  MARK_TS_TYPED (AT_ENCODE_EXPR);
+  MARK_TS_TYPED (UNARY_PLUS_EXPR);
+  MARK_TS_TYPED (TRAIT_EXPR);
+  MARK_TS_TYPED (TYPE_ARGUMENT_PACK);
+  MARK_TS_TYPED (NOEXCEPT_EXPR);
+  MARK_TS_TYPED (NONTYPE_ARGUMENT_PACK);
+  MARK_TS_TYPED (WHILE_STMT);
+  MARK_TS_TYPED (NEW_EXPR);
+  MARK_TS_TYPED (VEC_NEW_EXPR);
+  MARK_TS_TYPED (BREAK_STMT);
+  MARK_TS_TYPED (MEMBER_REF);
+  MARK_TS_TYPED (DOTSTAR_EXPR);
+  MARK_TS_TYPED (DO_STMT);
+  MARK_TS_TYPED (DELETE_EXPR);
+  MARK_TS_TYPED (VEC_DELETE_EXPR);
+  MARK_TS_TYPED (CONTINUE_STMT);
+  MARK_TS_TYPED (TAG_DEFN);
+  MARK_TS_TYPED (PSEUDO_DTOR_EXPR);
+  MARK_TS_TYPED (TYPEID_EXPR);
+  MARK_TS_TYPED (MUST_NOT_THROW_EXPR);
+  MARK_TS_TYPED (STMT_EXPR);
+  MARK_TS_TYPED (OFFSET_REF);
+  MARK_TS_TYPED (OFFSETOF_EXPR);
+  MARK_TS_TYPED (PTRMEM_CST);
+  MARK_TS_TYPED (EMPTY_CLASS_EXPR);
+  MARK_TS_TYPED (VEC_INIT_EXPR);
+  MARK_TS_TYPED (USING_STMT);
+  MARK_TS_TYPED (LAMBDA_EXPR);
+  MARK_TS_TYPED (CTOR_INITIALIZER);
+}
 
 #include "gt-cp-cp-objcp-common.h"

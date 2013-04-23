@@ -34,8 +34,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "hashtab.h"
 #include "plugin.h"
 
-static void init_attributes (void);
-
 /* Table of the tables of attributes (common, language, format, machine)
    searched.  */
 static const struct attribute_spec *attribute_tables[4];
@@ -57,7 +55,7 @@ static bool attributes_initialized = false;
 
 static const struct attribute_spec empty_attribute_table[] =
 {
-  { NULL, 0, 0, false, false, false, NULL }
+  { NULL, 0, 0, false, false, false, NULL, false }
 };
 
 /* Return base name of the attribute.  Ie '__attr__' is turned into 'attr'.
@@ -107,11 +105,14 @@ eq_attr (const void *p, const void *q)
 /* Initialize attribute tables, and make some sanity checks
    if --enable-checking.  */
 
-static void
+void
 init_attributes (void)
 {
   size_t i;
   int k;
+
+  if (attributes_initialized)
+    return;
 
   attribute_tables[0] = lang_hooks.common_attribute_table;
   attribute_tables[1] = lang_hooks.attribute_table;
@@ -165,7 +166,8 @@ init_attributes (void)
 	  gcc_assert (strcmp (attribute_tables[i][j].name,
 			      attribute_tables[i][k].name));
     }
-  /* Check that no name occurs in more than one table.  */
+  /* Check that no name occurs in more than one table.  Names that
+     begin with '*' are exempt, and may be overridden.  */
   for (i = 0; i < ARRAY_SIZE (attribute_tables); i++)
     {
       size_t j, k, l;
@@ -173,8 +175,9 @@ init_attributes (void)
       for (j = i + 1; j < ARRAY_SIZE (attribute_tables); j++)
 	for (k = 0; attribute_tables[i][k].name != NULL; k++)
 	  for (l = 0; attribute_tables[j][l].name != NULL; l++)
-	    gcc_assert (strcmp (attribute_tables[i][k].name,
-				attribute_tables[j][l].name));
+	    gcc_assert (attribute_tables[i][k].name[0] == '*'
+			|| strcmp (attribute_tables[i][k].name,
+				   attribute_tables[j][l].name));
     }
 #endif
 
@@ -198,10 +201,15 @@ register_attribute (const struct attribute_spec *attr)
 
   str.str = attr->name;
   str.length = strlen (str.str);
+
+  /* Attribute names in the table must be in the form 'text' and not
+     in the form '__text__'.  */
+  gcc_assert (str.length > 0 && str.str[0] != '_');
+
   slot = htab_find_slot_with_hash (attribute_hash, &str,
 				   substring_hash (str.str, str.length),
 				   INSERT);
-  gcc_assert (!*slot);
+  gcc_assert (!*slot || attr->name[0] == '*');
   *slot = (void *) CONST_CAST (struct attribute_spec *, attr);
 }
 
@@ -279,6 +287,7 @@ decl_attributes (tree *node, tree attributes, int flags)
   /* A "naked" function attribute implies "noinline" and "noclone" for
      those targets that support it.  */
   if (TREE_CODE (*node) == FUNCTION_DECL
+      && attributes
       && lookup_attribute_spec (get_identifier ("naked"))
       && lookup_attribute ("naked", attributes) != NULL)
     {
@@ -476,4 +485,13 @@ decl_attributes (tree *node, tree attributes, int flags)
     }
 
   return returned_attrs;
+}
+
+/* Subroutine of set_method_tm_attributes.  Apply TM attribute ATTR
+   to the method FNDECL.  */
+
+void
+apply_tm_attr (tree fndecl, tree attr)
+{
+  decl_attributes (&TREE_TYPE (fndecl), tree_cons (attr, NULL, NULL), 0);
 }

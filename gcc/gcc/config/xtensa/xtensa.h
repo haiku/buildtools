@@ -432,11 +432,6 @@ enum reg_class
   { 0xffffffff, 0x0000000f }  /* all registers */ \
 }
 
-#define IRA_COVER_CLASSES						\
-{									\
-  BR_REGS, FP_REGS, ACC_REG, AR_REGS, LIM_REG_CLASSES			\
-}
-
 /* A C expression whose value is a register class containing hard
    register REGNO.  In general there is more that one such class;
    choose a class which is "minimal", meaning that no smaller class
@@ -454,15 +449,6 @@ extern const enum reg_class xtensa_regno_to_class[FIRST_PSEUDO_REGISTER];
    Xtrnase, because all of the 16 AR registers may be explicitly used in
    the RTL, as either incoming or outgoing arguments.  */
 #define TARGET_SMALL_REGISTER_CLASSES_FOR_MODE_P hook_bool_mode_true
-
-/* Return the maximum number of consecutive registers
-   needed to represent mode MODE in a register of class CLASS.  */
-#define CLASS_UNITS(mode, size)						\
-  ((GET_MODE_SIZE (mode) + (size) - 1) / (size))
-
-#define CLASS_MAX_NREGS(CLASS, MODE)					\
-  (CLASS_UNITS (MODE, UNITS_PER_WORD))
-
 
 /* Stack layout; function entry, exit and calling.  */
 
@@ -675,10 +661,6 @@ typedef struct xtensa_args
   ((GET_CODE (X) == LABEL_REF || GET_CODE (X) == SYMBOL_REF		\
     || GET_CODE (X) == CONST_INT || GET_CODE (X) == HIGH		\
     || (GET_CODE (X) == CONST)))
-
-/* Nonzero if the constant value X is a legitimate general operand.
-   It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
-#define LEGITIMATE_CONSTANT_P(X) (! xtensa_tls_referenced_p (X))
 
 /* A C expression that is nonzero if X is a legitimate immediate
    operand on the target machine when generating position independent

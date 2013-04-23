@@ -1,5 +1,5 @@
 /* Prototypes.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2010
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -40,6 +40,8 @@ extern rtx machopic_legitimize_pic_address (rtx, enum machine_mode, rtx);
 
 extern void machopic_asm_out_constructor (rtx, int);
 extern void machopic_asm_out_destructor (rtx, int);
+extern section *machopic_select_rtx_section (enum machine_mode, rtx,
+					     unsigned HOST_WIDE_INT);
 #endif /* RTX_CODE */
 
 #ifdef TREE_CODE
@@ -54,10 +56,9 @@ extern void machopic_finish (FILE *);
 
 extern int machopic_reloc_rw_mask (void);
 extern section *machopic_select_section (tree, int, unsigned HOST_WIDE_INT);
-extern section *machopic_select_rtx_section (enum machine_mode, rtx,
-					     unsigned HOST_WIDE_INT);
 
 extern section *darwin_function_section (tree, enum node_frequency, bool, bool); 
+extern section *darwin_tm_clone_table_section (void);
 extern void darwin_function_switched_text_sections (FILE *, tree, bool);
 
 extern void darwin_unique_section (tree decl, int reloc);
@@ -112,10 +113,7 @@ extern void darwin_cpp_builtins (struct cpp_reader *);
 
 extern tree darwin_init_cfstring_builtins (unsigned);
 extern tree darwin_fold_builtin (tree, int, tree *, bool);
-extern tree darwin_objc_construct_string (tree);
 extern bool darwin_cfstring_p (tree);
-extern bool darwin_cfstring_ref_p (const_tree);
-extern void darwin_check_cfstring_format_arg (tree, tree);
 extern tree darwin_build_constant_cfstring (tree);
 extern void darwin_enter_string_into_cfstring_table (tree);
 

@@ -1265,6 +1265,14 @@ darwin_mergeable_constant_section (tree exp,
   return readonly_data_section;
 }
 
+section *
+darwin_tm_clone_table_section (void)
+{
+  return get_named_section (NULL,
+			    "__DATA,__tm_clone_table,regular,no_dead_strip",
+			    3);
+}
+
 int
 machopic_reloc_rw_mask (void)
 {
@@ -2934,6 +2942,33 @@ darwin_override_options (void)
       /* Earlier versions are not specifically accounted, until required.  */
     }
 
+  /* In principle, this should be c-family only.  However, we really need to
+     set sensible defaults for LTO as well, since the section selection stuff
+     should check for correctness re. the ABI.  TODO: check and provide the
+     flags (runtime & ABI) from the lto wrapper).  */
+
+  /* Unless set, force ABI=2 for NeXT and m64, 0 otherwise.  */
+  if (!global_options_set.x_flag_objc_abi)
+    global_options.x_flag_objc_abi
+	= (!flag_next_runtime)
+		? 0
+		: (TARGET_64BIT ? 2
+				: (generating_for_darwin_version >= 9) ? 1
+								       : 0);
+
+  /* Objective-C family ABI 2 is only valid for next/m64 at present.  */
+  if (global_options_set.x_flag_objc_abi && flag_next_runtime)
+    {
+      if (TARGET_64BIT && global_options.x_flag_objc_abi < 2)
+	error_at (UNKNOWN_LOCATION, "%<-fobjc-abi-version%> >= 2 must be"
+				    " used for %<-m64%> targets with"
+				    " %<-fnext-runtime%>");
+      if (!TARGET_64BIT && global_options.x_flag_objc_abi >= 2)
+	error_at (UNKNOWN_LOCATION, "%<-fobjc-abi-version%> >= 2 is not"
+				    " supported on %<-m32%> targets with"
+				    " %<-fnext-runtime%>");
+    }
+
   /* Don't emit DWARF3/4 unless specifically selected.  This is a 
      workaround for tool bugs.  */
   if (!global_options_set.x_dwarf_strict) 
@@ -2989,17 +3024,19 @@ darwin_override_options (void)
       darwin_emit_branch_islands = true;
     }
 
-  if (flag_var_tracking
+  if (flag_var_tracking_uninit == 0
       && generating_for_darwin_version >= 9
       && (flag_gtoggle ? (debug_info_level == DINFO_LEVEL_NONE)
       : (debug_info_level >= DINFO_LEVEL_NORMAL))
       && write_symbols == DWARF2_DEBUG)
-    flag_var_tracking_uninit = 1;
+    flag_var_tracking_uninit = flag_var_tracking;
 
   if (MACHO_DYNAMIC_NO_PIC_P)
     {
       if (flag_pic)
-	warning (0, "-mdynamic-no-pic overrides -fpic or -fPIC");
+	warning_at (UNKNOWN_LOCATION, 0,
+		 "%<-mdynamic-no-pic%> overrides %<-fpic%>, %<-fPIC%>,"
+		 " %<-fpie%> or %<-fPIE%>");
       flag_pic = 0;
     }
   else if (flag_pic == 1)
@@ -3018,12 +3055,13 @@ darwin_override_options (void)
   darwin_running_cxx = (strstr (lang_hooks.name, "C++") != 0);
 }
 
-/* Add $LDBL128 suffix to long double builtins.  */
+#if DARWIN_PPC
+/* Add $LDBL128 suffix to long double builtins for ppc darwin.  */
 
 static void
-darwin_patch_builtin (int fncode)
+darwin_patch_builtin (enum built_in_function fncode)
 {
-  tree fn = built_in_decls[fncode];
+  tree fn = builtin_decl_explicit (fncode);
   tree sym;
   char *newname;
 
@@ -3035,7 +3073,7 @@ darwin_patch_builtin (int fncode)
 
   set_user_assembler_name (fn, newname);
 
-  fn = implicit_built_in_decls[fncode];
+  fn = builtin_decl_implicit (fncode);
   if (fn)
     set_user_assembler_name (fn, newname);
 }
@@ -3059,6 +3097,7 @@ darwin_patch_builtins (void)
 #undef PATCH_BUILTIN_NO64
 #undef PATCH_BUILTIN_VARIADIC
 }
+#endif
 
 /*  CFStrings implementation.  */
 static GTY(()) tree cfstring_class_reference = NULL_TREE;
@@ -3210,9 +3249,10 @@ darwin_rename_builtins (void)
      use the faster version.  */
   if (!flag_unsafe_math_optimizations)
     {
-      int dcode = (BUILT_IN_COMPLEX_DIV_MIN
-		   + DCmode - MIN_MODE_COMPLEX_FLOAT);
-      tree fn = built_in_decls[dcode];
+      enum built_in_function dcode
+	= (enum built_in_function)(BUILT_IN_COMPLEX_DIV_MIN
+				   + DCmode - MIN_MODE_COMPLEX_FLOAT);
+      tree fn = builtin_decl_explicit (dcode);
       /* Fortran and c call TARGET_INIT_BUILTINS and
 	 TARGET_INIT_LIBFUNCS at different times, so we have to put a
 	 call into each to ensure that at least one of them is called
@@ -3220,7 +3260,7 @@ darwin_rename_builtins (void)
 	 new hook to run after build_common_builtin_nodes runs.  */
       if (fn)
 	set_user_assembler_name (fn, "___ieee_divdc3");
-      fn = implicit_built_in_decls[dcode];
+      fn = builtin_decl_implicit (dcode);
       if (fn)
 	set_user_assembler_name (fn, "___ieee_divdc3");
     }

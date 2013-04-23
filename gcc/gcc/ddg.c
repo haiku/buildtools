@@ -145,6 +145,45 @@ mem_access_insn_p (rtx insn)
   return rtx_mem_access_p (PATTERN (insn));
 }
 
+/* Return true if DEF_INSN contains address being auto-inc or auto-dec
+   which is used in USE_INSN.  Otherwise return false.  The result is
+   being used to decide whether to remove the edge between def_insn and
+   use_insn when -fmodulo-sched-allow-regmoves is set.  This function
+   doesn't need to consider the specific address register; no reg_moves
+   will be allowed for any life range defined by def_insn and used
+   by use_insn, if use_insn uses an address register auto-inc'ed by
+   def_insn.  */
+bool
+autoinc_var_is_used_p (rtx def_insn, rtx use_insn)
+{
+  rtx note;
+
+  for (note = REG_NOTES (def_insn); note; note = XEXP (note, 1))
+    if (REG_NOTE_KIND (note) == REG_INC
+	&& reg_referenced_p (XEXP (note, 0), PATTERN (use_insn)))
+      return true;
+
+  return false;
+}
+
+/* Return true if one of the definitions in INSN has MODE_CC.  Otherwise
+   return false.  */
+static bool
+def_has_ccmode_p (rtx insn)
+{
+  df_ref *def;
+
+  for (def = DF_INSN_DEFS (insn); *def; def++)
+    {
+      enum machine_mode mode = GET_MODE (DF_REF_REG (*def));
+
+      if (GET_MODE_CLASS (mode) == MODE_CC)
+	return true;
+    }
+
+  return false;
+}
+
 /* Computes the dependence parameters (latency, distance etc.), creates
    a ddg_edge and adds it to the given DDG.  */
 static void
@@ -173,10 +212,16 @@ create_ddg_dep_from_intra_loop_link (ddg_ptr g, ddg_node_ptr src_node,
      compensate for that by generating reg-moves based on the life-range
      analysis.  The anti-deps that will be deleted are the ones which
      have true-deps edges in the opposite direction (in other words
-     the kernel has only one def of the relevant register).  TODO:
-     support the removal of all anti-deps edges, i.e. including those
+     the kernel has only one def of the relevant register).
+     If the address that is being auto-inc or auto-dec in DEST_NODE
+     is used in SRC_NODE then do not remove the edge to make sure
+     reg-moves will not be created for this address.  
+     TODO: support the removal of all anti-deps edges, i.e. including those
      whose register has multiple defs in the loop.  */
-  if (flag_modulo_sched_allow_regmoves && (t == ANTI_DEP && dt == REG_DEP))
+  if (flag_modulo_sched_allow_regmoves 
+      && (t == ANTI_DEP && dt == REG_DEP)
+      && !def_has_ccmode_p (dest_node->insn)
+      && !autoinc_var_is_used_p (dest_node->insn, src_node->insn))
     {
       rtx set;
 
@@ -301,8 +346,16 @@ add_cross_iteration_register_deps (ddg_ptr g, df_ref last_def)
 
 	  gcc_assert (first_def_node);
 
+         /* Always create the edge if the use node is a branch in
+            order to prevent the creation of reg-moves.  
+            If the address that is being auto-inc or auto-dec in LAST_DEF
+            is used in USE_INSN then do not remove the edge to make sure
+            reg-moves will not be created for that address.  */
           if (DF_REF_ID (last_def) != DF_REF_ID (first_def)
-              || !flag_modulo_sched_allow_regmoves)
+              || !flag_modulo_sched_allow_regmoves
+	      || JUMP_P (use_node->insn)
+              || autoinc_var_is_used_p (DF_REF_INSN (last_def), use_insn)
+	      || def_has_ccmode_p (DF_REF_INSN (last_def)))
             create_ddg_dep_no_link (g, use_node, first_def_node, ANTI_DEP,
                                     REG_DEP, 1);
 
@@ -383,6 +436,33 @@ insns_may_alias_p (rtx insn1, rtx insn2)
   /* For each pair of MEMs in INSN1 and INSN2 check their independence.  */
   return  for_each_rtx (&PATTERN (insn1), (rtx_function) walk_mems_1,
 			 &PATTERN (insn2));
+}
+
+/* Given two nodes, analyze their RTL insns and add intra-loop mem deps
+   to ddg G.  */
+static void
+add_intra_loop_mem_dep (ddg_ptr g, ddg_node_ptr from, ddg_node_ptr to)
+{
+
+  if ((from->cuid == to->cuid)
+      || !insns_may_alias_p (from->insn, to->insn))
+    /* Do not create edge if memory references have disjoint alias sets
+       or 'to' and 'from' are the same instruction.  */
+    return;
+
+  if (mem_write_insn_p (from->insn))
+    {
+      if (mem_read_insn_p (to->insn))
+	create_ddg_dep_no_link (g, from, to,
+				DEBUG_INSN_P (to->insn)
+				? ANTI_DEP : TRUE_DEP, MEM_DEP, 0);
+      else
+	create_ddg_dep_no_link (g, from, to,
+				DEBUG_INSN_P (to->insn)
+				? ANTI_DEP : OUTPUT_DEP, MEM_DEP, 0);
+    }
+  else if (!mem_read_insn_p (to->insn))
+    create_ddg_dep_no_link (g, from, to, ANTI_DEP, MEM_DEP, 0);
 }
 
 /* Given two nodes, analyze their RTL insns and add inter-loop mem deps
@@ -472,10 +552,22 @@ build_intra_loop_deps (ddg_ptr g)
 	      if (DEBUG_INSN_P (j_node->insn))
 		continue;
 	      if (mem_access_insn_p (j_node->insn))
- 		/* Don't bother calculating inter-loop dep if an intra-loop dep
-		   already exists.  */
+		{
+		  /* Don't bother calculating inter-loop dep if an intra-loop dep
+		     already exists.  */
 	      	  if (! TEST_BIT (dest_node->successors, j))
 		    add_inter_loop_mem_dep (g, dest_node, j_node);
+		  /* If -fmodulo-sched-allow-regmoves
+		     is set certain anti-dep edges are not created.
+		     It might be that these anti-dep edges are on the
+		     path from one memory instruction to another such that
+		     removing these edges could cause a violation of the
+		     memory dependencies.  Thus we add intra edges between
+		     every two memory instructions in this case.  */
+		  if (flag_modulo_sched_allow_regmoves
+		      && !TEST_BIT (dest_node->predecessors, j))
+		    add_intra_loop_mem_dep (g, j_node, dest_node);
+		}
             }
         }
     }
@@ -1011,6 +1103,7 @@ free_ddg_all_sccs (ddg_all_sccs_ptr all_sccs)
   for (i = 0; i < all_sccs->num_sccs; i++)
     free_scc (all_sccs->sccs[i]);
 
+  free (all_sccs->sccs);
   free (all_sccs);
 }
 

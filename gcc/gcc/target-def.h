@@ -1,6 +1,6 @@
 /* Default initializers for a generic GCC target.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -78,10 +78,6 @@
 # endif
 #endif
 
-#ifdef TARGET_ASM_NAMED_SECTION
-#define TARGET_HAVE_NAMED_SECTIONS true
-#endif
-
 #ifndef TARGET_TERMINATE_DW2_EH_FRAME_INFO
 #ifdef EH_FRAME_SECTION_NAME
 #define TARGET_TERMINATE_DW2_EH_FRAME_INFO false
@@ -104,11 +100,7 @@
 			TARGET_ASM_UNALIGNED_DI_OP,		\
 			TARGET_ASM_UNALIGNED_TI_OP}
 
-#ifndef IRA_COVER_CLASSES
-#define TARGET_IRA_COVER_CLASSES 0
-#endif
-
-#if !defined (TARGET_FUNCTION_INCOMING_ARG) && !defined (FUNCTION_INCOMING_ARG)
+#if !defined (TARGET_FUNCTION_INCOMING_ARG)
 #define TARGET_FUNCTION_INCOMING_ARG TARGET_FUNCTION_ARG
 #endif
 

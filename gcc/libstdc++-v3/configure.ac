@@ -2,7 +2,7 @@
 
 AC_PREREQ(2.64)
 AC_INIT(package-unused, version-unused,, libstdc++)
-AC_CONFIG_SRCDIR(src/ios.cc)
+AC_CONFIG_SRCDIR(src/shared/hashtable-aux.cc)
 AC_CONFIG_HEADER(config.h)
 
 # This works around the fact that libtool configuration may change LD
@@ -88,6 +88,7 @@ CXXFLAGS="$save_CXXFLAGS"
 # up critical shell variables.
 GLIBCXX_CONFIGURE
 
+# Libtool setup.
 if test "x${with_newlib}" != "xyes"; then
   AC_LIBTOOL_DLOPEN
 fi
@@ -95,6 +96,38 @@ AM_PROG_LIBTOOL
 ACX_LT_HOST_FLAGS
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
+
+# libtool variables for C++ shared and position-independent compiles.
+#
+# Use glibcxx_lt_pic_flag to designate the automake variable
+# used to encapsulate the default libtool approach to creating objects
+# with position-independent code. Default: -prefer-pic.
+#
+# Use glibcxx_compiler_shared_flag to designate a compile-time flags for
+# creating shared objects. Default: -D_GLIBCXX_SHARED.
+#
+# Use glibcxx_compiler_pic_flag to designate a compile-time flags for
+# creating position-independent objects. This varies with the target
+# hardware and operating system, but is often: -DPIC -fPIC.
+if test "$enable_shared" = yes; then
+  glibcxx_lt_pic_flag="-prefer-pic"
+  glibcxx_compiler_pic_flag="$lt_prog_compiler_pic_CXX"
+  glibcxx_compiler_shared_flag="-D_GLIBCXX_SHARED"
+
+else
+  glibcxx_lt_pic_flag=
+  glibcxx_compiler_pic_flag=
+  glibcxx_compiler_shared_flag=
+fi
+AC_SUBST(glibcxx_lt_pic_flag)
+AC_SUBST(glibcxx_compiler_pic_flag)
+AC_SUBST(glibcxx_compiler_shared_flag)
+
+# Override the libtool's pic_flag and pic_mode.
+# Do this step after AM_PROG_LIBTOOL, but before AC_OUTPUT.
+# NB: this impacts --with-pic and --without-pic.
+lt_prog_compiler_pic_CXX="$glibcxx_compiler_pic_flag $glibcxx_compiler_shared_flag"
+pic_mode='default'
 
 # Eliminate -lstdc++ addition to postdeps for cross compiles.
 postdeps_CXX=`echo " $postdeps_CXX " | sed 's, -lstdc++ ,,g'`
@@ -110,6 +143,7 @@ GLIBCXX_ENABLE_PCH($is_hosted)
 GLIBCXX_ENABLE_THREADS
 GLIBCXX_ENABLE_ATOMIC_BUILTINS
 GLIBCXX_ENABLE_DECIMAL_FLOAT
+GLIBCXX_ENABLE_INT128_FLOAT128
 
 # Checks for compiler support that doesn't require linking.
 GLIBCXX_CHECK_COMPILER_FEATURES
@@ -123,14 +157,19 @@ GLIBCXX_ENABLE_LONG_LONG([yes])
 GLIBCXX_ENABLE_WCHAR_T([yes])
 GLIBCXX_ENABLE_C99([yes])
 GLIBCXX_ENABLE_CONCEPT_CHECKS([no])
-GLIBCXX_ENABLE_DEBUG_FLAGS(["-g3 -O0"])
+GLIBCXX_ENABLE_DEBUG_FLAGS(["-gdwarf-4 -g3 -O0"])
 GLIBCXX_ENABLE_DEBUG([no])
 GLIBCXX_ENABLE_PARALLEL([yes])
 GLIBCXX_ENABLE_CXX_FLAGS
 GLIBCXX_ENABLE_FULLY_DYNAMIC_STRING([no])
 GLIBCXX_ENABLE_EXTERN_TEMPLATE([yes])
+GLIBCXX_ENABLE_PYTHON
+GLIBCXX_ENABLE_WERROR([yes])
 
 # Checks for operating systems support that doesn't require linking.
+GLIBCXX_CHECK_MATH_PROTO
+GLIBCXX_CHECK_STDLIB_PROTO
+GLIBCXX_CHECK_STDIO_PROTO
 GLIBCXX_CHECK_SYSTEM_ERROR
 
 # For the streamoff typedef.
@@ -161,13 +200,16 @@ GLIBCXX_CHECK_GETTIMEOFDAY
 # NB: The default is [no], because otherwise it requires linking.
 GLIBCXX_ENABLE_LIBSTDCXX_TIME([no])
 
-# For gthread support
-GLIBCXX_CHECK_GTHREADS
-
-# For copy-assignable gthreads types
-GLIBCXX_GTHREADS_CXX11_COPY_ASSIGN
-
 AC_LC_MESSAGES
+
+# For hardware_concurrency
+AC_CHECK_HEADERS(sys/sysinfo.h)
+GLIBCXX_CHECK_GET_NPROCS
+AC_CHECK_HEADERS(unistd.h)
+GLIBCXX_CHECK_SC_NPROCESSORS_ONLN
+GLIBCXX_CHECK_SC_NPROC_ONLN
+GLIBCXX_CHECK_PTHREADS_NUM_PROCESSORS_NP
+GLIBCXX_CHECK_SYSCTL_HW_NCPU
 
 # Check for available headers.
 AC_CHECK_HEADERS([endian.h execinfo.h float.h fp.h ieeefp.h inttypes.h \
@@ -295,21 +337,18 @@ fi
 # Check for _Unwind_GetIPInfo.
 GCC_CHECK_UNWIND_GETIPINFO
 
-
 GCC_LINUX_FUTEX([AC_DEFINE(HAVE_LINUX_FUTEX, 1, [Define if futex syscall is available.])])
 
 GCC_HEADER_STDINT(include/gstdint.h)
 
-# This depends on GLIBCXX CHECK_LINKER_FEATURES, but without it assumes no.
 GLIBCXX_ENABLE_SYMVERS([yes])
 AC_SUBST(libtool_VERSION)
 
-GLIBCXX_ENABLE_VISIBILITY([yes])
+GLIBCXX_ENABLE_LIBSTDCXX_VISIBILITY([yes])
 
 ac_ldbl_compat=no
 case "$target" in
   powerpc*-*-linux* | \
-  powerpc*-*-gnu* | \
   sparc*-*-linux* | \
   s390*-*-linux* | \
   alpha*-*-linux*)
@@ -328,6 +367,9 @@ GLIBCXX_CONDITIONAL(GLIBCXX_LDBL_COMPAT, test $ac_ldbl_compat = yes)
 
 # This depends on GLIBCXX_ENABLE_SYMVERS and GLIBCXX_IS_NATIVE.
 GLIBCXX_CONFIGURE_TESTSUITE
+
+# For gthread support.  Depends on GLIBCXX_ENABLE_SYMVERS.
+GLIBCXX_CHECK_GTHREADS
 
 # Define documentation rules conditionally.
 
@@ -367,18 +409,12 @@ AM_CONDITIONAL(BUILD_MAN,
 	       test $ac_cv_prog_DOXYGEN = "yes" &&
 	       test $ac_cv_prog_DOT = "yes")
 
-# Check for pdf/epub dependencies.
+# Check for pdf dependencies.
 AC_CHECK_PROG([DBLATEX], dblatex, yes, no)
 AC_CHECK_PROG([PDFLATEX], pdflatex, yes, no)
 AM_CONDITIONAL(BUILD_PDF,
 	       test $ac_cv_prog_DBLATEX = "yes" &&
 	       test $ac_cv_prog_PDFLATEX = "yes")
-
-AC_CHECK_PROG([RUBY], ruby, yes, no)
-AC_CHECK_PROG([DBTOEPUB], dbtoepub, yes, no)
-AM_CONDITIONAL(BUILD_EPUB,
-	       test $ac_cv_prog_RUBY = "yes" &&
-	       test $ac_cv_prog_DBTOEPUB = "yes")
 
 
 # Propagate the target-specific source directories through the build chain.
@@ -418,19 +454,13 @@ GLIBCXX_EXPORT_INSTALL_INFO
 GLIBCXX_EXPORT_INCLUDES
 GLIBCXX_EXPORT_FLAGS
 
-if test "$enable_shared" = yes; then
-  LIBSUPCXX_PICFLAGS="-prefer-pic"
-else
-  LIBSUPCXX_PICFLAGS=
-fi
-AC_SUBST(LIBSUPCXX_PICFLAGS)
-
 dnl In autoconf 2.5x, AC_OUTPUT is replaced by four AC_CONFIG_* macros,
 dnl which can all be called multiple times as needed, plus one (different)
 dnl AC_OUTPUT macro.  This one lists the files to be created:
 AC_CONFIG_FILES(Makefile)
 AC_CONFIG_FILES([scripts/testsuite_flags],[chmod +x scripts/testsuite_flags])
 AC_CONFIG_FILES([scripts/extract_symvers],[chmod +x scripts/extract_symvers])
+AC_CONFIG_FILES([doc/xsl/customization.xsl])
 
 # Multilibs need MULTISUBDIR defined correctly in certain makefiles so
 # that multilib installs will end up installed in the correct place.

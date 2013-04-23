@@ -1,5 +1,5 @@
 /* Rewrite a program in Normal form into SSA.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
@@ -745,7 +745,17 @@ mark_def_sites (basic_block bb, gimple stmt, bitmap kills)
   set_rewrite_uses (stmt, false);
 
   if (is_gimple_debug (stmt))
-    return;
+    {
+      FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)
+	{
+	  tree sym = USE_FROM_PTR (use_p);
+	  gcc_assert (DECL_P (sym));
+	  set_rewrite_uses (stmt, true);
+	}
+      if (rewrite_uses_p (stmt))
+	SET_BIT (interesting_blocks, bb->index);
+      return;
+    }
 
   /* If a variable is used before being set, then the variable is live
      across a block boundary, so mark it live-on-entry to BB.  */
@@ -1279,6 +1289,107 @@ get_reaching_def (tree var)
 }
 
 
+/* Helper function for rewrite_stmt.  Rewrite uses in a debug stmt.  */
+
+static void
+rewrite_debug_stmt_uses (gimple stmt)
+{
+  use_operand_p use_p;
+  ssa_op_iter iter;
+  bool update = false;
+
+  FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)
+    {
+      tree var = USE_FROM_PTR (use_p), def = NULL_TREE;
+      gcc_assert (DECL_P (var));
+      if (var_ann (var) == NULL)
+	{
+	  if (TREE_CODE (var) == PARM_DECL && single_succ_p (ENTRY_BLOCK_PTR))
+	    {
+	      gimple_stmt_iterator gsi
+		= gsi_after_labels (single_succ (ENTRY_BLOCK_PTR));
+	      int lim;
+	      /* Search a few source bind stmts at the start of first bb to
+		 see if a DEBUG_EXPR_DECL can't be reused.  */
+	      for (lim = 32;
+		   !gsi_end_p (gsi) && lim > 0;
+		   gsi_next (&gsi), lim--)
+		{
+		  gimple gstmt = gsi_stmt (gsi);
+		  if (!gimple_debug_source_bind_p (gstmt))
+		    break;
+		  if (gimple_debug_source_bind_get_value (gstmt) == var)
+		    {
+		      def = gimple_debug_source_bind_get_var (gstmt);
+		      if (TREE_CODE (def) == DEBUG_EXPR_DECL)
+			break;
+		      else
+			def = NULL_TREE;
+		    }
+		}
+	      /* If not, add a new source bind stmt.  */
+	      if (def == NULL_TREE)
+		{
+		  gimple def_temp;
+		  def = make_node (DEBUG_EXPR_DECL);
+		  def_temp = gimple_build_debug_source_bind (def, var, NULL);
+		  DECL_ARTIFICIAL (def) = 1;
+		  TREE_TYPE (def) = TREE_TYPE (var);
+		  DECL_MODE (def) = DECL_MODE (var);
+		  gsi = gsi_after_labels (single_succ (ENTRY_BLOCK_PTR));
+		  gsi_insert_before (&gsi, def_temp, GSI_SAME_STMT);
+		}
+	      update = true;
+	    }
+	}
+      else
+	{
+	  def = get_current_def (var);
+	  /* Check if get_current_def can be trusted.  */
+	  if (def)
+	    {
+	      basic_block bb = gimple_bb (stmt);
+	      basic_block def_bb
+		= SSA_NAME_IS_DEFAULT_DEF (def)
+		  ? NULL : gimple_bb (SSA_NAME_DEF_STMT (def));
+
+	      /* If definition is in current bb, it is fine.  */
+	      if (bb == def_bb)
+		;
+	      /* If definition bb doesn't dominate the current bb,
+		 it can't be used.  */
+	      else if (def_bb && !dominated_by_p (CDI_DOMINATORS, bb, def_bb))
+		def = NULL;
+	      /* If there is just one definition and dominates the current
+		 bb, it is fine.  */
+	      else if (get_phi_state (var) == NEED_PHI_STATE_NO)
+		;
+	      else
+		{
+		  struct def_blocks_d *db_p = get_def_blocks_for (var);
+
+		  /* If there are some non-debug uses in the current bb,
+		     it is fine.  */
+		  if (bitmap_bit_p (db_p->livein_blocks, bb->index))
+		    ;
+		  /* Otherwise give up for now.  */
+		  else
+		    def = NULL;
+		}
+	    }
+	}
+      if (def == NULL)
+	{
+	  gimple_debug_bind_reset_value (stmt);
+	  update_stmt (stmt);
+	  return;
+	}
+      SET_USE (use_p, def);
+    }
+  if (update)
+    update_stmt (stmt);
+}
+
 /* SSA Rewriting Step 2.  Rewrite every variable used in each statement in
    the block with its immediate reaching definitions.  Update the current
    definition of a variable when a new real or virtual definition is found.  */
@@ -1306,12 +1417,17 @@ rewrite_stmt (gimple_stmt_iterator si)
 
   /* Step 1.  Rewrite USES in the statement.  */
   if (rewrite_uses_p (stmt))
-    FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)
-      {
-	tree var = USE_FROM_PTR (use_p);
-	gcc_assert (DECL_P (var));
-	SET_USE (use_p, get_reaching_def (var));
-      }
+    {
+      if (is_gimple_debug (stmt))
+	rewrite_debug_stmt_uses (stmt);
+      else
+	FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)
+	  {
+	    tree var = USE_FROM_PTR (use_p);
+	    gcc_assert (DECL_P (var));
+	    SET_USE (use_p, get_reaching_def (var));
+	  }
+    }
 
   /* Step 2.  Register the statement's DEF operands.  */
   if (register_defs_p (stmt))
@@ -1935,7 +2051,6 @@ rewrite_update_stmt (gimple stmt, gimple_stmt_iterator gsi)
     {
       fprintf (dump_file, "Updating SSA information for statement ");
       print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
-      fprintf (dump_file, "\n");
     }
 
   /* Rewrite USES included in OLD_SSA_NAMES and USES whose underlying
@@ -2083,7 +2198,7 @@ rewrite_update_enter_block (struct dom_walk_data *walk_data ATTRIBUTE_UNUSED,
   gimple_stmt_iterator gsi;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "\n\nRegistering new PHI nodes in block #%d\n\n",
+    fprintf (dump_file, "Registering new PHI nodes in block #%d\n",
 	     bb->index);
 
   /* Mark the unwind point for this block.  */
@@ -2413,8 +2528,7 @@ struct gimple_opt_pass pass_build_ssa =
   PROP_ssa,				/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func
-    | TODO_update_ssa_only_virtuals
+  TODO_update_ssa_only_virtuals
     | TODO_verify_ssa
     | TODO_remove_unused_locals		/* todo_flags_finish */
  }
@@ -2733,22 +2847,21 @@ dump_update_ssa (FILE *file)
 
   if (!bitmap_empty_p (SYMS_TO_RENAME (cfun)))
     {
-      fprintf (file, "\n\nSymbols to be put in SSA form\n\n");
+      fprintf (file, "\nSymbols to be put in SSA form\n");
       dump_decl_set (file, SYMS_TO_RENAME (cfun));
       fprintf (file, "\n");
     }
 
   if (names_to_release && !bitmap_empty_p (names_to_release))
     {
-      fprintf (file, "\n\nSSA names to release after updating the SSA web\n\n");
+      fprintf (file, "\nSSA names to release after updating the SSA web\n\n");
       EXECUTE_IF_SET_IN_BITMAP (names_to_release, 0, i, bi)
 	{
 	  print_generic_expr (file, ssa_name (i), 0);
 	  fprintf (file, " ");
 	}
+      fprintf (file, "\n");
     }
-
-  fprintf (file, "\n\n");
 }
 
 
@@ -3227,6 +3340,9 @@ update_ssa (unsigned update_flags)
 
   timevar_push (TV_TREE_SSA_INCREMENTAL);
 
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    fprintf (dump_file, "\nUpdating SSA:\n");
+
   if (!update_ssa_initialized_fn)
     init_update_ssa (cfun);
   gcc_assert (update_ssa_initialized_fn == cfun);
@@ -3391,21 +3507,21 @@ update_ssa (unsigned update_flags)
 
       dump_update_ssa (dump_file);
 
-      fprintf (dump_file, "Incremental SSA update started at block: %d\n\n",
+      fprintf (dump_file, "Incremental SSA update started at block: %d\n",
 	       start_bb->index);
 
       c = 0;
       EXECUTE_IF_SET_IN_BITMAP (blocks_to_update, 0, i, bi)
 	c++;
       fprintf (dump_file, "Number of blocks in CFG: %d\n", last_basic_block);
-      fprintf (dump_file, "Number of blocks to update: %d (%3.0f%%)\n\n",
+      fprintf (dump_file, "Number of blocks to update: %d (%3.0f%%)\n",
 	       c, PERCENT (c, last_basic_block));
 
       if (dump_flags & TDF_DETAILS)
 	{
-	  fprintf (dump_file, "Affected blocks: ");
+	  fprintf (dump_file, "Affected blocks:");
 	  EXECUTE_IF_SET_IN_BITMAP (blocks_to_update, 0, i, bi)
-	    fprintf (dump_file, "%u ", i);
+	    fprintf (dump_file, " %u", i);
 	  fprintf (dump_file, "\n");
 	}
 

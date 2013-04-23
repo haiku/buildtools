@@ -1,6 +1,6 @@
 /* Structure for saving state for a nested function.
    Copyright (C) 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   1999, 2000, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -87,10 +87,13 @@ struct GTY(()) emit_status {
 };
 
 
-/* Indexed by pseudo register number, gives the rtx for that pseudo.
-   Allocated in parallel with regno_pointer_align.
-   FIXME: We could put it into emit_status struct, but gengtype is not able to deal
-   with length attribute nested in top level structures.  */
+/* Indexed by register number, gives an rtx for that register (and only
+   that register).  For pseudo registers, it is the unique rtx for
+   that pseudo.  For hard registers, it is an rtx of the mode specified
+   by reg_raw_mode.
+
+   FIXME: We could put it into emit_status struct, but gengtype is not
+   able to deal with length attribute nested in top level structures.  */
 
 extern GTY ((length ("crtl->emit.x_reg_rtx_no"))) rtx * regno_reg_rtx;
 
@@ -169,6 +172,7 @@ struct gimple_df;
 struct temp_slot;
 typedef struct temp_slot *temp_slot_p;
 struct call_site_record_d;
+struct dw_fde_struct;
 
 DEF_VEC_P(temp_slot_p);
 DEF_VEC_ALLOC_P(temp_slot_p,gc);
@@ -434,6 +438,9 @@ struct GTY(()) rtl_data {
      function where currently compiled version of it is nothrow.  */
   bool nothrow;
 
+  /* True if we performed shrink-wrapping for the current function.  */
+  bool shrink_wrapped;
+
   /* Like regs_ever_live, but 1 if a reg is set or clobbered from an
      asm.  Unlike regs_ever_live, elements of this array corresponding
      to eliminable regs (like the frame pointer) are set if an asm
@@ -476,9 +483,6 @@ struct GTY(()) stack_usage
      !ACCUMULATE_OUTGOING_ARGS, it contains the outgoing arguments.  */
   int pushed_stack_size;
 
-  /* # of dynamic allocations in the function.  */
-  unsigned int dynamic_alloc_count : 31;
-
   /* Nonzero if the amount of stack space allocated dynamically cannot
      be bounded at compile-time.  */
   unsigned int has_unbounded_dynamic_stack_size : 1;
@@ -487,7 +491,6 @@ struct GTY(()) stack_usage
 #define current_function_static_stack_size (cfun->su->static_stack_size)
 #define current_function_dynamic_stack_size (cfun->su->dynamic_stack_size)
 #define current_function_pushed_stack_size (cfun->su->pushed_stack_size)
-#define current_function_dynamic_alloc_count (cfun->su->dynamic_alloc_count)
 #define current_function_has_unbounded_dynamic_stack_size \
   (cfun->su->has_unbounded_dynamic_stack_size)
 #define current_function_allocates_dynamic_stack_space    \
@@ -546,6 +549,11 @@ struct GTY(()) function {
   /* Used types hash table.  */
   htab_t GTY ((param_is (union tree_node))) used_types_hash;
 
+  /* Dwarf2 Frame Description Entry, containing the Call Frame Instructions
+     used for unwinding.  Only set when either dwarf2 unwinding or dwarf2
+     debugging is enabled.  */
+  struct dw_fde_struct *fde;
+
   /* Last statement uid.  */
   int last_stmt_uid;
 
@@ -596,15 +604,6 @@ struct GTY(()) function {
 
   /* Nonzero if current function uses stdarg.h or equivalent.  */
   unsigned int stdarg : 1;
-
-  /* Nonzero if the back-end should not keep track of expressions that
-     determine the size of variable-sized objects.  Normally, such
-     expressions are saved away, and then expanded when the next
-     function is started.  For example, if a parameter has a
-     variable-sized type, then the size of the parameter is computed
-     when the function body is entered.  However, some front-ends do
-     not desire this behavior.  */
-  unsigned int dont_save_pending_sizes_p : 1;
 
   unsigned int after_inlining : 1;
   unsigned int always_inline_functions_inlined : 1;
@@ -713,6 +712,7 @@ extern void number_blocks (tree);
 
 extern void clear_block_marks (tree);
 extern tree blocks_nreverse (tree);
+extern tree block_chainon (tree, tree);
 
 /* Return size needed for stack frame based on slots so far allocated.
    This size counts from zero.  It is not rounded to STACK_BOUNDARY;
@@ -754,6 +754,11 @@ extern bool reference_callee_copied (CUMULATIVE_ARGS *, enum machine_mode,
 extern void used_types_insert (tree);
 
 extern int get_next_funcdef_no (void);
+extern int get_last_funcdef_no (void);
+
+#ifdef HAVE_simple_return
+extern bool requires_stack_frame_p (rtx, HARD_REG_SET, HARD_REG_SET);
+#endif                        
 
 /* In predict.c */
 extern bool optimize_function_for_size_p (struct function *);

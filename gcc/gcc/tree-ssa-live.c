@@ -1,5 +1,5 @@
 /* Liveness for SSA trees.
-   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
 
@@ -157,10 +157,8 @@ delete_var_map (var_map map)
 {
   var_map_base_fini (map);
   partition_delete (map->var_partition);
-  if (map->partition_to_view)
-    free (map->partition_to_view);
-  if (map->view_to_partition)
-    free (map->view_to_partition);
+  free (map->partition_to_view);
+  free (map->view_to_partition);
   free (map);
 }
 
@@ -376,7 +374,8 @@ mark_all_vars_used_1 (tree *tp, int *walk_subtrees, void *data)
      eliminated as unused.  */
   if (TREE_CODE (t) == VAR_DECL)
     {
-      if (data != NULL && bitmap_clear_bit ((bitmap) data, DECL_UID (t)))
+      if (data != NULL && bitmap_clear_bit ((bitmap) data, DECL_UID (t))
+	  && DECL_CONTEXT (t) == current_function_decl)
 	mark_all_vars_used (&DECL_INITIAL (t), data);
       set_is_used (t);
     }
@@ -427,7 +426,6 @@ remove_unused_scope_block_p (tree scope)
 {
   tree *t, *next;
   bool unused = !TREE_USED (scope);
-  var_ann_t ann;
   int nsubblocks = 0;
 
   for (t = &BLOCK_VARS (scope); *t; t = next)
@@ -453,11 +451,8 @@ remove_unused_scope_block_p (tree scope)
       else if (TREE_CODE (*t) == VAR_DECL && DECL_HAS_VALUE_EXPR_P (*t))
 	unused = false;
 
-      /* Remove everything we don't generate debug info for.
-	 Don't remove larger vars though, because BLOCK_VARS are
-	 used also during expansion to determine which variables
-	 might share stack space.  */
-      else if (DECL_IGNORED_P (*t) && is_gimple_reg (*t))
+      /* Remove everything we don't generate debug info for.  */
+      else if (DECL_IGNORED_P (*t))
 	{
 	  *t = DECL_CHAIN (*t);
 	  next = t;
@@ -467,8 +462,7 @@ remove_unused_scope_block_p (tree scope)
 	 info about optimized-out variables in the scope blocks.
 	 Exception are the scope blocks not containing any instructions
 	 at all so user can't get into the scopes at first place.  */
-      else if ((ann = var_ann (*t)) != NULL
-	       && is_used_p (*t))
+      else if (var_ann (*t) != NULL && is_used_p (*t))
 	unused = false;
       else if (TREE_CODE (*t) == LABEL_DECL && TREE_USED (*t))
 	/* For labels that are still used in the IL, the decision to
@@ -690,9 +684,9 @@ remove_unused_locals (void)
   basic_block bb;
   tree var, t;
   referenced_var_iterator rvi;
-  var_ann_t ann;
   bitmap global_unused_vars = NULL;
   unsigned srcidx, dstidx, num;
+  bool have_local_clobbers = false;
 
   /* Removing declarations from lexical blocks when not optimizing is
      not only a waste of time, it actually causes differences in stack
@@ -724,6 +718,12 @@ remove_unused_locals (void)
 
 	  if (is_gimple_debug (stmt))
 	    continue;
+
+	  if (gimple_clobber_p (stmt))
+	    {
+	      have_local_clobbers = true;
+	      continue;
+	    }
 
 	  if (b)
 	    TREE_USED (b) = true;
@@ -758,6 +758,41 @@ remove_unused_locals (void)
 	  TREE_USED (e->goto_block) = true;
     }
 
+  /* We do a two-pass approach about the out-of-scope clobbers.  We want
+     to remove them if they are the only references to a local variable,
+     but we want to retain them when there's any other.  So the first pass
+     ignores them, and the second pass (if there were any) tries to remove
+     them.  */
+  if (have_local_clobbers)
+    FOR_EACH_BB (bb)
+      {
+	gimple_stmt_iterator gsi;
+
+	for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
+	  {
+	    gimple stmt = gsi_stmt (gsi);
+	    tree b = gimple_block (stmt);
+
+	    if (gimple_clobber_p (stmt))
+	      {
+		tree lhs = gimple_assign_lhs (stmt);
+		lhs = get_base_address (lhs);
+		if (TREE_CODE (lhs) == SSA_NAME)
+		  lhs = SSA_NAME_VAR (lhs);
+		if (DECL_P (lhs) && (!var_ann (lhs) || !is_used_p (lhs)))
+		  {
+		    unlink_stmt_vdef (stmt);
+		    gsi_remove (&gsi, true);
+		    release_defs (stmt);
+		    continue;
+		  }
+		if (b)
+		  TREE_USED (b) = true;
+	      }
+	    gsi_next (&gsi);
+	  }
+      }
+
   cfun->has_local_explicit_reg_vars = false;
 
   /* Remove unmarked local vars from local_decls.  */
@@ -766,7 +801,7 @@ remove_unused_locals (void)
     {
       var = VEC_index (tree, cfun->local_decls, srcidx);
       if (TREE_CODE (var) != FUNCTION_DECL
-	  && (!(ann = var_ann (var))
+	  && (!var_ann (var)
 	      || !is_used_p (var)))
 	{
 	  if (is_global_var (var))
@@ -798,8 +833,9 @@ remove_unused_locals (void)
       FOR_EACH_LOCAL_DECL (cfun, ix, var)
 	if (TREE_CODE (var) == VAR_DECL
 	    && is_global_var (var)
-	    && (ann = var_ann (var)) != NULL
-	    && is_used_p (var))
+	    && var_ann (var) != NULL
+	    && is_used_p (var)
+	    && DECL_CONTEXT (var) == current_function_decl)
 	  mark_all_vars_used (&DECL_INITIAL (var), global_unused_vars);
 
       num = VEC_length (tree, cfun->local_decls);
@@ -825,8 +861,7 @@ remove_unused_locals (void)
     if (!is_global_var (t)
 	&& TREE_CODE (t) != PARM_DECL
 	&& TREE_CODE (t) != RESULT_DECL
-	&& !is_used_p (t)
-	&& !var_ann (t)->is_heapvar)
+	&& !is_used_p (t))
       remove_referenced_var (t);
   remove_unused_scope_block_p (DECL_INITIAL (current_function_decl));
   if (dump_file && (dump_flags & TDF_DETAILS))

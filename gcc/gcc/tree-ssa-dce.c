@@ -1,5 +1,5 @@
 /* Dead code elimination pass for the GNU compiler.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Ben Elliston <bje@redhat.com>
    and Andrew MacLeod <amacleod@redhat.com>
@@ -271,8 +271,6 @@ mark_operand_necessary (tree op)
 static void
 mark_stmt_if_obviously_necessary (gimple stmt, bool aggressive)
 {
-  tree lhs = NULL_TREE;
-
   /* With non-call exceptions, we have to assume that all statements could
      throw.  If a statement may throw, it is inherently necessary.  */
   if (cfun->can_throw_non_call_exceptions && stmt_could_throw_p (stmt))
@@ -301,30 +299,40 @@ mark_stmt_if_obviously_necessary (gimple stmt, bool aggressive)
       return;
 
     case GIMPLE_CALL:
-      /* Most, but not all function calls are required.  Function calls that
-	 produce no result and have no side effects (i.e. const pure
-	 functions) are unnecessary.  */
-      if (gimple_has_side_effects (stmt))
-	{
-	  mark_stmt_necessary (stmt, true);
-	  return;
-	}
-      if (!gimple_call_lhs (stmt))
-        return;
-      lhs = gimple_call_lhs (stmt);
-      /* Fall through */
+      {
+	tree callee = gimple_call_fndecl (stmt);
+	if (callee != NULL_TREE
+	    && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
+	  switch (DECL_FUNCTION_CODE (callee))
+	    {
+	    case BUILT_IN_MALLOC:
+	    case BUILT_IN_CALLOC:
+	    case BUILT_IN_ALLOCA:
+	    case BUILT_IN_ALLOCA_WITH_ALIGN:
+	      return;
 
-    case GIMPLE_ASSIGN:
-      if (!lhs)
-        lhs = gimple_assign_lhs (stmt);
-      break;
+	    default:;
+	    }
+	/* Most, but not all function calls are required.  Function calls that
+	   produce no result and have no side effects (i.e. const pure
+	   functions) are unnecessary.  */
+	if (gimple_has_side_effects (stmt))
+	  {
+	    mark_stmt_necessary (stmt, true);
+	    return;
+	  }
+	if (!gimple_call_lhs (stmt))
+	  return;
+	break;
+      }
 
     case GIMPLE_DEBUG:
       /* Debug temps without a value are not useful.  ??? If we could
 	 easily locate the debug temp bind stmt for a use thereof,
 	 would could refrain from marking all debug temps here, and
 	 mark them only if they're used.  */
-      if (gimple_debug_bind_has_value_p (stmt)
+      if (!gimple_debug_bind_p (stmt)
+	  || gimple_debug_bind_has_value_p (stmt)
 	  || TREE_CODE (gimple_debug_bind_get_var (stmt)) != DEBUG_EXPR_DECL)
 	mark_stmt_necessary (stmt, false);
       return;
@@ -341,6 +349,12 @@ mark_stmt_if_obviously_necessary (gimple stmt, bool aggressive)
     case GIMPLE_SWITCH:
       if (! aggressive)
 	mark_stmt_necessary (stmt, true);
+      break;
+
+    case GIMPLE_ASSIGN:
+      if (TREE_CODE (gimple_assign_lhs (stmt)) == SSA_NAME
+	  && TREE_CLOBBER_P (gimple_assign_rhs1 (stmt)))
+	return;
       break;
 
     default:
@@ -497,6 +511,7 @@ find_obviously_necessary_stmts (struct edge_list *el)
 static bool
 ref_may_be_aliased (tree ref)
 {
+  gcc_assert (TREE_CODE (ref) != WITH_SIZE_EXPR);
   while (handled_component_p (ref))
     ref = TREE_OPERAND (ref, 0);
   if (TREE_CODE (ref) == MEM_REF
@@ -617,6 +632,26 @@ mark_all_reaching_defs_necessary_1 (ao_ref *ref ATTRIBUTE_UNUSED,
       tree lhs = gimple_assign_lhs (def_stmt);
       if (!ref_may_be_aliased (lhs))
 	return false;
+    }
+
+  /* We want to skip statments that do not constitute stores but have
+     a virtual definition.  */
+  if (is_gimple_call (def_stmt))
+    {
+      tree callee = gimple_call_fndecl (def_stmt);
+      if (callee != NULL_TREE
+	  && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
+	switch (DECL_FUNCTION_CODE (callee))
+	  {
+	  case BUILT_IN_MALLOC:
+	  case BUILT_IN_CALLOC:
+	  case BUILT_IN_ALLOCA:
+	  case BUILT_IN_ALLOCA_WITH_ALIGN:
+	  case BUILT_IN_FREE:
+	    return false;
+
+	  default:;
+	  }
     }
 
   mark_operand_necessary (vdef);
@@ -799,6 +834,25 @@ propagate_necessity (struct edge_list *el)
 	  ssa_op_iter iter;
 	  tree use;
 
+	  /* If this is a call to free which is directly fed by an
+	     allocation function do not mark that necessary through
+	     processing the argument.  */
+	  if (gimple_call_builtin_p (stmt, BUILT_IN_FREE))
+	    {
+	      tree ptr = gimple_call_arg (stmt, 0);
+	      gimple def_stmt;
+	      tree def_callee;
+	      /* If the pointer we free is defined by an allocation
+		 function do not add the call to the worklist.  */
+	      if (TREE_CODE (ptr) == SSA_NAME
+		  && is_gimple_call (def_stmt = SSA_NAME_DEF_STMT (ptr))
+		  && (def_callee = gimple_call_fndecl (def_stmt))
+		  && DECL_BUILT_IN_CLASS (def_callee) == BUILT_IN_NORMAL
+		  && (DECL_FUNCTION_CODE (def_callee) == BUILT_IN_MALLOC
+		      || DECL_FUNCTION_CODE (def_callee) == BUILT_IN_CALLOC))
+		continue;
+	    }
+
 	  FOR_EACH_SSA_TREE_OPERAND (use, stmt, iter, SSA_OP_USE)
 	    mark_operand_necessary (use);
 
@@ -838,8 +892,17 @@ propagate_necessity (struct edge_list *el)
 	      if (callee != NULL_TREE
 		  && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL
 		  && (DECL_FUNCTION_CODE (callee) == BUILT_IN_MEMSET
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_MEMSET_CHK
 		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_MALLOC
-		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_FREE))
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_CALLOC
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_FREE
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_VA_END
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_ALLOCA
+		      || (DECL_FUNCTION_CODE (callee)
+			  == BUILT_IN_ALLOCA_WITH_ALIGN)
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_STACK_SAVE
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_STACK_RESTORE
+		      || DECL_FUNCTION_CODE (callee) == BUILT_IN_ASSUME_ALIGNED))
 		continue;
 
 	      /* Calls implicitly load from memory, their arguments
@@ -851,6 +914,8 @@ propagate_necessity (struct edge_list *el)
 		  if (TREE_CODE (arg) == SSA_NAME
 		      || is_gimple_min_invariant (arg))
 		    continue;
+		  if (TREE_CODE (arg) == WITH_SIZE_EXPR)
+		    arg = TREE_OPERAND (arg, 0);
 		  if (!ref_may_be_aliased (arg))
 		    mark_aliased_reaching_defs_necessary (stmt, arg);
 		}
@@ -858,26 +923,26 @@ propagate_necessity (struct edge_list *el)
 	  else if (gimple_assign_single_p (stmt))
 	    {
 	      tree rhs;
-	      bool rhs_aliased = false;
 	      /* If this is a load mark things necessary.  */
 	      rhs = gimple_assign_rhs1 (stmt);
 	      if (TREE_CODE (rhs) != SSA_NAME
-		  && !is_gimple_min_invariant (rhs))
+		  && !is_gimple_min_invariant (rhs)
+		  && TREE_CODE (rhs) != CONSTRUCTOR)
 		{
 		  if (!ref_may_be_aliased (rhs))
 		    mark_aliased_reaching_defs_necessary (stmt, rhs);
 		  else
-		    rhs_aliased = true;
+		    mark_all_reaching_defs_necessary (stmt);
 		}
-	      if (rhs_aliased)
-		mark_all_reaching_defs_necessary (stmt);
 	    }
 	  else if (gimple_code (stmt) == GIMPLE_RETURN)
 	    {
 	      tree rhs = gimple_return_retval (stmt);
 	      /* A return statement may perform a load.  */
-	      if (TREE_CODE (rhs) != SSA_NAME
-		  && !is_gimple_min_invariant (rhs))
+	      if (rhs
+		  && TREE_CODE (rhs) != SSA_NAME
+		  && !is_gimple_min_invariant (rhs)
+		  && TREE_CODE (rhs) != CONSTRUCTOR)
 		{
 		  if (!ref_may_be_aliased (rhs))
 		    mark_aliased_reaching_defs_necessary (stmt, rhs);
@@ -895,9 +960,17 @@ propagate_necessity (struct edge_list *el)
 		  tree op = TREE_VALUE (gimple_asm_input_op (stmt, i));
 		  if (TREE_CODE (op) != SSA_NAME
 		      && !is_gimple_min_invariant (op)
+		      && TREE_CODE (op) != CONSTRUCTOR
 		      && !ref_may_be_aliased (op))
 		    mark_aliased_reaching_defs_necessary (stmt, op);
 		}
+	    }
+	  else if (gimple_code (stmt) == GIMPLE_TRANSACTION)
+	    {
+	      /* The beginning of a transaction is a memory barrier.  */
+	      /* ??? If we were really cool, we'd only be a barrier
+		 for the memories touched within the transaction.  */
+	      mark_all_reaching_defs_necessary (stmt);
 	    }
 	  else
 	    gcc_unreachable ();
@@ -922,18 +995,36 @@ propagate_necessity (struct edge_list *el)
     }
 }
 
+/* Replace all uses of NAME by underlying variable and mark it
+   for renaming.  */
+
+void
+mark_virtual_operand_for_renaming (tree name)
+{
+  bool used = false;
+  imm_use_iterator iter;
+  use_operand_p use_p;
+  gimple stmt;
+  tree name_var;
+
+  name_var = SSA_NAME_VAR (name);
+  FOR_EACH_IMM_USE_STMT (stmt, iter, name)
+    {
+      FOR_EACH_IMM_USE_ON_STMT (use_p, iter)
+        SET_USE (use_p, name_var);
+      update_stmt (stmt);
+      used = true;
+    }
+  if (used)
+    mark_sym_for_renaming (name_var);
+}
+
 /* Replace all uses of result of PHI by underlying variable and mark it
    for renaming.  */
 
 void
 mark_virtual_phi_result_for_renaming (gimple phi)
 {
-  bool used = false;
-  imm_use_iterator iter;
-  use_operand_p use_p;
-  gimple stmt;
-  tree result_ssa, result_var;
-
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "Marking result for renaming : ");
@@ -941,18 +1032,9 @@ mark_virtual_phi_result_for_renaming (gimple phi)
       fprintf (dump_file, "\n");
     }
 
-  result_ssa = gimple_phi_result (phi);
-  result_var = SSA_NAME_VAR (result_ssa);
-  FOR_EACH_IMM_USE_STMT (stmt, iter, result_ssa)
-    {
-      FOR_EACH_IMM_USE_ON_STMT (use_p, iter)
-        SET_USE (use_p, result_var);
-      update_stmt (stmt);
-      used = true;
-    }
-  if (used)
-    mark_sym_for_renaming (result_var);
+  mark_virtual_operand_for_renaming (gimple_phi_result (phi));
 }
+
 
 /* Remove dead PHI nodes from block BB.  */
 
@@ -1140,6 +1222,26 @@ remove_dead_stmt (gimple_stmt_iterator *i, basic_block bb)
 	  ei_next (&ei);
     }
 
+  /* If this is a store into a variable that is being optimized away,
+     add a debug bind stmt if possible.  */
+  if (MAY_HAVE_DEBUG_STMTS
+      && gimple_assign_single_p (stmt)
+      && is_gimple_val (gimple_assign_rhs1 (stmt)))
+    {
+      tree lhs = gimple_assign_lhs (stmt);
+      if ((TREE_CODE (lhs) == VAR_DECL || TREE_CODE (lhs) == PARM_DECL)
+	  && !DECL_IGNORED_P (lhs)
+	  && is_gimple_reg_type (TREE_TYPE (lhs))
+	  && !is_global_var (lhs)
+	  && !DECL_HAS_VALUE_EXPR_P (lhs))
+	{
+	  tree rhs = gimple_assign_rhs1 (stmt);
+	  gimple note
+	    = gimple_build_debug_bind (lhs, unshare_expr (rhs), stmt);
+	  gsi_insert_after (i, note, GSI_SAME_STMT);
+	}
+    }
+
   unlink_stmt_vdef (stmt);
   gsi_remove (i, true);
   release_defs (stmt);
@@ -1202,6 +1304,29 @@ eliminate_unnecessary_stmts (void)
 
 	  stats.total++;
 
+	  /* We can mark a call to free as not necessary if the
+	     defining statement of its argument is an allocation
+	     function and that is not necessary itself.  */
+	  if (gimple_call_builtin_p (stmt, BUILT_IN_FREE))
+	    {
+	      tree ptr = gimple_call_arg (stmt, 0);
+	      tree callee2;
+	      gimple def_stmt;
+	      if (TREE_CODE (ptr) != SSA_NAME)
+		continue;
+	      def_stmt = SSA_NAME_DEF_STMT (ptr);
+	      if (!is_gimple_call (def_stmt)
+		  || gimple_plf (def_stmt, STMT_NECESSARY))
+		continue;
+	      callee2 = gimple_call_fndecl (def_stmt);
+	      if (callee2 == NULL_TREE
+		  || DECL_BUILT_IN_CLASS (callee2) != BUILT_IN_NORMAL
+		  || (DECL_FUNCTION_CODE (callee2) != BUILT_IN_MALLOC
+		      && DECL_FUNCTION_CODE (callee2) != BUILT_IN_CALLOC))
+		continue;
+	      gimple_set_plf (stmt, STMT_NECESSARY, false);
+	    }
+
 	  /* If GSI is not necessary then remove it.  */
 	  if (!gimple_plf (stmt, STMT_NECESSARY))
 	    {
@@ -1211,31 +1336,38 @@ eliminate_unnecessary_stmts (void)
 	    }
 	  else if (is_gimple_call (stmt))
 	    {
-	      call = gimple_call_fndecl (stmt);
-	      if (call)
+	      tree name = gimple_call_lhs (stmt);
+
+	      notice_special_calls (stmt);
+
+	      /* When LHS of var = call (); is dead, simplify it into
+		 call (); saving one operand.  */
+	      if (name
+		  && TREE_CODE (name) == SSA_NAME
+		  && !TEST_BIT (processed, SSA_NAME_VERSION (name))
+		  /* Avoid doing so for allocation calls which we
+		     did not mark as necessary, it will confuse the
+		     special logic we apply to malloc/free pair removal.  */
+		  && (!(call = gimple_call_fndecl (stmt))
+		      || DECL_BUILT_IN_CLASS (call) != BUILT_IN_NORMAL
+		      || (DECL_FUNCTION_CODE (call) != BUILT_IN_MALLOC
+			  && DECL_FUNCTION_CODE (call) != BUILT_IN_CALLOC
+			  && DECL_FUNCTION_CODE (call) != BUILT_IN_ALLOCA
+			  && (DECL_FUNCTION_CODE (call)
+			      != BUILT_IN_ALLOCA_WITH_ALIGN))))
 		{
-		  tree name;
-
-		  /* When LHS of var = call (); is dead, simplify it into
-		     call (); saving one operand.  */
-		  name = gimple_call_lhs (stmt);
-		  if (name && TREE_CODE (name) == SSA_NAME
-		           && !TEST_BIT (processed, SSA_NAME_VERSION (name)))
+		  something_changed = true;
+		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    {
-		      something_changed = true;
-		      if (dump_file && (dump_flags & TDF_DETAILS))
-			{
-			  fprintf (dump_file, "Deleting LHS of call: ");
-			  print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
-			  fprintf (dump_file, "\n");
-			}
-
-		      gimple_call_set_lhs (stmt, NULL_TREE);
-		      maybe_clean_or_replace_eh_stmt (stmt, stmt);
-		      update_stmt (stmt);
-		      release_ssa_name (name);
+		      fprintf (dump_file, "Deleting LHS of call: ");
+		      print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
+		      fprintf (dump_file, "\n");
 		    }
-		  notice_special_calls (stmt);
+
+		  gimple_call_set_lhs (stmt, NULL_TREE);
+		  maybe_clean_or_replace_eh_stmt (stmt, stmt);
+		  update_stmt (stmt);
+		  release_ssa_name (name);
 		}
 	    }
 	}
@@ -1531,7 +1663,7 @@ struct gimple_opt_pass pass_dce =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_ssa	/* todo_flags_finish */
+  TODO_verify_ssa	                /* todo_flags_finish */
  }
 };
 
@@ -1550,7 +1682,7 @@ struct gimple_opt_pass pass_dce_loop =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_ssa	/* todo_flags_finish */
+  TODO_verify_ssa	                /* todo_flags_finish */
  }
 };
 
@@ -1569,7 +1701,7 @@ struct gimple_opt_pass pass_cd_dce =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func | TODO_verify_ssa
+  TODO_verify_ssa
   | TODO_verify_flow			/* todo_flags_finish */
  }
 };

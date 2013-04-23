@@ -1,6 +1,6 @@
 // C++ includes used for precompiling -*- C++ -*-
 
-// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
 // Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
@@ -53,6 +53,7 @@
 #include <ccomplex>
 #include <cfenv>
 #include <cinttypes>
+#include <cstdalign>
 #include <cstdbool>
 #include <cstdint>
 #include <ctgmath>
@@ -106,6 +107,7 @@
 #include <random>
 #include <ratio>
 #include <regex>
+#include <scoped_allocator>
 #include <system_error>
 #include <thread>
 #include <tuple>

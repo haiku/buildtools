@@ -1,5 +1,5 @@
 /* Transformations based on profile information for values.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -46,6 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "timevar.h"
 #include "tree-pass.h"
 #include "pointer-set.h"
+#include "profile.h"
 
 /* In this file value profile based optimizations are placed.  Currently the
    following optimizations are implemented (for more detailed descriptions
@@ -1059,35 +1060,75 @@ gimple_mod_subtract_transform (gimple_stmt_iterator *si)
   return true;
 }
 
-static struct cgraph_node** pid_map = NULL;
+static VEC(cgraph_node_ptr, heap) *cgraph_node_map = NULL;
 
-/* Initialize map of pids (pid -> cgraph node) */
+/* Initialize map from FUNCDEF_NO to CGRAPH_NODE.  */
 
-static void
-init_pid_map (void)
+void
+init_node_map (void)
 {
   struct cgraph_node *n;
 
-  if (pid_map != NULL)
-    return;
-
-  pid_map = XCNEWVEC (struct cgraph_node*, cgraph_max_pid);
+  if (get_last_funcdef_no ())
+    VEC_safe_grow_cleared (cgraph_node_ptr, heap,
+                           cgraph_node_map, get_last_funcdef_no ());
 
   for (n = cgraph_nodes; n; n = n->next)
     {
-      if (n->pid != -1)
-	pid_map [n->pid] = n;
+      if (DECL_STRUCT_FUNCTION (n->decl))
+        VEC_replace (cgraph_node_ptr, cgraph_node_map,
+                     DECL_STRUCT_FUNCTION (n->decl)->funcdef_no, n);
     }
+}
+
+/* Delete the CGRAPH_NODE_MAP.  */
+
+void
+del_node_map (void)
+{
+   VEC_free (cgraph_node_ptr, heap, cgraph_node_map);
+   cgraph_node_map = NULL;
 }
 
 /* Return cgraph node for function with pid */
 
 static inline struct cgraph_node*
-find_func_by_pid (int	pid)
+find_func_by_funcdef_no (int func_id)
 {
-  init_pid_map ();
+  int max_id = get_last_funcdef_no ();
+  if (func_id >= max_id || VEC_index (cgraph_node_ptr,
+                                      cgraph_node_map,
+                                      func_id) == NULL)
+    {
+      if (flag_profile_correction)
+        inform (DECL_SOURCE_LOCATION (current_function_decl),
+                "Inconsistent profile: indirect call target (%d) does not exist", func_id);
+      else
+        error ("Inconsistent profile: indirect call target (%d) does not exist", func_id);
 
-  return pid_map [pid];
+      return NULL;
+    }
+
+  return VEC_index (cgraph_node_ptr, cgraph_node_map, func_id);
+}
+
+/* Perform sanity check on the indirect call target. Due to race conditions,
+   false function target may be attributed to an indirect call site. If the
+   call expression type mismatches with the target function's type, expand_call
+   may ICE. Here we only do very minimal sanity check just to make compiler happy.
+   Returns true if TARGET is considered ok for call CALL_STMT.  */
+
+static bool
+check_ic_target (gimple call_stmt, struct cgraph_node *target)
+{
+   location_t locus;
+   if (gimple_check_call_matching_types (call_stmt, target->decl))
+     return true;
+
+   locus =  gimple_location (call_stmt);
+   inform (locus, "Skipping target %s with mismatching types for icall ",
+           cgraph_node_name (target));
+   return false;
 }
 
 /* Do transformation
@@ -1108,7 +1149,7 @@ gimple_ic (gimple icall_stmt, struct cgraph_node *direct_call,
   tree optype = build_pointer_type (void_type_node);
   edge e_cd, e_ci, e_di, e_dj = NULL, e_ij;
   gimple_stmt_iterator gsi;
-  int lp_nr;
+  int lp_nr, dflags;
 
   cond_bb = gimple_bb (icall_stmt);
   gsi = gsi_for_stmt (icall_stmt);
@@ -1135,6 +1176,9 @@ gimple_ic (gimple icall_stmt, struct cgraph_node *direct_call,
   update_stmt (icall_stmt);
   dcall_stmt = gimple_copy (icall_stmt);
   gimple_call_set_fndecl (dcall_stmt, direct_call->decl);
+  dflags = flags_from_decl_or_type (direct_call->decl);
+  if ((dflags & ECF_NORETURN) != 0)
+    gimple_call_set_lhs (dcall_stmt, NULL_TREE);
   gsi_insert_before (&gsi, dcall_stmt, GSI_SAME_STMT);
 
   /* Fix CFG. */
@@ -1179,17 +1223,23 @@ gimple_ic (gimple icall_stmt, struct cgraph_node *direct_call,
 
   if (e_ij != NULL)
     {
-      e_dj = make_edge (dcall_bb, join_bb, EDGE_FALLTHRU);
-      e_dj->probability = REG_BR_PROB_BASE;
-      e_dj->count = count;
+      if ((dflags & ECF_NORETURN) != 0)
+	e_ij->count = all;
+      else
+	{
+	  e_dj = make_edge (dcall_bb, join_bb, EDGE_FALLTHRU);
+	  e_dj->probability = REG_BR_PROB_BASE;
+	  e_dj->count = count;
 
+	  e_ij->count = all - count;
+	}
       e_ij->probability = REG_BR_PROB_BASE;
-      e_ij->count = all - count;
     }
 
   /* Insert PHI node for the call result if necessary.  */
   if (gimple_call_lhs (icall_stmt)
-      && TREE_CODE (gimple_call_lhs (icall_stmt)) == SSA_NAME)
+      && TREE_CODE (gimple_call_lhs (icall_stmt)) == SSA_NAME
+      && (dflags & ECF_NORETURN) == 0)
     {
       tree result = gimple_call_lhs (icall_stmt);
       gimple phi = create_phi_node (result, join_bb);
@@ -1240,16 +1290,16 @@ gimple_ic_transform (gimple stmt)
   histogram_value histogram;
   gcov_type val, count, all, bb_all;
   gcov_type prob;
-  tree callee;
   gimple modify;
   struct cgraph_node *direct_call;
 
   if (gimple_code (stmt) != GIMPLE_CALL)
     return false;
 
-  callee = gimple_call_fn (stmt);
+  if (gimple_call_fndecl (stmt) != NULL_TREE)
+    return false;
 
-  if (TREE_CODE (callee) == FUNCTION_DECL)
+  if (gimple_call_internal_p (stmt))
     return false;
 
   histogram = gimple_histogram_value_of_type (cfun, stmt, HIST_TYPE_INDIR_CALL);
@@ -1276,9 +1326,12 @@ gimple_ic_transform (gimple stmt)
     prob = (count * REG_BR_PROB_BASE + all / 2) / all;
   else
     prob = 0;
-  direct_call = find_func_by_pid ((int)val);
+  direct_call = find_func_by_funcdef_no ((int)val);
 
   if (direct_call == NULL)
+    return false;
+
+  if (!check_ic_target (stmt, direct_call))
     return false;
 
   modify = gimple_ic (stmt, direct_call, prob, count, all);
@@ -1484,13 +1537,13 @@ gimple_stringops_transform (gimple_stmt_iterator *gsi)
   else
     prob = 0;
   dest = gimple_call_arg (stmt, 0);
-  dest_align = get_pointer_alignment (dest, BIGGEST_ALIGNMENT);
+  dest_align = get_pointer_alignment (dest);
   switch (fcode)
     {
     case BUILT_IN_MEMCPY:
     case BUILT_IN_MEMPCPY:
       src = gimple_call_arg (stmt, 1);
-      src_align = get_pointer_alignment (src, BIGGEST_ALIGNMENT);
+      src_align = get_pointer_alignment (src);
       if (!can_move_by_pieces (val, MIN (dest_align, src_align)))
 	return false;
       break;
@@ -1640,6 +1693,7 @@ gimple_indirect_call_to_profile (gimple stmt, histogram_values *values)
   tree callee;
 
   if (gimple_code (stmt) != GIMPLE_CALL
+      || gimple_call_internal_p (stmt)
       || gimple_call_fndecl (stmt) != NULL_TREE)
     return;
 
@@ -1761,4 +1815,3 @@ gimple_find_values_to_profile (histogram_values *values)
         }
     }
 }
-

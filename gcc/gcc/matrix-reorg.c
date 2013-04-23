@@ -529,12 +529,9 @@ mat_free (void *e)
   if (!mat)
     return;
 
-  if (mat->free_stmts)
-    free (mat->free_stmts);
-  if (mat->dim_hot_level)
-    free (mat->dim_hot_level);
-  if (mat->malloc_for_level)
-    free (mat->malloc_for_level);
+  free (mat->free_stmts);
+  free (mat->dim_hot_level);
+  free (mat->malloc_for_level);
 }
 
 /* Find all potential matrices.
@@ -722,7 +719,8 @@ add_allocation_site (struct matrix_info *mi, gimple stmt, int level)
          must be set accordingly.  */
       for (min_malloc_level = 0;
 	   min_malloc_level < mi->max_malloced_level
-	   && mi->malloc_for_level[min_malloc_level]; min_malloc_level++);
+	   && mi->malloc_for_level[min_malloc_level]; min_malloc_level++)
+	;
       if (level < min_malloc_level)
 	{
 	  mi->allocation_function_decl = current_function_decl;
@@ -846,7 +844,7 @@ analyze_matrix_allocation_site (struct matrix_info *mi, gimple stmt,
 }
 
 /* The transposing decision making.
-   In order to to calculate the profitability of transposing, we collect two
+   In order to calculate the profitability of transposing, we collect two
    types of information regarding the accesses:
    1. profiling information used to express the hotness of an access, that
    is how often the matrix is accessed by this access site (count of the
@@ -2169,7 +2167,8 @@ transform_allocation_sites (void **slot, void *data ATTRIBUTE_UNUSED)
   update_ssa (TODO_update_ssa);
   /* Replace the malloc size argument in the malloc of level 0 to be
      the size of all the dimensions.  */
-  c_node = cgraph_node (mi->allocation_function_decl);
+  c_node = cgraph_get_node (mi->allocation_function_decl);
+  gcc_checking_assert (c_node);
   old_size_0 = gimple_call_arg (call_stmt_0, 0);
   tmp = force_gimple_operand_gsi (&gsi, mi->dimension_size[0], true,
 				  NULL, true, GSI_SAME_STMT);
@@ -2218,7 +2217,8 @@ transform_allocation_sites (void **slot, void *data ATTRIBUTE_UNUSED)
       if (!mi->free_stmts[i].stmt)
 	continue;
 
-      c_node = cgraph_node (mi->free_stmts[i].func);
+      c_node = cgraph_get_node (mi->free_stmts[i].func);
+      gcc_checking_assert (c_node);
       gcc_assert (is_gimple_call (mi->free_stmts[i].stmt));
       e = cgraph_edge (c_node, mi->free_stmts[i].stmt);
       gcc_assert (e);
@@ -2391,6 +2391,6 @@ struct simple_ipa_opt_pass pass_ipa_matrix_reorg =
   0,				/* properties_provided */
   0,				/* properties_destroyed */
   0,				/* todo_flags_start */
-  TODO_dump_cgraph | TODO_dump_func	/* todo_flags_finish */
+  TODO_dump_cgraph      	/* todo_flags_finish */
  }
 };

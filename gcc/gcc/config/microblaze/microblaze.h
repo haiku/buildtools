@@ -102,22 +102,6 @@ extern enum pipeline_type microblaze_pipe;
   { "target_asm_spec", TARGET_ASM_SPEC },				\
   SUBTARGET_EXTRA_SPECS
 
-/* Print subsidiary information on the compiler version in use.  */
-#define MICROBLAZE_VERSION MICROBLAZE_DEFAULT_CPU
-
-#ifndef MACHINE_TYPE
-#define MACHINE_TYPE "MicroBlaze/ELF"
-#endif
-
-#ifndef TARGET_VERSION_INTERNAL
-#define TARGET_VERSION_INTERNAL(STREAM)					\
-  fprintf (STREAM, " %s %s", MACHINE_TYPE, MICROBLAZE_VERSION)
-#endif
-
-#ifndef TARGET_VERSION
-#define TARGET_VERSION TARGET_VERSION_INTERNAL (stderr)
-#endif
-
 /* Local compiler-generated symbols must have a prefix that the assembler
    understands.   */
 
@@ -404,9 +388,6 @@ extern enum reg_class microblaze_regno_to_class[];
 #define SECONDARY_MEMORY_NEEDED(CLASS1, CLASS2, MODE)			\
   (GET_MODE_CLASS (MODE) == MODE_INT)
 
-#define CLASS_MAX_NREGS(CLASS, MODE)					\
-  ((GET_MODE_SIZE (MODE) + (UNITS_PER_WORD) - 1) / (UNITS_PER_WORD))
-
 /* Stack layout; function entry, exit and calling.  */
 
 #define STACK_GROWS_DOWNWARD
@@ -489,7 +470,7 @@ typedef struct microblaze_args
   /* Adjustments made to args pass in regs.  */
   /* ??? The size is doubled to work around a bug in the code that sets the 
      adjustments in function_arg.  */
-  struct rtx_def *adjust[MAX_ARGS_IN_REGISTERS * 2];
+  rtx adjust[MAX_ARGS_IN_REGISTERS * 2];
 } CUMULATIVE_ARGS;
 
 #define INIT_CUMULATIVE_ARGS(CUM,FNTYPE,LIBNAME,FNDECL,N_NAMED_ARGS)	\
@@ -539,12 +520,6 @@ typedef struct microblaze_args
 /* Define this, so that when PIC, reload won't try to reload invalid
    addresses which require two reload registers.  */
 #define LEGITIMATE_PIC_OPERAND_P(X)  (!pic_address_needs_scratch (X))
-
-/* At present, GAS doesn't understand li.[sd], so don't allow it
-   to be generated at present.  */
-#define LEGITIMATE_CONSTANT_P(X)				\
-  (GET_CODE (X) != CONST_DOUBLE					\
-    || microblaze_const_double_ok (X, GET_MODE (X)))
 
 #define CASE_VECTOR_MODE			(SImode)
 

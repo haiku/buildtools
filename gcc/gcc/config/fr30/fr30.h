@@ -1,8 +1,8 @@
 /*{{{  Comment.  */ 
 
 /* Definitions of FR30 target. 
-   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of GCC.
@@ -38,8 +38,6 @@ along with GCC; see the file COPYING3.  If not see
       builtin_assert ("machine=fr30");		\
     }						\
    while (0)
-
-#define TARGET_VERSION fprintf (stderr, " (fr30)");
 
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "crt0.o%s crti.o%s crtbegin.o%s"
@@ -289,11 +287,6 @@ enum reg_class
 
 #define GENERAL_REGS 	REAL_REGS
 #define N_REG_CLASSES 	((int) LIM_REG_CLASSES)
-
-#define IRA_COVER_CLASSES				\
-{							\
-  REAL_REGS, MULTIPLY_64_REG, LIM_REG_CLASSES		\
-}
 
 /* An initializer containing the names of the register classes as C string
    constants.  These names are used in writing some of the debugging dumps.  */
@@ -674,12 +667,6 @@ enum reg_class
    will reload one or both registers only if neither labeling works.  */
 #define REG_OK_FOR_INDEX_P(X) REG_OK_FOR_BASE_P (X)
 
-/* A C expression that is nonzero if X is a legitimate constant for an
-   immediate operand on the target machine.  You can assume that X satisfies
-   `CONSTANT_P', so you need not check this.  In fact, `1' is a suitable
-   definition for this macro on machines where anything `CONSTANT_P' is valid.  */
-#define LEGITIMATE_CONSTANT_P(X) 1
-
 /*}}}*/ 
 /*{{{  Describing Relative Costs of Operations */ 
 
@@ -709,13 +696,6 @@ enum reg_class
    `".data"' is right.  */
 #define DATA_SECTION_ASM_OP "\t.data"
 
-/* If defined, a C expression whose value is a string containing the
-   assembler operation to identify the following data as
-   uninitialized global data.  If not defined, and neither
-   `ASM_OUTPUT_BSS' nor `ASM_OUTPUT_ALIGNED_BSS' are defined,
-   uninitialized global data will be output in the data section if
-   `-fno-common' is passed, otherwise `ASM_OUTPUT_COMMON' will be
-   used.  */
 #define BSS_SECTION_ASM_OP "\t.section .bss"
 
 /*}}}*/ 
@@ -858,11 +838,6 @@ fprintf (STREAM, "\t.word .L%d\n", VALUE)
    called, in `call' RTL expressions.  On most machines this should be
    `QImode'.  */
 #define FUNCTION_MODE QImode
-
-/* If cross-compiling, don't require stdio.h etc to build libgcc.a.  */
-#if defined CROSS_DIRECTORY_STRUCTURE && ! defined inhibit_libc
-#define inhibit_libc
-#endif
 
 /*}}}*/ 
 

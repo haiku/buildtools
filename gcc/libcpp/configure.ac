@@ -33,11 +33,15 @@ AC_CHECK_PROGS([AUTOHEADER], [autoheader], [$MISSING autoheader])
 # Figure out what compiler warnings we can enable.
 # See config/warnings.m4 for details.
 
-ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings \
+ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wno-narrowing -Wwrite-strings \
 			  -Wmissing-format-attribute], [warn])
 ACX_PROG_CC_WARNING_OPTS([-Wstrict-prototypes -Wmissing-prototypes \
 			  -Wold-style-definition -Wc++-compat], [c_warn])
 ACX_PROG_CC_WARNING_ALMOST_PEDANTIC([-Wno-long-long])
+
+# Disable exceptions and RTTI if building with g++
+ACX_PROG_CC_WARNING_OPTS(
+       m4_quote(m4_do([-fno-exceptions -fno-rtti])), [noexception_flags])
 
 # Only enable with --enable-werror-always until existing warnings are
 # corrected.
@@ -102,7 +106,13 @@ if test $ac_cv_type_uchar = yes; then
   [Define if <sys/types.h> defines \`uchar'.])
 fi
 
-AM_ICONV
+# g++ on Solaris 10+ defines _XOPEN_SOURCE=600, which exposes a different
+# iconv() prototype.
+AS_IF([test "$ENABLE_BUILD_WITH_CXX" = "yes"],
+  [AC_LANG_PUSH([C++])
+   AM_ICONV
+   AC_LANG_POP([C++])],
+  [AM_ICONV])
 
 # More defines and substitutions.
 PACKAGE="$PACKAGE_TARNAME"
@@ -145,9 +155,7 @@ case $target in
 	x86_64-*-* | \
 	ia64-*-* | \
 	hppa*64*-*-* | \
-	i[34567]86-*-darwin* | \
-	i[34567]86-*-solaris2.1[0-9]* | \
-	i[34567]86-w64-mingw* | \
+	i[34567]86-*-* | x86_64-*-solaris2.1[0-9]* | \
 	mips*-*-* | \
 	mmix-*-* | \
 	powerpc*-*-* | \
@@ -155,15 +163,9 @@ case $target in
 	s390*-*-* | \
 	sparc*-*-* | \
 	spu-*-* | \
-	sh[123456789lbe]*-*-* | sh-*-*)
+	sh[123456789lbe]*-*-* | sh-*-* | \
+	tilegx-*-* | tilepro-*-* )
 		need_64bit_hwint=yes ;;
-	i[34567]86-*-linux*)
-		if test "x$enable_targets" = xall; then
-			need_64bit_hwint=yes
-		else
-			need_64bit_hwint=no
-		fi
-		;;
 	*)
 		need_64bit_hwint=no ;;
 esac

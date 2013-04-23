@@ -259,7 +259,7 @@
   (match_code "reg,mem")
 {
   if (GET_CODE (op) == REG)
-    return mode == Pmode;
+    return GET_MODE (op) == Pmode;
 
   if (GET_CODE (op) == MEM)
     {
@@ -326,7 +326,7 @@
 {
   /* We can accept any nonimmediate operand, except that MEM operands must
      be limited to those that use addresses valid for the 'U' constraint.  */
-  if (!nonimmediate_operand (op, mode) && !OK_FOR_U (op))
+  if (!nonimmediate_operand (op, mode) && !satisfies_constraint_U (op))
     return 0;
 
   /* H8SX accepts pretty much anything here.  */
@@ -344,7 +344,7 @@
   if (GET_CODE (op) == SUBREG)
     return 1;
   return (GET_CODE (op) == MEM
-	  && OK_FOR_U (op));
+	  && satisfies_constraint_U (op));
 })
 
 ;; Return nonzero if OP is a MEM suitable for bit manipulation insns.
@@ -353,7 +353,7 @@
   (match_code "mem")
 {
   return (GET_CODE (op) == MEM
-	  && OK_FOR_U (op));
+	  && satisfies_constraint_U (op));
 })
 
 ;; Return nonzero if OP is indirect register or constant memory
@@ -373,6 +373,20 @@
   (match_code "reg")
 {
   return op == stack_pointer_rtx;
+})
+
+;; False if X is anything that might eliminate to the stack pointer.
+
+(define_predicate "register_no_sp_elim_operand"
+  (match_operand 0 "register_operand")
+{
+  if (GET_CODE (op) == SUBREG)
+    op = SUBREG_REG (op);
+  return !(op == stack_pointer_rtx
+	   || op == arg_pointer_rtx
+	   || op == frame_pointer_rtx
+	   || IN_RANGE (REGNO (op),
+			FIRST_PSEUDO_REGISTER, LAST_VIRTUAL_REGISTER));
 })
 
 ;; Return nonzero if X is a constant whose absolute value is greater
@@ -416,12 +430,9 @@
 ;; Return nonzero if X is a constant suitable for inc/dec.
 
 (define_predicate "incdec_operand"
-  (match_code "const_int")
-{
-  return (GET_CODE (op) == CONST_INT
-	  && (CONST_OK_FOR_M (INTVAL (op))
-	      || CONST_OK_FOR_O (INTVAL (op))));
-})
+  (and (match_code "const_int")
+       (ior (match_test "satisfies_constraint_M (op)")
+	    (match_test "satisfies_constraint_O (op)"))))
 
 ;; Recognize valid operators for bit instructions.
 

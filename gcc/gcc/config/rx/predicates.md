@@ -72,6 +72,16 @@
        (match_operand 0 "rx_restricted_mem_operand"))
 )
 
+;; Check that the operand is suitable as the source operand
+;; for a min/max instruction.  This is the same as
+;; rx_source_operand except that CONST_INTs are allowed but
+;; REGs and SUBREGs are not.
+
+(define_predicate "rx_minmaxex_operand"
+  (ior (match_operand 0 "immediate_operand")
+       (match_operand 0 "rx_restricted_mem_operand"))
+)
+
 ;; Return true if OP is a store multiple operation.  This looks like:
 ;;
 ;;   [(set (SP) (MINUS (SP) (INT)))
@@ -284,7 +294,7 @@
 )
 
 (define_predicate "rx_zs_comparison_operator"
-  (match_code "eq,ne")
+  (match_code "eq,ne,lt,ge")
 )
 
 ;; GT and LE omitted due to operand swap required.

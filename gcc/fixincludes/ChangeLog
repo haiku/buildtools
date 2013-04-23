@@ -1,22 +1,119 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
-2012-03-01  Release Manager
+2012-09-20  Release Manager
 
-	* GCC 4.6.3 released.
+	* GCC 4.7.2 released.
 
-2011-10-26  Release Manager
+2012-06-14  Release Manager
 
-	* GCC 4.6.2 released.
+	* GCC 4.7.1 released.
 
-2011-06-27  Release Manager
+2012-03-26  David Edelsohn  <dje.gcc@gmail.com>
 
-	* GCC 4.6.1 released.
+	* inclhack.def (aix_malloc): New.
+	* fixincl.x: Regenerate.
+	* tests/base/malloc.h [AIX_MALLOC_CHECK]: New.
 
-2011-03-25  Release Manager
+2012-03-22  Release Manager
 
-	* GCC 4.6.0 released.
+	* GCC 4.7.0 released.
+
+2012-01-11  Bruce Korb <bkorb@gnu.org>
+	    Steven G. Kargl  <kargl@gcc.gnu.org>
+	    Andreas Tobler  <andreast@fgznet.ch>
+
+	PR bootstrap/51705
+	PR preprocessor/51776
+	* inclhack.def (cdef_cplusplus): Add a replacement for [[noreturn]].
+	* fixincl.x: Regenerate.
+	* tests/base/sys/cdefs.h: Update.
+
+	* genfixes: Remove the 'Ver.' from the version check.
+
+2011-12-20  Andreas Schwab  <schwab@linux-m68k.org>
+
+	* configure: Regenerate.
+
+2011-12-19  Andreas Schwab  <schwab@linux-m68k.org>
+
+	* configure: Regenerate.
+
+2011-11-16  David Edelsohn  <dje.gcc@gmail.com>
+
+	* inclhack.def (aix_once_init_[12]): New fixes.
+	* fixincl.x: Regenerate.
+	* tests/base/pthread.h: Update.
+
+2011-10-25  Mike Stump  <mikestump@comcast.net>
+
+	PR target/48851
+	* inclhack.def (void_null): New bypass.
+	* fixincl.x: Regenerate.
+
+2011-09-26  Tristan Gingold  <gingold@adacore.com>
+
+	* inclhack.def (ms_define_can_use_extern_prefix):
+	(vms_use_pragma_extern_model, vms_disable_decc_string_builtins):
+	New fixes.
+	* fixincl.x: Regenerate.
+	* tests/base/rtldef/string.h: New test.
+	* tests/base/rtldef/decc$types.h: Likewise.
+	* tests/base/testing.h: Update
+
+2011-09-22  Tristan Gingold  <gingold@adacore.com>
+
+	* mkfixinc.sh (target): Remove alpha-vms from particular targets.
+
+2011-08-23  Steve Ellcey  <sje@cup.hp.com>
+
+	PR libstdc++/50153
+	* inclhack.def (hpux11_abs): Extend to all hpux machines.
+	* fixincl.x: Regenerate.
+
+2011-08-10  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+	    Marc Glisse  <marc.glisse@normalesup.org>
+
+	PR libstdc++-v3/1773
+	* inclhack.def (solaris_cxx_linkage, solaris_getc_strict_stdc)
+	(solaris_longjmp_noreturn, solaris_pow_int_overload)
+	(solaris_std___filbuf): New fixes.
+	* tests/base/iso/math_iso.h, tests/base/iso/setjmp_iso.h,
+	tests/base/iso/stdio_iso.h, tests/base/iso/stdlib_iso.h: New tests.
+	* tests/base/stdio.h [SOLARIS_STD___FILBUF_CHECK]: New test.
+
+2011-07-25  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR c++/49347
+	* inclhack.def (solaris_posix_spawn_restrict): New fix.
+	* fixincl.x: Regenerate.
+	* tests/base/spawn.h: New test.
+
+2011-06-08  Douglas B Rupp  <rupp@gnat.com>
+
+	* configure.ac (AC_USE_SYSTEM_EXTENSIONS): Add.
+	* configure: Regenerate.
+	* config.h.in: Regenerate.
+
+2011-06-06  Peter O'Gorman  <pogma@thewrittenword.com>
+
+	* inclhack.def (aix_net_if_arp): New fix.
+	* fixincl.x: Regenerate.
+	* tests/base/net/if_arp.h [AIX_NET_IF_ARP_CHECK]: New test.
+
+2011-05-17  Tristan Gingold  <gingold@adacore.com>
+
+	* inclhack.def (solaris_complex_cxx): Fix syntax.
+	* fixincl.x: Regenerate.
+
+2011-05-17  Tristan Gingold  <gingold@adacore.com>
+
+	* check.tpl: Shell-quote testing file.
+
+2011-03-22  Joseph Myers  <joseph@codesourcery.com>
+
+	* mkfixinc.sh: Don't handle i?86-moss-msdos* or i?86-*-pe.
 
 2010-11-20  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 

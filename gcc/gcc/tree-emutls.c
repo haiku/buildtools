@@ -262,14 +262,14 @@ get_emutls_init_templ_addr (tree decl)
   if (DECL_EXTERNAL (to))
     varpool_node (to);
   else
-    varpool_finalize_decl (to);
+    varpool_add_new_variable (to);
   return build_fold_addr_expr (to);
 }
 
 /* Create and return the control variable for the TLS variable DECL.  */
 
 static tree
-new_emutls_decl (tree decl)
+new_emutls_decl (tree decl, tree alias_of)
 {
   tree name, to;
 
@@ -333,8 +333,12 @@ new_emutls_decl (tree decl)
      not external one.  */
   if (DECL_EXTERNAL (to))
     varpool_node (to);
-  else
-    varpool_finalize_decl (to);
+  else if (!alias_of)
+    varpool_add_new_variable (to);
+  else 
+    varpool_create_variable_alias (to,
+				   varpool_node_for_asm
+				    (DECL_ASSEMBLER_NAME (alias_of))->decl);
   return to;
 }
 
@@ -383,8 +387,8 @@ emutls_common_1 (tree tls_decl, tree control_decl, tree *pstmts)
 
   word_type_node = lang_hooks.types.type_for_mode (word_mode, 1);
 
-  x = build_call_expr (built_in_decls[BUILT_IN_EMUTLS_REGISTER_COMMON], 4,
-		       build_fold_addr_expr (control_decl),
+  x = build_call_expr (builtin_decl_explicit (BUILT_IN_EMUTLS_REGISTER_COMMON),
+		       4, build_fold_addr_expr (control_decl),
 		       fold_convert (word_type_node,
 				     DECL_SIZE_UNIT (tls_decl)),
 		       build_int_cst (word_type_node,
@@ -430,6 +434,7 @@ gen_emutls_addr (tree decl, struct lower_emutls_data *d)
       addr = create_tmp_var (build_pointer_type (TREE_TYPE (decl)), NULL);
       x = gimple_build_call (d->builtin_decl, 1, build_fold_addr_expr (cdecl));
       gimple_set_location (x, d->loc);
+      add_referenced_var (cdecl);
 
       addr = make_ssa_name (addr, x);
       gimple_call_set_lhs (x, addr);
@@ -437,7 +442,7 @@ gen_emutls_addr (tree decl, struct lower_emutls_data *d)
       gimple_seq_add_stmt (&d->seq, x);
 
       cgraph_create_edge (d->cfun_node, d->builtin_node, x,
-                          d->bb->count, d->bb_freq, d->bb->loop_depth);
+                          d->bb->count, d->bb_freq);
 
       /* We may be adding a new reference to a new variable to the function.
          This means we have to play with the ipa-reference web.  */
@@ -618,8 +623,10 @@ lower_emutls_function_body (struct cgraph_node *node)
   push_cfun (DECL_STRUCT_FUNCTION (node->decl));
 
   d.cfun_node = node;
-  d.builtin_decl = built_in_decls[BUILT_IN_EMUTLS_GET_ADDRESS];
-  d.builtin_node = cgraph_node (d.builtin_decl);
+  d.builtin_decl = builtin_decl_explicit (BUILT_IN_EMUTLS_GET_ADDRESS);
+  /* This is where we introduce the declaration to the IL and so we have to
+     create a node for it.  */
+  d.builtin_node = cgraph_get_create_node (d.builtin_decl);
 
   FOR_EACH_BB (d.bb)
     {
@@ -686,6 +693,40 @@ lower_emutls_function_body (struct cgraph_node *node)
   current_function_decl = NULL;
 }
 
+/* Create emutls variable for VAR, DATA is pointer to static
+   ctor body we can add constructors to.
+   Callback for varpool_for_variable_and_aliases.  */
+
+static bool
+create_emultls_var (struct varpool_node *var, void *data)
+{
+  tree cdecl;
+  struct varpool_node *cvar;
+
+  cdecl = new_emutls_decl (var->decl, var->alias_of);
+
+  cvar = varpool_get_node (cdecl);
+  VEC_quick_push (varpool_node_ptr, control_vars, cvar);
+
+  if (!var->alias)
+    {
+      /* Make sure the COMMON block control variable gets initialized.
+	 Note that there's no point in doing this for aliases; we only
+	 need to do this once for the main variable.  */
+      emutls_common_1 (var->decl, cdecl, (tree *)data);
+    }
+  if (var->alias && !var->alias_of)
+    cvar->alias = true;
+
+  /* Indicate that the value of the TLS variable may be found elsewhere,
+     preventing the variable from re-appearing in the GIMPLE.  We cheat
+     and use the control variable here (rather than a full call_expr),
+     which is special-cased inside the DWARF2 output routines.  */
+  SET_DECL_VALUE_EXPR (var->decl, cdecl);
+  DECL_HAS_VALUE_EXPR_P (var->decl) = 1;
+  return false;
+}
+
 /* Main entry point to the tls lowering pass.  */
 
 static unsigned int
@@ -706,6 +747,8 @@ ipa_lower_emutls (void)
 	gcc_checking_assert (TREE_STATIC (var->decl)
 			     || DECL_EXTERNAL (var->decl));
 	varpool_node_set_add (tls_vars, var);
+	if (var->alias && var->analyzed)
+	  varpool_node_set_add (tls_vars, varpool_variable_node (var, NULL));
       }
 
   /* If we found no TLS variables, then there is no further work to do.  */
@@ -726,34 +769,12 @@ ipa_lower_emutls (void)
   /* Create the control variables for each TLS variable.  */
   FOR_EACH_VEC_ELT (varpool_node_ptr, tls_vars->nodes, i, var)
     {
-      tree cdecl;
-      struct varpool_node *cvar;
-
       var = VEC_index (varpool_node_ptr, tls_vars->nodes, i);
-      cdecl = new_emutls_decl (var->decl);
 
-      cvar = varpool_get_node (cdecl);
-      VEC_quick_push (varpool_node_ptr, control_vars, cvar);
-
-      if (var->alias)
-	{
-	  any_aliases = true;
-	  cvar->alias = true;
-	}
-      else
-	{
-	  /* Make sure the COMMON block control variable gets initialized.
-	     Note that there's no point in doing this for aliases; we only
-	     need to do this once for the main variable.  */
-          emutls_common_1 (var->decl, cdecl, &ctor_body);
-	}
-
-      /* Indicate that the value of the TLS variable may be found elsewhere,
-	 preventing the variable from re-appearing in the GIMPLE.  We cheat
-	 and use the control variable here (rather than a full call_expr),
-	 which is special-cased inside the DWARF2 output routines.  */
-      SET_DECL_VALUE_EXPR (var->decl, cdecl);
-      DECL_HAS_VALUE_EXPR_P (var->decl) = 1;
+      if (var->alias && !var->alias_of)
+	any_aliases = true;
+      else if (!var->alias)
+	varpool_for_node_and_aliases (var, create_emultls_var, &ctor_body, true);
     }
 
   /* If there were any aliases, then frob the alias_pairs vector.  */
@@ -779,9 +800,9 @@ ipa_lower_emutls (void)
 
   VEC_free (varpool_node_ptr, heap, control_vars);
   VEC_free (tree, heap, access_vars);
-  tls_vars = NULL;
+  free_varpool_node_set (tls_vars);
 
-  return TODO_dump_func | TODO_ggc_collect | TODO_verify_all;
+  return TODO_ggc_collect | TODO_verify_all;
 }
 
 /* If the target supports TLS natively, we need do nothing here.  */

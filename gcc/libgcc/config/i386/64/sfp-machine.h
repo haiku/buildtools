@@ -1,14 +1,8 @@
 #define _FP_W_TYPE_SIZE		64
 
-#ifdef _WIN64
- #define _FP_W_TYPE		unsigned long long
- #define _FP_WS_TYPE		signed long long
- #define _FP_I_TYPE		long long
-#else
- #define _FP_W_TYPE		unsigned long
- #define _FP_WS_TYPE		signed long
- #define _FP_I_TYPE		long
-#endif
+#define _FP_W_TYPE		unsigned long long
+#define _FP_WS_TYPE		signed long long
+#define _FP_I_TYPE		long long
 
 typedef int TItype __attribute__ ((mode (TI)));
 typedef unsigned int UTItype __attribute__ ((mode (TI)));
@@ -55,6 +49,7 @@ typedef int __gcc_CMPtype __attribute__ ((mode (__libgcc_cmp_return__)));
     R##_c = FP_CLS_NAN;						\
   } while (0)
 
+#ifndef _SOFT_FLOAT
 #define FP_EX_INVALID		0x01
 #define FP_EX_DENORM		0x02
 #define FP_EX_DIVZERO		0x04
@@ -139,6 +134,7 @@ struct fenv
   } while (0)
 
 #define FP_ROUNDMODE		(_fcw & 0xc00)
+#endif
 
 #define	__LITTLE_ENDIAN	1234
 #define	__BIG_ENDIAN	4321

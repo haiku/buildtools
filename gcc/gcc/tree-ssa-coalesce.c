@@ -1,5 +1,5 @@
 /* Coalesce SSA_NAMES together for the out-of-ssa pass.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
 
@@ -242,8 +242,7 @@ delete_coalesce_list (coalesce_list_p cl)
 {
   gcc_assert (cl->cost_one_list == NULL);
   htab_delete (cl->list);
-  if (cl->sorted)
-    free (cl->sorted);
+  free (cl->sorted);
   gcc_assert (cl->num_sorted == 0);
   free (cl);
 }

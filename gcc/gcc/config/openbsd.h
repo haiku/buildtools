@@ -1,5 +1,5 @@
 /* Base configuration file for all OpenBSD targets.
-   Copyright (C) 1999, 2000, 2004, 2005, 2007, 2009, 2010
+   Copyright (C) 1999, 2000, 2004, 2005, 2007, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -59,7 +59,7 @@ along with GCC; see the file COPYING3.  If not see
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },	\
     { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1 }, \
     { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1 }, \
-    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0 }, \
+    { NATIVE_SYSTEM_HEADER_DIR, NATIVE_SYSTEM_HEADER_COMPONENT, 0, 0 }, \
     { 0, 0, 0, 0 }				\
   }
 
@@ -281,20 +281,4 @@ do {									 \
 /* Storage layout.  */
 
 
-/* Stack is explicitly denied execution rights on OpenBSD platforms.  */
-#define ENABLE_EXECUTE_STACK						\
-extern void __enable_execute_stack (void *);				\
-void									\
-__enable_execute_stack (void *addr)					\
-{									\
-  long size = getpagesize ();						\
-  long mask = ~(size-1);						\
-  char *page = (char *) (((long) addr) & mask); 			\
-  char *end  = (char *) ((((long) (addr + TRAMPOLINE_SIZE)) & mask) + size); \
-								      \
-  if (mprotect (page, end - page, PROT_READ | PROT_WRITE | PROT_EXEC) < 0) \
-    perror ("mprotect of trampoline code");				\
-}
-
-#include <sys/types.h>
-#include <sys/mman.h>
+#define HAVE_ENABLE_EXECUTE_STACK
