@@ -361,8 +361,12 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
+    { "/boot/common/non-packaged/develop/headers", 0, 0, 0 },\
     { "/boot/common/non-packaged/include", 0, 0, 0 },\
+    	/* TODO: To be removed. */\
+    { "/boot/common/develop/headers", 0, 0, 0 },\
     { "/boot/common/include", 0, 0, 0 },\
+    	/* TODO: To be removed. */\
     { "/boot/common/develop/headers", 0, 0, 0 },\
     { "/boot/system/develop/headers/os", 0, 0, 1 },\
     { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
@@ -439,6 +443,16 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 /* Whee.  LIBRARY_PATH is Haiku's LD_LIBRARY_PATH, which of course will
    cause nasty problems if we override it.  */
 #define LIBRARY_PATH_ENV        "BELIBRARIES"
+
+/* With STANDARD_STARTFILE_PREFIX_{1,2} set to "/boot/common/develop/lib/"
+   and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
+   standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
+#undef MD_STARTFILE_PREFIX
+#define MD_STARTFILE_PREFIX		"/boot/common/non-packaged/develop/lib/"
+
+/* TODO: To be removed. */
+#undef MD_STARTFILE_PREFIX_1
+#define MD_STARTFILE_PREFIX_1	"/boot/common/lib/"
 
 /* Haiku doesn't have a separate math library.  */
 #define MATH_LIBRARY ""
