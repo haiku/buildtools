@@ -1,5 +1,5 @@
 # Power E500MC tests
-	.section ".text"
+	.text
 start:
 	rfdi
 	rfgi
@@ -9,6 +9,11 @@ start:
 	msgclr	13
 	msgsnd	14
 	wait
+	wait 0
+	waitrsv
+	wait 1
+	waitimpl
+	wait 2
 	mdors
 	ehpriv
 	dsn	24, 25

@@ -57,9 +57,11 @@
 #ifndef _BACKWARD_HASH_FUN_H
 #define _BACKWARD_HASH_FUN_H 1
 
-#include <cstddef>
+#include <bits/c++config.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   using std::size_t;
 
@@ -163,6 +165,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       { return __x; }
     };
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif

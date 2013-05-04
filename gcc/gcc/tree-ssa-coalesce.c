@@ -25,13 +25,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "flags.h"
-#include "diagnostic.h"
+#include "tree-pretty-print.h"
 #include "bitmap.h"
 #include "tree-flow.h"
 #include "hashtab.h"
 #include "tree-dump.h"
 #include "tree-ssa-live.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 
 
 /* This set of routines implements a coalesce_list.  This is an object which
@@ -546,11 +546,9 @@ ssa_conflicts_test_p (ssa_conflicts_p ptr, unsigned x, unsigned y)
 {
   bitmap b;
 
-#ifdef ENABLE_CHECKING
-  gcc_assert (x < ptr->size);
-  gcc_assert (y < ptr->size);
-  gcc_assert (x != y);
-#endif
+  gcc_checking_assert (x < ptr->size);
+  gcc_checking_assert (y < ptr->size);
+  gcc_checking_assert (x != y);
 
   b = ptr->conflicts[x];
   if (b)
@@ -578,11 +576,9 @@ ssa_conflicts_add_one (ssa_conflicts_p ptr, unsigned x, unsigned y)
 static inline void
 ssa_conflicts_add (ssa_conflicts_p ptr, unsigned x, unsigned y)
 {
-#ifdef ENABLE_CHECKING
-  gcc_assert (x < ptr->size);
-  gcc_assert (y < ptr->size);
-  gcc_assert (x != y);
-#endif
+  gcc_checking_assert (x < ptr->size);
+  gcc_checking_assert (y < ptr->size);
+  gcc_checking_assert (x != y);
   ssa_conflicts_add_one (ptr, x, y);
   ssa_conflicts_add_one (ptr, y, x);
 }
@@ -724,11 +720,8 @@ live_track_add_partition (live_track_p ptr, int partition)
   root = basevar_index (ptr->map, partition);
   /* If this base var wasn't live before, it is now.  Clear the element list
      since it was delayed until needed.  */
-  if (!bitmap_bit_p (ptr->live_base_var, root))
-    {
-      bitmap_set_bit (ptr->live_base_var, root);
-      bitmap_clear (ptr->live_base_partitions[root]);
-    }
+  if (bitmap_set_bit (ptr->live_base_var, root))
+    bitmap_clear (ptr->live_base_partitions[root]);
   bitmap_set_bit (ptr->live_base_partitions[root], partition);
 
 }
@@ -1380,7 +1373,7 @@ coalesce_ssa_name (void)
 
 	  if (a
 	      && SSA_NAME_VAR (a)
-	      && !DECL_ARTIFICIAL (SSA_NAME_VAR (a))
+	      && !DECL_IGNORED_P (SSA_NAME_VAR (a))
 	      && (!has_zero_uses (a) || !SSA_NAME_IS_DEFAULT_DEF (a)))
 	    {
 	      tree *slot = (tree *) htab_find_slot (ssa_name_hash, a, INSERT);

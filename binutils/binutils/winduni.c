@@ -1,5 +1,5 @@
 /* winduni.c -- unicode support for the windres program.
-   Copyright 1997, 1998, 2000, 2001, 2003, 2007
+   Copyright 1997, 1998, 2000, 2001, 2003, 2005, 2007, 2009
    Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Rewritten by Kai Tietz, Onevision.
@@ -42,7 +42,7 @@
 #include "winduni.h"
 #include "safe-ctype.h"
 
-#if HAVE_ICONV_H
+#if HAVE_ICONV
 #include <iconv.h>
 #endif
 
@@ -192,6 +192,94 @@ void
 unicode_from_ascii (rc_uint_type *length, unichar **unicode, const char *ascii)
 {
   unicode_from_codepage (length, unicode, ascii, wind_current_codepage);
+}
+
+/* Convert an ASCII string with length A_LENGTH to a unicode string.  We just
+   copy it, expanding chars to shorts, rather than doing something intelligent.
+   This routine converts also \0 within a string.  */
+
+void
+unicode_from_ascii_len (rc_uint_type *length, unichar **unicode, const char *ascii, rc_uint_type a_length)
+{
+  char *tmp, *p;
+  rc_uint_type tlen, elen, idx = 0;
+
+  *unicode = NULL;
+
+  if (!a_length)
+    {
+      if (length)
+        *length = 0;
+      return;
+    }
+
+  /* Make sure we have zero terminated string.  */
+  p = tmp = (char *) alloca (a_length + 1);
+  memcpy (tmp, ascii, a_length);
+  tmp[a_length] = 0;
+
+  while (a_length > 0)
+    {
+      unichar *utmp, *up;
+
+      tlen = strlen (p);
+
+      if (tlen > a_length)
+        tlen = a_length;
+      if (*p == 0)
+        {
+	  /* Make room for one more character.  */
+	  utmp = (unichar *) res_alloc (sizeof (unichar) * (idx + 1));
+	  if (idx > 0)
+	    {
+	      memcpy (utmp, *unicode, idx * sizeof (unichar));
+	    }
+	  *unicode = utmp;
+	  utmp[idx++] = 0;
+	  --a_length;
+	  p++;
+	  continue;
+	}
+      utmp = NULL;
+      elen = 0;
+      elen = wind_MultiByteToWideChar (wind_current_codepage, p, NULL, 0);
+      if (elen)
+	{
+	  utmp = ((unichar *) res_alloc (elen + sizeof (unichar) * 2));
+	  wind_MultiByteToWideChar (wind_current_codepage, p, utmp, elen);
+	  elen /= sizeof (unichar);
+	  elen --;
+	}
+      else
+        {
+	  /* Make room for one more character.  */
+	  utmp = (unichar *) res_alloc (sizeof (unichar) * (idx + 1));
+	  if (idx > 0)
+	    {
+	      memcpy (utmp, *unicode, idx * sizeof (unichar));
+	    }
+	  *unicode = utmp;
+	  utmp[idx++] = ((unichar) *p) & 0xff;
+	  --a_length;
+	  p++;
+	  continue;
+	}
+      p += tlen;
+      a_length -= tlen;
+
+      up = (unichar *) res_alloc (sizeof (unichar) * (idx + elen));
+      if (idx > 0)
+	memcpy (up, *unicode, idx * sizeof (unichar));
+
+      *unicode = up;
+      if (elen)
+	memcpy (&up[idx], utmp, sizeof (unichar) * elen);
+
+      idx += elen;
+    }
+
+  if (length)
+    *length = idx;
 }
 
 /* Convert an unicode string to an ASCII string.  We just copy it,
@@ -616,16 +704,16 @@ codepage_from_unicode (rc_uint_type *length, const unichar *unicode, char **asci
     *length = len;
 }
 
-#ifdef HAVE_ICONV_H
+#if defined (HAVE_ICONV) && !defined (_WIN32) && !defined (__CYGWIN__)
 static int
-iconv_onechar (iconv_t cd, const char *s, char *d, int d_len, const char **n_s, char **n_d)
+iconv_onechar (iconv_t cd, ICONV_CONST char *s, char *d, int d_len, const char **n_s, char **n_d)
 {
   int i;
 
   for (i = 1; i <= 32; i++)
     {
       char *tmp_d = d;
-      const char *tmp_s = s;
+      ICONV_CONST char *tmp_s = s;
       size_t ret;
       size_t s_left = (size_t) i;
       size_t d_left = (size_t) d_len;
@@ -652,7 +740,7 @@ wind_iconv_cp (rc_uint_type cp)
     return NULL;
   return lim->iconv_name;
 }
-#endif /* HAVE_ICONV_H */
+#endif /* HAVE_ICONV */
 
 static rc_uint_type
 wind_MultiByteToWideChar (rc_uint_type cp, const char *mb,
@@ -661,12 +749,20 @@ wind_MultiByteToWideChar (rc_uint_type cp, const char *mb,
   rc_uint_type ret = 0;
 
 #if defined (_WIN32) || defined (__CYGWIN__)
-  ret = (rc_uint_type) MultiByteToWideChar (cp, MB_PRECOMPOSED,
+  rc_uint_type conv_flags = MB_PRECOMPOSED;
+
+  /* MB_PRECOMPOSED is not allowed for UTF-7 or UTF-8.  
+     MultiByteToWideChar will set the last error to
+     ERROR_INVALID_FLAGS if we do. */
+  if (cp == CP_UTF8 || cp == CP_UTF7)
+    conv_flags = 0;
+
+  ret = (rc_uint_type) MultiByteToWideChar (cp, conv_flags,
 					    mb, -1, u, u_len);
   /* Convert to bytes. */
   ret *= sizeof (unichar);
 
-#elif defined (HAVE_ICONV_H)
+#elif defined (HAVE_ICONV)
   int first = 1;
   char tmp[32];
   char *p_tmp;
@@ -679,11 +775,11 @@ wind_MultiByteToWideChar (rc_uint_type cp, const char *mb,
   while (1)
     {
       int iret;
-      const char *n_mb;
-      char *n_tmp;
+      const char *n_mb = "";
+      char *n_tmp = "";
 
       p_tmp = tmp;
-      iret = iconv_onechar (cd, (const char *) mb, p_tmp, 32, & n_mb, & n_tmp);
+      iret = iconv_onechar (cd, (ICONV_CONST char *) mb, p_tmp, 32, & n_mb, & n_tmp);
       if (first)
 	{
 	  first = 0;
@@ -739,7 +835,7 @@ wind_WideCharToMultiByte (rc_uint_type cp, const unichar *u, char *mb, rc_uint_t
 
   ret = (rc_uint_type) WideCharToMultiByte (cp, 0, u, -1, mb, mb_len,
 				      	    NULL, & used_def);
-#elif defined (HAVE_ICONV_H)
+#elif defined (HAVE_ICONV)
   int first = 1;
   char tmp[32];
   char *p_tmp;
@@ -752,11 +848,11 @@ wind_WideCharToMultiByte (rc_uint_type cp, const unichar *u, char *mb, rc_uint_t
   while (1)
     {
       int iret;
-      const char *n_u;
-      char *n_tmp;
+      const char *n_u = "";
+      char *n_tmp = "";
 
       p_tmp = tmp;
-      iret = iconv_onechar (cd, (const char *) u, p_tmp, 32, &n_u, & n_tmp);
+      iret = iconv_onechar (cd, (ICONV_CONST char *) u, p_tmp, 32, &n_u, & n_tmp);
       if (first)
 	{
 	  first = 0;

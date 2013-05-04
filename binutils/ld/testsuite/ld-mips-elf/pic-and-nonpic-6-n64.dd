@@ -19,7 +19,7 @@ Disassembly of section \.plt:
 .*:	ddd91000 	ld	t9,4096\(t2\)
 .*:	25ce1000 	addiu	t2,t2,4096
 .*:	030ec023 	subu	t8,t8,t2
-.*:	03e07821 	move	t3,ra
+.*:	03e0782d 	move	t3,ra
 .*:	0018c0c2 	srl	t8,t8,0x3
 .*:	0320f809 	jalr	t9
 .*:	2718fffe 	addiu	t8,t8,-2
@@ -27,21 +27,20 @@ Disassembly of section \.plt:
 0+430a0 <extf4@plt>:
 .*:	3c0f0008 	lui	t3,0x8
 .*:	ddf91010 	ld	t9,4112\(t3\)
-.*:	25f81010 	addiu	t8,t3,4112
 .*:	03200008 	jr	t9
+.*:	25f81010 	addiu	t8,t3,4112
 
 0+430b0 <extf5@plt>:
 .*:	3c0f0008 	lui	t3,0x8
 .*:	ddf91018 	ld	t9,4120\(t3\)
-.*:	25f81018 	addiu	t8,t3,4120
 .*:	03200008 	jr	t9
+.*:	25f81018 	addiu	t8,t3,4120
 
 0+430c0 <extf3@plt>:
 .*:	3c0f0008 	lui	t3,0x8
 .*:	ddf91020 	ld	t9,4128\(t3\)
-.*:	25f81020 	addiu	t8,t3,4128
 .*:	03200008 	jr	t9
-.*:	00000000 	nop
+.*:	25f81020 	addiu	t8,t3,4128
 
 Disassembly of section \.text:
 
@@ -98,5 +97,5 @@ Disassembly of section \.MIPS\.stubs:
    440a0:	df998010 	ld	t9,-32752\(gp\)
    440a4:	03e0782d 	move	t3,ra
    440a8:	0320f809 	jalr	t9
-   440ac:	6418000a 	daddiu	t8,zero,10
+   440ac:	64180009 	daddiu	t8,zero,9
 	\.\.\.

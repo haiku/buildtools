@@ -23,15 +23,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
-#include "rtl.h"
-#include "real.h"
 #include "flags.h"
 #include "tree-flow.h"
 #include "gimple.h"
 #include "tree-iterator.h"
 #include "tree-pass.h"
 #include "tree-ssa-propagate.h"
-#include "diagnostic.h"
 
 
 /* For each complex ssa name, a lattice value.  We're interested in finding
@@ -177,7 +174,7 @@ init_parameter_lattice_values (void)
 {
   tree parm, ssa_name;
 
-  for (parm = DECL_ARGUMENTS (cfun->decl); parm ; parm = TREE_CHAIN (parm))
+  for (parm = DECL_ARGUMENTS (cfun->decl); parm ; parm = DECL_CHAIN (parm))
     if (is_complex_reg (parm)
 	&& var_ann (parm) != NULL
 	&& (ssa_name = gimple_default_def (cfun, parm)) != NULL_TREE)
@@ -599,10 +596,10 @@ extract_component (gimple_stmt_iterator *gsi, tree t, bool imagpart_p,
     case VAR_DECL:
     case RESULT_DECL:
     case PARM_DECL:
-    case INDIRECT_REF:
     case COMPONENT_REF:
     case ARRAY_REF:
     case VIEW_CONVERT_EXPR:
+    case MEM_REF:
       {
 	tree inner_type = TREE_TYPE (TREE_TYPE (t));
 
@@ -687,7 +684,7 @@ update_parameter_components (void)
   edge entry_edge = single_succ_edge (ENTRY_BLOCK_PTR);
   tree parm;
 
-  for (parm = DECL_ARGUMENTS (cfun->decl); parm ; parm = TREE_CHAIN (parm))
+  for (parm = DECL_ARGUMENTS (cfun->decl); parm ; parm = DECL_CHAIN (parm))
     {
       tree type = TREE_TYPE (parm);
       tree ssa_name, r, i;
@@ -785,17 +782,14 @@ expand_complex_move (gimple_stmt_iterator *gsi, tree type)
     {
       if (is_ctrl_altering_stmt (stmt))
 	{
-	  edge_iterator ei;
 	  edge e;
 
 	  /* The value is not assigned on the exception edges, so we need not
 	     concern ourselves there.  We do need to update on the fallthru
 	     edge.  Find it.  */
-	  FOR_EACH_EDGE (e, ei, gsi_bb (*gsi)->succs)
-	    if (e->flags & EDGE_FALLTHRU)
-	      goto found_fallthru;
-	  gcc_unreachable ();
-	found_fallthru:
+	  e = find_fallthru_edge (gsi_bb (*gsi)->succs);
+	  if (!e)
+	    gcc_unreachable ();
 
 	  r = build1 (REALPART_EXPR, inner_type, lhs);
 	  i = build1 (IMAGPART_EXPR, inner_type, lhs);
@@ -1406,6 +1400,36 @@ expand_complex_comparison (gimple_stmt_iterator *gsi, tree ar, tree ai,
   update_stmt (stmt);
 }
 
+/* Expand inline asm that sets some complex SSA_NAMEs.  */
+
+static void
+expand_complex_asm (gimple_stmt_iterator *gsi)
+{
+  gimple stmt = gsi_stmt (*gsi);
+  unsigned int i;
+
+  for (i = 0; i < gimple_asm_noutputs (stmt); ++i)
+    {
+      tree link = gimple_asm_output_op (stmt, i);
+      tree op = TREE_VALUE (link);
+      if (TREE_CODE (op) == SSA_NAME
+	  && TREE_CODE (TREE_TYPE (op)) == COMPLEX_TYPE)
+	{
+	  tree type = TREE_TYPE (op);
+	  tree inner_type = TREE_TYPE (type);
+	  tree r = build1 (REALPART_EXPR, inner_type, op);
+	  tree i = build1 (IMAGPART_EXPR, inner_type, op);
+	  gimple_seq list = set_component_ssa_name (op, false, r);
+
+	  if (list)
+	    gsi_insert_seq_after (gsi, list, GSI_CONTINUE_LINKING);
+
+	  list = set_component_ssa_name (op, true, i);
+	  if (list)
+	    gsi_insert_seq_after (gsi, list, GSI_CONTINUE_LINKING);
+	}
+    }
+}
 
 /* Process one statement.  If we identify a complex operation, expand it.  */
 
@@ -1417,6 +1441,12 @@ expand_complex_operations_1 (gimple_stmt_iterator *gsi)
   tree ac, ar, ai, bc, br, bi;
   complex_lattice_t al, bl;
   enum tree_code code;
+
+  if (gimple_code (stmt) == GIMPLE_ASM)
+    {
+      expand_complex_asm (gsi);
+      return;
+    }
 
   lhs = gimple_get_lhs (stmt);
   if (!lhs && gimple_code (stmt) != GIMPLE_COND)

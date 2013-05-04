@@ -1,4 +1,4 @@
-/* Type based alias analysis.
+/* Escape analysis for types.
    Copyright (C) 2004, 2005, 2006, 2007, 2008, 2010
    Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
@@ -53,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "flags.h"
 #include "timevar.h"
 #include "diagnostic.h"
+#include "tree-pretty-print.h"
 #include "langhooks.h"
 
 /* Some of the aliasing is called very early, before this phase is
@@ -484,18 +485,13 @@ mark_type (tree type, enum escape_t escape_status)
     }
 
   uid = TYPE_UID (type);
-  if (bitmap_bit_p (map, uid))
+  if (!bitmap_set_bit (map, uid))
     return type;
-  else
-    {
-      bitmap_set_bit (map, uid);
-      if (escape_status == FULL_ESCAPE)
-	{
-	  /* Efficiency hack. When things are bad, do not mess around
-	     with this type anymore.  */
-	  bitmap_set_bit (global_types_exposed_parameter, uid);
-	}
-    }
+  else if (escape_status == FULL_ESCAPE)
+    /* Efficiency hack. When things are bad, do not mess around
+       with this type anymore.  */
+    bitmap_set_bit (global_types_exposed_parameter, uid);
+
   return type;
 }
 
@@ -1029,7 +1025,7 @@ check_function_parameter_and_return_types (tree fn, bool escapes)
 {
   tree arg;
 
-  if (TYPE_ARG_TYPES (TREE_TYPE (fn)))
+  if (prototype_p (TREE_TYPE (fn)))
     {
       for (arg = TYPE_ARG_TYPES (TREE_TYPE (fn));
 	   arg && TREE_VALUE (arg) != void_type_node;
@@ -1047,7 +1043,7 @@ check_function_parameter_and_return_types (tree fn, bool escapes)
 	 from the TYPE_ARG_LIST. However, Geoff is wrong, this code
 	 does seem to be live.  */
 
-      for (arg = DECL_ARGUMENTS (fn); arg; arg = TREE_CHAIN (arg))
+      for (arg = DECL_ARGUMENTS (fn); arg; arg = DECL_CHAIN (arg))
 	{
 	  tree type = get_canon_type (TREE_TYPE (arg), false, false);
 	  if (escapes)
@@ -1240,7 +1236,7 @@ look_for_casts (tree t)
 {
   unsigned int cast = 0;
 
-  if (is_gimple_cast (t) || TREE_CODE (t) == VIEW_CONVERT_EXPR)
+  if (CONVERT_EXPR_P (t) || TREE_CODE (t) == VIEW_CONVERT_EXPR)
     {
       tree castfromvar = TREE_OPERAND (t, 0);
       cast = cast | check_cast (TREE_TYPE (t), castfromvar);
@@ -1337,7 +1333,7 @@ check_call (gimple call)
 
       /* Check that there are no implicit casts in the passing of
 	 parameters.  */
-      if (TYPE_ARG_TYPES (TREE_TYPE (callee_t)))
+      if (prototype_p (TREE_TYPE (callee_t)))
 	{
 	  for (arg_type = TYPE_ARG_TYPES (TREE_TYPE (callee_t)), i = 0;
 	       arg_type && TREE_VALUE (arg_type) != void_type_node
@@ -1675,12 +1671,11 @@ analyze_function (struct cgraph_node *fn)
   /* There may be const decls with interesting right hand sides.  */
   if (DECL_STRUCT_FUNCTION (decl))
     {
-      tree step;
-      for (step = DECL_STRUCT_FUNCTION (decl)->local_decls;
-	   step;
-	   step = TREE_CHAIN (step))
+      tree var;
+      unsigned ix;
+
+      FOR_EACH_LOCAL_DECL (DECL_STRUCT_FUNCTION (decl), ix, var)
 	{
-	  tree var = TREE_VALUE (step);
 	  if (TREE_CODE (var) == VAR_DECL
 	      && DECL_INITIAL (var)
 	      && !TREE_STATIC (var))
@@ -1746,9 +1741,8 @@ close_type_seen (tree type)
 
   uid = TYPE_UID (type);
 
-  if (bitmap_bit_p (been_there_done_that, uid))
+  if (!bitmap_set_bit (been_there_done_that, uid))
     return;
-  bitmap_set_bit (been_there_done_that, uid);
 
   /* If we are doing a language with a type hierarchy, mark all of
      the superclasses.  */
@@ -1767,7 +1761,7 @@ close_type_seen (tree type)
      subfields.  */
   for (field = TYPE_FIELDS (type);
        field;
-       field = TREE_CHAIN (field))
+       field = DECL_CHAIN (field))
     {
       tree field_type;
       if (TREE_CODE (field) != FIELD_DECL)
@@ -1796,9 +1790,8 @@ close_type_exposed_parameter (tree type)
   uid = TYPE_UID (type);
   gcc_assert (!POINTER_TYPE_P (type));
 
-  if (bitmap_bit_p (been_there_done_that, uid))
+  if (!bitmap_set_bit (been_there_done_that, uid))
     return;
-  bitmap_set_bit (been_there_done_that, uid);
 
   /* If the field is a struct or union type, mark all of the
      subfields.  */
@@ -1851,9 +1844,8 @@ close_type_full_escape (tree type)
     return;
   uid = TYPE_UID (type);
 
-  if (bitmap_bit_p (been_there_done_that, uid))
+  if (!bitmap_set_bit (been_there_done_that, uid))
     return;
-  bitmap_set_bit (been_there_done_that, uid);
 
   subtype_map = subtype_map_for_uid (uid, false);
 
@@ -1929,9 +1921,8 @@ close_addressof_down (int uid)
   else
     return NULL;
 
-  if (bitmap_bit_p (been_there_done_that, uid))
+  if (!bitmap_set_bit (been_there_done_that, uid))
     return map;
-  bitmap_set_bit (been_there_done_that, uid);
 
   /* If the type escapes, get rid of the addressof map, it will not be
      needed.  */
@@ -2112,9 +2103,7 @@ type_escape_execute (void)
 static bool
 gate_type_escape_vars (void)
 {
-  return (flag_ipa_type_escape
-	  /* Don't bother doing anything if the program has errors.  */
-	  && !(errorcount || sorrycount));
+  return flag_ipa_struct_reorg && flag_whole_program && (optimize > 0);
 }
 
 struct simple_ipa_opt_pass pass_ipa_type_escape =

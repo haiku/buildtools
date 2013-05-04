@@ -3,7 +3,7 @@
 #
 # Makefile for directory with subdirs to build.
 #   Copyright (C) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-#   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+#   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
 #   Free Software Foundation
 #
 # This file is free software; you can redistribute it and/or modify
@@ -157,6 +157,8 @@ BUILD_EXPORTS = \
 	CXXFLAGS="$(CXXFLAGS_FOR_BUILD)"; export CXXFLAGS; \
 	GCJ="$(GCJ_FOR_BUILD)"; export GCJ; \
 	GFORTRAN="$(GFORTRAN_FOR_BUILD)"; export GFORTRAN; \
+	GOC="$(GOC_FOR_BUILD)"; export GOC; \
+	GOCFLAGS="$(GOCFLAGS_FOR_BUILD)"; export GOCFLAGS; \
 	DLLTOOL="$(DLLTOOL_FOR_BUILD)"; export DLLTOOL; \
 	LD="$(LD_FOR_BUILD)"; export LD; \
 	LDFLAGS="$(LDFLAGS_FOR_BUILD)"; export LDFLAGS; \
@@ -193,6 +195,7 @@ HOST_EXPORTS = \
 	CXXFLAGS="$(CXXFLAGS)"; export CXXFLAGS; \
 	GCJ="$(GCJ)"; export GCJ; \
 	GFORTRAN="$(GFORTRAN)"; export GFORTRAN; \
+	GOC="$(GOC)"; export GOC; \
 	AR="$(AR)"; export AR; \
 	AS="$(AS)"; export AS; \
 	CC_FOR_BUILD="$(CC_FOR_BUILD)"; export CC_FOR_BUILD; \
@@ -235,6 +238,7 @@ POSTSTAGE1_CXX_EXPORT = \
 POSTSTAGE1_CXX_EXPORT = \
 	CXX="$(STAGE_CC_WRAPPER) $$r/$(HOST_SUBDIR)/prev-gcc/g++$(exeext) \
 	  -B$$r/$(HOST_SUBDIR)/prev-gcc/ -B$(build_tooldir)/bin/ -nostdinc++ \
+	  -B$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/src/.libs \
 	  -I$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/include/$(TARGET_SUBDIR) \
 	  -I$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/include \
 	  -I$$s/libstdc++-v3/libsupc++ \
@@ -272,6 +276,7 @@ BASE_TARGET_EXPORTS = \
 	CXXFLAGS="$(CXXFLAGS_FOR_TARGET)"; export CXXFLAGS; \
 	GCJ="$(GCJ_FOR_TARGET) $(XGCC_FLAGS_FOR_TARGET) $$TFLAGS"; export GCJ; \
 	GFORTRAN="$(GFORTRAN_FOR_TARGET) $(XGCC_FLAGS_FOR_TARGET) $$TFLAGS"; export GFORTRAN; \
+	GOC="$(GOC_FOR_TARGET) $(XGCC_FLAGS_FOR_TARGET) $$TFLAGS"; export GOC; \
 	DLLTOOL="$(DLLTOOL_FOR_TARGET)"; export DLLTOOL; \
 	LD="$(COMPILER_LD_FOR_TARGET)"; export LD; \
 	LDFLAGS="$(LDFLAGS_FOR_TARGET)"; export LDFLAGS; \
@@ -338,6 +343,7 @@ CXX_FOR_BUILD = @CXX_FOR_BUILD@
 DLLTOOL_FOR_BUILD = @DLLTOOL_FOR_BUILD@
 GCJ_FOR_BUILD = @GCJ_FOR_BUILD@
 GFORTRAN_FOR_BUILD = @GFORTRAN_FOR_BUILD@
+GOC_FOR_BUILD = @GOC_FOR_BUILD@
 LDFLAGS_FOR_BUILD = @LDFLAGS_FOR_BUILD@
 LD_FOR_BUILD = @LD_FOR_BUILD@
 NM_FOR_BUILD = @NM_FOR_BUILD@
@@ -400,6 +406,7 @@ LDFLAGS = @LDFLAGS@
 LIBCFLAGS = $(CFLAGS)
 CXXFLAGS = @CXXFLAGS@
 LIBCXXFLAGS = $(CXXFLAGS) -fno-implicit-templates
+GOCFLAGS = $(CFLAGS)
 
 TFLAGS =
 
@@ -515,6 +522,7 @@ CXX_FOR_TARGET=$(STAGE_CC_WRAPPER) @CXX_FOR_TARGET@
 RAW_CXX_FOR_TARGET=$(STAGE_CC_WRAPPER) @RAW_CXX_FOR_TARGET@
 GCJ_FOR_TARGET=$(STAGE_CC_WRAPPER) @GCJ_FOR_TARGET@
 GFORTRAN_FOR_TARGET=$(STAGE_CC_WRAPPER) @GFORTRAN_FOR_TARGET@
+GOC_FOR_TARGET=$(STAGE_CC_WRAPPER) @GOC_FOR_TARGET@
 DLLTOOL_FOR_TARGET=@DLLTOOL_FOR_TARGET@
 LD_FOR_TARGET=@LD_FOR_TARGET@
 
@@ -536,6 +544,7 @@ CXXFLAGS_FOR_TARGET = @CXXFLAGS_FOR_TARGET@
 LIBCFLAGS_FOR_TARGET = $(CFLAGS_FOR_TARGET)
 LIBCXXFLAGS_FOR_TARGET = $(CXXFLAGS_FOR_TARGET) -fno-implicit-templates
 LDFLAGS_FOR_TARGET = 
+GOCFLAGS_FOR_TARGET = -O2 -g
 
 FLAGS_FOR_TARGET = @FLAGS_FOR_TARGET@
 SYSROOT_CFLAGS_FOR_TARGET = @SYSROOT_CFLAGS_FOR_TARGET@
@@ -559,11 +568,11 @@ all:
 ###
 
 # This is the list of directories that may be needed in RPATH_ENVVAR
-# so that prorgams built for the target machine work.
+# so that programs built for the target machine work.
 TARGET_LIB_PATH = $(TARGET_LIB_PATH_libstdc++-v3)$(TARGET_LIB_PATH_libmudflap)$(TARGET_LIB_PATH_libssp)$(TARGET_LIB_PATH_libgomp)$(HOST_LIB_PATH_gcc)
 
 @if target-libstdc++-v3
-TARGET_LIB_PATH_libstdc++-v3 = $$r/$(TARGET_SUBDIR)/libstdc++-v3/.libs:
+TARGET_LIB_PATH_libstdc++-v3 = $$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs:
 @endif target-libstdc++-v3
 
 @if target-libmudflap
@@ -630,6 +639,26 @@ HOST_LIB_PATH_libelf = \
   $$r/$(HOST_SUBDIR)/libelf/.libs:$$r/$(HOST_SUBDIR)/prev-libelf/.libs:
 @endif libelf
 
+
+CXX_FOR_TARGET_FLAG_TO_PASS = \
+	"CXX_FOR_TARGET=$(CXX_FOR_TARGET)"
+@if target-libstdc++-v3
+# CXX_FOR_TARGET is tricky to get right for target libs that require a
+# functional C++ compiler.  When we recurse, if we expand
+# CXX_FOR_TARGET before configuring libstdc++-v3, we won't get
+# libstdc++ include flags from the script.  Instead, we get an
+# -funconfigured-* word, so that we'll get errors if this invalid C++
+# command line is used for anything, but also so that we can use the
+# word to decide whether or not to pass on this CXX_FOR_TARGET.  If we
+# don't pass it on, sub-make will use the default definition, that
+# re-expands it at the time of use, so we'll get it right when we need
+# it.  One potential exception is the expansion of CXX_FOR_TARGET
+# passed down as part of CXX within TARGET_FLAGS, but this wouldn't
+# really work, for C++ host programs can't depend on the current-stage
+# C++ target library.
+CXX_FOR_TARGET_FLAG_TO_PASS = \
+	$(shell if echo "$(CXX_FOR_TARGET)" | grep " -funconfigured-" > /dev/null; then :; else echo '"CXX_FOR_TARGET=$(CXX_FOR_TARGET)"'; fi)
+@endif target-libstdc++-v3
 
 # Flags to pass down to all sub-makes.
 BASE_FLAGS_TO_PASS = \
@@ -698,12 +727,13 @@ BASE_FLAGS_TO_PASS = \
 	"CC_FOR_TARGET=$(CC_FOR_TARGET)" \
 	"CFLAGS_FOR_TARGET=$(CFLAGS_FOR_TARGET)" \
 	"CPPFLAGS_FOR_TARGET=$(CPPFLAGS_FOR_TARGET)" \
-	"CXX_FOR_TARGET=$(CXX_FOR_TARGET)" \
 	"CXXFLAGS_FOR_TARGET=$(CXXFLAGS_FOR_TARGET)" \
 	"DLLTOOL_FOR_TARGET=$(DLLTOOL_FOR_TARGET)" \
 	"FLAGS_FOR_TARGET=$(FLAGS_FOR_TARGET)" \
 	"GCJ_FOR_TARGET=$(GCJ_FOR_TARGET)" \
 	"GFORTRAN_FOR_TARGET=$(GFORTRAN_FOR_TARGET)" \
+	"GOC_FOR_TARGET=$(GOC_FOR_TARGET)" \
+	"GOCFLAGS_FOR_TARGET=$(GOCFLAGS_FOR_TARGET)" \
 	"LD_FOR_TARGET=$(LD_FOR_TARGET)" \
 	"LIPO_FOR_TARGET=$(LIPO_FOR_TARGET)" \
 	"LDFLAGS_FOR_TARGET=$(LDFLAGS_FOR_TARGET)" \
@@ -736,6 +766,7 @@ BASE_FLAGS_TO_PASS = \
 	"STAGEfeedback_CFLAGS=$(STAGEfeedback_CFLAGS)" \
 	"STAGEfeedback_CXXFLAGS=$(STAGEfeedback_CXXFLAGS)" \
 	"STAGEfeedback_TFLAGS=$(STAGEfeedback_TFLAGS)" \
+	$(CXX_FOR_TARGET_FLAG_TO_PASS) \
 	"TFLAGS=$(TFLAGS)" \
 	"CONFIG_SHELL=$(SHELL)" \
 	"MAKEINFO=$(MAKEINFO) $(MAKEINFOFLAGS)" 
@@ -753,6 +784,7 @@ EXTRA_HOST_FLAGS = \
 	'DLLTOOL=$(DLLTOOL)' \
 	'GCJ=$(GCJ)' \
 	'GFORTRAN=$(GFORTRAN)' \
+	'GOC=$(GOC)' \
 	'LD=$(LD)' \
 	'LIPO=$(LIPO)' \
 	'NM=$(NM)' \
@@ -801,6 +833,8 @@ EXTRA_TARGET_FLAGS = \
 	'DLLTOOL=$$(DLLTOOL_FOR_TARGET)' \
 	'GCJ=$$(GCJ_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
 	'GFORTRAN=$$(GFORTRAN_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+	'GOC=$$(GOC_FOR_TARGET) $$(XGCC_FLAGS_FOR_TARGET) $$(TFLAGS)' \
+	'GOCFLAGS=$$(GOCFLAGS_FOR_TARGET)' \
 	'LD=$(COMPILER_LD_FOR_TARGET)' \
 	'LDFLAGS=$$(LDFLAGS_FOR_TARGET)' \
 	'LIBCFLAGS=$$(LIBCFLAGS_FOR_TARGET)' \
@@ -925,12 +959,13 @@ configure-target:  \
     maybe-configure-target-libssp \
     maybe-configure-target-newlib \
     maybe-configure-target-libgcc \
+    maybe-configure-target-libquadmath \
     maybe-configure-target-libgfortran \
     maybe-configure-target-libobjc \
+    maybe-configure-target-libgo \
     maybe-configure-target-libtermcap \
     maybe-configure-target-winsup \
     maybe-configure-target-libgloss \
-    maybe-configure-target-libiberty \
     maybe-configure-target-gperf \
     maybe-configure-target-examples \
     maybe-configure-target-libffi \
@@ -1107,12 +1142,13 @@ all-target: maybe-all-target-newlib
 @if target-libgcc-no-bootstrap
 all-target: maybe-all-target-libgcc
 @endif target-libgcc-no-bootstrap
+all-target: maybe-all-target-libquadmath
 all-target: maybe-all-target-libgfortran
 all-target: maybe-all-target-libobjc
+all-target: maybe-all-target-libgo
 all-target: maybe-all-target-libtermcap
 all-target: maybe-all-target-winsup
 all-target: maybe-all-target-libgloss
-all-target: maybe-all-target-libiberty
 all-target: maybe-all-target-gperf
 all-target: maybe-all-target-examples
 all-target: maybe-all-target-libffi
@@ -1228,12 +1264,13 @@ info-target: maybe-info-target-libmudflap
 info-target: maybe-info-target-libssp
 info-target: maybe-info-target-newlib
 info-target: maybe-info-target-libgcc
+info-target: maybe-info-target-libquadmath
 info-target: maybe-info-target-libgfortran
 info-target: maybe-info-target-libobjc
+info-target: maybe-info-target-libgo
 info-target: maybe-info-target-libtermcap
 info-target: maybe-info-target-winsup
 info-target: maybe-info-target-libgloss
-info-target: maybe-info-target-libiberty
 info-target: maybe-info-target-gperf
 info-target: maybe-info-target-examples
 info-target: maybe-info-target-libffi
@@ -1342,12 +1379,13 @@ dvi-target: maybe-dvi-target-libmudflap
 dvi-target: maybe-dvi-target-libssp
 dvi-target: maybe-dvi-target-newlib
 dvi-target: maybe-dvi-target-libgcc
+dvi-target: maybe-dvi-target-libquadmath
 dvi-target: maybe-dvi-target-libgfortran
 dvi-target: maybe-dvi-target-libobjc
+dvi-target: maybe-dvi-target-libgo
 dvi-target: maybe-dvi-target-libtermcap
 dvi-target: maybe-dvi-target-winsup
 dvi-target: maybe-dvi-target-libgloss
-dvi-target: maybe-dvi-target-libiberty
 dvi-target: maybe-dvi-target-gperf
 dvi-target: maybe-dvi-target-examples
 dvi-target: maybe-dvi-target-libffi
@@ -1456,12 +1494,13 @@ pdf-target: maybe-pdf-target-libmudflap
 pdf-target: maybe-pdf-target-libssp
 pdf-target: maybe-pdf-target-newlib
 pdf-target: maybe-pdf-target-libgcc
+pdf-target: maybe-pdf-target-libquadmath
 pdf-target: maybe-pdf-target-libgfortran
 pdf-target: maybe-pdf-target-libobjc
+pdf-target: maybe-pdf-target-libgo
 pdf-target: maybe-pdf-target-libtermcap
 pdf-target: maybe-pdf-target-winsup
 pdf-target: maybe-pdf-target-libgloss
-pdf-target: maybe-pdf-target-libiberty
 pdf-target: maybe-pdf-target-gperf
 pdf-target: maybe-pdf-target-examples
 pdf-target: maybe-pdf-target-libffi
@@ -1570,12 +1609,13 @@ html-target: maybe-html-target-libmudflap
 html-target: maybe-html-target-libssp
 html-target: maybe-html-target-newlib
 html-target: maybe-html-target-libgcc
+html-target: maybe-html-target-libquadmath
 html-target: maybe-html-target-libgfortran
 html-target: maybe-html-target-libobjc
+html-target: maybe-html-target-libgo
 html-target: maybe-html-target-libtermcap
 html-target: maybe-html-target-winsup
 html-target: maybe-html-target-libgloss
-html-target: maybe-html-target-libiberty
 html-target: maybe-html-target-gperf
 html-target: maybe-html-target-examples
 html-target: maybe-html-target-libffi
@@ -1684,12 +1724,13 @@ TAGS-target: maybe-TAGS-target-libmudflap
 TAGS-target: maybe-TAGS-target-libssp
 TAGS-target: maybe-TAGS-target-newlib
 TAGS-target: maybe-TAGS-target-libgcc
+TAGS-target: maybe-TAGS-target-libquadmath
 TAGS-target: maybe-TAGS-target-libgfortran
 TAGS-target: maybe-TAGS-target-libobjc
+TAGS-target: maybe-TAGS-target-libgo
 TAGS-target: maybe-TAGS-target-libtermcap
 TAGS-target: maybe-TAGS-target-winsup
 TAGS-target: maybe-TAGS-target-libgloss
-TAGS-target: maybe-TAGS-target-libiberty
 TAGS-target: maybe-TAGS-target-gperf
 TAGS-target: maybe-TAGS-target-examples
 TAGS-target: maybe-TAGS-target-libffi
@@ -1798,12 +1839,13 @@ install-info-target: maybe-install-info-target-libmudflap
 install-info-target: maybe-install-info-target-libssp
 install-info-target: maybe-install-info-target-newlib
 install-info-target: maybe-install-info-target-libgcc
+install-info-target: maybe-install-info-target-libquadmath
 install-info-target: maybe-install-info-target-libgfortran
 install-info-target: maybe-install-info-target-libobjc
+install-info-target: maybe-install-info-target-libgo
 install-info-target: maybe-install-info-target-libtermcap
 install-info-target: maybe-install-info-target-winsup
 install-info-target: maybe-install-info-target-libgloss
-install-info-target: maybe-install-info-target-libiberty
 install-info-target: maybe-install-info-target-gperf
 install-info-target: maybe-install-info-target-examples
 install-info-target: maybe-install-info-target-libffi
@@ -1912,12 +1954,13 @@ install-pdf-target: maybe-install-pdf-target-libmudflap
 install-pdf-target: maybe-install-pdf-target-libssp
 install-pdf-target: maybe-install-pdf-target-newlib
 install-pdf-target: maybe-install-pdf-target-libgcc
+install-pdf-target: maybe-install-pdf-target-libquadmath
 install-pdf-target: maybe-install-pdf-target-libgfortran
 install-pdf-target: maybe-install-pdf-target-libobjc
+install-pdf-target: maybe-install-pdf-target-libgo
 install-pdf-target: maybe-install-pdf-target-libtermcap
 install-pdf-target: maybe-install-pdf-target-winsup
 install-pdf-target: maybe-install-pdf-target-libgloss
-install-pdf-target: maybe-install-pdf-target-libiberty
 install-pdf-target: maybe-install-pdf-target-gperf
 install-pdf-target: maybe-install-pdf-target-examples
 install-pdf-target: maybe-install-pdf-target-libffi
@@ -2026,12 +2069,13 @@ install-html-target: maybe-install-html-target-libmudflap
 install-html-target: maybe-install-html-target-libssp
 install-html-target: maybe-install-html-target-newlib
 install-html-target: maybe-install-html-target-libgcc
+install-html-target: maybe-install-html-target-libquadmath
 install-html-target: maybe-install-html-target-libgfortran
 install-html-target: maybe-install-html-target-libobjc
+install-html-target: maybe-install-html-target-libgo
 install-html-target: maybe-install-html-target-libtermcap
 install-html-target: maybe-install-html-target-winsup
 install-html-target: maybe-install-html-target-libgloss
-install-html-target: maybe-install-html-target-libiberty
 install-html-target: maybe-install-html-target-gperf
 install-html-target: maybe-install-html-target-examples
 install-html-target: maybe-install-html-target-libffi
@@ -2140,12 +2184,13 @@ installcheck-target: maybe-installcheck-target-libmudflap
 installcheck-target: maybe-installcheck-target-libssp
 installcheck-target: maybe-installcheck-target-newlib
 installcheck-target: maybe-installcheck-target-libgcc
+installcheck-target: maybe-installcheck-target-libquadmath
 installcheck-target: maybe-installcheck-target-libgfortran
 installcheck-target: maybe-installcheck-target-libobjc
+installcheck-target: maybe-installcheck-target-libgo
 installcheck-target: maybe-installcheck-target-libtermcap
 installcheck-target: maybe-installcheck-target-winsup
 installcheck-target: maybe-installcheck-target-libgloss
-installcheck-target: maybe-installcheck-target-libiberty
 installcheck-target: maybe-installcheck-target-gperf
 installcheck-target: maybe-installcheck-target-examples
 installcheck-target: maybe-installcheck-target-libffi
@@ -2254,12 +2299,13 @@ mostlyclean-target: maybe-mostlyclean-target-libmudflap
 mostlyclean-target: maybe-mostlyclean-target-libssp
 mostlyclean-target: maybe-mostlyclean-target-newlib
 mostlyclean-target: maybe-mostlyclean-target-libgcc
+mostlyclean-target: maybe-mostlyclean-target-libquadmath
 mostlyclean-target: maybe-mostlyclean-target-libgfortran
 mostlyclean-target: maybe-mostlyclean-target-libobjc
+mostlyclean-target: maybe-mostlyclean-target-libgo
 mostlyclean-target: maybe-mostlyclean-target-libtermcap
 mostlyclean-target: maybe-mostlyclean-target-winsup
 mostlyclean-target: maybe-mostlyclean-target-libgloss
-mostlyclean-target: maybe-mostlyclean-target-libiberty
 mostlyclean-target: maybe-mostlyclean-target-gperf
 mostlyclean-target: maybe-mostlyclean-target-examples
 mostlyclean-target: maybe-mostlyclean-target-libffi
@@ -2368,12 +2414,13 @@ clean-target: maybe-clean-target-libmudflap
 clean-target: maybe-clean-target-libssp
 clean-target: maybe-clean-target-newlib
 clean-target: maybe-clean-target-libgcc
+clean-target: maybe-clean-target-libquadmath
 clean-target: maybe-clean-target-libgfortran
 clean-target: maybe-clean-target-libobjc
+clean-target: maybe-clean-target-libgo
 clean-target: maybe-clean-target-libtermcap
 clean-target: maybe-clean-target-winsup
 clean-target: maybe-clean-target-libgloss
-clean-target: maybe-clean-target-libiberty
 clean-target: maybe-clean-target-gperf
 clean-target: maybe-clean-target-examples
 clean-target: maybe-clean-target-libffi
@@ -2482,12 +2529,13 @@ distclean-target: maybe-distclean-target-libmudflap
 distclean-target: maybe-distclean-target-libssp
 distclean-target: maybe-distclean-target-newlib
 distclean-target: maybe-distclean-target-libgcc
+distclean-target: maybe-distclean-target-libquadmath
 distclean-target: maybe-distclean-target-libgfortran
 distclean-target: maybe-distclean-target-libobjc
+distclean-target: maybe-distclean-target-libgo
 distclean-target: maybe-distclean-target-libtermcap
 distclean-target: maybe-distclean-target-winsup
 distclean-target: maybe-distclean-target-libgloss
-distclean-target: maybe-distclean-target-libiberty
 distclean-target: maybe-distclean-target-gperf
 distclean-target: maybe-distclean-target-examples
 distclean-target: maybe-distclean-target-libffi
@@ -2596,12 +2644,13 @@ maintainer-clean-target: maybe-maintainer-clean-target-libmudflap
 maintainer-clean-target: maybe-maintainer-clean-target-libssp
 maintainer-clean-target: maybe-maintainer-clean-target-newlib
 maintainer-clean-target: maybe-maintainer-clean-target-libgcc
+maintainer-clean-target: maybe-maintainer-clean-target-libquadmath
 maintainer-clean-target: maybe-maintainer-clean-target-libgfortran
 maintainer-clean-target: maybe-maintainer-clean-target-libobjc
+maintainer-clean-target: maybe-maintainer-clean-target-libgo
 maintainer-clean-target: maybe-maintainer-clean-target-libtermcap
 maintainer-clean-target: maybe-maintainer-clean-target-winsup
 maintainer-clean-target: maybe-maintainer-clean-target-libgloss
-maintainer-clean-target: maybe-maintainer-clean-target-libiberty
 maintainer-clean-target: maybe-maintainer-clean-target-gperf
 maintainer-clean-target: maybe-maintainer-clean-target-examples
 maintainer-clean-target: maybe-maintainer-clean-target-libffi
@@ -2765,12 +2814,13 @@ check-target:  \
     maybe-check-target-libssp \
     maybe-check-target-newlib \
     maybe-check-target-libgcc \
+    maybe-check-target-libquadmath \
     maybe-check-target-libgfortran \
     maybe-check-target-libobjc \
+    maybe-check-target-libgo \
     maybe-check-target-libtermcap \
     maybe-check-target-winsup \
     maybe-check-target-libgloss \
-    maybe-check-target-libiberty \
     maybe-check-target-gperf \
     maybe-check-target-examples \
     maybe-check-target-libffi \
@@ -2986,12 +3036,13 @@ install-target:  \
     maybe-install-target-libssp \
     maybe-install-target-newlib \
     maybe-install-target-libgcc \
+    maybe-install-target-libquadmath \
     maybe-install-target-libgfortran \
     maybe-install-target-libobjc \
+    maybe-install-target-libgo \
     maybe-install-target-libtermcap \
     maybe-install-target-winsup \
     maybe-install-target-libgloss \
-    maybe-install-target-libiberty \
     maybe-install-target-gperf \
     maybe-install-target-examples \
     maybe-install-target-libffi \
@@ -3023,6 +3074,120 @@ install.all: install-no-fixedincludes
 .PHONY: install-no-fixedincludes
 install-no-fixedincludes: installdirs install-host-nogcc \
 	install-target gcc-no-fixedincludes
+
+.PHONY: install-strip
+install-strip:
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(MAKE) $(RECURSE_FLAGS_TO_PASS) installdirs install-strip-host install-strip-target
+
+.PHONY: install-strip-host
+install-strip-host:  \
+    maybe-install-strip-ash \
+    maybe-install-strip-autoconf \
+    maybe-install-strip-automake \
+    maybe-install-strip-bash \
+    maybe-install-strip-bfd \
+    maybe-install-strip-opcodes \
+    maybe-install-strip-binutils \
+    maybe-install-strip-bison \
+    maybe-install-strip-byacc \
+    maybe-install-strip-bzip2 \
+    maybe-install-strip-cgen \
+    maybe-install-strip-dejagnu \
+    maybe-install-strip-diff \
+    maybe-install-strip-dosutils \
+    maybe-install-strip-etc \
+    maybe-install-strip-fastjar \
+    maybe-install-strip-fileutils \
+    maybe-install-strip-findutils \
+    maybe-install-strip-find \
+    maybe-install-strip-fixincludes \
+    maybe-install-strip-flex \
+    maybe-install-strip-gas \
+    maybe-install-strip-gcc \
+    maybe-install-strip-gawk \
+    maybe-install-strip-gettext \
+    maybe-install-strip-gmp \
+    maybe-install-strip-mpfr \
+    maybe-install-strip-mpc \
+    maybe-install-strip-ppl \
+    maybe-install-strip-cloog \
+    maybe-install-strip-libelf \
+    maybe-install-strip-gnuserv \
+    maybe-install-strip-gold \
+    maybe-install-strip-gprof \
+    maybe-install-strip-gzip \
+    maybe-install-strip-hello \
+    maybe-install-strip-indent \
+    maybe-install-strip-intl \
+    maybe-install-strip-tcl \
+    maybe-install-strip-itcl \
+    maybe-install-strip-ld \
+    maybe-install-strip-libcpp \
+    maybe-install-strip-libdecnumber \
+    maybe-install-strip-libgui \
+    maybe-install-strip-libiberty \
+    maybe-install-strip-libiconv \
+    maybe-install-strip-libtool \
+    maybe-install-strip-m4 \
+    maybe-install-strip-make \
+    maybe-install-strip-mmalloc \
+    maybe-install-strip-patch \
+    maybe-install-strip-perl \
+    maybe-install-strip-prms \
+    maybe-install-strip-rcs \
+    maybe-install-strip-readline \
+    maybe-install-strip-release \
+    maybe-install-strip-recode \
+    maybe-install-strip-sed \
+    maybe-install-strip-send-pr \
+    maybe-install-strip-shellutils \
+    maybe-install-strip-sid \
+    maybe-install-strip-sim \
+    maybe-install-strip-tar \
+    maybe-install-strip-texinfo \
+    maybe-install-strip-textutils \
+    maybe-install-strip-time \
+    maybe-install-strip-uudecode \
+    maybe-install-strip-wdiff \
+    maybe-install-strip-zip \
+    maybe-install-strip-zlib \
+    maybe-install-strip-gdb \
+    maybe-install-strip-expect \
+    maybe-install-strip-guile \
+    maybe-install-strip-tk \
+    maybe-install-strip-libtermcap \
+    maybe-install-strip-utils \
+    maybe-install-strip-gnattools \
+    maybe-install-strip-lto-plugin
+
+.PHONY: install-strip-target
+install-strip-target:  \
+    maybe-install-strip-target-libstdc++-v3 \
+    maybe-install-strip-target-libmudflap \
+    maybe-install-strip-target-libssp \
+    maybe-install-strip-target-newlib \
+    maybe-install-strip-target-libgcc \
+    maybe-install-strip-target-libquadmath \
+    maybe-install-strip-target-libgfortran \
+    maybe-install-strip-target-libobjc \
+    maybe-install-strip-target-libgo \
+    maybe-install-strip-target-libtermcap \
+    maybe-install-strip-target-winsup \
+    maybe-install-strip-target-libgloss \
+    maybe-install-strip-target-gperf \
+    maybe-install-strip-target-examples \
+    maybe-install-strip-target-libffi \
+    maybe-install-strip-target-libjava \
+    maybe-install-strip-target-zlib \
+    maybe-install-strip-target-boehm-gc \
+    maybe-install-strip-target-qthreads \
+    maybe-install-strip-target-rda \
+    maybe-install-strip-target-libada \
+    maybe-install-strip-target-libgomp
+
 
 ### other supporting targets
 
@@ -3548,6 +3713,21 @@ install-ash: installdirs
 
 @endif ash
 
+.PHONY: install-strip-ash maybe-install-strip-ash
+maybe-install-strip-ash:
+@if ash
+maybe-install-strip-ash: install-strip-ash
+
+install-strip-ash: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/ash && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif ash
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-ash info-ash
@@ -3970,6 +4150,21 @@ install-autoconf: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/autoconf && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif autoconf
+
+.PHONY: install-strip-autoconf maybe-install-strip-autoconf
+maybe-install-strip-autoconf:
+@if autoconf
+maybe-install-strip-autoconf: install-strip-autoconf
+
+install-strip-autoconf: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/autoconf && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif autoconf
 
@@ -4398,6 +4593,21 @@ install-automake: installdirs
 
 @endif automake
 
+.PHONY: install-strip-automake maybe-install-strip-automake
+maybe-install-strip-automake:
+@if automake
+maybe-install-strip-automake: install-strip-automake
+
+install-strip-automake: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/automake && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif automake
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-automake info-automake
@@ -4820,6 +5030,21 @@ install-bash: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/bash && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif bash
+
+.PHONY: install-strip-bash maybe-install-strip-bash
+maybe-install-strip-bash:
+@if bash
+maybe-install-strip-bash: install-strip-bash
+
+install-strip-bash: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/bash && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif bash
 
@@ -5702,6 +5927,21 @@ install-bfd: installdirs
 
 @endif bfd
 
+.PHONY: install-strip-bfd maybe-install-strip-bfd
+maybe-install-strip-bfd:
+@if bfd
+maybe-install-strip-bfd: install-strip-bfd
+
+install-strip-bfd: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/bfd && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif bfd
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-bfd info-bfd
@@ -6565,6 +6805,21 @@ install-opcodes: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/opcodes && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif opcodes
+
+.PHONY: install-strip-opcodes maybe-install-strip-opcodes
+maybe-install-strip-opcodes:
+@if opcodes
+maybe-install-strip-opcodes: install-strip-opcodes
+
+install-strip-opcodes: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/opcodes && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif opcodes
 
@@ -7434,6 +7689,21 @@ install-binutils: installdirs
 
 @endif binutils
 
+.PHONY: install-strip-binutils maybe-install-strip-binutils
+maybe-install-strip-binutils:
+@if binutils
+maybe-install-strip-binutils: install-strip-binutils
+
+install-strip-binutils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/binutils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif binutils
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-binutils info-binutils
@@ -7846,6 +8116,21 @@ install-bison: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/bison && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif bison
+
+.PHONY: install-strip-bison maybe-install-strip-bison
+maybe-install-strip-bison:
+@if bison
+maybe-install-strip-bison: install-strip-bison
+
+install-strip-bison: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/bison && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif bison
 
@@ -8277,6 +8562,21 @@ install-byacc: installdirs
 
 @endif byacc
 
+.PHONY: install-strip-byacc maybe-install-strip-byacc
+maybe-install-strip-byacc:
+@if byacc
+maybe-install-strip-byacc: install-strip-byacc
+
+install-strip-byacc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/byacc && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif byacc
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-byacc info-byacc
@@ -8699,6 +8999,21 @@ install-bzip2: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/bzip2 && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif bzip2
+
+.PHONY: install-strip-bzip2 maybe-install-strip-bzip2
+maybe-install-strip-bzip2:
+@if bzip2
+maybe-install-strip-bzip2: install-strip-bzip2
+
+install-strip-bzip2: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/bzip2 && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif bzip2
 
@@ -9127,6 +9442,21 @@ install-cgen: installdirs
 
 @endif cgen
 
+.PHONY: install-strip-cgen maybe-install-strip-cgen
+maybe-install-strip-cgen:
+@if cgen
+maybe-install-strip-cgen: install-strip-cgen
+
+install-strip-cgen: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/cgen && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif cgen
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-cgen info-cgen
@@ -9549,6 +9879,21 @@ install-dejagnu: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/dejagnu && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif dejagnu
+
+.PHONY: install-strip-dejagnu maybe-install-strip-dejagnu
+maybe-install-strip-dejagnu:
+@if dejagnu
+maybe-install-strip-dejagnu: install-strip-dejagnu
+
+install-strip-dejagnu: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/dejagnu && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif dejagnu
 
@@ -9977,6 +10322,21 @@ install-diff: installdirs
 
 @endif diff
 
+.PHONY: install-strip-diff maybe-install-strip-diff
+maybe-install-strip-diff:
+@if diff
+maybe-install-strip-diff: install-strip-diff
+
+install-strip-diff: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/diff && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif diff
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-diff info-diff
@@ -10393,6 +10753,21 @@ install-dosutils: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/dosutils && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif dosutils
+
+.PHONY: install-strip-dosutils maybe-install-strip-dosutils
+maybe-install-strip-dosutils:
+@if dosutils
+maybe-install-strip-dosutils: install-strip-dosutils
+
+install-strip-dosutils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/dosutils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif dosutils
 
@@ -10818,6 +11193,21 @@ install-etc: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/etc && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif etc
+
+.PHONY: install-strip-etc maybe-install-strip-etc
+maybe-install-strip-etc:
+@if etc
+maybe-install-strip-etc: install-strip-etc
+
+install-strip-etc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/etc && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif etc
 
@@ -11249,6 +11639,21 @@ install-fastjar: installdirs
 
 @endif fastjar
 
+.PHONY: install-strip-fastjar maybe-install-strip-fastjar
+maybe-install-strip-fastjar:
+@if fastjar
+maybe-install-strip-fastjar: install-strip-fastjar
+
+install-strip-fastjar: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/fastjar && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif fastjar
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-fastjar info-fastjar
@@ -11671,6 +12076,21 @@ install-fileutils: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/fileutils && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif fileutils
+
+.PHONY: install-strip-fileutils maybe-install-strip-fileutils
+maybe-install-strip-fileutils:
+@if fileutils
+maybe-install-strip-fileutils: install-strip-fileutils
+
+install-strip-fileutils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/fileutils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif fileutils
 
@@ -12099,6 +12519,21 @@ install-findutils: installdirs
 
 @endif findutils
 
+.PHONY: install-strip-findutils maybe-install-strip-findutils
+maybe-install-strip-findutils:
+@if findutils
+maybe-install-strip-findutils: install-strip-findutils
+
+install-strip-findutils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/findutils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif findutils
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-findutils info-findutils
@@ -12521,6 +12956,21 @@ install-find: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/find && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif find
+
+.PHONY: install-strip-find maybe-install-strip-find
+maybe-install-strip-find:
+@if find
+maybe-install-strip-find: install-strip-find
+
+install-strip-find: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/find && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif find
 
@@ -12949,6 +13399,21 @@ install-fixincludes: installdirs
 
 @endif fixincludes
 
+.PHONY: install-strip-fixincludes maybe-install-strip-fixincludes
+maybe-install-strip-fixincludes:
+@if fixincludes
+maybe-install-strip-fixincludes: install-strip-fixincludes
+
+install-strip-fixincludes: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/fixincludes && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif fixincludes
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-fixincludes info-fixincludes
@@ -13358,6 +13823,21 @@ install-flex: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/flex && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif flex
+
+.PHONY: install-strip-flex maybe-install-strip-flex
+maybe-install-strip-flex:
+@if flex
+maybe-install-strip-flex: install-strip-flex
+
+install-strip-flex: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/flex && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif flex
 
@@ -14240,6 +14720,21 @@ install-gas: installdirs
 
 @endif gas
 
+.PHONY: install-strip-gas maybe-install-strip-gas
+maybe-install-strip-gas:
+@if gas
+maybe-install-strip-gas: install-strip-gas
+
+install-strip-gas: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gas && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif gas
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-gas info-gas
@@ -15106,6 +15601,21 @@ install-gcc: installdirs
 
 @endif gcc
 
+.PHONY: install-strip-gcc maybe-install-strip-gcc
+maybe-install-strip-gcc:
+@if gcc
+maybe-install-strip-gcc: install-strip-gcc
+
+install-strip-gcc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gcc && \
+	  $(MAKE) $(FLAGS_TO_PASS) $(EXTRA_GCC_FLAGS) install-strip)
+
+@endif gcc
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-gcc info-gcc
@@ -15515,6 +16025,21 @@ install-gawk: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/gawk && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif gawk
+
+.PHONY: install-strip-gawk maybe-install-strip-gawk
+maybe-install-strip-gawk:
+@if gawk
+maybe-install-strip-gawk: install-strip-gawk
+
+install-strip-gawk: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gawk && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif gawk
 
@@ -15940,6 +16465,21 @@ install-gettext: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/gettext && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif gettext
+
+.PHONY: install-strip-gettext maybe-install-strip-gettext
+maybe-install-strip-gettext:
+@if gettext
+maybe-install-strip-gettext: install-strip-gettext
+
+install-strip-gettext: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gettext && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif gettext
 
@@ -16822,6 +17362,15 @@ install-gmp:
 
 @endif gmp
 
+.PHONY: install-strip-gmp maybe-install-strip-gmp
+maybe-install-strip-gmp:
+@if gmp
+maybe-install-strip-gmp: install-strip-gmp
+
+install-strip-gmp:
+
+@endif gmp
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-gmp info-gmp
@@ -17696,6 +18245,15 @@ install-mpfr:
 
 @endif mpfr
 
+.PHONY: install-strip-mpfr maybe-install-strip-mpfr
+maybe-install-strip-mpfr:
+@if mpfr
+maybe-install-strip-mpfr: install-strip-mpfr
+
+install-strip-mpfr:
+
+@endif mpfr
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-mpfr info-mpfr
@@ -18559,6 +19117,15 @@ maybe-install-mpc:
 maybe-install-mpc: install-mpc
 
 install-mpc:
+
+@endif mpc
+
+.PHONY: install-strip-mpc maybe-install-strip-mpc
+maybe-install-strip-mpc:
+@if mpc
+maybe-install-strip-mpc: install-strip-mpc
+
+install-strip-mpc:
 
 @endif mpc
 
@@ -19428,6 +19995,15 @@ install-ppl:
 
 @endif ppl
 
+.PHONY: install-strip-ppl maybe-install-strip-ppl
+maybe-install-strip-ppl:
+@if ppl
+maybe-install-strip-ppl: install-strip-ppl
+
+install-strip-ppl:
+
+@endif ppl
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-ppl info-ppl
@@ -20291,6 +20867,15 @@ maybe-install-cloog:
 maybe-install-cloog: install-cloog
 
 install-cloog:
+
+@endif cloog
+
+.PHONY: install-strip-cloog maybe-install-strip-cloog
+maybe-install-strip-cloog:
+@if cloog
+maybe-install-strip-cloog: install-strip-cloog
+
+install-strip-cloog:
 
 @endif cloog
 
@@ -21160,6 +21745,15 @@ install-libelf:
 
 @endif libelf
 
+.PHONY: install-strip-libelf maybe-install-strip-libelf
+maybe-install-strip-libelf:
+@if libelf
+maybe-install-strip-libelf: install-strip-libelf
+
+install-strip-libelf:
+
+@endif libelf
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-libelf info-libelf
@@ -21569,6 +22163,21 @@ install-gnuserv: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/gnuserv && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif gnuserv
+
+.PHONY: install-strip-gnuserv maybe-install-strip-gnuserv
+maybe-install-strip-gnuserv:
+@if gnuserv
+maybe-install-strip-gnuserv: install-strip-gnuserv
+
+install-strip-gnuserv: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gnuserv && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif gnuserv
 
@@ -22451,6 +23060,21 @@ install-gold: installdirs
 
 @endif gold
 
+.PHONY: install-strip-gold maybe-install-strip-gold
+maybe-install-strip-gold:
+@if gold
+maybe-install-strip-gold: install-strip-gold
+
+install-strip-gold: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gold && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif gold
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-gold info-gold
@@ -22860,6 +23484,21 @@ install-gprof: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/gprof && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif gprof
+
+.PHONY: install-strip-gprof maybe-install-strip-gprof
+maybe-install-strip-gprof:
+@if gprof
+maybe-install-strip-gprof: install-strip-gprof
+
+install-strip-gprof: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gprof && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif gprof
 
@@ -23288,6 +23927,21 @@ install-gzip: installdirs
 
 @endif gzip
 
+.PHONY: install-strip-gzip maybe-install-strip-gzip
+maybe-install-strip-gzip:
+@if gzip
+maybe-install-strip-gzip: install-strip-gzip
+
+install-strip-gzip: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gzip && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif gzip
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-gzip info-gzip
@@ -23713,6 +24367,21 @@ install-hello: installdirs
 
 @endif hello
 
+.PHONY: install-strip-hello maybe-install-strip-hello
+maybe-install-strip-hello:
+@if hello
+maybe-install-strip-hello: install-strip-hello
+
+install-strip-hello: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/hello && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif hello
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-hello info-hello
@@ -24135,6 +24804,21 @@ install-indent: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/indent && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif indent
+
+.PHONY: install-strip-indent maybe-install-strip-indent
+maybe-install-strip-indent:
+@if indent
+maybe-install-strip-indent: install-strip-indent
+
+install-strip-indent: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/indent && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif indent
 
@@ -25017,6 +25701,21 @@ install-intl: installdirs
 
 @endif intl
 
+.PHONY: install-strip-intl maybe-install-strip-intl
+maybe-install-strip-intl:
+@if intl
+maybe-install-strip-intl: install-strip-intl
+
+install-strip-intl: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/intl && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif intl
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-intl info-intl
@@ -25429,6 +26128,21 @@ install-tcl: installdirs
 
 @endif tcl
 
+.PHONY: install-strip-tcl maybe-install-strip-tcl
+maybe-install-strip-tcl:
+@if tcl
+maybe-install-strip-tcl: install-strip-tcl
+
+install-strip-tcl: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/tcl && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif tcl
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-tcl info-tcl
@@ -25836,6 +26550,21 @@ install-itcl: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/itcl && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif itcl
+
+.PHONY: install-strip-itcl maybe-install-strip-itcl
+maybe-install-strip-itcl:
+@if itcl
+maybe-install-strip-itcl: install-strip-itcl
+
+install-strip-itcl: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/itcl && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif itcl
 
@@ -26718,6 +27447,21 @@ install-ld: installdirs
 
 @endif ld
 
+.PHONY: install-strip-ld maybe-install-strip-ld
+maybe-install-strip-ld:
+@if ld
+maybe-install-strip-ld: install-strip-ld
+
+install-strip-ld: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/ld && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif ld
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-ld info-ld
@@ -27581,6 +28325,21 @@ install-libcpp: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/libcpp && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif libcpp
+
+.PHONY: install-strip-libcpp maybe-install-strip-libcpp
+maybe-install-strip-libcpp:
+@if libcpp
+maybe-install-strip-libcpp: install-strip-libcpp
+
+install-strip-libcpp: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libcpp && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif libcpp
 
@@ -28450,6 +29209,21 @@ install-libdecnumber: installdirs
 
 @endif libdecnumber
 
+.PHONY: install-strip-libdecnumber maybe-install-strip-libdecnumber
+maybe-install-strip-libdecnumber:
+@if libdecnumber
+maybe-install-strip-libdecnumber: install-strip-libdecnumber
+
+install-strip-libdecnumber: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libdecnumber && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif libdecnumber
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-libdecnumber info-libdecnumber
@@ -28859,6 +29633,21 @@ install-libgui: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/libgui && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif libgui
+
+.PHONY: install-strip-libgui maybe-install-strip-libgui
+maybe-install-strip-libgui:
+@if libgui
+maybe-install-strip-libgui: install-strip-libgui
+
+install-strip-libgui: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libgui && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif libgui
 
@@ -29747,6 +30536,21 @@ install-libiberty: installdirs
 
 @endif libiberty
 
+.PHONY: install-strip-libiberty maybe-install-strip-libiberty
+maybe-install-strip-libiberty:
+@if libiberty
+maybe-install-strip-libiberty: install-strip-libiberty
+
+install-strip-libiberty: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libiberty && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif libiberty
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-libiberty info-libiberty
@@ -30153,6 +30957,15 @@ install-libiconv:
 
 @endif libiconv
 
+.PHONY: install-strip-libiconv maybe-install-strip-libiconv
+maybe-install-strip-libiconv:
+@if libiconv
+maybe-install-strip-libiconv: install-strip-libiconv
+
+install-strip-libiconv:
+
+@endif libiconv
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-libiconv info-libiconv
@@ -30524,6 +31337,21 @@ install-libtool: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/libtool && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif libtool
+
+.PHONY: install-strip-libtool maybe-install-strip-libtool
+maybe-install-strip-libtool:
+@if libtool
+maybe-install-strip-libtool: install-strip-libtool
+
+install-strip-libtool: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libtool && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif libtool
 
@@ -30952,6 +31780,21 @@ install-m4: installdirs
 
 @endif m4
 
+.PHONY: install-strip-m4 maybe-install-strip-m4
+maybe-install-strip-m4:
+@if m4
+maybe-install-strip-m4: install-strip-m4
+
+install-strip-m4: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/m4 && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif m4
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-m4 info-m4
@@ -31377,6 +32220,21 @@ install-make: installdirs
 
 @endif make
 
+.PHONY: install-strip-make maybe-install-strip-make
+maybe-install-strip-make:
+@if make
+maybe-install-strip-make: install-strip-make
+
+install-strip-make: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/make && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif make
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-make info-make
@@ -31793,6 +32651,21 @@ install-mmalloc: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/mmalloc && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif mmalloc
+
+.PHONY: install-strip-mmalloc maybe-install-strip-mmalloc
+maybe-install-strip-mmalloc:
+@if mmalloc
+maybe-install-strip-mmalloc: install-strip-mmalloc
+
+install-strip-mmalloc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/mmalloc && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif mmalloc
 
@@ -32221,6 +33094,21 @@ install-patch: installdirs
 
 @endif patch
 
+.PHONY: install-strip-patch maybe-install-strip-patch
+maybe-install-strip-patch:
+@if patch
+maybe-install-strip-patch: install-strip-patch
+
+install-strip-patch: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/patch && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif patch
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-patch info-patch
@@ -32643,6 +33531,21 @@ install-perl: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/perl && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif perl
+
+.PHONY: install-strip-perl maybe-install-strip-perl
+maybe-install-strip-perl:
+@if perl
+maybe-install-strip-perl: install-strip-perl
+
+install-strip-perl: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/perl && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif perl
 
@@ -33071,6 +33974,21 @@ install-prms: installdirs
 
 @endif prms
 
+.PHONY: install-strip-prms maybe-install-strip-prms
+maybe-install-strip-prms:
+@if prms
+maybe-install-strip-prms: install-strip-prms
+
+install-strip-prms: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/prms && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif prms
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-prms info-prms
@@ -33493,6 +34411,21 @@ install-rcs: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/rcs && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif rcs
+
+.PHONY: install-strip-rcs maybe-install-strip-rcs
+maybe-install-strip-rcs:
+@if rcs
+maybe-install-strip-rcs: install-strip-rcs
+
+install-strip-rcs: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/rcs && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif rcs
 
@@ -33921,6 +34854,21 @@ install-readline: installdirs
 
 @endif readline
 
+.PHONY: install-strip-readline maybe-install-strip-readline
+maybe-install-strip-readline:
+@if readline
+maybe-install-strip-readline: install-strip-readline
+
+install-strip-readline: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/readline && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif readline
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-readline info-readline
@@ -34331,6 +35279,15 @@ maybe-install-release:
 maybe-install-release: install-release
 
 install-release:
+
+@endif release
+
+.PHONY: install-strip-release maybe-install-strip-release
+maybe-install-strip-release:
+@if release
+maybe-install-strip-release: install-strip-release
+
+install-strip-release:
 
 @endif release
 
@@ -34759,6 +35716,21 @@ install-recode: installdirs
 
 @endif recode
 
+.PHONY: install-strip-recode maybe-install-strip-recode
+maybe-install-strip-recode:
+@if recode
+maybe-install-strip-recode: install-strip-recode
+
+install-strip-recode: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/recode && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif recode
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-recode info-recode
@@ -35181,6 +36153,21 @@ install-sed: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/sed && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif sed
+
+.PHONY: install-strip-sed maybe-install-strip-sed
+maybe-install-strip-sed:
+@if sed
+maybe-install-strip-sed: install-strip-sed
+
+install-strip-sed: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/sed && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif sed
 
@@ -35609,6 +36596,21 @@ install-send-pr: installdirs
 
 @endif send-pr
 
+.PHONY: install-strip-send-pr maybe-install-strip-send-pr
+maybe-install-strip-send-pr:
+@if send-pr
+maybe-install-strip-send-pr: install-strip-send-pr
+
+install-strip-send-pr: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/send-pr && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif send-pr
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-send-pr info-send-pr
@@ -36031,6 +37033,21 @@ install-shellutils: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/shellutils && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif shellutils
+
+.PHONY: install-strip-shellutils maybe-install-strip-shellutils
+maybe-install-strip-shellutils:
+@if shellutils
+maybe-install-strip-shellutils: install-strip-shellutils
+
+install-strip-shellutils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/shellutils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif shellutils
 
@@ -36459,6 +37476,21 @@ install-sid: installdirs
 
 @endif sid
 
+.PHONY: install-strip-sid maybe-install-strip-sid
+maybe-install-strip-sid:
+@if sid
+maybe-install-strip-sid: install-strip-sid
+
+install-strip-sid: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/sid && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif sid
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-sid info-sid
@@ -36881,6 +37913,21 @@ install-sim: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/sim && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif sim
+
+.PHONY: install-strip-sim maybe-install-strip-sim
+maybe-install-strip-sim:
+@if sim
+maybe-install-strip-sim: install-strip-sim
+
+install-strip-sim: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/sim && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif sim
 
@@ -37309,6 +38356,21 @@ install-tar: installdirs
 
 @endif tar
 
+.PHONY: install-strip-tar maybe-install-strip-tar
+maybe-install-strip-tar:
+@if tar
+maybe-install-strip-tar: install-strip-tar
+
+install-strip-tar: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/tar && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif tar
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-tar info-tar
@@ -37725,6 +38787,15 @@ maybe-install-texinfo:
 maybe-install-texinfo: install-texinfo
 
 install-texinfo:
+
+@endif texinfo
+
+.PHONY: install-strip-texinfo maybe-install-strip-texinfo
+maybe-install-strip-texinfo:
+@if texinfo
+maybe-install-strip-texinfo: install-strip-texinfo
+
+install-strip-texinfo:
 
 @endif texinfo
 
@@ -38153,6 +39224,21 @@ install-textutils: installdirs
 
 @endif textutils
 
+.PHONY: install-strip-textutils maybe-install-strip-textutils
+maybe-install-strip-textutils:
+@if textutils
+maybe-install-strip-textutils: install-strip-textutils
+
+install-strip-textutils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/textutils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif textutils
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-textutils info-textutils
@@ -38575,6 +39661,21 @@ install-time: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/time && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif time
+
+.PHONY: install-strip-time maybe-install-strip-time
+maybe-install-strip-time:
+@if time
+maybe-install-strip-time: install-strip-time
+
+install-strip-time: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/time && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif time
 
@@ -39003,6 +40104,21 @@ install-uudecode: installdirs
 
 @endif uudecode
 
+.PHONY: install-strip-uudecode maybe-install-strip-uudecode
+maybe-install-strip-uudecode:
+@if uudecode
+maybe-install-strip-uudecode: install-strip-uudecode
+
+install-strip-uudecode: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/uudecode && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif uudecode
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-uudecode info-uudecode
@@ -39425,6 +40541,21 @@ install-wdiff: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/wdiff && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif wdiff
+
+.PHONY: install-strip-wdiff maybe-install-strip-wdiff
+maybe-install-strip-wdiff:
+@if wdiff
+maybe-install-strip-wdiff: install-strip-wdiff
+
+install-strip-wdiff: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/wdiff && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif wdiff
 
@@ -39853,6 +40984,21 @@ install-zip: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/zip && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif zip
+
+.PHONY: install-strip-zip maybe-install-strip-zip
+maybe-install-strip-zip:
+@if zip
+maybe-install-strip-zip: install-strip-zip
+
+install-strip-zip: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/zip && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif zip
 
@@ -40723,6 +41869,15 @@ install-zlib:
 
 @endif zlib
 
+.PHONY: install-strip-zlib maybe-install-strip-zlib
+maybe-install-strip-zlib:
+@if zlib
+maybe-install-strip-zlib: install-strip-zlib
+
+install-strip-zlib:
+
+@endif zlib
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-zlib info-zlib
@@ -41132,6 +42287,21 @@ install-gdb: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/gdb && \
 	  $(MAKE) $(FLAGS_TO_PASS) $(X11_FLAGS_TO_PASS) install)
+
+@endif gdb
+
+.PHONY: install-strip-gdb maybe-install-strip-gdb
+maybe-install-strip-gdb:
+@if gdb
+maybe-install-strip-gdb: install-strip-gdb
+
+install-strip-gdb: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gdb && \
+	  $(MAKE) $(FLAGS_TO_PASS) $(X11_FLAGS_TO_PASS) install-strip)
 
 @endif gdb
 
@@ -41560,6 +42730,21 @@ install-expect: installdirs
 
 @endif expect
 
+.PHONY: install-strip-expect maybe-install-strip-expect
+maybe-install-strip-expect:
+@if expect
+maybe-install-strip-expect: install-strip-expect
+
+install-strip-expect: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/expect && \
+	  $(MAKE) $(FLAGS_TO_PASS) $(X11_FLAGS_TO_PASS) install-strip)
+
+@endif expect
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-expect info-expect
@@ -41982,6 +43167,21 @@ install-guile: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/guile && \
 	  $(MAKE) $(FLAGS_TO_PASS) $(X11_FLAGS_TO_PASS) install)
+
+@endif guile
+
+.PHONY: install-strip-guile maybe-install-strip-guile
+maybe-install-strip-guile:
+@if guile
+maybe-install-strip-guile: install-strip-guile
+
+install-strip-guile: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/guile && \
+	  $(MAKE) $(FLAGS_TO_PASS) $(X11_FLAGS_TO_PASS) install-strip)
 
 @endif guile
 
@@ -42410,6 +43610,21 @@ install-tk: installdirs
 
 @endif tk
 
+.PHONY: install-strip-tk maybe-install-strip-tk
+maybe-install-strip-tk:
+@if tk
+maybe-install-strip-tk: install-strip-tk
+
+install-strip-tk: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/tk && \
+	  $(MAKE) $(FLAGS_TO_PASS) $(X11_FLAGS_TO_PASS) install-strip)
+
+@endif tk
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-tk info-tk
@@ -42829,6 +44044,21 @@ install-libtermcap: installdirs
 
 @endif libtermcap
 
+.PHONY: install-strip-libtermcap maybe-install-strip-libtermcap
+maybe-install-strip-libtermcap:
+@if libtermcap
+maybe-install-strip-libtermcap: install-strip-libtermcap
+
+install-strip-libtermcap: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libtermcap && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif libtermcap
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-libtermcap info-libtermcap
@@ -43185,6 +44415,21 @@ install-utils: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/utils && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif utils
+
+.PHONY: install-strip-utils maybe-install-strip-utils
+maybe-install-strip-utils:
+@if utils
+maybe-install-strip-utils: install-strip-utils
+
+install-strip-utils: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/utils && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif utils
 
@@ -43613,6 +44858,21 @@ install-gnattools: installdirs
 
 @endif gnattools
 
+.PHONY: install-strip-gnattools maybe-install-strip-gnattools
+maybe-install-strip-gnattools:
+@if gnattools
+maybe-install-strip-gnattools: install-strip-gnattools
+
+install-strip-gnattools: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/gnattools && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif gnattools
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-gnattools info-gnattools
@@ -43978,7 +45238,7 @@ configure-lto-plugin:
 	libsrcdir="$$s/lto-plugin"; \
 	$(SHELL) $${libsrcdir}/configure \
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
-	  --target=${target_alias} $${srcdiroption}  \
+	  --target=${target_alias} $${srcdiroption} --enable-shared \
 	  || exit 1
 @endif lto-plugin
 
@@ -44012,7 +45272,8 @@ configure-stage1-lto-plugin:
 	$(SHELL) $${libsrcdir}/configure \
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
 	  --target=${target_alias} $${srcdiroption} \
-	  $(STAGE1_CONFIGURE_FLAGS)
+	  $(STAGE1_CONFIGURE_FLAGS) \
+	  --enable-shared
 @endif lto-plugin-bootstrap
 
 .PHONY: configure-stage2-lto-plugin maybe-configure-stage2-lto-plugin
@@ -44045,7 +45306,8 @@ configure-stage2-lto-plugin:
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
 	  --target=${target_alias} $${srcdiroption} \
 	  --with-build-libsubdir=$(HOST_SUBDIR) \
-	  $(STAGE2_CONFIGURE_FLAGS)
+	  $(STAGE2_CONFIGURE_FLAGS) \
+	  --enable-shared
 @endif lto-plugin-bootstrap
 
 .PHONY: configure-stage3-lto-plugin maybe-configure-stage3-lto-plugin
@@ -44078,7 +45340,8 @@ configure-stage3-lto-plugin:
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
 	  --target=${target_alias} $${srcdiroption} \
 	  --with-build-libsubdir=$(HOST_SUBDIR) \
-	  $(STAGE3_CONFIGURE_FLAGS)
+	  $(STAGE3_CONFIGURE_FLAGS) \
+	  --enable-shared
 @endif lto-plugin-bootstrap
 
 .PHONY: configure-stage4-lto-plugin maybe-configure-stage4-lto-plugin
@@ -44111,7 +45374,8 @@ configure-stage4-lto-plugin:
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
 	  --target=${target_alias} $${srcdiroption} \
 	  --with-build-libsubdir=$(HOST_SUBDIR) \
-	  $(STAGE4_CONFIGURE_FLAGS)
+	  $(STAGE4_CONFIGURE_FLAGS) \
+	  --enable-shared
 @endif lto-plugin-bootstrap
 
 .PHONY: configure-stageprofile-lto-plugin maybe-configure-stageprofile-lto-plugin
@@ -44144,7 +45408,8 @@ configure-stageprofile-lto-plugin:
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
 	  --target=${target_alias} $${srcdiroption} \
 	  --with-build-libsubdir=$(HOST_SUBDIR) \
-	  $(STAGEprofile_CONFIGURE_FLAGS)
+	  $(STAGEprofile_CONFIGURE_FLAGS) \
+	  --enable-shared
 @endif lto-plugin-bootstrap
 
 .PHONY: configure-stagefeedback-lto-plugin maybe-configure-stagefeedback-lto-plugin
@@ -44177,7 +45442,8 @@ configure-stagefeedback-lto-plugin:
 	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
 	  --target=${target_alias} $${srcdiroption} \
 	  --with-build-libsubdir=$(HOST_SUBDIR) \
-	  $(STAGEfeedback_CONFIGURE_FLAGS)
+	  $(STAGEfeedback_CONFIGURE_FLAGS) \
+	  --enable-shared
 @endif lto-plugin-bootstrap
 
 
@@ -44489,6 +45755,21 @@ install-lto-plugin: installdirs
 	$(HOST_EXPORTS) \
 	(cd $(HOST_SUBDIR)/lto-plugin && \
 	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif lto-plugin
+
+.PHONY: install-strip-lto-plugin maybe-install-strip-lto-plugin
+maybe-install-strip-lto-plugin:
+@if lto-plugin
+maybe-install-strip-lto-plugin: install-strip-lto-plugin
+
+install-strip-lto-plugin: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/lto-plugin && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
 
 @endif lto-plugin
 
@@ -45452,6 +46733,21 @@ install-target-libstdc++-v3: installdirs
 
 @endif target-libstdc++-v3
 
+.PHONY: install-strip-target-libstdc++-v3 maybe-install-strip-target-libstdc++-v3
+maybe-install-strip-target-libstdc++-v3:
+@if target-libstdc++-v3
+maybe-install-strip-target-libstdc++-v3: install-strip-target-libstdc++-v3
+
+install-strip-target-libstdc++-v3: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(RAW_CXX_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libstdc++-v3 && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libstdc++-v3
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libstdc++-v3 info-target-libstdc++-v3
@@ -45891,6 +47187,21 @@ install-target-libmudflap: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/libmudflap && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libmudflap
+
+.PHONY: install-strip-target-libmudflap maybe-install-strip-target-libmudflap
+maybe-install-strip-target-libmudflap:
+@if target-libmudflap
+maybe-install-strip-target-libmudflap: install-strip-target-libmudflap
+
+install-strip-target-libmudflap: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libmudflap && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-libmudflap
 
@@ -46336,6 +47647,21 @@ install-target-libssp: installdirs
 
 @endif target-libssp
 
+.PHONY: install-strip-target-libssp maybe-install-strip-target-libssp
+maybe-install-strip-target-libssp:
+@if target-libssp
+maybe-install-strip-target-libssp: install-strip-target-libssp
+
+install-strip-target-libssp: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libssp && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libssp
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libssp info-target-libssp
@@ -46775,6 +48101,21 @@ install-target-newlib: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/newlib && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-newlib
+
+.PHONY: install-strip-target-newlib maybe-install-strip-target-newlib
+maybe-install-strip-target-newlib:
+@if target-newlib
+maybe-install-strip-target-newlib: install-strip-target-newlib
+
+install-strip-target-newlib: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/newlib && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-newlib
 
@@ -47741,6 +49082,21 @@ install-target-libgcc: installdirs
 
 @endif target-libgcc
 
+.PHONY: install-strip-target-libgcc maybe-install-strip-target-libgcc
+maybe-install-strip-target-libgcc:
+@if target-libgcc
+maybe-install-strip-target-libgcc: install-strip-target-libgcc
+
+install-strip-target-libgcc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgcc && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libgcc
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libgcc info-target-libgcc
@@ -48084,6 +49440,463 @@ maintainer-clean-target-libgcc:
 
 
 
+.PHONY: configure-target-libquadmath maybe-configure-target-libquadmath
+maybe-configure-target-libquadmath:
+@if gcc-bootstrap
+configure-target-libquadmath: stage_current
+@endif gcc-bootstrap
+@if target-libquadmath
+maybe-configure-target-libquadmath: configure-target-libquadmath
+configure-target-libquadmath: 
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	echo "Checking multilib configuration for libquadmath..."; \
+	$(SHELL) $(srcdir)/mkinstalldirs $(TARGET_SUBDIR)/libquadmath ; \
+	$(CC_FOR_TARGET) --print-multi-lib > $(TARGET_SUBDIR)/libquadmath/multilib.tmp 2> /dev/null ; \
+	if test -r $(TARGET_SUBDIR)/libquadmath/multilib.out; then \
+	  if cmp -s $(TARGET_SUBDIR)/libquadmath/multilib.tmp $(TARGET_SUBDIR)/libquadmath/multilib.out; then \
+	    rm -f $(TARGET_SUBDIR)/libquadmath/multilib.tmp; \
+	  else \
+	    rm -f $(TARGET_SUBDIR)/libquadmath/Makefile; \
+	    mv $(TARGET_SUBDIR)/libquadmath/multilib.tmp $(TARGET_SUBDIR)/libquadmath/multilib.out; \
+	  fi; \
+	else \
+	  mv $(TARGET_SUBDIR)/libquadmath/multilib.tmp $(TARGET_SUBDIR)/libquadmath/multilib.out; \
+	fi; \
+	test ! -f $(TARGET_SUBDIR)/libquadmath/Makefile || exit 0; \
+	$(SHELL) $(srcdir)/mkinstalldirs $(TARGET_SUBDIR)/libquadmath ; \
+	$(NORMAL_TARGET_EXPORTS)  \
+	echo Configuring in $(TARGET_SUBDIR)/libquadmath; \
+	cd "$(TARGET_SUBDIR)/libquadmath" || exit 1; \
+	case $(srcdir) in \
+	  /* | [A-Za-z]:[\\/]*) topdir=$(srcdir) ;; \
+	  *) topdir=`echo $(TARGET_SUBDIR)/libquadmath/ | \
+		sed -e 's,\./,,g' -e 's,[^/]*/,../,g' `$(srcdir) ;; \
+	esac; \
+	srcdiroption="--srcdir=$${topdir}/libquadmath"; \
+	libsrcdir="$$s/libquadmath"; \
+	rm -f no-such-file || : ; \
+	CONFIG_SITE=no-such-file $(SHELL) $${libsrcdir}/configure \
+	  $(TARGET_CONFIGARGS) --build=${build_alias} --host=${target_alias} \
+	  --target=${target_alias} $${srcdiroption}  \
+	  || exit 1
+@endif target-libquadmath
+
+
+
+
+
+.PHONY: all-target-libquadmath maybe-all-target-libquadmath
+maybe-all-target-libquadmath:
+@if gcc-bootstrap
+all-target-libquadmath: stage_current
+@endif gcc-bootstrap
+@if target-libquadmath
+TARGET-target-libquadmath=all
+maybe-all-target-libquadmath: all-target-libquadmath
+all-target-libquadmath: configure-target-libquadmath
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS)  \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) $(EXTRA_TARGET_FLAGS)  \
+		$(TARGET-target-libquadmath))
+@endif target-libquadmath
+
+
+
+
+
+.PHONY: check-target-libquadmath maybe-check-target-libquadmath
+maybe-check-target-libquadmath:
+@if target-libquadmath
+maybe-check-target-libquadmath: check-target-libquadmath
+
+check-target-libquadmath:
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)   check)
+
+@endif target-libquadmath
+
+.PHONY: install-target-libquadmath maybe-install-target-libquadmath
+maybe-install-target-libquadmath:
+@if target-libquadmath
+maybe-install-target-libquadmath: install-target-libquadmath
+
+install-target-libquadmath: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libquadmath
+
+.PHONY: install-strip-target-libquadmath maybe-install-strip-target-libquadmath
+maybe-install-strip-target-libquadmath:
+@if target-libquadmath
+maybe-install-strip-target-libquadmath: install-strip-target-libquadmath
+
+install-strip-target-libquadmath: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libquadmath
+
+# Other targets (info, dvi, pdf, etc.)
+
+.PHONY: maybe-info-target-libquadmath info-target-libquadmath
+maybe-info-target-libquadmath:
+@if target-libquadmath
+maybe-info-target-libquadmath: info-target-libquadmath
+
+info-target-libquadmath: \
+    configure-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing info in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           info) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-dvi-target-libquadmath dvi-target-libquadmath
+maybe-dvi-target-libquadmath:
+@if target-libquadmath
+maybe-dvi-target-libquadmath: dvi-target-libquadmath
+
+dvi-target-libquadmath: \
+    configure-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing dvi in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           dvi) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-pdf-target-libquadmath pdf-target-libquadmath
+maybe-pdf-target-libquadmath:
+@if target-libquadmath
+maybe-pdf-target-libquadmath: pdf-target-libquadmath
+
+pdf-target-libquadmath: \
+    configure-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing pdf in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           pdf) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-html-target-libquadmath html-target-libquadmath
+maybe-html-target-libquadmath:
+@if target-libquadmath
+maybe-html-target-libquadmath: html-target-libquadmath
+
+html-target-libquadmath: \
+    configure-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing html in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           html) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-TAGS-target-libquadmath TAGS-target-libquadmath
+maybe-TAGS-target-libquadmath:
+@if target-libquadmath
+maybe-TAGS-target-libquadmath: TAGS-target-libquadmath
+
+TAGS-target-libquadmath: \
+    configure-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing TAGS in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           TAGS) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-install-info-target-libquadmath install-info-target-libquadmath
+maybe-install-info-target-libquadmath:
+@if target-libquadmath
+maybe-install-info-target-libquadmath: install-info-target-libquadmath
+
+install-info-target-libquadmath: \
+    configure-target-libquadmath \
+    info-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing install-info in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           install-info) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-install-pdf-target-libquadmath install-pdf-target-libquadmath
+maybe-install-pdf-target-libquadmath:
+@if target-libquadmath
+maybe-install-pdf-target-libquadmath: install-pdf-target-libquadmath
+
+install-pdf-target-libquadmath: \
+    configure-target-libquadmath \
+    pdf-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing install-pdf in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           install-pdf) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-install-html-target-libquadmath install-html-target-libquadmath
+maybe-install-html-target-libquadmath:
+@if target-libquadmath
+maybe-install-html-target-libquadmath: install-html-target-libquadmath
+
+install-html-target-libquadmath: \
+    configure-target-libquadmath \
+    html-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing install-html in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           install-html) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-installcheck-target-libquadmath installcheck-target-libquadmath
+maybe-installcheck-target-libquadmath:
+@if target-libquadmath
+maybe-installcheck-target-libquadmath: installcheck-target-libquadmath
+
+installcheck-target-libquadmath: \
+    configure-target-libquadmath 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing installcheck in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           installcheck) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-mostlyclean-target-libquadmath mostlyclean-target-libquadmath
+maybe-mostlyclean-target-libquadmath:
+@if target-libquadmath
+maybe-mostlyclean-target-libquadmath: mostlyclean-target-libquadmath
+
+mostlyclean-target-libquadmath: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing mostlyclean in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           mostlyclean) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-clean-target-libquadmath clean-target-libquadmath
+maybe-clean-target-libquadmath:
+@if target-libquadmath
+maybe-clean-target-libquadmath: clean-target-libquadmath
+
+clean-target-libquadmath: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing clean in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           clean) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-distclean-target-libquadmath distclean-target-libquadmath
+maybe-distclean-target-libquadmath:
+@if target-libquadmath
+maybe-distclean-target-libquadmath: distclean-target-libquadmath
+
+distclean-target-libquadmath: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing distclean in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           distclean) \
+	  || exit 1
+
+@endif target-libquadmath
+
+.PHONY: maybe-maintainer-clean-target-libquadmath maintainer-clean-target-libquadmath
+maybe-maintainer-clean-target-libquadmath:
+@if target-libquadmath
+maybe-maintainer-clean-target-libquadmath: maintainer-clean-target-libquadmath
+
+maintainer-clean-target-libquadmath: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libquadmath/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing maintainer-clean in $(TARGET_SUBDIR)/libquadmath" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libquadmath && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           maintainer-clean) \
+	  || exit 1
+
+@endif target-libquadmath
+
+
+
+
+
 .PHONY: configure-target-libgfortran maybe-configure-target-libgfortran
 maybe-configure-target-libgfortran:
 @if gcc-bootstrap
@@ -48180,6 +49993,21 @@ install-target-libgfortran: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/libgfortran && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libgfortran
+
+.PHONY: install-strip-target-libgfortran maybe-install-strip-target-libgfortran
+maybe-install-strip-target-libgfortran:
+@if target-libgfortran
+maybe-install-strip-target-libgfortran: install-strip-target-libgfortran
+
+install-strip-target-libgfortran: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgfortran && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-libgfortran
 
@@ -48625,6 +50453,21 @@ install-target-libobjc: installdirs
 
 @endif target-libobjc
 
+.PHONY: install-strip-target-libobjc maybe-install-strip-target-libobjc
+maybe-install-strip-target-libobjc:
+@if target-libobjc
+maybe-install-strip-target-libobjc: install-strip-target-libobjc
+
+install-strip-target-libobjc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libobjc && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libobjc
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libobjc info-target-libobjc
@@ -48968,6 +50811,463 @@ maintainer-clean-target-libobjc:
 
 
 
+.PHONY: configure-target-libgo maybe-configure-target-libgo
+maybe-configure-target-libgo:
+@if gcc-bootstrap
+configure-target-libgo: stage_current
+@endif gcc-bootstrap
+@if target-libgo
+maybe-configure-target-libgo: configure-target-libgo
+configure-target-libgo: 
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	echo "Checking multilib configuration for libgo..."; \
+	$(SHELL) $(srcdir)/mkinstalldirs $(TARGET_SUBDIR)/libgo ; \
+	$(CC_FOR_TARGET) --print-multi-lib > $(TARGET_SUBDIR)/libgo/multilib.tmp 2> /dev/null ; \
+	if test -r $(TARGET_SUBDIR)/libgo/multilib.out; then \
+	  if cmp -s $(TARGET_SUBDIR)/libgo/multilib.tmp $(TARGET_SUBDIR)/libgo/multilib.out; then \
+	    rm -f $(TARGET_SUBDIR)/libgo/multilib.tmp; \
+	  else \
+	    rm -f $(TARGET_SUBDIR)/libgo/Makefile; \
+	    mv $(TARGET_SUBDIR)/libgo/multilib.tmp $(TARGET_SUBDIR)/libgo/multilib.out; \
+	  fi; \
+	else \
+	  mv $(TARGET_SUBDIR)/libgo/multilib.tmp $(TARGET_SUBDIR)/libgo/multilib.out; \
+	fi; \
+	test ! -f $(TARGET_SUBDIR)/libgo/Makefile || exit 0; \
+	$(SHELL) $(srcdir)/mkinstalldirs $(TARGET_SUBDIR)/libgo ; \
+	$(NORMAL_TARGET_EXPORTS)  \
+	echo Configuring in $(TARGET_SUBDIR)/libgo; \
+	cd "$(TARGET_SUBDIR)/libgo" || exit 1; \
+	case $(srcdir) in \
+	  /* | [A-Za-z]:[\\/]*) topdir=$(srcdir) ;; \
+	  *) topdir=`echo $(TARGET_SUBDIR)/libgo/ | \
+		sed -e 's,\./,,g' -e 's,[^/]*/,../,g' `$(srcdir) ;; \
+	esac; \
+	srcdiroption="--srcdir=$${topdir}/libgo"; \
+	libsrcdir="$$s/libgo"; \
+	rm -f no-such-file || : ; \
+	CONFIG_SITE=no-such-file $(SHELL) $${libsrcdir}/configure \
+	  $(TARGET_CONFIGARGS) --build=${build_alias} --host=${target_alias} \
+	  --target=${target_alias} $${srcdiroption}  \
+	  || exit 1
+@endif target-libgo
+
+
+
+
+
+.PHONY: all-target-libgo maybe-all-target-libgo
+maybe-all-target-libgo:
+@if gcc-bootstrap
+all-target-libgo: stage_current
+@endif gcc-bootstrap
+@if target-libgo
+TARGET-target-libgo=all
+maybe-all-target-libgo: all-target-libgo
+all-target-libgo: configure-target-libgo
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS)  \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) $(EXTRA_TARGET_FLAGS)  \
+		$(TARGET-target-libgo))
+@endif target-libgo
+
+
+
+
+
+.PHONY: check-target-libgo maybe-check-target-libgo
+maybe-check-target-libgo:
+@if target-libgo
+maybe-check-target-libgo: check-target-libgo
+
+check-target-libgo:
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)   check)
+
+@endif target-libgo
+
+.PHONY: install-target-libgo maybe-install-target-libgo
+maybe-install-target-libgo:
+@if target-libgo
+maybe-install-target-libgo: install-target-libgo
+
+install-target-libgo: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libgo
+
+.PHONY: install-strip-target-libgo maybe-install-strip-target-libgo
+maybe-install-strip-target-libgo:
+@if target-libgo
+maybe-install-strip-target-libgo: install-strip-target-libgo
+
+install-strip-target-libgo: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libgo
+
+# Other targets (info, dvi, pdf, etc.)
+
+.PHONY: maybe-info-target-libgo info-target-libgo
+maybe-info-target-libgo:
+@if target-libgo
+maybe-info-target-libgo: info-target-libgo
+
+info-target-libgo: \
+    configure-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing info in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           info) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-dvi-target-libgo dvi-target-libgo
+maybe-dvi-target-libgo:
+@if target-libgo
+maybe-dvi-target-libgo: dvi-target-libgo
+
+dvi-target-libgo: \
+    configure-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing dvi in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           dvi) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-pdf-target-libgo pdf-target-libgo
+maybe-pdf-target-libgo:
+@if target-libgo
+maybe-pdf-target-libgo: pdf-target-libgo
+
+pdf-target-libgo: \
+    configure-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing pdf in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           pdf) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-html-target-libgo html-target-libgo
+maybe-html-target-libgo:
+@if target-libgo
+maybe-html-target-libgo: html-target-libgo
+
+html-target-libgo: \
+    configure-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing html in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           html) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-TAGS-target-libgo TAGS-target-libgo
+maybe-TAGS-target-libgo:
+@if target-libgo
+maybe-TAGS-target-libgo: TAGS-target-libgo
+
+TAGS-target-libgo: \
+    configure-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing TAGS in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           TAGS) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-install-info-target-libgo install-info-target-libgo
+maybe-install-info-target-libgo:
+@if target-libgo
+maybe-install-info-target-libgo: install-info-target-libgo
+
+install-info-target-libgo: \
+    configure-target-libgo \
+    info-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing install-info in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           install-info) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-install-pdf-target-libgo install-pdf-target-libgo
+maybe-install-pdf-target-libgo:
+@if target-libgo
+maybe-install-pdf-target-libgo: install-pdf-target-libgo
+
+install-pdf-target-libgo: \
+    configure-target-libgo \
+    pdf-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing install-pdf in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           install-pdf) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-install-html-target-libgo install-html-target-libgo
+maybe-install-html-target-libgo:
+@if target-libgo
+maybe-install-html-target-libgo: install-html-target-libgo
+
+install-html-target-libgo: \
+    configure-target-libgo \
+    html-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing install-html in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           install-html) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-installcheck-target-libgo installcheck-target-libgo
+maybe-installcheck-target-libgo:
+@if target-libgo
+maybe-installcheck-target-libgo: installcheck-target-libgo
+
+installcheck-target-libgo: \
+    configure-target-libgo 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing installcheck in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           installcheck) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-mostlyclean-target-libgo mostlyclean-target-libgo
+maybe-mostlyclean-target-libgo:
+@if target-libgo
+maybe-mostlyclean-target-libgo: mostlyclean-target-libgo
+
+mostlyclean-target-libgo: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing mostlyclean in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           mostlyclean) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-clean-target-libgo clean-target-libgo
+maybe-clean-target-libgo:
+@if target-libgo
+maybe-clean-target-libgo: clean-target-libgo
+
+clean-target-libgo: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing clean in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           clean) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-distclean-target-libgo distclean-target-libgo
+maybe-distclean-target-libgo:
+@if target-libgo
+maybe-distclean-target-libgo: distclean-target-libgo
+
+distclean-target-libgo: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing distclean in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           distclean) \
+	  || exit 1
+
+@endif target-libgo
+
+.PHONY: maybe-maintainer-clean-target-libgo maintainer-clean-target-libgo
+maybe-maintainer-clean-target-libgo:
+@if target-libgo
+maybe-maintainer-clean-target-libgo: maintainer-clean-target-libgo
+
+maintainer-clean-target-libgo: 
+	@: $(MAKE); $(unstage)
+	@[ -f $(TARGET_SUBDIR)/libgo/Makefile ] || exit 0 ; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	echo "Doing maintainer-clean in $(TARGET_SUBDIR)/libgo" ; \
+	for flag in $(EXTRA_TARGET_FLAGS); do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	(cd $(TARGET_SUBDIR)/libgo && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	           maintainer-clean) \
+	  || exit 1
+
+@endif target-libgo
+
+
+
+
+
 .PHONY: configure-target-libtermcap maybe-configure-target-libtermcap
 maybe-configure-target-libtermcap:
 @if gcc-bootstrap
@@ -49059,6 +51359,21 @@ install-target-libtermcap: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/libtermcap && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libtermcap
+
+.PHONY: install-strip-target-libtermcap maybe-install-strip-target-libtermcap
+maybe-install-strip-target-libtermcap:
+@if target-libtermcap
+maybe-install-strip-target-libtermcap: install-strip-target-libtermcap
+
+install-strip-target-libtermcap: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libtermcap && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-libtermcap
 
@@ -49441,6 +51756,21 @@ install-target-winsup: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/winsup && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-winsup
+
+.PHONY: install-strip-target-winsup maybe-install-strip-target-winsup
+maybe-install-strip-target-winsup:
+@if target-winsup
+maybe-install-strip-target-winsup: install-strip-target-winsup
+
+install-strip-target-winsup: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/winsup && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-winsup
 
@@ -49881,6 +52211,21 @@ install-target-libgloss: installdirs
 
 @endif target-libgloss
 
+.PHONY: install-strip-target-libgloss maybe-install-strip-target-libgloss
+maybe-install-strip-target-libgloss:
+@if target-libgloss
+maybe-install-strip-target-libgloss: install-strip-target-libgloss
+
+install-strip-target-libgloss: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgloss && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libgloss
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libgloss info-target-libgloss
@@ -50224,448 +52569,6 @@ maintainer-clean-target-libgloss:
 
 
 
-.PHONY: configure-target-libiberty maybe-configure-target-libiberty
-maybe-configure-target-libiberty:
-@if gcc-bootstrap
-configure-target-libiberty: stage_current
-@endif gcc-bootstrap
-@if target-libiberty
-maybe-configure-target-libiberty: configure-target-libiberty
-configure-target-libiberty: 
-	@: $(MAKE); $(unstage)
-	@r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	echo "Checking multilib configuration for libiberty..."; \
-	$(SHELL) $(srcdir)/mkinstalldirs $(TARGET_SUBDIR)/libiberty ; \
-	$(CC_FOR_TARGET) --print-multi-lib > $(TARGET_SUBDIR)/libiberty/multilib.tmp 2> /dev/null ; \
-	if test -r $(TARGET_SUBDIR)/libiberty/multilib.out; then \
-	  if cmp -s $(TARGET_SUBDIR)/libiberty/multilib.tmp $(TARGET_SUBDIR)/libiberty/multilib.out; then \
-	    rm -f $(TARGET_SUBDIR)/libiberty/multilib.tmp; \
-	  else \
-	    rm -f $(TARGET_SUBDIR)/libiberty/Makefile; \
-	    mv $(TARGET_SUBDIR)/libiberty/multilib.tmp $(TARGET_SUBDIR)/libiberty/multilib.out; \
-	  fi; \
-	else \
-	  mv $(TARGET_SUBDIR)/libiberty/multilib.tmp $(TARGET_SUBDIR)/libiberty/multilib.out; \
-	fi; \
-	test ! -f $(TARGET_SUBDIR)/libiberty/Makefile || exit 0; \
-	$(SHELL) $(srcdir)/mkinstalldirs $(TARGET_SUBDIR)/libiberty ; \
-	$(NORMAL_TARGET_EXPORTS)  \
-	echo Configuring in $(TARGET_SUBDIR)/libiberty; \
-	cd "$(TARGET_SUBDIR)/libiberty" || exit 1; \
-	case $(srcdir) in \
-	  /* | [A-Za-z]:[\\/]*) topdir=$(srcdir) ;; \
-	  *) topdir=`echo $(TARGET_SUBDIR)/libiberty/ | \
-		sed -e 's,\./,,g' -e 's,[^/]*/,../,g' `$(srcdir) ;; \
-	esac; \
-	srcdiroption="--srcdir=$${topdir}/libiberty"; \
-	libsrcdir="$$s/libiberty"; \
-	rm -f no-such-file || : ; \
-	CONFIG_SITE=no-such-file $(SHELL) $${libsrcdir}/configure \
-	  $(TARGET_CONFIGARGS) --build=${build_alias} --host=${target_alias} \
-	  --target=${target_alias} $${srcdiroption}  \
-	  || exit 1
-@endif target-libiberty
-
-
-
-
-
-.PHONY: all-target-libiberty maybe-all-target-libiberty
-maybe-all-target-libiberty:
-@if gcc-bootstrap
-all-target-libiberty: stage_current
-@endif gcc-bootstrap
-@if target-libiberty
-TARGET-target-libiberty=all
-maybe-all-target-libiberty: all-target-libiberty
-all-target-libiberty: configure-target-libiberty
-	@: $(MAKE); $(unstage)
-	@r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS)  \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) $(EXTRA_TARGET_FLAGS)  \
-		$(TARGET-target-libiberty))
-@endif target-libiberty
-
-
-
-
-
-.PHONY: check-target-libiberty maybe-check-target-libiberty
-maybe-check-target-libiberty:
-@if target-libiberty
-maybe-check-target-libiberty: check-target-libiberty
-
-check-target-libiberty:
-	@: $(MAKE); $(unstage)
-	@r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(TARGET_FLAGS_TO_PASS)   check)
-
-@endif target-libiberty
-
-.PHONY: install-target-libiberty maybe-install-target-libiberty
-maybe-install-target-libiberty:
-@if target-libiberty
-maybe-install-target-libiberty: install-target-libiberty
-
-install-target-libiberty: installdirs
-	@: $(MAKE); $(unstage)
-	@r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
-
-@endif target-libiberty
-
-# Other targets (info, dvi, pdf, etc.)
-
-.PHONY: maybe-info-target-libiberty info-target-libiberty
-maybe-info-target-libiberty:
-@if target-libiberty
-maybe-info-target-libiberty: info-target-libiberty
-
-info-target-libiberty: \
-    configure-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing info in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           info) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-dvi-target-libiberty dvi-target-libiberty
-maybe-dvi-target-libiberty:
-@if target-libiberty
-maybe-dvi-target-libiberty: dvi-target-libiberty
-
-dvi-target-libiberty: \
-    configure-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing dvi in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           dvi) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-pdf-target-libiberty pdf-target-libiberty
-maybe-pdf-target-libiberty:
-@if target-libiberty
-maybe-pdf-target-libiberty: pdf-target-libiberty
-
-pdf-target-libiberty: \
-    configure-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing pdf in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           pdf) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-html-target-libiberty html-target-libiberty
-maybe-html-target-libiberty:
-@if target-libiberty
-maybe-html-target-libiberty: html-target-libiberty
-
-html-target-libiberty: \
-    configure-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing html in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           html) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-TAGS-target-libiberty TAGS-target-libiberty
-maybe-TAGS-target-libiberty:
-@if target-libiberty
-maybe-TAGS-target-libiberty: TAGS-target-libiberty
-
-TAGS-target-libiberty: \
-    configure-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing TAGS in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           TAGS) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-install-info-target-libiberty install-info-target-libiberty
-maybe-install-info-target-libiberty:
-@if target-libiberty
-maybe-install-info-target-libiberty: install-info-target-libiberty
-
-install-info-target-libiberty: \
-    configure-target-libiberty \
-    info-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing install-info in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           install-info) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-install-pdf-target-libiberty install-pdf-target-libiberty
-maybe-install-pdf-target-libiberty:
-@if target-libiberty
-maybe-install-pdf-target-libiberty: install-pdf-target-libiberty
-
-install-pdf-target-libiberty: \
-    configure-target-libiberty \
-    pdf-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing install-pdf in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           install-pdf) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-install-html-target-libiberty install-html-target-libiberty
-maybe-install-html-target-libiberty:
-@if target-libiberty
-maybe-install-html-target-libiberty: install-html-target-libiberty
-
-install-html-target-libiberty: \
-    configure-target-libiberty \
-    html-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing install-html in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           install-html) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-installcheck-target-libiberty installcheck-target-libiberty
-maybe-installcheck-target-libiberty:
-@if target-libiberty
-maybe-installcheck-target-libiberty: installcheck-target-libiberty
-
-installcheck-target-libiberty: \
-    configure-target-libiberty 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing installcheck in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           installcheck) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-mostlyclean-target-libiberty mostlyclean-target-libiberty
-maybe-mostlyclean-target-libiberty:
-@if target-libiberty
-maybe-mostlyclean-target-libiberty: mostlyclean-target-libiberty
-
-mostlyclean-target-libiberty: 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing mostlyclean in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           mostlyclean) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-clean-target-libiberty clean-target-libiberty
-maybe-clean-target-libiberty:
-@if target-libiberty
-maybe-clean-target-libiberty: clean-target-libiberty
-
-clean-target-libiberty: 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing clean in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           clean) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-distclean-target-libiberty distclean-target-libiberty
-maybe-distclean-target-libiberty:
-@if target-libiberty
-maybe-distclean-target-libiberty: distclean-target-libiberty
-
-distclean-target-libiberty: 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing distclean in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           distclean) \
-	  || exit 1
-
-@endif target-libiberty
-
-.PHONY: maybe-maintainer-clean-target-libiberty maintainer-clean-target-libiberty
-maybe-maintainer-clean-target-libiberty:
-@if target-libiberty
-maybe-maintainer-clean-target-libiberty: maintainer-clean-target-libiberty
-
-maintainer-clean-target-libiberty: 
-	@: $(MAKE); $(unstage)
-	@[ -f $(TARGET_SUBDIR)/libiberty/Makefile ] || exit 0 ; \
-	r=`${PWD_COMMAND}`; export r; \
-	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
-	$(NORMAL_TARGET_EXPORTS) \
-	echo "Doing maintainer-clean in $(TARGET_SUBDIR)/libiberty" ; \
-	for flag in $(EXTRA_TARGET_FLAGS); do \
-	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
-	done; \
-	(cd $(TARGET_SUBDIR)/libiberty && \
-	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
-	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
-	          "RANLIB=$${RANLIB}" \
-	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
-	           maintainer-clean) \
-	  || exit 1
-
-@endif target-libiberty
-
-
-
-
-
 .PHONY: configure-target-gperf maybe-configure-target-gperf
 maybe-configure-target-gperf:
 @if gcc-bootstrap
@@ -50762,6 +52665,21 @@ install-target-gperf: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/gperf && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-gperf
+
+.PHONY: install-strip-target-gperf maybe-install-strip-target-gperf
+maybe-install-strip-target-gperf:
+@if target-gperf
+maybe-install-strip-target-gperf: install-strip-target-gperf
+
+install-strip-target-gperf: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/gperf && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-gperf
 
@@ -51194,6 +53112,16 @@ maybe-install-target-examples: install-target-examples
 
 # Dummy target for uninstallable.
 install-target-examples:
+
+@endif target-examples
+
+.PHONY: install-strip-target-examples maybe-install-strip-target-examples
+maybe-install-strip-target-examples:
+@if target-examples
+maybe-install-strip-target-examples: install-strip-target-examples
+
+# Dummy target for uninstallable.
+install-strip-target-examples:
 
 @endif target-examples
 
@@ -51639,6 +53567,21 @@ install-target-libffi: installdirs
 
 @endif target-libffi
 
+.PHONY: install-strip-target-libffi maybe-install-strip-target-libffi
+maybe-install-strip-target-libffi:
+@if target-libffi
+maybe-install-strip-target-libffi: install-strip-target-libffi
+
+install-strip-target-libffi: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libffi && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libffi
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libffi info-target-libffi
@@ -52078,6 +54021,21 @@ install-target-libjava: installdirs
 	$(RAW_CXX_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/libjava && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libjava
+
+.PHONY: install-strip-target-libjava maybe-install-strip-target-libjava
+maybe-install-strip-target-libjava:
+@if target-libjava
+maybe-install-strip-target-libjava: install-strip-target-libjava
+
+install-strip-target-libjava: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(RAW_CXX_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libjava && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-libjava
 
@@ -52523,6 +54481,21 @@ install-target-zlib: installdirs
 
 @endif target-zlib
 
+.PHONY: install-strip-target-zlib maybe-install-strip-target-zlib
+maybe-install-strip-target-zlib:
+@if target-zlib
+maybe-install-strip-target-zlib: install-strip-target-zlib
+
+install-strip-target-zlib: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/zlib && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-zlib
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-zlib info-target-zlib
@@ -52962,6 +54935,21 @@ install-target-boehm-gc: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/boehm-gc && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-boehm-gc
+
+.PHONY: install-strip-target-boehm-gc maybe-install-strip-target-boehm-gc
+maybe-install-strip-target-boehm-gc:
+@if target-boehm-gc
+maybe-install-strip-target-boehm-gc: install-strip-target-boehm-gc
+
+install-strip-target-boehm-gc: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/boehm-gc && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-boehm-gc
 
@@ -53407,6 +55395,21 @@ install-target-qthreads: installdirs
 
 @endif target-qthreads
 
+.PHONY: install-strip-target-qthreads maybe-install-strip-target-qthreads
+maybe-install-strip-target-qthreads:
+@if target-qthreads
+maybe-install-strip-target-qthreads: install-strip-target-qthreads
+
+install-strip-target-qthreads: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/qthreads && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-qthreads
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-qthreads info-target-qthreads
@@ -53849,6 +55852,21 @@ install-target-rda: installdirs
 
 @endif target-rda
 
+.PHONY: install-strip-target-rda maybe-install-strip-target-rda
+maybe-install-strip-target-rda:
+@if target-rda
+maybe-install-strip-target-rda: install-strip-target-rda
+
+install-strip-target-rda: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/rda && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-rda
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-rda info-target-rda
@@ -54288,6 +56306,21 @@ install-target-libada: installdirs
 	$(NORMAL_TARGET_EXPORTS) \
 	(cd $(TARGET_SUBDIR)/libada && \
 	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install)
+
+@endif target-libada
+
+.PHONY: install-strip-target-libada maybe-install-strip-target-libada
+maybe-install-strip-target-libada:
+@if target-libada
+maybe-install-strip-target-libada: install-strip-target-libada
+
+install-strip-target-libada: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libada && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
 
 @endif target-libada
 
@@ -55259,6 +57292,21 @@ install-target-libgomp: installdirs
 
 @endif target-libgomp
 
+.PHONY: install-strip-target-libgomp maybe-install-strip-target-libgomp
+maybe-install-strip-target-libgomp:
+@if target-libgomp
+maybe-install-strip-target-libgomp: install-strip-target-libgomp
+
+install-strip-target-libgomp: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(NORMAL_TARGET_EXPORTS) \
+	(cd $(TARGET_SUBDIR)/libgomp && \
+	  $(MAKE) $(TARGET_FLAGS_TO_PASS)  install-strip)
+
+@endif target-libgomp
+
 # Other targets (info, dvi, pdf, etc.)
 
 .PHONY: maybe-info-target-libgomp info-target-libgomp
@@ -55642,7 +57690,7 @@ check-gcc-fortran:
 	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
 	$(HOST_EXPORTS) \
 	(cd gcc && $(MAKE) $(GCC_FLAGS_TO_PASS) check-fortran);
-check-fortran: check-gcc-fortran check-target-libgfortran
+check-fortran: check-gcc-fortran check-target-libquadmath check-target-libgfortran
 
 .PHONY: check-gcc-java check-java
 check-gcc-java:
@@ -55675,6 +57723,14 @@ check-gcc-obj-c++:
 	$(HOST_EXPORTS) \
 	(cd gcc && $(MAKE) $(GCC_FLAGS_TO_PASS) check-obj-c++);
 check-obj-c++: check-gcc-obj-c++
+
+.PHONY: check-gcc-go check-go
+check-gcc-go:
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd gcc && $(MAKE) $(GCC_FLAGS_TO_PASS) check-go);
+check-go: check-gcc-go check-target-libgo
 
 
 # Install the gcc headers files, but not the fixed include files,
@@ -57657,12 +59713,13 @@ configure-stage3-target-libgcc: maybe-all-stage3-gcc
 configure-stage4-target-libgcc: maybe-all-stage4-gcc
 configure-stageprofile-target-libgcc: maybe-all-stageprofile-gcc
 configure-stagefeedback-target-libgcc: maybe-all-stagefeedback-gcc
+configure-target-libquadmath: stage_last
 configure-target-libgfortran: stage_last
 configure-target-libobjc: stage_last
+configure-target-libgo: stage_last
 configure-target-libtermcap: stage_last
 configure-target-winsup: stage_last
 configure-target-libgloss: stage_last
-configure-target-libiberty: stage_last
 configure-target-gperf: stage_last
 configure-target-examples: stage_last
 configure-target-libffi: stage_last
@@ -57686,12 +59743,13 @@ configure-target-libmudflap: maybe-all-gcc
 configure-target-libssp: maybe-all-gcc
 configure-target-newlib: maybe-all-gcc
 configure-target-libgcc: maybe-all-gcc
+configure-target-libquadmath: maybe-all-gcc
 configure-target-libgfortran: maybe-all-gcc
 configure-target-libobjc: maybe-all-gcc
+configure-target-libgo: maybe-all-gcc
 configure-target-libtermcap: maybe-all-gcc
 configure-target-winsup: maybe-all-gcc
 configure-target-libgloss: maybe-all-gcc
-configure-target-libiberty: maybe-all-gcc
 configure-target-gperf: maybe-all-gcc
 configure-target-examples: maybe-all-gcc
 configure-target-libffi: maybe-all-gcc
@@ -57739,6 +59797,14 @@ configure-stage3-gcc: maybe-configure-stage3-intl
 configure-stage4-gcc: maybe-configure-stage4-intl
 configure-stageprofile-gcc: maybe-configure-stageprofile-intl
 configure-stagefeedback-gcc: maybe-configure-stagefeedback-intl
+configure-gcc: maybe-all-lto-plugin
+
+configure-stage1-gcc: maybe-all-stage1-lto-plugin
+configure-stage2-gcc: maybe-all-stage2-lto-plugin
+configure-stage3-gcc: maybe-all-stage3-lto-plugin
+configure-stage4-gcc: maybe-all-stage4-lto-plugin
+configure-stageprofile-gcc: maybe-all-stageprofile-lto-plugin
+configure-stagefeedback-gcc: maybe-all-stagefeedback-lto-plugin
 configure-gcc: maybe-all-binutils
 
 configure-stage1-gcc: maybe-all-stage1-binutils
@@ -57916,7 +59982,50 @@ all-stage4-gcc: maybe-all-stage4-libiberty
 all-stageprofile-gcc: maybe-all-stageprofile-libiberty
 all-stagefeedback-gcc: maybe-all-stagefeedback-libiberty
 all-gcc: maybe-all-fixincludes
+all-gcc: maybe-all-lto-plugin
+
+all-stage1-gcc: maybe-all-stage1-lto-plugin
+all-stage2-gcc: maybe-all-stage2-lto-plugin
+all-stage3-gcc: maybe-all-stage3-lto-plugin
+all-stage4-gcc: maybe-all-stage4-lto-plugin
+all-stageprofile-gcc: maybe-all-stageprofile-lto-plugin
+all-stagefeedback-gcc: maybe-all-stagefeedback-lto-plugin
+info-gcc: maybe-all-build-libiberty
+
+info-stage1-gcc: maybe-all-build-libiberty
+info-stage2-gcc: maybe-all-build-libiberty
+info-stage3-gcc: maybe-all-build-libiberty
+info-stage4-gcc: maybe-all-build-libiberty
+info-stageprofile-gcc: maybe-all-build-libiberty
+info-stagefeedback-gcc: maybe-all-build-libiberty
+dvi-gcc: maybe-all-build-libiberty
+
+dvi-stage1-gcc: maybe-all-build-libiberty
+dvi-stage2-gcc: maybe-all-build-libiberty
+dvi-stage3-gcc: maybe-all-build-libiberty
+dvi-stage4-gcc: maybe-all-build-libiberty
+dvi-stageprofile-gcc: maybe-all-build-libiberty
+dvi-stagefeedback-gcc: maybe-all-build-libiberty
+pdf-gcc: maybe-all-build-libiberty
+
+pdf-stage1-gcc: maybe-all-build-libiberty
+pdf-stage2-gcc: maybe-all-build-libiberty
+pdf-stage3-gcc: maybe-all-build-libiberty
+pdf-stage4-gcc: maybe-all-build-libiberty
+pdf-stageprofile-gcc: maybe-all-build-libiberty
+pdf-stagefeedback-gcc: maybe-all-build-libiberty
+html-gcc: maybe-all-build-libiberty
+
+html-stage1-gcc: maybe-all-build-libiberty
+html-stage2-gcc: maybe-all-build-libiberty
+html-stage3-gcc: maybe-all-build-libiberty
+html-stage4-gcc: maybe-all-build-libiberty
+html-stageprofile-gcc: maybe-all-build-libiberty
+html-stagefeedback-gcc: maybe-all-build-libiberty
 install-gcc: maybe-install-fixincludes
+install-gcc: maybe-install-lto-plugin
+install-strip-gcc: maybe-install-strip-fixincludes
+install-strip-gcc: maybe-install-strip-lto-plugin
 configure-libcpp: configure-libiberty
 
 configure-stage1-libcpp: configure-stage1-libiberty
@@ -57951,14 +60060,14 @@ all-stageprofile-libcpp: maybe-all-stageprofile-intl
 all-stagefeedback-libcpp: maybe-all-stagefeedback-intl
 all-fixincludes: maybe-all-libiberty
 all-gnattools: maybe-all-target-libada
-all-lto-plugin: maybe-all-gcc
+all-lto-plugin: maybe-all-libiberty
 
-all-stage1-lto-plugin: maybe-all-stage1-gcc
-all-stage2-lto-plugin: maybe-all-stage2-gcc
-all-stage3-lto-plugin: maybe-all-stage3-gcc
-all-stage4-lto-plugin: maybe-all-stage4-gcc
-all-stageprofile-lto-plugin: maybe-all-stageprofile-gcc
-all-stagefeedback-lto-plugin: maybe-all-stagefeedback-gcc
+all-stage1-lto-plugin: maybe-all-stage1-libiberty
+all-stage2-lto-plugin: maybe-all-stage2-libiberty
+all-stage3-lto-plugin: maybe-all-stage3-libiberty
+all-stage4-lto-plugin: maybe-all-stage4-libiberty
+all-stageprofile-lto-plugin: maybe-all-stageprofile-libiberty
+all-stagefeedback-lto-plugin: maybe-all-stagefeedback-libiberty
 configure-mpfr: maybe-all-gmp
 
 configure-stage1-mpfr: maybe-all-stage1-gmp
@@ -58129,7 +60238,9 @@ all-stage4-binutils: maybe-all-stage4-intl
 all-stageprofile-binutils: maybe-all-stageprofile-intl
 all-stagefeedback-binutils: maybe-all-stagefeedback-intl
 install-binutils: maybe-install-opcodes
+install-strip-binutils: maybe-install-strip-opcodes
 install-opcodes: maybe-install-bfd
+install-strip-opcodes: maybe-install-strip-bfd
 configure-gas: maybe-configure-intl
 
 configure-stage1-gas: maybe-configure-stage1-intl
@@ -58239,6 +60350,8 @@ all-stage3-ld: maybe-all-stage3-intl
 all-stage4-ld: maybe-all-stage4-intl
 all-stageprofile-ld: maybe-all-stageprofile-intl
 all-stagefeedback-ld: maybe-all-stagefeedback-intl
+install-ld: maybe-install-gold
+install-strip-ld: maybe-install-strip-gold
 configure-gold: maybe-configure-intl
 
 configure-stage1-gold: maybe-configure-stage1-intl
@@ -58347,6 +60460,7 @@ configure-itcl: maybe-configure-tk
 all-itcl: maybe-all-tcl
 all-itcl: maybe-all-tk
 install-itcl: maybe-install-tcl
+install-strip-itcl: maybe-install-strip-tcl
 configure-tk: maybe-configure-tcl
 all-tk: maybe-all-tcl
 all-sid: maybe-all-libiberty
@@ -58355,7 +60469,9 @@ all-sid: maybe-all-opcodes
 all-sid: maybe-all-tcl
 all-sid: maybe-all-tk
 install-sid: maybe-install-tcl
+install-strip-sid: maybe-install-strip-tcl
 install-sid: maybe-install-tk
+install-strip-sid: maybe-install-strip-tk
 configure-sim: maybe-configure-intl
 all-sim: maybe-all-intl
 all-sim: maybe-all-libiberty
@@ -58403,7 +60519,9 @@ configure-target-boehm-gc: maybe-configure-target-qthreads
 configure-target-boehm-gc: maybe-all-target-libstdc++-v3
 configure-target-fastjar: maybe-configure-target-zlib
 all-target-fastjar: maybe-all-target-zlib
-all-target-fastjar: maybe-all-target-libiberty
+configure-target-libgo: maybe-configure-target-libffi
+configure-target-libgo: maybe-all-target-libstdc++-v3
+all-target-libgo: maybe-all-target-libffi
 configure-target-libjava: maybe-configure-target-zlib
 configure-target-libjava: maybe-configure-target-boehm-gc
 configure-target-libjava: maybe-configure-target-qthreads
@@ -58414,9 +60532,7 @@ all-target-libjava: maybe-all-target-boehm-gc
 all-target-libjava: maybe-all-target-qthreads
 all-target-libjava: maybe-all-target-libffi
 configure-target-libobjc: maybe-configure-target-boehm-gc
-all-target-libobjc: maybe-all-target-libiberty
 all-target-libobjc: maybe-all-target-boehm-gc
-all-target-libstdc++-v3: maybe-all-target-libiberty
 configure-target-libstdc++-v3: maybe-configure-target-libgomp
 
 configure-stage1-target-libstdc++-v3: maybe-configure-stage1-target-libgomp
@@ -58434,12 +60550,10 @@ all-stage4-target-libstdc++-v3: maybe-configure-stage4-target-libgomp
 all-stageprofile-target-libstdc++-v3: maybe-configure-stageprofile-target-libgomp
 all-stagefeedback-target-libstdc++-v3: maybe-configure-stagefeedback-target-libgomp
 all-target-libgloss: maybe-all-target-newlib
-all-target-winsup: maybe-all-target-libiberty
 all-target-winsup: maybe-all-target-libtermcap
-configure-target-libiberty: maybe-all-binutils
-configure-target-libiberty: maybe-all-ld
 configure-target-newlib: maybe-all-binutils
 configure-target-newlib: maybe-all-ld
+configure-target-libgfortran: maybe-all-target-libquadmath
 
 
 # Dependencies for target modules on other target modules are
@@ -58467,12 +60581,13 @@ configure-target-libstdc++-v3: maybe-all-target-libgcc
 configure-target-libmudflap: maybe-all-target-libgcc
 configure-target-libssp: maybe-all-target-libgcc
 configure-target-newlib: maybe-all-target-libgcc
+configure-target-libquadmath: maybe-all-target-libgcc
 configure-target-libgfortran: maybe-all-target-libgcc
 configure-target-libobjc: maybe-all-target-libgcc
+configure-target-libgo: maybe-all-target-libgcc
 configure-target-libtermcap: maybe-all-target-libgcc
 configure-target-winsup: maybe-all-target-libgcc
 configure-target-libgloss: maybe-all-target-libgcc
-configure-target-libiberty: maybe-all-target-libgcc
 configure-target-gperf: maybe-all-target-libgcc
 configure-target-examples: maybe-all-target-libgcc
 configure-target-libffi: maybe-all-target-libgcc
@@ -58494,14 +60609,17 @@ configure-target-libssp: maybe-all-target-newlib maybe-all-target-libgloss
 
 
 
+configure-target-libquadmath: maybe-all-target-newlib maybe-all-target-libgloss
+
 configure-target-libgfortran: maybe-all-target-newlib maybe-all-target-libgloss
 
 configure-target-libobjc: maybe-all-target-newlib maybe-all-target-libgloss
 
+configure-target-libgo: maybe-all-target-newlib maybe-all-target-libgloss
+
 configure-target-libtermcap: maybe-all-target-newlib maybe-all-target-libgloss
 
 configure-target-winsup: maybe-all-target-newlib maybe-all-target-libgloss
-
 
 
 configure-target-gperf: maybe-all-target-newlib maybe-all-target-libgloss

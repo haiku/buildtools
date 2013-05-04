@@ -1,7 +1,9 @@
+%option nounput
+
 %{
 
-/* Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007
+/* Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support.
 
@@ -22,7 +24,6 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include "bfd.h"
 #include "safe-ctype.h"
 #include "bfdlink.h"
@@ -57,18 +58,21 @@ const char *lex_string = NULL;
    Otherwise, stack elements 0 through `include_stack_ptr - 1' are valid.  */
 
 #undef YY_INPUT
-#define YY_INPUT(buf,result,max_size) yy_input (buf, &result, max_size)
+#define YY_INPUT(buf,result,max_size) result = yy_input (buf, max_size)
 
+#ifndef YY_NO_UNPUT
 #define YY_NO_UNPUT
+#endif
 
 #define MAX_INCLUDE_DEPTH 10
 static YY_BUFFER_STATE include_stack[MAX_INCLUDE_DEPTH];
 static const char *file_name_stack[MAX_INCLUDE_DEPTH];
 static unsigned int lineno_stack[MAX_INCLUDE_DEPTH];
+static unsigned int sysrooted_stack[MAX_INCLUDE_DEPTH];
 static unsigned int include_stack_ptr = 0;
 static int vers_node_nesting = 0;
 
-static void yy_input (char *, int *, int);
+static int yy_input (char *, int);
 static void comment (void);
 static void lex_warn_invalid (char *where, char *what);
 
@@ -98,7 +102,7 @@ CMDFILENAMECHAR1  [_a-zA-Z0-9\/\.\\_\+\$\:\[\]\\\,\=\&\!\<\>\~]
 FILENAMECHAR1	[_a-zA-Z\/\.\\\$\_\~]
 SYMBOLCHARN     [_a-zA-Z\/\.\\\$\_\~0-9]
 FILENAMECHAR	[_a-zA-Z0-9\/\.\-\_\+\=\$\:\[\]\\\,\~]
-WILDCHAR	[_a-zA-Z0-9\/\.\-\_\+\=\$\:\[\]\\\,\~\?\*]
+WILDCHAR	[_a-zA-Z0-9\/\.\-\_\+\=\$\:\[\]\\\,\~\?\*\^\!]
 WHITE		[ \t\n\r]+
 
 NOCFILENAMECHAR	[_a-zA-Z0-9\/\.\-\_\+\$\:\[\]\\\~]
@@ -239,6 +243,8 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <BOTH,SCRIPT,EXPRESSION,MRI>":"		{ RTOKEN(':'); }
 <BOTH,SCRIPT,EXPRESSION,MRI>";"		{ RTOKEN(';');}
 <BOTH,SCRIPT>"MEMORY"			{ RTOKEN(MEMORY);}
+<BOTH,SCRIPT>"REGION_ALIAS"		{ RTOKEN(REGION_ALIAS);}
+<BOTH,SCRIPT>"LD_FEATURE"		{ RTOKEN(LD_FEATURE);}
 <BOTH,SCRIPT,EXPRESSION>"ORIGIN"	{ RTOKEN(ORIGIN);}
 <BOTH,SCRIPT>"VERSION"			{ RTOKEN(VERSIONK);}
 <EXPRESSION,BOTH,SCRIPT>"BLOCK"		{ RTOKEN(BLOCK);}
@@ -295,6 +301,8 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <BOTH,SCRIPT>"SORT_BY_NAME"		{ RTOKEN(SORT_BY_NAME); }
 <BOTH,SCRIPT>"SORT_BY_ALIGNMENT"	{ RTOKEN(SORT_BY_ALIGNMENT); }
 <BOTH,SCRIPT>"SORT"			{ RTOKEN(SORT_BY_NAME); }
+<BOTH,SCRIPT>"SORT_BY_INIT_PRIORITY"	{ RTOKEN(SORT_BY_INIT_PRIORITY); }
+<BOTH,SCRIPT>"SORT_NONE"		{ RTOKEN(SORT_NONE); }
 <EXPRESSION,BOTH,SCRIPT>"NOLOAD"	{ RTOKEN(NOLOAD);}
 <EXPRESSION,BOTH,SCRIPT>"DSECT"		{ RTOKEN(DSECT);}
 <EXPRESSION,BOTH,SCRIPT>"COPY"		{ RTOKEN(COPY);}
@@ -307,10 +315,12 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 <BOTH,SCRIPT>"org"			{ RTOKEN(ORIGIN);}
 <BOTH,SCRIPT>"l"			{ RTOKEN( LENGTH);}
 <BOTH,SCRIPT>"len"			{ RTOKEN( LENGTH);}
+<EXPRESSION,BOTH,SCRIPT>"INPUT_SECTION_FLAGS"	{ RTOKEN(INPUT_SECTION_FLAGS); }
 <EXPRESSION,BOTH,SCRIPT>"INCLUDE"	{ RTOKEN(INCLUDE);}
 <BOTH,SCRIPT>"PHDRS"			{ RTOKEN (PHDRS); }
 <EXPRESSION,BOTH,SCRIPT>"AT"		{ RTOKEN(AT);}
 <EXPRESSION,BOTH,SCRIPT>"SUBALIGN"	{ RTOKEN(SUBALIGN);}
+<EXPRESSION,BOTH,SCRIPT>"HIDDEN"	{ RTOKEN(HIDDEN); }
 <EXPRESSION,BOTH,SCRIPT>"PROVIDE"	{ RTOKEN(PROVIDE); }
 <EXPRESSION,BOTH,SCRIPT>"PROVIDE_HIDDEN" { RTOKEN(PROVIDE_HIDDEN); }
 <EXPRESSION,BOTH,SCRIPT>"KEEP"		{ RTOKEN(KEEP); }
@@ -441,18 +451,13 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
 
 <<EOF>> {
   include_stack_ptr--;
-
   if (include_stack_ptr == 0)
-  {
     yyterminate ();
-  }
   else
-  {
     yy_switch_to_buffer (include_stack[include_stack_ptr]);
-  }
 
-  ldfile_input_filename = file_name_stack[include_stack_ptr - 1];
   lineno = lineno_stack[include_stack_ptr];
+  input_flags.sysrooted = sysrooted_stack[include_stack_ptr];
 
   return END;
 }
@@ -467,7 +472,7 @@ V_IDENTIFIER [*?.$_a-zA-Z\[\]\-\!\^\\]([*?.$_a-zA-Z0-9\[\]\-\!\^\\]|::)*
    saving the current input info on the include stack.  */
 
 void
-lex_push_file (FILE *file, const char *name)
+lex_push_file (FILE *file, const char *name, unsigned int sysrooted)
 {
   if (include_stack_ptr >= MAX_INCLUDE_DEPTH)
     {
@@ -475,10 +480,12 @@ lex_push_file (FILE *file, const char *name)
     }
   file_name_stack[include_stack_ptr] = name;
   lineno_stack[include_stack_ptr] = lineno;
+  sysrooted_stack[include_stack_ptr] = input_flags.sysrooted;
   include_stack[include_stack_ptr] = YY_CURRENT_BUFFER;
 
   include_stack_ptr++;
   lineno = 1;
+  input_flags.sysrooted = sysrooted;
   yyin = file;
   yy_switch_to_buffer (yy_create_buffer (yyin, YY_BUF_SIZE));
 }
@@ -527,7 +534,7 @@ yy_create_string_buffer (const char *string, size_t size)
    on the include stack.  */
 
 void
-lex_redirect (const char *string)
+lex_redirect (const char *string, const char *fake_filename, unsigned int count)
 {
   YY_BUFFER_STATE tmp;
 
@@ -536,11 +543,11 @@ lex_redirect (const char *string)
     {
       einfo("%F: macros nested too deeply\n");
     }
-  file_name_stack[include_stack_ptr] = "redirect";
+  file_name_stack[include_stack_ptr] = fake_filename;
   lineno_stack[include_stack_ptr] = lineno;
   include_stack[include_stack_ptr] = YY_CURRENT_BUFFER;
   include_stack_ptr++;
-  lineno = 1;
+  lineno = count;
   tmp = yy_create_string_buffer (string, strlen (string));
   yy_switch_to_buffer (tmp);
 }
@@ -605,24 +612,34 @@ ldlex_popstate (void)
 {
   yy_start = *(--state_stack_p);
 }
+
+/* Return the current file name, or the previous file if no file is
+   current.  */
+
+const char*
+ldlex_filename (void)
+{
+  return file_name_stack[include_stack_ptr - (include_stack_ptr != 0)];
+}
 
 
-/* Place up to MAX_SIZE characters in BUF and return in *RESULT
+/* Place up to MAX_SIZE characters in BUF and return
    either the number of characters read, or 0 to indicate EOF.  */
 
-static void
-yy_input (char *buf, int *result, int max_size)
+static int
+yy_input (char *buf, int max_size)
 {
-  *result = 0;
+  int result = 0;
   if (YY_CURRENT_BUFFER->yy_input_file)
     {
       if (yyin)
 	{
-	  *result = fread (buf, 1, max_size, yyin);
-	  if (*result < max_size && ferror (yyin))
+	  result = fread (buf, 1, max_size, yyin);
+	  if (result < max_size && ferror (yyin))
 	    einfo ("%F%P: read in flex scanner failed\n");
 	}
     }
+  return result;
 }
 
 /* Eat the rest of a C-style comment.  */
@@ -677,14 +694,14 @@ lex_warn_invalid (char *where, char *what)
   if (ldfile_assumed_script)
     {
       bfd_set_error (bfd_error_file_not_recognized);
-      einfo ("%F%s: file not recognized: %E\n", ldfile_input_filename);
+      einfo ("%F%s: file not recognized: %E\n", ldlex_filename ());
     }
 
   if (! ISPRINT (*what))
     {
-      sprintf (buf, "\\%03o", (unsigned int) *what);
+      sprintf (buf, "\\%03o", *(unsigned char *) what);
       what = buf;
     }
 
-  einfo ("%P:%S: ignoring invalid character `%s'%s\n", what, where);
+  einfo ("%P:%S: ignoring invalid character `%s'%s\n", NULL, what, where);
 }

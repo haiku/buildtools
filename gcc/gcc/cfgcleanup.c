@@ -43,7 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "insn-config.h"
 #include "flags.h"
 #include "recog.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "cselib.h"
 #include "params.h"
 #include "tm_p.h"
@@ -65,10 +65,13 @@ static bool first_pass;
 /* Set to true if crossjumps occured in the latest run of try_optimize_cfg.  */
 static bool crossjumps_occured;
 
+/* Set to true if we couldn't run an optimization due to stale liveness
+   information; we should run df_analyze to enable more opportunities.  */
+static bool block_was_dirty;
+
 static bool try_crossjump_to_edge (int, edge, edge);
 static bool try_crossjump_bb (int, basic_block);
 static bool outgoing_edges_match (int, basic_block, basic_block);
-static int flow_find_cross_jump (int, basic_block, basic_block, rtx *, rtx *);
 static bool old_insns_match_p (int, rtx, rtx);
 
 static void merge_blocks_move_predecessor_nojumps (basic_block, basic_block);
@@ -432,7 +435,7 @@ try_forward_edges (int mode, basic_block b)
       int counter, goto_locus;
       bool threaded = false;
       int nthreaded_edges = 0;
-      bool may_thread = first_pass | df_get_bb_dirty (b);
+      bool may_thread = first_pass || (b->flags & BB_MODIFIED) != 0;
 
       /* Skip complex edges because we don't know how to update them.
 
@@ -467,7 +470,7 @@ try_forward_edges (int mode, basic_block b)
 	{
 	  basic_block new_target = NULL;
 	  bool new_target_threaded = false;
-	  may_thread |= df_get_bb_dirty (target);
+	  may_thread |= (target->flags & BB_MODIFIED) != 0;
 
 	  if (FORWARDER_BLOCK_P (target)
 	      && !(single_succ_edge (target)->flags & EDGE_CROSSING)
@@ -481,27 +484,34 @@ try_forward_edges (int mode, basic_block b)
 		{
 		  /* When not optimizing, ensure that edges or forwarder
 		     blocks with different locus are not optimized out.  */
-		  int locus = single_succ_edge (target)->goto_locus;
-		  rtx last ;
+		  int new_locus = single_succ_edge (target)->goto_locus;
+		  int locus = goto_locus;
 
-		  if (locus && goto_locus && !locator_eq (locus, goto_locus))
-		    counter = n_basic_blocks;
-		  else if (locus)
-		    goto_locus = locus;
-
-		  last = BB_END (target);
-		  if (DEBUG_INSN_P (last))
-		    last = prev_nondebug_insn (last);
-
-		  if (last && INSN_P (last))
+		  if (new_locus && locus && !locator_eq (new_locus, locus))
+		    new_target = NULL;
+		  else
 		    {
-		      locus = INSN_LOCATOR (last);
+		      rtx last;
 
-		      if (locus && goto_locus
-			  && !locator_eq (locus, goto_locus))
-			counter = n_basic_blocks;
-		      else if (locus)
-			goto_locus = locus;
+		      if (new_locus)
+			locus = new_locus;
+
+		      last = BB_END (target);
+		      if (DEBUG_INSN_P (last))
+			last = prev_nondebug_insn (last);
+
+		      new_locus = last && INSN_P (last)
+				  ? INSN_LOCATOR (last) : 0;
+
+		      if (new_locus && locus && !locator_eq (new_locus, locus))
+			new_target = NULL;
+		      else
+			{
+			  if (new_locus)
+			    locus = new_locus;
+
+			  goto_locus = locus;
+			}
 		    }
 		}
 	    }
@@ -794,7 +804,6 @@ merge_blocks_move (edge e, basic_block b, basic_block c, int mode)
       edge tmp_edge, b_fallthru_edge;
       bool c_has_outgoing_fallthru;
       bool b_has_incoming_fallthru;
-      edge_iterator ei;
 
       /* Avoid overactive code motion, as the forwarder blocks should be
 	 eliminated by edge redirection instead.  One exception might have
@@ -807,16 +816,10 @@ merge_blocks_move (edge e, basic_block b, basic_block c, int mode)
 	 and loop notes.  This is done by squeezing out all the notes
 	 and leaving them there to lie.  Not ideal, but functional.  */
 
-      FOR_EACH_EDGE (tmp_edge, ei, c->succs)
-	if (tmp_edge->flags & EDGE_FALLTHRU)
-	  break;
-
+      tmp_edge = find_fallthru_edge (c->succs);
       c_has_outgoing_fallthru = (tmp_edge != NULL);
 
-      FOR_EACH_EDGE (tmp_edge, ei, b->preds)
-	if (tmp_edge->flags & EDGE_FALLTHRU)
-	  break;
-
+      tmp_edge = find_fallthru_edge (b->preds);
       b_has_incoming_fallthru = (tmp_edge != NULL);
       b_fallthru_edge = tmp_edge;
       next = b->prev_bb;
@@ -977,13 +980,27 @@ old_insns_match_p (int mode ATTRIBUTE_UNUSED, rtx i1, rtx i2)
      be filled that clobbers a parameter expected by the subroutine.
 
      ??? We take the simple route for now and assume that if they're
-     equal, they were constructed identically.  */
+     equal, they were constructed identically.
 
-  if (CALL_P (i1)
-      && (!rtx_equal_p (CALL_INSN_FUNCTION_USAGE (i1),
+     Also check for identical exception regions.  */
+
+  if (CALL_P (i1))
+    {
+      /* Ensure the same EH region.  */
+      rtx n1 = find_reg_note (i1, REG_EH_REGION, 0);
+      rtx n2 = find_reg_note (i2, REG_EH_REGION, 0);
+
+      if (!n1 && n2)
+	return false;
+
+      if (n1 && (!n2 || XEXP (n1, 0) != XEXP (n2, 0)))
+	return false;
+
+      if (!rtx_equal_p (CALL_INSN_FUNCTION_USAGE (i1),
 			CALL_INSN_FUNCTION_USAGE (i2))
-	  || SIBLING_CALL_P (i1) != SIBLING_CALL_P (i2)))
-    return false;
+	  || SIBLING_CALL_P (i1) != SIBLING_CALL_P (i2))
+	return false;
+    }
 
 #ifdef STACK_REGS
   /* If cross_jump_death_matters is not 0, the insn's mode
@@ -1022,6 +1039,29 @@ old_insns_match_p (int mode ATTRIBUTE_UNUSED, rtx i1, rtx i2)
   return false;
 }
 
+/* When comparing insns I1 and I2 in flow_find_cross_jump or
+   flow_find_head_matching_sequence, ensure the notes match.  */
+
+static void
+merge_notes (rtx i1, rtx i2)
+{
+  /* If the merged insns have different REG_EQUAL notes, then
+     remove them.  */
+  rtx equiv1 = find_reg_equal_equiv_note (i1);
+  rtx equiv2 = find_reg_equal_equiv_note (i2);
+
+  if (equiv1 && !equiv2)
+    remove_note (i1, equiv1);
+  else if (!equiv1 && equiv2)
+    remove_note (i2, equiv2);
+  else if (equiv1 && equiv2
+	   && !rtx_equal_p (XEXP (equiv1, 0), XEXP (equiv2, 0)))
+    {
+      remove_note (i1, equiv1);
+      remove_note (i2, equiv2);
+    }
+}
+
 /* Look through the insns at the end of BB1 and BB2 and find the longest
    sequence that are equivalent.  Store the first insns for that sequence
    in *F1 and *F2 and return the sequence length.
@@ -1029,9 +1069,8 @@ old_insns_match_p (int mode ATTRIBUTE_UNUSED, rtx i1, rtx i2)
    To simplify callers of this function, if the blocks match exactly,
    store the head of the blocks in *F1 and *F2.  */
 
-static int
-flow_find_cross_jump (int mode ATTRIBUTE_UNUSED, basic_block bb1,
-		      basic_block bb2, rtx *f1, rtx *f2)
+int
+flow_find_cross_jump (basic_block bb1, basic_block bb2, rtx *f1, rtx *f2)
 {
   rtx i1, i2, last1, last2, afterlast1, afterlast2;
   int ninsns = 0;
@@ -1071,7 +1110,7 @@ flow_find_cross_jump (int mode ATTRIBUTE_UNUSED, basic_block bb1,
       if (i1 == BB_HEAD (bb1) || i2 == BB_HEAD (bb2))
 	break;
 
-      if (!old_insns_match_p (mode, i1, i2))
+      if (!old_insns_match_p (0, i1, i2))
 	break;
 
       merge_memattrs (i1, i2);
@@ -1079,21 +1118,7 @@ flow_find_cross_jump (int mode ATTRIBUTE_UNUSED, basic_block bb1,
       /* Don't begin a cross-jump with a NOTE insn.  */
       if (INSN_P (i1))
 	{
-	  /* If the merged insns have different REG_EQUAL notes, then
-	     remove them.  */
-	  rtx equiv1 = find_reg_equal_equiv_note (i1);
-	  rtx equiv2 = find_reg_equal_equiv_note (i2);
-
-	  if (equiv1 && !equiv2)
-	    remove_note (i1, equiv1);
-	  else if (!equiv1 && equiv2)
-	    remove_note (i2, equiv2);
-	  else if (equiv1 && equiv2
-		   && !rtx_equal_p (XEXP (equiv1, 0), XEXP (equiv2, 0)))
-	    {
-	      remove_note (i1, equiv1);
-	      remove_note (i2, equiv2);
-	    }
+	  merge_notes (i1, i2);
 
 	  afterlast1 = last1, afterlast2 = last2;
 	  last1 = i1, last2 = i2;
@@ -1128,6 +1153,108 @@ flow_find_cross_jump (int mode ATTRIBUTE_UNUSED, basic_block bb1,
       if (last2 != BB_HEAD (bb2) && LABEL_P (PREV_INSN (last2)))
 	last2 = PREV_INSN (last2);
 
+      *f1 = last1;
+      *f2 = last2;
+    }
+
+  return ninsns;
+}
+
+/* Like flow_find_cross_jump, except start looking for a matching sequence from
+   the head of the two blocks.  Do not include jumps at the end.
+   If STOP_AFTER is nonzero, stop after finding that many matching
+   instructions.  */
+
+int
+flow_find_head_matching_sequence (basic_block bb1, basic_block bb2, rtx *f1,
+				  rtx *f2, int stop_after)
+{
+  rtx i1, i2, last1, last2, beforelast1, beforelast2;
+  int ninsns = 0;
+  edge e;
+  edge_iterator ei;
+  int nehedges1 = 0, nehedges2 = 0;
+
+  FOR_EACH_EDGE (e, ei, bb1->succs)
+    if (e->flags & EDGE_EH)
+      nehedges1++;
+  FOR_EACH_EDGE (e, ei, bb2->succs)
+    if (e->flags & EDGE_EH)
+      nehedges2++;
+
+  i1 = BB_HEAD (bb1);
+  i2 = BB_HEAD (bb2);
+  last1 = beforelast1 = last2 = beforelast2 = NULL_RTX;
+
+  while (true)
+    {
+      /* Ignore notes, except NOTE_INSN_EPILOGUE_BEG.  */
+      while (!NONDEBUG_INSN_P (i1) && i1 != BB_END (bb1))
+	{
+	  if (NOTE_P (i1) && NOTE_KIND (i1) == NOTE_INSN_EPILOGUE_BEG)
+	    break;
+	  i1 = NEXT_INSN (i1);
+	}
+
+      while (!NONDEBUG_INSN_P (i2) && i2 != BB_END (bb2))
+	{
+	  if (NOTE_P (i2) && NOTE_KIND (i2) == NOTE_INSN_EPILOGUE_BEG)
+	    break;
+	  i2 = NEXT_INSN (i2);
+	}
+
+      if ((i1 == BB_END (bb1) && !NONDEBUG_INSN_P (i1))
+	  || (i2 == BB_END (bb2) && !NONDEBUG_INSN_P (i2)))
+	break;
+
+      if (NOTE_P (i1) || NOTE_P (i2)
+	  || JUMP_P (i1) || JUMP_P (i2))
+	break;
+
+      /* A sanity check to make sure we're not merging insns with different
+	 effects on EH.  If only one of them ends a basic block, it shouldn't
+	 have an EH edge; if both end a basic block, there should be the same
+	 number of EH edges.  */
+      if ((i1 == BB_END (bb1) && i2 != BB_END (bb2)
+	   && nehedges1 > 0)
+	  || (i2 == BB_END (bb2) && i1 != BB_END (bb1)
+	      && nehedges2 > 0)
+	  || (i1 == BB_END (bb1) && i2 == BB_END (bb2)
+	      && nehedges1 != nehedges2))
+	break;
+
+      if (!old_insns_match_p (0, i1, i2))
+	break;
+
+      merge_memattrs (i1, i2);
+
+      /* Don't begin a cross-jump with a NOTE insn.  */
+      if (INSN_P (i1))
+	{
+	  merge_notes (i1, i2);
+
+	  beforelast1 = last1, beforelast2 = last2;
+	  last1 = i1, last2 = i2;
+	  ninsns++;
+	}
+
+      if (i1 == BB_END (bb1) || i2 == BB_END (bb2)
+	  || (stop_after > 0 && ninsns == stop_after))
+	break;
+
+      i1 = NEXT_INSN (i1);
+      i2 = NEXT_INSN (i2);
+    }
+
+#ifdef HAVE_cc0
+  /* Don't allow a compare to be shared by cross-jumping unless the insn
+     after the compare is also shared.  */
+  if (ninsns && reg_mentioned_p (cc0_rtx, last1) && sets_cc0_p (last1))
+    last1 = beforelast1, last2 = beforelast2, ninsns--;
+#endif
+
+  if (ninsns)
+    {
       *f1 = last1;
       *f2 = last2;
     }
@@ -1503,7 +1630,7 @@ try_crossjump_to_edge (int mode, edge e1, edge e2)
     return false;
 
   /* ... and part the second.  */
-  nmatch = flow_find_cross_jump (mode, src1, src2, &newpos1, &newpos2);
+  nmatch = flow_find_cross_jump (src1, src2, &newpos1, &newpos2);
 
   /* Don't proceed with the crossjump unless we found a sufficient number
      of matching instructions or the 'from' block was totally matched
@@ -1686,7 +1813,6 @@ try_crossjump_bb (int mode, basic_block bb)
   bool changed;
   unsigned max, ix, ix2;
   basic_block ev, ev2;
-  edge_iterator ei;
 
   /* Nothing to do if there is not at least two incoming edges.  */
   if (EDGE_COUNT (bb->preds) < 2)
@@ -1723,14 +1849,7 @@ try_crossjump_bb (int mode, basic_block bb)
   if (EDGE_COUNT (bb->preds) > max)
     return false;
 
-  FOR_EACH_EDGE (e, ei, bb->preds)
-    {
-      if (e->flags & EDGE_FALLTHRU)
-	{
-	  fallthru = e;
-	  break;
-	}
-    }
+  fallthru = find_fallthru_edge (bb->preds);
 
   changed = false;
   for (ix = 0, ev = bb; ix < EDGE_COUNT (ev->preds); )
@@ -1749,8 +1868,8 @@ try_crossjump_bb (int mode, basic_block bb)
 	  /* If nothing changed since the last attempt, there is nothing
 	     we can do.  */
 	  if (!first_pass
-	      && (!(df_get_bb_dirty (e->src))
-		  && !(df_get_bb_dirty (fallthru->src))))
+	      && !((e->src->flags & BB_MODIFIED)
+		   || (fallthru->src->flags & BB_MODIFIED)))
 	    continue;
 
 	  if (try_crossjump_to_edge (mode, e, fallthru))
@@ -1799,8 +1918,8 @@ try_crossjump_bb (int mode, basic_block bb)
 	  /* If nothing changed since the last attempt, there is nothing
 	     we can do.  */
 	  if (!first_pass
-	      && (!(df_get_bb_dirty (e->src))
-		  && !(df_get_bb_dirty (e2->src))))
+	      && !((e->src->flags & BB_MODIFIED)
+		   || (e2->src->flags & BB_MODIFIED)))
 	    continue;
 
 	  if (try_crossjump_to_edge (mode, e, e2))
@@ -1815,6 +1934,313 @@ try_crossjump_bb (int mode, basic_block bb)
 
   if (changed)
     crossjumps_occured = true;
+
+  return changed;
+}
+
+/* Search the successors of BB for common insn sequences.  When found,
+   share code between them by moving it across the basic block
+   boundary.  Return true if any changes made.  */
+
+static bool
+try_head_merge_bb (basic_block bb)
+{
+  basic_block final_dest_bb = NULL;
+  int max_match = INT_MAX;
+  edge e0;
+  rtx *headptr, *currptr, *nextptr;
+  bool changed, moveall;
+  unsigned ix;
+  rtx e0_last_head, cond, move_before;
+  unsigned nedges = EDGE_COUNT (bb->succs);
+  rtx jump = BB_END (bb);
+  regset live, live_union;
+
+  /* Nothing to do if there is not at least two outgoing edges.  */
+  if (nedges < 2)
+    return false;
+
+  /* Don't crossjump if this block ends in a computed jump,
+     unless we are optimizing for size.  */
+  if (optimize_bb_for_size_p (bb)
+      && bb != EXIT_BLOCK_PTR
+      && computed_jump_p (BB_END (bb)))
+    return false;
+
+  cond = get_condition (jump, &move_before, true, false);
+  if (cond == NULL_RTX)
+    {
+#ifdef HAVE_cc0
+      if (reg_mentioned_p (cc0_rtx, jump))
+	move_before = prev_nonnote_nondebug_insn (jump);
+      else
+#endif
+	move_before = jump;
+    }
+
+  for (ix = 0; ix < nedges; ix++)
+    if (EDGE_SUCC (bb, ix)->dest == EXIT_BLOCK_PTR)
+      return false;
+
+  for (ix = 0; ix < nedges; ix++)
+    {
+      edge e = EDGE_SUCC (bb, ix);
+      basic_block other_bb = e->dest;
+
+      if (df_get_bb_dirty (other_bb))
+	{
+	  block_was_dirty = true;
+	  return false;
+	}
+
+      if (e->flags & EDGE_ABNORMAL)
+	return false;
+
+      /* Normally, all destination blocks must only be reachable from this
+	 block, i.e. they must have one incoming edge.
+
+	 There is one special case we can handle, that of multiple consecutive
+	 jumps where the first jumps to one of the targets of the second jump.
+	 This happens frequently in switch statements for default labels.
+	 The structure is as follows:
+	 FINAL_DEST_BB
+	 ....
+	 if (cond) jump A;
+	 fall through
+	 BB
+	 jump with targets A, B, C, D...
+	 A
+	 has two incoming edges, from FINAL_DEST_BB and BB
+
+	 In this case, we can try to move the insns through BB and into
+	 FINAL_DEST_BB.  */
+      if (EDGE_COUNT (other_bb->preds) != 1)
+	{
+	  edge incoming_edge, incoming_bb_other_edge;
+	  edge_iterator ei;
+
+	  if (final_dest_bb != NULL
+	      || EDGE_COUNT (other_bb->preds) != 2)
+	    return false;
+
+	  /* We must be able to move the insns across the whole block.  */
+	  move_before = BB_HEAD (bb);
+	  while (!NONDEBUG_INSN_P (move_before))
+	    move_before = NEXT_INSN (move_before);
+
+	  if (EDGE_COUNT (bb->preds) != 1)
+	    return false;
+	  incoming_edge = EDGE_PRED (bb, 0);
+	  final_dest_bb = incoming_edge->src;
+	  if (EDGE_COUNT (final_dest_bb->succs) != 2)
+	    return false;
+	  FOR_EACH_EDGE (incoming_bb_other_edge, ei, final_dest_bb->succs)
+	    if (incoming_bb_other_edge != incoming_edge)
+	      break;
+	  if (incoming_bb_other_edge->dest != other_bb)
+	    return false;
+	}
+    }
+
+  e0 = EDGE_SUCC (bb, 0);
+  e0_last_head = NULL_RTX;
+  changed = false;
+
+  for (ix = 1; ix < nedges; ix++)
+    {
+      edge e = EDGE_SUCC (bb, ix);
+      rtx e0_last, e_last;
+      int nmatch;
+
+      nmatch = flow_find_head_matching_sequence (e0->dest, e->dest,
+						 &e0_last, &e_last, 0);
+      if (nmatch == 0)
+	return false;
+
+      if (nmatch < max_match)
+	{
+	  max_match = nmatch;
+	  e0_last_head = e0_last;
+	}
+    }
+
+  /* If we matched an entire block, we probably have to avoid moving the
+     last insn.  */
+  if (max_match > 0
+      && e0_last_head == BB_END (e0->dest)
+      && (find_reg_note (e0_last_head, REG_EH_REGION, 0)
+	  || control_flow_insn_p (e0_last_head)))
+    {
+      max_match--;
+      if (max_match == 0)
+	return false;
+      do
+	e0_last_head = prev_real_insn (e0_last_head);
+      while (DEBUG_INSN_P (e0_last_head));
+    }
+
+  if (max_match == 0)
+    return false;
+
+  /* We must find a union of the live registers at each of the end points.  */
+  live = BITMAP_ALLOC (NULL);
+  live_union = BITMAP_ALLOC (NULL);
+
+  currptr = XNEWVEC (rtx, nedges);
+  headptr = XNEWVEC (rtx, nedges);
+  nextptr = XNEWVEC (rtx, nedges);
+
+  for (ix = 0; ix < nedges; ix++)
+    {
+      int j;
+      basic_block merge_bb = EDGE_SUCC (bb, ix)->dest;
+      rtx head = BB_HEAD (merge_bb);
+
+      while (!NONDEBUG_INSN_P (head))
+	head = NEXT_INSN (head);
+      headptr[ix] = head;
+      currptr[ix] = head;
+
+      /* Compute the end point and live information  */
+      for (j = 1; j < max_match; j++)
+	do
+	  head = NEXT_INSN (head);
+	while (!NONDEBUG_INSN_P (head));
+      simulate_backwards_to_point (merge_bb, live, head);
+      IOR_REG_SET (live_union, live);
+    }
+
+  /* If we're moving across two blocks, verify the validity of the
+     first move, then adjust the target and let the loop below deal
+     with the final move.  */
+  if (final_dest_bb != NULL)
+    {
+      rtx move_upto;
+
+      moveall = can_move_insns_across (currptr[0], e0_last_head, move_before,
+				       jump, e0->dest, live_union,
+				       NULL, &move_upto);
+      if (!moveall)
+	{
+	  if (move_upto == NULL_RTX)
+	    goto out;
+
+	  while (e0_last_head != move_upto)
+	    {
+	      df_simulate_one_insn_backwards (e0->dest, e0_last_head,
+					      live_union);
+	      e0_last_head = PREV_INSN (e0_last_head);
+	    }
+	}
+      if (e0_last_head == NULL_RTX)
+	goto out;
+
+      jump = BB_END (final_dest_bb);
+      cond = get_condition (jump, &move_before, true, false);
+      if (cond == NULL_RTX)
+	{
+#ifdef HAVE_cc0
+	  if (reg_mentioned_p (cc0_rtx, jump))
+	    move_before = prev_nonnote_nondebug_insn (jump);
+	  else
+#endif
+	    move_before = jump;
+	}
+    }
+
+  do
+    {
+      rtx move_upto;
+      moveall = can_move_insns_across (currptr[0], e0_last_head,
+				       move_before, jump, e0->dest, live_union,
+				       NULL, &move_upto);
+      if (!moveall && move_upto == NULL_RTX)
+	{
+	  if (jump == move_before)
+	    break;
+
+	  /* Try again, using a different insertion point.  */
+	  move_before = jump;
+
+#ifdef HAVE_cc0
+	  /* Don't try moving before a cc0 user, as that may invalidate
+	     the cc0.  */
+	  if (reg_mentioned_p (cc0_rtx, jump))
+	    break;
+#endif
+
+	  continue;
+	}
+
+      if (final_dest_bb && !moveall)
+	/* We haven't checked whether a partial move would be OK for the first
+	   move, so we have to fail this case.  */
+	break;
+
+      changed = true;
+      for (;;)
+	{
+	  if (currptr[0] == move_upto)
+	    break;
+	  for (ix = 0; ix < nedges; ix++)
+	    {
+	      rtx curr = currptr[ix];
+	      do
+		curr = NEXT_INSN (curr);
+	      while (!NONDEBUG_INSN_P (curr));
+	      currptr[ix] = curr;
+	    }
+	}
+
+      /* If we can't currently move all of the identical insns, remember
+	 each insn after the range that we'll merge.  */
+      if (!moveall)
+	for (ix = 0; ix < nedges; ix++)
+	  {
+	    rtx curr = currptr[ix];
+	    do
+	      curr = NEXT_INSN (curr);
+	    while (!NONDEBUG_INSN_P (curr));
+	    nextptr[ix] = curr;
+	  }
+
+      reorder_insns (headptr[0], currptr[0], PREV_INSN (move_before));
+      df_set_bb_dirty (EDGE_SUCC (bb, 0)->dest);
+      if (final_dest_bb != NULL)
+	df_set_bb_dirty (final_dest_bb);
+      df_set_bb_dirty (bb);
+      for (ix = 1; ix < nedges; ix++)
+	{
+	  df_set_bb_dirty (EDGE_SUCC (bb, ix)->dest);
+	  delete_insn_chain (headptr[ix], currptr[ix], false);
+	}
+      if (!moveall)
+	{
+	  if (jump == move_before)
+	    break;
+
+	  /* For the unmerged insns, try a different insertion point.  */
+	  move_before = jump;
+
+#ifdef HAVE_cc0
+	  /* Don't try moving before a cc0 user, as that may invalidate
+	     the cc0.  */
+	  if (reg_mentioned_p (cc0_rtx, jump))
+	    break;
+#endif
+
+	  for (ix = 0; ix < nedges; ix++)
+	    currptr[ix] = headptr[ix] = nextptr[ix];
+	}
+    }
+  while (!moveall);
+
+ out:
+  free (currptr);
+  free (headptr);
+  free (nextptr);
+
+  crossjumps_occured |= changed;
 
   return changed;
 }
@@ -1864,6 +2290,7 @@ try_optimize_cfg (int mode)
 	 one predecessor, they may be combined.  */
       do
 	{
+	  block_was_dirty = false;
 	  changed = false;
 	  iterations++;
 
@@ -1994,6 +2421,7 @@ try_optimize_cfg (int mode)
 		  continue;
 		}
 
+	      /* Merge B with its single successor, if any.  */
 	      if (single_succ_p (b)
 		  && (s = single_succ_edge (b))
 		  && !(s->flags & EDGE_COMPLEX)
@@ -2061,6 +2489,13 @@ try_optimize_cfg (int mode)
 		  && try_crossjump_bb (mode, b))
 		changed_here = true;
 
+	      if ((mode & CLEANUP_CROSSJUMP)
+		  /* This can lengthen register lifetimes.  Do it only after
+		     reload.  */
+		  && reload_completed
+		  && try_head_merge_bb (b))
+		changed_here = true;
+
 	      /* Don't get confused by the index shift caused by
 		 deleting blocks.  */
 	      if (!changed_here)
@@ -2072,6 +2507,13 @@ try_optimize_cfg (int mode)
 	  if ((mode & CLEANUP_CROSSJUMP)
 	      && try_crossjump_bb (mode, EXIT_BLOCK_PTR))
 	    changed = true;
+
+	  if (block_was_dirty)
+	    {
+	      /* This should only be set by head-merging.  */
+	      gcc_assert (mode & CLEANUP_CROSSJUMP);
+	      df_analyze ();
+	    }
 
 #ifdef ENABLE_CHECKING
 	  if (changed)
@@ -2257,8 +2699,7 @@ cleanup_cfg (int mode)
 	  if ((mode & CLEANUP_EXPENSIVE) && !reload_completed
 	      && !delete_trivially_dead_insns (get_insns (), max_reg_num ()))
 	    break;
-	  else if ((mode & CLEANUP_CROSSJUMP)
-		   && crossjumps_occured)
+	  if ((mode & CLEANUP_CROSSJUMP) && crossjumps_occured)
 	    run_fast_dce ();
 	}
       else

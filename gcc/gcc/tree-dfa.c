@@ -1,5 +1,5 @@
 /* Data flow functions for trees.
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
@@ -26,18 +26,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "hashtab.h"
 #include "pointer-set.h"
 #include "tree.h"
-#include "rtl.h"
 #include "tm_p.h"
-#include "hard-reg-set.h"
 #include "basic-block.h"
 #include "output.h"
 #include "timevar.h"
-#include "expr.h"
 #include "ggc.h"
 #include "langhooks.h"
 #include "flags.h"
 #include "function.h"
-#include "diagnostic.h"
+#include "tree-pretty-print.h"
 #include "tree-dump.h"
 #include "gimple.h"
 #include "tree-flow.h"
@@ -137,7 +134,7 @@ create_var_ann (tree t)
 	      || TREE_CODE (t) == PARM_DECL
 	      || TREE_CODE (t) == RESULT_DECL);
 
-  ann = GGC_CNEW (struct var_ann_d);
+  ann = ggc_alloc_cleared_var_ann_d ();
   *DECL_VAR_ANN_PTR (t) = ann;
 
   return ann;
@@ -193,11 +190,7 @@ renumber_gimple_stmt_uids_in_blocks (basic_block *blocks, int n_blocks)
 tree
 make_rename_temp (tree type, const char *prefix)
 {
-  tree t = create_tmp_var (type, prefix);
-
-  if (TREE_CODE (TREE_TYPE (t)) == COMPLEX_TYPE
-      || TREE_CODE (TREE_TYPE (t)) == VECTOR_TYPE)
-    DECL_GIMPLE_REG_P (t) = 1;
+  tree t = create_tmp_reg (type, prefix);
 
   if (gimple_referenced_vars (cfun))
     {
@@ -225,7 +218,7 @@ dump_referenced_vars (FILE *file)
   fprintf (file, "\nReferenced variables in %s: %u\n\n",
 	   get_name (current_function_decl), (unsigned) num_referenced_vars);
 
-  FOR_EACH_REFERENCED_VAR (var, rvi)
+  FOR_EACH_REFERENCED_VAR (cfun, var, rvi)
     {
       fprintf (file, "Variable: ");
       dump_variable (file, var);
@@ -237,7 +230,7 @@ dump_referenced_vars (FILE *file)
 
 /* Dump the list of all the referenced variables to stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_referenced_vars (void)
 {
   dump_referenced_vars (stderr);
@@ -249,8 +242,6 @@ debug_referenced_vars (void)
 void
 dump_variable (FILE *file, tree var)
 {
-  var_ann_t ann;
-
   if (TREE_CODE (var) == SSA_NAME)
     {
       if (POINTER_TYPE_P (TREE_TYPE (var)))
@@ -266,9 +257,9 @@ dump_variable (FILE *file, tree var)
 
   print_generic_expr (file, var, dump_flags);
 
-  ann = var_ann (var);
-
   fprintf (file, ", UID D.%u", (unsigned) DECL_UID (var));
+  if (DECL_PT_UID (var) != DECL_UID (var))
+    fprintf (file, ", PT-UID D.%u", (unsigned) DECL_PT_UID (var));
 
   fprintf (file, ", ");
   print_generic_expr (file, TREE_TYPE (var), dump_flags);
@@ -281,19 +272,6 @@ dump_variable (FILE *file, tree var)
 
   if (TREE_THIS_VOLATILE (var))
     fprintf (file, ", is volatile");
-
-  if (is_call_clobbered (var))
-    fprintf (file, ", call clobbered");
-  else if (is_call_used (var))
-    fprintf (file, ", call used");
-
-  if (ann && ann->noalias_state == NO_ALIAS)
-    fprintf (file, ", NO_ALIAS (does not alias other NO_ALIAS symbols)");
-  else if (ann && ann->noalias_state == NO_ALIAS_GLOBAL)
-    fprintf (file, ", NO_ALIAS_GLOBAL (does not alias other NO_ALIAS symbols"
-	           " and global vars)");
-  else if (ann && ann->noalias_state == NO_ALIAS_ANYTHING)
-    fprintf (file, ", NO_ALIAS_ANYTHING (does not alias any other symbols)");
 
   if (cfun && gimple_default_def (cfun, var))
     {
@@ -313,7 +291,7 @@ dump_variable (FILE *file, tree var)
 
 /* Dump variable VAR and its may-aliases to stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_variable (tree var)
 {
   dump_variable (stderr, var);
@@ -400,7 +378,7 @@ dump_dfa_stats (FILE *file)
 
 /* Dump DFA statistics on stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_dfa_stats (void)
 {
   dump_dfa_stats (stderr);
@@ -422,7 +400,7 @@ collect_dfa_stats (struct dfa_stats_d *dfa_stats_p ATTRIBUTE_UNUSED)
   memset ((void *)dfa_stats_p, 0, sizeof (struct dfa_stats_d));
 
   /* Count all the variable annotations.  */
-  FOR_EACH_REFERENCED_VAR (var, vi)
+  FOR_EACH_REFERENCED_VAR (cfun, var, vi)
     if (var_ann (var))
       dfa_stats_p->num_var_anns++;
 
@@ -510,13 +488,12 @@ find_referenced_vars_in (gimple stmt)
    variable.  */
 
 tree
-referenced_var_lookup (unsigned int uid)
+referenced_var_lookup (struct function *fn, unsigned int uid)
 {
   tree h;
   struct tree_decl_minimal in;
   in.uid = uid;
-  h = (tree) htab_find_with_hash (gimple_referenced_vars (cfun), &in, uid);
-  gcc_assert (h || uid == 0);
+  h = (tree) htab_find_with_hash (gimple_referenced_vars (fn), &in, uid);
   return h;
 }
 
@@ -732,6 +709,7 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
   tree size_tree = NULL_TREE;
   HOST_WIDE_INT bit_offset = 0;
   bool seen_variable_array_ref = false;
+  tree base_type;
 
   /* First get the final access size from just the outermost expression.  */
   if (TREE_CODE (exp) == COMPONENT_REF)
@@ -762,6 +740,8 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
      and find the ultimate containing object.  */
   while (1)
     {
+      base_type = TREE_TYPE (exp);
+
       switch (TREE_CODE (exp))
 	{
 	case BIT_FIELD_REF:
@@ -791,9 +771,9 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
 		    && maxsize != -1)
 		  {
 		    tree stype = TREE_TYPE (TREE_OPERAND (exp, 0));
-		    tree next = TREE_CHAIN (field);
+		    tree next = DECL_CHAIN (field);
 		    while (next && TREE_CODE (next) != FIELD_DECL)
-		      next = TREE_CHAIN (next);
+		      next = DECL_CHAIN (next);
 		    if (!next
 			|| TREE_CODE (stype) != RECORD_TYPE)
 		      {
@@ -877,6 +857,61 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
 	case VIEW_CONVERT_EXPR:
 	  break;
 
+	case MEM_REF:
+	  /* Hand back the decl for MEM[&decl, off].  */
+	  if (TREE_CODE (TREE_OPERAND (exp, 0)) == ADDR_EXPR)
+	    {
+	      if (integer_zerop (TREE_OPERAND (exp, 1)))
+		exp = TREE_OPERAND (TREE_OPERAND (exp, 0), 0);
+	      else
+		{
+		  double_int off = mem_ref_offset (exp);
+		  off = double_int_lshift (off,
+					   BITS_PER_UNIT == 8
+					   ? 3 : exact_log2 (BITS_PER_UNIT),
+					   HOST_BITS_PER_DOUBLE_INT, true);
+		  off = double_int_add (off, shwi_to_double_int (bit_offset));
+		  if (double_int_fits_in_shwi_p (off))
+		    {
+		      bit_offset = double_int_to_shwi (off);
+		      exp = TREE_OPERAND (TREE_OPERAND (exp, 0), 0);
+		    }
+		}
+	    }
+	  goto done;
+
+	case TARGET_MEM_REF:
+	  /* Hand back the decl for MEM[&decl, off].  */
+	  if (TREE_CODE (TMR_BASE (exp)) == ADDR_EXPR)
+	    {
+	      /* Via the variable index or index2 we can reach the
+		 whole object.  */
+	      if (TMR_INDEX (exp) || TMR_INDEX2 (exp))
+		{
+		  exp = TREE_OPERAND (TMR_BASE (exp), 0);
+		  bit_offset = 0;
+		  maxsize = -1;
+		  goto done;
+		}
+	      if (integer_zerop (TMR_OFFSET (exp)))
+		exp = TREE_OPERAND (TMR_BASE (exp), 0);
+	      else
+		{
+		  double_int off = mem_ref_offset (exp);
+		  off = double_int_lshift (off,
+					   BITS_PER_UNIT == 8
+					   ? 3 : exact_log2 (BITS_PER_UNIT),
+					   HOST_BITS_PER_DOUBLE_INT, true);
+		  off = double_int_add (off, shwi_to_double_int (bit_offset));
+		  if (double_int_fits_in_shwi_p (off))
+		    {
+		      bit_offset = double_int_to_shwi (off);
+		      exp = TREE_OPERAND (TMR_BASE (exp), 0);
+		    }
+		}
+	    }
+	  goto done;
+
 	default:
 	  goto done;
 	}
@@ -894,9 +929,16 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
      the array.  The simplest way to conservatively deal with this
      is to punt in the case that offset + maxsize reaches the
      base type boundary.  This needs to include possible trailing padding
-     that is there for alignment purposes.
+     that is there for alignment purposes.  */
 
-     That is of course only true if the base object is not a decl.  */
+  if (seen_variable_array_ref
+      && maxsize != -1
+      && (!host_integerp (TYPE_SIZE (base_type), 1)
+	  || (bit_offset + maxsize
+	      == (signed) TREE_INT_CST_LOW (TYPE_SIZE (base_type)))))
+    maxsize = -1;
+
+  /* In case of a decl or constant base object we can do better.  */
 
   if (DECL_P (exp))
     {
@@ -906,12 +948,14 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
 	  && host_integerp (DECL_SIZE (exp), 1))
 	maxsize = TREE_INT_CST_LOW (DECL_SIZE (exp)) - bit_offset;
     }
-  else if (seen_variable_array_ref
-	   && maxsize != -1
-	   && (!host_integerp (TYPE_SIZE (TREE_TYPE (exp)), 1)
-	       || (bit_offset + maxsize
-		   == (signed) TREE_INT_CST_LOW (TYPE_SIZE (TREE_TYPE (exp))))))
-    maxsize = -1;
+  else if (CONSTANT_CLASS_P (exp))
+    {
+      /* If maxsize is unknown adjust it according to the size of the
+         base type constant.  */
+      if (maxsize == -1
+	  && host_integerp (TYPE_SIZE (TREE_TYPE (exp)), 1))
+	maxsize = TREE_INT_CST_LOW (TYPE_SIZE (TREE_TYPE (exp))) - bit_offset;
+    }
 
   /* ???  Due to negative offsets in ARRAY_REF we can end up with
      negative bit_offset here.  We might want to store a zero offset
@@ -920,6 +964,120 @@ get_ref_base_and_extent (tree exp, HOST_WIDE_INT *poffset,
   *psize = bitsize;
   *pmax_size = maxsize;
 
+  return exp;
+}
+
+/* Returns the base object and a constant BITS_PER_UNIT offset in *POFFSET that
+   denotes the starting address of the memory access EXP.
+   Returns NULL_TREE if the offset is not constant or any component
+   is not BITS_PER_UNIT-aligned.  */
+
+tree
+get_addr_base_and_unit_offset (tree exp, HOST_WIDE_INT *poffset)
+{
+  HOST_WIDE_INT byte_offset = 0;
+
+  /* Compute cumulative byte-offset for nested component-refs and array-refs,
+     and find the ultimate containing object.  */
+  while (1)
+    {
+      switch (TREE_CODE (exp))
+	{
+	case BIT_FIELD_REF:
+	  return NULL_TREE;
+
+	case COMPONENT_REF:
+	  {
+	    tree field = TREE_OPERAND (exp, 1);
+	    tree this_offset = component_ref_field_offset (exp);
+	    HOST_WIDE_INT hthis_offset;
+
+	    if (!this_offset
+		|| TREE_CODE (this_offset) != INTEGER_CST
+		|| (TREE_INT_CST_LOW (DECL_FIELD_BIT_OFFSET (field))
+		    % BITS_PER_UNIT))
+	      return NULL_TREE;
+
+	    hthis_offset = TREE_INT_CST_LOW (this_offset);
+	    hthis_offset += (TREE_INT_CST_LOW (DECL_FIELD_BIT_OFFSET (field))
+			     / BITS_PER_UNIT);
+	    byte_offset += hthis_offset;
+	  }
+	  break;
+
+	case ARRAY_REF:
+	case ARRAY_RANGE_REF:
+	  {
+	    tree index = TREE_OPERAND (exp, 1);
+	    tree low_bound, unit_size;
+
+	    /* If the resulting bit-offset is constant, track it.  */
+	    if (TREE_CODE (index) == INTEGER_CST
+		&& (low_bound = array_ref_low_bound (exp),
+		    TREE_CODE (low_bound) == INTEGER_CST)
+		&& (unit_size = array_ref_element_size (exp),
+		    TREE_CODE (unit_size) == INTEGER_CST))
+	      {
+		HOST_WIDE_INT hindex = TREE_INT_CST_LOW (index);
+
+		hindex -= TREE_INT_CST_LOW (low_bound);
+		hindex *= TREE_INT_CST_LOW (unit_size);
+		byte_offset += hindex;
+	      }
+	    else
+	      return NULL_TREE;
+	  }
+	  break;
+
+	case REALPART_EXPR:
+	  break;
+
+	case IMAGPART_EXPR:
+	  byte_offset += TREE_INT_CST_LOW (TYPE_SIZE_UNIT (TREE_TYPE (exp)));
+	  break;
+
+	case VIEW_CONVERT_EXPR:
+	  break;
+
+	case MEM_REF:
+	  /* Hand back the decl for MEM[&decl, off].  */
+	  if (TREE_CODE (TREE_OPERAND (exp, 0)) == ADDR_EXPR)
+	    {
+	      if (!integer_zerop (TREE_OPERAND (exp, 1)))
+		{
+		  double_int off = mem_ref_offset (exp);
+		  gcc_assert (off.high == -1 || off.high == 0);
+		  byte_offset += double_int_to_shwi (off);
+		}
+	      exp = TREE_OPERAND (TREE_OPERAND (exp, 0), 0);
+	    }
+	  goto done;
+
+	case TARGET_MEM_REF:
+	  /* Hand back the decl for MEM[&decl, off].  */
+	  if (TREE_CODE (TMR_BASE (exp)) == ADDR_EXPR)
+	    {
+	      if (TMR_INDEX (exp) || TMR_INDEX2 (exp))
+		return NULL_TREE;
+	      if (!integer_zerop (TMR_OFFSET (exp)))
+		{
+		  double_int off = mem_ref_offset (exp);
+		  gcc_assert (off.high == -1 || off.high == 0);
+		  byte_offset += double_int_to_shwi (off);
+		}
+	      exp = TREE_OPERAND (TMR_BASE (exp), 0);
+	    }
+	  goto done;
+
+	default:
+	  goto done;
+	}
+
+      exp = TREE_OPERAND (exp, 0);
+    }
+done:
+
+  *poffset = byte_offset;
   return exp;
 }
 

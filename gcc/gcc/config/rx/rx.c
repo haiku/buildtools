@@ -30,7 +30,6 @@
 #include "rtl.h"
 #include "regs.h"
 #include "hard-reg-set.h"
-#include "real.h"
 #include "insn-config.h"
 #include "conditions.h"
 #include "output.h"
@@ -41,6 +40,7 @@
 #include "optabs.h"
 #include "libfuncs.h"
 #include "recog.h"
+#include "diagnostic-core.h"
 #include "toplev.h"
 #include "reload.h"
 #include "df.h"
@@ -51,11 +51,16 @@
 #include "target-def.h"
 #include "langhooks.h"
 
+static void rx_print_operand (FILE *, rtx, int);
+
 #define CC_FLAG_S	(1 << 0)
 #define CC_FLAG_Z	(1 << 1)
 #define CC_FLAG_O	(1 << 2)
 #define CC_FLAG_C	(1 << 3)
 #define CC_FLAG_FP	(1 << 4)	/* Fake, to differentiate CC_Fmode.  */
+
+static unsigned int flags_from_mode (enum machine_mode mode);
+static unsigned int flags_from_code (enum rtx_code code);
 
 enum rx_cpu_types  rx_cpu_type = RX600;
 
@@ -199,8 +204,10 @@ rx_is_restricted_memory_address (rtx mem, enum machine_mode mode)
     }
 }
 
-bool
-rx_is_mode_dependent_addr (rtx addr)
+/* Implement TARGET_MODE_DEPENDENT_ADDRESS_P.  */
+
+static bool
+rx_mode_dependent_address_p (const_rtx addr)
 {
   if (GET_CODE (addr) == CONST)
     addr = XEXP (addr, 0);
@@ -266,7 +273,7 @@ rx_is_mode_dependent_addr (rtx addr)
    assembler syntax for an instruction operand that is a memory
    reference whose address is ADDR.  */
 
-void
+static void
 rx_print_operand_address (FILE * file, rtx addr)
 {
   switch (GET_CODE (addr))
@@ -336,6 +343,7 @@ rx_print_operand_address (FILE * file, rtx addr)
     case LABEL_REF:
     case SYMBOL_REF:
       fprintf (file, "#");
+
     default:
       output_addr_const (file, addr);
       break;
@@ -371,75 +379,6 @@ rx_assemble_integer (rtx x, unsigned int size, int is_aligned)
   return true;
 }
 
-/* Convert a CC_MODE to the set of flags that it represents.  */
-
-static unsigned int
-flags_from_mode (enum machine_mode mode)
-{
-  switch (mode)
-    {
-    case CC_ZSmode:
-      return CC_FLAG_S | CC_FLAG_Z;
-    case CC_ZSOmode:
-      return CC_FLAG_S | CC_FLAG_Z | CC_FLAG_O;
-    case CC_ZSCmode:
-      return CC_FLAG_S | CC_FLAG_Z | CC_FLAG_C;
-    case CCmode:
-      return CC_FLAG_S | CC_FLAG_Z | CC_FLAG_O | CC_FLAG_C;
-    case CC_Fmode:
-      return CC_FLAG_FP;
-    default:
-      gcc_unreachable ();
-    }
-}
-
-/* Convert a set of flags to a CC_MODE that can implement it.  */
-
-static enum machine_mode
-mode_from_flags (unsigned int f)
-{
-  if (f & CC_FLAG_FP)
-    return CC_Fmode;
-  if (f & CC_FLAG_O)
-    {
-      if (f & CC_FLAG_C)
-	return CCmode;
-      else
-	return CC_ZSOmode;
-    }
-  else if (f & CC_FLAG_C)
-    return CC_ZSCmode;
-  else
-    return CC_ZSmode;
-}
-
-/* Convert an RTX_CODE to the set of flags needed to implement it.
-   This assumes an integer comparison.  */
-
-static unsigned int
-flags_from_code (enum rtx_code code)
-{
-  switch (code)
-    {
-    case LT:
-    case GE:
-      return CC_FLAG_S | CC_FLAG_O;
-    case GT:
-    case LE:
-      return CC_FLAG_S | CC_FLAG_O | CC_FLAG_Z;
-    case GEU:
-    case LTU:
-      return CC_FLAG_C;
-    case GTU:
-    case LEU:
-      return CC_FLAG_C | CC_FLAG_Z;
-    case EQ:
-    case NE:
-      return CC_FLAG_Z;
-    default:
-      gcc_unreachable ();
-    }
-}
 
 /* Handles the insertion of a single operand into the assembler output.
    The %<letter> directives supported are:
@@ -455,7 +394,7 @@ flags_from_code (enum rtx_code code)
          register indirect or register relative addressing.
      %R  Like %Q but for zero-extending loads.  */
 
-void
+static void
 rx_print_operand (FILE * file, rtx op, int letter)
 {
   bool unsigned_load = false;
@@ -486,7 +425,7 @@ rx_print_operand (FILE * file, rtx op, int letter)
       {
 	enum rtx_code code = GET_CODE (op);
 	enum machine_mode mode = GET_MODE (XEXP (op, 0));
-	const char * ret;
+	const char *ret;
 
 	if (mode == CC_Fmode)
 	  {
@@ -494,33 +433,68 @@ rx_print_operand (FILE * file, rtx op, int letter)
 	       branch combinations that include O use it helpfully.  */
 	    switch (code)
 	      {
-	      case ORDERED:	ret = "no";		break;
-	      case UNORDERED:	ret = "o";		break;
-	      case LT:		ret = "n";		break;
-	      case GE:		ret = "pz";		break;
-	      case EQ:		ret = "eq";		break;
-	      case NE:		ret = "ne";		break;
-	      default:		gcc_unreachable ();
+	      case ORDERED:
+		ret = "no";
+		break;
+	      case UNORDERED:
+		ret = "o";
+		break;
+	      case LT:
+		ret = "n";
+		break;
+	      case GE:
+		ret = "pz";
+		break;
+	      case EQ:
+		ret = "eq";
+		break;
+	      case NE:
+		ret = "ne";
+		break;
+	      default:
+		gcc_unreachable ();
 	      }
 	  }
 	else
 	  {
+	    unsigned int flags = flags_from_mode (mode);
+
 	    switch (code)
 	      {
-	      case LT:		ret = "lt";		break;
-	      case GE:		ret = "ge";		break;
-	      case GT:		ret = "gt";		break;
-	      case LE:		ret = "le";		break;
-	      case GEU:		ret = "geu";		break;
-	      case LTU:		ret = "ltu";		break;
-	      case GTU:		ret = "gtu";		break;
-	      case LEU:		ret = "leu";		break;
-	      case EQ:		ret = "eq";		break;
-	      case NE:		ret = "ne";		break;
-	      default:		gcc_unreachable ();
+	      case LT:
+		ret = (flags & CC_FLAG_O ? "lt" : "n");
+		break;
+	      case GE:
+		ret = (flags & CC_FLAG_O ? "ge" : "pz");
+		break;
+	      case GT:
+		ret = "gt";
+		break;
+	      case LE:
+		ret = "le";
+		break;
+	      case GEU:
+		ret = "geu";
+		break;
+	      case LTU:
+		ret = "ltu";
+		break;
+	      case GTU:
+		ret = "gtu";
+		break;
+	      case LEU:
+		ret = "leu";
+		break;
+	      case EQ:
+		ret = "eq";
+		break;
+	      case NE:
+		ret = "ne";
+		break;
+	      default:
+		gcc_unreachable ();
 	      }
-	    gcc_assert ((flags_from_code (code)
-			 & ~flags_from_mode (mode)) == 0);
+	    gcc_checking_assert ((flags_from_code (code) & ~flags) == 0);
 	  }
 	fputs (ret, file);
 	break;
@@ -835,7 +809,7 @@ rx_round_up (unsigned int value, unsigned int alignment)
 /* Return the number of bytes in the argument registers
    occupied by an argument of type TYPE and mode MODE.  */
 
-unsigned int
+static unsigned int
 rx_function_arg_size (Mmode mode, const_tree type)
 {
   unsigned int num_bytes;
@@ -855,7 +829,7 @@ rx_function_arg_size (Mmode mode, const_tree type)
    parameter list, or the last named parameter before the start of a
    variable parameter list.  */
 
-rtx
+static rtx
 rx_function_arg (Fargs * cum, Mmode mode, const_tree type, bool named)
 {
   unsigned int next_reg;
@@ -892,6 +866,20 @@ rx_function_arg (Fargs * cum, Mmode mode, const_tree type, bool named)
   return gen_rtx_REG (mode, next_reg);
 }
 
+static void
+rx_function_arg_advance (Fargs * cum, Mmode mode, const_tree type,
+			 bool named ATTRIBUTE_UNUSED)
+{
+  *cum += rx_function_arg_size (mode, type);
+}
+
+static unsigned int
+rx_function_arg_boundary (Mmode mode ATTRIBUTE_UNUSED,
+			  const_tree type ATTRIBUTE_UNUSED)
+{
+  return 32;
+}
+
 /* Return an RTL describing where a function return value of type RET_TYPE
    is held.  */
 
@@ -906,7 +894,8 @@ rx_function_value (const_tree ret_type,
      promoted to int when returned by a function.  */
   if (GET_MODE_SIZE (mode) > 0
       && GET_MODE_SIZE (mode) < 4
-      && ! COMPLEX_MODE_P (mode))
+      && ! COMPLEX_MODE_P (mode)
+      )
     return gen_rtx_REG (SImode, FUNC_RETURN_REGNUM);
     
   return gen_rtx_REG (mode, FUNC_RETURN_REGNUM);
@@ -999,7 +988,7 @@ is_naked_func (const_tree decl)
 
 static bool use_fixed_regs = false;
 
-void
+static void
 rx_conditional_register_usage (void)
 {
   static bool using_fixed_regs = false;
@@ -1294,13 +1283,13 @@ gen_rx_store_vector (unsigned int low, unsigned int high)
   vector = gen_rtx_PARALLEL (VOIDmode, rtvec_alloc (count));
 
   XVECEXP (vector, 0, 0) =
-    gen_rtx_SET (SImode, stack_pointer_rtx,
+    gen_rtx_SET (VOIDmode, stack_pointer_rtx,
 		 gen_rtx_MINUS (SImode, stack_pointer_rtx,
 				GEN_INT ((count - 1) * UNITS_PER_WORD)));
 
   for (i = 0; i < count - 1; i++)
     XVECEXP (vector, 0, i + 1) =
-      gen_rtx_SET (SImode,
+      gen_rtx_SET (VOIDmode,
 		   gen_rtx_MEM (SImode,
 				gen_rtx_MINUS (SImode, stack_pointer_rtx,
 					       GEN_INT ((i + 1) * UNITS_PER_WORD))),
@@ -1565,12 +1554,12 @@ gen_rx_rtsd_vector (unsigned int adjust, unsigned int low, unsigned int high)
   vector = gen_rtx_PARALLEL (VOIDmode, rtvec_alloc (count));
 
   XVECEXP (vector, 0, 0) =
-    gen_rtx_SET (SImode, stack_pointer_rtx,
+    gen_rtx_SET (VOIDmode, stack_pointer_rtx,
 		 plus_constant (stack_pointer_rtx, adjust));
 
   for (i = 0; i < count - 2; i++)
     XVECEXP (vector, 0, i + 1) =
-      gen_rtx_SET (SImode,
+      gen_rtx_SET (VOIDmode,
 		   gen_rtx_REG (SImode, low + i),
 		   gen_rtx_MEM (SImode,
 				i == 0 ? stack_pointer_rtx
@@ -1594,13 +1583,13 @@ gen_rx_popm_vector (unsigned int low, unsigned int high)
   vector = gen_rtx_PARALLEL (VOIDmode, rtvec_alloc (count));
 
   XVECEXP (vector, 0, 0) =
-    gen_rtx_SET (SImode, stack_pointer_rtx,
+    gen_rtx_SET (VOIDmode, stack_pointer_rtx,
 		 plus_constant (stack_pointer_rtx,
 				(count - 1) * UNITS_PER_WORD));
 
   for (i = 0; i < count - 1; i++)
     XVECEXP (vector, 0, i + 1) =
-      gen_rtx_SET (SImode,
+      gen_rtx_SET (VOIDmode,
 		   gen_rtx_REG (SImode, low + i),
 		   gen_rtx_MEM (SImode,
 				i == 0 ? stack_pointer_rtx
@@ -1688,6 +1677,7 @@ rx_expand_epilogue (bool is_sibcall)
 	  if (register_mask)
 	    {
 	      acc_low = acc_high = 0;
+
 	      for (reg = 1; reg < CC_REGNUM; reg ++)
 		if (register_mask & (1 << reg))
 		  {
@@ -1932,7 +1922,6 @@ enum rx_builtin
   RX_BUILTIN_REVW,
   RX_BUILTIN_RMPA,
   RX_BUILTIN_ROUND,
-  RX_BUILTIN_SAT,
   RX_BUILTIN_SETPSW,
   RX_BUILTIN_WAIT,
   RX_BUILTIN_max
@@ -1987,7 +1976,6 @@ rx_init_builtins (void)
   ADD_RX_BUILTIN1 (RACW,    "racw",    void,  integer);
   ADD_RX_BUILTIN1 (ROUND,   "round",   intSI, float);
   ADD_RX_BUILTIN1 (REVW,    "revw",    intSI, intSI);
-  ADD_RX_BUILTIN1 (SAT,     "sat",     intSI, intSI);
   ADD_RX_BUILTIN1 (WAIT,    "wait",    void,  void);
 }
 
@@ -2147,21 +2135,21 @@ rx_expand_builtin (tree exp,
 		   int ignore ATTRIBUTE_UNUSED)
 {
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
-  tree arg    = CALL_EXPR_ARGS (exp) ? CALL_EXPR_ARG (exp, 0) : NULL_TREE;
+  tree arg    = call_expr_nargs (exp) >= 1 ? CALL_EXPR_ARG (exp, 0) : NULL_TREE;
   rtx  op     = arg ? expand_normal (arg) : NULL_RTX;
   unsigned int fcode = DECL_FUNCTION_CODE (fndecl);
 
   switch (fcode)
     {
     case RX_BUILTIN_BRK:     emit_insn (gen_brk ()); return NULL_RTX;
-    case RX_BUILTIN_CLRPSW:  
-      if (! valid_psw_flag (op, "clrpsw"))
+    case RX_BUILTIN_CLRPSW:
+      if (!valid_psw_flag (op, "clrpsw"))
 	return NULL_RTX;
       return rx_expand_void_builtin_1_arg (op, gen_clrpsw, false);
-      if (! valid_psw_flag (op, "setpsw"))
+    case RX_BUILTIN_SETPSW:
+      if (!valid_psw_flag (op, "setpsw"))
 	return NULL_RTX;
       return rx_expand_void_builtin_1_arg (op, gen_setpsw, false);
-    case RX_BUILTIN_SETPSW:  
     case RX_BUILTIN_INT:     return rx_expand_void_builtin_1_arg
 	(op, gen_int, false);
     case RX_BUILTIN_MACHI:   return rx_expand_builtin_mac (exp, gen_machi);
@@ -2185,8 +2173,6 @@ rx_expand_builtin (tree exp,
     case RX_BUILTIN_ROUND:   return rx_expand_builtin_round (op, target);
     case RX_BUILTIN_REVW:    return rx_expand_int_builtin_1_arg
 	(op, target, gen_revw, false);
-    case RX_BUILTIN_SAT:     return rx_expand_int_builtin_1_arg
-	(op, target, gen_sat, false);
     case RX_BUILTIN_WAIT:    emit_insn (gen_wait ()); return NULL_RTX;
 
     default:
@@ -2308,7 +2294,6 @@ rx_handle_option (size_t code, const char *  arg ATTRIBUTE_UNUSED, int value)
       return value >= 0 && value <= 4;
 
     case OPT_mcpu_:
-    case OPT_patch_:
       if (strcasecmp (arg, "RX610") == 0)
 	rx_cpu_type = RX610;
       else if (strcasecmp (arg, "RX200") == 0)
@@ -2322,7 +2307,7 @@ rx_handle_option (size_t code, const char *  arg ATTRIBUTE_UNUSED, int value)
       
     case OPT_fpu:
       if (rx_cpu_type == RX200)
-	error ("The RX200 cpu does not have FPU hardware");
+	error ("the RX200 cpu does not have FPU hardware");
       break;
 
     default:
@@ -2332,27 +2317,21 @@ rx_handle_option (size_t code, const char *  arg ATTRIBUTE_UNUSED, int value)
   return true;
 }
 
-void
-rx_set_optimization_options (void)
+/* Implement TARGET_OVERRIDE_OPTIONS_AFTER_CHANGE.  */
+
+static void
+rx_override_options_after_change (void)
 {
   static bool first_time = TRUE;
-  static bool saved_allow_rx_fpu = TRUE;
 
   if (first_time)
     {
       /* If this is the first time through and the user has not disabled
-	 the use of RX FPU hardware then enable unsafe math optimizations,
-	 since the FPU instructions themselves are unsafe.  */
+	 the use of RX FPU hardware then enable -ffinite-math-only,
+	 since the FPU instructions do not support NaNs and infinities.  */
       if (TARGET_USE_FPU)
-	set_fast_math_flags (true);
+	flag_finite_math_only = 1;
 
-      /* FIXME: For some unknown reason LTO compression is not working,
-	 at least on my local system.  So set the default compression
-	 level to none, for now.  */
-      if (flag_lto_compression_level == -1)
-        flag_lto_compression_level = 0;
-
-      saved_allow_rx_fpu = ALLOW_RX_FPU_INSNS;
       first_time = FALSE;
     }
   else
@@ -2360,13 +2339,35 @@ rx_set_optimization_options (void)
       /* Alert the user if they are changing the optimization options
 	 to use IEEE compliant floating point arithmetic with RX FPU insns.  */
       if (TARGET_USE_FPU
-	  && ! fast_math_flags_set_p ())
-	warning (0, "RX FPU instructions are not IEEE compliant");
-
-      if (saved_allow_rx_fpu != ALLOW_RX_FPU_INSNS)
-	error ("Changing the FPU insns/math optimizations pairing is not supported");
+	  && !flag_finite_math_only)
+	warning (0, "RX FPU instructions do not support NaNs and infinities");
     }
 }
+
+static void
+rx_option_override (void)
+{
+  /* This target defaults to strict volatile bitfields.  */
+  if (flag_strict_volatile_bitfields < 0 && abi_version_at_least(2))
+    flag_strict_volatile_bitfields = 1;
+
+  rx_override_options_after_change ();
+
+  if (align_jumps == 0 && ! optimize_size)
+    align_jumps = 3;
+  if (align_loops == 0 && ! optimize_size)
+    align_loops = 3;
+  if (align_labels == 0 && ! optimize_size)
+    align_labels = 3;
+}
+
+/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
+static const struct default_options rx_option_optimization_table[] =
+  {
+    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
+    { OPT_LEVELS_NONE, 0, NULL, 0 }
+  };
+
 
 static bool
 rx_allocate_stack_slots_for_args (void)
@@ -2416,7 +2417,6 @@ rx_is_ms_bitfield_layout (const_tree record_type ATTRIBUTE_UNUSED)
   /* The packed attribute overrides the MS behaviour.  */
   return ! TYPE_PACKED (record_type);
 }
-
 
 /* Returns true if X a legitimate constant for an immediate
    operand on the RX.  X is already known to satisfy CONSTANT_P.  */
@@ -2451,8 +2451,7 @@ rx_is_legitimate_constant (rtx x)
 
 	default:
 	  /* FIXME: Can this ever happen ?  */
-	  abort ();
-	  return false;
+	  gcc_unreachable ();
 	}
       break;
       
@@ -2591,6 +2590,84 @@ rx_trampoline_init (rtx tramp, tree fndecl, rtx chain)
       emit_move_insn (adjust_address (tramp, SImode, 6 + 2), fnaddr);
     }
 }
+
+static int
+rx_memory_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
+		     reg_class_t regclass ATTRIBUTE_UNUSED,
+		     bool in)
+{
+  return (in ? 2 : 0) + REGISTER_MOVE_COST (mode, regclass, regclass);
+}
+
+/* Convert a CC_MODE to the set of flags that it represents.  */
+
+static unsigned int
+flags_from_mode (enum machine_mode mode)
+{
+  switch (mode)
+    {
+    case CC_ZSmode:
+      return CC_FLAG_S | CC_FLAG_Z;
+    case CC_ZSOmode:
+      return CC_FLAG_S | CC_FLAG_Z | CC_FLAG_O;
+    case CC_ZSCmode:
+      return CC_FLAG_S | CC_FLAG_Z | CC_FLAG_C;
+    case CCmode:
+      return CC_FLAG_S | CC_FLAG_Z | CC_FLAG_O | CC_FLAG_C;
+    case CC_Fmode:
+      return CC_FLAG_FP;
+    default:
+      gcc_unreachable ();
+    }
+}
+
+/* Convert a set of flags to a CC_MODE that can implement it.  */
+
+static enum machine_mode
+mode_from_flags (unsigned int f)
+{
+  if (f & CC_FLAG_FP)
+    return CC_Fmode;
+  if (f & CC_FLAG_O)
+    {
+      if (f & CC_FLAG_C)
+	return CCmode;
+      else
+	return CC_ZSOmode;
+    }
+  else if (f & CC_FLAG_C)
+    return CC_ZSCmode;
+  else
+    return CC_ZSmode;
+}
+
+/* Convert an RTX_CODE to the set of flags needed to implement it.
+   This assumes an integer comparison.  */
+
+static unsigned int
+flags_from_code (enum rtx_code code)
+{
+  switch (code)
+    {
+    case LT:
+    case GE:
+      return CC_FLAG_S;
+    case GT:
+    case LE:
+      return CC_FLAG_S | CC_FLAG_O | CC_FLAG_Z;
+    case GEU:
+    case LTU:
+      return CC_FLAG_C;
+    case GTU:
+    case LEU:
+      return CC_FLAG_C | CC_FLAG_Z;
+    case EQ:
+    case NE:
+      return CC_FLAG_Z;
+    default:
+      gcc_unreachable ();
+    }
+}
 
 /* Return a CC_MODE of which both M1 and M2 are subsets.  */
 
@@ -2615,10 +2692,13 @@ rx_cc_modes_compatible (enum machine_mode m1, enum machine_mode m2)
 /* Return the minimal CC mode needed to implement (CMP_CODE X Y).  */
 
 enum machine_mode
-rx_select_cc_mode (enum rtx_code cmp_code, rtx x, rtx y ATTRIBUTE_UNUSED)
+rx_select_cc_mode (enum rtx_code cmp_code, rtx x, rtx y)
 {
   if (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
     return CC_Fmode;
+
+  if (y != const0_rtx)
+    return CCmode;
 
   return mode_from_flags (flags_from_code (cmp_code));
 }
@@ -2651,10 +2731,10 @@ rx_match_ccmode (rtx insn, enum machine_mode cc_mode)
   rtx op1, flags;
   enum machine_mode flags_mode;
 
-  gcc_assert (XVECLEN (PATTERN (insn), 0) == 2);
+  gcc_checking_assert (XVECLEN (PATTERN (insn), 0) == 2);
 
   op1 = XVECEXP (PATTERN (insn), 0, 1);
-  gcc_assert (GET_CODE (SET_SRC (op1)) == COMPARE);
+  gcc_checking_assert (GET_CODE (SET_SRC (op1)) == COMPARE);
 
   flags = SET_DEST (op1);
   flags_mode = GET_MODE (flags);
@@ -2670,14 +2750,22 @@ rx_match_ccmode (rtx insn, enum machine_mode cc_mode)
 
   return true;
 }
+
 
 int
-rx_align_for_label (rtx lab ATTRIBUTE_UNUSED)
+rx_align_for_label (rtx lab, int uses_threshold)
 {
+  /* This is a simple heuristic to guess when an alignment would not be useful
+     because the delay due to the inserted NOPs would be greater than the delay
+     due to the misaligned branch.  If uses_threshold is zero then the alignment
+     is always useful.  */
+  if (LABEL_P (lab) && LABEL_NUSES (lab) < uses_threshold)
+    return 0;
+
   return optimize_size ? 1 : 3;
 }
 
-int
+static int
 rx_max_skip_for_label (rtx lab)
 {
   int opsize;
@@ -2688,7 +2776,7 @@ rx_max_skip_for_label (rtx lab)
   op = lab;
   do
     {
-      op = next_nonnote_insn (op);
+      op = next_nonnote_nondebug_insn (op);
     }
   while (op && (LABEL_P (op)
 		|| (INSN_P (op) && GET_CODE (PATTERN (op)) == USE)));
@@ -2701,6 +2789,15 @@ rx_max_skip_for_label (rtx lab)
   return 0;
 }
 
+#undef  TARGET_ASM_JUMP_ALIGN_MAX_SKIP
+#define TARGET_ASM_JUMP_ALIGN_MAX_SKIP			rx_max_skip_for_label
+#undef  TARGET_ASM_LOOP_ALIGN_MAX_SKIP
+#define TARGET_ASM_LOOP_ALIGN_MAX_SKIP			rx_max_skip_for_label
+#undef  TARGET_LABEL_ALIGN_AFTER_BARRIER_MAX_SKIP
+#define TARGET_LABEL_ALIGN_AFTER_BARRIER_MAX_SKIP	rx_max_skip_for_label
+#undef  TARGET_ASM_LABEL_ALIGN_MAX_SKIP
+#define TARGET_ASM_LABEL_ALIGN_MAX_SKIP			rx_max_skip_for_label
+
 #undef  TARGET_FUNCTION_VALUE
 #define TARGET_FUNCTION_VALUE		rx_function_value
 
@@ -2749,6 +2846,9 @@ rx_max_skip_for_label (rtx lab)
 #undef  TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P		rx_is_legitimate_address
 
+#undef  TARGET_MODE_DEPENDENT_ADDRESS_P
+#define TARGET_MODE_DEPENDENT_ADDRESS_P		rx_mode_dependent_address_p
+
 #undef  TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS
 #define TARGET_ALLOCATE_STACK_SLOTS_FOR_ARGS	rx_allocate_stack_slots_for_args
 
@@ -2760,6 +2860,15 @@ rx_max_skip_for_label (rtx lab)
 
 #undef  TARGET_FUNCTION_OK_FOR_SIBCALL
 #define TARGET_FUNCTION_OK_FOR_SIBCALL		rx_function_ok_for_sibcall
+
+#undef  TARGET_FUNCTION_ARG
+#define TARGET_FUNCTION_ARG     		rx_function_arg
+
+#undef  TARGET_FUNCTION_ARG_ADVANCE
+#define TARGET_FUNCTION_ARG_ADVANCE     	rx_function_arg_advance
+
+#undef	TARGET_FUNCTION_ARG_BOUNDARY
+#define	TARGET_FUNCTION_ARG_BOUNDARY		rx_function_arg_boundary
 
 #undef  TARGET_SET_CURRENT_FUNCTION
 #define TARGET_SET_CURRENT_FUNCTION		rx_set_current_function
@@ -2782,17 +2891,44 @@ rx_max_skip_for_label (rtx lab)
 #undef  TARGET_CAN_ELIMINATE
 #define TARGET_CAN_ELIMINATE			rx_can_eliminate
 
+#undef  TARGET_CONDITIONAL_REGISTER_USAGE
+#define TARGET_CONDITIONAL_REGISTER_USAGE	rx_conditional_register_usage
+
 #undef  TARGET_ASM_TRAMPOLINE_TEMPLATE
 #define TARGET_ASM_TRAMPOLINE_TEMPLATE		rx_trampoline_template
 
 #undef  TARGET_TRAMPOLINE_INIT
 #define TARGET_TRAMPOLINE_INIT			rx_trampoline_init
 
+#undef  TARGET_PRINT_OPERAND
+#define TARGET_PRINT_OPERAND			rx_print_operand
+
+#undef  TARGET_PRINT_OPERAND_ADDRESS
+#define TARGET_PRINT_OPERAND_ADDRESS		rx_print_operand_address
+
 #undef  TARGET_CC_MODES_COMPATIBLE
 #define TARGET_CC_MODES_COMPATIBLE		rx_cc_modes_compatible
 
+#undef  TARGET_MEMORY_MOVE_COST
+#define TARGET_MEMORY_MOVE_COST			rx_memory_move_cost
+
+#undef  TARGET_OPTION_OVERRIDE
+#define TARGET_OPTION_OVERRIDE			rx_option_override
+
+#undef  TARGET_OPTION_OPTIMIZATION_TABLE
+#define TARGET_OPTION_OPTIMIZATION_TABLE	rx_option_optimization_table
+
 #undef  TARGET_PROMOTE_FUNCTION_MODE
 #define TARGET_PROMOTE_FUNCTION_MODE		rx_promote_function_mode
+
+#undef  TARGET_OVERRIDE_OPTIONS_AFTER_CHANGE
+#define TARGET_OVERRIDE_OPTIONS_AFTER_CHANGE	rx_override_options_after_change
+
+#undef  TARGET_EXCEPT_UNWIND_INFO
+#define TARGET_EXCEPT_UNWIND_INFO		sjlj_except_unwind_info
+
+#undef  TARGET_FLAGS_REGNUM
+#define TARGET_FLAGS_REGNUM			CC_REG
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

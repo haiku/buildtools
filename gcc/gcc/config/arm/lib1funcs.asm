@@ -31,10 +31,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #ifdef __ARM_EABI__
 /* Some attributes that are common to all routines in this file.  */
-	/* Tag_ABI_align8_needed: This code does not require 8-byte
+	/* Tag_ABI_align_needed: This code does not require 8-byte
 	   alignment from the caller.  */
 	/* .eabi_attribute 24, 0  -- default setting.  */
-	/* Tag_ABI_align8_preserved: This code preserves 8-byte 
+	/* Tag_ABI_align_preserved: This code preserves 8-byte
 	   alignment in any callee.  */
 	.eabi_attribute 25, 1
 #endif /* __ARM_EABI__ */
@@ -104,7 +104,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 
 #if defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) \
-	|| defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__)
+	|| defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__) \
+	|| defined(__ARM_ARCH_7EM__)
 # define __ARM_ARCH__ 7
 #endif
 
@@ -640,7 +641,7 @@ pc		.req	r15
 	subhs	\dividend, \dividend, \divisor, lsr #3
 	orrhs	\result,   \result,   \curbit,  lsr #3
 	cmp	\dividend, #0			@ Early termination?
-	do_it	hs, t
+	do_it	ne, t
 	movnes	\curbit,   \curbit,  lsr #4	@ No, any more bits to do?
 	movne	\divisor,  \divisor, lsr #4
 	bne	1b

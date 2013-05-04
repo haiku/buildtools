@@ -1,6 +1,6 @@
 // shared_ptr and weak_ptr implementation details -*- C++ -*-
 
-// Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -43,13 +43,212 @@
 
 /** @file bits/shared_ptr_base.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{memory}
  */
 
 #ifndef _SHARED_PTR_BASE_H
 #define _SHARED_PTR_BASE_H 1
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+ /**
+   *  @brief  Exception possibly thrown by @c shared_ptr.
+   *  @ingroup exceptions
+   */
+  class bad_weak_ptr : public std::exception
+  {
+  public:
+    virtual char const*
+    what() const throw();
+
+    virtual ~bad_weak_ptr() throw();    
+  };
+
+  // Substitute for bad_weak_ptr object in the case of -fno-exceptions.
+  inline void
+  __throw_bad_weak_ptr()
+  {
+#if __EXCEPTIONS
+    throw bad_weak_ptr();
+#else
+    __builtin_abort();
+#endif
+  }
+
+  using __gnu_cxx::_Lock_policy;
+  using __gnu_cxx::__default_lock_policy;
+  using __gnu_cxx::_S_single;
+  using __gnu_cxx::_S_mutex;
+  using __gnu_cxx::_S_atomic;
+
+  // Empty helper class except when the template argument is _S_mutex.
+  template<_Lock_policy _Lp>
+    class _Mutex_base
+    {
+    protected:
+      // The atomic policy uses fully-fenced builtins, single doesn't care.
+      enum { _S_need_barriers = 0 };
+    };
+
+  template<>
+    class _Mutex_base<_S_mutex>
+    : public __gnu_cxx::__mutex
+    {
+    protected:
+      // This policy is used when atomic builtins are not available.
+      // The replacement atomic operations might not have the necessary
+      // memory barriers.
+      enum { _S_need_barriers = 1 };
+    };
+
+  template<_Lock_policy _Lp = __default_lock_policy>
+    class _Sp_counted_base
+    : public _Mutex_base<_Lp>
+    {
+    public:  
+      _Sp_counted_base()
+      : _M_use_count(1), _M_weak_count(1) { }
+      
+      virtual
+      ~_Sp_counted_base() // nothrow 
+      { }
+  
+      // Called when _M_use_count drops to zero, to release the resources
+      // managed by *this.
+      virtual void
+      _M_dispose() = 0; // nothrow
+      
+      // Called when _M_weak_count drops to zero.
+      virtual void
+      _M_destroy() // nothrow
+      { delete this; }
+      
+      virtual void*
+      _M_get_deleter(const std::type_info&) = 0;
+
+      void
+      _M_add_ref_copy()
+      { __gnu_cxx::__atomic_add_dispatch(&_M_use_count, 1); }
+  
+      void
+      _M_add_ref_lock();
+      
+      void
+      _M_release() // nothrow
+      {
+        // Be race-detector-friendly.  For more info see bits/c++config.
+        _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_use_count);
+	if (__gnu_cxx::__exchange_and_add_dispatch(&_M_use_count, -1) == 1)
+	  {
+            _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_use_count);
+	    _M_dispose();
+	    // There must be a memory barrier between dispose() and destroy()
+	    // to ensure that the effects of dispose() are observed in the
+	    // thread that runs destroy().
+	    // See http://gcc.gnu.org/ml/libstdc++/2005-11/msg00136.html
+	    if (_Mutex_base<_Lp>::_S_need_barriers)
+	      {
+	        _GLIBCXX_READ_MEM_BARRIER;
+	        _GLIBCXX_WRITE_MEM_BARRIER;
+	      }
+
+            // Be race-detector-friendly.  For more info see bits/c++config.
+            _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_weak_count);
+	    if (__gnu_cxx::__exchange_and_add_dispatch(&_M_weak_count,
+						       -1) == 1)
+              {
+                _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_weak_count);
+	        _M_destroy();
+              }
+	  }
+      }
+  
+      void
+      _M_weak_add_ref() // nothrow
+      { __gnu_cxx::__atomic_add_dispatch(&_M_weak_count, 1); }
+
+      void
+      _M_weak_release() // nothrow
+      {
+        // Be race-detector-friendly. For more info see bits/c++config.
+        _GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_weak_count);
+	if (__gnu_cxx::__exchange_and_add_dispatch(&_M_weak_count, -1) == 1)
+	  {
+            _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_weak_count);
+	    if (_Mutex_base<_Lp>::_S_need_barriers)
+	      {
+	        // See _M_release(),
+	        // destroy() must observe results of dispose()
+	        _GLIBCXX_READ_MEM_BARRIER;
+	        _GLIBCXX_WRITE_MEM_BARRIER;
+	      }
+	    _M_destroy();
+	  }
+      }
+  
+      long
+      _M_get_use_count() const // nothrow
+      {
+        // No memory barrier is used here so there is no synchronization
+        // with other threads.
+        return const_cast<const volatile _Atomic_word&>(_M_use_count);
+      }
+
+    private:  
+      _Sp_counted_base(_Sp_counted_base const&);
+      _Sp_counted_base& operator=(_Sp_counted_base const&);
+
+      _Atomic_word  _M_use_count;     // #shared
+      _Atomic_word  _M_weak_count;    // #weak + (#shared != 0)
+    };
+
+  template<>
+    inline void
+    _Sp_counted_base<_S_single>::
+    _M_add_ref_lock()
+    {
+      if (__gnu_cxx::__exchange_and_add_dispatch(&_M_use_count, 1) == 0)
+	{
+	  _M_use_count = 0;
+	  __throw_bad_weak_ptr();
+	}
+    }
+
+  template<>
+    inline void
+    _Sp_counted_base<_S_mutex>::
+    _M_add_ref_lock()
+    {
+      __gnu_cxx::__scoped_lock sentry(*this);
+      if (__gnu_cxx::__exchange_and_add_dispatch(&_M_use_count, 1) == 0)
+	{
+	  _M_use_count = 0;
+	  __throw_bad_weak_ptr();
+	}
+    }
+
+  template<> 
+    inline void
+    _Sp_counted_base<_S_atomic>::
+    _M_add_ref_lock()
+    {
+      // Perform lock-free add-if-not-zero operation.
+      _Atomic_word __count;
+      do
+	{
+	  __count = _M_use_count;
+	  if (__count == 0)
+	    __throw_bad_weak_ptr();
+	  
+	  // Replace the current counter value with the old value + 1, as
+	  // long as it's not changed meanwhile. 
+	}
+      while (!__sync_bool_compare_and_swap(&_M_use_count, __count,
+					   __count + 1));
+    }
+
 
   // Forward declarations.
   template<typename _Tp, _Lock_policy _Lp = __default_lock_policy>
@@ -85,6 +284,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     class _Sp_counted_ptr : public _Sp_counted_base<_Lp>
     {
     public:
+      explicit
       _Sp_counted_ptr(_Ptr __p)
       : _M_ptr(__p) { }
 
@@ -97,7 +297,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       { delete this; }
 
       virtual void*
-      _M_get_deleter(const std::type_info& __ti)
+      _M_get_deleter(const std::type_info&)
       { return 0; }
 
       _Sp_counted_ptr(const _Sp_counted_ptr&) = delete;
@@ -107,9 +307,21 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       _Ptr             _M_ptr;  // copy constructor must not throw
     };
 
+  template<>
+    inline void
+    _Sp_counted_ptr<nullptr_t, _S_single>::_M_dispose() { }
+
+  template<>
+    inline void
+    _Sp_counted_ptr<nullptr_t, _S_mutex>::_M_dispose() { }
+
+  template<>
+    inline void
+    _Sp_counted_ptr<nullptr_t, _S_atomic>::_M_dispose() { }
+
   // Support for custom deleter and/or allocator
   template<typename _Ptr, typename _Deleter, typename _Alloc, _Lock_policy _Lp>
-    class _Sp_counted_deleter : public _Sp_counted_ptr<_Ptr, _Lp>
+    class _Sp_counted_deleter : public _Sp_counted_base<_Lp>
     {
       typedef typename _Alloc::template
 	  rebind<_Sp_counted_deleter>::other _My_alloc_type;
@@ -122,24 +334,21 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       {
 	_Deleter _M_del;         // copy constructor must not throw
 	_My_Deleter(_Deleter __d, const _Alloc& __a)
-	  : _My_alloc_type(__a), _M_del(__d) { }
+	: _My_alloc_type(__a), _M_del(__d) { }
       };
-
-    protected:
-      typedef _Sp_counted_ptr<_Ptr, _Lp> _Base_type;
 
     public:
       // __d(__p) must not throw.
       _Sp_counted_deleter(_Ptr __p, _Deleter __d)
-      : _Base_type(__p), _M_del(__d, _Alloc()) { }
+      : _M_ptr(__p), _M_del(__d, _Alloc()) { }
 
       // __d(__p) must not throw.
       _Sp_counted_deleter(_Ptr __p, _Deleter __d, const _Alloc& __a)
-      : _Base_type(__p), _M_del(__d, __a) { }
+      : _M_ptr(__p), _M_del(__d, __a) { }
 
       virtual void
       _M_dispose() // nothrow
-      { _M_del._M_del(_Base_type::_M_ptr); }
+      { _M_del._M_del(_M_ptr); }
 
       virtual void
       _M_destroy() // nothrow
@@ -160,6 +369,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       }
 
     protected:
+      _Ptr             _M_ptr;  // copy constructor must not throw
       _My_Deleter      _M_del;  // copy constructor must not throw
     };
 
@@ -181,13 +391,14 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	_Base_type;
 
     public:
+      explicit
       _Sp_counted_ptr_inplace(_Alloc __a)
       : _Base_type(static_cast<_Tp*>(0), _Sp_destroy_inplace<_Tp>(), __a)
       , _M_storage()
       {
 	void* __p = &_M_storage;
 	::new (__p) _Tp();  // might throw
-	_Base_type::_Base_type::_M_ptr = static_cast<_Tp*>(__p);
+	_Base_type::_M_ptr = static_cast<_Tp*>(__p);
       }
 
       template<typename... _Args>
@@ -197,7 +408,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	{
 	  void* __p = &_M_storage;
 	  ::new (__p) _Tp(std::forward<_Args>(__args)...);  // might throw
-	  _Base_type::_Base_type::_M_ptr = static_cast<_Tp*>(__p);
+	  _Base_type::_M_ptr = static_cast<_Tp*>(__p);
 	}
 
       // Override because the allocator needs to know the dynamic type
@@ -233,10 +444,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     class __shared_count
     {
     public:
-      __shared_count() : _M_pi(0) // nothrow
+      constexpr __shared_count() : _M_pi(0) // nothrow
       { }
 
       template<typename _Ptr>
+        explicit
 	__shared_count(_Ptr __p) : _M_pi(0)
 	{
 	  __try
@@ -293,7 +505,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	}
 
       template<typename _Tp, typename _Alloc, typename... _Args>
-	__shared_count(_Sp_make_shared_tag, _Tp*, _Alloc __a, _Args&&... __args)
+	__shared_count(_Sp_make_shared_tag, _Tp*, const _Alloc& __a,
+		       _Args&&... __args)
 	: _M_pi(0)
 	{
 	  typedef _Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp> _Sp_cp_type;
@@ -313,9 +526,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	    }
 	}
 
-#if _GLIBCXX_DEPRECATED
+#if _GLIBCXX_USE_DEPRECATED
       // Special case for auto_ptr<_Tp> to provide the strong guarantee.
       template<typename _Tp>
+        explicit
 	__shared_count(std::auto_ptr<_Tp>&& __r)
 	: _M_pi(new _Sp_counted_ptr<_Tp*, _Lp>(__r.get()))
 	{ __r.release(); }
@@ -323,6 +537,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       // Special case for unique_ptr<_Tp,_Del> to provide the strong guarantee.
       template<typename _Tp, typename _Del>
+        explicit
 	__shared_count(std::unique_ptr<_Tp, _Del>&& __r)
 	: _M_pi(_S_create_from_up(std::move(__r)))
 	{ __r.release(); }
@@ -422,7 +637,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     class __weak_count
     {
     public:
-      __weak_count() : _M_pi(0) // nothrow
+      constexpr __weak_count() : _M_pi(0) // nothrow
       { }
 
       __weak_count(const __shared_count<_Lp>& __r) : _M_pi(__r._M_pi) // nothrow
@@ -538,14 +753,16 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     public:
       typedef _Tp   element_type;
 
-      __shared_ptr() : _M_ptr(0), _M_refcount() // never throws
+      constexpr __shared_ptr()
+      : _M_ptr(0), _M_refcount() // never throws
       { }
 
       template<typename _Tp1>
-	explicit __shared_ptr(_Tp1* __p) : _M_ptr(__p), _M_refcount(__p)
+	explicit __shared_ptr(_Tp1* __p)
+        : _M_ptr(__p), _M_refcount(__p)
 	{
 	  __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>)
-	  // __glibcxx_function_requires(_CompleteConcept<_Tp1*>)
+	  static_assert( sizeof(_Tp1) > 0, "incomplete type" );
 	  __enable_shared_from_this_helper(_M_refcount, __p, __p);
 	}
 
@@ -559,25 +776,37 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	}
 
       template<typename _Tp1, typename _Deleter, typename _Alloc>
-	__shared_ptr(_Tp1* __p, _Deleter __d, const _Alloc& __a)
-	: _M_ptr(__p), _M_refcount(__p, __d, __a)
+	__shared_ptr(_Tp1* __p, _Deleter __d, _Alloc __a)
+	: _M_ptr(__p), _M_refcount(__p, __d, std::move(__a))
 	{
 	  __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>)
 	  // TODO requires _Deleter CopyConstructible and __d(__p) well-formed
 	  __enable_shared_from_this_helper(_M_refcount, __p, __p);
 	}
 
+      template<typename _Deleter>
+	__shared_ptr(nullptr_t __p, _Deleter __d)
+	: _M_ptr(0), _M_refcount(__p, __d)
+	{ }
+
+      template<typename _Deleter, typename _Alloc>
+        __shared_ptr(nullptr_t __p, _Deleter __d, _Alloc __a)
+	: _M_ptr(0), _M_refcount(__p, __d, std::move(__a))
+	{ }
+
       template<typename _Tp1>
 	__shared_ptr(const __shared_ptr<_Tp1, _Lp>& __r, _Tp* __p)
 	: _M_ptr(__p), _M_refcount(__r._M_refcount) // never throws
 	{ }
 
-      //  generated copy constructor, assignment, destructor are fine.
+      __shared_ptr(const __shared_ptr&) = default; // never throws
+      __shared_ptr& operator=(const __shared_ptr&) = default; // never throws
 
-      template<typename _Tp1>
+      template<typename _Tp1, typename = typename
+	       std::enable_if<std::is_convertible<_Tp1*, _Tp*>::value>::type>
 	__shared_ptr(const __shared_ptr<_Tp1, _Lp>& __r)
 	: _M_ptr(__r._M_ptr), _M_refcount(__r._M_refcount) // never throws
-	{ __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>) }
+	{ }
 
       __shared_ptr(__shared_ptr&& __r)
       : _M_ptr(__r._M_ptr), _M_refcount() // never throws
@@ -586,11 +815,11 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	__r._M_ptr = 0;
       }
 
-      template<typename _Tp1>
+      template<typename _Tp1, typename = typename
+	       std::enable_if<std::is_convertible<_Tp1*, _Tp*>::value>::type>
 	__shared_ptr(__shared_ptr<_Tp1, _Lp>&& __r)
 	: _M_ptr(__r._M_ptr), _M_refcount() // never throws
 	{
-	  __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>)
 	  _M_refcount._M_swap(__r._M_refcount);
 	  __r._M_ptr = 0;
 	}
@@ -617,19 +846,24 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	  __enable_shared_from_this_helper(_M_refcount, __tmp, __tmp);
 	}
 
-#if _GLIBCXX_DEPRECATED
+#if _GLIBCXX_USE_DEPRECATED
       // Postcondition: use_count() == 1 and __r.get() == 0
       template<typename _Tp1>
 	__shared_ptr(std::auto_ptr<_Tp1>&& __r)
 	: _M_ptr(__r.get()), _M_refcount()
 	{
 	  __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>)
-	  // TODO requires _Tp1 is complete, delete __r.release() well-formed
+	  static_assert( sizeof(_Tp1) > 0, "incomplete type" );
 	  _Tp1* __tmp = __r.get();
 	  _M_refcount = __shared_count<_Lp>(std::move(__r));
 	  __enable_shared_from_this_helper(_M_refcount, __tmp, __tmp);
 	}
 #endif
+
+      /* TODO: use delegating constructor */
+      constexpr __shared_ptr(nullptr_t)
+      : _M_ptr(0), _M_refcount() // never throws
+      { }
 
       template<typename _Tp1>
 	__shared_ptr&
@@ -640,7 +874,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	  return *this;
 	}
 
-#if _GLIBCXX_DEPRECATED
+#if _GLIBCXX_USE_DEPRECATED
       template<typename _Tp1>
 	__shared_ptr&
 	operator=(std::auto_ptr<_Tp1>&& __r)
@@ -693,8 +927,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
       template<typename _Tp1, typename _Deleter, typename _Alloc>
 	void
-	reset(_Tp1* __p, _Deleter __d, const _Alloc& __a)
-	{ __shared_ptr(__p, __d, __a).swap(*this); }
+        reset(_Tp1* __p, _Deleter __d, _Alloc __a)
+        { __shared_ptr(__p, __d, std::move(__a)).swap(*this); }
 
       // Allow class instantiation when _Tp is [cv-qual] void.
       typename std::add_lvalue_reference<_Tp>::type
@@ -747,7 +981,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     protected:
       // This constructor is non-standard, it is used by allocate_shared.
       template<typename _Alloc, typename... _Args>
-	__shared_ptr(_Sp_make_shared_tag __tag, _Alloc __a, _Args&&... __args)
+	__shared_ptr(_Sp_make_shared_tag __tag, const _Alloc& __a,
+		     _Args&&... __args)
 	: _M_ptr(), _M_refcount(__tag, (_Tp*)0, __a,
 				std::forward<_Args>(__args)...)
 	{
@@ -770,7 +1005,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
         };
 
       template<typename _Alloc, typename... _Args>
-	__shared_ptr(_Sp_make_shared_tag __tag, _Alloc __a, _Args&&... __args)
+	__shared_ptr(_Sp_make_shared_tag __tag, const _Alloc& __a,
+		     _Args&&... __args)
 	: _M_ptr(), _M_refcount()
         {
 	  typedef typename _Alloc::template rebind<_Tp>::other _Alloc2;
@@ -794,7 +1030,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       template<typename _Tp1, _Lock_policy _Lp1, typename _Alloc,
 	       typename... _Args>
 	friend __shared_ptr<_Tp1, _Lp1>
-	__allocate_shared(_Alloc __a, _Args&&... __args);
+	__allocate_shared(const _Alloc& __a, _Args&&... __args);
 
     private:
       void*
@@ -819,11 +1055,31 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 	       const __shared_ptr<_Tp2, _Lp>& __b)
     { return __a.get() == __b.get(); }
 
+  template<typename _Tp, _Lock_policy _Lp>
+    inline bool
+    operator==(const __shared_ptr<_Tp, _Lp>& __a, nullptr_t)
+    { return __a.get() == nullptr; }
+
+  template<typename _Tp, _Lock_policy _Lp>
+    inline bool
+    operator==(nullptr_t, const __shared_ptr<_Tp, _Lp>& __b)
+    { return nullptr == __b.get(); }
+
   template<typename _Tp1, typename _Tp2, _Lock_policy _Lp>
     inline bool
     operator!=(const __shared_ptr<_Tp1, _Lp>& __a,
 	       const __shared_ptr<_Tp2, _Lp>& __b)
     { return __a.get() != __b.get(); }
+
+  template<typename _Tp, _Lock_policy _Lp>
+    inline bool
+    operator!=(const __shared_ptr<_Tp, _Lp>& __a, nullptr_t)
+    { return __a.get() != nullptr; }
+
+  template<typename _Tp, _Lock_policy _Lp>
+    inline bool
+    operator!=(nullptr_t, const __shared_ptr<_Tp, _Lp>& __b)
+    { return nullptr != __b.get(); }
 
   template<typename _Tp1, typename _Tp2, _Lock_policy _Lp>
     inline bool
@@ -846,25 +1102,6 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     struct less<__shared_ptr<_Tp, _Lp>>
     : public _Sp_less<__shared_ptr<_Tp, _Lp>>
     { };
-
-  // XXX LessThanComparable<_Tp> concept should provide >, >= and <=
-  template<typename _Tp, _Lock_policy _Lp>
-    inline bool
-    operator>(const __shared_ptr<_Tp, _Lp>& __a,
-	      const __shared_ptr<_Tp, _Lp>& __b)
-    { return __a.get() > __b.get(); }
-
-  template<typename _Tp, _Lock_policy _Lp>
-    inline bool
-    operator>=(const __shared_ptr<_Tp, _Lp>& __a,
-	       const __shared_ptr<_Tp, _Lp>& __b)
-    { return __a.get() >= __b.get(); }
-
-  template<typename _Tp, _Lock_policy _Lp>
-    inline bool
-    operator<=(const __shared_ptr<_Tp, _Lp>& __a,
-	       const __shared_ptr<_Tp, _Lp>& __b)
-    { return __a.get() <= __b.get(); }
 
   // 2.2.3.8 shared_ptr specialized algorithms.
   template<typename _Tp, _Lock_policy _Lp>
@@ -915,7 +1152,8 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     public:
       typedef _Tp element_type;
 
-      __weak_ptr() : _M_ptr(0), _M_refcount() // never throws
+      constexpr __weak_ptr()
+      : _M_ptr(0), _M_refcount() // never throws
       { }
 
       // Generated copy constructor, assignment, destructor are fine.
@@ -934,18 +1172,17 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
       //
       // It is not possible to avoid spurious access violations since
       // in multithreaded programs __r._M_ptr may be invalidated at any point.
-      template<typename _Tp1>
+      template<typename _Tp1, typename = typename
+	       std::enable_if<std::is_convertible<_Tp1*, _Tp*>::value>::type>
 	__weak_ptr(const __weak_ptr<_Tp1, _Lp>& __r)
 	: _M_refcount(__r._M_refcount) // never throws
-	{
-	  __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>)
-	  _M_ptr = __r.lock().get();
-	}
+        { _M_ptr = __r.lock().get(); }
 
-      template<typename _Tp1>
+      template<typename _Tp1, typename = typename
+	       std::enable_if<std::is_convertible<_Tp1*, _Tp*>::value>::type>
 	__weak_ptr(const __shared_ptr<_Tp1, _Lp>& __r)
 	: _M_ptr(__r._M_ptr), _M_refcount(__r._M_refcount) // never throws
-	{ __glibcxx_function_requires(_ConvertibleConcept<_Tp1*, _Tp*>) }
+	{ }
 
       template<typename _Tp1>
 	__weak_ptr&
@@ -1077,7 +1314,7 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     class __enable_shared_from_this
     {
     protected:
-      __enable_shared_from_this() { }
+      constexpr __enable_shared_from_this() { }
 
       __enable_shared_from_this(const __enable_shared_from_this&) { }
 
@@ -1118,10 +1355,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<typename _Tp, _Lock_policy _Lp, typename _Alloc, typename... _Args>
     inline __shared_ptr<_Tp, _Lp>
-    __allocate_shared(_Alloc __a, _Args&&... __args)
+    __allocate_shared(const _Alloc& __a, _Args&&... __args)
     {
-      return __shared_ptr<_Tp, _Lp>(_Sp_make_shared_tag(),
-	  std::forward<_Alloc>(__a), std::forward<_Args>(__args)...);
+      return __shared_ptr<_Tp, _Lp>(_Sp_make_shared_tag(), __a,
+				    std::forward<_Args>(__args)...);
     }
 
   template<typename _Tp, _Lock_policy _Lp, typename... _Args>
@@ -1129,10 +1366,21 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
     __make_shared(_Args&&... __args)
     {
       typedef typename std::remove_const<_Tp>::type _Tp_nc;
-      return __allocate_shared<_Tp, _Lp>(std::allocator<_Tp_nc>(),
-					 std::forward<_Args>(__args)...);
+      return std::__allocate_shared<_Tp, _Lp>(std::allocator<_Tp_nc>(),
+					      std::forward<_Args>(__args)...);
     }
 
-_GLIBCXX_END_NAMESPACE
+  /// std::hash specialization for __shared_ptr.
+  template<typename _Tp, _Lock_policy _Lp>
+    struct hash<__shared_ptr<_Tp, _Lp>>
+    : public std::unary_function<__shared_ptr<_Tp, _Lp>, size_t>
+    {
+      size_t
+      operator()(const __shared_ptr<_Tp, _Lp>& __s) const
+      { return std::hash<_Tp*>()(__s.get()); }
+    };
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif // _SHARED_PTR_BASE_H

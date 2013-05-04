@@ -51,7 +51,7 @@
 (define_register_constraint "y" "CR_REGS"
   "@internal")
 
-(define_register_constraint "z" "XER_REGS"
+(define_register_constraint "z" "CA_REGS"
   "@internal")
 
 ;; Use w as a prefix to add VSX modes
@@ -166,7 +166,7 @@ usually better to use @samp{m} or @samp{es} in @code{asm} statements)"
 
 (define_constraint "R"
   "AIX TOC entry"
-  (match_test "legitimate_constant_pool_address_p (op)"))
+  (match_test "legitimate_constant_pool_address_p (op, QImode, false)"))
 
 ;; General constraints
 

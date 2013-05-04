@@ -1,0 +1,97 @@
+Copyright (C) 2001-2010 Roberto Bagnara <bagnara@cs.unipr.it>
+Copyright (C) 2010-2011 BUGSENG srl (http://bugseng.com)
+
+Verbatim copying and distribution of this entire article is permitted
+in any medium, provided this notice is preserved.
+
+
+Parma Watchdog Library NEWS -- history of user-visible changes
+==============================================================
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.8  (released on August 2, 2010)
+--------------------------------------------------------------------------
+
+o  The new class Threshold_Watcher allows to define, generically,
+   any kind of watchdog controlling the exceeding of a threshold.
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.7  (released on April 14, 2009)
+--------------------------------------------------------------------------
+
+o  Minor configuration improvements.
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.6  (released on November 4, 2008)
+--------------------------------------------------------------------------
+
+o  The Parma Watchdog Library is now released under the terms of the
+   version 3 (or later) of the GNU General Public License.
+
+o  The `pwl.hh' header file no longer defines macros not prefixed
+   by "PWL_".
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.5  (released on January 20, 2006)
+--------------------------------------------------------------------------
+
+o  Portability has been improved.
+
+o  The configuration option --enable-optimization now accepts a value
+   of `zero'.
+
+
+Bugfixes
+========
+
+o  Fixed a bug in Time::operator+=(const Time&) where the resulting
+   number of microseconds was being erroneously set to the resulting
+   number of seconds.
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.4  (released on December 24, 2004)
+--------------------------------------------------------------------------
+
+Bugfixes
+========
+
+o  Fixed a bug that prevented profiling from functioning properly.
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.3  (released on August 18, 2004)
+--------------------------------------------------------------------------
+
+Bugfixes
+========
+
+o  Fixed a deadlock bug.
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.2 (released on April 28, 2003)
+--------------------------------------------------------------------------
+
+New Features
+============
+
+o  Added implicit and automatic initialization and finalization of the
+   library.  Explicit initialization and finalization is no longer
+   necessary nor possible.
+
+o  Portability improvements.
+
+
+--------------------------------------------------------------------------
+NEWS for version 0.1 (released on July 1, 2002)
+--------------------------------------------------------------------------
+
+New Features
+============
+
+o  The library has been released under the GNU General Public License.

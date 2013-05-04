@@ -32,7 +32,11 @@
 
 #include <limits>
 
-_GLIBCXX_BEGIN_NAMESPACE(std)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+#define const _GLIBCXX_USE_CONSTEXPR
 
   const bool __numeric_limits_base::is_specialized;
   const int  __numeric_limits_base::digits;
@@ -510,7 +514,10 @@ _GLIBCXX_BEGIN_NAMESPACE(std)
   const bool numeric_limits<char32_t>::tinyness_before;
   const float_round_style numeric_limits<char32_t>::round_style;
 
-_GLIBCXX_END_NAMESPACE
+#undef const
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 // XXX GLIBCXX_ABI Deprecated
 #ifdef _GLIBCXX_LONG_DOUBLE_COMPAT

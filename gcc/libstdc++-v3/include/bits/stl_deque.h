@@ -1,7 +1,7 @@
 // Deque implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-// Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+// 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -49,9 +49,9 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file stl_deque.h
+/** @file bits/stl_deque.h
  *  This is an internal header file, included by other library headers.
- *  You should not attempt to use it directly.
+ *  Do not attempt to use it directly. @headername{deque}
  */
 
 #ifndef _STL_DEQUE_H
@@ -62,7 +62,9 @@
 #include <bits/stl_iterator_base_funcs.h>
 #include <initializer_list>
 
-_GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   /**
    *  @brief This function controls the size of memory nodes.
@@ -449,6 +451,10 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       : _M_impl()
       { _M_initialize_map(0); }
 
+      _Deque_base(size_t __num_elements)
+      : _M_impl()
+      { _M_initialize_map(__num_elements); }
+
       _Deque_base(const allocator_type& __a, size_t __num_elements)
       : _M_impl(__a)
       { _M_initialize_map(__num_elements); }
@@ -773,6 +779,32 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       deque(const allocator_type& __a)
       : _Base(__a, 0) { }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      /**
+       *  @brief  Creates a %deque with default constructed elements.
+       *  @param  n  The number of elements to initially create.
+       *
+       *  This constructor fills the %deque with @a n default
+       *  constructed elements.
+       */
+      explicit
+      deque(size_type __n)
+      : _Base(__n)
+      { _M_default_initialize(); }
+
+      /**
+       *  @brief  Creates a %deque with copies of an exemplar element.
+       *  @param  n  The number of elements to initially create.
+       *  @param  value  An element to copy.
+       *  @param  a  An allocator.
+       *
+       *  This constructor fills the %deque with @a n copies of @a value.
+       */
+      deque(size_type __n, const value_type& __value,
+	    const allocator_type& __a = allocator_type())
+      : _Base(__a, __n)
+      { _M_fill_initialize(__value); }
+#else
       /**
        *  @brief  Creates a %deque with copies of an exemplar element.
        *  @param  n  The number of elements to initially create.
@@ -786,6 +818,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	    const allocator_type& __a = allocator_type())
       : _Base(__a, __n)
       { _M_fill_initialize(__value); }
+#endif
 
       /**
        *  @brief  %Deque copy constructor.
@@ -808,8 +841,8 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        *  The newly-created %deque contains the exact contents of @a x.
        *  The contents of @a x are a valid, but unspecified %deque.
        */
-      deque(deque&&  __x)
-      : _Base(std::forward<_Base>(__x)) { }
+      deque(deque&& __x)
+      : _Base(std::move(__x)) { }
 
       /**
        *  @brief  Builds a %deque from an initializer list.
@@ -824,11 +857,11 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
        */
       deque(initializer_list<value_type> __l,
 	    const allocator_type& __a = allocator_type())
-	: _Base(__a)
-        {
-	  _M_range_initialize(__l.begin(), __l.end(),
-			      random_access_iterator_tag());
-	}
+      : _Base(__a)
+      {
+	_M_range_initialize(__l.begin(), __l.end(),
+			    random_access_iterator_tag());
+      }
 #endif
 
       /**
@@ -1086,6 +1119,49 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       max_size() const
       { return _M_get_Tp_allocator().max_size(); }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      /**
+       *  @brief  Resizes the %deque to the specified number of elements.
+       *  @param  new_size  Number of elements the %deque should contain.
+       *
+       *  This function will %resize the %deque to the specified
+       *  number of elements.  If the number is smaller than the
+       *  %deque's current size the %deque is truncated, otherwise
+       *  default constructed elements are appended.
+       */
+      void
+      resize(size_type __new_size)
+      {
+	const size_type __len = size();
+	if (__new_size > __len)
+	  _M_default_append(__new_size - __len);
+	else if (__new_size < __len)
+	  _M_erase_at_end(this->_M_impl._M_start
+			  + difference_type(__new_size));
+      }
+
+      /**
+       *  @brief  Resizes the %deque to the specified number of elements.
+       *  @param  new_size  Number of elements the %deque should contain.
+       *  @param  x  Data with which new elements should be populated.
+       *
+       *  This function will %resize the %deque to the specified
+       *  number of elements.  If the number is smaller than the
+       *  %deque's current size the %deque is truncated, otherwise the
+       *  %deque is extended and new elements are populated with given
+       *  data.
+       */
+      void
+      resize(size_type __new_size, const value_type& __x)
+      {
+	const size_type __len = size();
+	if (__new_size > __len)
+	  insert(this->_M_impl._M_finish, __new_size - __len, __x);
+	else if (__new_size < __len)
+	  _M_erase_at_end(this->_M_impl._M_start
+			  + difference_type(__new_size));
+      }
+#else
       /**
        *  @brief  Resizes the %deque to the specified number of elements.
        *  @param  new_size  Number of elements the %deque should contain.
@@ -1101,11 +1177,13 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       resize(size_type __new_size, value_type __x = value_type())
       {
 	const size_type __len = size();
-	if (__new_size < __len)
-	  _M_erase_at_end(this->_M_impl._M_start + difference_type(__new_size));
-	else
+	if (__new_size > __len)
 	  insert(this->_M_impl._M_finish, __new_size - __len, __x);
+	else if (__new_size < __len)
+	  _M_erase_at_end(this->_M_impl._M_start
+			  + difference_type(__new_size));
       }
+#endif
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       /**  A non-binding request to reduce memory use.  */
@@ -1564,6 +1642,12 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
       void
       _M_fill_initialize(const value_type& __value);
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      // called by deque(n).
+      void
+      _M_default_initialize();
+#endif
+
       // Internal assign functions follow.  The *_aux functions do the actual
       // assignment work for the range versions.
 
@@ -1752,6 +1836,12 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 	this->_M_impl._M_finish = __pos;
       }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      // Called by resize(sz).
+      void
+      _M_default_append(size_type __n);
+#endif
+
       //@{
       /// Memory-handling helpers for the previous internal insert functions.
       iterator
@@ -1883,6 +1973,7 @@ _GLIBCXX_BEGIN_NESTED_NAMESPACE(std, _GLIBCXX_STD_D)
 
 #undef _GLIBCXX_DEQUE_BUF_SIZE
 
-_GLIBCXX_END_NESTED_NAMESPACE
+_GLIBCXX_END_NAMESPACE_CONTAINER
+} // namespace std
 
 #endif /* _STL_DEQUE_H */

@@ -1,6 +1,7 @@
 SCRIPT_NAME=elf
 ELFSIZE=64
 OUTPUT_FORMAT="elf64-s390"
+NO_REL_RELOCS=yes
 TEXT_START_ADDR=0x80000000
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
 COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
@@ -11,6 +12,7 @@ TEMPLATE_NAME=elf32
 GENERATE_SHLIB_SCRIPT=yes 
 GENERATE_PIE_SCRIPT=yes
 NO_SMALL_DATA=yes
+IREL_IN_PLT=
 
 # Treat a host that matches the target with the possible exception of "x"
 # in the name as if it were native.

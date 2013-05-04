@@ -1,5 +1,5 @@
 /* BFD support for the CR16C processor.
-   Copyright 2004, 2007 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -34,6 +34,7 @@ const bfd_arch_info_type bfd_cr16c_arch =
     1,
     TRUE, 	/* The one and only.  */
     bfd_default_compatible, 
-    bfd_default_scan ,
+    bfd_default_scan,
+    bfd_arch_default_fill,
     0,
   };

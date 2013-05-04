@@ -1,6 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright 1991, 1993, 1994, 1997, 1999, 2000, 2001, 2002, 2003, 2007,
-#   2008 Free Software Foundation, Inc.
+#   Copyright 1991, 1993, 1994, 1997, 1999, 2000, 2001, 2002, 2003, 2005, 2007,
+#   2008, 2009 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -204,9 +204,9 @@ hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
 
 	case lang_input_section_enum:
 	  if (l->input_section.section == info->input_section
-	      || strcmp (bfd_get_section_name (output_section,
+	      || strcmp (bfd_get_section_name (l->input_section.section->owner,
 					       l->input_section.section),
-			 bfd_get_section_name (output_section,
+			 bfd_get_section_name (info->input_section->owner,
 					       info->input_section)) == 0)
 	    {
 	      /* We've found our section.  Insert the stub immediately
@@ -271,7 +271,7 @@ m68hc11elf_add_stub_section (const char *stub_sec_name,
      at the correct place.  */
   info.input_section = tramp_section;
   lang_list_init (&info.add);
-  lang_add_section (&info.add, stub_sec, os);
+  lang_add_section (&info.add, stub_sec, NULL, os);
 
   if (info.add.head == NULL)
     goto err_ret;
@@ -284,11 +284,10 @@ m68hc11elf_add_stub_section (const char *stub_sec_name,
   return NULL;
 }
 
-/* Final emulation specific call.  For the 68HC12 we use this opportunity
-   to build linker stubs.  */
+/* For the 68HC12 we use this opportunity to build linker stubs.  */
 
 static void
-m68hc11elf_finish (void)
+m68hc11elf_after_allocation (void)
 {
   /* Now build the linker stubs.  */
   if (stub_file->the_bfd->sections != NULL)
@@ -308,7 +307,7 @@ m68hc11elf_finish (void)
 	einfo ("%X%P: can not build stubs: %E\n");
     }
 
-  gld${EMULATION_NAME}_finish ();
+  gld${EMULATION_NAME}_after_allocation ();
 }
 
 
@@ -370,5 +369,5 @@ PARSE_AND_LIST_ARGS_CASES='
 # Put these extra m68hc11elf routines in ld_${EMULATION_NAME}_emulation
 #
 LDEMUL_BEFORE_ALLOCATION=m68hc11_elf_${EMULATION_NAME}_before_allocation
-LDEMUL_FINISH=m68hc11elf_finish
+LDEMUL_AFTER_ALLOCATION=m68hc11elf_after_allocation
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=m68hc11elf_create_output_section_statements

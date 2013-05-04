@@ -1,5 +1,5 @@
 /* Top-level control of tree optimizations.
-   Copyright 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   Copyright 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
@@ -24,20 +24,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
-#include "rtl.h"
 #include "tm_p.h"
-#include "hard-reg-set.h"
 #include "basic-block.h"
 #include "output.h"
-#include "expr.h"
-#include "diagnostic.h"
-#include "basic-block.h"
 #include "flags.h"
 #include "tree-flow.h"
 #include "tree-dump.h"
 #include "timevar.h"
 #include "function.h"
 #include "langhooks.h"
+#include "diagnostic-core.h"
 #include "toplev.h"
 #include "flags.h"
 #include "cgraph.h"
@@ -50,7 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "except.h"
 #include "plugin.h"
-
+#include "regset.h"	/* FIXME: For reg_obstack.  */
 
 /* Gate: execute, or not, all of the non-trivial optimizations.  */
 
@@ -60,7 +56,7 @@ gate_all_optimizations (void)
   return (optimize >= 1
 	  /* Don't bother doing anything if the program has errors.
 	     We have to pass down the queue if we already went into SSA */
-	  && (!(errorcount || sorrycount) || gimple_in_ssa_p (cfun)));
+	  && (!seen_error () || gimple_in_ssa_p (cfun)));
 }
 
 struct gimple_opt_pass pass_all_optimizations =
@@ -73,7 +69,7 @@ struct gimple_opt_pass pass_all_optimizations =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  TV_NONE,				/* tv_id */
+  TV_OPTIMIZE,				/* tv_id */
   0,					/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
@@ -88,7 +84,21 @@ static bool
 gate_all_early_local_passes (void)
 {
 	  /* Don't bother doing anything if the program has errors.  */
-  return (!errorcount && !sorrycount && !in_lto_p);
+  return (!seen_error () && !in_lto_p);
+}
+
+static unsigned int
+execute_all_early_local_passes (void)
+{
+  /* Once this pass (and its sub-passes) are complete, all functions
+     will be in SSA form.  Technically this state change is happening
+     a tad early, since the sub-passes have not yet run, but since
+     none of the sub-passes are IPA passes and do not create new
+     functions, this is ok.  We're setting this value for the benefit
+     of IPA passes that follow.  */
+  if (cgraph_state < CGRAPH_STATE_IPA_SSA)
+    cgraph_state = CGRAPH_STATE_IPA_SSA;
+  return 0;
 }
 
 struct simple_ipa_opt_pass pass_early_local_passes =
@@ -97,11 +107,11 @@ struct simple_ipa_opt_pass pass_early_local_passes =
   SIMPLE_IPA_PASS,
   "early_local_cleanups",		/* name */
   gate_all_early_local_passes,		/* gate */
-  NULL,					/* execute */
+  execute_all_early_local_passes,	/* execute */
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  TV_NONE,				/* tv_id */
+  TV_EARLY_LOCAL,			/* tv_id */
   0,					/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
@@ -110,18 +120,6 @@ struct simple_ipa_opt_pass pass_early_local_passes =
  }
 };
 
-static unsigned int
-execute_early_local_optimizations (void)
-{
-  /* First time we start with early optimization we need to advance
-     cgraph state so newly inserted functions are also early optimized.
-     However we execute early local optimizations for lately inserted
-     functions, in that case don't reset cgraph state back to IPA_SSA.  */
-  if (cgraph_state < CGRAPH_STATE_IPA_SSA)
-    cgraph_state = CGRAPH_STATE_IPA_SSA;
-  return 0;
-}
-
 /* Gate: execute, or not, all of the non-trivial optimizations.  */
 
 static bool
@@ -129,7 +127,7 @@ gate_all_early_optimizations (void)
 {
   return (optimize >= 1
 	  /* Don't bother doing anything if the program has errors.  */
-	  && !(errorcount || sorrycount));
+	  && !seen_error ());
 }
 
 struct gimple_opt_pass pass_all_early_optimizations =
@@ -138,7 +136,7 @@ struct gimple_opt_pass pass_all_early_optimizations =
   GIMPLE_PASS,
   "early_optimizations",		/* name */
   gate_all_early_optimizations,		/* gate */
-  execute_early_local_optimizations,	/* execute */
+  NULL,					/* execute */
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
@@ -151,37 +149,6 @@ struct gimple_opt_pass pass_all_early_optimizations =
  }
 };
 
-/* Pass: cleanup the CFG just before expanding trees to RTL.
-   This is just a round of label cleanups and case node grouping
-   because after the tree optimizers have run such cleanups may
-   be necessary.  */
-
-static unsigned int
-execute_cleanup_cfg_pre_ipa (void)
-{
-  cleanup_tree_cfg ();
-  return 0;
-}
-
-struct gimple_opt_pass pass_cleanup_cfg =
-{
- {
-  GIMPLE_PASS,
-  "cleanup_cfg",			/* name */
-  NULL,					/* gate */
-  execute_cleanup_cfg_pre_ipa,		/* execute */
-  NULL,					/* sub */
-  NULL,					/* next */
-  0,					/* static_pass_number */
-  TV_NONE,				/* tv_id */
-  PROP_cfg,				/* properties_required */
-  0,					/* properties_provided */
-  0,					/* properties_destroyed */
-  0,					/* todo_flags_start */
-  TODO_dump_func			/* todo_flags_finish */
- }
-};
-
 
 /* Pass: cleanup the CFG just before expanding trees to RTL.
    This is just a round of label cleanups and case node grouping
@@ -191,10 +158,38 @@ struct gimple_opt_pass pass_cleanup_cfg =
 static unsigned int
 execute_cleanup_cfg_post_optimizing (void)
 {
-  fold_cond_expr_cond ();
   cleanup_tree_cfg ();
   cleanup_dead_labels ();
   group_case_labels ();
+  if ((flag_compare_debug_opt || flag_compare_debug)
+      && flag_dump_final_insns)
+    {
+      FILE *final_output = fopen (flag_dump_final_insns, "a");
+
+      if (!final_output)
+	{
+	  error ("could not open final insn dump file %qs: %m",
+		 flag_dump_final_insns);
+	  flag_dump_final_insns = NULL;
+	}
+      else
+	{
+	  int save_unnumbered = flag_dump_unnumbered;
+	  int save_noaddr = flag_dump_noaddr;
+
+	  flag_dump_noaddr = flag_dump_unnumbered = 1;
+	  fprintf (final_output, "\n");
+	  dump_enumerated_decls (final_output, dump_flags | TDF_NOUID);
+	  flag_dump_noaddr = save_noaddr;
+	  flag_dump_unnumbered = save_unnumbered;
+	  if (fclose (final_output))
+	    {
+	      error ("could not close final insn dump file %qs: %m",
+		     flag_dump_final_insns);
+	      flag_dump_final_insns = NULL;
+	    }
+	}
+    }
   return 0;
 }
 
@@ -208,7 +203,7 @@ struct gimple_opt_pass pass_cleanup_cfg_post_optimizing =
   NULL,					/* sub */
   NULL,					/* next */
   0,					/* static_pass_number */
-  TV_NONE,				/* tv_id */
+  TV_TREE_CLEANUP_CFG,			/* tv_id */
   PROP_cfg,				/* properties_required */
   0,					/* properties_provided */
   0,					/* properties_destroyed */
@@ -233,8 +228,9 @@ execute_free_datastructures (void)
   return 0;
 }
 
-/* Pass: fixup_cfg.  IPA passes, compilation of earlier functions or inlining
-   might have changed some properties, such as marked functions nothrow.
+/* IPA passes, compilation of earlier functions or inlining
+   might have changed some properties, such as marked functions nothrow,
+   pure, const or noreturn.
    Remove redundant edges and basic blocks, and create new ones if necessary.
 
    This pass can't be executed as stand alone pass from pass manager, because
@@ -270,31 +266,44 @@ execute_fixup_cfg (void)
 	  tree decl = is_gimple_call (stmt)
 		      ? gimple_call_fndecl (stmt)
 		      : NULL;
-
-	  if (decl
-	      && gimple_call_flags (stmt) & (ECF_CONST
-					     | ECF_PURE
-					     | ECF_LOOPING_CONST_OR_PURE))
+	  if (decl)
 	    {
-	      if (gimple_in_ssa_p (cfun))
+	      int flags = gimple_call_flags (stmt);
+	      if (flags & (ECF_CONST | ECF_PURE | ECF_LOOPING_CONST_OR_PURE))
 		{
-		  todo |= TODO_update_ssa | TODO_cleanup_cfg;
-		  mark_symbols_for_renaming (stmt);
-		  update_stmt (stmt);
-		}
-	    }
+		  if (gimple_purge_dead_abnormal_call_edges (bb))
+		    todo |= TODO_cleanup_cfg;
 
-	  maybe_clean_eh_stmt (stmt);
+		  if (gimple_in_ssa_p (cfun))
+		    {
+		      todo |= TODO_update_ssa | TODO_cleanup_cfg;
+		      update_stmt (stmt);
+		    }
+		}
+
+	      if (flags & ECF_NORETURN
+		  && fixup_noreturn_call (stmt))
+		todo |= TODO_cleanup_cfg;
+	     }
+
+	  if (maybe_clean_eh_stmt (stmt)
+	      && gimple_purge_dead_eh_edges (bb))
+	    todo |= TODO_cleanup_cfg;
 	}
 
-      if (gimple_purge_dead_eh_edges (bb))
-	todo |= TODO_cleanup_cfg;
       FOR_EACH_EDGE (e, ei, bb->succs)
         e->count = (e->count * count_scale
 		    + REG_BR_PROB_BASE / 2) / REG_BR_PROB_BASE;
     }
   if (count_scale != REG_BR_PROB_BASE)
     compute_function_frequency ();
+
+  /* We just processed all calls.  */
+  if (cfun->gimple_df)
+    {
+      VEC_free (gimple, gc, MODIFIED_NORETURN_CALLS (cfun));
+      MODIFIED_NORETURN_CALLS (cfun) = NULL;
+    }
 
   /* Dump a textual representation of the flowgraph.  */
   if (dump_file)
@@ -380,7 +389,7 @@ tree_rest_of_compilation (tree fndecl)
 {
   location_t saved_loc;
 
-  timevar_push (TV_EXPAND);
+  timevar_push (TV_REST_OF_COMPILATION);
 
   gcc_assert (cgraph_global_info_ready);
 
@@ -438,10 +447,10 @@ tree_rest_of_compilation (tree fndecl)
 	    = TREE_INT_CST_LOW (TYPE_SIZE_UNIT (ret_type));
 
 	  if (compare_tree_int (TYPE_SIZE_UNIT (ret_type), size_as_int) == 0)
-	    warning (OPT_Wlarger_than_eq, "size of return value of %q+D is %u bytes",
+	    warning (OPT_Wlarger_than_, "size of return value of %q+D is %u bytes",
                      fndecl, size_as_int);
 	  else
-	    warning (OPT_Wlarger_than_eq, "size of return value of %q+D is larger than %wd bytes",
+	    warning (OPT_Wlarger_than_, "size of return value of %q+D is larger than %wd bytes",
                      fndecl, larger_than_size);
 	}
     }
@@ -462,5 +471,5 @@ tree_rest_of_compilation (tree fndecl)
   input_location = saved_loc;
 
   ggc_collect ();
-  timevar_pop (TV_EXPAND);
+  timevar_pop (TV_REST_OF_COMPILATION);
 }

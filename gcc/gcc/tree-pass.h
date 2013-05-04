@@ -1,5 +1,5 @@
 /* Definitions for describing one tree-ssa optimization pass.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>
 
@@ -38,6 +38,7 @@ enum tree_dump_index
   TDI_nested,			/* dump each function after unnesting it */
   TDI_vcg,			/* create a VCG graph file for each
 				   function's flowgraph.  */
+  TDI_ada,                      /* dump declarations in Ada syntax.  */
   TDI_tree_all,                 /* enable all the GENERIC/GIMPLE dumps.  */
   TDI_rtl_all,                  /* enable all the RTL dumps.  */
   TDI_ipa_all,                  /* enable all the IPA dumps.  */
@@ -78,8 +79,11 @@ enum tree_dump_index
 #define TDF_ASMNAME	(1 << 18)	/* display asm names of decls  */
 #define TDF_EH		(1 << 19)	/* display EH region number
 					   holding this gimple statement.  */
-
 #define TDF_NOUID	(1 << 20)	/* omit UIDs from dumps.  */
+#define TDF_ALIAS	(1 << 21)	/* display alias information  */
+#define TDF_ENUMERATE_LOCALS (1 << 22)	/* Enumerate locals by uid.  */
+#define TDF_CSELIB	(1 << 23)	/* Dump cselib details.  */
+
 
 /* In tree-dump.c */
 
@@ -167,6 +171,7 @@ struct rtl_opt_pass
 struct varpool_node;
 struct cgraph_node;
 struct cgraph_node_set_def;
+struct varpool_node_set_def;
 
 /* Description of IPA pass with generate summary, write, execute, read and
    transform stages.  */
@@ -179,13 +184,19 @@ struct ipa_opt_pass_d
   void (*generate_summary) (void);
 
   /* This hook is used to serialize IPA summaries on disk.  */
-  void (*write_summary) (struct cgraph_node_set_def *);
+  void (*write_summary) (struct cgraph_node_set_def *,
+			 struct varpool_node_set_def *);
 
-  /* For most ipa passes, the information can only be deserialized in
-     one chunk.  However, function bodies are read function at a time
-     as needed so both calls are necessary.  */
+  /* This hook is used to deserialize IPA summaries from disk.  */
   void (*read_summary) (void);
-  void (*function_read_summary) (struct cgraph_node *);
+
+  /* This hook is used to serialize IPA optimization summaries on disk.  */
+  void (*write_optimization_summary) (struct cgraph_node_set_def *,
+				      struct varpool_node_set_def *);
+
+  /* This hook is used to deserialize IPA summaries from disk.  */
+  void (*read_optimization_summary) (void);
+
   /* Hook to convert gimple stmt uids into true gimple statements.  The second
      parameter is an array of statements indexed by their uid. */
   void (*stmt_fixup) (struct cgraph_node *, gimple *);
@@ -238,7 +249,6 @@ struct dump_file_info
 #define TODO_verify_flow		(1 << 3)
 #define TODO_verify_stmts		(1 << 4)
 #define TODO_cleanup_cfg        	(1 << 5)
-#define TODO_verify_loops		(1 << 6)
 #define TODO_dump_cgraph		(1 << 7)
 #define TODO_remove_functions		(1 << 8)
 #define TODO_rebuild_frequencies	(1 << 9)
@@ -265,7 +275,7 @@ struct dump_file_info
 /* Insert PHI nodes everywhere they are needed.  No pruning of the
    IDF is done.  This is used by passes that need the PHI nodes for
    O_j even if it means that some arguments will come from the default
-   definition of O_j's symbol (e.g., pass_linear_transform).
+   definition of O_j's symbol.
 
    WARNING: If you need to use this flag, chances are that your pass
    may be doing something wrong.  Inserting PHI nodes for an old name
@@ -302,6 +312,9 @@ struct dump_file_info
 
 /* Rebuild the addressable-vars bitmap and do register promotion.  */
 #define TODO_update_address_taken	(1 << 21)
+
+/* Rebuild the callgraph edges.  */
+#define TODO_rebuild_cgraph_edges       (1 << 22)
 
 /* Internally used in execute_function_todo().  */
 #define TODO_update_ssa_any		\
@@ -344,12 +357,9 @@ extern struct gimple_opt_pass pass_lower_eh;
 extern struct gimple_opt_pass pass_lower_eh_dispatch;
 extern struct gimple_opt_pass pass_lower_resx;
 extern struct gimple_opt_pass pass_build_cfg;
-extern struct gimple_opt_pass pass_tree_profile;
 extern struct gimple_opt_pass pass_early_tree_profile;
-extern struct gimple_opt_pass pass_cleanup_cfg;
 extern struct gimple_opt_pass pass_referenced_vars;
 extern struct gimple_opt_pass pass_cleanup_eh;
-extern struct gimple_opt_pass pass_fixup_cfg;
 extern struct gimple_opt_pass pass_sra;
 extern struct gimple_opt_pass pass_sra_early;
 extern struct gimple_opt_pass pass_early_ipa_sra;
@@ -364,6 +374,7 @@ extern struct gimple_opt_pass pass_iv_canon;
 extern struct gimple_opt_pass pass_scev_cprop;
 extern struct gimple_opt_pass pass_empty_loop;
 extern struct gimple_opt_pass pass_record_bounds;
+extern struct gimple_opt_pass pass_graphite;
 extern struct gimple_opt_pass pass_graphite_transforms;
 extern struct gimple_opt_pass pass_if_conversion;
 extern struct gimple_opt_pass pass_loop_distribution;
@@ -407,6 +418,7 @@ extern struct gimple_opt_pass pass_late_warn_uninitialized;
 extern struct gimple_opt_pass pass_cse_reciprocals;
 extern struct gimple_opt_pass pass_cse_sincos;
 extern struct gimple_opt_pass pass_optimize_bswap;
+extern struct gimple_opt_pass pass_optimize_widening_mul;
 extern struct gimple_opt_pass pass_warn_function_return;
 extern struct gimple_opt_pass pass_warn_function_noreturn;
 extern struct gimple_opt_pass pass_cselim;
@@ -420,7 +432,6 @@ extern struct gimple_opt_pass pass_rename_ssa_copies;
 extern struct gimple_opt_pass pass_rest_of_compilation;
 extern struct gimple_opt_pass pass_sink_code;
 extern struct gimple_opt_pass pass_fre;
-extern struct gimple_opt_pass pass_linear_transform;
 extern struct gimple_opt_pass pass_check_data_deps;
 extern struct gimple_opt_pass pass_copy_prop;
 extern struct gimple_opt_pass pass_vrp;
@@ -433,10 +444,13 @@ extern struct gimple_opt_pass pass_build_cgraph_edges;
 extern struct gimple_opt_pass pass_local_pure_const;
 extern struct gimple_opt_pass pass_tracer;
 extern struct gimple_opt_pass pass_warn_unused_result;
+extern struct gimple_opt_pass pass_split_functions;
+extern struct gimple_opt_pass pass_feedback_split_functions;
 
 /* IPA Passes */
+extern struct simple_ipa_opt_pass pass_ipa_lower_emutls;
 extern struct simple_ipa_opt_pass pass_ipa_function_and_variable_visibility;
-extern struct simple_ipa_opt_pass pass_ipa_early_inline;
+extern struct simple_ipa_opt_pass pass_ipa_tree_profile;
 
 extern struct simple_ipa_opt_pass pass_early_local_passes;
 
@@ -454,6 +468,8 @@ extern struct simple_ipa_opt_pass pass_ipa_pta;
 extern struct simple_ipa_opt_pass pass_ipa_struct_reorg;
 extern struct ipa_opt_pass_d pass_ipa_lto_wpa_fixup;
 extern struct ipa_opt_pass_d pass_ipa_lto_finish_out;
+extern struct ipa_opt_pass_d pass_ipa_profile;
+extern struct ipa_opt_pass_d pass_ipa_cdtor_merge;
 
 extern struct gimple_opt_pass pass_all_optimizations;
 extern struct gimple_opt_pass pass_cleanup_cfg_post_optimizing;
@@ -506,6 +522,7 @@ extern struct rtl_opt_pass pass_stack_ptr_mod;
 extern struct rtl_opt_pass pass_initialize_regs;
 extern struct rtl_opt_pass pass_combine;
 extern struct rtl_opt_pass pass_if_after_combine;
+extern struct rtl_opt_pass pass_implicit_zee;
 extern struct rtl_opt_pass pass_partition_blocks;
 extern struct rtl_opt_pass pass_match_asm_constraints;
 extern struct rtl_opt_pass pass_regmove;
@@ -534,6 +551,7 @@ extern struct rtl_opt_pass pass_reorder_blocks;
 extern struct rtl_opt_pass pass_branch_target_load_optimize2;
 extern struct rtl_opt_pass pass_leaf_regs;
 extern struct rtl_opt_pass pass_split_before_sched2;
+extern struct rtl_opt_pass pass_compare_elim_after_reload;
 extern struct rtl_opt_pass pass_sched2;
 extern struct rtl_opt_pass pass_stack_regs;
 extern struct rtl_opt_pass pass_stack_regs_run;
@@ -601,9 +619,10 @@ extern const char *get_current_pass_name (void);
 extern void print_current_pass (FILE *);
 extern void debug_pass (void);
 extern void ipa_write_summaries (void);
-extern void ipa_write_summaries_of_cgraph_node_set (
-	      struct cgraph_node_set_def *);
+extern void ipa_write_optimization_summaries (struct cgraph_node_set_def *,
+					      struct varpool_node_set_def *);
 extern void ipa_read_summaries (void);
+extern void ipa_read_optimization_summaries (void);
 extern void register_one_dump_file (struct opt_pass *);
 extern bool function_called_by_processed_nodes_p (void);
 extern void register_pass (struct register_pass_info *);

@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright 2001, 2002, 2003, 2004, 2006, 2007, 2008
+#   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
 #   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
@@ -35,6 +35,8 @@ fragment <<EOF
    get a weird testcase right; ld-mmix/bpo-22, forcing ELF to be
    output from the mmo emulation: -m mmo --oformat elf64-mmix!  */
 #include "elf-bfd.h"
+
+static void gld${EMULATION_NAME}_after_allocation (void);
 EOF
 
 source_em ${srcdir}/emultempl/elf-generic.em
@@ -46,63 +48,125 @@ fragment <<EOF
    SEC_READONLY sections right after MMO_TEXT_SECTION_NAME.  Much borrowed
    from elf32.em.  */
 
-static bfd_boolean
-mmo_place_orphan (asection *s)
+static lang_output_section_statement_type *
+mmo_place_orphan (asection *s,
+		  const char *secname,
+		  int constraint ATTRIBUTE_UNUSED)
 {
-  static struct orphan_save hold_text =
-    {
-      MMO_TEXT_SECTION_NAME,
-      SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_READONLY | SEC_CODE,
-      0, 0, 0, 0
-    };
-  struct orphan_save *place;
-  const char *secname;
+  static struct
+  {
+    flagword nonzero_flags;
+    struct orphan_save orphansave;
+  } holds[] =
+      {
+	{
+	  SEC_CODE | SEC_READONLY,
+	  {
+	    MMO_TEXT_SECTION_NAME,
+	    SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_READONLY | SEC_CODE,
+	    0, 0, 0, 0
+	  }
+	},
+	{
+	  SEC_LOAD | SEC_DATA,
+	  {
+	    MMO_DATA_SECTION_NAME,
+	    SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_DATA,
+	    0, 0, 0, 0
+	  }
+	},
+	{
+	  SEC_ALLOC,
+	  {
+	    ".bss",
+	    SEC_ALLOC,
+	    0, 0, 0, 0
+	  }
+	}
+      };
+
+  struct orphan_save *place = NULL;
   lang_output_section_statement_type *after;
   lang_output_section_statement_type *os;
+  size_t i;
 
-  /* We have nothing to say for anything other than a final link.  */
+  /* We have nothing to say for anything other than a final link or
+     for sections that are excluded.  */
   if (link_info.relocatable
-      || (s->flags & (SEC_EXCLUDE | SEC_LOAD)) != SEC_LOAD)
-    return FALSE;
+      || (s->flags & SEC_EXCLUDE) != 0)
+    return NULL;
 
-  /* Only care for sections we're going to load.  */
-  secname = s->name;
   os = lang_output_section_find (secname);
 
   /* We have an output section by this name.  Place the section inside it
      (regardless of whether the linker script lists it as input).  */
   if (os != NULL)
     {
-      lang_add_section (&os->children, s, os);
-      return TRUE;
+      lang_add_section (&os->children, s, NULL, os);
+      return os;
     }
 
-  /* If this section does not have .text-type section flags or there's no
-     MMO_TEXT_SECTION_NAME, we don't have anything to say.  */
-  if ((s->flags & (SEC_CODE | SEC_READONLY)) == 0)
-    return FALSE;
+  /* Check for matching section type flags for sections we care about.
+     A section without contents can have SEC_LOAD == 0, but we still
+     want it attached to a sane section so the symbols appear as
+     expected.  */
+  if ((s->flags & (SEC_ALLOC | SEC_READONLY)) != SEC_READONLY)
+    for (i = 0; i < sizeof (holds) / sizeof (holds[0]); i++)
+      if ((s->flags & holds[i].nonzero_flags) != 0)
+	{
+	  place = &holds[i].orphansave;
+	  if (place->os == NULL)
+	    place->os = lang_output_section_find (place->name);
+	  break;
+	}
 
-  if (hold_text.os == NULL)
-    hold_text.os = lang_output_section_find (hold_text.name);
+  if (place == NULL)
+    {
+      /* For other combinations, we have to give up, except we make
+	 sure not to place the orphan section after the
+	 linker-generated register section; that'd make it continue
+	 the reg section and we never want that to happen for orphan
+	 sections.  */
+      lang_output_section_statement_type *before;
+      lang_output_section_statement_type *lookup;
+      static struct orphan_save hold_nonreg =
+	{
+	  NULL,
+	  SEC_READONLY,
+	  0, 0, 0, 0
+	};
 
-  place = &hold_text;
-  if (hold_text.os != NULL)
-    after = hold_text.os;
-  else
-    after = &lang_output_section_statement.head->output_section_statement;
+      if (hold_nonreg.os == NULL)
+	{
+	  before = lang_output_section_find (MMIX_REG_CONTENTS_SECTION_NAME);
 
-  /* If there's an output section by this name, we'll use it, regardless
-     of section flags, in contrast to what's done in elf32.em.  */
-  os = lang_insert_orphan (s, secname, after, place, NULL, NULL);
+	  /* If we have no such section, all fine; we don't care where
+	     it's placed.  */
+	  if (before == NULL)
+	    return NULL;
 
-  /* We need an output section for .text as a root, so if there was none
-     (might happen with a peculiar linker script such as in "map
-     addresses", map-address.exp), we grab the output section created
-     above.  */
-  if (hold_text.os == NULL)
-    hold_text.os = os;
+	  /* We have to find the oss before this one, so we can use that as
+	     "after".  */
+	  for (lookup = &lang_output_section_statement.head->output_section_statement;
+	       lookup != NULL && lookup->next != before;
+	       lookup = lookup->next)
+	    ;
 
-  return TRUE;
+	  hold_nonreg.os = lookup;
+	}
+
+      place = &hold_nonreg;
+    }
+
+  after = place->os;
+  if (after == NULL)
+    return NULL;
+
+  /* If there's an output section by *this* name, we'll use it, regardless
+     of actual section flags, in contrast to what's done in elf32.em.  */
+  os = lang_insert_orphan (s, secname, 0, after, place, NULL, NULL);
+
+  return os;
 }
 
 /* Remove the spurious settings of SEC_RELOC that make it to the output at
@@ -119,11 +183,10 @@ mmo_wipe_sec_reloc_flag (bfd *abfd, asection *sec, void *ptr ATTRIBUTE_UNUSED)
 /* Iterate with bfd_map_over_sections over mmo_wipe_sec_reloc_flag... */
 
 static void
-mmo_finish (void)
+gld${EMULATION_NAME}_after_allocation (void)
 {
   bfd_map_over_sections (link_info.output_bfd, mmo_wipe_sec_reloc_flag, NULL);
   gld${EMULATION_NAME}_map_segments (FALSE);
-  finish_default ();
 }
 
 /* To get on-demand global register allocation right, we need to parse the
@@ -150,9 +213,9 @@ mmo_after_open (void)
 		   is->the_bfd);
 	}
     }
+  after_open_default ();
 }
 EOF
 
 LDEMUL_PLACE_ORPHAN=mmo_place_orphan
-LDEMUL_FINISH=mmo_finish
 LDEMUL_AFTER_OPEN=mmo_after_open

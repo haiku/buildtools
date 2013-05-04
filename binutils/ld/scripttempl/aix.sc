@@ -6,12 +6,12 @@
 cat <<EOF
 OUTPUT_ARCH(${ARCH})
 ${RELOCATING+${LIB_SEARCH_DIRS}}
-ENTRY(__start)
+${RELOCATING+ENTRY (__start)}
 SECTIONS
 {
   .pad 0 : { *(.pad) }
 
-  . = 0x10000000;
+  . = ALIGN (0x10000000 + SIZEOF_HEADERS, 32);
   .text ${RELOCATING-0} : {
     ${RELOCATING+PROVIDE (_text = .);}
     *(.text)
@@ -24,7 +24,8 @@ SECTIONS
     *(.tb)
     ${RELOCATING+PROVIDE (_etext = .);}
   }
-  . = ALIGN (0x10000000);
+
+  . = ALIGN (ALIGN (0x10000000) + (. & 0xfff), 32);
   .data . : {
     ${RELOCATING+PROVIDE (_data = .);}
     *(.data)

@@ -1,6 +1,6 @@
 /* -*- indented-text -*- */
 /* Process source files and output type information.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -49,7 +49,7 @@ update_lineno (const char *l, size_t len)
 ID	[[:alpha:]_][[:alnum:]_]*
 WS	[[:space:]]+
 HWS	[ \t\r\v\f]*
-IWORD	short|long|(un)?signed|char|int|HOST_WIDE_INT|HOST_WIDEST_INT|bool|size_t|BOOL_BITFIELD|CPPCHAR_SIGNED_T|ino_t|dev_t
+IWORD	short|long|(un)?signed|char|int|HOST_WIDE_INT|HOST_WIDEST_INT|bool|size_t|BOOL_BITFIELD|CPPCHAR_SIGNED_T|ino_t|dev_t|HARD_REG_SET
 ITYPE	{IWORD}({WS}{IWORD})*
 EOID	[^[:alnum:]_]
 
@@ -202,7 +202,7 @@ yybegin (const char *fname)
       perror (fname);
       exit (1);
     }
-  lexer_line.file = fname;
+  lexer_line.file = input_file_by_name (fname);
   lexer_line.line = 1;
 }
 

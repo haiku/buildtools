@@ -1,5 +1,6 @@
 /* budbg.c -- Interfaces to the generic debugging information routines.
-   Copyright 1995, 1996, 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 2002, 2003, 2005, 2007, 2008, 2012
+   Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
    This file is part of GNU Binutils.
@@ -21,8 +22,6 @@
 
 #ifndef BUDBG_H
 #define BUDBG_H
-
-#include <stdio.h>
 
 /* Routine used to read generic debugging information.  */
 

@@ -576,10 +576,13 @@ RANLIB
 NM
 LIPO
 AR
+toolexeclibdir
+toolexecdir
 target_subdir
 host_subdir
 build_subdir
 build_libsubdir
+target_noncanonical
 host_noncanonical
 host_os
 host_vendor
@@ -2174,6 +2177,8 @@ esac
 esac
 
 
+
+
 # post-stage1 host modules use a different CC_FOR_BUILD so, in order to
 # have matching libraries, they should use host libraries: Makefile.tpl
 # arranges to pass --with-build-libsubdir=$(HOST_SUBDIR).
@@ -2202,6 +2207,36 @@ else
 fi
 # No prefix.
 target_subdir=${target_noncanonical}
+
+
+# Calculate toolexeclibdir
+# Also toolexecdir, though it's only used in toolexeclibdir
+case ${version_specific_libs} in
+  yes)
+    # Need the gcc compiler version to know where to install libraries
+    # and header files if --enable-version-specific-runtime-libs option
+    # is selected.
+    toolexecdir='$(libdir)/gcc/$(target_noncanonical)'
+    toolexeclibdir='$(toolexecdir)/$(gcc_version)$(MULTISUBDIR)'
+    ;;
+  no)
+    if test -n "$with_cross_host" &&
+       test x"$with_cross_host" != x"no"; then
+      # Install a library built with a cross compiler in tooldir, not libdir.
+      toolexecdir='$(exec_prefix)/$(target_noncanonical)'
+      toolexeclibdir='$(toolexecdir)/lib'
+    else
+      toolexecdir='$(libdir)/gcc-lib/$(target_noncanonical)'
+      toolexeclibdir='$(libdir)'
+    fi
+    multi_os_directory=`$CC -print-multi-os-directory`
+    case $multi_os_directory in
+      .) ;; # Avoid trailing /.
+      *) toolexeclibdir=$toolexeclibdir/$multi_os_directory ;;
+    esac
+    ;;
+esac
+
 
 
 if test -n "$ac_tool_prefix"; then
@@ -3634,11 +3669,12 @@ $as_echo "$libgcc_cv_dfp" >&6; }
 decimal_float=$libgcc_cv_dfp
 
 
+
 # Check whether --enable-decimal-float was given.
 if test "${enable_decimal_float+set}" = set; then :
   enableval=$enable_decimal_float;
   case $enable_decimal_float in
-    yes | no | bid | dpd) ;;
+    yes | no | bid | dpd) default_decimal_float=$enable_decimal_float ;;
     *) as_fn_error "'$enable_decimal_float' is an invalid value for --enable-decimal-float.
 Valid choices are 'yes', 'bid', 'dpd', and 'no'." "$LINENO" 5 ;;
   esac
@@ -3646,10 +3682,14 @@ Valid choices are 'yes', 'bid', 'dpd', and 'no'." "$LINENO" 5 ;;
 else
 
   case $host in
-    powerpc*-*-linux* | i?86*-*-linux* | x86_64*-*-linux*)
+    powerpc*-*-linux* | i?86*-*-linux* | x86_64*-*-linux* | s390*-*-linux* | \
+    i?86*-*-mingw* | x86_64*-*-mingw* | \
+    i?86*-*-cygwin*)
       enable_decimal_float=yes
       ;;
     *)
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: decimal float is not supported for this target, ignored" >&5
+$as_echo "$as_me: WARNING: decimal float is not supported for this target, ignored" >&2;}
       enable_decimal_float=no
       ;;
   esac
@@ -3658,16 +3698,26 @@ fi
 
 
 # x86's use BID format instead of DPD
-if test x$enable_decimal_float = xyes; then
-  case $host in
-    i?86*-*-linux* | x86_64*-*-linux*)
-      enable_decimal_float=bid
-      ;;
-    *)
-      enable_decimal_float=dpd
-      ;;
-  esac
-fi
+case x$enable_decimal_float in
+  xyes)
+    case $host in
+      i?86*-*-* | x86_64*-*-*)
+	enable_decimal_float=bid
+	;;
+      *)
+	enable_decimal_float=dpd
+	;;
+    esac
+    default_decimal_float=$enable_decimal_float
+    ;;
+  xno)
+    # ENABLE_DECIMAL_FLOAT is set to 0. But we have to have proper
+    # dependency on libdecnumber.
+    default_decimal_float=dpd
+    ;;
+esac
+
+
 
 
 # Check for fixed-point support.
@@ -3692,6 +3742,30 @@ $as_echo "$libgcc_cv_fixed_point" >&6; }
 fixed_point=$libgcc_cv_fixed_point
 
 
+# Check for assembler CFI support.
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether assembler supports CFI directives" >&5
+$as_echo_n "checking whether assembler supports CFI directives... " >&6; }
+if test "${libgcc_cv_cfi+set}" = set; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+asm("\n\
+	.text\n\
+	.cfi_startproc\n\
+	.cfi_personality 0, symbol\n\
+	.cfi_endproc");
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  libgcc_cv_cfi=yes
+else
+  libgcc_cv_cfi=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $libgcc_cv_cfi" >&5
+$as_echo "$libgcc_cv_cfi" >&6; }
+
 # Check 32bit or 64bit for x86.
 case ${host} in
 i?86*-*-* | x86_64*-*-*)
@@ -3715,7 +3789,7 @@ esac
 # Link with -nostartfiles -nodefaultlibs since neither are present while
 # building libgcc.
 case ${host} in
-i?86-*-solaris2.1[0-9]*)
+i?86-*-solaris2*)
   cat > conftest.s <<EOF
 	.section	.eh_frame,"a",@unwind
 	.zero	4

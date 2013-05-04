@@ -1,6 +1,6 @@
 # Process this file with automake to generate Makefile.in
 
-AUTOMAKE_OPTIONS =
+AUTOMAKE_OPTIONS = foreign
 
 SUBDIRS = po testsuite
 
@@ -11,13 +11,17 @@ ACLOCAL_AMFLAGS = -I ../bfd -I ../config
 AM_CFLAGS = $(WARN_CFLAGS) $(LFS_CFLAGS) $(RANDOM_SEED_CFLAGS)
 AM_CXXFLAGS = $(WARN_CXXFLAGS) $(LFS_CFLAGS) $(RANDOM_SEED_CFLAGS)
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(srcdir) -I$(srcdir)/../include -I$(srcdir)/../elfcpp \
 	-DLOCALEDIR="\"$(datadir)/locale\"" \
 	-DBINDIR="\"$(bindir)\"" -DTOOLBINDIR="\"$(tooldir)/bin\"" \
-	@INCINTL@
+	-DTOOLLIBDIR="\"$(tooldir)/lib\"" @INCINTL@
 
 LIBIBERTY = ../libiberty/libiberty.a
+
+if PLUGINS
+LIBDL = -ldl
+endif
 
 if THREADS
 THREADSLIB = -lpthread
@@ -25,11 +29,17 @@ endif
 
 AM_YFLAGS = -d
 
-noinst_PROGRAMS = ld-new
+# Automake 1.10+ disables lex and yacc output file regeneration if
+# maintainer mode is disabled.  Avoid this.
+am__skiplex =
+am__skipyacc =
+
+noinst_PROGRAMS = ld-new incremental-dump
 noinst_LIBRARIES = libgold.a
 
 CCFILES = \
 	archive.cc \
+	attributes.cc \
 	binary.cc \
 	common.cc \
 	compressed_output.cc \
@@ -44,15 +54,22 @@ CCFILES = \
 	errors.cc \
 	expression.cc \
 	fileread.cc \
+        gc.cc \
+        gdb-index.cc \
 	gold.cc \
 	gold-threads.cc \
+	icf.cc \
+	incremental.cc \
+	int_encoding.cc \
 	layout.cc \
 	mapfile.cc \
 	merge.cc \
+	nacl.cc \
 	object.cc \
 	options.cc \
 	output.cc \
 	parameters.cc \
+	plugin.cc \
 	readsyms.cc \
 	reduced_debug_output.cc \
 	reloc.cc \
@@ -61,13 +78,17 @@ CCFILES = \
 	script.cc \
 	stringpool.cc \
 	symtab.cc \
+	target.cc \
 	target-select.cc \
+	timer.cc \
 	version.cc \
 	workqueue.cc \
 	workqueue-threads.cc
 
 HFILES = \
+	arm-reloc-property.h \
 	archive.h \
+	attributes.h \
 	binary.h \
 	common.h \
 	compressed_output.h \
@@ -81,15 +102,22 @@ HFILES = \
 	ehframe.h \
 	errors.h \
 	fileread.h \
+	freebsd.h \
+        gc.h \
+        gdb-index.h \
 	gold.h \
 	gold-threads.h \
+	icf.h \
+	int_encoding.h \
 	layout.h \
 	mapfile.h \
 	merge.h \
+	nacl.h \
 	object.h \
 	options.h \
 	output.h \
 	parameters.h \
+	plugin.h \
 	readsyms.h \
 	reduced_debug_output.h \
 	reloc.h \
@@ -102,6 +130,7 @@ HFILES = \
 	target.h \
 	target-reloc.h \
 	target-select.h \
+	timer.h \
 	tls.h \
 	token.h \
 	workqueue.h \
@@ -110,25 +139,38 @@ HFILES = \
 YFILES = \
 	yyscript.y
 
+DEFFILES = arm-reloc.def
+
 EXTRA_DIST = yyscript.c yyscript.h
 
 TARGETSOURCES = \
-	i386.cc x86_64.cc sparc.cc powerpc.cc
+	i386.cc x86_64.cc sparc.cc powerpc.cc arm.cc arm-reloc-property.cc
 
 ALL_TARGETOBJS = \
-	i386.$(OBJEXT) x86_64.$(OBJEXT) sparc.$(OBJEXT) powerpc.$(OBJEXT)
+	i386.$(OBJEXT) x86_64.$(OBJEXT) sparc.$(OBJEXT) powerpc.$(OBJEXT) \
+	arm.$(OBJEXT) arm-reloc-property.$(OBJEXT)
 
-libgold_a_SOURCES = $(CCFILES) $(HFILES) $(YFILES)
+libgold_a_SOURCES = $(CCFILES) $(HFILES) $(YFILES) $(DEFFILES)
+libgold_a_LIBADD = $(LIBOBJS)
 
 sources_var = main.cc
 deps_var = $(TARGETOBJS) libgold.a $(LIBIBERTY) $(LIBINTL_DEP)
-ldadd_var = $(TARGETOBJS) libgold.a $(LIBIBERTY) $(LIBINTL) $(THREADSLIB)
+ldadd_var = $(TARGETOBJS) libgold.a $(LIBIBERTY) $(GOLD_LDADD) $(LIBINTL) \
+	 $(THREADSLIB) $(LIBDL)
+ldflags_var = $(GOLD_LDFLAGS)
 
 ld_new_SOURCES = $(sources_var)
-ld_new_DEPENDENCIES = $(deps_var) $(LIBOBJS)
-ld_new_LDADD = $(ldadd_var) $(LIBOBJS)
+ld_new_DEPENDENCIES = $(deps_var)
+ld_new_LDADD = $(ldadd_var)
+ld_new_LDFLAGS = $(ldflags_var)
 
 EXTRA_ld_new_SOURCES = $(TARGETSOURCES)
+
+incremental_dump_SOURCES = incremental-dump.cc
+incremental_dump_DEPENDENCIES = $(TARGETOBJS) libgold.a $(LIBIBERTY) \
+	$(LIBINTL_DEP)
+incremental_dump_LDADD = $(TARGETOBJS) libgold.a $(LIBIBERTY) $(LIBINTL) \
+	 $(THREADSLIB) $(LIBDL)
 
 # Use an explicit dependency for the bison generated header file.
 expression.$(OBJEXT): yyscript.h
@@ -142,12 +184,23 @@ check: libgold.a
 
 install-exec-local: ld-new$(EXEEXT)
 	$(mkinstalldirs) $(DESTDIR)$(bindir) $(DESTDIR)$(tooldir)/bin
-	n=`echo ld | sed '$(transform)'`; \
+	n=`echo $(installed_linker) | sed '$(transform)'`; \
 	$(INSTALL_PROGRAM) ld-new$(EXEEXT) $(DESTDIR)$(bindir)/$${n}$(EXEEXT); \
 	if test "$(bindir)" != "$(tooldir)/bin"; then \
-	  rm -f $(DESTDIR)$(tooldir)/bin/ld$(EXEEXT); \
-	  ln $(DESTDIR)$(bindir)/$${n}$(EXEEXT) $(DESTDIR)$(tooldir)/bin/ld$(EXEEXT) >/dev/null 2>/dev/null \
+	  rm -f $(DESTDIR)$(tooldir)/bin/$(installed_linker)$(EXEEXT); \
+	  ln $(DESTDIR)$(bindir)/$${n}$(EXEEXT) $(DESTDIR)$(tooldir)/bin/$(installed_linker)$(EXEEXT) >/dev/null 2>/dev/null \
+	  || $(INSTALL_PROGRAM) ld-new$(EXEEXT) $(DESTDIR)$(tooldir)/bin/$(installed_linker)$(EXEEXT); \
+	fi; \
+	if test "x$(install_as_default)" = "xyes"; then \
+	  ld=`echo ld | sed '$(transform)'`; \
+	  rm -f $(DESTDIR)$(bindir)/$${ld}$(EXEEXT); \
+	  ln $(DESTDIR)$(bindir)/$${n}$(EXEEXT) $(DESTDIR)$(bindir)/$${ld}$(EXEEXT) >/dev/null 2>/dev/null \
+	  || $(INSTALL_PROGRAM) ld-new$(EXEEXT) $(DESTDIR)$(bindir)/$${ld}$(EXEEXT); \
+	  if test "$(bindir)" != "$(tooldir)/bin"; then \
+	    rm -f $(DESTDIR)$(tooldir)/bin/ld$(EXEEXT); \
+	    ln $(DESTDIR)$(bindir)/$${n}$(EXEEXT) $(DESTDIR)$(tooldir)/bin/ld$(EXEEXT) >/dev/null 2>/dev/null \
 	    || $(INSTALL_PROGRAM) ld-new$(EXEEXT) $(DESTDIR)$(tooldir)/bin/ld$(EXEEXT); \
+	  fi; \
 	fi
 
 # We want install to imply install-info as per GNU standards, despite

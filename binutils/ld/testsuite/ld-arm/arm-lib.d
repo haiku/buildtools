@@ -1,6 +1,6 @@
 
-tmpdir/arm-lib.so:     file format elf32-(little|big)arm
-architecture: arm, flags 0x00000150:
+tmpdir/arm-lib.so:     file format elf32-(little|big)arm.*
+architecture: armv4t, flags 0x00000150:
 HAS_SYMS, DYNAMIC, D_PAGED
 start address 0x.*
 
@@ -12,9 +12,9 @@ Disassembly of section .plt:
  .*:	e08fe00e 	add	lr, pc, lr
  .*:	e5bef008 	ldr	pc, \[lr, #8\]!
  .*:	.*
- .*:	e28fc6.* 	add	ip, pc, #.*	; 0x.*
+ .*:	e28fc6.* 	add	ip, pc, #.*
  .*:	e28cca.* 	add	ip, ip, #.*	; 0x.*
- .*:	e5bcf.* 	ldr	pc, \[ip, #.*\]!
+ .*:	e5bcf.* 	ldr	pc, \[ip, #.*\]!.*
 Disassembly of section .text:
 
 .* <lib_func1>:

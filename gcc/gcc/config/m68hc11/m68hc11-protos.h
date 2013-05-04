@@ -1,5 +1,5 @@
 /* Prototypes for exported functions defined in m68hc11.c
-   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2009
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
 
@@ -20,9 +20,6 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 
-extern int m68hc11_override_options (void);
-extern int m68hc11_optimization_options (int,int);
-extern void m68hc11_conditional_register_usage (void);
 extern int hard_regno_mode_ok (int, enum machine_mode);
 extern int m68hc11_hard_regno_rename_ok (int, int);
 
@@ -32,13 +29,6 @@ extern int m68hc11_initial_elimination_offset (int, int);
 
 extern void expand_prologue (void);
 extern void expand_epilogue (void);
-
-#ifdef TREE_CODE
-extern void m68hc11_function_arg_advance (CUMULATIVE_ARGS*,
-                                          enum machine_mode,
-                                          tree,
-                                          int);
-#endif
 
 #ifdef RTX_CODE
 extern int m68hc11_auto_inc_p (rtx);
@@ -56,9 +46,6 @@ extern void m68hc11_gen_rotate (enum rtx_code, rtx, rtx*);
 extern void m68hc11_output_swap (rtx, rtx*);
 
 extern int next_insn_test_reg (rtx, rtx);
-
-extern void print_operand (FILE*, rtx, int);
-extern void print_operand_address (FILE*, rtx);
 
 extern int m68hc11_reload_operands (rtx*);
 
@@ -103,9 +90,6 @@ extern int soft_reg_operand (rtx, enum machine_mode);
 
 extern void m68hc11_init_cumulative_args (CUMULATIVE_ARGS*, tree, rtx);
 
-extern rtx m68hc11_function_arg (const CUMULATIVE_ARGS* ,
-                                 enum machine_mode,
-                                 tree, int);
 #ifdef ARGS_SIZE_RTX
 extern enum direction m68hc11_function_arg_padding (enum machine_mode,
 						    const_tree);

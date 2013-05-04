@@ -163,7 +163,8 @@ prefer_and_bit_test (enum machine_mode mode, int bitnum)
 
   /* Fill in the integers.  */
   XEXP (and_test, 1)
-    = immed_double_const ((unsigned HOST_WIDE_INT) 1 << bitnum, 0, mode);
+    = immed_double_int_const (double_int_setbit (double_int_zero, bitnum),
+						 mode);
   XEXP (XEXP (shift_test, 0), 1) = GEN_INT (bitnum);
 
   return (rtx_cost (and_test, IF_THEN_ELSE, optimize_insn_for_speed_p ())
@@ -541,7 +542,7 @@ do_jump (tree exp, rtx if_false_label, rtx if_true_label, int prob)
 		  unsigned HOST_WIDE_INT mask
 		    = (unsigned HOST_WIDE_INT) 1 << TREE_INT_CST_LOW (shift);
 		  do_jump (build2 (BIT_AND_EXPR, argtype, arg,
-				   build_int_cst_wide_type (argtype, mask, 0)),
+				   build_int_cstu (argtype, mask)),
 			   clr_label, set_label, setclr_prob);
 		  break;
 		}
@@ -1022,7 +1023,7 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
     }
   else
     {
-      if (GET_MODE_CLASS (mode) == MODE_FLOAT
+      if (SCALAR_FLOAT_MODE_P (mode)
 	  && ! can_compare_p (code, mode, ccp_jump)
 	  && can_compare_p (swap_condition (code), mode, ccp_jump))
 	{
@@ -1033,7 +1034,7 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 	  op1 = tmp;
 	}
 
-      else if (GET_MODE_CLASS (mode) == MODE_FLOAT
+      else if (SCALAR_FLOAT_MODE_P (mode)
 	       && ! can_compare_p (code, mode, ccp_jump)
 
 	       /* Never split ORDERED and UNORDERED.  These must be implemented.  */

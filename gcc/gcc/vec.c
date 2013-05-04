@@ -1,5 +1,6 @@
 /* Vector API for GNU compiler.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2010
+   Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
 
 This file is part of GCC.
@@ -30,7 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ggc.h"
 #include "vec.h"
 #include "coretypes.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "hashtab.h"
 
 struct vec_prefix

@@ -107,6 +107,9 @@ m68k-*-*)
 	;;
 mep*-*-*)
 	;;
+microblaze*-*-*)
+	cpu_type=microblaze
+	;;
 mips*-*-*)
 	cpu_type=mips
 	;;
@@ -141,15 +144,6 @@ case ${host} in
 *-*-darwin*)
   asm_hidden_op=.private_extern
   tmake_file="t-darwin ${cpu_type}/t-darwin t-slibgcc-darwin"
-  ;;
-*-*-freebsd[12] | *-*-freebsd[12].* | *-*-freebsd*aout*)
-  # This is the place-holder for the generic a.out configuration
-  # of FreeBSD.  No actual configuration resides here since
-  # there was only ever a bare-bones ix86 configuration for
-  # a.out and it exists solely in the machine-specific section.
-  # This place-holder must exist to avoid dropping into
-  # the generic ELF configuration of FreeBSD (i.e. it must be
-  # ordered before that section).
   ;;
 *-*-freebsd*)
   # This is the generic ELF configuration of FreeBSD.  Later
@@ -189,7 +183,7 @@ alpha*-*-netbsd*)
 	;;
 alpha*-*-openbsd*)
 	;;
-alpha*-dec-osf[45]*)
+alpha*-dec-osf5.1*)
 	;;
 alpha64-dec-*vms*)
 	tmake_file="vms/t-vms vms/t-vms64 alpha/t-vms"
@@ -281,8 +275,10 @@ i[34567]86-*-elf*)
 x86_64-*-elf*)
 	;;
 i[34567]86-*-freebsd*)
+	tmake_file="${tmake_file} i386/t-freebsd"
 	;;
 x86_64-*-freebsd*)
+	tmake_file="${tmake_file} i386/t-freebsd"
 	;;
 i[34567]86-*-haiku*)
 	;;
@@ -405,13 +401,20 @@ mcore-*-elf)
 	;;
 mcore-*-pe*)
 	;;
+microblaze*-*-*)
+        tmake_file="microblaze/t-microblaze"
+	;;
 mips-sgi-irix[56]*)
 	;;
 mips*-*-netbsd*)			# NetBSD/mips, either endian.
 	;;
 mips64*-*-linux*)
+	extra_parts="$extra_parts crtfastmath.o"
+	tmake_file="{$tmake_file} mips/t-crtfm"
 	;;
 mips*-*-linux*)				# Linux MIPS, either endian.
+	extra_parts="$extra_parts crtfastmath.o"
+	tmake_file="{$tmake_file} mips/t-crtfm"
 	;;
 mips*-*-openbsd*)
 	;;
@@ -461,7 +464,8 @@ powerpc-*-darwin*)
 	;;
 powerpc64-*-darwin*)
 	;;
-powerpc*-*-freebsd*)
+powerpc-*-freebsd*)
+	tmake_file="${tmake_file} rs6000/t-ppccomm rs6000/t-freebsd t-softfp"
 	;;
 powerpc-*-haiku*)
 	;;
@@ -551,7 +555,7 @@ sparc-*-linux*)		# SPARC's running GNU/Linux, libc6
 	extra_parts="$extra_parts crtfastmath.o"
 	tmake_file="${tmake_file} sparc/t-crtfm"
 	;;
-sparc-*-rtems*)
+sparc-*-rtems* | sparc64-*-rtems* )
 	;;
 sparc64-*-solaris2* | sparcv9-*-solaris2*)
 	;;
@@ -609,6 +613,9 @@ i[34567]86-*-linux* | x86_64-*-linux* | \
   i[34567]86-*-kfreebsd*-gnu | i[34567]86-*-knetbsd*-gnu | \
   i[34567]86-*-gnu*)
 	tmake_file="${tmake_file} t-tls"
+	if test "$libgcc_cv_cfi" = "yes"; then
+		tmake_file="${tmake_file} t-stack i386/t-stack-i386"
+	fi
 	;;
 esac
 
@@ -618,7 +625,8 @@ i[34567]86-*-darwin* | x86_64-*-darwin* | \
   i[34567]86-*-linux* | x86_64-*-linux* | \
   i[34567]86-*-gnu* | \
   i[34567]86-*-solaris2* | \
-  i[34567]86-*-cygwin* | i[34567]86-*-mingw* | x86_64-*-mingw*)
+  i[34567]86-*-cygwin* | i[34567]86-*-mingw* | x86_64-*-mingw* | \
+  i[34567]86-*-freebsd* | x86_64-*-freebsd*)
 	if test "${host_address}" = 32; then
 		tmake_file="${tmake_file} t-softfp i386/${host_address}/t-fprules-softfp"
 	fi

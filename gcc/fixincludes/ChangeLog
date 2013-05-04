@@ -1,47 +1,73 @@
-2011-04-28  Release Manager
+2013-04-12  Release Manager
 
-	* GCC 4.5.3 released.
+	* GCC 4.6.4 released.
 
-2010-12-16  Release Manager
+2012-03-01  Release Manager
 
-	* GCC 4.5.2 released.
+	* GCC 4.6.3 released.
 
-2010-12-03  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+2011-10-26  Release Manager
 
-	Backport from mainline:
-	2010-11-09  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+	* GCC 4.6.2 released.
+
+2011-06-27  Release Manager
+
+	* GCC 4.6.1 released.
+
+2011-03-25  Release Manager
+
+	* GCC 4.6.0 released.
+
+2010-11-20  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	PR other/46202
+	* Makefile.in (install-strip): New phony target.
+	(all, check, install): Also mark as phony.
+
+2010-11-09  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
 	* inclhack.def (irix_pthread_init): New fix.
 	* fixincl.x: Regenerate.
 	* tests/base/pthread.h [IRIX_PTHREAD_INIT_CHECK]: New test.
 
-2010-10-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
-
-	Backport from mainline:
-	2010-10-20  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+2010-10-20  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
 	PR c++/46024
 	* inclhack.def (solaris_sys_va_list): New fix.
 	* fixincl.x: Regenerate.
 	* tests/base/sys/va_list.h: New test.
 
-2010-07-31  Release Manager
+2010-09-07  John David Anglin  <dave.anglin@nrc-cnrc.gc.ca>
 
-	* GCC 4.5.1 released.
+	* inclhack.def (hpux_htonl): Allow trailing whitespace in select.
+	* fixincl.x: Regenerate.
 
-2010-07-14  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
-
-	Backport from mainline:
-	2010-07-12  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+2010-07-12  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
 	* inclhack.def (solaris_cond_init): New fix.
 	* fixincl.x: Regenerate.
 	* tests/base/pthread.h [SOLARIS_COND_INIT_CHECK]: New test.
 	[SOLARIS_MUTEX_INIT_2_CHECK]: Adapt.
 
-2010-04-14  Release Manager
+2010-06-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
-	* GCC 4.5.0 released.
+	* inclhack.def (solaris__restrict, solaris_complex_cxx): New fixes
+	* fixincl.x: Regenerate.
+	* tests/base/complex.h [SOLARIS_COMPLEX_CXX_CHECK]: New test.
+	* tests/base/sys/feature_tests.h: New file.
+
+2010-06-03  Joern Rennecke <joern.rennecke@embecosm.com>
+	    Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	PR bootstrap/42798
+	* configure.ac: Check for declaration of 'basename(char *)'.
+	* configure: Regenerate.
+
+2010-04-12  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* inclhack.def (alpha_wchar): Remove.
+	* fixincl.x: Regenerate.
+	* tests/base/wchar.h: Remove.
 
 2010-04-02  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 

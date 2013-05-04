@@ -1,5 +1,6 @@
-/* tc-ldx.c -- Assemble for the DLX
-   Copyright 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
+/* tc-dlx.c -- Assemble for the DLX
+   Copyright 2002, 2003, 2004, 2005, 2007, 2009, 2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -20,8 +21,8 @@
 
 /* Initially created by Kuang Hwa Lin, 3/20/2002.  */
 
-#include "safe-ctype.h"
 #include "as.h"
+#include "safe-ctype.h"
 #include "tc-dlx.h"
 #include "opcode/dlx.h"
 
@@ -244,7 +245,12 @@ s_proc (int end_p)
 	  /* Missing entry point, use function's name with the leading
 	     char prepended.  */
 	  if (leading_char)
-	    asprintf (&label, "%c%s", leading_char, name);
+	    {
+	      unsigned len = strlen (name) + 1;
+	      label = xmalloc (len + 1);
+	      label[0] = leading_char;
+	      memcpy (label + 1, name, len);
+	    }
 	  else
 	    label = name;
 	}
@@ -594,7 +600,7 @@ static char *
 parse_operand (char *s, expressionS *operandp)
 {
   char *save = input_line_pointer;
-  char *new;
+  char *new_pos;
 
   the_insn.HI = the_insn.LO = 0;
 
@@ -641,9 +647,9 @@ parse_operand (char *s, expressionS *operandp)
       (void) expression (operandp);
     }
 
-  new = input_line_pointer;
+  new_pos = input_line_pointer;
   input_line_pointer = save;
-  return new;
+  return new_pos;
 }
 
 /* Instruction parsing.  Takes a string containing the opcode.
@@ -656,7 +662,6 @@ machine_ip (char *str)
   char *s;
   const char *args;
   struct machine_opcode *insn;
-  char *argsStart;
   unsigned long opcode;
   expressionS the_operand;
   expressionS *operand = &the_operand;
@@ -705,7 +710,6 @@ machine_ip (char *str)
       return;
     }
 
-  argsStart = s;
   opcode = insn->opcode;
   memset (&the_insn, '\0', sizeof (the_insn));
   the_insn.reloc = NO_RELOC;
@@ -908,6 +912,8 @@ md_assemble (char *str)
   know (str);
   machine_ip (str);
   toP = frag_more (4);
+  dwarf2_emit_insn (4);
+
   /* Put out the opcode.  */
   md_number_to_chars (toP, the_insn.opcode, 4);
 
@@ -1203,7 +1209,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED,
       return NULL;
     }
 
-  assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
+  gas_assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
 
   reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
@@ -1235,4 +1241,3 @@ dlx_pop_insert (void)
   pop_insert (dlx_pseudo_table);
   return ;
 }
-

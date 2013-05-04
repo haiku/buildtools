@@ -1,10 +1,11 @@
 #source: eh3.s
 #source: eh3a.s
-#ld:
+#as: --64
+#ld: -melf_x86_64 -Ttext 0x400078
 #readelf: -wf
 #target: x86_64-*-*
 
-The section .eh_frame contains:
+Contents of the .eh_frame section:
 
 00000000 00000014 00000000 CIE
   Version:               1

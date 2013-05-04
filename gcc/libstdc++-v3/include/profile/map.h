@@ -1,31 +1,25 @@
 // Profiling map implementation -*- C++ -*-
 
-// Copyright (C) 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
 // terms of the GNU General Public License as published by the
-// Free Software Foundation; either version 2, or (at your option)
+// Free Software Foundation; either version 3, or (at your option)
 // any later version.
-
+//
 // This library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 
-// You should have received a copy of the GNU General Public License along
-// with this library; see the file COPYING.  If not, write to the Free
-// Software Foundation, 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-// USA.
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
 
-// As a special exception, you may use this file as part of a free software
-// library without restriction.  Specifically, if other files instantiate
-// templates or use macros or inline functions from this file, or you compile
-// this file and link it with other files to produce an executable, this
-// file does not by itself cause the resulting executable to be covered by
-// the GNU General Public License.  This exception does not however
-// invalidate any other reasons why the executable file might be covered by
-// the GNU General Public License.
+// You should have received a copy of the GNU General Public License along
+// with this library; see the file COPYING3.  If not see
+// <http://www.gnu.org/licenses/>.
 
 /** @file profile/map.h
  *  This file is a GNU profile extension to the Standard C++ Library.
@@ -37,7 +31,7 @@
 #include <utility>
 #include <profile/base.h>
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
 namespace __profile
 {
@@ -45,9 +39,9 @@ namespace __profile
   template<typename _Key, typename _Tp, typename _Compare = std::less<_Key>,
 	   typename _Allocator = std::allocator<std::pair<const _Key, _Tp> > >
     class map
-    : public _GLIBCXX_STD_D::map<_Key, _Tp, _Compare, _Allocator>
+    : public _GLIBCXX_STD_C::map<_Key, _Tp, _Compare, _Allocator>
     {
-      typedef _GLIBCXX_STD_D::map<_Key, _Tp, _Compare, _Allocator> _Base;
+      typedef _GLIBCXX_STD_C::map<_Key, _Tp, _Compare, _Allocator> _Base;
 
     public:
       // types:
@@ -68,36 +62,31 @@ namespace __profile
       typedef std::reverse_iterator<iterator>       reverse_iterator;
       typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
-      using _Base::value_compare;
-
       // 23.3.1.1 construct/copy/destroy:
-      explicit map(const _Compare& __comp = _Compare(),
-		   const _Allocator& __a = _Allocator())
-      : _Base(__comp, __a) {
-          __profcxx_map_to_unordered_map_construct(this);
-      }
+      explicit
+      map(const _Compare& __comp = _Compare(),
+	  const _Allocator& __a = _Allocator())
+      : _Base(__comp, __a)
+      { __profcxx_map_to_unordered_map_construct(this); }
 
       template<typename _InputIterator>
         map(_InputIterator __first, _InputIterator __last,
 	    const _Compare& __comp = _Compare(),
 	    const _Allocator& __a = _Allocator())
-	: _Base(__first, __last, __comp, __a) {
-          __profcxx_map_to_unordered_map_construct(this);
-        }
+	: _Base(__first, __last, __comp, __a)
+        { __profcxx_map_to_unordered_map_construct(this); }
 
       map(const map& __x)
-      : _Base(__x) {
-          __profcxx_map_to_unordered_map_construct(this);
-      }
+      : _Base(__x)
+      { __profcxx_map_to_unordered_map_construct(this); }
 
       map(const _Base& __x)
-      : _Base(__x) {
-          __profcxx_map_to_unordered_map_construct(this);
-      }
+      : _Base(__x)
+      { __profcxx_map_to_unordered_map_construct(this); }
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       map(map&& __x)
-      : _Base(std::forward<map>(__x))
+      : _Base(std::move(__x))
       { }
 
       map(initializer_list<value_type> __l,
@@ -106,9 +95,8 @@ namespace __profile
       : _Base(__l, __c, __a) { }
 #endif
 
-      ~map() {
-          __profcxx_map_to_unordered_map_destruct(this);
-      }
+      ~map()
+      { __profcxx_map_to_unordered_map_destruct(this); }
 
       map&
       operator=(const map& __x)
@@ -223,6 +211,15 @@ namespace __profile
         return _Base::operator[](__k);
       }
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      mapped_type&
+      operator[](key_type&& __k)
+      {
+        __profcxx_map_to_unordered_map_find(this, size());
+        return _Base::operator[](std::move(__k));
+      }
+#endif
+
       mapped_type&
       at(const key_type& __k)
       {
@@ -249,24 +246,61 @@ namespace __profile
       }
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
+      template<typename _Pair, typename = typename
+	       std::enable_if<std::is_convertible<_Pair,
+						  value_type>::value>::type>
+        std::pair<iterator, bool>
+        insert(_Pair&& __x)
+        {
+	  __profcxx_map_to_unordered_map_insert(this, size(), 1);
+	  typedef typename _Base::iterator _Base_iterator;
+	  std::pair<_Base_iterator, bool> __res
+	    = _Base::insert(std::forward<_Pair>(__x));
+	  return std::pair<iterator, bool>(iterator(__res.first),
+					   __res.second);
+	}
+#endif
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       void
       insert(std::initializer_list<value_type> __list)
       { 
         size_type size_before = size();
         _Base::insert(__list); 
         __profcxx_map_to_unordered_map_insert(this, size_before, 
-                                                size() - size_before);
+					      size() - size_before);
       }
 #endif
 
       iterator
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      insert(const_iterator __position, const value_type& __x)
+#else
       insert(iterator __position, const value_type& __x)
+#endif
       {
         size_type size_before = size();
-	return iterator(_Base::insert(__position, __x));
+	iterator __i = iterator(_Base::insert(__position, __x));
         __profcxx_map_to_unordered_map_insert(this, size_before, 
-                                                size() - size_before);
+					      size() - size_before);
+	return __i;
       }
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      template<typename _Pair, typename = typename
+	       std::enable_if<std::is_convertible<_Pair,
+						  value_type>::value>::type>
+        iterator
+        insert(const_iterator __position, _Pair&& __x)
+        {
+	  size_type size_before = size();
+	  iterator __i
+	    = iterator(_Base::insert(__position, std::forward<_Pair>(__x)));
+	  __profcxx_map_to_unordered_map_insert(this, size_before, 
+						size() - size_before);
+	  return __i;
+      }
+#endif
 
       template<typename _InputIterator>
         void
@@ -280,12 +314,16 @@ namespace __profile
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       iterator
-      erase(iterator __position)
+      erase(const_iterator __position)
       {
 	iterator __i = _Base::erase(__position);
         __profcxx_map_to_unordered_map_erase(this, size(), 1);
         return __i;
       }
+
+      iterator
+      erase(iterator __position)
+      { return erase(const_iterator(__position)); }
 #else
       void
       erase(iterator __position)
@@ -310,31 +348,18 @@ namespace __profile
 
 #ifdef __GXX_EXPERIMENTAL_CXX0X__
       iterator
-      erase(iterator __first, iterator __last)
-      {
-	// _GLIBCXX_RESOLVE_LIB_DEFECTS
-	// 151. can't currently clear() empty container
-	while (__first != __last)
-	  this->erase(__first++);
-	return __last;
-      }
+      erase(const_iterator __first, const_iterator __last)
+      { return iterator(_Base::erase(__first, __last)); }
 #else
       void
       erase(iterator __first, iterator __last)
-      {
-	// _GLIBCXX_RESOLVE_LIB_DEFECTS
-	// 151. can't currently clear() empty container
-	while (__first != __last)
-	  this->erase(__first++);
-      }
+      { _Base::erase(__first, __last); }
 #endif
 
       void
 
       swap(map& __x)
-      {
-	_Base::swap(__x);
-      }
+      { _Base::swap(__x); }
 
       void
       clear()

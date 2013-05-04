@@ -23,8 +23,8 @@
 /* The only way I know to get gcc to generate a TLS common symbol is
    to use a C file and an OpenMP directive.  */
 
-#include <stdio.h>
 #include "config.h"
+#include <stdio.h>
 
 #define CHECK_EQ_OR_RETURN(var, expected)				\
   do									\
@@ -42,8 +42,11 @@ int v7;
 #pragma omp threadprivate (v7)
 #endif
 
+int t11(void);
+int t11_last(void);
+
 int
-t11()
+t11(void)
 {
 #ifdef HAVE_OMP_SUPPORT
   CHECK_EQ_OR_RETURN(v7, 0);
@@ -53,7 +56,7 @@ t11()
 }
 
 int
-t11_last()
+t11_last(void)
 {
 #ifdef HAVE_OMP_SUPPORT
   CHECK_EQ_OR_RETURN(v7, 70);

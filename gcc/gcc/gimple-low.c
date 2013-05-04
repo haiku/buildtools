@@ -1,6 +1,6 @@
 /* GIMPLE lowering pass.  Converts High GIMPLE into Low GIMPLE.
 
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -24,22 +24,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
-#include "rtl.h"
-#include "varray.h"
 #include "gimple.h"
 #include "tree-iterator.h"
 #include "tree-inline.h"
-#include "diagnostic.h"
-#include "langhooks.h"
-#include "langhooks-def.h"
 #include "tree-flow.h"
-#include "timevar.h"
-#include "except.h"
-#include "hashtab.h"
 #include "flags.h"
 #include "function.h"
-#include "expr.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "tree-pass.h"
 
 /* The differences between High GIMPLE and Low GIMPLE are the
@@ -157,11 +148,6 @@ lower_function_body (void)
 
       x = gimple_build_label (t.label);
       gsi_insert_after (&i, x, GSI_CONTINUE_LINKING);
-
-      /* Remove the line number from the representative return statement.
-	 It now fills in for many such returns.  Failure to remove this
-	 will result in incorrect results for coverage analysis.  */
-      gimple_set_location (t.stmt, UNKNOWN_LOCATION);
       gsi_insert_after (&i, t.stmt, GSI_CONTINUE_LINKING);
     }
 
@@ -249,7 +235,7 @@ gimple_check_call_args (gimple stmt)
     {
       for (i = 0, p = DECL_ARGUMENTS (fndecl);
 	   i < nargs;
-	   i++, p = TREE_CHAIN (p))
+	   i++, p = DECL_CHAIN (p))
 	{
 	  /* We cannot distinguish a varargs function from the case
 	     of excess parameters, still deferring the inlining decision
@@ -755,7 +741,14 @@ lower_gimple_return (gimple_stmt_iterator *gsi, struct lower_data *data)
       tmp_rs = *VEC_index (return_statements_t, data->return_statements, i);
 
       if (gimple_return_retval (stmt) == gimple_return_retval (tmp_rs.stmt))
-	goto found;
+	{
+	  /* Remove the line number from the representative return statement.
+	     It now fills in for many such returns.  Failure to remove this
+	     will result in incorrect results for coverage analysis.  */
+	  gimple_set_location (tmp_rs.stmt, UNKNOWN_LOCATION);
+
+	  goto found;
+	}
     }
 
   /* Not found.  Create a new label and record the return statement.  */
@@ -852,8 +845,7 @@ lower_builtin_setjmp (gimple_stmt_iterator *gsi)
   /* Build 'DEST = 0' and insert.  */
   if (dest)
     {
-      g = gimple_build_assign (dest, fold_convert_loc (loc, TREE_TYPE (dest),
-						       integer_zero_node));
+      g = gimple_build_assign (dest, build_zero_cst (TREE_TYPE (dest)));
       gimple_set_location (g, loc);
       gimple_set_block (g, gimple_block (stmt));
       gsi_insert_before (gsi, g, GSI_SAME_STMT);
@@ -902,7 +894,7 @@ record_vars_into (tree vars, tree fn)
   if (fn != current_function_decl)
     push_cfun (DECL_STRUCT_FUNCTION (fn));
 
-  for (; vars; vars = TREE_CHAIN (vars))
+  for (; vars; vars = DECL_CHAIN (vars))
     {
       tree var = vars;
 
@@ -916,8 +908,9 @@ record_vars_into (tree vars, tree fn)
 	continue;
 
       /* Record the variable.  */
-      cfun->local_decls = tree_cons (NULL_TREE, var,
-					     cfun->local_decls);
+      add_local_decl (cfun, var);
+      if (gimple_referenced_vars (cfun))
+	add_referenced_var (var);
     }
 
   if (fn != current_function_decl)

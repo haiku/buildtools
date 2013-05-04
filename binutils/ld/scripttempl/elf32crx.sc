@@ -10,14 +10,8 @@ cat <<EOF
 
 /* Example Linker Script for linking NS CRX elf32 files. */
 
-/* The next line forces the entry point (${ENTRY} in this script)
-   to be entered in the output file as an undefined symbol.
-   It is needed in case the entry point is not called explicitly
-   (which is the usual case) AND is in an archive.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}")
 OUTPUT_ARCH(${ARCH})
-${RELOCATING+EXTERN(${ENTRY})}
 ${RELOCATING+ENTRY(${ENTRY})}
 
 /* Define memory regions.  */
@@ -135,21 +129,21 @@ SECTIONS
    The heap and stack are aligned to the bus width, as a speed optimization
    for accessing data located there.  */
 
-  .heap :
+  .heap (NOLOAD) :
   {
     . = ALIGN(4);
     __HEAP_START = .;
     . += 0x2000; __HEAP_MAX = .;
   } > ram
 
-  .stack :
+  .stack (NOLOAD) :
   {
     . = ALIGN(4);
     . += 0x6000;
     __STACK_START = .;
   } > ram
 
-  .istack :
+  .istack (NOLOAD) :
   {
     . = ALIGN(4);
     . += 0x100;
@@ -171,6 +165,13 @@ SECTIONS
   .debug_str      0 : { *(.debug_str) }
   .debug_loc      0 : { *(.debug_loc) }
   .debug_macinfo  0 : { *(.debug_macinfo) }
+
+  /* DWARF 3 */
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges   0 : { *(.debug_ranges) }
+
+  /* DWARF Extension.  */
+  .debug_macro    0 : { *(.debug_macro) } 
 }
 
 __DATA_IMAGE_START = LOADADDR(.data);

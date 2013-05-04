@@ -21,7 +21,8 @@ Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
 
 /*
 
-@deftypefn Extension {const char*} make_relative_prefix (const char *@var{progname}, const char *@var{bin_prefix}, const char *@var{prefix})
+@deftypefn Extension {const char*} make_relative_prefix (const char *@var{progname}, @
+  const char *@var{bin_prefix}, const char *@var{prefix})
 
 Given three paths @var{progname}, @var{bin_prefix}, @var{prefix},
 return the path that is in the same position relative to
@@ -247,17 +248,21 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
 	{
 	  char *startp, *endp, *nstore;
 	  size_t prefixlen = strlen (temp) + 1;
+	  size_t len;
 	  if (prefixlen < 2)
 	    prefixlen = 2;
 
-	  nstore = (char *) alloca (prefixlen + strlen (progname) + 1);
+	  len = prefixlen + strlen (progname) + 1;
+#ifdef HAVE_HOST_EXECUTABLE_SUFFIX
+	  len += strlen (HOST_EXECUTABLE_SUFFIX);
+#endif
+	  nstore = (char *) alloca (len);
 
 	  startp = endp = temp;
 	  while (1)
 	    {
 	      if (*endp == PATH_SEPARATOR || *endp == 0)
 		{
-		  struct stat st;
 		  if (endp == startp)
 		    {
 		      nstore[0] = '.';
@@ -266,7 +271,7 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
 		    }
 		  else
 		    {
-		      strncpy (nstore, startp, endp - startp);
+		      memcpy (nstore, startp, endp - startp);
 		      if (! IS_DIR_SEPARATOR (endp[-1]))
 			{
 			  nstore[endp - startp] = DIR_SEPARATOR;
@@ -275,16 +280,21 @@ make_relative_prefix_1 (const char *progname, const char *bin_prefix,
 		      else
 			nstore[endp - startp] = 0;
 		    }
-
 		  strcat (nstore, progname);
-		  if ((! stat(nstore, &st) && S_ISREG (st.st_mode) && ! access (nstore, X_OK))
+		  if (! access (nstore, X_OK)
 #ifdef HAVE_HOST_EXECUTABLE_SUFFIX
-                      || (! stat (strcat (nstore, HOST_EXECUTABLE_SUFFIX)) && S_ISREG (st.st_mode) && ! access (nstore, X_OK))
+                      || ! access (strcat (nstore, HOST_EXECUTABLE_SUFFIX), X_OK)
 #endif
 		      )
 		    {
-		      progname = nstore;
-		      break;
+#if defined (HAVE_SYS_STAT_H) && defined (S_ISREG)
+		      struct stat st;
+		      if (stat (nstore, &st) >= 0 && S_ISREG (st.st_mode))
+#endif
+			{
+			  progname = nstore;
+			  break;
+			}
 		    }
 
 		  if (*endp == 0)

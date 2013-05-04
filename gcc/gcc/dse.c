@@ -1,5 +1,5 @@
 /* RTL dead store elimination.
-   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
    Contributed by Richard Sandiford <rsandifor@codesourcery.com>
@@ -47,6 +47,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "optabs.h"
 #include "dbgcnt.h"
 #include "target.h"
+#include "params.h"
 
 /* This file contains three techniques for performing Dead Store
    Elimination (dse).
@@ -387,6 +388,7 @@ static alloc_pool insn_info_pool;
 /* The linked list of stores that are under consideration in this
    basic block.  */
 static insn_info_t active_local_stores;
+static int active_local_stores_len;
 
 struct bb_info
 {
@@ -473,8 +475,9 @@ struct group_info
      hard_frame_pointer.  */
   bool frame_related;
 
-  /* A mem wrapped around the base pointer for the group in order to
-     do read dependency.  */
+  /* A mem wrapped around the base pointer for the group in order to do
+     read dependency.  It must be given BLKmode in order to encompass all
+     the possible offsets from the base.  */
   rtx base_mem;
 
   /* Canonized version of base_mem's address.  */
@@ -705,7 +708,7 @@ get_group_info (rtx base)
       *slot = gi = (group_info_t) pool_alloc (rtx_group_info_pool);
       gi->rtx_base = base;
       gi->id = rtx_group_next_id++;
-      gi->base_mem = gen_rtx_MEM (QImode, base);
+      gi->base_mem = gen_rtx_MEM (BLKmode, base);
       gi->canon_base_addr = canon_rtx (base);
       gi->store1_n = BITMAP_ALLOC (NULL);
       gi->store1_p = BITMAP_ALLOC (NULL);
@@ -805,93 +808,36 @@ free_store_info (insn_info_t insn_info)
   insn_info->store_rec = NULL;
 }
 
-
-struct insn_size {
-  int size;
-  rtx insn;
-};
-
-
-/* Add an insn to do the add inside a x if it is a
-   PRE/POST-INC/DEC/MODIFY.  D is an structure containing the insn and
-   the size of the mode of the MEM that this is inside of.  */
+/* Callback for for_each_inc_dec that emits an INSN that sets DEST to
+   SRC + SRCOFF before insn ARG.  */
 
 static int
-replace_inc_dec (rtx *r, void *d)
+emit_inc_dec_insn_before (rtx mem ATTRIBUTE_UNUSED,
+			  rtx op ATTRIBUTE_UNUSED,
+			  rtx dest, rtx src, rtx srcoff, void *arg)
 {
-  rtx x = *r;
-  struct insn_size *data = (struct insn_size *)d;
-  switch (GET_CODE (x))
-    {
-    case PRE_INC:
-    case POST_INC:
-      {
-	rtx r1 = XEXP (x, 0);
-	rtx c = gen_int_mode (data->size, GET_MODE (r1));
-	emit_insn_before (gen_rtx_SET (VOIDmode, r1,
-				       gen_rtx_PLUS (GET_MODE (r1), r1, c)),
-			  data->insn);
-	return -1;
-      }
+  rtx insn = (rtx)arg;
 
-    case PRE_DEC:
-    case POST_DEC:
-      {
-	rtx r1 = XEXP (x, 0);
-	rtx c = gen_int_mode (-data->size, GET_MODE (r1));
-	emit_insn_before (gen_rtx_SET (VOIDmode, r1,
-				       gen_rtx_PLUS (GET_MODE (r1), r1, c)),
-			  data->insn);
-	return -1;
-      }
+  if (srcoff)
+    src = gen_rtx_PLUS (GET_MODE (src), src, srcoff);
 
-    case PRE_MODIFY:
-    case POST_MODIFY:
-      {
-	/* We can reuse the add because we are about to delete the
-	   insn that contained it.  */
-	rtx add = XEXP (x, 0);
-	rtx r1 = XEXP (add, 0);
-	emit_insn_before (gen_rtx_SET (VOIDmode, r1, add), data->insn);
-	return -1;
-      }
+  /* We can reuse all operands without copying, because we are about
+     to delete the insn that contained it.  */
 
-    default:
-      return 0;
-    }
-}
+  emit_insn_before (gen_rtx_SET (VOIDmode, dest, src), insn);
 
-
-/* If X is a MEM, check the address to see if it is PRE/POST-INC/DEC/MODIFY
-   and generate an add to replace that.  */
-
-static int
-replace_inc_dec_mem (rtx *r, void *d)
-{
-  rtx x = *r;
-  if (x != NULL_RTX && MEM_P (x))
-    {
-      struct insn_size data;
-
-      data.size = GET_MODE_SIZE (GET_MODE (x));
-      data.insn = (rtx) d;
-
-      for_each_rtx (&XEXP (x, 0), replace_inc_dec, &data);
-
-      return -1;
-    }
-  return 0;
+  return -1;
 }
 
 /* Before we delete INSN, make sure that the auto inc/dec, if it is
    there, is split into a separate insn.  */
 
-static void
+void
 check_for_inc_dec (rtx insn)
 {
   rtx note = find_reg_note (insn, REG_INC, NULL_RTX);
   if (note)
-    for_each_rtx (&insn, replace_inc_dec_mem, insn);
+    for_each_inc_dec (&insn, emit_inc_dec_insn_before, insn);
 }
 
 
@@ -963,11 +909,10 @@ set_usage_bits (group_info_t group, HOST_WIDE_INT offset, HOST_WIDE_INT width)
 	    ai = i;
 	  }
 
-	if (bitmap_bit_p (store1, ai))
+	if (!bitmap_set_bit (store1, ai))
 	  bitmap_set_bit (store2, ai);
 	else
 	  {
-	    bitmap_set_bit (store1, ai);
 	    if (i < 0)
 	      {
 		if (group->offset_map_size_n < ai)
@@ -1004,6 +949,7 @@ add_wild_read (bb_info_t bb_info)
     }
   insn_info->wild_read = true;
   active_local_stores = NULL;
+  active_local_stores_len = 0;
 }
 
 
@@ -1107,7 +1053,7 @@ canon_address (rtx mem,
 
   *alias_set_out = 0;
 
-  cselib_lookup (mem_address, address_mode, 1);
+  cselib_lookup (mem_address, address_mode, 1, GET_MODE (mem));
 
   if (dump_file)
     {
@@ -1187,7 +1133,7 @@ canon_address (rtx mem,
 	}
     }
 
-  *base = cselib_lookup (address, address_mode, true);
+  *base = cselib_lookup (address, address_mode, true, GET_MODE (mem));
   *group_id = -1;
 
   if (*base == NULL)
@@ -1232,11 +1178,8 @@ set_position_unneeded (store_info_t s_info, int pos)
 {
   if (__builtin_expect (s_info->is_large, false))
     {
-      if (!bitmap_bit_p (s_info->positions_needed.large.bmap, pos))
-	{
-	  s_info->positions_needed.large.count++;
-	  bitmap_set_bit (s_info->positions_needed.large.bmap, pos);
-	}
+      if (bitmap_set_bit (s_info->positions_needed.large.bmap, pos))
+	s_info->positions_needed.large.count++;
     }
   else
     s_info->positions_needed.small_bitmask
@@ -1393,10 +1336,8 @@ record_store (rtx body, bb_info_t bb_info)
 
       gcc_assert (GET_MODE (mem) != BLKmode);
 
-      if (bitmap_bit_p (store1, spill_alias_set))
+      if (!bitmap_set_bit (store1, spill_alias_set))
 	bitmap_set_bit (store2, spill_alias_set);
-      else
-	bitmap_set_bit (store1, spill_alias_set);
 
       if (clear_alias_group->offset_map_size_p < spill_alias_set)
 	clear_alias_group->offset_map_size_p = spill_alias_set;
@@ -1599,6 +1540,7 @@ record_store (rtx body, bb_info_t bb_info)
 	{
 	  insn_info_t insn_to_delete = ptr;
 
+	  active_local_stores_len--;
 	  if (last)
 	    last->next_local_store = ptr->next_local_store;
 	  else
@@ -2136,6 +2078,7 @@ check_mem_read_rtx (rtx *loc, void *data)
 	      if (dump_file)
 		dump_insn_info ("removing from active", i_ptr);
 
+	      active_local_stores_len--;
 	      if (last)
 		last->next_local_store = i_ptr->next_local_store;
 	      else
@@ -2225,6 +2168,7 @@ check_mem_read_rtx (rtx *loc, void *data)
 	      if (dump_file)
 		dump_insn_info ("removing from active", i_ptr);
 
+	      active_local_stores_len--;
 	      if (last)
 		last->next_local_store = i_ptr->next_local_store;
 	      else
@@ -2284,6 +2228,7 @@ check_mem_read_rtx (rtx *loc, void *data)
 	      if (dump_file)
 		dump_insn_info ("removing from active", i_ptr);
 
+	      active_local_stores_len--;
 	      if (last)
 		last->next_local_store = i_ptr->next_local_store;
 	      else
@@ -2326,7 +2271,8 @@ get_call_args (rtx call_insn, tree fn, rtx *args, int nargs)
        arg = TREE_CHAIN (arg), idx++)
     {
       enum machine_mode mode = TYPE_MODE (TREE_VALUE (arg));
-      rtx reg = FUNCTION_ARG (args_so_far, mode, NULL_TREE, 1), link, tmp;
+      rtx reg, link, tmp;
+      reg = targetm.calls.function_arg (&args_so_far, mode, NULL_TREE, true);
       if (!reg || !REG_P (reg) || GET_MODE (reg) != mode
 	  || GET_MODE_CLASS (mode) != MODE_INT)
 	return false;
@@ -2360,7 +2306,7 @@ get_call_args (rtx call_insn, tree fn, rtx *args, int nargs)
       if (tmp)
 	args[idx] = tmp;
 
-      FUNCTION_ARG_ADVANCE (args_so_far, mode, NULL_TREE, 1);
+      targetm.calls.function_arg_advance (&args_so_far, mode, NULL_TREE, true);
     }
   if (arg != void_list_node || idx != nargs)
     return false;
@@ -2487,6 +2433,7 @@ scan_insn (bb_info_t bb_info, rtx insn)
 		  if (dump_file)
 		    dump_insn_info ("removing from active", i_ptr);
 
+		  active_local_stores_len--;
 		  if (last)
 		    last->next_local_store = i_ptr->next_local_store;
 		  else
@@ -2514,6 +2461,12 @@ scan_insn (bb_info_t bb_info, rtx insn)
 		    fprintf (dump_file, "handling memset as BLKmode store\n");
 		  if (mems_found == 1)
 		    {
+		      if (active_local_stores_len++
+			  >= PARAM_VALUE (PARAM_MAX_DSE_ACTIVE_LOCAL_STORES))
+			{
+			  active_local_stores_len = 1;
+			  active_local_stores = NULL;
+			}
 		      insn_info->next_local_store = active_local_stores;
 		      active_local_stores = insn_info;
 		    }
@@ -2557,6 +2510,12 @@ scan_insn (bb_info_t bb_info, rtx insn)
      it as cannot delete.  This simplifies the processing later.  */
   if (mems_found == 1)
     {
+      if (active_local_stores_len++
+	  >= PARAM_VALUE (PARAM_MAX_DSE_ACTIVE_LOCAL_STORES))
+	{
+	  active_local_stores_len = 1;
+	  active_local_stores = NULL;
+	}
       insn_info->next_local_store = active_local_stores;
       active_local_stores = insn_info;
     }
@@ -2595,6 +2554,7 @@ remove_useless_values (cselib_val *base)
 
       if (del)
 	{
+	  active_local_stores_len--;
 	  if (last)
 	    last->next_local_store = insn_info->next_local_store;
 	  else
@@ -2645,6 +2605,7 @@ dse_step1 (void)
 	    = create_alloc_pool ("cse_store_info_pool",
 				 sizeof (struct store_info), 100);
 	  active_local_stores = NULL;
+	  active_local_stores_len = 0;
 	  cselib_clear_table ();
 
 	  /* Scan the insns.  */
@@ -2777,7 +2738,7 @@ dse_step2_init (void)
   unsigned int i;
   group_info_t group;
 
-  for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+  FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, i, group)
     {
       /* For all non stack related bases, we only consider a store to
 	 be deletable if there are two or more stores for that
@@ -2829,7 +2790,7 @@ dse_step2_nospill (void)
      unused.  */
   current_position = 1;
 
-  for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+  FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, i, group)
     {
       bitmap_iterator bi;
       unsigned int j;
@@ -3072,7 +3033,7 @@ scan_reads_nospill (insn_info_t insn_info, bitmap gen, bitmap kill)
   /* If this insn reads the frame, kill all the frame related stores.  */
   if (insn_info->frame_read)
     {
-      for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+      FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, i, group)
 	if (group->process_globally && group->frame_related)
 	  {
 	    if (kill)
@@ -3083,7 +3044,7 @@ scan_reads_nospill (insn_info_t insn_info, bitmap gen, bitmap kill)
 
   while (read_info)
     {
-      for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+      FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, i, group)
 	{
 	  if (group->process_globally)
 	    {
@@ -3123,7 +3084,7 @@ scan_reads_nospill (insn_info_t insn_info, bitmap gen, bitmap kill)
 		     base.  */
 		  if ((read_info->group_id < 0)
 		      && canon_true_dependence (group->base_mem,
-						QImode,
+						GET_MODE (group->base_mem),
 						group->canon_base_addr,
 						read_info->mem, NULL_RTX,
 						rtx_varies_p))
@@ -3264,7 +3225,7 @@ dse_step3_exit_block_scan (bb_info_t bb_info)
       unsigned int i;
       group_info_t group;
 
-      for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+      FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, i, group)
 	{
 	  if (group->process_globally && group->frame_related)
 	    bitmap_ior_into (bb_info->gen, group->group_kill);
@@ -3346,7 +3307,7 @@ dse_step3 (bool for_spills)
 	      group_info_t group;
 
 	      all_ones = BITMAP_ALLOC (NULL);
-	      for (j = 0; VEC_iterate (group_info_t, rtx_group_vec, j, group); j++)
+	      FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, j, group)
 		bitmap_ior_into (all_ones, group->group_kill);
 	    }
 	  if (!bb_info->out)
@@ -3396,7 +3357,7 @@ dse_confluence_0 (basic_block bb)
    out set of the src of E.  If the various in or out sets are not
    there, that means they are all ones.  */
 
-static void
+static bool
 dse_confluence_n (edge e)
 {
   bb_info_t src_info = bb_table[e->src->index];
@@ -3412,6 +3373,7 @@ dse_confluence_n (edge e)
 	  bitmap_copy (src_info->out, dest_info->in);
 	}
     }
+  return true;
 }
 
 
@@ -3747,7 +3709,7 @@ dse_step7 (bool global_done)
   group_info_t group;
   basic_block bb;
 
-  for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+  FOR_EACH_VEC_ELT (group_info_t, rtx_group_vec, i, group)
     {
       free (group->offset_map_n);
       free (group->offset_map_p);

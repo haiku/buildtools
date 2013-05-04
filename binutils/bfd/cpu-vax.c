@@ -1,5 +1,5 @@
 /* bfd back-end for vax support
-   Copyright 1990, 1991, 1994, 2000, 2002, 2007
+   Copyright 1990, 1991, 1994, 2000, 2002, 2005, 2007
    Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support.
 
@@ -37,5 +37,6 @@ const bfd_arch_info_type bfd_vax_arch =
     TRUE, /* the one and only */
     bfd_default_compatible,
     bfd_default_scan,
+    bfd_arch_default_fill,
     0,
   };

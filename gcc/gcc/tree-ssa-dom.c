@@ -25,20 +25,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "tree.h"
 #include "flags.h"
-#include "rtl.h"
 #include "tm_p.h"
-#include "ggc.h"
 #include "basic-block.h"
 #include "cfgloop.h"
 #include "output.h"
-#include "expr.h"
 #include "function.h"
-#include "diagnostic.h"
+#include "tree-pretty-print.h"
+#include "gimple-pretty-print.h"
 #include "timevar.h"
 #include "tree-dump.h"
 #include "tree-flow.h"
 #include "domwalk.h"
-#include "real.h"
 #include "tree-pass.h"
 #include "tree-ssa-propagate.h"
 #include "langhooks.h"
@@ -54,6 +51,7 @@ enum expr_kind
   EXPR_SINGLE,
   EXPR_UNARY,
   EXPR_BINARY,
+  EXPR_TERNARY,
   EXPR_CALL
 };
 
@@ -64,7 +62,8 @@ struct hashable_expr
   union {
     struct { tree rhs; } single;
     struct { enum tree_code op;  tree opnd; } unary;
-    struct { enum tree_code op;  tree opnd0; tree opnd1; } binary;
+    struct { enum tree_code op;  tree opnd0, opnd1; } binary;
+    struct { enum tree_code op;  tree opnd0, opnd1, opnd2; } ternary;
     struct { tree fn; bool pure; size_t nargs; tree *args; } call;
   } ops;
 };
@@ -72,11 +71,14 @@ struct hashable_expr
 /* Structure for recording known values of a conditional expression
    at the exits from its block.  */
 
-struct cond_equivalence
+typedef struct cond_equivalence_s
 {
   struct hashable_expr cond;
   tree value;
-};
+} cond_equivalence;
+
+DEF_VEC_O(cond_equivalence);
+DEF_VEC_ALLOC_O(cond_equivalence,heap);
 
 /* Structure for recording edge equivalences as well as any pending
    edge redirections during the dominator optimizer.
@@ -100,11 +102,8 @@ struct edge_info
   tree rhs;
 
   /* Traversing an edge may also indicate one or more particular conditions
-     are true or false.  The number of recorded conditions can vary, but
-     can be determined by the condition's code.  So we have an array
-     and its maximum index rather than use a varray.  */
-  struct cond_equivalence *cond_equivalences;
-  unsigned int max_cond_equivalences;
+     are true or false.  */
+  VEC(cond_equivalence, heap) *cond_equivalences;
 };
 
 /* Hash table with expressions made available during the renaming process.
@@ -180,7 +179,7 @@ static hashval_t avail_expr_hash (const void *);
 static hashval_t real_avail_expr_hash (const void *);
 static int avail_expr_eq (const void *, const void *);
 static void htab_statistics (FILE *, htab_t);
-static void record_cond (struct cond_equivalence *);
+static void record_cond (cond_equivalence *);
 static void record_const_or_copy (tree, tree);
 static void record_equality (tree, tree);
 static void record_equivalences_from_phis (basic_block);
@@ -209,27 +208,34 @@ initialize_hash_element (gimple stmt, tree lhs,
     {
       enum tree_code subcode = gimple_assign_rhs_code (stmt);
 
-      expr->type = NULL_TREE;
-
       switch (get_gimple_rhs_class (subcode))
         {
         case GIMPLE_SINGLE_RHS:
-          expr->kind = EXPR_SINGLE;
-          expr->ops.single.rhs = gimple_assign_rhs1 (stmt);
-          break;
+	  expr->kind = EXPR_SINGLE;
+	  expr->type = TREE_TYPE (gimple_assign_rhs1 (stmt));
+	  expr->ops.single.rhs = gimple_assign_rhs1 (stmt);
+	  break;
         case GIMPLE_UNARY_RHS:
-          expr->kind = EXPR_UNARY;
+	  expr->kind = EXPR_UNARY;
 	  expr->type = TREE_TYPE (gimple_assign_lhs (stmt));
-          expr->ops.unary.op = subcode;
-          expr->ops.unary.opnd = gimple_assign_rhs1 (stmt);
-          break;
+	  expr->ops.unary.op = subcode;
+	  expr->ops.unary.opnd = gimple_assign_rhs1 (stmt);
+	  break;
         case GIMPLE_BINARY_RHS:
-          expr->kind = EXPR_BINARY;
+	  expr->kind = EXPR_BINARY;
 	  expr->type = TREE_TYPE (gimple_assign_lhs (stmt));
-          expr->ops.binary.op = subcode;
-          expr->ops.binary.opnd0 = gimple_assign_rhs1 (stmt);
-          expr->ops.binary.opnd1 = gimple_assign_rhs2 (stmt);
-          break;
+	  expr->ops.binary.op = subcode;
+	  expr->ops.binary.opnd0 = gimple_assign_rhs1 (stmt);
+	  expr->ops.binary.opnd1 = gimple_assign_rhs2 (stmt);
+	  break;
+        case GIMPLE_TERNARY_RHS:
+	  expr->kind = EXPR_TERNARY;
+	  expr->type = TREE_TYPE (gimple_assign_lhs (stmt));
+	  expr->ops.ternary.op = subcode;
+	  expr->ops.ternary.opnd0 = gimple_assign_rhs1 (stmt);
+	  expr->ops.ternary.opnd1 = gimple_assign_rhs2 (stmt);
+	  expr->ops.ternary.opnd2 = gimple_assign_rhs3 (stmt);
+	  break;
         default:
           gcc_unreachable ();
         }
@@ -374,23 +380,40 @@ hashable_expr_equal_p (const struct hashable_expr *expr0,
                               expr1->ops.unary.opnd, 0);
 
     case EXPR_BINARY:
-      {
-        if (expr0->ops.binary.op != expr1->ops.binary.op)
-          return false;
+      if (expr0->ops.binary.op != expr1->ops.binary.op)
+	return false;
 
-        if (operand_equal_p (expr0->ops.binary.opnd0,
-                             expr1->ops.binary.opnd0, 0)
-            && operand_equal_p (expr0->ops.binary.opnd1,
-                                expr1->ops.binary.opnd1, 0))
-          return true;
+      if (operand_equal_p (expr0->ops.binary.opnd0,
+			   expr1->ops.binary.opnd0, 0)
+	  && operand_equal_p (expr0->ops.binary.opnd1,
+			      expr1->ops.binary.opnd1, 0))
+	return true;
 
-        /* For commutative ops, allow the other order.  */
-        return (commutative_tree_code (expr0->ops.binary.op)
-                && operand_equal_p (expr0->ops.binary.opnd0,
-                                    expr1->ops.binary.opnd1, 0)
-                && operand_equal_p (expr0->ops.binary.opnd1,
-                                    expr1->ops.binary.opnd0, 0));
-      }
+      /* For commutative ops, allow the other order.  */
+      return (commutative_tree_code (expr0->ops.binary.op)
+	      && operand_equal_p (expr0->ops.binary.opnd0,
+				  expr1->ops.binary.opnd1, 0)
+	      && operand_equal_p (expr0->ops.binary.opnd1,
+				  expr1->ops.binary.opnd0, 0));
+
+    case EXPR_TERNARY:
+      if (expr0->ops.ternary.op != expr1->ops.ternary.op
+	  || !operand_equal_p (expr0->ops.ternary.opnd2,
+			       expr1->ops.ternary.opnd2, 0))
+	return false;
+
+      if (operand_equal_p (expr0->ops.ternary.opnd0,
+			   expr1->ops.ternary.opnd0, 0)
+	  && operand_equal_p (expr0->ops.ternary.opnd1,
+			      expr1->ops.ternary.opnd1, 0))
+	return true;
+
+      /* For commutative ops, allow the other order.  */
+      return (commutative_ternary_tree_code (expr0->ops.ternary.op)
+	      && operand_equal_p (expr0->ops.ternary.opnd0,
+				  expr1->ops.ternary.opnd1, 0)
+	      && operand_equal_p (expr0->ops.ternary.opnd1,
+				  expr1->ops.ternary.opnd0, 0));
 
     case EXPR_CALL:
       {
@@ -453,13 +476,26 @@ iterative_hash_hashable_expr (const struct hashable_expr *expr, hashval_t val)
     case EXPR_BINARY:
       val = iterative_hash_object (expr->ops.binary.op, val);
       if (commutative_tree_code (expr->ops.binary.op))
-          val = iterative_hash_exprs_commutative (expr->ops.binary.opnd0,
-                                                  expr->ops.binary.opnd1, val);
+	val = iterative_hash_exprs_commutative (expr->ops.binary.opnd0,
+						expr->ops.binary.opnd1, val);
       else
         {
           val = iterative_hash_expr (expr->ops.binary.opnd0, val);
           val = iterative_hash_expr (expr->ops.binary.opnd1, val);
         }
+      break;
+
+    case EXPR_TERNARY:
+      val = iterative_hash_object (expr->ops.ternary.op, val);
+      if (commutative_ternary_tree_code (expr->ops.ternary.op))
+	val = iterative_hash_exprs_commutative (expr->ops.ternary.opnd0,
+						expr->ops.ternary.opnd1, val);
+      else
+        {
+          val = iterative_hash_expr (expr->ops.ternary.opnd0, val);
+          val = iterative_hash_expr (expr->ops.ternary.opnd1, val);
+        }
+      val = iterative_hash_expr (expr->ops.ternary.opnd2, val);
       break;
 
     case EXPR_CALL:
@@ -512,6 +548,16 @@ print_expr_hash_elt (FILE * stream, const struct expr_hash_elt *element)
         print_generic_expr (stream, element->expr.ops.binary.opnd0, 0);
         fprintf (stream, " %s ", tree_code_name[element->expr.ops.binary.op]);
         print_generic_expr (stream, element->expr.ops.binary.opnd1, 0);
+        break;
+
+      case EXPR_TERNARY:
+        fprintf (stream, " %s <", tree_code_name[element->expr.ops.ternary.op]);
+        print_generic_expr (stream, element->expr.ops.ternary.opnd0, 0);
+	fputs (", ", stream);
+        print_generic_expr (stream, element->expr.ops.ternary.opnd1, 0);
+	fputs (", ", stream);
+        print_generic_expr (stream, element->expr.ops.ternary.opnd2, 0);
+	fputs (">", stream);
         break;
 
       case EXPR_CALL:
@@ -589,7 +635,7 @@ free_all_edge_infos (void)
 	  if (edge_info)
 	    {
 	      if (edge_info->cond_equivalences)
-		free (edge_info->cond_equivalences);
+		VEC_free (cond_equivalence, heap, edge_info->cond_equivalences);
 	      free (edge_info);
 	      e->aux = NULL;
 	    }
@@ -752,10 +798,11 @@ struct gimple_opt_pass pass_dominator =
   0,					/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func
+  TODO_cleanup_cfg
     | TODO_update_ssa
-    | TODO_cleanup_cfg
-    | TODO_verify_ssa			/* todo_flags_finish */
+    | TODO_verify_ssa
+    | TODO_verify_flow
+    | TODO_dump_func			/* todo_flags_finish */
  }
 };
 
@@ -1012,14 +1059,14 @@ record_equivalences_from_incoming_edge (basic_block bb)
 	{
 	  tree lhs = edge_info->lhs;
 	  tree rhs = edge_info->rhs;
-	  struct cond_equivalence *cond_equivalences = edge_info->cond_equivalences;
+	  cond_equivalence *eq;
 
 	  if (lhs)
 	    record_equality (lhs, rhs);
 
-	  if (cond_equivalences)
-            for (i = 0; i < edge_info->max_cond_equivalences; i++)
-              record_cond (&cond_equivalences[i]);
+	  for (i = 0; VEC_iterate (cond_equivalence,
+				   edge_info->cond_equivalences, i, eq); ++i)
+	    record_cond (eq);
 	}
     }
 }
@@ -1043,7 +1090,7 @@ dump_dominator_optimization_stats (FILE *file)
 
 /* Dump SSA statistics on stderr.  */
 
-void
+DEBUG_FUNCTION void
 debug_dominator_optimization_stats (void)
 {
   dump_dominator_optimization_stats (stderr);
@@ -1067,7 +1114,7 @@ htab_statistics (FILE *file, htab_t htab)
    boolean value.  */
 
 static void
-record_cond (struct cond_equivalence *p)
+record_cond (cond_equivalence *p)
 {
   struct expr_hash_elt *element = XCNEW (struct expr_hash_elt);
   void **slot;
@@ -1093,14 +1140,15 @@ record_cond (struct cond_equivalence *p)
 }
 
 /* Build a cond_equivalence record indicating that the comparison
-   CODE holds between operands OP0 and OP1.  */
+   CODE holds between operands OP0 and OP1 and push it to **P.  */
 
 static void
 build_and_record_new_cond (enum tree_code code,
                            tree op0, tree op1,
-                           struct cond_equivalence *p)
+                           VEC(cond_equivalence, heap) **p)
 {
-  struct hashable_expr *cond = &p->cond;
+  cond_equivalence c;
+  struct hashable_expr *cond = &c.cond;
 
   gcc_assert (TREE_CODE_CLASS (code) == tcc_comparison);
 
@@ -1110,7 +1158,8 @@ build_and_record_new_cond (enum tree_code code,
   cond->ops.binary.opnd0 = op0;
   cond->ops.binary.opnd1 = op1;
 
-  p->value = boolean_true_node;
+  c.value = boolean_true_node;
+  VEC_safe_push (cond_equivalence, heap, *p, &c);
 }
 
 /* Record that COND is true and INVERTED is false into the edge information
@@ -1123,6 +1172,7 @@ static void
 record_conditions (struct edge_info *edge_info, tree cond, tree inverted)
 {
   tree op0, op1;
+  cond_equivalence c;
 
   if (!COMPARISON_CLASS_P (cond))
     return;
@@ -1136,125 +1186,96 @@ record_conditions (struct edge_info *edge_info, tree cond, tree inverted)
     case GT_EXPR:
       if (FLOAT_TYPE_P (TREE_TYPE (op0)))
 	{
-	  edge_info->max_cond_equivalences = 6;
-	  edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 6);
 	  build_and_record_new_cond (ORDERED_EXPR, op0, op1,
-				     &edge_info->cond_equivalences[4]);
+				     &edge_info->cond_equivalences);
 	  build_and_record_new_cond (LTGT_EXPR, op0, op1,
-				     &edge_info->cond_equivalences[5]);
-	}
-      else
-        {
-          edge_info->max_cond_equivalences = 4;
-	  edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 4);
+				     &edge_info->cond_equivalences);
 	}
 
       build_and_record_new_cond ((TREE_CODE (cond) == LT_EXPR
 				  ? LE_EXPR : GE_EXPR),
-				 op0, op1, &edge_info->cond_equivalences[2]);
+				 op0, op1, &edge_info->cond_equivalences);
       build_and_record_new_cond (NE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[3]);
+				 &edge_info->cond_equivalences);
       break;
 
     case GE_EXPR:
     case LE_EXPR:
       if (FLOAT_TYPE_P (TREE_TYPE (op0)))
 	{
-	  edge_info->max_cond_equivalences = 3;
-	  edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 3);
 	  build_and_record_new_cond (ORDERED_EXPR, op0, op1,
-				     &edge_info->cond_equivalences[2]);
-	}
-      else
-	{
-	  edge_info->max_cond_equivalences = 2;
-	  edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 2);
+				     &edge_info->cond_equivalences);
 	}
       break;
 
     case EQ_EXPR:
       if (FLOAT_TYPE_P (TREE_TYPE (op0)))
 	{
-	  edge_info->max_cond_equivalences = 5;
-	  edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 5);
 	  build_and_record_new_cond (ORDERED_EXPR, op0, op1,
-				     &edge_info->cond_equivalences[4]);
-	}
-      else
-	{
-	  edge_info->max_cond_equivalences = 4;
-	  edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 4);
+				     &edge_info->cond_equivalences);
 	}
       build_and_record_new_cond (LE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[2]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (GE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[3]);
+				 &edge_info->cond_equivalences);
       break;
 
     case UNORDERED_EXPR:
-      edge_info->max_cond_equivalences = 8;
-      edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 8);
       build_and_record_new_cond (NE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[2]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (UNLE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[3]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (UNGE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[4]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (UNEQ_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[5]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (UNLT_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[6]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (UNGT_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[7]);
+				 &edge_info->cond_equivalences);
       break;
 
     case UNLT_EXPR:
     case UNGT_EXPR:
-      edge_info->max_cond_equivalences = 4;
-      edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 4);
       build_and_record_new_cond ((TREE_CODE (cond) == UNLT_EXPR
 				  ? UNLE_EXPR : UNGE_EXPR),
-				 op0, op1, &edge_info->cond_equivalences[2]);
+				 op0, op1, &edge_info->cond_equivalences);
       build_and_record_new_cond (NE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[3]);
+				 &edge_info->cond_equivalences);
       break;
 
     case UNEQ_EXPR:
-      edge_info->max_cond_equivalences = 4;
-      edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 4);
       build_and_record_new_cond (UNLE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[2]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (UNGE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[3]);
+				 &edge_info->cond_equivalences);
       break;
 
     case LTGT_EXPR:
-      edge_info->max_cond_equivalences = 4;
-      edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 4);
       build_and_record_new_cond (NE_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[2]);
+				 &edge_info->cond_equivalences);
       build_and_record_new_cond (ORDERED_EXPR, op0, op1,
-				 &edge_info->cond_equivalences[3]);
+				 &edge_info->cond_equivalences);
       break;
 
     default:
-      edge_info->max_cond_equivalences = 2;
-      edge_info->cond_equivalences = XNEWVEC (struct cond_equivalence, 2);
       break;
     }
 
   /* Now store the original true and false conditions into the first
      two slots.  */
-  initialize_expr_from_cond (cond, &edge_info->cond_equivalences[0].cond);
-  edge_info->cond_equivalences[0].value = boolean_true_node;
+  initialize_expr_from_cond (cond, &c.cond);
+  c.value = boolean_true_node;
+  VEC_safe_push (cond_equivalence, heap, edge_info->cond_equivalences, &c);
 
   /* It is possible for INVERTED to be the negation of a comparison,
      and not a valid RHS or GIMPLE_COND condition.  This happens because
      invert_truthvalue may return such an expression when asked to invert
      a floating-point comparison.  These comparisons are not assumed to
      obey the trichotomy law.  */
-  initialize_expr_from_cond (inverted, &edge_info->cond_equivalences[1].cond);
-  edge_info->cond_equivalences[1].value = boolean_false_node;
+  initialize_expr_from_cond (inverted, &c.cond);
+  c.value = boolean_false_node;
+  VEC_safe_push (cond_equivalence, heap, edge_info->cond_equivalences, &c);
 }
 
 /* A helper function for record_const_or_copy and record_equality.
@@ -1702,7 +1723,7 @@ dom_opt_leave_block (struct dom_walk_data *walk_data, basic_block bb)
 	     our equivalence tables.  */
 	  if (edge_info)
 	    {
-	      struct cond_equivalence *cond_equivalences = edge_info->cond_equivalences;
+	      cond_equivalence *eq;
 	      tree lhs = edge_info->lhs;
 	      tree rhs = edge_info->rhs;
 
@@ -1712,9 +1733,9 @@ dom_opt_leave_block (struct dom_walk_data *walk_data, basic_block bb)
 
 	      /* If we have 0 = COND or 1 = COND equivalences, record them
 		 into our expression hash tables.  */
-	      if (cond_equivalences)
-		for (i = 0; i < edge_info->max_cond_equivalences; i++)
-                  record_cond (&cond_equivalences[i]);
+	      for (i = 0; VEC_iterate (cond_equivalence,
+				       edge_info->cond_equivalences, i, eq); ++i)
+		record_cond (eq);
 	    }
 
 	  dom_thread_across_edge (walk_data, true_edge);
@@ -1737,7 +1758,7 @@ dom_opt_leave_block (struct dom_walk_data *walk_data, basic_block bb)
 	     our equivalence tables.  */
 	  if (edge_info)
 	    {
-	      struct cond_equivalence *cond_equivalences = edge_info->cond_equivalences;
+	      cond_equivalence *eq;
 	      tree lhs = edge_info->lhs;
 	      tree rhs = edge_info->rhs;
 
@@ -1747,9 +1768,9 @@ dom_opt_leave_block (struct dom_walk_data *walk_data, basic_block bb)
 
 	      /* If we have 0 = COND or 1 = COND equivalences, record them
 		 into our expression hash tables.  */
-	      if (cond_equivalences)
-		for (i = 0; i < edge_info->max_cond_equivalences; i++)
-                  record_cond (&cond_equivalences[i]);
+	      for (i = 0; VEC_iterate (cond_equivalence,
+				       edge_info->cond_equivalences, i, eq); ++i)
+		record_cond (eq);
 	    }
 
 	  /* Now thread the edge.  */
@@ -1831,10 +1852,8 @@ eliminate_redundant_computations (gimple_stmt_iterator* gsi)
            || useless_type_conversion_p (expr_type, TREE_TYPE (cached_lhs))))
       || may_propagate_copy_into_stmt (stmt, cached_lhs))
   {
-#if defined ENABLE_CHECKING
-      gcc_assert (TREE_CODE (cached_lhs) == SSA_NAME
-		  || is_gimple_min_invariant (cached_lhs));
-#endif
+      gcc_checking_assert (TREE_CODE (cached_lhs) == SSA_NAME
+			   || is_gimple_min_invariant (cached_lhs));
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
@@ -2157,6 +2176,48 @@ optimize_stmt (basic_block bb, gimple_stmt_iterator si)
       update_stmt_if_modified (stmt);
       eliminate_redundant_computations (&si);
       stmt = gsi_stmt (si);
+
+      /* Perform simple redundant store elimination.  */
+      if (gimple_assign_single_p (stmt)
+	  && TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
+	{
+	  tree lhs = gimple_assign_lhs (stmt);
+	  tree rhs = gimple_assign_rhs1 (stmt);
+	  tree cached_lhs;
+	  gimple new_stmt;
+	  if (TREE_CODE (rhs) == SSA_NAME)
+	    {
+	      tree tem = SSA_NAME_VALUE (rhs);
+	      if (tem)
+		rhs = tem;
+	    }
+	  /* Build a new statement with the RHS and LHS exchanged.  */
+	  if (TREE_CODE (rhs) == SSA_NAME)
+	    {
+	      gimple defstmt = SSA_NAME_DEF_STMT (rhs);
+	      new_stmt = gimple_build_assign (rhs, lhs);
+	      SSA_NAME_DEF_STMT (rhs) = defstmt;
+	    }
+	  else
+	    new_stmt = gimple_build_assign (rhs, lhs);
+	  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
+	  cached_lhs = lookup_avail_expr (new_stmt, false);
+	  if (cached_lhs
+	      && rhs == cached_lhs)
+	    {
+	      basic_block bb = gimple_bb (stmt);
+	      int lp_nr = lookup_stmt_eh_lp (stmt);
+	      unlink_stmt_vdef (stmt);
+	      gsi_remove (&si, true);
+	      if (lp_nr != 0)
+		{
+		  bitmap_set_bit (need_eh_cleanup, bb->index);
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file, "  Flagged to clear EH edges.\n");
+		}
+	      return;
+	    }
+	}
     }
 
   /* Record any additional equivalences created by this statement.  */

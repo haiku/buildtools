@@ -1,6 +1,6 @@
 // condition_variable -*- C++ -*-
 
-// Copyright (C) 2008, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010, 2012 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -26,15 +26,22 @@
 
 #if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1)
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   condition_variable::condition_variable() throw ()
   {
 #ifdef __GTHREAD_COND_INIT
     __native_type __tmp = __GTHREAD_COND_INIT;
-    _M_cond = __tmp;
+#if defined __GXX_EXPERIMENTAL_CXX0X__ \
+  && defined _GLIBCXX_GTHREADS_NO_COPY_ASSIGN_IN_CXX11
+    __builtin_memcpy(&_M_cond, &__tmp, sizeof(_M_cond));
 #else
-    int __e = __gthread_cond_init(&_M_cond, NULL);
+    _M_cond = __tmp;
+#endif
+#else
+    int __e = __gthread_cond_init(&_M_cond, 0);
 
     if (__e)
       __throw_system_error(__e);
@@ -84,6 +91,8 @@ namespace std
 
   condition_variable_any::~condition_variable_any() throw ()
   { }
-}
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif // _GLIBCXX_HAS_GTHREADS && _GLIBCXX_USE_C99_STDINT_TR1

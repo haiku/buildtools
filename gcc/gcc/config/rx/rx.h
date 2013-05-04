@@ -85,10 +85,10 @@ extern enum rx_cpu_types  rx_cpu_type;
 #define LIB_SPEC "					\
 --start-group						\
 -lc							\
-%{msim*:-lsim}%{!msim*:-lnosys}				\
+%{msim:-lsim}%{!msim:-lnosys}				\
 %{fprofile-arcs|fprofile-generate|coverage:-lgcov} 	\
 --end-group					   	\
-%{!T*: %{msim*:%Trx-sim.ld}%{!msim*:%Trx.ld}}		\
+%{!T*: %{msim:%Trx-sim.ld}%{!msim:%Trx.ld}}		\
 "
 
 #undef  LINK_SPEC
@@ -98,12 +98,6 @@ extern enum rx_cpu_types  rx_cpu_type;
 #define BITS_BIG_ENDIAN 		0
 #define BYTES_BIG_ENDIAN 		TARGET_BIG_ENDIAN_DATA
 #define WORDS_BIG_ENDIAN 		TARGET_BIG_ENDIAN_DATA
-
-#ifdef __RX_BIG_ENDIAN__
-#define LIBGCC2_WORDS_BIG_ENDIAN	1
-#else
-#define LIBGCC2_WORDS_BIG_ENDIAN	0
-#endif
 
 #define UNITS_PER_WORD 			4
 
@@ -118,11 +112,9 @@ extern enum rx_cpu_types  rx_cpu_type;
 #ifdef __RX_32BIT_DOUBLES__
 #define LIBGCC2_HAS_DF_MODE		0
 #define LIBGCC2_LONG_DOUBLE_TYPE_SIZE   32
-#define LIBGCC2_DOUBLE_TYPE_SIZE	32
 #else
 #define LIBGCC2_HAS_DF_MODE		1
 #define LIBGCC2_LONG_DOUBLE_TYPE_SIZE   64
-#define LIBGCC2_DOUBLE_TYPE_SIZE	64
 #endif
 
 #define DEFAULT_SIGNED_CHAR		0
@@ -132,8 +124,6 @@ extern enum rx_cpu_types  rx_cpu_type;
 #define BIGGEST_ALIGNMENT 		32
 #define STACK_BOUNDARY 			32
 #define PARM_BOUNDARY 			8
-
-#define FUNCTION_ARG_BOUNDARY(MODE, TYPE) 32
 
 #define STACK_GROWS_DOWNWARD		1
 #define FRAME_GROWS_DOWNWARD		0
@@ -161,14 +151,11 @@ extern enum rx_cpu_types  rx_cpu_type;
 #define MOVE_MAX 			4
 #define STARTING_FRAME_OFFSET		0
 
-#define RETURN_POPS_ARGS(FUNDECL, FUNTYPE, SIZE) 0
 #define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC)   1
 
 #define LEGITIMATE_CONSTANT_P(X) 	rx_is_legitimate_constant (X)
 
-#define HANDLE_PRAGMA_PACK_PUSH_POP	1
-
-#define HAVE_PRE_DECCREMENT		1
+#define HAVE_PRE_DECREMENT		1
 #define HAVE_POST_INCREMENT		1
 
 #define MOVE_RATIO(SPEED) 		((SPEED) ? 4 : 2)
@@ -262,9 +249,6 @@ enum reg_class
   1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1	\
 }
 
-#define CONDITIONAL_REGISTER_USAGE			\
-  rx_conditional_register_usage ()
-
 #define LIBCALL_VALUE(MODE)				\
   gen_rtx_REG (((GET_MODE_CLASS (MODE) != MODE_INT	\
                  || COMPLEX_MODE_P (MODE)		\
@@ -278,8 +262,6 @@ enum reg_class
 #define REG_ALLOC_ORDER						\
 {  7,  10,  11,  12,  13,  14,  4,  3,  2,  1, 9, 8, 6, 5, 15	\
 }
-
-#define PREFERRED_RELOAD_CLASS(X,CLASS)		CLASS
 
 #define REGNO_IN_RANGE(REGNO, MIN, MAX)		\
   (IN_RANGE ((REGNO), (MIN), (MAX)) 		\
@@ -306,14 +288,6 @@ enum reg_class
     ( (REG_P (X)						\
        || (GET_CODE (X) == SUBREG				\
 	   && REG_P (SUBREG_REG (X))))))
-
-#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL)	\
-  do							\
-    {							\
-      if (rx_is_mode_dependent_addr (ADDR))		\
-        goto LABEL;					\
-    }							\
-  while (0)
 
 
 #define RETURN_ADDR_RTX(COUNT, FRAMEADDR)				\
@@ -330,11 +304,6 @@ typedef unsigned int CUMULATIVE_ARGS;
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, INDIRECT, N_NAMED_ARGS) \
   (CUM) = 0
 
-#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
-  rx_function_arg (& CUM, MODE, TYPE, NAMED)
-
-#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)	\
-  (CUM) += rx_function_arg_size (MODE, TYPE)
 
 #define TRAMPOLINE_SIZE 	(! TARGET_BIG_ENDIAN_DATA ? 14 : 20)
 #define TRAMPOLINE_ALIGNMENT 	32
@@ -619,19 +588,12 @@ typedef unsigned int CUMULATIVE_ARGS;
    they contain are always computed between two same-section symbols.  */
 #define JUMP_TABLES_IN_TEXT_SECTION	(flag_pic)
 
-#define PRINT_OPERAND(FILE, X, CODE)		\
-  rx_print_operand (FILE, X, CODE)
-#define PRINT_OPERAND_ADDRESS(FILE, ADDR)	\
-  rx_print_operand_address (FILE, ADDR)
-
 /* This is a version of REG_P that also returns TRUE for SUBREGs.  */
 #define RX_REG_P(rtl) (REG_P (rtl) || GET_CODE (rtl) == SUBREG)
 
 /* Like REG_P except that this macro is true for SET expressions.  */
 #define SET_P(rtl)    (GET_CODE (rtl) == SET)
 
-#define CAN_DEBUG_WITHOUT_FP 1
-
 /* The AS100 assembler does not support .leb128 and .uleb128, but
    the compiler-build-time configure tests will have enabled their
    use because GAS supports them.  So default to generating STABS
@@ -645,33 +607,23 @@ typedef unsigned int CUMULATIVE_ARGS;
 #define ARG_POINTER_CFA_OFFSET(FNDECL)		4
 #define FRAME_POINTER_CFA_OFFSET(FNDECL)	4
 
-/* Translate -nofpu into -mnofpu so that it gets passed from gcc to cc1.  */
-#define TARGET_OPTION_TRANSLATE_TABLE \
-  {"-nofpu", "-mnofpu" }
-
-#define OPTIMIZATION_OPTIONS(LEVEL,SIZE) \
-  rx_set_optimization_options ()
-
 #define TARGET_USE_FPU		(! TARGET_NO_USE_FPU)
 
 /* This macro is used to decide when RX FPU instructions can be used.  */
 #define ALLOW_RX_FPU_INSNS	(TARGET_USE_FPU)
 
-#define BRANCH_COST(SPEED, PREDICT)           1
-#define REGISTER_MOVE_COST(MODE, FROM, TO)    2
-#define MEMORY_MOVE_COST(MODE, REGCLASS, IN) \
-  (((IN) ? 2 : 0) + memory_move_secondary_cost (MODE, REGCLASS, IN))
-  
-#define SELECT_CC_MODE(OP,X,Y)  rx_select_cc_mode ((OP), (X), (Y))
+#define BRANCH_COST(SPEED,PREDICT)       1
+#define REGISTER_MOVE_COST(MODE,FROM,TO) 2
 
-#define JUMP_ALIGN(x)				rx_align_for_label (x)
-#define JUMP_ALIGN_MAX_SKIP			rx_max_skip_for_label (label)
-#define LABEL_ALIGN_AFTER_BARRIER(x)		rx_align_for_label (x)
-#define LABEL_ALIGN_AFTER_BARRIER_MAX_SKIP	rx_max_skip_for_label (label)
-#define LOOP_ALIGN(x)				rx_align_for_label (x)
-#define LOOP_ALIGN_MAX_SKIP			rx_max_skip_for_label (label)
-#define LABEL_ALIGN(x)				rx_align_for_label (x)
-#define LABEL_ALIGN_MAX_SKIP			rx_max_skip_for_label (NULL_RTX)
+#define SELECT_CC_MODE(OP,X,Y)  rx_select_cc_mode((OP), (X), (Y))
+
+/* Compute the alignment needed for label X in various situations.
+   If the user has specified an alignment then honour that, otherwise
+   use rx_align_for_label.  */
+#define JUMP_ALIGN(x)				(align_jumps ? align_jumps : rx_align_for_label (x, 0))
+#define LABEL_ALIGN(x)				(align_labels ? align_labels : rx_align_for_label (x, 3))
+#define LOOP_ALIGN(x)				(align_loops ? align_loops : rx_align_for_label (x, 2))
+#define LABEL_ALIGN_AFTER_BARRIER(x)		rx_align_for_label (x, 0)
 
 #define ASM_OUTPUT_MAX_SKIP_ALIGN(STREAM, LOG, MAX_SKIP)	\
   do						\

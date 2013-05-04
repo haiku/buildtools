@@ -1,6 +1,6 @@
 // Custom pointer adapter and sample storage policies
 
-// Copyright (C) 2008, 2009 Free Software Foundation, Inc.
+// Copyright (C) 2008, 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,8 +23,10 @@
 // <http://www.gnu.org/licenses/>.
 
 /**
- * @file ext/pointer.h
- * @author Bob Walters
+ *  @file ext/pointer.h
+ *  This file is a GNU extension to the Standard C++ Library.
+ *
+ *  @author Bob Walters
  *
  * Provides reusable _Pointer_adapter for assisting in the development of
  * custom pointer types that can be used with the standard containers via
@@ -41,7 +43,9 @@
 #include <ext/cast.h>
 #include <ext/type_traits.h>
 
-_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /** 
    * @brief A storage policy for use with _Pointer_adapter<> which yields a
@@ -447,7 +451,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
       }
   
       inline _Pointer_adapter 
-      operator++(int __unused) 
+      operator++(int)
       {
         _Pointer_adapter tmp(*this);
         _Storage_policy::set(_Storage_policy::get() + 1);
@@ -560,6 +564,7 @@ _GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
                const _Pointer_adapter<_StoreT>& __p)
     { return (__os << __p.get()); }
 
-_GLIBCXX_END_NAMESPACE
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace
 
 #endif // _POINTER_H

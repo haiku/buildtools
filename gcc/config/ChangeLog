@@ -1,30 +1,167 @@
-2011-04-28  Release Manager
+2013-04-12  Release Manager
 
-	* GCC 4.5.3 released.
+	* GCC 4.6.4 released.
 
-2010-12-16  Release Manager
+2012-03-01  Release Manager
 
-	* GCC 4.5.2 released.
+	* GCC 4.6.3 released.
 
-2010-10-02  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+2011-12-18  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* acx.m4 (Test for GNAT): Update comment and add quotes in final test.
+
+2011-10-26  Release Manager
+
+	* GCC 4.6.2 released.
+
+2011-06-27  Release Manager
+
+	* GCC 4.6.1 released.
+
+2011-06-18  Mike Stump  <mikestump@comcast.net>
+
+	PR target/49461
+	* mh-darwin: Turn off -pie on darwin11 and later.
+
+2011-04-20  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* bootstrap-lto.mk: Remove obsolete requirement.
+
+2011-03-25  Release Manager
+
+	* GCC 4.6.0 released.
+
+2011-03-05  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+	    Eric Blake  <eblake@redhat.com>
+
+	* override.m4: Error out if a buggy M4 was detected, to
+	avoid spurious diffs in generated files.
+
+2011-01-25  Jakub Jelinek  <jakub@redhat.com>
+
+	* cloog.m4 (CLOOG_REQUESTED): Use $2 if --without-cloog.
+
+2011-01-10  Jan Hubicka  <jh@suse.cz>
+
+	* bootstrap-lto.mk: -fuse-linker-plugin is default now;
+	pass -fno-lto to STAGEprofile.
+
+2010-12-06  Dave Korn  <dave.korn.cygwin@gmail.com>
+
+	PR target/40125
+	PR lto/46695
+	* lthostflags.m4: New file.
+	(ACX_LT_HOST_FLAGS): Define.
+
+2010-12-02  Dave Korn  <dave.korn.cygwin@gmail.com>
+
+	* mh-cygwin (LDFLAGS): Turn up stack allocation to 12MB.
+	(BOOT_LDFLAGS): Add matching stack size flag.
+	* mh-mingw (LDFLAGS): Likewise.
+	(BOOT_LDFLAGS): Likewise.
+
+2010-11-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* bootstrap-lto.mk (BOOT_ADAFLAGS): Delete.
+
+2010-11-19  Tobias Grosser  <grosser@fim.uni-passau.de>
+
+	* cloog.m4: Use AS_HELP_STRING and fix help formatting.
+
+2010-11-15  Andreas Schwab  <schwab@redhat.com>
+
+	* cloog.m4 (CLOOG_INIT_FLAGS): Fix spelling in option names.
+
+2010-11-12  Tobias Grosser  <grosser@fim.uni-passau.de>
+
+	* cloog.m4: Add -enable-cloog-backend=(isl|ppl|ppl-legacy) to
+	define the cloog backend to use. Furthermore, only pass the ppllibs to
+	the configure checks, if necessary.
+
+2010-11-12  Tobias Grosser  <grosser@fim.uni-passau.de>
+
+	* cloog.m4: Use CLooG predefined macro to check for CLooG PPL.
+
+2010-11-12  Tobias Grosser  <grosser@fim.uni-passau.de>
+
+	* cloog.m4: Fix typo.  verison -> version.
+
+2010-11-12  Tobias Grosser  <grosser@fim.uni-passau.de>
+
+	* cloog.m4: Pass ppl libraries to the CLooG version check.
+
+2010-11-11  Jan Hubicka  <jh@suse.cz>
+
+	* bootstrap-lto: Use -flto.
+
+2010-11-04  Iain Sandoe  <iains@gcc.gnu.org>
+
+	* mh-darwin: Renamed from mh-ppc-darwin.
+
+2010-06-27  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 
 	* po.m4 (AM_PO_SUBDIRS): Fix unportable shell quoting.
 
-2010-07-31  Release Manager
+2010-09-10  Jonathan Yong  <jon_y@users.sourceforge.net>
 
-	* GCC 4.5.1 released.
+	* dfp.m4: Enable decimal float for i?86 cygwin
+	and mingw, and for x86_64 mingw.
 
-2010-06-10  Iain Sandoe  <iains@gcc.gnu.org>
+2010-09-06  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR target/45524
+	* dfp.m4: Don't set enable_decimal_float to dpd if DFP is
+	disabled.  Set default_decimal_float.
+
+2010-09-06  Andreas Schwab  <schwab@redhat.com>
+
+	* dfp.m4: Quote argument of AC_MSG_WARN.
+
+2010-09-03  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* dfp.m4: New file.
+
+2010-09-01  Andi Kleen	<ak@linux.intel.com>
+
+	* bootstrap-lto.mk (STAGE2_CFLAGS, STAGE3_CFLAGS): Change
+	to -fwhopr=jobserver -fuse-linker-plugin -frandom-seed=1.
+
+2010-08-21  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	PR target/45084
+	* stdint.m4 (GCC_HEADER_STDINT): Use m4 quotes for arguments
+	of AC_MSG_ERROR.
+
+2010-07-02  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* gc++filt.m4: New file.
+
+2010-06-20  Alexandre Oliva  <aoliva@redhat.com>
+
+	* bootstrap-lto.mk: New.
+
+2010-06-10  Paolo Bonzini  <bonzini@gnu.org>
+
+	* override.m4: Remove obsolete (<2.64) definitions.
+
+2010-06-09  Iain Sandoe  <iains@gcc.gnu.org>
 
 	PR bootstrap/43170
-	* tls.m4 (GCC_CHECK_TLS): Add volatile qualifier to the test 
-	references.  Move the main () test reference ahead of 
+	* tls.m4 (GCC_CHECK_TLS): Add volatile qualifier to the test
+	references.  Move the main () test reference ahead of
 	pthread_create().  Add a comment to explain the requirements
 	of the test.
 
-2010-04-14  Release Manager
+2010-06-03  Joern Rennecke <joern.rennecke@embecosm.com>
+	    Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 
-	* GCC 4.5.0 released.
+	PR bootstrap/42798
+	* override.m4 (_AC_CHECK_DECL_BODY, _AC_CHECK_DECLS): Import
+	definitions from git Autoconf.
+
+2010-04-13  Steve Ellcey  <sje@cup.hp.com>
+
+	* elf.m4: Add hppa[12]*-*-hpux* to list of non-elf platforms.
 
 2010-03-23  Kai Tietz  <kai.tietz@onevision.com>
 
@@ -293,7 +430,7 @@
 
 	PR bootstrap/32009
 	* mh-ppc-darwin (BOOT_CFLAGS): Reenable.
-		
+
 2008-01-08  Jakub Jelinek  <jakub@redhat.com>
 
 	* futex.m4: New file.
@@ -367,7 +504,7 @@
 
 	* acx.m4 (ACX_CHECK_INSTALLED_TARGET_TOOL): Fixup logic for cross
 	builds.
-	
+
 2007-06-20  Mike Stump  <mrs@apple.com>
 
 	* acx.m4 (NCN_STRICT_CHECK_TARGET_TOOLS): Fix incremental builds.
@@ -392,7 +529,7 @@
 
 2007-04-11  Kai Tietz  <kai.tietz@onevision.com>
 
-	* stdint.m4: Make template compatible with older cygwin 
+	* stdint.m4: Make template compatible with older cygwin
 	types.h, wrapping each type in a __XXX_t_defined #ifdef.
 
 2007-03-26  H.J. Lu  <hongjiu.lu@intel.com>
@@ -496,7 +633,8 @@
 2006-07-25  Paolo Bonzini  <bonzini@gnu.org>
 
 	PR build/26188
-	* stdint.m4: Test for uintptr_t even on systems with uint64_t or uint32_t.
+	* stdint.m4: Test for uintptr_t even on systems with uint64_t
+	or uint32_t.
 
 2006-07-21  Steve Ellcey  <sje@cup.hp.com>
 

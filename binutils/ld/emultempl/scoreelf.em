@@ -1,6 +1,7 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright 2006, 2007, 2008 Free Software Foundation, Inc.
+#   Copyright 2006, 2007, 2008, 2009, 2012 Free Software Foundation, Inc.
 #   Contributed by:
+#   Brain.lin (brain.lin@sunplusct.com)
 #   Mei Ligang (ligang@sunnorth.com.cn)
 #   Pei-Lin Tsai (pltsai@sunplus.com)
 
@@ -27,14 +28,17 @@
 #
 fragment <<EOF
 
+#include "elf32-score.h"
+
 static void
 gld${EMULATION_NAME}_before_parse ()
 {
 #ifndef TARGET_			/* I.e., if not generic.  */
-  ldfile_set_output_arch ("`echo ${ARCH}`");
+  ldfile_set_output_arch ("`echo ${ARCH}`", bfd_arch_unknown);
 #endif /* not TARGET_ */
-  config.dynamic_link = ${DYNAMIC_LINK-true};
-  config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo true ; else echo false ; fi`;
+  input_flags.dynamic = ${DYNAMIC_LINK-TRUE};
+  config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo TRUE ; else echo FALSE ; fi`;
+  config.separate_code = `if test "x${SEPARATE_CODE}" = xyes ; then echo TRUE ; else echo FALSE ; fi`;
 }
 
 static void
@@ -55,6 +59,15 @@ score_elf_after_open (void)
 }
 
 EOF
+
+# Define some shell vars to insert bits of code into the standard elf
+# parse_args and list_options functions.
+#
+PARSE_AND_LIST_PROLOGUE=''
+PARSE_AND_LIST_SHORTOPTS=
+PARSE_AND_LIST_LONGOPTS=''
+PARSE_AND_LIST_OPTIONS=''
+PARSE_AND_LIST_ARGS_CASES=''
 
 # We have our own after_open and before_allocation functions, but they call
 # the standard routines, so give them a different name.

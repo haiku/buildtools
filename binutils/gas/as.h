@@ -1,6 +1,6 @@
 /* as.h - global header file
    Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2012
    Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
@@ -36,54 +36,17 @@
   	COMMON as "".
    If TEST is #defined, then we are testing a module: #define COMMON as "".  */
 
-#include "config.h"
-
-/* This is the code recommended in the autoconf documentation, almost
-   verbatim.  If it doesn't work for you, let me know, and notify
-   djm@gnu.ai.mit.edu as well.  */
-/* Added void* version for STDC case.  This is to be compatible with
-   the declaration in bison.simple, used for m68k operand parsing.
-   --KR 1995.08.08 */
-/* Force void* decl for hpux.  This is what Bison uses.  --KR 1995.08.16 */
-
-#ifndef __GNUC__
-# if HAVE_ALLOCA_H
-#  include <alloca.h>
-# else
-#  ifdef _AIX
-/* Indented so that pre-ansi C compilers will ignore it, rather than
-   choke on it.  Some versions of AIX require this to be the first
-   thing in the file.  */
- #pragma alloca
-#  else
-#   ifndef alloca /* predefined by HP cc +Olibcalls */
-#    if !defined (__STDC__) && !defined (__hpux)
-extern char *alloca ();
-#    else
-extern void *alloca ();
-#    endif /* __STDC__, __hpux */
-#   endif /* alloca */
-#  endif /* _AIX */
-# endif /* HAVE_ALLOCA_H */
-#endif /* __GNUC__ */
-
-/* Prefer varargs for non-ANSI compiler, since some will barf if the
-   ellipsis definition is used with a no-arguments declaration.  */
-#if defined (HAVE_VARARGS_H) && !defined (__STDC__)
-#undef HAVE_STDARG_H
-#endif
-
-#if defined (HAVE_STDARG_H)
-#define USE_STDARG
-#endif
-#if !defined (USE_STDARG) && defined (HAVE_VARARGS_H)
-#define USE_VARARGS
-#endif
+#include "alloca-conf.h"
 
 /* Now, tend to the rest of the configuration.  */
 
 /* System include files first...  */
 #include <stdio.h>
+
+#ifdef STRING_WITH_STRINGS
+#include <string.h>
+#include <strings.h>
+#else
 #ifdef HAVE_STRING_H
 #include <string.h>
 #else
@@ -91,6 +54,8 @@ extern void *alloca ();
 #include <strings.h>
 #endif
 #endif
+#endif
+
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
@@ -106,22 +71,7 @@ extern void *alloca ();
 #include <errno.h>
 #endif
 
-#ifdef USE_STDARG
 #include <stdarg.h>
-#endif
-
-#ifdef USE_VARARGS
-#include <varargs.h>
-#endif
-
-#if !defined (USE_STDARG) && !defined (USE_VARARGS)
-/* Roll our own.  */
-#define va_alist REST
-#define va_dcl
-typedef int * va_list;
-#define va_start(ARGS)	ARGS = &REST
-#define va_end(ARGS)
-#endif
 
 #include "getopt.h"
 /* The first getopt value for machine-independent long options.
@@ -135,9 +85,9 @@ typedef int * va_list;
 #undef NDEBUG
 #endif
 #if __GNUC__ < 2 || (__GNUC__ == 2 && __GNUC_MINOR__ < 6)
-#define __PRETTY_FUNCTION__  ((char*)0)
+#define __PRETTY_FUNCTION__  ((char *) NULL)
 #endif
-#define assert(P) \
+#define gas_assert(P) \
   ((void) ((P) ? 0 : (as_assert (__FILE__, __LINE__, __PRETTY_FUNCTION__), 0)))
 #undef abort
 #define abort()		as_abort (__FILE__, __LINE__, __PRETTY_FUNCTION__)
@@ -176,6 +126,10 @@ extern void *realloc ();
 #endif
 #ifdef NEED_DECLARATION_STRSTR
 extern char *strstr ();
+#endif
+
+#if !HAVE_DECL_MEMPCPY
+void *mempcpy(void *, const void *, size_t);
 #endif
 
 #if !HAVE_DECL_VSNPRINTF
@@ -264,10 +218,10 @@ typedef addressT valueT;
 
 #if ENABLE_CHECKING || defined (DEBUG)
 #ifndef know
-#define know(p) assert(p)	/* Verify our assumptions!  */
+#define know(p) gas_assert(p)	/* Verify our assumptions!  */
 #endif /* not yet defined */
 #else
-#define know(p)			/* know() checks are no-op.ed  */
+#define know(p)	do {} while (0)	/* know() checks are no-op.ed  */
 #endif
 
 /* input_scrub.c */
@@ -418,6 +372,9 @@ COMMON int flag_strip_local_absolute;
 /* True if we should generate a traditional format object file.  */
 COMMON int flag_traditional_format;
 
+/* TRUE if debug sections should be compressed.  */
+COMMON int flag_compress_debug;
+
 /* TRUE if .note.GNU-stack section with SEC_CODE should be created */
 COMMON int flag_execstack;
 
@@ -483,7 +440,6 @@ struct _pseudo_type
 
 typedef struct _pseudo_type pseudo_typeS;
 
-#ifdef USE_STDARG
 #if (__GNUC__ >= 2) && !defined(VMS)
 /* for use with -Wformat */
 
@@ -510,13 +466,6 @@ typedef struct _pseudo_type pseudo_typeS;
 
 #endif /* __GNUC__ < 2 || defined(VMS) */
 
-#else /* ! USE_STDARG */
-
-#define PRINTF_LIKE(FCN)	void FCN ()
-#define PRINTF_WHERE_LIKE(FCN)	void FCN ()
-
-#endif /* ! USE_STDARG */
-
 PRINTF_LIKE (as_bad);
 PRINTF_LIKE (as_fatal) ATTRIBUTE_NORETURN;
 PRINTF_LIKE (as_tsktsk);
@@ -541,7 +490,7 @@ void   input_scrub_insert_line (const char *);
 void   input_scrub_insert_file (char *);
 char * input_scrub_new_file (char *);
 char * input_scrub_next_buffer (char **bufp);
-int    do_scrub_chars (int (*get) (char *, int), char *, int);
+size_t do_scrub_chars (size_t (*get) (char *, size_t), char *, size_t);
 int    gen_to_words (LITTLENUM_TYPE *, int, long);
 int    had_err (void);
 int    ignore_input (void);
@@ -631,6 +580,16 @@ COMMON int flag_m68k_mri;
 COMMON int           warn_comment;
 COMMON unsigned int  found_comment;
 COMMON char *        found_comment_file;
+#endif
+
+#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
+/* If .size directive failure should be error or warning.  */
+COMMON enum
+  {
+    size_check_error = 0,
+    size_check_warning
+  }
+flag_size_check;
 #endif
 
 #ifndef DOLLAR_AMBIGU

@@ -1,12 +1,12 @@
 /* 390 ELF support for BFD.
-   Copyright 2000, 2001, 2003 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2003, 2010 Free Software Foundation, Inc.
    Contributed by Carl B. Pedersen and Martin Schwidefsky.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 2 of the License, or
+   the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -32,6 +32,10 @@
 #define GOT_REG 		12		/* Holds addr of GOT */
 
 #include "elf/reloc-macros.h"
+
+/* Processor specific flags for the ELF header e_flags field.  */
+
+#define EF_S390_HIGH_GPRS        0x00000001
 
 /* Relocation types.  */
 
@@ -115,6 +119,7 @@ START_RELOC_NUMBERS (elf_s390_reloc_type)
     RELOC_NUMBER (R_390_GOTPLT20, 59)	/* 20 bit offset to jump slot.  */
     RELOC_NUMBER (R_390_TLS_GOTIE20, 60)/* 20 bit GOT offset for statis TLS
 					   block offset.  */
+    RELOC_NUMBER (R_390_IRELATIVE, 61)  /* IFUNC relocation.  */
     /* These are GNU extensions to enable C++ vtable garbage collection.  */
     RELOC_NUMBER (R_390_GNU_VTINHERIT, 250)
     RELOC_NUMBER (R_390_GNU_VTENTRY, 251)

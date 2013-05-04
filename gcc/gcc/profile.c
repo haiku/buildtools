@@ -1,6 +1,6 @@
 /* Calculate branch probabilities, and basic block execution counts.
    Copyright (C) 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
    Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
@@ -59,7 +59,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "regs.h"
 #include "expr.h"
 #include "function.h"
-#include "toplev.h"
+#include "basic-block.h"
+#include "diagnostic-core.h"
 #include "coverage.h"
 #include "value-prof.h"
 #include "tree.h"
@@ -70,9 +71,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 
 #include "profile.h"
-
-/* Hooks for profiling.  */
-static struct profile_hooks* profile_hooks;
 
 struct bb_info {
   unsigned int count_valid : 1;
@@ -140,7 +138,7 @@ instrument_edges (struct edge_list *el)
 		fprintf (dump_file, "Edge %d to %d instrumented%s\n",
 			 e->src->index, e->dest->index,
 			 EDGE_CRITICAL_P (e) ? " (and split)" : "");
-	      (profile_hooks->gen_edge_profiler) (num_instr_edges++, e);
+	      gimple_gen_edge_profiler (num_instr_edges++, e);
 	    }
 	}
     }
@@ -201,31 +199,31 @@ instrument_values (histogram_values values)
       switch (hist->type)
 	{
 	case HIST_TYPE_INTERVAL:
-	  (profile_hooks->gen_interval_profiler) (hist, t, 0);
+	  gimple_gen_interval_profiler (hist, t, 0);
 	  break;
 
 	case HIST_TYPE_POW2:
-	  (profile_hooks->gen_pow2_profiler) (hist, t, 0);
+	  gimple_gen_pow2_profiler (hist, t, 0);
 	  break;
 
 	case HIST_TYPE_SINGLE_VALUE:
-	  (profile_hooks->gen_one_value_profiler) (hist, t, 0);
+	  gimple_gen_one_value_profiler (hist, t, 0);
 	  break;
 
 	case HIST_TYPE_CONST_DELTA:
-	  (profile_hooks->gen_const_delta_profiler) (hist, t, 0);
+	  gimple_gen_const_delta_profiler (hist, t, 0);
 	  break;
 
  	case HIST_TYPE_INDIR_CALL:
- 	  (profile_hooks->gen_ic_profiler) (hist, t, 0);
+ 	  gimple_gen_ic_profiler (hist, t, 0);
   	  break;
 
 	case HIST_TYPE_AVERAGE:
-	  (profile_hooks->gen_average_profiler) (hist, t, 0);
+	  gimple_gen_average_profiler (hist, t, 0);
 	  break;
 
 	case HIST_TYPE_IOR:
-	  (profile_hooks->gen_ior_profiler) (hist, t, 0);
+	  gimple_gen_ior_profiler (hist, t, 0);
 	  break;
 
 	default:
@@ -411,8 +409,17 @@ read_profile_edge_counts (gcov_type *exec_counts)
 		e->count = exec_counts[exec_counts_pos++];
 		if (e->count > profile_info->sum_max)
 		  {
-		    error ("corrupted profile info: edge from %i to %i exceeds maximal count",
-			   bb->index, e->dest->index);
+		    if (flag_profile_correction)
+		      {
+			static bool informed = 0;
+			if (!informed)
+		          inform (input_location,
+			          "corrupted profile info: edge count exceeds maximal count");
+			informed = 1;
+		      }
+		    else
+		      error ("corrupted profile info: edge from %i to %i exceeds maximal count",
+			     bb->index, e->dest->index);
 		  }
 	      }
 	    else
@@ -935,7 +942,9 @@ branch_prob (void)
 	  /* It may happen that there are compiler generated statements
 	     without a locus at all.  Go through the basic block from the
 	     last to the first statement looking for a locus.  */
-	  for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&gsi))
+	  for (gsi = gsi_last_nondebug_bb (bb);
+	       !gsi_end_p (gsi);
+	       gsi_prev_nondebug (&gsi))
 	    {
 	      last = gsi_stmt (gsi);
 	      if (gimple_has_location (last))
@@ -989,6 +998,41 @@ branch_prob (void)
 	    fprintf (dump_file, "Adding fake entry edge to bb %i\n",
 		     bb->index);
 	  make_edge (ENTRY_BLOCK_PTR, bb, EDGE_FAKE);
+	  /* Avoid bbs that have both fake entry edge and also some
+	     exit edge.  One of those edges wouldn't be added to the
+	     spanning tree, but we can't instrument any of them.  */
+	  if (have_exit_edge || need_exit_edge)
+	    {
+	      gimple_stmt_iterator gsi;
+	      gimple first;
+	      tree fndecl;
+
+	      gsi = gsi_after_labels (bb);
+	      gcc_checking_assert (!gsi_end_p (gsi));
+	      first = gsi_stmt (gsi);
+	      if (is_gimple_debug (first))
+		{
+		  gsi_next_nondebug (&gsi);
+		  gcc_checking_assert (!gsi_end_p (gsi));
+		  first = gsi_stmt (gsi);
+		}
+	      /* Don't split the bbs containing __builtin_setjmp_receiver
+		 or __builtin_setjmp_dispatcher calls.  These are very
+		 special and don't expect anything to be inserted before
+		 them.  */
+	      if (!is_gimple_call (first)
+		  || (fndecl = gimple_call_fndecl (first)) == NULL
+		  || DECL_BUILT_IN_CLASS (fndecl) != BUILT_IN_NORMAL
+		  || (DECL_FUNCTION_CODE (fndecl) != BUILT_IN_SETJMP_RECEIVER
+		      && (DECL_FUNCTION_CODE (fndecl)
+			  != BUILT_IN_SETJMP_DISPATCHER)))
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Splitting bb %i after labels\n",
+			     bb->index);
+		  split_block_after_labels (bb);
+		}
+	    }
 	}
     }
 
@@ -1167,7 +1211,7 @@ branch_prob (void)
 #undef BB_TO_GCOV_INDEX
 
   if (flag_profile_values)
-    find_values_to_profile (&values);
+    gimple_find_values_to_profile (&values);
 
   if (flag_branch_probabilities)
     {
@@ -1184,7 +1228,7 @@ branch_prob (void)
     {
       unsigned n_instrumented;
 
-      profile_hooks->init_edge_profiler ();
+      gimple_init_edge_profiler ();
 
       n_instrumented = instrument_edges (el);
 
@@ -1369,11 +1413,3 @@ end_branch_prob (void)
     }
 }
 
-/* Set up hooks to enable tree-based profiling.  */
-
-void
-tree_register_profile_hooks (void)
-{
-  gcc_assert (current_ir_type () == IR_GIMPLE);
-  profile_hooks = &tree_profile_hooks;
-}

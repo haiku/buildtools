@@ -6588,15 +6588,17 @@
 
       emit_insn (gen_subdi3 (want, stack_pointer_rtx,
 			     force_reg (Pmode, operands[1])));
-      emit_insn (gen_adddi3 (tmp, stack_pointer_rtx, GEN_INT (-4096)));
 
       if (!CONST_INT_P (operands[1]))
 	{
+	  rtx limit = GEN_INT (4096);
 	  out_label = gen_label_rtx ();
-	  test = gen_rtx_GEU (VOIDmode, want, tmp);
-	  emit_jump_insn (gen_cbranchdi4 (test, want, tmp, out_label));
+	  test = gen_rtx_LTU (VOIDmode, operands[1], limit);
+	  emit_jump_insn
+	    (gen_cbranchdi4 (test, operands[1], limit, out_label));
 	}
 
+      emit_insn (gen_adddi3 (tmp, stack_pointer_rtx, GEN_INT (-4096)));
       emit_label (loop_label);
       memref = gen_rtx_MEM (DImode, tmp);
       MEM_VOLATILE_P (memref) = 1;
@@ -6763,7 +6765,7 @@
   /* This bit is the same as expand_builtin_longjmp.  */
   emit_move_insn (hard_frame_pointer_rtx, fp);
   emit_move_insn (pv, lab);
-  emit_stack_restore (SAVE_NONLOCAL, stack, NULL_RTX);
+  emit_stack_restore (SAVE_NONLOCAL, stack);
   emit_use (hard_frame_pointer_rtx);
   emit_use (stack_pointer_rtx);
 
@@ -6908,13 +6910,13 @@
 ;; Load the CIW into r2 for calling __T3E_MISMATCH
 
 (define_expand "umk_mismatch_args"
-  [(set:DI (match_dup 1) (mem:DI (plus:DI (reg:DI 15) (const_int -16))))
-   (set:DI (match_dup 2) (mem:DI (plus:DI (match_dup 1) (const_int -32))))
-   (set:DI (reg:DI 1) (match_operand:DI 0 "const_int_operand" ""))
-   (set:DI (match_dup 3) (plus:DI (mult:DI (reg:DI 25)
-					   (const_int 8))
-				  (match_dup 2)))
-   (set:DI (reg:DI 2) (mem:DI (match_dup 3)))]
+  [(set (match_dup 1) (mem:DI (plus:DI (reg:DI 15) (const_int -16))))
+   (set (match_dup 2) (mem:DI (plus:DI (match_dup 1) (const_int -32))))
+   (set (reg:DI 1) (match_operand:DI 0 "const_int_operand" ""))
+   (set (match_dup 3) (plus:DI (mult:DI (reg:DI 25)
+					(const_int 8))
+			       (match_dup 2)))
+   (set (reg:DI 2) (mem:DI (match_dup 3)))]
   "TARGET_ABI_UNICOSMK"
 {
   operands[1] = gen_reg_rtx (DImode);

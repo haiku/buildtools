@@ -25,9 +25,6 @@ Boston, MA 02111-1307, USA.  */
 #undef PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
-#undef ASM_COMMENT_START
-#define ASM_COMMENT_START " #"
-
 #undef MCOUNT_NAME
 #define MCOUNT_NAME "_mcount"
 
@@ -175,3 +172,8 @@ Boston, MA 02111-1307, USA.  */
 
 /* Haiku headers are C++-aware (and often use C++).  */
 #define NO_IMPLICIT_EXTERN_C
+
+/* Only allow -lssp for SSP, as -lssp_nonshared is problematic in Haiku */
+#ifndef TARGET_LIBC_PROVIDES_SSP
+#define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all:-lssp}"
+#endif

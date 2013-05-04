@@ -1,6 +1,6 @@
 /* Operating system specific defines to be used when targeting GCC for any
    Solaris 2 system.
-   Copyright 2002, 2003, 2004, 2007, 2008, 2009, 2010
+   Copyright 2002, 2003, 2004, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -99,7 +99,8 @@ along with GCC; see the file COPYING3.  If not see
 	   library.  */					\
 	if (c_dialect_cxx ())				\
 	  {						\
-	    builtin_define ("_XOPEN_SOURCE=500");	\
+	    builtin_define ("__STDC_VERSION__=199901L");\
+	    builtin_define ("_XOPEN_SOURCE=600");	\
 	    builtin_define ("_LARGEFILE_SOURCE=1");	\
 	    builtin_define ("_LARGEFILE64_SOURCE=1");	\
 	    builtin_define ("__EXTENSIONS__");		\
@@ -110,24 +111,30 @@ along with GCC; see the file COPYING3.  If not see
 /* The system headers under Solaris 2 are C++-aware since 2.0.  */
 #define NO_IMPLICIT_EXTERN_C
 
-/* The sun bundled assembler doesn't accept -Yd, (and neither does gas).
-   It's safe to pass -s always, even if -g is not used.  */
+/* It's safe to pass -s always, even if -g is not used.  */
 #undef ASM_SPEC
 #define ASM_SPEC "\
-%{v:-V} %{Qy:} %{!Qn:-Qy} %{n} %{T} %{Ym,*} %{Wa,*:%*} -s \
+%{v:-V} %{Qy:} %{!Qn:-Qy} %{Ym,*} -s \
 %{fpic|fpie|fPIC|fPIE:-K PIC} \
 %(asm_cpu) \
 "
+
+#ifndef CROSS_DIRECTORY_STRUCTURE
+#undef MD_EXEC_PREFIX
+#define MD_EXEC_PREFIX "/usr/ccs/bin/"
+
+#undef MD_STARTFILE_PREFIX
+#define MD_STARTFILE_PREFIX "/usr/ccs/lib/"
+#endif
 
 /* We don't use the standard LIB_SPEC only because we don't yet support c++.  */
 #undef LIB_SPEC
 #define LIB_SPEC \
   "%{compat-bsd:-lucb -lsocket -lnsl -lelf -laio} \
-   %{!shared:\
-     %{!symbolic:\
-       %{pthreads|pthread:-lpthread} \
-       %{!pthreads:%{!pthread:%{threads:-lthread}}} \
-       %{p|pg:-ldl} -lc}}"
+   %{!symbolic:\
+     %{pthreads|pthread:-lpthread " LIB_TLS_SPEC "} \
+     %{!pthreads:%{!pthread:%{threads:-lthread}}} \
+     %{p|pg:-ldl} -lc}"
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
@@ -156,12 +163,12 @@ along with GCC; see the file COPYING3.  If not see
    %{YP,*} \
    %{R*} \
    %{compat-bsd: \
-     %{!YP,*:%{p|pg:-Y P,%R/usr/ucblib:%R/usr/ccs/lib/libp:%R/usr/lib/libp:%R/usr/ccs/lib:%R/usr/lib} \
-             %{!p:%{!pg:-Y P,%R/usr/ucblib:%R/usr/ccs/lib:%R/usr/lib}}} \
+     %{!YP,*:%{p|pg:-Y P,%R/usr/ucblib:%R/usr/ccs/lib/libp:%R/usr/lib/libp:%R/usr/ccs/lib:%R/usr/lib:%R/lib} \
+             %{!p:%{!pg:-Y P,%R/usr/ucblib:%R/usr/ccs/lib:%R/usr/lib:%R/lib}}} \
              -R %R/usr/ucblib} \
    %{!compat-bsd: \
-     %{!YP,*:%{p|pg:-Y P,%R/usr/ccs/lib/libp:%R/usr/lib/libp:%R/usr/ccs/lib:%R/usr/lib} \
-             %{!p:%{!pg:-Y P,%R/usr/ccs/lib:%R/usr/lib}}}}"
+     %{!YP,*:%{p|pg:-Y P,%R/usr/ccs/lib/libp:%R/usr/lib/libp:%R/usr/ccs/lib:%R/usr/lib:%R/lib} \
+             %{!p:%{!pg:-Y P,%R/usr/ccs/lib:%R/usr/lib:%R/lib}}}}"
 
 #undef LINK_ARCH32_SPEC
 #define LINK_ARCH32_SPEC LINK_ARCH32_SPEC_BASE
@@ -169,15 +176,14 @@ along with GCC; see the file COPYING3.  If not see
 #undef LINK_ARCH_SPEC
 #define LINK_ARCH_SPEC LINK_ARCH32_SPEC
 
-/* This should be the same as in svr4.h, except with -R added.  */
 #undef  LINK_SPEC
 #define LINK_SPEC \
   "%{h*} %{v:-V} \
-   %{b} \
    %{!shared:%{!static:%{rdynamic: " RDYNAMIC_SPEC "}}} \
    %{static:-dn -Bstatic} \
    %{shared:-G -dy %{!mimpure-text:-z text}} \
    %{symbolic:-Bsymbolic -G -dy -z text} \
+   %{pthreads|pthread|threads:" LIB_THREAD_LDFLAGS_SPEC "} \
    %(link_arch) \
    %{Qy:} %{!Qn:-Qy}"
 
@@ -190,14 +196,9 @@ along with GCC; see the file COPYING3.  If not see
 #undef SUPPORTS_INIT_PRIORITY
 #define SUPPORTS_INIT_PRIORITY 0
 
-/* This defines which switch letters take arguments.
-   It is as in svr4.h but with -R added.  */
-#undef SWITCH_TAKES_ARG
-#define SWITCH_TAKES_ARG(CHAR) \
-  (DEFAULT_SWITCH_TAKES_ARG(CHAR) \
-   || (CHAR) == 'R' \
-   || (CHAR) == 'h' \
-   || (CHAR) == 'z')
+/* collect2.c can only parse GNU nm -n output.  Solaris nm needs -png to
+   produce the same format.  */
+#define NM_FLAGS "-png"
 
 #define STDC_0_IN_SYSTEM_HEADERS 1
 
@@ -274,7 +275,7 @@ __enable_execute_stack (void *addr)					\
     }								\
   while (0)
 
-/* Solaris 'as' has a bug: a .common directive in .tbss section
+/* Solaris 'as' has a bug: a .common directive in .tbss or .tdata section
    behaves as .tls_common rather than normal non-TLS .common.  */
 #undef  ASM_OUTPUT_ALIGNED_COMMON
 #define ASM_OUTPUT_ALIGNED_COMMON(FILE, NAME, SIZE, ALIGN)		\
@@ -282,8 +283,7 @@ __enable_execute_stack (void *addr)					\
     {									\
       if (TARGET_SUN_TLS						\
 	  && in_section							\
-	  && ((in_section->common.flags & (SECTION_TLS | SECTION_BSS))	\
-	      == (SECTION_TLS | SECTION_BSS)))				\
+	  && ((in_section->common.flags & SECTION_TLS) == SECTION_TLS))	\
 	switch_to_section (bss_section);				\
       fprintf ((FILE), "%s", COMMON_ASM_OP);				\
       assemble_name ((FILE), (NAME));					\
@@ -295,6 +295,9 @@ __enable_execute_stack (void *addr)					\
 #ifndef USE_GAS
 #undef TARGET_ASM_ASSEMBLE_VISIBILITY
 #define TARGET_ASM_ASSEMBLE_VISIBILITY solaris_assemble_visibility
+
+#define AS_NEEDS_DASH_FOR_PIPED_INPUT
+
 #endif
 
 extern GTY(()) tree solaris_pending_aligns;
@@ -303,3 +306,5 @@ extern GTY(()) tree solaris_pending_finis;
 
 /* Allow macro expansion in #pragma pack.  */
 #define HANDLE_PRAGMA_PACK_WITH_EXPANSION
+
+#define TARGET_POSIX_IO

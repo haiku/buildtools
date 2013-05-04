@@ -1,5 +1,6 @@
 /* DWARF2 EH unwinding support for AMD x86-64 and x86.
-   Copyright (C) 2004, 2005, 2006, 2009 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2009, 2010, 2012 Free Software Foundation,
+   Inc.
 
 This file is part of GCC.
 
@@ -106,7 +107,7 @@ x86_64_fallback_frame_state (struct _Unwind_Context *context,
    signal-turned-exceptions for them.  There's also no configure-run for
    the target, so we can't check on (e.g.) HAVE_SYS_UCONTEXT_H.  Using the
    target libc version macro should be enough.  */
-#if !(__GLIBC__ == 2 && __GLIBC_MINOR__ == 0)
+#if defined __GLIBC__ && !(__GLIBC__ == 2 && __GLIBC_MINOR__ == 0)
 
 #include <signal.h>
 #include <sys/ucontext.h>
@@ -133,9 +134,9 @@ x86_fallback_frame_state (struct _Unwind_Context *context,
     {
       struct rt_sigframe {
 	int sig;
-	struct siginfo *pinfo;
+	siginfo_t *pinfo;
 	void *puc;
-	struct siginfo info;
+	siginfo_t info;
 	struct ucontext uc;
       } *rt_ = context->cfa;
       /* The void * cast is necessary to avoid an aliasing warning.

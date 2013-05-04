@@ -794,27 +794,6 @@ fix = {
 
 
 /*
- *  Change external names of wcstok/wcsftime via asm instead of macros on
- *  Tru64 UNIX V4.0.
- */
-fix = {
-    hackname = alpha_wchar;
-    files    = wchar.h;
-
-    mach     = "alpha*-dec-osf4*";
-    select   = "#define wcstok wcstok_r";
-    sed      = "s@#define wcstok wcstok_r@"
-                "extern wchar_t *wcstok __((wchar_t *, const wchar_t *, "
-                          "wchar_t **)) __asm__(\"wcstok_r\");@";
-    sed      = "s@#define wcsftime __wcsftime_isoc@"
-                "extern size_t   wcsftime __((wchar_t *, size_t, const wchar_t *"
-                          ", const struct tm *)) __asm__(\"__wcsftime_isoc\");@";
-    test_text = "#define wcstok wcstok_r\n"
-		"#define wcsftime __wcsftime_isoc";
-};
-
-
-/*
  *  For C++, avoid any typedef or macro definition of bool,
  *  and use the built in type instead.
  *  HP/UX 10.20 also has it in curses_colr/curses.h.
@@ -2006,7 +1985,7 @@ fix = {
 fix = {
     hackname = hpux_htonl;
     files    = netinet/in.h;
-    select   = "#ifndef _XOPEN_SOURCE_EXTENDED\n"
+    select   = "#ifndef _XOPEN_SOURCE_EXTENDED[ \t]*\n"
                "(/\\*\n"
                " \\* Macros for number representation conversion\\.\n"
                " \\*/\n"
@@ -3288,6 +3267,23 @@ fix = {
 
 
 /*
+ *  Solaris 10+ <sys/feature_tests.h> defines _RESTRICT_KYWD as restrict
+ *  for C99.  This is wrong for C++, which needs many C99 features, but
+ *  only supports __restrict.
+ */
+fix = {
+    hackname  = solaris___restrict;
+    files     = sys/feature_tests.h;
+    select    = "#define[ \t]*_RESTRICT_KYWD[ \t]*restrict";
+    mach      = "*-*-solaris2*";
+    c_fix     = format;
+    c_fix_arg = "#ifdef __cplusplus\n#define\t_RESTRICT_KYWD\t__restrict\n"
+    	        "#else\n%0\n#endif";
+    test_text = "#define	_RESTRICT_KYWD	restrict";
+};
+
+
+/*
  * Solaris 10+ complex.h defines _Complex_I and _Imaginary_I in terms of
  * themselves, which are Sun Studio compiler intrinsics.  Remove _Imaginary_I
  * and imaginary definitions which are not supported by GCC.
@@ -3308,6 +3304,23 @@ fix = {
 		"#define	imaginary	_Imaginary\n"
 		"#undef	I\n"
 		"#define	I		_Imaginary_I";
+};
+
+
+/*
+ * Solaris 10+ <complex.h> is wrapped in #ifndef __cplusplus.  Wrap in
+ * extern "C" instead so libstdc++ can use it.
+ */
+fix = {
+    hackname  = solaris_complex_cxx;
+    mach      = "*-*-solaris2.*";
+    files     = complex.h;
+    sed	      = "/#if[ \t]*!defined(__cplusplus)/c"
+    		"#ifdef\t__cplusplus\\\nextern \"C\" {\\\n#endif";
+    sed	      = "/#endif[ \t]*\\/\\* !defined(__cplusplus) \\*\\//c"
+		"#ifdef\t__cplusplus\\\n}\\\n#endif";
+    test_text = "#if !defined(__cplusplus)\n"
+		"#endif	/* !defined(__cplusplus) */";
 };
 
 

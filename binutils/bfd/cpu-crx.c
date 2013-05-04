@@ -1,5 +1,5 @@
 /* BFD support for the CRX processor.
-   Copyright 2004, 2007 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -35,6 +35,7 @@ const bfd_arch_info_type bfd_crx_arch =
     1,      	/* Unsigned int section alignment power.  */
     TRUE, 	/* The one and only.  */
     bfd_default_compatible, 
-    bfd_default_scan ,
+    bfd_default_scan,
+    bfd_arch_default_fill,
     0,
   };

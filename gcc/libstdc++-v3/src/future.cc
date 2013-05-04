@@ -1,6 +1,6 @@
 // future -*- C++ -*-
 
-// Copyright (C) 2009 Free Software Foundation, Inc.
+// Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -28,6 +28,8 @@ namespace
 {
   struct future_error_category : public std::error_category
   {
+    future_error_category() {}
+
     virtual const char*
     name() const 
     { return "future"; }
@@ -46,6 +48,9 @@ namespace
       case std::future_errc::promise_already_satisfied:
           __msg = "Promise already satisfied";
           break;
+      case std::future_errc::no_state:
+          __msg = "No associated state";
+          break;
       default:
           __msg = "Unknown error";
           break;
@@ -62,12 +67,46 @@ namespace
   }
 }
 
-namespace std
+namespace std _GLIBCXX_VISIBILITY(default)
 {
-  const error_category* const future_category = &__future_category_instance();
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  const error_category& future_category()
+  { return __future_category_instance(); }
 
   future_error::~future_error() throw() { }
 
   const char* 
   future_error::what() const throw() { return _M_code.message().c_str(); }
+
+#if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1) \
+  && defined(_GLIBCXX_ATOMIC_BUILTINS_4)
+  __future_base::_Result_base::_Result_base() = default;
+
+  __future_base::_Result_base::~_Result_base() = default;
+
+  __future_base::_State_base::~_State_base() = default;
+#endif
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace std
+
+// XXX GLIBCXX_ABI Deprecated
+// gcc-4.6.0
+// <future> export changes
+#if defined(_GLIBCXX_SYMVER_GNU) && defined(PIC) \
+    && defined(_GLIBCXX_HAVE_AS_SYMVER_DIRECTIVE) \
+    && defined(_GLIBCXX_HAVE_SYMVER_SYMBOL_RENAMING_RUNTIME_SUPPORT)
+
+namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
+{
+  const std::error_category* future_category = &__future_category_instance();
 }
+
+#define _GLIBCXX_ASM_SYMVER(cur, old, version) \
+   asm (".symver " #cur "," #old "@@@" #version);
+
+_GLIBCXX_ASM_SYMVER(_ZN9__gnu_cxx15future_categoryE, _ZSt15future_category, GLIBCXX_3.4.14)
+
+#endif
+

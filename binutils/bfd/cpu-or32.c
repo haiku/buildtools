@@ -1,5 +1,5 @@
 /* BFD support for the OpenRISC 1000 architecture.
-   Copyright 2002, 2007 Free Software Foundation, Inc.
+   Copyright 2002, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Ivan Guzvinec  <ivang@opencores.org>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -35,7 +35,8 @@ const bfd_arch_info_type bfd_or32_arch =
     4,
     TRUE,         /* The one and only.  */
     bfd_default_compatible,
-    bfd_default_scan ,
+    bfd_default_scan,
+    bfd_arch_default_fill,
     0,
   };
 

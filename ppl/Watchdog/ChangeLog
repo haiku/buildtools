@@ -1,0 +1,1662 @@
+2011-02-20  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* PPL 0.11.1 released.
+
+2011-02-19  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS, README, Watchdog/config.guess, Watchdog/config.sub,
+	config.guess, config.sub, demos/ppl_lcdd/ppl_lcdd.1,
+	demos/ppl_lpsol/ppl_lpsol.1, demos/ppl_pips/ppl_pips.1,
+	doc/libppl.3, doc/libppl_c.3, doc/ppl-config.1: Updated for the
+	release of PPL 0.11.1.
+
+2011-02-14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/.gitignore, interfaces/C/tests/.gitignore,
+	interfaces/Java/parma_polyhedra_library/.gitignore,
+	interfaces/Prolog/GNU/.gitignore, tests/Grid/.gitignore,
+	tests/PIP_Problem/.gitignore,
+	tests/Partially_Reduced_Product/.gitignore,
+	tests/Polyhedron/.gitignore: Updated.
+
+2011-02-14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/Makefile.am, demos/ppl_pips/Makefile.am,
+	interfaces/C/tests/Makefile.am, interfaces/OCaml/tests/Makefile.am,
+	interfaces/Prolog/SWI/Makefile.am, tests/Ask_Tell/Makefile.am,
+	tests/BD_Shape/Makefile.am, tests/Box/Makefile.am,
+	tests/Grid/Makefile.am, tests/MIP_Problem/Makefile.am,
+	tests/Octagonal_Shape/Makefile.am, tests/PIP_Problem/Makefile.am,
+	tests/Partially_Reduced_Product/Makefile.am,
+	tests/Polyhedron/Makefile.am, tests/Powerset/Makefile.am: Reduce the
+	argument of valgrind's --num-callers below the allowed maximum.
+
+2011-01-25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* NEWS, README, Watchdog/src/Makefile.am, configure.ac,
+	src/Makefile.am: Prepare for release 0.11.1.
+
+2011-01-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am, NEWS, README, README.configure, STANDARDS,
+	Watchdog/Makefile.am, Watchdog/NEWS, Watchdog/README,
+	Watchdog/configure.ac, Watchdog/doc/Makefile.am,
+	Watchdog/doc/README.doc, Watchdog/doc/devref.tex,
+	Watchdog/doc/pwl.sty, Watchdog/doc/user.tex,
+	Watchdog/m4/Makefile.am, Watchdog/src/Doubly_Linked_Object.defs.hh,
+	Watchdog/src/Doubly_Linked_Object.inlines.hh,
+	Watchdog/src/Doubly_Linked_Object.types.hh,
+	Watchdog/src/EList.defs.hh, Watchdog/src/EList.inlines.hh,
+	Watchdog/src/EList.types.hh, Watchdog/src/EList_Iterator.defs.hh,
+	Watchdog/src/EList_Iterator.inlines.hh,
+	Watchdog/src/EList_Iterator.types.hh, Watchdog/src/Handler.defs.hh,
+	Watchdog/src/Handler.inlines.hh, Watchdog/src/Handler.types.hh,
+	Watchdog/src/Makefile.am, Watchdog/src/Pending_Element.defs.hh,
+	Watchdog/src/Pending_Element.inlines.hh,
+	Watchdog/src/Pending_Element.types.hh,
+	Watchdog/src/Pending_List.defs.hh,
+	Watchdog/src/Pending_List.inlines.hh,
+	Watchdog/src/Pending_List.templates.hh,
+	Watchdog/src/Pending_List.types.hh,
+	Watchdog/src/Threshold_Watcher.cc,
+	Watchdog/src/Threshold_Watcher.defs.hh,
+	Watchdog/src/Threshold_Watcher.inlines.hh,
+	Watchdog/src/Threshold_Watcher.templates.hh,
+	Watchdog/src/Threshold_Watcher.types.hh, Watchdog/src/Time.cc,
+	Watchdog/src/Time.defs.hh, Watchdog/src/Time.inlines.hh,
+	Watchdog/src/Time.types.hh, Watchdog/src/Watchdog.cc,
+	Watchdog/src/Watchdog.defs.hh, Watchdog/src/Watchdog.inlines.hh,
+	Watchdog/src/Watchdog.types.hh, Watchdog/src/pwl_header.hh,
+	Watchdog/tests/Makefile.am, Watchdog/tests/pwl_test.cc,
+	Watchdog/tests/pwl_test.hh, Watchdog/tests/watchdog1.cc,
+	Watchdog/utils/Makefile.am, Watchdog/utils/build_header.in,
+	configure.ac, debian/libppl-pwl.copyright.in,
+	debian/libppl.copyright.in, demos/Makefile.am,
+	demos/ppl_lcdd/Makefile.am, demos/ppl_lcdd/examples/Makefile.am,
+	demos/ppl_lcdd/ppl_lcdd.1, demos/ppl_lcdd/ppl_lcdd.cc,
+	demos/ppl_lcdd/ppl_lcdd_extra_man_text,
+	demos/ppl_lpsol/Makefile.am, demos/ppl_lpsol/dummy.cc,
+	demos/ppl_lpsol/examples/Makefile.am,
+	demos/ppl_lpsol/glpk_set_d_eps.c, demos/ppl_lpsol/ppl_lpsol.1,
+	demos/ppl_lpsol/ppl_lpsol.c,
+	demos/ppl_lpsol/ppl_lpsol_extra_man_text,
+	demos/ppl_pips/Makefile.am, demos/ppl_pips/examples/Makefile.am,
+	demos/ppl_pips/ppl_pips.1, demos/ppl_pips/ppl_pips.cc,
+	demos/ppl_pips/ppl_pips_extra_man_text,
+	devtools/bump_copyright_years, devtools/generate_dox_biblio,
+	devtools/generate_dox_ci_prolog_manual,
+	devtools/generate_man_pages, devtools/print_nonascii_lines,
+	doc/Makefile.am, doc/README.doc, doc/definitions.dox,
+	doc/devref-language-interface.tex, doc/devref.tex, doc/libppl.3,
+	doc/libppl_c.3, doc/ppl-config.1, doc/ppl-config_extra_man_text,
+	doc/ppl.sty, doc/user-language-interface.tex, doc/user.tex,
+	fedora/ppl.hh, fedora/ppl_c.h, fedora/pwl.hh, instchk.hh,
+	interfaces/C/C_interface.dox, interfaces/C/Makefile.am,
+	interfaces/C/ppl_c_header.h,
+	interfaces/C/ppl_c_implementation_common.cc,
+	interfaces/C/ppl_c_implementation_common.defs.hh,
+	interfaces/C/ppl_c_implementation_common.inlines.hh,
+	interfaces/C/ppl_c_version.h.in,
+	interfaces/C/ppl_interface_generator_c_cc_code.m4,
+	interfaces/C/ppl_interface_generator_c_cc_files.m4,
+	interfaces/C/ppl_interface_generator_c_h.m4,
+	interfaces/C/ppl_interface_generator_c_h_code.m4,
+	interfaces/C/ppl_interface_generator_c_hh_files.m4,
+	interfaces/C/ppl_interface_generator_c_procedure_generators.m4,
+	interfaces/C/tests/Makefile.am,
+	interfaces/C/tests/formatted_output.c,
+	interfaces/C/tests/pip_test.c, interfaces/C/tests/ppl_c_test.cc,
+	interfaces/C/tests/ppl_c_test.h,
+	interfaces/C/tests/print_to_buffer.c,
+	interfaces/C/tests/print_to_buffer.h,
+	interfaces/C/tests/watchdog1.c, interfaces/C/tests/weightwatch1.c,
+	interfaces/Java/Makefile.am, interfaces/Java/jni/Makefile.am,
+	interfaces/Java/jni/ppl_interface_generator_java_classes_cc_code.m4
+	,
+	interfaces/Java/jni/ppl_interface_generator_java_classes_cc_files.m
+	4, interfaces/Java/jni/ppl_java_common.cc,
+	interfaces/Java/jni/ppl_java_common.defs.hh,
+	interfaces/Java/jni/ppl_java_common.inlines.hh,
+	interfaces/Java/jni/ppl_java_globals.cc,
+	interfaces/Java/parma_polyhedra_library/Artificial_Parameter.java,
+	interfaces/Java/parma_polyhedra_library/Artificial_Parameter_Sequen
+	ce.java,
+	interfaces/Java/parma_polyhedra_library/Bounded_Integer_Type_Overfl
+	ow.java,
+	interfaces/Java/parma_polyhedra_library/Bounded_Integer_Type_Repres
+	entation.java,
+	interfaces/Java/parma_polyhedra_library/Bounded_Integer_Type_Width.
+	java, interfaces/Java/parma_polyhedra_library/By_Reference.java,
+	interfaces/Java/parma_polyhedra_library/Coefficient.java,
+	interfaces/Java/parma_polyhedra_library/Complexity_Class.java,
+	interfaces/Java/parma_polyhedra_library/Congruence.java,
+	interfaces/Java/parma_polyhedra_library/Congruence_System.java,
+	interfaces/Java/parma_polyhedra_library/Constraint.java,
+	interfaces/Java/parma_polyhedra_library/Constraint_System.java,
+	interfaces/Java/parma_polyhedra_library/Control_Parameter_Name.java
+	,
+	interfaces/Java/parma_polyhedra_library/Control_Parameter_Value.jav
+	a, interfaces/Java/parma_polyhedra_library/Degenerate_Element.java,
+	interfaces/Java/parma_polyhedra_library/Domain_Error_Exception.java
+	,
+	interfaces/Java/parma_polyhedra_library/Fake_Class_for_Doxygen.java
+	, interfaces/Java/parma_polyhedra_library/Generator.java,
+	interfaces/Java/parma_polyhedra_library/Generator_System.java,
+	interfaces/Java/parma_polyhedra_library/Generator_Type.java,
+	interfaces/Java/parma_polyhedra_library/Grid_Generator.java,
+	interfaces/Java/parma_polyhedra_library/Grid_Generator_System.java,
+	interfaces/Java/parma_polyhedra_library/Grid_Generator_Type.java,
+	interfaces/Java/parma_polyhedra_library/IO.java,
+	interfaces/Java/parma_polyhedra_library/Invalid_Argument_Exception.
+	java,
+	interfaces/Java/parma_polyhedra_library/Length_Error_Exception.java
+	, interfaces/Java/parma_polyhedra_library/Linear_Expression.java,
+	interfaces/Java/parma_polyhedra_library/Linear_Expression_Coefficie
+	nt.java,
+	interfaces/Java/parma_polyhedra_library/Linear_Expression_Differenc
+	e.java,
+	interfaces/Java/parma_polyhedra_library/Linear_Expression_Sum.java,
+	interfaces/Java/parma_polyhedra_library/Linear_Expression_Times.jav
+	a,
+	interfaces/Java/parma_polyhedra_library/Linear_Expression_Unary_Min
+	us.java,
+	interfaces/Java/parma_polyhedra_library/Linear_Expression_Variable.
+	java,
+	interfaces/Java/parma_polyhedra_library/Logic_Error_Exception.java,
+	interfaces/Java/parma_polyhedra_library/MIP_Problem.java,
+	interfaces/Java/parma_polyhedra_library/MIP_Problem_Status.java,
+	interfaces/Java/parma_polyhedra_library/Makefile.am,
+	interfaces/Java/parma_polyhedra_library/Optimization_Mode.java,
+	interfaces/Java/parma_polyhedra_library/Overflow_Error_Exception.ja
+	va, interfaces/Java/parma_polyhedra_library/PIP_Decision_Node.java,
+	interfaces/Java/parma_polyhedra_library/PIP_Problem.java,
+	interfaces/Java/parma_polyhedra_library/PIP_Problem_Control_Paramet
+	er_Name.java,
+	interfaces/Java/parma_polyhedra_library/PIP_Problem_Control_Paramet
+	er_Value.java,
+	interfaces/Java/parma_polyhedra_library/PIP_Problem_Status.java,
+	interfaces/Java/parma_polyhedra_library/PIP_Solution_Node.java,
+	interfaces/Java/parma_polyhedra_library/PIP_Tree_Node.java,
+	interfaces/Java/parma_polyhedra_library/PPL_Object.java,
+	interfaces/Java/parma_polyhedra_library/Pair.java,
+	interfaces/Java/parma_polyhedra_library/Parma_Polyhedra_Library.jav
+	a, interfaces/Java/parma_polyhedra_library/Partial_Function.java,
+	interfaces/Java/parma_polyhedra_library/Poly_Con_Relation.java,
+	interfaces/Java/parma_polyhedra_library/Poly_Gen_Relation.java,
+	interfaces/Java/parma_polyhedra_library/Relation_Symbol.java,
+	interfaces/Java/parma_polyhedra_library/Timeout_Exception.java,
+	interfaces/Java/parma_polyhedra_library/Variable.java,
+	interfaces/Java/parma_polyhedra_library/Variables_Set.java,
+	interfaces/Java/parma_polyhedra_library/ppl_interface_generator_jav
+	a_classes_java.m4,
+	interfaces/Java/parma_polyhedra_library/ppl_interface_generator_jav
+	a_classes_java_code.m4,
+	interfaces/Java/ppl_interface_generator_java_procedure_generators.m
+	4, interfaces/Java/tests/C_Polyhedron_test1.java,
+	interfaces/Java/tests/MIP_Problem_test1.java,
+	interfaces/Java/tests/Makefile.am,
+	interfaces/Java/tests/NNC_Polyhedron_test1.java,
+	interfaces/Java/tests/PIP_Problem_test1.java,
+	interfaces/Java/tests/PPL_Test.java,
+	interfaces/Java/tests/Parma_Polyhedra_Library_test1.java,
+	interfaces/Java/tests/Parma_Polyhedra_Library_test2.java,
+	interfaces/Java/tests/Test_Executor.java,
+	interfaces/Java/tests/ppl_interface_generator_java_test_java.m4,
+	interfaces/Java/tests/ppl_interface_generator_java_test_java_code.m
+	4, interfaces/Java/tests/ppl_java_tests_common,
+	interfaces/Makefile.am, interfaces/OCaml/Makefile.am,
+	interfaces/OCaml/OCaml_interface.dox,
+	interfaces/OCaml/ppl_interface_generator_ocaml_cc_code.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_cc_files.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_hh_code.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_hh_files.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_ml.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_ml_code.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_mli.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_mli_code.m4,
+	interfaces/OCaml/ppl_interface_generator_ocaml_procedure_generators
+	.m4, interfaces/OCaml/ppl_ocaml_common.cc,
+	interfaces/OCaml/ppl_ocaml_common.defs.hh,
+	interfaces/OCaml/ppl_ocaml_common.inlines.hh,
+	interfaces/OCaml/ppl_ocaml_globals.ml,
+	interfaces/OCaml/ppl_ocaml_globals.mli,
+	interfaces/OCaml/tests/Makefile.am,
+	interfaces/OCaml/tests/ppl_interface_generator_ocaml_test_ml.m4,
+	interfaces/OCaml/tests/ppl_interface_generator_ocaml_test_ml_code.m
+	4, interfaces/OCaml/tests/ppl_ocaml_tests_common,
+	interfaces/OCaml/tests/test1.ml,
+	interfaces/Prolog/Ciao/Makefile.am,
+	interfaces/Prolog/Ciao/ciao_cfli.hh,
+	interfaces/Prolog/Ciao/ciao_clpq.pl,
+	interfaces/Prolog/Ciao/ciao_clpq2.pl,
+	interfaces/Prolog/Ciao/ciao_efli.cc,
+	interfaces/Prolog/Ciao/ciao_efli.hh,
+	interfaces/Prolog/Ciao/ciao_pl_check.pl,
+	interfaces/Prolog/Ciao/ppl_interface_generator_ciao_pl.m4,
+	interfaces/Prolog/Ciao/ppl_interface_generator_ciao_prolog_generate
+	d_test_pl.m4, interfaces/Prolog/Ciao/ppl_prolog_sysdep.hh,
+	interfaces/Prolog/GNU/Makefile.am,
+	interfaces/Prolog/GNU/gnu_pl_check.pl,
+	interfaces/Prolog/GNU/gnu_prolog_generated_test.pl,
+	interfaces/Prolog/GNU/gp_clpq.pl,
+	interfaces/Prolog/GNU/gprolog_cfli.hh,
+	interfaces/Prolog/GNU/gprolog_efli.cc,
+	interfaces/Prolog/GNU/gprolog_efli.hh,
+	interfaces/Prolog/GNU/ppl_interface_generator_gprolog_pl.m4,
+	interfaces/Prolog/GNU/ppl_prolog_sysdep.hh,
+	interfaces/Prolog/Makefile.am,
+	interfaces/Prolog/Prolog_interface.dox,
+	interfaces/Prolog/SICStus/Makefile.am,
+	interfaces/Prolog/SICStus/ppl_interface_generator_sicstus_sd_cc.m4,
+	interfaces/Prolog/SICStus/ppl_prolog_sysdep.hh,
+	interfaces/Prolog/SICStus/ppl_sicstus.pl,
+	interfaces/Prolog/SICStus/sicstus_cfli.cc,
+	interfaces/Prolog/SICStus/sicstus_cfli.h,
+	interfaces/Prolog/SICStus/sicstus_cfli.ic,
+	interfaces/Prolog/SICStus/sicstus_efli.cc,
+	interfaces/Prolog/SICStus/sicstus_efli.hh,
+	interfaces/Prolog/SICStus/sp_clpq.pl,
+	interfaces/Prolog/SICStus/sp_pl_check.pl,
+	interfaces/Prolog/SICStus/sp_prolog_generated_test.pl,
+	interfaces/Prolog/SWI/Makefile.am,
+	interfaces/Prolog/SWI/pl_clpq.cc, interfaces/Prolog/SWI/pl_clpq.pl,
+	interfaces/Prolog/SWI/ppl_interface_generator_swiprolog_cc.m4,
+	interfaces/Prolog/SWI/ppl_pl.cc,
+	interfaces/Prolog/SWI/ppl_prolog_sysdep.hh,
+	interfaces/Prolog/SWI/ppl_swiprolog.pl,
+	interfaces/Prolog/SWI/swi_cfli.hh,
+	interfaces/Prolog/SWI/swi_efli.cc,
+	interfaces/Prolog/SWI/swi_efli.hh,
+	interfaces/Prolog/SWI/swi_pl_check.pl,
+	interfaces/Prolog/SWI/swi_prolog_generated_test.pl,
+	interfaces/Prolog/XSB/Makefile.am,
+	interfaces/Prolog/XSB/ppl_interface_generator_xsb_H.m4,
+	interfaces/Prolog/XSB/ppl_interface_generator_xsb_cc.m4,
+	interfaces/Prolog/XSB/ppl_interface_generator_xsb_hh.m4,
+	interfaces/Prolog/XSB/ppl_interface_generator_xsb_prolog_generated_
+	test_P.m4, interfaces/Prolog/XSB/ppl_prolog_sysdep.hh,
+	interfaces/Prolog/XSB/xsb_cfli.hh,
+	interfaces/Prolog/XSB/xsb_clpq.P,
+	interfaces/Prolog/XSB/xsb_clpq2.P,
+	interfaces/Prolog/XSB/xsb_efli.cc,
+	interfaces/Prolog/XSB/xsb_efli.hh,
+	interfaces/Prolog/XSB/xsb_pl_check.P,
+	interfaces/Prolog/YAP/Makefile.am,
+	interfaces/Prolog/YAP/ppl_interface_generator_yap_cc.m4,
+	interfaces/Prolog/YAP/ppl_prolog_sysdep.hh,
+	interfaces/Prolog/YAP/ppl_yap.pl,
+	interfaces/Prolog/YAP/yap_cfli.hh,
+	interfaces/Prolog/YAP/yap_clpq.pl,
+	interfaces/Prolog/YAP/yap_clpq2.pl,
+	interfaces/Prolog/YAP/yap_efli.cc,
+	interfaces/Prolog/YAP/yap_efli.hh,
+	interfaces/Prolog/YAP/yap_pl_check.pl,
+	interfaces/Prolog/YAP/yap_prolog_generated_test.pl,
+	interfaces/Prolog/ppl_interface_generator_prolog_cc_code.m4,
+	interfaces/Prolog/ppl_interface_generator_prolog_cc_files.m4,
+	interfaces/Prolog/ppl_interface_generator_prolog_dox.m4,
+	interfaces/Prolog/ppl_interface_generator_prolog_dox_code.m4,
+	interfaces/Prolog/ppl_interface_generator_prolog_hh_code.m4,
+	interfaces/Prolog/ppl_interface_generator_prolog_hh_files.m4,
+	interfaces/Prolog/ppl_interface_generator_prolog_procedure_generato
+	rs.m4, interfaces/Prolog/ppl_interface_generator_prolog_systems.m4,
+	interfaces/Prolog/ppl_prolog_common.cc,
+	interfaces/Prolog/ppl_prolog_common.defs.hh,
+	interfaces/Prolog/ppl_prolog_common.inlines.hh,
+	interfaces/Prolog/ppl_prolog_sysdep_dox,
+	interfaces/Prolog/ppl_prolog_sysindep_dox,
+	interfaces/Prolog/tests/Makefile.am,
+	interfaces/Prolog/tests/clpq.pl, interfaces/Prolog/tests/clpq2.pl,
+	interfaces/Prolog/tests/expected_clpq2_int16,
+	interfaces/Prolog/tests/expected_clpq2_int16_a,
+	interfaces/Prolog/tests/expected_clpq2_int32,
+	interfaces/Prolog/tests/expected_clpq2_int32_a,
+	interfaces/Prolog/tests/expected_clpq2_int64,
+	interfaces/Prolog/tests/expected_clpq2_int64_a,
+	interfaces/Prolog/tests/expected_clpq2_int8,
+	interfaces/Prolog/tests/expected_clpq2_int8_a,
+	interfaces/Prolog/tests/expected_clpq2_mpz,
+	interfaces/Prolog/tests/expected_clpq2_mpz_a,
+	interfaces/Prolog/tests/expected_clpq_int16,
+	interfaces/Prolog/tests/expected_clpq_int16_a,
+	interfaces/Prolog/tests/expected_clpq_int32,
+	interfaces/Prolog/tests/expected_clpq_int32_a,
+	interfaces/Prolog/tests/expected_clpq_int64,
+	interfaces/Prolog/tests/expected_clpq_int64_a,
+	interfaces/Prolog/tests/expected_clpq_int8,
+	interfaces/Prolog/tests/expected_clpq_int8_a,
+	interfaces/Prolog/tests/expected_clpq_mpz,
+	interfaces/Prolog/tests/expected_clpq_mpz_a,
+	interfaces/Prolog/tests/pl_check.pl,
+	interfaces/Prolog/tests/ppl_interface_generator_prolog_generated_te
+	st_pl.m4,
+	interfaces/Prolog/tests/ppl_interface_generator_prolog_generated_te
+	st_pl_code.m4,
+	interfaces/Prolog/tests/ppl_prolog_generated_test_common.pl,
+	interfaces/Python/ppl_py.cc, interfaces/Python/ppl_py.py,
+	interfaces/interfaced_boxes.hh, interfaces/marked_pointers.hh,
+	interfaces/ppl_interface_generator_common.m4,
+	interfaces/ppl_interface_generator_common_dat.m4,
+	interfaces/ppl_interface_generator_common_procedure_generators.m4,
+	interfaces/ppl_interface_generator_copyright, m4/Makefile.am,
+	m4/ac_check_ciao.m4, m4/ac_check_fpu_control.m4,
+	m4/ac_check_gmp.m4, m4/ac_check_sicstus_prolog.m4,
+	m4/ac_check_swi_prolog.m4, m4/ac_check_xsb_prolog.m4,
+	m4/ac_check_yap.m4, m4/ac_cxx_attribute_weak.m4,
+	m4/ac_cxx_double_binary_format.m4,
+	m4/ac_cxx_double_exact_output.m4, m4/ac_cxx_flexible_arrays.m4,
+	m4/ac_cxx_float_binary_format.m4, m4/ac_cxx_float_exact_output.m4,
+	m4/ac_cxx_ieee_inexact_flag.m4, m4/ac_cxx_limit_memory.m4,
+	m4/ac_cxx_long_double_binary_format.m4,
+	m4/ac_cxx_long_double_exact_output.m4,
+	m4/ac_cxx_proper_long_double.m4, m4/ac_cxx_remainder_bug.m4,
+	m4/ac_prog_jar.m4, m4/ac_prog_java.m4, m4/ac_prog_javac.m4,
+	m4/ac_prog_javah.m4, m4/ac_text_md5sum.m4, m4/ppl.m4, m4/ppl_c.m4,
+	src/Affine_Space.cc, src/Affine_Space.defs.hh,
+	src/Affine_Space.inlines.hh, src/Affine_Space.types.hh,
+	src/Any_Pointset.defs.hh, src/Any_Pointset.inlines.hh,
+	src/Any_Pointset.types.hh, src/Ask_Tell.defs.hh,
+	src/Ask_Tell.inlines.hh, src/Ask_Tell.templates.hh,
+	src/Ask_Tell.types.hh, src/BDS_Status.idefs.hh,
+	src/BDS_Status.inlines.hh, src/BD_Shape.cc, src/BD_Shape.defs.hh,
+	src/BD_Shape.inlines.hh, src/BD_Shape.templates.hh,
+	src/BD_Shape.types.hh, src/BHRZ03_Certificate.cc,
+	src/BHRZ03_Certificate.defs.hh, src/BHRZ03_Certificate.inlines.hh,
+	src/BHRZ03_Certificate.types.hh, src/Bit_Matrix.cc,
+	src/Bit_Matrix.defs.hh, src/Bit_Matrix.inlines.hh,
+	src/Bit_Matrix.types.hh, src/Bit_Row.cc, src/Bit_Row.defs.hh,
+	src/Bit_Row.inlines.hh, src/Bit_Row.types.hh, src/Boundary.defs.hh,
+	src/Box.cc, src/Box.defs.hh, src/Box.inlines.hh,
+	src/Box.templates.hh, src/Box.types.hh, src/Box_Status.idefs.hh,
+	src/Box_Status.inlines.hh, src/C_Integer.hh, src/C_Polyhedron.cc,
+	src/C_Polyhedron.defs.hh, src/C_Polyhedron.inlines.hh,
+	src/C_Polyhedron.types.hh, src/Checked_Number.cc,
+	src/Checked_Number.defs.hh, src/Checked_Number.inlines.hh,
+	src/Checked_Number.templates.hh, src/Checked_Number.types.hh,
+	src/Coefficient.cc, src/Coefficient.defs.hh,
+	src/Coefficient.inlines.hh, src/Coefficient.types.hh,
+	src/Coefficient_traits_template.hh, src/Congruence.cc,
+	src/Congruence.defs.hh, src/Congruence.inlines.hh,
+	src/Congruence.types.hh, src/Congruence_System.cc,
+	src/Congruence_System.defs.hh, src/Congruence_System.inlines.hh,
+	src/Congruence_System.types.hh, src/Constraint.cc,
+	src/Constraint.defs.hh, src/Constraint.inlines.hh,
+	src/Constraint.types.hh, src/Constraint_System.cc,
+	src/Constraint_System.defs.hh, src/Constraint_System.inlines.hh,
+	src/Constraint_System.types.hh, src/DB_Matrix.defs.hh,
+	src/DB_Matrix.inlines.hh, src/DB_Matrix.templates.hh,
+	src/DB_Matrix.types.hh, src/DB_Row.defs.hh, src/DB_Row.inlines.hh,
+	src/DB_Row.templates.hh, src/DB_Row.types.hh,
+	src/Determinate.defs.hh, src/Determinate.inlines.hh,
+	src/Determinate.types.hh, src/Float.cc, src/Float.defs.hh,
+	src/Float.inlines.hh, src/GMP_Integer.defs.hh,
+	src/GMP_Integer.inlines.hh, src/GMP_Integer.types.hh,
+	src/Generator.cc, src/Generator.defs.hh, src/Generator.inlines.hh,
+	src/Generator.types.hh, src/Generator_System.cc,
+	src/Generator_System.defs.hh, src/Generator_System.inlines.hh,
+	src/Generator_System.types.hh, src/Grid.defs.hh,
+	src/Grid.inlines.hh, src/Grid.templates.hh, src/Grid.types.hh,
+	src/Grid_Certificate.cc, src/Grid_Certificate.defs.hh,
+	src/Grid_Certificate.inlines.hh, src/Grid_Certificate.types.hh,
+	src/Grid_Generator.cc, src/Grid_Generator.defs.hh,
+	src/Grid_Generator.inlines.hh, src/Grid_Generator.types.hh,
+	src/Grid_Generator_System.cc, src/Grid_Generator_System.defs.hh,
+	src/Grid_Generator_System.inlines.hh,
+	src/Grid_Generator_System.types.hh, src/Grid_Status.cc,
+	src/Grid_Status.idefs.hh, src/Grid_Status.inlines.hh,
+	src/Grid_chdims.cc, src/Grid_conversion.cc, src/Grid_nonpublic.cc,
+	src/Grid_public.cc, src/Grid_simplify.cc, src/Grid_widenings.cc,
+	src/H79_Certificate.cc, src/H79_Certificate.defs.hh,
+	src/H79_Certificate.inlines.hh, src/H79_Certificate.types.hh,
+	src/Has_Assign_Or_Swap.hh, src/Init.cc, src/Init.defs.hh,
+	src/Init.inlines.hh, src/Init.types.hh, src/Interval.defs.hh,
+	src/Interval.inlines.hh, src/Interval.templates.hh,
+	src/Interval.types.hh, src/Interval_Info.defs.hh,
+	src/Interval_Info.inlines.hh, src/Interval_Info.types.hh,
+	src/Interval_Restriction.defs.hh, src/Linear_Expression.cc,
+	src/Linear_Expression.defs.hh, src/Linear_Expression.inlines.hh,
+	src/Linear_Expression.types.hh, src/Linear_Row.cc,
+	src/Linear_Row.defs.hh, src/Linear_Row.inlines.hh,
+	src/Linear_Row.types.hh, src/Linear_System.cc,
+	src/Linear_System.defs.hh, src/Linear_System.inlines.hh,
+	src/Linear_System.types.hh, src/MIP_Problem.cc,
+	src/MIP_Problem.defs.hh, src/MIP_Problem.inlines.hh,
+	src/MIP_Problem.templates.hh, src/MIP_Problem.types.hh,
+	src/Makefile.am, src/Matrix.defs.hh, src/Matrix.types.hh,
+	src/NNC_Polyhedron.cc, src/NNC_Polyhedron.defs.hh,
+	src/NNC_Polyhedron.inlines.hh, src/NNC_Polyhedron.types.hh,
+	src/Numeric_Format.defs.hh, src/OR_Matrix.defs.hh,
+	src/OR_Matrix.inlines.hh, src/OR_Matrix.templates.hh,
+	src/OR_Matrix.types.hh, src/Octagonal_Shape.cc,
+	src/Octagonal_Shape.defs.hh, src/Octagonal_Shape.inlines.hh,
+	src/Octagonal_Shape.templates.hh, src/Octagonal_Shape.types.hh,
+	src/Og_Status.idefs.hh, src/Og_Status.inlines.hh,
+	src/PIP_Problem.cc, src/PIP_Problem.defs.hh,
+	src/PIP_Problem.inlines.hh, src/PIP_Problem.templates.hh,
+	src/PIP_Problem.types.hh, src/PIP_Tree.cc, src/PIP_Tree.defs.hh,
+	src/PIP_Tree.inlines.hh, src/PIP_Tree.types.hh,
+	src/Partial_Function.cc, src/Partial_Function.defs.hh,
+	src/Partial_Function.inlines.hh, src/Partial_Function.types.hh,
+	src/Partially_Reduced_Product.defs.hh,
+	src/Partially_Reduced_Product.inlines.hh,
+	src/Partially_Reduced_Product.templates.hh,
+	src/Partially_Reduced_Product.types.hh, src/Ph_Status.cc,
+	src/Ph_Status.idefs.hh, src/Ph_Status.inlines.hh,
+	src/Pointset_Ask_Tell.cc, src/Pointset_Ask_Tell.defs.hh,
+	src/Pointset_Ask_Tell.inlines.hh,
+	src/Pointset_Ask_Tell.templates.hh, src/Pointset_Ask_Tell.types.hh,
+	src/Pointset_Powerset.cc, src/Pointset_Powerset.defs.hh,
+	src/Pointset_Powerset.inlines.hh,
+	src/Pointset_Powerset.templates.hh, src/Pointset_Powerset.types.hh,
+	src/Poly_Con_Relation.cc, src/Poly_Con_Relation.defs.hh,
+	src/Poly_Con_Relation.inlines.hh, src/Poly_Con_Relation.types.hh,
+	src/Poly_Gen_Relation.cc, src/Poly_Gen_Relation.defs.hh,
+	src/Poly_Gen_Relation.inlines.hh, src/Poly_Gen_Relation.types.hh,
+	src/Polyhedron.defs.hh, src/Polyhedron.inlines.hh,
+	src/Polyhedron.templates.hh, src/Polyhedron.types.hh,
+	src/Polyhedron_chdims.cc, src/Polyhedron_nonpublic.cc,
+	src/Polyhedron_public.cc, src/Polyhedron_widenings.cc,
+	src/Powerset.defs.hh, src/Powerset.inlines.hh,
+	src/Powerset.templates.hh, src/Powerset.types.hh,
+	src/Ptr_Iterator.defs.hh, src/Ptr_Iterator.inlines.hh,
+	src/Ptr_Iterator.types.hh, src/Rational_Box.hh,
+	src/Rational_Interval.hh, src/Result.defs.hh,
+	src/Result.inlines.hh, src/Rounding_Dir.defs.hh,
+	src/Rounding_Dir.inlines.hh, src/Row.defs.hh, src/Row.types.hh,
+	src/Scalar_Products.cc, src/Scalar_Products.defs.hh,
+	src/Scalar_Products.inlines.hh, src/Scalar_Products.types.hh,
+	src/Slow_Copy.hh, src/Temp.defs.hh, src/Temp.inlines.hh,
+	src/Temp.templates.hh, src/Topology.hh, src/Variable.cc,
+	src/Variable.defs.hh, src/Variable.inlines.hh,
+	src/Variable.types.hh, src/Variables_Set.cc,
+	src/Variables_Set.defs.hh, src/Variables_Set.inlines.hh,
+	src/Variables_Set.types.hh, src/WRD_coefficient_types.defs.hh,
+	src/WRD_coefficient_types.inlines.hh, src/Weight_Profiler.cc,
+	src/Weight_Profiler.defs.hh, src/Widening_Function.defs.hh,
+	src/Widening_Function.inlines.hh, src/Widening_Function.types.hh,
+	src/algorithms.hh, src/assert.hh, src/assign_or_swap.hh,
+	src/c_streambuf.cc, src/c_streambuf.defs.hh,
+	src/c_streambuf.inlines.hh, src/c_streambuf.types.hh,
+	src/checked.cc, src/checked.defs.hh, src/checked.inlines.hh,
+	src/checked_ext.defs.hh, src/checked_ext.inlines.hh,
+	src/checked_float.inlines.hh, src/checked_int.inlines.hh,
+	src/checked_mpq.inlines.hh, src/checked_mpz.inlines.hh,
+	src/checked_numeric_limits.hh, src/compiler.hh, src/conversion.cc,
+	src/distances.defs.hh, src/distances.inlines.hh,
+	src/distances.types.hh, src/fpu-c99.inlines.hh, src/fpu-ia32.cc,
+	src/fpu-ia32.inlines.hh, src/fpu-none.inlines.hh,
+	src/fpu-sparc.inlines.hh, src/fpu.defs.hh, src/fpu.types.hh,
+	src/globals.cc, src/globals.defs.hh, src/globals.inlines.hh,
+	src/globals.types.hh, src/initializer.hh, src/intervals.defs.hh,
+	src/iterator_to_const.defs.hh, src/iterator_to_const.inlines.hh,
+	src/iterator_to_const.types.hh, src/math_utilities.defs.hh,
+	src/math_utilities.inlines.hh, src/max_space_dimension.hh,
+	src/meta_programming.hh, src/minimize.cc, src/mp_std_bits.cc,
+	src/mp_std_bits.defs.hh, src/mp_std_bits.inlines.hh,
+	src/namespaces.hh, src/ppl-config.cc.in, src/ppl_header.hh,
+	src/simplify.cc, src/stdiobuf.cc, src/stdiobuf.defs.hh,
+	src/stdiobuf.inlines.hh, src/stdiobuf.types.hh,
+	src/swapping_sort.icc, src/termination.cc, src/termination.defs.hh,
+	src/termination.templates.hh, src/version.cc, src/version.hh.in,
+	src/wrap_assign.hh, src/wrap_string.cc, src/wrap_string.hh,
+	tests/Ask_Tell/Makefile.am, tests/Ask_Tell/append1.cc,
+	tests/BD_Shape/Makefile.am, tests/BD_Shape/addconstraints1.cc,
+	tests/BD_Shape/addspacedims1.cc,
+	tests/BD_Shape/affinedimension1.cc, tests/BD_Shape/affineimage1.cc,
+	tests/BD_Shape/affineimage2.cc, tests/BD_Shape/affinepreimage1.cc,
+	tests/BD_Shape/ascii_dump_load1.cc,
+	tests/BD_Shape/bgp99extrapolation1.cc,
+	tests/BD_Shape/bhmz05widening1.cc,
+	tests/BD_Shape/bhz03widening1.cc, tests/BD_Shape/bounded1.cc,
+	tests/BD_Shape/boundedaffineimage1.cc,
+	tests/BD_Shape/boundedaffinepreimage1.cc,
+	tests/BD_Shape/bounds1.cc, tests/BD_Shape/cc76extrapolation1.cc,
+	tests/BD_Shape/cc76narrowing1.cc, tests/BD_Shape/closure1.cc,
+	tests/BD_Shape/concatenate1.cc, tests/BD_Shape/congruences1.cc,
+	tests/BD_Shape/constrains1.cc, tests/BD_Shape/constraints1.cc,
+	tests/BD_Shape/contains1.cc,
+	tests/BD_Shape/containsintegerpoint1.cc,
+	tests/BD_Shape/difference1.cc, tests/BD_Shape/discrete1.cc,
+	tests/BD_Shape/disjoint1.cc,
+	tests/BD_Shape/dropsomenonintegerpoints1.cc,
+	tests/BD_Shape/empty1.cc, tests/BD_Shape/equality1.cc,
+	tests/BD_Shape/expandspacedim1.cc,
+	tests/BD_Shape/foldspacedims1.cc, tests/BD_Shape/frequency1.cc,
+	tests/BD_Shape/frombdshape1.cc, tests/BD_Shape/frombox1.cc,
+	tests/BD_Shape/fromgensys1.cc, tests/BD_Shape/fromgrid1.cc,
+	tests/BD_Shape/fromoctagonalshape1.cc,
+	tests/BD_Shape/frompolyhedron1.cc, tests/BD_Shape/fromspacedim1.cc,
+	tests/BD_Shape/generalizedaffineimage1.cc,
+	tests/BD_Shape/generalizedaffineimage2.cc,
+	tests/BD_Shape/generalizedaffinepreimage1.cc,
+	tests/BD_Shape/generalizedaffinepreimage2.cc,
+	tests/BD_Shape/generalizedaffinepreimage3.cc,
+	tests/BD_Shape/geomcovers1.cc, tests/BD_Shape/h79widening1.cc,
+	tests/BD_Shape/integerupperboundifexact1.cc,
+	tests/BD_Shape/intersection1.cc,
+	tests/BD_Shape/limitedbhmz05extrapolation1.cc,
+	tests/BD_Shape/limitedcc76extrapolation1.cc,
+	tests/BD_Shape/limitedh79extrapolation1.cc,
+	tests/BD_Shape/mapspacedims1.cc, tests/BD_Shape/max_min1.cc,
+	tests/BD_Shape/max_min2.cc, tests/BD_Shape/maxspacedim1.cc,
+	tests/BD_Shape/membytes1.cc, tests/BD_Shape/minconstraints1.cc,
+	tests/BD_Shape/relations1.cc, tests/BD_Shape/relations2.cc,
+	tests/BD_Shape/relations3.cc, tests/BD_Shape/relations4.cc,
+	tests/BD_Shape/removespacedims1.cc, tests/BD_Shape/run_tests,
+	tests/BD_Shape/simplifyusingcontext1.cc,
+	tests/BD_Shape/timeelapse1.cc, tests/BD_Shape/unconstrain1.cc,
+	tests/BD_Shape/universe1.cc, tests/BD_Shape/upperbound1.cc,
+	tests/BD_Shape/upperboundifexact1.cc, tests/BD_Shape/wrap1.cc,
+	tests/BD_Shape/writebdshape1.cc, tests/Box/Makefile.am,
+	tests/Box/addconstraints1.cc, tests/Box/addspacedims1.cc,
+	tests/Box/affinedimension1.cc, tests/Box/affineimage1.cc,
+	tests/Box/affinepreimage1.cc, tests/Box/ascii_dump_load1.cc,
+	tests/Box/bgp99extrapolation1.cc, tests/Box/bhz03widening1.cc,
+	tests/Box/bounded1.cc, tests/Box/boundedaffineimage1.cc,
+	tests/Box/boundedaffinepreimage1.cc, tests/Box/cc76narrowing1.cc,
+	tests/Box/cc76widening.cc, tests/Box/concatenate1.cc,
+	tests/Box/congruences1.cc, tests/Box/constrains1.cc,
+	tests/Box/constraints1.cc, tests/Box/contains1.cc,
+	tests/Box/containsintegerpoint1.cc, tests/Box/difference1.cc,
+	tests/Box/discrete1.cc, tests/Box/disjoint1.cc,
+	tests/Box/empty1.cc, tests/Box/equality1.cc,
+	tests/Box/expandspacedim1.cc, tests/Box/foldspacedims1.cc,
+	tests/Box/frequency1.cc, tests/Box/frombdshape1.cc,
+	tests/Box/frombox1.cc, tests/Box/fromgensys1.cc,
+	tests/Box/fromgrid1.cc, tests/Box/frompartiallyreducedproduct1.cc,
+	tests/Box/frompolyhedron1.cc, tests/Box/frompolyhedron2.cc,
+	tests/Box/fromspacedim1.cc, tests/Box/generalizedaffineimage1.cc,
+	tests/Box/generalizedaffineimage2.cc,
+	tests/Box/generalizedaffinepreimage1.cc, tests/Box/geomcovers1.cc,
+	tests/Box/intersection1.cc, tests/Box/interval1.cc,
+	tests/Box/limitedcc76extrapolation1.cc, tests/Box/mapspacedims1.cc,
+	tests/Box/max_min1.cc, tests/Box/maxspacedim1.cc,
+	tests/Box/membytes1.cc, tests/Box/minconstraints1.cc,
+	tests/Box/propagateconstraints1.cc,
+	tests/Box/propagateconstraints2.cc,
+	tests/Box/refinewithcongruence1.cc,
+	tests/Box/refinewithcongruences1.cc,
+	tests/Box/refinewithconstraint1.cc,
+	tests/Box/refinewithconstraint2.cc,
+	tests/Box/refinewithconstraints1.cc,
+	tests/Box/refinewithconstraints2.cc, tests/Box/relations1.cc,
+	tests/Box/relations2.cc, tests/Box/relations3.cc,
+	tests/Box/relations4.cc, tests/Box/removespacedims1.cc,
+	tests/Box/run_tests, tests/Box/simplifyusingcontext1.cc,
+	tests/Box/timeelapse1.cc, tests/Box/topclosed1.cc,
+	tests/Box/unconstrain1.cc, tests/Box/universe1.cc,
+	tests/Box/upperbound1.cc, tests/Box/upperboundifexact1.cc,
+	tests/Box/wrap1.cc, tests/Box/writebox1.cc, tests/Grid/Makefile.am,
+	tests/Grid/addcongruence1.cc, tests/Grid/addcongruences1.cc,
+	tests/Grid/addconstraint1.cc, tests/Grid/addconstraints1.cc,
+	tests/Grid/addgenerator1.cc, tests/Grid/addgenerators1.cc,
+	tests/Grid/addspacedims1.cc, tests/Grid/affinedim1.cc,
+	tests/Grid/affineimage1.cc, tests/Grid/affineimage2.cc,
+	tests/Grid/affinepreimage1.cc, tests/Grid/affinepreimage2.cc,
+	tests/Grid/approximatepartition1.cc, tests/Grid/asciidumpload1.cc,
+	tests/Grid/asciidumpload2.cc, tests/Grid/asciidumpload3.cc,
+	tests/Grid/asciidumpload4.cc, tests/Grid/asciidumpload5.cc,
+	tests/Grid/asciidumpload6.cc, tests/Grid/bhz03widening1.cc,
+	tests/Grid/bounded1.cc, tests/Grid/boundedaffineimage1.cc,
+	tests/Grid/boundedaffinepreimage1.cc, tests/Grid/boundingbox1.cc,
+	tests/Grid/bounds1.cc, tests/Grid/certificate1.cc,
+	tests/Grid/concatenate1.cc, tests/Grid/congruence1.cc,
+	tests/Grid/congruences1.cc, tests/Grid/congruences2.cc,
+	tests/Grid/constraints1.cc, tests/Grid/contains1.cc,
+	tests/Grid/containsintegerpoint1.cc, tests/Grid/discrete1.cc,
+	tests/Grid/disjoint1.cc, tests/Grid/dropnonintegerpoints1.cc,
+	tests/Grid/equals1.cc, tests/Grid/expandspacedim1.cc,
+	tests/Grid/foldspacedims1.cc, tests/Grid/frequency1.cc,
+	tests/Grid/frombdshape1.cc, tests/Grid/frombox1.cc,
+	tests/Grid/fromgrid1.cc, tests/Grid/fromoctagonalshape1.cc,
+	tests/Grid/frompolyhedron1.cc,
+	tests/Grid/generalizedaffineimage1.cc,
+	tests/Grid/generalizedaffineimage2.cc,
+	tests/Grid/generalizedaffineimage3.cc,
+	tests/Grid/generalizedaffinepreimage1.cc,
+	tests/Grid/generalizedaffinepreimage2.cc,
+	tests/Grid/generalizedaffinepreimage3.cc, tests/Grid/generator1.cc,
+	tests/Grid/generators1.cc, tests/Grid/generators2.cc,
+	tests/Grid/grid1.cc, tests/Grid/grid2.cc, tests/Grid/grid3.cc,
+	tests/Grid/griddifference1.cc, tests/Grid/intersection1.cc,
+	tests/Grid/isempty1.cc, tests/Grid/isuniverse1.cc,
+	tests/Grid/limitedextrapolation1.cc,
+	tests/Grid/limitedextrapolation2.cc,
+	tests/Grid/limitedextrapolation3.cc, tests/Grid/mapspacedims1.cc,
+	tests/Grid/maxmin1.cc, tests/Grid/membytes1.cc,
+	tests/Grid/mincongruences1.cc, tests/Grid/mingenerators1.cc,
+	tests/Grid/outputoperator1.cc, tests/Grid/outputoperator2.cc,
+	tests/Grid/outputoperator3.cc, tests/Grid/partition1.cc,
+	tests/Grid/powersetdifference1.cc,
+	tests/Grid/powersetgeometricallycovers1.cc,
+	tests/Grid/powersetgeometricallyequals1.cc,
+	tests/Grid/refinewithcongruences1.cc,
+	tests/Grid/refinewithconstraints1.cc, tests/Grid/relations1.cc,
+	tests/Grid/relations2.cc, tests/Grid/relations3.cc,
+	tests/Grid/removespacedims1.cc, tests/Grid/removespacedims2.cc,
+	tests/Grid/simplifyusingcontext1.cc, tests/Grid/timeelapse1.cc,
+	tests/Grid/topclosed1.cc, tests/Grid/topclosure1.cc,
+	tests/Grid/unconstrain1.cc, tests/Grid/upperbound1.cc,
+	tests/Grid/upperbound2.cc, tests/Grid/widening1.cc,
+	tests/Grid/widening2.cc, tests/Grid/widening3.cc,
+	tests/Grid/wrap1.cc, tests/Grid/writecongruencesystem.cc,
+	tests/MIP_Problem/Makefile.am,
+	tests/MIP_Problem/ascii_dump_load1.cc,
+	tests/MIP_Problem/exceptions1.cc, tests/MIP_Problem/mipproblem1.cc,
+	tests/MIP_Problem/mipproblem2.cc, tests/MIP_Problem/mipproblem3.cc,
+	tests/Makefile.am, tests/Octagonal_Shape/Makefile.am,
+	tests/Octagonal_Shape/addspacedims1.cc,
+	tests/Octagonal_Shape/affinedimension1.cc,
+	tests/Octagonal_Shape/affineimage1.cc,
+	tests/Octagonal_Shape/affineimage2.cc,
+	tests/Octagonal_Shape/affinepreimage1.cc,
+	tests/Octagonal_Shape/affinepreimage2.cc,
+	tests/Octagonal_Shape/ascii_dump_load1.cc,
+	tests/Octagonal_Shape/bhmz05widening1.cc,
+	tests/Octagonal_Shape/bhz03widening1.cc,
+	tests/Octagonal_Shape/bounded1.cc,
+	tests/Octagonal_Shape/boundedaffineimage1.cc,
+	tests/Octagonal_Shape/boundedaffinepreimage1.cc,
+	tests/Octagonal_Shape/bounds1.cc,
+	tests/Octagonal_Shape/cc76extrapolation1.cc,
+	tests/Octagonal_Shape/cc76narrowing1.cc,
+	tests/Octagonal_Shape/chinainit.cc,
+	tests/Octagonal_Shape/concatenate1.cc,
+	tests/Octagonal_Shape/congruences1.cc,
+	tests/Octagonal_Shape/constrains1.cc,
+	tests/Octagonal_Shape/constraints1.cc,
+	tests/Octagonal_Shape/contains1.cc,
+	tests/Octagonal_Shape/containsintegerpoint1.cc,
+	tests/Octagonal_Shape/difference1.cc,
+	tests/Octagonal_Shape/discrete1.cc,
+	tests/Octagonal_Shape/disjoint1.cc,
+	tests/Octagonal_Shape/dropsomenonintegerpoints1.cc,
+	tests/Octagonal_Shape/empty1.cc,
+	tests/Octagonal_Shape/expandspacedim1.cc,
+	tests/Octagonal_Shape/foldspacedims1.cc,
+	tests/Octagonal_Shape/frequency1.cc,
+	tests/Octagonal_Shape/frombdshape1.cc,
+	tests/Octagonal_Shape/frombox1.cc,
+	tests/Octagonal_Shape/fromgensys1.cc,
+	tests/Octagonal_Shape/fromgrid1.cc,
+	tests/Octagonal_Shape/fromoctagonalshape1.cc,
+	tests/Octagonal_Shape/frompolyhedron1.cc,
+	tests/Octagonal_Shape/fromspacedim1.cc,
+	tests/Octagonal_Shape/generalizedaffineimage1.cc,
+	tests/Octagonal_Shape/generalizedaffineimage2.cc,
+	tests/Octagonal_Shape/generalizedaffineimage3.cc,
+	tests/Octagonal_Shape/generalizedaffineimage4.cc,
+	tests/Octagonal_Shape/generalizedaffineimage5.cc,
+	tests/Octagonal_Shape/generalizedaffinepreimage1.cc,
+	tests/Octagonal_Shape/generalizedaffinepreimage2.cc,
+	tests/Octagonal_Shape/generalizedaffinepreimage3.cc,
+	tests/Octagonal_Shape/generalizedaffinepreimage4.cc,
+	tests/Octagonal_Shape/integerupperboundifexact1.cc,
+	tests/Octagonal_Shape/intersection1.cc,
+	tests/Octagonal_Shape/limitedbhmz05extrapolation1.cc,
+	tests/Octagonal_Shape/limitedcc76extrapolation1.cc,
+	tests/Octagonal_Shape/mapspacedims1.cc,
+	tests/Octagonal_Shape/max_min1.cc,
+	tests/Octagonal_Shape/max_min2.cc,
+	tests/Octagonal_Shape/maxspacedim1.cc,
+	tests/Octagonal_Shape/membytes1.cc,
+	tests/Octagonal_Shape/minconstraints1.cc,
+	tests/Octagonal_Shape/relatwithcons1.cc,
+	tests/Octagonal_Shape/relatwithcons2.cc,
+	tests/Octagonal_Shape/relatwithcons3.cc,
+	tests/Octagonal_Shape/relatwithgen1.cc,
+	tests/Octagonal_Shape/removespacedims1.cc,
+	tests/Octagonal_Shape/run_tests,
+	tests/Octagonal_Shape/simplifyusingcontext1.cc,
+	tests/Octagonal_Shape/timeelapse1.cc,
+	tests/Octagonal_Shape/unconstrain1.cc,
+	tests/Octagonal_Shape/universe1.cc,
+	tests/Octagonal_Shape/upperbound1.cc,
+	tests/Octagonal_Shape/upperboundifexact1.cc,
+	tests/Octagonal_Shape/wrap1.cc,
+	tests/Octagonal_Shape/writeoctagon1.cc,
+	tests/PIP_Problem/Makefile.am,
+	tests/PIP_Problem/ascii_dump_load1.cc,
+	tests/PIP_Problem/exceptions1.cc, tests/PIP_Problem/pipproblem1.cc,
+	tests/PIP_Problem/pipproblem2.cc, tests/PIP_Problem/pipproblem3.cc,
+	tests/Partially_Reduced_Product/Makefile.am,
+	tests/Partially_Reduced_Product/addcongruences1.cc,
+	tests/Partially_Reduced_Product/addconstraints1.cc,
+	tests/Partially_Reduced_Product/affineimage1.cc,
+	tests/Partially_Reduced_Product/asciidumpload1.cc,
+	tests/Partially_Reduced_Product/bounded1.cc,
+	tests/Partially_Reduced_Product/boundedaffineimage1.cc,
+	tests/Partially_Reduced_Product/bounds1.cc,
+	tests/Partially_Reduced_Product/concatenate1.cc,
+	tests/Partially_Reduced_Product/congruences1.cc,
+	tests/Partially_Reduced_Product/congruencesproduct1.cc,
+	tests/Partially_Reduced_Product/constraints1.cc,
+	tests/Partially_Reduced_Product/constraintsproduct1.cc,
+	tests/Partially_Reduced_Product/contains1.cc,
+	tests/Partially_Reduced_Product/difference1.cc,
+	tests/Partially_Reduced_Product/dimension1.cc,
+	tests/Partially_Reduced_Product/directproduct1.cc,
+	tests/Partially_Reduced_Product/directproduct2.cc,
+	tests/Partially_Reduced_Product/directproduct3.cc,
+	tests/Partially_Reduced_Product/directproduct4.cc,
+	tests/Partially_Reduced_Product/directproduct5.cc,
+	tests/Partially_Reduced_Product/directproduct6.cc,
+	tests/Partially_Reduced_Product/discrete1.cc,
+	tests/Partially_Reduced_Product/disjoint1.cc,
+	tests/Partially_Reduced_Product/dropsomenonintegerpoints1.cc,
+	tests/Partially_Reduced_Product/equals1.cc,
+	tests/Partially_Reduced_Product/frombdshape1.cc,
+	tests/Partially_Reduced_Product/frombox1.cc,
+	tests/Partially_Reduced_Product/fromgrid1.cc,
+	tests/Partially_Reduced_Product/fromoctagonalshape1.cc,
+	tests/Partially_Reduced_Product/frompolyhedron1.cc,
+	tests/Partially_Reduced_Product/fromproduct1.cc,
+	tests/Partially_Reduced_Product/generalizedaffineimage1.cc,
+	tests/Partially_Reduced_Product/intersection1.cc,
+	tests/Partially_Reduced_Product/isempty1.cc,
+	tests/Partially_Reduced_Product/isuniverse1.cc,
+	tests/Partially_Reduced_Product/maxmin1.cc,
+	tests/Partially_Reduced_Product/partially_reduced_product_test.hh,
+	tests/Partially_Reduced_Product/partiallyreducedproduct1.cc,
+	tests/Partially_Reduced_Product/partiallyreducedproduct2.cc,
+	tests/Partially_Reduced_Product/partiallyreducedproduct3.cc,
+	tests/Partially_Reduced_Product/partiallyreducedproduct4.cc,
+	tests/Partially_Reduced_Product/refinewithcongruences1.cc,
+	tests/Partially_Reduced_Product/refinewithconstraints1.cc,
+	tests/Partially_Reduced_Product/relations1.cc,
+	tests/Partially_Reduced_Product/shapepreservingproduct1.cc,
+	tests/Partially_Reduced_Product/smashproduct1.cc,
+	tests/Partially_Reduced_Product/spacedims1.cc,
+	tests/Partially_Reduced_Product/timeelapse1.cc,
+	tests/Partially_Reduced_Product/topclosed1.cc,
+	tests/Partially_Reduced_Product/topclosure1.cc,
+	tests/Partially_Reduced_Product/upperbound1.cc,
+	tests/Partially_Reduced_Product/widening1.cc,
+	tests/Polyhedron/Makefile.am, tests/Polyhedron/addcongruence1.cc,
+	tests/Polyhedron/addcongruences1.cc,
+	tests/Polyhedron/addconstraint1.cc,
+	tests/Polyhedron/addconstraints1.cc,
+	tests/Polyhedron/addconstraints2.cc,
+	tests/Polyhedron/addgenerator1.cc,
+	tests/Polyhedron/addgenerator2.cc,
+	tests/Polyhedron/addgenerators1.cc,
+	tests/Polyhedron/addgenerators2.cc,
+	tests/Polyhedron/addspacedims1.cc,
+	tests/Polyhedron/addspacedims2.cc,
+	tests/Polyhedron/affineimage1.cc, tests/Polyhedron/affineimage2.cc,
+	tests/Polyhedron/affinepreimage1.cc,
+	tests/Polyhedron/affinetrans.cc, tests/Polyhedron/append1.cc,
+	tests/Polyhedron/append2.cc, tests/Polyhedron/ascii_dump_load1.cc,
+	tests/Polyhedron/ascii_dump_load2.cc,
+	tests/Polyhedron/ascii_dump_load3.cc,
+	tests/Polyhedron/bgp99extrapolation1.cc,
+	tests/Polyhedron/bgp99extrapolation2.cc,
+	tests/Polyhedron/bhrz03widening1.cc,
+	tests/Polyhedron/bhrz03widening2.cc,
+	tests/Polyhedron/bhrz03widening3.cc,
+	tests/Polyhedron/bhz03widening1.cc, tests/Polyhedron/bounded1.cc,
+	tests/Polyhedron/boundedaffineimage1.cc,
+	tests/Polyhedron/boundedaffinepreimage1.cc,
+	tests/Polyhedron/boundedbhrz03extrapolation1.cc,
+	tests/Polyhedron/boundedh79extrapolation1.cc,
+	tests/Polyhedron/bounds1.cc, tests/Polyhedron/cnncconversion1.cc,
+	tests/Polyhedron/concatenate1.cc, tests/Polyhedron/congruences1.cc,
+	tests/Polyhedron/constrains1.cc, tests/Polyhedron/constraints1.cc,
+	tests/Polyhedron/contains1.cc, tests/Polyhedron/contains2.cc,
+	tests/Polyhedron/containsintegerpoint1.cc,
+	tests/Polyhedron/disjoint1.cc, tests/Polyhedron/disjoint2.cc,
+	tests/Polyhedron/dropsomenonintegerpoints1.cc,
+	tests/Polyhedron/dropsomenonintegerpoints2.cc,
+	tests/Polyhedron/dualhypercubes.cc, tests/Polyhedron/empty1.cc,
+	tests/Polyhedron/equals1.cc, tests/Polyhedron/exceptions1.cc,
+	tests/Polyhedron/exceptions2.cc, tests/Polyhedron/exceptions3.cc,
+	tests/Polyhedron/expandspacedim1.cc,
+	tests/Polyhedron/expandspacedim2.cc,
+	tests/Polyhedron/foldspacedims1.cc,
+	tests/Polyhedron/foldspacedims2.cc, tests/Polyhedron/frequency1.cc,
+	tests/Polyhedron/frombdshape1.cc, tests/Polyhedron/frombox1.cc,
+	tests/Polyhedron/frombox2.cc, tests/Polyhedron/fromgrid1.cc,
+	tests/Polyhedron/fromoctagonalshape1.cc,
+	tests/Polyhedron/generalizedaffineimage1.cc,
+	tests/Polyhedron/generalizedaffineimage2.cc,
+	tests/Polyhedron/generalizedaffinepreimage1.cc,
+	tests/Polyhedron/generalizedaffinepreimage2.cc,
+	tests/Polyhedron/generators1.cc, tests/Polyhedron/geomcovers1.cc,
+	tests/Polyhedron/h79widening1.cc, tests/Polyhedron/h79widening2.cc,
+	tests/Polyhedron/hybrid.cc, tests/Polyhedron/intersection1.cc,
+	tests/Polyhedron/limitedbhrz03extrapolation1.cc,
+	tests/Polyhedron/limitedh79extrapolation1.cc,
+	tests/Polyhedron/linearexpression1.cc,
+	tests/Polyhedron/linearpartition1.cc,
+	tests/Polyhedron/linearsystem1.cc,
+	tests/Polyhedron/mapspacedims1.cc, tests/Polyhedron/max_min1.cc,
+	tests/Polyhedron/maxspacedim1.cc, tests/Polyhedron/mc91.cc,
+	tests/Polyhedron/membytes1.cc, tests/Polyhedron/memory1.cc,
+	tests/Polyhedron/memory2.cc, tests/Polyhedron/minconstraints1.cc,
+	tests/Polyhedron/minconstraints2.cc,
+	tests/Polyhedron/mingenerators1.cc,
+	tests/Polyhedron/mingenerators2.cc,
+	tests/Polyhedron/nncminimize1.cc, tests/Polyhedron/nncminimize2.cc,
+	tests/Polyhedron/numberinput1.cc, tests/Polyhedron/onepoint.cc,
+	tests/Polyhedron/permute.cc, tests/Polyhedron/polydifference1.cc,
+	tests/Polyhedron/polydifference2.cc, tests/Polyhedron/polyhull1.cc,
+	tests/Polyhedron/polyhull2.cc,
+	tests/Polyhedron/polyhullifexact1.cc,
+	tests/Polyhedron/polyhullifexact2.cc,
+	tests/Polyhedron/randphull1.cc,
+	tests/Polyhedron/refinewithcongruence1.cc,
+	tests/Polyhedron/refinewithcongruences1.cc,
+	tests/Polyhedron/refinewithconstraint1.cc,
+	tests/Polyhedron/refinewithconstraints1.cc,
+	tests/Polyhedron/relations1.cc, tests/Polyhedron/relations2.cc,
+	tests/Polyhedron/relations3.cc,
+	tests/Polyhedron/removespacedims1.cc,
+	tests/Polyhedron/removespacedims2.cc,
+	tests/Polyhedron/simplifyusingcontext1.cc,
+	tests/Polyhedron/smm1.cc, tests/Polyhedron/termination1.cc,
+	tests/Polyhedron/termination2.cc, tests/Polyhedron/timeelapse1.cc,
+	tests/Polyhedron/timeelapse2.cc, tests/Polyhedron/topclosed1.cc,
+	tests/Polyhedron/topclosure1.cc, tests/Polyhedron/unconstrain1.cc,
+	tests/Polyhedron/universe1.cc, tests/Polyhedron/universe2.cc,
+	tests/Polyhedron/variablesset1.cc, tests/Polyhedron/watchdog1.cc,
+	tests/Polyhedron/weightwatch1.cc, tests/Polyhedron/wrap1.cc,
+	tests/Polyhedron/wrap2.cc, tests/Polyhedron/writeconsys1.cc,
+	tests/Polyhedron/writegensys1.cc,
+	tests/Polyhedron/writepolyhedron1.cc,
+	tests/Polyhedron/writepolyhedron2.cc,
+	tests/Polyhedron/writerelation1.cc,
+	tests/Polyhedron/writevariable1.cc, tests/Powerset/Makefile.am,
+	tests/Powerset/addcongruences1.cc,
+	tests/Powerset/addconstraints1.cc,
+	tests/Powerset/affinedimension1.cc, tests/Powerset/affineimage1.cc,
+	tests/Powerset/affinepreimage1.cc, tests/Powerset/bounded1.cc,
+	tests/Powerset/bounds1.cc, tests/Powerset/closed1.cc,
+	tests/Powerset/closure1.cc, tests/Powerset/collapse1.cc,
+	tests/Powerset/concatenate1.cc, tests/Powerset/contains1.cc,
+	tests/Powerset/containsintegerpoint1.cc,
+	tests/Powerset/difference1.cc, tests/Powerset/discrete1.cc,
+	tests/Powerset/disjoint1.cc, tests/Powerset/disjunct1.cc,
+	tests/Powerset/empty1.cc, tests/Powerset/entails1.cc,
+	tests/Powerset/equals1.cc, tests/Powerset/frombdshape1.cc,
+	tests/Powerset/frombox1.cc, tests/Powerset/fromcongruences1.cc,
+	tests/Powerset/fromconstraints1.cc, tests/Powerset/fromgrid1.cc,
+	tests/Powerset/fromoctagonalshape1.cc,
+	tests/Powerset/frompolyhedron1.cc,
+	tests/Powerset/fromspacedimension1.cc,
+	tests/Powerset/intersection1.cc, tests/Powerset/maxmin1.cc,
+	tests/Powerset/meet1.cc, tests/Powerset/membytes1.cc,
+	tests/Powerset/powerset1.cc, tests/Powerset/reduce1.cc,
+	tests/Powerset/refinewith1.cc, tests/Powerset/relationwith1.cc,
+	tests/Powerset/simplifyusingcontext1.cc, tests/Powerset/size1.cc,
+	tests/Powerset/spacedims1.cc, tests/Powerset/universe1.cc,
+	tests/Powerset/upperbound1.cc, tests/README,
+	tests/Random_Number_Generator.defs.hh,
+	tests/Random_Number_Generator.inlines.hh,
+	tests/Random_Number_Generator.types.hh, tests/files.cc,
+	tests/files.hh, tests/ppl_test.cc, tests/ppl_test.hh,
+	utils/Makefile.am, utils/build_header.in, utils/cm_cleaner.sh,
+	utils/cm_splitter.sh, utils/text2cxxarray.in, utils/timings.cc,
+	utils/timings.hh: Copyright notices updated.
+
+2010-08-02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Watchdog/ChangeLog: Updated.
+
+2010-08-02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+        * Makefile.am, README, Watchdog/Makefile.am, Watchdog/README: 
+        Distribute all READMEs and ChangeLogs.
+
+2010-08-02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* CREDITS, NEWS, TODO, Watchdog/NEWS: Updated.
+
+2010-08-02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README, Watchdog/README: Updated.
+
+2010-08-02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/config.guess, config.guess: Updated.
+
+2010-06-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/config.guess, Watchdog/config.sub, Watchdog/install-sh,
+	Watchdog/ltmain.sh, Watchdog/m4/libtool.m4,
+	Watchdog/m4/ltoptions.m4, Watchdog/m4/ltversion.m4,
+	Watchdog/m4/lt~obsolete.m4, config.guess, config.sub, install-sh,
+	ltmain.sh, m4/libtool.m4, m4/ltoptions.m4, m4/ltversion.m4,
+	m4/lt~obsolete.m4: Updated from Libtool 2.2.10.
+
+2010-03-18  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/src/Threshold_Watcher.defs.hh: Avoid a broken reference
+	to another manual that is built later.
+
+2010-03-03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.cc: Apparently GNU Hurd only supports
+	ITIMER_REAL.  (Thanks to Michael Tautschnig:
+	http://www.cs.unipr.it/pipermail/ppl-devel/2010-March/016072.html).
+
+2010-03-03  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.cc: Proper spacing added to
+	throw_syscall_error().  (Thanks to Michael Tautschnig.)
+
+2010-02-26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* TODO, Watchdog/src/Watchdog.inlines.hh,
+	Watchdog/tests/watchdog1.cc, interfaces/C/ppl_c_header.h,
+	interfaces/C/ppl_c_implementation_common.defs.hh,
+	interfaces/C/tests/watchdog1.c, tests/Polyhedron/watchdog1.cc: Throw
+	std::logic_error in case the client asks for watchdogs on a system
+	not supporting them.
+
+2010-02-26  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/src/Threshold_Watcher.defs.hh,
+	interfaces/C/ppl_c_implementation_common.cc,
+	interfaces/Java/jni/ppl_java_common.cc,
+	interfaces/OCaml/ppl_ocaml_common.cc,
+	interfaces/Prolog/ppl_prolog_common.cc,
+	tests/Polyhedron/weightwatch1.cc: Simplified initialization of
+	Threshold_Watcher<> static data member.
+
+2010-02-21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac: Use the C++ compiler to perform the tests
+	meant for C++.
+
+2010-02-21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.cc, Watchdog/src/Watchdog.defs.hh,
+	Watchdog/src/Watchdog.inlines.hh, Watchdog/src/pwl_header.hh: 
+	sigaction() is also needed, in addition to setitimer() in order to
+	support Watchdog objects.  We could check if signal() is available
+	if there is request for such a feature.
+
+2010-02-21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.cc, Watchdog/src/Watchdog.defs.hh,
+	Watchdog/src/Watchdog.inlines.hh, interfaces/C/tests/watchdog1.c,
+	interfaces/C/tests/weightwatch1.c: If setitimer() is not available,
+	no initialization is necessary.  This also works around a linking
+	bug in Mingw.  C tests improved with error-handling code.
+
+2010-02-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/Makefile.am, Watchdog/tests/{simple1.cc =>
+	watchdog1.cc}: Test program renamed.
+
+2010-02-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/pwl_header.hh, Watchdog/tests/simple1.cc: Cater for
+	systems where setitimer() is not provided (part 4).
+
+2010-02-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.cc, Watchdog/src/Watchdog.inlines.hh: Cater
+	for systems where setitimer() is not provided (part 3).
+
+2010-02-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* TODO, Watchdog/pwl-config.sed, Watchdog/src/Watchdog.cc,
+	Watchdog/src/Watchdog.defs.hh, Watchdog/src/Watchdog.inlines.hh: 
+	Cater for systems where setitimer() is not provided (part 2).
+
+2010-02-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.defs.hh, Watchdog/src/Watchdog.inlines.hh: 
+	Cater for systems where setitimer() is not provided (part 1).
+
+2010-02-17  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, configure.ac: Build the PWL unless not
+	explicitly disabled at configuration time.
+
+2010-02-16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/pwl_test.cc, tests/ppl_test.cc: Use the right
+	preprocessor conditionals for PPL_HAVE_DECL_SIGACTION.
+
+2010-02-16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/pwl_test.cc, tests/ppl_test.cc: Corrected several
+	problems.
+
+2010-02-15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, Watchdog/src/pwl_header.hh: Improved the
+	NDEBUG machinery.
+
+2010-02-15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, Watchdog/pwl-config.sed,
+	Watchdog/tests/pwl_test.cc, configure.ac, ppl-config.sed,
+	tests/ppl_test.cc: Improve portability to systems that do not
+	(fully) support Posix signal handling.
+
+2009-12-22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL, Watchdog/INSTALL, Watchdog/compile,
+	Watchdog/config.guess, Watchdog/config.sub, compile, config.guess,
+	config.sub: Updated.
+
+2009-08-02  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/Makefile.am: Do not link with -lm here.
+
+2009-07-30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL, Watchdog/INSTALL: Updated from Autoconf 2.64.
+
+2009-07-13  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/Threshold_Watcher.defs.hh: Added additional info
+	about Traits template parameter.
+
+2009-07-13  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.defs.hh: Drafted a few missing comments. To
+	be completed (by the author).
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Threshold_Watcher.defs.hh,
+	Watchdog/src/Threshold_Watcher.templates.hh: Private typedef
+	renamed.
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.defs.hh: Removed spurious blank line.
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/NEWS: Drafted the news for PWL 0.8.
+
+2009-07-12  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/doc/devref.doxyconf-html.in,
+	Watchdog/doc/devref.doxyconf-latex.in: Fixed INPUT variable in
+	Doxygen configuration for devref.
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/README, Watchdog/configure.ac, Watchdog/src/Makefile.am: 
+	Updated for PWL 0.8.
+
+2009-07-12  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* TODO, Watchdog/src/Watchdog.cc, Watchdog/src/Watchdog.defs.hh,
+	Watchdog/src/Watchdog.inlines.hh: Converted watchdog time argument
+	to unsigned.
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/m4/lib-link.m4, m4/lib-link.m4: Updated.
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac: Require Automake 1.11, enable lzma tar
+	archives and silent rules.
+
+2009-07-12  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/src/Threshold_Watcher.defs.hh,
+	Watchdog/src/Threshold_Watcher.templates.hh,
+	tests/Polyhedron/weightwatch1.cc: Avoid dummy parameter in
+	constructor for Threshold_Watcher::Initialize.  Renamed `initialize'
+	to `init' to avoid visual clash with `Initialize'.
+
+2009-07-12  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* INSTALL, Watchdog/INSTALL, Watchdog/compile,
+	Watchdog/config.guess, Watchdog/config.sub, Watchdog/depcomp,
+	Watchdog/install-sh, Watchdog/missing, Watchdog/mkinstalldirs,
+	compile, config.guess, config.sub, depcomp, install-sh, missing,
+	mkinstalldirs: Updated.
+
+2009-07-12  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/src/EList.defs.hh, Watchdog/src/Threshold_Watcher.cc,
+	Watchdog/src/Threshold_Watcher.defs.hh,
+	Watchdog/src/Threshold_Watcher.templates.hh,
+	Watchdog/src/Threshold_Watcher.types.hh: Minor improvements: prefer
+	direct header file inclusions to indirect ones.  Avoid unnecessarily
+	long lines.
+
+2009-07-11  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/Makefile.am, Watchdog/src/Pending_List.defs.hh,
+	Watchdog/src/Pending_List.inlines.hh,
+	Watchdog/src/Pending_List.templates.hh,
+	Watchdog/src/Pending_List.types.hh, Watchdog/src/{Weightwatch.cc =>
+	Threshold_Watcher.cc}, Watchdog/src/{Weightwatch.defs.hh =>
+	Threshold_Watcher.defs.hh}, Watchdog/src/{Weightwatch.inlines.hh =>
+	Threshold_Watcher.inlines.hh},
+	Watchdog/src/{Weightwatch.templates.hh =>
+	Threshold_Watcher.templates.hh}, Watchdog/src/{Weightwatch.types.hh
+	=> Threshold_Watcher.types.hh}, Watchdog/src/Watchdog.defs.hh: 
+	Converted Weightwatch in more generic Threshold_Watcher.
+
+2009-07-11  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/Weightwatch.inlines.hh: Fixed typo.
+
+2009-07-11  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/Weightwatch.cc: Forgotten file.
+
+2009-07-11  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/Makefile.am, Watchdog/src/Pending_List.defs.hh,
+	Watchdog/src/Pending_List.inlines.hh,
+	Watchdog/src/Pending_List.templates.hh,
+	Watchdog/src/Pending_List.types.hh, Watchdog/src/Watchdog.defs.hh,
+	Watchdog/src/Weightwatch.cc, Watchdog/src/Weightwatch.defs.hh,
+	Watchdog/src/Weightwatch.inlines.hh,
+	Watchdog/src/Weightwatch.templates.hh,
+	Watchdog/src/Weightwatch.types.hh: Weightwatch are now generic
+	threshold watchdog.
+
+2009-07-11  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/Weightwatch.cc, Watchdog/src/Weightwatch.defs.hh,
+	Watchdog/src/Weightwatch.inlines.hh: Weightwatch are now independent
+	from client code.
+
+2009-07-10  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* Watchdog/src/EList.inlines.hh, Watchdog/src/Makefile.am,
+	Watchdog/src/Pending_Element.cc,
+	Watchdog/src/Pending_Element.defs.hh,
+	Watchdog/src/Pending_Element.inlines.hh,
+	Watchdog/src/Pending_Element.types.hh,
+	Watchdog/src/Pending_List.defs.hh,
+	Watchdog/src/Pending_List.inlines.hh, Watchdog/src/{Pending_List.cc
+	=> Pending_List.templates.hh}, Watchdog/src/Pending_List.types.hh,
+	Watchdog/src/Watchdog.cc, Watchdog/src/Watchdog.defs.hh,
+	Watchdog/src/Weightwatch.cc, Watchdog/src/Weightwatch.defs.hh,
+	Watchdog/src/Weightwatch.inlines.hh,
+	Watchdog/src/Weightwatch.types.hh: Added Weightwatch.
+
+2009-04-20  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README, Watchdog/src/Makefile.am, configure.ac,
+	demos/ppl_lcdd/ppl_lcdd.1, demos/ppl_lpsol/ppl_lpsol.1,
+	doc/libppl.3, doc/libppl_c.3, doc/ppl-config.1,
+	doc/ppl-config_extra_man_text, interfaces/C/Makefile.am,
+	src/Makefile.am: Version number bumped.
+
+2009-04-18  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* PPL 0.10.2 released.
+
+2009-04-18  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/ChangeLog: Mark ChangeLog.
+
+2009-04-16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Watchdog/ChangeLog: Updated.
+
+2009-04-16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/doc/Makefile.am, doc/Makefile.am: Added targets to have
+	`make -n dist' work as expected.
+
+2009-04-16  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Makefile.am, Watchdog/tests/Makefile.am,
+	demos/ppl_lcdd/Makefile.am, demos/ppl_lpsol/Makefile.am,
+	interfaces/C/Makefile.am, interfaces/C/tests/Makefile.am,
+	interfaces/Java/Makefile.am, interfaces/Java/jni/Makefile.am,
+	interfaces/Java/parma_polyhedra_library/Makefile.am,
+	interfaces/Java/tests/Makefile.am, interfaces/OCaml/Makefile.am,
+	interfaces/OCaml/tests/Makefile.am,
+	interfaces/Prolog/Ciao/Makefile.am,
+	interfaces/Prolog/GNU/Makefile.am, interfaces/Prolog/Makefile.am,
+	interfaces/Prolog/SICStus/Makefile.am,
+	interfaces/Prolog/SWI/Makefile.am,
+	interfaces/Prolog/XSB/Makefile.am,
+	interfaces/Prolog/YAP/Makefile.am,
+	interfaces/Prolog/tests/Makefile.am, src/Makefile.am,
+	tests/BD_Shape/Makefile.am, tests/Box/Makefile.am,
+	tests/Grid/Makefile.am, tests/MIP_Problem/Makefile.am,
+	tests/Octagonal_Shape/Makefile.am,
+	tests/Partially_Reduced_Product/Makefile.am,
+	tests/Polyhedron/Makefile.am, tests/Powerset/Makefile.am: Added
+	rules so that `make -n' and `make -n check' work.
+
+2009-04-15  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/src/Makefile.am, interfaces/C/Makefile.am,
+	src/Makefile.am: Libtool -version-info updated for PPL 0.10.2.
+
+2009-04-14  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* PPL 0.10.1 released.
+
+2009-04-11  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .gitignore, Watchdog/doc/.gitignore, doc/.gitignore,
+	interfaces/Prolog/XSB/.gitignore: Added missing patterns.
+
+2009-04-11  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Watchdog/ChangeLog: Updated.
+
+2009-04-06  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Watchdog/ChangeLog: Updated.
+
+2009-04-04  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/NEWS, Watchdog/README, Watchdog/configure.ac,
+	Watchdog/src/Makefile.am: Updated for PWL 0.7.
+
+2009-03-30  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, configure.ac: Version number bumped.  The
+	name of the program is Autoconf.
+
+2009-03-30  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* TODO, Watchdog/src/Watchdog.defs.hh: Moved TODO items to their
+	place.
+
+2009-03-30  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* Watchdog/src/Watchdog.defs.hh,
+	interfaces/OCaml/ppl_ocaml_common.cc,
+	interfaces/OCaml/ppl_ocaml_common.defs.hh,
+	interfaces/OCaml/ppl_ocaml_globals.ml,
+	interfaces/OCaml/ppl_ocaml_globals.mli,
+	interfaces/Prolog/ppl_prolog_common.cc: Added timeout functions to
+	the OCaml interface.  Also removed duplicate CATCH_ALL macro
+	definitions in the Prolog and OCaml interfaces.
+
+2009-03-28  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, ChangeLog-2001-2008, ChangeLog_2001-2008,
+	Watchdog/ChangeLog, Watchdog/ChangeLog-2001-2008,
+	Watchdog/ChangeLog_2001-2008: Change logs updated.
+
+2009-03-28  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, configure.ac: Improved the semantics of the
+	--enable-watchdog configure option.
+
+2009-03-27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Watchdog/ChangeLog: Change logs covering the changes
+	made in the CVS repository in 2009.  They will be replaced by
+	up-to-date change logs obtained from git.
+
+2009-03-27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, ChangeLog-2001-2008, Watchdog/ChangeLog,
+	Watchdog/ChangeLog-2001-2008: Renamed and frozen: the
+	ChangeLog-2001-2008 should never be changed again.
+
+2009-03-27  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* ChangeLog, Watchdog/ChangeLog: Updated to 2008-12-31.
+
+2009-03-26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/tests/pwl_test.cc, tests/ppl_test.cc: Support systems
+	that do not define `siginfo_t'.
+
+2009-03-26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, configure.ac: Added checks for the
+	availability of `siginfo_t'.
+
+2009-03-26  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* m4/ac_check_fpu_control.m4: We can infer the possibility to
+	control the CPU even when cross-compiling.  This happens (at least)
+	on i386 and sparc (provided we have <ieeefp.h>).
+
+2009-03-25  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/ppl_c_stream.cc,
+	interfaces/C/tests/print_to_buffer.c, src/c_streambuf_format.cc,
+	src/c_streambuf_format.defs.hh, src/c_streambuf_format.inlines.hh,
+	src/c_streambuf_format_settings.h: Better parameters for formatted
+	output.
+
+2009-03-25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/fpu-ia32.inlines.hh: Properly use PPL_FPMATH_MAY_USE_387 and
+	PPL_FPMATH_MAY_USE_SSE.
+
+2009-03-25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/fpu-ia32.cc: Depend on PPL_CAN_CONTROL_FPU.
+
+2009-03-25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac: Typo fixed.
+
+2009-03-25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* : commit b5d7b09c10aea7c95b9d2693986e2e4e549d3a12 Author: Roberto
+	Bagnara <bagnara@cs.unipr.it> Date:   Wed Mar 25 21:06:01 2009 +0100
+
+2009-03-25  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/Box/congruences1.cc, tests/Box/max_min1.cc: Disable more
+	tests that fail on the Alpha due to a GCC bug.
+
+2009-03-25  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* src/Octagonal_Shape.templates.hh,
+	tests/BD_Shape/simplifyusingcontext1.cc,
+	tests/Octagonal_Shape/Makefile.am,
+	tests/Octagonal_Shape/simplifyusingcontext1.cc,
+	tests/Polyhedron/simplifyusingcontext1.cc: Implemented
+	Octagonal_Shape::simplify_using_context_assign().  The efficiency of
+	the method needs improving. Added a few tests.
+
+2009-03-25  Patricia Hill <p.m.hill@leeds.ac.uk>
+
+	* TODO: TODO item - Check the configuration dependent documentation for Prolog, done
+	and removed.
+
+2009-03-25  Patricia Hill <p.m.hill@leeds.ac.uk>
+
+	* interfaces/OCaml/ppl_interface_generator_ocaml_cc_code.m4,
+	interfaces/OCaml/ppl_ocaml_common.cc,
+	interfaces/OCaml/tests/ppl_interface_generator_ocaml_test_ml_code.m
+	4, interfaces/OCaml/tests/test1.ml: Where the result type is unit,
+	the type returned by C++ must be a CAMLprim value type and not a
+	void.
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* tests/Grid/addcongruences1.cc,
+	tests/Octagonal_Shape/generalizedaffineimage3.cc,
+	tests/Octagonal_Shape/generalizedaffinepreimage2.cc: Exception
+	handling is broken in GCC on the Alpha: commented out some tests.
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* interfaces/C/tests/formatted_output.c: Reduced DIMENSION to 100.
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* configure.ac, interfaces/C/tests/formatted_output.c,
+	m4/ac_check_fpu_control.m4, m4/ac_check_gmp.m4,
+	m4/ac_cxx_double_exact_output.m4, m4/ac_cxx_flexible_arrays.m4,
+	m4/ac_cxx_float_exact_output.m4, m4/ac_cxx_ieee_inexact_flag.m4,
+	m4/ac_cxx_limit_memory.m4, m4/ac_cxx_long_double_exact_output.m4,
+	m4/ac_cxx_proper_long_double.m4, m4/ac_cxx_remainder_bug.m4:
+	Improved the actions of AC_RUN_IFELSE when cross-compiling.
+
+2009-03-24  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/Makefile.am: Fixed file names.
+
+2009-03-24  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* NEWS: Mention the bug corrected for method
+	Octagonal_Shape<T>::affine_image().
+
+2009-03-24  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/ppl_c_header.h: Fixed comment.
+
+2009-03-24  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/ppl_c_header.h: Fixed indentation.
+
+2009-03-24  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* src/Octagonal_Shape.templates.hh: Corrected bug affecting method
+	Octagonal_Shape::affine_image().
+
+2009-03-24  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/Makefile.am, interfaces/C/ppl_c_header.h,
+	interfaces/C/ppl_c_implementation_common.cc,
+	interfaces/C/ppl_c_implementation_common.defs.hh,
+	interfaces/C/ppl_c_stream.cc, interfaces/C/ppl_c_stream.defs.hh,
+	interfaces/C/ppl_c_stream.h, interfaces/C/ppl_c_stream.inlines.hh,
+	interfaces/C/tests/formatted_output.c,
+	interfaces/C/tests/print_to_buffer.c,
+	interfaces/C/tests/print_to_buffer.h, src/Makefile.am,
+	src/c_stream.cc, src/c_stream.h, src/c_streambuf.inlines.hh,
+	src/c_streambuf_format.cc, src/c_streambuf_format.defs.hh,
+	src/c_streambuf_format.inlines.hh,
+	src/c_streambuf_format_settings.h: Cleaned C streams implementation.
+
+2009-03-24  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* tests/Octagonal_Shape/affineimage1.cc: Test test17() shows a bug
+	in method Octagonal_Shape::affine_image().  The bug is triggered
+	  when the affine image is of the form var -> var + n and the
+	octagonal shape has constraints relating var with another space
+	dimension having index smaller than var.
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* README.configure, TODO: Explained the `--disable-ppl_lcdd' and
+	`--disable-ppl_lcdd' configure options.
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* fedora/ppl.spec: There are no GNU Prolog packages available on
+	ia64: disable the GNU Prolog interface also on those platforms
+	(besides ppc64, s390 and s390x).
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* fedora/ppl.spec: Synchronized with the Fedora repository.
+
+2009-03-24  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* interfaces/C/ppl_c_header.h,
+	interfaces/C/tests/formatted_output.c,
+	interfaces/C/tests/print_to_buffer.c,
+	interfaces/C/tests/print_to_buffer.h, src/c_stream.h: Added some
+	more infrastructure.  Variables renamed.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* interfaces/C/tests/formatted_output.c,
+	interfaces/C/tests/print_to_buffer.c: Build restored.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/tests/print_to_buffer.c, src/c_stream.cc,
+	src/c_stream.h, src/c_streambuf_format.cc: Added repeated char for
+	left and right margin.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* interfaces/C/tests/print_to_buffer.c,
+	interfaces/C/tests/print_to_buffer.h, src/c_stream.h: Some fixes.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* interfaces/C/tests/Makefile.am, interfaces/C/tests/cxxoutput.c,
+	interfaces/C/tests/formatted_output.c,
+	interfaces/C/tests/print_to_buffer.cc: Done some cleaning.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* interfaces/C/Makefile.am, interfaces/C/ppl_c_header.h,
+	interfaces/C/tests/Makefile.am,
+	interfaces/C/tests/print_to_buffer.c,
+	interfaces/C/tests/print_to_buffer.h, src/c_stream.h: Started the
+	installation of the new formatted output machinery.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* src/c_stream.cc, src/c_stream.h, src/c_streambuf_format.cc: Better
+	name.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* src/c_stream.cc, src/c_stream.h, src/c_streambuf_format.cc: Bug
+	fix: ostringstream.str() returns a temporary.
+
+2009-03-23  Enea Zaffanella <zaffanella@spartacus.cs.unipr.it>
+
+	* tests/Octagonal_Shape/affineimage1.cc: Added a test.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* src/c_stream.cc, src/c_stream.h, src/c_streambuf.defs.hh,
+	src/c_streambuf.inlines.hh, src/c_streambuf_format.cc,
+	src/c_streambuf_format.defs.hh: Separated wrap before from wrap
+	after. Bug fixes.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/OR_Matrix.inlines.hh, src/Octagonal_Shape.inlines.hh,
+	src/Octagonal_Shape.templates.hh: Readability improvements.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/OR_Matrix.inlines.hh: Fixed a bug (that is inconsequential for
+	the current code base).  We were using `m % 2 == 1' instead of `m %
+	2 != 0', with `m' a signed number that could be negative.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* src/c_stream.cc, src/c_stream.h: Added ppl_io_ostream_buffer_clear
+	function.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* src/c_stream.cc, src/c_stream.h: Added write functions for native
+	types.
+
+2009-03-23  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* src/Makefile.am, src/c_stream.cc, src/c_stream.h,
+	src/c_streambuf.cc, src/c_streambuf.defs.hh,
+	src/c_streambuf.inlines.hh, src/c_streambuf_format.cc,
+	src/c_streambuf_format.defs.hh, src/c_streambuf_format.inlines.hh,
+	src/c_streambuf_format.types.hh: Added filtered streams. Implemented
+	format filter.
+
+2009-03-23  Enea Zaffanella <zaffanella@spartacus.cs.unipr.it>
+
+	* doc/Makefile.am: Add dependencies between HTML manuals for
+	parallel builds.  The distributed built HTML manuals logically
+	depend on the built tag file, which is not distributed; hence a
+	direct dependency cannot be added (it would break a `make distcheck'
+	check). As a workaround, they now depend on the core HTML manual,
+	which is built _and_ distributed.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/OR_Matrix.inlines.hh: Obsolete FIXME removed.
+
+2009-03-23  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* src/Octagonal_Shape.templates.hh: Little formatting improvement.
+
+2009-03-23  Enea Zaffanella <zaffanella@cs.unipr.it>
+
+	* src/pretty_print.cc, src/pretty_print.hh: Use consistent parameter
+	names in helper function wrap.
+
+2009-03-22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* demos/ppl_lpsol/expected_mpz_a: Updated to reflect the new way
+	`ppl_lpsol' is invoked.
+
+2009-03-22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Makefile.am, Watchdog/Makefile.am, Watchdog/pwl-config.sed,
+	ppl-config.sed: Tightened the machinery used to generate the
+	configuration headers.
+
+2009-03-22  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .gitignore, Makefile.am, Watchdog/Makefile.am,
+	Watchdog/configure.ac, Watchdog/pwl-config.sed, configure.ac,
+	ppl-config.sed: New machinery to create ppl-config.h and
+	pwl-config.h.
+
+2009-03-21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, configure.ac: Minimum Autoconf version
+	brought back to 2.61.
+
+2009-03-21  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* .gitignore, NEWS, Watchdog/.gitignore, Watchdog/configure.ac,
+	Watchdog/m4/Makefile.am, Watchdog/m4/ax_prefix_config_h.m4,
+	Watchdog/src/Makefile.am, configure.ac, instchk.hh, m4/Makefile.am,
+	m4/ac_check_fpu_control.m4, m4/ac_check_gmp.m4,
+	m4/ac_cxx_attribute_weak.m4, m4/ac_cxx_double_binary_format.m4,
+	m4/ac_cxx_double_exact_output.m4, m4/ac_cxx_flexible_arrays.m4,
+	m4/ac_cxx_float_binary_format.m4, m4/ac_cxx_float_exact_output.m4,
+	m4/ac_cxx_ieee_inexact_flag.m4, m4/ac_cxx_limit_memory.m4,
+	m4/ac_cxx_long_double_binary_format.m4,
+	m4/ac_cxx_long_double_exact_output.m4,
+	m4/ac_cxx_proper_long_double.m4, m4/ac_cxx_remainder_bug.m4,
+	m4/ax_prefix_config_h.m4: Got rid of AX_PREFIX_CONFIG_H.
+
+2009-03-20  Roberto Bagnara <bagnara@cs.unipr.it>
+
+	* Watchdog/configure.ac, configure.ac, m4/ac_prog_java.m4,
+	m4/ac_prog_javac.m4: Avoid using obsolete Autoconf macros.
+
+2009-02-22  Abramo Bagnara <abramo.bagnara@gmail.com>
+
+	* .cvsignore, .gitignore, Watchdog/.cvsignore, Watchdog/.gitignore,
+	Watchdog/doc/.cvsignore, Watchdog/doc/.gitignore,
+	Watchdog/m4/.cvsignore, Watchdog/m4/.gitignore,
+	Watchdog/src/.cvsignore, Watchdog/src/.gitignore,
+	Watchdog/tests/.cvsignore, Watchdog/tests/.gitignore,
+	Watchdog/utils/.cvsignore, Watchdog/utils/.gitignore,
+	debian/.cvsignore, debian/.gitignore, demos/.cvsignore,
+	demos/.gitignore, demos/ppl_lcdd/.cvsignore,
+	demos/ppl_lcdd/.gitignore, demos/ppl_lcdd/examples/.cvsignore,
+	demos/ppl_lcdd/examples/.gitignore, demos/ppl_lpsol/.cvsignore,
+	demos/ppl_lpsol/.gitignore, demos/ppl_lpsol/examples/.cvsignore,
+	demos/ppl_lpsol/examples/.gitignore, devtools/.cvsignore,
+	devtools/.gitignore, doc/.cvsignore, doc/.gitignore,
+	fedora/.cvsignore, fedora/.gitignore, interfaces/.cvsignore,
+	interfaces/.gitignore, interfaces/C/.cvsignore,
+	interfaces/C/.gitignore, interfaces/C/tests/.cvsignore,
+	interfaces/C/tests/.gitignore, interfaces/Java/.cvsignore,
+	interfaces/Java/.gitignore, interfaces/Java/jni/.cvsignore,
+	interfaces/Java/jni/.gitignore,
+	interfaces/Java/parma_polyhedra_library/.cvsignore,
+	interfaces/Java/parma_polyhedra_library/.gitignore,
+	interfaces/Java/tests/.cvsignore, interfaces/Java/tests/.gitignore,
+	interfaces/OCaml/.cvsignore, interfaces/OCaml/.gitignore,
+	interfaces/OCaml/tests/.cvsignore,
+	interfaces/OCaml/tests/.gitignore, interfaces/Prolog/.cvsignore,
+	interfaces/Prolog/.gitignore, interfaces/Prolog/Ciao/.cvsignore,
+	interfaces/Prolog/Ciao/.gitignore,
+	interfaces/Prolog/GNU/.cvsignore, interfaces/Prolog/GNU/.gitignore,
+	interfaces/Prolog/SICStus/.cvsignore,
+	interfaces/Prolog/SICStus/.gitignore,
+	interfaces/Prolog/SWI/.cvsignore, interfaces/Prolog/SWI/.gitignore,
+	interfaces/Prolog/XSB/.cvsignore, interfaces/Prolog/XSB/.gitignore,
+	interfaces/Prolog/YAP/.cvsignore, interfaces/Prolog/YAP/.gitignore,
+	interfaces/Prolog/tests/.cvsignore,
+	interfaces/Prolog/tests/.gitignore, m4/.cvsignore, m4/.gitignore,
+	src/.cvsignore, src/.gitignore, tests/.cvsignore, tests/.gitignore,
+	tests/Ask_Tell/.cvsignore, tests/Ask_Tell/.gitignore,
+	tests/BD_Shape/.cvsignore, tests/BD_Shape/.gitignore,
+	tests/Box/.cvsignore, tests/Box/.gitignore, tests/Grid/.cvsignore,
+	tests/Grid/.gitignore, tests/MIP_Problem/.cvsignore,
+	tests/MIP_Problem/.gitignore, tests/Octagonal_Shape/.cvsignore,
+	tests/Octagonal_Shape/.gitignore,
+	tests/Partially_Reduced_Product/.cvsignore,
+	tests/Partially_Reduced_Product/.gitignore,
+	tests/Polyhedron/.cvsignore, tests/Polyhedron/.gitignore,
+	tests/Powerset/.cvsignore, tests/Powerset/.gitignore,
+	utils/.cvsignore, utils/.gitignore: Replaced .cvsignore with
+	.gitignore.

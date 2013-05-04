@@ -1,23 +1,94 @@
-2011-04-28  Release Manager
+2013-04-12  Release Manager
 
-	* GCC 4.5.3 released.
+	* GCC 4.6.4 released.
 
-2010-12-16  Release Manager
+2012-03-01  Release Manager
 
-	* GCC 4.5.2 released.
+	* GCC 4.6.3 released.
 
-2010-07-31  Release Manager
+2012-02-09  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 4.5.1 released.
+	Backported from mainline
+	2012-01-19  Jakub Jelinek  <jakub@redhat.com>
 
-2010-06-10  Iain Sandoe  <iains@gcc.gnu.org>
+	PR libmudflap/40778
+	* testsuite/libmudflap.c/fail68-frag.c: New test.
+
+2011-11-20  Andreas Tobler  <andreast@fgznet.ch>
+
+	* configure: Regenerate.
+
+2011-10-26  Release Manager
+
+	* GCC 4.6.2 released.
+
+2011-07-25  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	Revert:
+	2011-07-15  Jakub Jelinek  <jakub@redhat.com>
+
+	PR testsuite/49753
+	PR tree-optimization/49309
+	* testsuite/libmudflap.c++/pass68-frag.cxx: New test.
+
+2011-07-15  Jakub Jelinek  <jakub@redhat.com>
+
+	PR testsuite/49753
+	PR tree-optimization/49309
+	* testsuite/libmudflap.c++/pass68-frag.cxx: New test.
+
+2011-06-27  Release Manager
+
+	* GCC 4.6.1 released.
+
+2011-03-25  Release Manager
+
+	* GCC 4.6.0 released.
+
+2011-02-13  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	* configure: Regenerate.
+
+2011-01-03  Jakub Jelinek  <jakub@redhat.com>
+
+	* mf-runtime.c (__mf_usage): Update copyright notice dates.
+
+2010-10-31  Jason Merrill  <jason@redhat.com>
+
+	PR testsuite/20003
+	* testsuite/libmudflap.cth/pass40-frag.c: Increase timeout to 30.
+
+2010-08-20  Uros Bizjak  <ubizjak@gmail.com>
+
+	* testsuite/libmudflap.c++/pass41-frag.cxx (dg-prune-output):
+	New dg directive.
+
+2010-06-09  Iain Sandoe  <iains@gcc.gnu.org>
 
 	PR bootstrap/43170
 	* configure: Regenerate.
 
-2010-04-14  Release Manager
+2010-05-16  Uros Bizjak  <ubizjak@gmail.com>
 
-	* GCC 4.5.0 released.
+	* testsuite/libmudflap.c/pass46-frag.c (dg-options): Remove -Wall.
+
+2010-05-15  Uros Bizjak  <ubizjak@gmail.com>
+
+	* testsuite/lib/mfdg.exp (additional_prunes): New global.
+	(dg-test): Clear additional_prunes before test is run.
+	(dg-prune-output): New procedure.
+	* testsuite/lib/libmudflap.exp (libmudflap-dg-test): Do not call
+	prune_gcc_output.
+	(libmudflap-dg-prune): New procedure.
+	* testsuite/libmudflap.c++/pass57-frag.cxx (dg-prune-output):
+	New dg directive.
+
+2010-05-04  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
+
+	PR other/43620
+	* configure.ac (AM_INIT_AUTOMAKE): Add no-dist.
+	* Makefile.in: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
 
 2010-04-02  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 

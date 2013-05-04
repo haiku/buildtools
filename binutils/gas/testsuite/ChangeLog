@@ -1,1103 +1,1341 @@
-2008-09-15  Alan Modra  <amodra@bigpond.net.au>
+2013-03-08  Christian Groessler  <chris@groessler.org>
 
-	* gas/all/gas.exp: Don't run redef tests on a bunch of targets.
-	* gas/elf/elf.exp: Likewise.
+	Backport from mainline:
 
-2008-09-06  Richard Sandiford  <rdsandiford@googlemail.com>
+	2012-10-26  Christian Groessler  <chris@groessler.org>
 
-	* gas/mips/cfi-n64-1.s, gas/mips/cfi-n64-1.d: New test.
-	* gas/mips/mips.exp: Run it.
+	* gas/z8k/z8k.exp: Run translate-ops test.
+	* gas/z8k/translate-ops.s: New file.
+	* gas/z8k/translate-ops.d: New file.
 
-2008-09-05  Nick Clifton  <nickc@redhat.com>
+2013-03-05  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-	* gas/arm/abs12.d: Update expected disassembly.
-	* gas/arm/tls_vxworks.d: Likewise.
-	* gas/arm/unwind_vxworks.d: Likewise.
-	* gas/arm/group-reloc-alu-encoding-bad.d: Skip for vxworks
-	targets.
-	* gas/arm/group-reloc-alu.d: Likewise.
-	* gas/arm/group-reloc-ldc-encoding-bad.d: Likewise.
-	* gas/arm/group-reloc-ldc.d: Likewise.
-	* gas/arm/group-reloc-ldr-encoding-bad.d: Likewise.
-	* gas/arm/group-reloc-ldr.d: Likewise.
-	* gas/arm/group-reloc-ldrs-encoding-bad.d: Likewise.
-	* gas/arm/group-reloc-ldrs.d: Likewise.
-	* gas/arm/local_function.d: Likewise.
-	* gas/arm/mapshort-elf.d: Likewise.
-	* gas/arm/undefined.d: Likewise.
+	* gas/aarch64/diagnostic.s: Add test.
+	* gas/aarch64/diagnostic.l: Update.
+	* gas/aarch64/illegal.s: Add test.
+	* gas/aarch64/illegal.l: Update.
+	* gas/aarch64/fpmov.s: New file.
+	* gas/aarch64/fpmov.d: New file.
 
-2008-09-04  Christian Groessler  <chris@groessler.org>
+2013-02-15  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-	* lib/gas-defs.exp (run_dump_test): If the test expects an error,
-	fail the test if gas doesn't report an error.
+	* gas/aarch64/system.s: Add tests.
+	* gas/aarch64/system.d: Update.
 
-2008-08-28  Jan Beulich  <jbeulich@novell.com>
+2013-02-12  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-	* gas/i386/intel.s: Add retf.
-	* gas/i386/intel.{d,e}: Adjust.
-	* gas/i386/opcode-intel.d: Replace lret with retf.
+	* gas/aarch64/alias.s: Add new tests.
+	* gas/aarch64/alias.d: Update.
+	* gas/aarch64/no-aliases.d: Update.
 
-2008-08-28  Jan Beulich  <jbeulich@novell.com>
+2013-02-12  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-	* gas/i386/gas/i386/opcode-suffix.d: Add suffixes to cmovXX.
+	* gas/aarch64/diagnostic.s: Add test.
+	* gas/aarch64/diagnostic.l: Update.
 
-2008-08-28  H.J. Lu  <hongjiu.lu@intel.com>
+2013-02-12  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-	* gas/ia64/dv-raw-err.s: Add tests for cr.iib0 and cr.iib1.
-	* gas/ia64/dv-waw-err.s: Likewise.
-	* gas/ia64/regs.s: Likewise.
+	* gas/aarch64/int-insns.d: Update.
+	* gas/aarch64/mov.d: Update.
+	* gas/aarch64/reloc-insn.d: Update.
 
-	* gas/ia64/dv-raw-err.l: Updated.
-	* gas/ia64/dv-waw-err.l: Likewise.
-	* gas/ia64/regs.d: Likewise.
+2013-02-12  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-2008-08-28  Jan Beulich  <jbeulich@novell.com>
+	* gas/aarch64/system.d: Update.
 
-	* gas/i386/string-bad.{l,s}, gas/i386/string-ok.{d,e,s}: New.
-	* gas/i386/i386.exp: Run new tests.
+2013-02-12  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-2008-08-27  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/aarch64/sysreg-1.s: Add tests of rmr_el1, rmr_el2 and rmr_el3.
+	* gas/aarch64/sysreg-1.d: Update.
+	* gas/aarch64/illegal.s: Add tests of daifset and daifclr.
+	* gas/aarch64/illegal.d: Update.
 
-	* gas/i386/intel.s: Add tests for fidivr.
+2013-02-12  Yufeng Zhang  <yufeng.zhang@arm.com>
 
-	* gas/i386/intel.d: Updated.
+	* gas/aarch64/illegal-2.s: Add test case.
+	* gas/aarch64/illegal-2.l: Likewise.
 
-2008-08-26  Jie Zhang  <jie.zhang@analog.com>
+2013-01-22  Alan Modra  <amodra@gmail.com>
 
-	* gas/bfin/arith_mode.d: New test.
-	* gas/bfin/arith_mode.s: New test.
-	* gas/bfin/invalid_arith_mode.l: New test.
-	* gas/bfin/invalid_arith_mode.s: New test.
-	* gas/bfin/bfin.exp: Add arith_mode and invalid_arith_mode.
+	Apply mainline patches
+	2012-11-23  Alan Modra  <amodra@gmail.com>
+	* gas/ppc/astest2.d: Pass -Mppc to objdump.
 
-2008-08-22  Jie Zhang  <jie.zhang@analog.com>
+	2012-11-14  Ulrich Weigand  <uweigand@de.ibm.com>
+	* gas/ppc/astest.d: Update for fixup changes.
+	* gas/ppc/astest64.d: Likewise.
+	* gas/ppc/astest2.d: Likewise.
+	* gas/ppc/astest2_64.d: Likewise.
+	* gas/ppc/test1elf32.d: Likewise.
+	* gas/ppc/test1elf64.d: Likewise.
 
-	* gas/bfin/misc.s: New test.
-	* gas/bfin/misc.d: New test.
-	* gas/bfin/bfin.exp: Add misc test.
+	2012-10-29  Alan Modra  <amodra@gmail.com>
+	* gas/cfi/cfi.exp: Remove redundant ppc test.  Exclude
+	powerpc-pe targets from cfi-common-6 test.
+	* gas/cfi/cfi-ppc-1.d: Use objdump to handle pe.
+	* gas/cfi/cfi-ppc-1.s: Don't use .type and .size.
+	* gas/ppc/ppc.exp: Exclude various tests for powerpc-pe.  Exclude
+	vle tests for le targets.
+	* gas/ppc/476.d, * gas/ppc/476.s: Update for le output.  Use .text
+	rather than section directive with quotes.
+	* gas/ppc/a2.d,	* gas/ppc/a2.s: Likewise.
+	* gas/ppc/altivec.d, * gas/ppc/altivec.s: Likewise.
+	* gas/ppc/altivec2.d: Likewise.
+	* gas/ppc/altivec_and_spe.d: Likewise.
+	* gas/ppc/astest.d: Likewise.
+	* gas/ppc/astest2.d: Likewise.
+	* gas/ppc/astest2_64.d: Likewise.
+	* gas/ppc/astest64.d: Likewise.
+	* gas/ppc/booke.d, * gas/ppc/booke.s: Likewise.
+	* gas/ppc/cell.d, * gas/ppc/cell.s: Likewise.
+	* gas/ppc/common.d, * gas/ppc/common.s: Likewise.
+	* gas/ppc/e500.d, * gas/ppc/e500.s: Likewise.
+	* gas/ppc/e500mc.d, * gas/ppc/e500mc.s: Likewise.
+	* gas/ppc/e500mc64_nop.d, * gas/ppc/e500mc64_nop.s: Likewise.
+	* gas/ppc/e5500_nop.d, * gas/ppc/e5500_nop.s: Likewise.
+	* gas/ppc/e6500.d, * gas/ppc/e6500.s: Likewise.
+	* gas/ppc/e6500_nop.d, * gas/ppc/e6500_nop.s: Likewise.
+	* gas/ppc/machine.d: Likewise.
+	* gas/ppc/power4.d, * gas/ppc/power4.s: Likewise.
+	* gas/ppc/power4_32.d, * gas/ppc/power4_32.s: Likewise.
+	* gas/ppc/power6.d, * gas/ppc/power6.s: Likewise.
+	* gas/ppc/power7.d, * gas/ppc/power7.s: Likewise.
+	* gas/ppc/ppc750ps.d, * gas/ppc/ppc750ps.s: Likewise.
+	* gas/ppc/regnames.d: Likewise.
+	* gas/ppc/simpshft.d: Likewise.
+	* gas/ppc/test1elf32.d: Likewise.
+	* gas/ppc/test1elf64.d: Likewise.
+	* gas/ppc/titan.d, * gas/ppc/titan.s: Likewise.
+	* gas/ppc/vle-reloc.s: Likewise.
+	* gas/ppc/vle-simple-1.s: Likewise.
+	* gas/ppc/vle-simple-2.s: Likewise.
+	* gas/ppc/vle-simple-3.s: Likewise.
+	* gas/ppc/vle-simple-4.s: Likewise.
+	* gas/ppc/vle-simple-5.s: Likewise.
+	* gas/ppc/vle-simple-6.s: Likewise.
+	* gas/ppc/vle.s: Likewise.
+	* gas/ppc/vsx.d, * gas/ppc/vsx.s: Likewise.
 
-2008-08-21  Richard Henderson  <rth@redhat.com>
+	2012-10-26  Alan Modra  <amodra@gmail.com>
+	* gas/ppc/power4.s: Fix invalid lq offsets.
+	* gas/ppc/power4.d: Update.
 
-	* gas/cfi/cfi-common-1.d: Allow for differing offsets, and
-	for DW_CFA_offset_extended_sf results.  Allow for differing nops.
-	* gas/cfi/cfi-hppa-1.d: Invert data alignment sign.  Change 
-	offsets to match 64-bit offsets.
-	* gas/cfi/cfi.exp: Don't run common tests on hppa64.
+	2012-10-22  Peter Bergner  <bergner@vnet.ibm.com>
+	* gas/ppc/altivec.s <vcfpsxws>: Fix opcode spelling.
 
-2008-08-20  Bob Wilson  <bob.wilson@acm.org>
-
-	* gas/all/gas.exp: Expect the redef test to fail on Xtensa.
-
-2008-08-20  H.J. Lu  <hongjiu.lu@intel.com>
-
-	AVX Programming Reference (August, 2008)
-	* gas/i386/avx.s: Add AES + AVX tests.
-	* gas/i386/arch-10.s: Likewise.
-	* gas/i386/sse2avx.s: Likewise.
-	* gas/i386/x86-64-arch-2.s: Likewise.
-	* gas/i386/x86-64-avx.s: Likewise.
-	* gas/i386/x86-64-sse2avx.s: Likewise.
-
-	* gas/i386/arch-10.d: Updated.
-	* gas/i386/arch-10-1.l: Likewise.
-	* gas/i386/arch-10-2.l: Likewise.
-	* gas/i386/arch-10-3.l: Likewise.
-	* gas/i386/arch-10-4.l: Likewise.
-	* gas/i386/avx.d: Likewise.
-	* gas/i386/avx-intel.d: Likewise.
-	* gas/i386/sse2avx.d: Likewise.
-	* gas/i386/x86-64-arch-2.d: Likewise.
-	* gas/i386/x86-64-avx.d: Likewise.
-	* gas/i386/x86-64-avx-intel.d: Likewise.
-	* gas/i386/x86-64-sse2avx.d: Likewise.
-
-	* gas/i386/i386.exp: Run arch-avx-1, arch-avx-1-1 and
-	arch-avx-1-2.
-
-	* gas/i386/arch-avx-1.d: New.
-	* gas/i386/arch-avx-1.s: Likewise.
-	* gas/i386/arch-avx-1-1.l: Likewise.
-	* gas/i386/arch-avx-1-1.s: Likewise.
-	* gas/i386/arch-avx-1-2.l: Likewise.
-	* gas/i386/arch-avx-1-2.s: Likewise.
-
-2008-08-15  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
-
-	* gas/s390/esa-g5.d: lxr operands are floating point.
-	* gas/s390/esa-g5.s: Likewise.
-	* gas/testsuite/gas/s390/zarch-z9-ec.d: rrdtr, rrxtr third
-	operands is gpr.
-	* gas/testsuite/gas/s390/zarch-z9-ec.s: Likewise.
-
-2008-08-12  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/amd.s: Add syscall and sysret.  Remove padding.
-
-	* gas/i386/amd.d: Updated.
-	* gas/i386/x86-64-opcode.d: Likewise.
-
-	* gas/i386/i386.exp: Run x86-64-intel64.
-
-	* gas/i386/x86-64-intel64.d: New.
-	* gas/i386/x86-64-intel64.s: Likewise.
-
-	* gas/i386/x86-64-opcode.s: Add syscall and sysret.
-
-2008-08-08  Richard Sandiford  <rdsandiford@googlemail.com>
-
-	* gas/mips/call-nonpic-1.s, gas/mips/call-nonpic-1.d: New test.
-	* gas/mips/mips.exp: Run it.
-
-2008-08-06  Richard Sandiford  <rdsandiford@googlemail.com>
-
-	* gas/mips/elf-rel8-mips16.d, gas/mips/elf-rel8-mips16.s,
-	* gas/mips/elf-rel9-mips16.d, gas/mips/elf-rel9-mips16.s,
-	* gas/mips/elf-rel13-mips16.d, gas/mips/elf-rel13-mips16.s: New tests.
-	* gas/mips/mips.exp: Run them.
-
-2008-08-01  Peter Bergner  <bergner@vnet.ibm.com>
-
-	* gas/ppc/power7.d: New.
+	2012-10-05  Peter Bergner  <bergner@vnet.ibm.com>
+	* gas/ppc/power7.d: Add tests for mfppr, mfppr32, mtppr and mtppr32.
 	* gas/ppc/power7.s: Likewise.
-	* gas/ppc/ppc.exp: Run power7 test.
+	* gas/ppc/altivec.d: Add tests for all legacy Altivec instructions.
+	* gas/ppc/altivec.s: Likewise.
+	* gas/ppc/altivec2.d: New test file.
+	* gas/ppc/altivec2.s: Likewise.
+	* gas/ppc/ppc.exp: Run it.
 
-2008-08-01  H.J. Lu  <hongjiu.lu@intel.com>
+	2012-08-01  James Lemke  <jwlemke@codesourcery.com>
+	* gas/cfi/cfi-ppc-1.d: Allow for code alignment of 2 or 4.
 
-	* gas/cfi/cfi-i386.s: Remove tests for AVX register maps.
-	* gas/cfi/cfi-x86_64.s: Likewise.
-
-	* gas/cfi/cfi-i386.d: Updated.
-	* gas/cfi/cfi-x86_64.d: Likewise.
-
-2008-07-31  Peter Bergner  <bergner@vnet.ibm.com>
-
-	* gas/ppc/cell.s: Add altivec instructions.
-	* gas/ppc/cell.d: Update expected output.
-	* gas/ppc/power6.d: New.
-	* gas/ppc/power6.s: Likewise.
-	* gas/ppc/ppc.exp (powerpc64*-*-*): Move cell from here to...
-	(powerpc*-*-*): Here.  Run power6 test.
-
-2008-07-24  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/nops-1.d: Add -mtune=generic32.
-	* gas/i386/nops-2.d: Likewise.
-	* gas/i386/nops-3.d: Likewise.
-
-	* gas/i386/x86-64-nops-1.d: Add -mtune=generic64.
-	* gas/i386/x86-64-nops-2.d: Likewise.
-	* gas/i386/x86-64-nops-3.d: Likewise.
-	* gas/i386/x86-64-nops-4.d: Likewise.
-
-2008-07-22  Chao-ying Fu  <fu@mips.com>
-
-	* gas/mips/tls-ill.l: Update error message.
-	* gas/mips/octeon-ill.l: Likewise.
-
-2008-07-14  Jie Zhang  <jie.zhang@analog.com>
-
-	* gas/bfin/{bit2.s, cache2.s, control_code2.s, event2.s,
-	logical2.s, move2.s, parallel.s, parallel2.s, parallel3.s,
-	parallel4.s, shift2.s, stack2.s, video2.s}: Remove DOS line
-	endings.
-
-2008-07-10  Richard Sandiford  <rdsandiford@googlemail.com>
-
-	* gas/mips/mips16-vis-1.d, gas/mips/mips16-vis-1.s: New tests.
-	* gas/mips/mips.exp: Run them.
-
-2008-07-09  Kai Tietz  <kai.tietz@onevision.com>
-
-	* gas/i386/i386.exp (x86-64-pcrel): Disable for w64.
-	(x86-64-sse5): Likewise.
-	(x86-64-opcode-inval): Likewise.
-	(x86-64-opcode-inval-intel): Likewise.
-	(x86-64-w64-pcrel): New.
-	* gas/i386/x86-64-w64-pcrel.d: New.
-
-2008-07-07  Adam Nemet  <anemet@caviumnetworks.com>
-
-	* gas/mips/mips32.s: Move out coprocessor2 insns from here ...
-	* gas/mips/mips32-cp2.s: ... to here.
-	* gas/mips/mips32.d: Update.
-	* gas/mips/mips32-cp2.d: New file.
-	* gas/mips/mips32r2.s: Move out coprocessor2 insns from here ...
-	* gas/mips/mips32r2-cp2.s: ... to here.
-	* gas/mips/mips32r2.d: Update.
-	* gas/mips/mips32r2-cp2.d: New file.
-	* gas/mips/mips64.s: Move out coprocessor2 insns from here ...
-	* gas/mips/mips64-cp2.s: ... to here.
-	* gas/mips/mips64.d: Update.
-	* gas/mips/mips64-cp2.d: New file.
-	* gas/mips/mips.exp: Run mips32-cp2, mips32r2-cp2 and mips64-cp
-	except for Octeon.
-	* gas/mips/octeon.s: Add supported coprocessor insns.  Move pop
-	down to keep alphabetical order.
-	* gas/mips/octeon.d: Update.
-	* gas/mips/octeon-ill.s: Add unsupported coprocessor insns.
-	* gas/mips/octeon-ill.l: Update.
-
-2008-07-07  Paul Brook  <paul@codesourcery.com>
-
-	* gas/arm/movw-local.d: New test.
-	* gas/arm/movw-local.s: New test. 
-
-2008-06-27  Chao-ying Fu  <fu@mips.com>
-
-	* gas/mips/odd-float.d: Replace ... with #pass.
-	* gas/mips/ldstla-32-shared.d: Add -march=mips1 for as.
-	* gas/mips/ldstla-32.d: Likewise.
-	* gas/mips/mips16-hilo-match.d: Add -mabi=32 -march=mips1 for as.
-	
-2008-06-19  Chao-ying Fu  <fu@mips.com>
-
-	* gas/mips/e32-rel2.d: Add -march=mips1 for as.
-
-2008-06-16  Hans-Peter Nilsson  <hp@bitrange.com>
-
-	PR gas/6607
-	* gas/mmix/err-loc-10.s, gas/mmix/err-loc-9.s, gas/mmix/loc-6.d,
-	gas/mmix/loc-6.s, gas/mmix/loc-7.d, gas/mmix/loc-7.s: New tests.
-
-2008-06-12  Adam Nemet  <anemet@caviumnetworks.com>
-
-	* gas/mips/octeon.s, gas/mips/octeon.d: Add tests for baddu,
-	bbit*, cins*, dmul, pop, dpop, exts*, mtm*, mtp*, syncs, syncw,
-	syncws, vm3mulu, vm0 and vmulu.
-	* gas/mips/octeon-ill.s, gas/mips/octeon-ill.s: New test.
-	* gas/mips/mips.exp: Run it.  Run octeon test with
-	run_dump_test_arches.
-
-	* gas/mips/octeon.s, gas/mips/octeon.d: Add tests for seq* and sne*.
-	* gas/mips/octeon-ill.s, gas/mips/octeon-ill.s: Add tests for seqi
-	and snei.
-
-2008-06-03  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run sse-check-none and
-	x86-64-sse-check-none.
-
-	* gas/i386/sse-check-none.d: New.
-	* gas/i386/sse-check-none.s: Likewise.
-	* gas/i386/x86-64-sse-check-none.d: Likewise.
-
-2008-06-03  Paul Brook  <paul@codesourcery.com>
-
-	* gas/arm/thumb32.d: Update expected output.
-
-2008-05-30  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/x86-64-avx.s: Add tests for vmovd on 64bit operands.
-
-	* gas/i386/x86-64-sse2avx.s: Add tests for movd on 64bit
-	operands.
-
-	* gas/testsuite/gas/i386/x86-64-avx.d: Updated.
-	* gas/testsuite/gas/i386/x86-64-avx-intel.d: Likewise.
-	* gas/testsuite/gas/i386/x86-64-sse2avx.d: Likewise.
-
-2008-05-27  Martin Schwidefsky  <schwidefsky@de.ibm.com>
-
-	* gas/s390/zarch-z990.d (idte): Fix operand format.
-
-2008-05-22  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/sse-noavx.s: Add tests for cvtpd2pi, cvtpi2pd and
-	cvttpd2pi.
-	* gas/i386/x86-64-sse-noavx.s: Likewise.
-
-	* gas/i386/sse-noavx.d: Updated.
-	* gas/i386/x86-64-sse-noavx.d: Likewise.
-
-2008-05-22  H.J. Lu  <hongjiu.lu@intel.com>
-
-	PR gas/6517
-	* gas/i386/avx.s: Add tests for unspecified memory operand
-	size in Intel syntax.
-	* gas/i386/x86-64-avx.s: Likewise.
-
-	* gas/i386/simd.s: Add tests for cvtsi2ss and cvtsi2sd with
-	unspecified memory operand size in Intel syntax.
-
-	* gas/i386/avx.d: Updated.
-	* gas/i386/avx-intel.d: Likewise.
-	* gas/i386/simd.d: Likewise.
-	* gas/i386/simd-intel.d: Likewise.
-	* gas/i386/simd-suffix.d: Likewise.
-	* gas/i386/x86-64-avx.d: Likewise.
-	* gas/i386/x86-64-avx-intel.d: Likewise.
-
-2008-05-21  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/sse-noavx.s: Add tests for movdq2q and movq2dq.
-	* gas/i386/x86-64-sse-noavx.s: Likewise.
-
-	* gas/i386/sse-noavx.d: Updated.
-	* gas/i386/x86-64-sse-noavx.d: Likewise.
-
-2008-05-09  Catherine Moore  <clm@codesourcery.com>
-
-	* gas/mips/mips16-hilo-match.s: New test.
-	* gas/mips/mip16-hilo-match.d: New test output.
-
-2008-05-02  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run movbe, movbe-intel, inval-movbe, ept,
-	ept-intel, inval-ept, x86-64-movbe, x86-64-movbe-intel,
-	x86-64-inval-movbe.  x86-64-ept, x86-64-ept-intel and
-	x86-64-inval-ept.
-
-	* gas/i386/arch-10.s: Add movbe and invept.
-	* gas/i386/x86-64-arch-2.s: Likewise.
-
-	* gas/i386/ept.d: New file
-	* gas/i386/ept-intel.d: Likewise.
-	* gas/i386/ept.s: Likewise.
-	* gas/i386/inval-ept.l: Likewise.
-	* gas/i386/inval-ept.s: Likewise.
-	* gas/i386/inval-movbe.l: Likewise.
-	* gas/i386/inval-movbe.s: Likewise.
-	* gas/i386/movbe.d: Likewise.
-	* gas/i386/movbe-intel.d: Likewise.
-	* gas/i386/movbe.s: Likewise.
-	* gas/i386/x86-64-inval-ept.l: Likewise.
-	* gas/i386/x86-64-inval-ept.s: Likewise.
-	* gas/i386/x86-64-inval-movbe.l: Likewise.
-	* gas/i386/x86-64-inval-movbe.s: Likewise.
-	* gas/i386/x86-64-ept.d: Likewise.
-	* gas/i386/x86-64-ept-intel.d: Likewise.
-	* gas/i386/x86-64-ept.s: Likewise.
-	* gas/i386/x86-64-movbe.d: Likewise.
-	* gas/i386/x86-64-movbe-intel.d: Likewise.
-	* gas/i386/x86-64-movbe.s: Likewise.
-
-	* gas/i386/arch-10.d: Updated.
-	* gas/i386/arch-10-1.l: Likewise.
-	* gas/i386/arch-10-2.l: Likewise.
-	* gas/i386/arch-10-3.l: Likewise.
-	* gas/i386/arch-10-4.l: Likewise.
-	* gas/i386/x86-64-arch-2.d: Likewise.
-
-2008-04-28  Adam Nemet  <anemet@caviumnetworks.com>
-
-	* gas/mips/mips4.s: Split out fp instruction from here ...
-	* gas/mips/mips4-fp.s: ... to here.
-	* gas/mips/mips4.d: Update.
-	* gas/mips/mips4-fp.l: New file. Check error messages with
-	-msoft-float.
-	* gas/mips/mips4-fp.d: New file. Check disassembly with
-	hard-float.
-
-	* gas/mips/mips32r2.s: Split out fp instructions from here ...
-	* gas/mips/mips32r2-fp32.s: ... to here.
-	* gas/mips/mips32r2.d: Update.
-	* gas/mips/mips32r2-fp32.l: New file.  Check error messages with
-	-msoft-float.
-	* gas/mips/mips32r2-fp32.d: New file.  Check disassembly with
-	hard-float.
-
-	* gas/mips/mips32r2-ill-nofp.s, gas/mips/mips32r2-ill-nofp.l: New
-	test derived from mips32r2-ill.
-
-	* gas/mips/mips32-sf32.l: New list test for mips32-sf32.s to check
-	error messages for soft-float targets.
-
-	* gas/mips/mips-macro-ill-sfp.s, gas/mips/mips-macro-ill-sfp.l:
-	New test for -msingle-float.
-	* gas/mips/mips-macro-ill-nofp.s, gas/mips/mips-macro-ill-nofp.l:
-	New test for -msoft-float.
-	* gas/mips/mips-hard-float-flag.s,
-	gas/mips/mips-hard-float-flag.l: New test for -mhard-float.
-	* gas/mips/mips-double-float-flag.s,
-	gas/mips/mips-double-float-flag.l: New test for -mdouble-float.
-
-	* gas/mips/mips.exp: Run new mips4-fp and mips32r2-fp dump tests.
-	Run mips4-fp and mips32r2-fp list tests with -msoft-float.  Run
-	new mips32r2-ill-nofp with -msoft-float.  Run new mips32-sf32 list
-	test with -msoft-float.  Run new mips-macro-ill-sfp test with
-	-msingle-float.  Run new mips-macro-ill-nofp test with
-	-msoft-float.  Run new mips-hard-float-flag and
-	mips-double-float-flag tests.
-
-2008-04-23  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run sse-noavx and x86-64-sse-noavx.
-
-	* gas/i386/sse-noavx.d: New.
-	* gas/i386/sse-noavx.s: Likewise.
-	* gas/i386/x86-64-sse-noavx.d: Likewise.
-	* gas/i386/x86-64-sse-noavx.s: Likewise.
-
-2008-04-23  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/sse2.s: Add tests for pmuludq, paddq and psubq.
-	* gas/i386/x86-64-simd.s: Likewise.
-
-	* gas/i386/sse2.d: Updated.
-	* gas/i386/x86-64-simd.d: Likewise.
-	* gas/i386/x86-64-simd-intel.d: Likewise.
-	* gas/i386/x86-64-simd-suffix.d: Likewise.
-
-2008-04-23  David S. Miller  <davem@davemloft.net>
-
-	* gas/sparc/pc2210.d: New file.
-	* gas/sparc/pc2210.d: Likewise.
-	* gas/sparc/sparc.exp: Run new %pc22/%pc10 relocation test.
-
-2008-04-18  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/arch-10.d: Updated.
-	* gas/i386/avx.d: Likewise.
-	* gas/i386/avx-intel.d: Likewise.
-	* gas/i386/x86-64-arch-2.d: Likewise.
-	* gas/i386/x86-64-avx.d: Likewise.
-	* gas/i386/x86-64-avx-intel.d: Likewise.
-
-2008-04-16  Dwarakanath Rajagopal  <dwarak.rajagopal@amd.com>
-	    Michael Meissner  <michael.meissner@amd.com>
-
-	* gas/i386/x86-64-sse5.s: Add protX tests to allow memory in the
-	middle operand.
-	* gas/i386/x86-64-sse5.d: Likewise.
-	
-2008-04-16  David S. Miller  <davem@davemloft.net>
-
-	* gas/sparc/gotops32.d: New.
-	* gas/sparc/gotops32.s: Likewise.
-	* gas/sparc/gotops64.d: Likewise.
-	* gas/sparc/gotops64.s: Likewise.
-	* gas/sparc/sparc.exp: Run new gotdata tests.
-
-2008-04-15  Andrew Stubbs  <andrew.stubbs@st.com>
-
-	* gas/sh/arch/arch.exp: Align PC-relative instructions in the gererated
-	assembly files.
-	* gas/sh/arch/sh-dsp.s: Regenerate.
-	* gas/sh/arch/sh.s: Regenerate.
-	* gas/sh/arch/sh2.s: Regenerate.
-	* gas/sh/arch/sh2a-nofpu-or-sh3-nommu.s: Regenerate.
-	* gas/sh/arch/sh2a-nofpu-or-sh4-nommu-nofpu.s: Regenerate.
-	* gas/sh/arch/sh2a-nofpu.s: Regenerate.
-	* gas/sh/arch/sh2a-or-sh3e.s: Regenerate.: Regenerate.
-	* gas/sh/arch/sh2a-or-sh4.s: Regenerate.
-	* gas/sh/arch/sh2a.s: Regenerate.
-	* gas/sh/arch/sh2e.s: Regenerate.
-	* gas/sh/arch/sh3-dsp.s: Regenerate.
-	* gas/sh/arch/sh3-nommu.s: Regenerate.
-	* gas/sh/arch/sh3.s: Regenerate.
-	* gas/sh/arch/sh3e.s: Regenerate.
-	* gas/sh/arch/sh4-nofpu.s: Regenerate.
-	* gas/sh/arch/sh4-nommu-nofpu.s: Regenerate.
-	* gas/sh/arch/sh4.s: Regenerate.
-	* gas/sh/arch/sh4a-nofpu.s: Regenerate.
-	* gas/sh/arch/sh4a.s: Regenerate.
-	* gas/sh/arch/sh4al-dsp.s: Regenerate.
-	* gas/sh/err-mova.s: New test.
-
-2008-04-14  Edmar Wienskoski  <edmar@freescale.com>
-
-	* gas/ppc/e500mc.s, gas/ppc/e500mc.d: New test.
-	* gas/ppc/ppc.exp: Run the new test
-
-2008-04-11  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/lns/lns-big-delta.d: Updated.
-	* gas/lns/lns-common-1.d: Likewise.
-	* gas/lns/lns-common-1-alt.d: Likewise.
-	* gas/lns/lns-duplicate.d: Likewise.
-
-2008-04-10  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run sse-check, sse-check-warn,
-	sse-check-error, x86-64-sse-check, x86-64-sse-check-warn and
-	x86-64-sse-check-error.
-
-	* gas/i386/sse-check.d: New.
-	* gas/i386/sse-check.s: Likewise.
-	* gas/i386/sse-check-error.l: Likewise.
-	* gas/i386/sse-check-error.s: Likewise.
-	* gas/i386/sse-check-warn.d: Likewise.
-	* gas/i386/sse-check-warn.e: Likewise.
-	* gas/i386/x86-64-sse-check.d: Likewise.
-	* gas/i386/x86-64-sse-check-error.l: Likewise.
-	* gas/i386/x86-64-sse-check-error.s: Likewise.
-	* gas/i386/x86-64-sse-check-warn.d: Likewise.
-
-2008-04-10  Santiago Urueña  <suruena@gmail.com>
-
-	* gas/all/gas.exp: Check the performance of the -ag command line
-	switch.
-
-2008-04-10  Andreas Krebbel  <krebbel1@de.ibm.com>
-
-	* gas/s390/zarch-z10.d: Map the compare and branch variants
-	with odd condition code mask to version with an even mask.
-
-2008-04-07  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/att-regs.s: Add AVX register test.
-	* gas/i386/intel-regs.s: Likewise.
-
-	* gas/i386/att-regs.d: Updated.
-	* gas/i386/intel-regs.d: Likewise.
-
-2008-04-07  Kaz Kojima  <kkojima@rr.iij4u.or.jp>
-
-	PR gas/6043
-	* gas/sh/sh64/eh-1.d: New.
-	* gas/sh/sh64/eh-1.d: Likewise.
-
-2008-04-04  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/arch-10-1.l: Replace CLMUL with PCLMUL.
-	* gas/i386/arch-10-2.l: Likewise.
-	* gas/i386/arch-10-3.l: Likewise.
-	* gas/i386/arch-10-4.l: Likewise.
-	* gas/i386/arch-10.s: Likewise.
-	* gas/i386/clmul-intel.d: Likewise.
-	* gas/i386/clmul.d: Likewise.
-	* gas/i386/clmul.s: Likewise.
-	* gas/i386/x86-64-arch-2.s: Likewise.
-	* gas/i386/x86-64-clmul-intel.d: Likewise.
-	* gas/i386/x86-64-clmul.d: Likewise.
-	* gas/i386/x86-64-clmul.s: Likewise.
-
-	* gas/i386/arch-10.d: Replace clmul with pclmul.
-	* gas/i386/x86-64-arch-2.d: Likewise.
-
-2008-04-03  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run aes, aes-intel, x86-64-aes,
-	x86-64-aes-intel, avx, avx-intel, inval-avx, x86-64-avx,
-	x86-64-avx-intel and x86-64-inval-avx.
-
-	* gas/cfi/cfi-i386.s: Add tests for AVX register maps.
-	* gas/cfi/cfi-x86_64.s: Likewise.
-
-	* gas/i386/aes.d: New.
-	* gas/i386/aes.s: Likewise.
-	* gas/i386/aes-intel.d: Likewise.
-	* gas/i386/avx.d: Likewise.
-	* gas/i386/avx.s: Likewise.
-	* gas/i386/avx-intel.d: Likewise.
-	* gas/i386/clmul.d: Likewise.
-	* gas/i386/clmul-intel.d: Likewise.
-	* gas/i386/clmul.s: Likewise.
-	* gas/i386/i386.exp: Likewise.
-	* gas/i386/inval-avx.l: Likewise.
-	* gas/i386/inval-avx.s: Likewise.
-	* gas/i386/sse2avx.d: Likewise.
-	* gas/i386/sse2avx.s: Likewise.
-	* gas/i386/x86-64-aes.d: Likewise.
-	* gas/i386/x86-64-aes.s: Likewise.
-	* gas/i386/x86-64-aes-intel.d: Likewise.
-	* gas/i386/x86-64-avx.d: Likewise.
-	* gas/i386/x86-64-avx.s: Likewise.
-	* gas/i386/x86-64-avx-intel.d: Likewise.
-	* gas/i386/x86-64-clmul.d: Likewise.
-	* gas/i386/x86-64-clmul-intel.d: Likewise.
-	* gas/i386/x86-64-clmul.s: Likewise.
-	* gas/i386/x86-64-inval-avx.l: Likewise.
-	* gas/i386/x86-64-inval-avx.s: Likewise.
-	* gas/i386/x86-64-sse2avx.d: Likewise.
-	* gas/i386/x86-64-sse2avx.s: Likewise.
-
-	* gas/i386/arch-10.s: Add tests for AVX, AES, CLMUL and FMA.
-	* gas/i386/x86-64-arch-2.s: Likewise.
-
-	* gas/i386/rexw.s: Add AVX tests.
-
-	* gas/i386/x86-64-opcode-inval.s: Remove lds/les test.
-
-	* gas/cfi/cfi-i386.d: Updated.
-	* gas/cfi/cfi-x86_64.d: Likewise.
-	* gas/i386/arch-10.d:  Likewise.
-	* gas/i386/arch-10-1.l: Likewise.
-	* gas/i386/arch-10-2.l: Likewise.
-	* gas/i386/arch-10-3.l: Likewise.
-	* gas/i386/arch-10-4.l: Likewise.
-	* gas/i386/rexw.d: Likewise.
-	* gas/i386/x86-64-arch-2.d: Likewise.
-	* gas/i386/x86-64-opcode-inval.d: Likewise.
-	* gas/i386/x86-64-opcode-inval-intel.d: Likewise.
-
-2008-03-26  Bernd Schmidt  <bernd.schmidt@analog.com>
-
-	From Jie Zhang  <jie.zhang@analog.com>
-	* gas/bfin/load.d: Update.
-	* gas/bfin/expected_comparison_errors.l: New test.
-	* gas/bfin/expected_comparison_errors.s: New test.
-	* gas/bfin/bfin.exp: Add expected_comparison_errors.
-	* gas/bfin/expected_errors.l, gas/bfin/expected_errors.s: Add
-	tests for bad options of "multiply and multipy-accumulate to
-	accumulator" instructions.  Add new vector instruction option
-	mode tests.
-	* gas/bfin/vector2.s: Add new vector instruction option mode test.
-	* gas/bfin/vector2.d: Adjust accordingly.
-	* gas/bfin/expected_errors.l, gas/bfin/expected_errors.s:
-	Add check for mismatch of accumulator and data register.
-	* gas/bfin/arithmetic.s, gas/bfin/arithmetic.d: Add check
-	for IU option.
-
-	* gas/bfin/flow.d: Adjust since the generated labels for LOOP_BEGIN
-	and LOOP_END instruction are local now.
-	* gas/bfin/flow2.d: Likewise.
-
-	From  Mike Frysinger  <michael.frysinger@analog.com>
-	* gas/bfin/expected_errors.s, gas/bfin/expected_errors.l: Add test
-	for mismatched half registers in vector multipy-accumulate
-	instructions.
-
-	From Robin Getz  <rgetz@blackfin.uclinux.org>
-	* gas/bfin/arithmetic.d: Update to reflect spaces/capitalization in
-	recent changes in opcodes/bfin-dis.c.
-	gas/bfin/arithmetic.s: Likewise.
-	gas/bfin/bit.d: Likewise.
-	gas/bfin/bit2.d: Likewise.
-	gas/bfin/control_code.d: Likewise.
-	gas/bfin/control_code2.d: Likewise.
-	gas/bfin/event.d: Likewise.
-	gas/bfin/event2.d: Likewise.
-	gas/bfin/flow.d: Likewise.
-	gas/bfin/flow2.d: Likewise.
-	gas/bfin/load.d: Likewise.
-	gas/bfin/logical.d: Likewise.
-	gas/bfin/logical2.d: Likewise.
-	gas/bfin/move.d: Likewise.
-	gas/bfin/move2.d: Likewise.
-	gas/bfin/parallel.d: Likewise.
-	gas/bfin/parallel2.d: Likewise.
-	gas/bfin/parallel3.d: Likewise.
-	gas/bfin/parallel4.d: Likewise.
-	gas/bfin/shift.d: Likewise.
-	gas/bfin/shift2.d: Likewise.
-	gas/bfin/stack.d: Likewise.
-	gas/bfin/stack2.d: Likewise.
-	gas/bfin/store.d: Likewise.
-	gas/bfin/vector.d: Likewise.
-	gas/bfin/vector2.d: Likewise.
-	gas/bfin/video.d: Likewise.
-	gas/bfin/video2.d: Likewise.
-
-2008-03-19  Andreas Krebbel  <krebbel1@de.ibm.com>
-
-	* gas/s390/zarch-z10.d: New file.
-	* gas/s390/zarch-z10.s: New file.
-	* gas/s390/s390.exp: Run the z10 testcases.
-
-2008-03-17  Richard Sandiford  <rsandifo@nildram.co.uk>
-
-	* gas/mips/elf-rel26.d: Add -32.
-	* gas/mips/mips16-intermix.d: Likewise.
-
-2008-03-13  Nick Clifton  <nickc@redhat.com>
-
-	PR gas/5895
-	* gas/macros/exit.s: New test case.
-	* gas/macros/macros.exp: Run the new test, expect it to produce an
-	error result.
-
-2008-03-09  Paul Brook  <paul@codesourcery.com>
-
-	* gas/arm/vfpv3-d16-bad.d: New test.
-	* gas/arm/vfpv3-d16-bad.l: New test.
-
-2008-03-06  Andreas Krebbel  <krebbel1@de.ibm.com>
-
-	* gas/s390/esa-g5.d (cdfbr, cdfr, cefbr, cefr, cxfbr, cxfr,
-	dxr, fidr, fier, fixr, lzdr, lzer, lzxr, sqdr, sqer, tp): Fix
-	operand format.
-	* gas/s390/esa-g5.s: Likewise.
-	* gas/s390/zarch-z900.d (cdgbr, cdgr, cegbr, cegr, cxgbr,
-	cxgr): Likewise.
-	* gas/s390/zarch-z900.s: Likewise.
-	* gas/s390/zarch-z9-109.d (cu41, cu42): Remove mask operand.
-	* gas/s390/zarch-z9-109.s: Likewise.
-
-2008-03-04  Paul Brook  <paul@codesourcery.com>
-
-	* gas/arm/archv6m.d: New test.
-	* gas/arm/archv6m.s: New test.
-	* gas/arm/t16-bad.s: Test low register non flag setting add.
-	* gas/arm/t16-bad.l: Update expected output.
-
-2008-03-03  H.J. Lu  <hongjiu.lu@intel.com>
-
-	PR gas/5543
-	* gas/i386/i386.exp: Run inval-equ-1 and inval-equ-2.
-
-	* gas/i386/inval-equ-1.l: New.
-	* gas/i386/inval-equ-1.s: Likewise.
-	* gas/i386/inval-equ-2.l: Likewise.
-	* gas/i386/inval-equ-2.s: Likewise.
-
-2008-03-01  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/x86-64-branch.s: Add tests for 16-bit near indirect
-	branches.
-
-	* gas/i386/x86-64-inval.s: Remove tests for 16-bit near indirect
-	branches.
-
-	* gas/i386/x86-64-branch.d: Updated.
-	* gas/i386/x86-64-inval.l: Likewise.
-
-2008-02-27  Nick Clifton  <nickc@redhat.com>
-
-	PR 3134
-	* gas/h8300/pr3134.s: New test.
-	* gas/h8300/pr3134.d: Expected disassembly
-	* gas/h8300/h8300.exp: Run the new test.
-
-	* gas/h8300/h8300-coff.exp: Fix test for COFF based ports to
-	accept h8300-rtemscoff not just h8300-rtems.
-
-2008-02-26  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/jump.d: Updated for COFF.
-
-2008-02-23  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/jump.s: Add tests for far branches.
-	* gas/i386/jump16.s: Likewise.
-
-	* gas/i386/jump.d: Updated.
-	* gas/i386/jump16.d: Likewise.
-	* gas/i386/x86-64-inval.l: Likewise.
-
-	* gas/i386/x86-64-inval.s: Add tests for 16-bit near indirect
-	branches.
-
-2008-02-22  Nick Clifton  <nickc@redhat.com>
-
-	* gas/m68hc11/bug-1825.d: Update to match changes in the
-	information generated with source-in-disassembly listings.
-	* gas/m68hc11/indexed12.d: Likewise.
-	* gas/m68hc11/insns-dwarf2.d: Likewise.
-	* gas/m68hc11/lbranch-dwarf2.d: Likewise.
-
-2008-02-18  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* cfi/cfi.exp (gas_x86_64_check): New.
-	(gas_x86_32_check): Likewise.
-	Run 32bit and 64bit tests for x86 targets if they are supportd.
-
-2008-02-18  Jan Beulich  <jbeulich@novell.com>
-
-	* gas/i386/att-regs.s, gas/i386/att-regs.d,
-	gas/i386/intel-regs.s, gas/i386/intel-regs.d: New.
-	* gas/i386/i386.exp: Run new tests.
-
-2008-02-14  Nick Clifton  <nickc@redhat.com>
-
-	PR gas/5712
-	* gas/arm/fp-save.s: New test.
-	* gas/arm/fp-save.d: Expected disassembly.
-
-2008-02-13  Adam Nemet  <anemet@caviumnetworks.com>
-
-	* gas/mips/branch-misc-2pic-64.d (#name): Have a unique name
-	different from the branch-misc-2-64.d test.
-
-2008-02-13  Jan Beulich  <jbeulich@novell.com>
-
-	* gas/i386/intelok.s: Replace invalid offset expression with
-	valid ones.
-	* gas/i386/x86_64.s: Likewise.
-
-2008-02-13  Jan Beulich  <jbeulich@novell.com>
-
-	* gas/i386/intelbad.s, gas/i386/intelok.s: Add 'bound' tests.
-	* gas/i386/intelbad.l, gas/i386/intelok.l, gas/i386/intelok.e,
-	gas/i386/opcode-intel.d: Adjust.
-
-2008-02-13  Jan Beulich  <jbeulich@novell.com>
-
-	* gas/cfi/cfi-i386.s: Add code testing use of all registers.
-	Fix a few comments.
-	* gas/cfi/cfi-x86_64.s: Likewise.
-	* gas/cfi/cfi-i386.d, gas/cfi/cfi-x86_64.d: Adjust.
-
-2008-02-12  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run x86-64-arch-2 instead of
-	x86-64-arch-10.
-
-	* gas/i386/x86-64-arch-10.d: Removed.
-
-	* gas/i386/x86-64-arch-2.d: New.
-	* gas/i386/x86-64-arch-2.s: Likewise.
-
-2008-02-12  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/x86-64-xsave.d: Remove prefix.
-
-2008-02-11  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/arch-10.s: Add xgetbv.
-
-	* gas/i386/arch-10.d: Updated.
-	* gas/i386/arch-10-1.l: Likewise.
-	* gas/i386/arch-10-2.l: Likewise.
-	* gas/i386/arch-10-3.l: Likewise.
-	* gas/i386/arch-10-4.l: Likewise.
-	* gas/i386/x86-64-arch-10.d: Likewise.
-
-2002-02-11  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* gas/i386/i386.exp: Run xsave, xsave-intel, x86-64-xsave
-	and x86-64-xsave-intel.
-
-	* gas/i386/x86-64-xsave-intel.d: New file.
-	* gas/i386/x86-64-xsave.d: Likewise.
-	* gas/i386/x86-64-xsave.s: Likewise.
-	* gas/i386/xsave-intel.d: Likewise.
-	* gas/i386/xsave.d: Likewise.
-	* gas/i386/xsave.s: Likewise.
-
-2008-02-05  Adam Nemet  <anemet@caviumnetworks.com>
-
-	* gas/mips/mips.exp: Invoke the tests smartmips, mips32-dsp,
-	mips32-dspr2, mips64-dsp and mips32-mt with run_dump_test instead
-	of run_dump_test_arches.
-	* gas/mips/smartmips.d: Pass -mips32.
-	* gas/mips/mips64-dsp.d: Pass -mips64r2.
-	* gas/mips/mips32-dsp.d: Pass -mips32r2.
+2012-12-20  Greta Yorsh  <Greta.Yorsh@arm.com>
+
+	* gas/arm/srs-t2.s: Add tests for missing srs modes.
+	* gas/arm/srs-t2.l: Update expected output.
+	* gas/arm/srs-arm.s: Add tests for missing srs modes.
+	* gas/arm/srs-arm.l: Update expected output.
+	* gas/arm/archv6.s: Add tests for missing rfe modes.
+	* gas/arm/archv6.d: Update expected output.
+
+2012-12-06  Yufeng Zhang  <yufeng.zhang@arm.com>
+
+	* gas/aarch64/programmer-friendly.s: Add tests for LDR literal with
+	the auto-generation of literal in pool.
+	* gas/aarch64/programmer-friendly.d: Update.
+
+2012-11-27  Roland McGrath  <mcgrathr@google.com>
+
+	* lib/gas-defs.exp (run_dump_test): If as options include
+	--compress-debug-sections and zlib is not available, report
+	the test as unsupported.
+
+2012-11-20  Roland McGrath  <mcgrathr@google.com>
+
+	* gas/arm/macro-pld.s: New file.
+	* gas/arm/macro-pld.d: New file.
+
+2012-10-09  Nagajyothi Eggone  <nagajyothi.eggone@amd.com>
+
+	* gas/i386/i386.exp: Run bdver3 test cases.
+	* gas/i386/nops-1-bdver3.d: New.
+	* gas/i386/arch-10-bdver3.d: New.
+	* gas/i386/x86-64-nops-1-bdver3.d: New.
+	* gas/i386/x86-64-arch-2-bdver3.d: New.
+
+2012-09-18  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	* gas/arm/armv8-a-bad.l: Updated for changed mnemonics.
+	* gas/arm/armv8-a-bad.s: Likewise.
+	* gas/arm/armv8-a.d: Likewise.
+	* gas/arm/armv8-a.s: Likewise.
+	* gas/arm/inst.s: Added test for ldrt encoding compatibly with ldralt.
+	* gas/arm/inst.d: Updated.
+
+2012-09-17  Yufeng Zhang  <yufeng.zhang@arm.com>
+
+	* gas/aarch64/crypto.d (#as): Update for v8->v8-A change.
+	* gas/aarch64/int-insns.d (#as): Likewise.
+	* gas/aarch64/legacy_reg_names.s (.arch): Likewise.
+	* gas/aarch64/neon-not.s (.arch): Likewise.
+	* gas/aarch64/neon-vfp-reglist-post.s (.arch): Likewise.
+	* gas/aarch64/neon-vfp-reglist.s (.arch): Likewise.
+
+2012-09-18  Chao-ying Fu  <fu@mips.com>
+
+	* gas/mips/micromips.d: Correct the disassembly of SWXC1.
+	* gas/mips/micromips-trap.d: Likewise.
+	* gas/mips/micromips@24k-triple-stores-1.d: Likewise.
+	* gas/mips/micromips@mips4-fp.d: Likewise.
+
+2012-08-17  Nagajyothi Eggone  <nagajyothi.eggone@amd.com>
+
+	* gas/i386/i386.exp: Run btver1 and btver2 test cases.
+
+	* gas/i386/nops-1-btver1.d: New.
+	* gas/i386/nops-1-btver2.d: New.
+	* gas/i386/arch-10-btver1.d: New.
+	* gas/i386/arch-10-btver2.d: New.
+	* gas/i386/x86-64-nops-1-btver1.d: New.
+	* gas/i386/x86-64-nops-1-btver2.d: New.
+	* gas/i386/x86-64-arch-2-btver1.d: New.
+	* gas/i386/x86-64-arch-2-btver2.d: New.
+
+2012-08-11  Saravanan Ekanathan <saravanan.ekanathan@amd.com>
+
+	PR gas/14423
+	* gas/i386/arch-10-bdver2.d: New file.
+	* gas/i386/x86-64-arch-2-bdver2.d: Likewise.
+	* gas/i386/i386.exp: Run new test
+
+2012-09-10  Hans-Peter Nilsson  <hp@bitrange.com>
+
+	PR gas/14521
+	* gas/mmix/group-1.d, gas/mmix/group-1.s: New test.
+
+	* gas/mmix/err-fb-2.s: New test.
+
+2012-09-10  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* gas/mips/mips.exp: Set has_newabi for all Linux targets.
+	* gas/mips/cfi-n64-1.d: Adjust for targets that do not infer the
+	ISA from the ABI.
+	* gas/mips/elf-rel-got-n32.d: Likewise.
+	* gas/mips/elf-rel-got-n64.d: Likewise.
+	* gas/mips/elf-rel-xgot-n32.d: Likewise.
+	* gas/mips/elf-rel-xgot-n64.d: Likewise.
+	* gas/mips/elf-rel18.d: Likewise.
+	* gas/mips/elf-rel28-n32.d: Likewise.
+	* gas/mips/elf-rel28-n64.d: Likewise.
+	* gas/mips/jal-newabi.d: Likewise.
+	* gas/mips/ldstla-n64-shared.d: Likewise.
+	* gas/mips/ldstla-n64-sym32.d: Likewise.
+	* gas/mips/ldstla-n64.d: Likewise.
+	* gas/mips/macro-warn-1-n32.d: Likewise.
+	* gas/mips/macro-warn-2-n32.d: Likewise.
+	* gas/mips/n32-consec.d: Likewise.
+
+2012-08-06  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* gas/mips/mips.exp: Set has_newabi for mips*-sde-elf* too.
+	* gas/mips/elf-rel-got-n32.s: Adjust padding.
+	* gas/mips/elf-rel-got-n64.s: Likewise.
+	* gas/mips/elf-rel23.s: Likewise.
+	* gas/mips/elf-rel28.s: Likewise.
+	* gas/mips/n32-consec.s: Likewise.
+	* gas/mips/elf-rel-xgot-n32.d: Adjust output expected.
+	* gas/mips/elf-rel-xgot-n64.d: Likewise.
+	* gas/mips/elf-rel23.d: Likewise.
+	* gas/mips/elf-rel23a.d: Likewise.
+	* gas/mips/elf-rel23b.d: Likewise.
+	* gas/mips/elf-rel28-n32.d: Likewise.
+
+2012-08-06  Maciej W. Rozycki  <macro@codesourcery.com>
+
+2012-08-06  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* gas/mips/branch-swap-2.l: New list test.
+	* gas/mips/branch-swap-2.s: New test source.
+	* gas/mips/mips.exp: Run the new test.
+
+	* gas/mips/micromips@mips32-dsp.d: New test.
+	* gas/mips/micromips@mips32-dspr2.d: New test.
+	* gas/mips/mips32-dsp.s: Update padding.
+	* gas/mips/mips32-dspr2.s: Likewise.
+	* gas/mips/mips.exp: Use run_dump_test_arches to run MIPS32 DSP
+	tests.
+2012-07-31  Catherine Moore  <clm@codesourcery.com>
+            Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* gas/mips/micromips@mips32-dsp.d: New.
+	* gas/mips/micromips@mips32-dspr2.d: New.
+	* gas/mips/mips32-dsp.d: Remove -mips32r2.
 	* gas/mips/mips32-dspr2.d: Likewise.
-	* gas/mips/mips32-mt.d: Likewise.
+	* gas/mips/mips.exp: (mips_create_arch): Use -mips64r2
+	for micromips.  Use run_dump_test_arches to run dsp tests.
 
-2008-02-04  Adam Nemet  <anemet@caviumnetworks.com>
+2012-09-04  Sergey A. Guriev  <sergey.a.guriev@intel.com>
 
-	* gas/mips/mips.exp: Call mips_arch_create for Octeon.  Invoke
-	Octeon tests.
-	* gas/mips/octeon.s, gas/mips/octeon.d: New test.
+	* gas/testsuite/gas/ia64/psn.d: New file.
+	* gas/testsuite/gas/ia64/psn.s: New file.
+	* gas/testsuite/gas/ia64/ia64.exp: Add new testcase.
+	* gas/testsuite/gas/ia64/opc-i.d: Fixed failing tests.
+	* gas/testsuite/gas/ia64/opc-m.d: Ditto.
 
-2008-01-31  Marc Gauthier  <marc@tensilica.com>
+2012-08-28  Peter Bergner  <bergner@vnet.ibm.com>
 
-	* gas/all/gas.exp: Recognize Xtensa processor variants.
-	* gas/elf/elf.exp: Likewise.
-	* gas/lns/lns.exp: Likewise.
+	Backport from mainline
+	2012-08-15  Peter Bergner  <bergner@vnet.ibm.com>
 
-2008-01-28  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/ppc/common.d ("nop", "xnop"): Add tests.
+	* gas/ppc/common.s: Likewise.
+	* gas/ppc/power7.d ("yield", "mdoio", "mdoom"): Add tests.
+	* gas/ppc/power7.s: Likewise.
 
-	* gas/cfi/cfi-alpha-1.d: Replace DW_CFA_def_cfa_reg with
-	DW_CFA_def_cfa_register.
-	* gas/cfi/cfi-alpha-3.d: Likewise.
-	* gas/cfi/cfi-hppa-1.d: Likewise.
-	* gas/cfi/cfi-i386.d: Likewise.
-	* gas/cfi/cfi-m68k.d: Likewise.
-	* gas/cfi/cfi-mips-1.d: Likewise.
-	* gas/cfi/cfi-sh-1.d: Likewise.
-	* gas/cfi/cfi-sparc-1.d: Likewise.
-	* gas/cfi/cfi-sparc64-1.d: Likewise.
-	* gas/cfi/cfi-x86_64.d: Likewise.
+	2012-08-15  Peter Bergner  <bergner@vnet.ibm.com>
 
-	* gas/cfi/cfi-common-1.d: Updated for i386/x86-64 register
-	names.
-	* gas/cfi/cfi-common-2.d: Likewise.
-	* gas/cfi/cfi-common-5.d: Likewise.
-	* gas/cfi/cfi-i386.d: Likewise.
-	* gas/cfi/cfi-x86_64.d: Likewise.
+	* gas/ppc/power4.s <lq, stq>: Add more tests.
+	* gas/ppc/power4.d: Likewise.
 
-2008-01-24  H.J. Lu  <hongjiu.lu@intel.com>
+	2012-08-20  Edmar Wienskoski  <edmar@freescale.com>
+	* gas/ppc/e6500.d: Changed opcode for vabsdub, vabsduh, vabsduw,
+	mviwsplt.
 
-	* gas/i386/x86-64-sib.s: Add tests for r12.
+2012-08-28  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
 
-	* gas/i386/x86-64-sib-intel.d: Updated.
-	* gas/i386/x86-64-sib.d: Likewise.
+	Apply mainline patches
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+crypto.s: Update testcase.
+	* gas/arm/armv8-a+crypto.d: Likewise.
 
-2008-01-23  H.J. Lu  <hongjiu.lu@intel.com>
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+crypto.d: Update testcase.
+	* gas/arm/armv8-a+crypto.s: Likewise.
 
-	* gas/i386/i386.exp : Run x86-64-arch-1 and x86-64-arch-10.
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+crypto.d: Update testcase.
+	* gas/arm/armv8-a+crypto.s: Likewise.
 
-	* gas/i386/x86-64-arch-1.d: New.
-	* gas/i386/x86-64-arch-1.s: Likewise.
-	* gas/i386/x86-64-arch-10.d: Likewise.
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+crypto.d: New testcase.
+	* gas/arm/armv8-a+crypto.s: Likewise.
 
-2008-01-23  Tristan Gingold  <gingold@adacore.com>
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+fp.d: Update testcase.
+	* gas/arm/armv8-a+fp.s: Likewise.
+	* gas/arm/half-prec-vfpv3.s: Likewise.
 
-	* gas/ia64/regs.d: Updated as the ia64 disassembler now displays
-	symbolic names for all ar registers.
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+fpv5.d: Update testcase.
+	* gas/arm/armv8-a+fpv5.s: Likewise.
+	* gas/arm/armv8-a+simdv3.d: Likewise.
+	* gas/arm/armv8-a+simdv3.s: Likewise.
 
-2008-01-22  H.J. Lu  <hongjiu.lu@intel.com>
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+fp.d: Update testcase.
+	* gas/arm/armv8-a+fp.s: Likewise.
+	* gas/arm/armv8-a+simd.d: Likewise.
+	* gas/arm/armv8-a+simd.s: Likewise.
 
-	* gas/i386/arch-10.d: New.
-	* gas/i386/arch-11.s: Likewise.
-	* gas/i386/arch-12.d: Likewise.
-	* gas/i386/arch-12.s: Likewise.
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/testsuite/gas/armv8-a+fp.d: Update testcase.
+	* gas/testsuite/gas/armv8-a+fp.s: Likewise.
+	* gas/testsuite/gas/armv8-a+simd.d: New testcase.
+	* gas/testsuite/gas/armv8-a+simd.s: Likewise.
 
-	* gas/i386/i386.exp: Run arch-11 and arch-12.
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a+fp.d: New testcase.
+	* gas/arm/armv8-a+fp.s: Likewise.
 
-2008-01-22  H.J. Lu  <hongjiu.lu@intel.com>
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-bad.l: Update testcase.
+	* gas/arm/armv8-a-bad.s: Likewise.
+	* gas/arm/armv8-a.d: Likewise.
+	* gas/arm/armv8-a.s: Likewise.
 
-	* gas/i386/arch-10-1.l: New.
-	* gas/i386/arch-10-1.s: Likewise.
-	* gas/i386/arch-10-2.l: Likewise.
-	* gas/i386/arch-10-2.s: Likewise.
-	* gas/i386/arch-10-3.l: Likewise.
-	* gas/i386/arch-10-3.s: Likewise.
-	* gas/i386/arch-10-4.l: Likewise.
-	* gas/i386/arch-10-4.s: Likewise.
-	* gas/i386/arch-10.d: Likewise.
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-bad.l: Update for HLT.
+	* gas/arm/armv8-a-bad.s: Likewise.
+	* gas/arm/armv8-a.d: Likewise.
+	* gas/arm/armv8-a.s: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a.d: Update.
+	* gas/arm/armv8-a.s: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a.s: New testcase.
+	* gas/arm/armv8-a.d: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-barrier.s: New testcase.
+	* gas/arm/armv8-a-barrier-arm.d: Likewise.
+	* gas/arm/armv8-a-barrier-thumb.d: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-bad.l: Update
+	* gas/arm/armv8-a-bad.s: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-it-bad.d: New testcase.
+	* gas/arm/armv8-a-it-bad.l: Likewise.
+	* gas/arm/armv8-a-it-bad.s: Likewise.
+	* gas/arm/ldr-t-bad.s: Update testcase.
+	* gas/arm/ldr-t.d: Likewise.
+	* gas/arm/ldr-t.s: Likewise.
+	* gas/arm/neon-cond-bad-inc.s: Likewise.
+	* gas/arm/sp-pc-validations-bad-t: Likewise.
+	* gas/arm/vfp-fma-inc.s: Likewise.
+	* gas/arm/vfp-neon-syntax-inc.s: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-bad.l: Update testcase.
+	* gas/arm/armv8-a-bad.s: Likewise.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/armv8-a-bad.d: New testcase.
+	* gas/arm/armv8-a-bad.l: Likewise.
+	* gas/arm/armv8-a-bad.s: Likewise.
+	* gas/arm/depr-swp.l: Update for change in expected output.
+	* gas/arm/depr-swp.s: Add additional test.
+
+	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* gas/arm/attr-march-all.d: Update for change in expected
+	output.
+	* gas/arm/attr-mfpu-vfpv4-d16.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv4.d: Likewise.
+	* gas/arm/attr-march-armv8-a+crypto.d: New testcase.
+	* gas/arm/attr-march-armv8-a+fp.d: Likewise.
+	* gas/arm/attr-march-armv8-a+simd.d: Likewise.
+	* gas/arm/attr-march-armv8-a.d: Likewise.
+
+012-08-13  Ian Bolton  <ian.bolton@arm.com>
+            Laurent Desnogues  <laurent.desnogues@arm.com>
+            Jim MacArthur  <jim.macarthur@arm.com>
+            Marcus Shawcroft  <marcus.shawcroft@arm.com>
+            Nigel Stephens  <nigel.stephens@arm.com>
+            Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
+            Richard Earnshaw  <rearnsha@arm.com>
+            Sofiane Naci  <sofiane.naci@arm.com>
+            Tejas Belagod  <tejas.belagod@arm.com>
+            Yufeng Zhang  <yufeng.zhang@arm.com>
+
+	* gas/aarch64: New directory.
+	* gas/aarch64/aarch64.exp: New file.
+	* gas/aarch64/addsub.d: New file.
+	* gas/aarch64/addsub.s: New file.
+	* gas/aarch64/advsimd-across.d: New file.
+	* gas/aarch64/advsimd-across.s: New file.
+	* gas/aarch64/advsimd-misc.d: New file.
+	* gas/aarch64/advsimd-misc.s: New file.
+	* gas/aarch64/advsisd-copy.d: New file.
+	* gas/aarch64/advsisd-copy.s: New file.
+	* gas/aarch64/advsisd-misc.d: New file.
+	* gas/aarch64/advsisd-misc.s: New file.
+	* gas/aarch64/alias.d: New file.
+	* gas/aarch64/alias.s: New file.
+	* gas/aarch64/bitfield-alias.d: New file.
+	* gas/aarch64/bitfield-alias.s: New file.
+	* gas/aarch64/bitfield-bfm.d: New file.
+	* gas/aarch64/bitfield-bfm.s: New file.
+	* gas/aarch64/bitfield-dump: New file.
+	* gas/aarch64/bitfield-no-aliases.d: New file.
+	* gas/aarch64/crypto.d: New file.
+	* gas/aarch64/crypto.s: New file.
+	* gas/aarch64/diagnostic.d: New file.
+	* gas/aarch64/diagnostic.l: New file.
+	* gas/aarch64/diagnostic.s: New file.
+	* gas/aarch64/floatdp2.d: New file.
+	* gas/aarch64/floatdp2.s: New file.
+	* gas/aarch64/fp_cvt_int.d: New file.
+	* gas/aarch64/fp_cvt_int.s: New file.
+	* gas/aarch64/illegal-2.d: New file.
+	* gas/aarch64/illegal-2.l: New file.
+	* gas/aarch64/illegal-2.s: New file.
+	* gas/aarch64/illegal.d: New file.
+	* gas/aarch64/illegal.l: New file.
+	* gas/aarch64/illegal.s: New file.
+	* gas/aarch64/inst-directive.d: New file.
+	* gas/aarch64/inst-directive.s: New file.
+	* gas/aarch64/int-insns.d: New file.
+	* gas/aarch64/int-insns.s: New file.
+	* gas/aarch64/ldst-exclusive.d: New file.
+	* gas/aarch64/ldst-exclusive.s: New file.
+	* gas/aarch64/ldst-reg-imm-post-ind.d: New file.
+	* gas/aarch64/ldst-reg-imm-post-ind.s: New file.
+	* gas/aarch64/ldst-reg-imm-pre-ind.d: New file.
+	* gas/aarch64/ldst-reg-imm-pre-ind.s: New file.
+	* gas/aarch64/ldst-reg-pair.d: New file.
+	* gas/aarch64/ldst-reg-pair.s: New file.
+	* gas/aarch64/ldst-reg-reg-offset.d: New file.
+	* gas/aarch64/ldst-reg-reg-offset.s: New file.
+	* gas/aarch64/ldst-reg-uns-imm.d: New file.
+	* gas/aarch64/ldst-reg-uns-imm.s: New file.
+	* gas/aarch64/ldst-reg-unscaled-imm.d: New file.
+	* gas/aarch64/ldst-reg-unscaled-imm.s: New file.
+	* gas/aarch64/legacy_reg_names.d: New file.
+	* gas/aarch64/legacy_reg_names.l: New file.
+	* gas/aarch64/legacy_reg_names.s: New file.
+	* gas/aarch64/mapmisc.d: New file.
+	* gas/aarch64/mapmisc.dat: New file.
+	* gas/aarch64/mapmisc.s: New file.
+	* gas/aarch64/mapping.d: New file.
+	* gas/aarch64/mapping.s: New file.
+	* gas/aarch64/mapping2.d: New file.
+	* gas/aarch64/mapping2.s: New file.
+	* gas/aarch64/mapping3.d: New file.
+	* gas/aarch64/mapping3.s: New file.
+	* gas/aarch64/mapping4.d: New file.
+	* gas/aarch64/mapping4.s: New file.
+	* gas/aarch64/mov-no-aliases.d: New file.
+	* gas/aarch64/mov.d: New file.
+	* gas/aarch64/mov.s: New file.
+	* gas/aarch64/movi.d: New file.
+	* gas/aarch64/movi.s: New file.
+	* gas/aarch64/msr.d: New file.
+	* gas/aarch64/msr.s: New file.
+	* gas/aarch64/neon-fp-cvt-int.d: New file.
+	* gas/aarch64/neon-fp-cvt-int.s: New file.
+	* gas/aarch64/neon-frint.d: New file.
+	* gas/aarch64/neon-frint.s: New file.
+	* gas/aarch64/neon-ins.d: New file.
+	* gas/aarch64/neon-ins.s: New file.
+	* gas/aarch64/neon-not.d: New file.
+	* gas/aarch64/neon-not.s: New file.
+	* gas/aarch64/neon-vfp-reglist-post.d: New file.
+	* gas/aarch64/neon-vfp-reglist-post.s: New file.
+	* gas/aarch64/neon-vfp-reglist.d: New file.
+	* gas/aarch64/neon-vfp-reglist.s: New file.
+	* gas/aarch64/no-aliases.d: New file.
+	* gas/aarch64/optional.d: New file.
+	* gas/aarch64/optional.s: New file.
+	* gas/aarch64/programmer-friendly.d: New file.
+	* gas/aarch64/programmer-friendly.s: New file.
+	* gas/aarch64/reloc-data.d: New file.
+	* gas/aarch64/reloc-data.s: New file.
+	* gas/aarch64/reloc-insn.d: New file.
+	* gas/aarch64/reloc-insn.s: New file.
+	* gas/aarch64/shifted.d: New file.
+	* gas/aarch64/shifted.s: New file.
+	* gas/aarch64/symbol.d: New file.
+	* gas/aarch64/symbol.s: New file.
+	* gas/aarch64/sysreg-1.d: New file.
+	* gas/aarch64/sysreg-1.s: New file.
+	* gas/aarch64/sysreg.d: New file.
+	* gas/aarch64/sysreg.s: New file.
+	* gas/aarch64/system.d: New file.
+	* gas/aarch64/system.s: New file.
+	* gas/aarch64/tlbi_op.d: New file.
+	* gas/aarch64/tlbi_op.s: New file.
+	* gas/aarch64/tls.d: New file.
+	* gas/aarch64/tls.s: New file.
+	* gas/aarch64/verbose-error.d: New file.
+	* gas/aarch64/verbose-error.l: New file.
+	* gas/aarch64/verbose-error.s: New file.
+
+2012-07-30  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/i386/inval-equ-2.l: Updated.
+
+2012-07-24  Sandra Loosemore  <sandra@codesourcery.com>
+	    Jie Zhang  <jzhang918@gmail.com>
+
+	* gas/arm/adr.d: New test.
+	* gas/arm/adr.s: New test.
+
+2012-07-16  Michael Zolotukhin  <michael.v.zolotukhin@intel.com>
+
+	* gas/i386/i386.exp: Run adx, rdseed and prefetchw tests.
+	* gas/i386/x86-64-arch-2.s: Use prefetchw as 3dnow and Prfchw tests.
 	* gas/i386/arch-10.s: Likewise.
+	* gas/i386/arch-10-1.l: Changed correspondingly.
+	* gas/i386/arch-10-2.l: Likewise.
+	* gas/i386/arch-10-3.l: Likewise.
+	* gas/i386/arch-10-4.l: Likewise.
+	* gas/i386/arch-10.d: Likewise.
+	* gas/i386/arch-10-lzcnt.d: Likewise.
+	* gas/i386/x86-64-arch-2.d: Likewise.
+	* gas/i386/x86-64-arch-2-lzcnt.d: Likewise.
+	* gas/i386/ilp32/x86-64-arch-2.d: Likewise.
+	* gas/i386/arch-10-prefetchw.d: New file.
+	* gas/i386/x86-64-arch-2-prefetchw.d: Likewise.
+	* gas/i386/rdseed.s: Likewise.
+	* gas/i386/rdseed.d: Likewise.
+	* gas/i386/rdseed-intel.d: Likewise.
+	* gas/i386/adx.s: Likewise.
+	* gas/i386/adx.d: Likewise.
+	* gas/i386/adx-intel.d: Likewise.
+	* gas/i386/x86-64-rdseed.s: Likewise.
+	* gas/i386/x86-64-rdseed.d: Likewise.
+	* gas/i386/x86-64-rdseed-intel.d: Likewise.
+	* gas/i386/x86-64-adx.s: Likewise.
+	* gas/i386/x86-64-adx.d: Likewise.
+	* gas/i386/x86-64-adx-intel.d: Likewise.
 
-	* gas/i386/i386.exp: Run arch-10, arch-10-1, arch-10-2,
-	arch-10-3 and arch-10-4.
+2012-07-02  Roland McGrath  <mcgrathr@google.com>
 
-	* gas/i386/nops-2.s: Use movsbl instead of cmove.
-	* gas/i386/nops-2-i386.d: Updated.
-	* gas/i386/nops-2-merom.d: Likewise.
-	* gas/i386/nops-2.d: Likewise.
-	* gas/i386/x86-64-nops-2.d: Likewise.
+	* gas/i386/rep-suffix.s: Add 'rep nop' case.
+	* gas/i386/x86-64-rep-suffix.s: Likewise.
+	* gas/i386/rep-suffix.d: Updated.
+	* gas/i386/x86-64-rep-suffix.d: Likewise.
+	* gas/i386/ilp32/x86-64-rep-suffix.d: Likewise.
 
-2008-01-15  H.J. Lu  <hongjiu.lu@intel.com>
+2012-07-02  H.J. Lu  <hongjiu.lu@intel.com>
 
-	* gas/i386/prescott.s: Add tests for movddup in Intel syntax.
-	* gas/i386/x86-64-prescott.s: Likewise.
+	* gas/i386/i386.exp: Don't run rep-bsf nor rep-ret.
 
-	* gas/i386/prescott.d: Updated.
-	* gas/i386/x86-64-prescott.d: Likewise.
+	* gas/i386/rep-bsf.d: Removed.
+	* gas/i386/rep-bsf.s: Likewise.
+	* gas/i386/rep-ret.d: Likewise.
+	* gas/i386/rep-ret.s: Likewise.
 
-2008-01-15  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/i386/rep-suffix.d: Updated.
+	* gas/i386/x86-64-rep-suffix.d: Likewise.
+	* gas/i386/ilp32/x86-64-rep-suffix.d: Likewise.
 
-	* gas/i386/i386.s: Add more tests for movsx and movzx.
-	* gas/i386/x86_64.s: Likewise.
+	* gas/i386/rep-suffix.s: Add tests for bsf, bsr and ret.
+	* gas/i386/x86-64-rep-suffix.s: Likewise.
 
-	* gas/i386/inval.s: Remove tests for movsxw and movzxw.
+2012-06-30  H.J. Lu  <hongjiu.lu@intel.com>
 
-	* gas/i386/x86-64-inval.s: Remove tests for movsxb, movsxw,
-	movsxl, movzxb and movzxw.
+	PR gas/14315
+	* gas/elf/common1.d: New file.
+	* gas/elf/common1.l: Likewise.
+	* gas/elf/common1.s: Likewise.
+	* gas/elf/common2.d: Likewise.
+	* gas/elf/common2.l: Likewise.
+	* gas/elf/common2.s: Likewise.
 
-	* gas/i386/i386.d: Updated.
-	* gas/i386/inval.l: Likewise.
-	* gas/i386/x86_64.d: Likewise.
-	* gas/i386/x86-64-inval.l: Likewise.
+	* gas/elf/elf.exp: Run common1 and common2.
 
-2008-01-14  H.J. Lu  <hongjiu.lu@intel.com>
+2012-06-29  Alan Modra  <amodra@gmail.com>
 
-	* gas/i386/i386.s: Add tests for movsx, movzx and movnti.
-	* gas/i386/inval.s: Likewise. 
-	* gas/i386/x86_64.s: Likewise.
-	* gas/i386/x86-64-inval.s: Likewise.
+	* gas/lns/lns.exp (lns-common-1): Add crx to alt target list.
 
-	* gas/i386/i386.d: Updated.
-	* gas/i386/inval.l: Likewise.
-	* gas/i386/x86_64.d: Likewise.
-	* gas/i386/x86-64-inval.l: Likewise.
+2012-06-28  Nick Clifton  <nickc@redhat.com>
 
-2008-01-12  H.J. Lu  <hongjiu.lu@intel.com>
+	PR gas/14260
+	* gas/arm/ldr-t-bad.s: Add test of bogus use of literal pool
+	addressing.
+	* gas/arm/ldr-t-bad.l: Update expected assembler error message
+	output.
 
-	PR gas/5534
-	* gas/i386/i386.s: Add tests for fnstsw and fstsw.
-	* gas/i386/inval.s: Likewise. 
-	* gas/i386/x86_64.s: Likewise.
+2012-06-28  Nick Clifton  <nickc@redhat.com>
 
-	* gas/i386/intel.s: Use word instead of dword on ss.
+	* gas/lns/lns.exp: Use alternate lns-common test for targets
+	enabling linker relaxation.
+	* gas/lns/lns-big-delta.d: Allow for output from architectures
+	with 32-bit addresses.
 
-	* gas/i386/x86-64-inval.s: Add tests for fnstsw, fstsw, in
-	and out.
+2012-06-27  Alan Modra  <amodra@gmail.com>
 
-	* gas/i386/prefix.s: Remove invalid fstsw.
+	* gas/i386/rep-ret.s: Zero pad section.
+	* gas/i386/rep-ret.d: Update.
 
-	* gas/i386/inval.l: Updated.
-	* gas/i386/intelbad.l: Likewise.
-	* gas/i386/i386.d: Likewise.
-	* gas/i386/x86_64.d: Likewise.
-	* gas/i386/x86-64-inval.l: Likewise.
-	* gas/i386/prefix.d: Updated.
+2012-06-22  Roland McGrath  <mcgrathr@google.com>
 
-2008-01-10  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/i386/rep-ret.d: New file.
+	* gas/i386/rep-ret.s: New file.
+	* gas/i386/i386.exp: Add the new test.
 
-	* gas/i386/nops.s: Add more tests with opcodes from 0x0f19
-	to 0x0f1f.
-	* gas/i386/x86-64-nops.s: Likewise.
+	* gas/i386/rep-bsf.d: New file.
+	* gas/i386/rep-bsf.s: New file.
+	* gas/i386/i386.exp: Add the new test.
 
-	* gas/i386/nops.d: Updated.
-	* gas/i386/x86-64-nops.d: Likewise.
+2012-06-13  H.J. Lu  <hongjiu.lu@intel.com>
 
-2008-01-09  Bob Wilson  <bob.wilson@acm.org>
-	
-	* gas/lns/lns.exp: Run new lns-big-delta test for targets that set
-	DWARF2_USE_FIXED_ADVANCE_PC.
-	* gas/lns/lns-big-delta.s: New.
-	* gas/lns/lns-big-delta.d: New.
-	
-2008-01-08  John David Anglin  <dave.anglin@nrc-cnrc.gc.ca>
+	* gas/i386/ilp32/x86-64-dc_a.d: New.
+	* gas/i386/ilp32/x86-64-dc_a.s: Likewise.
 
-	PR gas/5322
-	* lib/gas-defs.exp (gas_host_run): Add fourth argument to regsub
-	command.
+2012-06-11  Andreas Schwab  <schwab@linux-m68k.org>
 
-2008-01-05  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/ppc/e500mc.d: Update.
+	* gas/ppc/476.d: Update.
 
-	* gas/i386/intel.s: Add tests for fadd, faddp, fdiv, fdivp,
-	fdivr, fdivrp, fmul, fmulp, fsub, fsubp, fsubr and fsubrp.
+2012-06-07  H.J. Lu  <hongjiu.lu@intel.com>
 
-	* gas/i386/intel.d: Updated.
-	* gas/i386/intel.e: Likewise.
+	* gas/all/gas.exp: Don't run rept.
 
-2008-01-04  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/all/rept.d: Moved to ...
+	* gas/i386/rept.d: Here.
+	* gas/all/rept.s: Moved to ...
+	* gas/i386/rept.s: Here.
 
-	* gas/i386/rexw.d: New.
-	* gas/i386/rexw.s: Likewise.
+	* gas/i386/i386.exp: Run rept.
 
-	* gas/i386/x86-64-sse4_1-intel.d: Updated.
-	* gas/i386/x86-64-sse4_1.d: Likewise.
+2012-06-07  H.J. Lu  <hongjiu.lu@intel.com>
 
-2008-01-04  Nick Clifton  <nickc@redhat.com>
+	PR gas/14201
+	* gas/all/gas.exp: Run rept.
 
-	* gas/ppc/altivec_and_spe.s: New test - checks that ISA extension
-	command line options (-maltivec, -mspe) can be specified before
-	CPU selection command line options.
-	* gas/ppc/altivec_and_spe.d: Expected disassembly.
-	* gas/ppc/ppc.exp: Run the new test
+	* gas/all/rept.d: New file.
+	* gas/all/rept.s: Likewise.
 
-2008-01-03  H.J. Lu  <hongjiu.lu@intel.com>
+2012-05-29  Roland McGrath  <mcgrathr@google.com>
 
-	* gas/i386/arch-9.d: New file.
-	* gas/i386/arch-9.s: Likewise.
+	* gas/i386/bundle-bad.s: Remove nested .bundle_lock case.
+	* gas/i386/bundle-bad.l: Remove expected error line.
+	* gas/i386/bundle-lock.s: Add nested .bundle_lock case.
+	* gas/i386/bundle-lock.d: Update expectations.
 
-	* gas/i386/i386.exp: Run arch-9.
+2012-05-28  Nick Clifton  <nickc@redhat.com>
 
-2008-01-02  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/elf/syms.s: New test - checks the generation of multibyte
+	symbol names.
+	* gas/elf/syms.d: New file - expected readelf output.
+	* gas/elf/elf.exp: Add syms.
 
-	* gas/i386/arch-5.d: New file.
-	* gas/i386/arch-5.s: Likewise.
-	* gas/i386/arch-6.d: Likewise.
-	* gas/i386/arch-6.s: Likewise.
-	* gas/i386/arch-7.d: Likewise.
-	* gas/i386/arch-7.s: Likewise.
-	* gas/i386/arch-8.d: Likewise.
-	* gas/i386/arch-8.s: Likewise.
+2012-05-25  Alan Modra  <amodra@gmail.com>
 
-	* gas/i386/i386.exp: Run arch-5, arch-6, arch-7 and arch-8.
+	* gas/lns/lns-big-delta.s: Add nops.
+	* gas/lns/lns-big-delta.d: Update.
 
-2008-01-02  H.J. Lu  <hongjiu.lu@intel.com>
+2012-05-19  Alan Modra  <amodra@gmail.com>
 
-	* gas/i386/i386.s: Add tests for movq.
-	* gas/i386/x86_64.s: Likewise.
+	* gas/tic6x/unwind-1.d: Update for readelf changes.
+	* gas/tic6x/unwind-2.d: Likewise.
+	* gas/tic6x/unwind-3.d: Likewise.
 
-	* gas/i386/i386.d Updated.
-	* gas/i386/x86_64.d: Likewise.
+2012-05-17  H.J. Lu  <hongjiu.lu@intel.com>
 
-2008-01-02  H.J. Lu  <hongjiu.lu@intel.com>
+	* gas/all/weakref1.d: Expect addend as signed.
+	* gas/arm/pic_vxworks.d: Likewise.
+	* gas/arm/wince.d: Likewise.
+	* gas/h8300/h8300.exp: Likewise.
+	* gas/i386/sub.d: Likewise.
+	* gas/mips/ecoff@ld.d: Likewise.
+	* gas/mips/ecoff@sd.d: Likewise.
+	* gas/mips/l_d-n32.d: Likewise.
+	* gas/mips/l_d-n64.d: Likewise.
+	* gas/mips/l_d.d: Likewise.
+	* gas/mips/ld-n32.d: Likewise.
+	* gas/mips/ld-n64.d: Likewise.
+	* gas/mips/ld.d: Likewise.
+	* gas/mips/mips1@l_d.d: Likewise.
+	* gas/mips/mips1@ld-forward.d: Likewise.
+	* gas/mips/mips1@ld.d: Likewise.
+	* gas/mips/mips1@s_d.d: Likewise.
+	* gas/mips/s_d-n32.d: Likewise.
+	* gas/mips/s_d-n64.d: Likewise.
+	* gas/mips/s_d.d: Likewise.
+	* gas/mips/sd-n32.d: Likewise.
+	* gas/mips/sd-n64.d: Likewise.
+	* gas/mips/sd.d: Likewise.
+	* gas/mmix/bz-c.d: Likewise.
+	* gas/mmix/geta-c.d: Likewise.
+	* gas/mmix/jump-c.d: Likewise.
+	* gas/mmix/pushj-c.d: Likewise.
+	* gas/mmix/pushj-cs.d: Likewise.
+	* gas/mmix/reloc16-n.d: Likewise.
+	* gas/mmix/reloc16-r.d: Likewise.
+	* gas/mmix/reloc16.d: Likewise.
+	* gas/mmix/reloc8-r.d: Likewise.
+	* gas/mmix/reloc8.d: Likewise.
+	* gas/mmix/relocxrn.d: Likewise.
+	* gas/sh/sh64/case-1.d: Likewise.
+	* gas/sh/sh64/mix-1.d: Likewise.
+	* gas/sh/sh64/pt32-1.d: Likewise.
+	* gas/sh/sh64/pt64-1.d: Likewise.
+	* gas/sh/sh64/pt64-32-2.d: Likewise.
+	* gas/sh/sh64/rel32-2.d: Likewise.
+	* gas/sh/sh64/rel32-4.d: Likewise.
+	* gas/sh/sh64/rel64-2.d: Likewise.
+	* gas/sh/sh64/rel64-4.d: Likewise.
+	* gas/tic6x/data-reloc.d: Likewise.
+	* gas/tic6x/pcr-relocs.d: Likewise.
+	* gas/xstormy16/allinsn.d: Likewise.
+	* gas/xstormy16/reloc-1.d: Likewise.
+	* gas/xstormy16/reloc-2.d: Likewise.
 
-	PR gas/5534
-	* gas/i386/intel.s: Use QWORD on movq instead of DWORD.
+2012-05-17  Alan Modra  <amodra@gmail.com>
 
-	* gas/i386/inval.s: Add tests for movq.
-	* gas/i386/x86-64-inval.s: Likewise.
+	* gas/elf/dwarf2-1.d: Update.
+	* gas/elf/dwarf2-2.d: Update.
+	* gas/i386/dw2-compress-1.d: Update.
 
-	* gas/i386/inval.l: Updated.
-	* gas/i386/x86-64-inval.l: Likewise.
+2012-05-17  Alan Modra  <amodra@gmail.com>
 
-2008-01-02  Catherine Moore  <clm@codesourcery.com>
+	* gas/ppc/vle.d: Pass -a32 to assembler.
+	* gas/ppc/vle-reloc.d: Likewise.
+	* gas/ppc/vle-simple-1.d: Likewise, also match wider addresses.
+	* gas/ppc/vle-simple-2.d: Likewise.
+	* gas/ppc/vle-simple-3.d: Likewise.
+	* gas/ppc/vle-simple-4.d: Likewise.
+	* gas/ppc/vle-simple-5.d: Likewise.
+	* gas/ppc/vle-simple-6.d: Likewise.
 
-	* gas/mips/jalr.s: New test.
-	* gas/mips/jalr.l: New test output.
-	* gas/mips/mips.exp: Run new test.
+2012-05-16  Meador Inge  <meadori@codesourcery.com>
 
-For older changes see ChangeLog-2007
+	* gas/arm/stm-ldm.d: STMFD/LDMIA sp!, {reg} don't disassemble to
+	PUSH/POP {reg} any longer.  Some new test cases have been added as well.
+	* gas/arm/stm-ldm.s: Likewise.
+
+2012-05-15  James Murray <jsm@jsm-net.demon.co.uk>
+
+	* gas/m68hc11/insns9s12x.s: New
+	* gas/m68hc11/insns9s12x.d: New
+	* gas/m68hc11/hexprefix.s: New
+	* gas/m68hc11/hexprefix.d: New
+	* gas/m68hc11/9s12x-exg-sex-tfr.s: New
+	* gas/m68hc11/9s12x-exg-sex-tfr.d: New
+	* gas/m68hc11/insns9s12xg.s: New
+	* gas/m68hc11/insns9s12xg.d: New
+	* gas/m68hc11/9s12x-mov.s: New
+	* gas/m68hc11/9s12x-mov.d: New
+	* gas/m68hc11/m68hc11.exp: Updated
+	* gas/m68hc11/*.d: Brought in line with changed objdump output.
+	* gas/all/gas.exp: XFAIL all hc11/12 targets for redef2,3.
+	* gas/elf/elf.exp: XFAIL all hc11/12 targets for redef.
+
+2012-05-14  Catherine Moore  <clm@codesourcery.com>
+	    Maciej W. Rozycki  <macro@codesourcery.com>
+	    Rhonda Wittels  <rhonda@codesourcery.com>
+
+	* gas/ppc/ppc.exp: Run new tests.
+	* gas/ppc/vle-reloc.d: New test.
+	* gas/ppc/vle-reloc.s: New test.
+	* gas/ppc/vle-simple-1.d: New test.
+	* gas/ppc/vle-simple-1.s: New test.
+	* gas/ppc/vle-simple-2.d: New test.
+	* gas/ppc/vle-simple-2.s: New test.
+	* gas/ppc/vle-simple-3.d: New test.
+	* gas/ppc/vle-simple-3.s: New test.
+	* gas/ppc/vle-simple-4.d: New test.
+	* gas/ppc/vle-simple-4.s: New test.
+	* gas/ppc/vle-simple-5.d: New test.
+	* gas/ppc/vle-simple-5.s: New test.
+	* gas/ppc/vle-simple-6.d: New test.
+	* gas/ppc/vle-simple-6.s: New test.
+	* gas/ppc/vle.d: New test.
+	* gas/ppc/vle.s: New test.
+
+2012-05-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/cris/rd-pic-1.d: Expect addend as signed.
+	* gas/cris/rd-tls-1.d: Likewise.
+	* gas/cris/rd-tls-2.d: Likewise.
+
+2012-05-13  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/all/fwdexp.d: Expect addend as signed.
+	* gas/alpha/elf-reloc-1.d: Likewise.
+	* gas/i386/mixed-mode-reloc64.d: Likewise.
+	* gas/i386/reloc64.d: Likewise.
+	* gas/i386/ilp32/mixed-mode-reloc64.d: Expect addend as signed.
+	* gas/i386/ilp32/reloc64.d: Likewise.
+	* gas/ia64/pcrel.d: Likewise.
+	* gas/mips/branch-misc-2-64.d: Likewise.
+	* gas/mips/branch-misc-2pic-64.d: Likewise.
+	* gas/mips/branch-misc-4-64.d: Likewise.
+	* gas/mips/ldstla-n64-sym32.d: Likewise.
+	* gas/mips/micromips@branch-misc-2-64.d: Likewise.
+	* gas/mips/micromips@branch-misc-2pic-64.d: Likewise.
+	* gas/mips/micromips@branch-misc-4-64.d: Likewise.
+	* gas/mips/mips16-hilo-n32.d: Likewise.
+	* gas/ppc/astest.d: Likewise.
+	* gas/ppc/astest2.d: Likewise.
+	* gas/ppc/astest2_64.d: Likewise.
+	* gas/ppc/astest64.d: Likewise.
+	* gas/ppc/test1elf32.d: Likewise.
+	* gas/ppc/test1elf64.d: Likewise.
+	* gas/sparc/reloc64.d: Likewise.
+
+2012-05-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/mips/elf-rel10.d: Updated.
+	* gas/mips/elf-rel22.d: Likewise.
+	* gas/mmix/comment-1.d: Likewise.
+
+2012-05-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/i386/ilp32/ilp32.exp: Don't run reloc64-inval.
+
+	* gas/i386/ilp32/reloc64.s: Add test for -4294967295 addend.
+	* gas/i386/ilp32/reloc64.d: Updated.
+
+	* gas/i386/ilp32/reloc64-inval.l: Removed.
+	* gas/i386/ilp32/reloc64-inval.s: Likewise.
+
+2012-05-09  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/i386/ilp32/ilp32.exp: Run reloc64-inval.
+
+	* gas/i386/ilp32/reloc64.s: Add tests for ".quad".
+	* gas/i386/ilp32/reloc64.d: Updated.
+
+	* gas/i386/ilp32/reloc64-inval.l: New file.
+	* gas/i386/ilp32/reloc64-inval.s: Likewise.
+
+2012-05-08  Alan Modra  <amodra@gmail.com>
+
+	* lib/gas-defs.exp (run_dump_test): Don't set LC_ALL here.
+
+2012-05-06  Arnold Metselaar  <arnold_m@operamail.com>
+
+	* gas/z80/jr-forwf.s: New file, adapted from z8k version.
+	* gas/z80/jr-backf.s: Likewise.
+	* gas/z80/djnz-backf.s: Likewise.
+	* gas/z80/ill_op: New file, with illegal operand.
+	* gas/z80/z80.exp: Run new tests.
+
+2012-05-03  Sean Keys  <skeys@ipdatasys.com>
+
+	* gas/all/gas.exp: Added xgate tex entry.
+	* gas/xgate/abi-xgate-16-32.d: Simple ABI flag test.
+	* gas/xgate/abi-xgate-16-64.d: Ditto
+	* gas/xgate/abi-xgate-32-32.d: Ditto
+	* gas/xgate/abi-xgate-32-64.d: Ditto
+	* gas/xgate/abi.s: Source file for ABI tests.
+	* gas/xgate/all_insns.d: Dump file for all instructions test.
+	* gas/xgate/all_insns.s: Source file for all instructions test.
+	* gas/xgate/insns-dwarf2.d: Dump file for dwarf2 test.
+	* gas/xgate/insns.d: Dump file for instructions test.
+	* gas/xgate/insns.s: Source file for instructions test.
+	* gas/xgate/xgate.exp: XGATE tests file.
+
+2012-04-27  David S. Miller  <davem@davemloft.net>
+
+	* gas/sparc/sparc.exp: Run cfr test.
+	* gas/sparc/cfr.s: New testcase.
+	* gas/sparc/cfr.d: Likewise.
+
+	* gas/sparc/sparc.exp: Run pause test.
+	* gas/sparc/pause.s: New testcase.
+	* gas/sparc/pause.d: Likewise.
+
+	* gas/sparc/cbcond.s: New file.
+	* gas/sparc/cbcond.d: New file.
+	* gas/sparc/sparc.exp: Run cbcond test.
+
+	* gas/sparc/crypto.s: New file.
+	* gas/sparc/crypto.d: New file.
+	* gas/sparc/sparc.exp: Run crypto test.
+
+2012-04-12  David S. Miller  <davem@davemloft.net>
+
+	* gas/sparc/reloc64.s: Add abs34 code model tests.
+	* gas/sparc/reloc64.d: Update.
+
+2012-04-12  Roland McGrath  <mcgrathr@google.com>
+
+	* gas/elf/elf.exp (run_elf_list_test): Treat arm-*-nacl* targets
+	as -armeabi.
+
+	* gas/arm/any-idiv.d: Match *-*-nacl* targets too.
+	* gas/arm/arch4t.d: Likewise.
+	* gas/arm/arch4t-eabi.d: Likewise.
+	* gas/arm/attr-any-armv4t.d: Likewise.
+	* gas/arm/attr-any-thumbv6.d: Likewise.
+	* gas/arm/attr-cpu-directive.d: Likewise.
+	* gas/arm/attr-default.d: Likewise.
+	* gas/arm/attr-march-all.d: Likewise.
+	* gas/arm/attr-march-armv1.d: Likewise.
+	* gas/arm/attr-march-armv2a.d: Likewise.
+	* gas/arm/attr-march-armv2.d: Likewise.
+	* gas/arm/attr-march-armv2s.d: Likewise.
+	* gas/arm/attr-march-armv3.d: Likewise.
+	* gas/arm/attr-march-armv3m.d: Likewise.
+	* gas/arm/attr-march-armv4.d: Likewise.
+	* gas/arm/attr-march-armv4t.d: Likewise.
+	* gas/arm/attr-march-armv4txm.d: Likewise.
+	* gas/arm/attr-march-armv4xm.d: Likewise.
+	* gas/arm/attr-march-armv5.d: Likewise.
+	* gas/arm/attr-march-armv5t.d: Likewise.
+	* gas/arm/attr-march-armv5te.d: Likewise.
+	* gas/arm/attr-march-armv5tej.d: Likewise.
+	* gas/arm/attr-march-armv5texp.d: Likewise.
+	* gas/arm/attr-march-armv5txm.d: Likewise.
+	* gas/arm/attr-march-armv6.d: Likewise.
+	* gas/arm/attr-march-armv6j.d: Likewise.
+	* gas/arm/attr-march-armv6k.d: Likewise.
+	* gas/arm/attr-march-armv6k+sec.d: Likewise.
+	* gas/arm/attr-march-armv6kt2.d: Likewise.
+	* gas/arm/attr-march-armv6-m.d: Likewise.
+	* gas/arm/attr-march-armv6-m+os.d: Likewise.
+	* gas/arm/attr-march-armv6s-m.d: Likewise.
+	* gas/arm/attr-march-armv6t2.d: Likewise.
+	* gas/arm/attr-march-armv6z.d: Likewise.
+	* gas/arm/attr-march-armv6zk.d: Likewise.
+	* gas/arm/attr-march-armv6zkt2.d: Likewise.
+	* gas/arm/attr-march-armv6zt2.d: Likewise.
+	* gas/arm/attr-march-armv7-a.d: Likewise.
+	* gas/arm/attr-march-armv7a.d: Likewise.
+	* gas/arm/attr-march-armv7-a+idiv.d: Likewise.
+	* gas/arm/attr-march-armv7-a+mp.d: Likewise.
+	* gas/arm/attr-march-armv7-a+sec.d: Likewise.
+	* gas/arm/attr-march-armv7-a+sec+virt.d: Likewise.
+	* gas/arm/attr-march-armv7-a+virt.d: Likewise.
+	* gas/arm/attr-march-armv7.d: Likewise.
+	* gas/arm/attr-march-armv7em.d: Likewise.
+	* gas/arm/attr-march-armv7-m.d: Likewise.
+	* gas/arm/attr-march-armv7m.d: Likewise.
+	* gas/arm/attr-march-armv7-r.d: Likewise.
+	* gas/arm/attr-march-armv7r.d: Likewise.
+	* gas/arm/attr-march-armv7-r+mp.d: Likewise.
+	* gas/arm/attr-march-iwmmxt2.d: Likewise.
+	* gas/arm/attr-march-iwmmxt.d: Likewise.
+	* gas/arm/attr-march-xscale.d: Likewise.
+	* gas/arm/attr-mcpu.d: Likewise.
+	* gas/arm/attr-mfpu-arm1020e.d: Likewise.
+	* gas/arm/attr-mfpu-arm1020t.d: Likewise.
+	* gas/arm/attr-mfpu-arm1136jf-s.d: Likewise.
+	* gas/arm/attr-mfpu-arm1136jfs.d: Likewise.
+	* gas/arm/attr-mfpu-arm7500fe.d: Likewise.
+	* gas/arm/attr-mfpu-fpa10.d: Likewise.
+	* gas/arm/attr-mfpu-fpa11.d: Likewise.
+	* gas/arm/attr-mfpu-fpa.d: Likewise.
+	* gas/arm/attr-mfpu-fpe2.d: Likewise.
+	* gas/arm/attr-mfpu-fpe3.d: Likewise.
+	* gas/arm/attr-mfpu-fpe.d: Likewise.
+	* gas/arm/attr-mfpu-maverick.d: Likewise.
+	* gas/arm/attr-mfpu-neon.d: Likewise.
+	* gas/arm/attr-mfpu-neon-fp16.d: Likewise.
+	* gas/arm/attr-mfpu-softfpa.d: Likewise.
+	* gas/arm/attr-mfpu-softvfp.d: Likewise.
+	* gas/arm/attr-mfpu-softvfp+vfp.d: Likewise.
+	* gas/arm/attr-mfpu-vfp10.d: Likewise.
+	* gas/arm/attr-mfpu-vfp10-r0.d: Likewise.
+	* gas/arm/attr-mfpu-vfp3.d: Likewise.
+	* gas/arm/attr-mfpu-vfp9.d: Likewise.
+	* gas/arm/attr-mfpu-vfp.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv2.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv3-d16.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv3.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv4-d16.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv4.d: Likewise.
+	* gas/arm/attr-mfpu-vfpxd.d: Likewise.
+	* gas/arm/attr-names.d: Likewise.
+	* gas/arm/attr-order.d: Likewise.
+	* gas/arm/attr-override-cpu-directive.d: Likewise.
+	* gas/arm/attr-override-mcpu.d: Likewise.
+	* gas/arm/got_prel.d: Likewise.
+	* gas/arm/mapdir.d: Likewise.
+	* gas/arm/mapmisc.d: Likewise.
+	* gas/arm/mapsecs.d: Likewise.
+	* gas/arm/mapshort-eabi.d: Likewise.
+	* gas/arm/mapshort-elf.d: Likewise.
+	* gas/arm/mov-highregs-any.d: Likewise.
+	* gas/arm/mov-lowregs-any.d: Likewise.
+	* gas/arm/pr12198-1.d: Likewise.
+	* gas/arm/pr12198-2.d: Likewise.
+	* gas/arm/thumb.d: Likewise.
+	* gas/arm/thumb-eabi.d: Likewise.
+	* gas/arm/thumbrel.d: Likewise.
+
+2012-04-12  Jie Zhang  <jie@codesourcery.com>
+            Meador Inge  <meadori@codesourcery.com>
+
+	* gas/arm/push-pop.d: New testcase.
+	* gas/arm/push-pop.s: Ditto.
+	* gas/arm/stm-ldm.d: Ditto.
+	* gas/arm/stm-ldm.s: Ditto.
+
+2012-04-07  David S. Miller  <davem@davemloft.net>
+
+	* gas/all/gas.exp: Sparc can handle BFD_RELOC_8 for constants.
+
+2012-04-03  Roland McGrath  <mcgrathr@google.com>
+
+	* gas/i386/k1om.d: Add not-target match for *-*-nacl*.
+	* gas/i386/l1om.d: Likewise.
+
+2012-04-02  DJ Delorie  <dj@redhat.com>
+
+	* gas/rx/mov.d: Update patterns for fixed MOV.W encoding.
+
+2012-03-20  Nick Clifton  <nickc@redhat.com>
+
+	* gas/arm/vfp1xD.s: Add tests of the VMSR ad VMRS instructions in
+	priviledged modes.
+	* gas/arm/vfp1xD.d: Update expected output.
+
+2012-03-16  Matthew Gretton-Dann  <matther.gretton-dann@arm.com>
+
+	* gas/testsuite/gas/arm/any-idiv.d: New testcase.
+	* gas/testsuite/gas/arm/any-idiv.s: Likewise.
+	* gas/arm/attr-any-armv4t.d: Update expected output.
+	* gas/arm/attr-any-thumbv6.d: Likewise.
+	* gas/arm/attr-cpu-directive.d: Likewise.
+	* gas/arm/attr-default.d: Likewise.
+	* gas/arm/attr-march-armv1.d: Likewise.
+	* gas/arm/attr-march-armv2.d: Likewise.
+	* gas/arm/attr-march-armv2a.d: Likewise.
+	* gas/arm/attr-march-armv2s.d: Likewise.
+	* gas/arm/attr-march-armv3.d: Likewise.
+	* gas/arm/attr-march-armv3m.d: Likewise.
+	* gas/arm/attr-march-armv4.d: Likewise.
+	* gas/arm/attr-march-armv4t.d: Likewise.
+	* gas/arm/attr-march-armv4txm.d: Likewise.
+	* gas/arm/attr-march-armv4xm.d: Likewise.
+	* gas/arm/attr-march-armv5.d: Likewise.
+	* gas/arm/attr-march-armv5t.d: Likewise.
+	* gas/arm/attr-march-armv5te.d: Likewise.
+	* gas/arm/attr-march-armv5tej.d: Likewise.
+	* gas/arm/attr-march-armv5texp.d: Likewise.
+	* gas/arm/attr-march-armv5txm.d: Likewise.
+	* gas/arm/attr-march-armv6-m+os.d: Likewise.
+	* gas/arm/attr-march-armv6-m.d: Likewise.
+	* gas/arm/attr-march-armv6.d: Likewise.
+	* gas/arm/attr-march-armv6j.d: Likewise.
+	* gas/arm/attr-march-armv6k+sec.d: Likewise.
+	* gas/arm/attr-march-armv6k.d: Likewise.
+	* gas/arm/attr-march-armv6kt2.d: Likewise.
+	* gas/arm/attr-march-armv6s-m.d: Likewise.
+	* gas/arm/attr-march-armv6t2.d: Likewise.
+	* gas/arm/attr-march-armv6z.d: Likewise.
+	* gas/arm/attr-march-armv6zk.d: Likewise.
+	* gas/arm/attr-march-armv6zkt2.d: Likewise.
+	* gas/arm/attr-march-armv6zt2.d: Likewise.
+	* gas/arm/attr-march-armv7-a+mp.d: Likewise.
+	* gas/arm/attr-march-armv7-a+sec.d: Likewise.
+	* gas/arm/attr-march-armv7-a.d: Likewise.
+	* gas/arm/attr-march-armv7.d: Likewise.
+	* gas/arm/attr-march-armv7a.d: Likewise.
+	* gas/arm/attr-march-iwmmxt.d: Likewise.
+	* gas/arm/attr-march-iwmmxt2.d: Likewise.
+	* gas/arm/attr-march-xscale.d: Likewise.
+	* gas/arm/attr-mcpu.d: Likewise.
+	* gas/arm/attr-mfpu-arm1020e.d: Likewise.
+	* gas/arm/attr-mfpu-arm1020t.d: Likewise.
+	* gas/arm/attr-mfpu-arm1136jf-s.d: Likewise.
+	* gas/arm/attr-mfpu-arm1136jfs.d: Likewise.
+	* gas/arm/attr-mfpu-arm7500fe.d: Likewise.
+	* gas/arm/attr-mfpu-fpa.d: Likewise.
+	* gas/arm/attr-mfpu-fpa10.d: Likewise.
+	* gas/arm/attr-mfpu-fpa11.d: Likewise.
+	* gas/arm/attr-mfpu-fpe.d: Likewise.
+	* gas/arm/attr-mfpu-fpe2.d: Likewise.
+	* gas/arm/attr-mfpu-fpe3.d: Likewise.
+	* gas/arm/attr-mfpu-maverick.d: Likewise.
+	* gas/arm/attr-mfpu-neon-fp16.d: Likewise.
+	* gas/arm/attr-mfpu-neon.d: Likewise.
+	* gas/arm/attr-mfpu-softfpa.d: Likewise.
+	* gas/arm/attr-mfpu-softvfp+vfp.d: Likewise.
+	* gas/arm/attr-mfpu-softvfp.d: Likewise.
+	* gas/arm/attr-mfpu-vfp.d: Likewise.
+	* gas/arm/attr-mfpu-vfp10-r0.d: Likewise.
+	* gas/arm/attr-mfpu-vfp10.d: Likewise.
+	* gas/arm/attr-mfpu-vfp3.d: Likewise.
+	* gas/arm/attr-mfpu-vfp9.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv2.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv3-d16.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv3.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv4-d16.d: Likewise.
+	* gas/arm/attr-mfpu-vfpv4.d: Likewise.
+	* gas/arm/attr-mfpu-vfpxd.d: Likewise.
+	* gas/arm/attr-order.d: Likewise.
+	* gas/arm/attr-override-cpu-directive.d: Likewise.
+	* gas/arm/attr-override-mcpu.d: Likewise.
+	* gas/arm/eabi_attr_1.d: Likewise.
+	* gas/arm/mov-highregs-any.d: Likewise.
+	* gas/arm/mov-lowregs-any.d: Likewise.
+	* gas/arm/pr12198-1.d: Likewise.
+	* gas/arm/pr12198-2.d: Likewise.
+
+2012-03-15  Alan Modra  <amodra@gmail.com>
+
+	* gas/i386/bundle-lock.d: Ignore trailing nops.
+	* gas/i386/bundle.d: Likewise.
+	* gas/i386/x86-64-bundle.d: Likewise.
+
+2012-03-13  Roland McGrath  <mcgrathr@google.com>
+
+	* gas/i386/bundle-bad.s: New file.
+	* gas/i386/bundle-bad.d: New file.
+	* gas/i386/bundle-bad.l: New file.
+	* gas/i386/i386.exp: Run it.
+
+	* gas/arm/bundle.s: New file.
+	* gas/arm/bundle.d: New file.
+	* gas/arm/bundle-lock.s: New file.
+	* gas/arm/bundle-lock.d: New file.
+
+	* gas/i386/bundle.s: New file.
+	* gas/i386/bundle.d: New file.
+	* gas/i386/x86-64-bundle.s: New file.
+	* gas/i386/x86-64-bundle.d: New file.
+	* gas/i386/bundle-lock.s: New file.
+	* gas/i386/bundle-lock.d: New file.
+	* gas/i386/i386.exp: Run them.
+
+2012-03-10  Edmar Wienskoski  <edmar@freescale.com>
+
+	* gas/ppc/e500mc64_nop.s: New test case for e500mc family
+	termination nops.
+	* gas/ppc/e500mc64_nop.d: Likewise.
+	* gas/ppc/e5500_nop.s: Likewise.
+	* gas/ppc/e5500_nop.d: Likewise.
+	* gas/ppc/e6500_nop.s: Likewise.
+	* gas/ppc/e6500_nop.d: Likewise.
+	* gas/ppc/e6500.s: New.
+	* gas/ppc/e6500.d: Likewise.
+	* gas/ppc/ppc.exp: Run e6500, e500mc64_nop, e5500_nop, and e6500_nop.
+
+2012-03-08  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* gas/s390/esa-g5.d: Move length field to the second operand.
+	* gas/s390/esa-g5.s: Likewise.
+
+2012-02-14  Alan Modra  <amodra@gmail.com>
+
+	* gas/elf/bad-group.s: Add section attributes.
+	* gas/elf/elf.exp (groupautoa, groupautob): Don't run for hppa64-hpux.
+	(ifunc-1, type): Don't run for hpux.
+	* gas/elf/type-noifunc.e: Accept ANSI_COM.
+	* gas/elf/section7.s: Always have whitespace before directives.
+	* gas/elf/warn-2.s: Likewise.
+	* gas/i386/ifunc-3.s: Move .size directive.
+
+2012-02-13  Alan Modra  <amodra@gmail.com>
+
+	* gas/all/gas.exp (redef2): xfail m6811 and m6812.
+	* gas/elf/elf.exp: Use is_elf_format.
+	* gas/symver/symver.exp: Likewise.
+	* gas/m68hc11/m68hc11.exp: Simplify target test.
+	Add -m68hc11 to error tests that pass for hc12.
+
+2012-02-11  Kai Tietz  <ktietz@redhat.com>
+
+	* gas/i386/disp32.d: Adjust label pattern.
+
+2012-02-08  Kai Tietz  <ktietz@redhat.com>
+
+	* gas/i386/x86-64-disp32.d: Fix lable-pattern.
+
+2012-02-08  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/i386/hle-intel.d: New.
+	* gas/i386/hle.d: Likewise.
+	* gas/i386/hle.s: Likewise.
+	* gas/i386/hlebad.l: Likewise.
+	* gas/i386/hlebad.s: Likewise.
+	* gas/i386/rtm-intel.d: Likewise.
+	* gas/i386/rtm.d: Likewise.
+	* gas/i386/rtm.s: Likewise.
+	* gas/i386/x86-64-hle-intel.d: Likewise.
+	* gas/i386/x86-64-hle.d: Likewise.
+	* gas/i386/x86-64-hle.s: Likewise.
+	* gas/i386/x86-64-hlebad.l: Likewise.
+	* gas/i386/x86-64-hlebad.s: Likewise.
+	* gas/i386/x86-64-rtm-intel.d: Likewise.
+	* gas/i386/x86-64-rtm.d: Likewise.
+	* gas/i386/x86-64-rtm.s: Likewise.
+
+	* gas/i386/i386.exp: Run hle, hle-intel, hlebad x86-64-hle, rtm,
+	rtm-intel, x86-64-hle-intel, x86-64-hlebad, x86-64-rtm and
+	x86-64-rtm-intel.
+
+2012-01-20  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/i386/disp32.s: Add tests for .d8 suffix.
+	* gas/i386/x86-64-disp32.s: Likewise.
+
+	* gas/i386/disp32.d: Updated.
+	* gas/i386/x86-64-disp32.d: Likewise.
+
+2012-01-17  Andreas Schwab  <schwab@linux-m68k.org>
+
+	* gas/m68k/pmove.s, gas/m68k/pmove.d: New test.
+	* gas/m68k/all.exp: Run it.
+
+2012-01-13  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* gas/i386/i386.exp: Run vmfunc and x86-64-vmfunc.
+
+	* gas/i386/vmfunc.d: New.
+	* gas/i386/vmfunc.s: Likewise.
+	* gas/i386/x86-64-vmfunc.d: Likewise.
+
+2012-01-13  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/all/redef2.d: Skip for Darwin.
+	* gas/all/redef3.d: Likewise.
+	* gas/all/weakref1.d: Likewise.
+	* gas/macros/irp.d: Likewise.
+	* gas/macros/repeat.d: Likewise.
+	* gas/macros/rept.d: Likewise.
+	* gas/macros/test2.d: Likewise.
+	* gas/macros/vararg.d: Likewise.
+	* gas/mach-o/macro-irp.d: New.
+	* gas/mach-o/macro-repeat.d: New.
+	* gas/mach-o/macro-rept.d: New.
+	* gas/mach-o/macro-test2.d: New.
+	* gas/mach-o/macro-vararg.d: New.
+	* gas/mach-o/redef2.d: New.
+	* gas/mach-o/redef3.d: New.
+
+2012-01-13  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/dysymtab-3.d: New.
+	* gas/mach-o/symbols-7.s: New.
+
+2012-01-13  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/dysymtab-2.d: Update to include the set VMA.
+	* gas/mach-o/symbols-1-64.d: Likewise.
+	* gas/mach-o/symbols-1.d: Likewise.
+	* gas/mach-o/symbols-6.d: Likewise.
+	* gas/mach-o/zerofill-1.d: Likewise.
+	* gas/mach-o/zerofill-2.d: Likewise.
+
+2012-01-12  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/dysymtab-2.d: New.
+	* gas/mach-o/err-syms-4.s: New.
+	* gas/mach-o/err-syms-5.s: New.
+	* gas/mach-o/err-syms-6.s: New.
+	* gas/mach-o/symbols-6-64.d: New.
+	* gas/mach-o/symbols-6-64.s: New.
+	* gas/mach-o/symbols-6.d: New.
+	* gas/mach-o/symbols-6.s: New.
+
+2012-01-09  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/err-syms-1.s: New.
+	* gas/mach-o/err-syms-2.s: New.
+	* gas/mach-o/err-syms-3.s: New.
+	* gas/mach-o/symbols-2.d: New.
+	* gas/mach-o/symbols-2.s: New.
+	* gas/mach-o/symbols-3.s: New.
+	* gas/mach-o/symbols-4.s: New.
+	* gas/mach-o/symbols-5.d: New.
+	* gas/mach-o/symbols-5.s: New.
+
+2012-01-08  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	* gas/mips/tls-relw.s, gas/mips/tls-relw.d: New test.
+	* gas/mips/mips.exp: Run it.
+
+2012-01-08  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	* gas/mips/align3.s, gas/mips/align3.d: New testcase.
+	* gas/mips/mips.exp: Run it.
+
+2012-01-04  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/zerofill-2.d: New.
+
+2012-01-04  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/zerofill-1.d: New.
+	* gas/mach-o/zerofill-1.s: New.
+
+2012-01-03  Iain Sandoe  <idsandoe@googlemail.com>
+
+	* gas/mach-o/dysymtab-1-64.d: New.
+	* gas/mach-o/dysymtab-1.d: New.
+	* gas/mach-o/symbols-1-64.d: New.
+	* gas/mach-o/symbols-1.d: New.
+	* gas/mach-o/symbols-base-64.s: New.
+	* gas/mach-o/symbols-base.s: New.
+
+For older changes see ChangeLog-2011
 
 Local Variables:
 mode: change-log

@@ -68,7 +68,8 @@ elf_strtab_hash_newfunc (struct bfd_hash_entry *entry,
   /* Allocate the structure if it has not already been allocated by a
      subclass.  */
   if (entry == NULL)
-    entry = bfd_hash_allocate (table, sizeof (struct elf_strtab_hash_entry));
+    entry = (struct bfd_hash_entry *)
+        bfd_hash_allocate (table, sizeof (struct elf_strtab_hash_entry));
   if (entry == NULL)
     return NULL;
 
@@ -97,7 +98,7 @@ _bfd_elf_strtab_init (void)
   struct elf_strtab_hash *table;
   bfd_size_type amt = sizeof (struct elf_strtab_hash);
 
-  table = bfd_malloc (amt);
+  table = (struct elf_strtab_hash *) bfd_malloc (amt);
   if (table == NULL)
     return NULL;
 
@@ -112,7 +113,8 @@ _bfd_elf_strtab_init (void)
   table->size = 1;
   table->alloced = 64;
   amt = sizeof (struct elf_strtab_hasn_entry *);
-  table->array = bfd_malloc (table->alloced * amt);
+  table->array = (struct elf_strtab_hash_entry **)
+      bfd_malloc (table->alloced * amt);
   if (table->array == NULL)
     {
       free (table);
@@ -166,7 +168,8 @@ _bfd_elf_strtab_add (struct elf_strtab_hash *tab,
 	{
 	  bfd_size_type amt = sizeof (struct elf_strtab_hash_entry *);
 	  tab->alloced *= 2;
-	  tab->array = bfd_realloc_or_free (tab->array, tab->alloced * amt);
+	  tab->array = (struct elf_strtab_hash_entry **)
+              bfd_realloc_or_free (tab->array, tab->alloced * amt);
 	  if (tab->array == NULL)
 	    return (bfd_size_type) -1;
 	}
@@ -198,13 +201,39 @@ _bfd_elf_strtab_delref (struct elf_strtab_hash *tab, bfd_size_type idx)
   --tab->array[idx]->refcount;
 }
 
+unsigned int
+_bfd_elf_strtab_refcount (struct elf_strtab_hash *tab, bfd_size_type idx)
+{
+  return tab->array[idx]->refcount;
+}
+
 void
 _bfd_elf_strtab_clear_all_refs (struct elf_strtab_hash *tab)
 {
   bfd_size_type idx;
 
-  for (idx = 1; idx < tab->size; ++idx)
+  for (idx = 1; idx < tab->size; idx++)
     tab->array[idx]->refcount = 0;
+}
+
+/* Downsizes strtab.  Entries from IDX up to the current size are
+   removed from the array.  */
+void
+_bfd_elf_strtab_restore_size (struct elf_strtab_hash *tab, bfd_size_type idx)
+{
+  bfd_size_type curr_size = tab->size;
+
+  BFD_ASSERT (tab->sec_size == 0);
+  BFD_ASSERT (idx <= curr_size);
+  tab->size = idx;
+  for (; idx < curr_size; ++idx)
+    {
+      /* We don't remove entries from the hash table, just set their
+	 REFCOUNT to zero.  Setting LEN zero will result in the size
+	 growing if the entry is added again.  See _bfd_elf_strtab_add.  */
+      tab->array[idx]->refcount = 0;
+      tab->array[idx]->len = 0;
+    }
 }
 
 bfd_size_type
@@ -311,7 +340,7 @@ _bfd_elf_strtab_finalize (struct elf_strtab_hash *tab)
 
   /* Sort the strings by suffix and length.  */
   amt = tab->size * sizeof (struct elf_strtab_hash_entry *);
-  array = bfd_malloc (amt);
+  array = (struct elf_strtab_hash_entry **) bfd_malloc (amt);
   if (array == NULL)
     goto alloc_failure;
 

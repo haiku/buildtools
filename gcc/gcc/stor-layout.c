@@ -31,7 +31,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "function.h"
 #include "expr.h"
 #include "output.h"
-#include "toplev.h"
+#include "diagnostic-core.h"
 #include "ggc.h"
 #include "target.h"
 #include "langhooks.h"
@@ -49,8 +49,6 @@ tree sizetype_tab[(int) TYPE_KIND_LAST];
 /* If nonzero, this is an upper limit on alignment of structure fields.
    The value is measured in bits.  */
 unsigned int maximum_field_alignment = TARGET_DEFAULT_PACK_STRUCT * BITS_PER_UNIT;
-/* ... and its original value in bytes, specified via -fpack-struct=<value>.  */
-unsigned int initial_max_fld_align = TARGET_DEFAULT_PACK_STRUCT;
 
 /* Nonzero if all REFERENCE_TYPEs are internal and hence should be allocated
    in the address spaces' address_mode, not pointer_mode.   Set only by
@@ -69,7 +67,7 @@ extern void debug_rli (record_layout_info);
 
 /* SAVE_EXPRs for sizes of types and decls, waiting to be expanded.  */
 
-static GTY(()) tree pending_sizes;
+static GTY(()) VEC(tree,gc) *pending_sizes;
 
 /* Show that REFERENCE_TYPES are internal and should use address_mode.
    Called only by front end.  */
@@ -80,12 +78,12 @@ internal_reference_types (void)
   reference_types_internal = 1;
 }
 
-/* Get a list of all the objects put on the pending sizes list.  */
+/* Get a VEC of all the objects put on the pending sizes list.  */
 
-tree
+VEC(tree,gc) *
 get_pending_sizes (void)
 {
-  tree chain = pending_sizes;
+  VEC(tree,gc) *chain = pending_sizes;
 
   pending_sizes = 0;
   return chain;
@@ -101,14 +99,14 @@ put_pending_size (tree expr)
   expr = skip_simple_arithmetic (expr);
 
   if (TREE_CODE (expr) == SAVE_EXPR)
-    pending_sizes = tree_cons (NULL_TREE, expr, pending_sizes);
+    VEC_safe_push (tree, gc, pending_sizes, expr);
 }
 
 /* Put a chain of objects into the pending sizes list, which must be
    empty.  */
 
 void
-put_pending_sizes (tree chain)
+put_pending_sizes (VEC(tree,gc) *chain)
 {
   gcc_assert (!pending_sizes);
   pending_sizes = chain;
@@ -259,10 +257,11 @@ self_referential_size (tree size)
 {
   static unsigned HOST_WIDE_INT fnno = 0;
   VEC (tree, heap) *self_refs = NULL;
-  tree param_type_list = NULL, param_decl_list = NULL, arg_list = NULL;
+  tree param_type_list = NULL, param_decl_list = NULL;
   tree t, ref, return_type, fntype, fnname, fndecl;
   unsigned int i;
   char buf[128];
+  VEC(tree,gc) *args = NULL;
 
   /* Do not factor out simple operations.  */
   t = skip_simple_constant_arithmetic (size);
@@ -281,7 +280,8 @@ self_referential_size (tree size)
 
   /* Build the parameter and argument lists in parallel; also
      substitute the former for the latter in the expression.  */
-  for (i = 0; VEC_iterate (tree, self_refs, i, ref); i++)
+  args = VEC_alloc (tree, gc, VEC_length (tree, self_refs));
+  FOR_EACH_VEC_ELT (tree, self_refs, i, ref)
     {
       tree subst, param_name, param_type, param_decl;
 
@@ -316,7 +316,7 @@ self_referential_size (tree size)
 
       param_type_list = tree_cons (NULL_TREE, param_type, param_type_list);
       param_decl_list = chainon (param_decl, param_decl_list);
-      arg_list = tree_cons (NULL_TREE, ref, arg_list);
+      VEC_quick_push (tree, args, ref);
     }
 
   VEC_free (tree, heap, self_refs);
@@ -327,7 +327,6 @@ self_referential_size (tree size)
   /* The 3 lists have been created in reverse order.  */
   param_type_list = nreverse (param_type_list);
   param_decl_list = nreverse (param_decl_list);
-  arg_list = nreverse (arg_list);
 
   /* Build the function type.  */
   return_type = TREE_TYPE (size);
@@ -337,7 +336,7 @@ self_referential_size (tree size)
   sprintf (buf, "SZ"HOST_WIDE_INT_PRINT_UNSIGNED, fnno++);
   fnname = get_file_function_name (buf);
   fndecl = build_decl (input_location, FUNCTION_DECL, fnname, fntype);
-  for (t = param_decl_list; t; t = TREE_CHAIN (t))
+  for (t = param_decl_list; t; t = DECL_CHAIN (t))
     DECL_CONTEXT (t) = fndecl;
   DECL_ARGUMENTS (fndecl) = param_decl_list;
   DECL_RESULT (fndecl)
@@ -368,7 +367,7 @@ self_referential_size (tree size)
   VEC_safe_push (tree, gc, size_functions, fndecl);
 
   /* Replace the original expression with a call to the size function.  */
-  return build_function_call_expr (input_location, fndecl, arg_list);
+  return build_call_expr_loc_vec (UNKNOWN_LOCATION, fndecl, args);
 }
 
 /* Take, queue and compile all the size functions.  It is essential that
@@ -395,10 +394,6 @@ finalize_size_functions (void)
   VEC_free (tree, gc, size_functions);
 }
 
-#ifndef MAX_FIXED_MODE_SIZE
-#define MAX_FIXED_MODE_SIZE GET_MODE_BITSIZE (DImode)
-#endif
-
 /* Return the machine mode to use for a nonscalar of SIZE bits.  The
    mode must be in class MCLASS, and have exactly that many value bits;
    it may have padding as well.  If LIMIT is nonzero, modes of wider
@@ -494,6 +489,50 @@ int_mode_for_mode (enum machine_mode mode)
     default:
       gcc_unreachable ();
     }
+
+  return mode;
+}
+
+/* Find a mode that is suitable for representing a vector with
+   NUNITS elements of mode INNERMODE.  Returns BLKmode if there
+   is no suitable mode.  */
+
+enum machine_mode
+mode_for_vector (enum machine_mode innermode, unsigned nunits)
+{
+  enum machine_mode mode;
+
+  /* First, look for a supported vector type.  */
+  if (SCALAR_FLOAT_MODE_P (innermode))
+    mode = MIN_MODE_VECTOR_FLOAT;
+  else if (SCALAR_FRACT_MODE_P (innermode))
+    mode = MIN_MODE_VECTOR_FRACT;
+  else if (SCALAR_UFRACT_MODE_P (innermode))
+    mode = MIN_MODE_VECTOR_UFRACT;
+  else if (SCALAR_ACCUM_MODE_P (innermode))
+    mode = MIN_MODE_VECTOR_ACCUM;
+  else if (SCALAR_UACCUM_MODE_P (innermode))
+    mode = MIN_MODE_VECTOR_UACCUM;
+  else
+    mode = MIN_MODE_VECTOR_INT;
+
+  /* Do not check vector_mode_supported_p here.  We'll do that
+     later in vector_type_mode.  */
+  for (; mode != VOIDmode ; mode = GET_MODE_WIDER_MODE (mode))
+    if (GET_MODE_NUNITS (mode) == nunits
+	&& GET_MODE_INNER (mode) == innermode)
+      break;
+
+  /* For integers, try mapping it to a same-sized scalar mode.  */
+  if (mode == VOIDmode
+      && GET_MODE_CLASS (innermode) == MODE_INT)
+    mode = mode_for_size (nunits * GET_MODE_BITSIZE (innermode),
+			  MODE_INT, 0);
+
+  if (mode == VOIDmode
+      || (GET_MODE_CLASS (mode) == MODE_INT
+	  && !have_regs_of_mode[mode]))
+    return BLKmode;
 
   return mode;
 }
@@ -619,11 +658,15 @@ layout_decl (tree decl, unsigned int known_align)
 	    }
 
 	  /* See if we can use an ordinary integer mode for a bit-field.
-	     Conditions are: a fixed size that is correct for another mode
-	     and occupying a complete byte or bytes on proper boundary.  */
+	     Conditions are: a fixed size that is correct for another mode,
+	     occupying a complete byte or bytes on proper boundary,
+	     and not -fstrict-volatile-bitfields.  If the latter is set,
+	     we unfortunately can't check TREE_THIS_VOLATILE, as a cast
+	     may make a volatile object later.  */
 	  if (TYPE_SIZE (type) != 0
 	      && TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST
-	      && GET_MODE_CLASS (TYPE_MODE (type)) == MODE_INT)
+	      && GET_MODE_CLASS (TYPE_MODE (type)) == MODE_INT
+	      && flag_strict_volatile_bitfields <= 0)
 	    {
 	      enum machine_mode xmode
 		= mode_for_size_tree (DECL_SIZE (decl), MODE_INT, 1);
@@ -703,9 +746,9 @@ layout_decl (tree decl, unsigned int known_align)
 	  int size_as_int = TREE_INT_CST_LOW (size);
 
 	  if (compare_tree_int (size, size_as_int) == 0)
-	    warning (OPT_Wlarger_than_eq, "size of %q+D is %d bytes", decl, size_as_int);
+	    warning (OPT_Wlarger_than_, "size of %q+D is %d bytes", decl, size_as_int);
 	  else
-	    warning (OPT_Wlarger_than_eq, "size of %q+D is larger than %wd bytes",
+	    warning (OPT_Wlarger_than_, "size of %q+D is larger than %wd bytes",
                      decl, larger_than_size);
 	}
     }
@@ -773,7 +816,7 @@ start_record_layout (tree t)
   rli->offset = size_zero_node;
   rli->bitpos = bitsize_zero_node;
   rli->prev_field = 0;
-  rli->pending_statics = 0;
+  rli->pending_statics = NULL;
   rli->packed_maybe_necessary = 0;
   rli->remaining_in_alignment = 0;
 
@@ -839,7 +882,7 @@ normalize_offset (tree *poffset, tree *pbitpos, unsigned int off_align)
 
 /* Print debugging information about the information in RLI.  */
 
-void
+DEBUG_FUNCTION void
 debug_rli (record_layout_info rli)
 {
   print_node_brief (stderr, "type", rli->t, 0);
@@ -857,10 +900,10 @@ debug_rli (record_layout_info rli)
   if (rli->packed_maybe_necessary)
     fprintf (stderr, "packed may be necessary\n");
 
-  if (rli->pending_statics)
+  if (!VEC_empty (tree, rli->pending_statics))
     {
       fprintf (stderr, "pending statics:\n");
-      debug_tree (rli->pending_statics);
+      debug_vec_tree (rli->pending_statics);
     }
 }
 
@@ -1022,8 +1065,7 @@ place_union_field (record_layout_info rli, tree field)
   if (TREE_CODE (rli->t) == UNION_TYPE)
     rli->offset = size_binop (MAX_EXPR, rli->offset, DECL_SIZE_UNIT (field));
   else if (TREE_CODE (rli->t) == QUAL_UNION_TYPE)
-    rli->offset = fold_build3_loc (input_location, COND_EXPR, sizetype,
-			       DECL_QUALIFIER (field),
+    rli->offset = fold_build3 (COND_EXPR, sizetype, DECL_QUALIFIER (field),
 			       DECL_SIZE_UNIT (field), rli->offset);
 }
 
@@ -1071,8 +1113,7 @@ place_field (record_layout_info rli, tree field)
      it *after* the record is laid out.  */
   if (TREE_CODE (field) == VAR_DECL)
     {
-      rli->pending_statics = tree_cons (NULL_TREE, field,
-					rli->pending_statics);
+      VEC_safe_push (tree, gc, rli->pending_statics, field);
       return;
     }
 
@@ -1137,15 +1178,14 @@ place_field (record_layout_info rli, tree field)
     }
 
   /* Does this field automatically have alignment it needs by virtue
-     of the fields that precede it and the record's own alignment?
-     We already align ms_struct fields, so don't re-align them.  */
-  if (known_align < desired_align
-      && !targetm.ms_bitfield_layout_p (rli->t))
+     of the fields that precede it and the record's own alignment?  */
+  if (known_align < desired_align)
     {
       /* No, we need to skip space before this field.
 	 Bump the cumulative size to multiple of field alignment.  */
 
-      if (DECL_SOURCE_LOCATION (field) != BUILTINS_LOCATION)
+      if (!targetm.ms_bitfield_layout_p (rli->t)
+          && DECL_SOURCE_LOCATION (field) != BUILTINS_LOCATION)
 	warning (OPT_Wpadded, "padding struct to align %q+D", field);
 
       /* If the alignment is still within offset_align, just align
@@ -1167,7 +1207,8 @@ place_field (record_layout_info rli, tree field)
 
       if (! TREE_CONSTANT (rli->offset))
 	rli->offset_align = desired_align;
-
+      if (targetm.ms_bitfield_layout_p (rli->t))
+	rli->prev_field = NULL;
     }
 
   /* Handle compatibility with PCC.  Note that if the record has any
@@ -1207,11 +1248,11 @@ place_field (record_layout_info rli, tree field)
 	      if (warn_packed_bitfield_compat == 1)
 		inform
 		  (input_location,
-		   "Offset of packed bit-field %qD has changed in GCC 4.4",
+		   "offset of packed bit-field %qD has changed in GCC 4.4",
 		   field);
 	    }
 	  else
-	    rli->bitpos = round_up_loc (input_location, rli->bitpos, type_align);
+	    rli->bitpos = round_up (rli->bitpos, type_align);
 	}
 
       if (! DECL_PACKED (field))
@@ -1392,7 +1433,7 @@ place_field (record_layout_info rli, tree field)
 	  if (maximum_field_alignment != 0)
 	    type_align = MIN (type_align, maximum_field_alignment);
 
-	  rli->bitpos = round_up_loc (input_location, rli->bitpos, type_align);
+	  rli->bitpos = round_up (rli->bitpos, type_align);
 
           /* If we really aligned, don't allow subsequent bitfields
 	     to undo that.  */
@@ -1458,8 +1499,8 @@ place_field (record_layout_info rli, tree field)
 
       /* If we ended a bitfield before the full length of the type then
 	 pad the struct out to the full length of the last type.  */
-      if ((TREE_CHAIN (field) == NULL
-	   || TREE_CODE (TREE_CHAIN (field)) != FIELD_DECL)
+      if ((DECL_CHAIN (field) == NULL
+	   || TREE_CODE (DECL_CHAIN (field)) != FIELD_DECL)
 	  && DECL_BIT_FIELD_TYPE (field)
 	  && !integer_zerop (DECL_SIZE (field)))
 	rli->bitpos = size_binop (PLUS_EXPR, rli->bitpos,
@@ -1506,10 +1547,9 @@ finalize_record_size (record_layout_info rli)
       = size_binop (PLUS_EXPR, unpadded_size_unit, size_one_node);
 
   /* Round the size up to be a multiple of the required alignment.  */
-  TYPE_SIZE (rli->t) = round_up_loc (input_location, unpadded_size,
-				 TYPE_ALIGN (rli->t));
+  TYPE_SIZE (rli->t) = round_up (unpadded_size, TYPE_ALIGN (rli->t));
   TYPE_SIZE_UNIT (rli->t)
-    = round_up_loc (input_location, unpadded_size_unit, TYPE_ALIGN_UNIT (rli->t));
+    = round_up (unpadded_size_unit, TYPE_ALIGN_UNIT (rli->t));
 
   if (TREE_CONSTANT (unpadded_size)
       && simple_cst_equal (unpadded_size, TYPE_SIZE (rli->t)) == 0
@@ -1529,11 +1569,9 @@ finalize_record_size (record_layout_info rli)
       rli->unpacked_align = MAX (TYPE_ALIGN (rli->t), rli->unpacked_align);
 #endif
 
-      unpacked_size = round_up_loc (input_location, TYPE_SIZE (rli->t), rli->unpacked_align);
+      unpacked_size = round_up (TYPE_SIZE (rli->t), rli->unpacked_align);
       if (simple_cst_equal (unpacked_size, TYPE_SIZE (rli->t)))
 	{
-	  TYPE_PACKED (rli->t) = 0;
-
 	  if (TYPE_NAME (rli->t))
 	    {
 	      tree name;
@@ -1582,7 +1620,7 @@ compute_record_mode (tree type)
   /* A record which has any BLKmode members must itself be
      BLKmode; it can't go in a register.  Unless the member is
      BLKmode only because it isn't aligned.  */
-  for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+  for (field = TYPE_FIELDS (type); field; field = DECL_CHAIN (field))
     {
       if (TREE_CODE (field) != FIELD_DECL)
 	continue;
@@ -1683,10 +1721,9 @@ finalize_type_size (tree type)
 
   if (TYPE_SIZE (type) != 0)
     {
-      TYPE_SIZE (type) = round_up_loc (input_location,
-				   TYPE_SIZE (type), TYPE_ALIGN (type));
-      TYPE_SIZE_UNIT (type) = round_up_loc (input_location, TYPE_SIZE_UNIT (type),
-					TYPE_ALIGN_UNIT (type));
+      TYPE_SIZE (type) = round_up (TYPE_SIZE (type), TYPE_ALIGN (type));
+      TYPE_SIZE_UNIT (type)
+	= round_up (TYPE_SIZE_UNIT (type), TYPE_ALIGN_UNIT (type));
     }
 
   /* Evaluate nonconstant sizes only once, either now or as soon as safe.  */
@@ -1750,15 +1787,15 @@ finish_record_layout (record_layout_info rli, int free_p)
 
   /* Lay out any static members.  This is done now because their type
      may use the record's type.  */
-  while (rli->pending_statics)
-    {
-      layout_decl (TREE_VALUE (rli->pending_statics), 0);
-      rli->pending_statics = TREE_CHAIN (rli->pending_statics);
-    }
+  while (!VEC_empty (tree, rli->pending_statics))
+    layout_decl (VEC_pop (tree, rli->pending_statics), 0);
 
   /* Clean up.  */
   if (free_p)
-    free (rli);
+    {
+      VEC_free (tree, gc, rli->pending_statics);
+      free (rli);
+    }
 }
 
 
@@ -1777,8 +1814,8 @@ finish_builtin_struct (tree type, const char *name, tree fields,
   for (tail = NULL_TREE; fields; tail = fields, fields = next)
     {
       DECL_FIELD_CONTEXT (fields) = type;
-      next = TREE_CHAIN (fields);
-      TREE_CHAIN (fields) = tail;
+      next = DECL_CHAIN (fields);
+      DECL_CHAIN (fields) = tail;
     }
   TYPE_FIELDS (type) = tail;
 
@@ -1879,44 +1916,8 @@ layout_type (tree type)
 
 	/* Find an appropriate mode for the vector type.  */
 	if (TYPE_MODE (type) == VOIDmode)
-	  {
-	    enum machine_mode innermode = TYPE_MODE (innertype);
-	    enum machine_mode mode;
-
-	    /* First, look for a supported vector type.  */
-	    if (SCALAR_FLOAT_MODE_P (innermode))
-	      mode = MIN_MODE_VECTOR_FLOAT;
-	    else if (SCALAR_FRACT_MODE_P (innermode))
-	      mode = MIN_MODE_VECTOR_FRACT;
-	    else if (SCALAR_UFRACT_MODE_P (innermode))
-	      mode = MIN_MODE_VECTOR_UFRACT;
-	    else if (SCALAR_ACCUM_MODE_P (innermode))
-	      mode = MIN_MODE_VECTOR_ACCUM;
-	    else if (SCALAR_UACCUM_MODE_P (innermode))
-	      mode = MIN_MODE_VECTOR_UACCUM;
-	    else
-	      mode = MIN_MODE_VECTOR_INT;
-
-	    /* Do not check vector_mode_supported_p here.  We'll do that
-	       later in vector_type_mode.  */
-	    for (; mode != VOIDmode ; mode = GET_MODE_WIDER_MODE (mode))
-	      if (GET_MODE_NUNITS (mode) == nunits
-	  	  && GET_MODE_INNER (mode) == innermode)
-	        break;
-
-	    /* For integers, try mapping it to a same-sized scalar mode.  */
-	    if (mode == VOIDmode
-	        && GET_MODE_CLASS (innermode) == MODE_INT)
-	      mode = mode_for_size (nunits * GET_MODE_BITSIZE (innermode),
-				    MODE_INT, 0);
-
-	    if (mode == VOIDmode ||
-		(GET_MODE_CLASS (mode) == MODE_INT
-		 && !have_regs_of_mode[mode]))
-	      SET_TYPE_MODE (type, BLKmode);
-	    else
-	      SET_TYPE_MODE (type, mode);
-	  }
+	  SET_TYPE_MODE (type,
+			 mode_for_vector (TYPE_MODE (innertype), nunits));
 
 	TYPE_SATURATING (type) = TYPE_SATURATING (TREE_TYPE (type));
         TYPE_UNSIGNED (type) = TYPE_UNSIGNED (TREE_TYPE (type));
@@ -1926,9 +1927,17 @@ layout_type (tree type)
 	TYPE_SIZE (type) = int_const_binop (MULT_EXPR, TYPE_SIZE (innertype),
 					    bitsize_int (nunits), 0);
 
-	/* Always naturally align vectors.  This prevents ABI changes
-	   depending on whether or not native vector modes are supported.  */
-	TYPE_ALIGN (type) = tree_low_cst (TYPE_SIZE (type), 0);
+	/* For vector types, we do not default to the mode's alignment.
+	   Instead, query a target hook, defaulting to natural alignment.
+	   This prevents ABI changes depending on whether or not native
+	   vector modes are supported.  */
+	TYPE_ALIGN (type) = targetm.vector_alignment (type);
+
+	/* However, if the underlying mode requires a bigger alignment than
+	   what the target hook provides, we cannot use the mode.  For now,
+	   simply reject that case.  */
+	gcc_assert (TYPE_ALIGN (type)
+		    >= GET_MODE_ALIGNMENT (TYPE_MODE (type)));
         break;
       }
 
@@ -2002,10 +2011,9 @@ layout_type (tree type)
 	      length
 		= size_binop (PLUS_EXPR, size_one_node,
 			      fold_convert (sizetype,
-					    fold_build2_loc (input_location,
-							     MINUS_EXPR,
-							     TREE_TYPE (lb),
-							     ub, lb)));
+					    fold_build2 (MINUS_EXPR,
+							 TREE_TYPE (lb),
+							 ub, lb)));
 
 	    TYPE_SIZE (type) = size_binop (MULT_EXPR, element_size,
 					   fold_convert (bitsizetype,
@@ -2087,7 +2095,7 @@ layout_type (tree type)
 	  TYPE_FIELDS (type) = nreverse (TYPE_FIELDS (type));
 
 	/* Place all the fields.  */
-	for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+	for (field = TYPE_FIELDS (type); field; field = DECL_CHAIN (field))
 	  place_field (rli, field);
 
 	if (TREE_CODE (type) == QUAL_UNION_TYPE)
@@ -2237,37 +2245,35 @@ make_accum_type (int precision, int unsignedp, int satp)
    value to enable integer types to be created.  */
 
 void
-initialize_sizetypes (bool signed_p)
+initialize_sizetypes (void)
 {
   tree t = make_node (INTEGER_TYPE);
   int precision = GET_MODE_BITSIZE (SImode);
 
   SET_TYPE_MODE (t, SImode);
   TYPE_ALIGN (t) = GET_MODE_ALIGNMENT (SImode);
-  TYPE_USER_ALIGN (t) = 0;
   TYPE_IS_SIZETYPE (t) = 1;
-  TYPE_UNSIGNED (t) = !signed_p;
+  TYPE_UNSIGNED (t) = 1;
   TYPE_SIZE (t) = build_int_cst (t, precision);
   TYPE_SIZE_UNIT (t) = build_int_cst (t, GET_MODE_SIZE (SImode));
   TYPE_PRECISION (t) = precision;
 
-  /* Set TYPE_MIN_VALUE and TYPE_MAX_VALUE.  */
-  set_min_and_max_values_for_integral_type (t, precision, !signed_p);
+  set_min_and_max_values_for_integral_type (t, precision, true);
 
   sizetype = t;
   bitsizetype = build_distinct_type_copy (t);
 }
 
-/* Make sizetype a version of TYPE, and initialize *sizetype
-   accordingly.  We do this by overwriting the stub sizetype and
-   bitsizetype nodes created by initialize_sizetypes.  This makes sure
-   that (a) anything stubby about them no longer exists, (b) any
-   INTEGER_CSTs created with such a type, remain valid.  */
+/* Make sizetype a version of TYPE, and initialize *sizetype accordingly.
+   We do this by overwriting the stub sizetype and bitsizetype nodes created
+   by initialize_sizetypes.  This makes sure that (a) anything stubby about
+   them no longer exists and (b) any INTEGER_CSTs created with such a type,
+   remain valid.  */
 
 void
 set_sizetype (tree type)
 {
-  tree t;
+  tree t, max;
   int oprecision = TYPE_PRECISION (type);
   /* The *bitsizetype types use a precision that avoids overflows when
      calculating signed sizes / offsets in bits.  However, when
@@ -2280,11 +2286,11 @@ set_sizetype (tree type)
   if (precision > HOST_BITS_PER_WIDE_INT * 2)
     precision = HOST_BITS_PER_WIDE_INT * 2;
 
-  gcc_assert (TYPE_UNSIGNED (type) == TYPE_UNSIGNED (sizetype));
+  /* sizetype must be an unsigned type.  */
+  gcc_assert (TYPE_UNSIGNED (type));
 
   t = build_distinct_type_copy (type);
-  /* We do want to use sizetype's cache, as we will be replacing that
-     type.  */
+  /* We want to use sizetype's cache, as we will be replacing that type.  */
   TYPE_CACHED_VALUES (t) = TYPE_CACHED_VALUES (sizetype);
   TYPE_CACHED_VALUES_P (t) = TYPE_CACHED_VALUES_P (sizetype);
   TREE_TYPE (TYPE_CACHED_VALUES (t)) = type;
@@ -2296,10 +2302,15 @@ set_sizetype (tree type)
   TYPE_MAIN_VARIANT (sizetype) = sizetype;
   TYPE_CANONICAL (sizetype) = sizetype;
 
+  /* sizetype is unsigned but we need to fix TYPE_MAX_VALUE so that it is
+     sign-extended in a way consistent with force_fit_type.  */
+  max = TYPE_MAX_VALUE (sizetype);
+  TYPE_MAX_VALUE (sizetype)
+    = double_int_to_tree (sizetype, tree_to_double_int (max));
+
   t = make_node (INTEGER_TYPE);
   TYPE_NAME (t) = get_identifier ("bit_size_type");
-  /* We do want to use bitsizetype's cache, as we will be replacing that
-     type.  */
+  /* We want to use bitsizetype's cache, as we will be replacing that type.  */
   TYPE_CACHED_VALUES (t) = TYPE_CACHED_VALUES (bitsizetype);
   TYPE_CACHED_VALUES_P (t) = TYPE_CACHED_VALUES_P (bitsizetype);
   TYPE_PRECISION (t) = precision;
@@ -2311,36 +2322,13 @@ set_sizetype (tree type)
   TYPE_MAIN_VARIANT (bitsizetype) = bitsizetype;
   TYPE_CANONICAL (bitsizetype) = bitsizetype;
 
-  if (TYPE_UNSIGNED (type))
-    {
-      fixup_unsigned_type (bitsizetype);
-      ssizetype = make_signed_type (oprecision);
-      TYPE_IS_SIZETYPE (ssizetype) = 1;
-      sbitsizetype = make_signed_type (precision);
-      TYPE_IS_SIZETYPE (sbitsizetype) = 1;
-    }
-  else
-    {
-      fixup_signed_type (bitsizetype);
-      ssizetype = sizetype;
-      sbitsizetype = bitsizetype;
-    }
+  fixup_unsigned_type (bitsizetype);
 
-  /* If SIZETYPE is unsigned, we need to fix TYPE_MAX_VALUE so that
-     it is sign extended in a way consistent with force_fit_type.  */
-  if (TYPE_UNSIGNED (type))
-    {
-      tree orig_max, new_max;
-
-      orig_max = TYPE_MAX_VALUE (sizetype);
-
-      /* Build a new node with the same values, but a different type.
-	 Sign extend it to ensure consistency.  */
-      new_max = build_int_cst_wide_type (sizetype,
-					 TREE_INT_CST_LOW (orig_max),
-					 TREE_INT_CST_HIGH (orig_max));
-      TYPE_MAX_VALUE (sizetype) = new_max;
-    }
+  /* Create the signed variants of *sizetype.  */
+  ssizetype = make_signed_type (oprecision);
+  TYPE_IS_SIZETYPE (ssizetype) = 1;
+  sbitsizetype = make_signed_type (precision);
+  TYPE_IS_SIZETYPE (sbitsizetype) = 1;
 }
 
 /* TYPE is an integral type, i.e., an INTEGRAL_TYPE, ENUMERAL_TYPE
