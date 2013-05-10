@@ -325,6 +325,11 @@ arm*-*-netbsdelf*)
 	tmake_file="$tmake_file arm/t-arm arm/t-netbsd t-slibgcc-gld-nover"
 	;;
 arm-*-haiku*)
+	tmake_file="${tmake_file} arm/t-arm arm/t-elf arm/t-bpabi"
+	tmake_file="$tmake_file t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
+	tm_file="${tm_file} arm/bpabi-lib.h"
+	unwind_header=config/arm/unwind-arm.h
+	extra_parts="crtbegin.o crtend.o"
 	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tmake_file="${tmake_file} arm/t-arm t-fixedpoint-gnu-prefix"
@@ -535,8 +540,12 @@ x86_64-*-freebsd*)
 	tmake_file="${tmake_file} i386/t-freebsd i386/t-crtstuff"
 	;;
 i[34567]86-*-haiku*)
+	tmake_file="${tmake_file} i386/t-crtstuff t-libgcc-pic"
+	extra_parts="crtbegin.o crtend.o"
 	;;
 x86_64-*-haiku*)
+	tmake_file="${tmake_file} i386/t-crtstuff t-libgcc-pic"
+	extra_parts="crtbegin.o crtend.o"
 	;;
 i[34567]86-*-netbsdelf*)
 	;;
@@ -767,6 +776,7 @@ mips*-*-linux*)				# Linux MIPS, either endian.
 mips*-*-openbsd*)
 	;;
 mips*-*-haiku*)
+	extra_parts="crtbegin.o crtend.o"
 	;;
 mips*-sde-elf*)
 	tmake_file="$tmake_file mips/t-crtstuff mips/t-mips16"

@@ -177,3 +177,9 @@ Boston, MA 02111-1307, USA.  */
 #ifndef TARGET_LIBC_PROVIDES_SSP
 #define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all:-lssp}"
 #endif
+
+/* Do not desire to have _Jv_RegisterClasses in crtbegin.o for Haiku */
+#define TARGET_USE_JCR_SECTION 0
+
+/* Do not use TM clone registry in Haiku for now */
+#define USE_TM_CLONE_REGISTRY 0
