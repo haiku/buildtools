@@ -1,7 +1,7 @@
 /* tsum -- test file for the list summation function
 
-Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -61,17 +61,36 @@ get_prec_max (mpfr_t *tab, unsigned long n, mpfr_prec_t f)
   mpfr_exp_t min, max;
   unsigned long i;
 
-  for (i = 0; MPFR_IS_ZERO (tab[i]); i++)
-    MPFR_ASSERTD (i < n);
+  i = 0;
+  while (MPFR_IS_ZERO (tab[i]))
+    {
+      i++;
+      if (i == n)
+        return MPFR_PREC_MIN;  /* all values are 0 */
+    }
+
+  if (! mpfr_check (tab[i]))
+    {
+      printf ("tab[%lu] is not valid.\n", i);
+      exit (1);
+    }
+  MPFR_ASSERTN (MPFR_IS_FP (tab[i]));
   min = max = MPFR_GET_EXP(tab[i]);
   for (i++; i < n; i++)
     {
-      if (!MPFR_IS_ZERO (tab[i])) {
-        if (MPFR_GET_EXP(tab[i]) > max)
-          max = MPFR_GET_EXP(tab[i]);
-        if (MPFR_GET_EXP(tab[i]) < min)
-          min = MPFR_GET_EXP(tab[i]);
-      }
+      if (! mpfr_check (tab[i]))
+        {
+          printf ("tab[%lu] is not valid.\n", i);
+          exit (1);
+        }
+      MPFR_ASSERTN (MPFR_IS_FP (tab[i]));
+      if (! MPFR_IS_ZERO (tab[i]))
+        {
+          if (MPFR_GET_EXP(tab[i]) > max)
+            max = MPFR_GET_EXP(tab[i]);
+          if (MPFR_GET_EXP(tab[i]) < min)
+            min = MPFR_GET_EXP(tab[i]);
+        }
     }
   res = max - min;
   res += f;
@@ -174,7 +193,8 @@ test_sum (mpfr_prec_t f, unsigned long n)
   for (i = 0; i < n; i++)
     {
       mpfr_urandomb (tab[i], RANDS);
-      mpfr_set_exp (tab[i], randlimb () %1000);
+      if (! mpfr_zero_p (tab[i]))
+        mpfr_set_exp (tab[i], randlimb () % 1000);
     }
   algo_exact (real_non_rounded, tab, n, f);
   for (rnd_mode = 0; rnd_mode < MPFR_RND_MAX; rnd_mode++)

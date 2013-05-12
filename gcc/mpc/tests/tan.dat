@@ -1,23 +1,21 @@
 # Data test file for mpc_tan.
-
-# Copyright (C) INRIA, 2008, 2010
-
-# This file is part of the MPC Library.
 #
-# The MPC Library is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
-# option) any later version.
+# Copyright (C) 2008, 2010, 2011 INRIA
 #
-# The MPC Library is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-# License for more details.
+# This file is part of GNU MPC.
+#
+# GNU MPC is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+#o ption) any later version.
+#
+# GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+# more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the MPC Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-# MA 02111-1307, USA.
+# along with this program. If not, see http://www.gnu.org/licenses/ .
 
 # See file sin.dat for the format description.
 
@@ -127,4 +125,11 @@
 
 # huge values
 + - 53 -0 53 -1  53 0x4580CBF242683p-3 53 -0x1B3E8A3660D279p-3 N N
+- - 53 +0 53 -1  53 -0x4580CBF242683p-3 53 -0x1B3E8A3660D279p-3 N N
 + + 53 -0 53 +1  53 -0x1B3E8A3660D279p-3 53 0x4580CBF242683p-3 N N
+
+# some values taken from ttan.c
++ + 53 0x1D02967C31CDB5 53 0x1D02967C31CDB5  53 0x3243F6A8885A30p-53 53 0x11A62633145C07p-106 N N
+- + 53 0x1D02967C31CDB4 53 0x1D02967C31CDB5  53 0x3243F6A8885A30p-53 53 0x11A62633145C07p-106 D U
+- - 53 0x1D02967C31CDB4 53 0x1D02967C31CDB4  53 0x3243F6A8885A30p-53 53 0x11A62633145C07p-106 Z D
+- + 53 -0xB0BD0AA4A3B3D 53 -0xB0BD0AA4A3B3D  53 0x1921FB54442D19p-52 53 -0x172CECE675D1FDp-105 N N

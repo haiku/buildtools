@@ -26,8 +26,8 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define MOD_1_UNNORM_THRESHOLD           MP_SIZE_T_MAX  /* never */
 #define MOD_1N_TO_MOD_1_1_THRESHOLD         26
 #define MOD_1U_TO_MOD_1_1_THRESHOLD          9
-#define MOD_1_1_TO_MOD_1_2_THRESHOLD         0
-#define MOD_1_2_TO_MOD_1_4_THRESHOLD        10
+#define MOD_1_1_TO_MOD_1_2_THRESHOLD         0  /* never mpn_mod_1_1p */
+#define MOD_1_2_TO_MOD_1_4_THRESHOLD         0  /* never mpn_mod_1s_2p */
 #define PREINV_MOD_1_TO_MOD_1_THRESHOLD     34
 #define USE_PREINV_DIVREM_1                  1  /* native */
 #define DIVEXACT_1_THRESHOLD                 0  /* always (native) */
@@ -146,9 +146,9 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define DC_BDIV_QR_THRESHOLD                55
 #define DC_BDIV_Q_THRESHOLD                 82
 
-#define INV_MULMOD_BNM1_THRESHOLD           58
-#define INV_NEWTON_THRESHOLD               157
-#define INV_APPR_THRESHOLD                  16
+#define INV_MULMOD_BNM1_THRESHOLD           60
+#define INV_NEWTON_THRESHOLD                94
+#define INV_APPR_THRESHOLD                  78
 
 #define BINV_NEWTON_THRESHOLD              327
 #define REDC_1_TO_REDC_N_THRESHOLD          63

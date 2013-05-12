@@ -1,6 +1,6 @@
 dnl  x86-64 mpn_divrem_2 -- Divide an mpn number by a normalized 2-limb number.
 
-dnl  Copyright 2007, 2008 Free Software Foundation, Inc.
+dnl  Copyright 2007, 2008, 2010 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
 
@@ -73,7 +73,7 @@ PROLOGUE(mpn_divrem_2)
 	setb	%dl
 	cmp	%r10, %r8
 	setbe	%al
-	or	%al, %dl
+	orb	%al, %dl
 	jne	L(23)
 L(2):
 	lea	-3(%rcx,%r13), %rbx	C un + fn - 3

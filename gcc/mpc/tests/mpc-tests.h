@@ -1,37 +1,73 @@
-/* Tests helper functions.
+/* mpc-tests.h -- Tests helper functions.
 
-Copyright (C) INRIA, 2008, 2009, 2010, 2011
+Copyright (C) 2008, 2009, 2010, 2011, 2012 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
-#ifndef MPC_TESTS_H
-#define MPC_TESTS_H
+#ifndef __MPC_TESTS_H
+#define __MPC_TESTS_H
 
+#include "config.h"
 #include <stdio.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include "mpc.h"
 
-#include "mpc-impl.h"
+/* pieces copied from mpc-impl.h */
+#define MPC_PREC_RE(x) (mpfr_get_prec(mpc_realref(x)))
+#define MPC_PREC_IM(x) (mpfr_get_prec(mpc_imagref(x)))
+#define MPC_MAX_PREC(x) MPC_MAX(MPC_PREC_RE(x), MPC_PREC_IM(x))
+#define MPC_MAX(h,i) ((h) > (i) ? (h) : (i))
 
-/** OUTPUT HELPER MACROS */
-#define MPFR_OUT(X) \
-  printf (#X" [%ld]=", mpfr_get_prec (X));\
-  mpfr_out_str (stdout, 2, 0, (X), GMP_RNDN);\
-  printf ("\n");
+#define MPC_ASSERT(expr)                                        \
+  do {                                                          \
+    if (!(expr))                                                \
+      {                                                         \
+        fprintf (stderr, "%s:%d: MPC assertion failed: %s\n",   \
+                 __FILE__, __LINE__, #expr);                    \
+        abort();                                                \
+      }                                                         \
+  } while (0)
+
+#if defined (__cplusplus)
+extern "C" {
+#endif
+__MPC_DECLSPEC int  mpc_mul_naive (mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t);
+__MPC_DECLSPEC int  mpc_mul_karatsuba (mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t);
+__MPC_DECLSPEC int  mpc_fma_naive (mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t);
+#if defined (__cplusplus)
+}
+#endif
+/* end pieces copied from mpc-impl.h */
+
+#define MPC_OUT(x)                                              \
+do {                                                            \
+  printf (#x "[%lu,%lu]=", (unsigned long int) MPC_PREC_RE (x), \
+      (unsigned long int) MPC_PREC_IM (x));                     \
+  mpc_out_str (stdout, 2, 0, x, MPC_RNDNN);                     \
+  printf ("\n");                                                \
+} while (0)
+
+#define MPFR_OUT(x)                                             \
+do {                                                            \
+  printf (#x "[%lu]=", (unsigned long int) mpfr_get_prec (x));  \
+  mpfr_out_str (stdout, 2, 0, x, GMP_RNDN);                     \
+  printf ("\n");                                                \
+} while (0)
 
 
 #define MPC_INEX_STR(inex)                      \
@@ -65,13 +101,10 @@ MA 02111-1307, USA. */
    gmp_randstate_t rands) in your tests
    - add test_end at the end the test function */
 extern gmp_randstate_t  rands;
-extern char             rands_initialized;
 
 extern void test_start (void);
 extern void test_end (void);
-
 extern void test_default_random (mpc_ptr, mp_exp_t, mp_exp_t, unsigned int, unsigned int);
-extern unsigned long urandomm_ui (unsigned long);
 
 
 /** COMPARISON FUNCTIONS **/
@@ -193,12 +226,10 @@ extern void read_int (FILE *fp, int *n, const char *name);
 extern size_t read_string (FILE *fp, char **buffer_ptr, size_t buffer_length, const char *name);
 extern void read_mpfr (FILE *fp, mpfr_ptr x, int *known_sign);
 extern void read_mpc (FILE *fp, mpc_ptr z, known_signs_t *ks);
-extern void tests_memory_start (void);
-extern void tests_memory_end (void);
 
 #define TERNARY_NOT_CHECKED 255
    /* special value to indicate that the ternary value is not checked */
 #define TERNARY_ERROR 254
    /* special value to indicate that an error occurred in an mpc function */
 
-#endif /* MPC_TESTS_H */
+#endif /* __MPC_TESTS_H */

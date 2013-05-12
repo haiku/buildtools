@@ -1,7 +1,7 @@
 /* Test file for mpfr_subnormalize.
 
-Copyright 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -31,31 +31,33 @@ static const struct {
   int i;
   mpfr_rnd_t rnd;
   const char *out;
-} tab[] ={
-  {"1E1",  0, MPFR_RNDN, "1E1"},
-  {"1E1", -1, MPFR_RNDZ, "1E1"},
-  {"1E1", -1, MPFR_RNDD, "1E1"},
-  {"1E1",  1, MPFR_RNDU, "1E1"},
-  {"0.10000E-10", 0, MPFR_RNDN, "0.1E-10"},
-  {"0.10001E-10", 0, MPFR_RNDN, "0.1E-10"},
-  {"0.11001E-10", 0, MPFR_RNDN, "0.1E-9"},
-  {"0.11001E-10", 0, MPFR_RNDZ, "0.1E-10"},
-  {"0.11001E-10", 0, MPFR_RNDU, "0.1E-9"},
-  {"0.11000E-10", 0, MPFR_RNDN, "0.1E-9"},
-  {"0.11000E-10", -1, MPFR_RNDN, "0.1E-9"},
-  {"0.11000E-10", 1, MPFR_RNDN, "0.1E-10"},
-  {"0.11111E-8", 0, MPFR_RNDN, "0.10E-7"},
-  {"0.10111E-8", 0, MPFR_RNDN, "0.11E-8"},
-  {"0.11110E-8", -1, MPFR_RNDN, "0.10E-7"},
-  {"0.10110E-8", 1, MPFR_RNDN, "0.101E-8"}
+  int j;
+} tab[] = { /* 4th field: use the mpfr_dump format, in case of error. */
+  {"1E1",  0, MPFR_RNDN, "0.100000000E2", 0},
+  {"1E1", -1, MPFR_RNDZ, "0.100000000E2", -1},
+  {"1E1", -1, MPFR_RNDD, "0.100000000E2", -1},
+  {"1E1",  1, MPFR_RNDU, "0.100000000E2", 1},
+  {"0.10000E-10", 0, MPFR_RNDN, "0.100000000E-10", 0},
+  {"0.10001E-10", 0, MPFR_RNDN, "0.100000000E-10", -1},
+  {"0.11001E-10", 0, MPFR_RNDN, "0.100000000E-9", 1},
+  {"0.11001E-10", 0, MPFR_RNDZ, "0.100000000E-10", -1},
+  {"0.11001E-10", 0, MPFR_RNDU, "0.100000000E-9", 1},
+  {"0.11000E-10", 0, MPFR_RNDN, "0.100000000E-9", 1},
+  {"0.11000E-10", -1, MPFR_RNDN, "0.100000000E-9", 1},
+  {"0.11000E-10", 1, MPFR_RNDN, "0.100000000E-10", -1},
+  {"0.11111E-8", 0, MPFR_RNDN, "0.100000000E-7", 1},
+  {"0.10111E-8", 0, MPFR_RNDN, "0.110000000E-8", 1},
+  {"0.11110E-8", -1, MPFR_RNDN, "0.100000000E-7", 1},
+  {"0.10110E-8", 1, MPFR_RNDN, "0.101000000E-8", -1}
 };
 
 static void
 check1 (void)
 {
   mpfr_t x;
-  int i, j, k, s, old_inex;
+  int i, j, k, s, old_inex, tiny, expj;
   mpfr_exp_t emin, emax;
+  unsigned int expflags, flags;
 
   emin = mpfr_get_emin ();
   emax = mpfr_get_emax ();
@@ -71,18 +73,26 @@ check1 (void)
         {
           mpfr_set_str (x, tab[i].in, 2, MPFR_RNDN);
           old_inex = tab[i].i;
+          expj = tab[i].j;
           if (s)
             {
               mpfr_neg (x, x, MPFR_RNDN);
               old_inex = - old_inex;
+              expj = - expj;
             }
           if (k && old_inex)
             old_inex = old_inex < 0 ? INT_MIN : INT_MAX;
+          tiny = MPFR_GET_EXP (x) <= -3;
+          mpfr_clear_flags ();
           j = mpfr_subnormalize (x, old_inex, tab[i].rnd);
-          /* TODO: test j. */
+          expflags =
+            (tiny ? MPFR_FLAGS_UNDERFLOW : 0) |
+            (expj ? MPFR_FLAGS_INEXACT : 0);
+          flags = __gmpfr_flags;
           if (s)
             mpfr_neg (x, x, MPFR_RNDN);
-          if (mpfr_cmp_str (x, tab[i].out, 2, MPFR_RNDN) != 0)
+          if (mpfr_cmp_str (x, tab[i].out, 2, MPFR_RNDN) != 0 ||
+              flags != expflags || ! SAME_SIGN (j, expj))
             {
               const char *sgn = s ? "-" : "";
               printf ("Error for i = %d (old_inex = %d), k = %d, x = %s%s\n"
@@ -91,6 +101,8 @@ check1 (void)
               if (s)
                 mpfr_neg (x, x, MPFR_RNDN);
               mpfr_dump (x);
+              printf ("Expected flags = %u, got %u\n", expflags, flags);
+              printf ("Expected ternary value = %d, got %d\n", expj, j);
               exit (1);
             }
         }

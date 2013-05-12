@@ -15,7 +15,7 @@
 
 @SET_MAKE@
 
-# Copyright 1996, 1997, 1999, 2000, 2001, 2002, 2003, 2009 Free Software
+# Copyright 1996, 1997, 1999, 2000, 2001, 2002, 2003, 2009, 2012 Free Software
 # Foundation, Inc.
 #
 # This file is part of the GNU MP Library.
@@ -55,22 +55,23 @@ ANSI2KNR = $(top_builddir)/ansi2knr
 check_PROGRAMS = t-addsub$(EXEEXT) t-cmp$(EXEEXT) t-mul$(EXEEXT) \
 	t-mul_i$(EXEEXT) t-tdiv$(EXEEXT) t-tdiv_ui$(EXEEXT) \
 	t-fdiv$(EXEEXT) t-fdiv_ui$(EXEEXT) t-cdiv_ui$(EXEEXT) \
-	t-gcd$(EXEEXT) t-gcd_ui$(EXEEXT) t-lcm$(EXEEXT) dive$(EXEEXT) \
-	dive_ui$(EXEEXT) t-sqrtrem$(EXEEXT) convert$(EXEEXT) \
-	io$(EXEEXT) t-inp_str$(EXEEXT) logic$(EXEEXT) bit$(EXEEXT) \
-	t-powm$(EXEEXT) t-powm_ui$(EXEEXT) t-pow$(EXEEXT) \
-	t-div_2exp$(EXEEXT) reuse$(EXEEXT) t-root$(EXEEXT) \
-	t-perfsqr$(EXEEXT) t-perfpow$(EXEEXT) t-jac$(EXEEXT) \
-	t-bin$(EXEEXT) t-get_d$(EXEEXT) t-get_d_2exp$(EXEEXT) \
-	t-get_si$(EXEEXT) t-set_d$(EXEEXT) t-set_si$(EXEEXT) \
-	t-fac_ui$(EXEEXT) t-fib_ui$(EXEEXT) t-lucnum_ui$(EXEEXT) \
-	t-scan$(EXEEXT) t-fits$(EXEEXT) t-divis$(EXEEXT) \
-	t-divis_2exp$(EXEEXT) t-cong$(EXEEXT) t-cong_2exp$(EXEEXT) \
-	t-sizeinbase$(EXEEXT) t-set_str$(EXEEXT) t-aorsmul$(EXEEXT) \
-	t-cmp_d$(EXEEXT) t-cmp_si$(EXEEXT) t-hamdist$(EXEEXT) \
-	t-oddeven$(EXEEXT) t-popcount$(EXEEXT) t-set_f$(EXEEXT) \
-	t-io_raw$(EXEEXT) t-import$(EXEEXT) t-export$(EXEEXT) \
-	t-pprime_p$(EXEEXT) t-nextprime$(EXEEXT)
+	t-gcd$(EXEEXT) t-gcd_ui$(EXEEXT) t-lcm$(EXEEXT) \
+	t-invert$(EXEEXT) dive$(EXEEXT) dive_ui$(EXEEXT) \
+	t-sqrtrem$(EXEEXT) convert$(EXEEXT) io$(EXEEXT) \
+	t-inp_str$(EXEEXT) logic$(EXEEXT) bit$(EXEEXT) t-powm$(EXEEXT) \
+	t-powm_ui$(EXEEXT) t-pow$(EXEEXT) t-div_2exp$(EXEEXT) \
+	reuse$(EXEEXT) t-root$(EXEEXT) t-perfsqr$(EXEEXT) \
+	t-perfpow$(EXEEXT) t-jac$(EXEEXT) t-bin$(EXEEXT) \
+	t-get_d$(EXEEXT) t-get_d_2exp$(EXEEXT) t-get_si$(EXEEXT) \
+	t-set_d$(EXEEXT) t-set_si$(EXEEXT) t-fac_ui$(EXEEXT) \
+	t-fib_ui$(EXEEXT) t-lucnum_ui$(EXEEXT) t-scan$(EXEEXT) \
+	t-fits$(EXEEXT) t-divis$(EXEEXT) t-divis_2exp$(EXEEXT) \
+	t-cong$(EXEEXT) t-cong_2exp$(EXEEXT) t-sizeinbase$(EXEEXT) \
+	t-set_str$(EXEEXT) t-aorsmul$(EXEEXT) t-cmp_d$(EXEEXT) \
+	t-cmp_si$(EXEEXT) t-hamdist$(EXEEXT) t-oddeven$(EXEEXT) \
+	t-popcount$(EXEEXT) t-set_f$(EXEEXT) t-io_raw$(EXEEXT) \
+	t-import$(EXEEXT) t-export$(EXEEXT) t-pprime_p$(EXEEXT) \
+	t-nextprime$(EXEEXT)
 subdir = tests/mpz
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -247,6 +248,11 @@ t_inp_str_OBJECTS = t-inp_str$U.$(OBJEXT)
 t_inp_str_LDADD = $(LDADD)
 t_inp_str_DEPENDENCIES = $(top_builddir)/tests/libtests.la \
 	$(top_builddir)/libgmp.la
+t_invert_SOURCES = t-invert.c
+t_invert_OBJECTS = t-invert$U.$(OBJEXT)
+t_invert_LDADD = $(LDADD)
+t_invert_DEPENDENCIES = $(top_builddir)/tests/libtests.la \
+	$(top_builddir)/libgmp.la
 t_io_raw_SOURCES = t-io_raw.c
 t_io_raw_OBJECTS = t-io_raw$U.$(OBJEXT)
 t_io_raw_LDADD = $(LDADD)
@@ -390,22 +396,22 @@ SOURCES = bit.c convert.c dive.c dive_ui.c io.c logic.c reuse.c \
 	t-divis_2exp.c t-export.c t-fac_ui.c t-fdiv.c t-fdiv_ui.c \
 	t-fib_ui.c t-fits.c t-gcd.c t-gcd_ui.c t-get_d.c \
 	t-get_d_2exp.c t-get_si.c t-hamdist.c t-import.c t-inp_str.c \
-	t-io_raw.c t-jac.c t-lcm.c t-lucnum_ui.c t-mul.c t-mul_i.c \
-	t-nextprime.c t-oddeven.c t-perfpow.c t-perfsqr.c t-popcount.c \
-	t-pow.c t-powm.c t-powm_ui.c t-pprime_p.c t-root.c t-scan.c \
-	t-set_d.c t-set_f.c t-set_si.c t-set_str.c t-sizeinbase.c \
-	t-sqrtrem.c t-tdiv.c t-tdiv_ui.c
+	t-invert.c t-io_raw.c t-jac.c t-lcm.c t-lucnum_ui.c t-mul.c \
+	t-mul_i.c t-nextprime.c t-oddeven.c t-perfpow.c t-perfsqr.c \
+	t-popcount.c t-pow.c t-powm.c t-powm_ui.c t-pprime_p.c \
+	t-root.c t-scan.c t-set_d.c t-set_f.c t-set_si.c t-set_str.c \
+	t-sizeinbase.c t-sqrtrem.c t-tdiv.c t-tdiv_ui.c
 DIST_SOURCES = bit.c convert.c dive.c dive_ui.c io.c logic.c reuse.c \
 	t-addsub.c t-aorsmul.c t-bin.c t-cdiv_ui.c t-cmp.c t-cmp_d.c \
 	t-cmp_si.c t-cong.c t-cong_2exp.c t-div_2exp.c t-divis.c \
 	t-divis_2exp.c t-export.c t-fac_ui.c t-fdiv.c t-fdiv_ui.c \
 	t-fib_ui.c t-fits.c t-gcd.c t-gcd_ui.c t-get_d.c \
 	t-get_d_2exp.c t-get_si.c t-hamdist.c t-import.c t-inp_str.c \
-	t-io_raw.c t-jac.c t-lcm.c t-lucnum_ui.c t-mul.c t-mul_i.c \
-	t-nextprime.c t-oddeven.c t-perfpow.c t-perfsqr.c t-popcount.c \
-	t-pow.c t-powm.c t-powm_ui.c t-pprime_p.c t-root.c t-scan.c \
-	t-set_d.c t-set_f.c t-set_si.c t-set_str.c t-sizeinbase.c \
-	t-sqrtrem.c t-tdiv.c t-tdiv_ui.c
+	t-invert.c t-io_raw.c t-jac.c t-lcm.c t-lucnum_ui.c t-mul.c \
+	t-mul_i.c t-nextprime.c t-oddeven.c t-perfpow.c t-perfsqr.c \
+	t-popcount.c t-pow.c t-powm.c t-powm_ui.c t-pprime_p.c \
+	t-root.c t-scan.c t-set_d.c t-set_f.c t-set_si.c t-set_str.c \
+	t-sizeinbase.c t-sqrtrem.c t-tdiv.c t-tdiv_ui.c
 ETAGS = etags
 CTAGS = ctags
 am__tty_colors = \
@@ -444,8 +450,6 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 EXEEXT_FOR_BUILD = @EXEEXT_FOR_BUILD@
-F77 = @F77@
-FFLAGS = @FFLAGS@
 FGREP = @FGREP@
 GMP_LDFLAGS = @GMP_LDFLAGS@
 GMP_LIMB_BITS = @GMP_LIMB_BITS@
@@ -488,6 +492,7 @@ LTLIBOBJS = @LTLIBOBJS@
 M4 = @M4@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
+MANIFEST_TOOL = @MANIFEST_TOOL@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -521,10 +526,10 @@ abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
+ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
-ac_ct_F77 = @ac_ct_F77@
 am__leading_dot = @am__leading_dot@
 am__tar = @am__tar@
 am__untar = @am__untar@
@@ -554,7 +559,6 @@ libdir = @libdir@
 libexecdir = @libexecdir@
 localedir = @localedir@
 localstatedir = @localstatedir@
-lt_ECHO = @lt_ECHO@
 mandir = @mandir@
 mkdir_p = @mkdir_p@
 mpn_objects = @mpn_objects@
@@ -723,6 +727,9 @@ t-import$(EXEEXT): $(t_import_OBJECTS) $(t_import_DEPENDENCIES)
 t-inp_str$(EXEEXT): $(t_inp_str_OBJECTS) $(t_inp_str_DEPENDENCIES) 
 	@rm -f t-inp_str$(EXEEXT)
 	$(LINK) $(t_inp_str_OBJECTS) $(t_inp_str_LDADD) $(LIBS)
+t-invert$(EXEEXT): $(t_invert_OBJECTS) $(t_invert_DEPENDENCIES) 
+	@rm -f t-invert$(EXEEXT)
+	$(LINK) $(t_invert_OBJECTS) $(t_invert_LDADD) $(LIBS)
 t-io_raw$(EXEEXT): $(t_io_raw_OBJECTS) $(t_io_raw_DEPENDENCIES) 
 	@rm -f t-io_raw$(EXEEXT)
 	$(LINK) $(t_io_raw_OBJECTS) $(t_io_raw_LDADD) $(LIBS)
@@ -884,6 +891,8 @@ t-import_.c: t-import.c $(ANSI2KNR)
 	$(CPP) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) `if test -f $(srcdir)/t-import.c; then echo $(srcdir)/t-import.c; else echo t-import.c; fi` | sed 's/^# \([0-9]\)/#line \1/' | $(ANSI2KNR) > $@ || rm -f $@
 t-inp_str_.c: t-inp_str.c $(ANSI2KNR)
 	$(CPP) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) `if test -f $(srcdir)/t-inp_str.c; then echo $(srcdir)/t-inp_str.c; else echo t-inp_str.c; fi` | sed 's/^# \([0-9]\)/#line \1/' | $(ANSI2KNR) > $@ || rm -f $@
+t-invert_.c: t-invert.c $(ANSI2KNR)
+	$(CPP) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) `if test -f $(srcdir)/t-invert.c; then echo $(srcdir)/t-invert.c; else echo t-invert.c; fi` | sed 's/^# \([0-9]\)/#line \1/' | $(ANSI2KNR) > $@ || rm -f $@
 t-io_raw_.c: t-io_raw.c $(ANSI2KNR)
 	$(CPP) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) `if test -f $(srcdir)/t-io_raw.c; then echo $(srcdir)/t-io_raw.c; else echo t-io_raw.c; fi` | sed 's/^# \([0-9]\)/#line \1/' | $(ANSI2KNR) > $@ || rm -f $@
 t-jac_.c: t-jac.c $(ANSI2KNR)
@@ -950,10 +959,10 @@ t-fits_.lo t-gcd_.$(OBJEXT) t-gcd_.lo t-gcd_ui_.$(OBJEXT) t-gcd_ui_.lo \
 t-get_d_.$(OBJEXT) t-get_d_.lo t-get_d_2exp_.$(OBJEXT) \
 t-get_d_2exp_.lo t-get_si_.$(OBJEXT) t-get_si_.lo t-hamdist_.$(OBJEXT) \
 t-hamdist_.lo t-import_.$(OBJEXT) t-import_.lo t-inp_str_.$(OBJEXT) \
-t-inp_str_.lo t-io_raw_.$(OBJEXT) t-io_raw_.lo t-jac_.$(OBJEXT) \
-t-jac_.lo t-lcm_.$(OBJEXT) t-lcm_.lo t-lucnum_ui_.$(OBJEXT) \
-t-lucnum_ui_.lo t-mul_.$(OBJEXT) t-mul_.lo t-mul_i_.$(OBJEXT) \
-t-mul_i_.lo t-nextprime_.$(OBJEXT) t-nextprime_.lo \
+t-inp_str_.lo t-invert_.$(OBJEXT) t-invert_.lo t-io_raw_.$(OBJEXT) \
+t-io_raw_.lo t-jac_.$(OBJEXT) t-jac_.lo t-lcm_.$(OBJEXT) t-lcm_.lo \
+t-lucnum_ui_.$(OBJEXT) t-lucnum_ui_.lo t-mul_.$(OBJEXT) t-mul_.lo \
+t-mul_i_.$(OBJEXT) t-mul_i_.lo t-nextprime_.$(OBJEXT) t-nextprime_.lo \
 t-oddeven_.$(OBJEXT) t-oddeven_.lo t-perfpow_.$(OBJEXT) t-perfpow_.lo \
 t-perfsqr_.$(OBJEXT) t-perfsqr_.lo t-popcount_.$(OBJEXT) \
 t-popcount_.lo t-pow_.$(OBJEXT) t-pow_.lo t-powm_.$(OBJEXT) t-powm_.lo \

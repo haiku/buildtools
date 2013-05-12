@@ -1,7 +1,7 @@
 /* Test file for mpfr_fma.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -29,7 +29,7 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 static void
 test_exact (void)
 {
-  char *val[] =
+  const char *val[] =
     { "@NaN@", "-@Inf@", "-2", "-1", "-0", "0", "1", "2", "@Inf@" };
   int sv = sizeof (val) / sizeof (*val);
   int i, j, k;
@@ -337,6 +337,94 @@ test_underflow2 (void)
   mpfr_clears (x, y, z, r, (mpfr_ptr) 0);
 }
 
+static void
+bug20101018 (void)
+{
+  mpfr_t x, y, z, t, u;
+  int i;
+
+  mpfr_init2 (x, 64);
+  mpfr_init2 (y, 64);
+  mpfr_init2 (z, 64);
+  mpfr_init2 (t, 64);
+  mpfr_init2 (u, 64);
+
+  mpfr_set_str (x, "0xf.fffffffffffffffp-14766", 16, MPFR_RNDN);
+  mpfr_set_str (y, "-0xf.fffffffffffffffp+317", 16, MPFR_RNDN);
+  mpfr_set_str (z, "0x8.3ffffffffffe3ffp-14443", 16, MPFR_RNDN);
+  mpfr_set_str (t, "0x8.7ffffffffffc7ffp-14444", 16, MPFR_RNDN);
+  i = mpfr_fma (u, x, y, z, MPFR_RNDN);
+  if (mpfr_cmp (u, t) != 0)
+    {
+      printf ("Wrong result in bug20101018 (a)\n");
+      printf ("Expected ");
+      mpfr_out_str (stdout, 16, 0, t, MPFR_RNDN);
+      printf ("\nGot      ");
+      mpfr_out_str (stdout, 16, 0, u, MPFR_RNDN);
+      printf ("\n");
+      exit (1);
+    }
+  if (i <= 0)
+    {
+      printf ("Wrong ternary value in bug20101018 (a)\n");
+      printf ("Expected > 0\n");
+      printf ("Got      %d\n", i);
+      exit (1);
+    }
+
+  mpfr_set_str (x, "-0xf.fffffffffffffffp-11420", 16, MPFR_RNDN);
+  mpfr_set_str (y, "0xf.fffffffffffffffp+9863", 16, MPFR_RNDN);
+  mpfr_set_str (z, "0x8.fffff80ffffffffp-1551", 16, MPFR_RNDN);
+  mpfr_set_str (t, "0x9.fffff01ffffffffp-1552", 16, MPFR_RNDN);
+  i = mpfr_fma (u, x, y, z, MPFR_RNDN);
+  if (mpfr_cmp (u, t) != 0)
+    {
+      printf ("Wrong result in bug20101018 (b)\n");
+      printf ("Expected ");
+      mpfr_out_str (stdout, 16, 0, t, MPFR_RNDN);
+      printf ("\nGot      ");
+      mpfr_out_str (stdout, 16, 0, u, MPFR_RNDN);
+      printf ("\n");
+      exit (1);
+    }
+  if (i <= 0)
+    {
+      printf ("Wrong ternary value in bug20101018 (b)\n");
+      printf ("Expected > 0\n");
+      printf ("Got      %d\n", i);
+      exit (1);
+    }
+
+  mpfr_set_str (x, "0xf.fffffffffffffffp-2125", 16, MPFR_RNDN);
+  mpfr_set_str (y, "-0xf.fffffffffffffffp-6000", 16, MPFR_RNDN);
+  mpfr_set_str (z, "0x8p-8119", 16, MPFR_RNDN);
+  mpfr_set_str (t, "0x8.000000000000001p-8120", 16, MPFR_RNDN);
+  i = mpfr_fma (u, x, y, z, MPFR_RNDN);
+  if (mpfr_cmp (u, t) != 0)
+    {
+      printf ("Wrong result in bug20101018 (c)\n");
+      printf ("Expected ");
+      mpfr_out_str (stdout, 16, 0, t, MPFR_RNDN);
+      printf ("\nGot      ");
+      mpfr_out_str (stdout, 16, 0, u, MPFR_RNDN);
+      printf ("\n");
+      exit (1);
+    }
+  if (i <= 0)
+    {
+      printf ("Wrong ternary value in bug20101018 (c)\n");
+      printf ("Expected > 0\n");
+      printf ("Got      %d\n", i);
+      exit (1);
+    }
+
+  mpfr_clear (x);
+  mpfr_clear (y);
+  mpfr_clear (z);
+  mpfr_clear (t);
+  mpfr_clear (u);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -344,6 +432,8 @@ main (int argc, char *argv[])
   MPFR_SAVE_EXPO_DECL (expo);
 
   tests_start_mpfr ();
+
+  bug20101018 ();
 
   mpfr_init (x);
   mpfr_init (s);

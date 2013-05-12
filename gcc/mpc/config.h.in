@@ -1,6 +1,6 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
-/* Define to 1 if you have the <complex.h> header file. */
+/* complex.h present and usable */
 #undef HAVE_COMPLEX_H
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
@@ -11,9 +11,6 @@
 
 /* Define to 1 if you have the `dup2' function. */
 #undef HAVE_DUP2
-
-/* Define to 1 if you have the `fileno' function. */
-#undef HAVE_FILENO
 
 /* Define to 1 if you have the `gettimeofday' function. */
 #undef HAVE_GETTIMEOFDAY
@@ -26,9 +23,6 @@
 
 /* Library dl present */
 #undef HAVE_LIBDL
-
-/* Define to 1 if you have the `m' library (-lm). */
-#undef HAVE_LIBM
 
 /* Define to 1 if you have the <limits.h> header file. */
 #undef HAVE_LIMITS_H
@@ -73,8 +67,20 @@
    */
 #undef LT_OBJDIR
 
+/* C compiler */
+#undef MPC_CC
+
+/* Gcc yes or no */
+#undef MPC_GCC
+
+/* Version of gcc */
+#undef MPC_GCC_VERSION
+
 /* Do not check mpc_out_str on stdout */
-#undef NO_STREAM_REDIRECTION
+#undef MPC_NO_STREAM_REDIRECTION
+
+/* Use valgrind for make check */
+#undef MPC_USE_VALGRIND
 
 /* Name of package */
 #undef PACKAGE

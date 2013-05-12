@@ -157,9 +157,9 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define SQR_FFT_TABLE3_SIZE 182
 #define SQR_FFT_THRESHOLD                 1984
 
-#define MULLO_BASECASE_THRESHOLD            26
+#define MULLO_BASECASE_THRESHOLD            13
 #define MULLO_DC_THRESHOLD                   0  /* never mpn_mullo_basecase */
-#define MULLO_MUL_N_THRESHOLD             4392
+#define MULLO_MUL_N_THRESHOLD             3791
 
 #define DC_DIV_QR_THRESHOLD                 16
 #define DC_DIVAPPR_Q_THRESHOLD              66

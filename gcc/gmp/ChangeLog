@@ -1,3 +1,665 @@
+2012-05-06  Torbjorn Granlund  <tege@gmplib.org>
+
+	* Version 5.0.5 released.
+
+	* mpn/Makefile.am (TARG_DIST): Remove thumb, since directory now empty.
+
+2012-04-28  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/thumb/add_n.s: Remove broken code.
+	* mpn/thumb/sub_n.s: Likewise.
+
+2012-04-02  Torbjorn Granlund  <tege@gmplib.org>
+
+	* gmp-h.in (__GNU_MP_VERSION_PATCHLEVEL): Bump.
+
+	* Makefile.am (LIBGMP_LT_*, LIBGMPXX_LT_*, LIBMP_LT_*):
+	Bump version info.
+
+	* gmp-h.in (_GMP_H_HAVE_FILE): Test also __STDIO_LOADED (for VMS).
+
+2012-03-27  Torbjorn Granlund  <tege@gmplib.org>
+
+	* config.guess: Fix typo in coreisbr recognition.
+
+2012-03-07  Torbjorn Granlund  <tege@gmplib.org>
+
+	* config.guess: Handle AMD 11h correctly.
+
+2012-03-04 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* tests/mpz/t-invert.c: Avoid testing mod 0.
+	* doc/gmp.texi (mpz_invert): Specify mod 0 is not handled.
+
+2012-02-24  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/mpn/logic.c: New file.
+	* tests/mpn/Makefile.am (check_PROGRAMS): Add logic.
+
+	* tests/mpz/t-invert.c: New file.
+	* tests/mpz/Makefile.am (check_PROGRAMS): Add t-invert.
+
+2012-02-11 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* doc/gmp.texi (Multiplication Algorithms): Add Toom[68]'n'half.
+
+2012-02-10  Torbjorn Granlund  <tege@gmplib.org>
+
+	* Version 5.0.4 released.
+
+2012-02-09 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* gmp-impl.h (mpn_toom3*_itch): Support any recursion depth.
+	* tests/refmpn.c (refmpn_mul): Restore tight allocations.
+
+2012-02-09  Marc Glisse  <marc.glisse@inria.fr>
+
+	* gmp-impl.h (ABS_CAST): New macro.
+	* mpf/cmp_si.c: Use ABS_CAST.
+	* mpf/get_si.c: Use ABS_CAST.
+	* mpf/iset_si.c: Use ABS_CAST.
+	* mpf/set_si.c: Use ABS_CAST.
+	* mpq/set_si.c: Use ABS_CAST.
+	* mpz/cmp_si.c: Use ABS_CAST.
+	* mpz/get_si.c: Use ABS_CAST.
+	* mpz/iset_si.c: Use ABS_CAST.
+	* mpz/mul_i.h: Use ABS_CAST.
+	* mpz/set_si.c: Use ABS_CAST.
+
+2012-02-09  Torbjorn Granlund  <tege@gmplib.org>
+
+	* gmp-h.in (__GNU_MP_VERSION_PATCHLEVEL): Bump.
+
+	* Makefile.am (LIBGMP_LT_*, LIBGMPXX_LT_*, LIBMP_LT_*):
+	Bump version info.
+
+2012-02-08  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/powerpc32/divrem_2.asm: Fix off-by-one condition in invert_limb
+	code.
+
+2012-02-08  Niels Möller  <nisse@lysator.liu.se>
+
+	* doc/gmp.texi (mpz_gcdext): Describe cofactor canonicalization.
+	(mpn_gcdext): Copied doc updates from main repo.
+
+2012-02-07  Niels Möller  <nisse@lysator.liu.se>
+
+	* mpn/generic/gcdext.c (mpn_gcdext): Fixed assert, related to the
+	special case A = (2k+1) G, B = 2 G.
+
+2012-02-06  Niels Möller  <nisse@lysator.liu.se>
+
+	* mpn/generic/hgcd.c (hgcd_matrix_update_q): Fixed carry handling
+	bug.
+
+	* tests/mpz/t-gcd.c (main): Omit tests with urandomb operands.
+	* tests/mpn/t-hgcd.c (main): Likewise.
+
+2012-02-05  Niels Möller  <nisse@lysator.liu.se>
+
+	* tests/mpz/t-gcd.c (main): Add tests with rrandomb operands.
+	* tests/mpn/t-hgcd.c (main): Likewise.
+
+	* mpn/generic/gcdext_subdiv_step.c (mpn_gcdext_subdiv_step):
+	Bugfix, in u1 += q * u0, handle carry in all cases. Also normalize
+	the product q * u0.
+
+2012-02-04 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* tests/refmpn.c (refmpn_mul): More conservative allocations.
+
+2012-02-03  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/bd1/gmp-mparam.h: New file.
+
+	* longlong.h (udiv_qrnnd from sdiv_qrnnd): Declare udiv_w_sdiv.
+
+	* mpn/generic/udiv_w_sdiv.c: Use c89 function header.
+
+2012-02-02 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* mpn/generic/toom_interpolate_16pts.c: Correct an unlikely 32-bit bug.
+
+2012-02-02  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/toom63_mul.c: Allow s+t==n by adjusting an ASSERT.
+	* mpn/generic/toom_interpolate_8pts.c: Perform final incr iff s+t!=n.
+
+	* tests/mpn/t-toom6h.c (MIN_BN): Make more consistent with ASSERT in
+	tested function.
+
+2012-02-01  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/mpn/t-mul.c: New file.
+	* tests/mpn/Makefile.am: Compile it.
+
+2012-01-31  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/powm_sec.c (SQR_BASECASE_LIM): New name for
+	SQR_BASECASE_MAX.
+	(SQR_BASECASE_LIM, fat variant): Define to read __gmpn_cpuvec.
+	(SQR_BASECASE_LIM, native variant): Define to SQR_TOOM2_THRESHOLD
+	straight, without arithmetic.
+	(mpn_local_sqr): Use BELOW_THRESHOLD as per Marco's suggestion.
+
+2012-01-30  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/mpz/t-powm.c: Ensure all sizes are seen.
+
+2012-01-27  Torbjorn Granlund  <tege@gmplib.org>
+
+	* Version 5.0.3 released.
+
+	* Upgrade to libtool 2.4.2.
+
+2012-01-25  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tune/tuneup.c: Remove unused tuneup variables.
+
+2012-01-23  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/powerpc64/mode64/p6/gmp-mparam.h: New file.
+	* mpn/powerpc64/mode64/p7/gmp-mparam.h: New file.
+	* mpn/x86_64/bobcat/gmp-mparam.h: New file.
+
+2012-01-18  Marc Glisse  <marc.glisse@inria.fr>
+
+	* doc/gmp.texi (mpf_class::mpf_class): Use mp_bitcnt_t.
+
+2012-01-17  Torbjorn Granlund  <tege@gmplib.org>
+
+	* gmp-h.in (__GNU_MP_VERSION_PATCHLEVEL): Bump.
+
+	* Makefile.am (LIBGMP_LT_*, LIBGMPXX_LT_*, LIBMP_LT_*):
+	Bump version info.
+
+	* configure.in: Add ultrasparc T4 support.
+
+	* demos/isprime.c (main): Run 25 millerrabin tests.
+
+2012-01-15  Niels Möller  <nisse@lysator.liu.se>
+
+	* mpz/scan0.c (mpz_scan0): Use ~(mp_bitcnt_t) 0, rather than
+	ULONG_MAX, when returning "infinity".
+	* mpz/scan1.c (mpz_scan1): Likewise.
+
+2011-12-30  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpz/hamdist.c: Fix typo in a return statement.
+
+2011-12-08  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/powm_sec.c: Handle fat binaries better.
+
+2011-12-07  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in: Fix typo making HAVE_NATIVE_mpn_X fail for fat
+	functions.
+
+	* mpn/x86_64/fat/fat.c (__gmpn_cpuvec_init): Add a missing break.
+
+2011-12-01  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/fat/fat.c: Copy fake cpuid code from x86/fat/fat.c.
+
+	* gmp-impl.h (DECL_divexact_1): Fix typo in return type.
+
+2011-11-28  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/udiv_w_sdiv.c: Use CNST_LIMB for some constants.
+
+2011-11-25  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in: Overhaul x86/x86_64 support, merging three case
+	statements into one.
+
+2011-11-24  Torbjorn Granlund  <tege@gmplib.org>
+
+	* doc/gmp.texi (Formatted Output Strings): Clarify rules for mpf_t
+	precision.
+
+2011-11-21  Torbjorn Granlund  <tege@gmplib.org>
+
+	* gmp-h.in (__GNU_MP_RELEASE): Renamed from typo name.
+
+2011-11-20  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in: Split x86 CPUs into more subtypes for more accurate
+	passing of gcc flags.
+
+	* configure.in: Pass -m32 for powerpc64 with abi=32, using via _maybe
+	mechanism.
+
+2011-11-15  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/powm_sec.c (mpn_local_sqr): Remove forgotten TMP_* calls.
+	(redcify): Likewise.
+	(mpn_powm_sec): Likewise.
+
+	* mpn/generic/powm_sec.c (mpn_powm_sec): Use mpn_tabselect also in
+	initialisation.
+
+2011-10-15  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in (s390): Rewrite support to handle known CPUs.
+	* config.guess: Recognise s390 CPUs.
+	* config.sub: Match s390 CPUs.
+	* acinclude.m4 (S390_PATTERN, S390X_PATTERN): New defines.
+
+2011-10-14  Torbjorn Granlund  <tege@gmplib.org>
+
+	From Per Olofsson:
+	* mpn/generic/popham.c: Add __GMP_NOTHROW to make it match gmp.h.
+
+	* configure.in: AC_DEFINE HAVE_HOST_CPU_s390_zarch.
+	* longlong.h (s390): Use it.
+	(s390 umul_ppmm): Fix typo in pure C variant.
+
+2011-10-13  Torbjorn Granlund  <tege@gmplib.org>
+
+	* longlong.h (s390): Put back an accidentally deleted #else.
+
+	* configure.in (s390): Unset extra_functions for s390x.
+
+2011-10-12  Torbjorn Granlund  <tege@gmplib.org>
+
+	* longlong.h (s390 umul_ppmm): With new-enough gcc, avoid asm.
+
+	From Andreas Krebbel:
+	* longlong.h (s390 umul_ppmm): Support 32-bit limbs with gcc using
+	64-bit registers.
+	(s390 udiv_qrnnd): Likewise.
+
+2011-10-11  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in (s390x): Pass -mzarch to gcc in 32-bit mode.
+
+	* longlong.h (s390x): Add __CLOBBER_CC for relevant asm patterns.
+
+2011-10-10  Torbjorn Granlund  <tege@gmplib.org>
+
+	From Marco Trudel:
+	* tests/mpz/t-scan.c (check_ref): Fix loop end bound.
+
+2011-10-09  Torbjorn Granlund  <tege@gmplib.org>
+
+	* longlong.h (s390x): Put back UDItype casts to make gcc reloading use
+	right more for constants.
+	(s390x count_leading_zeros): Disable until we support z10 specifically.
+	(s390x add_ssaaaa): Remove algsi/slgsi until we support z10.
+
+2011-10-07  Torbjorn Granlund  <tege@gmplib.org>
+
+	* longlong.h (s390): Add 32-bit zarch umul_ppmm and udiv_qrnnd.
+	(s390): Overhaul 32-bit and 64-bit code.
+
+2011-10-04  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/Makefile.am (TARG_DIST): Add s390_32 and s390_64, remove s390.
+
+	* doc/gmp.texi (Custom Allocation): Rephrase a paragraph.
+
+	* demos/factorize.c: Run 25 Miller-Rabin tests.
+
+	* mpz/nextprime.c: Run 25 mpz_millerrabin tests (was 10).
+
+2011-10-03  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in: Support s390x.
+
+	* longlong.h: Add support for 64-bit s390x.
+
+	* mpn/s390_64: New directory.
+	* mpn/s390_32: Directory renamed from mpn/s390.
+
+2011-09-26  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/sh/sh2/submul_1.s: Make this old submul_1 implementation
+	actually compute intended function.
+
+2011-09-25  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/sh: Migrate files to '.asm'.
+	* configure.in: Recognise sh3 and sh4.
+
+2011-08-18  Torbjorn Granlund  <tege@gmplib.org>
+
+	* printf/doprntf.c (__gmp_doprnt_mpf): For DOPRNT_CONV_FIXED, ask for
+	one more digit.
+
+2011-08-17  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpf/sub.c: Fix typo in copy condition.  Delay an allocation.
+
+2011-08-10  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/rand/t-lc2exp.c (check_bigc): Call abort after reporting error.
+
+2011-07-15  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/arm/invert_limb.asm: Swap around some registers to silence 'as'
+	warnings.
+
+2011-07-14  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/dcpi1_bdiv_q.c (mpn_dcpi1_bdiv_q): Get mpn_sub_1 size
+	argument right.
+
+2011-07-04  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/misc/t-locale.c: Disable test for mingw.
+
+	* configure.in (x86_64 *-*-mingw*): Handle also cygwin here; clear out
+	extra_functions_64.
+
+2011-07-02  Torbjorn Granlund  <tege@gmplib.org>
+
+	* config.guess: Don't print newline in x86 cpuid function.
+	Rewrite x86-64 cpu recognition asm code to work under Windoze.
+
+2011-06-16  Torbjorn Granlund  <tege@gmplib.org>
+
+	* acinclude.m4 (GMP_ASM_RODATA): Fix typo in 2011-04-10 change.
+
+	* configure.in: Surround tr ranges with [] for portability.
+
+2011-05-08  Marc Glisse  <marc.glisse@inria.fr>
+
+	* doc/gmp.texi (gmp_randclass::get_f): Replace unsigned long
+	with mp_bitcnt_t.
+
+2011-05-07  Torbjorn Granlund  <tege@gmplib.org>
+
+	* Version 5.0.2 released.
+
+	* gmp-h.in (__GNU_MP_VERSION_PATCHLEVEL): Bump.
+
+	* Makefile.am (LIBGMP_LT_*, LIBGMPXX_LT_*, LIBMP_LT_*):
+	Bump version info.
+
+2011-05-05  Marc Glisse  <marc.glisse@inria.fr>
+
+	[These changes were made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* mpn/x86_64/fat/fat.c: Update for Sandy Bridge.
+	* config.guess: warning to keep it in sync with fat.c.
+
+2011-05-05  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/fat/fat_entry.asm: (PIC_OR_DARWIN): New symbol.  Use it to
+	work around Darwin problems.
+
+2011-05-02  Marc Glisse  <marc.glisse@inria.fr>
+
+	* configfsf.guess: Update to version of 2011-02-02.
+	* configfsf.sub: Update to version of 2011-03-23.
+
+2011-04-30  Marc Glisse  <marc.glisse@inria.fr>
+
+	* gmp-h.in (mpz_cdiv_q_2exp): Use mp_bitcnt_t to match the definition
+	and the documentation.
+	(mpz_remove): Likewise.
+	(mpf_eq): Likewise.
+
+	* ltmain.sh: Remove.
+	* .bootstrap: Let libtoolize generate ltmain.sh.
+
+	* doc/gmp.texi (mpf_urandomb): Explicit the fact that it does not
+	change the precision.
+
+2011-04-28  Torbjorn Granlund  <tege@gmplib.org>
+
+	[This change was made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* configure.in (x86_64): Support bobcat specifically.
+	(x86): Match bobcat and bulldozer, handle like k10.
+
+2011-04-27  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tune/speed.h (speed_cyclecounter): Always use PIC variant when
+	compiled with Apple's GCC.
+
+2011-04-26  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/sparc32/sparc-defs.m4 (changecom): Don't redefine '!' as it
+	interferes with expressions.
+
+2011-04-10  Niels Möller  <nisse@lysator.liu.se>
+
+	[This change was made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* configure.in: Add invert_limb_table to extra_functions_64 on
+	x86_64.
+
+2011-04-10  Torbjorn Granlund  <tege@gmplib.org>
+
+	* acinclude.m4 (GMP_ASM_RODATA): Make 'foo' larger to avoid clang
+	problems.
+
+2011-03-28  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86/invert_limb.asm: Protect movzwl register parameters from
+	being interpreted as m4 macro parameters.
+
+2011-03-21  Torbjorn Granlund  <tege@gmplib.org>
+
+	* configure.in (hppa): Under linux, treat 64-bit processors as if they
+	were 32-bit processors.
+
+2011-03-15 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* mpn/generic/toom_interpolate_16pts.c: Remove ambiguity.
+
+2011-03-12  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tune/powerpc.asm: Use powerpc syntax, not power syntax.
+
+2011-03-09  Marc Glisse  <marc.glisse@inria.fr>
+
+	* doc/gmp.texi: Remove void return type from constructors. Document
+	explicit constructors. Document mpf_class::mpf_class(mpf_t).
+
+2011-02-24  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86/p6/sse2/mod_1_4.asm: Fix typo in MULFUNC_PROLOGUE.
+
+2011-02-04  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/core2/popcount.asm: Add a MULFUNC_PROLOGUE.
+	* mpn/x86_64/pentium4/popcount.asm: Likewise.
+
+2011-01-31  Torbjorn Granlund  <tege@gmplib.org>
+
+	[These changes were made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* config.guess: Recognise new Intel processors.
+
+	* config.guess: Support 'coreinhm' and 'coreisbr'.
+	* config.sub: Likewise.
+	* configure.in: Likewise.
+
+2011-01-25 Marco Bodrato <bodrato@mail.dm.unipi.it>
+
+	* mpz/mul.c: Remove redundant size computation.
+
+2010-11-11  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/atom/aors_n.asm: Don't rely on ZF after 'bt' insn.
+	Use 64-bit 'test' to support operands of 2^32 limbs and more.
+
+2010-11-10  Torbjorn Granlund  <tege@gmplib.org>
+
+	[These changes were made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* mp_get_fns.c: Add a __GMP_NOTHROW for coherency with prototype.
+	* mp_set_fns.c: Likewise.
+	* mpf/cmp.c: Likewise.
+	* mpf/cmp_si.c: Likewise.
+	* mpf/cmp_ui.c: Likewise.
+	* mpf/fits_s.h: Likewise.
+	* mpf/fits_u.h: Likewise.
+	* mpf/get_dfl_prec.c: Likewise.
+	* mpf/get_prc.c: Likewise.
+	* mpf/get_si.c: Likewise.
+	* mpf/get_ui.c: Likewise.
+	* mpf/int_p.c: Likewise.
+	* mpf/set_dfl_prec.c: Likewise.
+	* mpf/set_prc_raw.c: Likewise.
+	* mpf/size.c: Likewise.
+	* mpf/swap.c: Likewise.
+	* mpq/equal.c: Likewise.
+	* mpq/swap.c: Likewise.
+	* mpz/cmp.c: Likewise.
+	* mpz/cmp_si.c: Likewise.
+	* mpz/cmp_ui.c: Likewise.
+	* mpz/cmpabs.c: Likewise.
+	* mpz/cmpabs_ui.c: Likewise.
+	* mpz/cong_2exp.c: Likewise.
+	* mpz/divis_2exp.c: Likewise.
+	* mpz/fits_s.h: Likewise.
+	* mpz/get_si.c: Likewise.
+	* mpz/hamdist.c: Likewise.
+	* mpz/scan0.c: Likewise.
+	* mpz/scan1.c: Likewise.
+	* mpz/sizeinbase.c: Likewise.
+	* mpz/swap.c: Likewise.
+	* mpz/tstbit.c: Likewise.
+
+2010-11-09  Torbjorn Granlund  <tege@gmplib.org>
+
+	[This change was made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* configure.in (AC_INIT): Amend bug reporting address with manual
+	reference.
+
+2010-11-06  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/aors_n.asm: Rewrite not to rely on ZF after 'bt' insn.
+
+2010-10-04  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86_64/gcd_1.asm: Use m4_lshift to avoid << operator.
+	* mpn/x86/k7/gcd_1.asm: Likewise.
+
+2010-08-20  Niels Möller  <nisse@lysator.liu.se>
+
+	Suggested by Ozkan Sezer:
+	* configure.in: If $M4 is already set in the environment, don't
+	touch it. Fixed the case that no assembler files are used, and
+	GMP_PROG_M4 is omitted.
+
+2010-06-15  Niels Möller  <nisse@lysator.liu.se>
+
+	* tests/mpn/Makefile.am (check_PROGRAMS): Added t-mod_1.
+	* tests/mpn/t-mod_1.c: New file.
+
+2010-05-24  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/mu_div_qr.c (mpn_preinv_mu_div_qr_itch): New function.
+	* gmp-impl.h: Declare it.
+	* tune/common.c (speed_mpn_mupi_div_qr): Use new itch function.
+	* tune/speed.h (SPEED_ROUTINE_MPN_MUPI_DIV_QR): Pass parameters right
+	for new itch function.
+
+2010-05-14  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/redc_2.c: Use asm code just for GNU C.
+
+2010-05-06  Torbjorn Granlund  <tege@gmplib.org>
+
+	[This change was made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* tune/tuneup.c (tune_mod_1): Fix typo.
+
+2010-05-05  Torbjorn Granlund  <tege@gmplib.org>
+
+	[These changes were made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* longlong.h: Undo 2009-03-01 change for powerpc64, it gives poor code.
+
+	* tune/tuneup.c (tune_mod_1): Use more typical divisor, for the benefit
+	of machines with early-out multipliers.
+
+2010-05-04  Torbjorn Granlund  <tege@gmplib.org>
+
+	[This change was made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* tune/tuneup.c (tune_mod_1): Fix typo.
+
+2010-05-03  Torbjorn Granlund  <tege@gmplib.org>
+
+	[This change was made after the 5.0.2 release, but inserted here to
+	match the change chronology of the main repository.]
+
+	* tune/tuneup.c (tune_mod_1): Measure MOD_1_1_TO_MOD_1_2_THRESHOLD and
+	MOD_1_2_TO_MOD_1_4_THRESHOLD before MOD_1U_TO_MOD_1_1_THRESHOLD for
+	correctness.
+
+2010-04-12  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/mpn/t-toom6h.c (SIZE_LOG): Define.
+	* tests/mpn/t-toom8h.c (SIZE_LOG): Likewise.
+
+2010-04-10  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/x86/divrem_2.asm: Use "orb" instead of "or" to work around
+	Solaris assembler bug.
+	* mpn/x86_64/mpn/x86_64/divrem_2.asm: Likewise.
+
+2010-03-25  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/toom33_mul.c: Fix mpn_add_n_sub_n usage.
+	* mpn/generic/toom3_sqr.c: Likewise.
+	* mpn/generic/toom63_mul.c: Likewise.
+
+2010-03-19  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/toom_interpolate_6pts.c: Call mpn_sublsh2_n and
+	mpn_sublsh_n with correct args.
+
+2010-03-06  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/tests.h (TESTS_REPS): Fix typo.
+
+2010-02-26  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/pa64/aors_n.asm: Fix typo in last change.
+
+2010-02-25  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tests/mpz/t-perfpow.c (check_random): Use mp_limb_t type for limb
+	variables.
+
+	* tests/mpn/t-div.c: Cast a switch index to placate HP's cc.
+	* tests/mpn/t-bdiv.c: Likewise.
+
+	* mpn/pa64/aors_n.asm: Fix support of the 2.0n ABI.
+
+2010-02-23  Torbjorn Granlund  <tege@gmplib.org>
+
+	* mpn/generic/mod_1_3.c: Cast a switch index.
+
+	* mpn/generic/sqrtrem.c: Use CNST_LIMB.
+
+2010-02-07  Torbjorn Granlund  <tege@gmplib.org>
+
+	* tune/tuneup.c (tune_redc): Set min_size and min_is_always when
+	measuring REDC_1_TO_REDC_2_THRESHOLD.
+	(tune_mod_1): Set min_size for PREINV_MOD_1_TO_MOD_1_THRESHOLD.
+
+	* mpn/x86_64/aorrlsh_n.asm (cnt): Fix a typo.
+	* mpn/x86_64/lshsub_n.asm: Likewise.
+
 2010-02-05  Torbjorn Granlund  <tege@gmplib.org>
 
 	* Version 5.0.1 released.
@@ -3661,7 +4323,6 @@
 	* mpn/powerpc64/darwin.m4 (LEAL): New name for LEA, since it is only
 	usable for local symbols.
 	(LEA): Replace with code for external references.
-
 
 	* mpn/powerpc32/vmx/mod_34lsub1.asm: Use LEAL.
 

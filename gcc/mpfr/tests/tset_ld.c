@@ -1,7 +1,7 @@
 /* Test file for mpfr_set_ld and mpfr_get_ld.
 
-Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -72,9 +72,15 @@ check_set_get (long double d, mpfr_t x)
       inex = mpfr_set_ld (x, d, (mpfr_rnd_t) r);
       if (inex != 0)
         {
+          mpfr_exp_t emin, emax;
+          emin = mpfr_get_emin ();
+          emax = mpfr_get_emax ();
           printf ("Error: mpfr_set_ld should be exact\n");
           printf ("d=%1.30Le inex=%d\n", d, inex);
-          printf ("emin=%ld emax=%ld\n", mpfr_get_emin (), mpfr_get_emax ());
+          if (emin >= LONG_MIN)
+            printf ("emin=%ld\n", (long) emin);
+          if (emax <= LONG_MAX)
+            printf ("emax=%ld\n", (long) emax);
           mpfr_dump (x);
           exit (1);
         }
@@ -147,12 +153,39 @@ static void
 test_fixed_bugs (void)
 {
   mpfr_t x;
-  long double d;
+  long double l, m;
 
   /* bug found by Steve Kargl (2009-03-14) */
   mpfr_init2 (x, 64);
   mpfr_set_ui_2exp (x, 1, -16447, MPFR_RNDN);
-  d = mpfr_get_ld (x, MPFR_RNDN);  /* an assertion failed in init2.c:50 */
+  mpfr_get_ld (x, MPFR_RNDN);  /* an assertion failed in init2.c:50 */
+
+  /* bug reported by Jakub Jelinek (2010-10-17)
+     https://gforge.inria.fr/tracker/?func=detail&aid=11300 */
+  mpfr_set_prec (x, MPFR_LDBL_MANT_DIG);
+  /* l = 0x1.23456789abcdef0123456789abcdp-914L; */
+  l = 8.215640181713713164092636634579e-276;
+  mpfr_set_ld (x, l, MPFR_RNDN);
+  m = mpfr_get_ld (x, MPFR_RNDN);
+  if (m != l)
+    {
+      printf ("Error in get_ld o set_ld for l=%Le\n", l);
+      printf ("Got m=%Le instead of l\n", m);
+      exit (1);
+    }
+
+  /* another similar test which failed with extended double precision and the
+     generic code for mpfr_set_ld */
+  /* l = 0x1.23456789abcdef0123456789abcdp-968L; */
+  l = 4.560596445887084662336528403703e-292;
+  mpfr_set_ld (x, l, MPFR_RNDN);
+  m = mpfr_get_ld (x, MPFR_RNDN);
+  if (m != l)
+    {
+      printf ("Error in get_ld o set_ld for l=%Le\n", l);
+      printf ("Got m=%Le instead of l\n", m);
+      exit (1);
+    }
 
   mpfr_clear (x);
 }
@@ -183,10 +216,12 @@ main (int argc, char *argv[])
 
   mpfr_init2 (x, MPFR_LDBL_MANT_DIG);
 
+#if !defined(MPFR_ERRDIVZERO)
   /* check NaN */
   mpfr_set_nan (x);
   d = mpfr_get_ld (x, MPFR_RNDN);
   check_set_get (d, x);
+#endif
 
   /* check +0.0 and -0.0 */
   d = 0.0;
@@ -199,12 +234,13 @@ main (int argc, char *argv[])
   if (MPFR_SIGN(x) > 0)
     {
       printf ("Error: sign of -0.0 is not set correctly\n");
-#ifdef _GMP_IEEE_FLOATS
+#if _GMP_IEEE_FLOATS
       exit (1);
       /* Non IEEE doesn't support negative zero yet */
 #endif
     }
 
+#if !defined(MPFR_ERRDIVZERO)
   /* check +Inf */
   mpfr_set_inf (x, 1);
   d = mpfr_get_ld (x, MPFR_RNDN);
@@ -214,6 +250,7 @@ main (int argc, char *argv[])
   mpfr_set_inf (x, -1);
   d = mpfr_get_ld (x, MPFR_RNDN);
   check_set_get (d, x);
+#endif
 
   /* check the largest power of two */
   d = 1.0; while (d < LDBL_MAX / 2.0) d += d;

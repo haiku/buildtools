@@ -1,7 +1,7 @@
 /* auxiliary functions for MPFR tests.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -42,6 +42,13 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 
 /* Loop for all rounding modes */
 #define RND_LOOP(_r) for((_r) = 0 ; (_r) < MPFR_RND_MAX ; (_r)++)
+
+/* Test whether two floating-point data have the same value,
+   seen as an element of the set of the floating-point data
+   (Level 2 in the IEEE 754-2008 standard). */
+#define SAME_VAL(X,Y)                                                   \
+  ((MPFR_IS_NAN (X) && MPFR_IS_NAN (Y)) ||                              \
+   (mpfr_equal_p ((X), (Y)) && MPFR_INT_SIGN (X) == MPFR_INT_SIGN (Y)))
 
 /* The MAX, MIN and ABS macros may already be defined if gmp-impl.h has
    been included. They have the same semantics as in gmp-impl.h, but the
@@ -84,10 +91,11 @@ FILE *src_fopen _MPFR_PROTO ((const char *, const char *));
 void set_emin _MPFR_PROTO ((mpfr_exp_t));
 void set_emax _MPFR_PROTO ((mpfr_exp_t));
 void tests_default_random _MPFR_PROTO ((mpfr_ptr, int, mpfr_exp_t, mpfr_exp_t));
-void data_check _MPFR_PROTO ((char *, int (*) (FLIST), char *));
+void data_check _MPFR_PROTO ((const char *, int (*) (FLIST), const char *));
 void bad_cases _MPFR_PROTO ((int (*)(FLIST), int (*)(FLIST),
-                             char *, int, mpfr_exp_t, mpfr_exp_t,
+                             const char *, int, mpfr_exp_t, mpfr_exp_t,
                              mpfr_prec_t, mpfr_prec_t, mpfr_prec_t, int));
+void flags_out _MPFR_PROTO ((unsigned int));
 
 int mpfr_cmp_str _MPFR_PROTO ((mpfr_srcptr x, const char *, int, mpfr_rnd_t));
 #define mpfr_cmp_str1(x,s) mpfr_cmp_str(x,s,10,MPFR_RNDN)

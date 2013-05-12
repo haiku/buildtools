@@ -1,38 +1,39 @@
 /* mpc-impl.h -- Internal include file for mpc.
 
-Copyright (C) INRIA, 2002, 2004, 2005, 2008, 2009, 2010, 2011
+Copyright (C) 2002, 2004, 2005, 2008, 2009, 2010, 2011, 2012 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
 #ifndef __MPC_IMPL_H
 #define __MPC_IMPL_H
+#define __MPC_LIBRARY_BUILD
+   /* to indicate we are inside the library build */
 
-#include <stdlib.h>
 #include "config.h"
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
 #include "mpc.h"
-
-#define MPC_RE(x) ((x)->re)
-#define MPC_IM(x) ((x)->im)
 
 /*
  * Miscellaneous useful macros
  */
 
+#define MPC_MIN(h,i) ((h) < (i) ? (h) : (i))
 #define MPC_MAX(h,i) ((h) > (i) ? (h) : (i))
 
 /* Safe absolute value (to avoid possible integer overflow) */
@@ -84,45 +85,47 @@ MA 02111-1307, USA. */
 #else
 #define ROUND_AWAY(f,rop) \
    (f)
-#endif
+#endif /* mpfr < 3 */
+
+#if MPFR_VERSION_MAJOR < 3
+/* declare missing functions, defined in get_version.c */
+__MPC_DECLSPEC void mpfr_set_zero (mpfr_ptr, int);
+__MPC_DECLSPEC int mpfr_regular_p (mpfr_srcptr);
+#endif /* mpfr < 3 */
 
 
 /*
  * MPC macros
  */
 
-#define MPC_PREC_RE(x) (mpfr_get_prec(MPC_RE(x)))
-#define MPC_PREC_IM(x) (mpfr_get_prec(MPC_IM(x)))
+#define MPC_PREC_RE(x) (mpfr_get_prec(mpc_realref(x)))
+#define MPC_PREC_IM(x) (mpfr_get_prec(mpc_imagref(x)))
 #define MPC_MAX_PREC(x) MPC_MAX(MPC_PREC_RE(x), MPC_PREC_IM(x))
 
 #define INV_RND(r) \
    (((r) == GMP_RNDU) ? GMP_RNDD : (((r) == GMP_RNDD) ? GMP_RNDU : (r)))
 
-#define mpc_inf_p(z) (mpfr_inf_p(MPC_RE(z))||mpfr_inf_p(MPC_IM(z)))
+#define mpc_inf_p(z) (mpfr_inf_p(mpc_realref(z))||mpfr_inf_p(mpc_imagref(z)))
    /* Convention in C99 (G.3): z is regarded as an infinity if at least one of
       its parts is infinite */
-#define mpc_zero_p(z) (mpfr_zero_p(MPC_RE(z))&&mpfr_zero_p(MPC_IM(z)))
+#define mpc_zero_p(z) (mpfr_zero_p(mpc_realref(z))&&mpfr_zero_p(mpc_imagref(z)))
    /* Convention in C99 (G.3): z is regarded as a zero if each of its parts is
       a zero */
-#define mpc_fin_p(z) (mpfr_number_p(MPC_RE(z))&&mpfr_number_p(MPC_IM(z)))
+#define mpc_fin_p(z) (mpfr_number_p(mpc_realref(z))&&mpfr_number_p(mpc_imagref(z)))
    /* Convention in C99 (G.3): z is regarded as finite if both its parts are */
-#define mpc_nan_p(z) ((mpfr_nan_p(MPC_RE(z)) && !mpfr_inf_p(MPC_IM(z))) || (mpfr_nan_p(MPC_IM(z)) && !mpfr_inf_p(MPC_RE(z))))
+#define mpc_nan_p(z) ((mpfr_nan_p(mpc_realref(z)) && !mpfr_inf_p(mpc_imagref(z))) || (mpfr_nan_p(mpc_imagref(z)) && !mpfr_inf_p(mpc_realref(z))))
    /* Consider as NaN all other numbers containing at least one NaN */
-
-
-#define MPC_OUT(x)                                                  \
-do {                                                            \
-  printf (#x "[%lu,%lu]=", (unsigned long int) MPC_PREC_RE (x), \
-      (unsigned long int) MPC_PREC_IM (x));                     \
-  mpc_out_str (stdout, 2, 0, x, MPC_RNDNN);                     \
-  printf ("\n");                                                \
-} while (0)
 
 
 /*
  * ASSERT macros
  */
 
+#ifdef NDEBUG
+#define MPC_ASSERT(expr) \
+  do {                   \
+  } while (0)
+#else
 #define MPC_ASSERT(expr)                                        \
   do {                                                          \
     if (!(expr))                                                \
@@ -132,6 +135,27 @@ do {                                                            \
         abort();                                                \
       }                                                         \
   } while (0)
+#endif
+
+
+/*
+ * Debug macros
+ */
+
+#define MPC_OUT(x)                                              \
+do {                                                            \
+  printf (#x "[%lu,%lu]=", (unsigned long int) MPC_PREC_RE (x), \
+      (unsigned long int) MPC_PREC_IM (x));                     \
+  mpc_out_str (stdout, 2, 0, x, MPC_RNDNN);                     \
+  printf ("\n");                                                \
+} while (0)
+
+#define MPFR_OUT(x)                                             \
+do {                                                            \
+  printf (#x "[%lu]=", (unsigned long int) mpfr_get_prec (x));  \
+  mpfr_out_str (stdout, 2, 0, x, GMP_RNDN);                     \
+  printf ("\n");                                                \
+} while (0)
 
 
 /*
@@ -151,14 +175,16 @@ do {                                                            \
 extern "C" {
 #endif
 
-__MPC_DECLSPEC int  mpc_mul_naive __MPC_PROTO ((mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t));
-__MPC_DECLSPEC int  mpc_mul_karatsuba __MPC_PROTO ((mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t));
-__MPC_DECLSPEC int  mpc_pow_usi __MPC_PROTO ((mpc_ptr, mpc_srcptr, unsigned long, int, mpc_rnd_t));
-__MPC_DECLSPEC char* mpc_alloc_str __MPC_PROTO ((size_t));
-__MPC_DECLSPEC char* mpc_realloc_str __MPC_PROTO ((char*, size_t, size_t));
-__MPC_DECLSPEC void mpc_free_str __MPC_PROTO ((char*));
-__MPC_DECLSPEC mpfr_prec_t mpc_ceil_log2 __MPC_PROTO ((mpfr_prec_t));
-__MPC_DECLSPEC int set_pi_over_2 __MPC_PROTO ((mpfr_ptr, int, mpfr_rnd_t));
+
+__MPC_DECLSPEC int  mpc_mul_naive (mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t);
+__MPC_DECLSPEC int  mpc_mul_karatsuba (mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t);
+__MPC_DECLSPEC int  mpc_fma_naive (mpc_ptr, mpc_srcptr, mpc_srcptr, mpc_srcptr, mpc_rnd_t);
+__MPC_DECLSPEC int  mpc_pow_usi (mpc_ptr, mpc_srcptr, unsigned long, int, mpc_rnd_t);
+__MPC_DECLSPEC char* mpc_alloc_str (size_t);
+__MPC_DECLSPEC char* mpc_realloc_str (char*, size_t, size_t);
+__MPC_DECLSPEC void mpc_free_str (char*);
+__MPC_DECLSPEC mpfr_prec_t mpc_ceil_log2 (mpfr_prec_t);
+__MPC_DECLSPEC int set_pi_over_2 (mpfr_ptr, int, mpfr_rnd_t);
 
 #if defined (__cplusplus)
 }

@@ -1,23 +1,21 @@
 # Data test file for mpc_log.
-
-# Copyright (C) INRIA, 2008, 2009, 2010
-
-# This file is part of the MPC Library.
 #
-# The MPC Library is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
+# Copyright (C) 2008, 2009, 2010, 2012 INRIA
+#
+# This file is part of GNU MPC.
+#
+# GNU MPC is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 #
-# The MPC Library is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-# License for more details.
+# GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+# more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the MPC Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-# MA 02111-1307, USA.
+# along with this program. If not, see http://www.gnu.org/licenses/ .
 
 # See file sin.dat for the format description.
 
@@ -97,6 +95,7 @@
 
 # log(nan + i*inf) = +inf + i*nan
 0 0 2 +inf 2 nan                   2 nan 2 +inf  N N
+0 0 2 +inf 2 nan                   2 nan 2 -inf  N N
 
 # log(nan + i*nan) = nan + i*nan
 0 0 2 nan 2 nan                    2 nan 2 nan   N N
@@ -116,6 +115,16 @@
 - + 53 0x8611A6D2511D3p-49  53 -0x3243F6A8885A3p-48    7 -0x42 2    -0 N Z
 + - 53 0x10C234DA4A23A7p-50 53  0x3243F6A8885A3p-48    7 -0x42 2    +0 U N
 - + 53 0x8611A6D2511D3p-49  53 -0x3243F6A8885A3p-48    7 -0x42 2    -0 D U
+
+# normal non-zero numbers
+- - 17 0x6701p-15 42 0x3b58ce0ac37p-43 2 2 2 1 N N
+- + 17 0x6701p-15 42 -0x3b58ce0ac37p-43 2 2 2 -1 N N
+- + 17 0x6701p-15 42 0x2ad8dce72ffp-40 2 -2 2 1 N N
+- - 17 0x6701p-15 42 -0x2ad8dce72ffp-40 2 -2 2 -1 N N
+- + 17 0x6701p-15 42 0x46db864bafp-38 2 1 2 2 N N
+- - 17 0x6701p-15 42 -0x46db864bafp-38 2 1 2 -2 N N
+- + 17 0x6701p-15 42 0x10468a8ace5p-39 2 -1 2 2 N N
+- - 17 0x6701p-15 42 -0x10468a8ace5p-39 2 -1 2 -2 N N
 
 # huge values
 + 0 53 0x162E42FEFA39Fp-39  2   0                   2 0x1p1024 2    +0 U U
@@ -157,7 +166,25 @@
 + + 53 0x162E4301C0025p-23   2  0x1p0         2 0x1p67108864 2 0x1p67108864 U U
 + + 53 0xB1721802E8F1p-21    2  0x1p0       2 0x1p134217728 2 0x1p134217728 U U
 + + 53 0x2C5C85FF57581p-22   2  0x1p0       2 0x1p268435456 2 0x1p268435456 U U
-# Due to intermediate overflow, the following result has real part infinity
-# instead of the correct result. Since this may happen in other parts of the
-# library as well, we do not consider it a bug for the moment.
-# + + 53 0x58B90BFD4BCBFp-22   2  0x1p0       2 0x1p536870912 2 0x1p536870912 U U
+
+# Example leading to intermediate overflow in x^2+y^2
++ + 53 0x58B90BFD4BCBFp-22   2  0x1p0       2 0x1p536870912 2 0x1p536870912 U U
++ + 53 0x58B90BFAA42A98p-25   2  0x1p0       2 0x3p1073741821 2 0x3p1073741821 U U
+# Example leading to intermediate underflow in x^2+y^2
+- - 53 -0x58B90BFB3775A8p-25   2  0x3p-2     2 0x1p-1073741824 2 0x1p-1073741824 D D
+
+# log (-1 + i*eps), looped in previous version
+- - 2 0 2 3                2 -1 2 0x1p-1073741813 N N
+- - 2 0 2 3                2 -1 2 0x1p-1073741813 D D
++ + 2 0x1p-1073741824 2 4  2 -1 2 0x1p-1073741813 U U
+# log(1 + i*eps), could cause similar problems
+- + 2 0               2 0x1p-1073741824  2 1 2 0x1p-1073741824 N N
+- - 2 0               2 0                2 1 2 0x1p-1073741824 D D
++ + 2 0x1p-1073741824 2 0x1p-1073741824  2 1 2 0x1p-1073741824 U U
+# log (eps + i)
+- - 2 0               2 0x3p-1  2 0x1p-1073741824 2 1 N N
+- - 2 0               2 0x3p-1  2 0x1p-1073741824 2 1 D D
++ + 2 0x1p-1073741824 2 2  2 0x1p-1073741824 2 1 U U
+
+# log (close to 1 + i*eps), improves test coverage
++ - 2 -0x1p-36 2 0x1p-1073741824  36 0x0.FFFFFFFFF 2 0x1p-1073741824 N N

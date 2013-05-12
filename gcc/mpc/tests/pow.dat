@@ -1,23 +1,21 @@
 # Data file for mpc_pow.
 #
-# Copyright (C) INRIA, 2009
+# Copyright (C) 2009, 2011, 2012 INRIA
 #
-# This file is part of the MPC Library.
+# This file is part of GNU MPC.
 #
-# The MPC Library is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
-# option) any later version.
+# GNU MPC is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+#o ption) any later version.
 #
-# The MPC Library is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-# License for more details.
+# GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+# more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the MPC Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-# MA 02111-1307, USA.
+# along with this program. If not, see http://www.gnu.org/licenses/ .
 #
 # For explanations on the file format, see add.dat.
 
@@ -135,7 +133,22 @@
 0 0 53    0 53    0    53 -inf 53   -1  53 -inf 53   +1 N N 
 0 0 53    0 53    0    53 -inf 53   -1  53 -inf 53   -1 N N 
 
-0 0 53  nan 53  nan    53   +0 53   +0  53   +0 53   +0 N N 
+0 0 53    1 53   +0    53   +0 53   +0  53   +0 53   +0 N N
+0 0 53    1 53   +0    53   +0 53   +0  53   -0 53   +0 N N
+0 0 53    1 53   +0    53   +0 53   -0  53   +0 53   +0 N N
+0 0 53    1 53   +0    53   +0 53   -0  53   -0 53   +0 N N
+0 0 53    1 53   +0    53   -0 53   +0  53   +0 53   +0 N N
+0 0 53    1 53   +0    53   -0 53   +0  53   -0 53   +0 N N
+0 0 53    1 53   +0    53   -0 53   -0  53   +0 53   +0 N N
+0 0 53    1 53   +0    53   -0 53   -0  53   -0 53   +0 N N
+0 0 53    1 53   +0    53   +0 53   +0  53   +0 53   -0 N N 
+0 0 53    1 53   +0    53   +0 53   +0  53   -0 53   -0 N N 
+0 0 53    1 53   +0    53   +0 53   -0  53   +0 53   -0 N N 
+0 0 53    1 53   +0    53   +0 53   -0  53   -0 53   -0 N N 
+0 0 53    1 53   +0    53   -0 53   +0  53   +0 53   -0 N N 
+0 0 53    1 53   +0    53   -0 53   +0  53   -0 53   -0 N N 
+0 0 53    1 53   +0    53   -0 53   -0  53   +0 53   -0 N N 
+0 0 53    1 53   +0    53   -0 53   -0  53   -0 53   -0 N N 
 0 0 53  nan 53  nan    53   +0 53   +0  53   +0 53   +1 N N 
 0 0 53  nan 53  nan    53   +0 53   +0  53   +0 53   -1 N N 
 0 0 53    0 53    0    53   +0 53   +0  53   +1 53   +0 N N 
@@ -371,6 +384,8 @@
 + 0 53 +0x1620227B598EF9p-57 53  0      53 -0 53 -1    53 +0 53 -2 N N
 
 # exact cases
+# (-1)^(1/2) = i
+0 0 2 0 2 1 2 -1 2 0 2 0x1p-1 2 0 N N
 # (-4)^(1/4) = 1+i
 0 0 2 1 2 1 2 -4 2 0 2 0x1p-2 2 0 N N
 # for an odd positive integer n, a positive integer m and an integer e:
@@ -438,3 +453,17 @@
 + + 2 -0 2 -0 2 3 2 -1 28 -744261116 2 +0 N N
 - + 2 +0 2 -0 2 4 2 3 28 -744261116 2 +0 N N
 - - 2 +0 2 +0 2 4 2 -3 28 -744261116 2 +0 N N
+
+# exact powers with non-integer exponent
+0 0 2 1 2 1 2 0 2 2 2 0.5 2 0 N N
+0 0 2 -2 2 2 2 0 2 2 2 1.5 2 0 N N
+0 0 2 1 2 64 12 -4095 2 128 2 0.5 2 0 N N
+0 0 3 5 2 3 2 16 4 30 2 0.5 2 0 N N
+0 0 7 97 7 99 6 -392 14 19206 2 0.5 2 0 N N
+0 0 6 63 6 61 5 248 18 7686 2 0.5 2 0 N N
+0 0 6 63 6 61 24 -59013092 17 3812256 2 0.25 2 0 N N
+
+0 + 2 0 2 0x3p-6 2 -1 2 0 2 0.5 2 1 N N
++ + 2 6 2 1 41 -0x2ce019e6f1e 36 0x1878418ba20 2 0.0625 2 0 N N
++ + 4 11 2 1 111 -0x73558286726957f922819cbeffff 109 0x1c484a8b32dbf409e966a8c00000 2 0x1p-5 2 0 N N
++ + 5 21 2 1 282 -0x24ea91ddba938e750d999f1075444e15d6ca0fff6a19c8cbefe6260261fd57effffffff 278 0x390aa828a3d933391ab999b0b0aa71aafbfc7b127fe30c84d107634940ba8000000000 2 0x1p-6 2 0 N N

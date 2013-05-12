@@ -1,6 +1,7 @@
 dnl  AMD64 mpn_add_n, mpn_sub_n
 
-dnl  Copyright 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
+dnl  Copyright 2003, 2004, 2005, 2007, 2008, 2010 Free Software Foundation,
+dnl  Inc.
 
 dnl  This file is part of the GNU MP Library.
 
@@ -20,12 +21,13 @@ dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
 include(`../config.m4')
 
 C	     cycles/limb
-C K8,K9:	 1.5
-C K10:		 1.5
-C P4:		 ?
-C P6 core2: 	 4.9
-C P6 corei7:
-C P6 atom:	 4
+C AMD K8,K9	 1.5
+C AMD K10	 1.5
+C Intel P4	 ?
+C Intel core2 	 4.9
+C Intel corei	 ?
+C Intel atom	 4
+C VIA nano	 3.25
 
 C The inner loop of this code is the result of running a code generation and
 C optimization tool suite written by David Harvey and Torbjorn Granlund.
@@ -53,23 +55,56 @@ ASM_START()
 	ALIGN(16)
 PROLOGUE(func_nc)
 	mov	R32(n), R32(%rax)
-	and	$3, R32(%rax)
 	shr	$2, n
+	and	$3, R32(%rax)
 	bt	$0, %r8			C cy flag <- carry parameter
-	jz	L(1)
-	jmp	L(ent)
+	jrcxz	L(lt4)
+
+	mov	(up), %r8
+	mov	8(up), %r9
+	dec	n
+	jmp	L(mid)
+
 EPILOGUE()
 	ALIGN(16)
 PROLOGUE(func)
 	mov	R32(n), R32(%rax)
 	shr	$2, n
-	jz	L(0)
 	and	$3, R32(%rax)
+	jrcxz	L(lt4)
 
-L(ent):	mov	(up), %r8
+	mov	(up), %r8
 	mov	8(up), %r9
 	dec	n
 	jmp	L(mid)
+
+L(lt4):	dec	R32(%rax)
+	mov	(up), %r8
+	jnz	L(2)
+	ADCSBB	(vp), %r8
+	mov	%r8, (rp)
+	adc	%eax, %eax
+	ret
+
+L(2):	dec	R32(%rax)
+	mov	8(up), %r9
+	jnz	L(3)
+	ADCSBB	(vp), %r8
+	ADCSBB	8(vp), %r9
+	mov	%r8, (rp)
+	mov	%r9, 8(rp)
+	adc	%eax, %eax
+	ret
+
+L(3):	mov	16(up), %r10
+	ADCSBB	(vp), %r8
+	ADCSBB	8(vp), %r9
+	ADCSBB	16(vp), %r10
+	mov	%r8, (rp)
+	mov	%r9, 8(rp)
+	mov	%r10, 16(rp)
+	setc	R8(%rax)
+	ret
 
 	ALIGN(16)
 L(top):	ADCSBB	(vp), %r8
@@ -104,36 +139,7 @@ L(end):	lea	32(up), up
 
 	inc	R32(%rax)
 	dec	R32(%rax)
-	jnz	L(1)
+	jnz	L(lt4)
 	adc	%eax, %eax
-	ret
-
-L(0):	test	R32(%rax), R32(%rax)
-L(1):	dec	R32(%rax)
-	mov	(up), %r8
-	jnz	L(2)
-	ADCSBB	(vp), %r8
-	mov	%r8, (rp)
-	adc	%eax, %eax
-	ret
-
-L(2):	dec	R32(%rax)
-	mov	8(up), %r9
-	jnz	L(3)
-	ADCSBB	(vp), %r8
-	ADCSBB	8(vp), %r9
-	mov	%r8, (rp)
-	mov	%r9, 8(rp)
-	adc	%eax, %eax
-	ret
-
-L(3):	mov	16(up), %r10
-	ADCSBB	(vp), %r8
-	ADCSBB	8(vp), %r9
-	ADCSBB	16(vp), %r10
-	mov	%r8, (rp)
-	mov	%r9, 8(rp)
-	mov	%r10, 16(rp)
-	setc	%al
 	ret
 EPILOGUE()

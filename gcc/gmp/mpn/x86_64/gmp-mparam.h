@@ -24,32 +24,32 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #define MOD_1_NORM_THRESHOLD                 0  /* always */
 #define MOD_1_UNNORM_THRESHOLD               0  /* always */
-#define MOD_1N_TO_MOD_1_1_THRESHOLD          8
-#define MOD_1U_TO_MOD_1_1_THRESHOLD          6
-#define MOD_1_1_TO_MOD_1_2_THRESHOLD         0
+#define MOD_1N_TO_MOD_1_1_THRESHOLD          7
+#define MOD_1U_TO_MOD_1_1_THRESHOLD          5
+#define MOD_1_1_TO_MOD_1_2_THRESHOLD         6
 #define MOD_1_2_TO_MOD_1_4_THRESHOLD        11
-#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     14
+#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     13
 #define USE_PREINV_DIVREM_1                  1  /* native */
 #define DIVEXACT_1_THRESHOLD                 0  /* always (native) */
 #define BMOD_1_TO_MOD_1_THRESHOLD           19
 
 #define MUL_TOOM22_THRESHOLD                28
 #define MUL_TOOM33_THRESHOLD                81
-#define MUL_TOOM44_THRESHOLD               120
-#define MUL_TOOM6H_THRESHOLD               466
+#define MUL_TOOM44_THRESHOLD               232
+#define MUL_TOOM6H_THRESHOLD               369
 #define MUL_TOOM8H_THRESHOLD               478
 
 #define MUL_TOOM32_TO_TOOM43_THRESHOLD      97
 #define MUL_TOOM32_TO_TOOM53_THRESHOLD     160
 #define MUL_TOOM42_TO_TOOM53_THRESHOLD     160
-#define MUL_TOOM42_TO_TOOM63_THRESHOLD     211
+#define MUL_TOOM42_TO_TOOM63_THRESHOLD     187
 
 #define SQR_BASECASE_THRESHOLD               0  /* always (native) */
-#define SQR_TOOM2_THRESHOLD                 34
-#define SQR_TOOM3_THRESHOLD                117
-#define SQR_TOOM4_THRESHOLD                512
-#define SQR_TOOM6_THRESHOLD                686
-#define SQR_TOOM8_THRESHOLD                686
+#define SQR_TOOM2_THRESHOLD                 32
+#define SQR_TOOM3_THRESHOLD                113
+#define SQR_TOOM4_THRESHOLD                327
+#define SQR_TOOM6_THRESHOLD                446
+#define SQR_TOOM8_THRESHOLD                597
 
 #define MULMOD_BNM1_THRESHOLD               17
 #define SQRMOD_BNM1_THRESHOLD               17
@@ -162,26 +162,26 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define SQR_FFT_TABLE3_SIZE 203
 #define SQR_FFT_THRESHOLD                 5248
 
-#define MULLO_BASECASE_THRESHOLD             9
-#define MULLO_DC_THRESHOLD                  29
+#define MULLO_BASECASE_THRESHOLD             0
+#define MULLO_DC_THRESHOLD                  35
 #define MULLO_MUL_N_THRESHOLD            14709
 
 #define DC_DIV_QR_THRESHOLD                 56
-#define DC_DIVAPPR_Q_THRESHOLD             270
+#define DC_DIVAPPR_Q_THRESHOLD             220
 #define DC_BDIV_QR_THRESHOLD                52
 #define DC_BDIV_Q_THRESHOLD                152
 
-#define INV_MULMOD_BNM1_THRESHOLD          174
-#define INV_NEWTON_THRESHOLD               252
-#define INV_APPR_THRESHOLD                 250
+#define INV_MULMOD_BNM1_THRESHOLD           74
+#define INV_NEWTON_THRESHOLD               260
+#define INV_APPR_THRESHOLD                 220
 
 #define BINV_NEWTON_THRESHOLD              345
-#define REDC_1_TO_REDC_2_THRESHOLD          50
+#define REDC_1_TO_REDC_2_THRESHOLD           6
 #define REDC_2_TO_REDC_N_THRESHOLD          79
 
 #define MU_DIV_QR_THRESHOLD               1787
 #define MU_DIVAPPR_Q_THRESHOLD            1787
-#define MUPI_DIV_QR_THRESHOLD              106
+#define MUPI_DIV_QR_THRESHOLD              126
 #define MU_BDIV_QR_THRESHOLD              1620
 #define MU_BDIV_Q_THRESHOLD               1787
 

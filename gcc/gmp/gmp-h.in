@@ -1,7 +1,8 @@
 /* Definitions for GNU multiple precision functions.   -*- mode: c -*-
 
 Copyright 1991, 1993, 1994, 1995, 1996, 1997, 1999, 2000, 2001, 2002, 2003,
-2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
+2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
@@ -122,9 +123,6 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
    __GMP_DECLSPEC_XX is similarly used for libgmpxx.  __GMP_WITHIN_GMPXX
    indicates when building libgmpxx, and in that case libgmpxx functions are
    exports, but libgmp functions which might get called are imports.
-
-   libmp.la uses __GMP_DECLSPEC, just as if it were libgmp.la.  libgmp and
-   libmp don't call each other, so there's no conflict or confusion.
 
    Libtool DLL_EXPORT define is not used.
 
@@ -326,7 +324,8 @@ typedef __mpq_struct *mpq_ptr;
   || defined (__STDIO__)              /* Apple MPW MrC */       \
   || defined (_MSL_STDIO_H)           /* Metrowerks */          \
   || defined (_STDIO_H_INCLUDED)      /* QNX4 */		\
-  || defined (_ISO_STDIO_ISO_H)       /* Sun C++ */
+  || defined (_ISO_STDIO_ISO_H)       /* Sun C++ */		\
+  || defined (__STDIO_LOADED)         /* VMS */
 #define _GMP_H_HAVE_FILE 1
 #endif
 
@@ -720,7 +719,7 @@ __GMP_DECLSPEC void mpz_bin_uiui __GMP_PROTO ((mpz_ptr, unsigned long int, unsig
 __GMP_DECLSPEC void mpz_cdiv_q __GMP_PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr));
 
 #define mpz_cdiv_q_2exp __gmpz_cdiv_q_2exp
-__GMP_DECLSPEC void mpz_cdiv_q_2exp __GMP_PROTO ((mpz_ptr, mpz_srcptr, unsigned long));
+__GMP_DECLSPEC void mpz_cdiv_q_2exp __GMP_PROTO ((mpz_ptr, mpz_srcptr, mp_bitcnt_t));
 
 #define mpz_cdiv_q_ui __gmpz_cdiv_q_ui
 __GMP_DECLSPEC unsigned long int mpz_cdiv_q_ui __GMP_PROTO ((mpz_ptr, mpz_srcptr, unsigned long int));
@@ -1053,7 +1052,7 @@ __GMP_DECLSPEC void mpz_random2 __GMP_PROTO ((mpz_ptr, mp_size_t));
 __GMP_DECLSPEC void mpz_realloc2 __GMP_PROTO ((mpz_ptr, mp_bitcnt_t));
 
 #define mpz_remove __gmpz_remove
-__GMP_DECLSPEC unsigned long int mpz_remove __GMP_PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr));
+__GMP_DECLSPEC mp_bitcnt_t mpz_remove __GMP_PROTO ((mpz_ptr, mpz_srcptr, mpz_srcptr));
 
 #define mpz_root __gmpz_root
 __GMP_DECLSPEC int mpz_root __GMP_PROTO ((mpz_ptr, mpz_srcptr, unsigned long int));
@@ -1329,7 +1328,7 @@ __GMP_DECLSPEC void mpf_div_ui __GMP_PROTO ((mpf_ptr, mpf_srcptr, unsigned long 
 __GMP_DECLSPEC void mpf_dump __GMP_PROTO ((mpf_srcptr));
 
 #define mpf_eq __gmpf_eq
-__GMP_DECLSPEC int mpf_eq __GMP_PROTO ((mpf_srcptr, mpf_srcptr, unsigned long int)) __GMP_ATTRIBUTE_PURE;
+__GMP_DECLSPEC int mpf_eq __GMP_PROTO ((mpf_srcptr, mpf_srcptr, mp_bitcnt_t)) __GMP_ATTRIBUTE_PURE;
 
 #define mpf_fits_sint_p __gmpf_fits_sint_p
 __GMP_DECLSPEC int mpf_fits_sint_p __GMP_PROTO ((mpf_srcptr)) __GMP_NOTHROW __GMP_ATTRIBUTE_PURE;
@@ -2273,8 +2272,8 @@ enum
 /* Major version number is the value of __GNU_MP__ too, above and in mp.h. */
 #define __GNU_MP_VERSION 5
 #define __GNU_MP_VERSION_MINOR 0
-#define __GNU_MP_VERSION_PATCHLEVEL 1
-#define __GMP_MP_RELEASE (__GNU_MP_VERSION * 10000 + __GNU_MP_VERSION_MINOR * 100 + __GNU_MP_VERSION_PATCHLEVEL)
+#define __GNU_MP_VERSION_PATCHLEVEL 5
+#define __GNU_MP_RELEASE (__GNU_MP_VERSION * 10000 + __GNU_MP_VERSION_MINOR * 100 + __GNU_MP_VERSION_PATCHLEVEL)
 
 #define __GMP_H__
 #endif /* __GMP_H__ */

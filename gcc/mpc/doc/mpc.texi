@@ -1,174 +1,131 @@
 \input texinfo
-@ignore
-Copyright (C) INRIA, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-
-This file is part of the MPC Library.
-
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
-option) any later version.
-
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
-
-You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA.
-@end ignore
-
-@ignore
-A recent version of makeinfo is required: at least version 4.2, where copying
-was introduced.
-@end ignore
-
 @setfilename mpc.info
-@settitle MPC @value{VERSION}
-@synindex tp fn
-@iftex
-@afourpaper
-@end iftex
-
 @include version.texi
+@settitle GNU MPC @value{VERSION}
+@synindex tp fn
+
 @set MINGMP 4.3.2
 @set MINMPFR 2.4.2
 
-@set AUTHORS INRIA
-@set COPYRIGHTDATES 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-@ifinfo
-@format
-START-INFO-DIR-ENTRY
-* mpc: (mpc.info).               Multiple Precision Complex Library.
-END-INFO-DIR-ENTRY
-@end format
-@end ifinfo
-
-@iftex
-@finalout
-@end iftex
-
+@set AUTHORS Andreas Enge, Philippe Th@'eveny, Paul Zimmermann
 
 @copying
-@ifinfo
-This is the manual for MPC, a library for multiple precision complex arithmetic,
-version @value{VERSION}, of @value{UPDATED-MONTH}.
-@end ifinfo
+This manual is for GNU MPC, a library for multiple precision complex arithmetic,
+version @value{VERSION} of @value{UPDATED-MONTH}.
 
-@sp 1
+Copyright @copyright{} 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012 INRIA
 
-Copyright (C) @value{COPYRIGHTDATES} @value{AUTHORS}
-
-@sp 2
-
-Permission is granted to make and distribute verbatim copies of
-this manual provided the copyright notice and this permission notice
-are preserved on all copies.
-
-Permission is granted to copy and distribute modified versions of this
-manual under the conditions for verbatim copying, provided that the entire
-resulting derived work is distributed under the terms of a permission
-notice identical to this one.
-
-Permission is granted to copy and distribute translations of this manual
-into another language, under the above conditions for modified versions.
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections. A copy of the license is included in the section
+entitled ``GNU Free Documentation License.''
+@end quotation
 @end copying
 
-@setchapternewpage on
-@titlepage
-
-@title MPC
-@subtitle The Multiple Precision Complex Library
-@subtitle Edition @value{VERSION}
-@subtitle @value{UPDATED-MONTH}
-
-@author @value{AUTHORS}
-
+@iftex
+@afourpaper
+@end iftex
 @tex
 \global\parindent=0pt
 \global\parskip=8pt
 \global\baselineskip=13pt
 @end tex
 
+@dircategory GNU Packages
+@direntry
+* mpc: (mpc)Multiple Precision Complex Library.
+@end direntry
+
+
+@titlepage
+@title GNU MPC
+@subtitle The GNU Multiple Precision Complex Library
+@subtitle Edition @value{VERSION}
+@subtitle @value{UPDATED-MONTH}
+@author @value{AUTHORS}
 @page
 @vskip 0pt plus 1filll
 @insertcopying
 @end titlepage
-@headings double
+
 
 @ifnottex
-@node Top, Copying, (dir), (dir)
+@node Top
+@top GNU MPC
 
-@top MPC
-
-This manual documents how to install and use the Multiple Precision
+This manual documents how to install and use the GNU Multiple Precision
 Complex Library, version @value{VERSION}
 @end ifnottex
 
 @menu
-* Copying::                     MPC Copying Conditions (LGPL).
-* Introduction to MPC::         Brief introduction to MPC.
-* Installing MPC::              How to configure and compile the MPC library.
+* Copying::                     GNU MPC Copying Conditions (LGPL).
+* Introduction to GNU MPC::         Brief introduction to GNU MPC.
+* Installing GNU MPC::              How to configure and compile the GNU MPC library.
 * Reporting Bugs::              How to usefully report bugs.
-* MPC Basics::                  What every MPC user should know.
+* GNU MPC Basics::                  What every GNU MPC user should know.
 * Complex Functions::           Functions for arithmetic on complex numbers.
-* Contributors::
 * References::
 * Concept Index::
 * Function Index::
+* GNU Free Documentation License::
 @end menu
 
-@c  @times{} made available as a "*" in info and html (already works in tex).
+@c  @times{} made available as a "x" in info and html (already works in tex).
 @ifnottex
 @macro times
-*
+x
 @end macro
 @end ifnottex
 
-@node Copying, Introduction to MPC, Top, Top
-@comment  node-name, next, previous,  up
-@unnumbered MPC Copying Conditions
+
+@node Copying
+@unnumbered GNU MPC Copying Conditions
 @cindex Copying conditions
-@cindex Conditions for copying MPC
+@cindex Conditions for copying GNU MPC
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
-option) any later version, see the file COPYING.LIB.
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
+option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
-@node Introduction to MPC, Installing MPC, Copying, Top
-@comment  node-name,  next,  previous,  up
-@chapter Introduction to MPC
+You should have received a copy of the GNU Lesser General Public License
+along with this program. If not, see @uref{http://www.gnu.org/licenses/}.
 
 
-MPC is a portable library written in C for arbitrary precision arithmetic
-on complex numbers providing correct rounding. Ultimately, it
-should implement a multiprecision equivalent of the C99 standard.
+@node Introduction to GNU MPC
+@chapter Introduction to GNU MPC
+
+
+GNU MPC is a portable library written in C for arbitrary precision arithmetic
+on complex numbers providing correct rounding. It implements a multiprecision
+equivalent of the C99 standard.
 It builds upon the GNU MP and the GNU MPFR libraries.
 
 @section How to use this Manual
 
-Everyone should read @ref{MPC Basics}.  If you need to install the library
-yourself, you need to read @ref{Installing MPC}, too.
+Everyone should read @ref{GNU MPC Basics}.  If you need to install the library
+yourself, you need to read @ref{Installing GNU MPC}, too.
 
 The remainder of the manual can be used for later reference, although it is
 probably a good idea to skim through it.
 
-@node Installing MPC, Reporting Bugs, Introduction to MPC, Top
-@comment  node-name,  next,  previous,  up
-@chapter Installing MPC
+@node Installing GNU MPC
+@chapter Installing GNU MPC
 @cindex Installation
 
-To build MPC, you first have to install GNU MP (version @value{MINGMP} or higher) and
-GNU MPFR (version @value{MINMPFR} or higher) on your computer.  You need a C compiler,
-preferably GCC, but any reasonable compiler should work. And you need a
+To build GNU MPC, you first have to install GNU MP (version @value{MINGMP} or higher) and
+GNU MPFR (version @value{MINMPFR} or higher) on your computer.  You need a C compiler;
+GCC version 4.4 or higher is recommended, since GNU MPC may trigger a bug in previous
+versions, see the thread at
+@uref{http://lists.gforge.inria.fr/pipermail/mpc-discuss/2011-February/000823.html}.
+And you need a
 standard Unix @samp{make} program, plus some other standard Unix utility
 programs.
 
@@ -184,7 +141,7 @@ Here are the steps needed to install the library on Unix systems:
 @item
 @samp{./configure}
 
-if GMP and MPFR are installed into standard directories, that is, directories
+if GMP and GNU MPFR are installed into standard directories, that is, directories
 that are searched by default by the compiler and the linking tools.
 
 @samp{./configure --with-gmp=<gmp_install_dir>}
@@ -196,8 +153,8 @@ directories with @samp{./configure --with-gmp-lib=<gmp_lib_dir>
 
 @samp{./configure --with-mpfr=<mpfr_install_dir>}
 
-is used to indicate a different location where MPFR is
-installed. Alternatively, you can specify directly MPFR include and MPFR lib
+is used to indicate a different location where GNU MPFR is
+installed. Alternatively, you can specify directly GNU MPFR include and GNU MPFR lib
 directories with @samp{./configure --with-mpf-lib=<mpfr_lib_dir>
 --with-mpfr-include=<mpfr_include_dir>}.
 
@@ -205,7 +162,10 @@ Another useful parameter is @samp{--prefix}, which can be used to
 specify an alternative installation location instead of
 @file{/usr/local}; see @samp{make install} below.
 
-If for debugging purposes you wish to log calls to MPC functions from
+To enable checking for memory leaks using @command{valgrind} during
+@code{make check}, add the parameter @code{--enable-valgrind-tests}.
+
+If for debugging purposes you wish to log calls to GNU MPC functions from
 within your code, add the parameter @samp{--enable-logging}.
 In your code, replace the inclusion of @file{mpc.h} by @file{mpc-log.h}
 and link the executable dynamically.
@@ -219,19 +179,21 @@ followed by the second one and so on. Finally, for each argument, the
 precisions of its real and imaginary part are specified and the argument
 itself is printed in hexadecimal via the function
 @code{mpc_out_str}
-(@pxref{string-io,,String and Stream Input and Output}).
+(@pxref{String and Stream Input and Output}).
+The option requires a dynamic library, so it may not be combined with
+@code{--disable-shared}.
 
 Use @samp{./configure --help} for an exhaustive list of parameters.
 
 @item
 @samp{make}
 
-This compiles MPC in the working directory.
+This compiles GNU MPC in the working directory.
 
 @item
 @samp{make check}
 
-This will make sure MPC was built correctly.
+This will make sure GNU MPC was built correctly.
 
 If you get error messages, please report them to
 @samp{mpc-discuss@@lists.gforge.inria.fr} (@xref{Reporting Bugs}, for
@@ -303,25 +265,24 @@ Delete all files copied by @samp{make install}.
 
 @section Known Build Problems
 
-On AIX, if GMP was built with the 64-bit ABI, before building and testing MPC,
+On AIX, if GMP was built with the 64-bit ABI, before building and testing GNU MPC,
 it might be necessary to set the @samp{OBJECT_MODE} environment variable to 64
 by, e.g.,
 
 @samp{export OBJECT_MODE=64}
 
 This has been tested with the C compiler IBM XL C/C++ Enterprise Edition
-V8.0 for AIX, version: 08.00.0000.0021, GMP 4.2.4 and MPFR 2.4.1.
+V8.0 for AIX, version: 08.00.0000.0021, GMP 4.2.4 and GNU MPFR 2.4.1.
 
 Please report any other problems you encounter to
 @samp{mpc-discuss@@lists.gforge.inria.fr}.
 @xref{Reporting Bugs}.
 
-@node Reporting Bugs, MPC Basics, Installing MPC, Top
-@comment  node-name,  next,  previous,  up
+@node Reporting Bugs
 @chapter Reporting Bugs
 @cindex Reporting bugs
 
-If you think you have found a bug in the MPC library,
+If you think you have found a bug in the GNU MPC library,
 please investigate
 and report it. We have made this library available to you, and it is not to ask
 too much from you, to ask you to report the bugs that you find.
@@ -349,15 +310,14 @@ Send your bug report to: @samp{mpc-discuss@@lists.gforge.inria.fr}.
 If you think something in this manual is unclear, or downright incorrect, or if
 the language needs to be improved, please send a note to the same address.
 
-@node MPC Basics, Complex Functions, Reporting Bugs, Top
-@comment  node-name,  next,  previous,  up
-@chapter MPC Basics
+@node GNU MPC Basics
+@chapter GNU MPC Basics
 
 
 @cindex @file{mpc.h}
-All declarations needed to use MPC are collected in the include file
+All declarations needed to use GNU MPC are collected in the include file
 @file{mpc.h}.  It is designed to work with both C and C++ compilers.
-You should include that file in any program using the MPC library
+You should include that file in any program using the GNU MPC library
 by adding the line
 @example
    #include "mpc.h"
@@ -380,10 +340,10 @@ of the real and imaginary parts;
 the corresponding C data type is @code{mpfr_prec_t}.
 For more details on the allowed precision range,
 @ifinfo
-@pxref{Nomenclature and Types,,, mpfr.info,MPFR}.
+@pxref{Nomenclature and Types,,, mpfr.info,GNU MPFR}.
 @end ifinfo
 @ifnotinfo
-see Section ``Nomenclature and Types'' in @cite{MPFR}.
+see Section ``Nomenclature and Types'' in @cite{GNU MPFR}.
 @end ifnotinfo
 
 @cindex Rounding Mode
@@ -398,24 +358,24 @@ part, one for the imaginary part.
 
 @section Function Classes
 
-There is only one class of functions in the MPC library, namely functions for
+There is only one class of functions in the GNU MPC library, namely functions for
 complex arithmetic. The function names begin with @code{mpc_}. The
 associated type is @code{mpc_t}.
 
 
-@section MPC Variable Conventions
+@section GNU MPC Variable Conventions
 
-As a general rule, all MPC functions expect output arguments before input
+As a general rule, all GNU MPC functions expect output arguments before input
 arguments.  This notation is based on an analogy with the assignment operator.
 
-MPC allows you to use the same variable for both input and output in the same
+GNU MPC allows you to use the same variable for both input and output in the same
 expression.  For example, the main function for floating-point multiplication,
 @code{mpc_mul}, can be used like this: @code{mpc_mul (x, x, x, rnd_mode)}.
 This
 computes the square of @var{x} with rounding mode @code{rnd_mode}
 and puts the result back in @var{x}.
 
-Before you can assign to an MPC variable, you need to initialize it by calling
+Before you can assign to an GNU MPC variable, you need to initialize it by calling
 one of the special initialization functions.  When you are done with a
 variable, you need to clear it out, using one of the functions for that
 purpose.
@@ -428,7 +388,7 @@ For efficiency reasons, avoid to initialize and clear out a variable in loops.
 Instead, initialize it before entering the loop, and clear it out after the
 loop has exited.
 
-You do not need to be concerned about allocating additional space for MPC
+You do not need to be concerned about allocating additional space for GNU MPC
 variables, since each of its real and imaginary part
 has a mantissa of fixed size.
 Hence unless you change its precision, or clear and reinitialize it,
@@ -456,7 +416,7 @@ to (100)=4 with a precision of two bits, and not to (110)=6.
 @anchor{return-value}
 @section Return Value
 
-Most MPC functions have a return value of type @code{int}, which is used
+Most GNU MPC functions have a return value of type @code{int}, which is used
 to indicate the position of the rounded real and imaginary parts with respect
 to the exact (infinite precision) values.
 If this integer is @code{i}, the macros @code{MPC_INEX_RE(i)} and
@@ -477,7 +437,7 @@ corresponding to the first or the second computed value, respectively.
 @section Branch Cuts And Special Values
 
 Some complex functions have branch cuts, across which the function is
-discontinous. In MPC, the branch cuts chosen are the same as those
+discontinous. In GNU MPC, the branch cuts chosen are the same as those
 specified for the corresponding functions in the ISO C99 standard.
 
 Likewise, when evaluated at a point whose real or imaginary part is
@@ -486,14 +446,13 @@ value as those specified for the corresponding function in the ISO C99
 standard.
 
 
-@node Complex Functions, Contributors, MPC Basics, Top
-@comment  node-name,  next,  previous,  up
+@node Complex Functions
 @chapter Complex Functions
 @cindex Complex functions
 
 The complex functions expect arguments of type @code{mpc_t}.
 
-The MPC floating-point functions have an interface that is similar to the
+The GNU MPC floating-point functions have an interface that is similar to the
 GNU MP
 integer functions.  The function prefix for operations on complex numbers is
 @code{mpc_}.
@@ -503,7 +462,7 @@ The precision of a computation is defined as follows: Compute the requested
 operation exactly (with ``infinite precision''), and round the result to
 the destination variable precision with the given rounding mode.
 
-The MPC complex functions are intended to be a smooth extension
+The GNU MPC complex functions are intended to be a smooth extension
 of the IEEE P754 arithmetic. The results obtained on one
 computer should not differ from the results obtained on a computer with a
 different word size.
@@ -524,8 +483,7 @@ different word size.
 * Internals::
 @end menu
 
-@node Initializing Complex Numbers, Assigning Complex Numbers, Complex Functions, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Initializing Complex Numbers
 @section Initialization Functions
 
 An @code{mpc_t} object must be initialized before storing the first value in
@@ -588,8 +546,7 @@ via @var{pi}.
 @end deftypefun
 
 
-@node Assigning Complex Numbers, Converting Complex Numbers, Initializing Complex Numbers, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Assigning Complex Numbers
 @section Assignment Functions
 @cindex Complex assignment functions
 
@@ -655,7 +612,7 @@ the precisions of the two parts; or use a temporary variable.
 @end deftypefun
 
 For functions assigning complex variables from strings or input streams,
-@pxref{string-io,,String and Stream Input and Output}.
+@pxref{String and Stream Input and Output}.
 
 @deftypefun void mpc_set_nan (mpc_t @var{rop})
 Set @var{rop} to Nan+i*NaN.
@@ -669,8 +626,7 @@ third auxiliary variable.
 @end deftypefun
 
 
-@node Converting Complex Numbers, String and Stream Input and Output, Assigning Complex Numbers, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Converting Complex Numbers
 @section Conversion Functions
 @cindex Conversion functions
 
@@ -684,14 +640,12 @@ Convert @var{op} to a C complex number, using the rounding mode @var{rnd}.
 
 
 For functions converting complex variables to strings or stream output,
-@pxref{string-io,,String and Stream Input and Output}.
+@pxref{String and Stream Input and Output}.
 
 
-@node String and Stream Input and Output, Complex Comparison, Converting Complex Numbers, Complex Functions
-@comment  node-name,  next,  previous,  up
-@cindex String and stream input and output
-@anchor{string-io}
+@node String and Stream Input and Output
 @section String and Stream Input and Output
+@cindex String and stream input and output
 
 @deftypefun int mpc_strtoc (mpc_t @var{rop}, const char *@var{nptr}, char **@var{endptr}, int @var{base}, mpc_rnd_t @var{rnd})
 Read a complex number from a string @var{nptr} in base @var{base}, rounded to
@@ -714,10 +668,10 @@ a real number is read, the missing imaginary part is set to +0.
 The form of a floating-point number depends on the base and is described
 in the documentation of @code{mpfr_strtofr}
 @ifinfo
-(@pxref{Assignment Functions,,, mpfr.info,MPFR}).
+(@pxref{Assignment Functions,,, mpfr.info,GNU MPFR}).
 @end ifinfo
 @ifnotinfo
-in the MPFR manual.
+in the GNU MPFR manual.
 @end ifnotinfo
 For instance, @code{"3.1415926"}, @code{"(1.25e+7 +.17)"}, @code{"(@@nan@@
 2)"} and @code{"(-0 -7)"} are valid strings for @var{base} = 10.
@@ -818,11 +772,10 @@ Return the number of characters written.
 @end deftypefun
 
 
-@node Complex Comparison, Projection & Decomposing, String and Stream Input and Output, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Complex Comparison
+@section Comparison Functions
 @cindex Complex comparisons functions
 @cindex Comparison functions
-@section Comparison Functions
 
 @deftypefn Function int mpc_cmp (mpc_t @var{op1}, mpc_t @var{op2})
 @deftypefnx Function int mpc_cmp_si_si (mpc_t @var{op1}, long int @var{op2r}, long int @var{op2i})
@@ -844,8 +797,7 @@ with @code{mpc_cmp (op1, op2) == 0}.
 @end deftypefn
 
 
-@node Projection & Decomposing, Basic Arithmetic, Complex Comparison, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Projection & Decomposing
 @section Projection and Decomposing Functions
 @cindex Projection and Decomposing Functions
 
@@ -880,16 +832,15 @@ zero with the same sign as the imaginary part of @var{op}.
 @end deftypefn
 
 
-@node Basic Arithmetic, Power Functions and Logarithm, Projection & Decomposing, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Basic Arithmetic
 @section Basic Arithmetic Functions
 @cindex Complex arithmetic functions
 @cindex Arithmetic functions
 
 All the following functions are designed in such a way that, when working
 with real numbers instead of complex numbers, their complexity should
-essentially be the same as with the MPFR library, with only a marginal
-overhead due to the MPC layer.
+essentially be the same as with the GNU MPFR library, with only a marginal
+overhead due to the GNU MPC layer.
 
 @deftypefun int mpc_add (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
 @deftypefunx int mpc_add_ui (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
@@ -907,11 +858,18 @@ Set @var{rop} to @var{op1} @minus{} @var{op2} rounded according to @var{rnd}.
 For @code{mpc_ui_ui_sub}, @var{op1} is @var{re1} + @var{im1}.
 @end deftypefn
 
+@deftypefun int mpc_neg (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
+Set @var{rop} to @minus{}@var{op} rounded according to @var{rnd}.
+Just changes the sign if @var{rop} and @var{op} are the same variable.
+@end deftypefun
+
 @deftypefun int mpc_mul (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
 @deftypefunx int mpc_mul_ui (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
 @deftypefunx int mpc_mul_si (mpc_t @var{rop}, mpc_t @var{op1}, long int @var{op2}, mpc_rnd_t @var{rnd})
 @deftypefunx int mpc_mul_fr (mpc_t @var{rop}, mpc_t @var{op1}, mpfr_t @var{op2}, mpc_rnd_t @var{rnd})
 Set @var{rop} to @var{op1} times @var{op2} rounded according to @var{rnd}.
+Note: for @code{mpc_mul}, in case @var{op1} and @var{op2} have the same value,
+use @code{mpc_sqr} for better efficiency.
 @end deftypefun
 
 @deftypefun int mpc_mul_i (mpc_t @var{rop}, mpc_t @var{op}, int @var{sgn}, mpc_rnd_t @var{rnd})
@@ -924,20 +882,17 @@ in both cases rounded according to @var{rnd}.
 Set @var{rop} to the square of @var{op} rounded according to @var{rnd}.
 @end deftypefun
 
-@deftypefun int mpc_div (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
-@deftypefunx int mpc_div_ui (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
-@deftypefunx int mpc_ui_div (mpc_t @var{rop}, unsigned long int @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
-@deftypefunx int mpc_div_fr (mpc_t @var{rop}, mpc_t @var{op1}, mpfr_t @var{op2}, mpc_rnd_t @var{rnd})
-@deftypefunx int mpc_fr_div (mpc_t @var{rop}, mpfr_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
-Set @var{rop} to @var{op1}/@var{op2} rounded according to @var{rnd}.
-For @code{mpc_div} and @code{mpc_ui_div}, the return value may fail to
-recognize some exact results. The sign of returned value is
-significant only for @code{mpc_div_ui}.
+@deftypefun int mpc_fma (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_t @var{op3}, mpc_rnd_t @var{rnd})
+Set @var{rop} to @var{op1}*@var{op2}+@var{op3},
+rounded according to @var{rnd}, with only one final rounding.
 @end deftypefun
 
-@deftypefun int mpc_neg (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
-Set @var{rop} to @minus{}@var{op} rounded according to @var{rnd}.
-Just changes the sign if @var{rop} and @var{op} are the same variable.
+@deftypefun int mpc_div (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefunx int mpc_div_ui (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefunx int mpc_div_fr (mpc_t @var{rop}, mpc_t @var{op1}, mpfr_t @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefunx int mpc_ui_div (mpc_t @var{rop}, unsigned long int @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefunx int mpc_fr_div (mpc_t @var{rop}, mpfr_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
+Set @var{rop} to @var{op1}/@var{op2} rounded according to @var{rnd}.
 @end deftypefun
 
 @deftypefun int mpc_conj (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
@@ -949,44 +904,40 @@ if @var{rop} and @var{op} are the same variable.
 @deftypefun int mpc_abs (mpfr_t @var{rop}, mpc_t @var{op}, mpfr_rnd_t @var{rnd})
 Set the floating-point number @var{rop} to the absolute value of @var{op},
 rounded in the direction @var{rnd}.
-The returned value is zero iff the result is exact.
 @end deftypefun
 
 @deftypefun int mpc_norm (mpfr_t @var{rop}, mpc_t @var{op}, mpfr_rnd_t @var{rnd})
 Set the floating-point number @var{rop} to the norm of @var{op}
 (i.e., the square of its absolute value),
 rounded in the direction @var{rnd}.
-The returned value is zero iff the result is exact.
-Note that the destination is of type @code{mpfr_t}, not @code{mpc_t}.
 @end deftypefun
 
-@deftypefun int mpc_mul_2exp (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefun int mpc_mul_2ui (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefunx int mpc_mul_2si (mpc_t @var{rop}, mpc_t @var{op1}, long int @var{op2}, mpc_rnd_t @var{rnd})
 Set @var{rop} to @var{op1} times 2 raised to @var{op2}
-rounded according to @var{rnd}. Just increases the exponents
+rounded according to @var{rnd}. Just modifies the exponents
 of the real and imaginary parts by @var{op2}
 when @var{rop} and @var{op1} are identical.
 @end deftypefun
 
-@deftypefun int mpc_div_2exp (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefun int mpc_div_2ui (mpc_t @var{rop}, mpc_t @var{op1}, unsigned long int @var{op2}, mpc_rnd_t @var{rnd})
+@deftypefunx int mpc_div_2si (mpc_t @var{rop}, mpc_t @var{op1}, long int @var{op2}, mpc_rnd_t @var{rnd})
 Set @var{rop} to @var{op1} divided by 2 raised to @var{op2}
-rounded according to @var{rnd}. Just decreases the exponents
+rounded according to @var{rnd}. Just modifies the exponents
 of the real and imaginary parts by @var{op2}
 when @var{rop} and @var{op1} are identical.
 @end deftypefun
 
-@deftypefun int mpc_fma (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_t @var{op3}, mpc_rnd_t @var{rnd})
-Set @var{rop} to @var{op1} times @var{op2} plus @var{op3},
-rounded according to @var{rnd}, with only one final rounding.
-@end deftypefun
 
-@node Power Functions and Logarithm, Trigonometric Functions, Basic Arithmetic, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Power Functions and Logarithm
 @section Power Functions and Logarithm
 @cindex Power functions
 @cindex Logarithm
 
 @deftypefun int mpc_sqrt (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
 Set @var{rop} to the square root of @var{op} rounded according to @var{rnd}.
+The returned value @var{rop} has a non-negative real part, and if its real
+part is zero, a non-negative imaginary part.
 @end deftypefun
 
 @deftypefun int mpc_pow (mpc_t @var{rop}, mpc_t @var{op1}, mpc_t @var{op2}, mpc_rnd_t @var{rnd})
@@ -1001,6 +952,8 @@ to @var{rnd}.
 For @code{mpc_pow_d}, @code{mpc_pow_ld}, @code{mpc_pow_si}, @code{mpc_pow_ui},
 @code{mpc_pow_z} and @code{mpc_pow_fr},
 the imaginary part of @var{op2} is considered as +0.
+When both @var{op1} and @var{op2} are zero, the result has real part 1,
+and imaginary part 0, with sign being the opposite of that of @var{op2}.
 @end deftypefun
 
 @deftypefun int mpc_exp (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
@@ -1009,16 +962,16 @@ rounded according to @var{rnd} with the precision of @var{rop}.
 @end deftypefun
 
 @deftypefun int mpc_log (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
-Set @var{rop} to the logarithm of @var{op},
+@deftypefunx int mpc_log10 (mpc_t @var{rop}, mpc_t @var{op}, mpc_rnd_t @var{rnd})
+Set @var{rop} to the natural and base-10 logarithm of @var{op} respectively,
 rounded according to @var{rnd} with the precision of @var{rop}.
 The principal branch is chosen, with the branch cut on the negative real axis,
 so that the imaginary part of the result lies in
-@math{]-\pi , \pi]}.
+@math{]-\pi , \pi]} and @math{]-\pi/log(10) , \pi/log(10)]} respectively.
 @end deftypefun
 
 
-@node Trigonometric Functions, Miscellaneous Complex Functions, Power Functions and Logarithm, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Trigonometric Functions
 @section Trigonometric Functions
 @cindex Trigonometric functions
 
@@ -1075,8 +1028,7 @@ rounded according to @var{rnd} with the precision of @var{rop}.
 The branch cut of @var{mpc_acosh} is @math{(-\infty, 1)}.
 @end deftypefun
 
-@node Miscellaneous Complex Functions, Advanced Functions, Trigonometric Functions, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Miscellaneous Complex Functions
 @section Miscellaneous Functions
 @cindex Miscellaneous complex functions
 
@@ -1090,7 +1042,7 @@ the GMP manual.
 @end deftypefun
 
 @deftypefun {const char *} mpc_get_version (void)
-Return the MPC version, as a null-terminated string.
+Return the GNU MPC version, as a null-terminated string.
 @end deftypefun
 
 @defmac MPC_VERSION
@@ -1098,10 +1050,10 @@ Return the MPC version, as a null-terminated string.
 @defmacx MPC_VERSION_MINOR
 @defmacx MPC_VERSION_PATCHLEVEL
 @defmacx MPC_VERSION_STRING
-@code{MPC_VERSION} is the version of MPC as a preprocessing constant.
+@code{MPC_VERSION} is the version of GNU MPC as a preprocessing constant.
 @code{MPC_VERSION_MAJOR}, @code{MPC_VERSION_MINOR} and
 @code{MPC_VERSION_PATCHLEVEL} are respectively the major, minor and
-patch level of MPC version, as preprocessing constants.
+patch level of GNU MPC version, as preprocessing constants.
 @code{MPC_VERSION_STRING} is the version as a string constant, which
 can be compared to the result of @code{mpc_get_version} to check at
 run time the header file and library used match:
@@ -1110,24 +1062,23 @@ if (strcmp (mpc_get_version (), MPC_VERSION_STRING))
   fprintf (stderr, "Warning: header and library do not match\n");
 @end example
 Note: Obtaining different strings is not necessarily an error, as in
-general, a program compiled with some old MPC version can be
-dynamically linked with a newer MPC library version (if allowed by the
+general, a program compiled with some old GNU MPC version can be
+dynamically linked with a newer GNU MPC library version (if allowed by the
 library versioning system).
 @end defmac
 
 @deftypefn Macro long MPC_VERSION_NUM (@var{major}, @var{minor}, @var{patchlevel})
 Create an integer in the same format as used by @code{MPC_VERSION} from the
 given @var{major}, @var{minor} and @var{patchlevel}.
-Here is an example of how to check the MPC version at compile time:
+Here is an example of how to check the GNU MPC version at compile time:
 @example
 #if (!defined(MPC_VERSION) || (MPC_VERSION<MPC_VERSION_NUM(2,1,0)))
-# error "Wrong MPC version."
+# error "Wrong GNU MPC version."
 #endif
 @end example
 @end deftypefn
 
-@node Advanced Functions, Internals, Miscellaneous Complex Functions, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Advanced Functions
 @section Advanced Functions
 
 @defmac MPC_SET_X_Y (@var{real_suffix}, @var{imag_suffix}, @var{rop}, @var{real}, @var{imag}, @var{rnd})
@@ -1152,12 +1103,11 @@ int mpc_set_ui_fr (mpc_t rop, long int re, double im, mpc_rnd_t rnd)
 @end defmac
 
 
-@node Internals,  , Advanced Functions, Complex Functions
-@comment  node-name,  next,  previous,  up
+@node Internals
 @section Internals
 
 These macros and
-functions are mainly designed for the implementation of MPC,
+functions are mainly designed for the implementation of GNU MPC,
 but may be useful for users too.
 However, no upward compatibility is guaranteed.
 You need to include @code{mpc-impl.h} to use them.
@@ -1166,18 +1116,7 @@ The macro @code{MPC_MAX_PREC(z)} gives the maximum of the precisions
 of the real and imaginary parts of a complex number.
 
 
-@node Contributors, References, Complex Functions, Top
-@comment  node-name,  next,  previous,  up
-@unnumbered Contributors
-
-The main developers of the MPC library are Andreas Enge,
-Philippe Th@'eveny and Paul Zimmermann.
-Patrick P@'elissier has helped cleaning up the code.
-Marc Helbling contributed the @code{mpc_ui_sub} and
-@code{mpc_ui_ui_sub} functions.
-
-@node References, Concept Index, Contributors, Top
-@comment  node-name,  next,  previous,  up
+@node References
 @unnumbered References
 
 @itemize @bullet
@@ -1189,7 +1128,7 @@ Version 4.2.4, @url{http://gmplib.org/}.
 
 @item
 Guillaume Hanrot, Vincent Lef@`evre, Patrick P@'elissier, Paul Zimmermann et al.
-@code{mpfr} -- A library for multiple-precision floating-point               computations with exact rounding.
+@code{mpfr} -- A library for multiple-precision floating-point computations with exact rounding.
 Version 2.4.1, @url{http://www.mpfr.org}.
 
 @item
@@ -1207,17 +1146,20 @@ ISO/IEC 9899:1999, Programming languages — C.
 
 @end itemize
 
-@node Concept Index, Function Index, References, Top
-@comment  node-name,  next,  previous,  up
+@node Concept Index
 @unnumbered Concept Index
 @printindex cp
 
-@node Function Index,  , Concept Index, Top
-@comment  node-name,  next,  previous,  up
-@unnumbered Function and Type Index
+@node Function Index
+@unnumbered Function Index
 @printindex fn
+
+@node GNU Free Documentation License
+@appendix GNU Free Documentation License
+@include fdl-1.3.texi
 
 @ifnothtml
 @contents
 @end ifnothtml
+
 @bye

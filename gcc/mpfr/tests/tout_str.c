@@ -1,7 +1,7 @@
 /* Test file for mpfr_out_str.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -46,22 +46,54 @@ static void
 special (void)
 {
   mpfr_t x;
+  unsigned int n;
 
   mpfr_init (x);
 
   mpfr_set_nan (x);
-  mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  n = mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  if (n != 5)
+    {
+      printf ("Error: mpfr_out_str (file, 10, 0, NaN, MPFR_RNDN) wrote %u "
+              "characters instead of 5.\n", n);
+      exit (1);
+    }
 
   mpfr_set_inf (x, 1);
-  mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  n = mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  if (n != 5)
+    {
+      printf ("Error: mpfr_out_str (file, 10, 0, +Inf, MPFR_RNDN) wrote %u "
+               "characters instead of 5.\n", n);
+      exit (1);
+    }
 
   mpfr_set_inf (x, -1);
-  mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  n = mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  if (n != 6)
+    {
+      printf ("Error: mpfr_out_str (file, 10, 0, -Inf, MPFR_RNDN) wrote %u "
+               "characters instead of 6.\n", n);
+      exit (1);
+    }
 
   mpfr_set_ui (x, 0, MPFR_RNDN);
-  mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  n = mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  if (n != 1)
+    {
+      printf ("Error: mpfr_out_str (file, 10, 0, +0, MPFR_RNDN) wrote %u "
+               "characters instead of 1.\n", n);
+      exit (1);
+    }
+
   mpfr_neg (x, x, MPFR_RNDN);
-  mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  n = mpfr_out_str (fout, 10, 0, x, MPFR_RNDN);
+  if (n != 2)
+    {
+      printf ("Error: mpfr_out_str (file, 10, 0, -0, MPFR_RNDN) wrote %u "
+               "characters instead of 2.\n", n);
+      exit (1);
+    }
 
   mpfr_clear (x);
 }

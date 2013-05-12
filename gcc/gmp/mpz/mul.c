@@ -1,7 +1,7 @@
 /* mpz_mul -- Multiply two integers.
 
-Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2005, 2009 Free Software
-Foundation, Inc.
+Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2005, 2009, 2011 Free
+Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
@@ -33,8 +33,8 @@ mpz_mul (mpz_ptr w, mpz_srcptr u, mpz_srcptr v)
 mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
 #endif /* BERKELEY_MP */
 {
-  mp_size_t usize = SIZ(u);
-  mp_size_t vsize = SIZ(v);
+  mp_size_t usize;
+  mp_size_t vsize;
   mp_size_t wsize;
   mp_size_t sign_product;
   mp_ptr up, vp;
@@ -44,6 +44,8 @@ mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
   mp_limb_t cy_limb;
   TMP_DECL;
 
+  usize = SIZ (u);
+  vsize = SIZ (v);
   sign_product = usize ^ vsize;
   usize = ABS (usize);
   vsize = ABS (vsize);
@@ -137,13 +139,11 @@ mult (mpz_srcptr u, mpz_srcptr v, mpz_ptr w)
   if (up == vp)
     {
       mpn_sqr (wp, up, usize);
-      wsize = usize + vsize;
       cy_limb = wp[wsize - 1];
     }
   else
     {
       cy_limb = mpn_mul (wp, up, usize, vp, vsize);
-      wsize = usize + vsize;
     }
 
   wsize -= cy_limb == 0;

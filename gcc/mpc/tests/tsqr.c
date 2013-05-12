@@ -1,29 +1,28 @@
 /* tsqr -- test file for mpc_sqr.
 
-Copyright (C) INRIA, 2002, 2005, 2008, 2010, 2011
+Copyright (C) 2002, 2005, 2008, 2010, 2011 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
-#include <stdio.h>
 #include <stdlib.h>
 #include "mpc-tests.h"
 
-static void cmpsqr (mpc_srcptr x, mpc_rnd_t rnd)
+static void
+cmpsqr (mpc_srcptr x, mpc_rnd_t rnd)
    /* computes the square of x with the specific function or by simple     */
    /* multiplication using the rounding mode rnd and compares the results  */
    /* and return values.                                                   */
@@ -149,13 +148,13 @@ reuse_bug (void)
   /* reuse bug found by Paul Zimmermann 20081021 */
   mpc_init2 (z1, 2);
   /* RE (z1^2) overflows, IM(z^2) = -0 */
-  mpfr_set_str (MPC_RE (z1), "0.11", 2, GMP_RNDN);
-  mpfr_mul_2si (MPC_RE (z1), MPC_RE (z1), mpfr_get_emax (), GMP_RNDN);
-  mpfr_set_ui (MPC_IM (z1), 0, GMP_RNDN);
+  mpfr_set_str (mpc_realref (z1), "0.11", 2, GMP_RNDN);
+  mpfr_mul_2si (mpc_realref (z1), mpc_realref (z1), mpfr_get_emax (), GMP_RNDN);
+  mpfr_set_ui (mpc_imagref (z1), 0, GMP_RNDN);
   mpc_conj (z1, z1, MPC_RNDNN);
   mpc_sqr (z1, z1, MPC_RNDNN);
-  if (!mpfr_inf_p (MPC_RE (z1)) || mpfr_signbit (MPC_RE (z1))
-      ||!mpfr_zero_p (MPC_IM (z1)) || !mpfr_signbit (MPC_IM (z1)))
+  if (!mpfr_inf_p (mpc_realref (z1)) || mpfr_signbit (mpc_realref (z1))
+      ||!mpfr_zero_p (mpc_imagref (z1)) || !mpfr_signbit (mpc_imagref (z1)))
     {
       printf ("Error: Regression, bug 20081021 reproduced\n");
       MPC_OUT (z1);
@@ -185,6 +184,8 @@ main (void)
   tgeneric (f, 2, 1024, 1, 0);
 
   reuse_bug ();
+
+  test_end ();
 
   return 0;
 }
