@@ -720,6 +720,7 @@ m32rle-*-linux*)
 	tmake_file="$tmake_file m32r/t-linux t-fdpbit"
 	;;
 m68k-*-haiku*)
+	extra_parts="crtbegin.o crtend.o"
 	;;
 m68k-*-elf* | fido-*-elf)
 	tmake_file="$tmake_file m68k/t-floatlib"
@@ -881,6 +882,7 @@ powerpc*-*-freebsd*)
 	esac
 	;;
 powerpc-*-haiku*)
+	extra_parts="crtbegin.o crtend.o"
 	;;
 powerpc-*-netbsd*)
 	tmake_file="$tmake_file rs6000/t-netbsd rs6000/t-crtstuff"
