@@ -84,38 +84,39 @@ Boston, MA 02111-1307, USA.  */
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
-    { "/boot/common/include", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/app", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/device", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/drivers", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/game", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/interface", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/kernel", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/locale", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/mail", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/media", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/midi", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/midi2", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/net", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/opengl", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/storage", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/support", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/translation", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/add-ons/graphics", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/add-ons/input_server", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/add-ons/screen_saver", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/add-ons/tracker", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/cpp", 0, 1, 1, 0, 0 }, \
-    { "/boot/develop/headers/3rdparty", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/bsd", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/glibc", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/gnu", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers/posix", 0, 0, 0, 0, 0 }, \
-    { "/boot/develop/headers", 0, 0, 0, 0, 0 }, \
+    { "/boot/common/non-packaged/develop/headers", 0, 0, 0, 0, 0 }, \
+    { "/boot/common/develop/headers", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/app", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/device", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/drivers", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/game", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/interface", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/kernel", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/locale", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/mail", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/media", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/midi", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/midi2", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/net", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/opengl", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/storage", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/support", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/translation", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/add-ons/graphics", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/add-ons/input_server", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/add-ons/screen_saver", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/add-ons/tracker", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/be_apps/Deskbar", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/cpp", 0, 1, 1, 0, 0 }, \
+    { "/boot/system/develop/headers/3rdparty", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/bsd", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/glibc", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/gnu", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers/posix", 0, 0, 0, 0, 0 }, \
+    { "/boot/system/develop/headers", 0, 0, 0, 0, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
     }
 #else /* CROSS_DIRECTORY_STRUCTURE */
@@ -166,6 +167,16 @@ Boston, MA 02111-1307, USA.  */
 /* Whee.  LIBRARY_PATH is Be's LD_LIBRARY_PATH, which of course will
    cause nasty problems if we override it.  */
 #define LIBRARY_PATH_ENV        "BELIBRARIES"
+
+/* With STANDARD_STARTFILE_PREFIX_{1,2} set to "/boot/common/develop/lib/"
+   and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
+   standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
+#undef STANDARD_STARTFILE_PREFIX_1
+#define STANDARD_STARTFILE_PREFIX_1		"/boot/common/develop/lib/"
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_2		"/boot/system/develop/lib/"
+#undef MD_STARTFILE_PREFIX
+#define MD_STARTFILE_PREFIX		"/boot/common/non-packaged/develop/lib/"
 
 /* Haiku doesn't have a separate math library.  */
 #define MATH_LIBRARY ""
