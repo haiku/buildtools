@@ -367,7 +367,6 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { "/boot/common/develop/headers", 0, 0, 0 },\
     { "/boot/common/include", 0, 0, 0 },\
     	/* TODO: To be removed. */\
-    { "/boot/common/develop/headers", 0, 0, 0 },\
     { "/boot/system/develop/headers/os", 0, 0, 1 },\
     { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
     { "/boot/system/develop/headers/os/device", 0, 0, 1 },\
