@@ -42,6 +42,8 @@ extern void abort (void);
 /* No pic register.  */
 #elif defined(__mcore__)
 /* No pic register.  */
+#elif defined(__MICROBLAZE__)
+# define PIC_REG "r20"
 #elif defined(__mips__)
 /* PIC register is $28, but is used even without -fpic.  */
 #elif defined(__MMIX__)
@@ -92,6 +94,8 @@ extern void abort (void);
 # else
 #  define PIC_REG "gr17"
 #endif
+#elif defined (__aarch64__)
+/* No pic register -- yet.  */
 #else
 # error "Modify the test for your target."
 #endif

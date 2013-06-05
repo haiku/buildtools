@@ -1,6 +1,6 @@
 // <system_error> implementation file
 
-// Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+// Copyright (C) 2007-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -62,8 +62,8 @@ namespace
     }
   };
 
-  const generic_error_category generic_category_instance;
-  const system_error_category system_category_instance;
+  const generic_error_category generic_category_instance{};
+  const system_error_category system_category_instance{};
 }
 
 namespace std _GLIBCXX_VISIBILITY(default)

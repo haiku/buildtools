@@ -1,6 +1,6 @@
 // { dg-options "-std=gnu++0x" }
 
-// Copyright (C) 2011 Free Software Foundation, Inc.
+// Copyright (C) 2011-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -45,6 +45,9 @@ void test01()
   VERIFY( (test_category<is_compound, float>(false)) );
   VERIFY( (test_category<is_compound, double>(false)) );
   VERIFY( (test_category<is_compound, long double>(false)) );
+
+  // libstdc++/56609
+  VERIFY( (test_category<is_compound, std::nullptr_t>(false)) );
 
   // Sanity check.
   VERIFY( (test_category<is_compound, ClassType>(true)) );

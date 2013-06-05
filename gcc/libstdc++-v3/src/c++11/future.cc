@@ -1,6 +1,6 @@
 // future -*- C++ -*-
 
-// Copyright (C) 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
+// Copyright (C) 2009-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -60,7 +60,7 @@ namespace
   const future_error_category&
   __future_category_instance() noexcept
   {
-    static const future_error_category __fec;
+    static const future_error_category __fec{};
     return __fec;
   }
 }

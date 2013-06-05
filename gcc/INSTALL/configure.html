@@ -3,13 +3,11 @@
 <title>Installing GCC: Configuration</title>
 <meta http-equiv="Content-Type" content="text/html">
 <meta name="description" content="Installing GCC: Configuration">
-<meta name="generator" content="makeinfo 4.12">
+<meta name="generator" content="makeinfo 4.13">
 <link title="Top" rel="top" href="#Top">
 <link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
 <!--
-Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
-1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-2010 Free Software Foundation, Inc.
+Copyright (C) 1988-2013 Free Software Foundation, Inc.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -637,14 +635,6 @@ opposite effect.  If neither option is specified, the configure script
 will try to guess whether the <code>.init_array</code> and
 <code>.fini_array</code> sections are supported and, if they are, use them.
 
-     <br><dt><code>--enable-build-with-cxx</code><dd>Build GCC using a C++ compiler rather than a C compiler.  This is an
-experimental option which may become the default in a later release.
-
-     <br><dt><code>--enable-build-poststage1-with-cxx</code><dd>When bootstrapping, build stages 2 and 3 of GCC using a C++ compiler
-rather than a C compiler.  Stage 1 is still built with a C compiler. 
-This is enabled by default and may be disabled using
-<samp><span class="option">--disable-build-poststage1-with-cxx</span></samp>.
-
      <br><dt><code>--enable-maintainer-mode</code><dd>The build rules that regenerate the Autoconf and Automake output files as
 well as the GCC master message catalog <samp><span class="file">gcc.pot</span></samp> are normally
 disabled.  This is because it can only be rebuilt if the complete source
@@ -827,10 +817,6 @@ without optimization.
 allocation is gathered.  This information is printed when using
 <samp><span class="option">-fmem-report</span></samp>.
 
-     <br><dt><code>--with-gc</code><dt><code>--with-gc=</code><var>choice</var><dd>With this option you can specify the garbage collector implementation
-used during the compilation process.  <var>choice</var> can be one of
-&lsquo;<samp><span class="samp">page</span></samp>&rsquo; and &lsquo;<samp><span class="samp">zone</span></samp>&rsquo;, where &lsquo;<samp><span class="samp">page</span></samp>&rsquo; is the default.
-
      <br><dt><code>--enable-nls</code><dt><code>--disable-nls</code><dd>The <samp><span class="option">--enable-nls</span></samp> option enables Native Language Support (NLS),
 which lets GCC output diagnostics in languages other than American
 English.  Native Language Support is enabled by default if not doing a
@@ -903,14 +889,14 @@ variable (<samp><span class="env">LD_LIBRARY_PATH</span></samp> on GNU/Linux and
      <p>These flags are applicable to the host platform only.  When building
 a cross compiler, they will not be used to configure target libraries.
 
-     <br><dt><code>--with-ppl=</code><var>pathname</var><dt><code>--with-ppl-include=</code><var>pathname</var><dt><code>--with-ppl-lib=</code><var>pathname</var><dt><code>--with-cloog=</code><var>pathname</var><dt><code>--with-cloog-include=</code><var>pathname</var><dt><code>--with-cloog-lib=</code><var>pathname</var><dd>If you do not have PPL (the Parma Polyhedra Library) and the CLooG
+     <br><dt><code>--with-isl=</code><var>pathname</var><dt><code>--with-isl-include=</code><var>pathname</var><dt><code>--with-isl-lib=</code><var>pathname</var><dt><code>--with-cloog=</code><var>pathname</var><dt><code>--with-cloog-include=</code><var>pathname</var><dt><code>--with-cloog-lib=</code><var>pathname</var><dd>If you do not have ISL and the CLooG
 libraries installed in a standard location and you want to build GCC,
 you can explicitly specify the directory where they are installed
-(&lsquo;<samp><span class="samp">--with-ppl=</span><var>pplinstalldir</var></samp>&rsquo;,
+(&lsquo;<samp><span class="samp">--with-isl=</span><var>islinstalldir</var></samp>&rsquo;,
 &lsquo;<samp><span class="samp">--with-cloog=</span><var>clooginstalldir</var></samp>&rsquo;). The
-<samp><span class="option">--with-ppl=</span><var>pplinstalldir</var></samp> option is shorthand for
-<samp><span class="option">--with-ppl-lib=</span><var>pplinstalldir</var><span class="option">/lib</span></samp> and
-<samp><span class="option">--with-ppl-include=</span><var>pplinstalldir</var><span class="option">/include</span></samp>.  Likewise the
+<samp><span class="option">--with-isl=</span><var>islinstalldir</var></samp> option is shorthand for
+<samp><span class="option">--with-isl-lib=</span><var>islinstalldir</var><span class="option">/lib</span></samp> and
+<samp><span class="option">--with-isl-include=</span><var>islinstalldir</var><span class="option">/include</span></samp>.  Likewise the
 <samp><span class="option">--with-cloog=</span><var>clooginstalldir</var></samp> option is shorthand for
 <samp><span class="option">--with-cloog-lib=</span><var>clooginstalldir</var><span class="option">/lib</span></samp> and
 <samp><span class="option">--with-cloog-include=</span><var>clooginstalldir</var><span class="option">/include</span></samp>.  If these
@@ -973,7 +959,13 @@ default, and may be disabled using <samp><span class="option">--disable-lto</spa
 link time when <samp><span class="option">-fuse-linker-plugin</span></samp> is enabled. 
 This linker should have plugin support such as gold starting with
 version 2.20 or GNU ld starting with version 2.21. 
-See <samp><span class="option">-fuse-linker-plugin</span></samp> for details. 
+See <samp><span class="option">-fuse-linker-plugin</span></samp> for details.
+
+     <br><dt><code>--enable-canonical-system-headers</code><dt><code>--disable-canonical-system-headers</code><dd>Enable system header path canonicalization for <samp><span class="file">libcpp</span></samp>.  This can
+produce shorter header file paths in diagnostics and dependency output
+files, but these changed header paths may conflict with some compilation
+environments.  Enabled by default, and may be disabled using
+<samp><span class="option">--disable-canonical-system-headers</span></samp>. 
 </dl>
 
 <h4 class="subheading"><a name="TOC3"></a>Cross-Compiler-Specific Options</h4>

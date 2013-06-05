@@ -1,5 +1,5 @@
 /* Target Definitions for TI C6X.
-   Copyright (C) 2010, 2011 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
    Contributed by Andrew Jenner <andrew@codesourcery.com>
    Contributed by Bernd Schmidt <bernds@codesourcery.com>
 
@@ -521,7 +521,7 @@ struct GTY(()) machine_function
 
 #define DBX_REGISTER_NUMBER(N) (dbx_register_map[(N)])
 
-extern int const dbx_register_map[FIRST_PSEUDO_REGISTER];
+extern unsigned const dbx_register_map[FIRST_PSEUDO_REGISTER];
 
 #define FINAL_PRESCAN_INSN c6x_final_prescan_insn
 

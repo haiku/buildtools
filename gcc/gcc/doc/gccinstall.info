@@ -1,9 +1,7 @@
-This is doc/gccinstall.info, produced by makeinfo version 4.12 from
-/space/rguenther/gcc-4.7.3/gcc-4.7.3/gcc/doc/install.texi.
+This is doc/gccinstall.info, produced by makeinfo version 4.13 from
+/d/gcc-4.8.1/gcc-4.8.1/gcc/doc/install.texi.
 
-Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-Free Software Foundation, Inc.
+Copyright (C) 1988-2013 Free Software Foundation, Inc.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -22,9 +20,7 @@ is included in the section entitled "GNU Free Documentation License".
 software.  Copies published by the Free Software Foundation raise
 funds for GNU development.
 
-   Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-Free Software Foundation, Inc.
+   Copyright (C) 1988-2013 Free Software Foundation, Inc.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -72,14 +68,16 @@ File: gccinstall.info,  Node: Installing GCC,  Next: Binaries,  Up: Top
 ****************
 
    The latest version of this document is always available at
-http://gcc.gnu.org/install/.
+http://gcc.gnu.org/install/.  It refers to the current development
+sources, instructions for specific released versions are included with
+the sources.
 
    This document describes the generic installation procedure for GCC
 as well as detailing some target specific installation instructions.
 
    GCC includes several components that previously were separate
 distributions with their own installation instructions.  This document
-supersedes all package specific installation instructions.
+supersedes all package-specific installation instructions.
 
    _Before_ starting the build/install procedure please check the *note
 host/target specific installation notes: Specific.  We recommend you
@@ -120,14 +118,21 @@ described below.
 Tools/packages necessary for building GCC
 =========================================
 
-ISO C90 compiler
-     Necessary to bootstrap GCC, although versions of GCC prior to 3.4
-     also allow bootstrapping with a traditional (K&R) C compiler.
+ISO C++98 compiler
+     Necessary to bootstrap GCC, although versions of GCC prior to 4.8
+     also allow bootstrapping with a ISO C89 compiler and versions of
+     GCC prior to 3.4 also allow bootstrapping with a traditional (K&R)
+     C compiler.
 
      To build all languages in a cross-compiler or other configuration
      where 3-stage bootstrap is not performed, you need to start with
-     an existing GCC binary (version 2.95 or later) because source code
+     an existing GCC binary (version 3.4 or later) because source code
      for language frontends other than C might use GCC extensions.
+
+     Note that to bootstrap GCC with versions of GCC earlier than 3.4,
+     you may need to use `--disable-stage1-checking', though
+     bootstrapping the compiler with such earlier compilers is strongly
+     discouraged.
 
 GNAT
      In order to build the Ada compiler (GNAT) you must already have
@@ -175,8 +180,8 @@ GNU tar version 1.14 (or later)
      have problems.
 
 Perl version 5.6.1 (or later)
-     Necessary when targetting Darwin, building `libstdc++', and not
-     using `--disable-symvers'.  Necessary when targetting Solaris 2
+     Necessary when targeting Darwin, building `libstdc++', and not
+     using `--disable-symvers'.  Necessary when targeting Solaris 2
      with Sun `ld' and not using `--disable-symvers'.  The bundled
      `perl' in Solaris 8 and up works.
 
@@ -225,29 +230,24 @@ MPC Library version 0.8.1 (or later)
      `--with-mpc' configure option should be used.  See also
      `--with-mpc-lib' and `--with-mpc-include'.
 
-Parma Polyhedra Library (PPL) version 0.11
+ISL Library version 0.11.1
      Necessary to build GCC with the Graphite loop optimizations.  It
-     can be downloaded from `http://www.cs.unipr.it/ppl/Download/'.
+     can be downloaded from `ftp://gcc.gnu.org/pub/gcc/infrastructure/'
+     as `isl-0.11.1.tar.bz2'.
 
-     The `--with-ppl' configure option should be used if PPL is not
+     The `--with-isl' configure option should be used if ISL is not
      installed in your default library search path.
 
-CLooG-PPL version 0.15 or CLooG 0.16
-     Necessary to build GCC with the Graphite loop optimizations.  There
-     are two versions available.  CLooG-PPL 0.15 as well as CLooG 0.16.
-     The former is the default right now.  It can be downloaded from
-     `ftp://gcc.gnu.org/pub/gcc/infrastructure/' as
-     `cloog-ppl-0.15.tar.gz'.
-
-     CLooG 0.16 support is still in testing stage, but will be the
-     default in future GCC releases.  It is also available at
-     `ftp://gcc.gnu.org/pub/gcc/infrastructure/' as
-     `cloog-0.16.1.tar.gz'.  To use it add the additional configure
-     option `--enable-cloog-backend=isl'.  Even if CLooG 0.16 does not
-     use PPL, PPL is still required for Graphite.
-
-     In both cases `--with-cloog' configure option should be used if
-     CLooG is not installed in your default library search path.
+CLooG 0.18.0
+     Necessary to build GCC with the Graphite loop optimizations.  It
+     can be downloaded from `ftp://gcc.gnu.org/pub/gcc/infrastructure/'
+     as `cloog-0.18.0.tar.gz'.  The `--with-cloog' configure option
+     should be used if CLooG is not installed in your default library
+     search path.  CLooG needs to be built against ISL 0.11.1.  Use
+     `--with-isl=system' to direct CLooG to pick up an already
+     installed ISL, otherwise it will use ISL 0.11.1 as bundled with
+     CLooG.  CLooG needs to be configured to use GMP internally, use
+     `--with-bits=gmp' to direct it to do that.
 
 
 Tools/packages necessary for modifying GCC
@@ -359,27 +359,18 @@ File: gccinstall.info,  Node: Downloading the source,  Next: Configuration,  Pre
 *****************
 
    GCC is distributed via SVN and FTP tarballs compressed with `gzip' or
-`bzip2'.  It is possible to download a full distribution or specific
-components.
+`bzip2'.
 
    Please refer to the releases web page for information on how to
 obtain GCC.
 
-   The full distribution includes the C, C++, Objective-C, Fortran,
-Java, and Ada (in the case of GCC 3.1 and later) compilers.  The full
-distribution also includes runtime libraries for C++, Objective-C,
-Fortran, and Java.  In GCC 3.0 and later versions, the GNU compiler
-testsuites are also included in the full distribution.
-
-   If you choose to download specific components, you must download the
-core GCC distribution plus any language specific distributions you wish
-to use.  The core distribution includes the C language front end as
-well as the shared components.  Each language has a tarball which
-includes the language front end as well as the language runtime (when
-appropriate).
-
-   Unpack the core distribution as well as any language specific
-distributions in the same directory.
+   The source distribution includes the C, C++, Objective-C, Fortran,
+Java, and Ada (in the case of GCC 3.1 and later) compilers, as well as
+runtime libraries for C++, Objective-C, Fortran, and Java.  For
+previous versions these were downloadable as separate components such
+as the core GCC distribution, which included the C language front end
+and shared components, and language-specific distributions including the
+language front end and the language runtime (where appropriate).
 
    If you also intend to build binutils (either to upgrade an existing
 installation or for use in place of the corresponding tools of your
@@ -1086,17 +1077,6 @@ option.
      whether the `.init_array' and `.fini_array' sections are supported
      and, if they are, use them.
 
-`--enable-build-with-cxx'
-     Build GCC using a C++ compiler rather than a C compiler.  This is
-     an experimental option which may become the default in a later
-     release.
-
-`--enable-build-poststage1-with-cxx'
-     When bootstrapping, build stages 2 and 3 of GCC using a C++
-     compiler rather than a C compiler.  Stage 1 is still built with a
-     C compiler.  This is enabled by default and may be disabled using
-     `--disable-build-poststage1-with-cxx'.
-
 `--enable-maintainer-mode'
      The build rules that regenerate the Autoconf and Automake output
      files as well as the GCC master message catalog `gcc.pot' are
@@ -1311,12 +1291,6 @@ option.
      allocation is gathered.  This information is printed when using
      `-fmem-report'.
 
-`--with-gc'
-`--with-gc=CHOICE'
-     With this option you can specify the garbage collector
-     implementation used during the compilation process.  CHOICE can be
-     one of `page' and `zone', where `page' is the default.
-
 `--enable-nls'
 `--disable-nls'
      The `--enable-nls' option enables Native Language Support (NLS),
@@ -1415,19 +1389,19 @@ option.
      building a cross compiler, they will not be used to configure
      target libraries.
 
-`--with-ppl=PATHNAME'
-`--with-ppl-include=PATHNAME'
-`--with-ppl-lib=PATHNAME'
+`--with-isl=PATHNAME'
+`--with-isl-include=PATHNAME'
+`--with-isl-lib=PATHNAME'
 `--with-cloog=PATHNAME'
 `--with-cloog-include=PATHNAME'
 `--with-cloog-lib=PATHNAME'
-     If you do not have PPL (the Parma Polyhedra Library) and the CLooG
-     libraries installed in a standard location and you want to build
-     GCC, you can explicitly specify the directory where they are
-     installed (`--with-ppl=PPLINSTALLDIR',
-     `--with-cloog=CLOOGINSTALLDIR'). The `--with-ppl=PPLINSTALLDIR'
-     option is shorthand for `--with-ppl-lib=PPLINSTALLDIR/lib' and
-     `--with-ppl-include=PPLINSTALLDIR/include'.  Likewise the
+     If you do not have ISL and the CLooG libraries installed in a
+     standard location and you want to build GCC, you can explicitly
+     specify the directory where they are installed
+     (`--with-isl=ISLINSTALLDIR', `--with-cloog=CLOOGINSTALLDIR'). The
+     `--with-isl=ISLINSTALLDIR' option is shorthand for
+     `--with-isl-lib=ISLINSTALLDIR/lib' and
+     `--with-isl-include=ISLINSTALLDIR/include'.  Likewise the
      `--with-cloog=CLOOGINSTALLDIR' option is shorthand for
      `--with-cloog-lib=CLOOGINSTALLDIR/lib' and
      `--with-cloog-include=CLOOGINSTALLDIR/include'.  If these
@@ -1506,6 +1480,14 @@ option.
      linker should have plugin support such as gold starting with
      version 2.20 or GNU ld starting with version 2.21.  See
      `-fuse-linker-plugin' for details.
+
+`--enable-canonical-system-headers'
+`--disable-canonical-system-headers'
+     Enable system header path canonicalization for `libcpp'.  This can
+     produce shorter header file paths in diagnostics and dependency
+     output files, but these changed header paths may conflict with
+     some compilation environments.  Enabled by default, and may be
+     disabled using `--disable-canonical-system-headers'.
 
 Cross-Compiler-Specific Options
 -------------------------------
@@ -2304,14 +2286,14 @@ group.)  The following will run each testsuite eight times using the
 `arm-sim' target, as if you had specified all possible combinations
 yourself:
 
-     --target_board=arm-sim/-mhard-float/-O1
-     --target_board=arm-sim/-mhard-float/-O2
-     --target_board=arm-sim/-mhard-float/-O3
-     --target_board=arm-sim/-mhard-float
-     --target_board=arm-sim/-msoft-float/-O1
-     --target_board=arm-sim/-msoft-float/-O2
-     --target_board=arm-sim/-msoft-float/-O3
-     --target_board=arm-sim/-msoft-float
+     --target_board='arm-sim/-mhard-float/-O1 \
+                     arm-sim/-mhard-float/-O2 \
+                     arm-sim/-mhard-float/-O3 \
+                     arm-sim/-mhard-float \
+                     arm-sim/-msoft-float/-O1 \
+                     arm-sim/-msoft-float/-O2 \
+                     arm-sim/-msoft-float/-O3 \
+                     arm-sim/-msoft-float'
 
    They can be combined as many times as you wish, in arbitrary ways.
 This list:
@@ -2555,19 +2537,14 @@ makers.
 
         * TGCware
 
-   * SGI IRIX:
-        * Nekoware
-
-        * TGCware
-
    * Microsoft Windows:
         * The Cygwin project;
 
         * The MinGW project.
 
-   * The Written Word offers binaries for AIX 4.3.3, 5.1 and 5.2, IRIX
-     6.5, Tru64 UNIX 4.0D and 5.1, GNU/Linux (i386), HP-UX 10.20,
-     11.00, and 11.11, and Solaris/SPARC 2.5.1, 2.6, 7, 8, 9 and 10.
+   * The Written Word offers binaries for AIX 4.3.3, 5.1 and 5.2,
+     GNU/Linux (i386), HP-UX 10.20, 11.00, and 11.11, and Solaris/SPARC
+     2.5.1, 2.6, 7, 8, 9 and 10.
 
    * OpenPKG offers binaries for quite a number of platforms.
 
@@ -2586,7 +2563,7 @@ Compiler Collection on your machine.
    Note that this list of install notes is _not_ a list of supported
 hosts or targets.  Not all supported hosts and targets are listed here,
 only the ones that require host-specific or target-specific information
-are.
+have to.
 
 alpha*-*-*
 ==========
@@ -2608,50 +2585,10 @@ are running the DEC/Compaq/HP Unix (DEC OSF/1, Digital UNIX, or
 Compaq/HP Tru64 UNIX) operating system, for example the DEC Alpha AXP
 systems.
 
-   Support for Tru64 UNIX V5.1 has been obsoleted in GCC 4.7, but can
-still be enabled by configuring with `--enable-obsolete'.  Support will
-be removed in GCC 4.8.  As of GCC 4.6, support for Tru64 UNIX V4.0 and
-V5.0 has been removed.  As of GCC 3.2, versions before
-`alpha*-dec-osf4' are no longer supported.  (These are the versions
-which identify themselves as DEC OSF/1.)
-
-   On Tru64 UNIX, virtual memory exhausted bootstrap failures may be
-fixed by reconfiguring Kernel Virtual Memory and Swap parameters per
-the `/usr/sbin/sys_check' Tuning Suggestions, or applying the patch in
-`http://gcc.gnu.org/ml/gcc/2002-08/msg00822.html'.  Depending on the OS
-version used, you need a data segment size between 512 MB and 1 GB, so
-simply use `ulimit -Sd unlimited'.
-
-   As of GNU binutils 2.22, neither GNU `as' nor GNU `ld' are supported
-on Tru64 UNIX, so you must not configure GCC with `--with-gnu-as' or
-`--with-gnu-ld'.
-
-   Cross-compilers for the Tru64 UNIX target currently do not work
-because the auxiliary programs `mips-tdump' and `mips-tfile' can't be
-compiled on anything but Tru64 UNIX.
-
-   GCC writes a `.verstamp' directive to the assembler output file
-unless it is built as a cross-compiler.  It gets the version to use from
-the system header file `/usr/include/stamp.h'.  If you install a new
-version of Tru64 UNIX, you should rebuild GCC to pick up the new version
-stamp.
-
-   GCC now supports both the native (ECOFF) debugging format used by DBX
-and GDB and an encapsulated STABS format for use only with GDB.  See the
-discussion of the `--with-stabs' option of `configure' above for more
-information on these formats and how to select them.
-
-   There is a bug in DEC's assembler that produces incorrect line
-numbers for ECOFF format when the `.align' directive is used.  To work
-around this problem, GCC will not emit such alignment directives while
-writing ECOFF format debugging information even if optimization is
-being performed.  Unfortunately, this has the very undesirable
-side-effect that code addresses when `-O' is specified are different
-depending on whether or not `-g' is also specified.
-
-   To avoid this behavior, specify `-gstabs+' and use GDB instead of
-DBX.  DEC is now aware of this problem with the assembler and hopes to
-provide a fix shortly.
+   Support for Tru64 UNIX V5.1 has been removed in GCC 4.8.  As of GCC
+4.6, support for Tru64 UNIX V4.0 and V5.0 has been removed.  As of GCC
+3.2, versions before `alpha*-dec-osf4' are no longer supported.  (These
+are the versions which identify themselves as DEC OSF/1.)
 
 amd64-*-solaris2.1[0-9]*
 ========================
@@ -2663,7 +2600,7 @@ arm-*-eabi
 
 ARM-family processors.  Subtargets that use the ELF object format
 require GNU binutils 2.13 or newer.  Such subtargets include:
-`arm-*-netbsdelf', `arm-*-*linux-gnueabi*' and `arm-*-rtemseabi'.
+`arm-*-netbsdelf', `arm-*-*linux-*' and `arm-*-rtemseabi'.
 
 avr
 ===
@@ -2987,11 +2924,11 @@ See bug 10877 for more information.
 is possible you have a hardware problem.  Further information on this
 can be found on www.bitwizard.nl.
 
-i?86-*-solaris2.[89]
-====================
+i?86-*-solaris2.9
+=================
 
-The Sun assembler in Solaris 8 and 9 has several bugs and limitations.
-While GCC works around them, several features are missing, so it is
+The Sun assembler in Solaris 9 has several bugs and limitations.  While
+GCC works around them, several features are missing, so it is
 recommended to use the GNU assembler instead.  There is no bundled
 version, but the current version, from GNU binutils 2.22, is known to
 work.
@@ -2999,9 +2936,8 @@ work.
    Solaris 2/x86 doesn't support the execution of SSE/SSE2 instructions
 before Solaris 9 4/04, even if the CPU supports them.  Programs will
 receive `SIGILL' if they try.  The fix is available both in Solaris 9
-Update 6 and kernel patch 112234-12 or newer.  There is no
-corresponding patch for Solaris 8.  To avoid this problem, `-march'
-defaults to `pentiumpro' on Solaris 8 and 9.  If you have the patch
+Update 6 and kernel patch 112234-12 or newer.  To avoid this problem,
+`-march' defaults to `pentiumpro' on Solaris 9.  If you have the patch
 installed, you can configure GCC with an appropriate `--with-arch'
 option, but need GNU `as' for SSE2 support.
 
@@ -3110,18 +3046,19 @@ environment variable does not provide a definition that will confuse
 problem most likely is the version of Make (see above).
 
    The native `as' and `ld' are recommended for bootstrapping on AIX.
-The GNU Assembler, GNU Linker, and GNU Binutils version 2.20 is
-required to bootstrap on AIX 5.  The native AIX tools do interoperate
-with GCC.
+The GNU Assembler, GNU Linker, and GNU Binutils version 2.20 is the
+minimum level that supports bootstrap on AIX 5.  The GNU Assembler has
+not been updated to support AIX 6 or AIX 7.  The native AIX tools do
+interoperate with GCC.
 
    AIX 5.3 TL10, AIX 6.1 TL05 and AIX 7.1 TL00 introduced an AIX
 assembler change that sometimes produces corrupt assembly files causing
 AIX linker errors.  The bug breaks GCC bootstrap on AIX and can cause
 compilation failures with existing GCC installations.  An AIX iFix for
 AIX 5.3 is available (APAR IZ98385 for AIX 5.3 TL10, APAR IZ98477 for
-AIX 5.3 TL11 and IZ98134 for AIX 5.3 TL12).  Fixes for AIX 6.1 (APAR
-IZ98732 for AIX 6.1 TL05 and APAR IZ98861 for AIX 6.1 TL06) and AIX 7.1
-are in verification and packaging phases.
+AIX 5.3 TL11 and IZ98134 for AIX 5.3 TL12). AIX 5.3 TL11 SP8, AIX 5.3
+TL12 SP5, AIX 6.1 TL04 SP11, AIX 6.1 TL05 SP7, AIX 6.1 TL06 SP6, AIX
+6.1 TL07 and AIX 7.1 TL01 should include the fix.
 
    Building `libstdc++.a' requires a fix for an AIX Assembler bug APAR
 IY26685 (AIX 4.3) or APAR IY25528 (AIX 5.1).  It also requires a fix
@@ -3324,87 +3261,14 @@ Support for IRIX 5 has been removed in GCC 4.6.
 mips-sgi-irix6
 ==============
 
-Support for IRIX 6.5 has been obsoleted in GCC 4.7, but can still be
-enabled by configuring with `--enable-obsolete'.  Support will be
-removed in GCC 4.8.  Support for IRIX 6 releases before 6.5 has been
-removed in GCC 4.6, as well as support for the O32 ABI.  It is
-_strongly_ recommended to upgrade to at least IRIX 6.5.18.  This
-release introduced full ISO C99 support, though for the N32 and N64 ABIs
-only.
-
-   To build and use GCC on IRIX 6.5, you need the IRIX Development
-Foundation (IDF) and IRIX Development Libraries (IDL).  They are
-included with the IRIX 6.5 media.
-
-   If you are using SGI's MIPSpro `cc' as your bootstrap compiler, you
-must ensure that the N32 ABI is in use.  To test this, compile a simple
-C file with `cc' and then run `file' on the resulting object file.  The
-output should look like:
-
-     test.o: ELF N32 MSB ...
-
-If you see:
-
-     test.o: ELF 32-bit MSB ...
-
-or
-
-     test.o: ELF 64-bit MSB ...
-
-then your version of `cc' uses the O32 or N64 ABI by default.  You
-should set the environment variable `CC' to `cc -n32' before
-configuring GCC.
-
-   If you want the resulting `gcc' to run on old 32-bit systems with
-the MIPS R4400 CPU, you need to ensure that only code for the `mips3'
-instruction set architecture (ISA) is generated.  While GCC 3.x does
-this correctly, both GCC 2.95 and SGI's MIPSpro `cc' may change the ISA
-depending on the machine where GCC is built.  Using one of them as the
-bootstrap compiler may result in `mips4' code, which won't run at all
-on `mips3'-only systems.  For the test program above, you should see:
-
-     test.o: ELF N32 MSB mips-3 ...
-
-If you get:
-
-     test.o: ELF N32 MSB mips-4 ...
-
-instead, you should set the environment variable `CC' to `cc -n32
--mips3' or `gcc -mips3' respectively before configuring GCC.
-
-   MIPSpro C 7.4 may cause bootstrap failures, due to a bug when
-inlining `memcmp'.  Either add `-U__INLINE_INTRINSICS' to the `CC'
-environment variable as a workaround or upgrade to MIPSpro C 7.4.1m.
-
-   GCC on IRIX 6.5 is usually built to support the N32 and N64 ABIs.  If
-you build GCC on a system that doesn't have the N64 libraries installed
-or cannot run 64-bit binaries, you need to configure with
-`--disable-multilib' so GCC doesn't try to use them.  Look for
-`/usr/lib64/libc.so.1' to see if you have the 64-bit libraries
-installed.
-
-   GCC must be configured with GNU `as'.  The latest version, from GNU
-binutils 2.22, is known to work.  On the other hand, bootstrap fails
-with GNU `ld' at least since GNU binutils 2.17.
-
-   The `--enable-libgcj' option is disabled by default: IRIX 6 uses a
-very low default limit (20480) for the command line length.  Although
-`libtool' contains a workaround for this problem, at least the N64
-`libgcj' is known not to build despite this, running into an internal
-error of the native `ld'.  A sure fix is to increase this limit
-(`ncargs') to its maximum of 262144 bytes.  If you have root access,
-you can use the `systune' command to do this.
-
-   `wchar_t' support in `libstdc++' is not available for old IRIX 6.5.x
-releases, x < 19.  The problem cannot be autodetected and in order to
-build GCC for such targets you need to configure with
-`--disable-wchar_t'.
+Support for IRIX 6.5 has been removed in GCC 4.8.  Support for IRIX 6
+releases before 6.5 has been removed in GCC 4.6, as well as support for
+the O32 ABI.
 
 moxie-*-elf
 ===========
 
-The moxie processor.  See `http://moxielogic.org/' for more information
-about this processor.
+The moxie processor.
 
 powerpc-*-*
 ===========
@@ -3502,9 +3366,8 @@ cross-compilation target only.
 *-*-solaris2*
 =============
 
-Support for Solaris 8 has been obsoleted in GCC 4.7, but can still be
-enabled by configuring with `--enable-obsolete'.  Support will be
-removed in GCC 4.8.  Support for Solaris 7 has been removed in GCC 4.6.
+Support for Solaris 8 has removed in GCC 4.8.  Support for Solaris 7 has
+been removed in GCC 4.6.
 
    Sun does not ship a C compiler with Solaris 2 before Solaris 10,
 though you can download the Sun Studio compilers for free.  In Solaris
@@ -3569,13 +3432,6 @@ newer: `g++' will complain that types are missing.  These headers
 assume that omitting the type means `int'; this assumption worked for
 C90 but is wrong for C++, and is now wrong for C99 also.
 
-   `g++' accepts such (invalid) constructs with the option
-`-fpermissive'; it will assume that any missing type is `int' (as
-defined by C90).
-
-   There are patches for Solaris 8 (108652-24 or newer for SPARC,
-108653-22 for Intel) that fix this bug.
-
    Sun bug 4927647 sometimes causes random spurious testsuite failures
 related to missing diagnostic output.  This bug doesn't affect GCC
 itself, rather it is a kernel bug triggered by the `expect' program
@@ -3583,30 +3439,22 @@ which is used only by the GCC testsuite driver.  When the bug causes
 the `expect' program to miss anticipated output, extra testsuite
 failures appear.
 
-   There are patches for Solaris 8 (117350-12 or newer for SPARC,
-117351-12 or newer for Intel) and Solaris 9 (117171-11 or newer for
-SPARC, 117172-11 or newer for Intel) that address this problem.
+   There are patches for Solaris 9 (117171-11 or newer for SPARC,
+117172-11 or newer for Intel) that address this problem.
 
-   Solaris 8 provides an alternate implementation of the thread library
-`libthread'.  It is required for TLS support and has been made the
-default in Solaris 9, so it is always used on Solaris 8.
-
-   Thread-local storage (TLS) is supported in Solaris 8 and 9, but
-requires some patches.  The `libthread' patches provide the
-`__tls_get_addr' (SPARC, 64-bit x86) resp. `___tls_get_addr' (32-bit
-x86) functions.  On Solaris 8, you need 108993-26 or newer on SPARC,
-108994-26 or newer on Intel.  On Solaris 9, the necessary support on
-SPARC is present since FCS, while 114432-05 or newer is required on
-Intel.  Additionally, on Solaris 8, patch 109147-14 or newer on SPARC or
-109148-22 or newer on Intel are required for the Sun `ld' and runtime
-linker (`ld.so.1') support.  Again, Solaris 9/SPARC works since FCS,
-while 113986-02 is required on Intel.  The linker patches must be
-installed even if GNU `ld' is used. Sun `as' in Solaris 8 and 9 doesn't
-support the necessary relocations, so GNU `as' must be used.  The
-`configure' script checks for those prerequisites and automatically
-enables TLS support if they are met.  Although those minimal patch
-versions should work, it is recommended to use the latest patch
-versions which include additional bug fixes.
+   Thread-local storage (TLS) is supported in Solaris 9, but requires
+some patches.  The `libthread' patches provide the `__tls_get_addr'
+(SPARC, 64-bit x86) resp. `___tls_get_addr' (32-bit x86) functions.  On
+Solaris 9, the necessary support on SPARC is present since FCS, while
+114432-05 or newer is required on Intel.  Additionally, on
+Solaris 9/x86, patch 113986-02 or newer is required for the Sun `ld'
+and runtime linker (`ld.so.1') support, while Solaris 9/SPARC works
+since FCS.  The linker patches must be installed even if GNU `ld' is
+used. Sun `as' in Solaris 9 doesn't support the necessary relocations,
+so GNU `as' must be used.  The `configure' script checks for those
+prerequisites and automatically enables TLS support if they are met.
+Although those minimal patch versions should work, it is recommended to
+use the latest patch versions which include additional bug fixes.
 
 sparc*-*-*
 ==========
@@ -4599,7 +4447,7 @@ Concept Index
 * Menu:
 
 * Binaries:                              Binaries.           (line    6)
-* build_configargs:                      Configuration.      (line 1458)
+* build_configargs:                      Configuration.      (line 1449)
 * Configuration:                         Configuration.      (line    6)
 * configurations supported by GCC:       Configurations.     (line    6)
 * Downloading GCC:                       Downloading the source.
@@ -4609,7 +4457,7 @@ Concept Index
 * FDL, GNU Free Documentation License:   GNU Free Documentation License.
                                                              (line    6)
 * Host specific installation:            Specific.           (line    6)
-* host_configargs:                       Configuration.      (line 1462)
+* host_configargs:                       Configuration.      (line 1453)
 * Installing GCC: Binaries:              Binaries.           (line    6)
 * Installing GCC: Building:              Building.           (line    6)
 * Installing GCC: Configuration:         Configuration.      (line    6)
@@ -4619,100 +4467,100 @@ Concept Index
 * Specific installation notes:           Specific.           (line    6)
 * Target specific installation:          Specific.           (line    6)
 * Target specific installation notes:    Specific.           (line    6)
-* target_configargs:                     Configuration.      (line 1466)
+* target_configargs:                     Configuration.      (line 1457)
 * Testing:                               Testing.            (line    6)
 * Testsuite:                             Testing.            (line    6)
 
 
 
 Tag Table:
-Node: Top1977
-Node: Installing GCC2535
-Node: Prerequisites4050
-Node: Downloading the source14274
-Node: Configuration16211
-Ref: with-gnu-as31217
-Ref: with-as32115
-Ref: with-gnu-ld33528
-Node: Building80760
-Node: Testing96245
-Node: Final install104094
-Node: Binaries109408
-Node: Specific111009
-Ref: alpha-x-x111515
-Ref: alpha-dec-osf51112004
-Ref: amd64-x-solaris210114540
-Ref: arm-x-eabi114643
-Ref: avr114861
-Ref: bfin115501
-Ref: cr16115743
-Ref: cris116158
-Ref: dos116974
-Ref: epiphany-x-elf117297
-Ref: x-x-freebsd117402
-Ref: h8300-hms119239
-Ref: hppa-hp-hpux119591
-Ref: hppa-hp-hpux10121962
-Ref: hppa-hp-hpux11122375
-Ref: x-x-linux-gnu128034
-Ref: ix86-x-linux128227
-Ref: ix86-x-solaris289128540
-Ref: ix86-x-solaris210129384
-Ref: ia64-x-linux130575
-Ref: ia64-x-hpux131345
-Ref: x-ibm-aix131900
-Ref: iq2000-x-elf138670
-Ref: lm32-x-elf138810
-Ref: lm32-x-uclinux138914
-Ref: m32c-x-elf139042
-Ref: m32r-x-elf139144
-Ref: m68k-x-x139246
-Ref: m68k-x-uclinux140284
-Ref: mep-x-elf140530
-Ref: microblaze-x-elf140640
-Ref: mips-x-x140759
-Ref: mips-sgi-irix5143155
-Ref: mips-sgi-irix6143235
-Ref: moxie-x-elf146459
-Ref: powerpc-x-x146579
-Ref: powerpc-x-darwin146784
-Ref: powerpc-x-elf147278
-Ref: powerpc-x-linux-gnu147363
-Ref: powerpc-x-netbsd147458
-Ref: powerpc-x-eabisim147546
-Ref: powerpc-x-eabi147672
-Ref: powerpcle-x-elf147748
-Ref: powerpcle-x-eabisim147840
-Ref: powerpcle-x-eabi147973
-Ref: rl78-x-elf148056
-Ref: rx-x-elf148162
-Ref: s390-x-linux148361
-Ref: s390x-x-linux148433
-Ref: s390x-ibm-tpf148520
-Ref: x-x-solaris2148651
-Ref: sparc-x-x154218
-Ref: sparc-sun-solaris2154720
-Ref: sparc-sun-solaris210157474
-Ref: sparc-x-linux157850
-Ref: sparc64-x-solaris2158075
-Ref: sparcv9-x-solaris2158728
-Ref: c6x-x-x158815
-Ref: tilegx-*-linux158906
-Ref: tilepro-*-linux159025
-Ref: x-x-vxworks159146
-Ref: x86-64-x-x160668
-Ref: x86-64-x-solaris210160996
-Ref: xtensa-x-elf161658
-Ref: xtensa-x-linux162329
-Ref: windows162670
-Ref: x-x-cygwin164607
-Ref: x-x-interix165160
-Ref: x-x-mingw32165469
-Ref: older165695
-Ref: elf167812
-Node: Old168070
-Node: Configurations171207
-Node: GNU Free Documentation License174748
-Node: Concept Index199895
+Node: Top1733
+Node: Installing GCC2291
+Node: Prerequisites3928
+Node: Downloading the source14255
+Node: Configuration15809
+Ref: with-gnu-as30815
+Ref: with-as31713
+Ref: with-gnu-ld33126
+Node: Building80044
+Node: Testing95529
+Node: Final install103401
+Node: Binaries108715
+Node: Specific110227
+Ref: alpha-x-x110737
+Ref: alpha-dec-osf51111226
+Ref: amd64-x-solaris210111751
+Ref: arm-x-eabi111854
+Ref: avr112065
+Ref: bfin112705
+Ref: cr16112947
+Ref: cris113362
+Ref: dos114178
+Ref: epiphany-x-elf114501
+Ref: x-x-freebsd114606
+Ref: h8300-hms116443
+Ref: hppa-hp-hpux116795
+Ref: hppa-hp-hpux10119166
+Ref: hppa-hp-hpux11119579
+Ref: x-x-linux-gnu125238
+Ref: ix86-x-linux125431
+Ref: ix86-x-solaris29125744
+Ref: ix86-x-solaris210126523
+Ref: ia64-x-linux127714
+Ref: ia64-x-hpux128484
+Ref: x-ibm-aix129039
+Ref: iq2000-x-elf135902
+Ref: lm32-x-elf136042
+Ref: lm32-x-uclinux136146
+Ref: m32c-x-elf136274
+Ref: m32r-x-elf136376
+Ref: m68k-x-x136478
+Ref: m68k-x-uclinux137516
+Ref: mep-x-elf137762
+Ref: microblaze-x-elf137872
+Ref: mips-x-x137991
+Ref: mips-sgi-irix5140387
+Ref: mips-sgi-irix6140467
+Ref: moxie-x-elf140654
+Ref: powerpc-x-x140701
+Ref: powerpc-x-darwin140906
+Ref: powerpc-x-elf141400
+Ref: powerpc-x-linux-gnu141485
+Ref: powerpc-x-netbsd141580
+Ref: powerpc-x-eabisim141668
+Ref: powerpc-x-eabi141794
+Ref: powerpcle-x-elf141870
+Ref: powerpcle-x-eabisim141962
+Ref: powerpcle-x-eabi142095
+Ref: rl78-x-elf142178
+Ref: rx-x-elf142284
+Ref: s390-x-linux142483
+Ref: s390x-x-linux142555
+Ref: s390x-ibm-tpf142642
+Ref: x-x-solaris2142773
+Ref: sparc-x-x147536
+Ref: sparc-sun-solaris2148038
+Ref: sparc-sun-solaris210150792
+Ref: sparc-x-linux151168
+Ref: sparc64-x-solaris2151393
+Ref: sparcv9-x-solaris2152046
+Ref: c6x-x-x152133
+Ref: tilegx-*-linux152224
+Ref: tilepro-*-linux152343
+Ref: x-x-vxworks152464
+Ref: x86-64-x-x153986
+Ref: x86-64-x-solaris210154314
+Ref: xtensa-x-elf154976
+Ref: xtensa-x-linux155647
+Ref: windows155988
+Ref: x-x-cygwin157925
+Ref: x-x-interix158478
+Ref: x-x-mingw32158787
+Ref: older159013
+Ref: elf161130
+Node: Old161388
+Node: Configurations164525
+Node: GNU Free Documentation License168066
+Node: Concept Index193213
 
 End Tag Table

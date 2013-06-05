@@ -3,13 +3,11 @@
 <title>Host/Target specific installation notes for GCC</title>
 <meta http-equiv="Content-Type" content="text/html">
 <meta name="description" content="Host/Target specific installation notes for GCC">
-<meta name="generator" content="makeinfo 4.12">
+<meta name="generator" content="makeinfo 4.13">
 <link title="Top" rel="top" href="#Top">
 <link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
 <!--
-Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
-1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-2010 Free Software Foundation, Inc.
+Copyright (C) 1988-2013 Free Software Foundation, Inc.
 
    Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -49,7 +47,7 @@ GNU Compiler Collection on your machine.
    <p>Note that this list of install notes is <em>not</em> a list of supported
 hosts or targets.  Not all supported hosts and targets are listed
 here, only the ones that require host-specific or target-specific
-information are.
+information have to.
 
      <ul>
 <li><a href="#alpha-x-x">alpha*-*-*</a>
@@ -66,7 +64,7 @@ information are.
 <li><a href="#hppa-hp-hpux11">hppa*-hp-hpux11</a>
 <li><a href="#x-x-linux-gnu">*-*-linux-gnu</a>
 <li><a href="#ix86-x-linux">i?86-*-linux*</a>
-<li><a href="#ix86-x-solaris289">i?86-*-solaris2.[89]</a>
+<li><a href="#ix86-x-solaris289">i?86-*-solaris2.9</a>
 <li><a href="#ix86-x-solaris210">i?86-*-solaris2.10</a>
 <li><a href="#ia64-x-linux">ia64-*-linux</a>
 <li><a href="#ia64-x-hpux">ia64-*-hpux*</a>
@@ -146,54 +144,11 @@ shared libraries.
 are running the DEC/Compaq/HP Unix (DEC OSF/1, Digital UNIX, or Compaq/HP
 Tru64 UNIX) operating system, for example the DEC Alpha AXP systems.
 
-   <p>Support for Tru64 UNIX V5.1 has been obsoleted in GCC 4.7, but can still
-be enabled by configuring with <samp><span class="option">--enable-obsolete</span></samp>.  Support will
-be removed in GCC 4.8.  As of GCC 4.6, support for Tru64 UNIX V4.0 and
-V5.0 has been removed.  As of GCC 3.2, versions before
-<code>alpha*-dec-osf4</code> are no longer supported.  (These are the versions
-which identify themselves as DEC OSF/1.)
+   <p>Support for Tru64 UNIX V5.1 has been removed in GCC 4.8.  As of GCC 4.6,
+support for Tru64 UNIX V4.0 and V5.0 has been removed.  As of GCC 3.2,
+versions before <code>alpha*-dec-osf4</code> are no longer supported.  (These
+are the versions which identify themselves as DEC OSF/1.)
 
-   <p>On Tru64 UNIX, virtual memory exhausted bootstrap failures
-may be fixed by reconfiguring Kernel Virtual Memory and Swap parameters
-per the <samp><span class="command">/usr/sbin/sys_check</span></samp> Tuning Suggestions,
-or applying the patch in
-<a href="http://gcc.gnu.org/ml/gcc/2002-08/msg00822.html">http://gcc.gnu.org/ml/gcc/2002-08/msg00822.html</a>.  Depending on
-the OS version used, you need a data segment size between 512 MB and
-1 GB, so simply use <samp><span class="command">ulimit -Sd unlimited</span></samp>.
-
-   <p>As of GNU binutils 2.22, neither GNU <samp><span class="command">as</span></samp> nor GNU <samp><span class="command">ld</span></samp>
-are supported on Tru64 UNIX, so you must not configure GCC with
-<samp><span class="option">--with-gnu-as</span></samp> or <samp><span class="option">--with-gnu-ld</span></samp>.
-
-   <p>Cross-compilers for the Tru64 UNIX target currently do not work because
-the auxiliary programs <samp><span class="command">mips-tdump</span></samp> and <samp><span class="command">mips-tfile</span></samp> can't
-be compiled on anything but Tru64 UNIX.
-
-   <p>GCC writes a &lsquo;<samp><span class="samp">.verstamp</span></samp>&rsquo; directive to the assembler output file
-unless it is built as a cross-compiler.  It gets the version to use from
-the system header file <samp><span class="file">/usr/include/stamp.h</span></samp>.  If you install a
-new version of Tru64 UNIX, you should rebuild GCC to pick up the new version
-stamp.
-
-   <p>GCC now supports both the native (ECOFF) debugging format used by DBX
-and GDB and an encapsulated STABS format for use only with GDB.  See the
-discussion of the <samp><span class="option">--with-stabs</span></samp> option of <samp><span class="file">configure</span></samp> above
-for more information on these formats and how to select them. 
-<!-- FIXME: does this work at all?  If so, perhaps make default. -->
-
-   <p>There is a bug in DEC's assembler that produces incorrect line numbers
-for ECOFF format when the &lsquo;<samp><span class="samp">.align</span></samp>&rsquo; directive is used.  To work
-around this problem, GCC will not emit such alignment directives
-while writing ECOFF format debugging information even if optimization is
-being performed.  Unfortunately, this has the very undesirable
-side-effect that code addresses when <samp><span class="option">-O</span></samp> is specified are
-different depending on whether or not <samp><span class="option">-g</span></samp> is also specified.
-
-   <p>To avoid this behavior, specify <samp><span class="option">-gstabs+</span></samp> and use GDB instead of
-DBX.  DEC is now aware of this problem with the assembler and hopes to
-provide a fix shortly.
-
-<!-- FIXME: still applicable? -->
    <p><hr />
 
 <h3 class="heading"><a name="TOC2"></a><a name="amd64_002dx_002dsolaris210"></a>amd64-*-solaris2.1[0-9]*</h3>
@@ -206,7 +161,7 @@ provide a fix shortly.
 
 <p>ARM-family processors.  Subtargets that use the ELF object format
 require GNU binutils 2.13 or newer.  Such subtargets include:
-<code>arm-*-netbsdelf</code>, <code>arm-*-*linux-gnueabi*</code>
+<code>arm-*-netbsdelf</code>, <code>arm-*-*linux-*</code>
 and <code>arm-*-rtemseabi</code>.
 
    <p><hr />
@@ -548,9 +503,9 @@ found on <a href="http://www.bitwizard.nl/sig11/">www.bitwizard.nl</a>.
 
    <p><hr />
 
-<h3 class="heading"><a name="TOC17"></a><a name="ix86_002dx_002dsolaris289"></a>i?86-*-solaris2.[89]</h3>
+<h3 class="heading"><a name="TOC17"></a><a name="ix86_002dx_002dsolaris29"></a>i?86-*-solaris2.9</h3>
 
-<p>The Sun assembler in Solaris 8 and 9 has several bugs and limitations. 
+<p>The Sun assembler in Solaris 9 has several bugs and limitations. 
 While GCC works around them, several features are missing, so it is
 <!-- FIXME: which ones? -->
 recommended to use the GNU assembler instead.  There is no bundled
@@ -560,9 +515,9 @@ work.
    <p>Solaris&nbsp;2/x86 doesn't support the execution of SSE/SSE2 instructions
 before Solaris&nbsp;9 4/04, even if the CPU supports them.  Programs will
 receive <code>SIGILL</code> if they try.  The fix is available both in
-Solaris&nbsp;9 Update&nbsp;6 and kernel patch 112234-12 or newer.  There is no
-corresponding patch for Solaris 8.  To avoid this problem,
-<samp><span class="option">-march</span></samp> defaults to &lsquo;<samp><span class="samp">pentiumpro</span></samp>&rsquo; on Solaris 8 and 9.  If
+Solaris&nbsp;9 Update&nbsp;6 and kernel patch 112234-12 or newer.  To
+avoid this problem,
+<samp><span class="option">-march</span></samp> defaults to &lsquo;<samp><span class="samp">pentiumpro</span></samp>&rsquo; on Solaris 9.  If
 you have the patch installed, you can configure GCC with an appropriate
 <samp><span class="option">--with-arch</span></samp> option, but need GNU <samp><span class="command">as</span></samp> for SSE2 support.
 
@@ -678,19 +633,20 @@ does not provide a definition that will confuse <samp><span class="command">conf
 If this error occurs during stage2 or later, then the problem most likely
 is the version of Make (see above).
 
-   <p>The native <samp><span class="command">as</span></samp> and <samp><span class="command">ld</span></samp> are recommended for bootstrapping
-on AIX.  The GNU Assembler, GNU Linker, and GNU Binutils version 2.20
-is required to bootstrap on AIX 5.  The native AIX tools do
-interoperate with GCC.
+   <p>The native <samp><span class="command">as</span></samp> and <samp><span class="command">ld</span></samp> are recommended for
+bootstrapping on AIX.  The GNU Assembler, GNU Linker, and GNU
+Binutils version 2.20 is the minimum level that supports bootstrap on
+AIX 5.  The GNU Assembler has not been updated to support AIX 6 or
+AIX 7.  The native AIX tools do interoperate with GCC.
 
    <p>AIX 5.3 TL10, AIX 6.1 TL05 and AIX 7.1 TL00 introduced an AIX
 assembler change that sometimes produces corrupt assembly files
 causing AIX linker errors.  The bug breaks GCC bootstrap on AIX and
 can cause compilation failures with existing GCC installations.  An
 AIX iFix for AIX 5.3 is available (APAR IZ98385 for AIX 5.3 TL10, APAR
-IZ98477 for AIX 5.3 TL11 and IZ98134 for AIX 5.3 TL12).  Fixes for AIX
-6.1 (APAR IZ98732 for AIX 6.1 TL05 and APAR IZ98861 for AIX 6.1 TL06)
-and AIX 7.1 are in verification and packaging phases.
+IZ98477 for AIX 5.3 TL11 and IZ98134 for AIX 5.3 TL12). AIX 5.3 TL11 SP8,
+AIX 5.3 TL12 SP5, AIX 6.1 TL04 SP11, AIX 6.1 TL05 SP7, AIX 6.1 TL06 SP6,
+AIX 6.1 TL07 and AIX 7.1 TL01 should include the fix.
 
    <p>Building <samp><span class="file">libstdc++.a</span></samp> requires a fix for an AIX Assembler bug
 APAR IY26685 (AIX 4.3) or APAR IY25528 (AIX 5.1).  It also requires a
@@ -916,91 +872,15 @@ made after Nov. 9, 2006) should be free from both of these problems.
 
 <h3 class="heading"><a name="TOC33"></a><a name="mips_002dsgi_002dirix6"></a>mips-sgi-irix6</h3>
 
-<p>Support for IRIX 6.5 has been obsoleted in GCC 4.7, but can still be
-enabled by configuring with <samp><span class="option">--enable-obsolete</span></samp>.  Support will be
-removed in GCC 4.8.  Support for IRIX 6 releases before 6.5 has been
-removed in GCC 4.6, as well as support for the O32 ABI.  It is
-<em>strongly</em> recommended to upgrade to at least IRIX 6.5.18.  This
-release introduced full ISO C99 support, though for the N32 and N64 ABIs
-only.
-
-   <p>To build and use GCC on IRIX 6.5, you need the IRIX Development Foundation
-(IDF) and IRIX Development Libraries (IDL).  They are included with the
-IRIX 6.5 media.
-
-   <p>If you are using SGI's MIPSpro <samp><span class="command">cc</span></samp> as your bootstrap compiler, you must
-ensure that the N32 ABI is in use.  To test this, compile a simple C
-file with <samp><span class="command">cc</span></samp> and then run <samp><span class="command">file</span></samp> on the
-resulting object file.  The output should look like:
-
-<pre class="smallexample">     test.o: ELF N32 MSB ...
-</pre>
-   <p class="noindent">If you see:
-
-<pre class="smallexample">     test.o: ELF 32-bit MSB ...
-</pre>
-   <p class="noindent">or
-
-<pre class="smallexample">     test.o: ELF 64-bit MSB ...
-</pre>
-   <p class="noindent">then your version of <samp><span class="command">cc</span></samp> uses the O32 or N64 ABI by default.  You
-should set the environment variable <samp><span class="env">CC</span></samp> to &lsquo;<samp><span class="samp">cc -n32</span></samp>&rsquo;
-before configuring GCC.
-
-   <p>If you want the resulting <samp><span class="command">gcc</span></samp> to run on old 32-bit systems
-with the MIPS R4400 CPU, you need to ensure that only code for the &lsquo;<samp><span class="samp">mips3</span></samp>&rsquo;
-instruction set architecture (ISA) is generated.  While GCC 3.x does
-this correctly, both GCC 2.95 and SGI's MIPSpro <samp><span class="command">cc</span></samp> may change
-the ISA depending on the machine where GCC is built.  Using one of them
-as the bootstrap compiler may result in &lsquo;<samp><span class="samp">mips4</span></samp>&rsquo; code, which won't run at
-all on &lsquo;<samp><span class="samp">mips3</span></samp>&rsquo;-only systems.  For the test program above, you should see:
-
-<pre class="smallexample">     test.o: ELF N32 MSB mips-3 ...
-</pre>
-   <p class="noindent">If you get:
-
-<pre class="smallexample">     test.o: ELF N32 MSB mips-4 ...
-</pre>
-   <p class="noindent">instead, you should set the environment variable <samp><span class="env">CC</span></samp> to &lsquo;<samp><span class="samp">cc
--n32 -mips3</span></samp>&rsquo; or &lsquo;<samp><span class="samp">gcc -mips3</span></samp>&rsquo; respectively before configuring GCC.
-
-   <p>MIPSpro C 7.4 may cause bootstrap failures, due to a bug when inlining
-<code>memcmp</code>.  Either add <code>-U__INLINE_INTRINSICS</code> to the <samp><span class="env">CC</span></samp>
-environment variable as a workaround or upgrade to MIPSpro C 7.4.1m.
-
-   <p>GCC on IRIX 6.5 is usually built to support the N32 and N64 ABIs.  If
-you build GCC on a system that doesn't have the N64 libraries installed
-or cannot run 64-bit binaries,
-you need to configure with <samp><span class="option">--disable-multilib</span></samp> so GCC doesn't
-try to use them. 
-Look for <samp><span class="file">/usr/lib64/libc.so.1</span></samp> to see if you
-have the 64-bit libraries installed.
-
-   <p>GCC must be configured with GNU <samp><span class="command">as</span></samp>.  The latest version, from GNU
-binutils 2.22, is known to work.  On the other hand, bootstrap fails
-with GNU <samp><span class="command">ld</span></samp> at least since GNU binutils 2.17.
-
-   <p>The <samp><span class="option">--enable-libgcj</span></samp>
-option is disabled by default: IRIX 6 uses a very low default limit
-(20480) for the command line length.  Although <samp><span class="command">libtool</span></samp> contains a
-workaround for this problem, at least the N64 &lsquo;<samp><span class="samp">libgcj</span></samp>&rsquo; is known not
-to build despite this, running into an internal error of the native
-<samp><span class="command">ld</span></samp>.  A sure fix is to increase this limit (&lsquo;<samp><span class="samp">ncargs</span></samp>&rsquo;) to
-its maximum of 262144 bytes.  If you have root access, you can use the
-<samp><span class="command">systune</span></samp> command to do this. 
-<!-- FIXME: does this work with current libtool? -->
-
-   <p><code>wchar_t</code> support in &lsquo;<samp><span class="samp">libstdc++</span></samp>&rsquo; is not available for old
-IRIX 6.5.x releases, x &lt; 19.  The problem cannot be autodetected
-and in order to build GCC for such targets you need to configure with
-<samp><span class="option">--disable-wchar_t</span></samp>.
+<p>Support for IRIX 6.5 has been removed in GCC 4.8.  Support for IRIX 6
+releases before 6.5 has been removed in GCC 4.6, as well as support for
+the O32 ABI.
 
    <p><hr />
 
 <h3 class="heading"><a name="TOC34"></a><a name="moxie_002dx_002delf"></a>moxie-*-elf</h3>
 
-<p>The moxie processor.  See <a href="http://moxielogic.org/">http://moxielogic.org/</a> for more
-information about this processor.
+<p>The moxie processor.
 
    <p><hr />
 
@@ -1120,9 +1000,8 @@ supported as cross-compilation target only.
 
 <h3 class="heading"><a name="TOC50"></a><a name="x_002dx_002dsolaris2"></a>*-*-solaris2*</h3>
 
-<p>Support for Solaris 8 has been obsoleted in GCC 4.7, but can still be
-enabled by configuring with <samp><span class="option">--enable-obsolete</span></samp>.  Support will be
-removed in GCC 4.8.  Support for Solaris 7 has been removed in GCC 4.6.
+<p>Support for Solaris 8 has removed in GCC 4.8.  Support for Solaris 7 has
+been removed in GCC 4.6.
 
    <p>Sun does not ship a C compiler with Solaris 2 before Solaris 10, though
 you can download the Sun Studio compilers for free.  In Solaris 10 and
@@ -1192,13 +1071,6 @@ newer: <samp><span class="command">g++</span></samp> will complain that types ar
 assume that omitting the type means <code>int</code>; this assumption worked for
 C90 but is wrong for C++, and is now wrong for C99 also.
 
-   <p><samp><span class="command">g++</span></samp> accepts such (invalid) constructs with the option
-<samp><span class="option">-fpermissive</span></samp>; it will assume that any missing type is <code>int</code>
-(as defined by C90).
-
-   <p>There are patches for Solaris 8 (108652-24 or newer for SPARC,
-108653-22 for Intel) that fix this bug.
-
    <p>Sun bug 4927647 sometimes causes random spurious testsuite failures
 related to missing diagnostic output.  This bug doesn't affect GCC
 itself, rather it is a kernel bug triggered by the <samp><span class="command">expect</span></samp>
@@ -1206,27 +1078,19 @@ program which is used only by the GCC testsuite driver.  When the bug
 causes the <samp><span class="command">expect</span></samp> program to miss anticipated output, extra
 testsuite failures appear.
 
-   <p>There are patches for Solaris 8 (117350-12 or newer for SPARC,
-117351-12 or newer for Intel) and Solaris 9 (117171-11 or newer for
+   <p>There are patches for Solaris 9 (117171-11 or newer for
 SPARC, 117172-11 or newer for Intel) that address this problem.
 
-   <p>Solaris&nbsp;8 provides an alternate implementation of the thread
-library &lsquo;<samp><span class="samp">libthread</span></samp>&rsquo;.  It is required for TLS support and has
-been made the default in Solaris&nbsp;9, so it is always used on
-Solaris&nbsp;8.
-
-   <p>Thread-local storage (TLS) is supported in Solaris&nbsp;8 and 9, but requires
+   <p>Thread-local storage (TLS) is supported in Solaris&nbsp;9, but requires
 some patches.  The &lsquo;<samp><span class="samp">libthread</span></samp>&rsquo; patches provide the
 <code>__tls_get_addr</code> (SPARC, 64-bit x86) resp. <code>___tls_get_addr</code>
-(32-bit x86) functions.  On Solaris&nbsp;8, you need 108993-26 or newer on
-SPARC, 108994-26 or newer on Intel.  On Solaris&nbsp;9, the necessary support
+(32-bit x86) functions.  On Solaris&nbsp;9, the necessary support
 on SPARC is present since FCS, while 114432-05 or newer is required on
-Intel.  Additionally, on Solaris&nbsp;8, patch 109147-14 or newer on SPARC or
-109148-22 or newer on Intel are required for the Sun <samp><span class="command">ld</span></samp> and
-runtime linker (<samp><span class="command">ld.so.1</span></samp>) support.  Again, Solaris&nbsp;9/SPARC
-works since FCS, while 113986-02 is required on Intel.  The linker
+Intel.  Additionally, on Solaris&nbsp;9/x86, patch 113986-02 or newer is
+required for the Sun <samp><span class="command">ld</span></samp> and runtime linker (<samp><span class="command">ld.so.1</span></samp>)
+support, while Solaris&nbsp;9/SPARC works since FCS.  The linker
 patches must be installed even if GNU <samp><span class="command">ld</span></samp> is used. Sun
-<samp><span class="command">as</span></samp> in Solaris&nbsp;8 and 9 doesn't support the necessary
+<samp><span class="command">as</span></samp> in Solaris&nbsp;9 doesn't support the necessary
 relocations, so GNU <samp><span class="command">as</span></samp> must be used.  The <samp><span class="command">configure</span></samp>
 script checks for those prerequisites and automatically enables TLS
 support if they are met.  Although those minimal patch versions should
