@@ -583,6 +583,17 @@ fi
 # Miscenalleous configure options
 # -------------------------------
 
+# handle --enable-hybrid-secondary
+AC_ARG_ENABLE(hybrid_secondary,
+[  --enable-hybrid-secondary build a secondary compiler for a Haiku hybrid system],
+ENABLE_HYBRID_SECONDARY=$enableval,
+ENABLE_HYBRID_SECONDARY=no)
+AC_SUBST(ENABLE_HYBRID_SECONDARY)
+if test "$ENABLE_HYBRID_SECONDARY" = "yes"; then
+  AC_DEFINE(ENABLE_HYBRID_SECONDARY, 1,
+	    [Define if building hybrid secondary compiler.])
+fi
+
 # See if we are building gcc with C++.
 AC_ARG_ENABLE(build-with-cxx,
 [  --enable-build-with-cxx build with C++ compiler instead of C compiler],
