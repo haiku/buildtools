@@ -1,7 +1,7 @@
 /* Language-level data type conversion for GNU C++.
    Copyright (C) 1987, 1988, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -157,7 +157,8 @@ cp_convert_to_pointer (tree type, tree expr)
 	  if (binfo || same_p)
 	    {
 	      if (binfo)
-		expr = build_base_path (code, expr, binfo, 0);
+		expr = build_base_path (code, expr, binfo, 0,
+					tf_warning_or_error);
 	      /* Add any qualifier conversions.  */
 	      return build_nop (type, expr);
 	    }
@@ -197,6 +198,11 @@ cp_convert_to_pointer (tree type, tree expr)
 
   if (null_ptr_cst_p (expr))
     {
+      if (c_inhibit_evaluation_warnings == 0
+	  && !NULLPTR_TYPE_P (TREE_TYPE (expr)))
+	warning (OPT_Wzero_as_null_pointer_constant,
+		 "zero as null pointer constant");
+
       if (TYPE_PTRMEMFUNC_P (type))
 	return build_ptrmemfunc (TYPE_PTRMEMFUNC_FN_TYPE (type), expr, 0,
 				 /*c_cast_p=*/false, tf_warning_or_error);
@@ -275,7 +281,8 @@ convert_to_pointer_force (tree type, tree expr)
 	    return error_mark_node;
 	  if (binfo)
 	    {
-	      expr = build_base_path (code, expr, binfo, 0);
+	      expr = build_base_path (code, expr, binfo, 0,
+				      tf_warning_or_error);
 	      if (expr == error_mark_node)
 		 return error_mark_node;
 	      /* Add any qualifier conversions.  */
@@ -341,7 +348,8 @@ build_up_reference (tree type, tree arg, int flags, tree decl)
 	return error_mark_node;
       if (binfo == NULL_TREE)
 	return error_not_base_type (target_type, argtype);
-      rval = build_base_path (PLUS_EXPR, rval, binfo, 1);
+      rval = build_base_path (PLUS_EXPR, rval, binfo, 1,
+			      tf_warning_or_error);
     }
   else
     rval
@@ -520,7 +528,6 @@ convert_from_reference (tree val)
       TREE_THIS_VOLATILE (ref) = CP_TYPE_VOLATILE_P (t);
       TREE_SIDE_EFFECTS (ref)
 	= (TREE_THIS_VOLATILE (ref) || TREE_SIDE_EFFECTS (val));
-      REFERENCE_REF_P (ref) = 1;
       val = ref;
     }
 
@@ -531,11 +538,17 @@ convert_from_reference (tree val)
    argument of class type into a temporary.  */
 
 tree
-force_rvalue (tree expr)
+force_rvalue (tree expr, tsubst_flags_t complain)
 {
-  if (MAYBE_CLASS_TYPE_P (TREE_TYPE (expr)) && TREE_CODE (expr) != TARGET_EXPR)
-    expr = ocp_convert (TREE_TYPE (expr), expr,
-			CONV_IMPLICIT|CONV_FORCE_TEMP, LOOKUP_NORMAL);
+  tree type = TREE_TYPE (expr);
+  if (MAYBE_CLASS_TYPE_P (type) && TREE_CODE (expr) != TARGET_EXPR)
+    {
+      VEC(tree,gc) *args = make_tree_vector_single (expr);
+      expr = build_special_member_call (NULL_TREE, complete_ctor_identifier,
+					&args, type, LOOKUP_NORMAL, complain);
+      release_tree_vector (args);
+      expr = build_cplus_new (type, expr, complain);
+    }
   else
     expr = decay_conversion (expr);
 
@@ -819,7 +832,7 @@ ocp_convert (tree type, tree expr, int convtype, int flags)
 	  release_tree_vector (ctor_vec);
 	}
       if (ctor)
-	return build_cplus_new (type, ctor);
+	return build_cplus_new (type, ctor, tf_warning_or_error);
     }
 
   if (flags & LOOKUP_COMPLAIN)
@@ -1526,6 +1539,17 @@ build_expr_type_conversion (int desires, tree expr, bool complain)
       if (DECL_NONCONVERTING_P (cand))
 	continue;
 
+      if (TREE_CODE (cand) == TEMPLATE_DECL)
+	{
+	  if (complain)
+	    {
+	      error ("ambiguous default type conversion from %qT",
+		     basetype);
+	      error ("  candidate conversions include %qD", cand);
+	    }
+	  return error_mark_node;
+	}
+
       candidate = non_reference (TREE_TYPE (TREE_TYPE (cand)));
 
       switch (TREE_CODE (candidate))
@@ -1610,6 +1634,11 @@ type_promotes_to (tree type)
      size.  */
   if (TREE_CODE (type) == BOOLEAN_TYPE)
     type = integer_type_node;
+
+  /* Scoped enums don't promote, but pretend they do for backward ABI bug
+     compatibility wrt varargs.  */
+  else if (SCOPED_ENUM_P (type) && abi_version_at_least (6))
+    ;
 
   /* Normally convert enums to int, but convert wide enums to something
      wider.  */

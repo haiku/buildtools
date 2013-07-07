@@ -1,5 +1,5 @@
 /* Command line option handling.
-   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Copyright (C) 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -53,21 +53,65 @@ enum cl_var_type {
 
 struct cl_option
 {
+  /* Text of the option, including initial '-'.  */
   const char *opt_text;
+  /* Help text for --help, or NULL.  */
   const char *help;
+  /* Error message for missing argument, or NULL.  */
   const char *missing_argument_error;
+  /* Warning to give when this option is used, or NULL.  */
   const char *warn_message;
+  /* Argument of alias target when positive option given, or NULL.  */
   const char *alias_arg;
+  /* Argument of alias target when negative option given, or NULL.  */
   const char *neg_alias_arg;
+  /* Alias target, or N_OPTS if not an alias.  */
   unsigned short alias_target;
+  /* Previous option that is an initial substring of this one, or
+     N_OPTS if none.  */
   unsigned short back_chain;
+  /* Option length, not including initial '-'.  */
   unsigned char opt_len;
+  /* Next option in a sequence marked with Negative, or -1 if none.  */
   int neg_index;
+  /* CL_* flags for this option.  */
   unsigned int flags;
+  /* Disabled in this configuration.  */
+  BOOL_BITFIELD cl_disabled : 1;
+  /* Options marked with CL_SEPARATE take a number of separate
+     arguments (1 to 4) that is one more than the number in this
+     bit-field.  */
+  unsigned int cl_separate_nargs : 2;
+  /* Option is an alias when used with separate argument.  */
+  BOOL_BITFIELD cl_separate_alias : 1;
+  /* Alias to negative form of option.  */
+  BOOL_BITFIELD cl_negative_alias : 1;
+  /* Option takes no argument in the driver.  */
+  BOOL_BITFIELD cl_no_driver_arg : 1;
+  /* Reject this option in the driver.  */
+  BOOL_BITFIELD cl_reject_driver : 1;
+  /* Reject no- form.  */
+  BOOL_BITFIELD cl_reject_negative : 1;
+  /* Missing argument OK (joined).  */
+  BOOL_BITFIELD cl_missing_ok : 1;
+  /* Argument is an integer >=0.  */
+  BOOL_BITFIELD cl_uinteger : 1;
+  /* Argument is a HOST_WIDE_INT.  */
+  BOOL_BITFIELD cl_host_wide_int : 1;
+  /* Argument should be converted to lowercase.  */
+  BOOL_BITFIELD cl_tolower : 1;
+  /* Report argument with -fverbose-asm  */
+  BOOL_BITFIELD cl_report : 1;
+  /* Offset of field for this option in struct gcc_options, or
+     (unsigned short) -1 if none.  */
   unsigned short flag_var_offset;
+  /* Index in cl_enums of enum used for this option's arguments, for
+     CLVC_ENUM options.  */
   unsigned short var_enum;
+  /* How this option's value is determined and sets a field.  */
   enum cl_var_type var_type;
-  int var_value;
+  /* Value or bit-mask with which to set a field.  */
+  HOST_WIDE_INT var_value;
 };
 
 /* Records that the state of an option consists of SIZE bytes starting
@@ -83,12 +127,12 @@ extern const unsigned int cl_options_count;
 extern const char *const lang_names[];
 extern const unsigned int cl_lang_count;
 
-#define CL_PARAMS               (1 << 11) /* Fake entry.  Used to display --param info with --help.  */
-#define CL_WARNING		(1 << 12) /* Enables an (optional) warning message.  */
-#define CL_OPTIMIZATION		(1 << 13) /* Enables an (optional) optimization.  */
-#define CL_DRIVER		(1 << 14) /* Driver option.  */
-#define CL_TARGET		(1 << 15) /* Target-specific option.  */
-#define CL_COMMON		(1 << 16) /* Language-independent.  */
+#define CL_PARAMS               (1U << 16) /* Fake entry.  Used to display --param info with --help.  */
+#define CL_WARNING		(1U << 17) /* Enables an (optional) warning message.  */
+#define CL_OPTIMIZATION		(1U << 18) /* Enables an (optional) optimization.  */
+#define CL_DRIVER		(1U << 19) /* Driver option.  */
+#define CL_TARGET		(1U << 20) /* Target-specific option.  */
+#define CL_COMMON		(1U << 21) /* Language-independent.  */
 
 #define CL_MIN_OPTION_CLASS	CL_PARAMS
 #define CL_MAX_OPTION_CLASS	CL_COMMON
@@ -98,23 +142,9 @@ extern const unsigned int cl_lang_count;
    This distinction is important because --help will not list options
    which only have these higher bits set.  */
 
-/* Options marked with CL_SEPARATE take a number of separate arguments
-   (1 to 4) that is one more than the number in this bit-field.  */
-#define CL_SEPARATE_NARGS_SHIFT	17
-#define CL_SEPARATE_NARGS_MASK	(3 << CL_SEPARATE_NARGS_SHIFT)
-
-#define CL_SEPARATE_ALIAS	(1 << 19) /* Option is an alias when used with separate argument.  */
-#define CL_NO_DRIVER_ARG	(1 << 20) /* Option takes no argument in the driver.  */
-#define CL_REJECT_DRIVER	(1 << 21) /* Reject this option in the driver.  */
-#define CL_SAVE			(1 << 22) /* Target-specific option for attribute.  */
-#define CL_DISABLED		(1 << 23) /* Disabled in this configuration.  */
-#define CL_REPORT		(1 << 24) /* Report argument with -fverbose-asm  */
-#define CL_JOINED		(1 << 25) /* If takes joined argument.  */
-#define CL_SEPARATE		(1 << 26) /* If takes a separate argument.  */
-#define CL_REJECT_NEGATIVE	(1 << 27) /* Reject no- form.  */
-#define CL_MISSING_OK		(1 << 28) /* Missing argument OK (joined).  */
-#define CL_UINTEGER		(1 << 29) /* Argument is an integer >=0.  */
-#define CL_UNDOCUMENTED		(1 << 30) /* Do not output with --help.  */
+#define CL_JOINED		(1U << 22) /* If takes joined argument.  */
+#define CL_SEPARATE		(1U << 23) /* If takes a separate argument.  */
+#define CL_UNDOCUMENTED		(1U << 24) /* Do not output with --help.  */
 
 /* Flags for an enumerated option argument.  */
 #define CL_ENUM_CANONICAL	(1 << 0) /* Canonical for this value.  */
@@ -261,10 +291,6 @@ struct cl_option_handlers
   void (*wrong_lang_callback) (const struct cl_decoded_option *decoded,
 			       unsigned int lang_mask);
 
-  /* Callback to call after the successful handling of any option.  */
-  void (*post_handling_callback) (const struct cl_decoded_option *decoded,
-				  unsigned int mask);
-
   /* The number of individual handlers.  */
   size_t num_handlers;
 
@@ -280,7 +306,7 @@ extern const char **in_fnames;
 
 extern unsigned num_in_fnames;
 
-size_t find_opt (const char *input, int lang_mask);
+size_t find_opt (const char *input, unsigned int lang_mask);
 extern int integral_argument (const char *arg);
 extern bool enum_value_to_arg (const struct cl_enum_arg *enum_args,
 			       const char **argp, int value,
@@ -367,4 +393,6 @@ extern void default_options_optimization (struct gcc_options *opts,
 extern void set_struct_debug_option (struct gcc_options *opts,
 				     location_t loc,
 				     const char *value);
+extern bool opt_enum_arg_to_value (size_t opt_index, const char *arg,
+				   int *value, unsigned int lang_mask);
 #endif

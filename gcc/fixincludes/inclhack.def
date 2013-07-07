@@ -369,6 +369,61 @@ fix = {
     test_text = "#define _Complex_I	__I\n";
 };
 
+/*
+ *  malloc.h on AIX6 uses XLC++ specific builtin syntax
+ */
+fix = {
+    hackname  = aix_malloc;
+    mach      = "*-*-aix*";
+    files     = "malloc.h";
+    select    = "#ifdef __cplusplus";
+    c_fix     = format;
+    c_fix_arg = "#if (defined(__cplusplus) && defined(__IBMCPP__))";
+    test_text = "#ifdef __cplusplus";
+};
+
+/*
+ * net/if_arp.h defines a variable fc_softc instead of adding a
+ * typedef for the struct on AIX 5.2, 5.3, 6.1 and 7.1
+ */
+fix = {
+    hackname  = aix_net_if_arp;
+    mach      = "*-*-aix*";
+    files     = "net/if_arp.h";
+    select    = "^struct  fc_softc \\{";
+    c_fix     = format;
+    c_fix_arg = "typedef struct _fc_softc {";
+    test_text = "struct  fc_softc {\n  int a;\n};";
+};
+
+/*
+ *  pthread.h on AIX defines PTHREAD_ONCE_INIT without enough braces.
+ */
+fix = {
+    hackname  = aix_once_init_1;
+    mach      = "*-*-aix*";
+    files     = "pthread.h";
+    select    = "#define[ \t]PTHREAD_ONCE_INIT \\\\\n"
+		"\\{ \\\\\n";
+    c_fix     = format;
+    c_fix_arg = "#define PTHREAD_ONCE_INIT \\\n"
+		"{{ \\\n";
+    test_text = "#define PTHREAD_ONCE_INIT \\\\\n"
+		"{ \\\\\n";
+};
+
+fix = {
+    hackname  = aix_once_init_2;
+    mach      = "*-*-aix*";
+    files     = "pthread.h";
+    select    = "[ \t]0 \\\\\n"
+		"\\}\n";
+    c_fix     = format;
+    c_fix_arg = "	0 \\\n"
+		"}}\n";
+    test_text = "	0 \\\\\n"
+		"}\n";
+};
 
 /*
  *  pthread.h on AIX 4.3.3 tries to define a macro without whitspace
@@ -986,6 +1041,21 @@ fix = {
     test_text = '#define  vfscanf	__svfscanf';
 };
 
+/*
+ * 'g++ -std=c++11' defines __cplusplus to 201103L, which suggests
+ * that it conforms to ISO/IEC 14882:2011.  It currently does
+ * not support the [[noreturn]] procedure attribute.
+ * When it does, this hack should be removed.
+ * SEE:  gcc.gnu.org/bugzilla/show_bug.cgi?id=51776
+ */
+fix = {
+    hackname  = cdef_cplusplus;
+    files     = sys/cdefs.h;
+    select    = '\[\[noreturn\]\]';
+    c_fix     = format;
+    c_fix_arg = '__attribute__((__noreturn__))';
+    test_text = "#define _Noreturn	[[noreturn]]";
+};
 
 /*
  *  Fix various macros used to define ioctl numbers.
@@ -1849,7 +1919,7 @@ fix = {
  */
 fix = {
     hackname  = hpux11_abs;
-    mach      = "ia64-hp-hpux11*";
+    mach      = "*-hp-hpux11*";
     files     = stdlib.h;
     select    = "ifndef _MATH_INCLUDED";
     c_fix     = format;
@@ -3315,9 +3385,9 @@ fix = {
     hackname  = solaris_complex_cxx;
     mach      = "*-*-solaris2.*";
     files     = complex.h;
-    sed	      = "/#if[ \t]*!defined(__cplusplus)/c"
+    sed	      = "/#if[ \t]*!defined(__cplusplus)/c\\\n"
     		"#ifdef\t__cplusplus\\\nextern \"C\" {\\\n#endif";
-    sed	      = "/#endif[ \t]*\\/\\* !defined(__cplusplus) \\*\\//c"
+    sed	      = "/#endif[ \t]*\\/\\* !defined(__cplusplus) \\*\\//c\\\n"
 		"#ifdef\t__cplusplus\\\n}\\\n#endif";
     test_text = "#if !defined(__cplusplus)\n"
 		"#endif	/* !defined(__cplusplus) */";
@@ -3341,6 +3411,59 @@ fix = {
     test_text =
     '#pragma ident	"@(#)pthread.h	1.29	01/07/07 SMI"'"\n"
     '#define	PTHREAD_COND_INITIALIZER	{{{0}, 0}, 0}	/* = DEFAULTCV */';
+};
+
+
+/*
+ *  g++ rejects functions declared with both C and C++ linkage.
+ */
+fix = {
+    hackname  = solaris_cxx_linkage;
+    mach      = '*-*-solaris2*';
+    files     = "iso/stdlib_iso.h";
+    select    = "(#if __cplusplus >= 199711L)\n"
+	        "(extern \"C\\+\\+\" \\{\n)"
+	        "(.*(bsearch|qsort).*)";
+    c_fix     = format;
+    c_fix_arg = "%1 && !__GNUG__\n%2%3";
+
+    test_text =
+    "#if __cplusplus >= 199711L\n"
+    "extern \"C++\" {\n"
+    "	void *bsearch(const void *, const void *, size_t, size_t,";
+};
+
+
+/*
+ *  Solaris <iso/stdio_iso.h> doesn't declare getc for C++ with
+ *  _STRICT_STDC, but uses it.
+ */
+fix = {
+    hackname  = solaris_getc_strict_stdc;
+    mach      = "*-*-solaris2*";
+    files     = "iso/stdio_iso.h";
+    select    = "(.*&& )!defined\\(_STRICT_STDC\\)(.*)";
+    c_fix     = format;
+    c_fix_arg = "%1(!defined(_STRICT_STDC) || (__cplusplus >= 199711L))%2";
+
+    test_text =
+    "#if	!defined(_REENTRANT) && !defined(_LP64) && !defined(_STRICT_STDC)";
+};
+
+
+/*
+ *  Before Solaris 10, <iso/setjmp_iso.h> doesn't mark longjump noreturn.
+ */
+fix = {
+    hackname  = solaris_longjmp_noreturn;
+    mach      = "*-*-solaris2*";
+    files     = "iso/setjmp_iso.h";
+    bypass    = "__NORETURN";
+    select    = "(.*longjmp\\(jmp_buf.*[^)]+\\));";
+    c_fix     = format;
+    c_fix_arg = "%1 __attribute__ ((__noreturn__));";
+
+    test_text = "extern void longjmp(jmp_buf, int);";
 };
 
 
@@ -3517,6 +3640,24 @@ fix = {
 
 
 /*
+ *  The pow overloads with int were removed in C++ 2011.
+ */
+fix = {
+    hackname  = solaris_pow_int_overload;
+    mach      = '*-*-solaris2*';
+    files     = "iso/math_iso.h";
+    select    = "^[ \t]*inline [a-z ]* pow\\([^()]*, int [^()]*\\)"
+		" *\\{[^{}]*\n[^{}]*\\}";
+    c_fix     = format;
+    c_fix_arg = "#ifndef __GXX_EXPERIMENTAL_CXX0X__\n%0\n#endif";
+
+    test_text =
+    "	inline long double pow(long double __X, int __Y) { return\n"
+    "		__powl(__X, (long double) (__Y)); }";
+};
+
+
+/*
  * Sun Solaris defines PTHREAD_RWLOCK_INITIALIZER with a "0" for some
  *  fields of the pthread_rwlock_t structure, which are of type
  *  upad64_t, which itself is typedef'd to int64_t, but with __STDC__
@@ -3689,6 +3830,44 @@ fix = {
     "#if defined(_LP64) || (__STDC__ - 0 == 0 && !defined(_NO_LONGLONG))\n"
     "typedef int64_t			intmax_t;\n"
     "#endif";
+};
+
+
+/*
+ * Solaris 10+ <spawn.h> uses char *const argv[_RESTRICT_KYWD] in the
+ * posix_spawn declarations, which doesn't work with C++.
+ */
+fix = {
+    hackname  = solaris_posix_spawn_restrict;
+    files     = spawn.h;
+    mach      = '*-*-solaris2*';
+    c_fix     = format;
+    c_fix_arg = "%1*_RESTRICT_KYWD %2%3";
+    select    = "(.*[ \t]+)([a-z]+)\\[_RESTRICT_KYWD\\](.*)";
+    test_text =
+    "char *const argv[_RESTRICT_KYWD],\n"
+    "char *const envp[_RESTRICT_KYWD]);";
+};
+
+
+/*
+ * Before Solaris 10, <stdio.h> lacks declarations of std::__filbuf and
+ * std::__flsbuf, but <iso/stdio_iso.h> uses them.
+ */
+fix = {
+    hackname  = solaris_std___filbuf;
+    files     = stdio.h;
+    mach      = '*-*-solaris2*';
+    bypass    = "using std::__filbuf";
+    select    = "(using std::perror;\n)(#endif)";
+    c_fix     = format;
+    c_fix_arg = "%1#ifndef _LP64\n"
+		"using std::__filbuf;\n"
+		"using std::__flsbuf;\n"
+		"#endif\n%2";
+
+    test_text = "using std::perror;\n"
+		"#endif";
 };
 
 
@@ -4386,6 +4565,65 @@ fix = {
 
 
 /*
+ *  Define __CAN_USE_EXTERN_PREFIX on vms.
+ */
+fix = {
+    hackname  = vms_define_can_use_extern_prefix;
+    files     = "rtldef/decc$types.h";
+    select    = "#[ \t]*else\n"
+		"#[ \t]*if defined\\(__DECCXX\\)\n"
+		"#[ \t]*define __CAN_USE_EXTERN_PREFIX 1\n";
+    mach      = "*-*-*vms*";
+    c_fix     = format;
+
+    c_fix_arg = "%0"
+		"#    elif defined (__GNUC__)\n"
+		"#\tdefine __CAN_USE_EXTERN_PREFIX 1\n";
+
+    test_text = "# else\n"
+		"#    if defined(__DECCXX)\n"
+		"#\tdefine __CAN_USE_EXTERN_PREFIX 1\n"
+		"#    endif\n"
+		"# endif\n";
+};
+
+/*
+ * On VMS, use pragma extern_model instead of VAX-C keywords.
+ */
+fix = {
+    hackname  = vms_use_pragma_extern_model;
+    select    = "#if defined\\(__DECC\\) \\|\\| defined\\(__DECCXX\\)\n"
+		"# pragma extern_model __save\n";
+    mach      = "*-*-*vms*";
+    c_fix     = format;
+
+    c_fix_arg = "#if defined(__DECC) || defined(__DECCXX) || defined(__GNUC__)\n"
+		"# pragma extern_model __save\n";
+
+    test_text = "#if defined(__DECC) || defined(__DECCXX)\n"
+		"# pragma extern_model __save\n"
+		"# pragma extern_model strict_refdef\n"
+		"   extern struct x zz$yy;\n"
+		"# pragma extern_model __restore\n"
+		"#endif\n";
+};
+
+/*
+ * On VMS, disable the use of dec-c string builtins
+ */
+fix = {
+    hackname  = vms_disable_decc_string_builtins;
+    select    = "#if !defined\\(__VAX\\)\n";
+    mach      = "*-*-*vms*";
+    files     = "rtldef/string.h";
+    c_fix     = format;
+
+    c_fix_arg = "#if !defined(__VAX) && !defined(__GNUC__)\n";
+
+    test_text = "#if !defined(__VAX)\n";
+};
+
+/*
  *  AIX and Interix headers define NULL to be cast to a void pointer,
  *  which is illegal in ANSI C++.
  */
@@ -4404,6 +4642,7 @@ fix = {
     files     = sys/types.h;
     /* avoid changing C++ friendly NULL */
     bypass    = __cplusplus;
+    bypass    = __null;
     select    = "^#[ \t]*define[ \t]+NULL[ \t]+\\(\\(void[ \t]*\\*\\)0\\)";
     c_fix     = format;
     c_fix_arg = "#define NULL 0";

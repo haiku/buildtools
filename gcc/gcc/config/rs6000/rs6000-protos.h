@@ -55,6 +55,10 @@ extern void rs6000_expand_vector_init (rtx, rtx);
 extern void paired_expand_vector_init (rtx, rtx);
 extern void rs6000_expand_vector_set (rtx, rtx, int);
 extern void rs6000_expand_vector_extract (rtx, rtx, int);
+extern bool altivec_expand_vec_perm_const (rtx op[4]);
+extern bool rs6000_expand_vec_perm_const (rtx op[4]);
+extern void rs6000_expand_extract_even (rtx, rtx, rtx);
+extern void rs6000_expand_interleave (rtx, rtx, rtx, bool);
 extern void build_mask64_2_operands (rtx, rtx *);
 extern int expand_block_clear (rtx[]);
 extern int expand_block_move (rtx[]);
@@ -79,6 +83,7 @@ extern bool (*rs6000_cannot_change_mode_class_ptr) (enum machine_mode,
 						    enum machine_mode,
 						    enum reg_class);
 extern void rs6000_secondary_reload_inner (rtx, rtx, rtx, bool);
+extern void rs6000_secondary_reload_ppc64 (rtx, rtx, rtx, bool);
 extern int paired_emit_vector_cond_expr (rtx, rtx, rtx,
                                          rtx, rtx, rtx);
 extern void paired_expand_vector_move (rtx operands[]);
@@ -102,13 +107,9 @@ extern rtx rs6000_emit_set_const (rtx, enum machine_mode, rtx, int);
 extern int rs6000_emit_cmove (rtx, rtx, rtx, rtx);
 extern int rs6000_emit_vector_cond_expr (rtx, rtx, rtx, rtx, rtx, rtx);
 extern void rs6000_emit_minmax (rtx, enum rtx_code, rtx, rtx);
-extern void rs6000_emit_sync (enum rtx_code, enum machine_mode,
-			      rtx, rtx, rtx, rtx, bool);
-extern void rs6000_split_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx, rtx);
-extern void rs6000_split_compare_and_swap (rtx, rtx, rtx, rtx, rtx);
-extern void rs6000_expand_compare_and_swapqhi (rtx, rtx, rtx, rtx);
-extern void rs6000_split_compare_and_swapqhi (rtx, rtx, rtx, rtx, rtx, rtx);
-extern void rs6000_split_lock_test_and_set (rtx, rtx, rtx, rtx);
+extern void rs6000_expand_atomic_compare_and_swap (rtx op[]);
+extern void rs6000_expand_atomic_exchange (rtx op[]);
+extern void rs6000_expand_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx, rtx);
 extern void rs6000_emit_swdiv (rtx, rtx, rtx, bool);
 extern void rs6000_emit_swrsqrt (rtx, rtx);
 extern void output_toc (FILE *, rtx, int, enum machine_mode);
@@ -170,9 +171,11 @@ extern unsigned int rs6000_dbx_register_number (unsigned int);
 extern void rs6000_emit_epilogue (int);
 extern void rs6000_emit_eh_reg_restore (rtx, rtx);
 extern const char * output_isel (rtx *);
-extern bool rs6000_tls_referenced_p (rtx);
-
+extern void rs6000_call_indirect_aix (rtx, rtx, rtx);
 extern void rs6000_aix_asm_output_dwarf_table_ref (char *);
+extern void get_ppc476_thunk_name (char name[32]);
+extern bool rs6000_overloaded_builtin_p (enum rs6000_builtins);
+extern unsigned rs6000_builtin_mask_calculate (void);
 
 /* Declare functions in rs6000-c.c */
 
@@ -181,6 +184,8 @@ extern void rs6000_cpu_cpp_builtins (struct cpp_reader *);
 #ifdef TREE_CODE
 extern bool rs6000_pragma_target_parse (tree, tree);
 #endif
+extern void rs6000_target_modify_macros (bool, int, unsigned);
+extern void (*rs6000_target_modify_macros_ptr) (bool, int, unsigned);
 
 #if TARGET_MACHO
 char *output_call (rtx, rtx *, int, int);

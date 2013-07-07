@@ -1,5 +1,6 @@
 @c Copyright (C) 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-@c 1999, 2000, 2001, 2003, 2004, 2005, 2008, 2012 Free Software Foundation, Inc.
+@c 1999, 2000, 2001, 2003, 2004, 2005, 2008, 2011, 2012
+@c Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -48,29 +49,6 @@ Compiler flags to use when compiling @file{libgcc2.c}.
 @item LIB2FUNCS_EXTRA
 A list of source file names to be compiled or assembled and inserted
 into @file{libgcc.a}.
-
-@findex Floating Point Emulation
-@item Floating Point Emulation
-To have GCC include software floating point libraries in @file{libgcc.a}
-define @code{FPBIT} and @code{DPBIT} along with a few rules as follows:
-@smallexample
-# We want fine grained libraries, so use the new code
-# to build the floating point emulation libraries.
-FPBIT = fp-bit.c
-DPBIT = dp-bit.c
-
-
-fp-bit.c: $(srcdir)/config/fp-bit.c
-        echo '#define FLOAT' > fp-bit.c
-        cat $(srcdir)/config/fp-bit.c >> fp-bit.c
-
-dp-bit.c: $(srcdir)/config/fp-bit.c
-        cat $(srcdir)/config/fp-bit.c > dp-bit.c
-@end smallexample
-
-You may need to provide additional #defines at the beginning of @file{fp-bit.c}
-and @file{dp-bit.c} to control target endianness and other options.
-
 
 @findex CRTSTUFF_T_CFLAGS
 @item CRTSTUFF_T_CFLAGS
@@ -156,12 +134,6 @@ Sometimes it is desirable that when building multiple versions of
 compiler.  In that case, set @code{MULTILIB_EXTRA_OPTS} to be the list
 of options to be used for all builds.  If you set this, you should
 probably set @code{CRTSTUFF_T_CFLAGS} to a dash followed by it.
-
-@findex NATIVE_SYSTEM_HEADER_DIR
-@item NATIVE_SYSTEM_HEADER_DIR
-If the default location for system headers is not @file{/usr/include},
-you must set this to the directory containing the headers.  This value
-should match the value of the @code{SYSTEM_INCLUDE_DIR} macro.
 
 @findex MULTILIB_OSDIRNAMES
 @item MULTILIB_OSDIRNAMES

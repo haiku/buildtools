@@ -57,6 +57,8 @@ struct ssaexpand SA;
    of comminucating the profile info to the builtin expanders.  */
 gimple currently_expanding_gimple_stmt;
 
+static rtx expand_debug_expr (tree);
+
 /* Return an expression tree corresponding to the RHS of GIMPLE
    statement STMT.  */
 
@@ -133,7 +135,7 @@ set_rtl (tree t, rtx x)
 	  /* If we don't yet have something recorded, just record it now.  */
 	  if (!DECL_RTL_SET_P (var))
 	    SET_DECL_RTL (var, x);
-	  /* If we have it set alrady to "multiple places" don't
+	  /* If we have it set already to "multiple places" don't
 	     change this.  */
 	  else if (DECL_RTL (var) == pc_rtx)
 	    ;
@@ -157,11 +159,6 @@ struct stack_var
 {
   /* The Variable.  */
   tree decl;
-
-  /* The offset of the variable.  During partitioning, this is the
-     offset relative to the partition.  After partitioning, this
-     is relative to the stack frame.  */
-  HOST_WIDE_INT offset;
 
   /* Initially, the size of the variable.  Later, the size of the partition,
      if this variable becomes it's partition's representative.  */
@@ -187,6 +184,7 @@ struct stack_var
 static struct stack_var *stack_vars;
 static size_t stack_vars_alloc;
 static size_t stack_vars_num;
+static struct pointer_map_t *decl_to_stack_part;
 
 /* An array of indices such that stack_vars[stack_vars_sorted[i]].size
    is non-decreasing.  */
@@ -205,13 +203,14 @@ static bool has_protected_decls;
    smaller than our cutoff threshold.  Used for -Wstack-protector.  */
 static bool has_short_buffer;
 
-/* Discover the byte alignment to use for DECL.  Ignore alignment
+/* Compute the byte alignment to use for DECL.  Ignore alignment
    we can't do with expected alignment of the stack boundary.  */
 
 static unsigned int
-get_decl_align_unit (tree decl)
+align_local_variable (tree decl)
 {
   unsigned int align = LOCAL_DECL_ALIGNMENT (decl);
+  DECL_ALIGN (decl) = align;
   return align / BITS_PER_UNIT;
 }
 
@@ -264,16 +263,21 @@ add_stack_var (tree decl)
       stack_vars
 	= XRESIZEVEC (struct stack_var, stack_vars, stack_vars_alloc);
     }
+  if (!decl_to_stack_part)
+    decl_to_stack_part = pointer_map_create ();
+
   v = &stack_vars[stack_vars_num];
+  * (size_t *)pointer_map_insert (decl_to_stack_part, decl) = stack_vars_num;
 
   v->decl = decl;
-  v->offset = 0;
   v->size = tree_low_cst (DECL_SIZE_UNIT (SSAVAR (decl)), 1);
   /* Ensure that all variables have size, so that &a != &b for any two
      variables that are simultaneously live.  */
   if (v->size == 0)
     v->size = 1;
-  v->alignb = get_decl_align_unit (SSAVAR (decl));
+  v->alignb = align_local_variable (SSAVAR (decl));
+  /* An alignment of zero can mightily confuse us later.  */
+  gcc_assert (v->alignb != 0);
 
   /* All variables are initially in their own partition.  */
   v->representative = stack_vars_num;
@@ -310,6 +314,14 @@ stack_var_conflict_p (size_t x, size_t y)
 {
   struct stack_var *a = &stack_vars[x];
   struct stack_var *b = &stack_vars[y];
+  if (x == y)
+    return false;
+  /* Partitions containing an SSA name result from gimple registers
+     with things like unsupported modes.  They are top-level and
+     hence conflict with everything else.  */
+  if (TREE_CODE (a->decl) == SSA_NAME || TREE_CODE (b->decl) == SSA_NAME)
+    return true;
+
   if (!a->conflicts || !b->conflicts)
     return false;
   return bitmap_bit_p (a->conflicts, y);
@@ -345,8 +357,7 @@ aggregate_contains_union_type (tree type)
    and due to type based aliasing rules decides that for two overlapping
    union temporaries { short s; int i; } accesses to the same mem through
    different types may not alias and happily reorders stores across
-   life-time boundaries of the temporaries (See PR25654).
-   We also have to mind MEM_IN_STRUCT_P and MEM_SCALAR_P.  */
+   life-time boundaries of the temporaries (See PR25654).  */
 
 static void
 add_alias_set_conflicts (void)
@@ -372,11 +383,171 @@ add_alias_set_conflicts (void)
 		 to elements will conflict.  In case of unions we have
 		 to be careful as type based aliasing rules may say
 		 access to the same memory does not conflict.  So play
-		 safe and add a conflict in this case.  */
-	      || contains_union)
+		 safe and add a conflict in this case when
+                 -fstrict-aliasing is used.  */
+              || (contains_union && flag_strict_aliasing))
 	    add_stack_var_conflict (i, j);
 	}
     }
+}
+
+/* Callback for walk_stmt_ops.  If OP is a decl touched by add_stack_var
+   enter its partition number into bitmap DATA.  */
+
+static bool
+visit_op (gimple stmt ATTRIBUTE_UNUSED, tree op, void *data)
+{
+  bitmap active = (bitmap)data;
+  op = get_base_address (op);
+  if (op
+      && DECL_P (op)
+      && DECL_RTL_IF_SET (op) == pc_rtx)
+    {
+      size_t *v = (size_t *) pointer_map_contains (decl_to_stack_part, op);
+      if (v)
+	bitmap_set_bit (active, *v);
+    }
+  return false;
+}
+
+/* Callback for walk_stmt_ops.  If OP is a decl touched by add_stack_var
+   record conflicts between it and all currently active other partitions
+   from bitmap DATA.  */
+
+static bool
+visit_conflict (gimple stmt ATTRIBUTE_UNUSED, tree op, void *data)
+{
+  bitmap active = (bitmap)data;
+  op = get_base_address (op);
+  if (op
+      && DECL_P (op)
+      && DECL_RTL_IF_SET (op) == pc_rtx)
+    {
+      size_t *v =
+	(size_t *) pointer_map_contains (decl_to_stack_part, op);
+      if (v && bitmap_set_bit (active, *v))
+	{
+	  size_t num = *v;
+	  bitmap_iterator bi;
+	  unsigned i;
+	  gcc_assert (num < stack_vars_num);
+	  EXECUTE_IF_SET_IN_BITMAP (active, 0, i, bi)
+	    add_stack_var_conflict (num, i);
+	}
+    }
+  return false;
+}
+
+/* Helper routine for add_scope_conflicts, calculating the active partitions
+   at the end of BB, leaving the result in WORK.  We're called to generate
+   conflicts when FOR_CONFLICT is true, otherwise we're just tracking
+   liveness.  */
+
+static void
+add_scope_conflicts_1 (basic_block bb, bitmap work, bool for_conflict)
+{
+  edge e;
+  edge_iterator ei;
+  gimple_stmt_iterator gsi;
+  bool (*visit)(gimple, tree, void *);
+
+  bitmap_clear (work);
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    bitmap_ior_into (work, (bitmap)e->src->aux);
+
+  visit = visit_op;
+
+  for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple stmt = gsi_stmt (gsi);
+      walk_stmt_load_store_addr_ops (stmt, work, NULL, NULL, visit);
+    }
+  for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple stmt = gsi_stmt (gsi);
+
+      if (gimple_clobber_p (stmt))
+	{
+	  tree lhs = gimple_assign_lhs (stmt);
+	  size_t *v;
+	  /* Nested function lowering might introduce LHSs
+	     that are COMPONENT_REFs.  */
+	  if (TREE_CODE (lhs) != VAR_DECL)
+	    continue;
+	  if (DECL_RTL_IF_SET (lhs) == pc_rtx
+	      && (v = (size_t *)
+		  pointer_map_contains (decl_to_stack_part, lhs)))
+	    bitmap_clear_bit (work, *v);
+	}
+      else if (!is_gimple_debug (stmt))
+	{
+	  if (for_conflict
+	      && visit == visit_op)
+	    {
+	      /* If this is the first real instruction in this BB we need
+	         to add conflicts for everything live at this point now.
+		 Unlike classical liveness for named objects we can't
+		 rely on seeing a def/use of the names we're interested in.
+		 There might merely be indirect loads/stores.  We'd not add any
+		 conflicts for such partitions.  */
+	      bitmap_iterator bi;
+	      unsigned i;
+	      EXECUTE_IF_SET_IN_BITMAP (work, 0, i, bi)
+		{
+		  unsigned j;
+		  bitmap_iterator bj;
+		  EXECUTE_IF_SET_IN_BITMAP (work, i + 1, j, bj)
+		    add_stack_var_conflict (i, j);
+		}
+	      visit = visit_conflict;
+	    }
+	  walk_stmt_load_store_addr_ops (stmt, work, visit, visit, visit);
+	}
+    }
+}
+
+/* Generate stack partition conflicts between all partitions that are
+   simultaneously live.  */
+
+static void
+add_scope_conflicts (void)
+{
+  basic_block bb;
+  bool changed;
+  bitmap work = BITMAP_ALLOC (NULL);
+
+  /* We approximate the live range of a stack variable by taking the first
+     mention of its name as starting point(s), and by the end-of-scope
+     death clobber added by gimplify as ending point(s) of the range.
+     This overapproximates in the case we for instance moved an address-taken
+     operation upward, without also moving a dereference to it upwards.
+     But it's conservatively correct as a variable never can hold values
+     before its name is mentioned at least once.
+
+     We then do a mostly classical bitmap liveness algorithm.  */
+
+  FOR_ALL_BB (bb)
+    bb->aux = BITMAP_ALLOC (NULL);
+
+  changed = true;
+  while (changed)
+    {
+      changed = false;
+      FOR_EACH_BB (bb)
+	{
+	  bitmap active = (bitmap)bb->aux;
+	  add_scope_conflicts_1 (bb, work, false);
+	  if (bitmap_ior_into (active, work))
+	    changed = true;
+	}
+    }
+
+  FOR_EACH_BB (bb)
+    add_scope_conflicts_1 (bb, work, true);
+
+  BITMAP_FREE (work);
+  FOR_ALL_BB (bb)
+    BITMAP_FREE (bb->aux);
 }
 
 /* A subroutine of partition_stack_vars.  A comparison function for qsort,
@@ -403,9 +574,9 @@ stack_var_cmp (const void *a, const void *b)
     return (int)largeb - (int)largea;
 
   /* Secondary compare on size, decreasing  */
-  if (sizea < sizeb)
-    return -1;
   if (sizea > sizeb)
+    return -1;
+  if (sizea < sizeb)
     return 1;
 
   /* Tertiary compare on true alignment, decreasing.  */
@@ -526,11 +697,13 @@ update_alias_info_with_stack_vars (void)
 					   (void *)(size_t) uid)) = part;
 	  *((tree *) pointer_map_insert (cfun->gimple_df->decls_to_pointers,
 					 decl)) = name;
+	  if (TREE_ADDRESSABLE (decl))
+	    TREE_ADDRESSABLE (name) = 1;
 	}
 
       /* Make the SSA name point to all partition members.  */
       pi = get_ptr_info (name);
-      pt_solution_set (&pi->pt, part, false, false);
+      pt_solution_set (&pi->pt, part, false);
     }
 
   /* Make all points-to sets that contain one member of a partition
@@ -564,28 +737,19 @@ update_alias_info_with_stack_vars (void)
 
 /* A subroutine of partition_stack_vars.  The UNION portion of a UNION/FIND
    partitioning algorithm.  Partitions A and B are known to be non-conflicting.
-   Merge them into a single partition A.
-
-   At the same time, add OFFSET to all variables in partition B.  At the end
-   of the partitioning process we've have a nice block easy to lay out within
-   the stack frame.  */
+   Merge them into a single partition A.  */
 
 static void
-union_stack_vars (size_t a, size_t b, HOST_WIDE_INT offset)
+union_stack_vars (size_t a, size_t b)
 {
-  size_t i, last;
   struct stack_var *vb = &stack_vars[b];
   bitmap_iterator bi;
   unsigned u;
 
-  /* Update each element of partition B with the given offset,
-     and merge them into partition A.  */
-  for (last = i = b; i != EOC; last = i, i = stack_vars[i].next)
-    {
-      stack_vars[i].offset += offset;
-      stack_vars[i].representative = a;
-    }
-  stack_vars[last].next = stack_vars[a].next;
+  gcc_assert (stack_vars[b].next == EOC);
+   /* Add B to A's partition.  */
+  stack_vars[b].next = stack_vars[a].next;
+  stack_vars[b].representative = a;
   stack_vars[a].next = b;
 
   /* Update the required alignment of partition A to account for B.  */
@@ -605,16 +769,13 @@ union_stack_vars (size_t a, size_t b, HOST_WIDE_INT offset)
    partitions constrained by the interference graph.  The overall
    algorithm used is as follows:
 
-	Sort the objects by size.
+	Sort the objects by size in descending order.
 	For each object A {
 	  S = size(A)
 	  O = 0
 	  loop {
 	    Look for the largest non-conflicting object B with size <= S.
 	    UNION (A, B)
-	    offset(B) = O
-	    O += size(B)
-	    S -= size(B)
 	  }
 	}
 */
@@ -636,22 +797,21 @@ partition_stack_vars (void)
   for (si = 0; si < n; ++si)
     {
       size_t i = stack_vars_sorted[si];
-      HOST_WIDE_INT isize = stack_vars[i].size;
       unsigned int ialign = stack_vars[i].alignb;
-      HOST_WIDE_INT offset = 0;
 
-      for (sj = si; sj-- > 0; )
+      /* Ignore objects that aren't partition representatives. If we
+         see a var that is not a partition representative, it must
+         have been merged earlier.  */
+      if (stack_vars[i].representative != i)
+        continue;
+
+      for (sj = si + 1; sj < n; ++sj)
 	{
 	  size_t j = stack_vars_sorted[sj];
-	  HOST_WIDE_INT jsize = stack_vars[j].size;
 	  unsigned int jalign = stack_vars[j].alignb;
 
 	  /* Ignore objects that aren't partition representatives.  */
 	  if (stack_vars[j].representative != j)
-	    continue;
-
-	  /* Ignore objects too large for the remaining space.  */
-	  if (isize < jsize)
 	    continue;
 
 	  /* Ignore conflicting objects.  */
@@ -664,25 +824,8 @@ partition_stack_vars (void)
 	      != (jalign * BITS_PER_UNIT <= MAX_SUPPORTED_STACK_ALIGNMENT))
 	    continue;
 
-	  /* Refine the remaining space check to include alignment.  */
-	  if (offset & (jalign - 1))
-	    {
-	      HOST_WIDE_INT toff = offset;
-	      toff += jalign - 1;
-	      toff &= -(HOST_WIDE_INT)jalign;
-	      if (isize - (toff - offset) < jsize)
-		continue;
-
-	      isize -= toff - offset;
-	      offset = toff;
-	    }
-
 	  /* UNION the objects, placing J at OFFSET.  */
-	  union_stack_vars (i, j, offset);
-
-	  isize -= jsize;
-	  if (isize == 0)
-	    break;
+	  union_stack_vars (i, j);
 	}
     }
 
@@ -712,9 +855,8 @@ dump_stack_var_partition (void)
 	{
 	  fputc ('\t', dump_file);
 	  print_generic_expr (dump_file, stack_vars[j].decl, dump_flags);
-	  fprintf (dump_file, ", offset " HOST_WIDE_INT_PRINT_DEC "\n",
-		   stack_vars[j].offset);
 	}
+      fputc ('\n', dump_file);
     }
 }
 
@@ -863,10 +1005,9 @@ expand_stack_vars (bool (*pred) (tree))
 	 partition.  */
       for (j = i; j != EOC; j = stack_vars[j].next)
 	{
-	  gcc_assert (stack_vars[j].offset <= stack_vars[i].size);
 	  expand_one_stack_var_at (stack_vars[j].decl,
 				   base, base_align,
-				   stack_vars[j].offset + offset);
+				   offset);
 	}
     }
 
@@ -905,7 +1046,7 @@ expand_one_stack_var (tree var)
   unsigned byte_align;
 
   size = tree_low_cst (DECL_SIZE_UNIT (SSAVAR (var)), 1);
-  byte_align = get_decl_align_unit (SSAVAR (var));
+  byte_align = align_local_variable (SSAVAR (var));
 
   /* We handle highly aligned variables in expand_stack_vars.  */
   gcc_assert (byte_align * BITS_PER_UNIT <= MAX_SUPPORTED_STACK_ALIGNMENT);
@@ -943,7 +1084,7 @@ expand_one_register_var (tree var)
     mark_user_reg (x);
 
   if (POINTER_TYPE_P (type))
-    mark_reg_pointer (x, TYPE_ALIGN (TREE_TYPE (type)));
+    mark_reg_pointer (x, get_pointer_alignment (var));
 }
 
 /* A subroutine of expand_one_var.  Called to assign rtl to a VAR_DECL that
@@ -1127,10 +1268,7 @@ expand_one_var (tree var, bool toplevel, bool really_expand)
 static void
 expand_used_vars_for_block (tree block, bool toplevel)
 {
-  size_t i, j, old_sv_num, this_sv_num, new_sv_num;
   tree t;
-
-  old_sv_num = toplevel ? 0 : stack_vars_num;
 
   /* Expand all variables at this level.  */
   for (t = BLOCK_VARS (block); t ; t = DECL_CHAIN (t))
@@ -1139,24 +1277,9 @@ expand_used_vars_for_block (tree block, bool toplevel)
 	    || !DECL_NONSHAREABLE (t)))
       expand_one_var (t, toplevel, true);
 
-  this_sv_num = stack_vars_num;
-
   /* Expand all variables at containing levels.  */
   for (t = BLOCK_SUBBLOCKS (block); t ; t = BLOCK_CHAIN (t))
     expand_used_vars_for_block (t, false);
-
-  /* Since we do not track exact variable lifetimes (which is not even
-     possible for variables whose address escapes), we mirror the block
-     tree in the interference graph.  Here we cause all variables at this
-     level, and all sublevels, to conflict.  */
-  if (old_sv_num < this_sv_num)
-    {
-      new_sv_num = stack_vars_num;
-
-      for (i = old_sv_num; i < new_sv_num; ++i)
-	for (j = i < this_sv_num ? i : this_sv_num; j-- > old_sv_num ;)
-	  add_stack_var_conflict (i, j);
-    }
 }
 
 /* A subroutine of expand_used_vars.  Walk down through the BLOCK tree
@@ -1344,6 +1467,8 @@ fini_vars_expansion (void)
   XDELETEVEC (stack_vars_sorted);
   stack_vars = NULL;
   stack_vars_alloc = stack_vars_num = 0;
+  pointer_map_destroy (decl_to_stack_part);
+  decl_to_stack_part = NULL;
 }
 
 /* Make a fair guess for the size of the stack frame of the function
@@ -1498,6 +1623,7 @@ expand_used_vars (void)
 
   if (stack_vars_num > 0)
     {
+      add_scope_conflicts ();
       /* Due to the way alias sets work, no variables with non-conflicting
 	 alias sets may be assigned the same address.  Add conflicts to
 	 reflect this.  */
@@ -1749,11 +1875,8 @@ expand_gimple_cond (basic_block bb, gimple stmt)
   last2 = last = get_last_insn ();
 
   extract_true_false_edges_from_block (bb, &true_edge, &false_edge);
-  if (gimple_has_location (stmt))
-    {
-      set_curr_insn_source_location (gimple_location (stmt));
-      set_curr_insn_block (gimple_block (stmt));
-    }
+  set_curr_insn_source_location (gimple_location (stmt));
+  set_curr_insn_block (gimple_block (stmt));
 
   /* These flags have no purpose in RTL land.  */
   true_edge->flags &= ~EDGE_TRUE_VALUE;
@@ -1837,23 +1960,66 @@ expand_gimple_cond (basic_block bb, gimple stmt)
   return new_bb;
 }
 
+/* Mark all calls that can have a transaction restart.  */
+
+static void
+mark_transaction_restart_calls (gimple stmt)
+{
+  struct tm_restart_node dummy;
+  void **slot;
+
+  if (!cfun->gimple_df->tm_restart)
+    return;
+
+  dummy.stmt = stmt;
+  slot = htab_find_slot (cfun->gimple_df->tm_restart, &dummy, NO_INSERT);
+  if (slot)
+    {
+      struct tm_restart_node *n = (struct tm_restart_node *) *slot;
+      tree list = n->label_or_list;
+      rtx insn;
+
+      for (insn = next_real_insn (get_last_insn ());
+	   !CALL_P (insn);
+	   insn = next_real_insn (insn))
+	continue;
+
+      if (TREE_CODE (list) == LABEL_DECL)
+	add_reg_note (insn, REG_TM, label_rtx (list));
+      else
+	for (; list ; list = TREE_CHAIN (list))
+	  add_reg_note (insn, REG_TM, label_rtx (TREE_VALUE (list)));
+    }
+}
+
 /* A subroutine of expand_gimple_stmt_1, expanding one GIMPLE_CALL
    statement STMT.  */
 
 static void
 expand_call_stmt (gimple stmt)
 {
-  tree exp;
-  tree lhs = gimple_call_lhs (stmt);
-  size_t i;
+  tree exp, decl, lhs;
   bool builtin_p;
-  tree decl;
+  size_t i;
+
+  if (gimple_call_internal_p (stmt))
+    {
+      expand_internal_call (stmt);
+      return;
+    }
 
   exp = build_vl_exp (CALL_EXPR, gimple_call_num_args (stmt) + 3);
 
   CALL_EXPR_FN (exp) = gimple_call_fn (stmt);
   decl = gimple_call_fndecl (stmt);
   builtin_p = decl && DECL_BUILT_IN (decl);
+
+  /* If this is not a builtin function, the function type through which the
+     call is made may be different from the type of the function.  */
+  if (!builtin_p)
+    CALL_EXPR_FN (exp)
+      = fold_convert (build_pointer_type (gimple_call_fntype (stmt)),
+		      CALL_EXPR_FN (exp));
 
   TREE_TYPE (exp) = gimple_call_return_type (stmt);
   CALL_EXPR_STATIC_CHAIN (exp) = gimple_call_chain (stmt);
@@ -1880,16 +2046,39 @@ expand_call_stmt (gimple stmt)
 
   CALL_EXPR_TAILCALL (exp) = gimple_call_tail_p (stmt);
   CALL_EXPR_RETURN_SLOT_OPT (exp) = gimple_call_return_slot_opt_p (stmt);
-  CALL_FROM_THUNK_P (exp) = gimple_call_from_thunk_p (stmt);
-  CALL_CANNOT_INLINE_P (exp) = gimple_call_cannot_inline_p (stmt);
+  if (decl
+      && DECL_BUILT_IN_CLASS (decl) == BUILT_IN_NORMAL
+      && (DECL_FUNCTION_CODE (decl) == BUILT_IN_ALLOCA
+	  || DECL_FUNCTION_CODE (decl) == BUILT_IN_ALLOCA_WITH_ALIGN))
+    CALL_ALLOCA_FOR_VAR_P (exp) = gimple_call_alloca_for_var_p (stmt);
+  else
+    CALL_FROM_THUNK_P (exp) = gimple_call_from_thunk_p (stmt);
   CALL_EXPR_VA_ARG_PACK (exp) = gimple_call_va_arg_pack_p (stmt);
   SET_EXPR_LOCATION (exp, gimple_location (stmt));
   TREE_BLOCK (exp) = gimple_block (stmt);
 
+  /* Ensure RTL is created for debug args.  */
+  if (decl && DECL_HAS_DEBUG_ARGS_P (decl))
+    {
+      VEC(tree, gc) **debug_args = decl_debug_args_lookup (decl);
+      unsigned int ix;
+      tree dtemp;
+
+      if (debug_args)
+	for (ix = 1; VEC_iterate (tree, *debug_args, ix, dtemp); ix += 2)
+	  {
+	    gcc_assert (TREE_CODE (dtemp) == DEBUG_EXPR_DECL);
+	    expand_debug_expr (dtemp);
+	  }
+    }
+
+  lhs = gimple_call_lhs (stmt);
   if (lhs)
     expand_assignment (lhs, exp, false);
   else
     expand_expr_real_1 (exp, const0_rtx, VOIDmode, EXPAND_NORMAL, NULL);
+
+  mark_transaction_restart_calls (stmt);
 }
 
 /* A subroutine of expand_gimple_stmt, expanding one gimple statement
@@ -1900,6 +2089,10 @@ static void
 expand_gimple_stmt_1 (gimple stmt)
 {
   tree op0;
+
+  set_curr_insn_source_location (gimple_location (stmt));
+  set_curr_insn_block (gimple_block (stmt));
+
   switch (gimple_code (stmt))
     {
     case GIMPLE_GOTO:
@@ -1972,8 +2165,13 @@ expand_gimple_stmt_1 (gimple stmt)
 			== GIMPLE_SINGLE_RHS);
 	    if (gimple_has_location (stmt) && CAN_HAVE_LOCATION_P (rhs))
 	      SET_EXPR_LOCATION (rhs, gimple_location (stmt));
-	    expand_assignment (lhs, rhs,
-			       gimple_assign_nontemporal_move_p (stmt));
+	    if (TREE_CLOBBER_P (rhs))
+	      /* This is a clobber to mark the going out of scope for
+		 this LHS.  */
+	      ;
+	    else
+	      expand_assignment (lhs, rhs,
+				 gimple_assign_nontemporal_move_p (stmt));
 	  }
 	else
 	  {
@@ -2056,32 +2254,21 @@ expand_gimple_stmt_1 (gimple stmt)
 static rtx
 expand_gimple_stmt (gimple stmt)
 {
-  int lp_nr = 0;
-  rtx last = NULL;
   location_t saved_location = input_location;
+  rtx last = get_last_insn ();
+  int lp_nr;
 
-  last = get_last_insn ();
-
-  /* If this is an expression of some kind and it has an associated line
-     number, then emit the line number before expanding the expression.
-
-     We need to save and restore the file and line information so that
-     errors discovered during expansion are emitted with the right
-     information.  It would be better of the diagnostic routines
-     used the file/line information embedded in the tree nodes rather
-     than globals.  */
   gcc_assert (cfun);
 
+  /* We need to save and restore the current source location so that errors
+     discovered during expansion are emitted with the right location.  But
+     it would be better if the diagnostic routines used the source location
+     embedded in the tree nodes rather than globals.  */
   if (gimple_has_location (stmt))
-    {
-      input_location = gimple_location (stmt);
-      set_curr_insn_source_location (input_location);
-
-      /* Record where the insns produced belong.  */
-      set_curr_insn_block (gimple_block (stmt));
-    }
+    input_location = gimple_location (stmt);
 
   expand_gimple_stmt_1 (stmt);
+
   /* Free any temporaries used to evaluate this statement.  */
   free_temp_slots ();
 
@@ -2307,15 +2494,13 @@ convert_debug_memory_address (enum machine_mode mode, rtx x,
   gcc_assert (xmode == mode || xmode == VOIDmode);
 #else
   rtx temp;
-  enum machine_mode address_mode = targetm.addr_space.address_mode (as);
-  enum machine_mode pointer_mode = targetm.addr_space.pointer_mode (as);
 
-  gcc_assert (mode == address_mode || mode == pointer_mode);
+  gcc_assert (targetm.addr_space.valid_pointer_mode (mode, as));
 
   if (GET_MODE (x) == mode || GET_MODE (x) == VOIDmode)
     return x;
 
-  if (GET_MODE_BITSIZE (mode) < GET_MODE_BITSIZE (xmode))
+  if (GET_MODE_PRECISION (mode) < GET_MODE_PRECISION (xmode))
     x = simplify_gen_subreg (mode, x, xmode,
 			     subreg_lowpart_offset
 			     (mode, xmode));
@@ -2370,14 +2555,69 @@ convert_debug_memory_address (enum machine_mode mode, rtx x,
   return x;
 }
 
-/* Return an RTX equivalent to the value of the tree expression
-   EXP.  */
+/* Return an RTX equivalent to the value of the parameter DECL.  */
+
+static rtx
+expand_debug_parm_decl (tree decl)
+{
+  rtx incoming = DECL_INCOMING_RTL (decl);
+
+  if (incoming
+      && GET_MODE (incoming) != BLKmode
+      && ((REG_P (incoming) && HARD_REGISTER_P (incoming))
+	  || (MEM_P (incoming)
+	      && REG_P (XEXP (incoming, 0))
+	      && HARD_REGISTER_P (XEXP (incoming, 0)))))
+    {
+      rtx rtl = gen_rtx_ENTRY_VALUE (GET_MODE (incoming));
+
+#ifdef HAVE_window_save
+      /* DECL_INCOMING_RTL uses the INCOMING_REGNO of parameter registers.
+	 If the target machine has an explicit window save instruction, the
+	 actual entry value is the corresponding OUTGOING_REGNO instead.  */
+      if (REG_P (incoming)
+	  && OUTGOING_REGNO (REGNO (incoming)) != REGNO (incoming))
+	incoming
+	  = gen_rtx_REG_offset (incoming, GET_MODE (incoming),
+				OUTGOING_REGNO (REGNO (incoming)), 0);
+      else if (MEM_P (incoming))
+	{
+	  rtx reg = XEXP (incoming, 0);
+	  if (OUTGOING_REGNO (REGNO (reg)) != REGNO (reg))
+	    {
+	      reg = gen_raw_REG (GET_MODE (reg), OUTGOING_REGNO (REGNO (reg)));
+	      incoming = replace_equiv_address_nv (incoming, reg);
+	    }
+	  else
+	    incoming = copy_rtx (incoming);
+	}
+#endif
+
+      ENTRY_VALUE_EXP (rtl) = incoming;
+      return rtl;
+    }
+
+  if (incoming
+      && GET_MODE (incoming) != BLKmode
+      && !TREE_ADDRESSABLE (decl)
+      && MEM_P (incoming)
+      && (XEXP (incoming, 0) == virtual_incoming_args_rtx
+	  || (GET_CODE (XEXP (incoming, 0)) == PLUS
+	      && XEXP (XEXP (incoming, 0), 0) == virtual_incoming_args_rtx
+	      && CONST_INT_P (XEXP (XEXP (incoming, 0), 1)))))
+    return copy_rtx (incoming);
+
+  return NULL_RTX;
+}
+
+/* Return an RTX equivalent to the value of the tree expression EXP.  */
 
 static rtx
 expand_debug_expr (tree exp)
 {
   rtx op0 = NULL_RTX, op1 = NULL_RTX, op2 = NULL_RTX;
   enum machine_mode mode = TYPE_MODE (TREE_TYPE (exp));
+  enum machine_mode inner_mode = VOIDmode;
   int unsignedp = TYPE_UNSIGNED (TREE_TYPE (exp));
   addr_space_t as;
 
@@ -2424,6 +2664,7 @@ expand_debug_expr (tree exp)
 
     unary:
     case tcc_unary:
+      inner_mode = TYPE_MODE (TREE_TYPE (TREE_OPERAND (exp, 0)));
       op0 = expand_debug_expr (TREE_OPERAND (exp, 0));
       if (!op0)
 	return NULL_RTX;
@@ -2528,7 +2769,7 @@ expand_debug_expr (tree exp)
     case NOP_EXPR:
     case CONVERT_EXPR:
       {
-	enum machine_mode inner_mode = GET_MODE (op0);
+	inner_mode = GET_MODE (op0);
 
 	if (mode == inner_mode)
 	  return op0;
@@ -2568,16 +2809,16 @@ expand_debug_expr (tree exp)
 	      op0 = simplify_gen_unary (FIX, mode, op0, inner_mode);
 	  }
 	else if (CONSTANT_P (op0)
-		 || GET_MODE_BITSIZE (mode) <= GET_MODE_BITSIZE (inner_mode))
+		 || GET_MODE_PRECISION (mode) <= GET_MODE_PRECISION (inner_mode))
 	  op0 = simplify_gen_subreg (mode, op0, inner_mode,
 				     subreg_lowpart_offset (mode,
 							    inner_mode));
 	else if (TREE_CODE_CLASS (TREE_CODE (exp)) == tcc_unary
 		 ? TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp, 0)))
 		 : unsignedp)
-	  op0 = gen_rtx_ZERO_EXTEND (mode, op0);
+	  op0 = simplify_gen_unary (ZERO_EXTEND, mode, op0, inner_mode);
 	else
-	  op0 = gen_rtx_SIGN_EXTEND (mode, op0);
+	  op0 = simplify_gen_unary (SIGN_EXTEND, mode, op0, inner_mode);
 
 	return op0;
       }
@@ -2712,7 +2953,8 @@ expand_debug_expr (tree exp)
 	    /* Don't use offset_address here, we don't need a
 	       recognizable address, and we don't want to generate
 	       code.  */
-	    op0 = gen_rtx_MEM (mode, gen_rtx_PLUS (addrmode, op0, op1));
+	    op0 = gen_rtx_MEM (mode, simplify_gen_binary (PLUS, addrmode,
+							  op0, op1));
 	  }
 
 	if (MEM_P (op0))
@@ -2785,25 +3027,23 @@ expand_debug_expr (tree exp)
       }
 
     case ABS_EXPR:
-      return gen_rtx_ABS (mode, op0);
+      return simplify_gen_unary (ABS, mode, op0, mode);
 
     case NEGATE_EXPR:
-      return gen_rtx_NEG (mode, op0);
+      return simplify_gen_unary (NEG, mode, op0, mode);
 
     case BIT_NOT_EXPR:
-      return gen_rtx_NOT (mode, op0);
+      return simplify_gen_unary (NOT, mode, op0, mode);
 
     case FLOAT_EXPR:
-      if (unsignedp)
-	return gen_rtx_UNSIGNED_FLOAT (mode, op0);
-      else
-	return gen_rtx_FLOAT (mode, op0);
+      return simplify_gen_unary (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp,
+									 0)))
+				 ? UNSIGNED_FLOAT : FLOAT, mode, op0,
+				 inner_mode);
 
     case FIX_TRUNC_EXPR:
-      if (unsignedp)
-	return gen_rtx_UNSIGNED_FIX (mode, op0);
-      else
-	return gen_rtx_FIX (mode, op0);
+      return simplify_gen_unary (unsignedp ? UNSIGNED_FIX : FIX, mode, op0,
+				 inner_mode);
 
     case POINTER_PLUS_EXPR:
       /* For the rare target where pointers are not the same size as
@@ -2814,161 +3054,164 @@ expand_debug_expr (tree exp)
 	  && GET_MODE (op0) != GET_MODE (op1))
 	{
 	  if (GET_MODE_BITSIZE (GET_MODE (op0)) < GET_MODE_BITSIZE (GET_MODE (op1)))
-	    op1 = gen_rtx_TRUNCATE (GET_MODE (op0), op1);
+	    op1 = simplify_gen_unary (TRUNCATE, GET_MODE (op0), op1,
+				      GET_MODE (op1));
 	  else
 	    /* We always sign-extend, regardless of the signedness of
 	       the operand, because the operand is always unsigned
 	       here even if the original C expression is signed.  */
-	    op1 = gen_rtx_SIGN_EXTEND (GET_MODE (op0), op1);
+	    op1 = simplify_gen_unary (SIGN_EXTEND, GET_MODE (op0), op1,
+				      GET_MODE (op1));
 	}
       /* Fall through.  */
     case PLUS_EXPR:
-      return gen_rtx_PLUS (mode, op0, op1);
+      return simplify_gen_binary (PLUS, mode, op0, op1);
 
     case MINUS_EXPR:
-      return gen_rtx_MINUS (mode, op0, op1);
+      return simplify_gen_binary (MINUS, mode, op0, op1);
 
     case MULT_EXPR:
-      return gen_rtx_MULT (mode, op0, op1);
+      return simplify_gen_binary (MULT, mode, op0, op1);
 
     case RDIV_EXPR:
     case TRUNC_DIV_EXPR:
     case EXACT_DIV_EXPR:
       if (unsignedp)
-	return gen_rtx_UDIV (mode, op0, op1);
+	return simplify_gen_binary (UDIV, mode, op0, op1);
       else
-	return gen_rtx_DIV (mode, op0, op1);
+	return simplify_gen_binary (DIV, mode, op0, op1);
 
     case TRUNC_MOD_EXPR:
-      if (unsignedp)
-	return gen_rtx_UMOD (mode, op0, op1);
-      else
-	return gen_rtx_MOD (mode, op0, op1);
+      return simplify_gen_binary (unsignedp ? UMOD : MOD, mode, op0, op1);
 
     case FLOOR_DIV_EXPR:
       if (unsignedp)
-	return gen_rtx_UDIV (mode, op0, op1);
+	return simplify_gen_binary (UDIV, mode, op0, op1);
       else
 	{
-	  rtx div = gen_rtx_DIV (mode, op0, op1);
-	  rtx mod = gen_rtx_MOD (mode, op0, op1);
+	  rtx div = simplify_gen_binary (DIV, mode, op0, op1);
+	  rtx mod = simplify_gen_binary (MOD, mode, op0, op1);
 	  rtx adj = floor_sdiv_adjust (mode, mod, op1);
-	  return gen_rtx_PLUS (mode, div, adj);
+	  return simplify_gen_binary (PLUS, mode, div, adj);
 	}
 
     case FLOOR_MOD_EXPR:
       if (unsignedp)
-	return gen_rtx_UMOD (mode, op0, op1);
+	return simplify_gen_binary (UMOD, mode, op0, op1);
       else
 	{
-	  rtx mod = gen_rtx_MOD (mode, op0, op1);
+	  rtx mod = simplify_gen_binary (MOD, mode, op0, op1);
 	  rtx adj = floor_sdiv_adjust (mode, mod, op1);
-	  adj = gen_rtx_NEG (mode, gen_rtx_MULT (mode, adj, op1));
-	  return gen_rtx_PLUS (mode, mod, adj);
+	  adj = simplify_gen_unary (NEG, mode,
+				    simplify_gen_binary (MULT, mode, adj, op1),
+				    mode);
+	  return simplify_gen_binary (PLUS, mode, mod, adj);
 	}
 
     case CEIL_DIV_EXPR:
       if (unsignedp)
 	{
-	  rtx div = gen_rtx_UDIV (mode, op0, op1);
-	  rtx mod = gen_rtx_UMOD (mode, op0, op1);
+	  rtx div = simplify_gen_binary (UDIV, mode, op0, op1);
+	  rtx mod = simplify_gen_binary (UMOD, mode, op0, op1);
 	  rtx adj = ceil_udiv_adjust (mode, mod, op1);
-	  return gen_rtx_PLUS (mode, div, adj);
+	  return simplify_gen_binary (PLUS, mode, div, adj);
 	}
       else
 	{
-	  rtx div = gen_rtx_DIV (mode, op0, op1);
-	  rtx mod = gen_rtx_MOD (mode, op0, op1);
+	  rtx div = simplify_gen_binary (DIV, mode, op0, op1);
+	  rtx mod = simplify_gen_binary (MOD, mode, op0, op1);
 	  rtx adj = ceil_sdiv_adjust (mode, mod, op1);
-	  return gen_rtx_PLUS (mode, div, adj);
+	  return simplify_gen_binary (PLUS, mode, div, adj);
 	}
 
     case CEIL_MOD_EXPR:
       if (unsignedp)
 	{
-	  rtx mod = gen_rtx_UMOD (mode, op0, op1);
+	  rtx mod = simplify_gen_binary (UMOD, mode, op0, op1);
 	  rtx adj = ceil_udiv_adjust (mode, mod, op1);
-	  adj = gen_rtx_NEG (mode, gen_rtx_MULT (mode, adj, op1));
-	  return gen_rtx_PLUS (mode, mod, adj);
+	  adj = simplify_gen_unary (NEG, mode,
+				    simplify_gen_binary (MULT, mode, adj, op1),
+				    mode);
+	  return simplify_gen_binary (PLUS, mode, mod, adj);
 	}
       else
 	{
-	  rtx mod = gen_rtx_MOD (mode, op0, op1);
+	  rtx mod = simplify_gen_binary (MOD, mode, op0, op1);
 	  rtx adj = ceil_sdiv_adjust (mode, mod, op1);
-	  adj = gen_rtx_NEG (mode, gen_rtx_MULT (mode, adj, op1));
-	  return gen_rtx_PLUS (mode, mod, adj);
+	  adj = simplify_gen_unary (NEG, mode,
+				    simplify_gen_binary (MULT, mode, adj, op1),
+				    mode);
+	  return simplify_gen_binary (PLUS, mode, mod, adj);
 	}
 
     case ROUND_DIV_EXPR:
       if (unsignedp)
 	{
-	  rtx div = gen_rtx_UDIV (mode, op0, op1);
-	  rtx mod = gen_rtx_UMOD (mode, op0, op1);
+	  rtx div = simplify_gen_binary (UDIV, mode, op0, op1);
+	  rtx mod = simplify_gen_binary (UMOD, mode, op0, op1);
 	  rtx adj = round_udiv_adjust (mode, mod, op1);
-	  return gen_rtx_PLUS (mode, div, adj);
+	  return simplify_gen_binary (PLUS, mode, div, adj);
 	}
       else
 	{
-	  rtx div = gen_rtx_DIV (mode, op0, op1);
-	  rtx mod = gen_rtx_MOD (mode, op0, op1);
+	  rtx div = simplify_gen_binary (DIV, mode, op0, op1);
+	  rtx mod = simplify_gen_binary (MOD, mode, op0, op1);
 	  rtx adj = round_sdiv_adjust (mode, mod, op1);
-	  return gen_rtx_PLUS (mode, div, adj);
+	  return simplify_gen_binary (PLUS, mode, div, adj);
 	}
 
     case ROUND_MOD_EXPR:
       if (unsignedp)
 	{
-	  rtx mod = gen_rtx_UMOD (mode, op0, op1);
+	  rtx mod = simplify_gen_binary (UMOD, mode, op0, op1);
 	  rtx adj = round_udiv_adjust (mode, mod, op1);
-	  adj = gen_rtx_NEG (mode, gen_rtx_MULT (mode, adj, op1));
-	  return gen_rtx_PLUS (mode, mod, adj);
+	  adj = simplify_gen_unary (NEG, mode,
+				    simplify_gen_binary (MULT, mode, adj, op1),
+				    mode);
+	  return simplify_gen_binary (PLUS, mode, mod, adj);
 	}
       else
 	{
-	  rtx mod = gen_rtx_MOD (mode, op0, op1);
+	  rtx mod = simplify_gen_binary (MOD, mode, op0, op1);
 	  rtx adj = round_sdiv_adjust (mode, mod, op1);
-	  adj = gen_rtx_NEG (mode, gen_rtx_MULT (mode, adj, op1));
-	  return gen_rtx_PLUS (mode, mod, adj);
+	  adj = simplify_gen_unary (NEG, mode,
+				    simplify_gen_binary (MULT, mode, adj, op1),
+				    mode);
+	  return simplify_gen_binary (PLUS, mode, mod, adj);
 	}
 
     case LSHIFT_EXPR:
-      return gen_rtx_ASHIFT (mode, op0, op1);
+      return simplify_gen_binary (ASHIFT, mode, op0, op1);
 
     case RSHIFT_EXPR:
       if (unsignedp)
-	return gen_rtx_LSHIFTRT (mode, op0, op1);
+	return simplify_gen_binary (LSHIFTRT, mode, op0, op1);
       else
-	return gen_rtx_ASHIFTRT (mode, op0, op1);
+	return simplify_gen_binary (ASHIFTRT, mode, op0, op1);
 
     case LROTATE_EXPR:
-      return gen_rtx_ROTATE (mode, op0, op1);
+      return simplify_gen_binary (ROTATE, mode, op0, op1);
 
     case RROTATE_EXPR:
-      return gen_rtx_ROTATERT (mode, op0, op1);
+      return simplify_gen_binary (ROTATERT, mode, op0, op1);
 
     case MIN_EXPR:
-      if (unsignedp)
-	return gen_rtx_UMIN (mode, op0, op1);
-      else
-	return gen_rtx_SMIN (mode, op0, op1);
+      return simplify_gen_binary (unsignedp ? UMIN : SMIN, mode, op0, op1);
 
     case MAX_EXPR:
-      if (unsignedp)
-	return gen_rtx_UMAX (mode, op0, op1);
-      else
-	return gen_rtx_SMAX (mode, op0, op1);
+      return simplify_gen_binary (unsignedp ? UMAX : SMAX, mode, op0, op1);
 
     case BIT_AND_EXPR:
     case TRUTH_AND_EXPR:
-      return gen_rtx_AND (mode, op0, op1);
+      return simplify_gen_binary (AND, mode, op0, op1);
 
     case BIT_IOR_EXPR:
     case TRUTH_OR_EXPR:
-      return gen_rtx_IOR (mode, op0, op1);
+      return simplify_gen_binary (IOR, mode, op0, op1);
 
     case BIT_XOR_EXPR:
     case TRUTH_XOR_EXPR:
-      return gen_rtx_XOR (mode, op0, op1);
+      return simplify_gen_binary (XOR, mode, op0, op1);
 
     case TRUTH_ANDIF_EXPR:
       return gen_rtx_IF_THEN_ELSE (mode, op0, op1, const0_rtx);
@@ -2977,61 +3220,53 @@ expand_debug_expr (tree exp)
       return gen_rtx_IF_THEN_ELSE (mode, op0, const_true_rtx, op1);
 
     case TRUTH_NOT_EXPR:
-      return gen_rtx_EQ (mode, op0, const0_rtx);
+      return simplify_gen_relational (EQ, mode, inner_mode, op0, const0_rtx);
 
     case LT_EXPR:
-      if (unsignedp)
-	return gen_rtx_LTU (mode, op0, op1);
-      else
-	return gen_rtx_LT (mode, op0, op1);
+      return simplify_gen_relational (unsignedp ? LTU : LT, mode, inner_mode,
+				      op0, op1);
 
     case LE_EXPR:
-      if (unsignedp)
-	return gen_rtx_LEU (mode, op0, op1);
-      else
-	return gen_rtx_LE (mode, op0, op1);
+      return simplify_gen_relational (unsignedp ? LEU : LE, mode, inner_mode,
+				      op0, op1);
 
     case GT_EXPR:
-      if (unsignedp)
-	return gen_rtx_GTU (mode, op0, op1);
-      else
-	return gen_rtx_GT (mode, op0, op1);
+      return simplify_gen_relational (unsignedp ? GTU : GT, mode, inner_mode,
+				      op0, op1);
 
     case GE_EXPR:
-      if (unsignedp)
-	return gen_rtx_GEU (mode, op0, op1);
-      else
-	return gen_rtx_GE (mode, op0, op1);
+      return simplify_gen_relational (unsignedp ? GEU : GE, mode, inner_mode,
+				      op0, op1);
 
     case EQ_EXPR:
-      return gen_rtx_EQ (mode, op0, op1);
+      return simplify_gen_relational (EQ, mode, inner_mode, op0, op1);
 
     case NE_EXPR:
-      return gen_rtx_NE (mode, op0, op1);
+      return simplify_gen_relational (NE, mode, inner_mode, op0, op1);
 
     case UNORDERED_EXPR:
-      return gen_rtx_UNORDERED (mode, op0, op1);
+      return simplify_gen_relational (UNORDERED, mode, inner_mode, op0, op1);
 
     case ORDERED_EXPR:
-      return gen_rtx_ORDERED (mode, op0, op1);
+      return simplify_gen_relational (ORDERED, mode, inner_mode, op0, op1);
 
     case UNLT_EXPR:
-      return gen_rtx_UNLT (mode, op0, op1);
+      return simplify_gen_relational (UNLT, mode, inner_mode, op0, op1);
 
     case UNLE_EXPR:
-      return gen_rtx_UNLE (mode, op0, op1);
+      return simplify_gen_relational (UNLE, mode, inner_mode, op0, op1);
 
     case UNGT_EXPR:
-      return gen_rtx_UNGT (mode, op0, op1);
+      return simplify_gen_relational (UNGT, mode, inner_mode, op0, op1);
 
     case UNGE_EXPR:
-      return gen_rtx_UNGE (mode, op0, op1);
+      return simplify_gen_relational (UNGE, mode, inner_mode, op0, op1);
 
     case UNEQ_EXPR:
-      return gen_rtx_UNEQ (mode, op0, op1);
+      return simplify_gen_relational (UNEQ, mode, inner_mode, op0, op1);
 
     case LTGT_EXPR:
-      return gen_rtx_LTGT (mode, op0, op1);
+      return simplify_gen_relational (LTGT, mode, inner_mode, op0, op1);
 
     case COND_EXPR:
       return gen_rtx_IF_THEN_ELSE (mode, op0, op1, op2);
@@ -3047,8 +3282,9 @@ expand_debug_expr (tree exp)
     case CONJ_EXPR:
       if (GET_CODE (op0) == CONCAT)
 	return gen_rtx_CONCAT (mode, XEXP (op0, 0),
-			       gen_rtx_NEG (GET_MODE_INNER (mode),
-					    XEXP (op0, 1)));
+			       simplify_gen_unary (NEG, GET_MODE_INNER (mode),
+						   XEXP (op0, 1),
+						   GET_MODE_INNER (mode)));
       else
 	{
 	  enum machine_mode imode = GET_MODE_INNER (mode);
@@ -3091,7 +3327,8 @@ expand_debug_expr (tree exp)
 	  if ((TREE_CODE (TREE_OPERAND (exp, 0)) == VAR_DECL
 	       || TREE_CODE (TREE_OPERAND (exp, 0)) == PARM_DECL
 	       || TREE_CODE (TREE_OPERAND (exp, 0)) == RESULT_DECL)
-	      && !TREE_ADDRESSABLE (TREE_OPERAND (exp, 0)))
+	      && (!TREE_ADDRESSABLE (TREE_OPERAND (exp, 0))
+		  || target_for_debug_bind (TREE_OPERAND (exp, 0))))
 	    return gen_rtx_DEBUG_IMPLICIT_PTR (mode, TREE_OPERAND (exp, 0));
 
 	  if (handled_component_p (TREE_OPERAND (exp, 0)))
@@ -3103,7 +3340,8 @@ expand_debug_expr (tree exp)
 	      if ((TREE_CODE (decl) == VAR_DECL
 		   || TREE_CODE (decl) == PARM_DECL
 		   || TREE_CODE (decl) == RESULT_DECL)
-		  && !TREE_ADDRESSABLE (decl)
+		  && (!TREE_ADDRESSABLE (decl)
+		      || target_for_debug_bind (decl))
 		  && (bitoffset % BITS_PER_UNIT) == 0
 		  && bitsize > 0
 		  && bitsize == maxsize)
@@ -3125,7 +3363,9 @@ expand_debug_expr (tree exp)
       /* Fall through.  */
 
     case CONSTRUCTOR:
-      if (TREE_CODE (TREE_TYPE (exp)) == VECTOR_TYPE)
+      if (TREE_CLOBBER_P (exp))
+	return NULL;
+      else if (TREE_CODE (TREE_TYPE (exp)) == VECTOR_TYPE)
 	{
 	  unsigned i;
 	  tree val;
@@ -3176,7 +3416,23 @@ expand_debug_expr (tree exp)
 	    int part = var_to_partition (SA.map, exp);
 
 	    if (part == NO_PARTITION)
-	      return NULL;
+	      {
+		/* If this is a reference to an incoming value of parameter
+		   that is never used in the code or where the incoming
+		   value is never used in the code, use PARM_DECL's
+		   DECL_RTL if set.  */
+		if (SSA_NAME_IS_DEFAULT_DEF (exp)
+		    && TREE_CODE (SSA_NAME_VAR (exp)) == PARM_DECL)
+		  {
+		    op0 = expand_debug_parm_decl (SSA_NAME_VAR (exp));
+		    if (op0)
+		      goto adjust_mode;
+		    op0 = expand_debug_expr (SSA_NAME_VAR (exp));
+		    if (op0)
+		      goto adjust_mode;
+		  }
+		return NULL;
+	      }
 
 	    gcc_assert (part >= 0 && (unsigned)part < SA.map->num_partitions);
 
@@ -3194,10 +3450,6 @@ expand_debug_expr (tree exp)
     case REDUC_MIN_EXPR:
     case REDUC_PLUS_EXPR:
     case VEC_COND_EXPR:
-    case VEC_EXTRACT_EVEN_EXPR:
-    case VEC_EXTRACT_ODD_EXPR:
-    case VEC_INTERLEAVE_HIGH_EXPR:
-    case VEC_INTERLEAVE_LOW_EXPR:
     case VEC_LSHIFT_EXPR:
     case VEC_PACK_FIX_TRUNC_EXPR:
     case VEC_PACK_SAT_EXPR:
@@ -3209,6 +3461,9 @@ expand_debug_expr (tree exp)
     case VEC_UNPACK_LO_EXPR:
     case VEC_WIDEN_MULT_HI_EXPR:
     case VEC_WIDEN_MULT_LO_EXPR:
+    case VEC_WIDEN_LSHIFT_HI_EXPR:
+    case VEC_WIDEN_LSHIFT_LO_EXPR:
+    case VEC_PERM_EXPR:
       return NULL;
 
    /* Misc codes.  */
@@ -3222,16 +3477,18 @@ expand_debug_expr (tree exp)
       if (SCALAR_INT_MODE_P (GET_MODE (op0))
 	  && SCALAR_INT_MODE_P (mode))
 	{
-	  if (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp, 0))))
-	    op0 = gen_rtx_ZERO_EXTEND (mode, op0);
-	  else
-	    op0 = gen_rtx_SIGN_EXTEND (mode, op0);
-	  if (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp, 1))))
-	    op1 = gen_rtx_ZERO_EXTEND (mode, op1);
-	  else
-	    op1 = gen_rtx_SIGN_EXTEND (mode, op1);
-	  op0 = gen_rtx_MULT (mode, op0, op1);
-	  return gen_rtx_PLUS (mode, op0, op2);
+	  op0
+	    = simplify_gen_unary (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp,
+									  0)))
+				  ? ZERO_EXTEND : SIGN_EXTEND, mode, op0,
+				  inner_mode);
+	  op1
+	    = simplify_gen_unary (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp,
+									  1)))
+				  ? ZERO_EXTEND : SIGN_EXTEND, mode, op1,
+				  inner_mode);
+	  op0 = simplify_gen_binary (MULT, mode, op0, op1);
+	  return simplify_gen_binary (PLUS, mode, op0, op2);
 	}
       return NULL;
 
@@ -3241,7 +3498,7 @@ expand_debug_expr (tree exp)
       if (SCALAR_INT_MODE_P (GET_MODE (op0))
 	  && SCALAR_INT_MODE_P (mode))
 	{
-	  enum machine_mode inner_mode = GET_MODE (op0);
+	  inner_mode = GET_MODE (op0);
 	  if (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp, 0))))
 	    op0 = simplify_gen_unary (ZERO_EXTEND, mode, op0, inner_mode);
 	  else
@@ -3250,30 +3507,33 @@ expand_debug_expr (tree exp)
 	    op1 = simplify_gen_unary (ZERO_EXTEND, mode, op1, inner_mode);
 	  else
 	    op1 = simplify_gen_unary (SIGN_EXTEND, mode, op1, inner_mode);
-	  op0 = gen_rtx_MULT (mode, op0, op1);
+	  op0 = simplify_gen_binary (MULT, mode, op0, op1);
 	  if (TREE_CODE (exp) == WIDEN_MULT_EXPR)
 	    return op0;
 	  else if (TREE_CODE (exp) == WIDEN_MULT_PLUS_EXPR)
-	    return gen_rtx_PLUS (mode, op0, op2);
+	    return simplify_gen_binary (PLUS, mode, op0, op2);
 	  else
-	    return gen_rtx_MINUS (mode, op2, op0);
+	    return simplify_gen_binary (MINUS, mode, op2, op0);
 	}
       return NULL;
 
     case WIDEN_SUM_EXPR:
+    case WIDEN_LSHIFT_EXPR:
       if (SCALAR_INT_MODE_P (GET_MODE (op0))
 	  && SCALAR_INT_MODE_P (mode))
 	{
-	  if (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp, 0))))
-	    op0 = gen_rtx_ZERO_EXTEND (mode, op0);
-	  else
-	    op0 = gen_rtx_SIGN_EXTEND (mode, op0);
-	  return gen_rtx_PLUS (mode, op0, op1);
+	  op0
+	    = simplify_gen_unary (TYPE_UNSIGNED (TREE_TYPE (TREE_OPERAND (exp,
+									  0)))
+				  ? ZERO_EXTEND : SIGN_EXTEND, mode, op0,
+				  inner_mode);
+	  return simplify_gen_binary (TREE_CODE (exp) == WIDEN_LSHIFT_EXPR
+				      ? ASHIFT : PLUS, mode, op0, op1);
 	}
       return NULL;
 
     case FMA_EXPR:
-      return gen_rtx_FMA (mode, op0, op1, op2);
+      return simplify_gen_ternary (FMA, mode, inner_mode, op0, op1, op2);
 
     default:
     flag_unsupported:
@@ -3284,6 +3544,148 @@ expand_debug_expr (tree exp)
       return NULL;
 #endif
     }
+}
+
+/* Return an RTX equivalent to the source bind value of the tree expression
+   EXP.  */
+
+static rtx
+expand_debug_source_expr (tree exp)
+{
+  rtx op0 = NULL_RTX;
+  enum machine_mode mode = VOIDmode, inner_mode;
+
+  switch (TREE_CODE (exp))
+    {
+    case PARM_DECL:
+      {
+	mode = DECL_MODE (exp);
+	op0 = expand_debug_parm_decl (exp);
+	if (op0)
+	   break;
+	/* See if this isn't an argument that has been completely
+	   optimized out.  */
+	if (!DECL_RTL_SET_P (exp)
+	    && !DECL_INCOMING_RTL (exp)
+	    && DECL_ABSTRACT_ORIGIN (current_function_decl))
+	  {
+	    tree aexp = exp;
+	    if (DECL_ABSTRACT_ORIGIN (exp))
+	      aexp = DECL_ABSTRACT_ORIGIN (exp);
+	    if (DECL_CONTEXT (aexp)
+		== DECL_ABSTRACT_ORIGIN (current_function_decl))
+	      {
+		VEC(tree, gc) **debug_args;
+		unsigned int ix;
+		tree ddecl;
+#ifdef ENABLE_CHECKING
+		tree parm;
+		for (parm = DECL_ARGUMENTS (current_function_decl);
+		     parm; parm = DECL_CHAIN (parm))
+		  gcc_assert (parm != exp
+			      && DECL_ABSTRACT_ORIGIN (parm) != aexp);
+#endif
+		debug_args = decl_debug_args_lookup (current_function_decl);
+		if (debug_args != NULL)
+		  {
+		    for (ix = 0; VEC_iterate (tree, *debug_args, ix, ddecl);
+			 ix += 2)
+		      if (ddecl == aexp)
+			return gen_rtx_DEBUG_PARAMETER_REF (mode, aexp);
+		  }
+	      }
+	  }
+	break;
+      }
+    default:
+      break;
+    }
+
+  if (op0 == NULL_RTX)
+    return NULL_RTX;
+
+  inner_mode = GET_MODE (op0);
+  if (mode == inner_mode)
+    return op0;
+
+  if (FLOAT_MODE_P (mode) && FLOAT_MODE_P (inner_mode))
+    {
+      if (GET_MODE_BITSIZE (mode) == GET_MODE_BITSIZE (inner_mode))
+	op0 = simplify_gen_subreg (mode, op0, inner_mode, 0);
+      else if (GET_MODE_BITSIZE (mode) < GET_MODE_BITSIZE (inner_mode))
+	op0 = simplify_gen_unary (FLOAT_TRUNCATE, mode, op0, inner_mode);
+      else
+	op0 = simplify_gen_unary (FLOAT_EXTEND, mode, op0, inner_mode);
+    }
+  else if (FLOAT_MODE_P (mode))
+    gcc_unreachable ();
+  else if (FLOAT_MODE_P (inner_mode))
+    {
+      if (TYPE_UNSIGNED (TREE_TYPE (exp)))
+	op0 = simplify_gen_unary (UNSIGNED_FIX, mode, op0, inner_mode);
+      else
+	op0 = simplify_gen_unary (FIX, mode, op0, inner_mode);
+    }
+  else if (CONSTANT_P (op0)
+	   || GET_MODE_BITSIZE (mode) <= GET_MODE_BITSIZE (inner_mode))
+    op0 = simplify_gen_subreg (mode, op0, inner_mode,
+			       subreg_lowpart_offset (mode, inner_mode));
+  else if (TYPE_UNSIGNED (TREE_TYPE (exp)))
+    op0 = simplify_gen_unary (ZERO_EXTEND, mode, op0, inner_mode);
+  else
+    op0 = simplify_gen_unary (SIGN_EXTEND, mode, op0, inner_mode);
+
+  return op0;
+}
+
+/* Ensure INSN_VAR_LOCATION_LOC (insn) doesn't have unbound complexity.
+   Allow 4 levels of rtl nesting for most rtl codes, and if we see anything
+   deeper than that, create DEBUG_EXPRs and emit DEBUG_INSNs before INSN.  */
+
+static void
+avoid_complex_debug_insns (rtx insn, rtx *exp_p, int depth)
+{
+  rtx exp = *exp_p;
+
+  if (exp == NULL_RTX)
+    return;
+
+  if ((OBJECT_P (exp) && !MEM_P (exp)) || GET_CODE (exp) == CLOBBER)
+    return;
+
+  if (depth == 4)
+    {
+      /* Create DEBUG_EXPR (and DEBUG_EXPR_DECL).  */
+      rtx dval = make_debug_expr_from_rtl (exp);
+
+      /* Emit a debug bind insn before INSN.  */
+      rtx bind = gen_rtx_VAR_LOCATION (GET_MODE (exp),
+				       DEBUG_EXPR_TREE_DECL (dval), exp,
+				       VAR_INIT_STATUS_INITIALIZED);
+
+      emit_debug_insn_before (bind, insn);
+      *exp_p = dval;
+      return;
+    }
+
+  const char *format_ptr = GET_RTX_FORMAT (GET_CODE (exp));
+  int i, j;
+  for (i = 0; i < GET_RTX_LENGTH (GET_CODE (exp)); i++)
+    switch (*format_ptr++)
+      {
+      case 'e':
+	avoid_complex_debug_insns (insn, &XEXP (exp, i), depth + 1);
+	break;
+
+      case 'E':
+      case 'V':
+	for (j = 0; j < XVECLEN (exp, i); j++)
+	  avoid_complex_debug_insns (insn, &XVECEXP (exp, i, j), depth + 1);
+	break;
+
+      default:
+	break;
+      }
 }
 
 /* Expand the _LOCs in debug insns.  We run this after expanding all
@@ -3306,14 +3708,18 @@ expand_debug_locations (void)
     if (DEBUG_INSN_P (insn))
       {
 	tree value = (tree)INSN_VAR_LOCATION_LOC (insn);
-	rtx val;
+	rtx val, prev_insn, insn2;
 	enum machine_mode mode;
 
 	if (value == NULL_TREE)
 	  val = NULL_RTX;
 	else
 	  {
-	    val = expand_debug_expr (value);
+	    if (INSN_VAR_LOCATION_STATUS (insn)
+		== VAR_INIT_STATUS_UNINITIALIZED)
+	      val = expand_debug_source_expr (value);
+	    else
+	      val = expand_debug_expr (value);
 	    gcc_assert (last == get_last_insn ());
 	  }
 
@@ -3332,6 +3738,9 @@ expand_debug_locations (void)
 	  }
 
 	INSN_VAR_LOCATION_LOC (insn) = val;
+	prev_insn = PREV_INSN (insn);
+	for (insn2 = insn; insn2 != prev_insn; insn2 = PREV_INSN (insn2))
+	  avoid_complex_debug_insns (insn2, &INSN_VAR_LOCATION_LOC (insn2), 0);
       }
 
   flag_strict_aliasing = save_strict_alias;
@@ -3506,7 +3915,7 @@ expand_gimple_basic_block (basic_block bb)
 		    val = gen_rtx_VAR_LOCATION
 			(mode, vexpr, (rtx)value, VAR_INIT_STATUS_INITIALIZED);
 
-		    val = emit_debug_insn (val);
+		    emit_debug_insn (val);
 
 		    FOR_EACH_IMM_USE_STMT (debugstmt, imm_iter, op)
 		      {
@@ -3547,6 +3956,11 @@ expand_gimple_basic_block (basic_block bb)
 	      rtx val;
 	      enum machine_mode mode;
 
+	      if (TREE_CODE (var) != DEBUG_EXPR_DECL
+		  && TREE_CODE (var) != LABEL_DECL
+		  && !target_for_debug_bind (var))
+		goto delink_debug_stmt;
+
 	      if (gimple_debug_bind_has_value_p (stmt))
 		value = gimple_debug_bind_get_value (stmt);
 	      else
@@ -3565,17 +3979,18 @@ expand_gimple_basic_block (basic_block bb)
 	      val = gen_rtx_VAR_LOCATION
 		(mode, var, (rtx)value, VAR_INIT_STATUS_INITIALIZED);
 
-	      val = emit_debug_insn (val);
+	      emit_debug_insn (val);
 
 	      if (dump_file && (dump_flags & TDF_DETAILS))
 		{
 		  /* We can't dump the insn with a TREE where an RTX
 		     is expected.  */
-		  INSN_VAR_LOCATION_LOC (val) = const0_rtx;
+		  PAT_VAR_LOCATION_LOC (val) = const0_rtx;
 		  maybe_dump_rtl_for_gimple_stmt (stmt, last);
-		  INSN_VAR_LOCATION_LOC (val) = (rtx)value;
+		  PAT_VAR_LOCATION_LOC (val) = (rtx)value;
 		}
 
+	    delink_debug_stmt:
 	      /* In order not to generate too many debug temporaries,
 	         we delink all uses of debug statements we already expanded.
 		 Therefore debug statements between definition and real
@@ -3590,6 +4005,39 @@ expand_gimple_basic_block (basic_block bb)
 	      stmt = gsi_stmt (nsi);
 	      if (!gimple_debug_bind_p (stmt))
 		break;
+	    }
+
+	  set_curr_insn_source_location (sloc);
+	  set_curr_insn_block (sblock);
+	}
+      else if (gimple_debug_source_bind_p (stmt))
+	{
+	  location_t sloc = get_curr_insn_source_location ();
+	  tree sblock = get_curr_insn_block ();
+	  tree var = gimple_debug_source_bind_get_var (stmt);
+	  tree value = gimple_debug_source_bind_get_value (stmt);
+	  rtx val;
+	  enum machine_mode mode;
+
+	  last = get_last_insn ();
+
+	  set_curr_insn_source_location (gimple_location (stmt));
+	  set_curr_insn_block (gimple_block (stmt));
+
+	  mode = DECL_MODE (var);
+
+	  val = gen_rtx_VAR_LOCATION (mode, var, (rtx)value,
+				      VAR_INIT_STATUS_UNINITIALIZED);
+
+	  emit_debug_insn (val);
+
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      /* We can't dump the insn with a TREE where an RTX
+		 is expected.  */
+	      PAT_VAR_LOCATION_LOC (val) = const0_rtx;
+	      maybe_dump_rtl_for_gimple_stmt (stmt, last);
+	      PAT_VAR_LOCATION_LOC (val) = (rtx)value;
 	    }
 
 	  set_curr_insn_source_location (sloc);
@@ -4080,6 +4528,31 @@ gimple_expand_cfg (void)
 	}
     }
 
+  /* If we have a class containing differently aligned pointers
+     we need to merge those into the corresponding RTL pointer
+     alignment.  */
+  for (i = 1; i < num_ssa_names; i++)
+    {
+      tree name = ssa_name (i);
+      int part;
+      rtx r;
+
+      if (!name
+	  || !POINTER_TYPE_P (TREE_TYPE (name))
+	  /* We might have generated new SSA names in
+	     update_alias_info_with_stack_vars.  They will have a NULL
+	     defining statements, and won't be part of the partitioning,
+	     so ignore those.  */
+	  || !SSA_NAME_DEF_STMT (name))
+	continue;
+      part = var_to_partition (SA.map, name);
+      if (part == NO_PARTITION)
+	continue;
+      r = SA.partition_to_pseudo[part];
+      if (REG_P (r))
+	mark_reg_pointer (r, get_pointer_alignment (name));
+    }
+
   /* If this function is `main', emit a call to `__main'
      to run global initializers, etc.  */
   if (DECL_NAME (current_function_decl)
@@ -4132,6 +4605,8 @@ gimple_expand_cfg (void)
   /* Zap the tree EH table.  */
   set_eh_throw_stmt_table (cfun, NULL);
 
+  /* We need JUMP_LABEL be set in order to redirect jumps, and hence
+     split edges which edge insertions might do.  */
   rebuild_jump_labels (get_insns ());
 
   FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, EXIT_BLOCK_PTR, next_bb)
@@ -4142,6 +4617,7 @@ gimple_expand_cfg (void)
 	{
 	  if (e->insns.r)
 	    {
+	      rebuild_jump_labels_chain (e->insns.r);
 	      /* Avoid putting insns before parm_birth_insn.  */
 	      if (e->src == ENTRY_BLOCK_PTR
 		  && single_succ_p (ENTRY_BLOCK_PTR)
@@ -4234,6 +4710,14 @@ gimple_expand_cfg (void)
   /* After expanding, the return labels are no longer needed. */
   return_label = NULL;
   naked_return_label = NULL;
+
+  /* After expanding, the tm_restart map is no longer needed.  */
+  if (cfun->gimple_df->tm_restart)
+    {
+      htab_delete (cfun->gimple_df->tm_restart);
+      cfun->gimple_df->tm_restart = NULL;
+    }
+
   /* Tag the blocks with a depth number so that change_scope can find
      the common parent easily.  */
   set_block_levels (DECL_INITIAL (cfun->decl), 0);
@@ -4259,7 +4743,6 @@ struct rtl_opt_pass pass_expand =
   PROP_ssa | PROP_trees,		/* properties_destroyed */
   TODO_verify_ssa | TODO_verify_flow
     | TODO_verify_stmts,		/* todo_flags_start */
-  TODO_dump_func
-  | TODO_ggc_collect			/* todo_flags_finish */
+  TODO_ggc_collect			/* todo_flags_finish */
  }
 };

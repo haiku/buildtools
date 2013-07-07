@@ -3,7 +3,7 @@
 <title>Prerequisites for GCC</title>
 <meta http-equiv="Content-Type" content="text/html">
 <meta name="description" content="Prerequisites for GCC">
-<meta name="generator" content="makeinfo 4.13">
+<meta name="generator" content="makeinfo 4.12">
 <link title="Top" rel="top" href="#Top">
 <link href="http://www.gnu.org/software/texinfo/" rel="generator-home" title="Texinfo Homepage">
 <!--
@@ -107,10 +107,8 @@ systems' <samp><span class="command">tar</span></samp> programs will also work, 
 Necessary when targetting Darwin, building &lsquo;<samp><span class="samp">libstdc++</span></samp>&rsquo;,
 and not using <samp><span class="option">--disable-symvers</span></samp>. 
 Necessary when targetting Solaris 2 with Sun <samp><span class="command">ld</span></samp> and not using
-<samp><span class="option">--disable-symvers</span></samp>.  A helper
-script needs &lsquo;<samp><span class="samp">Glob.pm</span></samp>&rsquo;, which is missing from <samp><span class="command">perl</span></samp> 5.005
-included in Solaris&nbsp;8.  The bundled <samp><span class="command">perl</span></samp> in Solaris&nbsp;9 and up
-works.
+<samp><span class="option">--disable-symvers</span></samp>.  The bundled <samp><span class="command">perl</span></samp> in Solaris&nbsp;8
+and up works.
 
      <p>Necessary when regenerating <samp><span class="file">Makefile</span></samp> dependencies in libiberty. 
 Necessary when regenerating <samp><span class="file">libiberty/functions.texi</span></samp>. 
@@ -128,34 +126,36 @@ others optional.  While any sufficiently new version of required tools
 usually work, library requirements are generally stricter.  Newer
 versions may work in some cases, but it's safer to use the exact
 versions documented.  We appreciate bug reports about problems with
-newer versions, though.
+newer versions, though.  If your OS vendor provides packages for the
+support libraries then using those packages may be the simplest way to
+install the libraries.
 
      <dl>
 <dt>GNU Multiple Precision Library (GMP) version 4.3.2 (or later)<dd>
-Necessary to build GCC.  If you do not have it installed in your
-library search path, you will have to configure with the
+Necessary to build GCC.  If a GMP source distribution is found in a
+subdirectory of your GCC sources named <samp><span class="file">gmp</span></samp>, it will be built
+together with GCC.  Alternatively, if GMP is already installed but it
+is not in your library search path, you will have to configure with the
 <samp><span class="option">--with-gmp</span></samp> configure option.  See also <samp><span class="option">--with-gmp-lib</span></samp>
-and <samp><span class="option">--with-gmp-include</span></samp>.  Alternatively, if a GMP source
-distribution is found in a subdirectory of your GCC sources named
-<samp><span class="file">gmp</span></samp>, it will be built together with GCC.
+and <samp><span class="option">--with-gmp-include</span></samp>.
 
      <br><dt>MPFR Library version 2.4.2 (or later)<dd>
 Necessary to build GCC.  It can be downloaded from
-<a href="http://www.mpfr.org/">http://www.mpfr.org/</a>.  The <samp><span class="option">--with-mpfr</span></samp> configure
-option should be used if your MPFR Library is not installed in your
-default library search path.  See also <samp><span class="option">--with-mpfr-lib</span></samp> and
-<samp><span class="option">--with-mpfr-include</span></samp>.  Alternatively, if a MPFR source
-distribution is found in a subdirectory of your GCC sources named
-<samp><span class="file">mpfr</span></samp>, it will be built together with GCC.
+<a href="http://www.mpfr.org/">http://www.mpfr.org/</a>.  If an MPFR source distribution is found
+in a subdirectory of your GCC sources named <samp><span class="file">mpfr</span></samp>, it will be
+built together with GCC.  Alternatively, if MPFR is already installed
+but it is not in your default library search path, the
+<samp><span class="option">--with-mpfr</span></samp> configure option should be used.  See also
+<samp><span class="option">--with-mpfr-lib</span></samp> and <samp><span class="option">--with-mpfr-include</span></samp>.
 
      <br><dt>MPC Library version 0.8.1 (or later)<dd>
 Necessary to build GCC.  It can be downloaded from
-<a href="http://www.multiprecision.org/">http://www.multiprecision.org/</a>.  The <samp><span class="option">--with-mpc</span></samp>
-configure option should be used if your MPC Library is not installed
-in your default library search path.  See also <samp><span class="option">--with-mpc-lib</span></samp>
-and <samp><span class="option">--with-mpc-include</span></samp>.  Alternatively, if an MPC source
-distribution is found in a subdirectory of your GCC sources named
-<samp><span class="file">mpc</span></samp>, it will be built together with GCC.
+<a href="http://www.multiprecision.org/">http://www.multiprecision.org/</a>.  If an MPC source distribution
+is found in a subdirectory of your GCC sources named <samp><span class="file">mpc</span></samp>, it
+will be built together with GCC.  Alternatively, if MPC is already
+installed but it is not in your default library search path, the
+<samp><span class="option">--with-mpc</span></samp> configure option should be used.  See also
+<samp><span class="option">--with-mpc-lib</span></samp> and <samp><span class="option">--with-mpc-include</span></samp>.
 
      <br><dt>Parma Polyhedra Library (PPL) version 0.11<dd>
 Necessary to build GCC with the Graphite loop optimizations. 
@@ -271,7 +271,7 @@ the GCC-specific entry point.  You can download a suitable jar from
      <br><dt>antlr.jar version 2.7.1 (or later)<dt>antlr binary<dd>
 If you wish to build the <samp><span class="command">gjdoc</span></samp> binary in libjava, you will
 need to have an <samp><span class="file">antlr.jar</span></samp> library available. The library is
-searched in system locations but can be configured with
+searched for in system locations but can be specified with
 <samp><span class="option">--with-antlr-jar=</span></samp> instead.  When configuring with
 <samp><span class="option">--enable-java-maintainer-mode</span></samp>, you will need to have one of
 the executables named <samp><span class="command">cantlr</span></samp>, <samp><span class="command">runantlr</span></samp> or

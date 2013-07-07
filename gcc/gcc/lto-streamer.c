@@ -32,7 +32,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "bitmap.h"
 #include "vec.h"
+#include "tree-streamer.h"
 #include "lto-streamer.h"
+#include "streamer-hooks.h"
 
 /* Statistics gathered during LTO, WPA and LTRANS.  */
 struct lto_stats_d lto_stats;
@@ -164,13 +166,13 @@ lto_get_section_name (int section_type, const char *name, struct lto_file_decl_d
      doesn't confuse the reader with merged sections.
 
      For options don't add a ID, the option reader cannot deal with them
-     and merging should be ok here.
-
-     XXX: use crc64 to minimize collisions? */
+     and merging should be ok here. */
   if (section_type == LTO_section_opts)
     strcpy (post, "");
+  else if (f != NULL) 
+    sprintf (post, "." HOST_WIDE_INT_PRINT_HEX_PURE, f->id);
   else
-    sprintf (post, ".%x", f ? f->id : crc32_string(0, get_random_seed (false)));
+    sprintf (post, "." HOST_WIDE_INT_PRINT_HEX_PURE, get_random_seed (false)); 
   return concat (LTO_SECTION_NAME_PREFIX, sep, add, post, NULL);
 }
 
@@ -255,423 +257,6 @@ print_lto_report (void)
 }
 
 
-/* Check that all the TS_* structures handled by the lto_output_* and
-   lto_input_* routines are exactly ALL the structures defined in
-   treestruct.def.  */
-
-static void
-check_handled_ts_structures (void)
-{
-  bool handled_p[LAST_TS_ENUM];
-  unsigned i;
-
-  memset (&handled_p, 0, sizeof (handled_p));
-
-  /* These are the TS_* structures that are either handled or
-     explicitly ignored by the streamer routines.  */
-  handled_p[TS_BASE] = true;
-  handled_p[TS_COMMON] = true;
-  handled_p[TS_INT_CST] = true;
-  handled_p[TS_REAL_CST] = true;
-  handled_p[TS_FIXED_CST] = true;
-  handled_p[TS_VECTOR] = true;
-  handled_p[TS_STRING] = true;
-  handled_p[TS_COMPLEX] = true;
-  handled_p[TS_IDENTIFIER] = true;
-  handled_p[TS_DECL_MINIMAL] = true;
-  handled_p[TS_DECL_COMMON] = true;
-  handled_p[TS_DECL_WRTL] = true;
-  handled_p[TS_DECL_NON_COMMON] = true;
-  handled_p[TS_DECL_WITH_VIS] = true;
-  handled_p[TS_FIELD_DECL] = true;
-  handled_p[TS_VAR_DECL] = true;
-  handled_p[TS_PARM_DECL] = true;
-  handled_p[TS_LABEL_DECL] = true;
-  handled_p[TS_RESULT_DECL] = true;
-  handled_p[TS_CONST_DECL] = true;
-  handled_p[TS_TYPE_DECL] = true;
-  handled_p[TS_FUNCTION_DECL] = true;
-  handled_p[TS_TYPE] = true;
-  handled_p[TS_LIST] = true;
-  handled_p[TS_VEC] = true;
-  handled_p[TS_EXP] = true;
-  handled_p[TS_SSA_NAME] = true;
-  handled_p[TS_BLOCK] = true;
-  handled_p[TS_BINFO] = true;
-  handled_p[TS_STATEMENT_LIST] = true;
-  handled_p[TS_CONSTRUCTOR] = true;
-  handled_p[TS_OMP_CLAUSE] = true;
-  handled_p[TS_OPTIMIZATION] = true;
-  handled_p[TS_TARGET_OPTION] = true;
-  handled_p[TS_TRANSLATION_UNIT_DECL] = true;
-
-  /* Anything not marked above will trigger the following assertion.
-     If this assertion triggers, it means that there is a new TS_*
-     structure that should be handled by the streamer.  */
-  for (i = 0; i < LAST_TS_ENUM; i++)
-    gcc_assert (handled_p[i]);
-}
-
-
-/* Helper for lto_streamer_cache_insert_1.  Add T to CACHE->NODES at
-   slot IX.  Add OFFSET to CACHE->OFFSETS at slot IX.  */
-
-static void
-lto_streamer_cache_add_to_node_array (struct lto_streamer_cache_d *cache,
-				      int ix, tree t, unsigned offset)
-{
-  gcc_assert (ix >= 0);
-
-  /* Grow the array of nodes and offsets to accomodate T at IX.  */
-  if (ix >= (int) VEC_length (tree, cache->nodes))
-    {
-      size_t sz = ix + (20 + ix) / 4;
-      VEC_safe_grow_cleared (tree, heap, cache->nodes, sz);
-      VEC_safe_grow_cleared (unsigned, heap, cache->offsets, sz);
-    }
-
-  VEC_replace (tree, cache->nodes, ix, t);
-  VEC_replace (unsigned, cache->offsets, ix, offset);
-}
-
-
-/* Helper for lto_streamer_cache_insert and lto_streamer_cache_insert_at.
-   CACHE, T, IX_P and OFFSET_P are as in lto_streamer_cache_insert.
-
-   If INSERT_AT_NEXT_SLOT_P is true, T is inserted at the next available
-   slot in the cache.  Otherwise, T is inserted at the position indicated
-   in *IX_P.
-
-   If T already existed in CACHE, return true.  Otherwise,
-   return false.  */
-
-static bool
-lto_streamer_cache_insert_1 (struct lto_streamer_cache_d *cache,
-			     tree t, int *ix_p, unsigned *offset_p,
-			     bool insert_at_next_slot_p)
-{
-  void **slot;
-  struct tree_int_map d_entry, *entry;
-  int ix;
-  unsigned offset;
-  bool existed_p;
-
-  gcc_assert (t);
-
-  d_entry.base.from = t;
-  slot = htab_find_slot (cache->node_map, &d_entry, INSERT);
-  if (*slot == NULL)
-    {
-      /* Determine the next slot to use in the cache.  */
-      if (insert_at_next_slot_p)
-	ix = cache->next_slot++;
-      else
-	ix = *ix_p;
-
-      entry = (struct tree_int_map *)pool_alloc (cache->node_map_entries);
-      entry->base.from = t;
-      entry->to = (unsigned) ix;
-      *slot = entry;
-
-      /* If no offset was given, store the invalid offset -1.  */
-      offset = (offset_p) ? *offset_p : (unsigned) -1;
-
-      lto_streamer_cache_add_to_node_array (cache, ix, t, offset);
-
-      /* Indicate that the item was not present in the cache.  */
-      existed_p = false;
-    }
-  else
-    {
-      entry = (struct tree_int_map *) *slot;
-      ix = (int) entry->to;
-      offset = VEC_index (unsigned, cache->offsets, ix);
-
-      if (!insert_at_next_slot_p && ix != *ix_p)
-	{
-	  /* If the caller wants to insert T at a specific slot
-	     location, and ENTRY->TO does not match *IX_P, add T to
-	     the requested location slot.  This situation arises when
-	     streaming builtin functions.
-
-	     For instance, on the writer side we could have two
-	     FUNCTION_DECLS T1 and T2 that are represented by the same
-	     builtin function.  The reader will only instantiate the
-	     canonical builtin, but since T1 and T2 had been
-	     originally stored in different cache slots (S1 and S2),
-	     the reader must be able to find the canonical builtin
-	     function at slots S1 and S2.  */
-	  gcc_assert (lto_stream_as_builtin_p (t));
-	  ix = *ix_p;
-
-	  /* Since we are storing a builtin, the offset into the
-	     stream is not necessary as we will not need to read
-	     forward in the stream.  */
-	  lto_streamer_cache_add_to_node_array (cache, ix, t, -1);
-	}
-
-      /* Indicate that T was already in the cache.  */
-      existed_p = true;
-    }
-
-  if (ix_p)
-    *ix_p = ix;
-
-  if (offset_p)
-    *offset_p = offset;
-
-  return existed_p;
-}
-
-
-/* Insert tree node T in CACHE.  If T already existed in the cache
-   return true.  Otherwise, return false.
-
-   If IX_P is non-null, update it with the index into the cache where
-   T has been stored.
-
-   *OFFSET_P represents the offset in the stream where T is physically
-   written out.  The first time T is added to the cache, *OFFSET_P is
-   recorded in the cache together with T.  But if T already existed
-   in the cache, *OFFSET_P is updated with the value that was recorded
-   the first time T was added to the cache.
-
-   If OFFSET_P is NULL, it is ignored.  */
-
-bool
-lto_streamer_cache_insert (struct lto_streamer_cache_d *cache, tree t,
-			   int *ix_p, unsigned *offset_p)
-{
-  return lto_streamer_cache_insert_1 (cache, t, ix_p, offset_p, true);
-}
-
-
-/* Insert tree node T in CACHE at slot IX.  If T already
-   existed in the cache return true.  Otherwise, return false.  */
-
-bool
-lto_streamer_cache_insert_at (struct lto_streamer_cache_d *cache,
-			      tree t, int ix)
-{
-  return lto_streamer_cache_insert_1 (cache, t, &ix, NULL, false);
-}
-
-
-/* Return true if tree node T exists in CACHE.  If IX_P is
-   not NULL, write to *IX_P the index into the cache where T is stored
-   (-1 if T is not found).  */
-
-bool
-lto_streamer_cache_lookup (struct lto_streamer_cache_d *cache, tree t,
-			   int *ix_p)
-{
-  void **slot;
-  struct tree_int_map d_slot;
-  bool retval;
-  int ix;
-
-  gcc_assert (t);
-
-  d_slot.base.from = t;
-  slot = htab_find_slot (cache->node_map, &d_slot, NO_INSERT);
-  if (slot == NULL)
-    {
-      retval = false;
-      ix = -1;
-    }
-  else
-    {
-      retval = true;
-      ix = (int) ((struct tree_int_map *) *slot)->to;
-    }
-
-  if (ix_p)
-    *ix_p = ix;
-
-  return retval;
-}
-
-
-/* Return the tree node at slot IX in CACHE.  */
-
-tree
-lto_streamer_cache_get (struct lto_streamer_cache_d *cache, int ix)
-{
-  gcc_assert (cache);
-
-  /* If the reader is requesting an index beyond the length of the
-     cache, it will need to read ahead.  Return NULL_TREE to indicate
-     that.  */
-  if ((unsigned) ix >= VEC_length (tree, cache->nodes))
-    return NULL_TREE;
-
-  return VEC_index (tree, cache->nodes, (unsigned) ix);
-}
-
-
-/* Record NODE in COMMON_NODES if it is not NULL and is not already in
-   SEEN_NODES.  */
-
-static void
-lto_record_common_node (tree *nodep, VEC(tree, heap) **common_nodes,
-			struct pointer_set_t *seen_nodes)
-{
-  tree node = *nodep;
-
-  if (node == NULL_TREE)
-    return;
-
-  if (TYPE_P (node))
-    {
-      /* Type merging will get confused by the canonical types as they
-	 are set by the middle-end.  */
-      if (in_lto_p)
-	TYPE_CANONICAL (node) = NULL_TREE;
-      node = gimple_register_type (node);
-      TYPE_CANONICAL (node) = gimple_register_canonical_type (node);
-      *nodep = node;
-    }
-
-  /* Return if node is already seen.  */
-  if (pointer_set_insert (seen_nodes, node))
-    return;
-
-  VEC_safe_push (tree, heap, *common_nodes, node);
-
-  if (tree_node_can_be_shared (node))
-    {
-      if (POINTER_TYPE_P (node)
-	  || TREE_CODE (node) == COMPLEX_TYPE
-	  || TREE_CODE (node) == ARRAY_TYPE)
-	lto_record_common_node (&TREE_TYPE (node), common_nodes, seen_nodes);
-    }
-}
-
-
-/* Generate a vector of common nodes and make sure they are merged
-   properly according to the the gimple type table.  */
-
-static VEC(tree,heap) *
-lto_get_common_nodes (void)
-{
-  unsigned i;
-  VEC(tree,heap) *common_nodes = NULL;
-  struct pointer_set_t *seen_nodes;
-
-  /* The MAIN_IDENTIFIER_NODE is normally set up by the front-end, but the
-     LTO back-end must agree. Currently, the only languages that set this
-     use the name "main".  */
-  if (main_identifier_node)
-    {
-      const char *main_name = IDENTIFIER_POINTER (main_identifier_node);
-      gcc_assert (strcmp (main_name, "main") == 0);
-    }
-  else
-    main_identifier_node = get_identifier ("main");
-
-  gcc_assert (ptrdiff_type_node == integer_type_node);
-
-  /* FIXME lto.  In the C++ front-end, fileptr_type_node is defined as a
-     variant copy of of ptr_type_node, rather than ptr_node itself.  The
-     distinction should only be relevant to the front-end, so we always
-     use the C definition here in lto1.
-
-     These should be assured in pass_ipa_free_lang_data.  */
-  gcc_assert (fileptr_type_node == ptr_type_node);
-  gcc_assert (TYPE_MAIN_VARIANT (fileptr_type_node) == ptr_type_node);
-
-  seen_nodes = pointer_set_create ();
-
-  /* Skip itk_char.  char_type_node is shared with the appropriately
-     signed variant.  */
-  for (i = itk_signed_char; i < itk_none; i++)
-    lto_record_common_node (&integer_types[i], &common_nodes, seen_nodes);
-
-  for (i = 0; i < TYPE_KIND_LAST; i++)
-    lto_record_common_node (&sizetype_tab[i], &common_nodes, seen_nodes);
-
-  for (i = 0; i < TI_MAX; i++)
-    lto_record_common_node (&global_trees[i], &common_nodes, seen_nodes);
-
-  pointer_set_destroy (seen_nodes);
-
-  return common_nodes;
-}
-
-
-/* Assign an index to tree node T and enter it in the streamer cache
-   CACHE.  */
-
-static void
-preload_common_node (struct lto_streamer_cache_d *cache, tree t)
-{
-  gcc_assert (t);
-
-  lto_streamer_cache_insert (cache, t, NULL, NULL);
-
- /* The FIELD_DECLs of structures should be shared, so that every
-    COMPONENT_REF uses the same tree node when referencing a field.
-    Pointer equality between FIELD_DECLs is used by the alias
-    machinery to compute overlapping memory references (See
-    nonoverlapping_component_refs_p).  */
- if (TREE_CODE (t) == RECORD_TYPE)
-   {
-     tree f;
-
-     for (f = TYPE_FIELDS (t); f; f = TREE_CHAIN (f))
-       preload_common_node (cache, f);
-   }
-}
-
-
-/* Create a cache of pickled nodes.  */
-
-struct lto_streamer_cache_d *
-lto_streamer_cache_create (void)
-{
-  struct lto_streamer_cache_d *cache;
-  VEC(tree, heap) *common_nodes;
-  unsigned i;
-  tree node;
-
-  cache = XCNEW (struct lto_streamer_cache_d);
-
-  cache->node_map = htab_create (101, tree_int_map_hash, tree_int_map_eq, NULL);
-
-  cache->node_map_entries = create_alloc_pool ("node map",
-					       sizeof (struct tree_int_map),
-					       100);
-
-  /* Load all the well-known tree nodes that are always created by
-     the compiler on startup.  This prevents writing them out
-     unnecessarily.  */
-  common_nodes = lto_get_common_nodes ();
-
-  FOR_EACH_VEC_ELT (tree, common_nodes, i, node)
-    preload_common_node (cache, node);
-
-  VEC_free(tree, heap, common_nodes);
-
-  return cache;
-}
-
-
-/* Delete the streamer cache C.  */
-
-void
-lto_streamer_cache_delete (struct lto_streamer_cache_d *c)
-{
-  if (c == NULL)
-    return;
-
-  htab_delete (c->node_map);
-  free_alloc_pool (c->node_map_entries);
-  VEC_free (tree, heap, c->nodes);
-  VEC_free (unsigned, heap, c->offsets);
-  free (c);
-}
-
-
 #ifdef LTO_STREAMER_DEBUG
 static htab_t tree_htab;
 
@@ -706,7 +291,7 @@ lto_streamer_init (void)
      match exactly the structures defined in treestruct.def.  When a
      new TS_* astructure is added, the streamer should be updated to
      handle it.  */
-  check_handled_ts_structures ();
+  streamer_check_handled_ts_structures ();
 
 #ifdef LTO_STREAMER_DEBUG
   tree_htab = htab_create (31, hash_tree, eq_tree, NULL);
@@ -796,4 +381,15 @@ lto_check_version (int major, int minor)
 	         "of the expected %d.%d",
 		 major, minor,
 		 LTO_major_version, LTO_minor_version);
+}
+
+
+/* Initialize all the streamer hooks used for streaming GIMPLE.  */
+
+void
+lto_streamer_hooks_init (void)
+{
+  streamer_hooks_init ();
+  streamer_hooks.write_tree = lto_output_tree;
+  streamer_hooks.read_tree = lto_input_tree;
 }

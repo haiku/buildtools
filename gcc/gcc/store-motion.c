@@ -309,8 +309,7 @@ load_kills_store (const_rtx x, const_rtx store_pattern, int after)
   if (after)
     return anti_dependence (x, store_pattern);
   else
-    return true_dependence (store_pattern, GET_MODE (store_pattern), x,
-			    rtx_addr_varies_p);
+    return true_dependence (store_pattern, GET_MODE (store_pattern), x);
 }
 
 /* Go through the entire rtx X, looking for any loads which might alias
@@ -1258,8 +1257,6 @@ struct rtl_opt_pass pass_rtl_store_motion =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func |
   TODO_verify_flow | TODO_ggc_collect   /* todo_flags_finish */
  }
 };
-

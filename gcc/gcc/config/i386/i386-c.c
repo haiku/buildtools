@@ -34,14 +34,14 @@ along with GCC; see the file COPYING3.  If not see
 
 static bool ix86_pragma_target_parse (tree, tree);
 static void ix86_target_macros_internal
-  (int, enum processor_type, enum processor_type, enum fpmath_unit,
+  (HOST_WIDE_INT, enum processor_type, enum processor_type, enum fpmath_unit,
    void (*def_or_undef) (cpp_reader *, const char *));
 
 
 /* Internal function to either define or undef the appropriate system
    macros.  */
 static void
-ix86_target_macros_internal (int isa_flag,
+ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
 			     enum processor_type arch,
 			     enum processor_type tune,
 			     enum fpmath_unit fpmath,
@@ -109,6 +109,10 @@ ix86_target_macros_internal (int isa_flag,
     case PROCESSOR_BDVER1:
       def_or_undef (parse_in, "__bdver1");
       def_or_undef (parse_in, "__bdver1__");
+      break;
+    case PROCESSOR_BDVER2:
+      def_or_undef (parse_in, "__bdver2");
+      def_or_undef (parse_in, "__bdver2__");
       break;
     case PROCESSOR_BTVER1:
       def_or_undef (parse_in, "__btver1");
@@ -198,6 +202,9 @@ ix86_target_macros_internal (int isa_flag,
     case PROCESSOR_BDVER1:
       def_or_undef (parse_in, "__tune_bdver1__");
       break;
+    case PROCESSOR_BDVER2:
+      def_or_undef (parse_in, "__tune_bdver2__");
+      break;
    case PROCESSOR_BTVER1:
       def_or_undef (parse_in, "__tune_btver1__");
       break;
@@ -226,6 +233,30 @@ ix86_target_macros_internal (int isa_flag,
       break;
     }
 
+  switch (ix86_cmodel)
+    {
+    case CM_SMALL:
+    case CM_SMALL_PIC:
+      def_or_undef (parse_in, "__code_model_small__");
+      break;
+    case CM_MEDIUM:
+    case CM_MEDIUM_PIC:
+      def_or_undef (parse_in, "__code_model_medium__");
+      break;
+    case CM_LARGE:
+    case CM_LARGE_PIC:
+      def_or_undef (parse_in, "__code_model_large__");
+      break;
+    case CM_32:
+      def_or_undef (parse_in, "__code_model_32__");
+      break;
+    case CM_KERNEL:
+      def_or_undef (parse_in, "__code_model_kernel__");
+      break;
+    default:
+      ;
+    }
+
   if (isa_flag & OPTION_MASK_ISA_MMX)
     def_or_undef (parse_in, "__MMX__");
   if (isa_flag & OPTION_MASK_ISA_3DNOW)
@@ -250,6 +281,8 @@ ix86_target_macros_internal (int isa_flag,
     def_or_undef (parse_in, "__PCLMUL__");
   if (isa_flag & OPTION_MASK_ISA_AVX)
     def_or_undef (parse_in, "__AVX__");
+  if (isa_flag & OPTION_MASK_ISA_AVX2)
+    def_or_undef (parse_in, "__AVX2__");
   if (isa_flag & OPTION_MASK_ISA_FMA)
     def_or_undef (parse_in, "__FMA__");
   if (isa_flag & OPTION_MASK_ISA_SSE4A)
@@ -264,6 +297,10 @@ ix86_target_macros_internal (int isa_flag,
     def_or_undef (parse_in, "__ABM__");
   if (isa_flag & OPTION_MASK_ISA_BMI)
     def_or_undef (parse_in, "__BMI__");
+  if (isa_flag & OPTION_MASK_ISA_BMI2)
+    def_or_undef (parse_in, "__BMI2__");
+  if (isa_flag & OPTION_MASK_ISA_LZCNT)
+    def_or_undef (parse_in, "__LZCNT__");
   if (isa_flag & OPTION_MASK_ISA_TBM)
     def_or_undef (parse_in, "__TBM__");
   if (isa_flag & OPTION_MASK_ISA_POPCNT)
@@ -292,9 +329,9 @@ ix86_pragma_target_parse (tree args, tree pop_target)
   tree cur_tree;
   struct cl_target_option *prev_opt;
   struct cl_target_option *cur_opt;
-  int prev_isa;
-  int cur_isa;
-  int diff_isa;
+  HOST_WIDE_INT prev_isa;
+  HOST_WIDE_INT cur_isa;
+  HOST_WIDE_INT diff_isa;
   enum processor_type prev_arch;
   enum processor_type prev_tune;
   enum processor_type cur_arch;
@@ -340,14 +377,14 @@ ix86_pragma_target_parse (tree args, tree pop_target)
   ix86_target_macros_internal (prev_isa & diff_isa,
 			       prev_arch,
 			       prev_tune,
-			       (enum fpmath_unit) prev_opt->fpmath,
+			       (enum fpmath_unit) prev_opt->x_ix86_fpmath,
 			       cpp_undef);
 
   /* Define all of the macros for new options that were just turned on.  */
   ix86_target_macros_internal (cur_isa & diff_isa,
 			       cur_arch,
 			       cur_tune,
-			       (enum fpmath_unit) cur_opt->fpmath,
+			       (enum fpmath_unit) cur_opt->x_ix86_fpmath,
 			       cpp_define);
 
   return true;
@@ -368,6 +405,11 @@ ix86_target_macros (void)
       cpp_define (parse_in, "__amd64__");
       cpp_define (parse_in, "__x86_64");
       cpp_define (parse_in, "__x86_64__");
+      if (TARGET_X32)
+	{
+	  cpp_define (parse_in, "_ILP32");
+	  cpp_define (parse_in, "__ILP32__");
+	}
     }
   else
     {

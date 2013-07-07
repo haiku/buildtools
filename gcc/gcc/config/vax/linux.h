@@ -1,5 +1,5 @@
 /* Definitions for VAX running Linux-based GNU systems with ELF format.
-   Copyright (C) 2007, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,10 +18,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (VAX GNU/Linux with ELF)");
-
-#define TARGET_OS_CPP_BUILTINS() LINUX_TARGET_OS_CPP_BUILTINS()
+#define TARGET_OS_CPP_BUILTINS() GNU_USER_TARGET_OS_CPP_BUILTINS()
 
 /* We use GAS, G-float double and want new DI patterns.  */
 #undef TARGET_DEFAULT

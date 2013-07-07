@@ -1,4 +1,5 @@
-/* Copyright (C) 2005, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+/* Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU OpenMP Library (libgomp).
@@ -43,6 +44,17 @@
 #ifdef HAVE_ATTRIBUTE_VISIBILITY
 # pragma GCC visibility push(hidden)
 #endif
+
+/* If we were a C++ library, we'd get this from <std/atomic>.  */
+enum memmodel
+{
+  MEMMODEL_RELAXED = 0,
+  MEMMODEL_CONSUME = 1,
+  MEMMODEL_ACQUIRE = 2,
+  MEMMODEL_RELEASE = 3,
+  MEMMODEL_ACQ_REL = 4,
+  MEMMODEL_SEQ_CST = 5
+};
 
 #include "sem.h"
 #include "mutex.h"
@@ -226,6 +238,7 @@ extern gomp_mutex_t gomp_remaining_threads_lock;
 extern unsigned long gomp_max_active_levels_var;
 extern unsigned long long gomp_spin_count_var, gomp_throttled_spin_count_var;
 extern unsigned long gomp_available_cpus, gomp_managed_threads;
+extern unsigned long *gomp_nthreads_var_list, gomp_nthreads_var_list_len;
 
 enum gomp_task_kind
 {
@@ -251,6 +264,7 @@ struct gomp_task
   enum gomp_task_kind kind;
   bool in_taskwait;
   bool in_tied_task;
+  bool final_task;
   gomp_sem_t taskwait_sem;
 };
 

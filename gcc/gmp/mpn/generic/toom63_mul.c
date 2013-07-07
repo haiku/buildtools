@@ -6,7 +6,7 @@
    SAFE TO REACH IT THROUGH DOCUMENTED INTERFACES.  IN FACT, IT IS ALMOST
    GUARANTEED THAT IT WILL CHANGE OR DISAPPEAR IN A FUTURE GNU MP RELEASE.
 
-Copyright 2009 Free Software Foundation, Inc.
+Copyright 2009, 2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
@@ -105,8 +105,8 @@ mpn_toom63_mul (mp_ptr pp,
 
   ASSERT (0 < s && s <= n);
   ASSERT (0 < t && t <= n);
-  /* WARNING! it assumes s+t>n */
-  ASSERT ( s + t > n );
+  /* WARNING! it assumes s+t>=n */
+  ASSERT ( s + t >= n );
   ASSERT ( s + t > 4);
   /* WARNING! it assumes n>1 */
   ASSERT ( n > 2);
@@ -149,7 +149,7 @@ mpn_toom63_mul (mp_ptr pp,
   if (cy == 0 && mpn_cmp (ws, b1, n) < 0)
     {
       cy = mpn_add_n_sub_n (v3, v1, b1, ws, n);
-      v3[n] = 0;
+      v3[n] = cy >> 1;
       v1[n] = 0;
       sign = ~sign;
     }
@@ -157,8 +157,8 @@ mpn_toom63_mul (mp_ptr pp,
     {
       mp_limb_t cy2;
       cy2 = mpn_add_n_sub_n (v3, v1, ws, b1, n);
-      w3[n] = cy + (cy2 >> 1);
-      w1[n] = cy - (cy & 1);
+      v3[n] = cy + (cy2 >> 1);
+      v1[n] = cy - (cy2 & 1);
     }
 #else
   v3[n] = cy + mpn_add_n (v3, ws, b1, n);

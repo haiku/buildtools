@@ -1,7 +1,7 @@
 /* Test file for mpfr_set.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -25,10 +25,15 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 
 #include "mpfr-test.h"
 
+int error;
+
 #define PRINT_ERROR_IF(condition, text)         \
   do {                                          \
     if (condition)                              \
-      printf (text);                            \
+      {                                         \
+        printf ("%s", text);                    \
+        error = 1;                              \
+      }                                         \
   } while (0)
 
 
@@ -147,11 +152,18 @@ main (void)
 
   tests_start_mpfr ();
 
+  /* Default : no error */
+  error = 0;
+
   /* check prototypes of mpfr_init_set_* */
   inexact = mpfr_init_set_si (x, -1, MPFR_RNDN);
+  MPFR_ASSERTN (inexact == 0);
   inexact = mpfr_init_set (y, x, MPFR_RNDN);
+  MPFR_ASSERTN (inexact == 0);
   inexact = mpfr_init_set_ui (z, 1, MPFR_RNDN);
+  MPFR_ASSERTN (inexact == 0);
   inexact = mpfr_init_set_d (u, 1.0, MPFR_RNDN);
+  MPFR_ASSERTN (inexact == 0);
 
   emax = mpfr_get_emax ();
   set_emax (0);
@@ -193,5 +205,5 @@ main (void)
   test_generic (2, 1000, 10);
 
   tests_end_mpfr ();
-  return 0;
+  return error;
 }

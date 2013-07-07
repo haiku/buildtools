@@ -1,5 +1,5 @@
 /* Generic SSA value propagation engine.
-   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
@@ -601,20 +601,17 @@ valid_gimple_rhs_p (tree expr)
           }
           break;
 
-	case TRUTH_NOT_EXPR:
-	  if (!is_gimple_val (TREE_OPERAND (expr, 0)))
-	    return false;
-	  break;
-
-	case TRUTH_AND_EXPR:
-	case TRUTH_XOR_EXPR:
-	case TRUTH_OR_EXPR:
-	  if (!is_gimple_val (TREE_OPERAND (expr, 0))
-	      || !is_gimple_val (TREE_OPERAND (expr, 1)))
-	    return false;
-	  break;
-
 	default:
+	  if (get_gimple_rhs_class (code) == GIMPLE_TERNARY_RHS)
+	    {
+	      if (((code == VEC_COND_EXPR || code == COND_EXPR)
+		   ? !is_gimple_condexpr (TREE_OPERAND (expr, 0))
+		   : !is_gimple_val (TREE_OPERAND (expr, 0)))
+		  || !is_gimple_val (TREE_OPERAND (expr, 1))
+		  || !is_gimple_val (TREE_OPERAND (expr, 2)))
+		return false;
+	      break;
+	    }
 	  return false;
 	}
       break;
@@ -686,6 +683,40 @@ move_ssa_defining_stmt_for_defs (gimple new_stmt, gimple old_stmt)
     }
 }
 
+/* Helper function for update_gimple_call and update_call_from_tree.
+   A GIMPLE_CALL STMT is being replaced with GIMPLE_CALL NEW_STMT.  */
+
+static void
+finish_update_gimple_call (gimple_stmt_iterator *si_p, gimple new_stmt,
+			   gimple stmt)
+{
+  gimple_call_set_lhs (new_stmt, gimple_call_lhs (stmt));
+  move_ssa_defining_stmt_for_defs (new_stmt, stmt);
+  gimple_set_vuse (new_stmt, gimple_vuse (stmt));
+  gimple_set_vdef (new_stmt, gimple_vdef (stmt));
+  gimple_set_location (new_stmt, gimple_location (stmt));
+  if (gimple_block (new_stmt) == NULL_TREE)
+    gimple_set_block (new_stmt, gimple_block (stmt));
+  gsi_replace (si_p, new_stmt, false);
+}
+
+/* Update a GIMPLE_CALL statement at iterator *SI_P to call to FN
+   with number of arguments NARGS, where the arguments in GIMPLE form
+   follow NARGS argument.  */
+
+bool
+update_gimple_call (gimple_stmt_iterator *si_p, tree fn, int nargs, ...)
+{
+  va_list ap;
+  gimple new_stmt, stmt = gsi_stmt (*si_p);
+
+  gcc_assert (is_gimple_call (stmt));
+  va_start (ap, nargs);
+  new_stmt = gimple_build_call_valist (fn, nargs, ap);
+  finish_update_gimple_call (si_p, new_stmt, stmt);
+  va_end (ap);
+  return true;
+}
 
 /* Update a GIMPLE_CALL statement at iterator *SI_P to reflect the
    value of EXPR, which is expected to be the result of folding the
@@ -702,13 +733,7 @@ move_ssa_defining_stmt_for_defs (gimple new_stmt, gimple old_stmt)
 bool
 update_call_from_tree (gimple_stmt_iterator *si_p, tree expr)
 {
-  tree lhs;
-
   gimple stmt = gsi_stmt (*si_p);
-
-  gcc_assert (is_gimple_call (stmt));
-
-  lhs = gimple_call_lhs (stmt);
 
   if (valid_gimple_call_p (expr))
     {
@@ -729,18 +754,14 @@ update_call_from_tree (gimple_stmt_iterator *si_p, tree expr)
         }
 
       new_stmt = gimple_build_call_vec (fn, args);
-      gimple_call_set_lhs (new_stmt, lhs);
-      move_ssa_defining_stmt_for_defs (new_stmt, stmt);
-      gimple_set_vuse (new_stmt, gimple_vuse (stmt));
-      gimple_set_vdef (new_stmt, gimple_vdef (stmt));
-      gimple_set_location (new_stmt, gimple_location (stmt));
-      gsi_replace (si_p, new_stmt, false);
+      finish_update_gimple_call (si_p, new_stmt, stmt);
       VEC_free (tree, heap, args);
 
       return true;
     }
   else if (valid_gimple_rhs_p (expr))
     {
+      tree lhs = gimple_call_lhs (stmt);
       gimple new_stmt;
 
       /* The call has simplified to an expression
@@ -979,6 +1000,9 @@ replace_phi_args_in (gimple phi, ssa_prop_get_value_fn get_value)
 
    DO_DCE is true if trivially dead stmts can be removed.
 
+   If DO_DCE is true, the statements within a BB are walked from
+   last to first element.  Otherwise we scan from first to last element.
+
    Return TRUE when something changed.  */
 
 bool
@@ -1032,6 +1056,12 @@ substitute_and_fold (ssa_prop_get_value_fn get_value_fn,
 	  }
 	else if (is_gimple_call (def_stmt))
 	  {
+	    int flags = gimple_call_flags (def_stmt);
+
+	    /* Don't optimize away calls that have side-effects.  */
+	    if ((flags & (ECF_CONST|ECF_PURE)) == 0
+		|| (flags & ECF_LOOPING_CONST_OR_PURE))
+	      continue;
 	    if (update_call_from_tree (&gsi, val)
 		&& maybe_clean_or_replace_eh_stmt (def_stmt, gsi_stmt (gsi)))
 	      gimple_purge_dead_eh_edges (gimple_bb (gsi_stmt (gsi)));
@@ -1059,9 +1089,10 @@ substitute_and_fold (ssa_prop_get_value_fn get_value_fn,
 	for (i = gsi_start_phis (bb); !gsi_end_p (i); gsi_next (&i))
 	  replace_phi_args_in (gsi_stmt (i), get_value_fn);
 
-      /* Propagate known values into stmts.  Do a backward walk to expose
-	 more trivially deletable stmts.  */
-      for (i = gsi_last_bb (bb); !gsi_end_p (i);)
+      /* Propagate known values into stmts.  Do a backward walk if
+         do_dce is true. In some case it exposes
+	 more trivially deletable stmts to walk backward.  */
+      for (i = (do_dce ? gsi_last_bb (bb) : gsi_start_bb (bb)); !gsi_end_p (i);)
 	{
           bool did_replace;
 	  gimple stmt = gsi_stmt (i);
@@ -1070,7 +1101,10 @@ substitute_and_fold (ssa_prop_get_value_fn get_value_fn,
 	  gimple_stmt_iterator oldi;
 
 	  oldi = i;
-	  gsi_prev (&i);
+	  if (do_dce)
+	    gsi_prev (&i);
+	  else
+	    gsi_next (&i);
 
 	  /* Ignore ASSERT_EXPRs.  They are used by VRP to generate
 	     range information for names and they are discarded

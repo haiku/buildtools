@@ -1,23 +1,21 @@
 # Data file for mpc_atan.
 #
-# Copyright (C) INRIA, 2009
+# Copyright (C) 2009, 2012 INRIA
 #
-# This file is part of the MPC Library.
+# This file is part of GNU MPC.
 #
-# The MPC Library is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
-# option) any later version.
+# GNU MPC is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+#o ption) any later version.
 #
-# The MPC Library is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-# License for more details.
+# GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+# more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the MPC Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-# MA 02111-1307, USA.
+# along with this program. If not, see http://www.gnu.org/licenses/ .
 #
 # The line format respects the parameter order in function prototype as
 # follow:
@@ -139,6 +137,14 @@
 
 # general inputs
 + - 72 0x91EA521228BFC46ACAp-118 72 -0x9E96A01DBAD6470974p-73   72 0x84C3E02A5C6DEE8410p-118 72 -0x99B43C52A95A21C220p-73 U N
+- - 72 0x91EA521228BFC46AC9p-118 72 -0x9E96A01DBAD6470974p-73   72 0x84C3E02A5C6DEE8410p-118 72 -0x99B43C52A95A21C220p-73 D D
+- + 72 0x91EA521228BFC46AC9p-118 72 -0x9E96A01DBAD6470973p-73   72 0x84C3E02A5C6DEE8410p-118 72 -0x99B43C52A95A21C220p-73 D U
++ + 72 0x91EA521228BFC46ACAp-118 72 0x9E96A01DBAD6470974p-73   72 0x84C3E02A5C6DEE8410p-118 72 0x99B43C52A95A21C220p-73 U N
+- + 72 0x91EA521228BFC46AC9p-118 72 0x9E96A01DBAD6470974p-73   72 0x84C3E02A5C6DEE8410p-118 72 0x99B43C52A95A21C220p-73 D U
+- - 72 0x91EA521228BFC46AC9p-118 72 0x9E96A01DBAD6470973p-73   72 0x84C3E02A5C6DEE8410p-118 72 0x99B43C52A95A21C220p-73 D D
 + - 156 -0xC90FDAA22167B20DB08A0C3B1FF415CABE49624p-155 156 0xEA84E971BD52E49CCEE036E303D5ECB2D9D9B9Ap-222   156 -0xF0CE58073F866A53F25DB85DE8D503FBDD81051p-109 156  0xCF81D7C76BB9754A52056CB0F144B0C6700CC8Cp-128 N N
 - - 2 0.75 2 -3 2 0x1p-7 2 -1 N N
 - + 2 0.75 2 3 2 0x1p-7 2 1 N N
+
+# improve test coverage
++ - 57 -0x1.921fb54442d184 57 -0x8.a7e33db93ecf18@-34  57 -0xa.529626a89a1960@23 57 -0x3.9a5472b5709e74@14 N N

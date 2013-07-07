@@ -39,42 +39,18 @@ enum sched_pass_id_t { SCHED_PASS_UNKNOWN, SCHED_RGN_PASS, SCHED_EBB_PASS,
 
 typedef VEC (basic_block, heap) *bb_vec_t;
 typedef VEC (rtx, heap) *insn_vec_t;
-typedef VEC(rtx, heap) *rtx_vec_t;
-
-struct sched_scan_info_def
-{
-  /* This hook notifies scheduler frontend to extend its internal per basic
-     block data structures.  This hook should be called once before a series of
-     calls to bb_init ().  */
-  void (*extend_bb) (void);
-
-  /* This hook makes scheduler frontend to initialize its internal data
-     structures for the passed basic block.  */
-  void (*init_bb) (basic_block);
-
-  /* This hook notifies scheduler frontend to extend its internal per insn data
-     structures.  This hook should be called once before a series of calls to
-     insn_init ().  */
-  void (*extend_insn) (void);
-
-  /* This hook makes scheduler frontend to initialize its internal data
-     structures for the passed insn.  */
-  void (*init_insn) (rtx);
-};
-
-extern const struct sched_scan_info_def *sched_scan_info;
-
-extern void sched_scan (const struct sched_scan_info_def *,
-			bb_vec_t, basic_block, insn_vec_t, rtx);
+typedef VEC (rtx, heap) *rtx_vec_t;
 
 extern void sched_init_bbs (void);
 
-extern void sched_init_luids (bb_vec_t, basic_block, insn_vec_t, rtx);
+extern void sched_extend_luids (void);
+extern void sched_init_insn_luid (rtx);
+extern void sched_init_luids (bb_vec_t);
 extern void sched_finish_luids (void);
 
 extern void sched_extend_target (void);
 
-extern void haifa_init_h_i_d (bb_vec_t, basic_block, insn_vec_t, rtx);
+extern void haifa_init_h_i_d (bb_vec_t);
 extern void haifa_finish_h_i_d (void);
 
 /* Hooks that are common to all the schedulers.  */
@@ -154,7 +130,6 @@ extern void sched_insns_init (rtx);
 extern void sched_insns_finish (void);
 
 extern void *xrecalloc (void *, size_t, size_t, size_t);
-extern rtx bb_note (basic_block);
 
 extern void reemit_notes (rtx);
 
@@ -197,7 +172,7 @@ extern struct ready_list ready;
 
 extern int max_issue (struct ready_list *, int, state_t, bool, int *);
 
-extern void ebb_compute_jump_reg_dependencies (rtx, regset, regset, regset);
+extern void ebb_compute_jump_reg_dependencies (rtx, regset);
 
 extern edge find_fallthru_edge_from (basic_block);
 
@@ -239,6 +214,9 @@ struct _dep
   /* Dependency status.  This field holds all dependency types and additional
      information for speculative dependencies.  */
   ds_t status;
+
+  /* Cached cost of the dependency.  */
+  int cost;
 };
 
 typedef struct _dep dep_def;
@@ -248,6 +226,9 @@ typedef dep_def *dep_t;
 #define DEP_CON(D) ((D)->con)
 #define DEP_TYPE(D) ((D)->type)
 #define DEP_STATUS(D) ((D)->status)
+#define DEP_COST(D) ((D)->cost)
+
+#define UNKNOWN_DEP_COST INT_MIN
 
 /* Functions to work with dep.  */
 
@@ -442,6 +423,7 @@ struct deps_reg
   rtx uses;
   rtx sets;
   rtx implicit_sets;
+  rtx control_uses;
   rtx clobbers;
   int uses_length;
   int clobbers_length;
@@ -471,6 +453,9 @@ struct deps_desc
   /* An EXPR_LIST containing all MEM rtx's which are pending writes.  */
   rtx pending_write_mems;
 
+  /* An INSN_LIST containing all jump insns.  */
+  rtx pending_jump_insns;
+
   /* We must prevent the above lists from ever growing too large since
      the number of dependencies produced is at least O(N*N),
      and execution time is at least O(4*N*N), as a function of the
@@ -482,8 +467,9 @@ struct deps_desc
   /* Indicates the length of the pending_write list.  */
   int pending_write_list_length;
 
-  /* Length of the pending memory flush list. Large functions with no
-     calls may build up extremely large lists.  */
+  /* Length of the pending memory flush list plus the length of the pending
+     jump insn list.  Large functions with no calls may build up extremely
+     large lists.  */
   int pending_flush_length;
 
   /* The last insn upon which all memory references must depend.
@@ -514,6 +500,9 @@ struct deps_desc
      scheduling is done.  */
   rtx sched_before_next_call;
 
+  /* Similarly, a list of insns which should not cross a branch.  */
+  rtx sched_before_next_jump;
+
   /* Used to keep post-call pseudo/hard reg movements together with
      the call.  */
   enum post_call_group in_post_call_group_p;
@@ -534,9 +523,6 @@ struct deps_desc
   /* Element N is set for each register that has any nonzero element
      in reg_last[N].{uses,sets,clobbers}.  */
   regset_head reg_last_in_use;
-
-  /* Element N is set for each register that is conditionally set.  */
-  regset_head reg_conditional_sets;
 
   /* Shows the last value of reg_pending_barrier associated with the insn.  */
   enum reg_pending_barrier_mode last_reg_pending_barrier;
@@ -605,16 +591,28 @@ struct haifa_sched_info
      parameter == 0) or removed (second parameter == 1).  */
   void (*add_remove_insn) (rtx, int);
 
-  /* Called to notify frontend that instruction is being scheduled.
-     The first parameter - instruction to scheduled, the second parameter -
-     last scheduled instruction.  */
-  void (*begin_schedule_ready) (rtx, rtx);
+  /* Called to notify the frontend that instruction INSN is being
+     scheduled.  */
+  void (*begin_schedule_ready) (rtx insn);
+
+  /* Called to notify the frontend that an instruction INSN is about to be
+     moved to its correct place in the final schedule.  This is done for all
+     insns in order of the schedule.  LAST indicates the last scheduled
+     instruction.  */
+  void (*begin_move_insn) (rtx insn, rtx last);
 
   /* If the second parameter is not NULL, return nonnull value, if the
      basic block should be advanced.
      If the second parameter is NULL, return the next basic block in EBB.
      The first parameter is the current basic block in EBB.  */
   basic_block (*advance_target_bb) (basic_block, rtx);
+
+  /* Allocate memory, store the frontend scheduler state in it, and
+     return it.  */
+  void *(*save_state) (void);
+  /* Restore frontend scheduler state from the argument, and free the
+     memory.  */
+  void (*restore_state) (void *);
 
   /* ??? FIXME: should use straight bitfields inside sched_info instead of
      this flag field.  */
@@ -653,9 +651,9 @@ extern struct haifa_sched_info *current_sched_info;
    up.  */
 extern bool sched_pressure_p;
 
-/* Map regno -> its cover class.  The map defined only when
+/* Map regno -> its pressure class.  The map defined only when
    SCHED_PRESSURE_P is true.  */
-extern enum reg_class *sched_regno_cover_class;
+extern enum reg_class *sched_regno_pressure_class;
 
 /* Indexed by INSN_UID, the collection of all data associated with
    a single instruction.  */
@@ -698,6 +696,21 @@ struct _haifa_deps_insn_data
      search in 'forw_deps'.  */
   deps_list_t resolved_forw_deps;
 
+  /* If the insn is conditional (either through COND_EXEC, or because
+     it is a conditional branch), this records the condition.  NULL
+     for insns that haven't been seen yet or don't have a condition;
+     const_true_rtx to mark an insn without a condition, or with a
+     condition that has been clobbered by a subsequent insn.  */
+  rtx cond;
+
+  /* For a conditional insn, a list of insns that could set the condition
+     register.  Used when generating control dependencies.  */
+  rtx cond_deps;
+
+  /* True if the condition in 'cond' should be reversed to get the actual
+     condition.  */
+  unsigned int reverse_cond : 1;
+
   /* Some insns (e.g. call) are not allowed to move across blocks.  */
   unsigned int cant_move : 1;
 };
@@ -707,7 +720,7 @@ struct _haifa_deps_insn_data
 #define INCREASE_BITS 8
 
 /* The structure describes how the corresponding insn increases the
-   register pressure for each cover class.  */
+   register pressure for each pressure class.  */
 struct reg_pressure_data
 {
   /* Pressure increase for given class because of clobber.  */
@@ -736,7 +749,7 @@ struct reg_use_data
 };
 
 /* The following structure describes used sets of registers by insns.
-   Registers are pseudos whose cover class is not NO_REGS or hard
+   Registers are pseudos whose pressure class is not NO_REGS or hard
    registers available for allocations.  */
 struct reg_set_data
 {
@@ -764,9 +777,17 @@ struct _haifa_insn_data
      used to note timing constraints for the insns in the pending list.  */
   int tick;
 
+  /* For insns that are scheduled at a fixed difference from another,
+     this records the tick in which they must be ready.  */
+  int exact_tick;
+
   /* INTER_TICK is used to adjust INSN_TICKs of instructions from the
      subsequent blocks in a region.  */
   int inter_tick;
+
+  /* Used temporarily to estimate an INSN_TICK value for an insn given
+     current knowledge.  */
+  int tick_estimate;
 
   /* See comment on QUEUE_INDEX macro in haifa-sched.c.  */
   int queue_index;
@@ -777,6 +798,18 @@ struct _haifa_insn_data
      moved load insn and this one.  */
   unsigned int fed_by_spec_load : 1;
   unsigned int is_load_insn : 1;
+  /* Nonzero if this insn has negative-cost forward dependencies against
+     an already scheduled insn.  */
+  unsigned int feeds_backtrack_insn : 1;
+
+  /* Nonzero if this insn is a shadow of another, scheduled after a fixed
+     delay.  We only emit shadows at the end of a cycle, with no other
+     real insns following them.  */
+  unsigned int shadow_p : 1;
+
+  /* Used internally in unschedule_insns_until to mark insns that must have
+     their TODO_SPEC recomputed.  */
+  unsigned int must_recompute_spec : 1;
 
   /* '> 0' if priority is valid,
      '== 0' if priority was not yet computed,
@@ -798,13 +831,17 @@ struct _haifa_insn_data
   /* Original pattern of the instruction.  */
   rtx orig_pat;
 
+  /* For insns with DEP_CONTROL dependencies, the predicated pattern if it
+     was ever successfully constructed.  */
+  rtx predicated_pat;
+
   /* The following array contains info how the insn increases register
      pressure.  There is an element for each cover class of pseudos
      referenced in insns.  */
   struct reg_pressure_data *reg_pressure;
   /* The following array contains maximal reg pressure between last
      scheduled insn and given insn.  There is an element for each
-     cover class of pseudos referenced in insns.  This info updated
+     pressure class of pseudos referenced in insns.  This info updated
      after scheduling each insn for each insn between the two
      mentioned insns.  */
   int *max_reg_pressure;
@@ -857,6 +894,9 @@ extern VEC(haifa_deps_insn_data_def, heap) *h_d_i_d;
 #define INSN_RESOLVED_FORW_DEPS(INSN) (HDID (INSN)->resolved_forw_deps)
 #define INSN_HARD_BACK_DEPS(INSN) (HDID (INSN)->hard_back_deps)
 #define INSN_SPEC_BACK_DEPS(INSN) (HDID (INSN)->spec_back_deps)
+#define INSN_CACHED_COND(INSN)	(HDID (INSN)->cond)
+#define INSN_REVERSE_COND(INSN) (HDID (INSN)->reverse_cond)
+#define INSN_COND_DEPS(INSN)	(HDID (INSN)->cond_deps)
 #define CANT_MOVE(INSN)	(HDID (INSN)->cant_move)
 #define CANT_MOVE_BY_LUID(LUID)	(VEC_index (haifa_deps_insn_data_def, h_d_i_d, \
                                             LUID)->cant_move)
@@ -870,6 +910,7 @@ extern VEC(haifa_deps_insn_data_def, heap) *h_d_i_d;
 #define CHECK_SPEC(INSN) (HID (INSN)->check_spec)
 #define RECOVERY_BLOCK(INSN) (HID (INSN)->recovery_block)
 #define ORIG_PAT(INSN) (HID (INSN)->orig_pat)
+#define PREDICATED_PAT(INSN) (HID (INSN)->predicated_pat)
 
 /* INSN is either a simple or a branchy speculation check.  */
 #define IS_SPECULATION_CHECK_P(INSN) \
@@ -909,10 +950,11 @@ extern VEC(haifa_deps_insn_data_def, heap) *h_d_i_d;
 /* We exclude sign bit.  */
 #define BITS_PER_DEP_STATUS (HOST_BITS_PER_INT - 1)
 
-/* First '4' stands for 3 dep type bits and HARD_DEP bit.
+/* First '6' stands for 4 dep type bits and the HARD_DEP and DEP_CANCELLED
+   bits.
    Second '4' stands for BEGIN_{DATA, CONTROL}, BE_IN_{DATA, CONTROL}
    dep weakness.  */
-#define BITS_PER_DEP_WEAK ((BITS_PER_DEP_STATUS - 4) / 4)
+#define BITS_PER_DEP_WEAK ((BITS_PER_DEP_STATUS - 6) / 4)
 
 /* Mask of speculative weakness in dep_status.  */
 #define DEP_WEAK_MASK ((1 << BITS_PER_DEP_WEAK) - 1)
@@ -986,13 +1028,16 @@ enum SPEC_TYPES_OFFSETS {
 #define DEP_TRUE (((ds_t) 1) << (BE_IN_CONTROL_BITS_OFFSET + BITS_PER_DEP_WEAK))
 #define DEP_OUTPUT (DEP_TRUE << 1)
 #define DEP_ANTI (DEP_OUTPUT << 1)
+#define DEP_CONTROL (DEP_ANTI << 1)
 
-#define DEP_TYPES (DEP_TRUE | DEP_OUTPUT | DEP_ANTI)
+#define DEP_TYPES (DEP_TRUE | DEP_OUTPUT | DEP_ANTI | DEP_CONTROL)
 
 /* Instruction has non-speculative dependence.  This bit represents the
    property of an instruction - not the one of a dependence.
    Therefore, it can appear only in TODO_SPEC field of an instruction.  */
-#define HARD_DEP (DEP_ANTI << 1)
+#define HARD_DEP (DEP_CONTROL << 1)
+
+#define DEP_CANCELLED (HARD_DEP << 1)
 
 /* This represents the results of calling sched-deps.c functions,
    which modify dependencies.  */
@@ -1017,7 +1062,9 @@ enum SCHED_FLAGS {
      Results in generation of data and control speculative dependencies.
      Requires USE_DEPS_LIST set.  */
   DO_SPECULATION = USE_DEPS_LIST << 1,
-  SCHED_RGN = DO_SPECULATION << 1,
+  DO_BACKTRACKING = DO_SPECULATION << 1,
+  DO_PREDICATION = DO_BACKTRACKING << 1,
+  SCHED_RGN = DO_PREDICATION << 1,
   SCHED_EBB = SCHED_RGN << 1,
   /* Scheduler can possibly create new basic blocks.  Used for assertions.  */
   NEW_BBS = SCHED_EBB << 1,
@@ -1123,7 +1170,7 @@ struct sched_deps_info_def
   /* Called when computing dependencies for a JUMP_INSN.  This function
      should store the set of registers that must be considered as set by
      the jump in the regset.  */
-  void (*compute_jump_reg_dependencies) (rtx, regset, regset, regset);
+  void (*compute_jump_reg_dependencies) (rtx, regset);
 
   /* Start analyzing insn.  */
   void (*start_insn) (rtx);
@@ -1178,6 +1225,7 @@ extern struct sched_deps_info_def *sched_deps_info;
 
 
 /* Functions in sched-deps.c.  */
+extern rtx sched_get_reverse_condition_uncached (const_rtx);
 extern bool sched_insns_conditions_mutex_p (const_rtx, const_rtx);
 extern bool sched_insn_is_legitimate_for_speculation_p (const_rtx, ds_t);
 extern void add_dependence (rtx, rtx, enum reg_note);
@@ -1189,6 +1237,7 @@ extern void init_deps_global (void);
 extern void finish_deps_global (void);
 extern void deps_analyze_insn (struct deps_desc *, rtx);
 extern void remove_from_deps (struct deps_desc *, rtx);
+extern void init_insn_reg_pressure_info (rtx);
 
 extern dw_t get_dep_weak_1 (ds_t, ds_t);
 extern dw_t get_dep_weak (ds_t, ds_t);
@@ -1232,7 +1281,7 @@ extern int dep_cost (dep_t);
 extern int set_priorities (rtx, rtx);
 
 extern void sched_setup_bb_reg_pressure_info (basic_block, rtx);
-extern void schedule_block (basic_block *);
+extern bool schedule_block (basic_block *);
 
 extern int cycle_issued_insns;
 extern int issue_rate;
@@ -1255,7 +1304,12 @@ extern rtx sched_emit_insn (rtx);
 extern rtx get_ready_element (int);
 extern int number_in_ready (void);
 
+/* Types and functions in sched-ebb.c.  */
 
+extern basic_block schedule_ebb (rtx, rtx, bool);
+extern void schedule_ebbs_init (void);
+extern void schedule_ebbs_finish (void);
+
 /* Types and functions in sched-rgn.c.  */
 
 /* A region is the main entity for interblock scheduling: insns
@@ -1303,7 +1357,14 @@ extern int *ebb_head;
 extern int current_nr_blocks;
 extern int current_blocks;
 extern int target_bb;
+extern bool sched_no_dce;
 
+extern void set_modulo_params (int, int, int, int);
+extern void record_delay_slot_pair (rtx, rtx, int, int);
+extern rtx real_insn_for_shadow (rtx);
+extern void discard_delay_pairs_above (int);
+extern void free_delay_pairs (void);
+extern void add_delay_dependencies (rtx);
 extern bool sched_is_disabled_for_current_region_p (void);
 extern void sched_rgn_init (bool);
 extern void sched_rgn_finish (void);
@@ -1477,6 +1538,7 @@ extern dep_t sd_find_dep_between (rtx, rtx, bool);
 extern void sd_add_dep (dep_t, bool);
 extern enum DEPS_ADJUST_RESULT sd_add_or_update_dep (dep_t, bool);
 extern void sd_resolve_dep (sd_iterator_def);
+extern void sd_unresolve_dep (sd_iterator_def);
 extern void sd_copy_back_deps (rtx, rtx, bool);
 extern void sd_delete_dep (sd_iterator_def);
 extern void sd_debug_lists (rtx, sd_list_types_def);
@@ -1490,3 +1552,4 @@ extern void print_pattern (char *, const_rtx, int);
 extern void print_value (char *, const_rtx, int);
 
 #endif /* GCC_SCHED_INT_H */
+

@@ -1,7 +1,7 @@
 /* Part of CPP library.  File handling.
    Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2008, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
    Written by Per Bothner, 1994.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -595,7 +595,7 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
       return false;
     }
 
-  regular = S_ISREG (file->st.st_mode);
+  regular = S_ISREG (file->st.st_mode) != 0;
   if (regular)
     {
       /* off_t might have a wider range than ssize_t - in other words,
@@ -996,8 +996,7 @@ make_cpp_file (cpp_reader *pfile, cpp_dir *dir, const char *fname)
 static void
 destroy_cpp_file (_cpp_file *file)
 {
-  if (file->buffer_start)
-    free ((void *) file->buffer_start);
+  free ((void *) file->buffer_start);
   free ((void *) file->name);
   free (file);
 }
@@ -1155,7 +1154,7 @@ file_hash_eq (const void *p, const void *q)
   else
     hname = entry->u.dir->name;
 
-  return strcmp (hname, fname) == 0;
+  return filename_cmp (hname, fname) == 0;
 }
 
 /* Compare entries in the nonexistent file hash table.  These are just
@@ -1163,7 +1162,7 @@ file_hash_eq (const void *p, const void *q)
 static int
 nonexistent_file_hash_eq (const void *p, const void *q)
 {
-  return strcmp ((const char *) p, (const char *) q) == 0;
+  return filename_cmp ((const char *) p, (const char *) q) == 0;
 }
 
 /* Initialize everything in this source file.  */
@@ -1221,13 +1220,12 @@ cpp_make_system_header (cpp_reader *pfile, int syshdr, int externc)
 {
   int flags = 0;
   const struct line_maps *line_table = pfile->line_table;
-  const struct line_map *map = &line_table->maps[line_table->used-1];
-
+  const struct line_map *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
   /* 1 = system header, 2 = system header to be treated as C.  */
   if (syshdr)
     flags = 1 + (externc != 0);
   pfile->buffer->sysp = flags;
-  _cpp_do_file_change (pfile, LC_RENAME, map->to_file,
+  _cpp_do_file_change (pfile, LC_RENAME, ORDINARY_MAP_FILE_NAME (map),
 		       SOURCE_LINE (map, pfile->line_table->highest_line), flags);
 }
 
@@ -1372,6 +1370,13 @@ _cpp_pop_file_buffer (cpp_reader *pfile, _cpp_file *file)
     }
 }
 
+/* Return the file name associated with FILE.  */
+const char *
+_cpp_get_file_name (_cpp_file *file)
+{
+  return file->name;
+}
+
 /* Inteface to file statistics record in _cpp_file structure. */
 struct stat *
 _cpp_get_file_stat (_cpp_file *file)
@@ -1413,7 +1418,7 @@ append_file_to_dir (const char *fname, cpp_dir *dir)
   flen = strlen (fname);
   path = XNEWVEC (char, dlen + 1 + flen + 1);
   memcpy (path, dir->name, dlen);
-  if (dlen && path[dlen - 1] != '/')
+  if (dlen && !IS_DIR_SEPARATOR (path[dlen - 1]))
     path[dlen++] = '/';
   memcpy (&path[dlen], fname, flen + 1);
 
@@ -1461,7 +1466,7 @@ read_name_map (cpp_dir *dir)
   len = dir->len;
   name = (char *) alloca (len + sizeof (FILE_NAME_MAP_FILE) + 1);
   memcpy (name, dir->name, len);
-  if (len && name[len - 1] != '/')
+  if (len && !IS_DIR_SEPARATOR (name[len - 1]))
     name[len++] = '/';
   strcpy (name + len, FILE_NAME_MAP_FILE);
   f = fopen (name, "r");
@@ -1532,10 +1537,18 @@ remap_filename (cpp_reader *pfile, _cpp_file *file)
 	read_name_map (dir);
 
       for (index = 0; dir->name_map[index]; index += 2)
-	if (!strcmp (dir->name_map[index], fname))
+	if (!filename_cmp (dir->name_map[index], fname))
 	    return xstrdup (dir->name_map[index + 1]);
-
+      if (IS_ABSOLUTE_PATH (fname))
+	return NULL;
       p = strchr (fname, '/');
+#ifdef HAVE_DOS_BASED_FILE_SYSTEM
+      {
+	char *p2 = strchr (fname, '\\');
+	if (!p || (p > p2))
+	  p = p2;
+      }
+#endif
       if (!p || p == fname)
 	return NULL;
 

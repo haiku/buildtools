@@ -287,9 +287,10 @@ build_size_arg_loc (location_t loc, tree nb_iter, tree op,
 		    gimple_seq *stmt_list)
 {
   gimple_seq stmts;
-  tree x = size_binop_loc (loc, MULT_EXPR,
-  			   fold_convert_loc (loc, sizetype, nb_iter),
-			   TYPE_SIZE_UNIT (TREE_TYPE (op)));
+  tree x = fold_build2_loc (loc, MULT_EXPR, size_type_node,
+			    fold_convert_loc (loc, size_type_node, nb_iter),
+			    fold_convert_loc (loc, size_type_node,
+					      TYPE_SIZE_UNIT (TREE_TYPE (op))));
   x = force_gimple_operand (x, &stmts, true, NULL);
   gimple_seq_add_seq (stmt_list, stmts);
 
@@ -312,7 +313,7 @@ generate_memset_zero (gimple stmt, tree op0, tree nb_iter,
 
   DR_STMT (dr) = stmt;
   DR_REF (dr) = op0;
-  res = dr_analyze_innermost (dr);
+  res = dr_analyze_innermost (dr, loop_containing_stmt (stmt));
   gcc_assert (res && stride_of_unit_type_p (DR_STEP (dr), TREE_TYPE (op0)));
 
   nb_bytes = build_size_arg_loc (loc, nb_iter, op0, &stmt_list);
@@ -320,9 +321,7 @@ generate_memset_zero (gimple stmt, tree op0, tree nb_iter,
   addr_base = fold_convert_loc (loc, sizetype, addr_base);
 
   /* Test for a negative stride, iterating over every element.  */
-  if (integer_zerop (size_binop (PLUS_EXPR,
-				 TYPE_SIZE_UNIT (TREE_TYPE (op0)),
-				 fold_convert (sizetype, DR_STEP (dr)))))
+  if (tree_int_cst_sgn (DR_STEP (dr)) == -1)
     {
       addr_base = size_binop_loc (loc, MINUS_EXPR, addr_base,
 				  fold_convert_loc (loc, sizetype, nb_bytes));
@@ -330,13 +329,12 @@ generate_memset_zero (gimple stmt, tree op0, tree nb_iter,
 				  TYPE_SIZE_UNIT (TREE_TYPE (op0)));
     }
 
-  addr_base = fold_build2_loc (loc, POINTER_PLUS_EXPR,
-			       TREE_TYPE (DR_BASE_ADDRESS (dr)),
-			       DR_BASE_ADDRESS (dr), addr_base);
+  addr_base = fold_build_pointer_plus_loc (loc,
+					   DR_BASE_ADDRESS (dr), addr_base);
   mem = force_gimple_operand (addr_base, &stmts, true, NULL);
   gimple_seq_add_seq (&stmt_list, stmts);
 
-  fn = build_fold_addr_expr (implicit_built_in_decls [BUILT_IN_MEMSET]);
+  fn = build_fold_addr_expr (builtin_decl_implicit (BUILT_IN_MEMSET));
   fn_call = gimple_build_call (fn, 3, mem, integer_zero_node, nb_bytes);
   gimple_seq_add_stmt (&stmt_list, fn_call);
   gsi_insert_seq_after (&bsi, stmt_list, GSI_CONTINUE_LINKING);
@@ -1145,7 +1143,8 @@ ldist_gen (struct loop *loop, struct graph *rdg,
       goto ldist_done;
 
   rewrite_into_loop_closed_ssa (NULL, TODO_update_ssa);
-  update_ssa (TODO_update_ssa_only_virtuals | TODO_update_ssa);
+  mark_sym_for_renaming (gimple_vop (cfun));
+  update_ssa (TODO_update_ssa_only_virtuals);
 
  ldist_done:
 
@@ -1324,6 +1323,7 @@ struct gimple_opt_pass pass_loop_distribution =
   0,				/* properties_provided */
   0,				/* properties_destroyed */
   0,				/* todo_flags_start */
-  TODO_dump_func                /* todo_flags_finish */
+  TODO_ggc_collect
+  | TODO_verify_ssa             /* todo_flags_finish */
  }
 };

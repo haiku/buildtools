@@ -1,7 +1,7 @@
 /* Expands front end tree to back end RTL for GCC
    Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
    1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010 Free Software Foundation, Inc.
+   2010, 2011, 2012 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -53,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "alloc-pool.h"
 #include "pretty-print.h"
 #include "bitmap.h"
+#include "params.h"
 
 
 /* Functions and data structures for expanding case statements.  */
@@ -1454,7 +1455,7 @@ expand_expr_stmt (tree exp)
       if (TYPE_MODE (type) == VOIDmode)
 	;
       else if (TYPE_MODE (type) != BLKmode)
-	value = copy_to_reg (value);
+	copy_to_reg (value);
       else
 	{
 	  rtx lab = gen_label_rtx ();
@@ -1683,119 +1684,21 @@ expand_return (tree retval)
     expand_value_return (result_rtl);
 
   /* If the result is an aggregate that is being returned in one (or more)
-     registers, load the registers here.  The compiler currently can't handle
-     copying a BLKmode value into registers.  We could put this code in a
-     more general area (for use by everyone instead of just function
-     call/return), but until this feature is generally usable it is kept here
-     (and in expand_call).  */
+     registers, load the registers here.  */
 
   else if (retval_rhs != 0
 	   && TYPE_MODE (TREE_TYPE (retval_rhs)) == BLKmode
 	   && REG_P (result_rtl))
     {
-      int i;
-      unsigned HOST_WIDE_INT bitpos, xbitpos;
-      unsigned HOST_WIDE_INT padding_correction = 0;
-      unsigned HOST_WIDE_INT bytes
-	= int_size_in_bytes (TREE_TYPE (retval_rhs));
-      int n_regs = (bytes + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
-      unsigned int bitsize
-	= MIN (TYPE_ALIGN (TREE_TYPE (retval_rhs)), BITS_PER_WORD);
-      rtx *result_pseudos = XALLOCAVEC (rtx, n_regs);
-      rtx result_reg, src = NULL_RTX, dst = NULL_RTX;
-      rtx result_val = expand_normal (retval_rhs);
-      enum machine_mode tmpmode, result_reg_mode;
-
-      if (bytes == 0)
+      val = copy_blkmode_to_reg (GET_MODE (result_rtl), retval_rhs);
+      if (val)
 	{
-	  expand_null_return ();
-	  return;
+	  /* Use the mode of the result value on the return register.  */
+	  PUT_MODE (result_rtl, GET_MODE (val));
+	  expand_value_return (val);
 	}
-
-      /* If the structure doesn't take up a whole number of words, see
-	 whether the register value should be padded on the left or on
-	 the right.  Set PADDING_CORRECTION to the number of padding
-	 bits needed on the left side.
-
-	 In most ABIs, the structure will be returned at the least end of
-	 the register, which translates to right padding on little-endian
-	 targets and left padding on big-endian targets.  The opposite
-	 holds if the structure is returned at the most significant
-	 end of the register.  */
-      if (bytes % UNITS_PER_WORD != 0
-	  && (targetm.calls.return_in_msb (TREE_TYPE (retval_rhs))
-	      ? !BYTES_BIG_ENDIAN
-	      : BYTES_BIG_ENDIAN))
-	padding_correction = (BITS_PER_WORD - ((bytes % UNITS_PER_WORD)
-					       * BITS_PER_UNIT));
-
-      /* Copy the structure BITSIZE bits at a time.  */
-      for (bitpos = 0, xbitpos = padding_correction;
-	   bitpos < bytes * BITS_PER_UNIT;
-	   bitpos += bitsize, xbitpos += bitsize)
-	{
-	  /* We need a new destination pseudo each time xbitpos is
-	     on a word boundary and when xbitpos == padding_correction
-	     (the first time through).  */
-	  if (xbitpos % BITS_PER_WORD == 0
-	      || xbitpos == padding_correction)
-	    {
-	      /* Generate an appropriate register.  */
-	      dst = gen_reg_rtx (word_mode);
-	      result_pseudos[xbitpos / BITS_PER_WORD] = dst;
-
-	      /* Clear the destination before we move anything into it.  */
-	      emit_move_insn (dst, CONST0_RTX (GET_MODE (dst)));
-	    }
-
-	  /* We need a new source operand each time bitpos is on a word
-	     boundary.  */
-	  if (bitpos % BITS_PER_WORD == 0)
-	    src = operand_subword_force (result_val,
-					 bitpos / BITS_PER_WORD,
-					 BLKmode);
-
-	  /* Use bitpos for the source extraction (left justified) and
-	     xbitpos for the destination store (right justified).  */
-	  store_bit_field (dst, bitsize, xbitpos % BITS_PER_WORD, word_mode,
-			   extract_bit_field (src, bitsize,
-					      bitpos % BITS_PER_WORD, 1, false,
-					      NULL_RTX, word_mode, word_mode));
-	}
-
-      tmpmode = GET_MODE (result_rtl);
-      if (tmpmode == BLKmode)
-	{
-	  /* Find the smallest integer mode large enough to hold the
-	     entire structure and use that mode instead of BLKmode
-	     on the USE insn for the return register.  */
-	  for (tmpmode = GET_CLASS_NARROWEST_MODE (MODE_INT);
-	       tmpmode != VOIDmode;
-	       tmpmode = GET_MODE_WIDER_MODE (tmpmode))
-	    /* Have we found a large enough mode?  */
-	    if (GET_MODE_SIZE (tmpmode) >= bytes)
-	      break;
-
-	  /* A suitable mode should have been found.  */
-	  gcc_assert (tmpmode != VOIDmode);
-
-	  PUT_MODE (result_rtl, tmpmode);
-	}
-
-      if (GET_MODE_SIZE (tmpmode) < GET_MODE_SIZE (word_mode))
-	result_reg_mode = word_mode;
       else
-	result_reg_mode = tmpmode;
-      result_reg = gen_reg_rtx (result_reg_mode);
-
-      for (i = 0; i < n_regs; i++)
-	emit_move_insn (operand_subword (result_reg, i, 0, result_reg_mode),
-			result_pseudos[i]);
-
-      if (tmpmode != result_reg_mode)
-	result_reg = gen_lowpart (tmpmode, result_reg);
-
-      expand_value_return (result_reg);
+	expand_null_return ();
     }
   else if (retval_rhs != 0
 	   && !VOID_TYPE_P (TREE_TYPE (retval_rhs))
@@ -2013,10 +1916,13 @@ expand_stack_save (void)
 void
 expand_stack_restore (tree var)
 {
-  rtx sa = expand_normal (var);
+  rtx prev, sa = expand_normal (var);
 
   sa = convert_memory_address (Pmode, sa);
+
+  prev = get_last_insn ();
   emit_stack_restore (SAVE_BLOCK, sa);
+  fixup_args_size_notes (prev, get_last_insn (), 0);
 }
 
 /* Do the insertion of a case label into case_list.  The labels are
@@ -2128,8 +2034,8 @@ bool lshift_cheap_p (void)
   if (!init[speed_p])
     {
       rtx reg = gen_rtx_REG (word_mode, 10000);
-      int cost = rtx_cost (gen_rtx_ASHIFT (word_mode, const1_rtx, reg), SET,
-      			   speed_p);
+      int cost = set_src_cost (gen_rtx_ASHIFT (word_mode, const1_rtx, reg),
+			       speed_p);
       cheap[speed_p] = cost < COSTS_N_INSNS (3);
       init[speed_p] = true;
     }
@@ -2267,6 +2173,20 @@ expand_switch_using_bit_tests_p (tree index_expr, tree range,
 	  && ((uniq == 1 && count >= 3)
 	      || (uniq == 2 && count >= 5)
 	      || (uniq == 3 && count >= 6)));
+}
+
+/* Return the smallest number of different values for which it is best to use a
+   jump-table instead of a tree of conditional branches.  */
+
+static unsigned int
+case_values_threshold (void)
+{
+  unsigned int threshold = PARAM_VALUE (PARAM_CASE_VALUES_THRESHOLD);
+
+  if (threshold == 0)
+    threshold = targetm.case_values_threshold ();
+
+  return threshold;
 }
 
 /* Terminate a case (Pascal/Ada) or switch (C) statement
@@ -2423,7 +2343,7 @@ expand_case (gimple stmt)
 	 If the switch-index is a constant, do it this way
 	 because we can optimize it.  */
 
-      else if (count < targetm.case_values_threshold ()
+      else if (count < case_values_threshold ()
 	       || compare_tree_int (range,
 				    (optimize_insn_for_size_p () ? 3 : 10) * count) > 0
 	       /* RANGE may be signed, and really large ranges will show up

@@ -1,5 +1,5 @@
 @c Copyright (C) 1988,1989,1992,1993,1994,1995,1996,1997,1998,1999,2000,
-@c 2001,2002,2003,2004,2005,2006,2007,2008,2009, 2010
+@c 2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011
 @c Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
@@ -64,6 +64,10 @@ improved alias analysis, plus migrating GCC to Bugzilla.
 
 @item
 Geoff Berry for his Java object serialization work and various patches.
+
+@item
+David Binderman tests weekly snapshots of GCC trunk against Fedora Rawhide
+for several architectures.
 
 @item
 Uros Bizjak for the implementation of x87 math built-in functions and
@@ -216,7 +220,7 @@ Mo DeJong for GCJ and libgcj bug fixes.
 
 @item
 DJ Delorie for the DJGPP port, build and libiberty maintenance,
-various bug fixes, and the M32C and MeP ports.
+various bug fixes, and the M32C, MeP, and RL78 ports.
 
 @item
 Arnaud Desitter for helping to debug GNU Fortran.
@@ -340,6 +344,9 @@ the support for System V Release 4.  He has also worked heavily on the
 Intel 386 and 860 support.
 
 @item
+Sumanth Gundapaneni for contributing the CR16 port.
+
+@item
 Mostafa Hagog for Swing Modulo Scheduling (SMS) and post reload GCSE@.
 
 @item
@@ -389,6 +396,9 @@ of testing and bug fixing, particularly of GCC configury code.
 
 @item
 Steve Holmgren for MachTen patches.
+
+@item
+Mat Hostetter for work on the TILE-Gx and TILEPro ports.
 
 @item
 Jan Hubicka for his x86 port improvements.
@@ -500,6 +510,9 @@ Jeff Law for his direction via the steering committee, coordinating the
 entire egcs project and GCC 2.95, rolling out snapshots and releases,
 handling merges from GCC2, reviewing tons of patches that might have
 fallen through the cracks else, and random but extensive hacking.
+
+@item
+Walter Lee for work on the TILE-Gx and TILEPro ports.
 
 @item
 Marc Lehmann for his direction via the steering committee and helping
@@ -746,7 +759,7 @@ Volker Reichelt for keeping up with the problem reports.
 
 @item
 Joern Rennecke for maintaining the sh port, loop, regmove & reload
-hacking.
+hacking and developing and maintaining the Epiphany port.
 
 @item
 Loren J. Rittle for improvements to libstdc++-v3 including the FreeBSD
@@ -806,8 +819,8 @@ Tobias Schl@"uter for work on GNU Fortran.
 
 @item
 Bernd Schmidt for various code generation improvements and major
-work in the reload pass as well a serving as release manager for
-GCC 2.95.3.
+work in the reload pass, serving as release manager for
+GCC 2.95.3, and work on the Blackfin and C6X ports.
 
 @item
 Peter Schmid for constant testing of libstdc++---especially application
@@ -866,6 +879,13 @@ Scott Snyder for queue, iterator, istream, and string fixes and libstdc++
 testsuite entries.  Also for providing the patch to G77 to add
 rudimentary support for @code{INTEGER*1}, @code{INTEGER*2}, and
 @code{LOGICAL*1}.
+
+@item
+Zdenek Sojka for running automated regression testing of GCC and reporting
+numerous bugs.
+
+@item
+Jayant Sonar for contributing the CR16 port.
 
 @item
 Brad Spencer for contributions to the GLIBCPP_FORCE_NEW technique.
@@ -934,8 +954,8 @@ Teemu Torma for thread safe exception handling support.
 Leonard Tower wrote parts of the parser, RTL generator, and RTL
 definitions, and of the VAX machine description.
 
-@item 
-Daniel Towner and Hariharan Sandanagobalane contributed and 
+@item
+Daniel Towner and Hariharan Sandanagobalane contributed and
 maintain the picoChip port.
 
 @item

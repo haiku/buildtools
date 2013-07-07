@@ -30,13 +30,13 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 /* 1867 MHz P6 model 13 */
 
-#define MOD_1_NORM_THRESHOLD                 3
-#define MOD_1_UNNORM_THRESHOLD               5
-#define MOD_1N_TO_MOD_1_1_THRESHOLD         10
-#define MOD_1U_TO_MOD_1_1_THRESHOLD          5
-#define MOD_1_1_TO_MOD_1_2_THRESHOLD         6
-#define MOD_1_2_TO_MOD_1_4_THRESHOLD         0
-#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     23
+#define MOD_1_NORM_THRESHOLD                 4
+#define MOD_1_UNNORM_THRESHOLD               6
+#define MOD_1N_TO_MOD_1_1_THRESHOLD          9
+#define MOD_1U_TO_MOD_1_1_THRESHOLD          6
+#define MOD_1_1_TO_MOD_1_2_THRESHOLD         0  /* never mpn_mod_1_1p */
+#define MOD_1_2_TO_MOD_1_4_THRESHOLD         8
+#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     15
 #define USE_PREINV_DIVREM_1                  1  /* native */
 #define DIVEXACT_1_THRESHOLD                 0  /* always (native) */
 #define BMOD_1_TO_MOD_1_THRESHOLD           22
@@ -144,16 +144,16 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 #define MULLO_BASECASE_THRESHOLD             0  /* always */
 #define MULLO_DC_THRESHOLD                  34
-#define MULLO_MUL_N_THRESHOLD             8907
+#define MULLO_MUL_N_THRESHOLD            13463
 
 #define DC_DIV_QR_THRESHOLD                 19
 #define DC_DIVAPPR_Q_THRESHOLD              56
 #define DC_BDIV_QR_THRESHOLD                60
 #define DC_BDIV_Q_THRESHOLD                132
 
-#define INV_MULMOD_BNM1_THRESHOLD          117
-#define INV_NEWTON_THRESHOLD                81
-#define INV_APPR_THRESHOLD                  61
+#define INV_MULMOD_BNM1_THRESHOLD           38
+#define INV_NEWTON_THRESHOLD                69
+#define INV_APPR_THRESHOLD                  65
 
 #define BINV_NEWTON_THRESHOLD              276
 #define REDC_1_TO_REDC_N_THRESHOLD          63

@@ -86,16 +86,6 @@ get_bc_label (enum bc_t bc)
 {
   tree label = bc_label[bc];
 
-  if (label == NULL_TREE)
-    {
-      if (bc == bc_break)
-	error ("break statement not within loop or switch");
-      else
-	error ("continue statement not within loop or switch");
-
-      return NULL_TREE;
-    }
-
   /* Mark the label used for finish_bc_block.  */
   TREE_USED (label) = 1;
   return label;
@@ -485,10 +475,10 @@ gimplify_must_not_throw_expr (tree *expr_p, gimple_seq *pre_p)
 
   gimplify_and_add (body, &try_);
   mnt = gimple_build_eh_must_not_throw (terminate_node);
-  gimplify_seq_add_stmt (&catch_, mnt);
+  gimple_seq_add_stmt_without_update (&catch_, mnt);
   mnt = gimple_build_try (try_, catch_, GIMPLE_TRY_CATCH);
 
-  gimplify_seq_add_stmt (pre_p, mnt);
+  gimple_seq_add_stmt_without_update (pre_p, mnt);
   if (temp)
     {
       *expr_p = temp;
@@ -579,7 +569,8 @@ cp_gimplify_expr (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p)
 
 	else if ((is_gimple_lvalue (op1) || INDIRECT_REF_P (op1)
 		  || (TREE_CODE (op1) == CONSTRUCTOR
-		      && CONSTRUCTOR_NELTS (op1) == 0)
+		      && CONSTRUCTOR_NELTS (op1) == 0
+		      && !TREE_CLOBBER_P (op1))
 		  || (TREE_CODE (op1) == CALL_EXPR
 		      && !CALL_EXPR_RETURN_SLOT_OPT (op1)))
 		 && is_really_empty_class (TREE_TYPE (op0)))
@@ -1109,6 +1100,8 @@ cp_genericize_r (tree *stmt_p, int *walk_subtrees, void *data)
       wtd->omp_ctx = omp_ctx.outer;
       splay_tree_delete (omp_ctx.variables);
     }
+  else if (TREE_CODE (stmt) == CONVERT_EXPR)
+    gcc_assert (!CONVERT_EXPR_VBASE_PATH (stmt));
 
   pointer_set_insert (p_set, *stmt_p);
 
@@ -1230,7 +1223,7 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
 	start2 = build_fold_addr_expr_loc (input_location, start2);
 
       end1 = TYPE_SIZE_UNIT (TREE_TYPE (arg1));
-      end1 = build2 (POINTER_PLUS_EXPR, TREE_TYPE (start1), start1, end1);
+      end1 = fold_build_pointer_plus (start1, end1);
 
       p1 = create_tmp_var (TREE_TYPE (start1), NULL);
       t = build2 (MODIFY_EXPR, TREE_TYPE (p1), p1, start1);
@@ -1260,15 +1253,13 @@ cxx_omp_clause_apply_fn (tree fn, tree arg1, tree arg2)
       t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
       append_to_statement_list (t, &ret);
 
-      t = TYPE_SIZE_UNIT (inner_type);
-      t = build2 (POINTER_PLUS_EXPR, TREE_TYPE (p1), p1, t);
+      t = fold_build_pointer_plus (p1, TYPE_SIZE_UNIT (inner_type));
       t = build2 (MODIFY_EXPR, TREE_TYPE (p1), p1, t);
       append_to_statement_list (t, &ret);
 
       if (arg2)
 	{
-	  t = TYPE_SIZE_UNIT (inner_type);
-	  t = build2 (POINTER_PLUS_EXPR, TREE_TYPE (p2), p2, t);
+	  t = fold_build_pointer_plus (p2, TYPE_SIZE_UNIT (inner_type));
 	  t = build2 (MODIFY_EXPR, TREE_TYPE (p2), p2, t);
 	  append_to_statement_list (t, &ret);
 	}
@@ -1367,26 +1358,15 @@ cxx_omp_privatize_by_reference (const_tree decl)
   return is_invisiref_parm (decl);
 }
 
-/* True if OpenMP sharing attribute of DECL is predetermined.  */
-
-enum omp_clause_default_kind
-cxx_omp_predetermined_sharing (tree decl)
+/* Return true if DECL is const qualified var having no mutable member.  */
+bool
+cxx_omp_const_qual_no_mutable (tree decl)
 {
-  tree type;
-
-  /* Static data members are predetermined as shared.  */
-  if (TREE_STATIC (decl))
-    {
-      tree ctx = CP_DECL_CONTEXT (decl);
-      if (TYPE_P (ctx) && MAYBE_CLASS_TYPE_P (ctx))
-	return OMP_CLAUSE_DEFAULT_SHARED;
-    }
-
-  type = TREE_TYPE (decl);
+  tree type = TREE_TYPE (decl);
   if (TREE_CODE (type) == REFERENCE_TYPE)
     {
       if (!is_invisiref_parm (decl))
-	return OMP_CLAUSE_DEFAULT_UNSPECIFIED;
+	return false;
       type = TREE_TYPE (type);
 
       if (TREE_CODE (decl) == RESULT_DECL && DECL_NAME (decl))
@@ -1410,11 +1390,32 @@ cxx_omp_predetermined_sharing (tree decl)
     }
 
   if (type == error_mark_node)
-    return OMP_CLAUSE_DEFAULT_UNSPECIFIED;
+    return false;
 
   /* Variables with const-qualified type having no mutable member
      are predetermined shared.  */
   if (TYPE_READONLY (type) && !cp_has_mutable_p (type))
+    return true;
+
+  return false;
+}
+
+/* True if OpenMP sharing attribute of DECL is predetermined.  */
+
+enum omp_clause_default_kind
+cxx_omp_predetermined_sharing (tree decl)
+{
+  /* Static data members are predetermined shared.  */
+  if (TREE_STATIC (decl))
+    {
+      tree ctx = CP_DECL_CONTEXT (decl);
+      if (TYPE_P (ctx) && MAYBE_CLASS_TYPE_P (ctx))
+	return OMP_CLAUSE_DEFAULT_SHARED;
+    }
+
+  /* Const qualified vars having no mutable member are predetermined
+     shared.  */
+  if (cxx_omp_const_qual_no_mutable (decl))
     return OMP_CLAUSE_DEFAULT_SHARED;
 
   return OMP_CLAUSE_DEFAULT_UNSPECIFIED;

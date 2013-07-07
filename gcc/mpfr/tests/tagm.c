@@ -1,7 +1,7 @@
 /* Test file for mpfr_agm.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -28,26 +28,84 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 #define check(a,b,r) check4(a,b,r,0.0)
 
 static void
-check4 (const char *as, const char *bs, mpfr_rnd_t rnd_mode, const char *res)
+check4 (const char *as, const char *bs, mpfr_rnd_t rnd_mode,
+        const char *res, int inex)
 {
-  mpfr_t ta, tb, tres;
+  mpfr_t ta, tb, tc, tres;
+  mpfr_exp_t emin, emax;
+  int i;
 
-  mpfr_inits2 (53, ta, tb, tres, (mpfr_ptr) 0);
+  emin = mpfr_get_emin ();
+  emax = mpfr_get_emax ();
 
-  mpfr_set_str1 (ta, as);
-  mpfr_set_str1 (tb, bs);
+  mpfr_inits2 (53, ta, tb, tc, tres, (mpfr_ptr) 0);
 
-  mpfr_agm(tres, ta, tb, rnd_mode);
-
-  if (mpfr_cmp_str1 (tres, res))
+  for (i = 0; i <= 2; i++)
     {
-      printf ("mpfr_agm failed for a=%s, b=%s, rnd_mode=%d\n",as,bs,rnd_mode);
-      printf ("expected result is %s, got ",res);
-      mpfr_out_str(stdout, 10, 0, tres, MPFR_RNDN);
-      putchar('\n');
-      exit (1);
-  }
-  mpfr_clears (ta, tb, tres, (mpfr_ptr) 0);
+      unsigned int expflags, newflags;
+      int inex2;
+
+      mpfr_set_str1 (ta, as);
+      mpfr_set_str1 (tb, bs);
+      mpfr_set_str1 (tc, res);
+
+      if (i > 0)
+        {
+          mpfr_exp_t ea, eb, ec, e0;
+
+          set_emin (MPFR_EMIN_MIN);
+          set_emax (MPFR_EMAX_MAX);
+
+          ea = mpfr_get_exp (ta);
+          eb = mpfr_get_exp (tb);
+          ec = mpfr_get_exp (tc);
+
+          e0 = i == 1 ? __gmpfr_emin : __gmpfr_emax;
+          if ((i == 1 && ea < eb) || (i == 2 && ea > eb))
+            {
+              mpfr_set_exp (ta, e0);
+              mpfr_set_exp (tb, e0 + (eb - ea));
+              mpfr_set_exp (tc, e0 + (ec - ea));
+            }
+          else
+            {
+              mpfr_set_exp (ta, e0 + (ea - eb));
+              mpfr_set_exp (tb, e0);
+              mpfr_set_exp (tc, e0 + (ec - eb));
+            }
+        }
+
+      __gmpfr_flags = expflags =
+        (randlimb () & 1) ? MPFR_FLAGS_ALL ^ MPFR_FLAGS_ERANGE : 0;
+      inex2 = mpfr_agm (tres, ta, tb, rnd_mode);
+      newflags = __gmpfr_flags;
+      expflags |= MPFR_FLAGS_INEXACT;
+
+      if (SIGN (inex2) != inex || newflags != expflags ||
+          ! mpfr_equal_p (tres, tc))
+        {
+          printf ("mpfr_agm failed in rnd_mode=%s for\n",
+                  mpfr_print_rnd_mode (rnd_mode));
+          printf ("  a = ");
+          mpfr_out_str (stdout, 10, 0, ta, MPFR_RNDN);
+          printf ("\n");
+          printf ("  b = ");
+          mpfr_out_str (stdout, 10, 0, tb, MPFR_RNDN);
+          printf ("\n");
+          printf ("expected inex = %d, flags = %u,\n"
+                  "         ", inex, expflags);
+          mpfr_dump (tc);
+          printf ("got      inex = %d, flags = %u,\n"
+                  "         ", inex2, newflags);
+          mpfr_dump (tres);
+          exit (1);
+        }
+
+      set_emin (emin);
+      set_emax (emax);
+    }
+
+  mpfr_clears (ta, tb, tc, tres, (mpfr_ptr) 0);
 }
 
 static void
@@ -71,7 +129,7 @@ check_large (void)
     }
 
   /* problem found by Damien Fischer <damien@maths.usyd.edu.au> 4 Aug 2003:
-     produced a division by zero exception */
+     produced a divide-by-zero exception */
   mpfr_set_prec (a, 268);
   mpfr_set_prec (b, 268);
   mpfr_set_prec (agm, 268);
@@ -202,16 +260,16 @@ main (int argc, char* argv[])
   check_nans ();
 
   check_large ();
-  check4 ("2.0", "1.0", MPFR_RNDN, "1.45679103104690677029");
-  check4 ("6.0", "4.0", MPFR_RNDN, "4.94936087247260925182");
-  check4 ("62.0", "61.0", MPFR_RNDN, "6.14989837188450749750e+01");
-  check4 ("0.5", "1.0", MPFR_RNDN, "7.28395515523453385143e-01");
-  check4 ("1.0", "2.0", MPFR_RNDN, "1.45679103104690677029");
-  check4 ("234375765.0", "234375000.0", MPFR_RNDN, "2.3437538249984395504e8");
-  check4 ("8.0", "1.0", MPFR_RNDU, "3.615756177597362786");
-  check4 ("1.0", "44.0", MPFR_RNDU, "1.33658354512981247808e1");
+  check4 ("2.0", "1.0", MPFR_RNDN, "1.456791031046906869", -1);
+  check4 ("6.0", "4.0", MPFR_RNDN, "4.949360872472608925", 1);
+  check4 ("62.0", "61.0", MPFR_RNDN, "61.498983718845075902", -1);
+  check4 ("0.5", "1.0", MPFR_RNDN, "0.72839551552345343459", -1);
+  check4 ("1.0", "2.0", MPFR_RNDN, "1.456791031046906869", -1);
+  check4 ("234375765.0", "234375000.0", MPFR_RNDN, "234375382.49984394025", 1);
+  check4 ("8.0", "1.0", MPFR_RNDU, "3.61575617759736274873", 1);
+  check4 ("1.0", "44.0", MPFR_RNDU, "13.3658354512981243907", 1);
   check4 ("1.0", "3.7252902984619140625e-9", MPFR_RNDU,
-          "7.55393356971199025907e-02");
+          "0.07553933569711989657765", 1);
   test_generic (2, 300, 17);
 
   tests_end_mpfr ();

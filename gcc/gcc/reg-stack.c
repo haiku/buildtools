@@ -1,6 +1,6 @@
 /* Register to Stack convert for GNU compiler.
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010, 2011, 2012
    Free Software Foundation, Inc.
 
    This file is part of GCC.
@@ -434,7 +434,8 @@ get_true_reg (rtx *pat)
 	break;
 
       case UNSPEC:
-	if (XINT (*pat, 1) == UNSPEC_TRUNC_NOOP)
+	if (XINT (*pat, 1) == UNSPEC_TRUNC_NOOP
+	    || XINT (*pat, 1) == UNSPEC_LDA)
 	  pat = & XVECEXP (*pat, 0, 0);
 	return pat;
 
@@ -1322,22 +1323,40 @@ compare_for_stack_reg (rtx insn, stack regstack, rtx pat_src)
 static int
 subst_stack_regs_in_debug_insn (rtx *loc, void *data)
 {
-  rtx *tloc = get_true_reg (loc);
   stack regstack = (stack)data;
   int hard_regno;
 
-  if (!STACK_REG_P (*tloc))
-    return 0;
-
-  if (tloc != loc)
+  if (!STACK_REG_P (*loc))
     return 0;
 
   hard_regno = get_hard_regnum (regstack, *loc);
+
+  /* If we can't find an active register, reset this debug insn.  */
+  if (hard_regno == -1)
+    return 1;
+
   gcc_assert (hard_regno >= FIRST_STACK_REG);
 
   replace_reg (loc, hard_regno);
 
   return -1;
+}
+
+/* Substitute hardware stack regs in debug insn INSN, using stack
+   layout REGSTACK.  If we can't find a hardware stack reg for any of
+   the REGs in it, reset the debug insn.  */
+
+static void
+subst_all_stack_regs_in_debug_insn (rtx insn, struct stack_def *regstack)
+{
+  int ret = for_each_rtx (&INSN_VAR_LOCATION_LOC (insn),
+			  subst_stack_regs_in_debug_insn,
+			  regstack);
+
+  if (ret == 1)
+    INSN_VAR_LOCATION_LOC (insn) = gen_rtx_UNKNOWN_VAR_LOC ();
+  else
+    gcc_checking_assert (ret == 0);
 }
 
 /* Substitute new registers in PAT, which is part of INSN.  REGSTACK
@@ -1655,6 +1674,7 @@ subst_stack_regs_pat (rtx insn, stack regstack, rtx pat)
 	  case UNSPEC:
 	    switch (XINT (pat_src, 1))
 	      {
+	      case UNSPEC_STA:
 	      case UNSPEC_FIST:
 
 	      case UNSPEC_FIST_FLOOR:
@@ -2947,8 +2967,7 @@ convert_regs_1 (basic_block block)
 	    debug_insns_with_starting_stack++;
 	  else
 	    {
-	      for_each_rtx (&PATTERN (insn), subst_stack_regs_in_debug_insn,
-			    &regstack);
+	      subst_all_stack_regs_in_debug_insn (insn, &regstack);
 
 	      /* Nothing must ever die at a debug insn.  If something
 		 is referenced in it that becomes dead, it should have
@@ -2986,8 +3005,7 @@ convert_regs_1 (basic_block block)
 	    continue;
 
 	  debug_insns_with_starting_stack--;
-	  for_each_rtx (&PATTERN (insn), subst_stack_regs_in_debug_insn,
-			&bi->stack_in);
+	  subst_all_stack_regs_in_debug_insn (insn, &bi->stack_in);
 	}
     }
 
@@ -3150,11 +3168,14 @@ convert_regs (void)
 	cfg_altered |= convert_regs_2 (b);
     }
 
+  /* We must fix up abnormal edges before inserting compensation code
+     because both mechanisms insert insns on edges.  */
+  inserted |= fixup_abnormal_edges ();
+
   inserted |= compensate_edges ();
 
   clear_aux_for_blocks ();
 
-  fixup_abnormal_edges ();
   if (inserted)
     commit_edge_insertions ();
 
@@ -3329,7 +3350,6 @@ struct rtl_opt_pass pass_stack_regs_run =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func |
   TODO_ggc_collect                      /* todo_flags_finish */
  }
 };

@@ -1,7 +1,7 @@
 /* Test file for mpfr_cmp_ui and mpfr_cmp_si.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -86,6 +86,126 @@ check_nan (void)
 #include "tcmp_ui.c"
     }
   mpfr_clear (x);
+}
+
+/* Since mpfr_cmp_ui and mpfr_cmp_si are also implemented by a macro
+   with __builtin_constant_p for GCC, check that side effects are
+   handled correctly. */
+static void
+check_macros (void)
+{
+  mpfr_t x;
+  int c;
+
+  mpfr_init2 (x, 32);
+
+  c = 0;
+  mpfr_set_ui (x, 17, MPFR_RNDN);
+  if (mpfr_cmp_ui (x, 17) != 0)
+    {
+      printf ("Error 1 on mpfr_cmp_ui(x,17) in check_macros\n");
+      exit (1);
+    }
+  if (mpfr_cmp_ui (x, (c++, 17)) != 0)
+    {
+      printf ("Error 2 on mpfr_cmp_ui(x,17) in check_macros\n");
+      exit (1);
+    }
+  if (c != 1)
+    {
+      printf ("Error 3 on mpfr_cmp_ui(x,17) in check_macros\n"
+              "(c = %d instead of 1)\n", c);
+      exit (1);
+    }
+  if (mpfr_cmp_si (x, 17) != 0)
+    {
+      printf ("Error 1 on mpfr_cmp_si(x,17) in check_macros\n");
+      exit (1);
+    }
+  if (mpfr_cmp_si (x, (c++, 17)) != 0)
+    {
+      printf ("Error 2 on mpfr_cmp_si(x,17) in check_macros\n");
+      exit (1);
+    }
+  if (c != 2)
+    {
+      printf ("Error 3 on mpfr_cmp_si(x,17) in check_macros\n"
+              "(c = %d instead of 2)\n", c);
+      exit (1);
+    }
+
+  c = 0;
+  mpfr_set_ui (x, 0, MPFR_RNDN);
+  if (mpfr_cmp_ui (x, 0) != 0)
+    {
+      printf ("Error 1 on mpfr_cmp_ui(x,0) in check_macros\n");
+      exit (1);
+    }
+  if (mpfr_cmp_ui (x, (c++, 0)) != 0)
+    {
+      printf ("Error 2 on mpfr_cmp_ui(x,0) in check_macros\n");
+      exit (1);
+    }
+  if (c != 1)
+    {
+      printf ("Error 3 on mpfr_cmp_ui(x,0) in check_macros\n"
+              "(c = %d instead of 1)\n", c);
+      exit (1);
+    }
+  if (mpfr_cmp_si (x, 0) != 0)
+    {
+      printf ("Error 1 on mpfr_cmp_si(x,0) in check_macros\n");
+      exit (1);
+    }
+  if (mpfr_cmp_si (x, (c++, 0)) != 0)
+    {
+      printf ("Error 2 on mpfr_cmp_si(x,0) in check_macros\n");
+      exit (1);
+    }
+  if (c != 2)
+    {
+      printf ("Error 3 on mpfr_cmp_si(x,0) in check_macros\n"
+              "(c = %d instead of 2)\n", c);
+      exit (1);
+    }
+
+  mpfr_clear (x);
+}
+
+/* Bug in r7114 */
+static void
+test_macros (void)
+{
+  mpfr_t x[3];
+  mpfr_ptr p;
+
+  mpfr_inits (x[0], x[1], x[2], (mpfr_ptr) 0);
+  mpfr_set_ui (x[0], 0, MPFR_RNDN);
+  p = x[0];
+  if (mpfr_cmp_ui (p++, 0) != 0)
+    {
+      printf ("Error in mpfr_cmp_ui macro: result should be 0.\n");
+      exit (1);
+    }
+  if (p != x[1])
+    {
+      printf ("Error in mpfr_cmp_ui macro: p - x[0] = %d (expecting 1)\n",
+              (int) (p - x[0]));
+      exit (1);
+    }
+  p = x[0];
+  if (mpfr_cmp_si (p++, 0) != 0)
+    {
+      printf ("Error in mpfr_cmp_si macro: result should be 0.\n");
+      exit (1);
+    }
+  if (p != x[1])
+    {
+      printf ("Error in mpfr_cmp_si macro: p - x[0] = %d (expecting 1)\n",
+              (int) (p - x[0]));
+      exit (1);
+    }
+  mpfr_clears (x[0], x[1], x[2], (mpfr_ptr) 0);
 }
 
 int
@@ -216,6 +336,8 @@ main (void)
   mpfr_clear (x);
 
   check_nan ();
+  check_macros ();
+  test_macros ();
 
   tests_end_mpfr ();
   return 0;

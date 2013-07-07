@@ -1,23 +1,22 @@
 /* mpc_sqrt -- Take the square root of a complex number.
 
-Copyright (C) INRIA, 2002, 2008, 2009, 2010
+Copyright (C) 2002, 2008, 2009, 2010, 2011, 2012 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
 #include "mpc-impl.h"
 
@@ -39,13 +38,13 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
   /* be either the real or the imaginary part of a */
   mpfr_prec_t prec;
   int inex_w, inex_t = 1, inex_re, inex_im, loops = 0;
-  const int re_cmp = mpfr_cmp_ui (MPC_RE (b), 0),
-            im_cmp = mpfr_cmp_ui (MPC_IM (b), 0);
+  const int re_cmp = mpfr_cmp_ui (mpc_realref (b), 0),
+            im_cmp = mpfr_cmp_ui (mpc_imagref (b), 0);
      /* comparison of the real/imaginary part of b with 0 */
   int repr_w, repr_t = 0 /* to avoid gcc warning */ ;
      /* flag indicating whether the computed value is already representable
         at the target precision */
-  const int im_sgn = mpfr_signbit (MPC_IM (b)) == 0 ? 0 : -1;
+  const int im_sgn = mpfr_signbit (mpc_imagref (b)) == 0 ? 0 : -1;
      /* we need to know the sign of Im(b) when it is +/-0 */
   const mpfr_rnd_t r = im_sgn ? GMP_RNDD : GMP_RNDU;
      /* rounding mode used when computing t */
@@ -54,41 +53,41 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
   if (!mpc_fin_p (b)) {
    /* sqrt(x +i*Inf) = +Inf +I*Inf, even if x = NaN */
    /* sqrt(x -i*Inf) = +Inf -I*Inf, even if x = NaN */
-   if (mpfr_inf_p (MPC_IM (b)))
+   if (mpfr_inf_p (mpc_imagref (b)))
       {
-         mpfr_set_inf (MPC_RE (a), +1);
-         mpfr_set_inf (MPC_IM (a), im_sgn);
+         mpfr_set_inf (mpc_realref (a), +1);
+         mpfr_set_inf (mpc_imagref (a), im_sgn);
          return MPC_INEX (0, 0);
       }
 
-   if (mpfr_inf_p (MPC_RE (b)))
+   if (mpfr_inf_p (mpc_realref (b)))
       {
-         if (mpfr_signbit (MPC_RE (b)))
+         if (mpfr_signbit (mpc_realref (b)))
          {
-            if (mpfr_number_p (MPC_IM (b)))
+            if (mpfr_number_p (mpc_imagref (b)))
                {
                /* sqrt(-Inf +i*y) = +0 +i*Inf, when y positive */
                /* sqrt(-Inf +i*y) = +0 -i*Inf, when y positive */
-               mpfr_set_ui (MPC_RE (a), 0, GMP_RNDN);
-               mpfr_set_inf (MPC_IM (a), im_sgn);
+               mpfr_set_ui (mpc_realref (a), 0, GMP_RNDN);
+               mpfr_set_inf (mpc_imagref (a), im_sgn);
                return MPC_INEX (0, 0);
                }
             else
                {
                /* sqrt(-Inf +i*NaN) = NaN +/-i*Inf */
-               mpfr_set_nan (MPC_RE (a));
-               mpfr_set_inf (MPC_IM (a), im_sgn);
+               mpfr_set_nan (mpc_realref (a));
+               mpfr_set_inf (mpc_imagref (a), im_sgn);
                return MPC_INEX (0, 0);
                }
          }
          else
          {
-            if (mpfr_number_p (MPC_IM (b)))
+            if (mpfr_number_p (mpc_imagref (b)))
                {
                /* sqrt(+Inf +i*y) = +Inf +i*0, when y positive */
                /* sqrt(+Inf +i*y) = +Inf -i*0, when y positive */
-               mpfr_set_inf (MPC_RE (a), +1);
-               mpfr_set_ui (MPC_IM (a), 0, GMP_RNDN);
+               mpfr_set_inf (mpc_realref (a), +1);
+               mpfr_set_ui (mpc_imagref (a), 0, GMP_RNDN);
                if (im_sgn)
                   mpc_conj (a, a, MPC_RNDNN);
                return MPC_INEX (0, 0);
@@ -105,10 +104,10 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
 
    /* sqrt(x +i*NaN) = NaN +i*NaN, if x is not infinite */
    /* sqrt(NaN +i*y) = NaN +i*NaN, if y is not infinite */
-   if (mpfr_nan_p (MPC_RE (b)) || mpfr_nan_p (MPC_IM (b)))
+   if (mpfr_nan_p (mpc_realref (b)) || mpfr_nan_p (mpc_imagref (b)))
       {
-         mpfr_set_nan (MPC_RE (a));
-         mpfr_set_nan (MPC_IM (a));
+         mpfr_set_nan (mpc_realref (a));
+         mpfr_set_nan (mpc_imagref (a));
          return MPC_INEX (0, 0);
       }
   }
@@ -125,8 +124,8 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
         }
       else if (re_cmp > 0)
         {
-          inex_w = mpfr_sqrt (MPC_RE (a), MPC_RE (b), MPC_RND_RE (rnd));
-          mpfr_set_ui (MPC_IM (a), 0, GMP_RNDN);
+          inex_w = mpfr_sqrt (mpc_realref (a), mpc_realref (b), MPC_RND_RE (rnd));
+          mpfr_set_ui (mpc_imagref (a), 0, GMP_RNDN);
           if (im_sgn)
             mpc_conj (a, a, MPC_RNDNN);
           return MPC_INEX (inex_w, 0);
@@ -134,16 +133,16 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
       else
         {
           mpfr_init2 (w, MPC_PREC_RE (b));
-          mpfr_neg (w, MPC_RE (b), GMP_RNDN);
+          mpfr_neg (w, mpc_realref (b), GMP_RNDN);
           if (im_sgn)
             {
-              inex_w = -mpfr_sqrt (MPC_IM (a), w, INV_RND (MPC_RND_IM (rnd)));
-              mpfr_neg (MPC_IM (a), MPC_IM (a), GMP_RNDN);
+              inex_w = -mpfr_sqrt (mpc_imagref (a), w, INV_RND (MPC_RND_IM (rnd)));
+              mpfr_neg (mpc_imagref (a), mpc_imagref (a), GMP_RNDN);
             }
           else
-            inex_w = mpfr_sqrt (MPC_IM (a), w, MPC_RND_IM (rnd));
+            inex_w = mpfr_sqrt (mpc_imagref (a), w, MPC_RND_IM (rnd));
 
-          mpfr_set_ui (MPC_RE (a), 0, GMP_RNDN);
+          mpfr_set_ui (mpc_realref (a), 0, GMP_RNDN);
           mpfr_clear (w);
           return MPC_INEX (0, inex_w);
         }
@@ -154,20 +153,20 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
     {
       mpfr_t y;
 
-      y[0] = MPC_IM (b)[0];
+      y[0] = mpc_imagref (b)[0];
       /* If y/2 underflows, so does sqrt(y/2) */
       mpfr_div_2ui (y, y, 1, GMP_RNDN);
       if (im_cmp > 0)
         {
-          inex_w = mpfr_sqrt (MPC_RE (a), y, MPC_RND_RE (rnd));
-          inex_t = mpfr_sqrt (MPC_IM (a), y, MPC_RND_IM (rnd));
+          inex_w = mpfr_sqrt (mpc_realref (a), y, MPC_RND_RE (rnd));
+          inex_t = mpfr_sqrt (mpc_imagref (a), y, MPC_RND_IM (rnd));
         }
       else
         {
           mpfr_neg (y, y, GMP_RNDN);
-          inex_w = mpfr_sqrt (MPC_RE (a), y, MPC_RND_RE (rnd));
-          inex_t = -mpfr_sqrt (MPC_IM (a), y, INV_RND (MPC_RND_IM (rnd)));
-          mpfr_neg (MPC_IM (a), MPC_IM (a), GMP_RNDN);
+          inex_w = mpfr_sqrt (mpc_realref (a), y, MPC_RND_RE (rnd));
+          inex_t = -mpfr_sqrt (mpc_imagref (a), y, INV_RND (MPC_RND_IM (rnd)));
+          mpfr_neg (mpc_imagref (a), mpc_imagref (a), GMP_RNDN);
         }
       return MPC_INEX (inex_w, inex_t);
     }
@@ -214,9 +213,9 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
       /* total error bounded by 3 ulps */
       inex_w = mpc_abs (w, b, GMP_RNDD);
       if (re_cmp < 0)
-        inex_w |= mpfr_sub (w, w, MPC_RE (b), GMP_RNDD);
+        inex_w |= mpfr_sub (w, w, mpc_realref (b), GMP_RNDD);
       else
-        inex_w |= mpfr_add (w, w, MPC_RE (b), GMP_RNDD);
+        inex_w |= mpfr_add (w, w, mpc_realref (b), GMP_RNDD);
       inex_w |= mpfr_div_2ui (w, w, 1, GMP_RNDD);
       inex_w |= mpfr_sqrt (w, w, GMP_RNDD);
 
@@ -241,7 +240,7 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
       if (!inex_w || ok_w) {
          /* t = y / 2w, rounded away */
          /* total error bounded by 7 ulps */
-         inex_t = mpfr_div (t, MPC_IM (b), w, r);
+         inex_t = mpfr_div (t, mpc_imagref (b), w, r);
          if (!inex_t && inex_w)
             /* The division was exact, but w was not. */
             inex_t = im_sgn ? -1 : 1;
@@ -263,16 +262,16 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
     while ((inex_w && !ok_w) || (inex_t && !ok_t));
 
    if (re_cmp > 0) {
-         inex_re = mpfr_set (MPC_RE (a), w, MPC_RND_RE(rnd));
-         inex_im = mpfr_set (MPC_IM (a), t, MPC_RND_IM(rnd));
+         inex_re = mpfr_set (mpc_realref (a), w, MPC_RND_RE(rnd));
+         inex_im = mpfr_set (mpc_imagref (a), t, MPC_RND_IM(rnd));
    }
    else if (im_cmp > 0) {
-      inex_re = mpfr_set (MPC_RE(a), t, MPC_RND_RE(rnd));
-      inex_im = mpfr_set (MPC_IM(a), w, MPC_RND_IM(rnd));
+      inex_re = mpfr_set (mpc_realref(a), t, MPC_RND_RE(rnd));
+      inex_im = mpfr_set (mpc_imagref(a), w, MPC_RND_IM(rnd));
    }
    else {
-      inex_re = mpfr_neg (MPC_RE (a), t, MPC_RND_RE(rnd));
-      inex_im = mpfr_neg (MPC_IM (a), w, MPC_RND_IM(rnd));
+      inex_re = mpfr_neg (mpc_realref (a), t, MPC_RND_RE(rnd));
+      inex_im = mpfr_neg (mpc_imagref (a), w, MPC_RND_IM(rnd));
    }
 
    if (repr_w && inex_w) {
@@ -291,7 +290,7 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
             be done now when we are in the target precision */
          if (re_cmp > 0) {
             if (rnd_w == GMP_RNDU) {
-               MPFR_ADD_ONE_ULP (MPC_RE (a));
+               MPFR_ADD_ONE_ULP (mpc_realref (a));
                inex_re = +1;
             }
             else
@@ -299,7 +298,7 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
          }
          else if (im_cmp > 0) {
             if (rnd_w == GMP_RNDU) {
-               MPFR_ADD_ONE_ULP (MPC_IM (a));
+               MPFR_ADD_ONE_ULP (mpc_imagref (a));
                inex_im = +1;
             }
             else
@@ -307,7 +306,7 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
          }
          else {
             if (rnd_w == GMP_RNDU) {
-               MPFR_ADD_ONE_ULP (MPC_IM (a));
+               MPFR_ADD_ONE_ULP (mpc_imagref (a));
                inex_im = -1;
             }
             else
@@ -330,11 +329,11 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
                inex_im = inex_t;
             else {
                inex_im = -inex_t;
-               if (   (im_cmp > 0 && r == GMP_RNDD)
-                   || (im_cmp < 0 && r == GMP_RNDU))
-                  MPFR_ADD_ONE_ULP (MPC_IM (a));
-               else
-                  MPFR_SUB_ONE_ULP (MPC_IM (a));
+               /* im_cmp > 0 implies that Im(b) > 0, thus im_sgn = 0
+                  and r = GMP_RNDU.
+                  im_cmp < 0 implies that Im(b) < 0, thus im_sgn = -1
+                  and r = GMP_RNDD. */
+               MPFR_SUB_ONE_ULP (mpc_imagref (a));
             }
          }
          else if (im_cmp > 0) {
@@ -342,21 +341,17 @@ mpc_sqrt (mpc_ptr a, mpc_srcptr b, mpc_rnd_t rnd)
                inex_re = inex_t;
             else {
                inex_re = -inex_t;
-               if (r == GMP_RNDD)
-                  MPFR_ADD_ONE_ULP (MPC_RE (a));
-               else
-                  MPFR_SUB_ONE_ULP (MPC_RE (a));
+               /* im_cmp > 0 implies r = GMP_RNDU (see above) */
+               MPFR_SUB_ONE_ULP (mpc_realref (a));
             }
          }
-         else {
+         else { /* im_cmp < 0 */
             if (rnd_t == r)
                inex_re = -inex_t;
             else {
                inex_re = inex_t;
-               if (r == GMP_RNDD)
-                  MPFR_SUB_ONE_ULP (MPC_RE (a));
-               else
-                  MPFR_ADD_ONE_ULP (MPC_RE (a));
+               /* im_cmp < 0 implies r = GMP_RNDD (see above) */
+               MPFR_SUB_ONE_ULP (mpc_realref (a));
             }
          }
       }

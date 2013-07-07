@@ -1,5 +1,5 @@
 /* Mudflap: narrow-pointer bounds-checking by tree rewriting.
-   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012
    Free Software Foundation, Inc.
    Contributed by Frank Ch. Eigler <fche@redhat.com>
    and Graydon Hoare <graydon@redhat.com>
@@ -88,7 +88,7 @@ mf_build_string (const char *string)
   tree result = mf_mark (build_string (len + 1, string));
 
   TREE_TYPE (result) = build_array_type
-    (char_type_node, build_index_type (build_int_cst (NULL_TREE, len)));
+    (char_type_node, build_index_type (size_int (len)));
   TREE_CONSTANT (result) = 1;
   TREE_READONLY (result) = 1;
   TREE_STATIC (result) = 1;
@@ -424,6 +424,10 @@ execute_mudflap_function_ops (void)
     return 0;
 
   push_gimplify_context (&gctx);
+
+  add_referenced_var (mf_cache_array_decl);
+  add_referenced_var (mf_cache_shift_decl);
+  add_referenced_var (mf_cache_mask_decl);
 
   /* In multithreaded mode, don't cache the lookup cache parameters.  */
   if (! flag_mudflap_threads)
@@ -850,16 +854,15 @@ mf_xform_derefs_1 (gimple_stmt_iterator *iter, tree *tp,
 	      elt = build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (elt)),
 			    elt);
             addr = fold_convert_loc (location, ptr_type_node, elt ? elt : base);
-            addr = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
-				addr, fold_convert_loc (location, sizetype,
-							byte_position (field)));
+            addr = fold_build_pointer_plus_loc (location,
+						addr, byte_position (field));
           }
         else
           addr = build1 (ADDR_EXPR, build_pointer_type (type), t);
 
         limit = fold_build2_loc (location, MINUS_EXPR, mf_uintptr_type,
                              fold_build2_loc (location, PLUS_EXPR, mf_uintptr_type,
-					  convert (mf_uintptr_type, addr),
+					  fold_convert (mf_uintptr_type, addr),
 					  size),
                              integer_one_node);
       }
@@ -868,33 +871,25 @@ mf_xform_derefs_1 (gimple_stmt_iterator *iter, tree *tp,
     case INDIRECT_REF:
       addr = TREE_OPERAND (t, 0);
       base = addr;
-      limit = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
-			   fold_build2_loc (location,
-					POINTER_PLUS_EXPR, ptr_type_node, base,
-					size),
-			   size_int (-1));
+      limit = fold_build_pointer_plus_hwi_loc
+	(location, fold_build_pointer_plus_loc (location, base, size), -1);
       break;
 
     case MEM_REF:
-      addr = fold_build2_loc (location, POINTER_PLUS_EXPR, TREE_TYPE (TREE_OPERAND (t, 0)),
-		     TREE_OPERAND (t, 0),
-		     fold_convert (sizetype, TREE_OPERAND (t, 1)));
+      addr = fold_build_pointer_plus_loc (location, TREE_OPERAND (t, 0),
+					  TREE_OPERAND (t, 1));
       base = addr;
-      limit = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
-			   fold_build2_loc (location,
-					POINTER_PLUS_EXPR, ptr_type_node, base,
-					size),
-			   size_int (-1));
+      limit = fold_build_pointer_plus_hwi_loc (location,
+			   fold_build_pointer_plus_loc (location,
+							base, size), -1);
       break;
 
     case TARGET_MEM_REF:
       addr = tree_mem_ref_addr (ptr_type_node, t);
       base = addr;
-      limit = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
-			   fold_build2_loc (location,
-					POINTER_PLUS_EXPR, ptr_type_node, base,
-					size),
-			   size_int (-1));
+      limit = fold_build_pointer_plus_hwi_loc (location,
+			   fold_build_pointer_plus_loc (location,
+							base, size), -1);
       break;
 
     case ARRAY_RANGE_REF:
@@ -913,29 +908,23 @@ mf_xform_derefs_1 (gimple_stmt_iterator *iter, tree *tp,
           return;
 
         bpu = bitsize_int (BITS_PER_UNIT);
-        ofs = convert (bitsizetype, TREE_OPERAND (t, 2));
+        ofs = fold_convert (bitsizetype, TREE_OPERAND (t, 2));
         rem = size_binop_loc (location, TRUNC_MOD_EXPR, ofs, bpu);
-        ofs = fold_convert_loc (location,
-				sizetype,
-				size_binop_loc (location,
-						TRUNC_DIV_EXPR, ofs, bpu));
+        ofs = size_binop_loc (location, TRUNC_DIV_EXPR, ofs, bpu);
 
-        size = convert (bitsizetype, TREE_OPERAND (t, 1));
+        size = fold_convert (bitsizetype, TREE_OPERAND (t, 1));
         size = size_binop_loc (location, PLUS_EXPR, size, rem);
         size = size_binop_loc (location, CEIL_DIV_EXPR, size, bpu);
-        size = convert (sizetype, size);
+        size = fold_convert (sizetype, size);
 
         addr = TREE_OPERAND (TREE_OPERAND (t, 0), 0);
-        addr = convert (ptr_type_node, addr);
-        addr = fold_build2_loc (location, POINTER_PLUS_EXPR,
-			    ptr_type_node, addr, ofs);
+        addr = fold_convert (ptr_type_node, addr);
+        addr = fold_build_pointer_plus_loc (location, addr, ofs);
 
         base = addr;
-        limit = fold_build2_loc (location, POINTER_PLUS_EXPR, ptr_type_node,
-                             fold_build2_loc (location,
-					  POINTER_PLUS_EXPR, ptr_type_node,
-					   base, size),
-                             size_int (-1));
+        limit = fold_build_pointer_plus_hwi_loc (location,
+                             fold_build_pointer_plus_loc (location,
+							  base, size), -1);
       }
       break;
 
@@ -947,7 +936,6 @@ mf_xform_derefs_1 (gimple_stmt_iterator *iter, tree *tp,
 }
 /* Transform
    1) Memory references.
-   2) BUILTIN_ALLOCA calls.
 */
 static void
 mf_xform_statements (void)
@@ -986,14 +974,6 @@ mf_xform_statements (void)
 				     gimple_location (s),
 				     integer_zero_node);
                 }
-              break;
-
-            case GIMPLE_CALL:
-              {
-                tree fndecl = gimple_call_fndecl (s);
-                if (fndecl && (DECL_FUNCTION_CODE (fndecl) == BUILT_IN_ALLOCA))
-                  gimple_call_set_cannot_inline (s, true);
-              }
               break;
 
             default:
@@ -1068,7 +1048,8 @@ mx_register_decls (tree decl, gimple_seq seq, location_t location)
 
 	  /* Variable-sized objects should have sizes already been
 	     gimplified when we got here. */
-	  size = convert (size_type_node, TYPE_SIZE_UNIT (TREE_TYPE (decl)));
+	  size = fold_convert (size_type_node,
+			       TYPE_SIZE_UNIT (TREE_TYPE (decl)));
 	  gcc_assert (is_gimple_val (size));
 
 
@@ -1252,13 +1233,13 @@ mudflap_register_call (tree obj, tree object_size, tree varname)
   tree arg, call_stmt;
 
   arg = build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (obj)), obj);
-  arg = convert (ptr_type_node, arg);
+  arg = fold_convert (ptr_type_node, arg);
 
   call_stmt = build_call_expr (mf_register_fndecl, 4,
 			       arg,
-			       convert (size_type_node, object_size),
+			       fold_convert (size_type_node, object_size),
 			       /* __MF_TYPE_STATIC */
-			       build_int_cst (NULL_TREE, 4),
+			       build_int_cst (integer_type_node, 4),
 			       varname);
 
   append_to_statement_list (call_stmt, &enqueued_call_stmt_chain);
@@ -1291,7 +1272,7 @@ mudflap_enqueue_constant (tree obj)
     return;
 
   if (TREE_CODE (obj) == STRING_CST)
-    object_size = build_int_cst (NULL_TREE, TREE_STRING_LENGTH (obj));
+    object_size = size_int (TREE_STRING_LENGTH (obj));
   else
     object_size = size_in_bytes (TREE_TYPE (obj));
 
@@ -1396,7 +1377,7 @@ struct gimple_opt_pass pass_mudflap_1 =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func                        /* todo_flags_finish */
+  0                                     /* todo_flags_finish */
  }
 };
 
@@ -1416,7 +1397,7 @@ struct gimple_opt_pass pass_mudflap_2 =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_verify_flow | TODO_verify_stmts
-  | TODO_dump_func | TODO_update_ssa    /* todo_flags_finish */
+  | TODO_update_ssa                     /* todo_flags_finish */
  }
 };
 

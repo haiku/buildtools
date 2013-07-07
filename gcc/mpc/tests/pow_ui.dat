@@ -1,23 +1,21 @@
 # Data file for mpc_pow_ui.
 #
-# Copyright (C) INRIA, 2010
+# Copyright (C) 2010, 2011, 2012 INRIA
 #
-# This file is part of the MPC Library.
+# This file is part of GNU MPC.
 #
-# The MPC Library is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Lesser General Public License as published by
-# the Free Software Foundation; either version 2.1 of the License, or (at your
-# option) any later version.
+# GNU MPC is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+#o ption) any later version.
 #
-# The MPC Library is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-# License for more details.
+# GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+# more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with the MPC Library; see the file COPYING.LIB.  If not, write to
-# the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-# MA 02111-1307, USA.
+# along with this program. If not, see http://www.gnu.org/licenses/ .
 #
 # The line format respects the parameter order in function prototype as
 # follow:
@@ -36,8 +34,8 @@
 0 0 53 +inf 53  nan    53 -inf 53   +1  +1 N N
 0 0 53 +inf 53  nan    53 -inf 53   -1  +1 N N
 
-0 0 53  nan 53  nan    53   +0 53   +0  +0 N N
-0 0 53    0 53    0    53   +0 53   +0  +1 N N
+0 0 53   +1 53   +0    53   +0 53   +0  +0 N N
+0 0 53   +0 53   +0    53   +0 53   +0  +1 N N
 
 0 0 53   +1 53   +0    53   +0 53   +1  +0 N N
 0 0 53   +1 53   -0    53   +0 53   +1  +0 N D
@@ -95,3 +93,10 @@
 ? ? 420  -0x1.c3fb41a71665f9a144927e70cbc2dc899e9e30880c0b5aa924ad8a538b4cd06e503f38bdbb7cfcfded29f7504fe0c91ecd4230984@-187 420 -0xc.82a09ac98133eb05b2643c98eb1c8e1a1609e75f682b14098176abd6c8b4b3c6c72dadaf8929f9bd87f8c78d03361bacb9fb13140@-292  420 0x1.cf13ce58adc4e639fd1c3063ffc9291433647999951bc04ba6797ec4de0335336ad0a28df18573d3b6322ebab662c08eadaed4a8e@-8 420 0x3.cf71d602ca6f754ebd6af522154f3ee1c46da0a52deb1f60016fca4b1e0b4b447b752169e837bb1866aa3734850cd158a7e3ca33c@-9  24 N N
 # exact result
 0 0  5 -9 5 46  5 3 5 2  3 D U
+
+# special cases with exponents 1 and 2
+0 0 53  3 53  4  53 3 53 4 1 N N
+0 0 53 -7 53 24  53 3 53 4 2 N N
+
+# coverage test
++ - 2 1 2 1 100 0x8ac78f4e6aec091921cbdc891p-99 100 0x4a5f2972ea662e1cc0caebb81p-100 3 N N

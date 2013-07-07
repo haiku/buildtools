@@ -129,6 +129,10 @@ typedef HOST_WIDE_INT __gcc_host_wide_int__;
 #define ATTRIBUTE_ASM_FPRINTF(m, n) ATTRIBUTE_NONNULL(m)
 #endif
 
+extern void fprint_whex (FILE *, unsigned HOST_WIDE_INT);
+extern void fprint_ul (FILE *, unsigned long);
+extern int sprint_ul (char *, unsigned long);
+
 extern void asm_fprintf (FILE *file, const char *p, ...)
      ATTRIBUTE_ASM_FPRINTF(2, 3);
 
@@ -442,7 +446,8 @@ extern void no_asm_to_stream (FILE *);
 #define SECTION_STYLE_MASK 0x600000	/* bits used for SECTION_STYLE */
 #define SECTION_COMMON   0x800000	/* contains common data */
 #define SECTION_RELRO	 0x1000000	/* data is readonly after relocation processing */
-#define SECTION_MACH_DEP 0x2000000	/* subsequent bits reserved for target */
+#define SECTION_EXCLUDE  0x2000000	/* discarded by the linker */
+#define SECTION_MACH_DEP 0x4000000	/* subsequent bits reserved for target */
 
 /* This SECTION_STYLE is used for unnamed sections that we can switch
    to using a special assembler directive.  */
@@ -605,6 +610,10 @@ extern bool unlikely_text_section_p (section *);
 extern void switch_to_section (section *);
 extern void output_section_asm_op (const void *);
 
+extern void record_tm_clone_pair (tree, tree);
+extern void finish_tm_clone_pairs (void);
+extern tree get_tm_clone_pair (tree);
+
 extern void default_asm_output_source_filename (FILE *, const char *);
 extern void output_file_directive (FILE *, const char *);
 
@@ -629,6 +638,7 @@ extern section *default_elf_select_section (tree, int, unsigned HOST_WIDE_INT);
 extern void default_unique_section (tree, int);
 extern section *default_function_rodata_section (tree);
 extern section *default_no_function_rodata_section (tree);
+extern section *default_clone_table_section (void);
 extern section *default_select_rtx_section (enum machine_mode, rtx,
 					    unsigned HOST_WIDE_INT);
 extern section *default_elf_select_rtx_section (enum machine_mode, rtx,
@@ -654,6 +664,12 @@ extern void file_end_indicate_split_stack (void);
 
 extern void default_elf_asm_output_external (FILE *file, tree,
 					     const char *);
+extern void default_elf_asm_output_limited_string (FILE *, const char *);
+extern void default_elf_asm_output_ascii (FILE *, const char *, unsigned int);
+extern void default_elf_internal_label (FILE *, const char *, unsigned long);
+
+extern void default_elf_init_array_asm_out_constructor (rtx, int);
+extern void default_elf_fini_array_asm_out_destructor (rtx, int);
 extern int maybe_assemble_visibility (tree);
 
 extern int default_address_cost (rtx, bool);

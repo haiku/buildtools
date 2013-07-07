@@ -109,6 +109,247 @@ gen_rtx_CONST_INT (enum machine_mode ARG_UNUSED (mode),
   return rt;
 }
 
+/* Predicate handling.
+
+   We construct from the machine description a table mapping each
+   predicate to a list of the rtl codes it can possibly match.  The
+   function 'maybe_both_true' uses it to deduce that there are no
+   expressions that can be matches by certain pairs of tree nodes.
+   Also, if a predicate can match only one code, we can hardwire that
+   code into the node testing the predicate.
+
+   Some predicates are flagged as special.  validate_pattern will not
+   warn about modeless match_operand expressions if they have a
+   special predicate.  Predicates that allow only constants are also
+   treated as special, for this purpose.
+
+   validate_pattern will warn about predicates that allow non-lvalues
+   when they appear in destination operands.
+
+   Calculating the set of rtx codes that can possibly be accepted by a
+   predicate expression EXP requires a three-state logic: any given
+   subexpression may definitively accept a code C (Y), definitively
+   reject a code C (N), or may have an indeterminate effect (I).  N
+   and I is N; Y or I is Y; Y and I, N or I are both I.  Here are full
+   truth tables.
+
+     a b  a&b  a|b
+     Y Y   Y    Y
+     N Y   N    Y
+     N N   N    N
+     I Y   I    Y
+     I N   N    I
+     I I   I    I
+
+   We represent Y with 1, N with 0, I with 2.  If any code is left in
+   an I state by the complete expression, we must assume that that
+   code can be accepted.  */
+
+#define N 0
+#define Y 1
+#define I 2
+
+#define TRISTATE_AND(a,b)			\
+  ((a) == I ? ((b) == N ? N : I) :		\
+   (b) == I ? ((a) == N ? N : I) :		\
+   (a) && (b))
+
+#define TRISTATE_OR(a,b)			\
+  ((a) == I ? ((b) == Y ? Y : I) :		\
+   (b) == I ? ((a) == Y ? Y : I) :		\
+   (a) || (b))
+
+#define TRISTATE_NOT(a)				\
+  ((a) == I ? I : !(a))
+
+/* 0 means no warning about that code yet, 1 means warned.  */
+static char did_you_mean_codes[NUM_RTX_CODE];
+
+/* Recursively calculate the set of rtx codes accepted by the
+   predicate expression EXP, writing the result to CODES.  LINENO is
+   the line number on which the directive containing EXP appeared.  */
+
+static void
+compute_predicate_codes (rtx exp, int lineno, char codes[NUM_RTX_CODE])
+{
+  char op0_codes[NUM_RTX_CODE];
+  char op1_codes[NUM_RTX_CODE];
+  char op2_codes[NUM_RTX_CODE];
+  int i;
+
+  switch (GET_CODE (exp))
+    {
+    case AND:
+      compute_predicate_codes (XEXP (exp, 0), lineno, op0_codes);
+      compute_predicate_codes (XEXP (exp, 1), lineno, op1_codes);
+      for (i = 0; i < NUM_RTX_CODE; i++)
+	codes[i] = TRISTATE_AND (op0_codes[i], op1_codes[i]);
+      break;
+
+    case IOR:
+      compute_predicate_codes (XEXP (exp, 0), lineno, op0_codes);
+      compute_predicate_codes (XEXP (exp, 1), lineno, op1_codes);
+      for (i = 0; i < NUM_RTX_CODE; i++)
+	codes[i] = TRISTATE_OR (op0_codes[i], op1_codes[i]);
+      break;
+    case NOT:
+      compute_predicate_codes (XEXP (exp, 0), lineno, op0_codes);
+      for (i = 0; i < NUM_RTX_CODE; i++)
+	codes[i] = TRISTATE_NOT (op0_codes[i]);
+      break;
+
+    case IF_THEN_ELSE:
+      /* a ? b : c  accepts the same codes as (a & b) | (!a & c).  */
+      compute_predicate_codes (XEXP (exp, 0), lineno, op0_codes);
+      compute_predicate_codes (XEXP (exp, 1), lineno, op1_codes);
+      compute_predicate_codes (XEXP (exp, 2), lineno, op2_codes);
+      for (i = 0; i < NUM_RTX_CODE; i++)
+	codes[i] = TRISTATE_OR (TRISTATE_AND (op0_codes[i], op1_codes[i]),
+				TRISTATE_AND (TRISTATE_NOT (op0_codes[i]),
+					      op2_codes[i]));
+      break;
+
+    case MATCH_CODE:
+      /* MATCH_CODE allows a specified list of codes.  However, if it
+	 does not apply to the top level of the expression, it does not
+	 constrain the set of codes for the top level.  */
+      if (XSTR (exp, 1)[0] != '\0')
+	{
+	  memset (codes, Y, NUM_RTX_CODE);
+	  break;
+	}
+
+      memset (codes, N, NUM_RTX_CODE);
+      {
+	const char *next_code = XSTR (exp, 0);
+	const char *code;
+
+	if (*next_code == '\0')
+	  {
+	    error_with_line (lineno, "empty match_code expression");
+	    break;
+	  }
+
+	while ((code = scan_comma_elt (&next_code)) != 0)
+	  {
+	    size_t n = next_code - code;
+	    int found_it = 0;
+
+	    for (i = 0; i < NUM_RTX_CODE; i++)
+	      if (!strncmp (code, GET_RTX_NAME (i), n)
+		  && GET_RTX_NAME (i)[n] == '\0')
+		{
+		  codes[i] = Y;
+		  found_it = 1;
+		  break;
+		}
+	    if (!found_it)
+	      {
+		error_with_line (lineno,
+				 "match_code \"%.*s\" matches nothing",
+				 (int) n, code);
+		for (i = 0; i < NUM_RTX_CODE; i++)
+		  if (!strncasecmp (code, GET_RTX_NAME (i), n)
+		      && GET_RTX_NAME (i)[n] == '\0'
+		      && !did_you_mean_codes[i])
+		    {
+		      did_you_mean_codes[i] = 1;
+		      message_with_line (lineno, "(did you mean \"%s\"?)",
+					 GET_RTX_NAME (i));
+		    }
+	      }
+	  }
+      }
+      break;
+
+    case MATCH_OPERAND:
+      /* MATCH_OPERAND disallows the set of codes that the named predicate
+	 disallows, and is indeterminate for the codes that it does allow.  */
+      {
+	struct pred_data *p = lookup_predicate (XSTR (exp, 1));
+	if (!p)
+	  {
+	    error_with_line (lineno, "reference to unknown predicate '%s'",
+			     XSTR (exp, 1));
+	    break;
+	  }
+	for (i = 0; i < NUM_RTX_CODE; i++)
+	  codes[i] = p->codes[i] ? I : N;
+      }
+      break;
+
+
+    case MATCH_TEST:
+      /* (match_test WHATEVER) is completely indeterminate.  */
+      memset (codes, I, NUM_RTX_CODE);
+      break;
+
+    default:
+      error_with_line (lineno,
+		       "'%s' cannot be used in a define_predicate expression",
+		       GET_RTX_NAME (GET_CODE (exp)));
+      memset (codes, I, NUM_RTX_CODE);
+      break;
+    }
+}
+
+#undef TRISTATE_OR
+#undef TRISTATE_AND
+#undef TRISTATE_NOT
+
+/* Return true if NAME is a valid predicate name.  */
+
+static bool
+valid_predicate_name_p (const char *name)
+{
+  const char *p;
+
+  if (!ISALPHA (name[0]) && name[0] != '_')
+    return false;
+  for (p = name + 1; *p; p++)
+    if (!ISALNUM (*p) && *p != '_')
+      return false;
+  return true;
+}
+
+/* Process define_predicate directive DESC, which appears on line number
+   LINENO.  Compute the set of codes that can be matched, and record this
+   as a known predicate.  */
+
+static void
+process_define_predicate (rtx desc, int lineno)
+{
+  struct pred_data *pred;
+  char codes[NUM_RTX_CODE];
+  int i;
+
+  if (!valid_predicate_name_p (XSTR (desc, 0)))
+    {
+      error_with_line (lineno,
+		       "%s: predicate name must be a valid C function name",
+		       XSTR (desc, 0));
+      return;
+    }
+
+  pred = XCNEW (struct pred_data);
+  pred->name = XSTR (desc, 0);
+  pred->exp = XEXP (desc, 1);
+  pred->c_block = XSTR (desc, 2);
+  if (GET_CODE (desc) == DEFINE_SPECIAL_PREDICATE)
+    pred->special = true;
+
+  compute_predicate_codes (XEXP (desc, 1), lineno, codes);
+
+  for (i = 0; i < NUM_RTX_CODE; i++)
+    if (codes[i] != N)
+      add_predicate_code (pred, (enum rtx_code) i);
+
+  add_predicate (pred);
+}
+#undef I
+#undef N
+#undef Y
+
 /* Queue PATTERN on LIST_TAIL.  Return the address of the new queue
    element.  */
 
@@ -125,6 +366,25 @@ queue_pattern (rtx pattern, struct queue_elem ***list_tail,
   **list_tail = e;
   *list_tail = &e->next;
   return e;
+}
+
+/* Build a define_attr for an binary attribute with name NAME and
+   possible values "yes" and "no", and queue it.  */
+static void
+add_define_attr (const char *name)
+{
+  struct queue_elem *e = XNEW(struct queue_elem);
+  rtx t1 = rtx_alloc (DEFINE_ATTR);
+  XSTR (t1, 0) = name;
+  XSTR (t1, 1) = "no,yes";
+  XEXP (t1, 2) = rtx_alloc (CONST_STRING);
+  XSTR (XEXP (t1, 2), 0) = "yes";
+  e->data = t1;
+  e->filename = "built-in";
+  e->lineno = -1;
+  e->next = define_attr_queue;
+  define_attr_queue = e;
+
 }
 
 /* Recursively remove constraints from an rtx.  */
@@ -182,6 +442,9 @@ process_rtx (rtx desc, int lineno)
 
     case DEFINE_PREDICATE:
     case DEFINE_SPECIAL_PREDICATE:
+      process_define_predicate (desc, lineno);
+      /* Fall through.  */
+
     case DEFINE_CONSTRAINT:
     case DEFINE_REGISTER_CONSTRAINT:
     case DEFINE_MEMORY_CONSTRAINT:
@@ -303,17 +566,10 @@ is_predicable (struct queue_elem *elem)
   return predicable_default;
 
  found:
-  /* Verify that predicability does not vary on the alternative.  */
-  /* ??? It should be possible to handle this by simply eliminating
-     the non-predicable alternatives from the insn.  FRV would like
-     to do this.  Delay this until we've got the basics solid.  */
+  /* Find out which value we're looking at.  Multiple alternatives means at
+     least one is predicable.  */
   if (strchr (value, ',') != NULL)
-    {
-      error_with_line (elem->lineno, "multiple alternatives for `predicable'");
-      return 0;
-    }
-
-  /* Find out which value we're looking at.  */
+    return 1;
   if (strcmp (value, predicable_true) == 0)
     return 1;
   if (strcmp (value, predicable_false) == 0)
@@ -350,8 +606,7 @@ identify_predicable_attribute (void)
   if (p_true == NULL || strchr (++p_true, ',') != NULL)
     {
       error_with_line (elem->lineno, "attribute `predicable' is not a boolean");
-      if (p_false)
-        free (p_false);
+      free (p_false);
       return;
     }
   p_true[-1] = '\0';
@@ -367,15 +622,13 @@ identify_predicable_attribute (void)
 
     case CONST:
       error_with_line (elem->lineno, "attribute `predicable' cannot be const");
-      if (p_false)
-	free (p_false);
+      free (p_false);
       return;
 
     default:
       error_with_line (elem->lineno,
 		       "attribute `predicable' must have a constant default");
-      if (p_false)
-	free (p_false);
+      free (p_false);
       return;
     }
 
@@ -387,8 +640,7 @@ identify_predicable_attribute (void)
     {
       error_with_line (elem->lineno,
 		       "unknown value `%s' for `predicable' attribute", value);
-      if (p_false)
-	free (p_false);
+      free (p_false);
     }
 }
 
@@ -558,6 +810,146 @@ alter_test_for_insn (struct queue_elem *ce_elem,
 			    XSTR (insn_elem->data, 2));
 }
 
+/* Modify VAL, which is an attribute expression for the "enabled" attribute,
+   to take "ce_enabled" into account.  Return the new expression.  */
+static rtx
+modify_attr_enabled_ce (rtx val)
+{
+  rtx eq_attr, str;
+  rtx ite;
+  eq_attr = rtx_alloc (EQ_ATTR);
+  ite = rtx_alloc (IF_THEN_ELSE);
+  str = rtx_alloc (CONST_STRING);
+
+  XSTR (eq_attr, 0) = "ce_enabled";
+  XSTR (eq_attr, 1) = "yes";
+  XSTR (str, 0) = "no";
+  XEXP (ite, 0) = eq_attr;
+  XEXP (ite, 1) = val;
+  XEXP (ite, 2) = str;
+
+  return ite;
+}
+
+/* Alter the attribute vector of INSN, which is a COND_EXEC variant created
+   from a define_insn pattern.  We must modify the "predicable" attribute
+   to be named "ce_enabled", and also change any "enabled" attribute that's
+   present so that it takes ce_enabled into account.
+   We rely on the fact that INSN was created with copy_rtx, and modify data
+   in-place.  */
+
+static void
+alter_attrs_for_insn (rtx insn)
+{
+  static bool global_changes_made = false;
+  rtvec vec = XVEC (insn, 4);
+  rtvec new_vec;
+  rtx val, set;
+  int num_elem;
+  int predicable_idx = -1;
+  int enabled_idx = -1;
+  int i;
+
+  if (! vec)
+    return;
+
+  num_elem = GET_NUM_ELEM (vec);
+  for (i = num_elem - 1; i >= 0; --i)
+    {
+      rtx sub = RTVEC_ELT (vec, i);
+      switch (GET_CODE (sub))
+	{
+	case SET_ATTR:
+	  if (strcmp (XSTR (sub, 0), "predicable") == 0)
+	    {
+	      predicable_idx = i;
+	      XSTR (sub, 0) = "ce_enabled";
+	    }
+	  else if (strcmp (XSTR (sub, 0), "enabled") == 0)
+	    {
+	      enabled_idx = i;
+	      XSTR (sub, 0) = "nonce_enabled";
+	    }
+	  break;
+
+	case SET_ATTR_ALTERNATIVE:
+	  if (strcmp (XSTR (sub, 0), "predicable") == 0)
+	    /* We already give an error elsewhere.  */
+	    return;
+	  else if (strcmp (XSTR (sub, 0), "enabled") == 0)
+	    {
+	      enabled_idx = i;
+	      XSTR (sub, 0) = "nonce_enabled";
+	    }
+	  break;
+
+	case SET:
+	  if (GET_CODE (SET_DEST (sub)) != ATTR)
+	    break;
+	  if (strcmp (XSTR (SET_DEST (sub), 0), "predicable") == 0)
+	    {
+	      sub = SET_SRC (sub);
+	      if (GET_CODE (sub) == CONST_STRING)
+		{
+		  predicable_idx = i;
+		  XSTR (sub, 0) = "ce_enabled";
+		}
+	      else
+		/* We already give an error elsewhere.  */
+		return;
+	      break;
+	    }
+	  if (strcmp (XSTR (SET_DEST (sub), 0), "enabled") == 0)
+	    {
+	      enabled_idx = i;
+	      XSTR (SET_DEST (sub), 0) = "nonce_enabled";
+	    }
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+    }
+  if (predicable_idx == -1)
+    return;
+
+  if (!global_changes_made)
+    {
+      struct queue_elem *elem;
+      
+      global_changes_made = true;
+      add_define_attr ("ce_enabled");
+      add_define_attr ("nonce_enabled");
+
+      for (elem = define_attr_queue; elem ; elem = elem->next)
+	if (strcmp (XSTR (elem->data, 0), "enabled") == 0)
+	  {
+	    XEXP (elem->data, 2)
+	      = modify_attr_enabled_ce (XEXP (elem->data, 2));
+	  }
+    }
+  if (enabled_idx == -1)
+    return;
+
+  new_vec = rtvec_alloc (num_elem + 1);
+  for (i = 0; i < num_elem; i++)
+    RTVEC_ELT (new_vec, i) = RTVEC_ELT (vec, i);
+  val = rtx_alloc (IF_THEN_ELSE);
+  XEXP (val, 0) = rtx_alloc (EQ_ATTR);
+  XEXP (val, 1) = rtx_alloc (CONST_STRING);
+  XEXP (val, 2) = rtx_alloc (CONST_STRING);
+  XSTR (XEXP (val, 0), 0) = "nonce_enabled";
+  XSTR (XEXP (val, 0), 1) = "yes";
+  XSTR (XEXP (val, 1), 0) = "yes";
+  XSTR (XEXP (val, 2), 0) = "no";
+  set = rtx_alloc (SET);
+  SET_DEST (set) = rtx_alloc (ATTR);
+  XSTR (SET_DEST (set), 0) = "enabled";
+  SET_SRC (set) = modify_attr_enabled_ce (val);
+  RTVEC_ELT (new_vec, i) = set;
+  XVEC (insn, 4) = new_vec;
+}
+
 /* Adjust all of the operand numbers in SRC to match the shift they'll
    get from an operand displacement of DISP.  Return a pointer after the
    adjusted string.  */
@@ -703,9 +1095,7 @@ process_one_cond_exec (struct queue_elem *ce_elem)
       XSTR (insn, 2) = alter_test_for_insn (ce_elem, insn_elem);
       XTMPL (insn, 3) = alter_output_for_insn (ce_elem, insn_elem,
 					      alternatives, max_operand);
-
-      /* ??? Set `predicable' to false.  Not crucial since it's really
-         only used here, and we won't reprocess this new pattern.  */
+      alter_attrs_for_insn (insn);
 
       /* Put the new pattern on the `other' list so that it
 	 (a) is not reprocessed by other define_cond_exec patterns
@@ -1064,7 +1454,7 @@ read_md_rtx (int *lineno, int *seqnr)
      their C test is provably always false).  If insn_elision is
      false, our caller needs to see all the patterns.  Note that the
      elided patterns are never counted by the sequence numbering; it
-     it is the caller's responsibility, when insn_elision is false, not
+     is the caller's responsibility, when insn_elision is false, not
      to use elided pattern numbers for anything.  */
   switch (GET_CODE (desc))
     {
@@ -1366,4 +1756,81 @@ record_insn_name (int code, const char *name)
     }
 
   insn_name_ptr[code] = new_name;
+}
+
+/* Make STATS describe the operands that appear in rtx X.  */
+
+static void
+get_pattern_stats_1 (struct pattern_stats *stats, rtx x)
+{
+  RTX_CODE code;
+  int i;
+  int len;
+  const char *fmt;
+
+  if (x == NULL_RTX)
+    return;
+
+  code = GET_CODE (x);
+  switch (code)
+    {
+    case MATCH_OPERAND:
+    case MATCH_OPERATOR:
+    case MATCH_PARALLEL:
+      stats->max_opno = MAX (stats->max_opno, XINT (x, 0));
+      break;
+
+    case MATCH_DUP:
+    case MATCH_OP_DUP:
+    case MATCH_PAR_DUP:
+      stats->num_dups++;
+      stats->max_dup_opno = MAX (stats->max_dup_opno, XINT (x, 0));
+      break;
+
+    case MATCH_SCRATCH:
+      stats->max_scratch_opno = MAX (stats->max_scratch_opno, XINT (x, 0));
+      break;
+
+    default:
+      break;
+    }
+
+  fmt = GET_RTX_FORMAT (code);
+  len = GET_RTX_LENGTH (code);
+  for (i = 0; i < len; i++)
+    {
+      if (fmt[i] == 'e' || fmt[i] == 'u')
+	get_pattern_stats_1 (stats, XEXP (x, i));
+      else if (fmt[i] == 'E')
+	{
+	  int j;
+	  for (j = 0; j < XVECLEN (x, i); j++)
+	    get_pattern_stats_1 (stats, XVECEXP (x, i, j));
+	}
+    }
+}
+
+/* Make STATS describe the operands that appear in instruction pattern
+   PATTERN.  */
+
+void
+get_pattern_stats (struct pattern_stats *stats, rtvec pattern)
+{
+  int i, len;
+
+  stats->max_opno = -1;
+  stats->max_dup_opno = -1;
+  stats->max_scratch_opno = -1;
+  stats->num_dups = 0;
+
+  len = GET_NUM_ELEM (pattern);
+  for (i = 0; i < len; i++)
+    get_pattern_stats_1 (stats, RTVEC_ELT (pattern, i));
+
+  stats->num_generator_args = stats->max_opno + 1;
+  stats->num_insn_operands = MAX (stats->max_opno,
+				  stats->max_scratch_opno) + 1;
+  stats->num_operand_vars = MAX (stats->max_opno,
+				  MAX (stats->max_dup_opno,
+				       stats->max_scratch_opno)) + 1;
 }

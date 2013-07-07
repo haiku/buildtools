@@ -1,6 +1,6 @@
 /* Control flow functions for trees.
    Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010  Free Software Foundation, Inc.
+   2010, 2011, 2012  Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -117,6 +117,7 @@ static int gimple_verify_flow_info (void);
 static void gimple_make_forwarder_block (edge);
 static void gimple_cfg2vcg (FILE *);
 static gimple first_non_label_stmt (basic_block);
+static bool verify_gimple_transaction (gimple);
 
 /* Flowgraph optimization and cleanup.  */
 static void gimple_merge_blocks (basic_block, basic_block);
@@ -261,8 +262,7 @@ struct gimple_opt_pass pass_build_cfg =
   PROP_cfg,				/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_verify_stmts | TODO_cleanup_cfg
-  | TODO_dump_func			/* todo_flags_finish */
+  TODO_verify_stmts | TODO_cleanup_cfg  /* todo_flags_finish */
  }
 };
 
@@ -667,6 +667,15 @@ make_edges (void)
 		}
 	      break;
 
+	    case GIMPLE_TRANSACTION:
+	      {
+		tree abort_label = gimple_transaction_label (last);
+		if (abort_label)
+		  make_edge (bb, label_to_block (abort_label), 0);
+		fallthru = true;
+	      }
+	      break;
+
 	    default:
 	      gcc_assert (!stmt_ends_bb_p (last));
 	      fallthru = true;
@@ -757,7 +766,7 @@ same_line_p (location_t locus1, location_t locus2)
     return true;
   return (from.file != NULL
           && to.file != NULL
-          && strcmp (from.file, to.file) == 0);
+          && filename_cmp (from.file, to.file) == 0);
 }
 
 /* Assign a unique discriminator value to block BB if it begins at the same
@@ -838,12 +847,12 @@ edge_to_cases_cleanup (const void *key ATTRIBUTE_UNUSED, void **value,
 
   for (t = (tree) *value; t; t = next)
     {
-      next = TREE_CHAIN (t);
-      TREE_CHAIN (t) = NULL;
+      next = CASE_CHAIN (t);
+      CASE_CHAIN (t) = NULL;
     }
 
   *value = NULL;
-  return false;
+  return true;
 }
 
 /* Start recording information mapping edges to case labels.  */
@@ -922,7 +931,7 @@ get_cases_for_edge (edge e, gimple t)
       /* Add it to the chain of CASE_LABEL_EXPRs referencing E, or create
 	 a new chain.  */
       slot = pointer_map_insert (edge_to_cases, this_edge);
-      TREE_CHAIN (elt) = (tree) *slot;
+      CASE_CHAIN (elt) = (tree) *slot;
       *slot = elt;
     }
 
@@ -1197,22 +1206,30 @@ cleanup_dead_labels (void)
   FOR_EACH_BB (bb)
     {
       gimple stmt = last_stmt (bb);
+      tree label, new_label;
+
       if (!stmt)
 	continue;
 
       switch (gimple_code (stmt))
 	{
 	case GIMPLE_COND:
-	  {
-	    tree true_label = gimple_cond_true_label (stmt);
-	    tree false_label = gimple_cond_false_label (stmt);
+	  label = gimple_cond_true_label (stmt);
+	  if (label)
+	    {
+	      new_label = main_block_label (label);
+	      if (new_label != label)
+		gimple_cond_set_true_label (stmt, new_label);
+	    }
 
-	    if (true_label)
-	      gimple_cond_set_true_label (stmt, main_block_label (true_label));
-	    if (false_label)
-	      gimple_cond_set_false_label (stmt, main_block_label (false_label));
-	    break;
-	  }
+	  label = gimple_cond_false_label (stmt);
+	  if (label)
+	    {
+	      new_label = main_block_label (label);
+	      if (new_label != label)
+		gimple_cond_set_false_label (stmt, new_label);
+	    }
+	  break;
 
 	case GIMPLE_SWITCH:
 	  {
@@ -1222,8 +1239,10 @@ cleanup_dead_labels (void)
 	    for (i = 0; i < n; ++i)
 	      {
 		tree case_label = gimple_switch_label (stmt, i);
-		tree label = main_block_label (CASE_LABEL (case_label));
-		CASE_LABEL (case_label) = label;
+		label = CASE_LABEL (case_label);
+		new_label = main_block_label (label);
+		if (new_label != label)
+		  CASE_LABEL (case_label) = new_label;
 	      }
 	    break;
 	  }
@@ -1244,11 +1263,25 @@ cleanup_dead_labels (void)
 	/* We have to handle gotos until they're removed, and we don't
 	   remove them until after we've created the CFG edges.  */
 	case GIMPLE_GOTO:
-          if (!computed_goto_p (stmt))
+	  if (!computed_goto_p (stmt))
 	    {
-	      tree new_dest = main_block_label (gimple_goto_dest (stmt));
-	      gimple_goto_set_dest (stmt, new_dest);
+	      label = gimple_goto_dest (stmt);
+	      new_label = main_block_label (label);
+	      if (new_label != label)
+		gimple_goto_set_dest (stmt, new_label);
 	    }
+	  break;
+
+	case GIMPLE_TRANSACTION:
+	  {
+	    tree label = gimple_transaction_label (stmt);
+	    if (label)
+	      {
+		tree new_label = main_block_label (label);
+		if (new_label != label)
+		  gimple_transaction_set_label (stmt, new_label);
+	      }
+	  }
 	  break;
 
 	default:
@@ -1358,13 +1391,14 @@ group_case_labels_stmt (gimple stmt)
 	{
 	  tree merge_case = gimple_switch_label (stmt, i);
 	  tree merge_label = CASE_LABEL (merge_case);
-	  tree t = int_const_binop (PLUS_EXPR, base_high,
-				    integer_one_node, 1);
+	  double_int bhp1 = double_int_add (tree_to_double_int (base_high),
+					    double_int_one);
 
 	  /* Merge the cases if they jump to the same place,
 	     and their ranges are consecutive.  */
 	  if (merge_label == base_label
-	      && tree_int_cst_equal (CASE_LOW (merge_case), t))
+	      && double_int_equal_p (tree_to_double_int (CASE_LOW (merge_case)),
+				     bhp1))
 	    {
 	      base_high = CASE_HIGH (merge_case) ?
 		  CASE_HIGH (merge_case) : CASE_LOW (merge_case);
@@ -1421,7 +1455,7 @@ gimple_can_merge_blocks_p (basic_block a, basic_block b)
   if (!single_succ_p (a))
     return false;
 
-  if (single_succ_edge (a)->flags & (EDGE_ABNORMAL | EDGE_EH))
+  if (single_succ_edge (a)->flags & (EDGE_ABNORMAL | EDGE_EH | EDGE_PRESERVE))
     return false;
 
   if (single_succ (a) != b)
@@ -1454,8 +1488,8 @@ gimple_can_merge_blocks_p (basic_block a, basic_block b)
 	break;
       lab = gimple_label_label (stmt);
 
-      /* Do not remove user labels.  */
-      if (!DECL_ARTIFICIAL (lab))
+      /* Do not remove user forced labels or for -O0 any user labels.  */
+      if (!DECL_ARTIFICIAL (lab) && (!optimize || FORCED_LABEL (lab)))
 	return false;
     }
 
@@ -1558,7 +1592,7 @@ replace_uses_by (tree name, tree val)
 		  /* This can only occur for virtual operands, since
 		     for the real ones SSA_NAME_OCCURS_IN_ABNORMAL_PHI (name))
 		     would prevent replacement.  */
-		  gcc_assert (!is_gimple_reg (name));
+		  gcc_checking_assert (!is_gimple_reg (name));
 		  SSA_NAME_OCCURS_IN_ABNORMAL_PHI (val) = 1;
 		}
 	    }
@@ -1566,29 +1600,41 @@ replace_uses_by (tree name, tree val)
 
       if (gimple_code (stmt) != GIMPLE_PHI)
 	{
+	  gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
+	  gimple orig_stmt = stmt;
 	  size_t i;
 
-	  fold_stmt_inplace (stmt);
-	  if (cfgcleanup_altered_bbs && !is_gimple_debug (stmt))
+	  /* Mark the block if we changed the last stmt in it.  */
+	  if (cfgcleanup_altered_bbs
+	      && stmt_ends_bb_p (stmt))
 	    bitmap_set_bit (cfgcleanup_altered_bbs, gimple_bb (stmt)->index);
 
-	  /* FIXME.  This should go in update_stmt.  */
-	  for (i = 0; i < gimple_num_ops (stmt); i++)
-	    {
-	      tree op = gimple_op (stmt, i);
-              /* Operands may be empty here.  For example, the labels
-                 of a GIMPLE_COND are nulled out following the creation
-                 of the corresponding CFG edges.  */
-	      if (op && TREE_CODE (op) == ADDR_EXPR)
-		recompute_tree_invariant_for_addr_expr (op);
-	    }
+	  /* FIXME.  It shouldn't be required to keep TREE_CONSTANT
+	     on ADDR_EXPRs up-to-date on GIMPLE.  Propagation will
+	     only change sth from non-invariant to invariant, and only
+	     when propagating constants.  */
+	  if (is_gimple_min_invariant (val))
+	    for (i = 0; i < gimple_num_ops (stmt); i++)
+	      {
+		tree op = gimple_op (stmt, i);
+		/* Operands may be empty here.  For example, the labels
+		   of a GIMPLE_COND are nulled out following the creation
+		   of the corresponding CFG edges.  */
+		if (op && TREE_CODE (op) == ADDR_EXPR)
+		  recompute_tree_invariant_for_addr_expr (op);
+	      }
 
-	  maybe_clean_or_replace_eh_stmt (stmt, stmt);
+	  if (fold_stmt (&gsi))
+	    stmt = gsi_stmt (gsi);
+
+	  if (maybe_clean_or_replace_eh_stmt (orig_stmt, stmt))
+	    gimple_purge_dead_eh_edges (gimple_bb (stmt));
+
 	  update_stmt (stmt);
 	}
     }
 
-  gcc_assert (has_zero_uses (name));
+  gcc_checking_assert (has_zero_uses (name));
 
   /* Also update the trees stored in loop structures.  */
   if (current_loops)
@@ -1698,6 +1744,15 @@ gimple_merge_blocks (basic_block a, basic_block b)
 	    {
 	      gimple_stmt_iterator dest_gsi = gsi_start_bb (a);
 	      gsi_insert_before (&dest_gsi, stmt, GSI_NEW_STMT);
+	    }
+	  /* Other user labels keep around in a form of a debug stmt.  */
+	  else if (!DECL_ARTIFICIAL (label) && MAY_HAVE_DEBUG_STMTS)
+	    {
+	      gimple dbg = gimple_build_debug_bind (label,
+						    integer_zero_node,
+						    stmt);
+	      gimple_debug_bind_reset_value (dbg);
+	      gsi_insert_before (&gsi, dbg, GSI_SAME_STMT);
 	    }
 
 	  lp_nr = EH_LANDING_PAD_NR (label);
@@ -2051,11 +2106,7 @@ gimple_dump_cfg (FILE *file, int flags)
 {
   if (flags & TDF_DETAILS)
     {
-      const char *funcname
-	= lang_hooks.decl_printable_name (current_function_decl, 2);
-
-      fputc ('\n', file);
-      fprintf (file, ";; Function %s\n\n", funcname);
+      dump_function_header (file, current_function_decl, flags);
       fprintf (file, ";; \n%d basic blocks, %d edges, last basic block %d.\n\n",
 	       n_basic_blocks, n_edges, last_basic_block);
 
@@ -2222,6 +2273,43 @@ gimple_cfg2vcg (FILE *file)
 			     Miscellaneous helpers
 ---------------------------------------------------------------------------*/
 
+/* Return true if T, a GIMPLE_CALL, can make an abnormal transfer of control
+   flow.  Transfers of control flow associated with EH are excluded.  */
+
+static bool
+call_can_make_abnormal_goto (gimple t)
+{
+  /* If the function has no non-local labels, then a call cannot make an
+     abnormal transfer of control.  */
+  if (!cfun->has_nonlocal_label)
+   return false;
+
+  /* Likewise if the call has no side effects.  */
+  if (!gimple_has_side_effects (t))
+    return false;
+
+  /* Likewise if the called function is leaf.  */
+  if (gimple_call_flags (t) & ECF_LEAF)
+    return false;
+
+  return true;
+}
+
+
+/* Return true if T can make an abnormal transfer of control flow.
+   Transfers of control flow associated with EH are excluded.  */
+
+bool
+stmt_can_make_abnormal_goto (gimple t)
+{
+  if (computed_goto_p (t))
+    return true;
+  if (is_gimple_call (t))
+    return call_can_make_abnormal_goto (t);
+  return false;
+}
+
+
 /* Return true if T represents a stmt that always transfers control.  */
 
 bool
@@ -2255,14 +2343,19 @@ is_ctrl_altering_stmt (gimple t)
       {
 	int flags = gimple_call_flags (t);
 
-	/* A non-pure/const call alters flow control if the current
-	   function has nonlocal labels.  */
-	if (!(flags & (ECF_CONST | ECF_PURE | ECF_LEAF))
-	    && cfun->has_nonlocal_label)
+	/* A call alters control flow if it can make an abnormal goto.  */
+	if (call_can_make_abnormal_goto (t))
 	  return true;
 
 	/* A call also alters control flow if it does not return.  */
 	if (flags & ECF_NORETURN)
+	  return true;
+
+	/* TM ending statements have backedges out of the transaction.
+	   Return true so we split the basic block containing them.
+	   Note that the TM_BUILTIN test is merely an optimization.  */
+	if ((flags & ECF_TM_BUILTIN)
+	    && is_tm_ending_fndecl (gimple_call_fndecl (t)))
 	  return true;
 
 	/* BUILT_IN_RETURN call is same as return statement.  */
@@ -2286,6 +2379,10 @@ is_ctrl_altering_stmt (gimple t)
       /* OpenMP directives alter control flow.  */
       return true;
 
+    case GIMPLE_TRANSACTION:
+      /* A transaction start alters control flow.  */
+      return true;
+
     default:
       break;
     }
@@ -2302,21 +2399,6 @@ simple_goto_p (gimple t)
 {
   return (gimple_code (t) == GIMPLE_GOTO
 	  && TREE_CODE (gimple_goto_dest (t)) == LABEL_DECL);
-}
-
-
-/* Return true if T can make an abnormal transfer of control flow.
-   Transfers of control flow associated with EH are excluded.  */
-
-bool
-stmt_can_make_abnormal_goto (gimple t)
-{
-  if (computed_goto_p (t))
-    return true;
-  if (is_gimple_call (t))
-    return (gimple_has_side_effects (t) && cfun->has_nonlocal_label
-	    && !(gimple_call_flags (t) & ECF_LEAF));
-  return false;
 }
 
 
@@ -2684,7 +2766,8 @@ verify_expr (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
       break;
 
     case NON_LVALUE_EXPR:
-	gcc_unreachable ();
+    case TRUTH_NOT_EXPR:
+      gcc_unreachable ();
 
     CASE_CONVERT:
     case FIX_TRUNC_EXPR:
@@ -2692,7 +2775,6 @@ verify_expr (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
     case NEGATE_EXPR:
     case ABS_EXPR:
     case BIT_NOT_EXPR:
-    case TRUTH_NOT_EXPR:
       CHECK_OP (0, "invalid operand to unary operator");
       break;
 
@@ -2776,13 +2858,11 @@ verify_expr (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
 	  error ("invalid operand to pointer plus, first operand is not a pointer");
 	  return t;
 	}
-      /* Check to make sure the second operand is an integer with type of
-	 sizetype.  */
-      if (!useless_type_conversion_p (sizetype,
-				     TREE_TYPE (TREE_OPERAND (t, 1))))
+      /* Check to make sure the second operand is a ptrofftype.  */
+      if (!ptrofftype_p (TREE_TYPE (TREE_OPERAND (t, 1))))
 	{
 	  error ("invalid operand to pointer plus, second operand is not an "
-		 "integer with type of sizetype");
+		 "integer type of appropriate width");
 	  return t;
 	}
       /* FALLTHROUGH */
@@ -2827,6 +2907,14 @@ verify_expr (tree *tp, int *walk_subtrees, void *data ATTRIBUTE_UNUSED)
     case CONSTRUCTOR:
       if (TREE_CONSTANT (t) && TREE_CODE (TREE_TYPE (t)) == VECTOR_TYPE)
 	*walk_subtrees = 0;
+      break;
+
+    case CASE_LABEL_EXPR:
+      if (CASE_CHAIN (t))
+	{
+	  error ("invalid CASE_CHAIN");
+	  return t;
+	}
       break;
 
     default:
@@ -2989,7 +3077,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
       if (!TMR_BASE (expr)
 	  || !is_gimple_mem_ref_addr (TMR_BASE (expr)))
 	{
-	  error ("invalid address operand in in TARGET_MEM_REF");
+	  error ("invalid address operand in TARGET_MEM_REF");
 	  return true;
 	}
       if (!TMR_OFFSET (expr)
@@ -3043,24 +3131,53 @@ static bool
 verify_gimple_call (gimple stmt)
 {
   tree fn = gimple_call_fn (stmt);
-  tree fntype;
+  tree fntype, fndecl;
   unsigned i;
 
-  if (TREE_CODE (fn) != OBJ_TYPE_REF
-      && !is_gimple_val (fn))
+  if (gimple_call_internal_p (stmt))
+    {
+      if (fn)
+	{
+	  error ("gimple call has two targets");
+	  debug_generic_stmt (fn);
+	  return true;
+	}
+    }
+  else
+    {
+      if (!fn)
+	{
+	  error ("gimple call has no target");
+	  return true;
+	}
+    }
+
+  if (fn && !is_gimple_call_addr (fn))
     {
       error ("invalid function in gimple call");
       debug_generic_stmt (fn);
       return true;
     }
 
-  if (!POINTER_TYPE_P (TREE_TYPE  (fn))
-      || (TREE_CODE (TREE_TYPE (TREE_TYPE (fn))) != FUNCTION_TYPE
-	  && TREE_CODE (TREE_TYPE (TREE_TYPE (fn))) != METHOD_TYPE))
+  if (fn
+      && (!POINTER_TYPE_P (TREE_TYPE (fn))
+	  || (TREE_CODE (TREE_TYPE (TREE_TYPE (fn))) != FUNCTION_TYPE
+	      && TREE_CODE (TREE_TYPE (TREE_TYPE (fn))) != METHOD_TYPE)))
     {
       error ("non-function in gimple call");
       return true;
     }
+
+   fndecl = gimple_call_fndecl (stmt);
+   if (fndecl
+       && TREE_CODE (fndecl) == FUNCTION_DECL
+       && DECL_LOOPING_CONST_OR_PURE_P (fndecl)
+       && !DECL_PURE_P (fndecl)
+       && !TREE_READONLY (fndecl))
+     {
+       error ("invalid pure const state for function");
+       return true;
+     }
 
   if (gimple_call_lhs (stmt)
       && (!is_gimple_lvalue (gimple_call_lhs (stmt))
@@ -3076,8 +3193,9 @@ verify_gimple_call (gimple stmt)
       return true;
     }
 
-  fntype = TREE_TYPE (TREE_TYPE (fn));
-  if (gimple_call_lhs (stmt)
+  fntype = gimple_call_fntype (stmt);
+  if (fntype
+      && gimple_call_lhs (stmt)
       && !useless_type_conversion_p (TREE_TYPE (gimple_call_lhs (stmt)),
 				     TREE_TYPE (fntype))
       /* ???  At least C++ misses conversions at assignments from
@@ -3161,20 +3279,52 @@ verify_gimple_comparison (tree type, tree op0, tree op1)
      effective type the comparison is carried out in.  Instead
      we require that either the first operand is trivially
      convertible into the second, or the other way around.
-     The resulting type of a comparison may be any integral type.
      Because we special-case pointers to void we allow
      comparisons of pointers with the same mode as well.  */
-  if ((!useless_type_conversion_p (op0_type, op1_type)
-       && !useless_type_conversion_p (op1_type, op0_type)
-       && (!POINTER_TYPE_P (op0_type)
-	   || !POINTER_TYPE_P (op1_type)
-	   || TYPE_MODE (op0_type) != TYPE_MODE (op1_type)))
-      || !INTEGRAL_TYPE_P (type))
+  if (!useless_type_conversion_p (op0_type, op1_type)
+      && !useless_type_conversion_p (op1_type, op0_type)
+      && (!POINTER_TYPE_P (op0_type)
+	  || !POINTER_TYPE_P (op1_type)
+	  || TYPE_MODE (op0_type) != TYPE_MODE (op1_type)))
     {
-      error ("type mismatch in comparison expression");
-      debug_generic_expr (type);
+      error ("mismatching comparison operand types");
       debug_generic_expr (op0_type);
       debug_generic_expr (op1_type);
+      return true;
+    }
+
+  /* The resulting type of a comparison may be an effective boolean type.  */
+  if (INTEGRAL_TYPE_P (type)
+      && (TREE_CODE (type) == BOOLEAN_TYPE
+	  || TYPE_PRECISION (type) == 1))
+    ;
+  /* Or an integer vector type with the same size and element count
+     as the comparison operand types.  */
+  else if (TREE_CODE (type) == VECTOR_TYPE
+	   && TREE_CODE (TREE_TYPE (type)) == INTEGER_TYPE)
+    {
+      if (TREE_CODE (op0_type) != VECTOR_TYPE
+	  || TREE_CODE (op1_type) != VECTOR_TYPE)
+        {
+          error ("non-vector operands in vector comparison");
+          debug_generic_expr (op0_type);
+          debug_generic_expr (op1_type);
+          return true;
+        }
+
+      if (TYPE_VECTOR_SUBPARTS (type) != TYPE_VECTOR_SUBPARTS (op0_type)
+	  || (GET_MODE_SIZE (TYPE_MODE (TREE_TYPE (type)))
+	      != GET_MODE_SIZE (TYPE_MODE (TREE_TYPE (op0_type)))))
+        {
+          error ("invalid vector comparison resulting type");
+          debug_generic_expr (type);
+          return true;
+        }
+    }
+  else
+    {
+      error ("bogus comparison result type");
+      debug_generic_expr (type);
       return true;
     }
 
@@ -3193,9 +3343,7 @@ verify_gimple_assign_unary (gimple stmt)
   tree rhs1 = gimple_assign_rhs1 (stmt);
   tree rhs1_type = TREE_TYPE (rhs1);
 
-  if (!is_gimple_reg (lhs)
-      && !(optimize == 0
-	   && TREE_CODE (lhs_type) == COMPLEX_TYPE))
+  if (!is_gimple_reg (lhs))
     {
       error ("non-register as LHS of unary operation");
       return true;
@@ -3212,19 +3360,16 @@ verify_gimple_assign_unary (gimple stmt)
     {
     CASE_CONVERT:
       {
-	/* Allow conversions between integral types and pointers only if
+	/* Allow conversions from pointer type to integral type only if
 	   there is no sign or zero extension involved.
-	   For targets were the precision of sizetype doesn't match that
-	   of pointers we need to allow arbitrary conversions from and
-	   to sizetype.  */
+	   For targets were the precision of ptrofftype doesn't match that
+	   of pointers we need to allow arbitrary conversions to ptrofftype.  */
 	if ((POINTER_TYPE_P (lhs_type)
-	     && INTEGRAL_TYPE_P (rhs1_type)
-	     && (TYPE_PRECISION (lhs_type) >= TYPE_PRECISION (rhs1_type)
-		 || rhs1_type == sizetype))
+	     && INTEGRAL_TYPE_P (rhs1_type))
 	    || (POINTER_TYPE_P (rhs1_type)
 		&& INTEGRAL_TYPE_P (lhs_type)
 		&& (TYPE_PRECISION (rhs1_type) >= TYPE_PRECISION (lhs_type)
-		    || lhs_type == sizetype)))
+		    || ptrofftype_p (sizetype))))
 	  return false;
 
 	/* Allow conversion from integer to offset type and vice versa.  */
@@ -3278,7 +3423,9 @@ verify_gimple_assign_unary (gimple stmt)
 
     case FLOAT_EXPR:
       {
-	if (!INTEGRAL_TYPE_P (rhs1_type) || !SCALAR_FLOAT_TYPE_P (lhs_type))
+	if ((!INTEGRAL_TYPE_P (rhs1_type) || !SCALAR_FLOAT_TYPE_P (lhs_type))
+	    && (!VECTOR_INTEGER_TYPE_P (rhs1_type)
+	        || !VECTOR_FLOAT_TYPE_P(lhs_type)))
 	  {
 	    error ("invalid types in conversion to floating point");
 	    debug_generic_expr (lhs_type);
@@ -3291,7 +3438,9 @@ verify_gimple_assign_unary (gimple stmt)
 
     case FIX_TRUNC_EXPR:
       {
-	if (!INTEGRAL_TYPE_P (lhs_type) || !SCALAR_FLOAT_TYPE_P (rhs1_type))
+        if ((!INTEGRAL_TYPE_P (lhs_type) || !SCALAR_FLOAT_TYPE_P (rhs1_type))
+            && (!VECTOR_INTEGER_TYPE_P (lhs_type)
+                || !VECTOR_FLOAT_TYPE_P(rhs1_type)))
 	  {
 	    error ("invalid types in conversion to integer");
 	    debug_generic_expr (lhs_type);
@@ -3312,7 +3461,6 @@ verify_gimple_assign_unary (gimple stmt)
       /* FIXME.  */
       return false;
 
-    case TRUTH_NOT_EXPR:
     case NEGATE_EXPR:
     case ABS_EXPR:
     case BIT_NOT_EXPR:
@@ -3351,9 +3499,7 @@ verify_gimple_assign_binary (gimple stmt)
   tree rhs2 = gimple_assign_rhs2 (stmt);
   tree rhs2_type = TREE_TYPE (rhs2);
 
-  if (!is_gimple_reg (lhs)
-      && !(optimize == 0
-	   && TREE_CODE (lhs_type) == COMPLEX_TYPE))
+  if (!is_gimple_reg (lhs))
     {
       error ("non-register as LHS of binary operation");
       return true;
@@ -3449,6 +3595,44 @@ verify_gimple_assign_binary (gimple stmt)
 	return false;
       }
 
+    case WIDEN_LSHIFT_EXPR:
+      {
+        if (!INTEGRAL_TYPE_P (lhs_type)
+            || !INTEGRAL_TYPE_P (rhs1_type)
+            || TREE_CODE (rhs2) != INTEGER_CST
+            || (2 * TYPE_PRECISION (rhs1_type) > TYPE_PRECISION (lhs_type)))
+          {
+            error ("type mismatch in widening vector shift expression");
+            debug_generic_expr (lhs_type);
+            debug_generic_expr (rhs1_type);
+            debug_generic_expr (rhs2_type);
+            return true;
+          }
+
+        return false;
+      }
+
+    case VEC_WIDEN_LSHIFT_HI_EXPR:
+    case VEC_WIDEN_LSHIFT_LO_EXPR:
+      {
+        if (TREE_CODE (rhs1_type) != VECTOR_TYPE
+            || TREE_CODE (lhs_type) != VECTOR_TYPE
+            || !INTEGRAL_TYPE_P (TREE_TYPE (rhs1_type))
+            || !INTEGRAL_TYPE_P (TREE_TYPE (lhs_type))
+            || TREE_CODE (rhs2) != INTEGER_CST
+            || (2 * TYPE_PRECISION (TREE_TYPE (rhs1_type))
+                > TYPE_PRECISION (TREE_TYPE (lhs_type))))
+          {
+            error ("type mismatch in widening vector shift expression");
+            debug_generic_expr (lhs_type);
+            debug_generic_expr (rhs1_type);
+            debug_generic_expr (rhs2_type);
+            return true;
+          }
+
+        return false;
+      }
+
     case PLUS_EXPR:
     case MINUS_EXPR:
       {
@@ -3494,7 +3678,7 @@ verify_gimple_assign_binary (gimple stmt)
 do_pointer_plus_expr_check:
 	if (!POINTER_TYPE_P (rhs1_type)
 	    || !useless_type_conversion_p (lhs_type, rhs1_type)
-	    || !useless_type_conversion_p (sizetype, rhs2_type))
+	    || !ptrofftype_p (rhs2_type))
 	  {
 	    error ("type mismatch in pointer plus expression");
 	    debug_generic_stmt (lhs_type);
@@ -3508,26 +3692,11 @@ do_pointer_plus_expr_check:
 
     case TRUTH_ANDIF_EXPR:
     case TRUTH_ORIF_EXPR:
-      gcc_unreachable ();
-
     case TRUTH_AND_EXPR:
     case TRUTH_OR_EXPR:
     case TRUTH_XOR_EXPR:
-      {
-	/* We allow any kind of integral typed argument and result.  */
-	if (!INTEGRAL_TYPE_P (rhs1_type)
-	    || !INTEGRAL_TYPE_P (rhs2_type)
-	    || !INTEGRAL_TYPE_P (lhs_type))
-	  {
-	    error ("type mismatch in binary truth expression");
-	    debug_generic_expr (lhs_type);
-	    debug_generic_expr (rhs1_type);
-	    debug_generic_expr (rhs2_type);
-	    return true;
-	  }
 
-	return false;
-      }
+      gcc_unreachable ();
 
     case LT_EXPR:
     case LE_EXPR:
@@ -3550,7 +3719,7 @@ do_pointer_plus_expr_check:
     case WIDEN_MULT_EXPR:
       if (TREE_CODE (lhs_type) != INTEGER_TYPE)
 	return true;
-      return ((2 * TYPE_PRECISION (rhs1_type) != TYPE_PRECISION (lhs_type))
+      return ((2 * TYPE_PRECISION (rhs1_type) > TYPE_PRECISION (lhs_type))
 	      || (TYPE_PRECISION (rhs1_type) != TYPE_PRECISION (rhs2_type)));
 
     case WIDEN_SUM_EXPR:
@@ -3559,10 +3728,6 @@ do_pointer_plus_expr_check:
     case VEC_PACK_TRUNC_EXPR:
     case VEC_PACK_SAT_EXPR:
     case VEC_PACK_FIX_TRUNC_EXPR:
-    case VEC_EXTRACT_EVEN_EXPR:
-    case VEC_EXTRACT_ODD_EXPR:
-    case VEC_INTERLEAVE_HIGH_EXPR:
-    case VEC_INTERLEAVE_LOW_EXPR:
       /* FIXME.  */
       return false;
 
@@ -3618,15 +3783,14 @@ verify_gimple_assign_ternary (gimple stmt)
   tree rhs3 = gimple_assign_rhs3 (stmt);
   tree rhs3_type = TREE_TYPE (rhs3);
 
-  if (!is_gimple_reg (lhs)
-      && !(optimize == 0
-	   && TREE_CODE (lhs_type) == COMPLEX_TYPE))
+  if (!is_gimple_reg (lhs))
     {
       error ("non-register as LHS of ternary operation");
       return true;
     }
 
-  if (!is_gimple_val (rhs1)
+  if (((rhs_code == VEC_COND_EXPR || rhs_code == COND_EXPR)
+       ? !is_gimple_condexpr (rhs1) : !is_gimple_val (rhs1))
       || !is_gimple_val (rhs2)
       || !is_gimple_val (rhs3))
     {
@@ -3643,7 +3807,7 @@ verify_gimple_assign_ternary (gimple stmt)
 	   && !FIXED_POINT_TYPE_P (rhs1_type))
 	  || !useless_type_conversion_p (rhs1_type, rhs2_type)
 	  || !useless_type_conversion_p (lhs_type, rhs3_type)
-	  || 2 * TYPE_PRECISION (rhs1_type) != TYPE_PRECISION (lhs_type)
+	  || 2 * TYPE_PRECISION (rhs1_type) > TYPE_PRECISION (lhs_type)
 	  || TYPE_PRECISION (rhs1_type) != TYPE_PRECISION (rhs2_type))
 	{
 	  error ("type mismatch in widening multiply-accumulate expression");
@@ -3668,6 +3832,77 @@ verify_gimple_assign_ternary (gimple stmt)
 	  return true;
 	}
       break;
+
+    case COND_EXPR:
+    case VEC_COND_EXPR:
+      if (!useless_type_conversion_p (lhs_type, rhs2_type)
+	  || !useless_type_conversion_p (lhs_type, rhs3_type))
+	{
+	  error ("type mismatch in conditional expression");
+	  debug_generic_expr (lhs_type);
+	  debug_generic_expr (rhs2_type);
+	  debug_generic_expr (rhs3_type);
+	  return true;
+	}
+      break;
+
+    case VEC_PERM_EXPR:
+      if (!useless_type_conversion_p (lhs_type, rhs1_type)
+	  || !useless_type_conversion_p (lhs_type, rhs2_type))
+	{
+	  error ("type mismatch in vector permute expression");
+	  debug_generic_expr (lhs_type);
+	  debug_generic_expr (rhs1_type);
+	  debug_generic_expr (rhs2_type);
+	  debug_generic_expr (rhs3_type);
+	  return true;
+	}
+
+      if (TREE_CODE (rhs1_type) != VECTOR_TYPE
+	  || TREE_CODE (rhs2_type) != VECTOR_TYPE
+	  || TREE_CODE (rhs3_type) != VECTOR_TYPE)
+	{
+	  error ("vector types expected in vector permute expression");
+	  debug_generic_expr (lhs_type);
+	  debug_generic_expr (rhs1_type);
+	  debug_generic_expr (rhs2_type);
+	  debug_generic_expr (rhs3_type);
+	  return true;
+	}
+
+      if (TYPE_VECTOR_SUBPARTS (rhs1_type) != TYPE_VECTOR_SUBPARTS (rhs2_type)
+	  || TYPE_VECTOR_SUBPARTS (rhs2_type)
+	     != TYPE_VECTOR_SUBPARTS (rhs3_type)
+	  || TYPE_VECTOR_SUBPARTS (rhs3_type)
+	     != TYPE_VECTOR_SUBPARTS (lhs_type))
+	{
+	  error ("vectors with different element number found "
+		 "in vector permute expression");
+	  debug_generic_expr (lhs_type);
+	  debug_generic_expr (rhs1_type);
+	  debug_generic_expr (rhs2_type);
+	  debug_generic_expr (rhs3_type);
+	  return true;
+	}
+
+      if (TREE_CODE (TREE_TYPE (rhs3_type)) != INTEGER_TYPE
+	  || GET_MODE_BITSIZE (TYPE_MODE (TREE_TYPE (rhs3_type)))
+	     != GET_MODE_BITSIZE (TYPE_MODE (TREE_TYPE (rhs1_type))))
+	{
+	  error ("invalid mask type in vector permute expression");
+	  debug_generic_expr (lhs_type);
+	  debug_generic_expr (rhs1_type);
+	  debug_generic_expr (rhs2_type);
+	  debug_generic_expr (rhs3_type);
+	  return true;
+	}
+
+      return false;
+
+    case DOT_PROD_EXPR:
+    case REALIGN_LOAD_EXPR:
+      /* FIXME.  */
+      return false;
 
     default:
       gcc_unreachable ();
@@ -3780,29 +4015,10 @@ verify_gimple_assign_single (gimple stmt)
 	}
       return res;
 
-    case COND_EXPR:
-      if (!is_gimple_reg (lhs)
-	  || (!is_gimple_reg (TREE_OPERAND (rhs1, 0))
-	      && !COMPARISON_CLASS_P (TREE_OPERAND (rhs1, 0)))
-	  || (!is_gimple_reg (TREE_OPERAND (rhs1, 1))
-	      && !is_gimple_min_invariant (TREE_OPERAND (rhs1, 1)))
-	  || (!is_gimple_reg (TREE_OPERAND (rhs1, 2))
-	      && !is_gimple_min_invariant (TREE_OPERAND (rhs1, 2))))
-	{
-	  error ("invalid COND_EXPR in gimple assignment");
-	  debug_generic_stmt (rhs1);
-	  return true;
-	}
-      return res;
-
     case CONSTRUCTOR:
     case OBJ_TYPE_REF:
     case ASSERT_EXPR:
     case WITH_SIZE_EXPR:
-    case POLYNOMIAL_CHREC:
-    case DOT_PROD_EXPR:
-    case VEC_COND_EXPR:
-    case REALIGN_LOAD_EXPR:
       /* FIXME.  */
       return res;
 
@@ -3915,47 +4131,6 @@ verify_gimple_switch (gimple stmt)
   return false;
 }
 
-
-/* Verify the contents of a GIMPLE_PHI.  Returns true if there is a problem,
-   and false otherwise.  */
-
-static bool
-verify_gimple_phi (gimple stmt)
-{
-  tree type = TREE_TYPE (gimple_phi_result (stmt));
-  unsigned i;
-
-  if (TREE_CODE (gimple_phi_result (stmt)) != SSA_NAME)
-    {
-      error ("invalid PHI result");
-      return true;
-    }
-
-  for (i = 0; i < gimple_phi_num_args (stmt); i++)
-    {
-      tree arg = gimple_phi_arg_def (stmt, i);
-      if ((is_gimple_reg (gimple_phi_result (stmt))
-	   && !is_gimple_val (arg))
-	  || (!is_gimple_reg (gimple_phi_result (stmt))
-	      && !is_gimple_addressable (arg)))
-	{
-	  error ("invalid PHI argument");
-	  debug_generic_stmt (arg);
-	  return true;
-	}
-      if (!useless_type_conversion_p (type, TREE_TYPE (arg)))
-	{
-	  error ("incompatible types in PHI argument %u", i);
-	  debug_generic_stmt (type);
-	  debug_generic_stmt (TREE_TYPE (arg));
-	  return true;
-	}
-    }
-
-  return false;
-}
-
-
 /* Verify a gimple debug statement STMT.
    Returns true if anything is wrong.  */
 
@@ -3971,12 +4146,48 @@ verify_gimple_debug (gimple stmt ATTRIBUTE_UNUSED)
   return false;
 }
 
+/* Verify a gimple label statement STMT.
+   Returns true if anything is wrong.  */
+
+static bool
+verify_gimple_label (gimple stmt)
+{
+  tree decl = gimple_label_label (stmt);
+  int uid;
+  bool err = false;
+
+  if (TREE_CODE (decl) != LABEL_DECL)
+    return true;
+
+  uid = LABEL_DECL_UID (decl);
+  if (cfun->cfg
+      && (uid == -1
+	  || VEC_index (basic_block,
+			label_to_block_map, uid) != gimple_bb (stmt)))
+    {
+      error ("incorrect entry in label_to_block_map");
+      err |= true;
+    }
+
+  uid = EH_LANDING_PAD_NR (decl);
+  if (uid)
+    {
+      eh_landing_pad lp = get_eh_landing_pad_from_number (uid);
+      if (decl != lp->post_landing_pad)
+	{
+	  error ("incorrect setting of landing pad number");
+	  err |= true;
+	}
+    }
+
+  return err;
+}
 
 /* Verify the GIMPLE statement STMT.  Returns true if there is an
    error, otherwise false.  */
 
 static bool
-verify_types_in_gimple_stmt (gimple stmt)
+verify_gimple_stmt (gimple stmt)
 {
   switch (gimple_code (stmt))
     {
@@ -3984,7 +4195,7 @@ verify_types_in_gimple_stmt (gimple stmt)
       return verify_gimple_assign (stmt);
 
     case GIMPLE_LABEL:
-      return TREE_CODE (gimple_label_label (stmt)) != LABEL_DECL;
+      return verify_gimple_label (stmt);
 
     case GIMPLE_CALL:
       return verify_gimple_call (stmt);
@@ -4020,8 +4231,8 @@ verify_types_in_gimple_stmt (gimple stmt)
     case GIMPLE_ASM:
       return false;
 
-    case GIMPLE_PHI:
-      return verify_gimple_phi (stmt);
+    case GIMPLE_TRANSACTION:
+      return verify_gimple_transaction (stmt);
 
     /* Tuples that do not have tree operands.  */
     case GIMPLE_NOP:
@@ -4048,10 +4259,74 @@ verify_types_in_gimple_stmt (gimple stmt)
     }
 }
 
+/* Verify the contents of a GIMPLE_PHI.  Returns true if there is a problem,
+   and false otherwise.  */
+
+static bool
+verify_gimple_phi (gimple phi)
+{
+  bool err = false;
+  unsigned i;
+  tree phi_result = gimple_phi_result (phi);
+  bool virtual_p;
+
+  if (!phi_result)
+    {
+      error ("invalid PHI result");
+      return true;
+    }
+
+  virtual_p = !is_gimple_reg (phi_result);
+  if (TREE_CODE (phi_result) != SSA_NAME
+      || (virtual_p
+	  && SSA_NAME_VAR (phi_result) != gimple_vop (cfun)))
+    {
+      error ("invalid PHI result");
+      err = true;
+    }
+
+  for (i = 0; i < gimple_phi_num_args (phi); i++)
+    {
+      tree t = gimple_phi_arg_def (phi, i);
+
+      if (!t)
+	{
+	  error ("missing PHI def");
+	  err |= true;
+	  continue;
+	}
+      /* Addressable variables do have SSA_NAMEs but they
+	 are not considered gimple values.  */
+      else if ((TREE_CODE (t) == SSA_NAME
+		&& virtual_p != !is_gimple_reg (t))
+	       || (virtual_p
+		   && (TREE_CODE (t) != SSA_NAME
+		       || SSA_NAME_VAR (t) != gimple_vop (cfun)))
+	       || (!virtual_p
+		   && !is_gimple_val (t)))
+	{
+	  error ("invalid PHI argument");
+	  debug_generic_expr (t);
+	  err |= true;
+	}
+#ifdef ENABLE_TYPES_CHECKING
+      if (!useless_type_conversion_p (TREE_TYPE (phi_result), TREE_TYPE (t)))
+	{
+	  error ("incompatible types in PHI argument %u", i);
+	  debug_generic_stmt (TREE_TYPE (phi_result));
+	  debug_generic_stmt (TREE_TYPE (t));
+	  err |= true;
+	}
+#endif
+    }
+
+  return err;
+}
+
 /* Verify the GIMPLE statements inside the sequence STMTS.  */
 
 static bool
-verify_types_in_gimple_seq_2 (gimple_seq stmts)
+verify_gimple_in_seq_2 (gimple_seq stmts)
 {
   gimple_stmt_iterator ittr;
   bool err = false;
@@ -4063,25 +4338,34 @@ verify_types_in_gimple_seq_2 (gimple_seq stmts)
       switch (gimple_code (stmt))
         {
 	case GIMPLE_BIND:
-	  err |= verify_types_in_gimple_seq_2 (gimple_bind_body (stmt));
+	  err |= verify_gimple_in_seq_2 (gimple_bind_body (stmt));
 	  break;
 
 	case GIMPLE_TRY:
-	  err |= verify_types_in_gimple_seq_2 (gimple_try_eval (stmt));
-	  err |= verify_types_in_gimple_seq_2 (gimple_try_cleanup (stmt));
+	  err |= verify_gimple_in_seq_2 (gimple_try_eval (stmt));
+	  err |= verify_gimple_in_seq_2 (gimple_try_cleanup (stmt));
 	  break;
 
 	case GIMPLE_EH_FILTER:
-	  err |= verify_types_in_gimple_seq_2 (gimple_eh_filter_failure (stmt));
+	  err |= verify_gimple_in_seq_2 (gimple_eh_filter_failure (stmt));
+	  break;
+
+	case GIMPLE_EH_ELSE:
+	  err |= verify_gimple_in_seq_2 (gimple_eh_else_n_body (stmt));
+	  err |= verify_gimple_in_seq_2 (gimple_eh_else_e_body (stmt));
 	  break;
 
 	case GIMPLE_CATCH:
-	  err |= verify_types_in_gimple_seq_2 (gimple_catch_handler (stmt));
+	  err |= verify_gimple_in_seq_2 (gimple_catch_handler (stmt));
+	  break;
+
+	case GIMPLE_TRANSACTION:
+	  err |= verify_gimple_transaction (stmt);
 	  break;
 
 	default:
 	  {
-	    bool err2 = verify_types_in_gimple_stmt (stmt);
+	    bool err2 = verify_gimple_stmt (stmt);
 	    if (err2)
 	      debug_gimple_stmt (stmt);
 	    err |= err2;
@@ -4092,104 +4376,29 @@ verify_types_in_gimple_seq_2 (gimple_seq stmts)
   return err;
 }
 
+/* Verify the contents of a GIMPLE_TRANSACTION.  Returns true if there
+   is a problem, otherwise false.  */
+
+static bool
+verify_gimple_transaction (gimple stmt)
+{
+  tree lab = gimple_transaction_label (stmt);
+  if (lab != NULL && TREE_CODE (lab) != LABEL_DECL)
+    return true;
+  return verify_gimple_in_seq_2 (gimple_transaction_body (stmt));
+}
+
 
 /* Verify the GIMPLE statements inside the statement list STMTS.  */
 
-void
-verify_types_in_gimple_seq (gimple_seq stmts)
+DEBUG_FUNCTION void
+verify_gimple_in_seq (gimple_seq stmts)
 {
-  if (verify_types_in_gimple_seq_2 (stmts))
+  timevar_push (TV_TREE_STMT_VERIFY);
+  if (verify_gimple_in_seq_2 (stmts))
     internal_error ("verify_gimple failed");
+  timevar_pop (TV_TREE_STMT_VERIFY);
 }
-
-
-/* Verify STMT, return true if STMT is not in GIMPLE form.
-   TODO: Implement type checking.  */
-
-static bool
-verify_stmt (gimple_stmt_iterator *gsi)
-{
-  tree addr;
-  struct walk_stmt_info wi;
-  bool last_in_block = gsi_one_before_end_p (*gsi);
-  gimple stmt = gsi_stmt (*gsi);
-  int lp_nr;
-
-  if (is_gimple_omp (stmt))
-    {
-      /* OpenMP directives are validated by the FE and never operated
-	 on by the optimizers.  Furthermore, GIMPLE_OMP_FOR may contain
-	 non-gimple expressions when the main index variable has had
-	 its address taken.  This does not affect the loop itself
-	 because the header of an GIMPLE_OMP_FOR is merely used to determine
-	 how to setup the parallel iteration.  */
-      return false;
-    }
-
-  /* FIXME.  The C frontend passes unpromoted arguments in case it
-     didn't see a function declaration before the call.  */
-  if (is_gimple_call (stmt))
-    {
-      tree decl;
-
-      if (!is_gimple_call_addr (gimple_call_fn (stmt)))
-	{
-	  error ("invalid function in call statement");
-	  return true;
-	}
-
-      decl = gimple_call_fndecl (stmt);
-      if (decl
-	  && TREE_CODE (decl) == FUNCTION_DECL
-	  && DECL_LOOPING_CONST_OR_PURE_P (decl)
-	  && (!DECL_PURE_P (decl))
-	  && (!TREE_READONLY (decl)))
-	{
-	  error ("invalid pure const state for function");
-	  return true;
-	}
-    }
-
-  if (is_gimple_debug (stmt))
-    return false;
-
-  memset (&wi, 0, sizeof (wi));
-  addr = walk_gimple_op (gsi_stmt (*gsi), verify_expr, &wi);
-  if (addr)
-    {
-      debug_generic_expr (addr);
-      inform (gimple_location (gsi_stmt (*gsi)), "in statement");
-      debug_gimple_stmt (stmt);
-      return true;
-    }
-
-  /* If the statement is marked as part of an EH region, then it is
-     expected that the statement could throw.  Verify that when we
-     have optimizations that simplify statements such that we prove
-     that they cannot throw, that we update other data structures
-     to match.  */
-  lp_nr = lookup_stmt_eh_lp (stmt);
-  if (lp_nr != 0)
-    {
-      if (!stmt_could_throw_p (stmt))
-	{
-	  error ("statement marked for throw, but doesn%'t");
-	  goto fail;
-	}
-      else if (lp_nr > 0 && !last_in_block && stmt_can_throw_internal (stmt))
-	{
-	  error ("statement marked for throw in middle of block");
-	  goto fail;
-	}
-    }
-
-  return false;
-
- fail:
-  debug_gimple_stmt (stmt);
-  return true;
-}
-
 
 /* Return true when the T can be shared.  */
 
@@ -4219,7 +4428,6 @@ tree_node_can_be_shared (tree t)
   return false;
 }
 
-
 /* Called via walk_gimple_stmt.  Verify tree sharing.  */
 
 static tree
@@ -4240,7 +4448,6 @@ verify_node_sharing (tree *tp, int *walk_subtrees, void *data)
   return NULL;
 }
 
-
 static bool eh_error_found;
 static int
 verify_eh_throw_stmt_node (void **slot, void *data)
@@ -4257,147 +4464,124 @@ verify_eh_throw_stmt_node (void **slot, void *data)
   return 1;
 }
 
-
-/* Verify the GIMPLE statements in every basic block.  */
+/* Verify the GIMPLE statements in the CFG of FN.  */
 
 DEBUG_FUNCTION void
-verify_stmts (void)
+verify_gimple_in_cfg (struct function *fn)
 {
   basic_block bb;
-  gimple_stmt_iterator gsi;
   bool err = false;
   struct pointer_set_t *visited, *visited_stmts;
-  tree addr;
-  struct walk_stmt_info wi;
 
   timevar_push (TV_TREE_STMT_VERIFY);
   visited = pointer_set_create ();
   visited_stmts = pointer_set_create ();
 
-  memset (&wi, 0, sizeof (wi));
-  wi.info = (void *) visited;
-
-  FOR_EACH_BB (bb)
+  FOR_EACH_BB_FN (bb, fn)
     {
-      gimple phi;
-      size_t i;
+      gimple_stmt_iterator gsi;
 
       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  phi = gsi_stmt (gsi);
+	  gimple phi = gsi_stmt (gsi);
+	  bool err2 = false;
+	  unsigned i;
+
 	  pointer_set_insert (visited_stmts, phi);
+
 	  if (gimple_bb (phi) != bb)
 	    {
 	      error ("gimple_bb (phi) is set to a wrong basic block");
-	      err |= true;
+	      err2 = true;
 	    }
+
+	  err2 |= verify_gimple_phi (phi);
 
 	  for (i = 0; i < gimple_phi_num_args (phi); i++)
 	    {
-	      tree t = gimple_phi_arg_def (phi, i);
-	      tree addr;
-
-	      if (!t)
-		{
-		  error ("missing PHI def");
-		  debug_gimple_stmt (phi);
-		  err |= true;
-		  continue;
-		}
-	      /* Addressable variables do have SSA_NAMEs but they
-		 are not considered gimple values.  */
-	      else if (TREE_CODE (t) != SSA_NAME
-		       && TREE_CODE (t) != FUNCTION_DECL
-		       && !is_gimple_min_invariant (t))
-		{
-		  error ("PHI argument is not a GIMPLE value");
-		  debug_gimple_stmt (phi);
-		  debug_generic_expr (t);
-		  err |= true;
-		}
-
-	      addr = walk_tree (&t, verify_node_sharing, visited, NULL);
+	      tree arg = gimple_phi_arg_def (phi, i);
+	      tree addr = walk_tree (&arg, verify_node_sharing, visited, NULL);
 	      if (addr)
 		{
 		  error ("incorrect sharing of tree nodes");
-		  debug_gimple_stmt (phi);
 		  debug_generic_expr (addr);
-		  err |= true;
+		  err2 |= true;
 		}
 	    }
 
-#ifdef ENABLE_TYPES_CHECKING
-	  if (verify_gimple_phi (phi))
-	    {
-	      debug_gimple_stmt (phi);
-	      err |= true;
-	    }
-#endif
+	  if (err2)
+	    debug_gimple_stmt (phi);
+	  err |= err2;
 	}
 
-      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  gimple stmt = gsi_stmt (gsi);
-
-	  if (gimple_code (stmt) == GIMPLE_WITH_CLEANUP_EXPR
-	      || gimple_code (stmt) == GIMPLE_BIND)
-	    {
-	      error ("invalid GIMPLE statement");
-	      debug_gimple_stmt (stmt);
-	      err |= true;
-	    }
+	  bool err2 = false;
+	  struct walk_stmt_info wi;
+	  tree addr;
+	  int lp_nr;
 
 	  pointer_set_insert (visited_stmts, stmt);
 
 	  if (gimple_bb (stmt) != bb)
 	    {
 	      error ("gimple_bb (stmt) is set to a wrong basic block");
-	      debug_gimple_stmt (stmt);
-	      err |= true;
+	      err2 = true;
 	    }
 
-	  if (gimple_code (stmt) == GIMPLE_LABEL)
-	    {
-	      tree decl = gimple_label_label (stmt);
-	      int uid = LABEL_DECL_UID (decl);
+	  err2 |= verify_gimple_stmt (stmt);
 
-	      if (uid == -1
-		  || VEC_index (basic_block, label_to_block_map, uid) != bb)
-		{
-		  error ("incorrect entry in label_to_block_map");
-		  err |= true;
-		}
-
-	      uid = EH_LANDING_PAD_NR (decl);
-	      if (uid)
-		{
-		  eh_landing_pad lp = get_eh_landing_pad_from_number (uid);
-		  if (decl != lp->post_landing_pad)
-		    {
-		      error ("incorrect setting of landing pad number");
-		      err |= true;
-		    }
-		}
-	    }
-
-	  err |= verify_stmt (&gsi);
-
-#ifdef ENABLE_TYPES_CHECKING
-	  if (verify_types_in_gimple_stmt (gsi_stmt (gsi)))
-	    {
-	      debug_gimple_stmt (stmt);
-	      err |= true;
-	    }
-#endif
-	  addr = walk_gimple_op (gsi_stmt (gsi), verify_node_sharing, &wi);
+	  memset (&wi, 0, sizeof (wi));
+	  wi.info = (void *) visited;
+	  addr = walk_gimple_op (stmt, verify_node_sharing, &wi);
 	  if (addr)
 	    {
 	      error ("incorrect sharing of tree nodes");
-	      debug_gimple_stmt (stmt);
 	      debug_generic_expr (addr);
-	      err |= true;
+	      err2 |= true;
 	    }
-	  gsi_next (&gsi);
+
+	  /* ???  Instead of not checking these stmts at all the walker
+	     should know its context via wi.  */
+	  if (!is_gimple_debug (stmt)
+	      && !is_gimple_omp (stmt))
+	    {
+	      memset (&wi, 0, sizeof (wi));
+	      addr = walk_gimple_op (stmt, verify_expr, &wi);
+	      if (addr)
+		{
+		  debug_generic_expr (addr);
+		  inform (gimple_location (stmt), "in statement");
+		  err2 |= true;
+		}
+	    }
+
+	  /* If the statement is marked as part of an EH region, then it is
+	     expected that the statement could throw.  Verify that when we
+	     have optimizations that simplify statements such that we prove
+	     that they cannot throw, that we update other data structures
+	     to match.  */
+	  lp_nr = lookup_stmt_eh_lp (stmt);
+	  if (lp_nr != 0)
+	    {
+	      if (!stmt_could_throw_p (stmt))
+		{
+		  error ("statement marked for throw, but doesn%'t");
+		  err2 |= true;
+		}
+	      else if (lp_nr > 0
+		       && !gsi_one_before_end_p (gsi)
+		       && stmt_can_throw_internal (stmt))
+		{
+		  error ("statement marked for throw in middle of block");
+		  err2 |= true;
+		}
+	    }
+
+	  if (err2)
+	    debug_gimple_stmt (stmt);
+	  err |= err2;
 	}
     }
 
@@ -4407,8 +4591,8 @@ verify_stmts (void)
 		   verify_eh_throw_stmt_node,
 		   visited_stmts);
 
-  if (err | eh_error_found)
-    internal_error ("verify_stmts failed");
+  if (err || eh_error_found)
+    internal_error ("verify_gimple failed");
 
   pointer_set_destroy (visited);
   pointer_set_destroy (visited_stmts);
@@ -4900,7 +5084,7 @@ gimple_redirect_edge_and_branch (edge e, basic_block dest)
 	      {
 		last = cases;
 		CASE_LABEL (cases) = label;
-		cases = TREE_CHAIN (cases);
+		cases = CASE_CHAIN (cases);
 	      }
 
 	    /* If there was already an edge in the CFG, then we need
@@ -4909,8 +5093,8 @@ gimple_redirect_edge_and_branch (edge e, basic_block dest)
 	      {
 		tree cases2 = get_cases_for_edge (e2, stmt);
 
-		TREE_CHAIN (last) = TREE_CHAIN (cases2);
-		TREE_CHAIN (cases2) = first;
+		CASE_CHAIN (last) = CASE_CHAIN (cases2);
+		CASE_CHAIN (cases2) = first;
 	      }
 	    bitmap_set_bit (touched_switch_bbs, gimple_bb (stmt)->index);
 	  }
@@ -4966,6 +5150,13 @@ gimple_redirect_edge_and_branch (edge e, basic_block dest)
     case GIMPLE_EH_DISPATCH:
       if (!(e->flags & EDGE_FALLTHRU))
 	redirect_eh_dispatch_edge (stmt, e, dest);
+      break;
+
+    case GIMPLE_TRANSACTION:
+      /* The ABORT edge has a stored label associated with it, otherwise
+	 the edges are simply redirectable.  */
+      if (e->flags == 0)
+	gimple_transaction_set_label (stmt, gimple_block_label (dest));
       break;
 
     default:
@@ -5121,6 +5312,12 @@ gimple_duplicate_bb (basic_block bb)
 
       stmt = gsi_stmt (gsi);
       if (gimple_code (stmt) == GIMPLE_LABEL)
+	continue;
+
+      /* Don't duplicate label debug stmts.  */
+      if (gimple_debug_bind_p (stmt)
+	  && TREE_CODE (gimple_debug_bind_get_var (stmt))
+	     == LABEL_DECL)
 	continue;
 
       /* Create a new copy of STMT and duplicate STMT's virtual
@@ -5439,12 +5636,10 @@ gimple_duplicate_sese_tail (edge entry ATTRIBUTE_UNUSED, edge exit ATTRIBUTE_UNU
   int total_freq = 0, exit_freq = 0;
   gcov_type total_count = 0, exit_count = 0;
   edge exits[2], nexits[2], e;
-  gimple_stmt_iterator gsi,gsi1;
+  gimple_stmt_iterator gsi;
   gimple cond_stmt;
   edge sorig, snew;
   basic_block exit_bb;
-  basic_block iters_bb;
-  tree new_rhs;
   gimple_stmt_iterator psi;
   gimple phi;
   tree def;
@@ -5525,35 +5720,6 @@ gimple_duplicate_sese_tail (edge entry ATTRIBUTE_UNUSED, edge exit ATTRIBUTE_UNU
   gcc_assert (gimple_code (cond_stmt) == GIMPLE_COND);
   cond_stmt = gimple_copy (cond_stmt);
 
- /* If the block consisting of the exit condition has the latch as
-    successor, then the body of the loop is executed before
-    the exit condition is tested.  In such case, moving the
-    condition to the entry, causes that the loop will iterate
-    one less iteration (which is the wanted outcome, since we
-    peel out the last iteration).  If the body is executed after
-    the condition, moving the condition to the entry requires
-    decrementing one iteration.  */
-  if (exits[1]->dest == orig_loop->latch)
-    new_rhs = gimple_cond_rhs (cond_stmt);
-  else
-  {
-    new_rhs = fold_build2 (MINUS_EXPR, TREE_TYPE (gimple_cond_rhs (cond_stmt)),
-			   gimple_cond_rhs (cond_stmt),
-			   build_int_cst (TREE_TYPE (gimple_cond_rhs (cond_stmt)), 1));
-
-    if (TREE_CODE (gimple_cond_rhs (cond_stmt)) == SSA_NAME)
-      {
-	iters_bb = gimple_bb (SSA_NAME_DEF_STMT (gimple_cond_rhs (cond_stmt)));
-	for (gsi1 = gsi_start_bb (iters_bb); !gsi_end_p (gsi1); gsi_next (&gsi1))
-	  if (gsi_stmt (gsi1) == SSA_NAME_DEF_STMT (gimple_cond_rhs (cond_stmt)))
-	    break;
-
-	new_rhs = force_gimple_operand_gsi (&gsi1, new_rhs, true,
-					    NULL_TREE,false,GSI_CONTINUE_LINKING);
-      }
-  }
-  gimple_cond_set_rhs (cond_stmt, unshare_expr (new_rhs));
-  gimple_cond_set_lhs (cond_stmt, unshare_expr (gimple_cond_lhs (cond_stmt)));
   gsi_insert_after (&gsi, cond_stmt, GSI_NEW_STMT);
 
   sorig = single_succ_edge (switch_bb);
@@ -5804,7 +5970,7 @@ move_stmt_eh_region_tree_nr (tree old_t_nr, struct move_stmt_d *p)
   old_nr = tree_low_cst (old_t_nr, 0);
   new_nr = move_stmt_eh_region_nr (old_nr, p);
 
-  return build_int_cst (NULL, new_nr);
+  return build_int_cst (integer_type_node, new_nr);
 }
 
 /* Like move_stmt_op, but for gimple statements.
@@ -6375,8 +6541,10 @@ dump_function_to_file (tree fn, FILE *file, int flags)
   bool ignore_topmost_bind = false, any_var = false;
   basic_block bb;
   tree chain;
+  bool tmclone = TREE_CODE (fn) == FUNCTION_DECL && decl_is_tm_clone (fn);
 
-  fprintf (file, "%s (", lang_hooks.decl_printable_name (fn, 2));
+  fprintf (file, "%s %s(", lang_hooks.decl_printable_name (fn, 2),
+	   tmclone ? "[tm-clone] " : "");
 
   arg = DECL_ARGUMENTS (fn);
   while (arg)
@@ -6731,9 +6899,20 @@ need_fake_edge_p (gimple t)
 	   && DECL_FUNCTION_CODE (fndecl) == BUILT_IN_FORK))
     return false;
 
-  if (is_gimple_call (t)
-      && !(call_flags & ECF_NORETURN))
-    return true;
+  if (is_gimple_call (t))
+    {
+      edge_iterator ei;
+      edge e;
+      basic_block bb;
+
+      if (!(call_flags & ECF_NORETURN))
+	return true;
+
+      bb = gimple_bb (t);
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	if ((e->flags & EDGE_FAKE) == 0)
+	  return true;
+    }
 
   if (gimple_code (t) == GIMPLE_ASM
        && (gimple_asm_volatile_p (t) || gimple_asm_input_p (t)))
@@ -6744,9 +6923,10 @@ need_fake_edge_p (gimple t)
 
 
 /* Add fake edges to the function exit for any non constant and non
-   noreturn calls, volatile inline assembly in the bitmap of blocks
-   specified by BLOCKS or to the whole CFG if BLOCKS is zero.  Return
-   the number of blocks that were split.
+   noreturn calls (or noreturn calls with EH/abnormal edges),
+   volatile inline assembly in the bitmap of blocks specified by BLOCKS
+   or to the whole CFG if BLOCKS is zero.  Return the number of blocks
+   that were split.
 
    The goal is to expose cases in which entering a basic block does
    not imply that all subsequent instructions must be executed.  */
@@ -7203,6 +7383,7 @@ struct cfg_hooks gimple_cfg_hooks = {
   gimple_split_edge,		/* split_edge  */
   gimple_make_forwarder_block,	/* make_forward_block  */
   NULL,				/* tidy_fallthru_edge  */
+  NULL,				/* force_nonfallthru */
   gimple_block_ends_with_call_p,/* block_ends_with_call_p */
   gimple_block_ends_with_condjump_p, /* block_ends_with_condjump_p */
   gimple_flow_call_edges_add,   /* flow_call_edges_add */
@@ -7279,7 +7460,7 @@ struct gimple_opt_pass pass_split_crit_edges =
   PROP_no_crit_edges,            /* properties_provided */
   0,                             /* properties_destroyed */
   0,                             /* todo_flags_start */
-  TODO_dump_func | TODO_verify_flow  /* todo_flags_finish */
+  TODO_verify_flow               /* todo_flags_finish */
  }
 };
 
@@ -7503,12 +7684,14 @@ do_warn_unused_result (gimple_seq seq)
 	case GIMPLE_CALL:
 	  if (gimple_call_lhs (g))
 	    break;
+	  if (gimple_call_internal_p (g))
+	    break;
 
 	  /* This is a naked call, as opposed to a GIMPLE_CALL with an
 	     LHS.  All calls whose value is ignored should be
 	     represented like this.  Look for the attribute.  */
 	  fdecl = gimple_call_fndecl (g);
-	  ftype = TREE_TYPE (TREE_TYPE (gimple_call_fn (g)));
+	  ftype = gimple_call_fntype (g);
 
 	  if (lookup_attribute ("warn_unused_result", TYPE_ATTRIBUTES (ftype)))
 	    {
@@ -7564,4 +7747,3 @@ struct gimple_opt_pass pass_warn_unused_result =
     0,					/* todo_flags_finish */
   }
 };
-

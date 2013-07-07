@@ -20,9 +20,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (sparc64-elf)")
-
 /* A 64 bit v9 compiler in a Medium/Anywhere code model environment.  */
 #undef TARGET_DEFAULT
 #define TARGET_DEFAULT \
@@ -42,7 +39,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef ASM_SPEC
 #define ASM_SPEC "\
 -s %{fpic|fPIC|fpie|fPIE:-K PIC} \
-%{mlittle-endian:-EL} \
 %(asm_cpu) %(asm_arch) \
 "
 
@@ -50,7 +46,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef LINK_SPEC
 #define LINK_SPEC "\
 %{v:-V} \
-%{mlittle-endian:-EL} \
 "
 
 #undef STARTFILE_SPEC
@@ -63,12 +58,6 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Use the default (for now).  */
 #undef LIB_SPEC
-
-#undef BYTES_BIG_ENDIAN
-#define BYTES_BIG_ENDIAN (! TARGET_LITTLE_ENDIAN)
-
-#undef WORDS_BIG_ENDIAN
-#define WORDS_BIG_ENDIAN (! TARGET_LITTLE_ENDIAN)
 
 #undef  LOCAL_LABEL_PREFIX
 #define LOCAL_LABEL_PREFIX  "."

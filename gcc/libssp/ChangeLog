@@ -1,35 +1,34 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
-2012-03-01  Release Manager
+2012-09-20  Release Manager
 
-	* GCC 4.6.3 released.
+	* GCC 4.7.2 released.
 
-2011-11-20  Andreas Tobler  <andreast@fgznet.ch>
+2012-06-14  Release Manager
+
+	* GCC 4.7.1 released.
+
+2012-05-31  Benjamin Kosnik  <bkoz@redhat.com>
+
+        PR libstdc++/52007
+        * configure.ac: Allow gnu, gnu* variants for --enable-symvers argument.
+        * configure: Regenerated.
+
+2012-03-22  Release Manager
+
+	* GCC 4.7.0 released.
+
+2011-11-21  Andreas Tobler  <andreast@fgznet.ch>
 
 	* configure: Regenerate.
 
-2011-10-26  Release Manager
-
-	* GCC 4.6.2 released.
-
-2011-06-27  Release Manager
-
-	* GCC 4.6.1 released.
-
-2011-03-28  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
-
-	Backport from mainline:
-	2011-03-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+2011-03-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
 	PR bootstrap/48135
 	* configure.ac (ssp_use_symver): Handle --disable-symvers.
 	* configure: Regenerate.
-
-2011-03-25  Release Manager
-
-	* GCC 4.6.0 released.
 
 2011-02-13  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 

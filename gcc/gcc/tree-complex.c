@@ -956,7 +956,7 @@ expand_complex_libcall (gimple_stmt_iterator *gsi, tree ar, tree ai,
 	     (BUILT_IN_COMPLEX_DIV_MIN + mode - MIN_MODE_COMPLEX_FLOAT));
   else
     gcc_unreachable ();
-  fn = built_in_decls[bcode];
+  fn = builtin_decl_explicit (bcode);
 
   stmt = gimple_build_call (fn, 4, ar, ai, br, bi);
   gimple_call_set_lhs (stmt, lhs);
@@ -1659,8 +1659,7 @@ struct gimple_opt_pass pass_lower_complex =
   PROP_gimple_lcx,			/* properties_provided */
   0,                       		/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func
-    | TODO_ggc_collect
+    TODO_ggc_collect
     | TODO_update_ssa
     | TODO_verify_stmts	 		/* todo_flags_finish */
  }
@@ -1690,8 +1689,7 @@ struct gimple_opt_pass pass_lower_complex_O0 =
   PROP_gimple_lcx,			/* properties_provided */
   0,					/* properties_destroyed */
   0,					/* todo_flags_start */
-  TODO_dump_func
-    | TODO_ggc_collect
+  TODO_ggc_collect
     | TODO_update_ssa
     | TODO_verify_stmts	 		/* todo_flags_finish */
  }

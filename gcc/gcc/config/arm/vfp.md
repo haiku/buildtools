@@ -133,85 +133,101 @@
 
 ;; DImode moves
 
-(define_insn "*arm_movdi_vfp"
-  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r,m,w,r,w,w, Uv")
-	(match_operand:DI 1 "di_operand"              "rIK,mi,r,r,w,w,Uvi,w"))]
-  "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP
+(define_insn "*movdi_vfp"
+  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r,r,r,r,r,r,m,w,r,w,w, Uv")
+       (match_operand:DI 1 "di_operand"              "r,rDa,Db,Dc,mi,mi,r,r,w,w,Uvi,w"))]
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP && arm_tune != cortexa8
    && (   register_operand (operands[0], DImode)
        || register_operand (operands[1], DImode))"
   "*
   switch (which_alternative)
     {
     case 0: 
-      return \"#\";
     case 1:
     case 2:
-      return output_move_double (operands);
     case 3:
-      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
+      return \"#\";
     case 4:
-      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
     case 5:
+    case 6:
+      return output_move_double (operands, true, NULL);
+    case 7:
+      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
+    case 8:
+      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
+    case 9:
       if (TARGET_VFP_SINGLE)
 	return \"fcpys%?\\t%0, %1\\t%@ int\;fcpys%?\\t%p0, %p1\\t%@ int\";
       else
 	return \"fcpyd%?\\t%P0, %P1\\t%@ int\";
-    case 6: case 7:
+    case 10: case 11:
       return output_move_vfp (operands);
     default:
       gcc_unreachable ();
     }
   "
-  [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
-   (set (attr "length") (cond [(eq_attr "alternative" "0,1,2") (const_int 8)
-			       (eq_attr "alternative" "5")
-				(if_then_else
-				 (eq (symbol_ref "TARGET_VFP_SINGLE")
-				     (const_int 1))
-				 (const_int 8)
-				 (const_int 4))]
-			      (const_int 4)))
-   (set_attr "predicable"    "yes")
-   (set_attr "pool_range"     "*,1020,*,*,*,*,1020,*")
-   (set_attr "neg_pool_range" "*,1008,*,*,*,*,1008,*")]
+  [(set_attr "type" "*,*,*,*,load2,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
+   (set_attr "neon_type" "*,*,*,*,*,*,*,neon_mcr_2_mcrr,neon_mrrc,neon_vmov,*,*")
+   (set (attr "length") (cond [(eq_attr "alternative" "1,4,5,6") (const_int 8)
+                              (eq_attr "alternative" "2") (const_int 12)
+                              (eq_attr "alternative" "3") (const_int 16)
+                              (eq_attr "alternative" "9")
+                               (if_then_else
+                                 (match_test "TARGET_VFP_SINGLE")
+                                 (const_int 8)
+                                 (const_int 4))]
+                              (const_int 4)))
+   (set_attr "pool_range"     "*,*,*,*,1020,4096,*,*,*,*,1020,*")
+   (set_attr "neg_pool_range" "*,*,*,*,1004,0,*,*,*,*,1004,*")
+   (set_attr "arch"           "t2,any,any,any,a,t2,any,any,any,any,any,any")]
 )
 
-(define_insn "*thumb2_movdi_vfp"
-  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r,m,w,r,w,w, Uv")
-	(match_operand:DI 1 "di_operand"              "rIK,mi,r,r,w,w,Uvi,w"))]
-  "TARGET_THUMB2 && TARGET_HARD_FLOAT && TARGET_VFP"
+(define_insn "*movdi_vfp_cortexa8"
+  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r,r,r,r,r,r,m,w,!r,w,w, Uv")
+       (match_operand:DI 1 "di_operand"              "r,rDa,Db,Dc,mi,mi,r,r,w,w,Uvi,w"))]
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP && arm_tune == cortexa8
+    && (   register_operand (operands[0], DImode)
+        || register_operand (operands[1], DImode))"
   "*
   switch (which_alternative)
     {
-    case 0: case 1: case 2:
-      return (output_move_double (operands));
+    case 0: 
+    case 1:
+    case 2:
     case 3:
-      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
+      return \"#\";
     case 4:
-      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
     case 5:
-      if (TARGET_VFP_SINGLE)
-	return \"fcpys%?\\t%0, %1\\t%@ int\;fcpys%?\\t%p0, %p1\\t%@ int\";
-      else
-	return \"fcpyd%?\\t%P0, %P1\\t%@ int\";
-    case 6: case 7:
+    case 6:
+      return output_move_double (operands, true, NULL);
+    case 7:
+      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
+    case 8:
+      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
+    case 9:
+      return \"fcpyd%?\\t%P0, %P1\\t%@ int\";
+    case 10: case 11:
       return output_move_vfp (operands);
     default:
-      abort ();
+      gcc_unreachable ();
     }
   "
-  [(set_attr "type" "*,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
-   (set (attr "length") (cond [(eq_attr "alternative" "0,1,2") (const_int 8)
-			       (eq_attr "alternative" "5")
-				(if_then_else
-				 (eq (symbol_ref "TARGET_VFP_SINGLE")
-				     (const_int 1))
-				 (const_int 8)
-				 (const_int 4))]
-			      (const_int 4)))
-   (set_attr "pool_range"     "*,4096,*,*,*,*,1020,*")
-   (set_attr "neg_pool_range" "*,   0,*,*,*,*,1008,*")]
-)
+  [(set_attr "type" "*,*,*,*,load2,load2,store2,r_2_f,f_2_r,ffarithd,f_loadd,f_stored")
+   (set (attr "length") (cond [(eq_attr "alternative" "1") (const_int 8)
+                               (eq_attr "alternative" "2") (const_int 12)
+                               (eq_attr "alternative" "3") (const_int 16)
+                               (eq_attr "alternative" "4,5,6") 
+			       (symbol_ref 
+				"arm_count_output_move_double_insns (operands) \
+                                 * 4")]
+                              (const_int 4)))
+   (set_attr "predicable"    "yes")
+   (set_attr "pool_range"     "*,*,*,*,1020,4096,*,*,*,*,1020,*")
+   (set_attr "neg_pool_range" "*,*,*,*,1004,0,*,*,*,*,1004,*")
+   (set (attr "ce_count") 
+	(symbol_ref "get_attr_length (insn) / 4"))
+   (set_attr "arch"           "t2,any,any,any,a,t2,any,any,any,any,any,any")]
+ )
 
 ;; HFmode moves
 (define_insn "*movhf_vfp_neon"
@@ -401,8 +417,8 @@
 ;; DFmode moves
 
 (define_insn "*movdf_vfp"
-  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,r, m,w  ,Uv,w,r")
-	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,mF,r,UvF,w, w,r"))]
+  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,w  ,Uv,r, m,w,r")
+	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,UvF,w ,mF,r,w,r"))]
   "TARGET_ARM && TARGET_HARD_FLOAT && TARGET_VFP
    && (   register_operand (operands[0], DFmode)
        || register_operand (operands[1], DFmode))"
@@ -418,9 +434,9 @@
 	gcc_assert (TARGET_VFP_DOUBLE);
         return \"fconstd%?\\t%P0, #%G1\";
       case 3: case 4:
-	return output_move_double (operands);
-      case 5: case 6:
 	return output_move_vfp (operands);
+      case 5: case 6:
+	return output_move_double (operands, true, NULL);
       case 7:
 	if (TARGET_VFP_SINGLE)
 	  return \"fcpys%?\\t%0, %1\;fcpys%?\\t%p0, %p1\";
@@ -435,22 +451,21 @@
   "
   [(set_attr "type"
      "r_2_f,f_2_r,fconstd,f_loadd,f_stored,load2,store2,ffarithd,*")
-   (set (attr "length") (cond [(eq_attr "alternative" "3,4,8") (const_int 8)
+   (set (attr "length") (cond [(eq_attr "alternative" "5,6,8") (const_int 8)
 			       (eq_attr "alternative" "7")
 				(if_then_else
-				 (eq (symbol_ref "TARGET_VFP_SINGLE")
-				     (const_int 1))
+				 (match_test "TARGET_VFP_SINGLE")
 				 (const_int 8)
 				 (const_int 4))]
 			      (const_int 4)))
    (set_attr "predicable" "yes")
    (set_attr "pool_range" "*,*,*,1020,*,1020,*,*,*")
-   (set_attr "neg_pool_range" "*,*,*,1008,*,1008,*,*,*")]
+   (set_attr "neg_pool_range" "*,*,*,1004,*,1004,*,*,*")]
 )
 
 (define_insn "*thumb2_movdf_vfp"
-  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,r, m,w  ,Uv,w,r")
-	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,mF,r,UvF,w, w,r"))]
+  [(set (match_operand:DF 0 "nonimmediate_soft_df_operand" "=w,?r,w ,w  ,Uv,r ,m,w,r")
+	(match_operand:DF 1 "soft_df_operand"		   " ?r,w,Dy,UvF,w, mF,r, w,r"))]
   "TARGET_THUMB2 && TARGET_HARD_FLOAT && TARGET_VFP"
   "*
   {
@@ -463,10 +478,10 @@
       case 2:
 	gcc_assert (TARGET_VFP_DOUBLE);
 	return \"fconstd%?\\t%P0, #%G1\";
-      case 3: case 4: case 8:
-	return output_move_double (operands);
-      case 5: case 6:
+      case 3: case 4:
 	return output_move_vfp (operands);
+      case 5: case 6: case 8:
+	return output_move_double (operands, true, NULL);
       case 7:
 	if (TARGET_VFP_SINGLE)
 	  return \"fcpys%?\\t%0, %1\;fcpys%?\\t%p0, %p1\";
@@ -478,17 +493,16 @@
     }
   "
   [(set_attr "type"
-     "r_2_f,f_2_r,fconstd,load2,store2,f_loadd,f_stored,ffarithd,*")
-   (set (attr "length") (cond [(eq_attr "alternative" "3,4,8") (const_int 8)
+     "r_2_f,f_2_r,fconstd,f_loadd,f_stored,load2,store2,ffarithd,*")
+   (set (attr "length") (cond [(eq_attr "alternative" "5,6,8") (const_int 8)
 			       (eq_attr "alternative" "7")
 				(if_then_else
-				 (eq (symbol_ref "TARGET_VFP_SINGLE")
-				     (const_int 1))
+				 (match_test "TARGET_VFP_SINGLE")
 				 (const_int 8)
 				 (const_int 4))]
 			      (const_int 4)))
-   (set_attr "pool_range" "*,*,*,4096,*,1020,*,*,*")
-   (set_attr "neg_pool_range" "*,*,*,0,*,1008,*,*,*")]
+   (set_attr "pool_range" "*,*,*,1020,*,4096,*,*,*")
+   (set_attr "neg_pool_range" "*,*,*,1008,*,0,*,*,*")]
 )
 
 
@@ -712,7 +726,7 @@
 ;; Division insns
 
 (define_insn "*divsf3_vfp"
-  [(set (match_operand:SF	  0 "s_register_operand" "+t")
+  [(set (match_operand:SF	  0 "s_register_operand" "=t")
 	(div:SF (match_operand:SF 1 "s_register_operand" "t")
 		(match_operand:SF 2 "s_register_operand" "t")))]
   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP"
@@ -722,7 +736,7 @@
 )
 
 (define_insn "*divdf3_vfp"
-  [(set (match_operand:DF	  0 "s_register_operand" "+w")
+  [(set (match_operand:DF	  0 "s_register_operand" "=w")
 	(div:DF (match_operand:DF 1 "s_register_operand" "w")
 		(match_operand:DF 2 "s_register_operand" "w")))]
   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP_DOUBLE"
@@ -735,7 +749,7 @@
 ;; Multiplication insns
 
 (define_insn "*mulsf3_vfp"
-  [(set (match_operand:SF	   0 "s_register_operand" "+t")
+  [(set (match_operand:SF	   0 "s_register_operand" "=t")
 	(mult:SF (match_operand:SF 1 "s_register_operand" "t")
 		 (match_operand:SF 2 "s_register_operand" "t")))]
   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP"
@@ -745,7 +759,7 @@
 )
 
 (define_insn "*muldf3_vfp"
-  [(set (match_operand:DF	   0 "s_register_operand" "+w")
+  [(set (match_operand:DF	   0 "s_register_operand" "=w")
 	(mult:DF (match_operand:DF 1 "s_register_operand" "w")
 		 (match_operand:DF 2 "s_register_operand" "w")))]
   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP_DOUBLE"
@@ -754,9 +768,8 @@
    (set_attr "type" "fmuld")]
 )
 
-
 (define_insn "*mulsf3negsf_vfp"
-  [(set (match_operand:SF		   0 "s_register_operand" "+t")
+  [(set (match_operand:SF		   0 "s_register_operand" "=t")
 	(mult:SF (neg:SF (match_operand:SF 1 "s_register_operand" "t"))
 		 (match_operand:SF	   2 "s_register_operand" "t")))]
   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP"
@@ -766,7 +779,7 @@
 )
 
 (define_insn "*muldf3negdf_vfp"
-  [(set (match_operand:DF		   0 "s_register_operand" "+w")
+  [(set (match_operand:DF		   0 "s_register_operand" "=w")
 	(mult:DF (neg:DF (match_operand:DF 1 "s_register_operand" "w"))
 		 (match_operand:DF	   2 "s_register_operand" "w")))]
   "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP_DOUBLE"
@@ -1131,9 +1144,40 @@
    (set_attr "type" "fcmpd")]
 )
 
+;; Fixed point to floating point conversions. 
+(define_code_iterator FCVT [unsigned_float float])
+(define_code_attr FCVTI32typename [(unsigned_float "u32") (float "s32")])
+
+(define_insn "*combine_vcvt_f32_<FCVTI32typename>"
+  [(set (match_operand:SF 0 "s_register_operand" "=t")
+	(mult:SF (FCVT:SF (match_operand:SI 1 "s_register_operand" "0"))
+		 (match_operand 2 
+			"const_double_vcvt_power_of_two_reciprocal" "Dt")))]
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP3 && !flag_rounding_math"
+  "vcvt.f32.<FCVTI32typename>\\t%0, %1, %v2"
+ [(set_attr "predicable" "no")
+  (set_attr "type" "f_cvt")]
+)
+
+;; Not the ideal way of implementing this. Ideally we would be able to split
+;; this into a move to a DP register and then a vcvt.f64.i32
+(define_insn "*combine_vcvt_f64_<FCVTI32typename>"
+  [(set (match_operand:DF 0 "s_register_operand" "=x,x,w")
+	(mult:DF (FCVT:DF (match_operand:SI 1 "s_register_operand" "r,t,r"))
+		 (match_operand 2 
+		     "const_double_vcvt_power_of_two_reciprocal" "Dt,Dt,Dt")))]
+  "TARGET_32BIT && TARGET_HARD_FLOAT && TARGET_VFP3 && !flag_rounding_math 
+  && !TARGET_VFP_SINGLE"
+  "@
+  vmov.f32\\t%0, %1\;vcvt.f64.<FCVTI32typename>\\t%P0, %P0, %v2
+  vmov.f32\\t%0, %1\;vcvt.f64.<FCVTI32typename>\\t%P0, %P0, %v2
+  vmov.f64\\t%P0, %1, %1\;vcvt.f64.<FCVTI32typename>\\t%P0, %P0, %v2"
+ [(set_attr "predicable" "no")
+  (set_attr "type" "f_cvt")
+  (set_attr "length" "8")]
+)
 
 ;; Store multiple insn used in function prologue.
-
 (define_insn "*push_multi_vfp"
   [(match_parallel 2 "multi_register_push"
     [(set (match_operand:BLK 0 "memory_operand" "=m")

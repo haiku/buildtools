@@ -54,6 +54,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "target.h"
 #include "lto-streamer.h"
+#include "data-streamer.h"
+#include "tree-streamer.h"
 #include "cfgloop.h"
 #include "tree-scalar-evolution.h"
 #include "intl.h"
@@ -435,6 +437,7 @@ special_builtin_state (enum pure_const_state_e *state, bool *looping,
 	case BUILT_IN_RETURN:
 	case BUILT_IN_UNREACHABLE:
 	case BUILT_IN_ALLOCA:
+	case BUILT_IN_ALLOCA_WITH_ALIGN:
 	case BUILT_IN_STACK_SAVE:
 	case BUILT_IN_STACK_RESTORE:
 	case BUILT_IN_EH_POINTER:
@@ -639,7 +642,6 @@ static void
 check_stmt (gimple_stmt_iterator *gsip, funct_state local, bool ipa)
 {
   gimple stmt = gsi_stmt (*gsip);
-  unsigned int i = 0;
 
   if (is_gimple_debug (stmt))
     return;
@@ -650,7 +652,8 @@ check_stmt (gimple_stmt_iterator *gsip, funct_state local, bool ipa)
       print_gimple_stmt (dump_file, stmt, 0, 0);
     }
 
-  if (gimple_has_volatile_ops (stmt))
+  if (gimple_has_volatile_ops (stmt)
+      && !gimple_clobber_p (stmt))
     {
       local->pure_const_state = IPA_NEITHER;
       if (dump_file)
@@ -693,16 +696,12 @@ check_stmt (gimple_stmt_iterator *gsip, funct_state local, bool ipa)
 	}
       break;
     case GIMPLE_ASM:
-      for (i = 0; i < gimple_asm_nclobbers (stmt); i++)
+      if (gimple_asm_clobbers_memory_p (stmt))
 	{
-	  tree op = gimple_asm_clobber_op (stmt, i);
-	  if (strcmp (TREE_STRING_POINTER (TREE_VALUE (op)), "memory") == 0)
-	    {
-              if (dump_file)
-                fprintf (dump_file, "    memory asm clobber is not const/pure");
-	      /* Abandon all hope, ye who enter here. */
-	      local->pure_const_state = IPA_NEITHER;
-	    }
+	  if (dump_file)
+	    fprintf (dump_file, "    memory asm clobber is not const/pure");
+	  /* Abandon all hope, ye who enter here. */
+	  local->pure_const_state = IPA_NEITHER;
 	}
       if (gimple_asm_volatile_p (stmt))
 	{
@@ -736,6 +735,16 @@ analyze_function (struct cgraph_node *fn, bool ipa)
   l->looping_previously_known = true;
   l->looping = false;
   l->can_throw = false;
+  state_from_flags (&l->state_previously_known, &l->looping_previously_known,
+		    flags_from_decl_or_type (fn->decl),
+		    cgraph_node_cannot_return (fn));
+
+  if (fn->thunk.thunk_p || fn->alias)
+    {
+      /* Thunk gets propagated through, so nothing interesting happens.  */
+      gcc_assert (ipa);
+      return l;
+    }
 
   if (dump_file)
     {
@@ -794,7 +803,7 @@ end:
 		    if (dump_file)
 		      fprintf (dump_file, "    can not prove finiteness of loop %i\n", loop->num);
 		    l->looping =true;
-		    break;
+		    FOR_EACH_LOOP_BREAK (li);
 		  }
 	      scev_finalize ();
 	    }
@@ -804,9 +813,6 @@ end:
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "    checking previously known:");
-  state_from_flags (&l->state_previously_known, &l->looping_previously_known,
-		    flags_from_decl_or_type (fn->decl),
-		    cgraph_node_cannot_return (fn));
 
   better_state (&l->pure_const_state, &l->looping,
 		l->state_previously_known,
@@ -946,7 +952,7 @@ pure_const_write_summary (cgraph_node_set set,
 	count++;
     }
 
-  lto_output_uleb128_stream (ob->main_stream, count);
+  streamer_write_uhwi_stream (ob->main_stream, count);
 
   /* Process all of the functions.  */
   for (csi = csi_start (set); !csi_end_p (csi); csi_next (&csi))
@@ -963,7 +969,7 @@ pure_const_write_summary (cgraph_node_set set,
 
 	  encoder = ob->decl_state->cgraph_node_encoder;
 	  node_ref = lto_cgraph_encoder_encode (encoder, node);
-	  lto_output_uleb128_stream (ob->main_stream, node_ref);
+	  streamer_write_uhwi_stream (ob->main_stream, node_ref);
 
 	  /* Note that flags will need to be read in the opposite
 	     order as we are pushing the bitflags into FLAGS.  */
@@ -973,7 +979,7 @@ pure_const_write_summary (cgraph_node_set set,
 	  bp_pack_value (&bp, fs->looping_previously_known, 1);
 	  bp_pack_value (&bp, fs->looping, 1);
 	  bp_pack_value (&bp, fs->can_throw, 1);
-	  lto_output_bitpack (&bp);
+	  streamer_write_bitpack (&bp);
 	}
     }
 
@@ -1002,7 +1008,7 @@ pure_const_read_summary (void)
       if (ib)
 	{
 	  unsigned int i;
-	  unsigned int count = lto_input_uleb128 (ib);
+	  unsigned int count = streamer_read_uhwi (ib);
 
 	  for (i = 0; i < count; i++)
 	    {
@@ -1013,7 +1019,7 @@ pure_const_read_summary (void)
 	      lto_cgraph_encoder_t encoder;
 
 	      fs = XCNEW (struct funct_state_d);
-	      index = lto_input_uleb128 (ib);
+	      index = streamer_read_uhwi (ib);
 	      encoder = file_data->cgraph_node_encoder;
 	      node = lto_cgraph_encoder_deref (encoder, index);
 	      set_function_state (node, fs);
@@ -1021,7 +1027,7 @@ pure_const_read_summary (void)
 	      /* Note that the flags must be read in the opposite
 		 order in which they were written (the bitflags were
 		 pushed into FLAGS).  */
-	      bp = lto_input_bitpack (ib);
+	      bp = streamer_read_bitpack (ib);
 	      fs->pure_const_state
 			= (enum pure_const_state_e) bp_unpack_value (&bp, 2);
 	      fs->state_previously_known
@@ -1068,14 +1074,16 @@ ignore_edge (struct cgraph_edge *e)
   return (!e->can_throw_external);
 }
 
-/* Return true if NODE is self recursive function.  */
+/* Return true if NODE is self recursive function.
+   ??? self recursive and indirectly recursive funcions should
+   be the same, so this function seems unnecesary.  */
 
 static bool
 self_recursive_p (struct cgraph_node *node)
 {
   struct cgraph_edge *e;
   for (e = node->callees; e; e = e->next_callee)
-    if (e->callee == node)
+    if (cgraph_function_node (e->callee, NULL) == node)
       return true;
   return false;
 }
@@ -1094,11 +1102,11 @@ propagate_pure_const (void)
   int i;
   struct ipa_dfs_info * w_info;
 
-  order_pos = ipa_utils_reduced_inorder (order, true, false, NULL);
+  order_pos = ipa_reduced_postorder (order, true, false, NULL);
   if (dump_file)
     {
       dump_cgraph (dump_file);
-      ipa_utils_print_order(dump_file, "reduced", order, order_pos);
+      ipa_print_order(dump_file, "reduced", order, order_pos);
     }
 
   /* Propagate the local information thru the call graph to produce
@@ -1111,6 +1119,9 @@ propagate_pure_const (void)
       bool looping = false;
       int count = 0;
       node = order[i];
+
+      if (node->alias)
+	continue;
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "Starting cycle\n");
@@ -1165,7 +1176,8 @@ propagate_pure_const (void)
 	  /* Now walk the edges and merge in callee properties.  */
 	  for (e = w->callees; e; e = e->next_callee)
 	    {
-	      struct cgraph_node *y = e->callee;
+	      enum availability avail;
+	      struct cgraph_node *y = cgraph_function_node (e->callee, &avail);
 	      enum pure_const_state_e edge_state = IPA_CONST;
 	      bool edge_looping = false;
 
@@ -1176,7 +1188,7 @@ propagate_pure_const (void)
 			   cgraph_node_name (e->callee),
 			   e->callee->uid);
 		}
-	      if (cgraph_function_body_availability (y) > AVAIL_OVERWRITABLE)
+	      if (avail > AVAIL_OVERWRITABLE)
 		{
 		  funct_state y_l = get_function_state (y);
 		  if (dump_file && (dump_flags & TDF_DETAILS))
@@ -1344,18 +1356,7 @@ propagate_pure_const (void)
 	}
     }
 
-  /* Cleanup. */
-  for (node = cgraph_nodes; node; node = node->next)
-    {
-      /* Get rid of the aux information.  */
-      if (node->aux)
-	{
-	  w_info = (struct ipa_dfs_info *) node->aux;
-	  free (node->aux);
-	  node->aux = NULL;
-	}
-    }
-
+  ipa_free_postorder_info ();
   free (order);
 }
 
@@ -1373,11 +1374,11 @@ propagate_nothrow (void)
   int i;
   struct ipa_dfs_info * w_info;
 
-  order_pos = ipa_utils_reduced_inorder (order, true, false, ignore_edge);
+  order_pos = ipa_reduced_postorder (order, true, false, ignore_edge);
   if (dump_file)
     {
       dump_cgraph (dump_file);
-      ipa_utils_print_order(dump_file, "reduced for nothrow", order, order_pos);
+      ipa_print_order (dump_file, "reduced for nothrow", order, order_pos);
     }
 
   /* Propagate the local information thru the call graph to produce
@@ -1388,6 +1389,9 @@ propagate_nothrow (void)
     {
       bool can_throw = false;
       node = order[i];
+
+      if (node->alias)
+	continue;
 
       /* Find the worst state for any node in the cycle.  */
       w = node;
@@ -1405,9 +1409,10 @@ propagate_nothrow (void)
 
 	  for (e = w->callees; e; e = e->next_callee)
 	    {
-	      struct cgraph_node *y = e->callee;
+	      enum availability avail;
+	      struct cgraph_node *y = cgraph_function_node (e->callee, &avail);
 
-	      if (cgraph_function_body_availability (y) > AVAIL_OVERWRITABLE)
+	      if (avail > AVAIL_OVERWRITABLE)
 		{
 		  funct_state y_l = get_function_state (y);
 
@@ -1435,10 +1440,7 @@ propagate_nothrow (void)
 	  funct_state w_l = get_function_state (w);
 	  if (!can_throw && !TREE_NOTHROW (w->decl))
 	    {
-	      struct cgraph_edge *e;
 	      cgraph_set_nothrow_flag (w, true);
-	      for (e = w->callers; e; e = e->next_caller)
-	        e->can_throw_external = false;
 	      if (dump_file)
 		fprintf (dump_file, "Function found to be nothrow: %s\n",
 			 cgraph_node_name (w));
@@ -1450,18 +1452,7 @@ propagate_nothrow (void)
 	}
     }
 
-  /* Cleanup. */
-  for (node = cgraph_nodes; node; node = node->next)
-    {
-      /* Get rid of the aux information.  */
-      if (node->aux)
-	{
-	  w_info = (struct ipa_dfs_info *) node->aux;
-	  free (node->aux);
-	  node->aux = NULL;
-	}
-    }
-
+  ipa_free_postorder_info ();
   free (order);
 }
 
@@ -1563,7 +1554,7 @@ local_pure_const (void)
   bool skip;
   struct cgraph_node *node;
 
-  node = cgraph_node (current_function_decl);
+  node = cgraph_get_node (current_function_decl);
   skip = skip_function_for_local_pure_const (node);
   if (!warn_suggest_attribute_const
       && !warn_suggest_attribute_pure
@@ -1656,19 +1647,14 @@ local_pure_const (void)
     }
   if (!l->can_throw && !TREE_NOTHROW (current_function_decl))
     {
-      struct cgraph_edge *e;
-
       cgraph_set_nothrow_flag (node, true);
-      for (e = node->callers; e; e = e->next_caller)
-	e->can_throw_external = false;
       changed = true;
       if (dump_file)
 	fprintf (dump_file, "Function found to be nothrow: %s\n",
 		 lang_hooks.decl_printable_name (current_function_decl,
 						 2));
     }
-  if (l)
-    free (l);
+  free (l);
   if (changed)
     return execute_fixup_cfg ();
   else

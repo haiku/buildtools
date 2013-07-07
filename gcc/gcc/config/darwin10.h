@@ -18,9 +18,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#undef LIB_SPEC
-#define LIB_SPEC "%{!static: -lSystem }"
-
 /* Fix PR41260 by passing -no_compact_unwind on darwin10 and later until
    unwinder in libSystem is fixed to digest new epilog unwinding notes.
 
@@ -29,4 +26,9 @@ along with GCC; see the file COPYING3.  If not see
 #define LINK_GCC_C_SEQUENCE_SPEC \
 "%:version-compare(>= 10.6 mmacosx-version-min= -no_compact_unwind) \
    %{!static:%{!static-libgcc: \
-      %:version-compare(>= 10.6 mmacosx-version-min= -lSystem) } } %G %L"
+      %:version-compare(>= 10.6 mmacosx-version-min= -lSystem) } } \
+   %{fno-pic|fno-PIC|fno-pie|fno-PIE|fapple-kext|mkernel|static|mdynamic-no-pic: \
+      %:version-compare(>= 10.7 mmacosx-version-min= -no_pie) } %G %L"
+
+#undef DEF_MIN_OSX_VERSION
+#define DEF_MIN_OSX_VERSION "10.6"

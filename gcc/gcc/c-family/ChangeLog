@@ -1,10 +1,203 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
-2012-03-01  Release Manager
+2012-12-03  Marek Polacek  <polacek@redhat.com>
 
-	* GCC 4.6.3 released.
+	Backported from mainline
+	2012-12-03  Marek Polacek  <polacek@redhat.com>
+
+	PR c/55570
+	* c-common.c (check_user_alignment): Swap order of tests,
+	check TREE_CODE first.
+
+2012-09-20  Release Manager
+
+	* GCC 4.7.2 released.
+
+2012-06-27  Kai Tietz  <ktietz@redhat.com>
+
+	Merged from trunk
+	PR preprocessor/37215
+	* c-ppoutput.c (preprocess_file): Check for nonempty buffer.
+
+2012-06-14  Release Manager
+
+	* GCC 4.7.1 released.
+
+2012-03-23  William Bader  <williambader@hotmail.com>
+
+	PR c/52682
+	* c-lex.c (c_lex_with_flags): Avoid declarations after stmts.
+
+2012-03-22  Release Manager
+
+	* GCC 4.7.0 released.
+
+2012-02-13  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/52215
+	* c-common.c (sync_resolve_params): Don't decide whether to convert
+	or not based on TYPE_SIZE comparison, convert whenever arg_type
+	is unsigned INTEGER_TYPE.
+
+2012-02-06  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c/52118
+	* c.opt ([Wunused-local-typedefs]): Fix description.
+
+2012-01-24  Mike Stump  <mikestump@comcast.net>
+
+	* c-common.c (c_common_type_for_mode): Match signed/unsigned types
+	exactly.
+
+2012-01-18  Richard Guenther  <rguenther@suse.de>
+
+	* c-opts.c (c_common_post_options): Reset LTO flags if
+	we are about to generate a PCH.
+
+2012-01-17  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/51777
+	* c-pretty-print.c (pp_c_integer_constant): For unsigned constants
+	use pp_unsigned_wide_integer.
+
+2012-01-10  Richard Guenther  <rguenther@suse.de>
+
+	PR middle-end/51806
+	* c-opts.c (c_common_handle_option): Move -Werror handling
+	to language independent code.
+
+2012-01-05  Richard Guenther  <rguenther@suse.de>
+
+	PR middle-end/51764
+	* c.opt (Wmudflap, fmudflap, fmudflapth, fmudflapir): Move here
+	from common.opt.
+
+2011-12-30  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/51316
+	* c-common.c (c_sizeof_or_alignof_type): In C++ allow for alignof
+	of array types with an unknown bound.
+
+2011-12-20  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-common.c (flag_isoc99): Update comment to refer to C11.
+	(flag_isoc1x): Change to flag_isoc11.
+	* c-common.h (flag_isoc99): Update comment to refer to C11.
+	(flag_isoc1x): Change to flag_isoc11.
+	* c-cppbuiltin.c (cpp_atomic_builtins): Change comment to refer to
+	C11.
+	* c-opts.c (set_std_c1x): Change to set_std_c11.
+	(c_common_handle_option): Handle OPT_std_c11 and OPT_std_gnu11.
+	Call set_std_c11.
+	(set_std_c89, set_std_c99, set_std_c11): Use flag_isoc11.
+	(set_std_c1): Use CLK_STDC11 and CLK_GNUC11.
+	* c.opt (std=c1x): Change to std=c11.  Document as non-draft
+	standard.
+	(std=c1x, std=iso9899:2011): Add as aliases of std=c11.
+	(std=gnu1x): Change to std=gnu11.  Refer to non-draft standard.
+	(std=gnu1x): Make alias of std=gnu11.
+
+2011-12-19  Jason Merrill  <jason@redhat.com>
+
+	PR c++/51228
+	* c-common.c (handle_transparent_union_attribute): Check the first
+	field if the type is complete.
+
+2011-12-15  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/51365
+	* c-common.c (RID_IS_FINAL): Add.
+	* c-common.h (RID_IS_FINAL): Add.
+
+2011-11-30  Iain Sandoe  <iains@gcc.gnu.org>
+
+	* c.opt (fgnu-runtime): Provide full description.
+	(fnext-runtime): Likewise.
+	* c-opts.c (OPT_fgnu_runtime, OPT_fnext_runtime) Remove.
+
+2011-11-28  Andrew MacLeod  <amacleod@redhat.com>
+
+	* c-cpp-builtin.c (cpp_atomic_builtins):New.  Emit all atomic
+	predefines in one place.  Add LOCK_FREE predefines.
+	(c_cpp_builtins): Move Legacy HAVE_SYNC predefines to
+	new func.
+
+2011-11-24  Andrew MacLeod  <amacleod@redhat.com>
+
+	PR c/51256
+	* c-common.c (get_atomic_generic_size): Check for various error 
+	conditions
+	(resolve_overloaded_atomic_exchange, 
+	resolve_overloaded_atomic_compare_exchange, 
+	resolve_overloaded_atomic_load, resolve_overloaded_atomic_store): Return
+	error_mark_node for error conditions.
+	
+2011-11-08  Richard Guenther  <rguenther@suse.de>
+
+	PR middle-end/51010
+	c-family/
+
+2011-11-07  Richard Henderson  <rth@redhat.com>
+	    Aldy Hernandez  <aldyh@redhat.com>
+	    Torvald Riegel  <triegel@redhat.com>
+
+	Merged from transactional-memory.
+
+	* c-common.c (handle_tm_wrap_attribute,
+	handle_tm_attribute, ignore_attribute, parse_tm_stmt_attr): New.
+	(struct c_common_reswords): Added __transaction* keywords.
+	(struct c_common_attribute_table): Added transaction* and tm_regparm
+	attributes.
+	* c-common.h: Added RID_TRANSACTION*. Added TM_ATTR* and TM_STMT*
+	masks.
+	(parse_tm_stmt_attr, tm_attr_to_mask, tm_mask_to_attr,
+	find_tm_attribute): Declare.
+
+2011-11-07  Jason Merrill  <jason@redhat.com>
+
+	PR c++/35688
+	* c-common.c, c-common.h: Revert yesterday's changes.
+
+2011-11-06  Jason Merrill  <jason@redhat.com>
+
+	PR c++/35688
+	* c-common.c (decl_has_visibility_attr): Split out from...
+	(c_determine_visibility): ...here.
+	* c-common.h: Declare it.
+
+2011-11-06  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-common.c (c_common_reswords): Add _Alignas and _Alignof.
+	(c_sizeof_or_alignof_type): Diagnose alignof applied to a function
+	type.
+	(check_user_alignment): New.  Split out of
+	handle_aligned_attribute.  Disallow integer constants with
+	noninteger types.  Conditionally allow zero.
+	(handle_aligned_attribute): Use check_user_alignment.
+	* c-common.h (RID_ALIGNAS, check_user_alignment): New.
+
+2011-11-06  Andrew MacLeod  <amacleod@redhat.com>
+	    Richard Henderson  <rth@redhat.com>
+
+	Merged from cxx-mem-model.
+
+	* c-cppbuiltin.c (c_cpp_builtins): Test both atomic and sync patterns.
+	* c-common.c (sync_resolve_params, sync_resolve_return): Only tweak 
+	parameters that are the same type size.
+	(get_atomic_generic_size): New.  Find size of generic
+	atomic function parameters and do typechecking.
+	(add_atomic_size_parameter): New.  Insert size into parameter list.
+	(resolve_overloaded_atomic_exchange): Restructure __atomic_exchange to
+	either __atomic_exchange_n or external library call.
+	(resolve_overloaded_atomic_compare_exchange): Restructure 
+	__atomic_compare_exchange to either _n variant or external library call.
+	(resolve_overloaded_atomic_load): Restructure __atomic_load to either 
+	__atomic_load_n or an external library call.
+	(resolve_overloaded_atomic_store): Restructure __atomic_store to either
+	__atomic_store_n or an external library call.
+	(resolve_overloaded_builtin): Handle new __atomic builtins.
 
 2011-11-04  Eric Botcazou  <ebotcazou@adacore.com>
 
@@ -18,9 +211,157 @@
 	* c-common.h (fold_offsetof_1): Declare.
 	(fold_offsetof): Remove STOP_REF argument.
 
-2011-10-26  Release Manager
+2011-11-02  Paolo Carlini  <paolo.carlini@oracle.com>
 
-	* GCC 4.6.2 released.
+	PR c++/50810
+	* c-opts.c (c_common_handle_option): Enable -Wnarrowing as part
+	of -Wall; include -Wnarrowing in -Wc++0x-compat; adjust default
+	Wnarrowing for C++0x and C++98.
+	* c.opt ([Wnarrowing]): Update.
+
+2011-11-01  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/44277
+	* c.opt: Add Wzero-as-null-pointer-constant.
+
+2011-10-31  Jason Merrill  <jason@redhat.com>
+
+	* c.opt (-fdeduce-init-list): Off by default.
+
+	PR c++/50920
+	* c-common.h (cxx_dialect): Add cxx11 and cxx03.
+	* c.opt: Add -std=c++11, -std=gnu++11, -std=gnu++03,
+	and -Wc++11-compat.
+	* c-opts.c (set_std_cxx11): Rename from set_std_cxx0x.
+
+2011-10-27  Roberto Agostino Vitillo  <ravitillo@lbl.gov>
+
+	PR c++/30066
+	* c.opt (fvisibility-inlines-hidden): Description change.
+
+2011-10-26  Ed Smith-Rowland  <3dw4rd@verizon.net>
+
+	Implement C++11 user-defined literals.
+	* c-common.c (build_userdef_literal): New.
+	* c-common.def: New tree code.
+	* c-common.h (tree_userdef_literal): New tree struct and accessors.
+	* c-lex.c (interpret_float): Add suffix parm.
+	(c_lex_with_flags): Build literal tokens.
+
+2011-10-23  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/50841
+	Revert:
+	2011-10-23  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/50810
+	* c-opts.c (c_common_handle_option): Enable -Wnarrowing as part
+	of -Wall; include -Wnarrowing in -Wc++0x-compat; adjust default
+	Wnarrowing for C++0x and C++98.
+	* c.opt ([Wnarrowing]): Update.
+
+2011-10-23  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/50810
+	* c-opts.c (c_common_handle_option): Enable -Wnarrowing as part
+	of -Wall; include -Wnarrowing in -Wc++0x-compat; adjust default
+	Wnarrowing for C++0x and C++98.
+	* c.opt ([Wnarrowing]): Update.
+
+2011-10-21  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/45385
+	* c-common.c (conversion_warning): Remove code looking for
+	artificial operands.
+
+2011-10-18  Dodji Seketeli  <dodji@redhat.com>
+
+	PR bootstrap/50760
+	* c-lex.c (fe_file_change): Use LINEMAP_SYSP when
+    	!NO_IMPLICIT_EXTERN_C.
+
+2011-10-17  Michael Spertus  <mike_spertus@symantec.com>
+
+	* c-common.c (c_common_reswords): Add __bases,
+	__direct_bases.
+	* c-common.h: Add RID_BASES and RID_DIRECT_BASES.
+
+2011-10-17  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/50757
+	* c.opt ([Wnonnull]): Add C++ and Objective-C++.
+
+2011-10-15  Tom Tromey  <tromey@redhat.com>
+	    Dodji Seketeli  <dodji@redhat.com>
+
+	* c.opt (fdebug-cpp): New option.
+	* c-opts.c (c_common_handle_option): Handle the option.
+	* c-ppoutput.c (maybe_print_line_1): New static function. Takes an
+	output stream in parameter. Factorized from ...
+	(maybe_print_line): ... this. Dump location debug information when
+	-fdebug-cpp is in effect.
+	(print_line_1): New static function. Takes an output stream in
+	parameter. Factorized from ...
+	(print_line): ... here. Dump location information when -fdebug-cpp
+	is in effect.
+	(scan_translation_unit): Dump location information when
+	-fdebug-cpp is in effect.
+
+2011-10-15  Tom Tromey  <tromey@redhat.com>
+	    Dodji Seketeli  <dodji@redhat.com>
+
+	* c.opt (ftrack-macro-expansion): New option. Handle it with and
+	without argument.
+	* c-opts.c (c_common_handle_option)<case
+	OPT_ftrack_macro_expansion_, case OPT_ftrack_macro_expansion>: New
+	cases. Handle -ftrack-macro-expansion with and without argument.
+
+2011-10-15  Tom Tromey  <tromey@redhat.com>
+	    Dodji Seketeli  <dodji@redhat.com>
+
+	* c-ppoutput.c (scan_translation_unit, maybe_print_line)
+	(print_line, cb_define, do_line_change): Adjust to avoid touching
+	the internals of struct line_map.  Use the public API instead.
+	* c-pch.c (c_common_read_pch): Likewise.
+	* c-lex.c (fe_file_change): Likewise.
+
+2011-10-14  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/17212
+	* c.opt ([Wformat-zero-length]): Add C++ and Objective-C++.
+
+2011-10-11  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/33067
+	* c-pretty-print.c (pp_c_floating_constant): Output
+	max_digits10 (in the ISO C++ WG N1822 sense) decimal digits.
+
+2011-10-11  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* c-common.c (def_builtin_1): Delete old interface with two
+	parallel arrays to hold standard builtin declarations, and replace
+	it with a function based interface that can support creating
+	builtins on the fly in the future.  Change all uses, and poison
+	the old	names.  Make sure 0 is not a legitimate builtin index.
+	* c-omp.c (c_finish_omp_barrier): Ditto.
+	(c_finish_omp_taskwait): Ditto.
+	(c_finish_omp_flush): Ditto.
+
+2011-10-11  Tristan Gingold  <gingold@adacore.com>
+
+	* c.opt: (fallow-parameterless-variadic-functions): New.
+
+2011-09-08  Dodji Seketeli  <dodji@redhat.com>
+
+	PR c++/33255 - Support -Wunused-local-typedefs warning
+	* c-common.h (struct c_language_function::local_typedefs): New
+	field.
+    	(record_locally_defined_typedef, maybe_record_typedef_use)
+    	(maybe_warn_unused_local_typedefs): Declare new functions.
+	* c-common.c (record_locally_defined_typedef)
+    	(maybe_record_typedef_use)
+    	(maybe_warn_unused_local_typedefs): Define new functions.
+	* c.opt: Declare new -Wunused-local-typedefs flag.
 
 2011-09-06  Eric Botcazou  <ebotcazou@adacore.com>
 
@@ -28,9 +369,211 @@
 	* c-common.c (c_fully_fold_internal) <ADDR_EXPR>: Fold offsetof-like
 	computations.
 
-2011-06-27  Release Manager
+2011-09-05  Richard Guenther  <rguenther@suse.de>
 
-	* GCC 4.6.1 released.
+	* c-common.c (complete_array_type): Use ssize_int (-1) instead
+	of integer_minus_one_node for empty array upper bounds.
+
+2011-08-28  Dodji Seketeli  <dodji@redhat.com>
+
+	* c-pch.c (c_common_read_pch): Call linemap_add with LC_ENTER as
+	it's the first time it's being called on this main TU.
+
+2011-08-24  Richard Guenther  <rguenther@suse.de>
+
+	PR c/49396
+	* c-cppbuiltin.c (c_cpp_builtins_optimize_pragma): Fix conditional.
+
+2011-08-22  Gabriel Charette  <gchare@google.com>
+
+	* c-opts.c (c_finish_options): Force BUILTINS_LOCATION for tokens
+	defined in cpp_init_builtins and c_cpp_builtins.
+
+2011-08-19  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-common.c (c_common_reswords): Add __builtin_complex.
+	* c-common.h (RID_BUILTIN_COMPLEX): New.
+
+2011-08-18  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-common.c (c_common_reswords): Add _Noreturn.
+	(keyword_is_function_specifier): Handle RID_NORETURN.
+	* c-common.h (RID_NORETURN): New.
+
+2011-08-10  Artjoms Sinkarovs <artyom.shinakroff@gmail.com>
+
+	* c-common.c (unsafe_conversion_p): New function. Check if it is
+	unsafe to convert an expression to the type.
+	(conversion_warning): Adjust, use unsafe_conversion_p.
+	* c-common.h (unsafe_conversion_p): New function declaration.
+
+2011-08-02  Jakub Jelinek  <jakub@redhat.com>
+
+	* c-common.h (c_finish_omp_atomic): Adjust prototype.
+	(c_finish_omp_taskyield): New prototype.
+	* c-omp.c (c_finish_omp_atomic): Add OPCODE, V, LHS1 and RHS1
+	arguments. Handle OMP_ATOMIC_READ, OMP_ATOMIC_CAPTURE_OLD and
+	OMP_ATOMIC_CAPTURE_NEW in addition to OMP_ATOMIC.  If LHS1
+	or RHS1 have side-effects, evaluate those too in the right spot,
+	if it is a decl and LHS is also a decl, error out if they
+	aren't the same.
+	(c_finish_omp_taskyield): New function.
+	* c-cppbuiltin.c (c_cpp_builtins): Change _OPENMP to 201107.
+	* c-pragma.c (omp_pragmas): Add taskyield.
+	* c-pragma.h (enum pragma_kind): Add PRAGMA_OMP_TASKYIELD.
+	(enum pragma_omp_clause): Add PRAGMA_OMP_CLAUSE_FINAL and
+	PRAGMA_OMP_CLAUSE_MERGEABLE.
+
+2011-07-25  Dodji Seketeli  <dodji@redhat.com>
+
+	* c-common.h (set_underlying_type): Remove parm name from
+	declaration.
+
+2011-07-25  Romain Geissler  <romain.geissler@gmail.com>
+
+	* c-pretty-print.h: Search c-common.h in c-family.
+	
+2011-07-22  Jason Merrill  <jason@redhat.com>
+
+	PR c++/49793
+	* c.opt (Wnarrowing): New.
+
+	PR c++/30112
+	* c-common.h: Declare c_linkage_bindings.
+	* c-pragma.c (handle_pragma_redefine_extname): Use it.
+
+	PR c++/49813
+	* c-opts.c (set_std_cxx0x): Set flag_isoc94 and flag_isoc99.
+	* c-pretty-print.c (pp_c_cv_qualifiers): Check c_dialect_cxx as well
+	as flag_isoc99 for 'restrict'.
+	(pp_c_specifier_qualifier_list): Likewise for _Complex.
+
+2011-07-21  Ian Lance Taylor  <iant@google.com>
+
+	PR middle-end/49705
+	* c-common.c (c_disable_warnings): New static function.
+	(c_enable_warnings): New static function.
+	(c_fully_fold_internal): Change local unused_p to bool.  Call
+	c_disable_warnings and c_enable_warnings rather than change
+	c_inhibit_evaluation_warnings.
+
+2011-07-20  Jason Merrill  <jason@redhat.com>
+
+	PR c++/6709 (DR 743)
+	PR c++/42603 (DR 950)
+	* c-common.h (CPP_KEYWORD, CPP_TEMPLATE_ID): Move from cp/parser.h.
+	(CPP_NESTED_NAME_SPECIFIER, N_CP_TTYPES): Likewise.
+	(CPP_DECLTYPE): New.
+	* c-common.c (c_parse_error): Handle CPP_DECLTYPE.
+
+2011-07-19  Richard Guenther  <rguenther@suse.de>
+
+	* c-common.c (pointer_int_sum): Use fold_build_pointer_plus.
+	* c-omp.c (c_finish_omp_for): Likewise.
+
+2011-07-12  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* c-ada-spec.c (dump_nested_types): Put semi-colon after empty loop
+	body on the next line.
+
+2011-07-08  Jason Merrill  <jason@redhat.com>
+
+	PR c++/45437
+	* c-omp.c (check_omp_for_incr_expr): Handle preevaluation.
+
+	PR c++/49673
+	* c-common.c (c_apply_type_quals_to_decl): Don't check
+	TYPE_NEEDS_CONSTRUCTING.
+
+2011-07-06  Richard Guenther  <rguenther@suse.de>
+
+	* c-common.c (c_common_nodes_and_builtins):
+	Merge calls to build_common_tree_nodes and build_common_tree_nodes_2.
+
+2011-07-05  Richard Guenther  <rguenther@suse.de>
+
+	* c-common.c (c_common_nodes_and_builtins): Build all common
+	tree nodes first.
+
+2011-06-27  Jakub Jelinek  <jakub@redhat.com>
+
+	* c-common.h (c_tree_chain_next): New static inline function.
+
+	* c-common.c (check_builtin_function_arguments): Handle
+	BUILT_IN_ASSUME_ALIGNED.
+
+2011-06-21  Andrew MacLeod  <amacleod@redhat.com>
+
+	* c-common.c: Add sync_ or SYNC__ to builtin names.
+	* c-omp.c: Add sync_ or SYNC__ to builtin names.
+
+2011-06-20  Pierre Vittet  <piervit@pvittet.com>
+
+	* c-pragma.h (pragma_handler_1arg, pragma_handler_2arg): New
+	handler.
+	(gen_pragma_handler): New union.
+	(internal_pragma_handler): New type.
+	(c_register_pragma_with_data)
+	(c_register_pragma_with_expansion_and_data): New functions.
+
+	* c-pragma.c (registered_pragmas, c_register_pragma_1)
+	(c_register_pragma, c_register_pragma_with_expansion)
+	(c_invoke_pragma_handler): Changed to work with
+	internal_pragma_handler.
+	(c_register_pragma_with_data)
+	(c_register_pragma_with_expansion_and_data): New functions.
+
+2011-06-14  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-common.c: Include common/common-target.h.
+	(handle_section_attribute): Use
+	targetm_common.have_named_sections.
+	* c-cppbuiltin.c: Include common/common-target.h.
+	(c_cpp_builtins): Use targetm_common.except_unwind_info.
+
+2011-06-10  Richard Guenther  <rguenther@suse.de>
+
+	* c-pretty-print.c (pp_c_type_specifier): Use pp_c_identifier
+	to print a IDENTIFIER_NODE.
+
+2011-06-09  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+	    Joseph Myers  <joseph@codesourcery.com>
+
+	* c.opt (fbuilding-libgcc): New option.
+	* c-cppbuiltin.c (c_cpp_builtins): Define
+	__LIBGCC_TRAMPOLINE_SIZE__ if flag_building_libgcc.
+
+2011-06-07  Jason Merrill  <jason@redhat.com>
+
+	* c-common.c (max_tinst_depth): Lower default to 900.
+
+	* c-format.c (gcc_cxxdiag_char_table): Add 'S' format.
+
+2011-06-07  Richard Guenther  <rguenther@suse.de>
+
+	* c-common.c (c_common_nodes_and_builtins): Do not set
+	size_type_node or call set_sizetype.
+
+2011-06-07  Dodji Seketeli  <dodji@redhat.com>
+
+	PR debug/49130
+	* c-pretty-print.c (pp_c_integer_constant): Consider the canonical
+    	type when using pointer comparison to compare types.
+
+2011-06-02  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	* c.opt: Add -Wdelete-non-virtual-dtor.
+	* c-opts.c (c_common_handle_option): Include it in -Wall.
+
+2011-05-30  Nathan Froyd  <froydnj@gcc.gnu.org>
+
+	PR bootstrap/49190
+
+	Revert:
+	2011-05-26  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.h (struct c_common_identifier): Inherit from tree_typed,
+	not tree_common.
 
 2011-05-27  Jakub Jelinek  <jakub@redhat.com>
 
@@ -38,16 +581,166 @@
 	* c-common.c (c_common_truthvalue_conversion) <case COND_EXPR>: For
 	C++ don't call c_common_truthvalue_conversion on void type arms.
 
-2011-04-19  Richard Guenther  <rguenther@suse.de>
+2011-05-27  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.h (struct stmt_tree_s) [x_cur_stmt_list]: Change to a VEC.
+	(stmt_list_stack): Define.
+	(cur_stmt_list): Adjust for new type of x_cur_stmt_list.
+	* c-semantics.c (push_stmt_list, pop_stmt_list): Likewise.
+
+2011-05-26  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.c (warning_candidate_p): Check for BLOCKs.
+
+2011-05-26  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.h (struct c_common_identifier): Inherit from tree_typed,
+	not tree_common.
+
+2011-05-25  Jakub Jelinek  <jakub@redhat.com>
+
+	* c-common.c (def_fn_type): Remove extra va_end.
+
+2011-05-23  Jason Merrill  <jason@redhat.com>
+
+	PR c++/48106
+	* c-common.c (c_common_get_narrower): New.
+	(shorten_binary_op, shorten_compare, warn_for_sign_compare): Use it.
+
+2011-05-23  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.h (check_function_arguments): Tweak prototype of
+	check_function_arguments.
+	* c-common.c (check_function_arguments): Likewise.  Adjust
+	calls to check_function_nonnull, check_function_format, and
+	check_function_sentinel.
+	(check_function_sentinel): Take a FUNCTION_TYPE rather than
+	separate attributes and typelist arguments.  Use
+	FOREACH_FUNCTION_ARGS to iterate over argument types.
+
+2011-05-15  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* c-common.c (c_common_reswords): Reorder.
+	* c-common.h (rid): Likewise.
+
+2011-05-10  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.c (def_fn_type): Don't call build_function_type, call
+	build_function_type_array or build_varargs_function_type_array
+	instead.
+	(c_common_nodes_and_builtins): Likewise.
+
+2011-05-05  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.c (c_add_case_label): Omit the loc argument to
+	build_case_label.
+	* c-common.h (build_case_label): Remove.
+	* c-semantics.c (build_case_label): Remove.
+
+2011-05-05  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-objc.h (objc_start_method_definition): Update prototype.
+	* stub-objc.c (objc_start_method_definition): Add extra parameter.
+
+2011-05-04  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.c (check_main_parameter_types): Reindent.  Don't use
+	TYPE_ARG_TYPES directly.
+	(handle_nonnull_attribute): Likewise.
+	(sync_resolve_params): Likewise.
+	* c-format.c (handle_format_arg_attribute): Likewise.  Adjust call
+	to check_format_string.
+	(handle_format_attribute): Likewise.
+	(check_format_string): Take a function type to examine instead of
+	a type list.  Use a function_arg_iterator to step through argument
+	types.
+
+2011-05-04  Richard Guenther  <rguenther@suse.de>
+
+	* c-common.c (fix_string_type): Use size_int for index type bounds.
+	(start_fname_decls): Do not pass NULL to build_int_cst.
+	(c_init_attributes): Likewise.
+	* c-lex.c (c_lex_with_flags): Likewise.
+
+2011-04-27  Jason Merrill  <jason@redhat.com>
+
+	* c-common.c (make_tree_vector_from_list): New.
+	* c-common.h: Declare it.
+
+2011-04-26  Richard Guenther  <rguenther@suse.de>
 
 	PR preprocessor/48248
-	* c-ppoutput.c (maybe_print_line): Avoid changing -P behavior.
+	* c-ppoutput.c (maybe_print_line): Always optimize newlines
+	for output size with -P.
+
+2011-04-25  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* c-common.c (struct c_common_resword): Add __underlying_type.
+	* c-common.h (enum rid): Add RID_UNDERLYING_TYPE.
+
+2011-04-20  Jim Meyering  <meyering@redhat.com>
+
+	* c-format.c (init_dollar_format_checking): Remove useless
+	if-before-free.
+
+2011-04-15  Nicola Pero  <nicola.pero@meta-innovation.com>
+
+	* c-objc.h (objc_get_interface_ivars): Removed.
+	(objc_detect_field_duplicates): New.
+	* stub-objc.c: Likewise.
+
+2011-04-14  Nicola Pero  <nicola.pero@meta-innovation.com>
+
+	* stub-objc.c (objc_declare_protocols): Renamed to
+	objc_declare_protocol.
+	* c-objc.h: Likewise.
+
+2011-04-14  Nicola Pero  <nicola.pero@meta-innovation.com>
+
+	* stub-objc.c (objc_declare_class): Updated argument name.
+
+2011-04-12  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.h (c_common_init_ts): Declare.
+	* c-common.c (c_common_init_ts): Define.
+
+2011-04-12  Nicola Pero  <nicola.pero@meta-innovation.com>
+
+	* c-objc.h (objc_build_message_expr): Updated prototype.
+	* stub-objc.c (objc_build_message_expr): Likewise.
+	
+2011-04-12  Martin Jambor  <mjambor@suse.cz>
+
+	* c-gimplify.c (c_genericize): Call cgraph_get_create_node instead
+	of cgraph_node.
+
+2011-04-11  Richard Guenther  <rguenther@suse.de>
+
+	* c-common.c (complete_array_type): Build a range type of
+	proper type.
+
+2011-04-08  Nathan Froyd  <froydnj@codesourcery.com>
+
+	* c-common.c (handle_sentinel_attribute): Don't use TYPE_ARG_TYPES.
+	(handle_type_generic_attribute): Likewise.
 
 2011-04-07  Jason Merrill  <jason@redhat.com>
 
 	PR c++/48450
 	* c-common.c (c_common_truthvalue_conversion): Don't ignore
 	conversion from C++0x scoped enum.
+
+2011-04-06  Joseph Myers  <joseph@codesourcery.com>
+
+	* c-target-def.h: New file.
+	* c-target.def: New file.
+	* c-target.h: New file.
+	* c-common.c (targetcm): Don't define here.
+	* c-common.h (default_handle_c_option): Declare.
+	* c-format.c: Include c-target.h instead of target.h.
+	* c-opts.c: Include c-target.h instead of target.h.  Explicitly
+	include tm.h.
+	(default_handle_c_option): Move from targhooks.c.
 
 2011-03-29  Jakub Jelinek  <jakub@redhat.com>
 
@@ -58,15 +751,53 @@
 	if map->to_file and print.src_file are different file.
 	(print_line): Update print.src_file.
 
-2011-03-29  Jason Merrill  <jason@redhat.com>
+2011-03-25  Kai Tietz  <ktietz@redhat.com>
 
-	* c.opt (fconstexpr-depth): New option.
+	* c-ada-spec.c (compare_comment): Use filename_cmp
+	instead of strcmp for filename.
+
+2011-03-25  Jeff Law  <law@redhat.com>
+
+	* c-family/c-common.c (def_fn_type): Add missing va_end.
+
+2011-03-25  Jason Merrill  <jason@redhat.com>
 
 	* c.opt: Add -std=c++03.
 
-2011-03-25  Release Manager
+2011-03-22  Eric Botcazou  <ebotcazou@adacore.com>
 
-	* GCC 4.6.0 released.
+	* c-ada-spec.c (dump_ada_template): Skip non-class instances.
+
+2011-03-17  Kai Tietz
+
+	PR target/12171
+	* c-pretty-print.c (pp_c_specifier_qualifier_list):
+	Display allowed attributes for function pointer types.
+	(pp_c_attributes_display): New function to display
+	attributes having affects_type_identity flag set to true.
+	* c-pretty-print.h (pp_c_attributes_display): New prototype.
+
+	* c-common.c (c_common_attribute_table):
+	Add new element.
+	(c_common_format_attribute_table): Likewise.
+
+2011-03-18  Jason Merrill  <jason@redhat.com>
+
+	* c.opt (fconstexpr-depth): Add Var(max_constexpr_depth).
+	* c-common.h: Don't declare it here.
+	* c-common.c: Or define it here.
+	* c-opts.c (c_common_handle_option): Or set it here.
+
+	PR c++/35315
+	* c-common.c (handle_transparent_union_attribute): Don't
+	make a duplicate type in C++.
+
+2011-03-15  Jason Merrill  <jason@redhat.com>
+
+	* c-common.c (max_constexpr_depth): New.
+	* c-common.h: Declare it.
+	* c-opts.c (c_common_handle_option): Set it.
+	* c.opt (fconstexpr-depth): New option.
 
 2011-03-11  Jason Merrill  <jason@redhat.com>
 
@@ -133,8 +864,8 @@
 	* c-common.c (lvalue_error): Add 'loc' argument.  Call error_at,
 	not error.
 
-2010-12-29  Nicola Pero  <nicola@nicola.brainstorm.co.uk>
-
+2010-12-29  Nicola Pero  <nicola.pero@meta-innovation.com>
+	
 	PR objc/47075
 	* c-objc.h (objc_finish_message_expr): Added argument to
 	prototype.
@@ -1059,7 +1790,7 @@
 	* c-common.c: Include gt-c-family-c-common.h.
 	* c-pragma.c: Include gt-c-family-c-pragma.h.
 
-Copyright (C) 2010 Free Software Foundation, Inc.
+Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

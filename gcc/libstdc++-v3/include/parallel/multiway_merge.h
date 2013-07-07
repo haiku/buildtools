@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -45,6 +45,7 @@
 #include <parallel/features.h>
 #include <parallel/parallel.h>
 #include <parallel/losertree.h>
+#include <parallel/multiseq_selection.h>
 #if _GLIBCXX_ASSERTIONS
 #include <parallel/checkers.h>
 #endif
@@ -54,6 +55,12 @@
 
 namespace __gnu_parallel
 {
+  template<typename _RAIter1, typename _RAIter2, typename _OutputIterator,
+	   typename _DifferenceTp, typename _Compare>
+    _OutputIterator
+    __merge_advance(_RAIter1&, _RAIter1, _RAIter2&, _RAIter2,
+		    _OutputIterator, _DifferenceTp, _Compare);
+
   /** @brief _Iterator wrapper supporting an implicit supremum at the end
    *         of the sequence, dominating all comparisons.
    *
@@ -634,10 +641,7 @@ namespace __gnu_parallel
   /** @brief Multi-way merging procedure for a high branching factor,
    *         requiring sentinels to exist.
    *
-   * @param __stable The value must the same as for the used LoserTrees.
-   * @param UnguardedLoserTree _Loser Tree variant to use for the unguarded
-   *   merging.
-   * @param GuardedLoserTree _Loser Tree variant to use for the guarded
+   * @tparam UnguardedLoserTree _Loser Tree variant to use for the unguarded
    *   merging.
    *
    * @param __seqs_begin Begin iterator of iterator pair input sequence.
@@ -904,7 +908,6 @@ namespace __gnu_parallel
    *  @param __comp Comparator.
    *  @param __length Maximum length to merge, possibly larger than the
    *  number of elements available.
-   *  @param __stable Stable merging incurs a performance penalty.
    *  @param __sentinel The sequences have __a __sentinel element.
    *  @return End iterator of output sequence. */
   template<bool __stable,
@@ -1144,7 +1147,7 @@ namespace __gnu_parallel
 
       _DifferenceType* __borders =
 	new _DifferenceType[__num_threads + 1];
-      equally_split(__length, __num_threads, __borders);
+      __equally_split(__length, __num_threads, __borders);
 
       for (_ThreadIndex __s = 0; __s < (__num_threads - 1); ++__s)
 	{
@@ -1199,7 +1202,9 @@ namespace __gnu_parallel
    *
    * Must not be called if the number of sequences is 1.
    *
-   * @param _Splitter functor to split input (either __exact or sampling based)
+   * @tparam _Splitter functor to split input (either __exact or sampling based)
+   * @tparam __stable Stable merging incurs a performance penalty.
+   * @tparam __sentinel Ignored.
    *
    * @param __seqs_begin Begin iterator of iterator pair input sequence.
    * @param __seqs_end End iterator of iterator pair input sequence.
@@ -1207,8 +1212,6 @@ namespace __gnu_parallel
    * @param __comp Comparator.
    * @param __length Maximum length to merge, possibly larger than the
    * number of elements available.
-   * @param __stable Stable merging incurs a performance penalty.
-   * @param __sentinel Ignored.
    * @return End iterator of output sequence.
    */
   template<bool __stable,
@@ -1389,11 +1392,11 @@ namespace __gnu_parallel
    * @post return __value - __target = min(__length, number of elements in all
    *    sequences).
    *
-   * @param _RAIterPairIterator iterator over sequence
+   * @tparam _RAIterPairIterator iterator over sequence
    *    of pairs of iterators
-   * @param _RAIterOut iterator over target sequence
-   * @param _DifferenceTp difference type for the sequence
-   * @param _Compare strict weak ordering type to compare elements
+   * @tparam _RAIterOut iterator over target sequence
+   * @tparam _DifferenceTp difference type for the sequence
+   * @tparam _Compare strict weak ordering type to compare elements
    *    in sequences
    *
    * @param __seqs_begin  __begin of sequence __sequence
@@ -1753,11 +1756,11 @@ namespace __gnu_parallel
    *
    * @see stable_multiway_merge_sentinels
    *
-   * @param _RAIterPairIterator iterator over sequence
+   * @tparam _RAIterPairIterator iterator over sequence
    *    of pairs of iterators
-   * @param _RAIterOut iterator over target sequence
-   * @param _DifferenceTp difference type for the sequence
-   * @param _Compare strict weak ordering type to compare elements
+   * @tparam _RAIterOut iterator over target sequence
+   * @tparam _DifferenceTp difference type for the sequence
+   * @tparam _Compare strict weak ordering type to compare elements
    *    in sequences
    *
    * @param __seqs_begin  __begin of sequence __sequence

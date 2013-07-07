@@ -1,15 +1,56 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
-2012-03-01  Release Manager
+2012-09-20  Release Manager
 
-	* GCC 4.6.3 released.
+	* GCC 4.7.2 released.
 
-2012-01-03  Richard Guenther  <rguenther@suse.de>
+2012-06-14  Release Manager
 
-	Backport from mainline
-	2011-08-10  Richard Guenther  <rguenther@suse.de>
+	* GCC 4.7.1 released.
+
+2012-03-22  Release Manager
+
+	* GCC 4.7.0 released.
+
+2012-02-22  Kai Tietz  <ktietz@redhat.com>
+
+	PR lto/50616
+	* lto-plugin.c (PRI_LL): New macro.
+	(dump_symtab): Use PRI_LL instead of ll in print.
+	(process_symtab): Use PRI_LL instead of ll in scan.
+
+2011-12-20  Andreas Schwab  <schwab@linux-m68k.org>
+
+	* configure: Regenerate.
+
+2011-12-19  Andreas Schwab  <schwab@linux-m68k.org>
+
+	* configure: Regenerate.
+
+2011-11-21  Andreas Tobler  <andreast@fgznet.ch>
+
+	* configure: Regenerate.
+
+2011-10-02  Jan Hubicka  <jh@suse.cz>
+
+	PR lto/47247
+	* lto-plugin.c (get_symbols_v2): New variable.
+	(write_resolution): Use V2 API when available.
+	(onload): Handle LDPT_GET_SYMBOLS_V2.
+
+2011-09-30  H.J. Lu  <hongjiu.lu@intel.com>
+	    Andi Kleen  <ak@linux.intel.com>
+
+	PR lto/50568
+	* lto-plugin.c (sym_aux): Change id to unsigned long long.
+	(plugin_symtab): Likewise.
+	(dump_symtab): Likewise.
+	(resolve_conflicts): Likewise.
+	(process_symtab): Likewise.
+
+2011-08-10  Richard Guenther  <rguenther@suse.de>
 
 	PR bootstrap/49907
 	lto-plugin/
@@ -19,26 +60,14 @@
 	* Makefile.in: Likewise.
 	* aclocal.m4: Likewise.
 
-2011-11-20  Andreas Tobler  <andreast@fgznet.ch>
+2011-04-20  Jim Meyering  <meyering@redhat.com>
 
-	* configure: Regenerate.
-
-2011-10-26  Release Manager
-
-	* GCC 4.6.2 released.
-
-2011-06-27  Release Manager
-
-	* GCC 4.6.1 released.
+	* lto-plugin.c (free_1, free_2): Remove useless if-before-free.
 
 2011-04-05  Richard Guenther  <rguenther@suse.de>
 
 	PR bootstrap/48431
 	* lto-plugin.c (claim_file_handler): Do not declare vars in code.
-
-2011-03-25  Release Manager
-
-	* GCC 4.6.0 released.
 
 2011-02-13  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 

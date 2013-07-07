@@ -20,12 +20,6 @@ the Free Software Foundation, 59 Temple Place - Suite 330,
 Boston, MA 02111-1307, USA.  */
 
 
-#if TARGET_64BIT_DEFAULT
-#define TARGET_VERSION fprintf (stderr, " (x86-64 Haiku/ELF)");
-#else
-#define TARGET_VERSION fprintf (stderr, " (i386 Haiku/ELF)");
-#endif
-
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START " #"
 

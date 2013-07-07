@@ -1,5 +1,6 @@
 /* Decompose multiword subregs.
-   Copyright (C) 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>
 		  Ian Lance Taylor <iant@google.com>
 
@@ -634,8 +635,15 @@ can_decompose_p (rtx x)
       unsigned int regno = REGNO (x);
 
       if (HARD_REGISTER_NUM_P (regno))
-	return (validate_subreg (word_mode, GET_MODE (x), x, UNITS_PER_WORD)
-		&& HARD_REGNO_MODE_OK (regno, word_mode));
+	{
+	  unsigned int byte, num_bytes;
+
+	  num_bytes = GET_MODE_SIZE (GET_MODE (x));
+	  for (byte = 0; byte < num_bytes; byte += UNITS_PER_WORD)
+	    if (simplify_subreg_regno (regno, GET_MODE (x), byte, word_mode) < 0)
+	      return false;
+	  return true;
+	}
       else
 	return !bitmap_bit_p (subreg_context, regno);
     }
@@ -1039,8 +1047,7 @@ resolve_shift_zext (rtx insn)
 	src_reg = expand_shift (GET_CODE (op) == ASHIFT ?
 				LSHIFT_EXPR : RSHIFT_EXPR,
 				word_mode, src_reg,
-				build_int_cst (NULL_TREE,
-					       shift_count - BITS_PER_WORD),
+				shift_count - BITS_PER_WORD,
 				dest_reg, 1);
     }
 
@@ -1129,10 +1136,11 @@ decompose_multiword_subregs (void)
 	      || GET_CODE (PATTERN (insn)) == USE)
 	    continue;
 
+	  recog_memoized (insn);
+
 	  if (find_decomposable_shift_zext (insn))
 	    continue;
 
-	  recog_memoized (insn);
 	  extract_insn (insn);
 
 	  set = simple_move (insn);
@@ -1371,7 +1379,6 @@ struct rtl_opt_pass pass_lower_subreg =
   0,                                    /* properties_provided */
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
-  TODO_dump_func |
   TODO_ggc_collect |
   TODO_verify_flow                      /* todo_flags_finish */
  }
@@ -1393,7 +1400,6 @@ struct rtl_opt_pass pass_lower_subreg2 =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func |
   TODO_ggc_collect |
   TODO_verify_flow                      /* todo_flags_finish */
  }

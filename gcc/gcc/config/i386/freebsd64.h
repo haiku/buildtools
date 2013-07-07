@@ -19,9 +19,6 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 
-#undef  TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (FreeBSD/x86-64 ELF)");
-
 #define SUBTARGET_EXTRA_SPECS \
   { "fbsd_dynamic_linker", FBSD_DYNAMIC_LINKER }
 
@@ -35,6 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef	LINK_SPEC
 #define LINK_SPEC "\
   %{m32:-m elf_i386_fbsd} \
+  %{p:%nconsider using '-pg' instead of '-p' with gprof(1)} \
   %{v:-V} \
   %{assert*} %{R*} %{rpath*} %{defsym*} \
   %{shared:-Bshareable %{h*} %{soname*}} \

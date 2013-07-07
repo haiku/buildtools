@@ -1,7 +1,7 @@
 /* Test file for mpfr_sub.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -201,6 +201,8 @@ check_diverse (void)
   if (mpfr_cmp (z, x))
     {
       printf ("Error in mpfr_sub (2)\n");
+      printf ("Expected "); mpfr_print_binary (x); puts ("");
+      printf ("Got      "); mpfr_print_binary (z); puts ("");
       exit (1);
     }
   mpfr_set_str_binary (x, "1.1110111011110001110111011111111111101000011001011100101100101101");
@@ -478,6 +480,156 @@ check_inexact (void)
   mpfr_clear (u);
 }
 
+/* Bug found by Jakub Jelinek
+ * http://bugzilla.redhat.com/643657
+ * https://gforge.inria.fr/tracker/index.php?func=detail&aid=11301
+ * The consequence can be either an assertion failure (i = 2 in the
+ * testcase below, in debug mode) or an incorrectly rounded value.
+ */
+static void
+bug20101017 (void)
+{
+  mpfr_t a, b, c;
+  int inex;
+  int i;
+
+  mpfr_init2 (a, GMP_NUMB_BITS * 2);
+  mpfr_init2 (b, GMP_NUMB_BITS);
+  mpfr_init2 (c, GMP_NUMB_BITS);
+
+  /* a = 2^(2N) + k.2^(2N-1) + 2^N and b = 1
+     with N = GMP_NUMB_BITS and k = 0 or 1.
+     c = a - b should round to the same value as a. */
+
+  for (i = 2; i <= 3; i++)
+    {
+      mpfr_set_ui_2exp (a, i, GMP_NUMB_BITS - 1, MPFR_RNDN);
+      mpfr_add_ui (a, a, 1, MPFR_RNDN);
+      mpfr_mul_2ui (a, a, GMP_NUMB_BITS, MPFR_RNDN);
+      mpfr_set_ui (b, 1, MPFR_RNDN);
+      inex = mpfr_sub (c, a, b, MPFR_RNDN);
+      mpfr_set (b, a, MPFR_RNDN);
+      if (! mpfr_equal_p (c, b))
+        {
+          printf ("Error in bug20101017 for i = %d.\n", i);
+          printf ("Expected ");
+          mpfr_out_str (stdout, 16, 0, b, MPFR_RNDN);
+          putchar ('\n');
+          printf ("Got      ");
+          mpfr_out_str (stdout, 16, 0, c, MPFR_RNDN);
+          putchar ('\n');
+          exit (1);
+        }
+      if (inex >= 0)
+        {
+          printf ("Error in bug20101017 for i = %d: bad inex value.\n", i);
+          printf ("Expected negative, got %d.\n", inex);
+          exit (1);
+        }
+    }
+
+  mpfr_set_prec (a, 64);
+  mpfr_set_prec (b, 129);
+  mpfr_set_prec (c, 2);
+  mpfr_set_str_binary (b, "0.100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001E65");
+  mpfr_set_str_binary (c, "0.10E1");
+  inex = mpfr_sub (a, b, c, MPFR_RNDN);
+  if (mpfr_cmp_ui_2exp (a, 1, 64) != 0 || inex >= 0)
+    {
+      printf ("Error in mpfr_sub for b-c for b=2^64+1+2^(-64), c=1\n");
+      printf ("Expected result 2^64 with inex < 0\n");
+      printf ("Got "); mpfr_print_binary (a);
+      printf (" with inex=%d\n", inex);
+      exit (1);
+    }
+
+  mpfr_clears (a, b, c, (mpfr_ptr) 0);
+}
+
+/* hard test of rounding */
+static void
+check_rounding (void)
+{
+  mpfr_t a, b, c, res;
+  mpfr_prec_t p;
+  long k, l;
+  int i;
+
+#define MAXKL (2 * GMP_NUMB_BITS)
+  for (p = MPFR_PREC_MIN; p <= GMP_NUMB_BITS; p++)
+    {
+      mpfr_init2 (a, p);
+      mpfr_init2 (res, p);
+      mpfr_init2 (b, p + 1 + MAXKL);
+      mpfr_init2 (c, MPFR_PREC_MIN);
+
+      /* b = 2^p + 1 + 2^(-k), c = 2^(-l) */
+      for (k = 0; k <= MAXKL; k++)
+        for (l = 0; l <= MAXKL; l++)
+          {
+            mpfr_set_ui_2exp (b, 1, p, MPFR_RNDN);
+            mpfr_add_ui (b, b, 1, MPFR_RNDN);
+            mpfr_mul_2ui (b, b, k, MPFR_RNDN);
+            mpfr_add_ui (b, b, 1, MPFR_RNDN);
+            mpfr_div_2ui (b, b, k, MPFR_RNDN);
+            mpfr_set_ui_2exp (c, 1, -l, MPFR_RNDN);
+            i = mpfr_sub (a, b, c, MPFR_RNDN);
+            /* b - c = 2^p + 1 + 2^(-k) - 2^(-l), should be rounded to
+               2^p for l <= k, and 2^p+2 for l < k */
+            if (l <= k)
+              {
+                if (mpfr_cmp_ui_2exp (a, 1, p) != 0)
+                  {
+                    printf ("Wrong result in check_rounding\n");
+                    printf ("p=%lu k=%ld l=%ld\n", (unsigned long) p, k, l);
+                    printf ("b="); mpfr_print_binary (b); puts ("");
+                    printf ("c="); mpfr_print_binary (c); puts ("");
+                    printf ("Expected 2^%lu\n", (unsigned long) p);
+                    printf ("Got      "); mpfr_print_binary (a); puts ("");
+                    exit (1);
+                  }
+                if (i >= 0)
+                  {
+                    printf ("Wrong ternary value in check_rounding\n");
+                    printf ("p=%lu k=%ld l=%ld\n", (unsigned long) p, k, l);
+                    printf ("b="); mpfr_print_binary (b); puts ("");
+                    printf ("c="); mpfr_print_binary (c); puts ("");
+                    printf ("a="); mpfr_print_binary (a); puts ("");
+                    printf ("Expected < 0, got %d\n", i);
+                    exit (1);
+                  }
+              }
+            else /* l < k */
+              {
+                mpfr_set_ui_2exp (res, 1, p, MPFR_RNDN);
+                mpfr_add_ui (res, res, 2, MPFR_RNDN);
+                if (mpfr_cmp (a, res) != 0)
+                  {
+                    printf ("Wrong result in check_rounding\n");
+                    printf ("b="); mpfr_print_binary (b); puts ("");
+                    printf ("c="); mpfr_print_binary (c); puts ("");
+                    printf ("Expected "); mpfr_print_binary (res); puts ("");
+                    printf ("Got      "); mpfr_print_binary (a); puts ("");
+                    exit (1);
+                  }
+                if (i <= 0)
+                  {
+                    printf ("Wrong ternary value in check_rounding\n");
+                    printf ("b="); mpfr_print_binary (b); puts ("");
+                    printf ("c="); mpfr_print_binary (c); puts ("");
+                    printf ("Expected > 0, got %d\n", i);
+                    exit (1);
+                  }
+              }
+          }
+
+      mpfr_clear (a);
+      mpfr_clear (res);
+      mpfr_clear (b);
+      mpfr_clear (c);
+    }
+}
+
 #define TEST_FUNCTION test_sub
 #define TWO_ARGS
 #define RAND_FUNCTION(x) mpfr_random2(x, MPFR_LIMB_SIZE (x), randlimb () % 100, RANDS)
@@ -491,6 +643,8 @@ main (void)
 
   tests_start_mpfr ();
 
+  bug20101017 ();
+  check_rounding ();
   check_diverse ();
   check_inexact ();
   bug_ddefour ();

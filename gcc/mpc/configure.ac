@@ -1,39 +1,40 @@
-/* configure.ac
+# Copyright (C) 2008, 2009, 2010, 2011, 2012 INRIA
+#
+# This file is part of GNU MPC.
+#
+# GNU MPC is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the
+# Free Software Foundation; either version 3 of the License, or (at your
+# option) any later version.
+#
+# GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+# more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this program. If not, see http://www.gnu.org/licenses/ .
 
-Copyright (C) INRIA, 2008, 2009, 2010, 2011
-
-This file is part of the MPC Library.
-
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
-option) any later version.
-
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
-
-You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
 
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT(mpc, 0.9, mpc-discuss@lists.gforge.inria.fr)
+AC_INIT(mpc, 1.0.1, mpc-discuss@lists.gforge.inria.fr)
 AC_CONFIG_SRCDIR([src/mpc-impl.h])
 AC_CONFIG_HEADER([config.h])
 
 AM_INIT_AUTOMAKE([1.9 -Wall -Werror])
 AM_MAINTAINER_MODE
 
+USER_CC=$CC
+USER_CFLAGS=$CFLAGS
+
 AC_CANONICAL_HOST
 AC_CONFIG_MACRO_DIR([m4])
 
-dnl Extra arguments to configure
+
+# Extra arguments to configure
 AC_ARG_WITH([mpfr_include],
             [AC_HELP_STRING([--with-mpfr-include=DIR],
                             [MPFR include directory])],
@@ -83,59 +84,74 @@ AC_ARG_ENABLE([logging],
               esac
              ]
              )
+AC_ARG_ENABLE([valgrind-tests],
+             [AC_HELP_STRING([--enable-valgrind-tests],
+                             [run checks through valgrind (default = no)])],
+             [case $enableval in
+                 yes) gl_VALGRIND_TESTS ;;
+                 no)  ;;
+                 *)   AC_MSG_ERROR([Bad value for --enable-valgrind-tests: Use yes or no]) ;;
+              esac
+             ]
+             )
 
-
-dnl Setup CC and CFLAGS
-
-dnl Check for user specification of CC or CFLAGS
-if test -n "$CFLAGS" || test -n "$CC" ; then
-   user_redefine_cc=yes
+# Check for CC and CFLAGS in gmp.h unless the user specified one of them
+# look for EGREP and SED here, see continued problem
+# at http://lists.gforge.inria.fr/pipermail/mpc-discuss/2012-January/001056.html
+AC_PROG_EGREP
+AC_PROG_SED
+if test -z "$USER_CC" && test -z "$USER_CFLAGS"; then
+   MPC_GMP_CC_CFLAGS
 fi
 
-# Check for programs
+# Setup CC and CFLAGS
 AC_PROG_CC
 AC_LANG(C)
 
-dnl Check GMP Header
+# automake 1.12 seems to require this, but automake 1.11 doesn't recognize it
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+
+# Set up LibTool
+LT_INIT
+
+# Check GMP Header
 AC_MSG_CHECKING(for gmp.h)
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
 #include "gmp.h"
 ]])],[AC_MSG_RESULT(yes)],[
  AC_MSG_RESULT(no)
- AC_MSG_ERROR([gmp.h can't be found, or is unusable.])
+ AC_MSG_ERROR([gmp.h cannot be found or is unusable.])
 ])
 
-dnl Check for GMP CFLAGS in gmp.h
-if test -z "$user_redefine_cc" ; then
-   MPC_GMP_CC_CFLAGS
+# Check (only in development versions) if the compiler accepts warning
+# flags and add them to CFLAGS
+# Note: don't do this if the user defined CFLAGS, since adding new flags
+# might override the user's settings, see
+# http://lists.gforge.inria.fr/pipermail/mpc-discuss/2012-May/001115.html
+if test -z "$USER_CFLAGS"; then
+   MPC_C_CHECK_WARNINGCFLAGS
 fi
 
 
-dnl Configs for Windows DLLs
-case $host in
-  *-*-cygwin* | *-*-mingw* | *-*-pw32* | *-*-os2*)
-     MPC_WINDOWS
-esac
-
-
-dnl Finally set up LibTool
-AC_PROG_LIBTOOL
-
 # Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS([complex.h locale.h inttypes.h stdint.h limits.h unistd.h sys/time.h])
+AC_CHECK_HEADERS([locale.h inttypes.h stdint.h limits.h unistd.h sys/time.h])
+AC_HEADER_TIME
+MPC_COMPLEX_H
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_TYPE_SIZE_T
-AC_HEADER_TIME
 
 # Checks for libraries.
-AC_CHECK_LIB([m], [creal])
+AC_CHECK_FUNCS([gettimeofday localeconv setlocale])
+AC_CHECK_FUNCS([dup dup2],,
+        [AC_DEFINE([MPC_NO_STREAM_REDIRECTION],1,[Do not check mpc_out_str on stdout])])
 
 AC_CHECK_LIB([gmp], [__gmpz_init],
              [LIBS="-lgmp $LIBS"],
-             [AC_MSG_ERROR([libgmp not found or uses a different ABI.])])
+             [AC_MSG_ERROR([libgmp not found or uses a different ABI (including static vs shared).])])
+
 AC_MSG_CHECKING(for MPFR)
 LIBS="-lmpfr $LIBS"
 AC_LINK_IFELSE(
@@ -146,10 +162,15 @@ AC_LINK_IFELSE(
         [AC_MSG_RESULT(yes)],
         [
         AC_MSG_RESULT(no)
-        AC_MSG_ERROR([libmpfr not found or uses a different ABI.])
+        AC_MSG_ERROR([libmpfr not found or uses a different ABI (including static vs shared).])
         ])
 
 # Check for a recent GMP
+# We only guarantee that with a *functional* and recent enough GMP version,
+# MPC will compile; we do not guarantee that GMP will compile.
+# In particular fat builds are broken in GMP 4.3.2 and GMP 5.0.0
+# (at least on 64-bit Core 2 under GNU/Linux),
+# see http://gmplib.org/list-archives/gmp-bugs/2011-August/002345.html.
 AC_MSG_CHECKING(for recent GMP)
 AC_COMPILE_IFELSE(
         [AC_LANG_SOURCE(
@@ -168,6 +189,7 @@ error
 
 # Check for a recent MPFR: we require MPFR 2.4.2 so that the tests
 # in log.dat pass
+# The same remark as above for GMP applies.
 AC_MSG_CHECKING(for recent MPFR)
 AC_COMPILE_IFELSE(
         [AC_LANG_SOURCE(
@@ -199,16 +221,22 @@ AS_IF([test "x$enable_logging" = "xyes"],
        ]
      )
 
-# Checks if compiler accepts warning flags.
-MPC_PROG_CC_WARNINGCFLAGS([WARNINGCFLAGS])
+# Configs for Windows DLLs
+AC_SUBST(MPC_LDFLAGS)
+AC_LIBTOOL_WIN32_DLL
+case $host in
+  *-*-cygwin* | *-*-mingw* | *-*-pw32* | *-*-os2*)
+     MPC_WINDOWS
+esac
 
-# Checks for library functions with warning flags.
-old_cflags=$CFLAGS
-CFLAGS="$CFLAGS $WARNINGCFLAGS"
-AC_CHECK_FUNCS([gettimeofday localeconv setlocale])
-AC_CHECK_FUNCS([dup dup2 fileno],,
-        [AC_DEFINE([NO_STREAM_REDIRECTION],1,[Do not check mpc_out_str on stdout])])
-CFLAGS=$old_cflags
+# Checks for gcc version, result in variables MPC_GCC etc. inside config.log
+AX_GCC_VERSION
+AC_DEFINE_UNQUOTED([MPC_GCC], ["$GCC"], [Gcc yes or no])
+AC_DEFINE_UNQUOTED([MPC_CC], ["$CC"], [C compiler])
+AC_DEFINE_UNQUOTED([MPC_GCC_VERSION], ["$GCC_VERSION"], [Version of gcc])
+
+# Looks for svn version if the version string contains "dev"
+MPC_SVNVERSION
 
 AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile doc/Makefile])
 AC_OUTPUT

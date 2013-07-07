@@ -1,23 +1,22 @@
 /* mpc_pow_fr -- Raise a complex number to a floating-point power.
 
-Copyright (C) INRIA, 2009
+Copyright (C) 2009, 2011 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
 #include "mpc-impl.h"
 
@@ -28,11 +27,11 @@ mpc_pow_fr (mpc_ptr z, mpc_srcptr x, mpfr_srcptr y, mpc_rnd_t rnd)
   int inex;
 
   /* avoid copying the significand of y by copying only the struct */
-  MPC_RE(yy)[0] = y[0];
-  mpfr_init2 (MPC_IM(yy), MPFR_PREC_MIN);
-  mpfr_set_ui (MPC_IM(yy), 0, GMP_RNDN);
+  mpc_realref(yy)[0] = y[0];
+  mpfr_init2 (mpc_imagref(yy), MPFR_PREC_MIN);
+  mpfr_set_ui (mpc_imagref(yy), 0, GMP_RNDN);
   inex = mpc_pow (z, x, yy, rnd);
-  mpfr_clear (MPC_IM(yy));
+  mpfr_clear (mpc_imagref(yy));
   return inex;
 }
 

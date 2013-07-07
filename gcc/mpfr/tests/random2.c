@@ -1,8 +1,8 @@
 /* mpfr_random2 -- Generate a positive random mpfr_t of specified size, with
    long runs of consecutive ones and zeros in the binary representation.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by the Arenaire and Cacao projects, INRIA.
+Copyright 1999, 2001, 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -36,7 +36,7 @@ mpfr_random2 (mpfr_ptr x, mp_size_t size, mpfr_exp_t exp,
 {
   mp_size_t xn, k, ri;
   unsigned long sh;
-  mp_ptr xp;
+  mp_limb_t *xp;
   mp_limb_t elimb, ran, acc;
   int ran_nbits, bit_pos, nb;
 

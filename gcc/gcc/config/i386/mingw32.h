@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using GNU tools and the Windows32 API Library.
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008,
-   2009, 2010 Free Software Foundation, Inc.
+   2009, 2010, 2011 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -19,12 +19,19 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#undef TARGET_VERSION
-#if TARGET_64BIT_DEFAULT
-#define TARGET_VERSION fprintf (stderr,"(x86_64 MinGW");
-#else
-#define TARGET_VERSION fprintf (stderr," (x86 MinGW)");
-#endif
+#undef DEFAULT_ABI
+#define DEFAULT_ABI MS_ABI
+
+/* By default, target has a 80387, uses IEEE compatible arithmetic,
+   returns float values in the 387 and needs stack probes.
+   We also align doubles to 64-bits for MSVC default compatibility.
+   Additionally we enable MS_BITFIELD_LAYOUT by default.  */
+
+#undef TARGET_SUBTARGET_DEFAULT
+#define TARGET_SUBTARGET_DEFAULT \
+	(MASK_80387 | MASK_IEEE_FP | MASK_FLOAT_RETURNS \
+	 | MASK_STACK_PROBE | MASK_ALIGN_DOUBLE \
+	 | MASK_MS_BITFIELD_LAYOUT)
 
 /* See i386/crtdll.h for an alternative definition. _INTEGRAL_MAX_BITS
    is for compatibility with native compiler.  */
@@ -47,6 +54,14 @@ along with GCC; see the file COPYING3.  If not see
     }								\
   while (0)
 
+#ifndef TARGET_USE_PTHREAD_BY_DEFAULT
+#define SPEC_PTHREAD1 "pthread"
+#define SPEC_PTHREAD2 "!no-pthread"
+#else
+#define SPEC_PTHREAD1 "!no-pthread"
+#define SPEC_PTHREAD2 "pthread"
+#endif
+
 #undef SUB_LINK_ENTRY32
 #undef SUB_LINK_ENTRY64
 #define SUB_LINK_ENTRY32 "-e _DllMainCRTStartup@12"
@@ -63,21 +78,21 @@ along with GCC; see the file COPYING3.  If not see
 #define SUB_LINK_ENTRY SUB_LINK_ENTRY32
 #endif
 
-/* Override the standard choice of /usr/include as the default prefix
-   to try when searching for header files.  */
-#undef STANDARD_INCLUDE_DIR
-#define STANDARD_INCLUDE_DIR "/mingw/include"
-#undef STANDARD_INCLUDE_COMPONENT
-#define STANDARD_INCLUDE_COMPONENT "MINGW"
+#undef NATIVE_SYSTEM_HEADER_COMPONENT
+#define NATIVE_SYSTEM_HEADER_COMPONENT "MINGW"
 
 #undef CPP_SPEC
-#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{mthreads:-D_MT}"
+#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{mthreads:-D_MT} " \
+		 "%{" SPEC_PTHREAD1 ":-D_REENTRANT} " \
+		 "%{" SPEC_PTHREAD2 ": } "
 
 /* For Windows applications, include more libraries, but always include
    kernel32.  */
 #undef LIB_SPEC
-#define LIB_SPEC "%{pg:-lgmon} %{mwindows:-lgdi32 -lcomdlg32} \
-                  -ladvapi32 -lshell32 -luser32 -lkernel32"
+#define LIB_SPEC "%{pg:-lgmon} %{" SPEC_PTHREAD1 ":-lpthread} " \
+		 "%{" SPEC_PTHREAD2 ": } " \
+		 "%{mwindows:-lgdi32 -lcomdlg32} " \
+                 "-ladvapi32 -lshell32 -luser32 -lkernel32"
 
 /* Weak symbols do not get resolved if using a Windows dll import lib.
    Make the unwind registration references strong undefs.  */
@@ -135,17 +150,23 @@ along with GCC; see the file COPYING3.  If not see
 #define STANDARD_STARTFILE_PREFIX_2 ""
 #endif
 
+/* For native mingw-version we need to take care that NATIVE_SYSTEM_HEADER_DIR
+   macro contains POSIX-style path.  See bug 52947.  */
+#undef NATIVE_SYSTEM_HEADER_DIR
+#define NATIVE_SYSTEM_HEADER_DIR "/mingw/include"
+
 /* Output STRING, a string representing a filename, to FILE.
    We canonicalize it to be in Unix format (backslashes are replaced
    forward slashes.  */
 #undef OUTPUT_QUOTED_STRING
 #define OUTPUT_QUOTED_STRING(FILE, STRING)               \
 do {						         \
+  const char *_string = (const char *) (STRING);	 \
   char c;					         \
 						         \
-  putc ('\"', asm_file);			         \
+  putc ('\"', (FILE));				         \
 						         \
-  while ((c = *string++) != 0)			         \
+  while ((c = *_string++) != 0)			         \
     {						         \
       if (c == '\\')				         \
 	c = '/';				         \
@@ -153,14 +174,14 @@ do {						         \
       if (ISPRINT (c))                                   \
         {                                                \
           if (c == '\"')			         \
-	    putc ('\\', asm_file);		         \
-          putc (c, asm_file);			         \
+	    putc ('\\', (FILE));		         \
+          putc (c, (FILE));			         \
         }                                                \
       else                                               \
-        fprintf (asm_file, "\\%03o", (unsigned char) c); \
+        fprintf ((FILE), "\\%03o", (unsigned char) c);	 \
     }						         \
 						         \
-  putc ('\"', asm_file);			         \
+  putc ('\"', (FILE));					 \
 } while (0)
 
 /* Define as short unsigned for compatibility with MS runtime.  */
@@ -169,7 +190,10 @@ do {						         \
 
 /* mingw32 uses the  -mthreads option to enable thread support.  */
 #undef GOMP_SELF_SPECS
-#define GOMP_SELF_SPECS "%{fopenmp: -mthreads}"
+#define GOMP_SELF_SPECS "%{fopenmp|ftree-parallelize-loops=*: " \
+			"-mthreads -pthread}"
+#undef GTM_SELF_SPECS
+#define GTM_SELF_SPECS "%{fgnu-tm:-mthreads -pthread}"
 
 /* mingw32 atexit function is safe to use in shared libraries.  Use it
    to register C++ static destructors.  */
@@ -199,33 +223,9 @@ do {						         \
 /* Let defaults.h definition of TARGET_USE_JCR_SECTION apply. */
 #undef TARGET_USE_JCR_SECTION
 
-#undef MINGW_ENABLE_EXECUTE_STACK
-#define MINGW_ENABLE_EXECUTE_STACK     \
-extern void __enable_execute_stack (void *);    \
-void         \
-__enable_execute_stack (void *addr)					\
-{									\
-  MEMORY_BASIC_INFORMATION b;						\
-  if (!VirtualQuery (addr, &b, sizeof(b)))				\
-    abort ();								\
-  VirtualProtect (b.BaseAddress, b.RegionSize, PAGE_EXECUTE_READWRITE,	\
-		  &b.Protect);						\
-}
-
-#undef ENABLE_EXECUTE_STACK
-#define ENABLE_EXECUTE_STACK MINGW_ENABLE_EXECUTE_STACK
+#define HAVE_ENABLE_EXECUTE_STACK
 #undef  CHECK_EXECUTE_STACK_ENABLED
 #define CHECK_EXECUTE_STACK_ENABLED flag_setstackexecutable
-
-#ifdef IN_LIBGCC2
-#include <windows.h>
-#endif
-
-/* For 64-bit Windows we can't use DW2 unwind info. Also for multilib
-   builds we can't use it, too.  */
-#if !TARGET_64BIT_DEFAULT && !defined (TARGET_BI_ARCH)
-#define MD_UNWIND_SUPPORT "config/i386/w32-unwind.h"
-#endif
 
 /* This matches SHLIB_SONAME and SHLIB_SOVERSION in t-cygming. */
 /* This matches SHLIB_SONAME and SHLIB_SOVERSION in t-cygwin. */
@@ -237,11 +237,4 @@ __enable_execute_stack (void *addr)					\
 #define LIBGCC_SONAME "libgcc_s" LIBGCC_EH_EXTN "-1.dll"
 
 /* We should find a way to not have to update this manually.  */
-#define LIBGCJ_SONAME "libgcj" /*LIBGCC_EH_EXTN*/ "-12.dll"
-
-/* For 32-bit Windows we need valid frame-pointer for function using
-   setjmp.  */
-#undef SUBTARGET_FRAME_POINTER_REQUIRED
-#define SUBTARGET_FRAME_POINTER_REQUIRED \
-  (!TARGET_64BIT && cfun->calls_setjmp)
-
+#define LIBGCJ_SONAME "libgcj" /*LIBGCC_EH_EXTN*/ "-13.dll"

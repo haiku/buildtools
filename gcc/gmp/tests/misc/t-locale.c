@@ -41,6 +41,13 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #include "gmp-impl.h"
 #include "tests.h"
 
+#ifdef __MINGW32__
+int
+main (void)
+{
+  exit (0);
+}
+#else
 
 char *decimal_point;
 
@@ -191,3 +198,4 @@ main (void)
   tests_memory_end ();
   exit (0);
 }
+#endif

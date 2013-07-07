@@ -28,6 +28,7 @@ extern tree objcp_tsubst_copy_and_build (tree, tree, tsubst_flags_t,
 					 tree, bool);
 
 extern bool cp_function_decl_explicit_p (tree decl);
+extern void cp_common_init_ts (void);
 
 /* Lang hooks that are shared between C++ and ObjC++ are defined here.  Hooks
    specific to C++ or ObjC++ go in cp/cp-lang.c and objcp/objcp-lang.c,
@@ -93,6 +94,8 @@ extern bool cp_function_decl_explicit_p (tree decl);
 #define LANG_HOOKS_TYPE_HASH_EQ	cxx_type_hash_eq
 #undef LANG_HOOKS_MISSING_NORETURN_OK_P
 #define LANG_HOOKS_MISSING_NORETURN_OK_P cp_missing_noreturn_ok_p
+#undef LANG_HOOKS_BLOCK_MAY_FALLTHRU
+#define LANG_HOOKS_BLOCK_MAY_FALLTHRU cxx_block_may_fallthru
 
 /* Attribute hooks.  */
 #undef LANG_HOOKS_COMMON_ATTRIBUTE_TABLE

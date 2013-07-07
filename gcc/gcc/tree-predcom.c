@@ -1,5 +1,5 @@
 /* Predictive commoning.
-   Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+   Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -598,6 +598,7 @@ suitable_reference_p (struct data_reference *a, enum ref_step_type *ref_step)
   tree ref = DR_REF (a), step = DR_STEP (a);
 
   if (!step
+      || TREE_THIS_VOLATILE (ref)
       || !is_gimple_reg_type (TREE_TYPE (ref))
       || tree_could_throw_p (ref))
     return false;
@@ -617,11 +618,12 @@ suitable_reference_p (struct data_reference *a, enum ref_step_type *ref_step)
 static void
 aff_combination_dr_offset (struct data_reference *dr, aff_tree *offset)
 {
+  tree type = TREE_TYPE (DR_OFFSET (dr));
   aff_tree delta;
 
-  tree_to_aff_combination_expand (DR_OFFSET (dr), sizetype, offset,
+  tree_to_aff_combination_expand (DR_OFFSET (dr), type, offset,
 				  &name_expansions);
-  aff_combination_const (&delta, sizetype, tree_to_double_int (DR_INIT (dr)));
+  aff_combination_const (&delta, type, tree_to_double_int (DR_INIT (dr)));
   aff_combination_add (offset, &delta);
 }
 
@@ -666,7 +668,7 @@ determine_offset (struct data_reference *a, struct data_reference *b,
   aff_combination_scale (&baseb, double_int_minus_one);
   aff_combination_add (&diff, &baseb);
 
-  tree_to_aff_combination_expand (DR_STEP (a), sizetype,
+  tree_to_aff_combination_expand (DR_STEP (a), TREE_TYPE (DR_STEP (a)),
 				  &step, &name_expansions);
   return aff_combination_constant_multiple_p (&diff, &step, off);
 }
@@ -1049,8 +1051,8 @@ valid_initializer_p (struct data_reference *ref,
   aff_combination_scale (&base, double_int_minus_one);
   aff_combination_add (&diff, &base);
 
-  tree_to_aff_combination_expand (DR_STEP (root), sizetype, &step,
-				  &name_expansions);
+  tree_to_aff_combination_expand (DR_STEP (root), TREE_TYPE (DR_STEP (root)),
+				  &step, &name_expansions);
   if (!aff_combination_constant_multiple_p (&diff, &step, &off))
     return false;
 
@@ -1114,7 +1116,7 @@ find_looparound_phi (struct loop *loop, dref ref, dref root)
   memset (&init_dr, 0, sizeof (struct data_reference));
   DR_REF (&init_dr) = init_ref;
   DR_STMT (&init_dr) = phi;
-  if (!dr_analyze_innermost (&init_dr))
+  if (!dr_analyze_innermost (&init_dr, loop))
     return NULL;
 
   if (!valid_initializer_p (&init_dr, ref->distance + 1, root->ref))
@@ -1304,8 +1306,20 @@ replace_ref_with (gimple stmt, tree new_tree, bool set, bool in_lhs)
       val = gimple_assign_lhs (stmt);
       if (TREE_CODE (val) != SSA_NAME)
 	{
-	  gcc_assert (gimple_assign_copy_p (stmt));
 	  val = gimple_assign_rhs1 (stmt);
+	  gcc_assert (gimple_assign_single_p (stmt));
+	  if (TREE_CLOBBER_P (val))
+	    {
+	      val = gimple_default_def (cfun, SSA_NAME_VAR (new_tree));
+	      if (val == NULL_TREE)
+		{
+		  val = make_ssa_name (SSA_NAME_VAR (new_tree),
+				       gimple_build_nop ());
+		  set_default_def (SSA_NAME_VAR (new_tree), val);
+		}
+	    }
+	  else
+	    gcc_assert (gimple_assign_copy_p (stmt));
 	}
     }
   else
@@ -1396,7 +1410,7 @@ ref_at_iteration (struct loop *loop, tree ref, int iter)
 	{
 	  val = fold_build2 (MULT_EXPR, sizetype, iv.step,
 			     size_int (iter));
-	  val = fold_build2 (POINTER_PLUS_EXPR, type, iv.base, val);
+	  val = fold_build_pointer_plus (iv.base, val);
 	}
       else
 	{
@@ -2464,8 +2478,17 @@ tree_predictive_commoning_loop (struct loop *loop)
   datarefs = VEC_alloc (data_reference_p, heap, 10);
   dependences = VEC_alloc (ddr_p, heap, 10);
   loop_nest = VEC_alloc (loop_p, heap, 3);
-  compute_data_dependences_for_loop (loop, true, &loop_nest, &datarefs,
-				     &dependences);
+  if (! compute_data_dependences_for_loop (loop, true, &loop_nest, &datarefs,
+					   &dependences))
+    {
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	fprintf (dump_file, "Cannot analyze data dependencies\n");
+      VEC_free (loop_p, heap, loop_nest);
+      free_data_refs (datarefs);
+      free_dependence_relations (dependences);
+      return false;
+    }
+
   if (dump_file && (dump_flags & TDF_DETAILS))
     dump_data_dependence_relations (dump_file, dependences);
 

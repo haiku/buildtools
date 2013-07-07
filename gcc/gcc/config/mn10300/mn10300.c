@@ -44,18 +44,14 @@
 #include "target.h"
 #include "target-def.h"
 #include "df.h"
+#include "opts.h"
+#include "cfgloop.h"
 
 /* This is used in the am33_2.0-linux-gnu port, in which global symbol
    names are not prefixed by underscores, to tell whether to prefix a
    label with a plus sign or not, so that the assembler can tell
    symbol names from register names.  */
 int mn10300_protect_label;
-
-/* The selected processor.  */
-enum processor_type mn10300_processor = PROCESSOR_DEFAULT;
-
-/* Processor type to select for tuning.  */
-static const char * mn10300_tune_string = NULL;
 
 /* Selected processor type for tuning.  */
 enum processor_type mn10300_tune_cpu = PROCESSOR_DEFAULT;
@@ -72,13 +68,6 @@ enum processor_type mn10300_tune_cpu = PROCESSOR_DEFAULT;
 				|| df_regs_ever_live_p (16)	\
 				|| df_regs_ever_live_p (17)))
 
-/* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
-static const struct default_options mn10300_option_optimization_table[] =
-  {
-    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
-    { OPT_LEVELS_NONE, 0, NULL, 0 }
-  };
-
 #define CC_FLAG_Z	1
 #define CC_FLAG_N	2
 #define CC_FLAG_C	4
@@ -87,38 +76,6 @@ static const struct default_options mn10300_option_optimization_table[] =
 static int cc_flags_for_mode(enum machine_mode);
 static int cc_flags_for_code(enum rtx_code);
 
-/* Implement TARGET_HANDLE_OPTION.  */
-
-static bool
-mn10300_handle_option (size_t code,
-		       const char *arg ATTRIBUTE_UNUSED,
-		       int value)
-{
-  switch (code)
-    {
-    case OPT_mam33:
-      mn10300_processor = value ? PROCESSOR_AM33 : PROCESSOR_MN10300;
-      return true;
-
-    case OPT_mam33_2:
-      mn10300_processor = (value
-			   ? PROCESSOR_AM33_2
-			   : MIN (PROCESSOR_AM33, PROCESSOR_DEFAULT));
-      return true;
-
-    case OPT_mam34:
-      mn10300_processor = (value ? PROCESSOR_AM34 : PROCESSOR_DEFAULT);
-      return true;
-
-    case OPT_mtune_:
-      mn10300_tune_string = arg;
-      return true;
-
-    default:
-      return true;
-    }
-}
-
 /* Implement TARGET_OPTION_OVERRIDE.  */
 
 static void
@@ -1260,7 +1217,7 @@ mn10300_expand_epilogue (void)
 
   /* Adjust the stack and restore callee-saved registers, if any.  */
   if (mn10300_can_use_rets_insn ())
-    emit_jump_insn (gen_rtx_RETURN (VOIDmode));
+    emit_jump_insn (ret_rtx);
   else
     emit_jump_insn (gen_return_ret (GEN_INT (size + REG_SAVE_BYTES)));
 }
@@ -1435,7 +1392,7 @@ mn10300_secondary_reload (bool in_p, rtx x, reg_class_t rclass_i,
 
       if (xregno >= FIRST_PSEUDO_REGISTER && xregno != INVALID_REGNUM)
 	{
-	  addr = reg_equiv_mem [xregno];
+	  addr = reg_equiv_mem (xregno);
 	  if (addr)
 	    addr = XEXP (addr, 0);
 	}
@@ -1535,7 +1492,7 @@ mn10300_va_start (tree valist, rtx nextarg)
 /* Return true when a parameter should be passed by reference.  */
 
 static bool
-mn10300_pass_by_reference (CUMULATIVE_ARGS *cum ATTRIBUTE_UNUSED,
+mn10300_pass_by_reference (cumulative_args_t cum ATTRIBUTE_UNUSED,
 			   enum machine_mode mode, const_tree type,
 			   bool named ATTRIBUTE_UNUSED)
 {
@@ -1553,9 +1510,10 @@ mn10300_pass_by_reference (CUMULATIVE_ARGS *cum ATTRIBUTE_UNUSED,
    from a function.  If the result is NULL_RTX, the argument is pushed.  */
 
 static rtx
-mn10300_function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+mn10300_function_arg (cumulative_args_t cum_v, enum machine_mode mode,
 		      const_tree type, bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
   rtx result = NULL_RTX;
   int size;
 
@@ -1601,9 +1559,11 @@ mn10300_function_arg (CUMULATIVE_ARGS *cum, enum machine_mode mode,
    (TYPE is null for libcalls where that information may not be available.)  */
 
 static void
-mn10300_function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+mn10300_function_arg_advance (cumulative_args_t cum_v, enum machine_mode mode,
 			      const_tree type, bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
   cum->nbytes += (mode != BLKmode
 		  ? (GET_MODE_SIZE (mode) + 3) & ~3
 		  : (int_size_in_bytes (type) + 3) & ~3);
@@ -1613,9 +1573,10 @@ mn10300_function_arg_advance (CUMULATIVE_ARGS *cum, enum machine_mode mode,
    partially in registers and partially in memory.  */
 
 static int
-mn10300_arg_partial_bytes (CUMULATIVE_ARGS *cum, enum machine_mode mode,
+mn10300_arg_partial_bytes (cumulative_args_t cum_v, enum machine_mode mode,
 			   tree type, bool named ATTRIBUTE_UNUSED)
 {
+  CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
   int size;
 
   /* We only support using 2 data registers as argument registers.  */
@@ -2056,13 +2017,13 @@ mn10300_legitimize_reload_address (rtx x,
   return any_change ? x : NULL_RTX;
 }
 
-/* Used by LEGITIMATE_CONSTANT_P().  Returns TRUE if X is a valid
+/* Implement TARGET_LEGITIMATE_CONSTANT_P.  Returns TRUE if X is a valid
    constant.  Note that some "constants" aren't valid, such as TLS
    symbols and unconverted GOT-based references, so we eliminate
    those here.  */
 
-bool
-mn10300_legitimate_constant_p (rtx x)
+static bool
+mn10300_legitimate_constant_p (enum machine_mode mode ATTRIBUTE_UNUSED, rtx x)
 {
   switch (GET_CODE (x))
     {
@@ -2221,7 +2182,7 @@ mn10300_address_cost (rtx x, bool speed)
       return speed ? 2 : 6;
 
     default:
-      return rtx_cost (x, MEM, speed);
+      return rtx_cost (x, MEM, 0, speed);
     }
 }
 
@@ -2335,7 +2296,8 @@ mn10300_memory_move_cost (enum machine_mode mode ATTRIBUTE_UNUSED,
    to represent cycles.  Size-relative costs are in bytes.  */
 
 static bool
-mn10300_rtx_costs (rtx x, int code, int outer_code, int *ptotal, bool speed)
+mn10300_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
+		   int *ptotal, bool speed)
 {
   /* This value is used for SYMBOL_REF etc where we want to pretend
      we have a full 32-bit constant.  */
@@ -2426,7 +2388,7 @@ mn10300_rtx_costs (rtx x, int code, int outer_code, int *ptotal, bool speed)
 	  i = INTVAL (XEXP (x, 1));
 	  if (i == 1 || i == 4)
 	    {
-	      total = 1 + rtx_cost (XEXP (x, 0), PLUS, speed);
+	      total = 1 + rtx_cost (XEXP (x, 0), PLUS, 0, speed);
 	      goto alldone;
 	    }
 	}
@@ -2513,7 +2475,6 @@ mn10300_encode_section_info (tree decl, rtx rtl, int first)
 
   if (! MEM_P (rtl))
     return;
-
   symbol = XEXP (rtl, 0);
   if (GET_CODE (symbol) != SYMBOL_REF)
     return;
@@ -2919,6 +2880,23 @@ mn10300_match_ccmode (rtx insn, enum machine_mode cc_mode)
   return true;
 }
 
+/* This function is used to help split:
+   
+     (set (reg) (and (reg) (int)))
+     
+   into:
+   
+     (set (reg) (shift (reg) (int))
+     (set (reg) (shift (reg) (int))
+     
+   where the shitfs will be shorter than the "and" insn.
+
+   It returns the number of bits that should be shifted.  A positive
+   values means that the low bits are to be cleared (and hence the
+   shifts should be right followed by left) whereas a negative value
+   means that the high bits are to be cleared (left followed by right).
+   Zero is returned when it would not be economical to split the AND.  */
+
 int
 mn10300_split_and_operand_count (rtx op)
 {
@@ -2935,7 +2913,7 @@ mn10300_split_and_operand_count (rtx op)
 	 would be replacing 1 6-byte insn with 2 3-byte insns.  */
       if (count > (optimize_insn_for_speed_p () ? 2 : 4))
 	return 0;
-      return -count;
+      return count;
     }
   else
     {
@@ -2966,7 +2944,7 @@ static bool
 extract_bundle (rtx insn, struct liw_data * pdata)
 {
   bool allow_consts = true;
-  rtx p,s;
+  rtx p;
 
   gcc_assert (pdata != NULL);
 
@@ -2983,8 +2961,6 @@ extract_bundle (rtx insn, struct liw_data * pdata)
     return false;
 
   pdata->op = get_attr_liw_op (insn);
-
-  s = SET_SRC (p);
 
   switch (pdata->op)
     {
@@ -3137,11 +3113,189 @@ mn10300_bundle_liw (void)
     }
 }
 
+#define DUMP(reason, insn)			\
+  do						\
+    {						\
+      if (dump_file)				\
+	{					\
+	  fprintf (dump_file, reason "\n");	\
+	  if (insn != NULL_RTX)			\
+	    print_rtl_single (dump_file, insn);	\
+	  fprintf(dump_file, "\n");		\
+	}					\
+    }						\
+  while (0)
+
+/* Replace the BRANCH insn with a Lcc insn that goes to LABEL.
+   Insert a SETLB insn just before LABEL.  */
+
+static void
+mn10300_insert_setlb_lcc (rtx label, rtx branch)
+{
+  rtx lcc, comparison, cmp_reg;
+
+  if (LABEL_NUSES (label) > 1)
+    {
+      rtx insn;
+
+      /* This label is used both as an entry point to the loop
+	 and as a loop-back point for the loop.  We need to separate
+	 these two functions so that the SETLB happens upon entry,
+	 but the loop-back does not go to the SETLB instruction.  */
+      DUMP ("Inserting SETLB insn after:", label);
+      insn = emit_insn_after (gen_setlb (), label);
+      label = gen_label_rtx ();
+      emit_label_after (label, insn);
+      DUMP ("Created new loop-back label:", label);
+    }
+  else
+    {
+      DUMP ("Inserting SETLB insn before:", label);
+      emit_insn_before (gen_setlb (), label);
+    }
+
+  comparison = XEXP (SET_SRC (PATTERN (branch)), 0);
+  cmp_reg = XEXP (comparison, 0);
+  gcc_assert (REG_P (cmp_reg));
+
+  /* If the comparison has not already been split out of the branch
+     then do so now.  */
+  gcc_assert (REGNO (cmp_reg) == CC_REG);
+
+  if (GET_MODE (cmp_reg) == CC_FLOATmode)
+    lcc = gen_FLcc (comparison, label);
+  else
+    lcc = gen_Lcc (comparison, label);    
+
+  lcc = emit_jump_insn_before (lcc, branch);
+  mark_jump_label (XVECEXP (PATTERN (lcc), 0, 0), lcc, 0);
+  JUMP_LABEL (lcc) = label;
+  DUMP ("Replacing branch insn...", branch);
+  DUMP ("... with Lcc insn:", lcc);  
+  delete_insn (branch);
+}
+
+static bool
+mn10300_block_contains_call (struct basic_block_def * block)
+{
+  rtx insn;
+
+  FOR_BB_INSNS (block, insn)
+    if (CALL_P (insn))
+      return true;
+
+  return false;
+}
+
+static bool
+mn10300_loop_contains_call_insn (loop_p loop)
+{
+  basic_block * bbs;
+  bool result = false;
+  unsigned int i;
+
+  bbs = get_loop_body (loop);
+
+  for (i = 0; i < loop->num_nodes; i++)
+    if (mn10300_block_contains_call (bbs[i]))
+      {
+	result = true;
+	break;
+      }
+
+  free (bbs);
+  return result;
+}
+
+static void
+mn10300_scan_for_setlb_lcc (void)
+{
+  struct loops loops;
+  loop_iterator liter;
+  loop_p loop;
+
+  DUMP ("Looking for loops that can use the SETLB insn", NULL_RTX);
+
+  df_analyze ();
+  compute_bb_for_insn ();
+
+  /* Find the loops.  */
+  if (flow_loops_find (& loops) < 1)
+    DUMP ("No loops found", NULL_RTX);
+  current_loops = & loops;
+
+  /* FIXME: For now we only investigate innermost loops.  In practice however
+     if an inner loop is not suitable for use with the SETLB/Lcc insns, it may
+     be the case that its parent loop is suitable.  Thus we should check all
+     loops, but work from the innermost outwards.  */
+  FOR_EACH_LOOP (liter, loop, LI_ONLY_INNERMOST)
+    {
+      const char * reason = NULL;
+
+      /* Check to see if we can modify this loop.  If we cannot
+	 then set 'reason' to describe why it could not be done.  */
+      if (loop->latch == NULL)
+	reason = "it contains multiple latches";
+      else if (loop->header != loop->latch)
+	/* FIXME: We could handle loops that span multiple blocks,
+	   but this requires a lot more work tracking down the branches
+	   that need altering, so for now keep things simple.  */
+	reason = "the loop spans multiple blocks";
+      else if (mn10300_loop_contains_call_insn (loop))
+	reason = "it contains CALL insns";
+      else
+	{
+	  rtx branch = BB_END (loop->latch);
+
+	  gcc_assert (JUMP_P (branch));
+	  if (single_set (branch) == NULL_RTX || ! any_condjump_p (branch))
+	    /* We cannot optimize tablejumps and the like.  */
+	    /* FIXME: We could handle unconditional jumps.  */
+	    reason = "it is not a simple loop";
+	  else
+	    {
+	      rtx label;
+
+	      if (dump_file)
+		flow_loop_dump (loop, dump_file, NULL, 0);
+
+	      label = BB_HEAD (loop->header);
+	      gcc_assert (LABEL_P (label));
+
+	      mn10300_insert_setlb_lcc (label, branch);
+	    }
+	}
+
+      if (dump_file && reason != NULL)
+	fprintf (dump_file, "Loop starting with insn %d is not suitable because %s\n",
+		 INSN_UID (BB_HEAD (loop->header)),
+		 reason);
+    }
+
+#if 0 /* FIXME: We should free the storage we allocated, but
+	 for some unknown reason this leads to seg-faults.  */
+  FOR_EACH_LOOP (liter, loop, 0)
+    free_simple_loop_desc (loop);
+
+  flow_loops_free (current_loops);
+#endif
+
+  current_loops = NULL;
+
+  df_finish_pass (false);  
+
+  DUMP ("SETLB scan complete", NULL_RTX);
+}
+
 static void
 mn10300_reorg (void)
 {
-  if (TARGET_AM33)
+  /* These are optimizations, so only run them if optimizing.  */
+  if (TARGET_AM33 && (optimize > 0 || optimize_size))
     {
+      if (TARGET_ALLOW_SETLB)
+	mn10300_scan_for_setlb_lcc ();
+
       if (TARGET_ALLOW_LIW)
 	mn10300_bundle_liw ();
     }
@@ -3151,9 +3305,6 @@ mn10300_reorg (void)
 
 #undef  TARGET_MACHINE_DEPENDENT_REORG
 #define TARGET_MACHINE_DEPENDENT_REORG mn10300_reorg
-
-#undef  TARGET_EXCEPT_UNWIND_INFO
-#define TARGET_EXCEPT_UNWIND_INFO sjlj_except_unwind_info
 
 #undef  TARGET_ASM_ALIGNED_HI_OP
 #define TARGET_ASM_ALIGNED_HI_OP "\t.hword\t"
@@ -3178,14 +3329,8 @@ mn10300_reorg (void)
 #undef TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA
 #define TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA mn10300_asm_output_addr_const_extra
 
-#undef  TARGET_DEFAULT_TARGET_FLAGS
-#define TARGET_DEFAULT_TARGET_FLAGS MASK_MULT_BUG | MASK_PTR_A0D0 | MASK_ALLOW_LIW
-#undef  TARGET_HANDLE_OPTION
-#define TARGET_HANDLE_OPTION mn10300_handle_option
 #undef  TARGET_OPTION_OVERRIDE
 #define TARGET_OPTION_OVERRIDE mn10300_option_override
-#undef  TARGET_OPTION_OPTIMIZATION_TABLE
-#define TARGET_OPTION_OPTIMIZATION_TABLE mn10300_option_optimization_table
 
 #undef  TARGET_ENCODE_SECTION_INFO
 #define TARGET_ENCODE_SECTION_INFO mn10300_encode_section_info
@@ -3217,6 +3362,8 @@ mn10300_reorg (void)
 #define TARGET_LEGITIMATE_ADDRESS_P	mn10300_legitimate_address_p
 #undef  TARGET_DELEGITIMIZE_ADDRESS
 #define TARGET_DELEGITIMIZE_ADDRESS	mn10300_delegitimize_address
+#undef  TARGET_LEGITIMATE_CONSTANT_P
+#define TARGET_LEGITIMATE_CONSTANT_P	mn10300_legitimate_constant_p
 
 #undef  TARGET_PREFERRED_RELOAD_CLASS
 #define TARGET_PREFERRED_RELOAD_CLASS mn10300_preferred_reload_class

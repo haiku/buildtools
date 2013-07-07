@@ -1,5 +1,5 @@
-This is libquadmath.info, produced by makeinfo version 4.13 from
-/home/jakub/gcc-4.6.4/gcc-4.6.4/libquadmath/libquadmath.texi.
+This is libquadmath.info, produced by makeinfo version 4.12 from
+/space/rguenther/gcc-4.7.3/gcc-4.7.3/libquadmath/libquadmath.texi.
 
 Copyright (C) 2010 Free Software Foundation, Inc.
 
@@ -106,9 +106,9 @@ defined.
 
 `M_PIq': pi
 
-`M_PI_2q': two pi
+`M_PI_2q': pi divided by two
 
-`M_PI_4q': four pi
+`M_PI_4q': pi divided by four
 
 `M_1_PIq': one over pi
 
@@ -324,8 +324,7 @@ File: libquadmath.info,  Node: strtoflt128,  Next: quadmath_snprintf,  Up: I/O L
 3.1 `strtoflt128' -- Convert from string
 ========================================
 
-The function `dmath_strtopQ' converts a string into a `__float128'
-number.
+The function `strtoflt128' converts a string into a `__float128' number.
 
 Syntax
      `__float128 strtoflt128 (const char *s, char **sp)'
@@ -372,6 +371,11 @@ _Arguments_:
      SIZE       byte size of the string, including tailing NUL
      FORMAT     conversion specifier string
 
+Note
+     On some targets when supported by the C library hooks are installed
+     for `printf' family of functions, so that `printf ("%Qe", 1.2Q);'
+     etc. works too.
+
 Example
           #include <quadmath.h>
           #include <stdlib.h>
@@ -409,10 +413,6 @@ Example
             return 0;
           }
 
-
-   On some targets when supported by the C library hooks are installed
-for `printf' family of functions, so that `printf ("%Qe", 1.2Q);' etc.
-works too.
 
 
 File: libquadmath.info,  Node: GNU Free Documentation License,  Next: Reporting Bugs,  Prev: I/O Library Routines,  Up: Top
@@ -912,13 +912,13 @@ reported via `http://gcc.gnu.org/bugs.html'.
 
 
 Tag Table:
-Node: Top1669
-Node: Typedef and constants2403
-Node: Math Library Routines3821
-Node: I/O Library Routines7626
-Node: strtoflt1287951
-Node: quadmath_snprintf8711
-Node: GNU Free Documentation License10902
-Node: Reporting Bugs36068
+Node: Top1674
+Node: Typedef and constants2408
+Node: Math Library Routines3848
+Node: I/O Library Routines7653
+Node: strtoflt1287978
+Node: quadmath_snprintf8736
+Node: GNU Free Documentation License10944
+Node: Reporting Bugs36110
 
 End Tag Table

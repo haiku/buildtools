@@ -1,7 +1,7 @@
 /* Test file for mpfr_erf and mpfr_erfc.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
-Contributed by Ludovic Meunier and Paul Zimmermann.
+Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
+Contributed by the AriC and Caramel projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -414,18 +414,44 @@ static void
 large_arg (void)
 {
   mpfr_t x, y;
+  unsigned int flags;
 
   mpfr_init2 (x, 88);
   mpfr_init2 (y, 98);
 
   mpfr_set_si_2exp (x, -1, 173, MPFR_RNDN);
+  mpfr_clear_flags ();
   mpfr_erfc (y, x, MPFR_RNDN);
+  flags = __gmpfr_flags;
   if (mpfr_cmp_ui (y, 2) != 0)
     {
       printf ("mpfr_erfc failed for large x (1)\n");
       exit (1);
     }
+  if (flags != MPFR_FLAGS_INEXACT)
+    {
+      printf ("mpfr_erfc sets incorrect flags for large x (1)\n");
+      printf ("Expected %u, got %u\n",
+              (unsigned int) MPFR_FLAGS_INEXACT, flags);
+      exit (1);
+    }
 
+  mpfr_set_si_2exp (x, -1, mpfr_get_emax () - 3, MPFR_RNDN);
+  mpfr_clear_flags ();
+  mpfr_erfc (y, x, MPFR_RNDN);
+  flags = __gmpfr_flags;
+  if (mpfr_cmp_ui (y, 2) != 0)
+    {
+      printf ("mpfr_erfc failed for large x (1b)\n");
+      exit (1);
+    }
+  if (flags != MPFR_FLAGS_INEXACT)
+    {
+      printf ("mpfr_erfc sets incorrect flags for large x (1b)\n");
+      printf ("Expected %u, got %u\n",
+              (unsigned int) MPFR_FLAGS_INEXACT, flags);
+      exit (1);
+    }
 
   mpfr_set_prec (x, 33);
   mpfr_set_prec (y, 43);
@@ -462,7 +488,9 @@ large_arg (void)
   mpfr_set_prec (x, 2);
   mpfr_set_prec (y, 21);
   mpfr_set_str_binary (x, "-1.0e3");
+  mpfr_clear_flags ();
   mpfr_erfc (y, x, MPFR_RNDZ);
+  flags = __gmpfr_flags;
   mpfr_set_prec (x, 21);
   mpfr_set_str_binary (x, "1.11111111111111111111");
   if (mpfr_cmp (x, y) != 0)
@@ -470,11 +498,20 @@ large_arg (void)
       printf ("mpfr_erfc failed for large x (4)\n");
       exit (1);
     }
+  if (flags != MPFR_FLAGS_INEXACT)
+    {
+      printf ("mpfr_erfc sets incorrect flags for large x (4)\n");
+      printf ("Expected %u, got %u\n",
+              (unsigned int) MPFR_FLAGS_INEXACT, flags);
+      exit (1);
+    }
 
   mpfr_set_prec (x, 2);
   mpfr_set_prec (y, 31);
   mpfr_set_str_binary (x, "-1.0e3");
+  mpfr_clear_flags ();
   mpfr_erfc (y, x, MPFR_RNDZ);
+  flags = __gmpfr_flags;
   mpfr_set_prec (x, 31);
   mpfr_set_str_binary (x, "1.111111111111111111111111111111");
   if (mpfr_cmp (x, y) != 0)
@@ -482,6 +519,13 @@ large_arg (void)
       printf ("mpfr_erfc failed for x=-8, prec=31 (5)\n");
       printf ("expected "); mpfr_dump (x);
       printf ("got      "); mpfr_dump (y);
+      exit (1);
+    }
+  if (flags != MPFR_FLAGS_INEXACT)
+    {
+      printf ("mpfr_erfc sets incorrect flags for large x (5)\n");
+      printf ("Expected %u, got %u\n",
+              (unsigned int) MPFR_FLAGS_INEXACT, flags);
       exit (1);
     }
 
@@ -521,6 +565,7 @@ test_erfc (void)
 {
   mpfr_t x, y, z;
   int inex;
+  mpfr_exp_t emin;
 
   mpfr_inits2 (40, x, y, z, (mpfr_ptr) 0);
 
@@ -544,7 +589,55 @@ test_erfc (void)
   inex = mpfr_erfc (x, x, MPFR_RNDN);
   MPFR_ASSERTN(inex > 0 && mpfr_cmp_ui (x, 2) == 0);
 
+  /* bug found by Pascal Molin on March 10, 2011 */
+  emin = mpfr_get_emin ();
+  if (! mpfr_set_emin (-1073808789))
+    {
+      /* Typically, a 64-bit machine. */
+      mpfr_set_si (x, 27282, MPFR_RNDN);
+      mpfr_erfc (y, x, MPFR_RNDN);
+      MPFR_ASSERTN(mpfr_cmp_ui (y, 0) != 0);
+      mpfr_set_emin (emin);
+    }
+
   mpfr_clears (x, y, z, (mpfr_ptr) 0);
+}
+
+/* Failure in r7569 (2011-03-15) due to incorrect flags. */
+static void
+reduced_expo_range (void)
+{
+  mpfr_exp_t emax;
+  mpfr_t x, y, ex_y;
+  int inex, ex_inex;
+  unsigned int flags, ex_flags;
+
+  emax = mpfr_get_emax ();
+  mpfr_set_emax (3);
+  mpfr_init2 (x, 33);
+  mpfr_inits2 (110, y, ex_y, (mpfr_ptr) 0);
+  mpfr_set_str_binary (x, "-0.111100110111111111011101010101110E3");
+  mpfr_clear_flags ();
+  inex = mpfr_erfc (y, x, MPFR_RNDZ);
+  flags = __gmpfr_flags;
+  mpfr_set_str (ex_y, "1.fffffffffffffffffffffe607440", 16, MPFR_RNDN);
+  ex_inex = -1;
+  ex_flags = MPFR_FLAGS_INEXACT;
+  if (SIGN (inex) != ex_inex || flags != ex_flags ||
+      ! mpfr_equal_p (y, ex_y))
+    {
+      printf ("Error in reduced_expo_range\non x = ");
+      mpfr_dump (x);
+      printf ("Expected y = ");
+      mpfr_out_str (stdout, 16, 0, ex_y, MPFR_RNDN);
+      printf ("\n         inex = %d, flags = %u\n", ex_inex, ex_flags);
+      printf ("Got      y = ");
+      mpfr_out_str (stdout, 16, 0, y, MPFR_RNDN);
+      printf ("\n         inex = %d, flags = %u\n", SIGN (inex), flags);
+      exit (1);
+    }
+  mpfr_clears (x, y, ex_y, (mpfr_ptr) 0);
+  mpfr_set_emax (emax);
 }
 
 int
@@ -556,6 +649,7 @@ main (int argc, char *argv[])
   special_erfc ();
   large_arg ();
   test_erfc ();
+  reduced_expo_range ();
 
   test_generic_erf (2, 100, 15);
   test_generic_erfc (2, 100, 15);

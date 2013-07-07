@@ -53,87 +53,15 @@ const char *lto_section_name[LTO_N_SECTION_TYPES] =
   "cgraph",
   "vars",
   "refs",
+  "asm",
   "jmpfuncs",
   "pureconst",
   "reference",
   "symtab",
   "opts",
-  "cgraphopt"
+  "cgraphopt",
+  "inline"
 };
-
-unsigned char
-lto_input_1_unsigned (struct lto_input_block *ib)
-{
-  if (ib->p >= ib->len)
-    internal_error ("bytecode stream: trying to read %d bytes "
-		    "after the end of the input buffer", ib->p - ib->len);
-
-  return (ib->data[ib->p++]);
-}
-
-
-/* Read an ULEB128 Number of IB.  */
-
-unsigned HOST_WIDE_INT
-lto_input_uleb128 (struct lto_input_block *ib)
-{
-  unsigned HOST_WIDE_INT result = 0;
-  int shift = 0;
-  unsigned HOST_WIDE_INT byte;
-
-  while (true)
-    {
-      byte = lto_input_1_unsigned (ib);
-      result |= (byte & 0x7f) << shift;
-      shift += 7;
-      if ((byte & 0x80) == 0)
-	return result;
-    }
-}
-
-/* HOST_WIDEST_INT version of lto_input_uleb128.  IB is as in
-   lto_input_uleb128.  */
-
-unsigned HOST_WIDEST_INT
-lto_input_widest_uint_uleb128 (struct lto_input_block *ib)
-{
-  unsigned HOST_WIDEST_INT result = 0;
-  int shift = 0;
-  unsigned HOST_WIDEST_INT byte;
-
-  while (true)
-    {
-      byte = lto_input_1_unsigned (ib);
-      result |= (byte & 0x7f) << shift;
-      shift += 7;
-      if ((byte & 0x80) == 0)
-	return result;
-    }
-}
-
-/* Read an SLEB128 Number of IB.  */
-
-HOST_WIDE_INT
-lto_input_sleb128 (struct lto_input_block *ib)
-{
-  HOST_WIDE_INT result = 0;
-  int shift = 0;
-  unsigned HOST_WIDE_INT byte;
-
-  while (true)
-    {
-      byte = lto_input_1_unsigned (ib);
-      result |= (byte & 0x7f) << shift;
-      shift += 7;
-      if ((byte & 0x80) == 0)
-	{
-	  if ((shift < HOST_BITS_PER_WIDE_INT) && (byte & 0x40))
-	    result |= - ((HOST_WIDE_INT)1 << shift);
-
-	  return result;
-	}
-    }
-}
 
 
 /* Hooks so that the ipa passes can call into the lto front end to get
@@ -484,4 +412,24 @@ lto_get_function_in_decl_state (struct lto_file_decl_data *file_data,
   temp.fn_decl = func;
   slot = htab_find_slot (file_data->function_decl_states, &temp, NO_INSERT);
   return slot? ((struct lto_in_decl_state*) *slot) : NULL;
+}
+
+
+/* Report read pass end of the section.  */
+
+void
+lto_section_overrun (struct lto_input_block *ib)
+{
+  fatal_error ("bytecode stream: trying to read %d bytes "
+	       "after the end of the input buffer", ib->p - ib->len);
+}
+
+/* Report out of range value.  */
+
+void
+lto_value_range_error (const char *purpose, HOST_WIDE_INT val,
+		       HOST_WIDE_INT min, HOST_WIDE_INT max)
+{
+  fatal_error ("%s out of range: Range is %i to %i, value is %i",
+	       purpose, (int)min, (int)max, (int)val);
 }

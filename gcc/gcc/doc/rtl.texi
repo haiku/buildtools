@@ -1,5 +1,5 @@
 @c Copyright (C) 1988, 1989, 1992, 1994, 1997, 1998, 1999, 2000, 2001, 2002,
-@c 2003, 2004, 2005, 2006, 2007, 2008, 2010
+@c 2003, 2004, 2005, 2006, 2007, 2008, 2010, 2011
 @c Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
@@ -409,15 +409,27 @@ and @code{TREE_OPERAND (@var{x}, 0)} contains the declaration,
 or another @code{COMPONENT_REF}, or null if there is no compile-time
 object associated with the reference.
 
+@findex MEM_OFFSET_KNOWN_P
+@item MEM_OFFSET_KNOWN_P (@var{x})
+True if the offset of the memory reference from @code{MEM_EXPR} is known.
+@samp{MEM_OFFSET (@var{x})} provides the offset if so.
+
 @findex MEM_OFFSET
 @item MEM_OFFSET (@var{x})
-The offset from the start of @code{MEM_EXPR} as a @code{CONST_INT} rtx.
+The offset from the start of @code{MEM_EXPR}.  The value is only valid if
+@samp{MEM_OFFSET_KNOWN_P (@var{x})} is true.
+
+@findex MEM_SIZE_KNOWN_P
+@item MEM_SIZE_KNOWN_P (@var{x})
+True if the size of the memory reference is known.
+@samp{MEM_SIZE (@var{x})} provides its size if so.
 
 @findex MEM_SIZE
 @item MEM_SIZE (@var{x})
-The size in bytes of the memory reference as a @code{CONST_INT} rtx.
+The size in bytes of the memory reference.
 This is mostly relevant for @code{BLKmode} references as otherwise
-the size is implied by the mode.
+the size is implied by the mode.  The value is only valid if
+@samp{MEM_SIZE_KNOWN_P (@var{x})} is true.
 
 @findex MEM_ALIGN
 @item MEM_ALIGN (@var{x})
@@ -657,17 +669,6 @@ In @code{label_ref} and @code{reg_label} expressions, nonzero if this is
 a reference to a non-local label.
 Stored in the @code{volatil} field and printed as @samp{/v}.
 
-@findex MEM_IN_STRUCT_P
-@cindex @code{mem} and @samp{/s}
-@cindex @code{in_struct}, in @code{mem}
-@item MEM_IN_STRUCT_P (@var{x})
-In @code{mem} expressions, nonzero for reference to an entire structure,
-union or array, or to a component of one.  Zero for references to a
-scalar variable or through a pointer to a scalar.  If both this flag and
-@code{MEM_SCALAR_P} are clear, then we don't know whether this @code{mem}
-is in a structure or not.  Both flags should never be simultaneously set.
-Stored in the @code{in_struct} field and printed as @samp{/s}.
-
 @findex MEM_KEEP_ALIAS_SET_P
 @cindex @code{mem} and @samp{/j}
 @cindex @code{jump}, in @code{mem}
@@ -676,18 +677,6 @@ In @code{mem} expressions, 1 if we should keep the alias set for this
 mem unchanged when we access a component.  Set to 1, for example, when we
 are already in a non-addressable component of an aggregate.
 Stored in the @code{jump} field and printed as @samp{/j}.
-
-@findex MEM_SCALAR_P
-@cindex @code{mem} and @samp{/i}
-@cindex @code{return_val}, in @code{mem}
-@item MEM_SCALAR_P (@var{x})
-In @code{mem} expressions, nonzero for reference to a scalar known not
-to be a member of a structure, union, or array.  Zero for such
-references and for indirections through pointers, even pointers pointing
-to scalar types.  If both this flag and @code{MEM_IN_STRUCT_P} are clear,
-then we don't know whether this @code{mem} is in a structure or not.
-Both flags should never be simultaneously set.
-Stored in the @code{return_val} field and printed as @samp{/i}.
 
 @findex MEM_VOLATILE_P
 @cindex @code{mem} and @samp{/v}
@@ -932,12 +921,6 @@ In an RTL dump, this flag is represented as @samp{/f}.
 @findex in_struct
 @cindex @samp{/s} in RTL dump
 @item in_struct
-In @code{mem} expressions, it is 1 if the memory datum referred to is
-all or part of a structure or array; 0 if it is (or might be) a scalar
-variable.  A reference through a C pointer has 0 because the pointer
-might point to a scalar variable.  This information allows the compiler
-to determine something about possible cases of aliasing.
-
 In @code{reg} expressions, it is 1 if the register has its entire life
 contained within the test expression of some loop.
 
@@ -973,9 +956,6 @@ the value to be returned by the current function.  On
 machines that pass parameters in registers, the same register number
 may be used for parameters as well, but this flag is not set on such
 uses.
-
-In @code{mem} expressions, 1 means the memory reference is to a scalar
-known not to be a member of a structure, union, or array.
 
 In @code{symbol_ref} expressions, 1 means the referenced symbol is weak.
 
@@ -1394,7 +1374,7 @@ Algol or Pascal function variables including a static chain.
 @findex MODE_CC
 @item MODE_CC
 Modes representing condition code values.  These are @code{CCmode} plus
-any @code{CC_MODE} modes listed in the @file{@var{machine}-modes.def}.  
+any @code{CC_MODE} modes listed in the @file{@var{machine}-modes.def}.
 @xref{Jump Patterns},
 also see @ref{Condition Code}.
 
@@ -1755,7 +1735,7 @@ a multi-part @code{reg} that actually refers to several registers.
 
 Each pseudo register has a natural mode.  If it is necessary to
 operate on it in a different mode, the register must be
-enclosed in a @code{subreg}.  
+enclosed in a @code{subreg}.
 
 There are currently three supported types for the first operand of a
 @code{subreg}:
@@ -1812,7 +1792,7 @@ When used as an lvalue, the low-order bits of the source value
 are stored in @var{reg} and the high-order bits are discarded.
 When used as an rvalue, the low-order bits of the @code{subreg} are
 taken from @var{reg} while the high-order bits may or may not be
-defined.  
+defined.
 
 The high-order bits of rvalues are in the following circumstances:
 
@@ -1849,7 +1829,7 @@ would set the lower two bytes of @var{z} to @var{y} and set the upper
 two bytes to an unknown value assuming @code{SUBREG_PROMOTED_VAR_P} is
 false.
 
-@item Normal subregs 
+@item Normal subregs
 When @var{m1} is at least as narrow as @var{m2} the @code{subreg}
 expression is called @dfn{normal}.
 
@@ -1898,7 +1878,7 @@ values.  This works because they handle them solely as a collection of
 integer values, with no particular numerical value.  Only real.c and
 the runtime libraries care about @code{FLOAT_WORDS_BIG_ENDIAN}.
 
-Thus, 
+Thus,
 
 @smallexample
 (subreg:HI (reg:SI @var{x}) 2)
@@ -2396,9 +2376,16 @@ Most often @var{m} will be a floating point mode.
 @item (ffs:@var{m} @var{x})
 Represents one plus the index of the least significant 1-bit in
 @var{x}, represented as an integer of mode @var{m}.  (The value is
-zero if @var{x} is zero.)  The mode of @var{x} need not be @var{m};
-depending on the target machine, various mode combinations may be
-valid.
+zero if @var{x} is zero.)  The mode of @var{x} must be @var{m}
+or @code{VOIDmode}.
+
+@findex clrsb
+@item (clrsb:@var{m} @var{x})
+Represents the number of redundant leading sign bits in @var{x},
+represented as an integer of mode @var{m}, starting at the most
+significant bit position.  This is one less than the number of leading
+sign bits (either 0 or 1), with no special cases.  The mode of @var{x}
+must be @var{m} or @code{VOIDmode}.
 
 @findex clz
 @item (clz:@var{m} @var{x})
@@ -2407,7 +2394,7 @@ integer of mode @var{m}, starting at the most significant bit position.
 If @var{x} is zero, the value is determined by
 @code{CLZ_DEFINED_VALUE_AT_ZERO} (@pxref{Misc}).  Note that this is one of
 the few expressions that is not invariant under widening.  The mode of
-@var{x} will usually be an integer mode.
+@var{x} must be @var{m} or @code{VOIDmode}.
 
 @findex ctz
 @item (ctz:@var{m} @var{x})
@@ -2416,23 +2403,24 @@ integer of mode @var{m}, starting at the least significant bit position.
 If @var{x} is zero, the value is determined by
 @code{CTZ_DEFINED_VALUE_AT_ZERO} (@pxref{Misc}).  Except for this case,
 @code{ctz(x)} is equivalent to @code{ffs(@var{x}) - 1}.  The mode of
-@var{x} will usually be an integer mode.
+@var{x} must be @var{m} or @code{VOIDmode}.
 
 @findex popcount
 @item (popcount:@var{m} @var{x})
 Represents the number of 1-bits in @var{x}, represented as an integer of
-mode @var{m}.  The mode of @var{x} will usually be an integer mode.
+mode @var{m}.  The mode of @var{x} must be @var{m} or @code{VOIDmode}.
 
 @findex parity
 @item (parity:@var{m} @var{x})
 Represents the number of 1-bits modulo 2 in @var{x}, represented as an
-integer of mode @var{m}.  The mode of @var{x} will usually be an integer
-mode.
+integer of mode @var{m}.  The mode of @var{x} must be @var{m} or
+@code{VOIDmode}.
 
 @findex bswap
 @item (bswap:@var{m} @var{x})
 Represents the value @var{x} with the order of bytes reversed, carried out
 in mode @var{m}, which must be a fixed-point machine mode.
+The mode of @var{x} must be @var{m} or @code{VOIDmode}.
 @end table
 
 @node Comparisons
@@ -2624,9 +2612,9 @@ a set bit indicates it is taken from @var{vec1}.
 This describes an operation that selects parts of a vector.  @var{vec1} is
 the source vector, and @var{selection} is a @code{parallel} that contains a
 @code{const_int} for each of the subparts of the result vector, giving the
-number of the source subpart that should be stored into it.  
+number of the source subpart that should be stored into it.
 The result mode @var{m} is either the submode for a single element of
-@var{vec1} (if only one subpart is selected), or another vector mode 
+@var{vec1} (if only one subpart is selected), or another vector mode
 with that element submode (if multiple subparts are selected).
 
 @findex vec_concat
@@ -2895,6 +2883,13 @@ placed in @code{pc} to return to the caller.
 Note that an insn pattern of @code{(return)} is logically equivalent to
 @code{(set (pc) (return))}, but the latter form is never used.
 
+@findex simple_return
+@item (simple_return)
+Like @code{(return)}, but truly represents only a function return, while
+@code{(return)} may represent an insn that also performs other functions
+of the function epilogue.  Like @code{(return)}, this may also occur in
+conditional jumps.
+
 @findex call
 @item (call @var{function} @var{nargs})
 Represents a function call.  @var{function} is a @code{mem} expression
@@ -3024,7 +3019,7 @@ Represents several side effects performed in parallel.  The square
 brackets stand for a vector; the operand of @code{parallel} is a
 vector of expressions.  @var{x0}, @var{x1} and so on are individual
 side effect expressions---expressions of code @code{set}, @code{call},
-@code{return}, @code{clobber} or @code{use}.
+@code{return}, @code{simple_return}, @code{clobber} or @code{use}.
 
 ``In parallel'' means that first all the values used in the individual
 side-effects are computed, and second all the actual side-effects are
@@ -3663,14 +3658,16 @@ and @code{call_insn} insns:
 @table @code
 @findex PATTERN
 @item PATTERN (@var{i})
-An expression for the side effect performed by this insn.  This must be
-one of the following codes: @code{set}, @code{call}, @code{use},
-@code{clobber}, @code{return}, @code{asm_input}, @code{asm_output},
-@code{addr_vec}, @code{addr_diff_vec}, @code{trap_if}, @code{unspec},
-@code{unspec_volatile}, @code{parallel}, @code{cond_exec}, or @code{sequence}.  If it is a @code{parallel},
-each element of the @code{parallel} must be one these codes, except that
-@code{parallel} expressions cannot be nested and @code{addr_vec} and
-@code{addr_diff_vec} are not permitted inside a @code{parallel} expression.
+An expression for the side effect performed by this insn.  This must
+be one of the following codes: @code{set}, @code{call}, @code{use},
+@code{clobber}, @code{return}, @code{simple_return}, @code{asm_input},
+@code{asm_output}, @code{addr_vec}, @code{addr_diff_vec},
+@code{trap_if}, @code{unspec}, @code{unspec_volatile},
+@code{parallel}, @code{cond_exec}, or @code{sequence}.  If it is a
+@code{parallel}, each element of the @code{parallel} must be one these
+codes, except that @code{parallel} expressions cannot be nested and
+@code{addr_vec} and @code{addr_diff_vec} are not permitted inside a
+@code{parallel} expression.
 
 @findex INSN_CODE
 @item INSN_CODE (@var{i})
@@ -3697,7 +3694,7 @@ A list (chain of @code{insn_list} expressions) giving information about
 dependencies between instructions within a basic block.  Neither a jump
 nor a label may come between the related insns.  These are only used by
 the schedulers and by combine.  This is a deprecated data structure.
-Def-use and use-def chains are now preferred. 
+Def-use and use-def chains are now preferred.
 
 @findex REG_NOTES
 @item REG_NOTES (@var{i})
@@ -3808,8 +3805,8 @@ construct.  It is used when the optimization to partition basic blocks
 into hot and cold sections is turned on.
 
 @findex REG_SETJMP
-@item REG_SETJMP 
-Appears attached to each @code{CALL_INSN} to @code{setjmp} or a 
+@item REG_SETJMP
+Appears attached to each @code{CALL_INSN} to @code{setjmp} or a
 related function.
 @end table
 

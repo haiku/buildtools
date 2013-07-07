@@ -1,6 +1,6 @@
 /* RunTime Type Identification
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007, 2008, 2009, 2010
+   2005, 2006, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
    Mostly written by Jason Merrill (jason@cygnus.com).
 
@@ -192,8 +192,7 @@ build_headof (tree exp)
 
   type = cp_build_qualified_type (ptr_type_node,
 				  cp_type_quals (TREE_TYPE (exp)));
-  return build2 (POINTER_PLUS_EXPR, type, exp,
-		 convert_to_integer (sizetype, offset));
+  return fold_build_pointer_plus (exp, offset);
 }
 
 /* Get a bad_cast node for the program to throw...
@@ -406,6 +405,8 @@ get_tinfo_decl (tree type)
     type = build_function_type (TREE_TYPE (type),
 				TREE_CHAIN (TYPE_ARG_TYPES (type)));
 
+  type = complete_type (type);
+
   /* For a class type, the variable is cached in the type node
      itself.  */
   if (CLASS_TYPE_P (type))
@@ -502,8 +503,8 @@ ifnonnull (tree test, tree result)
 {
   return build3 (COND_EXPR, TREE_TYPE (result),
 		 build2 (EQ_EXPR, boolean_type_node, test,
-			 cp_convert (TREE_TYPE (test), integer_zero_node)),
-		 cp_convert (TREE_TYPE (result), integer_zero_node),
+			 cp_convert (TREE_TYPE (test), nullptr_node)),
+		 cp_convert (TREE_TYPE (result), nullptr_node),
 		 result);
 }
 
@@ -514,7 +515,7 @@ static tree
 build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 {
   enum tree_code tc = TREE_CODE (type);
-  tree exprtype = TREE_TYPE (expr);
+  tree exprtype;
   tree dcast_fn;
   tree old_expr = expr;
   const char *errstr = NULL;
@@ -550,6 +551,9 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 
   if (tc == POINTER_TYPE)
     {
+      expr = decay_conversion (expr);
+      exprtype = TREE_TYPE (expr);
+
       /* If T is a pointer type, v shall be an rvalue of a pointer to
 	 complete class type, and the result is an rvalue of type T.  */
 
@@ -575,7 +579,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
     {
       expr = mark_lvalue_use (expr);
 
-      exprtype = build_reference_type (exprtype);
+      exprtype = build_reference_type (TREE_TYPE (expr));
 
       /* T is a reference type, v shall be an lvalue of a complete class
 	 type, and the result is an lvalue of the type referred to by T.  */
@@ -615,7 +619,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
     if (binfo)
       {
 	expr = build_base_path (PLUS_EXPR, convert_from_reference (expr),
-				binfo, 0);
+				binfo, 0, complain);
 	if (TREE_CODE (exprtype) == POINTER_TYPE)
 	  expr = rvalue (expr);
 	return expr;
@@ -746,7 +750,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 	      tree neq;
 
 	      result = save_expr (result);
-	      neq = c_common_truthvalue_conversion (input_location, result);
+	      neq = cp_truthvalue_conversion (result);
 	      return cp_convert (type,
 				 build3 (COND_EXPR, TREE_TYPE (result),
 					 neq, result, bad));
@@ -763,7 +767,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
  fail:
   if (complain & tf_error)
     error ("cannot dynamic_cast %qE (of type %q#T) to type %q#T (%s)",
-           expr, exprtype, type, errstr);
+           old_expr, TREE_TYPE (old_expr), type, errstr);
   return error_mark_node;
 }
 
@@ -916,8 +920,8 @@ tinfo_base_init (tinfo_s *ti, tree target)
       vtable_ptr = cp_build_addr_expr (vtable_ptr, tf_warning_or_error);
 
       /* We need to point into the middle of the vtable.  */
-      vtable_ptr = build2
-	(POINTER_PLUS_EXPR, TREE_TYPE (vtable_ptr), vtable_ptr,
+      vtable_ptr = fold_build_pointer_plus
+	(vtable_ptr,
 	 size_binop (MULT_EXPR,
 		     size_int (2 * TARGET_VTABLE_DATA_ENTRY_DISTANCE),
 		     TYPE_SIZE_UNIT (vtable_entry_type)));

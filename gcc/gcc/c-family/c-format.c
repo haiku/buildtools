@@ -1,6 +1,6 @@
 /* Check calls to formatted I/O functions (-Wformat).
    Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
    Free Software Foundation, Inc.
 
 This file is part of GCC.
@@ -32,7 +32,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "c-format.h"
 #include "alloc-pool.h"
-#include "target.h"
+#include "c-target.h"
 
 /* Set format warning options according to a -Wformat=n option.  */
 
@@ -120,7 +120,6 @@ handle_format_arg_attribute (tree *node, tree ARG_UNUSED (name),
   tree type = *node;
   tree format_num_expr = TREE_VALUE (args);
   unsigned HOST_WIDE_INT format_num = 0;
-  tree argument;
 
   if (!get_constant (format_num_expr, &format_num, 0))
     {
@@ -129,12 +128,11 @@ handle_format_arg_attribute (tree *node, tree ARG_UNUSED (name),
       return NULL_TREE;
     }
 
-  argument = TYPE_ARG_TYPES (type);
-  if (argument)
+  if (prototype_p (type))
     {
       /* The format arg can be any string reference valid for the language and
          target.  We cannot be more specific in this case.  */
-      if (!check_format_string (argument, format_num, flags, no_add_attrs, -1))
+      if (!check_format_string (type, format_num, flags, no_add_attrs, -1))
 	return NULL_TREE;
     }
 
@@ -154,23 +152,24 @@ handle_format_arg_attribute (tree *node, tree ARG_UNUSED (name),
    error).  When we know the specific reference type expected, this is also 
    checked.  */
 static bool
-check_format_string (tree argument, unsigned HOST_WIDE_INT format_num,
+check_format_string (tree fntype, unsigned HOST_WIDE_INT format_num,
 		     int flags, bool *no_add_attrs, int expected_format_type)
 {
   unsigned HOST_WIDE_INT i;
   bool is_objc_sref, is_target_sref, is_char_ref;
   tree ref;
   int fmt_flags;
+  function_args_iterator iter;
 
-  for (i = 1; i != format_num; i++)
+  i = 1;
+  FOREACH_FUNCTION_ARGS (fntype, ref, iter)
     {
-      if (argument == 0)
+      if (i == format_num)
 	break;
-      argument = TREE_CHAIN (argument);
+      i++;
     }
 
-  if (!argument
-      || !(ref = TREE_VALUE (argument))
+  if (!ref
       || !valid_stringptr_type_p (ref))
     {
       if (!(flags & (int) ATTR_FLAG_BUILT_IN))
@@ -741,7 +740,7 @@ static const format_char_info gcc_cxxdiag_char_table[] =
   /* Custom conversion specifiers.  */
 
   /* These will require a "tree" at runtime.  */
-  { "ADEFKTV",0,STD_C89,{ T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q+#",   "",   NULL },
+  { "ADEFKSTV",0,STD_C89,{ T89_V,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q+#",   "",   NULL },
 
   { "v", 0,STD_C89, { T89_I,   BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN,  BADLEN  }, "q#",  "",   NULL },
 
@@ -1107,10 +1106,8 @@ init_dollar_format_checking (int first_arg_num, tree params)
     }
   if (dollar_arguments_alloc < dollar_arguments_count)
     {
-      if (dollar_arguments_used)
-	free (dollar_arguments_used);
-      if (dollar_arguments_pointer_p)
-	free (dollar_arguments_pointer_p);
+      free (dollar_arguments_used);
+      free (dollar_arguments_pointer_p);
       dollar_arguments_alloc = dollar_arguments_count;
       dollar_arguments_used = XNEWVEC (char, dollar_arguments_alloc);
       dollar_arguments_pointer_p = XNEWVEC (char, dollar_arguments_alloc);
@@ -2959,7 +2956,6 @@ handle_format_attribute (tree *node, tree ARG_UNUSED (name), tree args,
 {
   tree type = *node;
   function_format_info info;
-  tree argument;
 
 #ifdef TARGET_FORMAT_TYPES
   /* If the target provides additional format types, we need to
@@ -2986,21 +2982,22 @@ handle_format_attribute (tree *node, tree ARG_UNUSED (name), tree args,
       return NULL_TREE;
     }
 
-  argument = TYPE_ARG_TYPES (type);
-  if (argument)
+  if (prototype_p (type))
     {
-      if (!check_format_string (argument, info.format_num, flags,
+      if (!check_format_string (type, info.format_num, flags,
 				no_add_attrs, info.format_type))
 	return NULL_TREE;
 
       if (info.first_arg_num != 0)
 	{
 	  unsigned HOST_WIDE_INT arg_num = 1;
+	  function_args_iterator iter;
+	  tree arg_type;
 
 	  /* Verify that first_arg_num points to the last arg,
 	     the ...  */
-	  while (argument)
-	    arg_num++, argument = TREE_CHAIN (argument);
+	  FOREACH_FUNCTION_ARGS (type, arg_type, iter)
+	    arg_num++;
 
 	  if (arg_num != info.first_arg_num)
 	    {

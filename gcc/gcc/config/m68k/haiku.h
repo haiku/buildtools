@@ -19,9 +19,6 @@ along with GCC; see the file COPYING.  If not, write to
 the Free Software Foundation, 51 Franklin Street, Fifth Floor,
 Boston, MA 02110-1301, USA.  */
 
-#undef TARGET_VERSION
-#define TARGET_VERSION fprintf (stderr, " (68k Haiku/ELF)");
-
 /* Default target comes from config.gcc.  */
 
 #undef TARGET_DEFAULT

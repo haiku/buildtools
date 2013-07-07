@@ -1,113 +1,109 @@
 This is mpc.info, produced by makeinfo version 4.13 from mpc.texi.
 
-START-INFO-DIR-ENTRY
-* mpc: (mpc.info).               Multiple Precision Complex Library.
-END-INFO-DIR-ENTRY
-
-   This is the manual for MPC, a library for multiple precision complex
-arithmetic, version 0.9, of February 2011.
-
+This manual is for GNU MPC, a library for multiple precision complex
+arithmetic, version 1.0.1 of September 2012.
 
    Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
-2011 INRIA
+2011, 2012 INRIA
 
+     Permission is granted to copy, distribute and/or modify this
+     document under the terms of the GNU Free Documentation License,
+     Version 1.3 or any later version published by the Free Software
+     Foundation; with no Invariant Sections. A copy of the license is
+     included in the section entitled "GNU Free Documentation License."
 
-
-   Permission is granted to make and distribute verbatim copies of this
-manual provided the copyright notice and this permission notice are
-preserved on all copies.
-
-   Permission is granted to copy and distribute modified versions of
-this manual under the conditions for verbatim copying, provided that
-the entire resulting derived work is distributed under the terms of a
-permission notice identical to this one.
-
-   Permission is granted to copy and distribute translations of this
-manual into another language, under the above conditions for modified
-versions.
+INFO-DIR-SECTION GNU Packages
+START-INFO-DIR-ENTRY
+* mpc: (mpc)Multiple Precision Complex Library.
+END-INFO-DIR-ENTRY
 
 
-File: mpc.info,  Node: Top,  Next: Copying,  Prev: (dir),  Up: (dir)
+File: mpc.info,  Node: Top,  Next: Copying,  Up: (dir)
 
-MPC
-***
+GNU MPC
+*******
 
-This manual documents how to install and use the Multiple Precision
-Complex Library, version 0.9
+This manual documents how to install and use the GNU Multiple Precision
+Complex Library, version 1.0.1
 
 * Menu:
 
-* Copying::                     MPC Copying Conditions (LGPL).
-* Introduction to MPC::         Brief introduction to MPC.
-* Installing MPC::              How to configure and compile the MPC library.
+* Copying::                     GNU MPC Copying Conditions (LGPL).
+* Introduction to GNU MPC::         Brief introduction to GNU MPC.
+* Installing GNU MPC::              How to configure and compile the GNU MPC library.
 * Reporting Bugs::              How to usefully report bugs.
-* MPC Basics::                  What every MPC user should know.
+* GNU MPC Basics::                  What every GNU MPC user should know.
 * Complex Functions::           Functions for arithmetic on complex numbers.
-* Contributors::
 * References::
 * Concept Index::
 * Function Index::
+* GNU Free Documentation License::
 
 
-File: mpc.info,  Node: Copying,  Next: Introduction to MPC,  Prev: Top,  Up: Top
+File: mpc.info,  Node: Copying,  Next: Introduction to GNU MPC,  Prev: Top,  Up: Top
 
-MPC Copying Conditions
-**********************
+GNU MPC Copying Conditions
+**************************
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as
-published by the Free Software Foundation; either version 2.1 of the
-License, or (at your option) any later version, see the file
-COPYING.LIB.
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
+option) any later version.
 
-   The MPC Library is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-Lesser General Public License for more details.
+   GNU MPC is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+License along with this program. If not, see
+`http://www.gnu.org/licenses/'.
 
 
-File: mpc.info,  Node: Introduction to MPC,  Next: Installing MPC,  Prev: Copying,  Up: Top
+File: mpc.info,  Node: Introduction to GNU MPC,  Next: Installing GNU MPC,  Prev: Copying,  Up: Top
 
-1 Introduction to MPC
-*********************
+1 Introduction to GNU MPC
+*************************
 
-MPC is a portable library written in C for arbitrary precision
-arithmetic on complex numbers providing correct rounding. Ultimately, it
-should implement a multiprecision equivalent of the C99 standard.  It
-builds upon the GNU MP and the GNU MPFR libraries.
+GNU MPC is a portable library written in C for arbitrary precision
+arithmetic on complex numbers providing correct rounding. It implements
+a multiprecision equivalent of the C99 standard.  It builds upon the
+GNU MP and the GNU MPFR libraries.
 
 1.1 How to use this Manual
 ==========================
 
-Everyone should read *note MPC Basics::.  If you need to install the
-library yourself, you need to read *note Installing MPC::, too.
+Everyone should read *note GNU MPC Basics::.  If you need to install
+the library yourself, you need to read *note Installing GNU MPC::, too.
 
    The remainder of the manual can be used for later reference,
 although it is probably a good idea to skim through it.
 
 
-File: mpc.info,  Node: Installing MPC,  Next: Reporting Bugs,  Prev: Introduction to MPC,  Up: Top
+File: mpc.info,  Node: Installing GNU MPC,  Next: Reporting Bugs,  Prev: Introduction to GNU MPC,  Up: Top
 
-2 Installing MPC
-****************
+2 Installing GNU MPC
+********************
 
-To build MPC, you first have to install GNU MP (version 4.3.2 or
+To build GNU MPC, you first have to install GNU MP (version 4.3.2 or
 higher) and GNU MPFR (version 2.4.2 or higher) on your computer.  You
-need a C compiler, preferably GCC, but any reasonable compiler should
-work. And you need a standard Unix `make' program, plus some other
-standard Unix utility programs.
+need a C compiler; GCC version 4.4 or higher is recommended, since GNU
+MPC may trigger a bug in previous versions, see the thread at
+`http://lists.gforge.inria.fr/pipermail/mpc-discuss/2011-February/000823.html'.
+And you need a standard Unix `make' program, plus some other standard
+Unix utility programs.
 
    Here are the steps needed to install the library on Unix systems:
 
-  1. `tar xzf mpc-0.9.tar.gz'
+  1. `tar xzf mpc-1.0.1.tar.gz'
 
-  2. `cd mpc-0.9'
+  2. `cd mpc-1.0.1'
 
   3. `./configure'
 
-     if GMP and MPFR are installed into standard directories, that is,
-     directories that are searched by default by the compiler and the
-     linking tools.
+     if GMP and GNU MPFR are installed into standard directories, that
+     is, directories that are searched by default by the compiler and
+     the linking tools.
 
      `./configure --with-gmp=<gmp_install_dir>'
 
@@ -118,39 +114,45 @@ standard Unix utility programs.
 
      `./configure --with-mpfr=<mpfr_install_dir>'
 
-     is used to indicate a different location where MPFR is installed.
-     Alternatively, you can specify directly MPFR include and MPFR lib
-     directories with `./configure --with-mpf-lib=<mpfr_lib_dir>
+     is used to indicate a different location where GNU MPFR is
+     installed. Alternatively, you can specify directly GNU MPFR
+     include and GNU MPFR lib directories with `./configure
+     --with-mpf-lib=<mpfr_lib_dir>
      --with-mpfr-include=<mpfr_include_dir>'.
 
      Another useful parameter is `--prefix', which can be used to
      specify an alternative installation location instead of
      `/usr/local'; see `make install' below.
 
-     If for debugging purposes you wish to log calls to MPC functions
-     from within your code, add the parameter `--enable-logging'.  In
-     your code, replace the inclusion of `mpc.h' by `mpc-log.h' and
-     link the executable dynamically.  Then all calls to functions with
-     only complex arguments are printed to `stderr' in the following
-     form: First, the function name is given, followed by its type such
-     as `c_cc', meaning that the function has one complex result (one
-     `c' in front of the `_'), computed from two complex arguments (two
-     `c' after the `_'). Then, the precisions of the real and the
-     imaginary part of the first result is given, followed by the
-     second one and so on. Finally, for each argument, the precisions
-     of its real and imaginary part are specified and the argument
-     itself is printed in hexadecimal via the function `mpc_out_str'
-     (*note String and Stream Input and Output: string-io.).
+     To enable checking for memory leaks using `valgrind' during `make
+     check', add the parameter `--enable-valgrind-tests'.
+
+     If for debugging purposes you wish to log calls to GNU MPC
+     functions from within your code, add the parameter
+     `--enable-logging'.  In your code, replace the inclusion of
+     `mpc.h' by `mpc-log.h' and link the executable dynamically.  Then
+     all calls to functions with only complex arguments are printed to
+     `stderr' in the following form: First, the function name is given,
+     followed by its type such as `c_cc', meaning that the function has
+     one complex result (one `c' in front of the `_'), computed from
+     two complex arguments (two `c' after the `_'). Then, the
+     precisions of the real and the imaginary part of the first result
+     is given, followed by the second one and so on. Finally, for each
+     argument, the precisions of its real and imaginary part are
+     specified and the argument itself is printed in hexadecimal via
+     the function `mpc_out_str' (*note String and Stream Input and
+     Output::).  The option requires a dynamic library, so it may not
+     be combined with `--disable-shared'.
 
      Use `./configure --help' for an exhaustive list of parameters.
 
   4. `make'
 
-     This compiles MPC in the working directory.
+     This compiles GNU MPC in the working directory.
 
   5. `make check'
 
-     This will make sure MPC was built correctly.
+     This will make sure GNU MPC was built correctly.
 
      If you get error messages, please report them to
      `mpc-discuss@lists.gforge.inria.fr' (*Note Reporting Bugs::, for
@@ -211,28 +213,28 @@ There are some other useful make targets:
 ========================
 
 On AIX, if GMP was built with the 64-bit ABI, before building and
-testing MPC, it might be necessary to set the `OBJECT_MODE' environment
-variable to 64 by, e.g.,
+testing GNU MPC, it might be necessary to set the `OBJECT_MODE'
+environment variable to 64 by, e.g.,
 
    `export OBJECT_MODE=64'
 
    This has been tested with the C compiler IBM XL C/C++ Enterprise
-Edition V8.0 for AIX, version: 08.00.0000.0021, GMP 4.2.4 and MPFR
+Edition V8.0 for AIX, version: 08.00.0000.0021, GMP 4.2.4 and GNU MPFR
 2.4.1.
 
    Please report any other problems you encounter to
 `mpc-discuss@lists.gforge.inria.fr'.  *Note Reporting Bugs::.
 
 
-File: mpc.info,  Node: Reporting Bugs,  Next: MPC Basics,  Prev: Installing MPC,  Up: Top
+File: mpc.info,  Node: Reporting Bugs,  Next: GNU MPC Basics,  Prev: Installing GNU MPC,  Up: Top
 
 3 Reporting Bugs
 ****************
 
-If you think you have found a bug in the MPC library, please investigate
-and report it. We have made this library available to you, and it is
-not to ask too much from you, to ask you to report the bugs that you
-find.
+If you think you have found a bug in the GNU MPC library, please
+investigate and report it. We have made this library available to you,
+and it is not to ask too much from you, to ask you to report the bugs
+that you find.
 
    There are a few things you should think about when you put your bug
 report together.
@@ -259,15 +261,15 @@ incorrect, or if the language needs to be improved, please send a note
 to the same address.
 
 
-File: mpc.info,  Node: MPC Basics,  Next: Complex Functions,  Prev: Reporting Bugs,  Up: Top
+File: mpc.info,  Node: GNU MPC Basics,  Next: Complex Functions,  Prev: Reporting Bugs,  Up: Top
 
-4 MPC Basics
-************
+4 GNU MPC Basics
+****************
 
-All declarations needed to use MPC are collected in the include file
+All declarations needed to use GNU MPC are collected in the include file
 `mpc.h'.  It is designed to work with both C and C++ compilers.  You
-should include that file in any program using the MPC library by adding
-the line
+should include that file in any program using the GNU MPC library by
+adding the line
         #include "mpc.h"
 
 4.1 Nomenclature and Types
@@ -291,26 +293,26 @@ real part, one for the imaginary part.
 4.2 Function Classes
 ====================
 
-There is only one class of functions in the MPC library, namely
+There is only one class of functions in the GNU MPC library, namely
 functions for complex arithmetic. The function names begin with `mpc_'.
 The associated type is `mpc_t'.
 
-4.3 MPC Variable Conventions
-============================
+4.3 GNU MPC Variable Conventions
+================================
 
-As a general rule, all MPC functions expect output arguments before
+As a general rule, all GNU MPC functions expect output arguments before
 input arguments.  This notation is based on an analogy with the
 assignment operator.
 
-   MPC allows you to use the same variable for both input and output in
-the same expression.  For example, the main function for floating-point
-multiplication, `mpc_mul', can be used like this: `mpc_mul (x, x, x,
-rnd_mode)'.  This computes the square of X with rounding mode `rnd_mode'
-and puts the result back in X.
+   GNU MPC allows you to use the same variable for both input and
+output in the same expression.  For example, the main function for
+floating-point multiplication, `mpc_mul', can be used like this:
+`mpc_mul (x, x, x, rnd_mode)'.  This computes the square of X with
+rounding mode `rnd_mode' and puts the result back in X.
 
-   Before you can assign to an MPC variable, you need to initialize it
-by calling one of the special initialization functions.  When you are
-done with a variable, you need to clear it out, using one of the
+   Before you can assign to an GNU MPC variable, you need to initialize
+it by calling one of the special initialization functions.  When you
+are done with a variable, you need to clear it out, using one of the
 functions for that purpose.
 
    A variable should only be initialized once, or at least cleared out
@@ -322,7 +324,7 @@ in loops.  Instead, initialize it before entering the loop, and clear
 it out after the loop has exited.
 
    You do not need to be concerned about allocating additional space
-for MPC variables, since each of its real and imaginary part has a
+for GNU MPC variables, since each of its real and imaginary part has a
 mantissa of fixed size.  Hence unless you change its precision, or
 clear and reinitialize it, a complex variable will have the same
 allocated space during all its life.
@@ -347,8 +349,8 @@ of two bits, and not to (110)=6.
 4.5 Return Value
 ================
 
-Most MPC functions have a return value of type `int', which is used to
-indicate the position of the rounded real and imaginary parts with
+Most GNU MPC functions have a return value of type `int', which is used
+to indicate the position of the rounded real and imaginary parts with
 respect to the exact (infinite precision) values.  If this integer is
 `i', the macros `MPC_INEX_RE(i)' and `MPC_INEX_IM(i)' give 0 if the
 corresponding rounded value is exact, a negative value if the rounded
@@ -367,7 +369,7 @@ to the first or the second computed value, respectively.
 ==================================
 
 Some complex functions have branch cuts, across which the function is
-discontinous. In MPC, the branch cuts chosen are the same as those
+discontinous. In GNU MPC, the branch cuts chosen are the same as those
 specified for the corresponding functions in the ISO C99 standard.
 
    Likewise, when evaluated at a point whose real or imaginary part is
@@ -376,26 +378,26 @@ value as those specified for the corresponding function in the ISO C99
 standard.
 
 
-File: mpc.info,  Node: Complex Functions,  Next: Contributors,  Prev: MPC Basics,  Up: Top
+File: mpc.info,  Node: Complex Functions,  Next: References,  Prev: GNU MPC Basics,  Up: Top
 
 5 Complex Functions
 *******************
 
 The complex functions expect arguments of type `mpc_t'.
 
-   The MPC floating-point functions have an interface that is similar
-to the GNU MP integer functions.  The function prefix for operations on
-complex numbers is `mpc_'.
+   The GNU MPC floating-point functions have an interface that is
+similar to the GNU MP integer functions.  The function prefix for
+operations on complex numbers is `mpc_'.
 
    The precision of a computation is defined as follows: Compute the
 requested operation exactly (with "infinite precision"), and round the
 result to the destination variable precision with the given rounding
 mode.
 
-   The MPC complex functions are intended to be a smooth extension of
-the IEEE P754 arithmetic. The results obtained on one computer should
-not differ from the results obtained on a computer with a different
-word size.
+   The GNU MPC complex functions are intended to be a smooth extension
+of the IEEE P754 arithmetic. The results obtained on one computer
+should not differ from the results obtained on a computer with a
+different word size.
 
 * Menu:
 
@@ -413,7 +415,7 @@ word size.
 * Internals::
 
 
-File: mpc.info,  Node: Initializing Complex Numbers,  Next: Assigning Complex Numbers,  Prev: Complex Functions,  Up: Complex Functions
+File: mpc.info,  Node: Initializing Complex Numbers,  Next: Assigning Complex Numbers,  Up: Complex Functions
 
 5.1 Initialization Functions
 ============================
@@ -547,7 +549,7 @@ macro (*note Advanced Functions::).
      temporary variable.
 
    For functions assigning complex variables from strings or input
-streams, *note String and Stream Input and Output: string-io.
+streams, *note String and Stream Input and Output::.
 
  -- Function: void mpc_set_nan (mpc_t ROP)
      Set ROP to Nan+i*NaN.
@@ -572,7 +574,7 @@ _before_ `mpc.h'.
      Convert OP to a C complex number, using the rounding mode RND.
 
    For functions converting complex variables to strings or stream
-output, *note String and Stream Input and Output: string-io.
+output, *note String and Stream Input and Output::.
 
 
 File: mpc.info,  Node: String and Stream Input and Output,  Next: Complex Comparison,  Prev: Converting Complex Numbers,  Up: Complex Functions
@@ -754,8 +756,8 @@ File: mpc.info,  Node: Basic Arithmetic,  Next: Power Functions and Logarithm,  
 
 All the following functions are designed in such a way that, when
 working with real numbers instead of complex numbers, their complexity
-should essentially be the same as with the MPFR library, with only a
-marginal overhead due to the MPC layer.
+should essentially be the same as with the GNU MPFR library, with only
+a marginal overhead due to the GNU MPC layer.
 
  -- Function: int mpc_add (mpc_t ROP, mpc_t OP1, mpc_t OP2, mpc_rnd_t
           RND)
@@ -780,6 +782,10 @@ marginal overhead due to the MPC layer.
      Set ROP to OP1 - OP2 rounded according to RND.  For
      `mpc_ui_ui_sub', OP1 is RE1 + IM1.
 
+ -- Function: int mpc_neg (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
+     Set ROP to -OP rounded according to RND.  Just changes the sign if
+     ROP and OP are the same variable.
+
  -- Function: int mpc_mul (mpc_t ROP, mpc_t OP1, mpc_t OP2, mpc_rnd_t
           RND)
  -- Function: int mpc_mul_ui (mpc_t ROP, mpc_t OP1, unsigned long int
@@ -788,7 +794,9 @@ marginal overhead due to the MPC layer.
           mpc_rnd_t RND)
  -- Function: int mpc_mul_fr (mpc_t ROP, mpc_t OP1, mpfr_t OP2,
           mpc_rnd_t RND)
-     Set ROP to OP1 times OP2 rounded according to RND.
+     Set ROP to OP1 times OP2 rounded according to RND.  Note: for
+     `mpc_mul', in case OP1 and OP2 have the same value, use `mpc_sqr'
+     for better efficiency.
 
  -- Function: int mpc_mul_i (mpc_t ROP, mpc_t OP, int SGN, mpc_rnd_t
           RND)
@@ -799,24 +807,22 @@ marginal overhead due to the MPC layer.
  -- Function: int mpc_sqr (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
      Set ROP to the square of OP rounded according to RND.
 
+ -- Function: int mpc_fma (mpc_t ROP, mpc_t OP1, mpc_t OP2, mpc_t OP3,
+          mpc_rnd_t RND)
+     Set ROP to OP1*OP2+OP3, rounded according to RND, with only one
+     final rounding.
+
  -- Function: int mpc_div (mpc_t ROP, mpc_t OP1, mpc_t OP2, mpc_rnd_t
           RND)
  -- Function: int mpc_div_ui (mpc_t ROP, mpc_t OP1, unsigned long int
           OP2, mpc_rnd_t RND)
- -- Function: int mpc_ui_div (mpc_t ROP, unsigned long int OP1, mpc_t
-          OP2, mpc_rnd_t RND)
  -- Function: int mpc_div_fr (mpc_t ROP, mpc_t OP1, mpfr_t OP2,
           mpc_rnd_t RND)
+ -- Function: int mpc_ui_div (mpc_t ROP, unsigned long int OP1, mpc_t
+          OP2, mpc_rnd_t RND)
  -- Function: int mpc_fr_div (mpc_t ROP, mpfr_t OP1, mpc_t OP2,
           mpc_rnd_t RND)
-     Set ROP to OP1/OP2 rounded according to RND.  For `mpc_div' and
-     `mpc_ui_div', the return value may fail to recognize some exact
-     results. The sign of returned value is significant only for
-     `mpc_div_ui'.
-
- -- Function: int mpc_neg (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
-     Set ROP to -OP rounded according to RND.  Just changes the sign if
-     ROP and OP are the same variable.
+     Set ROP to OP1/OP2 rounded according to RND.
 
  -- Function: int mpc_conj (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
      Set ROP to the conjugate of OP rounded according to RND.  Just
@@ -825,31 +831,27 @@ marginal overhead due to the MPC layer.
 
  -- Function: int mpc_abs (mpfr_t ROP, mpc_t OP, mpfr_rnd_t RND)
      Set the floating-point number ROP to the absolute value of OP,
-     rounded in the direction RND.  The returned value is zero iff the
-     result is exact.
+     rounded in the direction RND.
 
  -- Function: int mpc_norm (mpfr_t ROP, mpc_t OP, mpfr_rnd_t RND)
      Set the floating-point number ROP to the norm of OP (i.e., the
-     square of its absolute value), rounded in the direction RND.  The
-     returned value is zero iff the result is exact.  Note that the
-     destination is of type `mpfr_t', not `mpc_t'.
+     square of its absolute value), rounded in the direction RND.
 
- -- Function: int mpc_mul_2exp (mpc_t ROP, mpc_t OP1, unsigned long int
+ -- Function: int mpc_mul_2ui (mpc_t ROP, mpc_t OP1, unsigned long int
           OP2, mpc_rnd_t RND)
+ -- Function: int mpc_mul_2si (mpc_t ROP, mpc_t OP1, long int OP2,
+          mpc_rnd_t RND)
      Set ROP to OP1 times 2 raised to OP2 rounded according to RND.
-     Just increases the exponents of the real and imaginary parts by OP2
+     Just modifies the exponents of the real and imaginary parts by OP2
      when ROP and OP1 are identical.
 
- -- Function: int mpc_div_2exp (mpc_t ROP, mpc_t OP1, unsigned long int
+ -- Function: int mpc_div_2ui (mpc_t ROP, mpc_t OP1, unsigned long int
           OP2, mpc_rnd_t RND)
-     Set ROP to OP1 divided by 2 raised to OP2 rounded according to
-     RND. Just decreases the exponents of the real and imaginary parts
-     by OP2 when ROP and OP1 are identical.
-
- -- Function: int mpc_fma (mpc_t ROP, mpc_t OP1, mpc_t OP2, mpc_t OP3,
+ -- Function: int mpc_div_2si (mpc_t ROP, mpc_t OP1, long int OP2,
           mpc_rnd_t RND)
-     Set ROP to OP1 times OP2 plus OP3, rounded according to RND, with
-     only one final rounding.
+     Set ROP to OP1 divided by 2 raised to OP2 rounded according to
+     RND. Just modifies the exponents of the real and imaginary parts
+     by OP2 when ROP and OP1 are identical.
 
 
 File: mpc.info,  Node: Power Functions and Logarithm,  Next: Trigonometric Functions,  Prev: Basic Arithmetic,  Up: Complex Functions
@@ -858,7 +860,9 @@ File: mpc.info,  Node: Power Functions and Logarithm,  Next: Trigonometric Funct
 =================================
 
  -- Function: int mpc_sqrt (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
-     Set ROP to the square root of OP rounded according to RND.
+     Set ROP to the square root of OP rounded according to RND.  The
+     returned value ROP has a non-negative real part, and if its real
+     part is zero, a non-negative imaginary part.
 
  -- Function: int mpc_pow (mpc_t ROP, mpc_t OP1, mpc_t OP2, mpc_rnd_t
           RND)
@@ -877,17 +881,21 @@ File: mpc.info,  Node: Power Functions and Logarithm,  Next: Trigonometric Funct
      Set ROP to OP1 raised to the power OP2, rounded according to RND.
      For `mpc_pow_d', `mpc_pow_ld', `mpc_pow_si', `mpc_pow_ui',
      `mpc_pow_z' and `mpc_pow_fr', the imaginary part of OP2 is
-     considered as +0.
+     considered as +0.  When both OP1 and OP2 are zero, the result has
+     real part 1, and imaginary part 0, with sign being the opposite of
+     that of OP2.
 
  -- Function: int mpc_exp (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
      Set ROP to the exponential of OP, rounded according to RND with
      the precision of ROP.
 
  -- Function: int mpc_log (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
-     Set ROP to the logarithm of OP, rounded according to RND with the
-     precision of ROP.  The principal branch is chosen, with the branch
-     cut on the negative real axis, so that the imaginary part of the
-     result lies in ]-\pi , \pi].
+ -- Function: int mpc_log10 (mpc_t ROP, mpc_t OP, mpc_rnd_t RND)
+     Set ROP to the natural and base-10 logarithm of OP respectively,
+     rounded according to RND with the precision of ROP.  The principal
+     branch is chosen, with the branch cut on the negative real axis,
+     so that the imaginary part of the result lies in ]-\pi , \pi] and
+     ]-\pi/log(10) , \pi/log(10)] respectively.
 
 
 File: mpc.info,  Node: Trigonometric Functions,  Next: Miscellaneous Complex Functions,  Prev: Power Functions and Logarithm,  Up: Complex Functions
@@ -946,40 +954,40 @@ File: mpc.info,  Node: Miscellaneous Complex Functions,  Next: Advanced Function
 
  -- Function: int mpc_urandom (mpc_t ROP, gmp_randstate_t STATE)
      Generate a uniformly distributed random complex in the unit square
-     [0, 1] * [0, 1]. Return 0, unless an exponent in the real or
+     [0, 1] x [0, 1]. Return 0, unless an exponent in the real or
      imaginary part is not in the current exponent range, in which case
      that part is set to NaN and a zero value is returned. The second
      argument is a `gmp_randstate_t' structure which should be created
      using the GMP `rand_init' function, see the GMP manual.
 
  -- Function: const char * mpc_get_version (void)
-     Return the MPC version, as a null-terminated string.
+     Return the GNU MPC version, as a null-terminated string.
 
  -- Macro: MPC_VERSION
  -- Macro: MPC_VERSION_MAJOR
  -- Macro: MPC_VERSION_MINOR
  -- Macro: MPC_VERSION_PATCHLEVEL
  -- Macro: MPC_VERSION_STRING
-     `MPC_VERSION' is the version of MPC as a preprocessing constant.
-     `MPC_VERSION_MAJOR', `MPC_VERSION_MINOR' and
+     `MPC_VERSION' is the version of GNU MPC as a preprocessing
+     constant.  `MPC_VERSION_MAJOR', `MPC_VERSION_MINOR' and
      `MPC_VERSION_PATCHLEVEL' are respectively the major, minor and
-     patch level of MPC version, as preprocessing constants.
+     patch level of GNU MPC version, as preprocessing constants.
      `MPC_VERSION_STRING' is the version as a string constant, which
      can be compared to the result of `mpc_get_version' to check at run
      time the header file and library used match:
           if (strcmp (mpc_get_version (), MPC_VERSION_STRING))
             fprintf (stderr, "Warning: header and library do not match\n");
      Note: Obtaining different strings is not necessarily an error, as
-     in general, a program compiled with some old MPC version can be
-     dynamically linked with a newer MPC library version (if allowed by
-     the library versioning system).
+     in general, a program compiled with some old GNU MPC version can be
+     dynamically linked with a newer GNU MPC library version (if
+     allowed by the library versioning system).
 
  -- Macro: long MPC_VERSION_NUM (MAJOR, MINOR, PATCHLEVEL)
      Create an integer in the same format as used by `MPC_VERSION' from
      the given MAJOR, MINOR and PATCHLEVEL.  Here is an example of how
-     to check the MPC version at compile time:
+     to check the GNU MPC version at compile time:
           #if (!defined(MPC_VERSION) || (MPC_VERSION<MPC_VERSION_NUM(2,1,0)))
-          # error "Wrong MPC version."
+          # error "Wrong GNU MPC version."
           #endif
 
 
@@ -1011,7 +1019,7 @@ File: mpc.info,  Node: Internals,  Prev: Advanced Functions,  Up: Complex Functi
 ==============
 
 These macros and functions are mainly designed for the implementation
-of MPC, but may be useful for users too.  However, no upward
+of GNU MPC, but may be useful for users too.  However, no upward
 compatibility is guaranteed.  You need to include `mpc-impl.h' to use
 them.
 
@@ -1019,18 +1027,7 @@ them.
 the real and imaginary parts of a complex number.
 
 
-File: mpc.info,  Node: Contributors,  Next: References,  Prev: Complex Functions,  Up: Top
-
-Contributors
-************
-
-The main developers of the MPC library are Andreas Enge, Philippe
-The'veny and Paul Zimmermann.  Patrick Pe'lissier has helped cleaning
-up the code.  Marc Helbling contributed the `mpc_ui_sub' and
-`mpc_ui_ui_sub' functions.
-
-
-File: mpc.info,  Node: References,  Next: Concept Index,  Prev: Contributors,  Up: Top
+File: mpc.info,  Node: References,  Next: Concept Index,  Prev: Complex Functions,  Up: Top
 
 References
 **********
@@ -1040,8 +1037,8 @@ References
 
    * Guillaume Hanrot, Vincent Lefe`vre, Patrick Pe'lissier, Paul
      Zimmermann et al.  `mpfr' - A library for multiple-precision
-     floating-point               computations with exact rounding.
-     Version 2.4.1, `http://www.mpfr.org'.
+     floating-point computations with exact rounding.  Version 2.4.1,
+     `http://www.mpfr.org'.
 
    * IEEE standard for binary floating-point arithmetic, Technical
      Report ANSI-IEEE Standard 754-1985, New York, 1985.  Approved
@@ -1064,48 +1061,48 @@ Concept Index
 * Menu:
 
 * Arithmetic functions:                  Basic Arithmetic.     (line  6)
-* Comparison functions:                  Complex Comparison.   (line  3)
+* Comparison functions:                  Complex Comparison.   (line  6)
 * Complex arithmetic functions:          Basic Arithmetic.     (line  6)
 * Complex assignment functions:          Assigning Complex Numbers.
                                                                (line  6)
-* Complex comparisons functions:         Complex Comparison.   (line  3)
+* Complex comparisons functions:         Complex Comparison.   (line  6)
 * Complex functions:                     Complex Functions.    (line  6)
-* Complex number:                        MPC Basics.           (line 15)
-* Conditions for copying MPC:            Copying.              (line  6)
+* Complex number:                        GNU MPC Basics.       (line 15)
+* Conditions for copying GNU MPC:        Copying.              (line  6)
 * Conversion functions:                  Converting Complex Numbers.
                                                                (line  6)
 * Copying conditions:                    Copying.              (line  6)
-* Installation:                          Installing MPC.       (line  6)
+* Installation:                          Installing GNU MPC.   (line  6)
 * Logarithm:                             Power Functions and Logarithm.
                                                                (line  6)
 * Miscellaneous complex functions:       Miscellaneous Complex Functions.
                                                                (line  6)
-* mpc.h:                                 MPC Basics.           (line  6)
+* mpc.h:                                 GNU MPC Basics.       (line  6)
 * Power functions:                       Power Functions and Logarithm.
                                                                (line  6)
-* Precision:                             MPC Basics.           (line 19)
+* Precision:                             GNU MPC Basics.       (line 19)
 * Projection and Decomposing Functions:  Projection & Decomposing.
                                                                (line  6)
 * Reporting bugs:                        Reporting Bugs.       (line  6)
-* Rounding Mode:                         MPC Basics.           (line 24)
+* Rounding Mode:                         GNU MPC Basics.       (line 24)
 * String and stream input and output:    String and Stream Input and Output.
-                                                               (line  3)
+                                                               (line  6)
 * Trigonometric functions:               Trigonometric Functions.
                                                                (line  6)
 * User-defined precision:                Complex Functions.    (line 12)
 
 
-File: mpc.info,  Node: Function Index,  Prev: Concept Index,  Up: Top
+File: mpc.info,  Node: Function Index,  Next: GNU Free Documentation License,  Prev: Concept Index,  Up: Top
 
-Function and Type Index
-***********************
+Function Index
+**************
 
  [index ]
 * Menu:
 
 * _Complex:                              Converting Complex Numbers.
                                                               (line  10)
-* mpc_abs:                               Basic Arithmetic.    (line  78)
+* mpc_abs:                               Basic Arithmetic.    (line  82)
 * mpc_acos:                              Trigonometric Functions.
                                                               (line  38)
 * mpc_acosh:                             Trigonometric Functions.
@@ -1128,19 +1125,20 @@ Function and Type Index
 * mpc_cmp:                               Complex Comparison.  (line   7)
 * mpc_cmp_si:                            Complex Comparison.  (line  10)
 * mpc_cmp_si_si:                         Complex Comparison.  (line   9)
-* mpc_conj:                              Basic Arithmetic.    (line  73)
+* mpc_conj:                              Basic Arithmetic.    (line  77)
 * mpc_cos:                               Trigonometric Functions.
                                                               (line  11)
 * mpc_cosh:                              Trigonometric Functions.
                                                               (line  29)
-* mpc_div:                               Basic Arithmetic.    (line  55)
-* mpc_div_2exp:                          Basic Arithmetic.    (line  96)
-* mpc_div_fr:                            Basic Arithmetic.    (line  61)
-* mpc_div_ui:                            Basic Arithmetic.    (line  57)
+* mpc_div:                               Basic Arithmetic.    (line  66)
+* mpc_div_2si:                           Basic Arithmetic.    (line 101)
+* mpc_div_2ui:                           Basic Arithmetic.    (line  99)
+* mpc_div_fr:                            Basic Arithmetic.    (line  70)
+* mpc_div_ui:                            Basic Arithmetic.    (line  68)
 * mpc_exp:                               Power Functions and Logarithm.
-                                                              (line  29)
-* mpc_fma:                               Basic Arithmetic.    (line 102)
-* mpc_fr_div:                            Basic Arithmetic.    (line  63)
+                                                              (line  33)
+* mpc_fma:                               Basic Arithmetic.    (line  61)
+* mpc_fr_div:                            Basic Arithmetic.    (line  74)
 * mpc_fr_sub:                            Basic Arithmetic.    (line  25)
 * mpc_free_str:                          String and Stream Input and Output.
                                                               (line  68)
@@ -1165,38 +1163,41 @@ Function and Type Index
 * mpc_inp_str:                           String and Stream Input and Output.
                                                               (line  77)
 * mpc_log:                               Power Functions and Logarithm.
-                                                              (line  33)
-* mpc_mul:                               Basic Arithmetic.    (line  36)
-* mpc_mul_2exp:                          Basic Arithmetic.    (line  90)
-* mpc_mul_fr:                            Basic Arithmetic.    (line  42)
-* mpc_mul_i:                             Basic Arithmetic.    (line  46)
-* mpc_mul_si:                            Basic Arithmetic.    (line  40)
-* mpc_mul_ui:                            Basic Arithmetic.    (line  38)
-* mpc_neg:                               Basic Arithmetic.    (line  69)
-* mpc_norm:                              Basic Arithmetic.    (line  83)
+                                                              (line  37)
+* mpc_log10:                             Power Functions and Logarithm.
+                                                              (line  38)
+* mpc_mul:                               Basic Arithmetic.    (line  40)
+* mpc_mul_2si:                           Basic Arithmetic.    (line  93)
+* mpc_mul_2ui:                           Basic Arithmetic.    (line  91)
+* mpc_mul_fr:                            Basic Arithmetic.    (line  46)
+* mpc_mul_i:                             Basic Arithmetic.    (line  52)
+* mpc_mul_si:                            Basic Arithmetic.    (line  44)
+* mpc_mul_ui:                            Basic Arithmetic.    (line  42)
+* mpc_neg:                               Basic Arithmetic.    (line  35)
+* mpc_norm:                              Basic Arithmetic.    (line  86)
 * mpc_out_str:                           String and Stream Input and Output.
                                                               (line 112)
 * mpc_pow:                               Power Functions and Logarithm.
-                                                              (line  11)
-* mpc_pow_d:                             Power Functions and Logarithm.
                                                               (line  13)
-* mpc_pow_fr:                            Power Functions and Logarithm.
-                                                              (line  23)
-* mpc_pow_ld:                            Power Functions and Logarithm.
+* mpc_pow_d:                             Power Functions and Logarithm.
                                                               (line  15)
-* mpc_pow_si:                            Power Functions and Logarithm.
+* mpc_pow_fr:                            Power Functions and Logarithm.
+                                                              (line  25)
+* mpc_pow_ld:                            Power Functions and Logarithm.
                                                               (line  17)
-* mpc_pow_ui:                            Power Functions and Logarithm.
+* mpc_pow_si:                            Power Functions and Logarithm.
                                                               (line  19)
-* mpc_pow_z:                             Power Functions and Logarithm.
+* mpc_pow_ui:                            Power Functions and Logarithm.
                                                               (line  21)
+* mpc_pow_z:                             Power Functions and Logarithm.
+                                                              (line  23)
 * mpc_proj:                              Projection & Decomposing.
                                                               (line  25)
 * mpc_real:                              Projection & Decomposing.
                                                               (line   7)
 * mpc_realref:                           Projection & Decomposing.
                                                               (line  15)
-* mpc_rnd_t:                             MPC Basics.          (line  24)
+* mpc_rnd_t:                             GNU MPC Basics.      (line  24)
 * mpc_set:                               Assigning Complex Numbers.
                                                               (line  17)
 * mpc_set_d:                             Assigning Complex Numbers.
@@ -1256,7 +1257,7 @@ Function and Type Index
                                                               (line  16)
 * mpc_sinh:                              Trigonometric Functions.
                                                               (line  25)
-* mpc_sqr:                               Basic Arithmetic.    (line  51)
+* mpc_sqr:                               Basic Arithmetic.    (line  57)
 * mpc_sqrt:                              Power Functions and Logarithm.
                                                               (line   7)
 * mpc_strtoc:                            String and Stream Input and Output.
@@ -1266,12 +1267,12 @@ Function and Type Index
 * mpc_sub_ui:                            Basic Arithmetic.    (line  27)
 * mpc_swap:                              Assigning Complex Numbers.
                                                               (line  83)
-* mpc_t:                                 MPC Basics.          (line  15)
+* mpc_t:                                 GNU MPC Basics.      (line  15)
 * mpc_tan:                               Trigonometric Functions.
                                                               (line  21)
 * mpc_tanh:                              Trigonometric Functions.
                                                               (line  33)
-* mpc_ui_div:                            Basic Arithmetic.    (line  59)
+* mpc_ui_div:                            Basic Arithmetic.    (line  72)
 * mpc_ui_sub:                            Basic Arithmetic.    (line  29)
 * mpc_ui_ui_sub:                         Basic Arithmetic.    (line  31)
 * mpc_urandom:                           Miscellaneous Complex Functions.
@@ -1288,35 +1289,520 @@ Function and Type Index
                                                               (line  21)
 * MPC_VERSION_STRING:                    Miscellaneous Complex Functions.
                                                               (line  22)
-* mpfr_prec_t:                           MPC Basics.          (line  19)
+* mpfr_prec_t:                           GNU MPC Basics.      (line  19)
+
+
+File: mpc.info,  Node: GNU Free Documentation License,  Prev: Function Index,  Up: Top
+
+Anhang A GNU Free Documentation License
+***************************************
+
+                     Version 1.3, 3 November 2008
+
+     Copyright (C) 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc.
+     `http://fsf.org/'
+
+     Everyone is permitted to copy and distribute verbatim copies
+     of this license document, but changing it is not allowed.
+
+  0. PREAMBLE
+
+     The purpose of this License is to make a manual, textbook, or other
+     functional and useful document "free" in the sense of freedom: to
+     assure everyone the effective freedom to copy and redistribute it,
+     with or without modifying it, either commercially or
+     noncommercially.  Secondarily, this License preserves for the
+     author and publisher a way to get credit for their work, while not
+     being considered responsible for modifications made by others.
+
+     This License is a kind of "copyleft", which means that derivative
+     works of the document must themselves be free in the same sense.
+     It complements the GNU General Public License, which is a copyleft
+     license designed for free software.
+
+     We have designed this License in order to use it for manuals for
+     free software, because free software needs free documentation: a
+     free program should come with manuals providing the same freedoms
+     that the software does.  But this License is not limited to
+     software manuals; it can be used for any textual work, regardless
+     of subject matter or whether it is published as a printed book.
+     We recommend this License principally for works whose purpose is
+     instruction or reference.
+
+  1. APPLICABILITY AND DEFINITIONS
+
+     This License applies to any manual or other work, in any medium,
+     that contains a notice placed by the copyright holder saying it
+     can be distributed under the terms of this License.  Such a notice
+     grants a world-wide, royalty-free license, unlimited in duration,
+     to use that work under the conditions stated herein.  The
+     "Document", below, refers to any such manual or work.  Any member
+     of the public is a licensee, and is addressed as "you".  You
+     accept the license if you copy, modify or distribute the work in a
+     way requiring permission under copyright law.
+
+     A "Modified Version" of the Document means any work containing the
+     Document or a portion of it, either copied verbatim, or with
+     modifications and/or translated into another language.
+
+     A "Secondary Section" is a named appendix or a front-matter section
+     of the Document that deals exclusively with the relationship of the
+     publishers or authors of the Document to the Document's overall
+     subject (or to related matters) and contains nothing that could
+     fall directly within that overall subject.  (Thus, if the Document
+     is in part a textbook of mathematics, a Secondary Section may not
+     explain any mathematics.)  The relationship could be a matter of
+     historical connection with the subject or with related matters, or
+     of legal, commercial, philosophical, ethical or political position
+     regarding them.
+
+     The "Invariant Sections" are certain Secondary Sections whose
+     titles are designated, as being those of Invariant Sections, in
+     the notice that says that the Document is released under this
+     License.  If a section does not fit the above definition of
+     Secondary then it is not allowed to be designated as Invariant.
+     The Document may contain zero Invariant Sections.  If the Document
+     does not identify any Invariant Sections then there are none.
+
+     The "Cover Texts" are certain short passages of text that are
+     listed, as Front-Cover Texts or Back-Cover Texts, in the notice
+     that says that the Document is released under this License.  A
+     Front-Cover Text may be at most 5 words, and a Back-Cover Text may
+     be at most 25 words.
+
+     A "Transparent" copy of the Document means a machine-readable copy,
+     represented in a format whose specification is available to the
+     general public, that is suitable for revising the document
+     straightforwardly with generic text editors or (for images
+     composed of pixels) generic paint programs or (for drawings) some
+     widely available drawing editor, and that is suitable for input to
+     text formatters or for automatic translation to a variety of
+     formats suitable for input to text formatters.  A copy made in an
+     otherwise Transparent file format whose markup, or absence of
+     markup, has been arranged to thwart or discourage subsequent
+     modification by readers is not Transparent.  An image format is
+     not Transparent if used for any substantial amount of text.  A
+     copy that is not "Transparent" is called "Opaque".
+
+     Examples of suitable formats for Transparent copies include plain
+     ASCII without markup, Texinfo input format, LaTeX input format,
+     SGML or XML using a publicly available DTD, and
+     standard-conforming simple HTML, PostScript or PDF designed for
+     human modification.  Examples of transparent image formats include
+     PNG, XCF and JPG.  Opaque formats include proprietary formats that
+     can be read and edited only by proprietary word processors, SGML or
+     XML for which the DTD and/or processing tools are not generally
+     available, and the machine-generated HTML, PostScript or PDF
+     produced by some word processors for output purposes only.
+
+     The "Title Page" means, for a printed book, the title page itself,
+     plus such following pages as are needed to hold, legibly, the
+     material this License requires to appear in the title page.  For
+     works in formats which do not have any title page as such, "Title
+     Page" means the text near the most prominent appearance of the
+     work's title, preceding the beginning of the body of the text.
+
+     The "publisher" means any person or entity that distributes copies
+     of the Document to the public.
+
+     A section "Entitled XYZ" means a named subunit of the Document
+     whose title either is precisely XYZ or contains XYZ in parentheses
+     following text that translates XYZ in another language.  (Here XYZ
+     stands for a specific section name mentioned below, such as
+     "Acknowledgements", "Dedications", "Endorsements", or "History".)
+     To "Preserve the Title" of such a section when you modify the
+     Document means that it remains a section "Entitled XYZ" according
+     to this definition.
+
+     The Document may include Warranty Disclaimers next to the notice
+     which states that this License applies to the Document.  These
+     Warranty Disclaimers are considered to be included by reference in
+     this License, but only as regards disclaiming warranties: any other
+     implication that these Warranty Disclaimers may have is void and
+     has no effect on the meaning of this License.
+
+  2. VERBATIM COPYING
+
+     You may copy and distribute the Document in any medium, either
+     commercially or noncommercially, provided that this License, the
+     copyright notices, and the license notice saying this License
+     applies to the Document are reproduced in all copies, and that you
+     add no other conditions whatsoever to those of this License.  You
+     may not use technical measures to obstruct or control the reading
+     or further copying of the copies you make or distribute.  However,
+     you may accept compensation in exchange for copies.  If you
+     distribute a large enough number of copies you must also follow
+     the conditions in section 3.
+
+     You may also lend copies, under the same conditions stated above,
+     and you may publicly display copies.
+
+  3. COPYING IN QUANTITY
+
+     If you publish printed copies (or copies in media that commonly
+     have printed covers) of the Document, numbering more than 100, and
+     the Document's license notice requires Cover Texts, you must
+     enclose the copies in covers that carry, clearly and legibly, all
+     these Cover Texts: Front-Cover Texts on the front cover, and
+     Back-Cover Texts on the back cover.  Both covers must also clearly
+     and legibly identify you as the publisher of these copies.  The
+     front cover must present the full title with all words of the
+     title equally prominent and visible.  You may add other material
+     on the covers in addition.  Copying with changes limited to the
+     covers, as long as they preserve the title of the Document and
+     satisfy these conditions, can be treated as verbatim copying in
+     other respects.
+
+     If the required texts for either cover are too voluminous to fit
+     legibly, you should put the first ones listed (as many as fit
+     reasonably) on the actual cover, and continue the rest onto
+     adjacent pages.
+
+     If you publish or distribute Opaque copies of the Document
+     numbering more than 100, you must either include a
+     machine-readable Transparent copy along with each Opaque copy, or
+     state in or with each Opaque copy a computer-network location from
+     which the general network-using public has access to download
+     using public-standard network protocols a complete Transparent
+     copy of the Document, free of added material.  If you use the
+     latter option, you must take reasonably prudent steps, when you
+     begin distribution of Opaque copies in quantity, to ensure that
+     this Transparent copy will remain thus accessible at the stated
+     location until at least one year after the last time you
+     distribute an Opaque copy (directly or through your agents or
+     retailers) of that edition to the public.
+
+     It is requested, but not required, that you contact the authors of
+     the Document well before redistributing any large number of
+     copies, to give them a chance to provide you with an updated
+     version of the Document.
+
+  4. MODIFICATIONS
+
+     You may copy and distribute a Modified Version of the Document
+     under the conditions of sections 2 and 3 above, provided that you
+     release the Modified Version under precisely this License, with
+     the Modified Version filling the role of the Document, thus
+     licensing distribution and modification of the Modified Version to
+     whoever possesses a copy of it.  In addition, you must do these
+     things in the Modified Version:
+
+       A. Use in the Title Page (and on the covers, if any) a title
+          distinct from that of the Document, and from those of
+          previous versions (which should, if there were any, be listed
+          in the History section of the Document).  You may use the
+          same title as a previous version if the original publisher of
+          that version gives permission.
+
+       B. List on the Title Page, as authors, one or more persons or
+          entities responsible for authorship of the modifications in
+          the Modified Version, together with at least five of the
+          principal authors of the Document (all of its principal
+          authors, if it has fewer than five), unless they release you
+          from this requirement.
+
+       C. State on the Title page the name of the publisher of the
+          Modified Version, as the publisher.
+
+       D. Preserve all the copyright notices of the Document.
+
+       E. Add an appropriate copyright notice for your modifications
+          adjacent to the other copyright notices.
+
+       F. Include, immediately after the copyright notices, a license
+          notice giving the public permission to use the Modified
+          Version under the terms of this License, in the form shown in
+          the Addendum below.
+
+       G. Preserve in that license notice the full lists of Invariant
+          Sections and required Cover Texts given in the Document's
+          license notice.
+
+       H. Include an unaltered copy of this License.
+
+       I. Preserve the section Entitled "History", Preserve its Title,
+          and add to it an item stating at least the title, year, new
+          authors, and publisher of the Modified Version as given on
+          the Title Page.  If there is no section Entitled "History" in
+          the Document, create one stating the title, year, authors,
+          and publisher of the Document as given on its Title Page,
+          then add an item describing the Modified Version as stated in
+          the previous sentence.
+
+       J. Preserve the network location, if any, given in the Document
+          for public access to a Transparent copy of the Document, and
+          likewise the network locations given in the Document for
+          previous versions it was based on.  These may be placed in
+          the "History" section.  You may omit a network location for a
+          work that was published at least four years before the
+          Document itself, or if the original publisher of the version
+          it refers to gives permission.
+
+       K. For any section Entitled "Acknowledgements" or "Dedications",
+          Preserve the Title of the section, and preserve in the
+          section all the substance and tone of each of the contributor
+          acknowledgements and/or dedications given therein.
+
+       L. Preserve all the Invariant Sections of the Document,
+          unaltered in their text and in their titles.  Section numbers
+          or the equivalent are not considered part of the section
+          titles.
+
+       M. Delete any section Entitled "Endorsements".  Such a section
+          may not be included in the Modified Version.
+
+       N. Do not retitle any existing section to be Entitled
+          "Endorsements" or to conflict in title with any Invariant
+          Section.
+
+       O. Preserve any Warranty Disclaimers.
+
+     If the Modified Version includes new front-matter sections or
+     appendices that qualify as Secondary Sections and contain no
+     material copied from the Document, you may at your option
+     designate some or all of these sections as invariant.  To do this,
+     add their titles to the list of Invariant Sections in the Modified
+     Version's license notice.  These titles must be distinct from any
+     other section titles.
+
+     You may add a section Entitled "Endorsements", provided it contains
+     nothing but endorsements of your Modified Version by various
+     parties--for example, statements of peer review or that the text
+     has been approved by an organization as the authoritative
+     definition of a standard.
+
+     You may add a passage of up to five words as a Front-Cover Text,
+     and a passage of up to 25 words as a Back-Cover Text, to the end
+     of the list of Cover Texts in the Modified Version.  Only one
+     passage of Front-Cover Text and one of Back-Cover Text may be
+     added by (or through arrangements made by) any one entity.  If the
+     Document already includes a cover text for the same cover,
+     previously added by you or by arrangement made by the same entity
+     you are acting on behalf of, you may not add another; but you may
+     replace the old one, on explicit permission from the previous
+     publisher that added the old one.
+
+     The author(s) and publisher(s) of the Document do not by this
+     License give permission to use their names for publicity for or to
+     assert or imply endorsement of any Modified Version.
+
+  5. COMBINING DOCUMENTS
+
+     You may combine the Document with other documents released under
+     this License, under the terms defined in section 4 above for
+     modified versions, provided that you include in the combination
+     all of the Invariant Sections of all of the original documents,
+     unmodified, and list them all as Invariant Sections of your
+     combined work in its license notice, and that you preserve all
+     their Warranty Disclaimers.
+
+     The combined work need only contain one copy of this License, and
+     multiple identical Invariant Sections may be replaced with a single
+     copy.  If there are multiple Invariant Sections with the same name
+     but different contents, make the title of each such section unique
+     by adding at the end of it, in parentheses, the name of the
+     original author or publisher of that section if known, or else a
+     unique number.  Make the same adjustment to the section titles in
+     the list of Invariant Sections in the license notice of the
+     combined work.
+
+     In the combination, you must combine any sections Entitled
+     "History" in the various original documents, forming one section
+     Entitled "History"; likewise combine any sections Entitled
+     "Acknowledgements", and any sections Entitled "Dedications".  You
+     must delete all sections Entitled "Endorsements."
+
+  6. COLLECTIONS OF DOCUMENTS
+
+     You may make a collection consisting of the Document and other
+     documents released under this License, and replace the individual
+     copies of this License in the various documents with a single copy
+     that is included in the collection, provided that you follow the
+     rules of this License for verbatim copying of each of the
+     documents in all other respects.
+
+     You may extract a single document from such a collection, and
+     distribute it individually under this License, provided you insert
+     a copy of this License into the extracted document, and follow
+     this License in all other respects regarding verbatim copying of
+     that document.
+
+  7. AGGREGATION WITH INDEPENDENT WORKS
+
+     A compilation of the Document or its derivatives with other
+     separate and independent documents or works, in or on a volume of
+     a storage or distribution medium, is called an "aggregate" if the
+     copyright resulting from the compilation is not used to limit the
+     legal rights of the compilation's users beyond what the individual
+     works permit.  When the Document is included in an aggregate, this
+     License does not apply to the other works in the aggregate which
+     are not themselves derivative works of the Document.
+
+     If the Cover Text requirement of section 3 is applicable to these
+     copies of the Document, then if the Document is less than one half
+     of the entire aggregate, the Document's Cover Texts may be placed
+     on covers that bracket the Document within the aggregate, or the
+     electronic equivalent of covers if the Document is in electronic
+     form.  Otherwise they must appear on printed covers that bracket
+     the whole aggregate.
+
+  8. TRANSLATION
+
+     Translation is considered a kind of modification, so you may
+     distribute translations of the Document under the terms of section
+     4.  Replacing Invariant Sections with translations requires special
+     permission from their copyright holders, but you may include
+     translations of some or all Invariant Sections in addition to the
+     original versions of these Invariant Sections.  You may include a
+     translation of this License, and all the license notices in the
+     Document, and any Warranty Disclaimers, provided that you also
+     include the original English version of this License and the
+     original versions of those notices and disclaimers.  In case of a
+     disagreement between the translation and the original version of
+     this License or a notice or disclaimer, the original version will
+     prevail.
+
+     If a section in the Document is Entitled "Acknowledgements",
+     "Dedications", or "History", the requirement (section 4) to
+     Preserve its Title (section 1) will typically require changing the
+     actual title.
+
+  9. TERMINATION
+
+     You may not copy, modify, sublicense, or distribute the Document
+     except as expressly provided under this License.  Any attempt
+     otherwise to copy, modify, sublicense, or distribute it is void,
+     and will automatically terminate your rights under this License.
+
+     However, if you cease all violation of this License, then your
+     license from a particular copyright holder is reinstated (a)
+     provisionally, unless and until the copyright holder explicitly
+     and finally terminates your license, and (b) permanently, if the
+     copyright holder fails to notify you of the violation by some
+     reasonable means prior to 60 days after the cessation.
+
+     Moreover, your license from a particular copyright holder is
+     reinstated permanently if the copyright holder notifies you of the
+     violation by some reasonable means, this is the first time you have
+     received notice of violation of this License (for any work) from
+     that copyright holder, and you cure the violation prior to 30 days
+     after your receipt of the notice.
+
+     Termination of your rights under this section does not terminate
+     the licenses of parties who have received copies or rights from
+     you under this License.  If your rights have been terminated and
+     not permanently reinstated, receipt of a copy of some or all of
+     the same material does not give you any rights to use it.
+
+ 10. FUTURE REVISIONS OF THIS LICENSE
+
+     The Free Software Foundation may publish new, revised versions of
+     the GNU Free Documentation License from time to time.  Such new
+     versions will be similar in spirit to the present version, but may
+     differ in detail to address new problems or concerns.  See
+     `http://www.gnu.org/copyleft/'.
+
+     Each version of the License is given a distinguishing version
+     number.  If the Document specifies that a particular numbered
+     version of this License "or any later version" applies to it, you
+     have the option of following the terms and conditions either of
+     that specified version or of any later version that has been
+     published (not as a draft) by the Free Software Foundation.  If
+     the Document does not specify a version number of this License,
+     you may choose any version ever published (not as a draft) by the
+     Free Software Foundation.  If the Document specifies that a proxy
+     can decide which future versions of this License can be used, that
+     proxy's public statement of acceptance of a version permanently
+     authorizes you to choose that version for the Document.
+
+ 11. RELICENSING
+
+     "Massive Multiauthor Collaboration Site" (or "MMC Site") means any
+     World Wide Web server that publishes copyrightable works and also
+     provides prominent facilities for anybody to edit those works.  A
+     public wiki that anybody can edit is an example of such a server.
+     A "Massive Multiauthor Collaboration" (or "MMC") contained in the
+     site means any set of copyrightable works thus published on the MMC
+     site.
+
+     "CC-BY-SA" means the Creative Commons Attribution-Share Alike 3.0
+     license published by Creative Commons Corporation, a not-for-profit
+     corporation with a principal place of business in San Francisco,
+     California, as well as future copyleft versions of that license
+     published by that same organization.
+
+     "Incorporate" means to publish or republish a Document, in whole or
+     in part, as part of another Document.
+
+     An MMC is "eligible for relicensing" if it is licensed under this
+     License, and if all works that were first published under this
+     License somewhere other than this MMC, and subsequently
+     incorporated in whole or in part into the MMC, (1) had no cover
+     texts or invariant sections, and (2) were thus incorporated prior
+     to November 1, 2008.
+
+     The operator of an MMC Site may republish an MMC contained in the
+     site under CC-BY-SA on the same site at any time before August 1,
+     2009, provided the MMC is eligible for relicensing.
+
+
+ADDENDUM: How to use this License for your documents
+====================================================
+
+To use this License in a document you have written, include a copy of
+the License in the document and put the following copyright and license
+notices just after the title page:
+
+       Copyright (C)  YEAR  YOUR NAME.
+       Permission is granted to copy, distribute and/or modify this document
+       under the terms of the GNU Free Documentation License, Version 1.3
+       or any later version published by the Free Software Foundation;
+       with no Invariant Sections, no Front-Cover Texts, and no Back-Cover
+       Texts.  A copy of the license is included in the section entitled ``GNU
+       Free Documentation License''.
+
+   If you have Invariant Sections, Front-Cover Texts and Back-Cover
+Texts, replace the "with...Texts." line with this:
+
+         with the Invariant Sections being LIST THEIR TITLES, with
+         the Front-Cover Texts being LIST, and with the Back-Cover Texts
+         being LIST.
+
+   If you have Invariant Sections without Cover Texts, or some other
+combination of the three, merge those two alternatives to suit the
+situation.
+
+   If your document contains nontrivial examples of program code, we
+recommend releasing these examples in parallel under your choice of
+free software license, such as the GNU General Public License, to
+permit their use in free software.
 
 
 
 Tag Table:
-Node: Top946
-Node: Copying1607
-Node: Introduction to MPC2265
-Node: Installing MPC2973
-Node: Reporting Bugs7632
-Node: MPC Basics8961
-Ref: return-value12611
-Node: Complex Functions14053
-Node: Initializing Complex Numbers15202
-Node: Assigning Complex Numbers17616
-Node: Converting Complex Numbers22024
-Node: String and Stream Input and Output22658
-Ref: string-io22805
-Node: Complex Comparison29237
-Node: Projection & Decomposing30316
-Node: Basic Arithmetic31691
-Node: Power Functions and Logarithm36331
-Node: Trigonometric Functions37986
-Node: Miscellaneous Complex Functions40211
-Node: Advanced Functions42356
-Node: Internals43429
-Node: Contributors43876
-Node: References44222
-Node: Concept Index45136
-Node: Function Index47450
+Node: Top738
+Node: Copying1445
+Node: Introduction to GNU MPC2216
+Node: Installing GNU MPC2934
+Node: Reporting Bugs8016
+Node: GNU MPC Basics9357
+Ref: return-value13055
+Node: Complex Functions14505
+Node: Initializing Complex Numbers15664
+Node: Assigning Complex Numbers18052
+Node: Converting Complex Numbers22451
+Node: String and Stream Input and Output23076
+Node: Complex Comparison29655
+Node: Projection & Decomposing30734
+Node: Basic Arithmetic32109
+Node: Power Functions and Logarithm36682
+Node: Trigonometric Functions38749
+Node: Miscellaneous Complex Functions40974
+Node: Advanced Functions43148
+Node: Internals44221
+Node: References44672
+Node: Concept Index45578
+Node: Function Index47892
+Node: GNU Free Documentation License61676
 
 End Tag Table

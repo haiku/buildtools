@@ -1,32 +1,31 @@
-/* tio_str.c -- Test file for mpc_inp_str and mpc_out_str.
+/* tio_str-- Test file for mpc_inp_str and mpc_out_str.
 
-Copyright (C) INRIA, 2009, 2011
+Copyright (C) 2009, 2011 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
-
-#define  _XOPEN_SOURCE /* for fileno */
-#include <stdio.h>
-#include <string.h>
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
 #include "mpc-tests.h"
 
 #ifdef HAVE_UNISTD_H
-#include <unistd.h>
+#define _POSIX_C_SOURCE 1 /* apparently needed on Darwin */
+#include <unistd.h> /* for dup, dup2, STDIN_FILENO and STDOUT_FILENO */
+#else
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
 #endif
 
 extern unsigned long line_number;
@@ -77,8 +76,8 @@ check_file (const char* file_name)
       /* 2. read string at the same precision as the expected result */
       while (nextchar != '"')
         nextchar = getc (fp);
-      mpfr_set_prec (MPC_RE (got), MPC_PREC_RE (expected));
-      mpfr_set_prec (MPC_IM (got), MPC_PREC_IM (expected));
+      mpfr_set_prec (mpc_realref (got), MPC_PREC_RE (expected));
+      mpfr_set_prec (mpc_imagref (got), MPC_PREC_IM (expected));
       inex = mpc_inp_str (got, fp, &size, base, rnd);
 
       /* 3. compare this result with the expected one */
@@ -120,8 +119,7 @@ check_io_str (mpc_ptr read_number, mpc_ptr expected)
 
   if (!(fp = fopen (tmp_file, "w")))
     {
-      printf ("Error: Could not open file %s\n", tmp_file);
-
+      printf ("Error: Could not open file %s in write mode\n", tmp_file);
       exit (1);
     }
 
@@ -130,8 +128,7 @@ check_io_str (mpc_ptr read_number, mpc_ptr expected)
 
   if (!(fp = fopen (tmp_file, "r")))
     {
-      printf ("Error: Could not open file %s\n", tmp_file);
-
+      printf ("Error: Could not open file %s in read mode\n", tmp_file);
       exit (1);
     };
   if (mpc_inp_str (read_number, fp, &sz, 10, MPC_RNDNN) == -1)
@@ -155,7 +152,7 @@ check_io_str (mpc_ptr read_number, mpc_ptr expected)
     }
 }
 
-#ifndef NO_STREAM_REDIRECTION
+#ifndef MPC_NO_STREAM_REDIRECTION
 /* test out_str with stream=NULL */
 static void
 check_stdout (mpc_ptr read_number, mpc_ptr expected)
@@ -164,22 +161,22 @@ check_stdout (mpc_ptr read_number, mpc_ptr expected)
   int fd;
   size_t sz;
 
-  fflush(stdout);
-  fd = dup(fileno(stdout));
-  if (freopen(tmp_file, "w", stdout) == NULL)
+  fflush (stdout);
+  fd = dup (STDOUT_FILENO);
+  if (freopen (tmp_file, "w", stdout) == NULL)
   {
      printf ("mpc_inp_str cannot redirect stdout\n");
      exit (1);
   }
   mpc_out_str (NULL, 2, 0, expected, MPC_RNDNN);
-  fflush(stdout);
-  dup2(fd, fileno(stdout));
-  close(fd);
-  clearerr(stdout);
+  fflush (stdout);
+  dup2 (fd, STDOUT_FILENO);
+  close (fd);
+  clearerr (stdout);
 
-  fflush(stdin);
-  fd = dup(fileno(stdin));
-  if (freopen(tmp_file, "r", stdin) == NULL)
+  fflush (stdin);
+  fd = dup (STDIN_FILENO);
+  if (freopen (tmp_file, "r", stdin) == NULL)
   {
      printf ("mpc_inp_str cannot redirect stdout\n");
      exit (1);
@@ -200,12 +197,12 @@ check_stdout (mpc_ptr read_number, mpc_ptr expected)
       MPC_OUT (expected);
       exit (1);
     }
-  fflush(stdin);
-  dup2(fd, fileno(stdin));
-  close(fd);
-  clearerr(stdin);
+  fflush (stdin);
+  dup2 (fd, STDIN_FILENO);
+  close (fd);
+  clearerr (stdin);
 }
-#endif /* NO_STREAM_REDIRECTION */
+#endif /* MPC_NO_STREAM_REDIRECTION */
 
 int
 main (void)
@@ -231,15 +228,15 @@ main (void)
       mpc_set_si_si (x, -1, 1, MPC_RNDNN);
       check_io_str (z, x);
 
-      mpfr_set_inf (MPC_RE(x), -1);
-      mpfr_set_inf (MPC_IM(x), +1);
+      mpfr_set_inf (mpc_realref(x), -1);
+      mpfr_set_inf (mpc_imagref(x), +1);
       check_io_str (z, x);
 
       test_default_random (x,  -1024, 1024, 128, 25);
       check_io_str (z, x);
     }
 
-#ifndef NO_STREAM_REDIRECTION
+#ifndef MPC_NO_STREAM_REDIRECTION
   mpc_set_si_si (x, 1, -4, MPC_RNDNN);
   mpc_div_ui (x, x, 3, MPC_RNDDU);
 

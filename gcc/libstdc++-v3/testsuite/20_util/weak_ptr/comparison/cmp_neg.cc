@@ -41,13 +41,3 @@ main()
   test01();
   return 0;
 }
-
-// { dg-warning "note" "" { target *-*-* } 358 }
-// { dg-warning "note" "" { target *-*-* } 1086 }
-// { dg-warning "note" "" { target *-*-* } 468 }
-// { dg-warning "note" "" { target *-*-* } 586 }
-// { dg-warning "note" "" { target *-*-* } 1049 }
-// { dg-warning "note" "" { target *-*-* } 1055 }
-// { dg-warning "note" "" { target *-*-* } 341 }
-// { dg-warning "note" "" { target *-*-* } 291 }
-// { dg-warning "note" "" { target *-*-* } 207 }

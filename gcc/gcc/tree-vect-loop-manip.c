@@ -1,5 +1,5 @@
 /* Vectorizer Specific Loop Manipulations
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2012
    Free Software Foundation, Inc.
    Contributed by Dorit Naishlos <dorit@il.ibm.com>
    and Ira Rosen <irar@il.ibm.com>
@@ -513,7 +513,7 @@ slpeel_update_phi_nodes_for_guard1 (edge guard_edge, struct loop *loop,
        !gsi_end_p (gsi_orig) && !gsi_end_p (gsi_update);
        gsi_next (&gsi_orig), gsi_next (&gsi_update))
     {
-      source_location loop_locus, guard_locus;;
+      source_location loop_locus, guard_locus;
       orig_phi = gsi_stmt (gsi_orig);
       update_phi = gsi_stmt (gsi_update);
 
@@ -1037,7 +1037,7 @@ slpeel_verify_cfg_after_peeling (struct loop *first_loop,
 
 static void
 set_prologue_iterations (basic_block bb_before_first_loop,
-			 tree first_niters,
+			 tree *first_niters,
 			 struct loop *loop,
 			 unsigned int th)
 {
@@ -1100,39 +1100,10 @@ set_prologue_iterations (basic_block bb_before_first_loop,
   newphi = create_phi_node (var, bb_before_first_loop);
   add_phi_arg (newphi, prologue_after_cost_adjust_name, e_fallthru,
 	       UNKNOWN_LOCATION);
-  add_phi_arg (newphi, first_niters, e_false, UNKNOWN_LOCATION);
+  add_phi_arg (newphi, *first_niters, e_false, UNKNOWN_LOCATION);
 
-  first_niters = PHI_RESULT (newphi);
+  *first_niters = PHI_RESULT (newphi);
 }
-
-
-/* Remove dead assignments from loop NEW_LOOP.  */
-
-static void
-remove_dead_stmts_from_loop (struct loop *new_loop)
-{
-  basic_block *bbs = get_loop_body (new_loop);
-  unsigned i;
-  for (i = 0; i < new_loop->num_nodes; ++i)
-    {
-      gimple_stmt_iterator gsi;
-      for (gsi = gsi_start_bb (bbs[i]); !gsi_end_p (gsi);)
-	{
-	  gimple stmt = gsi_stmt (gsi);
-	  if (is_gimple_assign (stmt)
-	      && TREE_CODE (gimple_assign_lhs (stmt)) == SSA_NAME
-	      && has_zero_uses (gimple_assign_lhs (stmt)))
-	    {
-	      gsi_remove (&gsi, true);
-	      release_defs (stmt);
-	    }
-	  else
-	    gsi_next (&gsi);
-	}
-    }
-  free (bbs);
-}
-
 
 /* Function slpeel_tree_peel_loop_to_edge.
 
@@ -1187,7 +1158,7 @@ remove_dead_stmts_from_loop (struct loop *new_loop)
 
 static struct loop*
 slpeel_tree_peel_loop_to_edge (struct loop *loop,
-			       edge e, tree first_niters,
+			       edge e, tree *first_niters,
 			       tree niters, bool update_first_loop_count,
 			       unsigned int th, bool check_profitability,
 			       tree cond_expr, gimple_seq cond_expr_stmt_list)
@@ -1200,6 +1171,7 @@ slpeel_tree_peel_loop_to_edge (struct loop *loop,
   basic_block bb_before_first_loop;
   basic_block bb_between_loops;
   basic_block new_exit_bb;
+  gimple_stmt_iterator gsi;
   edge exit_e = single_exit (loop);
   LOC loop_loc;
   tree cost_pre_condition = NULL_TREE;
@@ -1213,6 +1185,40 @@ slpeel_tree_peel_loop_to_edge (struct loop *loop,
    the function tree_duplicate_bb is called.  */
   gimple_register_cfg_hooks ();
 
+  /* If the loop has a virtual PHI, but exit bb doesn't, create a virtual PHI
+     in the exit bb and rename all the uses after the loop.  This simplifies
+     the *guard[12] routines, which assume loop closed SSA form for all PHIs
+     (but normally loop closed SSA form doesn't require virtual PHIs to be
+     in the same form).  Doing this early simplifies the checking what
+     uses should be renamed.  */
+  for (gsi = gsi_start_phis (loop->header); !gsi_end_p (gsi); gsi_next (&gsi))
+    if (!is_gimple_reg (gimple_phi_result (gsi_stmt (gsi))))
+      {
+	gimple phi = gsi_stmt (gsi);
+	for (gsi = gsi_start_phis (exit_e->dest);
+	     !gsi_end_p (gsi); gsi_next (&gsi))
+	  if (!is_gimple_reg (gimple_phi_result (gsi_stmt (gsi))))
+	    break;
+	if (gsi_end_p (gsi))
+	  {
+	    gimple new_phi = create_phi_node (SSA_NAME_VAR (PHI_RESULT (phi)),
+					      exit_e->dest);
+	    tree vop = PHI_ARG_DEF_FROM_EDGE (phi, EDGE_SUCC (loop->latch, 0));
+	    imm_use_iterator imm_iter;
+	    gimple stmt;
+	    tree new_vop = make_ssa_name (SSA_NAME_VAR (PHI_RESULT (phi)),
+					  new_phi);
+	    use_operand_p use_p;
+
+	    add_phi_arg (new_phi, vop, exit_e, UNKNOWN_LOCATION);
+	    gimple_phi_set_result (new_phi, new_vop);
+	    FOR_EACH_IMM_USE_STMT (stmt, imm_iter, vop)
+	      if (stmt != new_phi && gimple_bb (stmt) != loop->header)
+		FOR_EACH_IMM_USE_ON_STMT (use_p, imm_iter)
+		  SET_USE (use_p, new_vop);
+	  }
+	break;
+      }
 
   /* 1. Generate a copy of LOOP and put it on E (E is the entry/exit of LOOP).
         Resulting CFG would be:
@@ -1357,8 +1363,8 @@ slpeel_tree_peel_loop_to_edge (struct loop *loop,
   if (!update_first_loop_count)
     {
       pre_condition =
-	fold_build2 (LE_EXPR, boolean_type_node, first_niters,
-		     build_int_cst (TREE_TYPE (first_niters), 0));
+	fold_build2 (LE_EXPR, boolean_type_node, *first_niters,
+		     build_int_cst (TREE_TYPE (*first_niters), 0));
       if (check_profitability)
 	{
 	  tree scalar_loop_iters
@@ -1389,8 +1395,8 @@ slpeel_tree_peel_loop_to_edge (struct loop *loop,
 				 loop, th);
 
       pre_condition =
-	fold_build2 (LE_EXPR, boolean_type_node, first_niters,
-		     build_int_cst (TREE_TYPE (first_niters), 0));
+	fold_build2 (LE_EXPR, boolean_type_node, *first_niters,
+		     build_int_cst (TREE_TYPE (*first_niters), 0));
     }
 
   skip_e = slpeel_add_loop_guard (bb_before_first_loop, pre_condition,
@@ -1431,7 +1437,7 @@ slpeel_tree_peel_loop_to_edge (struct loop *loop,
   bb_after_second_loop = split_edge (single_exit (second_loop));
 
   pre_condition =
-	fold_build2 (EQ_EXPR, boolean_type_node, first_niters, niters);
+	fold_build2 (EQ_EXPR, boolean_type_node, *first_niters, niters);
   skip_e = slpeel_add_loop_guard (bb_between_loops, pre_condition, NULL,
                                   bb_after_second_loop, bb_before_first_loop);
   slpeel_update_phi_nodes_for_guard2 (skip_e, second_loop,
@@ -1440,17 +1446,10 @@ slpeel_tree_peel_loop_to_edge (struct loop *loop,
   /* 4. Make first-loop iterate FIRST_NITERS times, if requested.
    */
   if (update_first_loop_count)
-    slpeel_make_loop_iterate_ntimes (first_loop, first_niters);
+    slpeel_make_loop_iterate_ntimes (first_loop, *first_niters);
 
   BITMAP_FREE (definitions);
   delete_update_ssa ();
-
-  /* Remove all pattern statements from the loop copy.  They will confuse
-     the expander if DCE is disabled.
-     ???  The pattern recognizer should be split into an analysis and
-     a transformation phase that is then run only on the loop that is
-     going to be transformed.  */
-  remove_dead_stmts_from_loop (new_loop);
 
   adjust_vec_debug_stmts ();
 
@@ -1798,13 +1797,12 @@ vect_update_ivs_after_vectorizer (loop_vec_info loop_vinfo, tree niters,
        !gsi_end_p (gsi) && !gsi_end_p (gsi1);
        gsi_next (&gsi), gsi_next (&gsi1))
     {
-      tree access_fn = NULL;
-      tree evolution_part;
       tree init_expr;
       tree step_expr, off;
       tree type;
       tree var, ni, ni_name;
       gimple_stmt_iterator last_gsi;
+      stmt_vec_info stmt_info;
 
       phi = gsi_stmt (gsi);
       phi1 = gsi_stmt (gsi1);
@@ -1823,47 +1821,34 @@ vect_update_ivs_after_vectorizer (loop_vec_info loop_vinfo, tree niters,
 	}
 
       /* Skip reduction phis.  */
-      if (STMT_VINFO_DEF_TYPE (vinfo_for_stmt (phi)) == vect_reduction_def)
+      stmt_info = vinfo_for_stmt (phi);
+      if (STMT_VINFO_DEF_TYPE (stmt_info) == vect_reduction_def)
         {
           if (vect_print_dump_info (REPORT_DETAILS))
             fprintf (vect_dump, "reduc phi. skip.");
           continue;
         }
 
-      access_fn = analyze_scalar_evolution (loop, PHI_RESULT (phi));
-      gcc_assert (access_fn);
-      /* We can end up with an access_fn like
-           (short int) {(short unsigned int) i_49, +, 1}_1
-	 for further analysis we need to strip the outer cast but we
-	 need to preserve the original type.  */
-      type = TREE_TYPE (access_fn);
-      STRIP_NOPS (access_fn);
-      evolution_part =
-	 unshare_expr (evolution_part_in_loop_num (access_fn, loop->num));
-      gcc_assert (evolution_part != NULL_TREE);
+      type = TREE_TYPE (gimple_phi_result (phi));
+      step_expr = STMT_VINFO_LOOP_PHI_EVOLUTION_PART (stmt_info);
+      step_expr = unshare_expr (step_expr);
 
       /* FORNOW: We do not support IVs whose evolution function is a polynomial
          of degree >= 2 or exponential.  */
-      gcc_assert (!tree_is_chrec (evolution_part));
+      gcc_assert (!tree_is_chrec (step_expr));
 
-      step_expr = evolution_part;
-      init_expr = unshare_expr (initial_condition_in_loop_num (access_fn,
-							       loop->num));
-      init_expr = fold_convert (type, init_expr);
+      init_expr = PHI_ARG_DEF_FROM_EDGE (phi, loop_preheader_edge (loop));
 
       off = fold_build2 (MULT_EXPR, TREE_TYPE (step_expr),
 			 fold_convert (TREE_TYPE (step_expr), niters),
 			 step_expr);
-      if (POINTER_TYPE_P (TREE_TYPE (init_expr)))
-	ni = fold_build2 (POINTER_PLUS_EXPR, TREE_TYPE (init_expr),
-			  init_expr,
-			  fold_convert (sizetype, off));
+      if (POINTER_TYPE_P (type))
+	ni = fold_build_pointer_plus (init_expr, off);
       else
-	ni = fold_build2 (PLUS_EXPR, TREE_TYPE (init_expr),
-			  init_expr,
-			  fold_convert (TREE_TYPE (init_expr), off));
+	ni = fold_build2 (PLUS_EXPR, type,
+			  init_expr, fold_convert (type, off));
 
-      var = create_tmp_var (TREE_TYPE (init_expr), "tmp");
+      var = create_tmp_var (type, "tmp");
       add_referenced_var (var);
 
       last_gsi = gsi_last_bb (exit_bb);
@@ -1963,7 +1948,7 @@ vect_do_peeling_for_loop_bound (loop_vec_info loop_vinfo, tree *ratio,
     }
 
   new_loop = slpeel_tree_peel_loop_to_edge (loop, single_exit (loop),
-                                            ratio_mult_vf_name, ni_name, false,
+                                            &ratio_mult_vf_name, ni_name, false,
                                             th, check_profitability,
 					    cond_expr, cond_expr_stmt_list);
   gcc_assert (new_loop);
@@ -2026,8 +2011,7 @@ vect_do_peeling_for_loop_bound (loop_vec_info loop_vinfo, tree *ratio,
    use TYPE_VECTOR_SUBPARTS.  */
 
 static tree
-vect_gen_niters_for_prolog_loop (loop_vec_info loop_vinfo, tree loop_niters,
-				 tree *wide_prolog_niters)
+vect_gen_niters_for_prolog_loop (loop_vec_info loop_vinfo, tree loop_niters)
 {
   struct data_reference *dr = LOOP_VINFO_UNALIGNED_DR (loop_vinfo);
   struct loop *loop = LOOP_VINFO_LOOP (loop_vinfo);
@@ -2112,19 +2096,6 @@ vect_gen_niters_for_prolog_loop (loop_vec_info loop_vinfo, tree loop_niters,
   add_referenced_var (var);
   stmts = NULL;
   iters_name = force_gimple_operand (iters, &stmts, false, var);
-  if (types_compatible_p (sizetype, niters_type))
-    *wide_prolog_niters = iters_name;
-  else
-    {
-      gimple_seq seq = NULL;
-      tree wide_iters = fold_convert (sizetype, iters);
-      var = create_tmp_var (sizetype, "prolog_loop_niters");
-      add_referenced_var (var);
-      *wide_prolog_niters = force_gimple_operand (wide_iters, &seq, false,
-						  var);
-      if (seq)
-	gimple_seq_add_seq (&stmts, seq);
-    }
 
   /* Insert stmt on loop preheader edge.  */
   if (stmts)
@@ -2206,9 +2177,8 @@ vect_do_peeling_for_alignment (loop_vec_info loop_vinfo)
   initialize_original_copy_tables ();
 
   ni_name = vect_build_loop_niters (loop_vinfo, NULL);
-  niters_of_prolog_loop = vect_gen_niters_for_prolog_loop (loop_vinfo, ni_name,
-							   &wide_prolog_niters);
-
+  niters_of_prolog_loop = vect_gen_niters_for_prolog_loop (loop_vinfo,
+							   ni_name);
 
   /* Get profitability threshold for vectorized loop.  */
   min_profitable_iters = LOOP_VINFO_COST_MODEL_MIN_ITERS (loop_vinfo);
@@ -2218,7 +2188,7 @@ vect_do_peeling_for_alignment (loop_vec_info loop_vinfo)
   /* Peel the prolog loop and iterate it niters_of_prolog_loop.  */
   new_loop =
     slpeel_tree_peel_loop_to_edge (loop, loop_preheader_edge (loop),
-				   niters_of_prolog_loop, ni_name, true,
+				   &niters_of_prolog_loop, ni_name, true,
 				   th, true, NULL_TREE, NULL);
 
   gcc_assert (new_loop);
@@ -2230,6 +2200,25 @@ vect_do_peeling_for_alignment (loop_vec_info loop_vinfo)
   n_iters = LOOP_VINFO_NITERS (loop_vinfo);
   LOOP_VINFO_NITERS (loop_vinfo) = fold_build2 (MINUS_EXPR,
 		TREE_TYPE (n_iters), n_iters, niters_of_prolog_loop);
+
+  if (types_compatible_p (sizetype, TREE_TYPE (niters_of_prolog_loop)))
+    wide_prolog_niters = niters_of_prolog_loop;
+  else
+    {
+      gimple_seq seq = NULL;
+      edge pe = loop_preheader_edge (loop);
+      tree wide_iters = fold_convert (sizetype, niters_of_prolog_loop);
+      tree var = create_tmp_var (sizetype, "prolog_loop_adjusted_niters");
+      add_referenced_var (var);
+      wide_prolog_niters = force_gimple_operand (wide_iters, &seq, false,
+                                                 var);
+      if (seq)
+	{
+	  /* Insert stmt on loop preheader edge.  */
+          basic_block new_bb = gsi_insert_seq_on_edge_immediate (pe, seq);
+          gcc_assert (!new_bb);
+        }
+    }
 
   /* Update the init conditions of the access functions of all data refs.  */
   vect_update_inits_of_drs (loop_vinfo, wide_prolog_niters);
@@ -2393,9 +2382,14 @@ static tree
 vect_vfa_segment_size (struct data_reference *dr, tree length_factor)
 {
   tree segment_length;
-  segment_length = size_binop (MULT_EXPR,
-			       fold_convert (sizetype, DR_STEP (dr)),
-			       fold_convert (sizetype, length_factor));
+
+  if (!compare_tree_int (DR_STEP (dr), 0))
+    segment_length = TYPE_SIZE_UNIT (TREE_TYPE (DR_REF (dr)));
+  else
+    segment_length = size_binop (MULT_EXPR,
+                                 fold_convert (sizetype, DR_STEP (dr)),
+                                 fold_convert (sizetype, length_factor));
+
   if (vect_supportable_dr_alignment (dr, false)
         == dr_explicit_realign_optimized)
     {
@@ -2446,13 +2440,13 @@ vect_create_cond_for_alias_checks (loop_vec_info loop_vinfo,
   tree part_cond_expr, length_factor;
 
   /* Create expression
-     ((store_ptr_0 + store_segment_length_0) < load_ptr_0)
-     || (load_ptr_0 + load_segment_length_0) < store_ptr_0))
+     ((store_ptr_0 + store_segment_length_0) <= load_ptr_0)
+     || (load_ptr_0 + load_segment_length_0) <= store_ptr_0))
      &&
      ...
      &&
-     ((store_ptr_n + store_segment_length_n) < load_ptr_n)
-     || (load_ptr_n + load_segment_length_n) < store_ptr_n))  */
+     ((store_ptr_n + store_segment_length_n) <= load_ptr_n)
+     || (load_ptr_n + load_segment_length_n) <= store_ptr_n))  */
 
   if (VEC_empty (ddr_p, may_alias_ddrs))
     return;
@@ -2468,7 +2462,7 @@ vect_create_cond_for_alias_checks (loop_vec_info loop_vinfo,
 
       dr_a = DDR_A (ddr);
       stmt_a = DR_STMT (DDR_A (ddr));
-      dr_group_first_a = DR_GROUP_FIRST_DR (vinfo_for_stmt (stmt_a));
+      dr_group_first_a = GROUP_FIRST_ELEMENT (vinfo_for_stmt (stmt_a));
       if (dr_group_first_a)
         {
 	  stmt_a = dr_group_first_a;
@@ -2477,7 +2471,7 @@ vect_create_cond_for_alias_checks (loop_vec_info loop_vinfo,
 
       dr_b = DDR_B (ddr);
       stmt_b = DR_STMT (DDR_B (ddr));
-      dr_group_first_b = DR_GROUP_FIRST_DR (vinfo_for_stmt (stmt_b));
+      dr_group_first_b = GROUP_FIRST_ELEMENT (vinfo_for_stmt (stmt_b));
       if (dr_group_first_b)
         {
 	  stmt_b = dr_group_first_b;
@@ -2508,21 +2502,19 @@ vect_create_cond_for_alias_checks (loop_vec_info loop_vinfo,
 	}
 
       seg_a_min = addr_base_a;
-      seg_a_max = fold_build2 (POINTER_PLUS_EXPR, TREE_TYPE (addr_base_a), 
-			       addr_base_a, segment_length_a);
+      seg_a_max = fold_build_pointer_plus (addr_base_a, segment_length_a);
       if (tree_int_cst_compare (DR_STEP (dr_a), size_zero_node) < 0)
 	seg_a_min = seg_a_max, seg_a_max = addr_base_a;
 
       seg_b_min = addr_base_b;
-      seg_b_max = fold_build2 (POINTER_PLUS_EXPR, TREE_TYPE (addr_base_b),
-			       addr_base_b, segment_length_b);
+      seg_b_max = fold_build_pointer_plus (addr_base_b, segment_length_b);
       if (tree_int_cst_compare (DR_STEP (dr_b), size_zero_node) < 0)
 	seg_b_min = seg_b_max, seg_b_max = addr_base_b;
 
       part_cond_expr =
       	fold_build2 (TRUTH_OR_EXPR, boolean_type_node,
-	  fold_build2 (LT_EXPR, boolean_type_node, seg_a_max, seg_b_min),
-	  fold_build2 (LT_EXPR, boolean_type_node, seg_b_max, seg_a_min));
+	  fold_build2 (LE_EXPR, boolean_type_node, seg_a_max, seg_b_min),
+	  fold_build2 (LE_EXPR, boolean_type_node, seg_b_max, seg_a_min));
 
       if (*cond_expr)
 	*cond_expr = fold_build2 (TRUTH_AND_EXPR, boolean_type_node,

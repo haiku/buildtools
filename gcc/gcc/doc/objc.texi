@@ -121,24 +121,8 @@ different naming convention, such as @code{class_get_super_class()}
 API).  Software using this API includes the file
 @file{objc/objc-api.h} where it is declared.
 
-The traditional API is deprecated but it is still supported in this
-release of the runtime; you can access it as usual by including
-@file{objc/objc-api.h}.
-
-If you are using the traditional API you are urged to upgrade your
-software to use the modern API because the traditional API requires
-access to private runtime internals to do anything serious with it;
-for this reason, there is no guarantee that future releases of the GNU
-Objective-C runtime library will be able to provide a fully compatible
-@file{objc/objc-api.h} as the private runtime internals change.  It is
-expected that the next release will hide a number of runtime internals
-making the traditional API nominally supported but fairly useless
-beyond very simple use cases.
-
-Finally, you can not include both @file{objc/objc-api.h} and
-@file{objc/runtime.h} at the same time.  The traditional and modern
-APIs unfortunately have some conflicting declarations (such as the one
-for @code{Method}) and can not be used at the same time.
+Starting with GCC 4.7.0, the traditional GNU runtime API is no longer
+available.
 
 @c =========================================================================
 @node Executing code before main
@@ -651,7 +635,8 @@ following class does this:
 
 + (void)initialize
 @{
-  class_ivar_set_gcinvisible (self, "weakPointer", YES);
+  if (self == objc_lookUpClass ("WeakPointer"))
+    class_ivar_set_gcinvisible (self, "weakPointer", YES);
 @}
 
 - initWithPointer:(const void*)p
@@ -1029,7 +1014,7 @@ If you want your own collection object to be usable with fast
 enumeration, you need to have it implement the method
 
 @smallexample
-- (unsigned long) countByEnumeratingWithState: (NSFastEnumerationState *)state 
+- (unsigned long) countByEnumeratingWithState: (NSFastEnumerationState *)state
                                       objects: (id *)objects
                                         count: (unsigned long)len;
 @end smallexample
@@ -1138,7 +1123,7 @@ the method
 + (BOOL) resolveInstanceMethod: (SEL)selector;
 @end smallexample
 
-in the case of an instance method, or 
+in the case of an instance method, or
 
 @smallexample
 + (BOOL) resolveClassMethod: (SEL)selector;

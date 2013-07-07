@@ -1,23 +1,22 @@
-/* test file for mpc_pow_si.
+/* tpow_si -- test file for mpc_pow_si.
 
-Copyright (C) INRIA, 2009, 2010
+Copyright (C) 2009, 2010, 2011 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
 #include <limits.h> /* for CHAR_BIT */
 #include "mpc-tests.h"
@@ -30,10 +29,8 @@ compare_mpc_pow (mpfr_prec_t pmax, int iter, unsigned long nbits)
   mpc_t x, y, z, t;
   long n;
   int i, inex_pow, inex_pow_si;
-  gmp_randstate_t state;
   mpc_rnd_t rnd;
 
-  gmp_randinit_default (state);
   mpc_init3 (y, sizeof (unsigned long) * CHAR_BIT, MPFR_PREC_MIN);
   for (p = MPFR_PREC_MIN; p <= pmax; p++)
     for (i = 0; i < iter; i++)
@@ -41,8 +38,8 @@ compare_mpc_pow (mpfr_prec_t pmax, int iter, unsigned long nbits)
         mpc_init2 (x, p);
         mpc_init2 (z, p);
         mpc_init2 (t, p);
-        mpc_urandom (x, state);
-        n = (signed long) gmp_urandomb_ui (state, nbits);
+        mpc_urandom (x, rands);
+        n = (signed long) gmp_urandomb_ui (rands, nbits);
         mpc_set_si (y, n, MPC_RNDNN);
         for (rnd = 0; rnd < 16; rnd ++)
           {
@@ -75,13 +72,14 @@ compare_mpc_pow (mpfr_prec_t pmax, int iter, unsigned long nbits)
         mpc_clear (t);
       }
   mpc_clear (y);
-  gmp_randclear (state);
 }
 
 int
 main (void)
 {
+  DECL_FUNC (CCS, f, mpc_pow_si);
   test_start ();
+  data_check (f, "pow_si.dat");
 
   compare_mpc_pow (100, 5, 19);
 

@@ -4,7 +4,7 @@ dnl  Process this file with autoconf to produce a configure script.
 define(GMP_COPYRIGHT,[[
 
 Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
-2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
@@ -27,7 +27,7 @@ AH_TOP(/*GMP_COPYRIGHT*/)
 
 AC_REVISION($Revision$)
 AC_PREREQ(2.59)
-AC_INIT(GNU MP, GMP_VERSION, gmp-bugs@gmplib.org, gmp)
+AC_INIT(GNU MP, GMP_VERSION, [gmp-bugs@gmplib.org, see http://gmplib.org/manual/Reporting-Bugs.html], gmp)
 AC_CONFIG_SRCDIR(gmp-impl.h)
 m4_pattern_forbid([^[ \t]*GMP_])
 m4_pattern_allow(GMP_LDFLAGS)
@@ -288,7 +288,15 @@ AH_VERBATIM([HAVE_HOST_CPU_1],
 #undef HAVE_HOST_CPU_pentiummmx
 #undef HAVE_HOST_CPU_pentiumpro
 #undef HAVE_HOST_CPU_pentium2
-#undef HAVE_HOST_CPU_pentium3])
+#undef HAVE_HOST_CPU_pentium3
+#undef HAVE_HOST_CPU_s390_z900
+#undef HAVE_HOST_CPU_s390_z990
+#undef HAVE_HOST_CPU_s390_z9
+#undef HAVE_HOST_CPU_s390_z10
+#undef HAVE_HOST_CPU_s390_z196
+
+/* Define to 1 iff we have a s390 with 64-bit registers.  */
+#undef HAVE_HOST_CPU_s390_zarch])
 
 
 # Table of compilers, options, and mpn paths.  This code has various related
@@ -422,7 +430,7 @@ case $host in
     AC_DEFINE(HAVE_HOST_CPU_FAMILY_alpha)
     case $host_cpu in
       alphaev5* | alphapca5*)
-      	path="alpha/ev5 alpha" ;;
+	path="alpha/ev5 alpha" ;;
       alphaev67 | alphaev68 | alphaev7*)
         path="alpha/ev67 alpha/ev6 alpha" ;;
       alphaev6)
@@ -656,6 +664,7 @@ case $host in
           # systems (GNU/Linux for instance), but lets assume they're ok.
           case $host in
             [*-*-hpux[1-9] | *-*-hpux[1-9].* | *-*-hpux10 | *-*-hpux10.*]) ;;
+	    [*-*-linux*])  abilist="1.0" ;; # due to linux permanent kernel bug
             *)    abilist="2.0w $abilist" ;;
           esac
 
@@ -862,7 +871,7 @@ case $host in
     abilist="32"
     cclist="gcc cc"
     cc_cflags="-O2"
-    gcc_cflags="$gcc_cflags -mpowerpc"
+    gcc_32_cflags="$gcc_cflags -mpowerpc"
     gcc_cflags_optlist="precomp subtype asm cpu"
     gcc_cflags_precomp="-no-cpp-precomp"
     gcc_cflags_subtype="-force_cpusubtype_ALL"	# for vmx on darwin
@@ -885,33 +894,28 @@ case $host in
         path="powerpc32" ;;
     esac
 
-    # gcc 2.7.2 knows -mcpu=403, 601, 603, 604.
-    # gcc 2.95 adds 401, 505, 602, 603e, ec603e, 604e, 620, 740, 750,
-    #   801, 821, 823, 860.
-    # gcc 3.0 adds 630, rs64a.
-    # gcc 3.1 adds 405, 7400, 7450.
-    # gcc 3.2 adds nothing.
-    # gcc 3.3 adds power3, power4, 8540.  power3 seems to be a synonym for 630.
-    # gcc pre-release 3.4 adds 405fp, 440, 440fp, 970.
-    #
-    # FIXME: The way 603e falls back to 603 for gcc 2.7.2 should be
-    # done for all the others too.  But what would be the correct
-    # arrangements?
-    #
     case $host_cpu in
       powerpc401)   gcc_cflags_cpu="-mcpu=401" ;;
-      powerpc403)   gcc_cflags_cpu="-mcpu=403" ;;
+      powerpc403)   gcc_cflags_cpu="-mcpu=403"
+		    xlc_cflags_arch="-qarch=403 -qarch=ppc" ;;
       powerpc405)   gcc_cflags_cpu="-mcpu=405" ;;
       powerpc505)   gcc_cflags_cpu="-mcpu=505" ;;
-      powerpc601)   gcc_cflags_cpu="-mcpu=601" ;;
-      powerpc602)   gcc_cflags_cpu="-mcpu=602" ;;
-      powerpc603)   gcc_cflags_cpu="-mcpu=603" ;;
-      powerpc603e)  gcc_cflags_cpu="-mcpu=603e -mcpu=603" ;;
-      powerpc604)   gcc_cflags_cpu="-mcpu=604" ;;
-      powerpc604e)  gcc_cflags_cpu="-mcpu=604e -mcpu=604" ;;
+      powerpc601)   gcc_cflags_cpu="-mcpu=601"
+		    xlc_cflags_arch="-qarch=601 -qarch=ppc" ;;
+      powerpc602)   gcc_cflags_cpu="-mcpu=602"
+		    xlc_cflags_arch="-qarch=602 -qarch=ppc" ;;
+      powerpc603)   gcc_cflags_cpu="-mcpu=603"
+		    xlc_cflags_arch="-qarch=603 -qarch=ppc" ;;
+      powerpc603e)  gcc_cflags_cpu="-mcpu=603e -mcpu=603"
+		    xlc_cflags_arch="-qarch=603 -qarch=ppc" ;;
+      powerpc604)   gcc_cflags_cpu="-mcpu=604"
+		    xlc_cflags_arch="-qarch=604 -qarch=ppc" ;;
+      powerpc604e)  gcc_cflags_cpu="-mcpu=604e -mcpu=604"
+		    xlc_cflags_arch="-qarch=604 -qarch=ppc" ;;
       powerpc620)   gcc_cflags_cpu="-mcpu=620" ;;
       powerpc630)   gcc_cflags_cpu="-mcpu=630"
-		    cpu_path="p3" ;;
+		    xlc_cflags_arch="-qarch=pwr3"
+		    cpu_path="p3 p3-p7" ;;
       powerpc740)   gcc_cflags_cpu="-mcpu=740" ;;
       powerpc7400 | powerpc7410)
 		    gcc_cflags_asm="-Wa,-maltivec"
@@ -925,76 +929,71 @@ case $host in
       powerpc823)   gcc_cflags_cpu="-mcpu=823" ;;
       powerpc860)   gcc_cflags_cpu="-mcpu=860" ;;
       powerpc970)   gcc_cflags_cpu="-mtune=970"
+		    xlc_cflags_arch="-qarch=970 -qarch=pwr3"
 		    vmx_path="powerpc64/vmx"
-		    cpu_path="p4" ;;
+		    cpu_path="p4 p3-p7" ;;
       power4)	    gcc_cflags_cpu="-mtune=power4"
-		    cpu_path="p4" ;;
+		    xlc_cflags_arch="-qarch=pwr4"
+		    cpu_path="p4 p3-p7" ;;
       power5)	    gcc_cflags_cpu="-mtune=power5 -mtune=power4"
-		    cpu_path="p5 p4" ;;
+		    xlc_cflags_arch="-qarch=pwr5"
+		    cpu_path="p5 p4 p3-p7" ;;
       power6)	    gcc_cflags_cpu="-mtune=power6"
-		    cpu_path="p6" ;;
+		    xlc_cflags_arch="-qarch=pwr6"
+		    cpu_path="p6 p3-p7" ;;
+      power7)	    gcc_cflags_cpu="-mtune=power7 -mtune=power5"
+		    xlc_cflags_arch="-qarch=pwr7 -qarch=pwr5"
+		    cpu_path="p7 p5 p4 p3-p7" ;;
     esac
 
     case $host in
       *-*-aix*)
-        cclist="gcc xlc cc"
-        xlc_cflags="-O2 -qmaxmem=20000"
-        xlc_cflags_optlist="arch"
-
-        # xlc (what version?) knows -qarch=ppc, ppcgr, 601, 602, 603, 604,
-        # 403, rs64a
-        # -qarch=ppc is needed, so ensure everything falls back to that.
-        # FIXME: Perhaps newer versions know more flavours.
-        #
-	case $host_cpu in
-	  powerpc403)   xlc_cflags_arch="-qarch=403 -qarch=ppc" ;;
-	  powerpc601)   xlc_cflags_arch="-qarch=601 -qarch=ppc" ;;
-	  powerpc602)   xlc_cflags_arch="-qarch=602 -qarch=ppc" ;;
-	  powerpc603)   xlc_cflags_arch="-qarch=603 -qarch=ppc" ;;
-	  powerpc603e)  xlc_cflags_arch="-qarch=603 -qarch=ppc" ;;
-	  powerpc604)   xlc_cflags_arch="-qarch=604 -qarch=ppc" ;;
-	  powerpc604e)  xlc_cflags_arch="-qarch=604 -qarch=ppc" ;;
-	  *)            xlc_cflags_arch="-qarch=ppc" ;;
-        esac
-        ;;
+	cclist="gcc xlc cc"
+	gcc_32_cflags_maybe="-maix32"
+	xlc_cflags="-O2 -qmaxmem=20000"
+	xlc_cflags_optlist="arch"
+	xlc_32_cflags_maybe="-q32"
+	ar_32_flags="-X32"
+	nm_32_flags="-X32"
     esac
 
     case $host in
       POWERPC64_PATTERN)
-        case $host in
-          *-*-aix*)
-            # On AIX a true 64-bit ABI is available.
-            # Need -Wc to pass object type flags through to the linker.
-            abilist="aix64 $abilist"
-            cclist_aix64="gcc xlc"
-            gcc_aix64_cflags="-O2 -maix64 -mpowerpc64"
-            gcc_aix64_cflags_optlist="cpu"
+	case $host in
+	  *-*-aix*)
+	    # On AIX a true 64-bit ABI is available.
+	    # Need -Wc to pass object type flags through to the linker.
+	    abilist="aix64 $abilist"
+	    cclist_aix64="gcc xlc"
+	    gcc_aix64_cflags="-O2 -maix64 -mpowerpc64"
+	    gcc_aix64_cflags_optlist="cpu"
 	    gcc_aix64_ldflags="-Wc,-maix64"
-            xlc_aix64_cflags="-O2 -q64 -qtune=pwr3 -qmaxmem=20000"
+	    xlc_aix64_cflags="-O2 -q64 -qmaxmem=20000"
+	    xlc_aix64_cflags_optlist="arch"
 	    xlc_aix64_ldflags="-Wc,-q64"
-            # Must indicate object type to ar and nm
+	    # Must indicate object type to ar and nm
 	    ar_aix64_flags="-X64"
 	    nm_aix64_flags="-X64"
 	    path_aix64=""
 	    for i in $cpu_path; do path_aix64="${path_aix64}powerpc64/mode64/$i "; done
-            path_aix64="${path_aix64}powerpc64/mode64 $vmx_path powerpc64"
-            # grab this object, though it's not a true cycle counter routine
-            SPEED_CYCLECOUNTER_OBJ_aix64=powerpc64.lo
-            cyclecounter_size_aix64=0
-            ;;
-          *-*-darwin*)
-            # On Darwin we can use 64-bit instructions with a longlong limb,
-            # but the chip still in 32-bit mode.
-            # In theory this can be used on any OS which knows how to save
-            # 64-bit registers in a context switch.
-            #
-            # Note that we must use -mpowerpc64 with gcc, since the
-            # longlong.h macros expect limb operands in a single 64-bit
-            # register, not two 32-bit registers as would be given for a
-            # long long without -mpowerpc64.  In theory we could detect and
-            # accommodate both styles, but the proper 64-bit registers will
-            # be fastest and are what we really want to use.
-            #
+	    path_aix64="${path_aix64}powerpc64/mode64 $vmx_path powerpc64"
+	    # grab this object, though it's not a true cycle counter routine
+	    SPEED_CYCLECOUNTER_OBJ_aix64=powerpc64.lo
+	    cyclecounter_size_aix64=0
+	    ;;
+	  *-*-darwin*)
+	    # On Darwin we can use 64-bit instructions with a longlong limb,
+	    # but the chip still in 32-bit mode.
+	    # In theory this can be used on any OS which knows how to save
+	    # 64-bit registers in a context switch.
+	    #
+	    # Note that we must use -mpowerpc64 with gcc, since the
+	    # longlong.h macros expect limb operands in a single 64-bit
+	    # register, not two 32-bit registers as would be given for a
+	    # long long without -mpowerpc64.  In theory we could detect and
+	    # accommodate both styles, but the proper 64-bit registers will
+	    # be fastest and are what we really want to use.
+	    #
 	    # One would think -mpowerpc64 would set the assembler in the right
 	    # mode to handle 64-bit instructions.  But for that, also
 	    # -force_cpusubtype_ALL is needed.
@@ -1003,8 +1002,10 @@ case $host in
 	    # incompatible with a shared library.
 	    #
 	    abilist="mode64 mode32 $abilist"
+	    gcc_32_cflags_maybe="-m32"
 	    gcc_cflags_opt="-O3 -O2 -O1"	# will this become used?
 	    cclist_mode32="gcc"
+	    gcc_mode32_cflags_maybe="-m32"
 	    gcc_mode32_cflags="-mpowerpc64"
 	    gcc_mode32_cflags_optlist="subtype cpu opt"
 	    gcc_mode32_cflags_subtype="-force_cpusubtype_ALL"
@@ -1018,8 +1019,8 @@ case $host in
 	    path_mode64=""
 	    for i in $cpu_path; do path_mode64="${path_mode64}powerpc64/mode64/$i "; done
 	    path_mode64="${path_mode64}powerpc64/mode64 $vmx_path powerpc64"
-            SPEED_CYCLECOUNTER_OBJ_mode64=powerpc64.lo
-            cyclecounter_size_mode64=0
+	    SPEED_CYCLECOUNTER_OBJ_mode64=powerpc64.lo
+	    cyclecounter_size_mode64=0
 	    any_mode64_testlist="sizeof-long-8"
 	    ;;
 	  *-*-linux* | *-*-*bsd*)
@@ -1028,17 +1029,19 @@ case $host in
 	    # others require -m64, hence the use of cflags_maybe.  The
 	    # sizeof-long-8 test checks the mode is right (for the no option
 	    # case).
-            #
-            # -mpowerpc64 is not used, since it should be the default in
-            # 64-bit mode.  (We need its effect for the various longlong.h
-            # asm macros to be right of course.)
-            #
-            # gcc64 was an early port of gcc to 64-bit mode, but should be
-            # obsolete before too long.  We prefer plain gcc when it knows
-            # 64-bits.
+	    #
+	    # -mpowerpc64 is not used, since it should be the default in
+	    # 64-bit mode.  (We need its effect for the various longlong.h
+	    # asm macros to be right of course.)
+	    #
+	    # gcc64 was an early port of gcc to 64-bit mode, but should be
+	    # obsolete before too long.  We prefer plain gcc when it knows
+	    # 64-bits.
 	    #
 	    abilist="mode64 mode32 $abilist"
+	    gcc_32_cflags_maybe="-m32"
 	    cclist_mode32="gcc"
+	    gcc_mode32_cflags_maybe="-m32"
 	    gcc_mode32_cflags="-mpowerpc64"
 	    gcc_mode32_cflags_optlist="cpu opt"
 	    gcc_mode32_cflags_opt="-O3 -O2 -O1"
@@ -1051,17 +1054,17 @@ case $host in
 	    path_mode64=""
 	    for i in $cpu_path; do path_mode64="${path_mode64}powerpc64/mode64/$i "; done
 	    path_mode64="${path_mode64}powerpc64/mode64 $vmx_path powerpc64"
-            SPEED_CYCLECOUNTER_OBJ_mode64=powerpc64.lo
-            cyclecounter_size_mode64=0
+	    SPEED_CYCLECOUNTER_OBJ_mode64=powerpc64.lo
+	    cyclecounter_size_mode64=0
 	    any_mode64_testlist="sizeof-long-8"
 	    ;;
-        esac
-        ;;
+	esac
+	;;
     esac
     ;;
 
 
-  # POWER
+  # POWER 32-bit
   [power-*-* | power[12]-*-* | power2sc-*-*])
     AC_DEFINE(HAVE_HOST_CPU_FAMILY_power)
     HAVE_HOST_CPU_FAMILY_power=1
@@ -1095,16 +1098,80 @@ case $host in
     ;;
 
 
-  # IBM s/370 and similar
-  [s3[6-9]0*-*-*])
+  # IBM System/390 and z/Architecture
+  S390_PATTERN | S390X_PATTERN)
+    abilist="32"
     gcc_cflags="$gcc_cflags $fomit_frame_pointer"
-    path="s390"
+    gcc_cflags_optlist="arch"
+    path="s390_32"
     extra_functions="udiv_w_sdiv"
+    gcc_32_cflags_maybe="-m31"
+
+    case $host_cpu in
+      s390)
+	;;
+      z900 | z900esa)
+        cpu="z900"
+        gccarch="$cpu"
+	path="s390_32/esame/$cpu s390_32/esame s390_32"
+	gcc_cflags_arch="-march=$gccarch"
+	AC_DEFINE_UNQUOTED(HAVE_HOST_CPU_s390_$cpu)
+	AC_DEFINE(HAVE_HOST_CPU_s390_zarch)
+	extra_functions=""
+        ;;
+      z990 | z990esa)
+        cpu="z990"
+        gccarch="$cpu"
+	path="s390_32/esame/$cpu s390_32/esame s390_32"
+	gcc_cflags_arch="-march=$gccarch"
+	AC_DEFINE_UNQUOTED(HAVE_HOST_CPU_s390_$cpu)
+	AC_DEFINE(HAVE_HOST_CPU_s390_zarch)
+	extra_functions=""
+        ;;
+      z9 | z9esa)
+        cpu="z9"
+	gccarch="z9-109"
+	path="s390_32/esame/$cpu s390_32/esame s390_32"
+	gcc_cflags_arch="-march=$gccarch"
+	AC_DEFINE_UNQUOTED(HAVE_HOST_CPU_s390_$cpu)
+	AC_DEFINE(HAVE_HOST_CPU_s390_zarch)
+	extra_functions=""
+        ;;
+      z10 | z10esa)
+        cpu="z10"
+	gccarch="z10"
+	path="s390_32/esame/$cpu s390_32/esame s390_32"
+	gcc_cflags_arch="-march=$gccarch"
+	AC_DEFINE_UNQUOTED(HAVE_HOST_CPU_s390_$cpu)
+	AC_DEFINE(HAVE_HOST_CPU_s390_zarch)
+	extra_functions=""
+        ;;
+      z196 | z196esa)
+        cpu="z196"
+	gccarch="z196"
+	path="s390_32/esame/$cpu s390_32/esame s390_32"
+	gcc_cflags_arch="-march=$gccarch"
+	AC_DEFINE_UNQUOTED(HAVE_HOST_CPU_s390_$cpu)
+	AC_DEFINE(HAVE_HOST_CPU_s390_zarch)
+	extra_functions=""
+        ;;
+      esac
+
+    case $host in
+      S390X_PATTERN)
+	abilist="64 32"
+	cclist_64="gcc"
+	gcc_64_cflags_optlist="arch"
+	gcc_64_cflags="$gcc_cflags -m64"
+	path_64="s390_64/$host_cpu s390_64"
+	extra_functions=""
+	;;
+      esac
     ;;
 
 
   sh-*-*)   path="sh" ;;
-  sh2-*-*)  path="sh/sh2 sh" ;;
+  [sh[2-4]-*-*])  path="sh/sh2 sh" ;;
 
 
   *sparc*-*-*)
@@ -1243,8 +1310,10 @@ case $host in
 	case $host_cpu in
 	  ultrasparc | ultrasparc2 | ultrasparc2i)
 	    path_64="sparc64/ultrasparc12 sparc64" ;;
-	  ultrasparc3)
-	    path_64="sparc64/ultrasparc34 sparc64/ultrasparc12 sparc64" ;;
+	  [ultrasparc[34]])
+	    path_64="sparc64/ultrasparc34 sparc64/ultrasparc1234 sparc64" ;;
+	  [ultrasparct[1234]])
+	    path_64="sparc64" ;;
 	  *)
 	    path_64="sparc64"
 	esac
@@ -1369,116 +1438,157 @@ case $host in
     gcc_cflags_optlist="cpu arch"
     case $host_cpu in
       i386*)
-        gcc_cflags_cpu="-mtune=i386 -mcpu=i386 -m386"
-        gcc_cflags_arch="-march=i386"
-        ;;
+	gcc_cflags_cpu="-mtune=i386 -mcpu=i386 -m386"
+	gcc_cflags_arch="-march=i386"
+	path="x86"
+	;;
       i486*)
-        gcc_cflags_cpu="-mtune=i486 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=i486"
-        ;;
+	gcc_cflags_cpu="-mtune=i486 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=i486"
+	path="x86/i486 x86"
+	;;
       i586 | pentium)
-        gcc_cflags_cpu="-mtune=pentium -mcpu=pentium -m486"
-        gcc_cflags_arch="-march=pentium"
-        ;;
+	gcc_cflags_cpu="-mtune=pentium -mcpu=pentium -m486"
+	gcc_cflags_arch="-march=pentium"
+	path="x86/pentium x86"
+	;;
       pentiummmx)
-        gcc_cflags_cpu="-mtune=pentium-mmx -mcpu=pentium-mmx -mcpu=pentium -m486"
-        gcc_cflags_arch="-march=pentium-mmx -march=pentium"
-        ;;
+	gcc_cflags_cpu="-mtune=pentium-mmx -mcpu=pentium-mmx -mcpu=pentium -m486"
+	gcc_cflags_arch="-march=pentium-mmx -march=pentium"
+	path="x86/pentium/mmx x86/pentium x86"
+	;;
       i686 | pentiumpro)
-        gcc_cflags_cpu="-mtune=pentiumpro -mcpu=pentiumpro -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=pentiumpro -march=pentium"
-        ;;
+	gcc_cflags_cpu="-mtune=pentiumpro -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=pentiumpro -march=pentium"
+	path="x86/p6 x86"
+	;;
       pentium2)
-        gcc_cflags_cpu="-mtune=pentium2 -mcpu=pentium2 -mcpu=pentiumpro -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=pentium2 -march=pentiumpro -march=pentium"
-        ;;
-      pentium3 | pentiumm)
-        gcc_cflags_cpu="-mtune=pentium3 -mcpu=pentium3 -mcpu=pentiumpro -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=pentium3 -march=pentiumpro -march=pentium"
-        ;;
+	gcc_cflags_cpu="-mtune=pentium2 -mcpu=pentium2 -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=pentium2 -march=pentiumpro -march=pentium"
+	path="x86/p6/mmx x86/p6 x86"
+	;;
+      pentium3)
+	gcc_cflags_cpu="-mtune=pentium3 -mcpu=pentium3 -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=pentium3 -march=pentiumpro -march=pentium"
+	path="x86/p6/p3mmx x86/p6/mmx x86/p6 x86"
+	;;
+      pentiumm)
+	gcc_cflags_cpu="-mtune=pentium3 -mcpu=pentium3 -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=pentium3 -march=pentiumpro -march=pentium"
+	path="x86/p6/sse2 x86/p6/p3mmx x86/p6/mmx x86/p6 x86"
+	;;
       k6)
-        gcc_cflags_cpu="-mtune=k6 -mcpu=k6 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=k6"
-        ;;
+	gcc_cflags_cpu="-mtune=k6 -mcpu=k6 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=k6"
+	path="x86/k6/mmx x86/k6 x86"
+	;;
       k62)
-        gcc_cflags_cpu="-mtune=k6-2 -mcpu=k6-2 -mcpu=k6 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=k6-2 -march=k6"
-        ;;
+	gcc_cflags_cpu="-mtune=k6-2 -mcpu=k6-2 -mcpu=k6 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=k6-2 -march=k6"
+	path="x86/k6/k62mmx x86/k6/mmx x86/k6 x86"
+	;;
       k63)
-        gcc_cflags_cpu="-mtune=k6-3 -mcpu=k6-3 -mcpu=k6 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=k6-3 -march=k6"
-        ;;
+	gcc_cflags_cpu="-mtune=k6-3 -mcpu=k6-3 -mcpu=k6 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=k6-3 -march=k6"
+	path="x86/k6/k62mmx x86/k6/mmx x86/k6 x86"
+	;;
       geode)
-        gcc_cflags_cpu="-mtune=k6-3 -mcpu=k6-3 -mcpu=k6 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=k6-3 -march=k6"
-        ;;
+	gcc_cflags_cpu="-mtune=k6-3 -mcpu=k6-3 -mcpu=k6 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=k6-3 -march=k6"
+	path="x86/geode x86/k6/k62mmx x86/k6/mmx x86/k6 x86"
+	;;
       athlon)
-        # Athlon instruction costs are close to P6 (3 cycle load latency,
-        # 4-6 cycle mul, 40 cycle div, pairable adc, etc) so if gcc doesn't
-        # know athlon (eg. 2.95.2 doesn't) then fall back on pentiumpro.
-        gcc_cflags_cpu="-mtune=athlon -mcpu=athlon -mcpu=pentiumpro -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=athlon -march=pentiumpro -march=pentium"
-        ;;
+	# Athlon instruction costs are close to P6 (3 cycle load latency,
+	# 4-6 cycle mul, 40 cycle div, pairable adc, etc) so if gcc doesn't
+	# know athlon (eg. 2.95.2 doesn't) then fall back on pentiumpro.
+	gcc_cflags_cpu="-mtune=athlon -mcpu=athlon -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=athlon -march=pentiumpro -march=pentium"
+	path="x86/k7/mmx x86/k7 x86"
+	;;
       i786 | pentium4)
-        # pentiumpro is the primary fallback when gcc doesn't know pentium4.
-        # This gets us cmov to eliminate branches.  Maybe "athlon" would be
-        # a possibility on gcc 3.0.
-        #
-        gcc_cflags_cpu="-mtune=pentium4 -mcpu=pentium4 -mcpu=pentiumpro -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=pentium4 -march=pentium4~-mno-sse2 -march=pentiumpro -march=pentium"
-        gcc_64_cflags_cpu="-mtune=nocona"
-        ;;
+	# pentiumpro is the primary fallback when gcc doesn't know pentium4.
+	# This gets us cmov to eliminate branches.  Maybe "athlon" would be
+	# a possibility on gcc 3.0.
+	#
+	gcc_cflags_cpu="-mtune=pentium4 -mcpu=pentium4 -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=pentium4 -march=pentium4~-mno-sse2 -march=pentiumpro -march=pentium"
+	gcc_64_cflags_cpu="-mtune=nocona"
+	path="x86/pentium4/sse2 x86/pentium4/mmx x86/pentium4 x86"
+	path_64="x86_64/pentium4 x86_64"
+	;;
       viac32)
-        # Not sure of the best fallbacks here for -mcpu.
-        # c3-2 has sse and mmx, so pentium3 is good for -march.
-        gcc_cflags_cpu="-mtune=c3-2 -mcpu=c3-2 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=c3-2 -march=pentium3 -march=pentiumpro -march=pentium"
-        ;;
+	# Not sure of the best fallbacks here for -mcpu.
+	# c3-2 has sse and mmx, so pentium3 is good for -march.
+	gcc_cflags_cpu="-mtune=c3-2 -mcpu=c3-2 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=c3-2 -march=pentium3 -march=pentiumpro -march=pentium"
+	path="x86/p6/p3mmx x86/p6/mmx x86/p6 x86"
+	;;
       viac3*)
-        # Not sure of the best fallbacks here.
-        gcc_cflags_cpu="-mtune=c3 -mcpu=c3 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=c3 -march=pentium-mmx -march=pentium"
-        ;;
-      athlon64 | x86_64)
-        gcc_cflags_cpu="-mtune=k8 -mcpu=athlon -mcpu=pentiumpro -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=k8 -march=k8~-mno-sse2 -march=athlon -march=pentiumpro -march=pentium"
-        ;;
-      core2 | corei)
-        gcc_cflags_cpu="-mtune=core2 -mtune=k8"
-        gcc_cflags_arch="-march=core2 -march=core2~-mno-sse2 -march=k8 -march=k8~-mno-sse2"
-        ;;
+	# Not sure of the best fallbacks here.
+	gcc_cflags_cpu="-mtune=c3 -mcpu=c3 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=c3 -march=pentium-mmx -march=pentium"
+	path="x86/pentium/mmx x86/pentium x86"
+	;;
+      athlon64 | k8 | x86_64)
+	gcc_cflags_cpu="-mtune=k8 -mcpu=athlon -mcpu=pentiumpro -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=k8 -march=k8~-mno-sse2 -march=athlon -march=pentiumpro -march=pentium"
+	path="x86/k8 x86/k7/mmx x86/k7 x86"
+	path_64="x86_64/k8 x86_64"
+	;;
+      k10)
+	gcc_cflags_cpu="-mtune=amdfam10 -mtune=k8"
+	gcc_cflags_arch="-march=amdfam10 -march=k8 -march=k8~-mno-sse2"
+	path="x86/k10 x86/k8 x86/k7/mmx x86/k7 x86"
+	path_64="x86_64/k10 x86_64/k8 x86_64"
+	;;
+      bobcat)
+	gcc_cflags_cpu="-mtune=btver1 -mtune=amdfam10 -mtune=k8"
+	gcc_cflags_arch="-march=btver1 -march=amdfam10 -march=k8 -march=k8~-mno-sse2"
+	path="x86/bobcat x86/k7/mmx x86/k7 x86"
+	path_64="x86_64/bobcat x86_64/k10 x86_64/k8 x86_64"
+	;;
+      bulldozer | bd1)
+	gcc_cflags_cpu="-mtune=bdver1 -mtune=amdfam10 -mtune=k8"
+	gcc_cflags_arch="-march=bdver1 -march=amdfam10 -march=k8 -march=k8~-mno-sse2"
+	path="x86/bd1 x86/k7/mmx x86/k7 x86"
+	path_64="x86_64/bd1 x86_64"
+	;;
+      core2)
+	gcc_cflags_cpu="-mtune=core2 -mtune=k8"
+	gcc_cflags_arch="-march=core2 -march=core2~-mno-sse2 -march=k8 -march=k8~-mno-sse2"
+	path="x86/core2 x86/p6/sse2 x86/p6/p3mmx x86/p6/mmx x86/p6 x86"
+	path_64="x86_64/core2 x86_64"
+       ;;
+      corei | coreinhm | coreiwsm)
+	gcc_cflags_cpu="-mtune=corei7 -mtune=core2 -mtune=k8"
+	gcc_cflags_arch="-march=corei7 -march=core2 -march=core2~-mno-sse2 -march=k8 -march=k8~-mno-sse2"
+	path="x86/coreinhm x86/p6/sse2 x86/p6/p3mmx x86/p6/mmx x86/p6 x86"
+	path_64="x86_64/coreinhm x86_64/core2 x86_64"
+	;;
+      coreisbr)
+	gcc_cflags_cpu="-mtune=corei7 -mtune=core2 -mtune=k8"
+	gcc_cflags_arch="-march=corei7 -march=core2 -march=core2~-mno-sse2 -march=k8 -march=k8~-mno-sse2"
+	path="x86/coreisbr x86/p6/sse2 x86/p6/p3mmx x86/p6/mmx x86/p6 x86"
+	path_64="x86_64/coreisbr x86_64/coreinhm x86_64/core2 x86_64"
+	;;
       atom)
-        gcc_cflags_cpu="-mtune=atom -mtune=pentium3"
-        gcc_cflags_arch="-march=atom -march=pentium3"
-        ;;
+	gcc_cflags_cpu="-mtune=atom -mtune=pentium3"
+	gcc_cflags_arch="-march=atom -march=pentium3"
+	path="x86/atom/sse2 x86/atom/mmx x86/atom x86"
+	path_64="x86_64/atom x86_64"
+	;;
+      nano)
+	gcc_cflags_cpu="-mtune=nano"
+	gcc_cflags_arch="-march=nano"
+	path="x86/nano x86"
+	path_64="x86_64/nano x86_64"
+	;;
       *)
-        gcc_cflags_cpu="-mtune=i486 -mcpu=i486 -m486"
-        gcc_cflags_arch="-march=i486"
-        ;;
-    esac
-
-    case $host_cpu in
-      i386*)                path="x86" ;;
-      i486*)                path="x86/i486 x86" ;;
-      i586 | pentium)       path="x86/pentium x86" ;;
-      pentiummmx)           path="x86/pentium/mmx x86/pentium x86" ;;
-      i686 | pentiumpro)    path="x86/p6 x86" ;;
-      pentium2)             path="x86/p6/mmx x86/p6 x86" ;;
-      pentium3)             path="x86/p6/p3mmx x86/p6/mmx x86/p6 x86";;
-      pentiumm | core2 | corei)
-                            path="x86/p6/sse2 x86/p6/p3mmx x86/p6/mmx x86/p6 x86";;
-      [k6[23]])             path="x86/k6/k62mmx x86/k6/mmx x86/k6 x86" ;;
-      k6)                   path="x86/k6/mmx x86/k6 x86" ;;
-      geode)                path="x86/k6/k62mmx x86/k6/mmx x86/k6 x86" ;;
-      # we don't have any specific 32-bit code for athlon64/opteron, the
-      # athlon code should be reasonable
-      athlon | athlon64)    path="x86/k7/mmx x86/k7 x86" ;;
-      i786 | pentium4)      path="x86/pentium4/sse2 x86/pentium4/mmx x86/pentium4 x86" ;;
-      # VIA/Centaur processors, sold as CyrixIII and C3.
-      viac32)               path="x86/p6/p3mmx x86/p6/mmx x86/p6 x86";;
-      viac3*)               path="x86/pentium/mmx x86/pentium x86";;
-      atom)                 path="x86/atom x86" ;;
-      *)                    path="x86" ;;
+	gcc_cflags_cpu="-mtune=i486 -mcpu=i486 -m486"
+	gcc_cflags_arch="-march=i486"
+	path="x86"
+	path_64="x86_64"
+	;;
     esac
 
     case $host in
@@ -1490,30 +1600,6 @@ case $host in
 	SPEED_CYCLECOUNTER_OBJ_64=x86_64.lo
 	cyclecounter_size_64=2
 	abilist="64 32"
-	path_64="x86_64"
-
-	case $host_cpu in
-	  x86_64)
-	    ;;
-	  athlon64)
-	    path_64="x86_64/k8 $path_64"
-	    ;;
-	  pentium4)
-	    path_64="x86_64/pentium4 $path_64"
-	    ;;
-	  core2)
-	    path_64="x86_64/core2 $path_64"
-	    ;;
-	  corei)
-	    path_64="x86_64/corei x86_64/core2 $path_64"
-	    ;;
-	  atom)
-	    path_64="x86_64/atom $path_64"
-	    ;;
-	  nano)
-	    path_64="x86_64/nano $path_64"
-	    ;;
-	esac
 
 	case $host in
 	  *-*-solaris*)
@@ -1521,7 +1607,7 @@ case $host in
 	    cclist_64="$cclist_64 cc"
 	    cc_64_cflags="-xO3 -m64"
 	    ;;
-	  *-*-mingw*)
+	  *-*-mingw* | *-*-cygwin)
 	    limb_64=longlong
 	    path_64=""	# Windows amd64 calling conventions are *different*
 	    # Silence many pedantic warnings for w64.  FIXME.
@@ -1826,7 +1912,7 @@ case $host in
 	gcc_64_cflags=""
 	extra_functions_64="$extra_functions_64 fat fat_entry"
 	path_64="x86_64/fat x86_64"
-	fat_path="x86_64 x86_64/fat x86_64/pentium4 x86_64/core2 x86_64/corei x86_64/atom x86_64/nano"
+	fat_path="x86_64 x86_64/fat x86_64/pentium4 x86_64/core2 x86_64/coreinhm x86_64/coreisbr x86_64/atom x86_64/nano"
       fi
 
       fat_functions="add_n addmul_1 copyd copyi
@@ -2651,14 +2737,14 @@ if test -n "$fat_path"; then
 #endif
 DECL_$tmp_fbase (__MPN(${tmp_fbase}_init));" >>fat.h
     # encourage various macros to use fat functions
-    AC_DEFINE_UNQUOTED(HAVE_NATIVE_$tmp_fbase)
+    AC_DEFINE_UNQUOTED(HAVE_NATIVE_mpn_$tmp_fbase)
   done
 
   echo "" >>fat.h
   echo "/* variable thresholds */" >>fat.h
   for tmp_tn in $fat_thresholds; do
     echo "#undef  $tmp_tn" >>fat.h
-    echo "#define $tmp_tn  CPUVEC_THRESHOLD (`echo $tmp_tn | tr A-Z a-z`)" >>fat.h
+    echo "#define $tmp_tn  CPUVEC_THRESHOLD (`echo $tmp_tn | tr [A-Z] [a-z]`)" >>fat.h
   done
 
   echo "
@@ -2674,7 +2760,7 @@ DECL_$tmp_fbase (__MPN(${tmp_fbase}_init));" >>fat.h
     echo "    p->$tmp_fbase = vec.$tmp_fbase; \\" >>fat.h
   done
   for tmp_tn in $fat_thresholds; do
-    tmp_field_name=`echo $tmp_tn | tr A-Z a-z`
+    tmp_field_name=`echo $tmp_tn | tr [[A-Z]] [[a-z]]`
     echo "    p->$tmp_field_name = vec.$tmp_field_name; \\" >>fat.h
   done
   echo "  } while (0)" >>fat.h
@@ -2688,7 +2774,7 @@ DECL_$tmp_fbase (__MPN(${tmp_fbase}_init));" >>fat.h
     echo "    ASSERT (vec.$tmp_fbase != NULL); \\" >>fat.h
   done
   for tmp_tn in $fat_thresholds; do
-    tmp_field_name=`echo $tmp_tn | tr A-Z a-z`
+    tmp_field_name=`echo $tmp_tn | tr [[A-Z]] [[a-z]]`
     echo "    ASSERT (vec.$tmp_field_name != 0); \\" >>fat.h
   done
   echo "  } while (0)" >>fat.h
@@ -2698,7 +2784,7 @@ DECL_$tmp_fbase (__MPN(${tmp_fbase}_init));" >>fat.h
 #define ITERATE_FAT_THRESHOLDS() \\
   do { \\" >>fat.h
   for tmp_tn in $fat_thresholds; do
-    tmp_field_name=`echo $tmp_tn | tr A-Z a-z`
+    tmp_field_name=`echo $tmp_tn | tr [[A-Z]] [[a-z]]`
     echo "    ITERATE ($tmp_tn, $tmp_field_name); \\" >>fat.h
   done
   echo "  } while (0)" >>fat.h
@@ -2734,7 +2820,7 @@ DECL_$tmp_fbase (__MPN(${tmp_fbase}_init));" >>fat.h
         if test -n "$tmp_thresh"; then
           THRESH_ASM_SETUP=["${THRESH_ASM_SETUP}define($tmp_tn,$tmp_thresh)
 "]
-          CPUVEC_SETUP="$CPUVEC_SETUP    decided_cpuvec.`echo $tmp_tn | tr A-Z a-z` = $tmp_thresh; \\
+          CPUVEC_SETUP="$CPUVEC_SETUP    decided_cpuvec.`echo $tmp_tn | tr [[A-Z]] [[a-z]]` = $tmp_thresh; \\
 "
           eval tmp_limit=\$${tmp_tn}_LIMIT
           if test -z "$tmp_limit"; then
@@ -3063,8 +3149,11 @@ AH_VERBATIM([HAVE_NATIVE],
 if test $found_asm = yes; then
   GMP_PROG_M4
   GMP_M4_M4WRAP_SPURIOUS
-else
-  M4=m4-not-needed
+# else
+# It's unclear why this m4-not-needed stuff was ever done.
+#  if test -z "$M4" ; then
+#    M4=m4-not-needed
+#  fi
 fi
 
 # Only do the GMP_ASM checks if there's a .S or .asm wanting them.

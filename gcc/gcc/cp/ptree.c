@@ -99,6 +99,15 @@ cxx_print_type (FILE *file, tree node, int indent)
       print_node (file, "expr", DECLTYPE_TYPE_EXPR (node), indent + 4);
       return;
 
+    case TYPENAME_TYPE:
+      print_node (file, "fullname", TYPENAME_TYPE_FULLNAME (node),
+		  indent + 4);
+      return;
+
+    case TYPE_PACK_EXPANSION:
+      print_node (file, "args", PACK_EXPANSION_EXTRA_ARGS (node), indent + 4);
+      return;
+
     default:
       return;
     }
@@ -175,12 +184,12 @@ cxx_print_identifier (FILE *file, tree node, int indent)
   if (indent == 0)
     fprintf (file, " ");
   else
-    indent_to (file, indent);
+    indent_to (file, indent + 4);
   cxx_print_binding (file, IDENTIFIER_NAMESPACE_BINDINGS (node), "bindings");
   if (indent == 0)
     fprintf (file, " ");
   else
-    indent_to (file, indent);
+    indent_to (file, indent + 4);
   cxx_print_binding (file, IDENTIFIER_BINDING (node), "local bindings");
   print_node (file, "label", IDENTIFIER_LABEL_VALUE (node), indent + 4);
   print_node (file, "template", IDENTIFIER_TEMPLATE (node), indent + 4);
@@ -215,6 +224,16 @@ cxx_print_xnode (FILE *file, tree node, int indent)
 	  indent_to (file, indent + 3);
 	  fprintf (file, "pending_template");
 	}
+      break;
+    case ARGUMENT_PACK_SELECT:
+      print_node (file, "pack", ARGUMENT_PACK_SELECT_FROM_PACK (node),
+		  indent+4);
+      indent_to (file, indent + 3);
+      fprintf (file, "index %d", ARGUMENT_PACK_SELECT_INDEX (node));
+      break;
+    case DEFERRED_NOEXCEPT:
+      print_node (file, "pattern", DEFERRED_NOEXCEPT_PATTERN (node), indent+4);
+      print_node (file, "args", DEFERRED_NOEXCEPT_ARGS (node), indent+4);
       break;
     default:
       break;

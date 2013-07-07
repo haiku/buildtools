@@ -1,7 +1,7 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using a Unix style C library and tools.
    Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-   2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+   2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,8 +18,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
-
-#define TARGET_VERSION fprintf (stderr, " (x86 Cygwin)");
 
 #define EXTRA_OS_CPP_BUILTINS()  /* Nothing.  */
 
@@ -128,6 +126,8 @@ along with GCC; see the file COPYING3.  If not see
    and the -pthread flag is not recognized.  */
 #undef GOMP_SELF_SPECS
 #define GOMP_SELF_SPECS ""
+#undef GTM_SELF_SPECS
+#define GTM_SELF_SPECS ""
 
 /* This matches SHLIB_SONAME and SHLIB_SOVERSION in t-cygwin. */
 #if DWARF2_UNWIND_INFO
@@ -138,5 +138,5 @@ along with GCC; see the file COPYING3.  If not see
 #define LIBGCC_SONAME "cyggcc_s" LIBGCC_EH_EXTN "-1.dll"
 
 /* We should find a way to not have to update this manually.  */
-#define LIBGCJ_SONAME "cyggcj" /*LIBGCC_EH_EXTN*/ "-12.dll"
+#define LIBGCJ_SONAME "cyggcj" /*LIBGCC_EH_EXTN*/ "-13.dll"
 

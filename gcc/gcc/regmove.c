@@ -548,8 +548,7 @@ optimize_reg_copy_3 (rtx insn, rtx dest, rtx src)
   /* Do not use a SUBREG to truncate from one mode to another if truncation
      is not a nop.  */
   if (GET_MODE_BITSIZE (GET_MODE (src_reg)) <= GET_MODE_BITSIZE (GET_MODE (src))
-      && !TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (GET_MODE (src)),
-				 GET_MODE_BITSIZE (GET_MODE (src_reg))))
+      && !TRULY_NOOP_TRUNCATION_MODES_P (GET_MODE (src), GET_MODE (src_reg)))
     return;
 
   set_insn = p;
@@ -1236,11 +1235,11 @@ regmove_optimize (void)
   df_note_add_problem ();
   df_analyze ();
 
-  if (flag_ira_loop_pressure)
-    ira_set_pseudo_classes (dump_file);
-
   regstat_init_n_sets_and_refs ();
   regstat_compute_ri ();
+
+  if (flag_ira_loop_pressure)
+    ira_set_pseudo_classes (dump_file);
 
   regno_src_regno = XNEWVEC (int, nregs);
   for (i = nregs; --i >= 0; )
@@ -1382,7 +1381,6 @@ struct rtl_opt_pass pass_regmove =
   0,                                    /* properties_destroyed */
   0,                                    /* todo_flags_start */
   TODO_df_finish | TODO_verify_rtl_sharing |
-  TODO_dump_func |
   TODO_ggc_collect                      /* todo_flags_finish */
  }
 };

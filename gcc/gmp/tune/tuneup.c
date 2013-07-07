@@ -1,7 +1,7 @@
 /* Create tuned thresholds for various algorithms.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2008, 2009, 2010 Free
-Software Foundation, Inc.
+Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
@@ -172,7 +172,6 @@ mp_size_t  mullo_dc_threshold           = MP_SIZE_T_MAX;
 mp_size_t  mullo_mul_n_threshold        = MP_SIZE_T_MAX;
 mp_size_t  mulmod_bnm1_threshold        = MP_SIZE_T_MAX;
 mp_size_t  sqrmod_bnm1_threshold        = MP_SIZE_T_MAX;
-mp_size_t  div_sb_preinv_threshold      = MP_SIZE_T_MAX;
 mp_size_t  dc_div_qr_threshold          = MP_SIZE_T_MAX;
 mp_size_t  dc_divappr_q_threshold       = MP_SIZE_T_MAX;
 mp_size_t  mu_div_qr_threshold          = MP_SIZE_T_MAX;
@@ -193,7 +192,6 @@ mp_size_t  redc_2_to_redc_n_threshold   = MP_SIZE_T_MAX;
 mp_size_t  powm_threshold               = MP_SIZE_T_MAX;
 mp_size_t  matrix22_strassen_threshold  = MP_SIZE_T_MAX;
 mp_size_t  hgcd_threshold               = MP_SIZE_T_MAX;
-mp_size_t  gcd_accel_threshold          = MP_SIZE_T_MAX;
 mp_size_t  gcd_dc_threshold             = MP_SIZE_T_MAX;
 mp_size_t  gcdext_dc_threshold          = MP_SIZE_T_MAX;
 mp_size_t  divrem_1_norm_threshold      = MP_SIZE_T_MAX;
@@ -1562,6 +1560,8 @@ tune_redc (void)
     param.name = "REDC_1_TO_REDC_2_THRESHOLD";
     param.function = speed_mpn_redc_1;
     param.function2 = speed_mpn_redc_2;
+    param.min_size = 1;
+    param.min_is_always = 1;
     param.max_size = TUNE_REDC_2_MAX;
     param.noprint = 1;
     one (&redc_1_to_redc_2_threshold, &param);
@@ -1770,50 +1770,58 @@ tune_mod_1 (void)
     param.min_size = 2;
     one (&mod_1n_to_mod_1_1_threshold, &param);
   }
+
   {
     static struct param_t  param;
 
     param.check_size = 256;
-
     s.r = randlimb_norm () / 5;
-    param.function = speed_mpn_mod_1_tune;
     param.noprint = 1;
 
-    param.name = "MOD_1U_TO_MOD_1_1_THRESHOLD";
-    param.min_size = 2;
-    one (&mod_1u_to_mod_1_1_threshold, &param);
-
+    param.function = speed_mpn_mod_1_1;
+    param.function2 = speed_mpn_mod_1_2;
+    param.min_is_always = 1;
     param.name = "MOD_1_1_TO_MOD_1_2_THRESHOLD";
-    param.min_size = mod_1u_to_mod_1_1_threshold;
+    param.min_size = 2;
     one (&mod_1_1_to_mod_1_2_threshold, &param);
 
-    if (mod_1u_to_mod_1_1_threshold + 2 >= mod_1_1_to_mod_1_2_threshold)
-      {
-	/* Disable mod_1_1, mod_1_2 is always faster.  Measure when to switch
-	   (from mod_1_unnorm) to mod_1_2.  */
-	mod_1_1_to_mod_1_2_threshold = 0;
-
-	/* This really measures mod_1u -> mod_1_2 */
-	param.min_size = 1;
-	one (&mod_1u_to_mod_1_1_threshold, &param);
-      }
-    print_define_remark ("MOD_1U_TO_MOD_1_1_THRESHOLD", mod_1u_to_mod_1_1_threshold, NULL);
-
+    param.function = speed_mpn_mod_1_2;
+    param.function2 = speed_mpn_mod_1_4;
+    param.min_is_always = 1;
     param.name = "MOD_1_2_TO_MOD_1_4_THRESHOLD";
-    param.min_size = mod_1_1_to_mod_1_2_threshold;
+    param.min_size = 1;
     one (&mod_1_2_to_mod_1_4_threshold, &param);
 
-    if (mod_1_1_to_mod_1_2_threshold + 2 >= mod_1_2_to_mod_1_4_threshold)
+    if (mod_1_1_to_mod_1_2_threshold >= mod_1_2_to_mod_1_4_threshold)
       {
-	/* Disable mod_1_2, mod_1_4 is always faster.  Measure when to switch
-	   (from mod_1_unnorm or mod_1_1) to mod_1_4.  */
+	/* Never use mod_1_2, measure mod_1_1 -> mod_1_4 */
 	mod_1_2_to_mod_1_4_threshold = 0;
 
-	param.min_size = 1;
+	param.function = speed_mpn_mod_1_1;
+	param.function2 = speed_mpn_mod_1_4;
+	param.min_is_always = 1;
+	param.name = "MOD_1_1_TO_MOD_1_4_THRESHOLD fake";
+	param.min_size = 2;
 	one (&mod_1_1_to_mod_1_2_threshold, &param);
       }
-    print_define_remark ("MOD_1_1_TO_MOD_1_2_THRESHOLD", mod_1_1_to_mod_1_2_threshold, NULL);
-    print_define_remark ("MOD_1_2_TO_MOD_1_4_THRESHOLD", mod_1_2_to_mod_1_4_threshold, NULL);
+
+    param.function = speed_mpn_mod_1_tune;
+    param.function2 = NULL;
+    param.name = "MOD_1U_TO_MOD_1_1_THRESHOLD";
+    param.min_size = 2;
+    param.min_is_always = 0;
+    one (&mod_1u_to_mod_1_1_threshold, &param);
+
+    if (mod_1u_to_mod_1_1_threshold >= mod_1_1_to_mod_1_2_threshold)
+      mod_1_1_to_mod_1_2_threshold = 0;
+    if (mod_1u_to_mod_1_1_threshold >= mod_1_2_to_mod_1_4_threshold)
+      mod_1_2_to_mod_1_4_threshold = 0;
+
+    print_define_remark ("MOD_1U_TO_MOD_1_1_THRESHOLD", mod_1u_to_mod_1_1_threshold, NULL);
+    print_define_remark ("MOD_1_1_TO_MOD_1_2_THRESHOLD", mod_1_1_to_mod_1_2_threshold,
+			 mod_1_1_to_mod_1_2_threshold == 0 ? "never mpn_mod_1_1p" : NULL);
+    print_define_remark ("MOD_1_2_TO_MOD_1_4_THRESHOLD", mod_1_2_to_mod_1_4_threshold,
+			 mod_1_2_to_mod_1_4_threshold == 0 ? "never mpn_mod_1s_2p" : NULL);
   }
 
   {
@@ -1825,6 +1833,7 @@ tune_mod_1 (void)
     s.r = randlimb_norm ();
     param.function = speed_mpn_preinv_mod_1;
     param.function2 = speed_mpn_mod_1_tune;
+    param.min_size = 1;
     one (&preinv_mod_1_to_mod_1_threshold, &param);
   }
 }

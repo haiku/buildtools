@@ -1,5 +1,5 @@
 /* Data references and dependences detectors.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
    Free Software Foundation, Inc.
    Contributed by Sebastian Pop <pop@cri.ensmp.fr>
 
@@ -60,16 +60,17 @@ struct innermost_loop_behavior
 };
 
 /* Describes the evolutions of indices of the memory reference.  The indices
-   are indices of the ARRAY_REFs and the operands of INDIRECT_REFs.
-   For ARRAY_REFs, BASE_OBJECT is the reference with zeroed indices
-   (note that this reference does not have to be valid, if zero does not
-   belong to the range of the array; hence it is not recommended to use
-   BASE_OBJECT in any code generation).  For INDIRECT_REFs, the address is
-   set to the loop-invariant part of the address of the object, except for
-   the constant offset.  For the examples above,
+   are indices of the ARRAY_REFs, indexes in artificial dimensions
+   added for member selection of records and the operands of MEM_REFs.
+   BASE_OBJECT is the part of the reference that is loop-invariant
+   (note that this reference does not have to cover the whole object
+   being accessed, in which case UNCONSTRAINED_BASE is set; hence it is
+   not recommended to use BASE_OBJECT in any code generation).
+   For the examples above,
 
-   base_object:        a[0].b[0][0]                   *(p + x + 4B * j_0)
+   base_object:        a                              *(p + x + 4B * j_0)
    indices:            {j_0, +, 1}_2                  {16, +, 4}_2
+		       4
 		       {i_0, +, 1}_1
 		       {j_0, +, 1}_2
 */
@@ -81,18 +82,17 @@ struct indices
 
   /* A list of chrecs.  Access functions of the indices.  */
   VEC(tree,heap) *access_fns;
+
+  /* Whether BASE_OBJECT is an access representing the whole object
+     or whether the access could not be constrained.  */
+  bool unconstrained_base;
 };
 
 struct dr_alias
 {
   /* The alias information that should be used for new pointers to this
-     location.  SYMBOL_TAG is either a DECL or a SYMBOL_MEMORY_TAG.  */
+     location.  */
   struct ptr_info_def *ptr_info;
-
-  /* The set of virtual operands corresponding to this memory reference,
-     serving as a description of the alias information for the memory
-     reference.  This could be eliminated if we had alias oracle.  */
-  bitmap vops;
 };
 
 /* An integer vector.  A vector formally consists of an element of a vector
@@ -201,6 +201,7 @@ struct data_reference
 #define DR_STMT(DR)                (DR)->stmt
 #define DR_REF(DR)                 (DR)->ref
 #define DR_BASE_OBJECT(DR)         (DR)->indices.base_object
+#define DR_UNCONSTRAINED_BASE(DR)  (DR)->indices.unconstrained_base
 #define DR_ACCESS_FNS(DR)	   (DR)->indices.access_fns
 #define DR_ACCESS_FN(DR, I)        VEC_index (tree, DR_ACCESS_FNS (DR), I)
 #define DR_NUM_DIMENSIONS(DR)      VEC_length (tree, DR_ACCESS_FNS (DR))
@@ -386,7 +387,7 @@ DEF_VEC_O (data_ref_loc);
 DEF_VEC_ALLOC_O (data_ref_loc, heap);
 
 bool get_references_in_stmt (gimple, VEC (data_ref_loc, heap) **);
-bool dr_analyze_innermost (struct data_reference *);
+bool dr_analyze_innermost (struct data_reference *, struct loop *);
 extern bool compute_data_dependences_for_loop (struct loop *, bool,
 					       VEC (loop_p, heap) **,
 					       VEC (data_reference_p, heap) **,
@@ -394,8 +395,6 @@ extern bool compute_data_dependences_for_loop (struct loop *, bool,
 extern bool compute_data_dependences_for_bb (basic_block, bool,
                                              VEC (data_reference_p, heap) **,
                                              VEC (ddr_p, heap) **);
-extern tree find_data_references_in_loop (struct loop *,
-                                          VEC (data_reference_p, heap) **);
 extern void print_direction_vector (FILE *, lambda_vector, int);
 extern void print_dir_vectors (FILE *, VEC (lambda_vector, heap) *, int);
 extern void print_dist_vectors (FILE *, VEC (lambda_vector, heap) *, int);
@@ -423,13 +422,20 @@ extern bool graphite_find_data_references_in_stmt (loop_p, loop_p, gimple,
 						   VEC (data_reference_p, heap) **);
 struct data_reference *create_data_ref (loop_p, loop_p, tree, gimple, bool);
 extern bool find_loop_nest (struct loop *, VEC (loop_p, heap) **);
-extern void compute_all_dependences (VEC (data_reference_p, heap) *,
+extern struct data_dependence_relation *initialize_data_dependence_relation
+     (struct data_reference *, struct data_reference *, VEC (loop_p, heap) *); 
+extern void compute_self_dependence (struct data_dependence_relation *);
+extern bool compute_all_dependences (VEC (data_reference_p, heap) *,
 				     VEC (ddr_p, heap) **, VEC (loop_p, heap) *,
 				     bool);
+extern tree find_data_references_in_bb (struct loop *, basic_block,
+                                        VEC (data_reference_p, heap) **);
 
 extern void create_rdg_vertices (struct graph *, VEC (gimple, heap) *);
 extern bool dr_may_alias_p (const struct data_reference *,
-			    const struct data_reference *);
+			    const struct data_reference *, bool);
+extern bool dr_equal_offsets_p (struct data_reference *,
+                                struct data_reference *);
 
 
 /* Return true when the base objects of data references A and B are

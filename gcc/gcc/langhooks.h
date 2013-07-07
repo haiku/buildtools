@@ -1,6 +1,6 @@
 /* The lang_hooks data structure.
-   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -132,6 +132,11 @@ struct lang_hooks_for_types
   /* Fill in information for the debugger about the bounds of TYPE.  */
   void (*get_subrange_bounds) (const_tree, tree *, tree *);
 
+  /* A type descriptive of TYPE's complex layout generated to help the
+     debugger to decode variable-length or self-referential constructs.
+     This is only used for the AT_GNAT_descriptive_type DWARF attribute.  */
+  tree (*descriptive_type) (const_tree);
+
   /* If we requested a pointer to a vector, build up the pointers that
      we stripped off while looking for the inner type.  Similarly for
      return values from functions.  The argument TYPE is the top of the
@@ -143,9 +148,10 @@ struct lang_hooks_for_types
 
 struct lang_hooks_for_decls
 {
-  /* Returns nonzero if we are in the global binding level.  Ada
-     returns -1 for an undocumented reason used in stor-layout.c.  */
-  int (*global_bindings_p) (void);
+  /* Return true if we are in the global binding level.  This hook is really
+     needed only if the language supports variable-sized types at the global
+     level, i.e. declared outside subprograms.  */
+  bool (*global_bindings_p) (void);
 
   /* Function to add a decl to the current scope level.  Takes one
      argument, a decl to add.  Returns that decl, or, if the same
@@ -458,6 +464,10 @@ struct lang_hooks
      `std::terminate', so the C++ version of this function returns a
      FUNCTION_DECL for `std::terminate'.  */
   tree (*eh_protect_cleanup_actions) (void);
+
+  /* Return true if a stmt can fallthru.  Used by block_may_fallthru
+     to possibly handle language trees.  */
+  bool (*block_may_fallthru) (const_tree);
 
   /* True if this language uses __cxa_end_cleanup when the ARM EABI
      is enabled.  */

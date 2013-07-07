@@ -135,6 +135,9 @@ typedef struct eni_weights_d
   /* Cost per call.  */
   unsigned call_cost;
 
+  /* Cost per indirect call.  */
+  unsigned indirect_call_cost;
+
   /* Cost per call to a target specific builtin */
   unsigned target_builtin_call_cost;
 
@@ -143,6 +146,9 @@ typedef struct eni_weights_d
 
   /* Cost for omp construct.  */
   unsigned omp_cost;
+
+  /* Cost for tm transaction.  */
+  unsigned tm_cost;
 
   /* Cost of return.  */
   unsigned return_cost;
@@ -182,7 +188,6 @@ int estimate_num_insns (gimple, eni_weights *);
 int estimate_num_insns_fn (tree, eni_weights *);
 int count_insns_seq (gimple_seq, eni_weights *);
 bool tree_versionable_function_p (tree);
-bool tree_can_inline_p (struct cgraph_edge *e);
 
 extern tree remap_decl (tree decl, copy_body_data *id);
 extern tree remap_type (tree type, copy_body_data *id);

@@ -1,7 +1,7 @@
 /* PowerPC-32 gmp-mparam.h -- Compiler/machine parameter header file.
 
 Copyright 1991, 1993, 1994, 1999, 2000, 2001, 2002, 2003, 2004, 2008, 2009,
-2010 Free Software Foundation, Inc.
+2010, 2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
@@ -36,14 +36,14 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define DIVREM_1_UNNORM_THRESHOLD            0  /* always */
 #define MOD_1_NORM_THRESHOLD                 0  /* always */
 #define MOD_1_UNNORM_THRESHOLD               0  /* always */
-#define MOD_1N_TO_MOD_1_1_THRESHOLD          5
+#define MOD_1N_TO_MOD_1_1_THRESHOLD          7
 #define MOD_1U_TO_MOD_1_1_THRESHOLD          8
-#define MOD_1_1_TO_MOD_1_2_THRESHOLD        16
-#define MOD_1_2_TO_MOD_1_4_THRESHOLD        65
-#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     17
+#define MOD_1_1_TO_MOD_1_2_THRESHOLD         0
+#define MOD_1_2_TO_MOD_1_4_THRESHOLD        36
+#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     37
 #define USE_PREINV_DIVREM_1                  1
 #define DIVEXACT_1_THRESHOLD                 0  /* always */
-#define BMOD_1_TO_MOD_1_THRESHOLD           98
+#define BMOD_1_TO_MOD_1_THRESHOLD           69
 
 #define MUL_TOOM22_THRESHOLD                14
 #define MUL_TOOM33_THRESHOLD                73
@@ -63,8 +63,8 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define SQR_TOOM6_THRESHOLD                189
 #define SQR_TOOM8_THRESHOLD                284
 
-#define MULMOD_BNM1_THRESHOLD                9
-#define SQRMOD_BNM1_THRESHOLD               14
+#define MULMOD_BNM1_THRESHOLD               10
+#define SQRMOD_BNM1_THRESHOLD               13
 
 #define MUL_FFT_MODF_THRESHOLD             284  /* k = 5 */
 #define MUL_FFT_TABLE3                                      \
@@ -166,9 +166,9 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define DC_BDIV_QR_THRESHOLD                55
 #define DC_BDIV_Q_THRESHOLD                124
 
-#define INV_MULMOD_BNM1_THRESHOLD          108
+#define INV_MULMOD_BNM1_THRESHOLD           42
 #define INV_NEWTON_THRESHOLD               179
-#define INV_APPR_THRESHOLD                 166
+#define INV_APPR_THRESHOLD                 157
 
 #define BINV_NEWTON_THRESHOLD              232
 #define REDC_1_TO_REDC_N_THRESHOLD          54

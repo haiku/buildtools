@@ -1,23 +1,22 @@
-/* Read data file and check function.
+/* read_data,c -- Read data file and check function.
 
-Copyright (C) INRIA, 2008, 2009, 2010, 2011
+Copyright (C) 2008, 2009, 2010, 2011, 2012 INRIA
 
-This file is part of the MPC Library.
+This file is part of GNU MPC.
 
-The MPC Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 2.1 of the License, or (at your
+GNU MPC is free software; you can redistribute it and/or modify it under
+the terms of the GNU Lesser General Public License as published by the
+Free Software Foundation; either version 3 of the License, or (at your
 option) any later version.
 
-The MPC Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+GNU MPC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for
+more details.
 
 You should have received a copy of the GNU Lesser General Public License
-along with the MPC Library; see the file COPYING.LIB.  If not, write to
-the Free Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-MA 02111-1307, USA. */
+along with this program. If not, see http://www.gnu.org/licenses/ .
+*/
 
 #include <stdlib.h>
 #include <string.h>
@@ -190,7 +189,7 @@ read_string (FILE *fp, char **buffer_ptr, size_t buffer_length, const char *name
   nextchar = getc (fp);
   skip_whitespace_comments (fp);
 
-  buffer_ptr = &buffer;
+  *buffer_ptr = buffer;
 
   return buffer_length;
 
@@ -272,7 +271,7 @@ read_mpc_rounding_mode (FILE *fp, mpc_rnd_t* rnd)
    mpfr_rnd_t re, im;
    read_mpfr_rounding_mode (fp, &re);
    read_mpfr_rounding_mode (fp, &im);
-   *rnd = RNDC (re, im);
+   *rnd = MPC_RND (re, im);
 }
 
 void
@@ -316,6 +315,30 @@ read_uint (FILE *fp, unsigned long int *ui)
   if (ferror (fp) || n == 0 || n == EOF)
     {
       printf ("Error: Cannot read uint in file '%s' line %lu\n",
+              pathname, line_number);
+      exit (1);
+    }
+  nextchar = getc (fp);
+  skip_whitespace_comments (fp);
+}
+
+static void
+read_sint (FILE *fp, long int *si)
+{
+  int n = 0;
+
+  if (nextchar == EOF)
+    {
+      printf ("Error: Unexpected EOF when reading sint "
+              "in file '%s' line %lu\n",
+              pathname, line_number);
+      exit (1);
+    }
+  ungetc (nextchar, fp);
+  n = fscanf (fp, "%li", si);
+  if (ferror (fp) || n == 0 || n == EOF)
+    {
+      printf ("Error: Cannot read sint in file '%s' line %lu\n",
               pathname, line_number);
       exit (1);
     }
@@ -389,8 +412,8 @@ read_mpfr (FILE *fp, mpfr_ptr x, int *known_sign)
 void
 read_mpc (FILE *fp, mpc_ptr z, known_signs_t *ks)
 {
-  read_mpfr (fp, MPC_RE (z), ks == NULL ? NULL : &ks->re);
-  read_mpfr (fp, MPC_IM (z), ks == NULL ? NULL : &ks->im);
+  read_mpfr (fp, mpc_realref (z), ks == NULL ? NULL : &ks->re);
+  read_mpfr (fp, mpc_imagref (z), ks == NULL ? NULL : &ks->im);
 }
 
 static void
@@ -398,8 +421,8 @@ check_compatible (int inex, mpfr_t expected, mpfr_rnd_t rnd, const char *s)
 {
   if ((rnd == GMP_RNDU && inex == -1) ||
       (rnd == GMP_RNDD && inex == +1) ||
-      (rnd == GMP_RNDZ && mpfr_signbit (expected) == 0 && inex == +1) ||
-      (rnd == GMP_RNDZ && mpfr_signbit (expected) == 1 && inex == -1))
+      (rnd == GMP_RNDZ && !mpfr_signbit (expected) && inex == +1) ||
+      (rnd == GMP_RNDZ && mpfr_signbit (expected) && inex == -1))
     {
       if (s != NULL)
         printf ("Incompatible ternary value '%c' (%s part) in file '%s' line %lu\n",
@@ -421,8 +444,8 @@ read_cc (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
   read_mpc (fp, expected, signs);
   read_mpc (fp, op, NULL);
   read_mpc_rounding_mode (fp, rnd);
-  check_compatible (*inex_re, MPC_RE(expected), MPC_RND_RE(*rnd), "real");
-  check_compatible (*inex_im, MPC_IM(expected), MPC_RND_IM(*rnd), "imag");
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
 }
 
 static void
@@ -448,8 +471,8 @@ read_ccc (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
   read_mpc (fp, op1, NULL);
   read_mpc (fp, op2, NULL);
   read_mpc_rounding_mode (fp, rnd);
-  check_compatible (*inex_re, MPC_RE(expected), MPC_RND_RE(*rnd), "real");
-  check_compatible (*inex_im, MPC_IM(expected), MPC_RND_IM(*rnd), "imag");
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
 }
 
 /* read lines of data for function with three mpc_t inputs and one mpc_t
@@ -467,8 +490,8 @@ read_cccc (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
   read_mpc (fp, op2, NULL);
   read_mpc (fp, op3, NULL);
   read_mpc_rounding_mode (fp, rnd);
-  check_compatible (*inex_re, MPC_RE(expected), MPC_RND_RE(*rnd), "real");
-  check_compatible (*inex_im, MPC_IM(expected), MPC_RND_IM(*rnd), "imag");
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
 }
 
 static void
@@ -482,8 +505,8 @@ read_cfc (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
   read_mpfr (fp, op1, NULL);
   read_mpc (fp, op2, NULL);
   read_mpc_rounding_mode (fp, rnd);
-  check_compatible (*inex_re, MPC_RE(expected), MPC_RND_RE(*rnd), "real");
-  check_compatible (*inex_im, MPC_IM(expected), MPC_RND_IM(*rnd), "imag");
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
 }
 
 static void
@@ -497,8 +520,8 @@ read_ccf (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
   read_mpc (fp, op1, NULL);
   read_mpfr (fp, op2, NULL);
   read_mpc_rounding_mode (fp, rnd);
-  check_compatible (*inex_re, MPC_RE(expected), MPC_RND_RE(*rnd), "real");
-  check_compatible (*inex_im, MPC_IM(expected), MPC_RND_IM(*rnd), "imag");
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
 }
 
 static void
@@ -512,8 +535,117 @@ read_ccu (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
   read_mpc (fp, op1, NULL);
   read_uint (fp, op2);
   read_mpc_rounding_mode (fp, rnd);
-  check_compatible (*inex_re, MPC_RE(expected), MPC_RND_RE(*rnd), "real");
-  check_compatible (*inex_im, MPC_IM(expected), MPC_RND_IM(*rnd), "imag");
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
+}
+
+static void
+read_ccs (FILE *fp, int *inex_re, int *inex_im, mpc_ptr expected,
+          known_signs_t *signs, mpc_ptr op1, long int *op2, mpc_rnd_t *rnd)
+{
+  test_line_number = line_number;
+  read_ternary (fp, inex_re);
+  read_ternary (fp, inex_im);
+  read_mpc (fp, expected, signs);
+  read_mpc (fp, op1, NULL);
+  read_sint (fp, op2);
+  read_mpc_rounding_mode (fp, rnd);
+  check_compatible (*inex_re, mpc_realref(expected), MPC_RND_RE(*rnd), "real");
+  check_compatible (*inex_im, mpc_imagref(expected), MPC_RND_IM(*rnd), "imag");
+}
+
+/* set MPFR flags to random values */
+static void
+set_mpfr_flags (int counter)
+{
+  if (counter & 1)
+    mpfr_set_underflow ();
+  else
+    mpfr_clear_underflow ();
+  if (counter & 2)
+    mpfr_set_overflow ();
+  else
+    mpfr_clear_overflow ();
+  /* the divide-by-0 flag was added in MPFR 3.1.0 */
+#ifdef mpfr_set_divby0
+  if (counter & 4)
+    mpfr_set_divby0 ();
+  else
+    mpfr_clear_divby0 ();
+#endif
+  if (counter & 8)
+    mpfr_set_nanflag ();
+  else
+    mpfr_clear_nanflag ();
+  if (counter & 16)
+    mpfr_set_inexflag ();
+  else
+    mpfr_clear_inexflag ();
+  if (counter & 32)
+    mpfr_set_erangeflag ();
+  else
+    mpfr_clear_erangeflag ();
+}
+
+/* Check MPFR flags: we allow that some flags are set internally by MPC,
+   for example if MPC does internal computations (using MPFR) which yield
+   an overflow, even if the final MPC result fits in the exponent range.
+   However we don't allow MPC to *clear* the MPFR flags */
+static void
+check_mpfr_flags (int counter)
+{
+  int old, neu;
+
+  old = (counter & 1) != 0;
+  neu = mpfr_underflow_p () != 0;
+  if (old && (neu == 0))
+    {
+      printf ("Error, underflow flag has been modified from %d to %d\n",
+              old, neu);
+      exit (1);
+    }
+  old = (counter & 2) != 0;
+  neu = mpfr_overflow_p () != 0;
+  if (old && (neu == 0))
+    {
+      printf ("Error, overflow flag has been modified from %d to %d\n",
+              old, neu);
+      exit (1);
+    }
+#ifdef mpfr_divby0_p
+  old = (counter & 4) != 0;
+  neu = mpfr_divby0_p () != 0;
+  if (old && (neu == 0))
+    {
+      printf ("Error, divby0 flag has been modified from %d to %d\n",
+              old, neu);
+      exit (1);
+    }
+#endif
+  old = (counter & 8) != 0;
+  neu = mpfr_nanflag_p () != 0;
+  if (old && (neu == 0))
+    {
+      printf ("Error, nanflag flag has been modified from %d to %d\n",
+              old, neu);
+      exit (1);
+    }
+  old = (counter & 16) != 0;
+  neu = mpfr_inexflag_p () != 0;
+  if (old && (neu == 0))
+    {
+      printf ("Error, inexflag flag has been modified from %d to %d\n",
+              old, neu);
+      exit (1);
+    }
+  old = (counter & 32) != 0;
+  neu = mpfr_erangeflag_p () != 0;
+  if (old && (neu == 0))
+    {
+      printf ("Error, erangeflag flag has been modified from %d to %d\n",
+              old, neu);
+      exit (1);
+    }
 }
 
 /* data_check (function, data_file_name) checks function results against
@@ -533,9 +665,12 @@ data_check (mpc_function function, const char *file_name)
   mpc_rnd_t rnd = MPC_RNDNN;
 
   unsigned long int ui;
+  long int si;
 
   known_signs_t signs;
   int inex = 0;
+
+  static int rand_counter = 0;
 
   fp = open_data_file (file_name);
 
@@ -547,7 +682,7 @@ data_check (mpc_function function, const char *file_name)
       mpfr_init (x1);
       mpfr_init (x2);
       break;
-    case CC: case CCU:
+    case CC: case CCU: case CCS:
       mpc_init2 (z2, 2);
       mpc_init2 (z3, 2);
       break;
@@ -576,6 +711,8 @@ data_check (mpc_function function, const char *file_name)
   nextchar = getc (fp);
   skip_whitespace_comments (fp);
   while (nextchar != EOF) {
+      set_mpfr_flags (rand_counter);
+
       /* for each kind of function prototype: */
       /* 3.1 read a line of data: expected result, parameters, rounding mode */
       /* 3.2 compute function at the same precision as the expected result */
@@ -611,8 +748,8 @@ data_check (mpc_function function, const char *file_name)
 
         case CC: /* example mpc_log */
           read_cc (fp, &inex_re, &inex_im, z1, &signs, z2, &rnd);
-          mpfr_set_prec (MPC_RE (z3), MPC_PREC_RE (z1));
-          mpfr_set_prec (MPC_IM (z3), MPC_PREC_IM (z1));
+          mpfr_set_prec (mpc_realref (z3), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref (z3), MPC_PREC_IM (z1));
           inex = function.pointer.CC (z3, z2, rnd);
           if (!MPC_INEX_CMP (inex_re, inex_im, inex)
               || !same_mpc_value (z3, z1, signs))
@@ -638,8 +775,8 @@ data_check (mpc_function function, const char *file_name)
 
         case C_CC: /* example mpc_mul */
           read_ccc (fp, &inex_re, &inex_im, z1, &signs, z2, z3, &rnd);
-          mpfr_set_prec (MPC_RE(z4), MPC_PREC_RE (z1));
-          mpfr_set_prec (MPC_IM(z4), MPC_PREC_IM (z1));
+          mpfr_set_prec (mpc_realref(z4), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref(z4), MPC_PREC_IM (z1));
           inex = function.pointer.C_CC (z4, z2, z3, rnd);
           if (!MPC_INEX_CMP (inex_re, inex_im, inex)
               || !same_mpc_value (z4, z1, signs))
@@ -698,8 +835,8 @@ data_check (mpc_function function, const char *file_name)
           read_cccc (fp, &inex_re, &inex_im, z1, &signs, z2, z3, z4, &rnd);
 	  /* z1 is the expected value, z2, z3, z4 are the inputs, and z5 is
 	     the computed value */
-          mpfr_set_prec (MPC_RE(z5), MPC_PREC_RE (z1));
-          mpfr_set_prec (MPC_IM(z5), MPC_PREC_IM (z1));
+          mpfr_set_prec (mpc_realref(z5), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref(z5), MPC_PREC_IM (z1));
           inex = function.pointer.CCCC (z5, z2, z3, z4, rnd);
           if (!MPC_INEX_CMP (inex_re, inex_im, inex)
               || !same_mpc_value (z5, z1, signs))
@@ -760,8 +897,8 @@ data_check (mpc_function function, const char *file_name)
 
         case CFC: /* example mpc_fr_div */
           read_cfc (fp, &inex_re, &inex_im, z1, &signs, x1, z2, &rnd);
-          mpfr_set_prec (MPC_RE(z3), MPC_PREC_RE (z1));
-          mpfr_set_prec (MPC_IM(z3), MPC_PREC_IM (z1));
+          mpfr_set_prec (mpc_realref(z3), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref(z3), MPC_PREC_IM (z1));
           inex = function.pointer.CFC (z3, x1, z2, rnd);
           if (!MPC_INEX_CMP (inex_re, inex_im, inex)
               || !same_mpc_value (z3, z1, signs))
@@ -791,8 +928,8 @@ data_check (mpc_function function, const char *file_name)
 
         case CCF: /* example mpc_mul_fr */
           read_ccf (fp, &inex_re, &inex_im, z1, &signs, z2, x1, &rnd);
-          mpfr_set_prec (MPC_RE(z3), MPC_PREC_RE (z1));
-          mpfr_set_prec (MPC_IM(z3), MPC_PREC_IM (z1));
+          mpfr_set_prec (mpc_realref(z3), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref(z3), MPC_PREC_IM (z1));
           inex = function.pointer.CCF (z3, z2, x1, rnd);
           if (!MPC_INEX_CMP (inex_re, inex_im, inex)
               || !same_mpc_value (z3, z1, signs))
@@ -822,8 +959,8 @@ data_check (mpc_function function, const char *file_name)
 
         case CCU: /* example mpc_pow_ui */
           read_ccu (fp, &inex_re, &inex_im, z1, &signs, z2, &ui, &rnd);
-          mpfr_set_prec (MPC_RE(z3), MPC_PREC_RE (z1));
-          mpfr_set_prec (MPC_IM(z3), MPC_PREC_IM (z1));
+          mpfr_set_prec (mpc_realref(z3), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref(z3), MPC_PREC_IM (z1));
           inex = function.pointer.CCU (z3, z2, ui, rnd);
           if (!MPC_INEX_CMP (inex_re, inex_im, inex)
               || !same_mpc_value (z3, z1, signs))
@@ -848,9 +985,42 @@ data_check (mpc_function function, const char *file_name)
             }
           break;
 
+        case CCS: /* example mpc_pow_si */
+          read_ccs (fp, &inex_re, &inex_im, z1, &signs, z2, &si, &rnd);
+          mpfr_set_prec (mpc_realref(z3), MPC_PREC_RE (z1));
+          mpfr_set_prec (mpc_imagref(z3), MPC_PREC_IM (z1));
+          inex = function.pointer.CCS (z3, z2, si, rnd);
+          if (!MPC_INEX_CMP (inex_re, inex_im, inex)
+              || !same_mpc_value (z3, z1, signs))
+            {
+              /* display sensible variable names */
+              mpc_t op1, got, expected;
+              op1[0] = z2[0];
+              expected[0]= z1[0];
+              got[0] = z3[0];
+              printf ("%s(op) failed (line %lu)\nwith rounding mode %s\n",
+                      function.name, test_line_number, rnd_mode[rnd]);
+              if (!MPC_INEX_CMP (inex_re, inex_im, inex))
+                printf("ternary value: got %s, expected (%s, %s)\n",
+                       MPC_INEX_STR (inex),
+                       MPFR_INEX_STR (inex_re), MPFR_INEX_STR (inex_im));
+              MPC_OUT (op1);
+              printf ("op2 %li\n     ", si);
+              MPC_OUT (got);
+              MPC_OUT (expected);
+
+              exit (1);
+            }
+          break;
+
         default:
-          ;
+          printf ("Unhandled function prototype %i in 'data_check'\n", function.type);
+          exit (1);
         }
+
+      /* check MPFR flags were not modified */
+      check_mpfr_flags (rand_counter);
+      rand_counter ++;
     }
 
   /* 3. Clear used variables */
@@ -861,7 +1031,7 @@ data_check (mpc_function function, const char *file_name)
       mpfr_clear (x1);
       mpfr_clear (x2);
       break;
-    case CC: case CCU:
+    case CC: case CCU: case CCS:
       mpc_clear (z2);
       mpc_clear (z3);
       break;

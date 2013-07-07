@@ -349,9 +349,6 @@ convert_control_dep_chain_into_preds (VEC(edge, heap) **dep_chains,
   if (num_chains == 0 || num_chains >= MAX_NUM_CHAINS)
     return false;
 
-  /* Now convert CD chains into predicates  */
-  has_valid_pred = true;
-
   /* Now convert the control dep chain into a set
      of predicates.  */
   *preds = XCNEWVEC (VEC(use_pred_info_t, heap) *,
@@ -361,6 +358,8 @@ convert_control_dep_chain_into_preds (VEC(edge, heap) **dep_chains,
   for (i = 0; i < num_chains; i++)
     {
       VEC(edge, heap) *one_cd_chain = dep_chains[i];
+
+      has_valid_pred = false;
       for (j = 0; j < VEC_length (edge, one_cd_chain); j++)
         {
           gimple cond_stmt;
@@ -412,6 +411,7 @@ convert_control_dep_chain_into_preds (VEC(edge, heap) **dep_chains,
           one_pred->cond = cond_stmt;
           one_pred->invert = !!(e->flags & EDGE_FALSE_VALUE);
           VEC_safe_push (use_pred_info_t, heap, (*preds)[i], one_pred);
+	  has_valid_pred = true;
         }
 
       if (!has_valid_pred)
@@ -1088,9 +1088,7 @@ use_pred_not_overlap_with_undef_path_pred (
 static inline bool
 is_and_or_or (enum tree_code tc, tree typ)
 {
-  return (tc == TRUTH_AND_EXPR
-          || tc == TRUTH_OR_EXPR
-          || tc == BIT_IOR_EXPR
+  return (tc == BIT_IOR_EXPR
           || (tc == BIT_AND_EXPR
               && (typ == 0 || TREE_CODE (typ) == BOOLEAN_TYPE)));
 }
@@ -1415,15 +1413,15 @@ is_norm_cond_subset_of (norm_cond_t norm_cond1,
   code1 = norm_cond1->cond_code;
   code2 = norm_cond2->cond_code;
 
-  if (code1 == TRUTH_AND_EXPR || code1 == BIT_AND_EXPR)
+  if (code1 == BIT_AND_EXPR)
     {
       /* Both conditions are AND expressions.  */
-      if (code2 == TRUTH_AND_EXPR || code2 == BIT_AND_EXPR)
+      if (code2 == BIT_AND_EXPR)
         return is_and_set_subset_of (norm_cond1, norm_cond2);
       /* NORM_COND1 is an AND expression, and NORM_COND2 is an OR
          expression. In this case, returns true if any subexpression
          of NORM_COND1 is a subset of any subexpression of NORM_COND2.  */
-      else if (code2 == TRUTH_OR_EXPR || code2 == BIT_IOR_EXPR)
+      else if (code2 == BIT_IOR_EXPR)
         {
           size_t len1;
           len1 = VEC_length (gimple, norm_cond1->conds);
@@ -1444,7 +1442,7 @@ is_norm_cond_subset_of (norm_cond_t norm_cond1,
         }
     }
   /* NORM_COND1 is an OR expression  */
-  else if (code1 == TRUTH_OR_EXPR || code1 == BIT_IOR_EXPR)
+  else if (code1 == BIT_IOR_EXPR)
     {
       if (code2 != code1)
         return false;
@@ -1457,10 +1455,10 @@ is_norm_cond_subset_of (norm_cond_t norm_cond1,
       gcc_assert (VEC_length (gimple, norm_cond1->conds) == 1);
       /* Conservatively returns false if NORM_COND1 is non-decomposible
          and NORM_COND2 is an AND expression.  */
-      if (code2 == TRUTH_AND_EXPR || code2 == BIT_AND_EXPR)
+      if (code2 == BIT_AND_EXPR)
         return false;
 
-      if (code2 == TRUTH_OR_EXPR || code2 == BIT_IOR_EXPR)
+      if (code2 == BIT_IOR_EXPR)
         return is_subset_of_any (VEC_index (gimple, norm_cond1->conds, 0),
                                  norm_cond1->invert, norm_cond2, false);
 
@@ -1605,6 +1603,157 @@ is_superset_of (VEC(use_pred_info_t, heap) **preds1,
   return true;
 }
 
+/* Comparison function used by qsort. It is used to
+   sort predicate chains to allow predicate
+   simplification.  */
+
+static int
+pred_chain_length_cmp (const void *p1, const void *p2)
+{
+  use_pred_info_t i1, i2;
+  VEC(use_pred_info_t, heap) * const *chain1
+      = (VEC(use_pred_info_t, heap) * const *)p1;
+  VEC(use_pred_info_t, heap) * const *chain2
+      = (VEC(use_pred_info_t, heap) * const *)p2;
+
+  if (VEC_length (use_pred_info_t, *chain1)
+      != VEC_length (use_pred_info_t, *chain2))
+    return (VEC_length (use_pred_info_t, *chain1)
+            - VEC_length (use_pred_info_t, *chain2));
+
+  i1 = VEC_index (use_pred_info_t, *chain1, 0);
+  i2 = VEC_index (use_pred_info_t, *chain2, 0);
+
+  /* Allow predicates with similar prefix come together.  */
+  if (!i1->invert && i2->invert)
+    return -1;
+  else if (i1->invert && !i2->invert)
+    return 1;
+
+  return gimple_uid (i1->cond) - gimple_uid (i2->cond);
+}
+
+/* x OR (!x AND y) is equivalent to x OR y.
+   This function normalizes x1 OR (!x1 AND x2) OR (!x1 AND !x2 AND x3)
+   into x1 OR x2 OR x3.  PREDS is the predicate chains, and N is
+   the number of chains. Returns true if normalization happens.  */
+
+static bool
+normalize_preds (VEC(use_pred_info_t, heap) **preds, size_t *n)
+{
+  size_t i, j, ll;
+  VEC(use_pred_info_t, heap) *pred_chain;
+  VEC(use_pred_info_t, heap) *x = 0;
+  use_pred_info_t xj = 0, nxj = 0;
+
+  if (*n < 2)
+    return false;
+
+  /* First sort the chains in ascending order of lengths.  */
+  qsort (preds, *n, sizeof (void *), pred_chain_length_cmp);
+  pred_chain = preds[0];
+  ll = VEC_length (use_pred_info_t, pred_chain);
+  if (ll != 1)
+   {
+     if (ll == 2)
+       {
+         use_pred_info_t xx, yy, xx2, nyy;
+         VEC(use_pred_info_t, heap) *pred_chain2 = preds[1];
+         if (VEC_length (use_pred_info_t, pred_chain2) != 2)
+           return false;
+
+         /* See if simplification x AND y OR x AND !y is possible.  */
+         xx = VEC_index (use_pred_info_t, pred_chain, 0);
+         yy = VEC_index (use_pred_info_t, pred_chain, 1);
+         xx2 = VEC_index (use_pred_info_t, pred_chain2, 0);
+         nyy = VEC_index (use_pred_info_t, pred_chain2, 1);
+         if (gimple_cond_lhs (xx->cond) != gimple_cond_lhs (xx2->cond)
+             || gimple_cond_rhs (xx->cond) != gimple_cond_rhs (xx2->cond)
+             || gimple_cond_code (xx->cond) != gimple_cond_code (xx2->cond)
+             || (xx->invert != xx2->invert))
+           return false;
+         if (gimple_cond_lhs (yy->cond) != gimple_cond_lhs (nyy->cond)
+             || gimple_cond_rhs (yy->cond) != gimple_cond_rhs (nyy->cond)
+             || gimple_cond_code (yy->cond) != gimple_cond_code (nyy->cond)
+             || (yy->invert == nyy->invert))
+           return false;
+
+         /* Now merge the first two chains.  */
+         free (yy);
+         free (nyy);
+         free (xx2);
+         VEC_free (use_pred_info_t, heap, pred_chain);
+         VEC_free (use_pred_info_t, heap, pred_chain2);
+         pred_chain = 0;
+         VEC_safe_push (use_pred_info_t, heap, pred_chain, xx);
+         preds[0] = pred_chain;
+         for (i = 1; i < *n - 1; i++)
+           preds[i] = preds[i + 1];
+
+         preds[*n - 1] = 0;
+         *n = *n - 1;
+       }
+     else
+       return false;
+   }
+
+  VEC_safe_push (use_pred_info_t, heap, x,
+                 VEC_index (use_pred_info_t, pred_chain, 0));
+
+  /* The loop extracts x1, x2, x3, etc from chains
+     x1 OR (!x1 AND x2) OR (!x1 AND !x2 AND x3) OR ...  */
+  for (i = 1; i < *n; i++)
+    {
+      pred_chain = preds[i];
+      if (VEC_length (use_pred_info_t, pred_chain) != i + 1)
+        return false;
+
+      for (j = 0; j < i; j++)
+        {
+          xj = VEC_index (use_pred_info_t, x, j);
+          nxj = VEC_index (use_pred_info_t, pred_chain, j);
+
+          /* Check if nxj is !xj  */
+          if (gimple_cond_lhs (xj->cond) != gimple_cond_lhs (nxj->cond)
+              || gimple_cond_rhs (xj->cond) != gimple_cond_rhs (nxj->cond)
+              || gimple_cond_code (xj->cond) != gimple_cond_code (nxj->cond)
+              || (xj->invert == nxj->invert))
+            return false;
+        }
+
+      VEC_safe_push (use_pred_info_t, heap, x,
+                     VEC_index (use_pred_info_t, pred_chain, i));
+    }
+
+  /* Now normalize the pred chains using the extraced x1, x2, x3 etc.  */
+  for (j = 0; j < *n; j++)
+    {
+      use_pred_info_t t;
+      xj = VEC_index (use_pred_info_t, x, j);
+
+      t = XNEW (struct use_pred_info);
+      *t = *xj;
+
+      VEC_replace (use_pred_info_t, x, j, t);
+    }
+
+  for (i = 0; i < *n; i++)
+    {
+      pred_chain = preds[i];
+      for (j = 0; j < VEC_length (use_pred_info_t, pred_chain); j++)
+        free (VEC_index (use_pred_info_t, pred_chain, j));
+      VEC_free (use_pred_info_t, heap, pred_chain);
+      pred_chain = 0;
+      /* A new chain.  */
+      VEC_safe_push (use_pred_info_t, heap, pred_chain,
+                     VEC_index (use_pred_info_t, x, i));
+      preds[i] = pred_chain;
+    }
+  return true;
+}
+
+
+
 /* Computes the predicates that guard the use and checks
    if the incoming paths that have empty (or possibly
    empty) defintion can be pruned/filtered. The function returns
@@ -1658,9 +1807,18 @@ is_use_properly_guarded (gimple use_stmt,
 
   if (has_valid_preds)
     {
+      bool normed;
       if (dump_file)
         dump_predicates (phi, num_def_preds, def_preds,
                          "Operand defs of phi ");
+
+      normed = normalize_preds (def_preds, &num_def_preds);
+      if (normed && dump_file)
+        {
+          fprintf (dump_file, "\nNormalized to\n");
+          dump_predicates (phi, num_def_preds, def_preds,
+                           "Operand defs of phi ");
+        }
       is_properly_guarded =
           is_superset_of (def_preds, num_def_preds,
                           preds, num_preds);
@@ -1795,7 +1953,8 @@ warn_uninitialized_phi (gimple phi, VEC(gimple, heap) **worklist,
     return;
 
   uninit_op = gimple_phi_arg_def (phi, MASK_FIRST_SET_BIT (uninit_opnds));
-  warn_uninit (uninit_op,
+  warn_uninit (OPT_Wmaybe_uninitialized, uninit_op, SSA_NAME_VAR (uninit_op),
+	       SSA_NAME_VAR (uninit_op),
                "%qD may be used uninitialized in this function",
                uninit_use_stmt);
 

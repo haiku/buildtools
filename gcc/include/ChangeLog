@@ -1,6 +1,6 @@
-2013-04-12  Release Manager
+2013-04-11  Release Manager
 
-	* GCC 4.6.4 released.
+	* GCC 4.7.3 released.
 
 2013-01-30  Kai Tietz  <ktietz@redhat.com>
 
@@ -12,13 +12,61 @@
 	stdint.h and sys/types.h headers are present.
 	* sha1.h (sha1_uintptr, sha1_uint32): Likewise.
 
-2012-03-01  Release Manager
+2012-09-20  Release Manager
 
-	* GCC 4.6.3 released.
+	* GCC 4.7.2 released.
 
-2011-10-26  Release Manager
+2012-06-14  Release Manager
 
-	* GCC 4.6.2 released.
+	* GCC 4.7.1 released.
+
+2012-03-22  Release Manager
+
+	* GCC 4.7.0 released.
+
+2012-01-26  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf2.h (enum dwarf_form): Add Fission extensions.
+	(enum dwarf_attribute): Likewise.
+
+2012-01-06  Jason Merrill  <jason@redhat.com>
+
+	PR c++/6057
+	PR c++/48051
+	PR c++/50855
+	PR c++/51322
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_INITIALIZER_LIST, DEMANGLE_COMPONENT_NULLARY.
+
+2011-11-07  Richard Henderson  <rth@redhat.com>
+
+	Merged from transactional-memory.
+
+	* demangle.h (enum gnu_v3_ctor_kinds): Add gnu_v3_object_ctor_group.
+	(enum gnu_v3_dtor_kinds): Add gnu_v3_object_dtor_group.
+	(DEMANGLE_COMPONENT_TRANSACTION_CLONE): New.
+	(DEMANGLE_COMPONENT_NONTRANSACTION_CLONE): New.
+
+2011-10-21  Ulrich Drepper  <drepper@gmail.com>
+
+	* obstack.h [!GNUC] (obstack_free): Avoid cast to int.
+
+2011-10-21  Marc Glisse  <marc.glisse@inria.fr>
+
+	* ansidecl.h (ENUM_BITFIELD): Always use enum in C++
+
+2011-09-28  Doug Evans  <dje@google.com>
+
+	* timeval-utils.h: New file.
+
+	* libiberty.h (countargv): Declare.
+
+2011-09-26  Cary Coutant  <ccoutant@google.com>
+
+	PR lto/47247
+	* plugin-api.h (enum ld_plugin_symbol_resolution): Add
+	LDPR_PREVAILING_DEF_IRONLY_EXP.
+	(enum ld_plugin_tag): Add LDPT_GET_SYMBOLS_V2.
 
 2011-09-23  Cary Coutant  <ccoutant@google.com>
 
@@ -26,13 +74,88 @@
 	* demangle.h (enum demangle_component_type): Add
 	DEMANGLE_COMPONENT_CLONE.
 
-2011-06-27  Release Manager
+2011-07-25  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
-	* GCC 4.6.1 released.
+	* xregex.h (regoff_t): Define.
 
-2011-03-25  Release Manager
+2011-07-22  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 4.6.0 released.
+	* dwarf2.h (DW_AT_GNU_macros): New.
+	(enum dwarf_macro_record_type): New enum.  Add DW_MACRO_GNU_*.
+
+	PR c++/49756
+	* libiberty.h (stack_limit_increase): New prototype.
+
+2011-07-13  Sriraman Tallam  <tmsriram@google.com>
+	
+	* plugin-api.h
+	(ld_plugin_section): New struct.
+	(ld_plugin_get_section_count): New typedef.
+	(ld_plugin_get_section_type): New typedef.
+	(ld_plugin_get_section_name): New typedef.
+	(ld_plugin_get_section_contents): New typedef.
+	(ld_plugin_update_section_order): New typedef.
+	(ld_plugin_allow_section_ordering): New typedef.
+	(LDPT_GET_SECTION_COUNT): New enum value.
+	(LDPT_GET_SECTION_TYPE): New enum value.
+	(LDPT_GET_SECTION_NAME): New enum value.
+	(LDPT_GET_SECTION_CONTENTS): New enum value.
+	(LDPT_UPDATE_SECTION_ORDER): New enum value.
+	(LDPT_ALLOW_SECTION_ORDERING): New enum value.
+	(tv_get_section_count): New struct members.
+	(tv_get_section_type): New struct members.
+	(tv_get_section_name): New struct members.
+	(tv_get_section_contents): New struct members.
+	(tv_update_section_order): New struct members.
+	(tv_allow_section_ordering): New struct members.
+
+2011-07-01  Joel Brobecker  <brobecker@adacore.com>
+
+	* filenames.h (HAVE_CASE_INSENSITIVE_FILE_SYSTEM): Define
+	on Darwin, as well as on the systems that use a DOS-like
+	filesystem.
+
+2011-06-22  Jakub Jelinek  <jakub@redhat.com>
+
+	PR debug/47858
+	* dwarf2.h (enum dwarf_location_atom): Add DW_OP_GNU_parameter_ref.
+
+2011-06-13  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* demangle.h (DMGL_RET_POSTFIX): Extend the comment.
+	(DMGL_RET_DROP): New.
+
+2011-04-30  Jakub Jelinek  <jakub@redhat.com>
+
+	* dwarf2.h (DW_OP_GNU_const_type, DW_OP_GNU_regval_type,
+	DW_OP_GNU_deref_type, DW_OP_GNU_convert, DW_OP_GNU_reinterpret): New.
+
+2011-04-25  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	* ansidecl.h (ENUM_BITFIELD): New, from gcc/system.h.
+
+2011-03-31  Tristan Gingold  <gingold@adacore.com>
+
+	* dwarf2.h (dwarf_line_number_hp_sfc_ops): New enum.
+
+2011-03-24  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf2.h (dwarf_form): Remove deprecated DW_FORM_sig8 define.
+
+2010-03-23  Rafael Ávila de Espíndola <respindola@mozilla.com>
+
+	* plugin-api.h (ld_plugin_get_view): New.
+	(ld_plugin_tag): Add LDPT_GET_VIEW.
+	(ld_plugin_tv): Add tv_get_view.
+
+2011-03-16  Jakub Jelinek  <jakub@redhat.com>
+
+	* dwarf2.h (DW_TAG_GNU_call_site, DW_TAG_GNU_call_site_parameter,
+	DW_AT_GNU_call_site_value, DW_AT_GNU_call_site_data_value,
+	DW_AT_GNU_call_site_target, DW_AT_GNU_call_site_target_clobbered,
+	DW_AT_GNU_tail_call, DW_AT_GNU_all_tail_call_sites,
+	DW_AT_GNU_all_call_sites,, DW_AT_GNU_all_source_call_sites,
+	DW_OP_GNU_entry_value): New.
 
 2011-02-28  Kai Tietz  <kai.tietz@onevision.com>
 
