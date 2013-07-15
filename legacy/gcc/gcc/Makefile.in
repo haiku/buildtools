@@ -2129,14 +2129,14 @@ stmp-int-hdrs: stmp-fixinc $(USER_H) xlimits.h
 stmp-headers:
 	touch $@
 
-FIXINCSRCDIR=$(srcdir)/fixinc
-fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
-	$(FIXINCSRCDIR)/procopen.c $(FIXINCSRCDIR)/gnu-regex.c \
-	$(FIXINCSRCDIR)/server.c $(FIXINCSRCDIR)/gnu-regex.h \
-	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def 
-	MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc; pwd` ; \
-	export MAKE srcdir ; \
-	cd ./fixinc; $(SHELL) $${srcdir}/mkfixinc.sh $(host_canonical) $(target)
+#FIXINCSRCDIR=$(srcdir)/fixinc
+#fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
+#	$(FIXINCSRCDIR)/procopen.c $(FIXINCSRCDIR)/gnu-regex.c \
+#	$(FIXINCSRCDIR)/server.c $(FIXINCSRCDIR)/gnu-regex.h \
+#	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def 
+#	MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc; pwd` ; \
+#	export MAKE srcdir ; \
+#	cd ./fixinc; $(SHELL) $${srcdir}/mkfixinc.sh $(host_canonical) $(target)
 
 ##stmp-fixinc: $(FIXINCLUDES) gsyslimits.h
 ##	rm -rf include
@@ -2159,7 +2159,7 @@ fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
 ##	fi
 
 # Build fixed copies of system files.
-stmp-fixinc: fixinc.sh gsyslimits.h
+stmp-fixinc: gsyslimits.h
 	rm -rf include; mkdir include
 	TARGET_MACHINE=$(target); srcdir=`cd $(srcdir); pwd`; \
 	INSTALL_ASSERT_H=$(INSTALL_ASSERT_H); SHELL=$(SHELL) ;\
