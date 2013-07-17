@@ -169,7 +169,7 @@ OTHERS =
 
 # This is set by the configure script to the list of directories which
 # should be built using the target tools.
-TARGET_CONFIGDIRS = libiberty libgloss newlib libio librx libstdc++ libg++ winsup opcodes libstub cygmon libf2c libchill libobjc
+TARGET_CONFIGDIRS = libiberty libgloss newlib librx libg++ winsup opcodes libstub cygmon libf2c libchill libobjc
 
 # Target libraries are put under this directory:
 # Changed by configure to $(target_alias) if cross.
@@ -756,8 +756,6 @@ INSTALL_X11_MODULES = \
 # This is a list of the targets for all of the modules which are compiled
 # using $(TARGET_FLAGS_TO_PASS).
 ALL_TARGET_MODULES = \
-	all-target-libio \
-	all-target-libstdc++ \
 	all-target-librx \
 	all-target-libg++ \
 	all-target-newlib \
@@ -779,8 +777,6 @@ ALL_TARGET_MODULES = \
 # This is a list of the configure targets for all of the modules which
 # are compiled using the target tools.
 CONFIGURE_TARGET_MODULES = \
-	configure-target-libio \
-	configure-target-libstdc++ \
 	configure-target-librx \
 	configure-target-libg++ \
 	configure-target-newlib \
@@ -802,8 +798,6 @@ CONFIGURE_TARGET_MODULES = \
 # This is a list of the check targets for all of the modules which are
 # compiled using $(TARGET_FLAGS_TO_PASS).
 CHECK_TARGET_MODULES = \
-	check-target-libio \
-	check-target-libstdc++ \
 	check-target-libg++ \
 	check-target-newlib \
 	check-target-libf2c \
@@ -820,8 +814,6 @@ CHECK_TARGET_MODULES = \
 # This is a list of the install targets for all of the modules which are
 # compiled using $(TARGET_FLAGS_TO_PASS).
 INSTALL_TARGET_MODULES = \
-	install-target-libio \
-	install-target-libstdc++ \
 	install-target-libg++ \
 	install-target-newlib \
 	install-target-libf2c \
@@ -906,8 +898,6 @@ CLEAN_MODULES = \
 
 # All of the target modules that can be cleaned
 CLEAN_TARGET_MODULES = \
-	clean-target-libio \
-	clean-target-libstdc++ \
 	clean-target-librx \
 	clean-target-libg++ \
 	clean-target-newlib \
@@ -1567,7 +1557,7 @@ all-byacc:
 all-bzip2:
 all-cvssrc:
 configure-target-cygmon: $(ALL_GCC)
-all-target-cygmon: configure-target-cygmon all-gas all-ld all-gcc all-target-libiberty all-target-newlib all-target-libio all-target-libstub
+all-target-cygmon: configure-target-cygmon all-gas all-ld all-gcc all-target-libiberty all-target-newlib all-target-libstub
 all-db:
 all-dejagnu: all-tcl all-expect all-tk
 all-diff: all-libiberty
@@ -1592,7 +1582,7 @@ all-gdb: all-libiberty all-opcodes all-bfd all-mmalloc all-readline all-bison al
 all-gettext:
 all-gnuserv:
 configure-target-gperf: $(ALL_GCC)
-all-target-gperf: configure-target-gperf all-target-libiberty all-target-libstdc++
+all-target-gperf: configure-target-gperf all-target-libiberty
 all-gprof: all-libiberty all-bfd all-opcodes all-intl
 all-grep: all-libiberty
 all-grez: all-libiberty all-bfd all-opcodes
@@ -1607,20 +1597,15 @@ all-ispell: all-emacs19
 all-itcl: all-tcl all-tk
 all-ld: all-libiberty all-bfd all-opcodes all-bison all-byacc all-flex all-intl
 configure-target-libg++: $(ALL_GCC) configure-target-librx
-all-target-libg++: configure-target-libg++ all-gas all-ld all-gcc all-target-libiberty all-target-newlib all-target-libio all-target-librx all-target-libstdc++
+all-target-libg++: configure-target-libg++ all-gas all-ld all-gcc all-target-libiberty all-target-newlib all-target-librx
 configure-target-libgloss: $(ALL_GCC)
 all-target-libgloss: configure-target-libgloss configure-target-newlib
-configure-target-libio: $(ALL_GCC)
-all-target-libio: configure-target-libio all-gas all-ld all-gcc all-target-libiberty all-target-newlib
-check-target-libio: all-target-libstdc++
 all-libgui: all-tcl all-tk all-itcl
 all-libiberty:
 configure-target-libjava: $(ALL_GCC) configure-target-zlib configure-target-boehm-gc configure-target-qthreads configure-target-newlib
 all-target-libjava: configure-target-libjava all-gcc all-zip all-target-newlib all-target-zlib all-target-boehm-gc all-target-qthreads
 configure-target-librx: $(ALL_GCC) configure-target-newlib
 all-target-librx: configure-target-librx
-configure-target-libstdc++: $(ALL_GCC)
-all-target-libstdc++: configure-target-libstdc++ all-gas all-ld all-gcc all-target-libiberty all-target-newlib all-target-libio
 configure-target-libstub: $(ALL_GCC)
 all-target-libstub: configure-target-libstub
 all-libtool:
@@ -1656,7 +1641,7 @@ all-tgas: all-libiberty all-bfd all-opcodes
 all-time:
 all-tix: all-tcl all-tk
 all-wdiff:
-all-target-winsup: all-target-newlib all-target-libiberty all-target-libio configure-target-winsup 
+all-target-winsup: all-target-newlib all-target-libiberty configure-target-winsup 
 configure-target-winsup: configure-target-newlib
 all-uudecode: all-libiberty
 all-zip:
@@ -1816,7 +1801,7 @@ gas+binutils.tar.gz: $(DIST_SUPPORT) $(GASB_SUPPORT_DIRS) gas
 		SUPPORT_FILES="$(GASB_SUPPORT_DIRS) makeall.bat configure.bat"
 
 .PHONY: libg++.tar.gz
-LIBGXX_SUPPORT_DIRS=include libstdc++ libio librx libiberty
+LIBGXX_SUPPORT_DIRS=include librx libiberty
 libg++.tar.gz: $(DIST_SUPPORT) libg++
 	$(MAKE) -f Makefile.in taz TOOL=libg++ \
 		SUPPORT_FILES="$(LIBGXX_SUPPORT_DIRS)"
