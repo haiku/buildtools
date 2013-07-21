@@ -2948,7 +2948,7 @@ for machine in $build $host $target; do
 		cpu_type=sparc
 		;;
 	x86_64-*)
-		cpu_type=x86_64
+		cpu_type=i386
 		;;
 	esac
 
@@ -5640,11 +5640,10 @@ for machine in $build $host $target; do
 		xm_file="${xm_file} xm-svr3"
 		use_collect2=yes
 		;;
-	x86_64-*)
-		# Not actually supported as a target. But we want to avoid an error when
-		# building a cross-compiler for this build host.
-		xm_file=i386/xm-x86_64.h
-		;;
+ 	x86_64-*)
+ 		# Not actually supported as a target. But we want to avoid an error when
+ 		# building a cross-compiler for this build host.
+ 		;;
 	*)
 		echo "Configuration $machine not supported" 1>&2
 		exit 1
