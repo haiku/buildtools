@@ -513,6 +513,9 @@ changequote([,])dnl
 	sparc*-*-*)
 		cpu_type=sparc
 		;;
+	x86_64-*)
+		cpu_type=x86_64
+		;;
 	esac
 
 	tm_file=${cpu_type}/${cpu_type}.h
@@ -3340,6 +3343,11 @@ changequote([,])dnl
 	we32k-att-sysv*)
 		xm_file="${xm_file} xm-svr3"
 		use_collect2=yes
+		;;
+	x86_64-*)
+		# Not actually supported as a target. But we want to avoid an error when
+		# building a cross-compiler for this build host.
+		xm_file=i386/xm-x86_64.h
 		;;
 	*)
 		echo "Configuration $machine not supported" 1>&2
