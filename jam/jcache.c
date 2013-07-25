@@ -299,7 +299,6 @@ delete_jamfile_cache(jamfile_cache* cache)
 		if (cache->entries)
 			hashdone(cache->entries);
 		delete_string_list(cache->filenames);
-		free(cache->cache_file);
 	}
 }
 
