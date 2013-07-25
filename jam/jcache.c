@@ -43,7 +43,7 @@ static char* pop_string(string_list *list);
 /*!	\brief Reads a line from the supplied file and writes it to the supplied
 		   buffer.
 
-	If the line end in a LF, it is chopped off.
+	If the line ends in a LF, it is chopped off.
 
 	\param file The file.
 	\param value The pointer to where the read value shall be written.
