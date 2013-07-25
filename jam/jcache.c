@@ -444,6 +444,11 @@ read_file(const char *filename, string_list* list)
 				len++;
 				line[len] = '\0';
 			}
+			if ((size_t)len + 1 == sizeof(buffer)) {
+				fprintf(stderr, "error: %s:%d: line too long!\n", filename,
+					list->count + 1);
+				exit(1);
+			}
 			// copy it
 			string = (char*)malloc(len + 1);
 			if (string) {
