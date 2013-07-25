@@ -637,8 +637,49 @@ get_jcache(void)
 		jamfileCache = new_jamfile_cache();
 	if (jamfileCache && !jamfileCache->cache_file) {
 		char* filename = jcache_name();
-		if (filename)
-			read_jcache(jamfileCache, filename);
+		if (filename) {
+			if (!read_jcache(jamfileCache, filename)) {
+				// An error occurred while reading the cache file. Remove all
+				// entries that we read in, assuming they might be corrupted.
+				// Since the hash doesn't support removing entries, we create
+				// a new one and copy over the entries we want to keep.
+				int count = jamfileCache->filenames->count;
+				int i;
+
+				jamfile_cache* newCache = new_jamfile_cache();
+				if (!newCache) {
+					fprintf(stderr, "Out of memory!\n");
+					exit(1);
+				}
+
+				for (i = 0; i < count; i++) {
+					char* entryname = jamfileCache->filenames->strings[i];
+					jcache_entry* entry = find_jcache_entry(jamfileCache,
+						entryname);
+					if (entry->used) {
+						jcache_entry newEntry;
+						if (!init_jcache_entry(&newEntry, entryname,
+								entry->time, entry->used)) {
+							fprintf(stderr, "Out of memory!\n");
+							exit(1);
+						}
+
+						delete_string_list(newEntry.strings);
+						newEntry.strings = entry->strings;
+						entry->strings = 0;
+
+						if (!add_jcache_entry(newCache, &newEntry)) {
+							fprintf(stderr, "Out of memory!\n");
+							exit(1);
+						}
+					}
+				}
+
+				delete_jamfile_cache(jamfileCache);
+				jamfileCache = newCache;
+				jamfileCache->cache_file = filename;
+			}
+		}
 	}
 	return jamfileCache;
 }
