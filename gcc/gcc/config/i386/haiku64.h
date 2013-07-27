@@ -131,3 +131,5 @@ Boston, MA 02111-1307, USA.  */
 
 #undef TARGET_ASM_UNIQUE_SECTION
 #define TARGET_ASM_UNIQUE_SECTION  x86_64_elf_unique_section
+
+#define USE_X86_64_FRAME_POINTER 1
