@@ -78,8 +78,8 @@ Boston, MA 02111-1307, USA.  */
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
-    { "/boot/common/non-packaged/develop/headers/gcc4", 0, 0, 0, 0, 0 }, \
-    { "/boot/common/develop/headers/gcc4", 0, 0, 0, 0, 0 }, \
+    { "/boot/common/non-packaged/develop/headers/gcc4", 0, 0, 0, 1, 0 }, \
+    { "/boot/common/develop/headers/gcc4", 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os", 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os/app", 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os/device", 0, 0, 0, 1, 0 }, \
@@ -128,8 +128,8 @@ Boston, MA 02111-1307, USA.  */
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
-    { "/boot/common/non-packaged/develop/headers", 0, 0, 0, 0, 0 }, \
-    { "/boot/common/develop/headers", 0, 0, 0, 0, 0 }, \
+    { "/boot/common/non-packaged/develop/headers", 0, 0, 0, 1, 0 }, \
+    { "/boot/common/develop/headers", 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os", 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os/app", 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os/device", 0, 0, 0, 1, 0 }, \
