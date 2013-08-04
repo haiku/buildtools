@@ -1003,11 +1003,11 @@ AC_LANG_POP(C++)
 
 
 # Configure -lm usage for host tools that need it
-math_library="-lm"
-case $host in
+build_math_library="-lm"
+case $build in
   *-*-haiku*)
     # no separate math library needed
-    math_library=
+    build_math_library=
     ;;
 esac
 
