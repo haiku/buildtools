@@ -599,7 +599,6 @@ ac_includes_default="\
 #endif"
 
 ac_subst_vars='LTLIBOBJS
-build_math_library
 LIBOBJS
 enable_plugin
 pluginlibs
@@ -735,6 +734,7 @@ LDEXP_LIB
 EXTRA_GCC_LIBS
 GNAT_LIBEXC
 COLLECT2_LIBS
+build_math_library
 CXXCPP
 AR
 NM
@@ -770,7 +770,7 @@ with_cpu
 enable_multiarch
 enable_multilib
 ENABLE_BUILD_WITH_CXX
-ENABLE_HYBRID_SECONDARY
+HYBRID_SECONDARY
 coverage_flags
 valgrind_command
 valgrind_path_defines
@@ -877,7 +877,7 @@ enable_werror_always
 enable_checking
 enable_coverage
 enable_gather_detailed_mem_stats
-enable_hybrid_secondary
+with_hybrid_secondary
 enable_build_with_cxx
 with_stabs
 enable_multilib
@@ -1568,7 +1568,6 @@ Optional Features:
                           texinfo bison or flex
   --disable-largefile     omit support for large files
   --enable-werror-always  enable -Werror despite compiler version
-  --enable-hybrid-secondary build a secondary compiler for a Haiku hybrid system
   --enable-checking[=LIST]
                           enable expensive run-time checks. With LIST, enable
                           only specific categories of checks. Categories are:
@@ -1655,6 +1654,8 @@ Optional Packages:
   --with-demangler-in-ld  try to use demangler in GNU ld
   --with-gnu-as           arrange to work with GNU as
   --with-as               arrange to use the specified as (full pathname)
+  --with-hybrid_secondary specify the packaging architecture for building a
+                          secondary compiler for a Haiku hybrid system
   --with-stabs            arrange to use stabs instead of host debug format
   --with-dwarf2           force the default debug format to be DWARF 2
   --with-native-system-header-dir=dir
@@ -7004,20 +7005,17 @@ fi
 # Miscenalleous configure options
 # -------------------------------
 
-# handle --enable-hybrid-secondary
-# Check whether --enable-hybrid_secondary was given.
-if test "${enable_hybrid_secondary+set}" = set; then :
-  enableval=$enable_hybrid_secondary; ENABLE_HYBRID_SECONDARY=$enableval
+# handle --with-hybrid-secondary
+
+# Check whether --with-hybrid_secondary was given.
+if test "${with_hybrid_secondary+set}" = set; then :
+  withval=$with_hybrid_secondary; HYBRID_SECONDARY=$withval
 else
-  ENABLE_HYBRID_SECONDARY=no
-fi
-
-
-if test "$ENABLE_HYBRID_SECONDARY" = "yes"; then
-
-$as_echo "#define ENABLE_HYBRID_SECONDARY 1" >>confdefs.h
+  HYBRID_SECONDARY=
 
 fi
+
+
 
 # See if we are building gcc with C++.
 # Check whether --enable-build-with-cxx was given.
@@ -8856,6 +8854,7 @@ case $build in
     build_math_library=
     ;;
 esac
+
 
 # These libraries may be used by collect2.
 # We may need a special search path to get them linked.
@@ -18074,7 +18073,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 18049 "configure"
+#line 18076 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -18180,7 +18179,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 18155 "configure"
+#line 18182 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H

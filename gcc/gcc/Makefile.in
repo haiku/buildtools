@@ -98,7 +98,7 @@ build_objdir := $(toplevel_builddir)/$(build_subdir)
 build_libobjdir := $(toplevel_builddir)/$(build_libsubdir)
 target_objdir := $(toplevel_builddir)/$(target_subdir)
 
-ENABLE_HYBRID_SECONDARY = @ENABLE_HYBRID_SECONDARY@
+HYBRID_SECONDARY = @HYBRID_SECONDARY@
 
 # --------
 # Defined vpaths
@@ -2104,8 +2104,8 @@ DRIVER_DEFINES = \
   `test "X$${SHLIB}" = "X" || test "@enable_shared@" != "yes" || echo "-DENABLE_SHARED_LIBGCC"` \
   -DCONFIGURE_SPECS="\"@CONFIGURE_SPECS@\""
 
-ifeq ($(ENABLE_HYBRID_SECONDARY),yes)
-DRIVER_DEFINES += -DENABLE_HYBRID_SECONDARY
+ifneq ($(HYBRID_SECONDARY),)
+DRIVER_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
 endif
 
 gcc.o: gcc.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) intl.h multilib.h \
@@ -4014,8 +4014,8 @@ PREPROCESSOR_DEFINES = \
   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc/\" \
   @TARGET_SYSTEM_ROOT_DEFINE@
 
-ifeq ($(ENABLE_HYBRID_SECONDARY),yes)
-PREPROCESSOR_DEFINES += -DENABLE_HYBRID_SECONDARY
+ifneq ($(HYBRID_SECONDARY),)
+PREPROCESSOR_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
 endif
 
 CFLAGS-cppbuiltin.o += $(PREPROCESSOR_DEFINES) -DBASEVER=$(BASEVER_s)

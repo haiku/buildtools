@@ -68,7 +68,7 @@ Boston, MA 02111-1307, USA.  */
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
 
-#ifdef ENABLE_HYBRID_SECONDARY
+#ifdef HYBRID_SECONDARY
 /* For a secondary compiler on a hybrid system, use alternative search paths.*/
 #define INCLUDE_DEFAULTS \
 { \
@@ -78,8 +78,8 @@ Boston, MA 02111-1307, USA.  */
     { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { FIXED_INCLUDE_DIR, "GCC", 0, 0, 0, 0 }, \
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 }, \
-    { "/boot/common/non-packaged/develop/headers/gcc4", 0, 0, 0, 1, 0 }, \
-    { "/boot/common/develop/headers/gcc4", 0, 0, 0, 1, 0 }, \
+    { "/boot/common/non-packaged/develop/headers/" HYBRID_SECONDARY, 0, 0, 0, 1, 0 }, \
+    { "/boot/common/develop/headers/" HYBRID_SECONDARY, 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers/os", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/os/app", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/os/device", 0, 0, 1, 1, 0 }, \
@@ -111,10 +111,11 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/system/develop/headers/glibc", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/gnu", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/posix", 0, 0, 1, 1, 0 }, \
+    { "/boot/system/develop/headers/" HYBRID_SECONDARY, 0, 0, 0, 1, 0 }, \
     { "/boot/system/develop/headers", 0, 0, 0, 1, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
 }
-#else /* ENABLE_HYBRID_SECONDARY */
+#else /* HYBRID_SECONDARY */
 /* For both native and cross compiler, use standard Haiku include file
    search paths.
    For a cross compiler, it is expected that an appropriate sysroot has
@@ -164,7 +165,7 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/system/develop/headers", 0, 0, 0, 1, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
 }
-#endif /* ENABLE_HYBRID_SECONDARY */
+#endif /* HYBRID_SECONDARY */
 
 /* Whee.  LIBRARY_PATH is Be's LD_LIBRARY_PATH, which of course will
    cause nasty problems if we override it.  */
@@ -174,18 +175,18 @@ Boston, MA 02111-1307, USA.  */
    and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
    standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
 #undef STARTFILE_PREFIX_SPEC
-#ifdef ENABLE_HYBRID_SECONDARY
+#ifdef HYBRID_SECONDARY
 /* For a secondary compiler on a hybrid system, use alternative search paths.*/
 #define STARTFILE_PREFIX_SPEC \
-	"/boot/common/non-packaged/develop/lib/gcc4/ \
-	/boot/common/develop/lib/gcc4/ \
-	/boot/system/develop/lib/gcc4/"
-#else /* ENABLE_HYBRID_SECONDARY */
+	"/boot/common/non-packaged/develop/lib/" HYBRID_SECONDARY "/" \
+	" /boot/common/develop/lib/" HYBRID_SECONDARY "/" \
+	" /boot/system/develop/lib/" HYBRID_SECONDARY "/"
+#else /* HYBRID_SECONDARY */
 #define STARTFILE_PREFIX_SPEC \
 	"/boot/common/non-packaged/develop/lib/ \
 	/boot/common/develop/lib/ \
 	/boot/system/develop/lib/"
-#endif /* ENABLE_HYBRID_SECONDARY */
+#endif /* HYBRID_SECONDARY */
 
 /* Haiku doesn't have a separate math library.  */
 #define MATH_LIBRARY ""
