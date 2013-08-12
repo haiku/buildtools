@@ -158,6 +158,7 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/3rdparty", 0, 0, 0, 1, 0 }, \
+    	/* TODO: To be removed when libtiff has been outsourced. */\
     { "/boot/system/develop/headers/bsd", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/glibc", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/gnu", 0, 0, 1, 1, 0 }, \
@@ -174,18 +175,22 @@ Boston, MA 02111-1307, USA.  */
 /* With STANDARD_STARTFILE_PREFIX_{1,2} set to "/boot/common/develop/lib/"
    and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
    standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#undef MD_STARTFILE_PREFIX
 #undef STARTFILE_PREFIX_SPEC
 #ifdef HYBRID_SECONDARY
 /* For a secondary compiler on a hybrid system, use alternative search paths.*/
-#define STARTFILE_PREFIX_SPEC \
-	"/boot/common/non-packaged/develop/lib/" HYBRID_SECONDARY "/" \
-	" /boot/common/develop/lib/" HYBRID_SECONDARY "/" \
-	" /boot/system/develop/lib/" HYBRID_SECONDARY "/"
+#define STANDARD_STARTFILE_PREFIX_1 \
+  "/boot/common/develop/lib/" HYBRID_SECONDARY "/"
+#define STANDARD_STARTFILE_PREFIX_2 \
+  "/boot/system/develop/lib/" HYBRID_SECONDARY "/"
+#define MD_STARTFILE_PREFIX \
+  "/boot/common/non-packaged/develop/lib/" HYBRID_SECONDARY "/"
 #else /* HYBRID_SECONDARY */
-#define STARTFILE_PREFIX_SPEC \
-	"/boot/common/non-packaged/develop/lib/ \
-	/boot/common/develop/lib/ \
-	/boot/system/develop/lib/"
+#define STANDARD_STARTFILE_PREFIX_1   "/boot/common/develop/lib/"
+#define STANDARD_STARTFILE_PREFIX_2   "/boot/system/develop/lib/"
+#define MD_STARTFILE_PREFIX           "/boot/common/non-packaged/develop/lib/"
 #endif /* HYBRID_SECONDARY */
 
 /* Haiku doesn't have a separate math library.  */
