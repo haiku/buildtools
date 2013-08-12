@@ -362,11 +362,7 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
     { "/boot/common/non-packaged/develop/headers", 0, 0, 0 },\
-    { "/boot/common/non-packaged/include", 0, 0, 0 },\
-    	/* TODO: To be removed. */\
     { "/boot/common/develop/headers", 0, 0, 0 },\
-    { "/boot/common/include", 0, 0, 0 },\
-    	/* TODO: To be removed. */\
     { "/boot/system/develop/headers/os", 0, 0, 1 },\
     { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
     { "/boot/system/develop/headers/os/device", 0, 0, 1 },\
@@ -392,6 +388,7 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 1 },\
     { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 1 },\
     { "/boot/system/develop/headers/3rdparty", 0, 0, 0 },\
+    	/* TODO: To be removed when libtiff has been outsourced. */\
     { "/boot/system/develop/headers/bsd", 0, 0, 0 },\
     { "/boot/system/develop/headers/glibc", 0, 0, 0 },\
     { "/boot/system/develop/headers/gnu", 0, 0, 0 },\
@@ -449,10 +446,6 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 #undef MD_STARTFILE_PREFIX
 #define MD_STARTFILE_PREFIX		"/boot/common/non-packaged/develop/lib/"
 
-/* TODO: To be removed. */
-#undef MD_STARTFILE_PREFIX_1
-#define MD_STARTFILE_PREFIX_1	"/boot/common/lib/"
-
 /* Haiku doesn't have a separate math library.  */
 #define MATH_LIBRARY ""
 
@@ -476,8 +469,6 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 	So we do just that, we replace MULTIPLE_SYMBOL_SPACES with a
 	test for optimization (see lex.c, line 4882ff and decl2.c, line 2701).
 */
-/* [bonefish]:
-    Review! */
 
 #undef MULTIPLE_SYMBOL_SPACES
 
@@ -492,14 +483,10 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
    so the most likely ill effect of disabling this is that a BeOS gdb
    debugging an executable with no debug info would not see the gcc2_compiled
    label. */
-/* [bonefish]:
-    Review! */
 #undef ASM_IDENTIFY_GCC
 #define ASM_IDENTIFY_GCC(FILE)
 
 /* required to compile winnt.c */
-/* [bonefish]:
-    Review! */
 #define I386_PE_STRIP_ENCODING(SYM_NAME) \
   ((SYM_NAME) + ((SYM_NAME)[0] == '@' ? 3 : 0))
 
