@@ -292,6 +292,14 @@ AC_ARG_WITH(dwarf2,
 dwarf2="$with_dwarf2",
 dwarf2=no)
 
+# handle --with-hybrid-secondary
+AC_ARG_WITH(hybrid_secondary,
+  [  --with-hybrid_secondary specify the packaging architecture for building a secondary compiler for a Haiku hybrid system.],
+  [HYBRID_SECONDARY=$withval],
+  [HYBRID_SECONDARY=]
+)
+AC_SUBST(HYBRID_SECONDARY)
+
 # Determine the host, build, and target systems
 AC_CANONICAL_SYSTEM
 

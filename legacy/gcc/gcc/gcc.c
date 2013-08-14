@@ -1409,10 +1409,19 @@ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
 #ifdef MD_STARTFILE_PREFIX_1
 static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
 #endif
+
 static const char *standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
+
 #if defined(__HAIKU__)
+#ifdef HYBRID_SECONDARY
+static const char *standard_startfile_prefix_1 =
+  "/boot/common/develop/lib/" HYBRID_SECONDARY "/";
+static const char *standard_startfile_prefix_2 =
+  "/boot/system/develop/lib/" HYBRID_SECONDARY "/";
+#else
 static const char *standard_startfile_prefix_1 = "/boot/common/develop/lib/";
 static const char *standard_startfile_prefix_2 = "/boot/system/develop/lib/";
+#endif
 #else
 static const char *standard_startfile_prefix_1 = "/lib/";
 static const char *standard_startfile_prefix_2 = "/usr/lib/";

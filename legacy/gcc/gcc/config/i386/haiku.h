@@ -353,10 +353,13 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 /* For native compiler, use standard Haiku include file search paths
    rooted in /boot/system/develop/headers.  For a cross compiler, don't expect
    the host to use the Haiku directory scheme, and instead look for the Haiku
-   include files relative to TOOL_INCLUDE_DIR. */
+   include files relative to TOOL_INCLUDE_DIR. When building as the compiler
+   for the secondary architecture of a hybrid, use slightly different paths. */
+
+#undef	INCLUDE_DEFAULTS
 
 #ifndef CROSS_COMPILE
-#undef INCLUDE_DEFAULTS
+#ifndef HYBRID_SECONDARY
 #define INCLUDE_DEFAULTS \
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
@@ -396,8 +399,50 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { "/boot/system/develop/headers", 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
     };
+#else /* HYBRID_SECONDARY */
+#define INCLUDE_DEFAULTS \
+    { \
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
+    { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
+    { "/boot/common/non-packaged/develop/headers/" HYBRID_SECONDARY, 0, 0, 0 },\
+    { "/boot/common/develop/headers/" HYBRID_SECONDARY, 0, 0, 0 },\
+    { "/boot/system/develop/headers/os", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/device", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/drivers", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/game", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/interface", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/kernel", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/locale", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/mail", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/media", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi2", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/net", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/opengl", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/storage", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/support", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/translation", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/graphics", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/input_server", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/screen_saver", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Deskbar", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/3rdparty", 0, 0, 0 },\
+    	/* TODO: To be removed when libtiff has been outsourced. */\
+    { "/boot/system/develop/headers/bsd", 0, 0, 1 },\
+    { "/boot/system/develop/headers/glibc", 0, 0, 1 },\
+    { "/boot/system/develop/headers/gnu", 0, 0, 1 },\
+    { "/boot/system/develop/headers/posix", 0, 0, 1 },\
+    { "/boot/system/develop/headers/" HYBRID_SECONDARY, 0, 0, 0 }, \
+    { "/boot/system/develop/headers", 0, 0, 0 }, \
+    { 0, 0, 0, 0 } \
+    };
+#endif
 #else /* CROSS_COMPILE */
-#undef	INCLUDE_DEFAULTS
+#ifndef HYBRID_SECONDARY
 #define INCLUDE_DEFAULTS				\
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
@@ -434,6 +479,45 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
     { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
     };
+#else /* HYBRID_SECONDARY */
+#define INCLUDE_DEFAULTS				\
+    { \
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
+    { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/locale", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/glibc", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/posix", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/" HYBRID_SECONDARY, 0, 0, 0 }, \
+    { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
+    { 0, 0, 0, 0 } \
+    };
+#endif
 #endif
 
 /* Whee.  LIBRARY_PATH is Haiku's LD_LIBRARY_PATH, which of course will
@@ -444,7 +528,12 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
    and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
    standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
 #undef MD_STARTFILE_PREFIX
+#ifdef HYBRID_SECONDARY
+#define MD_STARTFILE_PREFIX	 \
+	"/boot/common/non-packaged/develop/lib/" HYBRID_SECONDARY "/"
+#else
 #define MD_STARTFILE_PREFIX		"/boot/common/non-packaged/develop/lib/"
+#endif
 
 /* Haiku doesn't have a separate math library.  */
 #define MATH_LIBRARY ""
