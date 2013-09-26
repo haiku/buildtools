@@ -98,6 +98,8 @@ build_objdir := $(toplevel_builddir)/$(build_subdir)
 build_libobjdir := $(toplevel_builddir)/$(build_libsubdir)
 target_objdir := $(toplevel_builddir)/$(target_subdir)
 
+HYBRID_SECONDARY = @HYBRID_SECONDARY@
+
 # --------
 # Defined vpaths
 # --------
@@ -2102,6 +2104,10 @@ DRIVER_DEFINES = \
   `test "X$${SHLIB}" = "X" || test "@enable_shared@" != "yes" || echo "-DENABLE_SHARED_LIBGCC"` \
   -DCONFIGURE_SPECS="\"@CONFIGURE_SPECS@\""
 
+ifneq ($(HYBRID_SECONDARY),)
+DRIVER_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
+endif
+
 gcc.o: gcc.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) intl.h multilib.h \
     Makefile $(lang_specs_files) specs.h prefix.h $(GCC_H) $(FLAGS_H) \
     configargs.h $(OBSTACK_H) $(OPTS_H) $(DIAGNOSTIC_H) $(VEC_H) $(PARAMS_H)
@@ -3959,7 +3965,7 @@ $(genprogerr:%=build/gen%$(build_exeext)): $(BUILD_ERRORS)
 genprog = $(genprogerr) check checksum condmd
 
 # These programs need libs over and above what they get from the above list.
-build/genautomata$(build_exeext) : BUILD_LIBS += @math_library@
+build/genautomata$(build_exeext) : BUILD_LIBS += @build_math_library@
 
 # These programs are not linked with the MD reader.
 build/gengtype$(build_exeext) : build/gengtype-lex.o build/gengtype-parse.o \
@@ -4007,6 +4013,10 @@ PREPROCESSOR_DEFINES = \
   -DPREFIX=\"$(prefix)/\" \
   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc/\" \
   @TARGET_SYSTEM_ROOT_DEFINE@
+
+ifneq ($(HYBRID_SECONDARY),)
+PREPROCESSOR_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
+endif
 
 CFLAGS-cppbuiltin.o += $(PREPROCESSOR_DEFINES) -DBASEVER=$(BASEVER_s)
 cppbuiltin.o: cppbuiltin.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \

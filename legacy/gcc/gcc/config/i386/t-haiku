@@ -4,11 +4,17 @@ CROSS_LIBGCC1 =
 
 # There are system headers elsewhere, but these are the ones that
 # we are most likely to want to apply any fixes to.
-SYSTEM_HEADER_DIR = /boot/develop/headers/posix
+SYSTEM_HEADER_DIR = /boot/system/develop/headers/posix
 CROSS_SYSTEM_HEADER_DIR := $(CROSS_SYSTEM_HEADER_DIR)/posix
 
 # Use the system assert.h
 INSTALL_ASSERT_H =
+
+# Override the test that checks for the existence of a system limits.h header.
+# When cross compiling a native compiler for Haiku we don't actually know where
+# the system headers the cross compiler uses are. But we know Haiku has a
+# limits.h,
+LIMITS_H_TEST = true
 
 winnt.o: $(srcdir)/config/i386/winnt.c
 	$(CC) -c $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) $(srcdir)/config/i386/winnt.c

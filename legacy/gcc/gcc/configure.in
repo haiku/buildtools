@@ -292,6 +292,14 @@ AC_ARG_WITH(dwarf2,
 dwarf2="$with_dwarf2",
 dwarf2=no)
 
+# handle --with-hybrid-secondary
+AC_ARG_WITH(hybrid_secondary,
+  [  --with-hybrid_secondary specify the packaging architecture for building a secondary compiler for a Haiku hybrid system.],
+  [HYBRID_SECONDARY=$withval],
+  [HYBRID_SECONDARY=]
+)
+AC_SUBST(HYBRID_SECONDARY)
+
 # Determine the host, build, and target systems
 AC_CANONICAL_SYSTEM
 
@@ -512,6 +520,9 @@ changequote([,])dnl
 		;;
 	sparc*-*-*)
 		cpu_type=sparc
+		;;
+	x86_64-*)
+		cpu_type=i386
 		;;
 	esac
 
@@ -3340,6 +3351,10 @@ changequote([,])dnl
 	we32k-att-sysv*)
 		xm_file="${xm_file} xm-svr3"
 		use_collect2=yes
+		;;
+	x86_64-*)
+		# Not actually supported as a target. But we want to avoid an error when
+		# building a cross-compiler for this build host.
 		;;
 	*)
 		echo "Configuration $machine not supported" 1>&2

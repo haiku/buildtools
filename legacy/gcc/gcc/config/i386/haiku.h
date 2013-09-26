@@ -351,97 +351,189 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 #undef SMALL_STACK
 
 /* For native compiler, use standard Haiku include file search paths
-   rooted in /boot/develop/headers.  For a cross compiler, don't
-   expect the host to use the Haiku directory scheme, and instead look
-   for the Haiku include files relative to TOOL_INCLUDE_DIR.  Yes, we
-   use ANSI string concatenation here (FIXME) */
+   rooted in /boot/system/develop/headers.  For a cross compiler, don't expect
+   the host to use the Haiku directory scheme, and instead look for the Haiku
+   include files relative to TOOL_INCLUDE_DIR. When building as the compiler
+   for the secondary architecture of a hybrid, use slightly different paths. */
+
+#undef	INCLUDE_DEFAULTS
 
 #ifndef CROSS_COMPILE
-#undef INCLUDE_DEFAULTS
+#ifndef HYBRID_SECONDARY
 #define INCLUDE_DEFAULTS \
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
-    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
-    { "/boot/common/include", 0, 0, 0 },\
-    { "/boot/develop/headers/os", 0, 0, 0 },\
-    { "/boot/develop/headers/os/app", 0, 0, 0 },\
-    { "/boot/develop/headers/os/device", 0, 0, 0 },\
-    { "/boot/develop/headers/os/drivers", 0, 0, 0 },\
-    { "/boot/develop/headers/os/game", 0, 0, 0 },\
-    { "/boot/develop/headers/os/interface", 0, 0, 0 },\
-    { "/boot/develop/headers/os/kernel", 0, 0, 0 },\
-    { "/boot/develop/headers/os/locale", 0, 0, 0 },\
-    { "/boot/develop/headers/os/mail", 0, 0, 0 },\
-    { "/boot/develop/headers/os/media", 0, 0, 0 },\
-    { "/boot/develop/headers/os/midi", 0, 0, 0 },\
-    { "/boot/develop/headers/os/midi2", 0, 0, 0 },\
-    { "/boot/develop/headers/os/net", 0, 0, 0 },\
-    { "/boot/develop/headers/os/opengl", 0, 0, 0 },\
-    { "/boot/develop/headers/os/storage", 0, 0, 0 },\
-    { "/boot/develop/headers/os/support", 0, 0, 0 },\
-    { "/boot/develop/headers/os/translation", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/graphics", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/input_server", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/screen_saver", 0, 0, 0 },\
-    { "/boot/develop/headers/os/add-ons/tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/os/be_apps/Deskbar", 0, 0, 0 },\
-    { "/boot/develop/headers/os/be_apps/NetPositive", 0, 0, 0 },\
-    { "/boot/develop/headers/os/be_apps/Tracker", 0, 0, 0 },\
-    { "/boot/develop/headers/cpp", 0, 1, 1 },\
-    { "/boot/develop/headers/3rdparty", 0, 0, 0 },\
-    { "/boot/develop/headers/bsd", 0, 0, 0 },\
-    { "/boot/develop/headers/glibc", 0, 0, 0 },\
-    { "/boot/develop/headers/gnu", 0, 0, 0 },\
-    { "/boot/develop/headers/posix", 0, 0, 0 },\
-    { "/boot/develop/headers", 0, 0, 0 }, \
+    { "/boot/common/non-packaged/develop/headers", 0, 0, 0 },\
+    { "/boot/common/develop/headers", 0, 0, 0 },\
+    { "/boot/system/develop/headers/os", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/device", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/drivers", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/game", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/interface", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/kernel", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/locale", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/mail", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/media", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi2", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/net", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/opengl", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/storage", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/support", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/translation", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/graphics", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/input_server", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/screen_saver", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Deskbar", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/3rdparty", 0, 0, 0 },\
+    	/* TODO: To be removed when libtiff has been outsourced. */\
+    { "/boot/system/develop/headers/bsd", 0, 0, 1 },\
+    { "/boot/system/develop/headers/glibc", 0, 0, 1 },\
+    { "/boot/system/develop/headers/gnu", 0, 0, 1 },\
+    { "/boot/system/develop/headers/posix", 0, 0, 1 },\
+    { "/boot/system/develop/headers", 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
     };
+#else /* HYBRID_SECONDARY */
+#define INCLUDE_DEFAULTS \
+    { \
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
+    { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
+    { "/boot/common/non-packaged/develop/headers/" HYBRID_SECONDARY, 0, 0, 0 },\
+    { "/boot/common/develop/headers/" HYBRID_SECONDARY, 0, 0, 0 },\
+    { "/boot/system/develop/headers/os", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/app", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/device", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/drivers", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/game", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/interface", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/kernel", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/locale", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/mail", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/media", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/midi2", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/net", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/opengl", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/storage", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/support", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/translation", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/graphics", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/input_server", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/screen_saver", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/add-ons/tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Deskbar", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/NetPositive", 0, 0, 1 },\
+    { "/boot/system/develop/headers/os/be_apps/Tracker", 0, 0, 1 },\
+    { "/boot/system/develop/headers/3rdparty", 0, 0, 0 },\
+    	/* TODO: To be removed when libtiff has been outsourced. */\
+    { "/boot/system/develop/headers/bsd", 0, 0, 1 },\
+    { "/boot/system/develop/headers/glibc", 0, 0, 1 },\
+    { "/boot/system/develop/headers/gnu", 0, 0, 1 },\
+    { "/boot/system/develop/headers/posix", 0, 0, 1 },\
+    { "/boot/system/develop/headers/" HYBRID_SECONDARY, 0, 0, 0 }, \
+    { "/boot/system/develop/headers", 0, 0, 0 }, \
+    { 0, 0, 0, 0 } \
+    };
+#endif
 #else /* CROSS_COMPILE */
-#undef	INCLUDE_DEFAULTS
+#ifndef HYBRID_SECONDARY
 #define INCLUDE_DEFAULTS				\
     { \
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
     { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
-    { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1}, \
-    { CROSS_INCLUDE_DIR "/os", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/locale", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/cpp", 0, 1, 1 },\
+    { CROSS_INCLUDE_DIR "/os", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/locale", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 1 },\
     { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/glibc", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 0 },\
-    { CROSS_INCLUDE_DIR "/posix", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/glibc", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/posix", 0, 0, 1 },\
     { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
     { 0, 0, 0, 0 } \
     };
+#else /* HYBRID_SECONDARY */
+#define INCLUDE_DEFAULTS				\
+    { \
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },\
+    { GCC_INCLUDE_DIR, "GCC", 0, 0 },\
+    { CROSS_INCLUDE_DIR "/os", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/app", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/device", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/drivers", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/game", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/interface", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/kernel", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/locale", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/mail", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/media", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/midi", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/midi2", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/net", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/opengl", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/storage", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/support", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/translation", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/graphics", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/input_server", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/screen_saver", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/add-ons/tracker", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Deskbar", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/NetPositive", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/os/be_apps/Tracker", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/3rdparty", 0, 0, 0 },\
+    { CROSS_INCLUDE_DIR "/bsd", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/glibc", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/gnu", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/posix", 0, 0, 1 },\
+    { CROSS_INCLUDE_DIR "/" HYBRID_SECONDARY, 0, 0, 0 }, \
+    { CROSS_INCLUDE_DIR , 0, 0, 0 }, \
+    { 0, 0, 0, 0 } \
+    };
+#endif
 #endif
 
 /* Whee.  LIBRARY_PATH is Haiku's LD_LIBRARY_PATH, which of course will
    cause nasty problems if we override it.  */
 #define LIBRARY_PATH_ENV        "BELIBRARIES"
+
+/* With STANDARD_STARTFILE_PREFIX_{1,2} set to "/boot/common/develop/lib/"
+   and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
+   standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
+#undef MD_STARTFILE_PREFIX
+#ifdef HYBRID_SECONDARY
+#define MD_STARTFILE_PREFIX	 \
+	"/boot/common/non-packaged/develop/lib/" HYBRID_SECONDARY "/"
+#else
+#define MD_STARTFILE_PREFIX		"/boot/common/non-packaged/develop/lib/"
+#endif
 
 /* Haiku doesn't have a separate math library.  */
 #define MATH_LIBRARY ""
@@ -466,8 +558,6 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
 	So we do just that, we replace MULTIPLE_SYMBOL_SPACES with a
 	test for optimization (see lex.c, line 4882ff and decl2.c, line 2701).
 */
-/* [bonefish]:
-    Review! */
 
 #undef MULTIPLE_SYMBOL_SPACES
 
@@ -482,14 +572,10 @@ extern union tree_node *i386_pe_merge_decl_attributes ();
    so the most likely ill effect of disabling this is that a BeOS gdb
    debugging an executable with no debug info would not see the gcc2_compiled
    label. */
-/* [bonefish]:
-    Review! */
 #undef ASM_IDENTIFY_GCC
 #define ASM_IDENTIFY_GCC(FILE)
 
 /* required to compile winnt.c */
-/* [bonefish]:
-    Review! */
 #define I386_PE_STRIP_ENCODING(SYM_NAME) \
   ((SYM_NAME) + ((SYM_NAME)[0] == '@' ? 3 : 0))
 

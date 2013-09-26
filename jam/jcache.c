@@ -43,7 +43,7 @@ static char* pop_string(string_list *list);
 /*!	\brief Reads a line from the supplied file and writes it to the supplied
 		   buffer.
 
-	If the line end in a LF, it is chopped off.
+	If the line ends in a LF, it is chopped off.
 
 	\param file The file.
 	\param value The pointer to where the read value shall be written.
@@ -299,7 +299,6 @@ delete_jamfile_cache(jamfile_cache* cache)
 		if (cache->entries)
 			hashdone(cache->entries);
 		delete_string_list(cache->filenames);
-		free(cache->cache_file);
 	}
 }
 
@@ -444,6 +443,11 @@ read_file(const char *filename, string_list* list)
 				line[len] = '\n';
 				len++;
 				line[len] = '\0';
+			}
+			if ((size_t)len + 1 == sizeof(buffer)) {
+				fprintf(stderr, "error: %s:%d: line too long!\n", filename,
+					list->count + 1);
+				exit(1);
 			}
 			// copy it
 			string = (char*)malloc(len + 1);
@@ -638,8 +642,49 @@ get_jcache(void)
 		jamfileCache = new_jamfile_cache();
 	if (jamfileCache && !jamfileCache->cache_file) {
 		char* filename = jcache_name();
-		if (filename)
-			read_jcache(jamfileCache, filename);
+		if (filename) {
+			if (!read_jcache(jamfileCache, filename)) {
+				// An error occurred while reading the cache file. Remove all
+				// entries that we read in, assuming they might be corrupted.
+				// Since the hash doesn't support removing entries, we create
+				// a new one and copy over the entries we want to keep.
+				int count = jamfileCache->filenames->count;
+				int i;
+
+				jamfile_cache* newCache = new_jamfile_cache();
+				if (!newCache) {
+					fprintf(stderr, "Out of memory!\n");
+					exit(1);
+				}
+
+				for (i = 0; i < count; i++) {
+					char* entryname = jamfileCache->filenames->strings[i];
+					jcache_entry* entry = find_jcache_entry(jamfileCache,
+						entryname);
+					if (entry->used) {
+						jcache_entry newEntry;
+						if (!init_jcache_entry(&newEntry, entryname,
+								entry->time, entry->used)) {
+							fprintf(stderr, "Out of memory!\n");
+							exit(1);
+						}
+
+						delete_string_list(newEntry.strings);
+						newEntry.strings = entry->strings;
+						entry->strings = 0;
+
+						if (!add_jcache_entry(newCache, &newEntry)) {
+							fprintf(stderr, "Out of memory!\n");
+							exit(1);
+						}
+					}
+				}
+
+				delete_jamfile_cache(jamfileCache);
+				jamfileCache = newCache;
+				jamfileCache->cache_file = filename;
+			}
+		}
 	}
 	return jamfileCache;
 }

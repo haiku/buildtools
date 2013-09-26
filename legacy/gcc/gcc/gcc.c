@@ -1409,8 +1409,20 @@ static const char *md_startfile_prefix = MD_STARTFILE_PREFIX;
 #ifdef MD_STARTFILE_PREFIX_1
 static const char *md_startfile_prefix_1 = MD_STARTFILE_PREFIX_1;
 #endif
+
 static const char *standard_startfile_prefix = STANDARD_STARTFILE_PREFIX;
-#if !defined(__BEOS__) && !defined(__HAIKU__)
+
+#if defined(__HAIKU__)
+#ifdef HYBRID_SECONDARY
+static const char *standard_startfile_prefix_1 =
+  "/boot/common/develop/lib/" HYBRID_SECONDARY "/";
+static const char *standard_startfile_prefix_2 =
+  "/boot/system/develop/lib/" HYBRID_SECONDARY "/";
+#else
+static const char *standard_startfile_prefix_1 = "/boot/common/develop/lib/";
+static const char *standard_startfile_prefix_2 = "/boot/system/develop/lib/";
+#endif
+#else
 static const char *standard_startfile_prefix_1 = "/lib/";
 static const char *standard_startfile_prefix_2 = "/usr/lib/";
 #endif
@@ -4943,12 +4955,10 @@ main (argc, argv)
 		      NULL_PTR, 0, 0, NULL_PTR);
 	}
 
-#if !defined(__BEOS__) && !defined(__HAIKU__)
       add_prefix (&startfile_prefixes, standard_startfile_prefix_1,
 		  "BINUTILS", 0, 0, NULL_PTR);
       add_prefix (&startfile_prefixes, standard_startfile_prefix_2,
 		  "BINUTILS", 0, 0, NULL_PTR);
-#endif
 #if 0 /* Can cause surprises, and one can use -B./ instead.  */
       add_prefix (&startfile_prefixes, "./", NULL_PTR, 0, 1, NULL_PTR);
 #endif

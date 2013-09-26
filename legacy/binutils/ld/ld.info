@@ -1,7 +1,4 @@
-This is
-/home/bonefish/develop/haiku/buildtools/legacy/binutils/ld/ld.info,
-produced by makeinfo version 4.9 from
-/home/bonefish/develop/haiku/buildtools/legacy/binutils/ld/ld.texinfo.
+This is /home/zooey/Sources/haiku/buildtools.pm/legacy/binutils/ld/ld.info, produced by makeinfo version 4.13 from /home/zooey/Sources/haiku/buildtools.pm/legacy/binutils/ld/ld.texinfo.
 
 START-INFO-DIR-ENTRY
 * Ld: (ld).                       The GNU linker.
@@ -216,14 +213,14 @@ GNU linker:
 
      The default format is taken from the environment variable
      `GNUTARGET'.  *Note Environment::.  You can also define the input
-     format from a script, using the command `TARGET'; see *Note Format
+     format from a script, using the command `TARGET'; see *note Format
      Commands::.
 
 `-c MRI-COMMANDFILE'
 `--mri-script=MRI-COMMANDFILE'
      For compatibility with linkers produced by MRI, `ld' accepts script
      files written in an alternate, restricted command language,
-     described in *Note MRI Compatible Script Files: MRI.  Introduce
+     described in *note MRI Compatible Script Files: MRI.  Introduce
      MRI script files with the option `-c'; use the `-T' option to run
      linker scripts written in the general-purpose `ld' scripting
      language.  If MRI-CMDFILE does not exist, `ld' looks for it in the
@@ -276,7 +273,7 @@ GNU linker:
 
      You can also use the version script to control what symbols should
      be added to the dynamic symbol table if the output format supports
-     it.  See the description of `--version-script' in *Note VERSION::.
+     it.  See the description of `--version-script' in *note VERSION::.
 
 `-EB'
      Link big-endian objects.  This affects the default output format.
@@ -461,7 +458,7 @@ GNU linker:
                   [0x0000000c]                foo = (foo * 0x4)
                   [0x0000000c]                foo = (foo + 0x8)
 
-          See *Note Expressions:: for more information about
+          See *note Expressions:: for more information about
           expressions in linker scripts.
 
 `-n'
@@ -712,10 +709,10 @@ GNU linker:
      Tells the linker to accept input files whose architecture cannot be
      recognised.  The assumption is that the user knows what they are
      doing and deliberately wants to link in these unknown input files.
-     This was the default behaviour of the linker, before release
-     2.14.  The default behaviour from release 2.14 onwards is to
-     reject such input files, and so the `--accept-unknown-input-arch'
-     option has been added to restore the old behaviour.
+     This was the default behaviour of the linker, before release 2.14.
+     The default behaviour from release 2.14 onwards is to reject such
+     input files, and so the `--accept-unknown-input-arch' option has
+     been added to restore the old behaviour.
 
 `--as-needed'
 `--no-as-needed'
@@ -2049,7 +2046,7 @@ Several linker script commands deal with files.
      the "sysroot prefix".  Otherwise, the linker will try to open the
      file in the current directory.  If it is not found, the linker
      will search through the archive library search path.  See the
-     description of `-L' in *Note Command Line Options: Options.
+     description of `-L' in *note Command Line Options: Options.
 
      If you use `INPUT (-lFILE)', `ld' will transform the name to
      `libFILE.a', as with the command line argument `-l'.
@@ -2063,7 +2060,7 @@ Several linker script commands deal with files.
      The `GROUP' command is like `INPUT', except that the named files
      should all be archives, and they are searched repeatedly until no
      new undefined references are created.  See the description of `-('
-     in *Note Command Line Options: Options.
+     in *note Command Line Options: Options.
 
 `AS_NEEDED(FILE, FILE, ...)'
 `AS_NEEDED(FILE FILE ...)'
@@ -2237,14 +2234,14 @@ only use this within a `SECTIONS' command.  *Note Location Counter::.
 
    The semicolon after EXPRESSION is required.
 
-   Expressions are defined below; see *Note Expressions::.
+   Expressions are defined below; see *note Expressions::.
 
    You may write symbol assignments as commands in their own right, or
 as statements within a `SECTIONS' command, or as part of an output
 section description in a `SECTIONS' command.
 
    The section of the symbol will be set from the section of the
-expression; for more information, see *Note Expression Section::.
+expression; for more information, see *note Expression Section::.
 
    Here is an example showing the three different places that symbol
 assignments may be used:
@@ -2501,7 +2498,7 @@ the name should be supplied as a quoted numeric string.  A section name
 may consist of any sequence of characters, but a name which contains
 any unusual characters such as commas must be quoted.
 
-   The output section name `/DISCARD/' is special; *Note Output Section
+   The output section name `/DISCARD/' is special; *note Output Section
 Discarding::.
 
 
@@ -2532,7 +2529,7 @@ output section to the current value of the location counter.  The
 second will set it to the current value of the location counter aligned
 to the strictest alignment of a `.text' input section.
 
-   The ADDRESS may be an arbitrary expression; *Note Expressions::.
+   The ADDRESS may be an arbitrary expression; *note Expressions::.
 For example, if you want to align the section on a 0x10 byte boundary,
 so that the lowest four bits of the section address are zero, you could
 do something like this:
@@ -2979,9 +2976,8 @@ like this:
          OUTPUT-SECTION-COMMAND
          ...
        } [>REGION] [AT>LMA_REGION] [:PHDR :PHDR ...] [=FILLEXP]
-We've already described SECTION, ADDRESS, and
-OUTPUT-SECTION-COMMAND.  In this section we will describe the remaining
-section attributes.
+We've already described SECTION, ADDRESS, and OUTPUT-SECTION-COMMAND.
+In this section we will describe the remaining section attributes.
 
 * Menu:
 
@@ -3033,7 +3029,7 @@ File: ld.info,  Node: Output Section LMA,  Next: Forced Output Alignment,  Prev:
 ..........................
 
 Every section has a virtual address (VMA) and a load address (LMA); see
-*Note Basic Script Concepts::.  The address expression which may appear
+*note Basic Script Concepts::.  The address expression which may appear
 in an output section description sets the VMA (*note Output Section
 Address::).
 
@@ -3231,11 +3227,11 @@ section.
           .text0 { o1/*.o(.text) }
           .text1 { o2/*.o(.text) }
         }
-This will define both `.text0' and `.text1' to start at address
-0x1000.  `.text0' will be loaded at address 0x4000, and `.text1' will
-be loaded immediately after `.text0'.  The following symbols will be
-defined: `__load_start_text0', `__load_stop_text0',
-`__load_start_text1', `__load_stop_text1'.
+This will define both `.text0' and `.text1' to start at address 0x1000.
+`.text0' will be loaded at address 0x4000, and `.text1' will be loaded
+immediately after `.text0'.  The following symbols will be defined:
+`__load_start_text0', `__load_stop_text0', `__load_start_text1',
+`__load_stop_text1'.
 
    C code to copy overlay `.text1' into the overlay area might look
 like the following.
@@ -3274,8 +3270,8 @@ regions that become too full.  The linker will not shuffle sections
 around to fit into the available regions.
 
    A linker script may contain at most one use of the `MEMORY' command.
-However, you can define as many blocks of memory within it as you
-wish.  The syntax is:
+However, you can define as many blocks of memory within it as you wish.
+The syntax is:
      MEMORY
        {
          NAME [(ATTR)] : ORIGIN = ORIGIN, LENGTH = LEN
@@ -3290,7 +3286,7 @@ have a distinct name.
 
    The ATTR string is an optional list of attributes that specify
 whether to use a particular memory region for an input section which is
-not explicitly mapped in the linker script.  As described in *Note
+not explicitly mapped in the linker script.  As described in *note
 SECTIONS::, if you do not specify an output section for some input
 section, the linker will create an output section with the same name as
 the input section.  If you define region attributes, the linker will use
@@ -4022,11 +4018,10 @@ use in linker script expressions.
               variable = ALIGN(0x8000);
             }
           ... }
-     The first use of `ALIGN' in this example specifies the
-     location of a section because it is used as the optional ADDRESS
-     attribute of a section definition (*note Output Section
-     Address::).  The second use of `ALIGN' is used to defines the
-     value of a symbol.
+     The first use of `ALIGN' in this example specifies the location of
+     a section because it is used as the optional ADDRESS attribute of
+     a section definition (*note Output Section Address::).  The second
+     use of `ALIGN' is used to defines the value of a symbol.
 
      The builtin function `NEXT' is closely related to `ALIGN'.
 
@@ -4595,7 +4590,7 @@ File: ld.info,  Node: WIN32,  Next: Xtensa,  Prev: TI COFF,  Up: Machine Depende
 ==================================
 
 This section describes some of the win32 specific `ld' issues.  See
-*Note Command Line Options: Options. for detailed decription of the
+*note Command Line Options: Options. for detailed decription of the
 command line options mentioned here.
 
 _import libraries_
@@ -5306,13 +5301,12 @@ leave it out, state it!
    Often people omit facts because they think they know what causes the
 problem and assume that some details do not matter.  Thus, you might
 assume that the name of a symbol you use in an example does not matter.
-Well, probably it does not, but one cannot be sure.  Perhaps the bug
-is a stray memory reference which happens to fetch from the location
-where that name is stored in memory; perhaps, if the name were
-different, the contents of that location would fool the linker into
-doing the right thing despite the bug.  Play it safe and give a
-specific, complete example.  That is the easiest thing for you to do,
-and the most helpful.
+Well, probably it does not, but one cannot be sure.  Perhaps the bug is
+a stray memory reference which happens to fetch from the location where
+that name is stored in memory; perhaps, if the name were different, the
+contents of that location would fool the linker into doing the right
+thing despite the bug.  Play it safe and give a specific, complete
+example.  That is the easiest thing for you to do, and the most helpful.
 
    Keep in mind that the purpose of a bug report is to enable us to fix
 the bug if it is new to us.  Therefore, always write your bug reports
@@ -5444,7 +5438,7 @@ Appendix A MRI Compatible Script Files
 
 To aid users making the transition to GNU `ld' from the MRI linker,
 `ld' can use MRI compatible linker scripts as an alternative to the
-more general-purpose linker scripting language described in *Note
+more general-purpose linker scripting language described in *note
 Scripts::.  MRI compatible linker scripts have a much simpler command
 set than the scripting language otherwise used with `ld'.  GNU `ld'
 supports the most commonly used MRI linker commands; these commands are
@@ -5746,20 +5740,19 @@ Appendix B GNU Free Documentation License
      H. Include an unaltered copy of this License.
      I. Preserve the section entitled "History", and its title, and add
      to    it an item stating at least the title, year, new authors, and
-       publisher of the Modified Version as given on the Title Page.
-     If    there is no section entitled "History" in the Document,
-     create one    stating the title, year, authors, and publisher of
-     the Document as    given on its Title Page, then add an item
+       publisher of the Modified Version as given on the Title Page.  If
+       there is no section entitled "History" in the Document, create
+     one    stating the title, year, authors, and publisher of the
+     Document as    given on its Title Page, then add an item
      describing the Modified    Version as stated in the previous
      sentence.
      J. Preserve the network location, if any, given in the Document for
-       public access to a Transparent copy of the Document, and
-     likewise    the network locations given in the Document for
-     previous versions    it was based on.  These may be placed in the
-     "History" section.     You may omit a network location for a work
-     that was published at    least four years before the Document
-     itself, or if the original    publisher of the version it refers
-     to gives permission.
+       public access to a Transparent copy of the Document, and likewise
+       the network locations given in the Document for previous versions
+       it was based on.  These may be placed in the "History" section.
+       You may omit a network location for a work that was published at
+       least four years before the Document itself, or if the original
+      publisher of the version it refers to gives permission.
      K. In any section entitled "Acknowledgements" or "Dedications",
      preserve the section's title, and preserve in the section all the
       substance and tone of each of the contributor acknowledgements
@@ -6209,7 +6202,7 @@ Index
 * BFD requirements:                      BFD.                (line   16)
 * big-endian objects:                    Options.            (line  198)
 * binary input format:                   Options.            (line  115)
-* BLOCK(EXP):                            Builtin Functions.  (line   62)
+* BLOCK(EXP):                            Builtin Functions.  (line   61)
 * bug criteria:                          Bug Criteria.       (line    6)
 * bug reports:                           Bug Reporting.      (line    6)
 * bugs in ld:                            Reporting Bugs.     (line    6)
@@ -6245,14 +6238,14 @@ Index
 * data:                                  Output Section Data.
                                                              (line    6)
 * DATA_SEGMENT_ALIGN(MAXPAGESIZE, COMMONPAGESIZE): Builtin Functions.
-                                                             (line   67)
-* DATA_SEGMENT_END(EXP):                 Builtin Functions.  (line   88)
-* DATA_SEGMENT_RELRO_END(OFFSET, EXP):   Builtin Functions.  (line   94)
+                                                             (line   66)
+* DATA_SEGMENT_END(EXP):                 Builtin Functions.  (line   87)
+* DATA_SEGMENT_RELRO_END(OFFSET, EXP):   Builtin Functions.  (line   93)
 * dbx:                                   Options.            (line 1074)
 * DEF files, creating:                   Options.            (line 1470)
 * default emulation:                     Environment.        (line   21)
 * default input format:                  Environment.        (line    9)
-* DEFINED(SYMBOL):                       Builtin Functions.  (line  105)
+* DEFINED(SYMBOL):                       Builtin Functions.  (line  104)
 * deleting local symbols:                Options.            (line  513)
 * demangling, default:                   Environment.        (line   29)
 * demangling, from command line:         Options.            (line  752)
@@ -6317,7 +6310,7 @@ Index
 * grouping input files:                  File Commands.      (line   44)
 * groups of archives:                    Options.            (line  609)
 * H8/300 support:                        H8/300.             (line    6)
-* header size:                           Builtin Functions.  (line  170)
+* header size:                           Builtin Functions.  (line  169)
 * heap size:                             Options.            (line 1412)
 * help:                                  Options.            (line  792)
 * holes:                                 Location Counter.   (line   12)
@@ -6366,7 +6359,7 @@ Index
 * LDEMULATION:                           Environment.        (line   21)
 * len =:                                 MEMORY.             (line   72)
 * LENGTH =:                              MEMORY.             (line   72)
-* LENGTH(MEMORY):                        Builtin Functions.  (line  122)
+* LENGTH(MEMORY):                        Builtin Functions.  (line  121)
 * library search path in linker script:  File Commands.      (line   71)
 * link map:                              Options.            (line  347)
 * link-time runtime library search path: Options.            (line  967)
@@ -6383,7 +6376,7 @@ Index
 * little-endian objects:                 Options.            (line  201)
 * LOAD (MRI):                            MRI.                (line   84)
 * load address:                          Output Section LMA. (line    6)
-* LOADADDR(SECTION):                     Builtin Functions.  (line  125)
+* LOADADDR(SECTION):                     Builtin Functions.  (line  124)
 * loading, preventing:                   Output Section Type.
                                                              (line   22)
 * local symbols, deleting:               Options.            (line  517)
@@ -6395,14 +6388,14 @@ Index
                                                              (line   46)
 * machine dependencies:                  Machine Dependent.  (line    6)
 * mapping input sections to output sections: Input Section.  (line    6)
-* MAX:                                   Builtin Functions.  (line  130)
+* MAX:                                   Builtin Functions.  (line  129)
 * MEMORY:                                MEMORY.             (line    6)
 * memory region attributes:              MEMORY.             (line   32)
 * memory regions:                        MEMORY.             (line    6)
 * memory regions and sections:           Output Section Region.
                                                              (line    6)
 * memory usage:                          Options.            (line  804)
-* MIN:                                   Builtin Functions.  (line  133)
+* MIN:                                   Builtin Functions.  (line  132)
 * MRI compatibility:                     MRI.                (line    6)
 * MSP430 extra sections:                 MSP430.             (line   11)
 * NAME (MRI):                            MRI.                (line   90)
@@ -6410,13 +6403,13 @@ Index
                                                              (line    6)
 * names:                                 Symbols.            (line    6)
 * naming the output file:                Options.            (line  404)
-* NEXT(EXP):                             Builtin Functions.  (line  137)
+* NEXT(EXP):                             Builtin Functions.  (line  136)
 * NMAGIC:                                Options.            (line  384)
 * NOCROSSREFS(SECTIONS):                 Miscellaneous Commands.
                                                              (line   30)
 * NOLOAD:                                Output Section Type.
                                                              (line   22)
-* not enough room for program headers:   Builtin Functions.  (line  175)
+* not enough room for program headers:   Builtin Functions.  (line  174)
 * o =:                                   MEMORY.             (line   67)
 * objdump -i:                            BFD.                (line    6)
 * object file management:                BFD.                (line    6)
@@ -6430,7 +6423,7 @@ Index
 * ORDER (MRI):                           MRI.                (line   95)
 * org =:                                 MEMORY.             (line   67)
 * ORIGIN =:                              MEMORY.             (line   67)
-* ORIGIN(MEMORY):                        Builtin Functions.  (line  143)
+* ORIGIN(MEMORY):                        Builtin Functions.  (line  142)
 * orphan:                                Orphan Sections.    (line    6)
 * output file after errors:              Options.            (line  870)
 * output file format in linker script:   Format Commands.    (line   10)
@@ -6473,7 +6466,7 @@ Index
 * program headers:                       PHDRS.              (line    6)
 * program headers and sections:          Output Section Phdr.
                                                              (line    6)
-* program headers, not enough room:      Builtin Functions.  (line  175)
+* program headers, not enough room:      Builtin Functions.  (line  174)
 * program segments:                      PHDRS.              (line    6)
 * PROVIDE:                               PROVIDE.            (line    6)
 * PROVIDE_HIDDEN:                        PROVIDE_HIDDEN.     (line    6)
@@ -6521,12 +6514,12 @@ Index
 * section fill pattern:                  Output Section Fill.
                                                              (line    6)
 * section load address:                  Output Section LMA. (line    6)
-* section load address in expression:    Builtin Functions.  (line  125)
+* section load address in expression:    Builtin Functions.  (line  124)
 * section name:                          Output Section Name.
                                                              (line    6)
 * section name wildcard patterns:        Input Section Wildcards.
                                                              (line    6)
-* section size:                          Builtin Functions.  (line  154)
+* section size:                          Builtin Functions.  (line  153)
 * section, assigning to memory region:   Output Section Region.
                                                              (line    6)
 * section, assigning to program header:  Output Section Phdr.
@@ -6535,13 +6528,13 @@ Index
 * sections, discarding:                  Output Section Discarding.
                                                              (line    6)
 * segment origins, cmd line:             Options.            (line 1090)
-* SEGMENT_START(SEGMENT, DEFAULT):       Builtin Functions.  (line  146)
+* SEGMENT_START(SEGMENT, DEFAULT):       Builtin Functions.  (line  145)
 * segments, ELF:                         PHDRS.              (line    6)
 * shared libraries:                      Options.            (line 1022)
 * SHORT(EXPRESSION):                     Output Section Data.
                                                              (line    6)
-* SIZEOF(SECTION):                       Builtin Functions.  (line  154)
-* SIZEOF_HEADERS:                        Builtin Functions.  (line  170)
+* SIZEOF(SECTION):                       Builtin Functions.  (line  153)
+* SIZEOF_HEADERS:                        Builtin Functions.  (line  169)
 * small common symbols:                  Input Section Common.
                                                              (line   20)
 * SORT:                                  Input Section Wildcards.
@@ -6562,7 +6555,7 @@ Index
 * SUBALIGN(SUBSECTION_ALIGN):            Forced Input Alignment.
                                                              (line    6)
 * suffixes for integers:                 Constants.          (line   12)
-* symbol defaults:                       Builtin Functions.  (line  105)
+* symbol defaults:                       Builtin Functions.  (line  104)
 * symbol definition, scripts:            Assignments.        (line    6)
 * symbol names:                          Symbols.            (line    6)
 * symbol tracing:                        Options.            (line  522)
@@ -6579,7 +6572,7 @@ Index
 * thumb entry point:                     ARM.                (line   17)
 * TI COFF versions:                      TI COFF.            (line    6)
 * traditional format:                    Options.            (line 1069)
-* unallocated address, next:             Builtin Functions.  (line  137)
+* unallocated address, next:             Builtin Functions.  (line  136)
 * undefined symbol:                      Options.            (line  480)
 * undefined symbol in linker script:     Miscellaneous Commands.
                                                              (line   13)
@@ -6613,10 +6606,10 @@ Index
 
 
 Tag Table:
-Node: Top449
-Node: Overview1211
-Node: Invocation2325
-Node: Options2733
+Node: Top450
+Node: Overview1212
+Node: Invocation2326
+Node: Options2734
 Node: Environment77388
 Node: Scripts79148
 Node: Basic Script Concepts80882
@@ -6646,48 +6639,48 @@ Node: Output Section Data120371
 Node: Output Section Keywords123148
 Node: Output Section Discarding126717
 Node: Output Section Attributes127673
-Node: Output Section Type128677
-Node: Output Section LMA129831
-Node: Forced Output Alignment132102
-Node: Forced Input Alignment132370
-Node: Output Section Region132755
-Node: Output Section Phdr133185
-Node: Output Section Fill133849
-Node: Overlay Description134991
-Node: MEMORY139239
-Node: PHDRS143439
-Node: VERSION148478
-Node: Expressions156269
-Node: Constants157147
-Node: Symbols157708
-Node: Orphan Sections158446
-Node: Location Counter159209
-Node: Operators163513
-Node: Evaluation164435
-Node: Expression Section165799
-Node: Builtin Functions167288
-Node: Implicit Linker Scripts174780
-Node: Machine Dependent175555
-Node: H8/300176416
-Node: i960178041
-Node: ARM179726
-Node: HPPA ELF32182642
-Node: MMIX184265
-Node: MSP430185482
-Node: PowerPC ELF32186530
-Node: PowerPC64 ELF64188821
-Node: TI COFF193235
-Node: WIN32193767
-Node: Xtensa211841
-Node: BFD214963
-Node: BFD outline216418
-Node: BFD information loss217704
-Node: Canonical format220221
-Node: Reporting Bugs224578
-Node: Bug Criteria225272
-Node: Bug Reporting225971
-Node: MRI232996
-Node: GNU Free Documentation License237639
-Node: Index257353
+Node: Output Section Type128676
+Node: Output Section LMA129830
+Node: Forced Output Alignment132101
+Node: Forced Input Alignment132369
+Node: Output Section Region132754
+Node: Output Section Phdr133184
+Node: Output Section Fill133848
+Node: Overlay Description134990
+Node: MEMORY139237
+Node: PHDRS143436
+Node: VERSION148475
+Node: Expressions156266
+Node: Constants157144
+Node: Symbols157705
+Node: Orphan Sections158443
+Node: Location Counter159206
+Node: Operators163510
+Node: Evaluation164432
+Node: Expression Section165796
+Node: Builtin Functions167285
+Node: Implicit Linker Scripts174772
+Node: Machine Dependent175547
+Node: H8/300176408
+Node: i960178033
+Node: ARM179718
+Node: HPPA ELF32182634
+Node: MMIX184257
+Node: MSP430185474
+Node: PowerPC ELF32186522
+Node: PowerPC64 ELF64188813
+Node: TI COFF193227
+Node: WIN32193759
+Node: Xtensa211833
+Node: BFD214955
+Node: BFD outline216410
+Node: BFD information loss217696
+Node: Canonical format220213
+Node: Reporting Bugs224570
+Node: Bug Criteria225264
+Node: Bug Reporting225963
+Node: MRI232988
+Node: GNU Free Documentation License237631
+Node: Index257333
 
 End Tag Table

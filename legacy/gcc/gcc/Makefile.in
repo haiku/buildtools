@@ -182,6 +182,12 @@ program_transform_cross_name = s,^,$(target_alias)-,
 build_canonical = @build_canonical@
 host_canonical = @host_canonical@
 
+HYBRID_SECONDARY = @HYBRID_SECONDARY@
+HYBRID_SECONDARY_DEFINES =
+ifneq ($(HYBRID_SECONDARY),)
+HYBRID_SECONDARY_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
+endif
+
 # Tools to use when building a cross-compiler.
 # These are used because `configure' appends `cross-make'
 # to the makefile when making a cross-compiler.
@@ -1412,7 +1418,8 @@ DRIVER_DEFINES = \
   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc-lib/\" \
   -DDEFAULT_TARGET_VERSION=\"$(version)\" \
   -DDEFAULT_TARGET_MACHINE=\"$(target_alias)\" \
-  -DTOOLDIR_BASE_PREFIX=\"$(exec_prefix)/\"
+  -DTOOLDIR_BASE_PREFIX=\"$(exec_prefix)/\" \
+  $(HYBRID_SECONDARY_DEFINES)
 gcc.o: gcc.c $(CONFIG_H) system.h intl.h multilib.h \
     Makefile $(lang_specs_files) prefix.h
 	$(CC) $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
@@ -1976,6 +1983,7 @@ cccp.o: cccp.c $(CONFIG_H) intl.h pcp.h version.c config.status system.h \
 	  -DLOCAL_INCLUDE_DIR=\"$(includedir)\" \
 	  -DCROSS_INCLUDE_DIR=\"$(gcc_tooldir)/sys-include\" \
 	  -DTOOL_INCLUDE_DIR=\"$(gcc_tooldir)/include\" \
+	  $(HYBRID_SECONDARY_DEFINES) \
 	  -c `echo $(srcdir)/cccp.c | sed 's,^\./,,'`
 
 LIBCPP_OBJS =	cpplib.o cpphash.o cppalloc.o cpperror.o cppexp.o cppfiles.o \
@@ -2010,6 +2018,7 @@ cppinit.o:  cppinit.c $(CONFIG_H) cpplib.h intl.h system.h \
 	  -DLOCAL_INCLUDE_DIR=\"$(includedir)\" \
 	  -DCROSS_INCLUDE_DIR=\"$(gcc_tooldir)/sys-include\" \
 	  -DTOOL_INCLUDE_DIR=\"$(gcc_tooldir)/include\" \
+	  $(HYBRID_SECONDARY_DEFINES) \
 	  -c `echo $(srcdir)/cppinit.c | sed 's,^\./,,'`
 
 # Note for the stamp targets, we run the program `true' instead of
@@ -2034,6 +2043,7 @@ protoize.o: protoize.c $(srcdir)/../include/getopt.h $(CONFIG_H) system.h \
 	  -DTOOL_INCLUDE_DIR=\"$(gcc_tooldir)/include\" \
 	  -DLOCAL_INCLUDE_DIR=\"$(includedir)\" \
 	  -DSTD_PROTO_DIR=\"$(libsubdir)\" \
+	  $(HYBRID_SECONDARY_DEFINES) \
 	  $(srcdir)/protoize.c
 
 unprotoize.o: unprotoize.c protoize.c $(srcdir)/../include/getopt.h \
@@ -2129,14 +2139,14 @@ stmp-int-hdrs: stmp-fixinc $(USER_H) xlimits.h
 stmp-headers:
 	touch $@
 
-FIXINCSRCDIR=$(srcdir)/fixinc
-fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
-	$(FIXINCSRCDIR)/procopen.c $(FIXINCSRCDIR)/gnu-regex.c \
-	$(FIXINCSRCDIR)/server.c $(FIXINCSRCDIR)/gnu-regex.h \
-	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def 
-	MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc; pwd` ; \
-	export MAKE srcdir ; \
-	cd ./fixinc; $(SHELL) $${srcdir}/mkfixinc.sh $(host_canonical) $(target)
+#FIXINCSRCDIR=$(srcdir)/fixinc
+#fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
+#	$(FIXINCSRCDIR)/procopen.c $(FIXINCSRCDIR)/gnu-regex.c \
+#	$(FIXINCSRCDIR)/server.c $(FIXINCSRCDIR)/gnu-regex.h \
+#	$(FIXINCSRCDIR)/server.h $(FIXINCSRCDIR)/inclhack.def 
+#	MAKE="$(MAKE)"; srcdir=`cd $(srcdir)/fixinc; pwd` ; \
+#	export MAKE srcdir ; \
+#	cd ./fixinc; $(SHELL) $${srcdir}/mkfixinc.sh $(host_canonical) $(target)
 
 ##stmp-fixinc: $(FIXINCLUDES) gsyslimits.h
 ##	rm -rf include
@@ -2159,7 +2169,7 @@ fixinc.sh: $(FIXINCSRCDIR)/mkfixinc.sh $(FIXINCSRCDIR)/fixincl.c \
 ##	fi
 
 # Build fixed copies of system files.
-stmp-fixinc: fixinc.sh gsyslimits.h
+stmp-fixinc: gsyslimits.h
 	rm -rf include; mkdir include
 	TARGET_MACHINE=$(target); srcdir=`cd $(srcdir); pwd`; \
 	INSTALL_ASSERT_H=$(INSTALL_ASSERT_H); SHELL=$(SHELL) ;\

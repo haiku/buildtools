@@ -597,6 +597,15 @@ fi
 # Miscenalleous configure options
 # -------------------------------
 
+# handle --with-hybrid-secondary
+AC_ARG_WITH(hybrid_secondary,
+  [AS_HELP_STRING([--with-hybrid_secondary],
+                  [specify the packaging architecture for building a secondary compiler for a Haiku hybrid system])],
+  [HYBRID_SECONDARY=$withval],
+  [HYBRID_SECONDARY=]
+)
+AC_SUBST(HYBRID_SECONDARY)
+
 # See if we are building gcc with C++.
 AC_ARG_ENABLE(build-with-cxx,
 [AS_HELP_STRING([--enable-build-with-cxx],
@@ -992,13 +1001,14 @@ AC_LANG_POP(C++)
 
 
 # Configure -lm usage for host tools that need it
-math_library="-lm"
-case $host in
+build_math_library="-lm"
+case $build in
   *-*-haiku*)
     # no separate math library needed
-    math_library=
+    build_math_library=
     ;;
 esac
+AC_SUBST(build_math_library)
 
 # These libraries may be used by collect2.
 # We may need a special search path to get them linked.
