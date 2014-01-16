@@ -113,22 +113,7 @@ Boston, MA 02111-1307, USA.  */
     { "/boot/system/develop/headers/" HYBRID_SECONDARY, 0, 0, 0, 1, 0 }, \
         /* Hybrid secondary folders for os kits not in base haiku package */\
     { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/app", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/device", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/drivers", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/game", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/interface", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/kernel", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/locale", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/mail", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/media", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/midi", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/midi2", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/net", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/opengl", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/storage", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/support", 0, 0, 1, 1, 0 }, \
-    { "/boot/system/develop/headers/" HYBRID_SECONDARY "/os/translation", 0, 0, 1, 1, 0 }, \
     { "/boot/system/develop/headers", 0, 0, 0, 1, 0 }, \
     { 0, 0, 0, 0, 0, 0 } \
 }
