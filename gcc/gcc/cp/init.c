@@ -3524,6 +3524,8 @@ build_vec_init (tree base, tree maxindex, tree init,
 
       /* Clear out INIT so that we don't get confused below.  */
       init = NULL_TREE;
+      /* Any elements without explicit initializers get {}.  */
+      explicit_value_init_p = true;
     }
   else if (from_array)
     {
@@ -4062,6 +4064,7 @@ build_vec_delete (tree base, tree maxindex,
       tree cookie_addr;
       tree size_ptr_type = build_pointer_type (sizetype);
 
+      base = mark_rvalue_use (base);
       if (TREE_SIDE_EFFECTS (base))
 	{
 	  base_init = get_target_expr (base);

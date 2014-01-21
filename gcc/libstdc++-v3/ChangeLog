@@ -1,3 +1,289 @@
+2013-10-16  Release Manager
+
+	* GCC 4.8.2 released.
+
+2013-10-09  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	* testsuite/20_util/shared_ptr/cons/58659.cc: Use VERIFY instead of
+	aborting.
+
+2013-10-08  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/58659
+	* include/bits/shared_ptr_base.h (__shared_count::__shared_count(P,D)):
+	Delegate to constructor taking allocator.
+	(__shared_count::_S_create_from_up): Inline into ...
+	(__shared_count::__shared_count(unique_ptr<Y,D>&&): Here. Use
+	std::conditional instead of constrained overloads. Allocate memory
+	using the allocator type that will be used for deallocation.
+	* testsuite/20_util/shared_ptr/cons/58659.cc: New.
+	* testsuite/20_util/shared_ptr/cons/43820_neg.cc: Adjust.
+
+2013-10-07  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/57641
+	* include/std/mutex (timed_mutex, recursive_timed_mutex): Add
+	overloaded _M_try_lock_until to handle conversion between different
+	clocks. Replace constrained __try_lock_for_impl overloads with
+	conditional increment.
+	* testsuite/30_threads/timed_mutex/try_lock_until/57641.cc: New.
+
+2013-10-06  Jonathan Wakely  <jwakely.gcc@gmail.com>
+
+	PR libstdc++/57465
+	* include/std/functional
+	(_Function_base::_Base_manager::_M_not_empty_function): Fix overload
+	for pointers.
+	* testsuite/20_util/function/cons/57465.cc: New.
+
+2013-10-02  Jonathan Wakely  <jwakely.gcc@gmail.com>
+	    Daniel Krugler  <daniel.kruegler@gmail.com>
+
+	PR libstdc++/58569
+	* include/std/functional (function::_CheckResult): Move to namespace
+	scope and rename to __check_func_return_type.
+	* testsuite/20_util/function/58569.cc: New.
+
+2013-09-30  Chris Jefferson  <chris@bubblescope.net>
+
+	PR libstdc++/58437
+	* include/bits/stl_algo.h (__move_median_first): Rename to
+	__move_median_to_first, change to take an addition argument.
+	(__unguarded_partition_pivot): Adjust.
+	* testsuite/performance/25_algorithms/sort.cc: New.
+	* testsuite/performance/25_algorithms/sort_heap.cc: Likewise.
+	* testsuite/performance/25_algorithms/stable_sort.cc: Likewise.
+
+2013-09-19  Mitsuru Kariya  <kariya_mitsuru@hotmail.com>
+	    Chris Jefferson  <chris@bubblescope.net>
+
+	PR libstdc++/58358
+	* include/bits/stl_algo.h (search_n): Fix to guarantee a number
+	of comparisons <= number of elements in the range.
+	* testsuite/25_algorithms/search_n/58358.cc: New.
+	* testsuite/25_algorithms/search_n/iterator.cc: Extend.
+
+2013-09-13  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/58415
+	* include/ext/sso_string_base.h (__sso_string_base<>::
+	__sso_string_base(__sso_string_base&&)): Fix thinkos about
+	_M_length vs _M_set_length.
+	* testsuite/ext/vstring/cons/58415-1.cc: New.
+	* testsuite/ext/vstring/cons/58415-2.cc: Likewise.
+
+2013-09-10  Kai Tietz  <ktietz@redhat.com>
+
+	Backport from trunk.
+	PR libstdc++/54314
+	* config/abi/pre/gnu-versioned-namespace.ver: Add thunk _ZTv0_n12_NS*
+	like in gnu.ver.
+
+2013-09-07  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/58341
+	* include/bits/stl_algobase.h (copy_backward): Fix documentation
+	per DR 1206.
+
+2013-09-03  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/58302
+	* include/bits/random.tcc (negative_binomial_distribution<>::
+	operator()(_UniformRandomNumberGenerator&, const param_type&):
+	Fix typo in template argument.
+	* testsuite/26_numerics/random/negative_binomial_distribution/
+	operators/58302.cc: New.
+
+2013-08-16  Uros Bizjak  <ubizjak@gmail.com>
+
+	* src/c++98/compatibility.cc (_ZTIe): Use
+	reinterpret_cast<const cast *> to avoid -Wcast-qual warnings.
+	(_ZTIPe): Ditto.
+	(ZTIPKe): Ditto.
+
+2013-08-07  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* include/ext/atomicity.h: Add #pragma GCC system_header.
+
+2013-08-07  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/58098
+	* include/bits/random.h (cauchy_distribution<>::min,
+	extreme_value_distribution<>::min, normal_distribution<>::min,
+	student_t_distribution<>::min): Fix.
+	* include/ext/random (normal_mv_distribution<>::min): Likewise.
+	* testsuite/26_numerics/random/cauchy_distribution/cons/parms.cc:
+	Adjust.
+	testsuite/26_numerics/random/cauchy_distribution/cons/default.cc:
+	Likewise.
+	* testsuite/26_numerics/random/extreme_value_distribution/cons/
+	parms.cc: Likewise.
+	testsuite/26_numerics/random/extreme_value_distribution/cons/
+	default.cc: Likewise.
+	* testsuite/26_numerics/random/normal_distribution/cons/parms.cc:
+	Likewise.
+	* testsuite/26_numerics/random/normal_distribution/cons/default.cc:
+	Likewise.
+	* testsuite/26_numerics/random/student_t_distribution/cons/parms.cc:
+	Likewise.
+	* testsuite/26_numerics/random/student_t_distribution/cons/default.cc:
+	Likewise.
+	* testsuite/ext/random/normal_mv_distribution/cons/parms.cc: Likewise.
+	* testsuite/ext/random/normal_mv_distribution/cons/default.cc: Likewise.
+
+	* testsuite/26_numerics/random/exponential_distribution/cons/parms.cc:
+	Minor tweak.
+	* testsuite/26_numerics/random/exponential_distribution/cons/default.cc:
+	Likewise.
+
+	* testsuite/ext/von_mises_distribution/*: Move to...
+	* testsuite/ext/random/von_mises_distribution/*: ... here.
+	* testsuite/ext/triangular_distribution/*: Move to...
+	* testsuite/ext/random/triangular_distribution/*: ... here.
+
+2013-07-31  François Dumont  <fdumont@gcc.gnu.org>
+
+	* include/profile/unordered_base.h: New.
+	* include/Makefile.am: Add new profile header.
+	* include/Makefile.in: Regenerate.
+	* include/profile/impl/profiler.h
+	(__profcxx_inefficient_hash_is_on): New macro.
+	* include/profile/unordered_map (std::profile::unordered_map<>):
+	Use new _Unordered_profile base class. Use default implementations
+	for special functions.
+	(std::profile::unordered_multimap<>): Likewise.
+	* include/profile/unordered_set (std::profile::unordered_set<>):
+	Likewise.
+	(std::profile::unordered_multiset<>): Likewise.
+	* testsuite/23_containers/unordered_multiset/55043.cc: Fix
+	MoveOnly equality operator signature.
+
+2013-07-31  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/56627
+	* include/bits/stl_bvector.h: Use friend struct hash intead of
+	friend class hash to work around useless warnings produced by
+	some compilers.
+	* include/std/bitset: Likewise.
+
+2013-07-29  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	Revert last commit.
+
+2013-07-29  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* include/profile/unordered_map (unordered_map<>,
+	unordered_multimap<>): Clean-up constructors and assignment
+	operators to match debug-mode.
+	* include/profile/unordered_set (unordered_set<>,
+	unordered_multiset<>): Likewise.
+
+2013-07-22  Jason Merrill  <jason@redhat.com>
+
+	PR libstdc++/57914
+	* libsupc++/atexit_thread.cc (run): Delete cleanup elts.
+
+2013-06-27  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* include/profile/vector (emplace(iterator, _Args&&...)): Define.
+
+2013-06-25  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	* testsuite/23_containers/map/modifiers/erase/abi_tag.cc: Avoid
+	spurious fails with check-debug.
+	* testsuite/23_containers/multimap/modifiers/erase/abi_tag.cc:
+	Likewise.
+	* testsuite/23_containers/set/modifiers/erase/abi_tag.cc: Likewise.
+	* testsuite/23_containers/multiset/modifiers/erase/abi_tag.cc:
+	Likewise.
+
+2013-06-22  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/57674
+	* include/bits/random.h (binomial_distribution<>::_M_waiting):
+	Add double parameter.
+	* include/bits/random.tcc (binomial_distribution<>::operator()
+	(_UniformRandomNumberGenerator&, const param_type&)): Pass
+	__param._M_q to _M_waiting.
+	(_M_waiting): Adjust.
+	* testsuite/26_numerics/random/binomial_distribution/
+	operators/values.cc: Add tests.
+
+2013-06-21  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/57666
+	* include/std/valarray (valarray<>::operator=(const _Expr<>&)):
+	Implement correctly C++11 26.6.2.3/1.
+	* testsuite/26_numerics/valarray/dr630-3.C: New.
+
+2013-06-19  Alan Modra  <amodra@gmail.com>
+
+	Apply mainline patch
+	2013-06-14  Alan Modra  <amodra@gmail.com>
+	* configure.host (abi_baseline_pair): Match powerpc64*.
+
+2013-06-15  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR libstdc++/57619
+	* include/bits/unordered_map.h (unordered_map<>::insert,
+	unordered_multimap<>::insert): Use std::forward, not std::move.
+	* testsuite/23_containers/unordered_map/insert/57619.C: New.
+	* testsuite/23_containers/unordered_multimap/insert/57619.C: Likewise.
+
+2013-06-12  Benjamin Kosnik  <bkoz@redhat.com>
+
+	* include/bits/c++config (_GLIBCXX_ABI_TAG_CXX11): Add.
+	* include/bits/stl_map.h (erase): Use abi_tag when C++11.
+	* include/bits/stl_multimap.h: Same.
+	* include/bits/stl_multiset.h: Same.
+	* include/bits/stl_set.h: Same.
+	* include/bits/stl_tree.h: Same.
+	* include/std/complex (real, imag): Use macro for abi_tag.
+
+	* testsuite/lib/libstdc++.exp: Disable inlinling with -fno-inline.
+	* testsuite/util/testsuite_containers.h (erase_external): New
+	declarations.
+	(erase_external_iterators): Same.
+	(linkage_check_cxx98_cxx11_erase): Same.
+	(linkage_check_cxx98_cxx11_erase_iterators): Same.
+	* testsuite/util/testsuite_shared.cc: Define.
+	* testsuite/23_containers/map/modifiers/erase/abi_tag.cc: New.
+	* testsuite/23_containers/map/modifiers/erase/
+	dr130-linkage-check.cc: New.
+	* testsuite/23_containers/multimap/modifiers/erase/abi_tag.cc: New.
+	* testsuite/23_containers/multimap/modifiers/erase/
+	dr130-linkage-check.cc: New.
+	* testsuite/23_containers/multiset/modifiers/erase/abi_tag.cc: New.
+	* testsuite/23_containers/multiset/modifiers/erase/
+	dr130-linkage-check.cc: New.
+	* testsuite/23_containers/set/modifiers/erase/abi_tag.cc: New.
+	* testsuite/23_containers/set/modifiers/erase/dr130-linkage-check.cc:
+	New.
+	* testsuite/ext/profile/mutex_extensions_neg.cc: Adjust line number.
+
+	* testsuite/23_containers/map/dr130.cc: Move...
+	* testsuite/23_containers/map/modifiers/dr130.cc: ...here.
+	* testsuite/23_containers/multimap/dr130.cc: Move ...
+	* testsuite/23_containers/multimap/modifiers/dr130.cc: ...here.
+	* testsuite/23_containers/multiset/dr130.cc: Move...
+	* testsuite/23_containers/multiset/modifiers/dr130.cc: ...here.
+	* testsuite/23_containers/set/dr130.cc: Move...
+	* testsuite/23_containers/set/modifiers/dr130.cc: ...here.
+
+2013-06-11  Matthias Klose  <doko@ubuntu.com>
+
+	* include/Makefile.am (bits_headers): Remove ${bits_host_headers}.
+	(ext_headers): Remove ${ext_host_headers}.
+	(stamp-${host_alias}): Create ${host_builddir}/../ext.
+	(stamp-host): Link ${bits_host_headers} and ${ext_host_headers}.
+	(install-headers): Install ${bits_host_headers} and ${ext_host_headers}.
+	* include/Makefile.in: Regenerate.
+	* include/ext/random: Include ext/opt_random.h.
+
+2013-06-07  Uros Bizjak  <ubizjak@gmail.com>
+
+	* config/abi/post/alpha-linux-gnu/baseline_symbols.txt: Update.
+
 2013-05-31  Release Manager
 
 	* GCC 4.8.1 released.

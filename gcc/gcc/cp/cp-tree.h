@@ -1211,17 +1211,20 @@ enum languages { lang_c, lang_cplusplus, lang_java };
 /* The _DECL for this _TYPE.  */
 #define TYPE_MAIN_DECL(NODE) (TYPE_STUB_DECL (TYPE_MAIN_VARIANT (NODE)))
 
-/* Nonzero if T is a class (or struct or union) type.  Also nonzero
-   for template type parameters, typename types, and instantiated
-   template template parameters.  Keep these checks in ascending code
-   order.  */
-#define MAYBE_CLASS_TYPE_P(T)					\
+/* Nonzero if T is a type that could resolve to any kind of concrete type
+   at instantiation time.  */
+#define WILDCARD_TYPE_P(T)				\
   (TREE_CODE (T) == TEMPLATE_TYPE_PARM			\
    || TREE_CODE (T) == TYPENAME_TYPE			\
    || TREE_CODE (T) == TYPEOF_TYPE			\
    || TREE_CODE (T) == BOUND_TEMPLATE_TEMPLATE_PARM	\
-   || TREE_CODE (T) == DECLTYPE_TYPE			\
-   || CLASS_TYPE_P (T))
+   || TREE_CODE (T) == DECLTYPE_TYPE)
+
+/* Nonzero if T is a class (or struct or union) type.  Also nonzero
+   for template type parameters, typename types, and instantiated
+   template template parameters.  Keep these checks in ascending code
+   order.  */
+#define MAYBE_CLASS_TYPE_P(T) (WILDCARD_TYPE_P (T) || CLASS_TYPE_P (T))
 
 /* Set CLASS_TYPE_P for T to VAL.  T must be a class, struct, or
    union type.  */
@@ -5057,6 +5060,7 @@ extern tree in_class_defaulted_default_constructor (tree);
 extern bool user_provided_p			(tree);
 extern bool type_has_user_provided_constructor  (tree);
 extern bool type_has_user_provided_default_constructor (tree);
+extern bool vbase_has_user_provided_move_assign (tree);
 extern tree default_init_uninitialized_part (tree);
 extern bool trivial_default_constructor_is_constexpr (tree);
 extern bool type_has_constexpr_default_constructor (tree);
@@ -5177,7 +5181,7 @@ extern tree static_fn_type			(tree);
 extern void revert_static_member_fn		(tree);
 extern void fixup_anonymous_aggr		(tree);
 extern tree compute_array_index_type		(tree, tree, tsubst_flags_t);
-extern tree check_default_argument		(tree, tree);
+extern tree check_default_argument		(tree, tree, tsubst_flags_t);
 typedef int (*walk_namespaces_fn)		(tree, void *);
 extern int walk_namespaces			(walk_namespaces_fn,
 						 void *);
@@ -5452,7 +5456,8 @@ extern tree maybe_process_partial_specialization (tree);
 extern tree most_specialized_instantiation	(tree);
 extern void print_candidates			(tree);
 extern void instantiate_pending_templates	(int);
-extern tree tsubst_default_argument		(tree, tree, tree);
+extern tree tsubst_default_argument		(tree, tree, tree,
+						 tsubst_flags_t);
 extern tree tsubst (tree, tree, tsubst_flags_t, tree);
 extern tree tsubst_copy_and_build		(tree, tree, tsubst_flags_t,
 						 tree, bool, bool);
@@ -5585,6 +5590,7 @@ extern void resume_deferring_access_checks	(void);
 extern void stop_deferring_access_checks	(void);
 extern void pop_deferring_access_checks		(void);
 extern vec<deferred_access_check, va_gc> *get_deferred_access_checks (void);
+extern void reopen_deferring_access_checks (vec<deferred_access_check, va_gc> *);
 extern void pop_to_parent_deferring_access_checks (void);
 extern bool perform_access_checks (vec<deferred_access_check, va_gc> *,
 				   tsubst_flags_t);

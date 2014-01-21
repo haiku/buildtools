@@ -4459,7 +4459,9 @@ aapcs_vfp_allocate (CUMULATIVE_ARGS *pcum, enum machine_mode mode,
     if (((pcum->aapcs_vfp_regs_free >> regno) & mask) == mask)
       {
 	pcum->aapcs_vfp_reg_alloc = mask << regno;
-	if (mode == BLKmode || (mode == TImode && !TARGET_NEON))
+	if (mode == BLKmode
+	    || (mode == TImode && ! TARGET_NEON)
+	    || ! arm_hard_regno_mode_ok (FIRST_VFP_REGNUM + regno, mode))
 	  {
 	    int i;
 	    int rcount = pcum->aapcs_vfp_rcount;
@@ -7094,7 +7096,7 @@ static inline int
 thumb1_rtx_costs (rtx x, enum rtx_code code, enum rtx_code outer)
 {
   enum machine_mode mode = GET_MODE (x);
-  int total;
+  int total, words;
 
   switch (code)
     {
@@ -7102,6 +7104,8 @@ thumb1_rtx_costs (rtx x, enum rtx_code code, enum rtx_code outer)
     case ASHIFTRT:
     case LSHIFTRT:
     case ROTATERT:
+      return (mode == SImode) ? COSTS_N_INSNS (1) : COSTS_N_INSNS (2);
+
     case PLUS:
     case MINUS:
     case COMPARE:
@@ -7125,7 +7129,10 @@ thumb1_rtx_costs (rtx x, enum rtx_code code, enum rtx_code outer)
       return COSTS_N_INSNS (1) + 16;
 
     case SET:
-      return (COSTS_N_INSNS (1)
+      /* A SET doesn't have a mode, so let's look at the SET_DEST to get
+	 the mode.  */
+      words = ARM_NUM_INTS (GET_MODE_SIZE (GET_MODE (SET_DEST (x))));
+      return (COSTS_N_INSNS (words)
 	      + 4 * ((MEM_P (SET_SRC (x)))
 		     + MEM_P (SET_DEST (x))));
 
@@ -7822,6 +7829,7 @@ static inline int
 thumb1_size_rtx_costs (rtx x, enum rtx_code code, enum rtx_code outer)
 {
   enum machine_mode mode = GET_MODE (x);
+  int words;
 
   switch (code)
     {
@@ -7829,8 +7837,19 @@ thumb1_size_rtx_costs (rtx x, enum rtx_code code, enum rtx_code outer)
     case ASHIFTRT:
     case LSHIFTRT:
     case ROTATERT:
+      return (mode == SImode) ? COSTS_N_INSNS (1) : COSTS_N_INSNS (2);
+
     case PLUS:
     case MINUS:
+      /* Thumb-1 needs two instructions to fulfill shiftadd/shiftsub0/shiftsub1
+	 defined by RTL expansion, especially for the expansion of
+	 multiplication.  */
+      if ((GET_CODE (XEXP (x, 0)) == MULT
+	   && power_of_two_operand (XEXP (XEXP (x,0),1), SImode))
+	  || (GET_CODE (XEXP (x, 1)) == MULT
+	      && power_of_two_operand (XEXP (XEXP (x, 1), 1), SImode)))
+	return COSTS_N_INSNS (2);
+      /* On purpose fall through for normal RTX.  */
     case COMPARE:
     case NEG:
     case NOT:
@@ -7847,7 +7866,10 @@ thumb1_size_rtx_costs (rtx x, enum rtx_code code, enum rtx_code outer)
       return COSTS_N_INSNS (1);
 
     case SET:
-      return (COSTS_N_INSNS (1)
+      /* A SET doesn't have a mode, so let's look at the SET_DEST to get
+	 the mode.  */
+      words = ARM_NUM_INTS (GET_MODE_SIZE (GET_MODE (SET_DEST (x))));
+      return (COSTS_N_INSNS (words)
               + 4 * ((MEM_P (SET_SRC (x)))
                      + MEM_P (SET_DEST (x))));
 
@@ -17453,7 +17475,8 @@ arm_expand_prologue (void)
 	    }
 	}
 
-      if (current_tune->prefer_ldrd_strd
+      if (TARGET_LDRD
+	  && current_tune->prefer_ldrd_strd
           && !optimize_function_for_size_p (cfun))
         {
           if (TARGET_THUMB2)
@@ -23767,7 +23790,8 @@ arm_expand_epilogue (bool really_return)
         }
       else
         {
-          if (current_tune->prefer_ldrd_strd
+          if (TARGET_LDRD
+	      && current_tune->prefer_ldrd_strd
               && !optimize_function_for_size_p (cfun))
             {
               if (TARGET_THUMB2)

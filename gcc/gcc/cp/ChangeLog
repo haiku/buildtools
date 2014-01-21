@@ -1,3 +1,151 @@
+2013-10-16  Release Manager
+
+	* GCC 4.8.2 released.
+
+2013-10-08  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58568
+	* semantics.c (begin_lambda_type): Check return value of xref_tag
+	for error_mark_node; tidy.
+	* decl.c (grokdeclarator): Tweak error message.
+
+2013-10-02  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58535
+	* parser.c (cp_parser_function_specifier_opt): Upon error about
+	virtual templates don't set ds_virtual.
+
+2013-09-18  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58457
+	* class.c (instantiate_type): Loosen a bit the gcc_assert.
+
+2013-09-13  Jason Merrill  <jason@redhat.com>
+
+	PR c++/58273
+	* pt.c (any_type_dependent_elements_p): Actually check for
+	type-dependence, not value-dependence.
+
+2013-09-09  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/58325
+	* init.c (build_vec_delete): Call mark_rvalue_use on base.
+
+2013-08-20  Jason Merrill  <jason@redhat.com>
+
+	PR c++/58119
+	* cp-tree.h (WILDCARD_TYPE_P): Split out from...
+	(MAYBE_CLASS_TYPE_P): ...here.
+	* cvt.c (build_expr_type_conversion): Don't complain about a
+	template that can't match the desired type category.
+
+2013-08-17  Jason Merrill  <jason@redhat.com>
+
+	PR c++/58083
+	* name-lookup.c (push_class_level_binding_1): It's OK to push a
+	lambda type after the enclosing type is complete.
+
+2013-08-06  Jason Merrill  <jason@redhat.com>
+
+	PR c++/57825
+	* tree.c (strip_typedefs) [METHOD_TYPE]: Preserve ref-qualifier.
+
+2013-07-29  Jason Merrill  <jason@redhat.com>
+
+	PR c++/57901
+	* semantics.c (build_data_member_initialization, constexpr_fn_retval):
+	Use break_out_target_exprs instead of unshare_expr.
+
+	PR c++/58022
+	* typeck2.c (abstract_virtuals_error_sfinae): Don't remember
+	lookup in SFINAE context.
+
+2013-07-25  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/57981
+	* decl.c (check_default_argument): Take a tsubst_flags_t parameter.
+	(grokparms): Adjust.
+	* parser.c (cp_parser_late_parse_one_default_arg): Likewise.
+	* pt.c (tsubst_default_argument, tsubst_default_arguments): Take
+	a tsubst_flags_t parameter.
+	(tsubst_decl): Adjust.
+	* call.c (convert_default_arg): Likewise.
+	* cp-tree.h (check_default_argument, tsubst_default_argument):
+	Update declarations.
+
+2013-07-12  Jason Merrill  <jason@redhat.com>
+
+	* init.c (build_vec_init): Value-initialize the rest of the array.
+
+2013-07-09  Jason Merrill  <jason@redhat.com>
+
+	PR c++/57526
+	* semantics.c (lambda_capture_field_type): Build a DECLTYPE_TYPE
+	if the variable type uses 'auto'.
+
+	PR c++/57437
+	* typeck.c (check_return_expr): Lambda proxies aren't eligible
+	for nrv or return by move.
+
+	PR c++/57532
+	* parser.c (cp_parser_ref_qualifier_opt): Don't tentatively parse
+	a ref-qualifier in C++98 mode.
+
+	PR c++/57545
+	* pt.c (convert_nontype_argument) [INTEGER_CST]: Force the
+	argument to have the exact type of the parameter.
+
+	PR c++/57551
+	* semantics.c (cxx_eval_indirect_ref): Don't try to look through
+	a POINTER_PLUS_EXPR for type punning diagnostic.
+
+	PR c++/57831
+	* pt.c (tsubst_copy): Handle USING_DECL.
+
+2013-07-08  Jason Merrill  <jason@redhat.com>
+
+	PR c++/57550
+	* pt.c (fn_type_unification): Only defer during substitution.
+	(type_unification_real): Defer during defarg substitution,
+	add checks parm to pass back deferred checks.
+	(unify, do_auto_deduction): Adjust.
+	* semantics.c (reopen_deferring_access_checks): New.
+	* cp-tree.h: Declare it.
+
+2013-07-05  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/57645
+	* class.c (deduce_noexcept_on_destructors): Save, set, and restore
+	TYPE_HAS_NONTRIVIAL_DESTRUCTOR (t) around the main loop over the
+	destructors.
+
+2013-07-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/57771
+	* parser.c (cp_parser_postfix_expression) <case RID_STATCAST>
+	Temporarily set parser->greater_than_is_operator_p for
+	cp_parser_expression and restore from saved value afterwards.
+
+2013-06-21  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/53211
+	* pt.c (type_dependent_expression_p): Handle an array of unknown
+	bound depending on a variadic parameter.
+	* parser.c (cp_parser_range_for): Revert PR56794 changes.
+
+2013-05-31  Jason Merrill  <jason@redhat.com>
+
+	PR c++/57319
+	* class.c (vbase_has_user_provided_move_assign): New.
+	* method.c (synthesized_method_walk): Check it.
+	* cp-tree.h: Declare it.
+
+	PR c++/56930
+	* call.c (convert_like_real): Use cp_convert_and_check.
+	* cvt.c (cp_convert_and_check): Use maybe_constant_value.
+	* semantics.c (cxx_eval_constant_expression): Handle LTGT_EXPR.
+	(potential_constant_expression_1): Handle OMP_ATOMIC*.
+
 2013-05-31  Release Manager
 
 	* GCC 4.8.1 released.

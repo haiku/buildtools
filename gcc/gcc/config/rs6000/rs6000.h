@@ -662,6 +662,11 @@ extern unsigned char rs6000_recip_bits[];
    instructions for them.  Might as well be consistent with bits and bytes.  */
 #define WORDS_BIG_ENDIAN 1
 
+/* This says that for the IBM long double the larger magnitude double
+   comes first.  It's really a two element double array, and arrays
+   don't index differently between little- and big-endian.  */
+#define LONG_DOUBLE_LARGE_FIRST 1
+
 #define MAX_BITS_PER_WORD 64
 
 /* Width of a word, in units (bytes).  */
@@ -2288,6 +2293,13 @@ extern char rs6000_reg_names[][8];	/* register names (0 vs. %r0).  */
 
 /* How to align the given loop. */
 #define LOOP_ALIGN(LABEL)  rs6000_loop_align(LABEL)
+
+/* Alignment guaranteed by __builtin_malloc.  */
+/* FIXME:  128-bit alignment is guaranteed by glibc for TARGET_64BIT.
+   However, specifying the stronger guarantee currently leads to
+   a regression in SPEC CPU2006 437.leslie3d.  The stronger
+   guarantee should be implemented here once that's fixed.  */
+#define MALLOC_ABI_ALIGNMENT (64)
 
 /* Pick up the return address upon entry to a procedure. Used for
    dwarf2 unwind information.  This also enables the table driven

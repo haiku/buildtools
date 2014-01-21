@@ -29,6 +29,8 @@
 #include "gimple.h"
 #include "toplev.h"
 #include "output.h"
+#include "real.h"
+#include "realmpfr.h"
 
 #include "go-c.h"
 
@@ -208,6 +210,28 @@ class Gcc_backend : public Backend
   Bexpression*
   zero_expression(Btype*);
 
+  Bexpression*
+  error_expression()
+  { return this->make_expression(error_mark_node); }
+
+  Bexpression*
+  var_expression(Bvariable* var, Location);
+
+  Bexpression*
+  indirect_expression(Bexpression* expr, bool known_valid, Location);
+
+  Bexpression*
+  integer_constant_expression(Btype* btype, mpz_t val);
+
+  Bexpression*
+  float_constant_expression(Btype* btype, mpfr_t val);
+
+  Bexpression*
+  complex_constant_expression(Btype* btype, mpfr_t real, mpfr_t imag);
+
+  Bexpression*
+  convert_expression(Btype* type, Bexpression* expr, Location);
+
   // Statements.
 
   Bstatement*
@@ -287,10 +311,10 @@ class Gcc_backend : public Backend
 		     Location, Bstatement**);
 
   Bvariable*
-  immutable_struct(const std::string&, bool, Btype*, Location);
+  immutable_struct(const std::string&, bool, bool, Btype*, Location);
 
   void
-  immutable_struct_set_init(Bvariable*, const std::string&, bool, Btype*,
+  immutable_struct_set_init(Bvariable*, const std::string&, bool, bool, Btype*,
 			    Location, Bexpression*);
 
   Bvariable*
@@ -848,6 +872,100 @@ Gcc_backend::zero_expression(Btype* btype)
   return tree_to_expr(ret);
 }
 
+// An expression that references a variable.
+
+Bexpression*
+Gcc_backend::var_expression(Bvariable* var, Location)
+{
+  tree ret = var->get_tree();
+  if (ret == error_mark_node)
+    return this->error_expression();
+  return tree_to_expr(ret);
+}
+
+// An expression that indirectly references an expression.
+
+Bexpression*
+Gcc_backend::indirect_expression(Bexpression* expr, bool known_valid,
+                                 Location location)
+{
+  tree ret = build_fold_indirect_ref_loc(location.gcc_location(),
+                                         expr->get_tree());
+  if (known_valid)
+    TREE_THIS_NOTRAP(ret) = 1;
+  return tree_to_expr(ret);
+}
+
+// Return a typed value as a constant integer.
+
+Bexpression*
+Gcc_backend::integer_constant_expression(Btype* btype, mpz_t val)
+{
+  tree t = btype->get_tree();
+  if (t == error_mark_node)
+    return this->error_expression();
+
+  tree ret = double_int_to_tree(t, mpz_get_double_int(t, val, true));
+  return tree_to_expr(ret);
+}
+
+// Return a typed value as a constant floating-point number.
+
+Bexpression*
+Gcc_backend::float_constant_expression(Btype* btype, mpfr_t val)
+{
+  tree t = btype->get_tree();
+  tree ret;
+  if (t == error_mark_node)
+    return this->error_expression();
+
+  REAL_VALUE_TYPE r1;
+  real_from_mpfr(&r1, val, t, GMP_RNDN);
+  REAL_VALUE_TYPE r2;
+  real_convert(&r2, TYPE_MODE(t), &r1);
+  ret = build_real(t, r2);
+  return tree_to_expr(ret);
+}
+
+// Return a typed real and imaginary value as a constant complex number.
+
+Bexpression*
+Gcc_backend::complex_constant_expression(Btype* btype, mpfr_t real, mpfr_t imag)
+{
+  tree t = btype->get_tree();
+  tree ret;
+  if (t == error_mark_node)
+    return this->error_expression();
+
+  REAL_VALUE_TYPE r1;
+  real_from_mpfr(&r1, real, TREE_TYPE(t), GMP_RNDN);
+  REAL_VALUE_TYPE r2;
+  real_convert(&r2, TYPE_MODE(TREE_TYPE(t)), &r1);
+
+  REAL_VALUE_TYPE r3;
+  real_from_mpfr(&r3, imag, TREE_TYPE(t), GMP_RNDN);
+  REAL_VALUE_TYPE r4;
+  real_convert(&r4, TYPE_MODE(TREE_TYPE(t)), &r3);
+
+  ret = build_complex(t, build_real(TREE_TYPE(t), r2),
+                      build_real(TREE_TYPE(t), r4));
+  return tree_to_expr(ret);
+}
+
+// An expression that converts an expression to a different type.
+
+Bexpression*
+Gcc_backend::convert_expression(Btype* type, Bexpression* expr, Location)
+{
+  tree type_tree = type->get_tree();
+  tree expr_tree = expr->get_tree();
+  if (type_tree == error_mark_node || expr_tree == error_mark_node)
+    return this->error_expression();
+
+  tree ret = fold_convert(type_tree, expr_tree);
+  return tree_to_expr(ret);
+}
+
 // An expression as a statement.
 
 Bstatement*
@@ -1242,20 +1360,41 @@ Gcc_backend::non_zero_size_type(tree type)
   switch (TREE_CODE(type))
     {
     case RECORD_TYPE:
-      {
-	if (go_non_zero_struct == NULL_TREE)
-	  {
-	    type = make_node(RECORD_TYPE);
-	    tree field = build_decl(UNKNOWN_LOCATION, FIELD_DECL,
-				    get_identifier("dummy"),
-				    boolean_type_node);
-	    DECL_CONTEXT(field) = type;
-	    TYPE_FIELDS(type) = field;
-	    layout_type(type);
-	    go_non_zero_struct = type;
-	  }
-	return go_non_zero_struct;
-      }
+      if (TYPE_FIELDS(type) != NULL_TREE)
+	{
+	  tree ns = make_node(RECORD_TYPE);
+	  tree field_trees = NULL_TREE;
+	  tree *pp = &field_trees;
+	  for (tree field = TYPE_FIELDS(type);
+	       field != NULL_TREE;
+	       field = DECL_CHAIN(field))
+	    {
+	      tree ft = TREE_TYPE(field);
+	      if (field == TYPE_FIELDS(type))
+		ft = non_zero_size_type(ft);
+	      tree f = build_decl(DECL_SOURCE_LOCATION(field), FIELD_DECL,
+				  DECL_NAME(field), ft);
+	      DECL_CONTEXT(f) = ns;
+	      *pp = f;
+	      pp = &DECL_CHAIN(f);
+	    }
+	  TYPE_FIELDS(ns) = field_trees;
+	  layout_type(ns);
+	  return ns;
+	}
+
+      if (go_non_zero_struct == NULL_TREE)
+	{
+	  type = make_node(RECORD_TYPE);
+	  tree field = build_decl(UNKNOWN_LOCATION, FIELD_DECL,
+				  get_identifier("dummy"),
+				  boolean_type_node);
+	  DECL_CONTEXT(field) = type;
+	  TYPE_FIELDS(type) = field;
+	  layout_type(type);
+	  go_non_zero_struct = type;
+	}
+      return go_non_zero_struct;
 
     case ARRAY_TYPE:
       {
@@ -1454,8 +1593,8 @@ Gcc_backend::temporary_variable(Bfunction* function, Bblock* bblock,
 // Create a named immutable initialized data structure.
 
 Bvariable*
-Gcc_backend::immutable_struct(const std::string& name, bool, Btype* btype,
-			      Location location)
+Gcc_backend::immutable_struct(const std::string& name, bool is_hidden,
+			      bool, Btype* btype, Location location)
 {
   tree type_tree = btype->get_tree();
   if (type_tree == error_mark_node)
@@ -1469,6 +1608,8 @@ Gcc_backend::immutable_struct(const std::string& name, bool, Btype* btype,
   TREE_CONSTANT(decl) = 1;
   TREE_USED(decl) = 1;
   DECL_ARTIFICIAL(decl) = 1;
+  if (!is_hidden)
+    TREE_PUBLIC(decl) = 1;
 
   // We don't call rest_of_decl_compilation until we have the
   // initializer.
@@ -1482,8 +1623,7 @@ Gcc_backend::immutable_struct(const std::string& name, bool, Btype* btype,
 
 void
 Gcc_backend::immutable_struct_set_init(Bvariable* var, const std::string&,
-				       bool is_common, Btype*,
-				       Location,
+				       bool, bool is_common, Btype*, Location,
 				       Bexpression* initializer)
 {
   tree decl = var->get_tree();
@@ -1494,13 +1634,14 @@ Gcc_backend::immutable_struct_set_init(Bvariable* var, const std::string&,
   DECL_INITIAL(decl) = init_tree;
 
   // We can't call make_decl_one_only until we set DECL_INITIAL.
-  if (!is_common)
-    TREE_PUBLIC(decl) = 1;
-  else
-    {
-      make_decl_one_only(decl, DECL_ASSEMBLER_NAME(decl));
-      resolve_unique_section(decl, 1, 0);
-    }
+  if (is_common)
+    make_decl_one_only(decl, DECL_ASSEMBLER_NAME(decl));
+
+  // These variables are often unneeded in the final program, so put
+  // them in their own section so that linker GC can discard them.
+  resolve_unique_section(decl,
+			 compute_reloc_for_constant (init_tree),
+			 1);
 
   rest_of_decl_compilation(decl, 1, 0);
 }

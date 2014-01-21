@@ -8,21 +8,24 @@ see ONEWS.
 http://gcc.gnu.org/gcc-4.8/index.html
                              GCC 4.8 Release Series
 
-   May 31, 2013
+   October 16, 2013
 
    The [1]GNU project and the GCC developers are pleased to announce the
-   release of GCC 4.8.1.
+   release of GCC 4.8.2.
 
    This release is a bug-fix release, containing fixes for regressions in
-   GCC 4.8.0 relative to previous releases of GCC.
+   GCC 4.8.1 relative to previous releases of GCC.
 
 Release History
 
+   GCC 4.8.2
+          October 16, 2013 ([2]changes, [3]documentation)
+
    GCC 4.8.1
-          May 31, 2013 ([2]changes, [3]documentation)
+          May 31, 2013 ([4]changes, [5]documentation)
 
    GCC 4.8.0
-          March 22, 2013 ([4]changes, [5]documentation)
+          March 22, 2013 ([6]changes, [7]documentation)
 
 References and Acknowledgements
 
@@ -30,54 +33,56 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [6]successful builds is updated as new information becomes
+   A list of [8]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [7]amazing group of volunteers is
+   well as test results to GCC. This [9]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [8]GCC project
-   web site or contact the [9]GCC development mailing list.
+   For additional information about GCC please refer to the [10]GCC
+   project web site or contact the [11]GCC development mailing list.
 
-   To obtain GCC please use [10]our mirror sites or [11]our SVN server.
+   To obtain GCC please use [12]our mirror sites or [13]our SVN server.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [12]GCC manuals. If that fails, the
-    [13]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [14]GCC manuals. If that fails, the
+    [15]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [14]gcc@gcc.gnu.org. All of [15]our lists have public
+    list at [16]gcc@gcc.gnu.org. All of [17]our lists have public
     archives.
 
-   Copyright (C) [16]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [18]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [17]maintained by the GCC team. Last modified
-   2013-05-31[18].
+   These pages are [19]maintained by the GCC team. Last modified
+   2013-10-16[20].
 
 References
 
    1. http://www.gnu.org/
    2. http://gcc.gnu.org/gcc-4.8/changes.html
-   3. http://gcc.gnu.org/onlinedocs/4.8.1/
+   3. http://gcc.gnu.org/onlinedocs/4.8.2/
    4. http://gcc.gnu.org/gcc-4.8/changes.html
-   5. http://gcc.gnu.org/onlinedocs/4.8.0/
-   6. http://gcc.gnu.org/gcc-4.8/buildstat.html
-   7. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
-   8. http://gcc.gnu.org/index.html
-   9. mailto:gcc@gcc.gnu.org
-  10. http://gcc.gnu.org/mirrors.html
-  11. http://gcc.gnu.org/svn.html
-  12. http://gcc.gnu.org/onlinedocs/
-  13. mailto:gcc-help@gcc.gnu.org
-  14. mailto:gcc@gcc.gnu.org
-  15. http://gcc.gnu.org/lists.html
-  16. http://www.fsf.org/
-  17. http://gcc.gnu.org/about.html
-  18. http://validator.w3.org/check/referer
+   5. http://gcc.gnu.org/onlinedocs/4.8.1/
+   6. http://gcc.gnu.org/gcc-4.8/changes.html
+   7. http://gcc.gnu.org/onlinedocs/4.8.0/
+   8. http://gcc.gnu.org/gcc-4.8/buildstat.html
+   9. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
+  10. http://gcc.gnu.org/index.html
+  11. mailto:gcc@gcc.gnu.org
+  12. http://gcc.gnu.org/mirrors.html
+  13. http://gcc.gnu.org/svn.html
+  14. http://gcc.gnu.org/onlinedocs/
+  15. mailto:gcc-help@gcc.gnu.org
+  16. mailto:gcc@gcc.gnu.org
+  17. http://gcc.gnu.org/lists.html
+  18. http://www.fsf.org/
+  19. http://gcc.gnu.org/about.html
+  20. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.8/changes.html
                              GCC 4.8 Release Series
@@ -189,9 +194,9 @@ General Optimizer Improvements (and Changes)
      * [7]ThreadSanitizer has been added and can be enabled via
        -fsanitize=thread. Instructions will be instrumented to detect data
        races. The ThreadSanitizer is available on x86-64 GNU/Linux.
-     * A new local register allocator has been implemented, which replaces
-       the 26 year old reload pass and improves generated code quality.
-       For now it is active on the ia32 and x86-64 targets.
+     * A new local register allocator (LRA) has been implemented, which
+       replaces the 26 year old reload pass and improves generated code
+       quality. For now it is active on the ia32 and x86-64 targets.
      * Support for transactional memory has been implemented on the
        following architectures: IA-32/x86-64, ARM, PowerPC, SH, Sparc, and
        Alpha.
@@ -717,12 +722,12 @@ Operating Systems
 
      * Executables are now linked against shared libgcc by default. The
        previous default was to link statically, which can still be done by
-       explicitly specifying -static or -static-libgcc on the command
-       line. However it is strongly advised against, as it will cause
-       problems for any application that makes use of DLLs compiled by
-       GCC. It should be alright for a monolithic stand-alone application
-       that only links against the Windows OS DLLs, but offers little or
-       no benefit.
+       explicitly specifying -static or static-libgcc on the command line.
+       However it is strongly advised against, as it will cause problems
+       for any application that makes use of DLLs compiled by GCC. It
+       should be alright for a monolithic stand-alone application that
+       only links against the Windows DLLs, but offers little or no
+       benefit.
 
 GCC 4.8.1
 
@@ -747,20 +752,27 @@ GCC 4.8.1
    libstdc++ configured with the non-default --enable-libstdcxx-time=
    configuration option needs to be recompiled.
 
+GCC 4.8.2
+
+   This is the [34]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 4.8.2 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
 
     For questions related to the use of GCC, please consult these web
-    pages and the [34]GCC manuals. If that fails, the
-    [35]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [35]GCC manuals. If that fails, the
+    [36]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [36]gcc@gcc.gnu.org. All of [37]our lists have public
+    list at [37]gcc@gcc.gnu.org. All of [38]our lists have public
     archives.
 
-   Copyright (C) [38]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [39]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [39]maintained by the GCC team. Last modified
-   2013-05-31[40].
+   These pages are [40]maintained by the GCC team. Last modified
+   2013-10-16[41].
 
 References
 
@@ -797,13 +809,14 @@ References
   31. http://gcc.gnu.org/onlinedocs/gcc/X86-Built-in-Functions.html#X86-Built-in-Functions
   32. http://gcc.gnu.org/wiki/FunctionMultiVersioning
   33. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.8.1
-  34. http://gcc.gnu.org/onlinedocs/
-  35. mailto:gcc-help@gcc.gnu.org
-  36. mailto:gcc@gcc.gnu.org
-  37. http://gcc.gnu.org/lists.html
-  38. http://www.fsf.org/
-  39. http://gcc.gnu.org/about.html
-  40. http://validator.w3.org/check/referer
+  34. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.8.2
+  35. http://gcc.gnu.org/onlinedocs/
+  36. mailto:gcc-help@gcc.gnu.org
+  37. mailto:gcc@gcc.gnu.org
+  38. http://gcc.gnu.org/lists.html
+  39. http://www.fsf.org/
+  40. http://gcc.gnu.org/about.html
+  41. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.7/index.html
                              GCC 4.7 Release Series

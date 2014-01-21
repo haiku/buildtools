@@ -452,6 +452,7 @@ s390*-*-*)
 	cpu_type=s390
 	need_64bit_hwint=yes
 	extra_options="${extra_options} fused-madd.opt"
+	extra_headers="s390intrin.h htmintrin.h htmxlintrin.h"
 	;;
 # Note the 'l'; we need to be able to match e.g. "shle" or "shl".
 sh[123456789lbe]*-*-* | sh-*-*)
@@ -734,6 +735,7 @@ case ${target} in
     yes) thread_file='rtems' ;;
   esac
   extra_options="${extra_options} rtems.opt"
+  default_use_cxa_atexit=yes
   use_gcc_stdint=wrap
   ;;
 *-*-uclinux*)
@@ -1057,7 +1059,6 @@ hppa*64*-*-linux*)
 	tm_file="pa/pa64-start.h ${tm_file} dbxelf.h elfos.h gnu-user.h linux.h \
 		 glibc-stdint.h pa/pa-linux.h pa/pa64-regs.h pa/pa-64.h \
 		 pa/pa64-linux.h"
-	tmake_file="${tmake_file} pa/t-linux"
 	gas=yes gnu_ld=yes
 	need_64bit_hwint=yes
 	;;
@@ -2066,20 +2067,24 @@ powerpc-*-rtems*)
 	extra_options="${extra_options} rs6000/sysv4.opt"
 	tmake_file="rs6000/t-fprules rs6000/t-rtems t-rtems rs6000/t-ppccomm"
 	;;
-powerpc-*-linux* | powerpc64-*-linux*)
+powerpc*-*-linux*)
 	tm_file="${tm_file} dbxelf.h elfos.h freebsd-spec.h rs6000/sysv4.h"
 	extra_options="${extra_options} rs6000/sysv4.opt"
 	tmake_file="rs6000/t-fprules rs6000/t-ppcos ${tmake_file} rs6000/t-ppccomm"
+	case ${target} in
+	    powerpc*le-*-*)
+	    tm_file="${tm_file} rs6000/sysv4le.h" ;;
+	esac
 	maybe_biarch=yes
 	case ${target} in
-	    powerpc64-*-linux*spe* | powerpc64-*-linux*paired*)
+	    powerpc64*-*-linux*spe* | powerpc64*-*-linux*paired*)
 	    	echo "*** Configuration ${target} not supported" 1>&2
 		exit 1
 		;;
-	    powerpc-*-linux*spe* | powerpc-*-linux*paired*)
+	    powerpc*-*-linux*spe* | powerpc*-*-linux*paired*)
 		maybe_biarch=
 		;;
-	    powerpc64-*-linux*)
+	    powerpc64*-*-linux*)
 	    	test x$with_cpu != x || cpu_is_64bit=yes
 		maybe_biarch=always
 		;;

@@ -5438,10 +5438,17 @@ cp_parser_postfix_expression (cp_parser *parser, bool address_p, bool cast_p,
 	/* Restore the old message.  */
 	parser->type_definition_forbidden_message = saved_message;
 
+	bool saved_greater_than_is_operator_p
+	  = parser->greater_than_is_operator_p;
+	parser->greater_than_is_operator_p = true;
+
 	/* And the expression which is being cast.  */
 	cp_parser_require (parser, CPP_OPEN_PAREN, RT_OPEN_PAREN);
 	expression = cp_parser_expression (parser, /*cast_p=*/true, & idk);
 	cp_parser_require (parser, CPP_CLOSE_PAREN, RT_CLOSE_PAREN);
+
+	parser->greater_than_is_operator_p
+	  = saved_greater_than_is_operator_p;
 
 	/* Only type conversions to integral or enumeration types
 	   can be used in constant-expressions.  */
@@ -9595,10 +9602,7 @@ cp_parser_range_for (cp_parser *parser, tree scope, tree init, tree range_decl)
 	range_expr = error_mark_node;
       stmt = begin_range_for_stmt (scope, init);
       finish_range_for_decl (stmt, range_decl, range_expr);
-      if (range_expr != error_mark_node
-	  && !type_dependent_expression_p (range_expr)
-	  /* The length of an array might be dependent.  */
-	  && COMPLETE_TYPE_P (complete_type (TREE_TYPE (range_expr)))
+      if (!type_dependent_expression_p (range_expr)
 	  /* do_auto_deduction doesn't mess with template init-lists.  */
 	  && !BRACE_ENCLOSED_INITIALIZER_P (range_expr))
 	do_range_for_auto_deduction (range_decl, range_expr);
@@ -11135,7 +11139,8 @@ cp_parser_function_specifier_opt (cp_parser* parser,
 	 A member function template shall not be virtual.  */
       if (PROCESSING_REAL_TEMPLATE_DECL_P ())
 	error_at (token->location, "templates may not be %<virtual%>");
-      set_and_check_decl_spec_loc (decl_specs, ds_virtual, token);
+      else
+	set_and_check_decl_spec_loc (decl_specs, ds_virtual, token);
       break;
 
     case RID_EXPLICIT:
@@ -16982,6 +16987,11 @@ cp_parser_ref_qualifier_seq_opt (cp_parser* parser)
 {
   cp_ref_qualifier ref_qual = REF_QUAL_NONE;
   cp_token *token = cp_lexer_peek_token (parser->lexer);
+
+  /* Don't try to parse bitwise '&' as a ref-qualifier (c++/57532).  */
+  if (cxx_dialect < cxx11 && cp_parser_parsing_tentatively (parser))
+    return ref_qual;
+
   switch (token->type)
     {
     case CPP_AND:
@@ -22557,7 +22567,8 @@ cp_parser_late_parse_one_default_arg (cp_parser *parser, tree decl,
       /* In a non-template class, check conversions now.  In a template,
 	 we'll wait and instantiate these as needed.  */
       if (TREE_CODE (decl) == PARM_DECL)
-	parsed_arg = check_default_argument (parmtype, parsed_arg);
+	parsed_arg = check_default_argument (parmtype, parsed_arg,
+					     tf_warning_or_error);
       else
 	{
 	  int flags = LOOKUP_IMPLICIT;

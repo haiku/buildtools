@@ -1,3 +1,534 @@
+2013-10-16  Release Manager
+
+	* GCC 4.8.2 released.
+
+2013-10-14  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* gcc.dg/torture/pr58670.c (ASM_STR) [__i386__ || __x86_64__]: Use
+	btsl.
+
+2013-10-10  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/58670
+	* gcc.dg/torture/pr58670.c: New test.
+
+2013-10-09  Jakub Jelinek  <jakub@redhat.com>
+
+	Backport from mainline
+	2013-09-26  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58539
+	* gcc.dg/torture/pr58539.c: New testcase.
+
+2013-10-08  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58568
+	* g++.dg/cpp0x/lambda/lambda-ice10.C: New.
+	* g++.old-deja/g++.mike/misc9.C: Adjust.
+
+2013-10-08  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* gcc.target/s390/htm-nofloat-2.c: Add -mzarch to asm options.
+
+2013-10-07  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* gcc.target/s390/htm-nofloat-2.c: New testcase.
+
+2013-10-07  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	Backport from mainline
+	2013-06-27  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+        * gcc.target/s390/htm-1.c: New file.
+        * gcc.target/s390/htm-nofloat-1.c: New file.
+        * gcc.target/s390/htm-xl-intrin-1.c: New file.
+
+2013-10-04  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/57697
+	PR fortran/58469
+	* gfortran.dg/defined_assignment_8.f90: New.
+	* gfortran.dg/defined_assignment_9.f90: New.
+	* gfortran.dg/defined_assignment_10.f90: New.
+	* gfortran.dg/defined_assignment_11.f90: New.
+
+2013-10-04  Marcus Shawcroft  <marcus.shawcroft@arm.com>
+
+	Backport from mainline.
+
+	PR target/58460
+	* gcc.target/aarch64/pr58460.c: New file.
+
+2013-10-02  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58535
+	* g++.dg/parse/crash62.C: New.
+
+2013-10-01  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/58574
+	* gcc.c-torture/execute/pr58574.c: New test.
+
+2013-09-30  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/58564
+	* gcc.c-torture/execute/pr58564.c: New test.
+
+2013-09-23  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/opt28.ad[sb]: New test.
+	* gnat.dg/opt28_pkg.ads: New helper.
+
+2013-09-23  Alan Modra  <amodra@gmail.com>
+
+	* gcc.target/powerpc/pr58330.c: New.
+
+2013-09-18  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58457
+	* g++.dg/parse/using4.C: New.
+
+2013-09-18  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/array_bounds_test2.adb: New test.
+
+2013-09-18  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/in_out_parameter4.adb: New test.
+
+2013-09-17  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	PR tree-optimization/58088
+	* gcc.c-torture/compile/pr58088.c: New test.
+
+2013-09-13  Christian Bruel  <christian.bruel@st.com>
+
+	PR target/58314
+	* gcc.target/sh/torture/pr58314.c: New test.
+
+2013-09-11  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/58377
+	* g++.dg/uninit-pred-4.C: New testcase.
+
+2013-09-11  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58385
+	* gcc.c-torture/execute/pr58385.c: New test.
+
+2013-09-10  Jakub Jelinek  <jakub@redhat.com>
+
+	PR rtl-optimization/58365
+	* gcc.c-torture/execute/pr58365.c: New test.
+
+2013-09-09  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/58325
+	* g++.dg/warn/Wunused-var-21.C: New test.
+
+	PR tree-optimization/58364
+	* gcc.c-torture/execute/pr58364.c: New test.
+
+2013-09-09  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	PR target/57735
+	* g++.dg/ext/pr57735.C: New test.
+
+2013-09-09  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-08-27  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57521
+	* gcc.dg/torture/pr57521.c: New testcase.
+
+2013-09-09  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/57656
+	* gcc.dg/torture/pr57656.c: New testcase.
+
+2013-09-09  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57685
+	* gcc.dg/torture/pr57685.c: New testcase.
+
+2013-09-09  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58223
+	* gcc.dg/torture/pr58223.c: New testcase.
+	* gcc.dg/tree-ssa/ldist-16.c: Flip expected behavior.
+
+2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-08-29  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58246
+	* gcc.dg/torture/pr58246.c: New testcase.
+
+2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58228
+	* gcc.dg/torture/pr58228.c: New testcase.
+
+2013-09-03  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-08-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58010
+	* gcc.dg/pr58010.c: New testcase.
+
+2013-08-30  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58277
+	* gcc.c-torture/execute/pr58277-1.c: New test.
+	* gcc.c-torture/execute/pr58277-2.c: New test.
+
+2013-08-29  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from mainline
+	2013-07-22  Georg-Johann Lay  <avr@gjlay.de>
+
+	PR testsuite/52641
+	* gcc.dg/torture/pr57381.c: Add dg-require-effective-target int32plus.
+
+	2013-05-27  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57417
+	* gcc.dg/torture/pr57417.c: New testcase.
+
+	PR tree-optimization/57396
+	* gfortran.fortran-torture/execute/pr57396.f90: New testcase.
+
+	PR tree-optimization/57343
+	* gcc.dg/torture/pr57343.c: New testcase.
+
+	2013-05-23  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/57381
+	* gcc.dg/torture/pr57381.c: New testcase.
+
+2013-08-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/58257
+	* c-c++-common/gomp/pr58257.c: New test.
+
+2013-08-28  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-06-24  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/56977
+	* gcc.dg/pr56977.c: New testcase.
+
+2013-08-24  Mikael Morin  <mikael@gcc.gnu.org>
+
+	PR fortran/57798
+	* gfortran.dg/inline_sum_5.f90: New.
+
+2013-08-24  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from trunk:
+	2013-08-22  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/58185
+	* gfortran.dg/select_type_34.f90: New.
+
+2013-08-23  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/58218
+	* gcc.target/i386/pr58218.c: New test.
+
+	PR tree-optimization/58209
+	* gcc.c-torture/execute/pr58209.c: New test.
+
+2013-08-20  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58190
+	* g++.dg/pr57878.C: Use __SIZE_TYPE__.
+
+2013-08-18  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58006
+	* g++.dg/opt/pr58006.C: New test.
+
+2013-08-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58164
+	* gcc.c-torture/compile/pr58164.c: New test.
+
+	PR tree-optimization/58165
+	* g++.dg/opt/pr58165.C: New test.
+
+2013-08-14  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58145
+	* gcc.dg/pr58145-1.c: New test.
+	* gcc.dg/pr58145-2.c: New test.
+
+2013-08-13  Jakub Jelinek  <jakub@redhat.com>
+
+	PR sanitizer/56417
+	* gcc.dg/asan/pr56417.c: New test.
+
+2013-08-13  Vladimir Makarov  <vmakarov@redhat.com>
+
+	Backport from mainline
+	2013-06-06  Vladimir Makarov  <vmakarov@redhat.com>
+
+	PR rtl-optimization/57459
+	* gcc.target/i386/pr57459.c: New test.
+
+2013-08-13  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/loop_optimization16.adb: New test.
+	* gnat.dg/loop_optimization16_pkg.ad[sb]: New helper.
+
+2013-08-13  Marek Polacek  <polacek@redhat.com>
+
+	PR tree-optimization/57980
+	* gcc.dg/pr57980.c: New test.
+
+2013-08-13  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-08-12  Perez Read  <netfirewall@gmail.com>
+
+        PR target/58132
+        * gcc.target/i386/movabs-1.c: New test.
+
+2013-08-11  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from trunk:
+	2013-08-09  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/58058
+	* gfortran.dg/transfer_intrinsic_6.f90: New.
+
+2013-08-09  Zhenqiang Chen  <zhenqiang.chen@linaro.org>
+
+	Backport from mainline:
+	2013-08-09  Zhenqiang Chen  <zhenqiang.chen@linaro.org>
+
+	* gcc.target/arm/lp1189445.c: New testcase.
+
+2013-08-06  Martin Jambor  <mjambor@suse.cz>
+	    Bernd Edlinger <bernd.edlinger@hotmail.de>
+
+	* gcc.dg/torture/pr58041.c (foo): Accept z by reference.
+	(a): Fix constructor.
+
+2013-08-06  Martin Jambor  <mjambor@suse.cz>
+
+	PR middle-end/58041
+	* gcc.dg/torture/pr58041.c: New test.
+	* gcc.target/arm/pr58041.c: Likewise.
+
+2013-07-28  Tobias Burnus  <burnus@net-b.de>
+
+	Backport from mainline
+	2013-05-28  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/57435
+	* gfortran.dg/use_29.f90: New.
+
+2013-07-25  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/57981
+	* g++.dg/cpp0x/pr57981.C: New.
+
+2013-07-25  Terry Guo  <terry.guo@arm.com>
+
+	Backport from mainline:
+	2013-07-25  Terry Guo  <terry.guo@arm.com>
+
+	* gcc.target/arm/thumb1-Os-mult.c: New test case.
+
+2013-07-19  Wei Mi  <wmi@google.com>
+
+	Backport from mainline:
+	2013-07-18  Wei Mi  <wmi@google.com>
+
+	PR rtl-optimization/57878
+	* g++.dg/pr57878.C: New test.
+
+2013-07-19  Georg-Johann Lay  <avr@gjlay.de>
+
+	Backport from 2013-07-19 trunk r201051.
+
+	PR target/57516
+	* gcc.target/avr/torture/builtins-4-roundfx.c (test2hr, test2k):
+	Adjust to corrected rounding.
+
+2013-07-19  Kirill Yukhin  <kirill.yukhin@intel.com>
+
+	* gcc.target/i386/bmi-1.c: Extend with new instrinsics.
+	Fix scan patterns.
+	* gcc.target/i386/bmi-2.c: Ditto.
+	* gcc.target/i386/bmi-bextr-4.c: New.
+	* gcc.target/i386/bmi-bextr-5.c: Ditto.
+
+2013-07-16  Iain Sandoe  <iain@codesourcery.com>
+
+	PR target/55656
+	PR target/55657
+	* obj-c++.dg/cxx-ivars-3.mm: Use NSObject instead of Object.
+	* obj-c++.dg/strings/const-cfstring-5.mm: Likewise.
+	* obj-c++.dg/torture/strings/const-str-10.mm: Likewise.
+	* obj-c++.dg/torture/strings/const-str-9.mm: Likewise.
+	* objc.dg/image-info.m: Likewise.
+	* objc.dg/symtab-1.m: Likewise.
+	* objc.dg/torture/strings/const-str-10.m: Likewise.
+	* objc.dg/torture/strings/const-str-11.m: Likewise.
+	* objc.dg/torture/strings/const-str-9.m: Likewise.
+	* objc.dg/zero-link-1.m: Likewise.
+	* objc.dg/zero-link-2.m: Likewise.
+	* objc.dg/no-extra-load.m: Avoid Foundation.h.
+	* objc.dg/objc-foreach-4.m: Likewise.
+	* objc.dg/objc-foreach-5.m: Likewise.
+	* obj-c++.dg/proto-lossage-7.mm: Use NSObject instead of Object
+	(for Darwin).
+	* obj-c++.dg/strings/const-str-12.mm: Likewise.
+	* obj-c++.dg/syntax-error-1.mm: Likewise.
+	* objc.dg/method-6.m: Likewise.
+	* objc.dg/pr23214.m: Likewise.
+	* objc.dg/proto-lossage-7.m: Likewise.
+	* objc.dg/strings/const-str-12b.m: Likewise.
+	* objc.dg/zero-link-3.m: Likewise.
+	* obj-c++.dg/method-12.mm: Skip on Darwin versions without 'Object'.
+	* objc.dg/encode-7-next-64bit.m: Use NSObject instead of Object,
+	adjust headers, interfaces and encoded types to reflect current system
+	versions.  Add FIXME and outputs from current system compiler for
+	reference.
+
+2013-07-10  Janis Johnson  <janisjo@codesourcery.com>
+
+	* gcc.target/powerpc/20020118-1.c: Force 128-bit stack alignment
+	for EABI targets.
+	* gcc.c-torture/execute/nest-align-1.x: New.
+
+2013-07-08  Janis Johnson  <janisjo@codesourcery.com>
+
+	* gcc.target/powerpc/tfmode_off.c: Skip for EABI targets.
+
+	* gcc.target/powerpc/ppc-spe64-1.c: Update expected error message.
+
+	* gcc.target/powerpc/pr47197.c: Require powerpc_altivec_ok.
+
+2013-07-08  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/57785
+	* gfortran.dg/dot_product_2.f90: New.
+
+2013-07-08  Jakub Jelinek  <jakub@redhat.com>
+
+	PR rtl-optimization/57829
+	* gcc.c-torture/execute/pr57829.c: New test.
+
+2013-07-05  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/57645
+	* g++.dg/cpp0x/noexcept21.C: New.
+
+2013-07-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/57777
+	* gcc.target/i386/pr57777.c: New test.
+
+	PR c++/57771
+	* g++.dg/template/arg9.C: New test.
+
+2013-06-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/57736
+	* gcc.target/i386/pr57736.c: New test.
+
+2013-06-27  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/57623
+	* gcc.target/i386/bmi-bextr-3.c: New test.
+
+	PR target/57623
+	* gcc.target/i386/bmi2-bzhi-1.c: New test.
+
+2013-06-24  Martin Jambor  <mjambor@suse.cz>
+
+	PR tree-optimization/57358
+	* gcc.dg/ipa/pr57358.c: New test.
+
+2013-06-24  Alan Modra  <amodra@gmail.com>
+
+	* gcc.target/powerpc/altivec-consts.c: Correct for little-endian.
+	Add scan-assembler-not "lvx".
+	* gcc.target/powerpc/le-altivec-consts.c: New.
+
+2013-06-21  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-06-20  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/57655
+	* gcc.target/i386/pr57655.c: New test.
+
+2013-06-21  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/53211
+	* g++.dg/cpp0x/decltype55.C: New.
+
+2013-06-20  Wei Mi  <wmi@google.com>
+
+	Backport from mainline
+	2013-06-19  Wei Mi  <wmi@google.com>
+
+	PR rtl-optimization/57518
+	* testsuite/gcc.dg/pr57518.c: New test.
+
+2013-06-11  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/57508
+	* gfortran.dg/defined_assignment_7.f90: New.
+
+2013-06-10  Oleg Endo  <olegendo@gcc.gnu.org>
+
+	Backport from mainline
+	2013-05-20  Oleg Endo  <olegendo@gcc.gnu.org>
+
+	PR target/56547
+	* gcc.target/sh/pr56547-1.c: New.
+	* gcc.target/sh/pr56547-2.c: New.
+
+2013-06-09  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/57568
+	* gcc.c-torture/execute/pr57568.c: New test.
+
+2013-06-04  Tobias Burnus  <burnus@net-b.de>
+
+	Backport from mainline
+	2013-05-22  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/57364
+	* gfortran.dg/defined_assignment_6.f90: New.
+
+2013-05-31  Janus Weil  <janus@gcc.gnu.org>
+	    Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/57217
+	* gfortran.dg/typebound_override_4.f90: New.
+
 2013-05-31  Release Manager
 
 	* GCC 4.8.1 released.
