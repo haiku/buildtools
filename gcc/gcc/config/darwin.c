@@ -1,7 +1,5 @@
 /* Functions for generic Darwin as target machine for GNU C compiler.
-   Copyright (C) 1989, 1990, 1991, 1992, 1993, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+   Copyright (C) 1989-2013 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -84,6 +82,15 @@ along with GCC; see the file COPYING3.  If not see
    However, if we are generating code for earlier systems (or for use in the 
    kernel) the stubs might still be required, and this will be set true.  */
 int darwin_emit_branch_islands = false;
+
+typedef struct GTY(()) cdtor_record {
+  rtx symbol;
+  int priority;		/* [con/de]structor priority */
+  int position;		/* original position */
+} cdtor_record;
+
+static GTY(()) vec<cdtor_record, va_gc> *ctors = NULL;
+static GTY(()) vec<cdtor_record, va_gc> *dtors = NULL;
 
 /* A flag to determine whether we are running c++ or obj-c++.  This has to be
    settable from non-c-family contexts too (i.e. we can't use the c_dialect_
@@ -362,14 +369,13 @@ machopic_gen_offset (rtx orig)
 
 static GTY(()) const char * function_base_func_name;
 static GTY(()) int current_pic_label_num;
+static GTY(()) int emitted_pic_label_num;
 
-void
-machopic_output_function_base_name (FILE *file)
+static void
+update_pic_label_number_if_needed (void)
 {
   const char *current_name;
 
-  /* If dynamic-no-pic is on, we should not get here.  */
-  gcc_assert (!MACHO_DYNAMIC_NO_PIC_P);
   /* When we are generating _get_pc thunks within stubs, there is no current
      function.  */
   if (current_function_decl)
@@ -387,7 +393,28 @@ machopic_output_function_base_name (FILE *file)
       ++current_pic_label_num;
       function_base_func_name = "L_machopic_stub_dummy";
     }
-  fprintf (file, "L%011d$pb", current_pic_label_num);
+}
+
+void
+machopic_output_function_base_name (FILE *file)
+{
+  /* If dynamic-no-pic is on, we should not get here.  */
+  gcc_assert (!MACHO_DYNAMIC_NO_PIC_P);
+
+  update_pic_label_number_if_needed ();
+  fprintf (file, "L%d$pb", current_pic_label_num);
+}
+
+bool
+machopic_should_output_picbase_label (void)
+{
+  update_pic_label_number_if_needed ();
+
+  if (current_pic_label_num == emitted_pic_label_num)
+    return false;
+
+  emitted_pic_label_num = current_pic_label_num;
+  return true;
 }
 
 /* The suffix attached to non-lazy pointer symbols.  */
@@ -687,7 +714,7 @@ machopic_indirect_data_reference (rtx orig, rtx reg)
       orig = machopic_indirect_data_reference (XEXP (orig, 1),
 					       (base == reg ? 0 : reg));
       if (MACHOPIC_INDIRECT && (GET_CODE (orig) == CONST_INT))
-	result = plus_constant (base, INTVAL (orig));
+	result = plus_constant (Pmode, base, INTVAL (orig));
       else
 	result = gen_rtx_PLUS (Pmode, base, orig);
 
@@ -972,7 +999,7 @@ machopic_legitimize_pic_address (rtx orig, enum machine_mode mode, rtx reg)
 					      Pmode, (base == reg ? 0 : reg));
       if (GET_CODE (orig) == CONST_INT)
 	{
-	  pic_ref = plus_constant (base, INTVAL (orig));
+	  pic_ref = plus_constant (Pmode, base, INTVAL (orig));
 	  is_complex = 1;
 	}
       else
@@ -1710,12 +1737,9 @@ machopic_select_rtx_section (enum machine_mode mode, rtx x,
 void
 machopic_asm_out_constructor (rtx symbol, int priority ATTRIBUTE_UNUSED)
 {
-  if (MACHOPIC_INDIRECT)
-    switch_to_section (darwin_sections[mod_init_section]);
-  else
-    switch_to_section (darwin_sections[constructor_section]);
-  assemble_align (POINTER_SIZE);
-  assemble_integer (symbol, POINTER_SIZE / BITS_PER_UNIT, POINTER_SIZE, 1);
+  cdtor_record new_elt = {symbol, priority, vec_safe_length (ctors)};
+
+  vec_safe_push (ctors, new_elt);
 
   if (! MACHOPIC_INDIRECT)
     fprintf (asm_out_file, ".reference .constructors_used\n");
@@ -1724,15 +1748,68 @@ machopic_asm_out_constructor (rtx symbol, int priority ATTRIBUTE_UNUSED)
 void
 machopic_asm_out_destructor (rtx symbol, int priority ATTRIBUTE_UNUSED)
 {
+  cdtor_record new_elt = {symbol, priority, vec_safe_length (dtors)};
+
+  vec_safe_push (dtors, new_elt);
+
+  if (! MACHOPIC_INDIRECT)
+    fprintf (asm_out_file, ".reference .destructors_used\n");
+}
+
+static int
+sort_cdtor_records (const void * a, const void * b)
+{
+  const cdtor_record *cda = (const cdtor_record *)a;
+  const cdtor_record *cdb = (const cdtor_record *)b;
+  if (cda->priority > cdb->priority)
+    return 1;
+  if (cda->priority < cdb->priority)
+    return -1;
+  if (cda->position > cdb->position)
+    return 1;
+  if (cda->position < cdb->position)
+    return -1;
+  return 0;
+}
+
+static void 
+finalize_ctors ()
+{
+  unsigned int i;
+  cdtor_record *elt;
+ 
+  if (MACHOPIC_INDIRECT)
+    switch_to_section (darwin_sections[mod_init_section]);
+  else
+    switch_to_section (darwin_sections[constructor_section]);
+
+  if (vec_safe_length (ctors) > 1)
+    ctors->qsort (sort_cdtor_records);
+  FOR_EACH_VEC_SAFE_ELT (ctors, i, elt)
+    {
+      assemble_align (POINTER_SIZE);
+      assemble_integer (elt->symbol, POINTER_SIZE / BITS_PER_UNIT, POINTER_SIZE, 1);
+    }
+}
+
+static void
+finalize_dtors ()
+{
+  unsigned int i;
+  cdtor_record *elt;
+
   if (MACHOPIC_INDIRECT)
     switch_to_section (darwin_sections[mod_term_section]);
   else
     switch_to_section (darwin_sections[destructor_section]);
-  assemble_align (POINTER_SIZE);
-  assemble_integer (symbol, POINTER_SIZE / BITS_PER_UNIT, POINTER_SIZE, 1);
 
-  if (! MACHOPIC_INDIRECT)
-    fprintf (asm_out_file, ".reference .destructors_used\n");
+  if (vec_safe_length (dtors) > 1)
+    dtors->qsort (sort_cdtor_records);
+  FOR_EACH_VEC_SAFE_ELT (dtors, i, elt)
+    {
+      assemble_align (POINTER_SIZE);
+      assemble_integer (elt->symbol, POINTER_SIZE / BITS_PER_UNIT, POINTER_SIZE, 1);
+    }
 }
 
 void
@@ -1791,10 +1868,8 @@ static unsigned int lto_section_num = 0;
 typedef struct GTY (()) darwin_lto_section_e {
   const char *sectname;
 } darwin_lto_section_e ;
-DEF_VEC_O(darwin_lto_section_e);
-DEF_VEC_ALLOC_O(darwin_lto_section_e, gc);
 
-static GTY (()) VEC (darwin_lto_section_e, gc) * lto_section_names;
+static GTY (()) vec<darwin_lto_section_e, va_gc> *lto_section_names;
 
 /* Segment for LTO data.  */
 #define LTO_SEGMENT_NAME "__GNU_LTO"
@@ -1877,8 +1952,8 @@ darwin_asm_named_section (const char *name,
          TODO: check that we do not revisit sections, that would break
          the assumption of how this is done.  */
       if (lto_section_names == NULL)
-        lto_section_names = VEC_alloc (darwin_lto_section_e, gc, 16);
-      VEC_safe_push (darwin_lto_section_e, gc, lto_section_names, &e);
+        vec_alloc (lto_section_names, 16);
+      vec_safe_push (lto_section_names, e);
    }
   else if (strncmp (name, "__DWARF,", 8) == 0)
     darwin_asm_dwarf_section (name, flags, decl);
@@ -2623,7 +2698,7 @@ darwin_assemble_visibility (tree decl, int vis)
 {
   if (vis == VISIBILITY_DEFAULT)
     ;
-  else if (vis == VISIBILITY_HIDDEN)
+  else if (vis == VISIBILITY_HIDDEN || vis == VISIBILITY_INTERNAL)
     {
       fputs ("\t.private_extern ", asm_out_file);
       assemble_name (asm_out_file,
@@ -2631,11 +2706,11 @@ darwin_assemble_visibility (tree decl, int vis)
       fputs ("\n", asm_out_file);
     }
   else
-    warning (OPT_Wattributes, "internal and protected visibility attributes "
+    warning (OPT_Wattributes, "protected visibility attribute "
 	     "not supported in this configuration; ignored");
 }
 
-/* VEC Used by darwin_asm_dwarf_section.
+/* vec used by darwin_asm_dwarf_section.
    Maybe a hash tab would be better here - but the intention is that this is
    a very short list (fewer than 16 items) and each entry should (ideally, 
    eventually) only be presented once.
@@ -2648,11 +2723,9 @@ typedef struct GTY(()) dwarf_sect_used_entry {
 }
 dwarf_sect_used_entry;
 
-DEF_VEC_O(dwarf_sect_used_entry);
-DEF_VEC_ALLOC_O(dwarf_sect_used_entry, gc);
 
 /* A list of used __DWARF sections.  */
-static GTY (()) VEC (dwarf_sect_used_entry, gc) * dwarf_sect_names_table;
+static GTY (()) vec<dwarf_sect_used_entry, va_gc> *dwarf_sect_names_table;
 
 /* This is called when we are asked to assemble a named section and the 
    name begins with __DWARF,.  We keep a list of the section names (without
@@ -2675,10 +2748,10 @@ darwin_asm_dwarf_section (const char *name, unsigned int flags,
   namelen = strchr (sname, ',') - sname;
   gcc_assert (namelen);
   if (dwarf_sect_names_table == NULL)
-    dwarf_sect_names_table = VEC_alloc (dwarf_sect_used_entry, gc, 16);
+    vec_alloc (dwarf_sect_names_table, 16);
   else
     for (i = 0; 
-	 VEC_iterate (dwarf_sect_used_entry, dwarf_sect_names_table, i, ref);
+	 dwarf_sect_names_table->iterate (i, &ref);
 	 i++)
       {
 	if (!ref)
@@ -2698,7 +2771,7 @@ darwin_asm_dwarf_section (const char *name, unsigned int flags,
       fprintf (asm_out_file, "Lsection%.*s:\n", namelen, sname);
       e.count = 1;
       e.name = xstrdup (sname);
-      VEC_safe_push (dwarf_sect_used_entry, gc, dwarf_sect_names_table, &e);
+      vec_safe_push (dwarf_sect_names_table, e);
     }
 }
 
@@ -2768,6 +2841,10 @@ darwin_file_start (void)
 void
 darwin_file_end (void)
 {
+  if (!vec_safe_is_empty (ctors))
+    finalize_ctors ();
+  if (!vec_safe_is_empty (dtors))
+    finalize_dtors ();
   machopic_finish (asm_out_file);
   if (strcmp (lang_hooks.name, "GNU C++") == 0)
     {
@@ -2813,7 +2890,7 @@ darwin_file_end (void)
     }
 
   /* Output the names and indices.  */
-  if (lto_section_names && VEC_length (darwin_lto_section_e, lto_section_names))
+  if (lto_section_names && lto_section_names->length ())
     {
       int count;
       darwin_lto_section_e *ref;
@@ -2824,7 +2901,7 @@ darwin_file_end (void)
       /* Emit the names.  */
       fprintf (asm_out_file, "\t.section %s,%s,regular,debug\n",
 	       LTO_SEGMENT_NAME, LTO_NAMES_SECTION);
-      FOR_EACH_VEC_ELT (darwin_lto_section_e, lto_section_names, count, ref)
+      FOR_EACH_VEC_ELT (*lto_section_names, count, ref)
 	{
 	  fprintf (asm_out_file, "L_GNU_LTO_NAME%d:\n", count);
          /* We have to jump through hoops to get the values of the intra-section
@@ -2847,7 +2924,7 @@ darwin_file_end (void)
       fputs ("\t.align\t2\n", asm_out_file);
       fputs ("# Section offset, Section length, Name offset, Name length\n",
 	     asm_out_file);
-      FOR_EACH_VEC_ELT (darwin_lto_section_e, lto_section_names, count, ref)
+      FOR_EACH_VEC_ELT (*lto_section_names, count, ref)
 	{
 	  fprintf (asm_out_file, "%s L$gnu$lto$offs%d\t;# %s\n",
 		   op, count, ref->sectname);
@@ -2973,6 +3050,8 @@ darwin_override_options (void)
      workaround for tool bugs.  */
   if (!global_options_set.x_dwarf_strict) 
     dwarf_strict = 1;
+  if (!global_options_set.x_dwarf_version)
+    dwarf_version = 2;
 
   /* Do not allow unwind tables to be generated by default for m32.  
      fnon-call-exceptions will override this, regardless of what we do.  */
@@ -3004,6 +3083,18 @@ darwin_override_options (void)
       flag_reorder_blocks_and_partition = 0;
       flag_reorder_blocks = 1;
     }
+
+    /* FIXME: flag_objc_sjlj_exceptions is no longer needed since there is only
+       one valid choice of exception scheme for each runtime.  */
+    if (!global_options_set.x_flag_objc_sjlj_exceptions)
+      global_options.x_flag_objc_sjlj_exceptions = 
+				flag_next_runtime && !TARGET_64BIT;
+
+    /* FIXME: and this could be eliminated then too.  */
+    if (!global_options_set.x_flag_exceptions
+	&& flag_objc_exceptions
+	&& TARGET_64BIT)
+      flag_exceptions = 1;
 
   if (flag_mkernel || flag_apple_kext)
     {
@@ -3324,7 +3415,7 @@ darwin_build_constant_cfstring (tree str)
   if (!desc)
     {
       tree var, constructor, field;
-      VEC(constructor_elt,gc) *v = NULL;
+      vec<constructor_elt, va_gc> *v = NULL;
       int length = TREE_STRING_LENGTH (str) - 1;
 
       if (darwin_warn_nonportable_cfstrings)
@@ -3459,7 +3550,7 @@ darwin_function_section (tree decl, enum node_frequency freq,
 
   /* Startup code should go to startup subsection unless it is
      unlikely executed (this happens especially with function splitting
-     where we can split away unnecesary parts of static constructors).  */
+     where we can split away unnecessary parts of static constructors).  */
   if (startup && freq != NODE_FREQUENCY_UNLIKELY_EXECUTED)
     return (weak)
 	    ? darwin_sections[text_startup_coal_section]

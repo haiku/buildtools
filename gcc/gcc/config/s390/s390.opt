@@ -1,6 +1,6 @@
 ; Options for the S/390 / zSeries port of the compiler.
 
-; Copyright (C) 2005, 2006, 2007, 2010, 2011 Free Software Foundation, Inc.
+; Copyright (C) 2005-2013 Free Software Foundation, Inc.
 ;
 ; This file is part of GCC.
 ;
@@ -73,6 +73,9 @@ Enum(processor_type) String(z10) Value(PROCESSOR_2097_Z10)
 EnumValue
 Enum(processor_type) String(z196) Value(PROCESSOR_2817_Z196)
 
+EnumValue
+Enum(processor_type) String(zEC12) Value(PROCESSOR_2827_ZEC12)
+
 mbackchain
 Target Report Mask(BACKCHAIN)
 Maintain backchain pointer
@@ -100,6 +103,10 @@ Use 128-bit long double
 mlong-double-64
 Target Report RejectNegative Negative(mlong-double-128) InverseMask(LONG_DOUBLE_128)
 Use 64-bit long double
+
+mhtm
+Target Report Mask(OPT_HTM)
+Use hardware transactional execution instructions
 
 mpacked-stack
 Target Report Mask(PACKED_STACK)

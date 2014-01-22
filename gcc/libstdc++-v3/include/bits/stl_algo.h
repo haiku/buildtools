@@ -1,8 +1,6 @@
 // Algorithm implementation -*- C++ -*-
 
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-// 2010, 2011
-// Free Software Foundation, Inc.
+// Copyright (C) 2001-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -63,7 +61,7 @@
 #include <bits/stl_heap.h>
 #include <bits/stl_tempbuf.h>  // for _Temporary_buffer
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#if __cplusplus >= 201103L
 #include <random>     // for std::uniform_int_distribution
 #include <functional> // for std::bind
 #endif
@@ -74,10 +72,11 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  /// Swaps the median value of *__a, *__b and *__c to *__a
+  /// Swaps the median value of *__a, *__b and *__c to *__result
   template<typename _Iterator>
     void
-    __move_median_first(_Iterator __a, _Iterator __b, _Iterator __c)
+    __move_median_to_first(_Iterator __result, _Iterator __a,
+			   _Iterator __b, _Iterator __c)
     {
       // concept requirements
       __glibcxx_function_requires(_LessThanComparableConcept<
@@ -86,23 +85,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (*__a < *__b)
 	{
 	  if (*__b < *__c)
-	    std::iter_swap(__a, __b);
+	    std::iter_swap(__result, __b);
 	  else if (*__a < *__c)
-	    std::iter_swap(__a, __c);
+	    std::iter_swap(__result, __c);
+	  else
+	    std::iter_swap(__result, __a);
 	}
       else if (*__a < *__c)
-	return;
+      	std::iter_swap(__result, __a);
       else if (*__b < *__c)
-	std::iter_swap(__a, __c);
+	std::iter_swap(__result, __c);
       else
-	std::iter_swap(__a, __b);
+	std::iter_swap(__result, __b);
     }
 
-  /// Swaps the median value of *__a, *__b and *__c under __comp to *__a
+  /// Swaps the median value of *__a, *__b and *__c under __comp to *__result
   template<typename _Iterator, typename _Compare>
     void
-    __move_median_first(_Iterator __a, _Iterator __b, _Iterator __c,
-			_Compare __comp)
+    __move_median_to_first(_Iterator __result, _Iterator __a,
+			   _Iterator __b, _Iterator __c,
+			   _Compare __comp)
     {
       // concept requirements
       __glibcxx_function_requires(_BinaryFunctionConcept<_Compare, bool,
@@ -112,16 +114,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (__comp(*__a, *__b))
 	{
 	  if (__comp(*__b, *__c))
-	    std::iter_swap(__a, __b);
+	    std::iter_swap(__result, __b);
 	  else if (__comp(*__a, *__c))
-	    std::iter_swap(__a, __c);
+	    std::iter_swap(__result, __c);
+	  else
+	    std::iter_swap(__result, __a);
 	}
       else if (__comp(*__a, *__c))
-	return;
+	std::iter_swap(__result, __a);
       else if (__comp(*__b, *__c))
-	std::iter_swap(__a, __c);
+	std::iter_swap(__result, __c);
       else
-	std::iter_swap(__a, __b);
+	std::iter_swap(__result, __b);
     }
 
   // for_each
@@ -387,38 +391,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_DistanceType;
 
       _DistanceType __tailSize = __last - __first;
-      const _DistanceType __pattSize = __count;
+      _DistanceType __remainder = __count;
 
-      if (__tailSize < __pattSize)
-        return __last;
-
-      const _DistanceType __skipOffset = __pattSize - 1;
-      _RandomAccessIter __lookAhead = __first + __skipOffset;
-      __tailSize -= __pattSize;
-
-      while (1) // the main loop...
+      while (__remainder <= __tailSize) // the main loop...
 	{
-	  // __lookAhead here is always pointing to the last element of next 
-	  // possible match.
-	  while (!(*__lookAhead == __val)) // the skip loop...
-	    {
-	      if (__tailSize < __pattSize)
-		return __last;  // Failure
-	      __lookAhead += __pattSize;
-	      __tailSize -= __pattSize;
-	    }
-	  _DistanceType __remainder = __skipOffset;
-	  for (_RandomAccessIter __backTrack = __lookAhead - 1; 
-	       *__backTrack == __val; --__backTrack)
+	  __first += __remainder;
+	  __tailSize -= __remainder;
+	  // __first here is always pointing to one past the last element of
+	  // next possible match.
+	  _RandomAccessIter __backTrack = __first; 
+	  while (*--__backTrack == __val)
 	    {
 	      if (--__remainder == 0)
-		return (__lookAhead - __skipOffset); // Success
+	        return (__first - __count); // Success
 	    }
-	  if (__remainder > __tailSize)
-	    return __last; // Failure
-	  __lookAhead += __remainder;
-	  __tailSize -= __remainder;
+	  __remainder = __count + 1 - (__first - __backTrack);
 	}
+      return __last; // Failure
     }
 
   // search_n
@@ -480,38 +469,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_DistanceType;
 
       _DistanceType __tailSize = __last - __first;
-      const _DistanceType __pattSize = __count;
+      _DistanceType __remainder = __count;
 
-      if (__tailSize < __pattSize)
-        return __last;
-
-      const _DistanceType __skipOffset = __pattSize - 1;
-      _RandomAccessIter __lookAhead = __first + __skipOffset;
-      __tailSize -= __pattSize;
-
-      while (1) // the main loop...
+      while (__remainder <= __tailSize) // the main loop...
 	{
-	  // __lookAhead here is always pointing to the last element of next 
-	  // possible match.
-	  while (!bool(__binary_pred(*__lookAhead, __val))) // the skip loop...
-	    {
-	      if (__tailSize < __pattSize)
-		return __last;  // Failure
-	      __lookAhead += __pattSize;
-	      __tailSize -= __pattSize;
-	    }
-	  _DistanceType __remainder = __skipOffset;
-	  for (_RandomAccessIter __backTrack = __lookAhead - 1; 
-	       __binary_pred(*__backTrack, __val); --__backTrack)
+	  __first += __remainder;
+	  __tailSize -= __remainder;
+	  // __first here is always pointing to one past the last element of
+	  // next possible match.
+	  _RandomAccessIter __backTrack = __first; 
+	  while (__binary_pred(*--__backTrack, __val))
 	    {
 	      if (--__remainder == 0)
-		return (__lookAhead - __skipOffset); // Success
+	        return (__first - __count); // Success
 	    }
-	  if (__remainder > __tailSize)
-	    return __last; // Failure
-	  __lookAhead += __remainder;
-	  __tailSize -= __remainder;
+	  __remainder = __count + 1 - (__first - __backTrack);
 	}
+      return __last; // Failure
     }
 
   // find_end for forward iterators.
@@ -737,7 +711,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			     __comp);
     }
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#if __cplusplus >= 201103L
   /**
    *  @brief  Checks that a predicate is true for all the elements
    *          of a sequence.
@@ -954,7 +928,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __result;
     }
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#if __cplusplus >= 201103L
   /**
    *  @brief Copy the elements of a sequence for which a predicate is true.
    *  @ingroup mutating_algorithms
@@ -1486,7 +1460,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  range @p [__result,__result+(__last-__first)) such that the
    *  order of the elements is reversed.  For every @c i such that @p
    *  0<=i<=(__last-__first), @p reverse_copy() performs the
-   *  assignment @p *(__result+(__last-__first)-i) = *(__first+i).
+   *  assignment @p *(__result+(__last-__first)-1-i) = *(__first+i).
    *  The ranges @p [__first,__last) and @p
    *  [__result,__result+(__last-__first)) must not overlap.
   */
@@ -2305,7 +2279,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				_RandomAccessIterator __last)
     {
       _RandomAccessIterator __mid = __first + (__last - __first) / 2;
-      std::__move_median_first(__first, __mid, (__last - 1));
+      std::__move_median_to_first(__first, __first + 1, __mid, (__last - 2));
       return std::__unguarded_partition(__first + 1, __last, *__first);
     }
 
@@ -2317,7 +2291,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				_RandomAccessIterator __last, _Compare __comp)
     {
       _RandomAccessIterator __mid = __first + (__last - __first) / 2;
-      std::__move_median_first(__first, __mid, (__last - 1), __comp);
+      std::__move_median_to_first(__first, __first + 1, __mid, (__last - 2),
+				  __comp);
       return std::__unguarded_partition(__first + 1, __last, *__first, __comp);
     }
 
@@ -3964,7 +3939,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __result;
     }
 
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#if __cplusplus >= 201103L
   /**
    *  @brief  Determines whether the elements of a sequence are sorted.
    *  @ingroup sorting_algorithms
@@ -4413,7 +4388,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 #endif
 
-#endif // __GXX_EXPERIMENTAL_CXX0X__
+#endif // C++11
 
 _GLIBCXX_END_NAMESPACE_VERSION
 
@@ -5238,7 +5213,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
   template<typename _RandomAccessIterator, typename _RandomNumberGenerator>
     void
     random_shuffle(_RandomAccessIterator __first, _RandomAccessIterator __last,
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#if __cplusplus >= 201103L
 		   _RandomNumberGenerator&& __rand)
 #else
 		   _RandomNumberGenerator& __rand)

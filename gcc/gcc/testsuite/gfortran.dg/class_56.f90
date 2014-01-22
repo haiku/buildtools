@@ -19,3 +19,4 @@ contains
     class(Container), intent(inout):: self
   end subroutine proc
 end module lib_container
+

@@ -1,6 +1,5 @@
 // -*- C++ -*- Exception handling routines for throwing.
-// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-// 2011, 2012  Free Software Foundation, Inc.
+// Copyright (C) 2001-2013 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -61,6 +60,8 @@ extern "C" void
 __cxxabiv1::__cxa_throw (void *obj, std::type_info *tinfo,
 			 void (_GLIBCXX_CDTOR_CALLABI *dest) (void *))
 {
+  PROBE2 (throw, obj, tinfo);
+
   // Definitely a primary.
   __cxa_refcounted_exception *header
     = __get_refcounted_exception_header_from_obj (obj);
@@ -98,7 +99,12 @@ __cxxabiv1::__cxa_rethrow ()
       if (!__is_gxx_exception_class(header->unwindHeader.exception_class))
 	globals->caughtExceptions = 0;
       else
-	header->handlerCount = -header->handlerCount;
+	{
+	  header->handlerCount = -header->handlerCount;
+	  // Only notify probe for C++ exceptions.
+	  PROBE2 (rethrow, __get_object_from_ambiguous_exception(header),
+		  header->exceptionType);
+	}
 
 #ifdef _GLIBCXX_SJLJ_EXCEPTIONS
       _Unwind_SjLj_Resume_or_Rethrow (&header->unwindHeader);

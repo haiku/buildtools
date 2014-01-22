@@ -5,8 +5,820 @@ that led to GCC 3. For information on GCC 2.8.1 and older releases of GCC 2,
 see ONEWS.
 
 ======================================================================
-http://gcc.gnu.org/gcc-4.7/index.html
+http://gcc.gnu.org/gcc-4.8/index.html
+                             GCC 4.8 Release Series
 
+   October 16, 2013
+
+   The [1]GNU project and the GCC developers are pleased to announce the
+   release of GCC 4.8.2.
+
+   This release is a bug-fix release, containing fixes for regressions in
+   GCC 4.8.1 relative to previous releases of GCC.
+
+Release History
+
+   GCC 4.8.2
+          October 16, 2013 ([2]changes, [3]documentation)
+
+   GCC 4.8.1
+          May 31, 2013 ([4]changes, [5]documentation)
+
+   GCC 4.8.0
+          March 22, 2013 ([6]changes, [7]documentation)
+
+References and Acknowledgements
+
+   GCC used to stand for the GNU C Compiler, but since the compiler
+   supports several other languages aside from C, it now stands for the
+   GNU Compiler Collection.
+
+   A list of [8]successful builds is updated as new information becomes
+   available.
+
+   The GCC developers would like to thank the numerous people that have
+   contributed new features, improvements, bug fixes, and other changes as
+   well as test results to GCC. This [9]amazing group of volunteers is
+   what makes GCC successful.
+
+   For additional information about GCC please refer to the [10]GCC
+   project web site or contact the [11]GCC development mailing list.
+
+   To obtain GCC please use [12]our mirror sites or [13]our SVN server.
+
+
+    For questions related to the use of GCC, please consult these web
+    pages and the [14]GCC manuals. If that fails, the
+    [15]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    web pages and the development of GCC are welcome on our developer
+    list at [16]gcc@gcc.gnu.org. All of [17]our lists have public
+    archives.
+
+   Copyright (C) [18]Free Software Foundation, Inc. Verbatim copying and
+   distribution of this entire article is permitted in any medium,
+   provided this notice is preserved.
+
+   These pages are [19]maintained by the GCC team. Last modified
+   2013-10-16[20].
+
+References
+
+   1. http://www.gnu.org/
+   2. http://gcc.gnu.org/gcc-4.8/changes.html
+   3. http://gcc.gnu.org/onlinedocs/4.8.2/
+   4. http://gcc.gnu.org/gcc-4.8/changes.html
+   5. http://gcc.gnu.org/onlinedocs/4.8.1/
+   6. http://gcc.gnu.org/gcc-4.8/changes.html
+   7. http://gcc.gnu.org/onlinedocs/4.8.0/
+   8. http://gcc.gnu.org/gcc-4.8/buildstat.html
+   9. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
+  10. http://gcc.gnu.org/index.html
+  11. mailto:gcc@gcc.gnu.org
+  12. http://gcc.gnu.org/mirrors.html
+  13. http://gcc.gnu.org/svn.html
+  14. http://gcc.gnu.org/onlinedocs/
+  15. mailto:gcc-help@gcc.gnu.org
+  16. mailto:gcc@gcc.gnu.org
+  17. http://gcc.gnu.org/lists.html
+  18. http://www.fsf.org/
+  19. http://gcc.gnu.org/about.html
+  20. http://validator.w3.org/check/referer
+======================================================================
+http://gcc.gnu.org/gcc-4.8/changes.html
+                             GCC 4.8 Release Series
+                        Changes, New Features, and Fixes
+
+Caveats
+
+   GCC now uses C++ as its implementation language. This means that to
+   build GCC from sources, you will need a C++ compiler that understands
+   C++ 2003. For more details on the rationale and specific changes,
+   please refer to the [1]C++ conversion page.
+
+   To enable the Graphite framework for loop optimizations you now need
+   CLooG version 0.18.0 and ISL version 0.11.1. Both can be obtained from
+   the [2]GCC infrastructure directory. The installation manual contains
+   more information about requirements to build GCC.
+
+   GCC now uses a more aggressive analysis to derive an upper bound for
+   the number of iterations of loops using constraints imposed by language
+   standards. This may cause non-conforming programs to no longer work as
+   expected, such as SPEC CPU 2006 464.h264ref and 416.gamess. A new
+   option, -fno-aggressive-loop-optimizations, was added to disable this
+   aggressive analysis. In some loops that have known constant number of
+   iterations, but undefined behavior is known to occur in the loop before
+   reaching or during the last iteration, GCC will warn about the
+   undefined behavior in the loop instead of deriving lower upper bound of
+   the number of iterations for the loop. The warning can be disabled with
+   -Wno-aggressive-loop-optimizations.
+
+   On ARM, a bug has been fixed in GCC's implementation of the AAPCS rules
+   for the layout of vectors that could lead to wrong code being
+   generated. Vectors larger than 8 bytes in size are now by default
+   aligned to an 8-byte boundary. This is an ABI change: code that makes
+   explicit use of vector types may be incompatible with binary objects
+   built with older versions of GCC. Auto-vectorized code is not affected
+   by this change.
+
+   On AVR, support has been removed for the command-line option
+   -mshort-calls deprecated in GCC 4.7.
+
+   On AVR, the configure option --with-avrlibc supported since GCC 4.7.2
+   is turned on per default for all non-RTEMS configurations. This option
+   arranges for a better integration of [3]AVR Libc with avr-gcc. For
+   technical details, see [4]PR54461. To turn off the option in non-RTEMS
+   configurations, use --with-avrlibc=no. If the compiler is configured
+   for RTEMS, the option is always turned off.
+
+   More information on porting to GCC 4.8 from previous versions of GCC
+   can be found in the [5]porting guide for this release.
+
+General Optimizer Improvements (and Changes)
+
+     * DWARF4 is now the default when generating DWARF debug information.
+       When -g is used on a platform that uses DWARF debugging
+       information, GCC will now default to -gdwarf-4
+       -fno-debug-types-section.
+       GDB 7.5, Valgrind 3.8.0 and elfutils 0.154 debug information
+       consumers support DWARF4 by default. Before GCC 4.8 the default
+       version used was DWARF2. To make GCC 4.8 generate an older DWARF
+       version use -g together with -gdwarf-2 or -gdwarf-3. The default
+       for Darwin and VxWorks is still -gdwarf-2 -gstrict-dwarf.
+     * A new general optimization level, -Og, has been introduced. It
+       addresses the need for fast compilation and a superior debugging
+       experience while providing a reasonable level of runtime
+       performance. Overall experience for development should be better
+       than the default optimization level -O0.
+     * A new option -ftree-partial-pre was added to control the partial
+       redundancy elimination (PRE) optimization. This option is enabled
+       by default at the -O3 optimization level, and it makes PRE more
+       aggressive.
+     * The option -fconserve-space has been removed; it was no longer
+       useful on most targets since GCC supports putting variables into
+       BSS without making them common.
+     * The struct reorg and matrix reorg optimizations (command-line
+       options -fipa-struct-reorg and -fipa-matrix-reorg) have been
+       removed. They did not always work correctly, nor did they work with
+       link-time optimization (LTO), hence were only applicable to
+       programs consisting of a single translation unit.
+     * Several scalability bottle-necks have been removed from GCC's
+       optimization passes. Compilation of extremely large functions, e.g.
+       due to the use of the flatten attribute in the "Eigen" C++ linear
+       algebra templates library, is significantly faster than previous
+       releases of GCC.
+     * Link-time optimization (LTO) improvements:
+          + LTO partitioning has been rewritten for better reliability and
+            maintanibility. Several important bugs leading to link
+            failures have been fixed.
+     * Interprocedural optimization improvements:
+          + A new symbol table has been implemented. It builds on existing
+            callgraph and varpool modules and provide a new API. Unusual
+            symbol visibilities and aliases are handled more consistently
+            leading to, for example, more aggressive unreachable code
+            removal with LTO.
+          + The inline heuristic can now bypass limits on the size of of
+            inlined functions when the inlining is particularly
+            profitable. This happens, for example, when loop bounds or
+            array strides get propagated.
+          + Values passed through aggregates (either by value or
+            reference) are now propagated at the inter-procedural level
+            leading to better inlining decisions (for example in the case
+            of Fortran array descriptors) and devirtualization.
+     * [6]AddressSanitizer , a fast memory error detector, has been added
+       and can be enabled via -fsanitize=address. Memory access
+       instructions will be instrumented to detect heap-, stack-, and
+       global-buffer overflow as well as use-after-free bugs. To get nicer
+       stacktraces, use -fno-omit-frame-pointer. The AddressSanitizer is
+       available on IA-32/x86-64/x32/PowerPC/PowerPC64 GNU/Linux and on
+       x86-64 Darwin.
+     * [7]ThreadSanitizer has been added and can be enabled via
+       -fsanitize=thread. Instructions will be instrumented to detect data
+       races. The ThreadSanitizer is available on x86-64 GNU/Linux.
+     * A new local register allocator (LRA) has been implemented, which
+       replaces the 26 year old reload pass and improves generated code
+       quality. For now it is active on the ia32 and x86-64 targets.
+     * Support for transactional memory has been implemented on the
+       following architectures: IA-32/x86-64, ARM, PowerPC, SH, Sparc, and
+       Alpha.
+
+New Languages and Language specific improvements
+
+  C family
+
+     * Each diagnostic emitted now includes the original source line and a
+       caret '^' indicating the column. The option
+       -fno-diagnostics-show-caret suppresses this information.
+     * The option -ftrack-macro-expansion=2 is now enabled by default.
+       This allows the compiler to display the macro expansion stack in
+       diagnostics. Combined with the caret information, an example
+       diagnostic showing these two features is:
+
+t.c:1:94: error: invalid operands to binary < (have `struct mystruct' and `float
+')
+ #define MYMAX(A,B)    __extension__ ({ __typeof__(A) __a = (A); __typeof__(B) _
+_b = (B); __a < __b ? __b : __a; })
+
+              ^
+t.c:7:7: note: in expansion of macro 'MYMAX'
+   X = MYMAX(P, F);
+       ^
+
+     * A new -Wsizeof-pointer-memaccess warning has been added (also
+       enabled by -Wall) to warn about suspicious length parameters to
+       certain string and memory built-in functions if the argument uses
+       sizeof. This warning warns e.g. about memset (ptr, 0, sizeof
+       (ptr)); if ptr is not an array, but a pointer, and suggests a
+       possible fix, or about memcpy (&foo, ptr, sizeof (&foo));.
+     * The new option -Wpedantic is an alias for -pedantic, which is now
+       deprecated. The forms -Wno-pedantic, -Werror=pedantic, and
+       -Wno-error=pedantic work in the same way as for any other -W
+       option. One caveat is that -Werror=pedantic is not equivalent to
+       -pedantic-errors, since the latter makes into errors some warnings
+       that are not controlled by -Wpedantic, and the former only affects
+       diagnostics that are disabled when using -Wno-pedantic.
+     * The option -Wshadow no longer warns if a declaration shadows a
+       function declaration, unless the former declares a function or
+       pointer to function, because this is [8]a common and valid case in
+       real-world code.
+
+  C++
+
+     * G++ now implements the [9]C++11 thread_local keyword; this differs
+       from the GNU __thread keyword primarily in that it allows dynamic
+       initialization and destruction semantics. Unfortunately, this
+       support requires a run-time penalty for references to
+       non-function-local thread_local variables defined in a different
+       translation unit even if they don't need dynamic initialization, so
+       users may want to continue to use __thread for TLS variables with
+       static initialization semantics.
+       If the programmer can be sure that no use of the variable in a
+       non-defining TU needs to trigger dynamic initialization (either
+       because the variable is statically initialized, or a use of the
+       variable in the defining TU will be executed before any uses in
+       another TU), they can avoid this overhead with the
+       -fno-extern-tls-init option.
+       OpenMP threadprivate variables now also support dynamic
+       initialization and destruction by the same mechanism.
+     * G++ now implements the [10]C++11 attribute syntax, e.g.
+
+[[noreturn]] void f();
+
+       and also the alignment specifier, e.g.
+
+alignas(double) int i;
+
+     * G++ now implements [11]C++11 inheriting constructors, e.g.
+
+struct A { A(int); };
+struct B: A { using A::A; }; // defines B::B(int)
+B b(42); // OK
+
+     * As of GCC 4.8.1, G++ implements the change to decltype semantics
+       from [12]N3276.
+
+struct A f();
+decltype(f()) g();    // OK, return type of f() is not required to be complete.
+
+     * As of GCC 4.8.1, G++ implements [13]C++11 ref-qualifiers, e.g.
+
+struct A { int f() &; };
+int i = A().f();  // error, f() requires an lvalue object
+
+     * G++ now supports a -std=c++1y option for experimentation with
+       features proposed for the next revision of the standard, expected
+       around 2014. Currently the only difference from -std=c++11 is
+       support for return type deduction in normal functions, as proposed
+       in [14]N3386. Status of C++1y features in GCC 4.8 can be found
+       [15]here.
+     * The G++ namespace association extension, __attribute ((strong)),
+       has been deprecated. Inline namespaces should be used instead.
+     * G++ now supports a -fext-numeric-literal option to control whether
+       GNU numeric literal suffixes are accepted as extensions or
+       processed as C++11 user-defined numeric literal suffixes. The flag
+       is on (use suffixes for GNU literals) by default for -std=gnu++*,
+       and -std=c++98. The flag is off (use suffixes for user-defined
+       literals) by default for -std=c++11 and later.
+
+    Runtime Library (libstdc++)
+
+     * [16]Improved experimental support for the new ISO C++ standard,
+       C++11, including:
+          + forward_list meets the allocator-aware container requirements;
+          + this_thread::sleep_for(), this_thread::sleep_until() and
+            this_thread::yield() are defined without requiring the
+            configure option --enable-libstdcxx-time;
+     * Improvements to <random>:
+          + SSE optimized normal_distribution.
+          + Use of hardware RNG instruction for random_device on new x86
+            processors (requires the assembler to support the
+            instruction.)
+       and <ext/random>:
+          + New random number engine simd_fast_mersenne_twister_engine
+            with an optimized SSE implementation.
+          + New random number distributions beta_distribution,
+            normal_mv_distribution, rice_distribution,
+            nakagami_distribution, pareto_distribution, k_distribution,
+            arcsine_distribution, hoyt_distribution.
+     * Added --disable-libstdcxx-verbose configure option to disable
+       diagnostic messages issued when a process terminates abnormally.
+       This may be useful for embedded systems to reduce the size of
+       executables that link statically to the library.
+
+  Fortran
+
+     * Compatibility notice:
+          + Module files: The version of module files (.mod) has been
+            incremented. Fortran MODULEs compiled by earlier GCC versions
+            have to be recompiled, when they are USEd by files compiled
+            with GCC 4.8. GCC 4.8 is not able to read .mod files created
+            by earlier versions; attempting to do so gives an error
+            message.
+            Note: The ABI of the produced assembler data itself has not
+            changed; object files and libraries are fully compatible with
+            older versions except as noted below.
+          + ABI: Some internal names (used in the assembler/object file)
+            have changed for symbols declared in the specification part of
+            a module. If an affected module - or a file using it via use
+            association - is recompiled, the module and all files which
+            directly use such symbols have to be recompiled as well. This
+            change only affects the following kind of module symbols:
+               o Procedure pointers. Note: C-interoperable function
+                 pointers (type(c_funptr)) are not affected nor are
+                 procedure-pointer components.
+               o Deferred-length character strings.
+     * The [17]BACKTRACE intrinsic subroutine has been added. It shows a
+       backtrace at an arbitrary place in user code; program execution
+       continues normally afterwards.
+     * The [18]-Wc-binding-type warning option has been added (disabled by
+       default). It warns if the a variable might not be C interoperable;
+       in particular, if the variable has been declared using an intrinsic
+       type with default kind instead of using a kind parameter defined
+       for C interoperability in the intrinsic ISO_C_Binding module.
+       Before, this warning was always printed. The -Wc-binding-type
+       option is enabled by -Wall.
+     * The [19]-Wrealloc-lhs and -Wrealloc-lhs-all warning command-line
+       options have been added, which diagnose when code to is inserted
+       for automatic (re)allocation of a variable during assignment. This
+       option can be used to decide whether it is safe to use
+       [20]-fno-realloc-lhs. Additionally, it can be used to find
+       automatic (re)allocation in hot loops. (For arrays, replacing
+       "var=" by "var(:)=" disables the automatic reallocation.)
+     * The [21]-Wcompare-reals command-line option has been added. When
+       this is set, warnings are issued when comparing REAL or COMPLEX
+       types for equality and inequality; consider replacing a == b by
+       abs(a-b) < eps with a suitable eps. -Wcompare-reals is enabled by
+       -Wextra.
+     * The [22]-Wtarget-lifetime command-line option has been added
+       (enabled with -Wall), which warns if the pointer in a pointer
+       assignment might outlive its target.
+     * Reading floating point numbers which use "q" for the exponential
+       (such as 4.0q0) is now supported as vendor extension for better
+       compatibility with old data files. It is strongly recommended to
+       use for I/O the equivalent but standard conforming "e" (such as
+       4.0e0).
+       (For Fortran source code, consider replacing the "q" in
+       floating-point literals by a kind parameter (e.g. 4.0e0_qp with a
+       suitable qp). Note that - in Fortran source code - replacing "q" by
+       a simple "e" is not equivalent.)
+     * The GFORTRAN_TMPDIR environment variable for specifying a
+       non-default directory for files opened with STATUS="SCRATCH", is
+       not used anymore. Instead gfortran checks the POSIX/GNU standard
+       TMPDIR environment variable. If TMPDIR is not defined, gfortran
+       falls back to other methods to determine the directory for
+       temporary files as documented in the [23]user manual.
+     * [24]Fortran 2003:
+          + Support for unlimited polymorphic variables (CLASS(*)) has
+            been added. Nonconstant character lengths are not yet
+            supported.
+     * [25]TS 29113:
+          + Assumed types (TYPE(*)) are now supported.
+          + Experimental support for assumed-rank arrays (dimension(..))
+            has been added. Note that currently gfortran's own array
+            descriptor is used, which is different from the one defined in
+            TS29113, see [26]gfortran's header file or use the [27]Chasm
+            Language Interoperability Tools.
+
+  Go
+
+     * GCC 4.8.0 and 4.8.1 implement a preliminary version of the Go 1.1
+       release. The library support is not quite complete.
+     * Go has been tested on GNU/Linux and Solaris platforms for various
+       processors including x86, x86_64, PowerPC, SPARC, and Alpha. It may
+       work on other platforms as well.
+
+New Targets and Target Specific Improvements
+
+  AArch64
+
+     * A new port has been added to support AArch64, the new 64-bit
+       architecture from ARM. Note that this is a separate port from the
+       existing 32-bit ARM port.
+     * The port provides initial support for the Cortex-A53 and the
+       Cortex-A57 processors with the command line options
+       -mcpu=cortex-a53 and -mcpu=cortex-a57.
+
+  ARM
+
+     * Initial support has been added for the AArch32 extensions defined
+       in the ARMv8 architecture.
+     * Code generation improvements for the Cortex-A7 and Cortex-A15 CPUs.
+     * A new option, -mcpu=marvell-pj4, has been added to generate code
+       for the Marvell PJ4 processor.
+     * The compiler can now automatically generate the VFMA, VFMS, REVSH
+       and REV16 instructions.
+     * A new vectorizer cost model for Advanced SIMD configurations to
+       improve the auto-vectorization strategies used.
+     * The scheduler now takes into account the number of live registers
+       to reduce the amount of spilling that can occur. This should
+       improve code performance in large functions. The limit can be
+       removed by using the option -fno-sched-pressure.
+     * Improvements have been made to the Marvell iWMMX code generation
+       and support for the iWMMX2 SIMD unit has been added. The option
+       -mcpu=iwmmxt2 can be used to enable code generation for the latter.
+     * A number of code generation improvements for Thumb2 to reduce code
+       size when compiling for the M-profile processors.
+     * The RTEMS (arm-rtems) port has been updated to use the EABI.
+     * Code generation support for the old FPA and Maverick floating-point
+       architectures has been removed. Ports that previously relied on
+       these features have also been removed. This includes the targets:
+          + arm*-*-linux-gnu (use arm*-*-linux-gnueabi)
+          + arm*-*-elf (use arm*-*-eabi)
+          + arm*-*-uclinux* (use arm*-*-uclinux*eabi)
+          + arm*-*-ecos-elf (no alternative)
+          + arm*-*-freebsd (no alternative)
+          + arm*-wince-pe* (no alternative).
+
+  AVR
+
+     * Support for the "Embedded C" fixed-point has been added. For
+       details, see the [28]GCC wiki and the [29]user manual. The support
+       is not complete.
+     * A new print modifier %r for register operands in inline assembler
+       is supported. It will print the raw register number without the
+       register prefix 'r':
+    /* Return the most significant byte of 'val', a 64-bit value.  */
+
+    unsigned char msb (long long val)
+    {
+      unsigned char c;
+      __asm__ ("mov %0, %r1+7" : "=r" (c) : "r" (val));
+      return c;
+    }
+       The inline assembler in this example will generate code like
+    mov r24, 8+7
+       provided c is allocated to R24 and val is allocated to R8...R15.
+       This works because the GNU assembler accepts plain register numbers
+       without register prefix.
+     * Static initializers with 3-byte symbols are supported now:
+    extern const __memx char foo;
+    const __memx void *pfoo = &foo;
+       This requires at least Binutils 2.23.
+
+  IA-32/x86-64
+
+     * Allow -mpreferred-stack-boundary=3 for the x86-64 architecture with
+       SSE extensions disabled. Since the x86-64 ABI requires 16 byte
+       stack alignment, this is ABI incompatible and intended to be used
+       in controlled environments where stack space is an important
+       limitation. This option will lead to wrong code when functions
+       compiled with 16 byte stack alignment (such as functions from a
+       standard library) are called with misaligned stack. In this case,
+       SSE instructions may lead to misaligned memory access traps. In
+       addition, variable arguments will be handled incorrectly for 16
+       byte aligned objects (including x87 long double and __int128),
+       leading to wrong results. You must build all modules with
+       -mpreferred-stack-boundary=3, including any libraries. This
+       includes the system libraries and startup modules.
+     * Support for the new Intel processor codename Broadwell with RDSEED,
+       ADCX, ADOX, PREFETCHW is available through -madx, -mprfchw,
+       -mrdseed command-line options.
+     * Support for the Intel RTM and HLE intrinsics, built-in functions
+       and code generation is available via -mrtm and -mhle.
+     * Support for the Intel FXSR, XSAVE and XSAVEOPT instruction sets.
+       Intrinsics and built-in functions are available via -mfxsr, -mxsave
+       and -mxsaveopt respectively.
+     * New -maddress-mode=[short|long] options for x32.
+       -maddress-mode=short overrides default 64-bit addresses to 32-bit
+       by emitting the 0x67 address-size override prefix. This is the
+       default address mode for x32.
+     * New built-in functions to detect run-time CPU type and ISA:
+          + A built-in function __builtin_cpu_is has been added to detect
+            if the run-time CPU is of a particular type. It returns a
+            positive integer on a match and zero otherwise. It accepts one
+            string literal argument, the CPU name. For example,
+            __builtin_cpu_is("westmere") returns a positive integer if the
+            run-time CPU is an Intel Core i7 Westmere processor. Please
+            refer to the [30]user manual for the list of valid CPU names
+            recognized.
+          + A built-in function __builtin_cpu_supports has been added to
+            detect if the run-time CPU supports a particular ISA feature.
+            It returns a positive integer on a match and zero otherwise.
+            It accepts one string literal argument, the ISA feature. For
+            example, __builtin_cpu_supports("ssse3") returns a positive
+            integer if the run-time CPU supports SSSE3 instructions.
+            Please refer to the [31]user manual for the list of valid ISA
+            names recognized.
+       Caveat: If these built-in functions are called before any static
+       constructors are invoked, like during IFUNC initialization, then
+       the CPU detection initialization must be explicitly run using this
+       newly provided built-in function, __builtin_cpu_init. The
+       initialization needs to be done only once. For example, this is how
+       the invocation would look like inside an IFUNC initializer:
+    static void (*some_ifunc_resolver(void))(void)
+    {
+      __builtin_cpu_init();
+      if (__builtin_cpu_is("amdfam10h") ...
+      if (__builtin_cpu_supports("popcnt") ...
+    }
+
+     * Function Multiversioning Support with G++:
+       It is now possible to create multiple function versions each
+       targeting a specific processor and/or ISA. Function versions have
+       the same signature but different target attributes. For example,
+       here is a program with function versions:
+    __attribute__ ((target ("default")))
+    int foo(void)
+    {
+      return 1;
+    }
+
+    __attribute__ ((target ("sse4.2")))
+    int foo(void)
+    {
+      return 2;
+    }
+
+    int main (void)
+    {
+      int (*p) = &foo;
+      assert ((*p)() == foo());
+      return 0;
+    }
+
+       Please refer to this [32]wiki for more information.
+     * The x86 backend has been improved to allow option -fschedule-insns
+       to work reliably. This option can be used to schedule instructions
+       better and leads to improved performace in certain cases.
+     * Windows MinGW-w64 targets (*-w64-mingw*) require at least r5437
+       from the Mingw-w64 trunk.
+     * Support for new AMD family 15h processors (Steamroller core) is now
+       available through the -march=bdver3 and -mtune=bdver3 options.
+     * Support for new AMD family 16h processors (Jaguar core) is now
+       available through the -march=btver2 and -mtune=btver2 options.
+
+  FRV
+
+     * This target now supports the -fstack-usage command-line option.
+
+  MIPS
+
+     * GCC can now generate code specifically for the R4700, Broadcom XLP
+       and MIPS 34kn processors. The associated -march options are
+       -march=r4700, -march=xlp and -march=34kn respectively.
+     * GCC now generates better DSP code for MIPS 74k cores thanks to
+       further scheduling optimizations.
+     * The MIPS port now supports the -fstack-check option.
+     * GCC now passes the -mmcu and -mno-mcu options to the assembler.
+     * Previous versions of GCC would silently accept -fpic and -fPIC for
+       -mno-abicalls targets like mips*-elf. This combination was not
+       intended or supported, and did not generate position-independent
+       code. GCC 4.8 now reports an error when this combination is used.
+
+  PowerPC / PowerPC64 / RS6000
+
+     * SVR4 configurations (GNU/Linux, FreeBSD, NetBSD) no longer save,
+       restore or update the VRSAVE register by default. The respective
+       operating systems manage the VRSAVE register directly.
+     * Large TOC support has been added for AIX through the command line
+       option -mcmodel=large.
+     * Native Thread-Local Storage support has been added for AIX.
+     * VMX (Altivec) and VSX instruction sets now are enabled implicitly
+       when targetting processors that support those hardware features on
+       AIX 6.1 and above.
+
+  RX
+
+     * This target will now issue a warning message whenever multiple fast
+       interrupt handlers are found in the same compilation unit. This
+       feature can be turned off by the new
+       -mno-warn-multiple-fast-interrupts command-line option.
+
+  S/390, System z
+
+     * Support for the IBM zEnterprise zEC12 processor has been added.
+       When using the -march=zEC12 option, the compiler will generate code
+       making use of the following new instructions:
+          + load and trap instructions
+          + 2 new compare and trap instructions
+          + rotate and insert selected bits - without CC clobber
+       The -mtune=zEC12 option enables zEC12 specific instruction
+       scheduling without making use of new instructions.
+     * Register pressure sensitive instruction scheduling is enabled by
+       default.
+     * The ifunc function attribute is enabled by default.
+     * memcpy and memcmp invokations on big memory chunks or with run time
+       lengths are not generated inline anymore when tuning for z10 or
+       higher. The purpose is to make use of the IFUNC optimized versions
+       in Glibc.
+
+  SH
+
+     * The default alignment settings have been reduced to be less
+       aggressive. This results in more compact code for optimization
+       levels other than -Os.
+     * Improved support for the __atomic built-in functions:
+          + A new option -matomic-model=model selects the model for the
+            generated atomic sequences. The following models are
+            supported:
+
+              soft-gusa
+                      Software gUSA sequences (SH3* and SH4* only). On
+                      SH4A targets this will now also partially utilize
+                      the movco.l and movli.l instructions. This is the
+                      default when the target is sh3*-*-linux* or
+                      sh4*-*-linux*.
+
+              hard-llcs
+                      Hardware movco.l / movli.l sequences (SH4A only).
+
+              soft-tcb
+                      Software thread control block sequences.
+
+              soft-imask
+                      Software interrupt flipping sequences (privileged
+                      mode only). This is the default when the target is
+                      sh1*-*-linux* or sh2*-*-linux*.
+
+              none
+                      Generates function calls to the respective __atomic
+                      built-in functions. This is the default for SH64
+                      targets or when the target is not sh*-*-linux*.
+
+          + The option -msoft-atomic has been deprecated. It is now an
+            alias for -matomic-model=soft-gusa.
+          + A new option -mtas makes the compiler generate the tas.b
+            instruction for the __atomic_test_and_set built-in function
+            regardless of the selected atomic model.
+          + The __sync functions in libgcc now reflect the selected atomic
+            model when building the toolchain.
+     * Added support for the mov.b and mov.w instructions with
+       displacement addressing.
+     * Added support for the SH2A instructions movu.b and movu.w.
+     * Various improvements to code generated for integer arithmetic.
+     * Improvements to conditional branches and code that involves the T
+       bit. A new option -mzdcbranch tells the compiler to favor
+       zero-displacement branches. This is enabled by default for SH4*
+       targets.
+     * The pref instruction will now be emitted by the __builtin_prefetch
+       built-in function for SH3* targets.
+     * The fmac instruction will now be emitted by the fmaf standard
+       function and the __builtin_fmaf built-in function.
+     * The -mfused-madd option has been deprecated in favor of the
+       machine-independent -ffp-contract option. Notice that the fmac
+       instruction will now be generated by default for expressions like a
+       * b + c. This is due to the compiler default setting
+       -ffp-contract=fast.
+     * Added new options -mfsrra and -mfsca to allow the compiler using
+       the fsrra and fsca instructions on targets other than SH4A (where
+       they are already enabled by default).
+     * Added support for the __builtin_bswap32 built-in function. It is
+       now expanded as a sequence of swap.b and swap.w instructions
+       instead of a library function call.
+     * The behavior of the -mieee option has been fixed and the negative
+       form -mno-ieee has been added to control the IEEE conformance of
+       floating point comparisons. By default -mieee is now enabled and
+       the option -ffinite-math-only implicitly sets -mno-ieee.
+     * Added support for the built-in functions __builtin_thread_pointer
+       and __builtin_set_thread_pointer. This assumes that GBR is used to
+       hold the thread pointer of the current thread. Memory loads and
+       stores relative to the address returned by __builtin_thread_pointer
+       will now also utilize GBR based displacement address modes.
+     * The -mdiv= option for targets other than SHmedia has been fixed and
+       documented.
+
+  SPARC
+
+     * Added optimized instruction scheduling for Niagara4.
+
+  TILE-Gx
+
+     * Added support for the -mcmodel=MODEL command-line option. The
+       models supported are small and large.
+
+  V850
+
+     * This target now supports the E3V5 architecture via the use of the
+       new -mv850e3v5 command-line option. It also has experimental
+       support for the e3v5 LOOP instruction which can be enabled via the
+       new -mloop command-line option.
+
+  XStormy16
+
+     * This target now supports the -fstack-usage command-line option.
+
+Operating Systems
+
+  Windows (Cygwin)
+
+     * Executables are now linked against shared libgcc by default. The
+       previous default was to link statically, which can still be done by
+       explicitly specifying -static or static-libgcc on the command line.
+       However it is strongly advised against, as it will cause problems
+       for any application that makes use of DLLs compiled by GCC. It
+       should be alright for a monolithic stand-alone application that
+       only links against the Windows DLLs, but offers little or no
+       benefit.
+
+GCC 4.8.1
+
+   This is the [33]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 4.8.1 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
+   The C++11 <chrono> std::chrono::system_clock and
+   std::chrono::steady_clock classes have changed ABI in GCC 4.8.1, they
+   both are now separate (never typedefs of each other), both use
+   std::chrono::nanoseconds resolution, on most GNU/Linux configurations
+   std::chrono::steady_clock is now finally monotonic, and both classes
+   are mangled differently than in the previous GCC releases.
+   std::chrono::system_clock::now() with std::chrono::microseconds resp.
+   std::chrono::seconds resolution is still exported for backwards
+   compatibility with default configured libstdc++. Note that libstdc++
+   configured with --enable-libstdcxx-time= used to be ABI incompatible
+   with default configured libstdc++ for those two classes and no ABI
+   compatibility can be offered for those configurations, so any C++11
+   code that uses those classes and has been compiled and linked against
+   libstdc++ configured with the non-default --enable-libstdcxx-time=
+   configuration option needs to be recompiled.
+
+GCC 4.8.2
+
+   This is the [34]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 4.8.2 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
+
+    For questions related to the use of GCC, please consult these web
+    pages and the [35]GCC manuals. If that fails, the
+    [36]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    web pages and the development of GCC are welcome on our developer
+    list at [37]gcc@gcc.gnu.org. All of [38]our lists have public
+    archives.
+
+   Copyright (C) [39]Free Software Foundation, Inc. Verbatim copying and
+   distribution of this entire article is permitted in any medium,
+   provided this notice is preserved.
+
+   These pages are [40]maintained by the GCC team. Last modified
+   2013-10-16[41].
+
+References
+
+   1. http://gcc.gnu.org/wiki/cxx-conversion
+   2. ftp://gcc.gnu.org/pub/gcc/infrastructure/
+   3. http://www.nongnu.org/avr-libc/
+   4. http://gcc.gnu.org/PR54461
+   5. http://gcc.gnu.org/gcc-4.8/porting_to.html
+   6. https://code.google.com/p/address-sanitizer/
+   7. https://code.google.com/p/data-race-test/wiki/ThreadSanitizer
+   8. https://lkml.org/lkml/2006/11/28/239
+   9. http://gcc.gnu.org/gcc-4.8/cxx0x_status.html
+  10. http://gcc.gnu.org/gcc-4.8/cxx0x_status.html
+  11. http://gcc.gnu.org/gcc-4.8/cxx0x_status.html
+  12. http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2011/n3276.pdf
+  13. http://gcc.gnu.org/gcc-4.8/cxx0x_status.html
+  14. http://www.open-std.org/JTC1/SC22/WG21/docs/papers/2012/n3386.html
+  15. http://gcc.gnu.org/projects/cxx1y.html
+  16. http://gcc.gnu.org/onlinedocs/libstdc++/manual/status.html#status.iso.2011
+  17. http://gcc.gnu.org/onlinedocs/gfortran/BACKTRACE.html
+  18. http://gcc.gnu.org/onlinedocs/gfortran/Error-and-Warning-Options.html
+  19. http://gcc.gnu.org/onlinedocs/gfortran/Error-and-Warning-Options.html
+  20. http://gcc.gnu.org/onlinedocs/gfortran/Code-Gen-Options.html
+  21. http://gcc.gnu.org/onlinedocs/gfortran/Error-and-Warning-Options.html
+  22. http://gcc.gnu.org/onlinedocs/gfortran/Error-and-Warning-Options.html
+  23. http://gcc.gnu.org/onlinedocs/gfortran/TMPDIR.html
+  24. http://gcc.gnu.org/wiki/Fortran2003Status
+  25. http://gcc.gnu.org/wiki/TS29113Status
+  26. http://gcc.gnu.org/viewcvs/trunk/libgfortran/libgfortran.h?content-type=text%2Fplain&view=co
+  27. http://chasm-interop.sourceforge.net/
+  28. http://gcc.gnu.org/wiki/avr-gcc#Fixed-Point_Support
+  29. http://gcc.gnu.org/onlinedocs/gcc/Fixed-Point.html
+  30. http://gcc.gnu.org/onlinedocs/gcc/X86-Built-in-Functions.html#X86-Built-in-Functions
+  31. http://gcc.gnu.org/onlinedocs/gcc/X86-Built-in-Functions.html#X86-Built-in-Functions
+  32. http://gcc.gnu.org/wiki/FunctionMultiVersioning
+  33. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.8.1
+  34. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.8.2
+  35. http://gcc.gnu.org/onlinedocs/
+  36. mailto:gcc-help@gcc.gnu.org
+  37. mailto:gcc@gcc.gnu.org
+  38. http://gcc.gnu.org/lists.html
+  39. http://www.fsf.org/
+  40. http://gcc.gnu.org/about.html
+  41. http://validator.w3.org/check/referer
+======================================================================
+http://gcc.gnu.org/gcc-4.7/index.html
                              GCC 4.7 Release Series
 
    April 11, 2013
@@ -91,7 +903,6 @@ References
   22. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.7/changes.html
-
                              GCC 4.7 Release Series
                         Changes, New Features, and Fixes
 
@@ -937,30 +1748,32 @@ References
   55. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.6/index.html
-
                              GCC 4.6 Release Series
 
-   March 1, 2012
+   April 12, 2013
 
    The [1]GNU project and the GCC developers are pleased to announce the
-   release of GCC 4.6.3.
+   release of GCC 4.6.4.
 
    This release is a bug-fix release, containing fixes for regressions in
-   GCC 4.6.2 relative to previous releases of GCC.
+   GCC 4.6.3 relative to previous releases of GCC.
 
 Release History
 
+   GCC 4.6.4
+          April 12, 2013 ([2]changes, [3]documentation)
+
    GCC 4.6.3
-          March 1, 2012 ([2]changes, [3]documentation)
+          March 1, 2012 ([4]changes, [5]documentation)
 
    GCC 4.6.2
-          October 26, 2011 ([4]changes, [5]documentation)
+          October 26, 2011 ([6]changes, [7]documentation)
 
    GCC 4.6.1
-          June 27, 2011 ([6]changes, [7]documentation)
+          June 27, 2011 ([8]changes, [9]documentation)
 
    GCC 4.6.0
-          March 25, 2011 ([8]changes, [9]documentation)
+          March 25, 2011 ([10]changes, [11]documentation)
 
 References and Acknowledgements
 
@@ -968,61 +1781,62 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [10]successful builds is updated as new information becomes
+   A list of [12]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [11]amazing group of volunteers is
+   well as test results to GCC. This [13]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [12]GCC
-   project web site or contact the [13]GCC development mailing list.
+   For additional information about GCC please refer to the [14]GCC
+   project web site or contact the [15]GCC development mailing list.
 
-   To obtain GCC please use [14]our mirror sites or [15]our SVN server.
+   To obtain GCC please use [16]our mirror sites or [17]our SVN server.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [16]GCC manuals. If that fails, the
-    [17]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [18]GCC manuals. If that fails, the
+    [19]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [18]gcc@gcc.gnu.org. All of [19]our lists have public
+    list at [20]gcc@gcc.gnu.org. All of [21]our lists have public
     archives.
 
-   Copyright (C) [20]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [22]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [21]maintained by the GCC team. Last modified
-   2013-02-20[22].
+   These pages are [23]maintained by the GCC team. Last modified
+   2013-04-12[24].
 
 References
 
    1. http://www.gnu.org/
    2. http://gcc.gnu.org/gcc-4.6/changes.html
-   3. http://gcc.gnu.org/onlinedocs/4.6.3/
+   3. http://gcc.gnu.org/onlinedocs/4.6.4/
    4. http://gcc.gnu.org/gcc-4.6/changes.html
-   5. http://gcc.gnu.org/onlinedocs/4.6.2/
+   5. http://gcc.gnu.org/onlinedocs/4.6.3/
    6. http://gcc.gnu.org/gcc-4.6/changes.html
-   7. http://gcc.gnu.org/onlinedocs/4.6.1/
+   7. http://gcc.gnu.org/onlinedocs/4.6.2/
    8. http://gcc.gnu.org/gcc-4.6/changes.html
-   9. http://gcc.gnu.org/onlinedocs/4.6.0/
-  10. http://gcc.gnu.org/gcc-4.6/buildstat.html
-  11. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
-  12. http://gcc.gnu.org/index.html
-  13. mailto:gcc@gcc.gnu.org
-  14. http://gcc.gnu.org/mirrors.html
-  15. http://gcc.gnu.org/svn.html
-  16. http://gcc.gnu.org/onlinedocs/
-  17. mailto:gcc-help@gcc.gnu.org
-  18. mailto:gcc@gcc.gnu.org
-  19. http://gcc.gnu.org/lists.html
-  20. http://www.fsf.org/
-  21. http://gcc.gnu.org/about.html
-  22. http://validator.w3.org/check/referer
+   9. http://gcc.gnu.org/onlinedocs/4.6.1/
+  10. http://gcc.gnu.org/gcc-4.6/changes.html
+  11. http://gcc.gnu.org/onlinedocs/4.6.0/
+  12. http://gcc.gnu.org/gcc-4.6/buildstat.html
+  13. http://gcc.gnu.org/onlinedocs/gcc/Contributors.html
+  14. http://gcc.gnu.org/index.html
+  15. mailto:gcc@gcc.gnu.org
+  16. http://gcc.gnu.org/mirrors.html
+  17. http://gcc.gnu.org/svn.html
+  18. http://gcc.gnu.org/onlinedocs/
+  19. mailto:gcc-help@gcc.gnu.org
+  20. mailto:gcc@gcc.gnu.org
+  21. http://gcc.gnu.org/lists.html
+  22. http://www.fsf.org/
+  23. http://gcc.gnu.org/about.html
+  24. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.6/changes.html
-
                              GCC 4.6 Release Series
                         Changes, New Features, and Fixes
 
@@ -1897,20 +2711,27 @@ GCC 4.6.3
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
+GCC 4.6.4
+
+   This is the [23]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 4.6.4 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
 
     For questions related to the use of GCC, please consult these web
-    pages and the [23]GCC manuals. If that fails, the
-    [24]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [24]GCC manuals. If that fails, the
+    [25]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [25]gcc@gcc.gnu.org. All of [26]our lists have public
+    list at [26]gcc@gcc.gnu.org. All of [27]our lists have public
     archives.
 
-   Copyright (C) [27]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [28]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [28]maintained by the GCC team. Last modified
-   2013-01-07[29].
+   These pages are [29]maintained by the GCC team. Last modified
+   2013-04-12[30].
 
 References
 
@@ -1936,16 +2757,16 @@ References
   20. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.1
   21. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.2
   22. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.3
-  23. http://gcc.gnu.org/onlinedocs/
-  24. mailto:gcc-help@gcc.gnu.org
-  25. mailto:gcc@gcc.gnu.org
-  26. http://gcc.gnu.org/lists.html
-  27. http://www.fsf.org/
-  28. http://gcc.gnu.org/about.html
-  29. http://validator.w3.org/check/referer
+  23. http://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=4.6.4
+  24. http://gcc.gnu.org/onlinedocs/
+  25. mailto:gcc-help@gcc.gnu.org
+  26. mailto:gcc@gcc.gnu.org
+  27. http://gcc.gnu.org/lists.html
+  28. http://www.fsf.org/
+  29. http://gcc.gnu.org/about.html
+  30. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.5/index.html
-
                              GCC 4.5 Release Series
 
    Jul 2, 2012
@@ -2030,7 +2851,6 @@ References
   19. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.5/changes.html
-
                              GCC 4.5 Release Series
                         Changes, New Features, and Fixes
 
@@ -2718,7 +3538,6 @@ References
   35. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.4/index.html
-
                              GCC 4.4 Release Series
 
    March 13, 2012
@@ -2815,7 +3634,6 @@ References
   22. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.4/changes.html
-
                              GCC 4.4 Release Series
                         Changes, New Features, and Fixes
 
@@ -3450,7 +4268,6 @@ References
   26. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.3/index.html
-
                              GCC 4.3 Release Series
 
    Jun 27, 2011
@@ -3543,7 +4360,6 @@ References
   21. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.3/changes.html
-
                              GCC 4.3 Release Series
                         Changes, New Features, and Fixes
 
@@ -4365,7 +5181,6 @@ References
   37. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.2/index.html
-
                              GCC 4.2 Release Series
 
    May 19, 2008
@@ -4450,7 +5265,6 @@ References
   19. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.2/changes.html
-
                              GCC 4.2 Release Series
                         Changes, New Features, and Fixes
 
@@ -4774,7 +5588,6 @@ References
   13. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.1/index.html
-
                              GCC 4.1 Release Series
 
    February 13, 2007
@@ -4851,7 +5664,6 @@ References
   17. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.1/changes.html
-
                              GCC 4.1 Release Series
                         Changes, New Features, and Fixes
 
@@ -5411,7 +6223,6 @@ References
   13. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.0/index.html
-
                              GCC 4.0 Release Series
 
    January 31, 2007
@@ -5496,7 +6307,6 @@ References
   19. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-4.0/changes.html
-
                              GCC 4.0 Release Series
                         Changes, New Features, and Fixes
 
@@ -6026,7 +6836,6 @@ References
   22. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.4/index.html
-
                              GCC 3.4 Release Series
 
    May 26, 2006
@@ -6126,7 +6935,6 @@ References
   23. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.4/changes.html
-
                              GCC 3.4 Release Series
                         Changes, New Features, and Fixes
 
@@ -8310,7 +9118,6 @@ References
  418. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.3/index.html
-
                              GCC 3.3 Release Series
 
    May 03, 2005
@@ -8410,7 +9217,6 @@ References
   22. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.3/changes.html
-
                              GCC 3.3 Release Series
                         Changes, New Features, and Fixes
 
@@ -10323,7 +11129,6 @@ References
  559. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.2/index.html
-
                              GCC 3.2 Release Series
 
    April 25, 2003
@@ -10413,7 +11218,6 @@ References
   18. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.2/changes.html
-
                              GCC 3.2 Release Series
                         Changes, New Features, and Fixes
 
@@ -11271,7 +12075,6 @@ References
  252. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.1/index.html
-
                                     GCC 3.1
 
    July 27, 2002
@@ -11338,7 +12141,6 @@ References
   15. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.1/changes.html
-
                              GCC 3.1 Release Series
                         Changes, New Features, and Fixes
 
@@ -11698,7 +12500,6 @@ References
   19. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.0/gcc-3.0.html
-
                                    GCC 3.0.4
 
    February 20, 2002
@@ -11772,7 +12573,6 @@ References
   15. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.0/features.html
-
                               GCC 3.0 New Features
 
 Additional changes in GCC 3.0.4
@@ -11969,7 +12769,6 @@ References
   20. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-3.0/caveats.html
-
                                 GCC 3.0 Caveats
 
      * -fstrict-aliasing is now part of -O2 and higher optimization
@@ -12030,7 +12829,6 @@ References
    8. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-2.95/index.html
-
                                     GCC 2.95
 
    March 16, 2001: The GNU project and the GCC developers are pleased to
@@ -12120,7 +12918,6 @@ References
   17. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-2.95/features.html
-
                              GCC 2.95 New Features
 
      * General Optimizer Improvements:
@@ -12393,7 +13190,6 @@ References
   23. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/gcc-2.95/caveats.html
-
                                 GCC 2.95 Caveats
 
      * GCC 2.95 will issue an error for invalid asm statements that had
@@ -12462,7 +13258,6 @@ References
    8. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/egcs-1.1/index.html
-
                                     EGCS 1.1
 
    September 3, 1998: We are pleased to announce the release of EGCS 1.1.
@@ -12693,7 +13488,6 @@ References
   17. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/egcs-1.1/features.html
-
                              EGCS 1.1 new features
 
      * Integrated GNU Fortran (g77) compiler and runtime library with
@@ -12788,7 +13582,6 @@ References
   11. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/egcs-1.1/caveats.html
-
                                 EGCS 1.1 Caveats
 
      * EGCS has an integrated libstdc++, but does not have an integrated
@@ -12839,7 +13632,6 @@ References
    7. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/egcs-1.0/index.html
-
                                     EGCS 1.0
 
    December 3, 1997: We are pleased to announce the release of EGCS 1.0.
@@ -13041,7 +13833,6 @@ References
   12. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/egcs-1.0/features.html
-
                                EGCS 1.0 features
 
      * Core compiler is based on the gcc2 development tree from Aug 2,
@@ -13106,7 +13897,6 @@ References
    9. http://validator.w3.org/check/referer
 ======================================================================
 http://gcc.gnu.org/egcs-1.0/caveats.html
-
                                 EGCS 1.0 Caveats
 
      * EGCS has an integrated libstdc++, but does not have an integrated

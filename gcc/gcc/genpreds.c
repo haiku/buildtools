@@ -2,8 +2,7 @@
    - prototype declarations for operand predicates (tm-preds.h)
    - function definitions of operand predicates, if defined new-style
      (insn-preds.c)
-   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
-   Free Software Foundation, Inc.
+   Copyright (C) 2001-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -946,9 +945,10 @@ write_lookup_constraint (void)
 	{
 	  do
 	    {
-	      printf ("      if (!strncmp (str, \"%s\", %lu))\n"
+	      printf ("      if (!strncmp (str + 1, \"%s\", %lu))\n"
 		      "        return CONSTRAINT_%s;\n",
-		      c->name, (unsigned long int) c->namelen, c->c_name);
+		      c->name + 1, (unsigned long int) c->namelen - 1,
+		      c->c_name);
 	      c = c->next_this_letter;
 	    }
 	  while (c);

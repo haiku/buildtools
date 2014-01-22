@@ -1,6 +1,6 @@
 // { dg-options "-std=gnu++0x" }
 //
-// Copyright (C) 2011 Free Software Foundation, Inc.
+// Copyright (C) 2011-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -45,6 +45,9 @@ void test01()
   VERIFY( (test_category<is_fundamental, float>(true)) );
   VERIFY( (test_category<is_fundamental, double>(true)) );
   VERIFY( (test_category<is_fundamental, long double>(true)) );
+
+  // libstdc++/56609
+  VERIFY( (test_category<is_fundamental, std::nullptr_t>(true)) );
 
   // Sanity check.
   VERIFY( (test_category<is_fundamental, ClassType>(false)) );

@@ -1,7 +1,5 @@
 /* If-conversion support.
-   Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010,
-   2011
-   Free Software Foundation, Inc.
+   Copyright (C) 2000-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -40,12 +38,10 @@
 #include "tm_p.h"
 #include "cfgloop.h"
 #include "target.h"
-#include "timevar.h"
 #include "tree-pass.h"
 #include "df.h"
 #include "vec.h"
 #include "pointer-set.h"
-#include "vecprim.h"
 #include "dbgcnt.h"
 
 #ifndef HAVE_conditional_move
@@ -904,7 +900,7 @@ noce_emit_move_insn (rtx x, rtx y)
 	  switch (GET_RTX_CLASS (GET_CODE (y)))
 	    {
 	    case RTX_UNARY:
-	      ot = code_to_optab[GET_CODE (y)];
+	      ot = code_to_optab (GET_CODE (y));
 	      if (ot)
 		{
 		  start_sequence ();
@@ -921,7 +917,7 @@ noce_emit_move_insn (rtx x, rtx y)
 
 	    case RTX_BIN_ARITH:
 	    case RTX_COMM_ARITH:
-	      ot = code_to_optab[GET_CODE (y)];
+	      ot = code_to_optab (GET_CODE (y));
 	      if (ot)
 		{
 		  start_sequence ();
@@ -968,6 +964,8 @@ end_ifcvt_sequence (struct noce_if_info *if_info)
 
   set_used_flags (if_info->x);
   set_used_flags (if_info->cond);
+  set_used_flags (if_info->a);
+  set_used_flags (if_info->b);
   unshare_all_rtl_in_chain (seq);
   end_sequence ();
 
@@ -1021,7 +1019,7 @@ noce_try_move (struct noce_if_info *if_info)
 	    return FALSE;
 
 	  emit_insn_before_setloc (seq, if_info->jump,
-				   INSN_LOCATOR (if_info->insn_a));
+				   INSN_LOCATION (if_info->insn_a));
 	}
       return TRUE;
     }
@@ -1066,7 +1064,7 @@ noce_try_store_flag (struct noce_if_info *if_info)
 	return FALSE;
 
       emit_insn_before_setloc (seq, if_info->jump,
-			       INSN_LOCATOR (if_info->insn_a));
+			       INSN_LOCATION (if_info->insn_a));
       return TRUE;
     }
   else
@@ -1197,7 +1195,7 @@ noce_try_store_flag_constants (struct noce_if_info *if_info)
 	return FALSE;
 
       emit_insn_before_setloc (seq, if_info->jump,
-			       INSN_LOCATOR (if_info->insn_a));
+			       INSN_LOCATION (if_info->insn_a));
       return TRUE;
     }
 
@@ -1245,7 +1243,7 @@ noce_try_addcc (struct noce_if_info *if_info)
 		return FALSE;
 
 	      emit_insn_before_setloc (seq, if_info->jump,
-				       INSN_LOCATOR (if_info->insn_a));
+				       INSN_LOCATION (if_info->insn_a));
 	      return TRUE;
 	    }
 	  end_sequence ();
@@ -1285,7 +1283,7 @@ noce_try_addcc (struct noce_if_info *if_info)
 		return FALSE;
 
 	      emit_insn_before_setloc (seq, if_info->jump,
-				       INSN_LOCATOR (if_info->insn_a));
+				       INSN_LOCATION (if_info->insn_a));
 	      return TRUE;
 	    }
 	  end_sequence ();
@@ -1334,7 +1332,7 @@ noce_try_store_flag_mask (struct noce_if_info *if_info)
 	    return FALSE;
 
 	  emit_insn_before_setloc (seq, if_info->jump,
-				   INSN_LOCATOR (if_info->insn_a));
+				   INSN_LOCATION (if_info->insn_a));
 	  return TRUE;
 	}
 
@@ -1483,7 +1481,7 @@ noce_try_cmove (struct noce_if_info *if_info)
 	    return FALSE;
 
 	  emit_insn_before_setloc (seq, if_info->jump,
-				   INSN_LOCATOR (if_info->insn_a));
+				   INSN_LOCATION (if_info->insn_a));
 	  return TRUE;
 	}
       else
@@ -1521,8 +1519,7 @@ noce_try_cmove_arith (struct noce_if_info *if_info)
       && MEM_ADDR_SPACE (a) == MEM_ADDR_SPACE (b)
       && if_info->branch_cost >= 5)
     {
-      enum machine_mode address_mode
-	= targetm.addr_space.address_mode (MEM_ADDR_SPACE (a));
+      enum machine_mode address_mode = get_address_mode (a);
 
       a = XEXP (a, 0);
       b = XEXP (b, 0);
@@ -1685,7 +1682,7 @@ noce_try_cmove_arith (struct noce_if_info *if_info)
   if (!tmp)
     return FALSE;
 
-  emit_insn_before_setloc (tmp, if_info->jump, INSN_LOCATOR (if_info->insn_a));
+  emit_insn_before_setloc (tmp, if_info->jump, INSN_LOCATION (if_info->insn_a));
   return TRUE;
 
  end_seq_and_fail:
@@ -1932,7 +1929,7 @@ noce_try_minmax (struct noce_if_info *if_info)
   if (!seq)
     return FALSE;
 
-  emit_insn_before_setloc (seq, if_info->jump, INSN_LOCATOR (if_info->insn_a));
+  emit_insn_before_setloc (seq, if_info->jump, INSN_LOCATION (if_info->insn_a));
   if_info->cond = cond;
   if_info->cond_earliest = earliest;
 
@@ -2079,7 +2076,7 @@ noce_try_abs (struct noce_if_info *if_info)
   if (!seq)
     return FALSE;
 
-  emit_insn_before_setloc (seq, if_info->jump, INSN_LOCATOR (if_info->insn_a));
+  emit_insn_before_setloc (seq, if_info->jump, INSN_LOCATION (if_info->insn_a));
   if_info->cond = cond;
   if_info->cond_earliest = earliest;
 
@@ -2158,7 +2155,7 @@ noce_try_sign_mask (struct noce_if_info *if_info)
   if (!seq)
     return FALSE;
 
-  emit_insn_before_setloc (seq, if_info->jump, INSN_LOCATOR (if_info->insn_a));
+  emit_insn_before_setloc (seq, if_info->jump, INSN_LOCATION (if_info->insn_a));
   return TRUE;
 }
 
@@ -2258,7 +2255,7 @@ noce_try_bitop (struct noce_if_info *if_info)
 	return FALSE;
 
       emit_insn_before_setloc (seq, if_info->jump,
-			       INSN_LOCATOR (if_info->insn_a));
+			       INSN_LOCATION (if_info->insn_a));
     }
   return TRUE;
 }
@@ -2417,7 +2414,7 @@ noce_can_store_speculate_p (basic_block top_bb, const_rtx mem)
 		  || (CALL_P (insn) && (!RTL_CONST_CALL_P (insn)))))
 	    return false;
 
-	  if (memory_modified_in_insn_p (mem, insn))
+	  if (memory_must_be_modified_in_insn_p (mem, insn))
 	    return true;
 	  if (modified_in_p (XEXP (mem, 0), insn))
 	    return false;
@@ -2496,6 +2493,12 @@ noce_process_if_block (struct noce_if_info *if_info)
 	  || ! noce_operand_ok (SET_SRC (set_b))
 	  || reg_overlap_mentioned_p (x, SET_SRC (set_b))
 	  || modified_between_p (SET_SRC (set_b), insn_b, jump)
+	  /* Avoid extending the lifetime of hard registers on small
+	     register class machines.  */
+	  || (REG_P (SET_SRC (set_b))
+	      && HARD_REGISTER_P (SET_SRC (set_b))
+	      && targetm.small_register_classes_for_mode_p
+		   (GET_MODE (SET_SRC (set_b))))
 	  /* Likewise with X.  In particular this can happen when
 	     noce_get_condition looks farther back in the instruction
 	     stream than one might expect.  */
@@ -2659,7 +2662,7 @@ noce_process_if_block (struct noce_if_info *if_info)
       unshare_all_rtl_in_chain (seq);
       end_sequence ();
 
-      emit_insn_before_setloc (seq, BB_END (test_bb), INSN_LOCATOR (insn_a));
+      emit_insn_before_setloc (seq, BB_END (test_bb), INSN_LOCATION (insn_a));
     }
 
   /* The original THEN and ELSE blocks may now be removed.  The test block
@@ -2697,7 +2700,7 @@ noce_process_if_block (struct noce_if_info *if_info)
 static int
 check_cond_move_block (basic_block bb,
 		       struct pointer_map_t *vals,
-		       VEC (rtx, heap) **regs,
+		       vec<rtx> *regs,
 		       rtx cond)
 {
   rtx insn;
@@ -2762,7 +2765,7 @@ check_cond_move_block (basic_block bb,
       slot = pointer_map_insert (vals, (void *) dest);
       *slot = (void *) src;
 
-      VEC_safe_push (rtx, heap, *regs, dest);
+      regs->safe_push (dest);
     }
 
   return TRUE;
@@ -2853,8 +2856,8 @@ cond_move_process_if_block (struct noce_if_info *if_info)
   int c;
   struct pointer_map_t *then_vals;
   struct pointer_map_t *else_vals;
-  VEC (rtx, heap) *then_regs = NULL;
-  VEC (rtx, heap) *else_regs = NULL;
+  vec<rtx> then_regs = vNULL;
+  vec<rtx> else_regs = vNULL;
   unsigned int i;
   int success_p = FALSE;
 
@@ -2876,7 +2879,7 @@ cond_move_process_if_block (struct noce_if_info *if_info)
      source register does not change after the assignment.  Also count
      the number of registers set in only one of the blocks.  */
   c = 0;
-  FOR_EACH_VEC_ELT (rtx, then_regs, i, reg)
+  FOR_EACH_VEC_ELT (then_regs, i, reg)
     {
       void **then_slot = pointer_map_contains (then_vals, reg);
       void **else_slot = pointer_map_contains (else_vals, reg);
@@ -2895,7 +2898,7 @@ cond_move_process_if_block (struct noce_if_info *if_info)
     }
 
   /* Finish off c for MAX_CONDITIONAL_EXECUTE.  */
-  FOR_EACH_VEC_ELT (rtx, else_regs, i, reg)
+  FOR_EACH_VEC_ELT (else_regs, i, reg)
     {
       gcc_checking_assert (pointer_map_contains (else_vals, reg));
       if (!pointer_map_contains (then_vals, reg))
@@ -2931,7 +2934,7 @@ cond_move_process_if_block (struct noce_if_info *if_info)
       loc_insn = first_active_insn (else_bb);
       gcc_assert (loc_insn);
     }
-  emit_insn_before_setloc (seq, jump, INSN_LOCATOR (loc_insn));
+  emit_insn_before_setloc (seq, jump, INSN_LOCATION (loc_insn));
 
   if (else_bb)
     {
@@ -2959,8 +2962,8 @@ cond_move_process_if_block (struct noce_if_info *if_info)
 done:
   pointer_map_destroy (then_vals);
   pointer_map_destroy (else_vals);
-  VEC_free (rtx, heap, then_regs);
-  VEC_free (rtx, heap, else_regs);
+  then_regs.release ();
+  else_regs.release ();
   return success_p;
 }
 
@@ -3253,8 +3256,8 @@ find_if_header (basic_block test_bb, int pass)
   ce_info.else_bb = else_edge->dest;
   ce_info.pass = pass;
 
-#ifdef IFCVT_INIT_EXTRA_FIELDS
-  IFCVT_INIT_EXTRA_FIELDS (&ce_info);
+#ifdef IFCVT_MACHDEP_INIT
+  IFCVT_MACHDEP_INIT (&ce_info);
 #endif
 
   if (!reload_completed
@@ -3472,7 +3475,7 @@ cond_exec_find_if_block (struct ce_if_block * ce_info)
      code processing.  ??? we should fix this in the future.  */
   if (EDGE_COUNT (then_bb->succs) == 0)
     {
-      if (single_pred_p (else_bb))
+      if (single_pred_p (else_bb) && else_bb != EXIT_BLOCK_PTR)
 	{
 	  rtx last_insn = BB_END (then_bb);
 
@@ -3654,7 +3657,7 @@ find_cond_trap (basic_block test_bb, edge then_edge, edge else_edge)
     return FALSE;
 
   /* Emit the new insns before cond_earliest.  */
-  emit_insn_before_setloc (seq, cond_earliest, INSN_LOCATOR (trap));
+  emit_insn_before_setloc (seq, cond_earliest, INSN_LOCATION (trap));
 
   /* Delete the trap block if possible.  */
   remove_edge (trap_bb == then_bb ? then_edge : else_edge);
@@ -3875,7 +3878,7 @@ find_if_case_1 (basic_block test_bb, edge then_edge, edge else_edge)
 
   /* We can avoid creating a new basic block if then_bb is immediately
      followed by else_bb, i.e. deleting then_bb allows test_bb to fall
-     thru to else_bb.  */
+     through to else_bb.  */
 
   if (then_bb->next_bb == else_bb
       && then_bb->prev_bb == test_bb
@@ -3923,6 +3926,11 @@ find_if_case_2 (basic_block test_bb, edge then_edge, edge else_edge)
   basic_block else_bb = else_edge->dest;
   edge else_succ;
   int then_prob, else_prob;
+
+  /* We do not want to speculate (empty) loop latches.  */
+  if (current_loops
+      && else_bb->loop_father->latch == else_bb)
+    return FALSE;
 
   /* If we are partitioning hot/cold basic blocks, we don't want to
      mess up unconditional or indirect jumps that cross between hot
@@ -4385,12 +4393,7 @@ if_convert (void)
 
 #ifdef IFCVT_MULTIPLE_DUMPS
       if (dump_file && cond_exec_changed_p)
-	{
-	  if (dump_flags & TDF_SLIM)
-	    print_rtl_slim_with_bb (dump_file, get_insns (), dump_flags);
-	  else
-	    print_rtl_with_bb (dump_file, get_insns ());
-	}
+	print_rtl_with_bb (dump_file, get_insns (), dump_flags);
 #endif
     }
   while (cond_exec_changed_p);
@@ -4447,7 +4450,10 @@ rest_of_handle_if_conversion (void)
   if (flag_if_conversion)
     {
       if (dump_file)
-        dump_flow_info (dump_file, dump_flags);
+	{
+	  dump_reg_info (dump_file);
+	  dump_flow_info (dump_file, dump_flags);
+	}
       cleanup_cfg (CLEANUP_EXPENSIVE);
       if_convert ();
     }
@@ -4461,6 +4467,7 @@ struct rtl_opt_pass pass_rtl_ifcvt =
  {
   RTL_PASS,
   "ce1",                                /* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
   gate_handle_if_conversion,            /* gate */
   rest_of_handle_if_conversion,         /* execute */
   NULL,                                 /* sub */
@@ -4498,6 +4505,7 @@ struct rtl_opt_pass pass_if_after_combine =
  {
   RTL_PASS,
   "ce2",                                /* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
   gate_handle_if_after_combine,         /* gate */
   rest_of_handle_if_after_combine,      /* execute */
   NULL,                                 /* sub */
@@ -4534,6 +4542,7 @@ struct rtl_opt_pass pass_if_after_reload =
  {
   RTL_PASS,
   "ce3",                                /* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
   gate_handle_if_after_reload,          /* gate */
   rest_of_handle_if_after_reload,       /* execute */
   NULL,                                 /* sub */

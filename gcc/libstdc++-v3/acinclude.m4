@@ -169,6 +169,38 @@ AC_DEFUN([GLIBCXX_CHECK_COMPILER_FEATURES], [
 
 
 dnl
+dnl Check if the assembler used supports disabling generation of hardware
+dnl capabilities.  This is only supported by Sun as at the moment.
+dnl
+dnl Defines:
+dnl  HWCAP_FLAGS='-Wa,-nH' if possible.
+dnl
+AC_DEFUN([GLIBCXX_CHECK_ASSEMBLER_HWCAP], [
+  test -z "$HWCAP_FLAGS" && HWCAP_FLAGS=''
+
+  # Restrict the test to Solaris, other assemblers (e.g. AIX as) have -nH
+  # with a different meaning.
+  case ${target_os} in
+    solaris2*)
+      ac_save_CFLAGS="$CFLAGS"
+      CFLAGS="$CFLAGS -Wa,-nH"
+
+      AC_MSG_CHECKING([for as that supports -Wa,-nH])
+      AC_TRY_COMPILE([], [return 0;], [ac_hwcap_flags=yes],[ac_hwcap_flags=no])
+      if test "$ac_hwcap_flags" = "yes"; then
+	HWCAP_FLAGS="-Wa,-nH $HWCAP_FLAGS"
+      fi
+      AC_MSG_RESULT($ac_hwcap_flags)
+
+      CFLAGS="$ac_save_CFLAGS"
+      ;;
+  esac
+
+  AC_SUBST(HWCAP_FLAGS)
+])
+
+
+dnl
 dnl If GNU ld is in use, check to see if tricky linker opts can be used.  If
 dnl the native linker is in use, all variables will be defined to something
 dnl safe (like an empty string).
@@ -660,6 +692,10 @@ if test x"$glibcxx_stylesheets" = x"yes"; then
     glibcxx_local_stylesheets=yes
     XSL_STYLE_DIR=/usr/share/xml/docbook/stylesheet/docbook-xsl-ns
   fi
+  if test -d /usr/share/xml/docbook/stylesheet/nwalsh5/current; then
+    glibcxx_local_stylesheets=yes
+    XSL_STYLE_DIR=/usr/share/xml/docbook/stylesheet/nwalsh5/current
+  fi
 fi
 AC_MSG_RESULT($glibcxx_local_stylesheets)
 
@@ -1115,22 +1151,27 @@ AC_DEFUN([GLIBCXX_ENABLE_C99], [
 
 dnl
 dnl Check for clock_gettime, nanosleep and sched_yield, used in the
-dnl implementation of 20.8.5 [time.clock], and 30.2.2 [thread.thread.this]
-dnl in the current C++0x working draft.
+dnl implementation of 20.11.7 [time.clock], and 30.3.2 [thread.thread.this]
+dnl in the C++11 standard.
 dnl
 dnl --enable-libstdcxx-time
 dnl --enable-libstdcxx-time=yes
 dnl        checks for the availability of monotonic and realtime clocks,
-dnl        nanosleep and sched_yield in libc and libposix4 and, in case, links
-dnl       the latter
+dnl        nanosleep and sched_yield in libc and libposix4 and, if needed,
+dnl        links in the latter.
 dnl --enable-libstdcxx-time=rt
-dnl        also searches (and, in case, links) librt.  Note that this is
+dnl        also searches (and, if needed, links) librt.  Note that this is
 dnl        not always desirable because, in glibc, for example, in turn it
 dnl        triggers the linking of libpthread too, which activates locking,
 dnl        a large overhead for single-thread programs.
 dnl --enable-libstdcxx-time=no
 dnl --disable-libstdcxx-time
 dnl        disables the checks completely
+dnl
+dnl N.B. Darwin provides nanosleep but doesn't support the whole POSIX
+dnl Timers option, so doesn't define _POSIX_TIMERS. Because the test
+dnl below fails Darwin unconditionally defines _GLIBCXX_USE_NANOSLEEP in
+dnl os_defines.h and also defines _GLIBCXX_USE_SCHED_YIELD.
 dnl
 AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
 
@@ -1233,6 +1274,31 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
     fi
   fi
 
+  if test x"$ac_has_clock_monotonic" != x"yes"; then
+    case ${target_os} in
+      linux*)
+	AC_MSG_CHECKING([for clock_gettime syscall])
+	AC_TRY_COMPILE(
+	  [#include <unistd.h>
+	   #include <time.h>
+	   #include <sys/syscall.h>
+	  ],
+	  [#if _POSIX_TIMERS > 0 && defined(_POSIX_MONOTONIC_CLOCK)
+	    timespec tp;
+	   #endif
+	   syscall(SYS_clock_gettime, CLOCK_MONOTONIC, &tp);
+	   syscall(SYS_clock_gettime, CLOCK_REALTIME, &tp);
+	  ], [ac_has_clock_monotonic_syscall=yes], [ac_has_clock_monotonic_syscall=no])
+	AC_MSG_RESULT($ac_has_clock_monotonic_syscall)
+	if test x"$ac_has_clock_monotonic_syscall" = x"yes"; then
+	  AC_DEFINE(_GLIBCXX_USE_CLOCK_GETTIME_SYSCALL, 1,
+	  [ Defined if clock_gettime syscall has monotonic and realtime clock support. ])
+	  ac_has_clock_monotonic=yes
+	  ac_has_clock_realtime=yes
+	fi;;
+    esac
+  fi
+
   if test x"$ac_has_clock_monotonic" = x"yes"; then
     AC_DEFINE(_GLIBCXX_USE_CLOCK_MONOTONIC, 1,
       [ Defined if clock_gettime has monotonic clock support. ])
@@ -1246,6 +1312,35 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   if test x"$ac_has_nanosleep" = x"yes"; then
     AC_DEFINE(_GLIBCXX_USE_NANOSLEEP, 1,
       [ Defined if nanosleep is available. ])
+  else
+      AC_MSG_CHECKING([for sleep])
+      AC_TRY_COMPILE([#include <unistd.h>],
+                     [sleep(1)],
+                     [ac_has_sleep=yes],[ac_has_sleep=no])
+      if test x"$ac_has_sleep" = x"yes"; then
+        AC_DEFINE(HAVE_SLEEP,1, [Defined if sleep exists.])
+      fi
+      AC_MSG_RESULT($ac_has_sleep)
+      AC_MSG_CHECKING([for usleep])
+      AC_TRY_COMPILE([#include <unistd.h>],
+                     [sleep(1);
+                      usleep(100);],
+                     [ac_has_usleep=yes],[ac_has_usleep=no])
+      if test x"$ac_has_usleep" = x"yes"; then
+        AC_DEFINE(HAVE_USLEEP,1, [Defined if usleep exists.])
+      fi
+      AC_MSG_RESULT($ac_has_usleep)
+  fi
+
+  if test x"$ac_has_nanosleep$ac_has_sleep" = x"nono"; then
+      AC_MSG_CHECKING([for Sleep])
+      AC_TRY_COMPILE([#include <windows.h>],
+                     [Sleep(1)],
+                     [ac_has_win32_sleep=yes],[ac_has_win32_sleep=no])
+      if test x"$ac_has_win32_sleep" = x"yes"; then
+        AC_DEFINE(HAVE_WIN32_SLEEP,1, [Defined if Sleep exists.])
+      fi
+      AC_MSG_RESULT($ac_has_win32_sleep)
   fi
 
   AC_SUBST(GLIBCXX_LIBS)
@@ -1256,8 +1351,8 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
 ])
 
 dnl
-dnl Check for gettimeofday, used in the implementation of 20.8.5
-dnl [time.clock] in the current C++0x working draft.
+dnl Check for gettimeofday, used in the implementation of 20.11.7
+dnl [time.clock] in the C++11 standard.
 dnl
 AC_DEFUN([GLIBCXX_CHECK_GETTIMEOFDAY], [
 
@@ -1669,7 +1764,12 @@ AC_DEFUN([GLIBCXX_CHECK_RANDOM_TR1], [
   AC_MSG_CHECKING([for "/dev/random" and "/dev/urandom" for TR1 random_device])
   AC_CACHE_VAL(glibcxx_cv_random_tr1, [
     if test -r /dev/random && test -r /dev/urandom; then
-      glibcxx_cv_random_tr1=yes;
+  ## For MSys environment the test above is detect as false-positive
+  ## on mingw-targets.  So disable it explicit for them.
+      case ${target_os} in
+	*mingw*) glibcxx_cv_random_tr1=no ;;
+	*) glibcxx_cv_random_tr1=yes ;;
+      esac
     else
       glibcxx_cv_random_tr1=no;
     fi
@@ -1712,100 +1812,6 @@ AC_DEFUN([GLIBCXX_COMPUTE_STDIO_INTEGER_CONSTANTS], [
   ])
   AC_DEFINE_UNQUOTED(_GLIBCXX_STDIO_SEEK_END, $glibcxx_cv_stdio_seek_end,
 		     [Define to the value of the SEEK_END integer constant.])
-])
-
-dnl
-dnl Check whether required C++ overloads are present in <math.h>.
-dnl
-
-AC_DEFUN([GLIBCXX_CHECK_MATH_PROTO], [
-
-  AC_LANG_SAVE
-  AC_LANG_CPLUSPLUS
-
-  case "$host" in
-    *-*-solaris2.*)
-      # Solaris 8 FCS only had an overload for double std::abs(double) in
-      # <iso/math_iso.h>.  Patches 111721-04 (SPARC) and 112757-01 (x86)
-      # introduced the full set also found from Solaris 9 onwards.
-      AC_MSG_CHECKING([for float std::abs(float) overload])
-      AC_CACHE_VAL(glibcxx_cv_abs_float, [
-	AC_COMPILE_IFELSE([AC_LANG_SOURCE(
-	  [#include <math.h>
-	   namespace std {
-	     inline float abs(float __x)
-	     {  return __builtin_fabsf(__x); }
-	   }
-	])],
-	[glibcxx_cv_abs_float=no],
-	[glibcxx_cv_abs_float=yes]
-      )])
-
-      # autoheader cannot handle indented templates.
-      AH_VERBATIM([__CORRECT_ISO_CPP_MATH_H_PROTO1],
-	[/* Define if all C++ overloads are available in <math.h>.  */
-#if __cplusplus >= 199711L
-#undef __CORRECT_ISO_CPP_MATH_H_PROTO1
-#endif])
-      AH_VERBATIM([__CORRECT_ISO_CPP_MATH_H_PROTO2],
-	[/* Define if only double std::abs(double) is available in <math.h>.  */
-#if __cplusplus >= 199711L
-#undef __CORRECT_ISO_CPP_MATH_H_PROTO2
-#endif])
-
-      if test $glibcxx_cv_abs_float = yes; then
-	AC_DEFINE(__CORRECT_ISO_CPP_MATH_H_PROTO1)
-      else
-	AC_DEFINE(__CORRECT_ISO_CPP_MATH_H_PROTO2)
-      fi
-      AC_MSG_RESULT($glibcxx_cv_abs_float)
-      ;;
-  esac
-
-  AC_LANG_RESTORE
-])
-
-dnl
-dnl Check whether required C++ overloads are present in <stdlib.h>.
-dnl
-
-AC_DEFUN([GLIBCXX_CHECK_STDLIB_PROTO], [
-
-  AC_LANG_SAVE
-  AC_LANG_CPLUSPLUS
-
-  case "$host" in
-    *-*-solaris2.*)
-      # Solaris 8 FCS lacked the overloads for long std::abs(long) and
-      # ldiv_t std::div(long, long) in <iso/stdlib_iso.h>.  Patches 109607-02
-      # (SPARC) and 109608-02 (x86) introduced them.
-      AC_MSG_CHECKING([for long std::abs(long) overload])
-      AC_CACHE_VAL(glibcxx_cv_abs_long, [
-	AC_COMPILE_IFELSE([AC_LANG_SOURCE(
-	  [#include <stdlib.h>
-	   namespace std {
-	     inline long
-	     abs(long __i) { return labs(__i); }
-	   }
-	])],
-	[glibcxx_cv_abs_long=no],
-	[glibcxx_cv_abs_long=yes]
-      )])
-
-      # autoheader cannot handle indented templates.
-      AH_VERBATIM([__CORRECT_ISO_CPP_STDLIB_H_PROTO],
-	[/* Define if all C++ overloads are available in <stdlib.h>.  */
-#if __cplusplus >= 199711L
-#undef __CORRECT_ISO_CPP_STDLIB_H_PROTO
-#endif])
-      if test $glibcxx_cv_abs_long = yes; then
-	AC_DEFINE(__CORRECT_ISO_CPP_STDLIB_H_PROTO, 1)
-      fi
-      AC_MSG_RESULT($glibcxx_cv_abs_long)
-      ;;
-  esac
-
-  AC_LANG_RESTORE
 ])
 
 dnl
@@ -1929,6 +1935,9 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
 	;;
       darwin* | freebsd*)
 	enable_clocale_flag=darwin
+	;;
+      openbsd*)
+	enable_clocale_flag=newlib
 	;;
       *)
 	if test x"$with_newlib" = x"yes"; then
@@ -2241,7 +2250,6 @@ AC_DEFUN([GLIBCXX_ENABLE_PARALLEL], [
 
   AC_MSG_CHECKING([for parallel mode support])
   AC_MSG_RESULT([$enable_parallel])
-  GLIBCXX_CONDITIONAL(ENABLE_PARALLEL, test $enable_parallel = yes)
 ])
 
 
@@ -2407,6 +2415,31 @@ AC_DEFUN([GLIBCXX_ENABLE_HOSTED], [
   GLIBCXX_CONDITIONAL(GLIBCXX_HOSTED, test $is_hosted = yes)
   AC_DEFINE_UNQUOTED(_GLIBCXX_HOSTED, $hosted_define,
     [Define to 1 if a full hosted library is built, or 0 if freestanding.])
+])
+
+
+dnl
+dnl Check if the user wants a non-verbose library implementation.
+dnl
+dnl --disable-libstdcxx-verbose will turn off descriptive messages to
+dnl standard error on termination.
+dnl
+dnl Defines:
+dnl  _GLIBCXX_VERBOSE (always defined, either to 1 or 0)
+dnl
+AC_DEFUN([GLIBCXX_ENABLE_VERBOSE], [
+  AC_ARG_ENABLE([libstdcxx-verbose],
+    AC_HELP_STRING([--disable-libstdcxx-verbose],
+		   [disable termination messages to standard error]),,
+		   [enable_libstdcxx_verbose=yes])
+  if test x"$enable_libstdcxx_verbose" = xyes; then
+    verbose_define=1
+  else
+    AC_MSG_NOTICE([verbose termination messages are disabled])
+    verbose_define=0
+  fi
+  AC_DEFINE_UNQUOTED(_GLIBCXX_VERBOSE, $verbose_define,
+    [Define to 1 if a verbose library is built, or 0 otherwise.])
 ])
 
 
@@ -3233,7 +3266,7 @@ changequote([,])dnl
 fi
 
 # For libtool versioning info, format is CURRENT:REVISION:AGE
-libtool_VERSION=6:17:0
+libtool_VERSION=6:18:0
 
 # Everything parsed; figure out what files and settings to use.
 case $enable_symvers in
@@ -3341,10 +3374,14 @@ dnl having to write complex code (the sed commands to clean the macro
 dnl namespace are complex and fragile enough as it is).  We must also
 dnl add a relative path so that -I- is supported properly.
 dnl
+dnl Substs:
+dnl  thread_header
+dnl
 AC_DEFUN([GLIBCXX_ENABLE_THREADS], [
   AC_MSG_CHECKING([for thread model used by GCC])
   target_thread_file=`$CXX -v 2>&1 | sed -n 's/^Thread model: //p'`
   AC_MSG_RESULT([$target_thread_file])
+  GCC_AC_THREAD_HEADER([$target_thread_file])
 ])
 
 
@@ -3400,9 +3437,9 @@ AC_DEFUN([GLIBCXX_CHECK_GTHREADS], [
       #error
       #endif
     ], [case $target_os in
-	  # gthreads support breaks symbol versioning on Solaris 8/9 (PR
+	  # gthreads support breaks symbol versioning on Solaris 9 (PR
 	  # libstdc++/52189).
-          solaris2.[[89]]*)
+          solaris2.9*)
 	    if test x$enable_symvers = xno; then
 	      ac_has_gthreads=yes
 	    elif test x$enable_libstdcxx_threads = xyes; then
@@ -3451,6 +3488,26 @@ AC_DEFUN([AC_LC_MESSAGES], [
 		[Define if LC_MESSAGES is available in <locale.h>.])
     fi
   ])
+])
+
+dnl
+dnl Check whether rdrand is supported in the assembler.
+AC_DEFUN([GLIBCXX_CHECK_X86_RDRAND], [
+  AC_MSG_CHECKING([for rdrand support in assembler])
+  AC_CACHE_VAL(ac_cv_x86_rdrand, [
+  ac_cv_x86_rdrand=no
+  case "$target" in
+    i?86-*-* | \
+    x86_64-*-*)
+    AC_TRY_COMPILE(, [asm("rdrand %eax");],
+		[ac_cv_x86_rdrand=yes], [ac_cv_x86_rdrand=no])
+  esac
+  ])
+  if test $ac_cv_x86_rdrand = yes; then
+    AC_DEFINE(_GLIBCXX_X86_RDRAND, 1,
+		[ Defined if as can handle rdrand. ])
+  fi
+  AC_MSG_RESULT($ac_cv_x86_rdrand)
 ])
 
 dnl
@@ -3628,6 +3685,37 @@ AC_DEFUN([GLIBCXX_ENABLE_WERROR], [
 ])
 
 
+dnl
+dnl Check to see if sys/sdt.h exists and that it is suitable for use.
+dnl Some versions of sdt.h were not compatible with C++11.
+dnl
+AC_DEFUN([GLIBCXX_CHECK_SDT_H], [
+  AC_MSG_RESULT([for suitable sys/sdt.h])
+  # Note that this test has to be run with the C language.
+  # Otherwise, sdt.h will try to include some headers from
+  # libstdc++ itself.
+  AC_LANG_SAVE
+  AC_LANG_C
+  AC_CACHE_VAL(glibcxx_cv_sys_sdt_h, [
+    # Because we have to run the test in C, we use grep rather
+    # than the compiler to check for the bug.  The bug is that
+    # were strings without trailing whitespace, causing g++
+    # to look for operator"".  The pattern searches for the fixed
+    # output.
+    AC_EGREP_CPP([ \",\" ], [
+      #include <sys/sdt.h>
+      int f() { STAP_PROBE(hi, bob); }
+    ], [glibcxx_cv_sys_sdt_h=yes], [glibcxx_cv_sys_sdt_h=no])
+  ])
+  AC_LANG_RESTORE
+  if test $glibcxx_cv_sys_sdt_h = yes; then
+    AC_DEFINE(HAVE_SYS_SDT_H, 1,
+              [Define to 1 if you have a suitable <sys/sdt.h> header file])
+  fi
+  AC_MSG_RESULT($glibcxx_cv_sys_sdt_h)
+])
+
 # Macros from the top-level gcc directory.
 m4_include([../config/gc++filt.m4])
 m4_include([../config/tls.m4])
+m4_include([../config/gthr.m4])

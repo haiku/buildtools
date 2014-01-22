@@ -1,6 +1,5 @@
 ;; VSX patterns.
-;; Copyright (C) 2009, 2010, 2011, 2012
-;; Free Software Foundation, Inc.
+;; Copyright (C) 2009-2013 Free Software Foundation, Inc.
 ;; Contributed by Michael Meissner <meissner@linux.vnet.ibm.com>
 
 ;; This file is part of GCC.
@@ -209,8 +208,8 @@
 
 ;; VSX moves
 (define_insn "*vsx_mov<mode>"
-  [(set (match_operand:VSX_M 0 "nonimmediate_operand" "=Z,<VSr>,<VSr>,?Z,?wa,?wa,*o,*r,*r,<VSr>,?wa,v,wZ,v")
-	(match_operand:VSX_M 1 "input_operand" "<VSr>,Z,<VSr>,wa,Z,wa,r,o,r,j,j,W,v,wZ"))]
+  [(set (match_operand:VSX_M 0 "nonimmediate_operand" "=Z,<VSr>,<VSr>,?Z,?wa,?wa,*Y,*r,*r,<VSr>,?wa,*r,v,wZ,v")
+	(match_operand:VSX_M 1 "input_operand" "<VSr>,Z,<VSr>,wa,Z,wa,r,Y,r,j,j,j,W,v,wZ"))]
   "VECTOR_MEM_VSX_P (<MODE>mode)
    && (register_operand (operands[0], <MODE>mode) 
        || register_operand (operands[1], <MODE>mode))"
@@ -240,23 +239,24 @@
     case 6:
     case 7:
     case 8:
+    case 11:
       return "#";
 
     case 9:
     case 10:
       return "xxlxor %x0,%x0,%x0";
 
-    case 11:
+    case 12:
       return output_vec_const_move (operands);
 
-    case 12:
+    case 13:
       gcc_assert (MEM_P (operands[0])
 		  && GET_CODE (XEXP (operands[0], 0)) != PRE_INC
 		  && GET_CODE (XEXP (operands[0], 0)) != PRE_DEC
 		  && GET_CODE (XEXP (operands[0], 0)) != PRE_MODIFY);
       return "stvx %1,%y0";
 
-    case 13:
+    case 14:
       gcc_assert (MEM_P (operands[0])
 		  && GET_CODE (XEXP (operands[0], 0)) != PRE_INC
 		  && GET_CODE (XEXP (operands[0], 0)) != PRE_DEC
@@ -267,13 +267,13 @@
       gcc_unreachable ();
     }
 }
-  [(set_attr "type" "vecstore,vecload,vecsimple,vecstore,vecload,vecsimple,*,*,*,vecsimple,vecsimple,*,vecstore,vecload")])
+  [(set_attr "type" "vecstore,vecload,vecsimple,vecstore,vecload,vecsimple,*,*,*,vecsimple,vecsimple,*,*,vecstore,vecload")])
 
 ;; Unlike other VSX moves, allow the GPRs, since a normal use of TImode is for
 ;; unions.  However for plain data movement, slightly favor the vector loads
 (define_insn "*vsx_movti"
-  [(set (match_operand:TI 0 "nonimmediate_operand" "=Z,wa,wa,?o,?r,?r,wa,v,v,wZ")
-	(match_operand:TI 1 "input_operand" "wa,Z,wa,r,o,r,j,W,wZ,v"))]
+  [(set (match_operand:TI 0 "nonimmediate_operand" "=Z,wa,wa,?Y,?r,?r,wa,v,v,wZ")
+	(match_operand:TI 1 "input_operand" "wa,Z,wa,r,Y,r,j,W,wZ,v"))]
   "VECTOR_MEM_VSX_P (TImode)
    && (register_operand (operands[0], TImode) 
        || register_operand (operands[1], TImode))"
@@ -545,7 +545,7 @@
    xsmaddmdp %x0,%x1,%x3
    xsmaddadp %x0,%x1,%x2
    xsmaddmdp %x0,%x1,%x3
-   {fma|fmadd} %0,%1,%2,%3"
+   fmadd %0,%1,%2,%3"
   [(set_attr "type" "fp")
    (set_attr "fp_type" "fp_maddsub_d")])
 
@@ -591,7 +591,7 @@
    xsmsubmdp %x0,%x1,%x3
    xsmsubadp %x0,%x1,%x2
    xsmsubmdp %x0,%x1,%x3
-   {fms|fmsub} %0,%1,%2,%3"
+   fmsub %0,%1,%2,%3"
   [(set_attr "type" "fp")
    (set_attr "fp_type" "fp_maddsub_d")])
 
@@ -623,7 +623,7 @@
    xsnmaddmdp %x0,%x1,%x3
    xsnmaddadp %x0,%x1,%x2
    xsnmaddmdp %x0,%x1,%x3
-   {fnma|fnmadd} %0,%1,%2,%3"
+   fnmadd %0,%1,%2,%3"
   [(set_attr "type" "fp")
    (set_attr "fp_type" "fp_maddsub_d")])
 
@@ -657,7 +657,7 @@
    xsnmsubmdp %x0,%x1,%x3
    xsnmsubadp %x0,%x1,%x2
    xsnmsubmdp %x0,%x1,%x3
-   {fnms|fnmsub} %0,%1,%2,%3"
+   fnmsub %0,%1,%2,%3"
   [(set_attr "type" "fp")
    (set_attr "fp_type" "fp_maddsub_d")])
 

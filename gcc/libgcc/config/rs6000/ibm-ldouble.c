@@ -1,6 +1,5 @@
 /* 128-bit long double support routines for Darwin.
-   Copyright (C) 1993, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2011
-   Free Software Foundation, Inc.
+   Copyright (C) 1993-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -43,10 +42,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    represented as (1.0, +0.0) or (1.0, -0.0), and the low part of a
    NaN is don't-care.
 
-   This code currently assumes big-endian.  */
+   This code currently assumes the most significant double is in
+   the lower numbered register or lower addressed memory.  */
 
-#if (!defined (__LITTLE_ENDIAN__) \
-     && (defined (__MACH__) || defined (__powerpc__) || defined (_AIX)))
+#if defined (__MACH__) || defined (__powerpc__) || defined (_AIX)
 
 #define fabs(x) __builtin_fabs(x)
 #define isless(x, y) __builtin_isless (x, y)

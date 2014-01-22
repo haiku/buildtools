@@ -1,6 +1,98 @@
-2013-04-11  Release Manager
+2013-10-16  Release Manager
 
-	* GCC 4.7.3 released.
+	* GCC 4.8.2 released.
+
+2013-10-04  Chris Manghane  <cmang@google.com>
+
+	* go-gcc.cc (Backend::convert_expression): New function.
+
+2013-10-02  Chris Manghane  <cmang@google.com>
+
+	* go-gcc.cc: Include "real.h" and "realmpfr.h".
+	(Backend::integer_constant_expression): New function.
+	(Backend::float_constant_expression): New function.
+	(Backend::complex_constant_expression): New function.
+
+2013-09-30  Chris Manghane  <cmang@google.com>
+
+	* go-gcc.cc (Backend::error_expression): New function.
+	(Backend::var_expression): New function.
+	(Backend::indirect_expression): New function.
+
+2013-08-28  Ian Lance Taylor  <iant@google.com>
+
+	* go-gcc.cc (Gcc_backend::immutable_struct): Set TREE_PUBLIC if
+	the struct is not hidden.
+	(Gcc_backend::immutable_struct_set_init): Don't set TREE_PUBLIC.
+
+2013-08-06  Ian Lance Taylor  <iant@google.com>
+
+	* go-gcc.cc (Gcc_backend::immutable_struct_set_init): Use
+	compute_reloc_for_constant.
+
+2013-08-02  Ian Lance Taylor  <iant@google.com>
+
+	* go-gcc.cc (immutable_struct_set_init): Always call
+	resolve_unique_section.
+
+2013-07-24  Ian Lance Taylor  <iant@google.com>
+
+	* go-gcc.cc (Gcc_backend::non_zero_size_type): If a struct has a
+	fields, recreate those fields with the first one with a non-zero
+	size.
+
+2013-06-18  Ian Lance Taylor  <iant@google.com>
+
+	* go-gcc.cc (Gcc_backend::immutable_struct): Add is_hidden
+	parameter.
+	(Gcc_backend::immutable_struct_set_init): Likewise.
+
+2013-05-31  Release Manager
+
+	* GCC 4.8.1 released.
+
+2013-03-22  Release Manager
+
+	* GCC 4.8.0 released.
+
+2013-01-16  Shenghou Ma  <minux.ma@gmail.com>
+
+	* gospec.c: pass -u pthread_create to linker when static linking.
+
+2012-12-21  Ian Lance Taylor  <iant@google.com>
+
+	PR bootstrap/54659
+	* go-system.h: Don't include <cstdio>.
+
+2012-12-18  Ian Lance Taylor  <iant@google.com>
+
+	PR go/55201
+	* gospec.c: Revert last patch.
+
+2012-12-18  Andreas Schwab  <schwab@linux-m68k.org>
+
+	PR go/55201
+	* gospec.c (LIBATOMIC): Define.
+	(LIBATOMIC_PROFILE): Define.
+	(lang_specific_driver): Add LIBATOMIC[_PROFILE] option.
+
+2012-11-29  Ian Lance Taylor  <iant@google.com>
+
+	* go-gcc.cc: Include "output.h".
+	(global_variable): Add is_unique_section parameter.
+	(global_variable_set_init): Adjust unique section if necessary.
+	* Make-lang.in (go/go-gcc.o): Add dependency on output.h.
+
+2012-11-17  Diego Novillo  <dnovillo@google.com>
+
+	Adjust for new vec API (http://gcc.gnu.org/wiki/cxx-conversion/cxx-vec)
+
+	* go-lang.c: Use new vec API in vec.h.
+
+2012-11-16  Ian Lance Taylor  <iant@google.com>
+
+	* Make-lang.in (gccgo$(exeext)): Add + at start of command.
+	(go1$(exeext)): Likewise.
 
 2012-10-30  Ian Lance Taylor  <iant@google.com>
 
@@ -13,17 +105,25 @@
 	* gccgo.texi (Invoking gccgo): Document
 	-fgo-relative-import-path.
 
-2012-09-20  Ian Lance Taylor  <iant@google.com>
+2012-09-17  Ian Lance Taylor  <iant@google.com>
+
+	* config-lang.in (target_libs): Add target-libbacktrace.
+
+2012-09-16  Ian Lance Taylor  <iant@google.com>
 
 	* Make-lang.in (go/gogo.o): Depend on filenames.h.
 
-2012-09-20  Release Manager
+2012-08-14   Diego Novillo  <dnovillo@google.com>
 
-	* GCC 4.7.2 released.
+	Merge from cxx-conversion branch.  Configury.
 
-2012-06-14  Release Manager
+	* go-c.h: Remove all handlers of ENABLE_BUILD_WITH_CXX.
+	* go-gcc.cc: Likewise.
+	* go-system.h: Likewise.
 
-	* GCC 4.7.1 released.
+2012-07-24  Uros Bizjak  <ubizjak@gmail.com>
+
+	* go-lang.c (lang_decl): Add variable_size GTY option.
 
 2012-05-09  Ian Lance Taylor  <iant@google.com>
 
@@ -51,9 +151,10 @@
 	-fgo-check-divide-overflow.
 	* gccgo.texi (Invoking gccgo): Document new options.
 
-2012-03-22  Release Manager
+2012-04-18  Steven Bosscher  <steven@gcc.gnu.org>
 
-	* GCC 4.7.0 released.
+	* go-gcc.cc (Gcc_backend::switch_statement): Build SWITCH_EXPR
+	with NULL_TREE type instead of void_type_node.
 
 2012-03-09  Ian Lance Taylor  <iant@google.com>
 

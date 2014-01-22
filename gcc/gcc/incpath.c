@@ -1,7 +1,5 @@
 /* Set up combined include path chain for the preprocessor.
-   Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010, 2012
-   Free Software Foundation, Inc.
+   Copyright (C) 1986-2013 Free Software Foundation, Inc.
 
    Broken out of cppinit.c and cppfiles.c and rewritten Mar 2003.
 
@@ -151,12 +149,17 @@ add_standard_paths (const char *sysroot, const char *iprefix,
 		{
 		  char *str = concat (iprefix, p->fname + len, NULL);
 		  if (p->multilib == 1 && imultilib)
-		    str = concat (str, dir_separator_str, imultilib, NULL);
+		    str = reconcat (str, str, dir_separator_str,
+				    imultilib, NULL);
 		  else if (p->multilib == 2)
 		    {
 		      if (!imultiarch)
-			continue;
-		      str = concat (str, dir_separator_str, imultiarch, NULL);
+			{
+			  free (str);
+			  continue;
+			}
+		      str = reconcat (str, str, dir_separator_str,
+				      imultiarch, NULL);
 		    }
 		  add_path (str, SYSTEM, p->cxx_aware, false);
 		}
@@ -185,6 +188,7 @@ add_standard_paths (const char *sysroot, const char *iprefix,
 		   && !filename_ncmp (p->fname, cpp_PREFIX, cpp_PREFIX_len))
 	    {
  	      static const char *relocated_prefix;
+	      char *ostr;
 	      /* If this path starts with the configure-time prefix,
 		 but the compiler has been relocated, replace it
 		 with the run-time prefix.  The run-time exec prefix
@@ -200,22 +204,27 @@ add_standard_paths (const char *sysroot, const char *iprefix,
 		    = make_relative_prefix (dummy,
 					    cpp_EXEC_PREFIX,
 					    cpp_PREFIX);
+		  free (dummy);
 		}
-	      str = concat (relocated_prefix,
-			    p->fname + cpp_PREFIX_len,
-			    NULL);
-	      str = update_path (str, p->component);
+	      ostr = concat (relocated_prefix,
+			     p->fname + cpp_PREFIX_len,
+			     NULL);
+	      str = update_path (ostr, p->component);
+	      free (ostr);
 	    }
 	  else
 	    str = update_path (p->fname, p->component);
 
 	  if (p->multilib == 1 && imultilib)
-	    str = concat (str, dir_separator_str, imultilib, NULL);
+	    str = reconcat (str, str, dir_separator_str, imultilib, NULL);
 	  else if (p->multilib == 2)
 	    {
 	      if (!imultiarch)
-		continue;
-	      str = concat (str, dir_separator_str, imultiarch, NULL);
+		{
+		  free (str);
+		  continue;
+		}
+	      str = reconcat (str, str, dir_separator_str, imultiarch, NULL);
 	    }
 
 	  add_path (str, SYSTEM, p->cxx_aware, false);

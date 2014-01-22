@@ -1,6 +1,5 @@
 ;; ARM NEON coprocessor Machine Description
-;; Copyright (C) 2006, 2007, 2008, 2009, 2010, 2012
-;;   Free Software Foundation, Inc.
+;; Copyright (C) 2006-2013 Free Software Foundation, Inc.
 ;; Written by CodeSourcery.
 ;;
 ;; This file is part of GCC.
@@ -19,147 +18,16 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
-;; Enumerators for unspecs.
-(define_c_enum "unspec" [
-  UNSPEC_ASHIFT_SIGNED
-  UNSPEC_ASHIFT_UNSIGNED
-  UNSPEC_VABD
-  UNSPEC_VABDL
-  UNSPEC_VADD
-  UNSPEC_VADDHN
-  UNSPEC_VADDL
-  UNSPEC_VADDW
-  UNSPEC_VBSL
-  UNSPEC_VCAGE
-  UNSPEC_VCAGT
-  UNSPEC_VCEQ
-  UNSPEC_VCGE
-  UNSPEC_VCGEU
-  UNSPEC_VCGT
-  UNSPEC_VCGTU
-  UNSPEC_VCLS
-  UNSPEC_VCONCAT
-  UNSPEC_VCVT
-  UNSPEC_VCVT_N
-  UNSPEC_VEXT
-  UNSPEC_VHADD
-  UNSPEC_VHSUB
-  UNSPEC_VLD1
-  UNSPEC_VLD1_DUP
-  UNSPEC_VLD1_LANE
-  UNSPEC_VLD2
-  UNSPEC_VLD2_DUP
-  UNSPEC_VLD2_LANE
-  UNSPEC_VLD3
-  UNSPEC_VLD3A
-  UNSPEC_VLD3B
-  UNSPEC_VLD3_DUP
-  UNSPEC_VLD3_LANE
-  UNSPEC_VLD4
-  UNSPEC_VLD4A
-  UNSPEC_VLD4B
-  UNSPEC_VLD4_DUP
-  UNSPEC_VLD4_LANE
-  UNSPEC_VMAX
-  UNSPEC_VMIN
-  UNSPEC_VMLA
-  UNSPEC_VMLAL
-  UNSPEC_VMLA_LANE
-  UNSPEC_VMLAL_LANE
-  UNSPEC_VMLS
-  UNSPEC_VMLSL
-  UNSPEC_VMLS_LANE
-  UNSPEC_VMLSL_LANE
-  UNSPEC_VMOVL
-  UNSPEC_VMOVN
-  UNSPEC_VMUL
-  UNSPEC_VMULL
-  UNSPEC_VMUL_LANE
-  UNSPEC_VMULL_LANE
-  UNSPEC_VPADAL
-  UNSPEC_VPADD
-  UNSPEC_VPADDL
-  UNSPEC_VPMAX
-  UNSPEC_VPMIN
-  UNSPEC_VPSMAX
-  UNSPEC_VPSMIN
-  UNSPEC_VPUMAX
-  UNSPEC_VPUMIN
-  UNSPEC_VQABS
-  UNSPEC_VQADD
-  UNSPEC_VQDMLAL
-  UNSPEC_VQDMLAL_LANE
-  UNSPEC_VQDMLSL
-  UNSPEC_VQDMLSL_LANE
-  UNSPEC_VQDMULH
-  UNSPEC_VQDMULH_LANE
-  UNSPEC_VQDMULL
-  UNSPEC_VQDMULL_LANE
-  UNSPEC_VQMOVN
-  UNSPEC_VQMOVUN
-  UNSPEC_VQNEG
-  UNSPEC_VQSHL
-  UNSPEC_VQSHL_N
-  UNSPEC_VQSHLU_N
-  UNSPEC_VQSHRN_N
-  UNSPEC_VQSHRUN_N
-  UNSPEC_VQSUB
-  UNSPEC_VRECPE
-  UNSPEC_VRECPS
-  UNSPEC_VREV16
-  UNSPEC_VREV32
-  UNSPEC_VREV64
-  UNSPEC_VRSQRTE
-  UNSPEC_VRSQRTS
-  UNSPEC_VSHL
-  UNSPEC_VSHLL_N
-  UNSPEC_VSHL_N
-  UNSPEC_VSHR_N
-  UNSPEC_VSHRN_N
-  UNSPEC_VSLI
-  UNSPEC_VSRA_N
-  UNSPEC_VSRI
-  UNSPEC_VST1
-  UNSPEC_VST1_LANE
-  UNSPEC_VST2
-  UNSPEC_VST2_LANE
-  UNSPEC_VST3
-  UNSPEC_VST3A
-  UNSPEC_VST3B
-  UNSPEC_VST3_LANE
-  UNSPEC_VST4
-  UNSPEC_VST4A
-  UNSPEC_VST4B
-  UNSPEC_VST4_LANE
-  UNSPEC_VSTRUCTDUMMY
-  UNSPEC_VSUB
-  UNSPEC_VSUBHN
-  UNSPEC_VSUBL
-  UNSPEC_VSUBW
-  UNSPEC_VTBL
-  UNSPEC_VTBX
-  UNSPEC_VTRN1
-  UNSPEC_VTRN2
-  UNSPEC_VTST
-  UNSPEC_VUZP1
-  UNSPEC_VUZP2
-  UNSPEC_VZIP1
-  UNSPEC_VZIP2
-  UNSPEC_MISALIGNED_ACCESS
-  UNSPEC_VCLE
-  UNSPEC_VCLT
-])
-
 
 ;; Attribute used to permit string comparisons against <VQH_mnem> in
 ;; neon_type attribute definitions.
 (define_attr "vqh_mnem" "vadd,vmin,vmax" (const_string "vadd"))
 
 (define_insn "*neon_mov<mode>"
-  [(set (match_operand:VD 0 "nonimmediate_operand"
-	  "=w,Uv,w, w,  ?r,?w,?r,?r, ?Us")
-	(match_operand:VD 1 "general_operand"
-	  " w,w, Dn,Uvi, w, r, r, Usi,r"))]
+  [(set (match_operand:VDX 0 "nonimmediate_operand"
+	  "=w,Un,w, w,  ?r,?w,?r,?r, ?Us")
+	(match_operand:VDX 1 "general_operand"
+	  " w,w, Dn,Uni, w, r, r, Usi,r"))]
   "TARGET_NEON
    && (register_operand (operands[0], <MODE>mode)
        || register_operand (operands[1], <MODE>mode))"
@@ -177,20 +45,15 @@
       if (width == 0)
         return "vmov.f32\t%P0, %1  @ <mode>";
       else
-        sprintf (templ, "vmov.i%d\t%%P0, %%1  @ <mode>", width);
+        sprintf (templ, "vmov.i%d\t%%P0, %%x1  @ <mode>", width);
 
       return templ;
     }
 
-  /* FIXME: If the memory layout is changed in big-endian mode, output_move_vfp
-     below must be changed to output_move_neon (which will use the
-     element/structure loads/stores), and the constraint changed to 'Um' instead
-     of 'Uv'.  */
-
   switch (which_alternative)
     {
     case 0: return "vmov\t%P0, %P1  @ <mode>";
-    case 1: case 3: return output_move_vfp (operands);
+    case 1: case 3: return output_move_neon (operands);
     case 2: gcc_unreachable ();
     case 4: return "vmov\t%Q0, %R0, %P1  @ <mode>";
     case 5: return "vmov\t%P0, %Q1, %R1  @ <mode>";
@@ -198,10 +61,11 @@
     }
 }
  [(set_attr "neon_type" "neon_int_1,*,neon_vmov,*,neon_mrrc,neon_mcr_2_mcrr,*,*,*")
-  (set_attr "type" "*,f_stored,*,f_loadd,*,*,alu,load2,store2")
+  (set_attr "type" "*,f_stored,*,f_loadd,*,*,alu_reg,load2,store2")
   (set_attr "insn" "*,*,*,*,*,*,mov,*,*")
   (set_attr "length" "4,4,4,4,4,4,8,8,8")
-  (set_attr "pool_range"     "*,*,*,1020,*,*,*,1020,*")
+  (set_attr "arm_pool_range"     "*,*,*,1020,*,*,*,1020,*")
+  (set_attr "thumb2_pool_range"     "*,*,*,1018,*,*,*,1018,*")
   (set_attr "neg_pool_range" "*,*,*,1004,*,*,*,1004,*")])
 
 (define_insn "*neon_mov<mode>"
@@ -243,10 +107,11 @@
 }
   [(set_attr "neon_type" "neon_int_1,neon_stm_2,neon_vmov,neon_ldm_2,\
                           neon_mrrc,neon_mcr_2_mcrr,*,*,*")
-   (set_attr "type" "*,*,*,*,*,*,alu,load4,store4")
+   (set_attr "type" "*,*,*,*,*,*,alu_reg,load4,store4")
    (set_attr "insn" "*,*,*,*,*,*,mov,*,*")
    (set_attr "length" "4,8,4,8,8,8,16,8,16")
-   (set_attr "pool_range" "*,*,*,1020,*,*,*,1020,*")
+   (set_attr "arm_pool_range" "*,*,*,1020,*,*,*,1020,*")
+   (set_attr "thumb2_pool_range" "*,*,*,1018,*,*,*,1018,*")
    (set_attr "neg_pool_range" "*,*,*,996,*,*,*,996,*")])
 
 (define_expand "movti"
@@ -256,7 +121,7 @@
 {
   if (can_create_pseudo_p ())
     {
-      if (GET_CODE (operands[0]) != REG)
+      if (!REG_P (operands[0]))
 	operands[1] = force_reg (TImode, operands[1]);
     }
 })
@@ -268,7 +133,7 @@
 {
   if (can_create_pseudo_p ())
     {
-      if (GET_CODE (operands[0]) != REG)
+      if (!REG_P (operands[0]))
 	operands[1] = force_reg (<MODE>mode, operands[1]);
     }
 })
@@ -379,7 +244,7 @@
   [(set (match_operand:VDQX 0 "neon_struct_or_register_operand")
 	(unspec:VDQX [(match_operand:VDQX 1 "neon_struct_or_register_operand")]
 		     UNSPEC_MISALIGNED_ACCESS))]
-  "TARGET_NEON && !BYTES_BIG_ENDIAN"
+  "TARGET_NEON && !BYTES_BIG_ENDIAN && unaligned_access"
 {
   /* This pattern is not permitted to fail during expansion: if both arguments
      are non-registers (e.g. memory := constant, which can be created by the
@@ -393,7 +258,7 @@
   [(set (match_operand:VDX 0 "neon_struct_operand"	       "=Um")
 	(unspec:VDX [(match_operand:VDX 1 "s_register_operand" " w")]
 		    UNSPEC_MISALIGNED_ACCESS))]
-  "TARGET_NEON && !BYTES_BIG_ENDIAN"
+  "TARGET_NEON && !BYTES_BIG_ENDIAN && unaligned_access"
   "vst1.<V_sz_elem>\t{%P1}, %A0"
   [(set_attr "neon_type" "neon_vst1_1_2_regs_vst2_2_regs")])
 
@@ -401,7 +266,7 @@
   [(set (match_operand:VDX 0 "s_register_operand"		"=w")
 	(unspec:VDX [(match_operand:VDX 1 "neon_struct_operand" " Um")]
 		    UNSPEC_MISALIGNED_ACCESS))]
-  "TARGET_NEON && !BYTES_BIG_ENDIAN"
+  "TARGET_NEON && !BYTES_BIG_ENDIAN && unaligned_access"
   "vld1.<V_sz_elem>\t{%P0}, %A1"
   [(set_attr "neon_type" "neon_vld1_1_2_regs")])
 
@@ -409,7 +274,7 @@
   [(set (match_operand:VQX 0 "neon_struct_operand"	       "=Um")
 	(unspec:VQX [(match_operand:VQX 1 "s_register_operand" " w")]
 		    UNSPEC_MISALIGNED_ACCESS))]
-  "TARGET_NEON && !BYTES_BIG_ENDIAN"
+  "TARGET_NEON && !BYTES_BIG_ENDIAN && unaligned_access"
   "vst1.<V_sz_elem>\t{%q1}, %A0"
   [(set_attr "neon_type" "neon_vst1_1_2_regs_vst2_2_regs")])
 
@@ -417,35 +282,38 @@
   [(set (match_operand:VQX 0 "s_register_operand"	         "=w")
 	(unspec:VQX [(match_operand:VQX 1 "neon_struct_operand" " Um")]
 		    UNSPEC_MISALIGNED_ACCESS))]
-  "TARGET_NEON && !BYTES_BIG_ENDIAN"
+  "TARGET_NEON && !BYTES_BIG_ENDIAN && unaligned_access"
   "vld1.<V_sz_elem>\t{%q0}, %A1"
   [(set_attr "neon_type" "neon_vld1_1_2_regs")])
 
 (define_insn "vec_set<mode>_internal"
-  [(set (match_operand:VD 0 "s_register_operand" "=w")
+  [(set (match_operand:VD 0 "s_register_operand" "=w,w")
         (vec_merge:VD
           (vec_duplicate:VD
-            (match_operand:<V_elem> 1 "s_register_operand" "r"))
-          (match_operand:VD 3 "s_register_operand" "0")
-          (match_operand:SI 2 "immediate_operand" "i")))]
+            (match_operand:<V_elem> 1 "nonimmediate_operand" "Um,r"))
+          (match_operand:VD 3 "s_register_operand" "0,0")
+          (match_operand:SI 2 "immediate_operand" "i,i")))]
   "TARGET_NEON"
 {
   int elt = ffs ((int) INTVAL (operands[2])) - 1;
   if (BYTES_BIG_ENDIAN)
     elt = GET_MODE_NUNITS (<MODE>mode) - 1 - elt;
   operands[2] = GEN_INT (elt);
-  
-  return "vmov.<V_sz_elem>\t%P0[%c2], %1";
+
+  if (which_alternative == 0)
+    return "vld1.<V_sz_elem>\t{%P0[%c2]}, %A1";
+  else
+    return "vmov.<V_sz_elem>\t%P0[%c2], %1";
 }
-  [(set_attr "neon_type" "neon_mcr")])
+  [(set_attr "neon_type" "neon_vld1_vld2_lane,neon_mcr")])
 
 (define_insn "vec_set<mode>_internal"
-  [(set (match_operand:VQ 0 "s_register_operand" "=w")
+  [(set (match_operand:VQ 0 "s_register_operand" "=w,w")
         (vec_merge:VQ
           (vec_duplicate:VQ
-            (match_operand:<V_elem> 1 "s_register_operand" "r"))
-          (match_operand:VQ 3 "s_register_operand" "0")
-          (match_operand:SI 2 "immediate_operand" "i")))]
+            (match_operand:<V_elem> 1 "nonimmediate_operand" "Um,r"))
+          (match_operand:VQ 3 "s_register_operand" "0,0")
+          (match_operand:SI 2 "immediate_operand" "i,i")))]
   "TARGET_NEON"
 {
   HOST_WIDE_INT elem = ffs ((int) INTVAL (operands[2])) - 1;
@@ -460,18 +328,21 @@
   operands[0] = gen_rtx_REG (<V_HALF>mode, regno + hi);
   operands[2] = GEN_INT (elt);
 
-  return "vmov.<V_sz_elem>\t%P0[%c2], %1";
+  if (which_alternative == 0)
+    return "vld1.<V_sz_elem>\t{%P0[%c2]}, %A1";
+  else
+    return "vmov.<V_sz_elem>\t%P0[%c2], %1";
 }
-  [(set_attr "neon_type" "neon_mcr")]
+  [(set_attr "neon_type" "neon_vld1_vld2_lane,neon_mcr")]
 )
 
 (define_insn "vec_setv2di_internal"
-  [(set (match_operand:V2DI 0 "s_register_operand" "=w")
+  [(set (match_operand:V2DI 0 "s_register_operand" "=w,w")
         (vec_merge:V2DI
           (vec_duplicate:V2DI
-            (match_operand:DI 1 "s_register_operand" "r"))
-          (match_operand:V2DI 3 "s_register_operand" "0")
-          (match_operand:SI 2 "immediate_operand" "i")))]
+            (match_operand:DI 1 "nonimmediate_operand" "Um,r"))
+          (match_operand:V2DI 3 "s_register_operand" "0,0")
+          (match_operand:SI 2 "immediate_operand" "i,i")))]
   "TARGET_NEON"
 {
   HOST_WIDE_INT elem = ffs ((int) INTVAL (operands[2])) - 1;
@@ -479,9 +350,12 @@
 
   operands[0] = gen_rtx_REG (DImode, regno);
 
-  return "vmov\t%P0, %Q1, %R1";
+  if (which_alternative == 0)
+    return "vld1.64\t%P0, %A1";
+  else
+    return "vmov\t%P0, %Q1, %R1";
 }
-  [(set_attr "neon_type" "neon_mcr_2_mcrr")]
+  [(set_attr "neon_type" "neon_vld1_1_2_regs,neon_mcr_2_mcrr")]
 )
 
 (define_expand "vec_set<mode>"
@@ -497,10 +371,10 @@
 })
 
 (define_insn "vec_extract<mode>"
-  [(set (match_operand:<V_elem> 0 "s_register_operand" "=r")
+  [(set (match_operand:<V_elem> 0 "nonimmediate_operand" "=Um,r")
         (vec_select:<V_elem>
-          (match_operand:VD 1 "s_register_operand" "w")
-          (parallel [(match_operand:SI 2 "immediate_operand" "i")])))]
+          (match_operand:VD 1 "s_register_operand" "w,w")
+          (parallel [(match_operand:SI 2 "immediate_operand" "i,i")])))]
   "TARGET_NEON"
 {
   if (BYTES_BIG_ENDIAN)
@@ -509,16 +383,20 @@
       elt = GET_MODE_NUNITS (<MODE>mode) - 1 - elt;
       operands[2] = GEN_INT (elt);
     }
-  return "vmov.<V_uf_sclr>\t%0, %P1[%c2]";
+
+  if (which_alternative == 0)
+    return "vst1.<V_sz_elem>\t{%P1[%c2]}, %A0";
+  else
+    return "vmov.<V_uf_sclr>\t%0, %P1[%c2]";
 }
-  [(set_attr "neon_type" "neon_bp_simple")]
+  [(set_attr "neon_type" "neon_vst1_vst2_lane,neon_bp_simple")]
 )
 
 (define_insn "vec_extract<mode>"
-  [(set (match_operand:<V_elem> 0 "s_register_operand" "=r")
+  [(set (match_operand:<V_elem> 0 "nonimmediate_operand" "=Um,r")
 	(vec_select:<V_elem>
-          (match_operand:VQ 1 "s_register_operand" "w")
-          (parallel [(match_operand:SI 2 "immediate_operand" "i")])))]
+          (match_operand:VQ 1 "s_register_operand" "w,w")
+          (parallel [(match_operand:SI 2 "immediate_operand" "i,i")])))]
   "TARGET_NEON"
 {
   int half_elts = GET_MODE_NUNITS (<MODE>mode) / 2;
@@ -532,25 +410,31 @@
   operands[1] = gen_rtx_REG (<V_HALF>mode, regno + hi);
   operands[2] = GEN_INT (elt);
 
-  return "vmov.<V_uf_sclr>\t%0, %P1[%c2]";
+  if (which_alternative == 0)
+    return "vst1.<V_sz_elem>\t{%P1[%c2]}, %A0";
+  else
+    return "vmov.<V_uf_sclr>\t%0, %P1[%c2]";
 }
-  [(set_attr "neon_type" "neon_bp_simple")]
+  [(set_attr "neon_type" "neon_vst1_vst2_lane,neon_bp_simple")]
 )
 
 (define_insn "vec_extractv2di"
-  [(set (match_operand:DI 0 "s_register_operand" "=r")
+  [(set (match_operand:DI 0 "nonimmediate_operand" "=Um,r")
 	(vec_select:DI
-          (match_operand:V2DI 1 "s_register_operand" "w")
-          (parallel [(match_operand:SI 2 "immediate_operand" "i")])))]
+          (match_operand:V2DI 1 "s_register_operand" "w,w")
+          (parallel [(match_operand:SI 2 "immediate_operand" "i,i")])))]
   "TARGET_NEON"
 {
   int regno = REGNO (operands[1]) + 2 * INTVAL (operands[2]);
 
   operands[1] = gen_rtx_REG (DImode, regno);
 
-  return "vmov\t%Q0, %R0, %P1  @ v2di";
+  if (which_alternative == 0)
+    return "vst1.64\t{%P1}, %A0  @ v2di";
+  else
+    return "vmov\t%Q0, %R0, %P1  @ v2di";
 }
-  [(set_attr "neon_type" "neon_int_1")]
+  [(set_attr "neon_type" "neon_vst1_vst2_lane,neon_int_1")]
 )
 
 (define_expand "vec_init<mode>"
@@ -582,9 +466,9 @@
 )
 
 (define_insn "adddi3_neon"
-  [(set (match_operand:DI 0 "s_register_operand" "=w,?&r,?&r,?w")
-        (plus:DI (match_operand:DI 1 "s_register_operand" "%w,0,0,w")
-                 (match_operand:DI 2 "s_register_operand" "w,r,0,w")))
+  [(set (match_operand:DI 0 "s_register_operand" "=w,?&r,?&r,?w,?&r,?&r,?&r")
+        (plus:DI (match_operand:DI 1 "s_register_operand" "%w,0,0,w,r,0,r")
+                 (match_operand:DI 2 "arm_adddi_operand"     "w,r,0,w,r,Dd,Dd")))
    (clobber (reg:CC CC_REGNUM))]
   "TARGET_NEON"
 {
@@ -594,13 +478,16 @@
     case 3: return "vadd.i64\t%P0, %P1, %P2";
     case 1: return "#";
     case 2: return "#";
+    case 4: return "#";
+    case 5: return "#";
+    case 6: return "#";
     default: gcc_unreachable ();
     }
 }
-  [(set_attr "neon_type" "neon_int_1,*,*,neon_int_1")
-   (set_attr "conds" "*,clob,clob,*")
-   (set_attr "length" "*,8,8,*")
-   (set_attr "arch" "nota8,*,*,onlya8")]
+  [(set_attr "neon_type" "neon_int_1,*,*,neon_int_1,*,*,*")
+   (set_attr "conds" "*,clob,clob,*,clob,clob,clob")
+   (set_attr "length" "*,8,8,*,8,8,8")
+   (set_attr "arch" "nota8,*,*,onlya8,*,*,*")]
 )
 
 (define_insn "*sub<mode>3_neon"
@@ -703,6 +590,76 @@
                                   (if_then_else (match_test "<Scalar_mul_8_16>")
                                     (const_string "neon_mla_qqq_8_16")
                                     (const_string "neon_mla_qqq_32_qqd_32_scalar")))))]
+)
+
+;; Fused multiply-accumulate
+;; We define each insn twice here:
+;;    1: with flag_unsafe_math_optimizations for the widening multiply phase
+;;       to be able to use when converting to FMA.
+;;    2: without flag_unsafe_math_optimizations for the intrinsics to use.
+(define_insn "fma<VCVTF:mode>4"
+  [(set (match_operand:VCVTF 0 "register_operand" "=w")
+        (fma:VCVTF (match_operand:VCVTF 1 "register_operand" "w")
+		 (match_operand:VCVTF 2 "register_operand" "w")
+		 (match_operand:VCVTF 3 "register_operand" "0")))]
+  "TARGET_NEON && TARGET_FMA && flag_unsafe_math_optimizations"
+  "vfma%?.<V_if_elem>\\t%<V_reg>0, %<V_reg>1, %<V_reg>2"
+  [(set (attr "neon_type")
+	(if_then_else (match_test "<Is_d_reg>")
+		      (const_string "neon_fp_vmla_ddd")
+		      (const_string "neon_fp_vmla_qqq")))]
+)
+
+(define_insn "fma<VCVTF:mode>4_intrinsic"
+  [(set (match_operand:VCVTF 0 "register_operand" "=w")
+        (fma:VCVTF (match_operand:VCVTF 1 "register_operand" "w")
+		 (match_operand:VCVTF 2 "register_operand" "w")
+		 (match_operand:VCVTF 3 "register_operand" "0")))]
+  "TARGET_NEON && TARGET_FMA"
+  "vfma%?.<V_if_elem>\\t%<V_reg>0, %<V_reg>1, %<V_reg>2"
+  [(set (attr "neon_type")
+	(if_then_else (match_test "<Is_d_reg>")
+		      (const_string "neon_fp_vmla_ddd")
+		      (const_string "neon_fp_vmla_qqq")))]
+)
+
+(define_insn "*fmsub<VCVTF:mode>4"
+  [(set (match_operand:VCVTF 0 "register_operand" "=w")
+        (fma:VCVTF (neg:VCVTF (match_operand:VCVTF 1 "register_operand" "w"))
+		   (match_operand:VCVTF 2 "register_operand" "w")
+		   (match_operand:VCVTF 3 "register_operand" "0")))]
+  "TARGET_NEON && TARGET_FMA && flag_unsafe_math_optimizations"
+  "vfms%?.<V_if_elem>\\t%<V_reg>0, %<V_reg>1, %<V_reg>2"
+  [(set (attr "neon_type")
+	(if_then_else (match_test "<Is_d_reg>")
+		      (const_string "neon_fp_vmla_ddd")
+		      (const_string "neon_fp_vmla_qqq")))]
+)
+
+(define_insn "fmsub<VCVTF:mode>4_intrinsic"
+  [(set (match_operand:VCVTF 0 "register_operand" "=w")
+        (fma:VCVTF (neg:VCVTF (match_operand:VCVTF 1 "register_operand" "w"))
+		   (match_operand:VCVTF 2 "register_operand" "w")
+		   (match_operand:VCVTF 3 "register_operand" "0")))]
+  "TARGET_NEON && TARGET_FMA"
+  "vfms%?.<V_if_elem>\\t%<V_reg>0, %<V_reg>1, %<V_reg>2"
+  [(set (attr "neon_type")
+	(if_then_else (match_test "<Is_d_reg>")
+		      (const_string "neon_fp_vmla_ddd")
+		      (const_string "neon_fp_vmla_qqq")))]
+)
+
+(define_insn "neon_vrint<NEON_VRINT:nvrint_variant><VCVTF:mode>"
+  [(set (match_operand:VCVTF 0 "s_register_operand" "=w")
+        (unspec:VCVTF [(match_operand:VCVTF 1
+		         "s_register_operand" "w")]
+		NEON_VRINT))]
+  "TARGET_NEON && TARGET_FPU_ARMV8"
+  "vrint<nvrint_variant>%?.f32\\t%<V_reg>0, %<V_reg>1"
+  [(set (attr "neon_type")
+	(if_then_else (match_test "<Is_d_reg>")
+		(const_string "neon_fp_vadd_ddd_vabs_dd")
+		(const_string "neon_fp_vadd_qqq_vabs_qq")))]
 )
 
 (define_insn "ior<mode>3"
@@ -920,6 +877,45 @@
                     (const_string "neon_int_3")))]
 )
 
+(define_insn "negdi2_neon"
+  [(set (match_operand:DI 0 "s_register_operand"	 "=&w, w,r,&r")
+	(neg:DI (match_operand:DI 1 "s_register_operand" "  w, w,0, r")))
+   (clobber (match_scratch:DI 2				 "= X,&w,X, X"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_NEON"
+  "#"
+  [(set_attr "length" "8")]
+)
+
+; Split negdi2_neon for vfp registers
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(neg:DI (match_operand:DI 1 "s_register_operand" "")))
+   (clobber (match_scratch:DI 2 ""))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (const_int 0))
+   (parallel [(set (match_dup 0) (minus:DI (match_dup 2) (match_dup 1)))
+	      (clobber (reg:CC CC_REGNUM))])]
+  {
+    if (!REG_P (operands[2]))
+      operands[2] = operands[0];
+  }
+)
+
+; Split negdi2_neon for core registers
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(neg:DI (match_operand:DI 1 "s_register_operand" "")))
+   (clobber (match_scratch:DI 2 ""))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_32BIT && reload_completed
+   && arm_general_register_operand (operands[0], DImode)"
+  [(parallel [(set (match_dup 0) (neg:DI (match_dup 1)))
+	      (clobber (reg:CC CC_REGNUM))])]
+  ""
+)
+
 (define_insn "*umin<mode>3_neon"
   [(set (match_operand:VDQIW 0 "s_register_operand" "=w")
 	(umin:VDQIW (match_operand:VDQIW 1 "s_register_operand" "w")
@@ -1087,6 +1083,189 @@
     emit_insn (gen_vlshr<mode>3_imm (operands[0], operands[1], operands[2]));
   DONE;
 })
+
+;; 64-bit shifts
+
+;; This pattern loads a 32-bit shift count into a 64-bit NEON register,
+;; leaving the upper half uninitalized.  This is OK since the shift
+;; instruction only looks at the low 8 bits anyway.  To avoid confusing
+;; data flow analysis however, we pretend the full register is set
+;; using an unspec.
+(define_insn "neon_load_count"
+  [(set (match_operand:DI 0 "s_register_operand" "=w,w")
+        (unspec:DI [(match_operand:SI 1 "nonimmediate_operand" "Um,r")]
+                   UNSPEC_LOAD_COUNT))]
+  "TARGET_NEON"
+  "@
+   vld1.32\t{%P0[0]}, %A1
+   vmov.32\t%P0[0], %1"
+  [(set_attr "neon_type" "neon_vld1_vld2_lane,neon_mcr")]
+)
+
+(define_insn "ashldi3_neon_noclobber"
+  [(set (match_operand:DI 0 "s_register_operand"	    "=w,w")
+	(ashift:DI (match_operand:DI 1 "s_register_operand" " w,w")
+		   (match_operand:DI 2 "reg_or_int_operand" " i,w")))]
+  "TARGET_NEON && reload_completed
+   && (!CONST_INT_P (operands[2])
+       || (INTVAL (operands[2]) >= 0 && INTVAL (operands[2]) < 64))"
+  "@
+   vshl.u64\t%P0, %P1, %2
+   vshl.u64\t%P0, %P1, %P2"
+  [(set_attr "neon_type" "neon_vshl_ddd,neon_vshl_ddd")]
+)
+
+(define_insn_and_split "ashldi3_neon"
+  [(set (match_operand:DI 0 "s_register_operand"	    "= w, w,?&r,?r, ?w,w")
+	(ashift:DI (match_operand:DI 1 "s_register_operand" " 0w, w, 0r, r, 0w,w")
+		   (match_operand:SI 2 "general_operand"    "rUm, i,  r, i,rUm,i")))
+   (clobber (match_scratch:SI 3				    "= X, X,?&r, X,  X,X"))
+   (clobber (match_scratch:SI 4				    "= X, X,?&r, X,  X,X"))
+   (clobber (match_scratch:DI 5				    "=&w, X,  X, X, &w,X"))
+   (clobber (reg:CC_C CC_REGNUM))]
+  "TARGET_NEON"
+  "#"
+  "TARGET_NEON && reload_completed"
+  [(const_int 0)]
+  "
+  {
+    if (IS_VFP_REGNUM (REGNO (operands[0])))
+      {
+        if (CONST_INT_P (operands[2]))
+	  {
+	    if (INTVAL (operands[2]) < 1)
+	      {
+	        emit_insn (gen_movdi (operands[0], operands[1]));
+		DONE;
+	      }
+	    else if (INTVAL (operands[2]) > 63)
+	      operands[2] = gen_rtx_CONST_INT (VOIDmode, 63);
+	  }
+	else
+	  {
+	    emit_insn (gen_neon_load_count (operands[5], operands[2]));
+	    operands[2] = operands[5];
+	  }
+
+	/* Ditch the unnecessary clobbers.  */
+	emit_insn (gen_ashldi3_neon_noclobber (operands[0], operands[1],
+					       operands[2]));
+      }
+    else
+      {
+	if (CONST_INT_P (operands[2]) && INTVAL (operands[2]) == 1)
+	  /* This clobbers CC.  */
+	  emit_insn (gen_arm_ashldi3_1bit (operands[0], operands[1]));
+	else
+	  arm_emit_coreregs_64bit_shift (ASHIFT, operands[0], operands[1],
+					 operands[2], operands[3], operands[4]);
+      }
+    DONE;
+  }"
+  [(set_attr "arch" "nota8,nota8,*,*,onlya8,onlya8")
+   (set_attr "opt" "*,*,speed,speed,*,*")]
+)
+
+; The shift amount needs to be negated for right-shifts
+(define_insn "signed_shift_di3_neon"
+  [(set (match_operand:DI 0 "s_register_operand"	     "=w")
+	(unspec:DI [(match_operand:DI 1 "s_register_operand" " w")
+		    (match_operand:DI 2 "s_register_operand" " w")]
+		   UNSPEC_ASHIFT_SIGNED))]
+  "TARGET_NEON && reload_completed"
+  "vshl.s64\t%P0, %P1, %P2"
+  [(set_attr "neon_type" "neon_vshl_ddd")]
+)
+
+; The shift amount needs to be negated for right-shifts
+(define_insn "unsigned_shift_di3_neon"
+  [(set (match_operand:DI 0 "s_register_operand"	     "=w")
+	(unspec:DI [(match_operand:DI 1 "s_register_operand" " w")
+		    (match_operand:DI 2 "s_register_operand" " w")]
+		   UNSPEC_ASHIFT_UNSIGNED))]
+  "TARGET_NEON && reload_completed"
+  "vshl.u64\t%P0, %P1, %P2"
+  [(set_attr "neon_type" "neon_vshl_ddd")]
+)
+
+(define_insn "ashrdi3_neon_imm_noclobber"
+  [(set (match_operand:DI 0 "s_register_operand"	      "=w")
+	(ashiftrt:DI (match_operand:DI 1 "s_register_operand" " w")
+		     (match_operand:DI 2 "const_int_operand"  " i")))]
+  "TARGET_NEON && reload_completed
+   && INTVAL (operands[2]) > 0 && INTVAL (operands[2]) <= 64"
+  "vshr.s64\t%P0, %P1, %2"
+  [(set_attr "neon_type" "neon_vshl_ddd")]
+)
+
+(define_insn "lshrdi3_neon_imm_noclobber"
+  [(set (match_operand:DI 0 "s_register_operand"	      "=w")
+	(lshiftrt:DI (match_operand:DI 1 "s_register_operand" " w")
+		     (match_operand:DI 2 "const_int_operand"  " i")))]
+  "TARGET_NEON && reload_completed
+   && INTVAL (operands[2]) > 0 && INTVAL (operands[2]) <= 64"
+  "vshr.u64\t%P0, %P1, %2"
+  [(set_attr "neon_type" "neon_vshl_ddd")]
+)
+
+;; ashrdi3_neon
+;; lshrdi3_neon
+(define_insn_and_split "<shift>di3_neon"
+  [(set (match_operand:DI 0 "s_register_operand"	     "= w, w,?&r,?r,?w,?w")
+	(rshifts:DI (match_operand:DI 1 "s_register_operand" " 0w, w, 0r, r,0w, w")
+		    (match_operand:SI 2 "reg_or_int_operand" "  r, i,  r, i, r, i")))
+   (clobber (match_scratch:SI 3				     "=2r, X, &r, X,2r, X"))
+   (clobber (match_scratch:SI 4				     "= X, X, &r, X, X, X"))
+   (clobber (match_scratch:DI 5				     "=&w, X,  X, X,&w, X"))
+   (clobber (reg:CC CC_REGNUM))]
+  "TARGET_NEON"
+  "#"
+  "TARGET_NEON && reload_completed"
+  [(const_int 0)]
+  "
+  {
+    if (IS_VFP_REGNUM (REGNO (operands[0])))
+      {
+	if (CONST_INT_P (operands[2]))
+	  {
+	    if (INTVAL (operands[2]) < 1)
+	      {
+	        emit_insn (gen_movdi (operands[0], operands[1]));
+		DONE;
+	      }
+	    else if (INTVAL (operands[2]) > 64)
+	      operands[2] = gen_rtx_CONST_INT (VOIDmode, 64);
+
+	    /* Ditch the unnecessary clobbers.  */
+	    emit_insn (gen_<shift>di3_neon_imm_noclobber (operands[0],
+							  operands[1],
+							  operands[2]));
+	  }
+	else 
+	  {
+	    /* We must use a negative left-shift.  */
+	    emit_insn (gen_negsi2 (operands[3], operands[2]));
+	    emit_insn (gen_neon_load_count (operands[5], operands[3]));
+	    emit_insn (gen_<shifttype>_shift_di3_neon (operands[0], operands[1],
+						       operands[5]));
+	  }
+      }
+    else
+      {
+	if (CONST_INT_P (operands[2]) && INTVAL (operands[2]) == 1)
+	  /* This clobbers CC.  */
+	  emit_insn (gen_arm_<shift>di3_1bit (operands[0], operands[1]));
+	else
+	  /* This clobbers CC (ASHIFTRT by register only).  */
+	  arm_emit_coreregs_64bit_shift (<CODE>, operands[0], operands[1],
+				 	 operands[2], operands[3], operands[4]);
+      }
+
+    DONE;
+  }"
+  [(set_attr "arch" "nota8,nota8,*,*,onlya8,onlya8")
+   (set_attr "opt" "*,*,speed,speed,*,*")]
+)
 
 ;; Widening operations
 
@@ -1542,80 +1721,168 @@
 (define_expand "vcond<mode><mode>"
   [(set (match_operand:VDQW 0 "s_register_operand" "")
 	(if_then_else:VDQW
-	  (match_operator 3 "arm_comparison_operator"
+	  (match_operator 3 "comparison_operator"
 	    [(match_operand:VDQW 4 "s_register_operand" "")
 	     (match_operand:VDQW 5 "nonmemory_operand" "")])
 	  (match_operand:VDQW 1 "s_register_operand" "")
 	  (match_operand:VDQW 2 "s_register_operand" "")))]
   "TARGET_NEON && (!<Is_float_mode> || flag_unsafe_math_optimizations)"
 {
-  rtx mask;
-  int inverse = 0, immediate_zero = 0;
-  /* See the description of "magic" bits in the 'T' case of
-     arm_print_operand.  */
   HOST_WIDE_INT magic_word = (<MODE>mode == V2SFmode || <MODE>mode == V4SFmode)
 			     ? 3 : 1;
   rtx magic_rtx = GEN_INT (magic_word);
-  
-  mask = gen_reg_rtx (<V_cmp_result>mode);
-  
-  if (operands[5] == CONST0_RTX (<MODE>mode))
-    immediate_zero = 1;
-  else if (!REG_P (operands[5]))
-    operands[5] = force_reg (<MODE>mode, operands[5]);
-  
+  int inverse = 0;
+  int use_zero_form = 0;
+  int swap_bsl_operands = 0;
+  rtx mask = gen_reg_rtx (<V_cmp_result>mode);
+  rtx tmp = gen_reg_rtx (<V_cmp_result>mode);
+
+  rtx (*base_comparison) (rtx, rtx, rtx, rtx);
+  rtx (*complimentary_comparison) (rtx, rtx, rtx, rtx);
+
   switch (GET_CODE (operands[3]))
     {
     case GE:
-      emit_insn (gen_neon_vcge<mode> (mask, operands[4], operands[5],
-				      magic_rtx));
-      break;
-    
     case GT:
-      emit_insn (gen_neon_vcgt<mode> (mask, operands[4], operands[5],
-				      magic_rtx));
-      break;
-    
-    case EQ:
-      emit_insn (gen_neon_vceq<mode> (mask, operands[4], operands[5],
-				      magic_rtx));
-      break;
-    
     case LE:
-      if (immediate_zero)
-	emit_insn (gen_neon_vcle<mode> (mask, operands[4], operands[5],
-					magic_rtx));
-      else
-	emit_insn (gen_neon_vcge<mode> (mask, operands[5], operands[4],
-					magic_rtx));
-      break;
-    
     case LT:
-      if (immediate_zero)
-	emit_insn (gen_neon_vclt<mode> (mask, operands[4], operands[5],
-					magic_rtx));
-      else
-	emit_insn (gen_neon_vcgt<mode> (mask, operands[5], operands[4],
-					magic_rtx));
-      break;
-    
-    case NE:
-      emit_insn (gen_neon_vceq<mode> (mask, operands[4], operands[5],
-				      magic_rtx));
+    case EQ:
+      if (operands[5] == CONST0_RTX (<MODE>mode))
+	{
+	  use_zero_form = 1;
+	  break;
+	}
+      /* Fall through.  */
+    default:
+      if (!REG_P (operands[5]))
+	operands[5] = force_reg (<MODE>mode, operands[5]);
+    }
+
+  switch (GET_CODE (operands[3]))
+    {
+    case LT:
+    case UNLT:
       inverse = 1;
+      /* Fall through.  */
+    case GE:
+    case UNGE:
+    case ORDERED:
+    case UNORDERED:
+      base_comparison = gen_neon_vcge<mode>;
+      complimentary_comparison = gen_neon_vcgt<mode>;
       break;
-    
+    case LE:
+    case UNLE:
+      inverse = 1;
+      /* Fall through.  */
+    case GT:
+    case UNGT:
+      base_comparison = gen_neon_vcgt<mode>;
+      complimentary_comparison = gen_neon_vcge<mode>;
+      break;
+    case EQ:
+    case NE:
+    case UNEQ:
+      base_comparison = gen_neon_vceq<mode>;
+      complimentary_comparison = gen_neon_vceq<mode>;
+      break;
     default:
       gcc_unreachable ();
     }
-  
-  if (inverse)
+
+  switch (GET_CODE (operands[3]))
+    {
+    case LT:
+    case LE:
+    case GT:
+    case GE:
+    case EQ:
+      /* The easy case.  Here we emit one of vcge, vcgt or vceq.
+	 As a LT b <=> b GE a && a LE b <=> b GT a.  Our transformations are:
+	 a GE b -> a GE b
+	 a GT b -> a GT b
+	 a LE b -> b GE a
+	 a LT b -> b GT a
+	 a EQ b -> a EQ b
+	 Note that there also exist direct comparison against 0 forms,
+	 so catch those as a special case.  */
+      if (use_zero_form)
+	{
+	  inverse = 0;
+	  switch (GET_CODE (operands[3]))
+	    {
+	    case LT:
+	      base_comparison = gen_neon_vclt<mode>;
+	      break;
+	    case LE:
+	      base_comparison = gen_neon_vcle<mode>;
+	      break;
+	    default:
+	      /* Do nothing, other zero form cases already have the correct
+		 base_comparison.  */
+	      break;
+	    }
+	}
+
+      if (!inverse)
+	emit_insn (base_comparison (mask, operands[4], operands[5], magic_rtx));
+      else
+	emit_insn (complimentary_comparison (mask, operands[5], operands[4], magic_rtx));
+      break;
+    case UNLT:
+    case UNLE:
+    case UNGT:
+    case UNGE:
+    case NE:
+      /* Vector compare returns false for lanes which are unordered, so if we use
+	 the inverse of the comparison we actually want to emit, then
+	 swap the operands to BSL, we will end up with the correct result.
+	 Note that a NE NaN and NaN NE b are true for all a, b.
+
+	 Our transformations are:
+	 a GE b -> !(b GT a)
+	 a GT b -> !(b GE a)
+	 a LE b -> !(a GT b)
+	 a LT b -> !(a GE b)
+	 a NE b -> !(a EQ b)  */
+
+      if (inverse)
+	emit_insn (base_comparison (mask, operands[4], operands[5], magic_rtx));
+      else
+	emit_insn (complimentary_comparison (mask, operands[5], operands[4], magic_rtx));
+
+      swap_bsl_operands = 1;
+      break;
+    case UNEQ:
+      /* We check (a > b ||  b > a).  combining these comparisons give us
+	 true iff !(a != b && a ORDERED b), swapping the operands to BSL
+	 will then give us (a == b ||  a UNORDERED b) as intended.  */
+
+      emit_insn (gen_neon_vcgt<mode> (mask, operands[4], operands[5], magic_rtx));
+      emit_insn (gen_neon_vcgt<mode> (tmp, operands[5], operands[4], magic_rtx));
+      emit_insn (gen_ior<v_cmp_result>3 (mask, mask, tmp));
+      swap_bsl_operands = 1;
+      break;
+    case UNORDERED:
+       /* Operands are ORDERED iff (a > b || b >= a).
+	 Swapping the operands to BSL will give the UNORDERED case.  */
+     swap_bsl_operands = 1;
+     /* Fall through.  */
+    case ORDERED:
+      emit_insn (gen_neon_vcgt<mode> (tmp, operands[4], operands[5], magic_rtx));
+      emit_insn (gen_neon_vcge<mode> (mask, operands[5], operands[4], magic_rtx));
+      emit_insn (gen_ior<v_cmp_result>3 (mask, mask, tmp));
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  if (swap_bsl_operands)
     emit_insn (gen_neon_vbsl<mode> (operands[0], mask, operands[2],
 				    operands[1]));
   else
     emit_insn (gen_neon_vbsl<mode> (operands[0], mask, operands[1],
 				    operands[2]));
-
   DONE;
 })
 
@@ -1840,6 +2107,32 @@
   else
     emit_insn (gen_neon_vmla<mode>_unspec (operands[0], operands[1],
 					   operands[2], operands[3]));
+  DONE;
+})
+
+(define_expand "neon_vfma<VCVTF:mode>"
+  [(match_operand:VCVTF 0 "s_register_operand")
+   (match_operand:VCVTF 1 "s_register_operand")
+   (match_operand:VCVTF 2 "s_register_operand")
+   (match_operand:VCVTF 3 "s_register_operand")
+   (match_operand:SI 4 "immediate_operand")]
+  "TARGET_NEON && TARGET_FMA"
+{
+  emit_insn (gen_fma<mode>4_intrinsic (operands[0], operands[2], operands[3],
+				       operands[1]));
+  DONE;
+})
+
+(define_expand "neon_vfms<VCVTF:mode>"
+  [(match_operand:VCVTF 0 "s_register_operand")
+   (match_operand:VCVTF 1 "s_register_operand")
+   (match_operand:VCVTF 2 "s_register_operand")
+   (match_operand:VCVTF 3 "s_register_operand")
+   (match_operand:SI 4 "immediate_operand")]
+  "TARGET_NEON && TARGET_FMA"
+{
+  emit_insn (gen_fmsub<mode>4_intrinsic (operands[0], operands[2], operands[3],
+					 operands[1]));
   DONE;
 })
 
@@ -2108,7 +2401,7 @@
   [(set (match_operand:<V_cmp_result> 0 "s_register_operand" "=w,w")
         (unspec:<V_cmp_result>
 	  [(match_operand:VDQW 1 "s_register_operand" "w,w")
-	   (match_operand:VDQW 2 "nonmemory_operand" "w,Dz")
+	   (match_operand:VDQW 2 "reg_or_zero_operand" "w,Dz")
 	   (match_operand:SI 3 "immediate_operand" "i,i")]
           UNSPEC_VCEQ))]
   "TARGET_NEON"
@@ -2127,7 +2420,7 @@
   [(set (match_operand:<V_cmp_result> 0 "s_register_operand" "=w,w")
         (unspec:<V_cmp_result>
 	  [(match_operand:VDQW 1 "s_register_operand" "w,w")
-	   (match_operand:VDQW 2 "nonmemory_operand" "w,Dz")
+	   (match_operand:VDQW 2 "reg_or_zero_operand" "w,Dz")
 	   (match_operand:SI 3 "immediate_operand" "i,i")]
           UNSPEC_VCGE))]
   "TARGET_NEON"
@@ -2158,7 +2451,7 @@
   [(set (match_operand:<V_cmp_result> 0 "s_register_operand" "=w,w")
         (unspec:<V_cmp_result>
 	  [(match_operand:VDQW 1 "s_register_operand" "w,w")
-	   (match_operand:VDQW 2 "nonmemory_operand" "w,Dz")
+	   (match_operand:VDQW 2 "reg_or_zero_operand" "w,Dz")
            (match_operand:SI 3 "immediate_operand" "i,i")]
           UNSPEC_VCGT))]
   "TARGET_NEON"
@@ -2192,7 +2485,7 @@
   [(set (match_operand:<V_cmp_result> 0 "s_register_operand" "=w")
         (unspec:<V_cmp_result>
 	  [(match_operand:VDQW 1 "s_register_operand" "w")
-	   (match_operand:VDQW 2 "nonmemory_operand" "Dz")
+	   (match_operand:VDQW 2 "zero_operand" "Dz")
 	   (match_operand:SI 3 "immediate_operand" "i")]
           UNSPEC_VCLE))]
   "TARGET_NEON"
@@ -2209,7 +2502,7 @@
   [(set (match_operand:<V_cmp_result> 0 "s_register_operand" "=w")
         (unspec:<V_cmp_result>
 	  [(match_operand:VDQW 1 "s_register_operand" "w")
-	   (match_operand:VDQW 2 "nonmemory_operand" "Dz")
+	   (match_operand:VDQW 2 "zero_operand" "Dz")
 	   (match_operand:SI 3 "immediate_operand" "i")]
           UNSPEC_VCLT))]
   "TARGET_NEON"
@@ -2290,11 +2583,11 @@
 
 (define_insn "neon_vaba<mode>"
   [(set (match_operand:VDQIW 0 "s_register_operand" "=w")
-        (plus:VDQIW (match_operand:VDQIW 1 "s_register_operand" "0")
-                    (unspec:VDQIW [(match_operand:VDQIW 2 "s_register_operand" "w")
+        (plus:VDQIW (unspec:VDQIW [(match_operand:VDQIW 2 "s_register_operand" "w")
 		                   (match_operand:VDQIW 3 "s_register_operand" "w")
                                    (match_operand:SI 4 "immediate_operand" "i")]
-		                  UNSPEC_VABD)))]
+		                  UNSPEC_VABD)
+		    (match_operand:VDQIW 1 "s_register_operand" "0")))]
   "TARGET_NEON"
   "vaba.%T4%#<V_sz_elem>\t%<V_reg>0, %<V_reg>2, %<V_reg>3"
   [(set (attr "neon_type")
@@ -2304,11 +2597,11 @@
 
 (define_insn "neon_vabal<mode>"
   [(set (match_operand:<V_widen> 0 "s_register_operand" "=w")
-        (plus:<V_widen> (match_operand:<V_widen> 1 "s_register_operand" "0")
-                        (unspec:<V_widen> [(match_operand:VW 2 "s_register_operand" "w")
+        (plus:<V_widen> (unspec:<V_widen> [(match_operand:VW 2 "s_register_operand" "w")
                                            (match_operand:VW 3 "s_register_operand" "w")
                                            (match_operand:SI 4 "immediate_operand" "i")]
-                          UNSPEC_VABDL)))]
+					   UNSPEC_VABDL)
+			 (match_operand:<V_widen> 1 "s_register_operand" "0")))]
   "TARGET_NEON"
   "vabal.%T4%#<V_sz_elem>\t%q0, %P2, %P3"
   [(set_attr "neon_type" "neon_vaba")]
@@ -2710,14 +3003,24 @@
 })
 
 (define_expand "neon_vget_lanev2di"
-  [(match_operand:DI 0 "s_register_operand" "=r")
-   (match_operand:V2DI 1 "s_register_operand" "w")
-   (match_operand:SI 2 "immediate_operand" "i")
-   (match_operand:SI 3 "immediate_operand" "i")]
+  [(match_operand:DI 0 "s_register_operand" "")
+   (match_operand:V2DI 1 "s_register_operand" "")
+   (match_operand:SI 2 "immediate_operand" "")
+   (match_operand:SI 3 "immediate_operand" "")]
   "TARGET_NEON"
 {
-  neon_lane_bounds (operands[2], 0, 2);
-  emit_insn (gen_vec_extractv2di (operands[0], operands[1], operands[2]));
+  switch (INTVAL (operands[2]))
+    {
+    case 0:
+      emit_move_insn (operands[0], gen_lowpart (DImode, operands[1]));
+      break;
+    case 1:
+      emit_move_insn (operands[0], gen_highpart (DImode, operands[1]));
+      break;
+    default:
+      neon_lane_bounds (operands[2], 0, 1);
+      FAIL;
+    }
   DONE;
 })
 
@@ -4077,16 +4380,29 @@
   [(set_attr "neon_type" "neon_bp_3cycle")]
 )
 
-(define_insn "neon_vtrn<mode>_internal"
+(define_expand "neon_vtrn<mode>_internal"
+  [(parallel
+    [(set (match_operand:VDQW 0 "s_register_operand" "")
+	  (unspec:VDQW [(match_operand:VDQW 1 "s_register_operand" "")
+			(match_operand:VDQW 2 "s_register_operand" "")]
+	   UNSPEC_VTRN1))
+     (set (match_operand:VDQW 3 "s_register_operand" "")
+          (unspec:VDQW [(match_dup 1) (match_dup 2)] UNSPEC_VTRN2))])]
+  "TARGET_NEON"
+  ""
+)
+
+;; Note: Different operand numbering to handle tied registers correctly.
+(define_insn "*neon_vtrn<mode>_insn"
   [(set (match_operand:VDQW 0 "s_register_operand" "=w")
         (unspec:VDQW [(match_operand:VDQW 1 "s_register_operand" "0")
-                      (match_operand:VDQW 2 "s_register_operand" "w")]
+                      (match_operand:VDQW 3 "s_register_operand" "2")]
                      UNSPEC_VTRN1))
-   (set (match_operand:VDQW 3 "s_register_operand" "=2")
-         (unspec:VDQW [(match_dup 1) (match_dup 2)]
+   (set (match_operand:VDQW 2 "s_register_operand" "=w")
+         (unspec:VDQW [(match_dup 1) (match_dup 3)]
                      UNSPEC_VTRN2))]
   "TARGET_NEON"
-  "vtrn.<V_sz_elem>\t%<V_reg>0, %<V_reg>3"
+  "vtrn.<V_sz_elem>\t%<V_reg>0, %<V_reg>2"
   [(set (attr "neon_type")
       (if_then_else (match_test "<Is_d_reg>")
                     (const_string "neon_bp_simple")
@@ -4104,16 +4420,29 @@
   DONE;
 })
 
-(define_insn "neon_vzip<mode>_internal"
+(define_expand "neon_vzip<mode>_internal"
+  [(parallel
+    [(set (match_operand:VDQW 0 "s_register_operand" "")
+	  (unspec:VDQW [(match_operand:VDQW 1 "s_register_operand" "")
+	  	        (match_operand:VDQW 2 "s_register_operand" "")]
+		       UNSPEC_VZIP1))
+    (set (match_operand:VDQW 3 "s_register_operand" "")
+	 (unspec:VDQW [(match_dup 1) (match_dup 2)] UNSPEC_VZIP2))])]
+  "TARGET_NEON"
+  ""
+)
+
+;; Note: Different operand numbering to handle tied registers correctly.
+(define_insn "*neon_vzip<mode>_insn"
   [(set (match_operand:VDQW 0 "s_register_operand" "=w")
         (unspec:VDQW [(match_operand:VDQW 1 "s_register_operand" "0")
-                      (match_operand:VDQW 2 "s_register_operand" "w")]
+                      (match_operand:VDQW 3 "s_register_operand" "2")]
                      UNSPEC_VZIP1))
-   (set (match_operand:VDQW 3 "s_register_operand" "=2")
-        (unspec:VDQW [(match_dup 1) (match_dup 2)]
+   (set (match_operand:VDQW 2 "s_register_operand" "=w")
+        (unspec:VDQW [(match_dup 1) (match_dup 3)]
                      UNSPEC_VZIP2))]
   "TARGET_NEON"
-  "vzip.<V_sz_elem>\t%<V_reg>0, %<V_reg>3"
+  "vzip.<V_sz_elem>\t%<V_reg>0, %<V_reg>2"
   [(set (attr "neon_type")
       (if_then_else (match_test "<Is_d_reg>")
                     (const_string "neon_bp_simple")
@@ -4131,16 +4460,29 @@
   DONE;
 })
 
-(define_insn "neon_vuzp<mode>_internal"
+(define_expand "neon_vuzp<mode>_internal"
+  [(parallel
+    [(set (match_operand:VDQW 0 "s_register_operand" "")
+	  (unspec:VDQW [(match_operand:VDQW 1 "s_register_operand" "")
+			(match_operand:VDQW 2 "s_register_operand" "")]
+	   UNSPEC_VUZP1))
+     (set (match_operand:VDQW 3 "s_register_operand" "")
+	  (unspec:VDQW [(match_dup 1) (match_dup 2)] UNSPEC_VUZP2))])]
+  "TARGET_NEON"
+  ""
+)
+
+;; Note: Different operand numbering to handle tied registers correctly.
+(define_insn "*neon_vuzp<mode>_insn"
   [(set (match_operand:VDQW 0 "s_register_operand" "=w")
         (unspec:VDQW [(match_operand:VDQW 1 "s_register_operand" "0")
-                      (match_operand:VDQW 2 "s_register_operand" "w")]
+                      (match_operand:VDQW 3 "s_register_operand" "2")]
                      UNSPEC_VUZP1))
-   (set (match_operand:VDQW 3 "s_register_operand" "=2")
-        (unspec:VDQW [(match_dup 1) (match_dup 2)]
+   (set (match_operand:VDQW 2 "s_register_operand" "=w")
+        (unspec:VDQW [(match_dup 1) (match_dup 3)]
                      UNSPEC_VUZP2))]
   "TARGET_NEON"
-  "vuzp.<V_sz_elem>\t%<V_reg>0, %<V_reg>3"
+  "vuzp.<V_sz_elem>\t%<V_reg>0, %<V_reg>2"
   [(set (attr "neon_type")
       (if_then_else (match_test "<Is_d_reg>")
                     (const_string "neon_bp_simple")
@@ -4319,8 +4661,7 @@
 
 (define_insn "neon_vld1_dup<mode>"
   [(set (match_operand:VDX 0 "s_register_operand" "=w")
-        (unspec:VDX [(match_operand:<V_elem> 1 "neon_struct_operand" "Um")]
-                    UNSPEC_VLD1_DUP))]
+        (vec_duplicate:VDX (match_operand:<V_elem> 1 "neon_struct_operand" "Um")))]
   "TARGET_NEON"
 {
   if (GET_MODE_NUNITS (<MODE>mode) > 1)
@@ -4335,20 +4676,30 @@
 )
 
 (define_insn "neon_vld1_dup<mode>"
-  [(set (match_operand:VQX 0 "s_register_operand" "=w")
-        (unspec:VQX [(match_operand:<V_elem> 1 "neon_struct_operand" "Um")]
-                    UNSPEC_VLD1_DUP))]
+  [(set (match_operand:VQ 0 "s_register_operand" "=w")
+        (vec_duplicate:VQ (match_operand:<V_elem> 1 "neon_struct_operand" "Um")))]
   "TARGET_NEON"
 {
-  if (GET_MODE_NUNITS (<MODE>mode) > 2)
-    return "vld1.<V_sz_elem>\t{%e0[], %f0[]}, %A1";
-  else
-    return "vld1.<V_sz_elem>\t%h0, %A1";
+  return "vld1.<V_sz_elem>\t{%e0[], %f0[]}, %A1";
 }
-  [(set (attr "neon_type")
-      (if_then_else (gt (const_string "<V_mode_nunits>") (const_string "1"))
-                    (const_string "neon_vld2_2_regs_vld1_vld2_all_lanes")
-                    (const_string "neon_vld1_1_2_regs")))]
+  [(set_attr "neon_type" "neon_vld2_2_regs_vld1_vld2_all_lanes")]
+)
+
+(define_insn_and_split "neon_vld1_dupv2di"
+   [(set (match_operand:V2DI 0 "s_register_operand" "=w")
+    (vec_duplicate:V2DI (match_operand:DI 1 "neon_struct_operand" "Um")))]
+   "TARGET_NEON"
+   "#"
+   "&& reload_completed"
+   [(const_int 0)]
+   {
+    rtx tmprtx = gen_lowpart (DImode, operands[0]);
+    emit_insn (gen_neon_vld1_dupdi (tmprtx, operands[1]));
+    emit_move_insn (gen_highpart (DImode, operands[0]), tmprtx );
+    DONE;
+    }
+  [(set_attr "length" "8")
+   (set_attr "neon_type" "neon_vld2_2_regs_vld1_vld2_all_lanes")]
 )
 
 (define_expand "vec_store_lanes<mode><mode>"
@@ -4367,9 +4718,10 @@
 
 (define_insn "neon_vst1_lane<mode>"
   [(set (match_operand:<V_elem> 0 "neon_struct_operand" "=Um")
-	(vec_select:<V_elem>
-	  (match_operand:VDX 1 "s_register_operand" "w")
-	  (parallel [(match_operand:SI 2 "neon_lane_number" "i")])))]
+	(unspec:<V_elem>
+	  [(match_operand:VDX 1 "s_register_operand" "w")
+	   (match_operand:SI 2 "immediate_operand" "i")]
+	  UNSPEC_VST1_LANE))]
   "TARGET_NEON"
 {
   HOST_WIDE_INT lane = INTVAL (operands[2]);
@@ -4388,9 +4740,10 @@
 
 (define_insn "neon_vst1_lane<mode>"
   [(set (match_operand:<V_elem> 0 "neon_struct_operand" "=Um")
-        (vec_select:<V_elem>
-           (match_operand:VQX 1 "s_register_operand" "w")
-           (parallel [(match_operand:SI 2 "neon_lane_number" "i")])))]
+	(unspec:<V_elem>
+	  [(match_operand:VQX 1 "s_register_operand" "w")
+	   (match_operand:SI 2 "immediate_operand" "i")]
+	  UNSPEC_VST1_LANE))]
   "TARGET_NEON"
 {
   HOST_WIDE_INT lane = INTVAL (operands[2]);
@@ -4733,7 +5086,7 @@
   ops[2] = gen_rtx_REG (DImode, regno + 4);
   ops[3] = operands[1];
   ops[4] = operands[3];
-  output_asm_insn ("vld3.<V_sz_elem>\t{%P0[%c4], %P1[%c4], %P2[%c4]}, %A3",
+  output_asm_insn ("vld3.<V_sz_elem>\t{%P0[%c4], %P1[%c4], %P2[%c4]}, %3",
                    ops);
   return "";
 }
@@ -4765,7 +5118,7 @@
   ops[2] = gen_rtx_REG (DImode, regno + 8);
   ops[3] = operands[1];
   ops[4] = GEN_INT (lane);
-  output_asm_insn ("vld3.<V_sz_elem>\t{%P0[%c4], %P1[%c4], %P2[%c4]}, %A3",
+  output_asm_insn ("vld3.<V_sz_elem>\t{%P0[%c4], %P1[%c4], %P2[%c4]}, %3",
                    ops);
   return "";
 }
@@ -4787,7 +5140,7 @@
       ops[1] = gen_rtx_REG (DImode, regno + 2);
       ops[2] = gen_rtx_REG (DImode, regno + 4);
       ops[3] = operands[1];
-      output_asm_insn ("vld3.<V_sz_elem>\t{%P0[], %P1[], %P2[]}, %A3", ops);
+      output_asm_insn ("vld3.<V_sz_elem>\t{%P0[], %P1[], %P2[]}, %3", ops);
       return "";
     }
   else
@@ -4905,7 +5258,7 @@
   ops[2] = gen_rtx_REG (DImode, regno + 2);
   ops[3] = gen_rtx_REG (DImode, regno + 4);
   ops[4] = operands[2];
-  output_asm_insn ("vst3.<V_sz_elem>\t{%P1[%c4], %P2[%c4], %P3[%c4]}, %A0",
+  output_asm_insn ("vst3.<V_sz_elem>\t{%P1[%c4], %P2[%c4], %P3[%c4]}, %0",
                    ops);
   return "";
 }
@@ -4937,7 +5290,7 @@
   ops[2] = gen_rtx_REG (DImode, regno + 4);
   ops[3] = gen_rtx_REG (DImode, regno + 8);
   ops[4] = GEN_INT (lane);
-  output_asm_insn ("vst3.<V_sz_elem>\t{%P1[%c4], %P2[%c4], %P3[%c4]}, %A0",
+  output_asm_insn ("vst3.<V_sz_elem>\t{%P1[%c4], %P2[%c4], %P3[%c4]}, %0",
                    ops);
   return "";
 }
@@ -5666,3 +6019,65 @@
                                    (const_string "neon_fp_vadd_qqq_vabs_qq"))
                      (const_string "neon_int_5")))]
 )
+
+;; Copy from core-to-neon regs, then extend, not vice-versa
+
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(sign_extend:DI (match_operand:SI 1 "s_register_operand" "")))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (vec_duplicate:V2SI (match_dup 1)))
+   (set (match_dup 0) (ashiftrt:DI (match_dup 0) (const_int 32)))]
+  {
+    operands[2] = gen_rtx_REG (V2SImode, REGNO (operands[0]));
+  })
+
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(sign_extend:DI (match_operand:HI 1 "s_register_operand" "")))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (vec_duplicate:V4HI (match_dup 1)))
+   (set (match_dup 0) (ashiftrt:DI (match_dup 0) (const_int 48)))]
+  {
+    operands[2] = gen_rtx_REG (V4HImode, REGNO (operands[0]));
+  })
+
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(sign_extend:DI (match_operand:QI 1 "s_register_operand" "")))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (vec_duplicate:V8QI (match_dup 1)))
+   (set (match_dup 0) (ashiftrt:DI (match_dup 0) (const_int 56)))]
+  {
+    operands[2] = gen_rtx_REG (V8QImode, REGNO (operands[0]));
+  })
+
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(zero_extend:DI (match_operand:SI 1 "s_register_operand" "")))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (vec_duplicate:V2SI (match_dup 1)))
+   (set (match_dup 0) (lshiftrt:DI (match_dup 0) (const_int 32)))]
+  {
+    operands[2] = gen_rtx_REG (V2SImode, REGNO (operands[0]));
+  })
+
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(zero_extend:DI (match_operand:HI 1 "s_register_operand" "")))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (vec_duplicate:V4HI (match_dup 1)))
+   (set (match_dup 0) (lshiftrt:DI (match_dup 0) (const_int 48)))]
+  {
+    operands[2] = gen_rtx_REG (V4HImode, REGNO (operands[0]));
+  })
+
+(define_split
+  [(set (match_operand:DI 0 "s_register_operand" "")
+	(zero_extend:DI (match_operand:QI 1 "s_register_operand" "")))]
+  "TARGET_NEON && reload_completed && IS_VFP_REGNUM (REGNO (operands[0]))"
+  [(set (match_dup 2) (vec_duplicate:V8QI (match_dup 1)))
+   (set (match_dup 0) (lshiftrt:DI (match_dup 0) (const_int 56)))]
+  {
+    operands[2] = gen_rtx_REG (V8QImode, REGNO (operands[0]));
+  })
