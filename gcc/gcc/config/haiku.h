@@ -68,6 +68,14 @@ Boston, MA 02111-1307, USA.  */
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC "crtend.o%s crtn.o%s"
 
+/* Every program on Haiku links against libroot which contains the pthread
+   routines, so there's no need to explicitly call out when doing threaded
+   work.  */
+#undef GOMP_SELF_SPECS
+#define GOMP_SELF_SPECS ""
+#undef GTM_SELF_SPECS
+#define GTM_SELF_SPECS ""
+
 #ifdef HYBRID_SECONDARY
 /* For a secondary compiler on a hybrid system, use alternative search paths.*/
 #define INCLUDE_DEFAULTS \
