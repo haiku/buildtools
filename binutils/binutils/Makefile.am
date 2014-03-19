@@ -1,4 +1,21 @@
 ## Process this file with automake to generate Makefile.in
+#
+#   Copyright 2012 Free Software Foundation
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+#
 
 AUTOMAKE_OPTIONS = dejagnu no-dist foreign
 ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
@@ -16,6 +33,7 @@ EXEEXT_FOR_BUILD = @EXEEXT_FOR_BUILD@
 YACC = `if [ -f ../bison/bison ]; then echo ../bison/bison -y -L$(srcdir)/../bison/; else echo @YACC@; fi`
 YFLAGS = -d
 LEX = `if [ -f ../flex/flex ]; then echo ../flex/flex; else echo @LEX@; fi`
+LEXLIB = @LEXLIB@
 
 # Automake 1.10+ disables lex and yacc output file regeneration if
 # maintainer mode is disabled.  Avoid this.
@@ -65,10 +83,16 @@ bin_PROGRAMS = $(SIZE_PROG) $(OBJDUMP_PROG) $(AR_PROG) $(STRINGS_PROG) $(RANLIB_
 bin_SCRIPTS = @BUILD_INSTALL_MISC@
 EXTRA_SCRIPTS = embedspu
 
+## Test programs.
+BFDTEST1_PROG = bfdtest1
+BFDTEST2_PROG = bfdtest2
+
+TEST_PROGS = $(BFDTEST1_PROG) $(BFDTEST2_PROG)
+
 ## We need a special rule to install the programs which are built with
 ## -new, and to rename cxxfilt to c++filt.
 RENAMED_PROGS = $(NM_PROG) $(STRIP_PROG) $(DEMANGLER_PROG)
-noinst_PROGRAMS = $(RENAMED_PROGS) @BUILD_MISC@
+noinst_PROGRAMS = $(RENAMED_PROGS) $(TEST_PROGS) @BUILD_MISC@
 
 EXTRA_PROGRAMS = $(NLMCONV_PROG) srconv sysdump coffdump $(DLLTOOL_PROG) $(WINDRES_PROG) $(WINDMC_PROG) $(DLLWRAP_PROG)
 
@@ -194,6 +218,8 @@ addr2line_DEPENDENCIES = $(LIBINTL_DEP) $(LIBIBERTY) $(BFDLIB)
 readelf_DEPENDENCIES =   $(LIBINTL_DEP) $(LIBIBERTY)
 elfedit_DEPENDENCIES = $(LIBINTL_DEP) $(LIBIBERTY)
 dllwrap_DEPENDENCIES =   $(LIBINTL_DEP) $(LIBIBERTY)
+bfdtest1_DEPENDENCIES =  $(LIBINTL_DEP) $(LIBIBERTY) $(BFDLIB)
+bfdtest2_DEPENDENCIES =  $(LIBINTL_DEP) $(LIBIBERTY) $(BFDLIB)
 
 LDADD = $(BFDLIB) $(LIBIBERTY) $(LIBINTL)
 
@@ -234,11 +260,11 @@ cxxfilt_SOURCES = cxxfilt.c $(BULIBS)
 ar_SOURCES = arparse.y arlex.l ar.c not-ranlib.c arsup.c rename.c binemul.c \
 	emul_$(EMULATION).c $(BULIBS)
 EXTRA_ar_SOURCES = $(CFILES)
-ar_LDADD = $(BFDLIB) $(LIBIBERTY) @LEXLIB@ $(LIBINTL)
+ar_LDADD = $(BFDLIB) $(LIBIBERTY) $(LEXLIB) $(LIBINTL)
 
 ranlib_SOURCES = ar.c is-ranlib.c arparse.y arlex.l arsup.c rename.c \
 	binemul.c emul_$(EMULATION).c $(BULIBS)
-ranlib_LDADD = $(BFDLIB) $(LIBIBERTY) @LEXLIB@ $(LIBINTL)
+ranlib_LDADD = $(BFDLIB) $(LIBIBERTY) $(LEXLIB) $(LIBINTL)
 
 addr2line_SOURCES = addr2line.c $(BULIBS)
 
@@ -417,7 +443,7 @@ srconv_SOURCES = srconv.c coffgrok.c $(BULIBS)
 srconv.@OBJEXT@: sysroff.c
 
 dlltool_SOURCES = dlltool.c defparse.y deflex.l $(BULIBS)
-dlltool_LDADD = $(BFDLIB) $(LIBIBERTY) @LEXLIB@ $(LIBINTL)
+dlltool_LDADD = $(BFDLIB) $(LIBIBERTY) $(LEXLIB) $(LIBINTL)
 
 dlltool.@OBJEXT@:
 if am__fastdepCC
@@ -469,11 +495,11 @@ nlmconv_SOURCES = nlmconv.c nlmheader.y $(BULIBS)
 
 windres_SOURCES = windres.c resrc.c rescoff.c resbin.c rcparse.y rclex.c \
 	winduni.c resres.c $(BULIBS)
-windres_LDADD = $(BFDLIB) $(LIBIBERTY) @LEXLIB@ $(LIBINTL) $(LIBICONV)
+windres_LDADD = $(BFDLIB) $(LIBIBERTY) $(LEXLIB) $(LIBINTL) $(LIBICONV)
 
 windmc_SOURCES = windmc.c mcparse.y mclex.c \
 	winduni.c $(BULIBS)
-windmc_LDADD = $(BFDLIB) $(LIBIBERTY) @LEXLIB@ $(LIBINTL) $(LIBICONV)
+windmc_LDADD = $(BFDLIB) $(LIBIBERTY) $(LEXLIB) $(LIBINTL) $(LIBICONV)
 
 dllwrap_SOURCES = dllwrap.c version.c
 dllwrap_LDADD = $(LIBIBERTY) $(LIBINTL)

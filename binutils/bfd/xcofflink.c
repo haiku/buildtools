@@ -1,6 +1,6 @@
 /* POWER/PowerPC XCOFF linker support.
    Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
-   2005, 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
+   2005, 2006, 2007, 2008, 2009, 2010, 2011, 2013 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -148,7 +148,7 @@ struct xcoff_link_hash_table
     struct xcoff_link_size_list *next;
     struct xcoff_link_hash_entry *h;
     bfd_size_type size;
-  } 
+  }
   *size_list;
 
   /* Information about archives.  */
@@ -580,7 +580,7 @@ _bfd_xcoff_bfd_link_hash_table_create (bfd *abfd)
   struct xcoff_link_hash_table *ret;
   bfd_size_type amt = sizeof (* ret);
 
-  ret = bfd_malloc (amt);
+  ret = bfd_zmalloc (amt);
   if (ret == NULL)
     return NULL;
   if (!_bfd_link_hash_table_init (&ret->root, abfd, xcoff_link_hash_newfunc,
@@ -591,20 +591,8 @@ _bfd_xcoff_bfd_link_hash_table_create (bfd *abfd)
     }
 
   ret->debug_strtab = _bfd_xcoff_stringtab_init ();
-  ret->debug_section = NULL;
-  ret->loader_section = NULL;
-  ret->ldrel_count = 0;
-  memset (&ret->ldhdr, 0, sizeof (struct internal_ldhdr));
-  ret->linkage_section = NULL;
-  ret->toc_section = NULL;
-  ret->descriptor_section = NULL;
-  ret->imports = NULL;
-  ret->file_align = 0;
-  ret->textro = FALSE;
-  ret->gc = FALSE;
   ret->archive_info = htab_create (37, xcoff_archive_info_hash,
 				   xcoff_archive_info_eq, NULL);
-  memset (ret->special_sections, 0, sizeof ret->special_sections);
 
   /* The linker will always generate a full a.out header.  We need to
      record that fact now, before the sizeof_headers routine could be
@@ -6273,7 +6261,7 @@ _bfd_xcoff_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
       irel = flinfo.section_info[o->target_index].relocs;
       irelend = irel + o->reloc_count;
       rel_hash = flinfo.section_info[o->target_index].rel_hashes;
-      for (; irel < irelend; irel++, rel_hash++, erel += relsz)
+      for (; irel < irelend; irel++, rel_hash++)
 	{
 	  if (*rel_hash != NULL)
 	    {

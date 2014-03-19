@@ -540,6 +540,24 @@
 	msr	daifset, x0
 	msr	daifclr, x0
 
-	fmov    s0, #0x11
-	fmov    s0, #0xC0280000C1400000
-	fmov    d0, #0xC02f800000000000
+	fmov	s0, #0x11
+	fmov	s0, #0xC0280000C1400000
+	fmov	d0, #0xC02f800000000000
+
+	// No 16-byte relocation
+	ldr	q0, =one_label
+
+	ands	w0, w24, #0xffeefffffffffffd
+
+one_label:
+
+	cinc	w0, w1, al
+	cinc	w0, w1, nv
+	cset	w0, al
+	cset	w0, nv
+	cinv	w0, w1, al
+	cinv	w0, w1, nv
+	csetm	w0, al
+	csetm	w0, nv
+	cneg	w0, w1, al
+	cneg	w0, w1, nv

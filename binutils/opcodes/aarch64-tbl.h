@@ -163,10 +163,22 @@
   QLF2(X,X),			\
 }
 
+/* e.g. CRC32B <Wd>, <Wn>, <Wm>.  */
+#define QL_I3SAMEW		\
+{				\
+  QLF3(W,W,W),			\
+}
+
 /* e.g. SMULH <Xd>, <Xn>, <Xm>.  */
 #define QL_I3SAMEX		\
 {				\
   QLF3(X,X,X),			\
+}
+
+/* e.g. CRC32X <Wd>, <Wn>, <Xm>.  */
+#define QL_I3WWX		\
+{				\
+  QLF3(W,W,X),			\
 }
 
 /* e.g. UDIV <Xd>, <Xn>, <Xm>.  */
@@ -1171,11 +1183,11 @@
   QLF2(V_4S, NIL),		\
 }
 
-/* e.g. MOVI <Vd>.8B, #<imm8>.  */
+/* e.g. MOVI <Vd>.8B, #<imm8> {, LSL #<amount>}.  */
 #define QL_SIMD_IMM_B		\
 {				\
-  QLF2(V_8B, NIL),		\
-  QLF2(V_16B, NIL),		\
+  QLF2(V_8B, LSL),		\
+  QLF2(V_16B, LSL),		\
 }
 /* e.g. MOVI <Dd>, #<imm>.  */
 #define QL_SIMD_IMM_D		\
@@ -1199,11 +1211,14 @@ static const aarch64_feature_set aarch64_feature_simd =
   AARCH64_FEATURE (AARCH64_FEATURE_SIMD, 0);
 static const aarch64_feature_set aarch64_feature_crypto =
   AARCH64_FEATURE (AARCH64_FEATURE_CRYPTO, 0);
+static const aarch64_feature_set aarch64_feature_crc =
+  AARCH64_FEATURE (AARCH64_FEATURE_CRC, 0);
 
 #define CORE	&aarch64_feature_v8
 #define FP	&aarch64_feature_fp
 #define SIMD	&aarch64_feature_simd
 #define CRYPTO	&aarch64_feature_crypto
+#define CRC	&aarch64_feature_crc
 
 struct aarch64_opcode aarch64_opcode_table[] =
 {
@@ -1341,7 +1356,7 @@ struct aarch64_opcode aarch64_opcode_table[] =
   {"movi", 0xf008400, 0xbff8dc00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_IMM_SFT), QL_SIMD_IMM_S0H, F_SIZEQ},
   {"orr", 0xf009400, 0xbff8dc00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_IMM_SFT), QL_SIMD_IMM_S0H, F_SIZEQ},
   {"movi", 0xf00c400, 0xbff8ec00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_IMM_SFT), QL_SIMD_IMM_S1W, F_SIZEQ},
-  {"movi", 0xf00e400, 0xbff8fc00, asimdimm, OP_V_MOVI_B, SIMD, OP2 (Vd, SIMD_IMM), QL_SIMD_IMM_B, F_SIZEQ},
+  {"movi", 0xf00e400, 0xbff8fc00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_IMM_SFT), QL_SIMD_IMM_B, F_SIZEQ},
   {"fmov", 0xf00f400, 0xbff8fc00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_FPIMM), QL_SIMD_IMM_S, F_SIZEQ},
   {"mvni", 0x2f000400, 0xbff89c00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_IMM_SFT), QL_SIMD_IMM_S0W, F_SIZEQ},
   {"bic", 0x2f001400, 0xbff89c00, asimdimm, 0, SIMD, OP2 (Vd, SIMD_IMM_SFT), QL_SIMD_IMM_S0W, F_SIZEQ},
@@ -1767,13 +1782,13 @@ struct aarch64_opcode aarch64_opcode_table[] =
   /* Conditional select.  */
   {"csel", 0x1a800000, 0x7fe00c00, condsel, 0, CORE, OP4 (Rd, Rn, Rm, COND), QL_CSEL, F_SF},
   {"csinc", 0x1a800400, 0x7fe00c00, condsel, 0, CORE, OP4 (Rd, Rn, Rm, COND), QL_CSEL, F_HAS_ALIAS | F_SF},
-  {"cinc", 0x1a800400, 0x7fe00c00, condsel, OP_CINC, CORE, OP3 (Rd, Rn, COND), QL_CSEL, F_ALIAS | F_SF | F_CONV},
-  {"cset", 0x1a9f07e0, 0x7fff0fe0, condsel, OP_CSET, CORE, OP2 (Rd, COND), QL_DST_R, F_ALIAS | F_P1 | F_SF | F_CONV},
+  {"cinc", 0x1a800400, 0x7fe00c00, condsel, OP_CINC, CORE, OP3 (Rd, Rn, COND1), QL_CSEL, F_ALIAS | F_SF | F_CONV},
+  {"cset", 0x1a9f07e0, 0x7fff0fe0, condsel, OP_CSET, CORE, OP2 (Rd, COND1), QL_DST_R, F_ALIAS | F_P1 | F_SF | F_CONV},
   {"csinv", 0x5a800000, 0x7fe00c00, condsel, 0, CORE, OP4 (Rd, Rn, Rm, COND), QL_CSEL, F_HAS_ALIAS | F_SF},
-  {"cinv", 0x5a800000, 0x7fe00c00, condsel, OP_CINV, CORE, OP3 (Rd, Rn, COND), QL_CSEL, F_ALIAS | F_SF | F_CONV},
-  {"csetm", 0x5a9f03e0, 0x7fff0fe0, condsel, OP_CSETM, CORE, OP2 (Rd, COND), QL_DST_R, F_ALIAS | F_P1 | F_SF | F_CONV},
+  {"cinv", 0x5a800000, 0x7fe00c00, condsel, OP_CINV, CORE, OP3 (Rd, Rn, COND1), QL_CSEL, F_ALIAS | F_SF | F_CONV},
+  {"csetm", 0x5a9f03e0, 0x7fff0fe0, condsel, OP_CSETM, CORE, OP2 (Rd, COND1), QL_DST_R, F_ALIAS | F_P1 | F_SF | F_CONV},
   {"csneg", 0x5a800400, 0x7fe00c00, condsel, 0, CORE, OP4 (Rd, Rn, Rm, COND), QL_CSEL, F_HAS_ALIAS | F_SF},
-  {"cneg", 0x5a800400, 0x7fe00c00, condsel, OP_CNEG, CORE, OP3 (Rd, Rn, COND), QL_CSEL, F_ALIAS | F_SF | F_CONV},
+  {"cneg", 0x5a800400, 0x7fe00c00, condsel, OP_CNEG, CORE, OP3 (Rd, Rn, COND1), QL_CSEL, F_ALIAS | F_SF | F_CONV},
   /* Crypto AES.  */
   {"aese", 0x4e284800, 0xfffffc00, cryptoaes, 0, CRYPTO, OP2 (Vd, Vn), QL_V2SAME16B, 0},
   {"aesd", 0x4e285800, 0xfffffc00, cryptoaes, 0, CRYPTO, OP2 (Vd, Vn), QL_V2SAME16B, 0},
@@ -1810,6 +1825,15 @@ struct aarch64_opcode aarch64_opcode_table[] =
   {"asr", 0x1ac02800, 0x7fe0fc00, dp_2src, 0, CORE, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF | F_ALIAS},
   {"rorv", 0x1ac02c00, 0x7fe0fc00, dp_2src, 0, CORE, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF | F_HAS_ALIAS},
   {"ror", 0x1ac02c00, 0x7fe0fc00, dp_2src, 0, CORE, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_SF | F_ALIAS},
+  /* CRC instructions.  */
+  {"crc32b", 0x1ac04000, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0},
+  {"crc32h", 0x1ac04400, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0},
+  {"crc32w", 0x1ac04800, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0},
+  {"crc32x", 0x9ac04c00, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3WWX, 0},
+  {"crc32cb", 0x1ac05000, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0},
+  {"crc32ch", 0x1ac05400, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0},
+  {"crc32cw", 0x1ac05800, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3SAMEW, 0},
+  {"crc32cx", 0x9ac05c00, 0xffe0fc00, dp_2src, 0, CRC, OP3 (Rd, Rn, Rm), QL_I3WWX, 0},
   /* Data-processing (3 source).  */
   {"madd", 0x1b000000, 0x7fe08000, dp_3src, 0, CORE, OP4 (Rd, Rn, Rm, Ra), QL_I4SAMER, F_HAS_ALIAS | F_SF},
   {"mul", 0x1b007c00, 0x7fe0fc00, dp_3src, 0, CORE, OP3 (Rd, Rn, Rm), QL_I3SAMER, F_ALIAS | F_SF},
@@ -2211,7 +2235,9 @@ struct aarch64_opcode aarch64_opcode_table[] =
     Y(IMMEDIATE, fbits, "FBITS", 0, F(FLD_scale),			\
       "the number of bits after the binary point in the fixed-point value")\
     X(IMMEDIATE, 0, 0, "IMM_MOV", 0, F(), "an immediate")		\
-    Y(NIL, cond, "COND", 0, F(), "a condition")				\
+    Y(COND, cond, "COND", 0, F(), "a condition")			\
+    Y(COND, cond, "COND1", 0, F(),					\
+      "one of the standard conditions, excluding AL and NV.")		\
     X(ADDRESS, 0, ext_imm, "ADDR_ADRP", OPD_F_SEXT, F(FLD_immhi, FLD_immlo),\
       "21-bit PC-relative address of a 4KB page")			\
     Y(ADDRESS, imm, "ADDR_PCREL14", OPD_F_SEXT | OPD_F_SHIFT_BY_2,	\

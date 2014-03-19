@@ -1,3 +1,4 @@
+@node typedef bfd, Error reporting, BFD front end, BFD front end
 @section @code{typedef bfd}
 A BFD has type @code{bfd}; objects of this type are the
 cornerstone of any application using BFD. Using BFD
@@ -286,6 +287,7 @@ struct bfd
 @};
 
 @end example
+@node Error reporting, Miscellaneous, typedef bfd, BFD front end
 @section Error reporting
 Most BFD functions return nonzero on success (check their
 individual documentation for precise semantics).  On an error,
@@ -317,6 +319,7 @@ typedef enum bfd_error
   bfd_error_no_armap,
   bfd_error_no_more_archived_files,
   bfd_error_malformed_archive,
+  bfd_error_missing_dso,
   bfd_error_file_not_recognized,
   bfd_error_file_ambiguously_recognized,
   bfd_error_no_contents,
@@ -456,6 +459,7 @@ bfd_assert_handler_type bfd_get_assert_handler (void);
 @strong{Description}@*
 Return the BFD assert handler function.
 
+@node Miscellaneous, Memory Usage, Error reporting, BFD front end
 @section Miscellaneous
 
 
@@ -822,60 +826,6 @@ same machine type, this function can be used to switch between
 the preferred one (alternative == 0) and any others.  Currently,
 only ELF supports this feature, with up to two alternate
 machine codes.
-
-
-@example
-struct bfd_preserve
-@{
-  void *marker;
-  void *tdata;
-  flagword flags;
-  const struct bfd_arch_info *arch_info;
-  struct bfd_section *sections;
-  struct bfd_section *section_last;
-  unsigned int section_count;
-  struct bfd_hash_table section_htab;
-@};
-
-@end example
-@findex bfd_preserve_save
-@subsubsection @code{bfd_preserve_save}
-@strong{Synopsis}
-@example
-bfd_boolean bfd_preserve_save (bfd *, struct bfd_preserve *);
-@end example
-@strong{Description}@*
-When testing an object for compatibility with a particular
-target back-end, the back-end object_p function needs to set
-up certain fields in the bfd on successfully recognizing the
-object.  This typically happens in a piecemeal fashion, with
-failures possible at many points.  On failure, the bfd is
-supposed to be restored to its initial state, which is
-virtually impossible.  However, restoring a subset of the bfd
-state works in practice.  This function stores the subset and
-reinitializes the bfd.
-
-@findex bfd_preserve_restore
-@subsubsection @code{bfd_preserve_restore}
-@strong{Synopsis}
-@example
-void bfd_preserve_restore (bfd *, struct bfd_preserve *);
-@end example
-@strong{Description}@*
-This function restores bfd state saved by bfd_preserve_save.
-If MARKER is non-NULL in struct bfd_preserve then that block
-and all subsequently bfd_alloc'd memory is freed.
-
-@findex bfd_preserve_finish
-@subsubsection @code{bfd_preserve_finish}
-@strong{Synopsis}
-@example
-void bfd_preserve_finish (bfd *, struct bfd_preserve *);
-@end example
-@strong{Description}@*
-This function should be called when the bfd state saved by
-bfd_preserve_save is no longer needed.  ie. when the back-end
-object_p function returns with success.
 
 @findex bfd_emul_get_maxpagesize
 @subsubsection @code{bfd_emul_get_maxpagesize}

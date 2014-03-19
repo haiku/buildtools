@@ -81,24 +81,29 @@ SECTIONS
     KEEP(*(.vectors))
 
     /* For data that needs to reside in the lower 64k of progmem.  */
-    *(.progmem.gcc*)
-    *(.progmem*)
-    ${RELOCATING+. = ALIGN(2);}
+    ${RELOCATING+ *(.progmem.gcc*)}
 
+    /* PR 13812: Placing the trampolines here gives a better chance
+       that they will be in range of the code that uses them.  */
+    ${RELOCATING+. = ALIGN(2);}
     ${CONSTRUCTING+ __trampolines_start = . ; }
     /* The jump trampolines for the 16-bit limited relocs will reside here.  */
     *(.trampolines)
-    *(.trampolines*)
+    ${RELOCATING+ *(.trampolines*)}
     ${CONSTRUCTING+ __trampolines_end = . ; }
+
+    ${RELOCATING+ *(.progmem*)}
+    
+    ${RELOCATING+. = ALIGN(2);}
 
     /* For future tablejump instruction arrays for 3 byte pc devices.
        We don't relax jump/call instructions within these sections.  */
     *(.jumptables) 
-    *(.jumptables*) 
+    ${RELOCATING+ *(.jumptables*)}
 
     /* For code that needs to reside in the lower 128k progmem.  */
     *(.lowtext)
-    *(.lowtext*)
+    ${RELOCATING+ *(.lowtext*)}
 
     ${CONSTRUCTING+ __ctors_start = . ; }
     ${CONSTRUCTING+ *(.ctors) }
@@ -133,7 +138,7 @@ SECTIONS
     KEEP (*(.init9))
     *(.text)
     ${RELOCATING+. = ALIGN(2);}
-    *(.text.*)
+    ${RELOCATING+ *(.text.*)}
     ${RELOCATING+. = ALIGN(2);}
     *(.fini9)  /* _exit() starts here.  */
     KEEP (*(.fini9))
@@ -165,9 +170,9 @@ SECTIONS
        addresses for subsequent sections because -Tdata= from the command
        line will have no effect, see PR13697.  Thus, keep .data  */
     KEEP (*(.data))    
-    *(.data*)
+    ${RELOCATING+ *(.data*)}
     *(.rodata)  /* We need to include .rodata here if gcc is used */
-    *(.rodata*) /* with -fdata-sections.  */
+    ${RELOCATING+ *(.rodata*)} /* with -fdata-sections.  */
     *(.gnu.linkonce.d*)
     ${RELOCATING+. = ALIGN(2);}
     ${RELOCATING+ _edata = . ; }
@@ -178,7 +183,7 @@ SECTIONS
   {
     ${RELOCATING+ PROVIDE (__bss_start = .) ; }
     *(.bss)
-    *(.bss*)
+    ${RELOCATING+ *(.bss*)}
     *(COMMON)
     ${RELOCATING+ PROVIDE (__bss_end = .) ; }
   } ${RELOCATING+ > data}
@@ -198,7 +203,8 @@ SECTIONS
 
   .eeprom ${RELOCATING-0}:
   {
-    *(.eeprom*)
+    /* See .data above...  */
+    KEEP(*(.eeprom*))
     ${RELOCATING+ __eeprom_end = . ; }
   } ${RELOCATING+ > eeprom}
 
@@ -227,39 +233,12 @@ SECTIONS
   .stab.exclstr 0 : { *(.stab.exclstr) }
   .stab.index 0 : { *(.stab.index) }
   .stab.indexstr 0 : { *(.stab.indexstr) }
-  .comment 0 : { *(.comment) }
- 
-  /* DWARF debug sections.
-     Symbols in the DWARF debugging sections are relative to the beginning
-     of the section so we begin them at 0.  */
-
-  /* DWARF 1 */
-  .debug          0 : { *(.debug) }
-  .line           0 : { *(.line) }
-
-  /* GNU DWARF 1 extensions */
-  .debug_srcinfo  0 : { *(.debug_srcinfo) }
-  .debug_sfnames  0 : { *(.debug_sfnames) }
-
-  /* DWARF 1.1 and DWARF 2 */
-  .debug_aranges  0 : { *(.debug_aranges) }
-  .debug_pubnames 0 : { *(.debug_pubnames) }
-
-  /* DWARF 2 */
-  .debug_info     0 : { *(.debug_info) *(.gnu.linkonce.wi.*) }
-  .debug_abbrev   0 : { *(.debug_abbrev) }
-  .debug_line     0 : { *(.debug_line) }
-  .debug_frame    0 : { *(.debug_frame) }
-  .debug_str      0 : { *(.debug_str) }
-  .debug_loc      0 : { *(.debug_loc) }
-  .debug_macinfo  0 : { *(.debug_macinfo) }
-
-  /* DWARF 3 */
-  .debug_pubtypes 0 : { *(.debug_pubtypes) }
-  .debug_ranges   0 : { *(.debug_ranges) }
-
-  /* DWARF Extension.  */
-  .debug_macro    0 : { *(.debug_macro) } 
-}
+  .comment 0 : { *(.comment) } 
+  .note.gnu.build-id : { *(.note.gnu.build-id) }
 EOF
 
+. $srcdir/scripttempl/DWARF.sc
+
+cat <<EOF
+}
+EOF

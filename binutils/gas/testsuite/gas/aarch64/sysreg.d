@@ -23,3 +23,8 @@ Disassembly of section \.text:
   3c:	d5380260 	mrs	x0, id_isar3_el1
   40:	d5380280 	mrs	x0, id_isar4_el1
   44:	d53802a0 	mrs	x0, id_isar5_el1
+  48:	d538cc00 	mrs	x0, s3_0_c12_c12_0
+  4c:	d5384600 	mrs	x0, s3_0_c4_c6_0
+  50:	d5184600 	msr	s3_0_c4_c6_0, x0
+  54:	d5310300 	mrs	x0, s2_1_c0_c3_0
+  58:	d5110300 	msr	s2_1_c0_c3_0, x0

@@ -14,6 +14,24 @@
 # PARTICULAR PURPOSE.
 
 @SET_MAKE@
+
+#
+#   Copyright 2012 Free Software Foundation
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+#
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -261,7 +279,7 @@ POD2MAN = pod2man --center="GNU Development Tools" \
 	--release="binutils-$(VERSION)" --section=1
 
 man_MANS = as.1
-info_TEXINFOS = as.texinfo 
+info_TEXINFOS = as.texinfo
 as_TEXINFOS = asconfig.texi $(CPU_DOCS)
 AM_MAKEINFOFLAGS = -I "$(srcdir)" -I "$(top_srcdir)/../libiberty" \
 		   -I "$(top_srcdir)/../bfd/doc" -I ../../bfd/doc
@@ -292,11 +310,13 @@ CPU_DOCS = \
 	c-m32r.texi \
 	c-m68hc11.texi \
 	c-m68k.texi \
+	c-metag.texi \
 	c-microblaze.texi \
 	c-mips.texi \
 	c-mmix.texi \
 	c-mt.texi \
 	c-msp430.texi \
+	c-nios2.texi \
 	c-ns32k.texi \
 	c-pdp11.texi \
 	c-pj.texi \

@@ -1,6 +1,6 @@
 // arm.cc -- arm target support for gold.
 
-// Copyright 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
+// Copyright 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
 // Written by Doug Kwan <dougkwan@google.com> based on the i386 code
 // by Ian Lance Taylor <iant@google.com>.
 // This file also contains borrowed and adapted code from
@@ -2120,7 +2120,7 @@ class Target_arm : public Sized_target<32, big_endian>
   Target_arm(const Target::Target_info* info = &arm_info)
     : Sized_target<32, big_endian>(info),
       got_(NULL), plt_(NULL), got_plt_(NULL), rel_dyn_(NULL),
-      copy_relocs_(elfcpp::R_ARM_COPY), dynbss_(NULL),
+      copy_relocs_(elfcpp::R_ARM_COPY),
       got_mod_index_offset_(-1U), tls_base_symbol_defined_(false),
       stub_tables_(), stub_factory_(Stub_factory::get_instance()),
       should_force_pic_veneer_(false),
@@ -2286,21 +2286,21 @@ class Target_arm : public Sized_target<32, big_endian>
 			  const unsigned char* plocal_symbols,
 			  Relocatable_relocs*);
 
-  // Relocate a section during a relocatable link.
+  // Emit relocations for a section.
   void
-  relocate_for_relocatable(const Relocate_info<32, big_endian>*,
-			   unsigned int sh_type,
-			   const unsigned char* prelocs,
-			   size_t reloc_count,
-			   Output_section* output_section,
-			   typename elfcpp::Elf_types<32>::Elf_Off
-                             offset_in_output_section,
-			   const Relocatable_relocs*,
-			   unsigned char* view,
-			   Arm_address view_address,
-			   section_size_type view_size,
-			   unsigned char* reloc_view,
-			   section_size_type reloc_view_size);
+  relocate_relocs(const Relocate_info<32, big_endian>*,
+		  unsigned int sh_type,
+		  const unsigned char* prelocs,
+		  size_t reloc_count,
+		  Output_section* output_section,
+		  typename elfcpp::Elf_types<32>::Elf_Off
+                    offset_in_output_section,
+		  const Relocatable_relocs*,
+		  unsigned char* view,
+		  Arm_address view_address,
+		  section_size_type view_size,
+		  unsigned char* reloc_view,
+		  section_size_type reloc_view_size);
 
   // Perform target-specific processing in a relocatable link.  This is
   // only used if we use the relocation strategy RELOC_SPECIAL.
@@ -2478,7 +2478,7 @@ class Target_arm : public Sized_target<32, big_endian>
   { return new Arm_output_section<big_endian>(name, type, flags); }
 
   void
-  do_adjust_elf_header(unsigned char* view, int len) const;
+  do_adjust_elf_header(unsigned char* view, int len);
 
   // We only need to generate stubs, and hence perform relaxation if we are
   // not doing relocatable linking.
@@ -2553,7 +2553,8 @@ class Target_arm : public Sized_target<32, big_endian>
 	  unsigned int data_shndx,
 	  Output_section* output_section,
 	  const elfcpp::Rel<32, big_endian>& reloc, unsigned int r_type,
-	  const elfcpp::Sym<32, big_endian>& lsym);
+	  const elfcpp::Sym<32, big_endian>& lsym,
+	  bool is_discarded);
 
     inline void
     global(Symbol_table* symtab, Layout* layout, Target_arm* target,
@@ -2797,6 +2798,18 @@ class Target_arm : public Sized_target<32, big_endian>
   static std::string
   tag_cpu_name_value(unsigned int);
 
+  // Query attributes object to see if integer divide instructions may be
+  // present in an object.
+  static bool
+  attributes_accept_div(int arch, int profile,
+			const Object_attribute* div_attr);
+
+  // Query attributes object to see if integer divide instructions are
+  // forbidden to be in the object.  This is not the inverse of
+  // attributes_accept_div.
+  static bool
+  attributes_forbid_div(const Object_attribute* div_attr);
+
   // Merge object attributes from input object and those in the output.
   void
   merge_object_attributes(const char*, const Attributes_section_data*);
@@ -2894,8 +2907,6 @@ class Target_arm : public Sized_target<32, big_endian>
   Reloc_section* rel_dyn_;
   // Relocs saved to avoid a COPY reloc.
   Copy_relocs<elfcpp::SHT_REL, 32, big_endian> copy_relocs_;
-  // Space for variables copied with a COPY reloc.
-  Output_data_space* dynbss_;
   // Offset of the GOT entry for the TLS module index.
   unsigned int got_mod_index_offset_;
   // True if the _TLS_MODULE_BASE_ symbol has been defined.
@@ -2939,7 +2950,8 @@ const Target::Target_info Target_arm<big_endian>::arm_info =
   0,			// small_common_section_flags
   0,			// large_common_section_flags
   ".ARM.attributes",	// attributes_section
-  "aeabi"		// attributes_vendor
+  "aeabi",		// attributes_vendor
+  "_start"		// entry_symbol_name
 };
 
 // Arm relocate functions class
@@ -5643,10 +5655,6 @@ Arm_output_section<big_endian>::group_sections(
     Target_arm<big_endian>* target,
     const Task* task)
 {
-  // We only care about sections containing code.
-  if ((this->flags() & elfcpp::SHF_EXECINSTR) == 0)
-    return;
-
   // States for grouping.
   typedef enum
   {
@@ -7859,8 +7867,12 @@ Target_arm<big_endian>::Scan::local(Symbol_table* symtab,
 				    Output_section* output_section,
 				    const elfcpp::Rel<32, big_endian>& reloc,
 				    unsigned int r_type,
-				    const elfcpp::Sym<32, big_endian>& lsym)
+				    const elfcpp::Sym<32, big_endian>& lsym,
+				    bool is_discarded)
 {
+  if (is_discarded)
+    return;
+
   r_type = get_real_reloc_type(r_type);
   switch (r_type)
     {
@@ -8070,7 +8082,7 @@ Target_arm<big_endian>::Scan::local(Symbol_table* symtab,
 		  got->add_local_pair_with_rel(object, r_sym, shndx,
 					       GOT_TYPE_TLS_PAIR,
 					       target->rel_dyn_section(layout),
-					       elfcpp::R_ARM_TLS_DTPMOD32, 0);
+					       elfcpp::R_ARM_TLS_DTPMOD32);
 		else
 		  got->add_tls_gd32_with_static_reloc(GOT_TYPE_TLS_PAIR,
 						      object, r_sym);
@@ -8831,6 +8843,9 @@ Target_arm<big_endian>::Relocate::relocate(
     Arm_address address,
     section_size_type view_size)
 {
+  if (view == NULL)
+    return true;
+
   typedef Arm_relocate_functions<big_endian> Arm_relocate_functions;
 
   r_type = get_real_reloc_type(r_type);
@@ -9515,7 +9530,7 @@ Target_arm<big_endian>::relocate_section(
     }
 
   gold::relocate_section<32, big_endian, Target_arm, elfcpp::SHT_REL,
-			 Arm_relocate>(
+			 Arm_relocate, gold::Default_comdat_behavior>(
     relinfo,
     this,
     prelocs,
@@ -9590,11 +9605,11 @@ Target_arm<big_endian>::scan_relocatable_relocs(
     rr);
 }
 
-// Relocate a section during a relocatable link.
+// Emit relocations for a section.
 
 template<bool big_endian>
 void
-Target_arm<big_endian>::relocate_for_relocatable(
+Target_arm<big_endian>::relocate_relocs(
     const Relocate_info<32, big_endian>* relinfo,
     unsigned int sh_type,
     const unsigned char* prelocs,
@@ -9610,7 +9625,7 @@ Target_arm<big_endian>::relocate_for_relocatable(
 {
   gold_assert(sh_type == elfcpp::SHT_REL);
 
-  gold::relocate_for_relocatable<32, big_endian, elfcpp::SHT_REL>(
+  gold::relocate_relocs<32, big_endian, elfcpp::SHT_REL>(
     relinfo,
     prelocs,
     reloc_count,
@@ -10013,15 +10028,16 @@ template<bool big_endian>
 void
 Target_arm<big_endian>::do_adjust_elf_header(
     unsigned char* view,
-    int len) const
+    int len)
 {
   gold_assert(len == elfcpp::Elf_sizes<32>::ehdr_size);
 
   elfcpp::Ehdr<32, big_endian> ehdr(view);
+  elfcpp::Elf_Word flags = this->processor_specific_flags();
   unsigned char e_ident[elfcpp::EI_NIDENT];
   memcpy(e_ident, ehdr.get_e_ident(), elfcpp::EI_NIDENT);
 
-  if (elfcpp::arm_eabi_version(this->processor_specific_flags())
+  if (elfcpp::arm_eabi_version(flags)
       == elfcpp::EF_ARM_EABI_UNKNOWN)
     e_ident[elfcpp::EI_OSABI] = elfcpp::ELFOSABI_ARM;
   else
@@ -10030,6 +10046,21 @@ Target_arm<big_endian>::do_adjust_elf_header(
 
   // FIXME: Do EF_ARM_BE8 adjustment.
 
+  // If we're working in EABI_VER5, set the hard/soft float ABI flags
+  // as appropriate.
+  if (elfcpp::arm_eabi_version(flags) == elfcpp::EF_ARM_EABI_VER5)
+  {
+    elfcpp::Elf_Half type = ehdr.get_e_type();
+    if (type == elfcpp::ET_EXEC || type == elfcpp::ET_DYN)
+      {
+	Object_attribute* attr = this->get_aeabi_object_attribute(elfcpp::Tag_ABI_VFP_args);
+	if (attr->int_value())
+	  flags |= elfcpp::EF_ARM_ABI_FLOAT_HARD;
+	else
+	  flags |= elfcpp::EF_ARM_ABI_FLOAT_SOFT;
+	this->set_processor_specific_flags(flags);
+      }
+  }
   elfcpp::Ehdr_write<32, big_endian> oehdr(view);
   oehdr.put_e_ident(e_ident);
 }
@@ -10363,6 +10394,49 @@ Target_arm<big_endian>::tag_cpu_name_value(unsigned int value)
       sprintf(buffer, "<unknown CPU value %u>", value);
       return std::string(buffer);
     }
+}
+
+// Query attributes object to see if integer divide instructions may be
+// present in an object.
+
+template<bool big_endian>
+bool
+Target_arm<big_endian>::attributes_accept_div(int arch, int profile,
+    const Object_attribute* div_attr)
+{
+  switch (div_attr->int_value())
+    {
+    case 0:
+      // Integer divide allowed if instruction contained in
+      // archetecture.
+      if (arch == elfcpp::TAG_CPU_ARCH_V7 && (profile == 'R' || profile == 'M'))
+        return true;
+      else if (arch >= elfcpp::TAG_CPU_ARCH_V7E_M)
+        return true;
+      else
+        return false;
+
+    case 1:
+      // Integer divide explicitly prohibited.
+      return false;
+
+    default:
+      // Unrecognised case - treat as allowing divide everywhere.
+    case 2:
+      // Integer divide allowed in ARM state.
+      return true;
+    }
+}
+
+// Query attributes object to see if integer divide instructions are
+// forbidden to be in the object.  This is not the inverse of
+// attributes_accept_div.
+
+template<bool big_endian>
+bool
+Target_arm<big_endian>::attributes_forbid_div(const Object_attribute* div_attr)
+{
+  return div_attr->int_value() == 1;
 }
 
 // Merge object attributes from input file called NAME with those of the
@@ -10734,27 +10808,33 @@ Target_arm<big_endian>::merge_object_attributes(
 	  break;
 
 	case elfcpp::Tag_DIV_use:
-	  // This tag is set to zero if we can use UDIV and SDIV in Thumb
-	  // mode on a v7-M or v7-R CPU; to one if we can not use UDIV or
-	  // SDIV at all; and to two if we can use UDIV or SDIV on a v7-A
-	  // CPU.  We will merge as follows: If the input attribute's value
-	  // is one then the output attribute's value remains unchanged.  If
-	  // the input attribute's value is zero or two then if the output
-	  // attribute's value is one the output value is set to the input
-	  // value, otherwise the output value must be the same as the
-	  // inputs.  */
-	  if (in_attr[i].int_value() != 1 && out_attr[i].int_value() != 1)
-	    {
-	      if (in_attr[i].int_value() != out_attr[i].int_value())
-		{
-		  gold_error(_("DIV usage mismatch between %s and output"),
-			     name);
-		}
-	    }
-
-	  if (in_attr[i].int_value() != 1)
-	    out_attr[i].set_int_value(in_attr[i].int_value());
-
+	  {
+	    // A value of zero on input means that the divide
+	    // instruction may be used if available in the base
+	    // architecture as specified via Tag_CPU_arch and
+	    // Tag_CPU_arch_profile.  A value of 1 means that the user
+	    // did not want divide instructions.  A value of 2
+	    // explicitly means that divide instructions were allowed
+	    // in ARM and Thumb state.
+	    int arch = this->
+	      get_aeabi_object_attribute(elfcpp::Tag_CPU_arch)->
+	      int_value();
+	    int profile = this->
+	      get_aeabi_object_attribute(elfcpp::Tag_CPU_arch_profile)->
+	      int_value();
+	    if (in_attr[i].int_value() == out_attr[i].int_value())
+	      {
+		// Do nothing.
+	      }
+	    else if (attributes_forbid_div(&in_attr[i])
+		     && !attributes_accept_div(arch, profile, &out_attr[i]))
+	      out_attr[i].set_int_value(1);
+	    else if (attributes_forbid_div(&out_attr[i])
+		     && attributes_accept_div(arch, profile, &in_attr[i]))
+	      out_attr[i].set_int_value(in_attr[i].int_value());
+	    else if (in_attr[i].int_value() == 2)
+	      out_attr[i].set_int_value(in_attr[i].int_value());
+	  }
 	  break;
 
 	case elfcpp::Tag_MPextension_use_legacy:
@@ -11147,6 +11227,7 @@ Target_arm<big_endian>::scan_reloc_section_for_stubs(
     Arm_relobj<big_endian>::as_arm_relobj(relinfo->object);
   unsigned int local_count = arm_object->local_symbol_count();
 
+  gold::Default_comdat_behavior default_comdat_behavior;
   Comdat_behavior comdat_behavior = CB_UNDETERMINED;
 
   for (size_t i = 0; i < reloc_count; ++i, prelocs += reloc_size)
@@ -11320,7 +11401,7 @@ Target_arm<big_endian>::scan_reloc_section_for_stubs(
 	  if (comdat_behavior == CB_UNDETERMINED)
 	    {
 	      std::string name = arm_object->section_name(relinfo->data_shndx);
-	      comdat_behavior = get_comdat_behavior(name.c_str());
+ 	      comdat_behavior = default_comdat_behavior.get(name.c_str());
 	    }
 	  if (comdat_behavior == CB_PRETEND)
 	    {
@@ -11420,7 +11501,7 @@ Target_arm<big_endian>::group_sections(
 {
   // Group input sections and insert stub table
   Layout::Section_list section_list;
-  layout->get_allocated_sections(&section_list);
+  layout->get_executable_sections(&section_list);
   for (Layout::Section_list::const_iterator p = section_list.begin();
        p != section_list.end();
        ++p)
@@ -12134,7 +12215,8 @@ const Target::Target_info Target_arm_nacl<big_endian>::arm_nacl_info =
   0,			// small_common_section_flags
   0,			// large_common_section_flags
   ".ARM.attributes",	// attributes_section
-  "aeabi"		// attributes_vendor
+  "aeabi",		// attributes_vendor
+  "_start"		// entry_symbol_name
 };
 
 template<bool big_endian>

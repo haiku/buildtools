@@ -50,7 +50,7 @@ set build_tests {
    {begin.c end.c} {} "libbar.so"}
   {"Build warn libbar.so"
    "-shared" "-fPIC"
-   {beginwarn.c end.c} {} "libbarw.so"
+   {beginwarn.c end.c} {{readelf {-S --wide} libbarw.rd}} "libbarw.so"
     "C" "^.*\\\): warning: function foo is deprecated$"}
   {"Build hidden libbar.so"
    "-shared" "-fPIC"
@@ -173,6 +173,39 @@ set build_tests {
   {"Build libpr14323-2.so"
    "-shared" "-fPIC"
    {pr14323-2.c} {} "libpr14323-2.so"}
+  {"Build pr14862-1.o"
+   "-r -nostdlib" ""
+   {pr14862-1.c} {} "libpr14862-1.o"}
+  {"Build libpr14862.so"
+   "-shared -Wl,--version-script=pr11138-1.map" "-fPIC"
+   {pr14862-2.c} {} "libpr14862.so"}
+  {"Build libneeded1b.so"
+   "-shared" "-fPIC"
+   {needed1b.c} {} "libneeded1b.so"}
+  {"Build libneeded1a.so"
+   "-shared -Wl,--add-needed,--no-as-needed -Ltmpdir -lneeded1b" "-fPIC"
+   {needed1a.c} {} "libneeded1a.so"}
+  {"Build libneeded1c.o"
+   "-r -nostdlib" ""
+   {needed1c.c} {} "libneeded1c.o"}
+  {"Build libneeded1pic.o"
+   "-r -nostdlib" "-fPIC"
+   {needed1c.c} {} "libneeded1pic.o"}
+  {"Build needed1a.so with --add-needed"
+   "-shared tmpdir/libneeded1pic.o -Wl,--add-needed,-rpath=tmpdir,-z,defs -Ltmpdir -lneeded1a" ""
+   {dummy.c} {} "needed1a.so"}
+  {"Build needed1b.so with --copy-dt-needed-entries"
+   "-shared tmpdir/libneeded1pic.o -Wl,--copy-dt-needed-entries,-rpath=tmpdir,-z,defs -Ltmpdir -lneeded1a" ""
+   {dummy.c} {} "needed1b.so"}
+  {"Build needed1a.so with --no-add-needed"
+   "-shared tmpdir/libneeded1pic.o -Wl,--no-add-needed -Ltmpdir -lneeded1a" ""
+   {dummy.c} {} "needed1c.so"}
+  {"Build needed1b.so with --no-copy-dt-needed-entries"
+   "-shared tmpdir/libneeded1pic.o -Wl,--no-copy-dt-needed-entries -Ltmpdir -lneeded1a" ""
+   {dummy.c} {} "needed1d.so"}
+  {"Build librel.so"
+   "-shared" "-fPIC"
+   {rel.c} {} "librel.so"}
 }
 
 run_cc_link_tests $build_tests
@@ -308,10 +341,52 @@ set run_tests {
     {"Run with pr14323-1.c pr14323-2.so"
      "tmpdir/libpr14323-2.so" ""
      {pr14323-1.c} "pr14323" "pass.out"}
+    {"Run with pr14862-1.c libpr14862.so"
+     "--as-needed tmpdir/libpr14862-1.o tmpdir/libpr14862.so" ""
+     {dummy.c} "pr14862" "pr14862.out"}
+    {"Link with --add-needed"
+     "tmpdir/libneeded1c.o --add-needed -rpath=tmpdir -Ltmpdir -lneeded1a" ""
+     {dummy.c} "needed1a" "needed1.out"}
+    {"Link with --copy-dt-needed-entries"
+     "tmpdir/libneeded1c.o --copy-dt-needed-entries -rpath=tmpdir -Ltmpdir -lneeded1a" ""
+     {dummy.c} "needed1b" "needed1.out"}
+    {"Run relmain"
+     "--no-as-needed -rpath=tmpdir -Ltmpdir -lrel" ""
+     {relmain.c} "relmain" "relmain.out"}
 }
 
 # NetBSD ELF systems do not currently support the .*_array sections.
 run_ld_link_exec_tests [list "*-*-netbsdelf*"] $run_tests
+
+# Check --no-add-needed and --no-copy-dt-needed-entries
+set testname "--no-add-needed"
+set exec_output [run_host_cmd "$CC" "$gcc_gas_flag $gcc_ld_flag tmpdir/libneeded1c.o -Wl,--no-add-needed,-rpath-link=tmpdir -Ltmpdir -lneeded1a"]
+if { [ regexp "tmpdir/libneeded1b.so: .*: DSO missing" $exec_output ] } {
+    pass $testname
+} {
+    fail $testname
+}
+set testname "--no-copy-dt-needed-entries"
+set exec_output [run_host_cmd "$CC" "$gcc_gas_flag $gcc_ld_flag tmpdir/libneeded1c.o -Wl,--no-copy-dt-needed-entries,-rpath-link=tmpdir -Ltmpdir -lneeded1a"]
+if { [ regexp "tmpdir/libneeded1b.so: .*: DSO missing" $exec_output ] } {
+    pass $testname
+} {
+    fail $testname
+}
+set testname "--no-add-needed -shared"
+set exec_output [run_host_cmd "$CC" "$gcc_gas_flag $gcc_ld_flag -shared tmpdir/libneeded1pic.o -Wl,--no-add-needed,-z,defs -Ltmpdir -lneeded1a"]
+if { [ regexp "undefined reference to `bar'" $exec_output ] } {
+    pass $testname
+} {
+    fail $testname
+}
+set testname "--no-copy-dt-needed-entries -shared"
+set exec_output [run_host_cmd "$CC" "$gcc_gas_flag $gcc_ld_flag -shared tmpdir/libneeded1pic.o -Wl,--no-copy-dt-needed-entries,-z,defs -Ltmpdir -lneeded1a"]
+if { [ regexp "undefined reference to `bar'" $exec_output ] } {
+    pass $testname
+} {
+    fail $testname
+}
 
 # Check to see if the C++ compiler works
 if { [which $CXX] == 0 } {

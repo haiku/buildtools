@@ -1,7 +1,5 @@
 /* AVR-specific support for 32-bit ELF
-   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright 1999-2013 Free Software Foundation, Inc.
    Contributed by Denis Chertykov <denisc@overta.ru>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -672,7 +670,7 @@ elf32_avr_link_hash_table_create (bfd *abfd)
   struct elf32_avr_link_hash_table *htab;
   bfd_size_type amt = sizeof (*htab);
 
-  htab = bfd_malloc (amt);
+  htab = bfd_zmalloc (amt);
   if (htab == NULL)
     return NULL;
 
@@ -689,15 +687,6 @@ elf32_avr_link_hash_table_create (bfd *abfd)
   if (!bfd_hash_table_init (&htab->bstab, stub_hash_newfunc,
                             sizeof (struct elf32_avr_stub_hash_entry)))
     return NULL;
-
-  htab->stub_bfd = NULL;
-  htab->stub_sec = NULL;
-
-  /* Initialize the address mapping table.  */
-  htab->amt_stub_offsets = NULL;
-  htab->amt_destination_addr = NULL;
-  htab->amt_entry_cnt = 0;
-  htab->amt_max_entry_cnt = 0;
 
   return &htab->etab.root;
 }
@@ -717,7 +706,7 @@ elf32_avr_link_hash_table_free (struct bfd_link_hash_table *btab)
     free (htab->amt_destination_addr);
 
   bfd_hash_table_free (&htab->bstab);
-  _bfd_generic_link_hash_table_free (btab);
+  _bfd_elf_link_hash_table_free (btab);
 }
 
 /* Calculates the effective distance of a pc relative jump/call.  */
@@ -1703,8 +1692,8 @@ elf32_avr_relax_section (bfd *abfd,
   struct elf32_avr_link_hash_table *htab;
 
   /* If 'shrinkable' is FALSE, do not shrink by deleting bytes while
-     relaxing. Such shrinking can cause issues for the sections such 
-     as .vectors and .jumptables. Instead the unused bytes should be 
+     relaxing. Such shrinking can cause issues for the sections such
+     as .vectors and .jumptables. Instead the unused bytes should be
      filled with nop instructions. */
   bfd_boolean shrinkable = TRUE;
 
@@ -1875,7 +1864,7 @@ elf32_avr_relax_section (bfd *abfd,
               distance_short_enough = 1;
             /* If shrinkable, then we can check for a range of distance which
                is two bytes farther on both the directions because the call
-               or jump target will be closer by two bytes after the 
+               or jump target will be closer by two bytes after the
                relaxation. */
             else if (shrinkable && ((int) gap >= -4094 && (int) gap <= 4097))
               distance_short_enough = 1;
@@ -1952,7 +1941,7 @@ elf32_avr_relax_section (bfd *abfd,
                                              R_AVR_13_PCREL);
 
                 /* We should not modify the ordering if 'shrinkable' is
-                   FALSE. */ 
+                   FALSE. */
                 if (!shrinkable)
                   {
                     /* Let's insert a nop.  */
@@ -2147,6 +2136,7 @@ elf32_avr_relax_section (bfd *abfd,
 			  irel->r_offset + insn_size;
                         Elf_Internal_Sym *isym, *isymend;
                         unsigned int sec_shndx;
+			struct bfd_section *isec;
 
                         sec_shndx =
 			  _bfd_elf_section_from_bfd_section (abfd, sec);
@@ -2197,80 +2187,85 @@ elf32_avr_relax_section (bfd *abfd,
 				}
 			    }
 			}
+
 			/* Now we check for relocations pointing to ret.  */
-			{
-			  Elf_Internal_Rela *rel;
-			  Elf_Internal_Rela *relend;
+			for (isec = abfd->sections; isec && deleting_ret_is_safe; isec = isec->next)
+			  {
+			    Elf_Internal_Rela *rel;
+			    Elf_Internal_Rela *relend;
+              
+			    rel = elf_section_data (isec)->relocs;
+			    if (rel == NULL)
+			      rel = _bfd_elf_link_read_relocs (abfd, isec, NULL, NULL, TRUE);
 
-			  relend = elf_section_data (sec)->relocs
-			    + sec->reloc_count;
+			    relend = rel + isec->reloc_count;
 
-			  for (rel = elf_section_data (sec)->relocs;
-			       rel < relend; rel++)
-			    {
-			      bfd_vma reloc_target = 0;
+			    for (; rel && rel < relend; rel++)
+			      {
+				bfd_vma reloc_target = 0;
 
-			      /* Read this BFD's local symbols if we haven't
-				 done so already.  */
-			      if (isymbuf == NULL && symtab_hdr->sh_info != 0)
-				{
-				  isymbuf = (Elf_Internal_Sym *)
-				    symtab_hdr->contents;
-				  if (isymbuf == NULL)
-				    isymbuf = bfd_elf_get_elf_syms
-				      (abfd,
-				       symtab_hdr,
-				       symtab_hdr->sh_info, 0,
-				       NULL, NULL, NULL);
-				  if (isymbuf == NULL)
+				/* Read this BFD's local symbols if we haven't
+				   done so already.  */
+				if (isymbuf == NULL && symtab_hdr->sh_info != 0)
+				  {
+				    isymbuf = (Elf_Internal_Sym *)
+				      symtab_hdr->contents;
+				    if (isymbuf == NULL)
+				      isymbuf = bfd_elf_get_elf_syms
+					(abfd,
+					 symtab_hdr,
+					 symtab_hdr->sh_info, 0,
+					 NULL, NULL, NULL);
+				    if (isymbuf == NULL)
+				      break;
+				  }
+
+				/* Get the value of the symbol referred to
+				   by the reloc.  */
+				if (ELF32_R_SYM (rel->r_info)
+				    < symtab_hdr->sh_info)
+				  {
+				    /* A local symbol.  */
+				    asection *sym_sec;
+
+				    isym = isymbuf
+				      + ELF32_R_SYM (rel->r_info);
+				    sym_sec = bfd_section_from_elf_index
+				      (abfd, isym->st_shndx);
+				    symval = isym->st_value;
+
+				    /* If the reloc is absolute, it will not
+				       have a symbol or section associated
+				       with it.  */
+
+				    if (sym_sec)
+				      {
+					symval +=
+					  sym_sec->output_section->vma
+					  + sym_sec->output_offset;
+					reloc_target = symval + rel->r_addend;
+				      }
+				    else
+				      {
+					reloc_target = symval + rel->r_addend;
+					/* Reference symbol is absolute.  */
+				      }
+				  }
+				/* else ... reference symbol is extern.  */
+
+				if (address_of_ret == reloc_target)
+				  {
+				    deleting_ret_is_safe = 0;
+				    if (debug_relax)
+				      printf ("ret from "
+					      "rjmp/jmp ret sequence at address"
+					      " 0x%x could not be deleted. ret"
+					      " is target of a relocation.\n",
+					      (int) address_of_ret);
 				    break;
-				}
-
-			      /* Get the value of the symbol referred to
-				 by the reloc.  */
-			      if (ELF32_R_SYM (rel->r_info)
-				  < symtab_hdr->sh_info)
-				{
-				  /* A local symbol.  */
-				  asection *sym_sec;
-
-				  isym = isymbuf
-				    + ELF32_R_SYM (rel->r_info);
-				  sym_sec = bfd_section_from_elf_index
-				    (abfd, isym->st_shndx);
-				  symval = isym->st_value;
-
-				  /* If the reloc is absolute, it will not
-				     have a symbol or section associated
-				     with it.  */
-
-				  if (sym_sec)
-				    {
-				      symval +=
-					sym_sec->output_section->vma
-					+ sym_sec->output_offset;
-				      reloc_target = symval + rel->r_addend;
-				    }
-				  else
-				    {
-				      reloc_target = symval + rel->r_addend;
-				      /* Reference symbol is absolute.  */
-				    }
-				}
-			      /* else ... reference symbol is extern.  */
-
-			      if (address_of_ret == reloc_target)
-				{
-				  deleting_ret_is_safe = 0;
-				  if (debug_relax)
-				    printf ("ret from "
-					    "rjmp/jmp ret sequence at address"
-					    " 0x%x could not be deleted. ret"
-					    " is target of a relocation.\n",
-					    (int) address_of_ret);
-				}
-			    }
-			}
+				  }
+			      }
+			  }
 
 			if (deleting_ret_is_safe)
 			  {
@@ -2291,7 +2286,6 @@ elf32_avr_relax_section (bfd *abfd,
 			    break;
 			  }
                       }
-
                   }
               }
             break;

@@ -2837,6 +2837,10 @@ s3_bfd_score_elf_check_relocs (bfd *abfd,
             {
               while (h->root.type == bfd_link_hash_indirect)
                 h = (struct elf_link_hash_entry *)h->root.u.i.link;
+
+	      /* PR15323, ref flags aren't set for references in the
+		 same object.  */
+	      h->root.non_ir_ref = 1;
             }
         }
 
@@ -3537,7 +3541,8 @@ s3_bfd_score_elf_finish_dynamic_symbol (bfd *output_bfd,
 
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
   name = h->root.root.string;
-  if (strcmp (name, "_DYNAMIC") == 0 || strcmp (name, "_GLOBAL_OFFSET_TABLE_") == 0)
+  if (h == elf_hash_table (info)->hdynamic
+      || h == elf_hash_table (info)->hgot)
     sym->st_shndx = SHN_ABS;
   else if (strcmp (name, "_DYNAMIC_LINK") == 0)
     {
@@ -3905,10 +3910,12 @@ s3_bfd_score_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
     case 148:                  /* Linux/Score 32-bit.  */
       /* pr_cursig */
-      elf_tdata (abfd)->core_signal = score_bfd_get_16 (abfd, note->descdata + 12);
+      elf_tdata (abfd)->core->signal
+	= score_bfd_get_16 (abfd, note->descdata + 12);
 
       /* pr_pid */
-      elf_tdata (abfd)->core_lwpid = score_bfd_get_32 (abfd, note->descdata + 24);
+      elf_tdata (abfd)->core->lwpid
+	= score_bfd_get_32 (abfd, note->descdata + 24);
 
       /* pr_reg */
       offset = 72;
@@ -3918,7 +3925,8 @@ s3_bfd_score_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
     }
 
   /* Make a ".reg/999" section.  */
-  return _bfd_elfcore_make_pseudosection (abfd, ".reg", raw_size, note->descpos + offset);
+  return _bfd_elfcore_make_pseudosection (abfd, ".reg", raw_size,
+					  note->descpos + offset);
 }
 
 static bfd_boolean
@@ -3930,8 +3938,10 @@ s3_bfd_score_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
       return FALSE;
 
     case 124:                  /* Linux/Score elf_prpsinfo.  */
-      elf_tdata (abfd)->core_program = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-      elf_tdata (abfd)->core_command = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
+      elf_tdata (abfd)->core->program
+	= _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
+      elf_tdata (abfd)->core->command
+	= _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
     }
 
   /* Note that for some reason, a spurious space is tacked
@@ -3939,7 +3949,7 @@ s3_bfd_score_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      implementations, so strip it off if it exists.  */
 
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -4356,7 +4366,7 @@ elf32_score_link_hash_table_create (bfd *abfd)
   struct elf_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf_link_hash_table);
 
-  ret = (struct elf_link_hash_table *) bfd_malloc (amt);
+  ret = (struct elf_link_hash_table *) bfd_zmalloc (amt);
   if (ret == NULL)
     return NULL;
 

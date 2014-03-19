@@ -950,7 +950,7 @@ elf_m68k_link_hash_table_create (bfd *abfd)
   struct elf_m68k_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf_m68k_link_hash_table);
 
-  ret = (struct elf_m68k_link_hash_table *) bfd_malloc (amt);
+  ret = (struct elf_m68k_link_hash_table *) bfd_zmalloc (amt);
   if (ret == (struct elf_m68k_link_hash_table *) NULL)
     return NULL;
 
@@ -963,12 +963,6 @@ elf_m68k_link_hash_table_create (bfd *abfd)
       return NULL;
     }
 
-  ret->sym_cache.abfd = NULL;
-  ret->plt_info = NULL;
-  ret->local_gp_p = FALSE;
-  ret->use_neg_got_offsets_p = FALSE;
-  ret->allow_multigot_p = FALSE;
-  ret->multi_got_.bfd2got = NULL;
   ret->multi_got_.global_symndx = 1;
 
   return &ret->root.root;
@@ -988,6 +982,7 @@ elf_m68k_link_hash_table_free (struct bfd_link_hash_table *_htab)
       htab_delete (htab->multi_got_.bfd2got);
       htab->multi_got_.bfd2got = NULL;
     }
+  _bfd_elf_link_hash_table_free (_htab);
 }
 
 /* Set the right machine number.  */
@@ -2589,6 +2584,10 @@ elf_m68k_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
@@ -4742,7 +4741,9 @@ bfd_elf_m68k_set_target_options (struct bfd_link_info *info, int got_handling)
 }
 
 static enum elf_reloc_type_class
-elf32_m68k_reloc_type_class (const Elf_Internal_Rela *rela)
+elf32_m68k_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			     const asection *rel_sec ATTRIBUTE_UNUSED,
+			     const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF32_R_TYPE (rela->r_info))
     {
@@ -4782,10 +4783,10 @@ elf_m68k_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
     case 154:		/* Linux/m68k */
       /* pr_cursig */
-      elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
+      elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
 
       /* pr_pid */
-      elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 22);
+      elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 22);
 
       /* pr_reg */
       offset = 70;
@@ -4808,11 +4809,11 @@ elf_m68k_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
       return FALSE;
 
     case 124:		/* Linux/m68k elf_prpsinfo.  */
-      elf_tdata (abfd)->core_pid
+      elf_tdata (abfd)->core->pid
 	= bfd_get_32 (abfd, note->descdata + 12);
-      elf_tdata (abfd)->core_program
+      elf_tdata (abfd)->core->program
 	= _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-      elf_tdata (abfd)->core_command
+      elf_tdata (abfd)->core->command
 	= _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
     }
 
@@ -4820,7 +4821,7 @@ elf_m68k_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      onto the end of the args in some (at least one anyway)
      implementations, so strip it off if it exists.  */
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (n > 0 && command[n - 1] == ' ')

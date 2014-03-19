@@ -1,4 +1,21 @@
 ## Process this file with automake to generate Makefile.in
+#
+#   Copyright 2012 Free Software Foundation
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+#
 
 AUTOMAKE_OPTIONS = 1.11 no-dist foreign
 ACLOCAL_AMFLAGS = -I . -I .. -I ../config
@@ -35,7 +52,7 @@ AM_CFLAGS = $(WARN_CFLAGS)
 AM_CPPFLAGS = -DBINDIR='"$(bindir)"'
 if PLUGINS
 bfdinclude_HEADERS += $(INCDIR)/plugin-api.h
-LIBDL = -ldl
+LIBDL = @lt_cv_dlopen_libs@
 endif
 
 # bfd.h goes here, for now
@@ -112,12 +129,14 @@ ALL_MACHINES = \
 	cpu-m88k.lo \
 	cpu-mcore.lo \
 	cpu-mep.lo \
+	cpu-metag.lo \
 	cpu-microblaze.lo \
 	cpu-mips.lo \
 	cpu-mmix.lo \
 	cpu-moxie.lo \
 	cpu-msp430.lo \
 	cpu-mt.lo \
+	cpu-nios2.lo \
 	cpu-ns32k.lo \
 	cpu-openrisc.lo \
 	cpu-or32.lo \
@@ -141,6 +160,7 @@ ALL_MACHINES = \
 	cpu-tilegx.lo \
 	cpu-tilepro.lo \
 	cpu-v850.lo \
+	cpu-v850_rh850.lo \
 	cpu-vax.lo \
 	cpu-w65.lo \
 	cpu-we32k.lo \
@@ -193,6 +213,7 @@ ALL_MACHINES_CFILES = \
 	cpu-m88k.c \
 	cpu-mcore.c \
 	cpu-mep.c \
+	cpu-metag.c \
 	cpu-microblaze.c \
 	cpu-mips.c \
 	cpu-mmix.c \
@@ -200,6 +221,7 @@ ALL_MACHINES_CFILES = \
 	cpu-msp430.c \
 	cpu-mt.c \
 	cpu-ns32k.c \
+	cpu-nios2.c \
 	cpu-openrisc.c \
 	cpu-or32.c \
 	cpu-pdp11.c \
@@ -222,6 +244,7 @@ ALL_MACHINES_CFILES = \
 	cpu-tilegx.c \
 	cpu-tilepro.c \
 	cpu-v850.c \
+	cpu-v850_rh850.c \
 	cpu-vax.c \
 	cpu-w65.c \
 	cpu-we32k.c \
@@ -321,11 +344,12 @@ BFD32_BACKENDS = \
 	elf32-m88k.lo \
 	elf32-mcore.lo \
 	elf32-mep.lo \
+	elf32-metag.lo \
 	elf32-microblaze.lo \
-	elf32-mips.lo \
 	elf32-moxie.lo \
 	elf32-msp430.lo \
 	elf32-mt.lo \
+	elf32-nios2.lo \
 	elf32-openrisc.lo \
 	elf32-or32.lo \
 	elf32-pj.lo \
@@ -350,7 +374,6 @@ BFD32_BACKENDS = \
 	elf32-xtensa.lo \
 	elf32.lo \
 	elflink.lo \
-	elfxx-mips.lo \
 	elfxx-sparc.lo \
 	elfxx-tilegx.lo \
 	epoc-pe-arm.lo \
@@ -509,11 +532,12 @@ BFD32_BACKENDS_CFILES = \
 	elf32-m88k.c \
 	elf32-mcore.c \
 	elf32-mep.c \
+	elf32-metag.c \
 	elf32-microblaze.c \
-	elf32-mips.c \
 	elf32-moxie.c \
 	elf32-msp430.c \
 	elf32-mt.c \
+	elf32-nios2.c \
 	elf32-openrisc.c \
 	elf32-or32.c \
 	elf32-pj.c \
@@ -538,7 +562,6 @@ BFD32_BACKENDS_CFILES = \
 	elf32-xtensa.c \
 	elf32.c \
 	elflink.c \
-	elfxx-mips.c \
 	elfxx-sparc.c \
 	elfxx-tilegx.c \
 	epoc-pe-arm.c \
@@ -615,15 +638,17 @@ BFD32_BACKENDS_CFILES = \
 # elf32-ia64.c requires a 64-bit bfd_vma, and hence can not be put in
 # BFD32_BACKENDS.
 BFD64_BACKENDS = \
+	elf32-aarch64.lo \
 	elf64-aarch64.lo \
+	elfxx-aarch64.lo \
 	aix5ppc-core.lo \
 	aout64.lo \
 	coff-alpha.lo \
 	coff-x86_64.lo \
 	coff64-rs6000.lo \
 	demo64.lo \
-	elf-nacl.lo \
 	elf32-ia64.lo \
+	elf32-mips.lo \
 	elf32-score.lo \
 	elf32-score7.lo \
 	elf64-alpha.lo \
@@ -642,6 +667,7 @@ BFD64_BACKENDS = \
 	elf64.lo \
 	elfn32-mips.lo \
 	elfxx-ia64.lo \
+	elfxx-mips.lo \
 	mach-o-x86-64.lo \
 	mmo.lo \
 	nlm32-alpha.lo \
@@ -654,14 +680,13 @@ BFD64_BACKENDS = \
 	vms-alpha.lo
 
 BFD64_BACKENDS_CFILES = \
-	elf64-aarch64.c \
 	aix5ppc-core.c \
 	aout64.c \
 	coff-alpha.c \
 	coff-x86_64.c \
 	coff64-rs6000.c \
 	demo64.c \
-	elf-nacl.c \
+	elf32-mips.c \
 	elf32-score.c \
 	elf32-score7.c \
 	elf64-alpha.c \
@@ -678,7 +703,9 @@ BFD64_BACKENDS_CFILES = \
 	elf64-x86-64.c \
 	elf64.c \
 	elfn32-mips.c \
+	elfxx-aarch64.c \
 	elfxx-ia64.c \
+	elfxx-mips.c \
 	mach-o-x86-64.c \
 	mmo.c \
 	nlm32-alpha.c \
@@ -739,6 +766,7 @@ SOURCE_CFILES = \
 	$(OPTIONAL_BACKENDS_CFILES)
 
 BUILD_CFILES = \
+	elf32-aarch64.c elf64-aarch64.c \
 	elf32-ia64.c elf64-ia64.c peigen.c pepigen.c pex64igen.c
 
 CFILES = $(SOURCE_CFILES) $(BUILD_CFILES)
@@ -746,7 +774,7 @@ CFILES = $(SOURCE_CFILES) $(BUILD_CFILES)
 ## This is a list of all .h files which are in the source tree.
 SOURCE_HFILES = \
 	aout-target.h aoutf1.h aoutx.h coffcode.h coffswap.h ecoffswap.h \
-	elf-bfd.h elf-hppa.h elf32-hppa.h \
+	elf-bfd.h elf-hppa.h elf-linux-psinfo.h elf32-hppa.h \
 	elf64-hppa.h elfcode.h elfcore.h \
 	freebsd.h genlink.h go32stub.h \
 	libaout.h libbfd.h libcoff.h libecoff.h libhppa.h libieee.h \
@@ -886,6 +914,18 @@ elf64-target.h : elfxx-target.h
 	rm -f elf64-target.h
 	sed -e s/NN/64/g < $(srcdir)/elfxx-target.h > elf64-target.new
 	mv -f elf64-target.new elf64-target.h
+
+elf32-aarch64.c : elfnn-aarch64.c
+	rm -f elf32-aarch64.c
+	echo "#line 1 \"$(srcdir)/elfnn-aarch64.c\"" > elf32-aarch64.new
+	sed -e s/NN/32/g < $(srcdir)/elfnn-aarch64.c >> elf32-aarch64.new
+	mv -f elf32-aarch64.new elf32-aarch64.c
+
+elf64-aarch64.c : elfnn-aarch64.c
+	rm -f elf64-aarch64.c
+	echo "#line 1 \"$(srcdir)/elfnn-aarch64.c\"" > elf64-aarch64.new
+	sed -e s/NN/64/g < $(srcdir)/elfnn-aarch64.c >> elf64-aarch64.new
+	mv -f elf64-aarch64.new elf64-aarch64.c
 
 elf32-ia64.c : elfnn-ia64.c
 	rm -f elf32-ia64.c

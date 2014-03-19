@@ -1433,7 +1433,7 @@ _bfd_sparc_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 						TRUE);
 	      if (h == NULL)
 		return FALSE;
-	      
+
 	      /* Fake a STT_GNU_IFUNC symbol.  */
 	      h->type = STT_GNU_IFUNC;
 	      h->def_regular = 1;
@@ -1450,6 +1450,10 @@ _bfd_sparc_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       if (h && h->type == STT_GNU_IFUNC)
@@ -3008,7 +3012,7 @@ _bfd_sparc_elf_relocate_section (bfd *output_bfd,
 	      if (h == NULL)
 		abort ();
 
-	      /* Set STT_GNU_IFUNC symbol value.  */ 
+	      /* Set STT_GNU_IFUNC symbol value.  */
 	      h->root.u.def.value = sym->st_value;
 	      h->root.u.def.section = sec;
 	    }
@@ -3301,7 +3305,7 @@ _bfd_sparc_elf_relocate_section (bfd *output_bfd,
 	      if (h == NULL)
 		break;
 	    }
-	  /* PR 7027: We need similar behaviour for 64-bit binaries.  */ 
+	  /* PR 7027: We need similar behaviour for 64-bit binaries.  */
 	  else if (r_type == R_SPARC_WPLT30 && h == NULL)
 	    break;
 	  else
@@ -4149,7 +4153,7 @@ do_relocation:
 	      {
 		const char *name;
 
-		/* The Solaris native linker silently disregards overflows. 
+		/* The Solaris native linker silently disregards overflows.
 		   We don't, but this breaks stabs debugging info, whose
 		   relocations are only 32-bits wide.  Ignore overflows in
 		   this case and also for discarded entries.  */
@@ -4534,7 +4538,7 @@ _bfd_sparc_elf_finish_dynamic_symbol (bfd *output_bfd,
      _GLOBAL_OFFSET_TABLE_ is not absolute: it is relative to the
      ".got" section.  Likewise _PROCEDURE_LINKAGE_TABLE_ and ".plt".  */
   if (sym != NULL
-      && (strcmp (h->root.root.string, "_DYNAMIC") == 0
+      && (h == htab->elf.hdynamic
 	  || (!htab->is_vxworks
 	      && (h == htab->elf.hgot || h == htab->elf.hplt))))
     sym->st_shndx = SHN_ABS;
@@ -4741,7 +4745,7 @@ finish_local_dynamic_symbol (void **slot, void *inf)
   struct elf_link_hash_entry *h
     = (struct elf_link_hash_entry *) *slot;
   struct bfd_link_info *info
-    = (struct bfd_link_info *) inf; 
+    = (struct bfd_link_info *) inf;
 
   return _bfd_sparc_elf_finish_dynamic_symbol (info->output_bfd, info,
 					       h, NULL);
@@ -4789,9 +4793,10 @@ _bfd_sparc_elf_finish_dynamic_sections (bfd *output_bfd, struct bfd_link_info *i
 	    }
 	}
 
-      elf_section_data (splt->output_section)->this_hdr.sh_entsize
-	= (htab->is_vxworks || !ABI_64_P (output_bfd))
-	  ? 0 : htab->plt_entry_size;
+      if (elf_section_data (splt->output_section) != NULL)
+        elf_section_data (splt->output_section)->this_hdr.sh_entsize
+          = ((htab->is_vxworks || !ABI_64_P (output_bfd))
+             ? 0 : htab->plt_entry_size);
     }
 
   /* Set the first entry in the global offset table to the address of
@@ -4905,6 +4910,7 @@ _bfd_sparc_elf_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
   out_attr = &out_attrs[Tag_GNU_Sparc_HWCAPS];
 
   out_attr->i |= in_attr->i;
+  out_attr->type = 1;
 
   /* Merge Tag_compatibility attributes and any common GNU ones.  */
   _bfd_elf_merge_object_attributes (ibfd, obfd);

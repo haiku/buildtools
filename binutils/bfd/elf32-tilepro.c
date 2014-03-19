@@ -737,6 +737,16 @@ struct _bfd_tilepro_elf_obj_tdata
    && elf_tdata (bfd) != NULL				\
    && elf_object_id (bfd) == TILEPRO_ELF_DATA)
 
+/* Allocate TILEPro ELF private object data.  */
+
+static bfd_boolean
+tilepro_elf_mkobject (bfd *abfd)
+{
+  return bfd_elf_allocate_object (abfd,
+				  sizeof (struct _bfd_tilepro_elf_obj_tdata),
+				  TILEPRO_ELF_DATA);
+}
+
 #include "elf/common.h"
 #include "elf/internal.h"
 
@@ -934,11 +944,11 @@ tilepro_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
     return FALSE;
 
   /* pr_cursig */
-  elf_tdata (abfd)->core_signal =
+  elf_tdata (abfd)->core->signal =
     bfd_get_16 (abfd, note->descdata + TILEPRO_PRSTATUS_OFFSET_PR_CURSIG);
 
   /* pr_pid */
-  elf_tdata (abfd)->core_pid =
+  elf_tdata (abfd)->core->pid =
     bfd_get_32 (abfd, note->descdata + TILEPRO_PRSTATUS_OFFSET_PR_PID);
 
   /* pr_reg */
@@ -956,11 +966,11 @@ tilepro_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
   if (note->descsz != TILEPRO_PRPSINFO_SIZEOF)
     return FALSE;
 
-  elf_tdata (abfd)->core_program
+  elf_tdata (abfd)->core->program
     = _bfd_elfcore_strndup (abfd,
 			    note->descdata + TILEPRO_PRPSINFO_OFFSET_PR_FNAME,
 			    16);
-  elf_tdata (abfd)->core_command
+  elf_tdata (abfd)->core->command
     = _bfd_elfcore_strndup (abfd,
 			    note->descdata + TILEPRO_PRPSINFO_OFFSET_PR_PSARGS,
 			    ELF_PR_PSARGS_SIZE);
@@ -970,7 +980,7 @@ tilepro_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      onto the end of the args in some (at least one anyway)
      implementations, so strip it off if it exists.  */
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -1105,7 +1115,7 @@ static int
 tilepro_plt_entry_build (asection *splt, asection *sgotplt, bfd_vma offset,
 		      bfd_vma *r_offset)
 {
-  int plt_index = (offset - PLT_HEADER_SIZE) / PLT_ENTRY_SIZE;
+  int plt_index = (offset - PLT_ENTRY_SIZE) / PLT_ENTRY_SIZE;
   int got_offset = plt_index * GOT_ENTRY_SIZE + GOTPLT_HEADER_SIZE;
   tilepro_bundle_bits *pc;
 
@@ -1511,6 +1521,10 @@ tilepro_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       r_type = tilepro_elf_tls_transition (info, r_type, h == NULL);
@@ -2215,7 +2229,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *h, void *inf)
 	  /* Allocate room for the header.  */
 	  if (s->size == 0)
 	    {
-	      s->size = PLT_HEADER_SIZE;
+	      s->size = PLT_ENTRY_SIZE;
 	    }
 
           h->plt.offset = s->size;
@@ -3809,7 +3823,7 @@ tilepro_elf_finish_dynamic_symbol (bfd *output_bfd,
     }
 
   /* Mark some specially defined symbols as absolute. */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == htab->elf.hdynamic
       || (h == htab->elf.hgot || h == htab->elf.hplt))
     sym->st_shndx = SHN_ABS;
 
@@ -3889,10 +3903,15 @@ tilepro_elf_finish_dynamic_sections (bfd *output_bfd,
 
       /* Fill in the first entry in the procedure linkage table.  */
       if (splt->size > 0)
-        memcpy (splt->contents, tilepro_plt0_entry, PLT_HEADER_SIZE);
+	{
+	  memcpy (splt->contents, tilepro_plt0_entry, PLT_HEADER_SIZE);
+	  memset (splt->contents + PLT_HEADER_SIZE, 0,
+		  PLT_ENTRY_SIZE - PLT_HEADER_SIZE);
+	}
 
-      elf_section_data (splt->output_section)->this_hdr.sh_entsize
-	= PLT_ENTRY_SIZE;
+      if (elf_section_data (splt->output_section) != NULL)
+	elf_section_data (splt->output_section)->this_hdr.sh_entsize
+	  = PLT_ENTRY_SIZE;
     }
 
   if (htab->elf.sgotplt)
@@ -3946,11 +3965,13 @@ static bfd_vma
 tilepro_elf_plt_sym_val (bfd_vma i, const asection *plt,
                       const arelent *rel ATTRIBUTE_UNUSED)
 {
-  return plt->vma + PLT_HEADER_SIZE + i * PLT_ENTRY_SIZE;
+  return plt->vma + (i + 1) * PLT_ENTRY_SIZE;
 }
 
 static enum elf_reloc_type_class
-tilepro_reloc_type_class (const Elf_Internal_Rela *rela)
+tilepro_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			  const asection *rel_sec ATTRIBUTE_UNUSED,
+			  const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF32_R_TYPE (rela->r_info))
     {
@@ -4025,6 +4046,8 @@ tilepro_additional_program_headers (bfd *abfd,
 #define elf_backend_grok_prstatus            tilepro_elf_grok_prstatus
 #define elf_backend_grok_psinfo              tilepro_elf_grok_psinfo
 #define elf_backend_additional_program_headers tilepro_additional_program_headers
+
+#define bfd_elf32_mkobject		     tilepro_elf_mkobject
 
 #define elf_backend_init_index_section	_bfd_elf_init_1_index_section
 

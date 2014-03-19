@@ -1,3 +1,81 @@
+2013-10-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/x86-64/compressed-1a.d: Updated for 64-bit addresses.
+
+2013-09-12  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/x86-64/compressed-1a.d: Update expected output to
+	allow for 64-bit addresses.
+
+2013-08-22  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/nm.exp: --size-sort test: Add more ELF-like
+	targets.
+	* binutils-all/nm-1.s: Use .byte instead of .long.
+	Provide a terminating symbol.
+
+2013-08-21  Hans-Peter Nilsson  <hp@bitrange.com>
+
+	* binutils-all/nm.exp: Revert last change.  Instead use nm-elf-1.s
+	for mmix-knuth-mmixware.
+
+2013-08-20  Hans-Peter Nilsson  <hp@bitrange.com>
+
+	* binutils-all/nm.exp: Xfail test for nm --size-sort for
+	mmix-knuth-mmixware.
+
+2013-08-19  Tristan Gingold  <gingold@adacore.com>
+
+	* binutils-all/nm.exp: Add a test for nm --size-sort
+	* binutils-all/nm-elf-1.s: New file.
+	* binutils-all/nm-1.s: New file.
+
+2013-05-31  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/i386/compressed-1b.d: Updated for text/data/bss
+	section alignment change.
+	* binutils-all/i386/compressed-1c.d: Likewise.
+	* binutils-all/x86-64/compressed-1b.d: Likewise.
+	* binutils-all/x86-64/compressed-1c.d: Likewise.
+
+2013-05-28  Cary Coutant  <ccoutant@google.com>
+
+	* binutils-all/dw2-1.W: Adjust expected output.
+	* binutils-all/objdump.W: Likewise.
+	* binutils-all/i386/compressed-1a.d: Likewise.
+	* binutils-all/x86-64/compressed-1a.d: Likewise.
+
+2013-05-02  Nick Clifton  <nickc@redhat.com>
+
+	* readelf.exp: Expect -wi test to fail for the MSP430.
+
+2013-05-01  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* lib/binutils-common.exp (is_elf_format): Also exclude
+	*-*-linux*ecoff*.
+
+2013-02-26  Nick Clifton  <nickc@redhat.com>
+
+	PR binutils/15191
+	* binutils-all/readelf.n: Updare expected output from readelf.
+
+2013-02-14  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* binutils-all/mips/mixed-mips16.s: Add missing stack adjustment.
+	* binutils-all/mips/mixed-mips16.d: Update accordingly.
+
+2013-02-13  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	* binutils-all/mips/mixed-micromips.d: New test.
+	* binutils-all/mips/mixed-mips16.d: New test.
+	* binutils-all/mips/mixed-micromips.s: New test source.
+	* binutils-all/mips/mixed-mips16.s: New test source.
+	* binutils-all/mips/mips.exp: New file.
+
+2012-12-17  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/windres/README: Add copyright notice.
+
 2012-11-27  Roland McGrath  <mcgrathr@google.com>
 
 	* lib/binutils-common.exp (is_zlib_supported): New function.
@@ -9,18 +87,76 @@
 	Mark unsupported if zlib is not available.
 	* binutils-all/readelf.exp (readelf_compressed_wa_test): Likewise.
 
-2012-08-16  Ian Bolton  <ian.bolton@arm.com>
-            Laurent Desnogues  <laurent.desnogues@arm.com>
-            Jim MacArthur  <jim.macarthur@arm.com>
-            Marcus Shawcroft  <marcus.shawcroft@arm.com>
-            Nigel Stephens  <nigel.stephens@arm.com>
-            Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
-            Richard Earnshaw  <rearnsha@arm.com>
-            Sofiane Naci  <sofiane.naci@arm.com>
-            Tejas Belagod  <tejas.belagod@arm.com>
-            Yufeng Zhang  <yufeng.zhang@arm.com>
+2012-11-06  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/14567
+	* binutils-all/ar.exp (bfdtest1): Removed.
+	(long_filenames): Take bfdtests.
+	(thin_archive): Likewise.
+	(thin_archive_with_nested): Likewise.
+	(bfdtests): New.
+	Pass $bfdtests to long_filenames, thin_archive and
+	thin_archive_with_nested.
+
+2012-10-29  Alan Modra  <amodra@gmail.com>
+
+	* binutils-all/copy-3.d: Exclude all cygwin and mingw targets,
+	and rs6000.
+
+2012-10-24  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/ar.exp (bfdtest1): Remove findfile.
+
+2012-10-21  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/dw2-1.W: Updated.
+
+2012-10-20  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp: Add an objdump test.
+	* binutils-all/dw2-1.W: New file.
+
+2012-08-17  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/ar.exp (long_filenames): Remove extra verbose
+	before binutils_run.
+	(thin_archive): Likewise.
+	(thin_archive_with_nested): Likewise.  Also run bfdtest1 on
+	$archive2.
+
+2012-08-16  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/14481
+	* ar.exp (bfdtest1): New.
+	(long_filenames): Run bfdtest1.
+	(thin_archive): Likewise.
+	(thin_archive_with_nested): Likewise.
+
+2012-08-13  Ian Bolton  <ian.bolton@arm.com>
+	    Laurent Desnogues  <laurent.desnogues@arm.com>
+	    Jim MacArthur  <jim.macarthur@arm.com>
+	    Marcus Shawcroft  <marcus.shawcroft@arm.com>
+	    Nigel Stephens  <nigel.stephens@arm.com>
+	    Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
+	    Richard Earnshaw  <rearnsha@arm.com>
+	    Sofiane Naci  <sofiane.naci@arm.com>
+	    Tejas Belagod  <tejas.belagod@arm.com>
+	    Yufeng Zhang  <yufeng.zhang@arm.com>
 
 	* objdump.exp: Add AArch64.
+
+2012-08-02  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/14420
+	* binutils-all/i386/compressed-1a.d: Updated.
+	* binutils-all/objdump.W: Likewise.
+	* binutils-all/readelf.wa: Likewise.
+	* binutils-all/x86-64/compressed-1a.d: Likewise.
+
+2012-07-28  Kai Tietz  <ktietz@redhat.com>
+
+	* binutils-all/windres/version_small.rc: New test.
+	* binutils-all/windres/version_small.rsd: Likewise.
 
 2012-07-03  H.J. Lu  <hongjiu.lu@intel.com>
 
@@ -108,6 +244,12 @@
 
 For older changes see ChangeLog-0411
 
+Copyright (C) 2012 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
 Local Variables:
 mode: change-log
 left-margin: 8

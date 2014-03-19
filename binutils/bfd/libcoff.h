@@ -3,9 +3,7 @@
    Run "make headers" in your build bfd/ to regenerate.  */
 
 /* BFD COFF object file private structure.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -122,6 +120,7 @@ typedef struct pe_tdata
   int dll;
   int has_reloc_section;
   int dont_strip_reloc;
+  bfd_boolean insert_timestamp;
   bfd_boolean (*in_reloc_p) (bfd *, reloc_howto_type *);
   flagword real_flags;
 } pe_data_type;
@@ -354,6 +353,9 @@ extern asymbol *coff_bfd_make_debug_symbol
 extern bfd_boolean coff_find_nearest_line
   (bfd *, asection *, asymbol **, bfd_vma, const char **,
    const char **, unsigned int *);
+extern bfd_boolean coff_find_nearest_line_discriminator
+  (bfd *, asection *, asymbol **, bfd_vma, const char **,
+   const char **, unsigned int *, unsigned int *);
 struct dwarf_debug_section;
 extern bfd_boolean coff_find_nearest_line_with_names
   (bfd *, const struct dwarf_debug_section *, asection *, asymbol **,
@@ -730,7 +732,7 @@ typedef struct
   bfd_boolean _bfd_coff_long_section_names;
   bfd_boolean (*_bfd_coff_set_long_section_names)
     (bfd *, int);
-  
+
   unsigned int _bfd_coff_default_section_alignment_power;
   bfd_boolean _bfd_coff_force_symnames_in_strings;
   unsigned int _bfd_coff_debug_string_prefix_length;

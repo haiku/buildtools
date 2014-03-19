@@ -1,6 +1,5 @@
 /* 32-bit ELF support for TI C6X
-   Copyright 2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright 2010-2013 Free Software Foundation, Inc.
    Contributed by Joseph Myers <joseph@codesourcery.com>
    		  Bernd Schmidt  <bernds@codesourcery.com>
 
@@ -1570,7 +1569,7 @@ elf32_tic6x_link_hash_table_create (bfd *abfd)
   struct elf32_tic6x_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf32_tic6x_link_hash_table);
 
-  ret = bfd_malloc (amt);
+  ret = bfd_zmalloc (amt);
   if (ret == NULL)
     return NULL;
 
@@ -1583,7 +1582,6 @@ elf32_tic6x_link_hash_table_create (bfd *abfd)
       return NULL;
     }
 
-  ret->sym_cache.abfd = NULL;
   ret->obfd = abfd;
   ret->elf.is_relocatable_executable = 1;
 
@@ -1613,14 +1611,6 @@ elf32_tic6x_final_link (bfd *abfd, struct bfd_link_info *info)
     return FALSE;
 
   return TRUE;
-}
-
-/* Destroy a C6X ELF linker hash table.  */
-
-static void
-elf32_tic6x_link_hash_table_free (struct bfd_link_hash_table *hash)
-{
-  _bfd_generic_link_hash_table_free (hash);
 }
 
 /* Called to pass PARAMS to the backend.  We store them in the hash table
@@ -1787,7 +1777,7 @@ elf32_tic6x_finish_dynamic_symbol (bfd * output_bfd,
 	 Get the offset into the .got table of the entry that
 	 corresponds to this function.  Each .got entry is 4 bytes.
 	 The first three are reserved.
-	 
+
 	 For static executables, we don't reserve anything.  */
 
       plt_index = h->plt.offset / PLT_ENTRY_SIZE - 1;
@@ -1903,7 +1893,7 @@ elf32_tic6x_finish_dynamic_symbol (bfd * output_bfd,
     }
 
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == elf_hash_table (info)->hdynamic
       || h == elf_hash_table (info)->hgot)
     sym->st_shndx = SHN_ABS;
 
@@ -2841,6 +2831,10 @@ elf32_tic6x_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       switch (r_type)
@@ -3043,7 +3037,7 @@ elf32_tic6x_add_symbol_hook (bfd *abfd,
       *secp = bfd_make_section_old_way (abfd, ".scommon");
       (*secp)->flags |= SEC_IS_COMMON;
       *valp = sym->st_size;
-      bfd_set_section_alignment (abfd, *secp, bfd_log2 (sym->st_value));
+      (void) bfd_set_section_alignment (abfd, *secp, bfd_log2 (sym->st_value));
       break;
     }
 
@@ -3319,8 +3313,6 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
     {
       bfd_signed_vma *local_got;
       bfd_signed_vma *end_local_got;
-      char *local_tls_type;
-      bfd_vma *local_tlsdesc_gotent;
       bfd_size_type locsymcount;
       Elf_Internal_Shdr *symtab_hdr;
       asection *srel;
@@ -3361,8 +3353,7 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
       end_local_got = local_got + locsymcount;
       s = htab->elf.sgot;
       srel = htab->elf.srelgot;
-      for (; local_got < end_local_got;
-	   ++local_got, ++local_tls_type, ++local_tlsdesc_gotent)
+      for (; local_got < end_local_got; ++local_got)
 	{
 	  if (*local_got > 0)
 	    {
@@ -3520,79 +3511,10 @@ elf32_tic6x_size_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 static bfd_boolean
 elf32_tic6x_always_size_sections (bfd *output_bfd, struct bfd_link_info *info)
 {
-  if (elf32_tic6x_using_dsbt (output_bfd) && !info->relocatable)
-    {
-      struct elf_link_hash_entry *h;
-
-      /* Force a PT_GNU_STACK segment to be created.  */
-      if (! elf_tdata (output_bfd)->stack_flags)
-	elf_tdata (output_bfd)->stack_flags = PF_R | PF_W | PF_X;
-
-      /* Define __stacksize if it's not defined yet.  */
-      h = elf_link_hash_lookup (elf_hash_table (info), "__stacksize",
-				FALSE, FALSE, FALSE);
-      if (! h || h->root.type != bfd_link_hash_defined
-	  || h->type != STT_OBJECT
-	  || !h->def_regular)
-	{
-	  struct bfd_link_hash_entry *bh = NULL;
-
-	  if (!(_bfd_generic_link_add_one_symbol
-		(info, output_bfd, "__stacksize",
-		 BSF_GLOBAL, bfd_abs_section_ptr, DEFAULT_STACK_SIZE,
-		 (const char *) NULL, FALSE,
-		 get_elf_backend_data (output_bfd)->collect, &bh)))
-	    return FALSE;
-
-	  h = (struct elf_link_hash_entry *) bh;
-	  h->def_regular = 1;
-	  h->type = STT_OBJECT;
-	}
-    }
-  return TRUE;
-}
-
-static bfd_boolean
-elf32_tic6x_modify_program_headers (bfd *output_bfd,
-				    struct bfd_link_info *info)
-{
-  struct elf_obj_tdata *tdata = elf_tdata (output_bfd);
-  struct elf_segment_map *m;
-  Elf_Internal_Phdr *p;
-
-  /* objcopy and strip preserve what's already there using
-     elf32_tic6x_copy_private_bfd_data ().  */
-  if (! info)
-    return TRUE;
-
-  for (p = tdata->phdr, m = tdata->segment_map; m != NULL; m = m->next, p++)
-    if (m->p_type == PT_GNU_STACK)
-      break;
-
-  if (m)
-    {
-      struct elf_link_hash_entry *h;
-
-      /* Obtain the pointer to the __stacksize symbol.  */
-      h = elf_link_hash_lookup (elf_hash_table (info), "__stacksize",
-				FALSE, FALSE, FALSE);
-      if (h)
-	{
-	  while (h->root.type == bfd_link_hash_indirect
-		 || h->root.type == bfd_link_hash_warning)
-	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-	  BFD_ASSERT (h->root.type == bfd_link_hash_defined);
-	}
-
-      /* Set the header p_memsz from the symbol value.  We
-	 intentionally ignore the symbol section.  */
-      if (h && h->root.type == bfd_link_hash_defined)
-	p->p_memsz = h->root.u.def.value;
-      else
-	p->p_memsz = DEFAULT_STACK_SIZE;
-
-      p->p_align = 8;
-    }
+  if (elf32_tic6x_using_dsbt (output_bfd) && !info->relocatable
+      && !bfd_elf_stack_segment_size (output_bfd, info,
+				      "__stacksize", DEFAULT_STACK_SIZE))
+    return FALSE;
 
   return TRUE;
 }
@@ -4020,49 +3942,6 @@ elf32_tic6x_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
   return TRUE;
 }
 
-static bfd_boolean
-elf32_tic6x_copy_private_data (bfd * ibfd, bfd * obfd)
-{
-  _bfd_elf_copy_private_bfd_data (ibfd, obfd);
-
-  if (! is_tic6x_elf (ibfd) || ! is_tic6x_elf (obfd))
-    return TRUE;
-
-  /* Copy the stack size.  */
-  if (elf_tdata (ibfd)->phdr && elf_tdata (obfd)->phdr
-      && elf32_tic6x_using_dsbt (ibfd) && elf32_tic6x_using_dsbt (obfd))
-    {
-      unsigned i;
-
-      for (i = 0; i < elf_elfheader (ibfd)->e_phnum; i++)
-	if (elf_tdata (ibfd)->phdr[i].p_type == PT_GNU_STACK)
-	  {
-	    Elf_Internal_Phdr *iphdr = &elf_tdata (ibfd)->phdr[i];
-
-	    for (i = 0; i < elf_elfheader (obfd)->e_phnum; i++)
-	      if (elf_tdata (obfd)->phdr[i].p_type == PT_GNU_STACK)
-		{
-		  memcpy (&elf_tdata (obfd)->phdr[i], iphdr, sizeof (*iphdr));
-
-		  /* Rewrite the phdrs, since we're only called after they
-		     were first written.  */
-		  if (bfd_seek (obfd,
-				(bfd_signed_vma) get_elf_backend_data (obfd)
-				->s->sizeof_ehdr, SEEK_SET) != 0
-		      || get_elf_backend_data (obfd)->s
-		      ->write_out_phdrs (obfd, elf_tdata (obfd)->phdr,
-					 elf_elfheader (obfd)->e_phnum) != 0)
-		    return FALSE;
-		  break;
-		}
-
-	    break;
-	  }
-    }
-
-  return TRUE;
-}
-
 /* Add a new unwind edit to the list described by HEAD, TAIL.  If TINDEX is zero,
    adds the edit to the start of the list.  (The list must be built in order of
    ascending TINDEX: the function's callers are primarily responsible for
@@ -4077,11 +3956,11 @@ elf32_tic6x_add_unwind_table_edit (tic6x_unwind_table_edit **head,
 {
   tic6x_unwind_table_edit *new_edit = (tic6x_unwind_table_edit *)
       xmalloc (sizeof (tic6x_unwind_table_edit));
-  
+
   new_edit->type = type;
   new_edit->linked_section = linked_section;
   new_edit->index = tindex;
-  
+
   if (tindex > 0)
     {
       new_edit->next = NULL;
@@ -4147,7 +4026,7 @@ elf32_tic6x_insert_cantunwind_after (asection *text_sec, asection *exidx_sec)
 
 /* Scan .cx6abi.exidx tables, and create a list describing edits which
    should be made to those tables, such that:
-   
+
      1. Regions without unwind data are marked with EXIDX_CANTUNWIND entries.
      2. Duplicate entries are merged together (EXIDX_CANTUNWIND, or unwind
         codes which have been inlined into the index).
@@ -4175,15 +4054,15 @@ elf32_tic6x_fix_exidx_coverage (asection **text_section_order,
   for (inp = info->input_bfds; inp != NULL; inp = inp->link_next)
     {
       asection *sec;
-      
+
       for (sec = inp->sections; sec != NULL; sec = sec->next)
         {
 	  struct bfd_elf_section_data *elf_sec = elf_section_data (sec);
 	  Elf_Internal_Shdr *hdr = &elf_sec->this_hdr;
-	  
+
 	  if (!hdr || hdr->sh_type != SHT_C6000_UNWIND)
 	    continue;
-	  
+
 	  if (elf_sec->linked_to)
 	    {
 	      Elf_Internal_Shdr *linked_hdr
@@ -4246,13 +4125,13 @@ elf32_tic6x_fix_exidx_coverage (asection **text_section_order,
       hdr = &elf_section_data (exidx_sec)->this_hdr;
       if (hdr->sh_type != SHT_C6000_UNWIND)
         continue;
-      
+
       exidx_data = get_tic6x_elf_section_data (exidx_sec);
       if (exidx_data == NULL)
         continue;
-      
+
       ibfd = exidx_sec->owner;
-	  
+
       if (hdr->contents != NULL)
 	contents = hdr->contents;
       else if (! bfd_malloc_and_get_section (ibfd, exidx_sec, &contents))
@@ -4305,7 +4184,7 @@ elf32_tic6x_fix_exidx_coverage (asection **text_section_order,
       /* Record edits to be applied later (in elf32_tic6x_write_section).  */
       exidx_data->u.exidx.unwind_edit_list = unwind_edit_head;
       exidx_data->u.exidx.unwind_edit_tail = unwind_edit_tail;
-	  
+
       if (deleted_exidx_bytes > 0)
 	elf32_tic6x_adjust_exidx_size (exidx_sec, -deleted_exidx_bytes);
 
@@ -4343,12 +4222,12 @@ elf32_tic6x_copy_exidx_entry (bfd *output_bfd, bfd_byte *to, bfd_byte *from,
   /* High bit of first word is supposed to be zero.  */
   if ((first_word & 0x80000000ul) == 0)
     first_word = elf32_tic6x_add_low31 (first_word, offset);
-  
+
   /* If the high bit of the first word is clear, and the bit pattern is not 0x1
      (EXIDX_CANTUNWIND), this is an offset to an .c6xabi.extab entry.  */
   if ((second_word != 0x1) && ((second_word & 0x80000000ul) == 0))
     second_word = elf32_tic6x_add_low31 (second_word, offset);
-  
+
   bfd_put_32 (output_bfd, first_word, to);
   bfd_put_32 (output_bfd, second_word, to + 4);
 }
@@ -4394,7 +4273,7 @@ elf32_tic6x_write_section (bfd *output_bfd,
       if (edit_node)
 	{
 	  unsigned int edit_index = edit_node->index;
-	  
+
 	  if (in_index < edit_index && in_index * 8 < input_size)
 	    {
 	      elf32_tic6x_copy_exidx_entry (output_bfd,
@@ -4413,7 +4292,7 @@ elf32_tic6x_write_section (bfd *output_bfd,
 		  in_index++;
 		  add_to_offsets += 8;
 		  break;
-		
+
 		case INSERT_EXIDX_CANTUNWIND_AT_END:
 		  {
 		    asection *text_sec = edit_node->linked_section;
@@ -4443,7 +4322,7 @@ elf32_tic6x_write_section (bfd *output_bfd,
 		  }
 		  break;
 		}
-	      
+
 	      edit_node = edit_node->next;
 	    }
 	}
@@ -4484,12 +4363,11 @@ elf32_tic6x_set_osabi (bfd *abfd, struct bfd_link_info *link_info)
 #define ELF_MAXPAGESIZE		0x1000
 #define bfd_elf32_bfd_reloc_type_lookup elf32_tic6x_reloc_type_lookup
 #define bfd_elf32_bfd_reloc_name_lookup elf32_tic6x_reloc_name_lookup
-#define bfd_elf32_bfd_copy_private_bfd_data	elf32_tic6x_copy_private_data
 #define bfd_elf32_bfd_merge_private_bfd_data	elf32_tic6x_merge_private_bfd_data
 #define bfd_elf32_mkobject		elf32_tic6x_mkobject
 #define bfd_elf32_bfd_link_hash_table_create  elf32_tic6x_link_hash_table_create
-#define bfd_elf32_bfd_link_hash_table_free    elf32_tic6x_link_hash_table_free
 #define bfd_elf32_new_section_hook	elf32_tic6x_new_section_hook
+#define elf_backend_stack_align		8
 #define elf_backend_can_gc_sections	1
 #define elf_backend_default_use_rela_p	1
 #define elf_backend_may_use_rel_p	1
@@ -4509,8 +4387,6 @@ elf32_tic6x_set_osabi (bfd *abfd, struct bfd_link_info *link_info)
 #define elf_backend_fake_sections       elf32_tic6x_fake_sections
 #define elf_backend_gc_sweep_hook	elf32_tic6x_gc_sweep_hook
 #define elf_backend_gc_mark_extra_sections elf32_tic6x_gc_mark_extra_sections
-#define elf_backend_modify_program_headers \
-  elf32_tic6x_modify_program_headers
 #define elf_backend_create_dynamic_sections \
   elf32_tic6x_create_dynamic_sections
 #define elf_backend_adjust_dynamic_symbol \

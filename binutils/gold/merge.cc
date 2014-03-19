@@ -505,17 +505,17 @@ bool
 Output_merge_string<Char_type>::do_add_input_section(Relobj* object,
 						     unsigned int shndx)
 {
-  section_size_type len;
+  section_size_type sec_len;
   bool is_new;
   const unsigned char* pdata = object->decompressed_section_contents(shndx,
-								     &len,
+								     &sec_len,
 								     &is_new);
 
   const Char_type* p = reinterpret_cast<const Char_type*>(pdata);
-  const Char_type* pend = p + len / sizeof(Char_type);
+  const Char_type* pend = p + sec_len / sizeof(Char_type);
   const Char_type* pend0 = pend;
 
-  if (len % sizeof(Char_type) != 0)
+  if (sec_len % sizeof(Char_type) != 0)
     {
       object->error(_("mergeable string section length not multiple of "
 		      "character size"));
@@ -540,25 +540,44 @@ Output_merge_string<Char_type>::do_add_input_section(Relobj* object,
   this->merged_strings_lists_.push_back(merged_strings_list);
   Merged_strings& merged_strings = merged_strings_list->merged_strings;
 
-  // Count the number of strings in the section and size the list.
+  // Count the number of non-null strings in the section and size the list.
   size_t count = 0;
-  for (const Char_type* pt = p; pt < pend0; pt += string_length(pt) + 1)
-    ++count;
+  const Char_type* pt = p;
+  while (pt < pend0)
+    {
+      size_t len = string_length(pt);
+      if (len != 0)
+	++count;
+      pt += len + 1;
+    }
   if (pend0 < pend)
     ++count;
   merged_strings.reserve(count + 1);
 
   // The index I is in bytes, not characters.
   section_size_type i = 0;
+
+  // We assume here that the beginning of the section is correctly
+  // aligned, so each string within the section must retain the same
+  // modulo.
+  uintptr_t init_align_modulo = (reinterpret_cast<uintptr_t>(pdata)
+				 & (this->addralign() - 1));
+  bool has_misaligned_strings = false;
+
   while (p < pend0)
     {
       size_t len = string_length(p);
+
+      // Within merge input section each string must be aligned.
+      if (len != 0
+	  && ((reinterpret_cast<uintptr_t>(p) & (this->addralign() - 1))
+	      != init_align_modulo))
+	  has_misaligned_strings = true;
 
       Stringpool::Key key;
       this->stringpool_.add_with_length(p, len, true, &key);
 
       merged_strings.push_back(Merged_string(i, key));
-
       p += len + 1;
       i += (len + 1) * sizeof(Char_type);
     }
@@ -579,7 +598,13 @@ Output_merge_string<Char_type>::do_add_input_section(Relobj* object,
   merged_strings.push_back(Merged_string(i, 0));
 
   this->input_count_ += count;
-  this->input_size_ += len;
+  this->input_size_ += i;
+
+  if (has_misaligned_strings)
+    gold_warning(_("%s: section %s contains incorrectly aligned strings;"
+		   " the alignment of those strings won't be preserved"),
+		 object->name().c_str(),
+		 object->section_name(shndx).c_str());
 
   // For script processing, we keep the input sections.
   if (this->keeps_input_sections())

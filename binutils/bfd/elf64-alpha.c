@@ -1,6 +1,6 @@
 /* Alpha specific support for 64-bit ELF
    Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007, 2008, 2009, 2010, 2011, 2012
+   2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013
    Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@tamu.edu>.
 
@@ -225,7 +225,7 @@ struct alpha_elf_link_hash_table
 #define alpha_elf_sym_hashes(abfd) \
   ((struct alpha_elf_link_hash_entry **)elf_sym_hashes(abfd))
 
-/* Should we do dynamic things to this symbol?  This differs from the 
+/* Should we do dynamic things to this symbol?  This differs from the
    generic version in that we never need to consider function pointer
    equality wrt PLT entries -- we don't create a PLT entry if a symbol's
    address is ever taken.  */
@@ -299,6 +299,15 @@ elf64_alpha_bfd_link_hash_table_create (bfd *abfd)
   return &ret->root.root;
 }
 
+/* Alpha ELF follows MIPS ELF in using a special find_nearest_line
+   routine in order to handle the ECOFF debugging information.  */
+
+struct alpha_elf_find_line
+{
+  struct ecoff_debug_info d;
+  struct ecoff_find_line i;
+};
+
 /* We have some private fields hanging off of the elf_tdata structure.  */
 
 struct alpha_elf_obj_tdata
@@ -328,6 +337,10 @@ struct alpha_elf_obj_tdata
   /* For every got, this is the sum of the number of words required
      to hold all of the member object's local got.  */
   int local_got_size;
+
+  /* Used by elf64_alpha_find_nearest_line entry point.  */
+  struct alpha_elf_find_line *find_line_info;
+
 };
 
 #define alpha_elf_tdata(abfd) \
@@ -1430,17 +1443,6 @@ elf64_alpha_is_local_label_name (bfd *abfd ATTRIBUTE_UNUSED, const char *name)
   return name[0] == '$';
 }
 
-/* Alpha ELF follows MIPS ELF in using a special find_nearest_line
-   routine in order to handle the ECOFF debugging information.  We
-   still call this mips_elf_find_line because of the slot
-   find_line_info in elf_obj_tdata is declared that way.  */
-
-struct mips_elf_find_line
-{
-  struct ecoff_debug_info d;
-  struct ecoff_find_line i;
-};
-
 static bfd_boolean
 elf64_alpha_find_nearest_line (bfd *abfd, asection *section, asymbol **symbols,
 			       bfd_vma offset, const char **filename_ptr,
@@ -1460,7 +1462,7 @@ elf64_alpha_find_nearest_line (bfd *abfd, asection *section, asymbol **symbols,
   if (msec != NULL)
     {
       flagword origflags;
-      struct mips_elf_find_line *fi;
+      struct alpha_elf_find_line *fi;
       const struct ecoff_debug_swap * const swap =
 	get_elf_backend_data (abfd)->elf_backend_ecoff_debug_swap;
 
@@ -1471,16 +1473,16 @@ elf64_alpha_find_nearest_line (bfd *abfd, asection *section, asymbol **symbols,
       if (elf_section_data (msec)->this_hdr.sh_type != SHT_NOBITS)
 	msec->flags |= SEC_HAS_CONTENTS;
 
-      fi = elf_tdata (abfd)->find_line_info;
+      fi = alpha_elf_tdata (abfd)->find_line_info;
       if (fi == NULL)
 	{
 	  bfd_size_type external_fdr_size;
 	  char *fraw_src;
 	  char *fraw_end;
 	  struct fdr *fdr_ptr;
-	  bfd_size_type amt = sizeof (struct mips_elf_find_line);
+	  bfd_size_type amt = sizeof (struct alpha_elf_find_line);
 
-	  fi = (struct mips_elf_find_line *) bfd_zalloc (abfd, amt);
+	  fi = (struct alpha_elf_find_line *) bfd_zalloc (abfd, amt);
 	  if (fi == NULL)
 	    {
 	      msec->flags = origflags;
@@ -1509,7 +1511,7 @@ elf64_alpha_find_nearest_line (bfd *abfd, asection *section, asymbol **symbols,
 	  for (; fraw_src < fraw_end; fraw_src += external_fdr_size, fdr_ptr++)
 	    (*swap->swap_fdr_in) (abfd, fraw_src, fdr_ptr);
 
-	  elf_tdata (abfd)->find_line_info = fi;
+	  alpha_elf_tdata (abfd)->find_line_info = fi;
 
 	  /* Note that we don't bother to ever free this information.
              find_nearest_line is either called all the time, as in
@@ -1810,6 +1812,9 @@ elf64_alpha_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		 || h->root.root.type == bfd_link_hash_warning)
 	    h = (struct alpha_elf_link_hash_entry *)h->root.root.u.i.link;
 
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.root.non_ir_ref = 1;
 	  h->root.ref_regular = 1;
 	}
 
@@ -3585,7 +3590,9 @@ elf64_alpha_relax_tls_get_addr (struct alpha_relax_info *info, bfd_vma symval,
   use_gottprel = FALSE;
   new_symndx = is_gd ? ELF64_R_SYM (irel->r_info) : STN_UNDEF;
 
-  switch (!dynamic && !info->link_info->shared)
+  /* Some compilers warn about a Boolean-looking expression being
+     used in a switch.  The explicit cast silences them.  */
+  switch ((int) (!dynamic && !info->link_info->shared))
     {
     case 1:
       {
@@ -4141,7 +4148,7 @@ elf64_alpha_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
   bfd_boolean ret_val;
 
   BFD_ASSERT (is_alpha_elf (input_bfd));
-  
+
   /* Handle relocatable links with a smaller loop.  */
   if (info->relocatable)
     return elf64_alpha_relocate_section_r (output_bfd, info, input_bfd,
@@ -4890,19 +4897,19 @@ elf64_alpha_finish_dynamic_symbol (bfd *output_bfd, struct bfd_link_info *info,
 	      abort ();
 	    }
 
-	  elf64_alpha_emit_dynrel (output_bfd, info, sgot, srel, 
+	  elf64_alpha_emit_dynrel (output_bfd, info, sgot, srel,
 				   gotent->got_offset, h->dynindx,
 				   r_type, gotent->addend);
 
 	  if (gotent->reloc_type == R_ALPHA_TLSGD)
-	    elf64_alpha_emit_dynrel (output_bfd, info, sgot, srel, 
+	    elf64_alpha_emit_dynrel (output_bfd, info, sgot, srel,
 				     gotent->got_offset + 8, h->dynindx,
 				     R_ALPHA_DTPREL64, gotent->addend);
 	}
     }
 
   /* Mark some specially defined symbols as absolute.  */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == elf_hash_table (info)->hdynamic
       || h == elf_hash_table (info)->hgot
       || h == elf_hash_table (info)->hplt)
     sym->st_shndx = SHN_ABS;
@@ -5313,7 +5320,9 @@ elf64_alpha_final_link (bfd *abfd, struct bfd_link_info *info)
 }
 
 static enum elf_reloc_type_class
-elf64_alpha_reloc_type_class (const Elf_Internal_Rela *rela)
+elf64_alpha_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			      const asection *rel_sec ATTRIBUTE_UNUSED,
+			      const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF64_R_TYPE (rela->r_info))
     {

@@ -32,7 +32,7 @@
 /* Newlib-based hosts define _CONST as a STDC-safe alias for const,
   but to the tic80 toolchain it means something altogether different.
   Since sysdep.h will have pulled in stdio.h and hence _ansi.h which
-  contains this definition, we must undef it before including the 
+  contains this definition, we must undef it before including the
   tic80-specific definition. */
 #undef _CONST
 #endif /* _CONST */
@@ -700,15 +700,6 @@ coff_tic80_relocate_section (bfd *output_bfd,
   return TRUE;
 }
 
-/* Clear the r_reserved field in relocs.  */
-#define SWAP_OUT_RELOC_EXTRA(abfd,src,dst) \
-  do \
-    { \
-      dst->r_reserved[0] = 0; \
-      dst->r_reserved[1] = 0; \
-    } \
-  while (0)
-
 #define TIC80COFF 1		/* Customize coffcode.h */
 #undef C_AUTOARG		/* Clashes with TIc80's C_UEXT */
 #undef C_LASTENT		/* Clashes with TIc80's C_STATLAB */

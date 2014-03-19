@@ -1,7 +1,5 @@
 /* BFD back-end for HP PA-RISC ELF files.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2000, 2001,
-   2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
 
    Original code by
 	Center for Software Science
@@ -10,7 +8,7 @@
    Largely rewritten by Alan Modra <alan@linuxcare.com.au>
    Naming cleanup by Carlos O'Donell <carlos@systemhalted.org>
    TLS support written by Randolph Chung <tausq@debian.org>
- 
+
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
@@ -124,20 +122,20 @@
    Structure/Variable         		Prefix
    elf_link_hash_table			"etab"
    elf_link_hash_entry			"eh"
-   
+
    elf32_hppa_link_hash_table		"htab"
    elf32_hppa_link_hash_entry		"hh"
 
    bfd_hash_table			"btab"
    bfd_hash_entry			"bh"
-   
+
    bfd_hash_table containing stubs	"bstab"
    elf32_hppa_stub_hash_entry		"hsh"
 
    elf32_hppa_dyn_reloc_entry		"hdh"
-   
+
    Always remember to use GNU Coding Style. */
-					  
+
 #define PLT_ENTRY_SIZE 8
 #define GOT_ENTRY_SIZE 4
 #define ELF_DYNAMIC_INTERPRETER "/lib/ld.so.1"
@@ -419,7 +417,7 @@ elf32_hppa_link_hash_table_create (bfd *abfd)
   struct elf32_hppa_link_hash_table *htab;
   bfd_size_type amt = sizeof (*htab);
 
-  htab = bfd_malloc (amt);
+  htab = bfd_zmalloc (amt);
   if (htab == NULL)
     return NULL;
 
@@ -436,26 +434,8 @@ elf32_hppa_link_hash_table_create (bfd *abfd)
 			    sizeof (struct elf32_hppa_stub_hash_entry)))
     return NULL;
 
-  htab->stub_bfd = NULL;
-  htab->add_stub_section = NULL;
-  htab->layout_sections_again = NULL;
-  htab->stub_group = NULL;
-  htab->sgot = NULL;
-  htab->srelgot = NULL;
-  htab->splt = NULL;
-  htab->srelplt = NULL;
-  htab->sdynbss = NULL;
-  htab->srelbss = NULL;
   htab->text_segment_base = (bfd_vma) -1;
   htab->data_segment_base = (bfd_vma) -1;
-  htab->multi_subspace = 0;
-  htab->has_12bit_branch = 0;
-  htab->has_17bit_branch = 0;
-  htab->has_22bit_branch = 0;
-  htab->need_plt_stub = 0;
-  htab->sym_cache.abfd = NULL;
-  htab->tls_ldm_got.refcount = 0;
-
   return &htab->etab.root;
 }
 
@@ -468,7 +448,7 @@ elf32_hppa_link_hash_table_free (struct bfd_link_hash_table *btab)
     = (struct elf32_hppa_link_hash_table *) btab;
 
   bfd_hash_table_free (&htab->bstab);
-  _bfd_generic_link_hash_table_free (btab);
+  _bfd_elf_link_hash_table_free (btab);
 }
 
 /* Build a name for an entry in the stub hash table.  */
@@ -1110,7 +1090,7 @@ hppa32_elf_local_refcounts (bfd *abfd)
 {
   Elf_Internal_Shdr *symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
   bfd_signed_vma *local_refcounts;
-                  
+
   local_refcounts = elf_local_got_refcounts (abfd);
   if (local_refcounts == NULL)
     {
@@ -1187,6 +1167,10 @@ elf32_hppa_check_relocs (bfd *abfd,
 	  while (hh->eh.root.type == bfd_link_hash_indirect
 		 || hh->eh.root.type == bfd_link_hash_warning)
 	    hh = hppa_elf_hash_entry (hh->eh.root.u.i.link);
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  hh->eh.root.non_ir_ref = 1;
 	}
 
       r_type = ELF32_R_TYPE (rela->r_info);
@@ -1378,7 +1362,7 @@ elf32_hppa_check_relocs (bfd *abfd,
 	      else
 	        {
 	          bfd_signed_vma *local_got_refcounts;
-		  
+
 	          /* This is a global offset table entry for a local symbol.  */
 	          local_got_refcounts = hppa32_elf_local_refcounts (abfd);
 	          if (local_got_refcounts == NULL)
@@ -1724,10 +1708,10 @@ elf32_hppa_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
       case 396:		/* Linux/hppa */
 	/* pr_cursig */
-	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 24);
+	elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 24);
 
 	/* pr_reg */
 	offset = 72;
@@ -1750,9 +1734,9 @@ elf32_hppa_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 	return FALSE;
 
       case 124:		/* Linux/hppa elf_prpsinfo.  */
-	elf_tdata (abfd)->core_program
+	elf_tdata (abfd)->core->program
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-	elf_tdata (abfd)->core_command
+	elf_tdata (abfd)->core->command
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
     }
 
@@ -1760,7 +1744,7 @@ elf32_hppa_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      onto the end of the args in some (at least one anyway)
      implementations, so strip it off if it exists.  */
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -1965,7 +1949,7 @@ allocate_plt_static (struct elf_link_hash_entry *eh, void *inf)
 	     means that the plt entry is only used by a plabel.
 	     We'll be using a normal plt entry for this symbol, so
 	     clear the plabel indicator.  */
-	  
+
 	  hh->plabel = 0;
 	}
       else if (hh->plabel)
@@ -2013,7 +1997,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *eh, void *inf)
     return FALSE;
 
   hh = hppa_elf_hash_entry (eh);
-  
+
   if (htab->etab.dynamic_sections_created
       && eh->plt.offset != (bfd_vma) -1
       && !hh->plabel
@@ -2114,7 +2098,7 @@ allocate_dynrelocs (struct elf_link_hash_entry *eh, void *inf)
       /* For the non-shared case, discard space for relocs against
 	 symbols which turn out to need copy relocs or are not
 	 dynamic.  */
-      
+
       if (!eh->non_got_ref
 	  && ((ELIMINATE_COPY_RELOCS
 	       && eh->def_dynamic
@@ -2301,7 +2285,7 @@ elf32_hppa_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 		sec->size += 2 * GOT_ENTRY_SIZE;
 	      else if ((*local_tls_type & GOT_TLS_GD) == GOT_TLS_GD)
 		sec->size += GOT_ENTRY_SIZE;
-	      if (info->shared) 
+	      if (info->shared)
 	        {
 		  srel->size += sizeof (Elf32_External_Rela);
 		  if ((*local_tls_type & (GOT_TLS_GD | GOT_TLS_IE)) == (GOT_TLS_GD | GOT_TLS_IE))
@@ -2342,10 +2326,10 @@ elf32_hppa_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    }
 	}
     }
-  
+
   if (htab->tls_ldm_got.refcount > 0)
     {
-      /* Allocate 2 got entries and 1 dynamic reloc for 
+      /* Allocate 2 got entries and 1 dynamic reloc for
          R_PARISC_TLS_DTPMOD32 relocs.  */
       htab->tls_ldm_got.offset = htab->sgot->size;
       htab->sgot->size += (GOT_ENTRY_SIZE * 2);
@@ -2384,7 +2368,7 @@ elf32_hppa_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 	      bfd_size_type mask;
 
 	      if (gotalign > pltalign)
-		bfd_set_section_alignment (dynobj, sec, gotalign);
+		(void) bfd_set_section_alignment (dynobj, sec, gotalign);
 	      mask = ((bfd_size_type) 1 << gotalign) - 1;
 	      sec->size = (sec->size + sizeof (plt_stub) + mask) & ~mask;
 	    }
@@ -3220,7 +3204,7 @@ elf32_hppa_build_stubs (struct bfd_link_info *info)
 }
 
 /* Return the base vma address which should be subtracted from the real
-   address when resolving a dtpoff relocation.  
+   address when resolving a dtpoff relocation.
    This is PT_TLS segment p_vaddr.  */
 
 static bfd_vma
@@ -3242,9 +3226,9 @@ tpoff (struct bfd_link_info *info, bfd_vma address)
   /* If tls_sec is NULL, we should have signalled an error already.  */
   if (htab->tls_sec == NULL)
     return 0;
-  /* hppa TLS ABI is variant I and static TLS block start just after 
+  /* hppa TLS ABI is variant I and static TLS block start just after
      tcbhead structure which has 2 pointer fields.  */
-  return (address - htab->tls_sec->vma 
+  return (address - htab->tls_sec->vma
 	  + align_power ((bfd_vma) 8, htab->tls_sec->alignment_power));
 }
 
@@ -3323,7 +3307,7 @@ final_link_relocate (asection *input_section,
   bfd_signed_vma addend = rela->r_addend;
   bfd_vma location;
   struct elf32_hppa_stub_hash_entry *hsh = NULL;
-  int val;  
+  int val;
 
   if (r_type == R_PARISC_NONE)
     return bfd_reloc_ok;
@@ -4002,7 +3986,7 @@ elf32_hppa_relocate_section (bfd *output_bfd,
 		      || outrel.r_offset == (bfd_vma) -2);
 	      outrel.r_offset += (input_section->output_offset
 				  + input_section->output_section->vma);
-	      	      
+
 	      if (skip)
 		{
 		  memset (&outrel, 0, sizeof (outrel));
@@ -4064,12 +4048,12 @@ elf32_hppa_relocate_section (bfd *output_bfd,
 	      bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
 	    }
 	  break;
-	  
+
 	case R_PARISC_TLS_LDM21L:
 	case R_PARISC_TLS_LDM14R:
 	  {
 	    bfd_vma off;
-	
+
 	    off = htab->tls_ldm_got.offset;
 	    if (off & 1)
 	      off &= ~1;
@@ -4078,12 +4062,12 @@ elf32_hppa_relocate_section (bfd *output_bfd,
 		Elf_Internal_Rela outrel;
 		bfd_byte *loc;
 
-		outrel.r_offset = (off 
+		outrel.r_offset = (off
 				   + htab->sgot->output_section->vma
 				   + htab->sgot->output_offset);
 		outrel.r_addend = 0;
 		outrel.r_info = ELF32_R_INFO (0, R_PARISC_TLS_DTPMOD32);
-		loc = htab->srelgot->contents; 
+		loc = htab->srelgot->contents;
 		loc += htab->srelgot->reloc_count++ * sizeof (Elf32_External_Rela);
 
 		bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
@@ -4155,7 +4139,7 @@ elf32_hppa_relocate_section (bfd *output_bfd,
 			|| hh->eh.root.type != bfd_link_hash_undefweak))
 		  {
 		    need_relocs = TRUE;
-		    loc = htab->srelgot->contents; 
+		    loc = htab->srelgot->contents;
 		    /* FIXME (CAO): Should this be reloc_count++ ? */
 		    loc += htab->srelgot->reloc_count * sizeof (Elf32_External_Rela);
 		  }
@@ -4442,9 +4426,7 @@ elf32_hppa_finish_dynamic_symbol (bfd *output_bfd,
     }
 
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
-  if (eh_name (eh)[0] == '_'
-      && (strcmp (eh_name (eh), "_DYNAMIC") == 0
-	  || eh == htab->etab.hgot))
+  if (eh == htab->etab.hdynamic || eh == htab->etab.hgot)
     {
       sym->st_shndx = SHN_ABS;
     }
@@ -4456,7 +4438,9 @@ elf32_hppa_finish_dynamic_symbol (bfd *output_bfd,
    dynamic linker, before writing them out.  */
 
 static enum elf_reloc_type_class
-elf32_hppa_reloc_type_class (const Elf_Internal_Rela *rela)
+elf32_hppa_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			     const asection *rel_sec ATTRIBUTE_UNUSED,
+			     const Elf_Internal_Rela *rela)
 {
   /* Handle TLS relocs first; we don't want them to be marked
      relative by the "if (ELF32_R_SYM (rela->r_info) == STN_UNDEF)"

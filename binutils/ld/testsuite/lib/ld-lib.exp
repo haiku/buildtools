@@ -1,7 +1,5 @@
 # Support routines for LD testsuite.
-#   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
-#    2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
-#    Free Software Foundation, Inc.
+#   Copyright 1994-2013 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -179,13 +177,18 @@ proc big_or_little_endian {} {
 proc default_ld_link { ld target objects } {
     global HOSTING_EMU
     global HOSTING_CRT0
+    global HOSTING_SCRT0
     global HOSTING_LIBS
     global LIBS
     global host_triplet
     global link_output
     global exec_output
 
-    set objs "$HOSTING_CRT0 $objects"
+    if { [ string match "* -pie *" $objects ] } {
+	set objs "$HOSTING_SCRT0 $objects"
+    } else {
+	set objs "$HOSTING_CRT0 $objects"
+    }
     set libs "$LIBS $HOSTING_LIBS"
 
     if [is_endian_output_format $objects] then {
@@ -981,7 +984,7 @@ proc set_file_contents { filename contents } {
 proc ar_simple_create { ar aropts target objects } {
     remote_file host delete $target
 
-    set exec_output [run_host_cmd "$ar" "$aropts rc $target $objects"]
+    set exec_output [run_host_cmd "$ar" "$aropts -rc $target $objects"]
     set exec_output [prune_warnings $exec_output]
 
     if [string match "" $exec_output] then {
@@ -995,12 +998,13 @@ proc ar_simple_create { ar aropts target objects } {
 # List contains test-items with 3 items followed by 2 lists, one item and
 # one optional item:
 #  0:name
-#  1:ld/ar options
-#  2:assembler options
-#  3:filenames of assembler files
-#  4:list of actions, options and expected outputs.
-#  5:name of output file
-#  6:compiler flags (optional)
+#  1:ld/ar leading options, placed before object files
+#  2:ld/ar trailing options, placed after object files
+#  3:assembler options
+#  4:filenames of assembler files
+#  5:list of actions, options and expected outputs.
+#  6:name of output file
+#  7:compiler flags (optional)
 #
 # Actions: { command command-line-options file-containg-expected-output-regexps }
 # Commands:
@@ -1036,11 +1040,12 @@ proc run_ld_link_tests { ldtests } {
 	}
 
 	set ld_options [lindex $testitem 1]
-	set as_options [lindex $testitem 2]
-	set src_files  [lindex $testitem 3]
-	set actions [lindex $testitem 4]
-	set binfile tmpdir/[lindex $testitem 5]
-	set cflags [lindex $testitem 6]
+	set ld_after [lindex $testitem 2]
+	set as_options [lindex $testitem 3]
+	set src_files  [lindex $testitem 4]
+	set actions [lindex $testitem 5]
+	set binfile tmpdir/[lindex $testitem 6]
+	set cflags [lindex $testitem 7]
 	set objfiles {}
 	set is_unresolved 0
 	set failed 0
@@ -1049,6 +1054,7 @@ proc run_ld_link_tests { ldtests } {
 
 #	verbose -log "Testname is $testname"
 #	verbose -log "ld_options is $ld_options"
+#	verbose -log "ld_after is $ld_after"
 #	verbose -log "as_options is $as_options"
 #	verbose -log "src_files is $src_files"
 #	verbose -log "actions is $actions"
@@ -1082,10 +1088,10 @@ proc run_ld_link_tests { ldtests } {
 	}
 
 	if { [regexp ".*\\.a$" $binfile] } {
-	    if { ![ar_simple_create $ar $ld_options $binfile "$objfiles"] } {
+	    if { ![ar_simple_create $ar $ld_options $binfile "$objfiles $ld_after"] } {
 		set failed 1
 	    }
-	} elseif { ![ld_simple_link $ld $binfile "-L$srcdir/$subdir $ld_options $objfiles"] } {
+	} elseif { ![ld_simple_link $ld $binfile "-L$srcdir/$subdir $ld_options $objfiles $ld_after"] } {
 	    set maybe_failed 1
 	    set ld_output "$exec_output"
 	}
@@ -1407,7 +1413,13 @@ proc run_cc_link_tests { ldtests } {
 	    } else {
 		set failed 0
 	    }
-	} elseif { ![ld_simple_link $cc_cmd $binfile "-L$srcdir/$subdir $ldflags $objfiles"] } {
+	} else {
+	    if { ![ld_simple_link $cc_cmd $binfile "-L$srcdir/$subdir $ldflags $objfiles"] } {
+		set failed 1
+	    } else {
+		set failed 0
+	    }
+
 	    # Check if exec_output is expected.
 	    if { $warnings != "" } then {
 		verbose -log "returned with: <$exec_output>, expected: <$warnings>"
@@ -1416,12 +1428,11 @@ proc run_cc_link_tests { ldtests } {
 		} else {
 		    set failed 1
 		}
-	    } else {
-		fail $testname
-		set failed 1
 	    }
-	} else {
-	    set failed 0
+
+	    if { $failed == 1 } {
+		fail $testname
+	    }
 	}
 
 	if { $failed == 0 } {
@@ -1505,22 +1516,21 @@ proc check_gc_sections_available { } {
     if {![info exists gc_sections_available_saved]} {
 	# Some targets don't support gc-sections despite whatever's
 	# advertised by ld's options.
-	if {[istarget aarch64*-*-*]
-	     || [istarget arc-*-*]
-	     || [istarget d30v-*-*]
-	     || [istarget dlx-*-*]
-	     || [istarget i960-*-*]
-	     || [istarget or32-*-*]
-	     || [istarget pj*-*-*]
-	     || [istarget alpha-*-*]
-	     || [istarget hppa*64-*-*]
-	     || [istarget i370-*-*]
-	     || [istarget i860-*-*]
-	     || [istarget ia64-*-*]
-	     || [istarget mep-*-*]
-	     || [istarget mn10200-*-*]
-	     || [istarget *-*-cygwin]
-	     || [istarget *-*-mingw*] } {
+	if {   [istarget arc-*-*]
+	    || [istarget d30v-*-*]
+	    || [istarget dlx-*-*]
+	    || [istarget i960-*-*]
+	    || [istarget or32-*-*]
+	    || [istarget pj*-*-*]
+	    || [istarget alpha-*-*]
+	    || [istarget hppa*64-*-*]
+	    || [istarget i370-*-*]
+	    || [istarget i860-*-*]
+	    || [istarget ia64-*-*]
+	    || [istarget mep-*-*]
+	    || [istarget mn10200-*-*]
+	    || [istarget *-*-cygwin]
+	    || [istarget *-*-mingw*] } {
 	    set gc_sections_available_saved 0
 	    return 0
 	}
@@ -1550,10 +1560,12 @@ proc check_gc_sections_available { } {
 # Only used and accurate for ELF targets at the moment
 
 proc check_shared_lib_support { } {
-    if {![istarget arc-*-*]
+    if {![istarget aarch64*-*-elf]
+	 && ![istarget arc-*-*]
+	 && ![istarget arm*-*-elf]
 	 && ![istarget avr-*-*]
 	 && ![istarget cr16-*-*]
-	 && ![istarget cris*-*-*]
+	 && ![istarget cris*-*-elf]
 	 && ![istarget crx-*-*]
 	 && ![istarget d10v-*-*]
 	 && ![istarget d30v-*-*]
@@ -1575,6 +1587,7 @@ proc check_shared_lib_support { } {
 	 && ![istarget mcore*-*-*]
 	 && ![istarget mep-*-*]
 	 && ![istarget microblaze-*-*]
+	 && ![istarget mips*-*-elf]
 	 && ![istarget mn10200-*-*]
 	 && ![istarget moxie-*-*]
 	 && ![istarget msp430-*-*]
@@ -1582,6 +1595,7 @@ proc check_shared_lib_support { } {
 	 && ![istarget openrisc-*-*]
 	 && ![istarget or32-*-*]
 	 && ![istarget pj-*-*]
+	 && ![istarget rl78-*-*]
 	 && ![istarget rx-*-*]
 	 && ![istarget spu-*-*]
 	 && ![istarget v850*-*-*]
@@ -1607,6 +1621,34 @@ proc check_plugin_api_available { } {
 	}
     }
     return $plugin_api_available_saved
+}
+
+# Returns true if the target compiler supports LTO
+proc check_lto_available { } {
+    global lto_available_saved
+    global CC
+    if {![info exists lto_available_saved]} {
+	# Check if gcc supports -flto -fuse-linker-plugin
+	if { [which $CC] == 0 } {
+	    set lto_available_saved 0
+	    return 0
+	}
+	set basename "lto"
+	set src ${basename}[pid].c
+	set output ${basename}[pid].so
+	set f [open $src "w"]
+	puts $f ""
+	close $f
+	set status [remote_exec host $CC "-shared -B[pwd]/tmpdir/ld/ -flto -fuse-linker-plugin $src -o $output"]
+	if { [lindex $status 0] == 0 } {
+	    set lto_available_saved 1
+	} else {
+	    set lto_available_saved 0
+	}
+	file delete $src
+	file delete $output
+    }
+    return $lto_available_saved
 }
 
 # Check if the assembler supports CFI statements.

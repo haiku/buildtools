@@ -1,6 +1,6 @@
 /* Renesas / SuperH SH specific support for 32-bit ELF
    Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007, 2008, 2009, 2010, 2011, 2012
+   2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013
    Free Software Foundation, Inc.
    Contributed by Ian Lance Taylor, Cygnus Support.
 
@@ -3303,85 +3303,12 @@ sh_elf_always_size_sections (bfd *output_bfd, struct bfd_link_info *info)
 {
   sh_elf_hash_table (info)->plt_info = get_plt_info (output_bfd, info->shared);
 
-  if (sh_elf_hash_table (info)->fdpic_p && !info->relocatable)
-    {
-      struct elf_link_hash_entry *h;
-
-      /* Force a PT_GNU_STACK segment to be created.  */
-      if (! elf_tdata (output_bfd)->stack_flags)
-	elf_tdata (output_bfd)->stack_flags = PF_R | PF_W | PF_X;
-
-      /* Define __stacksize if it's not defined yet.  */
-      h = elf_link_hash_lookup (elf_hash_table (info), "__stacksize",
-				FALSE, FALSE, FALSE);
-      if (! h || h->root.type != bfd_link_hash_defined
-	  || h->type != STT_OBJECT
-	  || !h->def_regular)
-	{
-	  struct bfd_link_hash_entry *bh = NULL;
-
-	  if (!(_bfd_generic_link_add_one_symbol
-		(info, output_bfd, "__stacksize",
-		 BSF_GLOBAL, bfd_abs_section_ptr, DEFAULT_STACK_SIZE,
-		 (const char *) NULL, FALSE,
-		 get_elf_backend_data (output_bfd)->collect, &bh)))
-	    return FALSE;
-
-	  h = (struct elf_link_hash_entry *) bh;
-	  h->def_regular = 1;
-	  h->type = STT_OBJECT;
-	}
-    }
+  if (sh_elf_hash_table (info)->fdpic_p && !info->relocatable
+      && !bfd_elf_stack_segment_size (output_bfd, info,
+				      "__stacksize", DEFAULT_STACK_SIZE))
+    return FALSE;
   return TRUE;
 }
-
-#if !defined INCLUDE_SHMEDIA && !defined SH_TARGET_ALREADY_DEFINED
-
-static bfd_boolean
-sh_elf_modify_program_headers (bfd *output_bfd, struct bfd_link_info *info)
-{
-  struct elf_obj_tdata *tdata = elf_tdata (output_bfd);
-  struct elf_segment_map *m;
-  Elf_Internal_Phdr *p;
-
-  /* objcopy and strip preserve what's already there using
-     sh_elf_copy_private_bfd_data ().  */
-  if (! info)
-    return TRUE;
-
-  for (p = tdata->phdr, m = tdata->segment_map; m != NULL; m = m->next, p++)
-    if (m->p_type == PT_GNU_STACK)
-      break;
-
-  if (m)
-    {
-      struct elf_link_hash_entry *h;
-
-      /* Obtain the pointer to the __stacksize symbol.  */
-      h = elf_link_hash_lookup (elf_hash_table (info), "__stacksize",
-				FALSE, FALSE, FALSE);
-      if (h)
-	{
-	  while (h->root.type == bfd_link_hash_indirect
-		 || h->root.type == bfd_link_hash_warning)
-	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-	  BFD_ASSERT (h->root.type == bfd_link_hash_defined);
-	}
-
-      /* Set the header p_memsz from the symbol value.  We
-	 intentionally ignore the symbol section.  */
-      if (h && h->root.type == bfd_link_hash_defined)
-	p->p_memsz = h->root.u.def.value;
-      else
-	p->p_memsz = DEFAULT_STACK_SIZE;
-
-      p->p_align = 8;
-    }
-
-  return TRUE;
-}
-
-#endif
 
 /* Set the sizes of the dynamic sections.  */
 
@@ -4295,7 +4222,7 @@ sh_elf_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	      ((*_bfd_error_handler)
 	       (_("%B: 0x%lx: fatal: unaligned %s relocation 0x%lx"),
 		input_section->owner,
-		(unsigned long) rel->r_offset, howto->name, 
+		(unsigned long) rel->r_offset, howto->name,
 		(unsigned long) relocation));
 	      bfd_set_error (bfd_error_bad_value);
 	      return FALSE;
@@ -4310,7 +4237,7 @@ sh_elf_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	      ((*_bfd_error_handler)
 	       (_("%B: 0x%lx: fatal: unaligned %s relocation 0x%lx"),
 		input_section->owner,
-		(unsigned long) rel->r_offset, howto->name, 
+		(unsigned long) rel->r_offset, howto->name,
 		(unsigned long) relocation));
 	      bfd_set_error (bfd_error_bad_value);
 	      return FALSE;
@@ -4498,6 +4425,12 @@ sh_elf_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 
 	      check_segment[0] = check_segment[1] = -1;
 	    }
+	    /* We don't want warnings for non-NULL tests on undefined weak
+	       symbols.  */
+	    else if (r_type == R_SH_REL32
+		     && h
+		     && h->root.type == bfd_link_hash_undefweak) 
+	      check_segment[0] = check_segment[1] = -1;
 	  goto final_link_relocate;
 
 	case R_SH_GOTPLT32:
@@ -5995,9 +5928,9 @@ sh_elf_copy_indirect_symbol (struct bfd_link_info *info,
   eind->datalabel_got.refcount = 0;
 #endif
   edir->funcdesc.refcount += eind->funcdesc.refcount;
-  eind->funcdesc.refcount = 0;  
+  eind->funcdesc.refcount = 0;
   edir->abs_funcdesc_refcount += eind->abs_funcdesc_refcount;
-  eind->abs_funcdesc_refcount = 0;  
+  eind->abs_funcdesc_refcount = 0;
 
   if (ind->root.type == bfd_link_hash_indirect
       && dir->got.refcount <= 0)
@@ -6098,6 +6031,10 @@ sh_elf_check_relocs (bfd *abfd, struct bfd_link_info *info, asection *sec,
 #endif
 	      h = (struct elf_link_hash_entry *) h->root.u.i.link;
 	    }
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       r_type = sh_elf_optimized_tls_reloc (info, r_type, h == NULL);
@@ -6617,7 +6554,7 @@ sh_elf_set_mach_from_flags (bfd *abfd)
 
   if (sh_ef_bfd_table[flags] == 0)
     return FALSE;
-  
+
   bfd_default_set_arch_mach (abfd, bfd_arch_sh, sh_ef_bfd_table[flags]);
 
   return TRUE;
@@ -6633,11 +6570,11 @@ int
 sh_elf_get_flags_from_mach (unsigned long mach)
 {
   int i = ARRAY_SIZE (sh_ef_bfd_table) - 1;
-  
+
   for (; i>0; i--)
     if (sh_ef_bfd_table[i] == mach)
       return i;
-  
+
   /* shouldn't get here */
   BFD_FAIL();
 
@@ -6671,38 +6608,6 @@ sh_elf_copy_private_data (bfd * ibfd, bfd * obfd)
 
   if (! is_sh_elf (ibfd) || ! is_sh_elf (obfd))
     return TRUE;
-
-  /* Copy the stack size.  */
-  if (elf_tdata (ibfd)->phdr && elf_tdata (obfd)->phdr
-      && fdpic_object_p (ibfd) && fdpic_object_p (obfd))
-    {
-      unsigned i;
-
-      for (i = 0; i < elf_elfheader (ibfd)->e_phnum; i++)
-	if (elf_tdata (ibfd)->phdr[i].p_type == PT_GNU_STACK)
-	  {
-	    Elf_Internal_Phdr *iphdr = &elf_tdata (ibfd)->phdr[i];
-
-	    for (i = 0; i < elf_elfheader (obfd)->e_phnum; i++)
-	      if (elf_tdata (obfd)->phdr[i].p_type == PT_GNU_STACK)
-		{
-		  memcpy (&elf_tdata (obfd)->phdr[i], iphdr, sizeof (*iphdr));
-
-		  /* Rewrite the phdrs, since we're only called after they
-		     were first written.  */
-		  if (bfd_seek (obfd,
-				(bfd_signed_vma) get_elf_backend_data (obfd)
-				->s->sizeof_ehdr, SEEK_SET) != 0
-		      || get_elf_backend_data (obfd)->s
-		      ->write_out_phdrs (obfd, elf_tdata (obfd)->phdr,
-					 elf_elfheader (obfd)->e_phnum) != 0)
-		    return FALSE;
-		  break;
-		}
-
-	    break;
-	  }
-    }
 
   return sh_elf_set_private_flags (obfd, elf_elfheader (ibfd)->e_flags);
 }
@@ -7146,7 +7051,7 @@ sh_elf_finish_dynamic_symbol (bfd *output_bfd, struct bfd_link_info *info,
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  On VxWorks,
      _GLOBAL_OFFSET_TABLE_ is not absolute: it is relative to the
      ".got" section.  */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == htab->root.hdynamic
       || (!htab->vxworks_p && h == htab->root.hgot))
     sym->st_shndx = SHN_ABS;
 
@@ -7339,7 +7244,7 @@ sh_elf_finish_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 
   if (sgotplt && sgotplt->size > 0)
     elf_section_data (sgotplt->output_section)->this_hdr.sh_entsize = 4;
-    
+
   /* At the very end of the .rofixup section is a pointer to the GOT.  */
   if (htab->fdpic_p && htab->srofixup != NULL)
     {
@@ -7366,7 +7271,9 @@ sh_elf_finish_dynamic_sections (bfd *output_bfd, struct bfd_link_info *info)
 }
 
 static enum elf_reloc_type_class
-sh_elf_reloc_type_class (const Elf_Internal_Rela *rela)
+sh_elf_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			 const asection *rel_sec ATTRIBUTE_UNUSED,
+			 const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF32_R_TYPE (rela->r_info))
     {
@@ -7397,10 +7304,10 @@ elf32_shlin_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
       case 168:		/* Linux/SH */
 	/* pr_cursig */
-	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 24);
+	elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 24);
 
 	/* pr_reg */
 	offset = 72;
@@ -7423,9 +7330,9 @@ elf32_shlin_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 	return FALSE;
 
       case 124:		/* Linux/SH elf_prpsinfo */
-	elf_tdata (abfd)->core_program
+	elf_tdata (abfd)->core->program
 	 = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-	elf_tdata (abfd)->core_command
+	elf_tdata (abfd)->core->command
 	 = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
     }
 
@@ -7434,7 +7341,7 @@ elf32_shlin_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      implementations, so strip it off if it exists.  */
 
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -7445,7 +7352,7 @@ elf32_shlin_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 }
 #endif /* not SH_TARGET_ALREADY_DEFINED */
 
- 
+
 /* Return address for Ith PLT stub in section PLT, for relocation REL
    or (bfd_vma) -1 if it should not be included.  */
 
@@ -7576,6 +7483,7 @@ sh_elf_encode_eh_address (bfd *abfd,
 #define elf_backend_encode_eh_address \
 					sh_elf_encode_eh_address
 
+#define elf_backend_stack_align		8
 #define elf_backend_can_gc_sections	1
 #define elf_backend_can_refcount	1
 #define elf_backend_want_got_plt	1
@@ -7638,9 +7546,6 @@ sh_elf_encode_eh_address (bfd *abfd,
 #define	TARGET_LITTLE_SYM		bfd_elf32_shfd_vec
 #undef	TARGET_LITTLE_NAME
 #define	TARGET_LITTLE_NAME		"elf32-sh-fdpic"
-#undef elf_backend_modify_program_headers
-#define elf_backend_modify_program_headers \
-					sh_elf_modify_program_headers
 
 #undef	elf32_bed
 #define	elf32_bed			elf32_sh_fd_bed

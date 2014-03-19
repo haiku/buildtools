@@ -1,7 +1,5 @@
 /* BFD library support routines for architectures.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
-   2012 Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
    Hacked by John Gilmore and Steve Chamberlain of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -145,7 +143,7 @@ DESCRIPTION
 .#define bfd_mach_sparc_64bit_p(mach) \
 .  ((mach) >= bfd_mach_sparc_v9 && (mach) != bfd_mach_sparc_v8plusb)
 .  bfd_arch_spu,       {* PowerPC SPU *}
-.#define bfd_mach_spu		256 
+.#define bfd_mach_spu		256
 .  bfd_arch_mips,      {* MIPS Rxxxx *}
 .#define bfd_mach_mips3000		3000
 .#define bfd_mach_mips3900		3900
@@ -161,6 +159,7 @@ DESCRIPTION
 .#define bfd_mach_mips5000		5000
 .#define bfd_mach_mips5400		5400
 .#define bfd_mach_mips5500		5500
+.#define bfd_mach_mips5900		5900
 .#define bfd_mach_mips6000		6000
 .#define bfd_mach_mips7000		7000
 .#define bfd_mach_mips8000		8000
@@ -199,6 +198,10 @@ DESCRIPTION
 .  bfd_arch_k1om,   {* Intel K1OM *}
 .#define bfd_mach_k1om			(1 << 6)
 .#define bfd_mach_k1om_intel_syntax	(bfd_mach_k1om | bfd_mach_i386_intel_syntax)
+.#define bfd_mach_i386_nacl		(1 << 7)
+.#define bfd_mach_i386_i386_nacl	(bfd_mach_i386_i386 | bfd_mach_i386_nacl)
+.#define bfd_mach_x86_64_nacl		(bfd_mach_x86_64 | bfd_mach_i386_nacl)
+.#define bfd_mach_x64_32_nacl		(bfd_mach_x64_32 | bfd_mach_i386_nacl)
 .  bfd_arch_we32k,     {* AT&T WE32xxx *}
 .  bfd_arch_tahoe,     {* CCI/Harris Tahoe *}
 .  bfd_arch_i860,      {* Intel 860 *}
@@ -323,11 +326,13 @@ DESCRIPTION
 .  bfd_arch_tic6x,     {* Texas Instruments TMS320C6X *}
 .  bfd_arch_tic80,     {* TI TMS320c80 (MVP) *}
 .  bfd_arch_v850,      {* NEC V850 *}
+.  bfd_arch_v850_rh850,{* NEC V850 (using RH850 ABI) *}
 .#define bfd_mach_v850          1
 .#define bfd_mach_v850e 	'E'
 .#define bfd_mach_v850e1        '1'
 .#define bfd_mach_v850e2        0x4532
 .#define bfd_mach_v850e2v3      0x45325633
+.#define bfd_mach_v850e3v5      0x45335635 {* ('E'|'3'|'V'|'5') *}
 .  bfd_arch_arc,       {* ARC Cores *}
 .#define bfd_mach_arc_5         5
 .#define bfd_mach_arc_6         6
@@ -363,6 +368,8 @@ DESCRIPTION
 .#define bfd_mach_mep		1
 .#define bfd_mach_mep_h1	0x6831
 .#define bfd_mach_mep_c5	0x6335
+.  bfd_arch_metag,
+.#define bfd_mach_metag		1
 .  bfd_arch_ia64,      {* HP/Intel ia64 *}
 .#define bfd_mach_ia64_elf64	64
 .#define bfd_mach_ia64_elf32	32
@@ -417,7 +424,7 @@ DESCRIPTION
 .  bfd_arch_s390,      {* IBM s390 *}
 .#define bfd_mach_s390_31       31
 .#define bfd_mach_s390_64       64
-.  bfd_arch_score,     {* Sunplus score *} 
+.  bfd_arch_score,     {* Sunplus score *}
 .#define bfd_mach_score3         3
 .#define bfd_mach_score7         7
 .  bfd_arch_openrisc,  {* OpenRISC *}
@@ -432,7 +439,12 @@ DESCRIPTION
 .#define bfd_mach_msp14          14
 .#define bfd_mach_msp15          15
 .#define bfd_mach_msp16          16
+.#define bfd_mach_msp20          20
 .#define bfd_mach_msp21          21
+.#define bfd_mach_msp22          22
+.#define bfd_mach_msp23          23
+.#define bfd_mach_msp24          24
+.#define bfd_mach_msp26          26
 .#define bfd_mach_msp31          31
 .#define bfd_mach_msp32          32
 .#define bfd_mach_msp33          33
@@ -440,6 +452,10 @@ DESCRIPTION
 .#define bfd_mach_msp42          42
 .#define bfd_mach_msp43          43
 .#define bfd_mach_msp44          44
+.#define bfd_mach_msp430x        45
+.#define bfd_mach_msp46          46
+.#define bfd_mach_msp47          47
+.#define bfd_mach_msp54          54
 .  bfd_arch_xc16x,     {* Infineon's XC16X Series.               *}
 .#define bfd_mach_xc16x         1
 .#define bfd_mach_xc16xl        2
@@ -463,6 +479,9 @@ DESCRIPTION
 .#define bfd_mach_tilegx32  2
 .  bfd_arch_aarch64,   {* AArch64  *}
 .#define bfd_mach_aarch64 0
+.#define bfd_mach_aarch64_ilp32	32
+.  bfd_arch_nios2,
+.#define bfd_mach_nios2	0
 .  bfd_arch_last
 .  };
 */
@@ -546,6 +565,7 @@ extern const bfd_arch_info_type bfd_m68k_arch;
 extern const bfd_arch_info_type bfd_m88k_arch;
 extern const bfd_arch_info_type bfd_mcore_arch;
 extern const bfd_arch_info_type bfd_mep_arch;
+extern const bfd_arch_info_type bfd_metag_arch;
 extern const bfd_arch_info_type bfd_mips_arch;
 extern const bfd_arch_info_type bfd_microblaze_arch;
 extern const bfd_arch_info_type bfd_mmix_arch;
@@ -554,6 +574,7 @@ extern const bfd_arch_info_type bfd_mn10300_arch;
 extern const bfd_arch_info_type bfd_moxie_arch;
 extern const bfd_arch_info_type bfd_msp430_arch;
 extern const bfd_arch_info_type bfd_mt_arch;
+extern const bfd_arch_info_type bfd_nios2_arch;
 extern const bfd_arch_info_type bfd_ns32k_arch;
 extern const bfd_arch_info_type bfd_openrisc_arch;
 extern const bfd_arch_info_type bfd_or32_arch;
@@ -578,6 +599,7 @@ extern const bfd_arch_info_type bfd_tic80_arch;
 extern const bfd_arch_info_type bfd_tilegx_arch;
 extern const bfd_arch_info_type bfd_tilepro_arch;
 extern const bfd_arch_info_type bfd_v850_arch;
+extern const bfd_arch_info_type bfd_v850_rh850_arch;
 extern const bfd_arch_info_type bfd_vax_arch;
 extern const bfd_arch_info_type bfd_w65_arch;
 extern const bfd_arch_info_type bfd_we32k_arch;
@@ -632,6 +654,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_m88k_arch,
     &bfd_mcore_arch,
     &bfd_mep_arch,
+    &bfd_metag_arch,
     &bfd_microblaze_arch,
     &bfd_mips_arch,
     &bfd_mmix_arch,
@@ -640,6 +663,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_moxie_arch,
     &bfd_msp430_arch,
     &bfd_mt_arch,
+    &bfd_nios2_arch,
     &bfd_ns32k_arch,
     &bfd_openrisc_arch,
     &bfd_or32_arch,
@@ -661,6 +685,7 @@ static const bfd_arch_info_type * const bfd_archures_list[] =
     &bfd_tilegx_arch,
     &bfd_tilepro_arch,
     &bfd_v850_arch,
+    &bfd_v850_rh850_arch,
     &bfd_vax_arch,
     &bfd_w65_arch,
     &bfd_we32k_arch,

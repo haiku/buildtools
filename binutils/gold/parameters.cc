@@ -1,6 +1,6 @@
 // parameters.cc -- general parameters for a link using gold
 
-// Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013
 // Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
@@ -127,7 +127,10 @@ Parameters::set_target_once(Target* target)
   gold_assert(this->target_ == NULL);
   this->target_ = target;
   if (this->options_valid())
-    this->check_target_endianness();
+    {
+      this->check_target_endianness();
+      this->check_rodata_segment();
+    }
 }
 
 // Clear the target, for testing.
@@ -219,6 +222,15 @@ Parameters::check_target_endianness()
     }
 }
 
+void
+Parameters::check_rodata_segment()
+{
+  if (this->options().user_set_Trodata_segment()
+      && !this->options().rosegment()
+      && !this->target().isolate_execinstr())
+    gold_error(_("-Trodata-segment is meaningless without --rosegment"));
+}
+
 // Return the name of the entry symbol.
 
 const char*
@@ -226,10 +238,7 @@ Parameters::entry() const
 {
   const char* ret = this->options().entry();
   if (ret == NULL)
-    {
-      // FIXME: Need to support target specific entry symbol.
-      ret = "_start";
-    }
+    ret = parameters->target().entry_symbol_name();
   return ret;
 }
 

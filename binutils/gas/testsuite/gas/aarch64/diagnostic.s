@@ -41,7 +41,7 @@
 	shl	v1.2s, v2.2s, 32
 	sqshrn2	v2.16b, v3.8h, #17
 	movi	v1.4h, 256
-	movi	v1.4h, -1
+	movi	v1.4h, -129
 	movi	v1.4h, 255, msl #8
 	movi	d0, 256
 	movi	v1.4h, 255, lsl #7
@@ -89,3 +89,13 @@
 	movi	v1.8b, 97, lsl #8
 	msr	dummy, x1
 	fmov	s0, 0x42000000
+	ldp	x0, x1, [x2, #4]
+	ldp	x0, x1, [x2, #4]!
+	ldp	x0, x1, [x2], #4
+	stp	w0, w1, [x2, #3]
+	stp	w0, w1, [x2, #2]!
+	stp	w0, w1, [x2], #1
+	cinc	w0, w1, al
+	cinc	w0, w1, nv
+	cset	w0, al
+	cset	w0, nv

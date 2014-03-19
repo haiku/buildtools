@@ -1,6 +1,5 @@
 /* tc-rl78.c -- Assembler for the Renesas RL78
-   Copyright 2011
-   Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -38,10 +37,15 @@ const char comment_chars[]        = ";";
    first line of the input file.  This is because the compiler outputs
    #NO_APP at the beginning of its output.  */
 const char line_comment_chars[]   = "#";
-const char line_separator_chars[] = "|";
+/* Use something that isn't going to be needed by any expressions or
+   other syntax.  */
+const char line_separator_chars[] = "@";
 
 const char EXP_CHARS[]            = "eE";
 const char FLT_CHARS[]            = "dD";
+
+/* ELF flags to set in the output file header.  */
+static int elf_flags = 0;
 
 /*------------------------------------------------------------------*/
 
@@ -192,6 +196,9 @@ rl78_op (expressionS exp, int nbytes, int type)
     }
   else
     {
+      if (nbytes > 2
+	  && exp.X_md == BFD_RELOC_RL78_CODE)
+	exp.X_md = 0;
       rl78_op_fixup (exp, rl78_bytes.n_ops * 8, nbytes * 8, type);
       memset (rl78_bytes.ops + rl78_bytes.n_ops, 0, nbytes);
       rl78_bytes.n_ops += nbytes;
@@ -255,6 +262,7 @@ rl78_field (int val, int pos, int sz)
 enum options
 {
   OPTION_RELAX = OPTION_MD_BASE,
+  OPTION_G10,
 };
 
 #define RL78_SHORTOPTS ""
@@ -264,6 +272,7 @@ const char * md_shortopts = RL78_SHORTOPTS;
 struct option md_longopts[] =
 {
   {"relax", no_argument, NULL, OPTION_RELAX},
+  {"mg10", no_argument, NULL, OPTION_G10},
   {NULL, no_argument, NULL, 0}
 };
 size_t md_longopts_size = sizeof (md_longopts);
@@ -277,6 +286,9 @@ md_parse_option (int c, char * arg ATTRIBUTE_UNUSED)
       linkrelax = 1;
       return 1;
 
+    case OPTION_G10:
+      elf_flags |= E_FLAG_RL78_G10;
+      return 1;
     }
   return 0;
 }
@@ -321,6 +333,13 @@ rl78_md_end (void)
 {
 }
 
+/* Set the ELF specific flags.  */
+void
+rl78_elf_final_processing (void)
+{
+  elf_elfheader (stdoutput)->e_flags |= elf_flags;
+}
+
 /* Write a value out to the object file, using the appropriate endianness.  */
 void
 md_number_to_chars (char * buf, valueT val, int n)
@@ -335,6 +354,7 @@ static struct
 }
 reloc_functions[] =
 {
+  { "code", BFD_RELOC_RL78_CODE },
   { "lo16", BFD_RELOC_RL78_LO16 },
   { "hi16", BFD_RELOC_RL78_HI16 },
   { "hi8",  BFD_RELOC_RL78_HI8 },
@@ -552,6 +572,27 @@ rl78_cons_fix_new (fragS *	frag,
       return;
     }
 
+  switch (exp->X_md)
+    {
+    case BFD_RELOC_RL78_CODE:
+      if (size == 2)
+	type = exp->X_md;
+      break;
+    case BFD_RELOC_RL78_LO16:
+    case BFD_RELOC_RL78_HI16:
+      if (size != 2)
+	as_bad (_("%%hi16/%%lo16 only applies to .short or .hword"));
+      type = exp->X_md;
+      break;
+    case BFD_RELOC_RL78_HI8:
+      if (size != 1)
+	as_bad (_("%%hi8 only applies to .byte"));
+      type = exp->X_md;
+      break;
+    default:
+      break;
+    }
+
   if (exp->X_op == O_subtract && exp->X_op_symbol)
     {
       if (size != 4 && size != 2 && size != 1)
@@ -644,6 +685,11 @@ tc_gen_reloc (asection * seg ATTRIBUTE_UNUSED, fixS * fixp)
       SYM0 ();
       OP (OP_NEG);
       OP (ABS32);
+      break;
+
+    case BFD_RELOC_RL78_CODE:
+      SYM0 ();
+      OP (ABS16);
       break;
 
     case BFD_RELOC_RL78_LO16:
@@ -752,6 +798,7 @@ md_apply_fix (struct fix * f ATTRIBUTE_UNUSED,
 
     case BFD_RELOC_16:
     case BFD_RELOC_16_PCREL:
+    case BFD_RELOC_RL78_CODE:
       op[0] = val;
       op[1] = val >> 8;
       break;

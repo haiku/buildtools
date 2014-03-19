@@ -5,11 +5,20 @@ if [ -z "$MACHINE" ]; then
 else
   OUTPUT_ARCH=${ARCH}:${MACHINE}
 fi
+
+case ${target} in
+  *-*-cygwin*)
+    move_default_addr_high=1
+    ;;
+  *)
+    move_default_addr_high=0;
+    ;;
+esac
+
 rm -f e${EMULATION_NAME}.c
 (echo;echo;echo;echo;echo)>e${EMULATION_NAME}.c # there, now line numbers match ;-)
 fragment <<EOF
-/* Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012
-   Free Software Foundation, Inc.
+/* Copyright 2006-2013 Free Software Foundation, Inc.
    Written by Kai Tietz, OneVision Software GmbH&CoKg.
 
    This file is part of the GNU Binutils.
@@ -89,9 +98,39 @@ fragment <<EOF
 
 #if defined(TARGET_IS_i386pep) || ! defined(DLL_SUPPORT)
 #define	PE_DEF_SUBSYSTEM		3
+#undef NT_EXE_IMAGE_BASE
+#define NT_EXE_IMAGE_BASE \
+  ((bfd_vma) (${move_default_addr_high} ? 0x100400000LL \
+					: 0x400000LL))
+#undef NT_DLL_IMAGE_BASE
+#define NT_DLL_IMAGE_BASE \
+  ((bfd_vma) (${move_default_addr_high} ? 0x400000000LL \
+					: 0x10000000LL))
+#undef NT_DLL_AUTO_IMAGE_BASE
+#define NT_DLL_AUTO_IMAGE_BASE \
+  ((bfd_vma) (${move_default_addr_high} ? 0x400000000LL \
+					: 0x61300000LL))
+#undef NT_DLL_AUTO_IMAGE_MASK
+#define NT_DLL_AUTO_IMAGE_MASK \
+  ((bfd_vma) (${move_default_addr_high} ? 0x1ffff0000LL \
+					: 0x0ffc0000LL))
 #else
 #undef  NT_EXE_IMAGE_BASE
-#define NT_EXE_IMAGE_BASE		0x00010000
+#define NT_EXE_IMAGE_BASE \
+  ((bfd_vma) (${move_default_addr_high} ? 0x100010000LL \
+					: 0x10000LL))
+#undef NT_DLL_IMAGE_BASE
+#define NT_DLL_IMAGE_BASE \
+  ((bfd_vma) (${move_default_addr_high} ? 0x110000000LL \
+					: 0x10000000LL))
+#undef NT_DLL_AUTO_IMAGE_BASE
+#define NT_DLL_AUTO_IMAGE_BASE \
+  ((bfd_vma) (${move_default_addr_high} ? 0x120000000LL \
+					: 0x61300000LL))
+#undef NT_DLL_AUTO_IMAGE_MASK
+#define NT_DLL_AUTO_IMAGE_MASK \
+  ((bfd_vma) (${move_default_addr_high} ? 0x0ffff0000LL \
+					: 0x0ffc0000LL))
 #undef  PE_DEF_SECTION_ALIGNMENT
 #define	PE_DEF_SUBSYSTEM		2
 #undef  PE_DEF_FILE_ALIGNMENT
@@ -106,6 +145,7 @@ static flagword real_flags = IMAGE_FILE_LARGE_ADDRESS_AWARE;
 static int support_old_code = 0;
 static lang_assignment_statement_type *image_base_statement = 0;
 static unsigned short pe_dll_characteristics = 0;
+static bfd_boolean insert_timestamp = FALSE;
 
 #ifdef DLL_SUPPORT
 static int    pep_enable_stdcall_fixup = 1; /* 0=disable 1=enable (default).  */
@@ -201,6 +241,7 @@ enum options
   OPTION_NO_SEH,
   OPTION_NO_BIND,
   OPTION_WDM_DRIVER,
+  OPTION_INSERT_TIMESTAMP,
   OPTION_TERMINAL_SERVER_AWARE
 };
 
@@ -276,6 +317,7 @@ gld${EMULATION_NAME}_add_options
     {"no-bind", no_argument, NULL, OPTION_NO_BIND},
     {"wdmdriver", no_argument, NULL, OPTION_WDM_DRIVER},
     {"tsaware", no_argument, NULL, OPTION_TERMINAL_SERVER_AWARE},
+    {"insert-timestamp", no_argument, NULL, OPTION_INSERT_TIMESTAMP},
     {NULL, no_argument, NULL, 0}
   };
 
@@ -362,6 +404,8 @@ gld_${EMULATION_NAME}_list_options (FILE *file)
   fprintf (file, _("  --subsystem <name>[:<version>]     Set required OS subsystem [& version]\n"));
   fprintf (file, _("  --support-old-code                 Support interworking with old code\n"));
   fprintf (file, _("  --[no-]leading-underscore          Set explicit symbol underscore prefix mode\n"));
+  fprintf (file, _("  --insert-timestamp                 Use a real timestamp rather than zero.\n"));
+  fprintf (file, _("                                     This makes binaries non-deterministic\n"));
 #ifdef DLL_SUPPORT
   fprintf (file, _("  --add-stdcall-alias                Export symbols with and without @nn\n"));
   fprintf (file, _("  --disable-stdcall-fixup            Don't link _sym to _sym@nn\n"));
@@ -667,6 +711,9 @@ gld${EMULATION_NAME}_handle_option (int optc)
     case OPTION_LEADING_UNDERSCORE:
       pep_leading_underscore = 1;
       break;
+    case OPTION_INSERT_TIMESTAMP:
+      insert_timestamp = TRUE;
+      break;
 #ifdef DLL_SUPPORT
     case OPTION_OUT_DEF:
       pep_out_def_filename = xstrdup (optarg);
@@ -773,7 +820,7 @@ gld${EMULATION_NAME}_handle_option (int optc)
 
   /*  Set DLLCharacteristics bits  */
   set_pep_name ("__dll_characteristics__", pe_dll_characteristics);
- 
+
   return TRUE;
 }
 
@@ -808,7 +855,7 @@ static bfd_vma
 compute_dll_image_base (const char *ofile)
 {
   bfd_vma hash = (bfd_vma) strhash (ofile);
-  return 0x61300000 + ((hash << 16) & 0x0FFC0000);
+  return NT_DLL_AUTO_IMAGE_BASE + ((hash << 16) & NT_DLL_AUTO_IMAGE_MASK);
 }
 #endif
 
@@ -892,7 +939,7 @@ gld_${EMULATION_NAME}_after_parse (void)
       "targets, did you mean --export-all-symbols?\n"));
 
   set_entry_point ();
-  
+
   after_parse_default ();
 }
 
@@ -1136,7 +1183,7 @@ pr_sym (struct bfd_hash_entry *h, void *inf ATTRIBUTE_UNUSED)
 }
 #endif /* DLL_SUPPORT */
 
-static void 
+static void
 debug_section_p (bfd *abfd ATTRIBUTE_UNUSED, asection *sect, void *obj)
 {
   int *found = (int *) obj;
@@ -1179,6 +1226,7 @@ gld_${EMULATION_NAME}_after_open (void)
   pe_data (link_info.output_bfd)->pe_opthdr = pep;
   pe_data (link_info.output_bfd)->dll = init[DLLOFF].value;
   pe_data (link_info.output_bfd)->real_flags |= real_flags;
+  pe_data (link_info.output_bfd)->insert_timestamp = insert_timestamp;
 
   /* At this point we must decide whether to use long section names
      in the output or not.  If the user hasn't explicitly specified
