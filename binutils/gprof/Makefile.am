@@ -1,4 +1,21 @@
 ## Process this file with automake to generate Makefile.in
+#
+#   Copyright 2012 Free Software Foundation
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+#
 
 AUTOMAKE_OPTIONS = 1.11 foreign no-dist no-texinfo.tex
 ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
@@ -26,7 +43,7 @@ bin_PROGRAMS = gprof
 sources = basic_blocks.c call_graph.c cg_arcs.c cg_dfn.c \
 	cg_print.c corefile.c gmon_io.c gprof.c hertz.c hist.c source.c \
 	search_list.c symtab.c sym_ids.c utils.c \
-	i386.c alpha.c vax.c tahoe.c sparc.c mips.c
+	i386.c alpha.c vax.c tahoe.c sparc.c mips.c aarch64.c
 gprof_SOURCES = $(sources) flat_bl.c bsd_callg_bl.c fsf_callg_bl.c
 gprof_DEPENDENCIES = ../bfd/libbfd.la ../libiberty/libiberty.a $(LIBINTL_DEP)
 gprof_LDADD = ../bfd/libbfd.la ../libiberty/libiberty.a $(LIBINTL)

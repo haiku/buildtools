@@ -130,6 +130,17 @@ slurp_symtab (bfd *abfd)
     symcount = bfd_canonicalize_symtab (abfd, syms);
   if (symcount < 0)
     bfd_fatal (bfd_get_filename (abfd));
+
+  /* If there are no symbols left after canonicalization and
+     we have not tried the dynamic symbols then give them a go.  */
+  if (symcount == 0
+      && ! dynamic
+      && (storage = bfd_get_dynamic_symtab_upper_bound (abfd)) > 0)
+    {
+      free (syms);
+      syms = xmalloc (storage);
+      symcount = bfd_canonicalize_dynamic_symtab (abfd, syms);
+    }
 }
 
 /* These global variables are used to pass information between
@@ -249,7 +260,12 @@ translate_addresses (bfd *abfd, asection *section)
       if (! found)
 	{
 	  if (with_functions)
-	    printf ("??\n");
+	    {
+	      if (pretty_print)
+		printf ("?? ");
+	      else
+		printf ("??\n");
+	    }
 	  printf ("??:0\n");
 	}
       else

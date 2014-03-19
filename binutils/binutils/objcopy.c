@@ -1,7 +1,5 @@
 /* objcopy.c -- copy object file from input to output, optionally massaging it.
-   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013
-   Free Software Foundation, Inc.
+   Copyright 1991-2013 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -102,7 +100,7 @@ enum strip_action
   };
 
 /* Which symbols to remove.  */
-static enum strip_action strip_symbols;
+static enum strip_action strip_symbols = STRIP_UNDEF;
 
 enum locals_action
   {
@@ -114,27 +112,26 @@ enum locals_action
 /* Which local symbols to remove.  Overrides STRIP_ALL.  */
 static enum locals_action discard_locals;
 
-/* What kind of change to perform.  */
-enum change_action
-{
-  CHANGE_IGNORE,
-  CHANGE_MODIFY,
-  CHANGE_SET
-};
-
 /* Structure used to hold lists of sections and actions to take.  */
 struct section_list
 {
   struct section_list * next;	   /* Next section to change.  */
-  const char *		name;	   /* Section name.  */
+  const char *		pattern;   /* Section name pattern.  */
   bfd_boolean		used;	   /* Whether this entry was used.  */
-  bfd_boolean		remove;	   /* Whether to remove this section.  */
-  bfd_boolean		copy;	   /* Whether to copy this section.  */
-  enum change_action	change_vma;/* Whether to change or set VMA.  */
+
+  unsigned int          context;   /* What to do with matching sections.  */
+  /* Flag bits used in the context field.
+     COPY and REMOVE are mutually exlusive.  SET and ALTER are mutually exclusive.  */
+#define SECTION_CONTEXT_REMOVE    (1 << 0) /* Remove this section.  */
+#define SECTION_CONTEXT_COPY      (1 << 1) /* Copy this section, delete all non-copied section.  */
+#define SECTION_CONTEXT_SET_VMA   (1 << 2) /* Set the sections' VMA address.  */
+#define SECTION_CONTEXT_ALTER_VMA (1 << 3) /* Increment or decrement the section's VMA address.  */
+#define SECTION_CONTEXT_SET_LMA   (1 << 4) /* Set the sections' LMA address.  */
+#define SECTION_CONTEXT_ALTER_LMA (1 << 5) /* Increment or decrement the section's LMA address.  */
+#define SECTION_CONTEXT_SET_FLAGS (1 << 6) /* Set the section's flags.  */
+
   bfd_vma		vma_val;   /* Amount to change by or set to.  */
-  enum change_action	change_lma;/* Whether to change or set LMA.  */
   bfd_vma		lma_val;   /* Amount to change by or set to.  */
-  bfd_boolean		set_flags; /* Whether to set the section flags.	 */
   flagword		flags;	   /* What to set the section flags to.	 */
 };
 
@@ -690,6 +687,8 @@ parse_flags (const char *s)
       PARSE_FLAG ("rom", SEC_ROM);
       PARSE_FLAG ("share", SEC_COFF_SHARED);
       PARSE_FLAG ("contents", SEC_HAS_CONTENTS);
+      PARSE_FLAG ("merge", SEC_MERGE);
+      PARSE_FLAG ("strings", SEC_STRINGS);
 #undef PARSE_FLAG
       else
 	{
@@ -700,7 +699,7 @@ parse_flags (const char *s)
 	  copy[len] = '\0';
 	  non_fatal (_("unrecognized section flag `%s'"), copy);
 	  fatal (_("supported flags: %s"),
-		 "alloc, load, noload, readonly, debug, code, data, rom, share, contents");
+		 "alloc, load, noload, readonly, debug, code, data, rom, share, contents, merge, strings");
 	}
 
       s = snext;
@@ -710,32 +709,93 @@ parse_flags (const char *s)
   return ret;
 }
 
-/* Find and optionally add an entry in the change_sections list.  */
+/* Find and optionally add an entry in the change_sections list.
+
+   We need to be careful in how we match section names because of the support
+   for wildcard characters.  For example suppose that the user has invoked
+   objcopy like this:
+         
+       --set-section-flags .debug_*=debug
+       --set-section-flags .debug_str=readonly,debug
+       --change-section-address .debug_*ranges=0x1000
+
+   With the idea that all debug sections will receive the DEBUG flag, the
+   .debug_str section will also receive the READONLY flag and the
+   .debug_ranges and .debug_aranges sections will have their address set to
+   0x1000.  (This may not make much sense, but it is just an example).
+
+   When adding the section name patterns to the section list we need to make
+   sure that previous entries do not match with the new entry, unless the
+   match is exact.  (In which case we assume that the user is overriding
+   the previous entry with the new context).
+
+   When matching real section names to the section list we make use of the
+   wildcard characters, but we must do so in context.  Eg if we are setting
+   section addresses then we match for .debug_ranges but not for .debug_info.
+
+   Finally, if ADD is false and we do find a match, we mark the section list
+   entry as used.  */
 
 static struct section_list *
-find_section_list (const char *name, bfd_boolean add)
+find_section_list (const char *name, bfd_boolean add, unsigned int context)
 {
   struct section_list *p;
 
+  /* assert ((context & ((1 << 7) - 1)) != 0); */
+  
   for (p = change_sections; p != NULL; p = p->next)
-    if (strcmp (p->name, name) == 0)
-      return p;
+    {
+      if (add)
+	{
+	  if (strcmp (p->pattern, name) == 0)
+	    {
+	      /* Check for context conflicts.  */
+	      if (((p->context & SECTION_CONTEXT_REMOVE)
+		   && (context & SECTION_CONTEXT_COPY))
+		  || ((context & SECTION_CONTEXT_REMOVE)
+		      && (p->context & SECTION_CONTEXT_COPY)))
+		fatal (_("error: %s both copied and removed"), name);
+
+	      if (((p->context & SECTION_CONTEXT_SET_VMA)
+		  && (context & SECTION_CONTEXT_ALTER_VMA))
+		  || ((context & SECTION_CONTEXT_SET_VMA)
+		      && (context & SECTION_CONTEXT_ALTER_VMA)))
+		fatal (_("error: %s both sets and alters VMA"), name);
+
+	      if (((p->context & SECTION_CONTEXT_SET_LMA)
+		  && (context & SECTION_CONTEXT_ALTER_LMA))
+		  || ((context & SECTION_CONTEXT_SET_LMA)
+		      && (context & SECTION_CONTEXT_ALTER_LMA)))
+		fatal (_("error: %s both sets and alters LMA"), name);
+
+	      /* Extend the context.  */
+	      p->context |= context;
+	      return p;
+	    }
+	}
+      /* If we are not adding a new name/pattern then
+	 only check for a match if the context applies.  */
+      else if ((p->context & context)
+	       /* We could check for the presence of wildchar characters
+		  first and choose between calling strcmp and fnmatch,
+		  but is that really worth it ?  */
+	       && fnmatch (p->pattern, name, 0) == 0)
+	{
+	  p->used = TRUE;
+	  return p;
+	}
+    }
 
   if (! add)
     return NULL;
 
   p = (struct section_list *) xmalloc (sizeof (struct section_list));
-  p->name = name;
+  p->pattern = name;
   p->used = FALSE;
-  p->remove = FALSE;
-  p->copy = FALSE;
-  p->change_vma = CHANGE_IGNORE;
-  p->change_lma = CHANGE_IGNORE;
+  p->context = context;
   p->vma_val = 0;
   p->lma_val = 0;
-  p->set_flags = FALSE;
   p->flags = 0;
-
   p->next = change_sections;
   change_sections = p;
 
@@ -986,12 +1046,20 @@ is_strip_section_1 (bfd *abfd ATTRIBUTE_UNUSED, asection *sec)
   if (sections_removed || sections_copied)
     {
       struct section_list *p;
+      struct section_list *q;
 
-      p = find_section_list (bfd_get_section_name (abfd, sec), FALSE);
+      p = find_section_list (bfd_get_section_name (abfd, sec), FALSE,
+			     SECTION_CONTEXT_REMOVE);
+      q = find_section_list (bfd_get_section_name (abfd, sec), FALSE,
+			     SECTION_CONTEXT_COPY);
 
-      if (sections_removed && p != NULL && p->remove)
+      if (p && q)
+	fatal (_("error: section %s matches both remove and copy options"),
+	       bfd_get_section_name (abfd, sec));
+
+      if (p != NULL)
 	return TRUE;
-      if (sections_copied && (p == NULL || ! p->copy))
+      if (sections_copied && q == NULL)
 	return TRUE;
     }
 
@@ -1002,7 +1070,13 @@ is_strip_section_1 (bfd *abfd ATTRIBUTE_UNUSED, asection *sec)
 	  || strip_symbols == STRIP_ALL
 	  || discard_locals == LOCALS_ALL
 	  || convert_debugging)
-	return TRUE;
+	{
+	  /* By default we don't want to strip .reloc section.
+	     This section has for pe-coff special meaning.   See
+	     pe-dll.c file in ld, and peXXigen.c in bfd for details.  */
+	  if (strcmp (bfd_get_section_name (abfd, sec), ".reloc") != 0)
+	    return TRUE;
+	}
 
       if (strip_symbols == STRIP_DWO)
 	return is_dwo_section (abfd, sec);
@@ -1688,13 +1762,12 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
 	{
 	  flagword flags;
 
-	  pset = find_section_list (padd->name, FALSE);
+	  pset = find_section_list (padd->name, FALSE,
+				    SECTION_CONTEXT_SET_FLAGS);
 	  if (pset != NULL)
-	    pset->used = TRUE;
-
-	  flags = SEC_HAS_CONTENTS | SEC_READONLY | SEC_DATA;
-	  if (pset != NULL && pset->set_flags)
 	    flags = pset->flags | SEC_HAS_CONTENTS;
+	  else
+	    flags = SEC_HAS_CONTENTS | SEC_READONLY | SEC_DATA;
 
 	  /* bfd_make_section_with_flags() does not return very helpful
 	     error codes, so check for the most likely user error first.  */
@@ -1727,27 +1800,27 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
 	      return FALSE;
 	    }
 
+	  pset = find_section_list (padd->name, FALSE,
+				    SECTION_CONTEXT_SET_VMA | SECTION_CONTEXT_ALTER_VMA);
+	  if (pset != NULL
+	      && ! bfd_set_section_vma (obfd, padd->section, pset->vma_val))
+	    {
+	      bfd_nonfatal_message (NULL, obfd, padd->section, NULL);
+	      return FALSE;
+	    }
+
+	  pset = find_section_list (padd->name, FALSE,
+				    SECTION_CONTEXT_SET_LMA | SECTION_CONTEXT_ALTER_LMA);
 	  if (pset != NULL)
 	    {
-	      if (pset->change_vma != CHANGE_IGNORE)
-		if (! bfd_set_section_vma (obfd, padd->section,
-					   pset->vma_val))
-		  {
-		    bfd_nonfatal_message (NULL, obfd, padd->section, NULL);
-		    return FALSE;
-		  }
+	      padd->section->lma = pset->lma_val;
 
-	      if (pset->change_lma != CHANGE_IGNORE)
+	      if (! bfd_set_section_alignment
+		  (obfd, padd->section,
+		   bfd_section_alignment (obfd, padd->section)))
 		{
-		  padd->section->lma = pset->lma_val;
-
-		  if (! bfd_set_section_alignment
-		      (obfd, padd->section,
-		       bfd_section_alignment (obfd, padd->section)))
-		    {
-		      bfd_nonfatal_message (NULL, obfd, padd->section, NULL);
-		      return FALSE;
-		    }
+		  bfd_nonfatal_message (NULL, obfd, padd->section, NULL);
+		  return FALSE;
 		}
 	    }
 	}
@@ -1755,58 +1828,70 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
 
   if (gnu_debuglink_filename != NULL)
     {
-      gnu_debuglink_section = bfd_create_gnu_debuglink_section
-	(obfd, gnu_debuglink_filename);
-
-      if (gnu_debuglink_section == NULL)
+      /* PR 15125: Give a helpful warning message if
+	 the debuglink section already exists, and
+	 allow the rest of the copy to complete.  */
+      if (bfd_get_section_by_name (obfd, ".gnu_debuglink"))
 	{
-	  bfd_nonfatal_message (NULL, obfd, NULL,
-				_("cannot create debug link section `%s'"),
-				gnu_debuglink_filename);
-	  return FALSE;
+	  non_fatal (_("%s: debuglink section already exists"),
+		     bfd_get_filename (obfd));
+	  gnu_debuglink_filename = NULL;
 	}
-
-      /* Special processing for PE format files.  We
-	 have no way to distinguish PE from COFF here.  */
-      if (bfd_get_flavour (obfd) == bfd_target_coff_flavour)
+      else
 	{
-	  bfd_vma debuglink_vma;
-	  asection * highest_section;
-	  asection * sec;
+	  gnu_debuglink_section = bfd_create_gnu_debuglink_section
+	    (obfd, gnu_debuglink_filename);
 
-	  /* The PE spec requires that all sections be adjacent and sorted
-	     in ascending order of VMA.  It also specifies that debug
-	     sections should be last.  This is despite the fact that debug
-	     sections are not loaded into memory and so in theory have no
-	     use for a VMA.
+	  if (gnu_debuglink_section == NULL)
+	    {
+	      bfd_nonfatal_message (NULL, obfd, NULL,
+				    _("cannot create debug link section `%s'"),
+				    gnu_debuglink_filename);
+	      return FALSE;
+	    }
 
-	     This means that the debuglink section must be given a non-zero
-	     VMA which makes it contiguous with other debug sections.  So
-	     walk the current section list, find the section with the
-	     highest VMA and start the debuglink section after that one.  */
-	  for (sec = obfd->sections, highest_section = NULL;
-	       sec != NULL;
-	       sec = sec->next)
-	    if (sec->vma > 0
-		&& (highest_section == NULL
-		    || sec->vma > highest_section->vma))
-	      highest_section = sec;
+	  /* Special processing for PE format files.  We
+	     have no way to distinguish PE from COFF here.  */
+	  if (bfd_get_flavour (obfd) == bfd_target_coff_flavour)
+	    {
+	      bfd_vma debuglink_vma;
+	      asection * highest_section;
+	      asection * sec;
 
-	  if (highest_section)
-	    debuglink_vma = BFD_ALIGN (highest_section->vma
-				       + highest_section->size,
-				       /* FIXME: We ought to be using
-					  COFF_PAGE_SIZE here or maybe
-					  bfd_get_section_alignment() (if it
-					  was set) but since this is for PE
-					  and we know the required alignment
-					  it is easier just to hard code it.  */
-				       0x1000);
-	  else
-	    /* Umm, not sure what to do in this case.  */
-	    debuglink_vma = 0x1000;
+	      /* The PE spec requires that all sections be adjacent and sorted
+		 in ascending order of VMA.  It also specifies that debug
+		 sections should be last.  This is despite the fact that debug
+		 sections are not loaded into memory and so in theory have no
+		 use for a VMA.
 
-	  bfd_set_section_vma (obfd, gnu_debuglink_section, debuglink_vma);
+		 This means that the debuglink section must be given a non-zero
+		 VMA which makes it contiguous with other debug sections.  So
+		 walk the current section list, find the section with the
+		 highest VMA and start the debuglink section after that one.  */
+	      for (sec = obfd->sections, highest_section = NULL;
+		   sec != NULL;
+		   sec = sec->next)
+		if (sec->vma > 0
+		    && (highest_section == NULL
+			|| sec->vma > highest_section->vma))
+		  highest_section = sec;
+
+	      if (highest_section)
+		debuglink_vma = BFD_ALIGN (highest_section->vma
+					   + highest_section->size,
+					   /* FIXME: We ought to be using
+					      COFF_PAGE_SIZE here or maybe
+					      bfd_get_section_alignment() (if it
+					      was set) but since this is for PE
+					      and we know the required alignment
+					      it is easier just to hard code it.  */
+					   0x1000);
+	      else
+		/* Umm, not sure what to do in this case.  */
+		debuglink_vma = 0x1000;
+
+	      bfd_set_section_vma (obfd, gnu_debuglink_section, debuglink_vma);
+	    }
 	}
     }
 
@@ -2511,10 +2596,6 @@ setup_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
   if (is_strip_section (ibfd, isection))
     return;
 
-  p = find_section_list (bfd_section_name (ibfd, isection), FALSE);
-  if (p != NULL)
-    p->used = TRUE;
-
   /* Get the, possibly new, name of the output section.  */
   name = find_section_rename (ibfd, isection, & flags);
 
@@ -2536,7 +2617,10 @@ setup_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
     }
 
   make_nobits = FALSE;
-  if (p != NULL && p->set_flags)
+
+  p = find_section_list (bfd_section_name (ibfd, isection), FALSE,
+			 SECTION_CONTEXT_SET_FLAGS);
+  if (p != NULL)
     flags = p->flags | (flags & (SEC_HAS_CONTENTS | SEC_RELOC));
   else if (strip_symbols == STRIP_NONDEBUG
 	   && (flags & (SEC_ALLOC | SEC_GROUP)) != 0
@@ -2579,10 +2663,15 @@ setup_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
     }
 
   vma = bfd_section_vma (ibfd, isection);
-  if (p != NULL && p->change_vma == CHANGE_MODIFY)
-    vma += p->vma_val;
-  else if (p != NULL && p->change_vma == CHANGE_SET)
-    vma = p->vma_val;
+  p = find_section_list (bfd_section_name (ibfd, isection), FALSE,
+			 SECTION_CONTEXT_ALTER_VMA | SECTION_CONTEXT_SET_VMA);
+  if (p != NULL)
+    {
+      if (p->context & SECTION_CONTEXT_SET_VMA)
+	vma = p->vma_val;
+      else
+	vma += p->vma_val;
+    }
   else
     vma += change_section_address;
 
@@ -2593,14 +2682,14 @@ setup_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
     }
 
   lma = isection->lma;
-  if ((p != NULL) && p->change_lma != CHANGE_IGNORE)
+  p = find_section_list (bfd_section_name (ibfd, isection), FALSE,
+			 SECTION_CONTEXT_ALTER_LMA | SECTION_CONTEXT_SET_LMA);
+  if (p != NULL)
     {
-      if (p->change_lma == CHANGE_MODIFY)
+      if (p->context & SECTION_CONTEXT_ALTER_LMA)
 	lma += p->lma_val;
-      else if (p->change_lma == CHANGE_SET)
-	lma = p->lma_val;
       else
-	abort ();
+	lma = p->lma_val;
     }
   else
     lma += change_section_address;
@@ -2792,8 +2881,6 @@ copy_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
   osection = isection->output_section;
   size = bfd_get_section_size (isection);
 
-  p = find_section_list (bfd_get_section_name (ibfd, isection), FALSE);
-
   if (bfd_get_section_flags (ibfd, isection) & SEC_HAS_CONTENTS
       && bfd_get_section_flags (obfd, osection) & SEC_HAS_CONTENTS)
     {
@@ -2842,7 +2929,11 @@ copy_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
 
 	  for (; from < end; from += interleave)
 	    for (i = 0; i < copy_width; i++)
-	      *to++ = from[i];
+	      {
+		if (&from[i] >= end)
+		  break;
+		*to++ = from[i];
+	      }
 
 	  size = (size + interleave - 1 - copy_byte) / interleave * copy_width;
 	  osection->lma /= interleave;
@@ -2856,7 +2947,9 @@ copy_section (bfd *ibfd, sec_ptr isection, void *obfdarg)
 	}
       free (memhunk);
     }
-  else if (p != NULL && p->set_flags && (p->flags & SEC_HAS_CONTENTS) != 0)
+  else if ((p = find_section_list (bfd_get_section_name (ibfd, isection),
+				   FALSE, SECTION_CONTEXT_SET_FLAGS)) != NULL
+	   && (p->flags & SEC_HAS_CONTENTS) != 0)
     {
       void *memhunk = xmalloc (size);
 
@@ -3058,7 +3151,6 @@ strip_main (int argc, char *argv[])
   bfd_boolean formats_info = FALSE;
   int c;
   int i;
-  struct section_list *p;
   char *output_file = NULL;
 
   while ((c = getopt_long (argc, argv, "I:O:F:K:N:R:o:sSpdgxXHhVvw",
@@ -3076,8 +3168,7 @@ strip_main (int argc, char *argv[])
 	  input_target = output_target = optarg;
 	  break;
 	case 'R':
-	  p = find_section_list (optarg, TRUE);
-	  p->remove = TRUE;
+	  find_section_list (optarg, TRUE, SECTION_CONTEXT_REMOVE);
 	  sections_removed = TRUE;
 	  break;
 	case 's':
@@ -3350,7 +3441,6 @@ copy_main (int argc, char *argv[])
   bfd_boolean change_warn = TRUE;
   bfd_boolean formats_info = FALSE;
   int c;
-  struct section_list *p;
   struct stat statbuf;
   const bfd_arch_info_type *input_arch = NULL;
 
@@ -3403,18 +3493,12 @@ copy_main (int argc, char *argv[])
 	  break;
 
 	case 'j':
-	  p = find_section_list (optarg, TRUE);
-	  if (p->remove)
-	    fatal (_("%s both copied and removed"), optarg);
-	  p->copy = TRUE;
+	  find_section_list (optarg, TRUE, SECTION_CONTEXT_COPY);
 	  sections_copied = TRUE;
 	  break;
 
 	case 'R':
-	  p = find_section_list (optarg, TRUE);
-	  if (p->copy)
-	    fatal (_("%s both copied and removed"), optarg);
-	  p->remove = TRUE;
+	  find_section_list (optarg, TRUE, SECTION_CONTEXT_REMOVE);
 	  sections_removed = TRUE;
 	  break;
 
@@ -3443,6 +3527,7 @@ copy_main (int argc, char *argv[])
 	  break;
 
 	case OPTION_ADD_GNU_DEBUGLINK:
+	  long_section_names = ENABLE ;
 	  gnu_debuglink_filename = optarg;
 	  break;
 
@@ -3576,23 +3661,27 @@ copy_main (int argc, char *argv[])
 	case OPTION_CHANGE_SECTION_LMA:
 	case OPTION_CHANGE_SECTION_VMA:
 	  {
+	    struct section_list * p;
+	    unsigned int context = 0;
 	    const char *s;
 	    int len;
 	    char *name;
 	    char *option = NULL;
 	    bfd_vma val;
-	    enum change_action what = CHANGE_IGNORE;
 
 	    switch (c)
 	      {
 	      case OPTION_CHANGE_SECTION_ADDRESS:
 		option = "--change-section-address";
+		context = SECTION_CONTEXT_ALTER_LMA | SECTION_CONTEXT_ALTER_VMA;
 		break;
 	      case OPTION_CHANGE_SECTION_LMA:
 		option = "--change-section-lma";
+		context = SECTION_CONTEXT_ALTER_LMA;
 		break;
 	      case OPTION_CHANGE_SECTION_VMA:
 		option = "--change-section-vma";
+		context = SECTION_CONTEXT_ALTER_VMA;
 		break;
 	      }
 
@@ -3607,38 +3696,46 @@ copy_main (int argc, char *argv[])
 		      fatal (_("bad format for %s"), option);
 		  }
 	      }
+	    else
+	      {
+		/* Correct the context.  */
+		switch (c)
+		  {
+		  case OPTION_CHANGE_SECTION_ADDRESS:
+		    context = SECTION_CONTEXT_SET_LMA | SECTION_CONTEXT_SET_VMA;
+		    break;
+		  case OPTION_CHANGE_SECTION_LMA:
+		    context = SECTION_CONTEXT_SET_LMA;
+		    break;
+		  case OPTION_CHANGE_SECTION_VMA:
+		    context = SECTION_CONTEXT_SET_VMA;
+		    break;
+		  }
+	      }
 
 	    len = s - optarg;
 	    name = (char *) xmalloc (len + 1);
 	    strncpy (name, optarg, len);
 	    name[len] = '\0';
 
-	    p = find_section_list (name, TRUE);
+	    p = find_section_list (name, TRUE, context);
 
 	    val = parse_vma (s + 1, option);
-
-	    switch (*s)
-	      {
-	      case '=': what = CHANGE_SET; break;
-	      case '-': val  = - val; /* Drop through.  */
-	      case '+': what = CHANGE_MODIFY; break;
-	      }
+	    if (*s == '-')
+	      val = - val;
 
 	    switch (c)
 	      {
 	      case OPTION_CHANGE_SECTION_ADDRESS:
-		p->change_vma = what;
-		p->vma_val    = val;
+		p->vma_val = val;
 		/* Drop through.  */
 
 	      case OPTION_CHANGE_SECTION_LMA:
-		p->change_lma = what;
-		p->lma_val    = val;
+		p->lma_val = val;
 		break;
 
 	      case OPTION_CHANGE_SECTION_VMA:
-		p->change_vma = what;
-		p->vma_val    = val;
+		p->vma_val = val;
 		break;
 	      }
 	  }
@@ -3737,6 +3834,7 @@ copy_main (int argc, char *argv[])
 
 	case OPTION_SET_SECTION_FLAGS:
 	  {
+	    struct section_list *p;
 	    const char *s;
 	    int len;
 	    char *name;
@@ -3750,9 +3848,8 @@ copy_main (int argc, char *argv[])
 	    strncpy (name, optarg, len);
 	    name[len] = '\0';
 
-	    p = find_section_list (name, TRUE);
+	    p = find_section_list (name, TRUE, SECTION_CONTEXT_SET_FLAGS);
 
-	    p->set_flags = TRUE;
 	    p->flags = parse_flags (s + 1);
 	  }
 	  break;
@@ -4101,11 +4198,13 @@ copy_main (int argc, char *argv[])
 
   if (change_warn)
     {
+      struct section_list *p;
+
       for (p = change_sections; p != NULL; p = p->next)
 	{
 	  if (! p->used)
 	    {
-	      if (p->change_vma != CHANGE_IGNORE)
+	      if (p->context & (SECTION_CONTEXT_SET_VMA | SECTION_CONTEXT_ALTER_VMA))
 		{
 		  char buff [20];
 
@@ -4114,12 +4213,12 @@ copy_main (int argc, char *argv[])
 		  /* xgettext:c-format */
 		  non_fatal (_("%s %s%c0x%s never used"),
 			     "--change-section-vma",
-			     p->name,
-			     p->change_vma == CHANGE_SET ? '=' : '+',
+			     p->pattern,
+			     p->context & SECTION_CONTEXT_SET_VMA ? '=' : '+',
 			     buff);
 		}
 
-	      if (p->change_lma != CHANGE_IGNORE)
+	      if (p->context & (SECTION_CONTEXT_SET_LMA | SECTION_CONTEXT_ALTER_LMA))
 		{
 		  char buff [20];
 
@@ -4128,8 +4227,8 @@ copy_main (int argc, char *argv[])
 		  /* xgettext:c-format */
 		  non_fatal (_("%s %s%c0x%s never used"),
 			     "--change-section-lma",
-			     p->name,
-			     p->change_lma == CHANGE_SET ? '=' : '+',
+			     p->pattern,
+			     p->context & SECTION_CONTEXT_SET_LMA ? '=' : '+',
 			     buff);
 		}
 	    }

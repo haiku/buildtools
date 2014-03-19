@@ -1,7 +1,5 @@
 /* Generic BFD library interface and support routines.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
-   Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -22,6 +20,9 @@
    MA 02110-1301, USA.  */
 
 /*
+INODE
+typedef bfd, Error reporting, BFD front end, BFD front end
+
 SECTION
 	<<typedef bfd>>
 
@@ -340,6 +341,9 @@ CODE_FRAGMENT
    where it is needed.  The typedef's used are defined in bfd.h */
 
 /*
+INODE
+Error reporting, Miscellaneous, typedef bfd, BFD front end
+
 SECTION
 	Error reporting
 
@@ -374,6 +378,7 @@ CODE_FRAGMENT
 .  bfd_error_no_armap,
 .  bfd_error_no_more_archived_files,
 .  bfd_error_malformed_archive,
+.  bfd_error_missing_dso,
 .  bfd_error_file_not_recognized,
 .  bfd_error_file_ambiguously_recognized,
 .  bfd_error_no_contents,
@@ -406,6 +411,7 @@ const char *const bfd_errmsgs[] =
   N_("Archive has no index; run ranlib to add one"),
   N_("No more archived files"),
   N_("Malformed archive"),
+  N_("DSO missing from command line"),
   N_("File format not recognized"),
   N_("File format is ambiguous"),
   N_("Section has no contents"),
@@ -727,7 +733,9 @@ _bfd_default_error_handler (const char *fmt, ...)
   vfprintf (stderr, new_fmt, ap);
   va_end (ap);
 
-  putc ('\n', stderr);
+  /* On AIX, putc is implemented as a macro that triggers a -Wunused-value
+     warning, so use the fputc function to avoid it.  */
+  fputc ('\n', stderr);
   fflush (stderr);
 }
 
@@ -881,6 +889,9 @@ bfd_get_assert_handler (void)
 }
 
 /*
+INODE
+Miscellaneous, Memory Usage, Error reporting, BFD front end
+
 SECTION
 	Miscellaneous
 
@@ -1580,7 +1591,7 @@ bfd_record_phdr (bfd *abfd,
   if (count > 0)
     memcpy (m->sections, secs, count * sizeof (asection *));
 
-  for (pm = &elf_tdata (abfd)->segment_map; *pm != NULL; pm = &(*pm)->next)
+  for (pm = &elf_seg_map (abfd); *pm != NULL; pm = &(*pm)->next)
     ;
   *pm = m;
 
@@ -1684,128 +1695,6 @@ bfd_alt_mach_code (bfd *abfd, int alternative)
     }
 
   return FALSE;
-}
-
-/*
-CODE_FRAGMENT
-
-.struct bfd_preserve
-.{
-.  void *marker;
-.  void *tdata;
-.  flagword flags;
-.  const struct bfd_arch_info *arch_info;
-.  struct bfd_section *sections;
-.  struct bfd_section *section_last;
-.  unsigned int section_count;
-.  struct bfd_hash_table section_htab;
-.};
-.
-*/
-
-/*
-FUNCTION
-	bfd_preserve_save
-
-SYNOPSIS
-	bfd_boolean bfd_preserve_save (bfd *, struct bfd_preserve *);
-
-DESCRIPTION
-	When testing an object for compatibility with a particular
-	target back-end, the back-end object_p function needs to set
-	up certain fields in the bfd on successfully recognizing the
-	object.  This typically happens in a piecemeal fashion, with
-	failures possible at many points.  On failure, the bfd is
-	supposed to be restored to its initial state, which is
-	virtually impossible.  However, restoring a subset of the bfd
-	state works in practice.  This function stores the subset and
-	reinitializes the bfd.
-
-*/
-
-bfd_boolean
-bfd_preserve_save (bfd *abfd, struct bfd_preserve *preserve)
-{
-  preserve->tdata = abfd->tdata.any;
-  preserve->arch_info = abfd->arch_info;
-  preserve->flags = abfd->flags;
-  preserve->sections = abfd->sections;
-  preserve->section_last = abfd->section_last;
-  preserve->section_count = abfd->section_count;
-  preserve->section_htab = abfd->section_htab;
-
-  if (! bfd_hash_table_init (&abfd->section_htab, bfd_section_hash_newfunc,
-			     sizeof (struct section_hash_entry)))
-    return FALSE;
-
-  abfd->tdata.any = NULL;
-  abfd->arch_info = &bfd_default_arch_struct;
-  abfd->flags &= BFD_FLAGS_SAVED;
-  abfd->sections = NULL;
-  abfd->section_last = NULL;
-  abfd->section_count = 0;
-
-  return TRUE;
-}
-
-/*
-FUNCTION
-	bfd_preserve_restore
-
-SYNOPSIS
-	void bfd_preserve_restore (bfd *, struct bfd_preserve *);
-
-DESCRIPTION
-	This function restores bfd state saved by bfd_preserve_save.
-	If MARKER is non-NULL in struct bfd_preserve then that block
-	and all subsequently bfd_alloc'd memory is freed.
-
-*/
-
-void
-bfd_preserve_restore (bfd *abfd, struct bfd_preserve *preserve)
-{
-  bfd_hash_table_free (&abfd->section_htab);
-
-  abfd->tdata.any = preserve->tdata;
-  abfd->arch_info = preserve->arch_info;
-  abfd->flags = preserve->flags;
-  abfd->section_htab = preserve->section_htab;
-  abfd->sections = preserve->sections;
-  abfd->section_last = preserve->section_last;
-  abfd->section_count = preserve->section_count;
-
-  /* bfd_release frees all memory more recently bfd_alloc'd than
-     its arg, as well as its arg.  */
-  if (preserve->marker != NULL)
-    {
-      bfd_release (abfd, preserve->marker);
-      preserve->marker = NULL;
-    }
-}
-
-/*
-FUNCTION
-	bfd_preserve_finish
-
-SYNOPSIS
-	void bfd_preserve_finish (bfd *, struct bfd_preserve *);
-
-DESCRIPTION
-	This function should be called when the bfd state saved by
-	bfd_preserve_save is no longer needed.  ie. when the back-end
-	object_p function returns with success.
-
-*/
-
-void
-bfd_preserve_finish (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_preserve *preserve)
-{
-  /* It would be nice to be able to free more memory here, eg. old
-     tdata, but that's not possible since these blocks are sitting
-     inside bfd_alloc'd memory.  The section hash is on a separate
-     objalloc.  */
-  bfd_hash_table_free (&preserve->section_htab);
 }
 
 /*

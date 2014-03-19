@@ -115,8 +115,14 @@ Generate code for PowerPC e300 family.
 @item -maltivec
 Generate code for processors with AltiVec instructions.
 
+@item -mvle
+Generate code for Freescale PowerPC VLE instructions.
+
 @item -mvsx
 Generate code for processors with Vector-Scalar (VSX) instructions.
+
+@item -mhtm
+Generate code for processors with Hardware Transactional Memory instructions.
 
 @item -mpower4, -mpwr4
 Generate code for Power4 architecture.
@@ -130,6 +136,10 @@ Generate code for Power6 architecture.
 @item -mpower7, -mpwr7
 Generate code for Power7 architecture.
 
+@item -mpower8, -mpwr8
+Generate code for Power8 architecture.
+
+@item -mcell
 @item -mcell
 Generate code for Cell Broadband Engine architecture.
 

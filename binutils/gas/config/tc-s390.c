@@ -44,6 +44,10 @@ static int s390_arch_size = 0;
 static unsigned int current_cpu = S390_OPCODE_MAXCPU - 1;
 static unsigned int current_mode_mask = 0;
 
+/* Set to TRUE if the highgprs flag in the ELF header needs to be set
+   for the output file.  */
+static bfd_boolean set_highgprs_p = FALSE;
+
 /* Whether to use user friendly register names. Default is TRUE.  */
 #ifndef TARGET_REG_NAMES_P
 #define TARGET_REG_NAMES_P TRUE
@@ -86,22 +90,24 @@ static void s390_bss (int);
 static void s390_insn (int);
 static void s390_literals (int);
 static void s390_machine (int);
+static void s390_machinemode (int);
 
 const pseudo_typeS md_pseudo_table[] =
 {
-  { "align", s_align_bytes, 0 },
+  { "align",        s_align_bytes,      0 },
   /* Pseudo-ops which must be defined.  */
-  { "bss",      s390_bss,       0 },
-  { "insn",     s390_insn,      0 },
+  { "bss",          s390_bss,           0 },
+  { "insn",         s390_insn,          0 },
   /* Pseudo-ops which must be overridden.  */
-  { "byte",	s390_byte,	0 },
-  { "short",    s390_elf_cons,  2 },
-  { "long",	s390_elf_cons,	4 },
-  { "quad",     s390_elf_cons,  8 },
-  { "ltorg",    s390_literals,  0 },
-  { "string",   stringer,       8 + 1 },
-  { "machine",  s390_machine,   0 },
-  { NULL,	NULL,		0 }
+  { "byte",	    s390_byte,	        0 },
+  { "short",        s390_elf_cons,      2 },
+  { "long",	    s390_elf_cons,	4 },
+  { "quad",         s390_elf_cons,      8 },
+  { "ltorg",        s390_literals,      0 },
+  { "string",       stringer,           8 + 1 },
+  { "machine",      s390_machine,       0 },
+  { "machinemode",  s390_machinemode,   0 },
+  { NULL,	    NULL,		0 }
 };
 
 
@@ -375,6 +381,8 @@ s390_parse_cpu (char *arg)
     return S390_OPCODE_Z10;
   else if (strcmp (arg, "z196") == 0)
     return S390_OPCODE_Z196;
+  else if (strcmp (arg, "zEC12") == 0)
+    return S390_OPCODE_ZEC12;
   else if (strcmp (arg, "all") == 0)
     return S390_OPCODE_MAXCPU - 1;
   else
@@ -409,7 +417,11 @@ md_parse_option (int c, char *arg)
 	current_mode_mask = 1 << S390_OPCODE_ESA;
 
       else if (arg != NULL && strcmp (arg, "zarch") == 0)
-	current_mode_mask = 1 << S390_OPCODE_ZARCH;
+	{
+	  if (s390_arch_size == 32)
+	    set_highgprs_p = TRUE;
+	  current_mode_mask = 1 << S390_OPCODE_ZARCH;
+	}
 
       else if (arg != NULL && strncmp (arg, "arch=", 5) == 0)
 	{
@@ -1304,8 +1316,14 @@ md_gather_operands (char *str,
 	  else if (suffix == ELF_SUFFIX_PLT)
 	    {
 	      if ((operand->flags & S390_OPERAND_PCREL)
-		  && (operand->bits == 16))
+		  && (operand->bits == 12))
+		reloc = BFD_RELOC_390_PLT12DBL;
+	      else if ((operand->flags & S390_OPERAND_PCREL)
+		       && (operand->bits == 16))
 		reloc = BFD_RELOC_390_PLT16DBL;
+	      else if ((operand->flags & S390_OPERAND_PCREL)
+		       && (operand->bits == 24))
+		reloc = BFD_RELOC_390_PLT24DBL;
 	      else if ((operand->flags & S390_OPERAND_PCREL)
 		       && (operand->bits == 32))
 		reloc = BFD_RELOC_390_PLT32DBL;
@@ -1542,7 +1560,7 @@ md_gather_operands (char *str,
 	  if (!reloc_howto)
 	    abort ();
 
-	  size = bfd_get_reloc_size (reloc_howto);
+	  size = ((reloc_howto->bitsize - 1) / 8) + 1;
 
 	  if (size < 1 || size > 4)
 	    abort ();
@@ -1799,7 +1817,7 @@ s390_literals (int ignore ATTRIBUTE_UNUSED)
 
 /* The .machine pseudo op allows to switch to a different CPU level in
    the asm listing.  The current CPU setting can be stored on a stack
-   with .machine push and restored with .machined pop.  */
+   with .machine push and restored with .machine pop.  */
 
 static void
 s390_machine (int ignore ATTRIBUTE_UNUSED)
@@ -1829,10 +1847,6 @@ s390_machine (int ignore ATTRIBUTE_UNUSED)
     {
       unsigned int old_cpu = current_cpu;
       unsigned int new_cpu;
-      char *p;
-
-      for (p = cpu_string; *p != 0; p++)
-	*p = TOLOWER (*p);
 
       if (strcmp (cpu_string, "push") == 0)
 	{
@@ -1857,6 +1871,83 @@ s390_machine (int ignore ATTRIBUTE_UNUSED)
 	as_bad (_("invalid machine `%s'"), cpu_string);
 
       if (current_cpu != old_cpu)
+	s390_setup_opcodes ();
+    }
+
+  demand_empty_rest_of_line ();
+}
+
+/* The .machinemode pseudo op allows to switch to a different
+   architecture mode in the asm listing.  The current architecture
+   mode setting can be stored on a stack with .machinemode push and
+   restored with .machinemode pop.  */
+
+static void
+s390_machinemode (int ignore ATTRIBUTE_UNUSED)
+{
+  char *mode_string;
+#define MAX_HISTORY 100
+  static unsigned int *mode_history;
+  static int curr_hist;
+
+  SKIP_WHITESPACE ();
+
+  if (*input_line_pointer == '"')
+    {
+      int len;
+      mode_string = demand_copy_C_string (&len);
+    }
+  else
+    {
+      char c;
+      mode_string = input_line_pointer;
+      c = get_symbol_end ();
+      mode_string = xstrdup (mode_string);
+      *input_line_pointer = c;
+    }
+
+  if (mode_string != NULL)
+    {
+      unsigned int old_mode_mask = current_mode_mask;
+      char *p;
+
+      for (p = mode_string; *p != 0; p++)
+	*p = TOLOWER (*p);
+
+      if (strcmp (mode_string, "push") == 0)
+	{
+	  if (mode_history == NULL)
+	    mode_history = xmalloc (MAX_HISTORY * sizeof (*mode_history));
+
+	  if (curr_hist >= MAX_HISTORY)
+	    as_bad (_(".machinemode stack overflow"));
+	  else
+	    mode_history[curr_hist++] = current_mode_mask;
+	}
+      else if (strcmp (mode_string, "pop") == 0)
+	{
+	  if (curr_hist <= 0)
+	    as_bad (_(".machinemode stack underflow"));
+	  else
+	    current_mode_mask = mode_history[--curr_hist];
+	}
+      else
+	{
+	  if (strcmp (mode_string, "esa") == 0)
+	    current_mode_mask = 1 << S390_OPCODE_ESA;
+	  else if (strcmp (mode_string, "zarch") == 0)
+	    {
+	      if (s390_arch_size == 32)
+		set_highgprs_p = TRUE;
+	      current_mode_mask = 1 << S390_OPCODE_ZARCH;
+	    }
+	  else if (strcmp (mode_string, "zarch_nohighgprs") == 0)
+	    current_mode_mask = 1 << S390_OPCODE_ZARCH;
+	  else
+	    as_bad (_("invalid machine `%s'"), mode_string);
+	}
+
+      if (current_mode_mask != old_mode_mask)
 	s390_setup_opcodes ();
     }
 
@@ -1945,7 +2036,9 @@ tc_s390_fix_adjustable (fixS *fixP)
       || fixP->fx_r_type == BFD_RELOC_390_PLTOFF16
       || fixP->fx_r_type == BFD_RELOC_390_PLTOFF32
       || fixP->fx_r_type == BFD_RELOC_390_PLTOFF64
+      || fixP->fx_r_type == BFD_RELOC_390_PLT12DBL
       || fixP->fx_r_type == BFD_RELOC_390_PLT16DBL
+      || fixP->fx_r_type == BFD_RELOC_390_PLT24DBL
       || fixP->fx_r_type == BFD_RELOC_390_PLT32
       || fixP->fx_r_type == BFD_RELOC_390_PLT32DBL
       || fixP->fx_r_type == BFD_RELOC_390_PLT64
@@ -2011,7 +2104,9 @@ tc_s390_force_relocation (struct fix *fixp)
     case BFD_RELOC_390_GOT64:
     case BFD_RELOC_390_GOTENT:
     case BFD_RELOC_390_PLT32:
+    case BFD_RELOC_390_PLT12DBL:
     case BFD_RELOC_390_PLT16DBL:
+    case BFD_RELOC_390_PLT24DBL:
     case BFD_RELOC_390_PLT32DBL:
     case BFD_RELOC_390_PLT64:
     case BFD_RELOC_390_GOTPLT12:
@@ -2022,7 +2117,7 @@ tc_s390_force_relocation (struct fix *fixp)
     case BFD_RELOC_390_GOTPLTENT:
       return 1;
     default:
-      break;;
+      break;
     }
 
   return generic_force_reloc (fixp);
@@ -2103,6 +2198,14 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  fixP->fx_where += 1;
 	  fixP->fx_r_type = BFD_RELOC_8;
 	}
+      else if (operand->bits == 12 && operand->shift == 12
+	       && (operand->flags & S390_OPERAND_PCREL))
+	{
+	  fixP->fx_size = 2;
+	  fixP->fx_where += 1;
+	  fixP->fx_offset += 1;
+	  fixP->fx_r_type = BFD_RELOC_390_PC12DBL;
+	}
       else if (operand->bits == 16 && operand->shift == 16)
 	{
 	  fixP->fx_size = 2;
@@ -2114,6 +2217,14 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	    }
 	  else
 	    fixP->fx_r_type = BFD_RELOC_16;
+	}
+      else if (operand->bits == 24 && operand->shift == 24
+	       && (operand->flags & S390_OPERAND_PCREL))
+	{
+	  fixP->fx_size = 3;
+	  fixP->fx_where += 3;
+	  fixP->fx_offset += 3;
+	  fixP->fx_r_type = BFD_RELOC_390_PC24DBL;
 	}
       else if (operand->bits == 32 && operand->shift == 16
 	       && (operand->flags & S390_OPERAND_PCREL))
@@ -2153,9 +2264,17 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	case BFD_RELOC_390_12:
 	case BFD_RELOC_390_GOT12:
 	case BFD_RELOC_390_GOTPLT12:
+	case BFD_RELOC_390_PC12DBL:
+	case BFD_RELOC_390_PLT12DBL:
+	  if (fixP->fx_pcrel)
+	    value++;
+
 	  if (fixP->fx_done)
 	    {
 	      unsigned short mop;
+
+	      if (fixP->fx_pcrel)
+		value >>= 1;
 
 	      mop = bfd_getb16 ((unsigned char *) where);
 	      mop |= (unsigned short) (value & 0xfff);
@@ -2202,6 +2321,20 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  value += 2;
 	  if (fixP->fx_done)
 	    md_number_to_chars (where, (offsetT) value >> 1, 2);
+	  break;
+
+	case BFD_RELOC_390_PC24DBL:
+	case BFD_RELOC_390_PLT24DBL:
+	  value += 3;
+	  if (fixP->fx_done)
+	    {
+	      unsigned int mop;
+	      value >>= 1;
+
+	      mop = bfd_getb32 ((unsigned char *) where - 1);
+	      mop |= (unsigned int) (value & 0xffffff);
+	      bfd_putb32 ((bfd_vma) mop, (unsigned char *) where - 1);
+	    }
 	  break;
 
 	case BFD_RELOC_32:
@@ -2381,6 +2514,6 @@ tc_s390_regname_to_dw2regnum (char *regname)
 void
 s390_elf_final_processing (void)
 {
-  if (s390_arch_size == 32 && (current_mode_mask & (1 << S390_OPCODE_ZARCH)))
+  if (set_highgprs_p)
     elf_elfheader (stdoutput)->e_flags |= EF_S390_HIGH_GPRS;
 }

@@ -7,9 +7,7 @@
 
 /* Main header file for the bfd library -- portable access to object files.
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
-   2012 Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -69,7 +67,7 @@ extern "C" {
    problem for example when trying to use STRING_COMMA_LEN to build
    the arguments to the strncmp() macro.  Hence this alternative
    definition of strncmp is provided here.
-   
+
    Note - these macros do NOT work if STR2 is not a constant string.  */
 #define CONST_STRNEQ(STR1,STR2) (strncmp ((STR1), (STR2), sizeof (STR2) - 1) == 0)
   /* strcpy() can have a similar problem, but since we know we are
@@ -655,6 +653,8 @@ extern struct bfd_link_needed_list *bfd_elf_get_needed_list
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean bfd_elf_get_bfd_needed_list
   (bfd *, struct bfd_link_needed_list **);
+extern bfd_boolean bfd_elf_stack_segment_size (bfd *, struct bfd_link_info *,
+					       const char *, bfd_vma);
 extern bfd_boolean bfd_elf_size_dynamic_sections
   (bfd *, const char *, const char *, const char *, const char *, const char *,
    const char * const *, struct bfd_link_info *, struct bfd_section **);
@@ -916,7 +916,8 @@ extern void elf32_arm_next_input_section
   (struct bfd_link_info *, struct bfd_section *);
 extern bfd_boolean elf32_arm_size_stubs
   (bfd *, bfd *, struct bfd_link_info *, bfd_signed_vma,
-   struct bfd_section * (*) (const char *, struct bfd_section *), void (*) (void));
+   struct bfd_section * (*) (const char *, struct bfd_section *, unsigned int),
+   void (*) (void));
 extern bfd_boolean elf32_arm_build_stubs
   (struct bfd_link_info *);
 
@@ -938,7 +939,13 @@ extern unsigned int _bfd_elf_ppc_at_tprel_transform
 extern void bfd_elf64_aarch64_init_maps
   (bfd *);
 
-void bfd_elf64_aarch64_set_options
+extern void bfd_elf32_aarch64_init_maps
+  (bfd *);
+
+extern void bfd_elf64_aarch64_set_options
+  (bfd *, struct bfd_link_info *, int, int, int);
+
+extern void bfd_elf32_aarch64_set_options
   (bfd *, struct bfd_link_info *, int, int, int);
 
 /* ELF AArch64 mapping symbol support.  */
@@ -949,7 +956,7 @@ void bfd_elf64_aarch64_set_options
 extern bfd_boolean bfd_is_aarch64_special_symbol_name
   (const char * name, int type);
 
-/* AArch64 stub generation support.  Called from the linker.  */
+/* AArch64 stub generation support for ELF64.  Called from the linker.  */
 extern int elf64_aarch64_setup_section_lists
   (bfd *, struct bfd_link_info *);
 extern void elf64_aarch64_next_input_section
@@ -960,7 +967,19 @@ extern bfd_boolean elf64_aarch64_size_stubs
    void (*) (void));
 extern bfd_boolean elf64_aarch64_build_stubs
   (struct bfd_link_info *);
-  
+/* AArch64 stub generation support for ELF32.  Called from the linker.  */
+extern int elf32_aarch64_setup_section_lists
+  (bfd *, struct bfd_link_info *);
+extern void elf32_aarch64_next_input_section
+  (struct bfd_link_info *, struct bfd_section *);
+extern bfd_boolean elf32_aarch64_size_stubs
+  (bfd *, bfd *, struct bfd_link_info *, bfd_signed_vma,
+   struct bfd_section * (*) (const char *, struct bfd_section *),
+   void (*) (void));
+extern bfd_boolean elf32_aarch64_build_stubs
+  (struct bfd_link_info *);
+
+
 /* TI COFF load page support.  */
 extern void bfd_ticoff_set_section_load_page
   (struct bfd_section *, int);
@@ -996,9 +1015,8 @@ struct coff_comdat_info
   long symbol;
 };
 
-extern struct coff_comdat_info *bfd_coff_get_comdat_section
+extern struct coff_comdat_info * bfd_coff_get_comdat_section
   (bfd *, struct bfd_section *);
-
 /* Extracted from init.c.  */
 void bfd_init (void);
 
@@ -1047,7 +1065,13 @@ void *bfd_zalloc (bfd *abfd, bfd_size_type wanted);
 unsigned long bfd_calc_gnu_debuglink_crc32
    (unsigned long crc, const unsigned char *buf, bfd_size_type len);
 
+char *bfd_get_debug_link_info (bfd *abfd, unsigned long *crc32_out);
+
+char *bfd_get_alt_debug_link_info (bfd *abfd, unsigned long *crc32_out);
+
 char *bfd_follow_gnu_debuglink (bfd *abfd, const char *dir);
+
+char *bfd_follow_gnu_debugaltlink (bfd *abfd, const char *dir);
 
 struct bfd_section *bfd_create_gnu_debuglink_section
    (bfd *abfd, const char *filename);
@@ -1560,12 +1584,12 @@ typedef struct bfd_section
 } asection;
 
 /* Relax table contains information about instructions which can
-   be removed by relaxation -- replacing a long address with a 
+   be removed by relaxation -- replacing a long address with a
    short address.  */
 struct relax_table {
   /* Address where bytes may be deleted. */
   bfd_vma addr;
-  
+
   /* Number of bytes to be deleted.  */
   int size;
 };
@@ -1573,7 +1597,7 @@ struct relax_table {
 /* These sections are global, and are managed by BFD.  The application
    and target back end are not permitted to change the values in
    these sections.  */
-extern asection std_section[4];
+extern asection _bfd_std_section[4];
 
 #define BFD_ABS_SECTION_NAME "*ABS*"
 #define BFD_UND_SECTION_NAME "*UND*"
@@ -1581,13 +1605,13 @@ extern asection std_section[4];
 #define BFD_IND_SECTION_NAME "*IND*"
 
 /* Pointer to the common section.  */
-#define bfd_com_section_ptr (&std_section[0])
+#define bfd_com_section_ptr (&_bfd_std_section[0])
 /* Pointer to the undefined section.  */
-#define bfd_und_section_ptr (&std_section[1])
+#define bfd_und_section_ptr (&_bfd_std_section[1])
 /* Pointer to the absolute section.  */
-#define bfd_abs_section_ptr (&std_section[2])
+#define bfd_abs_section_ptr (&_bfd_std_section[2])
 /* Pointer to the indirect section.  */
-#define bfd_ind_section_ptr (&std_section[3])
+#define bfd_ind_section_ptr (&_bfd_std_section[3])
 
 #define bfd_is_und_section(sec) ((sec) == bfd_und_section_ptr)
 #define bfd_is_abs_section(sec) ((sec) == bfd_abs_section_ptr)
@@ -1874,7 +1898,7 @@ enum bfd_architecture
 #define bfd_mach_sparc_64bit_p(mach) \
   ((mach) >= bfd_mach_sparc_v9 && (mach) != bfd_mach_sparc_v8plusb)
   bfd_arch_spu,       /* PowerPC SPU */
-#define bfd_mach_spu           256 
+#define bfd_mach_spu           256
   bfd_arch_mips,      /* MIPS Rxxxx */
 #define bfd_mach_mips3000              3000
 #define bfd_mach_mips3900              3900
@@ -1890,6 +1914,7 @@ enum bfd_architecture
 #define bfd_mach_mips5000              5000
 #define bfd_mach_mips5400              5400
 #define bfd_mach_mips5500              5500
+#define bfd_mach_mips5900              5900
 #define bfd_mach_mips6000              6000
 #define bfd_mach_mips7000              7000
 #define bfd_mach_mips8000              8000
@@ -1928,6 +1953,10 @@ enum bfd_architecture
   bfd_arch_k1om,   /* Intel K1OM */
 #define bfd_mach_k1om                  (1 << 6)
 #define bfd_mach_k1om_intel_syntax     (bfd_mach_k1om | bfd_mach_i386_intel_syntax)
+#define bfd_mach_i386_nacl             (1 << 7)
+#define bfd_mach_i386_i386_nacl        (bfd_mach_i386_i386 | bfd_mach_i386_nacl)
+#define bfd_mach_x86_64_nacl           (bfd_mach_x86_64 | bfd_mach_i386_nacl)
+#define bfd_mach_x64_32_nacl           (bfd_mach_x64_32 | bfd_mach_i386_nacl)
   bfd_arch_we32k,     /* AT&T WE32xxx */
   bfd_arch_tahoe,     /* CCI/Harris Tahoe */
   bfd_arch_i860,      /* Intel 860 */
@@ -2052,11 +2081,13 @@ enum bfd_architecture
   bfd_arch_tic6x,     /* Texas Instruments TMS320C6X */
   bfd_arch_tic80,     /* TI TMS320c80 (MVP) */
   bfd_arch_v850,      /* NEC V850 */
+  bfd_arch_v850_rh850,/* NEC V850 (using RH850 ABI) */
 #define bfd_mach_v850          1
 #define bfd_mach_v850e         'E'
 #define bfd_mach_v850e1        '1'
 #define bfd_mach_v850e2        0x4532
 #define bfd_mach_v850e2v3      0x45325633
+#define bfd_mach_v850e3v5      0x45335635 /* ('E'|'3'|'V'|'5') */
   bfd_arch_arc,       /* ARC Cores */
 #define bfd_mach_arc_5         5
 #define bfd_mach_arc_6         6
@@ -2092,6 +2123,8 @@ enum bfd_architecture
 #define bfd_mach_mep           1
 #define bfd_mach_mep_h1        0x6831
 #define bfd_mach_mep_c5        0x6335
+  bfd_arch_metag,
+#define bfd_mach_metag         1
   bfd_arch_ia64,      /* HP/Intel ia64 */
 #define bfd_mach_ia64_elf64    64
 #define bfd_mach_ia64_elf32    32
@@ -2146,7 +2179,7 @@ enum bfd_architecture
   bfd_arch_s390,      /* IBM s390 */
 #define bfd_mach_s390_31       31
 #define bfd_mach_s390_64       64
-  bfd_arch_score,     /* Sunplus score */ 
+  bfd_arch_score,     /* Sunplus score */
 #define bfd_mach_score3         3
 #define bfd_mach_score7         7
   bfd_arch_openrisc,  /* OpenRISC */
@@ -2161,7 +2194,12 @@ enum bfd_architecture
 #define bfd_mach_msp14          14
 #define bfd_mach_msp15          15
 #define bfd_mach_msp16          16
+#define bfd_mach_msp20          20
 #define bfd_mach_msp21          21
+#define bfd_mach_msp22          22
+#define bfd_mach_msp23          23
+#define bfd_mach_msp24          24
+#define bfd_mach_msp26          26
 #define bfd_mach_msp31          31
 #define bfd_mach_msp32          32
 #define bfd_mach_msp33          33
@@ -2169,6 +2207,10 @@ enum bfd_architecture
 #define bfd_mach_msp42          42
 #define bfd_mach_msp43          43
 #define bfd_mach_msp44          44
+#define bfd_mach_msp430x        45
+#define bfd_mach_msp46          46
+#define bfd_mach_msp47          47
+#define bfd_mach_msp54          54
   bfd_arch_xc16x,     /* Infineon's XC16X Series.               */
 #define bfd_mach_xc16x         1
 #define bfd_mach_xc16xl        2
@@ -2192,6 +2234,9 @@ enum bfd_architecture
 #define bfd_mach_tilegx32  2
   bfd_arch_aarch64,   /* AArch64  */
 #define bfd_mach_aarch64 0
+#define bfd_mach_aarch64_ilp32 32
+  bfd_arch_nios2,
+#define bfd_mach_nios2 0
   bfd_arch_last
   };
 
@@ -2516,6 +2561,10 @@ The 24-bit relocation is used in some Intel 960 configurations.  */
   BFD_RELOC_HI16_PLTOFF,
   BFD_RELOC_HI16_S_PLTOFF,
   BFD_RELOC_8_PLTOFF,
+
+/* Size relocations.  */
+  BFD_RELOC_SIZE32,
+  BFD_RELOC_SIZE64,
 
 /* Relocations used by 68K ELF.  */
   BFD_RELOC_68K_GLOB_DAT,
@@ -2909,6 +2958,7 @@ to compensate for the borrow when the low bits are added.  */
   BFD_RELOC_MICROMIPS_TLS_TPREL_HI16,
   BFD_RELOC_MIPS_TLS_TPREL_LO16,
   BFD_RELOC_MICROMIPS_TLS_TPREL_LO16,
+  BFD_RELOC_MIPS_EH,
 
 
 /* MIPS ELF relocations (VxWorks and PLT extensions).  */
@@ -3073,6 +3123,8 @@ instruction.  */
   BFD_RELOC_X86_64_TLSDESC_CALL,
   BFD_RELOC_X86_64_TLSDESC,
   BFD_RELOC_X86_64_IRELATIVE,
+  BFD_RELOC_X86_64_PC32_BND,
+  BFD_RELOC_X86_64_PLT32_BND,
 
 /* ns32k relocations  */
   BFD_RELOC_NS32K_IMM_8,
@@ -3171,6 +3223,8 @@ instruction.  */
   BFD_RELOC_PPC64_TOC16_LO_DS,
   BFD_RELOC_PPC64_PLTGOT16_DS,
   BFD_RELOC_PPC64_PLTGOT16_LO_DS,
+  BFD_RELOC_PPC64_ADDR16_HIGH,
+  BFD_RELOC_PPC64_ADDR16_HIGHA,
 
 /* PowerPC and PowerPC64 thread-local storage relocations.  */
   BFD_RELOC_PPC_TLS,
@@ -3215,6 +3269,10 @@ instruction.  */
   BFD_RELOC_PPC64_DTPREL16_HIGHERA,
   BFD_RELOC_PPC64_DTPREL16_HIGHEST,
   BFD_RELOC_PPC64_DTPREL16_HIGHESTA,
+  BFD_RELOC_PPC64_TPREL16_HIGH,
+  BFD_RELOC_PPC64_TPREL16_HIGHA,
+  BFD_RELOC_PPC64_DTPREL16_HIGH,
+  BFD_RELOC_PPC64_DTPREL16_HIGHA,
 
 /* IBM 370/390 relocations  */
   BFD_RELOC_I370_D12,
@@ -3992,6 +4050,46 @@ short offset into 11 bits.  */
   BFD_RELOC_MEP_GNU_VTENTRY,
 
 
+/* Imagination Technologies Meta relocations.  */
+  BFD_RELOC_METAG_HIADDR16,
+  BFD_RELOC_METAG_LOADDR16,
+  BFD_RELOC_METAG_RELBRANCH,
+  BFD_RELOC_METAG_GETSETOFF,
+  BFD_RELOC_METAG_HIOG,
+  BFD_RELOC_METAG_LOOG,
+  BFD_RELOC_METAG_REL8,
+  BFD_RELOC_METAG_REL16,
+  BFD_RELOC_METAG_HI16_GOTOFF,
+  BFD_RELOC_METAG_LO16_GOTOFF,
+  BFD_RELOC_METAG_GETSET_GOTOFF,
+  BFD_RELOC_METAG_GETSET_GOT,
+  BFD_RELOC_METAG_HI16_GOTPC,
+  BFD_RELOC_METAG_LO16_GOTPC,
+  BFD_RELOC_METAG_HI16_PLT,
+  BFD_RELOC_METAG_LO16_PLT,
+  BFD_RELOC_METAG_RELBRANCH_PLT,
+  BFD_RELOC_METAG_GOTOFF,
+  BFD_RELOC_METAG_PLT,
+  BFD_RELOC_METAG_COPY,
+  BFD_RELOC_METAG_JMP_SLOT,
+  BFD_RELOC_METAG_RELATIVE,
+  BFD_RELOC_METAG_GLOB_DAT,
+  BFD_RELOC_METAG_TLS_GD,
+  BFD_RELOC_METAG_TLS_LDM,
+  BFD_RELOC_METAG_TLS_LDO_HI16,
+  BFD_RELOC_METAG_TLS_LDO_LO16,
+  BFD_RELOC_METAG_TLS_LDO,
+  BFD_RELOC_METAG_TLS_IE,
+  BFD_RELOC_METAG_TLS_IENONPIC,
+  BFD_RELOC_METAG_TLS_IENONPIC_HI16,
+  BFD_RELOC_METAG_TLS_IENONPIC_LO16,
+  BFD_RELOC_METAG_TLS_TPOFF,
+  BFD_RELOC_METAG_TLS_DTPMOD,
+  BFD_RELOC_METAG_TLS_DTPOFF,
+  BFD_RELOC_METAG_TLS_LE,
+  BFD_RELOC_METAG_TLS_LE_HI16,
+  BFD_RELOC_METAG_TLS_LE_LO16,
+
 /* These are relocations for the GETA instruction.  */
   BFD_RELOC_MMIX_GETA,
   BFD_RELOC_MMIX_GETA_1,
@@ -4091,7 +4189,7 @@ of 32 bit value) into 8 bit immediate value of LDI insn.  */
 command address) into 8 bit immediate value of LDI insn.  */
   BFD_RELOC_AVR_LO8_LDI_PM,
 
-/* This is a 16 bit reloc for the AVR that stores 8 bit value 
+/* This is a 16 bit reloc for the AVR that stores 8 bit value
 (command address) into 8 bit immediate value of LDI insn. If the address
 is beyond the 128k boundary, the linker inserts a jump stub for this reloc
 in the lower 128k.  */
@@ -4186,6 +4284,7 @@ in .byte hlo8(symbol)  */
   BFD_RELOC_RL78_HI16,
   BFD_RELOC_RL78_HI8,
   BFD_RELOC_RL78_LO16,
+  BFD_RELOC_RL78_CODE,
 
 /* Renesas RX Relocations.  */
   BFD_RELOC_RX_NEG8,
@@ -4243,11 +4342,23 @@ in .byte hlo8(symbol)  */
 /* 16 bit GOT offset.  */
   BFD_RELOC_390_GOT16,
 
+/* PC relative 12 bit shifted by 1.  */
+  BFD_RELOC_390_PC12DBL,
+
+/* 12 bit PC rel. PLT shifted by 1.  */
+  BFD_RELOC_390_PLT12DBL,
+
 /* PC relative 16 bit shifted by 1.  */
   BFD_RELOC_390_PC16DBL,
 
 /* 16 bit PC rel. PLT shifted by 1.  */
   BFD_RELOC_390_PLT16DBL,
+
+/* PC relative 24 bit shifted by 1.  */
+  BFD_RELOC_390_PC24DBL,
+
+/* 24 bit PC rel. PLT shifted by 1.  */
+  BFD_RELOC_390_PLT24DBL,
 
 /* PC relative 32 bit shifted by 1.  */
   BFD_RELOC_390_PC32DBL,
@@ -4813,6 +4924,7 @@ a matching LO8XG part.  */
   BFD_RELOC_H8_DIR24A8,
   BFD_RELOC_H8_DIR24R8,
   BFD_RELOC_H8_DIR32A16,
+  BFD_RELOC_H8_DISP32A16,
 
 /* Sony Xstormy16 Relocations.  */
   BFD_RELOC_XSTORMY16_REL_12,
@@ -4861,6 +4973,57 @@ a matching LO8XG part.  */
   BFD_RELOC_MSP430_16_BYTE,
   BFD_RELOC_MSP430_2X_PCREL,
   BFD_RELOC_MSP430_RL_PCREL,
+  BFD_RELOC_MSP430_ABS8,
+  BFD_RELOC_MSP430X_PCR20_EXT_SRC,
+  BFD_RELOC_MSP430X_PCR20_EXT_DST,
+  BFD_RELOC_MSP430X_PCR20_EXT_ODST,
+  BFD_RELOC_MSP430X_ABS20_EXT_SRC,
+  BFD_RELOC_MSP430X_ABS20_EXT_DST,
+  BFD_RELOC_MSP430X_ABS20_EXT_ODST,
+  BFD_RELOC_MSP430X_ABS20_ADR_SRC,
+  BFD_RELOC_MSP430X_ABS20_ADR_DST,
+  BFD_RELOC_MSP430X_PCR16,
+  BFD_RELOC_MSP430X_PCR20_CALL,
+  BFD_RELOC_MSP430X_ABS16,
+  BFD_RELOC_MSP430_ABS_HI16,
+  BFD_RELOC_MSP430_PREL31,
+  BFD_RELOC_MSP430_SYM_DIFF,
+
+/* Relocations used by the Altera Nios II core.  */
+  BFD_RELOC_NIOS2_S16,
+  BFD_RELOC_NIOS2_U16,
+  BFD_RELOC_NIOS2_CALL26,
+  BFD_RELOC_NIOS2_IMM5,
+  BFD_RELOC_NIOS2_CACHE_OPX,
+  BFD_RELOC_NIOS2_IMM6,
+  BFD_RELOC_NIOS2_IMM8,
+  BFD_RELOC_NIOS2_HI16,
+  BFD_RELOC_NIOS2_LO16,
+  BFD_RELOC_NIOS2_HIADJ16,
+  BFD_RELOC_NIOS2_GPREL,
+  BFD_RELOC_NIOS2_UJMP,
+  BFD_RELOC_NIOS2_CJMP,
+  BFD_RELOC_NIOS2_CALLR,
+  BFD_RELOC_NIOS2_ALIGN,
+  BFD_RELOC_NIOS2_GOT16,
+  BFD_RELOC_NIOS2_CALL16,
+  BFD_RELOC_NIOS2_GOTOFF_LO,
+  BFD_RELOC_NIOS2_GOTOFF_HA,
+  BFD_RELOC_NIOS2_PCREL_LO,
+  BFD_RELOC_NIOS2_PCREL_HA,
+  BFD_RELOC_NIOS2_TLS_GD16,
+  BFD_RELOC_NIOS2_TLS_LDM16,
+  BFD_RELOC_NIOS2_TLS_LDO16,
+  BFD_RELOC_NIOS2_TLS_IE16,
+  BFD_RELOC_NIOS2_TLS_LE16,
+  BFD_RELOC_NIOS2_TLS_DTPMOD,
+  BFD_RELOC_NIOS2_TLS_DTPREL,
+  BFD_RELOC_NIOS2_TLS_TPREL,
+  BFD_RELOC_NIOS2_COPY,
+  BFD_RELOC_NIOS2_GLOB_DAT,
+  BFD_RELOC_NIOS2_JUMP_SLOT,
+  BFD_RELOC_NIOS2_RELATIVE,
+  BFD_RELOC_NIOS2_GOTOFF,
 
 /* IQ2000 Relocations.  */
   BFD_RELOC_IQ2000_OFFSET_16,
@@ -5015,52 +5178,52 @@ the linker could optimize the movq to a leaq if possible.  */
 /* Same as BFD_RELOC_32_PCREL but with an implicit -4 addend.  */
   BFD_RELOC_MACH_O_X86_64_PCREL32_4,
 
-/* This is a 32 bit reloc for the microblaze that stores the 
+/* This is a 32 bit reloc for the microblaze that stores the
 low 16 bits of a value  */
   BFD_RELOC_MICROBLAZE_32_LO,
 
-/* This is a 32 bit pc-relative reloc for the microblaze that 
+/* This is a 32 bit pc-relative reloc for the microblaze that
 stores the low 16 bits of a value  */
   BFD_RELOC_MICROBLAZE_32_LO_PCREL,
 
-/* This is a 32 bit reloc for the microblaze that stores a 
+/* This is a 32 bit reloc for the microblaze that stores a
 value relative to the read-only small data area anchor  */
   BFD_RELOC_MICROBLAZE_32_ROSDA,
 
-/* This is a 32 bit reloc for the microblaze that stores a 
+/* This is a 32 bit reloc for the microblaze that stores a
 value relative to the read-write small data area anchor  */
   BFD_RELOC_MICROBLAZE_32_RWSDA,
 
-/* This is a 32 bit reloc for the microblaze to handle 
+/* This is a 32 bit reloc for the microblaze to handle
 expressions of the form "Symbol Op Symbol"  */
   BFD_RELOC_MICROBLAZE_32_SYM_OP_SYM,
 
-/* This is a 64 bit reloc that stores the 32 bit pc relative 
-value in two words (with an imm instruction).  No relocation is 
+/* This is a 64 bit reloc that stores the 32 bit pc relative
+value in two words (with an imm instruction).  No relocation is
 done here - only used for relaxing  */
   BFD_RELOC_MICROBLAZE_64_NONE,
 
-/* This is a 64 bit reloc that stores the 32 bit pc relative 
+/* This is a 64 bit reloc that stores the 32 bit pc relative
 value in two words (with an imm instruction).  The relocation is
 PC-relative GOT offset  */
   BFD_RELOC_MICROBLAZE_64_GOTPC,
 
-/* This is a 64 bit reloc that stores the 32 bit pc relative 
+/* This is a 64 bit reloc that stores the 32 bit pc relative
 value in two words (with an imm instruction).  The relocation is
 GOT offset  */
   BFD_RELOC_MICROBLAZE_64_GOT,
 
-/* This is a 64 bit reloc that stores the 32 bit pc relative 
+/* This is a 64 bit reloc that stores the 32 bit pc relative
 value in two words (with an imm instruction).  The relocation is
 PC-relative offset into PLT  */
   BFD_RELOC_MICROBLAZE_64_PLT,
 
-/* This is a 64 bit reloc that stores the 32 bit GOT relative 
+/* This is a 64 bit reloc that stores the 32 bit GOT relative
 value in two words (with an imm instruction).  The relocation is
 relative offset from _GLOBAL_OFFSET_TABLE_  */
   BFD_RELOC_MICROBLAZE_64_GOTOFF,
 
-/* This is a 32 bit reloc that stores the 32 bit GOT relative 
+/* This is a 32 bit reloc that stores the 32 bit GOT relative
 value in a word.  The relocation is relative offset from  */
   BFD_RELOC_MICROBLAZE_32_GOTOFF,
 
@@ -5068,14 +5231,109 @@ value in a word.  The relocation is relative offset from  */
 the dynamic object into the runtime process image.  */
   BFD_RELOC_MICROBLAZE_COPY,
 
-/* AArch64 ADD immediate instruction, holding bits 0 to 11 of the address.
-Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
-  BFD_RELOC_AARCH64_ADD_LO12,
+/* Unused Reloc  */
+  BFD_RELOC_MICROBLAZE_64_TLS,
 
-/* Get to the page base of the global offset table entry for a symbol as
-part of an ADRP instruction using a 21 bit PC relative value.Used in
-conjunction with BFD_RELOC_AARCH64_LD64_GOT_LO12_NC.  */
-  BFD_RELOC_AARCH64_ADR_GOT_PAGE,
+/* This is a 64 bit reloc that stores the 32 bit GOT relative value
+of the GOT TLS GD info entry in two words (with an imm instruction). The
+relocation is GOT offset.  */
+  BFD_RELOC_MICROBLAZE_64_TLSGD,
+
+/* This is a 64 bit reloc that stores the 32 bit GOT relative value
+of the GOT TLS LD info entry in two words (with an imm instruction). The
+relocation is GOT offset.  */
+  BFD_RELOC_MICROBLAZE_64_TLSLD,
+
+/* This is a 32 bit reloc that stores the Module ID to GOT(n).  */
+  BFD_RELOC_MICROBLAZE_32_TLSDTPMOD,
+
+/* This is a 32 bit reloc that stores TLS offset to GOT(n+1).  */
+  BFD_RELOC_MICROBLAZE_32_TLSDTPREL,
+
+/* This is a 32 bit reloc for storing TLS offset to two words (uses imm
+instruction)  */
+  BFD_RELOC_MICROBLAZE_64_TLSDTPREL,
+
+/* This is a 64 bit reloc that stores 32-bit thread pointer relative offset
+to two words (uses imm instruction).  */
+  BFD_RELOC_MICROBLAZE_64_TLSGOTTPREL,
+
+/* This is a 64 bit reloc that stores 32-bit thread pointer relative offset
+to two words (uses imm instruction).  */
+  BFD_RELOC_MICROBLAZE_64_TLSTPREL,
+
+/* AArch64 pseudo relocation code to mark the start of the AArch64
+relocation enumerators.  N.B. the order of the enumerators is
+important as several tables in the AArch64 bfd backend are indexed
+by these enumerators; make sure they are all synced.  */
+  BFD_RELOC_AARCH64_RELOC_START,
+
+/* AArch64 null relocation code.  */
+  BFD_RELOC_AARCH64_NONE,
+
+/* Basic absolute relocations of N bits.  These are equivalent to
+BFD_RELOC_N and they were added to assist the indexing of the howto
+table.  */
+  BFD_RELOC_AARCH64_64,
+  BFD_RELOC_AARCH64_32,
+  BFD_RELOC_AARCH64_16,
+
+/* PC-relative relocations.  These are equivalent to BFD_RELOC_N_PCREL
+and they were added to assist the indexing of the howto table.  */
+  BFD_RELOC_AARCH64_64_PCREL,
+  BFD_RELOC_AARCH64_32_PCREL,
+  BFD_RELOC_AARCH64_16_PCREL,
+
+/* AArch64 MOV[NZK] instruction with most significant bits 0 to 15
+of an unsigned address/value.  */
+  BFD_RELOC_AARCH64_MOVW_G0,
+
+/* AArch64 MOV[NZK] instruction with less significant bits 0 to 15 of
+an address/value.  No overflow checking.  */
+  BFD_RELOC_AARCH64_MOVW_G0_NC,
+
+/* AArch64 MOV[NZK] instruction with most significant bits 16 to 31
+of an unsigned address/value.  */
+  BFD_RELOC_AARCH64_MOVW_G1,
+
+/* AArch64 MOV[NZK] instruction with less significant bits 16 to 31
+of an address/value.  No overflow checking.  */
+  BFD_RELOC_AARCH64_MOVW_G1_NC,
+
+/* AArch64 MOV[NZK] instruction with most significant bits 32 to 47
+of an unsigned address/value.  */
+  BFD_RELOC_AARCH64_MOVW_G2,
+
+/* AArch64 MOV[NZK] instruction with less significant bits 32 to 47
+of an address/value.  No overflow checking.  */
+  BFD_RELOC_AARCH64_MOVW_G2_NC,
+
+/* AArch64 MOV[NZK] instruction with most signficant bits 48 to 64
+of a signed or unsigned address/value.  */
+  BFD_RELOC_AARCH64_MOVW_G3,
+
+/* AArch64 MOV[NZ] instruction with most significant bits 0 to 15
+of a signed value.  Changes instruction to MOVZ or MOVN depending on the
+value's sign.  */
+  BFD_RELOC_AARCH64_MOVW_G0_S,
+
+/* AArch64 MOV[NZ] instruction with most significant bits 16 to 31
+of a signed value.  Changes instruction to MOVZ or MOVN depending on the
+value's sign.  */
+  BFD_RELOC_AARCH64_MOVW_G1_S,
+
+/* AArch64 MOV[NZ] instruction with most significant bits 32 to 47
+of a signed value.  Changes instruction to MOVZ or MOVN depending on the
+value's sign.  */
+  BFD_RELOC_AARCH64_MOVW_G2_S,
+
+/* AArch64 Load Literal instruction, holding a 19 bit pc-relative word
+offset.  The lowest two bits must be zero and are not stored in the
+instruction, giving a 21 bit signed byte offset.  */
+  BFD_RELOC_AARCH64_LD_LO19_PCREL,
+
+/* AArch64 ADR instruction, holding a simple 21 bit pc-relative byte offset.  */
+  BFD_RELOC_AARCH64_ADR_LO21_PCREL,
 
 /* AArch64 ADRP instruction, with bits 12 to 32 of a pc-relative page
 offset, giving a 4KB aligned page base address.  */
@@ -5086,45 +5344,33 @@ offset, giving a 4KB aligned page base address, but with no overflow
 checking.  */
   BFD_RELOC_AARCH64_ADR_HI21_NC_PCREL,
 
-/* AArch64 ADR instruction, holding a simple 21 bit pc-relative byte offset.  */
-  BFD_RELOC_AARCH64_ADR_LO21_PCREL,
+/* AArch64 ADD immediate instruction, holding bits 0 to 11 of the address.
+Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
+  BFD_RELOC_AARCH64_ADD_LO12,
+
+/* AArch64 8-bit load/store instruction, holding bits 0 to 11 of the
+address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
+  BFD_RELOC_AARCH64_LDST8_LO12,
+
+/* AArch64 14 bit pc-relative test bit and branch.
+The lowest two bits must be zero and are not stored in the instruction,
+giving a 16 bit signed byte offset.  */
+  BFD_RELOC_AARCH64_TSTBR14,
 
 /* AArch64 19 bit pc-relative conditional branch and compare & branch.
 The lowest two bits must be zero and are not stored in the instruction,
 giving a 21 bit signed byte offset.  */
   BFD_RELOC_AARCH64_BRANCH19,
 
-/* AArch64 26 bit pc-relative unconditional branch and link.
-The lowest two bits must be zero and are not stored in the instruction,
-giving a 28 bit signed byte offset.  */
-  BFD_RELOC_AARCH64_CALL26,
-
-/* AArch64 pseudo relocation code to be used internally by the AArch64
-assembler and not (currently) written to any object files.  */
-  BFD_RELOC_AARCH64_GAS_INTERNAL_FIXUP,
-
 /* AArch64 26 bit pc-relative unconditional branch.
 The lowest two bits must be zero and are not stored in the instruction,
 giving a 28 bit signed byte offset.  */
   BFD_RELOC_AARCH64_JUMP26,
 
-/* AArch64 Load Literal instruction, holding a 19 bit pc-relative word
-offset.  The lowest two bits must be zero and are not stored in the
-instruction, giving a 21 bit signed byte offset.  */
-  BFD_RELOC_AARCH64_LD_LO19_PCREL,
-
-/* Unsigned 12 bit byte offset for 64 bit load/store from the page of
-the GOT entry for this symbol.  Used in conjunction with
-BFD_RELOC_AARCH64_ADR_GOTPAGE.  */
-  BFD_RELOC_AARCH64_LD64_GOT_LO12_NC,
-
-/* AArch64 unspecified load/store instruction, holding bits 0 to 11 of the
-address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
-  BFD_RELOC_AARCH64_LDST_LO12,
-
-/* AArch64 8-bit load/store instruction, holding bits 0 to 11 of the
-address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
-  BFD_RELOC_AARCH64_LDST8_LO12,
+/* AArch64 26 bit pc-relative unconditional branch and link.
+The lowest two bits must be zero and are not stored in the instruction,
+giving a 28 bit signed byte offset.  */
+  BFD_RELOC_AARCH64_CALL26,
 
 /* AArch64 16-bit load/store instruction, holding bits 0 to 11 of the
 address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
@@ -5142,86 +5388,27 @@ address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
 address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
   BFD_RELOC_AARCH64_LDST128_LO12,
 
-/* AArch64 MOV[NZK] instruction with most significant bits 0 to 15
-of an unsigned address/value.  */
-  BFD_RELOC_AARCH64_MOVW_G0,
+/* AArch64 Load Literal instruction, holding a 19 bit PC relative word
+offset of the global offset table entry for a symbol.  The lowest two
+bits must be zero and are not stored in the instruction, giving a 21
+bit signed byte offset.  This relocation type requires signed overflow
+checking.  */
+  BFD_RELOC_AARCH64_GOT_LD_PREL19,
 
-/* AArch64 MOV[NZ] instruction with most significant bits 0 to 15
-of a signed value.  Changes instruction to MOVZ or MOVN depending on the
-value's sign.  */
-  BFD_RELOC_AARCH64_MOVW_G0_S,
+/* Get to the page base of the global offset table entry for a symbol as
+part of an ADRP instruction using a 21 bit PC relative value.Used in
+conjunction with BFD_RELOC_AARCH64_LD64_GOT_LO12_NC.  */
+  BFD_RELOC_AARCH64_ADR_GOT_PAGE,
 
-/* AArch64 MOV[NZK] instruction with less significant bits 0 to 15 of
-an address/value.  No overflow checking.  */
-  BFD_RELOC_AARCH64_MOVW_G0_NC,
+/* Unsigned 12 bit byte offset for 64 bit load/store from the page of
+the GOT entry for this symbol.  Used in conjunction with
+BFD_RELOC_AARCH64_ADR_GOTPAGE.  Valid in LP64 ABI only.  */
+  BFD_RELOC_AARCH64_LD64_GOT_LO12_NC,
 
-/* AArch64 MOV[NZK] instruction with most significant bits 16 to 31
-of an unsigned address/value.  */
-  BFD_RELOC_AARCH64_MOVW_G1,
-
-/* AArch64 MOV[NZK] instruction with less significant bits 16 to 31
-of an address/value.  No overflow checking.  */
-  BFD_RELOC_AARCH64_MOVW_G1_NC,
-
-/* AArch64 MOV[NZ] instruction with most significant bits 16 to 31
-of a signed value.  Changes instruction to MOVZ or MOVN depending on the
-value's sign.  */
-  BFD_RELOC_AARCH64_MOVW_G1_S,
-
-/* AArch64 MOV[NZK] instruction with most significant bits 32 to 47
-of an unsigned address/value.  */
-  BFD_RELOC_AARCH64_MOVW_G2,
-
-/* AArch64 MOV[NZK] instruction with less significant bits 32 to 47
-of an address/value.  No overflow checking.  */
-  BFD_RELOC_AARCH64_MOVW_G2_NC,
-
-/* AArch64 MOV[NZ] instruction with most significant bits 32 to 47
-of a signed value.  Changes instruction to MOVZ or MOVN depending on the
-value's sign.  */
-  BFD_RELOC_AARCH64_MOVW_G2_S,
-
-/* AArch64 MOV[NZK] instruction with most signficant bits 48 to 64
-of a signed or unsigned address/value.  */
-  BFD_RELOC_AARCH64_MOVW_G3,
-
-/* AArch64 TLS relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_ADD,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_ADD_LO12_NC,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_ADR_PAGE,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_ADR_PREL21,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_CALL,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_LD64_LO12_NC,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_LD64_PREL19,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_LDR,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_OFF_G0_NC,
-
-/* AArch64 TLS DESC relocation.  */
-  BFD_RELOC_AARCH64_TLSDESC_OFF_G1,
-
-/* Unsigned 12 bit byte offset to global offset table entry for a symbols
-tls_index structure.  Used in conjunction with
-BFD_RELOC_AARCH64_TLSGD_ADR_PAGE21.  */
-  BFD_RELOC_AARCH64_TLSGD_ADD_LO12_NC,
+/* Unsigned 12 bit byte offset for 32 bit load/store from the page of
+the GOT entry for this symbol.  Used in conjunction with
+BFD_RELOC_AARCH64_ADR_GOTPAGE.  Valid in ILP32 ABI only.  */
+  BFD_RELOC_AARCH64_LD32_GOT_LO12_NC,
 
 /* Get to the page base of the global offset table entry for a symbols
 tls_index structure as part of an adrp instruction using a 21 bit PC
@@ -5229,20 +5416,43 @@ relative value.  Used in conjunction with
 BFD_RELOC_AARCH64_TLSGD_ADD_LO12_NC.  */
   BFD_RELOC_AARCH64_TLSGD_ADR_PAGE21,
 
-/* AArch64 TLS INITIAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+/* Unsigned 12 bit byte offset to global offset table entry for a symbols
+tls_index structure.  Used in conjunction with
+BFD_RELOC_AARCH64_TLSGD_ADR_PAGE21.  */
+  BFD_RELOC_AARCH64_TLSGD_ADD_LO12_NC,
 
 /* AArch64 TLS INITIAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSIE_LD_GOTTPREL_PREL19,
-
-/* AArch64 TLS INITIAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC,
+  BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G1,
 
 /* AArch64 TLS INITIAL EXEC relocation.  */
   BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G0_NC,
 
 /* AArch64 TLS INITIAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G1,
+  BFD_RELOC_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+
+/* AArch64 TLS INITIAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC,
+
+/* AArch64 TLS INITIAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSIE_LD32_GOTTPREL_LO12_NC,
+
+/* AArch64 TLS INITIAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSIE_LD_GOTTPREL_PREL19,
+
+/* AArch64 TLS LOCAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G2,
+
+/* AArch64 TLS LOCAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G1,
+
+/* AArch64 TLS LOCAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G1_NC,
+
+/* AArch64 TLS LOCAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G0,
+
+/* AArch64 TLS LOCAL EXEC relocation.  */
+  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G0_NC,
 
 /* AArch64 TLS LOCAL EXEC relocation.  */
   BFD_RELOC_AARCH64_TLSLE_ADD_TPREL_HI12,
@@ -5253,34 +5463,92 @@ BFD_RELOC_AARCH64_TLSGD_ADD_LO12_NC.  */
 /* AArch64 TLS LOCAL EXEC relocation.  */
   BFD_RELOC_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
 
-/* AArch64 TLS LOCAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G0,
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_LD_PREL19,
 
-/* AArch64 TLS LOCAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G0_NC,
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_ADR_PREL21,
 
-/* AArch64 TLS LOCAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G1,
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_ADR_PAGE21,
 
-/* AArch64 TLS LOCAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G1_NC,
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_LD64_LO12_NC,
 
-/* AArch64 TLS LOCAL EXEC relocation.  */
-  BFD_RELOC_AARCH64_TLSLE_MOVW_TPREL_G2,
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_LD32_LO12_NC,
+
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_ADD_LO12_NC,
+
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_OFF_G1,
+
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_OFF_G0_NC,
+
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_LDR,
+
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_ADD,
+
+/* AArch64 TLS DESC relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC_CALL,
 
 /* AArch64 TLS relocation.  */
-  BFD_RELOC_AARCH64_TLS_DTPMOD64,
+  BFD_RELOC_AARCH64_COPY,
 
 /* AArch64 TLS relocation.  */
-  BFD_RELOC_AARCH64_TLS_DTPREL64,
+  BFD_RELOC_AARCH64_GLOB_DAT,
 
 /* AArch64 TLS relocation.  */
-  BFD_RELOC_AARCH64_TLS_TPREL64,
+  BFD_RELOC_AARCH64_JUMP_SLOT,
 
-/* AArch64 14 bit pc-relative test bit and branch.
-The lowest two bits must be zero and are not stored in the instruction,
-giving a 16 bit signed byte offset.  */
-  BFD_RELOC_AARCH64_TSTBR14,
+/* AArch64 TLS relocation.  */
+  BFD_RELOC_AARCH64_RELATIVE,
+
+/* AArch64 TLS relocation.  */
+  BFD_RELOC_AARCH64_TLS_DTPMOD,
+
+/* AArch64 TLS relocation.  */
+  BFD_RELOC_AARCH64_TLS_DTPREL,
+
+/* AArch64 TLS relocation.  */
+  BFD_RELOC_AARCH64_TLS_TPREL,
+
+/* AArch64 TLS relocation.  */
+  BFD_RELOC_AARCH64_TLSDESC,
+
+/* AArch64 support for STT_GNU_IFUNC.  */
+  BFD_RELOC_AARCH64_IRELATIVE,
+
+/* AArch64 pseudo relocation code to mark the end of the AArch64
+relocation enumerators that have direct mapping to ELF reloc codes.
+There are a few more enumerators after this one; those are mainly
+used by the AArch64 assembler for the internal fixup or to select
+one of the above enumerators.  */
+  BFD_RELOC_AARCH64_RELOC_END,
+
+/* AArch64 pseudo relocation code to be used internally by the AArch64
+assembler and not (currently) written to any object files.  */
+  BFD_RELOC_AARCH64_GAS_INTERNAL_FIXUP,
+
+/* AArch64 unspecified load/store instruction, holding bits 0 to 11 of the
+address.  Used in conjunction with BFD_RELOC_AARCH64_ADR_HI21_PCREL.  */
+  BFD_RELOC_AARCH64_LDST_LO12,
+
+/* AArch64 pseudo relocation code to be used internally by the AArch64
+assembler and not (currently) written to any object files.  */
+  BFD_RELOC_AARCH64_LD_GOT_LO12_NC,
+
+/* AArch64 pseudo relocation code to be used internally by the AArch64
+assembler and not (currently) written to any object files.  */
+  BFD_RELOC_AARCH64_TLSIE_LD_GOTTPREL_LO12_NC,
+
+/* AArch64 pseudo relocation code to be used internally by the AArch64
+assembler and not (currently) written to any object files.  */
+  BFD_RELOC_AARCH64_TLSDESC_LD_LO12_NC,
 
 /* Tilera TILEPro Relocations.  */
   BFD_RELOC_TILEPRO_COPY,
@@ -5421,10 +5689,18 @@ giving a 16 bit signed byte offset.  */
   BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_PCREL,
   BFD_RELOC_TILEGX_IMM16_X0_HW0_GOT,
   BFD_RELOC_TILEGX_IMM16_X1_HW0_GOT,
+  BFD_RELOC_TILEGX_IMM16_X0_HW0_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW0_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X0_HW1_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW1_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X0_HW2_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW2_PLT_PCREL,
   BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_GOT,
   BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_GOT,
   BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_GOT,
   BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_GOT,
+  BFD_RELOC_TILEGX_IMM16_X0_HW3_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW3_PLT_PCREL,
   BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_GD,
   BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_GD,
   BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_LE,
@@ -5439,6 +5715,12 @@ giving a 16 bit signed byte offset.  */
   BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_TLS_GD,
   BFD_RELOC_TILEGX_IMM16_X0_HW0_TLS_IE,
   BFD_RELOC_TILEGX_IMM16_X1_HW0_TLS_IE,
+  BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW1_LAST_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X0_HW2_LAST_PLT_PCREL,
+  BFD_RELOC_TILEGX_IMM16_X1_HW2_LAST_PLT_PCREL,
   BFD_RELOC_TILEGX_IMM16_X0_HW0_LAST_TLS_IE,
   BFD_RELOC_TILEGX_IMM16_X1_HW0_LAST_TLS_IE,
   BFD_RELOC_TILEGX_IMM16_X0_HW1_LAST_TLS_IE,
@@ -5966,6 +6248,7 @@ typedef enum bfd_error
   bfd_error_no_armap,
   bfd_error_no_more_archived_files,
   bfd_error_malformed_archive,
+  bfd_error_missing_dso,
   bfd_error_file_not_recognized,
   bfd_error_file_ambiguously_recognized,
   bfd_error_no_contents,
@@ -6143,24 +6426,6 @@ extern bfd_byte *bfd_get_relocated_section_contents
    bfd_boolean, asymbol **);
 
 bfd_boolean bfd_alt_mach_code (bfd *abfd, int alternative);
-
-struct bfd_preserve
-{
-  void *marker;
-  void *tdata;
-  flagword flags;
-  const struct bfd_arch_info *arch_info;
-  struct bfd_section *sections;
-  struct bfd_section *section_last;
-  unsigned int section_count;
-  struct bfd_hash_table section_htab;
-};
-
-bfd_boolean bfd_preserve_save (bfd *, struct bfd_preserve *);
-
-void bfd_preserve_restore (bfd *, struct bfd_preserve *);
-
-void bfd_preserve_finish (bfd *, struct bfd_preserve *);
 
 bfd_vma bfd_emul_get_maxpagesize (const char *);
 
@@ -6687,6 +6952,9 @@ bfd_boolean bfd_compress_section_contents
 
 bfd_boolean bfd_get_full_section_contents
    (bfd *abfd, asection *section, bfd_byte **ptr);
+
+void bfd_cache_section_contents
+   (asection *sec, void *contents);
 
 bfd_boolean bfd_is_section_compressed
    (bfd *abfd, asection *section);

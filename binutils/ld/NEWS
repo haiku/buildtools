@@ -1,8 +1,29 @@
 -*- text -*-
 
+Changes in 2.24:
+
+* Add LOG2CEIL() builtin function to the linker script language
+
+* Add support for the Texas Instruments MSP430X processor.
+
+* Add support for Altera Nios II.
+
+* Add support for the V850E3V5 architecture.
+
+* Add support for the Imagination Technologies Meta processor.
+
+* --enable-new-dtags no longer generates old dtags in addition to new dtags.
+
+* Remove linker support for MIPS ECOFF targets.
+
+* Add ALIGN_WITH_INPUT to the linker script language to force the alignment of
+  an output section to use the maximum alignment of all its input sections.
+
 Changes in 2.23:
 
-* Add support for 64-bit ARM architecture: AArch64
+* Enable compressed debug section feature for x86/x86_64 pe-coff.
+
+* Add support for the 64-bit ARM architecture: AArch64.
 
 * Added SORT_NONE to the linker script language to disable section sorting.
 
@@ -557,6 +578,12 @@ Changes in version 2.1:
   other utilities should work on Risc/Ultrix and Irix.
 
 
+Copyright (C) 2012 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
 Local variables:
 fill-column: 79
 End:

@@ -27,8 +27,7 @@
 #include "as.h"
 
 /* This file is compiled conditionally for those targets which use
-   ECOFF debugging information (e.g., MIPS ECOFF, MIPS ELF, Alpha
-   ECOFF).  */
+   ECOFF debugging information (e.g., MIPS ELF, Alpha ECOFF).  */
 
 #include "ecoff.h"
 
@@ -2535,7 +2534,7 @@ ecoff_directive_def (int ignore ATTRIBUTE_UNUSED)
 	free (coff_sym_name);
       if (coff_tag != (char *) NULL)
 	free (coff_tag);
-      
+
       coff_sym_name = xstrdup (name);
       coff_type = type_info_init;
       coff_storage_class = sc_Nil;

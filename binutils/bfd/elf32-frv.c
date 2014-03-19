@@ -952,7 +952,7 @@ frvfdpic_elf_link_hash_table_create (bfd *abfd)
   struct frvfdpic_elf_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct frvfdpic_elf_link_hash_table);
 
-  ret = bfd_zalloc (abfd, amt);
+  ret = bfd_zmalloc (amt);
   if (ret == NULL)
     return NULL;
 
@@ -3363,7 +3363,7 @@ elf32_frv_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		   with ldi @(grB, #gottlsoff12(symbol+offset), grC.
 		   Preserve the packing bit.  */
 		insn = (insn & (unsigned long)0xfe03f000)
-		  | (unsigned long)0x00c80000;;
+		  | (unsigned long)0x00c80000;
 		bfd_put_32 (input_bfd, insn, contents + rel->r_offset);
 
 		r_type = R_FRV_GOTTLSOFF12;
@@ -5494,36 +5494,10 @@ static bfd_boolean
 elf32_frvfdpic_always_size_sections (bfd *output_bfd,
 				     struct bfd_link_info *info)
 {
-  if (!info->relocatable)
-    {
-      struct elf_link_hash_entry *h;
-
-      /* Force a PT_GNU_STACK segment to be created.  */
-      if (! elf_tdata (output_bfd)->stack_flags)
-	elf_tdata (output_bfd)->stack_flags = PF_R | PF_W | PF_X;
-
-      /* Define __stacksize if it's not defined yet.  */
-      h = elf_link_hash_lookup (elf_hash_table (info), "__stacksize",
-				FALSE, FALSE, FALSE);
-      if (! h || h->root.type != bfd_link_hash_defined
-	  || h->type != STT_OBJECT
-	  || !h->def_regular)
-	{
-	  struct bfd_link_hash_entry *bh = NULL;
-
-	  if (!(_bfd_generic_link_add_one_symbol
-		(info, output_bfd, "__stacksize",
-		 BSF_GLOBAL, bfd_abs_section_ptr, DEFAULT_STACK_SIZE,
-		 (const char *) NULL, FALSE,
-		 get_elf_backend_data (output_bfd)->collect, &bh)))
-	    return FALSE;
-
-	  h = (struct elf_link_hash_entry *) bh;
-	  h->def_regular = 1;
-	  h->type = STT_OBJECT;
-	  /* This one must NOT be hidden.  */
-	}
-    }
+  if (!info->relocatable
+      && !bfd_elf_stack_segment_size (output_bfd, info,
+				      "__stacksize", DEFAULT_STACK_SIZE))
+    return FALSE;
 
   return TRUE;
 }
@@ -5533,7 +5507,7 @@ elf32_frvfdpic_always_size_sections (bfd *output_bfd,
 static bfd_boolean
 _frvfdpic_check_discarded_relocs (bfd *abfd, asection *sec,
 				  struct bfd_link_info *info,
-				  
+
 				  bfd_boolean *changed)
 {
   Elf_Internal_Shdr *symtab_hdr;
@@ -5715,51 +5689,6 @@ elf32_frvfdpic_relax_section (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 	 we might have changed the size of a section processed before this
 	 one.  */
       *again = TRUE;
-    }
-
-  return TRUE;
-}
-
-static bfd_boolean
-elf32_frvfdpic_modify_program_headers (bfd *output_bfd,
-				       struct bfd_link_info *info)
-{
-  struct elf_obj_tdata *tdata = elf_tdata (output_bfd);
-  struct elf_segment_map *m;
-  Elf_Internal_Phdr *p;
-
-  /* objcopy and strip preserve what's already there using
-     elf32_frvfdpic_copy_private_bfd_data ().  */
-  if (! info)
-    return TRUE;
-
-  for (p = tdata->phdr, m = tdata->segment_map; m != NULL; m = m->next, p++)
-    if (m->p_type == PT_GNU_STACK)
-      break;
-
-  if (m)
-    {
-      struct elf_link_hash_entry *h;
-
-      /* Obtain the pointer to the __stacksize symbol.  */
-      h = elf_link_hash_lookup (elf_hash_table (info), "__stacksize",
-				FALSE, FALSE, FALSE);
-      if (h)
-	{
-	  while (h->root.type == bfd_link_hash_indirect
-		 || h->root.type == bfd_link_hash_warning)
-	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-	  BFD_ASSERT (h->root.type == bfd_link_hash_defined);
-	}
-
-      /* Set the header p_memsz from the symbol value.  We
-	 intentionally ignore the symbol section.  */
-      if (h && h->root.type == bfd_link_hash_defined)
-	p->p_memsz = h->root.u.def.value;
-      else
-	p->p_memsz = DEFAULT_STACK_SIZE;
-
-      p->p_align = 8;
     }
 
   return TRUE;
@@ -6117,6 +6046,10 @@ elf32_frv_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
@@ -6431,8 +6364,6 @@ frv_elf_arch_extension_p (flagword base, flagword extension)
 static bfd_boolean
 elf32_frvfdpic_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 {
-  unsigned i;
-
   if (bfd_get_flavour (ibfd) != bfd_target_elf_flavour
       || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
     return TRUE;
@@ -6443,31 +6374,6 @@ elf32_frvfdpic_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
   if (! elf_tdata (ibfd) || ! elf_tdata (ibfd)->phdr
       || ! elf_tdata (obfd) || ! elf_tdata (obfd)->phdr)
     return TRUE;
-
-  /* Copy the stack size.  */
-  for (i = 0; i < elf_elfheader (ibfd)->e_phnum; i++)
-    if (elf_tdata (ibfd)->phdr[i].p_type == PT_GNU_STACK)
-      {
-	Elf_Internal_Phdr *iphdr = &elf_tdata (ibfd)->phdr[i];
-
-	for (i = 0; i < elf_elfheader (obfd)->e_phnum; i++)
-	  if (elf_tdata (obfd)->phdr[i].p_type == PT_GNU_STACK)
-	    {
-	      memcpy (&elf_tdata (obfd)->phdr[i], iphdr, sizeof (*iphdr));
-
-	      /* Rewrite the phdrs, since we're only called after they
-		 were first written.  */
-	      if (bfd_seek (obfd, (bfd_signed_vma) get_elf_backend_data (obfd)
-			    ->s->sizeof_ehdr, SEEK_SET) != 0
-		  || get_elf_backend_data (obfd)->s
-		  ->write_out_phdrs (obfd, elf_tdata (obfd)->phdr,
-				     elf_elfheader (obfd)->e_phnum) != 0)
-		return FALSE;
-	      break;
-	    }
-
-	break;
-      }
 
   return TRUE;
 }
@@ -6842,12 +6748,12 @@ elf32_frv_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
          hardcoded offsets and sizes listed below (and contained within
 	 this lexical block) refer to fields in the target's elf_prstatus
 	 struct.  */
-      case 268:	
+      case 268:
 	/* `pr_cursig' is at offset 12.  */
-	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* `pr_pid' is at offset 24.  */
-	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 24);
+	elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 24);
 
 	/* `pr_reg' is at offset 72.  */
 	offset = 72;
@@ -6858,7 +6764,7 @@ elf32_frv_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 	   and `pr_interp_fdpic_loadmap', both of which (by design)
 	   immediately follow `pr_reg'.  This will allow these fields to
 	   be viewed by GDB as registers.
-	   
+
 	   `pr_reg' is 184 bytes long.  `pr_exec_fdpic_loadmap' and
 	   `pr_interp_fdpic_loadmap' are 4 bytes each.  */
 	raw_size = 184 + 4 + 4;
@@ -6883,11 +6789,11 @@ elf32_frv_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
       case 124:
 
 	/* `pr_fname' is found at offset 28 and is 16 bytes long.  */
-	elf_tdata (abfd)->core_program
+	elf_tdata (abfd)->core->program
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
 
 	/* `pr_psargs' is found at offset 44 and is 80 bytes long.  */
-	elf_tdata (abfd)->core_command
+	elf_tdata (abfd)->core->command
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
     }
 
@@ -6896,7 +6802,7 @@ elf32_frv_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      implementations, so strip it off if it exists.  */
 
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -6920,6 +6826,7 @@ elf32_frv_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 #define elf_backend_object_p			elf32_frv_object_p
 #define elf_backend_add_symbol_hook             elf32_frv_add_symbol_hook
 
+#define elf_backend_stack_align			8
 #define elf_backend_can_gc_sections		1
 #define elf_backend_rela_normal			1
 
@@ -6964,9 +6871,6 @@ elf32_frv_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 #undef elf_backend_always_size_sections
 #define elf_backend_always_size_sections \
 		elf32_frvfdpic_always_size_sections
-#undef elf_backend_modify_program_headers
-#define elf_backend_modify_program_headers \
-		elf32_frvfdpic_modify_program_headers
 #undef bfd_elf32_bfd_copy_private_bfd_data
 #define bfd_elf32_bfd_copy_private_bfd_data \
 		elf32_frvfdpic_copy_private_bfd_data

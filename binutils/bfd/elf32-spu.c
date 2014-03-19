@@ -1,7 +1,6 @@
 /* SPU specific support for 32-bit ELF
 
-   Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright 2006-2013 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -440,7 +439,7 @@ spu_elf_link_hash_table_create (bfd *abfd)
 {
   struct spu_link_hash_table *htab;
 
-  htab = bfd_malloc (sizeof (*htab));
+  htab = bfd_zmalloc (sizeof (*htab));
   if (htab == NULL)
     return NULL;
 
@@ -452,9 +451,6 @@ spu_elf_link_hash_table_create (bfd *abfd)
       free (htab);
       return NULL;
     }
-
-  memset (&htab->ovtab, 0,
-	  sizeof (*htab) - offsetof (struct spu_link_hash_table, ovtab));
 
   htab->elf.init_got_refcount.refcount = 0;
   htab->elf.init_got_refcount.glist = NULL;
@@ -1146,7 +1142,7 @@ count_stub (struct spu_link_hash_table *htab,
 }
 
 /* Support two sizes of overlay stubs, a slower more compact stub of two
-   intructions, and a faster stub of four instructions.
+   instructions, and a faster stub of four instructions.
    Soft-icache stubs are four or eight words.  */
 
 static unsigned int
@@ -1486,7 +1482,7 @@ allocate_spuear_stubs (struct elf_link_hash_entry *h, void *inf)
     {
       return count_stub (htab, NULL, NULL, nonovl_stub, h, NULL);
     }
-  
+
   return TRUE;
 }
 
@@ -1512,7 +1508,7 @@ build_spuear_stubs (struct elf_link_hash_entry *h, void *inf)
       return build_stub (info, NULL, NULL, nonovl_stub, h, NULL,
 			 h->root.u.def.value, sym_sec);
     }
-  
+
   return TRUE;
 }
 
@@ -2155,7 +2151,7 @@ spu_elf_check_vma (struct bfd_link_info *info)
 
   htab->local_store = hi + 1 - lo;
 
-  for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+  for (m = elf_seg_map (abfd); m != NULL; m = m->next)
     if (m->p_type == PT_LOAD)
       for (i = 0; i < m->count; i++)
 	if (m->sections[i]->size != 0
@@ -2949,7 +2945,7 @@ discover_functions (struct bfd_link_info *info)
   sec_arr = bfd_zmalloc (bfd_idx * sizeof (*sec_arr));
   if (sec_arr == NULL)
     return FALSE;
-  
+
   for (ibfd = info->input_bfds, bfd_idx = 0;
        ibfd != NULL;
        ibfd = ibfd->link_next, bfd_idx++)
@@ -2982,7 +2978,7 @@ discover_functions (struct bfd_link_info *info)
       if (symtab_hdr->contents != NULL)
 	{
 	  /* Don't use cached symbols since the generic ELF linker
-	     code only reads local symbols, and we need globals too.  */ 
+	     code only reads local symbols, and we need globals too.  */
 	  free (symtab_hdr->contents);
 	  symtab_hdr->contents = NULL;
 	}
@@ -4081,7 +4077,7 @@ print_one_overlay_section (FILE *script,
 			   struct bfd_link_info *info)
 {
   unsigned int j;
-	  
+
   for (j = base; j < count && ovly_map[j] == ovlynum; j++)
     {
       asection *sec = ovly_sections[2 * j];
@@ -4178,7 +4174,7 @@ spu_elf_auto_overlay (struct bfd_link_info *info)
   /* Find the extents of our loadable image.  */
   lo = (unsigned int) -1;
   hi = 0;
-  for (m = elf_tdata (info->output_bfd)->segment_map; m != NULL; m = m->next)
+  for (m = elf_seg_map (info->output_bfd); m != NULL; m = m->next)
     if (m->p_type == PT_LOAD)
       for (i = 0; i < m->count; i++)
 	if (m->sections[i]->size != 0)
@@ -4909,8 +4905,8 @@ spu_elf_relocate_section (bfd *output_bfd,
 	  && !(h->def_regular || ELF_COMMON_DEF_P (h)))
 	{
 	  bfd_byte *loc = contents + rel->r_offset;
-	  loc[0] = 0x1c; 
-	  loc[1] = 0x00; 
+	  loc[0] = 0x1c;
+	  loc[1] = 0x00;
 	  loc[2] &= 0x3f;
 	}
 
@@ -5201,7 +5197,7 @@ spu_elf_modify_segment_map (bfd *abfd, struct bfd_link_info *info)
     return TRUE;
 
   toe = bfd_get_section_by_name (abfd, ".toe");
-  for (m = elf_tdata (abfd)->segment_map; m != NULL; m = m->next)
+  for (m = elf_seg_map (abfd); m != NULL; m = m->next)
     if (m->p_type == PT_LOAD && m->count > 1)
       for (i = 0; i < m->count; i++)
 	if ((s = m->sections[i]) == toe
@@ -5251,7 +5247,7 @@ spu_elf_modify_segment_map (bfd *abfd, struct bfd_link_info *info)
      as PF_OVERLAY) will be placed into SPU local store on startup.  */
 
   /* Move all overlay segments onto a separate list.  */
-  p = &elf_tdata (abfd)->segment_map;
+  p = &elf_seg_map (abfd);
   p_overlay = &m_overlay;
   while (*p != NULL)
     {
@@ -5269,8 +5265,8 @@ spu_elf_modify_segment_map (bfd *abfd, struct bfd_link_info *info)
     }
 
   /* Re-insert overlay segments at the head of the segment map.  */
-  *p_overlay = elf_tdata (abfd)->segment_map;
-  elf_tdata (abfd)->segment_map = m_overlay;
+  *p_overlay = elf_seg_map (abfd);
+  elf_seg_map (abfd) = m_overlay;
 
   return TRUE;
 }
@@ -5305,14 +5301,14 @@ spu_elf_modify_program_headers (bfd *abfd, struct bfd_link_info *info)
   bed = get_elf_backend_data (abfd);
   tdata = elf_tdata (abfd);
   phdr = tdata->phdr;
-  count = tdata->program_header_size / bed->s->sizeof_phdr;
+  count = elf_program_header_size (abfd) / bed->s->sizeof_phdr;
   htab = spu_hash_table (info);
   if (htab->num_overlays != 0)
     {
       struct elf_segment_map *m;
       unsigned int o;
 
-      for (i = 0, m = elf_tdata (abfd)->segment_map; m; ++i, m = m->next)
+      for (i = 0, m = elf_seg_map (abfd); m; ++i, m = m->next)
 	if (m->count != 0
 	    && (o = spu_elf_section_data (m->sections[0])->u.o.ovl_index) != 0)
 	  {

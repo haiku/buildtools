@@ -58,6 +58,7 @@
 #define ARCH_m88k
 #define ARCH_mcore
 #define ARCH_mep
+#define ARCH_metag
 #define ARCH_microblaze
 #define ARCH_mips
 #define ARCH_mmix
@@ -66,6 +67,7 @@
 #define ARCH_moxie
 #define ARCH_mt
 #define ARCH_msp430
+#define ARCH_nios2
 #define ARCH_ns32k
 #define ARCH_openrisc
 #define ARCH_or32
@@ -309,6 +311,11 @@ disassembler (abfd)
       disassemble = print_insn_mep;
       break;
 #endif
+#ifdef ARCH_metag
+    case bfd_arch_metag:
+      disassemble = print_insn_metag;
+      break;
+#endif
 #ifdef ARCH_mips
     case bfd_arch_mips:
       if (bfd_big_endian (abfd))
@@ -330,6 +337,14 @@ disassembler (abfd)
 #ifdef ARCH_mn10300
     case bfd_arch_mn10300:
       disassemble = print_insn_mn10300;
+      break;
+#endif
+#ifdef ARCH_nios2
+    case bfd_arch_nios2:
+      if (bfd_big_endian (abfd))
+	disassemble = print_insn_big_nios2;
+      else
+	disassemble = print_insn_little_nios2;
       break;
 #endif
 #ifdef ARCH_openrisc
@@ -436,6 +451,7 @@ disassembler (abfd)
 #endif
 #ifdef ARCH_v850
     case bfd_arch_v850:
+    case bfd_arch_v850_rh850:
       disassemble = print_insn_v850;
       break;
 #endif
@@ -578,6 +594,11 @@ disassemble_init_for_target (struct disassemble_info * info)
     case bfd_arch_mep:
       info->skip_zeroes = 256;
       info->skip_zeroes_at_end = 0;
+      break;
+#endif
+#ifdef ARCH_metag
+    case bfd_arch_metag:
+      info->disassembler_needs_relocs = TRUE;
       break;
 #endif
 #ifdef ARCH_m32c

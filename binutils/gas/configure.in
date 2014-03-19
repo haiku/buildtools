@@ -3,6 +3,21 @@ dnl
 dnl And be careful when changing it!  If you must add tests with square
 dnl brackets, be sure changequote invocations surround it.
 dnl
+dnl   Copyright 2012, 2013 Free Software Foundation
+dnl
+dnl This file is free software; you can redistribute it and/or modify
+dnl it under the terms of the GNU General Public License as published by
+dnl the Free Software Foundation; either version 3 of the License, or
+dnl (at your option) any later version.
+dnl 
+dnl This program is distributed in the hope that it will be useful,
+dnl but WITHOUT ANY WARRANTY; without even the implied warranty of
+dnl MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+dnl GNU General Public License for more details.
+dnl 
+dnl You should have received a copy of the GNU General Public License
+dnl along with this program; see the file COPYING3.  If not see
+dnl <http://www.gnu.org/licenses/>.
 dnl
 dnl v2.5 needed for --bindir et al
 AC_PREREQ(2.59)
@@ -17,7 +32,7 @@ AC_CANONICAL_TARGET
 AC_ISC_POSIX
 
 changequote(,)dnl
-BFD_VERSION=`sed -n -e 's/^.._INIT_AUTOMAKE.*,[ 	]*\([^ 	]*\)[ 	]*).*/\1/p' < ${srcdir}/../bfd/configure.in`
+BFD_VERSION=`${srcdir}/../bfd/configure --version | sed -n -e '1s,.* ,,p'`
 changequote([,])dnl
 AM_INIT_AUTOMAKE(gas, ${BFD_VERSION})
 
@@ -149,23 +164,11 @@ for this_target in $target $canon_targets ; do
       microblaze*)
         ;;
 
-      mips-sony-bsd*)
-	;;
-      mips-*-bsd*)
-	AC_MSG_ERROR(Unknown vendor for mips-bsd configuration.)
-	;;
-
 changequote(,)dnl
       ppc-*-aix[5-9].*)
 changequote([,])dnl
 	AC_DEFINE(AIX_WEAK_SUPPORT, 1,
 		  [Define if using AIX 5.2 value for C_WEAKEXT.])
-	;;
-      ppc-*-linux-*)
-	case "$endian" in
-	  big)  ;;
-	  *)    AC_MSG_ERROR(GNU/Linux must be configured big endian) ;;
-	esac
 	;;
       ppc-*-solaris*)
 	if test ${this_target} = $target; then
@@ -232,13 +235,17 @@ changequote(,)dnl
 	    mips_cpu=`echo $target_cpu | sed -e 's/[a-z]*..//' -e 's/el$//'`
 changequote([,])dnl
 	    ;;
+	  mips*)
+changequote(,)dnl
+	    mips_cpu=`echo $target_cpu | sed -e 's/^mips//' -e 's/el$//'`
+changequote([,])dnl
+	    ;;
 	  *)
 	    AC_MSG_ERROR($target_cpu isn't a supported MIPS CPU name)
 	    ;;
 	esac
 	# See whether it's appropriate to set E_MIPS_ABI_O32 for o32
 	# binaries.  It's a GNU extension that some OSes don't understand.
-	# The value only matters on ELF targets.
 	case ${target} in
 	  *-*-irix*)
 	    use_e_mips_abi_o32=0
@@ -416,22 +423,10 @@ changequote([,])dnl
 # From target name and format, produce a list of supported emulations.
 
     case ${generic_target}-${fmt} in
-      mips-*-irix5*-*)	emulation="mipsbelf mipslelf mipself mipsbecoff mipslecoff mipsecoff" ;;
-      mips*-*-linux*-* | mips*-*-freebsd* | mips*-*-kfreebsd*-gnu)
-			case "$endian" in
+      mips-*-*-*)	case "$endian" in
 			big)	emulation="mipsbelf mipslelf mipself" ;;
 			*)	emulation="mipslelf mipsbelf mipself" ;;
 			esac ;;
-      mips-*-lnews*-ecoff) ;;
-      mips-*-*-ecoff)	case "$endian" in
-			big)	emulation="mipsbecoff mipslecoff mipsecoff" ;;
-			*)	emulation="mipslecoff mipsbecoff mipsecoff" ;;
-			esac ;;
-      mips-*-*-elf)	case "$endian" in
-			big)	emulation="mipsbelf mipslelf mipself" ;;
-			*)	emulation="mipslelf mipsbelf mipself" ;;
-			esac ;;
-      mips-*-sysv4*MP*-*) emulation="mipsbelf mipslelf mipself mipsbecoff mipslecoff mipsecoff" ;;
       # i386-pc-pe-coff != i386-pc-coff.
       i386-*-pe-coff)	;;
       # Uncommenting the next line will turn on support for i386 AOUT
@@ -544,7 +539,7 @@ esac
 #
 # And then there's "--enable-targets=all"....
 #
-# For now, just always do it for MIPS ELF or ECOFF configurations.  Sigh.
+# For now, just always do it for MIPS ELF configurations.  Sigh.
 
 formats="${obj_format}"
 emfiles=""
@@ -555,8 +550,6 @@ for em in . $emulations ; do
     .)	continue ;;
     mipsbelf | mipslelf | mipself)
 	fmt=elf   file=mipself ;;
-    mipsbecoff | mipslecoff | mipsecoff)
-	fmt=ecoff file=mipsecoff ;;
     *coff)
 	fmt=coff  file=$em ;;
     *aout)
@@ -587,11 +580,11 @@ if test `set . $formats ; shift ; echo $#` -gt 1 ; then
 fi
 if test `set . $emfiles ; shift ; echo $#` -gt 0 ; then
   DEFAULT_EMULATION=`set . $emulations ; echo $2`
-  # e-mips* has more than one emulation per file, e-i386* has just one at the
+  # e-mipself has more than one emulation per file, e-i386* has just one at the
   # moment.  If only one emulation is specified, then don't define
   # USE_EMULATIONS or include any of the e-files as they will only be bloat.
   case "${obj_format}${emfiles}" in
-    multi* | *mips*)
+    multi* | *mipself*)
       extra_objects="$extra_objects $emfiles"
       AC_DEFINE(USE_EMULATIONS, 1, [Use emulation support?]) ;;
   esac

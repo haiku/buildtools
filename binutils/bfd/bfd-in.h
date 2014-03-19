@@ -1,8 +1,6 @@
 /* Main header file for the bfd library -- portable access to object files.
 
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
-   2012 Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -62,7 +60,7 @@ extern "C" {
    problem for example when trying to use STRING_COMMA_LEN to build
    the arguments to the strncmp() macro.  Hence this alternative
    definition of strncmp is provided here.
-   
+
    Note - these macros do NOT work if STR2 is not a constant string.  */
 #define CONST_STRNEQ(STR1,STR2) (strncmp ((STR1), (STR2), sizeof (STR2) - 1) == 0)
   /* strcpy() can have a similar problem, but since we know we are
@@ -648,6 +646,8 @@ extern struct bfd_link_needed_list *bfd_elf_get_needed_list
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean bfd_elf_get_bfd_needed_list
   (bfd *, struct bfd_link_needed_list **);
+extern bfd_boolean bfd_elf_stack_segment_size (bfd *, struct bfd_link_info *,
+					       const char *, bfd_vma);
 extern bfd_boolean bfd_elf_size_dynamic_sections
   (bfd *, const char *, const char *, const char *, const char *, const char *,
    const char * const *, struct bfd_link_info *, struct bfd_section **);
@@ -909,7 +909,8 @@ extern void elf32_arm_next_input_section
   (struct bfd_link_info *, struct bfd_section *);
 extern bfd_boolean elf32_arm_size_stubs
   (bfd *, bfd *, struct bfd_link_info *, bfd_signed_vma,
-   struct bfd_section * (*) (const char *, struct bfd_section *), void (*) (void));
+   struct bfd_section * (*) (const char *, struct bfd_section *, unsigned int),
+   void (*) (void));
 extern bfd_boolean elf32_arm_build_stubs
   (struct bfd_link_info *);
 
@@ -931,7 +932,13 @@ extern unsigned int _bfd_elf_ppc_at_tprel_transform
 extern void bfd_elf64_aarch64_init_maps
   (bfd *);
 
-void bfd_elf64_aarch64_set_options
+extern void bfd_elf32_aarch64_init_maps
+  (bfd *);
+
+extern void bfd_elf64_aarch64_set_options
+  (bfd *, struct bfd_link_info *, int, int, int);
+
+extern void bfd_elf32_aarch64_set_options
   (bfd *, struct bfd_link_info *, int, int, int);
 
 /* ELF AArch64 mapping symbol support.  */
@@ -942,7 +949,7 @@ void bfd_elf64_aarch64_set_options
 extern bfd_boolean bfd_is_aarch64_special_symbol_name
   (const char * name, int type);
 
-/* AArch64 stub generation support.  Called from the linker.  */
+/* AArch64 stub generation support for ELF64.  Called from the linker.  */
 extern int elf64_aarch64_setup_section_lists
   (bfd *, struct bfd_link_info *);
 extern void elf64_aarch64_next_input_section
@@ -953,7 +960,19 @@ extern bfd_boolean elf64_aarch64_size_stubs
    void (*) (void));
 extern bfd_boolean elf64_aarch64_build_stubs
   (struct bfd_link_info *);
-  
+/* AArch64 stub generation support for ELF32.  Called from the linker.  */
+extern int elf32_aarch64_setup_section_lists
+  (bfd *, struct bfd_link_info *);
+extern void elf32_aarch64_next_input_section
+  (struct bfd_link_info *, struct bfd_section *);
+extern bfd_boolean elf32_aarch64_size_stubs
+  (bfd *, bfd *, struct bfd_link_info *, bfd_signed_vma,
+   struct bfd_section * (*) (const char *, struct bfd_section *),
+   void (*) (void));
+extern bfd_boolean elf32_aarch64_build_stubs
+  (struct bfd_link_info *);
+
+
 /* TI COFF load page support.  */
 extern void bfd_ticoff_set_section_load_page
   (struct bfd_section *, int);
@@ -989,6 +1008,5 @@ struct coff_comdat_info
   long symbol;
 };
 
-extern struct coff_comdat_info *bfd_coff_get_comdat_section
+extern struct coff_comdat_info * bfd_coff_get_comdat_section
   (bfd *, struct bfd_section *);
-

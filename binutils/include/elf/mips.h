@@ -1,6 +1,6 @@
 /* MIPS ELF support for BFD.
    Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
-   2003, 2004, 2005, 2008, 2009, 2010
+   2003, 2004, 2005, 2008, 2009, 2010, 2013
    Free Software Foundation, Inc.
 
    By Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>, from
@@ -152,10 +152,10 @@ START_RELOC_NUMBERS (elf_mips_reloc_type)
   FAKE_RELOC (R_MICROMIPS_max, 174)
 
   /* This was a GNU extension used by embedded-PIC.  It was co-opted by
-     mips-linux for exception-handling data.  It is no longer used, but
-     should continue to be supported by the linker for backward
-     compatibility.  (GCC stopped using it in May, 2004.)  */
+     mips-linux for exception-handling data.  GCC stopped using it in
+     May, 2004, then started using it again for compact unwind tables.  */
   RELOC_NUMBER (R_MIPS_PC32, 248)
+  RELOC_NUMBER (R_MIPS_EH, 249)
   /* FIXME: this relocation is used internally by gas.  */
   RELOC_NUMBER (R_MIPS_GNU_REL16_S2, 250)
   /* These are GNU extensions to enable C++ vtable garbage collection.  */
@@ -187,6 +187,16 @@ END_RELOC_NUMBERS (R_MIPS_maxext)
 /* Process the .MIPS.options section first by ld */
 #define EF_MIPS_OPTIONS_FIRST	0x00000080
 
+/* Indicates code compiled for a 64-bit machine in 32-bit mode
+   (regs are 32-bits wide).  */
+#define EF_MIPS_32BITMODE	0x00000100
+
+/* 32-bit machine but FP registers are 64 bit (-mfp64).  */
+#define EF_MIPS_FP64		0x00000200
+
+/* Code in file uses the IEEE 754-2008 NaN encoding convention.  */
+#define EF_MIPS_NAN2008		0x00000400
+
 /* Architectural Extensions used by this file */
 #define EF_MIPS_ARCH_ASE	0x0f000000
 
@@ -198,10 +208,6 @@ END_RELOC_NUMBERS (R_MIPS_maxext)
 
 /* Use MICROMIPS ISA extensions.  */
 #define EF_MIPS_ARCH_ASE_MICROMIPS	0x02000000
-
-/* Indicates code compiled for a 64-bit machine in 32-bit mode.
-   (regs are 32-bits wide.) */
-#define EF_MIPS_32BITMODE       0x00000100
 
 /* Four bit MIPS architecture field.  */
 #define EF_MIPS_ARCH		0xf0000000
@@ -270,6 +276,7 @@ END_RELOC_NUMBERS (R_MIPS_maxext)
 #define E_MIPS_MACH_XLR     	0x008c0000
 #define E_MIPS_MACH_OCTEON2	0x008d0000
 #define E_MIPS_MACH_5400	0x00910000
+#define E_MIPS_MACH_5900	0x00920000
 #define E_MIPS_MACH_5500	0x00980000
 #define E_MIPS_MACH_9000	0x00990000
 #define E_MIPS_MACH_LS2E        0x00A00000
@@ -802,15 +809,24 @@ extern void bfd_mips_elf32_swap_reginfo_out
    PLT entries and traditional MIPS lazy binding stubs.  We mark the former
    with STO_MIPS_PLT to distinguish them from the latter.  */
 #define STO_MIPS_PLT		0x8
-#define ELF_ST_IS_MIPS_PLT(other) (((other) & STO_MIPS_FLAGS) == STO_MIPS_PLT)
-#define ELF_ST_SET_MIPS_PLT(other) (((other) & ~STO_MIPS_FLAGS) | STO_MIPS_PLT)
+#define ELF_ST_IS_MIPS_PLT(other)					\
+  ((ELF_ST_IS_MIPS16 (other)						\
+    ? ((other) & (~STO_MIPS16 & STO_MIPS_FLAGS))			\
+    : ((other) & STO_MIPS_FLAGS)) == STO_MIPS_PLT)
+#define ELF_ST_SET_MIPS_PLT(other)					\
+  ((ELF_ST_IS_MIPS16 (other)						\
+    ? ((other) & (STO_MIPS16 | ~STO_MIPS_FLAGS))			\
+    : ((other) & ~STO_MIPS_FLAGS)) | STO_MIPS_PLT)
 
 /* This value is used to mark PIC functions in an object that mixes
    PIC and non-PIC.  Note that this bit overlaps with STO_MIPS16,
    although MIPS16 symbols are never considered to be MIPS_PIC.  */
 #define STO_MIPS_PIC		0x20
 #define ELF_ST_IS_MIPS_PIC(other) (((other) & STO_MIPS_FLAGS) == STO_MIPS_PIC)
-#define ELF_ST_SET_MIPS_PIC(other) (((other) & ~STO_MIPS_FLAGS) | STO_MIPS_PIC)
+#define ELF_ST_SET_MIPS_PIC(other)					\
+  ((ELF_ST_IS_MIPS16 (other)						\
+    ? ((other) & ~(STO_MIPS16 | STO_MIPS_FLAGS))			\
+    : ((other) & ~STO_MIPS_FLAGS)) | STO_MIPS_PIC)
 
 /* This value is used for a mips16 .text symbol.  */
 #define STO_MIPS16		0xf0
@@ -1116,11 +1132,30 @@ extern void bfd_mips_elf64_swap_reginfo_out
 enum
 {
   /* 0-3 are generic.  */
-  Tag_GNU_MIPS_ABI_FP = 4, /* Value 1 for hard-float -mdouble-float, 2
-			      for hard-float -msingle-float, 3 for
-			      soft-float, 4 for -mips32r2 -mfp64; 0 for
-			      not tagged or not using any ABIs affected
-			      by the differences.  */
+
+  /* Floating-point ABI used by this object file.  */
+  Tag_GNU_MIPS_ABI_FP = 4,
+};
+
+/* Object attribute values.  */
+enum
+{
+  /* Values defined for Tag_GNU_MIPS_ABI_FP.  */
+
+  /* Not tagged or not using any ABIs affected by the differences.  */
+  Val_GNU_MIPS_ABI_FP_ANY = 0,
+
+  /* Using hard-float -mdouble-float.  */
+  Val_GNU_MIPS_ABI_FP_DOUBLE = 1,
+
+  /* Using hard-float -msingle-float.  */
+  Val_GNU_MIPS_ABI_FP_SINGLE = 2,
+
+  /* Using soft-float.  */
+  Val_GNU_MIPS_ABI_FP_SOFT = 3,
+
+  /* Using -mips32r2 -mfp64.  */
+  Val_GNU_MIPS_ABI_FP_64 = 4,
 };
 
 #endif /* _ELF_MIPS_H */

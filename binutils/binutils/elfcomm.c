@@ -1,6 +1,5 @@
 /* elfcomm.c -- common code for ELF format file.
-   Copyright 2010
-   Free Software Foundation, Inc.
+   Copyright 2010-2013 Free Software Foundation, Inc.
 
    Originally developed by Eric Youngdale <eric@andante.jic.com>
    Modifications by Nick Clifton <nickc@redhat.com>
@@ -36,6 +35,9 @@ error (const char *message, ...)
 {
   va_list args;
 
+  /* Try to keep error messages in sync with the program's normal output.  */
+  fflush (stdout);
+
   va_start (args, message);
   fprintf (stderr, _("%s: Error: "), program_name);
   vfprintf (stderr, message, args);
@@ -47,6 +49,9 @@ warn (const char *message, ...)
 {
   va_list args;
 
+  /* Try to keep warning messages in sync with the program's normal output.  */
+  fflush (stdout);
+  
   va_start (args, message);
   fprintf (stderr, _("%s: Warning: "), program_name);
   vfprintf (stderr, message, args);
@@ -145,6 +150,57 @@ byte_get_little_endian (unsigned char *field, int size)
 	|    (((unsigned long) (field[2])) << 16)
 	|    (((unsigned long) (field[3])) << 24);
 
+    case 5:
+      if (sizeof (elf_vma) == 8)
+	return  ((elf_vma) (field[0]))
+	  |    (((elf_vma) (field[1])) << 8)
+	  |    (((elf_vma) (field[2])) << 16)
+	  |    (((elf_vma) (field[3])) << 24)
+	  |    (((elf_vma) (field[4])) << 32);
+      else if (sizeof (elf_vma) == 4)
+	/* We want to extract data from an 8 byte wide field and
+	   place it into a 4 byte wide field.  Since this is a little
+	   endian source we can just use the 4 byte extraction code.  */
+	return  ((unsigned long) (field[0]))
+	  |    (((unsigned long) (field[1])) << 8)
+	  |    (((unsigned long) (field[2])) << 16)
+	  |    (((unsigned long) (field[3])) << 24);
+
+    case 6:
+      if (sizeof (elf_vma) == 8)
+	return  ((elf_vma) (field[0]))
+	  |    (((elf_vma) (field[1])) << 8)
+	  |    (((elf_vma) (field[2])) << 16)
+	  |    (((elf_vma) (field[3])) << 24)
+	  |    (((elf_vma) (field[4])) << 32)
+	  |    (((elf_vma) (field[5])) << 40);
+      else if (sizeof (elf_vma) == 4)
+	/* We want to extract data from an 8 byte wide field and
+	   place it into a 4 byte wide field.  Since this is a little
+	   endian source we can just use the 4 byte extraction code.  */
+	return  ((unsigned long) (field[0]))
+	  |    (((unsigned long) (field[1])) << 8)
+	  |    (((unsigned long) (field[2])) << 16)
+	  |    (((unsigned long) (field[3])) << 24);
+
+    case 7:
+      if (sizeof (elf_vma) == 8)
+	return  ((elf_vma) (field[0]))
+	  |    (((elf_vma) (field[1])) << 8)
+	  |    (((elf_vma) (field[2])) << 16)
+	  |    (((elf_vma) (field[3])) << 24)
+	  |    (((elf_vma) (field[4])) << 32)
+	  |    (((elf_vma) (field[5])) << 40)
+	  |    (((elf_vma) (field[6])) << 48);
+      else if (sizeof (elf_vma) == 4)
+	/* We want to extract data from an 8 byte wide field and
+	   place it into a 4 byte wide field.  Since this is a little
+	   endian source we can just use the 4 byte extraction code.  */
+	return  ((unsigned long) (field[0]))
+	  |    (((unsigned long) (field[1])) << 8)
+	  |    (((unsigned long) (field[2])) << 16)
+	  |    (((unsigned long) (field[3])) << 24);
+
     case 8:
       if (sizeof (elf_vma) == 8)
 	return  ((elf_vma) (field[0]))
@@ -192,6 +248,63 @@ byte_get_big_endian (unsigned char *field, int size)
 	|   (((unsigned long) (field[1])) << 16)
 	|   (((unsigned long) (field[0])) << 24);
 
+    case 5:
+      if (sizeof (elf_vma) == 8)
+	return ((elf_vma) (field[4]))
+	  |   (((elf_vma) (field[3])) << 8)
+	  |   (((elf_vma) (field[2])) << 16)
+	  |   (((elf_vma) (field[1])) << 24)
+	  |   (((elf_vma) (field[0])) << 32);
+      else if (sizeof (elf_vma) == 4)
+	{
+	  /* Although we are extracting data from an 8 byte wide field,
+	     we are returning only 4 bytes of data.  */
+	  field += 1;
+	  return ((unsigned long) (field[3]))
+	    |   (((unsigned long) (field[2])) << 8)
+	    |   (((unsigned long) (field[1])) << 16)
+	    |   (((unsigned long) (field[0])) << 24);
+	}
+
+    case 6:
+      if (sizeof (elf_vma) == 8)
+	return ((elf_vma) (field[5]))
+	  |   (((elf_vma) (field[4])) << 8)
+	  |   (((elf_vma) (field[3])) << 16)
+	  |   (((elf_vma) (field[2])) << 24)
+	  |   (((elf_vma) (field[1])) << 32)
+	  |   (((elf_vma) (field[0])) << 40);
+      else if (sizeof (elf_vma) == 4)
+	{
+	  /* Although we are extracting data from an 8 byte wide field,
+	     we are returning only 4 bytes of data.  */
+	  field += 2;
+	  return ((unsigned long) (field[3]))
+	    |   (((unsigned long) (field[2])) << 8)
+	    |   (((unsigned long) (field[1])) << 16)
+	    |   (((unsigned long) (field[0])) << 24);
+	}
+
+    case 7:
+      if (sizeof (elf_vma) == 8)
+	return ((elf_vma) (field[6]))
+	  |   (((elf_vma) (field[5])) << 8)
+	  |   (((elf_vma) (field[4])) << 16)
+	  |   (((elf_vma) (field[3])) << 24)
+	  |   (((elf_vma) (field[2])) << 32)
+	  |   (((elf_vma) (field[1])) << 40)
+	  |   (((elf_vma) (field[0])) << 48);
+      else if (sizeof (elf_vma) == 4)
+	{
+	  /* Although we are extracting data from an 8 byte wide field,
+	     we are returning only 4 bytes of data.  */
+	  field += 3;
+	  return ((unsigned long) (field[3]))
+	    |   (((unsigned long) (field[2])) << 8)
+	    |   (((unsigned long) (field[1])) << 16)
+	    |   (((unsigned long) (field[0])) << 24);
+	}
+
     case 8:
       if (sizeof (elf_vma) == 8)
 	return ((elf_vma) (field[7]))
@@ -204,7 +317,7 @@ byte_get_big_endian (unsigned char *field, int size)
 	  |   (((elf_vma) (field[0])) << 56);
       else if (sizeof (elf_vma) == 4)
 	{
-	  /* Although we are extracing data from an 8 byte wide field,
+	  /* Although we are extracting data from an 8 byte wide field,
 	     we are returning only 4 bytes of data.  */
 	  field += 4;
 	  return ((unsigned long) (field[3]))
@@ -230,9 +343,18 @@ byte_get_signed (unsigned char *field, int size)
       return (x ^ 0x80) - 0x80;
     case 2:
       return (x ^ 0x8000) - 0x8000;
+    case 3:
+      return (x ^ 0x800000) - 0x800000;
     case 4:
       return (x ^ 0x80000000) - 0x80000000;
+    case 5:
+    case 6:
+    case 7:
     case 8:
+      /* Reads of 5-, 6-, and 7-byte numbers are the result of
+         trying to read past the end of a buffer, and will therefore
+         not have meaningful values, so we don't try to deal with
+         the sign in these cases.  */
       return x;
     default:
       abort ();
@@ -586,6 +708,12 @@ get_archive_member_name (struct archive_info *arch,
       char *member_file_name;
       char *member_name;
 
+      if (arch->longnames == NULL || arch->longnames_size == 0)
+	{
+	  error (_("Archive member uses long names, but no longname table found\n"));
+	  return NULL;
+	}
+      
       arch->nested_member_origin = 0;
       k = j = strtoul (arch->arhdr.ar_name + 1, &endp, 10);
       if (arch->is_thin_archive && endp != NULL && * endp == ':')
@@ -684,12 +812,20 @@ make_qualified_name (struct archive_info * arch,
 		     struct archive_info * nested_arch,
 		     const char *member_name)
 {
+  const char * error_name = _("<corrupt>");
   size_t len;
   char * name;
 
   len = strlen (arch->file_name) + strlen (member_name) + 3;
-  if (arch->is_thin_archive && arch->nested_member_origin != 0)
-    len += strlen (nested_arch->file_name) + 2;
+  if (arch->is_thin_archive
+      && arch->nested_member_origin != 0)
+    {
+      /* PR 15140: Allow for corrupt thin archives.  */
+      if (nested_arch->file_name)
+	len += strlen (nested_arch->file_name) + 2;
+      else
+	len += strlen (error_name) + 2;
+    }
 
   name = (char *) malloc (len);
   if (name == NULL)
@@ -698,9 +834,16 @@ make_qualified_name (struct archive_info * arch,
       return NULL;
     }
 
-  if (arch->is_thin_archive && arch->nested_member_origin != 0)
-    snprintf (name, len, "%s[%s(%s)]", arch->file_name,
-	      nested_arch->file_name, member_name);
+  if (arch->is_thin_archive
+      && arch->nested_member_origin != 0)
+    {
+      if (nested_arch->file_name)
+	snprintf (name, len, "%s[%s(%s)]", arch->file_name,
+		  nested_arch->file_name, member_name);
+      else
+	snprintf (name, len, "%s[%s(%s)]", arch->file_name,
+		  error_name, member_name);	
+    }
   else if (arch->is_thin_archive)
     snprintf (name, len, "%s[%s]", arch->file_name, member_name);
   else

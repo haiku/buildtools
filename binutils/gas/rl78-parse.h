@@ -282,7 +282,7 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 139 "rl78-parse.y"
+#line 138 "rl78-parse.y"
 {
   int regno;
   expressionS exp;

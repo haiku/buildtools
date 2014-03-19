@@ -41,16 +41,16 @@ elf32_sparc_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
       return FALSE;
 
     case 260:			/* Solaris prpsinfo_t.  */
-      elf_tdata (abfd)->core_program
+      elf_tdata (abfd)->core->program
 	= _bfd_elfcore_strndup (abfd, note->descdata + 84, 16);
-      elf_tdata (abfd)->core_command
+      elf_tdata (abfd)->core->command
 	= _bfd_elfcore_strndup (abfd, note->descdata + 100, 80);
       break;
 
     case 336:			/* Solaris psinfo_t.  */
-      elf_tdata (abfd)->core_program
+      elf_tdata (abfd)->core->program
 	= _bfd_elfcore_strndup (abfd, note->descdata + 88, 16);
-      elf_tdata (abfd)->core_command
+      elf_tdata (abfd)->core->command
 	= _bfd_elfcore_strndup (abfd, note->descdata + 104, 80);
       break;
     }
@@ -153,7 +153,9 @@ elf32_sparc_final_write_processing (bfd *abfd,
 }
 
 static enum elf_reloc_type_class
-elf32_sparc_reloc_type_class (const Elf_Internal_Rela *rela)
+elf32_sparc_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			      const asection *rel_sec ATTRIBUTE_UNUSED,
+			      const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF32_R_TYPE (rela->r_info))
     {

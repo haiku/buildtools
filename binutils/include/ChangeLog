@@ -1,10 +1,191 @@
-2012-08-28  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+2013-08-20  Alan Modra  <amodra@gmail.com>
 
-	Apply mainline patches
-	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+	* floatformat.h (floatformat_ibm_long_double): Delete.
+	(floatformat_ibm_long_double_big): Declare.
+	(floatformat_ibm_long_double_little): Declare.
+
+2013-08-19  Dehao Chen  <dehao@google.com>
+
+	* dwarf2.def (DW_AT_GNU_discriminator): New attribute.
+
+2013-08-02  Caroline Tice  <cmtice@google.com>
+
+	* vtv-change-permission.h: New file.
+
+2013-08-05  Eric Botcazou  <ebotcazou@adacore.com>
+            Konrad Eisele  <konrad@gaisler.com>
+
+	* opcode/sparc.h (sparc_opcode_arch_val): Add SPARC_OPCODE_ARCH_LEON.
+
+2013-06-08  Catherine Moore  <clm@codesourcery.com>
+
+	* opcode/mips.h (mips_opcode): Add ase field.
+	(INSN_ASE_MASK): Delete.
+	(INSN_DSP): Rename to ASE_DSP.  Provide new value.
+	(INSN_DSPR2): Rename to ASE_DSPR2.  Provide new value.
+	(INSN_MCU): Rename to ASE_MCU.  Provide new value.
+	(INSN_MDMX): Rename to ASE_MDMX.  Provide new value.
+	(INSN_MIPS3d): Rename to ASE_MIPS3D.  Provide new value.
+	(INSN_MT): Rename to ASE_MT.  Provide new value.
+	(INSN_SMARTMIPS): Rename to ASE_SMARTMIPS.  Provide new value.
+	(INSN_VIRT): Rename to ASE_VIRT.  Provide new value.
+	(INSN_VIRT64): Rename to ASE_VIRT64.  Provide new value.
+	(opcode_is_member): Add ase argument.  Check ase.
+
+2013-05-06  Paul Brook  <paul@codesourcery.com>
+
+        include/elf/
+        * mips.h (R_MIPS_PC32): Update comment.
+
+2013-04-03  Jason Merrill  <jason@redhat.com>
+
+	Demangle C++11 ref-qualifier.
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_REFERENCE_THIS,
+	DEMANGLE_COMPONENT_RVALUE_REFERENCE_THIS.
+
+2013-03-12  Sebastian Huber <sebastian.huber@embedded-brains.de>
+
+	* opcode/nios2.h: Edit comment.
+
+2013-03-11  Sebastian Huber <sebastian.huber@embedded-brains.de>
+
+	* opcode/nios2.h (OPX_WRPRS): New define.
+	(OP_MATCH_WRPRS): Likewise.
+
+2013-03-11  Sebastian Huber <sebastian.huber@embedded-brains.de>
+
+	* opcode/nios2.h (OP_RDPRS): New define.
+	(OP_MATCH_RDPRS): Likewise.
+
+2013-03-01  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf2.h (enum dwarf_sect): New enum type.
+
+2013-02-19  Alan Modra  <amodra@gmail.com>
+
+	* bfdlink.h (struct bfd_link_info): Delete emit_note_gnu_build_id.
+
+2013-02-11  Sriraman Tallam  <tmsriram@google.com>
+
+	* plugin-api.h (enum ld_plugin_level): Assign integers
+	explicitly for all values.
+
+2013-02-06  Sandra Loosemore  <sandra@codesourcery.com>
+            Andrew Jenner <andrew@codesourcery.com>
+
+	Based on patches from Altera Corporation.
+
+	* dis-asm.h (print_insn_big_nios2): Declare.
+	(print_insn_little_nios2): Declare.
+
+2013-01-30  Kai Tietz  <ktietz@redhat.com>
+
+	PR other/54620
+	PR target/39064
+	* md5.h (md5_uintptr, md5_uint32): Define as uintptr_t/uint32_t if
+	stdint.h and sys/types.h headers are present.
+	* sha1.h (sha1_uintptr, sha1_uint32): Likewise.
+
+2013-01-10  Will Newton <will.newton@imgtec.com>
+
+	* dis-asm.h (print_insn_metag): New declaration.
+
+2012-12-18  Aldy Hernandez  <aldyh@redhat.com>
+
+	PR other/54324
+	* ansidecl.h (ATTRIBUTE_UNUSED): Do not set __attribute__ for GCC
+	< 3.4.
+
+2012-12-17  Nick Clifton  <nickc@redhat.com>
+
+	* MAINTAINERS: Add copyright notice.
+	* alloca-conf.h: Likewise.
+	* fopen-bin.h: Likewise.
+	* fopen-same.h: Likewise.
+	* fopen-vms.h: Likewise.
+	* aout/hppa.h: Likewise.
+	* opcode/tahoe.h: Likewise.
+
+2012-12-11  Edgar E. Iglesias <edgar.iglesias@gmail.com>
+
+	* elf/microblaze.h: Add TLS relocs to START_RELOC_NUMBERS
+
+2012-11-09  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_TAGGED_NAME.
+
+2012-10-29  Sterling Augustine <saugustine@google.com>
+            Cary Coutant <ccoutant@google.com>
+
+	* dwarf2.h (dwarf_location_list_entry_type): New enum with fields
+	DW_LLE_GNU_end_of_list_entry, DW_LLE_GNU_base_address_selection_entry,
+	DW_LLE_GNU_start_end_entry and DW_LLE_GNU_start_length_entry.
+
+
+2012-10-26  Shinichiro Hamaji  <shinichiro.hamaji@gmail.com>
+
+	* dwarf2.h (DW_AT_APPLE_optimized, DW_AT_APPLE_flags)
+	(DW_AT_APPLE_isa, DW_AT_APPLE_block)
+	(DW_AT_APPLE_major_runtime_vers, DW_AT_APPLE_runtime_class)
+	(DW_AT_APPLE_omit_frame_ptr, DW_AT_APPLE_property_name)
+	(DW_AT_APPLE_property_getter, DW_AT_APPLE_property_setter)
+	(DW_AT_APPLE_property_attribute, DW_AT_APPLE_objc_complete_type)
+	(DW_AT_APPLE_property, DW_OP_GNU_entry_value): New macros.
+
+2012-10-24  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* bfdlink.h (bfd_link_info): Add
+	disable_target_specific_optimizations.
+
+2012-10-23  Nathan Sidwell  <nathan@codesourcery.com>
+
+	* bfdlink.h (struct bfd_link_info): Add stacksize option.
+
+2012-10-22  Jan Beich  <jbeich@tormail.org>
+
+	PR ld/14426
+	* bfdlink.h (bfd_link_info): Add ignore_hash.
+
+2012-10-08  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_TLS_INIT and DEMANGLE_COMPONENT_TLS_WRAPPER.
+
+2012-09-18  Florian Weimer  <fweimer@redhat.com>
+
+	PR other/54411
+	* objalloc.h (objalloc_alloc): Do not use fast path on wraparound.
+
+2012-09-27  Anthony Green  <green@moxielogic.com>
+
+	* opcode/moxie.h (MOXIE_BAD): New define.
+
+2012-09-12  Chris Schlumberger-Socha  <chris.schlumberger-socha@arm.com>
+
+	* elf/aarch64.h (R_AARCH64_GOT_LD_PREL19): New reloc.
+
+2012-09-06  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf2.def: Edit comment.
+
+2012-08-24  Sriraman Tallam  <tmsriram@google.com>
+
+	* plugin-api.h (ld_plugin_allow_unique_segment_for_sections):
+	New interface.
+	(ld_plugin_unique_segment_for_sections): New interface.
+	(LDPT_ALLOW_UNIQUE_SEGMENT_FOR_SECTIONS): New enum val.
+	(LDPT_UNIQUE_SEGMENT_FOR_SECTIONS): New enum val.
+	(tv_allow_unique_segment_for_sections): New member.
+	(tv_unique_segment_for_sections): New member.
+
+2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+
 	* opcode/arm.h (ARM_CPU_IS_ANY): New define.
 
-	2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+2012-08-24  Matthew Gretton-Dann  <matthew.gretton-dann@arm.com>
+
 	* elf/arm.h (TAG_CPU_ARCH_V8): New define.
 	(MAX_TAG_CPU_ARCH): Update.
 	* opcode/arm.h (ARM_EXT_V8): New define.
@@ -23,7 +204,7 @@
 	(ARM_ARCH_V8A_SIMD): Likewise.
 	(ARM_ARCH_V8A_CRYPTO): Likewise.
 
-2012-08-16  Ian Bolton  <ian.bolton@arm.com>
+2012-08-13  Ian Bolton  <ian.bolton@arm.com>
             Laurent Desnogues  <laurent.desnogues@arm.com>
             Jim MacArthur  <jim.macarthur@arm.com>
             Marcus Shawcroft  <marcus.shawcroft@arm.com>
@@ -37,6 +218,10 @@
 	* dis-asm.h (print_insn_aarch64): New declaration.
 	(print_aarch64_disassembler_options): New declaration.
 	(aarch64_symbol_is_valid): New declaration.
+
+2012-08-02  Sean Keys  <skeys@ipdatasys.com>
+
+	* elf/m68hc11.h: #define E_M68HC11_NO_BANK_WARNING 0x000000200
 
 2012-07-24  Stephan McCamant  <smcc@cs.berkeley.edu>
             Dr David Alan Gilbert  <dave@treblig.org>
@@ -52,6 +237,11 @@
 2012-07-13  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
 
 	* elf/s390.h (START_RELOC_NUMBERS): Define R_390_IRELATIVE reloc.
+
+2012-07-05  Sean Keys  <skeys@ipdatasys.com>
+
+	* opcode/xgate.h: Changed the format string for mode
+	XGATE_OP_DYA_MON.
 
 2012-06-18  Doug Evans  <dje@google.com>
 
@@ -1765,6 +1955,12 @@
 
 For older changes see ChangeLog-9103
 
+Copyright (C) 2004-2012 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
 Local Variables:
 mode: change-log
 left-margin: 8

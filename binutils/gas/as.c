@@ -1,8 +1,5 @@
 /* as.c - GAS main program.
-   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
-   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright 1987-2013 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -25,9 +22,9 @@
    Understands command arguments.
    Has a few routines that don't fit in other modules because they
    are shared.
-  
+
   			bugs
-  
+
    : initialisers
   	Since no-one else says they will support them in future: I
    don't support them now.  */
@@ -124,6 +121,9 @@ static struct itbl_file_list *itbl_files;
 #endif
 
 static long start_time;
+#ifdef HAVE_SBRK
+char *start_sbrk;
+#endif
 
 static int flag_macro_alternate;
 
@@ -132,7 +132,6 @@ static int flag_macro_alternate;
 #define EMULATION_ENVIRON "AS_EMULATION"
 
 extern struct emulation mipsbelf, mipslelf, mipself;
-extern struct emulation mipsbecoff, mipslecoff, mipsecoff;
 extern struct emulation i386coff, i386elf, i386aout;
 extern struct emulation crisaout, criself;
 
@@ -299,6 +298,8 @@ Options:\n\
   fprintf (stream, _("\
   --gdwarf-2              generate DWARF2 debugging information\n"));
   fprintf (stream, _("\
+  --gdwarf-sections       generate per-function section names for DWARF line information\n"));
+  fprintf (stream, _("\
   --hash-size=<value>     set the hash table size close to <value>\n"));
   fprintf (stream, _("\
   --help                  show this message and exit\n"));
@@ -365,7 +366,7 @@ Options:\n\
   --listing-cont-lines    set the maximum number of continuation lines used\n\
                           for the output data column of the listing\n"));
   fprintf (stream, _("\
-  @FILE                   read options from FILE\n")); 
+  @FILE                   read options from FILE\n"));
 
   md_show_usage (stream);
 
@@ -440,6 +441,7 @@ parse_args (int * pargc, char *** pargv)
       OPTION_GSTABS,
       OPTION_GSTABS_PLUS,
       OPTION_GDWARF2,
+      OPTION_GDWARF_SECTIONS,
       OPTION_STRIP_LOCAL_ABSOLUTE,
       OPTION_TRADITIONAL_FORMAT,
       OPTION_WARN,
@@ -457,7 +459,7 @@ parse_args (int * pargc, char *** pargv)
     /* When you add options here, check that they do
        not collide with OPTION_MD_BASE.  See as.h.  */
     };
-  
+
   static const struct option std_longopts[] =
   {
     /* Note: commas are placed at the start of the line rather than
@@ -487,6 +489,7 @@ parse_args (int * pargc, char *** pargv)
     /* GCC uses --gdwarf-2 but GAS uses to use --gdwarf2,
        so we keep it here for backwards compatibility.  */
     ,{"gdwarf2", no_argument, NULL, OPTION_GDWARF2}
+    ,{"gdwarf-sections", no_argument, NULL, OPTION_GDWARF_SECTIONS}
     ,{"gen-debug", no_argument, NULL, 'g'}
     ,{"gstabs", no_argument, NULL, OPTION_GSTABS}
     ,{"gstabs+", no_argument, NULL, OPTION_GSTABS_PLUS}
@@ -623,7 +626,7 @@ parse_args (int * pargc, char *** pargv)
 	case OPTION_VERSION:
 	  /* This output is intended to follow the GNU standards document.  */
 	  printf (_("GNU assembler %s\n"), BFD_VERSION_STRING);
-	  printf (_("Copyright 2012 Free Software Foundation, Inc.\n"));
+	  printf (_("Copyright 2013 Free Software Foundation, Inc.\n"));
 	  printf (_("\
 This program is free software; you may redistribute it under the terms of\n\
 the GNU General Public License version 3 or later.\n\
@@ -748,6 +751,10 @@ This program has absolutely no warranty.\n"));
 
 	case OPTION_GDWARF2:
 	  debug_type = DEBUG_DWARF2;
+	  break;
+
+	case OPTION_GDWARF_SECTIONS:
+	  flag_dwarf_sections = TRUE;
 	  break;
 
 	case 'J':
@@ -975,7 +982,7 @@ dump_statistics (void)
 	   myname, run_time / 1000000, run_time % 1000000);
 #ifdef HAVE_SBRK
   fprintf (stderr, _("%s: data size %ld\n"),
-	   myname, (long) (lim - (char *) &environ));
+	   myname, (long) (lim - start_sbrk));
 #endif
 
   subsegs_print_statistics (stderr);
@@ -1135,6 +1142,9 @@ main (int argc, char ** argv)
   int macro_strip_at;
 
   start_time = get_run_time ();
+#ifdef HAVE_SBRK
+  start_sbrk = (char *) sbrk (0);
+#endif
 
 #if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
   setlocale (LC_MESSAGES, "");
@@ -1261,7 +1271,7 @@ main (int argc, char ** argv)
       gnustack = subseg_new (".note.GNU-stack", 0);
       bfd_set_section_flags (stdoutput, gnustack,
 			     SEC_READONLY | (flag_execstack ? SEC_CODE : 0));
-                                                                             
+
     }
 #endif
 
@@ -1269,7 +1279,7 @@ main (int argc, char ** argv)
      assembly debugging or on behalf of the compiler, emit it now.  */
   dwarf2_finish ();
 
-  /* If we constructed dwarf2 .eh_frame info, either via .cfi 
+  /* If we constructed dwarf2 .eh_frame info, either via .cfi
      directives from the user or by the backend, emit it now.  */
   cfi_finish ();
 

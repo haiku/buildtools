@@ -495,12 +495,9 @@ elf_object_p (bfd *abfd)
   Elf_Internal_Shdr *i_shdrp;	/* Section header table, internal form */
   unsigned int shindex;
   const struct elf_backend_data *ebd;
-  struct bfd_preserve preserve;
   asection *s;
   bfd_size_type amt;
   const bfd_target *target;
-
-  preserve.marker = NULL;
 
   /* Read in the ELF header in external format.  */
 
@@ -539,9 +536,6 @@ elf_object_p (bfd *abfd)
       goto got_wrong_format_error;
     }
 
-  if (!bfd_preserve_save (abfd, &preserve))
-    goto got_no_match;
-
   target = abfd->xvec;
 
   /* Allocate an instance of the elf_obj_tdata structure and hook it up to
@@ -549,7 +543,6 @@ elf_object_p (bfd *abfd)
 
   if (! (*target->_bfd_set_format[bfd_object]) (abfd))
     goto got_no_match;
-  preserve.marker = elf_tdata (abfd);
 
   /* Now that we know the byte order, swap in the rest of the header */
   i_ehdrp = elf_elfheader (abfd);
@@ -842,25 +835,12 @@ elf_object_p (bfd *abfd)
 	    s->flags |= SEC_DEBUGGING;
 	}
     }
-
-  bfd_preserve_finish (abfd, &preserve);
   return target;
 
  got_wrong_format_error:
-  /* There is way too much undoing of half-known state here.  The caller,
-     bfd_check_format_matches, really shouldn't iterate on live bfd's to
-     check match/no-match like it does.  We have to rely on that a call to
-     bfd_default_set_arch_mach with the previously known mach, undoes what
-     was done by the first bfd_default_set_arch_mach (with mach 0) here.
-     For this to work, only elf-data and the mach may be changed by the
-     target-specific elf_backend_object_p function.  Note that saving the
-     whole bfd here and restoring it would be even worse; the first thing
-     you notice is that the cached bfd file position gets out of sync.  */
   bfd_set_error (bfd_error_wrong_format);
 
  got_no_match:
-  if (preserve.marker != NULL)
-    bfd_preserve_restore (abfd, &preserve);
   return NULL;
 }
 
@@ -1091,6 +1071,7 @@ elf_checksum_contents (bfd *abfd,
     {
       Elf_Internal_Shdr i_shdr;
       Elf_External_Shdr x_shdr;
+      bfd_byte *contents, *free_contents;
 
       i_shdr = *i_shdrp[count];
       i_shdr.sh_offset = 0;
@@ -1098,27 +1079,35 @@ elf_checksum_contents (bfd *abfd,
       elf_swap_shdr_out (abfd, &i_shdr, &x_shdr);
       (*process) (&x_shdr, sizeof x_shdr, arg);
 
-      /* PR ld/12451:
-	 Process the section's contents, if it has some.  Read them in if necessary.  */
-      if (i_shdr.contents)
-	(*process) (i_shdr.contents, i_shdr.sh_size, arg);
-      else if (i_shdr.sh_type != SHT_NOBITS)
+      /* Process the section's contents, if it has some.
+	 PR ld/12451: Read them in if necessary.  */
+      if (i_shdr.sh_type == SHT_NOBITS)
+	continue;
+      free_contents = NULL;
+      contents = i_shdr.contents;
+      if (contents == NULL)
 	{
 	  asection *sec;
 
 	  sec = bfd_section_from_elf_index (abfd, count);
 	  if (sec != NULL)
 	    {
-	      if (sec->contents == NULL)
+	      contents = sec->contents;
+	      if (contents == NULL)
 		{
 		  /* Force rereading from file.  */
 		  sec->flags &= ~SEC_IN_MEMORY;
-		  if (! bfd_malloc_and_get_section (abfd, sec, & sec->contents))
+		  if (!bfd_malloc_and_get_section (abfd, sec, &free_contents))
 		    continue;
+		  contents = free_contents;
 		}
-	      if (sec->contents != NULL)
-		(*process) (sec->contents, i_shdr.sh_size, arg);
 	    }
+	}
+      if (contents != NULL)
+	{
+	  (*process) (contents, i_shdr.sh_size, arg);
+	  if (free_contents != NULL)
+	    free (free_contents);
 	}
     }
 
@@ -1163,9 +1152,9 @@ elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bfd_boolean dynamic)
 	verhdr = NULL;
       else
 	verhdr = &elf_tdata (abfd)->dynversym_hdr;
-      if ((elf_tdata (abfd)->dynverdef_section != 0
+      if ((elf_dynverdef (abfd) != 0
 	   && elf_tdata (abfd)->verdef == NULL)
-	  || (elf_tdata (abfd)->dynverref_section != 0
+	  || (elf_dynverref (abfd) != 0
 	      && elf_tdata (abfd)->verref == NULL))
 	{
 	  if (!_bfd_elf_slurp_version_tables (abfd, FALSE))

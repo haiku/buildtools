@@ -1,3 +1,1181 @@
+2013-11-22  Cary Coutant  <ccoutant@google.com>
+
+	* testsuite/Makefile.am (exception_x86_64_bnd_test): Use in-tree
+	assembler.
+	* testsuite/Makefile.in: Regenerate.
+
+2013-11-17  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* x86_64.cc (Target_x86_64<size>::Scan::get_reference_flags):
+	Handle R_X86_64_PC32_BND and R_X86_64_PLT32_BND just like
+	R_X86_64_PC32 and R_X86_64_PLT32, respectively.
+	(Target_x86_64<size>::Scan::local): Likewise.
+	(Target_x86_64<size>::Scan::global): Likewise.
+	(Target_x86_64<size>::Relocate::relocate): Likewise.
+	(Target_x86_64<size>::Relocatable_size_for_reloc::get_size_for_reloc):
+	Likewise.
+	(Target_x86_64<size>::Scan::check_non_pic(): Handle
+	R_X86_64_PC32_BND.
+
+	* testsuite/Makefile.am (check_PROGRAMS): Add
+	exception_x86_64_bnd_test.
+	(exception_x86_64_bnd_test_SOURCES): New macro.
+	(exception_x86_64_bnd_test_DEPENDENCIES): Likewise.
+	(exception_x86_64_bnd_test_LDFLAGS): Likewise.
+	(exception_x86_64_bnd_test_LDADD): Likewise.
+	(exception_x86_64_bnd_1.o): New rule.
+	(exception_x86_64_bnd_2.o): Likewise.
+	* testsuite/Makefile.in: Regenerated.
+
+2013-11-15  Alan Modra  <amodra@gmail.com>
+
+	Apply changes from mainline to 2.24
+	2013-11-15  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Target_powerpc::glink_section): Provide non-const
+	accessor.
+	(Target_powerpc::Branch_info::make_stub): Make global entry stubs.
+	Only call ppc64_local_entry_offset for 64-bit.  Restrict
+	symval_for_branch lookup to ELFv1.
+	(Stub_table::add_plt_call_entry): Use unsigned int off.
+	(Output_data_glink::Address, invalid_address): New.
+	(Output_data_glink::add_eh_frame): Move out of line.  Add
+	support for ELFv2.
+	(Output_data_glink::add_global_entry, find_global_entry,
+	global_entry_address): New functions.
+	(Output_data_glink::global_entry_stubs_, end_branch_table_,
+	ge_size): New variables.
+	(Output_data_glink::set_final_data_size): Add global entry
+	stub sizing.
+	(Output_data_glink::do_write): Write global entry stubs.
+	(Target_powerpc::Scan::reloc_needs_plt_for_ifunc): Add target
+	parameter.  Return true for ELFv2.  Adjust callers.
+	(Target_powerpc::Scan::local, global): Restrict opd lookup to
+	ELFv1.  Similarly for ifunc and dynamic relocation processing
+	specific to ELFv1.  Recognize that symbols are defined on
+	their plt entries for ELFv2.
+	(Target_powerpc::symval_for_branch): Assert if called for
+	ELFv2 or ppc32.
+	(Target_powerpc::Relocate::relocate): Use global entry plt
+	stub for symbol value if such exists on ELFv2.
+	(Target_powerpc::Relocate::relocate): Don't call
+	symval_for_branch when ELFv2.  Do adjust for local entry
+	offset when ELFv2.
+	(Target_powerpc::do_dynsym_value): Set symbols to global entry
+	plt stub for ELFv2.
+	(Target_powerpc::do_plt_address_for_global): Similarly.
+
+	2013-11-04  Alan Modra  <amodra@gmail.com>
+	* symtab.h (Symbol::Reference_flags): Add FUNC_DESC_ABI.
+	(Symbol::needs_dynamic_reloc): Test new flag.
+	* powerpc.cc (needs_dynamic_reloc, use_plt_offset): Delete.
+	(Target_powerpc::Scan::get_reference_flags): Add target param.
+	Return FUNC_DESC_ABI for 64-bit ELFv1.
+	(Target_powerpc::Branch_info::make_stub): Adjust get_reference_flags
+	call.
+	(Target_powerpc::Scan::global): Use Symbol::needs_dynamic_reloc.
+	(Target_powerpc::Relocate::relocate): Use Symbol::use_plt_offset.
+
+	2013-10-30  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Powerpc_relobj::abiversion, set_abiversion,
+	ppc64_local_entry_offset, ppc64_local_entry_offset,
+	do_read_symbols): New functions.
+	(Powerpc_relobj::e_flags_, st_other_): New vars.
+	(Powerpc_relobj::Powerpc_relobj): Call set_abiversion.
+	(Powerpc_dynobj::abiversion, set_abiversion): New functions.
+	(Powerpc_relobj::e_flags_): New var.
+	(Target_powerpc::first_plt_entry_offset, plt_entry_size): Inline
+	and adjust for ELFv2.
+	(Target_powerpc::abiversion, set_abiversion, stk_toc): New functions.
+	(Powerpc_relobj::do_find_special_sections): Check no .opd in ELFv2.
+	(Powerpc_dynobj::do_find_special_sections): Likewise.
+	(Target_powerpc::do_define_standard_symbols): Define ".TOC.".
+	(Target_powerpc::Branch_info::make_stub): Adjust stub destination
+	to ELFv2 local entry.
+	(Target_powerpc::do_relax): No thread safe barriers needed for
+	ELFv2.
+	(Output_data_plt_powerpc::initial_plt_entry_size_,
+	plt_entry_size): Delete.  Replace all uses with
+	first_plt_entry_offset() and plt_entry_size().
+	(Output_data_plt_powerpc::Output_data_plt_powerpc): Remove
+	reserved_size parm.  Update callers.
+	(Output_data_plt_powerpc::entry_count): Update.
+	(Output_data_plt_powerpc::first_plt_entry_offset): Make private
+	and use Target_powerpc::first_plt_entry_offset().
+	(Output_data_plt_powerpc::get_plt_entry_size): Similarly and
+	rename to plt_entry_size.
+	(Output_data_plt_powerpc::add_ifunc_entry,
+	add_local_ifunc_entry): Adjust reloc for ELFv2.
+	(glink_eh_frame_fde_64): Rename to glink_eh_frame_fde_64v1.
+	(glink_eh_frame_fde_64v2): New.
+	(Stub_table::plt_call_size): Support ELFv2 sizing.
+	(Output_data_glink::add_eh_frame): Use the new FDE.
+	(Output_data_glink::set_final_data_size): Adjust for ELFv2 glink.
+	(Stub_table::do_write): Write ELFv2 stubs and glink.
+	(Target_powerpc::Relocate::relocate): Replaces nop after call
+	with ld 2,24(1) and adjust local offset destination for ELFv2.
+
+	2013-10-30  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Target_powerpc::Scan::check_non_pic): Handle new relocs.
+	(Target_powerpc::Scan::global, local): Likewise.
+	(Target_powerpc::Relocate::relocate): Likewise.  Check for overflow
+	on all ppc64 @h and @ha relocs.
+
+2013-10-30  Roland McGrath  <mcgrathr@google.com>
+
+	* x86_64.cc (Output_data_plt_x86_64_nacl::first_plt_entry):
+	Correct 9-byte nop sequence to match what the assembler generates.
+
+2013-10-14  Alan Modra  <amodra@gmail.com>
+
+	* output.h (Output_data_got::add_constant): Tidy.
+	(Output_data_got::add_constant_pair): New function.
+	* powerpc.cc (Output_data_got_powerpc): Override all Output_data_got
+	methods used so as to first call reserve_ent().
+
+2013-10-11  Roland McGrath  <mcgrathr@google.com>
+
+	* powerpc.cc (Output_data_got_powerpc): Remove unused methods
+	add_got_entry and add_got_entry_pair.
+
+	* configure.ac (TLS_GNU2_DIALECT): Use -Werror in test.
+	(HAVE_PUBNAMES): Likewise.
+	* configure: Regenerate.
+
+	* testsuite/Makefile.am: Replace '-T foo' with '-Wl,-T,foo' throughout.
+	* testsuite/Makefile.in: Regenerate.
+
+	* target.h (Target::adjust_elf_header, Target::do_adjust_elf_header):
+	Remove const from declaration.
+	* target.cc (Sized_target::do_adjust_elf_header): Update definition.
+	* sparc.cc (Target_sparc::do_adjust_elf_header): Likewise.
+	* output.h (Output_file_header): Remove const from member target_
+	and corresponding constructor argument.
+	* output.cc (Output_file_header::Output_file_header): Update prototype.
+	(Output_file_header::do_sized_write): Use this->target_ in place
+	of parameters()->target().
+
+	* testsuite/undef_symbol.cc (Foo::get_a): New method.
+
+	* configure.ac (MERGE_CONSTANTS_FLAG): New check.
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+	* testsuite/merge_string_literals_1.c: Renamed to have .cc suffix.
+	* testsuite/merge_string_literals_2.c: Likewise.
+	* testsuite/Makefile.am
+	(merge_string_literals_1.o, merge_string_literals_2.o): Update deps.
+	(AM_CFLAGS, AM_CXXFLAGS): Use $(MERGE_CONSTANTS_FLAG) in place of
+	literal -fmerge-constants.
+	* testsuite/Makefile.in: Regenerate.
+
+	* i386.cc (Target_i386): Remove unused member dynbss_.
+	* arm.cc (Target_arm): Likewise.
+	* powerpc.cc (Target_powerpc): Likewise.
+	* sparc.cc (Target_sparc): Likewise.
+	* tilegx.cc (Target_tilegx): Likewise.
+	* x86_64.cc (Target_x86_64): Likewise.
+	* dwarf_reader.h (Dwarf_info_reader): Remove unused members
+	type_signature_, type_offset_.
+	* plugin.h (Plugin_hook): Remove unused member layout_.
+	* readsyms.h (Add_symbols): Remove unused members dirpath_, dirindex_,
+	mapfile_.
+	(Read_member): Remove unused members input_objects_, symtab_,
+	mapfile_, layout_.
+	(Check_library): Remove unused member symtab_.
+	* archive.h (Lib_group): Remove unused member lib_.
+	* archive.cc (Lib_group::Lib_group): Update initializer.
+	* incremental.h	(Incremental_binary): Remove unused member target_.
+	(Incremental_script_entry): Removed unused member script_.
+	* layout.h (Write_symbols_task): Remove unused member input_objects_.
+	* icf.h (Icf): Remove unused member num_tracked_relocs.
+
+	* gold-threads.h (Once): Conditionalize member was_run_lock_ on
+	[ENABLE_THREADS && __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4], matching
+	its only use.
+	* gold-threads.cc (Once::Once): Likewise conditionalize initializer.
+
+	* archive.h: Use struct rather than class for forward declaration
+	of Read_symbols_data.
+
+2013-09-03  Pavel Chupin  <pavel.v.chupin@intel.com>
+
+	PR gold/15927
+	* x86_64.cc (Target_x86_64<size>::Scan::global): Use relative
+	relocation for R_X86_64_32 on x32.
+
+2013-08-27  Roland McGrath  <mcgrathr@google.com>
+
+	* output.cc (Output_segment::set_section_addresses): Take new
+	Target* argument.  If target->isolate_execinstr() and the segment
+	is executable and starts at a target->abi_pagesize() boundary,
+	pad its end out to a target->abi_pagesize() boundary with code fill.
+	* output.h (Output_segment::set_section_addresses): Update decl.
+	* layout.h (Layout::check_output_data_for_reset_values): Take new
+	argument RELAX_OUTPUTS.
+	(Layout): New member relax_output_list_.
+	(Layout::add_relax_output): New method.
+	* layout.cc (Layout::Layout): Update constructor.
+	(Layout::reset_relax_output): New method.
+	(Layout::clean_up_after_relaxation): Call it.
+	(Layout::prepare_for_relaxation): Update caller.
+	(Layout::set_segment_offsets): Update callers of set_section_addresses.
+	Call reset_relax_output before re-processing segments for
+	isolate_execinstr case.
+	(Layout::write_data): Handle relax_output_list_.
+	(Layout::Relaxation_debug_check::check_output_data_for_reset_values):
+	Take new argument RELAX_OUTPUTS.  Assert it's an empty collection.
+
+2013-08-23  Yuri Chornoivan  <yurchor@ukr.net>
+
+	PR binutils/15834
+	* object.h: Fix typos.
+
+2013-08-16  Roland McGrath  <mcgrathr@google.com>
+
+	* i386.cc (Target_i386_nacl::do_code_fill): New virtual function.
+	* x86_64.cc (Target_x86_64_nacl::do_code_fill): New virtual function.
+
+2013-08-07  Cary Coutant  <ccoutant@google.com>
+
+	Revert support for v2 DWP files:
+
+	2013-03-01  Cary Coutant  <ccoutant@google.com>
+
+	    Add dwp support for v2 DWARF package file format.
+	    * dwarf_reader.cc (Dwarf_info_reader::visit_type_unit): Add
+	    tu_length parameter.  Adjust all callers.
+	    * dwarf_reader.h (Dwarf_info_reader::visit_type_unit): Likewise.
+	    * dwp.cc: Include dwarf.h.
+	    (Section_bounds): New struct type.
+	    (Unit_set): New struct type.
+	    (Dwo_file::Dwo_file): Initialize new data member.
+	    (Dwo_file::read_compunit_index, Dwo_file::read_typeunit_index):
+	    Combine and rename to...
+	    (Dwo_file::read_unit_index): ...this.
+	    (Dwo_file::sized_read_compunit_index)
+	    (Dwo_file::sized_read_typeunit_index): Combine and rename to...
+	    (Dwo_file::sized_read_unit_index): ...this.
+	    (Dwo_file::copy_section): Remove section_name, is_str_offsets
+	    parameters; add section_id parameter.
+	    (Dwo_file::add_cu_set, Dwo_file::add_tu_set): Combine and rename to...
+	    (Dwo_file::add_unit_set): ...this.
+	    (Dwo_file::shndx_map_): Remove.
+	    (Dwo_file::sect_offsets_): New data member.
+	    (Dwp_output_file::Dwp_output_file): Initialize new data members.
+	    (Dwp_output_file::add_section): Rename to...
+	    (Dwp_output_file::add_contribution): ...this.
+	    (Dwp_output_file::add_cu_set): Combine parameters into a struct.
+	    (Dwp_output_file::add_tu_set): Likewise.
+	    (Dwp_output_file::Contribution): New type.
+	    (Dwp_output_file::Section::contributions): New data member.
+	    (Dwp_output_file::Cu_or_tu_set): Remove.
+	    (Dwp_output_file::Section::Section): New ctor.
+	    (Dwp_output_file::Dwp_index::Shndx_pool): Remove.
+	    (Dwp_output_file::Dwp_index::Section_table): New type.
+	    (Dwp_output_file::Dwp_index::Dwp_index): Initialize new data members.
+	    (Dwp_output_file::Dwp_index::enter_set): Change type of "set"
+	    parameter.
+	    (Dwp_output_file::Dwp_index::shndx_pool): Remove.
+	    (Dwp_output_file::Dwp_index::shndx_pool_end): Remove.
+	    (Dwp_output_file::Dwp_index::section_table): New member function.
+	    (Dwp_output_file::Dwp_index::section_table_end): New member function.
+	    (Dwp_output_file::Dwp_index::shndx_pool_size): Remove.
+	    (Dwp_output_file::Dwp_index::section_table_rows): New member function.
+	    (Dwp_output_file::Dwp_index::section_table_cols): New member function.
+	    (Dwp_output_file::Dwp_index::shndx_pool_): Remove.
+	    (Dwp_output_file::Dwp_index::section_table_): New data member.
+	    (Dwp_output_file::Dwp_index::section_mask_): New data member.
+	    (Dwp_output_file::add_output_section): New member function.
+	    (Dwp_output_file::write_new_section): New member function.
+	    (Dwp_output_file::write_contributions): New member function.
+	    (Dwp_output_file::section_id_map_): New data member.
+	    (class Dwo_id_info_reader): Remove.
+	    (class Unit_reader): New class.
+	    (get_dwarf_section_name): New function.
+	    (Dwo_file::read_executable): Adjust initializations of class data.
+	    (Dwo_file::read): Add support for v2 package file format.
+	    (Dwo_file::read_unit_index): Likewise.
+	    (Dwo_file::sized_read_unit_index): Likewise.
+	    (Dwo_file::copy_section): Likewise.
+	    (Dwo_file::add_unit_set): Likewise.
+	    (Dwp_output_file::add_output_section): Likewise.
+	    (Dwp_output_file::add_contribution): Likewise.
+	    (Dwp_output_file::Dwp_index::find_or_add): Use row index to check
+	    for empty slot.
+	    (Dwp_output_file::Dwp_index::enter_set): Add support for v2 package
+	    file format.
+	    (Dwp_output_file::Dwp_index::grow): Use row index to check for empty
+	    slot.
+	    (Dwp_output_file::initialize): Remove unused function.
+	    (Dwp_output_file::finalize): Add support for v2 package file format.
+	    (Dwp_output_file::write_index): Likewise.
+	    * gdb-index.cc (Gdb_index_info_reader::visit_type_unit): Adjust
+	    function prototype.
+
+2013-07-31  Cary Coutant  <ccoutant@google.com>
+
+	* object.cc (Sized_relobj::do_output_section_address): New function.
+	(Sized_relobj): Instantiate explicitly.
+	* object.h (Object::output_section_address): New function.
+	(Object::do_output_section_address): New function.
+	(Sized_relobj::do_output_section_address): New function.
+	* powerpc.cc (Target_powerpc::symval_for_branch): Use it.
+
+2013-07-30  Cary Coutant  <ccoutant@google.com>
+	    Sasa Stankovic  <Sasa.Stankovic@imgtec.com>
+
+	* parameters.cc (Parameters::entry): Return target-specific entry
+	symbol name.
+	* target.h (Target::entry_symbol_name): New function.
+	(Target_info::entry_symbol_name): New data member.
+
+	* arm.cc (Target_arm::arm_info): Add entry_symbol_name.
+	* i386.cc (Target_i386::i386_info): Likewise.
+	(Target_i386_nacl::i386_nacl_info): Likewise.
+	* sparc.cc (Target_sparc::sparc_info): Likewise.
+	* tilegx.cc (Target_tilegx::tilegx_info): Likewise.
+	* x86_64.cc: (Target_x86_64::x86_64_info) Likewise.
+	(Target_x86_64_nacl::x86_64_nacl_info) Likewise.
+	* testsuite/testfile.cc (Target_test::test_target_info): Likewise.
+
+2013-07-22  Sterling Augustine  <saugustine@google.com>
+
+	* dwarf_reader.cc (Dwarf_pubnames_table::read_section):
+	Convert parameter shndx to local variable. Add parameters symtab
+	and symtab_size.  Scan over section names.  Find relocation
+	section corresponding to current section.  Create and initialize
+	reloc_mapper_ and reloc_type_.
+	(Dwarf_pubnames_table::read_header):  Add assertion.  Change
+	unit_length to off_t.  Initialize member unit_length_.  Fill in field
+	cu_offset_.
+	* dwarf_reader.h (Dwarf_pubnames_table::Dwarf_pubnames_table):
+	Initialize new fields unit_length_ and cu_offset_.
+	(Dwarf_pubnames_table::read_section): Update prototype.
+	(Dwarf_pubnames_table::cu_offset): New member function.
+	(Dwarf_pubnames_table::subsection_size): Likewise.
+	(Dwarf_pubnames_table::cu_offset_, Dwarf_pubnames_table::unit_length):
+	New fields.
+	(Dwarf_info_reader::symtab, Dwarf_info_reader::symtab_size): Make
+	member functions public.
+	* gdb_index.cc (Gdb_index_info_reader::read_pubnames_and_pubtypes):
+	Update comment.  Rework logic.  Move repeated parts to...
+	(Gdb_index_info_reader::read_pubtable): ...here. New function.
+	(Gdb_index::Gdb_index): Initialize new fields, pubnames_table_,
+	pubtypes_table_, and stmt_list_offset.
+	(Gdb_index::map_pubtable_to_dies, Gdb_index::find_pubname_offset,
+	Gdb_index::find_pubtype_offset,
+	Gdb_index::map_pubnames_and_types_to_dies): Define new functions.
+	(Gdb_index::pubnames_read): Update prototype and rework logic.
+	* gdb_index.h (Gdb_index_info_reader, Dwarf_pubnames_table):
+	Forward declare.
+	(Gdb_index::map_pubtable_to_dies, Gdb_index::find_pubname_offset,
+	Gdb_index::find_pubtype_offset, Gdb_index::pubnames_table)
+	Gdb_index::pubtypes_table, Gdb_index::map_pubnames_and_types_to_dies,
+	Gdb_index::map_pubtable_to_dies):
+	Declare functions.
+	(Gdb_index::pubnames_read): Update declaration.
+	(Gdb_index::Pubname_offset_map): New type.
+	(Gdb_index::cu_pubname_map_, Gdb_index::cu_pubtype_map_,
+	Gdb_index::pubnames_table_, Gdb_index::pubtypes_table_,
+	Gdb_index::stmt_list_offset): Declare.
+	(Gdb_index::pubnames_shndx_, Gdb_index::pubnames_offet_,
+	Gdb_index::pubtypes_object_, Gdb_index::pubtypes_shndx_)
+	Gdb_index::pubtypes_offset_): Remove.
+
+2013-07-19  Roland McGrath  <mcgrathr@google.com>
+
+	* options.h (General_options): Add -Trodata-segment option.
+	* parameters.cc (Parameters::check_rodata_segment): New function.
+	(Parameters::set_target_once): Call it.
+	* parameters.h (Parameters): Declare it (private member function).
+	* layout.cc (load_seg_unusable_for_headers): New function, broken
+	out of Layout::relaxation_loop_body.  If TARGET->isolate_execinstr()
+	then validate rodata segment rather than text segment.
+	(relaxation_loop_body): Call that.
+	(is_text_segment): New function.  Don't admit a non-executable
+	segment if TARGET->isolate_execinstr().
+	(set_segment_offsets): Call it.  Honor -Trodata-segment option.
+
+2013-07-15  Shawn Landden  <shawnlandden@gmail.com>
+
+	PR gold/15070
+	* fileread.h (File_read::get_view): Clarify comment about ALIGNED.
+	* nacl.h (Sniff_file::View::View): Request aligned view.
+
+2013-07-11  Cary Coutant  <ccoutant@google.com>
+
+	* powerpc.cc (Target_powerpc::write_branch_lookup_table): Use
+	correct BRLT entry size.
+
+2013-07-03  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::Relocate::relocate): Update self-call
+	comment.
+
+2013-07-01  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf_reader.cc (Dwarf_ranges_table::read_ranges_table): Save
+	reloc_type_.
+	(Dwarf_ranges_table::read_range_list): Call lookup_reloc.
+	(Dwarf_ranges_table::lookup_reloc): New function.
+	* dwarf_reader.h (Dwarf_ranges_table::Dwarf_ranges_table): Initialize
+	reloc_type_.
+	(Dwarf_ranges_table::lookup_reloc): New function.
+	(Dwarf_ranges_table::reloc_type_): New data member.
+
+2013-06-27  Jing Yu  <jingyu@google.com>
+
+	PR gold/15662
+	* powerpc.cc (Output_data_brlt_powerpc::reset_brlt_sizes): New
+	function.
+	(Output_data_brlt_powerpc::finalize_brlt_sizes): New function.
+	(Target_powerpc::do_relax): Call the above.
+
+2013-06-27  Cary Coutant  <ccoutant@google.com>
+
+	* powerpc.cc (Target_powerpc::symval_for_branch): Don't assert
+	on garbage collected .opd section.
+
+2013-06-27  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::do_gc_add_reference): Test dst_shndx
+	is non-zero.
+	(Target_powerpc::do_gc_mark_symbols): Likewise for sym->shndx().
+	(Target_powerpc::do_function_location): Likewise for loc->shndx.
+
+2013-06-14  Cary Coutant  <ccoutant@google.com>
+
+	* resolve.cc (Symbol::override_base): Don't override st_type
+	from plugin placeholder symbols.
+	(Symbol_table::resolve): Likewise.
+	(Symbol_table::should_override): Don't complain about TLS mismatch
+	if the TO symbol is a plugin placeholder.
+	* testsuite/Makefile.am (plugin_test_tls): New test.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/plugin_test_tls.sh: New test script.
+	* testsuite/two_file_test_2_tls.cc: New test source.
+	* testsuite/two_file_test_tls.cc: New test source.
+
+2013-06-05  Alexander Ivchenko  <alexander.ivchenko@intel.com>
+
+	* layout.cc (Layout::set_segment_offsets): Taking care of the case when
+	the maximum segment alignment is larger than the page size.
+	* testsuite/Makefile.am (large_symbol_alignment): Test that Gold
+	correctly aligns the symbols with large alignemnt.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/large_symbol_alignment.cc: New file.
+
+2013-05-30  Alexander Ivchenko  <alexander.ivchenko@intel.com>
+	    Sriraman Tallam  <tmsriram@google.com>
+
+	* options.h (sort_section): New option.
+	* output.h (Input_section_sort_section_prefix_special_ordering_compare):
+	Rename from Input_section_sort_section_name_special_ordering_compare.
+	(Input_section_sort_section_name_compare): New struct.
+	* output.cc (Output_section::Input_section_sort_section_name_compare::
+	operator()): New function.
+	(Output_section::sort_attached_input_sections): Use new sort function
+	for .text if --sort-section=name is specified.
+	* layout.cc (Layout::make_output_section):
+	Add sorting by name when --sort-section=name is specified.
+	* testsuite/Makefile.am (text_section_grouping): Test option
+	--sort-section=name.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/section_sorting_name.cc: New file.
+	* testsuite/section_sorting_name.sh: New file.
+
+2013-05-21  Cary Coutant  <ccoutant@google.com>
+
+	* symtab.h (Symbol::is_cxx_vtable): New function.
+	* target-reloc.h (relocate_section): Check for vtable symbol.
+	* testsuite/Makefile.am (missing_key_func.sh): New test case.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/missing_key_func.cc: New test source.
+	* testsuite/missing_key_func.sh: New test script.
+
+2013-05-21  Cary Coutant  <ccoutant@google.com>
+
+	* object.cc (Sized_relobj_file::get_symbol_location_info): Set
+	type of enclosing symbol.
+	(Relocate_info::location): Check symbol type when describing symbol.
+	* object.h (Symbol_location_info): Remove unused line_number;
+	add enclosing_symbol_type.
+	* testsuite/debug_msg.sh: Adjust expected output.
+
+2013-05-13  Cary Coutant  <ccoutant@google.com>
+
+	* configure.ac: Export DEFAULT_TARGET.
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+	* testsuite/Makefile.am: Add .EXPORT_ALL_VARIABLES.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/debug_msg.sh: Delete duplicate tests.
+	Don't check undef_int error message match for powerpc where the
+	source file and line number aren't available.
+
+2013-05-10  Roland McGrath  <mcgrathr@google.com>
+
+	* options.h (General_options): Add --rosegment-gap option.
+	* options.cc (finalize): --rosegment-gap implies --rosegment.
+	* layout.cc (set_segment_offsets): Let user option override
+	target->rosegment_gap().
+
+2013-05-10  Roland McGrath  <mcgrathr@google.com>
+
+	* options.h (General_options): Remove leading space from help
+	messages for -nostdlib and --rosegment.
+
+2013-05-03  Maciej W. Rozycki  <macro@codesourcery.com>
+
+	PR ld/15365
+	* layout.cc (Layout::finalize): Make __ehdr_start STV_HIDDEN.
+
+2013-05-03  Alan Modra  <amodra@gmail.com>
+
+	* merge.cc (Output_merge_string::do_add_input_section): Correct
+	scan for number of strings.  Rename vars to avoid shadowing.
+	Include missing terminator in input_size_.
+
+2013-05-01  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* merge.cc (Output_merge_string<Char_type>::do_add_input_section):
+	Restore empty string handling.
+
+2013-05-01  Cary Coutant  <ccoutant@google.com>
+
+	* stringpool.cc (Stringpool_template::new_key_offset): Fix
+	uninitialized warning.
+
+2013-04-29  Alexander Ivchenko  <alexander.ivchenko@intel.com>
+
+	* output.cc (Output_section::add_merge_input_section): Allow
+	to merge sections if the alignment is more than character size.
+	* merge.h (Output_merge_string::Output_merge_string): Remove
+	assert.
+	* merge.cc (Output_merge_string<Char_type>::do_add_input_section): Count
+	only not-null strings. Check the alignment of strings.
+	* stringpool.h
+	(Stringpool_template<Stringpool_char>::Stringpool_template): Add
+	alignment as the argument.
+	(Stringpool_template<Stringpool_char>::addralign_): New class member.
+	* stringpool.cc (Stringpool_template<Stringpool_char>::new_key_offset):
+	Align non-zero length strings according to the addralign_.
+	(Stringpool_template<Stringpool_char>::set_string_offsets):
+	Updating offsets according to the given alignment.
+	* testsuite/Makefile.am (text_section_grouping): Test if string
+	literals are getting merged.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/merge_string_literals_1.c: New file.
+	* testsuite/merge_string_literals_2.c: Ditto.
+	* testsuite/merge_string_literals.sh: Ditto.
+
+2013-04-26  Ian Lance Taylor  <iant@google.com>
+
+	* target-reloc.h (relocate_section): If the reloc offset is out of
+	range, pass VIEW as NULL to relocate.relocate.
+	* arm.cc (Target_arm:Relocate::relocate): Check for a NULL view.
+	* i386.cc (Target_i386::Relocate::relocate): Likewise.
+	* powerpc.cc (Target_powerpc::Relocate::relocate): Likewise.
+	* sparc.cc (Target_sparc::Relocate::relocate): Likewise.
+	* tilegx.cc (Target_tilegx::Relocate::relocate): Likewise.
+	* x86_64.cc (Target_x86_64::Relocate::relocate): Likewise.
+
+2013-04-26  Geoff Pike  <gpike@chromium.org>
+
+	* gold.cc (queue_final_tasks): invoke layout->queue_build_id_tasks().
+	* layout.cc (Hash_task): New class.
+	(Layout::queue_build_id_tasks): New function.
+	(Layout::write_build_id): Handle single-thread portion of build ID
+	computation.  (In some cases, all of it is single-threaded.)  Replace
+	{sha1,md5}_process_bytes with {sha1,md5}_buffer to get the same
+	functionality in fewer lines of code.
+	* layout.h (Layout::queue_build_id_tasks): New function declaration.
+	* options.h (General_options): make "--build-id" default to tree
+	rather than sha1.  Add two new options related to --build-id=tree:
+	--build-id-chunk-size-for-treehash and
+	--build-id-min-file-size-for-treehash.
+	* Makefile.am: add testing of --build-id=tree and related new options
+	(these tests will be invoked by "make check").
+	* Makefile.in: Regenerate.
+
+2013-04-25  Alan Modra  <amodra@gmail.com>
+
+	* configure.tgt: Add powerpcle and powerpc64le.
+
+2013-04-22  Alan Modra  <amodra@gmail.com>
+
+	PR gold/15355
+	* layout.cc (Layout::segment_precedes): Allow more than one
+	segment with the same type and flags.
+
+2013-04-15  Cary Coutant  <ccoutant@google.com>
+
+	* layout.cc (Layout::set_relocatable_section_offsets): Don't
+	allocate space in file for BSS sections.
+
+2013-04-15  Cary Coutant  <ccoutant@google.com>
+
+	* script-sections.cc (Orphan_output_section): Reset address
+	to zero after each orphaned section for relocatable links.
+
+2013-04-15  Cary Coutant  <ccoutant@google.com>
+
+	* symtab.cc (Symbol_table::sized_write_globals): Subtract
+	section starting address for relocatable link.
+	* testsuite/Makefile.am (script_test_11): New test.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/script_test_11.c: New source file.
+	* testsuite/script_test_11.t: New linker script.
+
+2013-04-13  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Stub_control::can_add_to_stub_group): Don't set
+	owner when sections are not adjacent and exceed group size.
+	(Target_powerpc::group_sections): Handle corner case.
+	(Target_powerpc::Branch_info::make_stub): Handle case where
+	stub table doesn't exist due to branches in non-exec sections.
+	(Target_powerpc::Relocate::relocate): Likewise.
+
+2013-04-11  Alan Modra  <amodra@gmail.com>
+
+	PR gold/15354
+	* powerpc.cc (Target_powerpc::make_brlt_section): Name section
+	.branch_lt to match bfd ld.  Adjust comments throughout file.
+
+2013-04-04  Ian Lance Taylor  <iant@google.com>
+
+	GCC PR c++/56840
+	* object.cc (do_layout_deferred_sections): Handle .eh_frame
+	sections before checking whether they are included in the link.
+
+2013-03-29  Sriraman Tallam  <tmsriram@google.com>
+
+	* archive.cc (Archive::get_elf_object_for_member):  Create the elf
+	object before calling the plugin claim_file handler.  Pass the elf
+	object of the archive to the plugin. Delete the elf object if the
+	plugin claims the file.
+
+2013-03-21  Alan Modra  <amodra@gmail.com>
+
+	* layout.cc (Layout::set_segment_offsets): Accept writable .text
+	segment when omagic.
+
+2013-03-21  Alan Modra  <amodra@gmail.com>
+
+	* dwp.cc (Dwp_output_file::add_contribution): Avoid signed/unsigned
+	comparison warning.
+	* layout.cc (Layout::create_dynamic_symtab): Avoid "may be used
+	uninitialized" warning.
+
+2013-03-20  Alan Modra  <amodra@gmail.com>
+
+	* symtab.h (Symbol::clear_version): New function.
+	* symtab.cc (Symbol_table::set_dynsym_indexes): Don't set object
+	is_needed by weak references.  Clear version for symbols defined
+	in as-needed objects that are not needed.
+
+2013-03-15  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::Scan::reloc_needs_plt_for_ifunc): Make
+	static and public.  Add report_err param.  Return false for data refs.
+	(Target_powerpc::rela_dyn_section): New overloaded function.
+	(Target_powerpc::plt_, iplt_): Elucidate.
+	(Output_data_plt_powerpc::entry_count): Handle current_data_size()==0.
+	(Output_data_plt_powerpc::do_write): Don't write .iplt.
+	(Output_data_plt_powerpc::plt_entry_count): Don't add .iplt entries.
+	(Target_powerpc::Scan::local, global): Adjust reloc_needs_plt_for_ifunc
+	calls.  Put ifunc dynamic relocs in irela_dyn_section.  Only
+	push_branch and make_plt_entry for ifunc syms when
+	reloc_needs_plt_for_ifunc.
+	(Target_powerpc::Relocate::relocate): Don't use plt entry value
+	for ifunc unless reloc_needs_plt_for_ifunc.
+
+2013-03-15  Alan Modra  <amodra@gmail.com>
+
+	* gc.h (gc_process_relocs): Don't look through function descriptors.
+	* icf.cc (get_section_contents): Do so here instead.
+
+2013-03-13  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (is_branch_reloc): Forward declare.
+	(Target_powerpc::do_can_check_for_function_pointers): New predicate.
+	(Target_powerpc::Scan::local_reloc_may_be_function_pointer): Return
+	false for 64-bit, true for 32-bit non-branch relocs.
+	(Target_powerpc::Scan::global_reloc_may_be_function_pointer): Likewise.
+	* testsuite/Makefile.am (icf_test): Use linker map file instead of
+	nm output.
+	(icf_safe_test): Generate linker map file as well as nm output.
+	(icf_safe_so_test): Likewise.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/icf_test.sh: Parse linker map file to determine
+	section folding.
+	* testsuite/icf_safe_test.sh: Likewise.  Expect folding for PowerPC.
+	* testsuite/icf_safe_so_test.sh: Likewise.
+	(X86_32_or_ARM_specific_safe_fold): Merge into..
+	(arch_specific_safe_fold): ..this.
+	(X86_64_specific_safe_fold): Delete unused function.
+
+2013-03-12  Alan Modra  <amodra@gmail.com>
+
+	* gc.h (gc_process_relocs): Look through function descriptors
+	to determine shndx, symvalue and addend used by ICF.  Tidy
+	variable duplication.
+
+2013-03-11  Alan Modra  <amodra@gmail.com>
+
+	* gold.cc (queue_middle_tasks): Move detect_odr_violations..
+	* layout.cc (Layout_task_runner::run): ..to here.
+	* symtab.h (struct Symbol_location): Extract from..
+	(class Symbol_table): ..here.
+	* symtab.cc (Symbol_table::linenos_from_loc): Invoke function_location.
+	* target.h (class Target): Add function_location and
+	do_function_location functions.
+	(class Sized_target): Add do_function_location.
+	* object.h (class Sized_relobj_file): Move find_shdr..
+	(class Object): ..to here.
+	* object.cc: Likewise.  Update to suit.  Instantiate.
+	(Sized_relobj_file::find_eh_frame): Update find_shdr call.
+	* powerpc.cc (class Powerpc_dynobj): New.
+	(Target_powerpc::do_function_location): New function.
+	(Powerpc_relobj::do_find_special_sections): Update find_shdr call.
+	(Powerpc_dynobj::do_read_symbols): New function.
+	(Target_powerpc::do_make_elf_object): Make a Powerpc_dynobj.
+
+2013-03-08  Ian Lance Taylor  <iant@google.com>
+
+	* options.cc (General_options::string_to_object_format): Accept
+	"default".
+
+2013-03-08  Alan Modra  <amodra@gmail.com>
+
+	* ehframe.h (Post_fdes) Make it a vector of Post_fde rather than
+	pointer to Post_fde.
+	(struct Post_fde): Move definition to here..
+	* ehframe.cc (struct Post_fde): ..from here.
+	(Cie::write): Don't alloc Post_fde.
+	(Eh_frame::do_sized_write): Update.  Don't free Post_fde.
+
+2013-03-07  Alan Modra  <amodra@gmail.com>
+
+	* testsuite/discard_locals_relocatable_test.c: Add a powerpc
+	relocation referencing .LC0.
+	* testsuite/discard_locals_test.sh: Remove FIXMEs.
+
+2013-03-07  Alan Modra  <amodra@gmail.com>
+
+	* testsuite/ifunc-sel.h (ifunc_sel, ifunc_one): Mark
+	always_inline.  Add assembly for powerpc to avoid GOT.
+
+2013-03-07  Alan Modra  <amodra@gmail.com>
+
+	* testsuite/script_test_10.sh: Don't test .bss section
+	header number.
+
+2013-03-06  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (class Powerpc_relobj): Move some member functions.
+	(Target_powerpc::symval_for_branch):  Add symtab param.  Update
+	all callers.  Handle folded sections.
+	(Target_powerpc::do_gc_add_reference): Don't cast dynamic object
+	to Powerpc_relobj.
+	(Global_symbol_visitor_opd::operator()): Likewise.
+
+2013-03-04  Alan Modra  <amodra@gmail.com>
+
+	* testsuite/Makefile.am (final_layout_script.lds): Add .sbss.
+	* testsuite/Makefile.in: Regenerate.
+
+2013-03-01  Cary Coutant  <ccoutant@google.com>
+
+	Add dwp support for v2 DWARF package file format.
+	* dwarf_reader.cc (Dwarf_info_reader::visit_type_unit): Add
+	tu_length parameter.  Adjust all callers.
+	* dwarf_reader.h (Dwarf_info_reader::visit_type_unit): Likewise.
+	* dwp.cc: Include dwarf.h.
+	(Section_bounds): New struct type.
+	(Unit_set): New struct type.
+	(Dwo_file::Dwo_file): Initialize new data member.
+	(Dwo_file::read_compunit_index, Dwo_file::read_typeunit_index):
+	Combine and rename to...
+	(Dwo_file::read_unit_index): ...this.
+	(Dwo_file::sized_read_compunit_index)
+	(Dwo_file::sized_read_typeunit_index): Combine and rename to...
+	(Dwo_file::sized_read_unit_index): ...this.
+	(Dwo_file::copy_section): Remove section_name, is_str_offsets
+	parameters; add section_id parameter.
+	(Dwo_file::add_cu_set, Dwo_file::add_tu_set): Combine and rename to...
+	(Dwo_file::add_unit_set): ...this.
+	(Dwo_file::shndx_map_): Remove.
+	(Dwo_file::sect_offsets_): New data member.
+	(Dwp_output_file::Dwp_output_file): Initialize new data members.
+	(Dwp_output_file::add_section): Rename to...
+	(Dwp_output_file::add_contribution): ...this.
+	(Dwp_output_file::add_cu_set): Combine parameters into a struct.
+	(Dwp_output_file::add_tu_set): Likewise.
+	(Dwp_output_file::Contribution): New type.
+	(Dwp_output_file::Section::contributions): New data member.
+	(Dwp_output_file::Cu_or_tu_set): Remove.
+	(Dwp_output_file::Section::Section): New ctor.
+	(Dwp_output_file::Dwp_index::Shndx_pool): Remove.
+	(Dwp_output_file::Dwp_index::Section_table): New type.
+	(Dwp_output_file::Dwp_index::Dwp_index): Initialize new data members.
+	(Dwp_output_file::Dwp_index::enter_set): Change type of "set"
+	parameter.
+	(Dwp_output_file::Dwp_index::shndx_pool): Remove.
+	(Dwp_output_file::Dwp_index::shndx_pool_end): Remove.
+	(Dwp_output_file::Dwp_index::section_table): New member function.
+	(Dwp_output_file::Dwp_index::section_table_end): New member function.
+	(Dwp_output_file::Dwp_index::shndx_pool_size): Remove.
+	(Dwp_output_file::Dwp_index::section_table_rows): New member function.
+	(Dwp_output_file::Dwp_index::section_table_cols): New member function.
+	(Dwp_output_file::Dwp_index::shndx_pool_): Remove.
+	(Dwp_output_file::Dwp_index::section_table_): New data member.
+	(Dwp_output_file::Dwp_index::section_mask_): New data member.
+	(Dwp_output_file::add_output_section): New member function.
+	(Dwp_output_file::write_new_section): New member function.
+	(Dwp_output_file::write_contributions): New member function.
+	(Dwp_output_file::section_id_map_): New data member.
+	(class Dwo_id_info_reader): Remove.
+	(class Unit_reader): New class.
+	(get_dwarf_section_name): New function.
+	(Dwo_file::read_executable): Adjust initializations of class data.
+	(Dwo_file::read): Add support for v2 package file format.
+	(Dwo_file::read_unit_index): Likewise.
+	(Dwo_file::sized_read_unit_index): Likewise.
+	(Dwo_file::copy_section): Likewise.
+	(Dwo_file::add_unit_set): Likewise.
+	(Dwp_output_file::add_output_section): Likewise.
+	(Dwp_output_file::add_contribution): Likewise.
+	(Dwp_output_file::Dwp_index::find_or_add): Use row index to check
+	for empty slot.
+	(Dwp_output_file::Dwp_index::enter_set): Add support for v2 package
+	file format.
+	(Dwp_output_file::Dwp_index::grow): Use row index to check for empty
+	slot.
+	(Dwp_output_file::initialize): Remove unused function.
+	(Dwp_output_file::finalize): Add support for v2 package file format.
+	(Dwp_output_file::write_index): Likewise.
+	* gdb-index.cc (Gdb_index_info_reader::visit_type_unit): Adjust
+	function prototype.
+
+2013-03-01  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf_reader.cc (Dwarf_info_reader::check_buffer): Move
+	function into class definition in header file.
+	(Dwarf_info_reader::warn_corrupt_debug_section): New function.
+	* dwarf_reader.h (Dwarf_info_reader::warn_corrupt_debug_section):
+	New function.
+	(Dwarf_info_reader::check_buffer): Move here from .cc file.
+
+2013-02-28  Alan Modra  <amodra@gmail.com>
+
+	* target.h (Target::plt_fde_location, do_plt_fde_location): Declare.
+	* target.cc (Target::do_plt_fde_location): New function.
+	* ehframe.h (class FDE): Add post_map field to u_.from_linker,
+	accessor function, and constructor param.
+	(struct Post_fde, Post_fdes): Declare.
+	(Cie::write): Add post_fdes param.
+	* ehframe.cc (Fde::write): Use plt_fde_location.
+	(struct Post_fde): Define.
+	(Cie::write): Stash FDEs added post merge mapping.
+	(Eh_frame::add_ehframe_for_plt): Assert no new CIEs after mapping.
+	Adjust Fde constructor call.  Bump final_data_size_ for post map FDEs.
+	(Eh_frame::do_sized_write): Arrange to write post map FDES after
+	other FDEs.
+	* powerpc.cc (Target_powerpc::do_plt_fde_location): New function.
+	(Target_powerpc::has_glink): New function.
+	(Target_powerpc::do_relax): Add eh_frame info for stubs.
+	(struct Eh_cie, eh_frame_cie, glink_eh_frame_fde_64,
+	glink_eh_frame_fde_32, default_fde): New data.
+	(Stub_table::eh_frame_added_): New var.
+	(Stub_table::find_long_branch_entry, stub_address, stub_offset):
+	Make const.
+	(Stub_table::add_eh_frame): New function.
+	(Output_data_glink::add_eh_frame): New function.
+	(Target_powerpc::make_glink_section): Call add_eh_frame.
+
+2013-02-15  Ian Lance Taylor  <iant@google.com>
+
+	* options.h (DEFINE_uint64_alias): Define.
+	(class General_options): Add -Ttext-segment as an alias for
+	-Ttext.
+
+2013-02-15  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Stub_table::plt_off): New function, extracted from..
+	(Stub_table::do_write): ..here, two places.
+	(Stub_table::plt_call_size): Use it here too.
+
+2013-02-11  Ian Lance Taylor  <iant@google.com>
+
+	* descriptors.cc (Descriptors::close_all): New function.
+	* descriptors.h (class Descriptors): Declare close_all.
+	(close_all_descriptors): New inline function.
+	* plugin.cc: Include "descriptors.h".
+	(Plugin_manager::cleanup): Call close_all_descriptors.
+
+2013-02-06  Alan Modra  <amodra@gmail.com>
+
+	* README: Update coding style link.
+
+2013-01-28  Cary Coutant  <ccoutant@google.com>
+
+	* dwp.cc (File_list): New typedef.
+	(Dwo_name_info_reader): New class.
+	(Dwo_id_info_reader::Dwo_id_info_reader): Remove unused parameters.
+	(Dwo_id_info_reader::visit_top_die): Remove unused member function.
+	(Dwo_file::~Dwo_file): Delete input_file_ after obj_.
+	(Dwo_file::read_executable): New function.
+	(Dwo_file::read): Move common setup code to ...
+	(Dwo_file::make_object): ... here.
+	(dwp_options): Add --exec/-e.
+	(usage): Likewise.
+	(main): Likewise.
+
+2013-01-24  Sriraman Tallam  <tmsriram@google.com>
+
+	* layout.cc (Layout::layout): Check for option text_reorder.
+	(Layout::make_output_section): Ditto.
+	* options.h (text_reorder): New option.
+	* output.cc (Input_section_sort_compare): Remove special ordering
+	of section names.
+	(Output_section::
+	 Input_section_sort_section_name_special_ordering_compare::
+	 operator()): New function.
+	(Output_section::sort_attached_input_sections): Use new sort function
+	for .text.
+	* output.h (Input_section_sort_section_name_special_ordering_compare):
+	New struct.
+	* testsuite/Makefile.am (text_section_grouping): Test option
+	--no-text-reorder
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/text_section_grouping.sh: Check order of functions without
+	default text reordering.
+
+2013-01-18  Mike Frysinger  <vapier@gentoo.org>
+
+	* options.h (General_options): Change default to true for new_dtags.
+
+2013-01-18  Mike Frysinger  <vapier@gentoo.org>
+
+	* layout.cc (Layout::finish_dynamic_section): Only add DT_RPATH
+	when enable_new_dtags is false.  Only add DT_RUNPATH when
+	enable_new_dtags is true.
+
+2013-01-17  Serge Pavlov  <serge.v.pavlov@gmail.com>
+
+	* powerpc.cc (Stub_table::find_plt_call_entry): Make types
+	used in declaration and definition consistent.
+	(Target_powerpc::symval_for_branch): Ditto.
+
+2013-01-16  Sriraman Tallam  <tmsriram@google.com>
+
+	* testsuite/plugin_final_layout.cc: Fix comment.
+
+2013-01-16  Sriraman Tallam  <tmsriram@google.com>
+
+	* layout.cc (Layout::layout): Do not do default sorting for
+	text sections when section ordering is specified.
+	(make_output_section): Ditto.
+	* testsuite/plugin_final_layout.cc: Name the function sections
+	to catch reordering issues.
+
+2013-01-15  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::do_relax): Default shared libs to
+	plt-thread-safe.
+
+2013-01-15  Alan Modra  <amodra@gmail.com>
+
+	* testsuite/Makefile.am (final_layout_script.lds): Handle .got section.
+	* testsuite/Makefile.in: Regenerate.
+
+2013-01-14  Alan Modra  <amodra@gmail.com>
+
+	* testsuite/Makefile.am (MOSTLYCLEANFILES): Add various output files.
+	* testsuite/Makefile.in: Regenerate.
+
+2013-01-11  Pavel Chupin  <pavel.v.chupin@intel.com>
+
+	PR bfd/14430
+	Fix mingw gold build with plugins enabled
+	* Makefile.am: Replace -ldl with @DLOPEN_LIBS@.
+	* configure.ac: Export DLOPEN_LIBS and add headers check.
+	* plugin.cc: Handle non-dlfcn case.
+	* Makefile.in: Regenerate.
+	* config.in: Regenerate.
+	* configure: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
+2013-01-09  Sriraman Tallam  <tmsriram@google.com>
+
+	* output.h (sort_attached_input_sections): Change to be public.
+	* script-sections.cc
+	(Output_section_definition::set_section_addresses): Sort
+	attached input sections according to section order before linker
+	script assigns section addresses.
+	(Orphan_output_section::set_section_addresses): Sort
+	attached input sections according to section order before linker
+	script assigns section addresses.
+	* Makefile.am (final_layout.sh): Use a simple linker script to
+	check if section ordering still works.
+	* Makefile.in: Regenerate.
+
+2013-01-09  Ben Cheng  <bccheng@google.com>
+
+	* arm.cc (Target_arm::attributes_accept_div): New function.
+	(Target_arm::attributes_forbid_div): New function.
+	(Target_arm::merge_object_attributes): Merge the Tag_DIV_use
+	attribute using the same new functions as what bfd/elf32_arm.c
+	does.
+
+2013-01-07  Cary Coutant  <ccoutant@google.com>
+
+	PR gold/14993
+	* output.cc (Output_section::add_input_section): For incremental
+	updates, don't track input sections that are allocated from patch
+	space.
+
+2013-01-07  H.J. Lu  <hongjiu.lu@intel.com>
+	    Ian Lance Taylor  <iant@google.com>
+
+	PR gold/14897
+	* configure.ac (--enable-ld): Removed.
+	(install_as_default): Set to yes only for --enable-gold=default
+	or --disable-ld.
+	* configure: Regenerated.
+
+2013-01-07  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* options.h (General_options): Add -fuse-ld= for GCC linker
+	option compatibility.
+
+2013-01-04  Cary Coutant  <ccoutant@google.com>
+
+	* configure.ac: Fix typo restoring CXXFLAGS.
+	* configure: Regenerate.
+
+2013-01-04  Cary Coutant  <ccoutant@google.com>
+
+	* testsuite/Makefile.am (CXXLINK_S): New macro.
+	(debug_msg_so.err, debug_msg_ndebug.err): Use CXXLINK_S.
+	* testsuite/Makefile.in: Regenerate.
+
+2013-01-02  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* version.cc (print_version): Update copyright year to 2013.
+
+2012-12-20  Ian Lance Taylor  <iant@google.com>
+
+	* layout.cc (Layout::special_ordering_of_input_section): New
+	function.
+	(Layout::layout): If input section requires special ordering, must
+	sort input sections.
+	(Layout::make_output_section): May sort .text input sections.
+	(Layout::is_section_name_prefix_grouped): Remove.
+	* layout.h (class Layout): Declare
+	special_ordering_of_input_section.  Don't declare
+	is_section_name_prefix_grouped.
+	* output.cc (Output_section::add_input_section): Revert last
+	change.
+	(Output_section::Input_section_sort::match_file_name): Don't crash
+	if called on output section data.
+	(Output_section::Input_section_sort_compare): Sort based on
+	special ordering.
+	(Output_section::Input_section_sort_section_order_index_compare):
+	Revert last patch.
+	(Output_section::sort_attached_input_sections): Likewise.
+
+2012-12-18  Sriraman Tallam  <tmsriram@google.com>
+
+	* layout.cc (Layout::is_section_name_prefix_grouped): New function.
+	* layout.h (Layout::is_section_name_prefix_grouped): New function.
+	* output.cc (Output_section::add_input_section): Check if section
+	name contains special prefix.  Keep input sections to sort such
+	sections.
+	(Output_section::Input_section_sort_section_order_index_compare
+	 ::operator()): Group sections according to prefixes.
+	(Output_section::sort_attached_input_sections): Add condition to
+	Input_section_entry constructor call.
+	* testsuite/Makefile.am (text_section_grouping): New test.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/text_section_grouping.cc: New file.
+	* testsuite/text_section_grouping.sh: New file.
+
+2012-12-17  Nick Clifton  <nickc@redhat.com>
+
+	* Makefile.am: Add copyright notice.
+	* NEWS: Likewise.
+	* README: Likewise.
+	* configure.ac: Likewise.
+	* ftruncate.c: Likewise.
+	* Makefile.in: Regenerate.
+
+2012-12-14  Cary Coutant  <ccoutant@google.com>
+
+	* testsuite/Makefile.am (exception_separate_shared_12_test): Add
+	--no-as-needed flag.
+	(exception_separate_shared_12_test): Likewise.
+	(incremental_copy_test): Likewise.
+	* testsuite/Makefile.in: Regenerate.
+
+2012-12-14  Cary Coutant  <ccoutant@google.com>
+
+	* dwp.cc (Dwp_output_file::add_cu_set): Check for duplicate CUs.
+	(Dwp_output_file::Dwp_index::enter_set): Add assert.
+
+2012-12-12  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (class Track_tls): New.
+	(class Relocate, class Scan): Inherit Track_tls.
+	(Target_powerpc::Scan::local, global): Track tls optimization
+	and avoid creating plt entry for __tls_get_addr if all uses
+	are optimized away.
+	(Target_powerpc::Relocate::relocate): Update to use Track_tls.
+
+2012-12-12  Alan Modra  <amodra@gmail.com>
+
+	* options.h (General_options): Add --toc-sort/--no-toc-sort.
+	Replace no_toc_optimize with toc_optimize.
+	* output.h (Output_section::input_sections): Provide non-const variant.
+	* powerpc.cc (Powerpc_relobj::has_small_toc_reloc_,
+	set_has_small_toc_reloc, has_small_toc_reloc): New variable and
+	accessors.
+	(Target_powerpc::Scan::local, global): Call set_has_small_toc_reloc.
+	(class Sort_toc_sections): New.
+	(Target_powerpc::do_finalize_sections): Sort toc sections.
+	(Target_powerpc::Relocate::relocate): Update toc_optimize test.
+
+2012-12-10  Roland McGrath  <mcgrathr@google.com>
+
+	* testsuite/binary_unittest.cc (read_all): New function.
+	(Sized_binary_test): Use it instead of ::read.
+	* fileread.cc (do_read): Don't assume pread always reads the whole
+	amount in a single call.
+
+2012-12-10  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_selector_powerpc::Target_selector_powerpc):
+	Set EM_PPC64 or EM_PPC here.
+	(Target_selector_powerpc::do_recognize): Delete.
+
+2012-12-10  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj::Powerpc_relobj): Init has14_ and
+	stub_table_.
+	(Target_powerpc::Branch_info::make_stub): Don't omit addend.
+
+2012-12-07  Roland McGrath  <mcgrathr@google.com>
+
+	* testsuite/binary_unittest.cc (Sized_binary_test):
+	Use open_descriptor rather than ::open.
+
+2012-12-07  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Stub_table::do_write): Delete redundant Address
+	typedef and invalid_address constant.
+	(Output_data_glink, Stub_table, Target_powerpc): Explicitly
+	instantiate constants.
+
 2012-12-06  Roland McGrath  <mcgrathr@google.com>
 
 	* configure.ac (HAVE_ZLIB): Use AM_ZLIB instead of AC_SEARCH_LIBS.
@@ -7,10 +1185,103 @@
 	* Makefile.in: Regenerate.
 	* testsuite/Makefile.in: Regenerate.
 
-2012-12-07  Roland McGrath  <mcgrathr@google.com>
+2012-12-07  Alan Modra  <amodra@gmail.com>
 
-	* testsuite/binary_unittest.cc (Sized_binary_test):
-	Use open_descriptor rather than ::open.
+	* options.h (General_options): Add no_toc_optimize.
+	* powerpc.cc (ok_lo_toc_insn): New function.
+	(Target_powerpc::Relocate::relocate): Optimize toc access sequences.
+
+2012-12-06  Alan Modra  <amodra@gmail.com>
+
+	* options.h (General_options): Add plt_align, plt_static_chain,
+	plt_thread_safe.  Update stub_group_size help text.
+	* powerpc.cc (Target_powerpc::plt_thread_safe): New access function
+	for new plt_thread_safe_ var.
+	(use_plt_offset): Correct comments.
+	(Target_powerpc::do_relax): Look for thread creation symbols to
+	determine default plt_thread_safe value.  Clear plt call stubs
+	as well as branch stubs each iteration.
+	(add_2_2_11, add_12_12_11, bnectr_p4, cmpldi_2_0, xor_11_11_11): New
+	insn constants.
+	(l, hi, ha, write_insn): Move earlier.
+	(Stub_table): Delete prev_size, add last_plt_size and last_branch_size.
+	(Stub_table::clear_stubs): Rename from clear_long_branch_stubs, clear
+	plt stubs too.
+	(Stub_table::update_size): Adjust.
+	(Stub_table::prev_size, set_prev_size): Delete.
+	(Stub_table::stub_align): Let --plt-align affect result.
+	(Stub_table::plt_call_size): Calculate sizes for various stubs.
+	(Stub_table::branch_stub_size): Use last_plt_size in address calc.
+	(Stub_table::add_plt_call_stub): Pass iterator to plt_call_size.
+	(Stub_table::do_write): Support more stub variants.
+
+2012-12-04  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj::do_scan_relocs): Delete.
+	(Target_powerpc::do_define_standard_symbols): New function.
+
+2012-12-03  Alan Modra  <amodra@gmail.com>
+
+	* output.h: Formatting, whitespace.
+
+2012-12-03  Alan Modra  <amodra@gmail.com>
+
+	* layout.h (Layout::get_executable_sections): Declare.
+	* layout.cc (Layout::get_executable_sections): New function.
+	* arm.cc (Target_arm::group_sections): Use it.
+	(Arm_output_section::group_sections): Delete now redundant test.
+	* output.cc (Output_reloc::Output_reloc): Add is_relative.
+	param to handle relative relocs.
+	* output.h (Output_reloc::Output_reloc <absolute reloc>): Likewise.
+	(Output_data_reloc::add_absolute): Adjust.
+	(Output_data_reloc::add_relative): New function.
+	(Output_data::reset_data_size): New function.
+	(Output_relaxed_input_section::set_relobj, set_shndx): New functions.
+	(Output_section::set_addralign): New function.
+	(Output_section::checkpoint_set_addralign): New function.
+	(Output_section::clear_section_offsets_need_adjustment): New function.
+	(Output_section::input_sections): Make public.
+	* powerpc.cc (class Output_data_brlt_powerpc): New.
+	(class Stub_table, class Stub_control): New.
+	(Powerpc_relobj::has14_, set_has_14bit_branch, has_14bit_branch,
+	stub_table_, set_stub_table, stub_table): New vectors and accessor
+	functions.
+	(Target_powerpc::do_may_relax, do_relax, push_branch,
+	new_stub_table, stub_tables, brlt_section, group_sections,
+	add_branch_lookup_table, find_branch_lookup_table,
+	write_branch_lookup_table, make_brlt_section): New functions.
+	(Target_powerpc::struct Sort_sections, class Branch_info): New.
+	(Target_powerpc::brlt_section_, stub_tables_, branch_lookup_table_,
+	branch_info_): New vars.
+	(Target_powerpc::make_plt_entry, make_local_ifunc_plt_entry): Don't
+	make call stubs here.
+	(Output_data_glink): Remove all call stub handling from this class.
+	(Target_powerpc::Scan::local, global): Save interesting branch
+	relocs and relocs for ifunc.  Adjust calls to plt entry functions.
+	(Target_powerpc::do_finalize_sections): Only make reg save/restore
+	functions on final link.
+	(Target_powerpc::Relocate::relocate): Adjust lookup of call stubs.
+	Handle long branch destinations too.
+	(Target_powerpc::do_dynsym_value, do_plt_address_for_global,
+	do_plt_address_for_local): Adjust lookup of plt call stubs.
+
+2012-11-30  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.c (Target_powerpc::Scan::global): Don't emit relative
+	relocs against protected symbols when building 32-bit shared libs.
+
+2012-11-30  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::make_plt_section): Add symtab
+	param.  Call got_section() to make .got.  Update all callers
+	and their callers and so on.
+
+2012-11-30  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj::do_scan_relocs): Make STB_LOCAL
+	_GLOBAL_OFFSET_TABLE_ rather than STB_WEAK.
+	(Output_data_got_powerpc::make_header): Update _GLOBAL_OFFSET_TABLE_
+	value if it already exists.
 
 2012-11-19  H.J. Lu  <hongjiu.lu@intel.com>
 
@@ -22,25 +1293,46 @@
 	* arm.cc (Output_data_plt_arm_nacl::first_plt_entry): Use bic rather
 	than bfc instruction for data sandboxing.
 
-2012-11-07  Roland McGrath  <mcgrathr@google.com>
+2012-11-08  Alan Modra  <amodra@gmail.com>
 
-	* i386.cc (Target_i386::relocate_for_relocatable): Remove extraneous
-	typename from last change.
+	* po/POTFILES.in: Regenerate.
 
-	* target.h (Sized_target::relocate_for_relocatable): Use Elf_Off
+2012-11-05  Alan Modra  <amodra@gmail.com>
+
+	* configure.ac: Apply 2012-09-10 change to config.in here.
+	* configure: Regenerate.
+
+2012-11-05  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj): Delete "Offset" typedef.
+	(struct Opd_ent): Use "Address" rather than "Offset".
+	(Output_data_got_powerpc::got_base_offset): Return Valtype.
+	(Target_powerpc::got_section): Make public.
+	(Target_powerpc::scan_relocs): Move code setting symbols..
+	(Powerpc_relobj::do_scan_relocs): ..to here, new function.
+	Create _SDA_BASE_ only when referenced.
+
+2012-11-02  Roland McGrath  <mcgrathr@google.com>
+
+	* i386.cc (Target_i386::relocate_relocs): Remove extraneous typename
+	from last change.
+
+2012-11-01  Roland McGrath  <mcgrathr@google.com>
+
+	* target.h (Sized_target::relocate_relocs): Use Elf_Off
 	for offset_in_output_section parameter.
 	(Sized_target::relocate_special_relocatable): Likewise.
-	* arm.cc (Target_arm::relocate_for_relocatable): Likewise.
+	* arm.cc (Target_arm::relocate_relocs): Likewise.
 	(Target_arm::relocate_special_relocatable): Likewise.
-	* i386.cc (Target_i386::relocate_for_relocatable): Likewise.
-	* powerpc.cc (Target_powerpc::relocate_for_relocatable): Likewise.
-	* sparc.cc (Target_sparc::relocate_for_relocatable): Likewise.
-	* target-reloc.h (relocate_for_relocatable): Likewise.
+	* i386.cc (Target_i386::relocate_relocs): Likewise.
+	* powerpc.cc (Target_powerpc::relocate_relocs): Likewise.
+	* sparc.cc (Target_sparc::relocate_relocs): Likewise.
+	* target-reloc.h (relocate_relocs): Likewise.
 	* testsuite/testfile.cc (Target_test): Likewise.
-	* tilegx.cc (Target_tilegx::relocate_for_relocatable): Likewise.
-	* x86_64.cc (Target_x86_64::relocate_for_relocatable): Likewise.
+	* tilegx.cc (Target_tilegx::relocate_relocs): Likewise.
+	* x86_64.cc (Target_x86_64::relocate_relocs): Likewise.
 
-	* gold.h: Move inclusion of <clocale> to after <libintl.h> in
+	* system.h: Move inclusion of <clocale> to after <libintl.h> in
 	[ENABLE_NLS] section, and separately at top of [!ENABLE_NLS] section.
 
 	* descriptors.cc (set_close_on_exec): Add ATTRIBUTE_UNUSED to the
@@ -54,17 +1346,709 @@
 
 	* nacl.cc: Include "libiberty.h" for vasprintf declaration.
 
-2012-11-05  Alan Modra  <amodra@gmail.com>
+2012-10-30  Steve McIntyre  <steve.mcintyre@linaro.org>
 
-	* configure.ac: Apply 2012-09-10 change to config.in here.
+	* gold.cc (Target_arm::do_adjust_elf_header): Add the
+	hard-float/soft-float ABI flag as appropriate for ET_DYN/ET_EXEC
+	in EABI_VER5.
+
+2012-10-29  Cary Coutant  <ccoutant@google.com>
+
+	* dwp.cc (usage): Add file and exit status parameters;
+	add --help and --version options.
+	(print_version): New function.
+	(main): Add --help and --version options.
+
+2012-10-25  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* testsuite/Makefile.am (MOSTLYCLEANFILES): Add
+	final_layout_sequence.txt.
+	* testsuite/Makefile.in: Regenerated.
+
+2012-10-25  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* testsuite/Makefile.am (COMPILE1): New variable. Renamed from
+	COMPILE generated by automake.
+	(LINK1): Likewise.
+	(CXXCOMPILE1): Likewise.
+	(CXXLINK1): Likewise.
+	(COMPILE): Strip out -Wp,-D_FORTIFY_SOURCE= from COMPILE1.
+	(LINK): Likewise.
+	(CXXCOMPILE): Likewise.
+	(CXXLINK): Likewise.
+	* testsuite/Makefile.in: Regenerated.
+
+2012-10-25  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* dwp.cc (Dwo_file::record_target_info): Issue a fatal error
+	on bad fwrite return.
+
+2012-10-25  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* dwp.cc (Dwo_file::remap_str_offset): Use section_offset_type
+	on val.
+
+2012-10-23  Cary Coutant  <ccoutant@google.com>
+
+	* testsuite/Makefile.am (TEST_OBJCOPY): New macro.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/dwp_test.h: New source file.
+	* testsuite/dwp_test_1.cc: New source file.
+	* testsuite/dwp_test_1.s: New source file.
+	* testsuite/dwp_test_1.sh: New source file.
+	* testsuite/dwp_test_1b.cc: New source file.
+	* testsuite/dwp_test_1b.s: New source file.
+	* testsuite/dwp_test_2.cc: New source file.
+	* testsuite/dwp_test_2.s: New source file.
+	* testsuite/dwp_test_2.sh: New source file.
+	* testsuite/dwp_test_main.cc: New source file.
+	* testsuite/dwp_test_main.s: New source file.
+
+2012-10-23  Cary Coutant  <ccoutant@google.com>
+
+	* dwp.h: New header file.
+	* dwp.cc: New source file.
+	* gold.h: Move shared declarations to system.h.
+	* system.h: New header file.
+	* Makefile.am: Add dwp.
+	* Makefile.in: Regenerate.
+
+2012-10-23  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf_reader.cc (Dwarf_ranges_table::read_range_list): Call
+	Dwarf_info_reader::read_from_pointer.
+	(Dwarf_pubnames_table::read_header): Likewise.
+	(Dwarf_pubnames_table::next_name): Likewise.
+	(Dwarf_die::read_attributes): Likewise.
+	(Dwarf_die::skip_attributes): Likewise.
+	(Dwarf_info_reader::read_from_pointer): New function template.
+	* dwarf_reader.h (Dwarf_ranges_table): Add dwinfo_.
+	(Dwarf_pubnames_table): Likewise.
+	(Dwarf_info_reader::read_from_pointer): New function template.
+	* gdb-index.cc (Gdb_index_info_reader): Adjust call to
+	Dwarf_pubnames_table ctor.
+
+2012-10-23  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf_reader.cc (Dwarf_info_reader::do_parse): Use stored
+	abbrev_shndx.
+	* dwarf_reader.h (Dwarf_info_reader::Dwarf_info_reader): Initialize
+	abbrev_shndx_.
+	(Dwarf_info_reader::set_abbrev_shndx): New method.
+	(Dwarf_info_reader::abbrev_shndx_): New data member.
+
+2012-10-23  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf_reader.cc (make_elf_reloc_mapper): Check size and endianness
+	from object, not parameters.
+	(Dwarf_info_reader::parse): Likewise.
+	* object.h (Relobj::elfsize, Relobj::is_big_endian): New methods.
+	(Relobj::do_elfsize, Relobj::do_is_big_endian): New methods.
+	(Sized_relobj::do_elfsize, Sized_relobj::do_is_big_endian): New
+	methods.
+
+2012-10-23  Cary Coutant  <ccoutant@google.com>
+
+	* fileread.cc (Input_file::Input_file): New constructor.
+	* fileread.h (class Input_file): Add new constructor.
+
+2012-10-18  Alan Modra  <amodra@gmail.com>
+
+	PR gold/14727
+	* object.cc (Relobj::is_section_name_included): Also match
+	.sdata personality section.
+
+2012-10-18  Alan Modra  <amodra@gmail.com>
+
+	* target-reloc.h (class Default_comdat_behavior): New, package up..
+	(get_comdat_behaviour): ..this.
+	(relocate_section): Add Relocate_comdat_behavior template arg,
+	adjust code to suit.
+	* arm.cc (Target_arm::relocate_section): Adjust to suit.
+	(Target_arm::scan_reloc_section): Likewise.
+	* i386.cc (Target_i386::relocate_section): Likewise.
+	* sparc.cc (Target_sparc::relocate_section): Likewise.
+	* tilegx.cc (Target_tilegx::relocate_section): Likewise.
+	* x86_64.cc (Target_x86_64::relocate_section): Likewise.
+	* powerpc.cc (class Relocate_comdat_behavior): New.
+	(Target_powerpc::relocate_section): Don't zap opd relocs.  Supply
+	gold::relocate_section with new template arg.
+
+2012-10-18  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::Scan::local, global): Always emit
+	dynamic relocs for GOT_TPREL got entries, without symbol if
+	resolving locally.
+	(Target_powerpc::do_gc_add_reference): Don't add for dynamic objects.
+	(Target_powerpc::scan_relocs): Define _GLOBAL_OFFSET_TABLE_ early.
+	(Target_powerpc::Relocate:relocate): REL32 reloc may be unaligned.
+
+2012-10-17  Alan Modra  <amodra@gmail.com>
+
+	PR gold/14726
+	* gold.cc (queue_middle_tasks): Call gc_mark_symbol on _init and _fini.
+
+2012-10-16  Sriraman Tallam  <tmsriram@google.com>
+
+	* layout.cc (Layout::include_section): Keep sections marked
+	SHF_EXCLUDE when doing relocatable links.
+
+2012-10-16  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::define_save_restore_funcs): New func.
+	(Target_powerpc::do_finalize_sections): Call it.
+	(Output_data_save_res): New class and supporting functions.
+	(Target_powerpc::symval_for_branch): Only look up .opd entry for
+	normal symbols defined in object files.
+
+2012-10-12  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj::add_gc_mark, process_gc_mark): New.
+	(struct Opd_ent): Make "discard" a bit field.  Add "gc_mark".
+	(Target_powerpc::do_gc_mark_symbol): Delay marking function code
+	section if scan_opd_relocs not yet called.
+	(Target_powerpc::gc_process_relocs): Call process_gc_mark.
+
+2012-10-12  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Output_data_plt_powerpc::add_entry, add_ifunc_entry,
+	add_local_ifunc_entry): Revert last change.
+	(Target_powerpc::make_plt_entry, make_local_ifunc_plt_entry): Likewise.
+
+2012-10-05  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::do_plt_address_for_local,
+	do_plt_address_for_global): New functions.
+	(Output_data_got_powerpc::do_write): Don't segfault when linking
+	statically.
+	(Output_data_plt_powerpc::add_entry, add_ifunc_entry,
+	add_local_ifunc_entry): Return true on adding entry..
+	(Target_powerpc::make_plt_entry): ..use to avoid unnecessary
+	glink->add_entry call.  Remove unused symtab param.  Adjust calls.
+	(Target_powerpc::make_local_ifunc_plt_entry): Likewise.
+	(Target_powerpc::make_iplt_section): Remove symtab param.  Don't
+	set up symbols here.
+	(Target_powerpc::do_finalize_sections): Instead set up __rela_iplt
+	syms here.  Do so even when no .iplt.  Don't segfault when linking
+	statically.
+	(Output_data_glink::add_entry, find_entry): Rearrange params.  Add
+	new variants without reloc param.
+	(Glink_sym_ent::Glink_sym_ent): Likewise.
+	(Target_powerpc::Scan::reloc_needs_plt_for_ifunc): Accept any
+	reloc when refs will resolve to plt call stub.
+	(Target_powerpc::Scan::local): Correct ifunc handling.  Allow
+	R_PPC_PLTREL24 to resolve locally.
+	(Target_powerpc::Scan::global): Correct ifunc handling.
+	(Target_powerpc::Relocate::relocate): Correct local sym glink
+	lookup.  Don't destroy "value" when we have a plt call stub,
+	and when checking plt call validity.
+	(Target_powerpc::do_dynsym_value): Simplify.
+
+2012-10-05  Alan Modra  <amodra@gmail.com>
+
+	* i386.cc (Output_data_plt_i386::address_for_global,
+	address_for_local): Add plt offset to returned value.  Adjust uses.
+	* sparc.cc (Output_data_plt_sparc::address_for_global,
+	address_for_local): Likewise.
+	* tilegx.cc (Output_data_plt_tilegx::address_for_global,
+	address_for_local): Likewise.
+	* x86_64.cc (Output_data_plt_x86_64::address_for_global,
+	address_for_local): Likewise.
+	* target.h (Target::plt_address_for_global, plt_address_for_local):
+	Update comment.
+	* output.cc (Output_reloc::symbol_value): Don't add plt offset here.
+	(Output_data_got::Got_entry::write): Nor here.
+	* output.h: Comment fix.
+
+2012-10-02  Jiong Wang  <jiwang@tilera.com>
+
+	* tilegx.cc (Target_tilegx::do_finalize_sections): Adjust
+	global_offset_table_ value for larget got.
+	(Target_tilegx::Relocate::relocate): Handle adjusted got value.
+
+2012-09-29  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Target_powerpc::iplt_): New output section.
+	(Target_powerpc::iplt_section, make_iplt_section,
+	reloc_needs_plt_for_ifunc, make_local_ifunc_plt_entry): New functions.
+	(Target_powerpc::make_plt_entry): Handle ifunc syms.
+	Target_powerpc::plt_entry_count): Count iplt entries too.
+	(Output_data_plt_powerpc::Output_data_plt_powerpc): Don't create
+	reloc section in constructor.  New params.
+	(Target_powerpc::make_plt_section): Create reloc section here instead.
+	(Output_data_plt_powerpc::add_ifunc_entry, add_local_ifunc_entry): New
+	functions.
+	(Output_data_plt_powerpc::initial_plt_entry_size_, name_): New vars.
+	(Output_data_glink::add_entry, find_entry): New functions to
+	deal with local syms.
+	(Glink_sym_ent): Add support for local syms.
+	(Output_data_glink::do_write): Handle ifunc plt entries.
+	(Target_powerpc::Scan::get_reference_flags): Handle more relocs.
+	(Target_powerpc::Scan::local, global): Handle ifunc syms.
+	(Target_powerpc::Relocate::relocate): Likewise.
+	(Target_powerpc::do_dynsym_value): Use glink stub, not plt entry.
+
+2012-09-25  Alan Modra  <amodra@gmail.com>
+
+	* object.h (Sized_relobj_file::adjust_local_symbol,
+	do_adjust_local_symbol): New functions.
+	* object.cc (Sized_relobj_file::do_count_local_symbols): Use the above.
+	* powerpc.cc (Powerpc_relobj::do_adjust_local_symbol): New function.
+	(Powerpc_relobj::scan_opd_relocs): Warn on unexpected opd relocs
+	and irregular opd entry spacing.
+	(Powerpc_relobj::do_read_relocs): Add opd size checks.
+	(Global_symbol_visitor_opd): New functor.
+	(Target_powerpc::do_finalize_sections): Omit global symbols defined
+	on deleted opd entries.
+
+2012-09-15  Jiong Wang  <jiwang@tilera.com>
+
+	* tilegx.cc: New file.
+	* Makefile.am (TARGETSOURCES): Add tilegx.cc
+	(ALL_TARGETOBJS): Add tilegx.$(OBJEXT)
+	* configure.tgt: Add entries for tilegx*.
+	* configure.ac: Likewise.
+	* Makefile.in: Rebuild.
+	* configure: Likewise.
+	* testsuite/icf_safe_test.sh (arch_specific_safe_fold): Handle
+	tilegx.
+
+2012-09-13  Alan Modra  <amodra@gmail.com>
+
+	* target-reloc.h (scan_relocs): Call scan.local for relocs
+	against symbols in discarded sections.  Pass is_discarded
+	param.
+	* arm.cc, * i386.cc, * sparc.cc, * x86_64.cc (Target_*::Scan::local):
+	Add is_discarded param.
+	* powerpc (Target_powerpc::Scan::local): Likewise.  Use
+	is_discarded to flag opd entry as discarded.  Don't emit dyn
+	relocs on such entries.
+	(Target_powerpc::Scan::global): Similarly detect and handle
+	such opd entries.
+	(Powerpc_relobj): Replace opd_ent_shndx_ and opd_ent_off_ with
+	opd_ent_.  Update all uses.
+	(Powerpc_relobj::get_opd_discard, set_opd_discard): New functions.
+	(Target_powerpc::relocate_section): Zero out discarded opd
+	entry relocs.
+
+2012-09-12  Ian Lance Taylor  <iant@google.com>
+
+	PR gold/14570
+	* output.cc: Rename Output_data_got template parameter from size
+	to got_size for all functions.  Compile all variants of
+	Output_data_got.
+	(Output_data_got::Got_entry::write): Correct use of size for
+	symbol value.  Use local_is_tls rather than casting to
+	Sized_relobj_file.
+	* object.h (class Object): Add local_is_tls and do_local_is_tls.
+	(class Sized_relobj_file): Add do_local_is_tls.
+	* incremental.h (class Sized_relobj_incr): Add do_local_is_tls.
+
+2012-09-11  Alan Modra  <amodra@gmail.com>
+
+	PR gold/14566
+	* layout.cc (Layout::set_segment_offsets): When using
+	common-page-size alignment, ensure we are on a new max-page-size
+	page.
+	* output.cc (Output_segment::set_section_addresses): Use
+	abi_pagesize, not common_pagesize for relro boundary.
+	(Output_segment::set_offset): Likewise.
+
+2012-09-11  Alan Modra  <amodra@gmail.com>
+
+	* output.h (Output_data_got::add_global_tls, add_local_tls,
+	add_local_tls_pair): New functions.
+	(Output_data_got::add_local_pair_with_rel): Remove second
+	reloc param.  Expand comment.
+	(Output_data_got::Got_entry): Rename use_plt_offset_ to
+	use_plt_or_tls_offset_, similarly for constructor param.
+	(Output_data_got::Got_entry::write): Add got_index param.
+	* output.cc (Output_data_got::add_global_tls, add_local_tls,
+	add_local_tls_pair): New functions.
+	(Output_data_got::Got_entry::write): Handle tls symbols
+	with use_plt_or_tls_offset_ set specially.
+	(Output_data_got::add_local_pair_with_rel): Only one reloc.
+	(Output_data_got::do_write): Replace iterator with index, pass
+	index to entry write function.
+	* target.h (Target::tls_offset_for_local, tls_offset_for_global,
+	do_tls_offset_for_local, do_tls_offset_for_global): New functions.
+	* arm.cc (Target_arm::Scan::local): Update add_local_pair_with_rel
+	call.
+	* i386.cc (Target_i386::Scan::local): Likewise.
+	* sparc.cc (Target_sparc::Scan::local): Likewise.
+	* x86_64.cc (Target_x86_64::Scan::local): Likewise.
+	* powerpc.cc (Target_powerpc::do_tls_offset_for_local,
+	do_tls_offset_for_global): New functions.
+	(Target_powerpc::Scan::local): Correct TLS relocations and got
+	entry values.
+	(Target_powerpc::Scan::global): Don't emit unnecessary
+	dynamic relocations on TLS GOT entries.
 
 2012-09-10  Matthias Klose  <doko@ubuntu.com>
 
 	* config.in: Disable sanity check for kfreebsd.
 
+2012-09-10  Sterling Augustine  <saugustine@google.com>
+
+	* gdb-index.cc (Gdb_index::pubnames_read): New parameter.
+	(Gdb_index::pubtypes_read): New parameter.
+	(Gdb_index_info_reader::read_pubnames_and_pubtypes): Add parameters
+	to calls.
+	* gdb-index.h (Gdb_index): New fields pubnames_object_ and
+	pubtypes_object_.
+
+2012-09-09  Alan Modra  <amodra@gmail.com>
+
+	* target.h (Target::gc_mark_symbol, do_gc_mark_symbol): New functions.
+	(Sized_target::gc_add_reference, do_gc_add_reference): New functions.
+	* gc.h (gc_process_relocs): Call target gc_add_reference.
+	* gold.cc (queue_middle_tasks): Use gc_mark_symbol on start sym.
+	* symtab.cc (Symbol_table::gc_mark_undef_symbols): Use gc_mark_symbol.
+	(Symbol_table::gc_mark_symbol): Call target gc_mark_symbol. Remove
+	unnecessary cast.
+	* powerpc.cc (Powerpc_relobj::get_opd_ent): Rearrange parameters
+	to cater for when we don't need code offset.  Update use.
+	(Powerpc_relobj::access_from_map_, opd_valid_): New vars.
+	(Powerpc_relobj::access_from_map, add_reference, opd_valid,
+	set_opd_valid): New functions.
+	(Target_powerpc::do_gc_add_reference): New function.
+	(Target_powerpc::gc_process_relocs): Call gc()->add_reference on
+	stashed refs.
+	(Target_powerpc::do_gc_mark_symbol): New function.
+
+2012-09-06  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf_reader.cc (Dwarf_die::read_attributes): Add
+	DW_FORM_GNU_addr_index and DW_FORM_GNU_str_index.
+	(Dwarf_die::skip_attributes): Likewise.
+	* object.cc (Read_symbols_data::~Read_symbols_data): Update comment.
+	* testsuite/gdb_index_test.cc (inline_func_1): New function.
+	(main): Call it.
+	* testsuite/gdb_index_test_comm.sh: Check index for inline function.
+
+2012-09-05  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* testsuite/script_test_3.t: Add .got.plt output section
+	statement.
+	* testsuite/script_test_4.t: Likewise.
+
+2012-09-05  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relocate_functions): Upcase enum values,
+	update all uses and lose "enum" when using type.
+
+2012-09-05  Alan Modra  <amodra@gmail.com>
+
+	* configure.ac (FN_PTRS_IN_SO_WITHOUT_PIC): False for powerpc.
+	* configure: Regenerate.
+	* testsuite/Makefile.am (final_layout.stdout): Pass --synthetic to nm.
+	(plugin_final_layout.stdout): Likewise.
+	(memory_test): Set page sizes to 0x1000.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/discard_locals_test.sh: Add FIXME comment.
+	* testsuite/justsyms_exec.c: Disable function test for powerpc64.
+	* testsuite/pr14265.t: Add .got output section statement.
+	* testsuite/script_test_2.t: Likewise.
+	* testsuite/script_test_3.t: Likewise.
+	* testsuite/script_test_4.t: Likewise.
+	* testsuite/script_test_5.t: Likewise.
+	* testsuite/script_test_6.t: Likewise.
+	* testsuite/script_test_7.t: Likewise.
+	* testsuite/script_test_9.t: Likewise.
+
+2012-09-05  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj::get_opd_ent): Make const.
+	(Powerpc_relocate_functions::Status): New typedef.
+	(Target_powerpc::Scan::get_reference_flags): Handle more relocs.
+	(Target_powerpc::Scan::local): Handle REL64.
+	(Target_powerpc::Scan::global): Likewise, and dynamic relocs
+	for REL32 and REL64.
+	(Target_powerpc::symval_for_branch): New function, extracted from..
+	(Target_powerpc::Relocate::relocate): ..here.  Correct plt call
+	checks.  Report overflow errors.
+
+2012-09-05  Alan Modra  <amodra@gmail.com>
+
+	* object.h (Sized_relobj_file::emit_relocs): Delete.
+	(Sized_relobj_file::emit_relocs_reltype): Delete.
+	* reloc.cc (Sized_relobj_file::do_relocate_sections): Call target
+	relocate_relocs for --emit-relocs.
+	(Sized_relobj_file::emit_relocs, emit_relocs_reltype): Delete.
+	* output.h: Update comment.
+	(Output_segment::first_section): New function.
+	(Output_segment::first_section_load_address): Use first_section.
+	* output.cc (Output_segment::first_section): New function extracted..
+	(Output_segment::first_section_load_address): ..from here.  Delete.
+	* target-reloc.h (relocate_for_relocatable): Rename to relocate_relocs.
+	* target.h (Sized_target::relocate_for_relocatable): Likewise.
+	* arm.cc (Target_arm::relocate_for_relocatable): Likewise, and
+	adjust call to target.h function.
+	* i386.cc (Target_i386): Likewise.
+	* sparc.cc (Target_sparc): Likewise.
+	* x86_64.cc (Target_x86_64): Likewise.
+	* powerpc.cc (Target_powerpc): Likewise.
+	(Target_powerpc::Scan::local, global): Handle R_POWERPC_TLS.  Ensure
+	first tls section has section symbol for optimised local dynamic
+	output relocs.
+	(Target_powerpc::Relocate::relocate): Correct local dynamic value.
+	(Target_powerpc::relocate_relocs): Adjust relocs emitted for
+	optimised tls code.
+	* testsuite/testfile.cc (Target_test::relocate_for_relocatable):
+	Rename to relocate_relocs.  Update error message.
+
+2012-09-04  Andreas Schwab  <schwab@linux-m68k.org>
+
+	* powerpc.cc (do_make_elf_object): Allow ET_EXEC files with
+	--just-symbols.
+
+2012-08-31  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj): Add and use Address typedef.
+	(Powerpc_relobj::toc_base_offset): New stub function.
+	(Target_powerpc): Add tp_offset, dtp_offset.  Rename
+	got_mod_index_offset to tlsld_got_offset.  Update all refs.
+	(Target_powerpc::Relocate::enum skip_tls): New.
+	(Target_powerpc::call_tls_get_addr_): New var.
+	(Target_powerpc::is_branch_reloc): Move to file scope.
+	(Target_powerpc::relocate_tls, optimize_tls_reloc): Delete.
+	(Target_powerpc::optimize_tls_gd, optimize_tls_ld, optimize_tls_ie):
+	New functions.
+	(Target_powerpc::enum Got_type): Delete old values, add new ones.
+	(powerpc_info): Correct common_pagesize for ppc64.
+	(at_tls_transform, needs_dynamic_reloc, use_plt_offset): New functions.
+	(Powerpc_relocate_functions): Add overflow check enums and functions.
+	Add non-shift version of rela, rela_ua.  Delete all rel public
+	functions.  Delete addr16_lo.  Add addr64, addr64_u, addr32,
+	addr32_u, addr24, addr16_u, addr16_hi2, addr16_ha2, addr16_hi3,
+	addr16_ha3, addr14 functions.
+	(Output_data_got_powerpc::add_constant_pair): New function.
+	(Output_data_got_powerpc::got_base_offset): Likewise.
+	(Output_data_got_powerpc::do_write): Correct 64-bit got header.
+	(instruction constants): Sort, add some more.
+	(Output_data_glink::do_write): Add and use Address typedef.  Use
+	object->toc_base_offset() stub for 64-bit.
+	(Target_powerpc::tlsld_got_offset): Use add_constant_pair.
+	(Target_powerpc::Scan::get_reference_flags): Handle more relocs.
+	(Target_powerpc::Scan::local, global): Emit relative dynamic reloc
+	for R_PPC64_TOC.  Handle more relocs.  Generate got entries for TLS.
+	Always treat .opd relocs as against locally defined symbol.
+	Correct condition for RELATIVE relocs.
+	(Target_powerpc::do_finalize_sections): Test for NULL sections.
+	(Target_powerpc::Relocate::relocate): Use plt call stub as value
+	for 32-bit syms with a plt entry.  Correct ppc64 toc base
+	calculations.  Handle TLS relocs, and more.  Add overflow
+	checking and adjust for Powerpc_relocate_functions changes.
+	(Target_powerpc::relocate_for_relocatable): Handle zero r_sym.
+	Reinstate --emit-relocs code with FIXME.
+
+2012-08-30  Alan Modra  <amodra@gmail.com>
+
+	* layout.cc (Layout::set_segment_offsets): Set p_align to
+	abi_pagesize, not common_pagesize.
+	(Layout::relaxation_loop_body): Similarly use abi_pagesize
+	to determine whether file header can go in segment.
+
+2012-08-30  Alan Modra  <amodra@gmail.com>
+
+	* output.h (Output_reloc::Output_reloc <output section>): Add
+	is_relative param.  Adjust calls.
+	(Output_reloc::add_output_section_relative): New functions.
+	* output.cc (Output_reloc::Output_reloc <output section>): Handle
+	is_relative.
+	(Output_reloc::symbol_value): Handle SECTION_CODE.
+
+2012-08-24  Sriraman Tallam  <tmsriram@google.com>
+
+	* gold.cc (queue_middle_tasks): Call layout again when unique
+	segments for sections is desired.
+	* layout.cc (Layout::Layout): Initialize new members.
+	(Layout::get_output_section_flags): New function.
+	(Layout::choose_output_section): Call get_output_section_flags.
+	(Layout::layout): Make output section for mapping to a unique segment.
+	(Layout::insert_section_segment_map): New function.
+	(Layout::attach_allocated_section_to_segment): Make unique segment for
+	output sections marked so.
+	(Layout::segment_precedes): Check for unique segments when sorting.
+	* layout.h (Layout::Unique_segment_info): New struct.
+	(Layout::Section_segment_map): New typedef.
+	(Layout::insert_section_segment_map): New function.
+	(Layout::get_output_section_flags): New function.
+	(Layout::is_unique_segment_for_sections_specified): New function.
+	(Layout::set_unique_segment_for_sections_specified): New function.
+	(Layout::unique_segment_for_sections_specified_): New member.
+	(Layout::section_segment_map_): New member.
+	* object.cc (Sized_relobj_file<size, big_endian>::do_layout):
+	Rename is_gc_pass_one to is_pass_one.
+	Rename is_gc_pass_two to is_pass_two.
+	Rename is_gc_or_icf to is_two_pass.
+	Check for which pass based on whether symbols data is present.
+	Make it two pass when unique segments for sections is desired.
+	* output.cc (Output_section::Output_section): Initialize new
+	members.
+	* output.h (Output_section::is_unique_segment): New function.
+	(Output_section::set_is_unique_segment): New function.
+	(Output_section::is_unique_segment_): New member.
+	(Output_section::extra_segment_flags): New function.
+	(Output_section::set_extra_segment_flags): New function.
+	(Output_section::extra_segment_flags_): New member.
+	(Output_section::segment_alignment): New function.
+	(Output_section::set_segment_alignment): New function.
+	(Output_section::segment_alignment_): New member.
+	(Output_segment::Output_segment): Initialize is_unique_segment_.
+	(Output_segment::is_unique_segment): New function.
+	(Output_segment::set_is_unique_segment): New function.
+	(Output_segment::is_unique_segment_): New member.
+	* plugin.cc (allow_unique_segment_for_sections): New function.
+	(unique_segment_for_sections): New function.
+	(Plugin::load): Add new functions to transfer vector.
+	* Makefile.am (plugin_final_layout.readelf.stdout): Add readelf output.
+	* Makefile.in: Regenerate.
+	* testsuite/plugin_final_layout.sh: Check if unique segment
+	functionality works.
+	* testsuite/plugin_section_order.c (onload): Check if new interfaces
+	are available.
+	(allow_unique_segment_for_sections): New global.
+	(unique_segment_for_sections): New global.
+	(claim_file_hook): Call allow_unique_segment_for_sections.
+	(all_symbols_read_hook): Call unique_segment_for_sections.
+
+2012-08-22  Cary Coutant  <ccoutant@google.com>
+
+	* layout.cc (Layout::include_section): Don't assert on GROUP
+	sections with --emit-relocs.
+
+2012-08-21  Cary Coutant  <ccoutant@google.com>
+
+	* symtab.cc (Symbol_table::gc_mark_undef_symbols): Don't assert
+	if --export-dynamic-symbol names an undef symbol.
+
+2012-08-18  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc: Formatting and white space.
+	(Powerpc_relobj): Rename got2_section_ to special_.
+	Add opd_ent_shndx_ and opd_ent_off_ vectors.
+	(Powerpc_relobj::opd_shndx, init_opd, get_opd_ent, set_opd_ent,
+	scan_opd_relocs, do_read_relocs, opd_ent_ndx): New functions.
+	(Target_powerpc): Add Address typedef and invalid_address.  Use
+	throughout.
+	(Target_powerpc::is_branch_reloc): New function.
+	(Powerpc_relocate_functions): Add Address typedef, use throughout.
+	(Powerpc_relocate_functions:rela, rela_ua): Correct type used
+	for dst_mask, value and addend.
+	(Powerpc_relobj::do_find_special_sections): Find .opd for 64-bit.
+	(ld_2_1, cror_15_15_15, cror_31_31_31): New insn constants.
+	(Output_data_glink::do_write): Correct toc base.  Don't try to use
+	uint16_t for 24-bit offset.  Use get_output_section_offset and
+	check return.
+	(Target_powerpc::Scan::local): Handle more relocs.
+	(Target_powerpc::do_finalize_sections): Set up DT_PPC64_GLINK.
+	(Target_powerpc::Relocate::relocate): Correct toc base calculation.
+	Plug in toc restoring insn after plt calls.  Translate branches
+	to function descriptor symbols to corresponding entry point.
+	(Target_powerpc::relocate_for_relocatable): Check return from
+	get_output_section_offset.
+	* symtab.h: Comment typo.
+
+2012-08-14  Ian Lance Taylor  <iant@google.com>
+
+	* x86_64.cc (Target_x86_64::Scan::global): Fix erroneous call to
+	unsupported_relocal_local to call unsupported_reloc_global.
+
+2012-08-14  Nick Clifton  <nickc@redhat.com>
+
+	PR ld/14265
+	* script-sections.cc (Sections_element::output_section_name): Add
+	keep return parameter.
+	(Output_section_element::match_name): Add keep return parameter.
+	Return the value of the keep_ member.
+	* script-sections.h (class Output_section): Update
+	output_section_name prototype.
+	* layout.cc (Layout::keep_input_section): New public member
+	function.
+	(Layout::choose_output_section): Pass keep parameter to
+	output_section_name.
+	* layout.h (class Layout): Add keep_input_section.
+	* object.cc (Sized_relobj_file::do_layout): Check for kept input
+	sections.
+	* testsuite/Makefile.am: Add a test.
+	* testsuite/Makefile.in: Regenerate.
+	* testsuite/pr14265.c: Source file for the test.
+	* testsuite/pr14265.t: Linker script for the test.
+	* testsuite/pr14265.sh: Shell script for the test.
+
+2012-08-14  Alan Modra  <amodra@gmail.com>
+
+	* target.h (Target::output_section_name): New function.
+	(Target::do_output_section_name): New function.
+	* layout.cc (Layout::choose_output_section): Call the above.
+	* powerpc.cc (Target_powerpc::do_output_section_name): New function.
+
+2012-08-14  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc: Update for renamed R_PPC_REL16 relocs.
+	(Output_data_got_powerpc::do_write): Don't rely on base class lookup
+	for replace_constant call.
+	(Output_data_plt_powerpc::do_print_to_mapfile): New function.
+	(Output_data_glink::do_print_to_mapfile): New function.
+	(Target_powerpc::Scan::local): Ignore R_PPC64_TOCSAVE.
+	(Target_powerpc::Relocate::relocate): Likewise.
+
+2012-08-14  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc (Powerpc_relobj::set_got2_shndx): Delete.
+	(Powerpc_relobj::do_find_special_sections): Don't use set_got2_shndx.
+	(Output_data_glink::add_entry,find_entry): Remove shndx param.
+	(class Glink_sym_ent): Rename from struct Glink_sym_ent.  Remove
+	all references to shndx_.  Handle special case for R_PPC_PLTREL24
+	here.
+	(class Glink_sym_ent_hash): Rename from struct Glink_sym_ent_hash.
+	(Output_data_glink::do_write): Retrieve got2_shdnx from object.
+	(Target_powerpc::make_plt_entry): Don't special case R_PPC_PLTREL24
+	here.
+	(Target_powerpc::Scan::global): Nor on make_plt_entry call.
+	(Target_powerpc::Relocate::relocate): Nor on glink->find_entry call.
+
+2012-08-12  Alan Modra  <amodra@gmail.com>
+
+	* powerpc.cc: Whitespace fixes.  Wrap overly long lines.
+	(glink insn constants): Use uint32_t.
+	(Output_data_glink::add_entry): Use insert, not [] operator.
+
+2012-08-11  Alan Modra  <amodra@gmail.com>
+
+	* object.h (Sized_relobj_file::find_shdr): New function.
+	(Sized_relobj_file::find_special_sections): New function.
+	* object.cc (Sized_relobj_file::find_shdr): New function.
+	(Sized_relobj_file::find_eh_frame): Use find_shdr.
+	(Sized_relobj_file::find_special_sections): New function, split out..
+	(Sized_relobj_file::do_read_symbols): ..from here.
+	* output.h (Output_data_got::replace_constant): New function.
+	(Output_data_got::num_entries): New function.
+	(Output_data_got::last_got_offset,set_got_size): Use num_entries.
+	(Output_data_got::got_offset): Protected rather than private.
+	(Output_data_got::replace_got_entry): New function.
+	* output.cc (Output_data_got::replace_got_entry): New function.
+	* powerpc.cc (class Powerpc_relobj): New.
+	(class Powerpc_relocate_functions): Delete all psymval variants or
+	convert to value,addend type.  Delete pcrela, pcrela_unaligned.
+	Implement _ha functions using corresponding _hi function.
+	(Powerpc_relobj::find_special_sections): New function.
+	(Target_powerpc::do_make_elf_object): New function.
+	(class Output_data_got_powerpc): New.
+	(class Output_data_glink): New.
+	(class Powerpc_scan_relocatable_reloc): New.
+	Many more changes througout file.
+
 2012-08-09  Nick Clifton  <nickc@redhat.com>
 
 	* po/vi.po: Updated Vietnamese translation.
+
+2012-08-07  Ian Lance Taylor  <iant@google.com>
+
+	* layout.cc (Layout::add_target_dynamic_tags): If
+	dynrel_includes_plt but no dyn_rel, emit dynamic reloc tags for
+	plt_rel.
 
 2012-07-30  Nick Clifton  <nickc@redhat.com>
 
@@ -5421,7 +7405,7 @@
 
 2010-05-26  Rafael Espindola  <espindola@google.com>
 
-       PR 11604
+	PR 11604
 	* gold/object.cc(Sized_relobj::do_layout_deferred_sections): Avoid
 	adding sections the garbage collector removed.
 	* gold/testsuite/Makefile.am: Add test.
@@ -7175,48 +9159,48 @@
 2010-01-08  Doug Kwan  <dougkwan@google.com>
 
 	* arm.cc (Stub_table::Stub_table): Initalize cortex_a8_stubs_,
-	  prev_data_size_ and prev_addralign_.  Remove initializer for
-	  deleted data member has_been_changed_.
-	  (Stub_table::empty): Look at both reloc_stubs_ and cortex_a8_stubs_
-	  to determine if the table is empty.
-	  (Stub_table::has_been_changed, Stub_table_set_has_been_changed):
-	  Remove.
-	  (Stub_table::add_reloc_stub): Define method in class definition
-	  instead of just declaring it there.
-	  (Stub_table::add_cortex_a8_stub): New method definition.
-	  (Stub_table::update_data_size_and_addralign): Ditto.
-	  (Stub_table::finalize_stubs): Ditto.
-	  (Stub_table::apply_cortex_a8_workaround_to_address_range): Ditto.
-	  (Stub_table::do_addralign_): Return address alignment in the
-	  (Stub_table::do_reset_address_and_file_offset): Define method in
-	  class definition instead of declaring it there.  Set current data
-	  size to be the data size of the previous pass.
-	  (Stub_table::set_final_data_size): Use current data size as the
-	  final data size.
-	  (Stub_table::relocate_stub): Change parameter type of stub from
-	  Reloc_stub pointer to Stub pointer.
-	  (Stub_table::addralign_, Stub_table::has_been_changed_): Remove.
-	  (Stub_table::Cortex_a8_stub_list): New typedef.
-	  (Stub_table::cortex_a8_stubs_, Stub_table::prev_data_size_,
-	   Stub_table::prev_addralign_): New data member.
-	  (Arm_relobj::Arm_relobj): Initialize data member
-	  section_has_cortex_a8_workaround_.
-	  (Arm_relobj::section_has_cortex_a8_workaround,
-	   Arm_relobj::mark_section_for_cortex_a8_workaround): New method
-	   definitions.
-	  (Arm_relobj::section_has_cortex_a8_workaround_): New data member
-	  declarations.
-	  (Target_arm::relocate_stub): Change parameter type of stub from
-	  Reloc_stub pointer to Stub pointer.
-	  (Insn_template::size, Insn_template::alignment): Handle
-	  THUMB16_SPECIAL_TYPE.
-	  (Stub_table::remove_all_cortex_a8_stubs, Stub_table::finalize_stubs,
-	   Stub_table::update_data_size_and_addralign,
-	   Stub_table::apply_cortex_a8_workaround_to_address_range): New method
-	  definitions.
-	  (Stub_table::relocate_stubs): Handle Cortex-A8 stubs.
-	  (Stub_table::do_write): Ditto.
-	  (Target_arm::do_relax): Adjust code for changes in Stub_table.
+	prev_data_size_ and prev_addralign_.  Remove initializer for
+	deleted data member has_been_changed_.
+	(Stub_table::empty): Look at both reloc_stubs_ and cortex_a8_stubs_
+	to determine if the table is empty.
+	(Stub_table::has_been_changed, Stub_table_set_has_been_changed):
+	Remove.
+	(Stub_table::add_reloc_stub): Define method in class definition
+	instead of just declaring it there.
+	(Stub_table::add_cortex_a8_stub): New method definition.
+	(Stub_table::update_data_size_and_addralign): Ditto.
+	(Stub_table::finalize_stubs): Ditto.
+	(Stub_table::apply_cortex_a8_workaround_to_address_range): Ditto.
+	(Stub_table::do_addralign_): Return address alignment in the
+	(Stub_table::do_reset_address_and_file_offset): Define method in
+	class definition instead of declaring it there.  Set current data
+	size to be the data size of the previous pass.
+	(Stub_table::set_final_data_size): Use current data size as the
+	final data size.
+	(Stub_table::relocate_stub): Change parameter type of stub from
+	Reloc_stub pointer to Stub pointer.
+	(Stub_table::addralign_, Stub_table::has_been_changed_): Remove.
+	(Stub_table::Cortex_a8_stub_list): New typedef.
+	(Stub_table::cortex_a8_stubs_, Stub_table::prev_data_size_,
+	 Stub_table::prev_addralign_): New data member.
+	(Arm_relobj::Arm_relobj): Initialize data member
+	section_has_cortex_a8_workaround_.
+	(Arm_relobj::section_has_cortex_a8_workaround,
+	 Arm_relobj::mark_section_for_cortex_a8_workaround): New method
+	 definitions.
+	(Arm_relobj::section_has_cortex_a8_workaround_): New data member
+	declarations.
+	(Target_arm::relocate_stub): Change parameter type of stub from
+	Reloc_stub pointer to Stub pointer.
+	(Insn_template::size, Insn_template::alignment): Handle
+	THUMB16_SPECIAL_TYPE.
+	(Stub_table::remove_all_cortex_a8_stubs, Stub_table::finalize_stubs,
+	 Stub_table::update_data_size_and_addralign,
+	 Stub_table::apply_cortex_a8_workaround_to_address_range): New method
+	definitions.
+	(Stub_table::relocate_stubs): Handle Cortex-A8 stubs.
+	(Stub_table::do_write): Ditto.
+	(Target_arm::do_relax): Adjust code for changes in Stub_table.
 
 2010-01-08  Ian Lance Taylor  <iant@google.com>
 
@@ -8121,7 +10105,7 @@
 
 2009-12-01  Rafael Avila de Espindola  <espindola@google.com>
 
-       * incremental-dump.cc (main): Fix typos.
+	* incremental-dump.cc (main): Fix typos.
 
 2009-11-27  Rafael Avila de Espindola  <espindola@google.com>
 
@@ -10249,12 +12233,12 @@
 	(Incremental_inputs::sized_create_incremental_inputs_data): New method.
 	* incremental.h: New file.
 	* layout.cc (Layout::Layout): Handle new incremental_inputs_.
-       (Layout::finalize): Create incremental inputs section in
+	(Layout::finalize): Create incremental inputs section in
 	incremental builds.
-       (Layout::create_incremental_info_sections): New method.
+	(Layout::create_incremental_info_sections): New method.
 	* layout.h (Layout::incremental_inputs): New method.
-       (Layout::create_incremental_info_sections): New method.
-       (Layout::incremental_inputs_): New field.
+	(Layout::create_incremental_info_sections): New method.
+	(Layout::incremental_inputs_): New field.
 	* main.cc (main): Notify Incremental_input of the command line.
 
 2009-04-01  Ian Lance Taylor  <iant@google.com>
@@ -13343,3 +15327,16 @@
 2008-03-21  Ian Lance Taylor  <iant@google.com>
 
 	* Added source code to GNU binutils.
+
+Copyright (C) 2008-2013 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Local Variables:
+mode: change-log
+left-margin: 8
+fill-column: 74
+version-control: never
+End:

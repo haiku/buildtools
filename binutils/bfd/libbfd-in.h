@@ -96,6 +96,8 @@ struct areltdata
   bfd_size_type extra_size;	/* BSD4.4: extra bytes after the header.  */
   char *filename;		/* Null-terminated.  */
   file_ptr origin;		/* For element of a thin archive.  */
+  void *parent_cache;		/* Where and how to find this member.  */
+  file_ptr key;
 };
 
 #define arelt_size(bfd) (((struct areltdata *)((bfd)->arelt_data))->parsed_size)
@@ -160,8 +162,6 @@ extern bfd *_bfd_generic_get_elt_at_index
   (bfd *, symindex);
 bfd * _bfd_new_bfd
   (void);
-void _bfd_delete_bfd
-  (bfd *);
 bfd_boolean _bfd_free_cached_info
   (bfd *);
 
@@ -232,7 +232,9 @@ int bfd_generic_stat_arch_elt
 /* Generic routines to use for BFD_JUMP_TABLE_GENERIC.  Use
    BFD_JUMP_TABLE_GENERIC (_bfd_generic).  */
 
-#define _bfd_generic_close_and_cleanup bfd_true
+#define _bfd_generic_close_and_cleanup _bfd_archive_close_and_cleanup
+extern bfd_boolean _bfd_archive_close_and_cleanup
+  (bfd *);
 #define _bfd_generic_bfd_free_cached_info bfd_true
 extern bfd_boolean _bfd_generic_new_section_hook
   (bfd *, asection *);
@@ -704,6 +706,10 @@ extern bfd_boolean _bfd_write_merged_section
 
 extern bfd_vma _bfd_merged_section_offset
   (bfd *, asection **, void *, bfd_vma);
+
+/* Tidy up when done.  */
+
+extern void _bfd_merge_sections_free (void *);
 
 /* Create a string table.  */
 extern struct bfd_strtab_hash *_bfd_stringtab_init

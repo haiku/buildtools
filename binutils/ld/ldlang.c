@@ -1,7 +1,5 @@
 /* Linker command language support.
-   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright 1991-2013 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -387,7 +385,7 @@ get_init_priority (const char *name)
 	decimal numerical value of the init_priority attribute.
 	The order of execution in .init_array is forward and
 	.fini_array is backward.
-     2: .ctors.NNNN/.ctors.NNNN: Where NNNN is 65535 minus the
+     2: .ctors.NNNN/.dtors.NNNN: Where NNNN is 65535 minus the
 	decimal numerical value of the init_priority attribute.
 	The order of execution in .ctors is backward and .dtors
 	is forward.
@@ -1240,6 +1238,8 @@ lang_init (void)
 void
 lang_finish (void)
 {
+  bfd_link_hash_table_free (link_info.output_bfd, link_info.hash);
+  bfd_hash_table_free (&lang_definedness_table);
   output_section_statement_table_free ();
 }
 
@@ -1777,7 +1777,7 @@ lang_insert_orphan (asection *s,
   os_tail = ((lang_output_section_statement_type **)
 	     lang_output_section_statement.tail);
   os = lang_enter_output_section_statement (secname, address, normal_section,
-					    NULL, NULL, NULL, constraint);
+					    NULL, NULL, NULL, constraint, 0);
 
   ps = NULL;
   if (config.build_constructors && *os_tail == os)
@@ -2779,7 +2779,7 @@ load_symbols (lang_input_statement_type *entry,
 		 substitute BFD for us.  */
 	      if (!bfd_link_add_symbols (subsbfd, &link_info))
 		{
-		  einfo (_("%F%B: could not read symbols: %E\n"), member);
+		  einfo (_("%F%B: error adding symbols: %E\n"), member);
 		  loaded = FALSE;
 		}
 	    }
@@ -2793,7 +2793,7 @@ load_symbols (lang_input_statement_type *entry,
   if (bfd_link_add_symbols (entry->the_bfd, &link_info))
     entry->flags.loaded = TRUE;
   else
-    einfo (_("%F%B: could not read symbols: %E\n"), entry->the_bfd);
+    einfo (_("%F%B: error adding symbols: %E\n"), entry->the_bfd);
 
   return entry->flags.loaded;
 }
@@ -4965,8 +4965,8 @@ lang_size_sections_1
 		   as we did for the VMA, possibly including alignment
 		   from the bfd section.  If a different region, then
 		   only align according to the value in the output
-		   statement.  */
-		if (os->lma_region != os->region)
+		   statement unless specified otherwise.  */
+		if (os->lma_region != os->region && !os->align_lma_with_input)
 		  section_alignment = os->section_alignment;
 		if (section_alignment > 0)
 		  lma = align_power (lma, section_alignment);
@@ -5824,9 +5824,6 @@ lang_end (void)
 	    }
 	}
     }
-
-  /* Don't bfd_hash_table_free (&lang_definedness_table);
-     map file output may result in a call of lang_track_definedness.  */
 }
 
 /* This is a small function used when we want to ignore errors from
@@ -6236,7 +6233,8 @@ lang_enter_output_section_statement (const char *output_section_statement_name,
 				     etree_type *align,
 				     etree_type *subalign,
 				     etree_type *ebase,
-				     int constraint)
+				     int constraint,
+				     int align_with_input)
 {
   lang_output_section_statement_type *os;
 
@@ -6257,6 +6255,10 @@ lang_enter_output_section_statement (const char *output_section_statement_name,
 
   /* Make next things chain into subchain of this.  */
   push_stat_ptr (&os->children);
+
+  os->align_lma_with_input = align_with_input == ALIGN_WITH_INPUT;
+  if (os->align_lma_with_input && align != NULL)
+    einfo (_("%F%P:%S: error: align with input and explicit align specified\n"), NULL);
 
   os->subsection_alignment =
     topower (exp_get_value_int (subalign, -1, "subsection alignment"));
@@ -7308,7 +7310,7 @@ lang_enter_overlay_section (const char *name)
   etree_type *size;
 
   lang_enter_output_section_statement (name, overlay_vma, overlay_section,
-				       0, overlay_subalign, 0, 0);
+				       0, overlay_subalign, 0, 0, 0);
 
   /* If this is the first section, then base the VMA of future
      sections on this one.  This will work correctly even if `.' is

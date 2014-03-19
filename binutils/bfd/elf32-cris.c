@@ -511,10 +511,10 @@ cris_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
       case 202:		/* Linux/CRISv32 */
 	/* pr_cursig */
-	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 22);
+	elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 22);
 
 	/* pr_reg */
 	offset = 70;
@@ -530,10 +530,10 @@ cris_elf_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
       case 214:		/* Linux/CRIS */
 	/* pr_cursig */
-	elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
 
 	/* pr_pid */
-	elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 22);
+	elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 22);
 
 	/* pr_reg */
 	offset = 70;
@@ -557,9 +557,9 @@ cris_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 	return FALSE;
 
       case 124:		/* Linux/CRISv32 elf_prpsinfo */
-	elf_tdata (abfd)->core_program
+	elf_tdata (abfd)->core->program
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-	elf_tdata (abfd)->core_command
+	elf_tdata (abfd)->core->command
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
       }
   else
@@ -569,9 +569,9 @@ cris_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 	return FALSE;
 
       case 124:		/* Linux/CRIS elf_prpsinfo */
-	elf_tdata (abfd)->core_program
+	elf_tdata (abfd)->core->program
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-	elf_tdata (abfd)->core_command
+	elf_tdata (abfd)->core->command
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
       }
 
@@ -580,7 +580,7 @@ cris_elf_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      implementations, so strip it off if it exists.  */
 
   {
-    char *command = elf_tdata (abfd)->core_command;
+    char *command = elf_tdata (abfd)->core->command;
     int n = strlen (command);
 
     if (0 < n && command[n - 1] == ' ')
@@ -884,7 +884,7 @@ elf_cris_link_hash_table_create (bfd *abfd)
   struct elf_cris_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf_cris_link_hash_table);
 
-  ret = ((struct elf_cris_link_hash_table *) bfd_malloc (amt));
+  ret = ((struct elf_cris_link_hash_table *) bfd_zmalloc (amt));
   if (ret == (struct elf_cris_link_hash_table *) NULL)
     return NULL;
 
@@ -900,9 +900,6 @@ elf_cris_link_hash_table_create (bfd *abfd)
   /* Initialize to skip over the first three entries in the gotplt; they
      are used for run-time symbol evaluation.  */
   ret->next_gotplt_entry = 12;
-
-  /* We haven't seen any R_CRIS_nn_GOT_TPREL initially.  */
-  ret->dtpmod_refcount = 0;
 
   return &ret->root.root;
 }
@@ -2288,7 +2285,7 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
     }
 
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
-  if (strcmp (h->root.root.string, "_DYNAMIC") == 0
+  if (h == elf_hash_table (info)->hdynamic
       || h == elf_hash_table (info)->hgot)
     sym->st_shndx = SHN_ABS;
 
@@ -2698,7 +2695,7 @@ cris_elf_plt_sym_val (bfd_vma i ATTRIBUTE_UNUSED, const asection *plt,
     {
       bfd_size_type got_offset;
       bfd_byte gotoffs_raw[4];
-      
+
       if (!bfd_get_section_contents (abfd, (asection *) plt, gotoffs_raw,
 				     pltoffs + plt_entry_got_offset,
 				     sizeof (gotoffs_raw)))
@@ -3180,6 +3177,10 @@ cris_elf_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       r_type = ELF32_R_TYPE (rel->r_info);
@@ -4244,7 +4245,9 @@ cris_elf_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 }
 
 static enum elf_reloc_type_class
-elf_cris_reloc_type_class (const Elf_Internal_Rela *rela)
+elf_cris_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			   const asection *rel_sec ATTRIBUTE_UNUSED,
+			   const Elf_Internal_Rela *rela)
 {
   enum elf_cris_reloc_type r_type = ELF32_R_TYPE (rela->r_info);
   switch (r_type)
