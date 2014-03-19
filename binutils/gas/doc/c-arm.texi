@@ -390,7 +390,7 @@ ARM and THUMB instructions had their own, separate syntaxes.  The new,
 @code{unified} syntax, which can be selected via the @code{.syntax}
 directive, and has the following main features:
 
-@table @bullet
+@table @code
 @item
 Immediate operands do not require a @code{#} prefix.
 
@@ -468,6 +468,9 @@ so @samp{: @var{align}} is used instead.  For example:
 
 @node ARM Floating Point
 @section Floating Point
+@menu
+* ARM-Relocations::
+@end menu
 
 @cindex floating point, ARM (@sc{ieee})
 @cindex ARM floating point (@sc{ieee})
