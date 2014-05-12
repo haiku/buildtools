@@ -15,7 +15,7 @@
  *
  * Each word must be an individual element in a jam variable value.
  *
- * In $(JAMSHELL), % expands to the command string and ! expands to 
+ * In $(JAMSHELL), % expands to the command string and ! expands to
  * the slot number (starting at 1) for multiprocess (-j) invocations.
  * If $(JAMSHELL) doesn't include a %, it is tacked on as the last
  * argument.
@@ -50,13 +50,17 @@
 # include <process.h>
 # endif
 
-# ifdef OS_NT 
+# ifdef unix
+# include <unistd.h>
+# endif
+
+# ifdef OS_NT
 # define USE_EXECNT
 # include <process.h>
 # define WIN32_LEAN_AND_MEAN
 # include <windows.h>		/* do the ugly deed */
 # define USE_MYWAIT
-# if !defined( __BORLANDC__ ) 
+# if !defined( __BORLANDC__ )
 # define wait my_wait
 static int my_wait( int *status );
 # endif
@@ -94,7 +98,7 @@ onintr( int disp )
  */
 
 void
-execcmd( 
+execcmd(
 	char *string,
 	void (*func)( void *closure, int status ),
 	void *closure,
@@ -133,7 +137,7 @@ execcmd(
 
 	    cmdtab[ slot ].tempfile = malloc( strlen( tempdir ) + 32 );
 
-	    sprintf( cmdtab[ slot ].tempfile, "%s\\jam%dt%d.bat", 
+	    sprintf( cmdtab[ slot ].tempfile, "%s\\jam%dt%d.bat",
 				tempdir, GetCurrentProcessId(), slot );
 	}
 
@@ -223,15 +227,15 @@ execcmd(
 	}
 # else
 # ifdef NO_VFORK
-	if ((pid = fork()) == 0) 
+	if ((pid = fork()) == 0)
    	{
 	    execvp( argv[0], argv );
 	    _exit(127);
 	}
 # else
-	if ((pid = vfork()) == 0) 
+	if ((pid = vfork()) == 0)
    	{
-	    execvp( argv[0], argv );
+	    execvp( argv[0], (char* const*)argv );
 	    _exit(127);
 	}
 # endif
@@ -272,10 +276,10 @@ execwait()
 	if( !cmdsrunning )
 	    return 0;
 
-	do 
+	do
 	{
 	    /* Pick up process pid and status */
-    
+
 	    while( ( w = wait( &status ) ) == -1 && errno == EINTR )
 		;
 
@@ -377,7 +381,7 @@ my_wait( int *status )
 FAILED:
 	errno = GetLastError();
 	return -1;
-    
+
 }
 
 # endif /* USE_MYWAIT */

@@ -38,9 +38,7 @@
 
 # ifdef USE_PATHUNIX
 
-# if defined( OS_MACOSX )
-/* need unistd for the prototype for getcwd to avoid defaulting return to int on 64bit */
-/* XXX: others too ? */
+# if defined( unix )
 # include <unistd.h>
 # endif
 
@@ -49,13 +47,13 @@
  */
 
 void
-path_parse( 
+path_parse(
 	const char *file,
 	PATHNAME *f )
 {
 	const char *p, *q;
 	const char *end;
-	
+
 	memset( (char *)f, 0, sizeof( *f ) );
 
 	/* Look for <grist> */
@@ -83,7 +81,7 @@ path_parse(
 	{
 	    f->f_dir.ptr = file;
 	    f->f_dir.len = p - file;
-	
+
 	    /* Special case for / - dirname is /, not "" */
 
 	    if( !f->f_dir.len )
@@ -108,7 +106,7 @@ path_parse(
 	    f->f_member.ptr = p + 1;
 	    f->f_member.len = end - p - 2;
 	    end = p;
-	} 
+	}
 
 	/* Look for .suffix */
 	/* This would be memrchr() */
@@ -157,13 +155,13 @@ path_build(
 
 # if PATH_DELIM == '/'
 
-	if( f->f_root.len 
+	if( f->f_root.len
 	    && !( f->f_root.len == 1 && f->f_root.ptr[0] == '.' )
 	    && !( f->f_dir.len && f->f_dir.ptr[0] == '/' ) )
 
 # else /* unix */
 
-	if( f->f_root.len 
+	if( f->f_root.len
 	    && !( f->f_root.len == 1 && f->f_root.ptr[0] == '.' )
 	    && !( f->f_dir.len && f->f_dir.ptr[0] == '/' )
 	    && !( f->f_dir.len && f->f_dir.ptr[0] == '\\' )
@@ -233,8 +231,8 @@ path_parent( PATHNAME *f )
 	f->f_suffix.ptr =
 	f->f_member.ptr = "";
 
-	f->f_base.len = 
-	f->f_suffix.len = 
+	f->f_base.len =
+	f->f_suffix.len =
 	f->f_member.len = 0;
 }
 

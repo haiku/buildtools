@@ -35,14 +35,14 @@
  *    hcache_init() - read and parse the local .jamdeps file.
  *    hcache_done() - write a new .jamdeps file
  *    hcache() - return list of headers on target.  Use cache or do a scan.
- *    
+ *
  * The dependency file format is an ascii file with 1 line per target.
  * Each line has the following fields:
  * @boundname@ timestamp @file@ @file@ @file@ ... \n
  * */
 
 struct hcachedata {
-    char		*boundname;
+    const char	*boundname;
     time_t		time;
     LIST		*includes;
     LIST		*hdrscan; /* the HDRSCAN value for this target */
@@ -54,7 +54,7 @@ typedef struct hcachedata HCACHEDATA ;
 
 
 static struct hash *hcachehash = 0;
-static HCACHEDATA  *hcachelist = 0; 
+static HCACHEDATA  *hcachelist = 0;
 
 static int queries = 0;
 static int hits = 0;
@@ -70,10 +70,10 @@ static int hits = 0;
  * We cache the result so the user can't change the cache file during
  * header scanning.
  */
-static char*
+static const char*
 cache_name(void)
 {
-    static char* name = 0;
+    static const char* name = 0;
     if (!name) {
 	LIST *hcachevar = var_get("HCACHEFILE");
 
@@ -116,7 +116,7 @@ cache_maxage(void)
  * ASCII 0.  The returned value is as returned by newstr(), so it need
  * not be freed.
  */
-char*
+const char*
 read_netstring(FILE* f)
 {
     unsigned long len;
@@ -168,10 +168,10 @@ void
 hcache_init()
 {
     HCACHEDATA  cachedata, *c;
-    FILE	*f;
-    char	*version;
-    int		header_count = 0;
-    char*	hcachename;
+    FILE		*f;
+    const char	*version;
+    int			header_count = 0;
+    const char*	hcachename;
 
     hcachehash = hashinit (sizeof (HCACHEDATA), "hcache");
 
@@ -180,7 +180,7 @@ hcache_init()
 
     if (! (f = fopen (hcachename, "rb" )))
 	return;
-    
+
     version = read_netstring(f);
     if (!version || strcmp(version, CACHE_FILE_VERSION)) {
 	fclose(f);
@@ -189,11 +189,11 @@ hcache_init()
 
     while (1)
     {
-	char* record_type;
-	char *time_str;
-	char *age_str;
-	char *includes_count_str;
-	char *hdrscan_count_str;
+	const char* record_type;
+	const char *time_str;
+	const char *age_str;
+	const char *includes_count_str;
+	const char *hdrscan_count_str;
 	int i, count;
 	LIST *l;
 
@@ -210,14 +210,14 @@ hcache_init()
 		    hcachename, record_type ? record_type : "<null>");
 	    goto bail;
 	}
-	
+
 	c = &cachedata;
-	    
+
 	c->boundname = read_netstring(f);
 	time_str = read_netstring(f);
 	age_str = read_netstring(f);
 	includes_count_str = read_netstring(f);
-	
+
 	if (!c->boundname || !time_str || !age_str
 	    || !includes_count_str)
 	{
@@ -230,7 +230,7 @@ hcache_init()
 
 	count = atoi(includes_count_str);
 	for (l = 0, i = 0; i < count; i++) {
-	    char* s = read_netstring(f);
+	    const char* s = read_netstring(f);
 	    if (!s) {
 		fprintf(stderr, "invalid %s\n", hcachename);
 		goto bail;
@@ -248,7 +248,7 @@ hcache_init()
 
 	count = atoi(hdrscan_count_str);
 	for (l = 0, i = 0; i < count; i++) {
-	    char* s = read_netstring(f);
+	    const char* s = read_netstring(f);
 	    if (!s) {
 		fprintf(stderr, "invalid %s\n", hcachename);
 		goto bail;
@@ -272,7 +272,7 @@ hcache_init()
     if (DEBUG_HEADER) {
 	printf("hcache read from file %s\n", hcachename);
     }
-    
+
  bail:
     fclose(f);
 }
@@ -280,12 +280,12 @@ hcache_init()
 void
 hcache_done()
 {
-    FILE	*f;
+    FILE		*f;
     HCACHEDATA  *c;
-    int 	header_count = 0;
-    char*	hcachename;
-    int		maxage;
-    
+    int 		header_count = 0;
+    const char*	hcachename;
+    int			maxage;
+
     if (!hcachehash)
 	return;
 
