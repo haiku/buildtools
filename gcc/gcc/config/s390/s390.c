@@ -407,6 +407,65 @@ struct GTY(()) machine_function
    bytes on a z10 (or higher) CPU.  */
 #define PREDICT_DISTANCE (TARGET_Z10 ? 384 : 2048)
 
+static const int s390_hotpatch_trampoline_halfwords_default = 12;
+static const int s390_hotpatch_trampoline_halfwords_max = 1000000;
+static int s390_hotpatch_trampoline_halfwords = -1;
+
+/* Return the argument of the given hotpatch attribute or the default value if
+   no argument is present.  */
+
+static inline int
+get_hotpatch_attribute (tree hotpatch_attr)
+{
+  const_tree args;
+
+  args = TREE_VALUE (hotpatch_attr);
+
+  return (args) ?
+    TREE_INT_CST_LOW (TREE_VALUE (args)):
+    s390_hotpatch_trampoline_halfwords_default;
+}
+
+/* Check whether the hotpatch attribute is applied to a function and, if it has
+   an argument, the argument is valid.  */
+
+static tree
+s390_handle_hotpatch_attribute (tree *node, tree name, tree args,
+				int flags ATTRIBUTE_UNUSED, bool *no_add_attrs)
+{
+  if (TREE_CODE (*node) != FUNCTION_DECL)
+    {
+      warning (OPT_Wattributes, "%qE attribute only applies to functions",
+	       name);
+      *no_add_attrs = true;
+    }
+  else if (args)
+    {
+      tree expr = TREE_VALUE (args);
+
+      if (TREE_CODE (expr) != INTEGER_CST
+	  || !INTEGRAL_TYPE_P (TREE_TYPE (expr))
+	  || TREE_INT_CST_HIGH (expr) != 0
+	  || TREE_INT_CST_LOW (expr) > (unsigned int)
+	  s390_hotpatch_trampoline_halfwords_max)
+	{
+	  error ("requested %qE attribute is not a non-negative integer"
+		 " constant or too large (max. %d)", name,
+		 s390_hotpatch_trampoline_halfwords_max);
+	  *no_add_attrs = true;
+	}
+    }
+
+  return NULL_TREE;
+}
+
+static const struct attribute_spec s390_attribute_table[] = {
+  { "hotpatch", 0, 1, true, false, false, s390_handle_hotpatch_attribute, false
+  },
+  /* End element.  */
+  { NULL,        0, 0, false, false, false, NULL, false }
+};
+
 /* Return the alignment for LABEL.  We default to the -falign-labels
    value except for the literal pool base label.  */
 int
@@ -883,7 +942,8 @@ s390_canonicalize_comparison (int *code, rtx *op0, rtx *op1,
 	{
 	  /* For CCRAWmode put the required cc mask into the second
 	     operand.  */
-	  if (GET_MODE (XVECEXP (*op0, 0, 0)) == CCRAWmode)
+        if (GET_MODE (XVECEXP (*op0, 0, 0)) == CCRAWmode
+            && INTVAL (*op1) >= 0 && INTVAL (*op1) <= 3)
 	    *op1 = gen_rtx_CONST_INT (VOIDmode, 1 << (3 - INTVAL (*op1)));
 	  *op0 = XVECEXP (*op0, 0, 0);
 	  *code = new_code;
@@ -1594,6 +1654,46 @@ s390_init_machine_status (void)
 static void
 s390_option_override (void)
 {
+  unsigned int i;
+  cl_deferred_option *opt;
+  vec<cl_deferred_option> *v =
+    (vec<cl_deferred_option> *) s390_deferred_options;
+
+  if (v)
+    FOR_EACH_VEC_ELT (*v, i, opt)
+      {
+	switch (opt->opt_index)
+	  {
+	  case OPT_mhotpatch:
+	    s390_hotpatch_trampoline_halfwords = (opt->value) ?
+	      s390_hotpatch_trampoline_halfwords_default : -1;
+	    break;
+	  case OPT_mhotpatch_:
+	    {
+	      int val;
+
+	      val = integral_argument (opt->arg);
+	      if (val == -1)
+		{
+		  /* argument is not a plain number */
+		  error ("argument to %qs should be a non-negative integer",
+			 "-mhotpatch=");
+		  break;
+		}
+	      else if (val > s390_hotpatch_trampoline_halfwords_max)
+		{
+		  error ("argument to %qs is too large (max. %d)",
+			 "-mhotpatch=", s390_hotpatch_trampoline_halfwords_max);
+		  break;
+		}
+	      s390_hotpatch_trampoline_halfwords = val;
+	      break;
+	    }
+	  default:
+	    gcc_unreachable ();
+	  }
+      }
+
   /* Set up function hooks.  */
   init_machine_status = s390_init_machine_status;
 
@@ -3015,15 +3115,22 @@ s390_preferred_reload_class (rtx op, reg_class_t rclass)
 	 prefer ADDR_REGS.  If 'class' is not a superset
 	 of ADDR_REGS, e.g. FP_REGS, reject this reload.  */
       case CONST:
-	/* A larl operand with odd addend will get fixed via secondary
-	   reload.  So don't request it to be pushed into literal
-	   pool.  */
+	/* Symrefs cannot be pushed into the literal pool with -fPIC
+	   so we *MUST NOT* return NO_REGS for these cases
+	   (s390_cannot_force_const_mem will return true).  
+
+	   On the other hand we MUST return NO_REGS for symrefs with
+	   invalid addend which might have been pushed to the literal
+	   pool (no -fPIC).  Usually we would expect them to be
+	   handled via secondary reload but this does not happen if
+	   they are used as literal pool slot replacement in reload
+	   inheritance (see emit_input_reload_insns).  */
 	if (TARGET_CPU_ZARCH
 	    && GET_CODE (XEXP (op, 0)) == PLUS
 	    && GET_CODE (XEXP (XEXP(op, 0), 0)) == SYMBOL_REF
 	    && GET_CODE (XEXP (XEXP(op, 0), 1)) == CONST_INT)
 	  {
-	    if (reg_class_subset_p (ADDR_REGS, rclass))
+	    if (flag_pic && reg_class_subset_p (ADDR_REGS, rclass))
 	      return ADDR_REGS;
 	    else
 	      return NO_REGS;
@@ -4683,7 +4790,7 @@ s390_expand_insv (rtx dest, rtx op1, rtx op2, rtx src)
   int smode_bsize, mode_bsize;
   rtx op, clobber;
 
-  if (bitsize + bitpos > GET_MODE_SIZE (mode))
+  if (bitsize + bitpos > GET_MODE_BITSIZE (mode))
     return false;
 
   /* Generate INSERT IMMEDIATE (IILL et al).  */
@@ -5309,6 +5416,101 @@ get_some_local_dynamic_name (void)
       return cfun->machine->some_ld_name;
 
   gcc_unreachable ();
+}
+
+/* Returns -1 if the function should not be made hotpatchable.  Otherwise it
+   returns a number >= 0 that is the desired size of the hotpatch trampoline
+   in halfwords. */
+
+static int s390_function_num_hotpatch_trampoline_halfwords (tree decl,
+							    bool do_warn)
+{
+  tree attr;
+
+  if (DECL_DECLARED_INLINE_P (decl)
+      || DECL_ARTIFICIAL (decl)
+      || MAIN_NAME_P (DECL_NAME (decl)))
+    {
+      /* - Explicitly inlined functions cannot be hotpatched.
+	 - Artificial functions need not be hotpatched.
+	 - Making the main function hotpatchable is useless. */
+      return -1;
+    }
+  attr = lookup_attribute ("hotpatch", DECL_ATTRIBUTES (decl));
+  if (attr || s390_hotpatch_trampoline_halfwords >= 0)
+    {
+      if (lookup_attribute ("always_inline", DECL_ATTRIBUTES (decl)))
+	{
+	  if (do_warn)
+	    warning (OPT_Wattributes, "function %qE with the %qs attribute"
+		     " is not hotpatchable", DECL_NAME (decl), "always_inline");
+	  return -1;
+	}
+      else
+	{
+	  return (attr) ?
+	    get_hotpatch_attribute (attr) : s390_hotpatch_trampoline_halfwords;
+	}
+    }
+
+  return -1;
+}
+
+/* Hook to determine if one function can safely inline another.  */
+
+static bool
+s390_can_inline_p (tree caller, tree callee)
+{
+  if (s390_function_num_hotpatch_trampoline_halfwords (callee, false) >= 0)
+    return false;
+
+  return default_target_can_inline_p (caller, callee);
+}
+
+/* Write the extra assembler code needed to declare a function properly.  */
+
+void
+s390_asm_output_function_label (FILE *asm_out_file, const char *fname,
+				tree decl)
+{
+  int hotpatch_trampoline_halfwords = -1;
+
+  if (decl)
+    {
+      hotpatch_trampoline_halfwords =
+	s390_function_num_hotpatch_trampoline_halfwords (decl, true);
+      if (hotpatch_trampoline_halfwords >= 0
+	  && decl_function_context (decl) != NULL_TREE)
+	{
+	  warning_at (DECL_SOURCE_LOCATION (decl), OPT_mhotpatch,
+		      "hotpatching is not compatible with nested functions");
+	  hotpatch_trampoline_halfwords = -1;
+	}
+    }
+
+  if (hotpatch_trampoline_halfwords > 0)
+    {
+      int i;
+
+      /* Add a trampoline code area before the function label and initialize it
+	 with two-byte nop instructions.  This area can be overwritten with code
+	 that jumps to a patched version of the function.  */
+      for (i = 0; i < hotpatch_trampoline_halfwords; i++)
+	asm_fprintf (asm_out_file, "\tnopr\t%%r7\n");
+      /* Note:  The function label must be aligned so that (a) the bytes of the
+	 following nop do not cross a cacheline boundary, and (b) a jump address
+	 (eight bytes for 64 bit targets, 4 bytes for 32 bit targets) can be
+	 stored directly before the label without crossing a cacheline
+	 boundary.  All this is necessary to make sure the trampoline code can
+	 be changed atomically.  */
+    }
+
+  ASM_OUTPUT_LABEL (asm_out_file, fname);
+
+  /* Output a four-byte nop if hotpatching is enabled.  This can be overwritten
+     atomically with a relative backwards jump to the trampoline area.  */
+  if (hotpatch_trampoline_halfwords >= 0)
+    asm_fprintf (asm_out_file, "\tnop\t0\n");
 }
 
 /* Output machine-dependent UNSPECs occurring in address constant X
@@ -7846,6 +8048,9 @@ s390_optimize_nonescaping_tx (void)
     {
       bb = BASIC_BLOCK (bb_index);
 
+      if (!bb)
+	continue;
+
       FOR_BB_INSNS (bb, insn)
 	{
 	  rtx ite, cc, pat, target;
@@ -7959,7 +8164,10 @@ s390_optimize_nonescaping_tx (void)
   if (!result)
     return;
 
-  PATTERN (tbegin_insn) = XVECEXP (PATTERN (tbegin_insn), 0, 0);
+  PATTERN (tbegin_insn) = gen_rtx_PARALLEL (VOIDmode,
+			    gen_rtvec (2,
+				       XVECEXP (PATTERN (tbegin_insn), 0, 0),
+				       XVECEXP (PATTERN (tbegin_insn), 0, 1)));
   INSN_CODE (tbegin_insn) = -1;
   df_insn_rescan (tbegin_insn);
 
@@ -9568,61 +9776,47 @@ s390_gimplify_va_arg (tree valist, tree type, gimple_seq *pre_p,
 void
 s390_expand_tbegin (rtx dest, rtx tdb, rtx retry, bool clobber_fprs_p)
 {
-  const int CC0 = 1 << 3;
-  const int CC1 = 1 << 2;
-  const int CC3 = 1 << 0;
-  rtx abort_label = gen_label_rtx ();
-  rtx leave_label = gen_label_rtx ();
+  rtx retry_plus_two = gen_reg_rtx (SImode);
   rtx retry_reg = gen_reg_rtx (SImode);
   rtx retry_label = NULL_RTX;
-  rtx jump;
-  rtx very_unlikely = GEN_INT (REG_BR_PROB_BASE / 100 - 1);
 
   if (retry != NULL_RTX)
     {
       emit_move_insn (retry_reg, retry);
+      emit_insn (gen_addsi3 (retry_plus_two, retry_reg, const2_rtx));
+      emit_insn (gen_addsi3 (retry_reg, retry_reg, const1_rtx));
       retry_label = gen_label_rtx ();
       emit_label (retry_label);
     }
 
   if (clobber_fprs_p)
-    emit_insn (gen_tbegin_1 (tdb,
-		 gen_rtx_CONST_INT (VOIDmode, TBEGIN_MASK)));
+    emit_insn (gen_tbegin_1 (gen_rtx_CONST_INT (VOIDmode, TBEGIN_MASK), tdb));
   else
-    emit_insn (gen_tbegin_nofloat_1 (tdb,
-		 gen_rtx_CONST_INT (VOIDmode, TBEGIN_MASK)));
+    emit_insn (gen_tbegin_nofloat_1 (gen_rtx_CONST_INT (VOIDmode, TBEGIN_MASK),
+				     tdb));
 
-  jump = s390_emit_jump (abort_label,
-			 gen_rtx_NE (VOIDmode,
-				     gen_rtx_REG (CCRAWmode, CC_REGNUM),
-				     gen_rtx_CONST_INT (VOIDmode, CC0)));
-
-  JUMP_LABEL (jump) = abort_label;
-  LABEL_NUSES (abort_label) = 1;
-  add_reg_note (jump, REG_BR_PROB, very_unlikely);
-
-  /* Initialize CC return value.  */
-  emit_move_insn (dest, const0_rtx);
-
-  s390_emit_jump (leave_label, NULL_RTX);
-  LABEL_NUSES (leave_label) = 1;
-  emit_barrier ();
-
-  /* Abort handler code.  */
-
-  emit_label (abort_label);
+  emit_move_insn (dest, gen_rtx_UNSPEC (SImode,
+					gen_rtvec (1, gen_rtx_REG (CCRAWmode,
+								   CC_REGNUM)),
+					UNSPEC_CC_TO_INT));
   if (retry != NULL_RTX)
     {
+      const int CC0 = 1 << 3;
+      const int CC1 = 1 << 2;
+      const int CC3 = 1 << 0;
+      rtx jump;
       rtx count = gen_reg_rtx (SImode);
+      rtx leave_label = gen_label_rtx ();
+
+      /* Exit for success and permanent failures.  */
       jump = s390_emit_jump (leave_label,
 			     gen_rtx_EQ (VOIDmode,
 			       gen_rtx_REG (CCRAWmode, CC_REGNUM),
-			       gen_rtx_CONST_INT (VOIDmode, CC1 | CC3)));
-      LABEL_NUSES (leave_label) = 2;
-      add_reg_note (jump, REG_BR_PROB, very_unlikely);
+			       gen_rtx_CONST_INT (VOIDmode, CC0 | CC1 | CC3)));
+      LABEL_NUSES (leave_label) = 1;
 
       /* CC2 - transient failure. Perform retry with ppa.  */
-      emit_move_insn (count, retry);
+      emit_move_insn (count, retry_plus_two);
       emit_insn (gen_subsi3 (count, count, retry_reg));
       emit_insn (gen_tx_assist (count));
       jump = emit_jump_insn (gen_doloop_si64 (retry_label,
@@ -9630,13 +9824,8 @@ s390_expand_tbegin (rtx dest, rtx tdb, rtx retry, bool clobber_fprs_p)
 					      retry_reg));
       JUMP_LABEL (jump) = retry_label;
       LABEL_NUSES (retry_label) = 1;
+      emit_label (leave_label);
     }
-
-  emit_move_insn (dest, gen_rtx_UNSPEC (SImode,
-					gen_rtvec (1, gen_rtx_REG (CCRAWmode,
-								   CC_REGNUM)),
-					UNSPEC_CC_TO_INT));
-  emit_label (leave_label);
 }
 
 /* Builtins.  */
@@ -9674,6 +9863,9 @@ static void
 s390_init_builtins (void)
 {
   tree ftype, uint64_type;
+  tree returns_twice_attr = tree_cons (get_identifier ("returns_twice"),
+				       NULL, NULL);
+  tree noreturn_attr = tree_cons (get_identifier ("noreturn"), NULL, NULL);
 
   /* void foo (void) */
   ftype = build_function_type_list (void_type_node, NULL_TREE);
@@ -9684,17 +9876,17 @@ s390_init_builtins (void)
   ftype = build_function_type_list (void_type_node, integer_type_node,
 				    NULL_TREE);
   add_builtin_function ("__builtin_tabort", ftype,
-			S390_BUILTIN_TABORT, BUILT_IN_MD, NULL, NULL_TREE);
+			S390_BUILTIN_TABORT, BUILT_IN_MD, NULL, noreturn_attr);
   add_builtin_function ("__builtin_tx_assist", ftype,
 			S390_BUILTIN_TX_ASSIST, BUILT_IN_MD, NULL, NULL_TREE);
 
   /* int foo (void *) */
   ftype = build_function_type_list (integer_type_node, ptr_type_node, NULL_TREE);
   add_builtin_function ("__builtin_tbegin", ftype, S390_BUILTIN_TBEGIN,
-			BUILT_IN_MD, NULL, NULL_TREE);
+			BUILT_IN_MD, NULL, returns_twice_attr);
   add_builtin_function ("__builtin_tbegin_nofloat", ftype,
 			S390_BUILTIN_TBEGIN_NOFLOAT,
-			BUILT_IN_MD, NULL, NULL_TREE);
+			BUILT_IN_MD, NULL, returns_twice_attr);
 
   /* int foo (void *, int) */
   ftype = build_function_type_list (integer_type_node, ptr_type_node,
@@ -9702,11 +9894,11 @@ s390_init_builtins (void)
   add_builtin_function ("__builtin_tbegin_retry", ftype,
 			S390_BUILTIN_TBEGIN_RETRY,
 			BUILT_IN_MD,
-			NULL, NULL_TREE);
+			NULL, returns_twice_attr);
   add_builtin_function ("__builtin_tbegin_retry_nofloat", ftype,
 			S390_BUILTIN_TBEGIN_RETRY_NOFLOAT,
 			BUILT_IN_MD,
-			NULL, NULL_TREE);
+			NULL, returns_twice_attr);
 
   /* int foo (void) */
   ftype = build_function_type_list (integer_type_node, NULL_TREE);
@@ -11621,6 +11813,12 @@ s390_loop_unroll_adjust (unsigned nunroll, struct loop *loop)
 
 #undef TARGET_CANONICALIZE_COMPARISON
 #define TARGET_CANONICALIZE_COMPARISON s390_canonicalize_comparison
+
+#undef TARGET_ATTRIBUTE_TABLE
+#define TARGET_ATTRIBUTE_TABLE s390_attribute_table
+
+#undef TARGET_CAN_INLINE_P
+#define TARGET_CAN_INLINE_P s390_can_inline_p
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

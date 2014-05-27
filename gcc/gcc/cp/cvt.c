@@ -203,12 +203,12 @@ cp_convert_to_pointer (tree type, tree expr, tsubst_flags_t complain)
 
   if (null_ptr_cst_p (expr))
     {
-      if (complain & tf_warning)
-	maybe_warn_zero_as_null_pointer_constant (expr, loc);
-
       if (TYPE_PTRMEMFUNC_P (type))
 	return build_ptrmemfunc (TYPE_PTRMEMFUNC_FN_TYPE (type), expr, 0,
 				 /*c_cast_p=*/false, complain);
+
+      if (complain & tf_warning)
+	maybe_warn_zero_as_null_pointer_constant (expr, loc);
 
       /* A NULL pointer-to-data-member is represented by -1, not by
 	 zero.  */
@@ -743,6 +743,7 @@ ocp_convert (tree type, tree expr, int convtype, int flags,
 	     unspecified.  */
 	  if ((complain & tf_warning)
 	      && TREE_CODE (e) == INTEGER_CST
+	      && ENUM_UNDERLYING_TYPE (type)
 	      && !int_fits_type_p (e, ENUM_UNDERLYING_TYPE (type)))
 	    warning_at (loc, OPT_Wconversion, 
 			"the result of the conversion is unspecified because "

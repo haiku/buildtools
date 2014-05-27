@@ -1161,8 +1161,7 @@ build_accesses_from_assign (gimple stmt)
    GIMPLE_ASM operands with memory constrains which cannot be scalarized.  */
 
 static bool
-asm_visit_addr (gimple stmt ATTRIBUTE_UNUSED, tree op,
-		void *data ATTRIBUTE_UNUSED)
+asm_visit_addr (gimple, tree op, tree, void *)
 {
   op = get_base_address (op);
   if (op
@@ -2890,6 +2889,10 @@ load_assign_lhs_subreplacements (struct access *lacc, struct access *top_racc,
 						  lacc);
 	      else
 		drhs = NULL_TREE;
+	      if (drhs
+		  && !useless_type_conversion_p (lacc->type, TREE_TYPE (drhs)))
+		drhs = fold_build1_loc (loc, VIEW_CONVERT_EXPR,
+					lacc->type, drhs);
 	      ds = gimple_build_debug_bind (get_access_replacement (lacc),
 					    drhs, gsi_stmt (*old_gsi));
 	      gsi_insert_after (new_gsi, ds, GSI_NEW_STMT);
@@ -4865,6 +4868,14 @@ ipa_sra_preliminary_function_checks (struct cgraph_node *node)
     {
       if (dump_file)
 	fprintf (dump_file, "Function is not versionable.\n");
+      return false;
+    }
+
+  if (!opt_for_fn (node->symbol.decl, optimize)
+      || !opt_for_fn (node->symbol.decl, flag_ipa_sra))
+    {
+      if (dump_file)
+	fprintf (dump_file, "Function not optimized.\n");
       return false;
     }
 

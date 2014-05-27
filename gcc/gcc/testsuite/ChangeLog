@@ -1,3 +1,1865 @@
+2014-05-22  Release Manager
+
+	* GCC 4.8.3 released.
+
+2014-05-14  Matthias Klose  <doko@ubuntu.com>
+
+	PR driver/61106
+	* gcc-dg/unused-8a.c: Remove.
+
+2014-05-13  Peter Bergner  <bergner@vnet.ibm.com>
+
+	* lib/target-support.exp (check_dfp_hw_available): New function.
+	(is-effective-target): Check $arg for dfp_hw.
+	(is-effective-target-keyword): Likewise.
+	* gcc.target/powerpc/pack03.c: (dg-require-effective-target):
+	Change target to dfp_hw.
+
+2014-05-12  Senthil Kumar Selvaraj  <senthil_kumar.selvaraj@atmel.com>
+
+	Backport from mainline
+	2014-05-12  Senthil Kumar Selvaraj  <senthil_kumar.selvaraj@atmel.com>
+
+	PR target/60991
+	* gcc.target/avr/pr60991.c: New testcase.
+
+2014-05-09  Georg-Johann Lay  <avr@gjlay.de>
+
+	Backport from 2014-05-09 trunk r210267
+
+	PR target/61055
+	* gcc.target/avr/torture/pr61055.c: New test.
+
+2014-05-08  Matthias Klose  <doko@ubuntu.com>
+
+	PR driver/61106
+	* gcc-dg/unused-8a.c: New.
+	* gcc-dg/unused-8b.c: Likewise.
+
+2014-05-07  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57864
+	* gcc.dg/torture/pr57864.c: New testcase.
+
+2014-05-06  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-04-14  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/55022
+	* gcc.dg/graphite/pr55022.c: New testcase.
+
+2014-05-06  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-04-17  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/60849
+	* g++.dg/opt/pr60849.C: New testcase.
+
+	2014-04-07  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60766
+	* gcc.dg/torture/pr60766.c: New testcase.
+
+	2014-04-23  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60903
+	* gcc.dg/torture/pr60903.c: New testcase.
+
+2014-05-05  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-04-23  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/60895
+	* g++.dg/torture/pr60895.C: New testcase.
+
+	2014-04-07  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/60750
+	* g++.dg/torture/pr60750.C: New testcase.
+	* gcc.dg/tree-ssa/20040517-1.c: Adjust.
+
+	2014-04-14  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59817
+	PR tree-optimization/60453
+	* gfortran.dg/graphite/pr59817.f: New testcase.
+	* gcc.dg/graphite/pr59817-1.c: Likewise.
+	* gcc.dg/graphite/pr59817-2.c: Likewise.
+
+	2014-04-17  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60836
+	* g++.dg/vect/pr60836.cc: New testcase.
+
+2014-05-05  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from mainline
+	2014-04-25  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/60960
+	* gcc.c-torture/execute/pr60960.c: New test.
+
+2014-05-04  Peter Bergner  <bergner@vnet.ibm.com>
+
+	* gcc.target/powerpc/pack02.c (dg-options): Add -mhard-float.
+	(dg-require-effective-target): Change target to powerpc_fprs.
+	* gcc.target/powerpc/pack03.c (dg-options): Add -mhard-dfp.
+	(dg-require-effective-target): Change target to dfprt.
+
+2014-05-02  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR tree-optimization/60930
+	* gcc.dg/torture/pr60930.c:  New test.
+
+2014-04-30  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	Back port from mainline
+	2014-04-24  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/pack01.c: New test to test the new pack and
+	unpack builtin functionss for 128-bit types.
+	* gcc.target/powerpc/pack02.c: Likewise.
+	* gcc.target/powerpc/pack03.c: Likewise.
+	* gcc.target/powerpc/extend-divide-1.c: New test to test extended
+	divide builtin functionss.
+	* gcc.target/powerpc/extend-divide-2.c: Likewise.
+	* gcc.target/powerpc/bcd-1.c: New test for the new BCD builtin
+	functions.
+	* gcc.target/powerpc/bcd-2.c: Likewise.
+	* gcc.target/powerpc/bcd-3.c: Likewise.
+	* gcc.target/powerpc/dfp-builtin-1.c: New test for the new DFP
+	builtin functionss.
+	* gcc.target/powerpc/dfp-builtin-2.c: Likewise.
+
+2014-04-29  Pat Haugen  <pthaugen@us.ibm.com>
+
+	Backport from mainline
+	2014-04-17  Pat Haugen  <pthaugen@us.ibm.com>
+
+	* gcc.target/powerpc/ti_math1.c: New.
+	* gcc.target/powerpc/ti_math2.c: New.
+
+2014-04-25  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.c-torture/execute/20140425-1.c: New test.
+
+2014-04-23  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	Back port from main line:
+	2014-03-27  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/p8vector-vbpermq.c: New test to test the
+	vbpermq builtin.
+
+2014-04-23  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2014-04-21  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/60909
+	* gcc.target/i386/pr60909-1.c: New test.
+	* gcc.target/i386/pr60909-2.c: Ditto.
+
+2014-04-23  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-04-02  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/60729
+	* g++.dg/vect/pr60729.cc: New testcase.
+
+	2014-04-03  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60740
+	* gcc.dg/graphite/pr60740.c: New testcase.
+
+2014-04-23  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/60635
+	* gfortran.dg/lto/pr60635_0.f90: New testcase.
+	* gfortran.dg/lto/pr60635_1.c: Likewise.
+
+2014-04-21  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	Back port from the trunk, subversion id 209546.
+
+	2014-04-21  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/60735
+	* gcc.target/powerpc/pr60735.c: New test.  Insure _Decimal64 does
+	not cause errors if -mspe.
+
+2014-04-17  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/merge-vsx.c: Add V4SI and V4SF tests.
+	* gcc.dg/vmx/merge-vsx-be-order.c: Likewise.
+
+2014-04-12  Jerry DeLisle  <jvdelisle@gcc.gnu>
+
+	Backport from mainline
+	PR libfortran/60810
+	* gfortran.dg/arrayio_13.f90: New test.
+
+2014-04-11  Hans-Peter Nilsson  <hp@axis.com>
+
+	* gfortran.dg/fmt_en.f90: Gate test on effective_target
+	fd_truncate.
+
+2014-04-11  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* gcc.target/s390/htm-nofloat-1.c: Rename to ...
+	* gcc.target/s390/htm-nofloat-compile-1.c: ... this one.
+	* gcc.target/s390/htm-nofloat-2.c: Add check for htm target and
+	rename to ...
+	* gcc.target/s390/htm-nofloat-1.c: ... this one.
+	* gcc.target/s390/s390.exp: Make sure the assembler supports htm
+	instructions as well.
+
+2014-04-11  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* gcc.target/s390/htm-builtins-compile-1.c: Replace long long with
+	long.
+
+2014-04-11  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	* gcc.target/s390/htm-builtins-compile-1.c: Remove htm check.
+	* gcc.target/s390/htm-builtins-compile-2.c: Remove htm check.
+
+2014-04-10  Vladimir Makarov  <vmakarov@redhat.com>
+
+	PR rtl-optimization/60769
+	* g++.dg/pr60769.C: New.
+
+2014-04-10  Jakub Jelinek  <jakub@redhat.com>
+
+	Backport from mainline
+	2014-03-12  Jakub Jelinek  <jakub@redhat.com>
+		    Marc Glisse  <marc.glisse@inria.fr>
+
+	PR tree-optimization/60502
+	* gcc.c-torture/compile/pr60502.c: New test.
+
+	2014-03-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/60693
+	* gcc.target/i386/pr60693.c: New test.
+
+	PR c++/60689
+	* c-c++-common/pr60689.c: New test.
+
+	2014-03-22  Jakub Jelinek  <jakub@redhat.com>
+
+	PR debug/60603
+	* gcc.dg/debug/dwarf2/dwarf2-macro2.c: New test.
+
+	2014-03-17  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/60516
+	* gcc.target/i386/pr60516.c: New test.
+
+	2014-03-13  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/36282
+	* c-c++-common/pr36282-1.c: New test.
+	* c-c++-common/pr36282-2.c: New test.
+	* c-c++-common/pr36282-3.c: New test.
+	* c-c++-common/pr36282-4.c: New test.
+
+	2014-03-06  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/58595
+	* gcc.dg/tls/pr58595.c: New test.
+
+2014-04-07  Martin Jambor  <mjambor@suse.cz>
+
+	PR ipa/60640
+	* g++.dg/ipa/pr60640-1.C: New test.
+	* g++.dg/ipa/pr60640-2.C: Likewise.
+	* g++.dg/ipa/pr60640-3.C: Likewise.
+
+2014-04-06  Dominique d'Humieres  <dominiq@lps.ens.fr>
+	    Iain Sandoe <iain@codesourcery.com>
+
+	PR target/54083
+	* gcc.dg/attr-weakref-1.c: Allow the test on darwin with
+	the additional options -Wl,-undefined,dynamic_lookup and
+	-Wl,-flat_namespace
+	* gcc.dg/torture/pr53922.c: Additional option
+	-Wl,-flat_namespace for darwin[89].
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline
+	2013-04-05  David Edelsohn  <dje.gcc@gmail.com>
+
+	* gcc.target/powerpc/sd-vsx.c: Skip on AIX.
+	* gcc.target/powerpc/sd-pwr6.c: Same.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Back port from trunk
+	2014-03-12  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/p8vector-int128-1.c: New test to test ISA
+	2.07 128-bit arithmetic.
+	* gcc.target/powerpc/p8vector-int128-2.c: Likewise.
+
+	* gcc.target/powerpc/timode_off.c: Restrict cpu type to power5,
+	due to when TImode is allowed in VSX registers, the allowable
+	address modes for TImode is just a single indirect address in
+	order for the value to be loaded and store in either GPR or VSX
+	registers.  This affects the generated code, and it would cause
+	this test to fail, when such an option is used.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline r207699.
+	2014-02-11  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/60137
+	* gcc.target/powerpc/pr60137.c: New file.
+
+	Backport from mainline r207808.
+	2014-02-15  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/60203
+	* gcc.target/powerpc/pr60203.c: New testsuite.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Little Endian Vector API Support
+	Backport from mainline r206590
+	2014-01-13  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/insert.c: New.
+	* gcc.dg/vmx/insert-be-order.c: New.
+	* gcc.dg/vmx/extract.c: New.
+	* gcc.dg/vmx/extract-be-order.c: New.
+
+	Backport from mainline r206641
+	2014-01-15  Bill Schmidt  <wschmidt@vnet.linux.ibm.com>
+
+	* gcc.dg/vmx/mult-even-odd.c: New.
+	* gcc.dg/vmx/mult-even-odd-be-order.c: New.
+
+	Backport from mainline r206926
+	2014-01-22  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/insert-vsx-be-order.c: New.
+	* gcc.dg/vmx/extract-vsx.c: New.
+	* gcc.dg/vmx/extract-vsx-be-order.c: New.
+	* gcc.dg/vmx/insert-vsx.c: New.
+
+	Backport from mainline r207262
+	2014-01-29  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/merge-be-order.c: New.
+	* gcc.dg/vmx/merge.c: New.
+	* gcc.dg/vmx/merge-vsx-be-order.c: New.
+	* gcc.dg/vmx/merge-vsx.c: New.
+
+	Backport from mainline r207318
+	2014-01-30  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/splat.c: New.
+	* gcc.dg/vmx/splat-vsx.c: New.
+	* gcc.dg/vmx/splat-be-order.c: New.
+	* gcc.dg/vmx/splat-vsx-be-order.c: New.
+	* gcc.dg/vmx/eg-5.c: Remove special casing for little endian.
+	* gcc.dg/vmx/sn7153.c: Add special casing for little endian.
+
+	Backport from mainline r207414
+	2014-02-02  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/vsums.c: New.
+	* gcc.dg/vmx/vsums-be-order.c: New.
+
+	Backport from mainline r207415
+	2014-02-02  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/3b-15.c: Remove special handling for little endian.
+	* gcc.dg/vmx/perm.c: New.
+	* gcc.dg/vmx/perm-be-order.c: New.
+
+	Backport from mainline r207520
+	2014-02-05  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/pack.c: New.
+	* gcc.dg/vmx/pack-be-order.c: New.
+	* gcc.dg/vmx/unpack.c: New.
+	* gcc.dg/vmx/unpack-be-order.c: New.
+
+	Backport from mainline r207521
+	2014-02-05  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/sum2s.c: New.
+	* gcc.dg/vmx/sum2s-be-order.c: New.
+
+	Backport from mainline 208019
+	2014-02-21  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/ld.c: New test.
+	* gcc.dg/vmx/ld-be-order.c: New test.
+	* gcc.dg/vmx/ld-vsx.c: New test.
+	* gcc.dg/vmx/ld-vsx-be-order.c: New test.
+	* gcc.dg/vmx/ldl.c: New test.
+	* gcc.dg/vmx/ldl-be-order.c: New test.
+	* gcc.dg/vmx/ldl-vsx.c: New test.
+	* gcc.dg/vmx/ldl-vsx-be-order.c: New test.
+	* gcc.dg/vmx/st.c: New test.
+	* gcc.dg/vmx/st-be-order.c: New test.
+	* gcc.dg/vmx/st-vsx.c: New test.
+	* gcc.dg/vmx/st-vsx-be-order.c: New test.
+	* gcc.dg/vmx/stl.c: New test.
+	* gcc.dg/vmx/stl-be-order.c: New test.
+	* gcc.dg/vmx/stl-vsx.c: New test.
+	* gcc.dg/vmx/stl-vsx-be-order.c: New test.
+
+	Backport from mainline 208021
+	2014-02-21  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/vsums.c: Check entire result vector.
+	* gcc.dg/vmx/vsums-be-order.c: Likewise.
+
+	Backport from mainline 208049
+	2014-02-23  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/lde.c: New test.
+	* gcc.dg/vmx/lde-be-order.c: New test.
+	* gcc.dg/vmx/ste.c: New test.
+	* gcc.dg/vmx/ste-be-order.c: New test.
+
+	Backport from mainline 208120
+	2014-02-25  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/ld-vsx.c: Don't use vec_all_eq.
+	* gcc.dg/vmx/ld-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/ldl-vsx.c: Likewise.
+	* gcc.dg/vmx/ldl-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/merge-vsx.c: Likewise.
+	* gcc.dg/vmx/merge-vsx-be-order.c: Likewise.
+
+	Backport from mainline 208321
+	2014-03-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/extract-vsx.c: Replace "vector long" with "vector
+	long long" throughout.
+	* gcc.dg/vmx/extract-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/insert-vsx.c: Likewise.
+	* gcc.dg/vmx/insert-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/ld-vsx.c: Likewise.
+	* gcc.dg/vmx/ld-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/ldl-vsx.c: Likewise.
+	* gcc.dg/vmx/ldl-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/merge-vsx.c: Likewise.
+	* gcc.dg/vmx/merge-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/st-vsx.c: Likewise.
+	* gcc.dg/vmx/st-vsx-be-order.c: Likewise.
+	* gcc.dg/vmx/stl-vsx.c: Likewise.
+	* gcc.dg/vmx/stl-vsx-be-order.c: Likewise.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Back port from mainline
+	2014-01-23  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/59909
+	* gcc.target/powerpc/quad-atomic.c: New file to test power8 quad
+	word atomic functions at runtime.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline
+	2013-10-23  Pat Haugen  <pthaugen@us.ibm.com>
+
+	* gcc.target/powerpc/direct-move.h: Fix header for executable tests.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline
+	2013-04-05  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR target/56843
+	* gcc.target/powerpc/recip-1.c: Modify expected output.
+	* gcc.target/powerpc/recip-3.c: Likewise.
+	* gcc.target/powerpc/recip-4.c: Likewise.
+	* gcc.target/powerpc/recip-5.c: Add expected output for iterations.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline
+	2013-08-19  Peter Bergner  <bergner@vnet.ibm.com>
+
+	* gcc.target/powerpc/dfp-dd-2.c: New test.
+	* gcc.target/powerpc/dfp-td-2.c: Likewise.
+	* gcc.target/powerpc/dfp-td-3.c: Likewise.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	ELFv2 ABI Support
+	Backport from mainline r204808:
+
+	2013-11-14  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gcc.target/powerpc/ppc64-abi-1.c (stack_frame_t): Remove
+	compiler and linker field if _CALL_ELF == 2.
+	* gcc.target/powerpc/ppc64-abi-2.c (stack_frame_t): Likewise.
+	* gcc.target/powerpc/ppc64-abi-dfp-1.c (stack_frame_t): Likewise.
+	* gcc.dg/stack-usage-1.c (SIZE): Update value for _CALL_ELF == 2.
+
+	2013-11-14  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gcc.target/powerpc/ppc64-abi-dfp-1.c (FUNC_START): New macro.
+	(WRAPPER): Use it.
+	* gcc.target/powerpc/no-r11-1.c: Skip on powerpc_elfv2.
+	* gcc.target/powerpc/no-r11-2.c: Skip on powerpc_elfv2.
+	* gcc.target/powerpc/no-r11-3.c: Skip on powerpc_elfv2.
+
+	2013-11-14  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* lib/target-supports.exp (check_effective_target_powerpc_elfv2):
+	New function.
+	* gcc.target/powerpc/pr57949-1.c: Disable for powerpc_elfv2.
+	* gcc.target/powerpc/pr57949-2.c: Likewise.
+
+	Backport from mainline r204799:
+
+	2013-11-14  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* g++.dg/eh/ppc64-sighandle-cr.C: New test.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline r201750.
+	Note: Default setting of -mcompat-align-parm inverted!
+
+	2013-08-14  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	PR target/57949
+	* gcc.target/powerpc/pr57949-1.c: New.
+	* gcc.target/powerpc/pr57949-2.c: New.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Little Endian Vector Support
+	Backport from mainline r205638
+	2013-12-03  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vect/costmodel/ppc/costmodel-slp-34.c: Skip for little
+	endian.
+
+	Backport from mainline r205146
+	2013-11-20  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/pr48258-1.c: Skip for little endian.
+
+	Backport from mainline r204862
+	2013-11-15  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/3b-15.c: Revise for little endian.
+
+	Backport from mainline r204321
+	2013-11-02  Bill Schmidt  <wschmidt@vnet.linux.ibm.com>
+
+	* gcc.dg/vmx/vec-set.c: New.
+
+	Backport from mainline r204138
+	2013-10-28  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.dg/vmx/gcc-bug-i.c: Add little endian variant.
+	* gcc.dg/vmx/eg-5.c: Likewise.
+
+	Backport from mainline r203930
+	2013-10-22  Bill Schmidt  <wschmidt@vnet.ibm.com>
+
+	* gcc.target/powerpc/altivec-perm-1.c: Move the two vector pack
+	tests into...
+	* gcc.target/powerpc/altivec-perm-3.c: ...this new test, which is
+	restricted to big-endian targets.
+
+	Backport from mainline r203246
+	2013-10-07  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/pr43154.c: Skip for ppc64 little endian.
+	* gcc.target/powerpc/fusion.c: Likewise.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline
+	2013-11-27  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	* gfortran.dg/nan_7.f90: Disable for little endian PowerPC.
+
+	Backport from mainline r205106:
+
+	2013-11-20  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gcc.target/powerpc/darwin-longlong.c (msw): Make endian-safe.
+
+	Backport from mainline r205046:
+
+	2013-11-19  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+
+	* gcc.target/powerpc/ppc64-abi-2.c (MAKE_SLOT): New macro to
+	construct parameter slot value in endian-independent way.
+	(fcevv, fciievv, fcvevv): Use it.
+
+2014-04-04  Bill Schmidt <wschmidt@linux.vnet.ibm.com>
+
+	Power8 HTM Support
+	Backport from mainline
+	* lib/target-supports.exp (check_effective_target_powerpc_htm_ok): New
+	function to test if HTM is available.
+	* gcc.target/powerpc/htm-xl-intrin-1.c: New test.
+	* gcc.target/powerpc/htm-builtin-1.c: New test.
+
+2014-04-04  Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Power8 Base Support
+	Backport from mainline
+	2013-11-22  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/59054
+	* gcc.target/powerpc/direct-move.h (VSX_REG_ATTR): Allow test to
+	specify an appropriate register class for VSX operations.
+	(load_vsx): Use it.
+	(load_gpr_to_vsx): Likewise.
+	(load_vsx_to_gpr): Likewise.
+	* gcc.target/powerpc/direct-move-vint1.c: Use an appropriate
+	register class for VSX registers that the type can handle.  Remove
+	checks for explicit number of instructions generated, just check
+	if the instruction is generated.
+	* gcc.target/powerpc/direct-move-vint2.c: Likewise.
+	* gcc.target/powerpc/direct-move-float1.c: Likewise.
+	* gcc.target/powerpc/direct-move-float2.c: Likewise.
+	* gcc.target/powerpc/direct-move-double1.c: Likewise.
+	* gcc.target/powerpc/direct-move-double2.c: Likewise.
+	* gcc.target/powerpc/direct-move-long1.c: Likewise.
+	* gcc.target/powerpc/direct-move-long2.c: Likewise.
+
+	* gcc.target/powerpc/bool3-av.c: Limit to 64-bit mode for now.
+	* gcc.target/powerpc/bool3-p7.c: Likewise.
+	* gcc.target/powerpc/bool3-p8.c: Likewise.
+
+	* gcc.target/powerpc/p8vector-ldst.c: Just check that the
+	appropriate instructions are generated, don't check the count.
+
+	2013-11-12  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/59054
+	* gcc.target/powerpc/pr59054.c: New test.
+
+	2013-08-22  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/pr57744.c: Declare abort.
+
+	2013-07-18  Pat Haugen  <pthaugen@us.ibm.com>
+
+	* gcc.target/powerpc/pr57744.c: Fix typo.
+
+	Back port from mainline
+	2013-10-03  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/p8vector-fp.c: New test for floating point
+	scalar operations when using -mupper-regs-sf and -mupper-regs-df.
+	* gcc.target/powerpc/ppc-target-1.c: Update tests to allow either
+	VSX scalar operations or the traditional floating point form of
+	the instruction.
+	* gcc.target/powerpc/ppc-target-2.c: Likewise.
+	* gcc.target/powerpc/recip-3.c: Likewise.
+	* gcc.target/powerpc/recip-5.c: Likewise.
+	* gcc.target/powerpc/pr72747.c: Likewise.
+	* gcc.target/powerpc/vsx-builtin-3.c: Likewise.
+
+	Back port from mainline
+	2013-09-27  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/p8vector-ldst.c: New test for -mupper-regs-sf
+	and -mupper-regs-df.
+
+	Back port from mainline
+	2013-10-17  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/58673
+	* gcc.target/powerpc/pr58673-1.c: New file to test whether
+	-mquad-word + -mno-vsx-timode causes errors.
+	* gcc.target/powerpc/pr58673-2.c: Likewise.
+
+
+	Backport from trunk.
+	2013-07-23  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/bool2.h: New file, test the code generation
+	of logical operations for power5, altivec, power7, and power8 systems.
+	* gcc.target/powerpc/bool2-p5.c: Likewise.
+	* gcc.target/powerpc/bool2-av.c: Likewise.
+	* gcc.target/powerpc/bool2-p7.c: Likewise.
+	* gcc.target/powerpc/bool2-p8.c: Likewise.
+	* gcc.target/powerpc/bool3.h: Likewise.
+	* gcc.target/powerpc/bool3-av.c: Likewise.
+	* gcc.target/powerpc/bool2-p7.c: Likewise.
+	* gcc.target/powerpc/bool2-p8.c: Likewise.
+
+	Backport from trunk.
+	2013-07-31  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/fusion.c: New file, test power8 fusion support.
+
+	Back port from the trunk
+	2013-06-28  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	PR target/57744
+	* gcc.target/powerpc/pr57744.c: New test to make sure lqarx and
+	stqcx. get even registers.
+
+	Back port from the trunk
+
+	2013-06-12  Michael Meissner  <meissner@linux.vnet.ibm.com>
+		    Pat Haugen <pthaugen@us.ibm.com>
+		    Peter Bergner <bergner@vnet.ibm.com>
+
+	* gcc.target/powerpc/atomic-p7.c: New file, add tests for atomic
+	load/store instructions on power7, power8.
+	* gcc.target/powerpc/atomic-p8.c: Likewise.
+
+	Back port from the trunk
+
+	2013-06-10  Michael Meissner  <meissner@linux.vnet.ibm.com>
+		    Pat Haugen <pthaugen@us.ibm.com>
+		    Peter Bergner <bergner@vnet.ibm.com>
+
+	* gcc.target/powerpc/direct-move-vint1.c: New tests for power8
+	direct move instructions.
+	* gcc.target/powerpc/direct-move-vint2.c: Likewise.
+	* gcc.target/powerpc/direct-move.h: Likewise.
+	* gcc.target/powerpc/direct-move-float1.c: Likewise.
+	* gcc.target/powerpc/direct-move-float2.c: Likewise.
+	* gcc.target/powerpc/direct-move-double1.c: Likewise.
+	* gcc.target/powerpc/direct-move-double2.c: Likewise.
+	* gcc.target/powerpc/direct-move-long1.c: Likewise.
+	* gcc.target/powerpc/direct-move-long2.c: Likewise.
+
+	Backport from the trunk
+
+	2013-06-06  Michael Meissner  <meissner@linux.vnet.ibm.com>
+		    Pat Haugen <pthaugen@us.ibm.com>
+		    Peter Bergner <bergner@vnet.ibm.com>
+
+	* gcc.target/powerpc/p8vector-builtin-1.c: New test to test
+	power8 builtin functions.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-builtin-2.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-builtin-3.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-builtin-4.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-builtin-5.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-builtin-6.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-builtin-7.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-vectorize-1.c: New
+	tests to test power8 auto-vectorization.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-vectorize-2.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-vectorize-3.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-vectorize-4.c: Likewise.
+	* gcc/testsuite/gcc.target/powerpc/p8vector-vectorize-5.c: Likewise.
+
+	* gcc.target/powerpc/crypto-builtin-1.c: Use effective target
+	powerpc_p8vector_ok instead of powerpc_vsx_ok.
+
+	* gcc.target/powerpc/bool.c: New file, add eqv, nand, nor tests.
+
+	* lib/target-supports.exp (check_p8vector_hw_available) Add power8
+	support.
+	(check_effective_target_powerpc_p8vector_ok): Likewise.
+	(is-effective-target): Likewise.
+	(check_vect_support_and_set_flags): Likewise.
+
+	Backport from trunk
+
+	2013-05-22  Michael Meissner  <meissner@linux.vnet.ibm.com>
+		    Pat Haugen <pthaugen@us.ibm.com>
+		    Peter Bergner <bergner@vnet.ibm.com>
+
+	* gcc.target/powerpc/crypto-builtin-1.c: New file, test for power8
+	crypto builtins.
+
+	Backport from mainline
+	2013-03-20  Michael Meissner  <meissner@linux.vnet.ibm.com>
+
+	* gcc.target/powerpc/mmfpgpr.c: New test.
+	* gcc.target/powerpc/sd-vsx.c: Likewise.
+	* gcc.target/powerpc/sd-pwr6.c: Likewise.
+	* gcc.target/powerpc/vsx-float0.c: Likewise.
+
+2014-04-01  Dominique d'Humieres  <dominiq@lps.ens.fr>
+
+	PR libfortran/60128
+	* gfortran.dg/fmt_en.f90: Skip unsupported rounding tests.
+	XFAIL for i?86-*-solaris2.9* and hppa*-*-hpux*.
+
+2014-03-31  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Backport from mainline
+	2014-03-31  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR rtl-optimization/60700
+	* gcc.target/i386/pr60700.c: New test.
+
+2014-03-28  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR rtl-optimization/60700
+	Backport from mainline
+	2013-07-30  Zhenqiang Chen  <zhenqiang.chen@linaro.org>
+
+	* gcc.target/arm/pr57637.c: New testcase.
+
+2014-04-28  Thomas Koenig  <tkoenig@gcc.gnu.org>
+
+	PR fortran/60522
+	* gfortran.dg/where_4.f90:  New test case.
+
+2014-03-26  Martin Jambor  <mjambor@suse.cz>
+
+	PR ipa/60419
+	* g++.dg/ipa/pr60419.C: New test.
+
+2014-03-26  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.c-torture/execute/20140326-1.c: New test.
+
+2014-03-20  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/60543
+	PR fortran/60283
+	* gfortran.dg/implicit_pure_4.f90: New.
+
+2014-03-17  Mikael Pettersson  <mikpelinux@gmail.com>
+	    Committed by Bill Schmidt  <wschmidt@linux.vnet.ibm.com>
+
+	Backport from mainline:
+
+	2013-06-16  Joern Rennecke <joern.rennecke@embecosm.com>
+
+	PR rtl-optimization/57425
+	PR rtl-optimization/57569
+	* gcc.dg/torture/pr57425-1.c, gcc.dg/torture/pr57425-2.c: New files.
+	* gcc.dg/torture/pr57425-3.c, gcc.dg/torture/pr57569.c: Likewise.
+
+2014-03-17  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-03-11  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60429
+	PR tree-optimization/60485
+	* gcc.dg/pr60485-1.c: New testcase.
+	* gcc.dg/pr60485-2.c: Likewise.
+
+2014-03-15  Dominique d'Humieres  <dominiq@lps.ens.fr>
+
+	Backport from mainline
+	PR libfortran/60128
+	* gfortran.dg/fmt_en.f90: New test.
+
+2014-03-15  Jerry DeLisle  <jvdelisle@gcc.gnu>
+
+	Backport from mainline
+	PR libfortran/58324
+	* gfortran.dg/list_read_12.f90: New test.
+
+2014-03-13  Joey Ye  <joey.ye@arm.com>
+
+	Backport from mainline
+	2014-03-12  Thomas Preud'homme  <thomas.preudhomme@arm.com>
+
+	PR tree-optimization/60454
+	* gcc.c-torture/execute/pr60454.c: New test.
+
+2014-03-08  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/60450
+	* gfortran.dg/shape_8.f90: New.
+
+2014-03-06  Jakub Jelinek  <jakub@redhat.com>
+
+	Backport from mainline
+	2014-02-19  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/37743
+	* g++.dg/ext/builtin-bswap1.C: New test.
+	* c-c++-common/pr37743.c: New test.
+
+	PR preprocessor/58844
+	* c-c++-common/cpp/pr58844-1.c: New test.
+	* c-c++-common/cpp/pr58844-2.c: New test.
+
+	2014-02-13  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/43546
+	* gcc.target/i386/pr43546.c: New test.
+
+	2014-02-12  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/60101
+	* c-c++-common/pr60101.c: New test.
+
+	2014-02-11  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/52370
+	* gfortran.dg/pr52370.f90: New test.
+
+	PR debug/59776
+	* gcc.dg/guality/pr59776.c: New test.
+
+	2014-02-07  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/56824
+	* gcc.dg/pr56824.c: New test.
+
+	2014-02-06  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/60062
+	* gcc.c-torture/execute/pr60062.c: New test.
+	* gcc.c-torture/execute/pr60072.c: New test.
+
+	2014-02-04  Jakub Jelinek  <jakub@redhat.com>
+
+	PR ipa/60026
+	* c-c++-common/torture/pr60026.c: New test.
+
+	2014-02-05  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/57499
+	* g++.dg/torture/pr57499.C: New test.
+
+	2014-03-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/60400
+	* c-c++-common/cpp/pr60400.c: New test.
+	* c-c++-common/cpp/pr60400-1.h: New file.
+	* c-c++-common/cpp/pr60400-2.h: New file.
+
+2014-03-04  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60382
+	* gcc.dg/vect/pr60382.c: New testcase.
+
+2014-03-02  Mikael Morin  <mikael@gcc.gnu.org>
+
+	PR fortran/60341
+	* gfortran.dg/str_comp_optimize_1.f90: New test.
+
+2014-02-25  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-02-21  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60276
+	* gcc.dg/vect/pr60276.c: New testcase.
+
+2014-02-25  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-02-14  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60183
+	* gcc.dg/torture/pr60183.c: New testcase.
+
+2014-02-24  Fabien Chêne  <fabien@gcc.gnu.org>
+
+	PR c++/37140
+	* g++.dg/template/using27.C: New.
+	* g++.dg/template/using28.C: New.
+	* g++.dg/template/using29.C: New.
+
+2014-02-23  David Holsgrove <david.holsgrove@xilinx.com>
+
+	* gcc/testsuite/gcc.target/microblaze/others/mem_reload.c: New test.
+
+2014-02-22  Mikael Morin  <mikael@gcc.gnu.org>
+
+	PR fortran/59599
+	* gfortran.dg/ichar_3.f90: New test.
+
+2014-02-21  Steven G. Kargl  <kargl@gcc.gnu.org>
+
+	Backport from mainline
+	PR fortran/59700
+	* gfortran.dg/pr59700.f90: New test.
+
+2014-02-21  Martin Jambor  <mjambor@suse.cz>
+
+	PR ipa/55260
+	* gcc.dg/ipa/pr55260.c: New test.
+
+2014-02-19  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/49397
+	* gfortran.dg/proc_ptr_45.f90: New.
+	* gfortran.dg/proc_ptr_46.f90: New.
+
+2014-02-19  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2014-02-19  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/59794
+	* gcc.target/i386/pr39162.c: Add dg-prune-output.
+	(dg-options): Remove -Wno-psabi.
+	* gcc.target/i386/pr59794-2.c: Ditto.
+	* gcc.target/i386/sse-5.c: Ditto.
+
+2014-02-19  Janus Weil  <janus@gcc.gnu.org>
+
+	Backports from mainline:
+	2014-02-17  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/55907
+	* gfortran.dg/init_flag_12.f90: New.
+
+	2014-02-18  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/60231
+	* gfortran.dg/typebound_generic_15.f90: New.
+
+2014-02-18  Kai Tietz  <ktietz@redhat.com>
+
+	PR target/60193
+	* gcc.target/i386/nest-1.c: New testcase.
+
+2014-02-18  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gnat.dg/opt32.adb: New test.
+
+2014-02-15  Jerry DeLisle  <jvdelisle@gcc.gnu>
+	    Dominique d'Humieres  <dominiq@lps.ens.fr>
+
+	Backport from mainline
+	PR libfortran/59771
+	PR libfortran/59774
+	PR libfortran/59836
+	* gfortran.dg/fmt_g_1.f90: New test.
+	* gfortran.dg/round_3.f08: New cases added.
+
+2014-02-13  Dominik Vogt  <vogt@linux.vnet.ibm.com>
+
+	* gcc.target/s390/hotpatch-compile-8.c: New test.
+
+2014-02-12  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.c-torture/execute/20140212-1.c: New test.
+
+2014-02-10  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2014-01-30  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59903
+	* gcc.dg/torture/pr59903.c: New testcase.
+
+	2014-02-10  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/60115
+	* gcc.dg/torture/pr60115.c: New testcase.
+
+2014-02-09  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2013-10-21  Tobias Burnus  <burnus@net-b.de>
+
+	PR fortran/58803
+	PR fortran/59395
+	* gfortran.dg/proc_ptr_comp_38.f90: New.
+
+2014-02-08  Mikael Morin  <mikael@gcc.gnu.org>
+
+	PR fortran/57033
+	* gfortran.dg/default_initialization_7.f90: New test.
+
+2014-02-07  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/59906
+	* gfortran.dg/elemental_subroutine_9.f90 : New test
+
+2014-02-04  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2014-02-02  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/60017
+	* gcc.c-torture/execute/pr60017.c: New test.
+
+2014-02-01  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/59414
+	* gfortran.dg/allocate_class_3.f90 : New test
+
+2014-01-30  David Holsgrove <david.holsgrove@xilinx.com>
+
+	Backport from mainline.
+	* gcc.target/microblaze/isa/fcmp4.c: New.
+
+2014-01-26  Mikael Morin  <mikael@gcc.gnu.org>
+
+	PR fortran/58007
+	* gfortran.dg/unresolved_fixup_1.f90: New test.
+	* gfortran.dg/unresolved_fixup_2.f90: New test.
+
+2014-01-24  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Backport from mainline.
+	2014-01-23  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR target/59929
+	* gcc.target/i386/pr59929.c: New test.
+
+2014-01-24  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/57524
+	* g++.dg/ext/timevar2.C: New.
+
+2014-01-23  David Holsgrove <david.holsgrove@xilinx.com>
+
+	Backport from mainline.
+	* gcc.target/microblaze/others/builtin-trap.c: New test.
+
+2014-01-23  Marek Polacek  <polacek@redhat.com>
+
+	Backport from mainline
+	2013-10-21  Marek Polacek  <polacek@redhat.com>
+
+	PR middle-end/58809
+	* gcc.dg/gomp/pr58809.c: New test.
+
+2014-01-23  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/58809
+	* c-c++-common/gomp/pr58809.c: New test.
+
+2014-01-22  Marek Polacek  <polacek@redhat.com>
+
+	Backport from mainline
+	2014-01-22  Marek Polacek  <polacek@redhat.com>
+
+	PR c/59891
+	* gcc.dg/torture/pr59891.c: New test.
+
+2014-01-21  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/59860
+	* gcc.dg/strlenopt-4.c: Expect the same counts on s390*-* as on all
+	other targets.
+
+2014-01-20  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/59860
+	* gcc.dg/pr59860.c: New testcase.
+
+2014-01-20  Marek Polacek  <polacek@redhat.com>
+
+	Backported from mainline
+	2014-01-17  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/59838
+	* g++.dg/diagnostic/pr59838.C: New test.
+
+2014-01-19  Paul Thomas  <pault@gcc.gnu.org>
+
+	Backport from mainline
+	2013-12-01  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/34547
+	* gfortran.dg/null_5.f90 : Include new error.
+	* gfortran.dg/null_6.f90 : Include new error.
+
+2014-01-17  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Backport from mainline
+	2014-01-15  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR target/59794
+	* c-c++-common/convert-vec-1.c: Also prune ABI change for
+	Linux/x86.
+	* g++.dg/cpp0x/constexpr-53094-2.C: Likewise.
+	* g++.dg/ext/attribute-test-1.C: Likewise.
+	* g++.dg/ext/attribute-test-2.C: Likewise.
+	* g++.dg/ext/attribute-test-3.C: Likewise.
+	* g++.dg/ext/attribute-test-4.C: Likewise.
+	* g++.dg/torture/pr38565.C: Likewise.
+	* gcc.dg/pr53060.c: Likewise.
+	* c-c++-common/scal-to-vec2.c: Add -msse2 for x86.
+	* c-c++-common/vector-compare-2.c: Likewise.
+	* gcc.dg/Wstrict-aliasing-bogus-ref-all-2.c: Likewise.
+	* g++.dg/conversion/simd1.C: Add -msse2 for x86.  Adjust
+	dg-message line number.
+
+2014-01-17  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Backport from mainline
+	2014-01-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR target/59794
+	* gcc.target/i386/pr39162.c (y): New __m256i variable.
+	(bar): Change return type to void.  Set y to x.
+	* gcc.target/i386/pr59794-1.c: New testcase.
+	* gcc.target/i386/pr59794-2.c: Likewise.
+	* gcc.target/i386/pr59794-3.c: Likewise.
+	* gcc.target/i386/pr59794-4.c: Likewise.
+	* gcc.target/i386/pr59794-5.c: Likewise.
+	* gcc.target/i386/pr59794-6.c: Likewise.
+	* gcc.target/i386/pr59794-7.c: Likewise.
+
+2014-01-17  Matthias Klose  <doko@ubuntu.com>
+
+	Backport from the trunk:
+	2014-01-09  Uros Bizjak  <ubizjak@gmail.com>
+	* go.test/go-test.exp (go-gc-tests): Don't run peano.go on systems
+	which don't support -fsplit-stack.  Skip rotate[0123].go tests.
+
+2014-01-15  Kugan Vivekanandarajah  <kuganv@linaro.org>
+
+	Backport from mainline
+	2014-01-15  Matthew Gretton-Dann  <matthew.gretton-dann@linaro.org>
+	    Kugan Vivekanandarajah  <kuganv@linaro.org>
+
+	PR target/59695
+	* g++.dg/pr59695.C: New testcase.
+
+2014-01-17  Terry Guo  <terry.guo@arm.com>
+
+	* gcc.target/arm/pr59826.c: New test.
+
+2014-01-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/59839
+	* gcc.target/i386/pr59839.c: New test.
+
+	PR debug/54694
+	* gcc.target/i386/pr9771-1.c (main): Rename to...
+	(real_main): ... this.  Add __asm name "main".
+	(ASMNAME, ASMNAME2, STRING): Define.
+
+2014-01-16  Marek Polacek  <polacek@redhat.com>
+
+	Backported from mainline
+	2014-01-16  Marek Polacek  <polacek@redhat.com>
+
+	PR middle-end/59827
+	* gcc.dg/pr59827.c: New test.
+
+2014-01-15  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	PR target/59803
+	* gcc.c-torture/compile/pr59803.c: New testcase.
+
+2014-01-10  Yufeng Zhang  <yufeng.zhang@arm.com>
+
+	* gcc.target/arm/neon/vst1Q_laneu64-1.c: New test.
+
+2014-01-10  Hans-Peter Nilsson  <hp@axis.com>
+
+	* gcc.dg/pr46309.c: Disable for cris*-*-*.
+
+2014-01-10  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/56060
+	PR c++/59730
+	* g++.dg/cpp0x/variadic144.C: New.
+	* g++.dg/cpp0x/variadic145.C: Likewise.
+
+2014-01-10  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59715
+	* gcc.dg/torture/pr59715.c: New testcase.
+
+2014-01-09  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	* gcc.target/mips/bswap-1.c, gcc.target/mips/bswap-2.c,
+	gcc.target/mips/bswap-3.c, gcc.target/mips/bswap-4.c,
+	gcc.target/mips/bswap-5.c, gcc.target/mips/bswap-6.c: New tests.
+
+2014-01-09  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	PR rtl-optimization/59137
+	* gcc.target/mips/pr59137.c: New test.
+
+2014-01-09  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-11-18  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59125
+	PR tree-optimization/54570
+	* gcc.dg/builtin-object-size-8.c: Un-xfail.
+	* gcc.dg/builtin-object-size-14.c: New testcase.
+	* gcc.dg/strlenopt-14gf.c: Adjust.
+	* gcc.dg/strlenopt-1f.c: Likewise.
+	* gcc.dg/strlenopt-4gf.c: Likewise.
+
+	2013-12-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/59362
+	* gcc.c-torture/compile/pr59362.c: New test.
+
+2014-01-09  Richard Earnshaw  <rearnsha@arm.com>
+
+	PR rtl-optimization/54300
+	* gcc.target/arm/pr54300.C: New test.
+
+2014-01-08  Martin Jambor  <mjambor@suse.cz>
+
+	PR ipa/59610
+	* gcc.dg/ipa/pr59610.c: New test.
+
+2014-01-07  Jakub Jelinek  <jakub@redhat.com>
+
+	PR rtl-optimization/58668
+	* gcc.dg/pr58668.c: New test.
+
+	Backported from mainline
+	2013-12-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/58956
+	PR middle-end/59470
+	* gcc.target/i386/pr59470.c: New test.
+
+2014-01-04  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2014-01-02  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/59654
+	* gfortran.dg/dynamic_dispatch_12.f90: New.
+
+2014-01-03  Joseph Myers  <joseph@codesourcery.com>
+
+	* gcc.target/powerpc/rs6000-ldouble-3.c: New test.
+
+2014-01-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/59625
+	* gcc.target/i386/pr59625.c: New test.
+
+2014-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	PR rtl-optimization/59647
+	* g++.dg/opt/pr59647.C: New test.
+
+2013-12-31  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2013-12-30  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/58998
+	* gfortran.dg/generic_28.f90: New.
+
+2013-12-20  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/59255
+	* g++.dg/tree-prof/pr59255.C: New test.
+
+2013-12-19  James Greenhalgh  <james.greenhalgh@arm.com>
+
+	Backport from Mainline
+	2013-05-01  James Greenhalgh  <james.greenhalgh@arm.com>
+
+	* gcc.target/aarch64/scalar_intrinsics.c (force_simd): New.
+	(test_vceqd_s64): Force arguments to SIMD registers.
+	(test_vceqzd_s64): Likewise.
+	(test_vcged_s64): Likewise.
+	(test_vcled_s64): Likewise.
+	(test_vcgezd_s64): Likewise.
+	(test_vcged_u64): Likewise.
+	(test_vcgtd_s64): Likewise.
+	(test_vcltd_s64): Likewise.
+	(test_vcgtzd_s64): Likewise.
+	(test_vcgtd_u64): Likewise.
+	(test_vclezd_s64): Likewise.
+	(test_vcltzd_s64): Likewise.
+	(test_vtst_s64): Likewise.
+	(test_vtst_u64): Likewise.
+
+2013-12-19  Dominik Vogt  <vogt@linux.vnet.ibm.com>
+	    Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
+
+	Backport from mainline
+	2013-12-19  Dominik Vogt  <vogt@linux.vnet.ibm.com>
+	* gcc/testsuite/gcc.target/s390/hotpatch-1.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-2.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-3.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-4.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-5.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-6.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-7.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-8.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-9.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-10.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-11.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-12.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-1.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-2.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-3.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-4.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-5.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-6.c: New test
+	* gcc/testsuite/gcc.target/s390/hotpatch-compile-7.c: New test
+
+2013-12-18  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2013-12-15  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/59493
+	* gfortran.dg/unlimited_polymorphic_15.f90: New.
+
+2013-12-15  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR testsuite/58630
+	* gcc.target/i386/pr43662.c (dg-options):
+	Add -maccumulate-outgoing-args.
+	* gcc.target/i386/pr43869.c (dg-options): Ditto.
+	* gcc.target/i386/pr57003.c (dg-options): Ditto.
+	* gcc.target/i386/avx-vzeroupper-16.c (dg-options):
+	Remove -mtune=generic and add -maccumulate-outgoing-args instead.
+	* gcc.target/i386/avx-vzeroupper-17.c (dg-options): Ditto.
+	* gcc.target/i386/avx-vzeroupper-18.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/func-1.c (dg-options):
+	Add -maccumulate-outgoing-args.
+	* gcc.target/x86_64/abi/callabi/func-2a.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/func-2b.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/func-indirect.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/func-indirect-2a.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/func-indirect-2b.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/leaf-1.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/leaf-2.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/pr38891.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-1.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-2.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-3.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-4a.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-4b.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-5a.c (dg-options): Ditto.
+	* gcc.target/x86_64/abi/callabi/vaarg-5b.c (dg-options): Ditto.
+
+2013-12-12  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/59470
+	* g++.dg/opt/pr59470.C: New test.
+
+	PR libgomp/59467
+	* gfortran.dg/gomp/pr59467.f90: New test.
+	* c-c++-common/gomp/pr59467.c: New test.
+
+2013-12-12  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-12-12  Ryan Mansfield  <rmansfield@qnx.com>
+
+	PR testsuite/59442
+	* gcc.target/i386/sse2-movapd-1.c: Fix alignment attributes.
+	* gcc.target/i386/sse2-movapd-2.c: Likewise.
+	* gcc.target/i386/avx-vmovapd-256-1.c: Likewise.
+	* gcc.target/i386/avx-vmovapd-256-2.c: Likewise.
+
+2013-12-08  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-12-06  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/59405
+	* gcc.target/i386/pr59405.c: New test.
+
+2013-12-06  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/59388
+	* gcc.c-torture/execute/pr59388.c: New test.
+
+2013-12-06  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-11-28  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59330
+	* gcc.dg/torture/pr59330.c: New testcase.
+
+2013-12-06  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-11-27  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59288
+	* gcc.dg/torture/pr59288.c: New testcase.
+
+	2013-11-19  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59164
+	* gcc.dg/torture/pr59164.c: New testcase.
+
+	2013-09-05  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58137
+	* gcc.target/i386/pr58137.c: New testcase.
+
+2013-12-06  Oleg Endo  <olegendo@gcc.gnu.org>
+
+	PR target/51244
+	PR target/59343
+	* gcc.target/sh/pr51244-19.c: Adjust test case.
+
+2013-12-05  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-11-19  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/58956
+	* gcc.dg/torture/pr58956.c: New testcase.
+
+2013-12-04  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/59268
+	* g++.dg/cpp0x/constexpr-template6.C: New test.
+
+	PR rtl-optimization/58726
+	* gcc.c-torture/execute/pr58726.c: New test.
+
+	PR target/59163
+	* g++.dg/torture/pr59163.C: New test.
+
+2013-12-03  Marek Polacek  <polacek@redhat.com>
+
+	Backport from mainline
+	2013-12-03  Marek Polacek  <polacek@redhat.com>
+
+	PR c/59351
+	* gcc.dg/pr59351.c: New test.
+
+2013-12-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/59011
+	* gcc.dg/pr59011.c: New test.
+
+	PR target/58864
+	* g++.dg/opt/pr58864.C: New test.
+
+2013-12-02  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/59358
+	* gcc.c-torture/execute/pr59358.c: New test.
+
+2013-12-02  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/59139
+	* gcc.dg/torture/pr59139.c: New testcase.
+
+2013-11-27  Tom de Vries  <tom@codesourcery.com>
+	    Marc Glisse  <marc.glisse@inria.fr>
+
+	PR c++/59032
+	* c-c++-common/pr59032.c: New testcase.
+
+2013-11-27  Tom de Vries  <tom@codesourcery.com>
+	    Marc Glisse  <marc.glisse@inria.fr>
+
+	PR middle-end/59037
+	* c-c++-common/pr59037.c: New testcase.
+
+2013-11-30  Paul Thomas  <pault@gcc.gnu.org>
+
+	Backport from mainline
+	2013-11-04  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/57445
+	* gfortran.dg/optional_class_1.f90 : New test
+
+2013-11-29  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/59280
+	* c-c++-common/pr59280.c: New test.
+
+2013-11-28  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/59297
+	* g++.dg/gomp/pr59297.C: New test.
+
+2013-11-28  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	Backport from mainline
+	2013-11-28  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	* gcc.target/arm/vrinta-ce.c: New testcase.
+
+2013-11-28  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-11-23  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/56788
+	* config/i386/i386.c (bdesc_multi_arg) <IX86_BUILTIN_VFRCZSS>:
+	Declare as MULTI_ARG_1_SF instruction.
+	<IX86_BUILTIN_VFRCZSD>: Decleare as MULTI_ARG_1_DF instruction.
+	* config/i386/sse.md (*xop_vmfrcz<mode>2): Rename
+	from *xop_vmfrcz_<mode>.
+	* config/i386/xopintrin.h (_mm_frcz_ss): Use __builtin_ia32_movss
+	to merge scalar result with __A.
+	(_mm_frcz_sd): Use __builtin_ia32_movsd to merge scalar
+	result with __A.
+
+2013-11-28  Terry Guo  <terry.guo@arm.com>
+
+	Backport mainline r205391
+	2013-11-26  Terry Guo  <terry.guo@arm.com>
+
+	* gcc.target/arm/thumb1-pic-high-reg.c: New case.
+	* gcc.target/arm/thumb1-pic-single-base.c: New case.
+
+2013-11-27  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from mainline
+	2013-11-27  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/59014
+	* gcc.c-torture/execute/pr59014-2.c: New test.
+
+	2013-11-26  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/59014
+	* gcc.c-torture/execute/pr59014.c: New test.
+
+2013-11-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.c-torture/execute/20131127-1.c: New test.
+
+2013-11-25  Vidya Praveen  <vidyapraveen@arm.com>
+
+	Backport from mainline
+	2013-10-21  Vidya Praveen  <vidyapraveen@arm.com>
+
+	* gcc.dg/20050922-1.c: Remove stdlib.h and declare abort().
+	* gcc.dg/20050922-1.c: Remove stdlib.h and declare abort() and exit().
+
+2013-11-20  Dominik Vogt  <vogt@linux.vnet.ibm.com>
+
+	Backport from mainline
+	* gcc.target/s390/htm-1.c: Rename to ...
+	* gcc/testsuite/gcc.target/s390/htm-builtins-compile-1.c: ... this
+	one.
+	* gcc.target/s390/htm-xl-intrin-1.c: Rename to ...
+	* gcc.target/s390/htm-builtins-compile-3.c: ... this one.
+	* gcc.target/s390/htm-builtins-compile-2.c: New testcase.
+	* gcc.target/s390/htm-builtins-1.c: New testcase.
+	* gcc.target/s390/htm-builtins-2.c: New testcase.
+	* gcc.target/s390/s390.exp: Add check for htm machine.
+
+2013-11-19  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57517
+	* gfortran.fortran-torture/compile/pr57517.f90: New testcase.
+	* gcc.dg/torture/pr57517.c: Likewise.
+
+2013-11-19  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-11-05  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/58941
+	* gcc.dg/torture/pr58941.c: New testcase.
+
+2013-11-18  Richard Biener  <rguenther@suse.de>
+
+	Backport from mainline
+	2013-10-21  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58794
+	* c-c++-common/torture/pr58794-1.c: New testcase.
+	* c-c++-common/torture/pr58794-2.c: Likewise.
+
+	2013-10-21  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/58742
+	* c-c++-common/fold-divmul-1.c: New testcase.
+
+	2013-11-06  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58653
+	* gcc.dg/tree-ssa/predcom-6.c: New testcase.
+	* gcc.dg/tree-ssa/predcom-7.c: Likewise.
+
+	PR tree-optimization/59047
+	* gcc.dg/torture/pr59047.c: New testcase.
+
+	2013-10-15  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/58143
+	* gcc.dg/torture/pr58143-1.c: New testcase.
+	* gcc.dg/torture/pr58143-2.c: Likewise.
+	* gcc.dg/torture/pr58143-3.c: Likewise.
+
+2013-11-17  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2013-11-07  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/58471
+	* gfortran.dg/constructor_9.f90: New.
+
+2013-11-16  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2013-09-20  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/58099
+	* gfortran.dg/proc_ptr_43.f90: New.
+
+2013-11-16  Paul Thomas  <pault@gcc.gnu.org>
+
+	PR fortran/58771
+	* gfortran.dg/derived_external_function_1.f90 : New test
+
+2013-11-14  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-11-06  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/59021
+	* gcc.target/i386/pr59021.c: New test.
+
+2013-11-14  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/59101
+	* gcc.c-torture/execute/pr59101.c: New test.
+
+2013-11-11  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from mainline
+	2013-11-06  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/58970
+	* gcc.c-torture/compile/pr58970-1.c: New test.
+	* gcc.c-torture/compile/pr58970-2.c: New test.
+
+	2013-11-05  Jakub Jelinek  <jakub@redhat.com>
+
+	PR rtl-optimization/58997
+	* gcc.c-torture/compile/pr58997.c: New test.
+
+2013-11-10  Wei Mi  <wmi@google.com>
+
+	* gcc.dg/pr57518.c: Backport regex fix from r200720.
+
+2013-11-07  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Backport from mainline
+	2013-11-07  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR target/59034
+	* gcc.target/i386/pr59034-1.c: New test.
+	* gcc.target/i386/pr59034-2.c: Likewise.
+
+2013-11-06  Wei Mi  <wmi@google.com>
+
+	PR regression/58985
+	* gcc.dg/pr57518.c: Add subreg in regexp pattern.
+
+2013-11-05  Steven G. Kargl <kargl@gcc.gnu.org>
+
+	PR fortran/58989
+	* gfortran.dg/reshape_6.f90: New test.
+
+2013-11-05  Jakub Jelinek  <jakub@redhat.com>
+
+	PR tree-optimization/58984
+	* gcc.c-torture/execute/pr58984.c: New test.
+
+2013-11-04  Marek Polacek  <polacek@redhat.com>
+
+	Backport from mainline
+	2013-11-04  Marek Polacek  <polacek@redhat.com>
+
+	PR c++/58979
+	* g++.dg/diagnostic/pr58979.C: New test.
+
+2013-11-03  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Backport from mainline
+	2013-10-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR target/58690
+	* gcc.target/i386/pr58690.c: New test
+
+2013-11-02  Janus Weil  <janus@gcc.gnu.org>
+
+	Backport from mainline
+	2013-09-23  Janus Weil  <janus@gcc.gnu.org>
+
+	PR fortran/58355
+	* gfortran.dg/extends_15.f90: New.
+
+2013-10-29  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-08-08  Richard Sandiford  <rdsandiford@googlemail.com>
+
+	PR rtl-optimization/58079
+	* gcc.dg/torture/pr58079.c: New test.
+
+2013-10-28  Tom de Vries  <tom@codesourcery.com>
+
+	* gcc.target/arm/require-pic-register-loc.c: New test.
+
+2013-10-26  Uros Bizjak  <ubizjak@gmail.com>
+
+	Backport from mainline
+	2013-10-22  Uros Bizjak  <ubizjak@gmail.com>
+
+	PR target/58779
+	* gcc.target/i386/pr30315.c: Remove MINUSCC, DECCC, MINUSCCONLY
+	and MINUSCCZEXT defines. Update scan-assembler dg directive.
+	* gcc.dg/torture/pr58779.c: New test.
+
+2013-10-25  Richard Henderson  <rth@redhat.com>
+
+	PR rtl/58542
+	* gcc.dg/atomic-store-6.c: New.
+
+2013-10-25  Tom de Vries  <tom@codesourcery.com>
+
+	PR c++/58282
+	* g++.dg/tm/noexcept-6.C: New test.
+
+2013-10-25  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc.c-torture/execute/pr58831.c: New test.
+
+2013-10-23  Tom de Vries  <tom@codesourcery.com>
+
+	PR tree-optimization/58805
+	* gcc.dg/pr58805.c: New test.
+
+2013-10-23  Richard Biener  <rguenther@suse.de>
+
+	* gcc.dg/torture/pr58830.c: New testcase.
+
+	Backport from mainline
+	2013-06-24  Richard Biener  <rguenther@suse.de>
+
+	PR tree-optimization/57488
+	* gcc.dg/torture/pr57488.c: New testcase.
+
+2013-10-19  Oleg Endo  <olegendo@gcc.gnu.org>
+
+	* gcc.target/sh/pr54089-3.c: Fix test for load of constant 31.
+
+2013-10-17  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58596
+	* g++.dg/cpp0x/lambda/lambda-nsdmi5.C: New
+
+2013-10-16  Paolo Carlini  <paolo.carlini@oracle.com>
+
+	PR c++/58633
+	* g++.dg/cpp0x/decltype57.C: New.
+	* g++.dg/cpp0x/enum18.C: Revert r174385 changes.
+
 2013-10-16  Release Manager
 
 	* GCC 4.8.2 released.
@@ -39,9 +1901,9 @@
 	Backport from mainline
 	2013-06-27  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
 
-        * gcc.target/s390/htm-1.c: New file.
-        * gcc.target/s390/htm-nofloat-1.c: New file.
-        * gcc.target/s390/htm-xl-intrin-1.c: New file.
+	* gcc.target/s390/htm-1.c: New file.
+	* gcc.target/s390/htm-nofloat-1.c: New file.
+	* gcc.target/s390/htm-xl-intrin-1.c: New file.
 
 2013-10-04  Tobias Burnus  <burnus@net-b.de>
 
@@ -307,8 +2169,8 @@
 	Backport from mainline
 	2013-08-12  Perez Read  <netfirewall@gmail.com>
 
-        PR target/58132
-        * gcc.target/i386/movabs-1.c: New test.
+	PR target/58132
+	* gcc.target/i386/movabs-1.c: New test.
 
 2013-08-11  Janus Weil  <janus@gcc.gnu.org>
 
@@ -494,7 +2356,7 @@
 	2013-06-19  Wei Mi  <wmi@google.com>
 
 	PR rtl-optimization/57518
-	* testsuite/gcc.dg/pr57518.c: New test.
+	* gcc.dg/pr57518.c: New test.
 
 2013-06-11  Tobias Burnus  <burnus@net-b.de>
 
@@ -623,8 +2485,8 @@
 
 2013-05-09  Martin Jambor  <mjambor@suse.cz>
 
-        PR middle-end/56988
-        * gcc.dg/ipa/pr56988.c: New test.
+	PR middle-end/56988
+	* gcc.dg/ipa/pr56988.c: New test.
 
 2013-05-08  Marc Glisse  <marc.glisse@inria.fr>
 
@@ -701,7 +2563,7 @@
 	2013-04-25  Marek Polacek  <polacek@redhat.com>
 
 	PR tree-optimization/57066
-        * gcc.dg/torture/builtin-logb-1.c: Adjust testcase.
+	* gcc.dg/torture/builtin-logb-1.c: Adjust testcase.
 
 2013-05-02  Jakub Jelinek  <jakub@redhat.com>
 
@@ -727,32 +2589,32 @@
 	Backport from mainline
 	2013-04-24  Vladimir Makarov  <vmakarov@redhat.com>
 
-        PR rtl-optimizations/57046
-        * gcc.target/i386/pr57046.c: New test.
+	PR rtl-optimizations/57046
+	* gcc.target/i386/pr57046.c: New test.
 
 2013-05-02  Vladimir Makarov  <vmakarov@redhat.com>
 
 	Backport from mainline
 	2013-04-22  Vladimir Makarov  <vmakarov@redhat.com>
 
-        PR target/57018
-        * gcc.target/i386/pr57018.c: New test.
+	PR target/57018
+	* gcc.target/i386/pr57018.c: New test.
 
 2013-05-02  Vladimir Makarov  <vmakarov@redhat.com>
 
 	Backport from mainline
 	2013-04-18  Jakub Jelinek  <jakub@redhat.com>
 
-        PR rtl-optimization/56999
-        * g++.dg/opt/pr56999.C: New test.
+	PR rtl-optimization/56999
+	* g++.dg/opt/pr56999.C: New test.
 
 2013-05-02  Vladimir Makarov  <vmakarov@redhat.com>
 
 	Backport from mainline
 	2013-04-19  Vladimir Makarov  <vmakarov@redhat.com>
 
-        PR rtl-optimization/56847
-        * gcc.dg/pr56847.c: New test.
+	PR rtl-optimization/56847
+	* gcc.dg/pr56847.c: New test.
 
 2013-05-02  Ian Bolton  <ian.bolton@arm.com>
 
@@ -1102,7 +2964,7 @@
 	2013-03-29  Tobias Burnus  <burnus@net-b.de>
 
 	PR fortran/56737
-	* testsuite/gfortran.dg/fmt_cache_3.f90: New.
+	* gfortran.dg/fmt_cache_3.f90: New.
 
 2013-04-02  Richard Biener  <rguenther@suse.de>
 
@@ -1636,7 +3498,7 @@
 2013-02-20  Jan Hubicka  <jh@suse.cz>
 
 	PR tree-optimization/56265
-	* testsuite/g++.dg/ipa/devirt-11.C: New testcase.
+	* g++.dg/ipa/devirt-11.C: New testcase.
 
 2013-02-20  Richard Biener  <rguenther@suse.de>
 
@@ -1823,11 +3685,9 @@
 
 	Avoid instrumenting duplicated memory access in the same basic block
 	* c-c++-common/asan/no-redundant-instrumentation-1.c: New test.
-	* testsuite/c-c++-common/asan/no-redundant-instrumentation-2.c:
-	Likewise.
-	* testsuite/c-c++-common/asan/no-redundant-instrumentation-3.c:
-	Likewise.
-	* testsuite/c-c++-common/asan/inc.c: Likewise.
+	* c-c++-common/asan/no-redundant-instrumentation-2.c: Likewise.
+	* c-c++-common/asan/no-redundant-instrumentation-3.c: Likewise.
+	* c-c++-common/asan/inc.c: Likewise.
 
 2013-02-12  Vladimir Makarov  <vmakarov@redhat.com>
 

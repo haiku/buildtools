@@ -73,7 +73,7 @@ record_reference (tree *tp, int *walk_subtrees, void *data)
       decl = get_base_var (*tp);
       if (TREE_CODE (decl) == FUNCTION_DECL)
 	{
-	  struct cgraph_node *node = cgraph_get_create_node (decl);
+	  struct cgraph_node *node = cgraph_get_create_real_symbol_node (decl);
 	  if (!ctx->only_vars)
 	    cgraph_mark_address_taken_node (node);
 	  ipa_record_reference ((symtab_node)ctx->varpool_node,
@@ -143,7 +143,7 @@ record_eh_tables (struct cgraph_node *node, struct function *fun)
     {
       struct cgraph_node *per_node;
 
-      per_node = cgraph_get_create_node (DECL_FUNCTION_PERSONALITY (node->symbol.decl));
+      per_node = cgraph_get_create_real_symbol_node (DECL_FUNCTION_PERSONALITY (node->symbol.decl));
       ipa_record_reference ((symtab_node)node, (symtab_node)per_node, IPA_REF_ADDR, NULL);
       cgraph_mark_address_taken_node (per_node);
     }
@@ -218,12 +218,12 @@ compute_call_stmt_bb_frequency (tree decl, basic_block bb)
 /* Mark address taken in STMT.  */
 
 static bool
-mark_address (gimple stmt, tree addr, void *data)
+mark_address (gimple stmt, tree addr, tree, void *data)
 {
   addr = get_base_address (addr);
   if (TREE_CODE (addr) == FUNCTION_DECL)
     {
-      struct cgraph_node *node = cgraph_get_create_node (addr);
+      struct cgraph_node *node = cgraph_get_create_real_symbol_node (addr);
       cgraph_mark_address_taken_node (node);
       ipa_record_reference ((symtab_node)data,
 			    (symtab_node)node,
@@ -245,14 +245,14 @@ mark_address (gimple stmt, tree addr, void *data)
 /* Mark load of T.  */
 
 static bool
-mark_load (gimple stmt, tree t, void *data)
+mark_load (gimple stmt, tree t, tree, void *data)
 {
   t = get_base_address (t);
   if (t && TREE_CODE (t) == FUNCTION_DECL)
     {
       /* ??? This can happen on platforms with descriptors when these are
 	 directly manipulated in the code.  Pretend that it's an address.  */
-      struct cgraph_node *node = cgraph_get_create_node (t);
+      struct cgraph_node *node = cgraph_get_create_real_symbol_node (t);
       cgraph_mark_address_taken_node (node);
       ipa_record_reference ((symtab_node)data,
 			    (symtab_node)node,
@@ -273,7 +273,7 @@ mark_load (gimple stmt, tree t, void *data)
 /* Mark store of T.  */
 
 static bool
-mark_store (gimple stmt, tree t, void *data)
+mark_store (gimple stmt, tree t, tree, void *data)
 {
   t = get_base_address (t);
   if (t && TREE_CODE (t) == VAR_DECL
@@ -330,7 +330,7 @@ build_cgraph_edges (void)
 	    {
 	      tree fn = gimple_omp_parallel_child_fn (stmt);
 	      ipa_record_reference ((symtab_node)node,
-				    (symtab_node)cgraph_get_create_node (fn),
+				    (symtab_node)cgraph_get_create_real_symbol_node (fn),
 				    IPA_REF_ADDR, stmt);
 	    }
 	  if (gimple_code (stmt) == GIMPLE_OMP_TASK)
@@ -338,12 +338,12 @@ build_cgraph_edges (void)
 	      tree fn = gimple_omp_task_child_fn (stmt);
 	      if (fn)
 		ipa_record_reference ((symtab_node)node,
-				      (symtab_node) cgraph_get_create_node (fn),
+				      (symtab_node) cgraph_get_create_real_symbol_node (fn),
 				      IPA_REF_ADDR, stmt);
 	      fn = gimple_omp_task_copy_fn (stmt);
 	      if (fn)
 		ipa_record_reference ((symtab_node)node,
-				      (symtab_node)cgraph_get_create_node (fn),
+				      (symtab_node)cgraph_get_create_real_symbol_node (fn),
 				      IPA_REF_ADDR, stmt);
 	    }
 	}

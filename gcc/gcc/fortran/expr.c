@@ -3555,11 +3555,13 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	  return FAILURE;
 	}
 
-      if (!gfc_compare_interfaces (s2, s1, name, 0, 1,
-				   err, sizeof(err), NULL, NULL))
+      /* Check F2008Cor2, C729.  */
+      if (!s2->attr.intrinsic && s2->attr.if_source == IFSRC_UNKNOWN
+	  && !s2->attr.external && !s2->attr.subroutine && !s2->attr.function)
 	{
-	  gfc_error ("Interface mismatch in procedure pointer assignment "
-		     "at %L: %s", &rvalue->where, err);
+	  gfc_error ("Procedure pointer target '%s' at %L must be either an "
+		     "intrinsic, host or use associated, referenced or have "
+		     "the EXTERNAL attribute", s2->name, &rvalue->where);
 	  return FAILURE;
 	}
 
@@ -3679,8 +3681,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
     }
 
   if (is_implicit_pure && gfc_impure_variable (rvalue->symtree->n.sym))
-    gfc_current_ns->proc_name->attr.implicit_pure = 0;
-
+    gfc_unset_implicit_pure (gfc_current_ns->proc_name);
 
   if (gfc_has_vector_index (rvalue))
     {

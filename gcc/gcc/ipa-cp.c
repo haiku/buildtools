@@ -444,6 +444,9 @@ determine_versionability (struct cgraph_node *node)
     reason = "not a tree_versionable_function";
   else if (cgraph_function_body_availability (node) <= AVAIL_OVERWRITABLE)
     reason = "insufficient body availability";
+  else if (!opt_for_fn (node->symbol.decl, optimize)
+	   || !opt_for_fn (node->symbol.decl, flag_ipa_cp))
+    reason = "non-optimized function";
 
   if (reason && dump_file && !node->alias && !node->thunk.thunk_p)
     fprintf (dump_file, "Function %s/%i is not versionable, reason: %s.\n",
@@ -1455,22 +1458,21 @@ propagate_constants_accross_call (struct cgraph_edge *cs)
   args_count = ipa_get_cs_argument_count (args);
   parms_count = ipa_get_param_count (callee_info);
 
-  /* If this call goes through a thunk we must not propagate to the first (0th)
-     parameter.  However, we might need to uncover a thunk from below a series
-     of aliases first.  */
+  /* If this call goes through a thunk we should not propagate because we
+     cannot redirect edges to thunks.  However, we might need to uncover a
+     thunk from below a series of aliases first.  */
   alias_or_thunk = cs->callee;
   while (alias_or_thunk->alias)
     alias_or_thunk = cgraph_alias_aliased_node (alias_or_thunk);
   if (alias_or_thunk->thunk.thunk_p)
     {
-      ret |= set_all_contains_variable (ipa_get_parm_lattices (callee_info,
-							       0));
-      i = 1;
+      for (i = 0; i < parms_count; i++)
+	ret |= set_all_contains_variable (ipa_get_parm_lattices (callee_info,
+								 i));
+      return ret;
     }
-  else
-    i = 0;
 
-  for (; (i < args_count) && (i < parms_count); i++)
+  for (i = 0; (i < args_count) && (i < parms_count); i++)
     {
       struct ipa_jump_func *jump_func = ipa_get_ith_jump_func (args, i);
       struct ipcp_param_lattices *dest_plats;
@@ -3119,6 +3121,7 @@ cgraph_edge_brings_all_agg_vals_for_node (struct cgraph_edge *cs,
 					  struct cgraph_node *node)
 {
   struct ipa_node_params *orig_caller_info = IPA_NODE_REF (cs->caller);
+  struct ipa_node_params *orig_node_info;
   struct ipa_agg_replacement_value *aggval;
   int i, ec, count;
 
@@ -3133,6 +3136,7 @@ cgraph_edge_brings_all_agg_vals_for_node (struct cgraph_edge *cs,
       if (aggval->index >= ec)
 	return false;
 
+  orig_node_info = IPA_NODE_REF (IPA_NODE_REF (node)->ipcp_orig_node);
   if (orig_caller_info->ipcp_orig_node)
     orig_caller_info = IPA_NODE_REF (orig_caller_info->ipcp_orig_node);
 
@@ -3150,7 +3154,7 @@ cgraph_edge_brings_all_agg_vals_for_node (struct cgraph_edge *cs,
       if (!interesting)
 	continue;
 
-      plats = ipa_get_parm_lattices (orig_caller_info, aggval->index);
+      plats = ipa_get_parm_lattices (orig_node_info, aggval->index);
       if (plats->aggs_bottom)
 	return false;
 

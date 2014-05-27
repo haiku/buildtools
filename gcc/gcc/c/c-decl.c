@@ -4507,8 +4507,8 @@ finish_decl (tree decl, location_t init_loc, tree init,
 	  cleanup = build_unary_op (input_location, ADDR_EXPR, decl, 0);
 	  vec_alloc (v, 1);
 	  v->quick_push (cleanup);
-	  cleanup = build_function_call_vec (DECL_SOURCE_LOCATION (decl),
-	      				     cleanup_decl, v, NULL);
+	  cleanup = c_build_function_call_vec (DECL_SOURCE_LOCATION (decl),
+					       cleanup_decl, v, NULL);
 	  vec_free (v);
 
 	  /* Don't warn about decl unused; the cleanup uses it.  */
@@ -4632,7 +4632,9 @@ build_compound_literal (location_t loc, tree type, tree init, bool non_const)
     {
       int failure = complete_array_type (&TREE_TYPE (decl),
 					 DECL_INITIAL (decl), true);
-      gcc_assert (!failure);
+      /* If complete_array_type returns 3, it means that the
+         initial value of the compound literal is empty.  Allow it.  */
+      gcc_assert (failure == 0 || failure == 3);
 
       type = TREE_TYPE (decl);
       TREE_TYPE (DECL_INITIAL (decl)) = type;

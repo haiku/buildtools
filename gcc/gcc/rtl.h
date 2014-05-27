@@ -2705,6 +2705,8 @@ extern int canon_true_dependence (const_rtx, enum machine_mode, rtx,
 				  const_rtx, rtx);
 extern int read_dependence (const_rtx, const_rtx);
 extern int anti_dependence (const_rtx, const_rtx);
+extern int canon_anti_dependence (const_rtx, bool,
+	    			  	        const_rtx, enum machine_mode, rtx);
 extern int output_dependence (const_rtx, const_rtx);
 extern int may_alias_p (const_rtx, const_rtx);
 extern void init_alias_target (void);
@@ -2789,6 +2791,8 @@ extern void _fatal_insn (const char *, const_rtx, const char *, int, const char 
 #define fatal_insn_not_found(insn) \
 	_fatal_insn_not_found (insn, __FILE__, __LINE__, __FUNCTION__)
 
+/* reginfo.c */
+extern tree GTY(()) global_regs_decl[FIRST_PSEUDO_REGISTER];
 
 
 #endif /* ! GCC_RTL_H */

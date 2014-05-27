@@ -6421,10 +6421,6 @@ cp_parser_pseudo_destructor_name (cp_parser* parser,
   /* Look for the `~'.  */
   cp_parser_require (parser, CPP_COMPL, RT_COMPL);
 
-  /* Once we see the ~, this has to be a pseudo-destructor.  */
-  if (!processing_template_decl && !cp_parser_error_occurred (parser))
-    cp_parser_commit_to_tentative_parse (parser);
-
   /* Look for the type-name again.  We are not responsible for
      checking that it matches the first type-name.  */
   *type = cp_parser_nonclass_name (parser);
@@ -14168,25 +14164,7 @@ cp_parser_nonclass_name (cp_parser* parser)
   /* Look up the type-name.  */
   type_decl = cp_parser_lookup_name_simple (parser, identifier, token->location);
 
-  if (TREE_CODE (type_decl) == USING_DECL)
-    {
-      if (!DECL_DEPENDENT_P (type_decl))
-	type_decl = strip_using_decl (type_decl);
-      else if (USING_DECL_TYPENAME_P (type_decl))
-	{
-	  /* We have found a type introduced by a using
-	     declaration at class scope that refers to a dependent
-	     type.
-	     
-	     using typename :: [opt] nested-name-specifier unqualified-id ;
-	  */
-	  type_decl = make_typename_type (TREE_TYPE (type_decl),
-					  DECL_NAME (type_decl),
-					  typename_type, tf_error);
-	  if (type_decl != error_mark_node)
-	    type_decl = TYPE_NAME (type_decl);
-	}
-    }
+  type_decl = strip_using_decl (type_decl);
   
   if (TREE_CODE (type_decl) != TYPE_DECL
       && (objc_is_id (identifier) || objc_is_class_name (identifier)))
@@ -14742,7 +14720,8 @@ cp_parser_enum_specifier (cp_parser* parser)
         {
           underlying_type = grokdeclarator (NULL, &type_specifiers, TYPENAME,
                                             /*initialized=*/0, NULL);
-          if (underlying_type == error_mark_node)
+          if (underlying_type == error_mark_node
+	      || check_for_bare_parameter_packs (underlying_type))
             underlying_type = NULL_TREE;
         }
     }
@@ -22209,6 +22188,9 @@ cp_parser_functional_cast (cp_parser* parser, tree type)
   tree cast;
   bool nonconst_p;
 
+  if (!type)
+    type = error_mark_node;
+
   if (cp_lexer_next_token_is (parser->lexer, CPP_OPEN_BRACE))
     {
       maybe_warn_cpp0x (CPP0X_INITIALIZER_LISTS);
@@ -22576,6 +22558,9 @@ cp_parser_late_parse_one_default_arg (cp_parser *parser, tree decl,
 	      && CONSTRUCTOR_IS_DIRECT_INIT (parsed_arg))
 	    flags = LOOKUP_NORMAL;
 	  parsed_arg = digest_init_flags (TREE_TYPE (decl), parsed_arg, flags);
+	  if (TREE_CODE (parsed_arg) == TARGET_EXPR)
+	    /* This represents the whole initialization.  */
+	    TARGET_EXPR_DIRECT_INIT_P (parsed_arg) = true;
 	}
     }
 
