@@ -1190,6 +1190,67 @@ determine_invariantness (void)
   fini_walk_dominator_tree (&walk_data);
 }
 
+/* Return true if CODE is an operation that when operating on signed
+   integer types involves undefined behavior on overflow and the
+   operation can be expressed with unsigned arithmetic.  */
+
+static bool
+arith_code_with_undefined_signed_overflow (tree_code code)
+{
+  switch (code)
+    {
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case MULT_EXPR:
+    case NEGATE_EXPR:
+    case POINTER_PLUS_EXPR:
+      return true;
+    default:
+      return false;
+    }
+}
+
+/* Rewrite STMT, an assignment with a signed integer or pointer arithmetic
+   operation that can be transformed to unsigned arithmetic by converting
+   its operand, carrying out the operation in the corresponding unsigned
+   type and converting the result back to the original type.
+
+   Returns a sequence of statements that replace STMT and also contain
+   a modified form of STMT itself.  */
+
+static gimple_seq
+rewrite_to_defined_overflow (gimple stmt)
+{
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    {
+      fprintf (dump_file, "rewriting stmt with undefined signed "
+	       "overflow ");
+      print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
+    }
+
+  tree lhs = gimple_assign_lhs (stmt);
+  tree type = unsigned_type_for (TREE_TYPE (lhs));
+  gimple_seq stmts = NULL;
+  for (unsigned i = 1; i < gimple_num_ops (stmt); ++i)
+    {
+      gimple_seq stmts2 = NULL;
+      gimple_set_op (stmt, i,
+		     force_gimple_operand (fold_convert (type,
+							 gimple_op (stmt, i)),
+					   &stmts2, true, NULL_TREE));
+      gimple_seq_add_seq (&stmts, stmts2);
+    }
+  gimple_assign_set_lhs (stmt, make_ssa_name (type, stmt));
+  if (gimple_assign_rhs_code (stmt) == POINTER_PLUS_EXPR)
+    gimple_assign_set_rhs_code (stmt, PLUS_EXPR);
+  gimple_seq_add_stmt (&stmts, stmt);
+  gimple cvt = gimple_build_assign_with_ops
+      (NOP_EXPR, lhs, gimple_assign_lhs (stmt), NULL_TREE);
+  gimple_seq_add_stmt (&stmts, cvt);
+
+  return stmts;
+}
+
 /* Hoist the statements in basic block BB out of the loops prescribed by
    data stored in LIM_DATA structures associated with each statement.  Callback
    for walk_dominator_tree.  */
@@ -1321,7 +1382,21 @@ move_computations_stmt (struct dom_walk_data *dw_data,
 	    }
 	}
       gsi_remove (&bsi, false);
-      gsi_insert_on_edge (e, stmt);
+      /* In case this is a stmt that is not unconditionally executed
+         when the target loop header is executed and the stmt may
+	 invoke undefined integer or pointer overflow rewrite it to
+	 unsigned arithmetic.  */
+      if (is_gimple_assign (stmt)
+	  && INTEGRAL_TYPE_P (TREE_TYPE (gimple_assign_lhs (stmt)))
+	  && TYPE_OVERFLOW_UNDEFINED (TREE_TYPE (gimple_assign_lhs (stmt)))
+	  && arith_code_with_undefined_signed_overflow
+	       (gimple_assign_rhs_code (stmt))
+	  && (!ALWAYS_EXECUTED_IN (bb)
+	      || !(ALWAYS_EXECUTED_IN (bb) == level
+		   || flow_loop_nested_p (ALWAYS_EXECUTED_IN (bb), level))))
+	gsi_insert_seq_on_edge (e, rewrite_to_defined_overflow (stmt));
+      else
+	gsi_insert_on_edge (e, stmt);
     }
 }
 
@@ -1992,6 +2067,7 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag)
   gimple_stmt_iterator gsi;
   gimple stmt;
   struct prev_flag_edges *prev_edges = (struct prev_flag_edges *) ex->aux;
+  bool irr = ex->flags & EDGE_IRREDUCIBLE_LOOP;
 
   /* ?? Insert store after previous store if applicable.  See note
      below.  */
@@ -2006,8 +2082,9 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag)
   old_dest = ex->dest;
   new_bb = split_edge (ex);
   then_bb = create_empty_bb (new_bb);
-  if (current_loops && new_bb->loop_father)
-    add_bb_to_loop (then_bb, new_bb->loop_father);
+  if (irr)
+    then_bb->flags = BB_IRREDUCIBLE_LOOP;
+  add_bb_to_loop (then_bb, new_bb->loop_father);
 
   gsi = gsi_start_bb (new_bb);
   stmt = gimple_build_cond (NE_EXPR, flag, boolean_false_node,
@@ -2019,9 +2096,12 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag)
   stmt = gimple_build_assign (unshare_expr (mem), tmp_var);
   gsi_insert_after (&gsi, stmt, GSI_CONTINUE_LINKING);
 
-  make_edge (new_bb, then_bb, EDGE_TRUE_VALUE);
-  make_edge (new_bb, old_dest, EDGE_FALSE_VALUE);
-  then_old_edge = make_edge (then_bb, old_dest, EDGE_FALLTHRU);
+  make_edge (new_bb, then_bb,
+	     EDGE_TRUE_VALUE | (irr ? EDGE_IRREDUCIBLE_LOOP : 0));
+  make_edge (new_bb, old_dest,
+	     EDGE_FALSE_VALUE | (irr ? EDGE_IRREDUCIBLE_LOOP : 0));
+  then_old_edge = make_edge (then_bb, old_dest,
+			     EDGE_FALLTHRU | (irr ? EDGE_IRREDUCIBLE_LOOP : 0));
 
   set_immediate_dominator (CDI_DOMINATORS, then_bb, new_bb);
 

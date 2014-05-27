@@ -1994,12 +1994,14 @@ emit_group_store (rtx orig_dst, rtx src, tree type ATTRIBUTE_UNUSED, int ssize)
       HOST_WIDE_INT bytepos = INTVAL (XEXP (XVECEXP (src, 0, i), 1));
       enum machine_mode mode = GET_MODE (tmps[i]);
       unsigned int bytelen = GET_MODE_SIZE (mode);
-      unsigned int adj_bytelen = bytelen;
+      unsigned int adj_bytelen;
       rtx dest = dst;
 
       /* Handle trailing fragments that run over the size of the struct.  */
       if (ssize >= 0 && bytepos + (HOST_WIDE_INT) bytelen > ssize)
 	adj_bytelen = ssize - bytepos;
+      else
+	adj_bytelen = bytelen;
 
       if (GET_CODE (dst) == CONCAT)
 	{
@@ -2040,6 +2042,7 @@ emit_group_store (rtx orig_dst, rtx src, tree type ATTRIBUTE_UNUSED, int ssize)
 	    }
 	}
 
+      /* Handle trailing fragments that run over the size of the struct.  */
       if (ssize >= 0 && bytepos + (HOST_WIDE_INT) bytelen > ssize)
 	{
 	  /* store_bit_field always takes its value from the lsb.
@@ -2057,16 +2060,22 @@ emit_group_store (rtx orig_dst, rtx src, tree type ATTRIBUTE_UNUSED, int ssize)
 	      tmps[i] = expand_shift (RSHIFT_EXPR, mode, tmps[i],
 				      shift, tmps[i], 0);
 	    }
-	  bytelen = adj_bytelen;
+
+	  /* Make sure not to write past the end of the struct.  */
+	  store_bit_field (dest,
+			   adj_bytelen * BITS_PER_UNIT, bytepos * BITS_PER_UNIT,
+			   bytepos * BITS_PER_UNIT, ssize * BITS_PER_UNIT - 1,
+			   VOIDmode, tmps[i]);
 	}
 
       /* Optimize the access just a bit.  */
-      if (MEM_P (dest)
-	  && (! SLOW_UNALIGNED_ACCESS (mode, MEM_ALIGN (dest))
-	      || MEM_ALIGN (dest) >= GET_MODE_ALIGNMENT (mode))
-	  && bytepos * BITS_PER_UNIT % GET_MODE_ALIGNMENT (mode) == 0
-	  && bytelen == GET_MODE_SIZE (mode))
+      else if (MEM_P (dest)
+	       && (!SLOW_UNALIGNED_ACCESS (mode, MEM_ALIGN (dest))
+		   || MEM_ALIGN (dest) >= GET_MODE_ALIGNMENT (mode))
+	       && bytepos * BITS_PER_UNIT % GET_MODE_ALIGNMENT (mode) == 0
+	       && bytelen == GET_MODE_SIZE (mode))
 	emit_move_insn (adjust_address (dest, mode, bytepos), tmps[i]);
+
       else
 	store_bit_field (dest, bytelen * BITS_PER_UNIT, bytepos * BITS_PER_UNIT,
 			 0, 0, mode, tmps[i]);
@@ -3602,12 +3611,21 @@ compress_float_constant (rtx x, rtx y)
 	 into a new pseudo.  This constant may be used in different modes,
 	 and if not, combine will put things back together for us.  */
       trunc_y = force_reg (srcmode, trunc_y);
-      emit_unop_insn (ic, x, trunc_y, UNKNOWN);
+
+      /* If x is a hard register, perform the extension into a pseudo,
+	 so that e.g. stack realignment code is aware of it.  */
+      rtx target = x;
+      if (REG_P (x) && HARD_REGISTER_P (x))
+	target = gen_reg_rtx (dstmode);
+
+      emit_unop_insn (ic, target, trunc_y, UNKNOWN);
       last_insn = get_last_insn ();
 
-      if (REG_P (x))
+      if (REG_P (target))
 	set_unique_reg_note (last_insn, REG_EQUAL, y);
 
+      if (target != x)
+	return emit_move_insn (x, target);
       return last_insn;
     }
 
@@ -4551,19 +4569,19 @@ get_bit_range (unsigned HOST_WIDE_INT *bitstart,
 		- tree_low_cst (DECL_FIELD_BIT_OFFSET (repr), 1));
 
   /* If the adjustment is larger than bitpos, we would have a negative bit
-     position for the lower bound and this may wreak havoc later.  This can
-     occur only if we have a non-null offset, so adjust offset and bitpos
-     to make the lower bound non-negative.  */
+     position for the lower bound and this may wreak havoc later.  Adjust
+     offset and bitpos to make the lower bound non-negative in that case.  */
   if (bitoffset > *bitpos)
     {
       HOST_WIDE_INT adjust = bitoffset - *bitpos;
-
       gcc_assert ((adjust % BITS_PER_UNIT) == 0);
-      gcc_assert (*offset != NULL_TREE);
 
       *bitpos += adjust;
-      *offset
-	= size_binop (MINUS_EXPR, *offset, size_int (adjust / BITS_PER_UNIT));
+      if (*offset == NULL_TREE)
+	*offset = size_int (-adjust / BITS_PER_UNIT);
+      else
+	*offset
+	  = size_binop (MINUS_EXPR, *offset, size_int (adjust / BITS_PER_UNIT));
       *bitstart = 0;
     }
   else
@@ -4668,8 +4686,7 @@ expand_assignment (tree to, tree from, bool nontemporal)
 	  expand_insn (icode, 2, ops);
 	}
       else
-	store_bit_field (mem, GET_MODE_BITSIZE (mode),
-			 0, 0, 0, mode, reg);
+	store_bit_field (mem, GET_MODE_BITSIZE (mode), 0, 0, 0, mode, reg);
       return;
     }
 
@@ -4697,6 +4714,15 @@ expand_assignment (tree to, tree from, bool nontemporal)
       push_temp_slots ();
       tem = get_inner_reference (to, &bitsize, &bitpos, &offset, &mode1,
 				 &unsignedp, &volatilep, true);
+
+      /* Make sure bitpos is not negative, it can wreak havoc later.  */
+      if (bitpos < 0)
+	{
+	  gcc_assert (offset == NULL_TREE);
+	  offset = size_int (bitpos >> (BITS_PER_UNIT == 8
+					? 3 : exact_log2 (BITS_PER_UNIT)));
+	  bitpos &= BITS_PER_UNIT - 1;
+	}
 
       if (TREE_CODE (to) == COMPONENT_REF
 	  && DECL_BIT_FIELD_TYPE (TREE_OPERAND (to, 1)))

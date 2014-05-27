@@ -176,6 +176,9 @@ struct GTY((chain_next ("%h.next"))) gimple_statement_base {
   /* Nonzero if this statement contains volatile operands.  */
   unsigned has_volatile_ops 	: 1;
 
+  /* Padding to get subcode to 16 bit alignment.  */
+  unsigned pad			: 1;
+
   /* The SUBCODE field can be used for tuple-specific flags for tuples
      that do not require subcodes.  Note that SUBCODE should be at
      least as wide as tree codes, as several tuples store tree codes
@@ -888,13 +891,14 @@ extern tree gimple_signed_type (tree);
 extern alias_set_type gimple_get_alias_set (tree);
 extern void count_uses_and_derefs (tree, gimple, unsigned *, unsigned *,
 				   unsigned *);
+typedef bool (*walk_stmt_load_store_addr_fn) (gimple, tree, tree, void *);
 extern bool walk_stmt_load_store_addr_ops (gimple, void *,
-					   bool (*)(gimple, tree, void *),
-					   bool (*)(gimple, tree, void *),
-					   bool (*)(gimple, tree, void *));
+					   walk_stmt_load_store_addr_fn,
+					   walk_stmt_load_store_addr_fn,
+					   walk_stmt_load_store_addr_fn);
 extern bool walk_stmt_load_store_ops (gimple, void *,
-				      bool (*)(gimple, tree, void *),
-				      bool (*)(gimple, tree, void *));
+				      walk_stmt_load_store_addr_fn,
+				      walk_stmt_load_store_addr_fn);
 extern bool gimple_ior_addresses_taken (bitmap, gimple);
 extern bool gimple_call_builtin_p (gimple, enum built_in_class);
 extern bool gimple_call_builtin_p (gimple, enum built_in_function);

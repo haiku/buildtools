@@ -1516,13 +1516,16 @@ else
 	/* | [A-Za-z]:[\\/]* ) realsrcdir=${srcdir};;
 	*) realsrcdir=../${srcdir};;
 	esac
-	saved_CFLAGS="${CFLAGS}"
+	# Clearing GMPINC is necessary to prevent host headers being
+	# used by the build compiler.  Defining GENERATOR_FILE stops
+	# system.h from including gmp.h.
 	CC="${CC_FOR_BUILD}" CFLAGS="${CFLAGS_FOR_BUILD}" \
-	LDFLAGS="${LDFLAGS_FOR_BUILD}" \
+	CXX="${CXX_FOR_BUILD}" CXXFLAGS="${CXXFLAGS_FOR_BUILD}" \
+	LD="${LD_FOR_BUILD}" LDFLAGS="${LDFLAGS_FOR_BUILD}" \
+	GMPINC="" CPPFLAGS="${CPPFLAGS} -DGENERATOR_FILE" \
 	${realsrcdir}/configure \
 		--enable-languages=${enable_languages-all} \
 		--target=$target_alias --host=$build_alias --build=$build_alias
-	CFLAGS="${saved_CFLAGS}"
 
 	# We just finished tests for the build machine, so rename
 	# the file auto-build.h in the gcc directory.
@@ -1887,6 +1890,7 @@ STMP_FIXINC=stmp-fixinc		AC_SUBST(STMP_FIXINC)
 if test x$build != x$host || test "x$coverage_flags" != x
 then
     BUILD_CFLAGS='$(INTERNAL_CFLAGS) $(T_CFLAGS) $(CFLAGS_FOR_BUILD)'
+    BUILD_CXXFLAGS='$(INTERNAL_CFLAGS) $(T_CFLAGS) $(CXXFLAGS_FOR_BUILD)'
     BUILD_LDFLAGS='$(LDFLAGS_FOR_BUILD)'
 fi
 
@@ -3611,6 +3615,19 @@ foo:
        kasumi_fi_xor %f46, %f48, %f50, %f52],,
       [AC_DEFINE(HAVE_AS_SPARC4, 1,
                 [Define if your assembler supports SPARC4 instructions.])])
+
+    gcc_GAS_CHECK_FEATURE([LEON instructions],
+      gcc_cv_as_sparc_leon,,
+      [-Aleon],
+      [.text
+       .register %g2, #scratch
+       .register %g3, #scratch
+       .align 4
+       smac %g2, %g3, %g1
+       umac %g2, %g3, %g1
+       casa [[%g2]] 0xb, %g3, %g1],,
+      [AC_DEFINE(HAVE_AS_LEON, 1,
+                [Define if your assembler supports LEON instructions.])])
     ;;
 
 changequote(,)dnl
@@ -3749,8 +3766,13 @@ foo:	nop
 
     # These two are used unconditionally by i386.[ch]; it is to be defined
     # to 1 if the feature is present, 0 otherwise.
+    as_ix86_gotoff_in_data_opt=
+    if test x$gas = xyes; then
+      as_ix86_gotoff_in_data_opt="--32"
+    fi
     gcc_GAS_CHECK_FEATURE([GOTOFF in data],
-        gcc_cv_as_ix86_gotoff_in_data, [2,11,0],,
+      gcc_cv_as_ix86_gotoff_in_data, [2,11,0],
+      [$as_ix86_gotoff_in_data_opt],
 [	.text
 .L0:
 	nop
@@ -3771,6 +3793,12 @@ foo:	nop
 	 lock orl $0, (%esp)],,
         [AC_DEFINE(HAVE_AS_IX86_REP_LOCK_PREFIX, 1,
           [Define if the assembler supports 'rep <insn>, lock <insn>'.])])
+
+    gcc_GAS_CHECK_FEATURE([ud2 mnemonic],
+	gcc_cv_as_ix86_ud2,,,
+	[ud2],,
+      [AC_DEFINE(HAVE_AS_IX86_UD2, 1,
+	[Define if your assembler supports the 'ud2' mnemonic.])])
 
     gcc_GAS_CHECK_FEATURE([R_386_TLS_GD_PLT reloc],
         gcc_cv_as_ix86_tlsgdplt,,,
@@ -5193,15 +5221,15 @@ if test x"$enable_plugin" = x"yes"; then
   AC_MSG_CHECKING([for exported symbols])
   if test "x$export_sym_check" != x; then
     echo "int main() {return 0;} int foobar() {return 0;}" > conftest.c
-    ${CC} ${CFLAGS} ${LDFLAGS} conftest.c -o conftest > /dev/null 2>&1
-    if $export_sym_check conftest | grep foobar > /dev/null; then
+    ${CC} ${CFLAGS} ${LDFLAGS} conftest.c -o conftest$ac_exeext > /dev/null 2>&1
+    if $export_sym_check conftest$ac_exeext | grep -q foobar > /dev/null; then
       : # No need to use a flag
       AC_MSG_RESULT([yes])
     else
       AC_MSG_RESULT([yes])
       AC_MSG_CHECKING([for -rdynamic])
-      ${CC} ${CFLAGS} ${LDFLAGS} -rdynamic conftest.c -o conftest > /dev/null 2>&1
-      if $export_sym_check conftest | grep foobar > /dev/null; then
+      ${CC} ${CFLAGS} ${LDFLAGS} -rdynamic conftest.c -o conftest$ac_exeext > /dev/null 2>&1
+      if $export_sym_check conftest$ac_exeext | grep -q foobar > /dev/null; then
         plugin_rdynamic=yes
         pluginlibs="-rdynamic"
       else

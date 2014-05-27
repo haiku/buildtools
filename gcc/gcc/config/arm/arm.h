@@ -1213,11 +1213,15 @@ enum reg_class
    VFPv2.
    In big-endian mode, modes greater than word size (i.e. DFmode) are stored in
    VFP registers in little-endian order.  We can't describe that accurately to
-   GCC, so avoid taking subregs of such values.  */
-#define CANNOT_CHANGE_MODE_CLASS(FROM, TO, CLASS)	\
-  (TARGET_VFP && TARGET_BIG_END				\
-   && (GET_MODE_SIZE (FROM) > UNITS_PER_WORD		\
-       || GET_MODE_SIZE (TO) > UNITS_PER_WORD)		\
+   GCC, so avoid taking subregs of such values.
+   The only exception is going from a 128-bit to a 64-bit type.  In that case
+   the data layout happens to be consistent for big-endian, so we explicitly allow
+   that case.  */
+#define CANNOT_CHANGE_MODE_CLASS(FROM, TO, CLASS)		\
+  (TARGET_VFP && TARGET_BIG_END					\
+   && !(GET_MODE_SIZE (FROM) == 16 && GET_MODE_SIZE (TO) == 8)	\
+   && (GET_MODE_SIZE (FROM) > UNITS_PER_WORD			\
+       || GET_MODE_SIZE (TO) > UNITS_PER_WORD)			\
    && reg_classes_intersect_p (VFP_REGS, (CLASS)))
 
 /* The class value for index registers, and the one for base regs.  */
@@ -2139,14 +2143,9 @@ extern int making_const_table;
 #undef ASM_OUTPUT_BEFORE_CASE_LABEL
 #define ASM_OUTPUT_BEFORE_CASE_LABEL(FILE, PREFIX, NUM, TABLE) /* Empty.  */
 
-/* Make sure subsequent insns are aligned after a TBB.  */
-#define ASM_OUTPUT_CASE_END(FILE, NUM, JUMPTABLE)	\
-  do							\
-    {							\
-      if (GET_MODE (PATTERN (JUMPTABLE)) == QImode)	\
-	ASM_OUTPUT_ALIGN (FILE, 1);			\
-    }							\
-  while (0)
+#define LABEL_ALIGN_AFTER_BARRIER(LABEL)                \
+   (GET_CODE (PATTERN (prev_active_insn (LABEL))) == ADDR_DIFF_VEC \
+   ? 1 : 0)
 
 #define ARM_DECLARE_FUNCTION_NAME(STREAM, NAME, DECL) 	\
   do							\

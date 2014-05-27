@@ -178,7 +178,7 @@ canonicalize_constructor_val (tree cval, tree from_decl)
 	  /* Make sure we create a cgraph node for functions we'll reference.
 	     They can be non-existent if the reference comes from an entry
 	     of an external vtable for example.  */
-	  cgraph_get_create_node (base);
+	  cgraph_get_create_real_symbol_node (base);
 	}
       /* Fixup types in global initializers.  */
       if (TREE_TYPE (TREE_TYPE (cval)) != TREE_TYPE (TREE_OPERAND (cval, 0)))
@@ -866,6 +866,7 @@ gimple_fold_builtin (gimple stmt)
       break;
     case BUILT_IN_STRCPY:
     case BUILT_IN_STRNCPY:
+    case BUILT_IN_STRCAT:
       arg_idx = 1;
       type = 0;
       break;
@@ -939,6 +940,13 @@ gimple_fold_builtin (gimple stmt)
                                        gimple_call_arg (stmt, 1),
                                        gimple_call_arg (stmt, 2),
 				       val[1]);
+      break;
+
+    case BUILT_IN_STRCAT:
+      if (val[1] && is_gimple_val (val[1]) && nargs == 2)
+	result = fold_builtin_strcat (loc, gimple_call_arg (stmt, 0),
+				      gimple_call_arg (stmt, 1),
+				      val[1]);
       break;
 
     case BUILT_IN_FPUTS:

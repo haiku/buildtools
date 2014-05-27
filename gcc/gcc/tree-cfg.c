@@ -104,7 +104,6 @@ static int locus_map_eq (const void *, const void *);
 static void assign_discriminator (location_t, basic_block);
 static edge gimple_redirect_edge_and_branch (edge, basic_block);
 static edge gimple_try_redirect_by_replacing_jump (edge, basic_block);
-static unsigned int split_critical_edges (void);
 
 /* Various helpers.  */
 static inline bool stmt_starts_bb_p (gimple, gimple);
@@ -1535,6 +1534,11 @@ replace_uses_by (tree name, tree val)
 
   FOR_EACH_IMM_USE_STMT (stmt, imm_iter, name)
     {
+      /* Mark the block if we change the last stmt in it.  */
+      if (cfgcleanup_altered_bbs
+	  && stmt_ends_bb_p (stmt))
+	bitmap_set_bit (cfgcleanup_altered_bbs, gimple_bb (stmt)->index);
+
       FOR_EACH_IMM_USE_ON_STMT (use, imm_iter)
         {
 	  replace_exp (use, val);
@@ -1558,11 +1562,6 @@ replace_uses_by (tree name, tree val)
 	  gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
 	  gimple orig_stmt = stmt;
 	  size_t i;
-
-	  /* Mark the block if we changed the last stmt in it.  */
-	  if (cfgcleanup_altered_bbs
-	      && stmt_ends_bb_p (stmt))
-	    bitmap_set_bit (cfgcleanup_altered_bbs, gimple_bb (stmt)->index);
 
 	  /* FIXME.  It shouldn't be required to keep TREE_CONSTANT
 	     on ADDR_EXPRs up-to-date on GIMPLE.  Propagation will
@@ -3513,11 +3512,10 @@ verify_gimple_assign_binary (gimple stmt)
     case PLUS_EXPR:
     case MINUS_EXPR:
       {
-	/* We use regular PLUS_EXPR and MINUS_EXPR for vectors.
-	   ???  This just makes the checker happy and may not be what is
-	   intended.  */
-	if (TREE_CODE (lhs_type) == VECTOR_TYPE
-	    && POINTER_TYPE_P (TREE_TYPE (lhs_type)))
+	tree lhs_etype = lhs_type;
+	tree rhs1_etype = rhs1_type;
+	tree rhs2_etype = rhs2_type;
+	if (TREE_CODE (lhs_type) == VECTOR_TYPE)
 	  {
 	    if (TREE_CODE (rhs1_type) != VECTOR_TYPE
 		|| TREE_CODE (rhs2_type) != VECTOR_TYPE)
@@ -3525,22 +3523,13 @@ verify_gimple_assign_binary (gimple stmt)
 		error ("invalid non-vector operands to vector valued plus");
 		return true;
 	      }
-	    lhs_type = TREE_TYPE (lhs_type);
-	    rhs1_type = TREE_TYPE (rhs1_type);
-	    rhs2_type = TREE_TYPE (rhs2_type);
-	    /* PLUS_EXPR is commutative, so we might end up canonicalizing
-	       the pointer to 2nd place.  */
-	    if (POINTER_TYPE_P (rhs2_type))
-	      {
-		tree tem = rhs1_type;
-		rhs1_type = rhs2_type;
-		rhs2_type = tem;
-	      }
-	    goto do_pointer_plus_expr_check;
+	    lhs_etype = TREE_TYPE (lhs_type);
+	    rhs1_etype = TREE_TYPE (rhs1_type);
+	    rhs2_etype = TREE_TYPE (rhs2_type);
 	  }
-	if (POINTER_TYPE_P (lhs_type)
-	    || POINTER_TYPE_P (rhs1_type)
-	    || POINTER_TYPE_P (rhs2_type))
+	if (POINTER_TYPE_P (lhs_etype)
+	    || POINTER_TYPE_P (rhs1_etype)
+	    || POINTER_TYPE_P (rhs2_etype))
 	  {
 	    error ("invalid (pointer) operands to plus/minus");
 	    return true;
@@ -3552,7 +3541,6 @@ verify_gimple_assign_binary (gimple stmt)
 
     case POINTER_PLUS_EXPR:
       {
-do_pointer_plus_expr_check:
 	if (!POINTER_TYPE_P (rhs1_type)
 	    || !useless_type_conversion_p (lhs_type, rhs1_type)
 	    || !ptrofftype_p (rhs2_type))
@@ -7658,7 +7646,7 @@ struct cfg_hooks gimple_cfg_hooks = {
 
 /* Split all critical edges.  */
 
-static unsigned int
+unsigned int
 split_critical_edges (void)
 {
   basic_block bb;

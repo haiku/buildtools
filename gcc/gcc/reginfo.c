@@ -85,7 +85,7 @@ static const char initial_call_really_used_regs[] = CALL_REALLY_USED_REGISTERS;
 char global_regs[FIRST_PSEUDO_REGISTER];
 
 /* Declaration for the global register. */
-static tree GTY(()) global_regs_decl[FIRST_PSEUDO_REGISTER];
+tree global_regs_decl[FIRST_PSEUDO_REGISTER];
 
 /* Same information as REGS_INVALIDATED_BY_CALL but in regset form to be used
    in dataflow more conveniently.  */
@@ -620,40 +620,35 @@ choose_hard_reg_mode (unsigned int regno ATTRIBUTE_UNUSED,
        mode = GET_MODE_WIDER_MODE (mode))
     if ((unsigned) hard_regno_nregs[regno][mode] == nregs
 	&& HARD_REGNO_MODE_OK (regno, mode)
-	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode)))
+	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode))
+	&& GET_MODE_SIZE (mode) > GET_MODE_SIZE (found_mode))
       found_mode = mode;
-
-  if (found_mode != VOIDmode)
-    return found_mode;
 
   for (mode = GET_CLASS_NARROWEST_MODE (MODE_FLOAT);
        mode != VOIDmode;
        mode = GET_MODE_WIDER_MODE (mode))
     if ((unsigned) hard_regno_nregs[regno][mode] == nregs
 	&& HARD_REGNO_MODE_OK (regno, mode)
-	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode)))
+	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode))
+	&& GET_MODE_SIZE (mode) > GET_MODE_SIZE (found_mode))
       found_mode = mode;
-
-  if (found_mode != VOIDmode)
-    return found_mode;
 
   for (mode = GET_CLASS_NARROWEST_MODE (MODE_VECTOR_FLOAT);
        mode != VOIDmode;
        mode = GET_MODE_WIDER_MODE (mode))
     if ((unsigned) hard_regno_nregs[regno][mode] == nregs
 	&& HARD_REGNO_MODE_OK (regno, mode)
-	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode)))
+	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode))
+	&& GET_MODE_SIZE (mode) > GET_MODE_SIZE (found_mode))
       found_mode = mode;
-
-  if (found_mode != VOIDmode)
-    return found_mode;
 
   for (mode = GET_CLASS_NARROWEST_MODE (MODE_VECTOR_INT);
        mode != VOIDmode;
        mode = GET_MODE_WIDER_MODE (mode))
     if ((unsigned) hard_regno_nregs[regno][mode] == nregs
 	&& HARD_REGNO_MODE_OK (regno, mode)
-	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode)))
+	&& (! call_saved || ! HARD_REGNO_CALL_PART_CLOBBERED (regno, mode))
+	&& GET_MODE_SIZE (mode) > GET_MODE_SIZE (found_mode))
       found_mode = mode;
 
   if (found_mode != VOIDmode)

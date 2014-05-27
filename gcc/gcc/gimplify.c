@@ -2060,6 +2060,9 @@ gimplify_conversion (tree *expr_p)
 /* Nonlocal VLAs seen in the current function.  */
 static struct pointer_set_t *nonlocal_vlas;
 
+/* The VAR_DECLs created for nonlocal VLAs for debug info purposes.  */
+static tree nonlocal_vla_vars;
+
 /* Gimplify a VAR_DECL or PARM_DECL.  Return GS_OK if we expanded a
    DECL_VALUE_EXPR, and it's worth re-examining things.  */
 
@@ -2106,14 +2109,13 @@ gimplify_var_or_parm_decl (tree *expr_p)
 	    ctx = ctx->outer_context;
 	  if (!ctx && !pointer_set_insert (nonlocal_vlas, decl))
 	    {
-	      tree copy = copy_node (decl), block;
+	      tree copy = copy_node (decl);
 
 	      lang_hooks.dup_lang_specific_decl (copy);
 	      SET_DECL_RTL (copy, 0);
 	      TREE_USED (copy) = 1;
-	      block = DECL_INITIAL (current_function_decl);
-	      DECL_CHAIN (copy) = BLOCK_VARS (block);
-	      BLOCK_VARS (block) = copy;
+	      DECL_CHAIN (copy) = nonlocal_vla_vars;
+	      nonlocal_vla_vars = copy;
 	      SET_DECL_VALUE_EXPR (copy, unshare_expr (value_expr));
 	      DECL_HAS_VALUE_EXPR_P (copy) = 1;
 	    }
@@ -4369,7 +4371,7 @@ gimple_fold_indirect_ref (tree t)
           unsigned HOST_WIDE_INT indexi = offset * BITS_PER_UNIT;
           tree index = bitsize_int (indexi);
           if (offset / part_widthi
-              <= TYPE_VECTOR_SUBPARTS (TREE_TYPE (addrtype)))
+              < TYPE_VECTOR_SUBPARTS (TREE_TYPE (addrtype)))
             return fold_build3 (BIT_FIELD_REF, type, TREE_OPERAND (addr, 0),
                                 part_width, index);
 	}
@@ -6131,7 +6133,7 @@ omp_is_private (struct gimplify_omp_ctx *ctx, tree decl)
    region's REDUCTION clause.  */
 
 static bool
-omp_check_private (struct gimplify_omp_ctx *ctx, tree decl)
+omp_check_private (struct gimplify_omp_ctx *ctx, tree decl, bool copyprivate)
 {
   splay_tree_node n;
 
@@ -6140,8 +6142,11 @@ omp_check_private (struct gimplify_omp_ctx *ctx, tree decl)
       ctx = ctx->outer_context;
       if (ctx == NULL)
 	return !(is_global_var (decl)
-		 /* References might be private, but might be shared too.  */
-		 || lang_hooks.decls.omp_privatize_by_reference (decl));
+		 /* References might be private, but might be shared too,
+		    when checking for copyprivate, assume they might be
+		    private, otherwise assume they might be shared.  */
+		 || (!copyprivate
+		     && lang_hooks.decls.omp_privatize_by_reference (decl)));
 
       n = splay_tree_lookup (ctx->variables, (splay_tree_key) decl);
       if (n != NULL)
@@ -6267,12 +6272,36 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	      remove = true;
 	      break;
 	    }
+	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_COPYPRIVATE
+	      && !remove
+	      && !omp_check_private (ctx, decl, true))
+	    {
+	      remove = true;
+	      if (is_global_var (decl))
+		{
+		  if (DECL_THREAD_LOCAL_P (decl))
+		    remove = false;
+		  else if (DECL_HAS_VALUE_EXPR_P (decl))
+		    {
+		      tree value = get_base_address (DECL_VALUE_EXPR (decl));
+
+		      if (value
+			  && DECL_P (value)
+			  && DECL_THREAD_LOCAL_P (value))
+			remove = false;
+		    }
+		}
+	      if (remove)
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "copyprivate variable %qE is not threadprivate"
+			  " or private in outer context", DECL_NAME (decl));
+	    }
 	do_notice:
 	  if (outer_ctx)
 	    omp_notice_variable (outer_ctx, decl, true);
 	  if (check_non_private
 	      && region_type == ORT_WORKSHARE
-	      && omp_check_private (ctx, decl))
+	      && omp_check_private (ctx, decl, false))
 	    {
 	      error ("%s variable %qE is private in outer context",
 		     check_non_private, DECL_NAME (decl));
@@ -8261,6 +8290,21 @@ gimplify_body (tree fndecl, bool do_parms)
 
   if (nonlocal_vlas)
     {
+      if (nonlocal_vla_vars)
+	{
+	  /* tree-nested.c may later on call declare_vars (..., true);
+	     which relies on BLOCK_VARS chain to be the tail of the
+	     gimple_bind_vars chain.  Ensure we don't violate that
+	     assumption.  */
+	  if (gimple_bind_block (outer_bind)
+	      == DECL_INITIAL (current_function_decl))
+	    declare_vars (nonlocal_vla_vars, outer_bind, true);
+	  else
+	    BLOCK_VARS (DECL_INITIAL (current_function_decl))
+	      = chainon (BLOCK_VARS (DECL_INITIAL (current_function_decl)),
+			 nonlocal_vla_vars);
+	  nonlocal_vla_vars = NULL_TREE;
+	}
       pointer_set_destroy (nonlocal_vlas);
       nonlocal_vlas = NULL;
     }
@@ -8588,6 +8632,8 @@ gimple_regimplify_operands (gimple stmt, gimple_stmt_iterator *gsi_p)
     gsi_insert_after (gsi_p, post_stmt, GSI_NEW_STMT);
 
   pop_gimplify_context (NULL);
+
+  update_stmt (stmt);
 }
 
 /* Expand EXPR to list of gimple statements STMTS.  GIMPLE_TEST_F specifies

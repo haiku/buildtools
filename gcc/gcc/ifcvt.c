@@ -115,7 +115,11 @@ count_bb_insns (const_basic_block bb)
 
   while (1)
     {
-      if (CALL_P (insn) || NONJUMP_INSN_P (insn))
+      if ((CALL_P (insn) || NONJUMP_INSN_P (insn))
+	  /* Don't count USE/CLOBBER insns, flow_find_cross_jump etc.
+	     don't count them either and we need consistency.  */
+	  && GET_CODE (PATTERN (insn)) != USE
+	  && GET_CODE (PATTERN (insn)) != CLOBBER)
 	count++;
 
       if (insn == BB_END (bb))
@@ -505,7 +509,10 @@ cond_exec_process_if_block (ce_if_block_t * ce_info,
 	  n_insns -= 2 * n_matching;
 	}
 
-      if (then_start && else_start)
+      if (then_start
+	  && else_start
+	  && then_n_insns > n_matching
+	  && else_n_insns > n_matching)
 	{
 	  int longest_match = MIN (then_n_insns - n_matching,
 				   else_n_insns - n_matching);

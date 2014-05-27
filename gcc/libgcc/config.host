@@ -331,10 +331,10 @@ arm*-*-linux*)			# ARM GNU/Linux with ELF
 	;;
 arm*-*-uclinux*)		# ARM ucLinux
 	tmake_file="${tmake_file} t-fixedpoint-gnu-prefix"
+	tmake_file="$tmake_file arm/t-arm arm/t-elf t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
 	tmake_file="${tmake_file} arm/t-bpabi"
 	tm_file="$tm_file arm/bpabi-lib.h"
 	unwind_header=config/arm/unwind-arm.h
-	tmake_file="$tmake_file arm/t-arm arm/t-elf t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
 	extra_parts="$extra_parts crti.o crtn.o"
 	;;
 arm*-*-eabi* | arm*-*-symbianelf* | arm*-*-rtems*)
@@ -718,6 +718,10 @@ microblaze*-*-elf)
 	tmake_file="${tmake_file} microblaze/t-microblaze t-fdpbit"
 	extra_parts="$extra_parts crtbeginS.o crtendS.o crtbeginT.o crti.o crtn.o"
 	;;
+microblaze*-*-rtems*)
+	tmake_file="${tmake_file} microblaze/t-microblaze t-fdpbit"
+	extra_parts="$extra_parts crtbeginS.o crtendS.o crtbeginT.o crti.o crtn.o"
+	;;
 mips*-*-netbsd*)			# NetBSD/mips, either endian.
 	;;
 mips*-*-linux*)				# Linux MIPS, either endian.
@@ -1081,7 +1085,7 @@ tilepro-*-linux*)
 	md_unwind_header=tilepro/linux-unwind.h
         ;;
 v850*-*-*)
-	tmake_file="v850/t-v850 t-fdpbit"
+	tmake_file="${tmake_file} v850/t-v850 t-fdpbit"
 	;;
 vax-*-linux*)
 	tmake_file="$tmake_file vax/t-linux"
@@ -1098,7 +1102,7 @@ xtensa*-*-elf*)
 	extra_parts="$extra_parts crti.o crtn.o"
 	;;
 xtensa*-*-linux*)
-	tmake_file="$tmake_file xtensa/t-xtensa xtensa/t-linux"
+	tmake_file="$tmake_file xtensa/t-xtensa xtensa/t-linux t-slibgcc-libgcc"
 	md_unwind_header=xtensa/linux-unwind.h
 	;;
 am33_2.0-*-linux*)

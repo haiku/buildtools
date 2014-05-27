@@ -1,3 +1,64 @@
+2014-05-22  Release Manager
+
+	* GCC 4.8.3 released.
+
+2014-03-30  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/60703
+	* system-linux-alpha.ads: Adjust for Ada 2005.
+	* system-linux-mips.ads: Likewise.
+	* system-linux-mips64el.ads: Likewise.
+	* system-linux-mipsel.ads: Likewise.
+	* system-linux-s390.ads: Likewise.
+	* system-linux-s390x.ads: Likewise.
+	* system-linux-sparc.ads: Likewise.
+	* system-linux-sparcv9.ads: Likewise.
+	* system-rtems.ads: Likewise.
+	* system-vxworks-arm.ads: Likewise.
+
+2014-03-13  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/51483
+	* back_end.ads (Register_Type_Proc): Add 'precision' parameter.
+	* cstand.adb (Register_Float_Type): Add 'precision' parameter and use
+	it to set the RM size.  Use directly 'size' for the Esize.
+	* gcc-interface/gigi.h (enumerate_modes): Add integer parameter.
+	* gcc-interface/misc.c (enumerate_modes): Likewise.  Do not register
+	types for vector modes, pass the size in addition to the precision.
+
+2014-01-12  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/59772
+	* gcc-interface/cuintp.c (build_cst_from_int): Use 32-bit integer type
+	as intermediate type.
+	(UI_To_gnu): Likewise.
+
+2013-12-12  Eric Botcazou  <ebotcazou@adacore.com>
+	    Iain Sandoe  <iain@codesourcery.com>
+
+	PR ada/55946
+	* gcc-interface/Make-lang.in (ada/doctools/xgnatugn): Use gnatmake.
+	* gcc-interface/Makefile.in (GCC_LINK): Add LDFLAGS.
+	(../../gnatmake): Remove LDFLAGS.
+	(../../gnatlink): Likewise.
+
+2013-12-04  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/59382
+	* indepsw-darwin.adb: New file.
+
+2013-10-19  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/utils.c (scale_by_factor_of): New function.
+	(rest_of_record_type_compilation): Use scale_by_factor_of in order to
+	scale the original offset for both rounding cases; in the second case,
+	take into accout the addend to compute the alignment.  Tidy up.
+
+2013-10-19  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/utils.c (gnat_set_type_context): New function.
+	(gnat_pushdecl): Use it to set the context of the type.
+
 2013-10-16  Release Manager
 
 	* GCC 4.8.2 released.
