@@ -872,7 +872,7 @@ arm*-*-netbsdelf*)
 	;;
 arm*-*-haiku*)
 	tmake_file="${tmake_file} t-haiku arm/t-arm arm/t-arm-elf arm/t-bpabi arm/t-haiku"
-	tm_file="dbxelf.h elfos.h haiku.h arm/elf.h arm/bpabi.h arm/haiku.h"
+	tm_file="dbxelf.h elfos.h haiku.h arm/elf.h arm/bpabi.h arm/haiku.h haiku-stdint.h"
 	# The BPABI long long divmod functions return a 128-bit value in
 	# registers r0-r3.  Correctly modeling that requires the use of
 	# TImode.
@@ -1240,11 +1240,11 @@ x86_64-*-freebsd*)
 	;;
 i[34567]86-*-haiku*)
 	tmake_file='t-haiku i386/t-crtpic'
-	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku.h"
+	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku.h haiku-stdint.h"
 	;;
 x86_64-*-haiku*)
 	tmake_file='t-haiku i386/t-haiku64'
-	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku64.h"
+	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku64.h haiku-stdint.h"
 	;;
 i[34567]86-*-netbsdelf*)
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h netbsd.h netbsd-elf.h i386/netbsd-elf.h"
