@@ -34,7 +34,7 @@
 // file will come before all others.
 
 // On Haiku, nanosleep and sched_yield are always available except for the
-// kernel and the bootloader, so use them. 
+// kernel and the bootloader, so use them.
 #if !defined(_KERNEL_MODE) && !defined(_LOADER_MODE)
 	#define _GLIBCXX_USE_NANOSLEEP 1
 	#define _GLIBCXX_USE_SCHED_YIELD 1
