@@ -6227,7 +6227,7 @@ aix[4-9]*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
-beos* | haiku*)
+beos*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
@@ -8563,7 +8563,7 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
       esac
       ;;
 
-    beos* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+    beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
 
@@ -8583,8 +8583,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
 
     haiku*)
       # PIC is the default for Haiku.
-      # The "-static" flag exists, but is broken.
-      lt_prog_compiler_static=
       ;;
 
     hpux*)
@@ -9253,8 +9251,8 @@ _LT_EOF
       ;;
 
     haiku*)
-      allow_undefined_flag=unsupported
-      archive_cmds='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+      archive_cmds='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+      link_all_deplibs=yes
       ;;
 
     interix[3-9]*)
@@ -10547,7 +10545,7 @@ amigaos*)
   esac
   ;;
 
-beos* | haiku*)
+beos*)
   library_names_spec='${libname}${shared_ext}'
   dynamic_linker="$host_os ld.so"
   shlibpath_var=LIBRARY_PATH
@@ -10705,8 +10703,9 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/system/lib'
-  hardcode_into_libs=yes
+  sys_lib_search_path_spec='/boot/system/non-packaged/develop/lib /boot/system/develop/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/non-packaged/lib /boot/home/config/lib /boot/system/non-packaged/lib /boot/system/lib'
+  hardcode_into_libs=no
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -12577,8 +12576,8 @@ if test -z "$aix_libpath"; then aix_libpath="/usr/lib:/lib"; fi
         ;;
 
       haiku*)
-        allow_undefined_flag_CXX=unsupported
-        archive_cmds_CXX='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+        archive_cmds='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+        link_all_deplibs=yes
         ;;
 
       hpux9*)
@@ -13445,7 +13444,7 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
         ;;
       esac
       ;;
-    beos* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+    beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
     mingw* | cygwin* | os2* | pw32* | cegcc*)
@@ -13466,8 +13465,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
       ;;
     haiku*)
       # PIC is the default for Haiku.
-      # The "-static" flag exists, but is broken.
-      lt_prog_compiler_static_CXX=
       ;;
     interix[3-9]*)
       # Interix 3.x gcc -fpic/-fPIC options generate broken code.
@@ -14232,7 +14229,7 @@ amigaos*)
   esac
   ;;
 
-beos* | haiku*)
+beos*)
   library_names_spec='${libname}${shared_ext}'
   dynamic_linker="$host_os ld.so"
   shlibpath_var=LIBRARY_PATH
@@ -14388,8 +14385,9 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/system/lib'
-  hardcode_into_libs=yes
+  sys_lib_search_path_spec='/boot/system/non-packaged/develop/lib /boot/system/develop/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/non-packaged/lib /boot/home/config/lib /boot/system/non-packaged/lib /boot/system/lib'
+  hardcode_into_libs=no
   ;;
 
 hpux9* | hpux10* | hpux11*)
