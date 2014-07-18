@@ -625,6 +625,19 @@ case ${target} in
   # need_64bit_hwint=yes # system compiler has this for all arch!
   use_gcc_stdint=wrap
   ;;
+*-*-haiku*)
+  # This is the generic ELF configuration of Haiku.  Later
+  # machine-specific sections may refine and add to this
+  # configuration.
+  #
+  gas=yes
+  gnu_ld=yes
+  tmake_file="t-slibgcc"
+  case ${enable_threads} in
+    "" | yes | posix) thread_file='posix' ;;
+  esac
+  default_use_cxa_atexit=yes
+  ;;
 *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-knetbsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu)
   extra_options="$extra_options gnu-user.opt"
   gas=yes
@@ -1239,11 +1252,11 @@ x86_64-*-freebsd*)
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h ${fbsd_tm_file} i386/x86-64.h i386/freebsd.h i386/freebsd64.h"
 	;;
 i[34567]86-*-haiku*)
-	tmake_file='t-haiku i386/t-crtpic'
+	tmake_file="${tmake_file} t-haiku i386/t-crtpic"
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku.h haiku-stdint.h"
 	;;
 x86_64-*-haiku*)
-	tmake_file='t-haiku i386/t-haiku64'
+	tmake_file="${tmake_file} t-haiku i386/t-haiku64"
 	tm_file="${tm_file} i386/unix.h i386/att.h dbxelf.h elfos.h haiku.h i386/haiku64.h haiku-stdint.h"
 	;;
 i[34567]86-*-netbsdelf*)
@@ -1749,7 +1762,7 @@ m68k-*-rtems*)
 m68k-*-haiku*)
 	default_m68k_cpu=68020
 	default_cf_cpu=5206
-	tmake_file="m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
+	tmake_file="${tmake_file} m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
 	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
 	tm_defines="${tm_defines} MOTOROLA=1"
 	;;
@@ -1954,10 +1967,6 @@ mips-*-elf* | mipsel-*-elf*)
 	tm_file="elfos.h newlib-stdint.h ${tm_file} mips/elf.h"
 	tmake_file="mips/t-elf"
 	;;
-mipsel-*-haiku*)
-	tmake_file='mips/t-elf t-haiku'
-	tm_file="elfos.h ${tm_file} haiku.h mips/haiku.h"
-	;;
 mips64-*-elf* | mips64el-*-elf*)
 	tm_file="elfos.h newlib-stdint.h ${tm_file} mips/elf.h"
 	tmake_file="mips/t-elf"
@@ -2100,7 +2109,7 @@ powerpc-*-eabi*)
 	use_gcc_stdint=wrap
 	;;
 powerpc-*-haiku*)
-	tmake_file="rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
+	tmake_file="${tmake_file} rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
 	tm_file="${tm_file} dbxelf.h elfos.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku.h"
 	extra_options="${extra_options} rs6000/sysv4.opt"
 	;;

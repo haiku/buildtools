@@ -195,6 +195,14 @@ case ${host} in
       ;;
   esac
   ;;
+*-*-haiku*)
+  # This is the generic ELF configuration of Haiku.  Later
+  # machine-specific sections may refine and add to this
+  # configuration.
+  tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-haiku t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver"
+  tmake_file="$tmake_file t-slibgcc-nolc-override"
+  extra_parts="crtbegin.o crtend.o"
+  ;;
 *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-knetbsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu)
   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-linux"
   extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
@@ -324,7 +332,7 @@ arm*-*-netbsdelf*)
 	;;
 arm-*-haiku*)
 	tmake_file="${tmake_file} arm/t-arm arm/t-elf arm/t-bpabi"
-	tmake_file="$tmake_file t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
+	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
 	tm_file="${tm_file} arm/bpabi-lib.h"
 	unwind_header=config/arm/unwind-arm.h
 	extra_parts="crtbegin.o crtend.o"
@@ -515,11 +523,10 @@ x86_64-*-freebsd*)
 	tmake_file="${tmake_file} i386/t-freebsd i386/t-crtstuff"
 	;;
 i[34567]86-*-haiku*)
-	tmake_file="${tmake_file} i386/t-crtstuff t-libgcc-pic"
-	extra_parts="crtbegin.o crtend.o"
+	tmake_file="${tmake_file} i386/t-crtstuff i386/t-eh-dw2"
 	;;
 x86_64-*-haiku*)
-	tmake_file="${tmake_file} i386/t-crtstuff t-libgcc-pic"
+	tmake_file="${tmake_file} i386/t-crtstuff i386/t-eh-dw2"
 	extra_parts="crtbegin.o crtend.o"
 	;;
 i[34567]86-*-netbsdelf*)
@@ -749,9 +756,6 @@ mips*-*-linux*)				# Linux MIPS, either endian.
 	if test "${ac_cv_sizeof_long_double}" = 16; then
 		tmake_file="${tmake_file} mips/t-tpbit"
 	fi
-	;;
-mips*-*-haiku*)
-	extra_parts="crtbegin.o crtend.o"
 	;;
 mips*-sde-elf*)
 	tmake_file="$tmake_file mips/t-crtstuff mips/t-mips16"
