@@ -96,7 +96,7 @@ arm*-*-*)
 	;;
 avr-*-*)
 	cpu_type=avr
-	;;    
+	;;
 bfin*-*)
 	cpu_type=bfin
 	;;
@@ -201,7 +201,7 @@ case ${host} in
   # configuration.
   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-haiku t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver"
   tmake_file="$tmake_file t-slibgcc-nolc-override"
-  extra_parts="crtbegin.o crtend.o"
+  extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
   ;;
 *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-knetbsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu)
   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-linux"
@@ -335,7 +335,6 @@ arm-*-haiku*)
 	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
 	tm_file="${tm_file} arm/bpabi-lib.h"
 	unwind_header=config/arm/unwind-arm.h
-	extra_parts="crtbegin.o crtend.o"
 	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tmake_file="${tmake_file} arm/t-arm t-fixedpoint-gnu-prefix"
@@ -527,7 +526,6 @@ i[34567]86-*-haiku*)
 	;;
 x86_64-*-haiku*)
 	tmake_file="${tmake_file} i386/t-crtstuff i386/t-eh-dw2"
-	extra_parts="crtbegin.o crtend.o"
 	;;
 i[34567]86-*-netbsdelf*)
 	;;
@@ -686,7 +684,7 @@ lm32-*-rtems*)
 lm32-*-uclinux*)
         extra_parts="$extra_parts crtbegin.o crtendS.o crtbeginT.o"
         tmake_file="lm32/t-lm32 lm32/t-uclinux t-libgcc-pic t-softfp-sfdf t-softfp"
-	;;	
+	;;
 m32r-*-elf*)
 	tmake_file=t-fdpbit
  	;;
@@ -702,9 +700,6 @@ m32r-*-linux*)
  	;;
 m32rle-*-linux*)
 	tmake_file="$tmake_file m32r/t-linux t-fdpbit"
-	;;
-m68k-*-haiku*)
-	extra_parts="crtbegin.o crtend.o"
 	;;
 m68k-*-elf* | fido-*-elf)
 	tmake_file="$tmake_file m68k/t-floatlib"
@@ -858,9 +853,6 @@ powerpc*-*-freebsd*)
 	  md_unwind_header=rs6000/freebsd-unwind.h
 	  ;;
 	esac
-	;;
-powerpc-*-haiku*)
-	extra_parts="crtbegin.o crtend.o"
 	;;
 powerpc-*-netbsd*)
 	tmake_file="$tmake_file rs6000/t-netbsd rs6000/t-crtstuff"
