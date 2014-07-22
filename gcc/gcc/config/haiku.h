@@ -55,12 +55,10 @@ Boston, MA 02111-1307, USA.  */
 #undef LIB_SPEC
 #define LIB_SPEC "-lroot"
 
-/* gcc runtime lib is built into libroot.so on Haiku */
-/* ??? This is gonna be lovely when the next release of gcc has
-   some new symbol in, so that links start failing.  */
-#undef LIBGCC_SPEC
-#define LIBGCC_SPEC ""
-
+/* Use --as-needed -lgcc_s for eh support.  */
+#ifdef HAVE_LD_AS_NEEDED
+#define USE_LD_AS_NEEDED 1
+#endif
 
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "crti.o%s crtbeginS.o%s %{!shared:%{!nostart:start_dyn.o%s}} init_term_dyn.o%s"
@@ -181,9 +179,9 @@ Boston, MA 02111-1307, USA.  */
    cause nasty problems if we override it.  */
 #define LIBRARY_PATH_ENV        "BELIBRARIES"
 
-/* With STANDARD_STARTFILE_PREFIX_{1,2} set to "/boot/common/develop/lib/"
-   and "/boot/system/develop/lib/", MD_STARTFILE_PREFIX adds the last one of the
-   standard paths. The user specific paths are set via LIBRARY_PATH_ENV. */
+/* Set STANDARD_STARTFILE_PREFIX_1 set to "/boot/system/develop/lib/", or the
+   respective secondary architecture path. The user specific paths are set via
+   LIBRARY_PATH_ENV. */
 #undef STANDARD_STARTFILE_PREFIX_1
 #undef STANDARD_STARTFILE_PREFIX_2
 #undef MD_STARTFILE_PREFIX
@@ -191,15 +189,12 @@ Boston, MA 02111-1307, USA.  */
 #ifdef HYBRID_SECONDARY
 /* For a secondary compiler on a hybrid system, use alternative search paths.*/
 #define STANDARD_STARTFILE_PREFIX_1 \
-  "/boot/common/develop/lib/" HYBRID_SECONDARY "/"
+  "/boot/system/non-packaged/develop/lib/" HYBRID_SECONDARY "/"
 #define STANDARD_STARTFILE_PREFIX_2 \
   "/boot/system/develop/lib/" HYBRID_SECONDARY "/"
-#define MD_STARTFILE_PREFIX \
-  "/boot/common/non-packaged/develop/lib/" HYBRID_SECONDARY "/"
 #else /* HYBRID_SECONDARY */
-#define STANDARD_STARTFILE_PREFIX_1   "/boot/common/develop/lib/"
+#define STANDARD_STARTFILE_PREFIX_1   "/boot/system/non-packaged/develop/lib/"
 #define STANDARD_STARTFILE_PREFIX_2   "/boot/system/develop/lib/"
-#define MD_STARTFILE_PREFIX           "/boot/common/non-packaged/develop/lib/"
 #endif /* HYBRID_SECONDARY */
 
 /* Haiku doesn't have a separate math library.  */
