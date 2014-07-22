@@ -3588,7 +3588,7 @@ for machine in $build $host $target; do
 		tm_file=i386/haiku.h
 		xmake_file=i386/x-haiku
 		extra_objs=winnt.o
-		extra_parts='crtbegin.o crtend.o'
+		extra_parts='crtbegin.o crtbeginS.o crtend.o crtendS.o'
 		fixincludes=Makefile.in
 		float_format=i386
 		;;
