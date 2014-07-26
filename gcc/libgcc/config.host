@@ -701,6 +701,8 @@ m32r-*-linux*)
 m32rle-*-linux*)
 	tmake_file="$tmake_file m32r/t-linux t-fdpbit"
 	;;
+m68k-*-haiku*)
+	;;
 m68k-*-elf* | fido-*-elf)
 	tmake_file="$tmake_file m68k/t-floatlib"
 	;;
@@ -853,6 +855,8 @@ powerpc*-*-freebsd*)
 	  md_unwind_header=rs6000/freebsd-unwind.h
 	  ;;
 	esac
+	;;
+powerpc-*-haiku*)
 	;;
 powerpc-*-netbsd*)
 	tmake_file="$tmake_file rs6000/t-netbsd rs6000/t-crtstuff"
