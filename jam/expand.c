@@ -81,7 +81,7 @@ var_expand(
 	int depth;
 
 	if( DEBUG_VAREXP )
-	    printf( "expand '%.*s'\n", end - in, in );
+	    printf( "expand '%.*s'\n", (int)(end - in), in );
 
 	/* This gets alot of cases: $(<) and $(>) */
 

@@ -297,7 +297,7 @@ execwait()
 		    break;
 
 	    if( i == MAXJOBS )
-		printf( "jam: waif child process %ld found, ignoring it!\n", w );
+		printf( "jam: waif child process %d found, ignoring it!\n", w );
 	} while( i == MAXJOBS );
 
 # ifdef USE_EXECNT
