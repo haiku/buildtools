@@ -12,7 +12,7 @@ successfully.
 
 If you're not interested in binary compatibility (or want to build for the PowerPC architecture), you can build gcc4 instead by doing this:
 
-  $ ./configure --build-cross-tools-gcc4 <arch> ../buildtools
+  $ ./configure --build-cross-tools <arch> ../buildtools
 
 Replace "<arch>" with either "x86" or "ppc", depending on which of the two
 architectures you want to build for.
