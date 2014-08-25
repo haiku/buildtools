@@ -540,7 +540,7 @@ else if $(UNIX)
 	LEX		?= lex ;
 	LINKFLAGS	?= $(CCFLAGS) ;
 	LINKLIBS	?= ;
-	OPTIM		?= -O ;
+	OPTIM		?= ;
 	RANLIB		?= ranlib ;
 	YACC		?= yacc ;
 	YACCGEN		?= .c ;
