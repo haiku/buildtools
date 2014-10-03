@@ -53,7 +53,7 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "-m elf_i386_haiku -shared %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC "-m elf_i386_haiku %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
 
 /* A C statement (sans semicolon) to output to the stdio stream
    FILE the assembler definition of uninitialized global DECL named
