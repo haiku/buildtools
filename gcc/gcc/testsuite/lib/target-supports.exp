@@ -1790,6 +1790,15 @@ proc check_effective_target_large_double { } {
     }]
 }
 
+# Return 1 if the target supports long double of 128 bits,
+# 0 otherwise.
+
+proc check_effective_target_longdouble128 { } {
+    return [check_no_compiler_messages longdouble128 object {
+	int dummy[sizeof(long double) == 16 ? 1 : -1];
+    }]
+}
+
 # Return 1 if the target supports double of 64 bits,
 # 0 otherwise.
 
@@ -5328,4 +5337,41 @@ proc check_effective_target_aarch64_large { } {
     } else {
 	return 0
     }
+}
+
+# Return 1 if <fenv.h> is available with all the standard IEEE
+# exceptions and floating-point exceptions are raised by arithmetic
+# operations.  (If the target requires special options for "inexact"
+# exceptions, those need to be specified in the testcases.)
+
+proc check_effective_target_fenv_exceptions {} {
+    return [check_runtime fenv_exceptions {
+	#include <fenv.h>
+	#include <stdlib.h>
+	#ifndef FE_DIVBYZERO
+	# error Missing FE_DIVBYZERO
+	#endif
+	#ifndef FE_INEXACT
+	# error Missing FE_INEXACT
+	#endif
+	#ifndef FE_INVALID
+	# error Missing FE_INVALID
+	#endif
+	#ifndef FE_OVERFLOW
+	# error Missing FE_OVERFLOW
+	#endif
+	#ifndef FE_UNDERFLOW
+	# error Missing FE_UNDERFLOW
+	#endif
+	volatile float a = 0.0f, r;
+	int
+	main (void)
+	{
+	  r = a / a;
+	  if (fetestexcept (FE_INVALID))
+	    exit (0);
+	  else
+	    abort ();
+	}
+    } "-std=gnu99"]
 }

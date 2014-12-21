@@ -622,19 +622,12 @@
 		     | RS6000_BTC_TERNARY),				\
 		    CODE_FOR_ ## ICODE)			/* ICODE */
 
-/* Miscellaneous builtins.  */
-#define BU_MISC_1(ENUM, NAME, ATTR, ICODE)				\
+/* 128-bit long double floating point builtins.  */
+#define BU_LDBL128_2(ENUM, NAME, ATTR, ICODE)				\
   RS6000_BUILTIN_2 (MISC_BUILTIN_ ## ENUM,		/* ENUM */	\
 		    "__builtin_" NAME,			/* NAME */	\
-		    RS6000_BTM_HARD_FLOAT,		/* MASK */	\
-		    (RS6000_BTC_ ## ATTR		/* ATTR */	\
-		     | RS6000_BTC_UNARY),				\
-		    CODE_FOR_ ## ICODE)			/* ICODE */
-
-#define BU_MISC_2(ENUM, NAME, ATTR, ICODE)				\
-  RS6000_BUILTIN_2 (MISC_BUILTIN_ ## ENUM,		/* ENUM */	\
-		    "__builtin_" NAME,			/* NAME */	\
-		    RS6000_BTM_HARD_FLOAT,		/* MASK */	\
+		    (RS6000_BTM_HARD_FLOAT		/* MASK */	\
+		     | RS6000_BTM_LDBL128),				\
 		    (RS6000_BTC_ ## ATTR		/* ATTR */	\
 		     | RS6000_BTC_BINARY),				\
 		    CODE_FOR_ ## ICODE)			/* ICODE */
@@ -1265,6 +1258,16 @@ BU_VSX_2 (VEC_MERGEL_V2DF,    "mergel_2df",	CONST,	vsx_mergel_v2df)
 BU_VSX_2 (VEC_MERGEL_V2DI,    "mergel_2di",	CONST,	vsx_mergel_v2di)
 BU_VSX_2 (VEC_MERGEH_V2DF,    "mergeh_2df",	CONST,	vsx_mergeh_v2df)
 BU_VSX_2 (VEC_MERGEH_V2DI,    "mergeh_2di",	CONST,	vsx_mergeh_v2di)
+BU_VSX_2 (XXSPLTD_V2DF,       "xxspltd_2df",    CONST,  vsx_xxspltd_v2df)
+BU_VSX_2 (XXSPLTD_V2DI,       "xxspltd_2di",    CONST,  vsx_xxspltd_v2di)
+BU_VSX_2 (DIV_V2DI,           "div_2di",        CONST,  vsx_div_v2di)
+BU_VSX_2 (UDIV_V2DI,          "udiv_2di",       CONST,  vsx_udiv_v2di)
+BU_VSX_2 (MUL_V2DI,           "mul_2di",        CONST,  vsx_mul_v2di)
+
+BU_VSX_2 (XVCVSXDDP_SCALE,    "xvcvsxddp_scale", CONST, vsx_xvcvsxddp_scale)
+BU_VSX_2 (XVCVUXDDP_SCALE,    "xvcvuxddp_scale", CONST, vsx_xvcvuxddp_scale)
+BU_VSX_2 (XVCVDPSXDS_SCALE,   "xvcvdpsxds_scale", CONST, vsx_xvcvdpsxds_scale)
+BU_VSX_2 (XVCVDPUXDS_SCALE,   "xvcvdpuxds_scale", CONST, vsx_xvcvdpuxds_scale)
 
 /* VSX abs builtin functions.  */
 BU_VSX_A (XVABSDP,	      "xvabsdp",	CONST,	absv2df2)
@@ -1593,10 +1596,8 @@ BU_P8V_MISC_3 (BCDSUB_OV,	"bcdsub_ov",	CONST,	bcdsub_unordered)
 BU_DFP_MISC_2 (PACK_TD,		"pack_dec128",		CONST,	packtd)
 BU_DFP_MISC_2 (UNPACK_TD,	"unpack_dec128",	CONST,	unpacktd)
 
-BU_MISC_2 (PACK_TF,		"pack_longdouble",	CONST,	packtf)
-BU_MISC_2 (UNPACK_TF,		"unpack_longdouble",	CONST,	unpacktf)
-BU_MISC_1 (UNPACK_TF_0,		"longdouble_dw0",	CONST,	unpacktf_0)
-BU_MISC_1 (UNPACK_TF_1,		"longdouble_dw1",	CONST,	unpacktf_1)
+BU_LDBL128_2 (PACK_TF,		"pack_longdouble",	CONST,	packtf)
+BU_LDBL128_2 (UNPACK_TF,	"unpack_longdouble",	CONST,	unpacktf)
 
 BU_P7_MISC_2 (PACK_V1TI,	"pack_vector_int128",	CONST,	packv1ti)
 BU_P7_MISC_2 (UNPACK_V1TI,	"unpack_vector_int128",	CONST,	unpackv1ti)

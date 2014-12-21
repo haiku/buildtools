@@ -1201,12 +1201,18 @@ aarch64_layout_arg (cumulative_args_t pcum_v, enum machine_mode mode,
   CUMULATIVE_ARGS *pcum = get_cumulative_args (pcum_v);
   int ncrn, nvrn, nregs;
   bool allocate_ncrn, allocate_nvrn;
+  HOST_WIDE_INT size;
 
   /* We need to do this once per argument.  */
   if (pcum->aapcs_arg_processed)
     return;
 
   pcum->aapcs_arg_processed = true;
+
+  /* Size in bytes, rounded to the nearest multiple of 8 bytes.  */
+  size
+    = AARCH64_ROUND_UP (type ? int_size_in_bytes (type) : GET_MODE_SIZE (mode),
+			UNITS_PER_WORD);
 
   allocate_ncrn = (type) ? !(FLOAT_TYPE_P (type)) : !FLOAT_MODE_P (mode);
   allocate_nvrn = aarch64_vfp_is_call_candidate (pcum_v,
@@ -1258,9 +1264,7 @@ aarch64_layout_arg (cumulative_args_t pcum_v, enum machine_mode mode,
     }
 
   ncrn = pcum->aapcs_ncrn;
-  nregs = ((type ? int_size_in_bytes (type) : GET_MODE_SIZE (mode))
-	   + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
-
+  nregs = size / UNITS_PER_WORD;
 
   /* C6 - C9.  though the sign and zero extension semantics are
      handled elsewhere.  This is the case where the argument fits
@@ -1309,13 +1313,12 @@ aarch64_layout_arg (cumulative_args_t pcum_v, enum machine_mode mode,
   pcum->aapcs_nextncrn = NUM_ARG_REGS;
 
   /* The argument is passed on stack; record the needed number of words for
-     this argument (we can re-use NREGS) and align the total size if
-     necessary.  */
+     this argument and align the total size if necessary.  */
 on_stack:
-  pcum->aapcs_stack_words = nregs;
+  pcum->aapcs_stack_words = size / UNITS_PER_WORD;
   if (aarch64_function_arg_alignment (mode, type) == 16 * BITS_PER_UNIT)
     pcum->aapcs_stack_size = AARCH64_ROUND_UP (pcum->aapcs_stack_size,
-					       16 / UNITS_PER_WORD) + 1;
+					       16 / UNITS_PER_WORD);
   return;
 }
 
@@ -4845,6 +4848,15 @@ aarch64_override_options (void)
   aarch64_tune = selected_tune->core;
   aarch64_tune_params = selected_tune->tune;
 
+  if (aarch64_fix_a53_err835769 == 2)
+    {
+#ifdef TARGET_FIX_ERR_A53_835769_DEFAULT
+      aarch64_fix_a53_err835769 = 1;
+#else
+      aarch64_fix_a53_err835769 = 0;
+#endif
+    }
+
   aarch64_override_options_after_change ();
 }
 
@@ -6036,6 +6048,135 @@ aarch64_mangle_type (const_tree type)
   /* Use the default mangling.  */
   return NULL;
 }
+
+
+/* Return true iff X is a MEM rtx.  */
+
+static int
+is_mem_p (rtx *x, void *data ATTRIBUTE_UNUSED)
+{
+  return MEM_P (*x);
+}
+
+
+/*  Return true if mem_insn contains a MEM RTX somewhere in it.  */
+
+static bool
+has_memory_op (rtx mem_insn)
+{
+   rtx pattern = PATTERN (mem_insn);
+   return for_each_rtx (&pattern, is_mem_p, NULL);
+}
+
+
+/* Find the first rtx before insn that will generate an assembly
+   instruction.  */
+
+static rtx
+aarch64_prev_real_insn (rtx insn)
+{
+  if (!insn)
+    return NULL;
+
+  do
+    {
+      insn = prev_real_insn (insn);
+    }
+  while (insn && recog_memoized (insn) < 0);
+
+  return insn;
+}
+
+/*  Return true iff t1 is the v8type of a multiply-accumulate instruction.  */
+
+static bool
+is_madd_op (enum attr_v8type t1)
+{
+  return t1 == V8TYPE_MADD
+         || t1 == V8TYPE_MADDL;
+}
+
+
+/* Check if there is a register dependency between a load and the insn
+   for which we hold recog_data.  */
+
+static bool
+dep_between_memop_and_curr (rtx memop)
+{
+  rtx load_reg;
+  int opno;
+
+  gcc_assert (GET_CODE (memop) == SET);
+
+  if (!REG_P (SET_DEST (memop)))
+    return false;
+
+  load_reg = SET_DEST (memop);
+  for (opno = 1; opno < recog_data.n_operands; opno++)
+    {
+      rtx operand = recog_data.operand[opno];
+      if (REG_P (operand)
+          && reg_overlap_mentioned_p (load_reg, operand))
+        return true;
+
+    }
+  return false;
+}
+
+
+
+/* When working around the Cortex-A53 erratum 835769,
+   given rtx_insn INSN, return true if it is a 64-bit multiply-accumulate
+   instruction and has a preceding memory instruction such that a NOP
+   should be inserted between them.  */
+
+bool
+aarch64_madd_needs_nop (rtx insn)
+{
+  enum attr_v8type attr_type;
+  rtx prev;
+  rtx body;
+
+  if (!aarch64_fix_a53_err835769)
+    return false;
+
+  if (recog_memoized (insn) < 0)
+    return false;
+
+  attr_type = get_attr_v8type (insn);
+  if (!is_madd_op (attr_type))
+    return false;
+
+  prev = aarch64_prev_real_insn (insn);
+  /* aarch64_prev_real_insn can call recog_memoized on insns other than INSN.
+     Restore recog state to INSN to avoid state corruption.  */
+  extract_constrain_insn_cached (insn);
+
+  if (!prev || !has_memory_op (prev))
+    return false;
+
+  body = single_set (prev);
+
+  /* If the previous insn is a memory op and there is no dependency between
+     it and the madd, emit a nop between them.  If we know it's a memop but
+     body is NULL, return true to be safe.  */
+  if (GET_MODE (recog_data.operand[0]) == DImode
+      && (!body || !dep_between_memop_and_curr (body)))
+    return true;
+
+  return false;
+
+}
+
+/* Implement FINAL_PRESCAN_INSN.  */
+
+void
+aarch64_final_prescan_insn (rtx insn)
+{
+  if (aarch64_madd_needs_nop (insn))
+    fprintf (asm_out_file, "\tnop // between mem op and mult-accumulate\n");
+}
+
 
 /* Return the equivalent letter for size.  */
 static unsigned char

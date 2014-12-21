@@ -2735,8 +2735,10 @@ finish_member_declaration (tree decl)
 					      /*friend_p=*/0);
 	}
     }
-  /* Enter the DECL into the scope of the class.  */
-  else if (pushdecl_class_level (decl))
+  /* Enter the DECL into the scope of the class, if the class
+     isn't a closure (whose fields are supposed to be unnamed).  */
+  else if (CLASSTYPE_LAMBDA_EXPR (current_class_type)
+	   || pushdecl_class_level (decl))
     {
       if (TREE_CODE (decl) == USING_DECL)
 	{
@@ -3108,7 +3110,7 @@ finish_id_expression (tree id_expression,
 	  && DECL_CONTEXT (decl) == NULL_TREE
 	  && !cp_unevaluated_operand)
 	{
-	  error ("use of parameter %qD outside function body", decl);
+	  *error_msg = "use of parameter outside function body";
 	  return error_mark_node;
 	}
     }
@@ -3343,6 +3345,7 @@ finish_id_expression (tree id_expression,
       tree wrap;
       if (TREE_CODE (decl) == VAR_DECL
 	  && !cp_unevaluated_operand
+	  && !processing_template_decl
 	  && DECL_THREAD_LOCAL_P (decl)
 	  && (wrap = get_tls_wrapper_fn (decl)))
 	{
@@ -7296,7 +7299,9 @@ cxx_eval_bare_aggregate (const constexpr_call *call, tree t,
 	  constructor_elt *inner = base_field_constructor_elt (n, ce->index);
 	  inner->value = elt;
 	}
-      else if (ce->index && TREE_CODE (ce->index) == NOP_EXPR)
+      else if (ce->index
+	       && (TREE_CODE (ce->index) == NOP_EXPR
+		   || TREE_CODE (ce->index) == POINTER_PLUS_EXPR))
 	{
 	  /* This is an initializer for an empty base; now that we've
 	     checked that it's constant, we can ignore it.  */
