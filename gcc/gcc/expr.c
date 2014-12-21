@@ -7590,11 +7590,13 @@ expand_expr_addr_expr_1 (tree exp, rtx target, enum machine_mode tmode,
       break;
 
     case COMPOUND_LITERAL_EXPR:
-      /* Allow COMPOUND_LITERAL_EXPR in initializers, if e.g.
-	 rtl_for_decl_init is called on DECL_INITIAL with
-	 COMPOUNT_LITERAL_EXPRs in it, they aren't gimplified.  */
-      if (modifier == EXPAND_INITIALIZER
-	  && COMPOUND_LITERAL_EXPR_DECL (exp))
+      /* Allow COMPOUND_LITERAL_EXPR in initializers or coming from
+	 initializers, if e.g. rtl_for_decl_init is called on DECL_INITIAL
+	 with COMPOUND_LITERAL_EXPRs in it, or ARRAY_REF on a const static
+	 array with address of COMPOUND_LITERAL_EXPR in DECL_INITIAL;
+	 the initializers aren't gimplified.  */
+      if (COMPOUND_LITERAL_EXPR_DECL (exp)
+	  && TREE_STATIC (COMPOUND_LITERAL_EXPR_DECL (exp)))
 	return expand_expr_addr_expr_1 (COMPOUND_LITERAL_EXPR_DECL (exp),
 					target, tmode, modifier, as);
       /* FALLTHRU */
@@ -10603,7 +10605,7 @@ is_aligning_offset (const_tree offset, const_tree exp)
       || !host_integerp (TREE_OPERAND (offset, 1), 1)
       || compare_tree_int (TREE_OPERAND (offset, 1),
 			   BIGGEST_ALIGNMENT / BITS_PER_UNIT) <= 0
-      || !exact_log2 (tree_low_cst (TREE_OPERAND (offset, 1), 1) + 1) < 0)
+      || exact_log2 (tree_low_cst (TREE_OPERAND (offset, 1), 1) + 1) < 0)
     return 0;
 
   /* Look at the first operand of BIT_AND_EXPR and strip any conversion.

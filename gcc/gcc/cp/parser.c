@@ -12831,7 +12831,12 @@ cp_parser_template_id (cp_parser *parser,
      the effort required to do the parse, nor will we issue duplicate
      error messages about problems during instantiation of the
      template.  */
-  if (start_of_id)
+  if (start_of_id
+      /* Don't do this if we had a parse error in a declarator; re-parsing
+	 might succeed if a name changes meaning (60361).  */
+      && !(cp_parser_error_occurred (parser)
+	   && cp_parser_parsing_tentatively (parser)
+	   && parser->in_declarator_p))
     {
       cp_token *token = cp_lexer_token_at (parser->lexer, start_of_id);
 
@@ -23774,8 +23779,6 @@ cp_parser_commit_to_tentative_parse (cp_parser* parser)
 static void
 cp_parser_abort_tentative_parse (cp_parser* parser)
 {
-  gcc_assert (parser->context->status != CP_PARSER_STATUS_KIND_COMMITTED
-	      || errorcount > 0);
   cp_parser_simulate_error (parser);
   /* Now, pretend that we want to see if the construct was
      successfully parsed.  */

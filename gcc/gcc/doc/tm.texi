@@ -3930,6 +3930,13 @@ which.
 @c above is overfull.  not sure what to do.  --mew 5feb93  did
 @c something, not sure if it looks good.  --mew 10feb93
 
+@defmac INCOMING_REG_PARM_STACK_SPACE (@var{fndecl})
+Like @code{REG_PARM_STACK_SPACE}, but for incoming register arguments.
+Define this macro if space guaranteed when compiling a function body
+is different to space required when making a call, a situation that
+can arise with K&R style function definitions.
+@end defmac
+
 @defmac OUTGOING_REG_PARM_STACK_SPACE (@var{fntype})
 Define this to a nonzero value if it is the responsibility of the
 caller to allocate the area reserved for arguments passed in registers
@@ -4416,10 +4423,6 @@ that can be performed in some cases.  If you do not define this hook
 to return a nonzero value when it is required, the compiler will run out
 of spill registers and print a fatal error message.
 @end deftypefn
-
-@deftypevr {Target Hook} {unsigned int} TARGET_FLAGS_REGNUM
-If the target has a dedicated flags register, and it needs to use the post-reload comparison elimination pass, then this value should be set appropriately.
-@end deftypevr
 
 @node Scalar Return
 @subsection How Scalar Function Values Are Returned
@@ -5894,7 +5897,6 @@ interested in most macros in this section.
 @menu
 * CC0 Condition Codes::      Old style representation of condition codes.
 * MODE_CC Condition Codes::  Modern representation of condition codes.
-* Cond Exec Macros::         Macros to control conditional execution.
 @end menu
 
 @node CC0 Condition Codes
@@ -6007,10 +6009,11 @@ for comparisons whose argument is a @code{plus}:
 
 @smallexample
 #define SELECT_CC_MODE(OP,X,Y) \
-  (GET_MODE_CLASS (GET_MODE (X)) == MODE_FLOAT          \
-   ? ((OP == EQ || OP == NE) ? CCFPmode : CCFPEmode)    \
-   : ((GET_CODE (X) == PLUS || GET_CODE (X) == MINUS    \
-       || GET_CODE (X) == NEG) \
+  (GET_MODE_CLASS (GET_MODE (X)) == MODE_FLOAT           \
+   ? ((OP == LT || OP == LE || OP == GT || OP == GE)     \
+      ? CCFPEmode : CCFPmode)                            \
+   : ((GET_CODE (X) == PLUS || GET_CODE (X) == MINUS     \
+       || GET_CODE (X) == NEG || GET_CODE (x) == ASHIFT) \
       ? CC_NOOVmode : CCmode))
 @end smallexample
 
@@ -6053,10 +6056,11 @@ then @code{REVERSIBLE_CC_MODE (@var{mode})} must be zero.
 You need not define this macro if it would always returns zero or if the
 floating-point format is anything other than @code{IEEE_FLOAT_FORMAT}.
 For example, here is the definition used on the SPARC, where floating-point
-inequality comparisons are always given @code{CCFPEmode}:
+inequality comparisons are given either @code{CCFPEmode} or @code{CCFPmode}:
 
 @smallexample
-#define REVERSIBLE_CC_MODE(MODE)  ((MODE) != CCFPEmode)
+#define REVERSIBLE_CC_MODE(MODE) \
+   ((MODE) != CCFPEmode && (MODE) != CCFPmode)
 @end smallexample
 @end defmac
 
@@ -6066,7 +6070,7 @@ comparison done in CC_MODE @var{mode}.  The macro is used only in case
 @code{REVERSIBLE_CC_MODE (@var{mode})} is nonzero.  Define this macro in case
 machine has some non-standard way how to reverse certain conditionals.  For
 instance in case all floating point conditions are non-trapping, compiler may
-freely convert unordered compares to ordered one.  Then definition may look
+freely convert unordered compares to ordered ones.  Then definition may look
 like:
 
 @smallexample
@@ -6104,14 +6108,9 @@ same.  If they are, it returns that mode.  If they are different, it
 returns @code{VOIDmode}.
 @end deftypefn
 
-@node Cond Exec Macros
-@subsection Macros to control conditional execution
-@findex conditional execution
-@findex predication
-
-There is one macro that may need to be defined for targets
-supporting conditional execution, independent of how they
-represent conditional branches.
+@deftypevr {Target Hook} {unsigned int} TARGET_FLAGS_REGNUM
+If the target has a dedicated flags register, and it needs to use the post-reload comparison elimination pass, then this value should be set appropriately.
+@end deftypevr
 
 @node Costs
 @section Describing Relative Costs of Operations

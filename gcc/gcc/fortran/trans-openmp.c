@@ -115,6 +115,16 @@ gfc_omp_predetermined_sharing (tree decl)
   if (GFC_DECL_RESULT (decl) && ! DECL_HAS_VALUE_EXPR_P (decl))
     return OMP_CLAUSE_DEFAULT_SHARED;
 
+  /* These are either array or derived parameters, or vtables.
+     In the former cases, the OpenMP standard doesn't consider them to be
+     variables at all (they can't be redefined), but they can nevertheless appear
+     in parallel/task regions and for default(none) purposes treat them as shared.
+     For vtables likely the same handling is desirable.  */
+  if (TREE_CODE (decl) == VAR_DECL
+      && TREE_READONLY (decl)
+      && TREE_STATIC (decl))
+    return OMP_CLAUSE_DEFAULT_SHARED;
+
   return OMP_CLAUSE_DEFAULT_UNSPECIFIED;
 }
 
@@ -1217,6 +1227,18 @@ gfc_trans_omp_atomic (gfc_code *code)
     }
 
   lhsaddr = save_expr (lhsaddr);
+  if (TREE_CODE (lhsaddr) != SAVE_EXPR
+      && (TREE_CODE (lhsaddr) != ADDR_EXPR
+	  || TREE_CODE (TREE_OPERAND (lhsaddr, 0)) != VAR_DECL))
+    {
+      /* Make sure LHS is simple enough so that goa_lhs_expr_p can recognize
+	 it even after unsharing function body.  */
+      tree var = create_tmp_var_raw (TREE_TYPE (lhsaddr), NULL);
+      DECL_CONTEXT (var) = current_function_decl;
+      lhsaddr = build4 (TARGET_EXPR, TREE_TYPE (lhsaddr), var, lhsaddr,
+			NULL_TREE, NULL_TREE);
+    }
+
   rhs = gfc_evaluate_now (rse.expr, &block);
 
   if (atomic_code->ext.omp_atomic == GFC_OMP_ATOMIC_WRITE)
