@@ -1,5 +1,5 @@
 /* BFD back-end for archive files (libraries).
-   Copyright 1990-2013 Free Software Foundation, Inc.
+   Copyright (C) 1990-2014 Free Software Foundation, Inc.
    Written by Cygnus Support.  Mostly Gumby Henkel-Wallace's fault.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -140,6 +140,7 @@ SUBSECTION
 #include "safe-ctype.h"
 #include "hashtab.h"
 #include "filenames.h"
+#include "bfdlink.h"
 
 #ifndef errno
 extern int errno;
@@ -705,7 +706,7 @@ _bfd_get_elt_at_filepos (bfd *archive, file_ptr filepos)
   else
     {
       n_nfd->origin = n_nfd->proxy_origin;
-      n_nfd->filename = filename;
+      n_nfd->filename = xstrdup (filename);
     }
 
   n_nfd->arelt_data = new_areldata;
@@ -1299,6 +1300,8 @@ _bfd_slurp_extended_name_table (bfd *abfd)
 	{
 	byebye:
 	  free (namedata);
+	  bfd_ardata (abfd)->extended_names = NULL;
+	  bfd_ardata (abfd)->extended_names_size = 0;
 	  return FALSE;
 	}
 
@@ -1315,11 +1318,12 @@ _bfd_slurp_extended_name_table (bfd *abfd)
 	 text, the entries in the list are newline-padded, not null
 	 padded. In SVR4-style archives, the names also have a
 	 trailing '/'.  DOS/NT created archive often have \ in them
-	 We'll fix all problems here..  */
+	 We'll fix all problems here.  */
       {
 	char *ext_names = bfd_ardata (abfd)->extended_names;
 	char *temp = ext_names;
 	char *limit = temp + namedata->parsed_size;
+
 	for (; temp < limit; ++temp)
 	  {
 	    if (*temp == ARFMAG[1])
@@ -2356,6 +2360,10 @@ _bfd_compute_and_write_armap (bfd *arch, unsigned int elength)
 			  map = new_map;
 			}
 
+		      if (strcmp (syms[src_count]->name, "__gnu_lto_slim") == 0)
+			(*_bfd_error_handler)
+			  (_("%s: plugin needed to handle lto object"),
+			   bfd_get_filename (current));
 		      namelen = strlen (syms[src_count]->name);
 		      amt = sizeof (char *);
 		      map[orl_count].name = (char **) bfd_alloc (arch, amt);
@@ -2751,5 +2759,8 @@ _bfd_archive_close_and_cleanup (bfd *abfd)
 	    }
 	}
     }
+  if (abfd->is_linker_output)
+    (*abfd->link.hash->hash_table_free) (abfd);
+
   return TRUE;
 }

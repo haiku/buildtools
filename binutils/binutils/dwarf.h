@@ -1,5 +1,5 @@
 /* dwarf.h - DWARF support header file
-   Copyright 2005-2013 Free Software Foundation, Inc.
+   Copyright (C) 2005-2014 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -108,6 +108,8 @@ typedef struct
 }
 DWARF2_Internal_ARange;
 
+/* N.B. The order here must match the order in debug_displays.  */
+
 enum dwarf_section_display_enum
 {
   abbrev = 0,
@@ -116,12 +118,14 @@ enum dwarf_section_display_enum
   info,
   line,
   pubnames,
+  gnu_pubnames,
   eh_frame,
   macinfo,
   macro,
   str,
   loc,
   pubtypes,
+  gnu_pubtypes,
   ranges,
   static_func,
   static_vars,
@@ -231,6 +235,7 @@ extern int dwarf_check;
 extern void init_dwarf_regnames (unsigned int);
 extern void init_dwarf_regnames_i386 (void);
 extern void init_dwarf_regnames_x86_64 (void);
+extern void init_dwarf_regnames_aarch64 (void);
 
 extern int load_debug_section (enum dwarf_section_display_enum, void *);
 extern void free_debug_section (enum dwarf_section_display_enum);

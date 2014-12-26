@@ -1,6 +1,5 @@
 /* BFD back-end for VERSAdos-E objects.
-   Copyright 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
-   2006, 2007, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
+   Copyright (C) 1995-2014 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    Versados is a Motorola trademark.
@@ -795,6 +794,7 @@ versados_canonicalize_reloc (bfd *abfd,
 #define versados_bfd_is_local_label_name              bfd_generic_is_local_label_name
 #define versados_get_lineno                           _bfd_nosymbols_get_lineno
 #define versados_find_nearest_line                    _bfd_nosymbols_find_nearest_line
+#define versados_find_line                            _bfd_nosymbols_find_line
 #define versados_find_inliner_info                    _bfd_nosymbols_find_inliner_info
 #define versados_make_empty_symbol                    _bfd_generic_make_empty_symbol
 #define versados_bfd_make_debug_symbol                _bfd_nosymbols_bfd_make_debug_symbol
@@ -813,7 +813,6 @@ versados_canonicalize_reloc (bfd *abfd,
 #define versados_section_already_linked               _bfd_generic_section_already_linked
 #define versados_bfd_define_common_symbol             bfd_generic_define_common_symbol
 #define versados_bfd_link_hash_table_create           _bfd_generic_link_hash_table_create
-#define versados_bfd_link_hash_table_free             _bfd_generic_link_hash_table_free
 #define versados_bfd_link_add_symbols                 _bfd_generic_link_add_symbols
 #define versados_bfd_link_just_syms                   _bfd_generic_link_just_syms
 #define versados_bfd_copy_link_hash_symbol_type \
@@ -821,7 +820,7 @@ versados_canonicalize_reloc (bfd *abfd,
 #define versados_bfd_final_link                       _bfd_generic_final_link
 #define versados_bfd_link_split_section               _bfd_generic_link_split_section
 
-const bfd_target versados_vec =
+const bfd_target m68k_versados_vec =
 {
   "versados",			/* Name.  */
   bfd_target_versados_flavour,

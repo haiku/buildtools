@@ -1,9 +1,8 @@
 /* moxie-specific support for 32-bit ELF.
-   Copyright 2009, 2010, 2012 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    Copied from elf32-fr30.c which is..
-   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
-   Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -240,12 +239,12 @@ moxie_elf_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned;
+	  bfd_boolean unresolved_reloc, warned, ignored;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned);
+				   unresolved_reloc, warned, ignored);
 
 	  name = h->root.root.string;
 	}
@@ -370,9 +369,9 @@ moxie_elf_check_relocs (bfd *abfd,
 #define ELF_MACHINE_CODE	EM_MOXIE
 #define ELF_MAXPAGESIZE		0x1
 
-#define TARGET_BIG_SYM          bfd_elf32_bigmoxie_vec
+#define TARGET_BIG_SYM          moxie_elf32_be_vec
 #define TARGET_BIG_NAME		"elf32-bigmoxie"
-#define TARGET_LITTLE_SYM       bfd_elf32_littlemoxie_vec
+#define TARGET_LITTLE_SYM       moxie_elf32_le_vec
 #define TARGET_LITTLE_NAME	"elf32-littlemoxie"
 
 #define elf_info_to_howto_rel			NULL
