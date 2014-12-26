@@ -1,6 +1,6 @@
 /* Xilinx MicroBlaze-specific support for 32-bit ELF
 
-   Copyright 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1023,11 +1023,12 @@ microblaze_elf_relocate_section (bfd *output_bfd,
 	    {
 	      /* External symbol.  */
 	      bfd_boolean warned ATTRIBUTE_UNUSED;
+	      bfd_boolean ignored ATTRIBUTE_UNUSED;
 
 	      RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				       r_symndx, symtab_hdr, sym_hashes,
 				       h, sec, relocation,
-				       unresolved_reloc, warned);
+				       unresolved_reloc, warned, ignored);
 	      sym_name = h->root.root.string;
 	    }
 
@@ -2972,7 +2973,7 @@ microblaze_elf_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 
   /* Set up .got offsets for local syms, and space for local dynamic
      relocs.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     {
       bfd_signed_vma *local_got;
       bfd_signed_vma *end_local_got;
@@ -3465,10 +3466,10 @@ microblaze_elf_add_symbol_hook (bfd *abfd,
   return TRUE;
 }
 
-#define TARGET_LITTLE_SYM      bfd_elf32_microblazeel_vec
+#define TARGET_LITTLE_SYM      microblaze_elf32_le_vec
 #define TARGET_LITTLE_NAME     "elf32-microblazeel"
 
-#define TARGET_BIG_SYM          bfd_elf32_microblaze_vec
+#define TARGET_BIG_SYM          microblaze_elf32_vec
 #define TARGET_BIG_NAME		"elf32-microblaze"
 
 #define ELF_ARCH		bfd_arch_microblaze

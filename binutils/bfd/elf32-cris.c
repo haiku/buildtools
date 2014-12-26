@@ -1,6 +1,5 @@
 /* CRIS-specific support for 32-bit ELF.
-   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
-   2010, 2011, 2012 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
    Contributed by Axis Communications AB.
    Written by Hans-Peter Nilsson, based on elf32-fr30.c
    PIC and shlib bits based primarily on elf32-m68k.c and elf32-i386.c.
@@ -1040,13 +1039,13 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	}
       else
 	{
-	  bfd_boolean warned;
+	  bfd_boolean warned, ignored;
 	  bfd_boolean unresolved_reloc;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned);
+				   unresolved_reloc, warned, ignored);
 
 	  symname = h->root.root.string;
 
@@ -3236,15 +3235,20 @@ cris_elf_check_relocs (bfd *abfd,
 		     abfd, sec);
 		  return FALSE;
 		}
-
-	      /* Create the .got section, so we can assume it's always
-		 present whenever there's a dynobj.  */
-	      if (!_bfd_elf_create_got_section (dynobj, info))
-		return FALSE;
 	    }
 
 	  if (sgot == NULL)
-	    sgot = bfd_get_linker_section (dynobj, ".got");
+	    {
+	      /* We may have a dynobj but no .got section, if machine-
+		 independent parts of the linker found a reason to create
+		 a dynobj.  We want to create the .got section now, so we
+		 can assume it's always present whenever there's a dynobj.
+		 It's ok to call this function more than once.  */
+	      if (!_bfd_elf_create_got_section (dynobj, info))
+		return FALSE;
+
+	      sgot = bfd_get_linker_section (dynobj, ".got");
+	    }
 
 	  if (local_got_refcounts == NULL)
 	    {
@@ -4330,7 +4334,7 @@ elf_cris_got_elt_size (bfd *abfd ATTRIBUTE_UNUSED,
 #define ELF_MACHINE_CODE	EM_CRIS
 #define ELF_MAXPAGESIZE		0x2000
 
-#define TARGET_LITTLE_SYM	bfd_elf32_cris_vec
+#define TARGET_LITTLE_SYM	cris_elf32_vec
 #define TARGET_LITTLE_NAME	"elf32-cris"
 #define elf_symbol_leading_char 0
 
@@ -4399,7 +4403,7 @@ elf_cris_got_elt_size (bfd *abfd ATTRIBUTE_UNUSED,
 #undef TARGET_LITTLE_NAME
 #undef elf_symbol_leading_char
 
-#define TARGET_LITTLE_SYM bfd_elf32_us_cris_vec
+#define TARGET_LITTLE_SYM cris_elf32_us_vec
 #define TARGET_LITTLE_NAME "elf32-us-cris"
 #define elf_symbol_leading_char '_'
 #undef elf32_bed

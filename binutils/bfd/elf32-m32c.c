@@ -1,6 +1,5 @@
 /* M16C/M32C specific support for 32-bit ELF.
-   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
-   Free Software Foundation, Inc.
+   Copyright (C) 2005-2014 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -408,6 +407,11 @@ m32c_elf_relocate_section
       else
 	{
 	  h = sym_hashes [r_symndx - symtab_hdr->sh_info];
+
+	  if (info->wrap_hash != NULL
+	      && (input_section->flags & SEC_DEBUGGING) != 0)
+	    h = ((struct elf_link_hash_entry *)
+		 unwrap_hash_lookup (info, input_bfd, &h->root));
 
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
@@ -921,32 +925,78 @@ dump_symtab (bfd * abfd, void *internal_syms, void *external_syms)
     {
       switch (ELF_ST_TYPE (isym->st_info))
 	{
-	case STT_FUNC: st_info_str = "STT_FUNC";
-	case STT_SECTION: st_info_str = "STT_SECTION";
-	case STT_FILE: st_info_str = "STT_FILE";
-	case STT_OBJECT: st_info_str = "STT_OBJECT";
-	case STT_TLS: st_info_str = "STT_TLS";
-	default: st_info_str = "";
+	case STT_FUNC:
+	  st_info_str = "STT_FUNC";
+	  break;
+
+	case STT_SECTION:
+	  st_info_str = "STT_SECTION";
+	  break;
+
+	case STT_FILE:
+	  st_info_str = "STT_FILE";
+	  break;
+
+	case STT_OBJECT:
+	  st_info_str = "STT_OBJECT";
+	  break;
+
+	case STT_TLS:
+	  st_info_str = "STT_TLS";
+	  break;
+
+	default:
+	  st_info_str = "";
 	}
+
       switch (ELF_ST_BIND (isym->st_info))
 	{
-	case STB_LOCAL: st_info_stb_str = "STB_LOCAL";
-	case STB_GLOBAL: st_info_stb_str = "STB_GLOBAL";
-	default: st_info_stb_str = "";
+	case STB_LOCAL:
+	  st_info_stb_str = "STB_LOCAL";
+	  break;
+
+	case STB_GLOBAL:
+	  st_info_stb_str = "STB_GLOBAL";
+	  break;
+
+	default:
+	  st_info_stb_str = "";
 	}
+
       switch (ELF_ST_VISIBILITY (isym->st_other))
 	{
-	case STV_DEFAULT: st_other_str = "STV_DEFAULT";
-	case STV_INTERNAL: st_other_str = "STV_INTERNAL";
-	case STV_PROTECTED: st_other_str = "STV_PROTECTED";
-	default: st_other_str = "";
+	case STV_DEFAULT:
+	  st_other_str = "STV_DEFAULT";
+	  break;
+
+	case STV_INTERNAL:
+	  st_other_str = "STV_INTERNAL";
+	  break;
+
+	case STV_PROTECTED:
+	  st_other_str = "STV_PROTECTED";
+	  break;
+
+	default:
+	  st_other_str = "";
 	}
+
       switch (isym->st_shndx)
 	{
-	case SHN_ABS: st_shndx_str = "SHN_ABS";
-	case SHN_COMMON: st_shndx_str = "SHN_COMMON";
-	case SHN_UNDEF: st_shndx_str = "SHN_UNDEF";
-	default: st_shndx_str = "";
+	case SHN_ABS:
+	  st_shndx_str = "SHN_ABS";
+	  break;
+
+	case SHN_COMMON:
+	  st_shndx_str = "SHN_COMMON";
+	  break;
+
+	case SHN_UNDEF:
+	  st_shndx_str = "SHN_UNDEF";
+	  break;
+
+	default:
+	  st_shndx_str = "";
 	}
 
       printf ("isym = %p st_value = %lx st_size = %lx st_name = (%lu) %s "
@@ -1060,7 +1110,7 @@ m32c_elf_relax_plt_section (asection *splt,
 
   /* Likewise for local symbols, though that's somewhat less convenient
      as we have to walk the list of input bfds and swap in symbol data.  */
-  for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link_next)
+  for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
     {
       bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
       Elf_Internal_Shdr *symtab_hdr;
@@ -1134,7 +1184,7 @@ m32c_elf_relax_plt_section (asection *splt,
       elf_link_hash_traverse (elf_hash_table (info),
 			      m32c_relax_plt_realloc, &entry);
 
-      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link_next)
+      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
 	{
 	  bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
 	  unsigned int nlocals = elf_tdata (ibfd)->symtab_hdr.sh_info;
@@ -1998,10 +2048,10 @@ _bfd_m32c_elf_eh_frame_address_size (bfd *abfd, asection *sec ATTRIBUTE_UNUSED)
 #define ELF_MAXPAGESIZE		0x100
 
 #if 0
-#define TARGET_BIG_SYM		bfd_elf32_m32c_vec
+#define TARGET_BIG_SYM		m32c_elf32_vec
 #define TARGET_BIG_NAME		"elf32-m32c"
 #else
-#define TARGET_LITTLE_SYM		bfd_elf32_m32c_vec
+#define TARGET_LITTLE_SYM		m32c_elf32_vec
 #define TARGET_LITTLE_NAME		"elf32-m32c"
 #endif
 

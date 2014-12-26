@@ -1,7 +1,5 @@
 /* objdump.c -- dump information about an object file.
-   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
-   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
-   2012, 2013 Free Software Foundation, Inc.
+   Copyright (C) 1990-2014 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -193,6 +191,7 @@ static const struct objdump_private_desc * const objdump_private_vectors[] =
     NULL
   };
 
+static void usage (FILE *, int) ATTRIBUTE_NORETURN;
 static void
 usage (FILE *stream, int status)
 {
@@ -563,7 +562,10 @@ slurp_symtab (bfd *abfd)
 
   storage = bfd_get_symtab_upper_bound (abfd);
   if (storage < 0)
-    bfd_fatal (bfd_get_filename (abfd));
+    {
+      non_fatal (_("failed to read symbol table from: %s"), bfd_get_filename (abfd));
+      bfd_fatal (_("error message was"));
+    }
   if (storage)
     sy = (asymbol **) xmalloc (storage);
 
@@ -2260,7 +2262,7 @@ load_specific_debug_section (enum dwarf_section_display_enum debug,
   if (section->start != NULL)
     return 1;
 
-  section->address = 0;
+  section->address = bfd_get_section_vma (abfd, sec);
   section->size = bfd_get_section_size (sec);
   section->start = NULL;
   ret = bfd_get_full_section_contents (abfd, sec, &section->start);
@@ -2386,7 +2388,12 @@ dump_dwarf (bfd *abfd)
   else if (bfd_little_endian (abfd))
     byte_get = byte_get_little_endian;
   else
-    abort ();
+    /* PR 17512: file: objdump-s-endless-loop.tekhex.  */
+    {
+      warn (_("File %s does not contain any dwarf debug information\n"),
+	    bfd_get_filename (abfd));
+      return;
+    }
 
   switch (bfd_get_arch (abfd))
     {
@@ -2406,6 +2413,10 @@ dump_dwarf (bfd *abfd)
 	  init_dwarf_regnames_i386 ();
 	  break;
 	}
+      break;
+
+    case bfd_arch_aarch64:
+      init_dwarf_regnames_aarch64();
       break;
 
     default:
@@ -2490,7 +2501,7 @@ print_section_stabs (bfd *abfd,
 
      We start the index at -1 because there is a dummy symbol on
      the front of stabs-in-{coff,elf} sections that supplies sizes.  */
-  for (i = -1; stabp < stabs_end; stabp += STABSIZE, i++)
+  for (i = -1; stabp <= stabs_end - STABSIZE; stabp += STABSIZE, i++)
     {
       const char *name;
       unsigned long strx;
@@ -2528,10 +2539,13 @@ print_section_stabs (bfd *abfd,
 	}
       else
 	{
+	  bfd_size_type amt = strx + file_string_table_offset;
+
 	  /* Using the (possibly updated) string table offset, print the
 	     string (if any) associated with this symbol.  */
-	  if ((strx + file_string_table_offset) < stabstr_size)
-	    printf (" %s", &strtab[strx + file_string_table_offset]);
+	  if (amt < stabstr_size)
+	    /* PR 17512: file: 079-79389-0.001:0.1.  */
+	    printf (" %.*s", (int)(stabstr_size - amt), strtab + amt);
 	  else
 	    printf (" *");
 	}
@@ -2630,7 +2644,6 @@ dump_bfd_header (bfd *abfd)
   PF (WP_TEXT, "WP_TEXT");
   PF (D_PAGED, "D_PAGED");
   PF (BFD_IS_RELAXABLE, "BFD_IS_RELAXABLE");
-  PF (HAS_LOAD_PAGE, "HAS_LOAD_PAGE");
   printf (_("\nstart address 0x"));
   bfd_printf_vma (abfd, abfd->start_address);
   printf ("\n");
@@ -3106,7 +3119,11 @@ dump_relocs_in_section (bfd *abfd,
   relcount = bfd_canonicalize_reloc (abfd, section, relpp, syms);
 
   if (relcount < 0)
-    bfd_fatal (bfd_get_filename (abfd));
+    {
+      printf ("\n");
+      non_fatal (_("failed to read relocs in: %s"), bfd_get_filename (abfd));
+      bfd_fatal (_("error message was"));
+    }
   else if (relcount == 0)
     printf (" (none)\n\n");
   else
@@ -3659,15 +3676,15 @@ main (int argc, char **argv)
 	  dump_section_headers = TRUE;
 	  seenflag = TRUE;
 	  break;
-	case 'H':
-	  usage (stdout, 0);
-	  seenflag = TRUE;
 	case 'v':
 	case 'V':
 	  show_version = TRUE;
 	  seenflag = TRUE;
 	  break;
 
+	case 'H':
+	  usage (stdout, 0);
+	  /* No need to set seenflag or to break - usage() does not return.  */
 	default:
 	  usage (stderr, 1);
 	}
