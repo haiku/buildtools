@@ -1192,6 +1192,9 @@ eelf32ppc_fbsd.c: $(srcdir)/emulparams/elf32ppc_fbsd.sh \
   ldemul-list.h \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
+eelf_ppc_haiku.c: $(srcdir)/emulparams/elf_ppc_haiku.sh \
+  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
 eelf32ppclinux.c: $(srcdir)/emulparams/elf32ppclinux.sh \
   $(srcdir)/emulparams/elf32ppc.sh $(srcdir)/emulparams/elf32ppccommon.sh \
   $(srcdir)/emultempl/ppc32elf.em $(ELF_DEPS) \
@@ -1288,9 +1291,6 @@ eelf_i386_sol2.c: $(srcdir)/emulparams/elf_i386_sol2.sh \
   $(srcdir)/emulparams/solaris2.sh \
   $(srcdir)/emultempl/solaris2.em \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
-
-eelf_ppc_haiku.c: $(srcdir)/emulparams/elf_ppc_haiku.sh \
-  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eelf_mipsel_haiku.c: $(srcdir)/emulparams/elf_mipsel_haiku.sh \
   $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
