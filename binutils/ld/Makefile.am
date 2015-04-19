@@ -1193,7 +1193,10 @@ eelf32ppc_fbsd.c: $(srcdir)/emulparams/elf32ppc_fbsd.sh \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eelf32ppchaiku.c: $(srcdir)/emulparams/elf32ppchaiku.sh \
-  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+  $(srcdir)/emulparams/elf32ppc.sh $(srcdir)/emulparams/elf32ppccommon.sh \
+  $(srcdir)/emultempl/ppc32elf.em $(ELF_DEPS) \
+  ldemul-list.h \
+  $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eelf32ppclinux.c: $(srcdir)/emulparams/elf32ppclinux.sh \
   $(srcdir)/emulparams/elf32ppc.sh $(srcdir)/emulparams/elf32ppccommon.sh \
