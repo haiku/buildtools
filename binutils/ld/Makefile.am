@@ -254,6 +254,7 @@ ALL_EMULATION_SOURCES = \
 	eelf32or1k_linux.c \
 	eelf32ppc.c \
 	eelf32ppc_fbsd.c \
+	eelf32ppchaiku.c \
 	eelf32ppclinux.c \
 	eelf32ppcnto.c \
 	eelf32ppcsim.c \
@@ -279,7 +280,6 @@ ALL_EMULATION_SOURCES = \
 	eelf_i386_nacl.c \
 	eelf_i386_sol2.c \
 	eelf_i386_vxworks.c \
-	eelf_ppc_haiku.c \
 	eelf_mipsel_haiku.c \
 	eelf_s390.c \
 	egld960.c \
@@ -1192,7 +1192,7 @@ eelf32ppc_fbsd.c: $(srcdir)/emulparams/elf32ppc_fbsd.sh \
   ldemul-list.h \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
-eelf_ppc_haiku.c: $(srcdir)/emulparams/elf_ppc_haiku.sh \
+eelf32ppchaiku.c: $(srcdir)/emulparams/elf32ppchaiku.sh \
   $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eelf32ppclinux.c: $(srcdir)/emulparams/elf32ppclinux.sh \
