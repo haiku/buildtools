@@ -53,7 +53,7 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf32ppchaiku %{!r:-shared} -no-undefined %{nostart:-e 0}"
+#define LINK_SPEC "%{!o*:-o %b} -m elf32ppchaiku %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
 
 #undef CC1_SPEC
 #define CC1_SPEC "%{!no-fpic:%{!fno-pic:%{!fno-pie:%{!fpie:%{!fPIC:%{!fPIE:-fPIC}}}}}} %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
