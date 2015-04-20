@@ -54,3 +54,6 @@ Boston, MA 02111-1307, USA.  */
 
 #undef	LINK_SPEC
 #define LINK_SPEC "%{!o*:-o %b} -m elf32ppchaiku %{!r:-shared} -no-undefined %{nostart:-e 0}"
+
+#undef CC1_SPEC
+#define CC1_SPEC "%{!no-fpic:%{!fno-pic:%{!fno-pie:%{!fpie:%{!fPIC:%{!fPIE:-fPIC}}}}}} %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
