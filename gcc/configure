@@ -5212,7 +5212,7 @@ else
   # always differ), so we disassemble both files and compare the results:
   if uname -o | grep -iq haiku; then
     gcc_cv_prog_cmp_skip='objdump -Dz $$f1 | tail +6 >tmp-foo1; objdump -Dz $$f2 | tail +6 >tmp-foo2; cmp tmp-foo1 tmp-foo2'
-  else 
+  else
     gcc_cv_prog_cmp_skip='tail +16c $$f1 > tmp-foo1; tail +16c $$f2 > tmp-foo2; cmp tmp-foo1 tmp-foo2'
     echo abfoo >t1
     echo cdfoo >t2
