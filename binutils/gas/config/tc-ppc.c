@@ -1281,7 +1281,8 @@ PowerPC options:\n\
 -m476                   generate code for PowerPC 476\n\
 -m7400, -m7410, -m7450, -m7455\n\
                         generate code for PowerPC 7400/7410/7450/7455\n\
--m750cl                 generate code for PowerPC 750cl\n"));
+-m750cl                 generate code for PowerPC 750cl\n\
+-m821, -m850, -m860     generate code for PowerPC 821/850/860\n"));
   fprintf (stream, _("\
 -mppc64, -m620          generate code for PowerPC 620/625/630\n\
 -mppc64bridge           generate code for PowerPC 64, including bridge insns\n\
@@ -2752,12 +2753,18 @@ md_assemble (char *str)
       if ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
 	  && skip_optional)
 	{
+	  long val = ppc_optional_operand_value (operand);
 	  if (operand->insert)
 	    {
-	      insn = (*operand->insert) (insn, 0L, ppc_cpu, &errmsg);
+	      insn = (*operand->insert) (insn, val, ppc_cpu, &errmsg);
 	      if (errmsg != (const char *) NULL)
 		as_bad ("%s", errmsg);
 	    }
+	  else if (operand->shift >= 0)
+	    insn |= ((long) val & operand->bitm) << operand->shift;
+	  else
+	    insn |= ((long) val & operand->bitm) >> -operand->shift;
+
 	  if ((operand->flags & PPC_OPERAND_NEXT) != 0)
 	    next_opindex = *opindex_ptr + 1;
 	  continue;
@@ -3430,9 +3437,6 @@ md_assemble (char *str)
 
 	  size = bfd_get_reloc_size (reloc_howto);
 	  offset = target_big_endian ? (insn_length - size) : 0;
-
-	  if (size < 1 || size > 4)
-	    abort ();
 
 	  fixP = fix_new_exp (frag_now,
 			      f - frag_now->fr_literal + offset,
@@ -6773,6 +6777,29 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 	  fieldval += 2;
 	  break;
 #endif
+
+	case BFD_RELOC_VTABLE_INHERIT:
+	case BFD_RELOC_VTABLE_ENTRY:
+	case BFD_RELOC_PPC_DTPMOD:
+	case BFD_RELOC_PPC_TPREL:
+	case BFD_RELOC_PPC_DTPREL:
+	case BFD_RELOC_PPC_COPY:
+	case BFD_RELOC_PPC_GLOB_DAT:
+	case BFD_RELOC_32_PLT_PCREL:
+	case BFD_RELOC_PPC_EMB_NADDR32:
+	case BFD_RELOC_PPC64_TOC:
+	case BFD_RELOC_CTOR:
+	case BFD_RELOC_32:
+	case BFD_RELOC_32_PCREL:
+	case BFD_RELOC_RVA:
+	case BFD_RELOC_64:
+	case BFD_RELOC_64_PCREL:
+	case BFD_RELOC_PPC64_ADDR64_LOCAL:
+	  as_bad_where (fixP->fx_file, fixP->fx_line,
+			_("%s unsupported as instruction fixup"),
+			bfd_get_reloc_code_name (fixP->fx_r_type));
+	  fixP->fx_done = 1;
+	  return;
 
 	default:
 	  break;

@@ -1,3 +1,70 @@
+2015-07-21  Tristan Gingold  <gingold@adacore.com>
+
+	* configure: Regenerate.
+
+2015-07-10  Alan Modra  <amodra@gmail.com>
+
+	Apply from master.
+	2015-04-24  Alan Modra  <amodra@gmail.com>
+	* emultempl/ppc64elf.em (gld${EMULATION_NAME}_after_allocation):
+	Call gld${EMULATION_NAME}_map_segments regardless of need_laying_out.
+
+	2015-04-23  Alan Modra  <amodra@gmail.com>
+	* emulparams/elf64ppc.sh (GOT): Align.
+
+	2015-04-22  Alan Modra  <amodra@gmail.com>
+	* ldexp.h (struct ldexp_control): Delete dataseg.min_base.  Add
+	data_seg.relro_offset.
+	* ldexp.c (fold_binary <DATA_SEGMENT_ALIGN>): Don't set min_base.
+	(fold_binary <DATA_SEGMENT_RELRO_END>): Do set relro_offset.
+	* ldlang.c (lang_size_sections): Rewrite code adjusting relro
+	segment base to line up last section on page boundary.
+
+2015-02-11  Alan Modra  <amodra@gmail.com>
+
+	Apply from master.
+	2015-01-20  Andrew Burgess  <andrew.burgess@embecosm.com>
+	* ldlang.c (print_assignment): Only evaluate the expression for a
+	PROVIDE'd assignment when the destination is being defined.
+	Display a special message for PROVIDE'd symbols that are not being
+	provided.
+
+	2015-01-19  Alan Modra  <amodra@gmail.com>
+	PR 17165
+	* ldlang.c (lang_process): Run lang_common before lang_gc_sections.
+
+	2014-12-24  Alan Modra  <amodra@gmail.com>
+	* emultempl/elf32.em (gld${EMULATION_NAME}_after_open): Exclude
+	shared libraries in loop looking for .eh_frame sections.
+	Similarly for build-id loop.
+
+	2014-12-23  Alan Modra  <amodra@gmail.com>
+	* ldexp.c (exp_fold_tree_1 <etree_provide>): Test linker_def.
+
+	2014-12-23  Alan Modra  <amodra@gmail.com>
+	* ldexp.c (exp_fold_tree_1 <etree_provide>): Leave bfd_link_hash_common
+	symbols alone.
+
+	2014-12-23  Alan Modra  <amodra@gmail.com>
+	* ldexp.c (update_definedness): Correct logic setting by_object.
+
+	2014-12-23  Alan Modra  <amodra@gmail.com>
+	* ldexp.c (struct definedness_hash_entry, definedness_table)
+	(definedness_newfunc, symbol_defined, update_definedness): Move
+	and rename from..
+	* ldlang.h (struct lang_definedness_hash_entry): ..here,..
+	* ldlang.c (lang_definedness_table, lang_definedness_newfunc)
+	(lang_symbol_defined, lang_update_definedness): ..and here.
+	* ldexp.c (ldexp_init, ldexp_finish): New functions, extracted from..
+	* ldlang.c (lang_init, lang_finish): ..here.
+	* ldexp.h (ldexp_init, ldexp_finish): Declare.
+	* ldlang.h (lang_symbol_defined, lang_update_definedness): Delete.
+	* ldmain.c (main): Call ldexp_init and ldexp_finish.
+
+2014-12-23  Tristan Gingold  <gingold@adacore.com>
+
+	* configure: Regenerate.
+
 2014-12-23  Tristan Gingold  <gingold@adacore.com>
 
 	* configure: Regenerate.

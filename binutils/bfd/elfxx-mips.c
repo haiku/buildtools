@@ -6194,11 +6194,13 @@ mips_elf_obtain_contents (reloc_howto_type *howto,
 			  const Elf_Internal_Rela *relocation,
 			  bfd *input_bfd, bfd_byte *contents)
 {
-  bfd_vma x;
+  bfd_vma x = 0;
   bfd_byte *location = contents + relocation->r_offset;
+  unsigned int size = bfd_get_reloc_size (howto);
 
   /* Obtain the bytes.  */
-  x = bfd_get ((8 * bfd_get_reloc_size (howto)), input_bfd, location);
+  if (size != 0)
+    x = bfd_get (8 * size, input_bfd, location);
 
   return x;
 }
@@ -6223,6 +6225,7 @@ mips_elf_perform_relocation (struct bfd_link_info *info,
   bfd_vma x;
   bfd_byte *location;
   int r_type = ELF_R_TYPE (input_bfd, relocation->r_info);
+  unsigned int size;
 
   /* Figure out where the relocation is occurring.  */
   location = contents + relocation->r_offset;
@@ -6316,7 +6319,9 @@ mips_elf_perform_relocation (struct bfd_link_info *info,
     }
 
   /* Put the value into the output.  */
-  bfd_put (8 * bfd_get_reloc_size (howto), input_bfd, x, location);
+  size = bfd_get_reloc_size (howto);
+  if (size != 0)
+    bfd_put (8 * size, input_bfd, x, location);
 
   _bfd_mips_elf_reloc_shuffle (input_bfd, r_type, !info->relocatable,
 			       location);
@@ -9221,7 +9226,7 @@ _bfd_mips_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
      dynamic will now refer to the local copy instead.  */
   hmips->possibly_dynamic_relocs = 0;
 
-  return _bfd_elf_adjust_dynamic_copy (h, htab->sdynbss);
+  return _bfd_elf_adjust_dynamic_copy (info, h, htab->sdynbss);
 }
 
 /* This function is called after all the input files have been read,
@@ -11909,6 +11914,18 @@ mips_set_isa_flags (bfd *abfd)
   elf_elfheader (abfd)->e_flags &= ~(EF_MIPS_ARCH | EF_MIPS_MACH);
   elf_elfheader (abfd)->e_flags |= val;
 
+}
+
+
+/* Whether to sort relocs output by ld -r or ld --emit-relocs, by r_offset.
+   Don't do so for code sections.  We want to keep ordering of HI16/LO16
+   as is.  On the other hand, elf-eh-frame.c processing requires .eh_frame
+   relocs to be sorted.  */
+
+bfd_boolean
+_bfd_mips_elf_sort_relocs_p (asection *sec)
+{
+  return (sec->flags & SEC_CODE) == 0;
 }
 
 

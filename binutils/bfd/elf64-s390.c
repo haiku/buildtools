@@ -42,7 +42,7 @@ static reloc_howto_type elf_howto_table[] =
 {
   HOWTO (R_390_NONE,		/* type */
 	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = 2 byte, 2 = 4 byte) */
+	 3,			/* size (0 = byte, 1 = 2 byte, 2 = 4 byte) */
 	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
@@ -1707,7 +1707,7 @@ elf_s390_adjust_dynamic_symbol (struct bfd_link_info *info,
 
   s = htab->sdynbss;
 
-  return _bfd_elf_adjust_dynamic_copy (h, s);
+  return _bfd_elf_adjust_dynamic_copy (info, h, s);
 }
 
 /* Allocate space in .plt, .got and associated reloc sections for
@@ -3840,6 +3840,7 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_init_index_section	      _bfd_elf_init_1_index_section
 #define elf_backend_plt_sym_val		      elf_s390_plt_sym_val
 #define elf_backend_add_symbol_hook           elf_s390_add_symbol_hook
+#define elf_backend_sort_relocs_p             elf_s390_elf_sort_relocs_p
 
 #define bfd_elf64_mkobject		elf_s390_mkobject
 #define elf_backend_object_p		elf_s390_object_p

@@ -42,7 +42,7 @@ static bfd_reloc_status_type mep_reloc (bfd *, arelent *, struct bfd_symbol *,
 static reloc_howto_type mep_elf_howto_table [] =
 {
   /* type, size, bits, leftshift, rightshift, pcrel, OD/OS/OU, mask.  */
-  MEPREL (R_MEP_NONE,     0,  0, 0, 0, 0, N, 0),
+  MEPREL (R_MEP_NONE,     3,  0, 0, 0, 0, N, 0),
   MEPREL (R_RELC,         0,  0, 0, 0, 0, N, 0),
   /* MEPRELOC:HOWTO */
     /* This section generated from bfd/mep-relocs.pl from include/elf/mep.h.  */
@@ -400,6 +400,11 @@ mep_info_to_howto_rela
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
+  if (r_type >= R_MEP_max)
+    {
+      _bfd_error_handler (_("%B: invalid MEP reloc number: %d"), abfd, r_type);
+      r_type = 0;
+    }
   cache_ptr->howto = & mep_elf_howto_table [r_type];
 }
 

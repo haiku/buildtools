@@ -237,7 +237,7 @@ static reloc_howto_type dlx_elf_howto_table[]=
   /* No relocation.  */
   HOWTO (R_DLX_NONE,            /* Type. */
 	 0,                     /* Rightshift.  */
-	 0,                     /* size (0 = byte, 1 = short, 2 = long).  */
+	 3,                     /* size (0 = byte, 1 = short, 2 = long).  */
 	 0,                     /* Bitsize.  */
 	 FALSE,                 /* PC_relative.  */
 	 0,                     /* Bitpos.  */
@@ -546,7 +546,11 @@ dlx_rtype_to_howto (unsigned int r_type)
     case R_DLX_RELOC_16_LO:
       return & elf_dlx_reloc_16_lo;
     default:
-      BFD_ASSERT (r_type < (unsigned int) R_DLX_max);
+      if (r_type >= (unsigned int) R_DLX_max)
+	{
+	  _bfd_error_handler (_("Invalid DLX reloc number: %d"), r_type);
+	  r_type = 0;
+	}
       return & dlx_elf_howto_table[r_type];
     }
 }

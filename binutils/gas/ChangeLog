@@ -1,3 +1,110 @@
+2015-07-21  Tristan Gingold  <gingold@adacore.com>
+
+	* configure: Regenerate.
+
+2015-07-10  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2015-07-03  Alan Modra  <amodra@gmail.com>
+	* config/tc-ppc.c (md_show_usage): Add -m821, -m850, -m860.
+	* doc/c-ppc.texi (PowerPC-Opts): Likewise.
+
+	2015-06-19  Peter Bergner  <bergner@vnet.ibm.com>
+	* config/tc-ppc.c (md_assemble): Use ppc_optional_operand_value.
+	Allow for optional operands without insert functions.
+
+	2015-03-11  Alan Modra  <amodra@gmail.com>
+	* config/tc-ppc.c (md_assemble): Don't abort on 8 byte insn fixups.
+	(md_apply_fix): Report an error on data-only fixups used with insns.
+
+2015-06-19  Nick Clifton  <nickc@redhat.com>
+
+	PR gas/18541
+	* config/tc-arm.c (md_apply_fix): Add support for ADR in thumb
+	mode against a nearby symbol.
+
+2015-06-17  Renlin Li  <renlin.li@arm.com>
+
+	Applied from master.
+	2015-04-28  Renlin Li  <renlin.li@arm.com>
+	2015-06-03  Renlin Li  <renlin.li@arm.com>
+
+	* config/tc-arm.c (arm_init_frag): Always emit mapping symbols.
+
+2015-06-17  Renlin Li  <renlin.li@arm.com>
+
+	Applied from master.
+	2015-05-05  Renlin Li  <renlin.li@arm.com>
+
+	* config/tc-aarch64.c (aarch64_init_frag): Always generate mapping
+	symbols.
+
+2015-06-04  Matthew Wahab  <matthew.wahab@arm.com>
+
+	* config/tc-aarch64.c (mapping_state): Set minimum alignment for code
+	sections.
+
+2015-05-07  Renlin Li  <renlin.li@arm.com>
+
+	* config/tc-aarch64.c (s_aarch64_inst): Align frag during state
+	transition within executable section.
+	(md_assemble): Likewise.
+
+2015-04-06  Evandro Menezes  <e.menezes@samsung.com>
+
+	* config/tc-aarch64.c: Add support for Samsung Exynos M1.
+	* doc/c-aarch64.texi (-mcpu=): Add "exynos-m1".
+
+2015-04-06  Evandro Menezes  <e.menezes@samsung.com>
+
+	* config/tc-arm.c: Add support for Samsung Exynos M1.
+	* doc/c-arm.texi (-mcpu=): Add "exynos-m1".
+
+2015-04-04  Alan Modra  <amodra@gmail.com>
+
+	Apply from master.
+	2014-12-25  Yaakov Selkowitz  <yselkowi@redhat.com>
+	PR gas/17753
+	* config/tc-mep.c (md_begin): Specify types of vararg literals.
+
+2015-03-20  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Apply patch from master:
+	2015-03-20  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* config/tc-i386.c (i386_align_code): Limit multi-byte nop
+	instructions to 10 bytes.
+
+2015-03-11  Matthew Wahab  <matthew.wahab@arm.com>
+
+	* config/tc-aarch64.c: Add support for Cortex-A72.
+	* doc/c-aarch64.texi (-mcpu=): Add "cortex-a72".
+
+2015-03-11  Matthew Wahab  <matthew.wahab@arm.com>
+
+	* config/tc-arm.c: Add support for Cortex-A72.
+
+2015-02-11  Alan Modra  <amodra@gmail.com>
+
+	Apply from master.
+	2015-01-12  Alan Modra  <amodra@gmail.com>
+	* read.c (s_altmacro, s_reloc): Make definition static.
+
+	2014-12-12  Alan Modra  <amodra@gmail.com>
+	* config/tc-ppc.h (md_reg_eh_frame_to_debug_frame): Match current
+	gcc behaviour.
+	* config/te-aix.h: New file.
+	* configure.tgt: Use em=aix for powerpc-aix.
+
+2015-01-28  Matthew Wahab  <matthew.wahab@arm.com>
+
+	* config/tc-arm.c (parse_ifimm_zero): Accept #0x0 as a synonym for #0,
+	restoring previous behaviour.
+
+2014-12-23  Tristan Gingold  <gingold@adacore.com>
+
+	* configure: Regenerate.
+
 2014-12-23  Tristan Gingold  <gingold@adacore.com>
 
 	* configure: Regenerate.

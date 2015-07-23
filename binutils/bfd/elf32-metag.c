@@ -142,7 +142,7 @@ static reloc_howto_type elf_metag_howto_table[] =
   /* No relocation.  */
   HOWTO (R_METAG_NONE,		/* type */
 	 0,			/* rightshift */
-	 0,			/* size (0 = byte, 1 = short, 2 = long) */
+	 3,			/* size (0 = byte, 1 = short, 2 = long) */
 	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
@@ -896,7 +896,11 @@ metag_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  BFD_ASSERT (r_type < (unsigned int) R_METAG_MAX);
+  if (r_type >= (unsigned int) R_METAG_MAX)
+    {
+      _bfd_error_handler (_("%B: invalid METAG reloc number: %d"), abfd, r_type);
+      r_type = 0;
+    }
   cache_ptr->howto = & elf_metag_howto_table [r_type];
 }
 
@@ -2587,7 +2591,7 @@ elf_metag_adjust_dynamic_symbol (struct bfd_link_info *info,
 
   s = htab->sdynbss;
 
-  return _bfd_elf_adjust_dynamic_copy (eh, s);
+  return _bfd_elf_adjust_dynamic_copy (info, eh, s);
 }
 
 /* Allocate space in .plt, .got and associated reloc sections for

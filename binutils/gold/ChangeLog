@@ -1,3 +1,119 @@
+2015-07-06  Doug Kwan  <dougkwan@google.com>
+
+	Apply from master
+	2015-06-29  Doug Kwan  <dougkwan@google.com>
+
+	* testsuite/arm_bl_out_of_range.s: Align stub table so that it appears
+	  at address expected by test.
+	* testsuite/arm_cortex_a8_b.s: Ditto.
+	* testsuite/arm_cortex_a8_b_cond.s: Ditto.
+	* testsuite/arm_cortex_a8_bl.s: Ditto.
+	* testsuite/arm_cortex_a8_blx.s: Ditto.
+	* testsuite/arm_cortex_a8_local.s: Ditto.
+	* testsuite/arm_fix_v4bx.s: Ditto.
+	* testsuite/arm_unaligned_reloc.s: Ditto.
+	* testsuite/thumb_bl_out_of_range.s: Ditto.
+	* testsuite/thumb_bl_out_of_range_local.s: Ditto.
+	* testsuite/thumb_blx_out_of_range.s: Ditto.
+
+2015-06-05  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2015-05-16  Alan Modra  <amodra@gmail.com>
+	* reloc.cc (Sized_relobj_file::find_functions): Use function_location.
+	* powerpc.cc (Target_powerpc::do_calls_non_split): New function.
+	(addi_12_1, addis_2_12, addis_12_1, cmpld_7_12_0): New constants.
+	(lis_0): Rename from lis_0_0.
+
+	2015-04-28  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Target_powerpc::do_dynsym_value): Use Address rather
+	than unsigned int for find_global_entry result temp.  Compare
+	against invalid_address.
+	(Target_powerpc::do_plt_address_for_global): Likewise.
+	(Target_powerpc::Relocate::relocate): Likewise.  Don't assert
+	on plt call stub existence for debug info.  Do assert for plt
+	and global entry stub existence if an alloc section.
+
+	2015-04-28  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Target_powerpc::Relocate::relocate): Don't assert
+	on missing global entry stub due to bogus debug info.
+
+	2015-03-24  Alan Modra  <amodra@gmail.com>
+	PR 18147
+	* powerpc.cc (Target_powerpc::Relocate::relocate): Don't report
+	relocation errors for branches to strong undefined symbols.
+
+2015-03-18  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2015-02-24  Alan Modra  <amodra@gmail.com>
+	PR 18010
+	* powerpc.cc (Powerpc_relocate_functions::addr16_ds): Always
+	complain if value is not a multiple of four.
+	(Target_powerpc::Relocate::relocate): Correct handling of
+	R_POWERPC_GOT_TPREL16 and R_POWERPC_GOT_TPREL16_LO for ppc64.
+
+	2015-02-18  Alan Modra  <amodra@gmail.com>
+	PR 17954
+	* powerpc.cc (Global_symbol_visitor_opd::operator()): Set default
+	visibility.
+
+2015-02-22  H.J. Lu  <hongjiu.lu@intel.com>
+
+	Cherry-pick from master
+	2015-02-21  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure.ac (default_size): Set to 32 for x32.
+	* configure: Regenerated.
+
+2015-02-11  Alan Modra  <amodra@gmail.com>
+
+	Apply from master
+	2015-01-29  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Target_powerpc::Relocate::relocate): Correct GOT_TLSLD
+	and GOT_TLSGD to LE optimization.
+
+	2015-01-22  Alan Modra  <amodra@gmail.com>
+	* powerpc.cc (Target_powerpc::Scan::local <got relocs>): Correct
+	condition for need of ifunc plt entry.
+	(Target_powerpc::Scan::global <got relocs>): Likewise.
+
+	2014-12-22  Cary Coutant  <ccoutant@google.com>
+	* powerpc.cc (Target_powerpc::relocate): Fix overflow check.
+
+2015-01-06  H.J. Lu  <hongjiu.lu@intel.com>
+	    Cary Coutant  <ccoutant@google.com>
+
+	PR gold/17729
+	* configure.ac (DEFAULT_TARGET_X86_64): Don't set for x32.
+	(DEFAULT_TARGET_X32): Set for x32.
+	* x86_64.cc (cmp_insn_32): New.
+	(lea_r10_insn_32): Likewise.
+	(lea_r11_insn_32): Likewise.
+	(cmp_insn_64): Likewise.
+	(lea_r10_insn_64): Likewise.
+	(lea_r11_insn_64): Likewise.
+	(Target_x86_64<size>::do_calls_non_split): Handle x32.
+	* testsuite/Makefile.am (check_SCRIPTS): Add split_x32.sh.
+	(check_DATA): Add split_x32 files.
+	(split_x32_[1234n].o): New targets.
+	(split_x32_[124]): New targets.
+	(split_x32_[1234r].stdout): New targets.
+	* testsuite/split_x32.sh: New file.
+	* testsuite/split_x32_1.s: Likewise.
+	* testsuite/split_x32_2.s: Likewise.
+	* testsuite/split_x32_3.s: Likewise.
+	* testsuite/split_x32_4.s: Likewise.
+	* testsuite/split_x32_n.s: Likewise.
+	* configure: Regenerated.
+	* testsuite/Makefile.in: Likewise.
+
+2015-01-06  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR gold/17809
+	* x86_64.cc (Target_x86_64<size>::Relocate::tls_ie_to_le): Handle
+	x32.
+
 2014-12-04  Alan Modra  <amodra@gmail.com>
 
 	* Powerpc.cc (Target_powerpc::Branch_info::make_stub): Ignore

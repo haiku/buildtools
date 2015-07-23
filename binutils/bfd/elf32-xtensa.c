@@ -161,7 +161,7 @@ int elf32xtensa_no_literal_movement = 1;
 
 static reloc_howto_type elf_howto_table[] =
 {
-  HOWTO (R_XTENSA_NONE, 0, 0, 0, FALSE, 0, complain_overflow_dont,
+  HOWTO (R_XTENSA_NONE, 0, 3, 0, FALSE, 0, complain_overflow_dont,
 	 bfd_elf_xtensa_reloc, "R_XTENSA_NONE",
 	 FALSE, 0, 0, FALSE),
   HOWTO (R_XTENSA_32, 0, 2, 32, FALSE, 0, complain_overflow_bitfield,
@@ -479,7 +479,11 @@ elf_xtensa_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
 {
   unsigned int r_type = ELF32_R_TYPE (dst->r_info);
 
-  BFD_ASSERT (r_type < (unsigned int) R_XTENSA_max);
+  if (r_type >= (unsigned int) R_XTENSA_max)
+    {
+      _bfd_error_handler (_("%B: invalid XTENSA reloc number: %d"), abfd, r_type);
+      r_type = 0;
+    }
   cache_ptr->howto = &elf_howto_table[r_type];
 }
 

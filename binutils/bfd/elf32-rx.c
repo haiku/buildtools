@@ -49,7 +49,7 @@ void rx_dump_symtab (bfd *, void *, void *);
 
 static reloc_howto_type rx_elf_howto_table [] =
 {
-  RXREL (NONE,         0,  0, 0, dont,     FALSE),
+  RXREL (NONE,         3,  0, 0, dont,     FALSE),
   RXREL (DIR32,        2, 32, 0, signed,   FALSE),
   RXREL (DIR24S,       2, 24, 0, signed,   FALSE),
   RXREL (DIR16,        1, 16, 0, dont,     FALSE),
@@ -277,7 +277,7 @@ rx_reloc_type_lookup (bfd *                    abfd ATTRIBUTE_UNUSED,
   if (code == BFD_RELOC_RX_32_OP)
     return rx_elf_howto_table + R_RX_DIR32;
 
-  for (i = ARRAY_SIZE (rx_reloc_map); --i;)
+  for (i = ARRAY_SIZE (rx_reloc_map); i--;)
     if (rx_reloc_map [i].bfd_reloc_val == code)
       return rx_elf_howto_table + rx_reloc_map[i].rx_reloc_val;
 
@@ -307,7 +307,11 @@ rx_info_to_howto_rela (bfd *               abfd ATTRIBUTE_UNUSED,
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  BFD_ASSERT (r_type < (unsigned int) R_RX_max);
+  if (r_type >= (unsigned int) R_RX_max)
+    {
+      _bfd_error_handler (_("%B: invalid RX reloc number: %d"), abfd, r_type);
+      r_type = 0;
+    }
   cache_ptr->howto = rx_elf_howto_table + r_type;
 }
 
