@@ -69,7 +69,7 @@
 /* Do any of these work? */
 # if defined( VAX ) || defined( __VAX ) || defined( vax )
 # define OSPLAT "OSPLAT=VAX"
-# endif 
+# endif
 
 # endif
 
@@ -94,6 +94,7 @@
 # define OS_NT
 # define SPLITPATH ';'
 # define MAXLINE 996	/* longest 'together' actions */
+# define PATH_MAX _MAX_PATH
 # define USE_EXECUNIX
 # define USE_PATHUNIX
 # define PATH_DELIM '\\'
@@ -399,9 +400,9 @@
 # include <malloc.h>
 # endif
 
-# endif 
+# endif
 
-/* 
+/*
  * OSPLAT definitions - suppressed when it's a one-of-a-kind
  */
 
@@ -427,7 +428,7 @@
      !defined( OS_AS400 )
 # define OSPLAT "OSPLAT=X86"
 # endif
-# endif 
+# endif
 
 # ifdef __sparc__
 # if !defined( OS_SUNOS )

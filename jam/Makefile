@@ -21,7 +21,7 @@ HOST_SYSTEM=$(shell uname)
 #Lib = $(MSVCNT)/lib
 #Include = $(MSVCNT)/include
 #CC = cl /nologo
-#CFLAGS = -I $(Include) -DNT 
+#CFLAGS = -I $(Include) -DNT
 #TARGET = /Fejam0
 #LINKLIBS = $(Lib)/oldnames.lib $(Lib)/kernel32.lib $(Lib)/libc.lib
 #EXENAME = .\jam0.exe
@@ -29,7 +29,7 @@ HOST_SYSTEM=$(shell uname)
 # NT (with Microsoft compiler)
 # People with DevStudio settings already in shell environment.
 #CC = cl /nologo
-#CFLAGS = -DNT 
+#CFLAGS = -DNT -D_CRT_SECURE_NO_WARNINGS -DWIN32_LEAN_AND_MEAN
 #TARGET = /Fejam0
 #EXENAME = .\jam0.exe
 
@@ -67,7 +67,6 @@ SOURCES = \
 	rules.c scan.c search.c timestamp.c variable.c
 
 all: $(EXENAME)
-	LINKLIBS=$(LINKLIBS) $(EXENAME)
 
 $(EXENAME):
 	$(CC) $(TARGET) $(CFLAGS) $(SOURCES) $(LINKLIBS)
