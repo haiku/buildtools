@@ -30,11 +30,11 @@ static reloc_howto_type elf_msp430_howto_table[] =
 {
   HOWTO (R_MSP430_NONE,		/* type */
 	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 32,			/* bitsize */
+	 3,			/* size (0 = byte, 1 = short, 2 = long) */
+	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_bitfield,/* complain_on_overflow */
+	 complain_overflow_dont,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_MSP430_NONE",	/* name */
 	 FALSE,			/* partial_inplace */
@@ -197,11 +197,11 @@ static reloc_howto_type elf_msp430x_howto_table[] =
 {
   HOWTO (R_MSP430_NONE,		/* type */
 	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 32,			/* bitsize */
+	 3,			/* size (0 = byte, 1 = short, 2 = long) */
+	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_bitfield,/* complain_on_overflow */
+	 complain_overflow_dont,/* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_MSP430_NONE",	/* name */
 	 FALSE,			/* partial_inplace */
@@ -617,12 +617,20 @@ msp430_info_to_howto_rela (bfd * abfd ATTRIBUTE_UNUSED,
 
   if (uses_msp430x_relocs (abfd))
     {
-      BFD_ASSERT (r_type < (unsigned int) R_MSP430x_max);
+      if (r_type >= (unsigned int) R_MSP430x_max)
+	{
+	  _bfd_error_handler (_("%B: invalid MSP430X reloc number: %d"), abfd, r_type);
+	  r_type = 0;
+	}
       cache_ptr->howto = elf_msp430x_howto_table + r_type;
       return;
     }
 
-  BFD_ASSERT (r_type < (unsigned int) R_MSP430_max);
+  if (r_type >= (unsigned int) R_MSP430_max)
+    {
+      _bfd_error_handler (_("%B: invalid MSP430 reloc number: %d"), abfd, r_type);
+      r_type = 0;
+    }
   cache_ptr->howto = &elf_msp430_howto_table[r_type];
 }
 
