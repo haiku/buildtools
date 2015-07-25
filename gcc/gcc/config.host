@@ -61,7 +61,7 @@
 #			different from the default "liblto_plugin.so".
 
 # When setting any of these variables, check to see if a corresponding
-# variable is present in config.build; if so, you will likely want to
+# variable is present in config.build; if so, you will likely want to 
 # set it in both places.
 
 # Default settings.
@@ -129,10 +129,11 @@ case ${host} in
   mips*-*-linux* \
   | mips*-*-haiku* )
     case ${target} in
-      mips*-*-* )
+      mips*-*-linux* \
+      | mips*-*-haiku* )
 	host_extra_gcc_objs="driver-native.o"
 	host_xmake_file="${host_xmake_file} mips/x-native"
-    ;;
+      ;;
     esac
     ;;
   rs6000-*-* \

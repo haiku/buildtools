@@ -79,7 +79,7 @@ unwind_header=unwind-generic.h
 cpu_type=`echo ${host} | sed 's/-.*$//'`
 case ${host} in
 m32c*-*-*)
-	cpu_type=m32c
+        cpu_type=m32c
 	tmake_file=t-fdpbit
         ;;
 aarch64*-*-*)
@@ -124,7 +124,7 @@ lm32*-*-*)
 	cpu_type=lm32
 	;;
 m32r*-*-*)
-	cpu_type=m32r
+        cpu_type=m32r
         ;;
 m68k-*-*)
 	;;
