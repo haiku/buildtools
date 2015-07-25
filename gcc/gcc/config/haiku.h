@@ -208,6 +208,9 @@ Boston, MA 02111-1307, USA.  */
 #define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all:-lssp}"
 #endif
 
+/* Do not use JCR_SECTION_NAME default definition for Haiku */
+#define TARGET_NO_JCR_SECTION_NAME 1
+
 /* Do not desire to have _Jv_RegisterClasses in crtbegin.o for Haiku */
 #define TARGET_USE_JCR_SECTION 0
 

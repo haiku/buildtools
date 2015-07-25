@@ -379,14 +379,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 /* If we have named section and we support weak symbols, then use the
    .jcr section for recording java classes which need to be registered
-   at program start-up time.  */
-#if defined (TARGET_ASM_NAMED_SECTION) && SUPPORTS_WEAK
+   at program start-up time. Can be overridden by defining
+   TARGET_NO_JCR_SECTION_NAME. */
+#if defined (TARGET_ASM_NAMED_SECTION) && SUPPORTS_WEAK \
+    && !defined (TARGET_NO_JCR_SECTION_NAME)
 #ifndef JCR_SECTION_NAME
-/* Hack to remove _Jv crap on BeOS. i know it should be made somehow through
-	config files, but i don't know how (in which file ;) */
-#if !defined(__BEOS__) && !defined(__HAIKU__)
 #define JCR_SECTION_NAME ".jcr"
-#endif
 #endif
 #endif
 
