@@ -96,7 +96,7 @@ arm*-*-*)
 	;;
 avr-*-*)
 	cpu_type=avr
-	;;
+	;;    
 bfin*-*)
 	cpu_type=bfin
 	;;
@@ -684,7 +684,7 @@ lm32-*-rtems*)
 lm32-*-uclinux*)
         extra_parts="$extra_parts crtbegin.o crtendS.o crtbeginT.o"
         tmake_file="lm32/t-lm32 lm32/t-uclinux t-libgcc-pic t-softfp-sfdf t-softfp"
-	;;
+	;;	
 m32r-*-elf*)
 	tmake_file=t-fdpbit
  	;;
