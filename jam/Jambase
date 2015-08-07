@@ -26,7 +26,7 @@
 # 01/08/95 (seiwald) - Shell now handled with awk, not sed
 # 01/09/95 (seiwald) - Install* now take dest directory as target
 # 01/10/95 (seiwald) - All entries sorted.
-# 01/10/95 (seiwald) - NT support moved in, with LauraW's help.
+# 01/10/95 (seiwald) - NT support moved in, with LauraW's help.  
 # 01/10/95 (seiwald) - VMS support moved in.
 # 02/06/95 (seiwald) - ObjectC++Flags and SubDirC++Flags added.
 # 02/07/95 (seiwald) - Iron out when HDRSEARCH uses "" or SEARCH_SOURCE.
@@ -42,14 +42,14 @@
 #
 # all		- parent of first, shell, files, lib, exe
 # first		- first dependent of 'all', for potential initialization
-# shell		- parent of all Shell targets
+# shell		- parent of all Shell targets 
 # files		- parent of all File targets
 # lib		- parent of all Library targets
 # exe		- parent of all Main targets
 # dirs		- parent of all MkDir targets
 # clean		- removes all Shell, File, Library, and Main targets
 # uninstall	- removes all Install targets
-#
+#	
 
 # Rules defined by this file:
 #
@@ -105,7 +105,7 @@
 # FGristSourceFiles value ;		return $(value:G=$(SOURCE_GRIST))
 # FIsPrefix a : b ;				return whether or not a is a prefix of b
 # FStripCommon v1 : v2 ; 		strip common initial parts of v1 v2
-# FReverse a1 a2 ... ;			return ... a2 a1
+# FReverse a1 a2 ... ;			return ... a2 a1 
 # FRelPath d1 : d2 ;			return rel path from d1 to d2
 # FSubDir d1 d2 ... ;			return path to root
 #
@@ -134,7 +134,7 @@
 #	Exit - blurt out targets and exit
 #	Includes - marks sources as headers for target (a codependency)
 #	NoCare - don't panic if the target can't be built
-#	NoUpdate - create the target if needed but never update it
+#	NoUpdate - create the target if needed but never update it 
 #	NotFile - ignore the timestamp of the target (it's not a file)
 #	Temporary - target need not be present if sources haven't changed
 #
@@ -176,7 +176,7 @@ if $(NT)
     	SUFLIB		?= .lib ;
     	SUFOBJ		?= .obj ;
     	SUFEXE		?= .exe ;
-
+     
     if $(BCCROOT)
     {
 	AR		?= tlib /C /P64 ;
@@ -197,9 +197,12 @@ if $(NT)
 	CCFLAGS		?= /D \"WIN\" ;
 	C++		?= $(CC) ;
 	C++FLAGS	?= $(CCFLAGS) ;
-	LINK		?= link /nologo ;
-	LINKFLAGS	?= ;
-	LINKLIBS	?= ;
+	LINK		?= $(CC) ;
+	LINKFLAGS	?= $(CCFLAGS) ;
+	LINKLIBS	?= 
+				$(MSVC)\\lib\\mlibce.lib
+				$(MSVC)\\lib\\oldnames.lib
+				;
 	LINKLIBS	?= ;
 	NOARSCAN	?= true ;
 	OPTIM		?=  ;
@@ -210,7 +213,7 @@ if $(NT)
     {
 	# Visual C++ 6.0 uses MSVCDIR
 
-	MSVCNT		?= $(MSVCDIR) ;
+	MSVCNT		?= $(MSVCDIR) ;	
 
 	# bury IA64 in the path for the SDK
 
@@ -224,8 +227,9 @@ if $(NT)
 	C++FLAGS	?= $(CCFLAGS) ;
 	LINK		?= link /nologo ;
 	LINKFLAGS	?= "" ;
-	LINKLIBS	?=
+	LINKLIBS	?= 
 				$(MSVCNT)\\lib\\$(I)libc.lib
+				$(MSVCNT)\\lib\\$(I)oldnames.lib
 				$(MSVCNT)\\lib\\$(I)kernel32.lib ;
 	OPTIM		?= "" ;
 	STDHDRS		?= $(MSVCNT)\\include ;
@@ -251,7 +255,7 @@ else if $(MINGW)
 else if $(OS2)
 {
 	WATCOM		?= $(watcom) ;
-
+	 
 	if ! $(WATCOM)
 	{
 	    Exit On OS2, set WATCOM to the root of the Watcom directory. ;
@@ -310,7 +314,7 @@ else if $(VMS)
 	SUFLIB		?= .olb ;
 	SUFOBJ		?= .obj ;
 
-	switch $(OS)
+	switch $(OS) 
 	{
 	case OPENVMS : CCFLAGS ?= /stand=vaxc ;
 	case VMS     : LINKLIBS ?= sys$library:vaxcrtl.olb/lib ;
@@ -319,7 +323,7 @@ else if $(VMS)
 else if $(MAC)
 {
 	local OPT ;
-
+	
 	CW	?= "{CW}" ;
 
 	MACHDRS ?=
@@ -331,19 +335,19 @@ else if $(MAC)
 		"$(CW):MacOS Support:Universal:Libraries:StubLibraries:Interfacelib"
 		"$(CW):MacOS Support:Universal:Libraries:StubLibraries:Mathlib" ;
 
-	MPWLIBS ?=
+	MPWLIBS ?= 
 		"$(CW):MacOS Support:Libraries:Runtime:Libs:MSL_MPWCRuntime_PPC.lib"
 		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_C_PPC_MPW.Lib" ;
 
-	MPWNLLIBS ?=
+	MPWNLLIBS ?= 
 		"$(CW):MacOS Support:Libraries:Runtime:Libs:MSL_MPWCRuntime_PPC.lib"
 		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_C_PPC_MPW(NL).Lib" ;
-
+		
 	SIOUXHDRS ?= ;
-
-	SIOUXLIBS ?=
+	
+	SIOUXLIBS ?= 
 		"$(CW):MacOS Support:Libraries:Runtime:Libs:MSL_Runtime_PPC.lib"
-		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_SIOUX_PPC.Lib"
+		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_SIOUX_PPC.Lib" 
 		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_C_PPC.Lib" ;
 
 	C++		?= mwcppc ;
@@ -355,15 +359,15 @@ else if $(MAC)
 	DOTDOT		?= "::" ;
 	HDRS 		?= $(MACHDRS) $(MPWHDRS) ;
 	LINK		?= mwlinkppc ;
-	LINKFLAGS	?= -mpwtool -warn ;
-	LINKLIBS 	?= $(MACLIBS) $(MPWLIBS) ;
+	LINKFLAGS	?= -mpwtool -warn ;				
+	LINKLIBS 	?= $(MACLIBS) $(MPWLIBS) ;				
 	MKDIR		?= newfolder ;
 	MV		?= rename -y ;
 	NOARSCAN	?= true ;
 	OPTIM		?= ;
 	RM		?= delete -y ;
 	SLASH		?= ":" ;
-	STDHDRS		?= ;
+	STDHDRS		?= ; 
 	SUFLIB		?= .lib ;
 	SUFOBJ		?= .o ;
 }
@@ -445,7 +449,7 @@ else if $(UNIX)
 	CC		?= gcc ;
 	YACC		?= bison -y ;
 
-    case CYGWIN :
+    case CYGWIN :	
 	CC		?= gcc ;
 	CCFLAGS 	+= -D__cygwin__ ;
 	LEX		?= flex ;
@@ -474,12 +478,12 @@ else if $(UNIX)
 	C++		?= gcc ;
 	CCFLAGS		+= -D_POSIX_SOURCE ;
 	HDRS		+= /usr/include ;
-	RANLIB		?= "" ;
+	RANLIB		?= "" ; 
 	NOARSCAN	?= true ;
 	NOARUPDATE	?= true ;
 
     case MVS :
-	RANLIB		?= "" ;
+	RANLIB		?= "" ; 
 
     case NEXT :
 	AR		?= libtool -o ;
@@ -599,7 +603,7 @@ else if $(UNIX)
 	YACCFILES	?= ;
 	YACCFLAGS	?= ;
 
-	HDRPATTERN =
+	HDRPATTERN = 
 	    	"^[ 	]*#[ 	]*include[ 	]*[<\"]([^\">]*)[\">].*$" ;
 
 	OSFULL = $(OS)$(OSVER)$(OSPLAT) $(OS)$(OSPLAT) $(OS)$(OSVER) $(OS) ;
@@ -691,7 +695,7 @@ rule Fortran
 	Depends $(<) : $(>) ;
 }
 
-rule GenFile
+rule GenFile 
 {
 	local _t = [ FGristSourceFiles $(<) ] ;
 	local _s = [ FAppendSuffix $(>[1]) : $(SUFEXE) ] ;
@@ -770,14 +774,14 @@ rule InstallInto
 	    Install $(tt) : $(i) ;
 	    Chmod $(tt) ;
 
-	    if $(OWNER) && $(CHOWN)
-	    {
+	    if $(OWNER) && $(CHOWN) 
+	    { 
 		Chown $(tt) ;
 		OWNER on $(tt) = $(OWNER) ;
 	    }
 
-	    if $(GROUP) && $(CHGRP)
-	    {
+	    if $(GROUP) && $(CHGRP) 
+	    { 
 		Chgrp $(tt) ;
 		GROUP on $(tt) = $(GROUP) ;
 	    }
@@ -878,11 +882,11 @@ rule LibraryFromObjects
 	    MakeLocate $(_l) $(_l)($(_s:BS)) : $(LOCATE_TARGET) ;
 	}
 
-	if $(NOARSCAN)
-	{
+	if $(NOARSCAN) 
+	{ 
 	    # If we can't scan the library to timestamp its contents,
 	    # we have to just make the library depend directly on the
-	    # on-disk object files.
+	    # on-disk object files.  
 
 	    Depends $(_l) : $(_s) ;
 	}
@@ -1012,18 +1016,18 @@ rule MkDir
 
 	# Make a directory and all its parent directories.
 
-	# Ignore timestamps on directories: we only care if they
+	# Ignore timestamps on directories: we only care if they 
 	# exist.
 
 	NoUpdate $(<) ;
 
 	# Don't create . or any directory already created.
 
-	if $(<:G=) != $(DOT) && ! $($(<)-mkdir)
+	if $(<:G=) != $(DOT) && ! $($(<)-mkdir) 
 	{
 	    # Cheesy gate to prevent multiple invocations on same dir
 	    # Arrange for jam dirs
-	    # MkDir1 has the actions
+	    # MkDir1 has the actions 
 
 	    $(<)-mkdir = true ;
 	    LocalDepends dirs : $(<) ;
@@ -1084,17 +1088,17 @@ rule Object
 	# the regexp pattern $(HDRSCAN) and then invokes $(HDRRULE)
 	# with the scanned file as the target and the found headers
 	# as the sources.  HDRSEARCH is the value of SEARCH used for
-	# the found header files.  Finally, if jam must deal with
+	# the found header files.  Finally, if jam must deal with 
 	# header files of the same name in different directories,
 	# they can be distinguished with HDRGRIST.
 
-	# $(SEARCH_SOURCE:E) is where cc first looks for #include
-	# "foo.h" files.  If the source file is in a distant directory,
+	# $(SEARCH_SOURCE:E) is where cc first looks for #include 
+	# "foo.h" files.  If the source file is in a distant directory, 
 	# look there.  Else, look in "" (the current directory).
 
 	HDRRULE on $(>) = HdrRule ;
 	HDRSCAN on $(>) = $(HDRPATTERN) ;
-	HDRSEARCH on $(>) =
+	HDRSEARCH on $(>) = 
 		$(SEARCH_SOURCE:E) $(SUBDIRHDRS) $(HDRS) $(STDHDRS) ;
 
 	HDRGRIST on $(>) = $(HDRGRIST) ;
@@ -1211,7 +1215,7 @@ rule SubDir
 	# computes TOP as the path up from the current directory; the
 	# path contains one ../ for each of d1 d2 ...
 	#
-	# SubDir reads once the project-specific rules file Jamrules
+	# SubDir reads once the project-specific rules file Jamrules 
 	# in the TOP directory, if present.  This can be overridden
 	# with the variable TOPRULES.
 	#
@@ -1228,7 +1232,7 @@ rule SubDir
 	#	$(SEARCH_SOURCE) = $(SUBDIR)
 	#	$(LOCATE_SOURCE) = $(ALL_LOCATE_TARGET) $(SUBDIR)
 	#	$(LOCATE_TARGET) = $(ALL_LOCATE_TARGET) $(SUBDIR)
-	#	$(SOURCE_GRIST) = $(SUBDIR_TOKENS) with !'s
+	#	$(SOURCE_GRIST) = $(SUBDIR_TOKENS) with !'s 
 	#
 
 	local _top = $(<[1]) ;
@@ -1288,11 +1292,11 @@ rule SubDir
 		# merely a certain number of directories down from
 		# the current directory, and FSubDirPath will set
 		# TOP to a path consisting of ../ for each of the
-		# elements of _tokens, because that represents how
+		# elements of _tokens, because that represents how 
 		# far below TOP the current directory sits.
 		#
 		# In the more complicated case, the starting directory
-		# isn't the directory of jam's invocation but an
+		# isn't the directory of jam's invocation but an 
 		# location established by previous SubDir call.  The
 		# starting directory is SUBDIR_UP directories up from
 		# SUBDIR_ROOT, and then SUBDIR_DOWN directories down
@@ -1300,7 +1304,7 @@ rule SubDir
 		# SUBDIR_DOWN and SUBDIR_UP represent the path from
 		# the directory of jam's invocation.
 		#
-		# In the most complicated case, the _tokens also
+		# In the most complicated case, the _tokens also 
 		# represents directories down, because TOP is being
 		# estalished in a directory other than TOP's root.
 		# Hopefully, _tokens and SUBDIR_DOWN represent the
@@ -1326,9 +1330,9 @@ rule SubDir
 		SUBDIR_DOWN = [ FReverse $(SUBDIR_DOWN) ] ;
 		_tokens = [ FReverse $(_tokens) ] ;
 
-		if $(SUBDIR_DOWN) && $(_tokens)
-		{
-		    Echo Warning: SubDir $(<) misplaced! ;
+		if $(SUBDIR_DOWN) && $(_tokens) 
+		{ 
+		    Echo Warning: SubDir $(<) misplaced! ; 
 		}
 
 		# We'll remember the relative (UP/DOWN) path that
@@ -1383,9 +1387,9 @@ rule SubDir
 	    # Include $(TOPRULES) if set.
 	    # Otherwise include $(TOP)/Jamrules if present.
 
-	    if $($(_top)RULES) {
+	    if $($(_top)RULES) { 
 		include $($(_top)RULES) ;
-	    } else {
+	    } else { 
 		NoCare $(JAMRULES:R=$($(_top)):G=$(_top)) ;
 		include $(JAMRULES:R=$($(_top)):G=$(_top)) ;
 	    }
@@ -1440,9 +1444,9 @@ rule FSubDirPath
 
 	# If jam is invoked in a subdirectory of the TOP, then we
 	# need to prepend a ../ for every level we must climb up
-	# (TOP-UP), and then append the directory names we must
+	# (TOP-UP), and then append the directory names we must 
 	# climb down (TOP-DOWN), plus the named directories d1 ...
-	# If TOP was set externally, or computed from another TOP
+	# If TOP was set externally, or computed from another TOP 
 	# that was, we'll have to reroot the whole thing at TOP-ROOT.
 
 	local _r = [ FRelPath $($(<[1])-UP) : $($(<[1])-DOWN) $(<[2-]) ] ;
@@ -1545,7 +1549,7 @@ rule FGrist
 
 }
 
-rule FGristFiles
+rule FGristFiles 
 {
 	return $(<:G=$(SOURCE_GRIST:E)) ;
 }
@@ -1558,7 +1562,7 @@ rule FGristSourceFiles
 	# files have global visibility.
 	#
 	# Here we comment out the old version and replace it with the new.
-#	# Produce source file name name with grist in it,
+#	# Produce source file name name with grist in it, 
 #	# if SOURCE_GRIST is set.
 #
 #	# Leave header files alone, because they have a global
@@ -1568,7 +1572,7 @@ rule FGristSourceFiles
 #	{
 #	    return $(<) ;
 #	}
-#	else
+#	else 
 #	{
 #	    local _i _o ;
 #
@@ -1607,7 +1611,7 @@ rule FIsPrefix
 	}
 }
 
-rule FReverse
+rule FReverse 
 {
 	# FReverse a1 a2 a3 ... ;
 	# return ... a3 a2 a1 ;
@@ -1621,10 +1625,10 @@ rule FSubDir
 	# path (using ../../ etc) back to that root directory.
 	# Sets result in $(<)
 
-	if ! $(<[1])
+	if ! $(<[1]) 
 	{
 	    return $(DOT) ;
-	}
+	} 
 	else
 	{
 	    local _i _d ;
@@ -1685,7 +1689,7 @@ rule FRelPath
 rule FAppendSuffix
 {
        # E.g., "FAppendSuffix yacc lex foo.bat : $(SUFEXE) ;"
-       # returns (yacc,lex,foo.bat) on Unix and
+       # returns (yacc,lex,foo.bat) on Unix and 
        # (yacc.exe,lex.exe,foo.bat) on NT.
 
 	if $(>)
@@ -1770,7 +1774,7 @@ else if $(VMS)
 		{
 		    _s = $(DOT) ;
 		}
-		else
+		else 
 		{
 		    # This handles the following cases:
 		    # 	a -> [.a]
@@ -1866,7 +1870,7 @@ actions HardLink
 
 actions Install
 {
-	$(CP) $(>) $(<)
+	$(CP) $(>) $(<) 
 }
 
 actions Lex
@@ -1881,7 +1885,7 @@ actions LexMv
 
 actions Link bind NEEDLIBS
 {
-	$(LINK) $(LINKFLAGS) -o $(<) $(UNDEFS) $(>) $(NEEDLIBS) $(LINKLIBS)
+	$(LINK) $(LINKFLAGS) -o $(<) $(UNDEFS) $(>) $(NEEDLIBS) $(LINKLIBS) 
 }
 
 actions MkDir1
@@ -2008,7 +2012,7 @@ else if $(NT) && $(MSVC)
 {
 	actions updated together piecemeal Archive
 	{
-	$(AR) $(<) $(>)
+	$(AR) $(<) -+$(>)
 	}
 
 	actions Cc
@@ -2057,7 +2061,7 @@ else if $(OS2) && $(WATCOM)
 {
 	actions together piecemeal Archive
 	{
-	$(AR) $(<) +-$(>)
+	$(AR) $(<) +-$(>) 
 	}
 
 	actions Cc
@@ -2087,19 +2091,19 @@ else if $(OS2) && $(WATCOM)
 
 else if $(VMS)
 {
-    actions updated together piecemeal Archive
+    actions updated together piecemeal Archive 
     {
 	lib/replace $(<) $(>[1]) ,$(>[2-])
     }
 
     actions Cc
-    {
-	$(CC)/obj=$(<) $(CCFLAGS) $(CCDEFS) $(CCHDRS) $(>)
+    { 
+	$(CC)/obj=$(<) $(CCFLAGS) $(CCDEFS) $(CCHDRS) $(>) 
     }
 
     actions C++
-    {
-	$(C++)/obj=$(<) $(C++FLAGS) $(CCDEFS) $(CCHDRS) $(>)
+    { 
+	$(C++)/obj=$(<) $(C++FLAGS) $(CCDEFS) $(CCHDRS) $(>) 
     }
 
     actions piecemeal together existing Clean
@@ -2139,7 +2143,7 @@ else if $(VMS)
 
 else if $(MAC)
 {
-    actions together Archive
+    actions together Archive 
     {
 	$(LINK) -library -o $(<) $(>)
     }
@@ -2147,13 +2151,13 @@ else if $(MAC)
     actions Cc
     {
 	set -e MWCincludes $(CCHDRS)
-	$(CC) -o $(<) $(CCFLAGS) $(CCDEFS) $(>)
+	$(CC) -o $(<) $(CCFLAGS) $(CCDEFS) $(>) 
     }
 
     actions C++
     {
 	set -e MWCincludes $(CCHDRS)
-	$(CC) -o $(<) $(C++FLAGS) $(CCDEFS) $(>)
+	$(CC) -o $(<) $(C++FLAGS) $(CCDEFS) $(>) 
     }
 
     actions Link bind NEEDLIBS
