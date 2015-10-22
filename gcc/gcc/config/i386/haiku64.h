@@ -67,8 +67,8 @@ Boston, MA 02111-1307, USA.  */
 #define LINK_SPEC \
   "%{" SPEC_64 ":-m elf_x86_64} %{" SPEC_32 ":-m elf_i386_haiku} \
    %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:; \
-   :-pie --allow-shlib-undefined --export-dynamic} %{nostart:-e 0} \
-   %{shared:-shared -e 0} %{!shared: %{!nostart: -no-undefined}}"
+   :-pie --allow-shlib-undefined --export-dynamic} %{shared:-shared} \
+   %{nostart|shared:-e 0;:-no-undefined}"
 
 /* A C statement (sans semicolon) to output to the stdio stream
    FILE the assembler definition of uninitialized global DECL named
