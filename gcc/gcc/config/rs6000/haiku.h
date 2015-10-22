@@ -53,7 +53,13 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf32ppchaiku %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-pie --allow-shlib-undefined --export-dynamic} %{nostart:-e 0} %{shared:-shared -e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC \
+  "%{!o*:-o %b} -m elf32ppchaiku \
+   %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:; \
+   :-pie --allow-shlib-undefined --export-dynamic} %{nostart:-e 0} \
+   %{shared:-shared -e 0} %{!shared: %{!nostart: -no-undefined}}"
 
 #undef CC1_SPEC
-#define CC1_SPEC "%{fpic|fPIC|fpie|fPIE|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-fPIC} %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
+#define CC1_SPEC \
+  "%{fpic|fPIC|fpie|fPIE|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-fPIC} \
+   %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
