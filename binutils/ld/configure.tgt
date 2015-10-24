@@ -338,8 +338,8 @@ i[3-7]86-*-interix*)	targ_emul=i386pe_posix;
 i[3-7]86-*-beospe*)	targ_emul=i386beos ;;
 i[3-7]86-*-beos*)	targ_emul=elf_i386_be ;;
 i[3-7]86-*-haiku*)	targ_emul=elf_i386_haiku ;;
-x86_64-*-haiku*)	targ_emul=elf_x86_64
-			targ_extra_emuls=elf_i386_haiku ;;
+x86_64-*-haiku*)	targ_emul=elf_x86_64_haiku
+			targ_extra_emuls="elf_x86_64 elf_i386_haiku" ;;
 i[3-7]86-*-vxworks*)	targ_emul=elf_i386_vxworks ;;
 i[3-7]86-*-chaos)	targ_emul=elf_i386_chaos
 			;;

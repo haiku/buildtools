@@ -22,3 +22,5 @@ TARGET2_TYPE=got-rel
 
 # ARM does not support .s* sections.
 NO_SMALL_DATA=yes
+
+. ${srcdir}/emulparams/elf_haiku.sh

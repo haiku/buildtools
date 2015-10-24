@@ -9,3 +9,4 @@ NOP=0x90909090
 TEMPLATE_NAME=elf32
 GENERATE_SHLIB_SCRIPT=yes
 NO_SMALL_DATA=yes
+. ${srcdir}/emulparams/elf_haiku.sh

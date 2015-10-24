@@ -65,7 +65,7 @@ Boston, MA 02111-1307, USA.  */
 
 #undef	LINK_SPEC
 #define LINK_SPEC \
-  "%{" SPEC_64 ":-m elf_x86_64} %{" SPEC_32 ":-m elf_i386_haiku} \
+  "%{" SPEC_64 ":-m elf_x86_64_haiku} %{" SPEC_32 ":-m elf_i386_haiku} \
    %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:; \
    :-pie --allow-shlib-undefined --export-dynamic} %{shared:-shared} \
    %{nostart|shared:-e 0;:-no-undefined}"
