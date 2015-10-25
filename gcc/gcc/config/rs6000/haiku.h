@@ -58,8 +58,3 @@ Boston, MA 02111-1307, USA.  */
    %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:; \
    :-pie --allow-shlib-undefined --export-dynamic} %{shared:-shared} \
    %{nostart|shared:-e 0;:-no-undefined}"
-
-#undef CC1_SPEC
-#define CC1_SPEC \
-  "%{fpic|fPIC|fpie|fPIE|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-fPIC} \
-   %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
