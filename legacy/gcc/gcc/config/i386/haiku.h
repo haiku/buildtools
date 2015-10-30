@@ -163,14 +163,16 @@ Boston, MA 02111-1307, USA.  */
 -Asystem(haiku)"
 
 #undef CPP_SPEC
-#define CPP_SPEC "%(cpp_cpu) %{!no-fPIC:%{!no-fpic:-D__PIC__ -D__pic__}}"
+#define CPP_SPEC "%(cpp_cpu) %{!fno-pic:%{!fno-PIC:-D__PIC__ -D__pic__}}"
 
 /* Haiku uses lots of multichars, so don't warn about them unless the
    user explicitly asks for the warnings with -Wmultichar.  Note that
    CC1_SPEC is used for both cc1 and cc1plus. */
 
 #undef CC1_SPEC
-#define CC1_SPEC "%{!no-fpic:%{!fPIC:-fpic}} %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
+#define CC1_SPEC \
+  "%{!fpic:%{!fPIC:%{!fno-pic:%{!fno-PIC:-fPIC}}}} \
+   %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
 
 #undef CC1PLUS_SPEC
 #define CC1PLUS_SPEC "%{!Wctor-dtor-privacy:-Wno-ctor-dtor-privacy}"
@@ -183,8 +185,12 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf. */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf_i386_haiku %{!r:-shared} -Bsymbolic " \
-	"%{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: --no-undefined}}"
+#define LINK_SPEC \
+  "%{!o*:-o %b} -m elf_i386_haiku \
+   %{!shared:%{!r:%{!fno-pic:%{!fno-PIC:-pie --export-dynamic}} \
+   %{!static:--no-add-needed --allow-shlib-undefined}}} \
+   %{shared:-shared -Bsymbolic} %{nostart|shared:-e 0} \
+   %{!nostart:%{!shared:--no-undefined}}"
 
 /* Provide start and end file specs appropriate to glibc.  */
 

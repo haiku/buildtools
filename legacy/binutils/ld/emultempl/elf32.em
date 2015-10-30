@@ -891,6 +891,13 @@ gld${EMULATION_NAME}_after_open (void)
 	  && (bfd_elf_get_dyn_lib_class (l->by) & DYN_AS_NEEDED) != 0)
 	continue;
 
+      /* Skip the lib if --no-add-needed and --allow-shlib-undefined
+         is in effect.  */
+      if (l->by != NULL
+	  && link_info.unresolved_syms_in_shared_libs == RM_IGNORE
+	  && (bfd_elf_get_dyn_lib_class (l->by) & DYN_NO_ADD_NEEDED) != 0)
+	continue;
+
       /* If we've already seen this file, skip it.  */
       for (ll = needed; ll != l; ll = ll->next)
 	if ((ll->by == NULL
