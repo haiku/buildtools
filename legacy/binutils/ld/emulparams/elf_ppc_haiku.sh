@@ -1,3 +1,4 @@
+. ${srcdir}/emulparams/elf_haiku.sh
 SCRIPT_NAME=elf
 OUTPUT_FORMAT="elf32-powerpc"
 TEXT_START_ADDR=0x200000
