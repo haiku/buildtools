@@ -77,8 +77,8 @@
 #undef	LINK_SPEC
 #define LINK_SPEC \
   "%{!o*:-o %b} -m armelf \
-   %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:; \
-   :-pie --allow-shlib-undefined --export-dynamic} %{shared:-shared} \
-   %{nostart|shared:-e 0;:-no-undefined} %{mbig-endian:-EB} \
+   %{shared:-shared;!r:%{fno-pic|fno-PIC|fno-pie|fno-PIE:;:%{!pie:-pie}} \
+   %{!static:--export-dynamic --allow-shlib-undefined}} %{static:-static} \
+   %{nostart|shared:-e 0;:--no-undefined} %{mbig-endian:-EB} \
    %{mlittle-endian:-EL} -X"
 

@@ -187,9 +187,9 @@ Boston, MA 02111-1307, USA.  */
 #undef	LINK_SPEC
 #define LINK_SPEC \
   "%{!o*:-o %b} -m elf_i386_haiku \
-   %{!shared:%{!r:%{!fno-pic:%{!fno-PIC:-pie --export-dynamic}} \
-   %{!static:--no-add-needed --allow-shlib-undefined}}} \
-   %{shared:-shared -Bsymbolic} %{nostart|shared:-e 0} \
+   %{!shared:%{!r:%{!fno-pic:%{!fno-PIC:-pie}} \
+   %{!static:--no-add-needed --export-dynamic --allow-shlib-undefined}}} \
+   %{shared:-shared -Bsymbolic} %{static:-static} %{nostart|shared:-e 0} \
    %{!nostart:%{!shared:--no-undefined}}"
 
 /* Provide start and end file specs appropriate to glibc.  */

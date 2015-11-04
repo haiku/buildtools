@@ -55,6 +55,6 @@ Boston, MA 02111-1307, USA.  */
 #undef	LINK_SPEC
 #define LINK_SPEC \
   "%{!o*:-o %b} -m elf32ppchaiku \
-   %{shared|r|pie|fno-pic|fno-PIC|fno-pie|fno-PIE:; \
-   :-pie --allow-shlib-undefined --export-dynamic} %{shared:-shared} \
-   %{nostart|shared:-e 0;:-no-undefined}"
+   %{shared:-shared;!r:%{fno-pic|fno-PIC|fno-pie|fno-PIE:;:%{!pie:-pie}} \
+   %{!static:--export-dynamic --allow-shlib-undefined}} %{static:-static} \
+   %{nostart|shared:-e 0;:--no-undefined}"
