@@ -1,5 +1,5 @@
 /* tc-sh.c -- Assemble code for the Renesas / SuperH SH
-   Copyright (C) 1993-2014 Free Software Foundation, Inc.
+   Copyright (C) 1993-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -281,15 +281,15 @@ const char FLT_CHARS[] = "rRsSfFdDxXpP";
 #if BFD_HOST_64BIT_LONG
 /* The "reach" type is long, so we can only do this for a 64-bit-long
    host.  */
-#define SH64PCREL32_M (((long) -1 << 30) * 2 - 4)
+#define SH64PCREL32_M ((-((long) 1 << 30)) * 2 - 4)
 #define SH64PCREL48_F ((((long) 1 << 47) - 1) - 4)
-#define SH64PCREL48_M (((long) -1 << 47) - 4)
+#define SH64PCREL48_M ((-((long) 1 << 47)) - 4)
 #define SH64PCREL48_LENGTH (3 * 4)
 #else
 /* If the host does not have 64-bit longs, just make this state identical
    in reach to the 32-bit state.  Note that we have a slightly incorrect
    reach, but the correct one above will overflow a 32-bit number.  */
-#define SH64PCREL32_M (((long) -1 << 30) * 2)
+#define SH64PCREL32_M ((-((long) 1 << 30)) * 2)
 #define SH64PCREL48_F SH64PCREL32_F
 #define SH64PCREL48_M SH64PCREL32_M
 #define SH64PCREL48_LENGTH (3 * 4)
@@ -313,14 +313,14 @@ const char FLT_CHARS[] = "rRsSfFdDxXpP";
 #if BFD_HOST_64BIT_LONG
 /* The "reach" type is long, so we can only do this for a 64-bit-long
    host.  */
-#define MOVI_32_M (((long) -1 << 30) * 2 - 4)
+#define MOVI_32_M ((-((long) 1 << 30)) * 2 - 4)
 #define MOVI_48_F ((((long) 1 << 47) - 1) - 4)
-#define MOVI_48_M (((long) -1 << 47) - 4)
+#define MOVI_48_M ((-((long) 1 << 47)) - 4)
 #else
 /* If the host does not have 64-bit longs, just make this state identical
    in reach to the 32-bit state.  Note that we have a slightly incorrect
    reach, but the correct one above will overflow a 32-bit number.  */
-#define MOVI_32_M (((long) -1 << 30) * 2)
+#define MOVI_32_M ((-((long) 1 << 30)) * 2)
 #define MOVI_48_F MOVI_32_F
 #define MOVI_48_M MOVI_32_M
 #endif /* BFD_HOST_64BIT_LONG */
@@ -811,7 +811,7 @@ sh_cons_fix_new (fragS *frag, int off, int size, expressionS *exp,
 /* Clobbers input_line_pointer, checks end-of-line.  */
 /* NBYTES 1=.byte, 2=.word, 4=.long */
 static void
-sh_elf_cons (register int nbytes)
+sh_elf_cons (int nbytes)
 {
   expressionS exp;
 
@@ -1363,7 +1363,7 @@ parse_reg (char *src, int *mode, int *reg)
     }
   else
     prefix = 0;
-  
+
   consumed = parse_reg_without_prefix (src, mode, reg);
 
   if (consumed == 0)
@@ -3245,10 +3245,10 @@ md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 	  for (; bfd_arch; bfd_arch=bfd_arch->next)
 	    {
 	      int len = strlen(bfd_arch->printable_name);
-	      
+
 	      if (bfd_arch->mach == bfd_mach_sh5)
 		continue;
-	      
+
 	      if (strncasecmp (bfd_arch->printable_name, arg, len) != 0)
 		continue;
 
@@ -3262,7 +3262,7 @@ md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 		continue;
 	      break;
 	    }
-	  
+
 	  if (!preset_target_arch)
 	    as_bad (_("Invalid argument to --isa option: %s"), arg);
 	}
@@ -3692,7 +3692,7 @@ md_section_align (segT seg ATTRIBUTE_UNUSED, valueT size)
   return size;
 #else /* ! OBJ_ELF */
   return ((size + (1 << bfd_get_section_alignment (stdoutput, seg)) - 1)
-	  & (-1 << bfd_get_section_alignment (stdoutput, seg)));
+	  & -(1 << bfd_get_section_alignment (stdoutput, seg)));
 #endif /* ! OBJ_ELF */
 }
 

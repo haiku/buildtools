@@ -1,5 +1,5 @@
 /* BFD back-end for Intel 386 PE IMAGE COFF files.
-   Copyright (C) 2006-2014 Free Software Foundation, Inc.
+   Copyright (C) 2006-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -115,6 +115,7 @@ pex64_get_unwind_info (bfd *abfd, struct pex64_unwind_info *ui, void *data)
   ui->sizeofUnwindCodes = PEX64_UWI_SIZEOF_UWCODE_ARRAY (ui->CountOfCodes);
   ui->SizeOfBlock = ui->sizeofUnwindCodes + 4;
   ui->rawUnwindCodes = &ex_dta[4];
+
   ex_dta += ui->SizeOfBlock;
   switch (ui->Flags)
     {

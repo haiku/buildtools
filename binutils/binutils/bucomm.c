@@ -1,5 +1,5 @@
 /* bucomm.c -- Bin Utils COMmon code.
-   Copyright (C) 1991-2014 Free Software Foundation, Inc.
+   Copyright (C) 1991-2015 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -86,7 +86,7 @@ bfd_nonfatal_message (const char *filename,
   section_name = NULL;
   va_start (args, format);
   fprintf (stderr, "%s", program_name);
-  
+
   if (abfd)
     {
       if (!filename)
@@ -429,8 +429,12 @@ print_arelt_descr (FILE *file, bfd *abfd, bfd_boolean verbose)
 	  const char *ctime_result = (const char *) ctime (&when);
 	  bfd_size_type size;
 
-	  /* POSIX format:  skip weekday and seconds from ctime output.  */
-	  sprintf (timebuf, "%.12s %.4s", ctime_result + 4, ctime_result + 20);
+	  /* PR binutils/17605: Check for corrupt time values.  */
+	  if (ctime_result == NULL)
+	    sprintf (timebuf, _("<time data corrupt>"));
+	  else
+	    /* POSIX format:  skip weekday and seconds from ctime output.  */
+	    sprintf (timebuf, "%.12s %.4s", ctime_result + 4, ctime_result + 20);
 
 	  mode_string (buf.st_mode, modebuf);
 	  modebuf[10] = '\0';
@@ -570,7 +574,7 @@ off_t
 get_file_size (const char * file_name)
 {
   struct stat statbuf;
-  
+
   if (stat (file_name, &statbuf) < 0)
     {
       if (errno == ENOENT)
@@ -578,7 +582,7 @@ get_file_size (const char * file_name)
       else
 	non_fatal (_("Warning: could not locate '%s'.  reason: %s"),
 		   file_name, strerror (errno));
-    }  
+    }
   else if (! S_ISREG (statbuf.st_mode))
     non_fatal (_("Warning: '%s' is not an ordinary file"), file_name);
   else if (statbuf.st_size < 0)
@@ -600,7 +604,7 @@ bfd_get_archive_filename (const bfd *abfd)
   size_t needed;
 
   assert (abfd != NULL);
-  
+
   if (!abfd->my_archive)
     return bfd_get_filename (abfd);
 

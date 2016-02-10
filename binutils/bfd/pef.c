@@ -1,5 +1,5 @@
 /* PEF support for BFD.
-   Copyright (C) 1999-2014 Free Software Foundation, Inc.
+   Copyright (C) 1999-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -43,6 +43,7 @@
 #define bfd_pef_find_nearest_line                   _bfd_nosymbols_find_nearest_line
 #define bfd_pef_find_line                           _bfd_nosymbols_find_line
 #define bfd_pef_find_inliner_info                   _bfd_nosymbols_find_inliner_info
+#define bfd_pef_get_symbol_version_string	    _bfd_nosymbols_get_symbol_version_string
 #define bfd_pef_bfd_make_debug_symbol               _bfd_nosymbols_bfd_make_debug_symbol
 #define bfd_pef_read_minisymbols                    _bfd_generic_read_minisymbols
 #define bfd_pef_minisymbol_to_symbol                _bfd_generic_minisymbol_to_symbol
@@ -486,7 +487,7 @@ bfd_pef_scan_start_address (bfd *abfd)
     goto end;
 
   for (section = abfd->sections; section != NULL; section = section->next)
-    if ((section->index + 1) == header.main_section)
+    if ((long) (section->index + 1) == header.main_section)
       break;
 
   if (section == NULL)

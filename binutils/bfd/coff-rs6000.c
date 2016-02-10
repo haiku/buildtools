@@ -1,5 +1,5 @@
 /* BFD back-end for IBM RS/6000 "XCOFF" files.
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
    Written by Metin G. Ozisik, Mimi Phuong-Thao Vo, and John Gilmore.
    Archive support from Damon A. Permezel.
    Contributed by IBM Corporation and Cygnus Support.
@@ -402,34 +402,6 @@ _bfd_xcoff_is_local_label_name (bfd *abfd ATTRIBUTE_UNUSED,
 {
   return FALSE;
 }
-
-static const struct dwarf_debug_section xcoff_debug_sections[] =
-{
-  { ".dwabrev",		NULL },
-  { ".dwarnge",		NULL },
-  { NULL,	NULL }, /* .debug_frame */
-  { ".dwinfo",		NULL },
-  { ".dwline",		NULL },
-  { NULL,	NULL }, /* .debug_loc */
-  { NULL,	NULL }, /* .debug_macinfo */
-  { NULL,	NULL }, /* .debug_macro */
-  { ".dwpbnms",		NULL },
-  { ".dwpbtyp",		NULL },
-  { ".dwrnges",		NULL },
-  { NULL,	NULL }, /* .debug_static_func */
-  { NULL,	NULL }, /* .debug_static_vars */
-  { ".dwstr",	NULL },
-  { NULL,	NULL }, /* .debug_types */
-  /* GNU DWARF 1 extensions */
-  { NULL,	NULL }, /* .debug_sfnames */
-  { NULL,	NULL }, /* .debug_srcinfo */
-  /* SGI/MIPS DWARF 2 extensions */
-  { NULL,	NULL }, /* .debug_funcnames */
-  { NULL,	NULL }, /* .debug_typenames */
-  { NULL,	NULL }, /* .debug_varnames */
-  { NULL,	NULL }, /* .debug_weaknames */
-  { NULL,	NULL },
-};
 
 void
 _bfd_xcoff_swap_sym_in (bfd *abfd, void * ext1, void * in1)
@@ -2556,7 +2528,7 @@ _bfd_xcoff_sizeof_headers (bfd *abfd,
       };
       struct nbr_reloc_lineno *n_rl;
       bfd *sub;
-      int max_index;
+      unsigned int max_index;
       asection *s;
 
       /* Although the number of sections is known, the maximum value of
@@ -3421,7 +3393,7 @@ xcoff_ppc_relocate_section (bfd *output_bfd,
 		}
 	      else
 		{
-		  BFD_ASSERT (info->relocatable
+		  BFD_ASSERT (bfd_link_relocatable (info)
 			      || (info->static_link
 				  && (h->flags & XCOFF_WAS_UNDEFINED) != 0)
 			      || (h->flags & XCOFF_DEF_DYNAMIC) != 0
@@ -3591,7 +3563,7 @@ xcoff_create_csect_from_smclas (bfd *abfd,
       ".sv", ".bs", ".ds", ".uc", ".ti", ".tb", NULL, ".tc0", /* 8 - 15 */
       ".td", NULL, ".sv3264", NULL, ".tl", ".ul", ".te"
     };
-  
+
   if ((aux->x_csect.x_smclas < ARRAY_SIZE (names))
       && (NULL != names[aux->x_csect.x_smclas]))
     {
@@ -4008,6 +3980,8 @@ const struct xcoff_dwsect_name xcoff_dwsect_names[] = {
 #define _bfd_xcoff_make_empty_symbol coff_make_empty_symbol
 #define _bfd_xcoff_print_symbol coff_print_symbol
 #define _bfd_xcoff_get_symbol_info coff_get_symbol_info
+#define _bfd_xcoff_get_symbol_version_string \
+  _bfd_nosymbols_get_symbol_version_string
 #define _bfd_xcoff_bfd_is_local_label_name _bfd_xcoff_is_local_label_name
 #define _bfd_xcoff_bfd_is_target_special_symbol \
   coff_bfd_is_target_special_symbol

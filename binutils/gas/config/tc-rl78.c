@@ -1,5 +1,5 @@
 /* tc-rl78.c -- Assembler for the Renesas RL78
-   Copyright (C) 2011-2014 Free Software Foundation, Inc.
+   Copyright (C) 2011-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -281,6 +281,8 @@ enum options
 {
   OPTION_RELAX = OPTION_MD_BASE,
   OPTION_G10,
+  OPTION_G13,
+  OPTION_G14,
   OPTION_32BIT_DOUBLES,
   OPTION_64BIT_DOUBLES,
 };
@@ -293,6 +295,9 @@ struct option md_longopts[] =
 {
   {"relax", no_argument, NULL, OPTION_RELAX},
   {"mg10", no_argument, NULL, OPTION_G10},
+  {"mg13", no_argument, NULL, OPTION_G13},
+  {"mg14", no_argument, NULL, OPTION_G14},
+  {"mrl78", no_argument, NULL, OPTION_G14},
   {"m32bit-doubles", no_argument, NULL, OPTION_32BIT_DOUBLES},
   {"m64bit-doubles", no_argument, NULL, OPTION_64BIT_DOUBLES},
   {NULL, no_argument, NULL, 0}
@@ -309,7 +314,18 @@ md_parse_option (int c, char * arg ATTRIBUTE_UNUSED)
       return 1;
 
     case OPTION_G10:
+      elf_flags &= ~ E_FLAG_RL78_CPU_MASK;
       elf_flags |= E_FLAG_RL78_G10;
+      return 1;
+
+    case OPTION_G13:
+      elf_flags &= ~ E_FLAG_RL78_CPU_MASK;
+      elf_flags |= E_FLAG_RL78_G13;
+      return 1;
+
+    case OPTION_G14:
+      elf_flags &= ~ E_FLAG_RL78_CPU_MASK;
+      elf_flags |= E_FLAG_RL78_G14;
       return 1;
 
     case OPTION_32BIT_DOUBLES:
@@ -323,13 +339,35 @@ md_parse_option (int c, char * arg ATTRIBUTE_UNUSED)
   return 0;
 }
 
+int
+rl78_isa_g10 (void)
+{
+  return (elf_flags & E_FLAG_RL78_CPU_MASK) == E_FLAG_RL78_G10;
+}
+
+int
+rl78_isa_g13 (void)
+{
+  return (elf_flags & E_FLAG_RL78_CPU_MASK) == E_FLAG_RL78_G13;
+}
+
+int
+rl78_isa_g14 (void)
+{
+  return (elf_flags & E_FLAG_RL78_CPU_MASK) == E_FLAG_RL78_G14;
+}
+
 void
-md_show_usage (FILE * stream ATTRIBUTE_UNUSED)
+md_show_usage (FILE * stream)
 {
   fprintf (stream, _(" RL78 specific command line options:\n"));
+  fprintf (stream, _("  --mrelax          Enable link time relaxation\n"));
   fprintf (stream, _("  --mg10            Enable support for G10 variant\n"));
+  fprintf (stream, _("  --mg13            Selects the G13 core.\n"));
+  fprintf (stream, _("  --mg14            Selects the G14 core [default]\n"));
+  fprintf (stream, _("  --mrl78           Alias for --mg14\n"));
   fprintf (stream, _("  --m32bit-doubles  [default]\n"));
-  fprintf (stream, _("  --m64bit-doubles\n"));
+  fprintf (stream, _("  --m64bit-doubles  Source code uses 64-bit doubles\n"));
 }
 
 static void
@@ -364,9 +402,12 @@ const pseudo_typeS md_pseudo_table[] =
   { NULL, 	NULL, 		0 }
 };
 
+static symbolS * rl78_abs_sym = NULL;
+
 void
 md_begin (void)
 {
+  rl78_abs_sym = symbol_make ("__rl78_abs__");
 }
 
 void
@@ -643,13 +684,23 @@ rl78_cons_fix_new (fragS *	frag,
     case BFD_RELOC_RL78_LO16:
     case BFD_RELOC_RL78_HI16:
       if (size != 2)
-	as_bad (_("%%hi16/%%lo16 only applies to .short or .hword"));
-      type = exp->X_md;
+	{
+	  /* Fixups to assembler generated expressions do not use %hi or %lo.  */
+	  if (frag->fr_file)
+	    as_bad (_("%%hi16/%%lo16 only applies to .short or .hword"));
+	}
+      else
+	type = exp->X_md;
       break;
     case BFD_RELOC_RL78_HI8:
       if (size != 1)
-	as_bad (_("%%hi8 only applies to .byte"));
-      type = exp->X_md;
+	{
+	  /* Fixups to assembler generated expressions do not use %hi or %lo.  */
+	  if (frag->fr_file)
+	    as_bad (_("%%hi8 only applies to .byte"));
+	}
+      else
+	type = exp->X_md;
       break;
     default:
       break;
@@ -804,7 +855,7 @@ rl78_frag_fix_value (fragS *    fragP,
 /* Estimate how big the opcode is after this relax pass.  The return
    value is the difference between fr_fix and the actual size.  We
    compute the total size in rl78_relax_frag and store it in fr_subtype,
-   sowe only need to subtract fx_fix and return it.  */
+   so we only need to subtract fx_fix and return it.  */
 
 int
 md_estimate_size_before_relax (fragS * fragP ATTRIBUTE_UNUSED, segT segment ATTRIBUTE_UNUSED)
@@ -941,8 +992,8 @@ rl78_relax_frag (segT segment ATTRIBUTE_UNUSED, fragS * fragP, long stretch)
   fragP->fr_subtype = newsize;
   tprintf (" -> new %d old %d delta %d\n", newsize, oldsize, newsize-oldsize);
   return newsize - oldsize;
- }
- 
+}
+
 /* This lets us test for the opcode type and the desired size in a
    switch statement.  */
 #define OPCODE(type,size) ((type) * 16 + (size))
@@ -976,12 +1027,12 @@ md_convert_frag (bfd *   abfd ATTRIBUTE_UNUSED,
   /* We used a new frag for this opcode, so the opcode address should
      be the frag address.  */
   mypc = fragP->fr_address + (fragP->fr_opcode - fragP->fr_literal);
-  tprintf("\033[32mmypc: 0x%x\033[0m\n", (int)mypc);
+  tprintf ("\033[32mmypc: 0x%x\033[0m\n", (int)mypc);
 
   /* Try to get the target address.  If we fail here, we just use the
      largest format.  */
   if (rl78_frag_fix_value (fragP, segment, 0, & addr0,
-			 fragP->tc_frag_data->relax[ri].type != RL78_RELAX_BRANCH, 0))
+			   fragP->tc_frag_data->relax[ri].type != RL78_RELAX_BRANCH, 0))
     {
       /* We don't know the target address.  */
       keep_reloc = 1;
@@ -1097,7 +1148,7 @@ md_convert_frag (bfd *   abfd ATTRIBUTE_UNUSED,
 	  fprintf(stderr, "Missed case %d %d at 0x%lx\n",
 		  rl78_opcode_type (fragP->fr_opcode), fragP->fr_subtype, mypc);
 	  abort ();
-	  
+
 	}
       break;
 
@@ -1192,7 +1243,17 @@ tc_gen_reloc (asection * seg ATTRIBUTE_UNUSED, fixS * fixp)
   reloc[rp]->address       = fixp->fx_frag->fr_address + fixp->fx_where;	\
   reloc[++rp] = NULL
 #define OPSYM(SYM) OPX(BFD_RELOC_RL78_SYM, SYM, 0)
-#define OPIMM(IMM) OPX(BFD_RELOC_RL78_SYM, abs_symbol.bsym, IMM)
+
+  /* FIXME: We cannot do the normal thing for an immediate value reloc,
+     ie creating a RL78_SYM reloc in the *ABS* section with an offset
+     equal to the immediate value we want to store.  This fails because
+     the reloc processing in bfd_perform_relocation and bfd_install_relocation
+     will short circuit such relocs and never pass them on to the special
+     reloc processing code.  So instead we create a RL78_SYM reloc against
+     the __rl78_abs__ symbol and arrange for the linker scripts to place
+     this symbol at address 0.  */
+#define OPIMM(IMM) OPX (BFD_RELOC_RL78_SYM, symbol_get_bfdsym (rl78_abs_sym), IMM)
+
 #define OP(OP) OPX(BFD_RELOC_RL78_##OP, *reloc[0]->sym_ptr_ptr, 0)
 #define SYM0() reloc[0]->howto = bfd_reloc_type_lookup (stdoutput, BFD_RELOC_RL78_SYM)
 
@@ -1339,6 +1400,7 @@ md_apply_fix (struct fix * f ATTRIBUTE_UNUSED,
 		      val);
       /* Fall through.  */
     case BFD_RELOC_8:
+    case BFD_RELOC_RL78_SADDR: /* We need to store the 8 LSB, but this works.  */
       op[0] = val;
       break;
 
@@ -1407,5 +1469,5 @@ valueT
 md_section_align (segT segment, valueT size)
 {
   int align = bfd_get_section_alignment (stdoutput, segment);
-  return ((size + (1 << align) - 1) & (-1 << align));
+  return ((size + (1 << align) - 1) & -(1 << align));
 }

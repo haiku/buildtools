@@ -1,7 +1,7 @@
 /* libbfd.h -- Declarations used by bfd library *implementation*.
    (This include file is not for users of the library.)
 
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -23,6 +23,10 @@
    MA 02110-1301, USA.  */
 
 #include "hashtab.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Align an address upward to a boundary, expressed as a number of bytes.
    E.g. align to an 8-byte boundary with argument of 8.  Take care never
@@ -392,6 +396,8 @@ extern bfd_boolean _bfd_vms_lib_ia64_mkarchive (bfd *abfd);
   ((void (*) (bfd *, void *, asymbol *, bfd_print_symbol_type)) bfd_void)
 #define _bfd_nosymbols_get_symbol_info \
   ((void (*) (bfd *, asymbol *, symbol_info *)) bfd_void)
+#define _bfd_nosymbols_get_symbol_version_string \
+  ((const char *(*) (bfd *, asymbol *, bfd_boolean *)) bfd_nullvoidptr)
 #define _bfd_nosymbols_bfd_is_local_label_name \
   ((bfd_boolean (*) (bfd *, const char *)) bfd_false)
 #define _bfd_nosymbols_bfd_is_target_special_symbol \
@@ -544,6 +550,10 @@ extern bfd_boolean _bfd_dwarf2_find_nearest_line
   (bfd *, asymbol **, asymbol *, asection *, bfd_vma,
    const char **, const char **, unsigned int *, unsigned int *,
    const struct dwarf_debug_section *, unsigned int, void **);
+
+/* Find the bias between DWARF addresses and real addresses.  */
+extern bfd_signed_vma _bfd_dwarf2_find_symbol_bias
+  (asymbol **, void **);
 
 /* Find inliner info after calling bfd_find_nearest_line. */
 extern bfd_boolean _bfd_dwarf2_find_inliner_info

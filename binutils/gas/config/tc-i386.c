@@ -1,5 +1,5 @@
 /* tc-i386.c -- Assemble code for the Intel 80386
-   Copyright (C) 1989-2014 Free Software Foundation, Inc.
+   Copyright (C) 1989-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -519,6 +519,11 @@ static enum x86_elf_abi x86_elf_abi = I386_ABI;
 static int use_big_obj = 0;
 #endif
 
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
+/* 1 if generating code for a shared library.  */
+static int shared = 0;
+#endif
+
 /* 1 for intel syntax,
    0 if att syntax.  */
 static int intel_syntax = 0;
@@ -762,6 +767,8 @@ static const arch_entry cpu_arch[] =
     CPU_L1OM_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("k1om"), PROCESSOR_K1OM,
     CPU_K1OM_FLAGS, 0, 0 },
+  { STRING_COMMA_LEN ("iamcu"), PROCESSOR_IAMCU,
+    CPU_IAMCU_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("k6"), PROCESSOR_K6,
     CPU_K6_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("k6_2"), PROCESSOR_K6,
@@ -784,6 +791,8 @@ static const arch_entry cpu_arch[] =
     CPU_BDVER3_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("bdver4"), PROCESSOR_BD,
     CPU_BDVER4_FLAGS, 0, 0 },
+  { STRING_COMMA_LEN ("znver1"), PROCESSOR_ZNVER,
+    CPU_ZNVER1_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("btver1"), PROCESSOR_BT,
     CPU_BTVER1_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("btver2"), PROCESSOR_BT,
@@ -938,6 +947,12 @@ static const arch_entry cpu_arch[] =
     CPU_AVX512IFMA_FLAGS, 0, 0 },
   { STRING_COMMA_LEN (".avx512vbmi"), PROCESSOR_UNKNOWN,
     CPU_AVX512VBMI_FLAGS, 0, 0 },
+  { STRING_COMMA_LEN (".clzero"), PROCESSOR_UNKNOWN,
+    CPU_CLZERO_FLAGS, 0, 0 },
+  { STRING_COMMA_LEN (".mwaitx"), PROCESSOR_UNKNOWN,
+    CPU_MWAITX_FLAGS, 0, 0 },
+  { STRING_COMMA_LEN (".ospke"), PROCESSOR_UNKNOWN,
+    CPU_OSPKE_FLAGS, 0, 0 },
 };
 
 #ifdef I386COFF
@@ -1196,6 +1211,7 @@ i386_align_code (fragS *fragP, int count)
 	    case PROCESSOR_K8:
 	    case PROCESSOR_AMDFAM10:
 	    case PROCESSOR_BD:
+	    case PROCESSOR_ZNVER:
 	    case PROCESSOR_BT:
 	      patt = alt_patt;
 	      break;
@@ -1203,6 +1219,7 @@ i386_align_code (fragS *fragP, int count)
 	    case PROCESSOR_I486:
 	    case PROCESSOR_PENTIUM:
 	    case PROCESSOR_PENTIUMPRO:
+	    case PROCESSOR_IAMCU:
 	    case PROCESSOR_GENERIC32:
 	      patt = f32_patt;
 	      break;
@@ -1221,11 +1238,13 @@ i386_align_code (fragS *fragP, int count)
 	    case PROCESSOR_I386:
 	    case PROCESSOR_I486:
 	    case PROCESSOR_PENTIUM:
+	    case PROCESSOR_IAMCU:
 	    case PROCESSOR_K6:
 	    case PROCESSOR_ATHLON:
 	    case PROCESSOR_K8:
 	    case PROCESSOR_AMDFAM10:
 	    case PROCESSOR_BD:
+	    case PROCESSOR_ZNVER:
 	    case PROCESSOR_BT:
 	    case PROCESSOR_GENERIC32:
 	      /* We use cpu_arch_isa_flags to check if we CAN optimize
@@ -1372,23 +1391,6 @@ cpu_flags_all_zero (const union i386_cpu_flags *x)
     }
 }
 
-static INLINE void
-cpu_flags_set (union i386_cpu_flags *x, unsigned int v)
-{
-  switch (ARRAY_SIZE(x->array))
-    {
-    case 3:
-      x->array[2] = v;
-    case 2:
-      x->array[1] = v;
-    case 1:
-      x->array[0] = v;
-      break;
-    default:
-      abort ();
-    }
-}
-
 static INLINE int
 cpu_flags_equal (const union i386_cpu_flags *x,
 		 const union i386_cpu_flags *y)
@@ -1468,6 +1470,20 @@ cpu_flags_and_not (i386_cpu_flags x, i386_cpu_flags y)
       abort ();
     }
   return x;
+}
+
+static int
+valid_iamcu_cpu_flags (const i386_cpu_flags *flags)
+{
+  if (cpu_arch_isa == PROCESSOR_IAMCU)
+    {
+      static const i386_cpu_flags iamcu_flags = CPU_IAMCU_COMPAT_FLAGS;
+      i386_cpu_flags compat_flags;
+      compat_flags = cpu_flags_and_not (*flags, iamcu_flags);
+      return cpu_flags_all_zero (&compat_flags);
+    }
+  else
+    return 1;
 }
 
 #define CPU_FLAGS_ARCH_MATCH		0x1
@@ -1692,6 +1708,7 @@ match_mem_size (const insn_template *t, unsigned int j)
 {
   return (match_reg_size (t, j)
 	  && !((i.types[j].bitfield.unspecified
+		&& !i.broadcast
 		&& !t->operand_types[j].bitfield.unspecified)
 	       || (i.types[j].bitfield.fword
 		   && !t->operand_types[j].bitfield.fword)
@@ -2178,8 +2195,8 @@ set_intel_syntax (int syntax_flag)
   SKIP_WHITESPACE ();
   if (!is_end_of_line[(unsigned char) *input_line_pointer])
     {
-      char *string = input_line_pointer;
-      int e = get_symbol_end ();
+      char *string;
+      int e = get_symbol_name (&string);
 
       if (strcmp (string, "prefix") == 0)
 	ask_naked_reg = 1;
@@ -2187,7 +2204,7 @@ set_intel_syntax (int syntax_flag)
 	ask_naked_reg = -1;
       else
 	as_bad (_("bad argument to syntax directive."));
-      *input_line_pointer = e;
+      (void) restore_line_pointer (e);
     }
   demand_empty_rest_of_line ();
 
@@ -2239,8 +2256,8 @@ set_check (int what)
 
   if (!is_end_of_line[(unsigned char) *input_line_pointer])
     {
-      char *string = input_line_pointer;
-      int e = get_symbol_end ();
+      char *string;
+      int e = get_symbol_name (&string);
 
       if (strcmp (string, "none") == 0)
 	*kind = check_none;
@@ -2250,7 +2267,7 @@ set_check (int what)
 	*kind = check_error;
       else
 	as_bad (_("bad argument to %s_check directive."), str);
-      *input_line_pointer = e;
+      (void) restore_line_pointer (e);
     }
   else
     as_bad (_("missing argument for %s_check directive"), str);
@@ -2278,6 +2295,11 @@ check_cpu_arch_compatible (const char *name ATTRIBUTE_UNUSED,
 	arch = default_arch;
     }
 
+  /* If we are targeting Intel MCU, we must enable it.  */
+  if (get_elf_backend_data (stdoutput)->elf_machine_code != EM_IAMCU
+      || new_flag.bitfield.cpuiamcu)
+    return;
+
   /* If we are targeting Intel L1OM, we must enable it.  */
   if (get_elf_backend_data (stdoutput)->elf_machine_code != EM_L1OM
       || new_flag.bitfield.cpul1om)
@@ -2299,8 +2321,8 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
 
   if (!is_end_of_line[(unsigned char) *input_line_pointer])
     {
-      char *string = input_line_pointer;
-      int e = get_symbol_end ();
+      char *string;
+      int e = get_symbol_name (&string);
       unsigned int j;
       i386_cpu_flags flags;
 
@@ -2341,7 +2363,11 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
 	      else
 		flags = cpu_flags_and_not (cpu_arch_flags,
 					   cpu_arch[j].flags);
-	      if (!cpu_flags_equal (&flags, &cpu_arch_flags))
+
+	      if (!valid_iamcu_cpu_flags (&flags))
+		as_fatal (_("`%s' isn't valid for Intel MCU"),
+			  cpu_arch[j].name);
+	      else if (!cpu_flags_equal (&flags, &cpu_arch_flags))
 		{
 		  if (cpu_sub_arch_name)
 		    {
@@ -2356,7 +2382,7 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
 		  cpu_arch_flags = flags;
 		  cpu_arch_isa_flags = flags;
 		}
-	      *input_line_pointer = e;
+	      (void) restore_line_pointer (e);
 	      demand_empty_rest_of_line ();
 	      return;
 	    }
@@ -2373,8 +2399,11 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
   if (*input_line_pointer == ','
       && !is_end_of_line[(unsigned char) input_line_pointer[1]])
     {
-      char *string = ++input_line_pointer;
-      int e = get_symbol_end ();
+      char *string;
+      char e;
+
+      ++input_line_pointer;
+      e = get_symbol_name (&string);
 
       if (strcmp (string, "nojumps") == 0)
 	no_cond_jump_promotion = 1;
@@ -2383,7 +2412,7 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
       else
 	as_bad (_("no such architecture modifier: `%s'"), string);
 
-      *input_line_pointer = e;
+      (void) restore_line_pointer (e);
     }
 
   demand_empty_rest_of_line ();
@@ -2405,6 +2434,13 @@ i386_arch (void)
 	  || flag_code != CODE_64BIT)
 	as_fatal (_("Intel K1OM is 64bit ELF only"));
       return bfd_arch_k1om;
+    }
+  else if (cpu_arch_isa == PROCESSOR_IAMCU)
+    {
+      if (OUTPUT_FLAVOR != bfd_target_elf_flavour
+	  || flag_code == CODE_64BIT)
+	as_fatal (_("Intel MCU is 32bit ELF only"));
+      return bfd_arch_iamcu;
     }
   else
     return bfd_arch_i386;
@@ -2434,8 +2470,18 @@ i386_mach (void)
       else
 	return bfd_mach_x64_32;
     }
-  else if (!strcmp (default_arch, "i386"))
-    return bfd_mach_i386_i386;
+  else if (!strcmp (default_arch, "i386")
+	   || !strcmp (default_arch, "iamcu"))
+    {
+      if (cpu_arch_isa == PROCESSOR_IAMCU)
+	{
+	  if (OUTPUT_FLAVOR != bfd_target_elf_flavour)
+	    as_fatal (_("Intel MCU is 32bit ELF only"));
+	  return bfd_mach_i386_iamcu;
+	}
+      else
+	return bfd_mach_i386_i386;
+    }
   else
     as_fatal (_("unknown architecture"));
 }
@@ -2760,6 +2806,9 @@ reloc (unsigned int size,
 	  case BFD_RELOC_X86_64_GOT32:
 	    return BFD_RELOC_X86_64_GOT64;
 	    break;
+	  case BFD_RELOC_X86_64_GOTPLT64:
+	    return BFD_RELOC_X86_64_GOTPLT64;
+	    break;
 	  case BFD_RELOC_X86_64_PLTOFF64:
 	    return BFD_RELOC_X86_64_PLTOFF64;
 	    break;
@@ -2882,6 +2931,7 @@ tc_i386_fix_adjustable (fixS *fixP ATTRIBUTE_UNUSED)
       || fixP->fx_r_type == BFD_RELOC_386_GOTOFF
       || fixP->fx_r_type == BFD_RELOC_386_PLT32
       || fixP->fx_r_type == BFD_RELOC_386_GOT32
+      || fixP->fx_r_type == BFD_RELOC_386_GOT32X
       || fixP->fx_r_type == BFD_RELOC_386_TLS_GD
       || fixP->fx_r_type == BFD_RELOC_386_TLS_LDM
       || fixP->fx_r_type == BFD_RELOC_386_TLS_LDO_32
@@ -2895,6 +2945,8 @@ tc_i386_fix_adjustable (fixS *fixP ATTRIBUTE_UNUSED)
       || fixP->fx_r_type == BFD_RELOC_X86_64_PLT32
       || fixP->fx_r_type == BFD_RELOC_X86_64_GOT32
       || fixP->fx_r_type == BFD_RELOC_X86_64_GOTPCREL
+      || fixP->fx_r_type == BFD_RELOC_X86_64_GOTPCRELX
+      || fixP->fx_r_type == BFD_RELOC_X86_64_REX_GOTPCRELX
       || fixP->fx_r_type == BFD_RELOC_X86_64_TLSGD
       || fixP->fx_r_type == BFD_RELOC_X86_64_TLSLD
       || fixP->fx_r_type == BFD_RELOC_X86_64_DTPOFF32
@@ -3296,6 +3348,34 @@ process_immext (void)
 	  as_bad (_("can't use register '%s%s' as operand %d in '%s'."),
 		  register_prefix, i.op[x].regs->reg_name, x + 1,
 		  i.tm.name);
+
+      i.operands = 0;
+    }
+
+  if (i.tm.cpu_flags.bitfield.cpumwaitx && i.operands > 0)
+    {
+      /* MONITORX/MWAITX instructions have fixed operands with an opcode
+	 suffix which is coded in the same place as an 8-bit immediate
+	 field would be.
+	 Here we check those operands and remove them afterwards.  */
+      unsigned int x;
+
+      if (i.operands != 3)
+	abort();
+
+      for (x = 0; x < 2; x++)
+	if (register_number (i.op[x].regs) != x)
+	  goto bad_register_operand;
+
+      /* Check for third operand for mwaitx/monitorx insn.  */
+      if (register_number (i.op[x].regs)
+	  != (x + (i.tm.extension_opcode == 0xfb)))
+	{
+bad_register_operand:
+	  as_bad (_("can't use register '%s%s' as operand %d in '%s'."),
+		  register_prefix, i.op[x].regs->reg_name, x+1,
+		  i.tm.name);
+	}
 
       i.operands = 0;
     }
@@ -3890,14 +3970,14 @@ parse_operands (char *l, const char *mnemonic)
       /* Skip optional white space before operand.  */
       if (is_space_char (*l))
 	++l;
-      if (!is_operand_char (*l) && *l != END_OF_INSN)
+      if (!is_operand_char (*l) && *l != END_OF_INSN && *l != '"')
 	{
 	  as_bad (_("invalid character %s before operand %d"),
 		  output_invalid (*l),
 		  i.operands + 1);
 	  return NULL;
 	}
-      token_start = l;	/* after white space */
+      token_start = l;	/* After white space.  */
       paren_not_balanced = 0;
       while (paren_not_balanced || *l != ',')
 	{
@@ -3916,7 +3996,7 @@ parse_operands (char *l, const char *mnemonic)
 	      else
 		break;	/* we are done */
 	    }
-	  else if (!is_operand_char (*l) && !is_space_char (*l))
+	  else if (!is_operand_char (*l) && !is_space_char (*l) && *l != '"')
 	    {
 	      as_bad (_("invalid character %s in operand %d"),
 		      output_invalid (*l),
@@ -4716,6 +4796,10 @@ match_template (void)
 	      break;
 	    }
 	  }
+
+      /* Force 0x8b encoding for "mov foo@GOT, %eax".  */
+      if (i.reloc[0] == BFD_RELOC_386_GOT32 && t->base_opcode == 0xa0)
+	continue;
 
       /* We check register size if needed.  */
       check_register = t->opcode_modifier.checkregsize;
@@ -7083,6 +7167,7 @@ output_disp (fragS *insn_start_frag, offsetT insn_start_off)
 	      int size = disp_size (n);
 	      int sign = i.types[n].bitfield.disp32s;
 	      int pcrel = (i.flags[n] & Operand_PCrel) != 0;
+	      fixS *fixP;
 
 	      /* We can't have 8 bit displacement here.  */
 	      gas_assert (!i.types[n].bitfield.disp8);
@@ -7151,8 +7236,34 @@ output_disp (fragS *insn_start_frag, offsetT insn_start_off)
 		       insn, and that is taken care of in other code.  */
 		    reloc_type = BFD_RELOC_X86_64_GOTPC32;
 		}
-	      fix_new_exp (frag_now, p - frag_now->fr_literal, size,
-			   i.op[n].disps, pcrel, reloc_type);
+	      fixP = fix_new_exp (frag_now, p - frag_now->fr_literal,
+				  size, i.op[n].disps, pcrel,
+				  reloc_type);
+	      /* Check for "call/jmp *mem", "mov mem, %reg",
+		 "test %reg, mem" and "binop mem, %reg" where binop
+		 is one of adc, add, and, cmp, or, sbb, sub, xor
+		 instructions.  */
+	      if ((i.rm.mode == 2
+		   || (i.rm.mode == 0 && i.rm.regmem == 5))
+		  && ((i.operands == 1
+		       && i.tm.base_opcode == 0xff
+		       && (i.rm.reg == 2 || i.rm.reg == 4))
+		      || (i.operands == 2
+			  && (i.tm.base_opcode == 0x8b
+			      || i.tm.base_opcode == 0x85
+			      || (i.tm.base_opcode & 0xc7) == 0x03))))
+		{
+		  if (object_64bit)
+		    {
+		      fixP->fx_tcbit = i.rex != 0;
+		      if (i.base_reg
+			  && (i.base_reg->reg_num == RegRip
+			      || i.base_reg->reg_num == RegEip))
+		      fixP->fx_tcbit2 = 1;
+		    }
+		  else
+		    fixP->fx_tcbit2 = 1;
+		}
 	    }
 	}
     }
@@ -8560,6 +8671,7 @@ i386_att_operand (char *operand_string)
     }
   else if (is_digit_char (*op_string)
 	   || is_identifier_char (*op_string)
+	   || *op_string == '"'
 	   || *op_string == '(')
     {
       /* This is a memory reference of some sort.  */
@@ -8774,6 +8886,40 @@ i386_frag_max_var (fragS *frag)
   return TYPE_FROM_RELAX_STATE (frag->fr_subtype) == UNCOND_JUMP ? 4 : 5;
 }
 
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
+static int
+elf_symbol_resolved_in_segment_p (symbolS *fr_symbol, offsetT fr_var)
+{
+  /* STT_GNU_IFUNC symbol must go through PLT.  */
+  if ((symbol_get_bfdsym (fr_symbol)->flags
+       & BSF_GNU_INDIRECT_FUNCTION) != 0)
+    return 0;
+
+  if (!S_IS_EXTERNAL (fr_symbol))
+    /* Symbol may be weak or local.  */
+    return !S_IS_WEAK (fr_symbol);
+
+  /* Global symbols with non-default visibility can't be preempted. */
+  if (ELF_ST_VISIBILITY (S_GET_OTHER (fr_symbol)) != STV_DEFAULT)
+    return 1;
+
+  if (fr_var != NO_RELOC)
+    switch ((enum bfd_reloc_code_real) fr_var)
+      {
+      case BFD_RELOC_386_PLT32:
+      case BFD_RELOC_X86_64_PLT32:
+	/* Symbol with PLT relocatin may be preempted. */
+	return 0;
+      default:
+	abort ();
+      }
+
+  /* Global symbols with default visibility in a shared library may be
+     preempted by another definition.  */
+  return !shared;
+}
+#endif
+
 /* md_estimate_size_before_relax()
 
    Called just before relax() for rs_machine_dependent frags.  The x86
@@ -8797,10 +8943,8 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
   if (S_GET_SEGMENT (fragP->fr_symbol) != segment
 #if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
       || (IS_ELF
-	  && (S_IS_EXTERNAL (fragP->fr_symbol)
-	      || S_IS_WEAK (fragP->fr_symbol)
-	      || ((symbol_get_bfdsym (fragP->fr_symbol)->flags
-		   & BSF_GNU_INDIRECT_FUNCTION))))
+	  && !elf_symbol_resolved_in_segment_p (fragP->fr_symbol,
+						fragP->fr_var))
 #endif
 #if defined (OBJ_COFF) && defined (TE_PE)
       || (OUTPUT_FLAVOR == bfd_target_coff_flavour
@@ -9362,7 +9506,7 @@ parse_register (char *reg_string, char **end_op)
       symbolS *symbolP;
 
       input_line_pointer = reg_string;
-      c = get_symbol_end ();
+      c = get_symbol_name (&reg_string);
       symbolP = symbol_find (reg_string);
       if (symbolP && S_GET_SEGMENT (symbolP) == reg_section)
 	{
@@ -9470,6 +9614,9 @@ const char *md_shortopts = "qn";
 #define OPTION_MBIG_OBJ (OPTION_MD_BASE + 18)
 #define OPTION_OMIT_LOCK_PREFIX (OPTION_MD_BASE + 19)
 #define OPTION_MEVEXRCIG (OPTION_MD_BASE + 20)
+#define OPTION_MSHARED (OPTION_MD_BASE + 21)
+#define OPTION_MAMD64 (OPTION_MD_BASE + 22)
+#define OPTION_MINTEL64 (OPTION_MD_BASE + 23)
 
 struct option md_longopts[] =
 {
@@ -9480,6 +9627,7 @@ struct option md_longopts[] =
 #endif
 #if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
   {"x32", no_argument, NULL, OPTION_X32},
+  {"mshared", no_argument, NULL, OPTION_MSHARED},
 #endif
   {"divide", no_argument, NULL, OPTION_DIVIDE},
   {"march", required_argument, NULL, OPTION_MARCH},
@@ -9501,6 +9649,8 @@ struct option md_longopts[] =
 #endif
   {"momit-lock-prefix", required_argument, NULL, OPTION_OMIT_LOCK_PREFIX},
   {"mevexrcig", required_argument, NULL, OPTION_MEVEXRCIG},
+  {"mamd64", no_argument, NULL, OPTION_MAMD64},
+  {"mintel64", no_argument, NULL, OPTION_MINTEL64},
   {NULL, no_argument, NULL, 0}
 };
 size_t md_longopts_size = sizeof (md_longopts);
@@ -9539,6 +9689,10 @@ md_parse_option (int c, char *arg)
     case 's':
       /* -s: On i386 Solaris, this tells the native assembler to use
 	 .stab instead of .stab.excl.  We always use .stab anyhow.  */
+      break;
+
+    case OPTION_MSHARED:
+      shared = 1;
       break;
 #endif
 #if (defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF) \
@@ -9649,7 +9803,10 @@ md_parse_option (int c, char *arg)
 		  else
 		    flags = cpu_flags_and_not (cpu_arch_flags,
 					       cpu_arch[j].flags);
-		  if (!cpu_flags_equal (&flags, &cpu_arch_flags))
+
+		  if (!valid_iamcu_cpu_flags (&flags))
+		    as_fatal (_("`%s' isn't valid for Intel MCU"), arch);
+		  else if (!cpu_flags_equal (&flags, &cpu_arch_flags))
 		    {
 		      if (cpu_sub_arch_name)
 			{
@@ -9810,6 +9967,20 @@ md_parse_option (int c, char *arg)
         as_fatal (_("invalid -momit-lock-prefix= option: `%s'"), arg);
       break;
 
+    case OPTION_MAMD64:
+      cpu_arch_flags.bitfield.cpuamd64 = 1;
+      cpu_arch_flags.bitfield.cpuintel64 = 0;
+      cpu_arch_isa_flags.bitfield.cpuamd64 = 1;
+      cpu_arch_isa_flags.bitfield.cpuintel64 = 0;
+      break;
+
+    case OPTION_MINTEL64:
+      cpu_arch_flags.bitfield.cpuamd64 = 0;
+      cpu_arch_flags.bitfield.cpuintel64 = 1;
+      cpu_arch_isa_flags.bitfield.cpuamd64 = 0;
+      cpu_arch_isa_flags.bitfield.cpuintel64 = 1;
+      break;
+
     default:
       return 0;
     }
@@ -9966,6 +10137,8 @@ md_show_usage (FILE *stream)
   -mold-gcc               support old (<= 2.8.1) versions of gcc\n"));
   fprintf (stream, _("\
   -madd-bnd-prefix        add BND prefix for all valid branches\n"));
+  fprintf (stream, _("\
+  -mshared                disable branch optimization for shared code\n"));
 # if defined (TE_PE) || defined (TE_PEP)
   fprintf (stream, _("\
   -mbig-obj               generate big object files\n"));
@@ -9973,6 +10146,10 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\
   -momit-lock-prefix=[no|yes]\n\
                           strip all lock prefixes\n"));
+  fprintf (stream, _("\
+  -mamd64                 accept only AMD64 ISA\n"));
+  fprintf (stream, _("\
+  -mintel64               accept only Intel64 ISA\n"));
 }
 
 #if ((defined (OBJ_MAYBE_COFF) && defined (OBJ_MAYBE_AOUT)) \
@@ -9994,6 +10171,27 @@ i386_target_format (void)
     }
   else if (!strcmp (default_arch, "i386"))
     update_code_flag (CODE_32BIT, 1);
+  else if (!strcmp (default_arch, "iamcu"))
+    {
+      update_code_flag (CODE_32BIT, 1);
+      if (cpu_arch_isa == PROCESSOR_UNKNOWN)
+	{
+	  static const i386_cpu_flags iamcu_flags = CPU_IAMCU_FLAGS;
+	  cpu_arch_name = "iamcu";
+	  cpu_sub_arch_name = NULL;
+	  cpu_arch_flags = iamcu_flags;
+	  cpu_arch_isa = PROCESSOR_IAMCU;
+	  cpu_arch_isa_flags = iamcu_flags;
+	  if (!cpu_arch_tune_set)
+	    {
+	      cpu_arch_tune = cpu_arch_isa;
+	      cpu_arch_tune_flags = cpu_arch_isa_flags;
+	    }
+	}
+      else
+	as_fatal (_("Intel MCU doesn't support `%s' architecture"),
+		  cpu_arch_name);
+    }
   else
     as_fatal (_("unknown architecture"));
 
@@ -10051,11 +10249,17 @@ i386_target_format (void)
 	      as_fatal (_("Intel L1OM is 64bit only"));
 	    return ELF_TARGET_L1OM_FORMAT;
 	  }
-	if (cpu_arch_isa == PROCESSOR_K1OM)
+	else if (cpu_arch_isa == PROCESSOR_K1OM)
 	  {
 	    if (x86_elf_abi != X86_64_ABI)
 	      as_fatal (_("Intel K1OM is 64bit only"));
 	    return ELF_TARGET_K1OM_FORMAT;
+	  }
+	else if (cpu_arch_isa == PROCESSOR_IAMCU)
+	  {
+	    if (x86_elf_abi != I386_ABI)
+	      as_fatal (_("Intel MCU is 32bit only"));
+	    return ELF_TARGET_IAMCU_FORMAT;
 	  }
 	else
 	  return format;
@@ -10079,48 +10283,6 @@ i386_target_format (void)
 }
 
 #endif /* OBJ_MAYBE_ more than one  */
-
-#if (defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF))
-void
-i386_elf_emit_arch_note (void)
-{
-  if (IS_ELF && cpu_arch_name != NULL)
-    {
-      char *p;
-      asection *seg = now_seg;
-      subsegT subseg = now_subseg;
-      Elf_Internal_Note i_note;
-      Elf_External_Note e_note;
-      asection *note_secp;
-      int len;
-
-      /* Create the .note section.  */
-      note_secp = subseg_new (".note", 0);
-      bfd_set_section_flags (stdoutput,
-			     note_secp,
-			     SEC_HAS_CONTENTS | SEC_READONLY);
-
-      /* Process the arch string.  */
-      len = strlen (cpu_arch_name);
-
-      i_note.namesz = len + 1;
-      i_note.descsz = 0;
-      i_note.type = NT_ARCH;
-      p = frag_more (sizeof (e_note.namesz));
-      md_number_to_chars (p, (valueT) i_note.namesz, sizeof (e_note.namesz));
-      p = frag_more (sizeof (e_note.descsz));
-      md_number_to_chars (p, (valueT) i_note.descsz, sizeof (e_note.descsz));
-      p = frag_more (sizeof (e_note.type));
-      md_number_to_chars (p, (valueT) i_note.type, sizeof (e_note.type));
-      p = frag_more (len + 1);
-      strcpy (p, cpu_arch_name);
-
-      frag_align (2, 0, 0);
-
-      subseg_set (seg, subseg);
-    }
-}
-#endif
 
 symbolS *
 md_undefined_symbol (char *name)
@@ -10158,7 +10320,7 @@ md_section_align (segT segment ATTRIBUTE_UNUSED, valueT size)
       int align;
 
       align = bfd_get_section_alignment (stdoutput, segment);
-      size = ((size + (1 << align) - 1) & ((valueT) -1 << align));
+      size = ((size + (1 << align) - 1) & (-((valueT) 1 << align)));
     }
 #endif
 
@@ -10196,23 +10358,41 @@ s_bss (int ignore ATTRIBUTE_UNUSED)
 void
 i386_validate_fix (fixS *fixp)
 {
-  if (fixp->fx_subsy && fixp->fx_subsy == GOT_symbol)
+  if (fixp->fx_subsy)
     {
-      if (fixp->fx_r_type == BFD_RELOC_32_PCREL)
+      if (fixp->fx_subsy == GOT_symbol)
 	{
-	  if (!object_64bit)
-	    abort ();
-	  fixp->fx_r_type = BFD_RELOC_X86_64_GOTPCREL;
-	}
-      else
-	{
-	  if (!object_64bit)
-	    fixp->fx_r_type = BFD_RELOC_386_GOTOFF;
+	  if (fixp->fx_r_type == BFD_RELOC_32_PCREL)
+	    {
+	      if (!object_64bit)
+		abort ();
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
+	      if (fixp->fx_tcbit2)
+		fixp->fx_r_type = (fixp->fx_tcbit
+				   ? BFD_RELOC_X86_64_REX_GOTPCRELX
+				   : BFD_RELOC_X86_64_GOTPCRELX);
+	      else
+#endif
+		fixp->fx_r_type = BFD_RELOC_X86_64_GOTPCREL;
+	    }
 	  else
-	    fixp->fx_r_type = BFD_RELOC_X86_64_GOTOFF64;
+	    {
+	      if (!object_64bit)
+		fixp->fx_r_type = BFD_RELOC_386_GOTOFF;
+	      else
+		fixp->fx_r_type = BFD_RELOC_X86_64_GOTOFF64;
+	    }
+	  fixp->fx_subsy = 0;
 	}
-      fixp->fx_subsy = 0;
     }
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
+  else if (!object_64bit)
+    {
+      if (fixp->fx_r_type == BFD_RELOC_386_GOT32
+	  && fixp->fx_tcbit2)
+	fixp->fx_r_type = BFD_RELOC_386_GOT32X;
+    }
+#endif
 }
 
 arelent *
@@ -10246,8 +10426,11 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
     case BFD_RELOC_X86_64_PLT32:
     case BFD_RELOC_X86_64_GOT32:
     case BFD_RELOC_X86_64_GOTPCREL:
+    case BFD_RELOC_X86_64_GOTPCRELX:
+    case BFD_RELOC_X86_64_REX_GOTPCRELX:
     case BFD_RELOC_386_PLT32:
     case BFD_RELOC_386_GOT32:
+    case BFD_RELOC_386_GOT32X:
     case BFD_RELOC_386_GOTOFF:
     case BFD_RELOC_386_GOTPC:
     case BFD_RELOC_386_TLS_GD:
@@ -10399,6 +10582,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 	  case BFD_RELOC_X86_64_PLT32:
 	  case BFD_RELOC_X86_64_GOT32:
 	  case BFD_RELOC_X86_64_GOTPCREL:
+	  case BFD_RELOC_X86_64_GOTPCRELX:
+	  case BFD_RELOC_X86_64_REX_GOTPCRELX:
 	  case BFD_RELOC_X86_64_TLSGD:
 	  case BFD_RELOC_X86_64_TLSLD:
 	  case BFD_RELOC_X86_64_GOTTPOFF:

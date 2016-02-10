@@ -1,5 +1,5 @@
 /* Print mips instructions for GDB, the GNU debugger, or for objdump.
-   Copyright (C) 1989-2014 Free Software Foundation, Inc.
+   Copyright (C) 1989-2015 Free Software Foundation, Inc.
    Contributed by Nobuyuki Hikichi(hikichi@sra.co.jp).
 
    This file is part of the GNU opcodes library.
@@ -155,18 +155,6 @@ static const char * const mips_cp0_names_r5900[32] =
   "$20",          "$21",          "$22",          "c0_badpaddr",
   "c0_depc",      "c0_perfcnt",   "$26",          "$27",
   "c0_taglo",     "c0_taghi",     "c0_errorepc",  "$31"
-};
-
-static const struct mips_cp0sel_name mips_cp0sel_names_mipsr5900[] =
-{
-  { 24, 2, "c0_iab"			},
-  { 24, 3, "c0_iabm"		},
-  { 24, 4, "c0_dab"			},
-  { 24, 5, "c0_dabm"		},
-  { 24, 6, "c0_dvb"			},
-  { 24, 7, "c0_dvbm"		},
-  { 25, 1, "c0_perfcnt,1"	},
-  { 25, 2, "c0_perfcnt,2"	}
 };
 
 static const char * const mips_cp0_names_mips3264[32] =
@@ -649,6 +637,11 @@ const struct mips_arch_choice mips_arch_choices[] =
     ISA_MIPS64R2 | INSN_OCTEON2, 0, mips_cp0_names_numeric,
     NULL, 0, mips_cp1_names_mips3264, mips_hwr_names_numeric },
 
+  { "octeon3",   1, bfd_mach_mips_octeon3, CPU_OCTEON3,
+    ISA_MIPS64R5 | INSN_OCTEON3, ASE_VIRT | ASE_VIRT64,
+    mips_cp0_names_numeric,
+    NULL, 0, mips_cp1_names_mips3264, mips_hwr_names_numeric },
+
   { "xlr", 1, bfd_mach_mips_xlr, CPU_XLR,
     ISA_MIPS64 | INSN_XLR, 0,
     mips_cp0_names_xlr,
@@ -870,8 +863,8 @@ parse_mips_dis_option (const char *option, unsigned int len)
       mips_ase |= ASE_XPA;
       return;
     }
-  
-  
+
+
   /* Look for the = that delimits the end of the option name.  */
   for (i = 0; i < len; i++)
     if (option[i] == '=')
@@ -1704,7 +1697,7 @@ print_insn_mips (bfd_vma memaddr,
     {
       for (; op < &mips_opcodes[NUMOPCODES]; op++)
 	{
-	  if (op->pinfo != INSN_MACRO 
+	  if (op->pinfo != INSN_MACRO
 	      && !(no_aliases && (op->pinfo2 & INSN2_ALIAS))
 	      && (word & op->mask) == op->match)
 	    {

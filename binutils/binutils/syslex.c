@@ -500,7 +500,7 @@ char *yytext;
 #line 1 "syslex.l"
 #define YY_NO_INPUT 1
 #line 4 "syslex.l"
-/* Copyright (C) 2001-2014 Free Software Foundation, Inc.
+/* Copyright (C) 2001-2015 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -833,7 +833,7 @@ YY_RULE_SETUP
 case 6:
 YY_RULE_SETUP
 #line 51 "syslex.l"
-{ ; } 
+{ ; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP

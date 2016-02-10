@@ -1,5 +1,5 @@
 /* BFD back-end for IBM RS/6000 "XCOFF64" files.
-   Copyright (C) 2000-2014 Free Software Foundation, Inc.
+   Copyright (C) 2000-2015 Free Software Foundation, Inc.
    Written Clinton Popetz.
    Contributed by Cygnus Support.
 
@@ -1277,7 +1277,7 @@ xcoff64_ppc_relocate_section (bfd *output_bfd,
 		}
 	      else
 		{
-		  BFD_ASSERT (info->relocatable
+		  BFD_ASSERT (bfd_link_relocatable (info)
 			      || (h->flags & XCOFF_DEF_DYNAMIC) != 0
 			      || (h->flags & XCOFF_IMPORT) != 0);
 		}
@@ -2712,6 +2712,7 @@ const bfd_target rs6000_xcoff64_vec =
     coff_make_empty_symbol,
     coff_print_symbol,
     coff_get_symbol_info,
+    coff_get_symbol_version_string,
     _bfd_xcoff_is_local_label_name,
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
@@ -2969,6 +2970,7 @@ const bfd_target rs6000_xcoff64_aix_vec =
     coff_make_empty_symbol,
     coff_print_symbol,
     coff_get_symbol_info,
+    coff_get_symbol_version_string,
     _bfd_xcoff_is_local_label_name,
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,

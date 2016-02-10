@@ -1,6 +1,6 @@
 /* tc-microblaze.h -- Header file for tc-microblaze.c.
 
-   Copyright (C) 2009-2014 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -68,7 +68,7 @@ extern const struct relax_type md_relax_table[];
 
 /* We want local label support.  */
 #define LOCAL_LABELS_FB 1
-     
+
 /* Want the section information too... */
 #define MD_PCREL_FROM_SECTION(FIXP, SEC) md_pcrel_from_section (FIXP, SEC)
 
@@ -96,7 +96,7 @@ extern const struct relax_type md_relax_table[];
 #endif
 
 #include "write.h"        /* For definition of fixS */
-  
+
 extern void      md_begin            (void);
 extern void      md_assemble         (char *);
 extern symbolS * md_undefined_symbol (char *);

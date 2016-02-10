@@ -1,5 +1,5 @@
 /* vms.c -- BFD back-end for EVAX (openVMS/Alpha) files.
-   Copyright (C) 1996-2014 Free Software Foundation, Inc.
+   Copyright (C) 1996-2015 Free Software Foundation, Inc.
 
    Initial version written by Klaus Kaempf (kkaempf@rmi.de)
    Major rewrite by Adacore.
@@ -367,7 +367,7 @@ struct vms_section_data_struct
 struct vms_private_data_struct *bfd_vms_get_data (bfd *);
 
 static int vms_get_remaining_object_record (bfd *, unsigned int);
-static bfd_boolean _bfd_vms_slurp_object_records (bfd *);
+static bfd_boolean _bfd_vms_slurp_object_records (bfd * abfd);
 static void alpha_vms_add_fixup_lp (struct bfd_link_info *, bfd *, bfd *);
 static void alpha_vms_add_fixup_ca (struct bfd_link_info *, bfd *, bfd *);
 static void alpha_vms_add_fixup_qr (struct bfd_link_info *, bfd *, bfd *,
@@ -526,7 +526,6 @@ _bfd_vms_slurp_eisd (bfd *abfd, unsigned int offset)
 	return FALSE;
       eisd = (struct vms_eisd *)(PRIV (recrd.rec) + offset);
       rec_size = bfd_getl32 (eisd->eisdsize);
-
       if (rec_size == 0)
         break;
 
@@ -8598,7 +8597,7 @@ alpha_vms_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
   asection *dst;
   asection *dmt;
 
-  if (info->relocatable)
+  if (bfd_link_relocatable (info))
     {
       /* FIXME: we do not yet support relocatable link.  It is not obvious
          how to do it for debug infos.  */
@@ -9014,13 +9013,13 @@ vms_new_section_hook (bfd * abfd, asection *section)
 {
   bfd_size_type amt;
 
-  vms_debug2 ((1, "vms_new_section_hook (%p, [%d]%s)\n",
+  vms_debug2 ((1, "vms_new_section_hook (%p, [%u]%s)\n",
                abfd, section->index, section->name));
 
   if (! bfd_set_section_alignment (abfd, section, 0))
     return FALSE;
 
-  vms_debug2 ((7, "%d: %s\n", section->index, section->name));
+  vms_debug2 ((7, "%u: %s\n", section->index, section->name));
 
   amt = sizeof (struct vms_section_data_struct);
   section->used_by_bfd = bfd_zalloc (abfd, amt);

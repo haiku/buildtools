@@ -1,5 +1,5 @@
 /* atof_vax.c - turn a Flonum into a VAX floating point number
-   Copyright (C) 1987-2014 Free Software Foundation, Inc.
+   Copyright (C) 1987-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -379,7 +379,7 @@ flonum_gen2vax (int format_letter,	/* One of 'd' 'f' 'g' 'h'.  */
   	Address of where to build floating point literal.
   		Assumed to be 'big enough'.
   	Address of where to return size of literal (in chars).
-  
+
    Out:	Input_line_pointer->of next char after floating number.
   	Error message, or 0.
   	Floating point literal.

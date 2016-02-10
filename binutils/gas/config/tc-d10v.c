@@ -1,5 +1,5 @@
 /* tc-d10v.c -- Assembler code for the Mitsubishi D10V
-   Copyright (C) 1996-2014 Free Software Foundation, Inc.
+   Copyright (C) 1996-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -269,7 +269,7 @@ valueT
 md_section_align (asection *seg, valueT addr)
 {
   int align = bfd_get_section_alignment (stdoutput, seg);
-  return ((addr + (1 << align) - 1) & (-1 << align));
+  return ((addr + (1 << align) - 1) & -(1 << align));
 }
 
 void
@@ -1226,9 +1226,7 @@ find_opcode (struct d10v_opcode *opcode, expressionS myops[])
 		  sym_frag = symbol_get_frag (myops[opnum].X_add_symbol);
 		  found_symbol = FALSE;
 
-		  current_position =
-		    obstack_next_free (&frchain_now->frch_obstack)
-		    - frag_now->fr_literal;
+		  current_position = frag_now_fix_octets ();
 		  symbol_position = S_GET_VALUE (myops[opnum].X_add_symbol);
 
 		  for (f = frchain_now->frch_root; f; f = f->fr_next)

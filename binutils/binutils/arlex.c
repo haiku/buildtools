@@ -560,7 +560,7 @@ char *yytext;
 #line 4 "arlex.l"
 /* arlex.l - Strange script language lexer */
 
-/* Copyright (C) 1992-2014 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2015 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -590,7 +590,7 @@ char *yytext;
 #ifndef YY_NO_UNPUT
 #define YY_NO_UNPUT
 #endif
- 
+
 extern int yylex (void);
 
 int linenumber;
@@ -1034,7 +1034,7 @@ YY_RULE_SETUP
 case 35:
 YY_RULE_SETUP
 #line 81 "arlex.l"
-{ 	
+{
 		yylval.name =  xstrdup (yytext);
 		return FILENAME;
 		}
@@ -1058,7 +1058,7 @@ case 39:
 /* rule 39 can match eol */
 YY_RULE_SETUP
 #line 88 "arlex.l"
-{ linenumber ++; return NEWLINE; }	
+{ linenumber ++; return NEWLINE; }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP

@@ -491,7 +491,7 @@ int yy_flex_debug = 0;
 char *yytext;
 #line 1 "itbl-lex.l"
 /* itbl-lex.l
-   Copyright (C) 1997-2014 Free Software Foundation, Inc.
+   Copyright (C) 1997-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -500,7 +500,7 @@ char *yytext;
    the Free Software Foundation; either version 3, or (at your option)
    any later version.
 
-   GAS is distributed in the hope that it will be useful, 
+   GAS is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
@@ -874,9 +874,9 @@ YY_RULE_SETUP
 #line 82 "itbl-lex.l"
 {
     int c;
-    while ((c = input ()) !=  EOF) 
+    while ((c = input ()) !=  EOF)
       {
-        if (c ==  '\n') 
+        if (c ==  '\n')
     	{
     		unput (c);
     		break;
@@ -888,16 +888,16 @@ case 12:
 /* rule 12 can match eol */
 YY_RULE_SETUP
 #line 93 "itbl-lex.l"
-{ 
-    insntbl_line++; 
+{
+    insntbl_line++;
     MDBG (("in lex, NL = %d (x%x)\n", NL, NL));
-    return NL; 
+    return NL;
   }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
 #line 98 "itbl-lex.l"
-{ 
+{
   }
 	YY_BREAK
 case 14:
@@ -1915,10 +1915,10 @@ void yyfree (void * ptr )
 
 
 #ifndef yywrap
-int 
-yywrap () 
-  { 
-    return 1; 
+int
+yywrap ()
+  {
+    return 1;
   }
 #endif
 

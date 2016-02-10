@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2014 Free Software Foundation, Inc.
+# Copyright (C) 2012-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -76,6 +76,12 @@ if { [is_elf_format] } then {
     if {[istarget "rx-*-*"]} then {
 	set target_machine -rx
     }
+    if {[istarget "v850*-*-*"]} then {
+	set target_machine -v850
+    }
+    if {[istarget "rl78-*-*"]} then {
+	set target_machine -rl78
+    }
     if {[istarget "arm*-*-*"]} {
 	set target_machine -arm
     }
@@ -84,6 +90,7 @@ if { [is_elf_format] } then {
     # optimization because it interfers with link-time relaxation of
     # function prologues.
     if {![istarget "mn10300-*-*"]
+	&& ![istarget "arc-*-*"]
 	&& ![istarget "xtensa*-*-*"]
 	&& ![istarget "msp430*-*-*"]
 	&& ![istarget "nds32*-*-*"]
@@ -142,7 +149,7 @@ if { [is_elf_format] } then {
 	    # against ordinary symbols into relocations against section symbols.
 	    # This is usually revealed by the error message:
 	    #  symbol `sym' required but not present
-    	setup_xfail "m681*-*-*" "m68hc*-*-*"
+    	setup_xfail "m681*-*-*" "m68hc*-*-*" "arc-*-*"
 	    run_dump_test redef
 	    run_dump_test equ-reloc
 	}
@@ -172,11 +179,12 @@ if { [is_elf_format] } then {
     run_dump_test "symver"
 
     # No indirect functions on non-GNU targets.
-    # The MSP port sets the ELF header's OSABI field to ELFOSABI_STANDALONE.
+    # The Visium and MSP set the ELF header's OSABI field to ELFOSABI_STANDALONE.
     # The non-eabi ARM ports sets it to ELFOSABI_ARM.
     # So for these targets we cannot include an IFUNC symbol type
     # in the symbol type test.
     if { [istarget "*-*-hpux*"]
+	 || [istarget "visium-*-*"]
 	 || [istarget "msp*-*-*"]
 	 || [istarget "arm*-*-*"]} then {
 	# hppa64 has a non-standard common directive
@@ -204,6 +212,8 @@ if { [is_elf_format] } then {
     
     run_dump_test "common1"
     run_dump_test "common2"
+
+    run_dump_test "strtab"
 
 load_lib gas-dg.exp
 dg-init

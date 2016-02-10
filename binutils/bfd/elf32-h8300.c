@@ -1,5 +1,5 @@
 /* BFD back-end for Renesas H8/300 ELF binaries.
-   Copyright (C) 1993-2014 Free Software Foundation, Inc.
+   Copyright (C) 1993-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -480,7 +480,7 @@ elf32_h8_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (info->relocatable)
+      if (bfd_link_relocatable (info))
 	continue;
 
       r = elf32_h8_final_link_relocate (r_type, input_bfd, output_bfd,
@@ -707,7 +707,7 @@ elf32_h8_relax_section (bfd *abfd, asection *sec,
   /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (link_info->relocatable
+  if (bfd_link_relocatable (link_info)
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
@@ -742,7 +742,7 @@ elf32_h8_relax_section (bfd *abfd, asection *sec,
 	 some long jumps created by the compiler.  */
       if (irel != internal_relocs)
 	last_reloc = irel - 1;
-      
+
       switch(ELF32_R_TYPE (irel->r_info))
 	{
 	case R_H8_DIR24R8:
@@ -1742,5 +1742,14 @@ elf32_h8_get_relocated_section_contents (bfd *output_bfd,
                                 elf32_h8_get_relocated_section_contents
 
 #define elf_symbol_leading_char '_'
+
+#include "elf32-target.h"
+
+#undef  TARGET_BIG_SYM
+#define TARGET_BIG_SYM			h8300_elf32_linux_vec
+#undef  TARGET_BIG_NAME
+#define TARGET_BIG_NAME			"elf32-h8300-linux"
+#undef  elf_symbol_leading_char
+#define elf32_bed			elf32_h8300_linux_bed
 
 #include "elf32-target.h"

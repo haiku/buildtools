@@ -1,5 +1,5 @@
 /* simple.c -- BFD simple client routines
-   Copyright (C) 2002-2014 Free Software Foundation, Inc.
+   Copyright (C) 2002-2015 Free Software Foundation, Inc.
    Contributed by MontaVista Software, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -102,7 +102,7 @@ struct saved_output_info
 
 struct saved_offsets
 {
-  int section_count;
+  unsigned int section_count;
   struct saved_output_info *sections;
 };
 

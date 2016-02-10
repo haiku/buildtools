@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2014 Free Software Foundation, Inc.
+# Copyright (C) 2012-2015 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -16,4 +16,4 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Controls whether to enable development-mode features by default.
-development=false
+development=true

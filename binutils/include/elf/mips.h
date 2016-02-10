@@ -1,5 +1,5 @@
 /* MIPS ELF support for BFD.
-   Copyright (C) 1993-2014 Free Software Foundation, Inc.
+   Copyright (C) 1993-2015 Free Software Foundation, Inc.
 
    By Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>, from
    information in the System V Application Binary Interface, MIPS
@@ -748,6 +748,9 @@ extern void bfd_mips_elf32_swap_reginfo_out
 
 /* Points to the base of a writable PLT.  */
 #define DT_MIPS_RWPLT          0x70000034
+
+/* Relative offset of run time loader map, used for debugging.  */
+#define DT_MIPS_RLD_MAP_REL    0x70000035
 
 /* Flags which may appear in a DT_MIPS_FLAGS entry.  */
 
@@ -1246,6 +1249,7 @@ extern void bfd_mips_elf_swap_abiflags_v0_out
 #define AFL_EXT_5500         16  /* NEC VR5500 instruction.  */
 #define AFL_EXT_LOONGSON_2E  17  /* ST Microelectronics Loongson 2E.  */
 #define AFL_EXT_LOONGSON_2F  18  /* ST Microelectronics Loongson 2F.  */
+#define AFL_EXT_OCTEON3      19  /* Cavium Networks Octeon3.  */
 
 /* Masks for the flags1 word of an ABI flags structure.  */
 #define AFL_FLAGS1_ODDSPREG   1	 /* Uses odd single-precision registers.  */
@@ -1293,6 +1297,10 @@ enum
 
   /* Using -mips32r2 -mfp64 -mno-odd-spreg.  */
   Val_GNU_MIPS_ABI_FP_64A = 7,
+
+  /* This is reserved for backward-compatibility with an earlier
+     implementation of the MIPS NaN2008 functionality.  */
+  Val_GNU_MIPS_ABI_FP_NAN2008 = 8,
 
   /* Values defined for Tag_GNU_MIPS_ABI_MSA.  */
 

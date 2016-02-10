@@ -1,5 +1,5 @@
 /* Print VAX instructions.
-   Copyright (C) 1995-2014 Free Software Foundation, Inc.
+   Copyright (C) 1995-2015 Free Software Foundation, Inc.
    Contributed by Pauline Middelink <middelin@polyware.iaf.nl>
 
    This file is part of the GNU opcodes library.
@@ -131,14 +131,14 @@ parse_disassembler_options (char * options)
 	  /* A guesstimate of the number of entries we will have to create.  */
 	  entry_addr_total_slots +=
 	    strlen (options) / (strlen (entry_switch) + 5);
-	  
+
 	  entry_addr = realloc (entry_addr, sizeof (bfd_vma)
 				* entry_addr_total_slots);
 	}
 
       if (entry_addr == NULL)
 	return FALSE;
-	  
+
       entry_addr[entry_addr_occupied_slots] = bfd_scan_vma (options, NULL, 0);
       entry_addr_occupied_slots ++;
     }
@@ -402,7 +402,8 @@ print_insn_vax (bfd_vma memaddr, disassemble_info *info)
   argp = NULL;
   /* Check if the info buffer has more than one byte left since
      the last opcode might be a single byte with no argument data.  */
-  if (info->buffer_length - (memaddr - info->buffer_vma) > 1)
+  if (info->buffer_length - (memaddr - info->buffer_vma) > 1
+      && (info->stop_vma == 0 || memaddr < (info->stop_vma - 1)))
     {
       FETCH_DATA (info, buffer + 2);
     }

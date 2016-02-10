@@ -1,5 +1,5 @@
 /* BFD back-end for MIPS Extended-Coff files.
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
    Original version by Per Bothner.
    Full support added by Ian Lance Taylor, ian@cygnus.com.
 
@@ -960,7 +960,7 @@ mips_relocate_section (bfd *output_bfd,
 		 and the GP value of OUTPUT_BFD (which is in GP).  */
 	      addend = ecoff_data (input_bfd)->gp - gp;
 	    }
-	  else if (! info->relocatable
+	  else if (! bfd_link_relocatable (info)
 		   || h->root.type == bfd_link_hash_defined
 		   || h->root.type == bfd_link_hash_defweak)
 	    {
@@ -986,7 +986,7 @@ mips_relocate_section (bfd *output_bfd,
 	    }
 	}
 
-      if (info->relocatable)
+      if (bfd_link_relocatable (info))
 	{
 	  /* We are generating relocatable output, and must convert
 	     the existing reloc.  */

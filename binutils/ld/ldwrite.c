@@ -1,5 +1,5 @@
 /* ldwrite.c -- write out the linked file
-   Copyright (C) 1991-2014 Free Software Foundation, Inc.
+   Copyright (C) 1991-2015 Free Software Foundation, Inc.
    Written by Steve Chamberlain sac@cygnus.com
 
    This file is part of the GNU Binutils.
@@ -488,13 +488,13 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
 		  || info->strip == strip_some)
 		thislines = sec->lineno_count;
 
-	      if (info->relocatable)
+	      if (bfd_link_relocatable (info))
 		thisrelocs = sec->reloc_count;
 
 	      thissize = sec->size;
 
 	    }
-	  else if (info->relocatable
+	  else if (bfd_link_relocatable (info)
 		   && (p->type == bfd_section_reloc_link_order
 		       || p->type == bfd_symbol_reloc_link_order))
 	    thisrelocs++;

@@ -1,3 +1,77 @@
+2015-12-10  Alan Modra  <amodra@gmail.com>
+
+	Apply from master.
+	2015-12-07  Alan Modra  <amodra@gmail.com>
+	* powerpc.h (R_PPC64_ENTRY): Define.
+
+2015-11-11  Alan Modra  <amodra@gmail.com>
+            Peter Bergner <bergner@vnet.ibm.com>
+
+	* powerpc.h (R_POWERPC_REL16DX_HA): Define.
+
+2015-10-28  Marcin Kościelnicki  <koriakin@0x04.net>
+
+	* s390.h: New file.
+
+2015-10-22  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* x86_64.h (R_X86_64_GOTPCRELX): New.
+	(R_X86_64_REX_GOTPCRELX): Likewise.
+
+2015-10-22  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* i386.h (R_386_GOT32X): New.
+
+2015-10-13  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR gold/19118
+	* elfcpp.h (EM): Add EM_IAMCU.
+
+2015-10-02  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR gold/19060
+	* elfcpp.h (Chdr::get_ch_type): Change return type to Elf_Word.
+	* elfcpp_internal.h (Chdr_data<64>): Change ch_type to 4 bytes
+	and add ch_reserved.
+
+2015-04-08  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* elfcpp.h (Elf_sizes): Add chdr_size.
+	(Chdr): New.
+	(Chdr_write): Likewise.
+	* elfcpp_internal.h (Chdr_data): Likewise.
+
+2015-04-08  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* elfcpp.h (SHF): Add SHF_COMPRESSED.
+	(ELFCOMPRESS_ZLIB): New.
+	(ELFCOMPRESS_LOOS): Likewise.
+	(ELFCOMPRESS_HIOS): Likewise.
+	(ELFCOMPRESS_LOPROC): Likewise.
+	(ELFCOMPRESS_HIPROC): Likewise.
+
+2015-04-07  HC Yen <hc.yen@mediatek.com>
+
+	* arm.h: Add TAG_CPU_ARCH_V8 in Tag_CPU_arch EABI attribute.
+
+2015-02-09  Mark Wielaard  <mjw@redhat.com>
+
+	* dwarf.h (enum DW_LANG): Add DW_LANG_C_plus_plus_11,
+	DW_LANG_C11, DW_LANG_C_plus_plus_14, DW_LANG_Fortran03 and
+	DW_LANG_Fortran08 from ../include/dwarf2.h.
+
+2015-01-22  Han Shen  <shenhan@google.com>
+
+	* arm.h (R_ARM_IRELATIVE): New dynamic relocation.
+
+2015-01-01  Alan Modra  <amodra@gmail.com>
+
+	Update year range in copyright notice of all files.
+
+2014-12-25  Alan Modra  <amodra@gmail.com>
+
+	* arm.h: Add enums for Tag_ABI_FP_number_model and Tag_ABI_VFP_args.
+
 2014-09-17  Han Shen  <shenhan@google.com>
 
 	* aarch64.h (R_AARCH64_TLS_DTPREL64): Switch enum value with ...
@@ -381,7 +455,7 @@
 
 	* Added source code to GNU binutils.
 
-Copyright (C) 2008-2014 Free Software Foundation, Inc.
+Copyright (C) 2008-2015 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

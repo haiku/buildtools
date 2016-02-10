@@ -1,5 +1,5 @@
 /* ar.c - Archive modify and extract.
-   Copyright (C) 1991-2014 Free Software Foundation, Inc.
+   Copyright (C) 1991-2015 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -955,7 +955,7 @@ open_inarch (const char *archive_filename, const char *file)
 		 bfd_get_filename (arch));
 	  goto bloser;
 	}
-    }  
+    }
 
   last_one = &(arch->archive_next);
   /* Read all the contents right away, regardless.  */
@@ -1041,6 +1041,7 @@ extract_file (bfd *abfd)
     {
       non_fatal (_("illegal pathname found in archive member: %s"),
 		 bfd_get_filename (abfd));
+      free (cbuf);
       return;
     }
 

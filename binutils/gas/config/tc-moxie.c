@@ -1,5 +1,5 @@
 /* tc-moxie.c -- Assemble code for moxie
-   Copyright (C) 2009-2014 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -404,7 +404,7 @@ md_assemble (char *str)
 	iword += (a << 4);
       }
       break;
-    case MOXIE_F1_ABi4:
+    case MOXIE_F1_ABi2:
       iword = opcode->opcode << 8;
       while (ISSPACE (*op_end))
 	op_end++;
@@ -426,13 +426,13 @@ md_assemble (char *str)
 	op_end++;
 
 	op_end = parse_exp_save_ilp (op_end, &arg);
-	offset = frag_more (4);
+	offset = frag_more (2);
 	fix_new_exp (frag_now,
 		     (offset - frag_now->fr_literal),
-		     4,
+		     2,
 		     &arg,
 		     0,
-		     BFD_RELOC_32);
+		     BFD_RELOC_16);
 
 	if (*op_end != '(')
 	  {
@@ -458,7 +458,7 @@ md_assemble (char *str)
 	iword += (a << 4) + b;
       }
       break;
-    case MOXIE_F1_AiB4:
+    case MOXIE_F1_AiB2:
       iword = opcode->opcode << 8;
       while (ISSPACE (*op_end))
 	op_end++;
@@ -468,13 +468,13 @@ md_assemble (char *str)
 	int a, b;
 
 	op_end = parse_exp_save_ilp (op_end, &arg);
-	offset = frag_more (4);
+	offset = frag_more (2);
 	fix_new_exp (frag_now,
 		     (offset - frag_now->fr_literal),
-		     4,
+		     2,
 		     &arg,
 		     0,
-		     BFD_RELOC_32);
+		     BFD_RELOC_16);
 
 	if (*op_end != '(')
 	  {
@@ -616,13 +616,13 @@ md_parse_option (int c ATTRIBUTE_UNUSED, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
-    case OPTION_EB: 
-      target_big_endian = 1; 
+    case OPTION_EB:
+      target_big_endian = 1;
       break;
-    case OPTION_EL: 
+    case OPTION_EL:
       target_big_endian = 0;
       break;
-    default:        
+    default:
       return 0;
     }
 
@@ -640,7 +640,7 @@ md_show_usage (FILE *stream ATTRIBUTE_UNUSED)
 /* Apply a fixup to the object file.  */
 
 void
-md_apply_fix (fixS *fixP ATTRIBUTE_UNUSED, 
+md_apply_fix (fixS *fixP ATTRIBUTE_UNUSED,
 	      valueT * valP ATTRIBUTE_UNUSED, segT seg ATTRIBUTE_UNUSED)
 {
   char *buf = fixP->fx_where + fixP->fx_frag->fr_literal;
