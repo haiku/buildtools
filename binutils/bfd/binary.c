@@ -1,5 +1,5 @@
 /* BFD back-end for binary objects.
-   Copyright (C) 1994-2014 Free Software Foundation, Inc.
+   Copyright (C) 1994-2015 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -190,6 +190,8 @@ binary_canonicalize_symtab (bfd *abfd, asymbol **alocation)
 
 #define binary_make_empty_symbol  _bfd_generic_make_empty_symbol
 #define binary_print_symbol       _bfd_nosymbols_print_symbol
+#define binary_get_symbol_version_string \
+  _bfd_nosymbols_get_symbol_version_string
 
 /* Get information about a symbol.  */
 

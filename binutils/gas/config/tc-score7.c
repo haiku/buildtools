@@ -1,5 +1,5 @@
 /* tc-score7.c -- Assembler for Score7
-   Copyright (C) 2009-2014 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015 Free Software Foundation, Inc.
    Contributed by:
    Brain.lin (brain.lin@sunplusct.com)
    Mei Ligang (ligang@sunnorth.com.cn)
@@ -5471,10 +5471,9 @@ s7_get_symbol (void)
   char *name;
   symbolS *p;
 
-  name = input_line_pointer;
-  c = get_symbol_end ();
+  c = get_symbol_name (&name);
   p = (symbolS *) symbol_find_or_make (name);
-  *input_line_pointer = c;
+  (void) restore_line_pointer (c);
   return p;
 }
 
@@ -5954,8 +5953,7 @@ s7_s_score_lcomm (int bytes_p)
   segT bss_seg = bss_section;
   int needs_align = 0;
 
-  name = input_line_pointer;
-  c = get_symbol_end ();
+  c = get_symbol_name (&name);
   p = input_line_pointer;
   *p = c;
 
@@ -5966,7 +5964,7 @@ s7_s_score_lcomm (int bytes_p)
       return;
     }
 
-  SKIP_WHITESPACE ();
+  SKIP_WHITESPACE_AFTER_NAME ();
 
   /* Accept an optional comma after the name.  The comma used to be
      required, but Irix 5 cc does not generate it.  */
@@ -6636,7 +6634,7 @@ s7_section_align (segT segment, valueT size)
 {
   int align = bfd_get_section_alignment (stdoutput, segment);
 
-  return ((size + (1 << align) - 1) & (-1 << align));
+  return ((size + (1 << align) - 1) & -(1 << align));
 }
 
 static void

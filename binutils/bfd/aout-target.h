@@ -1,5 +1,5 @@
 /* Define a target vector and some small routines for a variant of a.out.
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -458,6 +458,10 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 #ifndef MY_get_symbol_info
 #define MY_get_symbol_info NAME (aout, get_symbol_info)
+#endif
+#ifndef MY_get_symbol_version_string
+#define MY_get_symbol_version_string \
+  _bfd_nosymbols_get_symbol_version_string
 #endif
 #ifndef MY_get_lineno
 #define MY_get_lineno NAME (aout, get_lineno)

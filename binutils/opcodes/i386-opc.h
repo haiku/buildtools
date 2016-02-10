@@ -1,5 +1,5 @@
 /* Declarations for Intel 80386 opcode table
-   Copyright (C) 2007-2014 Free Software Foundation, Inc.
+   Copyright (C) 2007-2015 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -112,6 +112,8 @@ enum
   CpuL1OM,
   /* Intel K1OM support required */
   CpuK1OM,
+  /* Intel IAMCU support required */
+  CpuIAMCU,
   /* Xsave/xrstor New Instructions support required */
   CpuXsave,
   /* Xsaveopt New Instructions support required */
@@ -192,10 +194,20 @@ enum
   CpuAVX512IFMA,
   /* Intel AVX-512 VBMI Instructions support required.  */
   CpuAVX512VBMI,
+  /* mwaitx instruction required */
+  CpuMWAITX,
+  /* Clzero instruction required */
+  CpuCLZERO,
+  /* OSPKE instruction required */
+  CpuOSPKE,
   /* 64bit support required  */
   Cpu64,
   /* Not supported in the 64bit mode  */
   CpuNo64,
+  /* AMD64 support required  */
+  CpuAMD64,
+  /* Intel64 support required  */
+  CpuIntel64,
   /* The last bitfield in i386_cpu_flags.  */
   CpuMax = CpuNo64
 };
@@ -255,6 +267,7 @@ typedef union i386_cpu_flags
       unsigned int cpuavx512bw:1;
       unsigned int cpul1om:1;
       unsigned int cpuk1om:1;
+      unsigned int cpuiamcu:1;
       unsigned int cpuxsave:1;
       unsigned int cpuxsaveopt:1;
       unsigned int cpuaes:1;
@@ -295,8 +308,13 @@ typedef union i386_cpu_flags
       unsigned int cpupcommit:1;
       unsigned int cpuavx512ifma:1;
       unsigned int cpuavx512vbmi:1;
+      unsigned int cpumwaitx:1;
+      unsigned int cpuclzero:1;
+      unsigned int cpuospke:1;
       unsigned int cpu64:1;
       unsigned int cpuno64:1;
+      unsigned int cpuamd64:1;
+      unsigned int cpuintel64:1;
 #ifdef CpuUnused
       unsigned int unused:(CpuNumOfBits - CpuUnused);
 #endif

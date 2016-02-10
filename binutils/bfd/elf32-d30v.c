@@ -1,5 +1,5 @@
 /* D30V-specific support for 32-bit ELF
-   Copyright (C) 1997-2014 Free Software Foundation, Inc.
+   Copyright (C) 1997-2015 Free Software Foundation, Inc.
    Contributed by Martin Hunt (hunt@cygnus.com).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -258,7 +258,7 @@ static reloc_howto_type elf_d30v_howto_table[] =
 	 0,			/* Bitsize.  */
 	 FALSE,			/* PC_relative.  */
 	 0,			/* Bitpos.  */
-	 complain_overflow_dont,/* Complain_on_overflow.  */
+	 complain_overflow_dont, /* Complain_on_overflow.  */
 	 bfd_elf_generic_reloc,	/* Special_function.  */
 	 "R_D30V_NONE",		/* Name.  */
 	 FALSE,			/* Partial_inplace.  */

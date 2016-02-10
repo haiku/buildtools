@@ -1,5 +1,5 @@
 /* read.h - of read.c
-   Copyright (C) 1986-2014 Free Software Foundation, Inc.
+   Copyright (C) 1986-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -32,6 +32,16 @@ extern char *input_line_pointer;	/* -> char we are parsing now.  */
 #else
 #define SKIP_WHITESPACE() know(*input_line_pointer != ' ' )
 #endif
+
+#define SKIP_WHITESPACE_AFTER_NAME()		\
+  do						\
+    {						\
+      if (* input_line_pointer == '"')		\
+	++ input_line_pointer;			\
+      if (* input_line_pointer == ' ')		\
+	++ input_line_pointer;			\
+    }						\
+  while (0)
 
 #define	LEX_NAME	(1)	/* may continue a name */
 #define LEX_BEGIN_NAME	(2)	/* may begin a name */
@@ -127,6 +137,7 @@ extern void pseudo_set (symbolS * symbolP);
 extern void read_a_source_file (char *name);
 extern void read_begin (void);
 extern void read_print_statistics (FILE *);
+extern char *read_symbol_name (void);
 extern int sizeof_leb128 (valueT, int sign);
 extern void stabs_generate_asm_file (void);
 extern void stabs_generate_asm_lineno (void);

@@ -1,5 +1,5 @@
 # Expect script for ld-plugin LTO tests
-#   Copyright (C) 2011-2014 Free Software Foundation, Inc.
+#   Copyright (C) 2011-2015 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -88,6 +88,9 @@ set lto_link_tests [list \
   [list "LTO 6" \
    "-O2 -flto -fuse-linker-plugin" "" \
    {lto-6.c} {} "lto-6.exe" "c"] \
+  [list "Compile PR ld/12365" \
+   "" "-flto -O2 $lto_fat" \
+   {pr12365a.c pr12365b.c pr12365c.c} {} ""] \
   [list "Compile 9" \
    "" "-O2 -finline -flto" \
    {lto-9.cc} {} "" "c++"] \
@@ -157,9 +160,12 @@ set lto_link_tests [list \
   [list "PR ld/13287" \
    "-flto -fuse-linker-plugin -Wl,--as-needed" "-flto" \
    {pr13287.cc} {} "pr13287.exe" "c++"] \
-  [list "PR ld/15323" \
+  [list "PR ld/15323 (1)" \
    "" "-O2" \
    {pr15323a.c} {} "" "c"] \
+  [list "PR ld/15323 (2)" \
+   "-O2 -flto -r -nostdlib" "-O2 -flto" \
+   {pr15323a.c} {} "pr15323a-r.o" "c"] \
   [list "Compile(1) PR ld/pr16846" \
    "" "-flto" \
    {pr16846a.c pr16846b.c} {} ""] \
@@ -247,6 +253,9 @@ set lto_link_elf_tests [list \
   [list "PR ld/16746 (2)" \
    "-O2 -flto -fuse-linker-plugin tmpdir/pr16746c.o tmpdir/pr16746a.o" "-O2 -flto" \
    {dummy.c} {} "pr16746b.exe"] \
+  [list "PR ld/14918" \
+   "-flto" "-flto" \
+   {pr14918.c} {{"readelf" {-d --wide} "pr14918.d"}} "pr14918.exe" "c"] \
 ]
 
 # Check final symbols in executables.
@@ -309,9 +318,12 @@ set lto_run_tests [list \
   [list "PR ld/13201" \
    "-O2 -flto -fuse-linker-plugin -Wl,--as-needed tmpdir/pr13201.o -lm" "" \
    {dummy.c} "pr13201.exe" "pr13201.out" "" "c"] \
-  [list "PR ld/15323" \
+  [list "PR ld/15323 (3)" \
    "-O2 -flto -fuse-linker-plugin tmpdir/pr15323a.o" "" \
    {pr15323b.c} "pr15323.exe" "pr15323.out" "-flto -O2" "c"] \
+  [list "PR ld/15323 (4)" \
+   "-O2 -flto tmpdir/pr15323a-r.o" "" \
+   {dummy.c} "pr15323a.exe" "pr15323.out" "-flto -O2" "c"] \
 ]
 
 if { [at_least_gcc_version 4 7] } {
@@ -377,6 +389,24 @@ if {![string match "" $catch_output]} {
 
 if { [at_least_gcc_version 4 7] } {
     # Check expected LTO linker errors.
+    # Since the asm symbol name hack in pr12365b.c doesn't work on all
+    # targets, run PR ld/12365 tests only for known targets.
+    if { ([istarget "i?86-*-elf*"]
+	   || (([istarget "i?86-*-linux*"] || [istarget "i?86-*-gnu*"])
+		&& ![istarget "*-*-*aout*"]
+		&& ![istarget "*-*-*oldld*"])
+	   || [istarget "i?86-*-nacl*"]
+	   || [istarget "x86_64-*-nacl*"]
+	   || [istarget "x86_64-*-linux*"]
+	   || [istarget "amd64-*-linux*"]) } {
+	set testname "PR ld/12365"
+	set exec_output [run_host_cmd "$CC" "-O2 -flto -flto-partition=none -fuse-linker-plugin tmpdir/pr12365a.o tmpdir/pr12365b.o tmpdir/pr12365c.o"]
+	if { [ regexp "undefined reference to `my_bcopy'" $exec_output ] } {
+	    pass $testname
+	} {
+	    fail $testname
+	}
+    }
     set testname "PR ld/12942 (3)"
     set exec_output [run_host_cmd "$CXX" "-O2 -flto -fuse-linker-plugin tmpdir/pr12942b.o tmpdir/pr12942a.o"]
     if { [ regexp "undefined reference to `link_error\\(\\)'" $exec_output ] } {

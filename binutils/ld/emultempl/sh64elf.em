@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2000-2014 Free Software Foundation, Inc.
+#   Copyright (C) 2000-2015 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -485,7 +485,8 @@ sh64_elf_${EMULATION_NAME}_after_allocation (void)
 
 		    /* If we emit relocatable contents, we need a
 		       relocation for the start address.  */
-		    if (link_info.relocatable || link_info.emitrelocations)
+		    if (bfd_link_relocatable (&link_info)
+			|| link_info.emitrelocations)
 		      {
 			/* FIXME: We could perhaps use lang_add_reloc and
 			   friends here, but I'm not really sure that

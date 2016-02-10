@@ -1,6 +1,6 @@
 /* tc-microblaze.c -- Assemble code for Xilinx MicroBlaze
 
-   Copyright (C) 2009-2014 Free Software Foundation, Inc.
+   Copyright (C) 2009-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -179,12 +179,11 @@ microblaze_s_lcomm (int xxx ATTRIBUTE_UNUSED)
   segT current_seg = now_seg;
   subsegT current_subseg = now_subseg;
 
-  name = input_line_pointer;
-  c = get_symbol_end ();
+  c = get_symbol_name (&name);
 
   /* Just after name is now '\0'.  */
   p = input_line_pointer;
-  *p = c;
+  (void) restore_line_pointer (c);
   SKIP_WHITESPACE ();
   if (*input_line_pointer != ',')
     {
@@ -315,7 +314,8 @@ microblaze_s_bss (int localvar)
 static void
 microblaze_s_func (int end_p ATTRIBUTE_UNUSED)
 {
-  *input_line_pointer = get_symbol_end ();
+  char *name;
+  restore_line_pointer (get_symbol_name (&name));
   s_func (1);
 }
 
@@ -329,11 +329,10 @@ microblaze_s_weakext (int ignore ATTRIBUTE_UNUSED)
   symbolS *symbolP;
   expressionS exp;
 
-  name = input_line_pointer;
-  c = get_symbol_end ();
+  c = get_symbol_name (&name);
   symbolP = symbol_find_or_make (name);
   S_SET_WEAK (symbolP);
-  *input_line_pointer = c;
+  (void) restore_line_pointer (c);
 
   SKIP_WHITESPACE ();
 
@@ -685,7 +684,7 @@ static symbolS * GOT_symbol;
 #define GOT_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
 
 static char *
-parse_imm (char * s, expressionS * e, int min, int max)
+parse_imm (char * s, expressionS * e, offsetT min, offsetT max)
 {
   char *new_pointer;
   char *atp;
@@ -736,11 +735,17 @@ parse_imm (char * s, expressionS * e, int min, int max)
     ; /* An error message has already been emitted.  */
   else if ((e->X_op != O_constant && e->X_op != O_symbol) )
     as_fatal (_("operand must be a constant or a label"));
-  else if ((e->X_op == O_constant) && ((int) e->X_add_number < min
-				       || (int) e->X_add_number > max))
+  else if (e->X_op == O_constant)
     {
-      as_fatal (_("operand must be absolute in range %d..%d, not %d"),
-                min, max, (int) e->X_add_number);
+      /* Special case: sign extend negative 32-bit values to 64-bits.  */
+      if ((e->X_add_number >> 31) == 1)
+	e->X_add_number |= -((offsetT) 1 << 31);
+
+      if (e->X_add_number < min || e->X_add_number > max)
+	{
+	  as_fatal (_("operand must be absolute in range %lx..%lx, not %lx"),
+		    (long) min, (long) max, (long) e->X_add_number);
+	}
     }
 
   if (atp)

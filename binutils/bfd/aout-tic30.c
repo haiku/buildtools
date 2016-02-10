@@ -1,5 +1,5 @@
 /* BFD back-end for TMS320C30 a.out binaries.
-   Copyright (C) 1998-2014 Free Software Foundation, Inc.
+   Copyright (C) 1998-2015 Free Software Foundation, Inc.
    Contributed by Steven Haworth (steve@pm.cse.rmit.edu.au)
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -916,6 +916,10 @@ tic30_aout_set_arch_mach (bfd *abfd,
 #endif
 #ifndef MY_get_symbol_info
 #define MY_get_symbol_info NAME (aout, get_symbol_info)
+#endif
+#ifndef MY_get_symbol_version_string
+#define MY_get_symbol_version_string \
+  _bfd_nosymbols_get_symbol_version_string
 #endif
 #ifndef MY_get_lineno
 #define MY_get_lineno NAME (aout, get_lineno)

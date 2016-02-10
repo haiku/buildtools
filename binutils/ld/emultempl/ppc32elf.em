@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2003-2014 Free Software Foundation, Inc.
+#   Copyright (C) 2003-2015 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -41,13 +41,14 @@ static int old_got = 0;
 
 static bfd_vma pagesize = 0;
 
-static struct ppc_elf_params params = { PLT_UNSET, -1, 0, 0, 0, 0 };
+static struct ppc_elf_params params = { PLT_UNSET, -1, 0, 0, 0, 0, 0 };
 
 static void
 ppc_after_open_output (void)
 {
   if (params.emit_stub_syms < 0)
-    params.emit_stub_syms = link_info.emitrelocations || link_info.shared;
+    params.emit_stub_syms = (link_info.emitrelocations
+			     || bfd_link_pic (&link_info));
   if (pagesize == 0)
     pagesize = config.commonpagesize;
   params.pagesize_p2 = bfd_log2 (pagesize);
@@ -172,7 +173,9 @@ ppc_before_allocation (void)
 	params.branch_trampolines = 1;
     }
 
-  if (params.ppc476_workaround || params.branch_trampolines)
+  if (params.branch_trampolines
+      || params.ppc476_workaround
+      || params.pic_fixup > 0)
     ENABLE_RELAXATION;
 }
 
@@ -249,6 +252,7 @@ PARSE_AND_LIST_PROLOGUE=${PARSE_AND_LIST_PROLOGUE}'
 #define OPTION_NO_STUBSYMS		(OPTION_STUBSYMS + 1)
 #define OPTION_PPC476_WORKAROUND	(OPTION_NO_STUBSYMS + 1)
 #define OPTION_NO_PPC476_WORKAROUND	(OPTION_PPC476_WORKAROUND + 1)
+#define OPTION_NO_PICFIXUP		(OPTION_NO_PPC476_WORKAROUND + 1)
 '
 
 PARSE_AND_LIST_LONGOPTS=${PARSE_AND_LIST_LONGOPTS}'
@@ -265,6 +269,7 @@ fi
 PARSE_AND_LIST_LONGOPTS=${PARSE_AND_LIST_LONGOPTS}'
   { "ppc476-workaround", optional_argument, NULL, OPTION_PPC476_WORKAROUND },
   { "no-ppc476-workaround", no_argument, NULL, OPTION_NO_PPC476_WORKAROUND },
+  { "no-pic-fixup", no_argument, NULL, OPTION_NO_PICFIXUP },
 '
 
 PARSE_AND_LIST_OPTIONS=${PARSE_AND_LIST_OPTIONS}'
@@ -282,7 +287,8 @@ fi
 PARSE_AND_LIST_OPTIONS=${PARSE_AND_LIST_OPTIONS}'\
   --ppc476-workaround [=pagesize]\n\
                               Avoid a cache bug on ppc476.\n\
-  --no-ppc476-workaround      Disable workaround.\n"
+  --no-ppc476-workaround      Disable workaround.\n\
+  --no-pic-fixup              Don'\''t edit non-pic to pic.\n"
 		   ));
 '
 
@@ -335,6 +341,10 @@ PARSE_AND_LIST_ARGS_CASES=${PARSE_AND_LIST_ARGS_CASES}'
 
     case OPTION_NO_PPC476_WORKAROUND:
       params.ppc476_workaround = 0;
+      break;
+
+    case OPTION_NO_PICFIXUP:
+      params.pic_fixup = -1;
       break;
 '
 

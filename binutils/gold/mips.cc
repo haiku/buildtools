@@ -1,6 +1,6 @@
 // mips.cc -- mips target support for gold.
 
-// Copyright (C) 2011-2014 Free Software Foundation, Inc.
+// Copyright (C) 2011-2015 Free Software Foundation, Inc.
 // Written by Sasa Stankovic <sasa.stankovic@imgtec.com>
 //        and Aleksandar Simeonov <aleksandar.simeonov@rt-rk.com>.
 // This file contains borrowed and adapted code from bfd/elfxx-mips.c.
@@ -3602,10 +3602,12 @@ class Target_mips : public Sized_target<size, big_endian>
              unsigned int shndx, Output_section* output_section,
              Symbol* sym, const elfcpp::Rel<size, big_endian>& reloc)
   {
+    unsigned int r_type = elfcpp::elf_r_type<size>(reloc.get_r_info());
     this->copy_relocs_.copy_reloc(symtab, layout,
                                   symtab->get_sized_symbol<size>(sym),
                                   object, shndx, output_section,
-                                  reloc, this->rel_dyn_section(layout));
+				  r_type, reloc.get_r_offset(), 0,
+                                  this->rel_dyn_section(layout));
   }
 
   void
@@ -3761,11 +3763,11 @@ struct reloc_high
 
   reloc_high(unsigned char* _view, const Mips_relobj<size, big_endian>* _object,
              const Symbol_value<size>* _psymval, Mips_address _addend,
-             unsigned int _r_type, bool _extract_addend,
+             unsigned int _r_type, unsigned int _r_sym, bool _extract_addend,
              Mips_address _address = 0, bool _gp_disp = false)
     : view(_view), object(_object), psymval(_psymval), addend(_addend),
-      r_type(_r_type), extract_addend(_extract_addend), address(_address),
-      gp_disp(_gp_disp)
+      r_type(_r_type), r_sym(_r_sym), extract_addend(_extract_addend),
+      address(_address), gp_disp(_gp_disp)
   { }
 
   unsigned char* view;
@@ -3773,6 +3775,7 @@ struct reloc_high
   const Symbol_value<size>* psymval;
   Mips_address addend;
   unsigned int r_type;
+  unsigned int r_sym;
   bool extract_addend;
   Mips_address address;
   bool gp_disp;
@@ -4266,11 +4269,12 @@ class Mips_relocate_functions : public Relocate_functions<size, big_endian>
   relhi16(unsigned char* view, const Mips_relobj<size, big_endian>* object,
           const Symbol_value<size>* psymval, Mips_address addend,
           Mips_address address, bool gp_disp, unsigned int r_type,
-          bool extract_addend)
+          unsigned int r_sym, bool extract_addend)
   {
     // Record the relocation.  It will be resolved when we find lo16 part.
     hi16_relocs.push_back(reloc_high<size, big_endian>(view, object, psymval,
-                          addend, r_type, extract_addend, address, gp_disp));
+                          addend, r_type, r_sym, extract_addend, address,
+                          gp_disp));
     return This::STATUS_OKAY;
   }
 
@@ -4331,11 +4335,11 @@ class Mips_relocate_functions : public Relocate_functions<size, big_endian>
   relgot16_local(unsigned char* view,
                  const Mips_relobj<size, big_endian>* object,
                  const Symbol_value<size>* psymval, Mips_address addend_a,
-                 bool extract_addend, unsigned int r_type)
+                 bool extract_addend, unsigned int r_type, unsigned int r_sym)
   {
     // Record the relocation.  It will be resolved when we find lo16 part.
     got16_relocs.push_back(reloc_high<size, big_endian>(view, object, psymval,
-                           addend_a, r_type, extract_addend));
+                           addend_a, r_type, r_sym, extract_addend));
     return This::STATUS_OKAY;
   }
 
@@ -4377,7 +4381,7 @@ class Mips_relocate_functions : public Relocate_functions<size, big_endian>
           const Mips_relobj<size, big_endian>* object,
           const Symbol_value<size>* psymval, Mips_address addend_a,
           bool extract_addend, Mips_address address, bool is_gp_disp,
-          unsigned int r_type)
+          unsigned int r_type, unsigned int r_sym)
   {
     mips_reloc_unshuffle(view, r_type, false);
     Valtype32* wv = reinterpret_cast<Valtype32*>(view);
@@ -4392,7 +4396,8 @@ class Mips_relocate_functions : public Relocate_functions<size, big_endian>
     while (it != hi16_relocs.end())
       {
         reloc_high<size, big_endian> hi16 = *it;
-        if (hi16.psymval->value(hi16.object, 0) == psymval->value(object, 0))
+        if (hi16.r_sym == r_sym
+            && is_matching_lo16_reloc(hi16.r_type, r_type))
           {
             if (do_relhi16(hi16.view, hi16.object, hi16.psymval, hi16.addend,
                            hi16.address, hi16.gp_disp, hi16.r_type,
@@ -4411,7 +4416,8 @@ class Mips_relocate_functions : public Relocate_functions<size, big_endian>
     while (it2 != got16_relocs.end())
       {
         reloc_high<size, big_endian> got16 = *it2;
-        if (got16.psymval->value(got16.object, 0) == psymval->value(object, 0))
+        if (got16.r_sym == r_sym
+            && is_matching_lo16_reloc(got16.r_type, r_type))
           {
             if (do_relgot16_local(got16.view, got16.object, got16.psymval,
                                   got16.addend, got16.r_type,
@@ -6158,7 +6164,7 @@ const uint32_t Mips_output_data_plt<size, big_endian>::plt0_entry_o32[] =
   0x8f990000,         // lw $25, %lo(&GOTPLT[0])($28)
   0x279c0000,         // addiu $28, $28, %lo(&GOTPLT[0])
   0x031cc023,         // subu $24, $24, $28
-  0x03e07821,         // move $15, $31        # 32-bit move (addu)
+  0x03e07825,         // or $15, $31, zero
   0x0018c082,         // srl $24, $24, 2
   0x0320f809,         // jalr $25
   0x2718fffe          // subu $24, $24, 2
@@ -6173,7 +6179,7 @@ const uint32_t Mips_output_data_plt<size, big_endian>::plt0_entry_n32[] =
   0x8dd90000,         // lw $25, %lo(&GOTPLT[0])($14)
   0x25ce0000,         // addiu $14, $14, %lo(&GOTPLT[0])
   0x030ec023,         // subu $24, $24, $14
-  0x03e07821,         // move $15, $31        # 32-bit move (addu)
+  0x03e07825,         // or $15, $31, zero
   0x0018c082,         // srl $24, $24, 2
   0x0320f809,         // jalr $25
   0x2718fffe          // subu $24, $24, 2
@@ -6188,7 +6194,7 @@ const uint32_t Mips_output_data_plt<size, big_endian>::plt0_entry_n64[] =
   0xddd90000,         // ld $25, %lo(&GOTPLT[0])($14)
   0x25ce0000,         // addiu $14, $14, %lo(&GOTPLT[0])
   0x030ec023,         // subu $24, $24, $14
-  0x03e07821,         // move $15, $31        # 64-bit move (daddu)
+  0x03e07825,         // or $15, $31, zero
   0x0018c0c2,         // srl $24, $24, 3
   0x0320f809,         // jalr $25
   0x2718fffe          // subu $24, $24, 2
@@ -6225,7 +6231,7 @@ plt0_entry_micromips32_o32[] =
   0xff3c, 0x0000,      // lw $25, %lo(&GOTPLT[0])($28)
   0x339c, 0x0000,      // addiu $28, $28, %lo(&GOTPLT[0])
   0x0398, 0xc1d0,      // subu $24, $24, $28
-  0x001f, 0x7950,      // move $15, $31
+  0x001f, 0x7a90,      // or $15, $31, zero
   0x0318, 0x1040,      // srl $24, $24, 2
   0x03f9, 0x0f3c,      // jalr $25
   0x3318, 0xfffe       // subu $24, $24, 2
@@ -6627,7 +6633,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_normal_1[4] =
 {
   0x8f998010,         // lw t9,0x8010(gp)
-  0x03e07821,         // addu t7,ra,zero
+  0x03e07825,         // or t7,ra,zero
   0x0320f809,         // jalr t9,ra
   0x24180000          // addiu t8,zero,DYN_INDEX sign extended
 };
@@ -6639,7 +6645,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_normal_1_n64[4] =
 {
   0xdf998010,         // ld t9,0x8010(gp)
-  0x03e0782d,         // daddu t7,ra,zero
+  0x03e07825,         // or t7,ra,zero
   0x0320f809,         // jalr t9,ra
   0x64180000          // daddiu t8,zero,DYN_INDEX sign extended
 };
@@ -6651,7 +6657,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_normal_2[4] =
 {
   0x8f998010,         // lw t9,0x8010(gp)
-  0x03e07821,         // addu t7,ra,zero
+  0x03e07825,         // or t7,ra,zero
   0x0320f809,         // jalr t9,ra
   0x34180000          // ori t8,zero,DYN_INDEX unsigned
 };
@@ -6663,7 +6669,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_normal_2_n64[4] =
 {
   0xdf998010,         // ld t9,0x8010(gp)
-  0x03e0782d,         // daddu t7,ra,zero
+  0x03e07825,         // or t7,ra,zero
   0x0320f809,         // jalr t9,ra
   0x34180000          // ori t8,zero,DYN_INDEX unsigned
 };
@@ -6674,7 +6680,7 @@ template<int size, bool big_endian>
 const uint32_t Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_big[5] =
 {
   0x8f998010,         // lw t9,0x8010(gp)
-  0x03e07821,         // addu t7,ra,zero
+  0x03e07825,         // or t7,ra,zero
   0x3c180000,         // lui t8,DYN_INDEX
   0x0320f809,         // jalr t9,ra
   0x37180000          // ori t8,t8,DYN_INDEX
@@ -6687,7 +6693,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_big_n64[5] =
 {
   0xdf998010,         // ld t9,0x8010(gp)
-  0x03e0782d,         // daddu t7,ra,zero
+  0x03e07825,         // or t7,ra,zero
   0x3c180000,         // lui t8,DYN_INDEX
   0x0320f809,         // jalr t9,ra
   0x37180000          // ori t8,t8,DYN_INDEX
@@ -6784,7 +6790,7 @@ Mips_output_data_mips_stubs<size, big_endian>::
 lazy_stub_micromips32_normal_1[] =
 {
   0xff3c, 0x8010,     // lw t9,0x8010(gp)
-  0x001f, 0x7950,     // addu t7,ra,zero
+  0x001f, 0x7a90,     // or t7,ra,zero
   0x03f9, 0x0f3c,     // jalr ra,t9
   0x3300, 0x0000      // addiu t8,zero,DYN_INDEX sign extended
 };
@@ -6798,7 +6804,7 @@ Mips_output_data_mips_stubs<size, big_endian>::
 lazy_stub_micromips32_normal_1_n64[] =
 {
   0xdf3c, 0x8010,     // ld t9,0x8010(gp)
-  0x581f, 0x7950,     // daddu t7,ra,zero
+  0x001f, 0x7a90,     // or t7,ra,zero
   0x03f9, 0x0f3c,     // jalr ra,t9
   0x5f00, 0x0000      // daddiu t8,zero,DYN_INDEX sign extended
 };
@@ -6812,7 +6818,7 @@ Mips_output_data_mips_stubs<size, big_endian>::
 lazy_stub_micromips32_normal_2[] =
 {
   0xff3c, 0x8010,     // lw t9,0x8010(gp)
-  0x001f, 0x7950,     // addu t7,ra,zero
+  0x001f, 0x7a90,     // or t7,ra,zero
   0x03f9, 0x0f3c,     // jalr ra,t9
   0x5300, 0x0000      // ori t8,zero,DYN_INDEX unsigned
 };
@@ -6826,7 +6832,7 @@ Mips_output_data_mips_stubs<size, big_endian>::
 lazy_stub_micromips32_normal_2_n64[] =
 {
   0xdf3c, 0x8010,     // ld t9,0x8010(gp)
-  0x581f, 0x7950,     // daddu t7,ra,zero
+  0x001f, 0x7a90,     // or t7,ra,zero
   0x03f9, 0x0f3c,     // jalr ra,t9
   0x5300, 0x0000      // ori t8,zero,DYN_INDEX unsigned
 };
@@ -6838,7 +6844,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_micromips32_big[] =
 {
   0xff3c, 0x8010,     // lw t9,0x8010(gp)
-  0x001f, 0x7950,     // addu t7,ra,zero
+  0x001f, 0x7a90,     // or t7,ra,zero
   0x41b8, 0x0000,     // lui t8,DYN_INDEX
   0x03f9, 0x0f3c,     // jalr ra,t9
   0x5318, 0x0000      // ori t8,t8,DYN_INDEX
@@ -6851,7 +6857,7 @@ const uint32_t
 Mips_output_data_mips_stubs<size, big_endian>::lazy_stub_micromips32_big_n64[] =
 {
   0xdf3c, 0x8010,     // ld t9,0x8010(gp)
-  0x581f, 0x7950,     // daddu t7,ra,zero
+  0x001f, 0x7a90,     // or t7,ra,zero
   0x41b8, 0x0000,     // lui t8,DYN_INDEX
   0x03f9, 0x0f3c,     // jalr ra,t9
   0x5318, 0x0000      // ori t8,t8,DYN_INDEX
@@ -9908,7 +9914,7 @@ Target_mips<size, big_endian>::Relocate::relocate(
     case elfcpp::R_MIPS16_HI16:
     case elfcpp::R_MICROMIPS_HI16:
       reloc_status = Reloc_funcs::relhi16(view, object, psymval, r_addend,
-                                          address, gp_disp, r_type,
+                                          address, gp_disp, r_type, r_sym,
                                           extract_addend);
       break;
 
@@ -9918,7 +9924,7 @@ Target_mips<size, big_endian>::Relocate::relocate(
     case elfcpp::R_MICROMIPS_HI0_LO16:
       reloc_status = Reloc_funcs::rello16(target, view, object, psymval,
                                           r_addend, extract_addend, address,
-                                          gp_disp, r_type);
+                                          gp_disp, r_type, r_sym);
       break;
 
     case elfcpp::R_MIPS_LITERAL:
@@ -10033,7 +10039,7 @@ Target_mips<size, big_endian>::Relocate::relocate(
       else
         reloc_status = Reloc_funcs::relgot16_local(view, object, psymval,
                                                    r_addend, extract_addend,
-                                                   r_type);
+                                                   r_type, r_sym);
       update_got_entry = changed_symbol_value;
       break;
 
@@ -10486,7 +10492,8 @@ const Target::Target_info Target_mips<size, big_endian>::mips_info =
   0,                    // large_common_section_flags
   NULL,                 // attributes_section
   NULL,                 // attributes_vendor
-  "__start"		// entry_symbol_name
+  "__start",		// entry_symbol_name
+  32,			// hash_entry_size
 };
 
 template<int size, bool big_endian>
@@ -10525,7 +10532,8 @@ const Target::Target_info Target_mips_nacl<size, big_endian>::mips_nacl_info =
   0,                    // large_common_section_flags
   NULL,                 // attributes_section
   NULL,                 // attributes_vendor
-  "_start"              // entry_symbol_name
+  "_start",             // entry_symbol_name
+  32,			// hash_entry_size
 };
 
 // Target selector for Mips.  Note this is never instantiated directly.

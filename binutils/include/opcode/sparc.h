@@ -1,5 +1,5 @@
 /* Definitions for opcode table for the sparc.
-   Copyright (C) 1989-2014 Free Software Foundation, Inc.
+   Copyright (C) 1989-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler, GDB, the GNU debugger, and
    the GNU Binutils.
@@ -151,7 +151,7 @@ typedef struct sparc_opcode
 #define HWCAP_CRC32C	0x20000000 /* CRC32C insn */
 
 #define HWCAP2_FJATHPLUS 0x00000001 /* Fujitsu Athena+ */
-#define HWCAP2_VIS3B     0x00000002 /* VIS3 present on multiple chips */
+#define HWCAP2_VIS3B     0x00000002 /* Subset of VIS3 present on sparc64 X+.  */
 #define HWCAP2_ADP       0x00000004 /* Application Data Protection */
 #define HWCAP2_SPARC5    0x00000008 /* The 29 new fp and sub instructions */
 #define HWCAP2_MWAIT     0x00000010 /* mwait instruction and load/monitor ASIs */

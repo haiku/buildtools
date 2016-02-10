@@ -1,5 +1,5 @@
 /* tc-xgate.c -- Assembler code for Freescale XGATE
-   Copyright (C) 2010-2014 Free Software Foundation, Inc.
+   Copyright (C) 2010-2015 Free Software Foundation, Inc.
    Contributed by Sean Keys <skeys@ipdatasys.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -469,7 +469,7 @@ valueT
 md_section_align (asection * seg, valueT addr)
 {
   int align = bfd_get_section_alignment (stdoutput, seg);
-  return ((addr + (1 << align) - 1) & (-1 << align));
+  return ((addr + (1 << align) - 1) & -(1 << align));
 }
 
 void

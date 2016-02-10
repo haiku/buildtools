@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2014 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2015 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -275,6 +275,9 @@ libbfd.h: $(LIBBFD_H_DEP)
 		./$(MKDOC) -i -f $(srcdir)/proto.str < $$file >> $@ ;; \
 	  esac; \
 	done
+	echo "#ifdef __cplusplus" >> $@
+	echo "}" >> $@
+	echo "#endif" >> $@
 
 LIBCOFF_H_DEP = \
 	$(srcdir)/../libcoff-in.h	\
@@ -294,6 +297,9 @@ libcoff.h: $(LIBCOFF_H_DEP)
 		./$(MKDOC) -i -f $(srcdir)/proto.str < $$file >> $@ ;; \
 	  esac; \
 	done
+	echo "#ifdef __cplusplus" >> $@
+	echo "}" >> $@
+	echo "#endif" >> $@
 
 BFD_H_DEP = \
 	$(srcdir)/../bfd-in.h 		\

@@ -1,5 +1,5 @@
 /* Definitions for Altera Nios II assembler.
-   Copyright (C) 2012-2014 Free Software Foundation, Inc.
+   Copyright (C) 2012-2015 Free Software Foundation, Inc.
    Contributed by Nigel Gray (ngray@altera.com).
    Contributed by Mentor Graphics, Inc.
 
@@ -117,5 +117,8 @@ extern bfd_reloc_code_real_type nios2_cons (expressionS *exp, int size);
 extern int nios2_regname_to_dw2regnum (char *regname);
 #define tc_cfi_frame_initial_instructions  nios2_frame_initial_instructions
 extern void nios2_frame_initial_instructions (void);
+
+#define elf_tc_final_processing nios2_elf_final_processing
+extern void nios2_elf_final_processing (void);
 
 #endif /* TC_NIOS2 */

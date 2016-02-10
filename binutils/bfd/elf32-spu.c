@@ -1,6 +1,6 @@
 /* SPU specific support for 32-bit ELF
 
-   Copyright (C) 2006-2014 Free Software Foundation, Inc.
+   Copyright (C) 2006-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -1837,6 +1837,18 @@ ovl_mgr_pread (struct bfd *abfd ATTRIBUTE_UNUSED,
   return count;
 }
 
+static int
+ovl_mgr_stat (struct bfd *abfd ATTRIBUTE_UNUSED,
+	      void *stream,
+	      struct stat *sb)
+{
+  struct _ovl_stream *os = (struct _ovl_stream *) stream;
+
+  memset (sb, 0, sizeof (*sb));
+  sb->st_size = (const char *) os->end - (const char *) os->start;
+  return 0;
+}
+
 bfd_boolean
 spu_elf_open_builtin_lib (bfd **ovl_bfd, const struct _ovl_stream *stream)
 {
@@ -1846,7 +1858,7 @@ spu_elf_open_builtin_lib (bfd **ovl_bfd, const struct _ovl_stream *stream)
 			      (void *) stream,
 			      ovl_mgr_pread,
 			      NULL,
-			      NULL);
+			      ovl_mgr_stat);
   return *ovl_bfd != NULL;
 }
 
@@ -4717,7 +4729,7 @@ spu_elf_final_link (bfd *output_bfd, struct bfd_link_info *info)
   return bfd_elf_final_link (output_bfd, info);
 }
 
-/* Called when not normally emitting relocs, ie. !info->relocatable
+/* Called when not normally emitting relocs, ie. !bfd_link_relocatable (info)
    and !info->emitrelocations.  Returns a count of special relocs
    that need to be emitted.  */
 
@@ -4890,7 +4902,7 @@ spu_elf_relocate_section (bfd *output_bfd,
 	  else if (info->unresolved_syms_in_objects == RM_IGNORE
 		   && ELF_ST_VISIBILITY (h->other) == STV_DEFAULT)
 	    ;
-	  else if (!info->relocatable
+	  else if (!bfd_link_relocatable (info)
 		   && !(r_type == R_SPU_PPU32 || r_type == R_SPU_PPU64))
 	    {
 	      bfd_boolean err;
@@ -4910,7 +4922,7 @@ spu_elf_relocate_section (bfd *output_bfd,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (info->relocatable)
+      if (bfd_link_relocatable (info))
 	continue;
 
       /* Change "a rt,ra,rb" to "ai rt,ra,0". */
@@ -4978,7 +4990,7 @@ spu_elf_relocate_section (bfd *output_bfd,
 	    }
 	}
 
-      if (htab->params->emit_fixups && !info->relocatable
+      if (htab->params->emit_fixups && !bfd_link_relocatable (info)
 	  && (input_section->flags & SEC_ALLOC) != 0
 	  && r_type == R_SPU_ADDR32)
 	{
@@ -5123,7 +5135,7 @@ spu_elf_output_symbol_hook (struct bfd_link_info *info,
 {
   struct spu_link_hash_table *htab = spu_hash_table (info);
 
-  if (!info->relocatable
+  if (!bfd_link_relocatable (info)
       && htab->stub_sec != NULL
       && h != NULL
       && (h->root.type == bfd_link_hash_defined

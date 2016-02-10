@@ -1,5 +1,5 @@
 /* BFD back-end for s-record objects.
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -249,7 +249,7 @@ srec_bad_byte (bfd *abfd,
       char buf[40];
 
       if (! ISPRINT (c))
-	sprintf (buf, "\\%03o", (unsigned int) c);
+	sprintf (buf, "\\%03o", (unsigned int) c & 0xff);
       else
 	{
 	  buf[0] = c;
@@ -1258,6 +1258,7 @@ srec_print_symbol (bfd *abfd,
 #define srec_find_line                            _bfd_nosymbols_find_line
 #define srec_find_inliner_info                    _bfd_nosymbols_find_inliner_info
 #define srec_make_empty_symbol                    _bfd_generic_make_empty_symbol
+#define srec_get_symbol_version_string		  _bfd_nosymbols_get_symbol_version_string
 #define srec_bfd_make_debug_symbol                _bfd_nosymbols_bfd_make_debug_symbol
 #define srec_read_minisymbols                     _bfd_generic_read_minisymbols
 #define srec_minisymbol_to_symbol                 _bfd_generic_minisymbol_to_symbol

@@ -1,5 +1,5 @@
 /* This is the Assembler Pre-Processor
-   Copyright (C) 1987-2014 Free Software Foundation, Inc.
+   Copyright (C) 1987-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -247,7 +247,7 @@ struct app_save
 char *
 app_push (void)
 {
-  register struct app_save *saved;
+  struct app_save *saved;
 
   saved = (struct app_save *) xmalloc (sizeof (*saved));
   saved->state = state;
@@ -284,7 +284,7 @@ app_push (void)
 void
 app_pop (char *arg)
 {
-  register struct app_save *saved = (struct app_save *) arg;
+  struct app_save *saved = (struct app_save *) arg;
 
   /* There is no do_scrub_end ().  */
   state = saved->state;
@@ -360,7 +360,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
   char *from;
   char *fromend;
   size_t fromlen;
-  register int ch, ch2 = 0;
+  int ch, ch2 = 0;
   /* Character that started the string we're working on.  */
   static char quotechar;
 

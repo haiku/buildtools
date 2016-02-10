@@ -1,5 +1,5 @@
 /* elfcomm.c -- common code for ELF format file.
-   Copyright (C) 2010-2014 Free Software Foundation, Inc.
+   Copyright (C) 2010-2015 Free Software Foundation, Inc.
 
    Originally developed by Eric Youngdale <eric@andante.jic.com>
    Modifications by Nick Clifton <nickc@redhat.com>
@@ -899,7 +899,7 @@ make_qualified_name (struct archive_info * arch,
 		  nested_arch->file_name, member_name);
       else
 	snprintf (name, len, "%s[%s(%s)]", arch->file_name,
-		  error_name, member_name);	
+		  error_name, member_name);
     }
   else if (arch->is_thin_archive)
     snprintf (name, len, "%s[%s]", arch->file_name, member_name);

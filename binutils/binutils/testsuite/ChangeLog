@@ -1,14 +1,272 @@
-2015-03-11  Jiong Wang  <jiong.wang@arm.com>
+2015-12-10  Alan Modra  <amodra@gmail.com>
+
+	Apply from master.
+	2015-11-30  Andrew Burgess  <andrew.burgess@embecosm.com>
+	* binutils-all/objdump.exp: Add test for .debug_ranges decode.
+	* binutils-all/dw2-ranges.S: New file.
+	* binutils-all/dw2-ranges.W: New file.
+
+2015-10-22  Alan Modra  <amodra@gmail.com>
+
+	* binutils-all/add-symbol.d: Run test on mips.  Support either
+	order of NEW and NEWDATA symbols.
+
+2015-10-21  Ronald Hoogenboom  <rhoogenboom@irdeto.com>
+
+	PR binutils/19104
+	* binutils-all/add-symbol.d: New test.
+	* binutils-all/objcopy.exp: Run the new test.
+
+2015-10-15  Alan Modra  <amodra@gmail.com>
+
+	* binutils-all/objcopy.exp: Delete trailing whitespace.  Use
+	"string equal" rather than "string match" when making simple
+	string comparisons.  Revert 2008-07-08 host_triplet checks.
+	Perform non-run tests when we can build executable.
+	(strip_executable, strip_executable_with_saving_a_symbol): Move
+	run test later.  Take extra param on whether to perform run test.
+	Update callers.
+	(keep_debug_symbols_and_test_copy): Delete unused vars.
+
+2015-09-30  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* lib/utils-lib.exp (run_dump_test): Handle symbolic link when
+	copying source file.
+
+2015-09-29  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/19020
+	* binutils-all/objcopy.exp: Run pr19020a and pr19020b.
+	* lib/utils-lib.exp (run_dump_test): Support binary input.
+	* binutils-all/pr19020.in: New file.
+	* binutils-all/pr19020a.d: Likewise.
+	* binutils-all/pr19020b.d: Likewise.
+
+2015-08-11  Alan Modra  <amodra@gmail.com>
+
+	* binutils-all/strip-12.s: Align .bss section.
+	* binutils-all/strip-12.d: Adjust.
+	* binutils-all/symbols-1.d: Allow extraneous symbols.
+	* binutils-all/symbols-2.d: Likewise, and V for weakened syms.
+	* binutils-all/symbols-3.d: Likewise.
+	* binutils-all/symbols-4.d: Likewise.
+
+2015-08-08  Hans-Peter Nilsson  <hp@axis.com>
+
+	* binutils-all/strip-12.s: Use ".section .bss" instead of ".bss"
+	which isn't supported by all ELF targets.
+
+2015-08-07  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/18785
+	* binutils-all/objcopy.exp: Run strip-12.
+	* binutils-all/strip-12.d: New file.
+	* binutils-all/strip-12.s: Likewise.
+
+2015-08-07  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* binutils-all/objcopy.exp: Run new symbol tests.
+	(objcopy_test_symbol_manipulation): New function.
+	* binutils-all/symbols-1.d: New file.
+	* binutils-all/symbols-2.d: New file.
+	* binutils-all/symbols-3.d: New file.
+	* binutils-all/symbols-4.d: New file.
+	* binutils-all/symbols.s: New file.
+
+2015-08-05  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/objcopy.exp (keep_debug_symbols_and_check_links):
+	New proc.  Checks that debug-info-only binaries retain the
+	sh_link field in stripped sections.
+
+2015-08-04  Nick Clifton  <nickc@redhat.com>
+
+	* lib/utils-lib.exp (run_dump_test): Document DUMPPROG, readelf
+	and size parameters.  Alpha-sort switch tables.  Include
+	addr2line, and size in list of possible auto-detected dump
+	programs.
+
+2015-07-24  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/localize-hidden-1.d: Allow for extra symbols in the
+	output.
+        * binutils-all/strip-11.d: Skip for the RL78.
+
+2015-07-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp: Update.
+
+2015-07-10  H.J. Lu  <hongjiu.lu@intel.com>
+
+	 PR binutils/18656
+	 * binutils-all/compress.exp (convert_test): New proc.
+	 Run conversion tests between x86-64 and x32.
+
+2015-07-10  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/dw2-3.W: Updated to accept .debug_* sections.
+
+2015-05-20  Ed Maste  <emaste@freebsd.org>
+
+	* lib/binutils-common.exp (is_elf_format): Include *-*-freebsd* except
+	i?86-*-freebsd\[12\].*.
+	* (is_aout_format): Update FreeBSD to i?86-*-freebsd\[12\].*.
+
+2015-05-18  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/dw2-3.S: Replace .int with .4byte.
+
+2015-05-15  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/z.s: New test.  Checks the --decompress option to
+	readelf.
+	* binutils-all/readelf.exp: Run the test.
+	* binutils-all/readelf.z: Expected output from readelf.
+
+2015-05-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp: Replace "$OBJDUMP -s -j .debug_info"
+	with "$OBJDUMP -W".
+	* binutils-all/libdw2-compressedgabi.out: Updated.
+
+2015-05-15  Nick Clifton  <nickc@redhat.com>
+
+	PR binutils/18374
+	* binutils-all/pr18374.s: New test file.
+	* binutils-all/readelf.exp: Assemble and run the new test.
+	* binutils-all/readelf.pr18374: Expected output from readelf.
+
+2015-05-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/elfedit-1.d: Also skip x86_64-*-nacl*.
+
+2015-05-11  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/elfedit-1.d: Skip x86_64-*-gnux32.
+	* lib/utils-lib.exp (run_dump_test): Allow mixing target and
+	not-target directives.
+
+2015-05-11  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/objdump.exp (cpus_expected): Append iamcu.
+
+2015-05-11  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/elfedit-5.d: New file.
+	* binutils-all/elfedit.exp: Run elfedit-5.
+
+2015-04-30  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/objdump.exp (cpus_expected): Add MeP CPU names.
+
+2015-04-23  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/18209
+	* binutils-all/compress.exp: Replace dw2-3.W with dw2-3gabi.W
+	on zlib-gabi output.
+	* binutils-all/dw2-1.W: Convert section names to .zdebug_*.
+	* binutils-all/dw2-3.W: Likewise.
+	* binutils-all/objdump.W: Likewise.
+	* binutils-all/dw2-3gabi.W: New file.
+
+2015-04-20  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/i386/compressed-1b.d: Don't hardcode offset of
+	.shstrtab section.
+	* binutils-all/i386/compressed-1c.d: Likewise.
+	* binutils-all/readelf.s-64: Likewise.
+	* binutils-all/x86-64/compressed-1b.d: Likewise.
+	* binutils-all/x86-64/compressed-1c.d: Likewise.
+
+2015-04-08  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* compress.exp: Add tests for
+	--compress-debug-sections={none|zlib|zlib-gnu|zlib-gabi}.
+	* binutils-all/dw2-3.rS: New file.
+	* binutils-all/dw2-3.rt: Likewise.
+	* binutils-all/libdw2-compressedgabi.out: Likewise.
+
+2015-04-06  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp: Remove is_zlib_supported check.
+	* binutils-all/objdump.exp: Likewise.
+	* binutils-all/readelf.exp (readelf_compressed_wa_test): Likewise.
+	* lib/utils-lib.exp (run_dump_test): Likewise.
+	* lib/binutils-common.exp (is_zlib_supported): Removed.
+
+2015-04-06  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp (compression_used): Remove "/dev/null"
+	from remote_exec.
+
+2015-04-05  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp (compression_used): New.
+	Xfail test if compression didn't make the section smaller.
+
+2015-04-04  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* binutils-all/compress.exp (testfile): Remove suffix.
+	(compressedfile): Likewise.
+	(compressedfile2): Likewise.
+	(libfile): Likewise.
+	(testfile3): New.
+	(compressedfile3): Likewise.
+	Updated.
+	Add a dw2-3.S test.
+	(${libfile}.a): Add ${compressedfile3}.o.
+	* binutils-all/dw2-3.S: New file.
+	* binutils-all/dw2-3.W: Likewise.
+	* binutils-all/libdw2-compressed.out: Updated.
+	* binutils-all/libdw2.out: Likewise.
+
+2015-04-03  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* lib/binutils-common.exp (is_zlib_supported): Always return 1.
+
+2015-04-02  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/readelf.ss-64: Move possible location of the $d
+	mapping symbol.
+
+2015-03-26  Renlin Li  <renlin.li@arm.com>
+
+	* binutils-all/readelf.s-64: Support aarch64 case.
+	* binutils-all/readelf.ss-64: Likewise.
+
+2015-03-11  Alan Modra  <amodra@gmail.com>
+
+	* binutils-all/update-section.exp: Only run on ELF targets.
+
+2015-03-03  Jiong Wang  <jiong.wang@arm.com>
 
 	* binutils-all/arm/rvct_symbol.s: New testcase.
 	* binutils-all/arm/objdump.exp: Run it.
 
-2015-02-11  Alan Modra  <amodra@gmail.com>
+2015-02-26  Andrew Burgess  <andrew.burgess@embecosm.com>
 
-	Apply from master.
-	2014-12-26  Alan Modra  <amodra@gmail.com>
+	* binutils-all/update-1.s: New file.
+	* binutils-all/update-2.s: New file.
+	* binutils-all/update-3.s: New file.
+	* binutils-all/update-4.s: New file.
+	* binutils-all/update-section.exp: New file.
+
+2015-02-24  Nick Clifton  <nickc@redhat.com>
+
+	* binutils-all/objcopy.exp: Skip the strip-10 test for the V850.
+
+2015-01-01  Alan Modra  <amodra@gmail.com>
+
+	Update year range in copyright notice of all files.
+
+2014-12-26  Alan Modra  <amodra@gmail.com>
+
 	* binutils-all/strip-11.d: New test.
 	* binutils-all/objcopy.exp: Run it.
+
+2014-12-06  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* binutils-all/objcopy.exp: Skip strip-10 for Visium.
 
 2014-09-12  Andrew Bennett  <andrew.bennett@imgtec.com>
 
@@ -372,7 +630,7 @@
 
 For older changes see ChangeLog-0411
 
-Copyright (C) 2012-2014 Free Software Foundation, Inc.
+Copyright (C) 2012-2015 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

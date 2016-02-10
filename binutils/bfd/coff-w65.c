@@ -1,5 +1,5 @@
 /* BFD back-end for WDC 65816 COFF binaries.
-   Copyright (C) 1995-2014 Free Software Foundation, Inc.
+   Copyright (C) 1995-2015 Free Software Foundation, Inc.
    Written by Steve Chamberlain, <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -31,16 +31,16 @@
 static reloc_howto_type howto_table[] =
 {
   HOWTO (R_W65_ABS8,    0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "abs8", TRUE, 0x000000ff, 0x000000ff, FALSE),
-    HOWTO (R_W65_ABS16,   1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, "abs16", TRUE, 0x0000ffff, 0x0000ffff, FALSE),
-    HOWTO (R_W65_ABS24,   0,  2, 32, FALSE, 0, complain_overflow_bitfield, 0, "abs24", TRUE, 0x00ffffff, 0x00ffffff, FALSE),
-    HOWTO (R_W65_ABS8S8,  0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, ">abs8", TRUE, 0x000000ff, 0x000000ff, FALSE),
-    HOWTO (R_W65_ABS8S16, 0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "^abs8", TRUE, 0x000000ff, 0x000000ff, FALSE),
-    HOWTO (R_W65_ABS16S8, 1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, ">abs16", TRUE, 0x0000ffff, 0x0000ffff, FALSE),
-    HOWTO (R_W65_ABS16S16,1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, "^abs16", TRUE, 0x0000ffff, 0x0000ffff, FALSE),
-    HOWTO (R_W65_PCR8,    0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "pcrel8", TRUE, 0x000000ff, 0x000000ff, TRUE),
-    HOWTO (R_W65_PCR16,   1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, "pcrel16", TRUE, 0x0000ffff, 0x0000ffff, TRUE),
-    HOWTO (R_W65_DP,      0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "dp", TRUE, 0x000000ff, 0x000000ff, FALSE),
-  };
+  HOWTO (R_W65_ABS16,   1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, "abs16", TRUE, 0x0000ffff, 0x0000ffff, FALSE),
+  HOWTO (R_W65_ABS24,   0,  2, 32, FALSE, 0, complain_overflow_bitfield, 0, "abs24", TRUE, 0x00ffffff, 0x00ffffff, FALSE),
+  HOWTO (R_W65_ABS8S8,  0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, ">abs8", TRUE, 0x000000ff, 0x000000ff, FALSE),
+  HOWTO (R_W65_ABS8S16, 0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "^abs8", TRUE, 0x000000ff, 0x000000ff, FALSE),
+  HOWTO (R_W65_ABS16S8, 1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, ">abs16", TRUE, 0x0000ffff, 0x0000ffff, FALSE),
+  HOWTO (R_W65_ABS16S16,1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, "^abs16", TRUE, 0x0000ffff, 0x0000ffff, FALSE),
+  HOWTO (R_W65_PCR8,    0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "pcrel8", TRUE, 0x000000ff, 0x000000ff, TRUE),
+  HOWTO (R_W65_PCR16,   1,  0, 16, FALSE, 0, complain_overflow_bitfield, 0, "pcrel16", TRUE, 0x0000ffff, 0x0000ffff, TRUE),
+  HOWTO (R_W65_DP,      0,  0, 8,  FALSE, 0, complain_overflow_bitfield, 0, "dp", TRUE, 0x000000ff, 0x000000ff, FALSE),
+};
 
 #define NUM_HOWTOS (sizeof (howto_table) / sizeof (howto_table[0]))
 

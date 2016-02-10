@@ -1,5 +1,5 @@
 /* Renesas RX specific support for 32-bit ELF.
-   Copyright (C) 2008-2014 Free Software Foundation, Inc.
+   Copyright (C) 2008-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -632,7 +632,7 @@ rx_elf_relocate_section
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (info->relocatable)
+      if (bfd_link_relocatable (info))
 	{
 	  /* This is a relocatable link.  We don't have to change
              anything, unless the reloc is against a section symbol,
@@ -1561,6 +1561,18 @@ elf32_rx_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, int count,
   irel = elf_section_data (sec)->relocs;
   irelend = irel + sec->reloc_count;
 
+  if (irel == NULL && sec->reloc_count > 0)
+    {
+      /* If the relocs have not been kept in the section data
+	 structure (because -no-keep-memory was used) then
+	 reread them now.  */
+      irel = (_bfd_elf_link_read_relocs
+	      (abfd, sec, NULL, (Elf_Internal_Rela *) NULL, FALSE));
+      if (irel == NULL)
+	/* FIXME: Return FALSE instead ?  */
+	irelend = irel;
+    }
+
   /* Actually delete the bytes.  */
   memmove (contents + addr, contents + addr + count,
 	   (size_t) (toaddr - addr - count));
@@ -1574,7 +1586,7 @@ elf32_rx_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr, int count,
     memset (contents + toaddr - count, 0x03, count);
 
   /* Adjust all the relocs.  */
-  for (irel = elf_section_data (sec)->relocs; irel < irelend; irel++)
+  for (; irel < irelend; irel++)
     {
       /* Get the new reloc address.  */
       if (irel->r_offset > addr
@@ -1991,14 +2003,17 @@ elf32_rx_relax_section (bfd *                  abfd,
   /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (link_info->relocatable
+  if (bfd_link_relocatable (link_info)
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
     return TRUE;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
-  shndx_hdr = &elf_tdata (abfd)->symtab_shndx_hdr;
+  symtab_hdr = & elf_symtab_hdr (abfd);
+  if (elf_symtab_shndx_list (abfd))
+    shndx_hdr = & elf_symtab_shndx_list (abfd)->hdr;
+  else
+    shndx_hdr = NULL;
 
   sec_start = sec->output_section->vma + sec->output_offset;
 
@@ -2023,7 +2038,7 @@ elf32_rx_relax_section (bfd *                  abfd,
       symtab_hdr->contents = (bfd_byte *) intsyms;
     }
 
-  if (shndx_hdr->sh_size != 0)
+  if (shndx_hdr && shndx_hdr->sh_size != 0)
     {
       bfd_size_type amt;
 
@@ -3074,6 +3089,9 @@ describe_flags (flagword flags)
   else
     strcat (buf, ", GCC ABI");
 
+  if (flags & E_FLAG_RX_SINSNS_SET)
+    strcat (buf, flags & E_FLAG_RX_SINSNS_YES ? ", uses String instructions" : ", bans String instructions");
+
   return buf;
 }
 
@@ -3100,8 +3118,22 @@ rx_elf_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
     {
       flagword known_flags;
 
+      if (old_flags & E_FLAG_RX_SINSNS_SET)
+	{
+	  if ((new_flags & E_FLAG_RX_SINSNS_SET) == 0)
+	    {
+	      new_flags &= ~ E_FLAG_RX_SINSNS_MASK;
+	      new_flags |= (old_flags & E_FLAG_RX_SINSNS_MASK);
+	    }
+	}
+      else if (new_flags & E_FLAG_RX_SINSNS_SET)
+	{
+	  old_flags &= ~ E_FLAG_RX_SINSNS_MASK;
+	  old_flags |= (new_flags & E_FLAG_RX_SINSNS_MASK);
+	}
+
       known_flags = E_FLAG_RX_ABI | E_FLAG_RX_64BIT_DOUBLES
-	| E_FLAG_RX_DSP | E_FLAG_RX_PID;
+	| E_FLAG_RX_DSP | E_FLAG_RX_PID | E_FLAG_RX_SINSNS_MASK;
 
       if ((old_flags ^ new_flags) & known_flags)
 	{

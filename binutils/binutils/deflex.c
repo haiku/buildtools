@@ -575,20 +575,20 @@ char *yytext;
 #define YY_NO_INPUT 1
 #line 4 "deflex.l"
 
-/* Copyright (C) 1995-2014 Free Software Foundation, Inc.
-   
+/* Copyright (C) 1995-2015 Free Software Foundation, Inc.
+
    This file is part of GNU Binutils.
-   
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
@@ -1002,13 +1002,13 @@ YY_RULE_SETUP
 case 27:
 YY_RULE_SETUP
 #line 63 "deflex.l"
-{ yylval.number = strtol (yytext,0,0); 
+{ yylval.number = strtol (yytext,0,0);
 		return NUMBER; }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
 #line 66 "deflex.l"
-{ 	
+{
 		yylval.id =  xstrdup (yytext);
 		return ID;
 		}

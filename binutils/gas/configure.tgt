@@ -1,6 +1,6 @@
 # gas target specific configuration file.  This is a -*- sh -*- file.
 #
-#   Copyright (C) 2012-2014 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2015 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -50,6 +50,7 @@ case ${cpu} in
   aarch64_be)		cpu_type=aarch64 endian=big ;;
   alpha*)		cpu_type=alpha ;;
   am33_2.0)		cpu_type=mn10300 endian=little ;;
+  arc*eb)		cpu_type=arc endian=big ;;
   arm*be|arm*b)		cpu_type=arm endian=big ;;
   arm*)			cpu_type=arm endian=little ;;
   bfin*)		cpu_type=bfin endian=little ;;
@@ -107,6 +108,7 @@ case ${cpu} in
   tilegx*be)		cpu_type=tilegx endian=big ;;
   tilegx*)		cpu_type=tilegx endian=little ;;
   v850*)		cpu_type=v850 ;;
+  visium)		cpu_type=visium endian=big ;;
   x86_64*)		cpu_type=i386 arch=x86_64;;
   xgate)		cpu_type=xgate ;;
   xtensa*)		cpu_type=xtensa arch=xtensa ;;
@@ -129,6 +131,7 @@ case ${generic_target} in
   alpha-*-openbsd*)			fmt=elf em=obsd ;;
 
   arc-*-elf*)				fmt=elf ;;
+  arc*-*-linux-uclibc*)			fmt=elf bfd_gas=yes ;;
 
   arm-*-aout)				fmt=aout ;;
   arm-*-coff)				fmt=coff ;;
@@ -182,6 +185,8 @@ case ${generic_target} in
   frv-*-*linux*)			fmt=elf em=linux;;
   frv-*-*)				fmt=elf ;;
 
+  ft32-*-*)				fmt=elf ;;
+
   hppa-*-linux*)
     case ${cpu} in
       hppa*64*)				fmt=elf em=hppalinux64 ;;
@@ -203,6 +208,7 @@ case ${generic_target} in
   hppa-*-hiux*)				fmt=som em=hppa ;;
 
   h8300-*-elf | h8300-*-rtems*)		fmt=elf ;;
+  h8300-*-linux*)			fmt=elf em=linux ;;
 
   i370-*-elf* | i370-*-linux*)		fmt=elf ;;
 
@@ -211,7 +217,8 @@ case ${generic_target} in
   i386-*-beospe*)			fmt=coff em=pe ;;
   i386-*-beos*)				fmt=elf ;;
   i386-*-coff)				fmt=coff ;;
-  i386-*-elf)				fmt=elf ;;
+  i386-*-elfiamcu)			fmt=elf arch=iamcu ;;
+  i386-*-elf*)				fmt=elf ;;
   i386-*-kaos*)				fmt=elf ;;
   i386-*-bsd*)				fmt=aout em=386bsd ;;
   i386-*-nacl*)				fmt=elf em=nacl
@@ -453,6 +460,8 @@ case ${generic_target} in
   vax-*-netbsdelf*)			fmt=elf em=nbsd ;;
   vax-*-linux-*)			fmt=elf em=linux ;;
 
+  visium-*-elf)				fmt=elf ;;
+
   xstormy16-*-*)			fmt=elf ;;
   
   xgate-*-*)    			fmt=elf ;;
@@ -464,6 +473,7 @@ case ${generic_target} in
   z8k-*-coff | z8k-*-sim)		fmt=coff ;;
 
   *-*-aout | *-*-scout)			fmt=aout ;;
+  *-*-cloudabi*)			fmt=elf ;;
   *-*-dragonfly*)			fmt=elf em=dragonfly ;;
   *-*-freebsd* | *-*-kfreebsd*-gnu)	fmt=elf em=freebsd ;;
   *-*-bsd*)				fmt=aout em=sun3 ;;

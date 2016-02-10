@@ -1,5 +1,5 @@
 /* BFD back-end for os9000 i386 binaries.
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -155,6 +155,8 @@ os9k_sizeof_headers (bfd *abfd ATTRIBUTE_UNUSED,
 #define aout_32_close_and_cleanup aout_32_bfd_free_cached_info
 
 #define aout_32_find_line	      _bfd_nosymbols_find_line
+#define aout_32_get_symbol_version_string \
+  _bfd_nosymbols_get_symbol_version_string
 #define aout_32_bfd_make_debug_symbol _bfd_nosymbols_bfd_make_debug_symbol
 
 #define aout_32_bfd_reloc_type_lookup _bfd_norelocs_bfd_reloc_type_lookup

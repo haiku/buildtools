@@ -1,9 +1,196 @@
-2015-07-10  Alan Modra  <amodra@gmail.com>
+2015-12-10  Alan Modra  <amodra@gmail.com>
 
-	Apply from master
-	2015-04-24  Alan Modra  <amodra@gmail.com>
+	Apply from master.
+	2015-12-07  Alan Modra  <amodra@gmail.com>
+	* ppc64.h (R_PPC64_ENTRY): Define.
+
+2015-11-11  Alan Modra  <amodra@gmail.com>
+	    Peter Bergner <bergner@vnet.ibm.com>
+
+	* ppc.h (R_PPC_REL16DX_HA): New reloction.
+	* ppc64.h (R_PPC64_REL16DX_HA): Likewise.
+
+2015-10-28  Cupertino Miranda  <cmiranda@synopsys.com>
+
+	* arc-reloc.def (ARC_32_PCREL): New definition.
+	(ARC_TLS_DTPOFF): Arrange it in order.
+
+2015-10-27  Stephen Fisher  <sfisher@panix.com>
+
+	* common.h (NT_NETBSD_MARCH): Define.
+
+2015-10-22  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* x86-64.h (R_X86_64_GOTPCRELX): New.
+	(R_X86_64_REX_GOTPCRELX): Likewise.
+
+2015-10-22  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* i386.h (R_386_GOT32X): New relocation.
+
+2015-10-07  Cupertino Miranda  <cmiranda@synopsys.com>
+
+	* arc-reloc.def: Macro file with definition of all relocation
+	types.
+	* arc.h: Changed macros for the newly supported ARC cpus.  Altered
+	enum defining the supported relocations.
+	* common.h: Changed EM_ARC_A5 definition to EM_ARC_COMPACT. Added
+	macro for EM_ARC_COMPACT2.
+
+2015-09-22  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* common.h (DF_1_STUB, DF_1_PIE): Define.
+
+2015-09-21  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* external.h (Elf64_External_Chdr): Change ch_type to 4 bytes
+	and add ch_reserved.
+
+2015-08-11  Jiong Wang  <jiong.wang@arm.com>
+
+	* aarch64.h (R_AARCH64_P32_TLSLD_ADD_DTPREL_LO12): Define.
+
+2015-08-11  Jiong Wang  <jiong.wang@arm.com>
+
+	* aarch64.h (R_AARCH64_P32_TLSLD_ADD_LO12_NC): Define.
+
+2015-08-11  Jiong Wang  <jiong.wang@arm.com>
+
+	* aarch64.h (R_AARCH64_P32_TLSLD_ADR_PAGE21): Define.
+
+2015-07-01  Sandra Loosemore  <sandra@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+
+	* nios2.h (R_NIOS2_R2_S12): New.
+	(R_NIOS2_R2_I10_1_PCREL): New.
+	(R_NIOS2_R2_T1I7_1_PCREL): New.
+	(R_NIOS2_R2_T1I7_2): New.
+	(R_NIOS2_R2_T2I4): New.
+	(R_NIOS2_R2_T2I4_1): New.
+	(R_NIOS2_R2_T2I4_2): New.
+	(R_NIOS2_R2_X1I7_2): New.
+	(R_NIOS2_R2_X2L5): New.
+	(R_NIOS2_R2_F1I5_2): New.
+	(R_NIOS2_R2_L5I4X1): New.
+	(R_NIOS2_R2_T1X1I6): New.
+	(R_NIOS2_R2_T1X1I6_2): New.
+	(R_NIOS2_ILLEGAL): Renumber.
+
+2015-07-01  Sandra Loosemore  <sandra@codesourcery.com>
+	    Cesar Philippidis  <cesar@codesourcery.com>
+
+	* nios2.h (EF_NIOS2_ARCH_R1, EF_NIOS2_ARCH_R2): Define.
+
+2015-05-29  Roland McGrath  <mcgrathr@google.com>
+
+	* common.h (GNU_ABI_TAG_SYLLABLE): New macro.
+	(GNU_ABI_TAG_NACL): New macro.
+
+2015-05-11  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* common.h (EM_486): Renamed to ...
+	(EM_IAMCU): This.
+
+2015-04-27  Andreas Krebbel  <krebbel@linux.vnet.ibm.com>
+
+	* s390.h: Define Tag_GNU_S390_ABI_Vector.
+
+2015-04-24  Alan Modra  <amodra@gmail.com>
+
 	* internal.h (ELF_SECTION_IN_SEGMENT_1): Ensure PT_LOAD and
 	similar segments only contain alloc sections.
+
+2015-04-24  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR binutils/18316
+	* mep.h (SEC_MEP_VLIW): Removed.
+
+2015-04-09  Nick Clifton  <nickc@redhat.com>
+
+	* rx.h (E_FLAG_RX_SINSNS_SET): New bit in e_flags field.
+	(E_FLAG_RX_SINSNS_YES): Likewise.
+	(E_FLAG_RX_SINSNS_MASK): New define.
+
+2015-04-03  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* external.h (Elf32_External_Chdr): New.
+	(Elf64_External_Chdr): Likewise.
+	* internal.h (Elf_Internal_Chdr): Likewise.
+
+2015-03-26  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* common.h (ELFOSABI_CLOUDABI): New.
+	(SHF_COMPRESSED): Likewise.
+	(ELFCOMPRESS_ZLIB): Likewise.
+	(ELFCOMPRESS_LOOS): Likewise.
+	(ELFCOMPRESS_HIOS): Likewise.
+	(ELFCOMPRESS_LOPROC): Likewise.
+	(ELFCOMPRESS_HIPROC): Likewise.
+
+2015-03-19  Nick Clifton  <nickc@redhat.com>
+
+	* rl78.h (E_FLAG_RL78_G10): Redefine.
+	(E_FLAG_RL78_CPU_MASK, E_FLAG_RL78_ANY_CPU, E_FLAG_RL78_G13
+	E_FLAG_RL78_G14): New flags.
+
+2015-02-19  Marcus Shawcroft  <marcus.shawcroft@arm.com>
+
+	* aarch64.h (R_AARCH64_P32_TLSGD_ADR_PREL21): Add.
+
+2015-02-24  Nick Clifton  <nickc@redhat.com>
+
+	* v850.h (EF_RH850_SIMD): Delete deprecated flag.
+	(EF_RH850_CACHE): Likewise.
+	(EF_RH850_MMU): Likewise.
+	(EF_RH850_DATA_ALIGN8): Likewise.
+	(SHT_RENESAS_IOP): Fix typo in name.
+	(SHT_RENESAS_INFO): Define.
+	(V850_NOTE_SECNAME): Define.
+	(SIZEOF_V850_NOTE): Define.
+	(V850_NOTE_NAME): Define.
+	(enum v850_notes): New enum.
+	(NUM_V850_NOTES): Define.
+
+2015-02-23  Nick Clifton  <nickc@redhat.com>
+
+	PR 17915
+	* score.h: Fix typo in license header.
+
+2015-02-20  Andreas Arnez  <arnez@linux.vnet.ibm.com>
+
+	* common.h (NT_S390_VXRS_LOW): New macro.
+	(NT_S390_VXRS_HIGH): Likewise.
+
+2015-01-28  James Bowman  <james.bowman@ftdichip.com>
+
+	* common.h (EM_FT32): Define.
+	* ft32.h: New file.
+
+2015-01-09  Anthony Green  <green@moxielogic.com>
+
+	* common.h (EM_MOXIE): Redefine to official number.
+	(EM_MOXIE_OLD): Define (from old number).
+
+2015-01-01  Alan Modra  <amodra@gmail.com>
+
+	Update year range in copyright notice of all files.
+
+2014-12-25  Thomas Preud'homme  <thomas.preudhomme@arm.com>
+
+	* arm.h: New AEABI_FP_number_model_* and AEABI_VFP_args_* enum values.
+
+2014-12-06  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* common.h (EM_VISIUM): Define.
+	* visium.h: New file.
+
+2014-11-13  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* x86-64.h (R_X86_64_GOTPLT64): Mark it obsolete.
+
+2014-10-17  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* sparc.h (ELF_SPARC_HWCAP2_VIS3B): Documentation improved.
 
 2014-10-09  Jose E. Marchesi  <jose.marchesi@oracle.com>
 
@@ -45,9 +232,9 @@
 	* avr.h: Add R_AVR_PORT5 and R_AVR_PORT6.
 
 2014-07-01  Barney Stratford   <barney_stratford@fastmail.fm>
-            Senthil Kumar Selvaraj  <senthil_kumar.selvaraj@atmel.com>
-            Pitchumani Sivanupandi  <pitchumani.s@atmel.com>
-            Soundararajan  <Sounderarajan.D@atmel.com>
+	    Senthil Kumar Selvaraj  <senthil_kumar.selvaraj@atmel.com>
+	    Pitchumani Sivanupandi  <pitchumani.s@atmel.com>
+	    Soundararajan  <Sounderarajan.D@atmel.com>
 
 	* avr.h (E_AVR_MACH_AVRTINY): Define avrtiny machine number.
 	(R_AVR_LDS_STS_16): Define 16 bit lds/sts reloc number.
@@ -224,7 +411,7 @@
 	* common.h (NT_S390_TDB): Define.
 
 2013-02-06  Sandra Loosemore  <sandra@codesourcery.com>
-            Andrew Jenner <andrew@codesourcery.com>
+	    Andrew Jenner <andrew@codesourcery.com>
 
 	Based on patches from Altera Corporation.
 
@@ -315,15 +502,15 @@
 	(R_TILEGX_IMM16_X1_HW2_LAST_PLT_PCREL): Ditto.
 
 2012-08-13  Ian Bolton  <ian.bolton@arm.com>
-            Laurent Desnogues  <laurent.desnogues@arm.com>
-            Jim MacArthur  <jim.macarthur@arm.com>
-            Marcus Shawcroft  <marcus.shawcroft@arm.com>
-            Nigel Stephens  <nigel.stephens@arm.com>
-            Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
-            Richard Earnshaw  <rearnsha@arm.com>
-            Sofiane Naci  <sofiane.naci@arm.com>
-            Tejas Belagod  <tejas.belagod@arm.com>
-            Yufeng Zhang  <yufeng.zhang@arm.com>
+	    Laurent Desnogues  <laurent.desnogues@arm.com>
+	    Jim MacArthur  <jim.macarthur@arm.com>
+	    Marcus Shawcroft  <marcus.shawcroft@arm.com>
+	    Nigel Stephens  <nigel.stephens@arm.com>
+	    Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
+	    Richard Earnshaw  <rearnsha@arm.com>
+	    Sofiane Naci  <sofiane.naci@arm.com>
+	    Tejas Belagod  <tejas.belagod@arm.com>
+	    Yufeng Zhang  <yufeng.zhang@arm.com>
 
 	* aarch64.h: New file.
 	* common.h (EM_res183): Rename to EM_AARCH64.
@@ -497,7 +684,7 @@
 	* x86-64.h (R_X86_64_RELATIVE64): New.
 
 2011-07-24  Chao-ying Fu  <fu@mips.com>
-            Maciej W. Rozycki  <macro@codesourcery.com>
+	    Maciej W. Rozycki  <macro@codesourcery.com>
 
 	* mips.h (R_MICROMIPS_min): New relocations.
 	(R_MICROMIPS_26_S1): Likewise.
@@ -636,7 +823,7 @@
 	* tic6x-attrs.h (Tag_ABI_compatibility): Define.
 
 2010-10-29  Bernd Schmidt  <bernds@codesourcery.com>
-            Joseph Myers  <joseph@codesourcery.com>
+	    Joseph Myers  <joseph@codesourcery.com>
 
 	* tic6x-attrs.h (Tag_ABI_DSBT): New.
 
@@ -1598,8 +1785,8 @@
 	* m32c.h: Add relax relocs.
 
 2006-02-17  Shrirang Khisti  <shrirangk@kpitcummins.com>
-            Anil Paranjape   <anilp1@kpitcummins.com>
-            Shilin Shakti    <shilins@kpitcummins.com>
+	    Anil Paranjape   <anilp1@kpitcummins.com>
+	    Shilin Shakti    <shilins@kpitcummins.com>
 
 	* common.h (EM_XC16X): New entry for xc16x cpu.
 	Sort other EM_* numbers into numerical order.
@@ -2015,7 +2202,7 @@
 
 For older changes see ChangeLog-9103
 
-Copyright (C) 2004-2014 Free Software Foundation, Inc.
+Copyright (C) 2004-2015 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

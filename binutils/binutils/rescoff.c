@@ -1,5 +1,5 @@
 /* rescoff.c -- read and write resources in Windows COFF files.
-   Copyright (C) 1997-2014 Free Software Foundation, Inc.
+   Copyright (C) 1997-2015 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Rewritten by Kai Tietz, Onevision.
 
@@ -164,7 +164,7 @@ read_coff_rsrc (const char *filename, const char *target)
      this will have to be cleaned up.  */
 
   ret = read_coff_res_dir (&wrbfd, data, &flaginfo, (const rc_res_id *) NULL, 0);
-  
+
   bfd_close (abfd);
 
   return ret;

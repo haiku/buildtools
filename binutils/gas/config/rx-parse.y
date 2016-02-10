@@ -1,5 +1,5 @@
 /* rx-parse.y  Renesas RX parser
-   Copyright (C) 2008-2014 Free Software Foundation, Inc.
+   Copyright (C) 2008-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -500,27 +500,27 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| SCMPU
-	  { B2 (0x7f, 0x83); }
+	  { B2 (0x7f, 0x83); rx_note_string_insn_use (); }
 	| SMOVU
-	  { B2 (0x7f, 0x87); }
+	  { B2 (0x7f, 0x87); rx_note_string_insn_use (); }
 	| SMOVB
-	  { B2 (0x7f, 0x8b); }
+	  { B2 (0x7f, 0x8b); rx_note_string_insn_use (); }
 	| SMOVF
-	  { B2 (0x7f, 0x8f); }
+	  { B2 (0x7f, 0x8f); rx_note_string_insn_use (); }
 
 /* ---------------------------------------------------------------------- */
 
 	| SUNTIL bwl
-	  { B2 (0x7f, 0x80); F ($2, 14, 2); }
+	  { B2 (0x7f, 0x80); F ($2, 14, 2); rx_note_string_insn_use (); }
 	| SWHILE bwl
-	  { B2 (0x7f, 0x84); F ($2, 14, 2); }
+	  { B2 (0x7f, 0x84); F ($2, 14, 2); rx_note_string_insn_use (); }
 	| SSTR bwl
 	  { B2 (0x7f, 0x88); F ($2, 14, 2); }
 
 /* ---------------------------------------------------------------------- */
 
 	| RMPA bwl
-	  { B2 (0x7f, 0x8c); F ($2, 14, 2); }
+	  { B2 (0x7f, 0x8c); F ($2, 14, 2); rx_note_string_insn_use (); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -889,7 +889,7 @@ float2_op
 	;
 
 float2_op_ni
-	: { rx_check_float_support (); } 
+	: { rx_check_float_support (); }
 	  REG ',' REG
 	  { id24 (1, 0x83 + (sub_op << 2), 0); F ($2, 16, 4); F ($4, 20, 4); }
 	| { rx_check_float_support (); }
@@ -1405,13 +1405,13 @@ rx_disp5op (expressionS * exp, int msize)
   switch (msize)
     {
     case BSIZE:
-      if (0 < v && v <= 31)
+      if (0 <= v && v <= 31)
 	return 1;
       break;
     case WSIZE:
       if (v & 1)
 	return 0;
-      if (0 < v && v <= 63)
+      if (0 <= v && v <= 63)
 	{
 	  exp->X_add_number >>= 1;
 	  return 1;
@@ -1420,7 +1420,7 @@ rx_disp5op (expressionS * exp, int msize)
     case LSIZE:
       if (v & 3)
 	return 0;
-      if (0 < v && v <= 127)
+      if (0 <= v && v <= 127)
 	{
 	  exp->X_add_number >>= 2;
 	  return 1;

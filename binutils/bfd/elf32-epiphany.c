@@ -1,5 +1,5 @@
 /* Adapteva epiphany specific support for 32-bit ELF
-   Copyright (C) 2000-2014 Free Software Foundation, Inc.
+   Copyright (C) 2000-2015 Free Software Foundation, Inc.
    Contributed by Embecosm on behalf of Adapteva, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -63,7 +63,7 @@ static reloc_howto_type epiphany_elf_howto_table [] =
 	  pr)                   /* pcrel_offset */
 
   /* This reloc does nothing.  */
-  AHOW (R_EPIPHANY_NONE,    0, 3, 0, FALSE, 0, complain_overflow_dont,     "R_EPIPHANY_NONE",        0,          0),
+  AHOW (R_EPIPHANY_NONE,    0, 3,0, FALSE, 0, complain_overflow_dont,     "R_EPIPHANY_NONE",        0,          0),
 
   /* 8 bit absolute (not likely) */
   AHOW (R_EPIPHANY_8,       0, 0, 8, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_8",      0x000000ff, 0x000000ff),
@@ -212,7 +212,7 @@ epiphany_elf_relax_section (bfd *abfd, asection *sec,
   /* We don't have to do anything for a relocatable link,
      if this section does not have relocs, or if this is
      not a code section.  */
-  if (link_info->relocatable
+  if (bfd_link_relocatable (link_info)
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
@@ -533,7 +533,7 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (info->relocatable)
+      if (bfd_link_relocatable (info))
 	continue;
 
       /* Finally, the sole EPIPHANY-specific part.  */

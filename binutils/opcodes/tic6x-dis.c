@@ -1,5 +1,5 @@
 /* TI C6X disassembler.
-   Copyright (C) 2010-2014 Free Software Foundation, Inc.
+   Copyright (C) 2010-2015 Free Software Foundation, Inc.
    Contributed by Joseph Myers <joseph@codesourcery.com>
    		  Bernd Schmidt  <bernds@codesourcery.com>
 
@@ -249,6 +249,9 @@ print_insn_tic6x (bfd_vma addr, struct disassemble_info *info)
 
   fp_offset = addr & 0x1f;
   fp_addr = addr - fp_offset;
+  /* Read in a block of instructions.  Since there might be a
+     symbol in the middle of this block, disable stop_vma.  */
+  info->stop_vma = 0;
   status = info->read_memory_func (fp_addr, fp, 32, info);
   if (status)
     {

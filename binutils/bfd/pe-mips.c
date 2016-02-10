@@ -1,5 +1,5 @@
 /* BFD back-end for MIPS PE COFF files.
-   Copyright (C) 1990-2014 Free Software Foundation, Inc.
+   Copyright (C) 1990-2015 Free Software Foundation, Inc.
    Modified from coff-i386.c by DJ Delorie, dj@cygnus.com
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -375,7 +375,7 @@ static reloc_howto_type howto_table[] =
       coffsym = (obj_symbols (abfd)				\
 	         + (cache_ptr->sym_ptr_ptr - symbols));		\
     else if (ptr)						\
-      coffsym = coff_symbol_from (abfd, ptr);			\
+      coffsym = coff_symbol_from (ptr);				\
     if (coffsym != NULL						\
 	&& coffsym->native->u.syment.n_scnum == 0)		\
       cache_ptr->addend = - coffsym->native->u.syment.n_value;	\
@@ -603,7 +603,7 @@ coff_pe_mips_relocate_section (bfd *output_bfd,
   struct internal_reloc *rel_end;
   unsigned int i;
 
-  if (info->relocatable)
+  if (bfd_link_relocatable (info))
     {
       (*_bfd_error_handler)
 	(_("%B: `ld -r' not supported with PE MIPS objects\n"), input_bfd);
@@ -661,7 +661,7 @@ coff_pe_mips_relocate_section (bfd *output_bfd,
          then we should ignore the symbol value.  */
       if (howto->pc_relative && howto->pcrel_offset)
 	{
-	  if (info->relocatable)
+	  if (bfd_link_relocatable (info))
 	    continue;
 	  if (sym != NULL && sym->n_scnum != 0)
 	    addend += sym->n_value;
@@ -701,7 +701,7 @@ coff_pe_mips_relocate_section (bfd *output_bfd,
 		     + sec->output_offset);
 	      }
 
-	  else if (! info->relocatable)
+	  else if (! bfd_link_relocatable (info))
 	    {
 	      if (! ((*info->callbacks->undefined_symbol)
 		     (info, h->root.root.string, input_bfd, input_section,

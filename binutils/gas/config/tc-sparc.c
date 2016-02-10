@@ -1,5 +1,5 @@
 /* tc-sparc.c -- Assemble for the SPARC
-   Copyright (C) 1989-2014 Free Software Foundation, Inc.
+   Copyright (C) 1989-2015 Free Software Foundation, Inc.
    This file is part of GAS, the GNU Assembler.
 
    GAS is free software; you can redistribute it and/or modify
@@ -280,7 +280,7 @@ static struct sparc_arch {
   { "v8pluse", "v9b", v9,  0, 1, HWCAP_V8PLUS|HWS_VE, 0 },
   { "v8plusv", "v9b", v9,  0, 1, HWCAP_V8PLUS|HWS_VV, 0 },
   { "v8plusm", "v9b", v9,  0, 1, HWCAP_V8PLUS|HWS_VM, 0 },
-  
+
   { "v9",      "v9",  v9,  0, 1, HWS_V9, 0 },
   { "v9a",     "v9a", v9,  0, 1, HWS_VA, 0 },
   { "v9b",     "v9b", v9,  0, 1, HWS_VB, 0 },
@@ -805,6 +805,7 @@ struct priv_reg_entry priv_reg_table[] =
   {"wstate", 14},
   {"fq", 15},
   {"gl", 16},
+  {"pmcdper", 23},
   {"ver", 31},
   {"", -1},			/* End marker.  */
 };
@@ -863,9 +864,9 @@ cmp_reg_entry (const void *parg, const void *qarg)
 void
 md_begin (void)
 {
-  register const char *retval = NULL;
+  const char *retval = NULL;
   int lose = 0;
-  register unsigned int i = 0;
+  unsigned int i = 0;
 
   /* We don't get a chance to initialize anything before md_parse_option
      is called, and it may not be called, so handle default initialization
@@ -1211,7 +1212,7 @@ synthetize_setsw (const struct sparc_opcode *insn)
   output_insn (insn, &the_insn);
 }
 
-/* Handle the setsw synthetic instruction.  */
+/* Handle the setx synthetic instruction.  */
 
 static void
 synthetize_setx (const struct sparc_opcode *insn)
@@ -1973,7 +1974,8 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		{
 		  ++s;
 		}
-	      if (strncmp (s, "%icc", 4) == 0)
+	      if ((strncmp (s, "%icc", 4) == 0)
+                  || (sparc_arch_size == 32 && strncmp (s, "%ncc", 4) == 0))
 		{
 		  s += 4;
 		  continue;
@@ -1985,7 +1987,8 @@ sparc_ip (char *str, const struct sparc_opcode **pinsn)
 		{
 		  ++s;
 		}
-	      if (strncmp (s, "%xcc", 4) == 0)
+              if ((strncmp (s, "%xcc", 4) == 0)
+                  || (sparc_arch_size == 64 && strncmp (s, "%ncc", 4) == 0))
 		{
 		  s += 4;
 		  continue;
@@ -3973,11 +3976,10 @@ s_reserve (int ignore ATTRIBUTE_UNUSED)
   int temp;
   symbolS *symbolP;
 
-  name = input_line_pointer;
-  c = get_symbol_end ();
+  c = get_symbol_name (&name);
   p = input_line_pointer;
   *p = c;
-  SKIP_WHITESPACE ();
+  SKIP_WHITESPACE_AFTER_NAME ();
 
   if (*input_line_pointer != ',')
     {
@@ -4115,12 +4117,11 @@ s_common (int ignore ATTRIBUTE_UNUSED)
   offsetT temp, size;
   symbolS *symbolP;
 
-  name = input_line_pointer;
-  c = get_symbol_end ();
+  c = get_symbol_name (&name);
   /* Just after name is now '\0'.  */
   p = input_line_pointer;
   *p = c;
-  SKIP_WHITESPACE ();
+  SKIP_WHITESPACE_AFTER_NAME ();
   if (*input_line_pointer != ',')
     {
       as_bad (_("Expected comma after symbol-name"));
@@ -4386,7 +4387,7 @@ s_register (int ignore ATTRIBUTE_UNUSED)
   char c;
   int reg;
   int flags;
-  const char *regname;
+  char *regname;
 
   if (input_line_pointer[0] != '%'
       || input_line_pointer[1] != 'g'
@@ -4400,8 +4401,7 @@ s_register (int ignore ATTRIBUTE_UNUSED)
   if (*input_line_pointer == '#')
     {
       ++input_line_pointer;
-      regname = input_line_pointer;
-      c = get_symbol_end ();
+      c = get_symbol_name (&regname);
       if (strcmp (regname, "scratch") && strcmp (regname, "ignore"))
 	as_bad (_("register syntax is .register %%g[2367],{#scratch|symbolname|#ignore}"));
       if (regname[0] == 'i')
@@ -4411,9 +4411,9 @@ s_register (int ignore ATTRIBUTE_UNUSED)
     }
   else
     {
-      regname = input_line_pointer;
-      c = get_symbol_end ();
+      c = get_symbol_name (&regname);
     }
+
   if (sparc_arch_size == 64)
     {
       if (globals[reg])
@@ -4460,7 +4460,7 @@ s_register (int ignore ATTRIBUTE_UNUSED)
 	}
     }
 
-  *input_line_pointer = c;
+  (void) restore_line_pointer (c);
 
   demand_empty_rest_of_line ();
 }

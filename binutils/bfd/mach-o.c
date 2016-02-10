@@ -1,5 +1,5 @@
 /* Mach-O support for BFD.
-   Copyright (C) 1999-2014 Free Software Foundation, Inc.
+   Copyright (C) 1999-2015 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -35,7 +35,7 @@
 #define bfd_mach_o_mkobject bfd_mach_o_gen_mkobject
 
 #define FILE_ALIGN(off, algn) \
-  (((off) + ((file_ptr) 1 << (algn)) - 1) & ((file_ptr) -1 << (algn)))
+  (((off) + ((file_ptr) 1 << (algn)) - 1) & ((file_ptr) -1U << (algn)))
 
 static bfd_boolean
 bfd_mach_o_read_dyld_content (bfd *abfd, bfd_mach_o_dyld_info_command *cmd);
@@ -390,7 +390,7 @@ bfd_mach_o_convert_section_name_to_bfd (bfd *abfd, const char *segname,
   if (xlat)
     {
       len = strlen (xlat->bfd_name);
-      res = bfd_alloc (abfd, len+1);
+      res = bfd_alloc (abfd, len + 1);
       if (res == NULL)
 	return;
       memcpy (res, xlat->bfd_name, len+1);
@@ -690,18 +690,18 @@ bfd_mach_o_bfd_copy_private_header_data (bfd *ibfd, bfd *obfd)
 		ody->export_size = idy->export_size;
 		ody->export_content = idy->export_content;
 	      }
-	    /* PR 17512: file: 730e492d.  */
+	    /* PR 17512L: file: 730e492d.  */
 	    else
 	      {
-		ody->rebase_size = 
-		  ody->bind_size = 
-		  ody->weak_bind_size = 
-		  ody->lazy_bind_size = 
+		ody->rebase_size =
+		  ody->bind_size =
+		  ody->weak_bind_size =
+		  ody->lazy_bind_size =
 		  ody->export_size = 0;
-		ody->rebase_content = 
-		  ody->bind_content = 
-		  ody->weak_bind_content = 
-		  ody->lazy_bind_content = 
+		ody->rebase_content =
+		  ody->bind_content =
+		  ody->weak_bind_content =
+		  ody->lazy_bind_content =
 		  ody->export_content = NULL;
 	      }
 	  }
@@ -1392,7 +1392,7 @@ bfd_mach_o_canonicalize_one_reloc (bfd *abfd,
 	  if (num >= (unsigned) bfd_mach_o_count_symbols (abfd))
 	    sym = bfd_und_section_ptr->symbol_ptr_ptr;
 	  else if (syms == NULL)
-	    sym = bfd_und_section_ptr->symbol_ptr_ptr;	    
+	    sym = bfd_und_section_ptr->symbol_ptr_ptr;
 	  else
 	    /* An external symbol number.  */
 	    sym = syms + num;
@@ -1411,7 +1411,7 @@ bfd_mach_o_canonicalize_one_reloc (bfd *abfd,
 	  /* PR 17512: file: 006-2964-0.004.  */
 	  if (num > mdata->nsects)
 	    return -1;
-	  
+
 	  /* A section number.  */
           sym = mdata->sections[num - 1]->bfdsection->symbol_ptr_ptr;
           /* For a symbol defined in section S, the addend (stored in the

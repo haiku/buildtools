@@ -1,6 +1,6 @@
 // options.h -- handle command line options for gold  -*- C++ -*-
 
-// Copyright (C) 2006-2014 Free Software Foundation, Inc.
+// Copyright (C) 2006-2015 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -644,6 +644,11 @@ class General_options
 	      N_("Allow unresolved references in shared libraries"),
 	      N_("Do not allow unresolved references in shared libraries"));
 
+  DEFINE_bool(apply_dynamic_relocs, options::TWO_DASHES, '\0', true,
+	      N_("Apply link-time values for dynamic relocations (default)"),
+	      N_("(aarch64 only) Do not apply link-time values "
+	         "for dynamic relocations"));
+
   DEFINE_bool(as_needed, options::TWO_DASHES, '\0', false,
 	      N_("Only set DT_NEEDED for shared libraries if used"),
 	      N_("Always DT_NEEDED for shared libraries"));
@@ -695,17 +700,10 @@ class General_options
 	      N_("Check segment addresses for overlaps (default)"),
 	      N_("Do not check segment addresses for overlaps"));
 
-#ifdef HAVE_ZLIB_H
   DEFINE_enum(compress_debug_sections, options::TWO_DASHES, '\0', "none",
 	      N_("Compress .debug_* sections in the output file"),
-	      ("[none,zlib]"),
-	      {"none", "zlib"});
-#else
-  DEFINE_enum(compress_debug_sections, options::TWO_DASHES, '\0', "none",
-	      N_("Compress .debug_* sections in the output file"),
-	      N_("[none]"),
-	      {"none"});
-#endif
+	      ("[none,zlib,zlib-gnu,zlib-gabi]"),
+	      {"none", "zlib", "zlib-gnu", "zlib-gabi"});
 
   DEFINE_bool(copy_dt_needed_entries, options::TWO_DASHES, '\0', false,
 	      N_("Not supported"),
@@ -746,10 +744,12 @@ class General_options
 	      N_("Look for violations of the C++ One Definition Rule"),
 	      N_("Do not look for violations of the C++ One Definition Rule"));
 
-  DEFINE_bool(discard_all, options::TWO_DASHES, 'x', false,
-	      N_("Delete all local symbols"), NULL);
-  DEFINE_bool(discard_locals, options::TWO_DASHES, 'X', false,
-	      N_("Delete all temporary local symbols"), NULL);
+  DEFINE_special(discard_all, options::TWO_DASHES, 'x',
+		 N_("Delete all local symbols"), NULL);
+  DEFINE_special(discard_locals, options::TWO_DASHES, 'X',
+		 N_("Delete all temporary local symbols"), NULL);
+  DEFINE_special(discard_none, options::TWO_DASHES, '\0',
+		 N_("Keep all local symbols"), NULL);
 
   DEFINE_bool(dynamic_list_data, options::TWO_DASHES, '\0', false,
 	      N_("Add data symbols to dynamic symbols"), NULL);
@@ -808,6 +808,14 @@ class General_options
   DEFINE_bool(fix_cortex_a8, options::TWO_DASHES, '\0', false,
 	      N_("(ARM only) Fix binaries for Cortex-A8 erratum."),
 	      N_("(ARM only) Do not fix binaries for Cortex-A8 erratum."));
+
+  DEFINE_bool(fix_cortex_a53_843419, options::TWO_DASHES, '\0', false,
+	      N_("(AArch64 only) Fix Cortex-A53 erratum 843419."),
+	      N_("(AArch64 only) Do not fix Cortex-A53 erratum 843419."));
+
+  DEFINE_bool(fix_cortex_a53_835769, options::TWO_DASHES, '\0', false,
+	      N_("(AArch64 only) Fix Cortex-A53 erratum 835769."),
+	      N_("(AArch64 only) Do not fix Cortex-A53 erratum 835769."));
 
   DEFINE_bool(fix_arm1176, options::TWO_DASHES, '\0', true,
 	      N_("(ARM only) Fix binaries for ARM1176 erratum."),
@@ -978,6 +986,10 @@ class General_options
 		    N_("Create a position independent executable"),
 		    N_("Do not create a position independent executable"),
 		    false);
+
+  DEFINE_bool(pic_veneer, options::TWO_DASHES, '\0', false,
+	      N_("Force PIC sequences for ARM/Thumb interworking veneers"),
+	      NULL);
 
   DEFINE_bool(pipeline_knowledge, options::ONE_DASH, '\0', false,
 	      NULL, N_("(ARM only) Ignore for backward compatibility"));
@@ -1222,6 +1234,9 @@ class General_options
 		    options::TWO_DASHES, '\0',
 		    N_("Report unresolved symbols as errors"),
 		    NULL, true);
+  DEFINE_bool(weak_unresolved_symbols, options::TWO_DASHES, '\0', false,
+	      N_("Convert unresolved symbols to weak references"),
+	      NULL);
 
   DEFINE_bool(wchar_size_warning, options::TWO_DASHES, '\0', true, NULL,
 	      N_("(ARM only) Do not warn about objects with incompatible "
@@ -1272,6 +1287,9 @@ class General_options
 	      NULL);
   DEFINE_bool(execstack, options::DASH_Z, '\0', false,
 	      N_("Mark output as requiring executable stack"), NULL);
+  DEFINE_bool(global, options::DASH_Z, '\0', false,
+	      N_("Make symbols in DSO available for subsequently loaded "
+	         "objects"), NULL);
   DEFINE_bool(initfirst, options::DASH_Z, '\0', false,
 	      N_("Mark DSO to be initialized first at runtime"),
 	      NULL);
@@ -1522,10 +1540,35 @@ class General_options
   endianness() const
   { return this->endianness_; }
 
+  bool
+  discard_all() const
+  { return this->discard_locals_ == DISCARD_ALL; }
+
+  bool
+  discard_locals() const
+  { return this->discard_locals_ == DISCARD_LOCALS; }
+
+  bool
+  discard_sec_merge() const
+  { return this->discard_locals_ == DISCARD_SEC_MERGE; }
+
  private:
   // Don't copy this structure.
   General_options(const General_options&);
   General_options& operator=(const General_options&);
+
+  // What local symbols to discard.
+  enum Discard_locals
+  {
+    // Locals in merge sections (default).
+    DISCARD_SEC_MERGE,
+    // None (--discard-none).
+    DISCARD_NONE,
+    // Temporary locals (--discard-locals/-X).
+    DISCARD_LOCALS,
+    // All locals (--discard-all/-x).
+    DISCARD_ALL
+  };
 
   // Whether to mark the stack as executable.
   enum Execstack
@@ -1622,6 +1665,8 @@ class General_options
   Fix_v4bx fix_v4bx_;
   // Endianness.
   Endianness endianness_;
+  // What local symbols to discard.
+  Discard_locals discard_locals_;
 };
 
 // The position-dependent options.  We use this to store the state of

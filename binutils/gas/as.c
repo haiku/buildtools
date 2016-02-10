@@ -1,5 +1,5 @@
 /* as.c - GAS main program.
-   Copyright (C) 1987-2014 Free Software Foundation, Inc.
+   Copyright (C) 1987-2015 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -224,6 +224,11 @@ print_version_id (void)
 	   VERSION, TARGET_ALIAS, BFD_VERSION_STRING);
 }
 
+#ifdef DEFAULT_FLAG_COMPRESS_DEBUG
+enum compressed_debug_section_type flag_compress_debug
+  = COMPRESS_DEBUG_GABI_ZLIB;
+#endif
+
 static void
 show_usage (FILE * stream)
 {
@@ -245,14 +250,21 @@ Options:\n\
 
   fprintf (stream, _("\
   --alternate             initially turn on alternate macro syntax\n"));
-#ifdef HAVE_ZLIB_H
+#ifdef DEFAULT_FLAG_COMPRESS_DEBUG
   fprintf (stream, _("\
-  --compress-debug-sections\n\
-                          compress DWARF debug sections using zlib\n"));
+  --compress-debug-sections[={none|zlib|zlib-gnu|zlib-gabi}]\n\
+                          compress DWARF debug sections using zlib [default]\n"));
   fprintf (stream, _("\
   --nocompress-debug-sections\n\
                           don't compress DWARF debug sections\n"));
-#endif /* HAVE_ZLIB_H */
+#else
+  fprintf (stream, _("\
+  --compress-debug-sections[={none|zlib|zlib-gnu|zlib-gabi}]\n\
+                          compress DWARF debug sections using zlib\n"));
+  fprintf (stream, _("\
+  --nocompress-debug-sections\n\
+                          don't compress DWARF debug sections [default]\n"));
+#endif
   fprintf (stream, _("\
   -D                      produce assembler debugging messages\n"));
   fprintf (stream, _("\
@@ -286,6 +298,8 @@ Options:\n\
   fprintf (stream, _("\
   --size-check=[error|warning]\n\
 			  ELF .size directive check (default --size-check=error)\n"));
+  fprintf (stream, _("\
+  --sectname-subst        enable section name substitution sequences\n"));
 #endif
   fprintf (stream, _("\
   -f                      skip whitespace and comment preprocessing\n"));
@@ -449,6 +463,7 @@ parse_args (int * pargc, char *** pargv)
       OPTION_EXECSTACK,
       OPTION_NOEXECSTACK,
       OPTION_SIZE_CHECK,
+      OPTION_SECTNAME_SUBST,
       OPTION_ALTERNATE,
       OPTION_AL,
       OPTION_HASH_TABLE_SIZE,
@@ -473,7 +488,7 @@ parse_args (int * pargc, char *** pargv)
     ,{"a", optional_argument, NULL, 'a'}
     /* Handle -al=<FILE>.  */
     ,{"al", optional_argument, NULL, OPTION_AL}
-    ,{"compress-debug-sections", no_argument, NULL, OPTION_COMPRESS_DEBUG}
+    ,{"compress-debug-sections", optional_argument, NULL, OPTION_COMPRESS_DEBUG}
     ,{"nocompress-debug-sections", no_argument, NULL, OPTION_NOCOMPRESS_DEBUG}
     ,{"debug-prefix-map", required_argument, NULL, OPTION_DEBUG_PREFIX_MAP}
     ,{"defsym", required_argument, NULL, OPTION_DEFSYM}
@@ -483,6 +498,7 @@ parse_args (int * pargc, char *** pargv)
     ,{"execstack", no_argument, NULL, OPTION_EXECSTACK}
     ,{"noexecstack", no_argument, NULL, OPTION_NOEXECSTACK}
     ,{"size-check", required_argument, NULL, OPTION_SIZE_CHECK}
+    ,{"sectname-subst", no_argument, NULL, OPTION_SECTNAME_SUBST}
 #endif
     ,{"fatal-warnings", no_argument, NULL, OPTION_WARN_FATAL}
     ,{"gdwarf-2", no_argument, NULL, OPTION_GDWARF2}
@@ -626,7 +642,7 @@ parse_args (int * pargc, char *** pargv)
 	case OPTION_VERSION:
 	  /* This output is intended to follow the GNU standards document.  */
 	  printf (_("GNU assembler %s\n"), BFD_VERSION_STRING);
-	  printf (_("Copyright (C) 2014 Free Software Foundation, Inc.\n"));
+	  printf (_("Copyright (C) 2015 Free Software Foundation, Inc.\n"));
 	  printf (_("\
 This program is free software; you may redistribute it under the terms of\n\
 the GNU General Public License version 3 or later.\n\
@@ -657,15 +673,31 @@ This program has absolutely no warranty.\n"));
 	  exit (EXIT_SUCCESS);
 
 	case OPTION_COMPRESS_DEBUG:
-#ifdef HAVE_ZLIB_H
-	  flag_compress_debug = 1;
+	  if (optarg)
+	    {
+#if defined OBJ_ELF || defined OBJ_MAYBE_ELF
+	      if (strcasecmp (optarg, "none") == 0)
+		flag_compress_debug = COMPRESS_DEBUG_NONE;
+	      else if (strcasecmp (optarg, "zlib") == 0)
+		flag_compress_debug = COMPRESS_DEBUG_GABI_ZLIB;
+	      else if (strcasecmp (optarg, "zlib-gnu") == 0)
+		flag_compress_debug = COMPRESS_DEBUG_GNU_ZLIB;
+	      else if (strcasecmp (optarg, "zlib-gabi") == 0)
+		flag_compress_debug = COMPRESS_DEBUG_GABI_ZLIB;
+	      else
+		as_fatal (_("Invalid --compress-debug-sections option: `%s'"),
+			  optarg);
 #else
-	  as_warn (_("cannot compress debug sections (zlib not installed)"));
-#endif /* HAVE_ZLIB_H */
+	      as_fatal (_("--compress-debug-sections=%s is unsupported"),
+			optarg);
+#endif
+	    }
+	  else
+	    flag_compress_debug = COMPRESS_DEBUG_GABI_ZLIB;
 	  break;
 
 	case OPTION_NOCOMPRESS_DEBUG:
-	  flag_compress_debug = 0;
+	  flag_compress_debug = COMPRESS_DEBUG_NONE;
 	  break;
 
 	case OPTION_DEBUG_PREFIX_MAP:
@@ -833,6 +865,10 @@ This program has absolutely no warranty.\n"));
 	    flag_size_check = size_check_warning;
 	  else
 	    as_fatal (_("Invalid --size-check= option: `%s'"), optarg);
+	  break;
+
+	case OPTION_SECTNAME_SUBST:
+	  flag_sectname_subst = 1;
 	  break;
 #endif
 	case 'Z':

@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2014 Free Software Foundation, Inc.
+# Copyright (C) 2012-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -132,6 +132,7 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
     run_dump_test "reg"
     run_dump_test "reg-intel"
     run_dump_test "i386"
+    run_dump_test "i386-intel"
     run_dump_test "compat"
     run_dump_test "compat-intel"
     run_dump_test "arch-1"
@@ -149,6 +150,7 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
     run_dump_test "arch-10-bdver2"
     run_dump_test "arch-10-bdver3"
     run_dump_test "arch-10-bdver4"
+    run_dump_test "arch-13-znver1"
     run_dump_test "arch-10-btver1"
     run_dump_test "arch-10-btver2"
     run_list_test "arch-10-1" "-march=generic32 -I${srcdir}/$subdir -al"
@@ -157,6 +159,7 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
     run_list_test "arch-10-4" "-march=i686+sse4+vmx+smx -I${srcdir}/$subdir -al"
     run_dump_test "arch-11"
     run_dump_test "arch-12"
+    run_dump_test "arch-13"
     run_dump_test "8087"
     run_dump_test "287"
     run_dump_test "387"
@@ -336,7 +339,11 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
     run_dump_test "avx512vbmi-intel"
     run_dump_test "avx512vbmi_vl"
     run_dump_test "avx512vbmi_vl-intel"
+    run_dump_test "clzero"
     run_dump_test "disassem"
+    run_dump_test "mwaitx-bdver4"
+    run_list_test "mwaitx-reg"
+    run_dump_test "ospke"
 
     # These tests require support for 8 and 16 bit relocs,
     # so we only run them for ELF and COFF targets.
@@ -349,8 +356,10 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
 	# but the relocs we currently produce are slightly different
 	# from those produced for ELF/COFF based toolchains.
 	# So for now we ignore PE targets.
-	run_dump_test "pcrel"
 	run_dump_test "absrel"
+	if {[istarget "*-*-coff*"]} then {
+	    run_dump_test "pcrel"
+	}
     }
 
     # ELF specific tests
@@ -358,6 +367,7 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
 	# PIC is only supported on ELF targets.
 	run_dump_test "intelpic"
 
+	run_dump_test "pcrel-elf"
 	run_dump_test "relax"
 	run_dump_test "gotpc"
 	run_dump_test "tlsd"
@@ -381,6 +391,7 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
 	run_dump_test "debug1"
 
 	run_dump_test "dw2-compress-2"
+	run_dump_test "dw2-compressed-2"
 
 	run_dump_test "bad-size"
 
@@ -388,6 +399,22 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
 	run_dump_test "size-2"
 	run_dump_test "size-3"
 	run_dump_test "size-4"
+
+	run_dump_test "note"
+
+	run_dump_test "relax-3"
+	run_dump_test "relax-4"
+
+	run_dump_test "got"
+
+	if {![istarget "*-*-nacl*"]} then {
+	    run_dump_test "iamcu-1"
+	    run_dump_test "iamcu-2"
+	    run_dump_test "iamcu-3"
+	    run_list_test "iamcu-inval-1" "-march=iamcu -al"
+	    run_list_test "iamcu-inval-2" "-march=iamcu -al"
+	    run_list_test "iamcu-inval-3" "-march=iamcu+sse4 -al"
+	}
     }
 
     # This is a PE specific test.
@@ -405,8 +432,10 @@ if [expr ([istarget "i*86-*-*"] ||  [istarget "x86_64-*-*"]) && [gas_32_check]] 
 
 # Common tests
 if [expr [istarget "i*86-*-*"] || [istarget "x86_64-*-*"]] then {
-    run_dump_test "intel-expr"
-    run_dump_test "string-ok"
+    if {![istarget "i*86-*-elfiamcu"]} then {
+	run_dump_test "intel-expr"
+	run_dump_test "string-ok"
+    }
     run_list_test "string-bad" ""
     run_list_test "reg-bad" ""
     run_list_test "space1" "-al"
@@ -416,6 +445,9 @@ if [expr [istarget "i*86-*-*"] || [istarget "x86_64-*-*"]] then {
 	run_list_test_stdin "list-2" "-al"
 	run_list_test_stdin "list-3" "-al"
 	run_dump_test "dw2-compress-1"
+	run_dump_test "dw2-compress-3"
+	run_dump_test "dw2-compressed-1"
+	run_dump_test "dw2-compressed-3"
     }
 }
 
@@ -426,6 +458,7 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
     set ASFLAGS "$ASFLAGS --64"
 
     run_dump_test "x86_64"
+    run_dump_test "x86_64-intel"
     run_dump_test "x86-64-addr32"
     run_dump_test "x86-64-addr32-intel"
     run_dump_test "x86-64-opcode"
@@ -512,12 +545,14 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
     run_dump_test "x86-64-fxsave-intel"
     run_dump_test "x86-64-arch-1"
     run_dump_test "x86-64-arch-2"
+    run_dump_test "x86-64-arch-3"
     run_dump_test "x86-64-arch-2-lzcnt"
     run_dump_test "x86-64-arch-2-prefetchw"
     run_dump_test "x86-64-arch-2-bdver1"
     run_dump_test "x86-64-arch-2-bdver2"
     run_dump_test "x86-64-arch-2-bdver3"
     run_dump_test "x86-64-arch-2-bdver4"
+    run_dump_test "x86-64-arch-3-znver1"
     run_dump_test "x86-64-arch-2-btver1"
     run_dump_test "x86-64-arch-2-btver2"
     run_list_test "x86-64-arch-2-1" "-march=generic64 -I${srcdir}/$subdir -al"
@@ -692,6 +727,10 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
     run_dump_test "x86-64-avx512vbmi-intel"
     run_dump_test "x86-64-avx512vbmi_vl"
     run_dump_test "x86-64-avx512vbmi_vl-intel"
+    run_dump_test "x86-64-clzero"
+    run_dump_test "x86-64-mwaitx-bdver4"
+    run_list_test "x86-64-mwaitx-reg"
+    run_dump_test "x86-64-ospke"
 
     if { ![istarget "*-*-aix*"]
       && ![istarget "*-*-beos*"]
@@ -728,6 +767,7 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
 	run_dump_test "x86-64-mpx-branch-2"
 
 	run_dump_test "x86-64-dw2-compress-2"
+	run_dump_test "x86-64-dw2-compressed-2"
 
 	run_dump_test "x86-64-size-1"
 	run_dump_test "x86-64-size-2"
@@ -735,6 +775,15 @@ if [expr ([istarget "i*86-*-*"] || [istarget "x86_64-*-*"]) && [gas_64_check]] t
 	run_dump_test "x86-64-size-4"
 	run_dump_test "x86-64-size-5"
 	run_list_test "x86-64-size-inval-1" "-al"
+
+	run_dump_test "x86-64-relax-2"
+	run_dump_test "x86-64-relax-3"
+
+	run_dump_test "x86-64-jump"
+	run_dump_test "x86-64-branch-2"
+	run_list_test "x86-64-branch-3" "-al -mintel64"
+
+	run_dump_test "x86-64-gotpcrel"
     }
 
     set ASFLAGS "$old_ASFLAGS"

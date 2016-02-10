@@ -1,5 +1,5 @@
 /* srconv.c -- Sysroff conversion program
-   Copyright (C) 1994-2014 Free Software Foundation, Inc.
+   Copyright (C) 1994-2015 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -1720,7 +1720,6 @@ prescan (struct coff_ofile *otree)
       if (s->visible->type == coff_vis_common)
 	{
 	  struct coff_where *w = s->where;
-
 	  /*      s->visible->type = coff_vis_ext_def; leave it as common */
 	  common_section->size = align (common_section->size);
 	  w->offset = common_section->size + common_section->address;
