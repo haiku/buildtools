@@ -40,9 +40,5 @@ Boston, MA 02111-1307, USA.  */
   while (0)
 
 #undef	LINK_SPEC
-#define LINK_SPEC \
-  "%{!o*:-o %b} -m elf_mipsel_haiku \
-   %{shared:-shared;!r:%{fno-pic|fno-PIC|fno-pie|fno-PIE:;:%{!pie:-pie}} \
-   %{!static:--export-dynamic --allow-shlib-undefined}} %{static:-static} \
-   %{nostart:-e 0}"
+#define LINK_SPEC "%{!o*:-o %b} -m elf_mipsel_haiku %{!r:-shared} %{nostart:-e 0}"
 

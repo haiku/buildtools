@@ -75,10 +75,6 @@
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC \
-  "%{!o*:-o %b} -m armelf \
-   %{shared:-shared;!r:%{fno-pic|fno-PIC|fno-pie|fno-PIE:;:%{!pie:-pie}} \
-   %{!static:--export-dynamic --allow-shlib-undefined}} %{static:-static} \
-   %{nostart|shared:-e 0;:--no-undefined} %{mbig-endian:-EB} \
-   %{mlittle-endian:-EL} -X"
+#define LINK_SPEC "%{!o*:-o %b} -m armelf %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}\
+  %{mbig-endian:-EB} %{mlittle-endian:-EL} -X"
 
