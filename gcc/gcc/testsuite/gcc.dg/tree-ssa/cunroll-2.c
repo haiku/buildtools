@@ -1,6 +1,8 @@
 /* { dg-do compile } */
 /* { dg-options "-O3 -fdump-tree-cunroll-details" } */
 int a[2];
+int test2 (void);
+void
 test(int c)
 { 
   int i;
@@ -12,5 +14,5 @@ test(int c)
     }
 }
 /* We are not able to get rid of the final conditional because the loop has two exits.  */
-/* { dg-final { scan-tree-dump "Completely unroll loop 1 times" "cunroll"} } */
+/* { dg-final { scan-tree-dump "loop with 2 iterations completely unrolled" "cunroll"} } */
 /* { dg-final { cleanup-tree-dump "cunroll" } } */

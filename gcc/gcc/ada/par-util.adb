@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2013, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -97,7 +97,7 @@ package body Util is
 
       --  Never consider something a misspelling if either the actual or
       --  expected string is less than 3 characters (before this check we
-      --  used to consider i to be a misspelled if in some cases!)
+      --  used to consider i to be a misspelled if in some cases).
 
       if SL < 3 or else Name_Len < 3 then
          return False;
@@ -181,8 +181,7 @@ package body Util is
       if Ada_Version = Ada_95
         and then Warn_On_Ada_2005_Compatibility
       then
-         if Token_Name = Name_Overriding
-           or else Token_Name = Name_Synchronized
+         if Nam_In (Token_Name, Name_Overriding, Name_Synchronized)
            or else (Token_Name = Name_Interface
                      and then Prev_Token /= Tok_Pragma)
          then
@@ -269,7 +268,7 @@ package body Util is
       Paren_Count : Nat;
 
    begin
-      --  First check, if a comma is present, then a comma is present!
+      --  First check, if a comma is present, then a comma is present
 
       if Token = Tok_Comma then
          T_Comma;
@@ -319,7 +318,7 @@ package body Util is
 
          --  If that test didn't work, loop ahead looking for a comma or
          --  semicolon at the same parenthesis level. Always remember that
-         --  we can't go badly wrong in an error situation like this!
+         --  we can't go badly wrong in an error situation like this.
 
          Paren_Count := 0;
 
@@ -430,9 +429,23 @@ package body Util is
             Error_Msg_SC -- CODEFIX
               ("|extra ""("" ignored");
 
+         --  Note: the following error used to be labeled as a non-serious
+         --  error like the other similar messages here (with a | at the start
+         --  of the message). But this caused some annoying cascaded errors
+         --  that were confusing, as shown by this example:
+
+         --          A : array (1 .. 9) of Integer :=
+         --            ((1 .. 2) => 0,
+         --             1  2   3
+         --       >>> positional aggregate cannot have one component
+         --       >>> named association cannot follow positional association
+         --       >>> extra ")" ignored
+
+         --  So we decided to label it as serious after all
+
          elsif T = Tok_Right_Paren then
             Error_Msg_SC -- CODEFIX
-              ("|extra "")"" ignored");
+              ("extra "")"" ignored");
 
          elsif T = Tok_Semicolon then
             Error_Msg_SC -- CODEFIX

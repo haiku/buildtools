@@ -6,6 +6,7 @@ TYPE a[SIZE];
 TYPE b[SIZE];
 TYPE c[SIZE];
 volatile TYPE c_ref[SIZE];
+extern int memcmp (const void *, const void *, size_t);
 
 __attribute__ ((__noinline__))
 void
@@ -47,7 +48,9 @@ avx2_test (void)
       gen_pop ();
       check_pop ();
 
-      if (memcmp (c, c_ref, SIZE * sizeof (TYPE)))
+      /* We need to cast away volatility from c_ref here in order to eliminate
+	 warning if libc version of memcpy is used here.  */
+      if (memcmp (c, (void *) c_ref, SIZE * sizeof (TYPE)))
 	abort();
     }
 }

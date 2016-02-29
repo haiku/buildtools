@@ -2,9 +2,11 @@
    allows it.  Under some circumstances another compare instruction might
    be selected, which is also fine.  Any AND instructions are considered
    counter productive and fail the test.  */
-/* { dg-do compile { target "sh*-*-*" } } */
+/* { dg-do compile }  */
 /* { dg-options "-O2" } */
 /* { dg-final { scan-assembler-not "and" } } */
+/* { dg-final { scan-assembler-not "extu" } } */
+/* { dg-final { scan-assembler-not "exts" } } */
 
 #define make_func(__valtype__, __valget__, __tstval__, __suff__)\
   int test_imm_##__tstval__##__suff__ (__valtype__ val) \

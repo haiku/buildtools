@@ -1,5 +1,5 @@
 /* Parser for Java(TM) .class files.
-   Copyright (C) 1996-2013 Free Software Foundation, Inc.
+   Copyright (C) 1996-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -26,7 +26,19 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "options.h"
+#include "real.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "stringpool.h"
 #include "obstack.h"
 #include "flags.h"
 #include "java-except.h"
@@ -37,9 +49,17 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "parse.h"
 #include "ggc.h"
 #include "debug.h"
+#include "hash-map.h"
+#include "is-a.h"
+#include "plugin-api.h"
+#include "tm.h"
+#include "hard-reg-set.h"
+#include "function.h"
+#include "ipa-ref.h"
 #include "cgraph.h"
 #include "bitmap.h"
 #include "target.h"
+#include "wide-int.h"
 
 #ifdef HAVE_LOCALE_H
 #include <locale.h>
@@ -312,13 +332,14 @@ set_source_filename (JCF *jcf, int index)
 {
   tree sfname_id = get_name_constant (jcf, index);
   const char *sfname = IDENTIFIER_POINTER (sfname_id);
-  const char *old_filename = input_filename;
+  const char *old_filename = LOCATION_FILE (input_location);
   int new_len = IDENTIFIER_LENGTH (sfname_id);
   if (old_filename != NULL)
     {
       int old_len = strlen (old_filename);
-      /* Use the current input_filename (derived from the class name)
-	 if it has a directory prefix, but otherwise matches sfname. */
+      /* Use the filename from current input_location (derived from the
+	 class name) if it has a directory prefix, but otherwise matches
+	 sfname.  */
       if (old_len > new_len
 	  && filename_cmp (sfname, old_filename + old_len - new_len) == 0
 	  && (old_filename[old_len - new_len - 1] == '/'
@@ -1039,14 +1060,13 @@ get_constant (JCF *jcf, int index)
     case CONSTANT_Long:
       {
 	unsigned HOST_WIDE_INT num;
-	double_int val;
 
 	num = JPOOL_UINT (jcf, index);
-	val = double_int::from_uhwi (num).llshift (32, 64);
+	wide_int val = wi::lshift (wide_int::from (num, 64, SIGNED), 32);
 	num = JPOOL_UINT (jcf, index + 1);
-	val |= double_int::from_uhwi (num);
+	val |= num;
 
-	value = double_int_to_tree (long_type_node, val);
+	value = wide_int_to_tree (long_type_node, val);
 	break;
       }
 
@@ -1094,7 +1114,7 @@ get_constant (JCF *jcf, int index)
 	  {
 	    int char_len = UT8_CHAR_LENGTH (*utf8);
 	    if (char_len < 0 || char_len > 3 || char_len > i)
- 	      fatal_error ("bad string constant");
+ 	      fatal_error (input_location, "bad string constant");
 
 	    utf8 += char_len;
 	    i -= char_len;
@@ -1112,7 +1132,7 @@ get_constant (JCF *jcf, int index)
   jcf->cpool.data[index].t = value;
   return value;
  bad:
-  fatal_error ("bad value constant type %d, index %d", 
+  fatal_error (input_location, "bad value constant type %d, index %d", 
 	       JPOOL_TAG (jcf, index), index);
 }
 
@@ -1423,13 +1443,13 @@ jcf_parse (JCF* jcf)
   bitmap_clear (field_offsets);
 
   if (jcf_parse_preamble (jcf) != 0)
-    fatal_error ("not a valid Java .class file");
+    fatal_error (input_location, "not a valid Java .class file");
   code = jcf_parse_constant_pool (jcf);
   if (code != 0)
-    fatal_error ("error while parsing constant pool");
+    fatal_error (input_location, "error while parsing constant pool");
   code = verify_constant_pool (jcf);
   if (code > 0)
-    fatal_error ("error in constant pool entry #%d\n", code);
+    fatal_error (input_location, "error in constant pool entry #%d\n", code);
 
   jcf_parse_class (jcf);
   if (main_class == NULL_TREE)
@@ -1441,7 +1461,8 @@ jcf_parse (JCF* jcf)
   if (CLASS_PARSED_P (current_class))
     {
       /* FIXME - where was first time */
-      fatal_error ("reading class %s for the second time from %s",
+      fatal_error (input_location,
+		   "reading class %s for the second time from %s",
 		   IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (current_class))),
 		   jcf->filename);
     }
@@ -1459,13 +1480,13 @@ jcf_parse (JCF* jcf)
   
   code = jcf_parse_fields (jcf);
   if (code != 0)
-    fatal_error ("error while parsing fields");
+    fatal_error (input_location, "error while parsing fields");
   code = jcf_parse_methods (jcf);
   if (code != 0)
-    fatal_error ("error while parsing methods");
+    fatal_error (input_location, "error while parsing methods");
   code = jcf_parse_final_attributes (jcf);
   if (code != 0)
-    fatal_error ("error while parsing final attributes");
+    fatal_error (input_location, "error while parsing final attributes");
 
   if (TYPE_REFLECTION_DATA (current_class))
     annotation_write_byte (JV_DONE_ATTR);
@@ -1559,7 +1580,8 @@ parse_class_file (void)
     linemap_add (line_table, LC_ENTER, 0, loc.file, loc.line);
   }
   file_start_location = input_location;
-  (*debug_hooks->start_source_file) (input_line, input_filename);
+  (*debug_hooks->start_source_file) (LOCATION_LINE (input_location),
+				     LOCATION_FILE (input_location));
 
   java_mark_class_local (current_class);
 
@@ -1617,7 +1639,8 @@ parse_class_file (void)
 	  for (ptr += 2; --i >= 0; ptr += 4)
 	    {
 	      int line = GET_u2 (ptr);
-	      /* Set initial input_line to smallest linenumber.
+	      /* Set initial line of input_location to smallest
+	       * linenumber.
 	       * Needs to be set before init_function_start. */
 	      if (min_line == 0 || line < min_line)
 		min_line = line;
@@ -1723,7 +1746,7 @@ java_emit_static_constructor (void)
 
       DECL_STATIC_CONSTRUCTOR (decl) = 1;
       java_genericize (decl);
-      cgraph_finalize_function (decl, false);
+      cgraph_node::finalize_function (decl, false);
     }
 }
 
@@ -1747,7 +1770,8 @@ java_parse_file (void)
       int avail = 2000;
       finput = fopen (main_input_filename, "r");
       if (finput == NULL)
-	fatal_error ("can%'t open %s: %m", input_filename);
+	fatal_error (input_location,
+		     "can%'t open %s: %m", LOCATION_FILE (input_location));
       list = XNEWVEC (char, avail);
       next = list;
       for (;;)
@@ -1766,7 +1790,8 @@ java_parse_file (void)
 	  if (count == 0)
 	    {
 	      if (! feof (finput))
-		fatal_error ("error closing %s: %m", input_filename);
+		fatal_error (input_location, "error closing %s: %m",
+			     LOCATION_FILE (input_location));
 	      *next = '\0';
 	      break;
 	    }
@@ -1880,11 +1905,12 @@ java_parse_file (void)
 
       /* Close previous descriptor, if any */
       if (finput && fclose (finput))
-	fatal_error ("can%'t close input file %s: %m", main_input_filename);
+	fatal_error (input_location,
+		     "can%'t close input file %s: %m", main_input_filename);
       
       finput = fopen (filename, "rb");
       if (finput == NULL)
-	fatal_error ("can%'t open %s: %m", filename);
+	fatal_error (input_location, "can%'t open %s: %m", filename);
 
 #ifdef IO_BUFFER_SIZE
       setvbuf (finput, xmalloc (IO_BUFFER_SIZE),
@@ -1900,7 +1926,7 @@ java_parse_file (void)
       if (magic == 0xcafebabe)
 	{
 	  CLASS_FILE_P (node) = 1;
-	  current_jcf = ggc_alloc_cleared_JCF ();
+	  current_jcf = ggc_cleared_alloc<JCF> ();
 	  current_jcf->read_state = finput;
 	  current_jcf->filbuf = jcf_filbuf_from_stdio;
 	  jcf_parse (current_jcf);
@@ -1917,13 +1943,13 @@ java_parse_file (void)
 	}
       else if (magic == (JCF_u4)ZIPMAGIC)
 	{
-	  main_jcf = ggc_alloc_cleared_JCF ();
+	  main_jcf = ggc_cleared_alloc<JCF> ();
 	  main_jcf->read_state = finput;
 	  main_jcf->filbuf = jcf_filbuf_from_stdio;
 	  linemap_add (line_table, LC_ENTER, false, filename, 0);
 	  input_location = linemap_line_start (line_table, 0, 1);
 	  if (open_in_zip (main_jcf, filename, NULL, 0) <  0)
-	    fatal_error ("bad zip/jar file %s", filename);
+	    fatal_error (input_location, "bad zip/jar file %s", filename);
 	  localToFile = SeenZipFiles;
 	  /* Register all the classes defined there.  */
 	  process_zip_dir ((FILE *) main_jcf->read_state);
@@ -2125,7 +2151,8 @@ parse_zip_file_entries (void)
 	    jcf->zipd        = zdir;
 
 	    if (read_zip_member (jcf, zdir, localToFile) < 0)
-	      fatal_error ("error while reading %s from zip file", file_name);
+	      fatal_error (input_location,
+			   "error while reading %s from zip file", file_name);
 
 	    buffer = XNEWVEC (char, zdir->filename_length + 1 +
 			    (jcf->buffer_end - jcf->buffer));
@@ -2173,7 +2200,7 @@ process_zip_dir (FILE *finput)
 
       class_name = compute_class_name (zdir);
       file_name  = XNEWVEC (char, zdir->filename_length+1);
-      jcf = ggc_alloc_cleared_JCF ();
+      jcf = ggc_cleared_alloc<JCF> ();
 
       strncpy (file_name, class_name_in_zip_dir, zdir->filename_length);
       file_name [zdir->filename_length] = '\0';

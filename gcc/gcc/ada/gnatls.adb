@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2011, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -40,10 +40,14 @@ with Prj.Env;     use Prj.Env;
 with Rident;      use Rident;
 with Sdefault;
 with Snames;
+with Stringt;
 with Switch;      use Switch;
 with Types;       use Types;
 
-with GNAT.Case_Util; use GNAT.Case_Util;
+with Ada.Command_Line; use Ada.Command_Line;
+
+with GNAT.Command_Line; use GNAT.Command_Line;
+with GNAT.Case_Util;    use GNAT.Case_Util;
 
 procedure Gnatls is
    pragma Ident (Gnat_Static_Version_String);
@@ -60,6 +64,9 @@ procedure Gnatls is
    Max_Column : constant := 80;
 
    No_Obj : aliased String := "<no_obj>";
+
+   No_Runtime : Boolean := False;
+   --  Set to True if there is no default runtime and --RTS= is not specified
 
    type File_Status is (
      OK,                  --  matching timestamp
@@ -124,6 +131,9 @@ procedure Gnatls is
    RTS_Specified : String_Access := null;
    --  Used to detect multiple use of --RTS= switch
 
+   Exit_Status : Exit_Code_Type := E_Success;
+   --  Reset to E_Fatal if bad error found
+
    -----------------------
    -- Local Subprograms --
    -----------------------
@@ -142,9 +152,9 @@ procedure Gnatls is
       Stamp    : Time_Stamp_Type;
       Checksum : Word;
       Status   : out File_Status);
-   --  Determine the file status (Status) of the file represented by FS
-   --  with the expected Stamp and checksum given as argument. FS will be
-   --  updated to the full file name if available.
+   --  Determine the file status (Status) of the file represented by FS with
+   --  the expected Stamp and checksum given as argument. FS will be updated
+   --  to the full file name if available.
 
    function Corresponding_Sdep_Entry (A : ALI_Id; U : Unit_Id) return Sdep_Id;
    --  Give the Sdep entry corresponding to the unit U in ali record A
@@ -167,7 +177,7 @@ procedure Gnatls is
    --  Reset Print flags properly when selective output is chosen
 
    procedure Scan_Ls_Arg (Argv : String);
-   --  Scan and process lser specific arguments. Argv is a single argument
+   --  Scan and process user specific arguments (Argv is a single argument)
 
    procedure Search_RTS (Name : String);
    --  Find include and objects path for the RTS name.
@@ -176,11 +186,14 @@ procedure Gnatls is
    --  Print usage message
 
    procedure Output_License_Information;
-   --  Output license statement, and if not found, output reference to
-   --  COPYING.
+   --  Output license statement, and if not found, output reference to COPYING
 
    function Image (Restriction : Restriction_Id) return String;
    --  Returns the capitalized image of Restriction
+
+   function Normalize (Path : String) return String;
+   --  Returns a normalized path name. On Windows, the directory separators are
+   --  set to '\' in Normalize_Pathname.
 
    ------------------------------------------
    -- GNATDIST specific output subprograms --
@@ -820,6 +833,15 @@ procedure Gnatls is
       return Result;
    end Image;
 
+   ---------------
+   -- Normalize --
+   ---------------
+
+   function Normalize (Path : String) return String is
+   begin
+      return Normalize_Pathname (Path);
+   end Normalize;
+
    --------------------------------
    -- Output_License_Information --
    --------------------------------
@@ -1203,6 +1225,10 @@ procedure Gnatls is
       if Src_Path /= null and then Lib_Path /= null then
          Add_Search_Dirs (Src_Path, Include);
          Add_Search_Dirs (Lib_Path, Objects);
+         Initialize_Default_Project_Path
+           (Prj_Path,
+            Target_Name  => Sdefault.Target_Name.all,
+            Runtime_Name => Name);
          return;
       end if;
 
@@ -1215,7 +1241,9 @@ procedure Gnatls is
       --  Try to find the RTS on the project path. First setup the project path
 
       Initialize_Default_Project_Path
-        (Prj_Path, Target_Name => Sdefault.Target_Name.all);
+        (Prj_Path,
+         Target_Name  => Sdefault.Target_Name.all,
+         Runtime_Name => Name);
 
       Rts_Full_Path := Get_Runtime_Path (Prj_Path, Name);
 
@@ -1252,6 +1280,7 @@ procedure Gnatls is
    procedure Scan_Ls_Arg (Argv : String) is
       FD  : File_Descriptor;
       Len : Integer;
+      OK  : Boolean;
 
    begin
       pragma Assert (Argv'First = 1);
@@ -1260,6 +1289,7 @@ procedure Gnatls is
          return;
       end if;
 
+      OK := True;
       if Argv (1) = '-' then
          if Argv'Length = 1 then
             Fail ("switch character cannot be followed by a blank");
@@ -1297,6 +1327,11 @@ procedure Gnatls is
          elsif Argv'Length >= 3 and then Argv (2 .. 3) = "aL" then
             Add_Lib_Dir (Argv (4 .. Argv'Last));
 
+         --  Processing for -aP<dir>
+
+         elsif Argv'Length > 3 and then Argv (1 .. 3) = "-aP" then
+            Add_Directories (Prj_Path, Argv (4 .. Argv'Last));
+
          --  Processing for -nostdinc
 
          elsif Argv (2 .. Argv'Last) = "nostdinc" then
@@ -1316,7 +1351,7 @@ procedure Gnatls is
                when 'l' => License                   := True;
                when 'V' => Very_Verbose_Mode         := True;
 
-               when others => null;
+               when others => OK := False;
             end case;
 
          --  Processing for -files=file
@@ -1396,6 +1431,9 @@ procedure Gnatls is
                Opt.No_Stdinc := True;
                Opt.RTS_Switch := True;
             end if;
+
+         else
+            OK := False;
          end if;
 
       --  If not a switch, it must be a file name
@@ -1403,6 +1441,13 @@ procedure Gnatls is
       else
          Add_File (Argv);
       end if;
+
+      if not OK then
+         Write_Str ("warning: unknown switch """);
+         Write_Str (Argv);
+         Write_Line ("""");
+      end if;
+
    end Scan_Ls_Arg;
 
    -----------
@@ -1484,6 +1529,11 @@ procedure Gnatls is
       Write_Str ("  -aOdir     specify object files search path");
       Write_Eol;
 
+      --  Line for -aP switch
+
+      Write_Str ("  -aPdir     specify project search path");
+      Write_Eol;
+
       --  Line for -I switch
 
       Write_Str ("  -Idir      like -aIdir -aOdir");
@@ -1531,10 +1581,11 @@ begin
 
    Csets.Initialize;
    Snames.Initialize;
+   Stringt.Initialize;
 
    --  First check for --version or --help
 
-   Check_Version_And_Help ("GNATLS", "1997");
+   Check_Version_And_Help ("GNATLS", "1992");
 
    --  Loop to scan out arguments
 
@@ -1552,12 +1603,18 @@ begin
 
    --  If -l (output license information) is given, it must be the only switch
 
-   if License and then Arg_Count /= 2 then
-      Set_Standard_Error;
-      Write_Str ("Can't use -l with another switch");
-      Write_Eol;
-      Usage;
-      Exit_Program (E_Fatal);
+   if License then
+      if Arg_Count = 2 then
+         Output_License_Information;
+         Exit_Program (E_Success);
+
+      else
+         Set_Standard_Error;
+         Write_Str ("Can't use -l with another switch");
+         Write_Eol;
+         Try_Help;
+         Exit_Program (E_Fatal);
+      end if;
    end if;
 
    --  Handle --RTS switch
@@ -1579,14 +1636,42 @@ begin
       First_Lib_Dir := First_Lib_Dir.Next;
    end loop;
 
-   --  Finally, add the default directories and obtain target parameters
+   --  Finally, add the default directories
 
    Osint.Add_Default_Search_Dirs;
+
+   --  If --RTS= is not specified, check if there is a default runtime
+
+   if RTS_Specified = null then
+      declare
+         Text : Source_Buffer_Ptr;
+         Hi   : Source_Ptr;
+
+      begin
+         Name_Buffer (1 .. 10) := "system.ads";
+         Name_Len := 10;
+
+         Read_Source_File (Name_Find, Lo => 0, Hi => Hi, Src => Text);
+
+         if Text = null then
+            No_Runtime := True;
+         end if;
+      end;
+   end if;
 
    if Verbose_Mode then
       Write_Eol;
       Display_Version ("GNATLS", "1997");
       Write_Eol;
+
+      if No_Runtime then
+         Write_Str
+           ("Default runtime not available. Use --RTS= with a valid runtime");
+         Write_Eol;
+         Write_Eol;
+         Exit_Status := E_Warnings;
+      end if;
+
       Write_Str ("Source Search Path:");
       Write_Eol;
 
@@ -1595,12 +1680,15 @@ begin
 
          if Dir_In_Src_Search_Path (J)'Length = 0 then
             Write_Str ("<Current_Directory>");
-         else
-            Write_Str (To_Host_Dir_Spec
-              (Dir_In_Src_Search_Path (J).all, True).all);
-         end if;
+            Write_Eol;
 
-         Write_Eol;
+         elsif not No_Runtime then
+            Write_Str
+              (Normalize
+                 (To_Host_Dir_Spec
+                      (Dir_In_Src_Search_Path (J).all, True).all));
+            Write_Eol;
+         end if;
       end loop;
 
       Write_Eol;
@@ -1613,12 +1701,15 @@ begin
 
          if Dir_In_Obj_Search_Path (J)'Length = 0 then
             Write_Str ("<Current_Directory>");
-         else
-            Write_Str (To_Host_Dir_Spec
-              (Dir_In_Obj_Search_Path (J).all, True).all);
-         end if;
+            Write_Eol;
 
-         Write_Eol;
+         elsif not No_Runtime then
+            Write_Str
+              (Normalize
+                 (To_Host_Dir_Spec
+                      (Dir_In_Obj_Search_Path (J).all, True).all));
+            Write_Eol;
+         end if;
       end loop;
 
       Write_Eol;
@@ -1665,7 +1756,7 @@ begin
 
                   Write_Str ("   ");
                   Write_Str
-                    (Normalize_Pathname
+                    (Normalize
                       (To_Host_Dir_Spec
                         (Project_Path (First .. Last), True).all));
                   Write_Eol;
@@ -1685,25 +1776,23 @@ begin
       Usage;
    end if;
 
-   --  Output license information when requested
-
-   if License then
-      Output_License_Information;
-      Exit_Program (E_Success);
-   end if;
-
    if not More_Lib_Files then
       if not Print_Usage and then not Verbose_Mode then
-         Usage;
+         if Argument_Count = 0 then
+            Usage;
+         else
+            Try_Help;
+            Exit_Status := E_Fatal;
+         end if;
       end if;
 
-      Exit_Program (E_Fatal);
+      Exit_Program (Exit_Status);
    end if;
 
    Initialize_ALI;
    Initialize_ALI_Source;
 
-   --  Print out all library for which no ALI files can be located
+   --  Print out all libraries for which no ALI files can be located
 
    while More_Lib_Files loop
       Main_File := Next_Main_Lib_File;
@@ -1721,17 +1810,17 @@ begin
             Write_Str (Name_Buffer (1 .. Name_Len));
             Write_Char ('"'); -- "
             Write_Eol;
+            Exit_Status := E_Fatal;
          end if;
 
       else
          Ali_File := Strip_Directory (Ali_File);
 
-         if Get_Name_Table_Info (Ali_File) = 0 then
+         if Get_Name_Table_Int (Ali_File) = 0 then
             Text := Read_Library_Info (Ali_File, True);
 
             declare
                Discard : ALI_Id;
-               pragma Unreferenced (Discard);
             begin
                Discard :=
                  Scan_ALI
@@ -1845,5 +1934,5 @@ begin
    --  All done. Set proper exit status
 
    Namet.Finalize;
-   Exit_Program (E_Success);
+   Exit_Program (Exit_Status);
 end Gnatls;

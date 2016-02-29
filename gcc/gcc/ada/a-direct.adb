@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -36,20 +36,17 @@ with Ada.Directories.Validity;   use Ada.Directories.Validity;
 with Ada.Strings.Fixed;
 with Ada.Strings.Maps;           use Ada.Strings.Maps;
 with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
-with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 
-with System;              use System;
-with System.CRTL;         use System.CRTL;
-with System.File_IO;      use System.File_IO;
-with System.OS_Constants; use System.OS_Constants;
-with System.OS_Lib;       use System.OS_Lib;
-with System.Regexp;       use System.Regexp;
+with System;                 use System;
+with System.CRTL;            use System.CRTL;
+with System.File_Attributes; use System.File_Attributes;
+with System.File_IO;         use System.File_IO;
+with System.OS_Constants;    use System.OS_Constants;
+with System.OS_Lib;          use System.OS_Lib;
+with System.Regexp;          use System.Regexp;
 
 package body Ada.Directories is
-
-   Filename_Max : constant Integer := 1024;
-   --  1024 is the value of FILENAME_MAX in stdio.h
 
    type Dir_Type_Value is new Address;
    --  This is the low-level address directory structure as returned by the C
@@ -493,18 +490,33 @@ package body Ada.Directories is
 
                --  No need to create the directory if it already exists
 
-               if Is_Directory (New_Dir (1 .. Last)) then
-                  null;
+               if not Is_Directory (New_Dir (1 .. Last)) then
+                  begin
+                     Create_Directory
+                       (New_Directory => New_Dir (1 .. Last), Form => Form);
 
-               --  It is an error if a file with such a name already exists
+                  exception
+                     when Use_Error =>
+                        if File_Exists (New_Dir (1 .. Last)) then
 
-               elsif Is_Regular_File (New_Dir (1 .. Last)) then
-                  raise Use_Error with
-                    "file """ & New_Dir (1 .. Last) & """ already exists";
+                           --  A file with such a name already exists. If it is
+                           --  a directory, then it was apparently just created
+                           --  by another process or thread, and all is well.
+                           --  If it is of some other kind, report an error.
 
-               else
-                  Create_Directory
-                    (New_Directory => New_Dir (1 .. Last), Form => Form);
+                           if not Is_Directory (New_Dir (1 .. Last)) then
+                              raise Use_Error with
+                                "file """ & New_Dir (1 .. Last) &
+                                  """ already exists and is not a directory";
+                           end if;
+
+                        else
+                           --  Create_Directory failed for some other reason:
+                           --  propagate the exception.
+
+                           raise;
+                        end if;
+                  end;
                end if;
             end if;
          end loop;
@@ -708,7 +720,7 @@ package body Ada.Directories is
    ----------------------
 
    procedure Fetch_Next_Entry (Search : Search_Type) is
-      Name : String (1 .. 255);
+      Name : String (1 .. NAME_MAX);
       Last : Natural;
 
       Kind : File_Kind := Ordinary_File;
@@ -717,9 +729,7 @@ package body Ada.Directories is
       Filename_Addr : Address;
       Filename_Len  : aliased Integer;
 
-      Buffer : array (0 .. Filename_Max + 12) of Character;
-      --  12 is the size of the dirent structure (see dirent.h), without the
-      --  field for the filename.
+      Buffer : array (1 .. SIZEOF_struct_dirent_alloc) of Character;
 
       function readdir_gnat
         (Directory : Address;
@@ -744,43 +754,61 @@ package body Ada.Directories is
             exit;
          end if;
 
+         if Filename_Len > Name'Length then
+            raise Use_Error with "file name too long";
+         end if;
+
          declare
-            subtype Path_String is String (1 .. Filename_Len);
-            type    Path_String_Access is access Path_String;
-
-            function Address_To_Access is new
-              Ada.Unchecked_Conversion
-                (Source => Address,
-                 Target => Path_String_Access);
-
-            Path_Access : constant Path_String_Access :=
-              Address_To_Access (Filename_Addr);
+            subtype Name_String is String (1 .. Filename_Len);
+            Dent_Name : Name_String;
+            for Dent_Name'Address use Filename_Addr;
+            pragma Import (Ada, Dent_Name);
 
          begin
             Last := Filename_Len;
-            Name (1 .. Last) := Path_Access.all;
+            Name (1 .. Last) := Dent_Name;
          end;
 
          --  Check if the entry matches the pattern
 
          if Match (Name (1 .. Last), Search.Value.Pattern) then
             declare
-               Full_Name : constant String :=
-                 Compose (To_String (Search.Value.Name), Name (1 .. Last));
-               Found     : Boolean := False;
+               C_Full_Name : constant String :=
+                               Compose (To_String (Search.Value.Name),
+                                        Name (1 .. Last)) & ASCII.NUL;
+               Full_Name   : String renames
+                               C_Full_Name
+                                 (C_Full_Name'First .. C_Full_Name'Last - 1);
+               Found       : Boolean := False;
+               Attr        : aliased File_Attributes;
+               Exists      : Integer;
+               Error       : Integer;
 
             begin
-               if File_Exists (Full_Name) then
+               Reset_Attributes (Attr'Access);
+               Exists := File_Exists_Attr (C_Full_Name'Address, Attr'Access);
+               Error  := Error_Attributes (Attr'Access);
+
+               if Error /= 0 then
+                  raise Use_Error
+                    with Full_Name & ": " & Errno_Message (Err => Error);
+               end if;
+
+               if Exists = 1 then
 
                   --  Now check if the file kind matches the filter
 
-                  if Is_Regular_File (Full_Name) then
+                  if Is_Regular_File_Attr
+                       (C_Full_Name'Address, Attr'Access) = 1
+                  then
                      if Search.Value.Filter (Ordinary_File) then
                         Kind := Ordinary_File;
                         Found := True;
                      end if;
 
-                  elsif Is_Directory (Full_Name) then
+                  elsif Is_Directory_Attr
+                          (C_Full_Name'Address, Attr'Access) = 1
+                  then
                      if Search.Value.Filter (Directory) then
                         Kind := Directory;
                         Found := True;
@@ -821,7 +849,7 @@ package body Ada.Directories is
    begin
       C_Name (1 .. Name'Length) := Name;
       C_Name (C_Name'Last) := ASCII.NUL;
-      return C_File_Exists (C_Name (1)'Address) = 1;
+      return C_File_Exists (C_Name'Address) = 1;
    end File_Exists;
 
    --------------
@@ -969,7 +997,6 @@ package body Ada.Directories is
       Hour   : Hour_Type;
       Minute : Minute_Type;
       Second : Second_Type;
-      Result : Time;
 
    begin
       --  First, the invalid cases
@@ -986,25 +1013,11 @@ package body Ada.Directories is
 
          GM_Split (Date, Year, Month, Day, Hour, Minute, Second);
 
-         --  On OpenVMS, the resulting time value must be in the local time
-         --  zone. Ada.Calendar.Time_Of is exactly what we need. Note that
-         --  in both cases, the sub seconds are set to zero (0.0) because the
-         --  time stamp does not store them in its value.
-
-         if OpenVMS then
-            Result :=
-              Ada.Calendar.Time_Of
-                (Year, Month, Day, Seconds_Of (Hour, Minute, Second, 0.0));
-
-         --  On Unix and Windows, the result must be in GMT. Ada.Calendar.
+         --  The result must be in GMT. Ada.Calendar.
          --  Formatting.Time_Of with default time zone of zero (0) is the
          --  routine of choice.
 
-         else
-            Result := Time_Of (Year, Month, Day, Hour, Minute, Second, 0.0);
-         end if;
-
-         return Result;
+         return Time_Of (Year, Month, Day, Hour, Minute, Second, 0.0);
       end if;
    end Modification_Time;
 
@@ -1237,7 +1250,7 @@ package body Ada.Directories is
    function Size (Name : String) return File_Size is
       C_Name : String (1 .. Name'Length + 1);
 
-      function C_Size (Name : Address) return Long_Integer;
+      function C_Size (Name : Address) return int64;
       pragma Import (C, C_Size, "__gnat_named_file_length");
 
    begin

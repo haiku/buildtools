@@ -1,5 +1,5 @@
-// Negative test for C++0x unrestricted unions
-// { dg-options -std=c++0x }
+// Negative test for C++11 unrestricted unions
+// { dg-do compile { target c++11 } }
 // { dg-prune-output "implicitly deleted because" }
 
 struct A

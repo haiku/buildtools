@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -206,28 +206,29 @@ package body Lib.Load is
       Unum := Units.Last;
 
       Units.Table (Unum) := (
-        Cunit            => Cunit,
-        Cunit_Entity     => Cunit_Entity,
-        Dependency_Num   => 0,
-        Dynamic_Elab     => False,
-        Error_Location   => Sloc (With_Node),
-        Expected_Unit    => Spec_Name,
-        Fatal_Error      => True,
-        Generate_Code    => False,
-        Has_Allocator    => False,
-        Has_RACW         => False,
-        Is_Compiler_Unit => False,
-        Ident_String     => Empty,
-        Loading          => False,
-        Main_Priority    => Default_Main_Priority,
-        Main_CPU         => Default_Main_CPU,
-        Munit_Index      => 0,
-        Serial_Number    => 0,
-        Source_Index     => No_Source_File,
-        Unit_File_Name   => Get_File_Name (Spec_Name, Subunit => False),
-        Unit_Name        => Spec_Name,
-        Version          => 0,
-        OA_Setting       => 'O');
+        Cunit             => Cunit,
+        Cunit_Entity      => Cunit_Entity,
+        Dependency_Num    => 0,
+        Dynamic_Elab      => False,
+        Error_Location    => Sloc (With_Node),
+        Expected_Unit     => Spec_Name,
+        Fatal_Error       => Error_Detected,
+        Generate_Code     => False,
+        Has_RACW          => False,
+        Filler            => False,
+        Ident_String      => Empty,
+        Loading           => False,
+        Main_Priority     => Default_Main_Priority,
+        Main_CPU          => Default_Main_CPU,
+        Munit_Index       => 0,
+        No_Elab_Code_All  => False,
+        Serial_Number     => 0,
+        Source_Index      => No_Source_File,
+        Unit_File_Name    => Get_File_Name (Spec_Name, Subunit => False),
+        Unit_Name         => Spec_Name,
+        Version           => 0,
+        OA_Setting        => 'O',
+        SPARK_Mode_Pragma => Empty);
 
       Set_Comes_From_Source_Default (Save_CS);
       Set_Error_Posted (Cunit_Entity);
@@ -312,28 +313,29 @@ package body Lib.Load is
          end if;
 
          Units.Table (Main_Unit) := (
-           Cunit            => Empty,
-           Cunit_Entity     => Empty,
-           Dependency_Num   => 0,
-           Dynamic_Elab     => False,
-           Error_Location   => No_Location,
-           Expected_Unit    => No_Unit_Name,
-           Fatal_Error      => False,
-           Generate_Code    => False,
-           Has_Allocator    => False,
-           Has_RACW         => False,
-           Is_Compiler_Unit => False,
-           Ident_String     => Empty,
-           Loading          => True,
-           Main_Priority    => Default_Main_Priority,
-           Main_CPU         => Default_Main_CPU,
-           Munit_Index      => 0,
-           Serial_Number    => 0,
-           Source_Index     => Main_Source_File,
-           Unit_File_Name   => Fname,
-           Unit_Name        => No_Unit_Name,
-           Version          => Version,
-           OA_Setting       => 'O');
+           Cunit             => Empty,
+           Cunit_Entity      => Empty,
+           Dependency_Num    => 0,
+           Dynamic_Elab      => False,
+           Error_Location    => No_Location,
+           Expected_Unit     => No_Unit_Name,
+           Fatal_Error       => None,
+           Generate_Code     => False,
+           Has_RACW          => False,
+           Filler            => False,
+           Ident_String      => Empty,
+           Loading           => True,
+           Main_Priority     => Default_Main_Priority,
+           Main_CPU          => Default_Main_CPU,
+           Munit_Index       => 0,
+           No_Elab_Code_All  => False,
+           Serial_Number     => 0,
+           Source_Index      => Main_Source_File,
+           Unit_File_Name    => Fname,
+           Unit_Name         => No_Unit_Name,
+           Version           => Version,
+           OA_Setting        => 'O',
+           SPARK_Mode_Pragma => Empty);
       end if;
    end Load_Main_Source;
 
@@ -675,28 +677,29 @@ package body Lib.Load is
 
          if Src_Ind /= No_Source_File then
             Units.Table (Unum) := (
-              Cunit            => Empty,
-              Cunit_Entity     => Empty,
-              Dependency_Num   => 0,
-              Dynamic_Elab     => False,
-              Error_Location   => Sloc (Error_Node),
-              Expected_Unit    => Uname_Actual,
-              Fatal_Error      => False,
-              Generate_Code    => False,
-              Has_Allocator    => False,
-              Has_RACW         => False,
-              Is_Compiler_Unit => False,
-              Ident_String     => Empty,
-              Loading          => True,
-              Main_Priority    => Default_Main_Priority,
-              Main_CPU         => Default_Main_CPU,
-              Munit_Index      => 0,
-              Serial_Number    => 0,
-              Source_Index     => Src_Ind,
-              Unit_File_Name   => Fname,
-              Unit_Name        => Uname_Actual,
-              Version          => Source_Checksum (Src_Ind),
-              OA_Setting       => 'O');
+              Cunit             => Empty,
+              Cunit_Entity      => Empty,
+              Dependency_Num    => 0,
+              Dynamic_Elab      => False,
+              Error_Location    => Sloc (Error_Node),
+              Expected_Unit     => Uname_Actual,
+              Fatal_Error       => None,
+              Generate_Code     => False,
+              Has_RACW          => False,
+              Filler            => False,
+              Ident_String      => Empty,
+              Loading           => True,
+              Main_Priority     => Default_Main_Priority,
+              Main_CPU          => Default_Main_CPU,
+              Munit_Index       => 0,
+              No_Elab_Code_All  => False,
+              Serial_Number     => 0,
+              Source_Index      => Src_Ind,
+              Unit_File_Name    => Fname,
+              Unit_Name         => Uname_Actual,
+              Version           => Source_Checksum (Src_Ind),
+              OA_Setting        => 'O',
+              SPARK_Mode_Pragma => Empty);
 
             --  Parse the new unit
 
@@ -737,12 +740,30 @@ package body Lib.Load is
                goto Done;
             end if;
 
-            --  If loaded unit had a fatal error, then caller inherits it!
+            --  If loaded unit had an error, then caller inherits setting
 
-            if Units.Table (Unum).Fatal_Error
-              and then Present (Error_Node)
-            then
-               Units.Table (Calling_Unit).Fatal_Error := True;
+            if Present (Error_Node) then
+               case Units.Table (Unum).Fatal_Error is
+
+                  --  Nothing to do if with'ed unit had no error
+
+                  when None =>
+                     null;
+
+                  --  If with'ed unit had a detected fatal error, propagate it
+
+                  when Error_Detected =>
+                     Units.Table (Calling_Unit).Fatal_Error := Error_Detected;
+
+                  --  If with'ed unit had an ignored error, then propagate it
+                  --  but do not overide an existring setting.
+
+                  when Error_Ignored =>
+                     if Units.Table (Calling_Unit).Fatal_Error = None then
+                        Units.Table (Calling_Unit).Fatal_Error :=
+                                                               Error_Ignored;
+                     end if;
+               end case;
             end if;
 
             --  Remove load stack entry and return the entry in the file table

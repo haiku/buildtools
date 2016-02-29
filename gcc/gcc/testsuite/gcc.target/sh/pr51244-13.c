@@ -8,10 +8,14 @@
    branch condition.  The tested function contains two other tst insns.  If
    everything goes as expected we will be seeing only those other two tst
    insns.  */
-/* { dg-do compile { target "sh*-*-*" } } */
+/* { dg-do compile }  */
 /* { dg-options "-O2" } */
 /* { dg-skip-if "" { "sh*-*-*" } { "-m5*" } { "" } } */
 /* { dg-final { scan-assembler-times "tst" 2 } } */
+
+void printk (const char*, const char*, int);
+void __constant_set_bit (int, unsigned long int*);
+void __set_bit (int, unsigned long int*);
 
 static __inline__ int
 __test_bit (unsigned long nr, volatile void * addr)
@@ -31,6 +35,8 @@ struct list_head
 {
   struct list_head *next, *prev;
 };
+
+void list_add (struct list_head*, struct list_head*);
 
 static inline void
 __list_del (struct list_head *prev, struct list_head *next)

@@ -1,4 +1,4 @@
-// { dg-options "-std=c++0x" }
+// { dg-do compile { target c++11 } }
 
 template<class T> struct S0 {};
 template<class T> using AS0 = S0<T>;
@@ -22,7 +22,7 @@ template<class T> using Vec = Vector<T, Alloc<T> >;
 
 template<class T> void g(Vector<T, Alloc<T> >);
 
-template<template<class T> class TT> void h(TT<int>); // { dg-error "provided for" }
+template<template<class T> class TT> void h(TT<int>); // { dg-message "provided for" }
 
 void
 bar()

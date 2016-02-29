@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -50,7 +50,7 @@ package body Sinput.C is
       --  indicates failure to open the specified source file.
 
       Len : Integer;
-      --  Length of file. Assume no more than 2 gigabytes of source!
+      --  Length of file (assume no more than 2 gigabytes of source)
 
       Actual_Len : Integer;
 
@@ -68,7 +68,8 @@ package body Sinput.C is
       if X = Source_File.First then
          Lo := First_Source_Ptr;
       else
-         Lo := Source_File.Table (X - 1).Source_Last + 1;
+         Lo := ((Source_File.Table (X - 1).Source_Last + Source_Align) /
+                  Source_Align) * Source_Align;
       end if;
 
       Name_Len := Path'Length;
@@ -91,8 +92,8 @@ package body Sinput.C is
 
       Len := Integer (File_Length (Source_File_FD));
 
-      --  Set Hi so that length is one more than the physical length,
-      --  allowing for the extra EOF character at the end of the buffer
+      --  Set Hi so that length is one more than the physical length, allowing
+      --  for the extra EOF character at the end of the buffer
 
       Hi := Lo + Source_Ptr (Len);
 
@@ -111,9 +112,9 @@ package body Sinput.C is
       begin
          --  Allocate source buffer, allowing extra character at end for EOF
 
-         --  Some systems (e.g. VMS) have file types that require one
-         --  read per line, so read until we get the Len bytes or until
-         --  there are no more characters.
+         --  Some systems have file types that require one read per line,
+         --  so read until we get the Len bytes or until there are no more
+         --  characters.
 
          Hi := Lo;
          loop
@@ -125,8 +126,8 @@ package body Sinput.C is
          Actual_Ptr (Hi) := EOF;
 
          --  Now we need to work out the proper virtual origin pointer to
-         --  return. This is exactly Actual_Ptr (0)'Address, but we have
-         --  to be careful to suppress checks to compute this address.
+         --  return. This is exactly Actual_Ptr (0)'Address, but we have to
+         --  be careful to suppress checks to compute this address.
 
          declare
             pragma Suppress (All_Checks);
@@ -146,7 +147,7 @@ package body Sinput.C is
       end;
 
       --  Read is complete, close the file and we are done (no need to test
-      --  status from close, since we have successfully read the file!)
+      --  status from close, since we have successfully read the file).
 
       Close (Source_File_FD);
 

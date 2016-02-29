@@ -5,5 +5,5 @@
 struct test
   {
     int a __attribute__((vector_size (8)));
-  }; /* { dg-message "note: the layout of aggregates containing vectors with 8-byte alignment will change" } */
+  }; /* { dg-message "note: the layout of aggregates containing vectors with 8-byte alignment has changed" } */
 

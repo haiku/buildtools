@@ -2,11 +2,11 @@
 --                                                                          --
 --                         GNAT COMPILER COMPONENTS                         --
 --                                                                          --
---                              P R J . T R E E                             --
+--                             P R J . T R E E                              --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2001-2011, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -61,8 +61,8 @@ package Prj.Tree is
    end record;
 
    procedure Initialize
-     (Self      : out Environment;
-      Flags     : Processing_Flags);
+     (Self  : out Environment;
+      Flags : Processing_Flags);
    --  Initialize a new environment
 
    procedure Initialize_And_Copy
@@ -268,6 +268,12 @@ package Prj.Tree is
    pragma Inline (Name_Of);
    --  Valid for all non empty nodes. May return No_Name for nodes that have
    --  no names.
+
+   function Display_Name_Of
+     (Node    : Project_Node_Id;
+      In_Tree : Project_Node_Tree_Ref) return Name_Id;
+   pragma Inline (Display_Name_Of);
+   --  Valid only for N_Project node. Returns the display name of the project.
 
    function Kind_Of
      (Node    : Project_Node_Id;
@@ -590,6 +596,12 @@ package Prj.Tree is
    --  Only valid for N_Variable_Reference or N_Attribute_Reference nodes.
    --  May return Empty_Node.
 
+   function Default_Of
+     (Node    : Project_Node_Id;
+      In_Tree : Project_Node_Tree_Ref) return Attribute_Default_Value;
+   pragma Inline (Default_Of);
+   --  Only valid for N_Attribute_Reference nodes
+
    function String_Type_Of
      (Node    : Project_Node_Id;
       In_Tree : Project_Node_Tree_Ref) return Project_Node_Id;
@@ -732,7 +744,14 @@ package Prj.Tree is
       In_Tree : Project_Node_Tree_Ref;
       To      : Name_Id);
    pragma Inline (Set_Name_Of);
-   --  Valid for all non empty nodes.
+   --  Valid for all non empty nodes
+
+   procedure Set_Display_Name_Of
+     (Node    : Project_Node_Id;
+      In_Tree : Project_Node_Tree_Ref;
+      To      : Name_Id);
+   pragma Inline (Set_Display_Name_Of);
+   --  Valid only for N_Project nodes
 
    procedure Set_Kind_Of
      (Node    : Project_Node_Id;
@@ -1068,7 +1087,14 @@ package Prj.Tree is
       In_Tree : Project_Node_Tree_Ref;
       To      : Project_Node_Id);
    pragma Inline (Set_Package_Node_Of);
-   --  Only valid for N_Variable_Reference or N_Attribute_Reference nodes.
+   --  Only valid for N_Variable_Reference or N_Attribute_Reference nodes
+
+   procedure Set_Default_Of
+     (Node    : Project_Node_Id;
+      In_Tree : Project_Node_Tree_Ref;
+      To      : Attribute_Default_Value);
+   pragma Inline (Set_Default_Of);
+   --  Only valid for N_Attribute_Reference nodes
 
    procedure Set_String_Type_Of
      (Node    : Project_Node_Id;
@@ -1146,6 +1172,9 @@ package Prj.Tree is
          Directory : Path_Name_Type := No_Path;
          --  Only for N_Project
 
+         Display_Name : Name_Id := No_Name;
+         --  Only for N_Project
+
          Expr_Kind : Variable_Kind := Undefined;
          --  See below for what Project_Node_Kind it is used
 
@@ -1178,6 +1207,9 @@ package Prj.Tree is
 
          Value : Name_Id := No_Name;
          --  See below for what Project_Node_Kind it is used
+
+         Default : Attribute_Default_Value := Empty_Value;
+         --  Only used in N_Attribute_Reference
 
          Field1 : Project_Node_Id := Empty_Node;
          --  See below the meaning for each Project_Node_Kind
@@ -1463,18 +1495,19 @@ package Prj.Tree is
          Name : Name_Id;
          --  Name of the project
 
-         Display_Name : Name_Id;
-         --  The name of the project as it appears in the .gpr file
-
          Node : Project_Node_Id;
          --  Node of the project in table Project_Nodes
 
-         Canonical_Path : Path_Name_Type;
+         Resolved_Path : Path_Name_Type;
          --  Resolved and canonical path of a real project file.
          --  No_Name in case of virtual projects.
 
          Extended : Boolean;
          --  True when the project is being extended by another project
+
+         From_Extended : Boolean;
+         --  True when the project is only imported by projects that are
+         --  extended.
 
          Proj_Qualifier : Project_Qualifier;
          --  The project qualifier of the project, if any
@@ -1482,10 +1515,10 @@ package Prj.Tree is
 
       No_Project_Name_And_Node : constant Project_Name_And_Node :=
         (Name           => No_Name,
-         Display_Name   => No_Name,
          Node           => Empty_Node,
-         Canonical_Path => No_Path,
+         Resolved_Path  => No_Path,
          Extended       => True,
+         From_Extended  => False,
          Proj_Qualifier => Unspecified);
 
       package Projects_Htable is new GNAT.Dynamic_HTables.Simple_HTable

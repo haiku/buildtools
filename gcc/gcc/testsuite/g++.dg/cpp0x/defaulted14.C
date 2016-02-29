@@ -1,5 +1,5 @@
 // PR c++/39866
-// { dg-options "-std=c++0x" }
+// { dg-do compile { target c++11 } }
 
 struct A {
   A& operator=(const A&) = delete; // { dg-bogus "" }
@@ -14,7 +14,5 @@ int main()
 {
   A a;
   a = B();		// { dg-error "no match" }
-  // { dg-message "candidate" "candidate note" { target *-*-* } 16 }
   a = 1.0;		// { dg-error "ambiguous" }
-  // { dg-message "candidate" "candidate note" { target *-*-* } 18 }
 }

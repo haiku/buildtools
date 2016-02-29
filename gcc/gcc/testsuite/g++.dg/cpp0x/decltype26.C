@@ -1,4 +1,4 @@
-// { dg-options -std=c++0x }
+// { dg-do compile { target c++11 } }
 
 struct A { };
 
@@ -10,7 +10,7 @@ decltype(f(T())) f(T t)		// { dg-error "depth" }
 
 int main()
 {
-  f(A());			// { dg-error "no match" }
+  f(A());			// { dg-message "from here" }
 }
 
-// { dg-prune-output "note" }
+// { dg-prune-output "compilation terminated" }

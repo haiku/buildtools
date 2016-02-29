@@ -33,6 +33,7 @@ func assert(a, b, c string) {
 				print("\ta[", i, "] = ", ac, "; b[", i, "] =", bc, "\n")
 			}
 		}
+		panic("string_lit")
 	}
 }
 
@@ -110,7 +111,7 @@ func main() {
 	r = -1
 	s = string(r)
 	assert(s, "\xef\xbf\xbd", "negative rune")
-	
+
 	// the large rune tests again, this time using constants instead of a variable.
 	// these conversions will be done at compile time.
 	s = string(0x10ffff) // largest rune value
@@ -123,6 +124,11 @@ func main() {
 	assert(s, "\xef\xbf\xbd", "surrogate rune max constant")
 	s = string(-1)
 	assert(s, "\xef\xbf\xbd", "negative rune")
+
+	// the large rune tests yet again, with a slice.
+	rs := []rune{0x10ffff, 0x10ffff + 1, 0xD800, 0xDFFF, -1}
+	s = string(rs)
+	assert(s, "\xf4\x8f\xbf\xbf\xef\xbf\xbd\xef\xbf\xbd\xef\xbf\xbd\xef\xbf\xbd", "large rune slice")
 
 	assert(string(gr1), gx1, "global ->[]rune")
 	assert(string(gr2), gx2fix, "global invalid ->[]rune")

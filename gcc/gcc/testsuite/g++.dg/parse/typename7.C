@@ -20,7 +20,7 @@ struct B
   void bar(T t) {
     A().bar<typename T>(t); } // { dg-error "expected|parse error|no matching" }
   void bad(T t) {
-    B<typename T>::bar(t); } // { dg-error "invalid|not a template" }
+    B<typename T>::bar(t); } // { dg-error "invalid|qualified-id|not a template" }
 };
 
 void baz()

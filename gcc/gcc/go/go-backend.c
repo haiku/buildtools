@@ -1,5 +1,5 @@
 /* go-backend.c -- Go frontend interface to gcc backend.
-   Copyright (C) 2010-2013 Free Software Foundation, Inc.
+   Copyright (C) 2010-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,13 +22,23 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "simple-object.h"
 #include "tm.h"
-#include "rtl.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "stor-layout.h"
 #include "tm_p.h"
 #include "intl.h"
 #include "output.h"	/* for assemble_string */
 #include "target.h"
 #include "common/common-target.h"
+#include "diagnostic.h"
 
 #include "go-c.h"
 
@@ -47,6 +57,14 @@ along with GCC; see the file COPYING3.  If not see
 
 /* This file holds all the cases where the Go frontend needs
    information from gcc's backend.  */
+
+/* Return whether or not GCC has reported any errors.  */
+
+bool
+saw_errors (void)
+{
+  return errorcount != 0 || sorrycount != 0;
+}
 
 /* Return the alignment in bytes of a struct field of type T.  */
 
@@ -90,12 +108,6 @@ void
 go_imported_unsafe (void)
 {
   flag_strict_aliasing = false;
-
-  /* This is a real hack.  init_varasm_once has already grabbed an
-     alias set, which we don't want when we aren't doing strict
-     aliasing.  We reinitialize to make it do it again.  This should
-     be OK in practice since we haven't really done anything yet.  */
-  init_varasm_once ();
 
   /* Let the backend know that the options have changed.  */
   targetm.override_options_after_change ();

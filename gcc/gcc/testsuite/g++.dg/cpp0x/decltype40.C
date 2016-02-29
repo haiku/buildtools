@@ -1,5 +1,5 @@
 // PR c++/51222
-// { dg-options -std=c++11 }
+// { dg-do compile { target c++11 } }
 
 template<class T>
 struct add_rref {
@@ -68,7 +68,7 @@ static_assert(sizeof(g<void(&)()>(0)) == 2, "Ouch");
 static_assert(sizeof(g<void(&&)()>(0)) == 2, "Ouch");
 static_assert(sizeof(f<void, void>(0)) == 2, "Ouch");
 static_assert(sizeof(f<void(), void()>(0)) == 2, "Ouch");
-static_assert(sizeof(f<void() const, void() const>(0)) == 2, "Ouch");
+//static_assert(sizeof(f<void() const, void() const>(0)) == 2, "Ouch");
 static_assert(sizeof(f<int, void>(0)) == 2, "Ouch");
 static_assert(sizeof(f<void, int>(0)) == 2, "Ouch");
 static_assert(sizeof(f<C, void>(0)) == 2, "Ouch");
@@ -90,7 +90,7 @@ static_assert(sizeof(g2<void(&)()>(0)) == 2, "Ouch");
 static_assert(sizeof(g2<void(&&)()>(0)) == 2, "Ouch");
 static_assert(sizeof(f2<void, void>(0)) == 2, "Ouch");
 static_assert(sizeof(f2<void(), void()>(0)) == 2, "Ouch");
-static_assert(sizeof(f2<void() const, void() const>(0)) == 2, "Ouch");
+//static_assert(sizeof(f2<void() const, void() const>(0)) == 2, "Ouch");
 static_assert(sizeof(f2<int, void>(0)) == 2, "Ouch");
 static_assert(sizeof(f2<void, int>(0)) == 2, "Ouch");
 static_assert(sizeof(f2<C, void>(0)) == 2, "Ouch");

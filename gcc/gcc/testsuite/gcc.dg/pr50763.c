@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -fno-tree-dominator-opts -fdump-tree-pre" } */
+/* { dg-options "-O2 -ftree-tail-merge -fno-tree-dominator-opts -fdump-tree-pre" } */
 
 int bar (int i);
 
@@ -12,5 +12,5 @@ foo (int c, int d)
   while (c == d);
 }
 
-/* { dg-final { scan-tree-dump-times "== 33" 1 "pre"} } */
+/* { dg-final { scan-tree-dump-times "== 33" 2 "pre"} } */
 /* { dg-final { cleanup-tree-dump "pre" } } */

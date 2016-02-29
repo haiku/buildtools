@@ -1,6 +1,6 @@
-// { dg-options "-std=gnu++0x" }
+// { dg-options "-std=gnu++11" }
 
-// Copyright (C) 2011-2013 Free Software Foundation, Inc.
+// Copyright (C) 2011-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -69,7 +69,7 @@ namespace
       start_counters(time, resource);
 
       // This is a worst insertion use case for the current implementation as
-      // we insert an element at the begining of the hashtable and then we
+      // we insert an element at the beginning of the hashtable and then we
       // insert starting at the end so that each time we need to seek up to the
       // first bucket to find the first non-empty one.
       us.insert(0);

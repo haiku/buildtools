@@ -1,6 +1,6 @@
 # Handlers for additional dg-xxx keywords in tests.
 
-# Copyright (C) 2004-2013 Free Software Foundation, Inc.
+# Copyright (C) 2004-2015 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -115,6 +115,15 @@ proc dg-require-cmath { args } {
     return
 }
 
+proc dg-require-thread-fence { args } {
+    if { ![ check_v3_target_thread_fence ] } {
+	upvar dg-do-what dg-do-what
+	set dg-do-what [list [lindex ${dg-do-what} 0] "N" "P"]
+	return
+    }
+    return
+}
+
 proc dg-require-atomic-builtins { args } {
     if { ![ check_v3_target_atomic_builtins ] } {
 	upvar dg-do-what dg-do-what
@@ -214,7 +223,38 @@ proc dg-require-little-endian { args } {
     return
 }
 
+proc dg-require-filesystem-ts { args } {
+    if { ![ check_v3_target_filesystem_ts ] } {
+	upvar dg-do-what dg-do-what
+	set dg-do-what [list [lindex ${dg-do-what} 0] "N" "P"]
+	return
+    }
+    return
+}
+
 proc add_options_for_no_pch { flags } {
     # This forces any generated and possibly included PCH to be invalid.
     return "-D__GLIBCXX__=99999999"
+}
+
+# Like dg-options, but adds to the default options rather than replacing them.
+
+proc dg-additional-options { args } {
+    upvar dg-extra-tool-flags extra-tool-flags
+
+    if { [llength $args] > 3 } {
+        error "[lindex $args 0]: too many arguments"
+        return
+    }
+
+    if { [llength $args] >= 3 } {
+        switch [dg-process-target [lindex $args 2]] {
+            "S" { eval lappend extra-tool-flags [lindex $args 1] }
+            "N" { }
+            "F" { error "[lindex $args 0]: `xfail' not allowed here" }
+            "P" { error "[lindex $args 0]: `xfail' not allowed here" }
+        }
+    } else {
+        eval lappend extra-tool-flags [lindex $args 1]
+    }
 }

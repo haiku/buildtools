@@ -1,6 +1,6 @@
 // PR c++/53594
-// { dg-do compile }
-// { dg-options "-std=c++11 -Wuninitialized" }
+// { dg-do compile { target c++11 } }
+// { dg-options "-Wuninitialized" }
 
 struct A
 {
@@ -11,6 +11,7 @@ struct A
 
 struct B
 {
+  virtual void g();
   const int d;		// { dg-warning "non-static const member" }
   int &e;		// { dg-warning "non-static reference" }
   int f = 7;

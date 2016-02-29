@@ -19,14 +19,15 @@ func main() {
 func p1() {
 	var s *S
 	var i I
-	var e interface {}
+	var e interface{}
 	e = s
 	i = e.(I)
 	_ = i
 }
 
-type S struct {
-}
+type S struct{}
+
+func (s *S) _() {}
 
 func shouldPanic(f func()) {
 	defer func() {

@@ -1,9 +1,9 @@
-// { dg-options "-std=c++0x" }
+// { dg-options "-std=gnu++11" }
 
 //
 // 2010-06-16  Stephen M. Webb <stephen.webb@bregmasoft.ca>
 //
-// Copyright (C) 2010-2013 Free Software Foundation, Inc.
+// Copyright (C) 2010-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -25,6 +25,10 @@
 
 #include <regex>
 #include <testsuite_hooks.h>
+#include <testsuite_regex.h>
+
+using namespace __gnu_test;
+using namespace std;
 
 void
 test01()
@@ -35,7 +39,7 @@ test01()
 	std::string target("aa");
 	std::smatch m;
 
-	VERIFY( std::regex_match(target, m, re) );
+	VERIFY( regex_match_debug(target, m, re) );
 
 	VERIFY( m.size()  == re.mark_count()+1 );
 	VERIFY( m.empty() == false );

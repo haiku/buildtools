@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -34,6 +34,8 @@ with Sinput.C;
 with Snames;  use Snames;
 with Stringt;
 with Styleg;
+
+with System.OS_Lib; use System.OS_Lib;
 
 package body ALI.Util is
 
@@ -192,7 +194,7 @@ package body ALI.Util is
       --  This loop is empty and harmless the first time in.
 
       for J in Source.First .. Source.Last loop
-         Set_Name_Table_Info (Source.Table (J).Sfile, 0);
+         Set_Name_Table_Int (Source.Table (J).Sfile, 0);
          Source.Table (J).Source_Found := False;
       end loop;
 
@@ -234,7 +236,7 @@ package body ALI.Util is
             --  file has not been processed already.
 
             if Afile /= No_File
-              and then Get_Name_Table_Info (Afile) = 0
+              and then Get_Name_Table_Int (Afile) = 0
             then
                Text := Read_Library_Info (Afile);
 
@@ -249,7 +251,7 @@ package body ALI.Util is
                      Error_Msg_File_1 := Afile;
                      Error_Msg_File_2 := Withs.Table (W).Sfile;
                      Error_Msg ("{ not found, { must be compiled");
-                     Set_Name_Table_Info (Afile, Int (No_Unit_Id));
+                     Set_Name_Table_Int (Afile, Int (No_Unit_Id));
                      return;
                   end if;
 
@@ -270,14 +272,18 @@ package body ALI.Util is
                   then
                      Error_Msg_File_1 := Withs.Table (W).Sfile;
                      Error_Msg ("{ had errors, must be fixed, and recompiled");
-                     Set_Name_Table_Info (Afile, Int (No_Unit_Id));
+                     Set_Name_Table_Int (Afile, Int (No_Unit_Id));
+
+                  --  In GNATprove mode, object files are never generated, so
+                  --  No_Object=True is not considered an error.
 
                   elsif ALIs.Table (Idread).No_Object
+                    and then not GNATprove_Mode
                     and then not Ignore_Errors
                   then
                      Error_Msg_File_1 := Withs.Table (W).Sfile;
                      Error_Msg ("{ must be recompiled");
-                     Set_Name_Table_Info (Afile, Int (No_Unit_Id));
+                     Set_Name_Table_Int (Afile, Int (No_Unit_Id));
                   end if;
 
                   --  If the Unit is an Interface to a Stand-Alone Library,
@@ -331,10 +337,10 @@ package body ALI.Util is
             --  If this is the first time we are seeing this source file,
             --  then make a new entry in the source table.
 
-            if Get_Name_Table_Info (F) = 0 then
+            if Get_Name_Table_Int (F) = 0 then
                Source.Increment_Last;
                S := Source.Last;
-               Set_Name_Table_Info (F, Int (S));
+               Set_Name_Table_Int (F, Int (S));
                Source.Table (S).Sfile := F;
                Source.Table (S).All_Timestamps_Match := True;
 
@@ -355,6 +361,7 @@ package body ALI.Util is
                   if Stamp (Stamp'First) /= ' ' then
                      Source.Table (S).Stamp := Stamp;
                      Source.Table (S).Source_Found := True;
+                     Source.Table (S).Stamp_File := F;
 
                   --  If we could not find the file, then the stamp is set
                   --  from the dependency table entry (to be possibly reset
@@ -363,6 +370,7 @@ package body ALI.Util is
                   else
                      Source.Table (S).Stamp := Sdep.Table (D).Stamp;
                      Source.Table (S).Source_Found := False;
+                     Source.Table (S).Stamp_File := ALIs.Table (A).Afile;
 
                      --  In All_Sources mode, flag error of file not found
 
@@ -376,15 +384,16 @@ package body ALI.Util is
                --  is off, so simply initialize the stamp from the Sdep entry
 
                else
-                  Source.Table (S).Source_Found := False;
                   Source.Table (S).Stamp := Sdep.Table (D).Stamp;
+                  Source.Table (S).Source_Found := False;
+                  Source.Table (S).Stamp_File := ALIs.Table (A).Afile;
                end if;
 
             --  Here if this is not the first time for this source file,
             --  so that the source table entry is already constructed.
 
             else
-               S := Source_Id (Get_Name_Table_Info (F));
+               S := Source_Id (Get_Name_Table_Int (F));
 
                --  Update checksum flag
 
@@ -403,13 +412,19 @@ package body ALI.Util is
                   --  source file even if Check_Source_Files is false, since
                   --  if we find it, then we can use it to resolve which of the
                   --  two timestamps in the ALI files is likely to be correct.
+                  --  We only look in the current directory, because when
+                  --  Check_Source_Files is false, other search directories are
+                  --  likely to be incorrect.
 
-                  if not Check_Source_Files then
+                  if not Check_Source_Files
+                    and then Is_Regular_File (Get_Name_String (F))
+                  then
                      Stamp := Source_File_Stamp (F);
 
                      if Stamp (Stamp'First) /= ' ' then
                         Source.Table (S).Stamp := Stamp;
                         Source.Table (S).Source_Found := True;
+                        Source.Table (S).Stamp_File := F;
                      end if;
                   end if;
 
@@ -428,6 +443,7 @@ package body ALI.Util is
                   else
                      if Sdep.Table (D).Stamp > Source.Table (S).Stamp then
                         Source.Table (S).Stamp := Sdep.Table (D).Stamp;
+                        Source.Table (S).Stamp_File := ALIs.Table (A).Afile;
                      end if;
                   end if;
                end if;
@@ -435,7 +451,7 @@ package body ALI.Util is
 
             --  Set the checksum value in the source table
 
-            S := Source_Id (Get_Name_Table_Info (F));
+            S := Source_Id (Get_Name_Table_Int (F));
             Source.Table (S).Checksum := Sdep.Table (D).Checksum;
          end if;
 
@@ -466,7 +482,7 @@ package body ALI.Util is
 
    begin
       for D in ALIs.Table (A).First_Sdep .. ALIs.Table (A).Last_Sdep loop
-         Src := Source_Id (Get_Name_Table_Info (Sdep.Table (D).Sfile));
+         Src := Source_Id (Get_Name_Table_Int (Sdep.Table (D).Sfile));
 
          if Opt.Minimal_Recompilation
            and then Sdep.Table (D).Stamp /= Source.Table (Src).Stamp

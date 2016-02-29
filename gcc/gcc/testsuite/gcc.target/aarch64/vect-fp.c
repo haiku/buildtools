@@ -8,11 +8,11 @@ extern void abort (void);
 
 
 #define DEFN_SETV(type) \
-		set_vector_##type (pR##type a, type n)   \
-		{ 				         \
-		  int i;			         \
-		  for (i=0; i<16; i++)		         \
-		    a[i] = n;				 \
+		void set_vector_##type (pR##type a, type n)   \
+		{					      \
+		  int i;				      \
+		  for (i=0; i<16; i++)			      \
+		    a[i] = n;				      \
 		}
 
 #define DEFN_CHECKV(type) \
@@ -117,6 +117,16 @@ int main (void)
 			    9.0, 10.0, 11.0, 12.0,
 			    13.0, 14.0, 15.0, 16.0 };
 
+  F32  fabd_F32_vector[] = { 1.0f, 1.0f, 1.0f, 1.0f,
+			     1.0f, 1.0f, 1.0f, 1.0f,
+			     1.0f, 1.0f, 1.0f, 1.0f,
+			     1.0f, 1.0f, 1.0f, 1.0f };
+
+  F64  fabd_F64_vector[] = { 1.0, 1.0, 1.0, 1.0,
+			     1.0, 1.0, 1.0, 1.0,
+			     1.0, 1.0, 1.0, 1.0,
+			     1.0, 1.0, 1.0, 1.0 };
+
   /* Setup input vectors.  */
   for (i=1; i<=16; i++)
     {
@@ -132,6 +142,7 @@ int main (void)
   TEST (div, 3);
   TEST (neg, 2);
   TEST (abs, 2);
+  TEST (fabd, 3);
 
   return 0;
 }

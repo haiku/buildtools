@@ -1,11 +1,11 @@
 // PR c++/51489
 // DR 1313
-// { dg-options "-std=c++0x" }
+// { dg-do compile { target c++11 } }
 
 struct array
 {
   constexpr array() :x(0) {}
-  constexpr int const* begin() { return &x; }
+  constexpr int const* begin() const { return &x; }
   int x;
 };
 constexpr array aa;

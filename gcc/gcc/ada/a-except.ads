@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -45,7 +45,7 @@
 --  2005 functionality is required. In particular, it is used for building
 --  run times on all targets.
 
-pragma Compiler_Unit;
+pragma Compiler_Unit_Warning;
 
 pragma Polling (Off);
 --  We must turn polling off for this unit, because otherwise we get
@@ -250,7 +250,7 @@ private
 
    --  Note: this used to be in a separate unit called System.Poll, but that
    --  caused horrible circular elaboration problems between System.Poll and
-   --  Ada.Exceptions. One way of solving such circularities is unification!
+   --  Ada.Exceptions.
 
    procedure Poll;
    --  Check for asynchronous abort. Note that we do not inline the body.
@@ -265,7 +265,7 @@ private
    Max_Tracebacks : constant := 50;
    --  Maximum number of trace backs stored in exception occurrence
 
-   type Tracebacks_Array is array (1 .. Max_Tracebacks) of TBE.Traceback_Entry;
+   subtype Tracebacks_Array is TBE.Tracebacks_Array (1 .. Max_Tracebacks);
    --  Traceback array stored in exception occurrence
 
    type Exception_Occurrence is record

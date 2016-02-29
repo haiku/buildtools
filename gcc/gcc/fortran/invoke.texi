@@ -1,10 +1,10 @@
-@c Copyright (C) 2004-2013 Free Software Foundation, Inc.
+@c Copyright (C) 2004-2015 Free Software Foundation, Inc.
 @c This is part of the GNU Fortran manual.   
 @c For copying conditions, see the file gfortran.texi.
 
 @ignore
 @c man begin COPYRIGHT
-Copyright @copyright{} 2004-2013 Free Software Foundation, Inc.
+Copyright @copyright{} 2004-2015 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -119,8 +119,8 @@ by type.  Explanations are in the following sections.
 -fdefault-real-8 -fdollar-ok -ffixed-line-length-@var{n} @gol
 -ffixed-line-length-none -ffree-form -ffree-line-length-@var{n} @gol
 -ffree-line-length-none -fimplicit-none -finteger-4-integer-8 @gol
--fmax-identifier-length -fmodule-private -fno-fixed-form -fno-range-check @gol
--fopenmp -freal-4-real-10 -freal-4-real-16 -freal-4-real-8 @gol
+-fmax-identifier-length -fmodule-private -ffixed-form -fno-range-check @gol
+-fopenacc -fopenmp -freal-4-real-10 -freal-4-real-16 -freal-4-real-8 @gol
 -freal-8-real-10 -freal-8-real-16 -freal-8-real-4 -std=@var{std}
 }
 
@@ -142,16 +142,16 @@ and warnings}.
 @gccoptlist{-Waliasing -Wall -Wampersand -Warray-bounds
 -Wc-binding-type -Wcharacter-truncation @gol
 -Wconversion -Wfunction-elimination -Wimplicit-interface @gol
--Wimplicit-procedure -Wintrinsic-shadow -Wintrinsics-std @gol
+-Wimplicit-procedure -Wintrinsic-shadow -Wuse-without-only -Wintrinsics-std @gol
 -Wline-truncation -Wno-align-commons -Wno-tabs -Wreal-q-constant @gol
--Wsurprising -Wunderflow -Wunused-parameter -Wrealloc-lhs Wrealloc-lhs-all @gol
+-Wsurprising -Wunderflow -Wunused-parameter -Wrealloc-lhs -Wrealloc-lhs-all @gol
 -Wtarget-lifetime -fmax-errors=@var{n} -fsyntax-only -pedantic -pedantic-errors
 }
 
 @item Debugging Options
 @xref{Debugging Options,,Options for debugging your program or GNU Fortran}.
 @gccoptlist{-fbacktrace -fdump-fortran-optimized -fdump-fortran-original @gol
--fdump-parse-tree -ffpe-trap=@var{list}
+-fdump-parse-tree -ffpe-trap=@var{list} -ffpe-summary=@var{list}
 }
 
 @item Directory Options
@@ -180,7 +180,7 @@ and warnings}.
 -finit-real=@var{<zero|inf|-inf|nan|snan>} @gol
 -fmax-array-constructor=@var{n} -fmax-stack-var-size=@var{n}
 -fno-align-commons @gol
--fno-automatic -fno-protect-parens -fno-underscoring -fno-whole-file @gol
+-fno-automatic -fno-protect-parens -fno-underscoring @gol
 -fsecond-underscore -fpack-derived -frealloc-lhs -frecursive @gol
 -frepack-arrays -fshort-enums -fstack-arrays
 }
@@ -199,7 +199,7 @@ accepted by the compiler:
 @item -ffree-form
 @itemx -ffixed-form
 @opindex @code{ffree-form}
-@opindex @code{fno-fixed-form}
+@opindex @code{ffixed-form}
 @cindex options, Fortran dialect
 @cindex file format, free
 @cindex file format, fixed
@@ -226,29 +226,6 @@ in fixed form sources.  If the @option{-fd-lines-as-code} option is
 given they are treated as if the first column contained a blank.  If the
 @option{-fd-lines-as-comments} option is given, they are treated as
 comment lines.
-
-@item -fdefault-double-8
-@opindex @code{fdefault-double-8}
-Set the @code{DOUBLE PRECISION} type to an 8 byte wide type.  If
-@option{-fdefault-real-8} is given, @code{DOUBLE PRECISION} would
-instead be promoted to 16 bytes if possible, and @option{-fdefault-double-8}
-can be used to prevent this.  The kind of real constants like @code{1.d0} will
-not be changed by @option{-fdefault-real-8} though, so also
-@option{-fdefault-double-8} does not affect it.
-
-@item -fdefault-integer-8
-@opindex @code{fdefault-integer-8}
-Set the default integer and logical types to an 8 byte wide type.
-Do nothing if this is already the default.  This option also affects
-the kind of integer constants like @code{42}.
-
-@item -fdefault-real-8
-@opindex @code{fdefault-real-8}
-Set the default real type to an 8 byte wide type.
-Do nothing if this is already the default.  This option also affects
-the kind of non-double real constants like @code{1.0}, and does promote
-the default width of @code{DOUBLE PRECISION} to 16 bytes if possible, unless
-@code{-fdefault-double-8} is given, too.
 
 @item -fdollar-ok
 @opindex @code{fdollar-ok}
@@ -320,21 +297,24 @@ Specify that no implicit typing is allowed, unless overridden by explicit
 @code{IMPLICIT} statements.  This is the equivalent of adding
 @code{implicit none} to the start of every procedure.
 
-@item -finteger-4-integer-8
-@opindex @code{finteger-4-integer-8}
-Promote all @code{INTEGER(KIND=4)} entities to an @code{INTEGER(KIND=8)}
-entities.  If @code{KIND=8} is unavailable, then an error will be issued.
-This option should be used with care and may not be suitable for your codes.
-Areas of possible concern include calls to external procedures,
-alignment in @code{EQUIVALENCE} and/or @code{COMMON}, generic interfaces,
-BOZ literal constant conversion, and I/O.  Inspection of the intermediate
-representation of the translated Fortran code, produced by
-@option{-fdump-tree-original}, is suggested.
-
 @item -fcray-pointer
 @opindex @code{fcray-pointer}
 Enable the Cray pointer extension, which provides C-like pointer
 functionality.
+
+@item -fopenacc
+@opindex @code{fopenacc}
+@cindex OpenACC
+Enable the OpenACC extensions.  This includes OpenACC @code{!$acc}
+directives in free form and @code{c$acc}, @code{*$acc} and
+@code{!$acc} directives in fixed form, @code{!$} conditional
+compilation sentinels in free form and @code{c$}, @code{*$} and
+@code{!$} sentinels in fixed form, and when linking arranges for the
+OpenACC runtime library to be linked in.
+
+Note that this is an experimental feature, incomplete, and subject to
+change in future versions of GCC.  See
+@w{@uref{https://gcc.gnu.org/wiki/OpenACC}} for more information.
 
 @item -fopenmp
 @opindex @code{fopenmp}
@@ -361,8 +341,44 @@ Similarly, @code{DATA i/Z'FFFFFFFF'/} will result in an integer overflow
 on most systems, but with @option{-fno-range-check} the value will
 ``wrap around'' and @code{i} will be initialized to @math{-1} instead.
 
+@item -fdefault-integer-8
+@opindex @code{fdefault-integer-8}
+Set the default integer and logical types to an 8 byte wide type.  This option
+also affects the kind of integer constants like @code{42}. Unlike
+@option{-finteger-4-integer-8}, it does not promote variables with explicit
+kind declaration.
+
+@item -fdefault-real-8
+@opindex @code{fdefault-real-8}
+Set the default real type to an 8 byte wide type. This option also affects
+the kind of non-double real constants like @code{1.0}, and does promote
+the default width of @code{DOUBLE PRECISION} to 16 bytes if possible, unless
+@code{-fdefault-double-8} is given, too. Unlike @option{-freal-4-real-8},
+it does not promote variables with explicit kind declaration.
+
+@item -fdefault-double-8
+@opindex @code{fdefault-double-8}
+Set the @code{DOUBLE PRECISION} type to an 8 byte wide type.  Do nothing if this
+is already the default.  If @option{-fdefault-real-8} is given,
+@code{DOUBLE PRECISION} would instead be promoted to 16 bytes if possible, and
+@option{-fdefault-double-8} can be used to prevent this.  The kind of real
+constants like @code{1.d0} will not be changed by @option{-fdefault-real-8}
+though, so also @option{-fdefault-double-8} does not affect it.
+
+@item -finteger-4-integer-8
+@opindex @code{finteger-4-integer-8}
+Promote all @code{INTEGER(KIND=4)} entities to an @code{INTEGER(KIND=8)}
+entities.  If @code{KIND=8} is unavailable, then an error will be issued.
+This option should be used with care and may not be suitable for your codes.
+Areas of possible concern include calls to external procedures,
+alignment in @code{EQUIVALENCE} and/or @code{COMMON}, generic interfaces,
+BOZ literal constant conversion, and I/O.  Inspection of the intermediate
+representation of the translated Fortran code, produced by
+@option{-fdump-tree-original}, is suggested.
+
 @item  -freal-4-real-8
 @itemx -freal-4-real-10
+@itemx -freal-4-real-16
 @itemx -freal-8-real-4
 @itemx -freal-8-real-10
 @itemx -freal-8-real-16
@@ -400,7 +416,7 @@ language standard, and warnings are given for the Fortran 77 features
 that are permitted but obsolescent in later standards. @samp{-std=f2008ts}
 allows the Fortran 2008 standard including the additions of the 
 Technical Specification (TS) 29113 on Further Interoperability of Fortran
-with C.
+with C and TS 18508 on Additional Parallel Features in Fortran.
 
 @end table
 
@@ -788,7 +804,9 @@ Warn when a character assignment will truncate the assigned string.
 @opindex @code{Wline-truncation}
 @cindex warnings, line truncation
 Warn when a source code line will be truncated.  This option is
-implied by @option{-Wall}.
+implied by @option{-Wall}.  For free-form source code, the default is
+@option{-Werror=line-truncation} such that truncations are reported as
+error.
 
 @item -Wconversion
 @opindex @code{Wconversion}
@@ -801,7 +819,8 @@ the expression after conversion. Implied by @option{-Wall}.
 @opindex @code{Wconversion-extra}
 @cindex warnings, conversion
 @cindex conversion
-Warn about implicit conversions between different types and kinds.
+Warn about implicit conversions between different types and kinds. This
+option does @emph{not} imply @option{-Wconversion}.
 
 @item -Wextra
 @opindex @code{Wextra}
@@ -873,17 +892,17 @@ A @code{CHARACTER} variable is declared with negative length.
 @cindex tabulators
 By default, tabs are accepted as whitespace, but tabs are not members
 of the Fortran Character Set.  For continuation lines, a tab followed
-by a digit between 1 and 9 is supported.  @option{-Wno-tabs} will cause
-a warning to be issued if a tab is encountered. Note, @option{-Wno-tabs}
+by a digit between 1 and 9 is supported.  @option{-Wtabs} will cause
+a warning to be issued if a tab is encountered. Note, @option{-Wtabs}
 is active for @option{-pedantic}, @option{-std=f95}, @option{-std=f2003},
-@option{-std=f2008} and @option{-Wall}.
+@option{-std=f2008}, @option{-std=f2008ts} and @option{-Wall}.
 
 @item -Wunderflow
 @opindex @code{Wunderflow}
 @cindex warnings, underflow
 @cindex underflow
 Produce a warning when numerical constant expressions are
-encountered, which yield an UNDERFLOW during compilation.
+encountered, which yield an UNDERFLOW during compilation. Enabled by default.
 
 @item -Wintrinsic-shadow
 @opindex @code{Wintrinsic-shadow}
@@ -893,6 +912,13 @@ Warn if a user-defined procedure or module procedure has the same name as an
 intrinsic; in this case, an explicit interface or @code{EXTERNAL} or
 @code{INTRINSIC} declaration might be needed to get calls later resolved to
 the desired intrinsic/procedure.  This option is implied by @option{-Wall}.
+
+@item -Wuse-without-only
+@opindex @code{Wuse-without-only}
+@cindex warnings, use statements
+@cindex intrinsic
+Warn if a @code{USE} statement has no @code{ONLY} qualifier and 
+thus implicitly imports all public entities of the used module.
 
 @item -Wunused-dummy-argument
 @opindex @code{Wunused-dummy-argument}
@@ -909,7 +935,8 @@ Contrary to @command{gcc}'s meaning of @option{-Wunused-parameter},
 @command{gfortran}'s implementation of this option does not warn
 about unused dummy arguments (see @option{-Wunused-dummy-argument}),
 but about unused @code{PARAMETER} values. @option{-Wunused-parameter}
-is not included in @option{-Wall} but is implied by @option{-Wall -Wextra}.
+is implied by @option{-Wextra} if also @option{-Wunused} or
+@option{-Wall} is used.
 
 @item -Walign-commons
 @opindex @code{Walign-commons}
@@ -953,6 +980,11 @@ This option is implied by @option{-Wextra}.
 @opindex @code{Wtargt-lifetime}
 Warn if the pointer in a pointer assignment might be longer than the its
 target. This option is implied by @option{-Wall}.
+
+@item -Wzerotrip
+@opindex @code{Wzerotrip}
+Warn if a @code{DO} loop is known to execute zero times at compile
+time.  This option is implied by @option{-Wall}.
 
 @item -Werror
 @opindex @code{Werror}
@@ -1021,6 +1053,17 @@ due to rounding, and hence the @code{ffpe-trap=inexact} is likely to
 be uninteresting in practice.
 
 By default no exception traps are enabled.
+
+@item -ffpe-summary=@var{list}
+@opindex @code{ffpe-summary=}@var{list}
+Specify a list of floating-point exceptions, whose flag status is printed
+to @code{ERROR_UNIT} when invoking @code{STOP} and @code{ERROR STOP}.
+@var{list} can be either @samp{none}, @samp{all} or a comma-separated list
+of the following exceptions: @samp{invalid}, @samp{zero}, @samp{overflow},
+@samp{underflow}, @samp{inexact} and @samp{denormal}. (See
+@option{-ffpe-trap} for a description of the exceptions.)
+
+By default, a summary for all exceptions but @samp{inexact} is shown.
 
 @item -fno-backtrace
 @opindex @code{fno-backtrace}
@@ -1246,10 +1289,9 @@ experimenting with issues such as integration of GNU Fortran into
 existing system environments (vis-@`{a}-vis existing libraries, tools,
 and so on).
 
-For example, with @option{-funderscoring}, and assuming other defaults like
-@option{-fcase-lower} and that @code{j()} and @code{max_count()} are
-external functions while @code{my_var} and @code{lvar} are local variables,
-a statement like
+For example, with @option{-funderscoring}, and assuming that @code{j()} and
+@code{max_count()} are external functions while @code{my_var} and
+@code{lvar} are local variables, a statement like
 @smallexample
 I = J() + MAX_COUNT (MY_VAR, LVAR)
 @end smallexample
@@ -1291,22 +1333,6 @@ issues so that debugging always involves using the names as they appear
 in the source, even if the names as seen by the linker are mangled to
 prevent accidental linking between procedures with incompatible
 interfaces.
-
-@item -fno-whole-file
-@opindex @code{fno-whole-file}
-This flag causes the compiler to resolve and translate each procedure in
-a file separately. 
-
-By default, the whole file is parsed and placed in a single front-end tree.
-During resolution, in addition to all the usual checks and fixups, references
-to external procedures that are in the same file effect resolution of
-that procedure, if not already done, and a check of the interfaces.  The
-dependences are resolved by changing the order in which the file is
-translated into the backend tree.  Thus, a procedure that is referenced
-is translated before the reference and the duplication of backend tree
-declarations eliminated.
-
-The @option{-fno-whole-file} option is deprecated and may lead to wrong code.
 
 @item -fsecond-underscore
 @opindex @code{fsecond-underscore}

@@ -1,4 +1,4 @@
-// Copyright (C) 2010-2013 Free Software Foundation, Inc.
+// Copyright (C) 2010-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -18,7 +18,7 @@
 // 20.8.9 Function template bind
 
 // { dg-do compile }
-// { dg-options "-std=gnu++0x" }
+// { dg-options "-std=gnu++11" }
 
 #include <functional>
 
@@ -30,10 +30,10 @@ void test01()
 {
   const int dummy = 0;
   std::bind(&inc, _1)(0);               // { dg-error  "no match" }
-  // { dg-error "rvalue|const" "" { target *-*-* } 1347 }
-  // { dg-error "rvalue|const" "" { target *-*-* } 1361 }
-  // { dg-error "rvalue|const" "" { target *-*-* } 1375 }
-  // { dg-error "rvalue|const" "" { target *-*-* } 1389 }
+  // { dg-error "rvalue|const" "" { target *-*-* } 1125 }
+  // { dg-error "rvalue|const" "" { target *-*-* } 1139 }
+  // { dg-error "rvalue|const" "" { target *-*-* } 1153 }
+  // { dg-error "rvalue|const" "" { target *-*-* } 1167 }
   std::bind(&inc, std::ref(dummy))();	// { dg-error  "no match" }
 }
 

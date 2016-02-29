@@ -2,7 +2,7 @@
    exception if trapping is enabled, but does not raise the flag
    otherwise.  */
 
-/* { dg-do run { target i?86-*-*gnu* x86_64-*-*gnu* } } */
+/* { dg-do run { target i?86-*-*gnu* x86_64-*-*gnu* ia64-*-*gnu* } } */
 /* { dg-options "-D_GNU_SOURCE" } */
 /* { dg-require-effective-target fenv_exceptions } */
 

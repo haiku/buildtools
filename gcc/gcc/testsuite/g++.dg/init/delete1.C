@@ -1,7 +1,7 @@
 // PR c++/19811
 
-class C; // { dg-error "forward" }
+class C; // { dg-message "forward" }
 
 void foo(void *p) {
-  delete [] ((C*)p) ; // { dg-error "" }
+  delete [] ((C*)p) ; // { dg-warning "problem|incomplete" }
 }

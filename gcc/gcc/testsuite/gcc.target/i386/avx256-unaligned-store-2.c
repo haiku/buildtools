@@ -1,5 +1,5 @@
 /* { dg-do compile { target { ! ia32 } } } */
-/* { dg-options "-O3 -dp -mavx -mavx256-split-unaligned-store" } */
+/* { dg-options "-O3 -dp -mavx -mavx256-split-unaligned-store -mno-prefer-avx128" } */
 
 #define N 1024
 
@@ -24,5 +24,5 @@ avx_test (void)
 }
 
 /* { dg-final { scan-assembler-not "avx_storedqu256" } } */
-/* { dg-final { scan-assembler "vmovdqu.*\\*movv16qi_internal/3" } } */
+/* { dg-final { scan-assembler "vmovups.*\\*movv16qi_internal/3" } } */
 /* { dg-final { scan-assembler "vextract.128" } } */

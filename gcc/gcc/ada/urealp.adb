@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2011, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,7 +38,7 @@ package body Urealp is
 
    Ureal_First_Entry : constant Ureal := Ureal'Succ (No_Ureal);
    --  First subscript allocated in Ureal table (note that we can't just
-   --  add 1 to No_Ureal, since "+" means something different for Ureals!
+   --  add 1 to No_Ureal, since "+" means something different for Ureals).
 
    type Ureal_Entry is record
       Num  : Uint;
@@ -1354,13 +1354,13 @@ package body Urealp is
         and then Val.Den >= -16
       then
          if Val.Den = 1 then
-            T := Val.Num * (10/2);
+            T := Val.Num * (10 / 2);
             UI_Write (T / 10, Decimal);
             Write_Char ('.');
             UI_Write (T mod 10, Decimal);
 
          elsif Val.Den = 2 then
-            T := Val.Num * (100/4);
+            T := Val.Num * (100 / 4);
             UI_Write (T / 100, Decimal);
             Write_Char ('.');
             UI_Write (T mod 100 / 10, Decimal);

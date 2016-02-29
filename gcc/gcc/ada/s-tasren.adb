@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---         Copyright (C) 1992-2012, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2014, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -367,7 +367,8 @@ package body System.Tasking.Rendezvous is
       if System.Tasking.Detect_Blocking
         and then STPO.Self.Common.Protected_Action_Nesting > 0
       then
-         raise Program_Error with "potentially blocking operation";
+         raise Program_Error with
+           "potentially blocking operation";
       end if;
 
       Call_Synchronous
@@ -565,13 +566,13 @@ package body System.Tasking.Rendezvous is
             Send_Trace_Info (M_RDV_Complete, Entry_Call.Self);
          end if;
 
-         Initialization.Defer_Abort_Nestable (Self_Id);
+         Initialization.Defer_Abort (Self_Id);
 
       elsif ZCX_By_Default then
 
          --  With ZCX, aborts are not automatically deferred in handlers
 
-         Initialization.Defer_Abort_Nestable (Self_Id);
+         Initialization.Defer_Abort (Self_Id);
       end if;
 
       --  We need to clean up any accepts which Self may have been serving when
@@ -837,7 +838,8 @@ package body System.Tasking.Rendezvous is
             Uninterpreted_Data := Self_Id.Common.Call.Uninterpreted_Data;
 
             --  In this case the accept body is not Null_Body. Defer abort
-            --  until it gets into the accept body.
+            --  until it gets into the accept body. The compiler has inserted
+            --  a call to Abort_Undefer as part of the entry expansion.
 
             pragma Assert (Self_Id.Deferral_Level = 1);
 
@@ -899,6 +901,8 @@ package body System.Tasking.Rendezvous is
                Initialization.Defer_Abort_Nestable (Self_Id);
 
                --  Leave abort deferred until the accept body
+               --  The compiler has inserted a call to Abort_Undefer as part of
+               --  the entry expansion.
             end if;
 
             STPO.Unlock (Self_Id);
@@ -970,6 +974,8 @@ package body System.Tasking.Rendezvous is
 
                   --  We need an extra defer here, to keep abort
                   --  deferred until we get into the accept body
+                  --  The compiler has inserted a call to Abort_Undefer as part
+                  --  of the entry expansion.
 
                   Initialization.Defer_Abort_Nestable (Self_Id);
                end if;
@@ -1007,7 +1013,8 @@ package body System.Tasking.Rendezvous is
                end if;
 
                Initialization.Undefer_Abort (Self_Id);
-               raise Program_Error with "Entry call not a delay mode";
+               raise Program_Error with
+                 "entry call not a delay mode";
             end if;
       end case;
 
@@ -1311,7 +1318,8 @@ package body System.Tasking.Rendezvous is
       if System.Tasking.Detect_Blocking
         and then Self_Id.Common.Protected_Action_Nesting > 0
       then
-         raise Program_Error with "potentially blocking operation";
+         raise Program_Error with
+           "potentially blocking operation";
       end if;
 
       if Parameters.Runtime_Traces then
@@ -1683,7 +1691,8 @@ package body System.Tasking.Rendezvous is
       if System.Tasking.Detect_Blocking
         and then Self_Id.Common.Protected_Action_Nesting > 0
       then
-         raise Program_Error with "potentially blocking operation";
+         raise Program_Error with
+           "potentially blocking operation";
       end if;
 
       Initialization.Defer_Abort (Self_Id);

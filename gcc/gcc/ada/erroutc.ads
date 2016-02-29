@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -47,25 +47,45 @@ package Erroutc is
    Flag_Source : Source_File_Index;
    --  Source file index for source file where error is being posted
 
+   Has_Double_Exclam : Boolean := False;
+   --  Set true to indicate that the current message contains the insertion
+   --  sequence !! (force warnings even in non-main unit source files).
+
+   Is_Serious_Error : Boolean := False;
+   --  Set True for a serious error (i.e. any message that is not a warning
+   --  or style message, and that does not contain a | insertion character).
+
+   Is_Unconditional_Msg : Boolean := False;
+   --  Set True to indicate that the current message contains the insertion
+   --  character ! and is thus to be treated as an unconditional message.
+
    Is_Warning_Msg : Boolean := False;
-   --  Set True to indicate if current message is warning message
+   --  Set True to indicate if current message is warning message (contains ?
+   --  or contains < and Error_Msg_Warn is True.
+
+   Is_Info_Msg : Boolean := False;
+   --  Set True to indicate that the current message starts with the characters
+   --  "info: " and is to be treated as an information message. This string
+   --  will be prepended to the message and all its continuations.
+
+   Is_Check_Msg : Boolean := False;
+   --  Set True to indicate that the current message starts with one of
+   --  "high: ", "medium: ", "low: " and is to be treated as a check message.
 
    Warning_Msg_Char : Character;
    --  Warning character, valid only if Is_Warning_Msg is True
-   --    ' '      -- ? appeared on its own in message
-   --    '?'      -- ?? appeared in message
-   --    'x'      -- ?x? appeared in message
-   --    'X'      -- ?x? appeared in message (X is upper case of x)
+   --    ' '      -- ?   or <   appeared on its own in message
+   --    '?'      -- ??  or <<  appeared in message
+   --    'x'      -- ?x? or <x< appeared in message (x = a .. z)
+   --    'X'      -- ?X? or <X< appeared in message (X = A .. Z)
+   --    '*'      -- ?*? or <*< appeared in message
+   --    '$'      -- ?$? or <$< appeared in message
+   --  In the case of the < sequences, this is set only if the message is
+   --  actually a warning, i.e. if Error_Msg_Warn is True
 
    Is_Style_Msg : Boolean := False;
    --  Set True to indicate if the current message is a style message
    --  (i.e. a message whose text starts with the characters "(style)").
-
-   Is_Serious_Error : Boolean := False;
-   --  Set by Set_Msg_Text to indicate if current message is serious error
-
-   Is_Unconditional_Msg : Boolean := False;
-   --  Set by Set_Msg_Text to indicate if current message is unconditional
 
    Kill_Message : Boolean := False;
    --  A flag used to kill weird messages (e.g. those containing uninterpreted
@@ -92,7 +112,7 @@ package Erroutc is
    --  ensures that two insertion tokens of maximum length can be accommodated.
    --  The value of 1024 is an arbitrary value that should be more than long
    --  enough to accommodate any reasonable message (and for that matter, some
-   --  pretty unreasonable messages!)
+   --  pretty unreasonable messages).
 
    Msg_Buffer : String (1 .. Max_Msg_Length);
    --  Buffer used to prepare error messages
@@ -187,14 +207,28 @@ package Erroutc is
       --  Column number for error message
 
       Warn : Boolean;
-      --  True if warning message (i.e. insertion character ? appeared)
+      --  True if warning message
+
+      Info : Boolean;
+      --  True if info message
+
+      Check : Boolean;
+      --  True if check message
+
+      Warn_Err : Boolean;
+      --  True if this is a warning message which is to be treated as an error
+      --  as a result of a match with a Warning_As_Error pragma.
 
       Warn_Chr : Character;
-      --  Warning character, valid only if Warn is True
-      --    ' '      -- ? appeared on its own in message
-      --    '?'      -- ?? appeared in message
-      --    'x'      -- ?x? appeared in message
-      --    'X'      -- ?x? appeared in message (X is upper case of x)
+      --  Warning character (note: set even if Warning_Doc_Switch is False)
+      --    ' '      -- ?   or <   appeared on its own in message
+      --    '?'      -- ??  or <<  appeared in message
+      --    'x'      -- ?x? or <x< appeared in message (x = a .. z)
+      --    'X'      -- ?X? or <X< appeared in message (X = A .. Z)
+      --    '*'      -- ?*? or <*< appeared in message
+      --    '$'      -- ?$? or <$< appeared in message
+      --  In the case of the < sequences, this is set only if the message is
+      --  actually a warning, i.e. if Error_Msg_Warn is True
 
       Style : Boolean;
       --  True if style message (starts with "(style)")
@@ -261,9 +295,13 @@ package Erroutc is
    --  values in this table always reference the original template, not an
    --  instantiation copy, in the generic case.
 
+   --  Reason is the reason from the pragma Warnings (Off,..) or the null
+   --  string if no reason parameter is given.
+
    type Warnings_Entry is record
-      Start : Source_Ptr;
-      Stop  : Source_Ptr;
+      Start  : Source_Ptr;
+      Stop   : Source_Ptr;
+      Reason : String_Id;
    end record;
 
    package Warnings is new Table.Table (
@@ -276,13 +314,16 @@ package Erroutc is
 
    --  The second table is used for the specific forms of the pragma, where
    --  the first argument is ON or OFF, and the second parameter is a string
-   --  which is the entire message to suppress, or a prefix of it.
+   --  which is the pattern to match for suppressing a warning.
 
    type Specific_Warning_Entry is record
       Start : Source_Ptr;
       Stop  : Source_Ptr;
       --  Starting and ending source pointers for the range. These are always
       --  from the same source file.
+
+      Reason : String_Id;
+      --  Reason string from pragma Warnings, or null string if none
 
       Msg : String_Ptr;
       --  Message from pragma Warnings (Off, string)
@@ -331,12 +372,18 @@ package Erroutc is
    procedure Add_Class;
    --  Add 'Class to buffer for class wide type case (Class_Flag set)
 
+   function Buffer_Ends_With (C : Character) return Boolean;
+   --  Tests if message buffer ends with given character
+
    function Buffer_Ends_With (S : String) return Boolean;
    --  Tests if message buffer ends with given string preceded by a space
 
+   procedure Buffer_Remove (C : Character);
+   --  Remove given character fron end of buffer if it is present
+
    procedure Buffer_Remove (S : String);
-   --  Removes given string from end of buffer if it is present
-   --  at end of buffer, and preceded by a space.
+   --  Removes given string from end of buffer if it is present at end of
+   --  buffer, and preceded by a space.
 
    function Compilation_Errors return Boolean;
    --  Returns true if errors have been detected, or warnings in -gnatwe
@@ -356,6 +403,10 @@ package Erroutc is
    --  redundant. If so, the message to be deleted and all its continuations
    --  are marked with the Deleted flag set to True.
 
+   function Get_Warning_Tag (Id : Error_Msg_Id) return String;
+   --  Given an error message ID, return tag showing warning message class, or
+   --  the null string if this option is not enabled or this is not a warning.
+
    procedure Output_Error_Msgs (E : in out Error_Msg_Id);
    --  Output source line, error flag, and text of stored error message and all
    --  subsequent messages for the same line and unit. On return E is set to be
@@ -374,6 +425,34 @@ package Erroutc is
    --  of line. If Error_Msg_Line_Length is non-zero, this is the routine that
    --  splits the line generating multiple lines of output, and in this case
    --  the last line has no terminating end of line character.
+
+   procedure Prescan_Message (Msg : String);
+   --  Scans message text and sets the following variables:
+   --
+   --    Is_Warning_Msg is set True if Msg is a warning message (contains a
+   --    question mark character), and False otherwise.
+   --
+   --    Is_Style_Msg is set True if Msg is a style message (starts with
+   --    "(style)") and False otherwise.
+   --
+   --    Is_Info_Msg is set True if Msg is an information message (starts
+   --    with "info: ". Such messages must contain a ? sequence since they
+   --    are also considered to be warning messages, and get a tag.
+   --
+   --    Is_Serious_Error is set to True unless the message is a warning or
+   --    style message or contains the character | (non-serious error).
+   --
+   --    Is_Unconditional_Msg is set True if the message contains the character
+   --    ! and is otherwise set False.
+   --
+   --    Has_Double_Exclam is set True if the message contains the sequence !!
+   --    and is otherwise set False.
+   --
+   --  We need to know right away these aspects of a message, since we will
+   --  test these values before doing the full error scan.
+   --
+   --  Note that the call has no effect for continuation messages (those whose
+   --  first character is '\'), and all variables are left unchanged.
 
    procedure Purge_Messages (From : Source_Ptr; To : Source_Ptr);
    --  All error messages whose location is in the range From .. To (not
@@ -421,7 +500,8 @@ package Erroutc is
    --  Handle reserved word insertion (upper case letters). The Text argument
    --  is the current error message input text, and J is an index which on
    --  entry points to the first character of the reserved word, and on exit
-   --  points past the last character of the reserved word.
+   --  points past the last character of the reserved word. Note that RM and
+   --  SPARK are treated specially and not considered to be keywords.
 
    procedure Set_Msg_Insertion_Run_Time_Name;
    --  If package System contains a definition for Run_Time_Name (see package
@@ -447,7 +527,8 @@ package Erroutc is
    procedure Set_Msg_Str (Text : String);
    --  Add a sequence of characters to the current message. This routine does
    --  not check for special insertion characters (they are just treated as
-   --  text characters if they occur).
+   --  text characters if they occur). It does perform the transformation of
+   --  the special strings _xxx (xxx = Pre/Post/Type_Invariant) to xxx'Class.
 
    procedure Set_Next_Non_Deleted_Msg (E : in out Error_Msg_Id);
    --  Given a message id, move to next message id, but skip any deleted
@@ -459,6 +540,7 @@ package Erroutc is
    procedure Set_Specific_Warning_Off
      (Loc    : Source_Ptr;
       Msg    : String;
+      Reason : String_Id;
       Config : Boolean;
       Used   : Boolean := False);
    --  This is called in response to the two argument form of pragma Warnings
@@ -466,10 +548,11 @@ package Erroutc is
    --  which identifies a specific warning to be suppressed. The first argument
    --  is the start of the suppression range, and the second argument is the
    --  string from the pragma. Loc is the location of the pragma (which is the
-   --  start of the range to suppress). Config is True for the configuration
-   --  pragma case (where there is no requirement for a matching OFF pragma).
-   --  Used is set True to disable the check that the warning actually has
-   --  has the effect of suppressing a warning.
+   --  start of the range to suppress). Reason is the reason string from the
+   --  pragma, or the null string if no reason is given. Config is True for the
+   --  configuration pragma case (where there is no requirement for a matching
+   --  OFF pragma). Used is set True to disable the check that the warning
+   --  actually has has the effect of suppressing a warning.
 
    procedure Set_Specific_Warning_On
      (Loc : Source_Ptr;
@@ -482,35 +565,44 @@ package Erroutc is
    --  string from the pragma. Err is set to True on return to report the error
    --  of no matching Warnings Off pragma preceding this one.
 
-   procedure Set_Warnings_Mode_Off (Loc : Source_Ptr);
+   procedure Set_Warnings_Mode_Off (Loc : Source_Ptr; Reason : String_Id);
    --  Called in response to a pragma Warnings (Off) to record the source
-   --  location from which warnings are to be turned off.
+   --  location from which warnings are to be turned off. Reason is the
+   --  Reason from the pragma, or the null string if none is given.
 
    procedure Set_Warnings_Mode_On (Loc : Source_Ptr);
    --  Called in response to a pragma Warnings (On) to record the source
    --  location from which warnings are to be turned back on.
 
-   procedure Test_Style_Warning_Serious_Msg (Msg : String);
-   --  Sets Is_Warning_Msg true if Msg is a warning message (contains a
-   --  question mark character), and False otherwise. Is_Style_Msg is set true
-   --  if Msg is a style message (starts with "(style)". Sets Is_Serious_Error
-   --  True unless the message is a warning or style/info message or contains
-   --  the character | indicating a non-serious error message. Note that the
-   --  call has no effect for continuation messages (those whose first
-   --  character is '\').
-
-   function Warnings_Suppressed (Loc : Source_Ptr) return Boolean;
+   function Warnings_Suppressed (Loc : Source_Ptr) return String_Id;
    --  Determines if given location is covered by a warnings off suppression
    --  range in the warnings table (or is suppressed by compilation option,
    --  which generates a warning range for the whole source file). This routine
-   --  only deals with the general ON/OFF case, not specific warnings. True
-   --  is also returned if warnings are globally suppressed.
+   --  only deals with the general ON/OFF case, not specific warnings. The
+   --  returned result is No_String if warnings are not suppressed. If warnings
+   --  are suppressed for the given location, then then corresponding Reason
+   --  parameter from the pragma is returned (or the null string if no Reason
+   --  parameter was present).
 
    function Warning_Specifically_Suppressed
      (Loc : Source_Ptr;
-      Msg : String_Ptr) return Boolean;
+      Msg : String_Ptr;
+      Tag : String := "") return String_Id;
    --  Determines if given message to be posted at given location is suppressed
    --  by specific ON/OFF Warnings pragmas specifying this particular message.
+   --  If the warning is not suppressed then No_String is returned, otherwise
+   --  the corresponding warning string is returned (or the null string if no
+   --  Warning argument was present in the pragma). Tag is the error message
+   --  tag for the message in question or the null string if there is no tag.
+   --
+   --  Note: we have a null default for Tag to deal with calls from an old
+   --  branch of gnat2why, which does not know about tags in the calls but
+   --  which uses the latest version of erroutc.
+
+   function Warning_Treated_As_Error (Msg : String) return Boolean;
+   --  Returns True if the warning message Msg matches any of the strings
+   --  given by Warning_As_Error pragmas, as stored in the Warnings_As_Errors
+   --  table by Set_Warning_As_Error.
 
    type Error_Msg_Proc is
      access procedure (Msg : String; Flag_Location : Source_Ptr);

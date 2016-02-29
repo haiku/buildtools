@@ -1,4 +1,5 @@
 /* Verify whether math functions are simplified.  */
+/* { dg-require-effective-target c99_runtime } */
 double sin(double);
 double floor(double);
 float 
@@ -44,11 +45,11 @@ __attribute__ ((noinline))
 double
 sin(double a)
 {
-	abort ();
+	return a;
 }
 __attribute__ ((noinline))
 float
 sinf(float a)
 {
-	return a;
+	abort ();
 }

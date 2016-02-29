@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2011, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2014, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -785,8 +785,13 @@ package body System.Task_Primitives.Operations is
    -------------------
 
    function RT_Resolution return Duration is
+      TS     : aliased timespec;
+      Result : Interfaces.C.int;
    begin
-      return 10#1.0#E-6;
+      Result := clock_getres (OSC.CLOCK_REALTIME, TS'Unchecked_Access);
+      pragma Assert (Result = 0);
+
+      return To_Duration (TS);
    end RT_Resolution;
 
    -----------
@@ -1125,7 +1130,7 @@ package body System.Task_Primitives.Operations is
    --  on the Real_Time clock. That is technically incorrect, if the Calendar
    --  clock happens to be reset or adjusted. To solve this defect will require
    --  modification to the compiler interface, so that it can pass through more
-   --  information, to tell us here which clock to use!
+   --  information, to tell us here which clock to use.
 
    --  cond_timedwait will return if any of the following happens:
    --  1) some other task did cond_signal on this condition variable

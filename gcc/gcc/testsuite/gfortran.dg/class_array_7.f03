@@ -19,7 +19,7 @@ module realloc
 
 contains
 
-  elemental subroutine assign (a, b)
+  impure elemental subroutine assign (a, b)
     class(base_type), intent(out) :: a
     type(base_type), intent(in) :: b
     a%i = b%i
@@ -54,4 +54,5 @@ program main
   if (trim (print_type ("a", a)) .ne. "a is extended_type") call abort
   call reallocate (a)
   if (trim (print_type ("a", a)) .ne. "a is base_type") call abort
+  deallocate (a)
 end program main

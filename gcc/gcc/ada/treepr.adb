@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -51,7 +51,7 @@ package body Treepr is
    use Atree.Unchecked_Access;
    --  This module uses the unchecked access functions in package Atree
    --  since it does an untyped traversal of the tree (we do not want to
-   --  count on the structure of the tree being correct in this routine!)
+   --  count on the structure of the tree being correct in this routine).
 
    ----------------------------------
    -- Approach Used for Tree Print --
@@ -100,7 +100,7 @@ package body Treepr is
    --  set proper node numbers in the hash table, and during the printing
    --  phase to make sure that a given node is not printed more than once.
    --  (nodes are printed in order during the printing phase, that's the
-   --  point of numbering them in the first place!)
+   --  point of numbering them in the first place).
 
    Printing_Descendants : Boolean;
    --  True if descendants are being printed, False if not. In the false case,
@@ -215,14 +215,38 @@ package body Treepr is
    --  descendents are to be printed. Prefix_Str is to be added to all
    --  printed lines.
 
+   -------
+   -- p --
+   -------
+
+   function p (N : Union_Id) return Node_Or_Entity_Id is
+   begin
+      case N is
+         when List_Low_Bound .. List_High_Bound - 1 =>
+            return Nlists.Parent (List_Id (N));
+
+         when Node_Range =>
+            return Atree.Parent (Node_Or_Entity_Id (N));
+
+         when others =>
+            Write_Int (Int (N));
+            Write_Str (" is not a Node_Id or List_Id value");
+            Write_Eol;
+            return Empty;
+      end case;
+   end p;
+
+   ---------
+   -- par --
+   ---------
+
+   function par (N : Union_Id) return Node_Or_Entity_Id renames p;
+
    --------
    -- pe --
    --------
 
-   procedure pe (E : Elist_Id) is
-   begin
-      Print_Tree_Elist (E);
-   end pe;
+   procedure pe (N : Union_Id) renames pn;
 
    --------
    -- pl --
@@ -306,10 +330,13 @@ package body Treepr is
    -- pp --
    --------
 
-   procedure pp (N : Union_Id) is
-   begin
-      pn (N);
-   end pp;
+   procedure pp (N : Union_Id) renames pn;
+
+   ---------
+   -- ppp --
+   ---------
+
+   procedure ppp (N : Union_Id) renames pt;
 
    ----------------
    -- Print_Char --
@@ -576,49 +603,18 @@ package body Treepr is
 
             begin
                case M is
-                  when Default_Mechanism
-                                    => Write_Str ("Default");
-                  when By_Copy
-                                    => Write_Str ("By_Copy");
-                  when By_Reference
-                                    => Write_Str ("By_Reference");
-                  when By_Descriptor
-                                    => Write_Str ("By_Descriptor");
-                  when By_Descriptor_UBS
-                                    => Write_Str ("By_Descriptor_UBS");
-                  when By_Descriptor_UBSB
-                                    => Write_Str ("By_Descriptor_UBSB");
-                  when By_Descriptor_UBA
-                                    => Write_Str ("By_Descriptor_UBA");
-                  when By_Descriptor_S
-                                    => Write_Str ("By_Descriptor_S");
-                  when By_Descriptor_SB
-                                    => Write_Str ("By_Descriptor_SB");
-                  when By_Descriptor_A
-                                    => Write_Str ("By_Descriptor_A");
-                  when By_Descriptor_NCA
-                                    => Write_Str ("By_Descriptor_NCA");
-                  when By_Short_Descriptor
-                                    => Write_Str ("By_Short_Descriptor");
-                  when By_Short_Descriptor_UBS
-                                    => Write_Str ("By_Short_Descriptor_UBS");
-                  when By_Short_Descriptor_UBSB
-                                    => Write_Str ("By_Short_Descriptor_UBSB");
-                  when By_Short_Descriptor_UBA
-                                    => Write_Str ("By_Short_Descriptor_UBA");
-                  when By_Short_Descriptor_S
-                                    => Write_Str ("By_Short_Descriptor_S");
-                  when By_Short_Descriptor_SB
-                                    => Write_Str ("By_Short_Descriptor_SB");
-                  when By_Short_Descriptor_A
-                                    => Write_Str ("By_Short_Descriptor_A");
-                  when By_Short_Descriptor_NCA
-                                    => Write_Str ("By_Short_Descriptor_NCA");
+                  when Default_Mechanism        =>
+                     Write_Str ("Default");
+
+                  when By_Copy                  =>
+                     Write_Str ("By_Copy");
+
+                  when By_Reference             =>
+                     Write_Str ("By_Reference");
 
                   when 1 .. Mechanism_Type'Last =>
                      Write_Str ("By_Copy if size <= ");
                      Write_Int (Int (M));
-
                end case;
             end;
 
@@ -1163,10 +1159,9 @@ package body Treepr is
             when F_Field5 =>
                Field_To_Be_Printed := Field5 (N) /= Union_Id (Empty);
 
-            --  Flag3 is obsolete, so this probably gets removed ???
-
-            when F_Flag3 => Field_To_Be_Printed := Has_Aspects (N);
-
+            when F_Flag1  => Field_To_Be_Printed := Flag1  (N);
+            when F_Flag2  => Field_To_Be_Printed := Flag2  (N);
+            when F_Flag3  => Field_To_Be_Printed := Flag3  (N);
             when F_Flag4  => Field_To_Be_Printed := Flag4  (N);
             when F_Flag5  => Field_To_Be_Printed := Flag5  (N);
             when F_Flag6  => Field_To_Be_Printed := Flag6  (N);
@@ -1182,11 +1177,6 @@ package body Treepr is
             when F_Flag16 => Field_To_Be_Printed := Flag16 (N);
             when F_Flag17 => Field_To_Be_Printed := Flag17 (N);
             when F_Flag18 => Field_To_Be_Printed := Flag18 (N);
-
-            --  Flag1,2 are no longer used
-
-            when F_Flag1  => raise Program_Error;
-            when F_Flag2  => raise Program_Error;
          end case;
 
          --  Print field if it is to be printed
@@ -1212,14 +1202,15 @@ package body Treepr is
                --  Special case End_Span = Uint5
 
                when F_Field5 =>
-                  if Nkind (N) = N_Case_Statement
-                    or else Nkind (N) = N_If_Statement
-                  then
+                  if Nkind_In (N, N_Case_Statement, N_If_Statement) then
                      Print_End_Span (N);
                   else
                      Print_Field (Field5 (N), Fmt);
                   end if;
 
+               when F_Flag1  => Print_Flag  (Flag1 (N));
+               when F_Flag2  => Print_Flag  (Flag2 (N));
+               when F_Flag3  => Print_Flag  (Flag3 (N));
                when F_Flag4  => Print_Flag  (Flag4 (N));
                when F_Flag5  => Print_Flag  (Flag5 (N));
                when F_Flag6  => Print_Flag  (Flag6 (N));
@@ -1235,15 +1226,6 @@ package body Treepr is
                when F_Flag16 => Print_Flag  (Flag16 (N));
                when F_Flag17 => Print_Flag  (Flag17 (N));
                when F_Flag18 => Print_Flag  (Flag18 (N));
-
-               --  Flag1,2 are no longer used
-
-               when F_Flag1  => raise Program_Error;
-               when F_Flag2  => raise Program_Error;
-
-               --  Not clear why we need the following ???
-
-               when F_Flag3  => Print_Flag (Has_Aspects (N));
             end case;
 
             Print_Eol;
@@ -1300,7 +1282,30 @@ package body Treepr is
    -----------------------
 
    procedure Print_Node_Header (N : Node_Id) is
-      Notes : Boolean := False;
+      Enumerate : Boolean := False;
+      --  Flag set when enumerating multiple header flags
+
+      procedure Print_Header_Flag (Flag : String);
+      --  Output one of the flags that appears in a node header. The routine
+      --  automatically handles enumeration of multiple flags.
+
+      -----------------------
+      -- Print_Header_Flag --
+      -----------------------
+
+      procedure Print_Header_Flag (Flag : String) is
+      begin
+         if Enumerate then
+            Print_Char (',');
+         else
+            Enumerate := True;
+            Print_Char ('(');
+         end if;
+
+         Print_Str (Flag);
+      end Print_Header_Flag;
+
+   --  Start of processing for Print_Node_Header
 
    begin
       Print_Node_Ref (N);
@@ -1311,34 +1316,25 @@ package body Treepr is
          return;
       end if;
 
+      Print_Char (' ');
+
       if Comes_From_Source (N) then
-         Notes := True;
-         Print_Str (" (source");
+         Print_Header_Flag ("source");
       end if;
 
       if Analyzed (N) then
-         if not Notes then
-            Notes := True;
-            Print_Str (" (");
-         else
-            Print_Str (",");
-         end if;
-
-         Print_Str ("analyzed");
+         Print_Header_Flag ("analyzed");
       end if;
 
       if Error_Posted (N) then
-         if not Notes then
-            Notes := True;
-            Print_Str (" (");
-         else
-            Print_Str (",");
-         end if;
-
-         Print_Str ("posted");
+         Print_Header_Flag ("posted");
       end if;
 
-      if Notes then
+      if Is_Ignored_Ghost_Node (N) then
+         Print_Header_Flag ("ignored ghost");
+      end if;
+
+      if Enumerate then
          Print_Char (')');
       end if;
 
@@ -1576,19 +1572,19 @@ package body Treepr is
    -- pt --
    --------
 
-   procedure pt (N : Node_Id) is
+   procedure pt (N : Union_Id) is
    begin
-      Print_Node_Subtree (N);
+      case N is
+         when List_Low_Bound .. List_High_Bound - 1 =>
+            Print_List_Subtree (List_Id (N));
+         when Node_Range =>
+            Print_Node_Subtree (Node_Id (N));
+         when Elist_Range =>
+            Print_Elist_Subtree (Elist_Id (N));
+         when others =>
+            pp (N);
+      end case;
    end pt;
-
-   ---------
-   -- ppp --
-   ---------
-
-   procedure ppp (N : Node_Id) is
-   begin
-      pt (N);
-   end ppp;
 
    -------------------
    -- Serial_Number --
@@ -1694,7 +1690,6 @@ package body Treepr is
          Print_Node_Subtree (Cunit (Main_Unit));
          Write_Eol;
       end if;
-
    end Tree_Dump;
 
    -----------------
@@ -1928,7 +1923,7 @@ package body Treepr is
 
                --  If we successfully fall through all the above tests (which
                --  execute a return if the node is not to be visited), we can
-               --  go ahead and visit the node!
+               --  go ahead and visit the node.
 
                if No_Indent then
                   Visit_Node (Nod, Prefix_Str, Prefix_Char);
@@ -1949,13 +1944,13 @@ package body Treepr is
             then
                return;
 
-            --  Otherwise we can visit the list. Note that we don't bother
-            --  to do the parent test that we did for the node case, because
-            --  it just does not happen that lists are referenced more than
-            --  one place in the tree. We aren't counting on this being the
-            --  case to generate valid output, it is just that we don't need
-            --  in practice to worry about listing the list at a place that
-            --  is inconvenient.
+            --  Otherwise we can visit the list. Note that we don't bother to
+            --  do the parent test that we did for the node case, because it
+            --  just does not happen that lists are referenced more than one
+            --  place in the tree. We aren't counting on this being the case
+            --  to generate valid output, it is just that we don't need in
+            --  practice to worry about listing the list at a place that is
+            --  inconvenient.
 
             else
                Visit_List (List_Id (D), New_Prefix);
@@ -2017,9 +2012,9 @@ package body Treepr is
       else
          if Serial_Number (Int (N)) < Next_Serial_Number then
 
-            --  Here we have already visited the node, but if it is in
-            --  a list, we still want to print the reference, so that
-            --  it is clear that it belongs to the list.
+            --  Here we have already visited the node, but if it is in a list,
+            --  we still want to print the reference, so that it is clear that
+            --  it belongs to the list.
 
             if Is_List_Member (N) then
                Print_Str (Prefix_Str);
@@ -2084,11 +2079,11 @@ package body Treepr is
          Visit_Descendent (Field22 (N));
          Visit_Descendent (Field23 (N));
 
-         --  Now an interesting kludge. Normally parents are always printed
-         --  since we traverse the tree in a downwards direction. There is
-         --  however an exception to this rule, which is the case where a
-         --  parent is constructed by the compiler and is not referenced
-         --  elsewhere in the tree. The following catches this case
+         --  Now an interesting special case. Normally parents are always
+         --  printed since we traverse the tree in a downwards direction.
+         --  However, there is an exception to this rule, which is the
+         --  case where a parent is constructed by the compiler and is not
+         --  referenced elsewhere in the tree. The following catches this case.
 
          if not Comes_From_Source (N) then
             Visit_Descendent (Union_Id (Parent (N)));
@@ -2102,9 +2097,9 @@ package body Treepr is
          --  indentations coming from this effect.
 
          --  To prevent this, what we do is to control references via
-         --  Next_Entity only from the first entity on a given scope
-         --  chain, and we keep them all at the same level. Of course
-         --  if an entity has already been referenced it is not printed.
+         --  Next_Entity only from the first entity on a given scope chain,
+         --  and we keep them all at the same level. Of course if an entity
+         --  has already been referenced it is not printed.
 
          if Present (Next_Entity (N))
            and then Present (Scope (N))

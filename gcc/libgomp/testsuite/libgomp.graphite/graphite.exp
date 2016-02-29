@@ -1,4 +1,4 @@
-#   Copyright (C) 2009-2013 Free Software Foundation, Inc.
+#   Copyright (C) 2009-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,8 +21,12 @@ if [info exists lang_library_path] then {
 if [info exists lang_test_file] then {
     unset lang_test_file
 }
+if [info exists lang_include_flags] then {
+    unset lang_include_flags
+}
 
 load_lib libgomp-dg.exp
+load_gcc_lib gcc-dg.exp
 
 if ![check_effective_target_pthread] {
   return
@@ -40,6 +44,9 @@ set PARALLEL_CFLAGS "-ansi -pedantic-errors -O2 \
 
 # Initialize `dg'.
 dg-init
+
+# Turn on OpenMP.
+lappend ALWAYS_CFLAGS "additional_flags=-fopenmp"
 
 # Gather a list of all tests.
 set tests [lsort [find $srcdir/$subdir *.c]]

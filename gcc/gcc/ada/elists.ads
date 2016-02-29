@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2009, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -107,6 +107,9 @@ package Elists is
    --  Obtains the last element of the given element list or, if the list has
    --  no items, then No_Elmt is returned.
 
+   function List_Length (List : Elist_Id) return Nat;
+   --  Returns number of elements in given List (zero if List = No_Elist)
+
    function Next_Elmt (Elmt : Elmt_Id) return Elmt_Id;
    pragma Inline (Next_Elmt);
    --  This function returns the next element on an element list. The argument
@@ -126,6 +129,11 @@ package Elists is
    --  Appends N at the end of To, allocating a new element. N must be a
    --  non-empty node or entity Id, and To must be an Elist (not No_Elist).
 
+   procedure Append_New_Elmt (N : Node_Or_Entity_Id; To : in out Elist_Id);
+   pragma Inline (Append_New_Elmt);
+   --  Like Append_Elmt if Elist_Id is not No_List, but if Elist_Id is No_List,
+   --  then first assigns it an empty element list and then does the append.
+
    procedure Append_Unique_Elmt (N : Node_Or_Entity_Id; To : Elist_Id);
    --  Like Append_Elmt, except that a check is made to see if To already
    --  contains N and if so the call has no effect.
@@ -137,11 +145,19 @@ package Elists is
    --  Add a new element (N) right after the pre-existing element Elmt
    --  It is invalid to call this subprogram with Elmt = No_Elmt.
 
+   function New_Copy_Elist (List : Elist_Id) return Elist_Id;
+   --  Replicate the contents of a list. Internal list nodes are not shared and
+   --  order of elements is preserved.
+
    procedure Replace_Elmt (Elmt : Elmt_Id; New_Node : Node_Or_Entity_Id);
    pragma Inline (Replace_Elmt);
    --  Causes the given element of the list to refer to New_Node, the node
    --  which was previously referred to by Elmt is effectively removed from
    --  the list and replaced by New_Node.
+
+   procedure Remove (List : Elist_Id; N : Node_Or_Entity_Id);
+   --  Remove a node or an entity from a list. If the list does not contain the
+   --  item in question, the routine has no effect.
 
    procedure Remove_Elmt (List : Elist_Id; Elmt : Elmt_Id);
    --  Removes Elmt from the given list. The node itself is not affected,
@@ -152,6 +168,10 @@ package Elists is
    --  Removes the last element of the given list. The node itself is not
    --  affected, but the space used by the list element may be (but is not
    --  required to be) freed for reuse in a subsequent Append_Elmt call.
+
+   function Contains (List : Elist_Id; N : Node_Or_Entity_Id) return Boolean;
+   --  Perform a sequential search to determine whether the given list contains
+   --  a node or an entity.
 
    function No (List : Elist_Id) return Boolean;
    pragma Inline (No);

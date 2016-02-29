@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,15 +38,6 @@ package body Opt is
    SU : constant := Storage_Unit;
    --  Shorthand for System.Storage_Unit
 
-   --------------------------
-   -- Full_Expander_Active --
-   --------------------------
-
-   function Full_Expander_Active return Boolean is
-   begin
-      return Expander_Active and not Alfa_Mode;
-   end Full_Expander_Active;
-
    ----------------------------------
    -- Register_Opt_Config_Switches --
    ----------------------------------
@@ -54,14 +45,14 @@ package body Opt is
    procedure Register_Opt_Config_Switches is
    begin
       Ada_Version_Config                    := Ada_Version;
+      Ada_Version_Pragma_Config             := Ada_Version_Pragma;
       Ada_Version_Explicit_Config           := Ada_Version_Explicit;
       Assertions_Enabled_Config             := Assertions_Enabled;
       Assume_No_Invalid_Values_Config       := Assume_No_Invalid_Values;
       Check_Float_Overflow_Config           := Check_Float_Overflow;
       Check_Policy_List_Config              := Check_Policy_List;
-      Debug_Pragmas_Disabled_Config         := Debug_Pragmas_Disabled;
-      Debug_Pragmas_Enabled_Config          := Debug_Pragmas_Enabled;
       Default_Pool_Config                   := Default_Pool;
+      Default_SSO_Config                    := Default_SSO;
       Dynamic_Elaboration_Checks_Config     := Dynamic_Elaboration_Checks;
       Exception_Locations_Suppressed_Config := Exception_Locations_Suppressed;
       Extensions_Allowed_Config             := Extensions_Allowed;
@@ -72,8 +63,12 @@ package body Opt is
       Optimize_Alignment_Config             := Optimize_Alignment;
       Persistent_BSS_Mode_Config            := Persistent_BSS_Mode;
       Polling_Required_Config               := Polling_Required;
-      Short_Descriptors_Config              := Short_Descriptors;
+      Prefix_Exception_Messages_Config      := Prefix_Exception_Messages;
+      SPARK_Mode_Config                     := SPARK_Mode;
+      SPARK_Mode_Pragma_Config              := SPARK_Mode_Pragma;
+      Uneval_Old_Config                     := Uneval_Old;
       Use_VADS_Size_Config                  := Use_VADS_Size;
+      Warnings_As_Errors_Count_Config       := Warnings_As_Errors_Count;
 
       --  Reset the indication that Optimize_Alignment was set locally, since
       --  if we had a pragma in the config file, it would set this flag True,
@@ -89,14 +84,14 @@ package body Opt is
    procedure Restore_Opt_Config_Switches (Save : Config_Switches_Type) is
    begin
       Ada_Version                    := Save.Ada_Version;
+      Ada_Version_Pragma             := Save.Ada_Version_Pragma;
       Ada_Version_Explicit           := Save.Ada_Version_Explicit;
       Assertions_Enabled             := Save.Assertions_Enabled;
       Assume_No_Invalid_Values       := Save.Assume_No_Invalid_Values;
       Check_Float_Overflow           := Save.Check_Float_Overflow;
       Check_Policy_List              := Save.Check_Policy_List;
-      Debug_Pragmas_Disabled         := Save.Debug_Pragmas_Disabled;
-      Debug_Pragmas_Enabled          := Save.Debug_Pragmas_Enabled;
       Default_Pool                   := Save.Default_Pool;
+      Default_SSO                    := Save.Default_SSO;
       Dynamic_Elaboration_Checks     := Save.Dynamic_Elaboration_Checks;
       Exception_Locations_Suppressed := Save.Exception_Locations_Suppressed;
       Extensions_Allowed             := Save.Extensions_Allowed;
@@ -108,8 +103,12 @@ package body Opt is
       Optimize_Alignment_Local       := Save.Optimize_Alignment_Local;
       Persistent_BSS_Mode            := Save.Persistent_BSS_Mode;
       Polling_Required               := Save.Polling_Required;
-      Short_Descriptors              := Save.Short_Descriptors;
+      Prefix_Exception_Messages      := Save.Prefix_Exception_Messages;
+      SPARK_Mode                     := Save.SPARK_Mode;
+      SPARK_Mode_Pragma              := Save.SPARK_Mode_Pragma;
+      Uneval_Old                     := Save.Uneval_Old;
       Use_VADS_Size                  := Save.Use_VADS_Size;
+      Warnings_As_Errors_Count       := Save.Warnings_As_Errors_Count;
 
       --  Update consistently the value of Init_Or_Norm_Scalars. The value of
       --  Normalize_Scalars is not saved/restored because after set to True its
@@ -126,14 +125,14 @@ package body Opt is
    procedure Save_Opt_Config_Switches (Save : out Config_Switches_Type) is
    begin
       Save.Ada_Version                    := Ada_Version;
+      Save.Ada_Version_Pragma             := Ada_Version_Pragma;
       Save.Ada_Version_Explicit           := Ada_Version_Explicit;
       Save.Assertions_Enabled             := Assertions_Enabled;
       Save.Assume_No_Invalid_Values       := Assume_No_Invalid_Values;
       Save.Check_Float_Overflow           := Check_Float_Overflow;
       Save.Check_Policy_List              := Check_Policy_List;
-      Save.Debug_Pragmas_Disabled         := Debug_Pragmas_Disabled;
-      Save.Debug_Pragmas_Enabled          := Debug_Pragmas_Enabled;
       Save.Default_Pool                   := Default_Pool;
+      Save.Default_SSO                    := Default_SSO;
       Save.Dynamic_Elaboration_Checks     := Dynamic_Elaboration_Checks;
       Save.Exception_Locations_Suppressed := Exception_Locations_Suppressed;
       Save.Extensions_Allowed             := Extensions_Allowed;
@@ -145,8 +144,12 @@ package body Opt is
       Save.Optimize_Alignment_Local       := Optimize_Alignment_Local;
       Save.Persistent_BSS_Mode            := Persistent_BSS_Mode;
       Save.Polling_Required               := Polling_Required;
-      Save.Short_Descriptors              := Short_Descriptors;
+      Save.Prefix_Exception_Messages      := Prefix_Exception_Messages;
+      Save.SPARK_Mode                     := SPARK_Mode;
+      Save.SPARK_Mode_Pragma              := SPARK_Mode_Pragma;
+      Save.Uneval_Old                     := Uneval_Old;
       Save.Use_VADS_Size                  := Use_VADS_Size;
+      Save.Warnings_As_Errors_Count       := Warnings_As_Errors_Count;
    end Save_Opt_Config_Switches;
 
    -----------------------------
@@ -167,44 +170,57 @@ package body Opt is
          --  the configuration setting even in a run time unit.
 
          Ada_Version                 := Ada_Version_Runtime;
+         Ada_Version_Pragma          := Empty;
+         Default_SSO                 := ' ';
          Dynamic_Elaboration_Checks  := False;
          Extensions_Allowed          := True;
          External_Name_Exp_Casing    := As_Is;
          External_Name_Imp_Casing    := Lowercase;
          Optimize_Alignment          := 'O';
          Persistent_BSS_Mode         := False;
+         Prefix_Exception_Messages   := True;
+         Uneval_Old                  := 'E';
          Use_VADS_Size               := False;
          Optimize_Alignment_Local    := True;
 
+         --  Note: we do not need to worry about Warnings_As_Errors_Count since
+         --  we do not expect to get any warnings from compiling such a unit.
+
          --  For an internal unit, assertions/debug pragmas are off unless this
-         --  is the main unit and they were explicitly enabled. We also make
-         --  sure we do not assume that values are necessarily valid.
+         --  is the main unit and they were explicitly enabled, or unless the
+         --  main unit was compiled in GNAT mode. We also make sure we do not
+         --  assume that values are necessarily valid and that SPARK_Mode is
+         --  set to its configuration value.
 
          if Main_Unit then
             Assertions_Enabled       := Assertions_Enabled_Config;
             Assume_No_Invalid_Values := Assume_No_Invalid_Values_Config;
-            Debug_Pragmas_Disabled   := Debug_Pragmas_Disabled_Config;
-            Debug_Pragmas_Enabled    := Debug_Pragmas_Enabled_Config;
             Check_Policy_List        := Check_Policy_List_Config;
+            SPARK_Mode               := SPARK_Mode_Config;
+            SPARK_Mode_Pragma        := SPARK_Mode_Pragma_Config;
          else
-            Assertions_Enabled       := False;
+            if GNAT_Mode_Config then
+               Assertions_Enabled    := Assertions_Enabled_Config;
+            else
+               Assertions_Enabled    := False;
+            end if;
             Assume_No_Invalid_Values := False;
-            Debug_Pragmas_Disabled   := False;
-            Debug_Pragmas_Enabled    := False;
             Check_Policy_List        := Empty;
+            SPARK_Mode               := None;
+            SPARK_Mode_Pragma        := Empty;
          end if;
 
       --  Case of non-internal unit
 
       else
          Ada_Version                 := Ada_Version_Config;
+         Ada_Version_Pragma          := Ada_Version_Pragma_Config;
          Ada_Version_Explicit        := Ada_Version_Explicit_Config;
          Assertions_Enabled          := Assertions_Enabled_Config;
          Assume_No_Invalid_Values    := Assume_No_Invalid_Values_Config;
          Check_Float_Overflow        := Check_Float_Overflow_Config;
          Check_Policy_List           := Check_Policy_List_Config;
-         Debug_Pragmas_Disabled      := Debug_Pragmas_Disabled_Config;
-         Debug_Pragmas_Enabled       := Debug_Pragmas_Enabled_Config;
+         Default_SSO                 := Default_SSO_Config;
          Dynamic_Elaboration_Checks  := Dynamic_Elaboration_Checks_Config;
          Extensions_Allowed          := Extensions_Allowed_Config;
          External_Name_Exp_Casing    := External_Name_Exp_Casing_Config;
@@ -214,7 +230,12 @@ package body Opt is
          Optimize_Alignment          := Optimize_Alignment_Config;
          Optimize_Alignment_Local    := False;
          Persistent_BSS_Mode         := Persistent_BSS_Mode_Config;
+         Prefix_Exception_Messages   := Prefix_Exception_Messages_Config;
+         SPARK_Mode                  := SPARK_Mode_Config;
+         SPARK_Mode_Pragma           := SPARK_Mode_Pragma_Config;
+         Uneval_Old                  := Uneval_Old_Config;
          Use_VADS_Size               := Use_VADS_Size_Config;
+         Warnings_As_Errors_Count    := Warnings_As_Errors_Count_Config;
 
          --  Update consistently the value of Init_Or_Norm_Scalars. The value
          --  of Normalize_Scalars is not saved/restored because once set to
@@ -225,12 +246,13 @@ package body Opt is
          Init_Or_Norm_Scalars := Initialize_Scalars or Normalize_Scalars;
       end if;
 
+      --  Values set for all units
+
       Default_Pool                   := Default_Pool_Config;
       Exception_Locations_Suppressed := Exception_Locations_Suppressed_Config;
       Fast_Math                      := Fast_Math_Config;
       Optimize_Alignment             := Optimize_Alignment_Config;
       Polling_Required               := Polling_Required_Config;
-      Short_Descriptors              := Short_Descriptors_Config;
    end Set_Opt_Config_Switches;
 
    ---------------
@@ -245,9 +267,13 @@ package body Opt is
 
    begin
       Tree_Read_Int  (Tree_ASIS_Version_Number);
+
+      Tree_Read_Bool (Address_Is_Private);
       Tree_Read_Bool (Brief_Output);
       Tree_Read_Bool (GNAT_Mode);
       Tree_Read_Char (Identifier_Character_Set);
+      Tree_Read_Bool (Ignore_Rep_Clauses);
+      Tree_Read_Bool (Ignore_Style_Checks_Pragmas);
       Tree_Read_Int  (Maximum_File_Name_Length);
       Tree_Read_Data (Suppress_Options'Address,
                       (Suppress_Options'Size + SU - 1) / SU);
@@ -261,8 +287,6 @@ package body Opt is
       Tree_Read_Bool (Assertions_Enabled);
       Tree_Read_Bool (Check_Float_Overflow);
       Tree_Read_Int  (Int (Check_Policy_List));
-      Tree_Read_Bool (Debug_Pragmas_Disabled);
-      Tree_Read_Bool (Debug_Pragmas_Enabled);
       Tree_Read_Int  (Int (Default_Pool));
       Tree_Read_Bool (Full_List);
 
@@ -292,6 +316,7 @@ package body Opt is
       Tree_Read_Bool (Inline_Active);
       Tree_Read_Bool (Inline_Processing_Required);
       Tree_Read_Bool (List_Units);
+      Tree_Read_Int  (Multiple_Unit_Index);
       Tree_Read_Bool (Configurable_Run_Time_Mode);
       Tree_Read_Data (Operating_Mode'Address,
                       (Operating_Mode'Size + SU - 1) / Storage_Unit);
@@ -312,9 +337,13 @@ package body Opt is
 
    begin
       Tree_Write_Int  (ASIS_Version_Number);
+
+      Tree_Write_Bool (Address_Is_Private);
       Tree_Write_Bool (Brief_Output);
       Tree_Write_Bool (GNAT_Mode);
       Tree_Write_Char (Identifier_Character_Set);
+      Tree_Write_Bool (Ignore_Rep_Clauses);
+      Tree_Write_Bool (Ignore_Style_Checks_Pragmas);
       Tree_Write_Int  (Maximum_File_Name_Length);
       Tree_Write_Data (Suppress_Options'Address,
                        (Suppress_Options'Size + SU - 1) / SU);
@@ -328,8 +357,6 @@ package body Opt is
       Tree_Write_Bool (Assertions_Enabled);
       Tree_Write_Bool (Check_Float_Overflow);
       Tree_Write_Int  (Int (Check_Policy_List));
-      Tree_Write_Bool (Debug_Pragmas_Disabled);
-      Tree_Write_Bool (Debug_Pragmas_Enabled);
       Tree_Write_Int  (Int (Default_Pool));
       Tree_Write_Bool (Full_List);
       Tree_Write_Int  (Int (Version_String'Length));
@@ -339,6 +366,7 @@ package body Opt is
       Tree_Write_Bool (Inline_Active);
       Tree_Write_Bool (Inline_Processing_Required);
       Tree_Write_Bool (List_Units);
+      Tree_Write_Int  (Multiple_Unit_Index);
       Tree_Write_Bool (Configurable_Run_Time_Mode);
       Tree_Write_Data (Operating_Mode'Address,
                        (Operating_Mode'Size + SU - 1) / SU);

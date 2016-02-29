@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *             Copyright (C) 2011, Free Software Foundation, Inc.           *
+ *          Copyright (C) 2011-2014, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -33,31 +33,15 @@
 
 #include "s-oscons.h"
 
-#ifdef NEED_PTHREAD_CONDATTR_SETCLOCK
+/* If the clock we used for tasking (CLOCK_RT_Ada) is not the default
+ * CLOCK_REALTIME, we need to set cond var attributes accordingly.
+ */
+#if CLOCK_RT_Ada != CLOCK_REALTIME
 # include <pthread.h>
 # include <time.h>
 
-#ifndef _AIXVERSION_530
-/* We use the same runtime library for AIX 5.2 and 5.3, but pthread_condattr_
- * setclock exists only on the latter, so for the former provide a dummy
- * implementation (declared below, weak symbol defined in init.c).
- *
- * Note: this means that under AIX 5.2 we'll be using CLOCK_MONOTONIC
- * timestamps from clock_gettime() as arguments to pthread_cond_timedwait,
- * which expects a CLOCK_REALTIME value, which is technically wrong, but
- * inocuous in practice on that particular platform since both clocks happen
- * to use close epochs.
- */
-
-extern int pthread_condattr_setclock (pthread_condattr_t *attr, clockid_t cl);
-#endif
-
 int
 __gnat_pthread_condattr_setup(pthread_condattr_t *attr) {
-/*
- * If using a clock other than CLOCK_REALTIME for the Ada Monotonic_Clock,
- * the corresponding clock id must be set for condition variables.
- */
   return pthread_condattr_setclock (attr, CLOCK_RT_Ada);
 }
 
@@ -70,3 +54,35 @@ __gnat_pthread_condattr_setup (void *attr) {
 }
 
 #endif
+
+#if defined (__APPLE__)
+#include <mach/mach.h>
+#include <mach/clock.h>
+#endif
+
+/* Return the clock ticks per nanosecond for Posix systems lacking the
+   Posix extension function clock_getres, or else 0 nsecs on error.  */
+
+int
+__gnat_clock_get_res (void)
+{
+#if defined (__APPLE__)
+  clock_serv_t clock_port;
+  mach_msg_type_number_t count;
+  int nsecs;
+  int result;
+
+  count = 1;
+  result = host_get_clock_service
+    (mach_host_self (), SYSTEM_CLOCK, &clock_port);
+
+  if (result == KERN_SUCCESS)
+    result = clock_get_attributes (clock_port, CLOCK_GET_TIME_RES,
+      (clock_attr_t) &nsecs, &count);
+
+  if (result == KERN_SUCCESS)
+    return nsecs;
+#endif
+
+  return 0;
+}

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -42,6 +42,7 @@ with Alloc; use Alloc;
 with Namet; use Namet;
 with Table;
 with Types; use Types;
+with Sinfo; use Sinfo;
 
 package Sem_Aux is
 
@@ -90,12 +91,10 @@ package Sem_Aux is
    --  subtype then it returns the subtype or type from which the subtype was
    --  obtained, otherwise it returns Empty.
 
-   function Available_View (Typ : Entity_Id) return Entity_Id;
-   --  Typ is typically a type that has the With_Type flag set. Returns the
-   --  non-limited view of the type, if available, otherwise the type itself.
-   --  For class-wide types, there is no direct link in the tree, so we have
-   --  to retrieve the class-wide type of the non-limited view of the Etype.
-   --  Returns the argument unchanged if it is not one of these cases.
+   function Available_View (Ent : Entity_Id) return Entity_Id;
+   --  Ent denotes an abstract state or a type that may come from a limited
+   --  with clause. Return the non-limited view of Ent if there is one or Ent
+   --  if this is not the case.
 
    function Constant_Value (Ent : Entity_Id) return Node_Id;
    --  Ent is a variable, constant, named integer, or named real entity. This
@@ -105,13 +104,10 @@ package Sem_Aux is
    --  constants from the point of view of constant folding. Empty is also
    --  returned for variables with no initialization expression.
 
-   function Effectively_Has_Constrained_Partial_View
-     (Typ  : Entity_Id;
-      Scop : Entity_Id) return Boolean;
-   --  Return True if Typ has attribute Has_Constrained_Partial_View set to
-   --  True; in addition, within a generic body, return True if a subtype is
-   --  a descendant of an untagged generic formal private or derived type, and
-   --  the subtype is not an unconstrained array subtype (RM 3.3(23.10/3)).
+   function Corresponding_Unsigned_Type (Typ : Entity_Id) return Entity_Id;
+   --  Typ is a signed integer subtype. This routine returns the standard
+   --  unsigned type with the same Esize as the implementation base type of
+   --  Typ, e.g. Long_Integer => Long_Unsigned.
 
    function Enclosing_Dynamic_Scope (Ent : Entity_Id) return Entity_Id;
    --  For any entity, Ent, returns the closest dynamic scope in which the
@@ -135,7 +131,7 @@ package Sem_Aux is
    --  stored discriminants are the same as the actual discriminants of the
    --  type, and hence this function is the same as First_Discriminant.
    --
-   --  For derived non-tagged types that rename discriminants in the root type
+   --  For derived untagged types that rename discriminants in the root type
    --  this is the first of the discriminants that occur in the root type. To
    --  be precise, in this case stored discriminants are entities attached to
    --  the entity chain of the derived type which are a copy of the
@@ -155,6 +151,18 @@ package Sem_Aux is
    function First_Tag_Component (Typ : Entity_Id) return Entity_Id;
    --  Typ must be a tagged record type. This function returns the Entity for
    --  the first _Tag field in the record type.
+
+   function Get_Binary_Nkind (Op : Entity_Id) return Node_Kind;
+   --  Op must be an entity with an Ekind of E_Operator. This function returns
+   --  the Nkind value that would be used to construct a binary operator node
+   --  referencing this entity. It is an error to call this function if Ekind
+   --  (Op) /= E_Operator.
+
+   function Get_Unary_Nkind (Op : Entity_Id) return Node_Kind;
+   --  Op must be an entity with an Ekind of E_Operator. This function returns
+   --  the Nkind value that would be used to construct a unary operator node
+   --  referencing this entity. It is an error to call this function if Ekind
+   --  (Op) /= E_Operator.
 
    function Get_Rep_Item
      (E             : Entity_Id;
@@ -256,8 +264,36 @@ package Sem_Aux is
    --  the given names then True is returned, otherwise False indicates that no
    --  matching entry was found.
 
+   function Has_External_Tag_Rep_Clause (T : Entity_Id) return Boolean;
+   --  Defined in tagged types. Set if an External_Tag rep. clause has been
+   --  given for this type. Use to avoid the generation of the default
+   --  External_Tag.
+   --
+   --  Note: we used to use an entity flag for this purpose, but that was wrong
+   --  because it was not propagated from the private view to the full view. We
+   --  could have added that propagation, but it would have been an annoying
+   --  irregularity compared to other representation aspects, and the cost of
+   --  looking up the aspect when needed is small.
+
+   function Has_Unconstrained_Elements (T : Entity_Id) return Boolean;
+   --  True if T has discriminants and is unconstrained, or is an array type
+   --  whose element type Has_Unconstrained_Elements.
+
+   function Has_Variant_Part (Typ : Entity_Id) return Boolean;
+   --  Return True if the first subtype of Typ is a discriminated record type
+   --  which has a variant part. False otherwise.
+
    function In_Generic_Body (Id : Entity_Id) return Boolean;
    --  Determine whether entity Id appears inside a generic body
+
+   function Initialization_Suppressed (Typ : Entity_Id) return Boolean;
+   pragma Inline (Initialization_Suppressed);
+   --  Returns True if initialization should be suppressed for the given type
+   --  or subtype. This is true if Suppress_Initialization is set either for
+   --  the subtype itself, or for the corresponding base type.
+
+   function Is_Body (N : Node_Id) return Boolean;
+   --  Determine whether an arbitrary node denotes a body
 
    function Is_By_Copy_Type (Ent : Entity_Id) return Boolean;
    --  Ent is any entity. Returns True if Ent is a type entity where the type
@@ -274,7 +310,7 @@ package Sem_Aux is
    function Is_Generic_Formal (E : Entity_Id) return Boolean;
    --  Determine whether E is a generic formal parameter. In particular this is
    --  used to set the visibility of generic formals of a generic package
-   --  declared with a box or with partial parametrization.
+   --  declared with a box or with partial parameterization.
 
    function Is_Indefinite_Subtype (Ent : Entity_Id) return Boolean;
    --  Ent is any entity. Determines if given entity is an unconstrained array
@@ -283,6 +319,12 @@ package Sem_Aux is
    --  so. False for other type entities, or any entities that are not types.
 
    function Is_Immutably_Limited_Type (Ent : Entity_Id) return Boolean;
+   --  Implements definition in Ada 2012 RM-7.5 (8.1/3). This differs from the
+   --  following predicate in that an untagged record with immutably limited
+   --  components is NOT by itself immutably limited. This matters, e.g. when
+   --  checking the legality of an access to the current instance.
+
+   function Is_Limited_View (Ent : Entity_Id) return Boolean;
    --  Ent is any entity. True for a type that is "inherently" limited (i.e.
    --  cannot become nonlimited). From the Ada 2005 RM-7.5(8.1/2), "a type with
    --  a part that is of a task, protected, or explicitly limited record type".
@@ -296,7 +338,8 @@ package Sem_Aux is
    --  Ent is any entity. Returns true if Ent is a limited type (limited
    --  private type, limited interface type, task type, protected type,
    --  composite containing a limited component, or a subtype of any of
-   --  these types).
+   --  these types). This older routine overlaps with the previous one, this
+   --  should be cleaned up???
 
    function Nearest_Ancestor (Typ : Entity_Id) return Entity_Id;
    --  Given a subtype Typ, this function finds out the nearest ancestor from
@@ -329,11 +372,14 @@ package Sem_Aux is
    function Number_Discriminants (Typ : Entity_Id) return Pos;
    --  Typ is a type with discriminants, yields number of discriminants in type
 
-   function Initialization_Suppressed (Typ : Entity_Id) return Boolean;
-   pragma Inline (Initialization_Suppressed);
-   --  Returns True if initialization should be suppressed for the given type
-   --  or subtype. This is true if Suppress_Initialization is set either for
-   --  the subtype itself, or for the corresponding base type.
+   function Object_Type_Has_Constrained_Partial_View
+     (Typ  : Entity_Id;
+      Scop : Entity_Id) return Boolean;
+   --  Return True if type of object has attribute Has_Constrained_Partial_View
+   --  set to True; in addition, within a generic body, return True if subtype
+   --  of the object is a descendant of an untagged generic formal private or
+   --  derived type, and the subtype is not an unconstrained array subtype
+   --  (RM 3.3(23.10/3)).
 
    function Ultimate_Alias (Prim : Entity_Id) return Entity_Id;
    pragma Inline (Ultimate_Alias);
@@ -346,5 +392,10 @@ package Sem_Aux is
    --  body entities for subprograms, tasks and protected units, in which case
    --  it returns the subprogram, task or protected body node for it. The unit
    --  may be a child unit with any number of ancestors.
+
+   function Package_Specification (Pack_Id : Entity_Id) return Node_Id;
+   --  Given an entity for a package or generic package, return corresponding
+   --  package specification. Simplifies handling of child units, and better
+   --  than the old idiom: Specification (Unit_Declaration_Node (Pack_Id)).
 
 end Sem_Aux;

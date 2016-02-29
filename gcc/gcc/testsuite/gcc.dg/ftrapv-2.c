@@ -8,8 +8,10 @@
 
 /* { dg-do run } */
 /* { dg-options "-ftrapv" } */
+/* { dg-require-effective-target trapping } */
 
 extern void abort(void);
+extern int abs(int);
 extern long labs(long);
 
 int __attribute__((noinline))

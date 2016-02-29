@@ -1,6 +1,6 @@
 /* Process declarations and variables for the GNU compiler for the
    Java(TM) language.
-   Copyright (C) 1996-2013 Free Software Foundation, Inc.
+   Copyright (C) 1996-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,7 +27,21 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "options.h"
+#include "real.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "stor-layout.h"
+#include "stringpool.h"
+#include "varasm.h"
 #include "diagnostic-core.h"
 #include "toplev.h"
 #include "flags.h"
@@ -35,13 +49,20 @@ The Free Software Foundation is independent of Sun Microsystems, Inc.  */
 #include "jcf.h"
 #include "java-except.h"
 #include "ggc.h"
+#include "hash-map.h"
+#include "is-a.h"
+#include "plugin-api.h"
+#include "tm.h"
+#include "hard-reg-set.h"
+#include "input.h"
+#include "function.h"
+#include "ipa-ref.h"
 #include "cgraph.h"
 #include "tree-inline.h"
 #include "target.h"
 #include "version.h"
 #include "tree-iterator.h"
 #include "langhooks.h"
-#include "cgraph.h"
 
 #if defined (DEBUG_JAVA_BINDING_LEVELS)
 extern void indent (void);
@@ -1304,7 +1325,7 @@ static struct binding_level *
 make_binding_level (void)
 {
   /* NOSTRICT */
-  return ggc_alloc_cleared_binding_level ();
+  return ggc_cleared_alloc<binding_level> ();
 }
 
 void
@@ -1643,7 +1664,7 @@ java_dup_lang_specific_decl (tree node)
     return;
 
   lang_decl_size = sizeof (struct lang_decl);
-  x = ggc_alloc_lang_decl (lang_decl_size);
+  x = ggc_alloc<struct lang_decl> ();
   memcpy (x, DECL_LANG_SPECIFIC (node), lang_decl_size);
   DECL_LANG_SPECIFIC (node) = x;
 }
@@ -1843,8 +1864,8 @@ end_java_method (void)
 	 variable to the block_body */
       fbody = DECL_SAVED_TREE (fndecl);
       block_body = BIND_EXPR_BODY (fbody);
-      htab_traverse (DECL_FUNCTION_INIT_TEST_TABLE (fndecl),
-		     attach_init_test_initialization_flags, block_body);
+      hash_table<treetreehasher> *ht = DECL_FUNCTION_INIT_TEST_TABLE (fndecl);
+      ht->traverse<tree, attach_init_test_initialization_flags> (block_body);
     }
 
   finish_method (fndecl);
@@ -1887,7 +1908,7 @@ finish_method (tree fndecl)
   cfun->function_end_locus = DECL_FUNCTION_LAST_LINE (fndecl);
 
   /* Defer inlining and expansion to the cgraph optimizers.  */
-  cgraph_finalize_function (fndecl, false);
+  cgraph_node::finalize_function (fndecl, false);
 }
 
 /* We pessimistically marked all methods and fields external until we
@@ -1903,8 +1924,8 @@ java_mark_decl_local (tree decl)
   /* Double check that we didn't pass the function to the callgraph early.  */
   if (TREE_CODE (decl) == FUNCTION_DECL)
     {
-      struct cgraph_node *node = cgraph_get_node (decl);
-      gcc_assert (!node || !node->local.finalized);
+      struct cgraph_node *node = cgraph_node::get (decl);
+      gcc_assert (!node || !node->definition);
     }
 #endif
   gcc_assert (!DECL_RTL_SET_P (decl));
@@ -2015,7 +2036,7 @@ java_add_stmt (tree new_stmt)
   tree stmts = current_binding_level->stmts;
   tree_stmt_iterator i;
 
-  if (input_filename)
+  if (LOCATION_FILE (input_location))
     walk_tree (&new_stmt, set_input_location, NULL, NULL);
 
   if (stmts == NULL)

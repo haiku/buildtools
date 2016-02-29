@@ -1,6 +1,8 @@
 /* { dg-do compile } */
 /* { dg-options "-O3 -fdump-tree-ivcanon-details" } */
 int a[1];
+void test2 (void);
+void
 test(int c)
 { 
   int i=0,j;
@@ -16,6 +18,6 @@ test(int c)
 
 /* We should do this as part of cunrolli, but our cost model do not take into account early exit
    from the last iteration.  */
-/* { dg-final { scan-tree-dump "Turned loop into non-loop; it never loops." "ivcanon"} } */
+/* { dg-final { scan-tree-dump "loop turned into non-loop; it never loops." "ivcanon"} } */
 /* { dg-final { scan-tree-dump "Last iteration exit edge was proved true." "ivcanon"} } */
 /* { dg-final { cleanup-tree-dump "ivcanon" } } */

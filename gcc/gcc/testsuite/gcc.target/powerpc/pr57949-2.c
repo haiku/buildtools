@@ -1,9 +1,10 @@
 /* { dg-do compile { target { powerpc64*-*-* && lp64 } } } */
 /* { dg-skip-if "" { powerpc*-*-darwin* } { "*" } { "" } } */
 /* { dg-skip-if "" { powerpc_elfv2 } { "*" } { "" } } */
-/* { dg-options "-O2 -mcpu=power7" } */
+/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power7" } } */
+/* { dg-options "-O2 -mcpu=power7 -mcompat-align-parm" } */
 
-/* Verify that vs is not 16-byte aligned in the absence of -mno-compat-align-parm.  */
+/* Verify that vs is not 16-byte aligned with -mcompat-align-parm.  */
 
 typedef float v4sf __attribute__ ((vector_size (16)));
 struct s { long m; v4sf v; };

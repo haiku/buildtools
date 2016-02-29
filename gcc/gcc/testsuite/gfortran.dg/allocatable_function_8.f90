@@ -1,7 +1,8 @@
 ! { dg-do run }
-! Test the fix for PR61459.
+! Test the fix for PR61459 and PR58883.
 !
 ! Contributed by John Wingate  <johnww@tds.net>
+!             and Tao Song  <songtao.thu@gmail.com>
 !
 module a
 
@@ -41,7 +42,18 @@ program main
    use a
    implicit none
    real, dimension(2) :: x = 1.0, y
+! PR61459
    y = f_workaround (x)
    if (any (f_segfault (x) .ne. y)) call abort
    if (any (f_segfault_plus (x) .ne. y)) call abort
+! PR58883
+   if (any (foo () .ne. reshape([1,2,3,4,5,6,7,8],[2,4]))) call abort
+contains
+  function foo()
+    integer, allocatable  :: foo(:,:)
+    integer, allocatable  :: temp(:)
+
+    temp = [1,2,3,4,5,6,7,8]
+    foo = reshape(temp,[2,4])
+  end function
 end program main

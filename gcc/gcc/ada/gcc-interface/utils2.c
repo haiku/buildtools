@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *          Copyright (C) 1992-2012, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2015, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -27,7 +27,20 @@
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
+#include "stor-layout.h"
+#include "stringpool.h"
+#include "varasm.h"
 #include "flags.h"
 #include "toplev.h"
 #include "ggc.h"
@@ -252,8 +265,8 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
   bool a2_side_effects_p = TREE_SIDE_EFFECTS (a2);
   bool length_zero_p = false;
 
-  /* If either operand has side-effects, they have to be evaluated only once
-     in spite of the multiple references to the operand in the comparison.  */
+  /* If the operands have side-effects, they need to be evaluated only once
+     in spite of the multiple references in the comparison.  */
   if (a1_side_effects_p)
     a1 = gnat_protect_expr (a1);
 
@@ -297,10 +310,14 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
 	 last < first holds.  */
       if (integer_zerop (length2))
 	{
+	  tree b = get_base_type (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
+
 	  length_zero_p = true;
 
-	  ub1 = TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
-	  lb1 = TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
+	  ub1
+	    = convert (b, TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
+	  lb1
+	    = convert (b, TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
 
 	  comparison = fold_build2_loc (loc, LT_EXPR, result_type, ub1, lb1);
 	  comparison = SUBSTITUTE_PLACEHOLDER_IN_EXPR (comparison, a1);
@@ -316,20 +333,23 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
 	 just use its length computed from the actual stored bounds.  */
       else if (TREE_CODE (length2) == INTEGER_CST)
 	{
-	  tree bt;
+	  tree b = get_base_type (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
 
-	  ub1 = TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
-	  lb1 = TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
+	  ub1
+	    = convert (b, TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
+	  lb1
+	    = convert (b, TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
 	  /* Note that we know that UB2 and LB2 are constant and hence
 	     cannot contain a PLACEHOLDER_EXPR.  */
-	  ub2 = TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t2)));
-	  lb2 = TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t2)));
-	  bt = get_base_type (TREE_TYPE (ub1));
+	  ub2
+	    = convert (b, TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t2))));
+	  lb2
+	    = convert (b, TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t2))));
 
 	  comparison
 	    = fold_build2_loc (loc, EQ_EXPR, result_type,
-			       build_binary_op (MINUS_EXPR, bt, ub1, lb1),
-			       build_binary_op (MINUS_EXPR, bt, ub2, lb2));
+			       build_binary_op (MINUS_EXPR, b, ub1, lb1),
+			       build_binary_op (MINUS_EXPR, b, ub2, lb2));
 	  comparison = SUBSTITUTE_PLACEHOLDER_IN_EXPR (comparison, a1);
 	  if (EXPR_P (comparison))
 	    SET_EXPR_LOCATION (comparison, loc);
@@ -409,9 +429,9 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
 					     a1_is_null, a2_is_null),
 			    result);
 
-  /* If either operand has side-effects, they have to be evaluated before
-     starting the comparison above since the place they would be otherwise
-     evaluated could be wrong.  */
+  /* If the operands have side-effects, they need to be evaluated before
+     doing the tests above since the place they otherwise would end up
+     being evaluated at run time could be wrong.  */
   if (a1_side_effects_p)
     result = build2 (COMPOUND_EXPR, result_type, a1, result);
 
@@ -626,7 +646,7 @@ nonbinary_modular_operation (enum tree_code op_code, tree type, tree lhs,
 static unsigned int
 resolve_atomic_size (tree type)
 {
-  unsigned HOST_WIDE_INT size = tree_low_cst (TYPE_SIZE_UNIT (type), 1);
+  unsigned HOST_WIDE_INT size = tree_to_uhwi (TYPE_SIZE_UNIT (type));
 
   if (size == 1 || size == 2 || size == 4 || size == 8 || size == 16)
     return size;
@@ -648,11 +668,11 @@ build_atomic_load (tree src)
       (build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
   tree mem_model = build_int_cst (integer_type_node, MEMMODEL_SEQ_CST);
   tree orig_src = src;
-  tree type = TREE_TYPE (src);
-  tree t, val;
+  tree t, addr, val;
   unsigned int size;
   int fncode;
 
+  /* Remove conversions to get the address of the underlying object.  */
   src = remove_conversions (src, false);
   size = resolve_atomic_size (TREE_TYPE (src));
   if (size == 0)
@@ -661,10 +681,13 @@ build_atomic_load (tree src)
   fncode = (int) BUILT_IN_ATOMIC_LOAD_N + exact_log2 (size) + 1;
   t = builtin_decl_implicit ((enum built_in_function) fncode);
 
-  src = build_unary_op (ADDR_EXPR, ptr_type, src);
-  val = build_call_expr (t, 2, src, mem_model);
+  addr = build_unary_op (ADDR_EXPR, ptr_type, src);
+  val = build_call_expr (t, 2, addr, mem_model);
 
-  return unchecked_convert (type, val, true);
+  /* First reinterpret the loaded bits in the original type of the load,
+     then convert to the expected result type.  */
+  t = fold_build1 (VIEW_CONVERT_EXPR, TREE_TYPE (src), val);
+  return convert (TREE_TYPE (orig_src), t);
 }
 
 /* Build an atomic store from SRC to the underlying atomic object in DEST.  */
@@ -677,10 +700,11 @@ build_atomic_store (tree dest, tree src)
       (build_qualified_type (void_type_node, TYPE_QUAL_VOLATILE));
   tree mem_model = build_int_cst (integer_type_node, MEMMODEL_SEQ_CST);
   tree orig_dest = dest;
-  tree t, int_type;
+  tree t, int_type, addr;
   unsigned int size;
   int fncode;
 
+  /* Remove conversions to get the address of the underlying object.  */
   dest = remove_conversions (dest, false);
   size = resolve_atomic_size (TREE_TYPE (dest));
   if (size == 0)
@@ -690,10 +714,20 @@ build_atomic_store (tree dest, tree src)
   t = builtin_decl_implicit ((enum built_in_function) fncode);
   int_type = gnat_type_for_size (BITS_PER_UNIT * size, 1);
 
-  dest = build_unary_op (ADDR_EXPR, ptr_type, dest);
-  src = unchecked_convert (int_type, src, true);
+  /* First convert the bits to be stored to the original type of the store,
+     then reinterpret them in the effective type.  But if the original type
+     is a padded type with the same size, convert to the inner type instead,
+     as we don't want to artificially introduce a CONSTRUCTOR here.  */
+  if (TYPE_IS_PADDING_P (TREE_TYPE (dest))
+      && TYPE_SIZE (TREE_TYPE (dest))
+	 == TYPE_SIZE (TREE_TYPE (TYPE_FIELDS (TREE_TYPE (dest)))))
+    src = convert (TREE_TYPE (TYPE_FIELDS (TREE_TYPE (dest))), src);
+  else
+    src = convert (TREE_TYPE (dest), src);
+  src = fold_build1 (VIEW_CONVERT_EXPR, int_type, src);
+  addr = build_unary_op (ADDR_EXPR, ptr_type, dest);
 
-  return build_call_expr (t, 3, dest, src, mem_model);
+  return build_call_expr (t, 3, addr, src, mem_model);
 }
 
 /* Make a binary operation of kind OP_CODE.  RESULT_TYPE is the type
@@ -1028,6 +1062,13 @@ build_binary_op (enum tree_code op_code, tree result_type,
 		gcc_unreachable ();
 	    }
 
+	  else if (POINTER_TYPE_P (left_base_type)
+		   && POINTER_TYPE_P (right_base_type))
+	    {
+	      gcc_assert (TREE_TYPE (left_base_type)
+			  == TREE_TYPE (right_base_type));
+	      best_type = left_base_type;
+	    }
 	  else
 	    gcc_unreachable ();
 
@@ -1160,7 +1201,6 @@ build_binary_op (enum tree_code op_code, tree result_type,
     ;
   else if (op_code == ARRAY_REF || op_code == ARRAY_RANGE_REF)
     {
-      TREE_THIS_NOTRAP (result) = 1;
       if (TYPE_VOLATILE (operation_type))
 	TREE_THIS_VOLATILE (result) = 1;
     }
@@ -1291,7 +1331,7 @@ build_unary_op (enum tree_code op_code, tree result_type, tree operand)
 	      HOST_WIDE_INT bitsize;
 	      HOST_WIDE_INT bitpos;
 	      tree offset, inner;
-	      enum machine_mode mode;
+	      machine_mode mode;
 	      int unsignedp, volatilep;
 
 	      inner = get_inner_reference (operand, &bitsize, &bitpos, &offset,
@@ -1698,7 +1738,8 @@ build_call_raise (int msg, Node_Id gnat_node, char kind)
   filename = build_string (len, str);
   line_number
     = (gnat_node != Empty && Sloc (gnat_node) != No_Location)
-      ? Get_Logical_Line_Number (Sloc(gnat_node)) : input_line;
+      ? Get_Logical_Line_Number (Sloc(gnat_node))
+      : LOCATION_LINE (input_location);
 
   TREE_TYPE (filename) = build_array_type (unsigned_char_type_node,
 					   build_index_type (size_int (len)));
@@ -1744,7 +1785,7 @@ build_call_raise_range (int msg, Node_Id gnat_node,
     }
   else
     {
-      line_number = input_line;
+      line_number = LOCATION_LINE (input_location);
       column_number = 0;
     }
 
@@ -1794,7 +1835,7 @@ build_call_raise_column (int msg, Node_Id gnat_node)
     }
   else
     {
-      line_number = input_line;
+      line_number = LOCATION_LINE (input_location);
       column_number = 0;
     }
 
@@ -1832,6 +1873,7 @@ tree
 gnat_build_constructor (tree type, vec<constructor_elt, va_gc> *v)
 {
   bool allconstant = (TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST);
+  bool read_only = true;
   bool side_effects = false;
   tree result, obj, val;
   unsigned int n_elmts;
@@ -1849,6 +1891,9 @@ gnat_build_constructor (tree type, vec<constructor_elt, va_gc> *v)
 	  || !initializer_constant_valid_p (val, TREE_TYPE (val)))
 	allconstant = false;
 
+      if (!TREE_READONLY (val))
+	read_only = false;
+
       if (TREE_SIDE_EFFECTS (val))
 	side_effects = true;
     }
@@ -1860,9 +1905,10 @@ gnat_build_constructor (tree type, vec<constructor_elt, va_gc> *v)
     v->qsort (compare_elmt_bitpos);
 
   result = build_constructor (type, v);
+  CONSTRUCTOR_NO_CLEARING (result) = 1;
   TREE_CONSTANT (result) = TREE_STATIC (result) = allconstant;
   TREE_SIDE_EFFECTS (result) = side_effects;
-  TREE_READONLY (result) = TYPE_READONLY (type) || allconstant;
+  TREE_READONLY (result) = TYPE_READONLY (type) || read_only || allconstant;
   return result;
 }
 
@@ -1874,11 +1920,11 @@ gnat_build_constructor (tree type, vec<constructor_elt, va_gc> *v)
    actual record and know how to look for fields in variant parts.  */
 
 static tree
-build_simple_component_ref (tree record_variable, tree component,
-                            tree field, bool no_fold_p)
+build_simple_component_ref (tree record_variable, tree component, tree field,
+			    bool no_fold_p)
 {
   tree record_type = TYPE_MAIN_VARIANT (TREE_TYPE (record_variable));
-  tree ref, inner_variable;
+  tree base, ref;
 
   gcc_assert (RECORD_OR_UNION_TYPE_P (record_type)
 	      && COMPLETE_TYPE_P (record_type)
@@ -1902,7 +1948,7 @@ build_simple_component_ref (tree record_variable, tree component,
     {
       tree new_field;
 
-      /* First loop thru normal components.  */
+      /* First loop through normal components.  */
       for (new_field = TYPE_FIELDS (record_type);
 	   new_field;
 	   new_field = DECL_CHAIN (new_field))
@@ -1910,7 +1956,7 @@ build_simple_component_ref (tree record_variable, tree component,
 	  break;
 
       /* Next, see if we're looking for an inherited component in an extension.
-	 If so, look thru the extension directly, but not if the type contains
+	 If so, look through the extension directly, unless the type contains
 	 a placeholder, as it might be needed for a later substitution.  */
       if (!new_field
 	  && TREE_CODE (record_variable) == VIEW_CONVERT_EXPR
@@ -1926,7 +1972,7 @@ build_simple_component_ref (tree record_variable, tree component,
 	    return ref;
 	}
 
-      /* Next, loop thru DECL_INTERNAL_P components if we haven't found the
+      /* Next, loop through DECL_INTERNAL_P components if we haven't found the
 	 component in the first search.  Doing this search in two steps is
 	 required to avoid hidden homonymous fields in the _Parent field.  */
       if (!new_field)
@@ -1957,17 +2003,41 @@ build_simple_component_ref (tree record_variable, tree component,
       && TREE_OVERFLOW (DECL_FIELD_OFFSET (field)))
     return NULL_TREE;
 
-  /* Look through conversion between type variants.  This is transparent as
-     far as the field is concerned.  */
-  if (TREE_CODE (record_variable) == VIEW_CONVERT_EXPR
-      && TYPE_MAIN_VARIANT (TREE_TYPE (TREE_OPERAND (record_variable, 0)))
-	 == record_type)
-    inner_variable = TREE_OPERAND (record_variable, 0);
-  else
-    inner_variable = record_variable;
+  /* We have found a suitable field.  Before building the COMPONENT_REF, get
+     the base object of the record variable if possible.  */
+  base = record_variable;
 
-  ref = build3 (COMPONENT_REF, TREE_TYPE (field), inner_variable, field,
-		NULL_TREE);
+  if (TREE_CODE (record_variable) == VIEW_CONVERT_EXPR)
+    {
+      tree inner_variable = TREE_OPERAND (record_variable, 0);
+      tree inner_type = TYPE_MAIN_VARIANT (TREE_TYPE (inner_variable));
+
+      /* Look through a conversion between type variants.  This is transparent
+	 as far as the field is concerned.  */
+      if (inner_type == record_type)
+	base = inner_variable;
+
+      /* Look through a conversion between original and packable version, but
+	 the field needs to be adjusted in this case.  */
+      else if (RECORD_OR_UNION_TYPE_P (inner_type)
+	       && TYPE_NAME (inner_type) == TYPE_NAME (record_type))
+	{
+	  tree new_field;
+
+	  for (new_field = TYPE_FIELDS (inner_type);
+	       new_field;
+	       new_field = DECL_CHAIN (new_field))
+	    if (SAME_FIELD_P (field, new_field))
+	      break;
+	  if (new_field)
+	    {
+	      field = new_field;
+	      base = inner_variable;
+	    }
+	}
+    }
+
+  ref = build3 (COMPONENT_REF, TREE_TYPE (field), base, field, NULL_TREE);
 
   if (TREE_READONLY (record_variable)
       || TREE_READONLY (field)
@@ -1984,10 +2054,10 @@ build_simple_component_ref (tree record_variable, tree component,
 
   /* The generic folder may punt in this case because the inner array type
      can be self-referential, but folding is in fact not problematic.  */
-  if (TREE_CODE (record_variable) == CONSTRUCTOR
-      && TYPE_CONTAINS_TEMPLATE_P (TREE_TYPE (record_variable)))
+  if (TREE_CODE (base) == CONSTRUCTOR
+      && TYPE_CONTAINS_TEMPLATE_P (TREE_TYPE (base)))
     {
-      vec<constructor_elt, va_gc> *elts = CONSTRUCTOR_ELTS (record_variable);
+      vec<constructor_elt, va_gc> *elts = CONSTRUCTOR_ELTS (base);
       unsigned HOST_WIDE_INT idx;
       tree index, value;
       FOR_EACH_CONSTRUCTOR_ELT (elts, idx, index, value)
@@ -1999,16 +2069,15 @@ build_simple_component_ref (tree record_variable, tree component,
   return fold (ref);
 }
 
-/* Like build_simple_component_ref, except that we give an error if the
-   reference could not be found.  */
+/* Likewise, but generate a Constraint_Error if the reference could not be
+   found.  */
 
 tree
-build_component_ref (tree record_variable, tree component,
-                     tree field, bool no_fold_p)
+build_component_ref (tree record_variable, tree component, tree field,
+		     bool no_fold_p)
 {
   tree ref = build_simple_component_ref (record_variable, component, field,
 					 no_fold_p);
-
   if (ref)
     return ref;
 
@@ -2101,24 +2170,14 @@ maybe_wrap_malloc (tree data_size, tree data_type, Node_Id gnat_node)
     = ((data_align > system_allocator_alignment)
        ? make_aligning_type (data_type, data_align, data_size,
 			     system_allocator_alignment,
-			     POINTER_SIZE / BITS_PER_UNIT)
+			     POINTER_SIZE / BITS_PER_UNIT,
+			     gnat_node)
        : NULL_TREE);
 
   tree size_to_malloc
     = aligning_type ? TYPE_SIZE_UNIT (aligning_type) : data_size;
 
-  tree malloc_ptr;
-
-  /* On VMS, if pointers are 64-bit and the allocator size is 32-bit or
-     Convention C, allocate 32-bit memory.  */
-  if (TARGET_ABI_OPEN_VMS
-      && POINTER_SIZE == 64
-      && Nkind (gnat_node) == N_Allocator
-      && (UI_To_Int (Esize (Etype (gnat_node))) == 32
-          || Convention (Etype (gnat_node)) == Convention_C))
-    malloc_ptr = build_call_n_expr (malloc32_decl, 1, size_to_malloc);
-  else
-    malloc_ptr = build_call_n_expr (malloc_decl, 1, size_to_malloc);
+  tree malloc_ptr = build_call_n_expr (malloc_decl, 1, size_to_malloc);
 
   if (aligning_type)
     {
@@ -2738,7 +2797,13 @@ gnat_invariant_expr (tree expr)
 	  || (TREE_CODE (expr) == VAR_DECL && TREE_READONLY (expr)))
 	 && decl_function_context (expr) == current_function_decl
 	 && DECL_INITIAL (expr))
-    expr = remove_conversions (DECL_INITIAL (expr), false);
+    {
+      expr = DECL_INITIAL (expr);
+      /* Look into CONSTRUCTORs built to initialize padded types.  */
+      if (TYPE_IS_PADDING_P (TREE_TYPE (expr)))
+	expr = convert (TREE_TYPE (TYPE_FIELDS (TREE_TYPE (expr))), expr);
+      expr = remove_conversions (expr, false);
+    }
 
   /* We are only interested in scalar types at the moment and, even if we may
      have gone through padding types in the above loop, we must be back to a

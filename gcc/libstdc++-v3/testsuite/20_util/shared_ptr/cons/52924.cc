@@ -1,7 +1,7 @@
-// { dg-options "-std=gnu++0x" }
+// { dg-options "-std=gnu++11" }
 // { dg-do compile }
 
-// Copyright (C) 2012-2013 Free Software Foundation, Inc.
+// Copyright (C) 2012-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,14 +22,12 @@
 
 // libstdc++/52924
 
-struct A { } a;
+struct A { };
 
 struct D {
   ~D() noexcept(false) { }
   void operator()(A*) { }
-} d;
-
-auto sp = std::shared_ptr<A>(&a, d);
+};
 
 template<typename T>
 struct Alloc : std::allocator<T>
@@ -37,8 +35,16 @@ struct Alloc : std::allocator<T>
   Alloc() = default;
   ~Alloc() noexcept(false) { }
   template<typename U> Alloc(const Alloc<U>&) { }
+
+  template<typename U>
+    struct rebind
+    { typedef Alloc<U> other; };
 };
 
+A a;
+D d;
 Alloc<A> al;
 
+auto sd = std::shared_ptr<A>(&a, d);
+auto sa = std::shared_ptr<A>(&a, d, al);
 auto as = std::allocate_shared<A>(al);

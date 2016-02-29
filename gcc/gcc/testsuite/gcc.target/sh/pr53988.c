@@ -2,12 +2,12 @@
    values loaded from memory.  If everything goes as expected we won't see
    any sign/zero extensions or and ops.  On SH2A we don't expect to see the
    movu insn.  */
-/* { dg-do compile { target "sh*-*-*" } } */
+/* { dg-do compile }  */
 /* { dg-options "-O1" } */
 /* { dg-skip-if "" { "sh*-*-*" } { "-m5*"} { "" } }  */
-/* { dg-final { scan-assembler-times "tst\tr" 8 { xfail *-*-*} } }  */
-/* { dg-final { scan-assembler-not "tst\t#255" { xfail *-*-*} } }  */
-/* { dg-final { scan-assembler-not "exts|extu|and|movu" { xfail *-*-*} } }  */
+/* { dg-final { scan-assembler-times "tst\tr" 8 } } */
+/* { dg-final { scan-assembler-not "tst\t#255" } } */
+/* { dg-final { scan-assembler-not "exts|extu|and|movu" } } */
 
 int
 test00 (char* a, char* b, int c, int d)

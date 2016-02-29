@@ -1,16 +1,10 @@
-// PR c++/60274
+// PR c++/60167
 
-typedef const char *const&  ProtocolIdType;
+template <int& F>
+struct Foo {
+  typedef int Bar;
 
-template <ProtocolIdType protocolId>
-struct C {
-  typedef int ProtocolVersion;
-  struct D {
-    ProtocolVersion GetProtocolVersion();
-  };
+  static Bar cache;
 };
-template <ProtocolIdType protocolId>
-typename C<protocolId>::ProtocolVersion C<protocolId>::D::GetProtocolVersion()
-{
-    return 1;
-}
+
+template <int& F> typename Foo<F>::Bar Foo<F>::cache;

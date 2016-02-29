@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2001-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -45,6 +45,10 @@ package Prj is
    --  Call by gprbuild for each language specify by switch
    --  --restricted-to-languages=.
 
+   procedure Remove_All_Restricted_Languages;
+   --  Call by gprbuild in CodePeer mode to ignore switches
+   --  --restricted-to-languages=.
+
    function Is_Allowed_Language (Name : Name_Id) return Boolean;
    --  Returns True if --restricted-to-languages= is not used or if Name
    --  is one of the restricted languages.
@@ -68,6 +72,16 @@ package Prj is
    type Yes_No_Unknown is (Yes, No, Unknown);
    --  Tri-state to decide if -lgnarl is needed when linking
 
+   type Attribute_Default_Value is
+     (Read_Only_Value,     --  For read only attributes (Name, Project_Dir)
+      Empty_Value,         --  Empty string or empty string list
+      Dot_Value,           --  "." or (".")
+      Object_Dir_Value,    --  'Object_Dir
+      Target_Value,        --  'Target (special rules)
+      Runtime_Value);      --  'Runtime (special rules)
+   --  Describe the default values of attributes that are referenced but not
+   --  declared.
+
    pragma Warnings (Off);
    type Project_Qualifier is
      (Unspecified,
@@ -79,7 +93,7 @@ package Prj is
 
       Library,
       Configuration,
-      Dry,
+      Abstract_Project,
       Aggregate,
       Aggregate_Library);
    pragma Warnings (On);
@@ -87,7 +101,7 @@ package Prj is
    --  file:
    --    Standard:             standard project ...
    --    Library:              library project is ...
-   --    Dry:                  abstract project is
+   --    Abstract_Project:     abstract project is
    --    Aggregate:            aggregate project is
    --    Aggregate_Library:    aggregate library project is ...
    --    Configuration:        configuration project is ...
@@ -118,6 +132,9 @@ package Prj is
    function Empty_File   return File_Name_Type;
    function Empty_String return Name_Id;
    --  Return the id for an empty string ""
+
+   function Dot_String return Name_Id;
+   --  Return the id for "."
 
    type Path_Information is record
       Name         : Path_Name_Type := No_Path;
@@ -161,8 +178,8 @@ package Prj is
    --  The defined kinds of variables
 
    Ignored : constant Variable_Kind;
-   --  Used to indicate that a package declaration must be ignored
-   --  while processing the project tree (unknown package name).
+   --  Used to indicate that a package declaration must be ignored while
+   --  processing the project tree (unknown package name).
 
    type Variable_Value (Kind : Variable_Kind := Undefined) is record
       Project  : Project_Id := No_Project;
@@ -258,7 +275,7 @@ package Prj is
                         Attributes => No_Variable,
                         Arrays     => No_Array,
                         Packages   => No_Package);
-   --  Default value of Declarations: indicates that there is no declarations
+   --  Default value of Declarations: used if there are no declarations
 
    type Package_Element is record
       Name   : Name_Id      := No_Name;
@@ -431,16 +448,14 @@ package Prj is
 
    function Other_Part (Source : Source_Id) return Source_Id;
    pragma Inline (Other_Part);
-   --  Source ID for the other part, if any: for a spec, indicates its body;
-   --  for a body, indicates its spec.
+   --  Source ID for the other part, if any: for a spec, returns its body;
+   --  for a body, returns its spec.
 
    No_Source : constant Source_Id := null;
 
    type Path_Syntax_Kind is
-     (Canonical,
-      --  Unix style
-      Host);
-      --  Host specific syntax, for example on VMS (the default)
+     (Canonical, -- Unix style
+      Host);     -- Host specific syntax
 
    --  The following record describes the configuration of a language
 
@@ -480,8 +495,7 @@ package Prj is
       --  unit in a multi-source file, in the object file name.
 
       Path_Syntax : Path_Syntax_Kind := Host;
-      --  Value may be Canonical (Unix style) or Host (host syntax, for example
-      --  on VMS for DEC C).
+      --  Value may be Canonical (Unix style) or Host (host syntax)
 
       Source_File_Switches : Name_List_Index := No_Name_List;
       --  Optional switches to be put before the source file. The source file
@@ -507,7 +521,7 @@ package Prj is
       --  there is no need for such switch.
 
       Object_Generated : Boolean := True;
-      --  False in no object file is generated
+      --  False if no object file is generated
 
       Objects_Linked : Boolean := True;
       --  False if object files are not use to link executables and build
@@ -591,9 +605,9 @@ package Prj is
       --  spec pattern.
 
       Config_File_Unique : Boolean := False;
-      --  Indicate if the config file specified to the compiler needs to be
-      --  unique. If it is unique, then all config files are concatenated into
-      --  a temp config file.
+      --  True if the config file specified to the compiler needs to be unique.
+      --  If it is unique, then all config files are concatenated into a temp
+      --  config file.
 
       Binder_Driver : File_Name_Type := No_File;
       --  The name of the binder driver for the language, if any
@@ -671,16 +685,26 @@ package Prj is
                            Clean_Object_Artifacts       => No_Name_List,
                            Clean_Source_Artifacts       => No_Name_List);
 
-   --  The following record ???
-
    type Language_Data is record
-      Name          : Name_Id         := No_Name;
-      Display_Name  : Name_Id         := No_Name;
-      Config        : Language_Config := No_Language_Config;
-      First_Source  : Source_Id       := No_Source;
+      Name : Name_Id := No_Name;
+      --  The name of the language in lower case
+
+      Display_Name : Name_Id := No_Name;
+      --  The name of the language, as found in attribute Languages
+
+      Config : Language_Config := No_Language_Config;
+      --  Configuration of the language
+
+      First_Source : Source_Id := No_Source;
+      --  Head of the list of sources of the language in the project
+
       Mapping_Files : Mapping_Files_Htable.Instance :=
                         Mapping_Files_Htable.Nil;
-      Next          : Language_Ptr  := No_Language_Index;
+      --  Hash table containing the mapping of the sources to their path names
+
+      Next : Language_Ptr := No_Language_Index;
+      --  Next language of the project
+
    end record;
 
    No_Language_Data : constant Language_Data :=
@@ -751,8 +775,7 @@ package Prj is
       --  recursive notation <dir>/** is used in attribute Source_Dirs.
 
       Language : Language_Ptr := No_Language_Index;
-      --  Index of the language. This is an index into
-      --  Project_Tree.Languages_Data.
+      --  Language of the source
 
       In_Interfaces : Boolean := True;
       --  False when the source is not included in interfaces, when attribute
@@ -960,11 +983,12 @@ package Prj is
       Only_If_Ada         : Boolean := False) return Path_Name_Type;
    --  Return the object directory to use for the project. This depends on
    --  whether we have a library project or a standard project. This function
-   --  might return No_Name when no directory applies.
-   --  If we have a library project file and Including_Libraries is True then
-   --  the library dir is returned instead of the object dir.
-   --  If Only_If_Ada is True, then No_Name will be returned when the project
-   --  doesn't Ada sources.
+   --  might return No_Name when no directory applies. If the project is a
+   --  library project file and Including_Libraries is True then the library
+   --  ALI dir is returned instead of the object dir, except when there is no
+   --  ALI files in the Library ALI dir and the object directory exists. If
+   --  Only_If_Ada is True, then No_Name is returned when the project doesn't
+   --  include any Ada source.
 
    procedure Compute_All_Imported_Projects
      (Root_Project : Project_Id;
@@ -1129,6 +1153,17 @@ package Prj is
       Auto_Init_Supported : Boolean := False;
       --  True if automatic initialisation is supported for shared stand-alone
       --  libraries.
+
+      --  Cleaning
+
+      Artifacts_In_Exec_Dir : Name_List_Index := No_Name_List;
+      --  List of regexp file names to be cleaned in the exec directory of the
+      --  main project.
+
+      Artifacts_In_Object_Dir : Name_List_Index := No_Name_List;
+      --  List of regexp file names to be cleaned in the object directory of
+      --  all projects.
+
    end record;
 
    Default_Project_Config : constant Project_Configuration :=
@@ -1163,7 +1198,9 @@ package Prj is
                                Lib_Version_Options            => No_Name_List,
                                Symbolic_Link_Supported        => False,
                                Lib_Maj_Min_Id_Supported       => False,
-                               Auto_Init_Supported            => False);
+                               Auto_Init_Supported            => False,
+                               Artifacts_In_Exec_Dir          => No_Name_List,
+                               Artifacts_In_Object_Dir        => No_Name_List);
 
    -------------------------
    -- Aggregated projects --
@@ -1241,10 +1278,8 @@ package Prj is
       ---------------
 
       Languages : Language_Ptr := No_Language_Index;
-      --  First index of the language data in the project.
-      --  This is an index into the project_tree_data.languages_data.
-      --  Traversing the list gives access to all the languages supported by
-      --  the project.
+      --  First index of the language data in the project. Traversing the list
+      --  gives access to all the languages supported by the project.
 
       --------------
       -- Projects --
@@ -1328,19 +1363,20 @@ package Prj is
       --  Indicate that this is a Standalone Library Project File
 
       Lib_Interface_ALIs : String_List_Id := Nil_String;
-      --  For Standalone Library Project Files, indicate the list of Interface
-      --  ALI files.
+      --  For Standalone Library Project Files, list of Interface ALI files
+
+      Other_Interfaces : String_List_Id := Nil_String;
+      --  List of non unit based sources in attribute Interfaces
 
       Lib_Auto_Init : Boolean := False;
-      --  For non static Stand-Alone Library Project Files, indicate if
-      --  the library initialisation should be automatic.
+      --  For non static Stand-Alone Library Project Files, True if the library
+      --  initialisation should be automatic.
 
       Symbol_Data : Symbol_Record := No_Symbols;
       --  Symbol file name, reference symbol file name, symbol policy
 
       Need_To_Build_Lib : Boolean := False;
-      --  Indicates that the library of a Library Project needs to be built or
-      --  rebuilt.
+      --  True if the library of a Library Project needs to be built or rebuilt
 
       -------------
       -- Sources --
@@ -1375,9 +1411,14 @@ package Prj is
       -------------------
 
       Ada_Objects_Path : String_Access := null;
-      --  The cached value of ADA_OBJECTS_PATH for this project file. Do not
-      --  use this field directly outside of the compiler, use
-      --  Prj.Env.Ada_Objects_Path instead.
+      --  The cached value of ADA_OBJECTS_PATH for this project file, with
+      --  library ALI directories for library projects instead of object
+      --  directories. Do not use this field directly outside of the
+      --  compiler, use Prj.Env.Ada_Objects_Path instead.
+
+      Ada_Objects_Path_No_Libs : String_Access := null;
+      --  The cached value of ADA_OBJECTS_PATH for this project file with all
+      --  object directories (no library ALI dir for library projects).
 
       Libgnarl_Needed : Yes_No_Unknown := Unknown;
       --  Set to True when libgnarl is needed to link
@@ -1398,8 +1439,8 @@ package Prj is
       --  The path name of the configuration pragmas file, if any
 
       Config_File_Temp : Boolean := False;
-      --  An indication that the configuration pragmas file is a temporary file
-      --  that must be deleted at the end.
+      --  True if the configuration pragmas file is a temporary file that must
+      --  be deleted at the end.
 
       Config_Checked : Boolean := False;
       --  A flag to avoid checking repetitively the configuration pragmas file
@@ -1494,6 +1535,30 @@ package Prj is
    --  Else it searches in the whole tree.
    --  If Index is specified, this only search for a source with that index.
 
+   type Source_Ids is array (Positive range <>) of Source_Id;
+   No_Sources : constant Source_Ids := (1 .. 0 => No_Source);
+
+   function Find_All_Sources
+     (In_Tree          : Project_Tree_Ref;
+      Project          : Project_Id;
+      In_Imported_Only : Boolean := False;
+      In_Extended_Only : Boolean := False;
+      Base_Name        : File_Name_Type;
+      Index            : Int     := 0) return Source_Ids;
+   --  Find all source files with the given name:
+   --
+   --    If In_Extended_Only is True, it will search in project and the project
+   --    it extends, but not in the imported projects.
+   --
+   --    If Extended_Only is False, and In_Imported_Only is True, it will
+   --    search in project and the projects it imports, but not in the others
+   --    or in aggregated projects.
+   --
+   --    If both Extended_Only and In_Imported_Only are False (the default)
+   --    then it searches the whole tree.
+   --
+   --  If Index is specified, this only search for sources with that index.
+
    -----------------------
    -- Project_Tree_Data --
    -----------------------
@@ -1518,6 +1583,7 @@ package Prj is
       Arrays            : Array_Table.Instance;
       Packages          : Package_Table.Instance;
       Private_Part      : Private_Project_Tree_Data;
+      Dot_String_List   : String_List_Id := Nil_String;
    end record;
    type Shared_Project_Tree_Data_Access is access all Shared_Project_Tree_Data;
    --  The data that is shared among multiple trees, when these trees are
@@ -1827,9 +1893,16 @@ package Prj is
    --       * user project also includes a "with" that can only be resolved
    --         once we have found the gnatls
 
-   Gprbuild_Flags : constant Processing_Flags;
-   Gprclean_Flags : constant Processing_Flags;
-   Gnatmake_Flags : constant Processing_Flags;
+   procedure Set_Ignore_Missing_With
+     (Flags : in out Processing_Flags;
+      Value : Boolean);
+   --  Set the value of component Ignore_Missing_With in Flags to Value
+
+   Gprbuild_Flags   : constant Processing_Flags;
+   Gprinstall_Flags : constant Processing_Flags;
+   Gprclean_Flags   : constant Processing_Flags;
+   Gprexec_Flags    : constant Processing_Flags;
+   Gnatmake_Flags   : constant Processing_Flags;
    --  Flags used by the various tools. They all display the error messages
    --  through Prj.Err.
 
@@ -1895,7 +1968,6 @@ package Prj is
    --  indentation level only affects output done through Debug_Output.
 
 private
-
    All_Packages : constant String_List_Access := null;
 
    No_Project_Tree : constant Project_Tree_Ref := null;
@@ -1935,14 +2007,18 @@ private
       Last : in out Natural);
    --  Append a String to the Buffer
 
+   --  Table used to store the path name of all the created temporary files, so
+   --  that they can be deleted at the end, or when the program is interrupted.
+
    package Temp_Files_Table is new GNAT.Dynamic_Tables
      (Table_Component_Type => Path_Name_Type,
       Table_Index_Type     => Integer,
       Table_Low_Bound      => 1,
       Table_Initial        => 10,
       Table_Increment      => 10);
-   --  Table to store the path name of all the created temporary files, so that
-   --  they can be deleted at the end, or when the program is interrupted.
+
+   --  The following type is used to represent the part of a project tree which
+   --  is private to the Project Manager.
 
    type Private_Project_Tree_Data is record
       Temp_Files   : Temp_Files_Table.Instance;
@@ -1952,19 +2028,17 @@ private
       Current_Source_Path_File : Path_Name_Type := No_Path;
       --  Current value of project source path file env var. Used to avoid
       --  setting the env var to the same value. When different from No_Path,
-      --  this indicates that logical names (VMS) or environment variables were
-      --  created and should be deassigned to avoid polluting the environment
-      --  on VMS.
-      --  gnatmake only
+      --  this indicates that environment variables were created and should be
+      --  deassigned to avoid polluting the environment. For gnatmake only.
 
       Current_Object_Path_File : Path_Name_Type := No_Path;
       --  Current value of project object path file env var. Used to avoid
       --  setting the env var to the same value.
       --  gnatmake only
-
    end record;
-   --  Type to represent the part of a project tree which is private to the
-   --  Project Manager.
+
+   --  The following type is used to hold processing flags which show what
+   --  functions are required for the various tools that are handled.
 
    type Processing_Flags is record
       Require_Sources_Other_Lang : Boolean;
@@ -1977,42 +2051,76 @@ private
       Allow_Invalid_External     : Error_Warning;
       Missing_Source_Files       : Error_Warning;
       Ignore_Missing_With        : Boolean;
+
+      Incomplete_Withs : Boolean := False;
+      --  This flag is set to True when the projects are parsed while ignoring
+      --  missing withed project and some withed projects are not found.
+
    end record;
 
-   Gprbuild_Flags : constant Processing_Flags :=
-                      (Report_Error               => null,
-                       When_No_Sources            => Warning,
-                       Require_Sources_Other_Lang => True,
-                       Allow_Duplicate_Basenames  => False,
-                       Compiler_Driver_Mandatory  => True,
-                       Error_On_Unknown_Language  => True,
-                       Require_Obj_Dirs           => Error,
-                       Allow_Invalid_External     => Error,
-                       Missing_Source_Files       => Error,
-                       Ignore_Missing_With        => False);
+   Gprbuild_Flags   : constant Processing_Flags :=
+                        (Report_Error               => null,
+                         When_No_Sources            => Warning,
+                         Require_Sources_Other_Lang => True,
+                         Allow_Duplicate_Basenames  => False,
+                         Compiler_Driver_Mandatory  => True,
+                         Error_On_Unknown_Language  => True,
+                         Require_Obj_Dirs           => Error,
+                         Allow_Invalid_External     => Error,
+                         Missing_Source_Files       => Error,
+                         Ignore_Missing_With        => False,
+                         Incomplete_Withs           => False);
 
-   Gprclean_Flags : constant Processing_Flags :=
-                      (Report_Error               => null,
-                       When_No_Sources            => Warning,
-                       Require_Sources_Other_Lang => True,
-                       Allow_Duplicate_Basenames  => False,
-                       Compiler_Driver_Mandatory  => True,
-                       Error_On_Unknown_Language  => True,
-                       Require_Obj_Dirs           => Warning,
-                       Allow_Invalid_External     => Error,
-                       Missing_Source_Files       => Error,
-                       Ignore_Missing_With        => False);
+   Gprinstall_Flags : constant Processing_Flags :=
+                        (Report_Error               => null,
+                         When_No_Sources            => Warning,
+                         Require_Sources_Other_Lang => True,
+                         Allow_Duplicate_Basenames  => False,
+                         Compiler_Driver_Mandatory  => True,
+                         Error_On_Unknown_Language  => True,
+                         Require_Obj_Dirs           => Silent,
+                         Allow_Invalid_External     => Error,
+                         Missing_Source_Files       => Error,
+                         Ignore_Missing_With        => False,
+                         Incomplete_Withs           => False);
 
-   Gnatmake_Flags : constant Processing_Flags :=
-                      (Report_Error               => null,
-                       When_No_Sources            => Error,
-                       Require_Sources_Other_Lang => False,
-                       Allow_Duplicate_Basenames  => False,
-                       Compiler_Driver_Mandatory  => False,
-                       Error_On_Unknown_Language  => False,
-                       Require_Obj_Dirs           => Error,
-                       Allow_Invalid_External     => Error,
-                       Missing_Source_Files       => Error,
-                       Ignore_Missing_With        => False);
+   Gprclean_Flags   : constant Processing_Flags :=
+                        (Report_Error               => null,
+                         When_No_Sources            => Warning,
+                         Require_Sources_Other_Lang => True,
+                         Allow_Duplicate_Basenames  => False,
+                         Compiler_Driver_Mandatory  => True,
+                         Error_On_Unknown_Language  => True,
+                         Require_Obj_Dirs           => Warning,
+                         Allow_Invalid_External     => Error,
+                         Missing_Source_Files       => Error,
+                         Ignore_Missing_With        => False,
+                         Incomplete_Withs           => False);
+
+   Gprexec_Flags    : constant Processing_Flags :=
+                        (Report_Error               => null,
+                         When_No_Sources            => Silent,
+                         Require_Sources_Other_Lang => False,
+                         Allow_Duplicate_Basenames  => False,
+                         Compiler_Driver_Mandatory  => False,
+                         Error_On_Unknown_Language  => True,
+                         Require_Obj_Dirs           => Silent,
+                         Allow_Invalid_External     => Error,
+                         Missing_Source_Files       => Silent,
+                         Ignore_Missing_With        => False,
+                         Incomplete_Withs           => False);
+
+   Gnatmake_Flags   : constant Processing_Flags :=
+                        (Report_Error               => null,
+                         When_No_Sources            => Error,
+                         Require_Sources_Other_Lang => False,
+                         Allow_Duplicate_Basenames  => False,
+                         Compiler_Driver_Mandatory  => False,
+                         Error_On_Unknown_Language  => False,
+                         Require_Obj_Dirs           => Error,
+                         Allow_Invalid_External     => Error,
+                         Missing_Source_Files       => Error,
+                         Ignore_Missing_With        => False,
+                         Incomplete_Withs           => False);
 
 end Prj;

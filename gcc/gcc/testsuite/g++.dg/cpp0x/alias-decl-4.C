@@ -1,4 +1,4 @@
-// { dg-options "-std=c++0x" }
+// { dg-do compile { target c++11 } }
 
 // [temp.alias]/3:
 // The type-id in an alias template declaration shall not refer
@@ -11,4 +11,4 @@ template <class T> using B = typename A<T>::U; // { dg-error "type" }
 template <class T> struct A {
     typedef B<T> U;
 };
-B<short> b; // { dg-error "invalid type" }
+B<short> b;

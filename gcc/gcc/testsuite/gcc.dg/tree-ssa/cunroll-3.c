@@ -1,6 +1,7 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -fdump-tree-cunrolli-details" } */
 int a[1];
+void
 test(int c)
 { 
   int i;
@@ -11,5 +12,5 @@ test(int c)
 }
 /* If we start duplicating headers prior curoll, this loop will have 0 iterations.  */
 
-/* { dg-final { scan-tree-dump "Completely unroll loop 1 times" "cunrolli"} } */
+/* { dg-final { scan-tree-dump "loop with 2 iterations completely unrolled" "cunrolli"} } */
 /* { dg-final { cleanup-tree-dump "cunrolli" } } */

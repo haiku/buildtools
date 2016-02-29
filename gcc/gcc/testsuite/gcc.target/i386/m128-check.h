@@ -37,8 +37,21 @@ typedef union
 typedef union
 {
   __m128i x;
+  unsigned int a[4];
+} union128i_ud;
+
+typedef union
+{
+  __m128i x;
   long long a[2];
 } union128i_q;
+
+typedef union
+{
+  __m128i x;
+  unsigned long long a[2];
+} union128i_uq;
+
 
 typedef union
 {
@@ -87,7 +100,9 @@ CHECK_EXP (union128i_ub, unsigned char, "%d")
 CHECK_EXP (union128i_w, short, "%d")
 CHECK_EXP (union128i_uw, unsigned short, "%d")
 CHECK_EXP (union128i_d, int, "0x%x")
+CHECK_EXP (union128i_ud, unsigned int, "0x%x")
 CHECK_EXP (union128i_q, long long, "0x%llx")
+CHECK_EXP (union128i_uq, unsigned long long, "0x%llx")
 CHECK_EXP (union128d, double, "%f")
 #endif
 
@@ -113,8 +128,16 @@ checkV##ARRAY (const TYPE *v, const TYPE *e, int n)     \
   return err;                                           \
 }
 
+CHECK_ARRAY(c, char, "0x%hhx")
+CHECK_ARRAY(s, short, "0x%hx")
 CHECK_ARRAY(i, int, "0x%x")
 CHECK_ARRAY(l, long long, "0x%llx")
+CHECK_ARRAY(uc, unsigned char, "0x%hhx")
+CHECK_ARRAY(us, unsigned short, "0x%hx")
+CHECK_ARRAY(ui, unsigned int, "0x%x")
+CHECK_ARRAY(ul, unsigned long long, "0x%llx")
+
+
 
 #define CHECK_FP_ARRAY(ARRAY, TYPE, ESP, FMT)                   \
 static int                                              \
@@ -163,4 +186,27 @@ union ieee754_double
       unsigned sign : 1;
    } bits __attribute__((packed));
 };
+#endif
+
+#define CHECK_FP_EXP(UINON_TYPE, VALUE_TYPE, ESP, FMT)		\
+static int							\
+__attribute__((noinline, unused))				\
+check_fp_##UINON_TYPE (UINON_TYPE u, const VALUE_TYPE *v)	\
+{								\
+  int i;							\
+  int err = 0;							\
+								\
+  for (i = 0; i < ARRAY_SIZE (u.a); i++)			\
+    if (u.a[i] > (v[i] + (ESP)) || u.a[i] < (v[i] - (ESP)))	\
+      {								\
+	err++;							\
+	PRINTF ("%i: " FMT " != " FMT "\n",			\
+		i, v[i], u.a[i]);				\
+      }								\
+  return err;							\
+}
+
+CHECK_FP_EXP (union128, float, ESP_FLOAT, "%f")
+#ifdef __SSE2__
+CHECK_FP_EXP (union128d, double, ESP_DOUBLE, "%f")
 #endif

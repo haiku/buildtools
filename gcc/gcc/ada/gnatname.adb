@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -26,10 +26,10 @@
 with Ada.Command_Line;  use Ada.Command_Line;
 with Ada.Text_IO;       use Ada.Text_IO;
 
+with GNAT.Command_Line; use GNAT.Command_Line;
 with GNAT.Dynamic_Tables;
 with GNAT.OS_Lib;       use GNAT.OS_Lib;
 
-with Hostparm;
 with Opt;
 with Osint;    use Osint;
 with Output;   use Output;
@@ -88,7 +88,7 @@ procedure Gnatname is
       Table_Initial        => 10,
       Table_Increment      => 100,
       Table_Name           => "Gnatname.Arguments");
-   --  Table to accumulate the foreign patterns
+   --  Table to accumulate directories and patterns
 
    package Preprocessor_Switches is new Table.Table
      (Table_Component_Type => String_Access,
@@ -289,7 +289,7 @@ procedure Gnatname is
                       Patterns.Last
                         (Arguments.Table (Arguments.Last).Foreign_Patterns) = 0
                   then
-                     Usage;
+                     Try_Help;
                      return;
                   end if;
 
@@ -345,6 +345,11 @@ procedure Gnatname is
                then
                   Subdirs :=
                     new String'(Arg (Subdirs_Switch'Length + 1 .. Arg'Last));
+
+               --  --no-backup
+
+               elsif Arg = "--no-backup" then
+                  Opt.No_Backup := True;
 
                --  -c
 
@@ -515,6 +520,7 @@ procedure Gnatname is
          Display_Usage_Version_And_Help;
 
          Write_Line ("  --subdirs=dir real obj/lib/exec dirs are subdirs");
+         Write_Line ("  --no-backup   do not create backup of project file");
          Write_Eol;
 
          Write_Line ("  --and        use different patterns");
@@ -542,35 +548,31 @@ procedure Gnatname is
 begin
    --  Add the directory where gnatname is invoked in front of the
    --  path, if gnatname is invoked with directory information.
-   --  Only do this if the platform is not VMS, where the notion of path
-   --  does not really exist.
 
-   if not Hostparm.OpenVMS then
-      declare
-         Command : constant String := Command_Name;
+   declare
+      Command : constant String := Command_Name;
 
-      begin
-         for Index in reverse Command'Range loop
-            if Command (Index) = Directory_Separator then
-               declare
-                  Absolute_Dir : constant String :=
-                                   Normalize_Pathname
-                                     (Command (Command'First .. Index));
+   begin
+      for Index in reverse Command'Range loop
+         if Command (Index) = Directory_Separator then
+            declare
+               Absolute_Dir : constant String :=
+                                Normalize_Pathname
+                                  (Command (Command'First .. Index));
 
-                  PATH         : constant String :=
-                                   Absolute_Dir &
-                                   Path_Separator &
-                                   Getenv ("PATH").all;
+               PATH         : constant String :=
+                                Absolute_Dir &
+                                Path_Separator &
+                                Getenv ("PATH").all;
 
-               begin
-                  Setenv ("PATH", PATH);
-               end;
+            begin
+               Setenv ("PATH", PATH);
+            end;
 
-               exit;
-            end if;
-         end loop;
-      end;
-   end if;
+            exit;
+         end if;
+      end loop;
+   end;
 
    --  Initialize tables
 
@@ -578,12 +580,12 @@ begin
    declare
       New_Arguments : Argument_Data;
       pragma Warnings (Off, New_Arguments);
-      --  Declaring this defaulted initialized object ensures
-      --  that the new allocated component of table Arguments
-      --  is correctly initialized.
+      --  Declaring this defaulted initialized object ensures that the new
+      --  allocated component of table Arguments is correctly initialized.
    begin
       Arguments.Append (New_Arguments);
    end;
+
    Patterns.Init (Arguments.Table (1).Directories);
    Patterns.Set_Last (Arguments.Table (1).Directories, 0);
    Patterns.Init (Arguments.Table (1).Name_Patterns);
@@ -613,7 +615,12 @@ begin
       and then
       Patterns.Last (Arguments.Table (Arguments.Last).Foreign_Patterns) = 0
    then
-      Usage;
+      if Argument_Count = 0 then
+         Usage;
+      elsif not Usage_Output then
+         Try_Help;
+      end if;
+
       return;
    end if;
 

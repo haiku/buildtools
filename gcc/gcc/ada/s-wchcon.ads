@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2009, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -36,7 +36,7 @@
 --  This unit may be used directly from an application program by providing
 --  an appropriate WITH, and the interface can be expected to remain stable.
 
-pragma Compiler_Unit;
+pragma Compiler_Unit_Warning;
 
 package System.WCh_Con is
    pragma Pure;
@@ -77,7 +77,7 @@ package System.WCh_Con is
 
    --     1.  Define a code for a new value of type WC_Encoding_Method
    --     2.  Adjust the definition of WC_Encoding_Method accordingly
-   --     3.  Provide appropriate conversion routines in System.Wch_Cnv
+   --     3.  Provide appropriate conversion routines in System.WCh_Cnv
    --     4.  Adjust definition of WC_Longest_Sequence if necessary
    --     5.  Add an entry in WC_Encoding_Letters for the new method
    --     6.  Add proper code to s-wchstw.adb, s-wchwts.adb, s-widwch.adb

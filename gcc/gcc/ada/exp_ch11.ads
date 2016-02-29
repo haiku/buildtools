@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,10 +31,10 @@ package Exp_Ch11 is
    procedure Expand_N_Exception_Declaration          (N : Node_Id);
    procedure Expand_N_Handled_Sequence_Of_Statements (N : Node_Id);
    procedure Expand_N_Raise_Constraint_Error         (N : Node_Id);
+   procedure Expand_N_Raise_Expression               (N : Node_Id);
    procedure Expand_N_Raise_Program_Error            (N : Node_Id);
    procedure Expand_N_Raise_Statement                (N : Node_Id);
    procedure Expand_N_Raise_Storage_Error            (N : Node_Id);
-   procedure Expand_N_Subprogram_Info                (N : Node_Id);
 
    --  Data structures for gathering information to build exception tables
    --  See runtime routine Ada.Exceptions for full details on the format and
@@ -83,11 +83,6 @@ package Exp_Ch11 is
    --  the Rcheck procedure for Code. The name is appended to Namet.Name_Buffer
    --  without the __gnat_rcheck_ prefix.
 
-   function Is_Non_Ada_Error (E : Entity_Id) return Boolean;
-   --  This function is provided for Gigi use. It returns True if operating on
-   --  VMS, and the argument E is the entity for System.Aux_Dec.Non_Ada_Error.
-   --  This is used to generate the special matching code for this exception.
-
    procedure Possible_Local_Raise (N : Node_Id; E : Entity_Id);
    --  This procedure is called whenever node N might cause the back end
    --  to generate a local raise for a local Constraint/Program/Storage_Error
@@ -95,4 +90,5 @@ package Exp_Ch11 is
    --  handler (and restriction No_Exception_Propagation is set), or if there
    --  is a local handler marking that it has a local raise. E is the entity
    --  of the corresponding exception.
+
 end Exp_Ch11;

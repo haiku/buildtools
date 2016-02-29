@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -67,7 +67,7 @@ package body Scng is
    procedure Accumulate_Token_Checksum;
    pragma Inline (Accumulate_Token_Checksum);
    --  Called after each numeric literal and identifier/keyword. For keywords,
-   --  the token used is Tok_Identifier. This allows to detect additional
+   --  the token used is Tok_Identifier. This allows detection of additional
    --  spaces added in sources when using the builder switch -m.
 
    procedure Accumulate_Token_Checksum_GNAT_6_3;
@@ -259,6 +259,82 @@ package body Scng is
       end case;
    end Accumulate_Token_Checksum_GNAT_5_03;
 
+   -----------------------
+   -- Check_End_Of_Line --
+   -----------------------
+
+   procedure Check_End_Of_Line is
+      Len : constant Int :=
+              Int (Scan_Ptr) -
+                Int (Current_Line_Start) -
+                  Wide_Char_Byte_Count;
+
+   --  Start of processing for Check_End_Of_Line
+
+   begin
+      if Style_Check then
+         Style.Check_Line_Terminator (Len);
+      end if;
+
+      --  Deal with checking maximum line length
+
+      if Style_Check and Style_Check_Max_Line_Length then
+         Style.Check_Line_Max_Length (Len);
+
+         --  If style checking is inactive, check maximum line length against
+         --  standard value.
+
+      elsif Len > Max_Line_Length then
+         Error_Msg
+           ("this line is too long",
+            Current_Line_Start + Source_Ptr (Max_Line_Length));
+      end if;
+
+      --  Now one more checking circuit. Normally we are only enforcing a limit
+      --  of physical characters, with tabs counting as one character. But if
+      --  after tab expansion we would have a total line length that exceeded
+      --  32766, that would really cause trouble, because column positions
+      --  would exceed the maximum we allow for a column count. Note: the limit
+      --  is 32766 rather than 32767, since we use a value of 32767 for special
+      --  purposes (see Sinput). Now we really do not want to go messing with
+      --  tabs in the normal case, so what we do is to check for a line that
+      --  has more than 4096 physical characters. Any shorter line could not
+      --  be a problem, even if it was all tabs.
+
+      if Len >= 4096 then
+         declare
+            Col : Natural;
+            Ptr : Source_Ptr;
+
+         begin
+            Col := 1;
+            Ptr := Current_Line_Start;
+            loop
+               exit when Ptr = Scan_Ptr;
+
+               if Source (Ptr) = ASCII.HT then
+                  Col := (Col - 1 + 8) / 8 * 8 + 1;
+               else
+                  Col := Col + 1;
+               end if;
+
+               if Col > 32766 then
+                  Error_Msg
+                    ("this line is longer than 32766 characters",
+                     Current_Line_Start);
+                  raise Unrecoverable_Error;
+               end if;
+
+               Ptr := Ptr + 1;
+            end loop;
+         end;
+      end if;
+
+      --  Reset wide character byte count for next line
+
+      Wide_Char_Byte_Count := 0;
+   end Check_End_Of_Line;
+
    ----------------------------
    -- Determine_Token_Casing --
    ----------------------------
@@ -336,10 +412,6 @@ package body Scng is
       Wptr : Source_Ptr;
       --  Used to remember start of last wide character scanned
 
-      procedure Check_End_Of_Line;
-      --  Called when end of line encountered. Checks that line is not too
-      --  long, and that other style checks for the end of line are met.
-
       function Double_Char_Token (C : Character) return Boolean;
       --  This function is used for double character tokens like := or <>. It
       --  checks if the character following Source (Scan_Ptr) is C, and if so
@@ -357,10 +429,7 @@ package body Scng is
       procedure Error_Illegal_Wide_Character;
       --  Give illegal wide character message. On return, Scan_Ptr is bumped
       --  past the illegal character, which may still leave us pointing to
-      --  junk, not much we can do if the escape sequence is messed up!
-
-      procedure Error_Long_Line;
-      --  Signal error of excessively long line
+      --  junk, not much we can do if the escape sequence is messed up.
 
       procedure Error_No_Double_Underline;
       --  Signal error of two underline or punctuation characters in a row.
@@ -387,78 +456,6 @@ package body Scng is
       function Start_Of_Wide_Character return Boolean;
       --  Returns True if the scan pointer is pointing to the start of a wide
       --  character sequence, does not modify the scan pointer in any case.
-
-      -----------------------
-      -- Check_End_Of_Line --
-      -----------------------
-
-      procedure Check_End_Of_Line is
-         Len : constant Int :=
-                 Int (Scan_Ptr) -
-                 Int (Current_Line_Start) -
-                 Wide_Char_Byte_Count;
-
-      begin
-         if Style_Check then
-            Style.Check_Line_Terminator (Len);
-         end if;
-
-         --  Deal with checking maximum line length
-
-         if Style_Check and Style_Check_Max_Line_Length then
-            Style.Check_Line_Max_Length (Len);
-
-         --  If style checking is inactive, check maximum line length against
-         --  standard value.
-
-         elsif Len > Max_Line_Length then
-            Error_Long_Line;
-         end if;
-
-         --  Now one more checking circuit. Normally we are only enforcing a
-         --  limit of physical characters, with tabs counting as one character.
-         --  But if after tab expansion we would have a total line length that
-         --  exceeded 32766, that would really cause trouble, because column
-         --  positions would exceed the maximum we allow for a column count.
-         --  Note: the limit is 32766 rather than 32767, since we use a value
-         --  of 32767 for special purposes (see Sinput). Now we really do not
-         --  want to go messing with tabs in the normal case, so what we do is
-         --  to check for a line that has more than 4096 physical characters.
-         --  Any shorter line could not be a problem, even if it was all tabs.
-
-         if Len >= 4096 then
-            declare
-               Col : Natural;
-               Ptr : Source_Ptr;
-
-            begin
-               Col := 1;
-               Ptr := Current_Line_Start;
-               loop
-                  exit when Ptr = Scan_Ptr;
-
-                  if Source (Ptr) = ASCII.HT then
-                     Col := (Col - 1 + 8) / 8 * 8 + 1;
-                  else
-                     Col := Col + 1;
-                  end if;
-
-                  if Col > 32766 then
-                     Error_Msg
-                       ("this line is longer than 32766 characters",
-                        Current_Line_Start);
-                     raise Unrecoverable_Error;
-                  end if;
-
-                  Ptr := Ptr + 1;
-               end loop;
-            end;
-         end if;
-
-         --  Reset wide character byte count for next line
-
-         Wide_Char_Byte_Count := 0;
-      end Check_End_Of_Line;
 
       -----------------------
       -- Double_Char_Token --
@@ -504,17 +501,6 @@ package body Scng is
          Scan_Ptr := Scan_Ptr + 1;
          Error_Msg ("illegal wide character", Wptr);
       end Error_Illegal_Wide_Character;
-
-      ---------------------
-      -- Error_Long_Line --
-      ---------------------
-
-      procedure Error_Long_Line is
-      begin
-         Error_Msg
-           ("this line is too long",
-            Current_Line_Start + Source_Ptr (Max_Line_Length));
-      end Error_Long_Line;
 
       -------------------------------
       -- Error_No_Double_Underline --
@@ -592,14 +578,12 @@ package body Scng is
          --  which the digit was expected on input, and is unchanged on return.
 
          procedure Scan_Integer;
-         --  Procedure to scan integer literal. On entry, Scan_Ptr points to a
-         --  digit, on exit Scan_Ptr points past the last character of the
-         --  integer.
+         --  Scan integer literal. On entry, Scan_Ptr points to a digit, on
+         --  exit Scan_Ptr points past the last character of the integer.
          --
          --  For each digit encountered, UI_Int_Value is multiplied by 10, and
-         --  the value of the digit added to the result. In addition, the
-         --  value in Scale is decremented by one for each actual digit
-         --  scanned.
+         --  the value of the digit added to the result. In addition, the value
+         --  in Scale is decremented by one for each actual digit scanned.
 
          --------------------------
          -- Error_Digit_Expected --
@@ -1587,7 +1571,7 @@ package body Scng is
                Token := Tok_Arrow;
 
                if Style_Check then
-                  Style.Check_Arrow;
+                  Style.Check_Arrow (Inside_Depends);
                end if;
 
                return;
@@ -1773,10 +1757,15 @@ package body Scng is
                   then
                      Scan_Ptr := Scan_Ptr + 1;
 
-                  --  Otherwise we have an illegal comment character
+                  --  Otherwise we have an illegal comment character, ignore
+                  --  this error in relaxed semantics mode.
 
                   else
-                     Error_Illegal_Character;
+                     if Relaxed_RM_Semantics then
+                        Scan_Ptr := Scan_Ptr + 1;
+                     else
+                        Error_Illegal_Character;
+                     end if;
                   end if;
                end loop;
 
@@ -1796,7 +1785,7 @@ package body Scng is
                --  If the SPARK restriction is set for this unit, then generate
                --  a token Tok_SPARK_Hide for a SPARK HIDE directive.
 
-               if Restriction_Check_Required (SPARK)
+               if Restriction_Check_Required (SPARK_05)
                  and then Source (Start_Of_Comment) = '#'
                then
                   declare
@@ -2527,7 +2516,7 @@ package body Scng is
 
             --  Left bracket not followed by a quote terminates an identifier.
             --  This is an error, but we don't want to give a junk error msg
-            --  about wide characters in this case!
+            --  about wide characters in this case.
 
             elsif Source (Scan_Ptr) = '['
               and then Source (Scan_Ptr + 1) /= '"'

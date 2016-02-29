@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -278,8 +278,28 @@ package Ada.Containers.Ordered_Sets is
          Key       : Key_Type) return Reference_Type;
 
    private
-      type Reference_Type
-         (Element : not null access Element_Type) is null record;
+      type Set_Access is access all Set;
+      for Set_Access'Storage_Size use 0;
+
+      type Key_Access is access all Key_Type;
+
+      type Reference_Control_Type is
+        new Ada.Finalization.Controlled with
+      record
+         Container : Set_Access;
+         Pos       : Cursor;
+         Old_Key   : Key_Access;
+      end record;
+
+      overriding procedure Adjust (Control : in out Reference_Control_Type);
+      pragma Inline (Adjust);
+
+      overriding procedure Finalize (Control : in out Reference_Control_Type);
+      pragma Inline (Finalize);
+
+      type Reference_Type (Element : not null access Element_Type) is record
+         Control  : Reference_Control_Type;
+      end record;
 
       use Ada.Streams;
 
@@ -398,5 +418,25 @@ private
                                            Lock   => 0));
 
    No_Element : constant Cursor := Cursor'(null, null);
+
+   type Iterator is new Limited_Controlled and
+     Set_Iterator_Interfaces.Reversible_Iterator with
+   record
+      Container : Set_Access;
+      Node      : Node_Access;
+   end record;
+
+   overriding procedure Finalize (Object : in out Iterator);
+
+   overriding function First (Object : Iterator) return Cursor;
+   overriding function Last  (Object : Iterator) return Cursor;
+
+   overriding function Next
+     (Object   : Iterator;
+      Position : Cursor) return Cursor;
+
+   overriding function Previous
+     (Object   : Iterator;
+      Position : Cursor) return Cursor;
 
 end Ada.Containers.Ordered_Sets;

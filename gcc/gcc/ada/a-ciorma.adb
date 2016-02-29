@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,27 +38,8 @@ pragma Elaborate_All (Ada.Containers.Red_Black_Trees.Generic_Keys);
 with System; use type System.Address;
 
 package body Ada.Containers.Indefinite_Ordered_Maps is
+   pragma Annotate (CodePeer, Skip_Analysis);
    pragma Suppress (All_Checks);
-
-   type Iterator is new Limited_Controlled and
-     Map_Iterator_Interfaces.Reversible_Iterator with
-   record
-      Container : Map_Access;
-      Node      : Node_Access;
-   end record;
-
-   overriding procedure Finalize (Object : in out Iterator);
-
-   overriding function First (Object : Iterator) return Cursor;
-   overriding function Last  (Object : Iterator) return Cursor;
-
-   overriding function Next
-     (Object   : Iterator;
-      Position : Cursor) return Cursor;
-
-   overriding function Previous
-     (Object   : Iterator;
-      Position : Cursor) return Cursor;
 
    -----------------------------
    -- Node Access Subprograms --
@@ -333,7 +314,7 @@ package body Ada.Containers.Indefinite_Ordered_Maps is
       end if;
 
       Target.Clear;
-      Insert_Items (Target.Tree);
+      Insert_Items (Source.Tree);
    end Assign;
 
    -------------
@@ -475,6 +456,7 @@ package body Ada.Containers.Indefinite_Ordered_Maps is
                             Color   => Source.Color,
                             Key     => K,
                             Element => E);
+
    exception
       when others =>
          Free_Key (K);
@@ -986,6 +968,7 @@ package body Ada.Containers.Indefinite_Ordered_Maps is
 
       begin
          Local_Iterate (Container.Tree);
+
       exception
          when others =>
             B := B - 1;
@@ -1325,7 +1308,6 @@ package body Ada.Containers.Indefinite_Ordered_Maps is
          declare
             K : Key_Type renames Position.Node.Key.all;
             E : Element_Type renames Position.Node.Element.all;
-
          begin
             Process (K, E);
          exception
@@ -1703,10 +1685,8 @@ package body Ada.Containers.Indefinite_Ordered_Maps is
          declare
             K : Key_Type renames Position.Node.Key.all;
             E : Element_Type renames Position.Node.Element.all;
-
          begin
             Process (K, E);
-
          exception
             when others =>
                L := L - 1;

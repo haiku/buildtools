@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -47,18 +47,17 @@ package Atree is
 --  program internally. Syntactic and semantic information is combined in
 --  this tree. There is no separate symbol table structure.
 
---  WARNING: There is a C version of this package. Any changes to this
---  source file must be properly reflected in the C header file atree.h
+--  WARNING: There is a C version of this package. Any changes to this source
+--  file must be properly reflected in the C header file atree.h
 
 --  Package Atree defines the basic structure of the tree and its nodes and
---  provides the basic abstract interface for manipulating the tree. Two
---  other packages use this interface to define the representation of Ada
---  programs using this tree format. The package Sinfo defines the basic
---  representation of the syntactic structure of the program, as output
---  by the parser. The package Entity_Info defines the semantic information
---  which is added to the tree nodes that represent declared entities (i.e.
---  the information which might typically be described in a separate symbol
---  table structure).
+--  provides the basic abstract interface for manipulating the tree. Two other
+--  packages use this interface to define the representation of Ada programs
+--  using this tree format. The package Sinfo defines the basic representation
+--  of the syntactic structure of the program, as output by the parser. The
+--  package Einfo defines the semantic information which is added to the tree
+--  nodes that represent declared entities (i.e. the information which might
+--  typically be described in a separate symbol table structure).
 
 --  The front end of the compiler first parses the program and generates a
 --  tree that is simply a syntactic representation of the program in abstract
@@ -69,13 +68,14 @@ package Atree is
    -- Size of Entities --
    ----------------------
 
-   --  Currently entities are composed of 6 sequentially allocated 32-byte
+   --  Currently entities are composed of 7 sequentially allocated 32-byte
    --  nodes, considered as a single record. The following definition gives
    --  the number of extension nodes.
 
-   Num_Extension_Nodes : Int := 5;
+   Num_Extension_Nodes : Node_Id := 6;
    --  This value is increased by one if debug flag -gnatd.N is set. This is
-   --  for testing performance impact of adding a new extension node.
+   --  for testing performance impact of adding a new extension node. We make
+   --  this of type Node_Id for easy reference in loops using this value.
 
    ----------------------------------------
    -- Definitions of Fields in Tree Node --
@@ -168,16 +168,20 @@ package Atree is
    --   it is useful to be able to do untyped traversals, and an internal
    --   package in Atree allows for direct untyped accesses in such cases.
 
-   --   Flag4         Fifteen Boolean flags (use depends on Nkind and
-   --   Flag5         Ekind, as described for FieldN). Again the access
-   --   Flag6         is usually via subprograms in Sinfo and Einfo which
-   --   Flag7         provide high-level synonyms for these flags, and
-   --   Flag8         contain debugging code that checks that the values
-   --   Flag9         in Nkind and Ekind are appropriate for the access.
+   --   Flag0         Nineteen Boolean flags (use depends on Nkind and
+   --   Flag1         Ekind, as described for FieldN). Again the access
+   --   Flag2         is usually via subprograms in Sinfo and Einfo which
+   --   Flag3         provide high-level synonyms for these flags, and
+   --   Flag4         contain debugging code that checks that the values
+   --   Flag5         in Nkind and Ekind are appropriate for the access.
+   --   Flag6
+   --   Flag7
+   --   Flag8
+   --   Flag9
    --   Flag10
-   --   Flag11        Note that Flag1-3 are missing from this list. For
-   --   Flag12        historical reasons, these flag names are unused.
-   --   Flag13
+   --   Flag11        Note that Flag0-3 are stored separately in the Flags
+   --   Flag12        table, but that's a detail of the implementation which
+   --   Flag13        is entirely hidden by the funcitonal interface.
    --   Flag14
    --   Flag15
    --   Flag16
@@ -209,8 +213,8 @@ package Atree is
    --   Elist6        Synonym for Field6 typed as Elist_Id (Empty = No_Elist)
    --   Uint6         Synonym for Field6 typed as Uint (Empty = Uint_0)
 
-   --   Similar definitions for Field7 to Field35 (and also Node7-Node35,
-   --   Elist7-Elist35, Uint7-Uint35, Ureal7-Ureal35). Note that not all
+   --   Similar definitions for Field7 to Field41 (and also Node7-Node41,
+   --   Elist7-Elist41, Uint7-Uint41, Ureal7-Ureal41). Note that not all
    --   these functions are defined, only the ones that are actually used.
 
    function Last_Node_Id return Node_Id;
@@ -219,6 +223,9 @@ package Atree is
 
    function Nodes_Address return System.Address;
    --  Return address of Nodes table (used in Back_End for Gigi call)
+
+   function Flags_Address return System.Address;
+   --  Return address of Flags table (used in Back_End for Gigi call)
 
    function Num_Nodes return Nat;
    --  Total number of nodes allocated, where an entity counts as a single
@@ -306,7 +313,20 @@ package Atree is
 
    Warnings_Detected : Nat := 0;
    --  Number of warnings detected. Initialized to zero at the start of
-   --  compilation. Initialized for -gnatVa use, see comment above.
+   --  compilation. Initialized for -gnatVa use, see comment above. This
+   --  count includes the count of style and info messages.
+
+   Info_Messages : Nat := 0;
+   --  Number of info messages generated. Info messages are neved treated as
+   --  errors (whether from use of the pragma, or the compiler switch -gnatwe).
+
+   Check_Messages : Nat := 0;
+   --  Number of check messages generated. Check messages are neither warnings
+   --  nor errors.
+
+   Warnings_Treated_As_Errors : Nat := 0;
+   --  Number of warnings changed into errors as a result of matching a pattern
+   --  given in a Warning_As_Error configuration pragma.
 
    Configurable_Run_Time_Violations : Nat := 0;
    --  Count of configurable run time violations so far. This is used to
@@ -335,13 +355,13 @@ package Atree is
 
    --  Field1-5 fields are set to Empty
 
-   --  Field6-35 fields in extended nodes are set to Empty
+   --  Field6-41 fields in extended nodes are set to Empty
 
    --  Parent is set to Empty
 
    --  All Boolean flag fields are set to False
 
-   --  Note: the value Empty is used in Field1-Field35 to indicate a null node.
+   --  Note: the value Empty is used in Field1-Field41 to indicate a null node.
    --  The usage varies. The common uses are to indicate absence of an optional
    --  clause or a completely unused Field1-35 field.
 
@@ -350,7 +370,7 @@ package Atree is
    -------------------------------------
 
    --  A subpackage Atree.Unchecked_Access provides routines for reading and
-   --  writing the fields defined above (Field1-35, Node1-35, Flag4-317 etc).
+   --  writing the fields defined above (Field1-35, Node1-35, Flag0-317 etc).
    --  These unchecked access routines can be used for untyped traversals.
    --  In addition they are used in the implementations of the Sinfo and
    --  Einfo packages. These packages both provide logical synonyms for
@@ -462,25 +482,26 @@ package Atree is
    --  with copying aspect specifications where this is required.
 
    function New_Copy (Source : Node_Id) return Node_Id;
-   --  This function allocates a completely new node, and then initializes it
-   --  by copying the contents of the source node into it. The contents of the
-   --  source node is not affected. The target node is always marked as not
-   --  being in a list (even if the source is a list member). The new node will
-   --  have an extension if the source has an extension. New_Copy (Empty)
-   --  returns Empty and New_Copy (Error) returns Error. Note that, unlike
-   --  Copy_Separate_Tree, New_Copy does not recursively copy any descendents,
-   --  so in general parent pointers are not set correctly for the descendents
-   --  of the copied node. Both normal and extended nodes (entities) may be
-   --  copied using New_Copy.
+   --  This function allocates a completely new node, and then initializes
+   --  it by copying the contents of the source node into it. The contents of
+   --  the source node is not affected. The target node is always marked as
+   --  not being in a list (even if the source is a list member), and not
+   --  overloaded. The new node will have an extension if the source has
+   --  an extension. New_Copy (Empty) returns Empty, and New_Copy (Error)
+   --  returns Error. Note that, unlike Copy_Separate_Tree, New_Copy does not
+   --  recursively copy any descendents, so in general parent pointers are not
+   --  set correctly for the descendents of the copied node. Both normal and
+   --  extended nodes (entities) may be copied using New_Copy.
 
    function Relocate_Node (Source : Node_Id) return Node_Id;
    --  Source is a non-entity node that is to be relocated. A new node is
-   --  allocated and the contents of Source are copied to this node using
-   --  Copy_Node. The parent pointers of descendents of the node are then
+   --  allocated, and the contents of Source are copied to this node, using
+   --  New_Copy. The parent pointers of descendents of the node are then
    --  adjusted to point to the relocated copy. The original node is not
    --  modified, but the parent pointers of its descendents are no longer
-   --  valid. This routine is used in conjunction with the tree rewrite
-   --  routines (see descriptions of Replace/Rewrite).
+   --  valid. The new copy is always marked as not overloaded. This routine is
+   --  used in conjunction with the tree rewrite routines (see descriptions of
+   --  Replace/Rewrite).
    --
    --  Note that the resulting node has the same parent as the source node, and
    --  is thus still attached to the tree. It is valid for Source to be Empty,
@@ -493,10 +514,17 @@ package Atree is
    --  a copied node by the parent field are also copied.) The parent pointers
    --  in the copy are properly set. Copy_Separate_Tree (Empty/Error) returns
    --  Empty/Error. The new subtree does not share entities with the source,
-   --  but has new entities with the same name. Most of the time this routine
-   --  is called on an unanalyzed tree, and no semantic information is copied.
-   --  However, to ensure that no entities are shared between the two when the
-   --  source is already analyzed, entity fields in the copy are zeroed out.
+   --  but has new entities with the same name.
+   --
+   --  Most of the time this routine is called on an unanalyzed tree, and no
+   --  semantic information is copied. However, to ensure that no entities
+   --  are shared between the two when the source is already analyzed, and
+   --  that the result looks like an unanalyzed tree from the parser, Entity
+   --  fields and Etype fields are set to Empty, and Analyzed flags set False.
+   --
+   --  In addition, Expanded_Name nodes are converted back into the original
+   --  parser form (where they are Selected_Components), so that reanalysis
+   --  does the right thing.
 
    function Copy_Separate_List (Source : List_Id) return List_Id;
    --  Applies Copy_Separate_Tree to each element of the Source list, returning
@@ -577,14 +605,8 @@ package Atree is
    --  The following functions return the contents of the indicated field of
    --  the node referenced by the argument, which is a Node_Id.
 
-   function Nkind             (N : Node_Id) return Node_Kind;
-   pragma Inline (Nkind);
-
    function Analyzed          (N : Node_Id) return Boolean;
    pragma Inline (Analyzed);
-
-   function Has_Aspects       (N : Node_Id) return Boolean;
-   pragma Inline (Has_Aspects);
 
    function Comes_From_Source (N : Node_Id) return Boolean;
    pragma Inline (Comes_From_Source);
@@ -592,26 +614,36 @@ package Atree is
    function Error_Posted      (N : Node_Id) return Boolean;
    pragma Inline (Error_Posted);
 
-   function Sloc              (N : Node_Id) return Source_Ptr;
-   pragma Inline (Sloc);
+   function Has_Aspects       (N : Node_Id) return Boolean;
+   pragma Inline (Has_Aspects);
 
-   function Paren_Count       (N : Node_Id) return Nat;
-   pragma Inline (Paren_Count);
+   function Is_Ignored_Ghost_Node
+                              (N : Node_Id) return Boolean;
+   pragma Inline (Is_Ignored_Ghost_Node);
 
-   function Parent            (N : Node_Id) return Node_Id;
-   pragma Inline (Parent);
-   --  Returns the parent of a node if the node is not a list member, or else
-   --  the parent of the list containing the node if the node is a list member.
+   function Nkind             (N : Node_Id) return Node_Kind;
+   pragma Inline (Nkind);
 
    function No                (N : Node_Id) return Boolean;
    pragma Inline (No);
    --  Tests given Id for equality with the Empty node. This allows notations
    --  like "if No (Variant_Part)" as opposed to "if Variant_Part = Empty".
 
+   function Parent            (N : Node_Id) return Node_Id;
+   pragma Inline (Parent);
+   --  Returns the parent of a node if the node is not a list member, or else
+   --  the parent of the list containing the node if the node is a list member.
+
+   function Paren_Count       (N : Node_Id) return Nat;
+   pragma Inline (Paren_Count);
+
    function Present           (N : Node_Id) return Boolean;
    pragma Inline (Present);
    --  Tests given Id for inequality with the Empty node. This allows notations
    --  like "if Present (Statement)" as opposed to "if Statement /= Empty".
+
+   function Sloc              (N : Node_Id) return Source_Ptr;
+   pragma Inline (Sloc);
 
    ---------------------
    -- Node_Kind Tests --
@@ -736,6 +768,39 @@ package Atree is
       V6 : Entity_Kind) return Boolean;
 
    function Ekind_In
+     (E  : Entity_Id;
+      V1 : Entity_Kind;
+      V2 : Entity_Kind;
+      V3 : Entity_Kind;
+      V4 : Entity_Kind;
+      V5 : Entity_Kind;
+      V6 : Entity_Kind;
+      V7 : Entity_Kind) return Boolean;
+
+   function Ekind_In
+     (E  : Entity_Id;
+      V1 : Entity_Kind;
+      V2 : Entity_Kind;
+      V3 : Entity_Kind;
+      V4 : Entity_Kind;
+      V5 : Entity_Kind;
+      V6 : Entity_Kind;
+      V7 : Entity_Kind;
+      V8 : Entity_Kind) return Boolean;
+
+   function Ekind_In
+     (E  : Entity_Id;
+      V1 : Entity_Kind;
+      V2 : Entity_Kind;
+      V3 : Entity_Kind;
+      V4 : Entity_Kind;
+      V5 : Entity_Kind;
+      V6 : Entity_Kind;
+      V7 : Entity_Kind;
+      V8 : Entity_Kind;
+      V9 : Entity_Kind) return Boolean;
+
+   function Ekind_In
      (T  : Entity_Kind;
       V1 : Entity_Kind;
       V2 : Entity_Kind) return Boolean;
@@ -770,6 +835,39 @@ package Atree is
       V5 : Entity_Kind;
       V6 : Entity_Kind) return Boolean;
 
+   function Ekind_In
+     (T  : Entity_Kind;
+      V1 : Entity_Kind;
+      V2 : Entity_Kind;
+      V3 : Entity_Kind;
+      V4 : Entity_Kind;
+      V5 : Entity_Kind;
+      V6 : Entity_Kind;
+      V7 : Entity_Kind) return Boolean;
+
+   function Ekind_In
+     (T  : Entity_Kind;
+      V1 : Entity_Kind;
+      V2 : Entity_Kind;
+      V3 : Entity_Kind;
+      V4 : Entity_Kind;
+      V5 : Entity_Kind;
+      V6 : Entity_Kind;
+      V7 : Entity_Kind;
+      V8 : Entity_Kind) return Boolean;
+
+   function Ekind_In
+     (T  : Entity_Kind;
+      V1 : Entity_Kind;
+      V2 : Entity_Kind;
+      V3 : Entity_Kind;
+      V4 : Entity_Kind;
+      V5 : Entity_Kind;
+      V6 : Entity_Kind;
+      V7 : Entity_Kind;
+      V8 : Entity_Kind;
+      V9 : Entity_Kind) return Boolean;
+
    pragma Inline (Ekind_In);
    --  Inline all above functions
 
@@ -795,38 +893,41 @@ package Atree is
    --  to be set in the specified field. Note that Set_Nkind is in the next
    --  section, since its use is restricted.
 
-   procedure Set_Sloc         (N : Node_Id; Val : Source_Ptr);
-   pragma Inline (Set_Sloc);
-
-   procedure Set_Paren_Count  (N : Node_Id; Val : Nat);
-   pragma Inline (Set_Paren_Count);
-
-   procedure Set_Parent       (N : Node_Id; Val : Node_Id);
-   pragma Inline (Set_Parent);
-
-   procedure Set_Analyzed     (N : Node_Id; Val : Boolean := True);
+   procedure Set_Analyzed (N : Node_Id; Val : Boolean := True);
    pragma Inline (Set_Analyzed);
+
+   procedure Set_Comes_From_Source (N : Node_Id; Val : Boolean);
+   pragma Inline (Set_Comes_From_Source);
+   --  Note that this routine is very rarely used, since usually the default
+   --  mechanism provided sets the right value, but in some unusual cases, the
+   --  value needs to be reset (e.g. when a source node is copied, and the copy
+   --  must not have Comes_From_Source set).
 
    procedure Set_Error_Posted (N : Node_Id; Val : Boolean := True);
    pragma Inline (Set_Error_Posted);
 
-   procedure Set_Comes_From_Source (N : Node_Id; Val : Boolean);
-   pragma Inline (Set_Comes_From_Source);
-   --  Note that this routine is very rarely used, since usually the
-   --  default mechanism provided sets the right value, but in some
-   --  unusual cases, the value needs to be reset (e.g. when a source
-   --  node is copied, and the copy must not have Comes_From_Source set).
-
    procedure Set_Has_Aspects (N : Node_Id; Val : Boolean := True);
    pragma Inline (Set_Has_Aspects);
+
+   procedure Set_Is_Ignored_Ghost_Node (N : Node_Id; Val : Boolean := True);
+   pragma Inline (Set_Is_Ignored_Ghost_Node);
 
    procedure Set_Original_Node (N : Node_Id; Val : Node_Id);
    pragma Inline (Set_Original_Node);
    --  Note that this routine is used only in very peculiar cases. In normal
    --  cases, the Original_Node link is set by calls to Rewrite. We currently
-   --  use it in ASIS mode to manually set the link from pragma expressions
-   --  to their aspect original source expressions, so that the original source
+   --  use it in ASIS mode to manually set the link from pragma expressions to
+   --  their aspect original source expressions, so that the original source
    --  expressions accessed by ASIS are also semantically analyzed.
+
+   procedure Set_Parent (N : Node_Id; Val : Node_Id);
+   pragma Inline (Set_Parent);
+
+   procedure Set_Paren_Count (N : Node_Id; Val : Nat);
+   pragma Inline (Set_Paren_Count);
+
+   procedure Set_Sloc (N : Node_Id; Val : Source_Ptr);
+   pragma Inline (Set_Sloc);
 
    ------------------------------
    -- Entity Update Procedures --
@@ -939,12 +1040,15 @@ package Atree is
    function Original_Node (Node : Node_Id) return Node_Id;
    pragma Inline (Original_Node);
    --  If Node has not been rewritten, then returns its input argument
-   --  unchanged, else returns the Node for the original subtree.
+   --  unchanged, else returns the Node for the original subtree. Note that
+   --  this is used extensively by ASIS on the trees constructed in ASIS mode
+   --  to reconstruct the original semantic tree. See section in sinfo.ads
+   --  for requirements on original nodes returned by this function.
    --
    --  Note: Parents are not preserved in original tree nodes that are
    --  retrieved in this way (i.e. their children may have children whose
-   --  pointers which reference some other node).
-
+   --  pointers which reference some other node). This needs more details???
+   --
    --  Note: there is no direct mechanism for deleting an original node (in
    --  a manner that can be reversed later). One possible approach is to use
    --  Rewrite to substitute a null statement for the node to be deleted.
@@ -1081,6 +1185,24 @@ package Atree is
       function Field35 (N : Node_Id) return Union_Id;
       pragma Inline (Field35);
 
+      function Field36 (N : Node_Id) return Union_Id;
+      pragma Inline (Field36);
+
+      function Field37 (N : Node_Id) return Union_Id;
+      pragma Inline (Field37);
+
+      function Field38 (N : Node_Id) return Union_Id;
+      pragma Inline (Field38);
+
+      function Field39 (N : Node_Id) return Union_Id;
+      pragma Inline (Field39);
+
+      function Field40 (N : Node_Id) return Union_Id;
+      pragma Inline (Field40);
+
+      function Field41 (N : Node_Id) return Union_Id;
+      pragma Inline (Field41);
+
       function Node1 (N : Node_Id) return Node_Id;
       pragma Inline (Node1);
 
@@ -1171,6 +1293,39 @@ package Atree is
       function Node30 (N : Node_Id) return Node_Id;
       pragma Inline (Node30);
 
+      function Node31 (N : Node_Id) return Node_Id;
+      pragma Inline (Node31);
+
+      function Node32 (N : Node_Id) return Node_Id;
+      pragma Inline (Node32);
+
+      function Node33 (N : Node_Id) return Node_Id;
+      pragma Inline (Node33);
+
+      function Node34 (N : Node_Id) return Node_Id;
+      pragma Inline (Node34);
+
+      function Node35 (N : Node_Id) return Node_Id;
+      pragma Inline (Node35);
+
+      function Node36 (N : Node_Id) return Node_Id;
+      pragma Inline (Node36);
+
+      function Node37 (N : Node_Id) return Node_Id;
+      pragma Inline (Node37);
+
+      function Node38 (N : Node_Id) return Node_Id;
+      pragma Inline (Node38);
+
+      function Node39 (N : Node_Id) return Node_Id;
+      pragma Inline (Node39);
+
+      function Node40 (N : Node_Id) return Node_Id;
+      pragma Inline (Node40);
+
+      function Node41 (N : Node_Id) return Node_Id;
+      pragma Inline (Node41);
+
       function List1 (N : Node_Id) return List_Id;
       pragma Inline (List1);
 
@@ -1212,6 +1367,9 @@ package Atree is
 
       function Elist8 (N : Node_Id) return Elist_Id;
       pragma Inline (Elist8);
+
+      function Elist9 (N : Node_Id) return Elist_Id;
+      pragma Inline (Elist9);
 
       function Elist10 (N : Node_Id) return Elist_Id;
       pragma Inline (Elist10);
@@ -1302,6 +1460,9 @@ package Atree is
       function Uint22 (N : Node_Id) return Uint;
       pragma Inline (Uint22);
 
+      function Uint24 (N : Node_Id) return Uint;
+      pragma Inline (Uint24);
+
       function Ureal3 (N : Node_Id) return Ureal;
       pragma Inline (Ureal3);
 
@@ -1310,6 +1471,18 @@ package Atree is
 
       function Ureal21 (N : Node_Id) return Ureal;
       pragma Inline (Ureal21);
+
+      function Flag0 (N : Node_Id) return Boolean;
+      pragma Inline (Flag0);
+
+      function Flag1 (N : Node_Id) return Boolean;
+      pragma Inline (Flag1);
+
+      function Flag2 (N : Node_Id) return Boolean;
+      pragma Inline (Flag2);
+
+      function Flag3 (N : Node_Id) return Boolean;
+      pragma Inline (Flag3);
 
       function Flag4 (N : Node_Id) return Boolean;
       pragma Inline (Flag4);
@@ -2363,6 +2536,24 @@ package Atree is
       procedure Set_Field35 (N : Node_Id; Val : Union_Id);
       pragma Inline (Set_Field35);
 
+      procedure Set_Field36 (N : Node_Id; Val : Union_Id);
+      pragma Inline (Set_Field36);
+
+      procedure Set_Field37 (N : Node_Id; Val : Union_Id);
+      pragma Inline (Set_Field37);
+
+      procedure Set_Field38 (N : Node_Id; Val : Union_Id);
+      pragma Inline (Set_Field38);
+
+      procedure Set_Field39 (N : Node_Id; Val : Union_Id);
+      pragma Inline (Set_Field39);
+
+      procedure Set_Field40 (N : Node_Id; Val : Union_Id);
+      pragma Inline (Set_Field40);
+
+      procedure Set_Field41 (N : Node_Id; Val : Union_Id);
+      pragma Inline (Set_Field41);
+
       procedure Set_Node1 (N : Node_Id; Val : Node_Id);
       pragma Inline (Set_Node1);
 
@@ -2453,6 +2644,39 @@ package Atree is
       procedure Set_Node30 (N : Node_Id; Val : Node_Id);
       pragma Inline (Set_Node30);
 
+      procedure Set_Node31 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node31);
+
+      procedure Set_Node32 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node32);
+
+      procedure Set_Node33 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node33);
+
+      procedure Set_Node34 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node34);
+
+      procedure Set_Node35 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node35);
+
+      procedure Set_Node36 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node36);
+
+      procedure Set_Node37 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node37);
+
+      procedure Set_Node38 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node38);
+
+      procedure Set_Node39 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node39);
+
+      procedure Set_Node40 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node40);
+
+      procedure Set_Node41 (N : Node_Id; Val : Node_Id);
+      pragma Inline (Set_Node41);
+
       procedure Set_List1 (N : Node_Id; Val : List_Id);
       pragma Inline (Set_List1);
 
@@ -2494,6 +2718,9 @@ package Atree is
 
       procedure Set_Elist8 (N : Node_Id; Val : Elist_Id);
       pragma Inline (Set_Elist8);
+
+      procedure Set_Elist9 (N : Node_Id; Val : Elist_Id);
+      pragma Inline (Set_Elist9);
 
       procedure Set_Elist10 (N : Node_Id; Val : Elist_Id);
       pragma Inline (Set_Elist10);
@@ -2579,6 +2806,9 @@ package Atree is
       procedure Set_Uint22 (N : Node_Id; Val : Uint);
       pragma Inline (Set_Uint22);
 
+      procedure Set_Uint24 (N : Node_Id; Val : Uint);
+      pragma Inline (Set_Uint24);
+
       procedure Set_Ureal3 (N : Node_Id; Val : Ureal);
       pragma Inline (Set_Ureal3);
 
@@ -2587,6 +2817,18 @@ package Atree is
 
       procedure Set_Ureal21 (N : Node_Id; Val : Ureal);
       pragma Inline (Set_Ureal21);
+
+      procedure Set_Flag0 (N : Node_Id; Val : Boolean);
+      pragma Inline (Set_Flag0);
+
+      procedure Set_Flag1 (N : Node_Id; Val : Boolean);
+      pragma Inline (Set_Flag1);
+
+      procedure Set_Flag2 (N : Node_Id; Val : Boolean);
+      pragma Inline (Set_Flag2);
+
+      procedure Set_Flag3 (N : Node_Id; Val : Boolean);
+      pragma Inline (Set_Flag3);
 
       procedure Set_Flag4 (N : Node_Id; Val : Boolean);
       pragma Inline (Set_Flag4);
@@ -3585,12 +3827,12 @@ package Atree is
       -------------------------
 
       --  The nodes of the tree are stored in a table (i.e. an array). In the
-      --  case of extended nodes five consecutive components in the array are
+      --  case of extended nodes six consecutive components in the array are
       --  used. There are thus two formats for array components. One is used
       --  for non-extended nodes, and for the first component of extended
       --  nodes. The other is used for the extension parts (second, third,
-      --  fourth and fifth components) of an extended node. A variant record
-      --  structure is used to distinguish the two formats.
+      --  fourth, fifth, and sixth components) of an extended node. A variant
+      --  record structure is used to distinguish the two formats.
 
       type Node_Record (Is_Extension : Boolean := False) is record
 
@@ -3644,10 +3886,13 @@ package Atree is
          Flag16 : Boolean;
          Flag17 : Boolean;
          Flag18 : Boolean;
-         --  The eighteen flags for a normal node
+         --  Flags 4-18 for a normal node. Note that Flags 0-3 are stored
+         --  separately in the Flags array.
 
-         --  The above fields are used as follows in components 2-6 of
-         --  an extended node entry.
+         --  The above fields are used as follows in components 2-6 of an
+         --  extended node entry. Currently they are not used in component 7,
+         --  since for now we have all the flags we need, but of course they
+         --  can be used for additional flags when needed in component 7.
 
          --    In_List           used as Flag19,Flag40,Flag129,Flag216,Flag287
          --    Has_Aspects       used as Flag20,Flag41,Flag130,Flag217,Flag288
@@ -3678,13 +3923,14 @@ package Atree is
          --  node, this field holds the Node_Kind value. For an extended node,
          --  The Nkind field is used as follows:
          --
-         --     Second entry: holds the Ekind field of the entity
-         --     Third entry:  holds 8 additional flags (Flag65-Flag72)
-         --     Fourth entry: holds 8 additional flags (Flag239-246)
-         --     Fifth entry:  holds 8 additional flags (Flag247-254)
-         --     Sixth entry:  holds 8 additional flags (Flag310-317)
+         --     Second entry:  holds the Ekind field of the entity
+         --     Third entry:   holds 8 additional flags (Flag65-Flag72)
+         --     Fourth entry:  holds 8 additional flags (Flag239-246)
+         --     Fifth entry:   holds 8 additional flags (Flag247-254)
+         --     Sixth entry:   holds 8 additional flags (Flag310-317)
+         --     Seventh entry: currently unused
 
-         --  Now finally (on an 32-bit boundary!) comes the variant part
+         --  Now finally (on an 32-bit boundary) comes the variant part
 
          case Is_Extension is
 
@@ -3755,11 +4001,18 @@ package Atree is
             --    Field6-11      Holds Field30-Field35
             --    Field12        Holds Flag255-Flag286
 
+            --  In the seventh component, the extension format as described
+            --  above is used to hold additional general fields as follows.
+            --  Flags are also available potentially, but not used now, as
+            --  we are not short of entity flags.
+
+            --    Field6-11     Holds Field36-Field41
+
          end case;
       end record;
 
       pragma Pack (Node_Record);
-      for Node_Record'Size use 8*32;
+      for Node_Record'Size use 8 * 32;
       for Node_Record'Alignment use 4;
 
       function E_To_N is new Unchecked_Conversion (Entity_Kind, Node_Kind);
@@ -3808,8 +4061,8 @@ package Atree is
          Field5            => Empty_List_Or_Node);
 
       --  Default value used to initialize node extensions (i.e. the second
-      --  through sixth components of an extended node). Note we are cheating
-      --  a bit here when it comes to Node12, which really holds flags and (for
+      --  through seventh components of an extended node). Note we are cheating
+      --  a bit here when it comes to Node12, which often holds flags and (for
       --  the third component), the convention. But it works because Empty,
       --  False, Convention_Ada, all happen to be all zero bits.
 
@@ -3852,7 +4105,7 @@ package Atree is
          Field12           => Empty_List_Or_Node);
 
       --  The following defines the extendable array used for the nodes table
-      --  Nodes with extensions use five consecutive entries in the array
+      --  Nodes with extensions use six consecutive entries in the array
 
       package Nodes is new Table.Table (
         Table_Component_Type => Node_Record,
@@ -3861,6 +4114,42 @@ package Atree is
         Table_Initial        => Alloc.Nodes_Initial,
         Table_Increment      => Alloc.Nodes_Increment,
         Table_Name           => "Nodes");
+
+      --  The following is a parallel table to Nodes, which provides 8 more
+      --  bits of space that logically belong to the corresponding node. This
+      --  is currently used to implement Flags 0,1,2,3 for normal nodes, or
+      --  the first component of an extended node (four bits unused). Entries
+      --  for extending components are completely unused.
+
+      type Flags_Byte is record
+         Flag0  : Boolean;
+         Flag1  : Boolean;
+         Flag2  : Boolean;
+         Flag3  : Boolean;
+
+         Is_Ignored_Ghost_Node : Boolean;
+         --  Flag denothing whether the node is subject to pragma Ghost with
+         --  policy Ignore. The name of the flag should be Flag4, however this
+         --  requires changing the names of all remaining 300+ flags.
+
+         Spare1 : Boolean;
+         Spare2 : Boolean;
+         Spare3 : Boolean;
+      end record;
+
+      for Flags_Byte'Size use 8;
+      pragma Pack (Flags_Byte);
+
+      Default_Flags : constant Flags_Byte := (others => False);
+      --  Default value used to initialize new entries
+
+      package Flags is new Table.Table (
+        Table_Component_Type => Flags_Byte,
+        Table_Index_Type     => Node_Id'Base,
+        Table_Low_Bound      => First_Node_Id,
+        Table_Initial        => Alloc.Nodes_Initial,
+        Table_Increment      => Alloc.Nodes_Increment,
+        Table_Name           => "Flags");
 
    end Atree_Private_Part;
 

@@ -1,5 +1,5 @@
 // PR c++/45923
-// { dg-options -std=c++0x }
+// { dg-do compile { target c++11 } }
 
 int f(int);
 
@@ -16,7 +16,7 @@ int main()
 struct complex 			// { dg-message "no constexpr constructor" }
 {
   complex(double r, double i) : re(r), im(i) { }
-  constexpr double real() { return re; } // { dg-error "not a literal type" }
+  constexpr double real() const { return re; } // { dg-error "not a literal type" }
   double imag() const { return im; }
 
 private:
