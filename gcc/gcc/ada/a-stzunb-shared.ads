@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2011, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -424,7 +424,7 @@ private
       Last : Natural := 0;
       Data : Wide_Wide_String (1 .. Max_Length);
       --  Last is the index of last significant element of the Data. All
-      --  elements with larger indices are just an extra room.
+      --  elements with larger indexes are just extra room for expansion.
    end record;
 
    type Shared_Wide_Wide_String_Access is access all Shared_Wide_Wide_String;
@@ -477,7 +477,7 @@ private
    --     reallocation when all of the following requirements are meat:
    --      - shared data object don't used anywhere longer;
    --      - its size is sufficient to store new value;
-   --      - the gap after reuse is less then some threshold.
+   --      - the gap after reuse is less than some threshold.
 
    --   - memory preallocation. Most of used memory allocation algorithms
    --     aligns allocated segment on the some boundary, thus some amount of
@@ -485,10 +485,10 @@ private
    --     preallocated memory can used later by Append/Insert operations
    --     without reallocation.
 
-   --  Reference counting uses GCC builtin atomic operations, which allows to
-   --  safely share internal data between Ada tasks. Nevertheless, this not
-   --  make objects of Unbounded_Wide_Wide_String thread-safe, so each instance
-   --  can't be accessed by several tasks simultaneously.
+   --  Reference counting uses GCC builtin atomic operations, which allows safe
+   --  sharing of internal data between Ada tasks. Nevertheless, this does not
+   --  make objects of Unbounded_String thread-safe: an instance cannot be
+   --  accessed by several tasks simultaneously.
 
    pragma Stream_Convert
      (Unbounded_Wide_Wide_String, To_Unbounded, To_Wide_Wide_String);

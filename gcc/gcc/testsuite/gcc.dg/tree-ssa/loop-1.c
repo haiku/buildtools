@@ -2,6 +2,8 @@
 /* -mlongcall will cause us to place &foo in the CTR register.  */
 /* { dg-skip-if "" { powerpc*-*-* } { "-mlongcall" } { "" } } */
 /* { dg-options "-O1 -ftree-loop-ivcanon -funroll-loops -fdump-tree-ivcanon-details -fdump-tree-cunroll-details -fdump-tree-optimized" } */
+/* { dg-options "-O1 -ftree-loop-ivcanon -funroll-loops -fdump-tree-ivcanon-details -fdump-tree-cunroll-details -fdump-tree-optimized -mshort-calls" {target epiphany-*-*} } */
+  
 
 /* On 31-bit S/390 the function address will be stored (once) in the literal pool,
    so scan-assembler-times "foo" will return 1 even if the loop is fully unrolled.
@@ -14,7 +16,7 @@
 /* { dg-options "-O1 -ftree-loop-ivcanon -funroll-loops -fdump-tree-ivcanon-details -fdump-tree-cunroll-details -fdump-tree-optimized -static" { target *-*-darwin* } } */
 
 /* On MIPS, disable generating hints (R_MIPS_JALR) for PIC calls.  In addition
-   to the load from the GOT this also contains the name of the funtion so for
+   to the load from the GOT this also contains the name of the function so for
    each call the function name would appear twice.  */
 /* { dg-options "-O1 -ftree-loop-ivcanon -funroll-loops -fdump-tree-ivcanon-details -fdump-tree-cunroll-details -fdump-tree-optimized -mno-relax-pic-calls" { target mips*-*-* } } */
 __attribute__ ((pure))
@@ -33,7 +35,7 @@ int xxx(void)
 
 /* { dg-final { scan-tree-dump-times "Added canonical iv to loop 1, 4 iterations" 1 "ivcanon"} } */
 /* { dg-final { cleanup-tree-dump "ivcanon" } } */
-/* { dg-final { scan-tree-dump-times "Completely unroll loop 4 times" 1 "cunroll"} } */
+/* { dg-final { scan-tree-dump-times "loop with 5 iterations completely unrolled" 1 "cunroll"} } */
 /* { dg-final { cleanup-tree-dump "cunroll" } } */
 /* { dg-final { scan-tree-dump-times "foo" 5 "optimized"} } */
 /* { dg-final { cleanup-tree-dump "optimized" } } */
@@ -47,7 +49,7 @@ int xxx(void)
 /* CRIS keeps the address in a register.  */
 /* m68k sometimes puts the address in a register, depending on CPU and PIC.  */
 
-/* { dg-final { scan-assembler-times "foo" 5 { xfail hppa*-*-* ia64*-*-* sh*-*-* cris-*-* crisv32-*-* fido-*-* m68k-*-* i?86-*-mingw* i?86-*-cygwin* x86_64-*-mingw* } } } */
+/* { dg-final { scan-assembler-times "foo" 5 { xfail hppa*-*-* ia64*-*-* sh*-*-* cris-*-* crisv32-*-* fido-*-* m68k-*-* i?86-*-mingw* i?86-*-cygwin* x86_64-*-mingw* visium-*-* } } } */
 /* { dg-final { scan-assembler-times "foo,%r" 5 { target hppa*-*-* } } } */
 /* { dg-final { scan-assembler-times "= foo"  5 { target ia64*-*-* } } } */
 /* { dg-final { scan-assembler-times "call\[ \t\]*_foo" 5 { target i?86-*-mingw* i?86-*-cygwin* } } } */
@@ -55,3 +57,4 @@ int xxx(void)
 /* { dg-final { scan-assembler-times "jsr|bsrf|blink\ttr?,r18"  5 { target sh*-*-* } } } */
 /* { dg-final { scan-assembler-times "Jsr \\\$r" 5 { target cris-*-* } } } */
 /* { dg-final { scan-assembler-times "\[jb\]sr" 5 { target fido-*-* m68k-*-* } } } */
+/* { dg-final { scan-assembler-times "bra *tr,r\[1-9\]*,r21" 5 { target visium-*-* } } } */

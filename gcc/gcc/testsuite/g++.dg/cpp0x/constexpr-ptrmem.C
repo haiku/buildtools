@@ -1,10 +1,10 @@
-// { dg-options -std=c++0x }
+// { dg-do compile { target c++11 } }
 
 struct C { // literal type
   int m;
   int n;
   constexpr C(int m) : m(m), n(-m) {}
-  constexpr bool is_neg() { return m < 0; }
+  constexpr bool is_neg() const { return m < 0; }
 };
 
 constexpr bool check1(const C& c, int C:: *pm) { return c.*pm < 0; } // #1

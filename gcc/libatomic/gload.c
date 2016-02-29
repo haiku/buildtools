@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2013 Free Software Foundation, Inc.
+/* Copyright (C) 2012-2015 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Atomic Library (libatomic).
@@ -32,7 +32,7 @@
 # define EXACT_INLINE(N, DEST, SRC, DONE)			\
   if (C2(HAVE_ATOMIC_LDST_,N))					\
     {								\
-      DEST = __atomic_load_n (SRC, smodel);			\
+      DEST = __atomic_load_n (SRC, __ATOMIC_SEQ_CST);		\
       DONE;							\
     }
 #else

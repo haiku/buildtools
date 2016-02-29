@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -fdump-tree-forwprop1 -W -Wall" } */
+/* { dg-options "-O2 -fdump-tree-ccp1 -W -Wall" } */
 #if (__SIZEOF_INT__ == __SIZEOF_FLOAT__)
 typedef int intflt;
 #elif (__SIZEOF_LONG__ == __SIZEOF_FLOAT__)
@@ -22,7 +22,7 @@ void f(void)
    particular situation before doing this transformation we have to
    assure that a is killed by a dominating store via type float for
    it to be valid.  Then we might as well handle the situation by
-   value-numbering, removing the load alltogether.
+   value-numbering, removing the load altogether.
    ???  We now do this after CPP re-writes a into SSA form.  */
-/* { dg-final { scan-tree-dump-times "VIEW_CONVERT_EXPR" 1 "forwprop1" } } */
-/* { dg-final { cleanup-tree-dump "forwprop1" } } */
+/* { dg-final { scan-tree-dump-times "VIEW_CONVERT_EXPR" 1 "ccp1" } } */
+/* { dg-final { cleanup-tree-dump "ccp1" } } */

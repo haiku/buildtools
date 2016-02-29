@@ -1,9 +1,9 @@
-// If you modify this, please update debug.cc as well.
+// If you modify this, please update simple11.cc and debug.cc as well.
 
 // { dg-do run }
-// { dg-options "-g -O0" }
+// { dg-options "-g -O0 -std=gnu++98" }
 
-// Copyright (C) 2011-2013 Free Software Foundation, Inc.
+// Copyright (C) 2011-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -19,6 +19,9 @@
 // You should have received a copy of the GNU General Public License along
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
+
+// Type printers only recognize the old std::string for now.
+#define _GLIBCXX_USE_CXX11_ABI 0
 
 #include <string>
 #include <deque>
@@ -69,6 +72,13 @@ main()
 
   std::map<std::string, int>::iterator mpiter = mp.begin();
 // { dg-final { note-test mpiter {{first = "zardoz", second = 23}} } }
+
+  // PR 67440
+  std::set<int> intset;
+  intset.insert(2);
+  intset.insert(3);
+  const std::set<int> const_intset = intset;
+// { dg-final { note-test const_intset {std::set with 2 elements = {[0] = 2, [1] = 3}} } }
 
   std::set<std::string> sp;
   sp.insert("clownfish");

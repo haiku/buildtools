@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2010, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -138,6 +138,19 @@ package body Elists is
       end if;
    end Append_Elmt;
 
+   ---------------------
+   -- Append_New_Elmt --
+   ---------------------
+
+   procedure Append_New_Elmt (N : Node_Or_Entity_Id; To : in out Elist_Id) is
+   begin
+      if To = No_Elist then
+         To := New_Elmt_List;
+      end if;
+
+      Append_Elmt (N, To);
+   end Append_New_Elmt;
+
    ------------------------
    -- Append_Unique_Elmt --
    ------------------------
@@ -157,6 +170,28 @@ package body Elists is
          end if;
       end loop;
    end Append_Unique_Elmt;
+
+   --------------
+   -- Contains --
+   --------------
+
+   function Contains (List : Elist_Id; N : Node_Or_Entity_Id) return Boolean is
+      Elmt : Elmt_Id;
+
+   begin
+      if Present (List) then
+         Elmt := First_Elmt (List);
+         while Present (Elmt) loop
+            if Node (Elmt) = N then
+               return True;
+            end if;
+
+            Next_Elmt (Elmt);
+         end loop;
+      end if;
+
+      return False;
+   end Contains;
 
    --------------------
    -- Elists_Address --
@@ -253,6 +288,32 @@ package body Elists is
       return Elmts.Last;
    end Last_Elmt_Id;
 
+   -----------------
+   -- List_Length --
+   -----------------
+
+   function List_Length (List : Elist_Id) return Nat is
+      Elmt : Elmt_Id;
+      N    : Nat;
+
+   begin
+      if List = No_Elist then
+         return 0;
+
+      else
+         N := 0;
+         Elmt := First_Elmt (List);
+         loop
+            if No (Elmt) then
+               return N;
+            else
+               N := N + 1;
+               Next_Elmt (Elmt);
+            end if;
+         end loop;
+      end if;
+   end List_Length;
+
    ----------
    -- Lock --
    ----------
@@ -264,6 +325,34 @@ package body Elists is
       Elists.Release;
       Elmts.Release;
    end Lock;
+
+   --------------------
+   -- New_Copy_Elist --
+   --------------------
+
+   function New_Copy_Elist (List : Elist_Id) return Elist_Id is
+      Result : Elist_Id;
+      Elmt   : Elmt_Id;
+
+   begin
+      if List = No_Elist then
+         return No_Elist;
+
+      --  Replicate the contents of the input list while preserving the
+      --  original order.
+
+      else
+         Result := New_Elmt_List;
+
+         Elmt := First_Elmt (List);
+         while Present (Elmt) loop
+            Append_Elmt (Node (Elmt), Result);
+            Next_Elmt (Elmt);
+         end loop;
+
+         return Result;
+      end if;
+   end New_Copy_Elist;
 
    -------------------
    -- New_Elmt_List --
@@ -374,6 +463,27 @@ package body Elists is
    begin
       return Elmt /= No_Elmt;
    end Present;
+
+   ------------
+   -- Remove --
+   ------------
+
+   procedure Remove (List : Elist_Id; N : Node_Or_Entity_Id) is
+      Elmt : Elmt_Id;
+
+   begin
+      if Present (List) then
+         Elmt := First_Elmt (List);
+         while Present (Elmt) loop
+            if Node (Elmt) = N then
+               Remove_Elmt (List, Elmt);
+               exit;
+            end if;
+
+            Next_Elmt (Elmt);
+         end loop;
+      end if;
+   end Remove;
 
    -----------------
    -- Remove_Elmt --

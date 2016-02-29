@@ -1,5 +1,5 @@
 /* Simulate storage of variables into target memory.
-   Copyright (C) 2007-2013 Free Software Foundation, Inc.
+   Copyright (C) 2007-2015 Free Software Foundation, Inc.
    Contributed by Paul Thomas and Brooks Moses
 
 This file is part of GCC.
@@ -22,8 +22,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "flags.h"
+#include "hash-set.h"
 #include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
+#include "stor-layout.h"
 #include "gfortran.h"
 #include "arith.h"
 #include "constructor.h"
@@ -32,7 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "trans-types.h"
 #include "target-memory.h"
 
-/* --------------------------------------------------------------- */ 
+/* --------------------------------------------------------------- */
 /* Calculate the size of an expression.  */
 
 
@@ -109,6 +119,8 @@ gfc_element_size (gfc_expr *e)
       return e->representation.length;
     case BT_DERIVED:
     case BT_CLASS:
+    case BT_VOID:
+    case BT_ASSUMED:
       {
 	/* Determine type size without clobbering the typespec for ISO C
 	   binding types.  */
@@ -151,7 +163,7 @@ gfc_target_expr_size (gfc_expr *e)
 }
 
 
-/* The encode_* functions export a value into a buffer, and 
+/* The encode_* functions export a value into a buffer, and
    return the number of bytes of the buffer that have been
    used.  */
 
@@ -286,7 +298,7 @@ gfc_target_encode_expr (gfc_expr *source, unsigned char *buffer,
 	      || source->expr_type == EXPR_STRUCTURE
 	      || source->expr_type == EXPR_SUBSTRING);
 
-  /* If we already have a target-memory representation, we use that rather 
+  /* If we already have a target-memory representation, we use that rather
      than recreating one.  */
   if (source->representation.string)
     {
@@ -328,6 +340,17 @@ gfc_target_encode_expr (gfc_expr *source, unsigned char *buffer,
 	}
 
     case BT_DERIVED:
+      if (source->ts.u.derived->ts.f90_type == BT_VOID)
+	{
+	  gfc_constructor *c;
+	  gcc_assert (source->expr_type == EXPR_STRUCTURE);
+	  c = gfc_constructor_first (source->value.constructor);
+	  gcc_assert (c->expr->expr_type == EXPR_CONSTANT
+		      && c->expr->ts.type == BT_INTEGER);
+	  return encode_integer (gfc_index_integer_kind, c->expr->value.integer,
+				 buffer, buffer_size);
+	}
+
       return encode_derived (source, buffer, buffer_size);
     default:
       gfc_internal_error ("Invalid expression in gfc_target_encode_expr.");
@@ -416,7 +439,7 @@ gfc_interpret_logical (int kind, unsigned char *buffer, size_t buffer_size,
 {
   tree t = native_interpret_expr (gfc_get_logical_type (kind), buffer,
 				  buffer_size);
-  *logical = tree_to_double_int (t).is_zero () ? 0 : 1;
+  *logical = wi::eq_p (t, 0) ? 0 : 1;
   return size_logical (kind);
 }
 
@@ -485,7 +508,7 @@ gfc_interpret_derived (unsigned char *buffer, size_t buffer_size, gfc_expr *resu
       /* Needed as gfc_typenode_for_spec as gfc_typenode_for_spec
 	 sets this to BT_INTEGER.  */
       result->ts.type = BT_DERIVED;
-      e = gfc_get_constant_expr (cmp->ts.type, cmp->ts.kind, &result->where); 
+      e = gfc_get_constant_expr (cmp->ts.type, cmp->ts.kind, &result->where);
       c = gfc_constructor_append_expr (&result->value.constructor, e, NULL);
       c->n.component = cmp;
       gfc_target_interpret_expr (buffer, buffer_size, e, true);
@@ -500,7 +523,7 @@ gfc_interpret_derived (unsigned char *buffer, size_t buffer_size, gfc_expr *resu
     {
       gfc_constructor *c;
       gfc_expr *e = gfc_get_constant_expr (cmp->ts.type, cmp->ts.kind,
-					   &result->where); 
+					   &result->where);
       e->ts = cmp->ts;
 
       /* Copy shape, if needed.  */
@@ -540,7 +563,7 @@ gfc_interpret_derived (unsigned char *buffer, size_t buffer_size, gfc_expr *resu
 
       gfc_target_interpret_expr (&buffer[ptr], buffer_size - ptr, e, true);
     }
-    
+
   return int_size_in_bytes (type);
 }
 
@@ -556,31 +579,31 @@ gfc_target_interpret_expr (unsigned char *buffer, size_t buffer_size,
   switch (result->ts.type)
     {
     case BT_INTEGER:
-      result->representation.length = 
+      result->representation.length =
         gfc_interpret_integer (result->ts.kind, buffer, buffer_size,
 			       result->value.integer);
       break;
 
     case BT_REAL:
-      result->representation.length = 
+      result->representation.length =
         gfc_interpret_float (result->ts.kind, buffer, buffer_size,
     			     result->value.real);
       break;
 
     case BT_COMPLEX:
-      result->representation.length = 
+      result->representation.length =
         gfc_interpret_complex (result->ts.kind, buffer, buffer_size,
 			       result->value.complex);
       break;
 
     case BT_LOGICAL:
-      result->representation.length = 
+      result->representation.length =
         gfc_interpret_logical (result->ts.kind, buffer, buffer_size,
 			       &result->value.logical);
       break;
 
     case BT_CHARACTER:
-      result->representation.length = 
+      result->representation.length =
         gfc_interpret_character (buffer, buffer_size, result);
       break;
 
@@ -588,7 +611,7 @@ gfc_target_interpret_expr (unsigned char *buffer, size_t buffer_size,
       result->ts = CLASS_DATA (result)->ts;
       /* Fall through.  */
     case BT_DERIVED:
-      result->representation.length = 
+      result->representation.length =
         gfc_interpret_derived (buffer, buffer_size, result);
       gcc_assert (result->representation.length >= 0);
       break;
@@ -615,7 +638,7 @@ gfc_target_interpret_expr (unsigned char *buffer, size_t buffer_size,
 }
 
 
-/* --------------------------------------------------------------- */ 
+/* --------------------------------------------------------------- */
 /* Two functions used by trans-common.c to write overlapping
    equivalence initializers to a buffer.  This is added to the union
    and the original initializers freed.  */
@@ -780,7 +803,7 @@ gfc_convert_boz (gfc_expr *expr, gfc_typespec *ts)
       gfc_interpret_complex (ts->kind, buffer, buffer_size,
 			     expr->value.complex);
     }
-  expr->is_boz = 0;  
+  expr->is_boz = 0;
   expr->ts.type = ts->type;
   expr->ts.kind = ts->kind;
 

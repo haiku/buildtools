@@ -1,7 +1,7 @@
 // { dg-require-atomic-builtins "" }
-// { dg-options "-std=gnu++0x" }
+// { dg-options "-std=gnu++11" }
 
-// Copyright (C) 2012-2013 Free Software Foundation, Inc.
+// Copyright (C) 2012-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -42,28 +42,28 @@ int main(void)
   a++;
   void* vp3(a);
   dist = reinterpret_cast<char*>(vp2) - reinterpret_cast<char*>(vp3);
-  // VERIFY ( std::abs(dist) == sizeof(void*));
+  VERIFY ( std::abs(dist) == 1 );
 
   // operator--
   void* vp4(a);
   a--;
   void* vp5(a);
   dist = reinterpret_cast<char*>(vp4) - reinterpret_cast<char*>(vp5);
-  // VERIFY ( std::abs(dist) == sizeof(void*));
+  VERIFY ( std::abs(dist) == 1 );
 
   // operator+=
   void* vp6(a);
   a+=n;
   void* vp7(a);
   dist = reinterpret_cast<char*>(vp6) - reinterpret_cast<char*>(vp7);
-  // VERIFY ( std::abs(dist) == sizeof(void*) * n);
+  VERIFY ( std::abs(dist) == n );
 
   // operator-=
   void* vp8(a);
   a-=n;
   void* vp9(a);
   dist = reinterpret_cast<char*>(vp8) - reinterpret_cast<char*>(vp9);
-  //VERIFY ( std::abs(dist) == sizeof(void*) * n);
+  VERIFY ( std::abs(dist) == n );
 
   return 0;
 }

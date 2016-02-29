@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---          Copyright (C) 1997-2009, Free Software Foundation, Inc.         --
+--          Copyright (C) 1997-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -37,43 +37,54 @@
 --  Do not add any dependency to GNARL packages since this package is used
 --  in both normal and restricted (ravenscar) environments.
 
+pragma Restriction_Warnings (No_Secondary_Stack);
+--  We wish to avoid secondary stack usage here, because (e.g.) Trace is called
+--  at delicate times, such as during task termination after the secondary
+--  stack has been deallocated. It's just a warning, so we don't require
+--  partition-wide consistency.
+
 with System.CRTL;
+with System.Storage_Elements; use System.Storage_Elements;
 with System.Task_Primitives;
 with System.Task_Primitives.Operations;
-with Ada.Unchecked_Conversion;
 
 package body System.Tasking.Debug is
 
    package STPO renames System.Task_Primitives.Operations;
 
-   function To_Integer is new
-     Ada.Unchecked_Conversion (Task_Id, System.Task_Primitives.Task_Address);
-
    type Trace_Flag_Set is array (Character) of Boolean;
 
    Trace_On : Trace_Flag_Set := ('A' .. 'Z' => False, others => True);
+
+   Stderr_Fd : constant := 2;
+   --  File descriptor for standard error
 
    -----------------------
    -- Local Subprograms --
    -----------------------
 
    procedure Write (Fd : Integer; S : String; Count : Integer);
+   --  Write Count characters of S to the file descriptor Fd
 
    procedure Put (S : String);
-   --  Display S on standard output
+   --  Display S on standard error
 
    procedure Put_Line (S : String := "");
-   --  Display S on standard output with an additional line terminator
+   --  Display S on standard error with an additional line terminator
+
+   procedure Put_Task_Image (T : Task_Id);
+   --  Display relevant characters from T.Common.Task_Image on standard error
+
+   procedure Put_Task_Id_Image (T : Task_Id);
+   --  Display address in hexadecimal form on standard error
 
    ------------------------
    -- Continue_All_Tasks --
    ------------------------
 
    procedure Continue_All_Tasks is
-      C : Task_Id;
-
+      C     : Task_Id;
       Dummy : Boolean;
-      pragma Unreferenced (Dummy);
 
    begin
       STPO.Lock_RTS;
@@ -104,7 +115,6 @@ package body System.Tasking.Debug is
       C : Task_Id;
    begin
       C := All_Tasks_List;
-
       while C /= null loop
          Print_Task_Info (C);
          C := C.Common.All_Tasks_Link;
@@ -134,16 +144,15 @@ package body System.Tasking.Debug is
          return;
       end if;
 
-      Put (T.Common.Task_Image (1 .. T.Common.Task_Image_Len) & ": " &
-           Task_States'Image (T.Common.State));
-
+      Put_Task_Image (T);
+      Put (": " & Task_States'Image (T.Common.State));
       Parent := T.Common.Parent;
 
       if Parent = null then
          Put (", parent: <none>");
       else
-         Put (", parent: " &
-              Parent.Common.Task_Image (1 .. Parent.Common.Task_Image_Len));
+         Put (", parent: ");
+         Put_Task_Image (Parent);
       end if;
 
       Put (", prio:" & T.Common.Current_Priority'Img);
@@ -165,7 +174,7 @@ package body System.Tasking.Debug is
          Put (", serving:");
 
          while Entry_Call /= null loop
-            Put (To_Integer (Entry_Call.Self)'Img);
+            Put_Task_Id_Image (Entry_Call.Self);
             Entry_Call := Entry_Call.Acceptor_Prev_Call;
          end loop;
       end if;
@@ -195,7 +204,7 @@ package body System.Tasking.Debug is
 
    procedure Put (S : String) is
    begin
-      Write (2, S, S'Length);
+      Write (Stderr_Fd, S, S'Length);
    end Put;
 
    --------------
@@ -204,8 +213,68 @@ package body System.Tasking.Debug is
 
    procedure Put_Line (S : String := "") is
    begin
-      Write (2, S & ASCII.LF, S'Length + 1);
+      Write (Stderr_Fd, S & ASCII.LF, S'Length + 1);
    end Put_Line;
+
+   -----------------------
+   -- Put_Task_Id_Image --
+   -----------------------
+
+   procedure Put_Task_Id_Image (T : Task_Id) is
+      Address_Image_Length : constant :=
+        13 + (if Standard'Address_Size = 64 then 10 else 0);
+      --  Length of string to be printed for address of task
+
+      H : constant array (0 .. 15) of Character := "0123456789ABCDEF";
+      --  Table of hex digits
+
+      S : String (1 .. Address_Image_Length);
+      P : Natural;
+      N : Integer_Address;
+      U : Natural := 0;
+
+   begin
+      if T = null then
+         Put ("Null_Task_Id");
+
+      else
+         S (S'Last) := '#';
+         P := Address_Image_Length - 1;
+         N := To_Integer (T.all'Address);
+         while P > 3 loop
+            if U = 4 then
+               S (P) := '_';
+               P := P - 1;
+               U := 1;
+            else
+               U := U + 1;
+            end if;
+
+            S (P) := H (Integer (N mod 16));
+            P := P - 1;
+            N := N / 16;
+         end loop;
+
+         S (1 .. 3) := "16#";
+         Put (S);
+      end if;
+   end Put_Task_Id_Image;
+
+   --------------------
+   -- Put_Task_Image --
+   --------------------
+
+   procedure Put_Task_Image (T : Task_Id) is
+   begin
+      --  In case T.Common.Task_Image_Len is uninitialized junk, we check that
+      --  it is in range, to make this more robust.
+
+      if T.Common.Task_Image_Len in T.Common.Task_Image'Range then
+         Put (T.Common.Task_Image (1 .. T.Common.Task_Image_Len));
+      else
+         Put (T.Common.Task_Image);
+      end if;
+   end Put_Task_Image;
 
    ----------------------
    -- Resume_All_Tasks --
@@ -214,12 +283,11 @@ package body System.Tasking.Debug is
    procedure Resume_All_Tasks (Thread_Self : OS_Interface.Thread_Id) is
       C     : Task_Id;
       Dummy : Boolean;
-      pragma Unreferenced (Dummy);
 
    begin
       STPO.Lock_RTS;
-      C := All_Tasks_List;
 
+      C := All_Tasks_List;
       while C /= null loop
          Dummy := STPO.Resume_Task (C, Thread_Self);
          C := C.Common.All_Tasks_Link;
@@ -263,10 +331,8 @@ package body System.Tasking.Debug is
    --------------------
 
    procedure Stop_All_Tasks is
-      C : Task_Id;
-
+      C     : Task_Id;
       Dummy : Boolean;
-      pragma Unreferenced (Dummy);
 
    begin
       STPO.Lock_RTS;
@@ -296,12 +362,11 @@ package body System.Tasking.Debug is
    procedure Suspend_All_Tasks (Thread_Self : OS_Interface.Thread_Id) is
       C     : Task_Id;
       Dummy : Boolean;
-      pragma Unreferenced (Dummy);
 
    begin
       STPO.Lock_RTS;
-      C := All_Tasks_List;
 
+      C := All_Tasks_List;
       while C /= null loop
          Dummy := STPO.Suspend_Task (C, Thread_Self);
          C := C.Common.All_Tasks_Link;
@@ -344,13 +409,14 @@ package body System.Tasking.Debug is
    is
    begin
       if Trace_On (Flag) then
-         Put (To_Integer (Self_Id)'Img &
-              ':' & Flag & ':' &
-              Self_Id.Common.Task_Image (1 .. Self_Id.Common.Task_Image_Len) &
-              ':');
+         Put_Task_Id_Image (Self_Id);
+         Put (":" & Flag & ":");
+         Put_Task_Image (Self_Id);
+         Put (":");
 
          if Other_Id /= null then
-            Put (To_Integer (Other_Id)'Img & ':');
+            Put_Task_Id_Image (Other_Id);
+            Put (":");
          end if;
 
          Put_Line (Msg);
@@ -363,11 +429,42 @@ package body System.Tasking.Debug is
 
    procedure Write (Fd : Integer; S : String; Count : Integer) is
       Discard : System.CRTL.ssize_t;
-      pragma Unreferenced (Discard);
+      --  Ignore write errors here; this is just debugging output, and there's
+      --  nothing to be done about errors anyway.
    begin
-      Discard := System.CRTL.write (Fd, S (S'First)'Address,
-                                    System.CRTL.size_t (Count));
-      --  Is it really right to ignore write errors here ???
+      Discard :=
+        System.CRTL.write
+          (Fd, S'Address, System.CRTL.size_t (Count));
    end Write;
+
+   -----------------
+   -- Master_Hook --
+   -----------------
+
+   procedure Master_Hook
+     (Dependent    : Task_Id;
+      Parent       : Task_Id;
+      Master_Level : Integer)
+   is
+      pragma Inspection_Point (Dependent);
+      pragma Inspection_Point (Parent);
+      pragma Inspection_Point (Master_Level);
+   begin
+      null;
+   end Master_Hook;
+
+   ---------------------------
+   -- Master_Completed_Hook --
+   ---------------------------
+
+   procedure Master_Completed_Hook
+     (Self_ID      : Task_Id;
+      Master_Level : Integer)
+   is
+      pragma Inspection_Point (Self_ID);
+      pragma Inspection_Point (Master_Level);
+   begin
+      null;
+   end Master_Completed_Hook;
 
 end System.Tasking.Debug;

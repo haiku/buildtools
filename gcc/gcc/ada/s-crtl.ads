@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2003-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2003-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,7 +31,7 @@
 
 --  This package provides the low level interface to the C runtime library
 
-pragma Compiler_Unit;
+pragma Compiler_Unit_Warning;
 
 with System.Parameters;
 
@@ -62,10 +62,35 @@ package System.CRTL is
    type ssize_t is range -(2 ** (Standard'Address_Size - 1))
                       .. +(2 ** (Standard'Address_Size - 1)) - 1;
 
+   type int64 is new Long_Long_Integer;
+   --  Note: we use Long_Long_Integer'First instead of -2 ** 63 to allow this
+   --  unit to compile when using custom target configuration files where the
+   --  maximum integer is 32 bits. This is useful for static analysis tools
+   --  such as SPARK or CodePeer. In the normal case, Long_Long_Integer is
+   --  always 64-bits so there is no difference.
+
    type Filename_Encoding is (UTF8, ASCII_8bits, Unspecified);
    for Filename_Encoding use (UTF8 => 0, ASCII_8bits => 1, Unspecified => 2);
    pragma Convention (C, Filename_Encoding);
    --  Describes the filename's encoding
+
+   --------------------
+   -- GCC intrinsics --
+   --------------------
+
+   --  The following functions are imported with convention Intrinsic so that
+   --  we take advantage of back-end builtins if present (else we fall back
+   --  to C library functions by the same names).
+
+   function strlen (A : System.Address) return size_t;
+   pragma Import (Intrinsic, strlen, "strlen");
+
+   procedure strncpy (dest, src : System.Address; n : size_t);
+   pragma Import (Intrinsic, strncpy, "strncpy");
+
+   -------------------------------
+   -- Other C runtime functions --
+   -------------------------------
 
    function atoi (A : System.Address) return Integer;
    pragma Import (C, atoi, "atoi");
@@ -103,6 +128,9 @@ package System.CRTL is
    function fputc (C : int; stream : FILEs) return int;
    pragma Import (C, fputc, "fputc");
 
+   function fputwc (C : int; stream : FILEs) return int;
+   pragma Import (C, fputwc, "__gnat_fputwc");
+
    function fputs (Strng : chars; Stream : FILEs) return int;
    pragma Import (C, fputs, "fputs");
 
@@ -124,14 +152,14 @@ package System.CRTL is
 
    function fseek64
      (stream : FILEs;
-      offset : ssize_t;
+      offset : int64;
       origin : int) return int;
    pragma Import (C, fseek64, "__gnat_fseek64");
 
    function ftell (stream : FILEs) return long;
    pragma Import (C, ftell, "ftell");
 
-   function ftell64 (stream : FILEs) return ssize_t;
+   function ftell64 (stream : FILEs) return int64;
    pragma Import (C, ftell64, "__gnat_ftell64");
 
    function getenv (S : String) return System.Address;
@@ -199,7 +227,7 @@ package System.CRTL is
    pragma Import (C, unlink, "__gnat_unlink");
 
    function open (filename : chars; oflag : int) return int;
-   pragma Import (C, open, "open");
+   pragma Import (C, open, "__gnat_open");
 
    function close (fd : int) return int;
    pragma Import (C, close, "close");

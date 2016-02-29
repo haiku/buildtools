@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O3 -fdump-tree-ldist-details" } */
+/* { dg-options "-O3 -fno-ipa-icf -fdump-tree-ldist-details" } */
 
 struct Foo
 {
@@ -67,6 +67,5 @@ int main()
 }
 
 /* { dg-final { scan-tree-dump-times "generated memset zero" 1 "ldist" } } */
-/* { dg-final { scan-tree-dump-times "generated memset minus one" 1 "ldist" } } */
 /* { dg-final { scan-tree-dump-times "generated memset" 5 "ldist" } } */
 /* { dg-final { cleanup-tree-dump "ldist" } } */

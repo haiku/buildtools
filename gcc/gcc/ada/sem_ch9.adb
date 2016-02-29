@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -304,7 +304,8 @@ package body Sem_Ch9 is
 
                            if Is_Scalar_Type (Etype (Attr))
                              and then Is_Scalar_Type (Etype (Prefix (Attr)))
-                             and then Is_Static_Subtype (Etype (Prefix (Attr)))
+                             and then
+                               Is_OK_Static_Subtype (Etype (Prefix (Attr)))
                            then
                               Para := First (Expressions (Attr));
 
@@ -389,7 +390,7 @@ package body Sem_Ch9 is
                      --  static function restricted.
 
                      elsif Kind = N_Attribute_Reference
-                       and then not Is_Static_Expression (N)
+                       and then not Is_OK_Static_Expression (N)
                        and then not Is_Static_Function (N)
                      then
                         if Lock_Free_Given then
@@ -427,7 +428,7 @@ package body Sem_Ch9 is
                      --  Non-static function calls restricted
 
                      elsif Kind = N_Function_Call
-                       and then not Is_Static_Expression (N)
+                       and then not Is_OK_Static_Expression (N)
                      then
                         if Lock_Free_Given then
                            Error_Msg_N
@@ -700,7 +701,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("abort statement is not allowed", N);
+      Check_SPARK_05_Restriction ("abort statement is not allowed", N);
 
       T_Name := First (Names (N));
       while Present (T_Name) loop
@@ -771,7 +772,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("accept statement is not allowed", N);
+      Check_SPARK_05_Restriction ("accept statement is not allowed", N);
 
       --  Entry name is initialized to Any_Id. It should get reset to the
       --  matching entry entity. An error is signalled if it is not reset.
@@ -1002,7 +1003,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("select statement is not allowed", N);
+      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (Max_Asynchronous_Select_Nesting, N);
       Check_Restriction (No_Select_Statements, N);
 
@@ -1048,7 +1049,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("select statement is not allowed", N);
+      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (No_Select_Statements, N);
 
       --  Ada 2005 (AI-345): The trigger may be a dispatching call
@@ -1145,7 +1146,7 @@ package body Sem_Ch9 is
       E : constant Node_Id := Expression (N);
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("delay statement is not allowed", N);
+      Check_SPARK_05_Restriction ("delay statement is not allowed", N);
       Check_Restriction (No_Relative_Delay, N);
       Check_Restriction (No_Delay, N);
       Check_Potentially_Blocking_Operation (N);
@@ -1163,7 +1164,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("delay statement is not allowed", N);
+      Check_SPARK_05_Restriction ("delay statement is not allowed", N);
       Check_Restriction (No_Delay, N);
       Check_Potentially_Blocking_Operation (N);
       Analyze (E);
@@ -1326,7 +1327,7 @@ package body Sem_Ch9 is
       --  for the discriminals and privals and finally a declaration for the
       --  entry family index (if applicable).
 
-      if Full_Expander_Active
+      if Expander_Active
         and then Is_Protected_Type (P_Type)
       then
          Install_Private_Data_Declarations
@@ -1452,7 +1453,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("entry call is not allowed", N);
+      Check_SPARK_05_Restriction ("entry call is not allowed", N);
 
       if Present (Pragmas_Before (N)) then
          Analyze_List (Pragmas_Before (N));
@@ -1495,7 +1496,7 @@ package body Sem_Ch9 is
 
    begin
       Generate_Definition (Def_Id);
-      Set_Contract (Def_Id, Make_Contract (Sloc (Def_Id)));
+
       Tasking_Used := True;
 
       --  Case of no discrete subtype definition
@@ -1557,7 +1558,7 @@ package body Sem_Ch9 is
                goto Skip_LB;
             end if;
 
-            if Is_Static_Expression (LBR)
+            if Is_OK_Static_Expression (LBR)
               and then Expr_Value (LBR) < LB
             then
                Error_Msg_Uint_1 := LB;
@@ -1583,7 +1584,7 @@ package body Sem_Ch9 is
                goto Skip_UB;
             end if;
 
-            if Is_Static_Expression (UBR)
+            if Is_OK_Static_Expression (UBR)
               and then Expr_Value (UBR) > UB
             then
                Error_Msg_Uint_1 := UB;
@@ -1734,6 +1735,22 @@ package body Sem_Ch9 is
       Set_Ekind (Body_Id, E_Protected_Body);
       Spec_Id := Find_Concurrent_Spec (Body_Id);
 
+      --  Protected bodies are currently removed by the expander. Since there
+      --  are no language-defined aspects that apply to a protected body, it is
+      --  not worth changing the whole expansion to accomodate implementation-
+      --  defined aspects. Plus we cannot possibly known the semantics of such
+      --  future implementation defined aspects in order to plan ahead.
+
+      if Has_Aspects (N) then
+         Error_Msg_N
+           ("aspects on protected bodies are not allowed",
+            First (Aspect_Specifications (N)));
+
+         --  Remove illegal aspects to prevent cascaded errors later on
+
+         Remove_Aspects (N);
+      end if;
+
       if Present (Spec_Id)
         and then Ekind (Spec_Id) = E_Protected_Type
       then
@@ -1869,7 +1886,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("protected definition is not allowed", N);
+      Check_SPARK_05_Restriction ("protected definition is not allowed", N);
       Analyze_Declarations (Visible_Declarations (N));
 
       if Present (Private_Declarations (N))
@@ -1895,6 +1912,11 @@ package body Sem_Ch9 is
            or else Has_Task (Etype (E))
          then
             Set_Has_Task (Current_Scope);
+
+         elsif Is_Protected_Type (Etype (E))
+           or else Has_Protected (Etype (E))
+         then
+            Set_Has_Protected (Current_Scope);
          end if;
 
          Next_Entity (E);
@@ -1941,6 +1963,7 @@ package body Sem_Ch9 is
 
       Set_Ekind              (T, E_Protected_Type);
       Set_Is_First_Subtype   (T, True);
+      Set_Has_Protected      (T, True);
       Init_Size_Align        (T);
       Set_Etype              (T, T);
       Set_Has_Delayed_Freeze (T, True);
@@ -2126,7 +2149,7 @@ package body Sem_Ch9 is
 
            --  Also skip if expander is not active
 
-           and then Full_Expander_Active
+           and then Expander_Active
          then
             Expand_N_Protected_Type_Declaration (N);
             Process_Full_View (N, T, Def_Id);
@@ -2153,7 +2176,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("requeue statement is not allowed", N);
+      Check_SPARK_05_Restriction ("requeue statement is not allowed", N);
       Check_Restriction (No_Requeue_Statements, N);
       Check_Unreachable_Code (N);
 
@@ -2420,10 +2443,11 @@ package body Sem_Ch9 is
 
       --  AI05-0225: the target protected object of a requeue must be a
       --  variable. This is a binding interpretation that applies to all
-      --  versions of the language.
+      --  versions of the language. Note that the subprogram does not have
+      --  to be a protected operation: it can be an primitive implemented
+      --  by entry with a formal that is a protected interface.
 
       if Present (Target_Obj)
-        and then Ekind (Scope (Entry_Id)) in Protected_Kind
         and then not Is_Variable (Target_Obj)
       then
          Error_Msg_N
@@ -2447,7 +2471,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("select statement is not allowed", N);
+      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (No_Select_Statements, N);
 
       --  Loop to analyze alternatives
@@ -2606,6 +2630,10 @@ package body Sem_Ch9 is
       --  disastrous result.
 
       Analyze_Protected_Type_Declaration (N);
+
+      if Has_Aspects (N) then
+         Analyze_Aspect_Specifications (N, Id);
+      end if;
    end Analyze_Single_Protected_Declaration;
 
    -------------------------------------
@@ -2703,6 +2731,22 @@ package body Sem_Ch9 is
       Set_Scope (Body_Id, Current_Scope);
       Spec_Id := Find_Concurrent_Spec (Body_Id);
 
+      --  Task bodies are transformed into a subprogram spec and body pair by
+      --  the expander. Since there are no language-defined aspects that apply
+      --  to a task body, it is not worth changing the whole expansion to
+      --  accomodate implementation-defined aspects. Plus we cannot possibly
+      --  know semantics of such aspects in order to plan ahead.
+
+      if Has_Aspects (N) then
+         Error_Msg_N
+           ("aspects on task bodies are not allowed",
+            First (Aspect_Specifications (N)));
+
+         --  Remove illegal aspects to prevent cascaded errors later on
+
+         Remove_Aspects (N);
+      end if;
+
       --  The spec is either a task type declaration, or a single task
       --  declaration for which we have created an anonymous type.
 
@@ -2727,7 +2771,6 @@ package body Sem_Ch9 is
       then
          if Nkind (Parent (Spec_Id)) = N_Task_Type_Declaration then
             Error_Msg_NE ("duplicate body for task type&", N, Spec_Id);
-
          else
             Error_Msg_NE ("duplicate body for task&", N, Spec_Id);
          end if;
@@ -2819,7 +2862,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("task definition is not allowed", N);
+      Check_SPARK_05_Restriction ("task definition is not allowed", N);
 
       if Present (Visible_Declarations (N)) then
          Analyze_Declarations (Visible_Declarations (N));
@@ -2851,8 +2894,32 @@ package body Sem_Ch9 is
       T      : Entity_Id;
 
    begin
-      Check_Restriction (No_Tasking, N);
+      --  Attempt to use tasking in no run time mode is not allowe. Issue hard
+      --  error message to disable expansion which leads to crashes.
+
+      if Opt.No_Run_Time_Mode then
+         Error_Msg_N ("tasking not allowed in No_Run_Time mode", N);
+
+      --  Otherwise soft check for no tasking restriction
+
+      else
+         Check_Restriction (No_Tasking, N);
+      end if;
+
+      --  Proceed ahead with analysis of task type declaration
+
       Tasking_Used := True;
+
+      --  The sequential partition elaboration policy is supported only in the
+      --  restricted profile.
+
+      if Partition_Elaboration_Policy = 'S'
+        and then not Restricted_Profile
+      then
+         Error_Msg_N
+           ("sequential elaboration supported only in restricted profile", N);
+      end if;
+
       T := Find_Type_Name (N);
       Generate_Definition (T);
 
@@ -2955,7 +3022,7 @@ package body Sem_Ch9 is
 
            --  Also skip if expander is not active
 
-           and then Full_Expander_Active
+           and then Expander_Active
          then
             Expand_N_Task_Type_Declaration (N);
             Process_Full_View (N, T, Def_Id);
@@ -2991,7 +3058,7 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_Restriction ("select statement is not allowed", N);
+      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (No_Select_Statements, N);
 
       --  Ada 2005 (AI-345): The trigger may be a dispatching call
@@ -3053,8 +3120,9 @@ package body Sem_Ch9 is
            and then not Is_Controlling_Limited_Procedure
                           (Entity (Name (Trigger)))
          then
-            Error_Msg_N ("triggering statement must be delay, procedure " &
-                         "or entry call", Trigger);
+            Error_Msg_N
+              ("triggering statement must be procedure or entry call " &
+               "or delay statement", Trigger);
          end if;
       end if;
 
@@ -3291,8 +3359,8 @@ package body Sem_Ch9 is
 
                if Present (Iface) then
                   Error_Msg_NE
-                    ("interface & not implemented by full type " &
-                     "(RM-2005 7.3 (7.3/2))", Priv_T, Iface);
+                    ("interface in partial view& not implemented by full "
+                     & "type (RM-2005 7.3 (7.3/2))", T, Iface);
                end if;
 
                Iface := Find_Hidden_Interface (Full_T_Ifaces, Priv_T_Ifaces);
@@ -3384,92 +3452,4 @@ package body Sem_Ch9 is
          Next_Entity (E);
       end loop;
    end Install_Declarations;
-
-   ---------------------------
-   -- Install_Discriminants --
-   ---------------------------
-
-   procedure Install_Discriminants (E : Entity_Id) is
-      Disc : Entity_Id;
-      Prev : Entity_Id;
-   begin
-      Disc := First_Discriminant (E);
-      while Present (Disc) loop
-         Prev := Current_Entity (Disc);
-         Set_Current_Entity (Disc);
-         Set_Is_Immediately_Visible (Disc);
-         Set_Homonym (Disc, Prev);
-         Next_Discriminant (Disc);
-      end loop;
-   end Install_Discriminants;
-
-   ------------------------------------------
-   -- Push_Scope_And_Install_Discriminants --
-   ------------------------------------------
-
-   procedure Push_Scope_And_Install_Discriminants (E : Entity_Id) is
-   begin
-      if Has_Discriminants (E) then
-         Push_Scope (E);
-         Install_Discriminants (E);
-      end if;
-   end Push_Scope_And_Install_Discriminants;
-
-   -----------------------------
-   -- Uninstall_Discriminants --
-   -----------------------------
-
-   procedure Uninstall_Discriminants (E : Entity_Id) is
-      Disc  : Entity_Id;
-      Prev  : Entity_Id;
-      Outer : Entity_Id;
-
-   begin
-      Disc := First_Discriminant (E);
-      while Present (Disc) loop
-         if Disc /= Current_Entity (Disc) then
-            Prev := Current_Entity (Disc);
-            while Present (Prev)
-              and then Present (Homonym (Prev))
-              and then Homonym (Prev) /= Disc
-            loop
-               Prev := Homonym (Prev);
-            end loop;
-         else
-            Prev := Empty;
-         end if;
-
-         Set_Is_Immediately_Visible (Disc, False);
-
-         Outer := Homonym (Disc);
-         while Present (Outer) and then Scope (Outer) = E loop
-            Outer := Homonym (Outer);
-         end loop;
-
-         --  Reset homonym link of other entities, but do not modify link
-         --  between entities in current scope, so that the back-end can have
-         --  a proper count of local overloadings.
-
-         if No (Prev) then
-            Set_Name_Entity_Id (Chars (Disc), Outer);
-
-         elsif Scope (Prev) /= Scope (Disc) then
-            Set_Homonym (Prev,  Outer);
-         end if;
-
-         Next_Discriminant (Disc);
-      end loop;
-   end Uninstall_Discriminants;
-
-   -------------------------------------------
-   -- Uninstall_Discriminants_And_Pop_Scope --
-   -------------------------------------------
-
-   procedure Uninstall_Discriminants_And_Pop_Scope (E : Entity_Id) is
-   begin
-      if Has_Discriminants (E) then
-         Uninstall_Discriminants (E);
-         Pop_Scope;
-      end if;
-   end Uninstall_Discriminants_And_Pop_Scope;
 end Sem_Ch9;

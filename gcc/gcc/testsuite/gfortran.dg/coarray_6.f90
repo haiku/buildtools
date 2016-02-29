@@ -32,7 +32,7 @@ end module m
 
 subroutine bar()
   integer, parameter :: a[*] = 4 ! { dg-error "PARAMETER attribute conflicts with CODIMENSION" }
-  integer, pointer :: b[:] ! { dg-error "is not ALLOCATABLE, SAVE nor a dummy" }
+  integer :: b[*] ! { dg-error "is not ALLOCATABLE, SAVE nor a dummy" }
 end subroutine bar
 
 subroutine vol()
@@ -75,7 +75,7 @@ subroutine valid(a)
   type t2
     type(t) :: b
   end type t2
-  type(t2), save :: xt2[*]
+  type(t2), save :: xt2[*] ! { dg-error "nonpointer, nonallocatable scalar, which is not a coarray" }
 end subroutine valid
 
 program main

@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // typelist for the C++ library testsuite. 
 //
-// Copyright (C) 2005-2013 Free Software Foundation, Inc.
+// Copyright (C) 2005-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -545,7 +545,7 @@ namespace __gnu_test
 	{
 	  void __constraint()
 	  {
-	    typedef std::has_trivial_default_constructor<_Tp> ctor_p;
+	    typedef std::is_trivially_default_constructible<_Tp> ctor_p;
 	    static_assert(ctor_p::value, "default constructor not trivial");
 
 	    typedef std::is_trivially_destructible<_Tp> dtor_p;
@@ -689,7 +689,8 @@ namespace __gnu_test
       struct _Concept;
 
     // NB: _Tp must be a literal type.
-    // Have to have user-defined default ctor for this to work.
+    // Have to have user-defined default ctor for this to work,
+    // or implicit default ctor must initialize all members.
     template<typename _Tp>
       struct _Concept<_Tp, true>
       {
@@ -872,5 +873,22 @@ namespace __gnu_test
 	  = &_Concept::__constraint;
       }
   };
+
+#if __cplusplus >= 201103L
+  // Generator to test lowering requirements for compare-and-exchange.
+  template<std::memory_order _Torder>
+  struct compare_exchange_order_lowering
+  {
+    template<typename _Tp>
+      void
+      operator()()
+      {
+        std::atomic<_Tp> __x;
+        _Tp __expected = 0;
+        __x.compare_exchange_strong(__expected, 1, _Torder);
+        __x.compare_exchange_weak(__expected, 1, _Torder);
+      }
+  };
+#endif
 } // namespace __gnu_test
 #endif

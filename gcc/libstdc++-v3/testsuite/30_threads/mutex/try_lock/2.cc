@@ -1,11 +1,11 @@
-// { dg-do run { target *-*-freebsd* *-*-netbsd* *-*-linux* *-*-solaris* *-*-cygwin *-*-darwin* powerpc-ibm-aix* } }
-// { dg-options " -std=gnu++0x -pthread" { target *-*-freebsd* *-*-netbsd* *-*-linux* powerpc-ibm-aix* } }
-// { dg-options " -std=gnu++0x -pthreads" { target *-*-solaris* } }
-// { dg-options " -std=gnu++0x " { target *-*-cygwin *-*-darwin* } }
+// { dg-do run { target *-*-freebsd* *-*-dragonfly* *-*-netbsd* *-*-linux* *-*-gnu* *-*-solaris* *-*-cygwin *-*-darwin* powerpc-ibm-aix* } }
+// { dg-options " -std=gnu++11 -pthread" { target *-*-freebsd* *-*-dragonfly* *-*-netbsd* *-*-linux* *-*-gnu* powerpc-ibm-aix* } }
+// { dg-options " -std=gnu++11 -pthreads" { target *-*-solaris* } }
+// { dg-options " -std=gnu++11 " { target *-*-cygwin *-*-darwin* } }
 // { dg-require-cstdint "" }
 // { dg-require-gthreads "" }
 
-// Copyright (C) 2008-2013 Free Software Foundation, Inc.
+// Copyright (C) 2008-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,6 +24,7 @@
 
 
 #include <mutex>
+#include <thread>
 #include <system_error>
 #include <testsuite_hooks.h>
 
@@ -38,15 +39,18 @@ int main()
       m.lock();
       bool b;
 
-      try
-	{
-	  b = m.try_lock();
-	  VERIFY( !b );
-	}
-      catch (const std::system_error& e)
-	{
-	  VERIFY( false );
-	}
+      std::thread t([&] {
+        try
+          {
+            b = m.try_lock();
+          }
+        catch (const std::system_error& e)
+          {
+            VERIFY( false );
+          }
+      });
+      t.join();
+      VERIFY( !b );
 
       m.unlock();
     }

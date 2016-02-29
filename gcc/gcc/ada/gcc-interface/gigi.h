@@ -6,7 +6,7 @@
  *                                                                          *
  *                              C Header File                               *
  *                                                                          *
- *          Copyright (C) 1992-2013, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2014, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -93,8 +93,8 @@ do {					\
     mark_visited (EXP);			\
 } while (0)
 
-/* Finalize the processing of From_With_Type incomplete types.  */
-extern void finalize_from_with_types (void);
+/* Finalize the processing of From_Limited_With incomplete types.  */
+extern void finalize_from_limited_with (void);
 
 /* Return the equivalent type to be used for GNAT_ENTITY, if it's a
    kind of type (such E_Task_Type) that has a different type which Gigi
@@ -123,9 +123,10 @@ extern bool is_cplusplus_method (Entity_Id gnat_entity);
 /* Create a record type that contains a SIZE bytes long field of TYPE with a
     starting bit position so that it is aligned to ALIGN bits, and leaving at
     least ROOM bytes free before the field.  BASE_ALIGN is the alignment the
-    record is guaranteed to get.  */
+    record is guaranteed to get.  GNAT_NODE is used for the position of the
+    associated TYPE_DECL.  */
 extern tree make_aligning_type (tree type, unsigned int align, tree size,
-				unsigned int base_align, int room);
+				unsigned int base_align, int room, Node_Id);
 
 /* TYPE is a RECORD_TYPE, UNION_TYPE or QUAL_UNION_TYPE that is being used
    as the field type of a packed record if IN_RECORD is true, or as the
@@ -142,7 +143,7 @@ extern tree make_packable_type (tree type, bool in_record);
 extern tree make_type_from_size (tree type, tree size_tree, bool for_biased);
 
 /* Ensure that TYPE has SIZE and ALIGN.  Make and return a new padded type
-   if needed.  We have already verified that SIZE and TYPE are large enough.
+   if needed.  We have already verified that SIZE and ALIGN are large enough.
    GNAT_ENTITY is used to name the resulting record and to issue a warning.
    IS_COMPONENT_TYPE is true if this is being done for the component type of
    an array.  IS_USER_TYPE is true if the original type needs to be completed.
@@ -209,6 +210,12 @@ extern tree create_concat_name (Entity_Id gnat_entity, const char *suffix);
    the name followed by "___" and the specified suffix.  */
 extern tree concat_name (tree gnu_name, const char *suffix);
 
+/* Initialize data structures of the decl.c module.  */
+extern void init_gnat_decl (void);
+
+/* Destroy data structures of the decl.c module.  */
+extern void destroy_gnat_decl (void);
+
 /* Highest number in the front-end node table.  */
 extern int max_gnat_nodes;
 
@@ -237,10 +244,14 @@ extern "C" {
 
 /* This is the main program of the back-end.  It sets up all the table
    structures and then generates code.  */
-extern void gigi (Node_Id gnat_root, int max_gnat_node,
+extern void gigi (Node_Id gnat_root,
+	          int max_gnat_node,
                   int number_name ATTRIBUTE_UNUSED,
-                  struct Node *nodes_ptr, Node_Id *next_node_ptr,
-                  Node_Id *prev_node_ptr, struct Elist_Header *elists_ptr,
+		  struct Node *nodes_ptr,
+		  struct Flags *Flags_Ptr,
+		  Node_Id *next_node_ptr,
+		  Node_Id *prev_node_ptr,
+		  struct Elist_Header *elists_ptr,
                   struct Elmt_Item *elmts_ptr,
                   struct String_Entry *strings_ptr,
                   Char_Code *strings_chars_ptr,
@@ -324,6 +335,9 @@ extern int double_float_alignment;
    types whose size is greater or equal to 64 bits, or 0 if this alignment
    is not specifically capped.  */
 extern int double_scalar_alignment;
+
+/* True if floating-point arithmetics may use wider intermediate results.  */
+extern bool fp_arith_may_widen;
 
 /* Data structures used to represent attributes.  */
 
@@ -381,10 +395,8 @@ enum standard_datatypes
   ADT_sbitsize_unit_node,
 
   /* Function declaration nodes for run-time functions for allocating memory.
-     Ada allocators cause calls to these functions to be generated.  Malloc32
-     is used only on 64bit systems needing to allocate 32bit memory.  */
+     Ada allocators cause calls to this function to be generated.  */
   ADT_malloc_decl,
-  ADT_malloc32_decl,
 
   /* Likewise for freeing memory.  */
   ADT_free_decl,
@@ -410,6 +422,7 @@ enum standard_datatypes
   ADT_update_setjmp_buf_decl,
   ADT_raise_nodefer_decl,
   ADT_reraise_zcx_decl,
+  ADT_set_exception_parameter_decl,
   ADT_begin_handler_decl,
   ADT_end_handler_decl,
   ADT_unhandled_except_decl,
@@ -429,6 +442,19 @@ enum exception_info_kind
   exception_column
 };
 
+/* Define the inline status of a subprogram.  */
+enum inline_status_t
+{
+  /* Inlining is suppressed for the subprogram.  */
+  is_suppressed,
+  /* No inlining is requested for the subprogram.  */
+  is_disabled,
+  /* Inlining is requested for the subprogram.  */
+  is_enabled,
+  /* Inlining is required for the subprogram.  */
+  is_required
+};
+
 extern GTY(()) tree gnat_std_decls[(int) ADT_LAST];
 extern GTY(()) tree gnat_raise_decls[(int) LAST_REASON_CODE + 1];
 extern GTY(()) tree gnat_raise_decls_ext[(int) LAST_REASON_CODE + 1];
@@ -443,7 +469,6 @@ extern GTY(()) tree gnat_raise_decls_ext[(int) LAST_REASON_CODE + 1];
 #define sbitsize_one_node gnat_std_decls[(int) ADT_sbitsize_one_node]
 #define sbitsize_unit_node gnat_std_decls[(int) ADT_sbitsize_unit_node]
 #define malloc_decl gnat_std_decls[(int) ADT_malloc_decl]
-#define malloc32_decl gnat_std_decls[(int) ADT_malloc32_decl]
 #define free_decl gnat_std_decls[(int) ADT_free_decl]
 #define mulv64_decl gnat_std_decls[(int) ADT_mulv64_decl]
 #define parent_name_id gnat_std_decls[(int) ADT_parent_name_id]
@@ -458,6 +483,8 @@ extern GTY(()) tree gnat_raise_decls_ext[(int) LAST_REASON_CODE + 1];
 #define update_setjmp_buf_decl gnat_std_decls[(int) ADT_update_setjmp_buf_decl]
 #define raise_nodefer_decl gnat_std_decls[(int) ADT_raise_nodefer_decl]
 #define reraise_zcx_decl gnat_std_decls[(int) ADT_reraise_zcx_decl]
+#define set_exception_parameter_decl \
+          gnat_std_decls[(int) ADT_set_exception_parameter_decl]
 #define begin_handler_decl gnat_std_decls[(int) ADT_begin_handler_decl]
 #define others_decl gnat_std_decls[(int) ADT_others_decl]
 #define all_others_decl gnat_std_decls[(int) ADT_all_others_decl]
@@ -490,7 +517,13 @@ extern tree get_block_jmpbuf_decl (void);
    for location information and flag propagation.  */
 extern void gnat_pushdecl (tree decl, Node_Id gnat_node);
 
+/* Initialize the GCC support for exception handling.  */
 extern void gnat_init_gcc_eh (void);
+
+/* Initialize the GCC support for floating-point operations.  */
+extern void gnat_init_gcc_fp (void);
+
+/* Install the builtin functions we might need.  */
 extern void gnat_install_builtins (void);
 
 /* Return an integer type with the number of bits of precision given by
@@ -500,7 +533,7 @@ extern tree gnat_type_for_size (unsigned precision, int unsignedp);
 
 /* Return a data type that has machine mode MODE.  UNSIGNEDP selects
    an unsigned type; otherwise a signed type is returned.  */
-extern tree gnat_type_for_mode (enum machine_mode mode, int unsignedp);
+extern tree gnat_type_for_mode (machine_mode mode, int unsignedp);
 
 /* Emit debug info for all global variable declarations.  */
 extern void gnat_write_global_declarations (void);
@@ -634,10 +667,8 @@ extern tree create_type_stub_decl (tree type_name, tree type);
    is a declaration that was generated by the compiler.  DEBUG_INFO_P is
    true if we need to write debug information about this type.  GNAT_NODE
    is used for the position of the decl.  */
-extern tree create_type_decl (tree type_name, tree type,
-                              struct attrib *attr_list,
-                              bool artificial_p, bool debug_info_p,
-			      Node_Id gnat_node);
+extern tree create_type_decl (tree type_name, tree type, bool artificial_p,
+			      bool debug_info_p, Node_Id gnat_node);
 
 /* Return a VAR_DECL or CONST_DECL node.
 
@@ -710,21 +741,28 @@ extern tree create_param_decl (tree param_name, tree param_type,
 
 /* Return a LABEL_DECL with LABEL_NAME.  GNAT_NODE is used for the position
    of the decl.  */
-extern tree create_label_decl (tree, Node_Id);
+extern tree create_label_decl (tree label_name, Node_Id gnat_node);
 
 /* Return a FUNCTION_DECL node.  SUBPROG_NAME is the name of the subprogram,
    ASM_NAME is its assembler name, SUBPROG_TYPE is its type (a FUNCTION_TYPE
    node), PARAM_DECL_LIST is the list of the subprogram arguments (a list of
    PARM_DECL nodes chained through the DECL_CHAIN field).
 
-   INLINE_FLAG, PUBLIC_FLAG, EXTERN_FLAG, ARTIFICIAL_FLAG and ATTR_LIST are
+   INLINE_STATUS, PUBLIC_FLAG, EXTERN_FLAG, ARTIFICIAL_FLAG and ATTR_LIST are
    used to set the appropriate fields in the FUNCTION_DECL.  GNAT_NODE is
    used for the position of the decl.  */
 extern tree create_subprog_decl (tree subprog_name, tree asm_name,
 				 tree subprog_type, tree param_decl_list,
-				 bool inline_flag, bool public_flag,
-				 bool extern_flag, bool artificial_flag,
+				 enum inline_status_t inline_status,
+				 bool public_flag, bool extern_flag,
+				 bool artificial_flag,
 				 struct attrib *attr_list, Node_Id gnat_node);
+
+/* Process the attributes in ATTR_LIST for NODE, which is either a DECL or
+   a TYPE.  If IN_PLACE is true, the tree pointed to by NODE should not be
+   changed.  GNAT_NODE is used for the position of error messages.  */
+extern void process_attributes (tree *node, struct attrib **attr_list,
+				bool in_place, Node_Id gnat_node);
 
 /* Set up the framework for generating code for SUBPROG_DECL, a subprogram
    body. This routine needs to be invoked before processing the declarations
@@ -741,19 +779,6 @@ extern void rest_of_subprog_body_compilation (tree subprog_decl);
    EXPR is an expression that we can use to locate any PLACEHOLDER_EXPRs.
    Return a constructor for the template.  */
 extern tree build_template (tree template_type, tree array_type, tree expr);
-
-/* Build a 64bit VMS descriptor from a Mechanism_Type, which must specify
-   a descriptor type, and the GCC type of an object.  Each FIELD_DECL
-   in the type contains in its DECL_INITIAL the expression to use when
-   a constructor is made for the type.  GNAT_ENTITY is a gnat node used
-   to print out an error message if the mechanism cannot be applied to
-   an object of that type and also for the name.  */
-extern tree build_vms_descriptor (tree type, Mechanism_Type mech,
-                                  Entity_Id gnat_entity);
-
-/* Build a 32bit VMS descriptor from a Mechanism_Type. See above.  */
-extern tree build_vms_descriptor32 (tree type, Mechanism_Type mech,
-                                  Entity_Id gnat_entity);
 
 /* Build a type to be used to represent an aliased object whose nominal type
    is an unconstrained array.  This consists of a RECORD_TYPE containing a
@@ -922,19 +947,6 @@ extern tree build_allocator (tree type, tree init, tree result_type,
                              Entity_Id gnat_proc, Entity_Id gnat_pool,
                              Node_Id gnat_node, bool);
 
-/* Fill in a VMS descriptor of GNU_TYPE for GNU_EXPR and return the result.
-   GNAT_ACTUAL is the actual parameter for which the descriptor is built.  */
-extern tree fill_vms_descriptor (tree gnu_type, tree gnu_expr,
-                                 Node_Id gnat_actual);
-
-/* Convert GNU_EXPR, a pointer to a VMS descriptor, to GNU_TYPE, a regular
-   pointer or fat pointer type.  GNU_EXPR_ALT_TYPE is the alternate (32-bit)
-   pointer type of GNU_EXPR.  GNAT_SUBPROG is the subprogram to which the
-   descriptor is passed.  */
-extern tree convert_vms_descriptor (tree gnu_type, tree gnu_expr,
-				    tree gnu_expr_alt_type,
-				    Entity_Id gnat_subprog);
-
 /* Indicate that we need to take the address of T and that it therefore
    should not be allocated in a register.  Returns true if successful.  */
 extern bool gnat_mark_addressable (tree t);
@@ -981,6 +993,18 @@ extern int fp_prec_to_size (int prec);
 /* Return the precision of the FP mode with size SIZE.  */
 extern int fp_size_to_prec (int size);
 
+/* Return whether GNAT_NODE is a defining identifier for a renaming that comes
+   from the parameter association for the instantiation of a generic.  We do
+   not want to emit source location for them: the code generated for their
+   initialization is likely to disturb debugging.  */
+extern bool renaming_from_generic_instantiation_p (Node_Id gnat_node);
+
+/* Try to process all nodes in the deferred context queue.  Keep in the queue
+   the ones that cannot be processed yet, remove the other ones.  If FORCE is
+   true, force the processing for all nodes, use the global context when nodes
+   don't have a GNU translation.  */
+extern void process_deferred_decl_context (bool force);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1018,19 +1042,6 @@ extern void enumerate_modes (void (*f) (const char *, int, int, int, int, int,
 
 #ifdef __cplusplus
 }
-#endif
-
-/* Let code know whether we are targetting VMS without need of
-   intrusive preprocessor directives.  */
-#ifndef TARGET_ABI_OPEN_VMS
-#define TARGET_ABI_OPEN_VMS 0
-#endif
-
-/* VMS option set by default, when clear forces 32bit mallocs and 32bit
-   Descriptors.  Always used in combination with TARGET_ABI_OPEN_VMS
-   so no effect on non-VMS systems.  */
-#if TARGET_ABI_OPEN_VMS == 0
-#define flag_vms_malloc64 0
 #endif
 
 /* Convenient shortcuts.  */

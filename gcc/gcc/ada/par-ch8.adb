@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2013, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -110,15 +110,15 @@ package body Ch8 is
 
    begin
       if Token = Tok_All then
-         if Ada_Version < Ada_2012 then
-            Error_Msg_SC ("|`USE ALL TYPE` is an Ada 2012 feature");
-            Error_Msg_SC ("\|unit must be compiled with -gnat2012 switch");
-         end if;
-
+         Error_Msg_Ada_2012_Feature ("|`USE ALL TYPE`", Token_Ptr);
          All_Present := True;
          Scan; -- past ALL
 
-      else
+         if Token /= Tok_Type then
+            Error_Msg_SC ("TYPE expected");
+         end if;
+
+      else pragma Assert (Token = Tok_Type);
          All_Present := False;
       end if;
 

@@ -1,4 +1,4 @@
-#   Copyright (C) 2000-2013 Free Software Foundation, Inc.
+#   Copyright (C) 2000-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 
 # Load support procs.
 load_lib g++-dg.exp
+load_lib mpx-dg.exp
 
 # If a testcase doesn't have special options, use these.
 global DEFAULT_CXXFLAGS
@@ -33,6 +34,7 @@ dg-init
 set tests [lsort [find $srcdir/$subdir *.C]]
 set tests [prune $tests $srcdir/$subdir/bprob/*]
 set tests [prune $tests $srcdir/$subdir/charset/*]
+set tests [prune $tests $srcdir/$subdir/cilk-plus/AN/*]
 set tests [prune $tests $srcdir/$subdir/compat/*]
 set tests [prune $tests $srcdir/$subdir/debug/*]
 set tests [prune $tests $srcdir/$subdir/dfp/*]
@@ -48,19 +50,22 @@ set tests [prune $tests $srcdir/$subdir/tree-prof/*]
 set tests [prune $tests $srcdir/$subdir/torture/*]
 set tests [prune $tests $srcdir/$subdir/graphite/*]
 set tests [prune $tests $srcdir/$subdir/tm/*]
+set tests [prune $tests $srcdir/$subdir/cilk-plus/*]
 set tests [prune $tests $srcdir/$subdir/guality/*]
 set tests [prune $tests $srcdir/$subdir/simulate-thread/*]
 set tests [prune $tests $srcdir/$subdir/asan/*]
+set tests [prune $tests $srcdir/$subdir/ubsan/*]
+set tests [prune $tests $srcdir/$subdir/tsan/*]
 
 # Main loop.
-g++-dg-runtest $tests $DEFAULT_CXXFLAGS
+g++-dg-runtest $tests "" $DEFAULT_CXXFLAGS
 
 # C/C++ common tests.
 g++-dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/*.\[cSi\]]] \
-	""
+	"" ""
 
 g++-dg-runtest [lsort [glob -nocomplain $srcdir/c-c++-common/cpp/*.\[cS\]]] \
-	""
+	"" ""
 
 
 # All done.

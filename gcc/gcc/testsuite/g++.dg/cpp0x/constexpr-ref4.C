@@ -1,11 +1,11 @@
 // PR c++/54777
-// { dg-options -std=c++0x }
+// { dg-do compile { target c++11 } }
 
 struct S
 {
   int s[1];
-  constexpr const int &foo (unsigned i) { return (i < 1 ? 0 : throw 1), s[i]; }
-  constexpr const int &bar (unsigned i) { return i < 1 ? s[i] : (throw 0, s[i]); }
+  constexpr const int &foo (unsigned i) const { return (i < 1 ? 0 : throw 1), s[i]; }
+  constexpr const int &bar (unsigned i) const { return i < 1 ? s[i] : (throw 0, s[i]); }
 };
 
 int

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -240,6 +240,10 @@ package body Ch5 is
                    and then Statement_Seen)
                 or else All_Pragmas)
             then
+               --  This Ada 2012 construct not allowed in a compiler unit
+
+               Check_Compiler_Unit ("null statement list", Token_Ptr);
+
                declare
                   Null_Stm : constant Node_Id :=
                                Make_Null_Statement (Token_Ptr);
@@ -447,7 +451,7 @@ package body Ch5 is
 
                   --  Otherwise we treat THEN as some kind of mess where we did
                   --  not see the associated IF, but we pick up assuming it had
-                  --  been there!
+                  --  been there.
 
                   Restore_Scan_State (Scan_State); -- to THEN
                   Append_To (Statement_List, P_If_Statement);
@@ -506,6 +510,24 @@ package body Ch5 is
                      Scan; -- past semicolon
                      Statement_Required := False;
 
+                     --  Here is the special test for a suspicious label, more
+                     --  accurately a suspicious name, which we think perhaps
+                     --  should have been a label. If next token is one of
+                     --  LOOP, FOR, WHILE, DECLARE, BEGIN, then make an entry
+                     --  in the suspicious label table.
+
+                     if Token = Tok_Loop    or else
+                        Token = Tok_For     or else
+                        Token = Tok_While   or else
+                        Token = Tok_Declare or else
+                        Token = Tok_Begin
+                     then
+                        Suspicious_Labels.Append
+                          ((Proc_Call     => Id_Node,
+                            Semicolon_Loc => Prev_Token_Ptr,
+                            Start_Token   => Token_Ptr));
+                     end if;
+
                   --  Check for case of "go to" in place of "goto"
 
                   elsif Token = Tok_Identifier
@@ -552,7 +574,7 @@ package body Ch5 is
 
                            --  We will set Error_name as the Block_Label since
                            --  we really don't know which of the labels might
-                           --  be used at the end of the loop or block!
+                           --  be used at the end of the loop or block.
 
                            Block_Label := Error_Name;
 
@@ -677,6 +699,11 @@ package body Ch5 is
 
                      else
                         TF_Semicolon;
+
+                        --  Normal processing as though semicolon were present
+
+                        Change_Name_To_Procedure_Call_Statement (Name_Node);
+                        Append_To (Statement_List, Name_Node);
                         Statement_Required := False;
                      end if;
 
@@ -1085,8 +1112,7 @@ package body Ch5 is
       procedure Check_Then_Column;
       --  This procedure carries out the style checks for a THEN token
       --  Note that the caller has set Loc to the Source_Ptr value for
-      --  the previous IF or ELSIF token. These checks apply only to a
-      --  THEN at the start of a line.
+      --  the previous IF or ELSIF token.
 
       function Else_Should_Be_Elsif return Boolean;
       --  An internal routine used to do a special error recovery check when
@@ -1124,7 +1150,7 @@ package body Ch5 is
 
       procedure Check_Then_Column is
       begin
-         if Token_Is_At_Start_Of_Line and then Token = Tok_Then then
+         if Token = Tok_Then then
             Check_If_Column;
 
             if Style_Check then
@@ -1256,11 +1282,12 @@ package body Ch5 is
    --  CONDITION ::= boolean_EXPRESSION
 
    function P_Condition return Node_Id is
-      Cond : Node_Id;
-
    begin
-      Cond := P_Expression_No_Right_Paren;
+      return P_Condition (P_Expression_No_Right_Paren);
+   end P_Condition;
 
+   function P_Condition (Cond : Node_Id) return Node_Id is
+   begin
       --  It is never possible for := to follow a condition, so if we get
       --  a := we assume it is a mistyped equality. Note that we do not try
       --  to reconstruct the tree correctly in this case, but we do at least
@@ -1278,7 +1305,7 @@ package body Ch5 is
 
       --  Otherwise check for redundant parentheses
 
-      --  If the  condition is a conditional or a quantified expression, it is
+      --  If the condition is a conditional or a quantified expression, it is
       --  parenthesized in the context of a condition, because of a separate
       --  syntax rule.
 
@@ -1656,10 +1683,7 @@ package body Ch5 is
       --  during analysis of the loop parameter specification.
 
       if Token = Tok_Of or else Token = Tok_Colon then
-         if Ada_Version < Ada_2012 then
-            Error_Msg_SC ("iterator is an Ada 2012 feature");
-         end if;
-
+         Error_Msg_Ada_2012_Feature ("iterator", Token_Ptr);
          return P_Iterator_Specification (ID_Node);
       end if;
 
@@ -1719,6 +1743,18 @@ package body Ch5 is
 
       elsif Token = Tok_In then
          Scan;  --  past IN
+
+      elsif Prev_Token = Tok_In
+        and then Present (Subtype_Indication (Node1))
+      then
+         --  Simplest recovery is to transform it into an element iterator.
+         --  Error message on 'in" has already been emitted when parsing the
+         --  optional constraint.
+
+         Set_Of_Present (Node1);
+         Error_Msg_N
+           ("subtype indication is only legal on an element iterator",
+              Subtype_Indication (Node1));
 
       else
          return Error;

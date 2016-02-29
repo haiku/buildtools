@@ -2,7 +2,7 @@
 // { dg-require-static-libstdcxx }
 // { dg-options "-static-libstdc++ -std=gnu++11" }
 
-// Copyright (C) 2012-2013 Free Software Foundation, Inc.
+// Copyright (C) 2012-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,3 +29,8 @@ int main()
   std::cout << "i am old-skool\n";
   return 0;
 }
+// Ignore TOC warnings on AIX
+// { dg-prune-output "ld: 0711-768 WARNING" }
+// { dg-prune-output "recognized no-op" }
+// { dg-prune-output "TOC-reload" }
+

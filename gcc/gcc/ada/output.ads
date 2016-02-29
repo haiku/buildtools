@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2010, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -137,6 +137,14 @@ package Output is
    procedure Write_Line (S : String);
    --  Equivalent to Write_Str (S) followed by Write_Eol;
 
+   function Last_Char return Character;
+   --  Returns last character written on the current line, or null if the
+   --  current line is (so far) empty.
+
+   procedure Delete_Last_Char;
+   --  Deletes last character written on the current line, no effect if the
+   --  current line is (so far) empty.
+
    function Column return Pos;
    pragma Inline (Column);
    --  Returns the number of the column about to be written (e.g. a value of 1
@@ -168,7 +176,7 @@ package Output is
    --  The following procedures are intended only for debugging purposes,
    --  for temporary insertion into the text in environments where a debugger
    --  is not available. They all have non-standard very short lower case
-   --  names, precisely to make sure that they are only used for debugging!
+   --  names, precisely to make sure that they are only used for debugging.
 
    procedure w (C : Character);
    --  Dump quote, character, quote, followed by line return
@@ -201,11 +209,8 @@ private
 
    Buffer : String (1 .. Buffer_Max + 1) := (others => '*');
    for Buffer'Alignment use 4;
-   --  Buffer used to build output line. We do line buffering because it
-   --  is needed for the support of the debug-generated-code option (-gnatD).
-   --  Historically it was first added because on VMS, line buffering is
-   --  needed with certain file formats. So in any case line buffering must
-   --  be retained for this purpose, even if other reasons disappear. Note
+   --  Buffer used to build output line. We do line buffering because it is
+   --  needed for the support of the debug-generated-code option (-gnatD). Note
    --  any attempt to write more output to a line than can fit in the buffer
    --  will be silently ignored. The alignment clause improves the efficiency
    --  of the save/restore procedures.

@@ -2,11 +2,11 @@
 --                                                                          --
 --                         GNAT RUN-TIME COMPONENTS                         --
 --                                                                          --
---                          A D A . S T R E A M S                           --
+--                           A D A . S T R E A M S                          --
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2009, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -41,9 +41,12 @@ package Ada.Streams is
 
    type Stream_Element is mod 2 ** Standard'Storage_Unit;
 
-   type Stream_Element_Offset is range
-     -(2 ** (Standard'Address_Size - 1)) ..
-     +(2 ** (Standard'Address_Size - 1)) - 1;
+   type Stream_Element_Offset is new Long_Long_Integer;
+   --  Stream_Element_Offset needs 64 bits to accomodate large stream files.
+   --  However, rather than make this explicitly 64-bits we derive from
+   --  Long_Long_Integer. In normal usage this will have the same effect.
+   --  But in the case of CodePeer with a target configuration file with a
+   --  maximum integer size of 32, it allows analysis of this unit.
 
    subtype Stream_Element_Count is
       Stream_Element_Offset range 0 .. Stream_Element_Offset'Last;
@@ -65,5 +68,20 @@ package Ada.Streams is
 private
 
    type Root_Stream_Type is abstract tagged limited null record;
+
+   --  Stream attributes for Stream_Element_Array: trivially call the
+   --  corresponding stream primitive for the whole array, instead of doing
+   --  so element by element.
+
+   procedure Read_SEA
+     (S : access Root_Stream_Type'Class;
+      V : out Stream_Element_Array);
+
+   procedure Write_SEA
+     (S : access Root_Stream_Type'Class;
+      V : Stream_Element_Array);
+
+   for Stream_Element_Array'Read use Read_SEA;
+   for Stream_Element_Array'Write use Write_SEA;
 
 end Ada.Streams;

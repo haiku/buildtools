@@ -3,7 +3,7 @@
    Based on gcc.dg/wtr-conversion-1.c  */
 
 /* { dg-do compile } */
-/* { dg-options "-Wtraditional" } */
+/* { dg-options "-Wtraditional-conversion" } */
 
 extern void foo_i (int);
 extern void foo_f (float);
@@ -24,7 +24,7 @@ testfunc1 ()
 {
   foo_i (i);
   foo_i (d32); /* { dg-warning "as integer rather than floating" "prototype conversion warning" } */
-  foo_i (d64); /* { dg-warning "as integer rather than floating" "prototype convDersion warning" } */
+  foo_i (d64); /* { dg-warning "as integer rather than floating" "prototype conversion warning" } */
   foo_i (d128); /* { dg-warning "as integer rather than floating" "prototype conversion warning" } */
   foo_d32 (i); /* { dg-warning "as floating rather than integer" "prototype conversion warning" } */
   foo_d32 (f); /* { dg-warning "as '_Decimal32' rather than 'float'" "prototype conversion warning" } */

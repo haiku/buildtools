@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -178,7 +178,7 @@ package body Eval_Fat is
 
       Uintp_Mark : Uintp.Save_Mark;
       --  The code is divided into blocks that systematically release
-      --  intermediate values (this routine generates lots of junk!)
+      --  intermediate values (this routine generates lots of junk).
 
    begin
       if N = Uint_0 then
@@ -508,12 +508,12 @@ package body Eval_Fat is
             if X_Exp < Emin_Den or not Has_Denormals (RT) then
                if Has_Signed_Zeros (RT) and then UR_Is_Negative (X) then
                   Error_Msg_N
-                    ("floating-point value underflows to -0.0?", Enode);
+                    ("floating-point value underflows to -0.0??", Enode);
                   return Ureal_M_0;
 
                else
                   Error_Msg_N
-                    ("floating-point value underflows to 0.0?", Enode);
+                    ("floating-point value underflows to 0.0??", Enode);
                   return Ureal_0;
                end if;
 
@@ -545,7 +545,7 @@ package body Eval_Fat is
                begin
                   if X_Frac_Denorm /= X_Frac then
                      Error_Msg_N
-                       ("gradual underflow causes loss of precision?",
+                       ("gradual underflow causes loss of precision??",
                         Enode);
                      X_Frac := X_Frac_Denorm;
                   end if;

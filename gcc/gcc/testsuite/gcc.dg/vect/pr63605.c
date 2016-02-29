@@ -1,5 +1,3 @@
-/* { dg-do run } */
-
 #include "tree-vect.h"
 
 extern void abort (void);
@@ -20,3 +18,5 @@ main ()
     abort ();
   return 0;
 }
+
+/* { dg-final { cleanup-tree-dump "vect" } } */

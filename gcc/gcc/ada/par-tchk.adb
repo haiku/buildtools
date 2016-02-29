@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -452,12 +452,11 @@ package body Tchk is
          Scan;
          return;
 
-      --  An interesting little kludge. If the previous token is a semicolon,
+      --  An interesting little case. If the previous token is a semicolon,
       --  then there is no way that we can legitimately need another semicolon.
-      --  This could only arise in an error situation where an error has
-      --  already been signalled. By simply ignoring the request for a
-      --  semicolon in this case, we avoid some spurious missing semicolon
-      --  messages.
+      --  This could only arise in an situation where an error has already been
+      --  signalled. By simply ignoring the request for a semicolon in this
+      --  case, we avoid some spurious missing semicolon messages.
 
       elsif Prev_Token = Tok_Semicolon then
          return;
@@ -558,11 +557,11 @@ package body Tchk is
               or else Token = Tok_Semicolon
               or else Token = Tok_EOF
             then
-               Restore_Scan_State (Scan_State); -- to where we were!
+               Restore_Scan_State (Scan_State); -- to where we were
                return;
             end if;
 
-            Scan; -- continue search!
+            Scan; -- continue search
 
             if Token = Tok_Arrow then
                Scan; -- past arrow
@@ -600,11 +599,11 @@ package body Tchk is
               or else Token = Tok_Semicolon
               or else Token = Tok_EOF
             then
-               Restore_Scan_State (Scan_State); -- to where we were!
+               Restore_Scan_State (Scan_State); -- to where we were
                return;
             end if;
 
-            Scan; -- continue search!
+            Scan; -- continue search
 
             if Token = Tok_Is
               or else Token = Tok_Of
@@ -642,11 +641,11 @@ package body Tchk is
               or else Token = Tok_Semicolon
               or else Token = Tok_EOF
             then
-               Restore_Scan_State (Scan_State); -- to where we were!
+               Restore_Scan_State (Scan_State); -- to where we were
                return;
             end if;
 
-            Scan; -- continue search!
+            Scan; -- continue search
 
             if Token = Tok_Loop or else Token = Tok_Then then
                Scan; -- past loop or then (message already generated)
@@ -677,11 +676,11 @@ package body Tchk is
               or else Token = Tok_Semicolon
               or else Token = Tok_EOF
             then
-               Restore_Scan_State (Scan_State); -- to where we were!
+               Restore_Scan_State (Scan_State); -- to where we were
                return;
             end if;
 
-            Scan; -- continue search!
+            Scan; -- continue search
 
             if Token = Tok_Return then
                Scan; -- past RETURN
@@ -703,7 +702,7 @@ package body Tchk is
          T_Semicolon;
          return;
 
-      --  An interesting little kludge here. If the previous token is a
+      --  An interesting little test here. If the previous token is a
       --  semicolon, then there is no way that we can legitimately need
       --  another semicolon. This could only arise in an error situation
       --  where an error has already been signalled. By simply ignoring
@@ -784,7 +783,7 @@ package body Tchk is
                return;
             end if;
 
-            Scan; -- continue search!
+            Scan; -- continue search
 
             if Token = Tok_Then then
                Scan; -- past THEN
@@ -818,7 +817,7 @@ package body Tchk is
                return;
             end if;
 
-            Scan; -- continue search!
+            Scan; -- continue search
 
             if Token = Tok_Use then
                Scan; -- past use

@@ -1,13 +1,13 @@
 // If not c++0x/gnu99, the {,u,u8,U,L}R prefix should be parsed as separate
 // token.
 // { dg-do compile }
-// { dg-options "" { target c } }
+// { dg-options "-std=gnu89" { target c } }
 // { dg-options "-std=c++98" { target c++ } }
 
 const void	*s0	= R"(a)";	// { dg-error "was not declared|undeclared" "undeclared" }
                 // { dg-error "expected ',' or ';'" "expected" { target c } 7 }
 const void	*s1	= uR"(a)";	// { dg-error "was not declared|undeclared" "undeclared" }
-                // { dg-error "expected ',' or ';'" expected" { target c } 9 }
+                // { dg-error "expected ',' or ';'" "expected" { target c } 9 }
 const void	*s2	= UR"(a)";	// { dg-error "was not declared|undeclared" "undeclared" }
                 // { dg-error "expected ',' or ';'" "expected" { target c } 11 }
 const void	*s3	= u8R"(a)";	// { dg-error "was not declared|undeclared" "undeclared" }

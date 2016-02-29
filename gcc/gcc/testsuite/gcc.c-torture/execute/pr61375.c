@@ -9,7 +9,7 @@ typedef unsigned long long uint64_t;
 #endif
 
 /* Some version of bswap optimization would ICE when analyzing a mask constant
-   too big for an HOST_WIDE_INT (PR61375).  */
+   too big for an uint64_t variable (PR210931).  */
 
 __attribute__ ((noinline, noclone)) uint64_t
 uint128_central_bitsi_ior (unsigned __int128 in1, uint64_t in2)
@@ -19,7 +19,7 @@ uint128_central_bitsi_ior (unsigned __int128 in1, uint64_t in2)
 }
 
 int
-main (int argc)
+main(int argc, char **argv)
 {
   __int128 in = 1;
 #ifdef __SIZEOF_INT128__

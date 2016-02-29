@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -24,6 +24,7 @@
 ------------------------------------------------------------------------------
 
 with Csets;
+with Makeutl;  use Makeutl;
 with Opt;
 with Output;
 with Osint;    use Osint;
@@ -36,7 +37,9 @@ with Prj.Tree; use Prj.Tree;
 with Prj.Util; use Prj.Util;
 with Sdefault;
 with Snames;   use Snames;
+with Stringt;
 with Table;    use Table;
+with Tempdir;
 
 with Ada.Characters.Handling;   use Ada.Characters.Handling;
 with GNAT.Directory_Operations; use GNAT.Directory_Operations;
@@ -61,8 +64,6 @@ package body Prj.Makr is
 
    Tree : constant Project_Node_Tree_Ref := new Project_Node_Tree_Data;
    --  The project tree where the project file is parsed
-
-   Root_Environment : Prj.Tree.Environment;
 
    Args : Argument_List_Access;
    --  The list of arguments for calls to the compiler to get the unit names
@@ -803,6 +804,7 @@ package body Prj.Makr is
 
       Csets.Initialize;
       Snames.Initialize;
+      Stringt.Initialize;
 
       Prj.Initialize (No_Project_Tree);
 
@@ -888,6 +890,14 @@ package body Prj.Makr is
             if No (Project_Node) then
                Prj.Com.Fail ("parsing of existing project file failed");
 
+            elsif Project_Qualifier_Of (Project_Node, Tree) = Aggregate then
+               Prj.Com.Fail ("aggregate projects are not supported");
+
+            elsif Project_Qualifier_Of (Project_Node, Tree) =
+                                                    Aggregate_Library
+            then
+               Prj.Com.Fail ("aggregate library projects are not supported");
+
             else
                --  If parsing was successful, remove the components that are
                --  automatically generated, if any, so that they will be
@@ -952,10 +962,10 @@ package body Prj.Makr is
                      then
                         Name := Prj.Tree.Name_Of (Current_Node, Tree);
 
-                        if Name = Name_Source_Files     or else
-                           Name = Name_Source_List_File or else
-                           Name = Name_Source_Dirs      or else
-                           Name = Name_Naming
+                        if Nam_In (Name, Name_Source_Files,
+                                         Name_Source_List_File,
+                                         Name_Source_Dirs,
+                                         Name_Naming)
                         then
                            Comments :=
                              Tree.Project_Nodes.Table (Current_Node).Comments;
@@ -1047,6 +1057,40 @@ package body Prj.Makr is
            Project_File_Extension;
          Output_Name_Last := Output_Name_Last + Project_File_Extension'Length;
 
+         --  Back up project file if it already exists
+
+         if not Opt.No_Backup
+           and then Is_Regular_File (Path_Name (1 .. Path_Last))
+         then
+            declare
+               Discard    : Boolean;
+               Saved_Path : constant String :=
+                              Path_Name (1 .. Path_Last) & ".saved_";
+               Nmb        : Natural;
+
+            begin
+               Nmb := 0;
+               loop
+                  declare
+                     Img : constant String := Nmb'Img;
+
+                  begin
+                     if not Is_Regular_File
+                              (Saved_Path & Img (2 .. Img'Last))
+                     then
+                        Copy_File
+                          (Name     => Path_Name (1 .. Path_Last),
+                           Pathname => Saved_Path & Img (2 .. Img'Last),
+                           Mode     => Overwrite,
+                           Success  => Discard);
+                        exit;
+                     end if;
+
+                     Nmb := Nmb + 1;
+                  end;
+               end loop;
+            end;
+         end if;
       end if;
 
       --  Change the current directory to the directory of the project file,
@@ -1143,7 +1187,7 @@ package body Prj.Makr is
                Canonical_Case_File_Name (Canon (1 .. Last));
 
                if Is_Regular_File
-                 (Dir_Name & Directory_Separator & Str (1 .. Last))
+                    (Dir_Name & Directory_Separator & Str (1 .. Last))
                then
                   Matched := True;
 
@@ -1198,6 +1242,7 @@ package body Prj.Makr is
                         Success : Boolean;
                         Saved_Output : File_Descriptor;
                         Saved_Error  : File_Descriptor;
+                        Tmp_File     : Path_Name_Type;
 
                      begin
                         --  If we don't have the path of the compiler yet,
@@ -1219,35 +1264,22 @@ package body Prj.Makr is
                            end if;
                         end if;
 
-                        --  If we don't have yet the file name of the
-                        --  temporary file, get it now.
-
-                        if Temp_File_Name = null then
-                           Create_Temp_File (FD, Temp_File_Name);
-
-                           if FD = Invalid_FD then
-                              Prj.Com.Fail
-                                ("could not create temporary file");
-                           end if;
-
-                           Close (FD);
-                           Delete_File (Temp_File_Name.all, Success);
-                        end if;
-
-                        Args (Args'Last) := new String'
-                          (Dir_Name &
-                           Directory_Separator &
-                           Str (1 .. Last));
-
                         --  Create the temporary file
 
-                        FD := Create_Output_Text_File
-                          (Name => Temp_File_Name.all);
+                        Tempdir.Create_Temp_File (FD, Tmp_File);
 
                         if FD = Invalid_FD then
                            Prj.Com.Fail
                              ("could not create temporary file");
+
+                        else
+                           Temp_File_Name :=
+                             new String'(Get_Name_String (Tmp_File));
                         end if;
+
+                        Args (Args'Last) :=
+                          new String'
+                            (Dir_Name & Directory_Separator & Str (1 .. Last));
 
                         --  Save the standard output and error
 
@@ -1294,7 +1326,8 @@ package body Prj.Makr is
 
                            if not Is_Valid (File) then
                               Prj.Com.Fail
-                                ("could not read temporary file");
+                                ("could not read temporary file " &
+                                 Temp_File_Name.all);
                            end if;
 
                            Save_Last_Source_Index := Sources.Last;
@@ -1443,7 +1476,7 @@ package body Prj.Makr is
                --  Do not call itself for "." or ".."
 
                if Is_Directory
-                 (Dir_Name & Directory_Separator & Str (1 .. Last))
+                    (Dir_Name & Directory_Separator & Str (1 .. Last))
                  and then Str (1 .. Last) /= "."
                  and then Str (1 .. Last) /= ".."
                then

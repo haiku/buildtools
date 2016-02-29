@@ -6,6 +6,7 @@ AUTOMAKE_OPTIONS = 1.8 foreign
 ## Skip over everything if the quadlib is not available:
 if BUILD_LIBQUADMATH
 ACLOCAL_AMFLAGS = -I .. -I ../config
+AM_CPPFLAGS = -I $(top_srcdir)/../include
 
 ## May be used by toolexeclibdir.
 gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
@@ -159,7 +160,13 @@ TEXINFO_TEX   = ../gcc/doc/include/texinfo.tex
 
 # Defines info, dvi, pdf and html targets
 MAKEINFOFLAGS = -I $(srcdir)/../gcc/doc/include
+
+if BUILD_LIBQUADMATH
 info_TEXINFOS = libquadmath.texi
+else
+info_TEXINFOS = 
+endif
+
 libquadmath_TEXINFOS = libquadmath-vers.texi
 
 libquadmath-vers.texi:

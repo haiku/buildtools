@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2011, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,6 +31,38 @@ with System;  use type System.Address;
 
 package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
 
+   -------------------
+   -- Checked_Index --
+   -------------------
+
+   function Checked_Index
+     (Hash_Table : aliased in out Hash_Table_Type'Class;
+      Node       : Count_Type) return Hash_Type
+   is
+      Result : Hash_Type;
+
+      B : Natural renames Hash_Table.Busy;
+      L : Natural renames Hash_Table.Lock;
+
+   begin
+      B := B + 1;
+      L := L + 1;
+
+      Result := Index (Hash_Table, Hash_Table.Nodes (Node));
+
+      B := B - 1;
+      L := L - 1;
+
+      return Result;
+
+   exception
+      when others =>
+         B := B - 1;
+         L := L - 1;
+
+         raise;
+   end Checked_Index;
+
    -----------
    -- Clear --
    -----------
@@ -48,6 +80,49 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
       HT.Free := -1;
       HT.Buckets := (others => 0);  -- optimize this somehow ???
    end Clear;
+
+   --------------------------
+   -- Delete_Node_At_Index --
+   --------------------------
+
+   procedure Delete_Node_At_Index
+     (HT   : in out Hash_Table_Type'Class;
+      Indx : Hash_Type;
+      X    : Count_Type)
+   is
+      Prev : Count_Type;
+      Curr : Count_Type;
+
+   begin
+      Prev := HT.Buckets (Indx);
+
+      if Prev = 0 then
+         raise Program_Error with
+           "attempt to delete node from empty hash bucket";
+      end if;
+
+      if Prev = X then
+         HT.Buckets (Indx) := Next (HT.Nodes (Prev));
+         HT.Length := HT.Length - 1;
+         return;
+      end if;
+
+      if HT.Length = 1 then
+         raise Program_Error with
+           "attempt to delete node not in its proper hash bucket";
+      end if;
+
+      loop
+         Curr := Next (HT.Nodes (Prev));
+
+         if Curr = 0 then
+            raise Program_Error with
+              "attempt to delete node not in its proper hash bucket";
+         end if;
+
+         Prev := Curr;
+      end loop;
+   end Delete_Node_At_Index;
 
    ---------------------------
    -- Delete_Node_Sans_Free --
@@ -69,7 +144,7 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
            "attempt to delete node from empty hashed container";
       end if;
 
-      Indx := Index (HT, HT.Nodes (X));
+      Indx := Checked_Index (HT, X);
       Prev := HT.Buckets (Indx);
 
       if Prev = 0 then
@@ -288,6 +363,14 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
    function Generic_Equal
      (L, R : Hash_Table_Type'Class) return Boolean
    is
+      BL : Natural renames L'Unrestricted_Access.Busy;
+      LL : Natural renames L'Unrestricted_Access.Lock;
+
+      BR : Natural renames R'Unrestricted_Access.Busy;
+      LR : Natural renames R'Unrestricted_Access.Lock;
+
+      Result : Boolean;
+
       L_Index : Hash_Type;
       L_Node  : Count_Type;
 
@@ -315,13 +398,23 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
          L_Index := L_Index + 1;
       end loop;
 
+      --  Per AI05-0022, the container implementation is required to detect
+      --  element tampering by a generic actual subprogram.
+
+      BL := BL + 1;
+      LL := LL + 1;
+
+      BR := BR + 1;
+      LR := LR + 1;
+
       --  For each node of hash table L, search for an equivalent node in hash
       --  table R.
 
       N := L.Length;
       loop
          if not Find (HT => R, Key => L.Nodes (L_Node)) then
-            return False;
+            Result := False;
+            exit;
          end if;
 
          N := N - 1;
@@ -329,10 +422,12 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
          L_Node := Next (L.Nodes (L_Node));
 
          if L_Node = 0 then
+
             --  We have exhausted the nodes in this bucket
 
             if N = 0 then
-               return True;
+               Result := True;
+               exit;
             end if;
 
             --  Find the next bucket
@@ -344,6 +439,24 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
             end loop;
          end if;
       end loop;
+
+      BL := BL - 1;
+      LL := LL - 1;
+
+      BR := BR - 1;
+      LR := LR - 1;
+
+      return Result;
+
+   exception
+      when others =>
+         BL := BL - 1;
+         LL := LL - 1;
+
+         BR := BR - 1;
+         LR := LR - 1;
+
+         raise;
    end Generic_Equal;
 
    -----------------------
@@ -397,7 +510,7 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
       for J in 1 .. N loop
          declare
             Node : constant Count_Type := New_Node (Stream);
-            Indx : constant Hash_Type := Index (HT, HT.Nodes (Node));
+            Indx : constant Hash_Type := Checked_Index (HT, Node);
             B    : Count_Type renames HT.Buckets (Indx);
          begin
             Set_Next (HT.Nodes (Node), Next => B);
@@ -461,9 +574,12 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
      (HT   : Hash_Table_Type'Class;
       Node : Count_Type) return Count_Type
    is
-      Result : Count_Type := Next (HT.Nodes (Node));
+      Result : Count_Type;
+      First  : Hash_Type;
 
    begin
+      Result := Next (HT.Nodes (Node));
+
       if Result /= 0 then  -- another node in same bucket
          return Result;
       end if;
@@ -471,7 +587,8 @@ package body Ada.Containers.Hash_Tables.Generic_Bounded_Operations is
       --  This was the last node in the bucket, so move to the next
       --  bucket, and start searching for next node from there.
 
-      for Indx in Index (HT, HT.Nodes (Node)) + 1 .. HT.Buckets'Last loop
+      First := Checked_Index (HT'Unrestricted_Access.all, Node) + 1;
+      for Indx in First .. HT.Buckets'Last loop
          Result := HT.Buckets (Indx);
 
          if Result /= 0 then  -- bucket is not empty

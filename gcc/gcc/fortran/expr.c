@@ -1,5 +1,5 @@
 /* Routines for manipulation of expression nodes.
-   Copyright (C) 2000-2013 Free Software Foundation, Inc.
+   Copyright (C) 2000-2015 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "flags.h"
 #include "gfortran.h"
 #include "arith.h"
 #include "match.h"
@@ -144,7 +145,8 @@ gfc_get_constant_expr (bt type, int kind, locus *where)
   gfc_expr *e;
 
   if (!where)
-    gfc_internal_error ("gfc_get_constant_expr(): locus 'where' cannot be NULL");
+    gfc_internal_error ("gfc_get_constant_expr(): locus %<where%> cannot be "
+			"NULL");
 
   e = gfc_get_expr ();
 
@@ -610,7 +612,7 @@ gfc_replace_expr (gfc_expr *dest, gfc_expr *src)
 
 /* Try to extract an integer constant from the passed expression node.
    Returns an error message or NULL if the result is set.  It is
-   tempting to generate an error and return SUCCESS or FAILURE, but
+   tempting to generate an error and return true or false, but
    failure is OK for some callers.  */
 
 const char *
@@ -1005,27 +1007,27 @@ is_subref_array (gfc_expr * e)
 
 /* Try to collapse intrinsic expressions.  */
 
-static gfc_try
+static bool
 simplify_intrinsic_op (gfc_expr *p, int type)
 {
   gfc_intrinsic_op op;
   gfc_expr *op1, *op2, *result;
 
   if (p->value.op.op == INTRINSIC_USER)
-    return SUCCESS;
+    return true;
 
   op1 = p->value.op.op1;
   op2 = p->value.op.op2;
   op  = p->value.op.op;
 
-  if (gfc_simplify_expr (op1, type) == FAILURE)
-    return FAILURE;
-  if (gfc_simplify_expr (op2, type) == FAILURE)
-    return FAILURE;
+  if (!gfc_simplify_expr (op1, type))
+    return false;
+  if (!gfc_simplify_expr (op2, type))
+    return false;
 
   if (!gfc_is_constant_expr (op1)
       || (op2 != NULL && !gfc_is_constant_expr (op2)))
-    return SUCCESS;
+    return true;
 
   /* Rip p apart.  */
   p->value.op.op1 = NULL;
@@ -1127,21 +1129,21 @@ simplify_intrinsic_op (gfc_expr *p, int type)
     {
       gfc_free_expr (op1);
       gfc_free_expr (op2);
-      return FAILURE;
+      return false;
     }
 
   result->rank = p->rank;
   result->where = p->where;
   gfc_replace_expr (p, result);
 
-  return SUCCESS;
+  return true;
 }
 
 
 /* Subroutine to simplify constructor expressions.  Mutually recursive
    with gfc_simplify_expr().  */
 
-static gfc_try
+static bool
 simplify_constructor (gfc_constructor_base base, int type)
 {
   gfc_constructor *c;
@@ -1150,10 +1152,10 @@ simplify_constructor (gfc_constructor_base base, int type)
   for (c = gfc_constructor_first (base); c; c = gfc_constructor_next (c))
     {
       if (c->iterator
-	  && (gfc_simplify_expr (c->iterator->start, type) == FAILURE
-	      || gfc_simplify_expr (c->iterator->end, type) == FAILURE
-	      || gfc_simplify_expr (c->iterator->step, type) == FAILURE))
-	return FAILURE;
+	  && (!gfc_simplify_expr(c->iterator->start, type)
+	      || !gfc_simplify_expr (c->iterator->end, type)
+	      || !gfc_simplify_expr (c->iterator->step, type)))
+	return false;
 
       if (c->expr)
 	{
@@ -1162,7 +1164,7 @@ simplify_constructor (gfc_constructor_base base, int type)
 	     doing so can make a dog's dinner of complicated things.  */
 	  p = gfc_copy_expr (c->expr);
 
-	  if (gfc_simplify_expr (p, type) == FAILURE)
+	  if (!gfc_simplify_expr (p, type))
 	    {
 	      gfc_free_expr (p);
 	      continue;
@@ -1172,13 +1174,13 @@ simplify_constructor (gfc_constructor_base base, int type)
 	}
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
 /* Pull a single array element out of an array constructor.  */
 
-static gfc_try
+static bool
 find_array_element (gfc_constructor_base base, gfc_array_ref *ar,
 		    gfc_constructor **rval)
 {
@@ -1190,9 +1192,9 @@ find_array_element (gfc_constructor_base base, gfc_array_ref *ar,
   mpz_t tmp;
   gfc_constructor *cons;
   gfc_expr *e;
-  gfc_try t;
+  bool t;
 
-  t = SUCCESS;
+  t = true;
   e = NULL;
 
   mpz_init_set_ui (offset, 0);
@@ -1201,15 +1203,15 @@ find_array_element (gfc_constructor_base base, gfc_array_ref *ar,
   mpz_init_set_ui (span, 1);
   for (i = 0; i < ar->dimen; i++)
     {
-      if (gfc_reduce_init_expr (ar->as->lower[i]) == FAILURE
-	  || gfc_reduce_init_expr (ar->as->upper[i]) == FAILURE)
+      if (!gfc_reduce_init_expr (ar->as->lower[i])
+	  || !gfc_reduce_init_expr (ar->as->upper[i]))
 	{
-	  t = FAILURE;
+	  t = false;
 	  cons = NULL;
 	  goto depart;
 	}
 
-      e = gfc_copy_expr (ar->start[i]);
+      e = ar->start[i];
       if (e->expr_type != EXPR_CONSTANT)
 	{
 	  cons = NULL;
@@ -1229,7 +1231,7 @@ find_array_element (gfc_constructor_base base, gfc_array_ref *ar,
 	  gfc_error ("Index in dimension %d is out of bounds "
 		     "at %L", i + 1, &ar->c_where[i]);
 	  cons = NULL;
-	  t = FAILURE;
+	  t = false;
 	  goto depart;
 	}
 
@@ -1258,8 +1260,6 @@ depart:
   mpz_clear (offset);
   mpz_clear (span);
   mpz_clear (tmp);
-  if (e)
-    gfc_free_expr (e);
   *rval = cons;
   return t;
 }
@@ -1270,12 +1270,23 @@ depart:
 static gfc_constructor *
 find_component_ref (gfc_constructor_base base, gfc_ref *ref)
 {
-  gfc_component *comp;
-  gfc_component *pick;
+  gfc_component *pick = ref->u.c.component;
   gfc_constructor *c = gfc_constructor_first (base);
 
-  comp = ref->u.c.sym->components;
-  pick = ref->u.c.component;
+  gfc_symbol *dt = ref->u.c.sym;
+  int ext = dt->attr.extension;
+
+  /* For extended types, check if the desired component is in one of the
+   * parent types.  */
+  while (ext > 0 && gfc_find_component (dt->components->ts.u.derived,
+					pick->name, true, true))
+    {
+      dt = dt->components->ts.u.derived;
+      c = gfc_constructor_first (c->expr->value.constructor);
+      ext--;
+    }
+
+  gfc_component *comp = dt->components;
   while (comp != pick)
     {
       comp = comp->next;
@@ -1309,7 +1320,7 @@ remove_subobject_ref (gfc_expr *p, gfc_constructor *cons)
 
 /* Pull an array section out of an array constructor.  */
 
-static gfc_try
+static bool
 find_array_section (gfc_expr *expr, gfc_ref *ref)
 {
   int idx;
@@ -1335,9 +1346,9 @@ find_array_section (gfc_expr *expr, gfc_ref *ref)
   gfc_expr *step;
   gfc_expr *upper;
   gfc_expr *lower;
-  gfc_try t;
+  bool t;
 
-  t = SUCCESS;
+  t = true;
 
   base = expr->value.constructor;
   expr->value.constructor = NULL;
@@ -1381,7 +1392,7 @@ find_array_section (gfc_expr *expr, gfc_ref *ref)
 
 	  if (begin->expr_type != EXPR_ARRAY || !gfc_is_constant_expr (begin))
 	    {
-	      t = FAILURE;
+	      t = false;
 	      goto cleanup;
 	    }
 
@@ -1407,7 +1418,7 @@ find_array_section (gfc_expr *expr, gfc_ref *ref)
 		{
 		  gfc_error ("index in dimension %d is out of bounds "
 			     "at %L", d + 1, &ref->u.ar.c_where[d]);
-		  t = FAILURE;
+		  t = false;
 		  goto cleanup;
 		}
 	    }
@@ -1418,7 +1429,7 @@ find_array_section (gfc_expr *expr, gfc_ref *ref)
 	      || (finish && finish->expr_type != EXPR_CONSTANT)
 	      || (step && step->expr_type != EXPR_CONSTANT))
 	    {
-	      t = FAILURE;
+	      t = false;
 	      goto cleanup;
 	    }
 
@@ -1458,7 +1469,7 @@ find_array_section (gfc_expr *expr, gfc_ref *ref)
 	    {
 	      gfc_error ("index in dimension %d is out of bounds "
 			 "at %L", d + 1, &ref->u.ar.c_where[d]);
-	      t = FAILURE;
+	      t = false;
 	      goto cleanup;
 	    }
 
@@ -1530,14 +1541,13 @@ find_array_section (gfc_expr *expr, gfc_ref *ref)
 	}
 
       limit = mpz_get_ui (ptr);
-      if (limit >= gfc_option.flag_max_array_constructor)
+      if (limit >= flag_max_array_constructor)
         {
 	  gfc_error ("The number of elements in the array constructor "
 		     "at %L requires an increase of the allowed %d "
 		     "upper limit.   See -fmax-array-constructor "
-		     "option", &expr->where,
-		     gfc_option.flag_max_array_constructor);
-	  return FAILURE;
+		     "option", &expr->where, flag_max_array_constructor);
+	  return false;
 	}
 
       cons = gfc_constructor_lookup (base, limit);
@@ -1567,7 +1577,7 @@ cleanup:
 
 /* Pull a substring out of an expression.  */
 
-static gfc_try
+static bool
 find_substring_ref (gfc_expr *p, gfc_expr **newp)
 {
   int end;
@@ -1577,7 +1587,7 @@ find_substring_ref (gfc_expr *p, gfc_expr **newp)
 
   if (p->ref->u.ss.start->expr_type != EXPR_CONSTANT
       || p->ref->u.ss.end->expr_type != EXPR_CONSTANT)
-    return FAILURE;
+    return false;
 
   *newp = gfc_copy_expr (p);
   free ((*newp)->value.character.string);
@@ -1591,7 +1601,7 @@ find_substring_ref (gfc_expr *p, gfc_expr **newp)
   memcpy (chr, &p->value.character.string[start - 1],
 	  length * sizeof (gfc_char_t));
   chr[length] = '\0';
-  return SUCCESS;
+  return true;
 }
 
 
@@ -1599,7 +1609,7 @@ find_substring_ref (gfc_expr *p, gfc_expr **newp)
 /* Simplify a subobject reference of a constructor.  This occurs when
    parameter variable values are substituted.  */
 
-static gfc_try
+static bool
 simplify_const_ref (gfc_expr *p)
 {
   gfc_constructor *cons, *c;
@@ -1621,19 +1631,18 @@ simplify_const_ref (gfc_expr *p)
 		  remove_subobject_ref (p, NULL);
 		  break;
 		}
-	      if (find_array_element (p->value.constructor, &p->ref->u.ar,
-				      &cons) == FAILURE)
-		return FAILURE;
+	      if (!find_array_element (p->value.constructor, &p->ref->u.ar, &cons))
+		return false;
 
 	      if (!cons)
-		return SUCCESS;
+		return true;
 
 	      remove_subobject_ref (p, cons);
 	      break;
 
 	    case AR_SECTION:
-	      if (find_array_section (p, p->ref) == FAILURE)
-		return FAILURE;
+	      if (!find_array_section (p, p->ref))
+		return false;
 	      p->ref->u.ar.type = AR_FULL;
 
 	    /* Fall through.  */
@@ -1646,8 +1655,8 @@ simplify_const_ref (gfc_expr *p)
 		       c; c = gfc_constructor_next (c))
 		    {
 		      c->expr->ref = gfc_copy_ref (p->ref->next);
-		      if (simplify_const_ref (c->expr) == FAILURE)
-			return FAILURE;
+		      if (!simplify_const_ref (c->expr))
+			return false;
 		    }
 
 		  if (p->ts.type == BT_DERIVED
@@ -1695,7 +1704,7 @@ simplify_const_ref (gfc_expr *p)
 	      break;
 
 	    default:
-	      return SUCCESS;
+	      return true;
 	    }
 
 	  break;
@@ -1706,8 +1715,8 @@ simplify_const_ref (gfc_expr *p)
 	  break;
 
 	case REF_SUBSTRING:
-  	  if (find_substring_ref (p, &newp) == FAILURE)
-	    return FAILURE;
+  	  if (!find_substring_ref (p, &newp))
+	    return false;
 
 	  gfc_replace_expr (p, newp);
 	  gfc_free_ref_list (p->ref);
@@ -1716,13 +1725,13 @@ simplify_const_ref (gfc_expr *p)
 	}
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
 /* Simplify a chain of references.  */
 
-static gfc_try
+static bool
 simplify_ref_chain (gfc_ref *ref, int type)
 {
   int n;
@@ -1734,41 +1743,41 @@ simplify_ref_chain (gfc_ref *ref, int type)
 	case REF_ARRAY:
 	  for (n = 0; n < ref->u.ar.dimen; n++)
 	    {
-	      if (gfc_simplify_expr (ref->u.ar.start[n], type) == FAILURE)
-		return FAILURE;
-	      if (gfc_simplify_expr (ref->u.ar.end[n], type) == FAILURE)
-		return FAILURE;
-	      if (gfc_simplify_expr (ref->u.ar.stride[n], type) == FAILURE)
-		return FAILURE;
+	      if (!gfc_simplify_expr (ref->u.ar.start[n], type))
+		return false;
+	      if (!gfc_simplify_expr (ref->u.ar.end[n], type))
+		return false;
+	      if (!gfc_simplify_expr (ref->u.ar.stride[n], type))
+		return false;
 	    }
 	  break;
 
 	case REF_SUBSTRING:
-	  if (gfc_simplify_expr (ref->u.ss.start, type) == FAILURE)
-	    return FAILURE;
-	  if (gfc_simplify_expr (ref->u.ss.end, type) == FAILURE)
-	    return FAILURE;
+	  if (!gfc_simplify_expr (ref->u.ss.start, type))
+	    return false;
+	  if (!gfc_simplify_expr (ref->u.ss.end, type))
+	    return false;
 	  break;
 
 	default:
 	  break;
 	}
     }
-  return SUCCESS;
+  return true;
 }
 
 
 /* Try to substitute the value of a parameter variable.  */
 
-static gfc_try
+static bool
 simplify_parameter_variable (gfc_expr *p, int type)
 {
   gfc_expr *e;
-  gfc_try t;
+  bool t;
 
   e = gfc_copy_expr (p->symtree->n.sym->value);
   if (e == NULL)
-    return FAILURE;
+    return false;
 
   e->rank = p->rank;
 
@@ -1778,7 +1787,7 @@ simplify_parameter_variable (gfc_expr *p, int type)
   t = gfc_simplify_expr (e, type);
 
   /* Only use the simplification if it eliminated all subobject references.  */
-  if (t == SUCCESS && !e->ref)
+  if (t && !e->ref)
     gfc_replace_expr (p, e);
   else
     gfc_free_expr (e);
@@ -1802,16 +1811,16 @@ simplify_parameter_variable (gfc_expr *p, int type)
      0   Basic expression parsing
      1   Simplifying array constructors -- will substitute
 	 iterator values.
-   Returns FAILURE on error, SUCCESS otherwise.
-   NOTE: Will return SUCCESS even if the expression can not be simplified.  */
+   Returns false on error, true otherwise.
+   NOTE: Will return true even if the expression can not be simplified.  */
 
-gfc_try
+bool
 gfc_simplify_expr (gfc_expr *p, int type)
 {
   gfc_actual_arglist *ap;
 
   if (p == NULL)
-    return SUCCESS;
+    return true;
 
   switch (p->expr_type)
     {
@@ -1821,18 +1830,18 @@ gfc_simplify_expr (gfc_expr *p, int type)
 
     case EXPR_FUNCTION:
       for (ap = p->value.function.actual; ap; ap = ap->next)
-	if (gfc_simplify_expr (ap->expr, type) == FAILURE)
-	  return FAILURE;
+	if (!gfc_simplify_expr (ap->expr, type))
+	  return false;
 
       if (p->value.function.isym != NULL
 	  && gfc_intrinsic_func_interface (p, 1) == MATCH_ERROR)
-	return FAILURE;
+	return false;
 
       break;
 
     case EXPR_SUBSTRING:
-      if (simplify_ref_chain (p->ref, type) == FAILURE)
-	return FAILURE;
+      if (!simplify_ref_chain (p->ref, type))
+	return false;
 
       if (gfc_is_constant_expr (p))
 	{
@@ -1871,8 +1880,8 @@ gfc_simplify_expr (gfc_expr *p, int type)
       break;
 
     case EXPR_OP:
-      if (simplify_intrinsic_op (p, type) == FAILURE)
-	return FAILURE;
+      if (!simplify_intrinsic_op (p, type))
+	return false;
       break;
 
     case EXPR_VARIABLE:
@@ -1882,8 +1891,8 @@ gfc_simplify_expr (gfc_expr *p, int type)
 	  && (gfc_init_expr_flag || p->ref
 	      || p->symtree->n.sym->value->expr_type != EXPR_ARRAY))
 	{
-	  if (simplify_parameter_variable (p, type) == FAILURE)
-	    return FAILURE;
+	  if (!simplify_parameter_variable (p, type))
+	    return false;
 	  break;
 	}
 
@@ -1893,35 +1902,34 @@ gfc_simplify_expr (gfc_expr *p, int type)
 	}
 
       /* Simplify subcomponent references.  */
-      if (simplify_ref_chain (p->ref, type) == FAILURE)
-	return FAILURE;
+      if (!simplify_ref_chain (p->ref, type))
+	return false;
 
       break;
 
     case EXPR_STRUCTURE:
     case EXPR_ARRAY:
-      if (simplify_ref_chain (p->ref, type) == FAILURE)
-	return FAILURE;
+      if (!simplify_ref_chain (p->ref, type))
+	return false;
 
-      if (simplify_constructor (p->value.constructor, type) == FAILURE)
-	return FAILURE;
+      if (!simplify_constructor (p->value.constructor, type))
+	return false;
 
       if (p->expr_type == EXPR_ARRAY && p->ref && p->ref->type == REF_ARRAY
 	  && p->ref->u.ar.type == AR_FULL)
 	  gfc_expand_constructor (p, false);
 
-      if (simplify_const_ref (p) == FAILURE)
-	return FAILURE;
+      if (!simplify_const_ref (p))
+	return false;
 
       break;
 
     case EXPR_COMPCALL:
     case EXPR_PPC:
-      gcc_unreachable ();
       break;
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
@@ -1932,7 +1940,7 @@ gfc_simplify_expr (gfc_expr *p, int type)
 static bt
 et0 (gfc_expr *e)
 {
-  if (e->expr_type == EXPR_VARIABLE && gfc_check_iter_variable (e) == SUCCESS)
+  if (e->expr_type == EXPR_VARIABLE && gfc_check_iter_variable (e))
     return BT_INTEGER;
 
   return e->ts.type;
@@ -1941,7 +1949,7 @@ et0 (gfc_expr *e)
 
 /* Scalarize an expression for an elemental intrinsic call.  */
 
-static gfc_try
+static bool
 scalarize_intrinsic_call (gfc_expr *e)
 {
   gfc_actual_arglist *a, *b;
@@ -1959,7 +1967,7 @@ scalarize_intrinsic_call (gfc_expr *e)
   for (; a; a = a->next)
     {
       n++;
-      if (a->expr->expr_type != EXPR_ARRAY)
+      if (!a->expr || a->expr->expr_type != EXPR_ARRAY)
 	continue;
       array_arg = n;
       expr = gfc_copy_expr (a->expr);
@@ -1967,7 +1975,7 @@ scalarize_intrinsic_call (gfc_expr *e)
     }
 
   if (!array_arg)
-    return FAILURE;
+    return false;
 
   old = gfc_copy_expr (e);
 
@@ -1984,7 +1992,7 @@ scalarize_intrinsic_call (gfc_expr *e)
   for (; a; a = a->next)
     {
       /* Check that this is OK for an initialization expression.  */
-      if (a->expr && gfc_check_init_expr (a->expr) == FAILURE)
+      if (a->expr && !gfc_check_init_expr (a->expr))
 	goto cleanup;
 
       rank[n] = 0;
@@ -2060,7 +2068,7 @@ scalarize_intrinsic_call (gfc_expr *e)
   /* Free "expr" but not the pointers it contains.  */
   free (expr);
   gfc_free_expr (old);
-  return SUCCESS;
+  return true;
 
 compliance:
   gfc_error_now ("elemental function arguments at %C are not compliant");
@@ -2068,18 +2076,18 @@ compliance:
 cleanup:
   gfc_free_expr (expr);
   gfc_free_expr (old);
-  return FAILURE;
+  return false;
 }
 
 
-static gfc_try
-check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
+static bool
+check_intrinsic_op (gfc_expr *e, bool (*check_function) (gfc_expr *))
 {
   gfc_expr *op1 = e->value.op.op1;
   gfc_expr *op2 = e->value.op.op2;
 
-  if ((*check_function) (op1) == FAILURE)
-    return FAILURE;
+  if (!(*check_function)(op1))
+    return false;
 
   switch (e->value.op.op)
     {
@@ -2101,15 +2109,15 @@ check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
     case INTRINSIC_LT_OS:
     case INTRINSIC_LE:
     case INTRINSIC_LE_OS:
-      if ((*check_function) (op2) == FAILURE)
-	return FAILURE;
+      if (!(*check_function)(op2))
+	return false;
 
       if (!(et0 (op1) == BT_CHARACTER && et0 (op2) == BT_CHARACTER)
 	  && !(numeric_type (et0 (op1)) && numeric_type (et0 (op2))))
 	{
 	  gfc_error ("Numeric or CHARACTER operands are required in "
 		     "expression at %L", &e->where);
-	 return FAILURE;
+	 return false;
 	}
       break;
 
@@ -2118,8 +2126,8 @@ check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
     case INTRINSIC_TIMES:
     case INTRINSIC_DIVIDE:
     case INTRINSIC_POWER:
-      if ((*check_function) (op2) == FAILURE)
-	return FAILURE;
+      if (!(*check_function)(op2))
+	return false;
 
       if (!numeric_type (et0 (op1)) || !numeric_type (et0 (op2)))
 	goto not_numeric;
@@ -2127,21 +2135,21 @@ check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
       break;
 
     case INTRINSIC_CONCAT:
-      if ((*check_function) (op2) == FAILURE)
-	return FAILURE;
+      if (!(*check_function)(op2))
+	return false;
 
       if (et0 (op1) != BT_CHARACTER || et0 (op2) != BT_CHARACTER)
 	{
 	  gfc_error ("Concatenation operator in expression at %L "
 		     "must have two CHARACTER operands", &op1->where);
-	  return FAILURE;
+	  return false;
 	}
 
       if (op1->ts.kind != op2->ts.kind)
 	{
 	  gfc_error ("Concat operator at %L must concatenate strings of the "
 		     "same kind", &e->where);
-	  return FAILURE;
+	  return false;
 	}
 
       break;
@@ -2151,7 +2159,7 @@ check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
 	{
 	  gfc_error (".NOT. operator in expression at %L must have a LOGICAL "
 		     "operand", &op1->where);
-	  return FAILURE;
+	  return false;
 	}
 
       break;
@@ -2160,14 +2168,14 @@ check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
     case INTRINSIC_OR:
     case INTRINSIC_EQV:
     case INTRINSIC_NEQV:
-      if ((*check_function) (op2) == FAILURE)
-	return FAILURE;
+      if (!(*check_function)(op2))
+	return false;
 
       if (et0 (op1) != BT_LOGICAL || et0 (op2) != BT_LOGICAL)
 	{
 	  gfc_error ("LOGICAL operands are required in expression at %L",
 		     &e->where);
-	  return FAILURE;
+	  return false;
 	}
 
       break;
@@ -2178,20 +2186,20 @@ check_intrinsic_op (gfc_expr *e, gfc_try (*check_function) (gfc_expr *))
     default:
       gfc_error ("Only intrinsic operators can be used in expression at %L",
 		 &e->where);
-      return FAILURE;
+      return false;
     }
 
-  return SUCCESS;
+  return true;
 
 not_numeric:
   gfc_error ("Numeric operands are required in expression at %L", &e->where);
 
-  return FAILURE;
+  return false;
 }
 
 /* F2003, 7.1.7 (3): In init expression, allocatable components
    must not be data-initialized.  */
-static gfc_try
+static bool
 check_alloc_comp_init (gfc_expr *e)
 {
   gfc_component *comp;
@@ -2204,17 +2212,17 @@ check_alloc_comp_init (gfc_expr *e)
        ctor = gfc_constructor_first (e->value.constructor);
        comp; comp = comp->next, ctor = gfc_constructor_next (ctor))
     {
-      if (comp->attr.allocatable
+      if (comp->attr.allocatable && ctor->expr
           && ctor->expr->expr_type != EXPR_NULL)
         {
-	  gfc_error("Invalid initialization expression for ALLOCATABLE "
-	            "component '%s' in structure constructor at %L",
-	            comp->name, &ctor->expr->where);
-	  return FAILURE;
+	  gfc_error ("Invalid initialization expression for ALLOCATABLE "
+		     "component %qs in structure constructor at %L",
+		     comp->name, &ctor->expr->where);
+	  return false;
 	}
     }
 
-  return SUCCESS;
+  return true;
 }
 
 static match
@@ -2223,13 +2231,13 @@ check_init_expr_arguments (gfc_expr *e)
   gfc_actual_arglist *ap;
 
   for (ap = e->value.function.actual; ap; ap = ap->next)
-    if (gfc_check_init_expr (ap->expr) == FAILURE)
+    if (!gfc_check_init_expr (ap->expr))
       return MATCH_ERROR;
 
   return MATCH_YES;
 }
 
-static gfc_try check_restricted (gfc_expr *);
+static bool check_restricted (gfc_expr *);
 
 /* F95, 7.1.6.1, Initialization expressions, (7)
    F2003, 7.1.7 Initialization expression, (8)  */
@@ -2256,7 +2264,7 @@ check_inquiry (gfc_expr *e, int not_restricted)
     "new_line", NULL
   };
 
-  int i;
+  int i = 0;
   gfc_actual_arglist *ap;
 
   if (!e->value.function.isym
@@ -2267,17 +2275,31 @@ check_inquiry (gfc_expr *e, int not_restricted)
   if (e->symtree == NULL)
     return MATCH_NO;
 
-  name = e->symtree->n.sym->name;
+  if (e->symtree->n.sym->from_intmod)
+    {
+      if (e->symtree->n.sym->from_intmod == INTMOD_ISO_FORTRAN_ENV
+	  && e->symtree->n.sym->intmod_sym_id != ISOFORTRAN_COMPILER_OPTIONS
+	  && e->symtree->n.sym->intmod_sym_id != ISOFORTRAN_COMPILER_VERSION)
+	return MATCH_NO;
 
-  functions = (gfc_option.warn_std & GFC_STD_F2003)
+      if (e->symtree->n.sym->from_intmod == INTMOD_ISO_C_BINDING
+	  && e->symtree->n.sym->intmod_sym_id != ISOCBINDING_C_SIZEOF)
+	return MATCH_NO;
+    }
+  else
+    {
+      name = e->symtree->n.sym->name;
+
+      functions = (gfc_option.warn_std & GFC_STD_F2003)
 		? inquiry_func_f2003 : inquiry_func_f95;
 
-  for (i = 0; functions[i]; i++)
-    if (strcmp (functions[i], name) == 0)
-      break;
+      for (i = 0; functions[i]; i++)
+	if (strcmp (functions[i], name) == 0)
+	  break;
 
-  if (functions[i] == NULL)
-    return MATCH_ERROR;
+	if (functions[i] == NULL)
+	  return MATCH_ERROR;
+    }
 
   /* At this point we have an inquiry function with a variable argument.  The
      type of the variable might be undefined, but we need it now, because the
@@ -2291,8 +2313,7 @@ check_inquiry (gfc_expr *e, int not_restricted)
       if (ap->expr->ts.type == BT_UNKNOWN)
 	{
 	  if (ap->expr->symtree->n.sym->ts.type == BT_UNKNOWN
-	      && gfc_set_default_type (ap->expr->symtree->n.sym, 0, gfc_current_ns)
-	      == FAILURE)
+	      && !gfc_set_default_type (ap->expr->symtree->n.sym, 0, gfc_current_ns))
 	    return MATCH_NO;
 
 	  ap->expr->ts = ap->expr->symtree->n.sym->ts;
@@ -2305,18 +2326,18 @@ check_inquiry (gfc_expr *e, int not_restricted)
 	    && (ap->expr->symtree->n.sym->ts.u.cl->length == NULL
 		|| ap->expr->symtree->n.sym->ts.deferred))
 	  {
-	    gfc_error ("Assumed or deferred character length variable '%s' "
+	    gfc_error ("Assumed or deferred character length variable %qs "
 			" in constant expression at %L",
 			ap->expr->symtree->n.sym->name,
 			&ap->expr->where);
 	      return MATCH_ERROR;
 	  }
-	else if (not_restricted && gfc_check_init_expr (ap->expr) == FAILURE)
+	else if (not_restricted && !gfc_check_init_expr (ap->expr))
 	  return MATCH_ERROR;
 
 	if (not_restricted == 0
 	      && ap->expr->expr_type != EXPR_VARIABLE
-	      && check_restricted (ap->expr) == FAILURE)
+	      && !check_restricted (ap->expr))
 	  return MATCH_ERROR;
 
 	if (not_restricted == 0
@@ -2371,8 +2392,8 @@ check_transformational (gfc_expr *e)
 
   if (functions[i] == NULL)
     {
-      gfc_error("transformational intrinsic '%s' at %L is not permitted "
-		"in an initialization expression", name, &e->where);
+      gfc_error ("transformational intrinsic %qs at %L is not permitted "
+		 "in an initialization expression", name, &e->where);
       return MATCH_ERROR;
     }
 
@@ -2402,9 +2423,8 @@ check_elemental (gfc_expr *e)
 
   if (e->ts.type != BT_INTEGER
       && e->ts.type != BT_CHARACTER
-      && gfc_notify_std (GFC_STD_F2003, "Evaluation of "
-			"nonstandard initialization expression at %L",
-			&e->where) == FAILURE)
+      && !gfc_notify_std (GFC_STD_F2003, "Evaluation of nonstandard "
+			  "initialization expression at %L", &e->where))
     return MATCH_ERROR;
 
   return check_init_expr_arguments (e);
@@ -2427,38 +2447,59 @@ check_conversion (gfc_expr *e)
    node if all goes well.  This would normally happen when the
    expression is constructed but function references are assumed to be
    intrinsics in the context of initialization expressions.  If
-   FAILURE is returned an error message has been generated.  */
+   false is returned an error message has been generated.  */
 
-gfc_try
+bool
 gfc_check_init_expr (gfc_expr *e)
 {
   match m;
-  gfc_try t;
+  bool t;
 
   if (e == NULL)
-    return SUCCESS;
+    return true;
 
   switch (e->expr_type)
     {
     case EXPR_OP:
       t = check_intrinsic_op (e, gfc_check_init_expr);
-      if (t == SUCCESS)
+      if (t)
 	t = gfc_simplify_expr (e, 0);
 
       break;
 
     case EXPR_FUNCTION:
-      t = FAILURE;
+      t = false;
 
       {
-	gfc_intrinsic_sym* isym;
-	gfc_symbol* sym;
+	bool conversion;
+	gfc_intrinsic_sym* isym = NULL;
+	gfc_symbol* sym = e->symtree->n.sym;
 
-	sym = e->symtree->n.sym;
-	if (!gfc_is_intrinsic (sym, 0, e->where)
-	    || (m = gfc_intrinsic_func_interface (e, 0)) != MATCH_YES)
+	/* Special case for IEEE_SELECTED_REAL_KIND from the intrinsic
+	   module IEEE_ARITHMETIC, which is allowed in initialization
+	   expressions.  */
+	if (!strcmp(sym->name, "ieee_selected_real_kind")
+	    && sym->from_intmod == INTMOD_IEEE_ARITHMETIC)
 	  {
-	    gfc_error ("Function '%s' in initialization expression at %L "
+	    gfc_expr *new_expr = gfc_simplify_ieee_selected_real_kind (e);
+	    if (new_expr)
+	      {
+		gfc_replace_expr (e, new_expr);
+		t = true;
+		break;
+	      }
+	  }
+
+	/* If a conversion function, e.g., __convert_i8_i4, was inserted
+	   into an array constructor, we need to skip the error check here.
+           Conversion errors are  caught below in scalarize_intrinsic_call.  */
+	conversion = e->value.function.isym
+		   && (e->value.function.isym->conversion == 1);
+
+	if (!conversion && (!gfc_is_intrinsic (sym, 0, e->where)
+	    || (m = gfc_intrinsic_func_interface (e, 0)) != MATCH_YES))
+	  {
+	    gfc_error ("Function %qs in initialization expression at %L "
 		       "must be an intrinsic function",
 		       e->symtree->n.sym->name, &e->where);
 	    break;
@@ -2470,20 +2511,20 @@ gfc_check_init_expr (gfc_expr *e)
 	    && (m = check_transformational (e)) == MATCH_NO
 	    && (m = check_elemental (e)) == MATCH_NO)
 	  {
-	    gfc_error ("Intrinsic function '%s' at %L is not permitted "
+	    gfc_error ("Intrinsic function %qs at %L is not permitted "
 		       "in an initialization expression",
 		       e->symtree->n.sym->name, &e->where);
 	    m = MATCH_ERROR;
 	  }
 
 	if (m == MATCH_ERROR)
-	  return FAILURE;
+	  return false;
 
 	/* Try to scalarize an elemental intrinsic function that has an
 	   array argument.  */
 	isym = gfc_find_function (e->symtree->n.sym->name);
 	if (isym && isym->elemental
-	    && (t = scalarize_intrinsic_call (e)) == SUCCESS)
+	    && (t = scalarize_intrinsic_call (e)))
 	  break;
       }
 
@@ -2493,9 +2534,9 @@ gfc_check_init_expr (gfc_expr *e)
       break;
 
     case EXPR_VARIABLE:
-      t = SUCCESS;
+      t = true;
 
-      if (gfc_check_iter_variable (e) == SUCCESS)
+      if (gfc_check_iter_variable (e))
 	break;
 
       if (e->symtree->n.sym->attr.flavor == FL_PARAMETER)
@@ -2505,9 +2546,9 @@ gfc_check_init_expr (gfc_expr *e)
 	     is invalid.  */
 	  if (!e->symtree->n.sym->value)
 	    {
-	      gfc_error("PARAMETER '%s' is used at %L before its definition "
-			"is complete", e->symtree->n.sym->name, &e->where);
-	      t = FAILURE;
+	      gfc_error ("PARAMETER %qs is used at %L before its definition "
+			 "is complete", e->symtree->n.sym->name, &e->where);
+	      t = false;
 	    }
 	  else
 	    t = simplify_parameter_variable (e, 0);
@@ -2518,32 +2559,32 @@ gfc_check_init_expr (gfc_expr *e)
       if (gfc_in_match_data ())
 	break;
 
-      t = FAILURE;
+      t = false;
 
       if (e->symtree->n.sym->as)
 	{
 	  switch (e->symtree->n.sym->as->type)
 	    {
 	      case AS_ASSUMED_SIZE:
-		gfc_error ("Assumed size array '%s' at %L is not permitted "
+		gfc_error ("Assumed size array %qs at %L is not permitted "
 			   "in an initialization expression",
 			   e->symtree->n.sym->name, &e->where);
 		break;
 
 	      case AS_ASSUMED_SHAPE:
-		gfc_error ("Assumed shape array '%s' at %L is not permitted "
+		gfc_error ("Assumed shape array %qs at %L is not permitted "
 			   "in an initialization expression",
 			   e->symtree->n.sym->name, &e->where);
 		break;
 
 	      case AS_DEFERRED:
-		gfc_error ("Deferred array '%s' at %L is not permitted "
+		gfc_error ("Deferred array %qs at %L is not permitted "
 			   "in an initialization expression",
 			   e->symtree->n.sym->name, &e->where);
 		break;
 
 	      case AS_EXPLICIT:
-		gfc_error ("Array '%s' at %L is a variable, which does "
+		gfc_error ("Array %qs at %L is a variable, which does "
 			   "not reduce to a constant expression",
 			   e->symtree->n.sym->name, &e->where);
 		break;
@@ -2553,7 +2594,7 @@ gfc_check_init_expr (gfc_expr *e)
 	  }
 	}
       else
-	gfc_error ("Parameter '%s' at %L has not been declared or is "
+	gfc_error ("Parameter %qs at %L has not been declared or is "
 		   "a variable, which does not reduce to a constant "
 		   "expression", e->symtree->n.sym->name, &e->where);
 
@@ -2561,42 +2602,46 @@ gfc_check_init_expr (gfc_expr *e)
 
     case EXPR_CONSTANT:
     case EXPR_NULL:
-      t = SUCCESS;
+      t = true;
       break;
 
     case EXPR_SUBSTRING:
-      t = gfc_check_init_expr (e->ref->u.ss.start);
-      if (t == FAILURE)
-	break;
+      if (e->ref)
+	{
+	  t = gfc_check_init_expr (e->ref->u.ss.start);
+	  if (!t)
+	    break;
 
-      t = gfc_check_init_expr (e->ref->u.ss.end);
-      if (t == SUCCESS)
-	t = gfc_simplify_expr (e, 0);
-
+	  t = gfc_check_init_expr (e->ref->u.ss.end);
+	  if (t)
+	    t = gfc_simplify_expr (e, 0);
+	}
+      else
+	t = false;
       break;
 
     case EXPR_STRUCTURE:
-      t = e->ts.is_iso_c ? SUCCESS : FAILURE;
-      if (t == SUCCESS)
+      t = e->ts.is_iso_c ? true : false;
+      if (t)
 	break;
 
       t = check_alloc_comp_init (e);
-      if (t == FAILURE)
+      if (!t)
 	break;
 
       t = gfc_check_constructor (e, gfc_check_init_expr);
-      if (t == FAILURE)
+      if (!t)
 	break;
 
       break;
 
     case EXPR_ARRAY:
       t = gfc_check_constructor (e, gfc_check_init_expr);
-      if (t == FAILURE)
+      if (!t)
 	break;
 
       t = gfc_expand_constructor (e, true);
-      if (t == FAILURE)
+      if (!t)
 	break;
 
       t = gfc_check_constructor_type (e);
@@ -2611,31 +2656,31 @@ gfc_check_init_expr (gfc_expr *e)
 
 /* Reduces a general expression to an initialization expression (a constant).
    This used to be part of gfc_match_init_expr.
-   Note that this function doesn't free the given expression on FAILURE.  */
+   Note that this function doesn't free the given expression on false.  */
 
-gfc_try
+bool
 gfc_reduce_init_expr (gfc_expr *expr)
 {
-  gfc_try t;
+  bool t;
 
   gfc_init_expr_flag = true;
   t = gfc_resolve_expr (expr);
-  if (t == SUCCESS)
+  if (t)
     t = gfc_check_init_expr (expr);
   gfc_init_expr_flag = false;
 
-  if (t == FAILURE)
-    return FAILURE;
+  if (!t)
+    return false;
 
   if (expr->expr_type == EXPR_ARRAY)
     {
-      if (gfc_check_constructor_type (expr) == FAILURE)
-	return FAILURE;
-      if (gfc_expand_constructor (expr, true) == FAILURE)
-	return FAILURE;
+      if (!gfc_check_constructor_type (expr))
+	return false;
+      if (!gfc_expand_constructor (expr, true))
+	return false;
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
@@ -2647,7 +2692,7 @@ gfc_match_init_expr (gfc_expr **result)
 {
   gfc_expr *expr;
   match m;
-  gfc_try t;
+  bool t;
 
   expr = NULL;
 
@@ -2661,7 +2706,7 @@ gfc_match_init_expr (gfc_expr **result)
     }
 
   t = gfc_reduce_init_expr (expr);
-  if (t != SUCCESS)
+  if (!t)
     {
       gfc_free_expr (expr);
       gfc_init_expr_flag = false;
@@ -2679,16 +2724,16 @@ gfc_match_init_expr (gfc_expr **result)
    restricted expression and optionally if the expression type is
    integer or character.  */
 
-static gfc_try
+static bool
 restricted_args (gfc_actual_arglist *a)
 {
   for (; a; a = a->next)
     {
-      if (check_restricted (a->expr) == FAILURE)
-	return FAILURE;
+      if (!check_restricted (a->expr))
+	return false;
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
@@ -2697,7 +2742,7 @@ restricted_args (gfc_actual_arglist *a)
 
 /* Make sure a non-intrinsic function is a specification function.  */
 
-static gfc_try
+static bool
 external_spec_function (gfc_expr *e)
 {
   gfc_symbol *f;
@@ -2706,30 +2751,30 @@ external_spec_function (gfc_expr *e)
 
   if (f->attr.proc == PROC_ST_FUNCTION)
     {
-      gfc_error ("Specification function '%s' at %L cannot be a statement "
+      gfc_error ("Specification function %qs at %L cannot be a statement "
 		 "function", f->name, &e->where);
-      return FAILURE;
+      return false;
     }
 
   if (f->attr.proc == PROC_INTERNAL)
     {
-      gfc_error ("Specification function '%s' at %L cannot be an internal "
+      gfc_error ("Specification function %qs at %L cannot be an internal "
 		 "function", f->name, &e->where);
-      return FAILURE;
+      return false;
     }
 
   if (!f->attr.pure && !f->attr.elemental)
     {
-      gfc_error ("Specification function '%s' at %L must be PURE", f->name,
+      gfc_error ("Specification function %qs at %L must be PURE", f->name,
 		 &e->where);
-      return FAILURE;
+      return false;
     }
 
   if (f->attr.recursive)
     {
-      gfc_error ("Specification function '%s' at %L cannot be RECURSIVE",
+      gfc_error ("Specification function %qs at %L cannot be RECURSIVE",
 		 f->name, &e->where);
-      return FAILURE;
+      return false;
     }
 
   return restricted_args (e->value.function.actual);
@@ -2739,12 +2784,12 @@ external_spec_function (gfc_expr *e)
 /* Check to see that a function reference to an intrinsic is a
    restricted expression.  */
 
-static gfc_try
+static bool
 restricted_intrinsic (gfc_expr *e)
 {
   /* TODO: Check constraints on inquiry functions.  7.1.6.2 (7).  */
   if (check_inquiry (e, 0) == MATCH_YES)
-    return SUCCESS;
+    return true;
 
   return restricted_args (e->value.function.actual);
 }
@@ -2752,39 +2797,39 @@ restricted_intrinsic (gfc_expr *e)
 
 /* Check the expressions of an actual arglist.  Used by check_restricted.  */
 
-static gfc_try
-check_arglist (gfc_actual_arglist* arg, gfc_try (*checker) (gfc_expr*))
+static bool
+check_arglist (gfc_actual_arglist* arg, bool (*checker) (gfc_expr*))
 {
   for (; arg; arg = arg->next)
-    if (checker (arg->expr) == FAILURE)
-      return FAILURE;
+    if (!checker (arg->expr))
+      return false;
 
-  return SUCCESS;
+  return true;
 }
 
 
 /* Check the subscription expressions of a reference chain with a checking
    function; used by check_restricted.  */
 
-static gfc_try
-check_references (gfc_ref* ref, gfc_try (*checker) (gfc_expr*))
+static bool
+check_references (gfc_ref* ref, bool (*checker) (gfc_expr*))
 {
   int dim;
 
   if (!ref)
-    return SUCCESS;
+    return true;
 
   switch (ref->type)
     {
     case REF_ARRAY:
       for (dim = 0; dim != ref->u.ar.dimen; ++dim)
 	{
-	  if (checker (ref->u.ar.start[dim]) == FAILURE)
-	    return FAILURE;
-	  if (checker (ref->u.ar.end[dim]) == FAILURE)
-	    return FAILURE;
-	  if (checker (ref->u.ar.stride[dim]) == FAILURE)
-	    return FAILURE;
+	  if (!checker (ref->u.ar.start[dim]))
+	    return false;
+	  if (!checker (ref->u.ar.end[dim]))
+	    return false;
+	  if (!checker (ref->u.ar.stride[dim]))
+	    return false;
 	}
       break;
 
@@ -2793,10 +2838,10 @@ check_references (gfc_ref* ref, gfc_try (*checker) (gfc_expr*))
       break;
 
     case REF_SUBSTRING:
-      if (checker (ref->u.ss.start) == FAILURE)
-	return FAILURE;
-      if (checker (ref->u.ss.end) == FAILURE)
-	return FAILURE;
+      if (!checker (ref->u.ss.start))
+	return false;
+      if (!checker (ref->u.ss.end))
+	return false;
       break;
 
     default:
@@ -2810,22 +2855,22 @@ check_references (gfc_ref* ref, gfc_try (*checker) (gfc_expr*))
 
 /* Verify that an expression is a restricted expression.  Like its
    cousin check_init_expr(), an error message is generated if we
-   return FAILURE.  */
+   return false.  */
 
-static gfc_try
+static bool
 check_restricted (gfc_expr *e)
 {
   gfc_symbol* sym;
-  gfc_try t;
+  bool t;
 
   if (e == NULL)
-    return SUCCESS;
+    return true;
 
   switch (e->expr_type)
     {
     case EXPR_OP:
       t = check_intrinsic_op (e, check_restricted);
-      if (t == SUCCESS)
+      if (t)
 	t = gfc_simplify_expr (e, 0);
 
       break;
@@ -2834,24 +2879,24 @@ check_restricted (gfc_expr *e)
       if (e->value.function.esym)
 	{
 	  t = check_arglist (e->value.function.actual, &check_restricted);
-	  if (t == SUCCESS)
+	  if (t)
 	    t = external_spec_function (e);
 	}
       else
 	{
 	  if (e->value.function.isym && e->value.function.isym->inquiry)
-	    t = SUCCESS;
+	    t = true;
 	  else
 	    t = check_arglist (e->value.function.actual, &check_restricted);
 
-	  if (t == SUCCESS)
+	  if (t)
 	    t = restricted_intrinsic (e);
 	}
       break;
 
     case EXPR_VARIABLE:
       sym = e->symtree->n.sym;
-      t = FAILURE;
+      t = false;
 
       /* If a dummy argument appears in a context that is valid for a
 	 restricted expression in an elemental procedure, it will have
@@ -2861,27 +2906,27 @@ check_restricted (gfc_expr *e)
       if (sym->attr.dummy && sym->ns == gfc_current_ns
 	  && sym->ns->proc_name && sym->ns->proc_name->attr.elemental)
 	{
-	  gfc_error ("Dummy argument '%s' not allowed in expression at %L",
+	  gfc_error ("Dummy argument %qs not allowed in expression at %L",
 		     sym->name, &e->where);
 	  break;
 	}
 
       if (sym->attr.optional)
 	{
-	  gfc_error ("Dummy argument '%s' at %L cannot be OPTIONAL",
+	  gfc_error ("Dummy argument %qs at %L cannot be OPTIONAL",
 		     sym->name, &e->where);
 	  break;
 	}
 
       if (sym->attr.intent == INTENT_OUT)
 	{
-	  gfc_error ("Dummy argument '%s' at %L cannot be INTENT(OUT)",
+	  gfc_error ("Dummy argument %qs at %L cannot be INTENT(OUT)",
 		     sym->name, &e->where);
 	  break;
 	}
 
       /* Check reference chain if any.  */
-      if (check_references (e->ref, &check_restricted) == FAILURE)
+      if (!check_references (e->ref, &check_restricted))
 	break;
 
       /* gfc_is_formal_arg broadcasts that a formal argument list is being
@@ -2902,11 +2947,11 @@ check_restricted (gfc_expr *e)
 		  && sym->ns->proc_name->attr.flavor == FL_MODULE)
 	    || (gfc_is_formal_arg () && (sym->ns == gfc_current_ns)))
 	{
-	  t = SUCCESS;
+	  t = true;
 	  break;
 	}
 
-      gfc_error ("Variable '%s' cannot appear in the expression at %L",
+      gfc_error ("Variable %qs cannot appear in the expression at %L",
 		 sym->name, &e->where);
       /* Prevent a repetition of the error.  */
       e->error = 1;
@@ -2914,16 +2959,16 @@ check_restricted (gfc_expr *e)
 
     case EXPR_NULL:
     case EXPR_CONSTANT:
-      t = SUCCESS;
+      t = true;
       break;
 
     case EXPR_SUBSTRING:
       t = gfc_specification_expr (e->ref->u.ss.start);
-      if (t == FAILURE)
+      if (!t)
 	break;
 
       t = gfc_specification_expr (e->ref->u.ss.end);
-      if (t == SUCCESS)
+      if (t)
 	t = gfc_simplify_expr (e, 0);
 
       break;
@@ -2945,21 +2990,21 @@ check_restricted (gfc_expr *e)
 
 
 /* Check to see that an expression is a specification expression.  If
-   we return FAILURE, an error has been generated.  */
+   we return false, an error has been generated.  */
 
-gfc_try
+bool
 gfc_specification_expr (gfc_expr *e)
 {
   gfc_component *comp;
 
   if (e == NULL)
-    return SUCCESS;
+    return true;
 
   if (e->ts.type != BT_INTEGER)
     {
       gfc_error ("Expression at %L must be of INTEGER type, found %s",
 		 &e->where, gfc_basic_typename (e->ts.type));
-      return FAILURE;
+      return false;
     }
 
   comp = gfc_get_proc_ptr_comp (e);
@@ -2969,21 +3014,21 @@ gfc_specification_expr (gfc_expr *e)
       && !gfc_pure (e->symtree->n.sym)
       && (!comp || !comp->attr.pure))
     {
-      gfc_error ("Function '%s' at %L must be PURE",
+      gfc_error ("Function %qs at %L must be PURE",
 		 e->symtree->n.sym->name, &e->where);
       /* Prevent repeat error messages.  */
       e->symtree->n.sym->attr.pure = 1;
-      return FAILURE;
+      return false;
     }
 
   if (e->rank != 0)
     {
       gfc_error ("Expression at %L must be scalar", &e->where);
-      return FAILURE;
+      return false;
     }
 
-  if (gfc_simplify_expr (e, 0) == FAILURE)
-    return FAILURE;
+  if (!gfc_simplify_expr (e, 0))
+    return false;
 
   return check_restricted (e);
 }
@@ -2993,18 +3038,18 @@ gfc_specification_expr (gfc_expr *e)
 
 /* Given two expressions, make sure that the arrays are conformable.  */
 
-gfc_try
+bool
 gfc_check_conformance (gfc_expr *op1, gfc_expr *op2, const char *optype_msgid, ...)
 {
   int op1_flag, op2_flag, d;
   mpz_t op1_size, op2_size;
-  gfc_try t;
+  bool t;
 
   va_list argp;
   char buffer[240];
 
   if (op1->rank == 0 || op2->rank == 0)
-    return SUCCESS;
+    return true;
 
   va_start (argp, optype_msgid);
   vsnprintf (buffer, 240, optype_msgid, argp);
@@ -3014,15 +3059,15 @@ gfc_check_conformance (gfc_expr *op1, gfc_expr *op2, const char *optype_msgid, .
     {
       gfc_error ("Incompatible ranks in %s (%d and %d) at %L", _(buffer),
 		 op1->rank, op2->rank, &op1->where);
-      return FAILURE;
+      return false;
     }
 
-  t = SUCCESS;
+  t = true;
 
   for (d = 0; d < op1->rank; d++)
     {
-      op1_flag = gfc_array_dimen_size (op1, d, &op1_size) == SUCCESS;
-      op2_flag = gfc_array_dimen_size (op2, d, &op2_size) == SUCCESS;
+      op1_flag = gfc_array_dimen_size(op1, d, &op1_size);
+      op2_flag = gfc_array_dimen_size(op2, d, &op2_size);
 
       if (op1_flag && op2_flag && mpz_cmp (op1_size, op2_size) != 0)
 	{
@@ -3031,7 +3076,7 @@ gfc_check_conformance (gfc_expr *op1, gfc_expr *op2, const char *optype_msgid, .
 		     (int) mpz_get_si (op1_size),
 		     (int) mpz_get_si (op2_size));
 
-	  t = FAILURE;
+	  t = false;
 	}
 
       if (op1_flag)
@@ -3039,18 +3084,18 @@ gfc_check_conformance (gfc_expr *op1, gfc_expr *op2, const char *optype_msgid, .
       if (op2_flag)
 	mpz_clear (op2_size);
 
-      if (t == FAILURE)
-	return FAILURE;
+      if (!t)
+	return false;
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
 /* Given an assignable expression and an arbitrary expression, make
    sure that the assignment can take place.  */
 
-gfc_try
+bool
 gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
 {
   gfc_symbol *sym;
@@ -3084,19 +3129,22 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
 	bad_proc = true;
 
       /* (ii) The assignment is in the main program; or  */
-      if (gfc_current_ns->proc_name->attr.is_main_program)
+      if (gfc_current_ns->proc_name
+	  && gfc_current_ns->proc_name->attr.is_main_program)
 	bad_proc = true;
 
       /* (iii) A module or internal procedure...  */
-      if ((gfc_current_ns->proc_name->attr.proc == PROC_INTERNAL
-	   || gfc_current_ns->proc_name->attr.proc == PROC_MODULE)
+      if (gfc_current_ns->proc_name
+	  && (gfc_current_ns->proc_name->attr.proc == PROC_INTERNAL
+	      || gfc_current_ns->proc_name->attr.proc == PROC_MODULE)
 	  && gfc_current_ns->parent
 	  && (!(gfc_current_ns->parent->proc_name->attr.function
 		|| gfc_current_ns->parent->proc_name->attr.subroutine)
 	      || gfc_current_ns->parent->proc_name->attr.is_main_program))
 	{
 	  /* ... that is not a function...  */
-	  if (!gfc_current_ns->proc_name->attr.function)
+	  if (gfc_current_ns->proc_name
+	      && !gfc_current_ns->proc_name->attr.function)
 	    bad_proc = true;
 
 	  /* ... or is not an entry and has a different name.  */
@@ -3115,8 +3163,8 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
 
       if (bad_proc)
 	{
-	  gfc_error ("'%s' at %L is not a VALUE", sym->name, &lvalue->where);
-	  return FAILURE;
+	  gfc_error ("%qs at %L is not a VALUE", sym->name, &lvalue->where);
+	  return false;
 	}
     }
 
@@ -3124,78 +3172,79 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
     {
       gfc_error ("Incompatible ranks %d and %d in assignment at %L",
 		 lvalue->rank, rvalue->rank, &lvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (lvalue->ts.type == BT_UNKNOWN)
     {
       gfc_error ("Variable type is UNKNOWN in assignment at %L",
 		 &lvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (rvalue->expr_type == EXPR_NULL)
     {
       if (has_pointer && (ref == NULL || ref->next == NULL)
 	  && lvalue->symtree->n.sym->attr.data)
-        return SUCCESS;
+        return true;
       else
 	{
 	  gfc_error ("NULL appears on right-hand side in assignment at %L",
 		     &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
     }
 
   /* This is possibly a typo: x = f() instead of x => f().  */
-  if (gfc_option.warn_surprising
+  if (warn_surprising
       && rvalue->expr_type == EXPR_FUNCTION && gfc_expr_attr (rvalue).pointer)
-    gfc_warning ("POINTER-valued function appears on right-hand side of "
+    gfc_warning (OPT_Wsurprising,
+		 "POINTER-valued function appears on right-hand side of "
 		 "assignment at %L", &rvalue->where);
 
   /* Check size of array assignments.  */
   if (lvalue->rank != 0 && rvalue->rank != 0
-      && gfc_check_conformance (lvalue, rvalue, "array assignment") != SUCCESS)
-    return FAILURE;
+      && !gfc_check_conformance (lvalue, rvalue, "array assignment"))
+    return false;
 
   if (rvalue->is_boz && lvalue->ts.type != BT_INTEGER
       && lvalue->symtree->n.sym->attr.data
-      && gfc_notify_std (GFC_STD_GNU, "BOZ literal at %L used to "
-                         "initialize non-integer variable '%s'",
-			 &rvalue->where, lvalue->symtree->n.sym->name)
-	 == FAILURE)
-    return FAILURE;
+      && !gfc_notify_std (GFC_STD_GNU, "BOZ literal at %L used to "
+			  "initialize non-integer variable %qs", 
+			  &rvalue->where, lvalue->symtree->n.sym->name))
+    return false;
   else if (rvalue->is_boz && !lvalue->symtree->n.sym->attr.data
-      && gfc_notify_std (GFC_STD_GNU, "BOZ literal at %L outside "
-			 "a DATA statement and outside INT/REAL/DBLE/CMPLX",
-			 &rvalue->where) == FAILURE)
-    return FAILURE;
+      && !gfc_notify_std (GFC_STD_GNU, "BOZ literal at %L outside "
+			  "a DATA statement and outside INT/REAL/DBLE/CMPLX",
+			  &rvalue->where))
+    return false;
 
   /* Handle the case of a BOZ literal on the RHS.  */
   if (rvalue->is_boz && lvalue->ts.type != BT_INTEGER)
     {
       int rc;
-      if (gfc_option.warn_surprising)
-        gfc_warning ("BOZ literal at %L is bitwise transferred "
-                     "non-integer symbol '%s'", &rvalue->where,
-                     lvalue->symtree->n.sym->name);
+      if (warn_surprising)
+	gfc_warning (OPT_Wsurprising,
+		     "BOZ literal at %L is bitwise transferred "
+		     "non-integer symbol %qs", &rvalue->where,
+		     lvalue->symtree->n.sym->name);
       if (!gfc_convert_boz (rvalue, &lvalue->ts))
-	return FAILURE;
+	return false;
       if ((rc = gfc_range_check (rvalue)) != ARITH_OK)
 	{
 	  if (rc == ARITH_UNDERFLOW)
 	    gfc_error ("Arithmetic underflow of bit-wise transferred BOZ at %L"
 		       ". This check can be disabled with the option "
-		       "-fno-range-check", &rvalue->where);
+		       "%<-fno-range-check%>", &rvalue->where);
 	  else if (rc == ARITH_OVERFLOW)
 	    gfc_error ("Arithmetic overflow of bit-wise transferred BOZ at %L"
 		       ". This check can be disabled with the option "
-		       "-fno-range-check", &rvalue->where);
+		       "%<-fno-range-check%>", &rvalue->where);
 	  else if (rc == ARITH_NAN)
 	    gfc_error ("Arithmetic NaN of bit-wise transferred BOZ at %L"
 		       ". This check can be disabled with the option "
-		       "-fno-range-check", &rvalue->where);
-	  return FAILURE;
+		       "%<-fno-range-check%>", &rvalue->where);
+	  return false;
 	}
     }
 
@@ -3206,7 +3255,7 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
   if (rvalue->expr_type == EXPR_CONSTANT && lvalue->ts.type == rvalue->ts.type
       && (lvalue->ts.type == BT_REAL || lvalue->ts.type == BT_COMPLEX))
     {
-      if (lvalue->ts.kind < rvalue->ts.kind && gfc_option.gfc_warn_conversion)
+      if (lvalue->ts.kind < rvalue->ts.kind && warn_conversion)
 	{
 	  /* As a special bonus, don't warn about REAL rvalues which are not
 	     changed by the conversion if -Wconversion is specified.  */
@@ -3224,30 +3273,32 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
 	      mpfr_sub (diff, rv, rvalue->value.real, GFC_RND_MODE);
 
 	      if (!mpfr_zero_p (diff))
-		gfc_warning ("Change of value in conversion from "
-			     " %s to %s at %L", gfc_typename (&rvalue->ts),
+		gfc_warning (OPT_Wconversion, 
+			     "Change of value in conversion from "
+			     " %qs to %qs at %L", gfc_typename (&rvalue->ts),
 			     gfc_typename (&lvalue->ts), &rvalue->where);
 
 	      mpfr_clear (rv);
 	      mpfr_clear (diff);
 	    }
 	  else
-	    gfc_warning ("Possible change of value in conversion from %s "
-			 "to %s at %L",gfc_typename (&rvalue->ts),
+	    gfc_warning (OPT_Wconversion,
+			 "Possible change of value in conversion from %qs "
+			 "to %qs at %L", gfc_typename (&rvalue->ts),
 			 gfc_typename (&lvalue->ts), &rvalue->where);
 
 	}
-      else if (gfc_option.warn_conversion_extra
-	       && lvalue->ts.kind > rvalue->ts.kind)
+      else if (warn_conversion_extra && lvalue->ts.kind > rvalue->ts.kind)
 	{
-	  gfc_warning ("Conversion from %s to %s at %L",
+	  gfc_warning (OPT_Wconversion_extra,
+		       "Conversion from %qs to %qs at %L",
 		       gfc_typename (&rvalue->ts),
 		       gfc_typename (&lvalue->ts), &rvalue->where);
 	}
     }
 
   if (gfc_compare_types (&lvalue->ts, &rvalue->ts))
-    return SUCCESS;
+    return true;
 
   /* Only DATA Statements come here.  */
   if (!conform)
@@ -3256,16 +3307,16 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
 	 converted to any other type.  */
       if ((gfc_numeric_ts (&lvalue->ts) && gfc_numeric_ts (&rvalue->ts))
 	  || rvalue->ts.type == BT_HOLLERITH)
-	return SUCCESS;
+	return true;
 
       if (lvalue->ts.type == BT_LOGICAL && rvalue->ts.type == BT_LOGICAL)
-	return SUCCESS;
+	return true;
 
       gfc_error ("Incompatible types in DATA statement at %L; attempted "
 		 "conversion of %s to %s", &lvalue->where,
 		 gfc_typename (&rvalue->ts), gfc_typename (&lvalue->ts));
 
-      return FAILURE;
+      return false;
     }
 
   /* Assignment is the only case where character variables of different
@@ -3275,7 +3326,7 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
       if (lvalue->ts.kind != rvalue->ts.kind)
 	gfc_convert_chartype (rvalue, &lvalue->ts);
 
-      return SUCCESS;
+      return true;
     }
 
   return gfc_convert_type (rvalue, &lvalue->ts, 1);
@@ -3286,7 +3337,7 @@ gfc_check_assign (gfc_expr *lvalue, gfc_expr *rvalue, int conform)
    we only check rvalue if it's not an assignment to NULL() or a
    NULLIFY statement.  */
 
-gfc_try
+bool
 gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 {
   symbol_attribute attr, lhs_attr;
@@ -3299,16 +3350,16 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
     {
       gfc_error ("Pointer assignment target is not a POINTER at %L",
 		 &lvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (lhs_attr.flavor == FL_PROCEDURE && lhs_attr.use_assoc
       && !lhs_attr.proc_pointer)
     {
-      gfc_error ("'%s' in the pointer assignment at %L cannot be an "
+      gfc_error ("%qs in the pointer assignment at %L cannot be an "
 		 "l-value since it is a procedure",
 		 lvalue->symtree->n.sym->name, &lvalue->where);
-      return FAILURE;
+      return false;
     }
 
   proc_pointer = lvalue->symtree->n.sym->attr.proc_pointer;
@@ -3328,16 +3379,15 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 
 	  if (ref->u.ar.type != AR_SECTION)
 	    {
-	      gfc_error ("Expected bounds specification for '%s' at %L",
+	      gfc_error ("Expected bounds specification for %qs at %L",
 			 lvalue->symtree->n.sym->name, &lvalue->where);
-	      return FAILURE;
+	      return false;
 	    }
 
-	  if (gfc_notify_std (GFC_STD_F2003,"Bounds "
-			      "specification for '%s' in pointer assignment "
-			      "at %L", lvalue->symtree->n.sym->name,
-			      &lvalue->where) == FAILURE)
-	    return FAILURE;
+	  if (!gfc_notify_std (GFC_STD_F2003, "Bounds specification "
+			       "for %qs in pointer assignment at %L", 
+			       lvalue->symtree->n.sym->name, &lvalue->where))
+	    return false;
 
 	  /* When bounds are given, all lbounds are necessary and either all
 	     or none of the upper bounds; no strides are allowed.  If the
@@ -3349,13 +3399,13 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 		{
 		  gfc_error ("Lower bound has to be present at %L",
 			     &lvalue->where);
-		  return FAILURE;
+		  return false;
 		}
 	      if (ref->u.ar.stride[dim])
 		{
 		  gfc_error ("Stride must not be present at %L",
 			     &lvalue->where);
-		  return FAILURE;
+		  return false;
 		}
 
 	      if (dim == 0)
@@ -3367,7 +3417,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 		    {
 		      gfc_error ("Either all or none of the upper bounds"
 				 " must be specified at %L", &lvalue->where);
-		      return FAILURE;
+		      return false;
 		    }
 		}
 	    }
@@ -3381,7 +3431,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
      kind, etc for lvalue and rvalue must match, and rvalue must be a
      pure variable if we're in a pure function.  */
   if (rvalue->expr_type == EXPR_NULL && rvalue->ts.type == BT_UNKNOWN)
-    return SUCCESS;
+    return true;
 
   /* F2008, C723 (pointer) and C726 (proc-pointer); for PURE also C1283.  */
   if (lvalue->expr_type == EXPR_VARIABLE
@@ -3393,7 +3443,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	  {
 	    gfc_error ("Pointer object at %L shall not have a coindex",
 		       &lvalue->where);
-	    return FAILURE;
+	    return false;
 	  }
     }
 
@@ -3414,7 +3464,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	{
 	  gfc_error ("Invalid procedure pointer assignment at %L",
 		     &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
       if (rvalue->expr_type == EXPR_VARIABLE && !attr.proc_pointer)
 	{
@@ -3429,53 +3479,57 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	      attr = gfc_expr_attr (rvalue);
 	    }
 	  /* Check for result of embracing function.  */
-	  if (sym == gfc_current_ns->proc_name
-	      && sym->attr.function && sym->result == sym)
+	  if (sym->attr.function && sym->result == sym)
 	    {
-	      gfc_error ("Function result '%s' is invalid as proc-target "
-			 "in procedure pointer assignment at %L",
-			 sym->name, &rvalue->where);
-	      return FAILURE;
+	      gfc_namespace *ns;
+
+	      for (ns = gfc_current_ns; ns; ns = ns->parent)
+		if (sym == ns->proc_name)
+		  {
+		    gfc_error ("Function result %qs is invalid as proc-target "
+			       "in procedure pointer assignment at %L",
+			       sym->name, &rvalue->where);
+		    return false;
+		  }
 	    }
 	}
       if (attr.abstract)
 	{
-	  gfc_error ("Abstract interface '%s' is invalid "
+	  gfc_error ("Abstract interface %qs is invalid "
 		     "in procedure pointer assignment at %L",
 		     rvalue->symtree->name, &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
       /* Check for F08:C729.  */
       if (attr.flavor == FL_PROCEDURE)
 	{
 	  if (attr.proc == PROC_ST_FUNCTION)
 	    {
-	      gfc_error ("Statement function '%s' is invalid "
+	      gfc_error ("Statement function %qs is invalid "
 			 "in procedure pointer assignment at %L",
 			 rvalue->symtree->name, &rvalue->where);
-	      return FAILURE;
+	      return false;
 	    }
 	  if (attr.proc == PROC_INTERNAL &&
-	      gfc_notify_std (GFC_STD_F2008, "Internal procedure "
-			      "'%s' is invalid in procedure pointer assignment "
-			      "at %L", rvalue->symtree->name, &rvalue->where)
-			      == FAILURE)
-	    return FAILURE;
+	      !gfc_notify_std(GFC_STD_F2008, "Internal procedure %qs "
+			      "is invalid in procedure pointer assignment "
+			      "at %L", rvalue->symtree->name, &rvalue->where))
+	    return false;
 	  if (attr.intrinsic && gfc_intrinsic_actual_ok (rvalue->symtree->name,
 							 attr.subroutine) == 0)
 	    {
-	      gfc_error ("Intrinsic '%s' at %L is invalid in procedure pointer "
+	      gfc_error ("Intrinsic %qs at %L is invalid in procedure pointer "
 			 "assignment", rvalue->symtree->name, &rvalue->where);
-	      return FAILURE;
+	      return false;
 	    }
 	}
       /* Check for F08:C730.  */
       if (attr.elemental && !attr.intrinsic)
 	{
-	  gfc_error ("Nonintrinsic elemental procedure '%s' is invalid "
+	  gfc_error ("Nonintrinsic elemental procedure %qs is invalid "
 		     "in procedure pointer assignment at %L",
 		     rvalue->symtree->name, &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
 
       /* Ensure that the calling convention is the same. As other attributes
@@ -3498,7 +3552,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	      gfc_error ("Mismatch in the procedure pointer assignment "
 			 "at %L: mismatch in the calling convention",
 			 &rvalue->where);
-	  return FAILURE;
+	  return false;
 	    }
 	}
 
@@ -3545,27 +3599,43 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	s2 = s2->ts.interface;
 
       if (s1 == s2 || !s1 || !s2)
-	return SUCCESS;
+	return true;
+
+      /* F08:7.2.2.4 (4)  */
+      if (s1->attr.if_source == IFSRC_UNKNOWN
+	  && gfc_explicit_interface_required (s2, err, sizeof(err)))
+	{
+	  gfc_error ("Explicit interface required for %qs at %L: %s",
+		     s1->name, &lvalue->where, err);
+	  return false;
+	}
+      if (s2->attr.if_source == IFSRC_UNKNOWN
+	  && gfc_explicit_interface_required (s1, err, sizeof(err)))
+	{
+	  gfc_error ("Explicit interface required for %qs at %L: %s",
+		     s2->name, &rvalue->where, err);
+	  return false;
+	}
 
       if (!gfc_compare_interfaces (s1, s2, name, 0, 1,
 				   err, sizeof(err), NULL, NULL))
 	{
 	  gfc_error ("Interface mismatch in procedure pointer assignment "
 		     "at %L: %s", &rvalue->where, err);
-	  return FAILURE;
+	  return false;
 	}
 
       /* Check F2008Cor2, C729.  */
       if (!s2->attr.intrinsic && s2->attr.if_source == IFSRC_UNKNOWN
 	  && !s2->attr.external && !s2->attr.subroutine && !s2->attr.function)
 	{
-	  gfc_error ("Procedure pointer target '%s' at %L must be either an "
+	  gfc_error ("Procedure pointer target %qs at %L must be either an "
 		     "intrinsic, host or use associated, referenced or have "
 		     "the EXTERNAL attribute", s2->name, &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
 
-      return SUCCESS;
+      return true;
     }
 
   if (!gfc_compare_types (&lvalue->ts, &rvalue->ts))
@@ -3576,37 +3646,34 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	       || (lvalue->ts.type == BT_DERIVED
 		   && (lvalue->ts.u.derived->attr.is_bind_c
 		       || lvalue->ts.u.derived->attr.sequence))))
-	gfc_error ("Data-pointer-object &L must be unlimited "
-		   "polymorphic, a sequence derived type or of a "
-		   "type with the BIND attribute assignment at %L "
-		   "to be compatible with an unlimited polymorphic "
-		   "target", &lvalue->where);
+	gfc_error ("Data-pointer-object at %L must be unlimited "
+		   "polymorphic, or of a type with the BIND or SEQUENCE "
+		   "attribute, to be compatible with an unlimited "
+		   "polymorphic target", &lvalue->where);
       else
 	gfc_error ("Different types in pointer assignment at %L; "
 		   "attempted assignment of %s to %s", &lvalue->where,
 		   gfc_typename (&rvalue->ts),
 		   gfc_typename (&lvalue->ts));
-      return FAILURE;
+      return false;
     }
 
   if (lvalue->ts.type != BT_CLASS && lvalue->ts.kind != rvalue->ts.kind)
     {
       gfc_error ("Different kind type parameters in pointer "
 		 "assignment at %L", &lvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (lvalue->rank != rvalue->rank && !rank_remap)
     {
       gfc_error ("Different ranks in pointer assignment at %L", &lvalue->where);
-      return FAILURE;
+      return false;
     }
 
-    /* Make sure the vtab is present.  */
-  if (lvalue->ts.type == BT_CLASS && rvalue->ts.type == BT_DERIVED)
-    gfc_find_derived_vtab (rvalue->ts.u.derived);
-  else if (UNLIMITED_POLY (lvalue) && !UNLIMITED_POLY (rvalue))
-    gfc_find_intrinsic_vtab (&rvalue->ts);
+  /* Make sure the vtab is present.  */
+  if (lvalue->ts.type == BT_CLASS && !UNLIMITED_POLY (rvalue))
+    gfc_find_vtab (&rvalue->ts);
 
   /* Check rank remapping.  */
   if (rank_remap)
@@ -3615,15 +3682,15 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 
       /* If this can be determined, check that the target must be at least as
 	 large as the pointer assigned to it is.  */
-      if (gfc_array_size (lvalue, &lsize) == SUCCESS
-	  && gfc_array_size (rvalue, &rsize) == SUCCESS
+      if (gfc_array_size (lvalue, &lsize)
+	  && gfc_array_size (rvalue, &rsize)
 	  && mpz_cmp (rsize, lsize) < 0)
 	{
 	  gfc_error ("Rank remapping target is smaller than size of the"
 		     " pointer (%ld < %ld) at %L",
 		     mpz_get_si (rsize), mpz_get_si (lsize),
 		     &lvalue->where);
-	  return FAILURE;
+	  return false;
 	}
 
       /* The target must be either rank one or it must be simply contiguous
@@ -3634,24 +3701,23 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	    {
 	      gfc_error ("Rank remapping target must be rank 1 or"
 			 " simply contiguous at %L", &rvalue->where);
-	      return FAILURE;
+	      return false;
 	    }
-	  if (gfc_notify_std (GFC_STD_F2008, "Rank remapping"
-			      " target is not rank 1 at %L", &rvalue->where)
-		== FAILURE)
-	    return FAILURE;
+	  if (!gfc_notify_std (GFC_STD_F2008, "Rank remapping target is not "
+			       "rank 1 at %L", &rvalue->where))
+	    return false;
 	}
     }
 
   /* Now punt if we are dealing with a NULLIFY(X) or X = NULL(X).  */
   if (rvalue->expr_type == EXPR_NULL)
-    return SUCCESS;
+    return true;
 
   if (lvalue->ts.type == BT_CHARACTER)
     {
-      gfc_try t = gfc_check_same_strlen (lvalue, rvalue, "pointer assignment");
-      if (t == FAILURE)
-	return FAILURE;
+      bool t = gfc_check_same_strlen (lvalue, rvalue, "pointer assignment");
+      if (!t)
+	return false;
     }
 
   if (rvalue->expr_type == EXPR_VARIABLE && is_subref_array (rvalue))
@@ -3664,14 +3730,14 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
       gfc_error ("Target expression in pointer assignment "
 		 "at %L must deliver a pointer result",
 		 &rvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (!attr.target && !attr.pointer)
     {
       gfc_error ("Pointer assignment target is neither TARGET "
 		 "nor POINTER at %L", &rvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (is_pure && gfc_impure_variable (rvalue->symtree->n.sym))
@@ -3687,7 +3753,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
     {
       gfc_error ("Pointer assignment with vector subscript "
 		 "on rhs at %L", &rvalue->where);
-      return FAILURE;
+      return false;
     }
 
   if (attr.is_protected && attr.use_assoc
@@ -3695,7 +3761,7 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
     {
       gfc_error ("Pointer assignment target has PROTECTED "
 		 "attribute at %L", &rvalue->where);
-      return FAILURE;
+      return false;
     }
 
   /* F2008, C725. For PURE also C1283.  */
@@ -3708,12 +3774,12 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	  {
 	    gfc_error ("Data target at %L shall not have a coindex",
 		       &rvalue->where);
-	    return FAILURE;
+	    return false;
 	  }
     }
 
   /* Warn if it is the LHS pointer may lives longer than the RHS target.  */
-  if (gfc_option.warn_target_lifetime
+  if (warn_target_lifetime
       && rvalue->expr_type == EXPR_VARIABLE
       && !rvalue->symtree->n.sym->attr.save
       && !attr.pointer && !rvalue->symtree->n.sym->attr.host_assoc
@@ -3740,25 +3806,29 @@ gfc_check_pointer_assign (gfc_expr *lvalue, gfc_expr *rvalue)
 	    ns && ns->proc_name && ns->proc_name->attr.flavor != FL_PROCEDURE;
 	    ns = ns->parent)
 	if (ns->parent == lvalue->symtree->n.sym->ns)
-	  warn = true;
+	  {
+	    warn = true;
+	    break;
+	  }
 
       if (warn)
-	gfc_warning ("Pointer at %L in pointer assignment might outlive the "
+	gfc_warning (OPT_Wtarget_lifetime,
+		     "Pointer at %L in pointer assignment might outlive the "
 		     "pointer target", &lvalue->where);
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
 /* Relative of gfc_check_assign() except that the lvalue is a single
    symbol.  Used for initialization assignments.  */
 
-gfc_try
+bool
 gfc_check_assign_symbol (gfc_symbol *sym, gfc_component *comp, gfc_expr *rvalue)
 {
   gfc_expr lvalue;
-  gfc_try r;
+  bool r;
   bool pointer, proc_pointer;
 
   memset (&lvalue, '\0', sizeof (gfc_expr));
@@ -3794,11 +3864,22 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_component *comp, gfc_expr *rvalue)
   if (pointer || proc_pointer)
     r = gfc_check_pointer_assign (&lvalue, rvalue);
   else
-    r = gfc_check_assign (&lvalue, rvalue, 1);
+    {
+      /* If a conversion function, e.g., __convert_i8_i4, was inserted
+	 into an array constructor, we should check if it can be reduced
+	 as an initialization expression.  */
+      if (rvalue->expr_type == EXPR_FUNCTION
+	  && rvalue->value.function.isym
+	  && (rvalue->value.function.isym->conversion == 1))
+	gfc_check_init_expr (rvalue);
+
+      r = gfc_check_assign (&lvalue, rvalue, 1);
+    }
 
   free (lvalue.symtree);
+  free (lvalue.ref);
 
-  if (r == FAILURE)
+  if (!r)
     return r;
 
   if (pointer && rvalue->expr_type != EXPR_NULL)
@@ -3810,13 +3891,13 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_component *comp, gfc_expr *rvalue)
 	{
 	  gfc_error ("Pointer initialization target at %L "
 	             "must not be ALLOCATABLE", &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
       if (!attr.target || attr.pointer)
 	{
 	  gfc_error ("Pointer initialization target at %L "
 		     "must have the TARGET attribute", &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
 
       if (!attr.save && rvalue->expr_type == EXPR_VARIABLE
@@ -3831,7 +3912,7 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_component *comp, gfc_expr *rvalue)
 	{
 	  gfc_error ("Pointer initialization target at %L "
 		     "must have the SAVE attribute", &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
     }
 
@@ -3843,11 +3924,11 @@ gfc_check_assign_symbol (gfc_symbol *sym, gfc_component *comp, gfc_expr *rvalue)
 	{
 	  gfc_error ("Procedure pointer initialization target at %L "
 		     "may not be a procedure pointer", &rvalue->where);
-	  return FAILURE;
+	  return false;
 	}
     }
 
-  return SUCCESS;
+  return true;
 }
 
 
@@ -3944,9 +4025,10 @@ gfc_get_variable_expr (gfc_symtree *var)
   e->symtree = var;
   e->ts = var->n.sym->ts;
 
-  if ((var->n.sym->as != NULL && var->n.sym->ts.type != BT_CLASS)
-      || (var->n.sym->ts.type == BT_CLASS && CLASS_DATA (var->n.sym)
-	  && CLASS_DATA (var->n.sym)->as))
+  if (var->n.sym->attr.flavor != FL_PROCEDURE
+      && ((var->n.sym->as != NULL && var->n.sym->ts.type != BT_CLASS)
+	   || (var->n.sym->ts.type == BT_CLASS && CLASS_DATA (var->n.sym)
+	       && CLASS_DATA (var->n.sym)->as)))
     {
       e->rank = var->n.sym->ts.type == BT_CLASS
 		? CLASS_DATA (var->n.sym)->as->rank : var->n.sym->as->rank;
@@ -4245,6 +4327,40 @@ gfc_is_proc_ptr_comp (gfc_expr *expr)
 }
 
 
+/* Determine if an expression is a function with an allocatable class scalar
+   result.  */
+bool
+gfc_is_alloc_class_scalar_function (gfc_expr *expr)
+{
+  if (expr->expr_type == EXPR_FUNCTION
+      && expr->value.function.esym
+      && expr->value.function.esym->result
+      && expr->value.function.esym->result->ts.type == BT_CLASS
+      && !CLASS_DATA (expr->value.function.esym->result)->attr.dimension
+      && CLASS_DATA (expr->value.function.esym->result)->attr.allocatable)
+    return true;
+
+  return false;
+}
+
+
+/* Determine if an expression is a function with an allocatable class array
+   result.  */
+bool
+gfc_is_alloc_class_array_function (gfc_expr *expr)
+{
+  if (expr->expr_type == EXPR_FUNCTION
+      && expr->value.function.esym
+      && expr->value.function.esym->result
+      && expr->value.function.esym->result->ts.type == BT_CLASS
+      && CLASS_DATA (expr->value.function.esym->result)->attr.dimension
+      && CLASS_DATA (expr->value.function.esym->result)->attr.allocatable)
+    return true;
+
+  return false;
+}
+
+
 /* Walk an expression tree and check each variable encountered for being typed.
    If strict is not set, a top-level variable is tolerated untyped in -std=gnu
    mode as is a basic arithmetic expression using those; this is for things in
@@ -4261,7 +4377,7 @@ static bool
 expr_check_typed_help (gfc_expr* e, gfc_symbol* sym ATTRIBUTE_UNUSED,
                        int* f ATTRIBUTE_UNUSED)
 {
-  gfc_try t;
+  bool t;
 
   if (e->expr_type != EXPR_VARIABLE)
     return false;
@@ -4270,10 +4386,10 @@ expr_check_typed_help (gfc_expr* e, gfc_symbol* sym ATTRIBUTE_UNUSED,
   t = gfc_check_symbol_typed (e->symtree->n.sym, check_typed_ns,
                               true, e->where);
 
-  return (t == FAILURE);
+  return (!t);
 }
 
-gfc_try
+bool
 gfc_expr_check_typed (gfc_expr* e, gfc_namespace* ns, bool strict)
 {
   bool error_found;
@@ -4287,12 +4403,12 @@ gfc_expr_check_typed (gfc_expr* e, gfc_namespace* ns, bool strict)
 
       if (e->expr_type == EXPR_OP)
 	{
-	  gfc_try t = SUCCESS;
+	  bool t = true;
 
 	  gcc_assert (e->value.op.op1);
 	  t = gfc_expr_check_typed (e->value.op.op1, ns, strict);
 
-	  if (t == SUCCESS && e->value.op.op2)
+	  if (t && e->value.op.op2)
 	    t = gfc_expr_check_typed (e->value.op.op2, ns, strict);
 
 	  return t;
@@ -4303,7 +4419,7 @@ gfc_expr_check_typed (gfc_expr* e, gfc_namespace* ns, bool strict)
   check_typed_ns = ns;
   error_found = gfc_traverse_expr (e, NULL, &expr_check_typed_help, 0);
 
-  return error_found ? FAILURE : SUCCESS;
+  return error_found ? false : true;
 }
 
 
@@ -4518,7 +4634,7 @@ gfc_is_simply_contiguous (gfc_expr *expr, bool strict)
   for (ref = expr->ref; ref; ref = ref->next)
     {
       if (ar)
-	return false; /* Array shall be last part-ref. */
+	return false; /* Array shall be last part-ref.  */
 
       if (ref->type == REF_COMPONENT)
 	part_ref  = ref;
@@ -4633,6 +4749,7 @@ gfc_build_intrinsic_call (gfc_namespace *ns, gfc_isym_id id, const char* name,
   result->symtree->n.sym->intmod_sym_id = id;
   result->symtree->n.sym->attr.flavor = FL_PROCEDURE;
   result->symtree->n.sym->attr.intrinsic = 1;
+  result->symtree->n.sym->attr.artificial = 1;
 
   va_start (ap, numarg);
   atail = NULL;
@@ -4662,9 +4779,9 @@ gfc_build_intrinsic_call (gfc_namespace *ns, gfc_isym_id id, const char* name,
    variables), some checks are not performed.
 
    Optionally, a possible error message can be suppressed if context is NULL
-   and just the return status (SUCCESS / FAILURE) be requested.  */
+   and just the return status (true / false) be requested.  */
 
-gfc_try
+bool
 gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
 			  bool own_scope, const char* context)
 {
@@ -4672,9 +4789,9 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
   bool is_pointer;
   bool check_intentin;
   bool ptr_component;
-  bool unlimited;
   symbol_attribute attr;
   gfc_ref* ref;
+  int i;
 
   if (e->expr_type == EXPR_VARIABLE)
     {
@@ -4687,8 +4804,6 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
       sym = e->value.function.esym ? e->value.function.esym : e->symtree->n.sym;
     }
 
-  unlimited = e->ts.type == BT_CLASS && UNLIMITED_POLY (sym);
-
   attr = gfc_expr_attr (e);
   if (!pointer && e->expr_type == EXPR_FUNCTION && attr.pointer)
     {
@@ -4697,7 +4812,7 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
 	  if (context)
 	    gfc_error ("Fortran 2008: Pointer functions in variable definition"
 		       " context (%s) at %L", context, &e->where);
-	  return FAILURE;
+	  return false;
 	}
     }
   else if (e->expr_type != EXPR_VARIABLE)
@@ -4705,35 +4820,35 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
       if (context)
 	gfc_error ("Non-variable expression in variable definition context (%s)"
 		   " at %L", context, &e->where);
-      return FAILURE;
+      return false;
     }
 
   if (!pointer && sym->attr.flavor == FL_PARAMETER)
     {
       if (context)
-	gfc_error ("Named constant '%s' in variable definition context (%s)"
+	gfc_error ("Named constant %qs in variable definition context (%s)"
 		   " at %L", sym->name, context, &e->where);
-      return FAILURE;
+      return false;
     }
   if (!pointer && sym->attr.flavor != FL_VARIABLE
       && !(sym->attr.flavor == FL_PROCEDURE && sym == sym->result)
       && !(sym->attr.flavor == FL_PROCEDURE && sym->attr.proc_pointer))
     {
       if (context)
-	gfc_error ("'%s' in variable definition context (%s) at %L is not"
+	gfc_error ("%qs in variable definition context (%s) at %L is not"
 		   " a variable", sym->name, context, &e->where);
-      return FAILURE;
+      return false;
     }
 
   /* Find out whether the expr is a pointer; this also means following
      component references to the last one.  */
   is_pointer = (attr.pointer || attr.proc_pointer);
-  if (pointer && !is_pointer && !unlimited)
+  if (pointer && !is_pointer)
     {
       if (context)
 	gfc_error ("Non-POINTER in pointer association context (%s)"
 		   " at %L", context, &e->where);
-      return FAILURE;
+      return false;
     }
 
   /* F2008, C1303.  */
@@ -4746,7 +4861,7 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
       if (context)
 	gfc_error ("LOCK_TYPE in variable definition context (%s) at %L",
 		   context, &e->where);
-      return FAILURE;
+      return false;
     }
 
   /* INTENT(IN) dummy argument.  Check this, unless the object itself is the
@@ -4773,18 +4888,18 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
       if (pointer && is_pointer)
 	{
 	  if (context)
-	    gfc_error ("Dummy argument '%s' with INTENT(IN) in pointer"
+	    gfc_error ("Dummy argument %qs with INTENT(IN) in pointer"
 		       " association context (%s) at %L",
 		       sym->name, context, &e->where);
-	  return FAILURE;
+	  return false;
 	}
       if (!pointer && !is_pointer && !sym->attr.pointer)
 	{
 	  if (context)
-	    gfc_error ("Dummy argument '%s' with INTENT(IN) in variable"
+	    gfc_error ("Dummy argument %qs with INTENT(IN) in variable"
 		       " definition context (%s) at %L",
 		       sym->name, context, &e->where);
-	  return FAILURE;
+	  return false;
 	}
     }
 
@@ -4794,18 +4909,18 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
       if (pointer && is_pointer)
 	{
 	  if (context)
-	    gfc_error ("Variable '%s' is PROTECTED and can not appear in a"
+	    gfc_error ("Variable %qs is PROTECTED and can not appear in a"
 		       " pointer association context (%s) at %L",
 		       sym->name, context, &e->where);
-	  return FAILURE;
+	  return false;
 	}
       if (!pointer && !is_pointer)
 	{
 	  if (context)
-	    gfc_error ("Variable '%s' is PROTECTED and can not appear in a"
+	    gfc_error ("Variable %qs is PROTECTED and can not appear in a"
 		       " variable definition context (%s) at %L",
 		       sym->name, context, &e->where);
-	  return FAILURE;
+	  return false;
 	}
     }
 
@@ -4814,10 +4929,10 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
   if (!pointer && !own_scope && gfc_pure (NULL) && gfc_impure_variable (sym))
     {
       if (context)
-	gfc_error ("Variable '%s' can not appear in a variable definition"
+	gfc_error ("Variable %qs can not appear in a variable definition"
 		   " context (%s) at %L in PURE procedure",
 		   sym->name, context, &e->where);
-      return FAILURE;
+      return false;
     }
 
   if (!pointer && context && gfc_implicit_pure (NULL)
@@ -4873,30 +4988,75 @@ gfc_check_vardef_context (gfc_expr* e, bool pointer, bool alloc_obj,
 	  if (context)
 	    {
 	      if (assoc->target->expr_type == EXPR_VARIABLE)
-		gfc_error ("'%s' at %L associated to vector-indexed target can"
+		gfc_error ("%qs at %L associated to vector-indexed target can"
 			   " not be used in a variable definition context (%s)",
 			   name, &e->where, context);
 	      else
-		gfc_error ("'%s' at %L associated to expression can"
+		gfc_error ("%qs at %L associated to expression can"
 			   " not be used in a variable definition context (%s)",
 			   name, &e->where, context);
 	    }
-	  return FAILURE;
+	  return false;
 	}
 
       /* Target must be allowed to appear in a variable definition context.  */
-      if (gfc_check_vardef_context (assoc->target, pointer, false, false, NULL)
-	  == FAILURE)
+      if (!gfc_check_vardef_context (assoc->target, pointer, false, false, NULL))
 	{
 	  if (context)
-	    gfc_error ("Associate-name '%s' can not appear in a variable"
+	    gfc_error_1 ("Associate-name '%s' can not appear in a variable"
 		       " definition context (%s) at %L because its target"
 		       " at %L can not, either",
 		       name, context, &e->where,
 		       &assoc->target->where);
-	  return FAILURE;
+	  return false;
 	}
     }
 
-  return SUCCESS;
+  /* Check for same value in vector expression subscript.  */
+
+  if (e->rank > 0)
+    for (ref = e->ref; ref != NULL; ref = ref->next)
+      if (ref->type == REF_ARRAY && ref->u.ar.type == AR_SECTION)
+	for (i = 0; i < GFC_MAX_DIMENSIONS
+	       && ref->u.ar.dimen_type[i] != 0; i++)
+	  if (ref->u.ar.dimen_type[i] == DIMEN_VECTOR)
+	    {
+	      gfc_expr *arr = ref->u.ar.start[i];
+	      if (arr->expr_type == EXPR_ARRAY)
+		{
+		  gfc_constructor *c, *n;
+		  gfc_expr *ec, *en;
+		  
+		  for (c = gfc_constructor_first (arr->value.constructor);
+		       c != NULL; c = gfc_constructor_next (c))
+		    {
+		      if (c == NULL || c->iterator != NULL)
+			continue;
+		      
+		      ec = c->expr;
+
+		      for (n = gfc_constructor_next (c); n != NULL;
+			   n = gfc_constructor_next (n))
+			{
+			  if (n->iterator != NULL)
+			    continue;
+			  
+			  en = n->expr;
+			  if (gfc_dep_compare_expr (ec, en) == 0)
+			    {
+			      if (context)
+				gfc_error_now_1 ("Elements with the same value "
+						 "at %L and %L in vector "
+						 "subscript in a variable "
+						 "definition context (%s)",
+						 &(ec->where), &(en->where),
+						 context);
+			      return false;
+			    }
+			}
+		    }
+		}
+	    }
+  
+  return true;
 }

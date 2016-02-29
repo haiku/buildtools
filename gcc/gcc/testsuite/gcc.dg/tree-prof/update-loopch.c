@@ -14,8 +14,10 @@ main ()
 /* Loop header copying will peel away the initial conditional, so the loop body
    is once reached directly from entry point of function, rest via loopback
    edge.  */
-/* { dg-final-use { scan-ipa-dump "loop depth 0, count 33334" "profile"} } */
-/* { dg-final-use { scan-tree-dump "loop depth 1, count 33332" "optimized"} } */
+/* { dg-final-use { scan-ipa-dump "loop depth 1, count 33334" "profile"} } */
+/* { dg-final-use { scan-tree-dump "loop depth 1, count 33333" "optimized"} } */
+/* { dg-final-use { scan-tree-dump-not "loop depth 1, count 33332" "optimized"} } */
+/* { dg-final-use { scan-tree-dump "Removing basic block" "optimized"} } */
 /* { dg-final-use { scan-tree-dump-not "Invalid sum" "optimized"} } */
 /* { dg-final-use { cleanup-ipa-dump "profile" } } */
 /* { dg-final-use { cleanup-tree-dump "optimized" } } */

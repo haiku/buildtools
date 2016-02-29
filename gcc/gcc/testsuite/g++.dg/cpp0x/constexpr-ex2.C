@@ -1,5 +1,4 @@
-// { dg-do compile }
-// { dg-options "-std=gnu++0x" }
+// { dg-do compile { target c++11 } }
 
 // From N2235
 
@@ -8,8 +7,8 @@
 // p 4
 struct A {
   constexpr A(int i) : val(i) { }
-  constexpr operator int() { return val; }
-  constexpr operator long() { return -1; }
+  constexpr operator int() const { return val; }
+  constexpr operator long() const { return -1; }
 private:
   int val;
 };

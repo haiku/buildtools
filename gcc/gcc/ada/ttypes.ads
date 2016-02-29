@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -26,7 +26,8 @@
 --  This package contains constants describing target properties
 
 with Types;    use Types;
-with Get_Targ; use Get_Targ;
+with Get_Targ;
+with Set_Targ;
 
 package Ttypes is
 
@@ -63,21 +64,19 @@ package Ttypes is
    --  values needed in Stand are obtained by direct reference to Ttypes
    --  and Ttypef.
 
-   --  For package System, the required constant values are obtained by
-   --  referencing appropriate attributes. Ada 95 already defines most of
-   --  the required attributes, and GNAT specific attributes have been
-   --  defined to cover the remaining cases (such as Storage_Unit). The
-   --  evaluation of these attributes obtains the required target dependent
-   --  values from Ttypes and Ttypef. The additional attributes that have
-   --  been added to GNAT (Address_Size, Storage_Unit, Word_Size, Max_Priority,
-   --  and Max_Interrupt_Priority) are for almost all purposes redundant with
-   --  respect to the corresponding references to System constants. For example
-   --  in a program, System.Address_Size and Standard'Address_Size yield the
-   --  same value. The critical use of the attribute is in writing the System
-   --  declaration of Address_Size which of course cannot refer to itself. By
-   --  this means we achieve complete target independence in the source code
-   --  of package System, i.e. there is only one copy of the source of System
-   --  for all targets.
+   --  For package System, there is a separate version for each target, with
+   --  explicit declarations of the required, constants.
+
+   --  Historical note: Originally we had in mind dealing with target dependent
+   --  differences by referencing appropriate attributes. Ada 95 already
+   --  defines most of the required attributes, and GNAT specific attributes
+   --  were defined to cover the remaining cases (such as Storage_Unit).
+   --  The additional attributes that have been added to GNAT (Address_Size,
+   --  Storage_Unit, and Word_Size) are redundant with respect to the
+   --  corresponding references to System constants. For example in a program,
+   --  System.Address_Size and Standard'Address_Size yield the same value.
+   --  These attributes have been retained for compatibility purposes, but
+   --  serve no purpose at this stage.
 
    --  Note that during compilation there are two versions of package System
    --  around. The version that is directly with'ed by compiler packages
@@ -92,18 +91,6 @@ package Ttypes is
    --  than referencing System.Storage_Unit, or Standard'Storage_Unit, both of
    --  which would yield the host value.
 
-   ----------------------------------------------
-   -- Target-Dependent Information in ALI File --
-   ----------------------------------------------
-
-   --  If the flag Generate_Target_Dependent_Info is set (e.g. by use of the
-   --  -gnatT switch), then the ALI file contains T lines representing each of
-   --  the constants defined in this package (see Lib-Writ spec for details).
-
-   --  These T lines use a code consisting of four upper case letters to
-   --  identify the constant whose value is output. These four letter codes
-   --  may be found as a comment in the declaration of each constant.
-
    ---------------------------------------------------
    -- Target-Dependent Values for Types in Standard --
    ---------------------------------------------------
@@ -113,65 +100,64 @@ package Ttypes is
    --  example, on some machines, Short_Float may be the same as Float, and
    --  Long_Long_Float may be the same as Long_Float.
 
-   Standard_Short_Short_Integer_Size  : constant Pos :=               -- SINS
-                                          Get_Char_Size;
-   Standard_Short_Short_Integer_Width : constant Pos :=               -- SINW
-                                          Width_From_Size
+   Standard_Short_Short_Integer_Size  : constant Pos :=
+                                          Set_Targ.Char_Size;
+   Standard_Short_Short_Integer_Width : constant Pos :=
+                                          Get_Targ.Width_From_Size
                                            (Standard_Short_Short_Integer_Size);
 
-   Standard_Short_Integer_Size        : constant Pos :=               -- SHIS
-                                          Get_Short_Size;
-   Standard_Short_Integer_Width       : constant Pos :=               -- SHIW
-                                          Width_From_Size
+   Standard_Short_Integer_Size        : constant Pos :=
+                                          Set_Targ.Short_Size;
+   Standard_Short_Integer_Width       : constant Pos :=
+                                          Get_Targ.Width_From_Size
                                             (Standard_Short_Integer_Size);
 
-   Standard_Integer_Size              : constant Pos :=               -- INTS
-                                          Get_Int_Size;
-   Standard_Integer_Width             : constant Pos :=               -- INTW
-                                          Width_From_Size
+   Standard_Integer_Size              : constant Pos :=
+                                          Set_Targ.Int_Size;
+   Standard_Integer_Width             : constant Pos :=
+                                          Get_Targ.Width_From_Size
                                             (Standard_Integer_Size);
 
-   Standard_Long_Integer_Size         : constant Pos :=               -- LINS
-                                          Get_Long_Size;
-   Standard_Long_Integer_Width        : constant Pos :=               -- LINW
-                                          Width_From_Size
+   Standard_Long_Integer_Size         : constant Pos :=
+                                          Set_Targ.Long_Size;
+   Standard_Long_Integer_Width        : constant Pos :=
+                                          Get_Targ.Width_From_Size
                                             (Standard_Long_Integer_Size);
 
-   Standard_Long_Long_Integer_Size    : constant Pos :=               -- LLIS
-                                          Get_Long_Long_Size;
-   Standard_Long_Long_Integer_Width   : constant Pos :=               -- LLIW
-                                          Width_From_Size
+   Standard_Long_Long_Integer_Size    : constant Pos :=
+                                          Set_Targ.Long_Long_Size;
+   Standard_Long_Long_Integer_Width   : constant Pos :=
+                                          Get_Targ.Width_From_Size
                                             (Standard_Long_Long_Integer_Size);
 
-   Standard_Short_Float_Size          : constant Pos :=               -- SFLS
-                                          Get_Float_Size;
-   Standard_Short_Float_Digits        : constant Pos :=               -- SFLD
-                                          Digits_From_Size
+   Standard_Short_Float_Size          : constant Pos :=
+                                          Set_Targ.Float_Size;
+   Standard_Short_Float_Digits        : constant Pos :=
+                                          Get_Targ.Digits_From_Size
                                             (Standard_Short_Float_Size);
 
-   Standard_Float_Size                : constant Pos :=               -- FLTS
-                                          Get_Float_Size;
-   Standard_Float_Digits              : constant Pos :=               -- FLTD
-                                          Digits_From_Size
+   Standard_Float_Size                : constant Pos :=
+                                          Set_Targ.Float_Size;
+   Standard_Float_Digits              : constant Pos :=
+                                          Get_Targ.Digits_From_Size
                                             (Standard_Float_Size);
 
-   Standard_Long_Float_Size           : constant Pos :=               -- LFLS
-                                          Get_Double_Size;
-   Standard_Long_Float_Digits         : constant Pos :=               -- LFLD
-                                          Digits_From_Size
+   Standard_Long_Float_Size           : constant Pos :=
+                                          Set_Targ.Double_Size;
+   Standard_Long_Float_Digits         : constant Pos :=
+                                          Get_Targ.Digits_From_Size
                                             (Standard_Long_Float_Size);
 
-   Standard_Long_Long_Float_Size      : constant Pos :=               -- LLFS
-                                          Get_Long_Double_Size;
-   Standard_Long_Long_Float_Digits    : constant Pos :=               -- LLFD
-                                          Digits_From_Size
+   Standard_Long_Long_Float_Size      : constant Pos :=
+                                          Set_Targ.Long_Double_Size;
+   Standard_Long_Long_Float_Digits    : constant Pos :=
+                                          Get_Targ.Digits_From_Size
                                             (Standard_Long_Long_Float_Size);
 
-   Standard_Character_Size            : constant Pos :=               -- CHAS
-                                          Get_Char_Size;
+   Standard_Character_Size            : constant Pos := Set_Targ.Char_Size;
 
-   Standard_Wide_Character_Size       : constant Pos := 16;           -- WCHS
-   Standard_Wide_Wide_Character_Size  : constant Pos := 32;           -- WWCS
+   Standard_Wide_Character_Size       : constant Pos := 16;
+   Standard_Wide_Wide_Character_Size  : constant Pos := 32;
    --  Standard wide character sizes
 
    --  Note: there is no specific control over the representation of
@@ -187,19 +173,18 @@ package Ttypes is
    -- Target-Dependent Values for Types in System --
    -------------------------------------------------
 
-   System_Address_Size : constant Pos := Get_Pointer_Size;            -- ADRS
+   System_Address_Size : constant Pos := Set_Targ.Pointer_Size;
    --  System.Address'Size (also size of all thin pointers)
 
-   System_Max_Binary_Modulus_Power : constant Pos :=                  -- MBMP
+   System_Max_Binary_Modulus_Power : constant Pos :=
                                        Standard_Long_Long_Integer_Size;
 
-   System_Max_Nonbinary_Modulus_Power : constant Pos :=               -- MNMP
-                                          Standard_Integer_Size;
+   System_Max_Nonbinary_Modulus_Power : constant Pos := Standard_Integer_Size;
 
-   System_Storage_Unit : constant Pos := Get_Bits_Per_Unit;           -- SUNI
-   System_Word_Size    : constant Pos := Get_Bits_Per_Word;           -- WRDS
+   System_Storage_Unit : constant Pos := Set_Targ.Bits_Per_Unit;
+   System_Word_Size    : constant Pos := Set_Targ.Bits_Per_Word;
 
-   System_Tick_Nanoseconds : constant Pos := 1_000_000_000;           -- TICK
+   System_Tick_Nanoseconds : constant Pos := 1_000_000_000;
    --  Value of System.Tick in nanoseconds. At the moment, this is a fixed
    --  constant (with value of 1.0 seconds), but later we should add this
    --  value to the GCC configuration file so that its value can be made
@@ -209,25 +194,25 @@ package Ttypes is
    -- Target-Dependent Values for Types in Interfaces --
    -----------------------------------------------------
 
-   Interfaces_Wchar_T_Size : constant Pos := Get_Wchar_T_Size;        -- WCTS
+   Interfaces_Wchar_T_Size : constant Pos := Set_Targ.Wchar_T_Size;
 
    ----------------------------------------
    -- Other Target-Dependent Definitions --
    ----------------------------------------
 
-   Maximum_Alignment : constant Pos := Get_Maximum_Alignment;        -- MAXA
+   Maximum_Alignment : constant Pos := Set_Targ.Maximum_Alignment;
    --  The maximum alignment, in storage units, that an object or type may
    --  require on the target machine.
 
-   System_Allocator_Alignment : constant Pos :=                      -- ALLA
-                                  Get_System_Allocator_Alignment;
+   System_Allocator_Alignment : constant Pos :=
+                                  Set_Targ.System_Allocator_Alignment;
    --  The alignment in storage units of addresses returned by malloc
 
-   Max_Unaligned_Field : constant Pos := Get_Max_Unaligned_Field;    -- MUNF
+   Max_Unaligned_Field : constant Pos := Set_Targ.Max_Unaligned_Field;
    --  The maximum supported size in bits for a field that is not aligned
    --  on a storage unit boundary.
 
-   Bytes_Big_Endian : Boolean := Get_Bytes_BE /= 0;                  -- BEND
+   Bytes_Big_Endian : Boolean := Set_Targ.Bytes_BE /= 0;
    --  Important note: for Ada purposes, the important setting is the bytes
    --  endianness (Bytes_Big_Endian), not the bits value (Bits_Big_Endian).
    --  This is because Ada bit addressing must be compatible with the byte
@@ -237,22 +222,33 @@ package Ttypes is
    --  and thus relevant only to the back end. Note that this is a variable
    --  rather than a constant, since it can be modified (flipped) by -gnatd8.
 
-   Target_Strict_Alignment : Boolean :=                               -- STRA
-                               Get_Strict_Alignment /= 0;
+   Target_Short_Enums : constant Boolean := Set_Targ.Short_Enums /= 0;
+   --  True if we are in short enums mode, where foreign convention
+   --  (in particular C and C++) enumeration types will be sized as in Ada,
+   --  using the shortest possibility from 8,16,32 bits, signed or unsigned.
+   --  A zero value means Short_Enums are not in use, and in this case all
+   --  foreign convention enumeration types are given the same size as c int.
+
+   Target_Strict_Alignment : Boolean :=
+                               Set_Targ.Strict_Alignment /= 0;
    --  True if instructions will fail if data is misaligned. Note that this
    --  is a variable rather than a constant since it can be modified (set to
    --  True) if the debug flag -gnatd.A is used.
 
-   Target_Double_Float_Alignment : constant Nat :=                    -- DFLA
-                                     Get_Double_Float_Alignment;
+   Target_Double_Float_Alignment : constant Nat :=
+                                     Set_Targ.Double_Float_Alignment;
    --  The default alignment of "double" floating-point types, i.e. floating
    --  point types whose size is equal to 64 bits, or 0 if this alignment is
-   --  not specifically capped.
+   --  not lower than the largest power of 2 multiple of System.Storage_Unit
+   --  that does not exceed either the object size of the type or the maximum
+   --  allowed alignment.
 
-   Target_Double_Scalar_Alignment : constant Nat :=                   -- DSCA
-                                      Get_Double_Scalar_Alignment;
+   Target_Double_Scalar_Alignment : constant Nat :=
+                                      Set_Targ.Double_Scalar_Alignment;
    --  The default alignment of "double" or larger scalar types, i.e. scalar
    --  types whose size is greater or equal to 64 bits, or 0 if this alignment
-   --  is not specifically capped.
+   --  is not lower than the largest power of 2 multiple of System.Storage_Unit
+   --  that does not exceed either the object size of the type or the maximum
+   --  allowed alignment.
 
 end Ttypes;

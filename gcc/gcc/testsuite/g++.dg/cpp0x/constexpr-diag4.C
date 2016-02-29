@@ -1,5 +1,5 @@
 // Origin: PR c++/51633
-// { dg-options "-std=c++11" }
+// { dg-do compile { target c++11 } }
 
 struct A
 {
@@ -21,5 +21,5 @@ struct A1
 struct B1
 {
     A1 a1;
-    constexpr B1() {} // { dg-error "uninitialized member" }
+    constexpr B1() {} // { dg-error "B1::a1" }
 };

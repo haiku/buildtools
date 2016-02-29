@@ -1,5 +1,5 @@
 // Negative examples from N3092 (FCD)
-// { dg-options -std=c++0x }
+// { dg-do compile { target c++11 } }
 
 // OK: declaration
 constexpr int square(int x);	// { dg-message "never defined" }
@@ -29,18 +29,18 @@ int next(constexpr int x) {	// { dg-error "parameter" }
 extern constexpr int memsz;	// { dg-error "definition" }
 
 // error: return type is void
-constexpr void f(int x)		// { dg-error "void" }
+constexpr void f(int x)		// { dg-error "void" "" { target c++11_only } }
 { /* ... */ }
 // error: use of decrement
 constexpr int prev(int x)
-{ return --x; }			// { dg-error "-- x" }
+{ return --x; }			// { dg-error "-- x" "" { target c++11_only } }
 
 // error: body not just return expr
 constexpr int g(int x, int n) {
   int r = 1;
   while (--n > 0) r *= x;
   return r;
-} // { dg-error "body of constexpr function" }
+} // { dg-error "body of constexpr function" "" { target c++11_only } }
 
 class debug_flag {
 public:
@@ -50,7 +50,7 @@ private:
   bool flag;
 };
 // OK
-constexpr int bar(int x, int y) // { dg-error "previously defined here" }
+constexpr int bar(int x, int y) // { dg-message "previously defined here" }
 { return x + y + x*y; }
 // ...
 // error: redefinition of bar

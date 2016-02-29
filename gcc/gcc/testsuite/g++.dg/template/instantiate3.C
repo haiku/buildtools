@@ -4,13 +4,13 @@
 // PR c++/7639
 // ICE when accessing member with incomplete type.
 
-class ACE_Null_Mutex;	// { dg-error "forward declaration" }
+class ACE_Null_Mutex;	// { dg-message "forward declaration" }
 
 template <class TYPE>
 struct ACE_Cleanup_Adapter
 {
   TYPE &object ()
-  { return object_; }	// { dg-error "invalid" }
+  { return object_; }
   TYPE object_;		// { dg-error "incomplete type" }
 };
 

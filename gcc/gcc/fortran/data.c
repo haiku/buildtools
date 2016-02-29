@@ -1,5 +1,5 @@
 /* Supporting functions for resolving DATA statement.
-   Copyright (C) 2002-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002-2015 Free Software Foundation, Inc.
    Contributed by Lifang Zeng <zlf605@hotmail.com>
 
 This file is part of GCC.
@@ -104,8 +104,9 @@ static gfc_expr *
 create_character_initializer (gfc_expr *init, gfc_typespec *ts,
 			      gfc_ref *ref, gfc_expr *rvalue)
 {
-  int len, start, end;
+  int len, start, end, tlen;
   gfc_char_t *dest;
+  bool alloced_init = false;
 	    
   gfc_extract_int (ts->u.cl->length, &len);
 
@@ -114,6 +115,7 @@ create_character_initializer (gfc_expr *init, gfc_typespec *ts,
       /* Create a new initializer.  */
       init = gfc_get_character_expr (ts->kind, NULL, NULL, len);
       init->ts = *ts;
+      alloced_init = true;
     }
 
   dest = init->value.character.string;
@@ -129,11 +131,15 @@ create_character_initializer (gfc_expr *init, gfc_typespec *ts,
       start_expr = gfc_copy_expr (ref->u.ss.start);
       end_expr = gfc_copy_expr (ref->u.ss.end);
 
-      if ((gfc_simplify_expr (start_expr, 1) == FAILURE)
-	  || (gfc_simplify_expr (end_expr, 1)) == FAILURE)
+      if ((!gfc_simplify_expr(start_expr, 1))
+	  || !(gfc_simplify_expr(end_expr, 1)))
 	{
 	  gfc_error ("failure to simplify substring reference in DATA "
 		     "statement at %L", &ref->u.ss.start->where);
+	  gfc_free_expr (start_expr);
+	  gfc_free_expr (end_expr);
+	  if (alloced_init)
+	    gfc_free_expr (init);
 	  return NULL;
 	}
 
@@ -156,12 +162,22 @@ create_character_initializer (gfc_expr *init, gfc_typespec *ts,
   else
     len = rvalue->value.character.length;
 
-  if (len > end - start)
+  tlen = end - start;
+  if (len > tlen)
     {
-      gfc_warning_now ("Initialization string starting at %L was "
-		       "truncated to fit the variable (%d/%d)",
-		       &rvalue->where, end - start, len);
-      len = end - start;
+      if (tlen < 0)
+	{
+	  gfc_warning_now (0, "Unused initialization string at %L because "
+			   "variable has zero length", &rvalue->where);
+	  len = 0;
+	}
+      else
+	{
+	  gfc_warning_now (0, "Initialization string at %L was truncated to "
+			   "fit the variable (%d/%d)", &rvalue->where,
+			   tlen, len);
+	  len = tlen;
+	}
     }
 
   if (rvalue->ts.type == BT_HOLLERITH)
@@ -175,7 +191,7 @@ create_character_initializer (gfc_expr *init, gfc_typespec *ts,
 	    len * sizeof (gfc_char_t));
 
   /* Pad with spaces.  Substrings will already be blanked.  */
-  if (len < end - start && ref == NULL)
+  if (len < tlen && ref == NULL)
     gfc_wide_memset (&dest[start + len], ' ', end - (start + len));
 
   if (rvalue->ts.type == BT_HOLLERITH)
@@ -196,7 +212,7 @@ create_character_initializer (gfc_expr *init, gfc_typespec *ts,
    consecutive values in LVALUE the same value in RVALUE.  In that case,
    LVALUE must refer to a full array, not an array section.  */
 
-gfc_try
+bool
 gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
 		       mpz_t *repeat)
 {
@@ -247,9 +263,9 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
 
 	  if (init && expr->expr_type != EXPR_ARRAY)
 	    {
-	      gfc_error ("'%s' at %L already is initialized at %L",
-			 lvalue->symtree->n.sym->name, &lvalue->where,
-			 &init->where);
+	      gfc_error_1 ("'%s' at %L already is initialized at %L",
+			   lvalue->symtree->n.sym->name, &lvalue->where,
+			   &init->where);
 	      goto abort;
 	    }
 
@@ -283,7 +299,7 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
 			  && ref->next == NULL);
 	      mpz_init_set (end, offset);
 	      mpz_add (end, end, *repeat);
-	      if (spec_size (ref->u.ar.as, &size) == SUCCESS)
+	      if (spec_size (ref->u.ar.as, &size))
 		{
 		  if (mpz_cmp (end, size) > 0)
 		    {
@@ -318,9 +334,9 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
 			   > LOCATION_LINE (rvalue->where.lb->location))
 			  ? con->expr : rvalue;
 		  if (gfc_notify_std (GFC_STD_GNU,
-				      "re-initialization of '%s' at %L",
-				      symbol->name, &exprd->where) == FAILURE)
-		    return FAILURE;
+				      "re-initialization of %qs at %L",
+				      symbol->name, &exprd->where) == false)
+		    return false;
 		}
 
 	      while (con != NULL)
@@ -372,7 +388,7 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
 	  else
 	    {
 	      mpz_t size;
-	      if (spec_size (ref->u.ar.as, &size) == SUCCESS)
+	      if (spec_size (ref->u.ar.as, &size))
 		{
 		  if (mpz_cmp (offset, size) >= 0)
 		    {
@@ -468,7 +484,7 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
   if (ref || last_ts->type == BT_CHARACTER)
     {
       if (lvalue->ts.u.cl->length == NULL && !(ref && ref->u.ss.length != NULL))
-	return FAILURE;
+	return false;
       expr = create_character_initializer (init, last_ts, ref, rvalue);
     }
   else
@@ -484,9 +500,9 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
 		  > LOCATION_LINE (rvalue->where.lb->location))
 	       ? init : rvalue;
 	  if (gfc_notify_std (GFC_STD_GNU,
-			      "re-initialization of '%s' at %L",
-			      symbol->name, &expr->where) == FAILURE)
-	    return FAILURE;
+			      "re-initialization of %qs at %L",
+			      symbol->name, &expr->where) == false)
+	    return false;
 	}
 
       expr = gfc_copy_expr (rvalue);
@@ -499,13 +515,13 @@ gfc_assign_data_value (gfc_expr *lvalue, gfc_expr *rvalue, mpz_t index,
   else
     last_con->expr = expr;
 
-  return SUCCESS;
+  return true;
 
 abort:
   if (!init)
     gfc_free_expr (expr);
   mpz_clear (offset);
-  return FAILURE;
+  return false;
 }
 
 

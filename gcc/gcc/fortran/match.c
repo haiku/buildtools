@@ -1,5 +1,5 @@
 /* Matching subroutines in all sizes, shapes and colors.
-   Copyright (C) 2000-2013 Free Software Foundation, Inc.
+   Copyright (C) 2000-2015 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -25,7 +25,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "gfortran.h"
 #include "match.h"
 #include "parse.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "stringpool.h"
 
 int gfc_matching_ptr_assignment = 0;
 int gfc_matching_procptr_assignment = 0;
@@ -100,6 +110,9 @@ gfc_op2string (gfc_intrinsic_op op)
     case INTRINSIC_PARENTHESES:
       return "parens";
 
+    case INTRINSIC_NONE:
+      return "none";
+
     default:
       break;
     }
@@ -161,12 +174,12 @@ gfc_match_parens (void)
 
   if (count > 0)
     {
-      gfc_error ("Missing ')' in statement at or before %L", &where);
+      gfc_error ("Missing %<)%> in statement at or before %L", &where);
       return MATCH_ERROR;
     }
   if (count < 0)
     {
-      gfc_error ("Missing '(' in statement at or before %L", &where);
+      gfc_error ("Missing %<(%> in statement at or before %L", &where);
       return MATCH_ERROR;
     }
 
@@ -495,18 +508,18 @@ gfc_match_label (void)
 
   if (gfc_get_symbol (name, NULL, &gfc_new_block))
     {
-      gfc_error ("Label name '%s' at %C is ambiguous", name);
+      gfc_error ("Label name %qs at %C is ambiguous", name);
       return MATCH_ERROR;
     }
 
   if (gfc_new_block->attr.flavor == FL_LABEL)
     {
-      gfc_error ("Duplicate construct label '%s' at %C", name);
+      gfc_error ("Duplicate construct label %qs at %C", name);
       return MATCH_ERROR;
     }
 
-  if (gfc_add_flavor (&gfc_new_block->attr, FL_LABEL,
-		      gfc_new_block->name, NULL) == FAILURE)
+  if (!gfc_add_flavor (&gfc_new_block->attr, FL_LABEL, 
+		       gfc_new_block->name, NULL))
     return MATCH_ERROR;
 
   return MATCH_YES;
@@ -529,9 +542,12 @@ gfc_match_name (char *buffer)
   gfc_gobble_whitespace ();
 
   c = gfc_next_ascii_char ();
-  if (!(ISALPHA (c) || (c == '_' && gfc_option.flag_allow_leading_underscore)))
+  if (!(ISALPHA (c) || (c == '_' && flag_allow_leading_underscore)))
     {
-      if (gfc_error_flag_test() == 0 && c != '(')
+      /* Special cases for unary minus and plus, which allows for a sensible
+	 error message for code of the form 'c = exp(-a*b) )' where an
+	 extra ')' appears at the end of statement.  */
+      if (!gfc_error_flag_test () && c != '(' && c != '-' && c != '+')
 	gfc_error ("Invalid character in name at %C");
       gfc_current_locus = old_loc;
       return MATCH_NO;
@@ -552,110 +568,17 @@ gfc_match_name (char *buffer)
       old_loc = gfc_current_locus;
       c = gfc_next_ascii_char ();
     }
-  while (ISALNUM (c) || c == '_' || (gfc_option.flag_dollar_ok && c == '$'));
+  while (ISALNUM (c) || c == '_' || (flag_dollar_ok && c == '$'));
 
-  if (c == '$' && !gfc_option.flag_dollar_ok)
+  if (c == '$' && !flag_dollar_ok)
     {
-      gfc_error ("Invalid character '$' at %C. Use -fdollar-ok to allow it "
-		 "as an extension");
+      gfc_fatal_error ("Invalid character %<$%> at %L. Use %<-fdollar-ok%> to "
+		       "allow it as an extension", &old_loc);
       return MATCH_ERROR;
     }
 
   buffer[i] = '\0';
   gfc_current_locus = old_loc;
-
-  return MATCH_YES;
-}
-
-
-/* Match a valid name for C, which is almost the same as for Fortran,
-   except that you can start with an underscore, etc..  It could have
-   been done by modifying the gfc_match_name, but this way other
-   things C allows can be done, such as no limits on the length.
-   Also, by rewriting it, we use the gfc_next_char_C() to prevent the
-   input characters from being automatically lower cased, since C is
-   case sensitive.  The parameter, buffer, is used to return the name
-   that is matched.  Return MATCH_ERROR if the name is not a valid C
-   name, MATCH_NO if what we're seeing isn't a name, and MATCH_YES if
-   we successfully match a C name.  */
-
-match
-gfc_match_name_C (const char **buffer)
-{
-  locus old_loc;
-  size_t i = 0;
-  gfc_char_t c;
-  char* buf;
-  size_t cursz = 16;
-
-  old_loc = gfc_current_locus;
-  gfc_gobble_whitespace ();
-
-  /* Get the next char (first possible char of name) and see if
-     it's valid for C (either a letter or an underscore).  */
-  c = gfc_next_char_literal (INSTRING_WARN);
-
-  /* If the user put nothing expect spaces between the quotes, it is valid
-     and simply means there is no name= specifier and the name is the Fortran
-     symbol name, all lowercase.  */
-  if (c == '"' || c == '\'')
-    {
-      gfc_current_locus = old_loc;
-      return MATCH_YES;
-    }
-
-  if (!ISALPHA (c) && c != '_')
-    {
-      gfc_error ("Invalid C name in NAME= specifier at %C");
-      return MATCH_ERROR;
-    }
-
-  buf = XNEWVEC (char, cursz);
-  /* Continue to read valid variable name characters.  */
-  do
-    {
-      gcc_assert (gfc_wide_fits_in_byte (c));
-
-      buf[i++] = (unsigned char) c;
-
-      if (i >= cursz)
-	{
-	  cursz *= 2;
-	  buf = XRESIZEVEC (char, buf, cursz);
-	}
-
-      old_loc = gfc_current_locus;
-
-      /* Get next char; param means we're in a string.  */
-      c = gfc_next_char_literal (INSTRING_WARN);
-    } while (ISALNUM (c) || c == '_');
-
-  /* The binding label will be needed later anyway, so just insert it
-     into the symbol table.  */
-  buf[i] = '\0';
-  *buffer = IDENTIFIER_POINTER (get_identifier (buf));
-  XDELETEVEC (buf);
-  gfc_current_locus = old_loc;
-
-  /* See if we stopped because of whitespace.  */
-  if (c == ' ')
-    {
-      gfc_gobble_whitespace ();
-      c = gfc_peek_ascii_char ();
-      if (c != '"' && c != '\'')
-        {
-          gfc_error ("Embedded space in NAME= specifier at %C");
-          return MATCH_ERROR;
-        }
-    }
-
-  /* If we stopped because we had an invalid character for a C name, report
-     that to the user by returning MATCH_NO.  */
-  if (c != '"' && c != '\'')
-    {
-      gfc_error ("Invalid C name in NAME= specifier at %C");
-      return MATCH_ERROR;
-    }
 
   return MATCH_YES;
 }
@@ -1268,7 +1191,7 @@ gfc_match_program (void)
   if (m == MATCH_ERROR)
     return m;
 
-  if (gfc_add_flavor (&sym->attr, FL_PROGRAM, sym->name, NULL) == FAILURE)
+  if (!gfc_add_flavor (&sym->attr, FL_PROGRAM, sym->name, NULL))
     return MATCH_ERROR;
 
   gfc_new_block = sym;
@@ -1383,16 +1306,15 @@ match_arithmetic_if (void)
   if (m != MATCH_YES)
     return m;
 
-  if (gfc_reference_st_label (l1, ST_LABEL_TARGET) == FAILURE
-      || gfc_reference_st_label (l2, ST_LABEL_TARGET) == FAILURE
-      || gfc_reference_st_label (l3, ST_LABEL_TARGET) == FAILURE)
+  if (!gfc_reference_st_label (l1, ST_LABEL_TARGET)
+      || !gfc_reference_st_label (l2, ST_LABEL_TARGET)
+      || !gfc_reference_st_label (l3, ST_LABEL_TARGET))
     {
       gfc_free_expr (expr);
       return MATCH_ERROR;
     }
 
-  if (gfc_notify_std (GFC_STD_F95_OBS, "Arithmetic IF "
-		      "statement at %C") == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F95_OBS, "Arithmetic IF statement at %C"))
     return MATCH_ERROR;
 
   new_st.op = EXEC_ARITHMETIC_IF;
@@ -1464,16 +1386,15 @@ gfc_match_if (gfc_statement *if_type)
 	  return MATCH_ERROR;
 	}
 
-      if (gfc_reference_st_label (l1, ST_LABEL_TARGET) == FAILURE
-	  || gfc_reference_st_label (l2, ST_LABEL_TARGET) == FAILURE
-	  || gfc_reference_st_label (l3, ST_LABEL_TARGET) == FAILURE)
+      if (!gfc_reference_st_label (l1, ST_LABEL_TARGET)
+	  || !gfc_reference_st_label (l2, ST_LABEL_TARGET)
+	  || !gfc_reference_st_label (l3, ST_LABEL_TARGET))
 	{
 	  gfc_free_expr (expr);
 	  return MATCH_ERROR;
 	}
 
-      if (gfc_notify_std (GFC_STD_F95_OBS, "Arithmetic IF "
-			  "statement at %C") == FAILURE)
+      if (!gfc_notify_std (GFC_STD_F95_OBS, "Arithmetic IF statement at %C"))
 	return MATCH_ERROR;
 
       new_st.op = EXEC_ARITHMETIC_IF;
@@ -1539,7 +1460,7 @@ gfc_match_if (gfc_statement *if_type)
      restore between tries.  */
 
 #define match(string, subr, statement) \
-  if (gfc_match(string) == MATCH_YES) { m = subr(); goto got_match; }
+  if (gfc_match (string) == MATCH_YES) { m = subr(); goto got_match; }
 
   gfc_clear_error ();
 
@@ -1591,7 +1512,7 @@ gfc_match_if (gfc_statement *if_type)
 
   /* All else has failed, so give up.  See if any of the matchers has
      stored an error message of some sort.  */
-  if (gfc_error_check () == 0)
+  if (!gfc_error_check ())
     gfc_error ("Unclassifiable statement in IF-clause at %C");
 
   gfc_free_expr (expr);
@@ -1610,13 +1531,12 @@ got_match:
      is in new_st.  Rearrange things so that the IF statement appears
      in new_st.  */
 
-  p = gfc_get_code ();
-  p->next = gfc_get_code ();
+  p = gfc_get_code (EXEC_IF);
+  p->next = XCNEW (gfc_code);
   *p->next = new_st;
   p->next->loc = gfc_current_locus;
 
   p->expr1 = expr;
-  p->op = EXEC_IF;
 
   gfc_clear_new_st ();
 
@@ -1649,7 +1569,7 @@ gfc_match_else (void)
 
   if (strcmp (name, gfc_current_block ()->name) != 0)
     {
-      gfc_error ("Label '%s' at %C doesn't match IF label '%s'",
+      gfc_error ("Label %qs at %C doesn't match IF label %qs",
 		 name, gfc_current_block ()->name);
       return MATCH_ERROR;
     }
@@ -1684,7 +1604,7 @@ gfc_match_elseif (void)
 
   if (strcmp (name, gfc_current_block ()->name) != 0)
     {
-      gfc_error ("Label '%s' at %C doesn't match IF label '%s'",
+      gfc_error ("Label %qs at %C doesn't match IF label %qs",
 		 name, gfc_current_block ()->name);
       goto cleanup;
     }
@@ -1746,7 +1666,7 @@ gfc_match_critical (void)
       return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+  if (gfc_find_state (COMP_DO_CONCURRENT))
     {
       gfc_error ("Image control statement CRITICAL at %C in DO CONCURRENT "
 		 "block");
@@ -1755,17 +1675,17 @@ gfc_match_critical (void)
 
   gfc_unset_implicit_pure (NULL);
 
-  if (gfc_notify_std (GFC_STD_F2008, "CRITICAL statement at %C")
-      == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F2008, "CRITICAL statement at %C"))
     return MATCH_ERROR;
 
-  if (gfc_option.coarray == GFC_FCOARRAY_NONE)
+  if (flag_coarray == GFC_FCOARRAY_NONE)
     {
-       gfc_fatal_error ("Coarrays disabled at %C, use -fcoarray= to enable");
+       gfc_fatal_error ("Coarrays disabled at %C, use %<-fcoarray=%> to "
+			"enable");
        return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_CRITICAL) == SUCCESS)
+  if (gfc_find_state (COMP_CRITICAL))
     {
       gfc_error ("Nested CRITICAL block at %C");
       return MATCH_ERROR;
@@ -1774,7 +1694,7 @@ gfc_match_critical (void)
   new_st.op = EXEC_CRITICAL;
 
   if (label != NULL
-      && gfc_reference_st_label (label, ST_LABEL_TARGET) == FAILURE)
+      && !gfc_reference_st_label (label, ST_LABEL_TARGET))
     return MATCH_ERROR;
 
   return MATCH_YES;
@@ -1841,7 +1761,7 @@ gfc_match_associate (void)
       for (a = new_st.ext.block.assoc; a; a = a->next)
 	if (!strcmp (a->name, newAssoc->name))
 	  {
-	    gfc_error ("Duplicate name '%s' in association at %C",
+	    gfc_error ("Duplicate name %qs in association at %C",
 		       newAssoc->name);
 	    goto assocListError;
 	  }
@@ -1867,7 +1787,7 @@ gfc_match_associate (void)
 	break;
       if (gfc_match_char (',') != MATCH_YES)
 	{
-	  gfc_error ("Expected ')' or ',' at %C");
+	  gfc_error ("Expected %<)%> or %<,%> at %C");
 	  return MATCH_ERROR;
 	}
 
@@ -1939,8 +1859,8 @@ match_derived_type_spec (gfc_typespec *ts)
    the implicit_flag is not needed, so it was removed. Derived types are
    identified by their name alone.  */
 
-static match
-match_type_spec (gfc_typespec *ts)
+match
+gfc_match_type_spec (gfc_typespec *ts)
 {
   match m;
   locus old_locus;
@@ -1954,7 +1874,7 @@ match_type_spec (gfc_typespec *ts)
       /* Enforce F03:C401.  */
       if (ts->u.derived->attr.abstract)
 	{
-	  gfc_error ("Derived type '%s' at %L may not be ABSTRACT",
+	  gfc_error ("Derived type %qs at %L may not be ABSTRACT",
 		     ts->u.derived->name, &old_locus);
 	  return MATCH_ERROR;
 	}
@@ -2025,6 +1945,11 @@ kind_selector:
 
   if (m == MATCH_NO)
     m = MATCH_YES;		/* No kind specifier found.  */
+
+  /* gfortran may have matched REAL(a=1), which is the keyword form of the
+     intrinsic procedure.  */
+  if (ts->type == BT_REAL && m == MATCH_ERROR)
+    m = MATCH_NO;
 
   return m;
 }
@@ -2226,7 +2151,7 @@ match_simple_forall (void)
 	goto syntax;
     }
 
-  c = gfc_get_code ();
+  c = XCNEW (gfc_code);
   *c = new_st;
   c->loc = gfc_current_locus;
 
@@ -2237,9 +2162,7 @@ match_simple_forall (void)
   new_st.op = EXEC_FORALL;
   new_st.expr1 = mask;
   new_st.ext.forall_iterator = head;
-  new_st.block = gfc_get_code ();
-
-  new_st.block->op = EXEC_FORALL;
+  new_st.block = gfc_get_code (EXEC_FORALL);
   new_st.block->next = c;
 
   return MATCH_YES;
@@ -2304,7 +2227,7 @@ gfc_match_forall (gfc_statement *st)
 	goto syntax;
     }
 
-  c = gfc_get_code ();
+  c = XCNEW (gfc_code);
   *c = new_st;
   c->loc = gfc_current_locus;
 
@@ -2312,8 +2235,7 @@ gfc_match_forall (gfc_statement *st)
   new_st.op = EXEC_FORALL;
   new_st.expr1 = mask;
   new_st.ext.forall_iterator = head;
-  new_st.block = gfc_get_code ();
-  new_st.block->op = EXEC_FORALL;
+  new_st.block = gfc_get_code (EXEC_FORALL);
   new_st.block->next = c;
 
   *st = ST_FORALL;
@@ -2379,8 +2301,7 @@ gfc_match_do (void)
       gfc_forall_iterator *head;
       gfc_expr *mask;
 
-      if (gfc_notify_std (GFC_STD_F2008, "DO CONCURRENT "
-			   "construct at %C") == FAILURE)
+      if (!gfc_notify_std (GFC_STD_F2008, "DO CONCURRENT construct at %C"))
 	return MATCH_ERROR;
 
 
@@ -2397,7 +2318,7 @@ gfc_match_do (void)
 	goto concurr_cleanup;
 
       if (label != NULL
-	   && gfc_reference_st_label (label, ST_LABEL_DO_TARGET) == FAILURE)
+	   && !gfc_reference_st_label (label, ST_LABEL_DO_TARGET))
 	goto concurr_cleanup;
 
       new_st.label1 = label;
@@ -2451,7 +2372,7 @@ concurr_cleanup:
 
 done:
   if (label != NULL
-      && gfc_reference_st_label (label, ST_LABEL_DO_TARGET) == FAILURE)
+      && !gfc_reference_st_label (label, ST_LABEL_DO_TARGET))
     goto cleanup;
 
   new_st.label1 = label;
@@ -2505,7 +2426,7 @@ match_exit_cycle (gfc_statement st, gfc_exec_op op)
       stree = gfc_find_symtree_in_proc (name, gfc_current_ns);
       if (!stree)
 	{
-	  gfc_error ("Name '%s' in %s statement at %C is unknown",
+	  gfc_error ("Name %qs in %s statement at %C is unknown",
 		     name, gfc_ascii_statement (st));
 	  return MATCH_ERROR;
 	}
@@ -2513,7 +2434,7 @@ match_exit_cycle (gfc_statement st, gfc_exec_op op)
       sym = stree->n.sym;
       if (sym->attr.flavor != FL_LABEL)
 	{
-	  gfc_error ("Name '%s' in %s statement at %C is not a construct name",
+	  gfc_error ("Name %qs in %s statement at %C is not a construct name",
 		     name, gfc_ascii_statement (st));
 	  return MATCH_ERROR;
 	}
@@ -2548,7 +2469,7 @@ match_exit_cycle (gfc_statement st, gfc_exec_op op)
 	gfc_error ("%s statement at %C is not within a construct",
 		   gfc_ascii_statement (st));
       else
-	gfc_error ("%s statement at %C is not within construct '%s'",
+	gfc_error ("%s statement at %C is not within construct %qs",
 		   gfc_ascii_statement (st), sym->name);
 
       return MATCH_ERROR;
@@ -2574,24 +2495,26 @@ match_exit_cycle (gfc_statement st, gfc_exec_op op)
       if (op == EXEC_CYCLE)
 	{
 	  gfc_error ("CYCLE statement at %C is not applicable to non-loop"
-		     " construct '%s'", sym->name);
+		     " construct %qs", sym->name);
 	  return MATCH_ERROR;
 	}
       gcc_assert (op == EXEC_EXIT);
-      if (gfc_notify_std (GFC_STD_F2008, "EXIT statement with no"
-			  " do-construct-name at %C") == FAILURE)
+      if (!gfc_notify_std (GFC_STD_F2008, "EXIT statement with no"
+			   " do-construct-name at %C"))
 	return MATCH_ERROR;
       break;
 
     default:
-      gfc_error ("%s statement at %C is not applicable to construct '%s'",
+      gfc_error ("%s statement at %C is not applicable to construct %qs",
 		 gfc_ascii_statement (st), sym->name);
       return MATCH_ERROR;
     }
 
   if (o != NULL)
     {
-      gfc_error ("%s statement at %C leaving OpenMP structured block",
+      gfc_error (is_oacc (p)
+		 ? "%s statement at %C leaving OpenACC structured block"
+		 : "%s statement at %C leaving OpenMP structured block",
 		 gfc_ascii_statement (st));
       return MATCH_ERROR;
     }
@@ -2601,8 +2524,38 @@ match_exit_cycle (gfc_statement st, gfc_exec_op op)
   if (cnt > 0
       && o != NULL
       && o->state == COMP_OMP_STRUCTURED_BLOCK
+      && (o->head->op == EXEC_OACC_LOOP
+	  || o->head->op == EXEC_OACC_PARALLEL_LOOP))
+    {
+      int collapse = 1;
+      gcc_assert (o->head->next != NULL
+		  && (o->head->next->op == EXEC_DO
+		      || o->head->next->op == EXEC_DO_WHILE)
+		  && o->previous != NULL
+		  && o->previous->tail->op == o->head->op);
+      if (o->previous->tail->ext.omp_clauses != NULL
+	  && o->previous->tail->ext.omp_clauses->collapse > 1)
+	collapse = o->previous->tail->ext.omp_clauses->collapse;
+      if (st == ST_EXIT && cnt <= collapse)
+	{
+	  gfc_error ("EXIT statement at %C terminating !$ACC LOOP loop");
+	  return MATCH_ERROR;
+	}
+      if (st == ST_CYCLE && cnt < collapse)
+	{
+	  gfc_error ("CYCLE statement at %C to non-innermost collapsed"
+		     " !$ACC LOOP loop");
+	  return MATCH_ERROR;
+	}
+    }
+  if (cnt > 0
+      && o != NULL
+      && (o->state == COMP_OMP_STRUCTURED_BLOCK)
       && (o->head->op == EXEC_OMP_DO
-	  || o->head->op == EXEC_OMP_PARALLEL_DO))
+	  || o->head->op == EXEC_OMP_PARALLEL_DO
+	  || o->head->op == EXEC_OMP_SIMD
+	  || o->head->op == EXEC_OMP_DO_SIMD
+	  || o->head->op == EXEC_OMP_PARALLEL_DO_SIMD))
     {
       int collapse = 1;
       gcc_assert (o->head->next != NULL
@@ -2653,7 +2606,8 @@ gfc_match_cycle (void)
 }
 
 
-/* Match a number or character constant after an (ALL) STOP or PAUSE statement.  */
+/* Match a number or character constant after an (ERROR) STOP or PAUSE
+   statement.  */
 
 static match
 gfc_match_stopcode (gfc_statement st)
@@ -2677,19 +2631,28 @@ gfc_match_stopcode (gfc_statement st)
 
   if (gfc_pure (NULL))
     {
-      gfc_error ("%s statement not allowed in PURE procedure at %C",
-		 gfc_ascii_statement (st));
-      goto cleanup;
+      if (st == ST_ERROR_STOP)
+	{
+	  if (!gfc_notify_std (GFC_STD_F2015, "%s statement at %C in PURE "
+			       "procedure", gfc_ascii_statement (st)))
+	    goto cleanup;
+	}
+      else
+	{
+	  gfc_error ("%s statement not allowed in PURE procedure at %C",
+		     gfc_ascii_statement (st));
+	  goto cleanup;
+	}
     }
 
   gfc_unset_implicit_pure (NULL);
 
-  if (st == ST_STOP && gfc_find_state (COMP_CRITICAL) == SUCCESS)
+  if (st == ST_STOP && gfc_find_state (COMP_CRITICAL))
     {
       gfc_error ("Image control statement STOP at %C in CRITICAL block");
       goto cleanup;
     }
-  if (st == ST_STOP && gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+  if (st == ST_STOP && gfc_find_state (COMP_DO_CONCURRENT))
     {
       gfc_error ("Image control statement STOP at %C in DO CONCURRENT block");
       goto cleanup;
@@ -2768,9 +2731,7 @@ gfc_match_pause (void)
   m = gfc_match_stopcode (ST_PAUSE);
   if (m == MATCH_YES)
     {
-      if (gfc_notify_std (GFC_STD_F95_DEL, "PAUSE statement"
-	  " at %C")
-	  == FAILURE)
+      if (!gfc_notify_std (GFC_STD_F95_DEL, "PAUSE statement at %C"))
 	m = MATCH_ERROR;
     }
   return m;
@@ -2791,8 +2752,7 @@ gfc_match_stop (void)
 match
 gfc_match_error_stop (void)
 {
-  if (gfc_notify_std (GFC_STD_F2008, "ERROR STOP statement at %C")
-      == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F2008, "ERROR STOP statement at %C"))
     return MATCH_ERROR;
 
   return gfc_match_stopcode (ST_ERROR_STOP);
@@ -2824,20 +2784,20 @@ lock_unlock_statement (gfc_statement st)
 
   gfc_unset_implicit_pure (NULL);
 
-  if (gfc_option.coarray == GFC_FCOARRAY_NONE)
+  if (flag_coarray == GFC_FCOARRAY_NONE)
     {
-       gfc_fatal_error ("Coarrays disabled at %C, use -fcoarray= to enable");
+       gfc_fatal_error ("Coarrays disabled at %C, use %<-fcoarray=%> to enable");
        return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_CRITICAL) == SUCCESS)
+  if (gfc_find_state (COMP_CRITICAL))
     {
       gfc_error ("Image control statement %s at %C in CRITICAL block",
 		 st == ST_LOCK ? "LOCK" : "UNLOCK");
       return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+  if (gfc_find_state (COMP_DO_CONCURRENT))
     {
       gfc_error ("Image control statement %s at %C in DO CONCURRENT block",
 		 st == ST_LOCK ? "LOCK" : "UNLOCK");
@@ -2976,8 +2936,7 @@ cleanup:
 match
 gfc_match_lock (void)
 {
-  if (gfc_notify_std (GFC_STD_F2008, "LOCK statement at %C")
-      == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F2008, "LOCK statement at %C"))
     return MATCH_ERROR;
 
   return lock_unlock_statement (ST_LOCK);
@@ -2987,8 +2946,7 @@ gfc_match_lock (void)
 match
 gfc_match_unlock (void)
 {
-  if (gfc_notify_std (GFC_STD_F2008, "UNLOCK statement at %C")
-      == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F2008, "UNLOCK statement at %C"))
     return MATCH_ERROR;
 
   return lock_unlock_statement (ST_UNLOCK);
@@ -3019,23 +2977,23 @@ sync_statement (gfc_statement st)
 
   gfc_unset_implicit_pure (NULL);
 
-  if (gfc_notify_std (GFC_STD_F2008, "SYNC statement at %C")
-      == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F2008, "SYNC statement at %C"))
     return MATCH_ERROR;
 
-  if (gfc_option.coarray == GFC_FCOARRAY_NONE)
+  if (flag_coarray == GFC_FCOARRAY_NONE)
     {
-       gfc_fatal_error ("Coarrays disabled at %C, use -fcoarray= to enable");
+       gfc_fatal_error ("Coarrays disabled at %C, use %<-fcoarray=%> to "
+			"enable");
        return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_CRITICAL) == SUCCESS)
+  if (gfc_find_state (COMP_CRITICAL))
     {
       gfc_error ("Image control statement SYNC at %C in CRITICAL block");
       return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+  if (gfc_find_state (COMP_DO_CONCURRENT))
     {
       gfc_error ("Image control statement SYNC at %C in DO CONCURRENT block");
       return MATCH_ERROR;
@@ -3213,13 +3171,11 @@ gfc_match_assign (void)
 
   if (gfc_match (" %l", &label) == MATCH_YES)
     {
-      if (gfc_reference_st_label (label, ST_LABEL_UNKNOWN) == FAILURE)
+      if (!gfc_reference_st_label (label, ST_LABEL_UNKNOWN))
 	return MATCH_ERROR;
       if (gfc_match (" to %v%t", &expr) == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F95_DEL, "ASSIGN "
-			      "statement at %C")
-	      == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F95_DEL, "ASSIGN statement at %C"))
 	    return MATCH_ERROR;
 
 	  expr->symtree->n.sym->attr.assign = 1;
@@ -3251,7 +3207,7 @@ gfc_match_goto (void)
 
   if (gfc_match (" %l%t", &label) == MATCH_YES)
     {
-      if (gfc_reference_st_label (label, ST_LABEL_TARGET) == FAILURE)
+      if (!gfc_reference_st_label (label, ST_LABEL_TARGET))
 	return MATCH_ERROR;
 
       new_st.op = EXEC_GOTO;
@@ -3263,9 +3219,7 @@ gfc_match_goto (void)
 
   if (gfc_match_variable (&expr, 0) == MATCH_YES)
     {
-      if (gfc_notify_std (GFC_STD_F95_DEL, "Assigned GOTO "
-			  "statement at %C")
-	  == FAILURE)
+      if (!gfc_notify_std (GFC_STD_F95_DEL, "Assigned GOTO statement at %C"))
 	return MATCH_ERROR;
 
       new_st.op = EXEC_GOTO;
@@ -3289,19 +3243,18 @@ gfc_match_goto (void)
 	  if (m != MATCH_YES)
 	    goto syntax;
 
-	  if (gfc_reference_st_label (label, ST_LABEL_TARGET) == FAILURE)
+	  if (!gfc_reference_st_label (label, ST_LABEL_TARGET))
 	    goto cleanup;
 
 	  if (head == NULL)
-	    head = tail = gfc_get_code ();
+	    head = tail = gfc_get_code (EXEC_GOTO);
 	  else
 	    {
-	      tail->block = gfc_get_code ();
+	      tail->block = gfc_get_code (EXEC_GOTO);
 	      tail = tail->block;
 	    }
 
 	  tail->label1 = label;
-	  tail->op = EXEC_GOTO;
 	}
       while (gfc_match_char (',') == MATCH_YES);
 
@@ -3334,14 +3287,14 @@ gfc_match_goto (void)
       if (m != MATCH_YES)
 	goto syntax;
 
-      if (gfc_reference_st_label (label, ST_LABEL_TARGET) == FAILURE)
+      if (!gfc_reference_st_label (label, ST_LABEL_TARGET))
 	goto cleanup;
 
       if (head == NULL)
-	head = tail = gfc_get_code ();
+	head = tail = gfc_get_code (EXEC_SELECT);
       else
 	{
-	  tail->block = gfc_get_code ();
+	  tail->block = gfc_get_code (EXEC_SELECT);
 	  tail = tail->block;
 	}
 
@@ -3349,11 +3302,9 @@ gfc_match_goto (void)
       cp->low = cp->high = gfc_get_int_expr (gfc_default_integer_kind,
 					     NULL, i++);
 
-      tail->op = EXEC_SELECT;
       tail->ext.block.case_list = cp;
 
-      tail->next = gfc_get_code ();
-      tail->next->op = EXEC_GOTO;
+      tail->next = gfc_get_code (EXEC_GOTO);
       tail->next->label1 = label;
     }
   while (gfc_match_char (',') == MATCH_YES);
@@ -3373,8 +3324,7 @@ gfc_match_goto (void)
   if (gfc_match (" %e%t", &expr) != MATCH_YES)
     goto syntax;
 
-  if (gfc_notify_std (GFC_STD_F95_OBS, "Computed GOTO "
-		      "at %C") == FAILURE)
+  if (!gfc_notify_std (GFC_STD_F95_OBS, "Computed GOTO at %C"))
     return MATCH_ERROR;
 
   /* At this point, a computed GOTO has been fully matched and an
@@ -3437,7 +3387,7 @@ gfc_match_allocate (void)
 
   /* Match an optional type-spec.  */
   old_locus = gfc_current_locus;
-  m = match_type_spec (&ts);
+  m = gfc_match_type_spec (&ts);
   if (m == MATCH_ERROR)
     goto cleanup;
   else if (m == MATCH_NO)
@@ -3456,8 +3406,8 @@ gfc_match_allocate (void)
     {
       if (gfc_match (" :: ") == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F2003, "typespec in "
-			      "ALLOCATE at %L", &old_locus) == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F2003, "typespec in ALLOCATE at %L", 
+			       &old_locus))
 	    goto cleanup;
 
 	  if (ts.deferred)
@@ -3512,8 +3462,8 @@ gfc_match_allocate (void)
 	  deferred_locus = tail->expr->where;
 	}
 
-      if (gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS
-	  || gfc_find_state (COMP_CRITICAL) == SUCCESS)
+      if (gfc_find_state (COMP_DO_CONCURRENT)
+	  || gfc_find_state (COMP_CRITICAL))
 	{
 	  gfc_ref *ref;
 	  bool coarray = tail->expr->symtree->n.sym->attr.codimension;
@@ -3521,12 +3471,12 @@ gfc_match_allocate (void)
 	    if (ref->type == REF_COMPONENT)
 	      coarray = ref->u.c.component->attr.codimension;
 
-	  if (coarray && gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+	  if (coarray && gfc_find_state (COMP_DO_CONCURRENT))
 	    {
 	      gfc_error ("ALLOCATE of coarray at %C in DO CONCURRENT block");
 	      goto cleanup;
 	    }
-	  if (coarray && gfc_find_state (COMP_CRITICAL) == SUCCESS)
+	  if (coarray && gfc_find_state (COMP_CRITICAL))
 	    {
 	      gfc_error ("ALLOCATE of coarray at %C in CRITICAL block");
 	      goto cleanup;
@@ -3621,8 +3571,7 @@ alloc_opt_list:
 	goto cleanup;
       if (m == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F2003, "ERRMSG tag at %L",
-			      &tmp->where) == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F2003, "ERRMSG tag at %L", &tmp->where))
 	    goto cleanup;
 
 	  /* Enforce C630.  */
@@ -3645,8 +3594,7 @@ alloc_opt_list:
 	goto cleanup;
       if (m == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F2003, "SOURCE tag at %L",
-			      &tmp->where) == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F2003, "SOURCE tag at %L", &tmp->where))
 	    goto cleanup;
 
 	  /* Enforce C630.  */
@@ -3659,15 +3607,15 @@ alloc_opt_list:
 	  /* The next 2 conditionals check C631.  */
 	  if (ts.type != BT_UNKNOWN)
 	    {
-	      gfc_error ("SOURCE tag at %L conflicts with the typespec at %L",
+	      gfc_error_1 ("SOURCE tag at %L conflicts with the typespec at %L",
 			 &tmp->where, &old_locus);
 	      goto cleanup;
 	    }
 
 	  if (head->next
-	      && gfc_notify_std (GFC_STD_F2008, "SOURCE tag at %L"
-				 " with more than a single allocate object",
-				 &tmp->where) == FAILURE)
+	      && !gfc_notify_std (GFC_STD_F2008, "SOURCE tag at %L"
+				  " with more than a single allocate object", 
+				  &tmp->where))
 	    goto cleanup;
 
 	  source = tmp;
@@ -3683,8 +3631,7 @@ alloc_opt_list:
 	goto cleanup;
       if (m == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F2008, "MOLD tag at %L",
-			      &tmp->where) == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F2008, "MOLD tag at %L", &tmp->where))
 	    goto cleanup;
 
 	  /* Check F08:C636.  */
@@ -3697,7 +3644,7 @@ alloc_opt_list:
 	  /* Check F08:C637.  */
 	  if (ts.type != BT_UNKNOWN)
 	    {
-	      gfc_error ("MOLD tag at %L conflicts with the typespec at %L",
+	      gfc_error_1 ("MOLD tag at %L conflicts with the typespec at %L",
 			 &tmp->where, &old_locus);
 	      goto cleanup;
 	    }
@@ -3723,7 +3670,7 @@ alloc_opt_list:
   /* Check F08:C637.  */
   if (source && mold)
     {
-      gfc_error ("MOLD tag at %L conflicts with SOURCE tag at %L",
+      gfc_error_1 ("MOLD tag at %L conflicts with SOURCE tag at %L",
 		  &mold->where, &source->where);
       goto cleanup;
     }
@@ -3814,14 +3761,16 @@ gfc_match_nullify (void)
 
       /* Chain to list.  */
       if (tail == NULL)
-	tail = &new_st;
+	{
+	  tail = &new_st;
+	  tail->op = EXEC_POINTER_ASSIGN;
+	}
       else
 	{
-	  tail->next = gfc_get_code ();
+	  tail->next = gfc_get_code (EXEC_POINTER_ASSIGN);
 	  tail = tail->next;
 	}
 
-      tail->op = EXEC_POINTER_ASSIGN;
       tail->expr1 = p;
       tail->expr2 = e;
 
@@ -3897,14 +3846,14 @@ gfc_match_deallocate (void)
 	gfc_unset_implicit_pure (NULL);
 
       if (gfc_is_coarray (tail->expr)
-	  && gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+	  && gfc_find_state (COMP_DO_CONCURRENT))
 	{
 	  gfc_error ("DEALLOCATE of coarray at %C in DO CONCURRENT block");
 	  goto cleanup;
 	}
 
       if (gfc_is_coarray (tail->expr)
-	  && gfc_find_state (COMP_CRITICAL) == SUCCESS)
+	  && gfc_find_state (COMP_CRITICAL))
 	{
 	  gfc_error ("DEALLOCATE of coarray at %C in CRITICAL block");
 	  goto cleanup;
@@ -3959,8 +3908,7 @@ dealloc_opt_list:
 	goto cleanup;
       if (m == MATCH_YES)
 	{
-	  if (gfc_notify_std (GFC_STD_F2003, "ERRMSG at %L",
-			      &tmp->where) == FAILURE)
+	  if (!gfc_notify_std (GFC_STD_F2003, "ERRMSG at %L", &tmp->where))
 	    goto cleanup;
 
 	  if (saw_errmsg)
@@ -4015,13 +3963,13 @@ gfc_match_return (void)
 
   e = NULL;
 
-  if (gfc_find_state (COMP_CRITICAL) == SUCCESS)
+  if (gfc_find_state (COMP_CRITICAL))
     {
       gfc_error ("Image control statement RETURN at %C in CRITICAL block");
       return MATCH_ERROR;
     }
 
-  if (gfc_find_state (COMP_DO_CONCURRENT) == SUCCESS)
+  if (gfc_find_state (COMP_DO_CONCURRENT))
     {
       gfc_error ("Image control statement RETURN at %C in DO CONCURRENT block");
       return MATCH_ERROR;
@@ -4030,16 +3978,12 @@ gfc_match_return (void)
   if (gfc_match_eos () == MATCH_YES)
     goto done;
 
-  if (gfc_find_state (COMP_SUBROUTINE) == FAILURE)
+  if (!gfc_find_state (COMP_SUBROUTINE))
     {
       gfc_error ("Alternate RETURN statement at %C is only allowed within "
 		 "a SUBROUTINE");
       goto cleanup;
     }
-
-  if (gfc_notify_std (GFC_STD_F95_OBS, "Alternate RETURN "
-		      "at %C") == FAILURE)
-    return MATCH_ERROR;
 
   if (gfc_current_form == FORM_FREE)
     {
@@ -4067,8 +4011,8 @@ cleanup:
 done:
   gfc_enclosing_unit (&s);
   if (s == COMP_PROGRAM
-      && gfc_notify_std (GFC_STD_GNU, "RETURN statement in "
-			"main program at %C") == FAILURE)
+      && !gfc_notify_std (GFC_STD_GNU, "RETURN statement in "
+			  "main program at %C"))
       return MATCH_ERROR;
 
   new_st.op = EXEC_RETURN;
@@ -4097,11 +4041,15 @@ match_typebound_call (gfc_symtree* varst)
   if (m == MATCH_NO)
     gfc_error ("Expected component reference at %C");
   if (m != MATCH_YES)
-    return MATCH_ERROR;
+    {
+      gfc_free_expr (base);
+      return MATCH_ERROR;
+    }
 
   if (gfc_match_eos () != MATCH_YES)
     {
       gfc_error ("Junk after CALL at %C");
+      gfc_free_expr (base);
       return MATCH_ERROR;
     }
 
@@ -4113,6 +4061,7 @@ match_typebound_call (gfc_symtree* varst)
     {
       gfc_error ("Expected type-bound procedure or procedure pointer component "
 		 "at %C");
+      gfc_free_expr (base);
       return MATCH_ERROR;
     }
   new_st.expr1 = base;
@@ -4179,7 +4128,7 @@ gfc_match_call (void)
 	}
 
       /* ...and then to try to make the symbol into a subroutine.  */
-      if (gfc_add_subroutine (&sym->attr, sym->name, NULL) == FAILURE)
+      if (!gfc_add_subroutine (&sym->attr, sym->name, NULL))
 	return MATCH_ERROR;
     }
 
@@ -4203,7 +4152,10 @@ gfc_match_call (void)
   i = 0;
   for (a = arglist; a; a = a->next)
     if (a->expr == NULL)
-      i = 1;
+      {
+	i = 1;
+	break;
+      }
 
   if (i)
     {
@@ -4211,8 +4163,7 @@ gfc_match_call (void)
       gfc_symbol *select_sym;
       char name[GFC_MAX_SYMBOL_LEN + 1];
 
-      new_st.next = c = gfc_get_code ();
-      c->op = EXEC_SELECT;
+      new_st.next = c = gfc_get_code (EXEC_SELECT);
       sprintf (name, "_result_%s", sym->name);
       gfc_get_ha_sym_tree (name, &select_st);   /* Can't fail.  */
 
@@ -4232,22 +4183,20 @@ gfc_match_call (void)
 	  if (a->expr != NULL)
 	    continue;
 
-	  if (gfc_reference_st_label (a->label, ST_LABEL_TARGET) == FAILURE)
+	  if (!gfc_reference_st_label (a->label, ST_LABEL_TARGET))
 	    continue;
 
 	  i++;
 
-	  c->block = gfc_get_code ();
+	  c->block = gfc_get_code (EXEC_SELECT);
 	  c = c->block;
-	  c->op = EXEC_SELECT;
 
 	  new_case = gfc_get_case ();
 	  new_case->high = gfc_get_int_expr (gfc_default_integer_kind, NULL, i);
 	  new_case->low = new_case->high;
 	  c->ext.block.case_list = new_case;
 
-	  c->next = gfc_get_code ();
-	  c->next->op = EXEC_GOTO;
+	  c->next = gfc_get_code (EXEC_GOTO);
 	  c->next->label1 = a->label;
 	}
     }
@@ -4347,7 +4296,6 @@ gfc_match_common (void)
   gfc_array_spec *as;
   gfc_equiv *e1, *e2;
   match m;
-  gfc_gsymbol *gsym;
 
   old_blank_common = gfc_current_ns->blank_common.head;
   if (old_blank_common)
@@ -4363,23 +4311,6 @@ gfc_match_common (void)
       m = match_common_name (name);
       if (m == MATCH_ERROR)
 	goto cleanup;
-
-      gsym = gfc_get_gsymbol (name);
-      if (gsym->type != GSYM_UNKNOWN && gsym->type != GSYM_COMMON)
-	{
-	  gfc_error ("Symbol '%s' at %C is already an external symbol that "
-		     "is not COMMON", name);
-	  goto cleanup;
-	}
-
-      if (gsym->type == GSYM_UNKNOWN)
-	{
-	  gsym->type = GSYM_COMMON;
-	  gsym->where = gfc_current_locus;
-	  gsym->defined = 1;
-	}
-
-      gsym->used = 1;
 
       if (name[0] == '\0')
 	{
@@ -4427,23 +4358,23 @@ gfc_match_common (void)
                   /* If we find an error, just print it and continue,
                      cause it's just semantic, and we can see if there
                      are more errors.  */
-                  gfc_error_now ("Variable '%s' at %L in common block '%s' "
-                                 "at %C must be declared with a C "
-                                 "interoperable kind since common block "
-                                 "'%s' is bind(c)",
-                                 sym->name, &(sym->declared_at), t->name,
-                                 t->name);
+                  gfc_error_now_1 ("Variable '%s' at %L in common block '%s' "
+				   "at %C must be declared with a C "
+				   "interoperable kind since common block "
+				   "'%s' is bind(c)",
+				   sym->name, &(sym->declared_at), t->name,
+				   t->name);
                 }
 
               if (sym->attr.is_bind_c == 1)
-                gfc_error_now ("Variable '%s' in common block "
-                               "'%s' at %C can not be bind(c) since "
-                               "it is not global", sym->name, t->name);
+                gfc_error_now ("Variable %qs in common block %qs at %C can not "
+                               "be bind(c) since it is not global", sym->name,
+			       t->name);
             }
 
 	  if (sym->attr.in_common)
 	    {
-	      gfc_error ("Symbol '%s' at %C is already in a COMMON block",
+	      gfc_error ("Symbol %qs at %C is already in a COMMON block",
 			 sym->name);
 	      goto cleanup;
 	    }
@@ -4451,14 +4382,13 @@ gfc_match_common (void)
 	  if (((sym->value != NULL && sym->value->expr_type != EXPR_NULL)
 	       || sym->attr.data) && gfc_current_state () != COMP_BLOCK_DATA)
 	    {
-	      if (gfc_notify_std (GFC_STD_GNU, "Initialized symbol '%s' at %C "
-					       "can only be COMMON in "
-					       "BLOCK DATA", sym->name)
-		  == FAILURE)
+	      if (!gfc_notify_std (GFC_STD_GNU, "Initialized symbol %qs at "
+				   "%C can only be COMMON in BLOCK DATA", 
+				   sym->name))
 		goto cleanup;
 	    }
 
-	  if (gfc_add_in_common (&sym->attr, sym->name, NULL) == FAILURE)
+	  if (!gfc_add_in_common (&sym->attr, sym->name, NULL))
 	    goto cleanup;
 
 	  if (tail != NULL)
@@ -4478,17 +4408,17 @@ gfc_match_common (void)
 	    {
 	      if (as->type != AS_EXPLICIT)
 		{
-		  gfc_error ("Array specification for symbol '%s' in COMMON "
+		  gfc_error ("Array specification for symbol %qs in COMMON "
 			     "at %C must be explicit", sym->name);
 		  goto cleanup;
 		}
 
-	      if (gfc_add_dimension (&sym->attr, sym->name, NULL) == FAILURE)
+	      if (!gfc_add_dimension (&sym->attr, sym->name, NULL))
 		goto cleanup;
 
 	      if (sym->attr.pointer)
 		{
-		  gfc_error ("Symbol '%s' in COMMON at %C cannot be a "
+		  gfc_error ("Symbol %qs in COMMON at %C cannot be a "
 			     "POINTER array", sym->name);
 		  goto cleanup;
 		}
@@ -4520,9 +4450,9 @@ gfc_match_common (void)
 		      if (other->common_head
 			  && other->common_head != sym->common_head)
 			{
-			  gfc_error ("Symbol '%s', in COMMON block '%s' at "
+			  gfc_error ("Symbol %qs, in COMMON block %qs at "
 				     "%C is being indirectly equivalenced to "
-				     "another COMMON block '%s'",
+				     "another COMMON block %qs",
 				     sym->name, sym->common_head->name,
 				     other->common_head->name);
 			    goto cleanup;
@@ -4554,10 +4484,6 @@ syntax:
   gfc_syntax_error (ST_COMMON);
 
 cleanup:
-  if (old_blank_common)
-    old_blank_common->common_next = NULL;
-  else
-    gfc_current_ns->blank_common.head = NULL;
   gfc_free_array_spec (as);
   return MATCH_ERROR;
 }
@@ -4585,7 +4511,7 @@ gfc_match_block_data (void)
   if (gfc_get_symbol (name, NULL, &sym))
     return MATCH_ERROR;
 
-  if (gfc_add_flavor (&sym->attr, FL_BLOCK_DATA, sym->name, NULL) == FAILURE)
+  if (!gfc_add_flavor (&sym->attr, FL_BLOCK_DATA, sym->name, NULL))
     return MATCH_ERROR;
 
   gfc_new_block = sym;
@@ -4603,6 +4529,30 @@ gfc_free_namelist (gfc_namelist *name)
 
   for (; name; name = n)
     {
+      n = name->next;
+      free (name);
+    }
+}
+
+
+/* Free an OpenMP namelist structure.  */
+
+void
+gfc_free_omp_namelist (gfc_omp_namelist *name)
+{
+  gfc_omp_namelist *n;
+
+  for (; name; name = n)
+    {
+      gfc_free_expr (name->expr);
+      if (name->udr)
+	{
+	  if (name->udr->combiner)
+	    gfc_free_statement (name->udr->combiner);
+	  if (name->udr->initializer)
+	    gfc_free_statement (name->udr->initializer);
+	  free (name->udr);
+	}
       n = name->next;
       free (name);
     }
@@ -4628,7 +4578,7 @@ gfc_match_namelist (void)
     {
       if (group_name->ts.type != BT_UNKNOWN)
 	{
-	  gfc_error ("Namelist group name '%s' at %C already has a basic "
+	  gfc_error ("Namelist group name %qs at %C already has a basic "
 		     "type of %s", group_name->name,
 		     gfc_typename (&group_name->ts));
 	  return MATCH_ERROR;
@@ -4636,15 +4586,14 @@ gfc_match_namelist (void)
 
       if (group_name->attr.flavor == FL_NAMELIST
 	  && group_name->attr.use_assoc
-	  && gfc_notify_std (GFC_STD_GNU, "Namelist group name '%s' "
-			     "at %C already is USE associated and can"
-			     "not be respecified.", group_name->name)
-	     == FAILURE)
+	  && !gfc_notify_std (GFC_STD_GNU, "Namelist group name %qs "
+			      "at %C already is USE associated and can"
+			      "not be respecified.", group_name->name))
 	return MATCH_ERROR;
 
       if (group_name->attr.flavor != FL_NAMELIST
-	  && gfc_add_flavor (&group_name->attr, FL_NAMELIST,
-			     group_name->name, NULL) == FAILURE)
+	  && !gfc_add_flavor (&group_name->attr, FL_NAMELIST, 
+			      group_name->name, NULL))
 	return MATCH_ERROR;
 
       for (;;)
@@ -4656,14 +4605,14 @@ gfc_match_namelist (void)
 	    goto error;
 
 	  if (sym->attr.in_namelist == 0
-	      && gfc_add_in_namelist (&sym->attr, sym->name, NULL) == FAILURE)
+	      && !gfc_add_in_namelist (&sym->attr, sym->name, NULL))
 	    goto error;
 
 	  /* Use gfc_error_check here, rather than goto error, so that
 	     these are the only errors for the next two lines.  */
 	  if (sym->as && sym->as->type == AS_ASSUMED_SIZE)
 	    {
-	      gfc_error ("Assumed size array '%s' in namelist '%s' at "
+	      gfc_error ("Assumed size array %qs in namelist %qs at "
 			 "%C is not allowed", sym->name, group_name->name);
 	      gfc_error_check ();
 	    }
@@ -4722,8 +4671,8 @@ gfc_match_module (void)
   if (m != MATCH_YES)
     return m;
 
-  if (gfc_add_flavor (&gfc_new_block->attr, FL_MODULE,
-		      gfc_new_block->name, NULL) == FAILURE)
+  if (!gfc_add_flavor (&gfc_new_block->attr, FL_MODULE, 
+		       gfc_new_block->name, NULL))
     return MATCH_ERROR;
 
   return MATCH_YES;
@@ -4812,7 +4761,7 @@ gfc_match_equivalence (void)
 
 	  sym = set->expr->symtree->n.sym;
 
-	  if (gfc_add_in_equivalence (&sym->attr, sym->name, NULL) == FAILURE)
+	  if (!gfc_add_in_equivalence (&sym->attr, sym->name, NULL))
 	    goto cleanup;
 
 	  if (sym->attr.in_common)
@@ -4948,7 +4897,9 @@ recursive_stmt_fcn (gfc_expr *e, gfc_symbol *sym)
 match
 gfc_match_st_function (void)
 {
-  gfc_error_buf old_error;
+  gfc_error_buf old_error_1;
+  output_buffer old_error;
+
   gfc_symbol *sym;
   gfc_expr *expr;
   match m;
@@ -4957,10 +4908,9 @@ gfc_match_st_function (void)
   if (m != MATCH_YES)
     return m;
 
-  gfc_push_error (&old_error);
+  gfc_push_error (&old_error, &old_error_1);
 
-  if (gfc_add_procedure (&sym->attr, PROC_ST_FUNCTION,
-			 sym->name, NULL) == FAILURE)
+  if (!gfc_add_procedure (&sym->attr, PROC_ST_FUNCTION, sym->name, NULL))
     goto undo_error;
 
   if (gfc_match_formal_arglist (sym, 1, 0) != MATCH_YES)
@@ -4970,7 +4920,8 @@ gfc_match_st_function (void)
   if (m == MATCH_NO)
     goto undo_error;
 
-  gfc_free_error (&old_error);
+  gfc_free_error (&old_error, &old_error_1);
+
   if (m == MATCH_ERROR)
     return m;
 
@@ -4982,14 +4933,22 @@ gfc_match_st_function (void)
 
   sym->value = expr;
 
-  if (gfc_notify_std (GFC_STD_F95_OBS,
-		      "Statement function at %C") == FAILURE)
+  if ((gfc_current_state () == COMP_FUNCTION
+       || gfc_current_state () == COMP_SUBROUTINE)
+      && gfc_state_stack->previous->state == COMP_INTERFACE)
+    {
+      gfc_error ("Statement function at %L cannot appear within an INTERFACE",
+		 &expr->where);
+      return MATCH_ERROR;
+    }
+
+  if (!gfc_notify_std (GFC_STD_F95_OBS, "Statement function at %C"))
     return MATCH_ERROR;
 
   return MATCH_YES;
 
 undo_error:
-  gfc_pop_error (&old_error);
+  gfc_pop_error (&old_error, &old_error_1);
   return MATCH_NO;
 }
 
@@ -5024,7 +4983,9 @@ gfc_free_case_list (gfc_case *p)
 }
 
 
-/* Match a single case selector.  */
+/* Match a single case selector.  Combining the requirements of F08:C830
+   and F08:C832 (R838) means that the case-value must have either CHARACTER,
+   INTEGER, or LOGICAL type.  */
 
 static match
 match_case_selector (gfc_case **cp)
@@ -5042,6 +5003,14 @@ match_case_selector (gfc_case **cp)
 	goto need_expr;
       if (m == MATCH_ERROR)
 	goto cleanup;
+
+      if (c->high->ts.type != BT_LOGICAL && c->high->ts.type != BT_INTEGER
+	  && c->high->ts.type != BT_CHARACTER)
+	{
+	  gfc_error ("Expression in CASE selector at %L cannot be %s",
+		     &c->high->where, gfc_typename (&c->high->ts));
+	  goto cleanup;
+	}
     }
   else
     {
@@ -5050,6 +5019,14 @@ match_case_selector (gfc_case **cp)
 	goto cleanup;
       if (m == MATCH_NO)
 	goto need_expr;
+
+      if (c->low->ts.type != BT_LOGICAL && c->low->ts.type != BT_INTEGER
+	  && c->low->ts.type != BT_CHARACTER)
+	{
+	  gfc_error ("Expression in CASE selector at %L cannot be %s",
+		     &c->low->where, gfc_typename (&c->low->ts));
+	  goto cleanup;
+	}
 
       /* If we're not looking at a ':' now, make a range out of a single
 	 target.  Else get the upper bound for the case range.  */
@@ -5100,7 +5077,7 @@ match_case_eos (void)
 
   if (strcmp (name, gfc_current_block ()->name) != 0)
     {
-      gfc_error ("Expected block name '%s' of SELECT construct at %C",
+      gfc_error ("Expected block name %qs of SELECT construct at %C",
 		 gfc_current_block ()->name);
       return MATCH_ERROR;
     }
@@ -5193,8 +5170,7 @@ copy_ts_from_selector_to_associate (gfc_expr *associate, gfc_expr *selector)
       assoc_sym->ts.type = BT_CLASS;
       assoc_sym->ts.u.derived = CLASS_DATA (selector)->ts.u.derived;
       assoc_sym->attr.pointer = 1;
-      gfc_build_class_symbol (&assoc_sym->ts, &assoc_sym->attr,
-			      &assoc_sym->as, false);
+      gfc_build_class_symbol (&assoc_sym->ts, &assoc_sym->attr, &assoc_sym->as);
     }
 }
 
@@ -5318,7 +5294,7 @@ select_type_set_tmp (gfc_typespec *ts)
 
   if (ts->type == BT_CLASS)
     gfc_build_class_symbol (&tmp->n.sym->ts, &tmp->n.sym->attr,
-			    &tmp->n.sym->as, false);
+			    &tmp->n.sym->as);
     }
 
   /* Add an association for it, so the rest of the parser knows it is
@@ -5375,7 +5351,7 @@ gfc_match_select_type (void)
     {
       m = gfc_match (" %e ", &expr1);
       if (m != MATCH_YES)
-	goto cleanup;
+	return m;
     }
 
   m = gfc_match (" )%t");
@@ -5421,6 +5397,8 @@ gfc_match_select_type (void)
   return MATCH_YES;
 
 cleanup:
+  gfc_free_expr (expr1);
+  gfc_free_expr (expr2);
   return m;
 }
 
@@ -5517,7 +5495,10 @@ gfc_match_type_is (void)
   c = gfc_get_case ();
   c->where = gfc_current_locus;
 
-  if (match_type_spec (&c->ts) == MATCH_ERROR)
+  m = gfc_match_type_spec (&c->ts);
+  if (m == MATCH_NO)
+    goto syntax;
+  if (m == MATCH_ERROR)
     goto cleanup;
 
   if (gfc_match_char (')') != MATCH_YES)
@@ -5597,7 +5578,10 @@ gfc_match_class_is (void)
   c = gfc_get_case ();
   c->where = gfc_current_locus;
 
-  if (match_derived_type_spec (&c->ts) == MATCH_ERROR)
+  m = match_derived_type_spec (&c->ts);
+  if (m == MATCH_NO)
+    goto syntax;
+  if (m == MATCH_ERROR)
     goto cleanup;
 
   if (c->ts.type == BT_DERIVED)
@@ -5655,12 +5639,10 @@ match_simple_where (void)
   if (gfc_match_eos () != MATCH_YES)
     goto syntax;
 
-  c = gfc_get_code ();
-
-  c->op = EXEC_WHERE;
+  c = gfc_get_code (EXEC_WHERE);
   c->expr1 = expr;
-  c->next = gfc_get_code ();
 
+  c->next = XCNEW (gfc_code);
   *c->next = new_st;
   gfc_clear_new_st ();
 
@@ -5715,12 +5697,10 @@ gfc_match_where (gfc_statement *st)
 
   /* We've got a simple WHERE statement.  */
   *st = ST_WHERE;
-  c = gfc_get_code ();
-
-  c->op = EXEC_WHERE;
+  c = gfc_get_code (EXEC_WHERE);
   c->expr1 = expr;
-  c->next = gfc_get_code ();
 
+  c->next = XCNEW (gfc_code);
   *c->next = new_st;
   gfc_clear_new_st ();
 
@@ -5781,7 +5761,7 @@ gfc_match_elsewhere (void)
 
       if (strcmp (name, gfc_current_block ()->name) != 0)
 	{
-	  gfc_error ("Label '%s' at %C doesn't match WHERE label '%s'",
+	  gfc_error ("Label %qs at %C doesn't match WHERE label %qs",
 		     name, gfc_current_block ()->name);
 	  goto cleanup;
 	}

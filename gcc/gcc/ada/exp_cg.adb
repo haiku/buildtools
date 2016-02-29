@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -261,12 +261,10 @@ package body Exp_CG is
             return True;
 
          elsif not Has_Fully_Qualified_Name (E) then
-            if        Chars (E) = Name_uSize
-              or else Chars (E) = Name_uAlignment
+            if Nam_In (Chars (E), Name_uSize, Name_uAlignment, Name_uAssign)
               or else
                 (Chars (E) = Name_Op_Eq
-                   and then Etype (First_Formal (E)) = Etype (Last_Formal (E)))
-              or else Chars (E) = Name_uAssign
+                  and then Etype (First_Formal (E)) = Etype (Last_Formal (E)))
               or else Is_Predefined_Interface_Primitive (E)
             then
                return True;
@@ -439,10 +437,10 @@ package body Exp_CG is
       if Nkind (P) = N_Subprogram_Body
         and then not Acts_As_Spec (P)
       then
-         Get_External_Name (Corresponding_Spec (P), Has_Suffix => False);
+         Get_External_Name (Corresponding_Spec (P));
 
       else
-         Get_External_Name (Defining_Entity (P), Has_Suffix => False);
+         Get_External_Name (Defining_Entity (P));
       end if;
 
       Write_Str (Name_Buffer (1 .. Name_Len));

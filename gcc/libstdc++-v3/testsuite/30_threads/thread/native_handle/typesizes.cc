@@ -1,10 +1,10 @@
-// { dg-do run { target *-*-linux* *-*-solaris* powerpc-ibm-aix* } }
-// { dg-options " -std=gnu++0x -pthread" { target *-*-linux* powerpc-ibm-aix* } }
-// { dg-options " -std=gnu++0x -pthreads" { target *-*-solaris* } }
+// { dg-do run { target *-*-linux* *-*-gnu* *-*-solaris* powerpc-ibm-aix* } }
+// { dg-options " -std=gnu++11 -pthread" { target *-*-linux* *-*-gnu* powerpc-ibm-aix* } }
+// { dg-options " -std=gnu++11 -pthreads" { target *-*-solaris* } }
 // { dg-require-cstdint "" }
 // { dg-require-gthreads "" }
 
-// Copyright (C) 2009-2013 Free Software Foundation, Inc.
+// Copyright (C) 2009-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the

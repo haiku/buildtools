@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 2012, Free Software Foundation, Inc.            --
+--          Copyright (C) 2012-2013, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -64,14 +64,18 @@ package body System.Bignums is
    -- Local Subprograms --
    -----------------------
 
-   function Add (X, Y : Digit_Vector; X_Neg, Y_Neg : Boolean) return Bignum
-   with Pre => X'First = 1 and then Y'First = 1;
+   function Add
+     (X, Y  : Digit_Vector;
+      X_Neg : Boolean;
+      Y_Neg : Boolean) return Bignum
+   with
+     Pre => X'First = 1 and then Y'First = 1;
    --  This procedure adds two signed numbers returning the Sum, it is used
    --  for both addition and subtraction. The value computed is X + Y, with
    --  X_Neg and Y_Neg giving the signs of the operands.
 
-   function Allocate_Bignum (Len : Length) return Bignum
-   with Post => Allocate_Bignum'Result.Len = Len;
+   function Allocate_Bignum (Len : Length) return Bignum with
+     Post => Allocate_Bignum'Result.Len = Len;
    --  Allocate Bignum value of indicated length on secondary stack. On return
    --  the Neg and D fields are left uninitialized.
 
@@ -81,7 +85,8 @@ package body System.Bignums is
    function Compare
      (X, Y         : Digit_Vector;
       X_Neg, Y_Neg : Boolean) return Compare_Result
-   with Pre => X'First = 1 and then Y'First = 1;
+   with
+     Pre => X'First = 1 and then Y'First = 1;
    --  Compare (X with sign X_Neg) with (Y with sign Y_Neg), and return the
    --  result of the signed comparison.
 
@@ -113,7 +118,11 @@ package body System.Bignums is
    -- Add --
    ---------
 
-   function Add (X, Y : Digit_Vector; X_Neg, Y_Neg : Boolean) return Bignum is
+   function Add
+     (X, Y  : Digit_Vector;
+      X_Neg : Boolean;
+      Y_Neg : Boolean) return Bignum
+   is
    begin
       --  If signs are the same, we are doing an addition, it is convenient to
       --  ensure that the first operand is the longer of the two.
@@ -355,7 +364,7 @@ package body System.Bignums is
                   Free_Bignum (XY2);
 
                   --  Raise storage error if intermediate value is getting too
-                  --  large, which we arbitrarily define as 200 words for now!
+                  --  large, which we arbitrarily define as 200 words for now.
 
                   if XY2S.Len > 200 then
                      Free_Bignum (XY2S);
@@ -699,7 +708,7 @@ package body System.Bignums is
 
       --  If both X and Y are less than 2**63-1, we can use Long_Long_Integer
       --  arithmetic. Note it is good not to do an accurate range check against
-      --  Long_Long_Integer since -2**63 / -1 overflows!
+      --  Long_Long_Integer since -2**63 / -1 overflows.
 
       elsif (X.Len <= 1 or else (X.Len = 2 and then X.D (1) < 2**31))
               and then

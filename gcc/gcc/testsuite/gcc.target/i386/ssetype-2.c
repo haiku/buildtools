@@ -1,4 +1,5 @@
 /* { dg-do compile } */
+/* { dg-skip-if "" { *-*-* } { "-march=*" } { "-march=k8" } } */
 /* { dg-options "-O2 -msse2 -march=k8" } */
 /* { dg-final { scan-assembler "andpd" } } */
 /* { dg-final { scan-assembler "andnpd" } } */

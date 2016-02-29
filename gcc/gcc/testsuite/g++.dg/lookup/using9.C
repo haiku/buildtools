@@ -20,12 +20,11 @@ void h()
   using C::f;
   f('h');
   f(1);         // { dg-error "ambiguous" }
-  // { dg-message "candidate" "candidate note" { target *-*-* } 22 }
-  void f(int);  // { dg-error "previous using declaration" }
+  void f(int);  // { dg-error "previous declaration" }
 }
 
 void m()
 {
   void f(int);
-  using B::f;   // { dg-error "already declared" }
+  using B::f;   // { dg-error "previous declaration" }
 }

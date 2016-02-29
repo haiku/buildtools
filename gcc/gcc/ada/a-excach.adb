@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2009, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -32,7 +32,7 @@
 pragma Warnings (Off);
 --  Allow withing of non-Preelaborated units in Ada 2005 mode where this
 --  package will be categorized as Preelaborate. See AI-362 for details.
---  It is safe in the context of the run-time to violate the rules!
+--  It is safe in the context of the run-time to violate the rules.
 
 with System.Traceback;
 
@@ -63,7 +63,7 @@ begin
       --  outside the AAA/ZZZ range.
 
       System.Traceback.Call_Chain
-        (Traceback   => Excep.Tracebacks'Address,
+        (Traceback   => Excep.Tracebacks,
          Max_Len     => Max_Tracebacks,
          Len         => Excep.Num_Tracebacks,
          Exclude_Min => Code_Address_For_AAA,

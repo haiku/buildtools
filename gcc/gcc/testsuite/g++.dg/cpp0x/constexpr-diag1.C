@@ -1,11 +1,11 @@
 // Test that we explain why a template instantiation isn't constexpr
-// { dg-options -std=c++0x }
+// { dg-do compile { target c++11 } }
 
 template <class T>
 struct A
 {
   T t;
-  constexpr int f() { return 42; } // { dg-error "enclosing class" }
+  constexpr int f() const { return 42; } // { dg-error "enclosing class" }
 };
 
 struct B { B(); operator int(); };

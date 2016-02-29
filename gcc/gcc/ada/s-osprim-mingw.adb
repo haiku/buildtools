@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2013, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -68,17 +68,17 @@ package body System.OS_Primitives is
 
    type Clock_Data_Access is access all Clock_Data;
 
-   --  Two base clock buffers. This is used to be able to update a buffer
-   --  while the other buffer is read. The point is that we do not want to
-   --  use a lock inside the Clock routine for performance reasons. We still
-   --  use a lock in the Get_Base_Time which is called very rarely. Current
-   --  is a pointer, the pragma Atomic is there to ensure that the value can
-   --  be set or read atomically. That's it, when Get_Base_Time has updated
-   --  a buffer the switch to the new value is done by changing Current
-   --  pointer.
+   --  Two base clock buffers. This is used to be able to update a buffer while
+   --  the other buffer is read. The point is that we do not want to use a lock
+   --  inside the Clock routine for performance reasons. We still use a lock
+   --  in the Get_Base_Time which is called very rarely. Current is a pointer,
+   --  the pragma Atomic is there to ensure that the value can be set or read
+   --  atomically. That's it, when Get_Base_Time has updated a buffer the
+   --  switch to the new value is done by changing Current pointer.
 
    First, Second : aliased Clock_Data;
-   Current       : Clock_Data_Access := First'Access;
+
+   Current : Clock_Data_Access := First'Access;
    pragma Atomic (Current);
 
    --  The following signature is to detect change on the base clock data
@@ -87,15 +87,15 @@ package body System.OS_Primitives is
    --  the base data for the changes to get undetected.
 
    type Signature_Type is mod 2**32;
-   Signature     : Signature_Type := 0;
+   Signature : Signature_Type := 0;
    pragma Atomic (Signature);
 
-   procedure Get_Base_Time (Data : out Clock_Data);
+   procedure Get_Base_Time (Data : in out Clock_Data);
    --  Retrieve the base time and base ticks. These values will be used by
    --  clock to compute the current time by adding to it a fraction of the
-   --  performance counter. This is for the implementation of a
-   --  high-resolution clock. Note that this routine does not change the base
-   --  monotonic values used by the monotonic clock.
+   --  performance counter. This is for the implementation of a high-resolution
+   --  clock. Note that this routine does not change the base monotonic values
+   --  used by the monotonic clock.
 
    -----------
    -- Clock --
@@ -166,7 +166,7 @@ package body System.OS_Primitives is
    -- Get_Base_Time --
    -------------------
 
-   procedure Get_Base_Time (Data : out Clock_Data) is
+   procedure Get_Base_Time (Data : in out Clock_Data) is
 
       --  The resolution for GetSystemTime is 1 millisecond
 
@@ -177,9 +177,11 @@ package body System.OS_Primitives is
       epoch_1970     : constant := 16#19D_B1DE_D53E_8000#; -- win32 UTC epoch
       system_time_ns : constant := 100;                    -- 100 ns per tick
       Sec_Unit       : constant := 10#1#E9;
-      Max_Elapsed    : constant LARGE_INTEGER :=
+
+      Max_Elapsed : constant LARGE_INTEGER :=
                          LARGE_INTEGER (Tick_Frequency / 100_000);
       --  Look for a precision of 0.01 ms
+
       Sig            : constant Signature_Type := Signature;
 
       Loc_Ticks, Ctrl_Ticks : aliased LARGE_INTEGER;
@@ -214,6 +216,7 @@ package body System.OS_Primitives is
       --  base data (time, clock, ticks) have already been updated.
 
       if Sig /= Signature then
+         Unlock;
          return;
       end if;
 
@@ -269,13 +272,14 @@ package body System.OS_Primitives is
          end if;
       end loop;
 
-      New_Data.Base_Clock := Duration
-        (Long_Long_Float ((New_Data.Base_Time - epoch_1970) * system_time_ns) /
-           Long_Long_Float (Sec_Unit));
+      New_Data.Base_Clock :=
+        Duration
+          (Long_Long_Float
+            ((New_Data.Base_Time - epoch_1970) * system_time_ns) /
+                                               Long_Long_Float (Sec_Unit));
 
       --  At this point all the base values have been set into the new data
-      --  record. We just change the pointer (atomic operation) to this new
-      --  values.
+      --  record. Change the pointer (atomic operation) to these new values.
 
       Current := New_Data;
       Data    := New_Data.all;

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -74,8 +74,8 @@ package body Comperr is
 
    procedure Compiler_Abort
      (X            : String;
-      Code         : Integer := 0;
-      Fallback_Loc : String := "")
+      Fallback_Loc : String  := "";
+      From_GCC     : Boolean := False)
    is
       --  The procedures below output a "bug box" with information about
       --  the cause of the compiler abort and about the preferred method
@@ -115,15 +115,15 @@ package body Comperr is
 
       Abort_In_Progress := True;
 
-      --  Generate a "standard" error message instead of a bug box in case of
-      --  .NET compiler, since we do not support all constructs of the
-      --  language. Of course ideally, we should detect this before bombing
-      --  on e.g. an assertion error, but in practice most of these bombs
-      --  are due to a legitimate case of a construct not being supported (in
-      --  a sense they all are, since for sure we are not supporting something
-      --  if we bomb!) By giving this message, we provide a more reasonable
-      --  practical interface, since giving scary bug boxes on unsupported
-      --  features is definitely not helpful.
+      --  Generate a "standard" error message instead of a bug box in case
+      --  of .NET compiler, since we do not support all constructs of the
+      --  language. Of course ideally, we should detect this before bombing on
+      --  e.g. an assertion error, but in practice most of these bombs are due
+      --  to a legitimate case of a construct not being supported (in a sense
+      --  they all are, since for sure we are not supporting something if we
+      --  bomb). By giving this message, we provide a more reasonable practical
+      --  interface, since giving scary bug boxes on unsupported features is
+      --  definitely not helpful.
 
       --  Similarly if we are generating SCIL, an error message is sufficient
       --  instead of generating a bug box.
@@ -206,7 +206,7 @@ package body Comperr is
          Write_Str (") ");
 
          if X'Length + Column > 76 then
-            if Code < 0 then
+            if From_GCC then
                Write_Str ("GCC error:");
             end if;
 
@@ -235,11 +235,7 @@ package body Comperr is
             Write_Str (X);
          end if;
 
-         if Code > 0 then
-            Write_Str (", Code=");
-            Write_Int (Int (Code));
-
-         elsif Code = 0 then
+         if not From_GCC then
 
             --  For exception case, get exception message from the TSD. Note
             --  that it would be neater and cleaner to pass the exception
@@ -371,21 +367,16 @@ package body Comperr is
                End_Line;
 
                Write_Str
-                 ("| Include the exact gcc or gnatmake command " &
-                  "that you entered.");
+                 ("| Include the exact command that you entered.");
                End_Line;
 
                Write_Str
-                 ("| Also include sources listed below in gnatchop format");
-               End_Line;
-
-               Write_Str
-                 ("| (concatenated together with no headers between files).");
+                 ("| Also include sources listed below.");
                End_Line;
 
                if not Is_FSF_Version then
                   Write_Str
-                    ("| Use plain ASCII or MIME attachment.");
+                    ("| Use plain ASCII or MIME attachment(s).");
                   End_Line;
                end if;
             end if;

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -29,7 +29,6 @@ with Debug;    use Debug;
 with Einfo;    use Einfo;
 with Errout;   use Errout;
 with Fname;    use Fname;
-with Hostparm;
 with Lib;      use Lib;
 with Opt;      use Opt;
 with Osint;    use Osint;
@@ -112,7 +111,6 @@ package body Sinput.L is
 
    procedure Complete_Source_File_Entry is
       CSF : constant Source_File_Index := Current_Source_File;
-
    begin
       Trim_Lines_Table (CSF);
       Source_File.Table (CSF).Source_Checksum := Checksum;
@@ -158,7 +156,6 @@ package body Sinput.L is
             Snew.Inlined_Call := Sloc (Inst_Node);
 
          else
-
             --  If the spec has been instantiated already, and we are now
             --  creating the instance source for the corresponding body now,
             --  retrieve the instance id that was assigned to the spec, which
@@ -167,10 +164,10 @@ package body Sinput.L is
             Inst_Spec := Instance_Spec (Inst_Node);
             if Present (Inst_Spec) then
                declare
-                  Inst_Spec_Ent     : Entity_Id;
+                  Inst_Spec_Ent : Entity_Id;
                   --  Instance spec entity
 
-                  Inst_Spec_Sloc    : Source_Ptr;
+                  Inst_Spec_Sloc : Source_Ptr;
                   --  Virtual sloc of the spec instance source
 
                   Inst_Spec_Inst_Id : Instance_Id;
@@ -188,12 +185,13 @@ package body Sinput.L is
 
                   --  The specification of the instance entity has a virtual
                   --  sloc within the instance sloc range.
+
                   --  ??? But the Unit_Declaration_Node has the sloc of the
                   --  instantiation, which is somewhat of an oddity.
 
-                  Inst_Spec_Sloc    :=
-                    Sloc (Specification (Unit_Declaration_Node
-                                           (Inst_Spec_Ent)));
+                  Inst_Spec_Sloc :=
+                    Sloc
+                      (Specification (Unit_Declaration_Node (Inst_Spec_Ent)));
                   Inst_Spec_Inst_Id :=
                     Source_File.Table
                       (Get_Source_File_Index (Inst_Spec_Sloc)).Instance;
@@ -209,11 +207,16 @@ package body Sinput.L is
             end if;
          end if;
 
-         --  Now we need to compute the new values of Source_First,
+         --  Now we need to compute the new values of Source_First and
          --  Source_Last and adjust the source file pointer to have the
          --  correct virtual origin for the new range of values.
 
-         Snew.Source_First := Source_File.Table (Xnew - 1).Source_Last + 1;
+         --  Source_First must be greater than the last Source_Last value
+         --  and also must be a multiple of Source_Align
+
+         Snew.Source_First :=
+           ((Source_File.Table (Xnew - 1).Source_Last + Source_Align) /
+              Source_Align) * Source_Align;
          A.Adjust := Snew.Source_First - A.Lo;
          Snew.Source_Last := A.Hi + A.Adjust;
 
@@ -398,10 +401,13 @@ package body Sinput.L is
       Source_File.Increment_Last;
       X := Source_File.Last;
 
+      --  Compute starting index, respecting alignment requirement
+
       if X = Source_File.First then
          Lo := First_Source_Ptr;
       else
-         Lo := Source_File.Table (X - 1).Source_Last + 1;
+         Lo := ((Source_File.Table (X - 1).Source_Last + Source_Align) /
+                  Source_Align) * Source_Align;
       end if;
 
       Osint.Read_Source_File (N, Lo, Hi, Src, T);
@@ -639,12 +645,7 @@ package body Sinput.L is
 
                      begin
                         Get_Name_String (N);
-
-                        if Hostparm.OpenVMS then
-                           Add_Str_To_Name_Buffer ("_prep");
-                        else
-                           Add_Str_To_Name_Buffer (".prep");
-                        end if;
+                        Add_Str_To_Name_Buffer (Prep_Suffix);
 
                         Delete_File (Name_Buffer (1 .. Name_Len), Status);
 
@@ -794,9 +795,106 @@ package body Sinput.L is
       Prep_Buffer (Prep_Buffer_Last) := C;
    end Put_Char_In_Prep_Buffer;
 
-   -----------------------------------
-   -- Source_File_Is_Pragma_No_Body --
-   -----------------------------------
+   -------------------------
+   -- Source_File_Is_Body --
+   -------------------------
+
+   function Source_File_Is_Body (X : Source_File_Index) return Boolean is
+      Pcount : Natural;
+
+   begin
+      Initialize_Scanner (No_Unit, X);
+
+      --  Loop to look for subprogram or package body
+
+      loop
+         case Token is
+
+            --  PRAGMA, WITH, USE (which can appear before a body)
+
+            when Tok_Pragma | Tok_With | Tok_Use =>
+
+               --  We just want to skip any of these, do it by skipping to a
+               --  semicolon, but check for EOF, in case we have bad syntax.
+
+               loop
+                  if Token = Tok_Semicolon then
+                     Scan;
+                     exit;
+                  elsif Token = Tok_EOF then
+                     return False;
+                  else
+                     Scan;
+                  end if;
+               end loop;
+
+            --  PACKAGE
+
+            when Tok_Package =>
+               Scan; -- Past PACKAGE
+
+               --  We have a body if and only if BODY follows
+
+               return Token = Tok_Body;
+
+            --  FUNCTION or PROCEDURE
+
+            when Tok_Procedure | Tok_Function =>
+               Pcount := 0;
+
+               --  Loop through tokens following PROCEDURE or FUNCTION
+
+               loop
+                  Scan;
+
+                  case Token is
+
+                     --  For parens, count paren level (note that paren level
+                     --  can get greater than 1 if we have default parameters).
+
+                     when Tok_Left_Paren =>
+                        Pcount := Pcount + 1;
+
+                     when Tok_Right_Paren =>
+                        Pcount := Pcount - 1;
+
+                     --  EOF means something weird, probably no body
+
+                     when Tok_EOF =>
+                        return False;
+
+                     --  BEGIN or IS or END definitely means body is present
+
+                     when Tok_Begin | Tok_Is | Tok_End =>
+                        return True;
+
+                     --  Semicolon means no body present if at outside any
+                     --  parens. If within parens, ignore, since it could be
+                     --  a parameter separator.
+
+                     when Tok_Semicolon =>
+                        if Pcount = 0 then
+                           return False;
+                        end if;
+
+                     --  Skip anything else
+
+                     when others =>
+                        null;
+                  end case;
+               end loop;
+
+            --  Anything else in main scan means we don't have a body
+
+            when others =>
+               return False;
+         end case;
+      end loop;
+   end Source_File_Is_Body;
+
+   ----------------------------
+   -- Source_File_Is_No_Body --
+   ----------------------------
 
    function Source_File_Is_No_Body (X : Source_File_Index) return Boolean is
    begin
@@ -824,28 +922,5 @@ package body Sinput.L is
 
       return Token = Tok_EOF;
    end Source_File_Is_No_Body;
-
-   ----------------------------
-   -- Source_File_Is_Subunit --
-   ----------------------------
-
-   function Source_File_Is_Subunit (X : Source_File_Index) return Boolean is
-   begin
-      Initialize_Scanner (No_Unit, X);
-
-      --  We scan past junk to the first interesting compilation unit token, to
-      --  see if it is SEPARATE. We ignore WITH keywords during this and also
-      --  PRIVATE. The reason for ignoring PRIVATE is that it handles some
-      --  error situations, and also to handle PRIVATE WITH in Ada 2005 mode.
-
-      while Token = Tok_With
-        or else Token = Tok_Private
-        or else (Token not in Token_Class_Cunit and then Token /= Tok_EOF)
-      loop
-         Scan;
-      end loop;
-
-      return Token = Tok_Separate;
-   end Source_File_Is_Subunit;
 
 end Sinput.L;

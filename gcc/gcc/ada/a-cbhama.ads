@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -35,6 +35,7 @@ with Ada.Iterator_Interfaces;
 
 private with Ada.Containers.Hash_Tables;
 private with Ada.Streams;
+private with Ada.Finalization;
 
 generic
    type Key_Type is private;
@@ -339,6 +340,7 @@ private
 
    use HT_Types;
    use Ada.Streams;
+   use Ada.Finalization;
 
    procedure Write
      (Stream    : not null access Root_Stream_Type'Class;
@@ -378,8 +380,21 @@ private
 
    for Cursor'Write use Write;
 
+   type Reference_Control_Type is new Controlled with record
+      Container : Map_Access;
+   end record;
+
+   overriding procedure Adjust (Control : in out Reference_Control_Type);
+   pragma Inline (Adjust);
+
+   overriding procedure Finalize (Control : in out Reference_Control_Type);
+   pragma Inline (Finalize);
+
    type Constant_Reference_Type
-      (Element : not null access constant Element_Type) is null record;
+     (Element : not null access constant Element_Type) is
+   record
+      Control : Reference_Control_Type;
+   end record;
 
    procedure Write
      (Stream : not null access Root_Stream_Type'Class;
@@ -393,8 +408,9 @@ private
 
    for Constant_Reference_Type'Read use Read;
 
-   type Reference_Type
-      (Element : not null access Element_Type) is null record;
+   type Reference_Type (Element : not null access Element_Type) is record
+      Control : Reference_Control_Type;
+   end record;
 
    procedure Write
      (Stream : not null access Root_Stream_Type'Class;
@@ -409,8 +425,22 @@ private
    for Reference_Type'Read use Read;
 
    Empty_Map : constant Map :=
-     (Hash_Table_Type with Capacity => 0, Modulus => 0);
+                 (Hash_Table_Type with Capacity => 0, Modulus => 0);
 
    No_Element : constant Cursor := (Container => null, Node => 0);
+
+   type Iterator is new Limited_Controlled and
+     Map_Iterator_Interfaces.Forward_Iterator with
+   record
+      Container : Map_Access;
+   end record;
+
+   overriding procedure Finalize (Object : in out Iterator);
+
+   overriding function First (Object : Iterator) return Cursor;
+
+   overriding function Next
+     (Object   : Iterator;
+      Position : Cursor) return Cursor;
 
 end Ada.Containers.Bounded_Hashed_Maps;

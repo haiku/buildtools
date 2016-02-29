@@ -1,11 +1,12 @@
-// { dg-options "-std=c++0x -ftrack-macro-expansion=0" }
+// { dg-do compile { target c++11 } }
+// { dg-options "-ftrack-macro-expansion=0" }
 
 #define SA(X) static_assert (X, #X)
 
 struct A
 {
   int i;
-  constexpr A(int _i) { i = _i; } // { dg-error "empty body|uninitialized member" }
+  constexpr A(int _i) { i = _i; } // { dg-error "empty body|A::i" }
 };
 
 template <class T>

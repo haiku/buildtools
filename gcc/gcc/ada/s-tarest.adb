@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1999-2012, Free Software Foundation, Inc.          --
+--         Copyright (C) 1999-2014, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -47,8 +47,12 @@ with Ada.Exceptions;
 
 with System.Task_Primitives.Operations;
 with System.Soft_Links.Tasking;
-with System.Secondary_Stack;
 with System.Storage_Elements;
+
+with System.Secondary_Stack;
+pragma Elaborate_All (System.Secondary_Stack);
+--  Make sure the body of Secondary_Stack is elaborated before calling
+--  Init_Tasking_Soft_Links. See comments for this routine for explanation.
 
 with System.Soft_Links;
 --  Used for the non-tasking routines (*_NT) that refer to global data. They
@@ -122,7 +126,7 @@ package body System.Tasking.Restricted.Stages is
       Elaborated    : Access_Boolean;
       Task_Image    : String;
       Created_Task  : Task_Id);
-   --  Code shared between Create_Restricted_Task_Concurrent and
+   --  Code shared between Create_Restricted_Task (the concurrent version) and
    --  Create_Restricted_Task_Sequential. See comment of the former in the
    --  specification of this package.
 
@@ -206,6 +210,9 @@ package body System.Tasking.Restricted.Stages is
       Secondary_Stack : aliased SSE.Storage_Array
         (1 .. Self_ID.Common.Compiler_Data.Pri_Stack_Info.Size *
                 SSE.Storage_Offset (Parameters.Sec_Stack_Percentage) / 100);
+      for Secondary_Stack'Alignment use Standard'Maximum_Alignment;
+      --  This is the secondary stack data. Note that it is critical that this
+      --  have maximum alignment, since any kind of data can be allocated here.
 
       pragma Warnings (Off);
       Secondary_Stack_Address : System.Address := Secondary_Stack'Address;
@@ -268,49 +275,45 @@ package body System.Tasking.Restricted.Stages is
             Save_Occurrence (EO, E);
       end;
 
-      --  Look for a fall-back handler. It can be either in the task itself
-      --  or in the environment task. Note that this code is always executed
-      --  by a task whose master is the environment task. The task termination
-      --  code for the environment task is executed by
-      --  SSL.Task_Termination_Handler.
+      --  Look for a fall-back handler
 
       --  This package is part of the restricted run time which supports
       --  neither task hierarchies (No_Task_Hierarchy) nor specific task
       --  termination handlers (No_Specific_Termination_Handlers).
 
-      --  There is no need for explicit protection against race conditions
-      --  for Self_ID.Common.Fall_Back_Handler because this procedure can
-      --  only be executed by Self, and the Fall_Back_Handler can only be
-      --  modified by Self.
+      --  As specified in ARM C.7.3 par. 9/2, "the fall-back handler applies
+      --  only to the dependent tasks of the task". Hence, if the terminating
+      --  tasks (Self_ID) had a fall-back handler, it would not apply to
+      --  itself. This code is always executed by a task whose master is the
+      --  environment task (the task termination code for the environment task
+      --  is executed by SSL.Task_Termination_Handler), so the fall-back
+      --  handler to execute for this task can only be defined by its parent
+      --  (there is no grandparent).
 
-      if Self_ID.Common.Fall_Back_Handler /= null then
-         Self_ID.Common.Fall_Back_Handler (Cause, Self_ID, EO);
-      else
-         declare
-            TH : Termination_Handler := null;
+      declare
+         TH : Termination_Handler := null;
 
-         begin
-            if Single_Lock then
-               Lock_RTS;
-            end if;
+      begin
+         if Single_Lock then
+            Lock_RTS;
+         end if;
 
-            Write_Lock (Self_ID.Common.Parent);
+         Write_Lock (Self_ID.Common.Parent);
 
-            TH := Self_ID.Common.Parent.Common.Fall_Back_Handler;
+         TH := Self_ID.Common.Parent.Common.Fall_Back_Handler;
 
-            Unlock (Self_ID.Common.Parent);
+         Unlock (Self_ID.Common.Parent);
 
-            if Single_Lock then
-               Unlock_RTS;
-            end if;
+         if Single_Lock then
+            Unlock_RTS;
+         end if;
 
-            --  Execute the task termination handler if we found it
+         --  Execute the task termination handler if we found it
 
-            if TH /= null then
-               TH.all (Cause, Self_ID, EO);
-            end if;
-         end;
-      end if;
+         if TH /= null then
+            TH.all (Cause, Self_ID, EO);
+         end if;
+      end;
 
       Terminate_Task (Self_ID);
    end Task_Wrapper;
@@ -538,7 +541,6 @@ package body System.Tasking.Restricted.Stages is
 
       if CPU /= Unspecified_CPU
         and then (CPU < Integer (System.Multiprocessors.CPU_Range'First)
-          or else CPU > Integer (System.Multiprocessors.CPU_Range'Last)
           or else CPU > Integer (System.Multiprocessors.Number_Of_CPUs))
       then
          raise Tasking_Error with "CPU not in range";

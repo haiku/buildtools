@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *          Copyright (C) 1992-2014, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2015, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -23,23 +23,28 @@
  *                                                                          *
  ****************************************************************************/
 
-/* This file corresponds to the Ada package body Uintp. It was created
-   manually from the files uintp.ads and uintp.adb. */
+/* This file corresponds to the Ada package body Uintp.  It was created
+   manually from the files uintp.ads and uintp.adb.  */
 
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "hash-set.h"
+#include "machmode.h"
+#include "vec.h"
+#include "double-int.h"
+#include "input.h"
+#include "alias.h"
+#include "symtab.h"
+#include "wide-int.h"
+#include "inchash.h"
 #include "tree.h"
+#include "fold-const.h"
 
 #include "ada.h"
 #include "types.h"
 #include "uintp.h"
-#include "atree.h"
-#include "elists.h"
-#include "nlists.h"
-#include "stringt.h"
-#include "fe.h"
 #include "ada-tree.h"
 #include "gigi.h"
 
@@ -53,8 +58,8 @@
    the integer value itself.  The origin of the Uints_Ptr table is adjusted so
    that a Uint value of Uint_Bias indexes the first element.
 
-   First define a utility function that operates like build_int_cst for
-   integral types and does a conversion to floating-point for real types.  */
+   First define a utility function that operates like build_int_cst_type for
+   integral types and does a conversion for floating-point types.  */
 
 static tree
 build_cst_from_int (tree type, HOST_WIDE_INT low)
@@ -73,19 +78,14 @@ build_cst_from_int (tree type, HOST_WIDE_INT low)
 tree
 UI_To_gnu (Uint Input, tree type)
 {
+  /* We might have a TYPE with biased representation and be passed an unbiased
+     value that doesn't fit.  We always use an unbiased type to be able to hold
+     any such possible value for intermediate computations and then rely on a
+     conversion back to TYPE to perform the bias adjustment when need be.  */
+  tree comp_type
+    = TREE_CODE (type) == INTEGER_TYPE && TYPE_BIASED_REPRESENTATION_P (type)
+      ? get_base_type (type) : type;
   tree gnu_ret;
-
-  /* We might have a TYPE with biased representation and be passed an
-     unbiased value that doesn't fit.  We always use an unbiased type able
-     to hold any such possible value for intermediate computations, and
-     then rely on a conversion back to TYPE to perform the bias adjustment
-     when need be.  */
-
-  int biased_type_p
-    = (TREE_CODE (type) == INTEGER_TYPE
-       && TYPE_BIASED_REPRESENTATION_P (type));
-
-  tree comp_type = biased_type_p ? get_base_type (type) : type;
 
   if (Input <= Uint_Direct_Last)
     gnu_ret = build_cst_from_int (comp_type, Input - Uint_Direct_Bias);
@@ -153,24 +153,28 @@ UI_From_gnu (tree Input)
   Int_Vector vec;
 
 #if HOST_BITS_PER_WIDE_INT == 64
-  /* On 64-bit hosts, host_integerp tells whether the input fits in a
+  /* On 64-bit hosts, tree_fits_shwi_p tells whether the input fits in a
      signed 64-bit integer.  Then a truncation tells whether it fits
      in a signed 32-bit integer.  */
-  if (host_integerp (Input, 0))
+  if (tree_fits_shwi_p (Input))
     {
-      HOST_WIDE_INT hw_input = TREE_INT_CST_LOW (Input);
+      HOST_WIDE_INT hw_input = tree_to_shwi (Input);
       if (hw_input == (int) hw_input)
 	return UI_From_Int (hw_input);
     }
   else
     return No_Uint;
 #else
-  /* On 32-bit hosts, host_integerp tells whether the input fits in a
+  /* On 32-bit hosts, tree_fits_shwi_p tells whether the input fits in a
      signed 32-bit integer.  Then a sign test tells whether it fits
      in a signed 64-bit integer.  */
-  if (host_integerp (Input, 0))
-    return UI_From_Int (TREE_INT_CST_LOW (Input));
-  else if (TREE_INT_CST_HIGH (Input) < 0 && TYPE_UNSIGNED (gnu_type))
+  if (tree_fits_shwi_p (Input))
+    return UI_From_Int (tree_to_shwi (Input));
+
+  gcc_assert (TYPE_PRECISION (gnu_type) <= 64);
+  if (TYPE_UNSIGNED (gnu_type)
+      && TYPE_PRECISION (gnu_type) == 64
+      && wi::neg_p (Input, SIGNED))
     return No_Uint;
 #endif
 
@@ -179,14 +183,15 @@ UI_From_gnu (tree Input)
 
   for (i = Max_For_Dint - 1; i >= 0; i--)
     {
-      v[i] = tree_low_cst (fold_build1 (ABS_EXPR, gnu_type,
+      v[i] = tree_to_shwi (fold_build1 (ABS_EXPR, gnu_type,
 					fold_build2 (TRUNC_MOD_EXPR, gnu_type,
-						     gnu_temp, gnu_base)),
-			   0);
+						     gnu_temp, gnu_base)));
       gnu_temp = fold_build2 (TRUNC_DIV_EXPR, gnu_type, gnu_temp, gnu_base);
     }
 
-  temp.Low_Bound = 1, temp.High_Bound = Max_For_Dint;
-  vec.Array = v, vec.Bounds = &temp;
+  temp.Low_Bound = 1;
+  temp.High_Bound = Max_For_Dint;
+  vec.Bounds = &temp;
+  vec.Array = v;
   return Vector_To_Uint (vec, tree_int_cst_sgn (Input) < 0);
 }

@@ -8,6 +8,11 @@
 
 package main
 
+import (
+	"os"
+	"unsafe"
+)
+
 import _ "fmt"
 
 var call string
@@ -20,6 +25,10 @@ func (T) _() {
 }
 
 func (T) _() {
+}
+
+type U struct {
+	_ struct{ a, b, c int }
 }
 
 const (
@@ -102,8 +111,25 @@ func main() {
 		panic(sum)
 	}
 
+	// go.tools/ssa/interp cannot support unsafe.Pointer.
+	if os.Getenv("GOSSAINTERP") == "" {
+		type T1 struct{ x, y, z int }
+		t1 := *(*T)(unsafe.Pointer(&T1{1, 2, 3}))
+		t2 := *(*T)(unsafe.Pointer(&T1{4, 5, 6}))
+		if t1 != t2 {
+			panic("T{} != T{}")
+		}
+
+		var u1, u2 interface{}
+		u1 = *(*U)(unsafe.Pointer(&T1{1, 2, 3}))
+		u2 = *(*U)(unsafe.Pointer(&T1{4, 5, 6}))
+		if u1 != u2 {
+			panic("U{} != U{}")
+		}
+	}
+
 	h(a, b)
-	
+
 	m()
 }
 
@@ -133,14 +159,13 @@ func fp1(x, y int) {
 	}
 }
 
-
 func m() {
 	var i I
-	
+
 	i = TI{}
 	i.M(1, 1)
 	i.M(2, 2)
-	
+
 	fp(1, 1)
 	fp(2, 2)
 }
@@ -162,4 +187,3 @@ func _() {
 func ff() {
 	var _ int = 1
 }
-

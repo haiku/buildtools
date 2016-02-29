@@ -1,5 +1,5 @@
 /* Header for array handling functions
-   Copyright (C) 2002-2013 Free Software Foundation, Inc.
+   Copyright (C) 2002-2015 Free Software Foundation, Inc.
    Contributed by Paul Brook
 
 This file is part of GCC.
@@ -42,15 +42,21 @@ void gfc_trans_dummy_array_bias (gfc_symbol *, tree, gfc_wrapped_block *);
 /* Generate entry and exit code for g77 calling convention arrays.  */
 void gfc_trans_g77_array (gfc_symbol *, gfc_wrapped_block *);
 /* Generate code to deallocate an array, if it is allocated.  */
-tree gfc_trans_dealloc_allocated (tree, bool);
+tree gfc_trans_dealloc_allocated (tree, bool, gfc_expr *);
 
-tree gfc_duplicate_allocatable (tree dest, tree src, tree type, int rank);
+tree gfc_full_array_size (stmtblock_t *, tree, int);
+
+tree gfc_duplicate_allocatable (tree, tree, tree, int, tree);
 
 tree gfc_copy_allocatable_data (tree dest, tree src, tree type, int rank);
+
+tree gfc_duplicate_allocatable_nocopy (tree, tree, tree, int);
 
 tree gfc_nullify_alloc_comp (gfc_symbol *, tree, int);
 
 tree gfc_deallocate_alloc_comp (gfc_symbol *, tree, int);
+tree gfc_deallocate_alloc_comp_no_caf (gfc_symbol *, tree, int);
+tree gfc_reassign_alloc_comp_caf (gfc_symbol *, tree, tree);
 
 tree gfc_copy_alloc_comp (gfc_symbol *, tree, tree, int);
 
@@ -123,7 +129,7 @@ void gfc_conv_resolve_dependencies (gfc_loopinfo *, gfc_ss *, gfc_ss *);
 tree gfc_build_null_descriptor (tree);
 
 /* Get a single array element.  */
-void gfc_conv_array_ref (gfc_se *, gfc_array_ref *, gfc_symbol *, locus *);
+void gfc_conv_array_ref (gfc_se *, gfc_array_ref *, gfc_expr *, locus *);
 /* Translate a reference to a temporary array.  */
 void gfc_conv_tmp_array_ref (gfc_se * se);
 /* Translate a reference to an array temporary.  */

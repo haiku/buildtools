@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O1 -fdump-tree-dom2" } */
+/* { dg-options "-O1 -fdump-tree-dom2 -std=gnu89" } */
   
 extern void abort (void);
 
@@ -56,7 +56,7 @@ store_expr (exp, target, want_value)
     ;
 }
 
-/* All paths to the test "target != 0" occuring in the final IF statement
+/* All paths to the test "target != 0" occurring in the final IF statement
    dereference target.  Thus target can not have the value zero at that
    point and the test should have been eliminated.  */
 /* ??? The dominator walker (A) doesn't merge this data at joins and

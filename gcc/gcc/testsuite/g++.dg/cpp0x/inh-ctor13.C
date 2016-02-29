@@ -1,4 +1,4 @@
-// { dg-options "-std=c++11" }
+// { dg-do compile { target c++11 } }
 
 struct A
 {
@@ -8,7 +8,7 @@ struct A
 
 struct C
 {
-  C() = delete;			// { dg-error "declared here" }
+  C() = delete;			// { dg-message "declared here" }
 };
 
 struct B: A, C

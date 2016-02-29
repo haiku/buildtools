@@ -1,7 +1,6 @@
 // Test that we properly extend the lifetime of the initializer_list
 // array even if the initializer_list is a subobject.
-// { dg-options -std=c++0x }
-// { dg-do run }
+// { dg-do run { target c++11 } }
 
 #include <initializer_list>
 
@@ -54,9 +53,11 @@ struct D {
   D() { ok = true; }
 };
 
+volatile bool always_false = false;
+
 int main(int argc, const char** argv)
 {
-  do_throw = (argc > 1);	// always false, but optimizer can't tell
+  do_throw = always_false;	// always false, but optimizer can't tell
   ok = false;
   C c;
   ok = false;

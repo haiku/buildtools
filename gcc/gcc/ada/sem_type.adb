@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -252,10 +252,9 @@ package body Sem_Type is
             --  preference rule applies.
 
             if (((Ekind (Name) = E_Function or else Ekind (Name) = E_Procedure)
-                 and then Ekind (Name) = Ekind (It.Nam))
-                or else (Ekind (Name) = E_Operator
-              and then Ekind (It.Nam) = E_Function))
-
+                   and then Ekind (Name) = Ekind (It.Nam))
+                 or else (Ekind (Name) = E_Operator
+                           and then Ekind (It.Nam) = E_Function))
               and then Is_Immediately_Visible (It.Nam)
               and then Type_Conformant (Name, It.Nam)
               and then Base_Type (It.Typ) = Base_Type (T)
@@ -269,9 +268,9 @@ package body Sem_Type is
                --  predefined operator in any case.
 
                elsif Nkind (N) = N_Operator_Symbol
-                 or else (Nkind (N) = N_Expanded_Name
-                            and then
-                          Nkind (Selector_Name (N)) = N_Operator_Symbol)
+                 or else
+                   (Nkind (N) = N_Expanded_Name
+                     and then Nkind (Selector_Name (N)) = N_Operator_Symbol)
                then
                   exit;
 
@@ -373,7 +372,7 @@ package body Sem_Type is
            or else Is_Potentially_Use_Visible (Vis_Type)
            or else In_Use (Vis_Type)
            or else (In_Use (Scope (Vis_Type))
-                      and then not Is_Hidden (Vis_Type))
+                     and then not Is_Hidden (Vis_Type))
            or else Nkind (N) = N_Expanded_Name
            or else (Nkind (N) in N_Op and then E = Entity (N))
            or else In_Instance
@@ -390,8 +389,8 @@ package body Sem_Type is
          elsif Nkind (N) = N_Function_Call
            and then Nkind (Name (N)) = N_Expanded_Name
            and then (Entity (Prefix (Name (N))) = Scope (Base_Type (T))
-                       or else Entity (Prefix (Name (N))) = Scope (Vis_Type)
-                       or else Scope (Vis_Type) = System_Aux_Id)
+                      or else Entity (Prefix (Name (N))) = Scope (Vis_Type)
+                      or else Scope (Vis_Type) = System_Aux_Id)
          then
             null;
 
@@ -472,7 +471,7 @@ package body Sem_Type is
       elsif Interp_Map.Last < 0
         or else
           (Interp_Map.Table (Interp_Map.Last).Node /= N
-             and then not Is_Overloaded (N))
+            and then not Is_Overloaded (N))
       then
          New_Interps (N);
 
@@ -601,6 +600,7 @@ package body Sem_Type is
             if Scop = Inst then
                return True;
             end if;
+
             Scop := Scope (Scop);
          end loop;
 
@@ -641,9 +641,8 @@ package body Sem_Type is
             exit when (not Is_Overloadable (H))
               and then Is_Immediately_Visible (H);
 
-            if Is_Immediately_Visible (H)
-              and then H /= Ent
-            then
+            if Is_Immediately_Visible (H) and then H /= Ent then
+
                --  Only add interpretation if not hidden by an inner
                --  immediately visible one.
 
@@ -766,9 +765,11 @@ package body Sem_Type is
            Is_Private_Type (Typ1)
              and then
               ((Present (Full_View (Typ1))
-                    and then Covers (Full_View (Typ1), Typ2))
-                 or else Base_Type (Typ1) = Typ2
-                 or else Base_Type (Typ2) = Typ1);
+                 and then Covers (Full_View (Typ1), Typ2))
+                or else (Present (Underlying_Full_View (Typ1))
+                          and then Covers (Underlying_Full_View (Typ1), Typ2))
+                or else Base_Type (Typ1) = Typ2
+                or else Base_Type (Typ2) = Typ1);
       end Full_View_Covers;
 
       -----------------
@@ -780,7 +781,7 @@ package body Sem_Type is
          RA  : Entity_Id;
 
       begin
-         --  Retrieve parent subtype from subtype declaration for actual.
+         --  Retrieve parent subtype from subtype declaration for actual
 
          if Nkind (Par) = N_Subtype_Declaration
            and then not Comes_From_Source (Par)
@@ -793,7 +794,7 @@ package body Sem_Type is
             end if;
          end if;
 
-         --  Otherwise actual is not the actual of an enclosing instance.
+         --  Otherwise actual is not the actual of an enclosing instance
 
          return T;
       end Real_Actual;
@@ -953,16 +954,43 @@ package body Sem_Type is
             --  Note: test for presence of E is defense against previous error.
 
             if No (E) then
-               Check_Error_Detected;
+
+               --  If expansion is disabled the Corresponding_Record_Type may
+               --  not be available yet, so use the interface list in the
+               --  declaration directly.
+
+               if ASIS_Mode
+                 and then Nkind (Parent (BT2)) = N_Protected_Type_Declaration
+                 and then Present (Interface_List (Parent (BT2)))
+               then
+                  declare
+                     Intf : Node_Id := First (Interface_List (Parent (BT2)));
+                  begin
+                     while Present (Intf) loop
+                        if Is_Ancestor (Etype (T1), Entity (Intf)) then
+                           return True;
+                        else
+                           Next (Intf);
+                        end if;
+                     end loop;
+                  end;
+
+                  return False;
+
+               else
+                  Check_Error_Detected;
+               end if;
+
+            --  Here we have a corresponding record type
 
             elsif Present (Interfaces (E)) then
                Elmt := First_Elmt (Interfaces (E));
                while Present (Elmt) loop
                   if Is_Ancestor (Etype (T1), Node (Elmt)) then
                      return True;
+                  else
+                     Next_Elmt (Elmt);
                   end if;
-
-                  Next_Elmt (Elmt);
                end loop;
             end if;
 
@@ -979,7 +1007,7 @@ package body Sem_Type is
       elsif Is_Class_Wide_Type (T2)
         and then
           (Class_Wide_Type (T1) = Class_Wide_Type (T2)
-             or else Base_Type (Root_Type (T2)) = BT1)
+            or else Base_Type (Root_Type (T2)) = BT1)
       then
          return True;
 
@@ -988,19 +1016,17 @@ package body Sem_Type is
       --  attributes require some real type, etc. The built-in types Any_XXX
       --  represent these classes.
 
-      elsif (T1 = Any_Integer and then Is_Integer_Type (T2))
-        or else (T1 = Any_Boolean and then Is_Boolean_Type (T2))
-        or else (T1 = Any_Real and then Is_Real_Type (T2))
-        or else (T1 = Any_Fixed and then Is_Fixed_Point_Type (T2))
-        or else (T1 = Any_Discrete and then Is_Discrete_Type (T2))
+      elsif     (T1 = Any_Integer  and then Is_Integer_Type     (T2))
+        or else (T1 = Any_Boolean  and then Is_Boolean_Type     (T2))
+        or else (T1 = Any_Real     and then Is_Real_Type        (T2))
+        or else (T1 = Any_Fixed    and then Is_Fixed_Point_Type (T2))
+        or else (T1 = Any_Discrete and then Is_Discrete_Type    (T2))
       then
          return True;
 
       --  An aggregate is compatible with an array or record type
 
-      elsif T2 = Any_Composite
-        and then Is_Aggregate_Type (T1)
-      then
+      elsif T2 = Any_Composite and then Is_Aggregate_Type (T1) then
          return True;
 
       --  If the expected type is an anonymous access, the designated type must
@@ -1023,26 +1049,23 @@ package body Sem_Type is
         and then Ekind (BT1) = E_General_Access_Type
         and then Ekind (BT2) = E_Anonymous_Access_Type
         and then (Covers (Designated_Type (T1), Designated_Type (T2))
-                   or else Covers (Designated_Type (T2), Designated_Type (T1)))
+                    or else
+                  Covers (Designated_Type (T2), Designated_Type (T1)))
       then
          return True;
 
       --  An Access_To_Subprogram is compatible with itself, or with an
       --  anonymous type created for an attribute reference Access.
 
-      elsif (Ekind (BT1) = E_Access_Subprogram_Type
-               or else
-             Ekind (BT1) = E_Access_Protected_Subprogram_Type)
+      elsif Ekind_In (BT1, E_Access_Subprogram_Type,
+                           E_Access_Protected_Subprogram_Type)
         and then Is_Access_Type (T2)
         and then (not Comes_From_Source (T1)
                    or else not Comes_From_Source (T2))
         and then (Is_Overloadable (Designated_Type (T2))
-                    or else
-                  Ekind (Designated_Type (T2)) = E_Subprogram_Type)
-        and then
-          Type_Conformant (Designated_Type (T1), Designated_Type (T2))
-        and then
-          Mode_Conformant (Designated_Type (T1), Designated_Type (T2))
+                   or else Ekind (Designated_Type (T2)) = E_Subprogram_Type)
+        and then Type_Conformant (Designated_Type (T1), Designated_Type (T2))
+        and then Mode_Conformant (Designated_Type (T1), Designated_Type (T2))
       then
          return True;
 
@@ -1050,20 +1073,15 @@ package body Sem_Type is
       --  with itself, or with an anonymous type created for an attribute
       --  reference Access.
 
-      elsif (Ekind (BT1) = E_Anonymous_Access_Subprogram_Type
-               or else
-             Ekind (BT1)
-                      = E_Anonymous_Access_Protected_Subprogram_Type)
+      elsif Ekind_In (BT1, E_Anonymous_Access_Subprogram_Type,
+                           E_Anonymous_Access_Protected_Subprogram_Type)
         and then Is_Access_Type (T2)
         and then (not Comes_From_Source (T1)
                    or else not Comes_From_Source (T2))
         and then (Is_Overloadable (Designated_Type (T2))
-                    or else
-                  Ekind (Designated_Type (T2)) = E_Subprogram_Type)
-        and then
-           Type_Conformant (Designated_Type (T1), Designated_Type (T2))
-        and then
-           Mode_Conformant (Designated_Type (T1), Designated_Type (T2))
+                   or else Ekind (Designated_Type (T2)) = E_Subprogram_Type)
+        and then Type_Conformant (Designated_Type (T1), Designated_Type (T2))
+        and then Mode_Conformant (Designated_Type (T1), Designated_Type (T2))
       then
          return True;
 
@@ -1072,8 +1090,7 @@ package body Sem_Type is
       --  vice versa.
 
       elsif Is_Record_Type (T1)
-        and then (Is_Remote_Call_Interface (T1)
-                   or else Is_Remote_Types (T1))
+        and then (Is_Remote_Call_Interface (T1) or else Is_Remote_Types (T1))
         and then Present (Corresponding_Remote_Type (T1))
       then
          return Covers (Corresponding_Remote_Type (T1), T2);
@@ -1081,8 +1098,7 @@ package body Sem_Type is
       --  and conversely.
 
       elsif Is_Record_Type (T2)
-        and then (Is_Remote_Call_Interface (T2)
-                   or else Is_Remote_Types (T2))
+        and then (Is_Remote_Call_Interface (T2) or else Is_Remote_Types (T2))
         and then Present (Corresponding_Remote_Type (T2))
       then
          return Covers (Corresponding_Remote_Type (T2), T1);
@@ -1122,25 +1138,26 @@ package body Sem_Type is
 
       --  Ditto for allocators, which eventually resolve to the context type
 
-      elsif Ekind (T2) = E_Allocator_Type
-        and then Is_Access_Type (T1)
-      then
+      elsif Ekind (T2) = E_Allocator_Type and then Is_Access_Type (T1) then
          return Covers (Designated_Type (T1), Designated_Type (T2))
-          or else
-            (From_With_Type (Designated_Type (T1))
-              and then Covers (Designated_Type (T2), Designated_Type (T1)));
+           or else
+             (From_Limited_With (Designated_Type (T1))
+               and then Covers (Designated_Type (T2), Designated_Type (T1)));
 
       --  A boolean operation on integer literals is compatible with modular
       --  context.
 
-      elsif T2 = Any_Modular
-        and then Is_Modular_Integer_Type (T1)
-      then
+      elsif T2 = Any_Modular and then Is_Modular_Integer_Type (T1) then
          return True;
 
       --  The actual type may be the result of a previous error
 
       elsif BT2 = Any_Type then
+         return True;
+
+      --  A Raise_Expressions is legal in any expression context
+
+      elsif BT2 = Raise_Type then
          return True;
 
       --  A packed array type covers its corresponding non-packed type. This is
@@ -1150,7 +1167,7 @@ package body Sem_Type is
 
       elsif Is_Array_Type (T2)
         and then Is_Packed (T2)
-        and then T1 = Packed_Array_Type (T2)
+        and then T1 = Packed_Array_Impl_Type (T2)
       then
          return True;
 
@@ -1158,7 +1175,7 @@ package body Sem_Type is
 
       elsif Is_Array_Type (T1)
         and then Is_Packed (T1)
-        and then T2 = Packed_Array_Type (T1)
+        and then T2 = Packed_Array_Impl_Type (T1)
       then
          return True;
 
@@ -1167,9 +1184,7 @@ package body Sem_Type is
       --  legal, to prevent cascaded errors.
 
       elsif In_Instance
-        and then
-          (Full_View_Covers (T1, T2)
-            or else Full_View_Covers (T2, T1))
+        and then (Full_View_Covers (T1, T2) or else Full_View_Covers (T2, T1))
       then
          return True;
 
@@ -1190,22 +1205,23 @@ package body Sem_Type is
 
       elsif In_Inlined_Body
         and then (Underlying_Type (T1) = Underlying_Type (T2)
-                   or else (Is_Access_Type (T1)
-                              and then Is_Access_Type (T2)
-                              and then
-                                Designated_Type (T1) = Designated_Type (T2))
-                   or else (T1 = Any_Access
-                              and then Is_Access_Type (Underlying_Type (T2)))
-                   or else (T2 = Any_Composite
-                              and then
-                                Is_Composite_Type (Underlying_Type (T1))))
+                   or else
+                     (Is_Access_Type (T1)
+                       and then Is_Access_Type (T2)
+                       and then Designated_Type (T1) = Designated_Type (T2))
+                   or else
+                     (T1 = Any_Access
+                       and then Is_Access_Type (Underlying_Type (T2)))
+                   or else
+                     (T2 = Any_Composite
+                       and then Is_Composite_Type (Underlying_Type (T1))))
       then
          return True;
 
       --  Ada 2005 (AI-50217): Additional branches to make the shadow entity
       --  obtained through a limited_with compatible with its real entity.
 
-      elsif From_With_Type (T1) then
+      elsif From_Limited_With (T1) then
 
          --  If the expected type is the non-limited view of a type, the
          --  expression may have the limited view. If that one in turn is
@@ -1221,7 +1237,7 @@ package body Sem_Type is
             return False;
          end if;
 
-      elsif From_With_Type (T2) then
+      elsif From_Limited_With (T2) then
 
          --  If units in the context have Limited_With clauses on each other,
          --  either type might have a limited view. Checks performed elsewhere
@@ -1267,11 +1283,11 @@ package body Sem_Type is
         and then Ekind (T2) = E_Anonymous_Access_Type
         and then Is_Generic_Type (Directly_Designated_Type (T1))
         and then Get_Instance_Of (Directly_Designated_Type (T1)) =
-                   Directly_Designated_Type (T2)
+                                               Directly_Designated_Type (T2)
       then
          return True;
 
-      --  Otherwise, types are not compatible!
+      --  Otherwise, types are not compatible
 
       else
          return False;
@@ -1313,7 +1329,7 @@ package body Sem_Type is
       --  Determine whether a subprogram is an actual in an enclosing instance.
       --  An overloading between such a subprogram and one declared outside the
       --  instance is resolved in favor of the first, because it resolved in
-      --  the generic. Within the instance the eactual is represented by a
+      --  the generic. Within the instance the actual is represented by a
       --  constructed subprogram renaming.
 
       function Matches (Actual, Formal : Node_Id) return Boolean;
@@ -1364,8 +1380,8 @@ package body Sem_Type is
          else
             return Is_Entity_Name (Subtype_Indication (Type_Definition (Par)))
               and then
-               Is_Generic_Actual_Type (
-                 Entity (Subtype_Indication (Type_Definition (Par))));
+                Is_Generic_Actual_Type (
+                  Entity (Subtype_Indication (Type_Definition (Par))));
          end if;
       end Inherited_From_Actual;
 
@@ -1383,10 +1399,10 @@ package body Sem_Type is
          return In_Same_List (Parent (Typ), Op_Decl)
            or else
              (Ekind_In (Scop, E_Package, E_Generic_Package)
-                and then List_Containing (Op_Decl) =
-                  Visible_Declarations (Parent (Scop))
-                and then List_Containing (Parent (Typ)) =
-                  Private_Declarations (Parent (Scop)));
+               and then List_Containing (Op_Decl) =
+                              Visible_Declarations (Parent (Scop))
+               and then List_Containing (Parent (Typ)) =
+                              Private_Declarations (Parent (Scop)));
       end In_Same_Declaration_List;
 
       --------------------------
@@ -1396,9 +1412,8 @@ package body Sem_Type is
       function Is_Actual_Subprogram (S : Entity_Id) return Boolean is
       begin
          return In_Open_Scopes (Scope (S))
-           and then
-             Nkind (Unit_Declaration_Node (S)) =
-               N_Subprogram_Renaming_Declaration
+           and then Nkind (Unit_Declaration_Node (S)) =
+                                         N_Subprogram_Renaming_Declaration
 
            --  Why the Comes_From_Source test here???
 
@@ -1551,8 +1566,10 @@ package body Sem_Type is
 
                if Nkind (Act1) in N_Op
                  and then Is_Overloaded (Act1)
-                 and then (Nkind (Right_Opnd (Act1)) = N_Integer_Literal
-                            or else Nkind (Right_Opnd (Act1)) = N_Real_Literal)
+                 and then Nkind_In (Left_Opnd (Act1), N_Integer_Literal,
+                                                      N_Real_Literal)
+                 and then Nkind_In (Right_Opnd (Act1), N_Integer_Literal,
+                                                       N_Real_Literal)
                  and then Has_Compatible_Type (Act1, Standard_Boolean)
                  and then Etype (F1) = Standard_Boolean
                then
@@ -1734,8 +1751,7 @@ package body Sem_Type is
       if Convention (Nam1) = Convention_CIL
         and then Convention (Nam2) = Convention_CIL
         and then Ekind (Nam1) = Ekind (Nam2)
-        and then (Ekind (Nam1) = E_Procedure
-                   or else Ekind (Nam1) = E_Function)
+        and then Ekind_In (Nam1, E_Procedure, E_Function)
       then
          return It2;
       end if;
@@ -1746,9 +1762,7 @@ package body Sem_Type is
       --  then we must check whether the user-defined entity hides the prede-
       --  fined one.
 
-      if Chars (Nam1) in Any_Operator_Name
-        and then Standard_Operator
-      then
+      if Chars (Nam1) in Any_Operator_Name and then Standard_Operator then
          if        Typ = Universal_Integer
            or else Typ = Universal_Real
            or else Typ = Any_Integer
@@ -1765,8 +1779,7 @@ package body Sem_Type is
             begin
                Get_First_Interp (N, I, It);
                while Present (It.Typ) loop
-                  if (Covers (Typ, It.Typ)
-                        or else Typ = Any_Type)
+                  if (Covers (Typ, It.Typ) or else Typ = Any_Type)
                     and then
                      (It.Typ = Universal_Integer
                        or else It.Typ = Universal_Real)
@@ -1917,9 +1930,7 @@ package body Sem_Type is
          --  handled here as well. We test Comes_From_Source to exclude this
          --  treatment for implicit renamings created for formal subprograms.
 
-         elsif In_Instance
-           and then not In_Generic_Actual (N)
-         then
+         elsif In_Instance and then not In_Generic_Actual (N) then
             if Nkind (N) in N_Subprogram_Call
               or else
                 (Nkind (N) in N_Has_Entity
@@ -2028,7 +2039,7 @@ package body Sem_Type is
       elsif (Nkind (N) = N_Function_Call
               and then Nkind (Name (N)) = N_Expanded_Name
               and then (Chars (Predef_Subp) /= Name_Op_Expon
-                          or else Hides_Op (User_Subp, Predef_Subp))
+                         or else Hides_Op (User_Subp, Predef_Subp))
               and then Scope (User_Subp) = Entity (Prefix (Name (N))))
         or else Hides_Op (User_Subp, Predef_Subp)
       then
@@ -2048,24 +2059,22 @@ package body Sem_Type is
       --  Ditto in Ada 2012, where an ambiguity may arise for an operation
       --  on a partial view that is completed with a fixed point type. See
       --  AI05-0020 and AI05-0209. The ambiguity is resolved in favor of the
-      --  user-defined subprogram so that a client of the package has the
-      --  same resulution as the body of the package.
+      --  user-defined type and subprogram, so that a client of the package
+      --  has the same resolution as the body of the package.
 
       else
          if (In_Open_Scopes (Scope (User_Subp))
-           or else Is_Potentially_Use_Visible (User_Subp))
+              or else Is_Potentially_Use_Visible (User_Subp))
            and then not In_Instance
          then
             if Is_Fixed_Point_Type (Typ)
-              and then (Chars (Nam1) = Name_Op_Multiply
-                          or else Chars (Nam1) = Name_Op_Divide)
+              and then Nam_In (Chars (Nam1), Name_Op_Multiply, Name_Op_Divide)
               and then
                 (Ada_Version = Ada_83
-                  or else
-                   (Ada_Version >= Ada_2012
-                     and then
-                       In_Same_Declaration_List
-                         (Typ, Unit_Declaration_Node (User_Subp))))
+                  or else (Ada_Version >= Ada_2012
+                            and then In_Same_Declaration_List
+                                       (First_Subtype (Typ),
+                                          Unit_Declaration_Node (User_Subp))))
             then
                if It2.Nam = Predef_Subp then
                   return It1;
@@ -2079,16 +2088,14 @@ package body Sem_Type is
             --  declared in the same declarative list as the type. The node
             --  may be an operator or a function call.
 
-            elsif (Chars (Nam1) = Name_Op_Eq
-                     or else
-                   Chars (Nam1) = Name_Op_Ne)
+            elsif Nam_In (Chars (Nam1), Name_Op_Eq, Name_Op_Ne)
               and then Ada_Version >= Ada_2005
               and then Etype (User_Subp) = Standard_Boolean
               and then Ekind (Operand_Type) = E_Anonymous_Access_Type
               and then
                 In_Same_Declaration_List
                   (Designated_Type (Operand_Type),
-                     Unit_Declaration_Node (User_Subp))
+                   Unit_Declaration_Node (User_Subp))
             then
                if It2.Nam = Predef_Subp then
                   return It1;
@@ -2153,14 +2160,10 @@ package body Sem_Type is
       then
          return Type_Conformant (New_S, Old_S);
 
-      elsif Ekind (New_S) = E_Function
-        and then Ekind (Old_S) = E_Operator
-      then
+      elsif Ekind (New_S) = E_Function and then Ekind (Old_S) = E_Operator then
          return Operator_Matches_Spec (Old_S, New_S);
 
-      elsif Ekind (New_S) = E_Procedure
-        and then Is_Entry (Old_S)
-      then
+      elsif Ekind (New_S) = E_Procedure and then Is_Entry (Old_S) then
          return Type_Conformant (New_S, Old_S);
 
       else
@@ -2188,7 +2191,6 @@ package body Sem_Type is
                --  apply preference rule.
 
                if TR /= Any_Type then
-
                   if (T = Universal_Integer or else T = Universal_Real)
                     and then It.Typ = T
                   then
@@ -2234,22 +2236,24 @@ package body Sem_Type is
       --  is no rule in 4.6 that allows "access Integer" to be converted to P.
 
       elsif Ada_Version >= Ada_2005
-        and then
-          (Ekind (Etype (L)) = E_Anonymous_Access_Type
-             or else
-           Ekind (Etype (L)) = E_Anonymous_Access_Subprogram_Type)
+        and then Ekind_In (Etype (L), E_Anonymous_Access_Type,
+                                      E_Anonymous_Access_Subprogram_Type)
         and then Is_Access_Type (Etype (R))
         and then Ekind (Etype (R)) /= E_Access_Type
       then
          return Etype (L);
 
       elsif Ada_Version >= Ada_2005
-        and then
-          (Ekind (Etype (R)) = E_Anonymous_Access_Type
-            or else Ekind (Etype (R)) = E_Anonymous_Access_Subprogram_Type)
+        and then Ekind_In (Etype (R), E_Anonymous_Access_Type,
+                                      E_Anonymous_Access_Subprogram_Type)
         and then Is_Access_Type (Etype (L))
         and then Ekind (Etype (L)) /= E_Access_Type
       then
+         return Etype (R);
+
+      --  If one operand is a raise_expression, use type of other operand
+
+      elsif Nkind (L) = N_Raise_Expression then
          return Etype (R);
 
       else
@@ -2277,9 +2281,7 @@ package body Sem_Type is
       if Is_Overloaded (N) and then Is_Overloadable (E) then
          Act_Parm  := First_Actual (N);
          Form_Parm := First_Formal (E);
-         while Present (Act_Parm)
-           and then Present (Form_Parm)
-         loop
+         while Present (Act_Parm) and then Present (Form_Parm) loop
             Act := Act_Parm;
 
             if Nkind (Act) = N_Parameter_Association then
@@ -2383,28 +2385,30 @@ package body Sem_Type is
 
            or else
              (Is_Record_Type (Typ)
-                and then Is_Concurrent_Type (Etype (N))
-                and then Present (Corresponding_Record_Type (Etype (N)))
-                and then Covers (Typ, Corresponding_Record_Type (Etype (N))))
+               and then Is_Concurrent_Type (Etype (N))
+               and then Present (Corresponding_Record_Type (Etype (N)))
+               and then Covers (Typ, Corresponding_Record_Type (Etype (N))))
 
            or else
              (Is_Concurrent_Type (Typ)
-                and then Is_Record_Type (Etype (N))
-                and then Present (Corresponding_Record_Type (Typ))
-                and then Covers (Corresponding_Record_Type (Typ), Etype (N)))
+               and then Is_Record_Type (Etype (N))
+               and then Present (Corresponding_Record_Type (Typ))
+               and then Covers (Corresponding_Record_Type (Typ), Etype (N)))
 
            or else
              (not Is_Tagged_Type (Typ)
-                and then Ekind (Typ) /= E_Anonymous_Access_Type
-                and then Covers (Etype (N), Typ));
+               and then Ekind (Typ) /= E_Anonymous_Access_Type
+               and then Covers (Etype (N), Typ));
+
+      --  Overloaded case
 
       else
          Get_First_Interp (N, I, It);
          while Present (It.Typ) loop
             if (Covers (Typ, It.Typ)
-                  and then
-                    (Scope (It.Nam) /= Standard_Standard
-                       or else not Is_Invisible_Operator (N, Base_Type (Typ))))
+                 and then
+                   (Scope (It.Nam) /= Standard_Standard
+                     or else not Is_Invisible_Operator (N, Base_Type (Typ))))
 
                --  Ada 2005 (AI-345)
 
@@ -2478,10 +2482,10 @@ package body Sem_Type is
    begin
       return Operator_Matches_Spec (Op, F)
         and then (In_Open_Scopes (Scope (F))
-                    or else Scope (F) = Scope (Btyp)
-                    or else (not In_Open_Scopes (Scope (Btyp))
-                              and then not In_Use (Btyp)
-                              and then not In_Use (Scope (Btyp))));
+                   or else Scope (F) = Scope (Btyp)
+                   or else (not In_Open_Scopes (Scope (Btyp))
+                             and then not In_Use (Btyp)
+                             and then not In_Use (Scope (Btyp))));
    end Hides_Op;
 
    ------------------------
@@ -2615,12 +2619,17 @@ package body Sem_Type is
 
             begin
                AI := First (Interface_List (Parent (Target_Typ)));
+
+               --  The progenitor itself may be a subtype of an interface type.
+
                while Present (AI) loop
-                  if Etype (AI) = Iface_Typ then
+                  if Etype (AI) = Iface_Typ
+                    or else Base_Type (Etype (AI)) = Iface_Typ
+                  then
                      return True;
 
                   elsif Present (Interfaces (Etype (AI)))
-                     and then Iface_Present_In_Ancestor (Etype (AI))
+                    and then Iface_Present_In_Ancestor (Etype (AI))
                   then
                      return True;
                   end if;
@@ -2726,11 +2735,10 @@ package body Sem_Type is
          --  Ada 2005 (AI-251): Complete the error notification
 
          elsif Is_Class_Wide_Type (Etype (R))
-             and then Is_Interface (Etype (Class_Wide_Type (Etype (R))))
+           and then Is_Interface (Etype (Class_Wide_Type (Etype (R))))
          then
             Error_Msg_NE ("(Ada 2005) does not implement interface }",
                           L, Etype (Class_Wide_Type (Etype (R))));
-
          else
             Error_Msg_N ("incompatible types", Parent (L));
          end if;
@@ -2842,8 +2850,8 @@ package body Sem_Type is
 
             elsif BT1 = Base_Type (Par)
               or else (Is_Private_Type (T1)
-                         and then Present (Full_View (T1))
-                         and then Base_Type (Par) = Base_Type (Full_View (T1)))
+                        and then Present (Full_View (T1))
+                        and then Base_Type (Par) = Base_Type (Full_View (T1)))
             then
                return True;
 
@@ -3059,10 +3067,7 @@ package body Sem_Type is
       elsif Num = 1 then
          T1 := Etype (First_Formal (New_S));
 
-         if Op_Name = Name_Op_Subtract
-           or else Op_Name = Name_Op_Add
-           or else Op_Name = Name_Op_Abs
-         then
+         if Nam_In (Op_Name, Name_Op_Subtract, Name_Op_Add, Name_Op_Abs) then
             return Base_Type (T1) = Base_Type (T)
               and then Is_Numeric_Type (T);
 
@@ -3080,26 +3085,24 @@ package body Sem_Type is
          T1 := Etype (First_Formal (New_S));
          T2 := Etype (Next_Formal (First_Formal (New_S)));
 
-         if Op_Name =  Name_Op_And or else Op_Name = Name_Op_Or
-           or else Op_Name = Name_Op_Xor
-         then
+         if Nam_In (Op_Name, Name_Op_And, Name_Op_Or, Name_Op_Xor) then
             return Base_Type (T1) = Base_Type (T2)
               and then Base_Type (T1) = Base_Type (T)
               and then Valid_Boolean_Arg (Base_Type (T));
 
-         elsif Op_Name = Name_Op_Eq or else Op_Name = Name_Op_Ne then
+         elsif Nam_In (Op_Name, Name_Op_Eq, Name_Op_Ne) then
             return Base_Type (T1) = Base_Type (T2)
               and then not Is_Limited_Type (T1)
               and then Is_Boolean_Type (T);
 
-         elsif Op_Name = Name_Op_Lt or else Op_Name = Name_Op_Le
-           or else Op_Name = Name_Op_Gt or else Op_Name = Name_Op_Ge
+         elsif Nam_In (Op_Name, Name_Op_Lt, Name_Op_Le,
+                                Name_Op_Gt, Name_Op_Ge)
          then
             return Base_Type (T1) = Base_Type (T2)
               and then Valid_Comparison_Arg (T1)
               and then Is_Boolean_Type (T);
 
-         elsif Op_Name = Name_Op_Add or else Op_Name = Name_Op_Subtract then
+         elsif Nam_In (Op_Name, Name_Op_Add, Name_Op_Subtract) then
             return Base_Type (T1) = Base_Type (T2)
               and then Base_Type (T1) = Base_Type (T)
               and then Is_Numeric_Type (T);
@@ -3152,7 +3155,7 @@ package body Sem_Type is
                         and then Is_Floating_Point_Type (T2)
                         and then Base_Type (T2) = Base_Type (T));
 
-         elsif Op_Name = Name_Op_Mod or else Op_Name = Name_Op_Rem then
+         elsif Nam_In (Op_Name, Name_Op_Mod, Name_Op_Rem) then
             return Base_Type (T1) = Base_Type (T2)
               and then Base_Type (T1) = Base_Type (T)
               and then Is_Integer_Type (T);
@@ -3166,10 +3169,10 @@ package body Sem_Type is
             return Is_Array_Type (T)
               and then (Base_Type (T) = Base_Type (Etype (Op)))
               and then (Base_Type (T1) = Base_Type (T)
-                         or else
+                          or else
                         Base_Type (T1) = Base_Type (Component_Type (T)))
               and then (Base_Type (T2) = Base_Type (T)
-                         or else
+                          or else
                         Base_Type (T2) = Base_Type (Component_Type (T)));
 
          else
@@ -3213,6 +3216,8 @@ package body Sem_Type is
 
    begin
       if Is_Overloaded (Old_N) then
+         Set_Is_Overloaded (New_N);
+
          if Nkind (Old_N) = N_Selected_Component
            and then Is_Overloaded (Selector_Name (Old_N))
          then
@@ -3316,14 +3321,10 @@ package body Sem_Type is
       then
          return T1;
 
-      elsif T2 = Any_Composite
-        and then Is_Aggregate_Type (T1)
-      then
+      elsif T2 = Any_Composite and then Is_Aggregate_Type (T1) then
          return T1;
 
-      elsif T1 = Any_Composite
-        and then Is_Aggregate_Type (T2)
-      then
+      elsif T1 = Any_Composite and then Is_Aggregate_Type (T2) then
          return T2;
 
       elsif T1 = Any_Modular and then Is_Modular_Integer_Type (T2) then
@@ -3351,7 +3352,7 @@ package body Sem_Type is
 
       elsif Is_Class_Wide_Type (T2)
         and then Is_Interface (Etype (T2))
-        and then Interface_Present_In_Ancestor (Typ => T1,
+        and then Interface_Present_In_Ancestor (Typ   => T1,
                                                 Iface => Etype (T2))
       then
          return T1;
@@ -3366,32 +3367,30 @@ package body Sem_Type is
       then
          return T2;
 
-      elsif (Ekind (B1) = E_Access_Subprogram_Type
-               or else
-             Ekind (B1) = E_Access_Protected_Subprogram_Type)
+      elsif Ekind_In (B1, E_Access_Subprogram_Type,
+                          E_Access_Protected_Subprogram_Type)
         and then Ekind (Designated_Type (B1)) /= E_Subprogram_Type
         and then Is_Access_Type (T2)
       then
          return T2;
 
-      elsif (Ekind (B2) = E_Access_Subprogram_Type
-               or else
-             Ekind (B2) = E_Access_Protected_Subprogram_Type)
+      elsif Ekind_In (B2, E_Access_Subprogram_Type,
+                          E_Access_Protected_Subprogram_Type)
         and then Ekind (Designated_Type (B2)) /= E_Subprogram_Type
         and then Is_Access_Type (T1)
       then
          return T1;
 
-      elsif (Ekind (T1) = E_Allocator_Type
-              or else Ekind (T1) = E_Access_Attribute_Type
-              or else Ekind (T1) = E_Anonymous_Access_Type)
+      elsif Ekind_In (T1, E_Allocator_Type,
+                          E_Access_Attribute_Type,
+                          E_Anonymous_Access_Type)
         and then Is_Access_Type (T2)
       then
          return T2;
 
-      elsif (Ekind (T2) = E_Allocator_Type
-              or else Ekind (T2) = E_Access_Attribute_Type
-              or else Ekind (T2) = E_Anonymous_Access_Type)
+      elsif Ekind_In (T2, E_Allocator_Type,
+                          E_Access_Attribute_Type,
+                          E_Anonymous_Access_Type)
         and then Is_Access_Type (T1)
       then
          return T1;
@@ -3437,8 +3436,7 @@ package body Sem_Type is
         and then Number_Dimensions (T) = 1
         and then Is_Boolean_Type (Component_Type (T))
         and then
-         ((not Is_Private_Composite (T)
-            and then not Is_Limited_Composite (T))
+         ((not Is_Private_Composite (T) and then not Is_Limited_Composite (T))
            or else In_Instance
            or else Available_Full_View_Of_Component (T))
       then
@@ -3467,10 +3465,8 @@ package body Sem_Type is
       elsif Is_Array_Type (T)
           and then Number_Dimensions (T) = 1
           and then Is_Discrete_Type (Component_Type (T))
-          and then (not Is_Private_Composite (T)
-                     or else In_Instance)
-          and then (not Is_Limited_Composite (T)
-                     or else In_Instance)
+          and then (not Is_Private_Composite (T) or else In_Instance)
+          and then (not Is_Limited_Composite (T) or else In_Instance)
       then
          return True;
 
@@ -3530,23 +3526,25 @@ package body Sem_Type is
       Write_Str ("Overloads: ");
       Print_Node_Briefly (N);
 
-      if Nkind (N) not in N_Has_Entity then
-         return;
-      end if;
-
       if not Is_Overloaded (N) then
-         Write_Str ("Non-overloaded entity ");
-         Write_Eol;
+         Write_Line ("Non-overloaded entity ");
          Write_Entity_Info (Entity (N), " ");
+
+      elsif Nkind (N) not in N_Has_Entity then
+         Get_First_Interp (N, I, It);
+         while Present (It.Nam) loop
+            Write_Int (Int (It.Typ));
+            Write_Str ("   ");
+            Write_Name (Chars (It.Typ));
+            Write_Eol;
+            Get_Next_Interp (I, It);
+         end loop;
 
       else
          Get_First_Interp (N, I, It);
-         Write_Str ("Overloaded entity ");
-         Write_Eol;
-         Write_Str ("      Name           Type           Abstract Op");
-         Write_Eol;
-         Write_Str ("===============================================");
-         Write_Eol;
+         Write_Line ("Overloaded entity ");
+         Write_Line ("      Name           Type           Abstract Op");
+         Write_Line ("===============================================");
          Nam := It.Nam;
 
          while Present (Nam) loop

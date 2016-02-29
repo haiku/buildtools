@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Iterator Wrappers for the C++ library testsuite. 
 //
-// Copyright (C) 2004-2013 Free Software Foundation, Inc.
+// Copyright (C) 2004-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -116,7 +116,7 @@ namespace __gnu_test
    * 
    * This class takes a pointer and wraps it to provide exactly
    * the requirements of a output_iterator. It should not be
-   * instansiated directly, but generated from a test_container
+   * instantiated directly, but generated from a test_container
    */
   template<class T>
   struct output_iterator_wrapper
@@ -177,7 +177,7 @@ namespace __gnu_test
    * 
    * This class takes a pointer and wraps it to provide exactly
    * the requirements of a input_iterator. It should not be
-   * instansiated directly, but generated from a test_container
+   * instantiated directly, but generated from a test_container
    */
   template<class T>
   class input_iterator_wrapper
@@ -259,7 +259,7 @@ namespace __gnu_test
    * 
    * This class takes a pointer and wraps it to provide exactly
    * the requirements of a forward_iterator. It should not be
-   * instansiated directly, but generated from a test_container
+   * instantiated directly, but generated from a test_container
    */
   template<class T>
   struct forward_iterator_wrapper : public input_iterator_wrapper<T>
@@ -313,7 +313,7 @@ namespace __gnu_test
    * 
    * This class takes a pointer and wraps it to provide exactly
    * the requirements of a forward_iterator. It should not be
-   * instansiated directly, but generated from a test_container
+   * instantiated directly, but generated from a test_container
    */
   template<class T>
   struct bidirectional_iterator_wrapper : public forward_iterator_wrapper<T>
@@ -377,7 +377,7 @@ namespace __gnu_test
    * 
    * This class takes a pointer and wraps it to provide exactly
    * the requirements of a forward_iterator. It should not be
-   * instansiated directly, but generated from a test_container
+   * instantiated directly, but generated from a test_container
    */
   template<class T>
   struct random_access_iterator_wrapper 
@@ -518,7 +518,7 @@ namespace __gnu_test
    * It takes two pointers representing a range and presents them as 
    * a container of iterators.
    */
-  template <class T, template<class T> class ItType>
+  template <class T, template<class TT> class ItType>
   struct test_container
   {
     typename ItType<T>::ContainerType bounds;
@@ -538,6 +538,10 @@ namespace __gnu_test
       ITERATOR_VERIFY(pos >= bounds.first && pos <= bounds.last);
       return ItType<T>(pos, &bounds);
     }
+
+    const T&
+    val(int pos)
+    { return (bounds.first)[pos]; }
 
     ItType<T>
     begin()

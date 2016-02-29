@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2011, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -95,7 +95,11 @@ package body System.Soft_Links.Tasking is
 
    function Get_Sec_Stack_Addr return  Address is
    begin
-      return STPO.Self.Common.Compiler_Data.Sec_Stack_Addr;
+      return Result : constant Address :=
+        STPO.Self.Common.Compiler_Data.Sec_Stack_Addr
+      do
+         pragma Assert (Result /= Null_Address);
+      end return;
    end Get_Sec_Stack_Addr;
 
    function Get_Stack_Info return Stack_Checking.Stack_Access is
@@ -181,12 +185,13 @@ package body System.Soft_Links.Tasking is
 
       --  There is no need for explicit protection against race conditions for
       --  this part because it can only be executed by the environment task
-      --  after all the other tasks have been finalized.
+      --  after all the other tasks have been finalized. Note that there is no
+      --  fall-back handler which could apply to this environment task because
+      --  it has no parents, and, as specified in ARM C.7.3 par. 9/2, "the
+      --  fall-back handler applies only to the dependent tasks of the task".
 
       if Self_Id.Common.Specific_Handler /= null then
          Self_Id.Common.Specific_Handler.all (Cause, Self_Id, EO);
-      elsif Self_Id.Common.Fall_Back_Handler /= null then
-         Self_Id.Common.Fall_Back_Handler.all (Cause, Self_Id, EO);
       end if;
    end Task_Termination_Handler_T;
 
@@ -221,6 +226,8 @@ package body System.Soft_Links.Tasking is
          SSL.Set_Sec_Stack_Addr     (SSL.Get_Sec_Stack_Addr_NT);
          SSL.Set_Jmpbuf_Address     (SSL.Get_Jmpbuf_Address_NT);
       end if;
+
+      pragma Assert (Get_Sec_Stack_Addr /= Null_Address);
    end Init_Tasking_Soft_Links;
 
 end System.Soft_Links.Tasking;

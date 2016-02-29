@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2012, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -73,12 +73,9 @@ procedure Gnatbind is
    --  Standard library
 
    Text     : Text_Buffer_Ptr;
-   Next_Arg : Positive;
 
    Output_File_Name_Seen : Boolean := False;
    Output_File_Name      : String_Ptr := new String'("");
-
-   L_Switch_Seen : Boolean := False;
 
    Mapping_File : String_Ptr := null;
 
@@ -103,6 +100,15 @@ procedure Gnatbind is
    --  Scan and process binder specific arguments. Argv is a single argument.
    --  All the one character arguments are still handled by Switch. This
    --  routine handles -aO -aI and -I-. The lower bound of Argv must be 1.
+
+   generic
+      with procedure Action (Argv : String);
+   procedure Generic_Scan_Bind_Args;
+   --  Iterate through the args calling Action on each one, taking care of
+   --  response files.
+
+   procedure Write_Arg (S : String);
+   --  Passed to Generic_Scan_Bind_Args to print args
 
    function Is_Cross_Compiler return Boolean;
    --  Returns True iff this is a cross-compiler
@@ -143,7 +149,7 @@ procedure Gnatbind is
       --  should not be listed.
 
       No_Restriction_List : constant array (All_Restrictions) of Boolean :=
-        (No_Allocators_After_Elaboration => True,
+        (No_Standard_Allocators_After_Elaboration => True,
          --  This involves run-time conditions not checkable at compile time
 
          No_Anonymous_Allocators         => True,
@@ -175,6 +181,18 @@ procedure Gnatbind is
 
          Max_Storage_At_Blocking         => True,
          --  Not checkable at compile time
+
+         --  The following three should not be partition-wide, so the
+         --  following tests are junk to be removed eventually ???
+
+         No_Specification_Of_Aspect      => True,
+         --  Requires a parameter value, not a count
+
+         No_Use_Of_Attribute             => True,
+         --  Requires a parameter value, not a count
+
+         No_Use_Of_Pragma                => True,
+         --  Requires a parameter value, not a count
 
          others                          => False);
 
@@ -317,12 +335,6 @@ procedure Gnatbind is
 
          elsif Argv (2) = 'L' then
             if Argv'Length >= 3 then
-
-               --  Remember that the -L switch was specified, so that if this
-               --  is on OpenVMS, the export names are put in uppercase.
-               --  This is not known before the target parameters are read.
-
-               L_Switch_Seen := True;
 
                Opt.Bind_For_Library := True;
                Opt.Ada_Init_Name :=
@@ -468,6 +480,62 @@ procedure Gnatbind is
       end if;
    end Scan_Bind_Arg;
 
+   ----------------------------
+   -- Generic_Scan_Bind_Args --
+   ----------------------------
+
+   procedure Generic_Scan_Bind_Args is
+      Next_Arg : Positive := 1;
+
+   begin
+      --  Use low level argument routines to avoid dragging in secondary stack
+
+      while Next_Arg < Arg_Count loop
+         declare
+            Next_Argv : String (1 .. Len_Arg (Next_Arg));
+
+         begin
+            Fill_Arg (Next_Argv'Address, Next_Arg);
+
+            if Next_Argv'Length > 0 then
+               if Next_Argv (1) = '@' then
+                  if Next_Argv'Length > 1 then
+                     declare
+                        Arguments : constant Argument_List :=
+                                      Response_File.Arguments_From
+                                        (Response_File_Name        =>
+                                           Next_Argv (2 .. Next_Argv'Last),
+                                         Recursive                 => True,
+                                         Ignore_Non_Existing_Files => True);
+                     begin
+                        for J in Arguments'Range loop
+                           Action (Arguments (J).all);
+                        end loop;
+                     end;
+                  end if;
+
+               else
+                  Action (Next_Argv);
+               end if;
+            end if;
+         end;
+
+         Next_Arg := Next_Arg + 1;
+      end loop;
+   end Generic_Scan_Bind_Args;
+
+   ---------------
+   -- Write_Arg --
+   ---------------
+
+   procedure Write_Arg (S : String) is
+   begin
+      Write_Str (" " & S);
+   end Write_Arg;
+
+   procedure Scan_Bind_Args is new Generic_Scan_Bind_Args (Scan_Bind_Arg);
+   procedure Put_Bind_Args is new Generic_Scan_Bind_Args (Write_Arg);
+
    procedure Check_Version_And_Help is
      new Check_Version_And_Help_G (Bindusg.Display);
 
@@ -496,42 +564,18 @@ begin
 
    --  First, scan to detect --version and/or --help
 
-   Check_Version_And_Help ("GNATBIND", "1995");
+   Check_Version_And_Help ("GNATBIND", "1992");
 
-   --  Use low level argument routines to avoid dragging in the secondary stack
+   --  We need to Scan_Bind_Args first, to set Verbose_Mode, so we know whether
+   --  to Put_Bind_Args.
 
-   Next_Arg := 1;
-   Scan_Args : while Next_Arg < Arg_Count loop
-      declare
-         Next_Argv : String (1 .. Len_Arg (Next_Arg));
-      begin
-         Fill_Arg (Next_Argv'Address, Next_Arg);
+   Scan_Bind_Args;
 
-         if Next_Argv'Length > 0 then
-            if Next_Argv (1) = '@' then
-               if Next_Argv'Length > 1 then
-                  declare
-                     Arguments : constant Argument_List :=
-                                   Response_File.Arguments_From
-                                     (Response_File_Name        =>
-                                        Next_Argv (2 .. Next_Argv'Last),
-                                      Recursive                 => True,
-                                      Ignore_Non_Existing_Files => True);
-                  begin
-                     for J in Arguments'Range loop
-                        Scan_Bind_Arg (Arguments (J).all);
-                     end loop;
-                  end;
-               end if;
-
-            else
-               Scan_Bind_Arg (Next_Argv);
-            end if;
-         end if;
-      end;
-
-      Next_Arg := Next_Arg + 1;
-   end loop Scan_Args;
+   if Verbose_Mode then
+      Write_Str (Command_Name);
+      Put_Bind_Args;
+      Write_Eol;
+   end if;
 
    if Use_Pragma_Linker_Constructor then
       if Bind_Main_Program then
@@ -590,17 +634,6 @@ begin
 
    Cumulative_Restrictions := Targparm.Restrictions_On_Target;
 
-   --  On OpenVMS, when -L is used, all external names used in pragmas Export
-   --  are in upper case. The reason is that on OpenVMS, the macro-assembler
-   --  MACASM-32, used to build Stand-Alone Libraries, only understands
-   --  uppercase.
-
-   if L_Switch_Seen and then OpenVMS_On_Target then
-      To_Upper (Opt.Ada_Init_Name.all);
-      To_Upper (Opt.Ada_Final_Name.all);
-      To_Upper (Opt.Ada_Main_Name.all);
-   end if;
-
    --  Acquire configurable run-time mode
 
    if Configurable_Run_Time_On_Target then
@@ -614,10 +647,15 @@ begin
       Display_Version ("GNATBIND", "1995");
    end if;
 
-   --  Output usage information if no files
+   --  Output usage information if no arguments
 
    if not More_Lib_Files then
-      Bindusg.Display;
+      if Argument_Count = 0 then
+         Bindusg.Display;
+      else
+         Write_Line ("try ""gnatbind --help"" for more information.");
+      end if;
+
       Exit_Program (E_Fatal);
    end if;
 
@@ -735,6 +773,13 @@ begin
       --  Quit if some file needs compiling
 
       if No_Object_Specified then
+         raise Unrecoverable_Error;
+      end if;
+
+      --  Quit with message if we had a GNATprove file
+
+      if GNATprove_Mode_Specified then
+         Error_Msg ("one or more files compiled in GNATprove mode");
          raise Unrecoverable_Error;
       end if;
 
@@ -861,7 +906,8 @@ begin
                   --------------------
 
                   function Put_In_Sources
-                    (S : File_Name_Type) return Boolean is
+                    (S : File_Name_Type) return Boolean
+                  is
                   begin
                      for J in 1 .. Closure_Sources.Last loop
                         if Closure_Sources.Table (J) = S then
@@ -887,11 +933,14 @@ begin
                   for J in reverse Elab_Order.First .. Elab_Order.Last loop
                      Source := Units.Table (Elab_Order.Table (J)).Sfile;
 
-                     --  Do not include the sources of the runtime and do not
-                     --  include the same source several times.
+                     --  Do not include same source more than once
 
                      if Put_In_Sources (Source)
-                       and then not Is_Internal_File_Name (Source)
+
+                       --  Do not include run-time units unless -Ra switch set
+
+                       and then (List_Closure_All
+                                  or else not Is_Internal_File_Name (Source))
                      then
                         if not Zero_Formatting then
                            Write_Str ("   ");
