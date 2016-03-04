@@ -10,7 +10,7 @@ If you want to build the default (legacy, 2.95.3) gcc, do this:
 One of the last output lines should tell you that the tools have been built
 successfully.
 
-If you're not interested in binary compatibility (or want to build for the PowerPC architecture), you can build gcc4 instead by doing this:
+If you're not interested in binary compatibility (or want to build for the PowerPC architecture), you can build gcc5 instead by doing this:
 
   $ ./configure --build-cross-tools <arch> ../buildtools
 
