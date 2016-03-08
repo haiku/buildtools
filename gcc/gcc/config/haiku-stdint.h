@@ -1,5 +1,5 @@
 /* Definitions for <stdint.h> types on Haiku.
-   Copyright (C) 2014 Paweł Dziepak.
+   Copyright (C) 2014 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
