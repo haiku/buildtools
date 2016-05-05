@@ -42,4 +42,7 @@
 	#define _GLIBCXX_USE_CLOCK_REALTIME 1
 #endif
 
+// See libstdc++/69506
+#define _GLIBCXX_USE_WEAK_REF 0
+
 #endif
