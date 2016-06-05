@@ -1,3 +1,26 @@
+2016-06-03  Release Manager
+
+	* GCC 5.4.0 released.
+
+2016-05-10  Sebastian Huber  <sebastian.huber@embedded-brains.de>
+
+	Backport from mainline:
+	2016-04-27  Sebastian Huber  <sebastian.huber@embedded-brains.de>
+
+	* configure.tgt (configure_tgt_pre_target_cpu_XCFLAGS): New variable.
+	(*-*-rtems*): New supported target.
+	* config/rtems/host-config.h: New file.
+	* config/rtems/lock.c: Likewise.
+
+2016-01-06  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	Backport from mainline:
+	2016-01-06  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	PR other/67627
+	* Makefile.am (all-multi): Add dependency.
+	* Makefile.in: Regenerate.
+
 2015-12-04  Release Manager
 
 	* GCC 5.3.0 released.
