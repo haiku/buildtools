@@ -109,7 +109,9 @@ typedef enum
   GFC_CAF_COARRAY_ALLOC,
   GFC_CAF_LOCK_STATIC,
   GFC_CAF_LOCK_ALLOC,
-  GFC_CAF_CRITICAL
+  GFC_CAF_CRITICAL,
+  GFC_CAF_EVENT_STATIC,
+  GFC_CAF_EVENT_ALLOC
 }
 gfc_coarray_type;
 
@@ -354,6 +356,7 @@ tree gfc_class_set_static_fields (tree, tree, tree);
 tree gfc_class_data_get (tree);
 tree gfc_class_vptr_get (tree);
 tree gfc_class_len_get (tree);
+tree gfc_class_len_or_zero_get (tree);
 gfc_expr * gfc_find_and_cut_at_last_class_ref (gfc_expr *);
 /* Get an accessor to the class' vtab's * field, when a class handle is
    available.  */
@@ -748,6 +751,8 @@ extern GTY(()) tree gfor_fndecl_caf_sendget;
 extern GTY(()) tree gfor_fndecl_caf_sync_all;
 extern GTY(()) tree gfor_fndecl_caf_sync_memory;
 extern GTY(()) tree gfor_fndecl_caf_sync_images;
+extern GTY(()) tree gfor_fndecl_caf_stop_numeric;
+extern GTY(()) tree gfor_fndecl_caf_stop_str;
 extern GTY(()) tree gfor_fndecl_caf_error_stop;
 extern GTY(()) tree gfor_fndecl_caf_error_stop_str;
 extern GTY(()) tree gfor_fndecl_caf_atomic_def;
@@ -756,6 +761,9 @@ extern GTY(()) tree gfor_fndecl_caf_atomic_cas;
 extern GTY(()) tree gfor_fndecl_caf_atomic_op;
 extern GTY(()) tree gfor_fndecl_caf_lock;
 extern GTY(()) tree gfor_fndecl_caf_unlock;
+extern GTY(()) tree gfor_fndecl_caf_event_post;
+extern GTY(()) tree gfor_fndecl_caf_event_wait;
+extern GTY(()) tree gfor_fndecl_caf_event_query;
 extern GTY(()) tree gfor_fndecl_co_broadcast;
 extern GTY(()) tree gfor_fndecl_co_max;
 extern GTY(()) tree gfor_fndecl_co_min;
@@ -1027,7 +1035,9 @@ extern const char gfc_msg_wrong_return[];
 					   construct is not workshared.  */
 #define OMPWS_SCALARIZER_WS	4	/* Set if scalarizer should attempt
 					   to create parallel loops.  */
-#define OMPWS_NOWAIT		8	/* Use NOWAIT on OMP_FOR.  */
+#define OMPWS_SCALARIZER_BODY	8	/* Set if handling body of potential
+					   parallel loop.  */
+#define OMPWS_NOWAIT		16	/* Use NOWAIT on OMP_FOR.  */
 extern int ompws_flags;
 
 #endif /* GFC_TRANS_H */

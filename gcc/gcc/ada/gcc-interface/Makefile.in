@@ -1365,9 +1365,7 @@ ifeq ($(strip $(filter-out %86 kfreebsd%,$(target_cpu) $(target_os))),)
   s-osinte.adb<s-osinte-posix.adb \
   s-osinte.ads<s-osinte-kfreebsd-gnu.ads \
   s-osprim.adb<s-osprim-posix.adb \
-  s-taprop.adb<s-taprop-linux.adb \
-  s-tasinf.ads<s-tasinf-linux.ads \
-  s-tasinf.adb<s-tasinf-linux.adb \
+  s-taprop.adb<s-taprop-posix.adb \
   s-taspri.ads<s-taspri-posix.ads \
   s-tpopsp.adb<s-tpopsp-posix-foreign.adb \
   $(ATOMICS_TARGET_PAIRS) \
@@ -1398,9 +1396,7 @@ ifeq ($(strip $(filter-out x86_64 kfreebsd%,$(target_cpu) $(target_os))),)
   s-osinte.adb<s-osinte-posix.adb \
   s-osinte.ads<s-osinte-kfreebsd-gnu.ads \
   s-osprim.adb<s-osprim-posix.adb \
-  s-taprop.adb<s-taprop-linux.adb \
-  s-tasinf.ads<s-tasinf-linux.ads \
-  s-tasinf.adb<s-tasinf-linux.adb \
+  s-taprop.adb<s-taprop-posix.adb \
   s-taspri.ads<s-taspri-posix.ads \
   s-tpopsp.adb<s-tpopsp-posix-foreign.adb \
   system.ads<system-freebsd-x86_64.ads
@@ -2557,10 +2553,9 @@ gnatlink-re: ../stamp-tools gnatmake-re
 install-gcc-specs:
 #	Install all the requested GCC spec files.
 
-	for f in $(GCC_SPEC_FILES); do \
-	    $(INSTALL_DATA_DATE) $(srcdir)/ada/$$f \
-	    $(libsubdir)/$$(echo $$f|sed -e 's#_[a-zA-Z0-9]*##g'); \
-	done
+	$(foreach f,$(GCC_SPEC_FILES), \
+	    $(INSTALL_DATA_DATE) $(srcdir)/ada/$(f) \
+	    $(DESTDIR)$(libsubdir)/$$(echo $(f)|sed -e 's#_[a-zA-Z0-9]*##g');)
 
 install-gnatlib: ../stamp-gnatlib-$(RTSDIR) install-gcc-specs
 #	Create the directory before deleting it, in case the directory is
