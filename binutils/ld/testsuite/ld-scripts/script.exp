@@ -1,6 +1,6 @@
 # Test basic linker script functionality
 # By Ian Lance Taylor, Cygnus Support
-#   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+#   Copyright (C) 1999-2016 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -145,6 +145,24 @@ proc extract_symbol_test { testfile testname } {
 	    pass $testname
 	    return
 	}
+	[a-z]*-*-pe$ {
+	    # Fails for PE based targets because the extracted section
+	    # relative symbols (eg tred or .text) all become undefined
+	    # when the sections are blown away by --extract-symbol.  Again
+	    # this should not matter as --extract-symbol is only used by
+	    # VxWorks.
+	    pass $testname
+	    return
+	}
+	# More PE variations...
+	[a-z]*-*-mingw* {
+	    pass $testname
+	    return
+	}
+	[a-z]*-*-cygwin$ {
+	    pass $testname
+	    return
+	}
     }
 
     set extract_syms [run_host_cmd $nm $copyfile]
@@ -212,3 +230,4 @@ foreach test_script $test_script_list {
 }
 
 run_dump_test "align-with-input"
+run_dump_test "pr20302"

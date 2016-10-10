@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2015 Free Software Foundation, Inc.
+# Copyright (C) 2012-2016 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -90,7 +90,6 @@ if { [is_elf_format] } then {
     # optimization because it interfers with link-time relaxation of
     # function prologues.
     if {![istarget "mn10300-*-*"]
-	&& ![istarget "arc-*-*"]
 	&& ![istarget "xtensa*-*-*"]
 	&& ![istarget "msp430*-*-*"]
 	&& ![istarget "nds32*-*-*"]
@@ -111,6 +110,7 @@ if { [is_elf_format] } then {
 	    run_dump_test "file"
 	}
     }
+    run_dump_test "file-2"
     setup_xfail "nds32*-*-*"
     run_dump_test "group0a"
     run_dump_test "group0b"
@@ -133,6 +133,7 @@ if { [is_elf_format] } then {
     }
     case $target_triplet in {
 	{ alpha*-*-* } { }
+	{ *c54x*-*-* } { }
 	{ cr16*-*-* } { }
 	{ crx*-*-* } { }
 	{ h8300-*-* } { }
@@ -142,14 +143,14 @@ if { [is_elf_format] } then {
 	{ mn10200-*-* } { }
 	{ mn10300-*-* } { }
 	{ msp43*-*-* } { }
-	{ *c54x*-*-* } { }
+	{ rl78-*-* } { }
 	{ rx-*-* } { }
 	default {
 	    # The next test can fail if the target does not convert fixups
 	    # against ordinary symbols into relocations against section symbols.
 	    # This is usually revealed by the error message:
 	    #  symbol `sym' required but not present
-    	setup_xfail "m681*-*-*" "m68hc*-*-*" "arc-*-*"
+	    setup_xfail "m681*-*-*" "m68hc*-*-*" "xgate-*-*" "vax-*-*"
 	    run_dump_test redef
 	    run_dump_test equ-reloc
 	}
@@ -183,10 +184,13 @@ if { [is_elf_format] } then {
     # The non-eabi ARM ports sets it to ELFOSABI_ARM.
     # So for these targets we cannot include an IFUNC symbol type
     # in the symbol type test.
-    if { [istarget "*-*-hpux*"]
-	 || [istarget "visium-*-*"]
+    # We also need to exclude targets that do not support unique objects.
+    if {    [istarget "*-*-hpux*"]
+	 || [istarget "arm*-*-*"]
 	 || [istarget "msp*-*-*"]
-	 || [istarget "arm*-*-*"]} then {
+	 || [istarget "visium-*-*"]
+	 || ![supports_gnu_unique]
+     } then {
 	# hppa64 has a non-standard common directive
 	if { ![istarget "hppa64*-*-hpux*"] } then {
 	    run_elf_list_test "type-noifunc" "" "" "-s" "| grep \"1 *\\\[FONTC\\\]\""
@@ -200,24 +204,36 @@ if { [is_elf_format] } then {
     run_dump_test "section7"
     run_dump_test "section8"
     run_dump_test "section9"
+    run_dump_test "section10"
+    run_dump_test "section11"
     run_dump_test "dwarf2-1"
     run_dump_test "dwarf2-2"
     run_dump_test "dwarf2-3"
     run_dump_test "dwarf2-4"
+    run_dump_test "bss"
+    run_dump_test "bad-bss"
     run_dump_test "bad-section-flag"
     run_dump_test "bad-size"
     run_dump_test "bad-group"
 
     run_dump_test "syms"
     
-    run_dump_test "common1"
-    run_dump_test "common2"
+    # hpux has a non-standard common directive.
+    if { ![istarget "*-*-hpux*"] } then {
+	run_dump_test "common1"
+	run_dump_test "common2"
+	run_dump_test "common3a"
+	run_dump_test "common3b"
+	run_dump_test "common4a"
+	run_dump_test "common4b"
+    }
 
     run_dump_test "strtab"
 
-load_lib gas-dg.exp
-dg-init
-dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/err-*.s $srcdir/$subdir/warn-*.s]] "" ""
-dg-finish
+    run_dump_test "bignums"
     
+    load_lib gas-dg.exp
+    dg-init
+    dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/err-*.s $srcdir/$subdir/warn-*.s]] "" ""
+    dg-finish
 }
