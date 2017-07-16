@@ -117,6 +117,10 @@ var_defines( const char **e )
 
 		/* Get name */
 
+		if (val - *e > MAXSYM) {
+			printf("MAXSYM is too low, need at least %d\n", val - *e);
+			exit(-1);
+		}
 		strncpy( buf, *e, val - *e );
 		buf[ val - *e ] = '\0';
 

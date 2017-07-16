@@ -478,7 +478,7 @@
 
 /* You probably don't need to muck with these. */
 
-# define MAXSYM	1024	/* longest symbol in the environment */
+# define MAXSYM	2048	/* longest symbol in the environment */
 # define MAXJPATH 1024	/* longest filename */
 
 # define MAXJOBS 64	/* silently enforce -j limit */

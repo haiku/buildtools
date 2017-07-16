@@ -129,6 +129,10 @@ headers1(
 
 		char buf2[ MAXSYM ];
 		int l = re[i]->endp[1] - re[i]->startp[1];
+		if (l > MAXSYM) {
+			printf("MAXSYM is too low! Need at least %d\n", l);
+			exit(-1);
+		}
 		memcpy( buf2, re[i]->startp[1], l );
 		buf2[ l ] = 0;
 		result = list_new( result, buf2, 0 );

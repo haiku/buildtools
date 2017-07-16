@@ -276,19 +276,19 @@ builtin_match(
 	LOL	*args,
 	int	*jmp )
 {
-	LIST *l, *r;
-	LIST *result = 0;
+    LIST *l, *r;
+    LIST *result = 0;
 
-	/* For each pattern */
+    /* For each pattern */
 
-	for( l = lol_get( args, 0 ); l; l = l->next )
-	{
-	    regexp *re = regcomp( l->string );
+    for( l = lol_get( args, 0 ); l; l = l->next )
+    {
+	regexp *re = regcomp( l->string );
 
-	    /* For each string to match against */
+	/* For each string to match against */
 
-	    for( r = lol_get( args, 1 ); r; r = r->next )
-		if( regexec( re, r->string ) )
+	for( r = lol_get( args, 1 ); r; r = r->next )
+	    if( regexec( re, r->string ) )
 	    {
 		int i, top;
 
@@ -305,14 +305,18 @@ builtin_match(
 		{
 		    char buf[ MAXSYM ];
 		    int l = re->endp[i] - re->startp[i];
+		    if (l > MAXSYM) {
+			printf("MAXSYM is too low! NEed at least %d\n", l);
+			exit(-1);
+		    }
 		    memcpy( buf, re->startp[i], l );
 		    buf[ l ] = 0;
 		    result = list_new( result, buf, 0 );
 		}
 	    }
 
-	    free( (char *)re );
-	}
+	free( (char *)re );
+    }
 
-	return result;
+    return result;
 }
