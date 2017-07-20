@@ -7111,10 +7111,6 @@ do_pragma (buf, limit, op, keyword)
 {
   SKIP_WHITE_SPACE (buf);
   if (!strncmp ((char *) buf, "once", 4)) {
-    /* Allow #pragma once in system headers, since that's not the user's
-       fault.  */
-    if (!instack[indepth].system_header_p)
-      warning ("`#pragma once' is obsolete");
     do_once ();
   }
 
