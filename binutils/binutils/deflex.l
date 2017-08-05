@@ -1,8 +1,8 @@
-%option noinput nounput
+%option noinput nounput noyywrap
 
 %{/* deflex.l - Lexer for .def files */
 
-/* Copyright (C) 1995-2016 Free Software Foundation, Inc.
+/* Copyright (C) 1995-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -91,7 +91,3 @@ int linenumber;
 "@"	 	{ return '@';}
 ","		{ return ',';}
 %%
-#ifndef yywrap
-/* Needed for lex, though not flex. */
-int yywrap(void) { return 1; }
-#endif

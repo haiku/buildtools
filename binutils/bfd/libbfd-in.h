@@ -1,7 +1,7 @@
 /* libbfd.h -- Declarations used by bfd library *implementation*.
    (This include file is not for users of the library.)
 
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -27,15 +27,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* Align an address upward to a boundary, expressed as a number of bytes.
-   E.g. align to an 8-byte boundary with argument of 8.  Take care never
-   to wrap around if the address is within boundary-1 of the end of the
-   address space.  */
-#define BFD_ALIGN(this, boundary)					  \
-  ((((bfd_vma) (this) + (boundary) - 1) >= (bfd_vma) (this))		  \
-   ? (((bfd_vma) (this) + ((boundary) - 1)) & ~ (bfd_vma) ((boundary)-1)) \
-   : ~ (bfd_vma) 0)
 
 /* If you want to read and write large blocks, you might want to do it
    in quanta of this amount */
@@ -118,9 +109,7 @@ extern void *bfd_realloc2
 extern void *bfd_zmalloc2
   (bfd_size_type, bfd_size_type);
 
-extern void _bfd_default_error_handler (const char *s, ...);
-extern bfd_error_handler_type _bfd_error_handler;
-extern bfd_assert_handler_type _bfd_assert_handler;
+extern void _bfd_error_handler (const char *s, ...);
 
 /* These routines allocate and free things on the BFD's objalloc.  */
 
@@ -273,7 +262,7 @@ extern bfd_boolean _bfd_generic_get_section_contents_in_window
 #define _bfd_generic_bfd_copy_private_bfd_data \
   ((bfd_boolean (*) (bfd *, bfd *)) bfd_true)
 #define _bfd_generic_bfd_merge_private_bfd_data \
-  ((bfd_boolean (*) (bfd *, bfd *)) bfd_true)
+  ((bfd_boolean (*) (bfd *, struct bfd_link_info *)) bfd_true)
 #define _bfd_generic_bfd_set_private_flags \
   ((bfd_boolean (*) (bfd *, flagword)) bfd_true)
 #define _bfd_generic_bfd_copy_private_section_data \
@@ -384,16 +373,18 @@ extern bfd_boolean _bfd_archive_bsd44_construct_extended_name_table
 
 /* Routines to use for BFD_JUMP_TABLE_ARCHIVE to get VMS style
    archives.  Use BFD_JUMP_TABLE_ARCHIVE (_bfd_vms_lib).  Some of them
-   are irrelevant and never called, so defined as NULL.  */
+   are irrelevant.  */
 
 extern bfd_boolean _bfd_vms_lib_write_archive_contents (bfd *arch);
-#define _bfd_vms_lib_slurp_armap NULL
-#define _bfd_vms_lib_slurp_extended_name_table NULL
-#define _bfd_vms_lib_construct_extended_name_table NULL
-#define _bfd_vms_lib_truncate_arname NULL
-#define _bfd_vms_lib_write_armap NULL
-#define _bfd_vms_lib_read_ar_hdr NULL
-#define _bfd_vms_lib_write_ar_hdr NULL
+#define _bfd_vms_lib_slurp_armap _bfd_noarchive_slurp_armap
+#define _bfd_vms_lib_slurp_extended_name_table \
+  _bfd_noarchive_slurp_extended_name_table
+#define _bfd_vms_lib_construct_extended_name_table \
+  _bfd_noarchive_construct_extended_name_table
+#define _bfd_vms_lib_truncate_arname _bfd_noarchive_truncate_arname
+#define _bfd_vms_lib_write_armap _bfd_noarchive_write_armap
+#define _bfd_vms_lib_read_ar_hdr _bfd_noarchive_read_ar_hdr
+#define _bfd_vms_lib_write_ar_hdr _bfd_noarchive_write_ar_hdr
 extern bfd *_bfd_vms_lib_openr_next_archived_file (bfd *, bfd *);
 extern bfd *_bfd_vms_lib_get_elt_at_index (bfd *, symindex);
 extern int _bfd_vms_lib_generic_stat_arch_elt (bfd *, struct stat *);
@@ -622,12 +613,6 @@ extern void _bfd_generic_link_hash_table_free
 extern bfd_boolean _bfd_generic_link_add_symbols
   (bfd *, struct bfd_link_info *);
 
-/* Generic add symbol routine.  This version is used by targets for
-   which the linker must collect constructors and destructors by name,
-   as the collect2 program does.  */
-extern bfd_boolean _bfd_generic_link_add_symbols_collect
-  (bfd *, struct bfd_link_info *);
-
 /* Generic archive add symbol routine.  */
 extern bfd_boolean _bfd_generic_link_add_archive_symbols
   (bfd *, struct bfd_link_info *,
@@ -760,10 +745,6 @@ extern bfd_size_type _bfd_stringtab_add
 /* Write out a string table.  */
 extern bfd_boolean _bfd_stringtab_emit
   (bfd *, struct bfd_strtab_hash *);
-
-/* Check that endianness of input and output file match.  */
-extern bfd_boolean _bfd_generic_verify_endian_match
-  (bfd *, bfd *);
 
 /* Macros to tell if bfds are read or write enabled.
 

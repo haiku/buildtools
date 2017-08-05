@@ -1,5 +1,5 @@
 \input texinfo @c                               -*-Texinfo-*-
-@c  Copyright (C) 1991-2016 Free Software Foundation, Inc.
+@c  Copyright (C) 1991-2017 Free Software Foundation, Inc.
 @c UPDATE!!  On future updates--
 @c   (1)   check for new machine-dep cmdline options in
 @c         md_parse_option definitions in config/tc-*.c
@@ -100,7 +100,7 @@
 This file documents the GNU Assembler "@value{AS}".
 
 @c man begin COPYRIGHT
-Copyright @copyright{} 1991-2016 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2017 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -149,7 +149,7 @@ done.
 @end tex
 
 @vskip 0pt plus 1filll
-Copyright @copyright{} 1991-2016 Free Software Foundation, Inc.
+Copyright @copyright{} 1991-2017 Free Software Foundation, Inc.
 
       Permission is granted to copy, distribute and/or modify this document
       under the terms of the GNU Free Documentation License, Version 1.3
@@ -416,6 +416,7 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mips32r3}] [@b{-mips32r5}] [@b{-mips32r6}] [@b{-mips64}] [@b{-mips64r2}]
    [@b{-mips64r3}] [@b{-mips64r5}] [@b{-mips64r6}]
    [@b{-construct-floats}] [@b{-no-construct-floats}]
+   [@b{-mignore-branch-isa}] [@b{-mno-ignore-branch-isa}]
    [@b{-mnan=@var{encoding}}]
    [@b{-trap}] [@b{-no-break}] [@b{-break}] [@b{-no-trap}]
    [@b{-mips16}] [@b{-no-mips16}]
@@ -511,6 +512,12 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mint-register=@var{number}}]
    [@b{-mgcc-abi}|@b{-mrx-abi}]
 @end ifset
+@ifset RISCV
+
+@emph{Target RISC-V options:}
+   [@b{-march}=@var{ISA}]
+   [@b{-mabi}=@var{ABI}]
+@end ifset
 @ifset S390
 
 @emph{Target s390 options:}
@@ -530,10 +537,21 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
 
 @emph{Target SPARC options:}
 @c The order here is important.  See c-sparc.texi.
-   [@b{-Av6}|@b{-Av7}|@b{-Av8}|@b{-Asparclet}|@b{-Asparclite}
-    @b{-Av8plus}|@b{-Av8plusa}|@b{-Av9}|@b{-Av9a}]
-   [@b{-xarch=v8plus}|@b{-xarch=v8plusa}] [@b{-bump}]
+   [@b{-Av6}|@b{-Av7}|@b{-Av8}|@b{-Aleon}|@b{-Asparclet}|@b{-Asparclite}
+    @b{-Av8plus}|@b{-Av8plusa}|@b{-Av8plusb}|@b{-Av8plusc}|@b{-Av8plusd}
+    @b{-Av8plusv}|@b{-Av8plusm}|@b{-Av9}|@b{-Av9a}|@b{-Av9b}|@b{-Av9c}
+    @b{-Av9d}|@b{-Av9e}|@b{-Av9v}|@b{-Av9m}|@b{-Asparc}|@b{-Asparcvis}
+    @b{-Asparcvis2}|@b{-Asparcfmaf}|@b{-Asparcima}|@b{-Asparcvis3}
+    @b{-Asparcvisr}|@b{-Asparc5}]
+   [@b{-xarch=v8plus}|@b{-xarch=v8plusa}]|@b{-xarch=v8plusb}|@b{-xarch=v8plusc}
+    @b{-xarch=v8plusd}|@b{-xarch=v8plusv}|@b{-xarch=v8plusm}|@b{-xarch=v9}
+    @b{-xarch=v9a}|@b{-xarch=v9b}|@b{-xarch=v9c}|@b{-xarch=v9d}|@b{-xarch=v9e}
+    @b{-xarch=v9v}|@b{-xarch=v9m}|@b{-xarch=sparc}|@b{-xarch=sparcvis}
+    @b{-xarch=sparcvis2}|@b{-xarch=sparcfmaf}|@b{-xarch=sparcima}
+    @b{-xarch=sparcvis3}|@b{-xarch=sparcvisr}|@b{-xarch=sparc5}
+    @b{-bump}]
    [@b{-32}|@b{-64}]
+   [@b{--enforce-aligned-data}][@b{--dcti-couples-detect}]
 @end ifset
 @ifset TIC54X
 
@@ -1504,6 +1522,17 @@ The @samp{--relax-branch} option enables the relaxation of out-of-range
 branches.  By default @samp{--no-relax-branch} is selected, causing any
 out-of-range branches to produce an error.
 
+@item -mignore-branch-isa
+@itemx -mno-ignore-branch-isa
+Ignore branch checks for invalid transitions between ISA modes.  The
+semantics of branches does not provide for an ISA mode switch, so in
+most cases the ISA mode a branch has been encoded for has to be the
+same as the ISA mode of the branch's target label.  Therefore GAS has
+checks implemented that verify in branch assembly that the two ISA
+modes match.  @samp{-mignore-branch-isa} disables these checks.  By
+default @samp{-mno-ignore-branch-isa} is selected, causing any invalid
+branch requiring a transition between ISA modes to produce an error.
+
 @item -mnan=@var{encoding}
 Select between the IEEE 754-2008 (@option{-mnan=2008}) or the legacy
 (@option{-mnan=legacy}) NaN encoding format.  The latter is the default.
@@ -1636,6 +1665,25 @@ PowerPC processor.
 
 @end ifset
 
+@ifset RISCV
+
+@ifclear man
+@xref{RISC-V-Opts}, for the options available when @value{AS} is configured
+for a RISC-V processor.
+@end ifclear
+
+@ifset man
+@c man begin OPTIONS
+The following options are available when @value{AS} is configured for a
+RISC-V  processor.
+@c man end
+@c man begin INCLUDE
+@include c-riscv.texi
+@c ended inside the included file
+@end ifset
+
+@end ifset
+
 @c man begin OPTIONS
 @ifset RX
 See the info pages for documentation of the RX-specific options.
@@ -1654,9 +1702,11 @@ Select the word size, either 31/32 bits or 64 bits.
 Select the architecture mode, either the Enterprise System
 Architecture (esa) or the z/Architecture mode (zarch).
 @item -march=@var{processor}
-Specify which s390 processor variant is the target, @samp{g6}, @samp{g6},
-@samp{z900}, @samp{z990}, @samp{z9-109}, @samp{z9-ec}, @samp{z10},
-@samp{z196}, @samp{zEC12}, or @samp{z13}.
+Specify which s390 processor variant is the target, @samp{g5} (or
+@samp{arch3}), @samp{g6}, @samp{z900} (or @samp{arch5}), @samp{z990} (or
+@samp{arch6}), @samp{z9-109}, @samp{z9-ec} (or @samp{arch7}), @samp{z10} (or
+@samp{arch8}), @samp{z196} (or @samp{arch9}), @samp{zEC12} (or @samp{arch10}),
+@samp{z13} (or @samp{arch11}), or @samp{arch12}.
 @item -mregnames
 @itemx -mno-regnames
 Allow or disallow symbolic names for registers.
@@ -3028,12 +3078,13 @@ sequence.
 @cindex single character constant
 @cindex character, single
 @cindex constant, single character
-A single character may be written as a single quote immediately
-followed by that character.  The same escapes apply to characters as
-to strings.  So if you want to write the character backslash, you
-must write @kbd{'\\} where the first @code{\} escapes the second
-@code{\}.  As you can see, the quote is an acute accent, not a
-grave accent.  A newline
+A single character may be written as a single quote immediately followed by
+that character.  Some backslash escapes apply to characters, @code{\b},
+@code{\f}, @code{\n}, @code{\r}, @code{\t}, and @code{\"} with the same meaning
+as for strings, plus @code{\'} for a single quote.  So if you want to write the
+character backslash, you must write @kbd{'\\} where the first @code{\} escapes
+the second @code{\}.  As you can see, the quote is an acute accent, not a grave
+accent.  A newline
 @ifclear GENERIC
 @ifclear abnormal-separator
 (or semicolon @samp{;})
@@ -4817,6 +4868,9 @@ value that is added/substracted from the previous offset.
 @subsection @code{.cfi_offset @var{register}, @var{offset}}
 Previous value of @var{register} is saved at offset @var{offset} from
 CFA.
+
+@subsection @code{.cfi_val_offset @var{register}, @var{offset}}
+Previous value of @var{register} is CFA + @var{offset}.
 
 @subsection @code{.cfi_rel_offset @var{register}, @var{offset}}
 Previous value of @var{register} is saved at offset @var{offset} from
@@ -7557,6 +7611,9 @@ subject, see the hardware manufacturer's manual.
 @ifset RL78
 * RL78-Dependent::              RL78 Dependent Features
 @end ifset
+@ifset RISCV
+* RISC-V-Dependent::            RISC-V Dependent Features
+@end ifset
 @ifset RX
 * RX-Dependent::                RX Dependent Features
 @end ifset
@@ -7782,6 +7839,10 @@ family.
 
 @ifset RL78
 @include c-rl78.texi
+@end ifset
+
+@ifset RISCV
+@include c-riscv.texi
 @end ifset
 
 @ifset RX

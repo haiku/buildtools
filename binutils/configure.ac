@@ -337,7 +337,7 @@ case "${ENABLE_GOLD}" in
       *-*-elf* | *-*-sysv4* | *-*-unixware* | *-*-eabi* | hppa*64*-*-hpux* \
       | *-*-linux* | *-*-gnu* | frv-*-uclinux* | *-*-irix5* | *-*-irix6* \
       | *-*-netbsd* | *-*-openbsd* | *-*-freebsd* | *-*-dragonfly* \
-      | *-*-solaris2* | *-*-nto* | *-*-nacl*)
+      | *-*-solaris2* | *-*-nto* | *-*-nacl* | *-*-fuchsia*)
         case "${target}" in
           *-*-linux*aout* | *-*-linux*oldld*)
             ;;
@@ -1272,9 +1272,6 @@ case "${target}" in
     ;;
   mips*-*-*)
     noconfigdirs="$noconfigdirs gprof"
-    ;;
-  nds32*-*-*)
-    noconfigdirs="$noconfigdirs gdb"
     ;;
   nvptx*-*-*)
     noconfigdirs="$noconfigdirs target-libssp target-libstdc++-v3 target-libobjc"

@@ -1,5 +1,5 @@
 # Support routines for LD testsuite.
-#   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -35,9 +35,12 @@ proc at_least_gcc_version { major minor } {
 	set CC [find_gcc]
     }
     if { $CC == "" } {
-      return 0
+	return 0
     }
     set state [remote_exec host $CC --version]
+    if { [lindex $state 0] != 0 } {
+	return 0;
+    }
     set tmp "[lindex $state 1]\n"
     # Look for (eg) 4.6.1 in the version output.
     set ver_re "\[^\\.0-9\]+(\[1-9\]\[0-9\]*)\\.(\[0-9\]+)(?:\\.\[0-9\]+)?"
@@ -617,6 +620,7 @@ proc run_dump_test { name {extra_options {}} } {
     set dumpfile tmpdir/dump.out
     set run_ld 0
     set run_objcopy 0
+    set objfile_names {}
     set opts(as) {}
     set opts(ld) {}
     set opts(ld_after_inputfiles) {}
@@ -663,6 +667,22 @@ proc run_dump_test { name {extra_options {}} } {
 		} else {
 		    lappend asflags {}
 		}
+
+                # Create the object file name based on nothing but the source
+                # file name.
+                set new_objfile \
+                    [concat tmpdir/[file rootname [file tail [lindex $opt_val 0]]].o]
+                # But, sometimes, we have the exact same source filename in
+                # different directories (foo/src.s bar/src.s) which would lead
+                # us to try and create two src.o files.  We detect this
+                # conflict here, and instead create src.o and src1.o.
+                set j 0
+                while { [lsearch $objfile_names $new_objfile] != -1 } {
+                    incr j
+                    set new_objfile \
+                        [concat tmpdir/[file rootname [file tail  [lindex $opt_val 0]]]${j}.o]
+                }
+		lappend objfile_names $new_objfile
 	    }
 	    default {
 		if [string length $opts($opt_name)] {
@@ -789,6 +809,7 @@ proc run_dump_test { name {extra_options {}} } {
     if { $opts(source) == "" } {
 	set sourcefiles [list ${file}.s]
 	set asflags [list ""]
+	set objfile_names [list tmpdir/[file tail ${file}].o]
     } else {
 	set sourcefiles {}
 	foreach sf $opts(source) {
@@ -823,7 +844,7 @@ proc run_dump_test { name {extra_options {}} } {
 	}
 	regsub "RUN_OBJCOPY" $sourceasflags "" sourceasflags
 
-	set objfile "tmpdir/dump$i.o"
+	set objfile [lindex $objfile_names $i]
 	catch "exec rm -f $objfile" exec_output
 	lappend objfiles $objfile
 	set cmd "$AS $ASFLAGS $opts(as) $sourceasflags -o $objfile $sourcefile"
@@ -1011,7 +1032,7 @@ proc run_dump_test { name {extra_options {}} } {
             }
         }
     } else {
-	set objfile "tmpdir/dump0.o"
+	set objfile [lindex $objfiles 0]
     }
 
     # We must not have expected failure if we get here.
@@ -1159,7 +1180,9 @@ proc ar_simple_create { ar aropts target objects } {
 #     in all other cases, any output from the linker during linking is
 #     treated as a sign of an error and FAILs the test.
 #
-proc run_ld_link_tests { ldtests } {
+# args is an optional list of target triplets to be xfailed.
+#
+proc run_ld_link_tests { ldtests args } {
     global ld
     global as
     global nm
@@ -1186,6 +1209,10 @@ proc run_ld_link_tests { ldtests } {
 
 	if ![runtest_file_p $runtests $testname] then {
 	    continue
+	}
+
+	foreach target $args {
+	    setup_xfail $target
 	}
 
 	set ld_options [lindex $testitem 1]
@@ -1361,7 +1388,6 @@ if ![string length [info proc prune_warnings]] {
     }
 }
 
-# targets_to_xfail is a list of target triplets to be xfailed.
 # ldtests contains test-items with 3 items followed by 1 lists, 2 items
 # and 3 optional items:
 #   0:name
@@ -1373,8 +1399,9 @@ if ![string length [info proc prune_warnings]] {
 #   6:compiler flags (optional)
 #   7:language (optional)
 #   8:linker warning (optional)
+# args is an optional list of target triplets to be xfailed.
 
-proc run_ld_link_exec_tests { targets_to_xfail ldtests } {
+proc run_ld_link_exec_tests { ldtests args } {
     global ld
     global as
     global srcdir
@@ -1388,7 +1415,7 @@ proc run_ld_link_exec_tests { targets_to_xfail ldtests } {
     global exec_output
 
     foreach testitem $ldtests {
-	foreach target $targets_to_xfail {
+	foreach target $args {
 	    setup_xfail $target
 	}
 	set testname [lindex $testitem 0]
@@ -1579,7 +1606,6 @@ proc run_cc_link_tests { ldtests } {
 	    # compile only
 	} elseif { [regexp ".*\\.a$" $binfile] } {
 	    if { ![ar_simple_create $ar $ldflags $binfile "$objfiles"] } {
-		fail $testname
 		set failed 1
 	    }
 	} else {
@@ -1595,10 +1621,6 @@ proc run_cc_link_tests { ldtests } {
 		} else {
 		    set failed 1
 		}
-	    }
-
-	    if { $failed == 1 } {
-		fail $testname
 	    }
 	}
 
@@ -1660,13 +1682,12 @@ proc run_cc_link_tests { ldtests } {
 	    }
 	}
 
-	if { $failed != 0 } {
+	if { $failed } {
 	    fail $testname
-	} elseif { $is_unresolved == 0 } {
-	    pass $testname
-	} else {
+	} elseif { $is_unresolved } {
 	    unresolved $testname
-	    continue
+	} else {
+	    pass $testname
 	}
     }
 }
@@ -1761,6 +1782,7 @@ proc check_shared_lib_support { } {
 	 && ![istarget spu-*-*]
 	 && ![istarget v850*-*-*]
 	 && ![istarget visium-*-*]
+	 && ![istarget xc16x-*-elf]
 	 && ![istarget xgate-*-*]
 	 && ![istarget xstormy16-*-*]
 	 && ![istarget *-*-irix*]
@@ -1768,6 +1790,26 @@ proc check_shared_lib_support { } {
 	return 1
     }
     return 0
+}
+
+# Return true if target uses genelf.em (assuming it is ELF).
+proc is_generic_elf { } {
+    if { [istarget "d30v-*-*"]
+	 || [istarget "dlx-*-*"]
+	 || [istarget "fr30-*-*"]
+	 || ([istarget "frv-*-*"] && ![istarget "frv-*-linux*"])
+	 || [istarget "ft32-*-*"]
+	 || [istarget "i860-*-*"]
+	 || [istarget "i960-*-*"]
+	 || [istarget "iq2000-*-*"]
+	 || [istarget "mn10200-*-*"]
+	 || [istarget "moxie-*-*"]
+	 || [istarget "msp430-*-*"]
+	 || [istarget "mt-*-*"]
+	 || [istarget "pj*-*-*"] } {
+	return 1;
+    }
+    return 0;
 }
 
 # Returns true if the target ld supports the plugin API.
@@ -1802,13 +1844,38 @@ proc check_sysroot_available { } {
     return $ld_sysroot_available_saved
 }
 
+# Returns 1 if plugin is enabled in gcc.  Returns 0 otherwise.
+proc check_gcc_plugin_enabled { } {
+    global CC
+
+    if {![info exists CC]} {
+	set CC [find_gcc]
+    }
+    if { $CC == ""} {
+	return 0
+    }
+    set state [remote_exec host $CC -v]
+    if { [lindex $state 0] != 0 } {
+	return 0;
+    }
+    for { set i 1 } { $i < [llength $state] } { incr i } {
+	set v [lindex $state $i]
+	if { [ string match "*--disable-plugin*" $v ] } {
+	    verbose "plugin is disabled by $v"
+	    return 0;
+	}
+    }
+
+    return 1;
+}
+
 # Returns true if the target compiler supports LTO
 proc check_lto_available { } {
     global lto_available_saved
     global CC
 
     if {![info exists lto_available_saved]} {
-        if { [which $CC] == 0 } {
+        if { ![check_gcc_plugin_enabled] } {
 	    set lto_available_saved 0
 	    return 0
 	}
@@ -1851,7 +1918,7 @@ proc check_lto_fat_available { } {
     global CC
 
     if {![info exists lto_fat_available_saved]} {
-        if { [which $CC] == 0 } {
+        if { ![check_gcc_plugin_enabled] } {
 	    set lto_fat_available_saved 0
 	    return 0
 	}
@@ -1894,7 +1961,7 @@ proc check_lto_shared_available { } {
     global CC
 
     if {![info exists lto_shared_available_saved]} {
-        if { [which $CC] == 0 } {
+        if { ![check_gcc_plugin_enabled] } {
 	    set lto_shared_available_saved 0
 	    return 0
 	}

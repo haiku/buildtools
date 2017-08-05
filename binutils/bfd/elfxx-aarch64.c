@@ -1,5 +1,5 @@
 /* AArch64-specific support for ELF.
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -319,7 +319,7 @@ _bfd_aarch64_elf_put_addend (bfd *abfd,
 	  /* Force use of MOVZ.  */
 	  contents = reencode_movzn_to_movz (contents);
 	}
-      /* fall through */
+      /* Fall through.  */
 
       /* Group relocations to create a 16, 32, 48 or 64 bit unsigned
          data or abs address inline.  */

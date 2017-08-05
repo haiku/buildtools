@@ -1,6 +1,6 @@
 /* tc-microblaze.c -- Assemble code for Xilinx MicroBlaze
 
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -2132,6 +2132,7 @@ md_apply_fix (fixS *   fixP,
     case BFD_RELOC_MICROBLAZE_64_TLSGD:
     case BFD_RELOC_MICROBLAZE_64_TLSLD:
       S_SET_THREAD_LOCAL (fixP->fx_addsy);
+      /* Fall through.  */
 
     case BFD_RELOC_MICROBLAZE_64_GOTPC:
     case BFD_RELOC_MICROBLAZE_64_GOT:

@@ -1,5 +1,5 @@
 # Expect script for ld-x86_64 tests
-#   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+#   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -207,6 +207,12 @@ set x86_64tests {
      "--64" { pr19827a.S }  {{readelf {-rW} pr19827.rd}} "pr19827.so"}
     {"Build pr19969.so" "-melf_x86_64 -shared" ""
      "--64" { pr19969a.S } {} "pr19969.so"}
+    {"Build pr20550a.o" "" ""
+     "--64" { pr20550a.s }}
+    {"Build pr20550b.so" "-melf_x86_64 -shared" ""
+     "--64" { pr20550b.s } {} "pr20550b.so"}
+    {"Build pr20550" "-melf_x86_64 -pie tmpdir/pr20550a.o tmpdir/pr20550b.so" ""
+     "--64" { dummy.s } {} "pr20550"}
 }
 
 # So as to avoid rewriting every last test case here in a nacl variant,
@@ -559,7 +565,7 @@ proc undefined_weak {cflags ldflags} {
 
     exec cp tmpdir/libpr19704a.so tmpdir/libpr19704.so
 
-    run_ld_link_exec_tests [] [list \
+    run_ld_link_exec_tests [list \
 	[list \
 	    "Run pr19704" \
 	    "$ldflags tmpdir/libpr19704.so -R tmpdir" \
@@ -824,7 +830,7 @@ if { [isnative] && [which $CC] != 0 } {
 	] \
     ]
 
-    run_ld_link_exec_tests [] [list \
+    run_ld_link_exec_tests [list \
 	[list \
 	    "Run plt-main" \
 	    "tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
@@ -894,6 +900,53 @@ if { [isnative] && [which $CC] != 0 } {
 	] \
     ]
 
+    # Run-time tests which require working ifunc attribute support.
+    if { [check_ifunc_attribute_available] } {
+	run_cc_link_tests [list \
+	    [list \
+		"Build libpr19784a.so" \
+		"-shared -Wl,-Bsymbolic-functions" \
+		"-fPIC -O2 -g" \
+		{ pr19784b.c pr19784c.c } \
+		{} \
+		"libpr19784a.so" \
+	    ] \
+	    [list \
+		"Build libpr19784b.so" \
+		"-shared -Wl,-Bsymbolic-functions" \
+		"-fPIC -O2 -g" \
+		{ pr19784c.c pr19784b.c } \
+		{} \
+		"libpr19784b.so" \
+	    ] \
+	    [list \
+		"Build pr19784a.o" \
+		"" \
+		"" \
+		{ pr19784a.c } \
+	    ] \
+	]
+
+	run_ld_link_exec_tests [list \
+	    [list \
+		"Run pr19784a" \
+		"tmpdir/pr19784a.o tmpdir/libpr19784a.so" \
+		"" \
+		{ dummy.s } \
+		"pr19784a" \
+		"pass.out" \
+	    ] \
+	    [list \
+		"Run pr19784b" \
+		"--as-needed tmpdir/pr19784a.o tmpdir/libpr19784b.so" \
+		"" \
+		{ dummy.s } \
+		"pr19784b" \
+		"pass.out" \
+	    ] \
+	]
+    }
+
     if { [istarget "x86_64-*-linux*"] \
 	 && ![istarget "x86_64-*-linux*-gnux32"]} {
 
@@ -918,7 +971,7 @@ if { [isnative] && [which $CC] != 0 } {
 	    ] \
 	]
 
-	run_ld_link_exec_tests [] [list \
+	run_ld_link_exec_tests [list \
 	    [list \
 		"Run plt-main with -z bndplt" \
 		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
@@ -938,6 +991,14 @@ if { [isnative] && [which $CC] != 0 } {
 		"plt-main.out" \
 		"-fPIC" \
 	    ] \
+	    [list \
+		"Run pr20800" \
+		"-pie -z now" \
+		"" \
+		{ pr20800a.S pr20800b.S } \
+		"pr20800" \
+		"pass.out" \
+	    ] \
 	]
     }
 
@@ -956,3 +1017,8 @@ if { ![istarget "x86_64-*-linux*"]} {
 run_dump_test "pr17618"
 run_dump_test "pltgot-1"
 run_dump_test "pltgot-2"
+run_dump_test "pr20830a"
+run_dump_test "pr20830b"
+run_dump_test "pr21038a"
+run_dump_test "pr21038b"
+run_dump_test "pr21038c"

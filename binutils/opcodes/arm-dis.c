@@ -1,5 +1,5 @@
 /* Instruction printing code for the ARM
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rwe@pegasus.esprit.ec.org)
    Modification by James G. Smith (jsmith@cygnus.co.uk)
 
@@ -116,6 +116,7 @@ struct opcode16
    %<bitfield>G         print as an iWMMXt general purpose or control register
    %<bitfield>D		print as a NEON D register
    %<bitfield>Q		print as a NEON Q register
+   %<bitfield>V		print as a NEON D or Q register
    %<bitfield>E		print a quarter-float immediate value
 
    %y<code>		print a single precision VFP reg.
@@ -505,6 +506,8 @@ static const struct opcode32 coprocessor_opcodes[] =
     0x0ee60a10, 0x0fff0fff, "vmsr%c\tmvfr1, %12-15r"},
   {ARM_FEATURE_COPROC (FPU_VFP_EXT_V1xD),
     0x0ee70a10, 0x0fff0fff, "vmsr%c\tmvfr0, %12-15r"},
+  {ARM_FEATURE_COPROC (FPU_VFP_EXT_ARMV8),
+    0x0ee50a10, 0x0fff0fff, "vmsr%c\tmvfr2, %12-15r"},
   {ARM_FEATURE_COPROC (FPU_VFP_EXT_V1xD),
     0x0ee80a10, 0x0fff0fff, "vmsr%c\tfpexc, %12-15r"},
   {ARM_FEATURE_COPROC (FPU_VFP_EXT_V1xD),
@@ -517,6 +520,8 @@ static const struct opcode32 coprocessor_opcodes[] =
     0x0ef1fa10, 0x0fffffff, "vmrs%c\tAPSR_nzcv, fpscr"},
   {ARM_FEATURE_COPROC (FPU_VFP_EXT_V1xD),
     0x0ef10a10, 0x0fff0fff, "vmrs%c\t%12-15r, fpscr"},
+  {ARM_FEATURE_COPROC (FPU_VFP_EXT_ARMV8),
+    0x0ef50a10, 0x0fff0fff, "vmrs%c\t%12-15r, mvfr2"},
   {ARM_FEATURE_COPROC (FPU_VFP_EXT_V1xD),
     0x0ef60a10, 0x0fff0fff, "vmrs%c\t%12-15r, mvfr1"},
   {ARM_FEATURE_COPROC (FPU_VFP_EXT_V1xD),
@@ -882,6 +887,28 @@ static const struct opcode32 coprocessor_opcodes[] =
     0xfc400000, 0xfff00000,
     "mcrr2%c\t%8-11d, %4-7d, %12-15R, %16-19R, cr%0-3d"},
 
+  /* ARMv8.3 AdvSIMD instructions in the space of coprocessor 8.  */
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfc800800, 0xfeb00f10, "vcadd%c.f16\t%12-15,22V, %16-19,7V, %0-3,5V, #%24?29%24'70"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfc900800, 0xfeb00f10, "vcadd%c.f32\t%12-15,22V, %16-19,7V, %0-3,5V, #%24?29%24'70"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfc200800, 0xff300f10, "vcmla%c.f16\t%12-15,22V, %16-19,7V, %0-3,5V, #%23'90"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfd200800, 0xff300f10, "vcmla%c.f16\t%12-15,22V, %16-19,7V, %0-3,5V, #%23?21%23?780"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfc300800, 0xff300f10, "vcmla%c.f32\t%12-15,22V, %16-19,7V, %0-3,5V, #%23'90"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfd300800, 0xff300f10, "vcmla%c.f32\t%12-15,22V, %16-19,7V, %0-3,5V, #%23?21%23?780"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfe000800, 0xfea00f10, "vcmla%c.f16\t%12-15,22V, %16-19,7V, %0-3D[%5?10], #%20'90"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfe200800, 0xfea00f10, "vcmla%c.f16\t%12-15,22V, %16-19,7V, %0-3D[%5?10], #%20?21%23?780"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfe800800, 0xfea00f10, "vcmla%c.f32\t%12-15,22V, %16-19,7V, %0-3,5D[0], #%20'90"},
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0xfea00800, 0xfea00f10, "vcmla%c.f32\t%12-15,22V, %16-19,7V, %0-3,5D[0], #%20?21%23?780"},
+
   /* V5 coprocessor instructions.  */
   {ARM_FEATURE_CORE_LOW (ARM_EXT_V5),
     0xfc100000, 0xfe100000, "ldc2%22'l%c\t%8-11d, cr%12-15d, %A"},
@@ -970,6 +997,10 @@ static const struct opcode32 coprocessor_opcodes[] =
     0x0eb109c0, 0x0fbf0fd0, "vsqrt%c.f16\t%y1, %y0"},
   {ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
     0x0e300940, 0x0fb00f50, "vsub%c.f16\t%y1, %y2, %y0"},
+
+  /* ARMv8.3 javascript conversion instruction.  */
+  {ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A),
+    0x0eb90bc0, 0x0fbf0fd0, "vjcvt%c.s32.f64\t%y1, %z0"},
 
   {ARM_FEATURE_CORE_LOW (0), 0, 0, 0}
 };
@@ -3669,10 +3700,15 @@ print_insn_coprocessor (bfd_vma pc,
 			  }
 			func (stream, "%s", arm_regnames[value]);
 			break;
+		      case 'V':
+			if (given & (1 << 6))
+			  goto Q;
+			/* FALLTHROUGH */
 		      case 'D':
 			func (stream, "d%ld", value);
 			break;
 		      case 'Q':
+		      Q:
 			if (value & 1)
 			  func (stream, "<illegal reg q%ld.5>", value >> 1);
 			else
@@ -4686,6 +4722,7 @@ print_insn_arm (bfd_vma pc, struct disassemble_info *info, long given)
 
 		    case 'S':
 		      allow_unpredictable = TRUE;
+		      /* Fall through.  */
 		    case 's':
                       if ((given & 0x004f0000) == 0x004f0000)
 			{
@@ -5427,22 +5464,31 @@ psr_name (int regno)
 {
   switch (regno)
     {
-    case 0: return "APSR";
-    case 1: return "IAPSR";
-    case 2: return "EAPSR";
-    case 3: return "PSR";
-    case 5: return "IPSR";
-    case 6: return "EPSR";
-    case 7: return "IEPSR";
-    case 8: return "MSP";
-    case 9: return "PSP";
-    case 16: return "PRIMASK";
-    case 17: return "BASEPRI";
-    case 18: return "BASEPRI_MAX";
-    case 19: return "FAULTMASK";
-    case 20: return "CONTROL";
+    case 0x0: return "APSR";
+    case 0x1: return "IAPSR";
+    case 0x2: return "EAPSR";
+    case 0x3: return "PSR";
+    case 0x5: return "IPSR";
+    case 0x6: return "EPSR";
+    case 0x7: return "IEPSR";
+    case 0x8: return "MSP";
+    case 0x9: return "PSP";
+    case 0xa: return "MSPLIM";
+    case 0xb: return "PSPLIM";
+    case 0x10: return "PRIMASK";
+    case 0x11: return "BASEPRI";
+    case 0x12: return "BASEPRI_MAX";
+    case 0x13: return "FAULTMASK";
+    case 0x14: return "CONTROL";
     case 0x88: return "MSP_NS";
     case 0x89: return "PSP_NS";
+    case 0x8a: return "MSPLIM_NS";
+    case 0x8b: return "PSPLIM_NS";
+    case 0x90: return "PRIMASK_NS";
+    case 0x91: return "BASEPRI_NS";
+    case 0x93: return "FAULTMASK_NS";
+    case 0x94: return "CONTROL_NS";
+    case 0x98: return "SP_NS";
     default: return "<unknown>";
     }
 }
@@ -5717,7 +5763,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		      if (off || !U)
 			{
 			  func (stream, ", #%c%u", U ? '+' : '-', off * 4);
-			  value_in_comment = off * 4 * U ? 1 : -1;
+			  value_in_comment = (off && U) ? 1 : -1;
 			}
 		      func (stream, "]");
 		      if (W)
@@ -5729,7 +5775,7 @@ print_insn_thumb32 (bfd_vma pc, struct disassemble_info *info, long given)
 		      if (W)
 			{
 			  func (stream, "#%c%u", U ? '+' : '-', off * 4);
-			  value_in_comment = off * 4 * U ? 1 : -1;
+			  value_in_comment = (off && U) ? 1 : -1;
 			}
 		      else
 			{

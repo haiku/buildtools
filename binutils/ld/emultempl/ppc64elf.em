@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-# Copyright (C) 2002-2016 Free Software Foundation, Inc.
+# Copyright (C) 2002-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -25,7 +25,6 @@
 fragment <<EOF
 
 #include "ldctor.h"
-#include "libbfd.h"
 #include "elf-bfd.h"
 #include "elf64-ppc.h"
 #include "ldlex.h"
@@ -593,7 +592,6 @@ gld${EMULATION_NAME}_finish (void)
   if (msg != NULL)
     free (msg);
 
-  ppc64_elf_restore_symbols (&link_info);
   finish_default ();
 }
 
@@ -744,10 +742,10 @@ PARSE_AND_LIST_OPTIONS=${PARSE_AND_LIST_OPTIONS}'
                                 choose suitable defaults.\n"
 		   ));
   fprintf (file, _("\
-  --plt-static-chain          PLT call stubs should load r11.${DEFAULT_PLT_STATIC_CHAIN- (default)}\n"
+  --plt-static-chain          PLT call stubs should load r11.'${DEFAULT_PLT_STATIC_CHAIN- (default)}'\n"
 		   ));
   fprintf (file, _("\
-  --no-plt-static-chain       PLT call stubs should not load r11.${DEFAULT_PLT_STATIC_CHAIN+ (default)}\n"
+  --no-plt-static-chain       PLT call stubs should not load r11.'${DEFAULT_PLT_STATIC_CHAIN+ (default)}'\n"
 		   ));
   fprintf (file, _("\
   --plt-thread-safe           PLT call stubs with load-load barrier.\n"

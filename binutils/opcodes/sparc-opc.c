@@ -1,5 +1,5 @@
 /* Table of opcodes for the sparc.
-   Copyright (C) 1989-2016 Free Software Foundation, Inc.
+   Copyright (C) 1989-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -92,40 +92,59 @@
    otherwise.  */
 #define v9notv9a	(MASK_V9)
 
+/* Hardware capability sets, used to keep sparc_opcode_archs easy to
+   read.  */
+#define HWS_V8 HWCAP_MUL32 | HWCAP_DIV32 | HWCAP_FSMULD
+#define HWS_V9 HWS_V8 | HWCAP_POPC
+#define HWS_VA HWS_V9 | HWCAP_VIS
+#define HWS_VB HWS_VA | HWCAP_VIS2
+#define HWS_VC HWS_VB | HWCAP_ASI_BLK_INIT
+#define HWS_VD HWS_VC | HWCAP_FMAF | HWCAP_VIS3 | HWCAP_HPC
+#define HWS_VE HWS_VD                                                   \
+  | HWCAP_AES | HWCAP_DES | HWCAP_KASUMI | HWCAP_CAMELLIA               \
+  | HWCAP_MD5 | HWCAP_SHA1 | HWCAP_SHA256 |HWCAP_SHA512 | HWCAP_MPMUL   \
+  | HWCAP_MONT | HWCAP_CRC32C | HWCAP_CBCOND | HWCAP_PAUSE
+#define HWS_VV HWS_VE | HWCAP_FJFMAU | HWCAP_IMA
+#define HWS_VM HWS_VV
+
+#define HWS2_VM							\
+  HWCAP2_VIS3B | HWCAP2_ADP | HWCAP2_SPARC5 | HWCAP2_MWAIT	\
+  | HWCAP2_XMPMUL | HWCAP2_XMONT
+
 /* Table of opcode architectures.
    The order is defined in opcode/sparc.h.  */
 
 const struct sparc_opcode_arch sparc_opcode_archs[] =
 {
-  { "v6", MASK_V6 },
-  { "v7", MASK_V6 | MASK_V7 },
-  { "v8", MASK_V6 | MASK_V7 | MASK_V8 },
-  { "leon", MASK_V6 | MASK_V7 | MASK_V8 | MASK_LEON },
-  { "sparclet", MASK_V6 | MASK_V7 | MASK_V8 | MASK_SPARCLET },
-  { "sparclite", MASK_V6 | MASK_V7 | MASK_V8 | MASK_SPARCLITE },
+  { "v6", MASK_V6, 0, 0 },
+  { "v7", MASK_V6 | MASK_V7, 0, 0 },
+  { "v8", MASK_V6 | MASK_V7 | MASK_V8, HWS_V8, 0 },
+  { "leon", MASK_V6 | MASK_V7 | MASK_V8 | MASK_LEON, HWS_V8, 0 },
+  { "sparclet", MASK_V6 | MASK_V7 | MASK_V8 | MASK_SPARCLET, HWS_V8, 0 },
+  { "sparclite", MASK_V6 | MASK_V7 | MASK_V8 | MASK_SPARCLITE, HWS_V8, 0 },
   /* ??? Don't some v8 priviledged insns conflict with v9?  */
-  { "v9", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 },
+  { "v9", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9, HWS_V9, 0 },
   /* v9 with ultrasparc additions */
-  { "v9a", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A },
+  { "v9a", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A, HWS_VA, 0 },
   /* v9 with cheetah additions */
-  { "v9b", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B },
+  { "v9b", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B, HWS_VB, 0 },
   /* v9 with UA2005 and T1 additions.  */
   { "v9c", (MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B
-            | MASK_V9C) },
+            | MASK_V9C), HWS_VC, 0 },
   /* v9 with UA2007 and T3 additions.  */
   { "v9d", (MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B
-            | MASK_V9C | MASK_V9D) },
+            | MASK_V9C | MASK_V9D), HWS_VD, 0 },
   /* v9 with OSA2011 and T4 additions modulus integer multiply-add.  */
   { "v9e", (MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B
-            | MASK_V9C | MASK_V9D | MASK_V9E) },
+            | MASK_V9C | MASK_V9D | MASK_V9E), HWS_VE, 0 },
   /* V9 with OSA2011 and T4 additions, integer multiply and Fujitsu fp
      multiply-add.  */
   { "v9v", (MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B
-            | MASK_V9C | MASK_V9D | MASK_V9E | MASK_V9V) },
+            | MASK_V9C | MASK_V9D | MASK_V9E | MASK_V9V), HWS_VV, 0 },
   /* v9 with OSA2015 and M7 additions.  */
   { "v9m", (MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B
-            | MASK_V9C | MASK_V9D | MASK_V9E | MASK_V9V | MASK_V9M) },
-  { NULL, 0 }
+            | MASK_V9C | MASK_V9D | MASK_V9E | MASK_V9V | MASK_V9M), HWS_VM, HWS2_VM },
+  { NULL, 0, 0, 0 }
 };
 
 /* Given NAME, return it's architecture entry.  */
@@ -369,6 +388,28 @@ const struct sparc_opcode sparc_opcodes[] = {
 { "lda",	F3(3, 0x30, 1), F3(~3, ~0x30, ~1),		"[i+1]o,g", 0, 0, 0, v9 },
 { "lda",	F3(3, 0x30, 1), F3(~3, ~0x30, ~1)|RS1_G0,	"[i]o,g", 0, 0, 0, v9 },
 { "lda",	F3(3, 0x30, 1), F3(~3, ~0x30, ~1)|SIMM13(~0),	"[1]o,g", 0, 0, 0, v9 }, /* ld [rs1+0],d */
+
+/* Note that the LDTXA instructions share an opcode with the
+   (deprecated) LDTWA instructions below.  They are differenciated by
+   the combination of the `i' instruction field and the ASI used in
+   the instruction.  */
+
+#define ldtxa(asi) \
+{ "ldtxa",	F3(3, 0x13, 0)|ASI((asi)), F3(~3, ~0x13, ~0)|ASI(~(asi)), "[1+2]A,d", 0, HWCAP_ASI_BLK_INIT, 0, v9c }, \
+{ "ldtxa",	F3(3, 0x13, 0)|ASI((asi)), F3(~3, ~0x13, ~0)|ASI(~(asi))|RS2_G0, "[1]A,d", 0, HWCAP_ASI_BLK_INIT, 0, v9c }
+
+ldtxa (0x22), /* #ASI_TWINX_AIUP  */
+ldtxa (0x23), /* #ASI_TWINX_AIUS  */
+ldtxa (0x26), /* #ASI_TWINX_REAL  */
+ldtxa (0x27), /* #ASI_TWINX_N  */
+ldtxa (0x2A), /* #ASI_TWINX_AIUP_L  */
+ldtxa (0x2B), /* #ASI_TWINX_AIUS_L  */
+ldtxa (0x2E), /* #ASI_TWINX_REAL_L  */
+ldtxa (0x2F), /* #ASI_TWINX_NL  */
+ldtxa (0xE2), /* #ASI_TWINX_P  */
+ldtxa (0xE3), /* #ASI_TWINX_S  */
+ldtxa (0xEA), /* #ASI_TWINX_PL  */
+ldtxa (0xEB), /* #ASI_TWINX_SL  */
 
 { "ldtwa",	F3(3, 0x13, 0), F3(~3, ~0x13, ~0),		"[1+2]A,d", 0, 0, 0, v9 },
 { "ldtwa",	F3(3, 0x13, 0), F3(~3, ~0x13, ~0)|RS2_G0,	"[1]A,d", 0, 0, 0, v9 }, /* ldda [rs1+%g0],d */
@@ -2133,7 +2174,7 @@ SLCBCC("cbnefr", 15),
 { "des_iip",    F3F(2, 0x36, 0x135), F3F(~2, ~0x36, ~0x135), "v,H", F_FLOAT, HWCAP_DES, 0, v9e },
 { "des_kexpand",F3F(2, 0x36, 0x136), F3F(~2, ~0x36, ~0x136), "v,X,H", F_FLOAT, HWCAP_DES, 0, v9e },
 {"kasumi_fi_fi",F3F(2, 0x36, 0x138), F3F(~2, ~0x36, ~0x138), "v,B,H", F_FLOAT, HWCAP_KASUMI, 0, v9e },
-{ "camellia_fi",F3F(2, 0x36, 0x13c), F3F(~2, ~0x36, ~0x13c), "v,B,H", F_FLOAT, HWCAP_CAMELLIA, 0, v9e },
+{ "camellia_fl",F3F(2, 0x36, 0x13c), F3F(~2, ~0x36, ~0x13c), "v,B,H", F_FLOAT, HWCAP_CAMELLIA, 0, v9e },
 {"camellia_fli",F3F(2, 0x36, 0x13d), F3F(~2, ~0x36, ~0x13d), "v,B,H", F_FLOAT, HWCAP_CAMELLIA, 0, v9e },
 { "md5",        F3F(2, 0x36, 0x140), F3F(~2, ~0x36, ~0x140), "", F_FLOAT, HWCAP_MD5, 0, v9e },
 { "sha1",       F3F(2, 0x36, 0x141), F3F(~2, ~0x36, ~0x141), "", F_FLOAT, HWCAP_SHA1, 0, v9e },
@@ -2421,6 +2462,18 @@ static arg asi_table[] =
   { 0xf1, "#ASI_BLK_S", },
   { 0xf8, "#ASI_BLK_PL", },
   { 0xf9, "#ASI_BLK_SL", },
+  { 0x22, "#ASI_TWINX_AIUP", },
+  { 0x23, "#ASI_TWINX_AIUS", },
+  { 0x26, "#ASI_TWINX_REAL", },
+  { 0x27, "#ASI_TWINX_N", },
+  { 0x2A, "#ASI_TWINX_AIUP_L", },
+  { 0x2B, "#ASI_TWINX_AIUS_L", },
+  { 0x2E, "#ASI_TWINX_REAL_L", },
+  { 0x2F, "#ASI_TWINX_NL", },
+  { 0xE2, "#ASI_TWINX_P", },
+  { 0xE3, "#ASI_TWINX_S", },
+  { 0xEA, "#ASI_TWINX_PL", },
+  { 0xEB, "#ASI_TWINX_SL", },
   { 0, 0 }
 };
 

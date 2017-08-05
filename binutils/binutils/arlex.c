@@ -332,6 +332,9 @@ void yyfree (void *  );
 
 /* Begin user sect3 */
 
+#define yywrap(n) 1
+#define YY_SKIP_YYWRAP
+
 typedef unsigned char YY_CHAR;
 
 FILE *yyin = (FILE *) 0, *yyout = (FILE *) 0;
@@ -560,7 +563,7 @@ char *yytext;
 #line 4 "arlex.l"
 /* arlex.l - Strange script language lexer */
 
-/* Copyright (C) 1992-2016 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -594,7 +597,7 @@ char *yytext;
 extern int yylex (void);
 
 int linenumber;
-#line 598 "arlex.c"
+#line 601 "arlex.c"
 
 #define INITIAL 0
 
@@ -777,7 +780,7 @@ YY_DECL
 #line 45 "arlex.l"
 
 
-#line 781 "arlex.c"
+#line 784 "arlex.c"
 
 	if ( !(yy_init) )
 		{
@@ -1065,7 +1068,7 @@ YY_RULE_SETUP
 #line 90 "arlex.l"
 ECHO;
 	YY_BREAK
-#line 1069 "arlex.c"
+#line 1072 "arlex.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2028,8 +2031,4 @@ void yyfree (void * ptr )
 #line 90 "arlex.l"
 
 
-#ifndef yywrap
-/* Needed for lex, though not flex. */
-int yywrap(void) { return 1; }
-#endif
 

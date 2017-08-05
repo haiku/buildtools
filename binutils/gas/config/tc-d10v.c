@@ -1,5 +1,5 @@
 /* tc-d10v.c -- Assembler code for the Mitsubishi D10V
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright (C) 1996-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -1548,7 +1548,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  if ( segf && segf->sym != fixP->fx_addsy)
 	    value = 0;
         }
-      /* Drop through.  */
+      /* Fall through.  */
     case BFD_RELOC_D10V_18:
       /* Instruction addresses are always right-shifted by 2.  */
       value >>= AT_WORD_RIGHT_SHIFT;

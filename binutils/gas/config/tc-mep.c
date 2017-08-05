@@ -1,5 +1,5 @@
 /* tc-mep.c -- Assembler for the Toshiba Media Processor.
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -28,7 +28,6 @@
 #include "cgen.h"
 #include "elf/common.h"
 #include "elf/mep.h"
-#include "libbfd.h"
 #include "xregex.h"
 
 /* Structure to hold all of the different components describing
@@ -1147,7 +1146,7 @@ mep_check_ivc2_scheduling (void)
 
 /* The scheduling functions are just filters for invalid combinations.
    If there is a violation, they terminate assembly.  Otherise they
-   just fall through.  Succesful combinations cause no side effects
+   just fall through.  Successful combinations cause no side effects
    other than valid nop insertion.  */
 
 static void
@@ -1220,7 +1219,7 @@ md_assemble (char * str)
 		     + copro insn
 
                  We want to handle the general case where more than
-                 one instruction can be preceeded by a +.  This will
+                 one instruction can be preceded by a +.  This will
                  happen later if we add support for internally parallel
                  coprocessors.  We'll make the parsing nice and general
                  so that it can handle an arbitrary number of insns
@@ -1300,7 +1299,7 @@ md_assemble (char * str)
 	  /* Check for a + with a core insn and abort if found. */
 	  if (!thisInsnIsCopro)
 	    {
-	      as_fatal("A core insn cannot be preceeded by a +.\n");
+	      as_fatal("A core insn cannot be preceded by a +.\n");
 	      return;
 	    }
 
@@ -1709,7 +1708,7 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 	    operand = MEP_OPERAND_PCREL17A2;
 	    break;
 	  }
-	/* ...FALLTHROUGH... */
+	/* Fall through.  */
 
       case MEP_INSN_JMP:
 	addend = target_address_for (fragP);
@@ -1724,6 +1723,7 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 
       case MEP_INSN_BNEZ:
 	bit = 1;
+	/* Fall through.  */
       case MEP_INSN_BEQZ:
 	fragP->fr_opcode[1^e] = bit | (addend & 0xfe);
 	operand = MEP_OPERAND_PCREL8A2;
@@ -1731,6 +1731,7 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 
       case MEP_INSN_BNEI:
 	bit = 4;
+	/* Fall through.  */
       case MEP_INSN_BEQI:
 	if (subtype_mappings[fragP->fr_subtype].growth)
 	  {
@@ -2184,7 +2185,7 @@ mep_cleanup (void)
 {
   /* Take care of any insns left to be parallelized when the file ends.
      This is mainly here to handle the case where the file ends with an
-     insn preceeded by a + or the file ends unexpectedly.  */
+     insn preceded by a + or the file ends unexpectedly.  */
   if (mode == VLIW)
     mep_process_saved_insns ();
 }

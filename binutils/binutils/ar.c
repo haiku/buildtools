@@ -1,5 +1,5 @@
 /* ar.c - Archive modify and extract.
-   Copyright (C) 1991-2016 Free Software Foundation, Inc.
+   Copyright (C) 1991-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -29,11 +29,11 @@
 #include "progress.h"
 #include "getopt.h"
 #include "aout/ar.h"
-#include "libbfd.h"
 #include "bucomm.h"
 #include "arsup.h"
 #include "filenames.h"
 #include "binemul.h"
+#include "plugin-api.h"
 #include "plugin.h"
 
 #ifdef __GO32___

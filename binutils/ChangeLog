@@ -1,3 +1,27 @@
+2016-12-08  Alan Modra  <amodra@gmail.com>
+
+	* configure: Regenerate.
+
+2016-12-02  Josh Conner  <joshconner@google.com>
+
+	* configure.ac: Add fuchsia to targets that use ELF.
+	* configure: Regenerated.
+
+2016-11-07  Doug Evans  <dje@google.com>
+
+	* config.sub: Sync with upstream version 2016-11-03.
+	git://git.sv.gnu.org/config.git
+	* config.guess: Sync with upstream version 2016-10-02.
+
+2016-09-27  Simon Marchi  <simon.marchi@polymtl.ca>
+
+	* .gitignore: Add archives and make stamps.
+
+2016-07-20  Yan-Ting Lin  <currygt52@gmail.com>
+
+	* configure.ac (nds32*-*-*): Remove entry to enable gdb.
+	* configure: Regenerated.
+
 2016-06-28  Walter Lee  <walt@tilera.com>
 
 	* configure.ac (tilepro-*-*): Add gdb to noconfigdirs.

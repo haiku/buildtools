@@ -16,7 +16,7 @@
 @SET_MAKE@
 
 #
-#   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2017 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -288,6 +288,7 @@ TDEFINES = @TDEFINES@
 USE_NLS = @USE_NLS@
 VERSION = @VERSION@
 WARN_CFLAGS = @WARN_CFLAGS@
+WARN_CFLAGS_FOR_BUILD = @WARN_CFLAGS_FOR_BUILD@
 WARN_WRITE_STRINGS = @WARN_WRITE_STRINGS@
 XGETTEXT = @XGETTEXT@
 abs_builddir = @abs_builddir@
@@ -480,6 +481,7 @@ ALL_MACHINES = \
 	cpu-plugin.lo \
 	cpu-powerpc.lo \
 	cpu-rs6000.lo \
+	cpu-riscv.lo \
 	cpu-rl78.lo \
 	cpu-rx.lo \
 	cpu-s390.lo \
@@ -567,6 +569,7 @@ ALL_MACHINES_CFILES = \
 	cpu-plugin.c \
 	cpu-powerpc.c \
 	cpu-rs6000.c \
+	cpu-riscv.c \
 	cpu-rl78.c \
 	cpu-rx.c \
 	cpu-s390.c \
@@ -1005,18 +1008,21 @@ BFD64_BACKENDS = \
 	elf64-hppa.lo \
 	elf64-ia64.lo \
 	elf64-ia64-vms.lo \
+	elfxx-ia64.lo \
+	elfn32-mips.lo \
 	elf64-mips.lo \
+	elfxx-mips.lo \
 	elf64-mmix.lo \
 	elf64-ppc.lo \
+	elf32-riscv.lo \
+	elf64-riscv.lo \
+	elfxx-riscv.lo \
 	elf64-s390.lo \
 	elf64-sh64.lo \
 	elf64-sparc.lo \
 	elf64-tilegx.lo \
 	elf64-x86-64.lo \
 	elf64.lo \
-	elfn32-mips.lo \
-	elfxx-ia64.lo \
-	elfxx-mips.lo \
 	mach-o-aarch64.lo \
 	mach-o-x86-64.lo \
 	mmo.lo \
@@ -1056,6 +1062,7 @@ BFD64_BACKENDS_CFILES = \
 	elfxx-aarch64.c \
 	elfxx-ia64.c \
 	elfxx-mips.c \
+	elfxx-riscv.c \
 	mach-o-aarch64.c \
 	mach-o-x86-64.c \
 	mmo.c \
@@ -1121,7 +1128,9 @@ SOURCE_CFILES = \
 
 BUILD_CFILES = \
 	elf32-aarch64.c elf64-aarch64.c \
-	elf32-ia64.c elf64-ia64.c peigen.c pepigen.c pex64igen.c
+	elf32-ia64.c elf64-ia64.c \
+	elf32-riscv.c elf64-riscv.c \
+	peigen.c pepigen.c pex64igen.c
 
 CFILES = $(SOURCE_CFILES) $(BUILD_CFILES)
 SOURCE_HFILES = \
@@ -1169,13 +1178,14 @@ noinst_LIBRARIES = libbfd.a
 libbfd_a_SOURCES = 
 BFD_H_DEPS = $(INCDIR)/ansidecl.h $(INCDIR)/symcat.h
 LOCAL_H_DEPS = libbfd.h sysdep.h config.h
-BFD_H_FILES = bfd-in.h init.c opncls.c libbfd.c section.c archures.c \
-	reloc.c syms.c bfd.c bfdio.c bfdwin.c \
-	archive.c corefile.c targets.c format.c compress.c
+BFD_H_FILES = bfd-in.h init.c opncls.c libbfd.c \
+	bfdio.c bfdwin.c section.c archures.c reloc.c \
+	syms.c bfd.c archive.c corefile.c targets.c format.c \
+	linker.c simple.c compress.c
 
 BFD64_H_FILES = archive64.c
-LIBBFD_H_FILES = libbfd-in.h init.c libbfd.c bfdio.c bfdwin.c \
-	cache.c reloc.c archures.c elf.c
+LIBBFD_H_FILES = libbfd-in.h libbfd.c bfdio.c bfdwin.c \
+	cache.c reloc.c archures.c linker.c
 
 LIBCOFF_H_FILES = libcoff-in.h coffcode.h
 MOSTLYCLEANFILES = ofiles stamp-ofiles
@@ -1410,6 +1420,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-pj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-plugin.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-powerpc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-riscv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-rl78.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-rs6000.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cpu-rx.Plo@am__quote@
@@ -1499,6 +1510,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-or1k.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-pj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-ppc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-riscv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-rl78.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-rx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf32-s390.Plo@am__quote@
@@ -1530,6 +1542,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-mips.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-mmix.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-ppc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-riscv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-s390.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-sh64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elf64-sparc.Plo@am__quote@
@@ -1541,6 +1554,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elfxx-aarch64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elfxx-ia64.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elfxx-mips.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elfxx-riscv.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elfxx-sparc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/elfxx-tilegx.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/epoc-pe-arm.Plo@am__quote@
@@ -2077,6 +2091,18 @@ elf64-ia64.c : elfnn-ia64.c
 	rm -f elf64-ia64.c
 	$(SED) -e s/NN/64/g < $(srcdir)/elfnn-ia64.c > elf64-ia64.new
 	mv -f elf64-ia64.new elf64-ia64.c
+
+elf32-riscv.c : elfnn-riscv.c
+	rm -f elf32-riscv.c
+	echo "#line 1 \"$(srcdir)/elfnn-riscv.c\"" > elf32-riscv.new
+	sed -e s/NN/32/g < $(srcdir)/elfnn-riscv.c >> elf32-riscv.new
+	mv -f elf32-riscv.new elf32-riscv.c
+
+elf64-riscv.c : elfnn-riscv.c
+	rm -f elf64-riscv.c
+	echo "#line 1 \"$(srcdir)/elfnn-riscv.c\"" > elf64-riscv.new
+	sed -e s/NN/64/g < $(srcdir)/elfnn-riscv.c >> elf64-riscv.new
+	mv -f elf64-riscv.new elf64-riscv.c
 
 peigen.c : peXXigen.c
 	rm -f peigen.c

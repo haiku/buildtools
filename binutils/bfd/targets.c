@@ -1,5 +1,5 @@
 /* Generic target-file-type support for the BFD library.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -291,7 +291,7 @@ BFD_JUMP_TABLE macros.
 .  bfd_boolean (*_bfd_copy_private_bfd_data) (bfd *, bfd *);
 .  {* Called to merge BFD general private data from one object file
 .     to a common output file when linking.  *}
-.  bfd_boolean (*_bfd_merge_private_bfd_data) (bfd *, bfd *);
+.  bfd_boolean (*_bfd_merge_private_bfd_data) (bfd *, struct bfd_link_info *);
 .  {* Called to initialize BFD private section data from one object file
 .     to another.  *}
 .#define bfd_init_private_section_data(ibfd, isec, obfd, osec, link_info) \
@@ -799,6 +799,8 @@ extern const bfd_target powerpc_pe_le_vec;
 extern const bfd_target powerpc_pei_vec;
 extern const bfd_target powerpc_pei_le_vec;
 extern const bfd_target powerpc_xcoff_vec;
+extern const bfd_target riscv_elf32_vec;
+extern const bfd_target riscv_elf64_vec;
 extern const bfd_target rl78_elf32_vec;
 extern const bfd_target rs6000_xcoff64_vec;
 extern const bfd_target rs6000_xcoff64_aix_vec;
@@ -1303,6 +1305,10 @@ static const bfd_target * const _bfd_target_vector[] =
 	&powerpc_xcoff_vec,
 #endif
 
+#ifdef BFD64
+	&riscv_elf32_vec,
+	&riscv_elf64_vec,
+#endif
 	&rl78_elf32_vec,
 
 #ifdef BFD64
@@ -1815,29 +1821,28 @@ bfd_target_list (void)
 
 /*
 FUNCTION
-	bfd_seach_for_target
+	bfd_iterate_over_targets
 
 SYNOPSIS
-	const bfd_target *bfd_search_for_target
-	  (int (*search_func) (const bfd_target *, void *),
-	   void *);
+	const bfd_target *bfd_iterate_over_targets
+	  (int (*func) (const bfd_target *, void *),
+	   void *data);
 
 DESCRIPTION
-	Return a pointer to the first transfer vector in the list of
-	transfer vectors maintained by BFD that produces a non-zero
-	result when passed to the function @var{search_func}.  The
-	parameter @var{data} is passed, unexamined, to the search
-	function.
+	Call @var{func} for each target in the list of BFD target
+	vectors, passing @var{data} to @var{func}.  Stop iterating if
+	@var{func} returns a non-zero result, and return that target
+	vector.  Return NULL if @var{func} always returns zero.
 */
 
 const bfd_target *
-bfd_search_for_target (int (*search_func) (const bfd_target *, void *),
-		       void *data)
+bfd_iterate_over_targets (int (*func) (const bfd_target *, void *),
+			  void *data)
 {
-  const bfd_target * const *target;
+  const bfd_target *const *target;
 
-  for (target = bfd_target_vector; *target != NULL; target ++)
-    if (search_func (*target, data))
+  for (target = bfd_target_vector; *target != NULL; ++target)
+    if (func (*target, data))
       return *target;
 
   return NULL;

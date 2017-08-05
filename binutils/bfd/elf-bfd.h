@@ -1,5 +1,5 @@
 /* BFD back-end data structures for ELF files.
-   Copyright (C) 1992-2016 Free Software Foundation, Inc.
+   Copyright (C) 1992-2017 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -444,6 +444,7 @@ enum elf_target_id
 {
   AARCH64_ELF_DATA = 1,
   ALPHA_ELF_DATA,
+  ARC_ELF_DATA,
   ARM_ELF_DATA,
   AVR_ELF_DATA,
   BFIN_ELF_DATA,
@@ -476,6 +477,7 @@ enum elf_target_id
   XGATE_ELF_DATA,
   TILEGX_ELF_DATA,
   TILEPRO_ELF_DATA,
+  RISCV_ELF_DATA,
   GENERIC_ELF_DATA
 };
 
@@ -524,6 +526,7 @@ struct elf_link_hash_table
   /* The number of symbols found in the link which is intended for the
      mandatory DT_SYMTAB tag (.dynsym section) in .dynamic section.  */
   bfd_size_type dynsymcount;
+  bfd_size_type local_dynsymcount;
 
   /* The string table of dynamic symbols, which becomes the .dynstr
      section.  */
@@ -592,6 +595,10 @@ struct elf_link_hash_table
   asection *srelgot;
   asection *splt;
   asection *srelplt;
+  asection *sdynbss;
+  asection *srelbss;
+  asection *sdynrelro;
+  asection *sreldynrelro;
   asection *igotplt;
   asection *iplt;
   asection *irelplt;
@@ -754,6 +761,8 @@ typedef asection * (*elf_gc_mark_hook_fn)
   (asection *, struct bfd_link_info *, Elf_Internal_Rela *,
    struct elf_link_hash_entry *, Elf_Internal_Sym *);
 
+struct bfd_elf_section_reloc_data;
+
 struct elf_backend_data
 {
   /* The architecture for this backend.  */
@@ -766,7 +775,7 @@ struct elf_backend_data
   /* The ELF machine code (EM_xxxx) for this backend.  */
   int elf_machine_code;
 
-  /* EI_OSABI. */
+  /* EI_OSABI.  */
   int elf_osabi;
 
   /* The maximum page size for this backend.  */
@@ -1072,6 +1081,11 @@ struct elf_backend_data
   bfd_boolean (*elf_backend_modify_program_headers)
     (bfd *, struct bfd_link_info *);
 
+  /* This function is called to see if the PHDR header should be
+     checked for validity.  */
+  bfd_boolean (*elf_backend_allow_non_load_phdr)
+    (bfd *,  const Elf_Internal_Phdr *, unsigned);
+
   /* This function is called before section garbage collection to
      mark entry symbol sections.  */
   void (*gc_keep)
@@ -1126,6 +1140,11 @@ struct elf_backend_data
      bfd_boolean (*) (void *, const char *, Elf_Internal_Sym *, asection *,
 		      struct elf_link_hash_entry *));
 
+  /* Filter what symbols of the output file to include in the import
+     library if one is created.  */
+  unsigned int (*elf_backend_filter_implib_symbols)
+    (bfd *, struct bfd_link_info *, asymbol **, long);
+
   /* Copy any information related to dynamic linking from a pre-existing
      symbol to a newly created symbol.  Also called to copy flags and
      other back-end info to a weakdef, in which case the symbol is not
@@ -1165,6 +1184,11 @@ struct elf_backend_data
   bfd_boolean (*elf_backend_emit_relocs)
     (bfd *, asection *, Elf_Internal_Shdr *, Elf_Internal_Rela *,
      struct elf_link_hash_entry **);
+
+  /* Update relocations.  It is allowed to change the number and the order.
+     In such a case hashes should be invalidated.  */
+  void (*elf_backend_update_relocs)
+    (asection *, struct bfd_elf_section_reloc_data *);
 
   /* Count relocations.  Not called for relocatable links
      or if all relocs are being preserved in the output.  */
@@ -1312,7 +1336,7 @@ struct elf_backend_data
      Elf_Internal_Shdr *osection);
 		
   /* Used to handle bad SHF_LINK_ORDER input.  */
-  bfd_error_handler_type link_order_error_handler;
+  void (*link_order_error_handler) (const char *, ...);
 
   /* Name of the PLT relocation section.  */
   const char *relplt_name;
@@ -1369,7 +1393,7 @@ struct elf_backend_data
   /* This is non-zero if static TLS segments require a special alignment.  */
   unsigned static_tls_alignment;
 
-  /* Alignment for the PT_GNU_STACK segment. */
+  /* Alignment for the PT_GNU_STACK segment.  */
   unsigned stack_align;
 
   /* Flag bits to assign to a section of type SHT_STRTAB.  */
@@ -1412,6 +1436,10 @@ struct elf_backend_data
      backend relocate_section routine for relocatable linking.  */
   unsigned rela_normal : 1;
 
+  /* Set if DT_REL/DT_RELA/DT_RELSZ/DT_RELASZ should not include PLT
+     relocations.  */
+  unsigned dtrel_excludes_plt : 1;
+
   /* TRUE if addresses "naturally" sign extend.  This is used when
      swapping in from Elf32 when BFD64.  */
   unsigned sign_extend_vma : 1;
@@ -1425,11 +1453,16 @@ struct elf_backend_data
   unsigned can_refcount : 1;
   unsigned want_got_sym : 1;
   unsigned want_dynbss : 1;
+  unsigned want_dynrelro : 1;
 
   /* Targets which do not support physical addressing often require
      that the p_paddr field in the section header to be set to zero.
      This field indicates whether this behavior is required.  */
   unsigned want_p_paddr_set_to_zero : 1;
+
+  /* Target has broken hardware and/or kernel that requires pages not
+     to be mapped twice with different permissions.  */
+  unsigned no_page_alias : 1;
 
   /* True if an object file lacking a .note.GNU-stack section
      should be assumed to be requesting exec stack.  At least one
@@ -1445,6 +1478,10 @@ struct elf_backend_data
   /* Address of protected data defined in the shared library may be
      external, i.e., due to copy relocation.   */
   unsigned extern_protected_data : 1;
+
+  /* True if `_bfd_elf_link_renumber_dynsyms' must be called even for
+     static binaries.  */
+  unsigned always_renumber_dynsyms : 1;
 };
 
 /* Information about reloc sections associated with a bfd_elf_section_data
@@ -1665,13 +1702,13 @@ struct output_elf_obj_tdata
    symbol type or STB_GNU_UNIQUE binding.  Used to set the osabi
    field in the ELF header structure.  */
 enum elf_gnu_symbols
-  {
-    elf_gnu_symbol_none = 0,
-    elf_gnu_symbol_any = 1 << 0,
-    elf_gnu_symbol_ifunc = (elf_gnu_symbol_any | 1 << 1),
-    elf_gnu_symbol_unique = (elf_gnu_symbol_any | 1 << 2),
-    elf_gnu_symbol_all = (elf_gnu_symbol_ifunc | elf_gnu_symbol_unique)
-  };
+{
+  elf_gnu_symbol_none = 0,
+  elf_gnu_symbol_any = 1 << 0,
+  elf_gnu_symbol_ifunc = (elf_gnu_symbol_any | 1 << 1),
+  elf_gnu_symbol_unique = (elf_gnu_symbol_any | 1 << 2),
+  elf_gnu_symbol_all = (elf_gnu_symbol_ifunc | elf_gnu_symbol_unique)
+};
 
 typedef struct elf_section_list
 {
@@ -1679,8 +1716,7 @@ typedef struct elf_section_list
   unsigned int               ndx;
   struct elf_section_list *  next;
 } elf_section_list;
-  
-    
+
 /* Some private data is stashed away for future use using the tdata pointer
    in the bfd structure.  */
 
@@ -1951,6 +1987,8 @@ extern bfd_boolean _bfd_elf_section_already_linked
   (bfd *, asection *, struct bfd_link_info *);
 extern void bfd_elf_set_group_contents
   (bfd *, asection *, void *);
+extern unsigned int _bfd_elf_filter_global_symbols
+  (bfd *, struct bfd_link_info *, asymbol **, long);
 extern asection *_bfd_elf_check_kept_section
   (asection *, struct bfd_link_info *);
 #define _bfd_elf_link_just_syms _bfd_generic_link_just_syms
@@ -2376,8 +2414,10 @@ extern unsigned int _bfd_elf_ppc_at_tprel_transform
   (unsigned int, unsigned int);
 /* PowerPC elf_object_p tweak.  */
 extern bfd_boolean _bfd_elf_ppc_set_arch (bfd *);
+/* PowerPC .gnu.attributes handling common to both 32-bit and 64-bit.  */
+extern void _bfd_elf_ppc_merge_fp_attributes (bfd *, struct bfd_link_info *);
 
-/* Exported interface for writing elf corefile notes. */
+/* Exported interface for writing elf corefile notes.  */
 extern char *elfcore_write_note
   (bfd *, char *, int *, const char *, int, const void *, int);
 extern char *elfcore_write_prpsinfo
@@ -2491,7 +2531,8 @@ extern char *_bfd_elf_attr_strdup (bfd *, const char *);
 extern void _bfd_elf_copy_obj_attributes (bfd *, bfd *);
 extern int _bfd_elf_obj_attrs_arg_type (bfd *, int, unsigned int);
 extern void _bfd_elf_parse_attributes (bfd *, Elf_Internal_Shdr *);
-extern bfd_boolean _bfd_elf_merge_object_attributes (bfd *, bfd *);
+extern bfd_boolean _bfd_elf_merge_object_attributes
+  (bfd *, struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_merge_unknown_attribute_low (bfd *, bfd *, int);
 extern bfd_boolean _bfd_elf_merge_unknown_attribute_list (bfd *, bfd *);
 extern Elf_Internal_Shdr *_bfd_elf_single_rel_hdr (asection *sec);

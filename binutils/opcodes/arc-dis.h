@@ -1,5 +1,5 @@
 /* Disassembler structures definitions for the ARC.
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
 
    Contributed by Claudiu Zissulescu (claziss@synopsys.com)
 
@@ -21,6 +21,10 @@
 
 #ifndef ARCDIS_H
 #define ARCDIS_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum ARC_Debugger_OperandType
 {
@@ -102,4 +106,9 @@ struct arcDisState
 
 struct arcDisState
 arcAnalyzeInstr (bfd_vma memaddr, struct disassemble_info *);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

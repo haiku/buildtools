@@ -1,5 +1,5 @@
 /* expr.c -operands, expressions-
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -515,6 +515,14 @@ integer_constant (int radix, expressionS *expressionP)
   if (tc_allow_U_suffix && (c == 'U' || c == 'u'))
     c = * input_line_pointer++;
 
+#ifndef tc_allow_L_suffix
+#define tc_allow_L_suffix 1
+#endif
+  /* PR 20732: Look for, and ignore, a L or LL suffix to the number.  */
+  if (tc_allow_L_suffix)
+    while (c == 'L' || c == 'l')
+      c = * input_line_pointer++;
+
   if (small)
     {
       /* Here with number, in correct radix. c is the next char.
@@ -949,8 +957,8 @@ operand (expressionS *expressionP, enum expr_mode mode)
       if (md_need_index_operator())
 	goto de_fault;
 # endif
-      /* FALLTHROUGH */
 #endif
+      /* Fall through.  */
     case '(':
       /* Didn't begin with digit & not a name.  */
       segment = expr (0, expressionP, mode);
@@ -980,8 +988,8 @@ operand (expressionS *expressionP, enum expr_mode mode)
       if (! flag_m68k_mri || *input_line_pointer != '\'')
 	goto de_fault;
       ++input_line_pointer;
-      /* Fall through.  */
 #endif
+      /* Fall through.  */
     case '\'':
       if (! flag_m68k_mri)
 	{
@@ -1002,12 +1010,13 @@ operand (expressionS *expressionP, enum expr_mode mode)
       /* Double quote is the bitwise not operator in MRI mode.  */
       if (! flag_m68k_mri)
 	goto de_fault;
-      /* Fall through.  */
 #endif
+      /* Fall through.  */
     case '~':
       /* '~' is permitted to start a label on the Delta.  */
       if (is_name_beginner (c))
 	goto isname;
+      /* Fall through.  */
     case '!':
     case '-':
     case '+':
@@ -1362,7 +1371,7 @@ operand (expressionS *expressionP, enum expr_mode mode)
   /* It is more 'efficient' to clean up the expressionS when they are
      created.  Doing it here saves lines of code.  */
   clean_up_expression (expressionP);
-  SKIP_WHITESPACE ();		/* -> 1st char after operand.  */
+  SKIP_ALL_WHITESPACE ();		/* -> 1st char after operand.  */
   know (*input_line_pointer != ' ');
 
   /* The PA port needs this information.  */

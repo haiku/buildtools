@@ -1,5 +1,5 @@
 /* tc-cr16.c -- Assembler code for the CR16 CPU core.
-   Copyright (C) 2007-2016 Free Software Foundation, Inc.
+   Copyright (C) 2007-2017 Free Software Foundation, Inc.
 
    Contributed by M R Swami Reddy <MR.Swami.Reddy@nsc.com>
 
@@ -1165,6 +1165,7 @@ set_operand (char *operand, ins * cr16_ins)
     {
     case arg_ic:    /* Case $0x18.  */
       operandS++;
+      /* Fall through.  */
     case arg_c:     /* Case 0x18.  */
       /* Set constant.  */
       process_label_constant (operandS, cr16_ins);
@@ -1182,6 +1183,7 @@ set_operand (char *operand, ins * cr16_ins)
       *operandE = '\0';
       process_label_constant (operandS, cr16_ins);
       operandS = operandE;
+      /* Fall through.  */
     case arg_rbase: /* Case (r1) or (r1,r0).  */
       operandS++;
       /* Set register base.  */
@@ -1469,7 +1471,7 @@ gettrap (char *s)
     if (strcasecmp (trap->name, s) == 0)
       return trap->entry;
 
-  /* To make compatable with CR16 4.1 tools, the below 3-lines of
+  /* To make compatible with CR16 4.1 tools, the below 3-lines of
    * code added. Refer: Development Tracker item #123 */
   for (trap = cr16_traps; trap < (cr16_traps + NUMTRAPS); trap++)
     if (trap->entry  == (unsigned int) atoi (s))
@@ -1789,7 +1791,9 @@ print_constant (int nbits, int shift, argument *arg)
       break;
 
     case 21:
-      if ((nbits == 21) && (IS_INSN_TYPE (LD_STOR_INS))) nbits = 20;
+      if ((nbits == 21) && (IS_INSN_TYPE (LD_STOR_INS)))
+	nbits = 20;
+      /* Fall through.  */
     case 24:
     case 22:
     case 20:
@@ -2381,7 +2385,7 @@ next_insn:
 
       for (i = 0; i < insn->nargs; i++)
         {
-         /* For BAL (ra),disp17 instuction only. And also set the
+         /* For BAL (ra),disp17 instruction only. And also set the
             DISP24a relocation type.  */
          if (IS_INSN_MNEMONIC ("bal") && (instruction->size == 2) && i == 0)
            {

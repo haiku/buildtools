@@ -1,5 +1,5 @@
 /* Linker command language support.
-   Copyright (C) 1991-2016 Free Software Foundation, Inc.
+   Copyright (C) 1991-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -39,7 +39,6 @@
 #include "fnmatch.h"
 #include "demangle.h"
 #include "hashtab.h"
-#include "libbfd.h"
 #include "elf-bfd.h"
 #ifdef ENABLE_PLUGINS
 #include "plugin.h"
@@ -224,6 +223,43 @@ unique_section_p (const asection *sec,
 
 /* Generic traversal routines for finding matching sections.  */
 
+/* Return true if FILE matches a pattern in EXCLUDE_LIST, otherwise return
+   false.  */
+
+static bfd_boolean
+walk_wild_file_in_exclude_list (struct name_list *exclude_list,
+                                lang_input_statement_type *file)
+{
+  struct name_list *list_tmp;
+
+  for (list_tmp = exclude_list;
+       list_tmp;
+       list_tmp = list_tmp->next)
+    {
+      char *p = archive_path (list_tmp->name);
+
+      if (p != NULL)
+	{
+	  if (input_statement_is_archive_path (list_tmp->name, p, file))
+	    return TRUE;
+	}
+
+      else if (name_match (list_tmp->name, file->filename) == 0)
+	return TRUE;
+
+      /* FIXME: Perhaps remove the following at some stage?  Matching
+	 unadorned archives like this was never documented and has
+	 been superceded by the archive:path syntax.  */
+      else if (file->the_bfd != NULL
+	       && file->the_bfd->my_archive != NULL
+	       && name_match (list_tmp->name,
+			      file->the_bfd->my_archive->filename) == 0)
+	return TRUE;
+    }
+
+  return FALSE;
+}
+
 /* Try processing a section against a wildcard.  This just calls
    the callback unless the filename exclusion list is present
    and excludes the file.  It's hardly ever present so this
@@ -237,33 +273,9 @@ walk_wild_consider_section (lang_wild_statement_type *ptr,
 			    callback_t callback,
 			    void *data)
 {
-  struct name_list *list_tmp;
-
   /* Don't process sections from files which were excluded.  */
-  for (list_tmp = sec->spec.exclude_name_list;
-       list_tmp;
-       list_tmp = list_tmp->next)
-    {
-      char *p = archive_path (list_tmp->name);
-
-      if (p != NULL)
-	{
-	  if (input_statement_is_archive_path (list_tmp->name, p, file))
-	    return;
-	}
-
-      else if (name_match (list_tmp->name, file->filename) == 0)
-	return;
-
-      /* FIXME: Perhaps remove the following at some stage?  Matching
-	 unadorned archives like this was never documented and has
-	 been superceded by the archive:path syntax.  */
-      else if (file->the_bfd != NULL
-	       && file->the_bfd->my_archive != NULL
-	       && name_match (list_tmp->name,
-			      file->the_bfd->my_archive->filename) == 0)
-	return;
-    }
+  if (walk_wild_file_in_exclude_list (sec->spec.exclude_name_list, file))
+    return;
 
   (*callback) (ptr, sec, s, ptr->section_flag_list, file, data);
 }
@@ -861,6 +873,9 @@ walk_wild_file (lang_wild_statement_type *s,
 		callback_t callback,
 		void *data)
 {
+  if (walk_wild_file_in_exclude_list (s->exclude_name_list, f))
+    return;
+
   if (f->the_bfd == NULL
       || !bfd_check_format (f->the_bfd, bfd_archive))
     walk_wild_section (s, f, callback, data);
@@ -2295,6 +2310,12 @@ section_already_linked (bfd *abfd, asection *sec, void *data)
       return;
     }
 
+  /* Deal with SHF_EXCLUDE ELF sections.  */
+  if (!bfd_link_relocatable (&link_info)
+      && (abfd->flags & BFD_PLUGIN) == 0
+      && (sec->flags & (SEC_GROUP | SEC_KEEP | SEC_EXCLUDE)) == SEC_EXCLUDE)
+    sec->output_section = bfd_abs_section_ptr;
+
   if (!(abfd->flags & DYNAMIC))
     bfd_section_already_linked (abfd, sec, &link_info);
 }
@@ -3114,15 +3135,15 @@ open_output (const char *name)
      line?  */
   if (command_line.endian != ENDIAN_UNSET)
     {
-      const bfd_target *target;
-      enum bfd_endian desired_endian;
-
       /* Get the chosen target.  */
-      target = bfd_search_for_target (get_target, (void *) output_target);
+      const bfd_target *target
+	= bfd_iterate_over_targets (get_target, (void *) output_target);
 
       /* If the target is not supported, we cannot do anything.  */
       if (target != NULL)
 	{
+	  enum bfd_endian desired_endian;
+
 	  if (command_line.endian == ENDIAN_BIG)
 	    desired_endian = BFD_ENDIAN_BIG;
 	  else
@@ -3144,8 +3165,8 @@ open_output (const char *name)
 		  /* Try to find a target as similar as possible to
 		     the default target, but which has the desired
 		     endian characteristic.  */
-		  bfd_search_for_target (closest_target_match,
-					 (void *) target);
+		  bfd_iterate_over_targets (closest_target_match,
+					    (void *) target);
 
 		  /* Oh dear - we could not find any targets that
 		     satisfy our requirements.  */
@@ -3356,7 +3377,8 @@ open_input_bfds (lang_statement_union_type *s, enum open_bfd_mode mode)
 #endif
 	  break;
 	case lang_assignment_statement_enum:
-	  if (s->assignment_statement.exp->assign.defsym)
+	  if (s->assignment_statement.exp->type.node_class != etree_assert
+	      && s->assignment_statement.exp->assign.defsym)
 	    /* This is from a --defsym on the command line.  */
 	    exp_fold_tree_no_dot (s->assignment_statement.exp);
 	  break;
@@ -3410,6 +3432,8 @@ insert_undefined (const char *name)
     {
       h->type = bfd_link_hash_undefined;
       h->u.undef.abfd = NULL;
+      if (is_elf_hash_table (link_info.hash))
+	((struct elf_link_hash_entry *) h)->mark = 1;
       bfd_link_add_undef (link_info.hash, h);
     }
 }
@@ -3683,7 +3707,7 @@ map_input_to_output_sections
 	     processed the segment marker.  Originally, the linker
 	     treated segment directives (like -Ttext on the
 	     command-line) as section directives.  We honor the
-	     section directive semantics for backwards compatibilty;
+	     section directive semantics for backwards compatibility;
 	     linker scripts that do not specifically check for
 	     SEGMENT_START automatically get the old semantics.  */
 	  if (!s->address_statement.segment
@@ -4414,6 +4438,15 @@ print_wild_statement (lang_wild_statement_type *w,
 
   print_space ();
 
+  if (w->exclude_name_list)
+    {
+      name_list *tmp;
+      minfo ("EXCLUDE_FILE(%s", w->exclude_name_list->name);
+      for (tmp = w->exclude_name_list->next; tmp; tmp = tmp->next)
+        minfo (" %s", tmp->name);
+      minfo (") ");
+    }
+
   if (w->filenames_sorted)
     minfo ("SORT(");
   if (w->filename != NULL)
@@ -4644,7 +4677,8 @@ size_input_section
 
   if (i->sec_info_type == SEC_INFO_TYPE_JUST_SYMS)
     i->output_offset = i->vma - o->vma;
-  else if ((i->flags & SEC_EXCLUDE) != 0)
+  else if (((i->flags & SEC_EXCLUDE) != 0)
+	   || output_section_statement->ignored)
     i->output_offset = dot - o->vma;
   else
     {
@@ -5613,6 +5647,7 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 	case lang_output_section_statement_enum:
 	  {
 	    lang_output_section_statement_type *os;
+	    bfd_vma newdot;
 
 	    os = &(s->output_section_statement);
 	    os->after_end = *found_end;
@@ -5624,18 +5659,24 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 		    prefer_next_section = FALSE;
 		  }
 		dot = os->bfd_section->vma;
+	      }
+	    newdot = lang_do_assignments_1 (os->children.head,
+					    os, os->fill, dot, found_end);
+	    if (!os->ignored)
+	      {
+		if (os->bfd_section != NULL)
+		  {
+		    /* .tbss sections effectively have zero size.  */
+		    if (!IS_TBSS (os->bfd_section)
+			|| bfd_link_relocatable (&link_info))
+		      dot += TO_ADDR (os->bfd_section->size);
 
-		lang_do_assignments_1 (os->children.head,
-				       os, os->fill, dot, found_end);
-
-		/* .tbss sections effectively have zero size.  */
-		if (!IS_TBSS (os->bfd_section)
-		    || bfd_link_relocatable (&link_info))
-		  dot += TO_ADDR (os->bfd_section->size);
-
-		if (os->update_dot_tree != NULL)
-		  exp_fold_tree (os->update_dot_tree, bfd_abs_section_ptr,
-				 &dot);
+		    if (os->update_dot_tree != NULL)
+		      exp_fold_tree (os->update_dot_tree,
+				     bfd_abs_section_ptr, &dot);
+		  }
+		else
+		  dot = newdot;
 	      }
 	  }
 	  break;
@@ -5659,7 +5700,7 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 	      if (expld.result.section != NULL)
 		s->data_statement.value += expld.result.section->vma;
 	    }
-	  else
+	  else if (expld.phase == lang_final_phase_enum)
 	    einfo (_("%F%P: invalid data statement\n"));
 	  {
 	    unsigned int size;
@@ -5692,7 +5733,7 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 			 bfd_abs_section_ptr, &dot);
 	  if (expld.result.valid_p)
 	    s->reloc_statement.addend_value = expld.result.value;
-	  else
+	  else if (expld.phase == lang_final_phase_enum)
 	    einfo (_("%F%P: invalid reloc statement\n"));
 	  dot += TO_ADDR (bfd_get_reloc_size (s->reloc_statement.howto));
 	  break;
@@ -5728,7 +5769,8 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 		*found_end = TRUE;
 	    }
 	  exp_fold_tree (s->assignment_statement.exp,
-			 current_os->bfd_section,
+			 (current_os->bfd_section != NULL
+			  ? current_os->bfd_section : bfd_und_section_ptr),
 			 &dot);
 	  break;
 
@@ -5979,7 +6021,8 @@ lang_end (void)
    BFD.  */
 
 static void
-ignore_bfd_errors (const char *s ATTRIBUTE_UNUSED, ...)
+ignore_bfd_errors (const char *fmt ATTRIBUTE_UNUSED,
+		   va_list ap ATTRIBUTE_UNUSED)
 {
   /* Don't do anything.  */
 }
@@ -6049,7 +6092,7 @@ lang_check (void)
 	     information which is needed in the output file.  */
 	  if (!command_line.warn_mismatch)
 	    pfn = bfd_set_error_handler (ignore_bfd_errors);
-	  if (!bfd_merge_private_bfd_data (input_bfd, link_info.output_bfd))
+	  if (!bfd_merge_private_bfd_data (input_bfd, &link_info))
 	    {
 	      if (command_line.warn_mismatch)
 		einfo (_("%P%X: failed to merge target specific data"
@@ -6841,7 +6884,7 @@ lang_process (void)
 	 are any more to be added to the link before we call the
 	 emulation's after_open hook.  We create a private list of
 	 input statements for this purpose, which we will eventually
-	 insert into the global statment list after the first claimed
+	 insert into the global statement list after the first claimed
 	 file.  */
       added = *stat_ptr;
       /* We need to manipulate all three chains in synchrony.  */
@@ -7059,11 +7102,13 @@ lang_add_wild (struct wildcard_spec *filespec,
   new_stmt->filename = NULL;
   new_stmt->filenames_sorted = FALSE;
   new_stmt->section_flag_list = NULL;
+  new_stmt->exclude_name_list = NULL;
   if (filespec != NULL)
     {
       new_stmt->filename = filespec->name;
       new_stmt->filenames_sorted = filespec->sorted == by_name;
       new_stmt->section_flag_list = filespec->section_flag_list;
+      new_stmt->exclude_name_list = filespec->exclude_name_list;
     }
   new_stmt->section_list = section_list;
   new_stmt->keep_sections = keep_sections;

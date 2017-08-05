@@ -1,5 +1,5 @@
 /* tc-z80.c -- Assemble code for the Zilog Z80 and ASCII R800
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
    Contributed by Arnold Metselaar <arnold_m@operamail.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -317,6 +317,7 @@ z80_start_line_hook (void)
 	      *p++ = buf[2];
 	      break;
 	    }
+	  /* Fall through.  */
 	case '"':
 	  for (quote = *p++; quote != *p && '\n' != *p; ++p)
 	    /* No escapes.  */ ;
@@ -539,7 +540,7 @@ contains_register(symbolS *sym)
     return 0;
 }
 
-/* Parse general expression, not loooking for indexed adressing.  */
+/* Parse general expression, not loooking for indexed addressing.  */
 static const char *
 parse_exp_not_indexed (const char *s, expressionS *op)
 {
@@ -874,6 +875,7 @@ emit_mr (char prefix, char opcode, const char *args)
 	    }
 	  check_mach (INS_UNPORT);
 	}
+      /* Fall through.  */
     case O_register:
       emit_mx (prefix, opcode, 0, & arg_m);
       break;
@@ -1776,6 +1778,7 @@ emit_mulub (char prefix ATTRIBUTE_UNUSED, char opcode, const char * args)
 	      *q = opcode + ((reg - 'b') << 3);
 	      break;
 	    }
+	  /* Fall through.  */
 	default:
 	  ill_op ();
 	}

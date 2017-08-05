@@ -1,5 +1,5 @@
 /* tc-sh.c -- Assemble code for the Renesas / SuperH SH
-   Copyright (C) 1993-2016 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -2414,11 +2414,13 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 	      break;
 	    case IMM0_3s:
 	      nbuf[indx] |= 0x08;
+	      /* Fall through.  */
 	    case IMM0_3c:
 	      insert (output + low_byte, BFD_RELOC_SH_IMM3, 0, operand);
 	      break;
 	    case IMM0_3Us:
 	      nbuf[indx] |= 0x80;
+	      /* Fall through.  */
 	    case IMM0_3Uc:
 	      insert (output + low_byte, BFD_RELOC_SH_IMM3U, 0, operand);
 	      break;

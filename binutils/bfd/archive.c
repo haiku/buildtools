@@ -1,5 +1,5 @@
 /* BFD back-end for archive files (libraries).
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Written by Cygnus Support.  Mostly Gumby Henkel-Wallace's fault.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -2289,7 +2289,7 @@ _bfd_write_archive_contents (bfd *arch)
 	{
 	  if (bfd_update_armap_timestamp (arch))
 	    break;
-	  (*_bfd_error_handler)
+	  _bfd_error_handler
 	    (_("Warning: writing archive was slow: rewriting timestamp\n"));
 	}
       while (++tries < 6);
@@ -2401,7 +2401,7 @@ _bfd_compute_and_write_armap (bfd *arch, unsigned int elength)
 			}
 
 		      if (strcmp (syms[src_count]->name, "__gnu_lto_slim") == 0)
-			(*_bfd_error_handler)
+			_bfd_error_handler
 			  (_("%s: plugin needed to handle lto object"),
 			   bfd_get_filename (current));
 		      namelen = strlen (syms[src_count]->name);

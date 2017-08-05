@@ -1,5 +1,5 @@
 /* tc-s390.c -- Assemble for the S390
-   Copyright (C) 2000-2016 Free Software Foundation, Inc.
+   Copyright (C) 2000-2017 Free Software Foundation, Inc.
    Contributed by Martin Schwidefsky (schwidefsky@de.ibm.com).
 
    This file is part of GAS, the GNU Assembler.
@@ -41,8 +41,11 @@ static int s390_arch_size = 0;
    Since with S/390 a newer CPU always supports everything from its
    predecessors this will accept every valid asm input.  */
 static unsigned int current_cpu = S390_OPCODE_MAXCPU - 1;
+/* All facilities are enabled by default.  */
+static unsigned int current_flags = S390_INSTR_FLAG_FACILITY_MASK;
+/* The mode mask default is picked in init_default_arch depending on
+   the current cpu.  */
 static unsigned int current_mode_mask = 0;
-static unsigned int current_flags = 0;
 
 /* Set to TRUE if the highgprs flag in the ELF header needs to be set
    for the output file.  */
@@ -269,20 +272,26 @@ s390_parse_cpu (const char *         arg,
   static struct
   {
     const char * name;
-    unsigned int len;
+    unsigned int name_len;
+    const char * alt_name;
+    unsigned int alt_name_len;
     unsigned int flags;
   } cpu_table[S390_OPCODE_MAXCPU] =
   {
-    { STRING_COMMA_LEN ("g5"), 0 },
-    { STRING_COMMA_LEN ("g6"), 0 },
-    { STRING_COMMA_LEN ("z900"), 0 },
-    { STRING_COMMA_LEN ("z990"), 0 },
-    { STRING_COMMA_LEN ("z9-109"), 0 },
-    { STRING_COMMA_LEN ("z9-ec"), 0 },
-    { STRING_COMMA_LEN ("z10"), 0 },
-    { STRING_COMMA_LEN ("z196"), 0 },
-    { STRING_COMMA_LEN ("zEC12"), S390_INSTR_FLAG_HTM },
-    { STRING_COMMA_LEN ("z13"), S390_INSTR_FLAG_HTM | S390_INSTR_FLAG_VX }
+    { STRING_COMMA_LEN ("g5"), STRING_COMMA_LEN ("arch3"), 0 },
+    { STRING_COMMA_LEN ("g6"), STRING_COMMA_LEN (""), 0 },
+    { STRING_COMMA_LEN ("z900"), STRING_COMMA_LEN ("arch5"), 0 },
+    { STRING_COMMA_LEN ("z990"), STRING_COMMA_LEN ("arch6"), 0 },
+    { STRING_COMMA_LEN ("z9-109"), STRING_COMMA_LEN (""), 0 },
+    { STRING_COMMA_LEN ("z9-ec"), STRING_COMMA_LEN ("arch7"), 0 },
+    { STRING_COMMA_LEN ("z10"), STRING_COMMA_LEN ("arch8"), 0 },
+    { STRING_COMMA_LEN ("z196"), STRING_COMMA_LEN ("arch9"), 0 },
+    { STRING_COMMA_LEN ("zEC12"), STRING_COMMA_LEN ("arch10"),
+      S390_INSTR_FLAG_HTM },
+    { STRING_COMMA_LEN ("z13"), STRING_COMMA_LEN ("arch11"),
+      S390_INSTR_FLAG_HTM | S390_INSTR_FLAG_VX },
+    { STRING_COMMA_LEN ("arch12"), STRING_COMMA_LEN (""),
+      S390_INSTR_FLAG_HTM | S390_INSTR_FLAG_VX }
   };
   static struct
   {
@@ -309,17 +318,31 @@ s390_parse_cpu (const char *         arg,
     {
       for (icpu = 0; icpu < S390_OPCODE_MAXCPU; icpu++)
 	{
-	  unsigned int l;
+	  unsigned int l, l_alt;
 
-	  l = cpu_table[icpu].len;
+	  l = cpu_table[icpu].name_len;
+
 	  if (strncmp (arg, cpu_table[icpu].name, l) == 0
 	      && (arg[l] == 0 || arg[l] == '+'))
 	    {
 	      arg += l;
 	      break;
 	    }
+
+	  l_alt = cpu_table[icpu].alt_name_len;
+
+	  if (l_alt > 0
+	      && strncmp (arg, cpu_table[icpu].alt_name, l_alt) == 0
+	      && (arg[l_alt] == 0 || arg[l_alt] == '+'))
+	    {
+	      arg += l_alt;
+	      break;
+	    }
 	}
     }
+
+  if (icpu == S390_OPCODE_MAXCPU)
+    return S390_OPCODE_MAXCPU;
 
   ilp_bak = input_line_pointer;
   if (icpu != S390_OPCODE_MAXCPU)
@@ -908,6 +931,7 @@ s390_exp_compare (expressionS *exp1, expressionS *exp2)
 
     case O_big:
       as_bad (_("Can't handle O_big in s390_exp_compare"));
+      return 0;
 
     case O_symbol:     /* X_add_symbol & X_add_number must be equal.  */
     case O_symbol_rva:
@@ -1630,6 +1654,9 @@ md_gather_operands (char *str,
 	      || fixups[i].reloc == BFD_RELOC_390_GOT20
 	      || fixups[i].reloc == BFD_RELOC_390_GOT16)
 	    fixP->fx_no_overflow = 1;
+
+	  if (operand->flags & S390_OPERAND_PCREL)
+	    fixP->fx_pcrel_adjust = operand->shift / 8;
 	}
       else
 	fix_new_exp (frag_now, f - frag_now->fr_literal, 4, &fixups[i].exp,
@@ -2284,6 +2311,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  fixP->fx_size = 2;
 	  fixP->fx_where += 1;
 	  fixP->fx_offset += 1;
+	  fixP->fx_pcrel_adjust = 1;
 	  fixP->fx_r_type = BFD_RELOC_390_PC12DBL;
 	}
       else if (operand->bits == 16 && operand->shift == 16)
@@ -2294,9 +2322,19 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	    {
 	      fixP->fx_r_type = BFD_RELOC_390_PC16DBL;
 	      fixP->fx_offset += 2;
+	      fixP->fx_pcrel_adjust = 2;
 	    }
 	  else
 	    fixP->fx_r_type = BFD_RELOC_16;
+	}
+      else if (operand->bits == 16 && operand->shift == 32
+	       && (operand->flags & S390_OPERAND_PCREL))
+	{
+	  fixP->fx_size = 2;
+	  fixP->fx_where += 4;
+	  fixP->fx_offset += 4;
+	  fixP->fx_pcrel_adjust = 4;
+	  fixP->fx_r_type = BFD_RELOC_390_PC16DBL;
 	}
       else if (operand->bits == 24 && operand->shift == 24
 	       && (operand->flags & S390_OPERAND_PCREL))
@@ -2304,6 +2342,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  fixP->fx_size = 3;
 	  fixP->fx_where += 3;
 	  fixP->fx_offset += 3;
+	  fixP->fx_pcrel_adjust = 3;
 	  fixP->fx_r_type = BFD_RELOC_390_PC24DBL;
 	}
       else if (operand->bits == 32 && operand->shift == 16
@@ -2312,6 +2351,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  fixP->fx_size = 4;
 	  fixP->fx_where += 2;
 	  fixP->fx_offset += 2;
+	  fixP->fx_pcrel_adjust = 2;
 	  fixP->fx_r_type = BFD_RELOC_390_PC32DBL;
 	}
       else
@@ -2347,7 +2387,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	case BFD_RELOC_390_PC12DBL:
 	case BFD_RELOC_390_PLT12DBL:
 	  if (fixP->fx_pcrel)
-	    value++;
+	    value += fixP->fx_pcrel_adjust;
 
 	  if (fixP->fx_done)
 	    {
@@ -2398,14 +2438,14 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  break;
 	case BFD_RELOC_390_PC16DBL:
 	case BFD_RELOC_390_PLT16DBL:
-	  value += 2;
+	  value += fixP->fx_pcrel_adjust;
 	  if (fixP->fx_done)
 	    md_number_to_chars (where, (offsetT) value >> 1, 2);
 	  break;
 
 	case BFD_RELOC_390_PC24DBL:
 	case BFD_RELOC_390_PLT24DBL:
-	  value += 3;
+	  value += fixP->fx_pcrel_adjust;
 	  if (fixP->fx_done)
 	    {
 	      unsigned int mop;
@@ -2443,7 +2483,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	case BFD_RELOC_390_GOTPCDBL:
 	case BFD_RELOC_390_GOTENT:
 	case BFD_RELOC_390_GOTPLTENT:
-	  value += 2;
+	  value += fixP->fx_pcrel_adjust;
 	  if (fixP->fx_done)
 	    md_number_to_chars (where, (offsetT) value >> 1, 4);
 	  break;

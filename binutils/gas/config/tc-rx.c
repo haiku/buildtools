@@ -1,5 +1,5 @@
 /* tc-rx.c -- Assembler for the Renesas RX
-   Copyright (C) 2008-2016 Free Software Foundation, Inc.
+   Copyright (C) 2008-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -22,7 +22,6 @@
 #include "struc-symbol.h"
 #include "safe-ctype.h"
 #include "dwarf2dbg.h"
-#include "libbfd.h"
 #include "elf/common.h"
 #include "elf/rx.h"
 #include "rx-defs.h"
@@ -1078,7 +1077,7 @@ scan_for_infix_rx_pseudo_ops (char * str)
   if (dot == NULL || dot == str)
     return FALSE;
 
-  /* A real pseudo-op must be preceeded by whitespace.  */
+  /* A real pseudo-op must be preceded by whitespace.  */
   if (dot[-1] != ' ' && dot[-1] != '\t')
     return FALSE;
 
@@ -2402,8 +2401,10 @@ md_apply_fix (struct fix * f ATTRIBUTE_UNUSED,
 
     case BFD_RELOC_RX_GPRELL:
       val >>= 1;
+      /* Fall through.  */
     case BFD_RELOC_RX_GPRELW:
       val >>= 1;
+      /* Fall through.  */
     case BFD_RELOC_RX_GPRELB:
 #if RX_OPCODE_BIG_ENDIAN
       op[1] = val & 0xff;
@@ -2670,7 +2671,7 @@ rx_elf_final_processing (void)
   elf_elfheader (stdoutput)->e_flags |= elf_flags;
 }
 
-/* Scan the current input line for occurances of Renesas
+/* Scan the current input line for occurrences of Renesas
    local labels and replace them with the GAS version.  */
 
 void

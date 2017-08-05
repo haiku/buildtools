@@ -1,5 +1,5 @@
 /* tc-bfin.c -- Assembler for the ADI Blackfin.
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -26,7 +26,6 @@
 #ifdef OBJ_ELF
 #include "dwarf2dbg.h"
 #endif
-#include "libbfd.h"
 #include "elf/common.h"
 #include "elf/bfin.h"
 

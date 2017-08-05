@@ -1,8 +1,8 @@
 /* ft32-specific support for 32-bit ELF.
-   Copyright (C) 2013-2016 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
    Copied from elf32-moxie.c which is..
-   Copyright (C) 2009-2016 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -160,7 +160,7 @@ struct ft32_reloc_map
 static const struct ft32_reloc_map ft32_reloc_map [] =
 {
   { BFD_RELOC_NONE,            R_FT32_NONE },
-  { BFD_RELOC_32,              R_FT32_20 },
+  { BFD_RELOC_32,              R_FT32_32 },
   { BFD_RELOC_16,              R_FT32_16 },
   { BFD_RELOC_8,               R_FT32_8 },
   { BFD_RELOC_FT32_10,           R_FT32_10 },

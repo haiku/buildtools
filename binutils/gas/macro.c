@@ -1,5 +1,5 @@
 /* macro.c - macro support for gas
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
 
    Written by Steve and Judy Chamberlain of Cygnus Support,
       sac@cygnus.com
@@ -842,7 +842,7 @@ macro_expand_body (sb *in, sb *out, formal_entry *formals,
 	    {
 	      /* Sub in the macro invocation number.  */
 
-	      char buffer[10];
+	      char buffer[12];
 	      src++;
 	      sprintf (buffer, "%d", macro_number);
 	      sb_add_string (out, buffer);

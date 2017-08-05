@@ -1,5 +1,5 @@
 # Expect script for ld-i386 tests
-#   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+#   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -413,6 +413,7 @@ run_dump_test "pr20253-4a"
 run_dump_test "pr20253-4b"
 run_dump_test "pr20253-4c"
 run_dump_test "pr20253-5"
+run_dump_test "pr20515"
 
 if { !([istarget "i?86-*-linux*"]
        || [istarget "i?86-*-gnu*"]
@@ -468,7 +469,7 @@ proc undefined_weak {cflags ldflags} {
 
     exec cp tmpdir/libpr19704a.so tmpdir/libpr19704.so
 
-    run_ld_link_exec_tests [] [list \
+    run_ld_link_exec_tests [list \
 	[list \
 	    "Run pr19704" \
 	    "$ldflags tmpdir/libpr19704.so -R tmpdir" \
@@ -734,7 +735,7 @@ if { [isnative]
 	] \
     ]
 
-    run_ld_link_exec_tests [] [list \
+    run_ld_link_exec_tests [list \
 	[list \
 	    "Run plt-main" \
 	    "tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
@@ -831,9 +832,23 @@ if { [isnative]
 	    "-fPIC -O2 -g" \
 	    { ifunc-1a.c ifunc-1b.S ifunc-1c.S ifunc-1d.S } \
 	] \
+	[list \
+	    "Build pr21168a.o" \
+	    "" \
+	    "" \
+	    { pr21168a.c } \
+	] \
+	[list \
+	    "Build pr21168.so" \
+	    "-shared" \
+	    "" \
+	    { pr21168b.S } \
+	    "" \
+	    "pr21168.so" \
+	] \
     ]
 
-    run_ld_link_exec_tests [] [list \
+    run_ld_link_exec_tests [list \
 	[list \
 	    "Run ifunc-1a" \
 	    "tmpdir/ifunc-1a.o tmpdir/ifunc-1b.o \
@@ -852,6 +867,14 @@ if { [isnative]
 	    "ifunc-1b" \
 	    "pass.out" \
 	] \
+	[list \
+	    "Run pr21168" \
+	    "tmpdir/pr21168a.o tmpdir/pr21168.so" \
+	    "" \
+	    { dummy.c } \
+	    "pr21168" \
+	    "pass.out" \
+	] \
     ]
 }
 
@@ -863,3 +886,4 @@ if { !([istarget "i?86-*-linux*"]
 # Linux only tests
 run_dump_test "pltgot-1"
 run_dump_test "pltgot-2"
+run_dump_test "pr20830"

@@ -1,5 +1,5 @@
 /* read.c - read a source file -
-   Copyright (C) 1986-2016 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -3394,11 +3394,20 @@ s_space (int mult)
 	{
 	  offsetT i;
 
-	  if (mult == 0)
-	    mult = 1;
-	  bytes = mult * exp.X_add_number;
-	  for (i = 0; i < exp.X_add_number; i++)
-	    emit_expr (&val, mult);
+	  /* PR 20901: Check for excessive values.
+	     FIXME: 1<<10 is an arbitrary limit.  Maybe use maxpagesize instead ?  */
+	  if (exp.X_add_number < 0 || exp.X_add_number > (1 << 10))
+	    as_bad (_("size value for space directive too large: %lx"),
+		    (long) exp.X_add_number);
+	  else
+	    {
+	      if (mult == 0)
+		mult = 1;
+	      bytes = mult * exp.X_add_number;
+
+	      for (i = 0; i < exp.X_add_number; i++)
+		emit_expr (&val, mult);
+	    }
 	}
     }
   else
@@ -4085,14 +4094,14 @@ s_reloc (int ignore ATTRIBUTE_UNUSED)
     case O_constant:
       exp.X_add_symbol = section_symbol (now_seg);
       exp.X_op = O_symbol;
-      /* Fall thru */
+      /* Fallthru */
     case O_symbol:
       if (exp.X_add_number == 0)
 	{
 	  reloc->u.a.offset_sym = exp.X_add_symbol;
 	  break;
 	}
-      /* Fall thru */
+      /* Fallthru */
     default:
       reloc->u.a.offset_sym = make_expr_symbol (&exp);
       break;
@@ -5533,6 +5542,12 @@ next_char_of_string (void)
   c = *input_line_pointer++ & CHAR_MASK;
   switch (c)
     {
+    case 0:
+      /* PR 20902: Do not advance past the end of the buffer.  */
+      -- input_line_pointer;
+      c = NOT_A_CHAR;
+      break;
+
     case '\"':
       c = NOT_A_CHAR;
       break;
@@ -5627,6 +5642,12 @@ next_char_of_string (void)
 	  as_warn (_("unterminated string; newline inserted"));
 	  c = '\n';
 	  bump_line_counters ();
+	  break;
+
+	case 0:
+	  /* Do not advance past the end of the buffer.  */
+	  -- input_line_pointer;
+	  c = NOT_A_CHAR;
 	  break;
 
 	default:

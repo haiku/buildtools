@@ -1,5 +1,5 @@
 /* ELF object file format
-   Copyright (C) 1992-2016 Free Software Foundation, Inc.
+   Copyright (C) 1992-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -813,6 +813,7 @@ obj_elf_parse_section_letters (char *str, size_t len, bfd_boolean *is_clone)
 		}
 	      break;
 	    }
+	  /* Fall through.  */
 	default:
 	  {
 	    const char *bad_msg = _("unrecognized .section attribute:"

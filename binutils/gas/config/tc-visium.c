@@ -1,6 +1,6 @@
 /* This is the machine dependent code of the Visium Assembler.
 
-   Copyright (C) 2005-2016 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -1520,8 +1520,7 @@ md_assemble (char *str0)
 	  return;
 	}
       this_dest = r1;
-
-      /* fall through...  */
+      /* Fall through.  */
 
     case mode_i:
       /* MOVIL/WRTL traditionally get an implicit "%l" applied

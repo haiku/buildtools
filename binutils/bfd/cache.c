@@ -1,6 +1,6 @@
 /* BFD library -- caching of file descriptors.
 
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
 
    Hacked by Steve Chamberlain of Cygnus Support (steve@cygnus.com).
 
@@ -268,8 +268,9 @@ bfd_cache_lookup_worker (bfd *abfd, enum cache_flag flag)
   else
     return (FILE *) abfd->iostream;
 
-  (*_bfd_error_handler) (_("reopening %B: %s\n"),
-			 orig_bfd, bfd_errmsg (bfd_get_error ()));
+  /* xgettext:c-format */
+  _bfd_error_handler (_("reopening %B: %s\n"),
+		      orig_bfd, bfd_errmsg (bfd_get_error ()));
   return NULL;
 }
 

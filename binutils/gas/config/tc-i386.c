@@ -1,5 +1,5 @@
 /* tc-i386.c -- Assemble code for the Intel 80386
-   Copyright (C) 1989-2016 Free Software Foundation, Inc.
+   Copyright (C) 1989-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -958,12 +958,16 @@ static const arch_entry cpu_arch[] =
     CPU_SE1_FLAGS, 0 },
   { STRING_COMMA_LEN (".clwb"), PROCESSOR_UNKNOWN,
     CPU_CLWB_FLAGS, 0 },
-  { STRING_COMMA_LEN (".pcommit"), PROCESSOR_UNKNOWN,
-    CPU_PCOMMIT_FLAGS, 0 },
   { STRING_COMMA_LEN (".avx512ifma"), PROCESSOR_UNKNOWN,
     CPU_AVX512IFMA_FLAGS, 0 },
   { STRING_COMMA_LEN (".avx512vbmi"), PROCESSOR_UNKNOWN,
     CPU_AVX512VBMI_FLAGS, 0 },
+  { STRING_COMMA_LEN (".avx512_4fmaps"), PROCESSOR_UNKNOWN,
+    CPU_AVX512_4FMAPS_FLAGS, 0 },
+  { STRING_COMMA_LEN (".avx512_4vnniw"), PROCESSOR_UNKNOWN,
+    CPU_AVX512_4VNNIW_FLAGS, 0 },
+  { STRING_COMMA_LEN (".avx512_vpopcntdq"), PROCESSOR_UNKNOWN,
+    CPU_AVX512_VPOPCNTDQ_FLAGS, 0 },
   { STRING_COMMA_LEN (".clzero"), PROCESSOR_UNKNOWN,
     CPU_CLZERO_FLAGS, 0 },
   { STRING_COMMA_LEN (".mwaitx"), PROCESSOR_UNKNOWN,
@@ -972,6 +976,8 @@ static const arch_entry cpu_arch[] =
     CPU_OSPKE_FLAGS, 0 },
   { STRING_COMMA_LEN (".rdpid"), PROCESSOR_UNKNOWN,
     CPU_RDPID_FLAGS, 0 },
+  { STRING_COMMA_LEN (".ptwrite"), PROCESSOR_UNKNOWN,
+    CPU_PTWRITE_FLAGS, 0 },
 };
 
 static const noarch_entry cpu_noarch[] =
@@ -999,6 +1005,9 @@ static const noarch_entry cpu_noarch[] =
   { STRING_COMMA_LEN ("noavx512vl"), CPU_ANY_AVX512VL_FLAGS },
   { STRING_COMMA_LEN ("noavx512ifma"), CPU_ANY_AVX512IFMA_FLAGS },
   { STRING_COMMA_LEN ("noavx512vbmi"), CPU_ANY_AVX512VBMI_FLAGS },
+  { STRING_COMMA_LEN ("noavx512_4fmaps"), CPU_ANY_AVX512_4FMAPS_FLAGS },
+  { STRING_COMMA_LEN ("noavx512_4vnniw"), CPU_ANY_AVX512_4VNNIW_FLAGS },
+  { STRING_COMMA_LEN ("noavx512_vpopcntdq"), CPU_ANY_AVX512_VPOPCNTDQ_FLAGS },
 };
 
 #ifdef I386COFF
@@ -1372,9 +1381,11 @@ operand_type_all_zero (const union i386_operand_type *x)
     case 3:
       if (x->array[2])
 	return 0;
+      /* Fall through.  */
     case 2:
       if (x->array[1])
 	return 0;
+      /* Fall through.  */
     case 1:
       return !x->array[0];
     default:
@@ -1389,10 +1400,13 @@ operand_type_set (union i386_operand_type *x, unsigned int v)
     {
     case 3:
       x->array[2] = v;
+      /* Fall through.  */
     case 2:
       x->array[1] = v;
+      /* Fall through.  */
     case 1:
       x->array[0] = v;
+      /* Fall through.  */
       break;
     default:
       abort ();
@@ -1408,9 +1422,11 @@ operand_type_equal (const union i386_operand_type *x,
     case 3:
       if (x->array[2] != y->array[2])
 	return 0;
+      /* Fall through.  */
     case 2:
       if (x->array[1] != y->array[1])
 	return 0;
+      /* Fall through.  */
     case 1:
       return x->array[0] == y->array[0];
       break;
@@ -1427,9 +1443,11 @@ cpu_flags_all_zero (const union i386_cpu_flags *x)
     case 3:
       if (x->array[2])
 	return 0;
+      /* Fall through.  */
     case 2:
       if (x->array[1])
 	return 0;
+      /* Fall through.  */
     case 1:
       return !x->array[0];
     default:
@@ -1446,9 +1464,11 @@ cpu_flags_equal (const union i386_cpu_flags *x,
     case 3:
       if (x->array[2] != y->array[2])
 	return 0;
+      /* Fall through.  */
     case 2:
       if (x->array[1] != y->array[1])
 	return 0;
+      /* Fall through.  */
     case 1:
       return x->array[0] == y->array[0];
       break;
@@ -1471,8 +1491,10 @@ cpu_flags_and (i386_cpu_flags x, i386_cpu_flags y)
     {
     case 3:
       x.array [2] &= y.array [2];
+      /* Fall through.  */
     case 2:
       x.array [1] &= y.array [1];
+      /* Fall through.  */
     case 1:
       x.array [0] &= y.array [0];
       break;
@@ -1489,8 +1511,10 @@ cpu_flags_or (i386_cpu_flags x, i386_cpu_flags y)
     {
     case 3:
       x.array [2] |= y.array [2];
+      /* Fall through.  */
     case 2:
       x.array [1] |= y.array [1];
+      /* Fall through.  */
     case 1:
       x.array [0] |= y.array [0];
       break;
@@ -1507,8 +1531,10 @@ cpu_flags_and_not (i386_cpu_flags x, i386_cpu_flags y)
     {
     case 3:
       x.array [2] &= ~y.array [2];
+      /* Fall through.  */
     case 2:
       x.array [1] &= ~y.array [1];
+      /* Fall through.  */
     case 1:
       x.array [0] &= ~y.array [0];
       break;
@@ -1516,20 +1542,6 @@ cpu_flags_and_not (i386_cpu_flags x, i386_cpu_flags y)
       abort ();
     }
   return x;
-}
-
-static int
-valid_iamcu_cpu_flags (const i386_cpu_flags *flags)
-{
-  if (cpu_arch_isa == PROCESSOR_IAMCU)
-    {
-      static const i386_cpu_flags iamcu_flags = CPU_IAMCU_COMPAT_FLAGS;
-      i386_cpu_flags compat_flags;
-      compat_flags = cpu_flags_and_not (*flags, iamcu_flags);
-      return cpu_flags_all_zero (&compat_flags);
-    }
-  else
-    return 1;
 }
 
 #define CPU_FLAGS_ARCH_MATCH		0x1
@@ -1619,8 +1631,10 @@ operand_type_and (i386_operand_type x, i386_operand_type y)
     {
     case 3:
       x.array [2] &= y.array [2];
+      /* Fall through.  */
     case 2:
       x.array [1] &= y.array [1];
+      /* Fall through.  */
     case 1:
       x.array [0] &= y.array [0];
       break;
@@ -1637,8 +1651,10 @@ operand_type_or (i386_operand_type x, i386_operand_type y)
     {
     case 3:
       x.array [2] |= y.array [2];
+      /* Fall through.  */
     case 2:
       x.array [1] |= y.array [1];
+      /* Fall through.  */
     case 1:
       x.array [0] |= y.array [0];
       break;
@@ -1655,8 +1671,10 @@ operand_type_xor (i386_operand_type x, i386_operand_type y)
     {
     case 3:
       x.array [2] ^= y.array [2];
+      /* Fall through.  */
     case 2:
       x.array [1] ^= y.array [1];
+      /* Fall through.  */
     case 1:
       x.array [0] ^= y.array [0];
       break;
@@ -2422,10 +2440,7 @@ set_cpu_arch (int dummy ATTRIBUTE_UNUSED)
 	      flags = cpu_flags_or (cpu_arch_flags,
 				    cpu_arch[j].flags);
 
-	      if (!valid_iamcu_cpu_flags (&flags))
-		as_fatal (_("`%s' isn't valid for Intel MCU"),
-			  cpu_arch[j].name);
-	      else if (!cpu_flags_equal (&flags, &cpu_arch_flags))
+	      if (!cpu_flags_equal (&flags, &cpu_arch_flags))
 		{
 		  if (cpu_sub_arch_name)
 		    {
@@ -3943,6 +3958,7 @@ check_suffix:
 	  if (intel_syntax && (intel_float_operand (mnemonic) & 2))
 	    i.suffix = SHORT_MNEM_SUFFIX;
 	  else
+	    /* Fall through.  */
 	case BYTE_MNEM_SUFFIX:
 	case QWORD_MNEM_SUFFIX:
 	  i.suffix = mnem_p[-1];
@@ -4218,6 +4234,7 @@ swap_operands (void)
     case 5:
     case 4:
       swap_2_operands (1, i.operands - 2);
+      /* Fall through.  */
     case 3:
     case 2:
       swap_2_operands (0, i.operands - 1);
@@ -4957,11 +4974,13 @@ match_template (char mnem_suffix)
 	      else if (t->opcode_modifier.d)
 		goto check_reverse;
 	    }
+	  /* Fall through.  */
 
 	case 3:
 	  /* If we swap operand in encoding, we match the next one.  */
 	  if (i.swap_operand && t->opcode_modifier.s)
 	    continue;
+	  /* Fall through.  */
 	case 4:
 	case 5:
 	  overlap1 = operand_type_and (i.types[1], operand_types[1]);
@@ -5013,9 +5032,11 @@ check_reverse:
 		case 5:
 		  overlap4 = operand_type_and (i.types[4],
 					       operand_types[4]);
+		  /* Fall through.  */
 		case 4:
 		  overlap3 = operand_type_and (i.types[3],
 					       operand_types[3]);
+		  /* Fall through.  */
 		case 3:
 		  overlap2 = operand_type_and (i.types[2],
 					       operand_types[2]);
@@ -5033,6 +5054,7 @@ check_reverse:
 						       i.types[4],
 						       operand_types[4]))
 		    continue;
+		  /* Fall through.  */
 		case 4:
 		  if (!operand_type_match (overlap3, i.types[3])
 		      || (check_register
@@ -5043,6 +5065,7 @@ check_reverse:
 							   i.types[3],
 							   operand_types[3])))
 		    continue;
+		  /* Fall through.  */
 		case 3:
 		  /* Here we make use of the fact that there are no
 		     reverse match 3 operand instructions, and all 3
@@ -5385,6 +5408,7 @@ process_suffix (void)
 	      i.suffix = QWORD_MNEM_SUFFIX;
 	      break;
 	    }
+	  /* Fall through.  */
 	case CODE_32BIT:
 	  if (!i.tm.opcode_modifier.no_lsuf)
 	    i.suffix = LONG_MNEM_SUFFIX;
@@ -5670,7 +5694,7 @@ check_qword_reg (void)
     /* Warn if the r prefix on a general reg is missing.  */
     else if ((i.types[op].bitfield.reg16
 	      || i.types[op].bitfield.reg32)
-	     && (i.tm.operand_types[op].bitfield.reg32
+	     && (i.tm.operand_types[op].bitfield.reg64
 		 || i.tm.operand_types[op].bitfield.acc))
       {
 	/* Prohibit these changes in the 64bit mode, since the
@@ -5951,6 +5975,25 @@ duplicate:
       i.reg_operands--;
       i.tm.operands--;
     }
+  else if (i.tm.opcode_modifier.implicitquadgroup)
+    {
+      /* The second operand must be {x,y,z}mmN, where N is a multiple of 4. */
+      gas_assert (i.operands >= 2
+          && (operand_type_equal (&i.types[1], &regxmm)
+              || operand_type_equal (&i.types[1], &regymm)
+              || operand_type_equal (&i.types[1], &regzmm)));
+      unsigned int regnum = register_number (i.op[1].regs);
+      unsigned int first_reg_in_group = regnum & ~3;
+      unsigned int last_reg_in_group = first_reg_in_group + 3;
+      if (regnum != first_reg_in_group) {
+        as_warn (_("the second source register `%s%s' implicitly denotes"
+            " `%s%.3s%d' to `%s%.3s%d' source group in `%s'"),
+            register_prefix, i.op[1].regs->reg_name,
+            register_prefix, i.op[1].regs->reg_name, first_reg_in_group,
+            register_prefix, i.op[1].regs->reg_name, last_reg_in_group,
+            i.tm.name);
+      }
+	}
   else if (i.tm.opcode_modifier.regkludge)
     {
       /* The imul $imm, %reg instruction is converted into
@@ -6968,6 +7011,7 @@ output_jump (void)
     {
     case 2:
       *p++ = i.tm.base_opcode >> 8;
+      /* Fall through.  */
     case 1:
       *p++ = i.tm.base_opcode;
       break;
@@ -10019,9 +10063,7 @@ md_parse_option (int c, const char *arg)
 		  flags = cpu_flags_or (cpu_arch_flags,
 					cpu_arch[j].flags);
 
-		  if (!valid_iamcu_cpu_flags (&flags))
-		    as_fatal (_("`%s' isn't valid for Intel MCU"), arch);
-		  else if (!cpu_flags_equal (&flags, &cpu_arch_flags))
+		  if (!cpu_flags_equal (&flags, &cpu_arch_flags))
 		    {
 		      if (cpu_sub_arch_name)
 			{
@@ -10477,7 +10519,7 @@ i386_target_format (void)
 	      cpu_arch_tune_flags = cpu_arch_isa_flags;
 	    }
 	}
-      else
+      else if (cpu_arch_isa != PROCESSOR_IAMCU)
 	as_fatal (_("Intel MCU doesn't support `%s' architecture"),
 		  cpu_arch_name);
     }
@@ -10711,6 +10753,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 	  return NULL;
 	}
 #endif
+      /* Fall through.  */
 
     case BFD_RELOC_X86_64_PLT32:
     case BFD_RELOC_X86_64_GOT32:
@@ -10763,6 +10806,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 	  code = fixp->fx_r_type;
 	  break;
 	}
+      /* Fall through.  */
     default:
       if (fixp->fx_pcrel)
 	{

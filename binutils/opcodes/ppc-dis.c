@@ -1,5 +1,5 @@
 /* ppc-dis.c -- Disassemble PowerPC instructions
-   Copyright (C) 1994-2016 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support
 
    This file is part of the GNU opcodes library.
@@ -45,8 +45,19 @@ struct dis_private
   (((struct dis_private *) ((INFO)->private_data))->dialect)
 
 struct ppc_mopt {
+  /* Option string, without -m or -M prefix.  */
   const char *opt;
+  /* CPU option flags.  */
   ppc_cpu_t cpu;
+  /* Flags that should stay on, even when combined with another cpu
+     option.  This should only be used for generic options like
+     "-many" or "-maltivec" where it is reasonable to add some
+     capability to another cpu selection.  The added flags are sticky
+     so that, for example, "-many -me500" and "-me500 -many" result in
+     the same assembler or disassembler behaviour.  Do not use
+     "sticky" for specific cpus, as this will prevent that cpu's flags
+     from overriding the defaults set in powerpc_init_dialect or a
+     prior -m option.  */
   ppc_cpu_t sticky;
 };
 
@@ -93,7 +104,7 @@ struct ppc_mopt ppc_opts[] = {
 		| PPC_OPCODE_A2),
     0 },
   { "altivec", PPC_OPCODE_PPC,
-    PPC_OPCODE_ALTIVEC | PPC_OPCODE_ALTIVEC2 },
+    PPC_OPCODE_ALTIVEC },
   { "any",     0,
     PPC_OPCODE_ANY },
   { "booke",   PPC_OPCODE_PPC | PPC_OPCODE_BOOKE,
@@ -104,6 +115,11 @@ struct ppc_mopt ppc_opts[] = {
 		| PPC_OPCODE_CELL | PPC_OPCODE_ALTIVEC),
     0 },
   { "com",     PPC_OPCODE_COMMON,
+    0 },
+  { "e200z4",  (PPC_OPCODE_PPC | PPC_OPCODE_BOOKE| PPC_OPCODE_SPE
+		| PPC_OPCODE_ISEL | PPC_OPCODE_EFS | PPC_OPCODE_BRLOCK
+		| PPC_OPCODE_PMR | PPC_OPCODE_CACHELCK | PPC_OPCODE_RFMCI
+		| PPC_OPCODE_E500 | PPC_OPCODE_VLE | PPC_OPCODE_E200Z4),
     0 },
   { "e300",    PPC_OPCODE_PPC | PPC_OPCODE_E300,
     0 },
@@ -216,7 +232,7 @@ struct ppc_mopt ppc_opts[] = {
 		| PPC_OPCODE_E500),
     PPC_OPCODE_VLE },
   { "vsx",     PPC_OPCODE_PPC,
-    PPC_OPCODE_VSX | PPC_OPCODE_VSX3 },
+    PPC_OPCODE_VSX },
   { "htm",     PPC_OPCODE_PPC,
     PPC_OPCODE_HTM },
 };
@@ -231,7 +247,7 @@ get_powerpc_dialect (struct disassemble_info *info)
 
   /* Disassemble according to the section headers flags for VLE-mode.  */
   if (dialect & PPC_OPCODE_VLE
-      && info->section->owner != NULL
+      && info->section != NULL && info->section->owner != NULL
       && bfd_get_flavour (info->section->owner) == bfd_target_elf_flavour
       && elf_object_id (info->section->owner) == PPC32_ELF_DATA
       && (elf_section_flags (info->section) & SHF_PPC_VLE) != 0)

@@ -3,7 +3,7 @@ dnl
 dnl And be careful when changing it!  If you must add tests with square
 dnl brackets, be sure changequote invocations surround it.
 dnl
-dnl   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2017 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -40,6 +40,7 @@ AC_USE_SYSTEM_EXTENSIONS
 
 LT_INIT
 ACX_LARGEFILE
+ACX_PROG_CMP_IGNORE_INITIAL
 
 AC_ARG_ENABLE(targets,
 [  --enable-targets        alternative target configurations besides the primary],
@@ -510,7 +511,7 @@ changequote([,])dnl
 	AC_MSG_RESULT($enable_audio_ext)
 	;;
 
-      i386 | s390 | sparc)
+      i386 | riscv | s390 | sparc)
 	if test $this_target = $target ; then
 	  AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
 	fi

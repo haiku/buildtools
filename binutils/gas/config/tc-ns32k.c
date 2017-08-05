@@ -1,5 +1,5 @@
 /* ns32k.c  -- Assemble on the National Semiconductor 32k series
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -333,7 +333,7 @@ const pseudo_typeS md_pseudo_table[] =
    displacement base-adjust as there are other routines that must
    consider this. Also, as we have two various offset-adjusts in the
    ns32k (acb versus br/brs/jsr/bcond), two set of limits would have
-   had to be used.  Now we dont have to think about that.  */
+   had to be used.  Now we don't have to think about that.  */
 
 const relax_typeS md_relax_table[] =
 {
@@ -432,6 +432,7 @@ addr_mode (char *operand,
 		  addrmodeP->disp[0] = str + 2;
 		  return -1;
 		}
+	      /* Fall through.  */
 	    default:
 	      as_bad (_("Invalid syntax in PC-relative addressing mode"));
 	      return 0;
@@ -481,7 +482,7 @@ addr_mode (char *operand,
 	{
 	case 'f':
 	  addrmodeP->float_flag = 1;
-	  /* Drop through.  */
+	  /* Fall through.  */
 	case 'r':
 	  if (str[1] >= '0' && str[1] < '8')
 	    {
@@ -564,7 +565,7 @@ addr_mode (char *operand,
 		  str[strl - 4] = 0;
 		  return -1;		/* reg rel */
 		}
-	      /* Drop through.  */
+	      /* Fall through.  */
 
 	    default:
 	      if (!strncmp (&str[strl - 4], "(fp", 3))
@@ -925,6 +926,7 @@ encode_operand (int argc,
 	case 'f':		/* Operand of sfsr turns out to be a nasty
 				   specialcase.  */
 	  opcode_bit_ptr -= 5;
+	  /* Fall through.  */
 	case 'Z':		/* Float not immediate.  */
 	case 'F':		/* 32 bit float	general form.  */
 	case 'L':		/* 64 bit float.  */
@@ -983,10 +985,10 @@ encode_operand (int argc,
 	  argv[i] = freeptr;
 	  pcrel -= 1;		/* Make pcrel 0 in spite of what case 'p':
 				   wants.  */
-	  /* fall thru */
+	  /* fallthru */
 	case 'p':		/* Displacement - pc relative addressing.  */
 	  pcrel += 1;
-	  /* fall thru */
+	  /* fallthru */
 	case 'd':		/* Displacement.  */
 	  iif.instr_size += suffixP[i] ? suffixP[i] : 4;
 	  IIF (12, 2, suffixP[i], (unsigned long) argv[i], 0,
@@ -1816,7 +1818,7 @@ convert_iif (void)
 		  {
 		    /* Frag it.  */
 		    if (exprP.X_op_symbol)
-		      /* We cant relax this case.  */
+		      /* We can't relax this case.  */
 		      as_fatal (_("Can't relax difference"));
 		    else
 		      {

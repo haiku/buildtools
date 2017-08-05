@@ -1,5 +1,5 @@
 # Expect script for various indirect symbol tests.
-#   Copyright (C) 2012-2016 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2017 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -91,6 +91,9 @@ set build_tests {
   {"Build pr18720b1.o"
    "-r -nostdlib tmpdir/pr18720b.o" ""
    {dummy.c} {} "pr18720b1.o"}
+  {"Build pr18720a"
+   "tmpdir/pr18720a.o tmpdir/pr18720b.o tmpdir/libpr18720c.so" ""
+   {check-ptr-eq.c} {{readelf {--dyn-syms} pr18720.rd}} "pr18720a"}
   {"Build libpr19553b.so"
    "-shared -Wl,--version-script=pr19553.map" "-fPIC"
    {pr19553b.c} {} "libpr19553b.so"}
@@ -179,4 +182,4 @@ set run_tests {
      {pr19553a.c} "pr19553d" "pr19553d.out"}
 }
 
-run_ld_link_exec_tests [] $run_tests
+run_ld_link_exec_tests $run_tests

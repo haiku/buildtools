@@ -1,5 +1,5 @@
 /* IBM RS/6000 "XCOFF" back-end for BFD.
-   Copyright (C) 1990-2016 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Written by Metin G. Ozisik, Mimi Phuong-Thao Vo, and John Gilmore.
    Archive support from Damon A. Permezel.
    Contributed by IBM Corporation and Cygnus Support.
@@ -468,8 +468,8 @@ rs6000coff_core_p (bfd *abfd)
 
   /* Issue warning if the core file was truncated during writing.  */
   if (c_flag & CORE_TRUNC)
-    (*_bfd_error_handler) (_("%s: warning core file truncated"),
-			   bfd_get_filename (abfd));
+    _bfd_error_handler (_("%s: warning core file truncated"),
+			bfd_get_filename (abfd));
 
   /* Allocate core file header.  */
 #ifndef BFD64

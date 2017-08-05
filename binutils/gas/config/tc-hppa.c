@@ -1,5 +1,5 @@
 /* tc-hppa.c -- Assemble for the PA
-   Copyright (C) 1989-2016 Free Software Foundation, Inc.
+   Copyright (C) 1989-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -1440,7 +1440,7 @@ tc_gen_reloc (asection *section, fixS *fixp)
 	  /* Facilitate hand-crafted unwind info.  */
 	  if (strcmp (section->name, UNWIND_SECTION_NAME) == 0)
 	    code = R_PARISC_SEGREL32;
-	  /* Fall thru */
+	  /* Fallthru */
 
 	default:
 	  reloc->addend = fixp->fx_offset;
@@ -3505,8 +3505,9 @@ pa_ip (char *str)
 			/* M bit is explicit in the major opcode.  */
 			INSERT_FIELD_AND_CONTINUE (opcode, a, 2);
 		      }
-		    else if (*args == 'e')
+		    else
 		      {
+			gas_assert (*args == 'e');
 			/* Stash the ma/mb flag temporarily in the
 			   instruction.  We will use (and remove it)
 			   later when handling 'J', 'K', '<' & '>'.  */
@@ -5431,6 +5432,7 @@ pa_ip (char *str)
 		{
 		case SGL:
 		  opcode |= 0x20;
+		  /* Fall through.  */
 		case DBL:
 		  the_insn.fpof1 = flag;
 		  continue;

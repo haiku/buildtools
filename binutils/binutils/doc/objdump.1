@@ -133,7 +133,7 @@
 .\" ========================================================================
 .\"
 .IX Title "OBJDUMP 1"
-.TH OBJDUMP 1 "2016-08-03" "binutils-2.27" "GNU Development Tools"
+.TH OBJDUMP 1 "2017-03-02" "binutils-2.28" "GNU Development Tools"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -425,6 +425,15 @@ Pass target specific information to the disassembler.  Only supported on
 some targets.  If it is necessary to specify more than one
 disassembler option then multiple \fB\-M\fR options can be used or
 can be placed together into a comma separated list.
+.Sp
+For \s-1ARC, \s0\fBdsp\fR controls the printing of \s-1DSP\s0 instructions,
+\&\fBspfp\fR selects the printing of \s-1FPX\s0 single precision \s-1FP\s0
+instructions, \fBdpfp\fR selects the printing of \s-1FPX\s0 double
+precision \s-1FP\s0 instructions, \fBquarkse_em\fR selects the printing of
+special QuarkSE-EM instructions, \fBfpuda\fR selects the printing
+of double precision assist instructions, \fBfpus\fR selects the
+printing of \s-1FPU\s0 single precision \s-1FP\s0 instructions, while \fBfpud\fR
+selects the printing of \s-1FPU\s0 souble precision \s-1FP\s0 instructions.
 .Sp
 If the target is an \s-1ARM\s0 architecture then this switch can be used to
 select which register name set is used during disassembler.  Specifying
@@ -915,6 +924,13 @@ Print the dynamic symbol table entries of the file.  This is only
 meaningful for dynamic objects, such as certain types of shared
 libraries.  This is similar to the information provided by the \fBnm\fR
 program when given the \fB\-D\fR (\fB\-\-dynamic\fR) option.
+.Sp
+The output format is similar to that produced by the \fB\-\-syms\fR
+option, except that an extra field is inserted before the symbol's
+name, giving the version information associated with the symbol.
+If the version is the default version to be used when resolving
+unversioned references to the symbol then it's displayed as is,
+otherwise it's put into parentheses.
 .IP "\fB\-\-special\-syms\fR" 4
 .IX Item "--special-syms"
 When displaying symbols include those which the target considers to be
@@ -971,7 +987,7 @@ with a backslash.  The \fIfile\fR may itself contain additional
 \&\fInm\fR\|(1), \fIreadelf\fR\|(1), and the Info entries for \fIbinutils\fR.
 .SH "COPYRIGHT"
 .IX Header "COPYRIGHT"
-Copyright (c) 1991\-2016 Free Software Foundation, Inc.
+Copyright (c) 1991\-2017 Free Software Foundation, Inc.
 .PP
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the \s-1GNU\s0 Free Documentation License, Version 1.3
