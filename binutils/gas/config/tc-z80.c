@@ -1,5 +1,5 @@
 /* tc-z80.c -- Assemble code for the Zilog Z80 and ASCII R800
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
    Contributed by Arnold Metselaar <arnold_m@operamail.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -81,7 +81,7 @@ static int ins_err = INS_R800;
 static int ins_used = INS_Z80;
 
 int
-md_parse_option (int c, char* arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, const char* arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -163,7 +163,7 @@ static symbolS * zero;
 
 struct reg_entry
 {
-  char* name;
+  const char* name;
   int number;
 };
 #define R_STACKABLE (0x80)
@@ -249,7 +249,7 @@ md_begin (void)
         }
     }
   p = input_line_pointer;
-  input_line_pointer = "0";
+  input_line_pointer = (char *) "0";
   nul.X_md=0;
   expression (& nul);
   input_line_pointer = p;
@@ -317,6 +317,7 @@ z80_start_line_hook (void)
 	      *p++ = buf[2];
 	      break;
 	    }
+	  /* Fall through.  */
 	case '"':
 	  for (quote = *p++; quote != *p && '\n' != *p; ++p)
 	    /* No escapes.  */ ;
@@ -384,7 +385,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
   return NULL;
 }
 
-char *
+const char *
 md_atof (int type ATTRIBUTE_UNUSED, char *litP ATTRIBUTE_UNUSED,
 	 int *sizeP ATTRIBUTE_UNUSED)
 {
@@ -408,9 +409,9 @@ typedef const char * (asfunc)(char, char, const char*);
 
 typedef struct _table_t
 {
-  char* name;
-  char prefix;
-  char opcode;
+  const char* name;
+  unsigned char prefix;
+  unsigned char opcode;
   asfunc * fp;
 } table_t;
 
@@ -539,7 +540,7 @@ contains_register(symbolS *sym)
     return 0;
 }
 
-/* Parse general expression, not loooking for indexed adressing.  */
+/* Parse general expression, not loooking for indexed addressing.  */
 static const char *
 parse_exp_not_indexed (const char *s, expressionS *op)
 {
@@ -874,6 +875,7 @@ emit_mr (char prefix, char opcode, const char *args)
 	    }
 	  check_mach (INS_UNPORT);
 	}
+      /* Fall through.  */
     case O_register:
       emit_mx (prefix, opcode, 0, & arg_m);
       break;
@@ -1776,6 +1778,7 @@ emit_mulub (char prefix ATTRIBUTE_UNUSED, char opcode, const char * args)
 	      *q = opcode + ((reg - 'b') << 3);
 	      break;
 	    }
+	  /* Fall through.  */
 	default:
 	  ill_op ();
 	}
@@ -2058,8 +2061,8 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED , fixS *fixp)
       return NULL;
     }
 
-  reloc               = xmalloc (sizeof (arelent));
-  reloc->sym_ptr_ptr  = xmalloc (sizeof (asymbol *));
+  reloc               = XNEW (arelent);
+  reloc->sym_ptr_ptr  = XNEW (asymbol *);
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address      = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->howto        = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);

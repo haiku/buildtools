@@ -1,5 +1,5 @@
 /* tc-crx.c -- Assembler code for the CRX CPU core.
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2017 Free Software Foundation, Inc.
 
    Contributed by Tomer Levi, NSC, Israel.
    Originally written for GAS 2.12 by Tomer Levi, NSC, Israel.
@@ -308,8 +308,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
 {
   arelent * reloc;
 
-  reloc = xmalloc (sizeof (arelent));
-  reloc->sym_ptr_ptr  = xmalloc (sizeof (asymbol *));
+  reloc = XNEW (arelent);
+  reloc->sym_ptr_ptr  = XNEW (asymbol *);
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
   reloc->addend = fixP->fx_offset;
@@ -451,7 +451,7 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, asection *sec, fragS *fragP)
    GAS does not understand.  */
 
 int
-md_parse_option (int c ATTRIBUTE_UNUSED, char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -464,7 +464,7 @@ md_show_usage (FILE *stream ATTRIBUTE_UNUSED)
   return;
 }
 
-char *
+const char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
@@ -730,6 +730,7 @@ set_operand (char *operand, ins * crx_ins)
     case arg_sc:    /* Case *+0x18.  */
     case arg_ic:    /* Case $0x18.  */
       operandS++;
+      /* Fall through.  */
     case arg_c:	    /* Case 0x18.  */
       /* Set constant.  */
       process_label_constant (operandS, crx_ins);
@@ -747,6 +748,7 @@ set_operand (char *operand, ins * crx_ins)
       *operandE = '\0';
       process_label_constant (operandS, crx_ins);
       operandS = operandE;
+      /* Fall through.  */
     case arg_rbase: /* Case (r1).  */
       operandS++;
       /* Set register base.  */
@@ -1279,6 +1281,7 @@ print_operand (int nbits, int shift, argument *arg)
       CRX_PRINT (0, getreg_image (arg->r), 12);
       CRX_PRINT (0, getreg_image (arg->i_r), 8);
       CRX_PRINT (0, arg->scale, 6);
+      /* Fall through.  */
     case arg_ic:
     case arg_c:
       print_constant (nbits, shift, arg);
@@ -1325,7 +1328,7 @@ static op_err
 check_range (long *num, int bits, int unsigned flags, int update)
 {
   uint32_t max;
-  int retval = OP_LEGAL;
+  op_err retval = OP_LEGAL;
   int bin;
   uint32_t upper_64kb = 0xffff0000;
   uint32_t value = *num;
@@ -1765,7 +1768,7 @@ preprocess_reglist (char *param, int *allocated)
 
   while (*paramP++ != '{');
 
-  new_param = (char *)xcalloc (MAX_INST_LEN, sizeof (char));
+  new_param = XCNEWVEC (char, MAX_INST_LEN);
   *allocated = 1;
   strncpy (new_param, param, paramP - param - 1);
 

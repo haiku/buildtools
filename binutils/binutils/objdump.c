@@ -1,5 +1,5 @@
 /* objdump.c -- dump information about an object file.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -488,9 +488,18 @@ dump_section_header (bfd *abfd, asection *section,
     }
   PF (SEC_SMALL_DATA, "SMALL_DATA");
   if (bfd_get_flavour (abfd) == bfd_target_coff_flavour)
-    PF (SEC_COFF_SHARED, "SHARED");
+    {
+      PF (SEC_COFF_SHARED, "SHARED");
+      PF (SEC_COFF_NOREAD, "NOREAD");
+    }
+  else if (bfd_get_flavour (abfd) == bfd_target_elf_flavour)
+    PF (SEC_ELF_PURECODE, "PURECODE");
   PF (SEC_THREAD_LOCAL, "THREAD_LOCAL");
   PF (SEC_GROUP, "GROUP");
+  if (bfd_get_arch (abfd) == bfd_arch_mep)
+    {
+      PF (SEC_MEP_VLIW, "VLIW");
+    }
 
   if ((section->flags & SEC_LINK_ONCE) != 0)
     {
@@ -606,6 +615,18 @@ slurp_dynamic_symtab (bfd *abfd)
   return sy;
 }
 
+/* Some symbol names are significant and should be kept in the
+   table of sorted symbol names, even if they are marked as
+   debugging/section symbols.  */
+
+static bfd_boolean
+is_significant_symbol_name (const char * name)
+{
+  return strcmp (name, ".plt") == 0
+    ||   strcmp (name, ".got") == 0
+    ||   strcmp (name, ".plt.got") == 0;
+}
+
 /* Filter out (in place) symbols that are useless for disassembly.
    COUNT is the number of elements in SYMBOLS.
    Return the number of useful symbols.  */
@@ -621,7 +642,8 @@ remove_useless_symbols (asymbol **symbols, long count)
 
       if (sym->name == NULL || sym->name[0] == '\0')
 	continue;
-      if (sym->flags & (BSF_DEBUGGING | BSF_SECTION_SYM))
+      if ((sym->flags & (BSF_DEBUGGING | BSF_SECTION_SYM))
+	  && ! is_significant_symbol_name (sym->name))
 	continue;
       if (bfd_is_und_section (sym->section)
 	  || bfd_is_com_section (sym->section))
@@ -727,6 +749,21 @@ compare_symbols (const void *ap, const void *bp)
 	return -1;
       else
 	return 1;
+    }
+
+  if (bfd_get_flavour (bfd_asymbol_bfd (a)) == bfd_target_elf_flavour
+      && bfd_get_flavour (bfd_asymbol_bfd (b)) == bfd_target_elf_flavour)
+    {
+      bfd_vma asz, bsz;
+
+      asz = 0;
+      if ((a->flags & BSF_SYNTHETIC) == 0)
+	asz = ((elf_symbol_type *) a)->internal_elf_sym.st_size;
+      bsz = 0;
+      if ((b->flags & BSF_SYNTHETIC) == 0)
+	bsz = ((elf_symbol_type *) b)->internal_elf_sym.st_size;
+      if (asz != bsz)
+	return asz > bsz ? -1 : 1;
     }
 
   /* Symbols that start with '.' might be section names, so sort them
@@ -889,11 +926,14 @@ find_symbol_for_address (bfd_vma vma,
 
   /* The symbol we want is now in min, the low end of the range we
      were searching.  If there are several symbols with the same
-     value, we want the first one.  */
+     value, we want the first (non-section/non-debugging) one.  */
   thisplace = min;
   while (thisplace > 0
 	 && (bfd_asymbol_value (sorted_syms[thisplace])
-	     == bfd_asymbol_value (sorted_syms[thisplace - 1])))
+	     == bfd_asymbol_value (sorted_syms[thisplace - 1]))
+	 && ((sorted_syms[thisplace - 1]->flags
+	      & (BSF_SECTION_SYM | BSF_DEBUGGING)) == 0)
+	 )
     --thisplace;
 
   /* Prefer a symbol in the current section if we have multple symbols
@@ -979,6 +1019,41 @@ find_symbol_for_address (bfd_vma vma,
 	return NULL;
     }
 
+  /* If we have not found an exact match for the specified address
+     and we have dynamic relocations available, then we can produce
+     a better result by matching a relocation to the address and
+     using the symbol associated with that relocation.  */
+  if (!want_section
+      && aux->dynrelbuf != NULL
+      && sorted_syms[thisplace]->value != vma
+      /* If we have matched a synthetic symbol, then stick with that.  */
+      && (sorted_syms[thisplace]->flags & BSF_SYNTHETIC) == 0)
+    {
+      long        rel_count;
+      arelent **  rel_pp;
+
+      for (rel_count = aux->dynrelcount, rel_pp = aux->dynrelbuf;
+	   rel_count--;)
+	{
+	  arelent * rel = rel_pp[rel_count];
+
+	  if (rel->address == vma
+	      && rel->sym_ptr_ptr != NULL
+	      /* Absolute relocations do not provide a more helpful symbolic address.  */
+	      && ! bfd_is_abs_section ((* rel->sym_ptr_ptr)->section))
+	    {
+	      if (place != NULL)
+		* place = thisplace;
+	      return * rel->sym_ptr_ptr;
+	    }
+
+	  /* We are scanning backwards, so if we go below the target address
+	     we have failed.  */
+	  if (rel_pp[rel_count]->address < vma)
+	    break;
+	}
+    }
+
   if (place != NULL)
     *place = thisplace;
 
@@ -1016,8 +1091,21 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
   else
     {
       (*inf->fprintf_func) (inf->stream, " <");
+
       objdump_print_symname (abfd, inf, sym);
-      if (bfd_asymbol_value (sym) > vma)
+
+      if (bfd_asymbol_value (sym) == vma)
+	;
+      /* Undefined symbols in an executables and dynamic objects do not have
+	 a value associated with them, so it does not make sense to display
+	 an offset relative to them.  Normally we would not be provided with
+	 this kind of symbol, but the target backend might choose to do so,
+	 and the code in find_symbol_for_address might return an as yet
+	 unresolved symbol associated with a dynamic reloc.  */
+      else if ((bfd_get_file_flags (abfd) & (EXEC_P | DYNAMIC))
+	       && bfd_is_und_section (sym->section))
+	;
+      else if (bfd_asymbol_value (sym) > vma)
 	{
 	  (*inf->fprintf_func) (inf->stream, "-0x");
 	  objdump_print_value (bfd_asymbol_value (sym) - vma, inf, TRUE);
@@ -1027,6 +1115,7 @@ objdump_print_addr_with_sym (bfd *abfd, asection *sec, asymbol *sym,
 	  (*inf->fprintf_func) (inf->stream, "+0x");
 	  objdump_print_value (vma - bfd_asymbol_value (sym), inf, TRUE);
 	}
+
       (*inf->fprintf_func) (inf->stream, ">");
     }
 
@@ -1122,6 +1211,7 @@ struct print_file_list
   const char **linemap;
   unsigned maxline;
   unsigned last_line;
+  unsigned max_printed;
   int first;
 };
 
@@ -1247,6 +1337,7 @@ try_print_file_open (const char *origname, const char *modname)
 
   p->linemap = index_file (p->map, p->mapsize, &p->maxline);
   p->last_line = 0;
+  p->max_printed = 0;
   p->filename = origname;
   p->modname = modname;
   p->next = print_files;
@@ -1335,6 +1426,7 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
   unsigned int linenumber;
   unsigned int discriminator;
   bfd_boolean reloc;
+  char *path = NULL;
 
   if (! with_line_numbers && ! with_source_code)
     return;
@@ -1355,20 +1447,21 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
     {
       char *path_up;
       const char *fname = filename;
-      char *path = (char *) alloca (prefix_length + PATH_MAX + 1);
+
+      path = xmalloc (prefix_length + PATH_MAX + 1);
 
       if (prefix_length)
 	memcpy (path, prefix, prefix_length);
       path_up = path + prefix_length;
 
       /* Build relocated filename, stripping off leading directories
-	 from the initial filename if requested. */
+	 from the initial filename if requested.  */
       if (prefix_strip > 0)
 	{
 	  int level = 0;
 	  const char *s;
 
-	  /* Skip selected directory levels. */
+	  /* Skip selected directory levels.  */
 	  for (s = fname + 1; *s != '\0' && level < prefix_strip; s++)
 	    if (IS_DIR_SEPARATOR(*s))
 	      {
@@ -1377,7 +1470,7 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
 	      }
 	}
 
-      /* Update complete filename. */
+      /* Update complete filename.  */
       strncpy (path_up, fname, PATH_MAX);
       path_up[PATH_MAX] = '\0';
 
@@ -1432,10 +1525,17 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
 	      l = linenumber - SHOW_PRECEDING_CONTEXT_LINES;
 	      if (l >= linenumber)
 		l = 1;
-	      if (p->last_line >= l && p->last_line <= linenumber)
-		l = p->last_line + 1;
+	      if (p->max_printed >= l)
+		{
+		  if (p->max_printed < linenumber)
+		    l = p->max_printed + 1;
+		  else
+		    l = linenumber;
+		}
 	    }
 	  dump_lines (p, l, linenumber);
+	  if (p->max_printed < linenumber)
+	    p->max_printed = linenumber;
 	  p->last_line = linenumber;
 	  p->first = 0;
 	}
@@ -1456,6 +1556,9 @@ show_line (bfd *abfd, asection *section, bfd_vma addr_offset)
 
   if (discriminator != prev_discriminator)
     prev_discriminator = discriminator;
+
+  if (path)
+    free (path);
 }
 
 /* Pseudo FILE object for strings.  */
@@ -1968,7 +2071,7 @@ disassemble_section (bfd *abfd, asection *section, void *inf)
 
   /* Decide which set of relocs to use.  Load them if necessary.  */
   paux = (struct objdump_disasm_info *) pinfo->application_data;
-  if (paux->dynrelbuf)
+  if (paux->dynrelbuf && dump_dynamic_reloc_info)
     {
       rel_pp = paux->dynrelbuf;
       rel_count = paux->dynrelcount;
@@ -2245,13 +2348,11 @@ disassemble_data (bfd *abfd)
   /* Allow the target to customize the info structure.  */
   disassemble_init_for_target (& disasm_info);
 
-  /* Pre-load the dynamic relocs if we are going
-     to be dumping them along with the disassembly.  */
-  if (dump_dynamic_reloc_info)
+  /* Pre-load the dynamic relocs as we may need them during the disassembly.  */
     {
       long relsize = bfd_get_dynamic_reloc_upper_bound (abfd);
 
-      if (relsize < 0)
+      if (relsize < 0 && dump_dynamic_reloc_info)
 	bfd_fatal (bfd_get_filename (abfd));
 
       if (relsize > 0)
@@ -2507,6 +2608,10 @@ dump_dwarf (bfd *abfd)
 
     case bfd_arch_aarch64:
       init_dwarf_regnames_aarch64();
+      break;
+
+    case bfd_arch_s390:
+      init_dwarf_regnames_s390 ();
       break;
 
     default:

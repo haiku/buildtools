@@ -67,6 +67,7 @@
 	prfm	PLDL3KEEP, [x9, x15, sxtx #2]
 	sysl	x7, #1, C16, C30, #1
 	sysl	x7, #1, C15, C77, #1
+	sysl	x7, #1, x15, C1, #1
 	add	x0, xzr, x7, uxtx #5
 	mov	x0, ##5
 	bad expression
@@ -209,3 +210,88 @@
 	ldst_single_wb_64 ldrsh
 
 	ldst_single_wb_64 ldrsw
+
+	dup	v0.2d, v1.2d[-1]
+	dup	v0.2d, v1.2d[0]
+	dup	v0.2d, v1.2d[1]
+	dup	v0.2d, v1.2d[2]
+	dup	v0.2d, v1.2d[64]
+
+	dup	v0.4s, v1.4s[-1]
+	dup	v0.4s, v1.4s[0]
+	dup	v0.4s, v1.4s[3]
+	dup	v0.4s, v1.4s[4]
+	dup	v0.4s, v1.4s[65]
+
+	dup	v0.8h, v1.8h[-1]
+	dup	v0.8h, v1.8h[0]
+	dup	v0.8h, v1.8h[7]
+	dup	v0.8h, v1.8h[8]
+	dup	v0.8h, v1.8h[66]
+
+	dup	v0.16b, v1.16b[-1]
+	dup	v0.16b, v1.16b[0]
+	dup	v0.16b, v1.16b[15]
+	dup	v0.16b, v1.16b[16]
+	dup	v0.16b, v1.16b[67]
+
+	ld2	{v0.d, v1.d}[-1], [x0]
+	ld2	{v0.d, v1.d}[0], [x0]
+	ld2	{v0.d, v1.d}[1], [x0]
+	ld2	{v0.d, v1.d}[2], [x0]
+	ld2	{v0.d, v1.d}[64], [x0]
+
+	ld2	{v0.s, v1.s}[-1], [x0]
+	ld2	{v0.s, v1.s}[0], [x0]
+	ld2	{v0.s, v1.s}[3], [x0]
+	ld2	{v0.s, v1.s}[4], [x0]
+	ld2	{v0.s, v1.s}[65], [x0]
+
+	ld2	{v0.h, v1.h}[-1], [x0]
+	ld2	{v0.h, v1.h}[0], [x0]
+	ld2	{v0.h, v1.h}[7], [x0]
+	ld2	{v0.h, v1.h}[8], [x0]
+	ld2	{v0.h, v1.h}[66], [x0]
+
+	ld2	{v0.b, v1.b}[-1], [x0]
+	ld2	{v0.b, v1.b}[0], [x0]
+	ld2	{v0.b, v1.b}[15], [x0]
+	ld2	{v0.b, v1.b}[16], [x0]
+	ld2	{v0.b, v1.b}[67], [x0]
+
+	fmov	d0, #2
+	fmov	d0, #-2
+	fmov	s0, 2
+	fmov	s0, -2
+
+	st2	{v0.4s, v1.4s}, [sp], xzr
+	str	x1, [x2, sp]
+
+	ldr	x0, [x1, #:lo12:foo] // OK
+	ldnp	x1, x2, [x3, #:lo12:foo]
+	ld1	{v0.4s}, [x3, #:lo12:foo]
+	stuminl x0, [x3, #:lo12:foo]
+	prfum	pldl1keep, [x3, #:lo12:foo]
+
+	ldr	x0, [x3], x4
+	ldnp	x1, x2, [x3], x4
+	ld1	{v0.4s}, [x3], x4 // OK
+	stuminl x0, [x3], x4
+	prfum	pldl1keep, [x3], x4
+
+	ldr	x0, [x1, #1, mul vl]
+	ldr	x0, [x1, x2, mul vl]
+	ldr	x0, [x1, x2, mul #1]
+	ldr	x0, [x1, x2, mul #4]
+
+	strb	w7, [x30, x0, mul]
+	strb	w7, [x30, x0, mul #1]
+	strb	w7, [x30, w0, mul]
+	strb	w7, [x30, w0, mul #2]
+
+	adds	x1, sp, 1, mul #1
+	adds	x1, sp, 2, mul #255
+	adds	x1, sp, 3, mul #256
+	orr	x0, x0, #0xff, mul #1
+	orr	x0, x0, #0xfe, mul #255
+	orr	x0, x0, #0xfc, mul #256

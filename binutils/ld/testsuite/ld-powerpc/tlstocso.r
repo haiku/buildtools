@@ -21,9 +21,9 @@ Section Headers:
  +\[[ 0-9]+\] \.opd .*
  +\[[ 0-9]+\] \.got .*
  +\[[ 0-9]+\] \.plt .*
- +\[[ 0-9]+\] \.shstrtab .*
  +\[[ 0-9]+\] \.symtab .*
  +\[[ 0-9]+\] \.strtab .*
+ +\[[ 0-9]+\] \.shstrtab .*
 #...
 
 Elf file type is DYN \(Shared object file\)
@@ -112,7 +112,6 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* OBJECT +LOCAL +DEFAULT +9 _DYNAMIC
 .* NOTYPE +LOCAL +DEFAULT +6 .*\.plt_call\.__tls_get_addr
 .* NOTYPE +LOCAL +DEFAULT +6 __glink_PLTresolve
-.* NOTYPE +LOCAL +DEFAULT +UND \.__tls_get_addr
 .* TLS +GLOBAL +DEFAULT +UND gd
 .* TLS +GLOBAL +DEFAULT +8 le0
 .* NOTYPE +GLOBAL +DEFAULT +UND __tls_get_addr

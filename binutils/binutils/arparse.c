@@ -64,9 +64,9 @@
 /* Copy the first part of user declarations.  */
 #line 1 "arparse.y" /* yacc.c:339  */
 
-/* arparse.y - Stange script language parser */
+/* arparse.y - Strange script language parser */
 
-/* Copyright (C) 1992-2015 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 

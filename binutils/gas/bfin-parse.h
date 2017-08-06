@@ -396,7 +396,7 @@ extern int yydebug;
 typedef union YYSTYPE YYSTYPE;
 union YYSTYPE
 {
-#line 446 "./config/bfin-parse.y" /* yacc.c:1915  */
+#line 444 "./config/bfin-parse.y" /* yacc.c:1915  */
 
   INSTR_T instr;
   Expr_Node *expr;

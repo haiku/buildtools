@@ -1,5 +1,5 @@
 /* IBM S/390-specific support for 64-bit ELF
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2017 Free Software Foundation, Inc.
    Contributed Martin Schwidefsky (schwidefsky@de.ibm.com).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -25,6 +25,7 @@
 #include "libbfd.h"
 #include "elf-bfd.h"
 #include "elf/s390.h"
+#include <stdarg.h>
 
 /* In case we're on a 32-bit machine, construct a 64-bit "-1" value
    from smaller values.  Start with zero, widen, *then* decrement.  */
@@ -337,10 +338,10 @@ elf_s390_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 	&& strcasecmp (elf_howto_table[i].name, r_name) == 0)
       return &elf_howto_table[i];
 
-    if (strcasecmp (elf64_s390_vtinherit_howto.name, r_name) == 0)
-      return &elf64_s390_vtinherit_howto;
-    if (strcasecmp (elf64_s390_vtentry_howto.name, r_name) == 0)
-      return &elf64_s390_vtentry_howto;
+  if (strcasecmp (elf64_s390_vtinherit_howto.name, r_name) == 0)
+    return &elf64_s390_vtinherit_howto;
+  if (strcasecmp (elf64_s390_vtentry_howto.name, r_name) == 0)
+    return &elf64_s390_vtentry_howto;
 
   return NULL;
 }
@@ -367,8 +368,9 @@ elf_s390_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
     default:
       if (r_type >= sizeof (elf_howto_table) / sizeof (elf_howto_table[0]))
 	{
-	  (*_bfd_error_handler) (_("%B: invalid relocation type %d"),
-				 abfd, (int) r_type);
+	  /* xgettext:c-format */
+	  _bfd_error_handler (_("%B: invalid relocation type %d"),
+			      abfd, (int) r_type);
 	  r_type = R_390_NONE;
 	}
       cache_ptr->howto = &elf_howto_table[r_type];
@@ -492,8 +494,8 @@ elf_s390_is_local_label_name (bfd *abfd, const char *name)
 
    The GOT holds the address in the PLT to be executed.
    The loader then gets:
-   24(15) =  Pointer to the structure describing the object.
-   28(15) =  Offset in symbol table
+   48(15) =  Pointer to the structure describing the object.
+   56(15) =  Offset in symbol table
    The loader  must  then find the module where the function is
    and insert the address in the GOT.
 
@@ -649,8 +651,6 @@ struct elf_s390_link_hash_table
   struct elf_link_hash_table elf;
 
   /* Short-cuts to get to dynamic linker sections.  */
-  asection *sdynbss;
-  asection *srelbss;
   asection *irelifunc;
 
   union {
@@ -664,9 +664,9 @@ struct elf_s390_link_hash_table
 
 /* Get the s390 ELF linker hash table from a link_info structure.  */
 
-#define elf_s390_hash_table(p) \
-  (elf_hash_table_id ((struct elf_link_hash_table *) ((p)->hash)) \
-  == S390_ELF_DATA ? ((struct elf_s390_link_hash_table *) ((p)->hash)) : NULL)
+#define elf_s390_hash_table(p)						\
+  (elf_hash_table_id ((struct elf_link_hash_table *) ((p)->hash))	\
+   == S390_ELF_DATA ? ((struct elf_s390_link_hash_table *) ((p)->hash)) : NULL)
 
 #define ELF64 1
 #include "elf-s390-common.c"
@@ -728,63 +728,6 @@ elf_s390_link_hash_table_create (bfd *abfd)
   return &ret->elf.root;
 }
 
-/* Create .got, .gotplt, and .rela.got sections in DYNOBJ, and set up
-   shortcuts to them in our hash table.  */
-
-static bfd_boolean
-create_got_section (bfd *dynobj,
-		    struct bfd_link_info *info)
-{
-  struct elf_s390_link_hash_table *htab;
-
-  if (! _bfd_elf_create_got_section (dynobj, info))
-    return FALSE;
-
-  htab = elf_s390_hash_table (info);
-  if (htab == NULL)
-    return FALSE;
-
-  htab->elf.sgot = bfd_get_linker_section (dynobj, ".got");
-  htab->elf.sgotplt = bfd_get_linker_section (dynobj, ".got.plt");
-  htab->elf.srelgot = bfd_get_linker_section (dynobj, ".rela.got");
-  if (!htab->elf.sgot || !htab->elf.sgotplt || !htab->elf.srelgot)
-    abort ();
-  return TRUE;
-}
-
-/* Create .plt, .rela.plt, .got, .got.plt, .rela.got, .dynbss, and
-   .rela.bss sections in DYNOBJ, and set up shortcuts to them in our
-   hash table.  */
-
-static bfd_boolean
-elf_s390_create_dynamic_sections (bfd *dynobj,
-				  struct bfd_link_info *info)
-{
-  struct elf_s390_link_hash_table *htab;
-
-  htab = elf_s390_hash_table (info);
-  if (htab == NULL)
-    return FALSE;
-
-  if (!htab->elf.sgot && !create_got_section (dynobj, info))
-    return FALSE;
-
-  if (!_bfd_elf_create_dynamic_sections (dynobj, info))
-    return FALSE;
-
-  htab->elf.splt = bfd_get_linker_section (dynobj, ".plt");
-  htab->elf.srelplt = bfd_get_linker_section (dynobj, ".rela.plt");
-  htab->sdynbss = bfd_get_linker_section (dynobj, ".dynbss");
-  if (!bfd_link_pic (info))
-    htab->srelbss = bfd_get_linker_section (dynobj, ".rela.bss");
-
-  if (!htab->elf.splt || !htab->elf.srelplt || !htab->sdynbss
-      || (!bfd_link_pic (info) && !htab->srelbss))
-    abort ();
-
-  return TRUE;
-}
-
 /* Copy the extra info we tack onto an elf_link_hash_entry.  */
 
 static void
@@ -842,7 +785,8 @@ elf_s390_copy_indirect_symbol (struct bfd_link_info *info,
       /* If called to transfer flags for a weakdef during processing
 	 of elf_adjust_dynamic_symbol, don't copy non_got_ref.
 	 We clear it ourselves for ELIMINATE_COPY_RELOCS.  */
-      dir->ref_dynamic |= ind->ref_dynamic;
+      if (dir->versioned != versioned_hidden)
+	dir->ref_dynamic |= ind->ref_dynamic;
       dir->ref_regular |= ind->ref_regular;
       dir->ref_regular_nonweak |= ind->ref_regular_nonweak;
       dir->needs_plt |= ind->needs_plt;
@@ -923,9 +867,9 @@ elf_s390_check_relocs (bfd *abfd,
 
       if (r_symndx >= NUM_SHDR_ENTRIES (symtab_hdr))
 	{
-	  (*_bfd_error_handler) (_("%B: bad symbol index: %d"),
-				 abfd,
-				 r_symndx);
+	  /* xgettext:c-format */
+	  _bfd_error_handler (_("%B: bad symbol index: %d"),
+			      abfd, r_symndx);
 	  return FALSE;
 	}
 
@@ -1014,7 +958,7 @@ elf_s390_check_relocs (bfd *abfd,
 	    {
 	      if (htab->elf.dynobj == NULL)
 		htab->elf.dynobj = abfd;
-	      if (!create_got_section (htab->elf.dynobj, info))
+	      if (!_bfd_elf_create_got_section (htab->elf.dynobj, info))
 		return FALSE;
 	    }
 	}
@@ -1052,6 +996,7 @@ elf_s390_check_relocs (bfd *abfd,
 	case R_390_GOTOFF64:
 	  if (h == NULL || !s390_is_ifunc_symbol_p (h) || !h->def_regular)
 	    break;
+	  /* Fall through.  */
 
 	case R_390_PLT12DBL:
 	case R_390_PLT16DBL:
@@ -1163,7 +1108,8 @@ elf_s390_check_relocs (bfd *abfd,
 	    {
 	      if (old_tls_type == GOT_NORMAL || tls_type == GOT_NORMAL)
 		{
-		  (*_bfd_error_handler)
+		  _bfd_error_handler
+		    /* xgettext:c-format */
 		    (_("%B: `%s' accessed both as normal and thread local symbol"),
 		     abfd, h->root.root.string);
 		  return FALSE;
@@ -1596,7 +1542,7 @@ elf_s390_adjust_dynamic_symbol (struct bfd_link_info *info,
 				struct elf_link_hash_entry *h)
 {
   struct elf_s390_link_hash_table *htab;
-  asection *s;
+  asection *s, *srel;
 
   /* STT_GNU_IFUNC symbol must go through PLT. */
   if (s390_is_ifunc_symbol_p (h))
@@ -1748,13 +1694,21 @@ elf_s390_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* We must generate a R_390_COPY reloc to tell the dynamic linker to
      copy the initial value out of the dynamic object and into the
      runtime process image.  */
+  if ((h->root.u.def.section->flags & SEC_READONLY) != 0)
+    {
+      s = htab->elf.sdynrelro;
+      srel = htab->elf.sreldynrelro;
+    }
+  else
+    {
+      s = htab->elf.sdynbss;
+      srel = htab->elf.srelbss;
+    }
   if ((h->root.u.def.section->flags & SEC_ALLOC) != 0 && h->size != 0)
     {
-      htab->srelbss->size += sizeof (Elf64_External_Rela);
+      srel->size += sizeof (Elf64_External_Rela);
       h->needs_copy = 1;
     }
-
-  s = htab->sdynbss;
 
   return _bfd_elf_adjust_dynamic_copy (info, h, s);
 }
@@ -2153,7 +2107,8 @@ elf_s390_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
       if (s == htab->elf.splt
 	  || s == htab->elf.sgot
 	  || s == htab->elf.sgotplt
-	  || s == htab->sdynbss
+	  || s == htab->elf.sdynbss
+	  || s == htab->elf.sdynrelro
 	  || s == htab->elf.iplt
 	  || s == htab->elf.igotplt
 	  || s == htab->irelifunc)
@@ -2293,7 +2248,8 @@ invalid_tls_insn (bfd *input_bfd,
   reloc_howto_type *howto;
 
   howto = elf_howto_table + ELF64_R_TYPE (rel->r_info);
-  (*_bfd_error_handler)
+  _bfd_error_handler
+    /* xgettext:c-format */
     (_("%B(%A+0x%lx): invalid instruction for TLS relocation %s"),
      input_bfd,
      input_section,
@@ -2479,7 +2435,7 @@ elf_s390_relocate_section (bfd *output_bfd,
 		    PLT_ENTRY_SIZE;
 
 		  /* Offset in GOT is PLT index plus GOT headers(3)
-		     times 4, addr & GOT addr.  */
+		     times 8, addr & GOT addr.  */
 		  relocation = (plt_index + 3) * GOT_ENTRY_SIZE;
 		  if (r_type == R_390_GOTPLTENT)
 		    relocation += htab->elf.sgot->output_section->vma;
@@ -2745,6 +2701,18 @@ elf_s390_relocate_section (bfd *output_bfd,
 	case R_390_PC32:
 	case R_390_PC32DBL:
 	case R_390_PC64:
+	  if (h != NULL
+	      && bfd_link_pie (info)
+	      && !h->def_regular)
+	    {
+	      _bfd_error_handler (_("%B: `%s' non-PLT reloc for symbol defined "
+				    "in shared library and accessed "
+				    "from executable "
+				    "(rebuild file with -fPIC ?)"),
+				  input_bfd, h->root.root.string);
+	      bfd_set_error (bfd_error_bad_value);
+	      return FALSE;
+	    }
 	  /* The target of these relocs are instruction operands
 	     residing in read-only sections.  We cannot emit a runtime
 	     reloc for it.  */
@@ -2758,6 +2726,7 @@ elf_s390_relocate_section (bfd *output_bfd,
 			    + h->plt.offset);
 	      goto do_relocation;
 	    }
+	  /* Fall through.  */
 
 	case R_390_8:
 	case R_390_16:
@@ -3306,7 +3275,8 @@ elf_s390_relocate_section (bfd *output_bfd,
 	       && h->def_dynamic)
 	  && _bfd_elf_section_offset (output_bfd, info, input_section,
 				      rel->r_offset) != (bfd_vma) -1)
-	(*_bfd_error_handler)
+	_bfd_error_handler
+	  /* xgettext:c-format */
 	  (_("%B(%A+0x%lx): unresolvable %s relocation against symbol `%s'"),
 	   input_bfd,
 	   input_section,
@@ -3357,17 +3327,13 @@ elf_s390_relocate_section (bfd *output_bfd,
 	    }
 
 	  if (r == bfd_reloc_overflow)
-	    {
-
-	      if (! ((*info->callbacks->reloc_overflow)
-		     (info, (h ? &h->root : NULL), name, howto->name,
-		      (bfd_vma) 0, input_bfd, input_section,
-		      rel->r_offset)))
-		return FALSE;
-	    }
+	    (*info->callbacks->reloc_overflow)
+	      (info, (h ? &h->root : NULL), name, howto->name,
+	       (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	  else
 	    {
-	      (*_bfd_error_handler)
+	      _bfd_error_handler
+		/* xgettext:c-format */
 		(_("%B(%A+0x%lx): reloc against `%s': error %d"),
 		 input_bfd, input_section,
 		 (long) rel->r_offset, name, (int) r);
@@ -3608,7 +3574,7 @@ elf_s390_finish_dynamic_symbol (bfd *output_bfd,
 	    }
 	}
       else if (bfd_link_pic (info)
-	  && SYMBOL_REFERENCES_LOCAL (info, h))
+	       && SYMBOL_REFERENCES_LOCAL (info, h))
 	{
 	  /* If this is a static link, or it is a -Bsymbolic link and
 	     the symbol is defined locally or was forced to be local
@@ -3616,7 +3582,7 @@ elf_s390_finish_dynamic_symbol (bfd *output_bfd,
 	     RELATIVE reloc.  The entry in the global offset table
 	     will already have been initialized in the
 	     relocate_section function.  */
-	  if (!h->def_regular)
+	  if (!(h->def_regular || ELF_COMMON_DEF_P (h)))
 	    return FALSE;
 	  BFD_ASSERT((h->got.offset & 1) != 0);
 	  rela.r_info = ELF64_R_INFO (0, R_390_RELATIVE);
@@ -3627,7 +3593,7 @@ elf_s390_finish_dynamic_symbol (bfd *output_bfd,
       else
 	{
 	  BFD_ASSERT((h->got.offset & 1) == 0);
-do_glob_dat:
+	do_glob_dat:
 	  bfd_put_64 (output_bfd, (bfd_vma) 0, htab->elf.sgot->contents + h->got.offset);
 	  rela.r_info = ELF64_R_INFO (h->dynindx, R_390_GLOB_DAT);
 	  rela.r_addend = 0;
@@ -3641,6 +3607,7 @@ do_glob_dat:
   if (h->needs_copy)
     {
       Elf_Internal_Rela rela;
+      asection *s;
       bfd_byte *loc;
 
       /* This symbols needs a copy reloc.  Set it up.  */
@@ -3648,7 +3615,7 @@ do_glob_dat:
       if (h->dynindx == -1
 	  || (h->root.type != bfd_link_hash_defined
 	      && h->root.type != bfd_link_hash_defweak)
-	  || htab->srelbss == NULL)
+	  || htab->elf.srelbss == NULL)
 	abort ();
 
       rela.r_offset = (h->root.u.def.value
@@ -3656,8 +3623,11 @@ do_glob_dat:
 		       + h->root.u.def.section->output_offset);
       rela.r_info = ELF64_R_INFO (h->dynindx, R_390_COPY);
       rela.r_addend = 0;
-      loc = htab->srelbss->contents;
-      loc += htab->srelbss->reloc_count++ * sizeof (Elf64_External_Rela);
+      if (h->root.u.def.section == htab->elf.sdynrelro)
+	s = htab->elf.sreldynrelro;
+      else
+	s = htab->elf.srelbss;
+      loc = s->contents + s->reloc_count++ * sizeof (Elf64_External_Rela);
       bfd_elf64_swap_reloca_out (output_bfd, &rela, loc);
     }
 
@@ -3749,16 +3719,17 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
 	      continue;
 
 	    case DT_PLTGOT:
-	      dyn.d_un.d_ptr = htab->elf.sgot->output_section->vma;
+	      s = htab->elf.sgotplt;
+	      dyn.d_un.d_ptr = s->output_section->vma + s->output_offset;
 	      break;
 
 	    case DT_JMPREL:
-	      dyn.d_un.d_ptr = htab->elf.srelplt->output_section->vma;
+	      s = htab->elf.srelplt;
+	      dyn.d_un.d_ptr = s->output_section->vma + s->output_offset;
 	      break;
 
 	    case DT_PLTRELSZ:
-	      s = htab->elf.srelplt->output_section;
-	      dyn.d_un.d_val = s->size;
+	      dyn.d_un.d_val = htab->elf.srelplt->size + htab->elf.irelplt->size;
 	      break;
 
 	    case DT_RELASZ:
@@ -3769,8 +3740,7 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
 		 linker script arranges for .rela.plt to follow all
 		 other relocation sections, we don't have to worry
 		 about changing the DT_RELA entry.  */
-	      s = htab->elf.srelplt->output_section;
-	      dyn.d_un.d_val -= s->size;
+	      dyn.d_un.d_val -= htab->elf.srelplt->size + htab->elf.irelplt->size;
 	      break;
 	    }
 
@@ -3785,9 +3755,10 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
 		  PLT_FIRST_ENTRY_SIZE);
 	  /* Fixup relative address to start of GOT */
 	  bfd_put_32 (output_bfd,
-		      (htab->elf.sgotplt->output_section->vma +
-		       htab->elf.sgotplt->output_offset
-		       - htab->elf.splt->output_section->vma - 6)/2,
+		      (htab->elf.sgotplt->output_section->vma
+		       + htab->elf.sgotplt->output_offset
+		       - htab->elf.splt->output_section->vma
+		       - htab->elf.splt->output_offset - 6)/2,
 		      htab->elf.splt->contents + 8);
 	}
       if (elf_section_data (htab->elf.splt->output_section) != NULL)
@@ -3807,7 +3778,7 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
 	  /* One entry for shared object struct ptr.  */
 	  bfd_put_64 (output_bfd, (bfd_vma) 0, htab->elf.sgotplt->contents + 8);
 	  /* One entry for _dl_runtime_resolve.  */
-	  bfd_put_64 (output_bfd, (bfd_vma) 0, htab->elf.sgotplt->contents + 12);
+	  bfd_put_64 (output_bfd, (bfd_vma) 0, htab->elf.sgotplt->contents + 16);
 	}
 
       elf_section_data (htab->elf.sgot->output_section)
@@ -3847,7 +3818,120 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
 
   return TRUE;
 }
+
+/* Support for core dump NOTE sections.  */
 
+static bfd_boolean
+elf_s390_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
+{
+  int offset;
+  size_t size;
+
+  switch (note->descsz)
+    {
+    default:
+      return FALSE;
+
+    case 336:			/* sizeof(struct elf_prstatus) on s390x */
+      /* pr_cursig */
+      elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
+
+      /* pr_pid */
+      elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 32);
+
+      /* pr_reg */
+      offset = 112;
+      size = 216;
+      break;
+    }
+
+  /* Make a ".reg/999" section.  */
+  return _bfd_elfcore_make_pseudosection (abfd, ".reg",
+					  size, note->descpos + offset);
+}
+
+static bfd_boolean
+elf_s390_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
+{
+  switch (note->descsz)
+    {
+    default:
+      return FALSE;
+
+    case 136:			/* sizeof(struct elf_prpsinfo) on s390x */
+      elf_tdata (abfd)->core->pid
+	= bfd_get_32 (abfd, note->descdata + 24);
+      elf_tdata (abfd)->core->program
+	= _bfd_elfcore_strndup (abfd, note->descdata + 40, 16);
+      elf_tdata (abfd)->core->command
+	= _bfd_elfcore_strndup (abfd, note->descdata + 56, 80);
+    }
+
+  /* Note that for some reason, a spurious space is tacked
+     onto the end of the args in some (at least one anyway)
+     implementations, so strip it off if it exists.  */
+
+  {
+    char *command = elf_tdata (abfd)->core->command;
+    int n = strlen (command);
+
+    if (0 < n && command[n - 1] == ' ')
+      command[n - 1] = '\0';
+  }
+
+  return TRUE;
+}
+
+static char *
+elf_s390_write_core_note (bfd *abfd, char *buf, int *bufsiz,
+			  int note_type, ...)
+{
+  va_list ap;
+
+  switch (note_type)
+    {
+    default:
+      return NULL;
+
+    case NT_PRPSINFO:
+      {
+	char data[136] = { 0 };
+	const char *fname, *psargs;
+
+	va_start (ap, note_type);
+	fname = va_arg (ap, const char *);
+	psargs = va_arg (ap, const char *);
+	va_end (ap);
+
+	strncpy (data + 40, fname, 16);
+	strncpy (data + 56, psargs, 80);
+	return elfcore_write_note (abfd, buf, bufsiz, "CORE", note_type,
+				   &data, sizeof (data));
+      }
+
+    case NT_PRSTATUS:
+      {
+	char data[336] = { 0 };
+	long pid;
+	int cursig;
+	const void *gregs;
+
+	va_start (ap, note_type);
+	pid = va_arg (ap, long);
+	cursig = va_arg (ap, int);
+	gregs = va_arg (ap, const void *);
+	va_end (ap);
+
+	bfd_put_16 (abfd, cursig, data + 12);
+	bfd_put_32 (abfd, pid, data + 32);
+	memcpy (data + 112, gregs, 216);
+	return elfcore_write_note (abfd, buf, bufsiz, "CORE", note_type,
+				   &data, sizeof (data));
+      }
+    }
+  /* NOTREACHED */
+}
+
 /* Return address for Ith PLT stub in section PLT, for relocation REL
    or (bfd_vma) -1 if it should not be included.  */
 
@@ -3862,15 +3946,12 @@ elf_s390_plt_sym_val (bfd_vma i, const asection *plt,
    object file when linking.  */
 
 static bfd_boolean
-elf64_s390_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
+elf64_s390_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 {
-  if (!is_s390_elf (ibfd) || !is_s390_elf (obfd))
+  if (!is_s390_elf (ibfd) || !is_s390_elf (info->output_bfd))
     return TRUE;
 
-  if (!elf_s390_merge_obj_attributes (ibfd, obfd))
-    return FALSE;
-
-  return TRUE;
+  return elf_s390_merge_obj_attributes (ibfd, info);
 }
 
 /* Why was the hash table entry size definition changed from
@@ -3924,6 +4005,7 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_plt_readonly	1
 #define elf_backend_want_plt_sym	0
 #define elf_backend_got_header_size	24
+#define elf_backend_want_dynrelro	1
 #define elf_backend_rela_normal		1
 
 #define elf_info_to_howto		elf_s390_info_to_howto
@@ -3937,7 +4019,7 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_adjust_dynamic_symbol     elf_s390_adjust_dynamic_symbol
 #define elf_backend_check_relocs	      elf_s390_check_relocs
 #define elf_backend_copy_indirect_symbol      elf_s390_copy_indirect_symbol
-#define elf_backend_create_dynamic_sections   elf_s390_create_dynamic_sections
+#define elf_backend_create_dynamic_sections   _bfd_elf_create_dynamic_sections
 #define elf_backend_finish_dynamic_sections   elf_s390_finish_dynamic_sections
 #define elf_backend_finish_dynamic_symbol     elf_s390_finish_dynamic_symbol
 #define elf_backend_gc_mark_hook	      elf_s390_gc_mark_hook
@@ -3946,26 +4028,14 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_relocate_section	      elf_s390_relocate_section
 #define elf_backend_size_dynamic_sections     elf_s390_size_dynamic_sections
 #define elf_backend_init_index_section	      _bfd_elf_init_1_index_section
+#define elf_backend_grok_prstatus	      elf_s390_grok_prstatus
+#define elf_backend_grok_psinfo		      elf_s390_grok_psinfo
+#define elf_backend_write_core_note	      elf_s390_write_core_note
 #define elf_backend_plt_sym_val		      elf_s390_plt_sym_val
 #define elf_backend_add_symbol_hook           elf_s390_add_symbol_hook
 #define elf_backend_sort_relocs_p             elf_s390_elf_sort_relocs_p
 
 #define bfd_elf64_mkobject		elf_s390_mkobject
 #define elf_backend_object_p		elf_s390_object_p
-
-/* Enable ELF64 archive functions.  */
-#define bfd_elf64_archive_functions
-extern bfd_boolean bfd_elf64_archive_slurp_armap (bfd *);
-extern bfd_boolean bfd_elf64_archive_write_armap (bfd *, unsigned int, struct orl *, unsigned int, int);
-
-#define bfd_elf64_archive_slurp_extended_name_table 	_bfd_archive_coff_slurp_extended_name_table
-#define bfd_elf64_archive_construct_extended_name_table _bfd_archive_coff_construct_extended_name_table
-#define bfd_elf64_archive_truncate_arname 		_bfd_archive_coff_truncate_arname
-#define bfd_elf64_archive_read_ar_hdr			_bfd_archive_coff_read_ar_hdr
-#define bfd_elf64_archive_write_ar_hdr			_bfd_archive_coff_write_ar_hdr
-#define bfd_elf64_archive_openr_next_archived_file 	_bfd_archive_coff_openr_next_archived_file
-#define bfd_elf64_archive_get_elt_at_index 		_bfd_archive_coff_get_elt_at_index
-#define bfd_elf64_archive_generic_stat_arch_elt 	_bfd_archive_coff_generic_stat_arch_elt
-#define bfd_elf64_archive_update_armap_timestamp 	_bfd_archive_coff_update_armap_timestamp
 
 #include "elf64-target.h"

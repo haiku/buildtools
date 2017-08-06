@@ -320,6 +320,9 @@ typedef struct bfd_section
      when memory read flag isn't set. */
 #define SEC_COFF_NOREAD 0x40000000
 
+  /* Indicate that section has the purecode flag set.  */
+#define SEC_ELF_PURECODE 0x80000000
+
   /*  End of section flags.  */
 
   /* Some internal packed boolean fields.  */
@@ -386,7 +389,7 @@ typedef struct bfd_section
       information.  */
   bfd_vma lma;
 
-  /* The size of the section in octets, as it will be output.
+  /* The size of the section in *octets*, as it will be output.
      Contains a value even if the section has no contents (e.g., the
      size of @code{.bss}).  */
   bfd_size_type size;
@@ -656,9 +659,9 @@ extern asection _bfd_std_section[4];
 #define bfd_section_removed_from_list(ABFD, S) \
   ((S)->next == NULL ? (ABFD)->section_last != (S) : (S)->next->prev != (S))
 
-#define BFD_FAKE_SECTION(SEC, FLAGS, SYM, NAME, IDX)                   \
+#define BFD_FAKE_SECTION(SEC, SYM, NAME, IDX, FLAGS)                   \
   /* name, id,  index, next, prev, flags, user_set_vma,            */  \
-  @{ NAME,  IDX, 0,     NULL, NULL, FLAGS, 0,                           \
+  @{  NAME, IDX, 0,     NULL, NULL, FLAGS, 0,                           \
                                                                        \
   /* linker_mark, linker_has_input, gc_mark, decompress_status,    */  \
      0,           0,                1,       0,                        \

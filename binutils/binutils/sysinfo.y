@@ -1,4 +1,4 @@
-/* Copyright (C) 2001-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2001-2017 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support (steve@cygnus.com).
 
    This file is part of GNU binutils.
@@ -153,9 +153,8 @@ it:
     break;
   case 'g':
     printf("\tchecksum(ffile,raw, idx, IT_%s_CODE);\n", it);
-
+    /* Fall through.  */
   case 'i':
-
   case 'o':
   case 'c':
     printf("}\n");
@@ -182,6 +181,7 @@ repeat_it_field: '(' REPEAT NAME
 	      printf("\tprintf(\"repeat %%d\\n\", %s);\n",$3);
 	      if (rdepth==2)
 	      printf("\tprintf(\"repeat %%d\\n\", %s[n]);\n",$3);
+	      /* Fall through.  */
 	    case 'i':
 	    case 'g':
 	    case 'o':

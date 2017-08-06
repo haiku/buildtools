@@ -1,5 +1,5 @@
 /* Support for the generic parts of PE/PEI, for BFD.
-   Copyright (C) 1995-2015 Free Software Foundation, Inc.
+   Copyright (C) 1995-2017 Free Software Foundation, Inc.
    Written by Cygnus Solutions.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -771,11 +771,13 @@ pe_ILF_build_a_bfd (bfd *           abfd,
 
     case IMPORT_CONST:
       /* XXX code yet to be written.  */
+      /* xgettext:c-format */
       _bfd_error_handler (_("%B: Unhandled import type; %x"),
 			  abfd, import_type);
       return FALSE;
 
     default:
+      /* xgettext:c-format */
       _bfd_error_handler (_("%B: Unrecognised import type; %x"),
 			  abfd, import_type);
       return FALSE;
@@ -790,6 +792,7 @@ pe_ILF_build_a_bfd (bfd *           abfd,
       break;
 
     default:
+      /* xgettext:c-format */
       _bfd_error_handler (_("%B: Unrecognised import name type; %x"),
 			  abfd, import_name_type);
       return FALSE;
@@ -889,8 +892,8 @@ pe_ILF_build_a_bfd (bfd *           abfd,
   if (import_name_type == IMPORT_ORDINAL)
     {
       if (ordinal == 0)
-	/* XXX - treat as IMPORT_NAME ??? */
-	abort ();
+	/* See PR 20907 for a reproducer.  */
+	goto error_return;
 
 #ifdef COFF_WITH_pex64
       ((unsigned int *) id4->contents)[0] = ordinal;
@@ -959,13 +962,19 @@ pe_ILF_build_a_bfd (bfd *           abfd,
       pe_ILF_save_relocs (&vars, id5);
     }
 
+  /* Create an import symbol.  */
+  pe_ILF_make_a_symbol (& vars, "__imp_", symbol_name, id5, 0);
+  imp_sym   = vars.sym_ptr_ptr - 1;
+  imp_index = vars.sym_index - 1;
+
   /* Create extra sections depending upon the type of import we are dealing with.  */
   switch (import_type)
     {
       int i;
 
     case IMPORT_CODE:
-      /* Create a .text section.
+      /* CODE functions are special, in that they get a trampoline that
+         jumps to the main import symbol.  Create a .text section to hold it.
 	 First we need to look up its contents in the jump table.  */
       for (i = NUM_ENTRIES (jtab); i--;)
 	{
@@ -985,11 +994,6 @@ pe_ILF_build_a_bfd (bfd *           abfd,
 
       /* Copy in the jump code.  */
       memcpy (text->contents, jtab[i].data, jtab[i].size);
-
-      /* Create an import symbol.  */
-      pe_ILF_make_a_symbol (& vars, "__imp_", symbol_name, id5, 0);
-      imp_sym   = vars.sym_ptr_ptr - 1;
-      imp_index = vars.sym_index - 1;
 
       /* Create a reloc for the data in the text section.  */
 #ifdef MIPS_ARCH_MAGIC_WINCE
@@ -1068,14 +1072,6 @@ pe_ILF_build_a_bfd (bfd *           abfd,
       pe_ILF_make_a_symbol (& vars, "", symbol_name, text,
 			    BSF_NOT_AT_END | BSF_FUNCTION);
 
-      /* Create an import symbol for the DLL, without the
-       .dll suffix.  */
-      ptr = (bfd_byte *) strrchr (source_dll, '.');
-      if (ptr)
-	* ptr = 0;
-      pe_ILF_make_a_symbol (& vars, "__IMPORT_DESCRIPTOR_", source_dll, NULL, 0);
-      if (ptr)
-	* ptr = '.';
       break;
 
     case IMPORT_DATA:
@@ -1086,6 +1082,14 @@ pe_ILF_build_a_bfd (bfd *           abfd,
       /* XXX code not yet written.  */
       abort ();
     }
+
+  /* Create an import symbol for the DLL, without the .dll suffix.  */
+  ptr = (bfd_byte *) strrchr (source_dll, '.');
+  if (ptr)
+    * ptr = 0;
+  pe_ILF_make_a_symbol (& vars, "__IMPORT_DESCRIPTOR_", source_dll, NULL, 0);
+  if (ptr)
+    * ptr = '.';
 
   /* Point the bfd at the symbol table.  */
   obj_symbols (abfd) = vars.sym_cache;
@@ -1209,6 +1213,7 @@ pe_ILF_object_p (bfd * abfd)
       /* We no longer support PowerPC.  */
     default:
       _bfd_error_handler
+	/* xgettext:c-format */
 	(_("%B: Unrecognised machine type (0x%x)"
 	   " in Import Library Format archive"),
 	 abfd, machine);
@@ -1221,6 +1226,7 @@ pe_ILF_object_p (bfd * abfd)
   if (magic == 0)
     {
       _bfd_error_handler
+	/* xgettext:c-format */
 	(_("%B: Recognised but unhandled machine type (0x%x)"
 	   " in Import Library Format archive"),
 	 abfd, machine);
@@ -1263,7 +1269,8 @@ pe_ILF_object_p (bfd * abfd)
     }
 
   symbol_name = (char *) ptr;
-  source_dll  = symbol_name + strlen (symbol_name) + 1;
+  /* See PR 20905 for an example of where the strnlen is necessary.  */
+  source_dll  = symbol_name + strnlen (symbol_name, size - 1) + 1;
 
   /* Verify that the strings are null terminated.  */
   if (ptr[size - 1] != 0
@@ -1288,7 +1295,7 @@ pe_ILF_object_p (bfd * abfd)
 }
 
 static void
-pe_bfd_read_buildid(bfd *abfd)
+pe_bfd_read_buildid (bfd *abfd)
 {
   pe_data_type *pe = pe_data (abfd);
   struct internal_extra_pe_aouthdr *extra = &pe->pe_opthdr;
@@ -1305,7 +1312,7 @@ pe_bfd_read_buildid(bfd *abfd)
 
   addr += extra->ImageBase;
 
-  /* Search for the section containing the DebugDirectory */
+  /* Search for the section containing the DebugDirectory.  */
   for (section = abfd->sections; section != NULL; section = section->next)
     {
       if ((addr >= section->vma) && (addr < (section->vma + section->size)))
@@ -1313,16 +1320,21 @@ pe_bfd_read_buildid(bfd *abfd)
     }
 
   if (section == NULL)
-    {
-      return;
-    }
-  else if (!(section->flags & SEC_HAS_CONTENTS))
-    {
-      return;
-    }
+    return;
+
+  if (!(section->flags & SEC_HAS_CONTENTS))
+    return;
 
   dataoff = addr - section->vma;
 
+  /* PR 20605: Make sure that the data is really there.  */
+  if (dataoff + size > section->size)
+    {
+      _bfd_error_handler (_("%B: Error: Debug Data ends beyond end of debug directory."),
+			  abfd);
+      return;
+    }
+  
   /* Read the whole section. */
   if (!bfd_malloc_and_get_section (abfd, section, &data))
     {
@@ -1353,8 +1365,8 @@ pe_bfd_read_buildid(bfd *abfd)
                                               (file_ptr) idd.PointerToRawData,
                                               idd.SizeOfData, cvinfo))
             {
-              struct bfd_build_id* build_id = bfd_alloc(abfd,
-                         sizeof(struct bfd_build_id) + cvinfo->SignatureLength);
+              struct bfd_build_id* build_id = bfd_alloc (abfd,
+                         sizeof (struct bfd_build_id) + cvinfo->SignatureLength);
               if (build_id)
                 {
                   build_id->size = cvinfo->SignatureLength;

@@ -1,5 +1,5 @@
 /* 32-bit ELF support for S+core.
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2017 Free Software Foundation, Inc.
    Contributed by
    Brain.lin (brain.lin@sunplusct.com)
    Mei Ligang (ligang@sunnorth.com.cn)
@@ -1429,7 +1429,8 @@ score_elf_create_got_section (bfd *abfd,
   /* We have to use an alignment of 2**4 here because this is hardcoded
      in the function stub generation and in the linker script.  */
   s = bfd_make_section_anyway_with_flags (abfd, ".got", flags);
-   if (s == NULL
+  elf_hash_table (info)->sgot = s;
+  if (s == NULL
       || ! bfd_set_section_alignment (abfd, s, 4))
     return FALSE;
 
@@ -1446,6 +1447,7 @@ score_elf_create_got_section (bfd *abfd,
   h->non_elf = 0;
   h->def_regular = 1;
   h->type = STT_OBJECT;
+  elf_hash_table (info)->hgot = h;
 
   if (bfd_link_pic (info) && ! bfd_elf_link_record_dynamic_symbol (info, h))
     return FALSE;
@@ -1515,7 +1517,7 @@ score_elf_create_local_got_entry (bfd *abfd,
     {
       (*loc)->gotidx = -1;
       /* We didn't allocate enough space in the GOT.  */
-      (*_bfd_error_handler)
+      _bfd_error_handler
         (_("not enough GOT space for local GOT entries"));
       bfd_set_error (bfd_error_bad_value);
       return NULL;
@@ -2667,12 +2669,11 @@ s3_bfd_score_elf_relocate_section (bfd *output_bfd,
             }
           else if (!bfd_link_relocatable (info))
             {
-              if (! ((*info->callbacks->undefined_symbol)
-                     (info, h->root.root.root.string, input_bfd,
-                      input_section, rel->r_offset,
-                      (info->unresolved_syms_in_objects == RM_GENERATE_ERROR)
-                      || ELF_ST_VISIBILITY (h->root.other))))
-                return bfd_reloc_undefined;
+	      (*info->callbacks->undefined_symbol)
+		(info, h->root.root.root.string, input_bfd,
+		 input_section, rel->r_offset,
+		 (info->unresolved_syms_in_objects == RM_GENERATE_ERROR)
+		 || ELF_ST_VISIBILITY (h->root.other));
               relocation = 0;
             }
         }
@@ -2718,16 +2719,14 @@ s3_bfd_score_elf_relocate_section (bfd *output_bfd,
               /* If the overflowing reloc was to an undefined symbol,
                  we have already printed one error message and there
                  is no point complaining again.  */
-              if (((!h) || (h->root.root.type != bfd_link_hash_undefined))
-                  && (!((*info->callbacks->reloc_overflow)
-                        (info, NULL, name, howto->name, (bfd_vma) 0,
-                         input_bfd, input_section, rel->r_offset))))
-                return FALSE;
+	      if (!h || h->root.root.type != bfd_link_hash_undefined)
+		(*info->callbacks->reloc_overflow)
+		  (info, NULL, name, howto->name, (bfd_vma) 0,
+		   input_bfd, input_section, rel->r_offset);
               break;
             case bfd_reloc_undefined:
-              if (!((*info->callbacks->undefined_symbol)
-                    (info, name, input_bfd, input_section, rel->r_offset, TRUE)))
-                return FALSE;
+	      (*info->callbacks->undefined_symbol)
+		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
               break;
 
             case bfd_reloc_outofrange:
@@ -2749,12 +2748,11 @@ s3_bfd_score_elf_relocate_section (bfd *output_bfd,
 
             default:
               msg = _("internal error: unknown error");
-              /* fall through */
+              /* Fall through.  */
 
             common_error:
-              if (!((*info->callbacks->warning)
-                    (info, msg, name, input_bfd, input_section, rel->r_offset)))
-                return FALSE;
+	      (*info->callbacks->warning) (info, msg, name, input_bfd,
+					   input_section, rel->r_offset);
               break;
             }
         }
@@ -2829,7 +2827,9 @@ s3_bfd_score_elf_check_relocs (bfd *abfd,
         }
       else if (r_symndx >= extsymoff + NUM_SHDR_ENTRIES (symtab_hdr))
         {
-          (*_bfd_error_handler) (_("%s: Malformed reloc detected for section %s"), abfd, name);
+	  _bfd_error_handler
+	    /* xgettext:c-format */
+	    (_("%s: Malformed reloc detected for section %s"), abfd, name);
           bfd_set_error (bfd_error_bad_value);
           return FALSE;
         }
@@ -2885,7 +2885,8 @@ s3_bfd_score_elf_check_relocs (bfd *abfd,
         case R_SCORE_CALL15:
           if (h == NULL)
             {
-              (*_bfd_error_handler)
+	      _bfd_error_handler
+		/* xgettext:c-format */
                 (_("%B: CALL15 reloc at 0x%lx not against global symbol"),
                  abfd, (unsigned long) rel->r_offset);
               bfd_set_error (bfd_error_bad_value);
@@ -3618,21 +3619,18 @@ s3_bfd_score_elf_finish_dynamic_sections (bfd *output_bfd,
           switch (dyn.d_tag)
             {
             case DT_RELENT:
-              s = score_elf_rel_dyn_section (dynobj, FALSE);
-              BFD_ASSERT (s != NULL);
               dyn.d_un.d_val = SCORE_ELF_REL_SIZE (dynobj);
               break;
 
             case DT_STRSZ:
               /* Rewrite DT_STRSZ.  */
-              dyn.d_un.d_val = _bfd_elf_strtab_size (elf_hash_table (info)->dynstr);
-                    break;
+              dyn.d_un.d_val
+                = _bfd_elf_strtab_size (elf_hash_table (info)->dynstr);
+              break;
 
             case DT_PLTGOT:
-              name = ".got";
-              s = bfd_get_section_by_name (output_bfd, name);
-              BFD_ASSERT (s != NULL);
-              dyn.d_un.d_ptr = s->vma;
+              s = elf_hash_table (info)->sgot;
+              dyn.d_un.d_ptr = s->output_section->vma + s->output_offset;
               break;
 
             case DT_SCORE_BASE_ADDRESS:
@@ -3660,14 +3658,13 @@ s3_bfd_score_elf_finish_dynamic_sections (bfd *output_bfd,
                 }
               /* In case if we don't have global got symbols we default
                   to setting DT_SCORE_GOTSYM to the same value as
-                  DT_SCORE_SYMTABNO, so we just fall through.  */
+                  DT_SCORE_SYMTABNO.  */
+	      /* Fall through.  */
 
             case DT_SCORE_SYMTABNO:
               name = ".dynsym";
               elemsize = SCORE_ELF_SYM_SIZE (output_bfd);
-              s = bfd_get_section_by_name (output_bfd, name);
-              BFD_ASSERT (s != NULL);
-
+              s = bfd_get_linker_section (dynobj, name);
               dyn.d_un.d_val = s->size / elemsize;
               break;
 
@@ -4024,12 +4021,13 @@ s3_elf32_score_print_private_bfd_data (bfd *abfd, void * ptr)
 }
 
 static bfd_boolean
-s3_elf32_score_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
+s3_elf32_score_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 {
+  bfd *obfd = info->output_bfd;
   flagword in_flags;
   flagword out_flags;
 
-  if (!_bfd_generic_verify_endian_match (ibfd, obfd))
+  if (!_bfd_generic_verify_endian_match (ibfd, info))
     return FALSE;
 
   in_flags  = elf_elfheader (ibfd)->e_flags;
@@ -4057,9 +4055,8 @@ s3_elf32_score_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
     }
 
   if (((in_flags & EF_SCORE_PIC) != 0) != ((out_flags & EF_SCORE_PIC) != 0))
-    {
-      (*_bfd_error_handler) (_("%B: warning: linking PIC files with non-PIC files"), ibfd);
-    }
+    _bfd_error_handler
+      (_("%B: warning: linking PIC files with non-PIC files"), ibfd);
 
   /* FIXME: Maybe dependency fix compatibility should be checked here.  */
 
@@ -4399,12 +4396,12 @@ elf32_score_print_private_bfd_data (bfd *abfd, void * ptr)
 }
 
 static bfd_boolean
-elf32_score_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
+elf32_score_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 {
-  if (bfd_get_mach (obfd) == bfd_mach_score3)
-    return s3_elf32_score_merge_private_bfd_data (ibfd, obfd);
+  if (bfd_get_mach (info->output_bfd) == bfd_mach_score3)
+    return s3_elf32_score_merge_private_bfd_data (ibfd, info);
   else
-    return s7_elf32_score_merge_private_bfd_data (ibfd, obfd);
+    return s7_elf32_score_merge_private_bfd_data (ibfd, info);
 }
 
 static bfd_boolean

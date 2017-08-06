@@ -1,5 +1,5 @@
 /* ldlang.h - linker command language support
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright (C) 1991-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -372,6 +372,7 @@ struct lang_wild_statement_struct
   struct wildcard_list *section_list;
   bfd_boolean keep_sections;
   lang_statement_list_type children;
+  struct name_list *exclude_name_list;
 
   walk_wild_section_handler_t walk_wild_section_handler;
   struct wildcard_list *handler_data[4];
@@ -464,6 +465,7 @@ struct lang_nocrossrefs
 {
   struct lang_nocrossrefs *next;
   lang_nocrossref_type *list;
+  bfd_boolean onlyfirst;
 };
 
 /* This structure is used to hold a list of input section names which
@@ -654,6 +656,8 @@ extern void lang_new_phdr
    etree_type *);
 extern void lang_add_nocrossref
   (lang_nocrossref_type *);
+extern void lang_add_nocrossref_to
+  (lang_nocrossref_type *);
 extern void lang_enter_overlay
   (etree_type *, etree_type *);
 extern void lang_enter_overlay_section
@@ -692,5 +696,8 @@ lang_ld_feature (char *);
 
 extern void
 lang_print_memory_usage (void);
+
+extern void
+lang_add_gc_name (const char *);
 
 #endif

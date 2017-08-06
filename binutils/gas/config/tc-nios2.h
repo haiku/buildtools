@@ -1,5 +1,5 @@
 /* Definitions for Altera Nios II assembler.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by Nigel Gray (ngray@altera.com).
    Contributed by Mentor Graphics, Inc.
 
@@ -92,7 +92,7 @@ extern long nios2_relax_frag (segT segment, fragS * fragP, long stretch);
 
 /* Processor-specific section directives.  */
 #define md_elf_section_letter		nios2_elf_section_letter
-extern int nios2_elf_section_letter (int, char **);
+extern int nios2_elf_section_letter (int, const char **);
 #define md_elf_section_flags		nios2_elf_section_flags
 extern flagword nios2_elf_section_flags (flagword, int, int);
 #endif
@@ -100,6 +100,14 @@ extern flagword nios2_elf_section_flags (flagword, int, int);
 #define GLOBAL_OFFSET_TABLE_NAME       "_GLOBAL_OFFSET_TABLE_"
 
 #define DIFF_EXPR_OK
+
+/* Don't allow the generic code to convert fixups involving the
+   subtraction of a label in the current section to pc-relative if we
+   don't have the necessary pc-relative relocation.  */
+#define TC_FORCE_RELOCATION_SUB_LOCAL(FIX, SEG)		\
+  (!((FIX)->fx_r_type == BFD_RELOC_16			\
+     || (FIX)->fx_r_type == BFD_RELOC_NIOS2_LO16	\
+     || (FIX)->fx_r_type == BFD_RELOC_NIOS2_HIADJ16))
 
 /* Nios2 ABI doesn't have 32-bit PCREL relocation, and, as relocations for
    CFI information will be in section other than .text, we can't use PC-biased

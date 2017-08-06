@@ -1,5 +1,5 @@
 /* IBM S/390-specific support for ELF 32 and 64 bit functions
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2017 Free Software Foundation, Inc.
    Contributed by Andreas Krebbel.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -236,11 +236,10 @@ elf_s390_add_symbol_hook (bfd *abfd,
 			  asection **secp ATTRIBUTE_UNUSED,
 			  bfd_vma *valp ATTRIBUTE_UNUSED)
 {
-  if ((ELF_ST_TYPE (sym->st_info) == STT_GNU_IFUNC
-       || ELF_ST_BIND (sym->st_info) == STB_GNU_UNIQUE)
+  if (ELF_ST_TYPE (sym->st_info) == STT_GNU_IFUNC
       && (abfd->flags & DYNAMIC) == 0
       && bfd_get_flavour (info->output_bfd) == bfd_target_elf_flavour)
-    elf_tdata (info->output_bfd)->has_gnu_symbols = elf_gnu_symbol_any;
+    elf_tdata (info->output_bfd)->has_gnu_symbols |= elf_gnu_symbol_ifunc;
 
   return TRUE;
 }
@@ -260,8 +259,9 @@ elf_s390_elf_sort_relocs_p (asection *sec)
 /* Merge object attributes from IBFD into OBFD.  Raise an error if
    there are conflicting attributes.  */
 static bfd_boolean
-elf_s390_merge_obj_attributes (bfd *ibfd, bfd *obfd)
+elf_s390_merge_obj_attributes (bfd *ibfd, struct bfd_link_info *info)
 {
+  bfd *obfd = info->output_bfd;
   obj_attribute *in_attr, *in_attrs;
   obj_attribute *out_attr, *out_attrs;
 
@@ -287,10 +287,12 @@ elf_s390_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 
   if (in_attr->i > 2)
     _bfd_error_handler
+      /* xgettext:c-format */
       (_("Warning: %B uses unknown vector ABI %d"), ibfd,
        in_attr->i);
   else if (out_attr->i > 2)
     _bfd_error_handler
+      /* xgettext:c-format */
       (_("Warning: %B uses unknown vector ABI %d"), obfd,
        out_attr->i);
   else if (in_attr->i != out_attr->i)
@@ -302,6 +304,7 @@ elf_s390_merge_obj_attributes (bfd *ibfd, bfd *obfd)
 	  const char abi_str[3][9] = { "none", "software", "hardware" };
 
 	  _bfd_error_handler
+	    /* xgettext:c-format */
 	    (_("Warning: %B uses vector %s ABI, %B uses %s ABI"),
 	     ibfd, obfd, abi_str[in_attr->i], abi_str[out_attr->i]);
 	}
@@ -310,7 +313,7 @@ elf_s390_merge_obj_attributes (bfd *ibfd, bfd *obfd)
     }
 
   /* Merge Tag_compatibility attributes and any common GNU ones.  */
-  _bfd_elf_merge_object_attributes (ibfd, obfd);
+  _bfd_elf_merge_object_attributes (ibfd, info);
 
   return TRUE;
 }

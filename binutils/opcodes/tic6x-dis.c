@@ -1,5 +1,5 @@
 /* TI C6X disassembler.
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2017 Free Software Foundation, Inc.
    Contributed by Joseph Myers <joseph@codesourcery.com>
    		  Bernd Schmidt  <bernds@codesourcery.com>
 
@@ -1075,6 +1075,7 @@ print_insn_tic6x (bfd_vma addr, struct disassemble_info *info)
 		case tic6x_coding_mem_offset_minus_one_noscale:
 		case tic6x_coding_mem_offset_minus_one:
 		  fld_val += 1;
+		  /* Fall through.  */
 		case tic6x_coding_mem_offset_noscale:
 		case tic6x_coding_mem_offset:
 		  mem_offset = fld_val;

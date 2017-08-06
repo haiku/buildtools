@@ -1,5 +1,5 @@
 /* dlltool.c -- tool to generate stuff for PE style DLLs
-   Copyright (C) 1995-2015 Free Software Foundation, Inc.
+   Copyright (C) 1995-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -780,10 +780,9 @@ typedef struct export
   int ordinal;
   int constant;
   int noname;		/* Don't put name in image file.  */
-  int private;	/* Don't put reference in import lib.  */
+  int private;		/* Don't put reference in import lib.  */
   int data;
-  int hint;
-  int forward;	/* Number of forward label, 0 means no forward.  */
+  int forward;		/* Number of forward label, 0 means no forward.  */
   struct export *next;
 }
 export_type;
@@ -1253,7 +1252,7 @@ def_import (const char *app_name, const char *module, const char *dllext,
 	    const char *entry, int ord_val, const char *its_name)
 {
   const char *application_name;
-  char *buf;
+  char *buf = NULL;
 
   if (entry != NULL)
     application_name = entry;
@@ -1266,13 +1265,12 @@ def_import (const char *app_name, const char *module, const char *dllext,
     }
 
   if (dllext != NULL)
-    {
-      buf = (char *) alloca (strlen (module) + strlen (dllext) + 2);
-      sprintf (buf, "%s.%s", module, dllext);
-      module = buf;
-    }
+    module = buf = concat (module, ".", dllext, NULL);
 
   append_import (application_name, module, ord_val, its_name);
+
+  if (buf)
+    free (buf);
 }
 
 void
@@ -1334,7 +1332,7 @@ run (const char *what, char *args)
     if (*s == ' ')
       i++;
   i++;
-  argv = alloca (sizeof (char *) * (i + 3));
+  argv = xmalloc (sizeof (char *) * (i + 3));
   i = 0;
   argv[i++] = what;
   s = args;
@@ -1353,6 +1351,7 @@ run (const char *what, char *args)
 
   pid = pexecute (argv[0], (char * const *) argv, program_name, temp_base,
 		  &errmsg_fmt, &errmsg_arg, PEXECUTE_ONE | PEXECUTE_SEARCH);
+  free(argv);
 
   if (pid == -1)
     {
@@ -1986,12 +1985,13 @@ assemble_file (const char * source, const char * dest)
 {
   char * cmd;
 
-  cmd = (char *) alloca (strlen (ASM_SWITCHES) + strlen (as_flags)
-			 + strlen (source) + strlen (dest) + 50);
+  cmd = xmalloc (strlen (ASM_SWITCHES) + strlen (as_flags)
+		 + strlen (source) + strlen (dest) + 50);
 
   sprintf (cmd, "%s %s -o %s %s", ASM_SWITCHES, as_flags, dest, source);
 
   run (as_name, cmd);
+  free (cmd);
 }
 
 static const char * temp_file_to_remove[5];
@@ -2707,7 +2707,8 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	      sec->orelocation = rpp;
 	      break;
 	    }
-	  /* else fall through */
+	  /* Fall through.  */
+
 	case IDATA4:
 	  /* An idata$4 or idata$5 is one word long, and has an
 	     rva to idata$6.  */
@@ -2774,10 +2775,8 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	case IDATA6:
 	  if (!exp->noname)
 	    {
-	      /* This used to add 1 to exp->hint.  I don't know
-		 why it did that, and it does not match what I see
-		 in programs compiled with the MS tools.  */
-	      int idx = exp->hint;
+	      int idx = exp->ordinal;
+
 	      if (exp->its_name)
 	        si->size = strlen (exp->its_name) + 3;
 	      else
@@ -3261,7 +3260,6 @@ gen_lib_file (int delay)
 	  alias_exp.noname = exp->noname;
 	  alias_exp.private = exp->private;
 	  alias_exp.data = exp->data;
-	  alias_exp.hint = exp->hint;
 	  alias_exp.forward = exp->forward;
 	  alias_exp.next = exp->next;
 	  n = make_one_lib_file (&alias_exp, i + PREFIX_ALIAS_BASE, delay);
@@ -3295,7 +3293,7 @@ gen_lib_file (int delay)
     {
       char *name;
 
-      name = (char *) alloca (strlen (TMP_STUB) + 10);
+      name = xmalloc (strlen (TMP_STUB) + 10);
       for (i = 0; (exp = d_exports_lexically[i]); i++)
 	{
 	  /* Don't delete non-existent stubs for PRIVATE entries.  */
@@ -3313,6 +3311,7 @@ gen_lib_file (int delay)
 		non_fatal (_("cannot delete %s: %s"), name, strerror (errno));
 	    }
 	}
+      free (name);
     }
 
   inform (_("Created lib file"));
@@ -3924,10 +3923,8 @@ mangle_defs (void)
 {
   /* First work out the minimum ordinal chosen.  */
   export_type *exp;
-
-  int i;
-  int hint = 0;
   export_type **d_export_vec = xmalloc (sizeof (export_type *) * d_nfuncs);
+  int i;
 
   inform (_("Processing definitions"));
 
@@ -3955,11 +3952,6 @@ mangle_defs (void)
   d_exports_lexically[i] = 0;
 
   qsort (d_exports_lexically, i, sizeof (export_type *), nfunc);
-
-  /* Fill exp entries with their hint values.  */
-  for (i = 0; i < d_nfuncs; i++)
-    if (!d_exports_lexically[i]->noname || show_allnames)
-      d_exports_lexically[i]->hint = hint++;
 
   inform (_("Processed definitions"));
 }

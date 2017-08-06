@@ -21,13 +21,11 @@ Section Headers:
  +\[[ 0-9]+\] \.dynamic +DYNAMIC +0+804a060 .*
  +\[[ 0-9]+\] \.got +PROGBITS +0+804a0e0 .*
  +\[[ 0-9]+\] \.got\.plt +PROGBITS +0+804a104 .*
- +\[[ 0-9]+\] \.shstrtab +.*
  +\[[ 0-9]+\] \.symtab +.*
  +\[[ 0-9]+\] \.strtab +.*
+ +\[[ 0-9]+\] \.shstrtab +.*
 Key to Flags:
-.*
-.*
-.*
+#...
 
 Elf file type is EXEC \(Executable file\)
 Entry point 0x8049156

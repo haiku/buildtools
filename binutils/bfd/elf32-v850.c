@@ -1,5 +1,5 @@
 /* V850-specific support for 32-bit ELF
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright (C) 1996-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -464,7 +464,7 @@ v850_elf_perform_lo16_relocation (bfd *abfd, unsigned long *insn,
 	}
       else
 	{
-	  (*_bfd_error_handler) (_("FAILED to find previous HI16 reloc"));
+	  _bfd_error_handler (_("FAILED to find previous HI16 reloc"));
 	  return FALSE;
 	}
     }
@@ -1898,6 +1898,7 @@ v850_elf_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED,
   r_type = ELF32_R_TYPE (dst->r_info);
   if (r_type >= (unsigned int) R_V850_max)
     {
+      /* xgettext:c-format */
       _bfd_error_handler (_("%B: invalid V850 reloc number: %d"), abfd, r_type);
       r_type = 0;
     }
@@ -1916,6 +1917,7 @@ v850_elf_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
   r_type = ELF32_R_TYPE (dst->r_info);
   if (r_type >= (unsigned int) R_V850_max)
     {
+      /* xgettext:c-format */
       _bfd_error_handler (_("%B: invalid V850 reloc number: %d"), abfd, r_type);
       r_type = 0;
     }
@@ -2271,18 +2273,14 @@ v850_elf_relocate_section (bfd *output_bfd,
 	  switch ((int) r)
 	    {
 	    case bfd_reloc_overflow:
-	      if (! ((*info->callbacks->reloc_overflow)
-		     (info, (h ? &h->root : NULL), name, howto->name,
-		      (bfd_vma) 0, input_bfd, input_section,
-		      rel->r_offset)))
-		return FALSE;
+	      (*info->callbacks->reloc_overflow)
+		(info, (h ? &h->root : NULL), name, howto->name,
+		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      if (! ((*info->callbacks->undefined_symbol)
-		     (info, name, input_bfd, input_section,
-		      rel->r_offset, TRUE)))
-		return FALSE;
+	      (*info->callbacks->undefined_symbol)
+		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -2314,10 +2312,8 @@ v850_elf_relocate_section (bfd *output_bfd,
 	      /* fall through */
 
 	    common_error:
-	      if (!((*info->callbacks->warning)
-		    (info, msg, name, input_bfd, input_section,
-		     rel->r_offset)))
-		return FALSE;
+	      (*info->callbacks->warning) (info, msg, name, input_bfd,
+					   input_section, rel->r_offset);
 	      break;
 	    }
 	}
@@ -2428,10 +2424,10 @@ v850_elf_set_note (bfd * abfd, enum v850_notes note, unsigned int val)
   return TRUE;
 }
 
-/* Copy backend specific data from one object module to another.  */
+/* Copy a v850 note section from one object module to another.  */
 
-static bfd_boolean
-v850_elf_copy_private_bfd_data (bfd * ibfd, bfd * obfd)
+static void
+v850_elf_copy_notes (bfd *ibfd, bfd *obfd)
 {
   asection * onotes;
   asection * inotes;
@@ -2440,10 +2436,10 @@ v850_elf_copy_private_bfd_data (bfd * ibfd, bfd * obfd)
      skip the merge.  The normal input to output section
      copying will take care of everythng for us.  */
   if ((onotes = bfd_get_section_by_name (obfd, V850_NOTE_SECNAME)) == NULL)
-    return TRUE;
+    return;
 
   if ((inotes = bfd_get_section_by_name (ibfd, V850_NOTE_SECNAME)) == NULL)
-    return TRUE;
+    return;
 
   if (bfd_section_size (ibfd, inotes) == bfd_section_size (obfd, onotes))
     {
@@ -2459,8 +2455,15 @@ v850_elf_copy_private_bfd_data (bfd * ibfd, bfd * obfd)
       /* Copy/overwrite notes from the input to the output.  */
       memcpy (ocont, icont, bfd_section_size (obfd, onotes));
     }
+}
 
-  return TRUE;
+/* Copy backend specific data from one object module to another.  */
+
+static bfd_boolean
+v850_elf_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
+{
+  v850_elf_copy_notes (ibfd, obfd);
+  return _bfd_elf_copy_private_bfd_data (ibfd, obfd);
 }
 #define bfd_elf32_bfd_copy_private_bfd_data	v850_elf_copy_private_bfd_data
 
@@ -2519,6 +2522,7 @@ v850_elf_merge_notes (bfd * ibfd, bfd *obfd)
 	      if (oval == EF_RH850_DATA_ALIGN4)
 		{
 		  _bfd_error_handler
+		    /* xgettext:c-format */
 		    (_("error: %B needs 8-byte aligment but %B is set for 4-byte alignment"),
 				      ibfd, obfd);
 		  result = FALSE;
@@ -2533,8 +2537,10 @@ v850_elf_merge_notes (bfd * ibfd, bfd *obfd)
 	    case V850_NOTE_DATA_SIZE:
 	      if (oval == EF_RH850_DOUBLE32)
 		{
-		  _bfd_error_handler (_("error: %B uses 64-bit doubles but %B uses 32-bit doubles"),
-				      ibfd, obfd);
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("error: %B uses 64-bit doubles but "
+		       "%B uses 32-bit doubles"), ibfd, obfd);
 		  result = FALSE;
 		}
 	      else
@@ -2546,8 +2552,10 @@ v850_elf_merge_notes (bfd * ibfd, bfd *obfd)
 	    case V850_NOTE_FPU_INFO:
 	      if (oval == EF_RH850_FPU20)
 		{
-		  _bfd_error_handler (_("error: %B uses FPU-3.0 but %B only supports FPU-2.0"),
-				     ibfd, obfd);
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("error: %B uses FPU-3.0 but %B only supports FPU-2.0"),
+		     ibfd, obfd);
 		  result = FALSE;
 		}
 	      else
@@ -2757,8 +2765,9 @@ v850_elf_set_private_flags (bfd *abfd, flagword flags)
    to the output object file when linking.  */
 
 static bfd_boolean
-v850_elf_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
+v850_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 {
+  bfd *obfd = info->output_bfd;
   flagword out_flags;
   flagword in_flags;
   bfd_boolean result = TRUE;
@@ -2801,8 +2810,8 @@ v850_elf_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
     {
       if ((in_flags & EF_V800_850E3) != (out_flags & EF_V800_850E3))
 	{
-	  _bfd_error_handler (_("%B: Architecture mismatch with previous modules"),
-			      ibfd);
+	  _bfd_error_handler
+	    (_("%B: Architecture mismatch with previous modules"), ibfd);
 	  elf_elfheader (obfd)->e_flags |= EF_V800_850E3;
 	}
 
@@ -2857,8 +2866,8 @@ v850_elf_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
 	  return result;
 	}
 
-      _bfd_error_handler (_("%B: Architecture mismatch with previous modules"),
-			  ibfd);
+      _bfd_error_handler
+	(_("%B: Architecture mismatch with previous modules"), ibfd);
     }
 
   return result;
@@ -3589,19 +3598,23 @@ v850_elf_relax_section (bfd *abfd,
 		}
 	      else
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGCALL points to unrecognized insns",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset));
-
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGCALL points to "
+		       "unrecognized insns"),
+		     bfd_get_filename (abfd), (unsigned long) irel->r_offset);
 		  continue;
 		}
 
 	      if (no_match >= 0)
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGCALL points to unrecognized insn 0x%x",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset+no_match, insn[no_match]));
-
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGCALL points to "
+		       "unrecognized insn 0x%x"),
+		     bfd_get_filename (abfd),
+		     (unsigned long) irel->r_offset + no_match,
+		     insn[no_match]);
 		  continue;
 		}
 
@@ -3640,9 +3653,11 @@ v850_elf_relax_section (bfd *abfd,
 		  || lo_irelfn == irelend
 		  || irelcall  == irelend)
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGCALL points to unrecognized reloc",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset ));
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGCALL points to "
+		       "unrecognized reloc"),
+		     bfd_get_filename (abfd), (unsigned long) irel->r_offset);
 
 		  continue;
 		}
@@ -3678,10 +3693,12 @@ v850_elf_relax_section (bfd *abfd,
 
 	      if (symval + irelcall->r_addend != irelcall->r_offset + 4)
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGCALL points to unrecognized reloc 0x%lx",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset, irelcall->r_offset ));
-
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGCALL points to "
+		       "unrecognized reloc 0x%lx"),
+		     bfd_get_filename (abfd), (unsigned long) irel->r_offset,
+		     irelcall->r_offset);
 		  continue;
 		}
 
@@ -3819,19 +3836,23 @@ v850_elf_relax_section (bfd *abfd,
 		}
 	      else
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGJUMP points to unrecognized insns",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset));
-
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGJUMP points to "
+		       "unrecognized insns"),
+		     bfd_get_filename (abfd), (unsigned long) irel->r_offset);
 		  continue;
 		}
 
 	      if (no_match >= 0)
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGJUMP points to unrecognized insn 0x%x",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset+no_match, insn[no_match]));
-
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGJUMP points to "
+		       "unrecognized insn 0x%x"),
+		     bfd_get_filename (abfd),
+		     (unsigned long) irel->r_offset + no_match,
+		     insn[no_match]);
 		  continue;
 		}
 
@@ -3859,10 +3880,11 @@ v850_elf_relax_section (bfd *abfd,
 	      if (   hi_irelfn == irelend
 		  || lo_irelfn == irelend)
 		{
-		  ((*_bfd_error_handler)
-		   ("%s: 0x%lx: warning: R_V850_LONGJUMP points to unrecognized reloc",
-		    bfd_get_filename (abfd), (unsigned long) irel->r_offset ));
-
+		  _bfd_error_handler
+		    /* xgettext:c-format */
+		    (_("%s: 0x%lx: warning: R_V850_LONGJUMP points to "
+		       "unrecognized reloc"),
+		     bfd_get_filename (abfd), (unsigned long) irel->r_offset);
 		  continue;
 		}
 

@@ -1,5 +1,5 @@
 /* Generic ECOFF (Extended-COFF) routines.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Original version by Per Bothner.
    Full support added by Ian Lance Taylor, ian@cygnus.com.
 
@@ -959,7 +959,8 @@ _bfd_ecoff_slurp_symbol_table (bfd *abfd)
   if (internal_ptr - internal < (ptrdiff_t) bfd_get_symcount (abfd))
     {
       bfd_get_symcount (abfd) = internal_ptr - internal;
-      (*_bfd_error_handler)
+      _bfd_error_handler
+	/* xgettext:c-format */
 	(_("%B: warning: isymMax (%ld) is greater than ifdMax (%d)\n"),
 	 abfd, ecoff_data (abfd)->debug_info.symbolic_header.isymMax,
 	 ecoff_data (abfd)->debug_info.symbolic_header.ifdMax);
@@ -1536,6 +1537,7 @@ _bfd_ecoff_print_symbol (bfd *abfd,
 		if (ECOFF_IS_STAB (&ecoff_ext.asym))
 		  ;
 		else if (ecoffsymbol (symbol)->local)
+		  /* xgettext:c-format */
 		  fprintf (file, _("\n      End+1 symbol: %-7ld   Type:  %s"),
 			   ((long)
 			    (AUX_GET_ISYM (bigendian,
@@ -3544,9 +3546,9 @@ ecoff_link_check_archive_element (bfd *abfd,
   if (h->type != bfd_link_hash_undefined)
     return TRUE;
 
-  /* Include this element.  */
+  /* Include this element?  */
   if (!(*info->callbacks->add_archive_element) (info, abfd, name, &abfd))
-    return FALSE;
+    return TRUE;
   *pneeded = TRUE;
 
   return ecoff_link_add_object_symbols (abfd, info);
@@ -4015,17 +4017,12 @@ ecoff_reloc_link_order (bfd *output_bfd,
 	case bfd_reloc_outofrange:
 	  abort ();
 	case bfd_reloc_overflow:
-	  if (! ((*info->callbacks->reloc_overflow)
-		 (info, NULL,
-		  (link_order->type == bfd_section_reloc_link_order
-		   ? bfd_section_name (output_bfd, section)
-		   : link_order->u.reloc.p->u.name),
-		  rel.howto->name, addend, NULL,
-		  NULL, (bfd_vma) 0)))
-	    {
-	      free (buf);
-	      return FALSE;
-	    }
+	  (*info->callbacks->reloc_overflow)
+	    (info, NULL,
+	     (link_order->type == bfd_section_reloc_link_order
+	      ? bfd_section_name (output_bfd, section)
+	      : link_order->u.reloc.p->u.name),
+	     rel.howto->name, addend, NULL, NULL, (bfd_vma) 0);
 	  break;
 	}
       ok = bfd_set_section_contents (output_bfd, output_section, (void *) buf,
@@ -4055,10 +4052,8 @@ ecoff_reloc_link_order (bfd *output_bfd,
 	in.r_symndx = h->indx;
       else
 	{
-	  if (! ((*info->callbacks->unattached_reloc)
-		 (info, link_order->u.reloc.p->u.name, NULL,
-		  NULL, (bfd_vma) 0)))
-	    return FALSE;
+	  (*info->callbacks->unattached_reloc)
+	    (info, link_order->u.reloc.p->u.name, NULL, NULL, (bfd_vma) 0);
 	  in.r_symndx = 0;
 	}
       in.r_extern = 1;

@@ -1,5 +1,5 @@
 /* dwarf.h - DWARF support header file
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -204,6 +204,7 @@ extern void init_dwarf_regnames_i386 (void);
 extern void init_dwarf_regnames_iamcu (void);
 extern void init_dwarf_regnames_x86_64 (void);
 extern void init_dwarf_regnames_aarch64 (void);
+extern void init_dwarf_regnames_s390 (void);
 
 extern int load_debug_section (enum dwarf_section_display_enum, void *);
 extern void free_debug_section (enum dwarf_section_display_enum);
@@ -223,7 +224,7 @@ extern void * xcrealloc (void *, size_t, size_t);
 
 extern dwarf_vma read_leb128 (unsigned char *, unsigned int *, bfd_boolean, const unsigned char * const);
 
-/* A callback into the client.  Retuns TRUE if there is a
+/* A callback into the client.  Returns TRUE if there is a
    relocation against the given debug section at the given
    offset.  */
 extern bfd_boolean reloc_at (struct dwarf_section *, dwarf_vma);

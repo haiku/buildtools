@@ -1,5 +1,5 @@
 /* Select disassembly routine for specified architecture.
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -106,8 +106,7 @@
 #endif
 
 disassembler_ftype
-disassembler (abfd)
-     bfd *abfd;
+disassembler (bfd *abfd)
 {
   enum bfd_architecture a = bfd_get_arch (abfd);
   disassembler_ftype disassemble;
@@ -376,6 +375,11 @@ disassembler (abfd)
 	disassemble = print_insn_little_powerpc;
       break;
 #endif
+#ifdef ARCH_riscv
+    case bfd_arch_riscv:
+      disassemble = print_insn_riscv;
+      break;
+#endif
 #ifdef ARCH_rs6000
     case bfd_arch_rs6000:
       if (bfd_get_mach (abfd) == bfd_mach_ppc_620)
@@ -543,11 +547,13 @@ disassembler (abfd)
 }
 
 void
-disassembler_usage (stream)
-     FILE * stream ATTRIBUTE_UNUSED;
+disassembler_usage (FILE *stream ATTRIBUTE_UNUSED)
 {
 #ifdef ARCH_aarch64
   print_aarch64_disassembler_options (stream);
+#endif
+#ifdef ARCH_arc
+  print_arc_disassembler_options (stream);
 #endif
 #ifdef ARCH_arm
   print_arm_disassembler_options (stream);
@@ -557,6 +563,9 @@ disassembler_usage (stream)
 #endif
 #ifdef ARCH_powerpc
   print_ppc_disassembler_options (stream);
+#endif
+#ifdef ARCH_riscv
+  print_riscv_disassembler_options (stream);
 #endif
 #ifdef ARCH_i386
   print_i386_disassembler_options (stream);

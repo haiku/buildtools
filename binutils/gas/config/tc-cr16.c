@@ -1,5 +1,5 @@
 /* tc-cr16.c -- Assembler code for the CR16 CPU core.
-   Copyright (C) 2007-2015 Free Software Foundation, Inc.
+   Copyright (C) 2007-2017 Free Software Foundation, Inc.
 
    Contributed by M R Swami Reddy <MR.Swami.Reddy@nsc.com>
 
@@ -528,8 +528,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
 	   && (S_GET_SEGMENT (fixP->fx_subsy) == absolute_section)))
      return NULL;
 
-  reloc = xmalloc (sizeof (arelent));
-  reloc->sym_ptr_ptr  = xmalloc (sizeof (asymbol *));
+  reloc = XNEW (arelent);
+  reloc->sym_ptr_ptr  = XNEW (asymbol *);
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
   reloc->addend = fixP->fx_offset;
@@ -702,7 +702,7 @@ md_undefined_symbol (char *name)
    GAS does not understand.  */
 
 int
-md_parse_option (int c ATTRIBUTE_UNUSED, char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -715,7 +715,7 @@ md_show_usage (FILE *stream ATTRIBUTE_UNUSED)
   return;
 }
 
-char *
+const char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
@@ -1165,6 +1165,7 @@ set_operand (char *operand, ins * cr16_ins)
     {
     case arg_ic:    /* Case $0x18.  */
       operandS++;
+      /* Fall through.  */
     case arg_c:     /* Case 0x18.  */
       /* Set constant.  */
       process_label_constant (operandS, cr16_ins);
@@ -1182,6 +1183,7 @@ set_operand (char *operand, ins * cr16_ins)
       *operandE = '\0';
       process_label_constant (operandS, cr16_ins);
       operandS = operandE;
+      /* Fall through.  */
     case arg_rbase: /* Case (r1) or (r1,r0).  */
       operandS++;
       /* Set register base.  */
@@ -1469,7 +1471,7 @@ gettrap (char *s)
     if (strcasecmp (trap->name, s) == 0)
       return trap->entry;
 
-  /* To make compatable with CR16 4.1 tools, the below 3-lines of
+  /* To make compatible with CR16 4.1 tools, the below 3-lines of
    * code added. Refer: Development Tracker item #123 */
   for (trap = cr16_traps; trap < (cr16_traps + NUMTRAPS); trap++)
     if (trap->entry  == (unsigned int) atoi (s))
@@ -1789,7 +1791,9 @@ print_constant (int nbits, int shift, argument *arg)
       break;
 
     case 21:
-      if ((nbits == 21) && (IS_INSN_TYPE (LD_STOR_INS))) nbits = 20;
+      if ((nbits == 21) && (IS_INSN_TYPE (LD_STOR_INS)))
+	nbits = 20;
+      /* Fall through.  */
     case 24:
     case 22:
     case 20:
@@ -1993,7 +1997,7 @@ static op_err
 check_range (long *num, int bits, int unsigned flags, int update)
 {
   long min, max;
-  int retval = OP_LEGAL;
+  op_err retval = OP_LEGAL;
   long value = *num;
 
   if (bits == 0 && value > 0) return OP_OUT_OF_RANGE;
@@ -2002,7 +2006,7 @@ check_range (long *num, int bits, int unsigned flags, int update)
      bits of a 32-bit negative value read in by the parser are set,
      so that the correct comparisons are made.  */
   if (value & 0x80000000)
-    value |= (-1L << 31);
+    value |= (-1UL << 31);
 
 
   /* Verify operand value is even.  */
@@ -2195,7 +2199,7 @@ adjust_if_needed (ins *insn ATTRIBUTE_UNUSED)
    Returns 1 upon success, 0 upon failure.  */
 
 static int
-assemble_insn (char *mnemonic, ins *insn)
+assemble_insn (const char *mnemonic, ins *insn)
 {
   /* Type of each operand in the current template.  */
   argtype cur_type[MAX_OPERANDS];
@@ -2381,7 +2385,7 @@ next_insn:
 
       for (i = 0; i < insn->nargs; i++)
         {
-         /* For BAL (ra),disp17 instuction only. And also set the
+         /* For BAL (ra),disp17 instruction only. And also set the
             DISP24a relocation type.  */
          if (IS_INSN_MNEMONIC ("bal") && (instruction->size == 2) && i == 0)
            {
@@ -2487,6 +2491,35 @@ print_insn (ins *insn)
     }
 }
 
+/* Actually assemble an instruction.  */
+
+static void
+cr16_assemble (const char *op, char *param)
+{
+  ins cr16_ins;
+
+  /* Find the instruction.  */
+  instruction = (const inst *) hash_find (cr16_inst_hash, op);
+  if (instruction == NULL)
+    {
+      as_bad (_("Unknown opcode: `%s'"), op);
+      return;
+    }
+
+  /* Tie dwarf2 debug info to the address at the start of the insn.  */
+  dwarf2_emit_insn (0);
+
+  /* Parse the instruction's operands.  */
+  parse_insn (&cr16_ins, param);
+
+  /* Assemble the instruction - return upon failure.  */
+  if (assemble_insn (op, &cr16_ins) == 0)
+    return;
+
+  /* Print the instruction.  */
+  print_insn (&cr16_ins);
+}
+
 /* This is the guts of the machine-dependent assembler.  OP points to a
    machine dependent instruction.  This function is supposed to emit
    the frags/bytes it assembles to.  */
@@ -2509,10 +2542,11 @@ md_assemble (char *op)
   if (is_bcc_insn (op))
     {
       strcpy (param1, get_b_cc (op));
-      op = "b";
       strcat (param1,",");
       strcat (param1, param);
       param = (char *) &param1;
+      cr16_assemble ("b", param);
+      return;
     }
 
   /* Checking the cinv options and adjust the mnemonic by removing the
@@ -2538,32 +2572,14 @@ md_assemble (char *op)
           && ((&cr16_ins)->arg[0].constant >= 0))
         {
            if (streq ("lshb", op))
-             op = "ashub";
+             cr16_assemble ("ashub", param);
            else if (streq ("lshd", op))
-             op = "ashud";
+             cr16_assemble ("ashud", param);
            else
-             op = "ashuw";
+             cr16_assemble ("ashuw", param);
+	   return;
         }
     }
 
-  /* Find the instruction.  */
-  instruction = (const inst *) hash_find (cr16_inst_hash, op);
-  if (instruction == NULL)
-    {
-      as_bad (_("Unknown opcode: `%s'"), op);
-      return;
-    }
-
-  /* Tie dwarf2 debug info to the address at the start of the insn.  */
-  dwarf2_emit_insn (0);
-
-  /* Parse the instruction's operands.  */
-  parse_insn (&cr16_ins, param);
-
-  /* Assemble the instruction - return upon failure.  */
-  if (assemble_insn (op, &cr16_ins) == 0)
-    return;
-
-  /* Print the instruction.  */
-  print_insn (&cr16_ins);
+  cr16_assemble (op, param);
 }

@@ -1,5 +1,5 @@
 /* Renesas RL78 specific support for 32-bit ELF.
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -287,6 +287,7 @@ rl78_info_to_howto_rela (bfd *               abfd ATTRIBUTE_UNUSED,
   r_type = ELF32_R_TYPE (dst->r_info);
   if (r_type >= (unsigned int) R_RL78_max)
     {
+      /* xgettext:c-format */
       _bfd_error_handler (_("%B: invalid RL78 reloc number: %d"), abfd, r_type);
       r_type = 0;
     }
@@ -295,7 +296,6 @@ rl78_info_to_howto_rela (bfd *               abfd ATTRIBUTE_UNUSED,
 
 static bfd_vma
 get_symbol_value (const char *            name,
-		  bfd_reloc_status_type * status,
 		  struct bfd_link_info *  info,
 		  bfd *                   input_bfd,
 		  asection *              input_section,
@@ -312,12 +312,8 @@ get_symbol_value (const char *            name,
       || (h->type != bfd_link_hash_defined
 	  && h->type != bfd_link_hash_defweak))
     {
-      bfd_reloc_status_type res;
-
-      res = info->callbacks->undefined_symbol
+      (*info->callbacks->undefined_symbol)
 	(info, name, input_bfd, input_section, offset, TRUE);
-      if (status)
-	* status = res;
       return 0;
     }
 
@@ -327,44 +323,36 @@ get_symbol_value (const char *            name,
 }
 
 static bfd_vma
-get_romstart (bfd_reloc_status_type * status,
-	      struct bfd_link_info *  info,
+get_romstart (struct bfd_link_info *  info,
 	      bfd *                   abfd,
 	      asection *              sec,
 	      int		      offset)
 {
   static bfd_boolean cached = FALSE;
   static bfd_vma     cached_value = 0;
-  static bfd_reloc_status_type cached_status;
 
   if (!cached)
     {
-      cached_value = get_symbol_value ("_start", & cached_status, info, abfd, sec, offset);
+      cached_value = get_symbol_value ("_start", info, abfd, sec, offset);
       cached = TRUE;
     }
-  if (status)
-    * status = cached_status;
   return cached_value;
 }
 
 static bfd_vma
-get_ramstart (bfd_reloc_status_type * status,
-	      struct bfd_link_info *  info,
+get_ramstart (struct bfd_link_info *  info,
 	      bfd *                   abfd,
 	      asection *              sec,
 	      int		      offset)
 {
   static bfd_boolean cached = FALSE;
   static bfd_vma     cached_value = 0;
-  static bfd_reloc_status_type cached_status;
 
   if (!cached)
     {
-      cached_value = get_symbol_value ("__datastart", & cached_status, info, abfd, sec, offset);
+      cached_value = get_symbol_value ("__datastart", info, abfd, sec, offset);
       cached = TRUE;
     }
-  if (status)
-    * status = cached_status;
   return cached_value;
 }
 
@@ -573,12 +561,12 @@ rl78_special_reloc (bfd *      input_bfd,
 	break;
 
     case R_RL78_OPromtop:
-      relocation = get_romstart (&r, NULL, input_bfd, input_section,
+      relocation = get_romstart (NULL, input_bfd, input_section,
 				 reloc->address);
       break;
 
     case R_RL78_OPramtop:
-      relocation = get_ramstart (&r, NULL, input_bfd, input_section,
+      relocation = get_ramstart (NULL, input_bfd, input_section,
 				 reloc->address);
       break;
     }
@@ -697,17 +685,13 @@ rl78_elf_relocate_section
   struct elf_link_hash_entry ** sym_hashes;
   Elf_Internal_Rela *           rel;
   Elf_Internal_Rela *           relend;
-  bfd *dynobj;
   asection *splt;
 
   symtab_hdr = & elf_tdata (input_bfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (input_bfd);
   relend     = relocs + input_section->reloc_count;
 
-  dynobj = elf_hash_table (info)->dynobj;
-  splt = NULL;
-  if (dynobj != NULL)
-    splt = bfd_get_linker_section (dynobj, ".plt");
+  splt = elf_hash_table (info)->splt;
 
   for (rel = relocs; rel < relend; rel ++)
     {
@@ -1068,12 +1052,12 @@ rl78_elf_relocate_section
 	  break;
 
 	case R_RL78_OPromtop:
-	  relocation = get_romstart (&r, info, input_bfd, input_section, rel->r_offset);
+	  relocation = get_romstart (info, input_bfd, input_section, rel->r_offset);
 	  (void) rl78_compute_complex_reloc (r_type, relocation, input_section);
 	  break;
 
 	case R_RL78_OPramtop:
-	  relocation = get_ramstart (&r, info, input_bfd, input_section, rel->r_offset);
+	  relocation = get_ramstart (info, input_bfd, input_section, rel->r_offset);
 	  (void) rl78_compute_complex_reloc (r_type, relocation, input_section);
 	  break;
 
@@ -1092,45 +1076,47 @@ rl78_elf_relocate_section
 	      /* Catch the case of a missing function declaration
 		 and emit a more helpful error message.  */
 	      if (r_type == R_RL78_DIR24S_PCREL)
+		/* xgettext:c-format */
 		msg = _("%B(%A): error: call to undefined function '%s'");
 	      else
-		r = info->callbacks->reloc_overflow
+		(*info->callbacks->reloc_overflow)
 		  (info, (h ? &h->root : NULL), name, howto->name, (bfd_vma) 0,
 		   input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      r = info->callbacks->undefined_symbol
-		(info, name, input_bfd, input_section, rel->r_offset,
-		 TRUE);
+	      (*info->callbacks->undefined_symbol)
+		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
 	      break;
 
 	    case bfd_reloc_other:
+	      /* xgettext:c-format */
 	      msg = _("%B(%A): warning: unaligned access to symbol '%s' in the small data area");
 	      break;
 
 	    case bfd_reloc_outofrange:
+	      /* xgettext:c-format */
 	      msg = _("%B(%A): internal error: out of range error");
 	      break;
 
 	    case bfd_reloc_notsupported:
+	      /* xgettext:c-format */
 	      msg = _("%B(%A): internal error: unsupported relocation error");
 	      break;
 
 	    case bfd_reloc_dangerous:
+	      /* xgettext:c-format */
 	      msg = _("%B(%A): internal error: dangerous relocation");
 	      break;
 
 	    default:
+	      /* xgettext:c-format */
 	      msg = _("%B(%A): internal error: unknown error");
 	      break;
 	    }
 
 	  if (msg)
 	    _bfd_error_handler (msg, input_bfd, input_section, name);
-
-	  if (! r)
-	    return FALSE;
 	}
     }
 
@@ -1173,8 +1159,9 @@ rl78_cpu_name (flagword flags)
    object file when linking.  */
 
 static bfd_boolean
-rl78_elf_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
+rl78_elf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 {
+  bfd *obfd = info->output_bfd;
   flagword new_flags;
   flagword old_flags;
   bfd_boolean error = FALSE;
@@ -1209,7 +1196,8 @@ rl78_elf_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
 		     but that is still incompatible with the G10 ABI.  */
 		  error = TRUE;
 
-		  (*_bfd_error_handler)
+		  _bfd_error_handler
+		    /* xgettext:c-format */
 		    (_("RL78 ABI conflict: G10 file %s cannot be linked with %s file %s"),
 		     bfd_get_filename (ibfd),
 		     rl78_cpu_name (out_cpu), bfd_get_filename (obfd));
@@ -1225,7 +1213,8 @@ rl78_elf_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
 	    {
 	      error = TRUE;
 
-	      (*_bfd_error_handler)
+	      _bfd_error_handler
+		/* xgettext:c-format */
 		(_("RL78 ABI conflict: cannot link %s file %s with %s file %s"),
 		 rl78_cpu_name (in_cpu),  bfd_get_filename (ibfd),
 		 rl78_cpu_name (out_cpu), bfd_get_filename (obfd));
@@ -1234,15 +1223,17 @@ rl78_elf_merge_private_bfd_data (bfd * ibfd, bfd * obfd)
 
       if (changed_flags & E_FLAG_RL78_64BIT_DOUBLES)
 	{
-	  (*_bfd_error_handler)
+	  _bfd_error_handler
 	    (_("RL78 merge conflict: cannot link 32-bit and 64-bit objects together"));
 
 	  if (old_flags & E_FLAG_RL78_64BIT_DOUBLES)
-	    (*_bfd_error_handler) (_("- %s is 64-bit, %s is not"),
-				   bfd_get_filename (obfd), bfd_get_filename (ibfd));
+	    /* xgettext:c-format */
+	    _bfd_error_handler (_("- %s is 64-bit, %s is not"),
+				bfd_get_filename (obfd), bfd_get_filename (ibfd));
 	  else
-	    (*_bfd_error_handler) (_("- %s is 64-bit, %s is not"),
-				   bfd_get_filename (ibfd), bfd_get_filename (obfd));
+	    /* xgettext:c-format */
+	    _bfd_error_handler (_("- %s is 64-bit, %s is not"),
+				bfd_get_filename (ibfd), bfd_get_filename (obfd));
 	  error = TRUE;
 	}
     }
@@ -1316,7 +1307,6 @@ rl78_elf_check_relocs
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
   sym_hashes = elf_sym_hashes (abfd);
   local_plt_offsets = elf_local_got_offsets (abfd);
-  splt = NULL;
   dynobj = elf_hash_table(info)->dynobj;
 
   rel_end = relocs + sec->reloc_count;
@@ -1349,20 +1339,18 @@ rl78_elf_check_relocs
 	case R_RL78_DIR16S:
 	  if (dynobj == NULL)
 	    elf_hash_table (info)->dynobj = dynobj = abfd;
+	  splt = elf_hash_table (info)->splt;
 	  if (splt == NULL)
 	    {
-	      splt = bfd_get_linker_section (dynobj, ".plt");
-	      if (splt == NULL)
-		{
-		  flagword flags = (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS
-				    | SEC_IN_MEMORY | SEC_LINKER_CREATED
-				    | SEC_READONLY | SEC_CODE);
-		  splt = bfd_make_section_anyway_with_flags (dynobj, ".plt",
-							     flags);
-		  if (splt == NULL
-		      || ! bfd_set_section_alignment (dynobj, splt, 1))
-		    return FALSE;
-		}
+	      flagword flags = (SEC_ALLOC | SEC_LOAD | SEC_HAS_CONTENTS
+				| SEC_IN_MEMORY | SEC_LINKER_CREATED
+				| SEC_READONLY | SEC_CODE);
+	      splt = bfd_make_section_anyway_with_flags (dynobj, ".plt",
+							 flags);
+	      elf_hash_table (info)->splt = splt;
+	      if (splt == NULL
+		  || ! bfd_set_section_alignment (dynobj, splt, 1))
+		return FALSE;
 	    }
 
 	  if (h != NULL)
@@ -1419,8 +1407,9 @@ rl78_elf_finish_dynamic_sections (bfd *abfd ATTRIBUTE_UNUSED,
   if (info->relax_trip > 0)
     return TRUE;
 
-  if ((dynobj = elf_hash_table (info)->dynobj) != NULL
-      && (splt = bfd_get_linker_section (dynobj, ".plt")) != NULL)
+  dynobj = elf_hash_table (info)->dynobj;
+  splt = elf_hash_table (info)->splt;
+  if (dynobj != NULL && splt != NULL)
     {
       bfd_byte *contents = splt->contents;
       unsigned int i, size = splt->size;
@@ -1449,7 +1438,7 @@ rl78_elf_always_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
   if (dynobj == NULL)
     return TRUE;
 
-  splt = bfd_get_linker_section (dynobj, ".plt");
+  splt = elf_hash_table (info)->splt;
   BFD_ASSERT (splt != NULL);
 
   splt->contents = (bfd_byte *) bfd_zalloc (dynobj, splt->size);
@@ -1932,12 +1921,12 @@ rl78_offset_for_reloc (bfd *                    abfd,
 	  break;
 
 	case R_RL78_OPromtop:
-	  symval = get_romstart (NULL, info, input_bfd, input_section, rel->r_offset);
+	  symval = get_romstart (info, input_bfd, input_section, rel->r_offset);
 	  (void) rl78_compute_complex_reloc (r_type, symval, input_section);
 	  break;
 
 	case R_RL78_OPramtop:
-	  symval = get_ramstart (NULL, info, input_bfd, input_section, rel->r_offset);
+	  symval = get_ramstart (info, input_bfd, input_section, rel->r_offset);
 	  (void) rl78_compute_complex_reloc (r_type, symval, input_section);
 	  break;
 
@@ -1974,7 +1963,16 @@ rl78_offset_for_reloc (bfd *                    abfd,
 
 	default:
 	reloc_computes_value:
-	  symval = rl78_compute_complex_reloc (r_type, 0, input_section);
+	  symval = rl78_compute_complex_reloc (r_type, symval, input_section);
+	  /* Fall through.  */
+	case R_RL78_DIR32:
+	case R_RL78_DIR24S:
+	case R_RL78_DIR16:
+	case R_RL78_DIR16U:
+	case R_RL78_DIR16S:
+	case R_RL78_DIR24S_PCREL:
+	case R_RL78_DIR16S_PCREL:
+	case R_RL78_DIR8S_PCREL:
 	  if (lrel)
 	    *lrel = rel;
 	  return symval;
@@ -2316,6 +2314,27 @@ rl78_elf_relax_section
 
 	  switch (insn[0])
 	    {
+	    case 0xdc: /* BC */
+	    case 0xdd: /* BZ */
+	    case 0xde: /* BNC */
+	    case 0xdf: /* BNZ */
+	      if (insn[1] == 0x03 && insn[2] == 0xee /* BR */
+		  && (srel->r_offset - irel->r_offset) > 1) /* a B<c> without its own reloc */
+		{
+		  /* This is a "long" conditional as generated by gas:
+		     DC 03 EE ad.dr  */
+		  if (pcrel < 127
+		      && pcrel > -127)
+		    {
+		      insn[0] ^= 0x02; /* invert conditional */
+		      SNIPNR (4, 1);
+		      SNIP (1, 2, R_RL78_DIR8S_PCREL);
+		      insn[1] = pcrel;
+		      *again = TRUE;
+		    }
+		}
+	      break;
+
 	    case 0xec: /* BR !!abs20 */
 
 	      if (pcrel < 127
@@ -2331,7 +2350,7 @@ rl78_elf_relax_section
 		  insn[0] = 0xed;
 		  insn[1] = symval & 0xff;
 		  insn[2] = symval >> 8;
-		  SNIP (2, 1, R_RL78_DIR16S);
+		  SNIP (2, 1, R_RL78_DIR16U);
 		  *again = TRUE;
 		}
 	      else if (pcrel < 32767
@@ -2363,7 +2382,7 @@ rl78_elf_relax_section
 		  insn[0] = 0xfd;
 		  insn[1] = symval & 0xff;
 		  insn[2] = symval >> 8;
-		  SNIP (2, 1, R_RL78_DIR16S);
+		  SNIP (2, 1, R_RL78_DIR16U);
 		  *again = TRUE;
 		}
 	      else if (pcrel < 32767
@@ -2386,6 +2405,25 @@ rl78_elf_relax_section
 		 here anyway. */
 	      switch (insn[1])
 		{
+		case 0xd3: /* BNH */
+		case 0xc3: /* BH */
+		  if (insn[2] == 0x03 && insn[3] == 0xee
+		      && (srel->r_offset - irel->r_offset) > 2) /* a B<c> without its own reloc */
+		    {
+		      /* Another long branch by gas:
+			 61 D3 03 EE ad.dr  */
+		      if (pcrel < 127
+			  && pcrel > -127)
+			{
+			  insn[1] ^= 0x10; /* invert conditional */
+			  SNIPNR (5, 1);
+			  SNIP (2, 2, R_RL78_DIR8S_PCREL);
+			  insn[2] = pcrel;
+			  *again = TRUE;
+			}
+		    }
+		  break;
+
 		case 0xc8: /* SKC */
 		  if (insn[2] == 0xef)
 		    {

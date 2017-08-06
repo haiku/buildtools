@@ -1,5 +1,5 @@
 /* dw2gencfi.c - Support for generating Dwarf2 CFI information.
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
    Contributed by Michal Ludvig <mludvig@suse.cz>
 
    This file is part of GAS, the GNU Assembler.
@@ -434,11 +434,9 @@ struct frch_cfi_data
 static struct fde_entry *
 alloc_fde_entry (void)
 {
-  struct fde_entry *fde = (struct fde_entry *)
-      xcalloc (1, sizeof (struct fde_entry));
+  struct fde_entry *fde = XCNEW (struct fde_entry);
 
-  frchain_now->frch_cfi_data = (struct frch_cfi_data *)
-      xcalloc (1, sizeof (struct frch_cfi_data));
+  frchain_now->frch_cfi_data = XCNEW (struct frch_cfi_data);
   frchain_now->frch_cfi_data->cur_fde_data = fde;
   *last_fde_data = fde;
   last_fde_data = &fde->next;
@@ -467,8 +465,7 @@ static struct fde_entry *last_fde;
 static struct cfi_insn_data *
 alloc_cfi_insn_data (void)
 {
-  struct cfi_insn_data *insn = (struct cfi_insn_data *)
-      xcalloc (1, sizeof (struct cfi_insn_data));
+  struct cfi_insn_data *insn = XCNEW (struct cfi_insn_data);
   struct fde_entry *cur_fde_data = frchain_now->frch_cfi_data->cur_fde_data;
 
   *cur_fde_data->last = insn;
@@ -509,6 +506,7 @@ void
 cfi_set_sections (void)
 {
   frchain_now->frch_cfi_data->cur_fde_data->sections = all_cfi_sections;
+  cfi_sections_set = TRUE;
 }
 
 /* Universal functions to store new instructions.  */
@@ -602,6 +600,22 @@ cfi_add_CFA_offset (unsigned regno, offsetT offset)
     as_bad (_("register save offset not a multiple of %u"), abs_data_align);
 }
 
+/* Add a DW_CFA_val_offset record to the CFI data.  */
+
+void
+cfi_add_CFA_val_offset (unsigned regno, offsetT offset)
+{
+  unsigned int abs_data_align;
+
+  gas_assert (DWARF2_CIE_DATA_ALIGNMENT != 0);
+  cfi_add_CFA_insn_reg_offset (DW_CFA_val_offset, regno, offset);
+
+  abs_data_align = (DWARF2_CIE_DATA_ALIGNMENT < 0
+		    ? -DWARF2_CIE_DATA_ALIGNMENT : DWARF2_CIE_DATA_ALIGNMENT);
+  if (offset % abs_data_align)
+    as_bad (_("register save offset not a multiple of %u"), abs_data_align);
+}
+
 /* Add a DW_CFA_def_cfa record to the CFI data.  */
 
 void
@@ -661,7 +675,7 @@ cfi_add_CFA_remember_state (void)
 
   cfi_add_CFA_insn (DW_CFA_remember_state);
 
-  p = (struct cfa_save_data *) xmalloc (sizeof (*p));
+  p = XNEW (struct cfa_save_data);
   p->cfa_offset = frchain_now->frch_cfi_data->cur_cfa_offset;
   p->next = frchain_now->frch_cfi_data->cfa_save_stack;
   frchain_now->frch_cfi_data->cfa_save_stack = p;
@@ -729,6 +743,7 @@ const pseudo_typeS cfi_pseudo_table[] =
     { "cfi_val_encoded_addr", dot_cfi_val_encoded_addr, 0 },
     { "cfi_inline_lsda", dot_cfi_inline_lsda, 0 },
     { "cfi_label", dot_cfi_label, 0 },
+    { "cfi_val_offset", dot_cfi, DW_CFA_val_offset },
     { NULL, NULL, 0 }
   };
 
@@ -827,6 +842,13 @@ dot_cfi (int arg)
       cfi_parse_separator ();
       offset = cfi_parse_const ();
       cfi_add_CFA_offset (reg1, offset);
+      break;
+
+    case DW_CFA_val_offset:
+      reg1 = cfi_parse_reg ();
+      cfi_parse_separator ();
+      offset = cfi_parse_const ();
+      cfi_add_CFA_val_offset (reg1, offset);
       break;
 
     case CFI_rel_offset:
@@ -946,7 +968,7 @@ dot_cfi_escape (int ignored ATTRIBUTE_UNUSED)
   tail = &head;
   do
     {
-      e = (struct cfi_escape_data *) xmalloc (sizeof (*e));
+      e = XNEW (struct cfi_escape_data);
       do_parse_cons_expression (&e->exp, 1);
       *tail = e;
       tail = &e->next;
@@ -1155,6 +1177,7 @@ dot_cfi_val_encoded_addr (int ignored ATTRIBUTE_UNUSED)
     case O_constant:
       if ((encoding & 0x70) != DW_EH_PE_pcrel)
 	break;
+      /* Fall through.  */
     default:
       encoding = DW_EH_PE_omit;
       break;
@@ -1186,6 +1209,7 @@ dot_cfi_label (int ignored ATTRIBUTE_UNUSED)
     cfi_add_advance_loc (symbol_temp_new_now ());
 
   cfi_add_label (name);
+  free (name);
 
   demand_empty_rest_of_line ();
 }
@@ -1245,9 +1269,11 @@ dot_cfi_sections (int ignored ATTRIBUTE_UNUSED)
       }
 
   demand_empty_rest_of_line ();
-  if (cfi_sections_set && cfi_sections != sections)
+  if (cfi_sections_set
+      && (sections & (CFI_EMIT_eh_frame | CFI_EMIT_eh_frame_compact))
+      && (cfi_sections & (CFI_EMIT_eh_frame | CFI_EMIT_eh_frame_compact))
+	 != (sections & (CFI_EMIT_eh_frame | CFI_EMIT_eh_frame_compact)))
     as_bad (_("inconsistent uses of .cfi_sections"));
-  cfi_sections_set = TRUE;
   cfi_sections = sections;
 }
 
@@ -1283,6 +1309,7 @@ dot_cfi_startproc (int ignored ATTRIBUTE_UNUSED)
     }
   demand_empty_rest_of_line ();
 
+  cfi_sections_set = TRUE;
   all_cfi_sections |= cfi_sections;
   cfi_set_sections ();
   frchain_now->frch_cfi_data->cur_cfa_offset = 0;
@@ -1309,6 +1336,7 @@ dot_cfi_endproc (int ignored ATTRIBUTE_UNUSED)
 
   demand_empty_rest_of_line ();
 
+  cfi_sections_set = TRUE;
   if ((cfi_sections & CFI_EMIT_target) != 0)
     tc_cfi_endproc (last_fde);
 }
@@ -1371,6 +1399,7 @@ dot_cfi_fde_data (int ignored ATTRIBUTE_UNUSED)
 
   last_fde = frchain_now->frch_cfi_data->cur_fde_data;
 
+  cfi_sections_set = TRUE;
   if ((cfi_sections & CFI_EMIT_target) != 0
       || (cfi_sections & CFI_EMIT_eh_frame_compact) != 0)
     {
@@ -1383,7 +1412,7 @@ dot_cfi_fde_data (int ignored ATTRIBUTE_UNUSED)
 	  num_ops = 0;
 	  do
 	    {
-	      e = (struct cfi_escape_data *) xmalloc (sizeof (*e));
+	      e = XNEW (struct cfi_escape_data);
 	      do_parse_cons_expression (&e->exp, 1);
 	      *tail = e;
 	      tail = &e->next;
@@ -1405,7 +1434,7 @@ dot_cfi_fde_data (int ignored ATTRIBUTE_UNUSED)
 	num_ops = 3;
 
       last_fde->eh_data_size = num_ops;
-      last_fde->eh_data = (bfd_byte *) xmalloc (num_ops);
+      last_fde->eh_data =  XNEWVEC (bfd_byte, num_ops);
       num_ops = 0;
       while (head)
 	{
@@ -1674,6 +1703,23 @@ output_cfi_insn (struct cfi_insn_data *insn)
       else
 	{
 	  out_one (DW_CFA_offset_extended);
+	  out_uleb128 (regno);
+	  out_uleb128 (offset);
+	}
+      break;
+
+    case DW_CFA_val_offset:
+      regno = insn->u.ri.reg;
+      offset = insn->u.ri.offset / DWARF2_CIE_DATA_ALIGNMENT;
+      if (offset < 0)
+	{
+	  out_one (DW_CFA_val_offset_sf);
+	  out_uleb128 (regno);
+	  out_sleb128 (offset);
+	}
+      else
+	{
+	  out_one (DW_CFA_val_offset);
 	  out_uleb128 (regno);
 	  out_uleb128 (offset);
 	}
@@ -2089,7 +2135,7 @@ select_cie_for_fde (struct fde_entry *fde, bfd_boolean eh_frame,
     fail:;
     }
 
-  cie = (struct cie_entry *) xmalloc (sizeof (struct cie_entry));
+  cie = XNEW (struct cie_entry);
   cie->next = cie_root;
   cie_root = cie;
   SET_CUR_SEG (cie, CUR_SEG (fde));
@@ -2222,6 +2268,7 @@ cfi_finish (void)
   if (all_fde_data == 0)
     return;
 
+  cfi_sections_set = TRUE;
   if ((all_cfi_sections & CFI_EMIT_eh_frame) != 0
       || (all_cfi_sections & CFI_EMIT_eh_frame_compact) != 0)
     {
@@ -2407,6 +2454,7 @@ cfi_finish (void)
       flag_traditional_format = save_flag_traditional_format;
     }
 
+  cfi_sections_set = TRUE;
   if ((all_cfi_sections & CFI_EMIT_debug_frame) != 0)
     {
       int alignment = ffs (DWARF2_ADDR_SIZE (stdoutput)) - 1;
@@ -2513,6 +2561,7 @@ const pseudo_typeS cfi_pseudo_table[] =
     { "cfi_val_encoded_addr", dot_cfi_dummy, 0 },
     { "cfi_label", dot_cfi_dummy, 0 },
     { "cfi_inline_lsda", dot_cfi_dummy, 0 },
+    { "cfi_val_offset", dot_cfi_dummy, 0 },
     { NULL, NULL, 0 }
   };
 

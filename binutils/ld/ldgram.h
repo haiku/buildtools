@@ -119,60 +119,61 @@ extern int yydebug;
     FLOAT = 329,
     NOFLOAT = 330,
     NOCROSSREFS = 331,
-    ORIGIN = 332,
-    FILL = 333,
-    LENGTH = 334,
-    CREATE_OBJECT_SYMBOLS = 335,
-    INPUT = 336,
-    GROUP = 337,
-    OUTPUT = 338,
-    CONSTRUCTORS = 339,
-    ALIGNMOD = 340,
-    AT = 341,
-    SUBALIGN = 342,
-    HIDDEN = 343,
-    PROVIDE = 344,
-    PROVIDE_HIDDEN = 345,
-    AS_NEEDED = 346,
-    CHIP = 347,
-    LIST = 348,
-    SECT = 349,
-    ABSOLUTE = 350,
-    LOAD = 351,
-    NEWLINE = 352,
-    ENDWORD = 353,
-    ORDER = 354,
-    NAMEWORD = 355,
-    ASSERT_K = 356,
-    LOG2CEIL = 357,
-    FORMAT = 358,
-    PUBLIC = 359,
-    DEFSYMEND = 360,
-    BASE = 361,
-    ALIAS = 362,
-    TRUNCATE = 363,
-    REL = 364,
-    INPUT_SCRIPT = 365,
-    INPUT_MRI_SCRIPT = 366,
-    INPUT_DEFSYM = 367,
-    CASE = 368,
-    EXTERN = 369,
-    START = 370,
-    VERS_TAG = 371,
-    VERS_IDENTIFIER = 372,
-    GLOBAL = 373,
-    LOCAL = 374,
-    VERSIONK = 375,
-    INPUT_VERSION_SCRIPT = 376,
-    KEEP = 377,
-    ONLY_IF_RO = 378,
-    ONLY_IF_RW = 379,
-    SPECIAL = 380,
-    INPUT_SECTION_FLAGS = 381,
-    ALIGN_WITH_INPUT = 382,
-    EXCLUDE_FILE = 383,
-    CONSTANT = 384,
-    INPUT_DYNAMIC_LIST = 385
+    NOCROSSREFS_TO = 332,
+    ORIGIN = 333,
+    FILL = 334,
+    LENGTH = 335,
+    CREATE_OBJECT_SYMBOLS = 336,
+    INPUT = 337,
+    GROUP = 338,
+    OUTPUT = 339,
+    CONSTRUCTORS = 340,
+    ALIGNMOD = 341,
+    AT = 342,
+    SUBALIGN = 343,
+    HIDDEN = 344,
+    PROVIDE = 345,
+    PROVIDE_HIDDEN = 346,
+    AS_NEEDED = 347,
+    CHIP = 348,
+    LIST = 349,
+    SECT = 350,
+    ABSOLUTE = 351,
+    LOAD = 352,
+    NEWLINE = 353,
+    ENDWORD = 354,
+    ORDER = 355,
+    NAMEWORD = 356,
+    ASSERT_K = 357,
+    LOG2CEIL = 358,
+    FORMAT = 359,
+    PUBLIC = 360,
+    DEFSYMEND = 361,
+    BASE = 362,
+    ALIAS = 363,
+    TRUNCATE = 364,
+    REL = 365,
+    INPUT_SCRIPT = 366,
+    INPUT_MRI_SCRIPT = 367,
+    INPUT_DEFSYM = 368,
+    CASE = 369,
+    EXTERN = 370,
+    START = 371,
+    VERS_TAG = 372,
+    VERS_IDENTIFIER = 373,
+    GLOBAL = 374,
+    LOCAL = 375,
+    VERSIONK = 376,
+    INPUT_VERSION_SCRIPT = 377,
+    KEEP = 378,
+    ONLY_IF_RO = 379,
+    ONLY_IF_RW = 380,
+    SPECIAL = 381,
+    INPUT_SECTION_FLAGS = 382,
+    ALIGN_WITH_INPUT = 383,
+    EXCLUDE_FILE = 384,
+    CONSTANT = 385,
+    INPUT_DYNAMIC_LIST = 386
   };
 #endif
 /* Tokens.  */
@@ -250,60 +251,61 @@ extern int yydebug;
 #define FLOAT 329
 #define NOFLOAT 330
 #define NOCROSSREFS 331
-#define ORIGIN 332
-#define FILL 333
-#define LENGTH 334
-#define CREATE_OBJECT_SYMBOLS 335
-#define INPUT 336
-#define GROUP 337
-#define OUTPUT 338
-#define CONSTRUCTORS 339
-#define ALIGNMOD 340
-#define AT 341
-#define SUBALIGN 342
-#define HIDDEN 343
-#define PROVIDE 344
-#define PROVIDE_HIDDEN 345
-#define AS_NEEDED 346
-#define CHIP 347
-#define LIST 348
-#define SECT 349
-#define ABSOLUTE 350
-#define LOAD 351
-#define NEWLINE 352
-#define ENDWORD 353
-#define ORDER 354
-#define NAMEWORD 355
-#define ASSERT_K 356
-#define LOG2CEIL 357
-#define FORMAT 358
-#define PUBLIC 359
-#define DEFSYMEND 360
-#define BASE 361
-#define ALIAS 362
-#define TRUNCATE 363
-#define REL 364
-#define INPUT_SCRIPT 365
-#define INPUT_MRI_SCRIPT 366
-#define INPUT_DEFSYM 367
-#define CASE 368
-#define EXTERN 369
-#define START 370
-#define VERS_TAG 371
-#define VERS_IDENTIFIER 372
-#define GLOBAL 373
-#define LOCAL 374
-#define VERSIONK 375
-#define INPUT_VERSION_SCRIPT 376
-#define KEEP 377
-#define ONLY_IF_RO 378
-#define ONLY_IF_RW 379
-#define SPECIAL 380
-#define INPUT_SECTION_FLAGS 381
-#define ALIGN_WITH_INPUT 382
-#define EXCLUDE_FILE 383
-#define CONSTANT 384
-#define INPUT_DYNAMIC_LIST 385
+#define NOCROSSREFS_TO 332
+#define ORIGIN 333
+#define FILL 334
+#define LENGTH 335
+#define CREATE_OBJECT_SYMBOLS 336
+#define INPUT 337
+#define GROUP 338
+#define OUTPUT 339
+#define CONSTRUCTORS 340
+#define ALIGNMOD 341
+#define AT 342
+#define SUBALIGN 343
+#define HIDDEN 344
+#define PROVIDE 345
+#define PROVIDE_HIDDEN 346
+#define AS_NEEDED 347
+#define CHIP 348
+#define LIST 349
+#define SECT 350
+#define ABSOLUTE 351
+#define LOAD 352
+#define NEWLINE 353
+#define ENDWORD 354
+#define ORDER 355
+#define NAMEWORD 356
+#define ASSERT_K 357
+#define LOG2CEIL 358
+#define FORMAT 359
+#define PUBLIC 360
+#define DEFSYMEND 361
+#define BASE 362
+#define ALIAS 363
+#define TRUNCATE 364
+#define REL 365
+#define INPUT_SCRIPT 366
+#define INPUT_MRI_SCRIPT 367
+#define INPUT_DEFSYM 368
+#define CASE 369
+#define EXTERN 370
+#define START 371
+#define VERS_TAG 372
+#define VERS_IDENTIFIER 373
+#define GLOBAL 374
+#define LOCAL 375
+#define VERSIONK 376
+#define INPUT_VERSION_SCRIPT 377
+#define KEEP 378
+#define ONLY_IF_RO 379
+#define ONLY_IF_RW 380
+#define SPECIAL 381
+#define INPUT_SECTION_FLAGS 382
+#define ALIGN_WITH_INPUT 383
+#define EXCLUDE_FILE 384
+#define CONSTANT 385
+#define INPUT_DYNAMIC_LIST 386
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -341,7 +343,7 @@ union YYSTYPE
   struct bfd_elf_version_expr *versyms;
   struct bfd_elf_version_tree *versnode;
 
-#line 345 "ldgram.h" /* yacc.c:1915  */
+#line 347 "ldgram.h" /* yacc.c:1915  */
 };
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1

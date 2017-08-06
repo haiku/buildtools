@@ -1,5 +1,5 @@
 # Expect script for i386 no-PLT tests.
-#   Copyright (C) 2016 Free Software Foundation, Inc.
+#   Copyright (C) 2016-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -163,7 +163,7 @@ run_cc_link_tests [list \
     ] \
 ]
 
-run_ld_link_exec_tests [] [list \
+run_ld_link_exec_tests [list \
     [list \
 	"No PLT (dynamic 1a)" \
 	"tmpdir/no-plt-check1a.o tmpdir/no-plt-main1.o \
@@ -265,9 +265,30 @@ if { [check_ifunc_available] } {
 	    "-fPIC -O2 -g" \
 	    { pr20244-3a.c pr20244-3b.S pr20244-3c.S pr20244-3d.S } \
 	] \
+	[list \
+	    "Build pr20253-1a.o pr20253-1b.o pr20253-1c.o pr20253-1d.o" \
+	    "" \
+	    "-fPIE -O2 -g" \
+	    { pr20253-1a.c pr20253-1b.S pr20253-1c.S pr20253-1d.S } \
+	] \
+	[list \
+	    "Build libpr20253-1a.so" \
+	    "-shared tmpdir/pr20253-1b.o \
+	     tmpdir/pr20253-1c.o tmpdir/pr20253-1d.o" \
+	    "" \
+	    { dummy.s } \
+	    {} \
+	    "libpr20253-1a.so" \
+	] \
+	[list \
+	    "Build pr20253-2a.o pr20253-2b.o pr20253-2c.o pr20253-2d.o" \
+	    "" \
+	    "-fPIE -O2 -g" \
+	    { pr20253-2a.c pr20253-2b.S pr20253-2c.S pr20253-2d.S } \
+	] \
     ]
 
-    run_ld_link_exec_tests [] [list \
+    run_ld_link_exec_tests [list \
 	[list \
 	    "Run pr20244-3a" \
 	    "tmpdir/pr20244-3a.o tmpdir/pr20244-3b.o \
@@ -285,6 +306,103 @@ if { [check_ifunc_available] } {
 	    { dummy.c } \
 	    "pr20244-3b" \
 	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-1a" \
+	    "tmpdir/pr20253-1a.o tmpdir/pr20253-1b.o \
+	     tmpdir/pr20253-1c.o tmpdir/pr20253-1d.o" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-1a" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-1b" \
+	    "--static tmpdir/pr20253-1a.o tmpdir/pr20253-1b.o \
+	    tmpdir/pr20253-1c.o tmpdir/pr20253-1d.o" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-1b" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-1c" \
+	    "-pie tmpdir/pr20253-1a.o tmpdir/pr20253-1b.o \
+	    tmpdir/pr20253-1c.o tmpdir/pr20253-1d.o" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-1c" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-1d" \
+	    "tmpdir/pr20253-1a.o tmpdir/libpr20253-1a.so" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-1d" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-1e" \
+	    "-pie tmpdir/pr20253-1a.o tmpdir/libpr20253-1a.so" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-1e" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-1f" \
+	    "tmpdir/pr20253-1a.o" \
+	    "" \
+	    { pr20253-1b.S pr20253-1c.S pr20253-1d.S } \
+	    "pr20253-1f" \
+	    "pass.out" \
+	    "-DCHECK_PLT" \
+	] \
+	[list \
+	    "Run pr20253-1g" \
+	    "--static tmpdir/pr20253-1a.o" \
+	    "" \
+	    { pr20253-1b.S pr20253-1c.S pr20253-1d.S } \
+	    "pr20253-1g" \
+	    "pass.out" \
+	    "-DCHECK_PLT" \
+	] \
+	[list \
+	    "Run pr20253-2a" \
+	    "tmpdir/pr20253-2a.o tmpdir/pr20253-2b.o \
+	     tmpdir/pr20253-2c.o tmpdir/pr20253-2d.o" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-2a" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-2b" \
+	    "--static tmpdir/pr20253-2a.o tmpdir/pr20253-2b.o \
+	    tmpdir/pr20253-2c.o tmpdir/pr20253-2d.o" \
+	    "" \
+	    { dummy.s } \
+	    "pr20253-2b" \
+	    "pass.out" \
+	] \
+	[list \
+	    "Run pr20253-2c" \
+	    "tmpdir/pr20253-2a.o" \
+	    "" \
+	    { pr20253-2b.S pr20253-2c.S pr20253-2d.S } \
+	    "pr20253-2c" \
+	    "pass.out" \
+	    "-DCHECK_PLT" \
+	] \
+	[list \
+	    "Run pr20253-2d" \
+	    "--static tmpdir/pr20253-2a.o" \
+	    "" \
+	    { pr20253-2b.S pr20253-2c.S pr20253-2d.S } \
+	    "pr20253-2d" \
+	    "pass.out" \
+	    "-DCHECK_PLT" \
 	] \
     ]
 }

@@ -1,5 +1,5 @@
 /* tc-tic4x.c -- Assemble for the Texas Instruments TMS320C[34]x.
-   Copyright (C) 1997-2015 Free Software Foundation, Inc.
+   Copyright (C) 1997-2017 Free Software Foundation, Inc.
 
    Contributed by Michael P. Hayes (m.hayes@elec.canterbury.ac.nz)
 
@@ -124,7 +124,8 @@ typedef struct tic4x_insn
     unsigned int nchars;	/* This is always 4 for the C30.  */
     unsigned long opcode;	/* Opcode number.  */
     expressionS exp;		/* Expression required for relocation.  */
-    int reloc;			/* Relocation type required.  */
+    /* Relocation type required.  */
+    bfd_reloc_code_real_type reloc;
     int pcrel;			/* True if relocation PC relative.  */
     char *pname;		/* Name of instruction in parallel.  */
     unsigned int num_operands;	/* Number of operands in total.  */
@@ -618,7 +619,7 @@ tic4x_atof (char *str, char what_kind, LITTLENUM_TYPE *words)
 }
 
 static void
-tic4x_insert_reg (char *regname, int regnum)
+tic4x_insert_reg (const char *regname, int regnum)
 {
   char buf[32];
   int i;
@@ -634,7 +635,7 @@ tic4x_insert_reg (char *regname, int regnum)
 }
 
 static void
-tic4x_insert_sym (char *symname, int value)
+tic4x_insert_sym (const char *symname, int value)
 {
   symbolS *symbolP;
 
@@ -713,7 +714,6 @@ tic4x_asg (int x ATTRIBUTE_UNUSED)
   char c;
   char *name;
   char *str;
-  char *tmp;
 
   SKIP_WHITESPACE ();
   str = input_line_pointer;
@@ -728,12 +728,8 @@ tic4x_asg (int x ATTRIBUTE_UNUSED)
     }
   *input_line_pointer++ = '\0';
   c = get_symbol_name (&name);	/* Get terminator.  */
-  tmp = xmalloc (strlen (str) + 1);
-  strcpy (tmp, str);
-  str = tmp;
-  tmp = xmalloc (strlen (name) + 1);
-  strcpy (tmp, name);
-  name = tmp;
+  str = xstrdup (str);
+  name = xstrdup (name);
   if (hash_find (tic4x_asg_hash, name))
     hash_replace (tic4x_asg_hash, name, (void *) str);
   else
@@ -969,8 +965,7 @@ tic4x_sect (int x ATTRIBUTE_UNUSED)
   if (c == '"')
     c = * ++ input_line_pointer;
   input_line_pointer++;		/* Skip null symbol terminator.  */
-  name = xmalloc (input_line_pointer - section_name + 1);
-  strcpy (name, section_name);
+  name = xstrdup (section_name);
 
   /* TI C from version 5.0 allows a section name to contain a
      subsection name as well. The subsection name is separated by a
@@ -1080,8 +1075,7 @@ tic4x_usect (int x ATTRIBUTE_UNUSED)
   if (c == '"')
     c = * ++ input_line_pointer;
   input_line_pointer++;		/* Skip null symbol terminator.  */
-  name = xmalloc (input_line_pointer - section_name + 1);
-  strcpy (name, section_name);
+  name = xstrdup (section_name);
 
   if (c == ',')
     input_line_pointer =
@@ -1239,7 +1233,7 @@ tic4x_inst_insert (const tic4x_inst_t *inst)
 
 /* Make a new instruction template.  */
 static tic4x_inst_t *
-tic4x_inst_make (char *name, unsigned long opcode, char *args)
+tic4x_inst_make (const char *name, unsigned long opcode, const char *args)
 {
   static tic4x_inst_t *insts = NULL;
   static char *names = NULL;
@@ -1248,10 +1242,9 @@ tic4x_inst_make (char *name, unsigned long opcode, char *args)
   if (insts == NULL)
     {
       /* Allocate memory to store name strings.  */
-      names = (char *) xmalloc (sizeof (char) * 8192);
+      names = XNEWVEC (char, 8192);
       /* Allocate memory for additional insts.  */
-      insts = (tic4x_inst_t *)
-	xmalloc (sizeof (tic4x_inst_t) * 1024);
+      insts = XNEWVEC (tic4x_inst_t, 1024);
     }
   insts[iindex].name = names;
   insts[iindex].opcode = opcode;
@@ -1271,7 +1264,7 @@ tic4x_inst_make (char *name, unsigned long opcode, char *args)
 static int
 tic4x_inst_add (const tic4x_inst_t *insts)
 {
-  char *s = insts->name;
+  const char *s = insts->name;
   char *d;
   unsigned int i;
   int ok = 1;
@@ -1295,7 +1288,7 @@ tic4x_inst_add (const tic4x_inst_t *insts)
 	    {
 	      tic4x_inst_t *inst;
 	      int k = 0;
-	      char *c = tic4x_conds[i].name;
+	      const char *c = tic4x_conds[i].name;
 	      char *e = d;
 
 	      while (*c)
@@ -1407,7 +1400,7 @@ static int
 tic4x_indirect_parse (tic4x_operand_t *operand,
 		      const tic4x_indirect_t *indirect)
 {
-  char *n = indirect->name;
+  const char *n = indirect->name;
   char *s = input_line_pointer;
   char *b;
   symbolS *symbolP;
@@ -1560,10 +1553,10 @@ tic4x_operand_parse (char *s, tic4x_operand_t *operand)
       /* Allow ori ^foo, ar0 to be equivalent to ldi .hi.foo, ar0  */
       /* WARNING : The TI C40 assembler cannot do this.  */
       else if (exp->X_op == O_symbol)
-	{
-	  operand->mode = M_HI;
-	  break;
-	}
+	operand->mode = M_HI;
+      else
+	as_bad (_("Expecting a constant value"));
+      break;
 
     case '#':
       input_line_pointer = tic4x_expression (++input_line_pointer, exp);
@@ -1583,14 +1576,11 @@ tic4x_operand_parse (char *s, tic4x_operand_t *operand)
       /* Allow ori foo, ar0 to be equivalent to ldi .lo.foo, ar0  */
       /* WARNING : The TI C40 assembler cannot do this.  */
       else if (exp->X_op == O_symbol)
-	{
-	  operand->mode = M_IMMED;
-	  break;
-	}
-
+	operand->mode = M_IMMED;
       else
 	as_bad (_("Expecting a constant value"));
       break;
+
     case '\\':
 #endif
     case '@':
@@ -2552,7 +2542,7 @@ tic4x_cleanup (void)
    of chars emitted is stored in *sizeP.  An error message is
    returned, or NULL on OK.  */
 
-char *
+const char *
 md_atof (int type, char *litP, int *sizeP)
 {
   int prec;
@@ -2648,9 +2638,11 @@ md_apply_fix (fixS *fixP, valueT *value, segT seg ATTRIBUTE_UNUSED)
     {
     case BFD_RELOC_32:
       buf[3] = val >> 24;
+      /* Fall through.  */
     case BFD_RELOC_24:
     case BFD_RELOC_24_PCREL:
       buf[2] = val >> 16;
+      /* Fall through.  */
     case BFD_RELOC_16:
     case BFD_RELOC_16_PCREL:
     case BFD_RELOC_LO16:
@@ -2710,7 +2702,7 @@ md_estimate_size_before_relax (fragS *fragP ATTRIBUTE_UNUSED,
 
 
 int
-md_parse_option (int c, char *arg)
+md_parse_option (int c, const char *arg)
 {
   switch (c)
     {
@@ -2728,24 +2720,28 @@ md_parse_option (int c, char *arg)
 
     case 'b':
       as_warn (_("Option -b is depreciated, please use -mbig"));
+      /* Fall through.  */
     case OPTION_BIG:             /* big model */
       tic4x_big_model = 1;
       break;
 
     case 'p':
       as_warn (_("Option -p is depreciated, please use -mmemparm"));
+      /* Fall through.  */
     case OPTION_MEMPARM:         /* push args */
       tic4x_reg_args = 0;
       break;
 
     case 'r':
       as_warn (_("Option -r is depreciated, please use -mregparm"));
+      /* Fall through.  */
     case OPTION_REGPARM:        /* register args */
       tic4x_reg_args = 1;
       break;
 
     case 's':
       as_warn (_("Option -s is depreciated, please use -msmall"));
+      /* Fall through.  */
     case OPTION_SMALL:		/* small model */
       tic4x_big_model = 0;
       break;
@@ -3018,9 +3014,9 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixP)
 {
   arelent *reloc;
 
-  reloc = (arelent *) xmalloc (sizeof (arelent));
+  reloc = XNEW (arelent);
 
-  reloc->sym_ptr_ptr = (asymbol **) xmalloc (sizeof (asymbol *));
+  reloc->sym_ptr_ptr = XNEW (asymbol *);
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
   reloc->address /= OCTETS_PER_BYTE;

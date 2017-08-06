@@ -1,5 +1,5 @@
 /* Print Motorola 68k instructions.
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -1220,6 +1220,7 @@ print_insn_arg (const char *d,
 
     case 'X':
       place = '8';
+      /* Fall through.  */
     case 'Y':
     case 'Z':
     case 'W':

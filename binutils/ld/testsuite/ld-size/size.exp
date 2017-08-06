@@ -1,6 +1,6 @@
 # Expect script for linker support of size relocations.
 #
-#   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+#   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -176,7 +176,7 @@ if { [regexp_diff "tmpdir/dump.out" "$srcdir/$subdir/size-7.out" ] } then {
 }
 
 # Run-time size relocation tests.
-run_ld_link_exec_tests [] [list \
+run_ld_link_exec_tests [list \
     [list \
 	"Run size-1" \
 	"tmpdir/libsize-1.so" \

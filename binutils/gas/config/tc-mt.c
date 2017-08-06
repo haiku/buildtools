@@ -1,5 +1,5 @@
 /* tc-mt.c -- Assembler for the Morpho Technologies mt .
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -27,7 +27,6 @@
 #include "cgen.h"
 #include "elf/common.h"
 #include "elf/mt.h"
-#include "libbfd.h"
 
 /* Structure to hold all of the different components
    describing an individual instruction.  */
@@ -101,7 +100,7 @@ enum mt_architectures
 static enum mt_architectures mt_arch = ms1_16_002;
 
 int
-md_parse_option (int c ATTRIBUTE_UNUSED, char * arg)
+md_parse_option (int c ATTRIBUTE_UNUSED, const char * arg)
 {
   switch (c)
     {
@@ -134,6 +133,7 @@ md_parse_option (int c ATTRIBUTE_UNUSED, char * arg)
  	  mt_mach_bitmask = 1 << MACH_MS2;
  	  mt_arch = ms2;
  	}
+      break;
     case OPTION_NO_SCHED_REST:
       no_scheduling_restrictions = 1;
       break;
@@ -433,7 +433,7 @@ md_number_to_chars (char * buf, valueT val, int n)
   number_to_chars_bigendian (buf, val, n);
 }
 
-char *
+const char *
 md_atof (int type, char * litP, int * sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, FALSE);

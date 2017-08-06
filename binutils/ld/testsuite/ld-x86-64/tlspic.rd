@@ -22,13 +22,11 @@ Section Headers:
  +\[[ 0-9]+\] .dynamic +DYNAMIC +0+201380 0+1380 0+130 10 +WA +3 +0 +8
  +\[[ 0-9]+\] .got +PROGBITS +0+2014b0 0+14b0 0+90 08 +WA +0 +0 +8
  +\[[ 0-9]+\] .got.plt +PROGBITS +0+201540 0+1540 0+20 08 +WA +0 +0 +8
- +\[[ 0-9]+\] .shstrtab +.*
  +\[[ 0-9]+\] .symtab +.*
  +\[[ 0-9]+\] .strtab +.*
+ +\[[ 0-9]+\] .shstrtab +.*
 Key to Flags:
-.*
-.*
-.*
+#...
 
 Elf file type is DYN \(Shared object file\)
 Entry point 0x1000
@@ -72,8 +70,6 @@ Relocation section '.rela.plt' at offset 0x[0-9a-f]+ contains 1 entries:
 Symbol table '\.dynsym' contains [0-9]+ entries:
  +Num: +Value +Size +Type +Bind +Vis +Ndx +Name
 .* NOTYPE +LOCAL +DEFAULT +UND *
-.* SECTION +LOCAL +DEFAULT +7 *
-.* SECTION +LOCAL +DEFAULT +8 *
 .* TLS +GLOBAL +DEFAULT +8 sg8
 .* TLS +GLOBAL +DEFAULT +8 sg3
 .* TLS +GLOBAL +DEFAULT +8 sg4
