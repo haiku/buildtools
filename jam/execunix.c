@@ -50,8 +50,18 @@
 # include <process.h>
 # endif
 
+# ifdef __linux__
+# define USE_POSIX_SPAWN
+# endif
+
 # ifdef unix
 # include <unistd.h>
+
+# ifdef USE_POSIX_SPAWN
+extern char **environ;
+# include <spawn.h>
+# endif
+
 # endif
 
 # ifdef OS_NT
@@ -226,6 +236,13 @@ execcmd(
 	    exit( EXITBAD );
 	}
 # else
+# ifdef USE_POSIX_SPAWN
+	if (posix_spawnp(&pid, argv[0], NULL, NULL, (char * const*)argv, environ) != 0)
+	{
+	    perror( "posix_spawnp" );
+	    exit( EXITBAD );
+	}
+# else
 # ifdef NO_VFORK
 	if ((pid = fork()) == 0)
    	{
@@ -245,6 +262,7 @@ execcmd(
 	    perror( "vfork" );
 	    exit( EXITBAD );
 	}
+# endif
 # endif
 	/* Save the operation for execwait() to find. */
 
